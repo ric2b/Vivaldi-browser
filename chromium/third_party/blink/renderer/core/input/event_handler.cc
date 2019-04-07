@@ -87,6 +87,8 @@
 #include "third_party/blink/renderer/core/page/touch_adjustment.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/cursor_data.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -96,8 +98,6 @@
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_animator_base.h"
-#include "third_party/blink/renderer/platform/scroll/scrollbar.h"
 #include "third_party/blink/renderer/platform/windows_keyboard_codes.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
@@ -287,12 +287,12 @@ HitTestResult EventHandler::HitTestResultAtLocation(
           HitTestLocation adjusted_location(
               (LayoutRect(main_content_point, location.BoundingBox().Size())));
           return main_frame.GetEventHandler().HitTestResultAtLocation(
-              adjusted_location, hit_type, stop_node);
+              adjusted_location, hit_type, stop_node, no_lifecycle_update);
         } else {
           HitTestLocation adjusted_location(main_view->ConvertFromRootFrame(
               frame_view->ConvertToRootFrame(location.Point())));
           return main_frame.GetEventHandler().HitTestResultAtLocation(
-              adjusted_location, hit_type, stop_node);
+              adjusted_location, hit_type, stop_node, no_lifecycle_update);
         }
       }
     }
@@ -437,7 +437,7 @@ EventHandler::OptionalCursor EventHandler::SelectCursor(
   if (scroll_manager_->MiddleClickAutoscrollInProgress())
     return kNoCursorChange;
 
-  if (result.GetScrollbar())
+  if (result.GetScrollbar() && !result.GetScrollbar()->IsCustomScrollbar())
     return PointerCursor();
 
   Node* node = result.InnerPossiblyPseudoNode();
@@ -964,11 +964,11 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
   event_result = DispatchMousePointerEvent(
       WebInputEvent::kPointerMove, mev.InnerNode(), mev.CanvasRegionId(),
       mev.Event(), coalesced_events);
+  // TODO(crbug.com/346473): Since there is no default action for the mousemove
+  // event we should consider doing drag&drop even when js cancels the
+  // mouse move event.
   // https://w3c.github.io/uievents/#event-type-mousemove
-  // Since there is no default action for the mousemove event issue a
-  // mouse dragged event irrespective of whether the event is cancelled.
-  if (event_result != WebInputEventResult::kNotHandled &&
-      event_result != WebInputEventResult::kHandledApplication)
+  if (event_result != WebInputEventResult::kNotHandled)
     return event_result;
 
   return mouse_event_manager_->HandleMouseDraggedEvent(mev);
@@ -1766,10 +1766,9 @@ GestureEventWithHitTestResults EventHandler::HitTestResultForGestureEvent(
     LocalFrame* hit_frame = hit_test_result.InnerNodeFrame();
     if (!hit_frame)
       hit_frame = frame_;
-    location = HitTestLocation(hit_frame->View()->ConvertFromRootFrame(
-        LayoutPoint(adjusted_event.PositionInRootFrame())));
-    hit_test_result = EventHandlingUtil::HitTestResultInFrame(
-        hit_frame, location,
+    location = HitTestLocation(adjusted_event.PositionInRootFrame());
+    hit_test_result = root_frame.GetEventHandler().HitTestResultAtLocation(
+        location,
         (hit_type | HitTestRequest::kReadOnly) & ~HitTestRequest::kListBased);
   }
   // If we did a rect-based hit test it must be resolved to the best single node
@@ -1925,9 +1924,8 @@ WebInputEventResult EventHandler::ShowNonLocatedContextMenu(
   IntPoint location_in_viewport =
       visual_viewport.RootFrameToViewport(location_in_root_frame);
   IntPoint global_position =
-      ToChromeClient(view->GetChromeClient())
-          ->ViewportToScreen(IntRect(location_in_viewport, IntSize()),
-                             frame_->View())
+      view->GetChromeClient()->ViewportToScreen(
+          IntRect(location_in_viewport, IntSize()), frame_->View())
           .Location();
 
   Node* target_node =
@@ -2110,7 +2108,7 @@ bool EventHandler::HandleTextInputEvent(const String& text,
   TextEvent* event = TextEvent::Create(frame_->DomWindow(), text, input_type);
   event->SetUnderlyingEvent(underlying_event);
 
-  target->DispatchEvent(event);
+  target->DispatchEvent(*event);
   return event->DefaultHandled() || event->defaultPrevented();
 }
 

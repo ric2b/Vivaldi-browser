@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/android/application_status_listener.h"
 #include "base/android/jni_android.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/auto_reset.h"
@@ -43,7 +44,6 @@
 #include "components/viz/client/hit_test_data_provider_draw_quad.h"
 #include "components/viz/client/local_surface_id_provider.h"
 #include "components/viz/common/features.h"
-#include "components/viz/common/gl_helper.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
 #include "components/viz/common/quads/compositor_frame.h"
@@ -81,9 +81,9 @@
 #include "gpu/vulkan/init/vulkan_factory.h"
 #include "gpu/vulkan/vulkan_implementation.h"
 #include "gpu/vulkan/vulkan_surface.h"
-#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "services/viz/privileged/interfaces/compositing/frame_sink_manager.mojom.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
+#include "services/ws/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkMallocPixelRef.h"
@@ -103,6 +103,29 @@ class VulkanSurface;
 namespace content {
 
 namespace {
+
+// These functions are called based on application visibility status.
+void SendOnBackgroundedToGpuService() {
+  content::GpuProcessHost::CallOnIO(
+      content::GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
+      false /* force_create */,
+      base::BindRepeating([](content::GpuProcessHost* host) {
+        if (host) {
+          host->gpu_service()->OnBackgrounded();
+        }
+      }));
+}
+
+void SendOnForegroundedToGpuService() {
+  content::GpuProcessHost::CallOnIO(
+      content::GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
+      false /* force_create */,
+      base::BindRepeating([](content::GpuProcessHost* host) {
+        if (host) {
+          host->gpu_service()->OnForegrounded();
+        }
+      }));
+}
 
 // The client_id used here should not conflict with the client_id generated
 // from RenderWidgetHostImpl.
@@ -161,13 +184,14 @@ class CompositorDependencies {
     host_frame_sink_manager.SetConnectionLostCallback(base::BindRepeating(
         []() { CompositorDependencies::Get().CreateVizFrameSinkManager(); }));
 
-    BrowserMainLoop::GetInstance()
-        ->gpu_channel_establish_factory()
-        ->EstablishGpuChannel(base::BindOnce(
-            &CompositorDependencies::
-                OnReadyToConnectVizFrameSinkManagerOnMainThread,
-            base::Unretained(this), std::move(frame_sink_manager_request),
-            frame_sink_manager_client.PassInterface()));
+    pending_connect_viz_on_main_thread_ = base::BindOnce(
+        &CompositorDependencies::
+            OnReadyToConnectVizFrameSinkManagerOnMainThread,
+        base::Unretained(this), std::move(frame_sink_manager_request),
+        frame_sink_manager_client.PassInterface());
+
+    // Will connect using the above callback if we are foreground.
+    TryEstablishVizConnectionIfNeeded();
   }
 
   SingleThreadTaskGraphRunner task_graph_runner;
@@ -190,7 +214,13 @@ class CompositorDependencies {
  private:
   friend class base::NoDestructor<CompositorDependencies>;
 
-  CompositorDependencies() : frame_sink_id_allocator(kDefaultClientId) {
+  CompositorDependencies()
+      : frame_sink_id_allocator(kDefaultClientId),
+        app_listener_(base::BindRepeating(
+            &CompositorDependencies::OnApplicationStateChange,
+            base::Unretained(this))) {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
     bool enable_viz =
         base::FeatureList::IsEnabled(features::kVizDisplayCompositor);
     if (!enable_viz) {
@@ -203,6 +233,9 @@ class CompositorDependencies {
     } else {
       CreateVizFrameSinkManager();
     }
+
+    // Ensure we're in the correct state at start up.
+    OnApplicationStateChange(app_listener_.GetState());
   }
 
   void OnReadyToConnectVizFrameSinkManagerOnMainThread(
@@ -234,10 +267,85 @@ class CompositorDependencies {
     // GpuProcessHost::Get() can return null.
     auto* gpu_process_host = GpuProcessHost::Get();
     if (gpu_process_host) {
-      gpu_process_host->ConnectFrameSinkManager(std::move(request),
-                                                std::move(client));
+      gpu_process_host->gpu_host()->ConnectFrameSinkManager(std::move(request),
+                                                            std::move(client));
     }
   }
+
+  void TryEstablishVizConnectionIfNeeded() {
+    // We don't connect to the viz process if backgrounded, as the OS may
+    // repeatedly kill the resulting process. Instead wait until we come to the
+    // foreground.
+    if (pending_connect_viz_on_main_thread_ && application_is_foreground_) {
+      BrowserMainLoop::GetInstance()
+          ->gpu_channel_establish_factory()
+          ->EstablishGpuChannel(std::move(pending_connect_viz_on_main_thread_));
+    }
+  }
+
+  void EnqueueLowEndBackgroundCleanup() {
+    if (base::SysInfo::IsLowEndDevice()) {
+      low_end_background_cleanup_task_.Reset(
+          base::BindOnce(&CompositorDependencies::DoLowEndBackgroundCleanup,
+                         base::Unretained(this)));
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+          FROM_HERE, low_end_background_cleanup_task_.callback(),
+          base::TimeDelta::FromSeconds(5));
+    }
+  }
+
+  void DoLowEndBackgroundCleanup() {
+    // When we become visible, we immediately cancel the callback that runs this
+    // code. First, evict all unlocked frames, allowing resources to be
+    // reclaimed.
+    viz::FrameEvictionManager::GetInstance()->PurgeAllUnlockedFrames();
+
+    // Next, notify the GPU process to do background processing, which will
+    // lose all renderer contexts.
+    content::GpuProcessHost::CallOnIO(
+        content::GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
+        false /* force_create */,
+        base::BindRepeating([](content::GpuProcessHost* host) {
+          if (host) {
+            host->gpu_service()->OnBackgroundCleanup();
+          }
+        }));
+  }
+
+  // This callback function runs when application state changes. If application
+  // state is UNKNOWN, consider it as the app running as a conservative
+  // approach so that we don't send the gpu services to background.
+  void OnApplicationStateChange(
+      base::android::ApplicationState application_state) {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+    switch (application_state) {
+      case base::android::APPLICATION_STATE_UNKNOWN:
+      case base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES:
+      case base::android::APPLICATION_STATE_HAS_PAUSED_ACTIVITIES:
+        GpuDataManagerImpl::GetInstance()->SetApplicationVisible(true);
+        SendOnForegroundedToGpuService();
+        low_end_background_cleanup_task_.Cancel();
+        application_is_foreground_ = true;
+        TryEstablishVizConnectionIfNeeded();
+        break;
+      case base::android::APPLICATION_STATE_HAS_STOPPED_ACTIVITIES:
+      case base::android::APPLICATION_STATE_HAS_DESTROYED_ACTIVITIES:
+        GpuDataManagerImpl::GetInstance()->SetApplicationVisible(false);
+        SendOnBackgroundedToGpuService();
+        EnqueueLowEndBackgroundCleanup();
+        application_is_foreground_ = false;
+    }
+  }
+
+  // A task which runs cleanup tasks on low-end Android after a delay. Enqueued
+  // when we hide, canceled when we're shown.
+  base::CancelableOnceClosure low_end_background_cleanup_task_;
+
+  // An instance of Android AppListener.
+  base::android::ApplicationStatusListener app_listener_;
+  bool application_is_foreground_ = true;
+  gpu::GpuChannelEstablishedCallback pending_connect_viz_on_main_thread_;
 };
 
 const unsigned int kMaxDisplaySwapBuffers = 1U;
@@ -361,20 +469,20 @@ void CreateContextProviderAfterGpuChannelEstablished(
   constexpr bool support_grcontext = false;
 
   auto context_provider =
-      base::MakeRefCounted<ui::ContextProviderCommandBuffer>(
+      base::MakeRefCounted<ws::ContextProviderCommandBuffer>(
           std::move(gpu_channel_host), factory->GetGpuMemoryBufferManager(),
           stream_id, stream_priority, handle,
           GURL(std::string("chrome://gpu/Compositor::CreateContextProvider")),
           automatic_flushes, support_locking, support_grcontext,
           shared_memory_limits, attributes,
-          ui::command_buffer_metrics::ContextType::UNKNOWN);
+          ws::command_buffer_metrics::ContextType::UNKNOWN);
   callback.Run(std::move(context_provider));
 }
 
 class AndroidOutputSurface : public viz::OutputSurface {
  public:
   AndroidOutputSurface(
-      scoped_refptr<ui::ContextProviderCommandBuffer> context_provider,
+      scoped_refptr<ws::ContextProviderCommandBuffer> context_provider,
       base::RepeatingCallback<void(const gfx::Size&)> swap_buffers_callback)
       : viz::OutputSurface(std::move(context_provider)),
         swap_buffers_callback_(std::move(swap_buffers_callback)),
@@ -459,7 +567,7 @@ class AndroidOutputSurface : public viz::OutputSurface {
 
   uint32_t GetFramebufferCopyTextureFormat() override {
     auto* gl =
-        static_cast<ui::ContextProviderCommandBuffer*>(context_provider());
+        static_cast<ws::ContextProviderCommandBuffer*>(context_provider());
     return gl->GetCopyTextureInternalFormat();
   }
 
@@ -467,8 +575,8 @@ class AndroidOutputSurface : public viz::OutputSurface {
 
  private:
   gpu::CommandBufferProxyImpl* GetCommandBufferProxy() {
-    ui::ContextProviderCommandBuffer* provider_command_buffer =
-        static_cast<ui::ContextProviderCommandBuffer*>(context_provider_.get());
+    ws::ContextProviderCommandBuffer* provider_command_buffer =
+        static_cast<ws::ContextProviderCommandBuffer*>(context_provider_.get());
     gpu::CommandBufferProxyImpl* command_buffer_proxy =
         provider_command_buffer->GetCommandBufferProxy();
     DCHECK(command_buffer_proxy);
@@ -609,33 +717,6 @@ class VulkanOutputSurface : public viz::OutputSurface {
 };
 #endif
 
-// TODO(khushalsagar): These are being sent based on the CompositorImpl
-// visiblity which bakes in the assumption that there is a single CompositorImpl
-// instance per application, while the embedder could potentially create
-// multiple compositor instances. We should use the ApplicationStateListener to
-// send these notifications to the GPU instead. See crbug.com/859723.
-void SendOnBackgroundedToGpuService() {
-  content::GpuProcessHost::CallOnIO(
-      content::GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
-      false /* force_create */,
-      base::BindRepeating([](content::GpuProcessHost* host) {
-        if (host) {
-          host->gpu_service()->OnBackgrounded();
-        }
-      }));
-}
-
-void SendOnForegroundedToGpuService() {
-  content::GpuProcessHost::CallOnIO(
-      content::GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
-      false /* force_create */,
-      base::BindRepeating([](content::GpuProcessHost* host) {
-        if (host) {
-          host->gpu_service()->OnForegrounded();
-        }
-      }));
-}
-
 static bool g_initialized = false;
 
 }  // anonymous namespace
@@ -703,9 +784,6 @@ CompositorImpl::CompositorImpl(CompositorClient* client,
       enable_viz_(
           base::FeatureList::IsEnabled(features::kVizDisplayCompositor)),
       weak_factory_(this) {
-  GetHostFrameSinkManager()->RegisterFrameSinkId(frame_sink_id_, this);
-  GetHostFrameSinkManager()->SetFrameSinkDebugLabel(frame_sink_id_,
-                                                    "CompositorImpl");
   DCHECK(client);
 
   SetRootWindow(root_window);
@@ -720,7 +798,6 @@ CompositorImpl::~CompositorImpl() {
   DetachRootWindow();
   // Clean-up any surface references.
   SetSurface(NULL);
-  GetHostFrameSinkManager()->InvalidateFrameSinkId(frame_sink_id_);
 }
 
 void CompositorImpl::DetachRootWindow() {
@@ -858,38 +935,65 @@ void CompositorImpl::CreateLayerTreeHost() {
 
 void CompositorImpl::SetVisible(bool visible) {
   TRACE_EVENT1("cc", "CompositorImpl::SetVisible", "visible", visible);
+
   if (!visible) {
     DCHECK(host_->IsVisible());
-
-    // Make a best effort to try to complete pending readbacks.
-    // TODO(crbug.com/637035): Consider doing this in a better way,
-    // ideally with the guarantee of readbacks completing.
-    if (display_.get() && HavePendingReadbacks())
-      display_->ForceImmediateDrawAndSwapIfPossible();
-
+    // Tear down the display first, synchronously completing any pending
+    // draws/readbacks if poosible.
+    TearDownDisplayAndUnregisterRootFrameSink();
+    // Hide the LayerTreeHost and release its frame sink.
     host_->SetVisible(false);
     host_->ReleaseLayerTreeFrameSink();
     has_layer_tree_frame_sink_ = false;
     pending_frames_ = 0;
-    if (display_) {
-      GetFrameSinkManager()->UnregisterBeginFrameSource(
-          root_window_->GetBeginFrameSource());
-    }
-    display_.reset();
-    GpuDataManagerImpl::GetInstance()->SetApplicationVisible(false);
-    SendOnBackgroundedToGpuService();
-    EnqueueLowEndBackgroundCleanup();
   } else {
+    DCHECK(!host_->IsVisible());
+    RegisterRootFrameSink();
     host_->SetVisible(true);
     has_submitted_frame_since_became_visible_ = false;
     if (layer_tree_frame_sink_request_pending_)
       HandlePendingLayerTreeFrameSinkRequest();
-    GpuDataManagerImpl::GetInstance()->SetApplicationVisible(true);
-    SendOnForegroundedToGpuService();
-    low_end_background_cleanup_task_.Cancel();
   }
-  if (display_private_)
-    display_private_->SetDisplayVisible(visible);
+}
+
+void CompositorImpl::TearDownDisplayAndUnregisterRootFrameSink() {
+  if (enable_viz_) {
+    // Make a best effort to try to complete pending readbacks.
+    // TODO(crbug.com/637035): Consider doing this in a better way,
+    // ideally with the guarantee of readbacks completing.
+    if (display_private_ && HavePendingReadbacks()) {
+      // Note that while this is not a Sync IPC, the call to
+      // InvalidateFrameSinkId below will end up triggering a sync call to
+      // FrameSinkManager::DestroyCompositorFrameSink, as this is the root
+      // frame sink. Because |display_private_| is an associated interface to
+      // FrameSinkManager, this subsequent sync call will ensure ordered
+      // execution of this call.
+      display_private_->ForceImmediateDrawAndSwapIfPossible();
+    }
+
+    GetHostFrameSinkManager()->InvalidateFrameSinkId(frame_sink_id_);
+    display_private_.reset();
+  } else {
+    // Make a best effort to try to complete pending readbacks.
+    // TODO(crbug.com/637035): Consider doing this in a better way,
+    // ideally with the guarantee of readbacks completing.
+    if (display_ && HavePendingReadbacks())
+      display_->ForceImmediateDrawAndSwapIfPossible();
+
+    if (display_) {
+      GetFrameSinkManager()->UnregisterBeginFrameSource(
+          root_window_->GetBeginFrameSource());
+    }
+
+    GetHostFrameSinkManager()->InvalidateFrameSinkId(frame_sink_id_);
+    display_.reset();
+  }
+}
+
+void CompositorImpl::RegisterRootFrameSink() {
+  GetHostFrameSinkManager()->RegisterFrameSinkId(frame_sink_id_, this);
+  GetHostFrameSinkManager()->SetFrameSinkDebugLabel(frame_sink_id_,
+                                                    "CompositorImpl");
 }
 
 void CompositorImpl::SetWindowBounds(const gfx::Size& size) {
@@ -1011,10 +1115,8 @@ void CompositorImpl::OnGpuChannelEstablished(
     return;
   }
 
-  // We don't need the context anymore if we are invisible. Additionally, we
-  // should notify the channel that we are invisible.
+  // We don't need the context anymore if we are invisible.
   if (!host_->IsVisible()) {
-    SendOnBackgroundedToGpuService();
     return;
   }
 
@@ -1036,7 +1138,7 @@ void CompositorImpl::OnGpuChannelEstablished(
   gpu::SurfaceHandle surface_handle =
       enable_viz_ ? gpu::kNullSurfaceHandle : surface_handle_;
   auto context_provider =
-      base::MakeRefCounted<ui::ContextProviderCommandBuffer>(
+      base::MakeRefCounted<ws::ContextProviderCommandBuffer>(
           std::move(gpu_channel_host), factory->GetGpuMemoryBufferManager(),
           stream_id, stream_priority, surface_handle,
           GURL(std::string("chrome://gpu/CompositorImpl::") +
@@ -1045,7 +1147,7 @@ void CompositorImpl::OnGpuChannelEstablished(
           GetCompositorContextSharedMemoryLimits(root_window_),
           GetCompositorContextAttributes(display_color_space_,
                                          requires_alpha_channel_),
-          ui::command_buffer_metrics::ContextType::BROWSER_COMPOSITOR);
+          ws::command_buffer_metrics::ContextType::BROWSER_COMPOSITOR);
   auto result = context_provider->BindToCurrentThread();
   LOG_IF(FATAL, result == gpu::ContextResult::kFatalFailure)
       << "Fatal error making Gpu context";
@@ -1232,44 +1334,26 @@ bool CompositorImpl::IsDrawingFirstVisibleFrame() const {
   return !has_submitted_frame_since_became_visible_;
 }
 
+void CompositorImpl::SetVSyncPaused(bool paused) {
+  // No action needed in non-Viz mode, as VSync is handled in WindowAndroid.
+  if (!enable_viz_)
+    return;
+
+  if (vsync_paused_ == paused)
+    return;
+
+  vsync_paused_ = paused;
+  if (display_private_)
+    display_private_->SetVSyncPaused(paused);
+}
+
 void CompositorImpl::OnCompositorLockStateChanged(bool locked) {
   if (host_)
     host_->SetDeferCommits(locked);
 }
 
-void CompositorImpl::EnqueueLowEndBackgroundCleanup() {
-  if (base::SysInfo::IsLowEndDevice()) {
-    low_end_background_cleanup_task_.Reset(
-        base::BindOnce(&CompositorImpl::DoLowEndBackgroundCleanup,
-                       weak_factory_.GetWeakPtr()));
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, low_end_background_cleanup_task_.callback(),
-        base::TimeDelta::FromSeconds(5));
-  }
-}
-
-void CompositorImpl::DoLowEndBackgroundCleanup() {
-  // When we become visible, we immediately cancel the callback that runs this
-  // code.
-  DCHECK(!host_->IsVisible());
-
-  // First, evict all unlocked frames, allowing resources to be reclaimed.
-  viz::FrameEvictionManager::GetInstance()->PurgeAllUnlockedFrames();
-
-  // Next, notify the GPU process to do background processing, which will
-  // lose all renderer contexts.
-  content::GpuProcessHost::CallOnIO(
-      content::GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
-      false /* force_create */,
-      base::BindRepeating([](content::GpuProcessHost* host) {
-        if (host) {
-          host->gpu_service()->OnBackgroundCleanup();
-        }
-      }));
-}
-
 void CompositorImpl::InitializeVizLayerTreeFrameSink(
-    scoped_refptr<ui::ContextProviderCommandBuffer> context_provider) {
+    scoped_refptr<ws::ContextProviderCommandBuffer> context_provider) {
   DCHECK(enable_viz_);
 
   pending_frames_ = 0;
@@ -1297,6 +1381,7 @@ void CompositorImpl::InitializeVizLayerTreeFrameSink(
   viz::RendererSettings renderer_settings;
   renderer_settings.allow_antialiasing = false;
   renderer_settings.highp_threshold_min = 2048;
+  renderer_settings.requires_alpha_channel = requires_alpha_channel_;
   root_params->frame_sink_id = frame_sink_id_;
   root_params->widget = surface_handle_;
   root_params->gpu_compositing = true;
@@ -1325,6 +1410,7 @@ void CompositorImpl::InitializeVizLayerTreeFrameSink(
   host_->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
   display_private_->SetDisplayVisible(true);
   display_private_->Resize(size_);
+  display_private_->SetVSyncPaused(vsync_paused_);
 }
 
 viz::LocalSurfaceId CompositorImpl::GenerateLocalSurfaceId() const {

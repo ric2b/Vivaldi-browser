@@ -102,11 +102,11 @@
 <translation id="3171922709365450819">该客户端不支持此设备，因为此设备要求进行第三方身份验证。</translation>
 <translation id="3194245623920924351">Chrome远程桌面</translation>
 <translation id="3197730452537982411">远程桌面</translation>
+<translation id="3212472844831225214">• 添加了对 Android 9.0 Pie 的支持。</translation>
 <translation id="324272851072175193">通过电子邮件发送这些说明</translation>
 <translation id="3258789396564295715">您可使用 Chrome 远程桌面安全地访问此计算机。</translation>
 <translation id="3286521253923406898">Chrome 远程访问主机控制器</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" />想进行更改。</translation>
-<translation id="331779822864701136">• 添加了对 Android 8.0 Oreo 的支持。</translation>
 <translation id="332624996707057614">修改计算机名称</translation>
 <translation id="3339299787263251426">通过互联网安全地访问您的计算机</translation>
 <translation id="3360306038446926262">窗口</translation>
@@ -122,8 +122,9 @@
 <translation id="369442766917958684">离线。</translation>
 <translation id="3695446226812920698">如何解决</translation>
 <translation id="3718805989288361841">Chrome 远程桌面的政策设置有误。请与您的系统管理员联系寻求帮助。</translation>
-<translation id="3759645055923345178">设置完毕后，您只需输入相应的 PIN 码或访问代码，便可从此页面访问这台计算机</translation>
 <translation id="3776024066357219166">您的 Chrome 远程桌面会话已结束。</translation>
+<translation id="3846148461359626420">• 改进了在 iPhone X 上的平移和缩放体验。
+• 提升了稳定性，并更正了多项错误。</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">请在下方确认您的帐号和 PIN，以便允许通过 Chrome 远程桌面进行访问。</translation>
 <translation id="3897092660631435901">菜单</translation>
@@ -137,6 +138,7 @@
 <translation id="405887016757208221">远程计算机未能将该会话初始化。如果问题仍然存在，请尝试重新配置主机。</translation>
 <translation id="4068946408131579958">所有连接</translation>
 <translation id="409800995205263688">注意：策略设置仅允许您网络内的计算机之间建立连接。</translation>
+<translation id="4126409073460786861">请在设置完毕后刷新此页面，然后您只需选择设备并输入相应的 PIN 码，便可访问这台计算机</translation>
 <translation id="4145029455188493639">以 <ph name="EMAIL_ADDRESS" /> 的身份登录。</translation>
 <translation id="4155497795971509630">缺少某些必需的组件。请确保您已安装该软件的最新版本，然后重试。</translation>
 <translation id="4156740505453712750">为防止他人擅自访问此计算机，请选用一个<ph name="BOLD_START" />至少 6 位数<ph name="BOLD_END" />的 PIN。当从其他位置连接时，将需要输入此 PIN。</translation>
@@ -145,7 +147,6 @@
 <translation id="4207623512727273241">请先运行该安装程序，再继续操作。</translation>
 <translation id="4227991223508142681">主机配置实用程序</translation>
 <translation id="4240294130679914010">Chrome 远程访问主机卸载程序</translation>
-<translation id="4249741460382919890">常规的问题修复，并提高了稳定性。</translation>
 <translation id="4277463233460010382">此计算机已配置为允许一个或多个客户端无需输入 PIN 即可进行连接。</translation>
 <translation id="4277736576214464567">访问代码无效，请重试。</translation>
 <translation id="4361728918881830843">要启用到另一台计算机的远程连接，请在该计算机上安装 Chrome 远程桌面并点击“<ph name="BUTTON_NAME" />”。</translation>
@@ -271,6 +272,7 @@ PC</translation>
 <translation id="6998989275928107238">至</translation>
 <translation id="7019153418965365059">无法识别的主机错误：<ph name="HOST_OFFLINE_REASON" />。</translation>
 <translation id="701976023053394610">远程协助</translation>
+<translation id="7026930240735156896">按照说明设置计算机以供远程访问</translation>
 <translation id="7038683108611689168">允许我们收集使用情况统计信息和崩溃报告，以帮助改进 Chrome 远程访问。</translation>
 <translation id="7067321367069083429">屏幕充当触摸屏</translation>
 <translation id="7116737094673640201">欢迎使用 Chrome 远程桌面</translation>
@@ -296,7 +298,6 @@ PC</translation>
 <translation id="7782471917492991422">请检查您的计算机电源管理设置，确保未将该设置配置为无操作时进入休眠模式。</translation>
 <translation id="7810127880729796595">显示统计信息（连接：<ph name="QUALITY" />）</translation>
 <translation id="7836926030608666805">缺少某些必需的组件。请确保您运行的是最新版本的 Chrome，然后重试。</translation>
-<translation id="7850909060902317210">安装“Chrome 远程桌面”软件，并按照说明完成设置</translation>
 <translation id="7868137160098754906">请为远程计算机输入PIN码。</translation>
 <translation id="7869445566579231750">您无权运行该应用。</translation>
 <translation id="7895403300744144251">这台远程计算机的安全政策不允许从您的帐号进行连接。</translation>

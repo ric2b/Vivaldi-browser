@@ -9,6 +9,7 @@
 <translation id="1293699935367580298">Esc</translation>
 <translation id="1306549533752902673">APPS RECOMENDADOS</translation>
 <translation id="1368832886055348810">Da esquerda para a direita</translation>
+<translation id="1383876407941801731">Pesquisar</translation>
 <translation id="1398853756734560583">Maximizar</translation>
 <translation id="1413622004203049571">Desativar notificações de <ph name="NOTIFIER_NAME" /></translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{Um minuto e }one{# minutos e }other{# minutos e }}</translation>
@@ -40,6 +41,7 @@
 <translation id="24452542372838207">Expandir notificação</translation>
 <translation id="2482878487686419369">Notificações</translation>
 <translation id="2497284189126895209">Todos os arquivos</translation>
+<translation id="2515586267016047495">Alt</translation>
 <translation id="2522350507219695259">A calibração está concluída</translation>
 <translation id="252373100621549798">Exibição desconhecida</translation>
 <translation id="2583543531130364912">Calibrar a touchscreen</translation>
@@ -63,6 +65,7 @@
 <translation id="3660179305079774227">Seta para cima</translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> GB/s</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
+<translation id="3842239759367498783">Continuar lendo no dispositivo móvel <ph name="TITLE" /></translation>
 <translation id="385051799172605136">Voltar</translation>
 <translation id="3889424535448813030">Seta para a direita</translation>
 <translation id="3892641579809465218">Display interno</translation>
@@ -78,14 +81,12 @@
 <translation id="4724120544754982507">Central de Notificações: <ph name="UNREAD_NOTIFICATION_COUNT" /> notificações não lidas</translation>
 <translation id="4730374152663651037">USADOS FREQUENTEMENTE</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{1 mês restante}one{# mês restante}other{# meses restantes}}</translation>
-<translation id="4820616160060340806">Comando+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="4841881773802181781">Inserção</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{Um segundo}one{# segundos}other{# segundos}}</translation>
 <translation id="4971687151119236543">Faixa anterior da mídia</translation>
-<translation id="4999762576397546063">Ctrl+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="5046499563572181734">Toque aqui</translation>
 <translation id="5076340679995252485">&amp;Colar</translation>
-<translation id="5120799197269191491">Pesquisar+<ph name="KEY_COMBO_NAME" /></translation>
+<translation id="5137751499640340777">Inicie o Google Assistente</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">Triângulo de divulgação</translation>
 <translation id="528468243742722775">End</translation>
@@ -100,7 +101,6 @@
 <translation id="5906667377645263094">{SECONDS,plural, =1{Um segundo restante}one{# segundos restantes}other{# segundos restantes}}</translation>
 <translation id="5941711191222866238">Minimizar</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{Uma hora}one{# horas}other{# horas}}</translation>
-<translation id="5948410903763073882">Alt+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="6012623610530968780">Página <ph name="SELECTED_PAGE" /> de <ph name="TOTAL_PAGE_NUM" /></translation>
 <translation id="6022924867608035986">Limpar texto da caixa de pesquisa</translation>
 <translation id="6040143037577758943">Fechar</translation>
@@ -149,6 +149,8 @@
 <translation id="7814458197256864873">Co&amp;piar</translation>
 <translation id="7879499977785298635">Não bloquear</translation>
 <translation id="7907591526440419938">Abrir arquivo</translation>
+<translation id="7969046989155602842">Command</translation>
+<translation id="8087772101393322318"><ph name="KEY_MODIFIER_NAME" />+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{Uma hora atrás}one{# horas atrás}other{# horas atrás}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{1 segundo restante}one{# segundos restantes}other{# segundos restantes}}</translation>
 <translation id="815598010540052116">Percorrer para baixo</translation>
@@ -161,7 +163,6 @@
 <translation id="838869780401515933">marcar</translation>
 <translation id="8393700583063109961">Enviar mensagem</translation>
 <translation id="8394908167088220973">Reproduzir/pausar mídia</translation>
-<translation id="8400147561352026160">Shift+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8458811141851741261">{YEARS,plural, =1{1 a}one{# a}other{# a}}</translation>
 <translation id="8602707065186045623">Arquivo <ph name="SAVEAS_EXTENSION_TYPE" /> (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> KB/s</translation>

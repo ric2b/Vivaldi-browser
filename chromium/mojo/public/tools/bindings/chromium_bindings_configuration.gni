@@ -4,6 +4,7 @@
 
 _typemap_imports = [
   "//ash/public/interfaces/typemaps.gni",
+  "//chrome/chrome_cleaner/interfaces/typemaps/typemaps.gni",
   "//chrome/common/extensions/typemaps.gni",
   "//chrome/common/importer/typemaps.gni",
   "//chrome/common/media_router/mojo/typemaps.gni",
@@ -17,8 +18,6 @@ _typemap_imports = [
   "//components/sync/mojo/typemaps.gni",
   "//components/typemaps.gni",
   "//content/common/bluetooth/typemaps.gni",
-  "//content/common/indexed_db/typemaps.gni",
-  "//content/common/presentation/typemaps.gni",
   "//content/common/typemaps.gni",
   "//content/public/common/typemaps.gni",
   "//device/bluetooth/public/mojom/typemaps.gni",
@@ -40,8 +39,8 @@ _typemap_imports = [
   "//services/proxy_resolver/public/cpp/typemaps.gni",
   "//services/resource_coordinator/public/cpp/typemaps.gni",
   "//services/service_manager/public/cpp/typemaps.gni",
-  "//services/ui/public/interfaces/cursor/typemaps.gni",
-  "//services/ui/public/interfaces/ime/typemaps.gni",
+  "//services/ws/public/mojom/cursor/typemaps.gni",
+  "//services/ws/public/mojom/ime/typemaps.gni",
   "//services/viz/privileged/cpp/typemaps.gni",
   "//services/viz/privileged/interfaces/compositing/typemaps.gni",
   "//services/viz/public/cpp/compositing/typemaps.gni",

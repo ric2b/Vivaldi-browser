@@ -19,21 +19,19 @@
 
 using testing::_;
 
-namespace net {
-class NetworkQualityEstimator;
-}
-
 namespace data_reduction_proxy {
 
 TestDataReductionProxyConfig::TestDataReductionProxyConfig(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     net::NetLog* net_log,
+    network::NetworkConnectionTracker* network_connection_tracker,
     DataReductionProxyConfigurator* configurator,
     DataReductionProxyEventCreator* event_creator)
     : TestDataReductionProxyConfig(
           std::make_unique<TestDataReductionProxyParams>(),
           io_task_runner,
           net_log,
+          network_connection_tracker,
           configurator,
           event_creator) {}
 
@@ -41,10 +39,12 @@ TestDataReductionProxyConfig::TestDataReductionProxyConfig(
     std::unique_ptr<DataReductionProxyConfigValues> config_values,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     net::NetLog* net_log,
+    network::NetworkConnectionTracker* network_connection_tracker,
     DataReductionProxyConfigurator* configurator,
     DataReductionProxyEventCreator* event_creator)
     : DataReductionProxyConfig(io_task_runner,
                                net_log,
+                               network_connection_tracker,
                                std::move(config_values),
                                configurator,
                                event_creator),
@@ -146,11 +146,13 @@ MockDataReductionProxyConfig::MockDataReductionProxyConfig(
     std::unique_ptr<DataReductionProxyConfigValues> config_values,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     net::NetLog* net_log,
+    network::NetworkConnectionTracker* network_connection_tracker,
     DataReductionProxyConfigurator* configurator,
     DataReductionProxyEventCreator* event_creator)
     : TestDataReductionProxyConfig(std::move(config_values),
                                    io_task_runner,
                                    net_log,
+                                   network_connection_tracker,
                                    configurator,
                                    event_creator) {}
 

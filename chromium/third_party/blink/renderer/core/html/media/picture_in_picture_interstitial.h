@@ -36,8 +36,8 @@ class PictureInPictureInterstitial final : public HTMLDivElement {
   HTMLVideoElement& GetVideoElement() const { return *video_element_; }
 
   // Node override.
-  Node::InsertionNotificationRequest InsertedInto(ContainerNode*) override;
-  void RemovedFrom(ContainerNode*) override;
+  Node::InsertionNotificationRequest InsertedInto(ContainerNode&) override;
+  void RemovedFrom(ContainerNode&) override;
 
   // Element:
   void Trace(blink::Visitor*) override;

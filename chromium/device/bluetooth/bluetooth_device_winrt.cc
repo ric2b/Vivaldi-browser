@@ -4,18 +4,21 @@
 
 #include "device/bluetooth/bluetooth_device_winrt.h"
 
+#include <windows.devices.enumeration.h>
 #include <windows.foundation.h>
 
 #include <utility>
 
 #include "base/bind_helpers.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/win/core_winrt_util.h"
 #include "base/win/scoped_hstring.h"
 #include "device/bluetooth/bluetooth_adapter_winrt.h"
 #include "device/bluetooth/bluetooth_gatt_discoverer_winrt.h"
+#include "device/bluetooth/bluetooth_pairing_winrt.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service_winrt.h"
 #include "device/bluetooth/event_utils_winrt.h"
 
@@ -34,12 +37,68 @@ using ABI::Windows::Devices::Bluetooth::GenericAttributeProfile::
     GattDeviceServicesResult;
 using ABI::Windows::Devices::Bluetooth::GenericAttributeProfile::
     IGattDeviceServicesResult;
-using ABI::Windows::Devices::Bluetooth::IBluetoothLEDevice;
+using ABI::Windows::Devices::Bluetooth::IBluetoothLEDevice2;
 using ABI::Windows::Devices::Bluetooth::IBluetoothLEDevice3;
+using ABI::Windows::Devices::Bluetooth::IBluetoothLEDevice;
 using ABI::Windows::Devices::Bluetooth::IBluetoothLEDeviceStatics;
+using ABI::Windows::Devices::Enumeration::DevicePairingResultStatus;
+using ABI::Windows::Devices::Enumeration::IDeviceInformation2;
+using ABI::Windows::Devices::Enumeration::IDeviceInformation;
+using ABI::Windows::Devices::Enumeration::IDeviceInformationCustomPairing;
+using ABI::Windows::Devices::Enumeration::IDeviceInformationPairing2;
+using ABI::Windows::Devices::Enumeration::IDeviceInformationPairing;
+using ABI::Windows::Devices::Enumeration::IDevicePairingRequestedEventArgs;
 using ABI::Windows::Foundation::IAsyncOperation;
 using ABI::Windows::Foundation::IClosable;
 using Microsoft::WRL::ComPtr;
+
+void PostTask(BluetoothPairingWinrt::ErrorCallback error_callback,
+              BluetoothDevice::ConnectErrorCode error_code) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(error_callback), error_code));
+}
+
+ComPtr<IDeviceInformationPairing> GetDeviceInformationPairing(
+    ComPtr<IBluetoothLEDevice> ble_device) {
+  if (!ble_device) {
+    VLOG(2) << "No BLE device instance present.";
+    return nullptr;
+  }
+
+  ComPtr<IBluetoothLEDevice2> ble_device_2;
+  HRESULT hr = ble_device.As(&ble_device_2);
+  if (FAILED(hr)) {
+    VLOG(2) << "Obtaining IBluetoothLEDevice2 failed: "
+            << logging::SystemErrorCodeToString(hr);
+    return nullptr;
+  }
+
+  ComPtr<IDeviceInformation> device_information;
+  hr = ble_device_2->get_DeviceInformation(&device_information);
+  if (FAILED(hr)) {
+    VLOG(2) << "Getting Device Information failed: "
+            << logging::SystemErrorCodeToString(hr);
+    return nullptr;
+  }
+
+  ComPtr<IDeviceInformation2> device_information_2;
+  hr = device_information.As(&device_information_2);
+  if (FAILED(hr)) {
+    VLOG(2) << "Obtaining IDeviceInformation2 failed: "
+            << logging::SystemErrorCodeToString(hr);
+    return nullptr;
+  }
+
+  ComPtr<IDeviceInformationPairing> pairing;
+  hr = device_information_2->get_Pairing(&pairing);
+  if (FAILED(hr)) {
+    VLOG(2) << "DeviceInformation::get_Pairing() failed: "
+            << logging::SystemErrorCodeToString(hr);
+    return nullptr;
+  }
+
+  return pairing;
+}
 
 void CloseDevice(ComPtr<IBluetoothLEDevice> ble_device) {
   if (!ble_device)
@@ -147,8 +206,24 @@ base::Optional<std::string> BluetoothDeviceWinrt::GetName() const {
 }
 
 bool BluetoothDeviceWinrt::IsPaired() const {
-  NOTIMPLEMENTED();
-  return false;
+  ComPtr<IDeviceInformationPairing> pairing =
+      GetDeviceInformationPairing(ble_device_);
+  if (!pairing) {
+    VLOG(2) << "Failed to get DeviceInformationPairing.";
+    return false;
+  }
+
+  boolean is_paired;
+  HRESULT hr = pairing->get_IsPaired(&is_paired);
+  if (FAILED(hr)) {
+    VLOG(2) << "DeviceInformationPairing::get_IsPaired() failed: "
+            << logging::SystemErrorCodeToString(hr);
+    return false;
+  }
+
+  VLOG(2) << "BluetoothDeviceWinrt::IsPaired(): "
+          << (is_paired ? "True" : "False");
+  return is_paired;
 }
 
 bool BluetoothDeviceWinrt::IsConnected() const {
@@ -181,8 +256,7 @@ bool BluetoothDeviceWinrt::IsConnecting() const {
 }
 
 bool BluetoothDeviceWinrt::ExpectingPinCode() const {
-  NOTIMPLEMENTED();
-  return false;
+  return pairing_ && pairing_->ExpectingPinCode();
 }
 
 bool BluetoothDeviceWinrt::ExpectingPasskey() const {
@@ -213,8 +287,71 @@ void BluetoothDeviceWinrt::Connect(PairingDelegate* pairing_delegate,
   NOTIMPLEMENTED();
 }
 
+void BluetoothDeviceWinrt::Pair(PairingDelegate* pairing_delegate,
+                                const base::Closure& callback,
+                                const ConnectErrorCallback& error_callback) {
+  VLOG(2) << "BluetoothDeviceWinrt::Pair()";
+  if (pairing_) {
+    VLOG(2) << "Another Pair Operation is already in progress.";
+    PostTask(error_callback, ERROR_INPROGRESS);
+    return;
+  }
+
+  ComPtr<IDeviceInformationPairing> pairing =
+      GetDeviceInformationPairing(ble_device_);
+  if (!pairing) {
+    VLOG(2) << "Failed to get DeviceInformationPairing.";
+    PostTask(error_callback, ERROR_UNKNOWN);
+    return;
+  }
+
+  ComPtr<IDeviceInformationPairing2> pairing_2;
+  HRESULT hr = pairing.As(&pairing_2);
+  if (FAILED(hr)) {
+    VLOG(2) << "Obtaining IDeviceInformationPairing2 failed: "
+            << logging::SystemErrorCodeToString(hr);
+    PostTask(error_callback, ERROR_UNKNOWN);
+    return;
+  }
+
+  ComPtr<IDeviceInformationCustomPairing> custom;
+  hr = pairing_2->get_Custom(&custom);
+  if (FAILED(hr)) {
+    VLOG(2) << "DeviceInformationPairing::get_Custom() failed: "
+            << logging::SystemErrorCodeToString(hr);
+    PostTask(error_callback, ERROR_UNKNOWN);
+    return;
+  }
+
+  // Wrap success and error callback, so that they clean up the pairing object
+  // once they are run.
+  auto wrapped_callback = base::BindOnce(
+      [](base::WeakPtr<BluetoothDeviceWinrt> device,
+         base::OnceClosure callback) {
+        if (device)
+          device->pairing_.reset();
+        std::move(callback).Run();
+      },
+      weak_ptr_factory_.GetWeakPtr(), callback);
+
+  auto wrapped_error_callback = base::BindOnce(
+      [](base::WeakPtr<BluetoothDeviceWinrt> device,
+         ConnectErrorCallback error_callback, ConnectErrorCode error_code) {
+        if (device)
+          device->pairing_.reset();
+        std::move(error_callback).Run(error_code);
+      },
+      weak_ptr_factory_.GetWeakPtr(), error_callback);
+
+  pairing_ = std::make_unique<BluetoothPairingWinrt>(
+      this, pairing_delegate, std::move(custom), std::move(wrapped_callback),
+      std::move(wrapped_error_callback));
+  pairing_->StartPairing();
+}
+
 void BluetoothDeviceWinrt::SetPinCode(const std::string& pincode) {
-  NOTIMPLEMENTED();
+  if (pairing_)
+    pairing_->SetPinCode(pincode);
 }
 
 void BluetoothDeviceWinrt::SetPasskey(uint32_t passkey) {
@@ -226,11 +363,13 @@ void BluetoothDeviceWinrt::ConfirmPairing() {
 }
 
 void BluetoothDeviceWinrt::RejectPairing() {
-  NOTIMPLEMENTED();
+  if (pairing_)
+    pairing_->RejectPairing();
 }
 
 void BluetoothDeviceWinrt::CancelPairing() {
-  NOTIMPLEMENTED();
+  if (pairing_)
+    pairing_->CancelPairing();
 }
 
 void BluetoothDeviceWinrt::Disconnect(const base::Closure& callback,
@@ -311,7 +450,20 @@ void BluetoothDeviceWinrt::CreateGattConnectionImpl() {
 }
 
 void BluetoothDeviceWinrt::DisconnectGatt() {
+  // Closing the device and disposing of all references will trigger a Gatt
+  // Disconnection after a short timeout. Since the Gatt Services store a
+  // reference to |ble_device_| as well, we need to clear them to drop all
+  // remaining references, so that the OS disconnects.
+  // Reference:
+  // - https://docs.microsoft.com/en-us/windows/uwp/devices-sensors/gatt-client
   CloseDevice(ble_device_);
+  ClearGattServices();
+
+  // Stop any pending Gatt Discovery sessions and report an error. This will
+  // destroy |gatt_discoverer_| and release remaining references the discoverer
+  // might have hold.
+  if (gatt_discoverer_)
+    OnGattDiscoveryComplete(false);
 }
 
 HRESULT BluetoothDeviceWinrt::GetBluetoothLEDeviceStaticsActivationFactory(
@@ -344,6 +496,13 @@ void BluetoothDeviceWinrt::OnFromBluetoothAddress(
       base::BindRepeating(&BluetoothDeviceWinrt::OnConnectionStatusChanged,
                           weak_ptr_factory_.GetWeakPtr()));
 
+  // For paired devices the OS immediately establishes a GATT connection after
+  // the first advertisement. In this case our handler is registered too late to
+  // catch the initial connection changed event, and we need to perform an
+  // explicit check ourselves.
+  if (IsGattConnected())
+    DidConnectGatt();
+
   if (gatt_services_changed_token_) {
     RemoveGattServicesChangedHandler(ble_device_.Get(),
                                      *gatt_services_changed_token_);
@@ -371,9 +530,7 @@ void BluetoothDeviceWinrt::OnConnectionStatusChanged(
     DidConnectGatt();
   } else {
     gatt_discoverer_.reset();
-    gatt_services_.clear();
-    device_uuids_.ClearServiceUUIDs();
-    SetGattServicesDiscoveryComplete(false);
+    ClearGattServices();
     DidDisconnectGatt();
   }
 }
@@ -381,6 +538,8 @@ void BluetoothDeviceWinrt::OnConnectionStatusChanged(
 void BluetoothDeviceWinrt::OnGattServicesChanged(IBluetoothLEDevice* ble_device,
                                                  IInspectable* object) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  // Note: We don't clear out |gatt_services_| here, as we don't want to break
+  // existing references to Gatt Services that did not change.
   device_uuids_.ClearServiceUUIDs();
   SetGattServicesDiscoveryComplete(false);
   adapter_->NotifyDeviceChanged(this);
@@ -399,25 +558,46 @@ void BluetoothDeviceWinrt::OnGattDiscoveryComplete(bool success) {
   if (!success) {
     if (!IsGattConnected())
       DidFailToConnectGatt(ConnectErrorCode::ERROR_FAILED);
+    gatt_discoverer_.reset();
     return;
   }
 
+  // Instead of clearing out |gatt_services_| and creating each service from
+  // scratch, we create a new map and move already existing services into it in
+  // order to preserve pointer stability.
+  GattServiceMap gatt_services;
   for (const auto& gatt_service : gatt_discoverer_->GetGattServices()) {
     auto gatt_service_winrt =
         BluetoothRemoteGattServiceWinrt::Create(this, gatt_service);
     if (!gatt_service_winrt)
       continue;
 
-    const auto& service = *gatt_service_winrt;
-    gatt_services_.emplace(service.GetIdentifier(),
-                           std::move(gatt_service_winrt));
+    std::string identifier = gatt_service_winrt->GetIdentifier();
+    auto iter = gatt_services_.find(identifier);
+    if (iter != gatt_services_.end()) {
+      iter = gatt_services.emplace(std::move(*iter)).first;
+    } else {
+      iter = gatt_services
+                 .emplace(std::move(identifier), std::move(gatt_service_winrt))
+                 .first;
+    }
+
+    static_cast<BluetoothRemoteGattServiceWinrt*>(iter->second.get())
+        ->UpdateCharacteristics(gatt_discoverer_.get());
   }
 
+  std::swap(gatt_services, gatt_services_);
   device_uuids_.ReplaceServiceUUIDs(gatt_services_);
   SetGattServicesDiscoveryComplete(true);
   adapter_->NotifyGattServicesDiscovered(this);
   adapter_->NotifyDeviceChanged(this);
   gatt_discoverer_.reset();
+}
+
+void BluetoothDeviceWinrt::ClearGattServices() {
+  gatt_services_.clear();
+  device_uuids_.ClearServiceUUIDs();
+  SetGattServicesDiscoveryComplete(false);
 }
 
 }  // namespace device

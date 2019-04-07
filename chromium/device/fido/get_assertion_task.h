@@ -43,33 +43,19 @@ class COMPONENT_EXPORT(DEVICE_FIDO) GetAssertionTask : public FidoTask {
   // FidoTask:
   void StartTask() override;
 
-  void GetAssertion();
+  void GetAssertion(bool enforce_user_presence = false);
   void U2fSign();
 
-  // PublicKeyUserEntity field in GetAssertion response is optional with the
-  // following constraints:
-  // - If assertion has been made without user verification, user identifiable
-  //   information must not be included.
-  // - For resident key credentials, user id of the user entity is mandatory.
-  // - When multiple accounts exist for specified RP ID, user entity is
-  //   mandatory.
-  // TODO(hongjunchoi) : Add link to section of the CTAP spec once it is
-  // published.
-  bool CheckRequirementsOnReturnedUserEntities(
-      const AuthenticatorGetAssertionResponse& response);
-
-  // Checks whether credential ID returned from the authenticator was included
-  // in the allowed list for authenticators. If the device has resident key
-  // support, returned credential ID may be resident credential. Thus, returned
-  // credential ID need not be in allowed list.
-  // TODO(hongjunchoi) : Add link to section of the CTAP spec once it is
-  // published.
-  bool CheckRequirementsOnReturnedCredentialId(
-      const AuthenticatorGetAssertionResponse& response);
-
-  void OnCtapGetAssertionResponseReceived(
-      CtapDeviceResponseCode response_code,
-      base::Optional<AuthenticatorGetAssertionResponse> device_response);
+  // Callback logic for CTAP2 GetAssertion. This will fall back to U2F on hybrid
+  // U2F/CTAP2 devices when:
+  //   a) No credentials were recognized via CTAP2 and,
+  //   b) The request contains the appID extension.
+  void GetAssertionCallbackWithU2fFallback(
+      bool is_silent_authentication,
+      UserVerificationRequirement user_verification_required,
+      GetAssertionTaskCallback callback,
+      CtapDeviceResponseCode,
+      base::Optional<AuthenticatorGetAssertionResponse>);
 
   CtapGetAssertionRequest request_;
   std::unique_ptr<SignOperation> sign_operation_;

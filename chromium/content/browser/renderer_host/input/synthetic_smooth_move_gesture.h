@@ -34,8 +34,12 @@ class CONTENT_EXPORT SyntheticSmoothMoveGestureParams {
   gfx::PointF start_point;
   std::vector<gfx::Vector2dF> distances;
   int speed_in_pixels_s;
+  int fling_velocity_x;
+  int fling_velocity_y;
   bool prevent_fling;
   bool add_slop;
+  bool precise_scrolling_deltas;
+  bool scroll_by_page;
 };
 
 // This class is used as helper class for simulation of scroll and drag.
@@ -76,6 +80,9 @@ class CONTENT_EXPORT SyntheticSmoothMoveGesture : public SyntheticGesture {
                               const gfx::Vector2dF& delta,
                               const blink::WebMouseWheelEvent::Phase phase,
                               const base::TimeTicks& timestamp) const;
+
+  void ForwardFlingGestureEvent(SyntheticGestureTarget* target,
+                                const blink::WebInputEvent::Type type) const;
 
   void PressPoint(SyntheticGestureTarget* target,
                   const base::TimeTicks& timestamp);

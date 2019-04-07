@@ -72,6 +72,9 @@ void CaptivePortalWindowProxy::Show() {
   if (GetState() == STATE_DISPLAYED)  // Dialog is already shown, do nothing.
     return;
 
+  for (auto& observer : observers_)
+    observer.OnBeforeCaptivePortalShown();
+
   InitCaptivePortalView();
 
   CaptivePortalView* portal = captive_portal_view_.release();
@@ -108,21 +111,24 @@ void CaptivePortalWindowProxy::OnOriginalURLLoaded() {
   Close();
 }
 
-void CaptivePortalWindowProxy::OnWidgetClosing(views::Widget* widget) {
+void CaptivePortalWindowProxy::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void CaptivePortalWindowProxy::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
+
+void CaptivePortalWindowProxy::OnWidgetDestroyed(views::Widget* widget) {
   DCHECK(GetState() == STATE_DISPLAYED);
   DCHECK(widget == widget_);
 
   DetachFromWidget(widget);
 
   DCHECK(GetState() == STATE_IDLE);
-}
 
-void CaptivePortalWindowProxy::OnWidgetDestroying(views::Widget* widget) {
-  DetachFromWidget(widget);
-}
-
-void CaptivePortalWindowProxy::OnWidgetDestroyed(views::Widget* widget) {
-  DetachFromWidget(widget);
+  for (auto& observer : observers_)
+    observer.OnAfterCaptivePortalHidden();
 }
 
 void CaptivePortalWindowProxy::InitCaptivePortalView() {

@@ -5,21 +5,38 @@
 #ifndef ASH_ASSISTANT_UI_MAIN_STAGE_ASSISTANT_MAIN_STAGE_H_
 #define ASH_ASSISTANT_UI_MAIN_STAGE_ASSISTANT_MAIN_STAGE_H_
 
+#include <memory>
+
+#include "ash/assistant/model/assistant_interaction_model_observer.h"
+#include "ash/assistant/model/assistant_ui_model_observer.h"
 #include "base/macros.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
 
+namespace ui {
+class CallbackLayerAnimationObserver;
+}  // namespace ui
+
+namespace views {
+class Label;
+}  // namespace views
+
 namespace ash {
 
 class AssistantController;
+class AssistantFooterView;
+class AssistantHeaderView;
+class AssistantProgressIndicator;
 class AssistantQueryView;
-class SuggestionContainerView;
 class UiElementContainerView;
 
 // AssistantMainStage is the child of AssistantMainView responsible for
 // displaying the Assistant interaction to the user. This includes visual
 // affordances for the query, response, as well as suggestions.
-class AssistantMainStage : public views::View, public views::ViewObserver {
+class AssistantMainStage : public views::View,
+                           public views::ViewObserver,
+                           public AssistantInteractionModelObserver,
+                           public AssistantUiModelObserver {
  public:
   explicit AssistantMainStage(AssistantController* assistant_controller);
   ~AssistantMainStage() override;
@@ -29,20 +46,69 @@ class AssistantMainStage : public views::View, public views::ViewObserver {
   void ChildVisibilityChanged(views::View* child) override;
 
   // views::ViewObserver:
+  void OnViewBoundsChanged(views::View* view) override;
   void OnViewPreferredSizeChanged(views::View* view) override;
   void OnViewVisibilityChanged(views::View* view) override;
 
- private:
-  void InitLayout(AssistantController* assistant_controller);
-  void InitContentLayoutContainer(AssistantController* assistant_controller);
-  void InitQueryLayoutContainer(AssistantController* assistant_controller);
+  // AssistantInteractionModelObserver:
+  void OnCommittedQueryChanged(const AssistantQuery& query) override;
+  void OnPendingQueryChanged(const AssistantQuery& query) override;
+  void OnPendingQueryCleared() override;
+  void OnResponseChanged(const AssistantResponse& response) override;
 
-  AssistantQueryView* committed_query_view_;       // Owned by view hierarchy.
-  views::View* committed_query_view_spacer_;       // Owned by view hierarchy.
-  AssistantQueryView* pending_query_view_;         // Owned by view hierarchy.
-  SuggestionContainerView* suggestion_container_;  // Owned by view hierarchy.
-  views::View* suggestion_container_spacer_;       // Owned by view hierarchy.
-  UiElementContainerView* ui_element_container_;   // Owned by view hierarchy.
+  // AssistantUiModelObserver:
+  void OnUiVisibilityChanged(AssistantVisibility new_visibility,
+                             AssistantVisibility old_visibility,
+                             AssistantSource source) override;
+
+ private:
+  void InitLayout();
+  void InitContentLayoutContainer();
+  void InitQueryLayoutContainer();
+  void InitOverlayLayoutContainer();
+
+  void UpdateTopPadding();
+  void UpdateQueryViewTransform(views::View* query_view);
+  void UpdateFooter();
+
+  void OnActivateQuery();
+  void OnActiveQueryCleared();
+  bool OnActiveQueryExitAnimationEnded(
+      const ui::CallbackLayerAnimationObserver& observer);
+
+  void OnFooterAnimationStarted(
+      const ui::CallbackLayerAnimationObserver& observer);
+  bool OnFooterAnimationEnded(
+      const ui::CallbackLayerAnimationObserver& observer);
+
+  AssistantController* const assistant_controller_;  // Owned by Shell.
+
+  // Content layout container and children. Owned by view hierarchy.
+  AssistantHeaderView* header_;
+  views::View* content_layout_container_;
+  UiElementContainerView* ui_element_container_;
+  AssistantFooterView* footer_;
+
+  // Query layout container and children. Owned by view hierarchy.
+  views::View* query_layout_container_;
+  AssistantQueryView* active_query_view_ = nullptr;
+  AssistantQueryView* committed_query_view_ = nullptr;
+  AssistantQueryView* pending_query_view_ = nullptr;
+
+  // Overlay layout container and children. Owned by view hierarchy.
+  views::View* overlay_layout_container_;
+  views::Label* greeting_label_;
+  AssistantProgressIndicator* progress_indicator_;
+
+  std::unique_ptr<ui::CallbackLayerAnimationObserver>
+      active_query_exit_animation_observer_;
+
+  std::unique_ptr<ui::CallbackLayerAnimationObserver>
+      footer_animation_observer_;
+
+  // True if this is the first query received for the current Assistant UI
+  // session, false otherwise.
+  bool is_first_query_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantMainStage);
 };

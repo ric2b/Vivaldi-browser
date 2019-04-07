@@ -17,6 +17,10 @@ const char kSyncDisableDeferredStartup[] = "sync-disable-deferred-startup";
 // Enables feature to avoid unnecessary GetUpdate requests.
 const char kSyncEnableGetUpdateAvoidance[] = "sync-enable-get-update-avoidance";
 
+// Controls whether the initial state of the "Capture Specifics" flag on
+// chrome://sync-internals is enabled.
+const char kSyncIncludeSpecificsInProtocolLog[] = "sync-include-specifics";
+
 // Overrides the default server used for profile sync.
 const char kSyncServiceURL[] = "sync-url";
 
@@ -32,9 +36,26 @@ const char kSyncShortInitialRetryOverride[] =
 // that it's what you want.
 const char kSyncShortNudgeDelayForTest[] = "sync-short-nudge-delay-for-test";
 
+// Allows custom passphrase users to receive Wallet data for secondary accounts
+// while in transport-only mode.
+const base::Feature kSyncAllowWalletDataInTransportModeWithCustomPassphrase{
+    "SyncAllowAutofillWalletDataInTransportModeWithCustomPassphrase",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Enables clearing of sync data when a user enables passphrase encryption.
 const base::Feature kSyncClearDataOnPassphraseEncryption{
     "ClearSyncDataOnPassphraseEncryption", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If enabled, allows the Sync machinery ("transport layer") to start
+// independently of Sync-the-feature.
+const base::Feature kSyncStandaloneTransport{"SyncStandaloneTransport",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If enabled, allows the Sync machinery to start with a signed-in account that
+// has *not* been chosen as Chrome's primary account (see IdentityManager). Only
+// has an effect if SyncStandaloneTransport is also enabled.
+const base::Feature kSyncSupportSecondaryAccount{
+    "SyncSupportSecondaryAccount", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Gates registration and construction of user events machinery. Enabled by
 // default as each use case should have their own gating feature as well.
@@ -73,5 +94,13 @@ const base::Feature kSyncUSSSessions{"SyncUSSSessions",
 // Enable USS implementation of autofill profile datatype.
 const base::Feature kSyncUSSAutofillProfile{"SyncUSSAutofillProfile",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable USS implementation of autofill wallet datatype.
+const base::Feature kSyncUSSAutofillWalletData{
+    "SyncUSSAutofillWalletData", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable USS implementation of autofill wallet metadata datatype.
+const base::Feature kSyncUSSAutofillWalletMetadata{
+    "SyncUSSAutofillWalletMetadata", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace switches

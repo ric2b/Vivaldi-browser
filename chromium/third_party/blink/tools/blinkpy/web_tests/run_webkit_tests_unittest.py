@@ -29,11 +29,14 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import json
+import os
 import re
 import StringIO
+import sys
 import unittest
 
 from blinkpy.common import exit_codes
+from blinkpy.common import path_finder
 from blinkpy.common.host import Host
 from blinkpy.common.host_mock import MockHost
 from blinkpy.common.system.path import abspath_to_uri
@@ -43,6 +46,11 @@ from blinkpy.web_tests import run_webkit_tests
 from blinkpy.web_tests.models import test_expectations
 from blinkpy.web_tests.models import test_failures
 from blinkpy.web_tests.port import test
+
+_MOCK_ROOT = os.path.join(
+    path_finder.get_chromium_src_dir(), 'third_party', 'pymock')
+sys.path.append(_MOCK_ROOT)
+import mock
 
 
 def parse_args(extra_args=None, tests_included=False):
@@ -521,25 +529,31 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
     def test_sharding_even(self):
         # Test that we actually select the right part
         tests_to_run = ['passes/error.html', 'passes/image.html', 'passes/platform_image.html', 'passes/text.html']
-        # Shard 0 of 2
-        tests_run = get_tests_run(['--shard-index', '0', '--total-shards', '2', '--order', 'natural'] + tests_to_run)
-        self.assertEqual(tests_run, ['passes/error.html', 'passes/image.html'])
-        # Shard 1 of 2
-        tests_run = get_tests_run(['--shard-index', '1', '--total-shards', '2', '--order', 'natural'] + tests_to_run)
-        self.assertEqual(tests_run, ['passes/platform_image.html', 'passes/text.html'])
+
+        with mock.patch('__builtin__.hash', len):
+
+          # Shard 0 of 2
+          tests_run = get_tests_run(['--shard-index', '0', '--total-shards', '2', '--order', 'natural'] + tests_to_run)
+          self.assertEqual(tests_run, ['passes/platform_image.html', 'passes/text.html'])
+          # Shard 1 of 2
+          tests_run = get_tests_run(['--shard-index', '1', '--total-shards', '2', '--order', 'natural'] + tests_to_run)
+          self.assertEqual(tests_run, ['passes/error.html', 'passes/image.html'])
 
     def test_sharding_uneven(self):
         tests_to_run = ['passes/error.html', 'passes/image.html', 'passes/platform_image.html', 'passes/text.html',
                         'perf/foo/test.html']
-        # Shard 0 of 3
-        tests_run = get_tests_run(['--shard-index', '0', '--total-shards', '3', '--order', 'natural'] + tests_to_run)
-        self.assertEqual(tests_run, ['passes/error.html', 'passes/image.html'])
-        # Shard 1 of 3
-        tests_run = get_tests_run(['--shard-index', '1', '--total-shards', '3', '--order', 'natural'] + tests_to_run)
-        self.assertEqual(tests_run, ['passes/platform_image.html', 'passes/text.html'])
-        # Shard 2 of 3
-        tests_run = get_tests_run(['--shard-index', '2', '--total-shards', '3', '--order', 'natural'] + tests_to_run)
-        self.assertEqual(tests_run, ['perf/foo/test.html'])
+
+        with mock.patch('__builtin__.hash', len):
+
+          # Shard 0 of 3
+          tests_run = get_tests_run(['--shard-index', '0', '--total-shards', '3', '--order', 'natural'] + tests_to_run)
+          self.assertEqual(tests_run, ['perf/foo/test.html'])
+          # Shard 1 of 3
+          tests_run = get_tests_run(['--shard-index', '1', '--total-shards', '3', '--order', 'natural'] + tests_to_run)
+          self.assertEqual(tests_run, ['passes/text.html'])
+          # Shard 2 of 3
+          tests_run = get_tests_run(['--shard-index', '2', '--total-shards', '3', '--order', 'natural'] + tests_to_run)
+          self.assertEqual(tests_run, ['passes/error.html', 'passes/image.html', 'passes/platform_image.html'])
 
     def test_sharding_incorrect_arguments(self):
         with self.assertRaises(ValueError):
@@ -553,15 +567,17 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         tests_to_run = ['passes/error.html', 'passes/image.html', 'passes/platform_image.html', 'passes/text.html']
         host = MockHost()
 
-        host.environ['GTEST_SHARD_INDEX'] = '0'
-        host.environ['GTEST_TOTAL_SHARDS'] = '2'
-        shard_0_tests_run = get_tests_run(['--order', 'natural'] + tests_to_run, host=host)
-        self.assertEqual(shard_0_tests_run, ['passes/error.html', 'passes/image.html'])
+        with mock.patch('__builtin__.hash', len):
 
-        host.environ['GTEST_SHARD_INDEX'] = '1'
-        host.environ['GTEST_TOTAL_SHARDS'] = '2'
-        shard_1_tests_run = get_tests_run(['--order', 'natural'] + tests_to_run, host=host)
-        self.assertEqual(shard_1_tests_run, ['passes/platform_image.html', 'passes/text.html'])
+          host.environ['GTEST_SHARD_INDEX'] = '0'
+          host.environ['GTEST_TOTAL_SHARDS'] = '2'
+          shard_0_tests_run = get_tests_run(['--order', 'natural'] + tests_to_run, host=host)
+          self.assertEqual(shard_0_tests_run, ['passes/platform_image.html', 'passes/text.html'])
+
+          host.environ['GTEST_SHARD_INDEX'] = '1'
+          host.environ['GTEST_TOTAL_SHARDS'] = '2'
+          shard_1_tests_run = get_tests_run(['--order', 'natural'] + tests_to_run, host=host)
+          self.assertEqual(shard_1_tests_run, ['passes/error.html', 'passes/image.html'])
 
     def test_smoke_test(self):
         host = MockHost()
@@ -617,16 +633,27 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
                                      'failures/unexpected/text-image-checksum.html'],
                                     tests_included=True, host=host)
         self.assertEqual(details.exit_code, 2)
-        json_string = host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json')
-        self.assertTrue(json_string.find(
-            '"text-image-checksum.html":{'
-            '"expected":"PASS",'
-            '"text_mismatch":"general text mismatch",'
-            '"actual":"IMAGE+TEXT","is_unexpected":true') != -1)
-        self.assertTrue(json_string.find(
-            '"missing_text.html":{"expected":"PASS","is_missing_text":true,"actual":"MISSING","is_unexpected":true') != -1)
-        self.assertTrue(json_string.find('"num_regressions":2') != -1)
-        self.assertTrue(json_string.find('"num_flaky":0') != -1)
+        results = json.loads(host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json'))
+        self.assertEqual(
+            results['tests']['failures']['unexpected']['text-image-checksum.html'],
+            {
+                'expected': 'PASS',
+                'actual': 'IMAGE+TEXT',
+                'is_unexpected': True,
+                'is_regression': True,
+                'text_mismatch': 'general text mismatch',
+            })
+        self.assertEqual(
+            results['tests']['failures']['unexpected']['missing_text.html'],
+            {
+                'expected': 'PASS',
+                'actual': 'MISSING',
+                'is_unexpected': True,
+                'is_regression': True,
+                'is_missing_text': True,
+            })
+        self.assertEqual(results['num_regressions'], 2)
+        self.assertEqual(results['num_flaky'], 0)
 
     def test_different_failure_on_retry(self):
         # This tests that if a test fails two different ways -- both unexpected
@@ -659,8 +686,8 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
     def test_crash_with_stderr(self):
         host = MockHost()
         logging_run(['failures/unexpected/crash-with-stderr.html'], tests_included=True, host=host)
-        self.assertTrue(host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json').find(
-            '{"crash-with-stderr.html":{"expected":"PASS","actual":"CRASH","has_stderr":true,"is_unexpected":true') != -1)
+        full_results = json.loads(host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json'))
+        self.assertEqual(full_results['tests']['failures']['unexpected']['crash-with-stderr.html']['has_stderr'], True)
 
     def test_no_image_failure_with_image_diff(self):
         host = MockHost()
@@ -828,11 +855,15 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
             host.filesystem.exists('/tmp/layout-test-results/retry_3/failures/unexpected/text-image-checksum-actual.png'))
         json_string = host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json')
         results = parse_full_results(json_string)
-        self.assertEqual(results['tests']['failures']['unexpected']['text-image-checksum.html'],
-                         {'expected': 'PASS',
-                          'actual': 'TEXT IMAGE+TEXT IMAGE+TEXT IMAGE+TEXT',
-                          'is_unexpected': True,
-                          'text_mismatch': 'general text mismatch'})
+        self.assertEqual(
+            results['tests']['failures']['unexpected']['text-image-checksum.html'],
+            {
+                'expected': 'PASS',
+                'actual': 'TEXT IMAGE+TEXT IMAGE+TEXT IMAGE+TEXT',
+                'is_regression': True,
+                'is_unexpected': True,
+                'text_mismatch': 'general text mismatch',
+            })
         self.assertFalse(results['pixel_tests_enabled'])
         self.assertTrue(details.enabled_pixel_tests_in_retry)
 
@@ -925,7 +956,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         host = MockHost()
         logging_run(['--no-show-results', 'reftests/foo/'], tests_included=True, host=host)
         results = parse_full_results(host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json'))
-        self.assertEqual(results['tests']['reftests']['foo']['unlistedtest.html']['actual'], 'MISSING')
+        self.assertEqual(results['tests']['reftests']['foo']['unlistedtest.html']['actual'], 'MISSING MISSING MISSING MISSING')
         self.assertEqual(results['num_regressions'], 5)
         self.assertEqual(results['num_flaky'], 0)
 
@@ -1124,12 +1155,33 @@ class EndToEndTest(unittest.TestCase):
         self.assertTrue('multiple-mismatch-success.html' not in results['tests']['reftests']['foo'])
         self.assertTrue('multiple-both-success.html' not in results['tests']['reftests']['foo'])
 
-        self.assertEqual(results['tests']['reftests']['foo']['multiple-match-failure.html'],
-                         {'expected': 'PASS', 'actual': 'IMAGE', 'reftest_type': ['=='], 'is_unexpected': True})
-        self.assertEqual(results['tests']['reftests']['foo']['multiple-mismatch-failure.html'],
-                         {'expected': 'PASS', 'actual': 'IMAGE', 'reftest_type': ['!='], 'is_unexpected': True})
-        self.assertEqual(results['tests']['reftests']['foo']['multiple-both-failure.html'],
-                         {'expected': 'PASS', 'actual': 'IMAGE', 'reftest_type': ['==', '!='], 'is_unexpected': True})
+        self.assertEqual(
+            results['tests']['reftests']['foo']['multiple-match-failure.html'],
+            {
+                'expected': 'PASS',
+                'actual': 'IMAGE IMAGE IMAGE IMAGE',
+                'reftest_type': ['=='],
+                'is_regression': True,
+                'is_unexpected': True,
+            })
+        self.assertEqual(
+            results['tests']['reftests']['foo']['multiple-mismatch-failure.html'],
+            {
+                'expected': 'PASS',
+                'actual': 'IMAGE IMAGE IMAGE IMAGE',
+                'reftest_type': ['!='],
+                'is_regression': True,
+                'is_unexpected': True,
+            })
+        self.assertEqual(
+            results['tests']['reftests']['foo']['multiple-both-failure.html'],
+            {
+                'expected': 'PASS',
+                'actual': 'IMAGE IMAGE IMAGE IMAGE',
+                'reftest_type': ['==', '!='],
+                'is_regression': True,
+                'is_unexpected': True,
+            })
 
 
 class RebaselineTest(unittest.TestCase, StreamTestingMixin):
@@ -1221,7 +1273,8 @@ class RebaselineTest(unittest.TestCase, StreamTestingMixin):
             expected_extensions=['.txt'])
 
     def test_reset_results_testharness_no_baseline(self):
-        # Tests that we don't create new result for a testharness test without baselines.
+        # Tests that we create new result for a failing testharness test without
+        # baselines, but don't create one for a passing one.
         host = MockHost()
         details, log_stream, _ = logging_run(
             [
@@ -1232,8 +1285,8 @@ class RebaselineTest(unittest.TestCase, StreamTestingMixin):
             tests_included=True, host=host)
         file_list = host.filesystem.written_files.keys()
         self.assertEqual(details.exit_code, 0)
-        self.assertEqual(len(file_list), 5)
-        self.assert_baselines(file_list, log_stream, 'failures/unexpected/testharness', [])
+        self.assertEqual(len(file_list), 6)
+        self.assert_baselines(file_list, log_stream, 'failures/unexpected/testharness', ['.txt'])
         self.assert_baselines(file_list, log_stream, 'passes/testharness', [])
 
     def test_reset_results_testharness_existing_baseline(self):
@@ -1456,6 +1509,58 @@ class RebaselineTest(unittest.TestCase, StreamTestingMixin):
         self.assert_baselines(
             file_list, log_stream,
             'virtual/virtual_failures/failures/unexpected/text-image-checksum',
+            expected_extensions=['.png'])
+
+    def test_new_platform_baseline_with_fallback(self):
+        # Test that we update the existing baseline in the platform-specific
+        # directory if the new baseline is different, with existing fallback
+        # baseline (which should not matter).
+        host = MockHost()
+        host.filesystem.write_text_file(
+            test.LAYOUT_TEST_DIR +
+            '/platform/test-mac-mac10.10/failures/unexpected/text-image-checksum-expected.png',
+            'wrong-png-baseline')
+
+        details, log_stream, _ = logging_run(
+            [
+                '--reset-results',
+                'failures/unexpected/text-image-checksum.html'
+            ],
+            tests_included=True, host=host)
+        file_list = host.filesystem.written_files.keys()
+        self.assertEqual(details.exit_code, 0)
+        self.assertEqual(len(file_list), 7)
+        # We should reset the platform image baseline.
+        self.assert_baselines(
+            file_list, log_stream,
+            'platform/test-mac-mac10.10/failures/unexpected/text-image-checksum',
+            expected_extensions=['.png'])
+
+    def test_new_platform_baseline_without_fallback(self):
+        # Test that we update the existing baseline in the platform-specific
+        # directory if the new baseline is different, without existing fallback
+        # baseline (which should not matter).
+        host = MockHost()
+        host.filesystem.write_text_file(
+            test.LAYOUT_TEST_DIR +
+            '/platform/test-mac-mac10.10/failures/unexpected/text-image-checksum-expected.png',
+            'wrong-png-baseline')
+        host.filesystem.remove(
+            test.LAYOUT_TEST_DIR + '/failures/unexpected/text-image-checksum-expected.png')
+
+        details, log_stream, _ = logging_run(
+            [
+                '--reset-results',
+                'failures/unexpected/text-image-checksum.html'
+            ],
+            tests_included=True, host=host)
+        file_list = host.filesystem.written_files.keys()
+        self.assertEqual(details.exit_code, 0)
+        self.assertEqual(len(file_list), 8)
+        # We should reset the platform image baseline.
+        self.assert_baselines(
+            file_list, log_stream,
+            'platform/test-mac-mac10.10/failures/unexpected/text-image-checksum',
             expected_extensions=['.png'])
 
     def test_new_virtual_baseline_optimize(self):

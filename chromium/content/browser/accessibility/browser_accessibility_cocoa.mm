@@ -833,7 +833,9 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
   if (![self isIgnored]) {
     children_.reset();
   } else {
-    [ToBrowserAccessibilityCocoa(owner_->PlatformGetParent()) childrenChanged];
+    auto* parent = owner_->PlatformGetParent();
+    if (parent)
+      [ToBrowserAccessibilityCocoa(parent) childrenChanged];
   }
 }
 
@@ -1720,8 +1722,11 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
     std::string role_attribute;
     if (owner_->GetHtmlAttribute("role", &role_attribute)) {
       ax::mojom::Role internalRole = [self internalRole];
-      if ((internalRole != ax::mojom::Role::kGroup &&
-           internalRole != ax::mojom::Role::kListItem) ||
+      if ((internalRole != ax::mojom::Role::kBlockquote &&
+           internalRole != ax::mojom::Role::kCaption &&
+           internalRole != ax::mojom::Role::kGroup &&
+           internalRole != ax::mojom::Role::kListItem &&
+           internalRole != ax::mojom::Role::kParagraph) ||
           internalRole == ax::mojom::Role::kTab) {
         // TODO(dtseng): This is not localized; see crbug/84814.
         return base::SysUTF8ToNSString(role_attribute);
@@ -2276,6 +2281,7 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
   return base::SysUTF16ToNSString(owner_->GetValue());
 }
 
+// TODO(crbug.com/865101) Remove this once the autofill state works.
 - (BOOL)isFocusedInputWithSuggestions {
   if (!owner_->IsPlainTextField())
     return false;
@@ -2288,6 +2294,8 @@ NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
 - (NSNumber*)valueAutofillAvailable {
   if (![self instanceActive])
     return nil;
+  // TODO(crbug.com/865101) Use this instead:
+  // return owner_->HasState(ax::mojom::State::kAutofillAvailable) ? @YES : @NO;
   return [self isFocusedInputWithSuggestions] ? @YES : @NO;
 }
 

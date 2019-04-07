@@ -15,8 +15,6 @@ namespace scheduler {
 
 WebThreadScheduler::~WebThreadScheduler() = default;
 
-WebThreadScheduler::RAILModeObserver::~RAILModeObserver() = default;
-
 // static
 std::unique_ptr<WebThreadScheduler>
 WebThreadScheduler::CreateMainThreadScheduler(
@@ -68,6 +66,12 @@ WebThreadScheduler::InputTaskRunner() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 WebThreadScheduler::IPCTaskRunner() {
+  NOTREACHED();
+  return nullptr;
+}
+
+scoped_refptr<base::SingleThreadTaskRunner>
+WebThreadScheduler::CleanupTaskRunner() {
   NOTREACHED();
   return nullptr;
 }
@@ -153,7 +157,7 @@ void WebThreadScheduler::SetTopLevelBlameContext(
   NOTREACHED();
 }
 
-void WebThreadScheduler::AddRAILModeObserver(RAILModeObserver* observer) {
+void WebThreadScheduler::AddRAILModeObserver(WebRAILModeObserver* observer) {
   NOTREACHED();
 }
 

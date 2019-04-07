@@ -23,7 +23,6 @@
 #include "components/policy/core/common/cloud/mock_device_management_service.h"
 #include "components/policy/core/common/cloud/mock_signing_service.h"
 #include "components/policy/proto/device_management_backend.pb.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -60,6 +59,9 @@ const char kAssetId[] = "fake-asset-id";
 const char kLocation[] = "fake-location";
 const char kGcmID[] = "fake-gcm-id";
 const char kPackageName[] = "com.example.app";
+const char kPolicyToken[] = "fake-policy-token";
+const char kPolicyName[] = "fake-policy-name";
+const char kValueValidationMessage[] = "fake-value-validation-message";
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || \
     defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -246,6 +248,22 @@ class CloudPolicyClientTest : public testing::Test {
     license_two->set_available_licenses(0);
 
     upload_app_install_report_response_.mutable_app_install_report_response();
+
+    em::PolicyValidationReportRequest* policy_validation_report_request =
+        upload_policy_validation_report_request_
+            .mutable_policy_validation_report_request();
+    policy_validation_report_request->set_policy_type(policy_type_);
+    policy_validation_report_request->set_policy_token(kPolicyToken);
+    policy_validation_report_request->set_validation_result_type(
+        em::PolicyValidationReportRequest::
+            VALIDATION_RESULT_TYPE_VALUE_WARNING);
+    em::PolicyValueValidationIssue* policy_value_validation_issue =
+        policy_validation_report_request->add_policy_value_validation_issues();
+    policy_value_validation_issue->set_policy_name(kPolicyName);
+    policy_value_validation_issue->set_severity(
+        em::PolicyValueValidationIssue::
+            VALUE_VALIDATION_ISSUE_SEVERITY_WARNING);
+    policy_value_validation_issue->set_debug_message(kValueValidationMessage);
   }
 
   void SetUp() override {
@@ -272,7 +290,7 @@ class CloudPolicyClientTest : public testing::Test {
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             &url_loader_factory_);
     client_ = std::make_unique<CloudPolicyClient>(
-        kMachineID, kMachineModel, kBrandCode, &service_, nullptr,
+        kMachineID, kMachineModel, kBrandCode, &service_,
         shared_url_loader_factory_, &fake_signing_service_,
         base::BindRepeating(
             &MockDeviceDMTokenCallbackObserver::OnDeviceDMTokenRequested,
@@ -360,6 +378,20 @@ class CloudPolicyClientTest : public testing::Test {
                 StartJob(dm_protocol::kValueRequestUploadStatus,
                          std::string(), std::string(), kDMToken,
                          client_id_, MatchProto(upload_status_request_)));
+  }
+
+  void ExpectUploadPolicyValidationReport() {
+    EXPECT_CALL(
+        service_,
+        CreateJob(
+            DeviceManagementRequestJob::TYPE_UPLOAD_POLICY_VALIDATION_REPORT,
+            shared_url_loader_factory_))
+        .WillOnce(
+            service_.SucceedJob(upload_policy_validation_report_response_));
+    EXPECT_CALL(service_,
+                StartJob(dm_protocol::kValueRequestUploadPolicyValidationReport,
+                         std::string(), std::string(), kDMToken, client_id_,
+                         MatchProto(upload_policy_validation_report_request_)));
   }
 
   void ExpectChromeDesktopReport() {
@@ -483,6 +515,7 @@ class CloudPolicyClientTest : public testing::Test {
   em::DeviceManagementRequest attribute_update_request_;
   em::DeviceManagementRequest gcm_id_update_request_;
   em::DeviceManagementRequest check_device_license_request_;
+  em::DeviceManagementRequest upload_policy_validation_report_request_;
 
   // Protobufs used in successful responses.
   em::DeviceManagementResponse registration_response_;
@@ -498,6 +531,7 @@ class CloudPolicyClientTest : public testing::Test {
   em::DeviceManagementResponse check_device_license_response_;
   em::DeviceManagementResponse check_device_license_broken_response_;
   em::DeviceManagementResponse upload_app_install_report_response_;
+  em::DeviceManagementResponse upload_policy_validation_report_response_;
 
   base::MessageLoop loop_;
   std::string client_id_;
@@ -1033,6 +1067,19 @@ TEST_F(CloudPolicyClientTest, UploadStatusWhilePolicyFetchActive) {
   EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
 }
 
+TEST_F(CloudPolicyClientTest, UploadPolicyValidationReport) {
+  Register();
+
+  ExpectUploadPolicyValidationReport();
+  std::vector<ValueValidationIssue> issues;
+  issues.push_back(
+      {kPolicyName, ValueValidationIssue::kWarning, kValueValidationMessage});
+  client_->UploadPolicyValidationReport(
+      CloudPolicyValidatorBase::VALIDATION_VALUE_WARNING, issues, policy_type_,
+      kPolicyToken);
+  EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
+}
+
 TEST_F(CloudPolicyClientTest, UploadChromeDesktopReport) {
   Register();
 
@@ -1148,15 +1195,15 @@ TEST_F(CloudPolicyClientTest, FetchRemoteCommands) {
           ElementsAre(MatchProto(
               remote_command_response_.remote_command_response().commands(0)))))
       .Times(1);
-  const CloudPolicyClient::RemoteCommandCallback callback =
-      base::Bind(&MockRemoteCommandsObserver::OnRemoteCommandsFetched,
-                 base::Unretained(&remote_commands_observer));
+  CloudPolicyClient::RemoteCommandCallback callback =
+      base::BindOnce(&MockRemoteCommandsObserver::OnRemoteCommandsFetched,
+                     base::Unretained(&remote_commands_observer));
 
   const std::vector<em::RemoteCommandResult> command_results(
       1, remote_command_request_.remote_command_request().command_results(0));
   client_->FetchRemoteCommands(
       std::make_unique<RemoteCommandJob::UniqueIDType>(kLastCommandId),
-      command_results, callback);
+      command_results, std::move(callback));
 
   EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
 }

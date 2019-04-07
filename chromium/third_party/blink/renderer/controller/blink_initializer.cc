@@ -57,6 +57,7 @@
 #include "v8/include/v8.h"
 
 #if defined(OS_ANDROID)
+#include "third_party/blink/renderer/controller/crash_memory_metrics_reporter_impl.h"
 #include "third_party/blink/renderer/controller/oom_intervention_impl.h"
 #endif
 
@@ -73,20 +74,16 @@ class EndOfTaskRunner : public WebThread::TaskObserver {
   }
 };
 
-}  // namespace
+WebThread::TaskObserver* g_end_of_task_runner = nullptr;
 
-static WebThread::TaskObserver* g_end_of_task_runner = nullptr;
-
-static BlinkInitializer& GetBlinkInitializer() {
+BlinkInitializer& GetBlinkInitializer() {
   DEFINE_STATIC_LOCAL(std::unique_ptr<BlinkInitializer>, initializer,
                       (std::make_unique<BlinkInitializer>()));
   return *initializer;
 }
 
-void Initialize(Platform* platform, service_manager::BinderRegistry* registry) {
-  DCHECK(registry);
-  Platform::Initialize(platform);
-
+void InitializeCommon(Platform* platform,
+                      service_manager::BinderRegistry* registry) {
 #if !defined(ARCH_CPU_X86_64) && !defined(ARCH_CPU_ARM64) && defined(OS_WIN)
   // Reserve address space on 32 bit Windows, to make it likelier that large
   // array buffer allocations succeed.
@@ -139,6 +136,23 @@ void Initialize(Platform* platform, service_manager::BinderRegistry* registry) {
   }
 }
 
+}  // namespace
+
+void Initialize(Platform* platform,
+                service_manager::BinderRegistry* registry,
+                WebThread* main_thread) {
+  DCHECK(registry);
+  Platform::Initialize(platform, main_thread);
+  InitializeCommon(platform, registry);
+}
+
+void CreateMainThreadAndInitialize(Platform* platform,
+                                   service_manager::BinderRegistry* registry) {
+  DCHECK(registry);
+  Platform::CreateMainThreadAndInitialize(platform);
+  InitializeCommon(platform, registry);
+}
+
 void BlinkInitializer::RegisterInterfaces(
     service_manager::BinderRegistry& registry) {
   ModulesInitializer::RegisterInterfaces(registry);
@@ -152,6 +166,10 @@ void BlinkInitializer::RegisterInterfaces(
   registry.AddInterface(
       ConvertToBaseCallback(CrossThreadBind(&OomInterventionImpl::Create)),
       main_thread->GetTaskRunner());
+
+  registry.AddInterface(ConvertToBaseCallback(CrossThreadBind(
+                            &CrashMemoryMetricsReporterImpl::Bind)),
+                        main_thread->GetTaskRunner());
 #endif
 
   registry.AddInterface(

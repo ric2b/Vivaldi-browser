@@ -95,9 +95,7 @@ class BookmarkBarView : public views::AccessiblePaneView,
 
   // Sets whether the containing browser is showing an infobar.  This affects
   // layout during animation.
-  void set_infobar_visible(bool infobar_visible) {
-    infobar_visible_ = infobar_visible;
-  }
+  void SetInfoBarVisible(bool infobar_visible);
 
   // Changes the state of the bookmark bar.
   void SetBookmarkBarState(BookmarkBar::State state,
@@ -390,7 +388,13 @@ class BookmarkBarView : public views::AccessiblePaneView,
     SchedulePaint();
   }
 
-  int GetPreferredHeight() const;
+  // Inserts |button| in logical position |index| in the bar, maintaining
+  // correct focus traversal order.
+  void InsertBookmarkButtonAtIndex(views::View* button, int index);
+
+  // Returns the model index for the bookmark associated with |button|,
+  // or -1 if |button| is not a bookmark button from this bar.
+  int GetIndexForButton(views::View* button);
 
   // Needed to react to kShowAppsShortcutInBookmarkBar changes.
   PrefChangeRegistrar profile_pref_registrar_;
@@ -433,6 +437,9 @@ class BookmarkBarView : public views::AccessiblePaneView,
   // Visible if not all the bookmark buttons fit.
   views::MenuButton* overflow_button_;
 
+  // The individual bookmark buttons.
+  std::vector<views::LabelButton*> bookmark_buttons_;
+
   // Shows a text and a link to import bookmarks if there are no bookmarks in
   // the Bookmarks Bar.
   views::View* instructions_;
@@ -458,7 +465,7 @@ class BookmarkBarView : public views::AccessiblePaneView,
   // Are we animating to or from the detached state?
   bool animating_detached_;
 
-  base::ObserverList<BookmarkBarViewObserver> observers_;
+  base::ObserverList<BookmarkBarViewObserver>::Unchecked observers_;
 
   // Factory used to delay showing of the drop menu.
   base::WeakPtrFactory<BookmarkBarView> show_folder_method_factory_;

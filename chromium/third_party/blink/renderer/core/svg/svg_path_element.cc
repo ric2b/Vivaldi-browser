@@ -123,13 +123,13 @@ void SVGPathElement::InvalidateMPathDependencies() {
 }
 
 Node::InsertionNotificationRequest SVGPathElement::InsertedInto(
-    ContainerNode* root_parent) {
+    ContainerNode& root_parent) {
   SVGGeometryElement::InsertedInto(root_parent);
   InvalidateMPathDependencies();
   return kInsertionDone;
 }
 
-void SVGPathElement::RemovedFrom(ContainerNode* root_parent) {
+void SVGPathElement::RemovedFrom(ContainerNode& root_parent) {
   SVGGeometryElement::RemovedFrom(root_parent);
   InvalidateMPathDependencies();
 }

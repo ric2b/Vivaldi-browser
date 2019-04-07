@@ -5,8 +5,8 @@
 #include "ash/test/ash_test_base.h"
 
 #include "ash/shell.h"
-#include "services/ui/ws2/test_window_tree_client.h"
-#include "services/ui/ws2/window_tree_test_helper.h"
+#include "services/ws/test_window_tree_client.h"
+#include "services/ws/window_tree_test_helper.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -55,7 +55,7 @@ TEST_F(CursorTest, TopLevel) {
 TEST_F(CursorTest, Embedded) {
   // Create a window to hold an embedding and set its cursor.
   aura::Window* embed_root = GetWindowTreeTestHelper()->NewWindow();
-  ui::ws2::TestWindowTreeClient test_client;
+  ws::TestWindowTreeClient test_client;
   GetWindowTreeTestHelper()->Embed(embed_root, nullptr, &test_client, 0);
   const ui::CursorData help_cursor(ui::CursorType::kHelp);
   GetWindowTreeTestHelper()->SetCursor(embed_root, help_cursor);

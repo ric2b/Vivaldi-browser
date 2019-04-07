@@ -15,7 +15,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/macros.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "chrome/browser/extensions/api/braille_display_private/brlapi_connection.h"
 #include "chrome/browser/extensions/api/braille_display_private/brlapi_keycode_map.h"
@@ -27,12 +27,17 @@ namespace api {
 namespace braille_display_private {
 
 namespace {
+
 // Delay between detecting a directory update and trying to connect
 // to the brlapi.
-const int64_t kConnectionDelayMs = 500;
+constexpr base::TimeDelta kConnectionDelay =
+    base::TimeDelta::FromMilliseconds(500);
+
 // How long to periodically retry connecting after a brltty restart.
 // Some displays are slow to connect.
-const int64_t kConnectRetryTimeout = 20000;
+constexpr base::TimeDelta kConnectRetryTimeout =
+    base::TimeDelta::FromSeconds(20);
+
 }  // namespace
 
 BrailleController::BrailleController() {
@@ -100,7 +105,7 @@ std::unique_ptr<DisplayState> BrailleControllerImpl::GetDisplayState() {
   return display_state;
 }
 
-void BrailleControllerImpl::WriteDots(const std::vector<char>& cells,
+void BrailleControllerImpl::WriteDots(const std::vector<uint8_t>& cells,
                                       unsigned int cells_cols,
                                       unsigned int cells_rows) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -248,19 +253,16 @@ void BrailleControllerImpl::TryToConnect() {
 
 void BrailleControllerImpl::ResetRetryConnectHorizon() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  retry_connect_horizon_ =
-      base::Time::Now() +
-      base::TimeDelta::FromMilliseconds(kConnectRetryTimeout);
+  retry_connect_horizon_ = base::Time::Now() + kConnectRetryTimeout;
 }
 
 void BrailleControllerImpl::ScheduleTryToConnect() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  base::TimeDelta delay(base::TimeDelta::FromMilliseconds(kConnectionDelayMs));
   // Don't reschedule if there's already a connect scheduled or
   // the next attempt would fall outside of the retry limit.
   if (connect_scheduled_)
     return;
-  if (base::Time::Now() + delay > retry_connect_horizon_) {
+  if (base::Time::Now() + kConnectionDelay > retry_connect_horizon_) {
     VLOG(1) << "Stopping to retry to connect to brlapi";
     return;
   }
@@ -270,7 +272,7 @@ void BrailleControllerImpl::ScheduleTryToConnect() {
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(&BrailleControllerImpl::TryToConnect,
                      base::Unretained(this)),
-      delay);
+      kConnectionDelay);
 }
 
 void BrailleControllerImpl::Disconnect() {

@@ -26,7 +26,7 @@ class DEVICE_VR_EXPORT GvrDevice : public VRDeviceBase,
 
   // VRDeviceBase
   void RequestSession(
-      mojom::XRDeviceRuntimeSessionOptionsPtr options,
+      mojom::XRRuntimeSessionOptionsPtr options,
       mojom::XRRuntime::RequestSessionCallback callback) override;
   void PauseTracking() override;
   void ResumeTracking() override;
@@ -42,7 +42,7 @@ class DEVICE_VR_EXPORT GvrDevice : public VRDeviceBase,
   // VRDeviceBase
   void OnListeningForActivate(bool listening) override;
   void OnMagicWindowFrameDataRequest(
-      mojom::VRMagicWindowProvider::GetFrameDataCallback callback) override;
+      mojom::XRFrameDataProvider::GetFrameDataCallback callback) override;
 
   void OnStartPresentResult(mojom::XRRuntime::RequestSessionCallback callback,
                             mojom::XRSessionPtr session);

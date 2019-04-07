@@ -11,7 +11,7 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_actions_bar_bubble_views.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/events/base_event_utils.h"
-#include "ui/views/bubble/bubble_dialog_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/window/dialog_client_view.h"
 
@@ -48,9 +48,6 @@ class ExtensionMessageBubbleViewBrowserTest
   ExtensionMessageBubbleViewBrowserTest() {}
   ~ExtensionMessageBubbleViewBrowserTest() override {}
 
-  // ExtensionMessageBubbleBrowserTest:
-  void SetUp() override;
-
   // TestBrowserDialog:
   void ShowUi(const std::string& name) override;
 
@@ -70,14 +67,6 @@ class ExtensionMessageBubbleViewBrowserTest
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionMessageBubbleViewBrowserTest);
 };
-
-void ExtensionMessageBubbleViewBrowserTest::SetUp() {
-  // MD is required on Mac to get a Views bubble. On other platforms, it should
-  // not affect the behavior of the bubble (just the appearance), so enable for
-  // all platforms.
-  UseMdOnly();
-  SupportsTestUi::SetUp();
-}
 
 void ExtensionMessageBubbleViewBrowserTest::ShowUi(const std::string& name) {
   // When invoked this way, the dialog test harness must close the bubble.
@@ -284,7 +273,7 @@ IN_PROC_BROWSER_TEST_F(NtpExtensionBubbleViewBrowserTest,
 }
 
 // Flaky on Mac https://crbug.com/851655
-#if defined(OS_MACOSX)
+#if defined(OS_MACOSX) || defined(OS_LINUX)
 #define MAYBE_TestBubbleClosedAfterExtensionUninstall \
   DISABLED_TestBubbleClosedAfterExtensionUninstall
 #else

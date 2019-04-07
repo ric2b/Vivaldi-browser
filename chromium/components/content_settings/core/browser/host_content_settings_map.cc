@@ -157,12 +157,12 @@ content_settings::PatternPair GetPatternsFromScopingType(
   content_settings::PatternPair patterns;
 
   switch (scoping_type) {
-    case WebsiteSettingsInfo::REQUESTING_DOMAIN_ONLY_SCOPE:
+    case WebsiteSettingsInfo::COOKIES_SCOPE:
       patterns.first = ContentSettingsPattern::FromURL(primary_url);
       patterns.second = ContentSettingsPattern::Wildcard();
       break;
-    case WebsiteSettingsInfo::TOP_LEVEL_ORIGIN_ONLY_SCOPE:
-    case WebsiteSettingsInfo::REQUESTING_ORIGIN_ONLY_SCOPE:
+    case WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE:
+    case WebsiteSettingsInfo::SINGLE_ORIGIN_WITH_EMBEDDED_EXCEPTIONS_SCOPE:
       patterns.first = ContentSettingsPattern::FromURLNoWildcard(primary_url);
       patterns.second = ContentSettingsPattern::Wildcard();
       break;
@@ -197,10 +197,12 @@ enum class FlashPermissions {
 
 }  // namespace
 
-HostContentSettingsMap::HostContentSettingsMap(PrefService* prefs,
-                                               bool is_incognito_profile,
-                                               bool is_guest_profile,
-                                               bool store_last_modified)
+HostContentSettingsMap::HostContentSettingsMap(
+    PrefService* prefs,
+    bool is_incognito_profile,
+    bool is_guest_profile,
+    bool store_last_modified,
+    bool migrate_requesting_and_top_level_origin_settings)
     : RefcountedKeyedService(base::ThreadTaskRunnerHandle::Get()),
 #ifndef NDEBUG
       used_from_thread_id_(base::PlatformThread::CurrentId()),
@@ -242,6 +244,8 @@ HostContentSettingsMap::HostContentSettingsMap(PrefService* prefs,
   content_settings_providers_[DEFAULT_PROVIDER] = std::move(default_provider);
 
   InitializePluginsDataSettings();
+  if (migrate_requesting_and_top_level_origin_settings)
+    MigrateRequestingAndTopLevelOriginSettings();
   RecordExceptionMetrics();
 }
 
@@ -429,6 +433,15 @@ void HostContentSettingsMap::SetWebsiteSettingCustomScope(
     ContentSettingsType content_type,
     const std::string& resource_identifier,
     std::unique_ptr<base::Value> value) {
+  DCHECK(primary_pattern == secondary_pattern ||
+         secondary_pattern == ContentSettingsPattern::Wildcard() ||
+         content_settings::WebsiteSettingsRegistry::GetInstance()
+             ->Get(content_type)
+             ->SupportsEmbeddedExceptions() ||
+         content_settings::WebsiteSettingsRegistry::GetInstance()
+                 ->Get(content_type)
+                 ->scoping_type() ==
+             WebsiteSettingsInfo::REQUESTING_ORIGIN_AND_TOP_LEVEL_ORIGIN_SCOPE);
   DCHECK(SupportsResourceIdentifier(content_type) ||
          resource_identifier.empty());
   // TODO(crbug.com/731126): Verify that assumptions for notification content
@@ -917,6 +930,51 @@ void HostContentSettingsMap::InitializePluginsDataSettings() {
       SetWebsiteSettingDefaultScope(primary, primary,
                                     CONTENT_SETTINGS_TYPE_PLUGINS_DATA,
                                     std::string(), std::move(dict));
+    }
+  }
+}
+
+void HostContentSettingsMap::MigrateRequestingAndTopLevelOriginSettings() {
+  content_settings::ContentSettingsRegistry* registry =
+      content_settings::ContentSettingsRegistry::GetInstance();
+  for (const content_settings::ContentSettingsInfo* info : *registry) {
+    // Only 3 types should be migrated.
+    ContentSettingsType type = info->website_settings_info()->type();
+    if (type != CONTENT_SETTINGS_TYPE_GEOLOCATION &&
+        type != CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER &&
+        type != CONTENT_SETTINGS_TYPE_MIDI_SYSEX) {
+      continue;
+    }
+
+    ContentSettingsForOneType host_settings;
+    GetSettingsForOneType(type, std::string(), &host_settings);
+    for (ContentSettingPatternSource pattern : host_settings) {
+      if (pattern.source != "preference")
+        continue;
+
+      // Users were never allowed to add user-specified patterns for these types
+      // so we can assume they are all origin scoped.
+      DCHECK(GURL(pattern.primary_pattern.ToString()).is_valid());
+      DCHECK(GURL(pattern.secondary_pattern.ToString()).is_valid());
+
+      if (pattern.secondary_pattern.IsValid() &&
+          pattern.secondary_pattern != pattern.primary_pattern &&
+          pattern.secondary_pattern != ContentSettingsPattern::Wildcard()) {
+        SetContentSettingCustomScope(pattern.primary_pattern,
+                                     pattern.secondary_pattern, type,
+                                     std::string(), CONTENT_SETTING_DEFAULT);
+        // Also clear the setting for the top level origin so that the user
+        // receives another prompt. This is necessary in case they have allowed
+        // the top level origin but blocked an embedded origin in which case
+        // they should have another opportunity to block a request from an
+        // embedded origin.
+        SetContentSettingCustomScope(pattern.secondary_pattern,
+                                     pattern.secondary_pattern, type,
+                                     std::string(), CONTENT_SETTING_DEFAULT);
+        SetContentSettingCustomScope(pattern.secondary_pattern,
+                                     ContentSettingsPattern::Wildcard(), type,
+                                     std::string(), CONTENT_SETTING_DEFAULT);
+      }
     }
   }
 }

@@ -7,12 +7,16 @@
 #include <lib/async/default.h>
 #include <lib/async/task.h>
 #include <lib/async/wait.h>
+#include <lib/zx/job.h>
 #include <lib/zx/socket.h>
 
 #include "base/callback.h"
+#include "base/process/launch.h"
+#include "base/test/multiprocess_test.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "testing/multiprocess_func_list.h"
 
 namespace base {
 
@@ -25,7 +29,9 @@ struct TestTask : public async_task_t {
     deadline = 0;
   }
 
-  static void TaskProc(async_t* async, async_task_t* task, zx_status_t status);
+  static void TaskProc(async_dispatcher_t* async,
+                       async_task_t* task,
+                       zx_status_t status);
 
   int num_calls = 0;
   int repeats = 1;
@@ -34,10 +40,10 @@ struct TestTask : public async_task_t {
 };
 
 // static
-void TestTask::TaskProc(async_t* async,
+void TestTask::TaskProc(async_dispatcher_t* async,
                         async_task_t* task,
                         zx_status_t status) {
-  EXPECT_EQ(async, async_get_default());
+  EXPECT_EQ(async, async_get_default_dispatcher());
   EXPECT_TRUE(status == ZX_OK || status == ZX_ERR_CANCELED)
       << "status: " << status;
 
@@ -45,7 +51,7 @@ void TestTask::TaskProc(async_t* async,
   test_task->num_calls++;
   test_task->last_status = status;
 
-  if (!test_task->on_call.is_null())
+  if (test_task->on_call)
     std::move(test_task->on_call).Run();
 
   if (test_task->num_calls < test_task->repeats)
@@ -61,7 +67,7 @@ struct TestWait : public async_wait_t {
     trigger = signals;
   }
 
-  static void HandleProc(async_t* async,
+  static void HandleProc(async_dispatcher_t* async,
                          async_wait_t* wait,
                          zx_status_t status,
                          const zx_packet_signal_t* signal);
@@ -71,11 +77,11 @@ struct TestWait : public async_wait_t {
 };
 
 // static
-void TestWait::HandleProc(async_t* async,
+void TestWait::HandleProc(async_dispatcher_t* async,
                           async_wait_t* wait,
                           zx_status_t status,
                           const zx_packet_signal_t* signal) {
-  EXPECT_EQ(async, async_get_default());
+  EXPECT_EQ(async, async_get_default_dispatcher());
   EXPECT_TRUE(status == ZX_OK || status == ZX_ERR_CANCELED)
       << "status: " << status;
 
@@ -84,18 +90,51 @@ void TestWait::HandleProc(async_t* async,
   test_wait->num_calls++;
   test_wait->last_status = status;
 
-  if (!test_wait->on_call.is_null())
+  if (test_wait->on_call)
+    std::move(test_wait->on_call).Run();
+}
+
+struct TestException : public async_exception_t {
+  TestException(zx_handle_t handle) {
+    state = ASYNC_STATE_INIT;
+    handler = &HandleProc;
+    task = handle;
+    options = 0;
+  }
+
+  static void HandleProc(async_dispatcher_t* async,
+                         async_exception_t* wait,
+                         zx_status_t status,
+                         const zx_port_packet_t* packet);
+  int num_calls = 0;
+  OnceClosure on_call;
+  zx_status_t last_status = ZX_OK;
+};
+
+// static
+void TestException::HandleProc(async_dispatcher_t* async,
+                               async_exception_t* wait,
+                               zx_status_t status,
+                               const zx_port_packet_t* packet) {
+  EXPECT_EQ(async, async_get_default_dispatcher());
+
+  auto* test_wait = static_cast<TestException*>(wait);
+
+  test_wait->num_calls++;
+  test_wait->last_status = status;
+
+  if (test_wait->on_call)
     std::move(test_wait->on_call).Run();
 }
 
 }  // namespace
 
-class AsyncDispatcherTest : public testing::Test {
+class AsyncDispatcherTest : public MultiProcessTest {
  public:
   AsyncDispatcherTest() {
     dispatcher_ = std::make_unique<AsyncDispatcher>();
 
-    async_ = async_get_default();
+    async_ = async_get_default_dispatcher();
     EXPECT_TRUE(async_);
 
     EXPECT_EQ(zx::socket::create(ZX_SOCKET_DATAGRAM, &socket1_, &socket2_),
@@ -117,7 +156,7 @@ class AsyncDispatcherTest : public testing::Test {
  protected:
   std::unique_ptr<AsyncDispatcher> dispatcher_;
 
-  async_t* async_ = nullptr;
+  async_dispatcher_t* async_ = nullptr;
 
   zx::socket socket1_;
   zx::socket socket2_;
@@ -213,6 +252,55 @@ TEST_F(AsyncDispatcherTest, WaitShutdown) {
 
   EXPECT_EQ(wait.num_calls, 1);
   EXPECT_EQ(wait.last_status, ZX_ERR_CANCELED);
+}
+
+// Sub-process which crashes itself, to generate an exception-port event.
+MULTIPROCESS_TEST_MAIN(AsyncDispatcherCrashingChild) {
+  IMMEDIATE_CRASH();
+  return 0;
+}
+
+TEST_F(AsyncDispatcherTest, BindExceptionPort) {
+  zx::job child_job;
+  ASSERT_EQ(zx::job::create(*zx::job::default_job(), 0, &child_job), ZX_OK);
+
+  // Bind |child_job|'s exception port to the dispatcher.
+  TestException exception(child_job.get());
+  EXPECT_EQ(async_bind_exception_port(async_, &exception), ZX_OK);
+
+  // Launch a child process in the job, that will immediately crash.
+  LaunchOptions options;
+  options.job_handle = child_job.get();
+  Process child =
+      SpawnChildWithOptions("AsyncDispatcherCrashingChild", options);
+  ASSERT_TRUE(child.IsValid());
+
+  // Wait for the exception event to be handled.
+  EXPECT_EQ(
+      dispatcher_->DispatchOrWaitUntil(
+          (TimeTicks::Now() + TestTimeouts::action_max_timeout()).ToZxTime()),
+      ZX_OK);
+  EXPECT_EQ(exception.num_calls, 1);
+  EXPECT_EQ(exception.last_status, ZX_OK);
+
+  EXPECT_EQ(async_unbind_exception_port(async_, &exception), ZX_OK);
+  ASSERT_EQ(child_job.kill(), ZX_OK);
+}
+
+TEST_F(AsyncDispatcherTest, CancelExceptionPort) {
+  zx::job child_job;
+  ASSERT_EQ(zx::job::create(*zx::job::default_job(), 0, &child_job), ZX_OK);
+
+  // Bind |child_job|'s exception port to the dispatcher.
+  TestException exception(child_job.get());
+  EXPECT_EQ(async_bind_exception_port(async_, &exception), ZX_OK);
+
+  // Tear-down the dispatcher, and verify that the |exception| is cancelled.
+  dispatcher_ = nullptr;
+  EXPECT_EQ(exception.num_calls, 1);
+  EXPECT_EQ(exception.last_status, ZX_ERR_CANCELED);
+
+  ASSERT_EQ(child_job.kill(), ZX_OK);
 }
 
 }  // namespace base

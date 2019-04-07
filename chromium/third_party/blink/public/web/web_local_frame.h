@@ -27,7 +27,7 @@
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_history_item.h"
 #include "third_party/blink/public/web/web_ime_text_span.h"
-#include "third_party/blink/public/web/web_navigation_timings.h"
+#include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/public/web/web_text_direction.h"
 #include "v8/include/v8.h"
 
@@ -46,7 +46,6 @@ class WebLocalFrameClient;
 class WebFrameWidget;
 class WebInputMethodController;
 class WebPerformance;
-class WebPlugin;
 class WebRange;
 class WebSecurityOrigin;
 class WebScriptExecutionCallback;
@@ -60,6 +59,7 @@ enum class WebTreeScopeType;
 struct WebAssociatedURLLoaderOptions;
 struct WebConsoleMessage;
 struct WebContentSecurityPolicyViolation;
+struct WebNavigationParams;
 struct WebFindOptions;
 struct WebMediaPlayerAction;
 struct WebPrintParams;
@@ -216,8 +216,8 @@ class WebLocalFrame : public WebFrame {
       const WebHistoryItem&,
       bool is_client_redirect,
       const base::UnguessableToken& devtools_navigation_token,
-      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data,
-      const WebNavigationTimings& navigation_timings) = 0;
+      std::unique_ptr<WebNavigationParams> navigation_params,
+      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) = 0;
 
   // Commits a same-document navigation in the frame. For history navigations, a
   // valid WebHistoryItem should be provided. Returns CommitResult::Ok if the
@@ -239,14 +239,17 @@ class WebLocalFrame : public WebFrame {
                               const WebURL& unreachable_url = WebURL(),
                               bool replace = false) = 0;
 
-  // Navigates to the given data with specific mime type and optional text
-  // encoding.  For HTML data, baseURL indicates the security origin of
-  // the document and is used to resolve links.  If specified,
-  // unreachableURL is reported via WebDocumentLoader::unreachableURL.  If
-  // replace is false, then this data will be loaded as a normal
-  // navigation.  Otherwise, the current history item will be replaced.
+  // Calls CommitDataNavigationWithRequest with a WebURLRequest that is built
+  // either 1) based on the previous, provisional request (if |replace| is true
+  // and |unreachable_url| is present) or 2) constructed from scratch otherwise.
+  //
+  // |base_url| indicates the security origin and is used to resolve links in
+  // the committed document.
+  //
+  // Please see documentation of CommitDataNavigationWithRequest for description
+  // of other parameters.
   virtual void CommitDataNavigation(
-      const WebData&,
+      const WebData& data,
       const WebString& mime_type,
       const WebString& text_encoding,
       const WebURL& base_url,
@@ -255,8 +258,33 @@ class WebLocalFrame : public WebFrame {
       WebFrameLoadType,
       const WebHistoryItem&,
       bool is_client_redirect,
-      std::unique_ptr<WebDocumentLoader::ExtraData> navigation_data,
-      const WebNavigationTimings& navigation_timings) = 0;
+      std::unique_ptr<WebNavigationParams> navigation_params,
+      std::unique_ptr<WebDocumentLoader::ExtraData> navigation_data) = 0;
+
+  // Navigates to the given |data| with specified |mime_type| and optional
+  // |text_encoding|.
+  //
+  // If specified, |unreachable_url| is reported via
+  // WebDocumentLoader::UnreachableURL.
+  //
+  // If |replace| is false, then this data will be loaded as a normal
+  // navigation.  Otherwise, the current history item will be replaced.
+  //
+  // This method can be called instead of CommitDataNavigation when a
+  // ResourceRequest has already been precomputed (e.g. when trying to commit an
+  // error page, while mimicking the original failed request).
+  virtual void CommitDataNavigationWithRequest(
+      const WebURLRequest&,
+      const WebData&,
+      const WebString& mime_type,
+      const WebString& text_encoding,
+      const WebURL& unreachable_url,
+      bool replace,
+      WebFrameLoadType,
+      const WebHistoryItem&,
+      bool is_client_redirect,
+      std::unique_ptr<WebNavigationParams> navigation_params,
+      std::unique_ptr<WebDocumentLoader::ExtraData> navigation_data) = 0;
 
   // Returns the document loader that is currently loading.  May be null.
   virtual WebDocumentLoader* GetProvisionalDocumentLoader() const = 0;
@@ -651,12 +679,6 @@ class WebLocalFrame : public WebFrame {
 
   // Find-in-page -----------------------------------------------------------
 
-  // Begins a find request, which includes finding the next find match (using
-  // find()) and scoping the frame for find matches if needed.
-  virtual void RequestFind(int identifier,
-                           const WebString& search_text,
-                           const WebFindOptions&) = 0;
-
   // Searches a frame for a given string.
   //
   // If a match is found, this function will select it (scrolling down to
@@ -685,8 +707,6 @@ class WebLocalFrame : public WebFrame {
   // generated by find results. If this is called with an empty array, the
   // default behavior will be restored.
   virtual void SetTickmarks(const WebVector<WebRect>&) = 0;
-
-  virtual WebPlugin* GetWebPluginForFind() = 0;
 
   // Context menu -----------------------------------------------------------
 

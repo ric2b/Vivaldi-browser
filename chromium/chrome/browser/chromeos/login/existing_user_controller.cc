@@ -53,6 +53,7 @@
 #include "chrome/browser/chromeos/system/device_disabling_manager.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/chrome_device_id_helper.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
 #include "chrome/common/channel_info.h"
@@ -62,6 +63,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
+#include "chromeos/cryptohome/cryptohome_util.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
@@ -70,7 +72,7 @@
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_util.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
@@ -82,7 +84,6 @@
 #include "components/policy/proto/cloud_policy.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
-#include "components/signin/core/browser/signin_client.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_names.h"
@@ -1067,9 +1068,7 @@ void ExistingUserController::OnOldEncryptionDetected(
       g_browser_process->platform_part()
           ->browser_policy_connector_chromeos()
           ->device_management_service();
-  // Use signin profile request context
-  net::URLRequestContextGetter* const signin_profile_context =
-      ProfileHelper::GetSigninProfile()->GetRequestContext();
+  // Use signin profile URL loader factory
   scoped_refptr<network::SharedURLLoaderFactory>
       sigin_profile_url_loader_factory =
           content::BrowserContext::GetDefaultStoragePartition(
@@ -1079,8 +1078,7 @@ void ExistingUserController::OnOldEncryptionDetected(
   auto cloud_policy_client = std::make_unique<policy::CloudPolicyClient>(
       std::string() /* machine_id */, std::string() /* machine_model */,
       std::string() /* brand_code */, device_management_service,
-      signin_profile_context, sigin_profile_url_loader_factory,
-      nullptr /* signing_service */,
+      sigin_profile_url_loader_factory, nullptr /* signing_service */,
       chromeos::GetDeviceDMTokenForUserPolicyGetter(
           user_context.GetAccountId()));
   pre_signin_policy_fetcher_ = std::make_unique<policy::PreSigninPolicyFetcher>(
@@ -1132,12 +1130,18 @@ void ExistingUserController::OnPolicyFetchResult(
                          EncryptionMigrationMode::ASK_USER));
       break;
 
-    case apu::EcryptfsMigrationAction::kWipe:
-      cryptohome::AsyncMethodCaller::GetInstance()->AsyncRemove(
-          cryptohome::Identification(user_context.GetAccountId()),
-          base::Bind(&ExistingUserController::WipePerformed,
-                     weak_factory_.GetWeakPtr(), user_context));
+    case apu::EcryptfsMigrationAction::kWipe: {
+      cryptohome::AccountIdentifier account_identifier;
+      account_identifier.set_account_id(
+          cryptohome::Identification(user_context.GetAccountId()).id());
+
+      DBusThreadManager::Get()->GetCryptohomeClient()->RemoveEx(
+          account_identifier,
+          base::BindOnce(&ExistingUserController::WipePerformed,
+                         weak_factory_.GetWeakPtr(), user_context));
+
       break;
+    }
 
     case apu::EcryptfsMigrationAction::kMinimalMigrate:
       // Reset the profile ever initialized flag, so that user policy manager
@@ -1170,13 +1174,15 @@ void ExistingUserController::OnPolicyFetchResult(
   }
 }
 
-void ExistingUserController::WipePerformed(const UserContext& user_context,
-                                           bool success,
-                                           cryptohome::MountError return_code) {
-  if (!success) {
+void ExistingUserController::WipePerformed(
+    const UserContext& user_context,
+    base::Optional<cryptohome::BaseReply> reply) {
+  const cryptohome::MountError error = BaseReplyToMountError(reply);
+  if (error != cryptohome::MOUNT_ERROR_NONE) {
     LOG(ERROR) << "Removal of cryptohome for "
                << user_context.GetAccountId().Serialize()
-               << " failed, return code: " << return_code;
+               << " failed, return code: "
+               << BaseReplyToMountError(reply.value());
   }
 
   // Let the user authenticate online because we lose the OAuth token by
@@ -1648,7 +1654,7 @@ void ExistingUserController::DoCompleteLogin(
     bool is_ephemeral = ChromeUserManager::Get()->AreEphemeralUsersEnabled() &&
                         user_context.GetAccountId() !=
                             ChromeUserManager::Get()->GetOwnerAccountId();
-    device_id = SigninClient::GenerateSigninScopedDeviceID(is_ephemeral);
+    device_id = GenerateSigninScopedDeviceId(is_ephemeral);
   }
   user_context.SetDeviceId(device_id);
 

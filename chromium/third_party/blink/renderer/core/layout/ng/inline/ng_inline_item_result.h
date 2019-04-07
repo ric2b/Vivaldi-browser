@@ -50,13 +50,11 @@ struct CORE_EXPORT NGInlineItemResult {
   // NGLayoutResult for atomic inline items.
   scoped_refptr<NGLayoutResult> layout_result;
 
-  // Margins and padding for atomic inline items and open/close tags.
+  // Margins, borders, and padding for open tags.
+  // Margins are set for atomic inlines too.
   NGLineBoxStrut margins;
+  NGLineBoxStrut borders;
   NGLineBoxStrut padding;
-
-  // Borders/padding for open tags.
-  LayoutUnit borders_paddings_line_over;
-  LayoutUnit borders_paddings_line_under;
 
   // Has start/end edge for open/close tags.
   bool has_edge = false;
@@ -163,13 +161,17 @@ class CORE_EXPORT NGLineInfo {
 
   LayoutUnit TextIndent() const { return text_indent_; }
 
-  NGBfcOffset LineBfcOffset() const { return line_bfc_offset_; }
+  NGBfcOffset BfcOffset() const { return bfc_offset_; }
   LayoutUnit AvailableWidth() const { return available_width_; }
-  LayoutUnit Width() const { return width_; }
+  LayoutUnit Width() const { return width_.ClampNegativeToZero(); }
+  LayoutUnit WidthForAlignment() const { return width_; }
   LayoutUnit ComputeWidth() const;
-  void SetLineBfcOffset(NGBfcOffset line_bfc_offset,
-                        LayoutUnit available_width,
-                        LayoutUnit width);
+
+  void SetBfcOffset(const NGBfcOffset& bfc_offset) { bfc_offset_ = bfc_offset; }
+  void SetWidth(LayoutUnit available_width, LayoutUnit width) {
+    available_width_ = available_width;
+    width_ = width;
+  }
 
   // Start text offset of this line.
   unsigned StartOffset() const { return start_offset_; }
@@ -182,18 +184,19 @@ class CORE_EXPORT NGLineInfo {
   }
 
   // Fragment to append to the line end. Used by 'text-overflow: ellipsis'.
-  scoped_refptr<NGPhysicalTextFragment>& LineEndFragment() {
+  scoped_refptr<const NGPhysicalTextFragment>& LineEndFragment() {
     return line_end_fragment_;
   }
-  void SetLineEndFragment(scoped_refptr<NGPhysicalTextFragment>);
+  void SetLineEndFragment(scoped_refptr<const NGPhysicalTextFragment>);
 
  private:
   const NGInlineItemsData* items_data_ = nullptr;
   const ComputedStyle* line_style_ = nullptr;
   NGInlineItemResults results_;
-  scoped_refptr<NGPhysicalTextFragment> line_end_fragment_;
+  scoped_refptr<const NGPhysicalTextFragment> line_end_fragment_;
 
-  NGBfcOffset line_bfc_offset_;
+  NGBfcOffset bfc_offset_;
+
   LayoutUnit available_width_;
   LayoutUnit width_;
   LayoutUnit text_indent_;

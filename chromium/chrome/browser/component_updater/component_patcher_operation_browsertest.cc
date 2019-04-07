@@ -13,8 +13,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "build/build_config.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/services/patch/public/cpp/patch.h"
@@ -28,7 +28,7 @@
 namespace {
 
 constexpr base::TaskTraits kTaskTraits = {
-    base::MayBlock(), base::TaskPriority::BACKGROUND,
+    base::MayBlock(), base::TaskPriority::BEST_EFFORT,
     base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN};
 
 }  // namespace

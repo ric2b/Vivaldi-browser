@@ -13,7 +13,6 @@
 #include <utility>
 
 #include "ash/public/cpp/ash_features.h"
-#include "ash/public/interfaces/ime_info.mojom.h"
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/hash.h"
@@ -329,7 +328,7 @@ void InputMethodManagerImpl::StateImpl::EnableLockScreenLayouts() {
     // Skip if it's not a keyboard layout. Drop input methods including
     // extension ones. We need to keep all IMEs to support inputting on inline
     // reply on a notification if notifications on lock screen is enabled.
-    if ((!ash::features::IsLockScreenNotificationsEnabled() &&
+    if ((!ash::features::IsLockScreenInlineReplyEnabled() &&
          !manager_->IsLoginKeyboard(input_method_id)) ||
         added_ids.count(input_method_id)) {
       continue;
@@ -481,8 +480,10 @@ bool InputMethodManagerImpl::StateImpl::IsInputMethodAllowed(
     return true;
 
   // We only restrict keyboard layouts.
-  if (!manager_->util_.IsKeyboardLayout(input_method_id))
+  if (!manager_->util_.IsKeyboardLayout(input_method_id) &&
+      !extension_ime_util::IsArcIME(input_method_id)) {
     return true;
+  }
 
   return base::ContainsValue(allowed_keyboard_layout_input_method_ids,
                              input_method_id) ||
@@ -618,6 +619,7 @@ void InputMethodManagerImpl::StateImpl::AddInputMethodExtension(
   }
 
   manager_->NotifyImeMenuListChanged();
+  manager_->NotifyInputMethodExtensionAdded(extension_id);
 }
 
 void InputMethodManagerImpl::StateImpl::RemoveInputMethodExtension(
@@ -654,6 +656,7 @@ void InputMethodManagerImpl::StateImpl::RemoveInputMethodExtension(
   // If |current_input_method| is no longer in |active_input_method_ids|,
   // switch to the first one in |active_input_method_ids|.
   ChangeInputMethod(current_input_method.id(), false);
+  manager_->NotifyInputMethodExtensionRemoved(extension_id);
 }
 
 void InputMethodManagerImpl::StateImpl::GetInputMethodExtensions(
@@ -1121,9 +1124,9 @@ void InputMethodManagerImpl::ChangeInputMethodInternal(
     // it can use the fallback system virtual keyboard UI.
     state_->DisableInputView();
 
-    // TODO(mash): Support virtual keyboard under MASH. There is no
+    // TODO(crbug.com/756059): Support virtual keyboard under MASH. There is no
     // KeyboardController in the browser process under MASH.
-    if (features::IsAshInBrowserProcess()) {
+    if (!features::IsUsingWindowService()) {
       auto* keyboard_controller = keyboard::KeyboardController::Get();
       if (keyboard_controller->enabled())
         keyboard_controller->Reload();
@@ -1277,6 +1280,18 @@ void InputMethodManagerImpl::ImeMenuActivationChanged(bool is_active) {
   MaybeNotifyImeMenuActivationChanged();
 }
 
+void InputMethodManagerImpl::NotifyInputMethodExtensionAdded(
+    const std::string& extension_id) {
+  for (auto& observer : observers_)
+    observer.OnInputMethodExtensionAdded(extension_id);
+}
+
+void InputMethodManagerImpl::NotifyInputMethodExtensionRemoved(
+    const std::string& extension_id) {
+  for (auto& observer : observers_)
+    observer.OnInputMethodExtensionRemoved(extension_id);
+}
+
 void InputMethodManagerImpl::NotifyImeMenuListChanged() {
   for (auto& observer : ime_menu_observers_)
     observer.ImeMenuListChanged();
@@ -1390,7 +1405,8 @@ ui::InputMethodKeyboardController*
 InputMethodManagerImpl::GetInputMethodKeyboardController() {
   // Callers expect a nullptr when the keyboard is disabled. See
   // https://crbug.com/850020.
-  return keyboard::KeyboardController::Get()->enabled()
+  return keyboard::KeyboardController::HasInstance() &&
+                 keyboard::KeyboardController::Get()->enabled()
              ? keyboard::KeyboardController::Get()
              : nullptr;
 }

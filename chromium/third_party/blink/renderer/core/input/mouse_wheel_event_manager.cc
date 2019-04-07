@@ -8,6 +8,7 @@
 #include "third_party/blink/public/platform/web_mouse_wheel_event.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/events/wheel_event.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/input/event_handling_util.h"
@@ -58,8 +59,8 @@ WebInputEventResult MouseWheelEventManager::HandleWheelEvent(
   bool has_phase_info = event.phase != WebMouseWheelEvent::kPhaseNone ||
                         event.momentum_phase != WebMouseWheelEvent::kPhaseNone;
   if (!has_phase_info) {
-    // Synthetic wheel events generated from GesturePinchUpdate don't have
-    // phase info. Send these events to the target under the cursor.
+    // Wheel events generated from plugin and tests may not have phase info.
+    // Send these events to the target under the cursor.
     wheel_target_ = FindTargetNode(event, doc, view);
   } else if (event.phase == WebMouseWheelEvent::kPhaseBegan || !wheel_target_) {
     // Find and save the wheel_target_, this target will be used for the rest
@@ -83,7 +84,7 @@ WebInputEventResult MouseWheelEventManager::HandleWheelEvent(
     bool should_enforce_vertical_scroll =
         wheel_target_->GetDocument().IsVerticalScrollEnforced();
     DispatchEventResult dom_event_result =
-        wheel_target_->DispatchEvent(dom_event);
+        wheel_target_->DispatchEvent(*dom_event);
     if (dom_event_result != DispatchEventResult::kNotCanceled) {
       // Reset the target if the dom event is cancelled to make sure that new
       // targeting happens for the next wheel event.

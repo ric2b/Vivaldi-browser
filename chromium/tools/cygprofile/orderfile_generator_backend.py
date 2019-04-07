@@ -17,6 +17,7 @@ Example usage:
 import argparse
 import hashlib
 import json
+import glob
 import logging
 import os
 import re
@@ -29,6 +30,7 @@ import time
 import cyglog_to_orderfile
 import cygprofile_utils
 import patch_orderfile
+import phased_orderfile
 import process_profiles
 import profile_android_startup
 import symbol_extractor
@@ -201,8 +203,8 @@ class StepRecorder(object):
 
     Args:
       cmd: A list of command strings.
-      cwd: Directory in which the command should be executed, defaults to script
-          location if not specified.
+      cwd: Directory in which the command should be executed, defaults to build
+           root of script's location if not specified.
       raise_on_error: If true will raise a CommandError if the call doesn't
           succeed and mark the step as failed.
       stdout: A file to redirect stdout for the command to.
@@ -226,7 +228,7 @@ class ClankCompiler(object):
   """Handles compilation of clank."""
 
   def __init__(self, out_dir, step_recorder, arch, jobs, max_load, use_goma,
-               goma_dir):
+               goma_dir, system_health_profiling):
     self._out_dir = out_dir
     self._step_recorder = step_recorder
     self._arch = arch
@@ -234,9 +236,11 @@ class ClankCompiler(object):
     self._max_load = max_load
     self._use_goma = use_goma
     self._goma_dir = goma_dir
-    lib_chrome_so_dir = 'lib.unstripped'
+    self._system_health_profiling = system_health_profiling
+
+    self.obj_dir = os.path.join(self._out_dir, 'Release', 'obj')
     self.lib_chrome_so = os.path.join(
-        self._out_dir, 'Release', lib_chrome_so_dir, 'libchrome.so')
+        self._out_dir, 'Release', 'lib.unstripped', 'libchrome.so')
     self.chrome_apk = os.path.join(
         self._out_dir, 'Release', 'apks', 'Chrome.apk')
 
@@ -251,6 +255,7 @@ class ClankCompiler(object):
 
     # Set the "Release Official" flavor, the parts affecting performance.
     args = [
+        'enable_resource_whitelist_generation=false',
         'is_chrome_branded=true',
         'is_debug=false',
         'is_official_build=true',
@@ -265,6 +270,9 @@ class ClankCompiler(object):
     ]
     if self._goma_dir:
       args += ['goma_dir="%s"' % self._goma_dir]
+    if self._system_health_profiling:
+      args += ['devtools_instrumentation_dumping = ' +
+               str(instrumented).lower()]
 
     self._step_recorder.RunCommand(
         ['gn', 'gen', os.path.join(self._out_dir, 'Release'),
@@ -393,9 +401,6 @@ class OrderfileGenerator(object):
   generates an updated orderfile.
   """
   _CLANK_REPO = os.path.join(constants.DIR_SOURCE_ROOT, 'clank')
-  _CYGLOG_TO_ORDERFILE_SCRIPT = os.path.join(
-      constants.DIR_SOURCE_ROOT, 'tools', 'cygprofile',
-      'cyglog_to_orderfile.py')
   _CHECK_ORDERFILE_SCRIPT = os.path.join(
       constants.DIR_SOURCE_ROOT, 'tools', 'cygprofile', 'check_orderfile.py')
   _BUILD_ROOT = os.path.abspath(os.path.dirname(os.path.dirname(
@@ -403,8 +408,6 @@ class OrderfileGenerator(object):
 
   _UNPATCHED_ORDERFILE_FILENAME = os.path.join(
       _CLANK_REPO, 'orderfiles', 'unpatched_orderfile.%s')
-  _MERGED_CYGLOG_FILENAME = os.path.join(
-      constants.GetOutDirectory(), 'merged_cyglog')
 
   _PATH_TO_ORDERFILE = os.path.join(_CLANK_REPO, 'orderfiles',
                                     'orderfile.%s.out')
@@ -440,6 +443,14 @@ class OrderfileGenerator(object):
       self._profiler = profile_android_startup.AndroidProfileTool(
           output_directory, host_profile_dir, use_wpr, urls, simulate_user,
           device=options.device)
+      if options.pregenerated_profiles:
+        self._profiler.SetPregeneratedProfiles(
+            glob.glob(options.pregenerated_profiles))
+    else:
+      assert not options.pregenerated_profiles, (
+          '--pregenerated-profiles cannot be used with --skip-profile')
+      assert not options.profile_save_dir, (
+          '--profile-save-dir cannot be used with --skip-profile')
 
     self._output_data = {}
     self._step_recorder = StepRecorder(options.buildbot)
@@ -473,14 +484,71 @@ class OrderfileGenerator(object):
       dest.close()
 
   def _GenerateAndProcessProfile(self):
-    """Invokes a script to merge the per-thread traces into one file."""
+    """Invokes a script to merge the per-thread traces into one file.
+
+    The produced list of offsets is saved in
+    self._GetUnpatchedOrderfileFilename().
+    """
     self._step_recorder.BeginStep('Generate Profile Data')
     files = []
+    logging.getLogger().setLevel(logging.DEBUG)
+    if self._options.system_health_orderfile:
+      files = self._profiler.CollectSystemHealthProfile(
+          self._compiler.chrome_apk)
+      self._MaybeSaveProfile(files)
+      try:
+        self._ProcessPhasedOrderfile(files)
+      except Exception:
+        for f in files:
+          self._SaveForDebugging(f)
+        self._SaveForDebugging(self._compiler.lib_chrome_so)
+        raise
+      finally:
+        self._profiler.Cleanup()
+    else:
+      self._CollectLegacyProfile()
+    logging.getLogger().setLevel(logging.INFO)
+
+  def _ProcessPhasedOrderfile(self, files):
+    """Process the phased orderfiles produced by system health benchmarks.
+
+    The offsets will be placed in _GetUnpatchedOrderfileFilename().
+
+    Args:
+      file: Profile files pulled locally.
+    """
+    self._step_recorder.BeginStep('Process Phased Orderfile')
+    profiles = process_profiles.ProfileManager(files)
+    processor = process_profiles.SymbolOffsetProcessor(
+        self._compiler.lib_chrome_so)
+    phaser = phased_orderfile.PhasedAnalyzer(profiles, processor)
+    if self._options.offsets_for_memory:
+      profile_offsets = phaser.GetOffsetsForMemoryFootprint()
+    else:
+      profile_offsets = phaser.GetOffsetsForStartup()
+    self._output_data['orderfile_size'] = {
+        'startup_kib': processor.OffsetsPrimarySize(
+            profile_offsets.startup) / 1024,
+        'common_kib': processor.OffsetsPrimarySize(
+            profile_offsets.common) / 1024,
+        'interaction_kib': processor.OffsetsPrimarySize(
+            profile_offsets.interaction) / 1024}
+
+    offsets_list = (profile_offsets.startup +
+                    profile_offsets.common +
+                    profile_offsets.interaction)
+    ordered_symbols = processor.GetOrderedSymbols(offsets_list)
+    if not ordered_symbols:
+      raise Exception('Failed to get ordered symbols')
+    with open(self._GetUnpatchedOrderfileFilename(), 'w') as orderfile:
+      orderfile.write('\n'.join(ordered_symbols))
+
+  def _CollectLegacyProfile(self):
     try:
-      logging.getLogger().setLevel(logging.DEBUG)
       files = self._profiler.CollectProfile(
           self._compiler.chrome_apk,
           constants.PACKAGE_INFO['chrome'])
+      self._MaybeSaveProfile(files)
       self._step_recorder.BeginStep('Process profile')
       assert os.path.exists(self._compiler.lib_chrome_so)
       offsets = process_profiles.GetReachedOffsetsFromDumpFiles(
@@ -488,35 +556,27 @@ class OrderfileGenerator(object):
       if not offsets:
         raise Exception('No profiler offsets found in {}'.format(
             '\n'.join(files)))
-      with open(self._MERGED_CYGLOG_FILENAME, 'w') as f:
-        f.write('\n'.join(map(str, offsets)))
+      processor = process_profiles.SymbolOffsetProcessor(
+          self._compiler.lib_chrome_so)
+      ordered_symbols = processor.GetOrderedSymbols(offsets)
+      if not ordered_symbols:
+        raise Exception('No symbol names from  offsets found in {}'.format(
+            '\n'.join(files)))
+      with open(self._GetUnpatchedOrderfileFilename(), 'w') as orderfile:
+        orderfile.write('\n'.join(ordered_symbols))
     except Exception:
       for f in files:
         self._SaveForDebugging(f)
       raise
     finally:
       self._profiler.Cleanup()
-      logging.getLogger().setLevel(logging.INFO)
 
-    try:
-      command_args = [
-          '--target-arch=' + self._options.arch,
-          '--native-library=' + self._compiler.lib_chrome_so,
-          '--output=' + self._GetUnpatchedOrderfileFilename()]
-      command_args.append('--reached-offsets=' + self._MERGED_CYGLOG_FILENAME)
-      self._step_recorder.RunCommand(
-          [self._CYGLOG_TO_ORDERFILE_SCRIPT] + command_args)
-    except CommandError:
-      self._SaveForDebugging(self._MERGED_CYGLOG_FILENAME)
-      self._SaveForDebuggingWithOverwrite(self._compiler.lib_chrome_so)
-      raise
-
-  def _DeleteTempFiles(self):
-    """Deletes intermediate step output files."""
-    print 'Delete %s' % (
-        self._MERGED_CYGLOG_FILENAME)
-    if os.path.isfile(self._MERGED_CYGLOG_FILENAME):
-      os.unlink(self._MERGED_CYGLOG_FILENAME)
+  def _MaybeSaveProfile(self, files):
+    if self._options.profile_save_dir:
+      logging.info('Saving profiles to %s', self._options.profile_save_dir)
+      for f in files:
+        shutil.copy(f, self._options.profile_save_dir)
+        logging.info('Saved profile %s', f)
 
   def _PatchOrderfile(self):
     """Patches the orderfile using clean version of libchrome.so."""
@@ -619,6 +679,13 @@ class OrderfileGenerator(object):
 
     assert (bool(self._options.profile) ^
             bool(self._options.manual_symbol_offsets))
+    if self._options.system_health_orderfile and not self._options.profile:
+      raise AssertionError('--system_health_orderfile must be not be used '
+                           'with --skip-profile')
+    if (self._options.manual_symbol_offsets and
+        not self._options.system_health_orderfile):
+      raise AssertionError('--manual-symbol-offsets must be used with '
+                           '--system_health_orderfile.')
 
     if self._options.profile:
       try:
@@ -627,13 +694,12 @@ class OrderfileGenerator(object):
             self._instrumented_out_dir,
             self._step_recorder, self._options.arch, self._options.jobs,
             self._options.max_load, self._options.use_goma,
-            self._options.goma_dir)
+            self._options.goma_dir, self._options.system_health_orderfile)
         self._compiler.CompileChromeApk(True)
         self._GenerateAndProcessProfile()
         self._MaybeArchiveOrderfile(self._GetUnpatchedOrderfileFilename())
         profile_uploaded = True
       finally:
-        self._DeleteTempFiles()
         _StashOutputDirectory(self._instrumented_out_dir)
     elif self._options.manual_symbol_offsets:
       assert self._options.manual_libname
@@ -660,7 +726,8 @@ class OrderfileGenerator(object):
         self._compiler = ClankCompiler(
             self._uninstrumented_out_dir, self._step_recorder,
             self._options.arch, self._options.jobs, self._options.max_load,
-            self._options.use_goma, self._options.goma_dir)
+            self._options.use_goma, self._options.goma_dir,
+            self._options.system_health_orderfile)
         self._compiler.CompileLibchrome(False)
         self._PatchOrderfile()
         # Because identical code folding is a bit different with and without
@@ -736,6 +803,15 @@ def CreateArgumentParser():
       '--use-goma', action='store_true', help='Enable GOMA.', default=False)
   parser.add_argument('--adb-path', help='Path to the adb binary.')
 
+  parser.add_argument('--system-health-orderfile', action='store_true',
+                      help=('Create an orderfile based on system health '
+                            'benchmarks.'),
+                      default=False)
+  parser.add_argument('--offsets-for-memory', action='store_true',
+                      help=('Favor memory savings in the orderfile. Used '
+                            'with --system-health-orderfile.'),
+                      default=False)
+
   parser.add_argument('--manual-symbol-offsets', default=None, type=str,
                       help=('File of list of ordered symbol offsets generated '
                             'by manual profiling. Must set other --manual* '
@@ -746,6 +822,14 @@ def CreateArgumentParser():
   parser.add_argument('--manual-objdir', default=None, type=str,
                       help=('Root of object file directory corresponding to '
                             '--manual-symbol-offsets.'))
+  parser.add_argument('--pregenerated-profiles', default=None, type=str,
+                      help=('Pregenerated profiles to use instead of running '
+                            'profile step. Cannot be used with '
+                            '--skip-profiles.'))
+  parser.add_argument('--profile-save-dir', default=None, type=str,
+                      help=('Directory to save any profiles created. These can '
+                            'be used with --pregenerated-profiles.  Cannot be '
+                            'used with --skip-profiles.'))
 
   profile_android_startup.AddProfileCollectionArguments(parser)
   return parser

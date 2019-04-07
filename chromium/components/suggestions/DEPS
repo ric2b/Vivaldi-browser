@@ -1,6 +1,6 @@
 include_rules = [
   "+components/data_use_measurement/core",
-  "+components/google/core/browser",
+  "+components/google/core",
   "+components/image_fetcher",
   "+components/keyed_service/core",
   "+components/leveldb_proto",
@@ -13,6 +13,8 @@ include_rules = [
   "+google_apis",
   "+net",
   "+services/identity/public/cpp",
+  "+services/network/public",
+  "+services/network/test",
   "+skia/ext",
   "+ui",
   "+url",

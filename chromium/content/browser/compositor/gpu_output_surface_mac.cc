@@ -8,12 +8,12 @@
 #include "components/viz/service/display/output_surface_frame.h"
 #include "components/viz/service/display_embedder/compositor_overlay_candidate_validator.h"
 #include "gpu/GLES2/gl2extchromium.h"
-#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
+#include "services/ws/public/cpp/gpu/context_provider_command_buffer.h"
 
 namespace content {
 
 GpuOutputSurfaceMac::GpuOutputSurfaceMac(
-    scoped_refptr<ui::ContextProviderCommandBuffer> context,
+    scoped_refptr<ws::ContextProviderCommandBuffer> context,
     gpu::SurfaceHandle surface_handle,
     const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
     std::unique_ptr<viz::CompositorOverlayCandidateValidator>

@@ -13,7 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/timer/elapsed_timer.h"
 #include "content/public/browser/browser_context.h"
@@ -606,10 +606,6 @@ void ContentVerifier::BindURLLoaderFactoryRequestOnUIThread(
   if (shutdown_on_ui_)
     return;
 
-  network::mojom::URLLoaderFactoryParamsPtr params =
-      network::mojom::URLLoaderFactoryParams::New();
-  params->process_id = network::mojom::kBrowserProcessId;
-  params->is_corb_enabled = false;
   content::BrowserContext::GetDefaultStoragePartition(context_)
       ->GetURLLoaderFactoryForBrowserProcess()
       ->Clone(std::move(url_loader_factory_request));

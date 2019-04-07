@@ -19,11 +19,13 @@
 #include "chrome/browser/chromeos/file_system_provider/icon_set.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_info.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/api/file_system_provider_capabilities/file_system_provider_capabilities_handler.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/cros_disks_client.h"
+#include "chromeos/disks/disk.h"
 #include "chromeos/disks/mock_disk_mount_manager.h"
 #include "components/drive/file_change.h"
 #include "components/prefs/pref_service.h"
@@ -31,11 +33,13 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/install_warning.h"
 #include "google_apis/drive/test_util.h"
+#include "services/identity/public/cpp/identity_test_utils.h"
 #include "storage/browser/fileapi/external_mount_points.h"
 
 using ::testing::_;
 using ::testing::ReturnRef;
 
+using chromeos::disks::Disk;
 using chromeos::disks::DiskMountManager;
 
 namespace {
@@ -281,37 +285,44 @@ class FileManagerPrivateApiTest : public extensions::ExtensionApiTest {
         if (static_cast<size_t>(disk_info_index) >= arraysize(kTestDisks))
           return;
 
+        std::unique_ptr<Disk> disk =
+            Disk::Builder()
+                .SetDevicePath(kTestMountPoints[i].source_path)
+                .SetMountPath(kTestMountPoints[i].mount_path)
+                .SetWriteDisabledByPolicy(
+                    kTestDisks[disk_info_index].write_disabled_by_policy)
+                .SetSystemPath(kTestDisks[disk_info_index].system_path)
+                .SetFilePath(kTestDisks[disk_info_index].file_path)
+                .SetDeviceLabel(kTestDisks[disk_info_index].device_label)
+                .SetDriveLabel(kTestDisks[disk_info_index].drive_label)
+                .SetVendorId(kTestDisks[disk_info_index].vendor_id)
+                .SetVendorName(kTestDisks[disk_info_index].vendor_name)
+                .SetProductId(kTestDisks[disk_info_index].product_id)
+                .SetProductName(kTestDisks[disk_info_index].product_name)
+                .SetFileSystemUUID(kTestDisks[disk_info_index].fs_uuid)
+                .SetSystemPathPrefix(
+                    kTestDisks[disk_info_index].system_path_prefix)
+                .SetDeviceType(kTestDisks[disk_info_index].device_type)
+                .SetSizeInBytes(kTestDisks[disk_info_index].size_in_bytes)
+                .SetIsParent(kTestDisks[disk_info_index].is_parent)
+                .SetIsReadOnlyHardware(
+                    kTestDisks[disk_info_index].is_read_only_hardware)
+                .SetHasMedia(kTestDisks[disk_info_index].has_media)
+                .SetOnBootDevice(kTestDisks[disk_info_index].on_boot_device)
+                .SetOnRemovableDevice(
+                    kTestDisks[disk_info_index].on_removable_device)
+                .SetIsHidden(kTestDisks[disk_info_index].is_hidden)
+                .SetFileSystemType(kTestDisks[disk_info_index].file_system_type)
+                .SetBaseMountPath(kTestDisks[disk_info_index].base_mount_path)
+                .Build();
+
         volumes_.insert(DiskMountManager::DiskMap::value_type(
-            kTestMountPoints[i].source_path,
-            std::make_unique<DiskMountManager::Disk>(
-                kTestMountPoints[i].source_path, kTestMountPoints[i].mount_path,
-                kTestDisks[disk_info_index].write_disabled_by_policy,
-                kTestDisks[disk_info_index].system_path,
-                kTestDisks[disk_info_index].file_path,
-                kTestDisks[disk_info_index].device_label,
-                kTestDisks[disk_info_index].drive_label,
-                kTestDisks[disk_info_index].vendor_id,
-                kTestDisks[disk_info_index].vendor_name,
-                kTestDisks[disk_info_index].product_id,
-                kTestDisks[disk_info_index].product_name,
-                kTestDisks[disk_info_index].fs_uuid,
-                kTestDisks[disk_info_index].system_path_prefix,
-                kTestDisks[disk_info_index].device_type,
-                kTestDisks[disk_info_index].size_in_bytes,
-                kTestDisks[disk_info_index].is_parent,
-                kTestDisks[disk_info_index].is_read_only_hardware,
-                kTestDisks[disk_info_index].has_media,
-                kTestDisks[disk_info_index].on_boot_device,
-                kTestDisks[disk_info_index].on_removable_device,
-                kTestDisks[disk_info_index].is_hidden,
-                kTestDisks[disk_info_index].file_system_type,
-                kTestDisks[disk_info_index].base_mount_path)));
+            kTestMountPoints[i].source_path, std::move(disk)));
       }
     }
   }
 
-  const DiskMountManager::Disk* FindVolumeBySourcePath(
-      const std::string& source_path) {
+  const Disk* FindVolumeBySourcePath(const std::string& source_path) {
     auto volume_it = volumes_.find(source_path);
     return (volume_it == volumes_.end()) ? nullptr : volume_it->second.get();
   }
@@ -364,11 +375,19 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Mount) {
   // check that UnmountPath is really called with the same value.
   EXPECT_CALL(*disk_mount_manager_mock_, UnmountPath(_, _, _))
       .Times(0);
+  EXPECT_CALL(
+      *disk_mount_manager_mock_,
+      UnmountPath(chromeos::CrosDisksClient::GetRemovableDiskMountPoint()
+                      .AppendASCII("mount_path1")
+                      .AsUTF8Unsafe(),
+                  chromeos::UNMOUNT_OPTIONS_NONE, _))
+      .Times(1);
   EXPECT_CALL(*disk_mount_manager_mock_,
-              UnmountPath(
-                  chromeos::CrosDisksClient::GetArchiveMountPoint().AppendASCII(
-                      "archive_mount_path").AsUTF8Unsafe(),
-                  chromeos::UNMOUNT_OPTIONS_NONE, _)).Times(1);
+              UnmountPath(chromeos::CrosDisksClient::GetArchiveMountPoint()
+                              .AppendASCII("archive_mount_path")
+                              .AsUTF8Unsafe(),
+                          chromeos::UNMOUNT_OPTIONS_LAZY, _))
+      .Times(1);
 
   ASSERT_TRUE(RunComponentExtensionTest("file_browser/mount_test"))
       << message_;
@@ -510,8 +529,10 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Crostini) {
   crostini::CrostiniManager::GetInstance()->set_skip_restart_for_testing();
 
   // Profile must be signed in with email for crostini.
-  SigninManagerFactory::GetForProfileIfExists(browser()->profile())
-      ->SetAuthenticatedAccountInfo("12345", "testuser@gmail.com");
+  identity::SetPrimaryAccount(
+      SigninManagerFactory::GetForProfileIfExists(browser()->profile()),
+      IdentityManagerFactory::GetForProfileIfExists(browser()->profile()),
+      "testuser@gmail.com");
 
   // DiskMountManager mock.
   std::string known_hosts;

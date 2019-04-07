@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
+#include "net/base/completion_callback.h"
 #include "net/base/io_buffer.h"
 #include "net/disk_cache/disk_cache.h"
 #include "url/origin.h"
@@ -31,11 +32,14 @@ namespace content {
 class CONTENT_EXPORT GeneratedCodeCache {
  public:
   using ReadDataCallback =
-      base::RepeatingCallback<void(scoped_refptr<net::IOBufferWithSize>)>;
+      base::RepeatingCallback<void(const base::Time&,
+                                   const std::vector<uint8_t>&)>;
+  static const int kResponseTimeSizeInBytes = sizeof(int64_t);
 
   // Creates a GeneratedCodeCache with the specified path and the maximum size.
-  static std::unique_ptr<GeneratedCodeCache> Create(const base::FilePath& path,
-                                                    int max_size);
+  // If |max_size_bytes| is 0, then disk_cache picks a default size based on
+  // some heuristics.
+  GeneratedCodeCache(const base::FilePath& path, int max_size_bytes);
 
   ~GeneratedCodeCache();
 
@@ -44,7 +48,8 @@ class CONTENT_EXPORT GeneratedCodeCache {
   // it creates a new one.
   void WriteData(const GURL& url,
                  const url::Origin& origin,
-                 scoped_refptr<net::IOBufferWithSize>);
+                 const base::Time& response_time,
+                 const std::vector<uint8_t>& data);
 
   // Fetch entry corresponding to <url, origin> from the cache and pass
   // it using the ReadDataCallback.
@@ -52,6 +57,13 @@ class CONTENT_EXPORT GeneratedCodeCache {
 
   // Delete the entry corresponding to <url, origin>
   void DeleteEntry(const GURL& url, const url::Origin& origin);
+
+  // Clear code cache.
+  // TODO(mythria): Add support to conditional clearing based on URL
+  // and time range.
+  // TODO(mythria): Also check if we can avoid retruning an error code and
+  // always call the callback to be consistent with other methods.
+  int ClearCache(net::CompletionCallback callback);
 
   const base::FilePath& path() const { return path_; }
 
@@ -63,12 +75,10 @@ class CONTENT_EXPORT GeneratedCodeCache {
   enum BackendState { kUnInitialized, kInitializing, kInitialized, kFailed };
 
   // The operation requested.
-  enum Operation { kFetch, kWrite, kDelete };
+  enum Operation { kFetch, kWrite, kDelete, kClearCache };
 
   // Data streams corresponding to each entry.
   enum { kDataIndex = 1 };
-
-  GeneratedCodeCache(const base::FilePath& path, int max_size_bytes);
 
   // Creates a simple_disk_cache backend.
   void CreateBackend();
@@ -106,6 +116,9 @@ class CONTENT_EXPORT GeneratedCodeCache {
 
   // Delete entry from cache
   void DeleteEntryImpl(const std::string& key);
+
+  void DoPendingClearCache(net::CompletionCallback callback);
+  void PendingClearComplete(net::CompletionCallback callback, int rv);
 
   std::unique_ptr<disk_cache::Backend> backend_;
   BackendState backend_state_;

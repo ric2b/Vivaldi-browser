@@ -22,40 +22,27 @@ class SyncService;
 
 namespace autofill {
 
-extern const base::Feature kAutofillAlwaysFillAddresses;
-extern const base::Feature kAutofillCreateDataForTest;
-extern const base::Feature kAutofillCreditCardAssist;
-extern const base::Feature kAutofillScanCardholderName;
-extern const base::Feature kAutofillCreditCardAblationExperiment;
-extern const base::Feature kAutofillCreditCardLocalCardMigration;
-extern const base::Feature kAutofillDeleteDisusedAddresses;
-extern const base::Feature kAutofillDeleteDisusedCreditCards;
-extern const base::Feature kAutofillExpandedPopupViews;
-extern const base::Feature kAutofillPreferServerNamePredictions;
-extern const base::Feature kAutofillRationalizeFieldTypePredictions;
-extern const base::Feature kAutofillSaveCardDialogUnlabeledExpirationDate;
-extern const base::Feature kAutofillSuggestInvalidProfileData;
-extern const base::Feature kAutofillSuppressDisusedAddresses;
-extern const base::Feature kAutofillSuppressDisusedCreditCards;
-extern const base::Feature kAutofillUpstream;
-extern const base::Feature kAutofillUpstreamAllowAllEmailDomains;
-extern const base::Feature kAutofillUpstreamAlwaysRequestCardholderName;
-extern const base::Feature kAutofillUpstreamBlankCardholderNameField;
-extern const base::Feature kAutofillUpstreamEditableCardholderName;
-extern const base::Feature kAutofillUpstreamSendPanFirstSix;
-extern const base::Feature kAutofillUpstreamUpdatePromptExplanation;
-extern const base::Feature kAutofillVoteUsingInvalidProfileData;
-extern const char kCreditCardSigninPromoImpressionLimitParamKey[];
-extern const char kAutofillCreditCardLastUsedDateShowExpirationDateKey[];
-extern const char kAutofillUpstreamMaxMinutesSinceAutofillProfileUseKey[];
+// Parameterized Features (grouped with parameter name and options)
+#if !defined(OS_ANDROID)
+extern const base::Feature kAutofillDropdownLayoutExperiment;
+extern const char kAutofillDropdownLayoutParameterName[];
+extern const char kAutofillDropdownLayoutParameterLeadingIcon[];
+extern const char kAutofillDropdownLayoutParameterTrailingIcon[];
+#endif  // !defined(OS_ANDROID)
 
-#if defined(OS_MACOSX)
-extern const base::Feature kMacViewsAutofillPopup;
-#endif  // defined(OS_MACOSX)
+#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
+extern const base::Feature kAutofillPrimaryInfoStyleExperiment;
+extern const char kAutofillForcedFontWeightParameterName[];
+extern const char kAutofillForcedFontWeightParameterMedium[];
+extern const char kAutofillForcedFontWeightParameterBold[];
+#endif  // defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
 
-// Returns true if autofill should be enabled. See also
-// IsInAutofillSuggestionsDisabledExperiment below.
-bool IsAutofillEnabled(const PrefService* pref_service);
+// Returns true if uploading credit cards to Wallet servers is enabled. This
+// requires the appropriate flags and user settings to be true and the user to
+// be a member of a supported domain.
+bool IsCreditCardUploadEnabled(const PrefService* pref_service,
+                               const syncer::SyncService* sync_service,
+                               const std::string& user_email);
 
 // Returns true if autofill suggestions are disabled via experiment. The
 // disabled experiment isn't the same as disabling autofill completely since we
@@ -66,65 +53,44 @@ bool IsInAutofillSuggestionsDisabledExperiment();
 // Returns whether the Autofill credit card assist infobar should be shown.
 bool IsAutofillCreditCardAssistEnabled();
 
+// Returns whether locally saving card when credit card upload succeeds should
+// be disabled.
+bool IsAutofillNoLocalSaveOnUploadSuccessExperimentEnabled();
+
 // Returns true if the user should be offered to locally store unmasked cards.
 // This controls whether the option is presented at all rather than the default
 // response of the option.
 bool OfferStoreUnmaskedCards();
 
-// Returns true if uploading credit cards to Wallet servers is enabled. This
-// requires the appropriate flags and user settings to be true and the user to
-// be a member of a supported domain.
-bool IsCreditCardUploadEnabled(const PrefService* pref_service,
-                               const syncer::SyncService* sync_service,
-                               const std::string& user_email);
+// Returns whether the account of the active signed-in user should be used.
+bool ShouldUseActiveSignedInAccount();
 
-// Returns whether Autofill credit card local card migration experiment is
-// enabled.
-bool IsAutofillCreditCardLocalCardMigrationExperimentEnabled();
+#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
+enum class ForcedFontWeight {
+  kDefault,  // No change to the font weight.
+  kMedium,
+  kBold,
+};
 
-// For testing purposes; not to be launched.  When enabled, Chrome Upstream
-// always requests that the user enters/confirms cardholder name in the
-// offer-to-save dialog, regardless of if it was present or if the user is a
-// Google Payments customer.  Note that this will override the detected
-// cardholder name, if one was found.
-bool IsAutofillUpstreamAlwaysRequestCardholderNameExperimentEnabled();
+// Returns the font weight to be used for primary information on the Autofill
+// dropdown for Addresses and Credit Cards. Returns kDefault if feature
+// kAutofillPrimaryInfoStyleExperiment is disabled or if the corresponding
+// feature param is invalid.
+ForcedFontWeight GetForcedFontWeight();
+#endif  // defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
 
-// For experimental purposes; not to be made available in chrome://flags. When
-// enabled and Chrome Upstream requests the cardholder name in the offer-to-save
-// dialog, the field will be blank instead of being prefilled with the name from
-// the user's Google Account.
-bool IsAutofillUpstreamBlankCardholderNameFieldExperimentEnabled();
-
-// Returns whether the experiment is enabled where Chrome Upstream can request
-// the user to enter/confirm cardholder name in the offer-to-save bubble if it
-// was not detected or was conflicting during the checkout flow and the user is
-// NOT a Google Payments customer.
-bool IsAutofillUpstreamEditableCardholderNameExperimentEnabled();
-
-// Returns whether the experiment is enabled where Chrome Upstream sends the
-// first six digits of the card PAN to Google Payments to help determine whether
-// card upload is possible.
-bool IsAutofillUpstreamSendPanFirstSixExperimentEnabled();
-
-// Returns whether the experiment is enbaled where upstream sends updated
-// prompt explanation which changes 'save this card' to 'save your card and
-// billing address.'
-bool IsAutofillUpstreamUpdatePromptExplanationExperimentEnabled();
-
-#if defined(OS_MACOSX)
-// Returns true if whether the views autofill popup feature is enabled or the
-// we're using the views browser.
-bool IsMacViewsAutofillPopupExperimentEnabled();
-#endif  // defined(OS_MACOSX)
-
-// Returns true if the native Views implementation of the Desktop dropdown
-// should be used. This will also be true if the kExperimentalUi flag is true,
-// which forces a bunch of forthcoming UI changes on.
-bool ShouldUseNativeViews();
-
-// Returns true if expiration dates on the save card dialog should be
-// unlabeled, i.e. not preceded by "Exp."
-bool IsAutofillSaveCardDialogUnlabeledExpirationDateEnabled();
+#if !defined(OS_ANDROID)
+enum class ForcedPopupLayoutState {
+  kDefault,       // No popup layout forced by experiment.
+  kLeadingIcon,   // Experiment forces leading (left in LTR) icon layout.
+  kTrailingIcon,  // Experiment forces trailing (right in LTR) icon layout.
+};
+// Returns kDefault if no experimental behavior is enabled for
+// kAutofillDropdownLayoutExperiment; returns kLeftIcon or kRightIcon
+// if the experiment param matches kAutofillDropdownLayoutParameterLeadingIcon
+// or kAutofillDropdownLayoutParameterTrailingIcon, respectively.
+ForcedPopupLayoutState GetForcedPopupLayoutState();
+#endif  // !defined(OS_ANDROID)
 
 }  // namespace autofill
 

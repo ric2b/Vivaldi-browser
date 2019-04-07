@@ -25,8 +25,7 @@ jumbo_static_library("apis") {
     "//third_party/cacheinvalidation",
     "//third_party/blink/public:blink_headers",
     "//vivaldi/app/resources",
-    "//vivaldi/extensions/schema:api",
-    "//vivaldi/extensions/schema:api_registration",
+    "//vivaldi/extensions/schema",
     "//vivaldi/prefs:prefs_files_generator",
   ]
   sources = [

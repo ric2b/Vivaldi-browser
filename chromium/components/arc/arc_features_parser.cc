@@ -11,7 +11,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 
@@ -95,6 +95,15 @@ base::Optional<ArcFeatures> ParseFeaturesJson(base::StringPiece input_json) {
     arc_features.build_props.emplace(item.first, item.second.GetString());
   }
 
+  // Parse the Play Store version
+  const base::Value* play_version = json_value->FindKeyOfType(
+      "play_store_version", base::Value::Type::STRING);
+  if (!play_version) {
+    LOG(ERROR) << "No Play Store version in JSON.";
+    return base::nullopt;
+  }
+  arc_features.play_store_version = play_version->GetString();
+
   return arc_features;
 }
 
@@ -126,7 +135,7 @@ ArcFeatures& ArcFeatures::operator=(ArcFeatures&& other) = default;
 void ArcFeaturesParser::GetArcFeatures(
     base::OnceCallback<void(base::Optional<ArcFeatures>)> callback) {
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&ReadOnFileThread, base::FilePath(kArcFeaturesJsonFile)),
       std::move(callback));
 }

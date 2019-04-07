@@ -23,6 +23,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
 #include "components/ownership/mock_owner_key_util.h"
@@ -63,9 +64,11 @@ class KioskCrashRestoreTest : public InProcessBrowserTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     const AccountId account_id = AccountId::FromUserEmail(GetTestAppUserId());
-    const cryptohome::Identification cryptohome_id(account_id);
+    const cryptohome::AccountIdentifier cryptohome_id =
+        cryptohome::CreateAccountIdentifierFromAccountId(account_id);
 
-    command_line->AppendSwitchASCII(switches::kLoginUser, cryptohome_id.id());
+    command_line->AppendSwitchASCII(switches::kLoginUser,
+                                    cryptohome_id.account_id());
     command_line->AppendSwitchASCII(
         switches::kLoginProfile,
         CryptohomeClient::GetStubSanitizedUsername(cryptohome_id));

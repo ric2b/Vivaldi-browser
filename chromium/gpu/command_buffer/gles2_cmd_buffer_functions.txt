@@ -253,6 +253,12 @@ GL_APICALL void         GL_APIENTRY glGenVertexArraysOES (GLsizeiNotNegative n, 
 GL_APICALL void         GL_APIENTRY glDeleteVertexArraysOES (GLsizeiNotNegative n, const GLuint* arrays);
 GL_APICALL GLboolean    GL_APIENTRY glIsVertexArrayOES (GLidVertexArray array);
 GL_APICALL void         GL_APIENTRY glBindVertexArrayOES (GLidBindVertexArray array);
+GL_APICALL void         GL_APIENTRY glFramebufferParameteri (GLenumFramebufferTarget target, GLenumFramebufferParameter pname, GLint param);
+
+GL_APICALL void         GL_APIENTRY glBindImageTexture (GLuint unit, GLuint texture, GLint level, GLboolean layered, GLint layer, GLenum access, GLenum format);
+GL_APICALL void         GL_APIENTRY glDispatchCompute (GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z);
+GL_APICALL void         GL_APIENTRY glMemoryBarrierEXT (GLbitfield barriers);
+GL_APICALL void         GL_APIENTRY glMemoryBarrierByRegion (GLbitfield barriers);
 
 // Non-GL commands.
 GL_APICALL void         GL_APIENTRY glSwapBuffers (GLuint64 swap_id, GLbitfieldSwapBuffersFlags flags = 0);
@@ -394,3 +400,6 @@ GL_APICALL void         GL_APIENTRY glDestroyGpuFenceCHROMIUM (GLuint gpu_fence_
 GL_APICALL void         GL_APIENTRY glInvalidateReadbackBufferShadowDataCHROMIUM (GLidBuffer buffer_id);
 // (used for CHROMIUM_nonblocking_readback implementation)
 GL_APICALL void         GL_APIENTRY glSetReadbackBufferShadowAllocationINTERNAL (GLidBuffer buffer_id, GLint shm_id, GLuint shm_offset, GLuint size);
+
+// Extension ANGLE_multiview
+GL_APICALL void         GL_APIENTRY glFramebufferTextureMultiviewLayeredANGLE (GLenum target, GLenum attachment, GLuint texture, GLint level, GLint baseViewIndex, GLsizei numViews);

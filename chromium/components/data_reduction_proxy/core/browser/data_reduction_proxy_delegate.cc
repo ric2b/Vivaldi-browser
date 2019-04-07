@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_bypass_stats.h"
@@ -39,14 +40,16 @@ DataReductionProxyDelegate::DataReductionProxyDelegate(
     const DataReductionProxyConfigurator* configurator,
     DataReductionProxyEventCreator* event_creator,
     DataReductionProxyBypassStats* bypass_stats,
-    net::NetLog* net_log)
+    net::NetLog* net_log,
+    network::NetworkConnectionTracker* network_connection_tracker)
     : config_(config),
       configurator_(configurator),
       event_creator_(event_creator),
       bypass_stats_(bypass_stats),
       tick_clock_(base::DefaultTickClock::GetInstance()),
       io_data_(nullptr),
-      net_log_(net_log) {
+      net_log_(net_log),
+      network_connection_tracker_(network_connection_tracker) {
   DCHECK(config_);
   DCHECK(configurator_);
   DCHECK(event_creator_);
@@ -58,14 +61,14 @@ DataReductionProxyDelegate::DataReductionProxyDelegate(
 
 DataReductionProxyDelegate::~DataReductionProxyDelegate() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
+  network_connection_tracker_->RemoveNetworkConnectionObserver(this);
 }
 
 void DataReductionProxyDelegate::InitializeOnIOThread(
     DataReductionProxyIOData* io_data) {
   DCHECK(io_data);
   DCHECK(thread_checker_.CalledOnValidThread());
-  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
+  network_connection_tracker_->AddNetworkConnectionObserver(this);
   io_data_ = io_data;
 }
 
@@ -96,12 +99,10 @@ void DataReductionProxyDelegate::OnResolveProxy(
           : config_->GetProxiesForHttp();
 
   // Remove the proxies that are unsupported for this request.
-  proxies_for_http.erase(
-      std::remove_if(proxies_for_http.begin(), proxies_for_http.end(),
-                     [content_type](const DataReductionProxyServer& proxy) {
-                       return !proxy.SupportsResourceType(content_type);
-                     }),
-      proxies_for_http.end());
+  base::EraseIf(proxies_for_http,
+                [content_type](const DataReductionProxyServer& proxy) {
+                  return !proxy.SupportsResourceType(content_type);
+                });
 
   base::Optional<std::pair<bool /* is_secure_proxy */, bool /*is_core_proxy */>>
       warmup_proxy = config_->GetInFlightWarmupProxyDetails();
@@ -118,14 +119,11 @@ void DataReductionProxyDelegate::OnResolveProxy(
     bool is_core_proxy = warmup_proxy->second;
     // Remove the proxies with properties that do not match the properties of
     // the proxy that is being probed.
-    proxies_for_http.erase(
-        std::remove_if(proxies_for_http.begin(), proxies_for_http.end(),
-                       [is_secure_proxy,
-                        is_core_proxy](const DataReductionProxyServer& proxy) {
-                         return proxy.IsSecureProxy() != is_secure_proxy ||
-                                proxy.IsCoreProxy() != is_core_proxy;
-                       }),
-        proxies_for_http.end());
+    base::EraseIf(proxies_for_http, [is_secure_proxy, is_core_proxy](
+                                        const DataReductionProxyServer& proxy) {
+      return proxy.IsSecureProxy() != is_secure_proxy ||
+             proxy.IsCoreProxy() != is_core_proxy;
+    });
   }
 
   // If the proxy is disabled due to warmup URL fetch failing in the past,
@@ -238,11 +236,11 @@ void DataReductionProxyDelegate::RecordQuicProxyStatus(
                             QUIC_PROXY_STATUS_BOUNDARY);
 }
 
-void DataReductionProxyDelegate::OnNetworkChanged(
-    net::NetworkChangeNotifier::ConnectionType type) {
+void DataReductionProxyDelegate::OnConnectionChanged(
+    network::mojom::ConnectionType type) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (type == net::NetworkChangeNotifier::CONNECTION_NONE)
+  if (type == network::mojom::ConnectionType::CONNECTION_NONE)
     return;
 
   last_network_change_time_ = tick_clock_->NowTicks();

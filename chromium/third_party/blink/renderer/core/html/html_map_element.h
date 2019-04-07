@@ -50,8 +50,8 @@ class CORE_EXPORT HTMLMapElement final : public HTMLElement {
 
   void ParseAttribute(const AttributeModificationParams&) override;
 
-  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
-  void RemovedFrom(ContainerNode*) override;
+  InsertionNotificationRequest InsertedInto(ContainerNode&) override;
+  void RemovedFrom(ContainerNode&) override;
 
   AtomicString name_;
 };

@@ -162,10 +162,6 @@ extern const char kRemoveNonCWSExtensionURL[];
 // "Learn more" URL for resetting profile preferences.
 extern const char kResetProfileSettingsLearnMoreURL[];
 
-// Parameters that get appended to force SafeSearch.
-extern const char kSafeSearchSafeParameter[];
-extern const char kSafeSearchSsuiParameter[];
-
 // Help URL for the settings page's search feature.
 extern const char kSettingsSearchHelpURL[];
 
@@ -232,6 +228,9 @@ extern const char kInstantTetheringLearnMoreURL[];
 // The URL for the "Learn more" link in the connected devices.
 extern const char kMultiDeviceLearnMoreURL[];
 
+// The URL for the "Learn more" link for Android Messages.
+extern const char kAndroidMessagesLearnMoreURL[];
+
 // The URL for the "Learn more" link in the language settings.
 extern const char kLanguageSettingsLearnMoreUrl[];
 
@@ -256,6 +255,9 @@ extern const char kTPMFirmwareUpdateLearnMoreURL[];
 
 // The URL for the "Learn more" page for the time zone settings page.
 extern const char kTimeZoneSettingsLearnMoreURL[];
+
+// The URL for the "Learn more" page for the network file shares settings page.
+extern const char kSmbSharesLearnMoreURL[];
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_MACOSX)

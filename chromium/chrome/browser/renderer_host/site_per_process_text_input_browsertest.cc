@@ -10,6 +10,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
@@ -639,6 +641,41 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
   reset_state_observer.Wait();
 }
 
+#if defined(USE_AURA)
+// This test creates a blank page and adds an <input> to it. Then, the <input>
+// is focused, UI is focused, then the input is refocused. The test verifies
+// that selection bounds change with the refocus (see https://crbug.com/864563).
+IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
+                       SelectionBoundsChangeAfterRefocusInput) {
+  CreateIframePage("a()");
+  content::RenderFrameHost* main_frame = GetFrame(IndexVector{});
+  content::RenderWidgetHostView* view = main_frame->GetView();
+  content::WebContents* web_contents = active_contents();
+  AddInputFieldToFrame(main_frame, "text", "", false);
+
+  auto focus_input_and_wait_for_selection_bounds_change =
+      [&main_frame, &web_contents, &view]() {
+        ViewSelectionBoundsChangedObserver bounds_observer(web_contents, view);
+        // SimulateKeyPress(web_contents, ui::DomKey::TAB, ui::DomCode::TAB,
+        //               ui::VKEY_TAB, false, true, false, false);
+        EXPECT_TRUE(ExecuteScript(main_frame,
+                                  "document.querySelector('input').focus();"));
+        bounds_observer.Wait();
+      };
+
+  focus_input_and_wait_for_selection_bounds_change();
+
+  // Focus location bar.
+  BrowserWindow* window = browser()->window();
+  ASSERT_TRUE(window);
+  LocationBar* location_bar = window->GetLocationBar();
+  ASSERT_TRUE(location_bar);
+  location_bar->FocusLocation(true);
+
+  focus_input_and_wait_for_selection_bounds_change();
+}
+#endif
+
 // This test verifies that if we have a focused <input> in the main frame and
 // the tab is closed, TextInputManager handles unregistering itself and
 // notifying the observers properly (see https://crbug.com/669375).
@@ -1117,6 +1154,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
 
   // Set |TextInputState.show_ime_if_needed| to true. Expect IME.
   sender.SetShowVirtualKeyboardIfEnabled(true);
+#if defined(OS_WIN)
+  sender.SetLastPointerType(ui::EventPointerType::POINTER_TYPE_TOUCH);
+#endif
   EXPECT_TRUE(send_and_check_show_ime());
 
   // Send the same message. Expect IME (no change).
@@ -1133,6 +1173,12 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
   // Set |TextInputState.show_ime_if_needed|. Expect IME.
   sender.SetShowVirtualKeyboardIfEnabled(true);
   EXPECT_TRUE(send_and_check_show_ime());
+
+#if defined(OS_WIN)
+  // Set input type to mouse. Expect no IME.
+  sender.SetLastPointerType(ui::EventPointerType::POINTER_TYPE_MOUSE);
+  EXPECT_FALSE(send_and_check_show_ime());
+#endif
 
   // Set |TextInputState.type| to ui::TEXT_INPUT_TYPE_NONE. Expect no IME.
   sender.SetType(ui::TEXT_INPUT_TYPE_NONE);
@@ -1274,10 +1320,11 @@ class ShowDefinitionForWordObserver
   DISALLOW_COPY_AND_ASSIGN(ShowDefinitionForWordObserver);
 };
 
+// Flakey (https:://crbug.com/874417).
 // This test verifies that requests for dictionary lookup based on selection
 // range are routed to the focused RenderWidgetHost.
 IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
-                       LookUpStringForRangeRoutesToFocusedWidget) {
+                       DISABLED_LookUpStringForRangeRoutesToFocusedWidget) {
   CreateIframePage("a(b)");
   std::vector<content::RenderFrameHost*> frames{GetFrame(IndexVector{}),
                                                 GetFrame(IndexVector{0})};

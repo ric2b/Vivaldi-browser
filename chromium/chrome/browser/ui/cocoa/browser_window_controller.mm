@@ -42,7 +42,6 @@
 #import "chrome/browser/ui/cocoa/background_gradient_view.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_controller.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bubble_observer_cocoa.h"
-#import "chrome/browser/ui/cocoa/bookmarks/bookmark_editor_controller.h"
 #import "chrome/browser/ui/cocoa/browser/exclusive_access_controller_views.h"
 #include "chrome/browser/ui/cocoa/browser_dialogs_views_mac.h"
 #import "chrome/browser/ui/cocoa/browser_window_cocoa.h"
@@ -79,7 +78,6 @@
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_controller.h"
 #import "chrome/browser/ui/cocoa/touchbar/browser_window_touch_bar_controller.h"
 #include "chrome/browser/ui/cocoa/translate/translate_bubble_bridge_views.h"
-#import "chrome/browser/ui/cocoa/translate/translate_bubble_controller.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -444,7 +442,6 @@ bool IsTabDetachingInFullscreenEnabled() {
   [downloadShelfController_ browserWillBeDestroyed];
   [bookmarkBarController_ browserWillBeDestroyed];
   [avatarButtonController_ browserWillBeDestroyed];
-  [bookmarkBubbleController_ browserWillBeDestroyed];
 
   [super dealloc];
 }
@@ -1547,123 +1544,30 @@ bool IsTabDetachingInFullscreenEnabled() {
 
   bookmarkBubbleObserver_.reset(new BookmarkBubbleObserverCocoa(self));
 
-  if (chrome::ShowPilotDialogsWithViewsToolkit()) {
-    chrome::ShowBookmarkBubbleViewsAtPoint(
-        gfx::ScreenPointFromNSPoint(ui::ConvertPointFromWindowToScreen(
-            [self window], [self bookmarkBubblePoint])),
-        [[self window] contentView], bookmarkBubbleObserver_.get(),
-        browser_.get(), url, alreadyMarked,
-        [self locationBarBridge]->star_decoration());
-  } else {
-#if BUILDFLAG(MAC_VIEWS_BROWSER)
-    NOTREACHED() << "MacViews Browser can't show cocoa dialogs";
-#else
-    BookmarkModel* model =
-        BookmarkModelFactory::GetForBrowserContext(browser_->profile());
-    bookmarks::ManagedBookmarkService* managed =
-        ManagedBookmarkServiceFactory::GetForProfile(browser_->profile());
-    const BookmarkNode* node = model->GetMostRecentlyAddedUserNodeForURL(url);
-    bookmarkBubbleController_ = [[BookmarkBubbleController alloc]
-        initWithParentWindow:[self window]
-              bubbleObserver:bookmarkBubbleObserver_.get()
-                     managed:managed
-                       model:model
-                        node:node
-           alreadyBookmarked:alreadyMarked];
-    [bookmarkBubbleController_ showWindow:self];
-#endif
-  }
-  DCHECK(bookmarkBubbleObserver_);
+  chrome::ShowBookmarkBubbleViewsAtPoint(
+      gfx::ScreenPointFromNSPoint(ui::ConvertPointFromWindowToScreen(
+          [self window], [self bookmarkBubblePoint])),
+      [[self window] contentView], bookmarkBubbleObserver_.get(),
+      browser_.get(), url, alreadyMarked,
+      [self locationBarBridge]->star_decoration());
 }
 
 - (void)bookmarkBubbleClosed {
-  // Nil out the weak bookmark bubble controller reference.
-  bookmarkBubbleController_ = nil;
   bookmarkBubbleObserver_.reset();
-}
-
-// Handle the editBookmarkNode: action sent from bookmark bubble controllers.
-- (void)editBookmarkNode:(id)sender {
-  BOOL responds = [sender respondsToSelector:@selector(node)];
-  DCHECK(responds);
-  if (responds) {
-    const BookmarkNode* node = [sender node];
-    if (node)
-      BookmarkEditor::Show([self window], browser_->profile(),
-          BookmarkEditor::EditDetails::EditNode(node),
-          BookmarkEditor::SHOW_TREE);
-  }
 }
 
 - (void)showTranslateBubbleForWebContents:(content::WebContents*)contents
                                      step:(translate::TranslateStep)step
                                 errorType:(translate::TranslateErrors::Type)
                                 errorType {
-  if (chrome::ShowAllDialogsWithViewsToolkit()) {
-    ShowTranslateBubbleViews([self window], [self locationBarBridge], contents,
-                             step, errorType, true);
-    return;
-  }
-  // TODO(hajimehoshi): The similar logic exists at TranslateBubbleView::
-  // ShowBubble. This should be unified.
-  if (translateBubbleController_) {
-    // When the user reads the advanced setting panel, the bubble should not be
-    // changed because they are focusing on the bubble.
-    if (translateBubbleController_.webContents == contents &&
-        translateBubbleController_.model->GetViewState() ==
-        TranslateBubbleModel::VIEW_STATE_ADVANCED) {
-      return;
-    }
-    if (step != translate::TRANSLATE_STEP_TRANSLATE_ERROR) {
-      TranslateBubbleModel::ViewState viewState =
-          TranslateBubbleModelImpl::TranslateStepToViewState(step);
-      [translateBubbleController_ switchView:viewState];
-    } else {
-      [translateBubbleController_ switchToErrorView:errorType];
-    }
-    return;
-  }
-
-  std::string sourceLanguage;
-  std::string targetLanguage;
-  ChromeTranslateClient::GetTranslateLanguages(
-      contents, &sourceLanguage, &targetLanguage);
-
-  std::unique_ptr<translate::TranslateUIDelegate> uiDelegate(
-      new translate::TranslateUIDelegate(
-          ChromeTranslateClient::GetManagerFromWebContents(contents)
-              ->GetWeakPtr(),
-          sourceLanguage, targetLanguage));
-  std::unique_ptr<TranslateBubbleModel> model(
-      new TranslateBubbleModelImpl(step, std::move(uiDelegate)));
-  translateBubbleController_ =
-      [[TranslateBubbleController alloc] initWithParentWindow:self
-                                                        model:std::move(model)
-                                                  webContents:contents];
-  [translateBubbleController_ showWindow:nil];
-
-  NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
-  [center addObserver:self
-             selector:@selector(translateBubbleWindowWillClose:)
-                 name:NSWindowWillCloseNotification
-               object:[translateBubbleController_ window]];
+  ShowTranslateBubbleViews([self window], [self locationBarBridge], contents,
+                           step, errorType, true);
 }
 
 - (void)dismissPermissionBubble {
   PermissionPrompt::Delegate* delegate = [self permissionRequestManager];
   if (delegate)
     delegate->Closing();
-}
-
-// Nil out the weak translate bubble controller reference.
-- (void)translateBubbleWindowWillClose:(NSNotification*)notification {
-  DCHECK_EQ([notification object], [translateBubbleController_ window]);
-
-  NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
-  [center removeObserver:self
-                    name:NSWindowWillCloseNotification
-                  object:[translateBubbleController_ window]];
-  translateBubbleController_ = nil;
 }
 
 // If the browser is in incognito mode or has multi-profiles, install the image

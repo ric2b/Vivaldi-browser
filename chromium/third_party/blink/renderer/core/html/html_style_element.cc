@@ -75,7 +75,7 @@ void HTMLStyleElement::FinishParsingChildren() {
 }
 
 Node::InsertionNotificationRequest HTMLStyleElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   HTMLElement::InsertedInto(insertion_point);
   if (isConnected()) {
     if (StyleElement::ProcessStyleSheet(GetDocument(), *this) ==
@@ -87,9 +87,9 @@ Node::InsertionNotificationRequest HTMLStyleElement::InsertedInto(
   return kInsertionDone;
 }
 
-void HTMLStyleElement::RemovedFrom(ContainerNode* insertion_point) {
+void HTMLStyleElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLElement::RemovedFrom(insertion_point);
-  StyleElement::RemovedFrom(*this, insertion_point);
+  StyleElement::RemovedFrom(*this, &insertion_point);
 }
 
 void HTMLStyleElement::ChildrenChanged(const ChildrenChange& change) {
@@ -113,9 +113,9 @@ void HTMLStyleElement::DispatchPendingEvent(
   if (loaded_sheet_) {
     if (GetDocument().HasListenerType(
             Document::kLoadListenerAtCapturePhaseOrAtStyleElement))
-      DispatchEvent(Event::Create(EventTypeNames::load));
+      DispatchEvent(*Event::Create(EventTypeNames::load));
   } else {
-    DispatchEvent(Event::Create(EventTypeNames::error));
+    DispatchEvent(*Event::Create(EventTypeNames::error));
   }
   // Checks Document's load event synchronously here for performance.
   // This is safe because dispatchPendingEvent() is called asynchronously.

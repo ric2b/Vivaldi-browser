@@ -38,9 +38,9 @@
 #include "content/public/common/web_preferences.h"
 #include "content/public/renderer/media_stream_utils.h"
 #include "content/public/renderer/render_frame.h"
+#include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
 #include "content/public/renderer/render_view_visitor.h"
-#include "content/public/renderer/renderer_gamepad_provider.h"
 #include "content/public/test/layouttest_support.h"
 #include "content/shell/common/layout_test/layout_test_messages.h"
 #include "content/shell/common/shell_messages.h"
@@ -84,7 +84,7 @@
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_history_item.h"
 #include "third_party/blink/public/web/web_local_frame.h"
-#include "third_party/blink/public/web/web_navigation_timings.h"
+#include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/public/web/web_script_source.h"
 #include "third_party/blink/public/web/web_testing_support.h"
 #include "third_party/blink/public/web/web_view.h"
@@ -447,12 +447,8 @@ void BlinkTestRunner::TestFinished() {
   // Now we know that we're in the main frame, we should generate dump results.
   // Clean out the lifecycle if needed before capturing the layout tree
   // dump and pixels from the compositor.
-  render_view()
-      ->GetWebView()
-      ->MainFrame()
-      ->ToWebLocalFrame()
-      ->FrameWidget()
-      ->UpdateAllLifecyclePhases();
+  auto* web_frame = render_view()->GetWebView()->MainFrame()->ToWebLocalFrame();
+  web_frame->FrameWidget()->UpdateAllLifecyclePhases();
 
   // Initialize a new dump results object which we will populate in the calls
   // below.
@@ -470,6 +466,13 @@ void BlinkTestRunner::TestFinished() {
   // the browser instead. We want to switch all tests to use this for pixel
   // dumps.
   bool browser_should_capture_pixels = CaptureLocalPixelsDump();
+
+  // Add the current selection rect to the dump result, if requested.
+  if (browser_should_capture_pixels &&
+      interfaces->TestRunner()->ShouldDumpSelectionRect()) {
+    dump_result_->selection_rect =
+        web_frame->GetSelectionBoundsRectForTesting();
+  }
 
   // Request the browser to send us a callback through which we will return the
   // results.
@@ -533,6 +536,7 @@ bool BlinkTestRunner::CaptureLocalPixelsDump() {
           render_view()->GetWebView()->MainFrame()->ToWebLocalFrame(),
           base::BindOnce(&BlinkTestRunner::OnPixelsDumpCompleted,
                          base::Unretained(this)));
+
   // If the browser should capture pixels, then we shouldn't be waiting for dump
   // results.
   DCHECK(!browser_should_capture_pixels || !waiting_for_layout_dump_results_);
@@ -854,8 +858,8 @@ void BlinkTestRunner::OnReset() {
   main_frame->CommitNavigation(
       WebURLRequest(GURL(url::kAboutBlankURL)),
       blink::WebFrameLoadType::kStandard, blink::WebHistoryItem(), false,
-      base::UnguessableToken::Create(), nullptr /* extra_data */,
-      blink::WebNavigationTimings());
+      base::UnguessableToken::Create(), nullptr /* navigation_params */,
+      nullptr /* extra_data */);
   Send(new ShellViewHostMsg_ResetDone(routing_id()));
 }
 

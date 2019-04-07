@@ -22,7 +22,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LINE_INLINE_FLOW_BOX_H_
 
 #include <memory>
-#include "third_party/blink/renderer/core/layout/api/selection_state.h"
 #include "third_party/blink/renderer/core/layout/line/inline_box.h"
 #include "third_party/blink/renderer/core/layout/overflow_model.h"
 #include "third_party/blink/renderer/core/style/shadow_data.h"
@@ -74,7 +73,7 @@ class InlineFlowBox : public InlineBox {
     // bullet list items.  Even when the list bullet is an image, the line is
     // still considered to be immune from the quirk.
     has_text_children_ =
-        line_layout_item.Style()->Display() == EDisplay::kListItem;
+        line_layout_item.StyleRef().Display() == EDisplay::kListItem;
     has_text_descendants_ = has_text_children_;
   }
 
@@ -261,7 +260,7 @@ class InlineFlowBox : public InlineBox {
 
   void RemoveChild(InlineBox* child, MarkLineBoxes);
 
-  SelectionState GetSelectionState() const override;
+  bool IsSelected() const override { return false; }
 
   bool CanAccommodateEllipsis(bool ltr,
                               LayoutUnit block_edge,

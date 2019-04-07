@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/interfaces/pref_connector.mojom.h"
 #include "ash/public/interfaces/user_info.mojom.h"
 #include "ash/session/multiprofiles_intro_dialog.h"
@@ -26,6 +27,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -34,6 +36,7 @@
 #include "services/preferences/public/cpp/pref_service_factory.h"
 #include "services/preferences/public/mojom/preferences.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "ui/message_center/message_center.h"
 
 using session_manager::SessionState;
 
@@ -101,6 +104,10 @@ bool SessionController::ShouldLockScreenAutomatically() const {
 
 bool SessionController::IsRunningInAppMode() const {
   return is_running_in_app_mode_;
+}
+
+bool SessionController::IsDemoSession() const {
+  return is_demo_session_;
 }
 
 bool SessionController::IsUserSessionBlocked() const {
@@ -286,6 +293,8 @@ void SessionController::SetSessionInfo(mojom::SessionInfoPtr info) {
   can_lock_ = info->can_lock_screen;
   should_lock_screen_automatically_ = info->should_lock_screen_automatically;
   is_running_in_app_mode_ = info->is_running_in_app_mode;
+  if (info->is_demo_session)
+    SetIsDemoSession();
   add_user_session_policy_ = info->add_user_session_policy;
   SetSessionState(info->state);
 }
@@ -336,9 +345,10 @@ void SessionController::SetUserSessionOrder(
 
   // Check active user change and notifies observers.
   if (user_sessions_[0]->session_id != active_session_id_) {
+    const bool is_first_session = active_session_id_ == 0u;
     active_session_id_ = user_sessions_[0]->session_id;
 
-    if (!last_active_account_id.is_valid()) {
+    if (is_first_session) {
       for (auto& observer : observers_)
         observer.OnFirstSessionStarted();
     }
@@ -487,6 +497,16 @@ void SessionController::ProvideUserPrefServiceForTest(
   OnProfilePrefServiceInitialized(account_id, std::move(pref_service));
 }
 
+void SessionController::SetIsDemoSession() {
+  if (is_demo_session_)
+    return;
+
+  is_demo_session_ = true;
+  Shell::Get()->metrics()->StartDemoSessionMetricsRecording();
+  // Notifications should be silenced during demo sessions.
+  message_center::MessageCenter::Get()->SetQuietMode(true);
+}
+
 void SessionController::SetSessionState(SessionState state) {
   if (state_ == state)
     return;
@@ -540,6 +560,7 @@ void SessionController::AddUserSession(mojom::UserSessionPtr user_session) {
                    weak_ptr_factory_.GetWeakPtr(), account_id));
   }
 
+  UpdateLoginStatus();
   for (auto& observer : observers_)
     observer.OnUserSessionAdded(account_id);
 }
@@ -576,8 +597,8 @@ LoginStatus SessionController::CalculateLoginStatusForActiveSession() const {
 
   switch (user_sessions_[0]->user_info->type) {
     case user_manager::USER_TYPE_REGULAR:
-      // TODO: This needs to distinguish between owner and non-owner.
-      return LoginStatus::USER;
+      return user_sessions_[0]->user_info->is_device_owner ? LoginStatus::OWNER
+                                                           : LoginStatus::USER;
     case user_manager::USER_TYPE_GUEST:
       return LoginStatus::GUEST;
     case user_manager::USER_TYPE_PUBLIC_ACCOUNT:

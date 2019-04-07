@@ -45,7 +45,6 @@
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
-#include "third_party/blink/renderer/core/loader/threadable_loading_context.h"
 #include "third_party/blink/renderer/core/loader/worker_fetch_context.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/script/script.h"
@@ -67,7 +66,9 @@
 #include "third_party/blink/renderer/platform/network/network_utils.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/shared_buffer.h"
+#include "third_party/blink/renderer/platform/weborigin/referrer_policy.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
+#include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
@@ -248,14 +249,6 @@ void WebEmbeddedWorkerImpl::PostMessageToPageInspector(int session_id,
   worker_inspector_proxy_->DispatchMessageFromWorker(session_id, message);
 }
 
-void WebEmbeddedWorkerImpl::SetContentSecurityPolicyAndReferrerPolicy(
-    ContentSecurityPolicy* content_security_policy,
-    String referrer_policy) {
-  DCHECK(IsMainThread());
-  shadow_page_->SetContentSecurityPolicyAndReferrerPolicy(
-      content_security_policy, std::move(referrer_policy));
-}
-
 std::unique_ptr<WebApplicationCacheHost>
 WebEmbeddedWorkerImpl::CreateApplicationCacheHost(
     WebApplicationCacheHostClient*) {
@@ -285,7 +278,7 @@ void WebEmbeddedWorkerImpl::OnShadowPageInitialized() {
   // worker.
   DCHECK(!main_script_loader_);
   main_script_loader_ = WorkerClassicScriptLoader::Create();
-  main_script_loader_->LoadAsynchronously(
+  main_script_loader_->LoadTopLevelScriptAsynchronously(
       *shadow_page_->GetDocument(), worker_start_data_.script_url,
       WebURLRequest::kRequestContextServiceWorker,
       network::mojom::FetchRequestMode::kSameOrigin,
@@ -336,6 +329,7 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
   // (crbug.com/254993)
   const SecurityOrigin* starter_origin = document->GetSecurityOrigin();
   bool starter_secure_context = document->IsSecureContext();
+  const HttpsState starter_https_state = document->GetHttpsState();
 
   WorkerClients* worker_clients = WorkerClients::Create();
   ProvideIndexedDBClientToWorker(worker_clients,
@@ -372,17 +366,22 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
   // |main_script_loader_| isn't created if the InstalledScriptsManager had the
   // script.
   if (main_script_loader_) {
-    // We need to set the CSP to both the shadow page's document and the
-    // ServiceWorkerGlobalScope.
-    SetContentSecurityPolicyAndReferrerPolicy(
-        main_script_loader_->ReleaseContentSecurityPolicy(),
-        main_script_loader_->GetReferrerPolicy());
+    ContentSecurityPolicy* content_security_policy =
+        main_script_loader_->GetContentSecurityPolicy();
+    ReferrerPolicy referrer_policy = kReferrerPolicyDefault;
+    if (!main_script_loader_->GetReferrerPolicy().IsNull()) {
+      SecurityPolicy::ReferrerPolicyFromHeaderValue(
+          main_script_loader_->GetReferrerPolicy(),
+          kDoNotSupportReferrerPolicyLegacyKeywords, &referrer_policy);
+    }
     global_scope_creation_params = std::make_unique<GlobalScopeCreationParams>(
         worker_start_data_.script_url, script_type,
         worker_start_data_.user_agent,
-        document->GetContentSecurityPolicy()->Headers(),
-        document->GetReferrerPolicy(), starter_origin, starter_secure_context,
-        worker_clients, main_script_loader_->ResponseAddressSpace(),
+        content_security_policy ? content_security_policy->Headers()
+                                : Vector<CSPHeaderAndType>(),
+        referrer_policy, starter_origin, starter_secure_context,
+        starter_https_state, worker_clients,
+        main_script_loader_->ResponseAddressSpace(),
         main_script_loader_->OriginTrialTokens(), devtools_worker_token_,
         std::move(worker_settings),
         static_cast<V8CacheOptions>(worker_start_data_.v8_cache_options),
@@ -392,14 +391,13 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
     cached_meta_data = main_script_loader_->ReleaseCachedMetadata();
     main_script_loader_ = nullptr;
   } else {
-    // ContentSecurityPolicy and ReferrerPolicy are applied to |document| at
-    // SetContentSecurityPolicyAndReferrerPolicy() before evaluating the main
-    // script.
+    // We don't have to set ContentSecurityPolicy and ReferrerPolicy. They're
+    // served by the installed scripts manager on the worker thread.
     global_scope_creation_params = std::make_unique<GlobalScopeCreationParams>(
         worker_start_data_.script_url, script_type,
         worker_start_data_.user_agent, Vector<CSPHeaderAndType>(),
         kReferrerPolicyDefault, starter_origin, starter_secure_context,
-        worker_clients, worker_start_data_.address_space,
+        starter_https_state, worker_clients, worker_start_data_.address_space,
         nullptr /* OriginTrialTokens */, devtools_worker_token_,
         std::move(worker_settings),
         static_cast<V8CacheOptions>(worker_start_data_.v8_cache_options),
@@ -413,7 +411,6 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
   }
 
   worker_thread_ = std::make_unique<ServiceWorkerThread>(
-      ThreadableLoadingContext::Create(*document),
       ServiceWorkerGlobalScopeProxy::Create(*this, *worker_context_client_),
       std::move(installed_scripts_manager_), std::move(cache_storage_info_));
 

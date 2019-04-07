@@ -72,17 +72,12 @@ class CORE_EXPORT ModulePendingScript : public PendingScript {
 
   // PendingScript
   ScriptType GetScriptType() const override { return ScriptType::kModule; }
-  Script* GetSource(const KURL& document_url,
-                    bool& error_occurred) const override;
+  Script* GetSource(const KURL& document_url) const override;
   bool IsReady() const override { return ready_; }
   bool IsExternal() const override { return is_external_; }
-  bool ErrorOccurred() const override;
   bool WasCanceled() const override { return false; }
 
-  bool StartStreamingIfPossible(ScriptStreamer::Type,
-                                base::OnceClosure) override {
-    return false;
-  }
+  bool StartStreamingIfPossible(base::OnceClosure) override { return false; }
   bool IsCurrentlyStreaming() const override { return false; }
 
   KURL UrlForTracing() const override { return NullURL(); }

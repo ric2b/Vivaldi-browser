@@ -32,7 +32,6 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image_metrics.h"
 #include "third_party/blink/renderer/platform/graphics/deferred_image_decoder.h"
@@ -54,19 +53,16 @@ namespace blink {
 
 int GetRepetitionCountWithPolicyOverride(int actual_count,
                                          ImageAnimationPolicy policy) {
-  switch (policy) {
-    case kImageAnimationPolicyAllowed:
-      // Default policy, no count override.
-      return actual_count;
-    case kImageAnimationPolicyAnimateOnce:
-      // Only a single loop allowed.
-      return kAnimationLoopOnce;
-    case kImageAnimationPolicyNoAnimation:
-      // Dont animate.
-      return kAnimationNone;
+  if (actual_count == kAnimationNone ||
+      policy == kImageAnimationPolicyNoAnimation) {
+    return kAnimationNone;
   }
 
-  NOTREACHED();
+  if (actual_count == kAnimationLoopOnce ||
+      policy == kImageAnimationPolicyAnimateOnce) {
+    return kAnimationLoopOnce;
+  }
+
   return actual_count;
 }
 
@@ -110,13 +106,14 @@ size_t BitmapImage::TotalFrameBytes() {
   return 0u;
 }
 
-PaintImage BitmapImage::PaintImageForTesting(size_t frame_index) {
-  return CreatePaintImage(frame_index);
+PaintImage BitmapImage::PaintImageForTesting() {
+  return CreatePaintImage();
 }
 
-PaintImage BitmapImage::CreatePaintImage(size_t index) {
+PaintImage BitmapImage::CreatePaintImage() {
   sk_sp<PaintImageGenerator> generator =
-      decoder_ ? decoder_->CreateGenerator(index) : nullptr;
+      decoder_ ? decoder_->CreateGenerator(PaintImage::kDefaultFrameIndex)
+               : nullptr;
   if (!generator)
     return PaintImage();
 
@@ -126,7 +123,6 @@ PaintImage BitmapImage::CreatePaintImage(size_t index) {
   auto builder =
       CreatePaintImageBuilder()
           .set_paint_image_generator(std::move(generator))
-          .set_frame_index(index)
           .set_repetition_count(GetRepetitionCountWithPolicyOverride(
               RepetitionCount(), animation_policy_))
           .set_completion_state(completion_state)
@@ -186,6 +182,15 @@ Image::SizeAvailability BitmapImage::SetData(scoped_refptr<SharedBuffer> data,
   return DataChanged(all_data_received);
 }
 
+// Return the image density in 0.01 "bits per pixel" rounded to the nearest
+// integer.
+static inline int ImageDensityInCentiBpp(IntSize size,
+                                         size_t image_size_bytes) {
+  uint64_t image_area = static_cast<uint64_t>(size.Width()) * size.Height();
+  return (static_cast<uint64_t>(image_size_bytes) * 100 * 8 + image_area / 2) /
+         image_area;
+}
+
 Image::SizeAvailability BitmapImage::DataChanged(bool all_data_received) {
   TRACE_EVENT0("blink", "BitmapImage::dataChanged");
 
@@ -193,6 +198,17 @@ Image::SizeAvailability BitmapImage::DataChanged(bool all_data_received) {
   // compositor thread. Its necessary to clear the frame since more data
   // requires a new PaintImageGenerator instance.
   cached_frame_ = PaintImage();
+
+  // Report the image density metric right after we received all the data. The
+  // SetData() call on the decoder_ (if there is one) should have decoded the
+  // images and we should know the image size at this point. We still check it
+  // here as a sanity check.
+  if (!all_data_received_ && all_data_received && decoder_ &&
+      decoder_->Data() && decoder_->FilenameExtension() == "jpg" &&
+      IsSizeAvailable() && Size().Width() >= 100 && Size().Height() >= 100) {
+    BitmapImageMetrics::CountImageJpegDensity(
+        ImageDensityInCentiBpp(Size(), decoder_->Data()->size()));
+  }
 
   // Feed all the data we've seen so far to the image decoder.
   all_data_received_ = all_data_received;
@@ -306,7 +322,7 @@ PaintImage BitmapImage::PaintImageForCurrentFrame() {
   if (cached_frame_)
     return cached_frame_;
 
-  cached_frame_ = CreatePaintImage(PaintImage::kDefaultFrameIndex);
+  cached_frame_ = CreatePaintImage();
 
   // Create the SkImage backing for this PaintImage here to ensure that copies
   // of the PaintImage share the same SkImage. Skia's caching of the decoded
@@ -367,7 +383,7 @@ bool BitmapImage::CurrentFrameIsLazyDecoded() {
   return true;
 }
 
-ImageOrientation BitmapImage::CurrentFrameOrientation() {
+ImageOrientation BitmapImage::CurrentFrameOrientation() const {
   return decoder_ ? decoder_->OrientationAtIndex(PaintImage::kDefaultFrameIndex)
                   : kDefaultImageOrientation;
 }
@@ -413,12 +429,5 @@ void BitmapImage::SetAnimationPolicy(ImageAnimationPolicy policy) {
   animation_policy_ = policy;
   ResetAnimation();
 }
-
-STATIC_ASSERT_ENUM(WebSettings::kImageAnimationPolicyAllowed,
-                   kImageAnimationPolicyAllowed);
-STATIC_ASSERT_ENUM(WebSettings::kImageAnimationPolicyAnimateOnce,
-                   kImageAnimationPolicyAnimateOnce);
-STATIC_ASSERT_ENUM(WebSettings::kImageAnimationPolicyNoAnimation,
-                   kImageAnimationPolicyNoAnimation);
 
 }  // namespace blink

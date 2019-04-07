@@ -8,9 +8,9 @@
 
 #include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
-#include "gpu/GLES2/gl2extchromium.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/mac/io_surface.h"
+#include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_image_io_surface.h"
 
 namespace gpu {
@@ -105,7 +105,7 @@ bool GpuMemoryBufferFactoryIOSurface::SupportsCreateAnonymousImage() const {
 
 scoped_refptr<gl::GLImage>
 GpuMemoryBufferFactoryIOSurface::CreateImageForGpuMemoryBuffer(
-    const gfx::GpuMemoryBufferHandle& handle,
+    gfx::GpuMemoryBufferHandle handle,
     const gfx::Size& size,
     gfx::BufferFormat format,
     unsigned internalformat,
@@ -167,10 +167,12 @@ GpuMemoryBufferFactoryIOSurface::CreateAnonymousImage(const gfx::Size& size,
     LOG(ERROR) << "Failed to create IOSurface mach port.";
   }
 
-  gfx::GenericSharedMemoryId image_id(++next_anonymous_image_id_);
   scoped_refptr<gl::GLImageIOSurface> image(
       gl::GLImageIOSurface::Create(size, internalformat));
-  if (!image->Initialize(io_surface.get(), image_id, format)) {
+  // Use an invalid GMB id so that we can differentiate between anonymous and
+  // shared GMBs by using gfx::GenericSharedMemoryId::is_valid().
+  if (!image->Initialize(io_surface.get(), gfx::GenericSharedMemoryId(),
+                         format)) {
     DLOG(ERROR) << "Failed to initialize anonymous GLImage.";
     return scoped_refptr<gl::GLImage>();
   }

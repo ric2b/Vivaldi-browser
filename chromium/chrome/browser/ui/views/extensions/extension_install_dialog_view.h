@@ -48,18 +48,24 @@ class ExtensionInstallDialogView : public views::DialogDelegateView,
   void ResizeWidget();
 
  private:
-  // views::DialogDelegateView:
+  // views::View:
   gfx::Size CalculatePreferredSize() const override;
-  void AddedToWidget() override;
   void VisibilityChanged(views::View* starting_from, bool is_visible) override;
-  int GetDialogButtons() const override;
-  base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
-  int GetDefaultDialogButton() const override;
+  void AddedToWidget() override;
+
+  // views::DialogDelegate:
+  views::View* CreateExtraView() override;
   bool Cancel() override;
   bool Accept() override;
-  ui::ModalType GetModalType() const override;
-  views::View* CreateExtraView() override;
+  int GetDialogButtons() const override;
+  int GetDefaultDialogButton() const override;
+  base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   bool IsDialogButtonEnabled(ui::DialogButton button) const override;
+
+  // views::WidgetDelegate:
+  ax::mojom::Role GetAccessibleWindowRole() const override;
+  base::string16 GetAccessibleWindowTitle() const override;
+  ui::ModalType GetModalType() const override;
 
   // views::LinkListener:
   void LinkClicked(views::Link* source, int event_flags) override;
@@ -82,6 +88,7 @@ class ExtensionInstallDialogView : public views::DialogDelegateView,
   content::PageNavigator* navigator_;
   ExtensionInstallPrompt::DoneCallback done_callback_;
   std::unique_ptr<ExtensionInstallPrompt::Prompt> prompt_;
+  base::string16 title_;
 
   // The scroll view containing all the details for the dialog (including all
   // collapsible/expandable sections).

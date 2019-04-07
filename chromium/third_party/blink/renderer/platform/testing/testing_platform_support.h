@@ -39,6 +39,7 @@
 #include "base/macros.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
+#include "third_party/blink/renderer/platform/testing/code_cache_loader_mock.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 
@@ -62,14 +63,19 @@ class TestingPlatformSupport : public Platform {
   WebString DefaultLocale() override;
   WebThread* CurrentThread() override;
   WebBlobRegistry* GetBlobRegistry() override;
-  WebIDBFactory* IdbFactory() override;
+  std::unique_ptr<WebIDBFactory> CreateIdbFactory() override;
   WebURLLoaderMockFactory* GetURLLoaderMockFactory() override;
   std::unique_ptr<blink::WebURLLoaderFactory> CreateDefaultURLLoaderFactory()
       override;
+  std::unique_ptr<CodeCacheLoader> CreateCodeCacheLoader() override {
+    return std::make_unique<CodeCacheLoaderMock>();
+  }
   WebData GetDataResource(const char* name) override;
   InterfaceProvider* GetInterfaceProvider() override;
+  bool IsThreadedAnimationEnabled() override;
 
   virtual void RunUntilIdle();
+  void SetThreadedAnimationEnabled(bool enabled);
 
   // Overrides the handling of GetInterface on the platform's associated
   // interface provider.
@@ -90,6 +96,9 @@ class TestingPlatformSupport : public Platform {
 
   Platform* const old_platform_;
   std::unique_ptr<TestingInterfaceProvider> interface_provider_;
+
+ private:
+  bool is_threaded_animation_enabled_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TestingPlatformSupport);
 };

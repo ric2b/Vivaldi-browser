@@ -85,7 +85,7 @@ inline PseudoElement* PseudoElementData::GetPseudoElement(
   if (kPseudoIdAfter == pseudo_id)
     return generated_after_;
 // Workaround for CPU bug. This avoids compiler optimizing
-// this group of if conditions into switch. See crbug.com/855390.
+// this group of if conditions into switch. See http://crbug.com/855390.
 #if defined(ARCH_CPU_ARMEL)
   __asm__ volatile("");
 #endif

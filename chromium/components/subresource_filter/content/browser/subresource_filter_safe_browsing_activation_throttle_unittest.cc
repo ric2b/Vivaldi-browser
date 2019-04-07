@@ -171,6 +171,7 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
     ruleset_dealer_ = std::make_unique<VerifiedRulesetDealer::Handle>(
         base::MessageLoopCurrent::Get()->task_runner());
     ruleset_dealer_->TryOpenAndSetRulesetFile(test_ruleset_pair_.indexed.path,
+                                              /*expected_checksum=*/0,
                                               base::DoNothing());
 
     auto* contents = RenderViewHostTestHarness::web_contents();
@@ -283,8 +284,9 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
     // NavigationSimulator by giving it an option to be driven by a
     // TestMockTimeTaskRunner. Also see https://crbug.com/703346.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&base::TestMockTimeTaskRunner::RunUntilIdle,
-                              base::Unretained(test_io_task_runner_.get())));
+        FROM_HERE,
+        base::BindOnce(&base::TestMockTimeTaskRunner::RunUntilIdle,
+                       base::Unretained(test_io_task_runner_.get())));
     simulator->Commit();
     return simulator->GetLastThrottleCheckResult();
   }

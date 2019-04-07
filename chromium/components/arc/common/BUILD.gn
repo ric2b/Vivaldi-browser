@@ -29,6 +29,7 @@ if (is_chromeos) {
       "file_system.mojom",
       "ime.mojom",
       "input_method_manager.mojom",
+      "intent_common.mojom",
       "intent_helper.mojom",
       "kiosk.mojom",
       "lock_screen.mojom",
@@ -38,10 +39,12 @@ if (is_chromeos) {
       "obb_mounter.mojom",
       "oemcrypto.mojom",
       "oemcrypto_daemon.mojom",
+      "pip.mojom",
       "policy.mojom",
       "power.mojom",
       "print.mojom",
       "process.mojom",
+      "property.mojom",
       "rotation_lock.mojom",
       "scale_factor.mojom",
       "screen_capture.mojom",
@@ -62,7 +65,9 @@ if (is_chromeos) {
       ":notifications",
       "//device/usb/public/mojom",
       "//mojo/public/mojom/base",
+      "//ui/accessibility/mojom",
       "//ui/gfx/geometry/mojo",
+      "//url/mojom:url_mojom_gurl",
     ]
   }
 
@@ -78,9 +83,8 @@ if (is_chromeos) {
   }
 }
 
-# Media related mojo interfaces. There are used by
-# //services/ui/public/interfaces. We have this separate mojom target to avoid
-# pulling in unnecessary interfaces,
+# Media related mojo interfaces. There are used by //services/ws/public/mojom.
+# We have this separate mojom target to avoid pulling in unnecessary interfaces.
 mojom("media") {
   sources = [
     "gfx.mojom",

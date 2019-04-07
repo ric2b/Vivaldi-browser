@@ -13,11 +13,12 @@
 #include "ash/shell/content/client/shell_content_browser_client.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/logging.h"
 #include "base/path_service.h"
 #include "content/public/utility/content_utility_client.h"
 #include "services/service_manager/public/cpp/service.h"
-#include "services/ui/ime/test_ime_driver/public/mojom/constants.mojom.h"
-#include "services/ui/ime/test_ime_driver/test_ime_application.h"
+#include "services/ws/ime/test_ime_driver/public/mojom/constants.mojom.h"
+#include "services/ws/ime/test_ime_driver/test_ime_application.h"
 #include "ui/base/ime/input_method_initializer.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -26,20 +27,23 @@ namespace shell {
 namespace {
 
 std::unique_ptr<service_manager::Service> CreateQuickLaunch() {
+  logging::SetLogPrefix("quick");
   return std::make_unique<quick_launch::QuickLaunchApplication>();
 }
 
 std::unique_ptr<service_manager::Service> CreateShortcutViewer() {
+  logging::SetLogPrefix("shortcut");
   return std::make_unique<
       keyboard_shortcut_viewer::ShortcutViewerApplication>();
 }
 
 std::unique_ptr<service_manager::Service> CreateTapVisualizer() {
+  logging::SetLogPrefix("tap");
   return std::make_unique<tap_visualizer::TapVisualizerApp>();
 }
 
 std::unique_ptr<service_manager::Service> CreateTestImeDriver() {
-  return std::make_unique<ui::test::TestIMEApplication>();
+  return std::make_unique<ws::test::TestIMEApplication>();
 }
 
 class ShellContentUtilityClient : public content::ContentUtilityClient {

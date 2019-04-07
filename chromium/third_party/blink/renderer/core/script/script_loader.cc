@@ -47,6 +47,7 @@
 #include "third_party/blink/renderer/core/script/script_element_base.h"
 #include "third_party/blink/renderer/core/script/script_runner.h"
 #include "third_party/blink/renderer/core/svg_names.h"
+#include "third_party/blink/renderer/platform/bindings/parkable_string.h"
 #include "third_party/blink/renderer/platform/feature_policy/feature_policy.h"
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/loader/fetch/access_control_status.h"
@@ -55,8 +56,8 @@
 #include "third_party/blink/renderer/platform/loader/subresource_integrity.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
+#include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
-#include "third_party/blink/renderer/platform/wtf/text/movable_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
 
@@ -300,15 +301,24 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
   //
   // FIXME: If script is parser inserted, verify it's still in the original
   // document.
-  Document& element_document = element_->GetDocument();
-  Document* context_document = element_document.ContextDocument();
-  if (!element_document.ExecutingFrame())
-    return false;
-  if (!context_document || !context_document->ExecutingFrame())
-    return false;
 
   // <spec step="11">If scripting is disabled for the script element, then
   // return. The script is not executed.</spec>
+  //
+  // <spec
+  // href="https://html.spec.whatwg.org/multipage/webappapis.html#concept-n-noscript">
+  // Scripting is disabled for a node if [the node's node document has no
+  // browsing context], or if scripting is disabled in that browsing context.
+  // </spec>
+  Document& element_document = element_->GetDocument();
+  // TODO(timothygu): Investigate if we could switch from ExecutingFrame() to
+  // ExecutingWindow().
+  if (!element_document.ExecutingFrame())
+    return false;
+
+  Document* context_document = element_document.ContextDocument();
+  if (!context_document || !context_document->ExecutingFrame())
+    return false;
   if (!context_document->CanExecuteScripts(kAboutToExecuteScript))
     return false;
 
@@ -363,10 +373,13 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
 
   // <spec step="20">Let referrer policy be the current state of the element's
   // referrerpolicy content attribute.</spec>
-  // TODO(domfarolino): Implement referrerpolicy attribute on script elements.
-  // As a stopgap, we set |referrer_policy| to document's referrer policy to
-  // keep the backward compatibility (https://crbug.com/841673).
-  ReferrerPolicy referrer_policy = element_document.GetReferrerPolicy();
+  String referrerpolicy_attr = element_->ReferrerPolicyAttributeValue();
+  ReferrerPolicy referrer_policy = kReferrerPolicyDefault;
+  if (!referrerpolicy_attr.IsEmpty()) {
+    SecurityPolicy::ReferrerPolicyFromString(
+        referrerpolicy_attr, kDoNotSupportReferrerPolicyLegacyKeywords,
+        &referrer_policy);
+  }
 
   // <spec step="21">Let parser metadata be "parser-inserted" if the script
   // element has been flagged as "parser-inserted", and "not-parser-inserted"
@@ -395,7 +408,7 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
   // <spec step="22">Let options be a script fetch options whose cryptographic
   // nonce is cryptographic nonce, integrity metadata is integrity metadata,
   // parser metadata is parser metadata, credentials mode is module script
-  // credentials mode, and referrer policy is referrer_policy.</spec>
+  // credentials mode, and referrer policy is referrer policy.</spec>
   ScriptFetchOptions options(nonce, integrity_metadata, integrity_attr,
                              parser_state, credentials_mode, referrer_policy);
 
@@ -546,7 +559,7 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
         Modulator* modulator = Modulator::From(
             ToScriptStateForMainWorld(context_document->GetFrame()));
         ModuleScript* module_script = ModuleScript::Create(
-            MovableString(element_->TextFromChildren().Impl()), modulator,
+            ParkableString(element_->TextFromChildren().Impl()), modulator,
             source_url, base_url, options, kSharableCrossOrigin, position);
 
         // <spec step="25.2.B.2">If this returns null, set the script's script

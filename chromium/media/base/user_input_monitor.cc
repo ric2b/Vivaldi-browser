@@ -33,8 +33,7 @@ void WriteKeyPressMonitorCount(
   // No ordering constraints between Load/Store operations, a temporary
   // inconsistent value is fine.
   base::subtle::NoBarrier_Store(
-      reinterpret_cast<base::subtle::Atomic32*>(writable_mapping.memory()),
-      count);
+      static_cast<base::subtle::Atomic32*>(writable_mapping.memory()), count);
 }
 
 #ifdef DISABLE_USER_INPUT_MONITOR
@@ -54,7 +53,8 @@ UserInputMonitorBase::UserInputMonitorBase() {
 }
 
 UserInputMonitorBase::~UserInputMonitorBase() {
-  DCHECK_EQ(0u, references_);
+  // |references_| may be non-zero as it's decremented due to Mojo messages from
+  // the renderer, and they may not reach the browser always in tests.
 }
 
 void UserInputMonitorBase::EnableKeyPressMonitoring() {

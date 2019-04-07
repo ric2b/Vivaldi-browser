@@ -16,6 +16,7 @@
 #include "base/strings/utf_offset_string_conversions.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
+#include "components/omnibox/browser/suggestion_answer.h"
 #include "components/search_engines/template_url.h"
 #include "components/url_formatter/url_formatter.h"
 #include "ui/base/page_transition_types.h"
@@ -111,6 +112,15 @@ struct AutocompleteMatch {
   // and |description| strings.
   static const base::char16 kInvalidChars[];
 
+  // Document subtype, for AutocompleteMatchType::DOCUMENT.
+  enum class DocumentType {
+    NONE,
+    DRIVE_DOCS,
+    DRIVE_SHEETS,
+    DRIVE_SLIDES,
+    DRIVE_OTHER
+  };
+
   AutocompleteMatch();
   AutocompleteMatch(AutocompleteProvider* provider,
                     int relevance,
@@ -127,18 +137,12 @@ struct AutocompleteMatch {
   // would determine.
   static const gfx::VectorIcon& TypeToVectorIcon(Type type,
                                                  bool is_bookmark,
-                                                 bool is_tab_match);
+                                                 bool is_tab_match,
+                                                 DocumentType document_type);
 
   // Comparison function for determining when one match is better than another.
   static bool MoreRelevant(const AutocompleteMatch& elem1,
                            const AutocompleteMatch& elem2);
-
-  // Comparison function for removing matches with duplicate destinations.
-  // Destinations are compared using |stripped_destination_url|.  Pairs of
-  // matches with empty destinations are treated as differing, since empty
-  // destinations are expected for non-navigable matches.
-  static bool DestinationsEqual(const AutocompleteMatch& elem1,
-                                const AutocompleteMatch& elem2);
 
   // Helper functions for classes creating matches:
   // Fills in the classifications for |text|, using |style| as the base style
@@ -418,6 +422,9 @@ struct AutocompleteMatch {
   std::string image_dominant_color;
   std::string image_url;
 
+  // Optional override to use for types that specify an icon sub-type.
+  DocumentType document_type;
+
   // The main text displayed in the address bar dropdown.
   base::string16 contents;
   ACMatchClassifications contents_class;
@@ -435,7 +442,7 @@ struct AutocompleteMatch {
   // A rich-format version of the display for the dropdown.
   base::string16 answer_contents;
   base::string16 answer_type;
-  std::unique_ptr<SuggestionAnswer> answer;
+  base::Optional<SuggestionAnswer> answer;
 
   // The transition type to use when the user opens this match.  By default
   // this is TYPED.  Providers whose matches do not look like URLs should set

@@ -16,7 +16,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/crx_file/crx_verifier.h"
@@ -105,7 +105,8 @@ TEST_F(ComponentUnpackerTest, UnpackFullCrx) {
       base::MakeRefCounted<ComponentUnpacker>(
           std::vector<uint8_t>(std::begin(jebg_hash), std::end(jebg_hash)),
           test_file("jebgalgnebhfojomionfpkfelancnnkf.crx"), nullptr,
-          config->CreateServiceManagerConnector());
+          config->CreateServiceManagerConnector(),
+          crx_file::VerifierFormat::CRX2_OR_CRX3);
   component_unpacker->Unpack(base::BindOnce(
       &ComponentUnpackerTest::UnpackComplete, base::Unretained(this)));
   RunThreads();
@@ -136,7 +137,8 @@ TEST_F(ComponentUnpackerTest, UnpackFileNotFound) {
   scoped_refptr<ComponentUnpacker> component_unpacker =
       base::MakeRefCounted<ComponentUnpacker>(
           std::vector<uint8_t>(std::begin(jebg_hash), std::end(jebg_hash)),
-          test_file("file-not-found.crx"), nullptr, nullptr);
+          test_file("file-not-found.crx"), nullptr, nullptr,
+          crx_file::VerifierFormat::CRX2_OR_CRX3);
   component_unpacker->Unpack(base::BindOnce(
       &ComponentUnpackerTest::UnpackComplete, base::Unretained(this)));
   RunThreads();
@@ -153,7 +155,8 @@ TEST_F(ComponentUnpackerTest, UnpackFileHashMismatch) {
   scoped_refptr<ComponentUnpacker> component_unpacker =
       base::MakeRefCounted<ComponentUnpacker>(
           std::vector<uint8_t>(std::begin(abag_hash), std::end(abag_hash)),
-          test_file("jebgalgnebhfojomionfpkfelancnnkf.crx"), nullptr, nullptr);
+          test_file("jebgalgnebhfojomionfpkfelancnnkf.crx"), nullptr, nullptr,
+          crx_file::VerifierFormat::CRX2_OR_CRX3);
   component_unpacker->Unpack(base::BindOnce(
       &ComponentUnpackerTest::UnpackComplete, base::Unretained(this)));
   RunThreads();

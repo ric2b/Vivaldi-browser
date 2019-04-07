@@ -116,10 +116,28 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   // May be empty if this SiteInstance does not have a |site_|.
   const GURL& original_url() { return original_url_; }
 
+  // Returns the URL which should be used in a LockToOrigin call for this
+  // SiteInstance's process.
+  const GURL& lock_url() { return lock_url_; }
+
   // True if |url| resolves to an effective URL that is different from |url|.
   // See GetEffectiveURL().  This will be true for hosted apps as well as NTP
   // URLs.
   static bool HasEffectiveURL(BrowserContext* browser_context, const GURL& url);
+
+  // Returns the site for the given URL, which includes only the scheme and
+  // registered domain.  Returns an empty GURL if the URL has no host.
+  // |use_effective_urls| specifies whether to resolve |url| to an effective
+  // URL (via ContentBrowserClient::GetEffectiveURL()) before determining the
+  // site.
+  static GURL GetSiteForURL(BrowserContext* context,
+                            const GURL& url,
+                            bool use_effective_urls);
+
+  // Returns the URL to which a process should be locked for the given URL.
+  // This is computed similarly to the site URL (see GetSiteForURL), but
+  // without resolving effective URLs.
+  static GURL DetermineProcessLockURL(BrowserContext* context, const GURL& url);
 
   // Returns the SiteInstance, related to this one, that should be used
   // for subframes when an oopif is required, but a dedicated process is not.
@@ -203,18 +221,17 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   static bool DoesSiteRequireDedicatedProcess(BrowserContext* browser_context,
                                               const GURL& url);
 
-  // Returns true if a process |host| can be locked to a site |site_url|.
-  // Returning true here also implies that |site_url| requires a dedicated
-  // process.  However, the converse does not hold: this might still return
-  // false for certain special cases where an origin lock can't be applied even
-  // when |site_url| requires a dedicated process (e.g., with
+  // Returns true if a process can be locked to a site |site_url|. Returning
+  // true here also implies that |site_url| requires a dedicated process.
+  // However, the converse does not hold: this might still return false for
+  // certain special cases where an origin lock can't be applied even when
+  // |site_url| requires a dedicated process (e.g., with
   // --site-per-process).  Examples of those cases include <webview> guests,
   // WebUI, single-process mode, or extensions where a process is currently
   // allowed to be reused for different extensions.  Most of these special
   // cases should eventually be removed, and this function should become
   // equivalent to DoesSiteRequireDedicatedProcess().
   static bool ShouldLockToOrigin(BrowserContext* browser_context,
-                                 RenderProcessHost* host,
                                  GURL site_url);
 
  private:
@@ -276,6 +293,12 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   // The URL which was used to set the |site_| for this SiteInstance.
   GURL original_url_;
 
+  // The URL to use when locking a process to this SiteInstance's site via
+  // LockToOrigin().  This is the same as |site_| except for cases involving
+  // effective URLs, such as hosted apps.  In those cases, this URL is a site
+  // URL that is computed without the use of effective URLs.
+  GURL lock_url_;
+
   // The ProcessReusePolicy to use when creating a RenderProcessHost for this
   // SiteInstance.
   ProcessReusePolicy process_reuse_policy_;
@@ -283,7 +306,7 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   // Whether the SiteInstance was created for a service worker.
   bool is_for_service_worker_;
 
-  base::ObserverList<Observer, true> observers_;
+  base::ObserverList<Observer, true>::Unchecked observers_;
 
   DISALLOW_COPY_AND_ASSIGN(SiteInstanceImpl);
 };

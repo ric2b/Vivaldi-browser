@@ -102,7 +102,8 @@ scoped_refptr<GinJavaBridgeMessageFilter> GinJavaBridgeMessageFilter::FromHost(
   return filter;
 }
 
-GinJavaBridgeDispatcherHost* GinJavaBridgeMessageFilter::FindHost() {
+scoped_refptr<GinJavaBridgeDispatcherHost>
+GinJavaBridgeMessageFilter::FindHost() {
   base::AutoLock locker(hosts_lock_);
   auto iter = hosts_.find(current_routing_id_);
   if (iter != hosts_.end())
@@ -110,7 +111,7 @@ GinJavaBridgeDispatcherHost* GinJavaBridgeMessageFilter::FindHost() {
   // Not being able to find a host is OK -- we can receive messages from
   // RenderFrames for which the corresponding host part has already been
   // destroyed. That means, any references to Java objects that the host was
-  // holding were already released (with the death of ContentViewCore), so we
+  // holding were already released (with the death of WebContents), so we
   // can just ignore such messages.
   // RenderProcessHostImpl does the same -- if it can't find a listener
   // for the message's routing id, it just drops the message silently.
@@ -124,7 +125,7 @@ void GinJavaBridgeMessageFilter::OnGetMethods(
     GinJavaBoundObject::ObjectID object_id,
     std::set<std::string>* returned_method_names) {
   DCHECK(JavaBridgeThread::CurrentlyOn());
-  GinJavaBridgeDispatcherHost* host = FindHost();
+  scoped_refptr<GinJavaBridgeDispatcherHost> host = FindHost();
   if (host) {
     host->OnGetMethods(object_id, returned_method_names);
   } else {
@@ -137,7 +138,7 @@ void GinJavaBridgeMessageFilter::OnHasMethod(
     const std::string& method_name,
     bool* result) {
   DCHECK(JavaBridgeThread::CurrentlyOn());
-  GinJavaBridgeDispatcherHost* host = FindHost();
+  scoped_refptr<GinJavaBridgeDispatcherHost> host = FindHost();
   if (host) {
     host->OnHasMethod(object_id, method_name, result);
   } else {
@@ -152,7 +153,7 @@ void GinJavaBridgeMessageFilter::OnInvokeMethod(
     base::ListValue* wrapped_result,
     content::GinJavaBridgeError* error_code) {
   DCHECK(JavaBridgeThread::CurrentlyOn());
-  GinJavaBridgeDispatcherHost* host = FindHost();
+  scoped_refptr<GinJavaBridgeDispatcherHost> host = FindHost();
   if (host) {
     host->OnInvokeMethod(current_routing_id_, object_id, method_name, arguments,
                          wrapped_result, error_code);
@@ -165,7 +166,7 @@ void GinJavaBridgeMessageFilter::OnInvokeMethod(
 void GinJavaBridgeMessageFilter::OnObjectWrapperDeleted(
     GinJavaBoundObject::ObjectID object_id) {
   DCHECK(JavaBridgeThread::CurrentlyOn());
-  GinJavaBridgeDispatcherHost* host = FindHost();
+  scoped_refptr<GinJavaBridgeDispatcherHost> host = FindHost();
   if (host)
     host->OnObjectWrapperDeleted(current_routing_id_, object_id);
 }

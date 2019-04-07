@@ -26,6 +26,10 @@
     defined(OS_WIN)
 #define PERFETTO_AVAILABLE
 #include "services/tracing/public/cpp/perfetto/producer_client.h"
+#include "services/tracing/public/cpp/perfetto/trace_event_data_source.h"
+#include "third_party/perfetto/include/perfetto/tracing/core/trace_writer.h"
+#include "third_party/perfetto/protos/perfetto/trace/chrome/chrome_trace_event.pbzero.h"
+#include "third_party/perfetto/protos/perfetto/trace/trace_packet.pbzero.h"
 #endif
 
 namespace {
@@ -63,6 +67,21 @@ class PerfettoTraceEventAgent : public TraceEventAgent {
               std::move(producer_client_pipe), std::move(producer_host_pipe));
         },
         std::move(perfetto_service)));
+
+    GetProducerClient()->AddDataSource(TraceEventDataSource::GetInstance());
+  }
+
+  void AddMetadataGeneratorFunction(
+      MetadataGeneratorFunction generator) override {
+    // Instantiate and register the metadata data source on the first
+    // call.
+    static TraceEventMetadataSource* metadata_source = []() {
+      static base::NoDestructor<TraceEventMetadataSource> instance;
+      GetProducerClient()->AddDataSource(instance.get());
+      return instance.get();
+    }();
+
+    metadata_source->AddGeneratorFunction(generator);
   }
 };
 #endif
@@ -71,18 +90,26 @@ class PerfettoTraceEventAgent : public TraceEventAgent {
 std::unique_ptr<TraceEventAgent> TraceEventAgent::Create(
     service_manager::Connector* connector,
     bool request_clock_sync_marker_on_android) {
+  std::unique_ptr<TraceEventAgent> new_agent;
+
   if (TracingUsesPerfettoBackend()) {
 #if defined(PERFETTO_AVAILABLE)
-    return std::make_unique<PerfettoTraceEventAgent>(
+    new_agent = std::make_unique<PerfettoTraceEventAgent>(
         connector, request_clock_sync_marker_on_android);
 #else
-    LOG(FATAL) << "Perfetto is not yet available for this platform.";
-    return nullptr;
+    LOG(ERROR) << "Perfetto is not yet available for this platform; falling "
+                  "back to using legacy TraceLog";
 #endif
-  } else {
-    return std::make_unique<LegacyTraceEventAgent>(
+  }
+
+  // Use legacy tracing if we're on an unsupported platform or the feature flag
+  // is disabled.
+  if (!new_agent) {
+    new_agent = std::make_unique<LegacyTraceEventAgent>(
         connector, request_clock_sync_marker_on_android);
   }
+
+  return new_agent;
 }
 
 TraceEventAgent::TraceEventAgent(service_manager::Connector* connector,

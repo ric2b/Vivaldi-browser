@@ -70,8 +70,7 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
   void ModelReadyToSync(std::unique_ptr<MetadataBatch> batch) override;
   bool IsTrackingMetadata() override;
   void ReportError(const ModelError& error) override;
-  base::WeakPtr<ModelTypeControllerDelegate> GetControllerDelegateOnUIThread()
-      override;
+  base::WeakPtr<ModelTypeControllerDelegate> GetControllerDelegate() override;
 
   // ModelTypeProcessor implementation.
   void ConnectSync(std::unique_ptr<CommitQueue> worker) override;
@@ -89,7 +88,7 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
   void OnSyncStopping(SyncStopMetadataFate metadata_fate) override;
   void GetAllNodesForDebugging(AllNodesCallback callback) override;
   void GetStatusCountersForDebugging(StatusCountersCallback callback) override;
-  void RecordMemoryUsageHistogram() override;
+  void RecordMemoryUsageAndCountsHistograms() override;
 
   // Returns the estimate of dynamically allocated memory in bytes.
   size_t EstimateMemoryUsage() const;
@@ -130,9 +129,24 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
   void RecommitAllForEncryption(std::unordered_set<std::string> already_updated,
                                 MetadataChangeList* metadata_changes);
 
-  // Handle the first update received from the server after being enabled.
-  void OnInitialUpdateReceived(const sync_pb::ModelTypeState& type_state,
-                               const UpdateResponseDataList& updates);
+  // Validates the update specified by the input parameters and returns whether
+  // it should get further processed. If the update is incorrect, this function
+  // also reports an error.
+  bool ValidateUpdate(const sync_pb::ModelTypeState& model_type_state,
+                      const UpdateResponseDataList& updates);
+
+  // Handle the first update received from the server after being enabled. If
+  // the data type does not support incremental updates, this will be called for
+  // any server update.
+  base::Optional<ModelError> OnFullUpdateReceived(
+      const sync_pb::ModelTypeState& type_state,
+      const UpdateResponseDataList& updates);
+
+  // Handle any incremental updates received from the server after being
+  // enabled.
+  base::Optional<ModelError> OnIncrementalUpdateReceived(
+      const sync_pb::ModelTypeState& type_state,
+      const UpdateResponseDataList& updates);
 
   // ModelTypeSyncBridge::GetData() callback for pending loading data upon
   // GetLocalChanges call.
@@ -151,9 +165,6 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
 
   // Returns true if there are any local entities to be committed.
   bool HasLocalChanges() const;
-
-  // Computes the client tag hash for the given client |tag|.
-  std::string GetHashForTag(const std::string& tag);
 
   // Looks up the client tag hash for the given |storage_key|, and regenerates
   // with |data| if the lookup finds nothing. Does not update the storage key to
@@ -189,18 +200,23 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
       const std::vector<std::string>& storage_key_to_be_deleted,
       MetadataChangeList* metadata_changes);
 
-  // Tombstones all entries whose versions are older than
-  // |version_watermark| unless they are unsynced.
-  void ExpireEntriesByVersion(int64_t version_watermark,
-                              MetadataChangeList* metadata_changes);
+  // Removes metadata for all entries unless they are unsynced.
+  // This is used to limit the amount of data stored in sync, and this does not
+  // tell the bridge to delete the actual data.
+  void ExpireAllEntries(MetadataChangeList* metadata_changes);
 
-  // Tombstones all entries whose ages are older than
+  // Removes metadata for all entries whose ages are older than
   // |age_watermark_in_days| unless they are unsynced.
+  // This is used to limit the amount of data stored in sync, and this does not
+  // tell the bridge to delete the actual data.
   void ExpireEntriesByAge(int32_t age_watermark_in_days,
                           MetadataChangeList* metadata_changes);
 
   // If the number of |entities_| exceeds |max_number_of_items|, the
-  // processor will tombstone the extra sync entities based on the LRU rule.
+  // processor removes metadata for the extra sync entities based on the LRU
+  // rule.
+  // This is used to limit the amount of data stored in sync, and this does not
+  // tell the bridge to delete the actual data.
   void ExpireEntriesByItemLimit(int32_t max_number_of_items,
                                 MetadataChangeList* metadata_changes);
 
@@ -293,11 +309,6 @@ class ClientTagBasedModelTypeProcessor : public ModelTypeProcessor,
   // confirmation, we should delete local data, because the model side never
   // intends to read it. This includes both data and metadata.
   const bool commit_only_;
-
-  // The version which processor already ran garbage collection against on.
-  // Cache this value is for saving resource purpose(ex. cpu, battery), so
-  // processor only run on each version once.
-  int64_t cached_gc_directive_version_;
 
   // The day which processor already ran garbage collection against on.
   // Cache this value is for saving resource purpose(ex. cpu, battery), we round

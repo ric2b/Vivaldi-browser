@@ -586,6 +586,15 @@
       }
     },
     {
+      "command": "showLogPage",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [79, 87]
+        }
+      }
+    },
+    {
       "command": "help",
       "sequence": {
         "cvoxModifier": true,
@@ -949,6 +958,15 @@
           "keyCode": [32]
         },
         "doubleTap": true
+      }
+    },
+    {
+      "command": "showTtsSettings",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [79, 83]
+        }
       }
     }
   ]

@@ -197,8 +197,8 @@ std::unique_ptr<Layer> Layer::Clone() const {
               : cc::DeadlinePolicy::UseDefaultDeadline(),
           surface_layer_->stretch_content_to_fill_bounds());
     }
-    if (surface_layer_->fallback_surface_id().is_valid())
-      clone->SetFallbackSurfaceId(surface_layer_->fallback_surface_id());
+    if (surface_layer_->fallback_surface_id())
+      clone->SetFallbackSurfaceId(*surface_layer_->fallback_surface_id());
   } else if (type_ == LAYER_SOLID_COLOR) {
     clone->SetColor(GetTargetColor());
   }
@@ -480,6 +480,9 @@ void Layer::SetAlphaShape(std::unique_ptr<ShapeRects> shape) {
   alpha_shape_ = std::move(shape);
 
   SetLayerFilters();
+
+  if (delegate_)
+    delegate_->OnLayerAlphaShapeChanged();
 }
 
 void Layer::SetLayerFilters() {
@@ -814,8 +817,8 @@ const viz::SurfaceId* Layer::GetPrimarySurfaceId() const {
 }
 
 const viz::SurfaceId* Layer::GetFallbackSurfaceId() const {
-  if (surface_layer_)
-    return &surface_layer_->fallback_surface_id();
+  if (surface_layer_ && surface_layer_->fallback_surface_id())
+    return &surface_layer_->fallback_surface_id().value();
   return nullptr;
 }
 
@@ -983,7 +986,7 @@ gfx::ScrollOffset Layer::CurrentScrollOffset() const {
   const Compositor* compositor = GetCompositor();
   gfx::ScrollOffset offset;
   if (compositor &&
-      compositor->GetScrollOffsetForLayer(cc_layer_->id(), &offset))
+      compositor->GetScrollOffsetForLayer(cc_layer_->element_id(), &offset))
     return offset;
   return cc_layer_->CurrentScrollOffset();
 }
@@ -991,7 +994,7 @@ gfx::ScrollOffset Layer::CurrentScrollOffset() const {
 void Layer::SetScrollOffset(const gfx::ScrollOffset& offset) {
   Compositor* compositor = GetCompositor();
   bool scrolled_on_impl_side =
-      compositor && compositor->ScrollLayerTo(cc_layer_->id(), offset);
+      compositor && compositor->ScrollLayerTo(cc_layer_->element_id(), offset);
 
   if (!scrolled_on_impl_side)
     cc_layer_->SetScrollOffset(offset);

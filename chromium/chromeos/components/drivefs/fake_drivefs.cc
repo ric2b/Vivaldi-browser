@@ -36,11 +36,11 @@ class FakeDriveFsMojoConnectionDelegate
   DISALLOW_COPY_AND_ASSIGN(FakeDriveFsMojoConnectionDelegate);
 };
 
-std::vector<std::pair<base::RepeatingCallback<AccountId()>,
+std::vector<std::pair<base::RepeatingCallback<std::string()>,
                       base::WeakPtr<FakeDriveFs>>>&
 GetRegisteredFakeDriveFsIntances() {
   static base::NoDestructor<std::vector<std::pair<
-      base::RepeatingCallback<AccountId()>, base::WeakPtr<FakeDriveFs>>>>
+      base::RepeatingCallback<std::string()>, base::WeakPtr<FakeDriveFs>>>>
       registered_fake_drivefs_instances;
   return *registered_fake_drivefs_instances;
 }
@@ -66,9 +66,9 @@ base::FilePath MaybeMountDriveFs(
   }
   CHECK(!datadir_suffix.empty());
   for (auto& registration : GetRegisteredFakeDriveFsIntances()) {
-    AccountId account_id = registration.first.Run();
-    if (registration.second && account_id.HasAccountIdKey() &&
-        account_id.GetAccountIdKey() == datadir_suffix) {
+    std::string account_id = registration.first.Run();
+    if (registration.second && !account_id.empty() &&
+        account_id == datadir_suffix) {
       return registration.second->mount_path();
     }
   }
@@ -97,7 +97,7 @@ FakeDriveFs::FakeDriveFs(const base::FilePath& mount_path)
 FakeDriveFs::~FakeDriveFs() = default;
 
 void FakeDriveFs::RegisterMountingForAccountId(
-    base::RepeatingCallback<AccountId()> account_id_getter) {
+    base::RepeatingCallback<std::string()> account_id_getter) {
   chromeos::DBusThreadManager* dbus_thread_manager =
       chromeos::DBusThreadManager::Get();
   static_cast<chromeos::FakeCrosDisksClient*>(
@@ -120,11 +120,13 @@ FakeDriveFs::CreateConnectionDelegate() {
 
 void FakeDriveFs::SetMetadata(const base::FilePath& path,
                               const std::string& mime_type,
-                              const std::string& original_name) {
+                              const std::string& original_name,
+                              bool pinned) {
   auto& stored_metadata = metadata_[path];
   stored_metadata.mime_type = mime_type;
   stored_metadata.original_name = original_name;
   stored_metadata.hosted = (original_name != path.BaseName().value());
+  stored_metadata.pinned = pinned;
 }
 
 void FakeDriveFs::Init(drivefs::mojom::DriveFsConfigurationPtr config,
@@ -151,6 +153,7 @@ void FakeDriveFs::GetMetadata(const base::FilePath& path,
 
   const auto& stored_metadata = metadata_[path];
   metadata->pinned = stored_metadata.pinned;
+  metadata->available_offline = stored_metadata.pinned;
 
   metadata->content_mime_type = stored_metadata.mime_type;
   metadata->type = stored_metadata.hosted
@@ -180,6 +183,12 @@ void FakeDriveFs::SetPinned(const base::FilePath& path,
                             bool pinned,
                             SetPinnedCallback callback) {
   metadata_[path].pinned = pinned;
+  std::move(callback).Run(drive::FILE_ERROR_OK);
+}
+
+void FakeDriveFs::UpdateNetworkState(bool pause_syncing, bool is_offline) {}
+
+void FakeDriveFs::ResetCache(ResetCacheCallback callback) {
   std::move(callback).Run(drive::FILE_ERROR_OK);
 }
 

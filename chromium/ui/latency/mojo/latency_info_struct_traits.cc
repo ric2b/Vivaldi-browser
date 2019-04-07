@@ -24,6 +24,8 @@ ui::mojom::SourceEventType UISourceEventTypeToMojo(ui::SourceEventType type) {
       return ui::mojom::SourceEventType::INERTIAL;
     case ui::KEY_PRESS:
       return ui::mojom::SourceEventType::KEY_PRESS;
+    case ui::TOUCHPAD:
+      return ui::mojom::SourceEventType::TOUCHPAD;
     case ui::FRAME:
       return ui::mojom::SourceEventType::FRAME;
     case ui::OTHER:
@@ -47,6 +49,8 @@ ui::SourceEventType MojoSourceEventTypeToUI(ui::mojom::SourceEventType type) {
       return ui::INERTIAL;
     case ui::mojom::SourceEventType::KEY_PRESS:
       return ui::KEY_PRESS;
+    case ui::mojom::SourceEventType::TOUCHPAD:
+      return ui::TOUCHPAD;
     case ui::mojom::SourceEventType::FRAME:
       return ui::FRAME;
     case ui::mojom::SourceEventType::OTHER:
@@ -197,7 +201,7 @@ EnumTraits<ui::mojom::LatencyComponentType, ui::LatencyComponentType>::ToMojom(
           INPUT_EVENT_LATENCY_FRAME_SWAP_COMPONENT;
   }
   NOTREACHED();
-  return ui::mojom::LatencyComponentType::LATENCY_COMPONENT_TYPE_LAST;
+  return ui::mojom::LatencyComponentType::kMaxValue;
 }
 
 // static

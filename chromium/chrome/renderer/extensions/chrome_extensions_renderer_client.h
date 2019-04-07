@@ -16,6 +16,7 @@
 class GURL;
 
 namespace blink {
+class WebElement;
 class WebFrame;
 class WebLocalFrame;
 struct WebPluginParams;
@@ -76,13 +77,18 @@ class ChromeExtensionsRendererClient
   static bool ShouldFork(blink::WebLocalFrame* frame,
                          const GURL& url,
                          bool is_initial_navigation,
-                         bool is_server_redirect,
-                         bool* send_referrer);
+                         bool is_server_redirect);
   static content::BrowserPluginDelegate* CreateBrowserPluginDelegate(
       content::RenderFrame* render_frame,
       const content::WebPluginInfo& info,
       const std::string& mime_type,
       const GURL& original_url);
+  static bool IsPluginHandledByMimeHandlerView(
+      const blink::WebElement& plugin_element,
+      const GURL& resource_url,
+      const std::string& mime_type,
+      const content::WebPluginInfo& plugin_info,
+      int32_t element_instance_id);
   static blink::WebFrame* FindFrame(blink::WebLocalFrame* relative_to_frame,
                                     const std::string& name);
 

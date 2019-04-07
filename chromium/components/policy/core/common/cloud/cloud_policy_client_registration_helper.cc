@@ -14,7 +14,6 @@
 #include "google_apis/gaia/gaia_urls.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "google_apis/gaia/oauth2_token_service.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if !defined(OS_ANDROID)
@@ -46,9 +45,9 @@ class CloudPolicyClientRegistrationHelper::TokenServiceHelper
 
  private:
   // OAuth2TokenService::Consumer implementation:
-  void OnGetTokenSuccess(const OAuth2TokenService::Request* request,
-                         const std::string& access_token,
-                         const base::Time& expiration_time) override;
+  void OnGetTokenSuccess(
+      const OAuth2TokenService::Request* request,
+      const OAuth2AccessTokenConsumer::TokenResponse& token_response) override;
   void OnGetTokenFailure(const OAuth2TokenService::Request* request,
                          const GoogleServiceAuthError& error) override;
 
@@ -79,10 +78,9 @@ void CloudPolicyClientRegistrationHelper::TokenServiceHelper::FetchAccessToken(
 
 void CloudPolicyClientRegistrationHelper::TokenServiceHelper::OnGetTokenSuccess(
     const OAuth2TokenService::Request* request,
-    const std::string& access_token,
-    const base::Time& expiration_time) {
+    const OAuth2AccessTokenConsumer::TokenResponse& token_response) {
   DCHECK_EQ(token_request_.get(), request);
-  callback_.Run(access_token);
+  callback_.Run(token_response.access_token);
 }
 
 void CloudPolicyClientRegistrationHelper::TokenServiceHelper::OnGetTokenFailure(
@@ -105,14 +103,13 @@ class CloudPolicyClientRegistrationHelper::LoginTokenHelper
 
   void FetchAccessToken(
       const std::string& login_refresh_token,
-      net::URLRequestContextGetter* context,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const StringCallback& callback);
 
  private:
   // OAuth2AccessTokenConsumer implementation:
-  void OnGetTokenSuccess(const std::string& access_token,
-                         const base::Time& expiration_time) override;
+  void OnGetTokenSuccess(
+      const OAuth2AccessTokenConsumer::TokenResponse& token_response) override;
   void OnGetTokenFailure(const GoogleServiceAuthError& error) override;
 
   StringCallback callback_;
@@ -123,7 +120,6 @@ CloudPolicyClientRegistrationHelper::LoginTokenHelper::LoginTokenHelper() {}
 
 void CloudPolicyClientRegistrationHelper::LoginTokenHelper::FetchAccessToken(
     const std::string& login_refresh_token,
-    net::URLRequestContextGetter* context,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const StringCallback& callback) {
   DCHECK(!oauth2_access_token_fetcher_);
@@ -141,9 +137,8 @@ void CloudPolicyClientRegistrationHelper::LoginTokenHelper::FetchAccessToken(
 }
 
 void CloudPolicyClientRegistrationHelper::LoginTokenHelper::OnGetTokenSuccess(
-    const std::string& access_token,
-    const base::Time& expiration_time) {
-  callback_.Run(access_token);
+    const OAuth2AccessTokenConsumer::TokenResponse& token_response) {
+  callback_.Run(token_response.access_token);
 }
 
 void CloudPolicyClientRegistrationHelper::LoginTokenHelper::OnGetTokenFailure(
@@ -156,12 +151,7 @@ void CloudPolicyClientRegistrationHelper::LoginTokenHelper::OnGetTokenFailure(
 CloudPolicyClientRegistrationHelper::CloudPolicyClientRegistrationHelper(
     CloudPolicyClient* client,
     enterprise_management::DeviceRegisterRequest::Type registration_type)
-    : context_(client->GetRequestContext()),
-      url_loader_factory_(client->GetURLLoaderFactory()),
-      client_(client),
-      registration_type_(registration_type) {
-  DCHECK(context_);
-  DCHECK(url_loader_factory_);
+    : client_(client), registration_type_(registration_type) {
   DCHECK(client_);
 }
 
@@ -213,7 +203,7 @@ void CloudPolicyClientRegistrationHelper::StartRegistrationWithLoginToken(
   login_token_helper_.reset(
       new CloudPolicyClientRegistrationHelper::LoginTokenHelper());
   login_token_helper_->FetchAccessToken(
-      login_refresh_token, context_.get(), url_loader_factory_,
+      login_refresh_token, client_->GetURLLoaderFactory(),
       base::Bind(&CloudPolicyClientRegistrationHelper::OnTokenFetched,
                  base::Unretained(this)));
 }
@@ -247,7 +237,8 @@ void CloudPolicyClientRegistrationHelper::OnTokenFetched(
   DVLOG(1) << "Fetched new scoped OAuth token:" << oauth_access_token_;
   // Now we've gotten our access token - contact GAIA to see if this is a
   // hosted domain.
-  user_info_fetcher_.reset(new UserInfoFetcher(this, context_.get()));
+  user_info_fetcher_.reset(
+      new UserInfoFetcher(this, client_->GetURLLoaderFactory()));
   user_info_fetcher_->Start(oauth_access_token_);
 }
 

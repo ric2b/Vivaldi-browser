@@ -11,8 +11,8 @@
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
@@ -261,8 +261,7 @@ DownloadTargetDeterminer::Result
           DownloadPathGenerationEvent::USE_DEFAULTL_DOWNLOAD_DIRECTORY, false);
     }
     virtual_path_ = target_directory.Append(generated_filename);
-    // We do not want to restrict downloads to only the download directory for Vivaldi.
-    should_notify_extensions_ = !vivaldi::IsVivaldiRunning();
+    should_notify_extensions_ = true;
   } else {
     conflict_action_ = DownloadPathReservationTracker::OVERWRITE;
     virtual_path_ = download_->GetForcedFilePath();

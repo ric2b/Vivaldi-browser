@@ -50,6 +50,8 @@ class QuicDispatcher : public QuicTimeWaitListManager::Visitor,
                  std::unique_ptr<QuicConnectionHelperInterface> helper,
                  std::unique_ptr<QuicCryptoServerStream::Helper> session_helper,
                  std::unique_ptr<QuicAlarmFactory> alarm_factory);
+  QuicDispatcher(const QuicDispatcher&) = delete;
+  QuicDispatcher& operator=(const QuicDispatcher&) = delete;
 
   ~QuicDispatcher() override;
 
@@ -277,13 +279,6 @@ class QuicDispatcher : public QuicTimeWaitListManager::Visitor,
 
   QuicPacketWriter* writer() { return writer_.get(); }
 
-  // Creates per-connection packet writers out of the QuicDispatcher's shared
-  // QuicPacketWriter. The per-connection writers' IsWriteBlocked() state must
-  // always be the same as the shared writer's IsWriteBlocked(), or else the
-  // QuicDispatcher::OnCanWrite logic will not work. (This will hopefully be
-  // cleaned up for bug 16950226.)
-  virtual QuicPacketWriter* CreatePerConnectionWriter();
-
   // Returns true if a session should be created for a connection with an
   // unknown version identified by |version_label|.
   virtual bool ShouldCreateSessionForUnknownVersion(
@@ -453,8 +448,6 @@ class QuicDispatcher : public QuicTimeWaitListManager::Visitor,
 
   // True if this dispatcher is not draining.
   bool accept_new_connections_;
-
-  DISALLOW_COPY_AND_ASSIGN(QuicDispatcher);
 };
 
 }  // namespace quic

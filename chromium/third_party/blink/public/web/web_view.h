@@ -72,6 +72,7 @@ class WebView : protected WebWidget {
 
   // WebWidget overrides.
   using WebWidget::Close;
+  using WebWidget::LifecycleUpdate;
   using WebWidget::Size;
   using WebWidget::Resize;
   using WebWidget::ResizeVisualViewport;
@@ -79,8 +80,8 @@ class WebView : protected WebWidget {
   using WebWidget::DidExitFullscreen;
   using WebWidget::BeginFrame;
   using WebWidget::UpdateAllLifecyclePhases;
+  using WebWidget::UpdateLifecycle;
   using WebWidget::PaintContent;
-  using WebWidget::PaintContentIgnoringCompositing;
   using WebWidget::LayoutAndPaintAsync;
   using WebWidget::CompositeAndReadbackAsync;
   using WebWidget::ThemeChanged;
@@ -191,11 +192,6 @@ class WebView : protected WebWidget {
                                         WebRemoteFrame* from,
                                         WebLocalFrame* to) {}
 
-  // Animate a scale into the specified rect where multiple targets were
-  // found from previous tap gesture.
-  // Returns false if it doesn't do any zooming.
-  virtual bool ZoomToMultipleTargetsRect(const WebRect&) = 0;
-
   // Zoom ----------------------------------------------------------------
 
   // Returns the current zoom level.  0 is "original size", and each increment
@@ -233,6 +229,11 @@ class WebView : protected WebWidget {
 
   // Scales the page without affecting layout by using the visual viewport.
   virtual void SetPageScaleFactor(float) = 0;
+
+  // Minimum and Maximum as computed as a combination of default, page defined,
+  // UA, etc. constraints.
+  virtual float MinimumPageScaleFactor() const = 0;
+  virtual float MaximumPageScaleFactor() const = 0;
 
   // Sets the offset of the visual viewport within the main frame, in
   // partial CSS pixels. The offset will be clamped so the visual viewport
@@ -272,7 +273,8 @@ class WebView : protected WebWidget {
   // Returns the "preferred" contents size, defined as the preferred minimum
   // width of the main document's contents and the minimum height required to
   // display the main document without scrollbars.  The returned size has the
-  // page zoom factor applied.
+  // page zoom factor applied. The lifecycle must be updated to at least layout
+  // before calling this (see: |UpdateLifecycle|).
   virtual WebSize ContentsPreferredMinimumSize() = 0;
 
   // Sets the display mode of the web app.
@@ -343,6 +345,8 @@ class WebView : protected WebWidget {
   // Control plugins.
   virtual void SetPluginsEnabled(const bool plugins_enabled) = 0;
   virtual void LoadImageAt(const WebPoint&) = 0;
+
+  virtual void SetAllowAccessKeys(const bool allow_access_keys) = 0;
   // Vivaldi end
 
   // Support for resource loading initiated by plugins -------------------
@@ -374,12 +378,6 @@ class WebView : protected WebWidget {
 
   // Hides any popup (suggestions, selects...) that might be showing.
   virtual void HidePopups() = 0;
-
-  // Generate a synthetic touch event applying the result of a tap
-  // disambiguation popup.
-  virtual void ResolveTapDisambiguation(base::TimeTicks timestamp,
-                                        WebPoint tap_viewport_offset,
-                                        bool is_long_press) = 0;
 
   // Visited link state --------------------------------------------------
 

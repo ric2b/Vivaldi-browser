@@ -19,7 +19,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/native_app_window.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/views/widget/widget.h"
@@ -54,35 +54,6 @@ bool IsInImmersiveFullscreen(ash::wm::WindowState* window_state) {
 }
 
 }  // namespace
-
-typedef InProcessBrowserTest AcceleratorCommandsBrowserTest;
-
-// Confirm that toggling window miximized works properly
-IN_PROC_BROWSER_TEST_F(AcceleratorCommandsBrowserTest, ToggleMaximized) {
-  ASSERT_TRUE(ash::Shell::HasInstance()) << "No Instance";
-  ash::wm::WindowState* window_state = ash::wm::GetActiveWindowState();
-  ASSERT_TRUE(window_state);
-
-  // When not in fullscreen, accelerators::ToggleMaximized toggles Maximized.
-  EXPECT_FALSE(window_state->IsMaximized());
-  ash::accelerators::ToggleMaximized();
-  EXPECT_TRUE(window_state->IsMaximized());
-  ash::accelerators::ToggleMaximized();
-  EXPECT_FALSE(window_state->IsMaximized());
-
-  // When in fullscreen accelerators::ToggleMaximized gets out of fullscreen.
-  EXPECT_FALSE(window_state->IsFullscreen());
-  Browser* browser = chrome::FindBrowserWithWindow(window_state->window());
-  ASSERT_TRUE(browser);
-  chrome::ToggleFullscreenMode(browser);
-  EXPECT_TRUE(window_state->IsFullscreen());
-  ash::accelerators::ToggleMaximized();
-  EXPECT_FALSE(window_state->IsFullscreen());
-  EXPECT_FALSE(window_state->IsMaximized());
-  ash::accelerators::ToggleMaximized();
-  EXPECT_FALSE(window_state->IsFullscreen());
-  EXPECT_TRUE(window_state->IsMaximized());
-}
 
 class AcceleratorCommandsFullscreenBrowserTest
     : public WithParamInterface<ui::WindowShowState>,
@@ -137,7 +108,7 @@ IN_PROC_BROWSER_TEST_P(AcceleratorCommandsFullscreenBrowserTest,
   // 2) ToggleFullscreen() should have no effect on windows which cannot be
   // maximized.
   window_state->window()->SetProperty(aura::client::kResizeBehaviorKey,
-                                      ui::mojom::kResizeBehaviorNone);
+                                      ws::mojom::kResizeBehaviorNone);
   ash::accelerators::ToggleFullscreen();
   EXPECT_TRUE(IsInitialShowState(window_state));
 

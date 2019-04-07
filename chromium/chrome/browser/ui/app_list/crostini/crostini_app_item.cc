@@ -25,9 +25,9 @@ CrostiniAppItem::CrostiniAppItem(
     const std::string& name)
     : ChromeAppListItem(profile, id) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  crostini_app_icon_.reset(new CrostiniAppIcon(
+  crostini_app_icon_ = std::make_unique<CrostiniAppIcon>(
       profile, id, app_list::AppListConfig::instance().grid_icon_dimension(),
-      this));
+      this);
 
   SetName(name);
   UpdateIcon();
@@ -35,6 +35,10 @@ CrostiniAppItem::CrostiniAppItem(
     UpdateFromSync(sync_item);
   } else {
     SetDefaultPositionIfApplicable();
+
+    // Crostini app is created from scratch. Move it to default folder.
+    DCHECK(folder_id().empty());
+    SetChromeFolderId(kCrostiniFolderId);
   }
 
   // Set model updater last to avoid being called during construction.

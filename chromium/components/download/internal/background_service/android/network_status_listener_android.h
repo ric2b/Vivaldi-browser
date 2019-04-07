@@ -9,6 +9,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 
 namespace download {
 
@@ -25,7 +26,7 @@ class NetworkStatusListenerAndroid : public NetworkStatusListener {
   // NetworkStatusListener implementation.
   void Start(NetworkStatusListener::Observer* observer) override;
   void Stop() override;
-  net::NetworkChangeNotifier::ConnectionType GetConnectionType() override;
+  network::mojom::ConnectionType GetConnectionType() override;
 
   void NotifyNetworkChange(JNIEnv* env,
                            const base::android::JavaRef<jobject>& jobj,

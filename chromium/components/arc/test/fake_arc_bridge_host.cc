@@ -84,6 +84,8 @@ void FakeArcBridgeHost::OnObbMounterInstanceReady(
 void FakeArcBridgeHost::OnOemCryptoInstanceReady(
     mojom::OemCryptoInstancePtr oemcrypto_ptr) {}
 
+void FakeArcBridgeHost::OnPipInstanceReady(mojom::PipInstancePtr pip_ptr) {}
+
 void FakeArcBridgeHost::OnPolicyInstanceReady(
     mojom::PolicyInstancePtr policy_ptr) {}
 
@@ -95,6 +97,9 @@ void FakeArcBridgeHost::OnPrintInstanceReady(
 
 void FakeArcBridgeHost::OnProcessInstanceReady(
     mojom::ProcessInstancePtr process_ptr) {}
+
+void FakeArcBridgeHost::OnPropertyInstanceReady(
+    mojom::PropertyInstancePtr property_ptr) {}
 
 void FakeArcBridgeHost::OnRotationLockInstanceReady(
     mojom::RotationLockInstancePtr rotation_lock_ptr) {}

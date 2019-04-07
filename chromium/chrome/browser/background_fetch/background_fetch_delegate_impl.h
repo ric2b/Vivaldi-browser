@@ -39,15 +39,23 @@ class BackgroundFetchDelegateImpl
       public offline_items_collection::OfflineContentProvider,
       public KeyedService {
  public:
-  explicit BackgroundFetchDelegateImpl(Profile* profile);
+  BackgroundFetchDelegateImpl(Profile* profile,
+                              const std::string& provider_namespace);
 
   ~BackgroundFetchDelegateImpl() override;
+
+  // Lazily initializes and returns the DownloadService.
+  download::DownloadService* GetDownloadService();
 
   // KeyedService implementation:
   void Shutdown() override;
 
   // BackgroundFetchDelegate implementation:
   void GetIconDisplaySize(GetIconDisplaySizeCallback callback) override;
+  void GetPermissionForOrigin(
+      const url::Origin& origin,
+      const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
+      GetPermissionForOriginCallback callback) override;
   void CreateDownloadJob(std::unique_ptr<content::BackgroundFetchDescription>
                              fetch_description) override;
   void DownloadUrl(const std::string& job_unique_id,
@@ -58,7 +66,8 @@ class BackgroundFetchDelegateImpl
                    const net::HttpRequestHeaders& headers) override;
   void Abort(const std::string& job_unique_id) override;
   void UpdateUI(const std::string& job_unique_id,
-                const std::string& title) override;
+                const base::Optional<std::string>& title,
+                const base::Optional<SkBitmap>& icon) override;
 
   // Abort all ongoing downloads and fail the fetch. Currently only used when
   // the bytes downloaded exceed the total download size, if specified.
@@ -77,7 +86,8 @@ class BackgroundFetchDelegateImpl
                            uint64_t size);
 
   // OfflineContentProvider implementation:
-  void OpenItem(const offline_items_collection::ContentId& id) override;
+  void OpenItem(offline_items_collection::LaunchLocation location,
+                const offline_items_collection::ContentId& id) override;
   void RemoveItem(const offline_items_collection::ContentId& id) override;
   void CancelDownload(const offline_items_collection::ContentId& id) override;
   void PauseDownload(const offline_items_collection::ContentId& id) override;
@@ -87,9 +97,15 @@ class BackgroundFetchDelegateImpl
                    SingleItemCallback callback) override;
   void GetAllItems(MultipleItemCallback callback) override;
   void GetVisualsForItem(const offline_items_collection::ContentId& id,
-                         const VisualsCallback& callback) override;
+                         VisualsCallback callback) override;
+  void GetShareInfoForItem(const offline_items_collection::ContentId& id,
+                           ShareCallback callback) override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
+
+  // Called once the Download Service is initialized. Resumes all previously
+  // active Jobs.
+  void ResumeActiveJobs();
 
   base::WeakPtr<BackgroundFetchDelegateImpl> GetWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
@@ -98,8 +114,9 @@ class BackgroundFetchDelegateImpl
  private:
   struct JobDetails {
     JobDetails(JobDetails&&);
-    explicit JobDetails(
-        std::unique_ptr<content::BackgroundFetchDescription> fetch_description);
+    JobDetails(
+        std::unique_ptr<content::BackgroundFetchDescription> fetch_description,
+        const std::string& provider_namespace);
     ~JobDetails();
 
     void UpdateOfflineItem();
@@ -131,9 +148,16 @@ class BackgroundFetchDelegateImpl
   void OnDownloadReceived(const std::string& guid,
                           download::DownloadParams::StartResult result);
 
+  // The profile this service is being created for.
+  Profile* profile_;
+
+  // The namespace provided to the |offline_content_aggregator_| and used when
+  // creating Content IDs.
+  std::string provider_namespace_;
+
   // The BackgroundFetchDelegateImplFactory depends on the
   // DownloadServiceFactory, so |download_service_| should outlive |this|.
-  download::DownloadService* download_service_;
+  download::DownloadService* download_service_ = nullptr;
 
   // Map from individual download GUIDs to job unique ids.
   std::map<std::string, std::string> download_job_unique_id_map_;

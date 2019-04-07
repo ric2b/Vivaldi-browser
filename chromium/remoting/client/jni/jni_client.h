@@ -16,7 +16,6 @@
 
 namespace remoting {
 
-class AudioPlayerAndroid;
 class ChromotingClientRuntime;
 class JniGlDisplayHandler;
 
@@ -146,6 +145,12 @@ class JniClient : public ChromotingSession::Delegate {
                             const base::android::JavaParamRef<jstring>& type,
                             const base::android::JavaParamRef<jstring>& data);
 
+  void SendClientResolution(JNIEnv* env,
+                            const base::android::JavaParamRef<jobject>& caller,
+                            jint dips_width,
+                            jint dips_height,
+                            jfloat scale);
+
   // Deletes this object.
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& caller);
 
@@ -161,7 +166,6 @@ class JniClient : public ChromotingSession::Delegate {
   base::android::ScopedJavaGlobalRef<jobject> java_client_;
 
   std::unique_ptr<JniGlDisplayHandler> display_handler_;
-  std::unique_ptr<AudioPlayerAndroid> audio_player_;
 
   std::string host_id_;
 

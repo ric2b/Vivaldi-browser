@@ -102,7 +102,6 @@ UnifiedSystemTrayBubble::UnifiedSystemTrayBubble(UnifiedSystemTray* tray,
 
   TrayBackgroundView::InitializeBubbleAnimations(bubble_widget_);
   bubble_view_->InitializeAndShowBubble();
-  unified_view_->Init();
 
   if (app_list::features::IsBackgroundBlurEnabled()) {
     bubble_widget_->client_view()->layer()->SetBackgroundBlur(
@@ -138,18 +137,10 @@ void UnifiedSystemTrayBubble::ActivateBubble() {
   DCHECK(unified_view_);
   DCHECK(bubble_widget_);
 
-  views::Widget* bubble_widget = bubble_widget_;
-  // RequestInitFocus() may cause UnifiedSystemTrayBubble to destruct through
-  // Shell::NotifyFullscreenStateChanged, MessageCenter::OnBlockingStateChanged,
-  // and UiDelegate::HideMessageCenter().  https://crbug.com/853434
-  unified_view_->RequestInitFocus();
-
-  // |bubble_widget| is destructed asynchronously, so the instance is still
-  // alive here.
-  if (bubble_widget->IsClosed())
+  if (bubble_widget_->IsClosed())
     return;
-  bubble_widget->widget_delegate()->set_can_activate(true);
-  bubble_widget->Activate();
+  bubble_widget_->widget_delegate()->set_can_activate(true);
+  bubble_widget_->Activate();
 }
 
 void UnifiedSystemTrayBubble::CloseNow() {
@@ -168,6 +159,23 @@ void UnifiedSystemTrayBubble::EnsureExpanded() {
   DCHECK(unified_view_);
   DCHECK(controller_);
   controller_->EnsureExpanded();
+}
+
+void UnifiedSystemTrayBubble::ShowAudioDetailedView() {
+  if (!bubble_widget_)
+    return;
+
+  DCHECK(unified_view_);
+  DCHECK(controller_);
+  controller_->ShowAudioDetailedView();
+}
+
+void UnifiedSystemTrayBubble::UpdateBubble() {
+  if (!bubble_widget_)
+    return;
+  DCHECK(bubble_view_);
+
+  bubble_view_->UpdateBubble();
 }
 
 void UnifiedSystemTrayBubble::UpdateTransform() {
@@ -217,9 +225,12 @@ int UnifiedSystemTrayBubble::CalculateMaxHeight() const {
   // TODO(yamaguchi): Reconsider this formula. The y-position of the top edge
   // still differes by few pixels between the horizontal and vertical shelf
   // modes.
+  gfx::Rect anchor_bounds =
+      tray_->shelf()->GetSystemTrayAnchor()->GetBoundsInScreen();
+  int bottom = tray_->shelf()->IsHorizontalAlignment() ? anchor_bounds.y()
+                                                       : anchor_bounds.bottom();
   int free_space_height_above_anchor =
-      tray_->shelf()->GetSystemTrayAnchor()->GetBoundsInScreen().y() -
-      tray_->shelf()->GetUserWorkAreaBounds().y();
+      bottom - tray_->shelf()->GetUserWorkAreaBounds().y();
   return free_space_height_above_anchor - kPaddingFromScreenTop -
          bubble_view_->GetBorderInsets().height();
 }

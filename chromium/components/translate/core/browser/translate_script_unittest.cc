@@ -46,9 +46,14 @@ class TranslateScriptTest : public testing::Test {
   }
 
   void Request() {
-    script_->Request(
-        base::Bind(&TranslateScriptTest::OnComplete, base::Unretained(this)));
+    script_->Request(base::BindRepeating(&TranslateScriptTest::OnComplete,
+                                         base::Unretained(this)),
+                     /*is_incognito=*/false);
   }
+
+  const std::string& GetData() { return script_->data(); }
+
+  void RunUntilIdle() { scoped_task_environment_.RunUntilIdle(); }
 
   network::TestURLLoaderFactory* GetTestURLLoaderFactory() {
     return &test_url_loader_factory_;
@@ -56,6 +61,7 @@ class TranslateScriptTest : public testing::Test {
 
  private:
   void OnComplete(bool success, const std::string& script) {
+    // No op.
   }
 
   // Sets up the task scheduling/task-runner environment for each test.
@@ -145,6 +151,18 @@ TEST_F(TranslateScriptTest, CheckScriptURL) {
   EXPECT_TRUE(url.is_valid());
   EXPECT_EQ(expected_url.GetOrigin().spec(), url.GetOrigin().spec());
   EXPECT_EQ(expected_url.path(), url.path());
+}
+
+TEST_F(TranslateScriptTest, CheckResponse) {
+  const std::string test_response =
+      "(function() { console.log(\"Hello, world!\"); }());";
+  GURL full_url = TranslateScript::GetTranslateScriptURL();
+  GetTestURLLoaderFactory()->AddResponse(full_url.spec(), test_response);
+
+  Request();
+  RunUntilIdle();
+
+  EXPECT_NE(std::string::npos, GetData().find(test_response));
 }
 
 }  // namespace translate

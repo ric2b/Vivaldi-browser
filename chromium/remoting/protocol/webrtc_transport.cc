@@ -35,6 +35,7 @@
 #include "third_party/webrtc/api/audio_codecs/opus/audio_decoder_opus.h"
 #include "third_party/webrtc/api/audio_codecs/opus/audio_encoder_opus.h"
 #include "third_party/webrtc/api/stats/rtcstats_objects.h"
+#include "third_party/webrtc/api/video_codecs/builtin_video_decoder_factory.h"
 
 using buzz::QName;
 using buzz::XmlElement;
@@ -51,13 +52,6 @@ const int kTransportInfoSendDelayMs = 20;
 
 // XML namespace for the transport elements.
 const char kTransportNamespace[] = "google:remoting:webrtc";
-
-// Bitrate cap applied to relay connections. This is done to prevent
-// large amounts of packet loss, since the Google TURN/relay server drops
-// packets to limit the connection to ~10Mbps. The rate-limiting behavior works
-// badly with WebRTC's bandwidth-estimation, which results in the host process
-// trying to send frames too rapidly over the connection.
-constexpr int kMaxBitrateOnRelayKbps = 8000;
 
 #if !defined(NDEBUG)
 // Command line switch used to disable signature verification.
@@ -213,17 +207,22 @@ class WebrtcTransport::PeerConnectionWrapper
  public:
   PeerConnectionWrapper(
       rtc::Thread* worker_thread,
-      std::unique_ptr<cricket::WebRtcVideoEncoderFactory> encoder_factory,
+      std::unique_ptr<webrtc::VideoEncoderFactory> encoder_factory,
       std::unique_ptr<cricket::PortAllocator> port_allocator,
       base::WeakPtr<WebrtcTransport> transport)
       : transport_(transport) {
     audio_module_ = new rtc::RefCountedObject<WebrtcAudioModule>();
 
     peer_connection_factory_ = webrtc::CreatePeerConnectionFactory(
-        worker_thread, rtc::Thread::Current(), audio_module_.get(),
+        worker_thread,  // network_thread
+        worker_thread,
+        rtc::Thread::Current(),  // signaling_thread
+        audio_module_,
         webrtc::CreateAudioEncoderFactory<webrtc::AudioEncoderOpus>(),
         webrtc::CreateAudioDecoderFactory<webrtc::AudioDecoderOpus>(),
-        encoder_factory.release(), nullptr);
+        std::move(encoder_factory), webrtc::CreateBuiltinVideoDecoderFactory(),
+        nullptr,   // audio_mixer
+        nullptr);  // audio_processing
 
     webrtc::PeerConnectionInterface::RTCConfiguration rtc_config;
     rtc_config.enable_dtls_srtp = true;
@@ -305,7 +304,7 @@ class WebrtcTransport::PeerConnectionWrapper
   }
 
  private:
-  scoped_refptr<WebrtcAudioModule> audio_module_;
+  rtc::scoped_refptr<WebrtcAudioModule> audio_module_;
   scoped_refptr<webrtc::PeerConnectionFactoryInterface>
       peer_connection_factory_;
   scoped_refptr<webrtc::PeerConnectionInterface> peer_connection_;
@@ -751,6 +750,16 @@ void WebrtcTransport::OnStatsDelivered(
   VLOG(0) << "Relay connection: " << (is_relay ? "true" : "false");
 
   if (is_relay) {
+    int max_bitrate_kbps = transport_context_->GetTurnMaxRateKbps();
+    if (max_bitrate_kbps <= 0) {
+      VLOG(0) << "No bitrate cap set.";
+      return;
+    }
+    VLOG(0) << "Capping bitrate to " << max_bitrate_kbps << "kbps.";
+
+    // Apply the suggested bitrate cap to prevent large amounts of packet loss.
+    // The Google TURN/relay server limits the connection speed by dropping
+    // packets, which may interact badly with WebRTC's bandwidth-estimation.
     auto senders = peer_connection()->GetSenders();
     for (rtc::scoped_refptr<webrtc::RtpSenderInterface> sender : senders) {
       // x-google-max-bitrate is only set for video codecs in the SDP exchange.
@@ -771,7 +780,7 @@ void WebrtcTransport::OnStatsDelivered(
                    << sender->id();
       }
 
-      parameters.encodings[0].max_bitrate_bps = kMaxBitrateOnRelayKbps * 1000;
+      parameters.encodings[0].max_bitrate_bps = max_bitrate_kbps * 1000;
       sender->SetParameters(parameters);
     }
   }

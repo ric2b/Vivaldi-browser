@@ -13,6 +13,7 @@
 #include "ash/system/unified/collapse_button.h"
 #include "ash/system/unified/top_shortcut_button.h"
 #include "ash/system/unified/unified_system_tray_controller.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
@@ -124,7 +125,8 @@ TriView* UnifiedDetailedViewDelegate::CreateTitleRow(int string_id) {
 
   auto* label = TrayPopupUtils::CreateDefaultLabel();
   label->SetText(l10n_util::GetStringUTF16(string_id));
-  TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::TITLE);
+  TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::TITLE,
+                           true /* use_unified_theme */);
   style.SetupLabel(label);
   tri_view->AddView(TriView::Container::CENTER, label);
 
@@ -147,11 +149,12 @@ void UnifiedDetailedViewDelegate::ShowStickyHeaderSeparator(
     views::View* view,
     bool show_separator) {
   if (show_separator) {
+    const int separator_width = ash::TrayConstants::separator_width();
     view->SetBorder(views::CreatePaddedBorder(
-        views::CreateSolidSidedBorder(0, 0, kSeparatorWidth, 0,
+        views::CreateSolidSidedBorder(0, 0, separator_width, 0,
                                       kUnifiedMenuSeparatorColor),
         gfx::Insets(kMenuSeparatorVerticalPadding, 0,
-                    kMenuSeparatorVerticalPadding - kSeparatorWidth, 0)));
+                    kMenuSeparatorVerticalPadding - separator_width, 0)));
   } else {
     view->SetBorder(views::CreateEmptyBorder(
         gfx::Insets(kMenuSeparatorVerticalPadding, 0)));
@@ -205,7 +208,7 @@ views::Button* UnifiedDetailedViewDelegate::CreateSettingsButton(
 
 views::Button* UnifiedDetailedViewDelegate::CreateHelpButton(
     views::ButtonListener* listener) {
-  auto* button = new TopShortcutButton(listener, kSystemMenuHelpIcon,
+  auto* button = new TopShortcutButton(listener, vector_icons::kHelpOutlineIcon,
                                        IDS_ASH_STATUS_TRAY_HELP);
   // Help opens a web page, so treat it like Web UI settings.
   if (!TrayPopupUtils::CanOpenWebUISettings())

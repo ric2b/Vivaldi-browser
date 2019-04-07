@@ -12,7 +12,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/leveldatabase/chromium_logger.h"
 #include "third_party/leveldatabase/src/include/leveldb/status.h"
@@ -515,7 +515,7 @@ void MojoEnv::Schedule(void (*function)(void* arg), void* arg) {
   base::PostTaskWithTraits(FROM_HERE,
                            {base::MayBlock(), base::WithBaseSyncPrimitives(),
                             base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
-                           base::Bind(function, arg));
+                           base::BindOnce(function, arg));
 }
 
 void MojoEnv::StartThread(void (*function)(void* arg), void* arg) {

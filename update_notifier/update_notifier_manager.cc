@@ -511,7 +511,7 @@ bool UpdateNotifierManager::RunNotifier(HINSTANCE instance) {
   base::FilePath local_state_path;
   CHECK(PathService::Get(chrome::FILE_LOCAL_STATE, &local_state_path));
   scoped_refptr<JsonPrefStore> local_state = new JsonPrefStore(
-      local_state_path, ui_thread_loop_->task_runner(), nullptr);
+      local_state_path, nullptr, ui_thread_loop_->task_runner());
   local_state->ReadPrefs();
 
   const base::Value* locale_value = nullptr;

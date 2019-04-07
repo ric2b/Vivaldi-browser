@@ -28,7 +28,9 @@
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "extensions/browser/api/management/management_api.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_system.h"
@@ -187,34 +189,52 @@ class ExtensionWebstorePrivateApiTest : public ExtensionApiTest {
 };
 
 // Test cases for webstore origin frame blocking.
-// TODO(mkwst): Disabled until new X-Frame-Options behavior rolls into
-// Chromium, see crbug.com/226018.
 IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest,
-                       DISABLED_FrameWebstorePageBlocked) {
-  base::string16 expected_title = base::UTF8ToUTF16("PASS: about:blank");
-  base::string16 failure_title = base::UTF8ToUTF16("FAIL");
-  content::TitleWatcher watcher(GetWebContents(), expected_title);
-  watcher.AlsoWaitForTitle(failure_title);
+                       FrameWebstorePageBlocked) {
   GURL url = embedded_test_server()->GetURL(
       "/extensions/api_test/webstore_private/noframe.html");
+  content::WebContents* web_contents = GetWebContents();
   ui_test_utils::NavigateToURL(browser(), url);
-  base::string16 final_title = watcher.WaitAndGetTitle();
-  EXPECT_EQ(expected_title, final_title);
+
+  // Try to load the same URL, but with the current Chrome web store origin in
+  // an iframe (i.e. http://www.example.com)
+  content::TestNavigationObserver observer(web_contents);
+  ASSERT_TRUE(content::ExecuteScript(web_contents, "dropFrame()"));
+  WaitForLoadStop(web_contents);
+  content::RenderFrameHost* subframe =
+      content::ChildFrameAt(web_contents->GetMainFrame(), 0);
+  ASSERT_TRUE(subframe);
+
+  // The subframe load should fail due to XFO.
+  GURL iframe_url = embedded_test_server()->GetURL(
+      "www.example.com", "/extensions/api_test/webstore_private/noframe.html");
+  EXPECT_EQ(iframe_url, subframe->GetLastCommittedURL());
+  EXPECT_FALSE(observer.last_navigation_succeeded());
+  EXPECT_EQ(net::ERR_BLOCKED_BY_RESPONSE, observer.last_net_error_code());
 }
 
-// TODO(mkwst): Disabled until new X-Frame-Options behavior rolls into
-// Chromium, see crbug.com/226018.
-IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest,
-                       DISABLED_FrameErrorPageBlocked) {
-  base::string16 expected_title = base::UTF8ToUTF16("PASS: about:blank");
-  base::string16 failure_title = base::UTF8ToUTF16("FAIL");
-  content::TitleWatcher watcher(GetWebContents(), expected_title);
-  watcher.AlsoWaitForTitle(failure_title);
+IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, FrameErrorPageBlocked) {
   GURL url = embedded_test_server()->GetURL(
       "/extensions/api_test/webstore_private/noframe2.html");
+  content::WebContents* web_contents = GetWebContents();
   ui_test_utils::NavigateToURL(browser(), url);
-  base::string16 final_title = watcher.WaitAndGetTitle();
-  EXPECT_EQ(expected_title, final_title);
+
+  // Try to load the same URL, but with the current Chrome web store origin in
+  // an iframe (i.e. http://www.example.com)
+  content::TestNavigationObserver observer(web_contents);
+  ASSERT_TRUE(content::ExecuteScript(web_contents, "dropFrame()"));
+  WaitForLoadStop(web_contents);
+  content::RenderFrameHost* subframe =
+      content::ChildFrameAt(web_contents->GetMainFrame(), 0);
+  ASSERT_TRUE(subframe);
+
+  // The subframe load should fail due to XFO.
+  GURL iframe_url = embedded_test_server()->GetURL(
+      "www.example.com",
+      "/nonesuch/extensions/api_test/webstore_private/noframe2.html ");
+  EXPECT_EQ(iframe_url, subframe->GetLastCommittedURL());
+  EXPECT_FALSE(observer.last_navigation_succeeded());
+  EXPECT_EQ(net::ERR_BLOCKED_BY_RESPONSE, observer.last_net_error_code());
 }
 
 // Test cases where the user accepts the install confirmation dialog.
@@ -351,24 +371,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTest, EmptyCrx) {
 }
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-
-class ExtensionWebstorePrivateApiTestSupervised
-    : public ExtensionWebstorePrivateApiTest {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionWebstorePrivateApiTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitchASCII(switches::kSupervisedUserId, "not_empty");
-  }
-};
-
-// Tests that extension installation is blocked for supervised users.
-// Note: This will have to be updated if we enable SU-initiated installs.
-IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTestSupervised,
-                       InstallBlocked) {
-  ASSERT_TRUE(
-      RunInstallTest("begin_install_fail_supervised.html", "extension.crx"));
-}
-
 class ExtensionWebstorePrivateApiTestChild
     : public ExtensionWebstorePrivateApiTest {
  public:

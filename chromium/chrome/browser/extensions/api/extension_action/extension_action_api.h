@@ -128,7 +128,7 @@ class ExtensionActionAPI : public BrowserContextKeyedAPI {
   static const char* service_name() { return "ExtensionActionAPI"; }
   static const bool kServiceRedirectedInIncognito = true;
 
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   content::BrowserContext* browser_context_;
 
@@ -197,6 +197,9 @@ class ExtensionActionHideFunction : public ExtensionActionFunction {
 
 // setIcon
 class ExtensionActionSetIconFunction : public ExtensionActionFunction {
+ public:
+  static void SetReportErrorForInvisibleIconForTesting(bool value);
+
  protected:
   ~ExtensionActionSetIconFunction() override {}
   ResponseAction RunExtensionAction() override;

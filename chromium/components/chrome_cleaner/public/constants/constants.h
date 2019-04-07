@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_CHROME_CLEANER_PUBLIC_CONSTANTS_CONSTANTS_H_
 #define COMPONENTS_CHROME_CLEANER_PUBLIC_CONSTANTS_CONSTANTS_H_
 
+#include <ostream>
+
 #include "components/chrome_cleaner/public/constants/result_codes.h"
 
 // Constants shared by the Chromium and the Chrome Cleanaup tool repos.
@@ -70,6 +72,9 @@ extern const char kRebootPromptMethodSwitch[];
 
 // Indicates that metrics reporting is enabled for the current user.
 extern const char kUmaUserSwitch[];
+
+// Indicates that quarantine feature is enabled.
+extern const char kQuarantineSwitch[];
 
 // Registry paths where the reporter and the cleaner will write metrics data
 // to be reported by Chrome.
@@ -148,6 +153,14 @@ enum class ExecutionMode {
   // Auxiliary enumerator for range checking.
   kNumValues,
 };
+
+// Pretty printers for gtest and CHECK. Declared here to avoid ODR violations.
+// See explanation at
+// https://groups.google.com/a/chromium.org/d/msg/chromium-dev/i_wOTsE5Z6g/jhtqTY6fCwAJ.
+
+std::ostream& operator<<(std::ostream& stream, ChromePromptValue mode);
+
+std::ostream& operator<<(std::ostream& stream, ExecutionMode mode);
 
 }  // namespace chrome_cleaner
 

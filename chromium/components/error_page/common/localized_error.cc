@@ -39,10 +39,6 @@
 #include "base/win/windows_version.h"
 #endif
 
-#if defined(OS_ANDROID)
-#include "components/offline_pages/core/offline_page_feature.h"
-#endif
-
 namespace error_page {
 
 namespace {
@@ -258,6 +254,12 @@ const LocalizedErrorMap net_error_options[] = {
    SHOW_NO_BUTTONS,
   },
   {net::ERR_SSL_VERSION_INTERFERENCE,
+   IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
+   IDS_ERRORPAGES_SUMMARY_CONNECTION_FAILED,
+   SUGGEST_CHECK_CONNECTION | SUGGEST_FIREWALL_CONFIG | SUGGEST_PROXY_CONFIG,
+   SHOW_BUTTON_RELOAD,
+  },
+  {net::ERR_TLS13_DOWNGRADE_DETECTED,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_CONNECTION_FAILED,
    SUGGEST_CHECK_CONNECTION | SUGGEST_FIREWALL_CONFIG | SUGGEST_PROXY_CONFIG,
@@ -492,16 +494,19 @@ base::DictionaryValue* GetStandardMenuItemsText() {
   return standard_menu_items_text;
 }
 
+// Returns true if the error is due to a disconnected network.
+bool IsOfflineError(const std::string& error_domain, int error_code) {
+  return ((error_code == net::ERR_INTERNET_DISCONNECTED &&
+           error_domain == Error::kNetErrorDomain) ||
+          (error_code == error_page::DNS_PROBE_FINISHED_NO_INTERNET &&
+           error_domain == Error::kDnsProbeErrorDomain));
+}
+
 // Gets the icon class for a given |error_domain| and |error_code|.
 const char* GetIconClassForError(const std::string& error_domain,
                                  int error_code) {
-  if ((error_code == net::ERR_INTERNET_DISCONNECTED &&
-       error_domain == Error::kNetErrorDomain) ||
-      (error_code == error_page::DNS_PROBE_FINISHED_NO_INTERNET &&
-       error_domain == Error::kDnsProbeErrorDomain))
-    return "icon-offline";
-
-  return "icon-generic";
+  return IsOfflineError(error_domain, error_code) ? "icon-offline"
+                                                  : "icon-generic";
 }
 
 // If the first suggestion is for a Google cache copy link. Promote the
@@ -869,6 +874,7 @@ void LocalizedError::GetStrings(
     bool stale_copy_in_cache,
     bool can_show_network_diagnostics_dialog,
     bool is_incognito,
+    OfflineContentOnNetErrorFeatureState offline_content_feature_state,
     const std::string& locale,
     std::unique_ptr<error_page::ErrorPageParams> params,
     base::DictionaryValue* error_strings) {
@@ -1070,21 +1076,46 @@ void LocalizedError::GetStrings(
   if (!is_post && !reload_visible && !show_saved_copy_visible &&
       !is_incognito && failed_url.is_valid() &&
       failed_url.SchemeIsHTTPOrHTTPS() &&
-      IsSuggested(options.suggestions, SUGGEST_OFFLINE_CHECKS)) {
+      IsOfflineError(error_domain, error_code)) {
     error_strings->SetPath(
         {"downloadButton", "msg"},
         base::Value(l10n_util::GetStringUTF16(IDS_ERRORPAGES_BUTTON_DOWNLOAD)));
     error_strings->SetPath({"downloadButton", "disabledMsg"},
                            base::Value(l10n_util::GetStringUTF16(
                                IDS_ERRORPAGES_BUTTON_DOWNLOADING)));
+  }
 
-    if (offline_pages::ShouldShowAlternateDinoPage()) {
-      // Under the experiment, we will show a disabled reload button
-      // in addition to an enabled download button.
-      error_strings->SetPath(
-          {"reloadButton", "msg"},
-          base::Value(l10n_util::GetStringUTF16(IDS_ERRORPAGES_BUTTON_RELOAD)));
-      error_strings->SetKey("alternateDownloadButtonStyle", base::Value(true));
+  error_strings->SetString(
+      "closeDescriptionPopup",
+      l10n_util::GetStringUTF16(IDS_ERRORPAGES_SUGGESTION_CLOSE_POPUP_BUTTON));
+
+  if (IsOfflineError(error_domain, error_code) && !is_incognito) {
+    switch (offline_content_feature_state) {
+      case OfflineContentOnNetErrorFeatureState::kDisabled:
+        break;
+      case OfflineContentOnNetErrorFeatureState::kEnabledList:
+        error_strings->SetString("suggestedOfflineContentPresentationMode",
+                                 "list");
+        error_strings->SetPath({"offlineContentList", "title"},
+                               base::Value(l10n_util::GetStringUTF16(
+                                   IDS_ERRORPAGES_OFFLINE_CONTENT_LIST_TITLE)));
+        error_strings->SetPath(
+            {"offlineContentList", "actionText"},
+            base::Value(l10n_util::GetStringUTF16(
+                IDS_ERRORPAGES_OFFLINE_CONTENT_LIST_OPEN_ALL_BUTTON)));
+        break;
+      case OfflineContentOnNetErrorFeatureState::kEnabledSummary:
+        error_strings->SetString("suggestedOfflineContentPresentationMode",
+                                 "summary");
+        error_strings->SetPath(
+            {"offlineContentSummary", "description"},
+            base::Value(l10n_util::GetStringUTF16(
+                IDS_ERRORPAGES_OFFLINE_CONTENT_SUMMARY_DESCRIPTION)));
+        error_strings->SetPath(
+            {"offlineContentSummary", "actionText"},
+            base::Value(l10n_util::GetStringUTF16(
+                IDS_ERRORPAGES_OFFLINE_CONTENT_SUMMARY_BUTTON)));
+        break;
     }
   }
 #endif  // defined(OS_ANDROID)

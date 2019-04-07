@@ -91,6 +91,7 @@
 #include "ui/accessibility/ax_modes.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
+#include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/range/range.h"
@@ -249,6 +250,24 @@ class RenderViewImplTest : public RenderViewTest {
     return static_cast<TestRenderFrame*>(view()->GetMainRenderFrame());
   }
 
+  void ReceiveDisableDeviceEmulation(RenderViewImpl* view) {
+    // Emulates receiving an IPC message.
+    view->GetWidget()->OnDisableDeviceEmulation();
+  }
+
+  void ReceiveEnableDeviceEmulation(
+      RenderViewImpl* view,
+      const blink::WebDeviceEmulationParams& params) {
+    // Emulates receiving an IPC message.
+    view->GetWidget()->OnEnableDeviceEmulation(params);
+  }
+
+  void ReceiveSetTextDirection(RenderViewImpl* view,
+                               blink::WebTextDirection direction) {
+    // Emulates receiving an IPC message.
+    view->OnSetTextDirection(direction);
+  }
+
   void GoToOffsetWithParams(int offset,
                             const PageState& state,
                             const CommonNavigationParams common_params,
@@ -370,7 +389,7 @@ class RenderViewImplTest : public RenderViewTest {
 
     ui::KeyEvent char_event(keydown_event.GetCharacter(),
                             static_cast<ui::KeyboardCode>(key_code),
-                            flags);
+                            ui::DomCode::NONE, flags);
     NativeWebKeyboardEvent char_web_event(char_event);
     SendNativeKeyEvent(char_web_event);
 
@@ -396,7 +415,7 @@ class RenderViewImplTest : public RenderViewTest {
   }
 
   const gfx::Size& GetPreferredSize() {
-    view()->CheckPreferredSize();
+    view()->UpdatePreferredSize();
     return view()->preferred_size_;
   }
 
@@ -487,7 +506,7 @@ class RenderViewImplScaleFactorTest : public RenderViewImplTest {
     params.view_size.width = width;
     params.view_size.height = height;
     params.device_scale_factor = dpr;
-    view()->OnEnableDeviceEmulation(params);
+    ReceiveEnableDeviceEmulation(view(), params);
     EXPECT_TRUE(ExecuteJavaScriptAndReturnIntValue(get_width, &emulated_width));
     EXPECT_EQ(width, emulated_width);
     EXPECT_TRUE(ExecuteJavaScriptAndReturnIntValue(get_height,
@@ -523,80 +542,6 @@ class RenderViewImplDisableZoomForDSFTest
     return deps;
   }
 };
-
-#if defined(OS_ANDROID)
-class TapCallbackFilter : public IPC::Listener {
- public:
-  explicit TapCallbackFilter(
-      base::RepeatingCallback<void(const gfx::Rect&, const gfx::Size&)>
-          callback)
-      : callback_(callback) {}
-
-  bool OnMessageReceived(const IPC::Message& msg) override {
-    bool handled = true;
-    IPC_BEGIN_MESSAGE_MAP(TapCallbackFilter, msg)
-      IPC_MESSAGE_HANDLER(ViewHostMsg_ShowDisambiguationPopup,
-                          OnShowDisambiguationPopup)
-      IPC_MESSAGE_UNHANDLED(handled = false)
-    IPC_END_MESSAGE_MAP()
-    return handled;
-  }
-
-  void OnShowDisambiguationPopup(const gfx::Rect& rect_pixels,
-                                 const gfx::Size& size,
-                                 base::SharedMemoryHandle handle) {
-    callback_.Run(rect_pixels, size);
-  }
-
- private:
-  base::RepeatingCallback<void(const gfx::Rect&, const gfx::Size&)> callback_;
-};
-
-static blink::WebCoalescedInputEvent FatTap(int x,
-                                            int y,
-                                            int width,
-                                            int height) {
-  blink::WebGestureEvent event(
-      blink::WebInputEvent::kGestureTap, blink::WebInputEvent::kNoModifiers,
-      blink::WebInputEvent::GetStaticTimeStampForTests(),
-      blink::kWebGestureDeviceTouchscreen);
-  event.SetPositionInWidget(gfx::PointF(x, y));
-  event.data.tap.width = width;
-  event.data.tap.height = height;
-  return blink::WebCoalescedInputEvent(event);
-}
-
-TEST_F(RenderViewImplScaleFactorTest, TapDisambiguatorSize) {
-  // TODO(oshima): This test tried in the past to enable UseZoomForDSF but
-  // didn't actually do so for the compositor, and fails with it enabled.
-  const float device_scale = 2.625f;
-  SetDeviceScaleFactor(device_scale);
-  EXPECT_EQ(device_scale, view()->GetDeviceScaleFactor());
-
-  LoadHTML(
-      "<style type=\"text/css\">"
-      " a {"
-      "  display: block;"
-      "  width: 40px;"
-      "  height: 40px;"
-      "  background-color:#ccccff;"
-      " }"
-      "</style>"
-      "<body style=\"margin: 0px\">"
-      "<a href=\"#\">link </a>"
-      "<a href=\"#\">link </a>"
-      "</body>");
-  std::unique_ptr<TapCallbackFilter> callback_filter(
-      new TapCallbackFilter(base::BindRepeating(
-          [](const gfx::Rect& rect_pixels, const gfx::Size& canvas_size) {
-            EXPECT_EQ(rect_pixels, gfx::Rect(28, 68, 24, 24));
-            EXPECT_EQ(canvas_size, gfx::Size(48, 48));
-          })));
-  render_thread_->sink().AddFilter(callback_filter.get());
-  view()->webview()->HandleInputEvent(FatTap(40, 80, 200, 200));
-  render_thread_->sink().RemoveFilter(callback_filter.get());
-}
-#endif
 
 // Ensure that the main RenderFrame is deleted and cleared from the RenderView
 // after closing it.
@@ -731,12 +676,6 @@ TEST_F(RenderViewImplTest, DecideNavigationPolicy) {
   // If this is a renderer-initiated navigation that just begun, it should
   // stop and be sent to the browser.
   EXPECT_EQ(blink::kWebNavigationPolicyHandledByClient, policy);
-
-  // If this a navigation that is ready to commit, it should be handled
-  // locally.
-  request.SetCheckForBrowserSideNavigation(false);
-  policy = frame()->DecidePolicyForNavigation(policy_info);
-  EXPECT_EQ(blink::kWebNavigationPolicyCurrentTab, policy);
 
   // Verify that form posts to WebUI URLs will be sent to the browser process.
   blink::WebURLRequest form_request(GURL("chrome://foo"));
@@ -893,10 +832,10 @@ TEST_F(RenderViewImplScaleFactorTest, DeviceEmulationWithOOPIF) {
             view()->GetWidget()->GetOriginalScreenInfo().device_scale_factor);
   EXPECT_EQ(device_scale, child_proxy->screen_info().device_scale_factor);
 
-  view()->OnDisableDeviceEmulation();
+  ReceiveDisableDeviceEmulation(view());
 
   blink::WebDeviceEmulationParams params;
-  view()->OnEnableDeviceEmulation(params);
+  ReceiveEnableDeviceEmulation(view(), params);
   // Don't disable here to test that emulation is being shutdown properly.
 }
 
@@ -1458,7 +1397,7 @@ TEST_F(RenderViewImplTest, OnSetTextDirection) {
   for (size_t i = 0; i < arraysize(kTextDirection); ++i) {
     // Set the text direction of the <textarea> element.
     ExecuteJavaScriptForTests("document.getElementById('test').focus();");
-    view()->OnSetTextDirection(kTextDirection[i].direction);
+    ReceiveSetTextDirection(view(), kTextDirection[i].direction);
 
     // Write the values of its DOM 'dir' attribute and its CSS 'direction'
     // property to the <div> element.
@@ -1844,7 +1783,15 @@ TEST_F(RenderViewImplTest, OnDeleteSurroundingText) {
   EXPECT_EQ(0, info.selection_end);
 }
 
-TEST_F(RenderViewImplTest, OnDeleteSurroundingTextInCodePoints) {
+#if defined(OS_ANDROID)
+// Failing on Android M: http://crbug.com/873580
+#define MAYBE_OnDeleteSurroundingTextInCodePoints \
+  DISABLED_OnDeleteSurroundingTextInCodePoints
+#else
+#define MAYBE_OnDeleteSurroundingTextInCodePoints \
+  OnDeleteSurroundingTextInCodePoints
+#endif
+TEST_F(RenderViewImplTest, MAYBE_OnDeleteSurroundingTextInCodePoints) {
   // Load an HTML page consisting of an input field.
   LoadHTML(
       // "ab" + trophy + space + "cdef" + trophy + space + "gh".
@@ -1911,7 +1858,7 @@ TEST_F(RenderViewImplTest, BasicRenderFrame) {
 TEST_F(RenderViewImplTest, MessageOrderInDidChangeSelection) {
   LoadHTML("<textarea id=\"test\"></textarea>");
 
-  view()->SetHandlingInputEventForTesting(true);
+  view()->GetWidget()->SetHandlingInputEvent(true);
   ExecuteJavaScriptForTests("document.getElementById('test').focus();");
 
   bool is_input_type_called = false;
@@ -2551,20 +2498,38 @@ TEST_F(RenderViewImplBlinkSettingsTest, Default) {
 
 TEST_F(RenderViewImplBlinkSettingsTest, CommandLine) {
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kBlinkSettings,
-      "multiTargetTapNotificationEnabled=true,viewportEnabled=true");
+      switches::kBlinkSettings, "viewportEnabled=true");
   DoSetUp();
-  EXPECT_TRUE(settings()->MultiTargetTapNotificationEnabled());
   EXPECT_TRUE(settings()->ViewportEnabled());
 }
 
-TEST_F(RenderViewImplBlinkSettingsTest, Negative) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kBlinkSettings,
-      "multiTargetTapNotificationEnabled=false,viewportEnabled=true");
+// Ensure that setting default page scale limits immediately recomputes the
+// minimum scale factor to the final value. With
+// shrinks_viewport_contents_to_fit, Blink clamps the minimum cased on the
+// content width. In this case, that'll always be 1.
+TEST_F(RenderViewImplBlinkSettingsTest, DefaultPageScaleSettings) {
   DoSetUp();
-  EXPECT_FALSE(settings()->MultiTargetTapNotificationEnabled());
-  EXPECT_TRUE(settings()->ViewportEnabled());
+  LoadHTML(
+      "<style>"
+      "    body,html {"
+      "    margin: 0;"
+      "    width:100%;"
+      "    height:100%;"
+      "}"
+      "</style>");
+
+  EXPECT_EQ(1.f, view()->webview()->PageScaleFactor());
+  EXPECT_EQ(1.f, view()->webview()->MinimumPageScaleFactor());
+
+  WebPreferences prefs;
+  prefs.shrinks_viewport_contents_to_fit = true;
+  prefs.default_minimum_page_scale_factor = 0.1f;
+  prefs.default_maximum_page_scale_factor = 5.5f;
+  view()->SetWebkitPreferences(prefs);
+
+  EXPECT_EQ(1.f, view()->webview()->PageScaleFactor());
+  EXPECT_EQ(1.f, view()->webview()->MinimumPageScaleFactor());
+  EXPECT_EQ(5.5f, view()->webview()->MaximumPageScaleFactor());
 }
 
 TEST_F(RenderViewImplDisableZoomForDSFTest,
@@ -2599,10 +2564,10 @@ TEST_F(RenderViewImplScaleFactorTest, ScreenMetricsEmulationWithOriginalDSF1) {
     TestEmulatedSizeDprDsf(1005, 1102, 3.f, 1.f);
   }
 
-  view()->OnDisableDeviceEmulation();
+  ReceiveDisableDeviceEmulation(view());
 
   blink::WebDeviceEmulationParams params;
-  view()->OnEnableDeviceEmulation(params);
+  ReceiveEnableDeviceEmulation(view(), params);
   // Don't disable here to test that emulation is being shutdown properly.
 }
 
@@ -2628,10 +2593,10 @@ TEST_F(RenderViewImplScaleFactorTest, ScreenMetricsEmulationWithOriginalDSF2) {
     TestEmulatedSizeDprDsf(1005, 1102, 3.f, compositor_dsf);
   }
 
-  view()->OnDisableDeviceEmulation();
+  ReceiveDisableDeviceEmulation(view());
 
   blink::WebDeviceEmulationParams params;
-  view()->OnEnableDeviceEmulation(params);
+  ReceiveEnableDeviceEmulation(view(), params);
   // Don't disable here to test that emulation is being shutdown properly.
 }
 
@@ -2714,7 +2679,8 @@ const char kAutoResizeTestPage[] =
 }  // namespace
 
 TEST_F(RenderViewImplEnableZoomForDSFTest, AutoResizeWithZoomForDSF) {
-  view()->EnableAutoResizeForTesting(gfx::Size(5, 5), gfx::Size(1000, 1000));
+  view()->GetWidget()->EnableAutoResizeForTesting(gfx::Size(5, 5),
+                                                  gfx::Size(1000, 1000));
   LoadHTML(kAutoResizeTestPage);
   gfx::Size size_at_1x = view()->GetWidget()->size();
   ASSERT_FALSE(size_at_1x.IsEmpty());
@@ -2726,7 +2692,8 @@ TEST_F(RenderViewImplEnableZoomForDSFTest, AutoResizeWithZoomForDSF) {
 }
 
 TEST_F(RenderViewImplScaleFactorTest, AutoResizeWithoutZoomForDSF) {
-  view()->EnableAutoResizeForTesting(gfx::Size(5, 5), gfx::Size(1000, 1000));
+  view()->GetWidget()->EnableAutoResizeForTesting(gfx::Size(5, 5),
+                                                  gfx::Size(1000, 1000));
   LoadHTML(kAutoResizeTestPage);
   gfx::Size size_at_1x = view()->GetWidget()->size();
   ASSERT_FALSE(size_at_1x.IsEmpty());

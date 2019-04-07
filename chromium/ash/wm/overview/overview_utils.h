@@ -5,12 +5,13 @@
 #ifndef ASH_WM_OVERVIEW_OVERVIEW_UTILS_H_
 #define ASH_WM_OVERVIEW_OVERVIEW_UTILS_H_
 
+#include <memory>
+
 #include "ash/ash_export.h"
 #include "ash/wm/overview/overview_animation_type.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/compositor/layer_type.h"
-
-#include <memory>
+#include "ui/gfx/geometry/rect.h"
 
 namespace aura {
 class Window;
@@ -20,28 +21,28 @@ namespace views {
 class Widget;
 }  // namespace views
 
-namespace aura {
-class Window;
-}
-
 namespace ash {
 
 // Returns true if |window| can cover available workspace.
 bool CanCoverAvailableWorkspace(aura::Window* window);
 
-// Returns true if overview mode should use the new animations.
-// TODO(wutao): Remove this function when the old overview mode animations
-// become obsolete. See https://crbug.com/801465.
-bool IsNewOverviewAnimationsEnabled();
-
 bool IsOverviewSwipeToCloseEnabled();
+
+// Fades |widget| to opacity one with the enter overview settings. Additionally
+// place |widget| closer to the top of screen and slide it down if |slide| is
+// true.
+void FadeInWidgetAndMaybeSlideOnEnter(views::Widget* widget,
+                                      OverviewAnimationType animation_type,
+                                      bool slide);
 
 // Fades |widget| to opacity zero with animation settings depending on
 // |animation_type|. Used by several classes which need to be destroyed on
 // exiting overview, but have some widgets which need to continue animating.
-// |widget| is destroyed after finishing animation.
-void FadeOutWidgetOnExit(std::unique_ptr<views::Widget> widget,
-                         OverviewAnimationType animation_type);
+// |widget| is destroyed after finishing animation. Additionally slide |widget|
+// towards the top of screen if |slide| is true.
+void FadeOutWidgetAndMaybeSlideOnExit(std::unique_ptr<views::Widget> widget,
+                                      OverviewAnimationType animation_type,
+                                      bool slide);
 
 // Creates and returns a background translucent widget parented in
 // |root_window|'s default container and having |background_color|.
@@ -60,6 +61,14 @@ std::unique_ptr<views::Widget> CreateBackgroundWidget(aura::Window* root_window,
                                                       float initial_opacity,
                                                       aura::Window* parent,
                                                       bool stack_on_top);
+
+// Calculates the bounds of the |transformed_window|. Those bounds are a union
+// of all regular (normal and panel) windows in the |transformed_window|'s
+// transient hierarchy. The returned Rect is in virtual screen coordinates. The
+// returned bounds are adjusted to allow the original |transformed_window|'s
+// header to be hidden if |top_inset| is not zero.
+gfx::Rect GetTransformedBounds(aura::Window* transformed_window, int top_inset);
+
 }  // namespace ash
 
 #endif  // ASH_WM_OVERVIEW_OVERVIEW_UTILS_H_

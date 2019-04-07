@@ -8,6 +8,7 @@
 # toolchain, this GNI file may be read and processed from within Chrome OS
 # toolchains. Checking |is_android| here would therefore be too restrictive.
 if (is_android || is_chromeos) {
+  import("//build/config/chromecast_build.gni")
   import("//build_overrides/build.gni")
   import("abi.gni")
 
@@ -116,11 +117,11 @@ if (is_android || is_chromeos) {
   # google_play_services_package contains the path where individual client
   # targets (e.g. google_play_services_base_java) are located.
   if (!defined(google_play_services_package)) {
-    google_play_services_package = "//third_party/android_tools"
-  }
-
-  if (!defined(android_support_library_package)) {
-    android_support_library_package = "//third_party/android_tools/support"
+    if (is_chromecast && chromecast_branding != "public") {
+      google_play_services_package = "//chromecast/internal/android/prebuilt/google-play-services-first-party"
+    } else {
+      google_play_services_package = "//third_party/android_tools"
+    }
   }
 
   if (!defined(system_webview_apk_target)) {
@@ -167,9 +168,6 @@ if (is_android || is_chromeos) {
     # The password for the keystore to use for signing builds.
     android_keystore_password = default_android_keystore_password
 
-    # Enables verbose proguard output (summaries and unfiltered output).
-    proguard_verbose = false
-
     # Java debug on Android. Having this on enables multidexing, and turning it
     # off will enable proguard.
     is_java_debug = is_debug
@@ -209,13 +207,16 @@ if (is_android || is_chromeos) {
     # Refer to android_aar_prebuilt() for more details.
     update_android_aar_prebuilts = false
 
-    # When true, uses the third party libraries from //third_party/android_deps
-    # over the ones in other places. (instead of the support library from
-    # android_tools for example)
-    enable_android_deps_repository = true
-
     # Turns off android lint. Useful for prototyping or for faster local builds.
     disable_android_lint = false
+
+    # Location of aapt2 binary used for app bundles. For now, a more recent version
+    # than the one distributed with the Android SDK is required.
+    android_sdk_tools_bundle_aapt2 =
+        "//third_party/android_build_tools/aapt2/aapt2"
+
+    # Path to r8.jar. If specified, will be used instead of ProGuard for optimization.
+    experimental_r8_path = ""
   }
 
   # We need a second declare_args block to make sure we are using the overridden
@@ -352,13 +353,6 @@ if (is_android || is_chromeos) {
 
   if (android_libcpp_lib_dir == "") {
     android_libcpp_lib_dir = "${android_libcpp_root}/libs/${android_app_abi}"
-  }
-
-  declare_args() {
-    # Location of aapt2 binary used for app bundles. For now, a more recent version
-    # than the one distributed with the Android SDK is required.
-    android_sdk_tools_bundle_aapt2 =
-        "//third_party/android_build_tools/aapt2/aapt2"
   }
 }
 

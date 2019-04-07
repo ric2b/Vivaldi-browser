@@ -12,20 +12,21 @@
 # Usage:
 # $ ./cmake_update.sh
 # Requirements:
+# Install the following Debian packages.
 # - cmake3
 # - yasm or nasm
 # Toolchain for armv7:
-#  -gcc-arm-linux-gnueabihf
-#  -g++-arm-linux-gnueabihf
+# - gcc-arm-linux-gnueabihf
+# - g++-arm-linux-gnueabihf
 # Toolchain for arm64:
-#  -gcc-aarch64-linux-gnu
-#  -g++-aarch64-linux-gnu
+# - gcc-aarch64-linux-gnu
+# - g++-aarch64-linux-gnu
 # 32bit build environment for cmake. Including but potentially not limited to:
-#  -lib32gcc-7-dev
-#  -lib32stdc++-7-dev
+# - lib32gcc-7-dev
+# - lib32stdc++-7-dev
 # Alternatively: treat 32bit builds like Windows and manually tweak aom_config.h
 
-set -e
+set -eE
 
 # sort() consistently.
 export LC_ALL=C
@@ -64,7 +65,7 @@ fi
 # $1 - Header file directory.
 # $2 - cmake options.
 function gen_config_files {
-  cmake "${SRC}" ${2} &> /dev/null
+  cmake "${SRC}" ${2} &> cmake.txt
 
   case "${1}" in
     *x64*|*ia32*)
@@ -83,7 +84,7 @@ function update_readme {
   local IFS=$'\n'
   # Split git log output '<date>\n<commit hash>' on the newline to produce 2
   # array entries.
-  local vals=($(git --no-pager log -1 --format="%cd%n%H" \
+  local vals=($(git -C "${SRC}" --no-pager log -1 --format="%cd%n%H" \
     --date=format:"%A %B %d %Y"))
   sed -E -i.bak \
     -e "s/^(Date:)[[:space:]]+.*$/\1 ${vals[0]}/" \
@@ -98,8 +99,15 @@ Commit: ${vals[1]}
 EOF
 }
 
+# Scope 'trap' error reporting to configuration generation.
+(
 TMP=$(mktemp -d "${BASE}/build.XXXX")
 cd "${TMP}"
+
+trap '{
+  [ -f ${TMP}/cmake.txt ] && cat ${TMP}/cmake.txt
+  echo "Build directory ${TMP} not removed automatically."
+}' ERR
 
 all_platforms="-DCONFIG_SIZE_LIMIT=1"
 all_platforms+=" -DDECODE_HEIGHT_LIMIT=16384 -DDECODE_WIDTH_LIMIT=16384"
@@ -118,7 +126,8 @@ cp libaom_srcs.gni "${BASE}"
 cp config/aom_version.h "${CFG}/config/"
 
 reset_dirs linux/ia32
-gen_config_files linux/ia32 "${toolchain}/x86-linux.cmake ${all_platforms}"
+gen_config_files linux/ia32 "${toolchain}/x86-linux.cmake ${all_platforms} \
+  -DAOM_RTCD_FLAGS=--require-mmx;--require-sse;--require-sse2"
 
 reset_dirs linux/x64
 gen_config_files linux/x64 "${all_platforms}"
@@ -165,10 +174,11 @@ gen_config_files linux/arm-neon-cpu-detect \
 
 reset_dirs linux/arm64
 gen_config_files linux/arm64 "${toolchain}/arm64-linux-gcc.cmake ${all_platforms}"
+)
 
-cd "${SRC}"
 update_readme
 
-git cl format &> /dev/null || echo "ERROR: Run 'git cl format' manually."
+git cl format > /dev/null \
+  || echo "ERROR: 'git cl format' failed. Please run 'git cl format' manually."
 
 clean

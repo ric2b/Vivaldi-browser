@@ -5,11 +5,12 @@
 #include "ash/shelf/shelf_background_animator.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "ash/animation/animation_change_type.h"
 #include "ash/public/cpp/ash_switches.h"
+#include "ash/public/cpp/login_constants.h"
 #include "ash/public/cpp/wallpaper_types.h"
-#include "ash/session/session_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_background_animator_observer.h"
 #include "ash/shelf/shelf_constants.h"
@@ -57,42 +58,56 @@ ColorProfile GetShelfColorProfile() {
 // given |background_type|.
 std::pair<int, int> GetTargetColorAlphaValues(
     ShelfBackgroundType background_type) {
-  int target_shelf_color_alpha = 0;
-  int target_item_color_alpha = 0;
+  int target_shelf_color_alpha = SK_AlphaTRANSPARENT;
+  int target_item_color_alpha = SK_AlphaTRANSPARENT;
 
   switch (background_type) {
     case SHELF_BACKGROUND_DEFAULT:
       if (chromeos::switches::ShouldUseShelfNewUi()) {
         target_shelf_color_alpha = kShelfTranslucentAlpha;
-        target_item_color_alpha = 0;
+        target_item_color_alpha = SK_AlphaTRANSPARENT;
       } else {
-        target_shelf_color_alpha = 0;
+        target_shelf_color_alpha = SK_AlphaTRANSPARENT;
         target_item_color_alpha = kShelfTranslucentAlpha;
       }
       break;
     case SHELF_BACKGROUND_OVERLAP:
-      if (chromeos::switches::ShouldUseShelfNewUi()) {
-        target_shelf_color_alpha = kShelfTranslucentWithOverlapAlphaNewUi;
-        target_item_color_alpha = 0;
-      } else {
-        target_shelf_color_alpha = kShelfTranslucentAlpha;
-        target_item_color_alpha = 0;
-      }
+      target_shelf_color_alpha = kShelfTranslucentAlpha;
+      target_item_color_alpha = SK_AlphaTRANSPARENT;
       break;
     case SHELF_BACKGROUND_MAXIMIZED:
-      target_shelf_color_alpha = ShelfBackgroundAnimator::kMaxAlpha;
-      target_item_color_alpha = 0;
+      if (chromeos::switches::ShouldUseShelfNewUi()) {
+        target_shelf_color_alpha = kShelfTranslucentMaximizedWindowNewUi;
+      } else {
+        target_shelf_color_alpha = ShelfBackgroundAnimator::kMaxAlpha;
+      }
+      target_item_color_alpha = SK_AlphaTRANSPARENT;
       break;
     case SHELF_BACKGROUND_APP_LIST:
-      target_shelf_color_alpha = 0;
-      target_item_color_alpha = 0;
+      if (chromeos::switches::ShouldUseShelfNewUi()) {
+        target_shelf_color_alpha = kShelfTranslucentOverAppList;
+      } else {
+        target_shelf_color_alpha = SK_AlphaTRANSPARENT;
+      }
+      target_item_color_alpha = SK_AlphaTRANSPARENT;
       break;
     case SHELF_BACKGROUND_SPLIT_VIEW:
       target_shelf_color_alpha = ShelfBackgroundAnimator::kMaxAlpha;
-      target_item_color_alpha = 0;
+      target_item_color_alpha = SK_AlphaTRANSPARENT;
       break;
-    default:
-      NOTREACHED();
+    case SHELF_BACKGROUND_OOBE:
+      target_shelf_color_alpha = SK_AlphaTRANSPARENT;
+      target_item_color_alpha = SK_AlphaOPAQUE;
+      break;
+    case SHELF_BACKGROUND_LOGIN:
+      target_shelf_color_alpha = SK_AlphaTRANSPARENT;
+      target_item_color_alpha = SK_AlphaTRANSPARENT;
+      break;
+    case SHELF_BACKGROUND_LOGIN_NONBLURRED_WALLPAPER:
+      target_shelf_color_alpha =
+          login_constants::kNonBlurredWallpaperBackgroundAlpha;
+      target_item_color_alpha = SK_AlphaTRANSPARENT;
+      break;
   }
   return std::pair<int, int>(target_shelf_color_alpha, target_item_color_alpha);
 }
@@ -124,8 +139,6 @@ ShelfBackgroundAnimator::ShelfBackgroundAnimator(
     Shelf* shelf,
     WallpaperController* wallpaper_controller)
     : shelf_(shelf), wallpaper_controller_(wallpaper_controller) {
-  if (Shell::HasInstance())  // Null in testing::Test.
-    Shell::Get()->session_controller()->AddObserver(this);
   if (wallpaper_controller_)
     wallpaper_controller_->AddObserver(this);
   if (shelf_)
@@ -141,8 +154,6 @@ ShelfBackgroundAnimator::~ShelfBackgroundAnimator() {
     wallpaper_controller_->RemoveObserver(this);
   if (shelf_)
     shelf_->RemoveObserver(this);
-  if (Shell::HasInstance())  // Null in testing::Test.
-    Shell::Get()->session_controller()->RemoveObserver(this);
 }
 
 void ShelfBackgroundAnimator::AddObserver(
@@ -191,11 +202,6 @@ int ShelfBackgroundAnimator::GetBackgroundAlphaValue(
 }
 
 void ShelfBackgroundAnimator::OnWallpaperColorsChanged() {
-  AnimateBackground(target_background_type_, AnimationChangeType::ANIMATE);
-}
-
-void ShelfBackgroundAnimator::OnSessionStateChanged(
-    session_manager::SessionState state) {
   AnimateBackground(target_background_type_, AnimationChangeType::ANIMATE);
 }
 
@@ -267,11 +273,14 @@ void ShelfBackgroundAnimator::CreateAnimator(
       break;
     case SHELF_BACKGROUND_MAXIMIZED:
     case SHELF_BACKGROUND_SPLIT_VIEW:
+    case SHELF_BACKGROUND_OOBE:
+    case SHELF_BACKGROUND_LOGIN:
+    case SHELF_BACKGROUND_LOGIN_NONBLURRED_WALLPAPER:
       duration_ms = 250;
       break;
   }
 
-  animator_.reset(new gfx::SlideAnimation(this));
+  animator_ = std::make_unique<gfx::SlideAnimation>(this);
   animator_->SetSlideDuration(duration_ms);
 }
 
@@ -290,58 +299,55 @@ void ShelfBackgroundAnimator::GetTargetValues(
     ShelfBackgroundType background_type,
     AnimationValues* shelf_background_values,
     AnimationValues* item_background_values) const {
-  // Shell may not have instance in tests.
-  if (Shell::HasInstance()) {
-    auto session_state = Shell::Get()->session_controller()->GetSessionState();
+  // Fetches wallpaper color and darkens it.
+  auto darken_wallpaper = [&](int darkening_alpha) {
+    if (!wallpaper_controller_)
+      return kShelfDefaultBaseColor;
+    SkColor target_color =
+        wallpaper_controller_->GetProminentColor(GetShelfColorProfile());
+    if (target_color == kInvalidWallpaperColor)
+      return kShelfDefaultBaseColor;
+    return color_utils::GetResultingPaintColor(
+        SkColorSetA(kShelfDefaultBaseColor, darkening_alpha), target_color);
+  };
 
-    // OOBE always uses a fixed shelf color.
-    if (session_state == session_manager::SessionState::OOBE) {
-      shelf_background_values->SetTargetValues(SK_ColorTRANSPARENT);
-      item_background_values->SetTargetValues(gfx::kGoogleGrey100);
-      return;
-    }
-
-    // All other non-active sessions use transparent colors.
-    if (session_state != session_manager::SessionState::ACTIVE) {
-      shelf_background_values->SetTargetValues(SK_ColorTRANSPARENT);
-      item_background_values->SetTargetValues(SK_ColorTRANSPARENT);
-      return;
-    }
+  SkColor shelf_target_color = kShelfDefaultBaseColor;
+  SkColor item_target_color = kShelfDefaultBaseColor;
+  switch (background_type) {
+    case SHELF_BACKGROUND_DEFAULT:
+    case SHELF_BACKGROUND_OVERLAP:
+    case SHELF_BACKGROUND_APP_LIST:
+      shelf_target_color = darken_wallpaper(kShelfTranslucentColorDarkenAlpha);
+      item_target_color = shelf_target_color;
+      break;
+    case SHELF_BACKGROUND_MAXIMIZED:
+      shelf_target_color = darken_wallpaper(kShelfOpaqueColorDarkenAlpha);
+      item_target_color = shelf_target_color;
+      break;
+    case SHELF_BACKGROUND_SPLIT_VIEW:
+      shelf_target_color = darken_wallpaper(ShelfBackgroundAnimator::kMaxAlpha);
+      item_target_color = shelf_target_color;
+      break;
+    case SHELF_BACKGROUND_OOBE:
+      shelf_target_color = SK_ColorTRANSPARENT;
+      item_target_color = gfx::kGoogleGrey100;
+      break;
+    case SHELF_BACKGROUND_LOGIN:
+      shelf_target_color = SK_ColorTRANSPARENT;
+      item_target_color = SK_ColorTRANSPARENT;
+      break;
+    case SHELF_BACKGROUND_LOGIN_NONBLURRED_WALLPAPER:
+      shelf_target_color = login_constants::kDefaultBaseColor;
+      item_target_color = login_constants::kDefaultBaseColor;
+      break;
   }
 
   std::pair<int, int> target_color_alpha_values =
       GetTargetColorAlphaValues(background_type);
-
-  SkColor target_color =
-      wallpaper_controller_
-          ? wallpaper_controller_->GetProminentColor(GetShelfColorProfile())
-          : kShelfDefaultBaseColor;
-  if (target_color == kInvalidWallpaperColor) {
-    target_color = kShelfDefaultBaseColor;
-  } else {
-    int darkening_alpha = 0;
-
-    switch (background_type) {
-      case SHELF_BACKGROUND_DEFAULT:
-      case SHELF_BACKGROUND_OVERLAP:
-      case SHELF_BACKGROUND_APP_LIST:
-        darkening_alpha = kShelfTranslucentColorDarkenAlpha;
-        break;
-      case SHELF_BACKGROUND_MAXIMIZED:
-        darkening_alpha = kShelfOpaqueColorDarkenAlpha;
-        break;
-      case SHELF_BACKGROUND_SPLIT_VIEW:
-        darkening_alpha = ShelfBackgroundAnimator::kMaxAlpha;
-        break;
-    }
-    target_color = color_utils::GetResultingPaintColor(
-        SkColorSetA(kShelfDefaultBaseColor, darkening_alpha), target_color);
-  }
-
   shelf_background_values->SetTargetValues(
-      SkColorSetA(target_color, target_color_alpha_values.first));
+      SkColorSetA(shelf_target_color, target_color_alpha_values.first));
   item_background_values->SetTargetValues(
-      SkColorSetA(target_color, target_color_alpha_values.second));
+      SkColorSetA(item_target_color, target_color_alpha_values.second));
 }
 
 void ShelfBackgroundAnimator::SetAnimationValues(double t) {

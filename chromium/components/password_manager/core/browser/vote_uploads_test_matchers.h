@@ -25,6 +25,19 @@ MATCHER_P(SignatureIsSameAs,
   return false;
 }
 
+MATCHER_P(SubmissionEventIsSameAs,
+          expected_submission_event,
+          std::string(negation ? "submission event isn't "
+                               : "submission event is ") +
+              std::to_string(static_cast<int>(expected_submission_event))) {
+  if (expected_submission_event == arg.get_submission_event_for_testing())
+    return true;
+
+  *result_listener << "submission event is "
+                   << arg.get_submission_event_for_testing() << " instead";
+  return false;
+}
+
 MATCHER_P(UploadedAutofillTypesAre, expected_types, "") {
   size_t fields_matched_type_count = 0;
   bool conflict_found = false;
@@ -140,24 +153,6 @@ MATCHER_P2(UploadedGenerationTypesAre,
         if (generated_password_changed != field->generated_password_changed())
           return false;
       }
-    }
-  }
-  return true;
-}
-
-MATCHER_P2(UploadedFormClassifierVoteIs,
-           found_generation_element,
-           generation_element,
-           "") {
-  for (const auto& field : arg) {
-    if (found_generation_element && field->name == generation_element) {
-      if (field->form_classifier_outcome() !=
-          autofill::AutofillUploadContents::Field::GENERATION_ELEMENT)
-        return false;
-    } else {
-      if (field->form_classifier_outcome() !=
-          autofill::AutofillUploadContents::Field::NON_GENERATION_ELEMENT)
-        return false;
     }
   }
   return true;

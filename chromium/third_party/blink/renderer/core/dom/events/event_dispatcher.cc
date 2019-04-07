@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatch_forbidden_scope.h"
+#include "third_party/blink/renderer/core/dom/events/event_path.h"
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
 #include "third_party/blink/renderer/core/dom/events/window_event_context.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
@@ -49,27 +50,26 @@
 
 namespace blink {
 
-DispatchEventResult EventDispatcher::DispatchEvent(Node& node, Event* event) {
+DispatchEventResult EventDispatcher::DispatchEvent(Node& node, Event& event) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("blink.debug"),
                "EventDispatcher::dispatchEvent");
 #if DCHECK_IS_ON()
   DCHECK(!EventDispatchForbiddenScope::IsEventDispatchForbidden());
 #endif
   EventDispatcher dispatcher(node, event);
-  return event->DispatchEvent(dispatcher);
+  return event.DispatchEvent(dispatcher);
 }
 
-EventDispatcher::EventDispatcher(Node& node, Event* event)
+EventDispatcher::EventDispatcher(Node& node, Event& event)
     : node_(node), event_(event) {
-  DCHECK(event_.Get());
   view_ = node.GetDocument().View();
   event_->InitEventPath(*node_);
 }
 
-void EventDispatcher::DispatchScopedEvent(Node& node, Event* event) {
+void EventDispatcher::DispatchScopedEvent(Node& node, Event& event) {
   // We need to set the target here because it can go away by the time we
   // actually fire the event.
-  event->SetTarget(EventPath::EventTargetRespectingTargetRules(node));
+  event.SetTarget(EventPath::EventTargetRespectingTargetRules(node));
   ScopedEventQueue::Instance()->EnqueueEvent(event);
 }
 
@@ -95,20 +95,20 @@ void EventDispatcher::DispatchSimulatedClick(
   nodes_dispatching_simulated_clicks.insert(&node);
 
   if (mouse_event_options == kSendMouseOverUpDownEvents)
-    EventDispatcher(node, MouseEvent::Create(EventTypeNames::mouseover,
-                                             node.GetDocument().domWindow(),
-                                             underlying_event, creation_scope))
+    EventDispatcher(node, *MouseEvent::Create(EventTypeNames::mouseover,
+                                              node.GetDocument().domWindow(),
+                                              underlying_event, creation_scope))
         .Dispatch();
 
   if (mouse_event_options != kSendNoEvents) {
-    EventDispatcher(node, MouseEvent::Create(EventTypeNames::mousedown,
-                                             node.GetDocument().domWindow(),
-                                             underlying_event, creation_scope))
+    EventDispatcher(node, *MouseEvent::Create(EventTypeNames::mousedown,
+                                              node.GetDocument().domWindow(),
+                                              underlying_event, creation_scope))
         .Dispatch();
     node.SetActive(true);
-    EventDispatcher(node, MouseEvent::Create(EventTypeNames::mouseup,
-                                             node.GetDocument().domWindow(),
-                                             underlying_event, creation_scope))
+    EventDispatcher(node, *MouseEvent::Create(EventTypeNames::mouseup,
+                                              node.GetDocument().domWindow(),
+                                              underlying_event, creation_scope))
         .Dispatch();
   }
   // Some elements (e.g. the color picker) may set active state to true before
@@ -116,9 +116,9 @@ void EventDispatcher::DispatchSimulatedClick(
   node.SetActive(false);
 
   // always send click
-  EventDispatcher(node, MouseEvent::Create(EventTypeNames::click,
-                                           node.GetDocument().domWindow(),
-                                           underlying_event, creation_scope))
+  EventDispatcher(node, *MouseEvent::Create(EventTypeNames::click,
+                                            node.GetDocument().domWindow(),
+                                            underlying_event, creation_scope))
       .Dispatch();
 
   nodes_dispatching_simulated_clicks.erase(&node);
@@ -207,7 +207,7 @@ inline EventDispatchContinuation EventDispatcher::DispatchEventPreProcess(
   // legacy-pre-activation behavior.
   if (activation_target) {
     pre_dispatch_event_handler_result =
-        activation_target->PreDispatchEventHandler(event_.Get());
+        activation_target->PreDispatchEventHandler(*event_);
   }
   return (event_->GetEventPath().IsEmpty() || event_->PropagationStopped())
              ? kDoneDispatching
@@ -293,7 +293,7 @@ inline void EventDispatcher::DispatchEventPostProcess(
     // This may dispatch an event, and node_ and event_ might be altered.
     if (activation_target) {
       activation_target->PostDispatchEventHandler(
-          event_.Get(), pre_dispatch_event_handler_result);
+          *event_, pre_dispatch_event_handler_result);
     }
     // TODO(tkent): Is it safe to kick DefaultEventHandler() with such altered
     // event_?
@@ -325,7 +325,7 @@ inline void EventDispatcher::DispatchEventPostProcess(
     // Non-bubbling events call only one default event handler, the one for the
     // target.
     node_->WillCallDefaultEventHandler(*event_);
-    node_->DefaultEventHandler(event_.Get());
+    node_->DefaultEventHandler(*event_);
     DCHECK(!event_->defaultPrevented());
     // For bubbling events, call default event handlers on the same targets in
     // the same order as the bubbling phase.
@@ -334,7 +334,7 @@ inline void EventDispatcher::DispatchEventPostProcess(
       for (size_t i = 1; i < size; ++i) {
         event_->GetEventPath()[i].GetNode()->WillCallDefaultEventHandler(
             *event_);
-        event_->GetEventPath()[i].GetNode()->DefaultEventHandler(event_.Get());
+        event_->GetEventPath()[i].GetNode()->DefaultEventHandler(*event_);
         DCHECK(!event_->defaultPrevented());
         if (event_->DefaultHandled())
           break;

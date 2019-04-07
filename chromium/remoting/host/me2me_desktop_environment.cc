@@ -15,10 +15,9 @@
 #include "remoting/host/curtain_mode.h"
 #include "remoting/host/desktop_resizer.h"
 #include "remoting/host/host_window.h"
-#include "remoting/host/host_window.h"
 #include "remoting/host/host_window_proxy.h"
 #include "remoting/host/input_injector.h"
-#include "remoting/host/local_input_monitor.h"
+#include "remoting/host/input_monitor/local_input_monitor.h"
 #include "remoting/host/resizing_host_observer.h"
 #include "remoting/host/screen_controls.h"
 #include "remoting/protocol/capability_names.h"
@@ -123,14 +122,21 @@ bool Me2MeDesktopEnvironment::InitializeSecurity(
       desktop_environment_options().enable_user_interface();
 #endif
 
-  // Create the disconnect window.
   if (want_user_interface) {
     // Create the local input monitor.
     local_input_monitor_ = LocalInputMonitor::Create(
-        caller_task_runner(), input_task_runner(), ui_task_runner(),
+        caller_task_runner(), input_task_runner(), ui_task_runner());
+    local_input_monitor_->StartMonitoringForClientSession(
         client_session_control);
 
+    // Create the disconnect window.
+#if defined(OS_WIN)
+    disconnect_window_ =
+        HostWindow::CreateAutoHidingDisconnectWindow(LocalInputMonitor::Create(
+            caller_task_runner(), input_task_runner(), ui_task_runner()));
+#else
     disconnect_window_ = HostWindow::CreateDisconnectWindow();
+#endif
     disconnect_window_.reset(new HostWindowProxy(
         caller_task_runner(), ui_task_runner(), std::move(disconnect_window_)));
     disconnect_window_->Start(client_session_control);

@@ -20,18 +20,13 @@ namespace keyboard {
 class KeyboardUI;
 }
 
-namespace service_manager {
-class Connector;
-}
-
-namespace ui {
+namespace ws {
 class InputDeviceControllerClient;
 }
 
 namespace ash {
 
 class AccessibilityDelegate;
-class NetworkingConfigDelegate;
 class ScreenshotDelegate;
 
 // Delegate of the Shell.
@@ -40,22 +35,12 @@ class ASH_EXPORT ShellDelegate {
   // The Shell owns the delegate.
   virtual ~ShellDelegate() {}
 
-  // Returns the connector for the mojo service manager. Returns null in tests.
-  virtual service_manager::Connector* GetShellConnector() const = 0;
-
   // Returns true if |window| can be shown for the delegate's concept of current
   // user.
   virtual bool CanShowWindowForUser(aura::Window* window) const = 0;
 
-  // Called before processing |Shell::Init()| so that the delegate
-  // can perform tasks necessary before the shell is initialized.
-  virtual void PreInit() = 0;
-
   // Create a shell-specific keyboard::KeyboardUI.
   virtual std::unique_ptr<keyboard::KeyboardUI> CreateKeyboardUI() = 0;
-
-  // Returns the delegate. May be null in tests.
-  virtual NetworkingConfigDelegate* GetNetworkingConfigDelegate() = 0;
 
   // TODO(jamescook): Replace with a mojo-compatible interface.
   virtual std::unique_ptr<ScreenshotDelegate> CreateScreenshotDelegate() = 0;
@@ -66,7 +51,7 @@ class ASH_EXPORT ShellDelegate {
   virtual void OpenKeyboardShortcutHelpPage() const {}
 
   // Creator of Shell owns this; it's assumed this outlives Shell.
-  virtual ui::InputDeviceControllerClient* GetInputDeviceControllerClient() = 0;
+  virtual ws::InputDeviceControllerClient* GetInputDeviceControllerClient() = 0;
 };
 
 }  // namespace ash

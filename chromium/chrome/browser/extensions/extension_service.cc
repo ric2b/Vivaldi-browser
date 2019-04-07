@@ -23,7 +23,7 @@
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -60,7 +60,8 @@
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/theme_source.h"
-#include "chrome/browser/upgrade_detector.h"
+#include "chrome/browser/upgrade_detector/upgrade_detector.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_ids_map.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
@@ -126,12 +127,12 @@ using LoadErrorBehavior = ExtensionRegistrar::LoadErrorBehavior;
 
 namespace {
 
-// Wait this many seconds after an extensions becomes idle before updating it.
-const int kUpdateIdleDelay = 5;
+// Wait this long after an extensions becomes idle before updating it.
+constexpr base::TimeDelta kUpdateIdleDelay = base::TimeDelta::FromSeconds(5);
 
 // IDs of extensions that have been replaced by component extensions and need to
 // be uninstalled.
-const char* kMigratedExtensionIds[] = {
+const char* const kMigratedExtensionIds[] = {
     "boadgeojelhgndaghljhdicfkmllpafd",  // Google Cast
     "dliochdbjfkdbacpmhlcpmleaejidimm"   // Google Cast (Beta)
 };
@@ -148,6 +149,21 @@ void ExtensionService::CheckExternalUninstall(const std::string& id) {
     DCHECK(provider->IsReady());
     if (provider->HasExtension(id))
       return;  // Yup, known extension, don't uninstall.
+  }
+
+  // Historically, the code under //chrome/browser/extensions has
+  // unsurprisingly managed all extensions. Later, Progressive Web Apps (PWAs)
+  // were implemented on top of extensions, more out of convenience than out of
+  // principle. As of mid 2018, there is work underway to separate PWAs's
+  // implementation details from the //c/b/e code. During the transition
+  // period, PWA-extensions are no longer managed solely by //c/b/e code. We
+  // add a special case here so that //c/b/e code doesn't uninstall
+  // PWA-extensions that it doesn't otherwise know about.
+  //
+  // Long term, PWAs will be completely separate from extensions, and we can
+  // remove this cross-link.
+  if (web_app::ExtensionIdsMap::HasExtensionId(profile_->GetPrefs(), id)) {
+    return;
   }
 
   // We get the list of external extensions to check from preferences.
@@ -902,21 +918,21 @@ void ExtensionService::PostActivateExtension(
   // to make sure that the FaviconSource is registered with the
   // ChromeURLDataManager.
   if (permissions_data->HasHostPermission(GURL(chrome::kChromeUIFaviconURL))) {
-    FaviconSource* favicon_source = new FaviconSource(profile_);
-    content::URLDataSource::Add(profile_, favicon_source);
+    content::URLDataSource::Add(profile_,
+                                std::make_unique<FaviconSource>(profile_));
   }
 
   // Same for chrome://theme/ resources.
   if (permissions_data->HasHostPermission(GURL(chrome::kChromeUIThemeURL))) {
-    ThemeSource* theme_source = new ThemeSource(profile_);
-    content::URLDataSource::Add(profile_, theme_source);
+    content::URLDataSource::Add(profile_,
+                                std::make_unique<ThemeSource>(profile_));
   }
 
   // Same for chrome://thumb/ resources.
   if (permissions_data->HasHostPermission(
           GURL(chrome::kChromeUIThumbnailURL))) {
-    ThumbnailSource* thumbnail_source = new ThumbnailSource(profile_, false);
-    content::URLDataSource::Add(profile_, thumbnail_source);
+    content::URLDataSource::Add(
+        profile_, std::make_unique<ThumbnailSource>(profile_, false));
   }
 
   // Same for chrome://vivaldi-data/ resources.
@@ -1836,7 +1852,7 @@ void ExtensionService::Observe(int type,
                     base::IgnoreResult(
                         &ExtensionService::FinishDelayedInstallationIfReady),
                     AsWeakPtr(), *it, false /*install_immediately*/),
-                base::TimeDelta::FromSeconds(kUpdateIdleDelay));
+                kUpdateIdleDelay);
           }
         }
       }

@@ -39,6 +39,7 @@
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/page_scale_constraints_set.h"
@@ -64,15 +65,15 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/transforms/transform_state.h"
 #if defined(OS_MACOSX)
-#include "third_party/blink/renderer/platform/mac/scroll_animator_mac.h"
+#include "third_party/blink/renderer/core/scroll/scroll_animator_mac.h"
 #endif
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_layer_tree_view.h"
+#include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar_layer_delegate.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 #include "third_party/blink/renderer/platform/scroll/main_thread_scrolling_reason.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_animator_base.h"
-#include "third_party/blink/renderer/platform/scroll/scrollbar_layer_delegate.h"
-#include "third_party/blink/renderer/platform/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 using blink::WebRect;
@@ -278,8 +279,10 @@ static void UpdateLayerTouchActionRects(GraphicsLayer& layer) {
                                                      rect)) {
         continue;
       }
+      LayoutRect layout_rect = LayoutRect(rect.Rect());
+      layout_rect.MoveBy(-layer.GetOffsetFromTransformNode());
       touch_action_rects_in_layer_space.emplace_back(TouchActionRect(
-          LayoutRect(rect.Rect()), touch_action_rect.whitelisted_touch_action));
+          layout_rect, touch_action_rect.whitelisted_touch_action));
     }
   }
   layer.CcLayer()->SetTouchActionRegion(
@@ -527,10 +530,10 @@ bool ScrollingCoordinator::UpdateCompositedScrollOffset(
   return true;
 }
 
-bool ScrollingCoordinator::ScrollableAreaScrollLayerDidChange(
+void ScrollingCoordinator::ScrollableAreaScrollLayerDidChange(
     ScrollableArea* scrollable_area) {
   if (!page_ || !page_->MainFrame())
-    return false;
+    return;
 
   UpdateUserInputScrollable(scrollable_area);
 
@@ -613,7 +616,7 @@ bool ScrollingCoordinator::ScrollableAreaScrollLayerDidChange(
   }
   scrollable_area->LayerForScrollingDidChange(timeline);
 
-  return !!cc_layer;
+  return;
 }
 
 using GraphicsLayerHitTestRects =
@@ -841,7 +844,7 @@ void ScrollingCoordinator::Reset(LocalFrame* frame) {
 // (although that's not yet implemented - crbug.com/261307).
 void ScrollingCoordinator::SetTouchEventTargetRects(
     LocalFrame* frame,
-    LayerHitTestRects& layer_rects) {
+    const LayerHitTestRects& layer_rects) {
   TRACE_EVENT0("input", "ScrollingCoordinator::setTouchEventTargetRects");
 
   DCHECK(!RuntimeEnabledFeatures::PaintTouchActionRectsEnabled());

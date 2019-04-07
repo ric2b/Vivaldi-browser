@@ -48,4 +48,12 @@ bool DeviceInfo::CodecNeedsFlushWorkaround(MediaCodecBridge* codec) {
   return MediaCodecUtil::CodecNeedsFlushWorkaround(codec);
 }
 
+bool DeviceInfo::IsAsyncApiSupported() {
+  // Technically the base setCallback() API is available in L, but we
+  // need the version which accepts a Handler which is in M... but
+  // in M there's a MediaCodec bug that's not fixed until N :|
+  // https://crbug.com/873094 https://crbug.com/610523
+  return SdkVersion() >= base::android::SDK_VERSION_NOUGAT;
+}
+
 }  // namespace media

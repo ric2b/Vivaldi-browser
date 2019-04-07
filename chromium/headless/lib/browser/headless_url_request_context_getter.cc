@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "components/cookie_config/cookie_store_util.h"
 #include "content/public/browser/browser_thread.h"
@@ -137,8 +137,9 @@ HeadlessURLRequestContextGetter::GetURLRequestContext() {
         user_data_path_.Append(FILE_PATH_LITERAL("Cookies")), false, true,
         NULL);
     cookie_config.crypto_delegate = cookie_config::GetCookieCryptoDelegate();
+    // TODO(crbug.com/801910): Hook up logging by passing in a non-null netlog.
     std::unique_ptr<net::CookieStore> cookie_store =
-        CreateCookieStore(cookie_config);
+        CreateCookieStore(cookie_config, nullptr /* netlog*/);
     std::unique_ptr<net::ChannelIDService> channel_id_service =
         std::make_unique<net::ChannelIDService>(
             new net::DefaultChannelIDStore(nullptr));

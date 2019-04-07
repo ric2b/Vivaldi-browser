@@ -19,8 +19,6 @@
 
 #include "third_party/blink/renderer/core/svg/svg_animated_number_optional_number.h"
 
-#include "third_party/blink/renderer/core/svg/svg_element.h"
-
 namespace blink {
 
 SVGAnimatedNumberOptionalNumber::SVGAnimatedNumberOptionalNumber(
@@ -62,7 +60,7 @@ void SVGAnimatedNumberOptionalNumber::AnimationEnded() {
   second_number_->AnimationEnded();
 }
 
-bool SVGAnimatedNumberOptionalNumber::NeedsSynchronizeAttribute() {
+bool SVGAnimatedNumberOptionalNumber::NeedsSynchronizeAttribute() const {
   return first_number_->NeedsSynchronizeAttribute() ||
          second_number_->NeedsSynchronizeAttribute();
 }

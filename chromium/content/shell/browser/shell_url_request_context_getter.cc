@@ -13,7 +13,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "components/network_session_configurator/browser/network_session_configurator.h"
 #include "content/public/browser/browser_thread.h"
@@ -47,6 +47,41 @@
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
 namespace content {
+namespace {
+
+net::CertVerifier* g_cert_verifier_for_testing = nullptr;
+
+// A CertVerifier that forwards all requests to
+// |g_cert_verifier_for_profile_io_data_testing|. This is used to allow
+// BrowserContexts to have their own std::unique_ptr<net::CertVerifier> while
+// forwarding calls to the shared verifier.
+class WrappedCertVerifierForTesting : public net::CertVerifier {
+ public:
+  WrappedCertVerifierForTesting() = default;
+  ~WrappedCertVerifierForTesting() override = default;
+
+  // CertVerifier implementation
+  int Verify(const RequestParams& params,
+             net::CertVerifyResult* verify_result,
+             net::CompletionOnceCallback callback,
+             std::unique_ptr<Request>* out_req,
+             const net::NetLogWithSource& net_log) override {
+    verify_result->Reset();
+    if (!g_cert_verifier_for_testing)
+      return net::ERR_FAILED;
+    return g_cert_verifier_for_testing->Verify(
+        params, verify_result, std::move(callback), out_req, net_log);
+  }
+  void SetConfig(const Config& config) override {
+    if (!g_cert_verifier_for_testing)
+      return;
+    return g_cert_verifier_for_testing->SetConfig(config);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(WrappedCertVerifierForTesting);
+};
+}  // namespace
 
 ShellURLRequestContextGetter::ShellURLRequestContextGetter(
     bool ignore_certificate_errors,
@@ -83,6 +118,15 @@ void ShellURLRequestContextGetter::NotifyContextShuttingDown() {
   url_request_context_ = nullptr;  // deletes it
 }
 
+std::string ShellURLRequestContextGetter::GetAcceptLanguages() {
+  return "en-us,en";
+}
+
+void ShellURLRequestContextGetter::SetCertVerifierForTesting(
+    net::CertVerifier* cert_verifier) {
+  g_cert_verifier_for_testing = cert_verifier;
+}
+
 std::unique_ptr<net::NetworkDelegate>
 ShellURLRequestContextGetter::CreateNetworkDelegate() {
   return std::make_unique<ShellNetworkDelegate>();
@@ -90,6 +134,8 @@ ShellURLRequestContextGetter::CreateNetworkDelegate() {
 
 std::unique_ptr<net::CertVerifier>
 ShellURLRequestContextGetter::GetCertVerifier() {
+  if (g_cert_verifier_for_testing)
+    return std::make_unique<WrappedCertVerifierForTesting>();
   return net::CertVerifier::CreateDefault();
 }
 
@@ -119,14 +165,14 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
     builder.set_net_log(net_log_);
     builder.set_network_delegate(CreateNetworkDelegate());
     std::unique_ptr<net::CookieStore> cookie_store =
-        CreateCookieStore(CookieStoreConfig());
+        CreateCookieStore(CookieStoreConfig(), net_log_);
     std::unique_ptr<net::ChannelIDService> channel_id_service =
         std::make_unique<net::ChannelIDService>(
             new net::DefaultChannelIDStore(nullptr));
     cookie_store->SetChannelIDServiceID(channel_id_service->GetUniqueID());
     builder.SetCookieAndChannelIdStores(std::move(cookie_store),
                                         std::move(channel_id_service));
-    builder.set_accept_language("en-us,en");
+    builder.set_accept_language(GetAcceptLanguages());
     builder.set_user_agent(GetShellUserAgent());
 
     builder.SetCertVerifier(GetCertVerifier());
@@ -193,6 +239,9 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
             base::TimeDelta::FromMilliseconds(100);
       builder.set_reporting_policy(std::move(reporting_policy));
     }
+
+    builder.set_network_error_logging_enabled(
+        base::FeatureList::IsEnabled(network::features::kNetworkErrorLogging));
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
     builder.set_enable_brotli(true);

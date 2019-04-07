@@ -15,7 +15,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
@@ -31,6 +30,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabTestUtils;
 import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.DisableInTabbedMode;
@@ -59,6 +59,7 @@ public class BrandColorTest {
     private ToolbarPhone mToolbar;
     private ToolbarDataProvider mToolbarDataProvider;
     private int mDefaultColor;
+    private boolean mSupportsDarkStatusIcons;
 
     private static String getUrlWithBrandColor(String brandColor) {
         String brandColorMetaTag = TextUtils.isEmpty(brandColor)
@@ -87,9 +88,14 @@ public class BrandColorTest {
         });
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
                 && !SysUtils.isLowEndDevice()) {
-            final int expectedStatusBarColor = brandColor == mDefaultColor
-                    ? Color.BLACK
-                    : ColorUtils.getDarkenedColorForStatusBar(brandColor);
+            final int expectedStatusBarColor;
+            if (mSupportsDarkStatusIcons) {
+                expectedStatusBarColor = brandColor == mDefaultColor ? Color.WHITE : brandColor;
+            } else {
+                expectedStatusBarColor = brandColor == mDefaultColor
+                        ? Color.BLACK
+                        : ColorUtils.getDarkenedColorForStatusBar(brandColor);
+            }
             CriteriaHelper.pollUiThread(
                     Criteria.equals(expectedStatusBarColor, new Callable<Integer>() {
                         @Override
@@ -104,8 +110,12 @@ public class BrandColorTest {
         mActivityTestRule.startMainActivityWithURL(url);
         mToolbar = (ToolbarPhone) mActivityTestRule.getActivity().findViewById(R.id.toolbar);
         mToolbarDataProvider = mToolbar.getToolbarDataProvider();
-        mDefaultColor = ApiCompatibilityUtils.getColor(
-                mActivityTestRule.getActivity().getResources(), R.color.default_primary_color);
+        mDefaultColor =
+                ColorUtils.getDefaultThemeColor(mActivityTestRule.getActivity().getResources(),
+                        FeatureUtilities.isChromeModernDesignEnabled(), /* isIncognito =*/false);
+        // TODO(https://crbug.com/871805): Use helper class to determine whether dark status icons
+        // are supported.
+        mSupportsDarkStatusIcons = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M;
     }
 
     /**
@@ -251,7 +261,7 @@ public class BrandColorTest {
                 return mActivityTestRule.getActivity().getActivityTab().isShowingInterstitialPage();
             }
         });
-        checkForBrandColor(ApiCompatibilityUtils.getColor(
-                mActivityTestRule.getActivity().getResources(), R.color.default_primary_color));
+        checkForBrandColor(ColorUtils.getDefaultThemeColor(
+                mActivityTestRule.getActivity().getResources(), true, false));
     }
 }

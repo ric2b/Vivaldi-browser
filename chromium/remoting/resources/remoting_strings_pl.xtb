@@ -102,11 +102,11 @@ Informacje na temat prywatności znajdziesz w Polityce prywatności Google (http
 <translation id="3171922709365450819">To urządzenie nie jest obsługiwane przez tego klienta, ponieważ wymaga uwierzytelniania innej firmy.</translation>
 <translation id="3194245623920924351">Pulpit zdalny Chrome</translation>
 <translation id="3197730452537982411">Pulpit zdalny</translation>
+<translation id="3212472844831225214">• Dodano obsługę Androida 9.0 Pie.</translation>
 <translation id="324272851072175193">Prześlij te instrukcje e-mailem</translation>
 <translation id="3258789396564295715">Możesz bezpiecznie korzystać z tego komputera przez Pulpit zdalny Chrome.</translation>
 <translation id="3286521253923406898">Kontroler hosta funkcji Chromoting</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> chce wprowadzić zmiany.</translation>
-<translation id="331779822864701136">• Dodano obsługę Androida 8.0 Oreo.</translation>
 <translation id="332624996707057614">Edytuj nazwę komputera</translation>
 <translation id="3339299787263251426">Bezpieczny dostęp online do komputera</translation>
 <translation id="3360306038446926262">Okna</translation>
@@ -122,8 +122,9 @@ Informacje na temat prywatności znajdziesz w Polityce prywatności Google (http
 <translation id="369442766917958684">Offline.</translation>
 <translation id="3695446226812920698">Instrukcje</translation>
 <translation id="3718805989288361841">Wystąpił błąd związany z ustawieniami zasad dla Pulpitu zdalnego Chrome. Aby uzyskać pomoc, skontaktuj się z administratorem systemu.</translation>
-<translation id="3759645055923345178">Po zakończeniu konfiguracji będzie można uzyskiwać z tej strony dostęp do komputera poprzez wpisanie kodu PIN lub kodu dostępu.</translation>
 <translation id="3776024066357219166">Sesja Pulpitu zdalnego Chrome została zakończona.</translation>
+<translation id="3846148461359626420">• Lepsze działanie przesuwania i powiększania na iPhonie X.
+• Zwiększona stabilność i poprawki błędów.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Potwierdź poniżej swoje konto i kod PIN, by pozwolić na dostęp przez Pulpit zdalny Chrome.</translation>
 <translation id="3897092660631435901">Menu</translation>
@@ -137,6 +138,7 @@ Informacje na temat prywatności znajdziesz w Polityce prywatności Google (http
 <translation id="405887016757208221">Komputerowi zdalnemu nie udało się zainicjować sesji. Jeśli problem nie zniknie, spróbuj ponownie skonfigurować hosta.</translation>
 <translation id="4068946408131579958">Wszystkie połączenia</translation>
 <translation id="409800995205263688">UWAGA: ustawienia zasad zezwalają wyłącznie na połączenia między komputerami w Twojej sieci.</translation>
+<translation id="4126409073460786861">Po zakończeniu konfiguracji odśwież tę stronę. Gdy to zrobisz, dostęp do komputera będzie można uzyskiwać, wybierając urządzenie i wpisując kod PIN.</translation>
 <translation id="4145029455188493639">W tej chwili używasz konta <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Brak niektórych wymaganych komponentów. Upewnij się, że masz zainstalowaną najnowszą wersję oprogramowania, i spróbuj ponownie.</translation>
 <translation id="4156740505453712750">Aby zabezpieczyć dostęp do tego komputera, wybierz PIN złożony z <ph name="BOLD_START" />co najmniej sześciu cyfr<ph name="BOLD_END" />. Będzie on wymagany przy łączeniu się z innej lokalizacji.</translation>
@@ -145,7 +147,6 @@ Informacje na temat prywatności znajdziesz w Polityce prywatności Google (http
 <translation id="4207623512727273241">Najpierw uruchom instalatora.</translation>
 <translation id="4227991223508142681">Narzędzie konfiguracji hosta</translation>
 <translation id="4240294130679914010">Program do odinstalowywania hosta funkcji Chromoting</translation>
-<translation id="4249741460382919890">Ogólne poprawki i lepsza stabilność.</translation>
 <translation id="4277463233460010382">Ten komputer jest skonfigurowany do zezwalania jednemu lub wielu klientom na łączenie się bez podawania kodu PIN.</translation>
 <translation id="4277736576214464567">Kod dostępu jest nieprawidłowy. Spróbuj ponownie.</translation>
 <translation id="4361728918881830843">Aby umożliwić zdalne połączenia z innym komputerem, zainstaluj na nim Pulpit zdalny Chrome i kliknij „<ph name="BUTTON_NAME" />”.</translation>
@@ -271,6 +272,7 @@ PC</translation>
 <translation id="6998989275928107238">Do</translation>
 <translation id="7019153418965365059">Nieznany błąd hosta: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Pomoc zdalna</translation>
+<translation id="7026930240735156896">Wykonaj te instrukcje, by skonfigurować komputer do dostępu zdalnego</translation>
 <translation id="7038683108611689168">Pomóż nam udoskonalić Chromoting, zezwalając na gromadzenie przez nas statystyk użytkowania i raportów o awariach.</translation>
 <translation id="7067321367069083429">Ekran działa jak ekran dotykowy</translation>
 <translation id="7116737094673640201">Witamy w Pulpicie zdalnym Chrome</translation>
@@ -296,7 +298,6 @@ PC</translation>
 <translation id="7782471917492991422">Sprawdź ustawienia zarządzania zasilaniem komputera i upewnij się, że nie jest on skonfigurowany do przechodzenia podczas bezczynności w tryb uśpienia.</translation>
 <translation id="7810127880729796595">Pokaż statystyki (jakość połączenia: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Brak niektórych wymaganych komponentów. Upewnij się, że korzystasz z najnowszej wersji Chrome, i spróbuj ponownie.</translation>
-<translation id="7850909060902317210">Zainstaluj Pulpit zdalny Chrome i postępuj zgodnie z instrukcją, by ukończyć konfigurację</translation>
 <translation id="7868137160098754906">Wpisz kod PIN komputera zdalnego.</translation>
 <translation id="7869445566579231750">Nie masz uprawnień do uruchamiania tej aplikacji.</translation>
 <translation id="7895403300744144251">Zasady bezpieczeństwa obowiązujące na komputerze zdalnym nie zezwalają na nawiązywanie połączeń z Twojego konta.</translation>

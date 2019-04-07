@@ -197,6 +197,7 @@ enum Role {
   kImageMap,
   kInlineTextBox,
   kInputTime,
+  kKeyboard,
   kLabelText,
   kLayoutTable,
   kLayoutTableCell,
@@ -277,6 +278,7 @@ enum Role {
 
 enum State {
   kNone,
+  kAutofillAvailable,
   kCollapsed,
   kDefault,
   kEditable,

@@ -26,7 +26,7 @@ namespace chromeos {
 
 // ARC Kiosk splash screen minimum show time.
 constexpr base::TimeDelta kArcKioskSplashScreenMinTime =
-    base::TimeDelta::FromSeconds(3);
+    base::TimeDelta::FromSeconds(10);
 
 ArcKioskController::ArcKioskController(LoginDisplayHost* host, OobeUI* oobe_ui)
     : host_(host),
@@ -58,14 +58,13 @@ void ArcKioskController::CleanUp() {
   // Delegate is registered only when |profile_| is set.
   if (profile_)
     ArcKioskAppService::Get(profile_)->SetDelegate(nullptr);
-
-  host_->Finalize(base::OnceClosure());
 }
 
 void ArcKioskController::CloseSplashScreen() {
   if (!launched_)
     return;
   CleanUp();
+  host_->Finalize(base::OnceClosure());
   session_manager::SessionManager::Get()->SessionStarted();
 }
 

@@ -74,6 +74,8 @@ ChromeAPIPermissions::GetAllPermissions() const {
            APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kEnterpriseDeviceAttributes,
        "enterprise.deviceAttributes"},
+      {APIPermission::kEnterpriseHardwarePlatform,
+       "enterprise.hardwarePlatform"},
       {APIPermission::kEnterprisePlatformKeys, "enterprise.platformKeys"},
       {APIPermission::kFileBrowserHandler, "fileBrowserHandler",
        APIPermissionInfo::kFlagCannotBeOptional},
@@ -188,6 +190,7 @@ ChromeAPIPermissions::GetAllPermissions() const {
       {APIPermission::kResourcesPrivate, "resourcesPrivate",
        APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kSafeBrowsingPrivate, "safeBrowsingPrivate"},
+      {APIPermission::kArcAppsPrivate, "arcAppsPrivate"},
 
       // Full url access permissions.
       {APIPermission::kDebugger, "debugger",

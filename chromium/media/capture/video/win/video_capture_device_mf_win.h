@@ -68,6 +68,7 @@ class CAPTURE_EXPORT VideoCaptureDeviceMFWin : public VideoCaptureDevice {
                               int length,
                               base::TimeTicks reference_time,
                               base::TimeDelta timestamp);
+  void OnFrameDropped(VideoCaptureFrameDropReason reason);
   void OnEvent(IMFMediaEvent* media_event);
 
   using CreateMFPhotoCallbackCB =
@@ -108,8 +109,12 @@ class CAPTURE_EXPORT VideoCaptureDeviceMFWin : public VideoCaptureDevice {
   HRESULT FillCapabilities(IMFCaptureSource* source,
                            bool photo,
                            CapabilityList* capabilities);
-  void OnError(const base::Location& from_here, HRESULT hr);
-  void OnError(const base::Location& from_here, const char* message);
+  void OnError(VideoCaptureError error,
+               const base::Location& from_here,
+               HRESULT hr);
+  void OnError(VideoCaptureError error,
+               const base::Location& from_here,
+               const char* message);
 
   VideoFacingMode facing_mode_;
   CreateMFPhotoCallbackCB create_mf_photo_callback_;

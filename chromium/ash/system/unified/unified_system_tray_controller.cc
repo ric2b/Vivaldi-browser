@@ -41,8 +41,6 @@
 #include "ash/wm/lock_state_controller.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/session_manager_client.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/message_center/message_center.h"
 #include "ui/views/widget/widget.h"
@@ -64,7 +62,7 @@ UnifiedSystemTrayController::UnifiedSystemTrayController(
     : model_(model),
       bubble_(bubble),
       animation_(std::make_unique<gfx::SlideAnimation>(this)) {
-  animation_->Reset(model->expanded_on_open() ? 1.0 : 0.0);
+  animation_->Reset(model->IsExpandedOnOpen() ? 1.0 : 0.0);
   animation_->SetSlideDuration(kExpandAnimationDurationMs);
   animation_->SetTweenType(gfx::Tween::EASE_IN_OUT);
 }
@@ -73,7 +71,7 @@ UnifiedSystemTrayController::~UnifiedSystemTrayController() = default;
 
 UnifiedSystemTrayView* UnifiedSystemTrayController::CreateView() {
   DCHECK(!unified_view_);
-  unified_view_ = new UnifiedSystemTrayView(this, model_->expanded_on_open());
+  unified_view_ = new UnifiedSystemTrayView(this, model_->IsExpandedOnOpen());
   InitFeaturePods();
 
   volume_slider_controller_ =
@@ -119,9 +117,7 @@ void UnifiedSystemTrayController::HandleSignOutAction() {
 
 void UnifiedSystemTrayController::HandleLockAction() {
   Shell::Get()->metrics()->RecordUserMetricsAction(UMA_TRAY_LOCK_SCREEN);
-  chromeos::DBusThreadManager::Get()
-      ->GetSessionManagerClient()
-      ->RequestLockScreen();
+  Shell::Get()->session_controller()->LockScreen();
   CloseBubble();
 }
 
@@ -175,6 +171,11 @@ void UnifiedSystemTrayController::OnClearAllAnimationEnded() {
       message_center::MessageCenter::RemoveType::NON_PINNED);
 }
 
+void UnifiedSystemTrayController::OnMessageCenterVisibilityUpdated() {
+  if (bubble_)
+    bubble_->UpdateTransform();
+}
+
 void UnifiedSystemTrayController::BeginDrag(const gfx::Point& location) {
   drag_init_point_ = location;
   was_expanded_ = IsExpanded();
@@ -217,22 +218,9 @@ void UnifiedSystemTrayController::Fling(int velocity) {
   StartAnimation(velocity < 0);
 }
 
-void UnifiedSystemTrayController::ShowUserChooserWidget() {
-  // Don't allow user add or switch when CancelCastingDialog is open.
-  // See http://crrev.com/291276 and http://crbug.com/353170.
-  if (Shell::IsSystemModalWindowOpen())
+void UnifiedSystemTrayController::ShowUserChooserView() {
+  if (!IsUserChooserEnabled())
     return;
-
-  // Don't allow at login, lock or when adding a multi-profile user.
-  SessionController* session = Shell::Get()->session_controller();
-  if (session->IsUserSessionBlocked())
-    return;
-
-  // Don't show if we cannot add or switch users.
-  if (session->GetAddUserPolicy() != AddUserSessionPolicy::ALLOWED &&
-      session->NumberOfLoggedInUsers() <= 1)
-    return;
-
   unified_view_->SetDetailedView(new UserChooserView(this));
 }
 
@@ -309,6 +297,24 @@ void UnifiedSystemTrayController::EnsureExpanded() {
   animation_->Show();
 }
 
+bool UnifiedSystemTrayController::IsUserChooserEnabled() const {
+  // Don't allow user add or switch when CancelCastingDialog is open.
+  // See http://crrev.com/291276 and http://crbug.com/353170.
+  if (Shell::IsSystemModalWindowOpen())
+    return false;
+
+  // Don't allow at login, lock or when adding a multi-profile user.
+  SessionController* session = Shell::Get()->session_controller();
+  if (session->IsUserSessionBlocked())
+    return false;
+
+  // Don't show if we cannot add or switch users.
+  if (session->GetAddUserPolicy() != AddUserSessionPolicy::ALLOWED &&
+      session->NumberOfLoggedInUsers() <= 1)
+    return false;
+  return true;
+}
+
 void UnifiedSystemTrayController::AnimationEnded(
     const gfx::Animation* animation) {
   UpdateExpandedAmount();
@@ -323,6 +329,10 @@ void UnifiedSystemTrayController::AnimationCanceled(
     const gfx::Animation* animation) {
   animation_->Reset(std::round(animation_->GetCurrentValue()));
   UpdateExpandedAmount();
+}
+
+void UnifiedSystemTrayController::OnAudioSettingsButtonClicked() {
+  ShowAudioDetailedView();
 }
 
 void UnifiedSystemTrayController::InitFeaturePods() {
@@ -363,8 +373,14 @@ void UnifiedSystemTrayController::ShowDetailedView(
   UpdateExpandedAmount();
 
   unified_view_->SaveFeaturePodFocus();
+  views::FocusManager* manager = unified_view_->GetFocusManager();
+  if (manager && manager->GetFocusedView())
+    manager->ClearFocus();
+
   unified_view_->SetDetailedView(controller->CreateView());
   detailed_view_controller_ = std::move(controller);
+
+  bubble_->UpdateBubble();
 }
 
 void UnifiedSystemTrayController::UpdateExpandedAmount() {

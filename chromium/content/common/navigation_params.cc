@@ -36,7 +36,7 @@ CommonNavigationParams::CommonNavigationParams(
     const GURL& base_url_for_data_url,
     const GURL& history_url_for_data_url,
     PreviewsState previews_state,
-    const base::TimeTicks& navigation_start,
+    base::TimeTicks navigation_start,
     std::string method,
     const scoped_refptr<network::ResourceRequestBody>& post_data,
     base::Optional<SourceLocation> source_location,
@@ -44,7 +44,8 @@ CommonNavigationParams::CommonNavigationParams(
     bool started_from_context_menu,
     bool has_user_gesture,
     const std::vector<ContentSecurityPolicy>& initiator_csp,
-    const base::Optional<CSPSource>& initiator_self_source)
+    const base::Optional<CSPSource>& initiator_self_source,
+    base::TimeTicks input_start)
     : url(url),
       referrer(referrer),
       transition(transition),
@@ -62,7 +63,8 @@ CommonNavigationParams::CommonNavigationParams(
       started_from_context_menu(started_from_context_menu),
       has_user_gesture(has_user_gesture),
       initiator_csp(initiator_csp),
-      initiator_self_source(initiator_self_source) {
+      initiator_self_source(initiator_self_source),
+      input_start(input_start) {
   // |method != "POST"| should imply absence of |post_data|.
   if (method != "POST" && post_data) {
     NOTREACHED();

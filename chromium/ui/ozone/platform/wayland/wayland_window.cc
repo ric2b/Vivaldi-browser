@@ -71,11 +71,9 @@ WaylandWindow::WaylandWindow(PlatformWindowDelegate* delegate,
     : delegate_(delegate),
       connection_(connection),
       xdg_shell_objects_factory_(new XDGShellObjectFactory()),
-      state_(PlatformWindowState::PLATFORM_WINDOW_STATE_UNKNOWN) {}
+      state_(PlatformWindowState::PLATFORM_WINDOW_STATE_NORMAL) {}
 
 WaylandWindow::~WaylandWindow() {
-  delegate_->OnAcceleratedWidgetDestroying();
-
   PlatformEventSource::GetInstance()->RemovePlatformEventDispatcher(this);
   connection_->RemoveWindow(surface_.id());
 
@@ -84,8 +82,6 @@ WaylandWindow::~WaylandWindow() {
 
   if (has_pointer_focus_)
     connection_->pointer()->reset_window_with_pointer_focus();
-
-  delegate_->OnAcceleratedWidgetDestroyed();
 }
 
 // static
@@ -98,8 +94,7 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
   DCHECK(xdg_shell_objects_factory_);
 
   bounds_ = properties.bounds;
-  if (properties.parent_widget != gfx::kNullAcceleratedWidget)
-    parent_window_ = GetParentWindow(properties.parent_widget);
+  parent_window_ = GetParentWindow(properties.parent_widget);
 
   surface_.reset(wl_compositor_create_surface(connection_->compositor()));
   if (!surface_) {
@@ -130,7 +125,7 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
 
   connection_->AddWindow(surface_.id(), this);
   PlatformEventSource::GetInstance()->AddPlatformEventDispatcher(this);
-  delegate_->OnAcceleratedWidgetAvailable(surface_.id(), 1.f);
+  delegate_->OnAcceleratedWidgetAvailable(surface_.id());
 
   return true;
 }
@@ -294,7 +289,8 @@ void WaylandWindow::ToggleFullscreen() {
     // unless they are empty, because |bounds_| can contain bounds of a
     // maximized window instead.
     if (restored_bounds_.IsEmpty())
-      restored_bounds_ = bounds_;
+      SetRestoredBoundsInPixels(bounds_);
+
     xdg_surface_->SetFullscreen();
   } else {
     // Check the comment above. If it's not handled synchronously, media files
@@ -319,7 +315,7 @@ void WaylandWindow::Maximize() {
   // state to a maximize state, and then preserved to be the same, when changing
   // from maximized to fullscreen and back to a maximized state.
   if (restored_bounds_.IsEmpty())
-    restored_bounds_ = bounds_;
+    SetRestoredBoundsInPixels(bounds_);
 
   xdg_surface_->SetMaximized();
   connection_->ScheduleFlush();
@@ -380,6 +376,14 @@ void WaylandWindow::ConfineCursorToBounds(const gfx::Rect& bounds) {
 PlatformImeController* WaylandWindow::GetPlatformImeController() {
   NOTIMPLEMENTED();
   return nullptr;
+}
+
+void WaylandWindow::SetRestoredBoundsInPixels(const gfx::Rect& bounds) {
+  restored_bounds_ = bounds;
+}
+
+gfx::Rect WaylandWindow::GetRestoredBoundsInPixels() const {
+  return restored_bounds_;
 }
 
 bool WaylandWindow::CanDispatchEvent(const PlatformEvent& event) {
@@ -470,9 +474,29 @@ void WaylandWindow::HandleSurfaceConfigure(int32_t width,
   // most recent bounds, and have WaylandConnection call ApplyPendingBounds
   // when it has finished processing events. We may get many configure events
   // in a row during an interactive resize, and only the last one matters.
-  SetPendingBounds(width, height);
+  //
+  // Width or height set to 0 means that we should decide on width and height by
+  // ourselves, but we don't want to set them to anything else. Use restored
+  // bounds size or the current bounds.
+  //
+  // Note: if the browser was started with --start-fullscreen and a user exits
+  // the fullscreen mode, wayland may set the width and height to be 1. Instead,
+  // explicitly set the bounds to the current desired ones or the previous
+  // bounds.
+  if (width <= 1 || height <= 1) {
+    pending_bounds_.set_size(restored_bounds_.IsEmpty()
+                                 ? GetBounds().size()
+                                 : restored_bounds_.size());
+  } else {
+    pending_bounds_ = gfx::Rect(0, 0, width, height);
+  }
 
-  if (old_state != state_)
+  const bool is_normal = !IsFullscreen() && !IsMaximized();
+  const bool state_changed = old_state != state_;
+  if (is_normal && state_changed)
+    restored_bounds_ = gfx::Rect();
+
+  if (state_changed)
     delegate_->OnWindowStateChanged(state_);
 
   if (did_active_change)
@@ -496,27 +520,6 @@ bool WaylandWindow::IsMaximized() const {
 
 bool WaylandWindow::IsFullscreen() const {
   return state_ == PlatformWindowState::PLATFORM_WINDOW_STATE_FULLSCREEN;
-}
-
-void WaylandWindow::SetPendingBounds(int32_t width, int32_t height) {
-  // Width or height set to 0 means that we should decide on width and height by
-  // ourselves, but we don't want to set them to anything else. Use restored
-  // bounds size or the current bounds.
-  //
-  // Note: if the browser was started with --start-fullscreen and a user exits
-  // the fullscreen mode, wayland may set the width and height to be 1. Instead,
-  // explicitly set the bounds to the current desired ones or the previous
-  // bounds.
-  if (width <= 1 || height <= 1) {
-    pending_bounds_.set_size(restored_bounds_.IsEmpty()
-                                 ? GetBounds().size()
-                                 : restored_bounds_.size());
-  } else {
-    pending_bounds_ = gfx::Rect(0, 0, width, height);
-  }
-
-  if (!IsFullscreen() && !IsMaximized())
-    restored_bounds_ = gfx::Rect();
 }
 
 WaylandWindow* WaylandWindow::GetParentWindow(

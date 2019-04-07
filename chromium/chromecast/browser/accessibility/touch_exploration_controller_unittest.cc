@@ -78,27 +78,41 @@ int Factorial(int n) {
 class MockTouchExplorationControllerDelegate
     : public TouchExplorationControllerDelegate {
  public:
+  void HandleAccessibilityGesture(ax::mojom::Gesture gesture) override {
+    last_gesture_ = gesture;
+  }
+  void HandleTap(const gfx::Point touch_location) override {
+    last_tap_ = touch_location;
+  }
+
+  const std::vector<float> VolumeChanges() const { return volume_changes_; }
+  ax::mojom::Gesture GetLastGesture() const { return last_gesture_; }
+  void ResetLastGesture() { last_gesture_ = ax::mojom::Gesture::kNone; }
+
+ private:
+  std::vector<float> volume_changes_;
+  ax::mojom::Gesture last_gesture_ = ax::mojom::Gesture::kNone;
+  gfx::Point last_tap_;
+};
+
+class MockAccessibilitySoundPlayer : public AccessibilitySoundPlayer {
+ public:
+  MockAccessibilitySoundPlayer() {}
+  ~MockAccessibilitySoundPlayer() override {}
+
   void PlayPassthroughEarcon() override { ++num_times_passthrough_played_; }
   void PlayExitScreenEarcon() override { ++num_times_exit_screen_played_; }
   void PlayEnterScreenEarcon() override { ++num_times_enter_screen_played_; }
   void PlayTouchTypeEarcon() override { ++num_times_touch_type_sound_played_; }
-  void HandleAccessibilityGesture(ax::mojom::Gesture gesture) override {
-    last_gesture_ = gesture;
-  }
 
-  const std::vector<float> VolumeChanges() const { return volume_changes_; }
-  size_t NumAdjustSounds() const { return num_times_adjust_sound_played_; }
   size_t NumPassthroughSounds() const { return num_times_passthrough_played_; }
   size_t NumExitScreenSounds() const { return num_times_exit_screen_played_; }
   size_t NumEnterScreenSounds() const { return num_times_enter_screen_played_; }
   size_t NumTouchTypeSounds() const {
     return num_times_touch_type_sound_played_;
   }
-  ax::mojom::Gesture GetLastGesture() const { return last_gesture_; }
-  void ResetLastGesture() { last_gesture_ = ax::mojom::Gesture::kNone; }
 
   void ResetCountersToZero() {
-    num_times_adjust_sound_played_ = 0;
     num_times_passthrough_played_ = 0;
     num_times_exit_screen_played_ = 0;
     num_times_enter_screen_played_ = 0;
@@ -106,13 +120,10 @@ class MockTouchExplorationControllerDelegate
   }
 
  private:
-  std::vector<float> volume_changes_;
-  size_t num_times_adjust_sound_played_ = 0;
   size_t num_times_passthrough_played_ = 0;
   size_t num_times_exit_screen_played_ = 0;
   size_t num_times_enter_screen_played_ = 0;
   size_t num_times_touch_type_sound_played_ = 0;
-  ax::mojom::Gesture last_gesture_ = ax::mojom::Gesture::kNone;
 };
 
 }  // namespace
@@ -128,12 +139,6 @@ class TouchExplorationControllerTestApi {
     DCHECK(touch_exploration_controller_->tap_timer_.IsRunning());
     touch_exploration_controller_->tap_timer_.Stop();
     touch_exploration_controller_->OnTapTimerFired();
-  }
-
-  void CallPassthroughTimerNowForTesting() {
-    DCHECK(touch_exploration_controller_->passthrough_timer_.IsRunning());
-    touch_exploration_controller_->passthrough_timer_.Stop();
-    touch_exploration_controller_->OnPassthroughTimerFired();
   }
 
   void CallTapTimerNowIfRunningForTesting() {
@@ -156,10 +161,6 @@ class TouchExplorationControllerTestApi {
   bool IsInTwoFingerTapStateForTesting() const {
     return touch_exploration_controller_->state_ ==
            touch_exploration_controller_->TWO_FINGER_TAP;
-  }
-  bool IsInCornerPassthroughStateForTesting() const {
-    return touch_exploration_controller_->state_ ==
-           touch_exploration_controller_->CORNER_PASSTHROUGH;
   }
 
   gfx::Rect BoundsOfRootWindowInDIPForTesting() const {
@@ -192,8 +193,18 @@ class TouchExplorationControllerTestApi {
     touch_exploration_controller_->SetExcludeBounds(bounds);
   }
 
-  void SetLiftActivationBounds(const gfx::Rect& bounds) {
-    touch_exploration_controller_->SetLiftActivationBounds(bounds);
+  void InstallRewriter(aura::Window* window) {
+    if (touch_exploration_controller_ && window) {
+      window->GetHost()->GetEventSource()->AddEventRewriter(
+          touch_exploration_controller_.get());
+    }
+  }
+
+  void RemoveRewriter(aura::Window* window) {
+    if (touch_exploration_controller_ && window) {
+      window->GetHost()->GetEventSource()->RemoveEventRewriter(
+          touch_exploration_controller_.get());
+    }
   }
 
  private:
@@ -280,11 +291,6 @@ class TouchExplorationTest : public aura::test::AuraTestBase {
     touch_exploration_controller_->CallTapTimerNowForTesting();
   }
 
-  void AdvanceSimulatedTimePastPassthroughDelay() {
-    simulated_clock_.Advance(base::TimeDelta::FromMilliseconds(1000));
-    touch_exploration_controller_->CallPassthroughTimerNowForTesting();
-  }
-
   void AdvanceSimulatedTimePastPotentialTapDelay() {
     simulated_clock_.Advance(base::TimeDelta::FromMilliseconds(1000));
     touch_exploration_controller_->CallTapTimerNowIfRunningForTesting();
@@ -296,10 +302,13 @@ class TouchExplorationTest : public aura::test::AuraTestBase {
 
   void SwitchTouchExplorationMode(bool on) {
     if (!on && touch_exploration_controller_.get()) {
+      touch_exploration_controller_->RemoveRewriter(root_window());
       touch_exploration_controller_.reset();
     } else if (on && !touch_exploration_controller_.get()) {
-      touch_exploration_controller_.reset(new TouchExplorationControllerTestApi(
-          new TouchExplorationController(root_window(), &delegate_)));
+      touch_exploration_controller_.reset(
+          new TouchExplorationControllerTestApi(new TouchExplorationController(
+              root_window(), &delegate_, &accessibility_sound_player_)));
+      touch_exploration_controller_->InstallRewriter(root_window());
       cursor_client()->ShowCursor();
       cursor_client()->DisableMouseEvents();
     }
@@ -312,50 +321,6 @@ class TouchExplorationTest : public aura::test::AuraTestBase {
     generator_->Dispatch(&touch_press);
     AdvanceSimulatedTimePastTapDelay();
     EXPECT_TRUE(IsInTouchToMouseMode());
-  }
-
-  // Checks that Corner Passthrough is working. Assumes that corner is the
-  // bottom left corner or the bottom right corner.
-  void AssertCornerPassthroughWorking(gfx::Point corner) {
-    ASSERT_EQ(0U, delegate_.NumPassthroughSounds());
-
-    ui::TouchEvent first_press(
-        ui::ET_TOUCH_PRESSED, corner, Now(),
-        ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
-    generator_->Dispatch(&first_press);
-
-    AdvanceSimulatedTimePastPassthroughDelay();
-    EXPECT_FALSE(IsInGestureInProgressState());
-    EXPECT_FALSE(IsInTouchToMouseMode());
-    EXPECT_TRUE(IsInCornerPassthroughState());
-
-    gfx::Rect window = BoundsOfRootWindowInDIP();
-    // The following events should be passed through.
-    gfx::Point passthrough(window.right() / 2, window.bottom() / 2);
-    ui::TouchEvent passthrough_press(
-        ui::ET_TOUCH_PRESSED, passthrough, Now(),
-        ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 1));
-    ASSERT_EQ(1U, delegate_.NumPassthroughSounds());
-    generator_->Dispatch(&passthrough_press);
-    generator_->ReleaseTouchId(1);
-    generator_->PressTouchId(1);
-    EXPECT_FALSE(IsInGestureInProgressState());
-    EXPECT_TRUE(IsInCornerPassthroughState());
-
-    std::vector<ui::LocatedEvent*> captured_events = GetCapturedLocatedEvents();
-    ASSERT_EQ(3U, captured_events.size());
-    EXPECT_EQ(ui::ET_TOUCH_PRESSED, captured_events[0]->type());
-    EXPECT_EQ(ui::ET_TOUCH_RELEASED, captured_events[1]->type());
-    EXPECT_EQ(ui::ET_TOUCH_PRESSED, captured_events[2]->type());
-    generator_->ReleaseTouchId(1);
-    ClearCapturedEvents();
-
-    generator_->ReleaseTouchId(0);
-    captured_events = GetCapturedLocatedEvents();
-    ASSERT_EQ(0U, captured_events.size());
-    EXPECT_FALSE(IsInTouchToMouseMode());
-    EXPECT_FALSE(IsInCornerPassthroughState());
-    ClearCapturedEvents();
   }
 
   bool IsInTouchToMouseMode() {
@@ -376,11 +341,6 @@ class TouchExplorationTest : public aura::test::AuraTestBase {
 
   bool IsInTwoFingerTapState() {
     return touch_exploration_controller_->IsInTwoFingerTapStateForTesting();
-  }
-
-  bool IsInCornerPassthroughState() {
-    return touch_exploration_controller_
-        ->IsInCornerPassthroughStateForTesting();
   }
 
   gfx::Rect BoundsOfRootWindowInDIP() {
@@ -409,14 +369,11 @@ class TouchExplorationTest : public aura::test::AuraTestBase {
     touch_exploration_controller_->SetExcludeBounds(bounds);
   }
 
-  void SetLiftActivationBounds(const gfx::Rect& bounds) {
-    touch_exploration_controller_->SetLiftActivationBounds(bounds);
-  }
-
   std::unique_ptr<ui::test::EventGenerator> generator_;
   ui::GestureDetector::Config gesture_detector_config_;
   base::SimpleTestTickClock simulated_clock_;
   MockTouchExplorationControllerDelegate delegate_;
+  MockAccessibilitySoundPlayer accessibility_sound_player_;
 
  private:
   EventCapturer event_capturer_;
@@ -1716,108 +1673,6 @@ TEST_F(TouchExplorationTest, TwoFingerTapAndMoveSecondFinger) {
   EXPECT_FALSE(IsInTwoFingerTapState());
 }
 
-// Corner passthrough should turn on if the user first holds down on either the
-// right or left corner past a delay and then places a finger anywhere else on
-// the screen.
-TEST_F(TouchExplorationTest, ActivateLeftCornerPassthrough) {
-  SwitchTouchExplorationMode(true);
-
-  gfx::Rect window = BoundsOfRootWindowInDIP();
-  gfx::Point left_corner(
-      (GetLeavingDistanceFromEdge() + GetMaxDistanceFromEdge()) / 2,
-      window.bottom() -
-          (GetLeavingDistanceFromEdge() + GetMaxDistanceFromEdge()) / 2);
-  AssertCornerPassthroughWorking(left_corner);
-}
-
-TEST_F(TouchExplorationTest, ActivateRightCornerPassthrough) {
-  SwitchTouchExplorationMode(true);
-
-  gfx::Rect window = BoundsOfRootWindowInDIP();
-  gfx::Point right_corner(
-      window.right() -
-          (GetLeavingDistanceFromEdge() + GetMaxDistanceFromEdge()) / 2,
-      window.bottom() -
-          (GetLeavingDistanceFromEdge() + GetMaxDistanceFromEdge()) / 2);
-  AssertCornerPassthroughWorking(right_corner);
-}
-
-// Earcons should play if the user slides off the screen or enters the screen
-// from the edge.
-TEST_F(TouchExplorationTest, EnterEarconPlays) {
-  SwitchTouchExplorationMode(true);
-
-  gfx::Rect window = BoundsOfRootWindowInDIP();
-
-  gfx::Point upper_left_corner(0, 0);
-  gfx::Point upper_right_corner(window.right(), 0);
-  gfx::Point left_edge(0, 140);
-  gfx::Point right_edge(window.right(), 140);
-  gfx::Point top_edge(140, 0);
-  gfx::Point bottom_edge(140, window.bottom());
-
-  std::vector<gfx::Point> locations;
-  locations.push_back(upper_left_corner);
-  locations.push_back(upper_right_corner);
-  locations.push_back(left_edge);
-  locations.push_back(right_edge);
-  locations.push_back(top_edge);
-  locations.push_back(bottom_edge);
-
-  for (std::vector<gfx::Point>::const_iterator point = locations.begin();
-       point != locations.end(); ++point) {
-    ui::TouchEvent touch_event(
-        ui::ET_TOUCH_PRESSED, *point, Now(),
-        ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 1));
-
-    generator_->Dispatch(&touch_event);
-    ASSERT_EQ(1U, delegate_.NumEnterScreenSounds());
-    generator_->ReleaseTouchId(1);
-    delegate_.ResetCountersToZero();
-  }
-}
-
-TEST_F(TouchExplorationTest, ExitEarconPlays) {
-  SwitchTouchExplorationMode(true);
-
-  // On the device, it cannot actually tell if the finger has left the screen or
-  // not. If the finger has left the screen, it reads it as a release that
-  // occurred very close to the edge of the screen even if the finger is still
-  // technically touching the moniter. To simulate this, a release that occurs
-  // close to the edge is dispatched.
-  gfx::Point initial_press(100, 200);
-  gfx::Rect window = BoundsOfRootWindowInDIP();
-
-  gfx::Point upper_left_corner(0, 0);
-  gfx::Point upper_right_corner(window.right(), 0);
-  gfx::Point lower_left_corner(0, window.bottom());
-  gfx::Point lower_right_corner(window.right(), window.bottom());
-  gfx::Point left_edge(0, 40);
-  gfx::Point right_edge(window.right(), 40);
-  gfx::Point top_edge(40, 0);
-  gfx::Point bottom_edge(40, window.bottom());
-
-  std::vector<gfx::Point> locations;
-  locations.push_back(upper_left_corner);
-  locations.push_back(upper_right_corner);
-  locations.push_back(lower_left_corner);
-  locations.push_back(lower_right_corner);
-  locations.push_back(left_edge);
-  locations.push_back(right_edge);
-  locations.push_back(top_edge);
-  locations.push_back(bottom_edge);
-
-  for (std::vector<gfx::Point>::const_iterator point = locations.begin();
-       point != locations.end(); ++point) {
-    generator_->PressTouch();
-    generator_->MoveTouch(initial_press);
-    generator_->MoveTouch(*point);
-    generator_->ReleaseTouch();
-    ASSERT_EQ(1U, delegate_.NumExitScreenSounds());
-    delegate_.ResetCountersToZero();
-  }
-}
-
 TEST_F(TouchExplorationTest, ExclusionArea) {
   SwitchTouchExplorationMode(true);
 
@@ -1900,89 +1755,6 @@ TEST_F(TouchExplorationTest, ExclusionArea) {
     EXPECT_EQ(ui::ET_MOUSE_MOVED, GetCapturedEvents()[0]->type());
     ClearCapturedEvents();
   }
-}
-
-TEST_F(TouchExplorationTest, SingleTapInLiftActivationArea) {
-  SwitchTouchExplorationMode(true);
-
-  gfx::Rect lift_activation = BoundsOfRootWindowInDIP();
-  lift_activation.Inset(0, 0, 0, lift_activation.CenterPoint().y());
-  SetLiftActivationBounds(lift_activation);
-
-  // Tap at one location, and get tap and mouse move events.
-  gfx::Point tap_location = lift_activation.CenterPoint();
-
-  // The user has to have previously selected something.
-  SetTouchAccessibilityAnchorPoint(tap_location);
-
-  generator_->set_current_location(tap_location);
-  generator_->PressTouchId(1);
-  generator_->ReleaseTouchId(1);
-  AdvanceSimulatedTimePastTapDelay();
-
-  const EventList& captured_events = GetCapturedEvents();
-  ASSERT_EQ(3U, captured_events.size());
-  EXPECT_EQ(ui::ET_TOUCH_PRESSED, captured_events[0]->type());
-  EXPECT_EQ(ui::ET_TOUCH_RELEASED, captured_events[1]->type());
-  EXPECT_EQ(ui::ET_MOUSE_MOVED, captured_events[2]->type());
-  ClearCapturedEvents();
-
-  gfx::Point out_tap_location(tap_location.x(), lift_activation.bottom() + 20);
-  SetTouchAccessibilityAnchorPoint(out_tap_location);
-  generator_->set_current_location(out_tap_location);
-  generator_->PressTouchId(1);
-  generator_->ReleaseTouchId(1);
-  AdvanceSimulatedTimePastTapDelay();
-
-  const EventList& out_captured_events = GetCapturedEvents();
-  ASSERT_EQ(1U, out_captured_events.size());
-  EXPECT_EQ(ui::ET_MOUSE_MOVED, out_captured_events[0]->type());
-}
-
-TEST_F(TouchExplorationTest, TouchExploreLiftInLiftActivationArea) {
-  SwitchTouchExplorationMode(true);
-
-  gfx::Rect lift_activation = BoundsOfRootWindowInDIP();
-  lift_activation.Inset(0, 0, 0, lift_activation.CenterPoint().y());
-  SetLiftActivationBounds(lift_activation);
-
-  // Explore at one location, and get tap and mouse move events.
-  gfx::Point tap_location = lift_activation.CenterPoint();
-  EnterTouchExplorationModeAtLocation(tap_location);
-  ClearCapturedEvents();
-  ASSERT_EQ(0U, delegate_.NumTouchTypeSounds());
-
-  // A touch release should trigger a tap.
-  ui::TouchEvent touch_explore_release(
-      ui::ET_TOUCH_RELEASED, tap_location, Now(),
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
-  generator_->Dispatch(&touch_explore_release);
-  AdvanceSimulatedTimePastTapDelay();
-
-  const EventList& captured_events = GetCapturedEvents();
-  ASSERT_EQ(3U, captured_events.size());
-  EXPECT_EQ(ui::ET_TOUCH_PRESSED, captured_events[0]->type());
-  EXPECT_EQ(ui::ET_TOUCH_RELEASED, captured_events[1]->type());
-  EXPECT_EQ(ui::ET_MOUSE_MOVED, captured_events[2]->type());
-  ASSERT_EQ(1U, delegate_.NumTouchTypeSounds());
-  ClearCapturedEvents();
-  delegate_.ResetCountersToZero();
-
-  // Touch explore inside the activation bounds, but lift outside.
-  gfx::Point out_tap_location(tap_location.x(), lift_activation.bottom() + 20);
-  SetTouchAccessibilityAnchorPoint(out_tap_location);
-  EnterTouchExplorationModeAtLocation(tap_location);
-  ClearCapturedEvents();
-  ui::TouchEvent out_touch_explore_release(
-      ui::ET_TOUCH_RELEASED, out_tap_location, Now(),
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
-  generator_->Dispatch(&out_touch_explore_release);
-  AdvanceSimulatedTimePastTapDelay();
-
-  const EventList& out_captured_events = GetCapturedEvents();
-  ASSERT_EQ(1U, out_captured_events.size());
-  EXPECT_EQ(ui::ET_MOUSE_MOVED, out_captured_events[0]->type());
-  ASSERT_EQ(0U, delegate_.NumTouchTypeSounds());
 }
 
 // Ensure that any touch release events received after

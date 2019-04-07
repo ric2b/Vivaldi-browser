@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "chrome/browser/chromeos/policy/affiliated_invalidation_service_provider.h"
+#include "components/invalidation/public/identity_provider.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 
@@ -78,6 +79,10 @@ class AffiliatedInvalidationServiceProviderImpl
   std::unique_ptr<InvalidationServiceObserver>
       device_invalidation_service_observer_;
 
+  // The |identity_provider_| must be declared before |invalidation_service_|
+  // becaise the service has a pointer to it.
+  std::unique_ptr<invalidation::IdentityProvider> identity_provider_;
+
   // State observers for logged-in users' invalidation services.
   std::vector<std::unique_ptr<InvalidationServiceObserver>>
       profile_invalidation_service_observers_;
@@ -87,7 +92,7 @@ class AffiliatedInvalidationServiceProviderImpl
   // for use.
   invalidation::InvalidationService* invalidation_service_;
 
-  base::ObserverList<Consumer, true> consumers_;
+  base::ObserverList<Consumer, true>::Unchecked consumers_;
   int consumer_count_;
 
   bool is_shut_down_;

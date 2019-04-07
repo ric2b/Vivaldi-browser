@@ -30,7 +30,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
-#include "third_party/blink/renderer/platform/scroll/scrollbar_theme.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 
 namespace blink {
 
@@ -88,7 +88,7 @@ void Settings::SetTextAutosizingEnabled(bool text_autosizing_enabled) {
   Invalidate(SettingsDelegate::kTextAutosizingChange);
 }
 
-// FIXME: Move to Settings.in once make_settings can understand IntSize.
+// TODO: Move to Settings.json5 once make_settings can understand IntSize.
 void Settings::SetTextAutosizingWindowSizeOverride(
     const IntSize& text_autosizing_window_size_override) {
   if (text_autosizing_window_size_override_ ==

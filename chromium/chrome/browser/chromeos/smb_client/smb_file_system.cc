@@ -10,7 +10,7 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/chromeos/file_system_provider/service.h"
 #include "chrome/browser/chromeos/smb_client/smb_errors.h"
 #include "chrome/browser/chromeos/smb_client/smb_file_system_id.h"
@@ -22,6 +22,8 @@
 namespace chromeos {
 
 namespace {
+
+using file_system_provider::ProvidedFileSystemInterface;
 
 // This is a bogus data URI.
 // The Files app will attempt to download a whole image to create a thumbnail
@@ -38,7 +40,12 @@ constexpr uint32_t kReadDirectoryInitialBatchSize = 64;
 // Maximum number of entries to send at a time for read directory,
 constexpr uint32_t kReadDirectoryMaxBatchSize = 2048;
 
-using file_system_provider::ProvidedFileSystemInterface;
+constexpr ProvidedFileSystemInterface::MetadataFieldMask kRequestableFields =
+    ProvidedFileSystemInterface::MetadataField::METADATA_FIELD_IS_DIRECTORY |
+    ProvidedFileSystemInterface::MetadataField::METADATA_FIELD_NAME |
+    ProvidedFileSystemInterface::MetadataField::METADATA_FIELD_SIZE |
+    ProvidedFileSystemInterface::MetadataField::
+        METADATA_FIELD_MODIFICATION_TIME;
 
 bool RequestedIsDirectory(
     ProvidedFileSystemInterface::MetadataFieldMask fields) {
@@ -67,6 +74,12 @@ bool RequestedThumbnail(ProvidedFileSystemInterface::MetadataFieldMask fields) {
          ProvidedFileSystemInterface::MetadataField::METADATA_FIELD_THUMBNAIL;
 }
 
+bool IsRedundantRequest(ProvidedFileSystemInterface::MetadataFieldMask fields) {
+  // If there isn't at least 1 requestable field there is no point doing a
+  // network request.
+  return (fields & kRequestableFields) == 0;
+}
+
 // Metrics recording.
 void RecordReadDirectoryCount(int count) {
   UMA_HISTOGRAM_COUNTS_100000("NativeSmbFileShare.ReadDirectoryCount", count);
@@ -88,6 +101,10 @@ filesystem::mojom::FsFileType MapEntryType(bool is_directory) {
 }
 
 constexpr size_t kTaskQueueCapacity = 2;
+
+std::unique_ptr<TempFileManager> CreateTempFileManager() {
+  return std::make_unique<TempFileManager>();
+}
 
 }  // namespace
 
@@ -170,9 +187,13 @@ AbortCallback SmbFileSystem::GetMetadata(
     const base::FilePath& entry_path,
     ProvidedFileSystemInterface::MetadataFieldMask fields,
     ProvidedFileSystemInterface::GetMetadataCallback callback) {
+  if (IsRedundantRequest(fields)) {
+    return HandleSyncRedundantGetMetadata(fields, std::move(callback));
+  }
+
   auto reply =
       base::BindOnce(&SmbFileSystem::HandleRequestGetMetadataEntryCallback,
-                     AsWeakPtr(), fields, callback);
+                     AsWeakPtr(), fields, std::move(callback));
   SmbTask task = base::BindOnce(&SmbProviderClient::GetMetadataEntry,
                                 GetWeakSmbProviderClient(), GetMountId(),
                                 entry_path, std::move(reply));
@@ -355,11 +376,10 @@ AbortCallback SmbFileSystem::WriteFile(
 
   const std::vector<uint8_t> data(buffer->data(), buffer->data() + length);
   if (!temp_file_manager_) {
-    SmbTask task =
-        base::BindOnce(base::IgnoreResult(&SmbFileSystem::CallWriteFile),
-                       base::Unretained(this), file_handle, std::move(data),
-                       offset, length, std::move(callback));
-    InitTempFileManagerAndExecuteTask(std::move(task));
+    SmbTask task = base::BindOnce(
+        base::IgnoreResult(&SmbFileSystem::CallWriteFile), AsWeakPtr(),
+        file_handle, std::move(data), offset, length, std::move(callback));
+    CreateTempFileManagerAndExecuteTask(std::move(task));
     // The call to init temp_file_manager_ will not be abortable since it is
     // asynchronous.
     return CreateAbortCallback();
@@ -368,17 +388,27 @@ AbortCallback SmbFileSystem::WriteFile(
   return CallWriteFile(file_handle, data, offset, length, std::move(callback));
 }
 
-void SmbFileSystem::InitTempFileManagerAndExecuteTask(SmbTask task) {
-  // InitTempFileManager() has to be called on a separate thread since it
+void SmbFileSystem::CreateTempFileManagerAndExecuteTask(SmbTask task) {
+  // CreateTempFileManager() has to be called on a separate thread since it
   // contains a call that requires a blockable thread.
   base::TaskTraits task_traits = {base::MayBlock(),
                                   base::TaskPriority::USER_BLOCKING,
                                   base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN};
-  base::OnceClosure init_task = base::BindOnce(
-      &SmbFileSystem::InitTempFileManager, base::Unretained(this));
+  auto init_task = base::BindOnce(&CreateTempFileManager);
+  auto reply = base::BindOnce(&SmbFileSystem::InitTempFileManagerAndExecuteTask,
+                              AsWeakPtr(), std::move(task));
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, task_traits, std::move(init_task), std::move(reply));
+}
 
-  base::PostTaskWithTraitsAndReply(FROM_HERE, task_traits, std::move(init_task),
-                                   std::move(task));
+void SmbFileSystem::InitTempFileManagerAndExecuteTask(
+    SmbTask task,
+    std::unique_ptr<TempFileManager> temp_file_manager) {
+  DCHECK(!temp_file_manager_);
+  DCHECK(temp_file_manager);
+
+  temp_file_manager_ = std::move(temp_file_manager);
+  std::move(task).Run();
 }
 
 AbortCallback SmbFileSystem::CallWriteFile(
@@ -601,6 +631,22 @@ void SmbFileSystem::HandleContinueCopyCallback(
   std::move(callback).Run(TranslateToFileError(error));
 }
 
+AbortCallback SmbFileSystem::HandleSyncRedundantGetMetadata(
+    ProvidedFileSystemInterface::MetadataFieldMask fields,
+    ProvidedFileSystemInterface::GetMetadataCallback callback) {
+  auto metadata = std::make_unique<file_system_provider::EntryMetadata>();
+
+  // The fields could be empty or have one or both of thumbnail and metadata.
+  // We completely ignore metadata, but populate the bogus URI for the
+  // thumbnail.
+  if (RequestedThumbnail(fields)) {
+    metadata->thumbnail = std::make_unique<std::string>(kUnknownImageDataUri);
+  }
+
+  std::move(callback).Run(std::move(metadata), base::File::FILE_OK);
+  return CreateAbortCallback();
+}
+
 void SmbFileSystem::HandleRequestGetMetadataEntryCallback(
     ProvidedFileSystemInterface::MetadataFieldMask fields,
     ProvidedFileSystemInterface::GetMetadataCallback callback,
@@ -681,11 +727,6 @@ void SmbFileSystem::HandleStatusCallback(
   task_queue_.TaskFinished();
 
   std::move(callback).Run(TranslateToFileError(error));
-}
-
-void SmbFileSystem::InitTempFileManager() {
-  DCHECK(!temp_file_manager_);
-  temp_file_manager_ = std::make_unique<TempFileManager>();
 }
 
 base::WeakPtr<file_system_provider::ProvidedFileSystemInterface>

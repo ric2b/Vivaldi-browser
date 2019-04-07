@@ -26,11 +26,13 @@
 #include "ios/chrome/browser/translate/chrome_ios_translate_client.h"
 #include "ios/chrome/browser/ui/translate/language_selection_view_controller.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
+#include "ios/chrome/test/app/navigation_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
 #import "ios/chrome/test/app/web_view_interaction_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
+#import "ios/web/public/test/earl_grey/js_test_util.h"
 #include "ios/web/public/test/http_server/data_response_provider.h"
 #import "ios/web/public/test/http_server/http_server.h"
 #include "ios/web/public/test/http_server/http_server_util.h"
@@ -245,17 +247,11 @@ using translate::LanguageDetectionController;
   web::WebState* _webState;  // weak
 }
 
-// YES if translate status has been checked, indicating that translate callbacks
-// have all been invoked
-@property bool translateStatusChecked;
-
 - (instancetype)initWithWebState:(web::WebState*)webState;
 
 @end
 
 @implementation MockTranslateScriptManager
-
-@synthesize translateStatusChecked = _translateStatusChecked;
 
 - (instancetype)initWithWebState:(web::WebState*)webState {
   if ((self = [super init])) {
@@ -278,26 +274,20 @@ using translate::LanguageDetectionController;
 }
 
 - (void)inject {
-  // Prevent the actual script from being injected.
-}
-
-- (void)injectTranslateStatusScript {
-  _webState->ExecuteJavaScript(
-      base::UTF8ToUTF16("__gCrWeb.message.invokeOnHost({"
-                        "  'command': 'translate.status',"
-                        "  'success': true,"
-                        "  'originalPageLanguage': 'fr',"
-                        "  'translationTime': 0});"));
-  self.translateStatusChecked = true;
-}
-
-- (void)injectWaitUntilTranslateReadyScript {
+  // Prevent the actual script from being injected and instead just invoke host
+  // with 'translate.ready' followed by 'translate.status'.
   _webState->ExecuteJavaScript(
       base::UTF8ToUTF16("__gCrWeb.message.invokeOnHost({"
                         "  'command': 'translate.ready',"
-                        "  'timeout': false,"
+                        "  'errorCode': 0,"
                         "  'loadTime': 0,"
                         "  'readyTime': 0});"));
+  _webState->ExecuteJavaScript(
+      base::UTF8ToUTF16("__gCrWeb.message.invokeOnHost({"
+                        "  'command': 'translate.status',"
+                        "  'errorCode': 0,"
+                        "  'originalPageLanguage': 'fr',"
+                        "  'translationTime': 0});"));
 }
 
 @end
@@ -472,16 +462,8 @@ using translate::LanguageDetectionController;
   [self assertLanguageDetails:expectedLanguageDetails];
 }
 
-// TODO(crbug.com/847948): This test is faling on devices.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_testLanguageDetectionHttpContentLanguage \
-  testLanguageDetectionHttpContentLanguage
-#else
-#define MAYBE_testLanguageDetectionHttpContentLanguage \
-  DISABLED_testLanguageDetectionHttpContentLanguage
-#endif
 // Tests that language in http content is detected.
-- (void)MAYBE_testLanguageDetectionHttpContentLanguage {
+- (void)testLanguageDetectionHttpContentLanguage {
   // Start the HTTP server.
   std::unique_ptr<web::DataResponseProvider> provider(new TestResponseProvider);
   web::test::SetUpHttpServer(std::move(provider));
@@ -557,7 +539,23 @@ using translate::LanguageDetectionController;
       web::test::HttpServer::MakeUrl("http://languageDetectionLargePage");
   responses[URL] = html;
   web::test::SetUpSimpleHttpServer(responses);
-  [ChromeEarlGrey loadURL:URL];
+
+  if (@available(iOS 12, *)) {
+    // TODO(crbug.com/874452) iOS12 has a bug where long pages take forever to
+    // load.  Add a 20 seconds timeout here.
+    chrome_test_util::LoadUrl(URL);
+    web::WebState* webState = chrome_test_util::GetCurrentWebState();
+    GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
+                   20,
+                   ^{
+                     return !webState->IsLoading();
+                   }),
+               @"Failed to load large page on iOS 12.");
+    if (webState->ContentIsHTML())
+      web::WaitUntilWindowIdInjected(webState);
+  } else {
+    [ChromeEarlGrey loadURL:URL];
+  }
 
   // Check that language has been detected.
   translate::LanguageDetectionDetails expectedLanguageDetails;
@@ -788,14 +786,6 @@ using translate::LanguageDetectionController;
       selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
                                    IDS_TRANSLATE_INFOBAR_ACCEPT)]
       performAction:grey_tap()];
-
-  // Wait for all callbacks.
-  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
-                 base::test::ios::kWaitForJSCompletionTimeout,
-                 ^{
-                   return jsTranslateManager.translateStatusChecked;
-                 }),
-             @"Did not receive all translate status callbacks");
 
   // Check that the translation happened.
   [ChromeEarlGrey waitForWebViewContainingText:"Translated"];

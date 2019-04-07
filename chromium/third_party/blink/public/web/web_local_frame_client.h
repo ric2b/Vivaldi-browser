@@ -332,8 +332,6 @@ class BLINK_EXPORT WebLocalFrameClient {
   // defaultPolicy should just be returned.
 
   struct NavigationPolicyInfo {
-    WebDocumentLoader::ExtraData* extra_data;
-
     // Note: if browser side navigations are enabled, the client may modify
     // the urlRequest. However, should this happen, the client should change
     // the WebNavigationPolicy to WebNavigationPolicyIgnore, and the load
@@ -352,6 +350,7 @@ class BLINK_EXPORT WebLocalFrameClient {
     WebContentSecurityPolicyDisposition
         should_check_main_world_content_security_policy;
     mojo::ScopedMessagePipeHandle blob_url_token;
+    base::TimeTicks input_start;
 
     // Specify whether or not a MHTML Archive can be used to load a subframe
     // resource instead of doing a network request.
@@ -359,8 +358,7 @@ class BLINK_EXPORT WebLocalFrameClient {
     ArchiveStatus archive_status;
 
     explicit NavigationPolicyInfo(WebURLRequest& url_request)
-        : extra_data(nullptr),
-          url_request(url_request),
+        : url_request(url_request),
           navigation_type(kWebNavigationTypeOther),
           default_policy(kWebNavigationPolicyIgnore),
           replaces_current_history_item(false),
@@ -702,25 +700,6 @@ class BLINK_EXPORT WebLocalFrameClient {
       WebScrollDirection direction,
       WebScrollGranularity granularity) {}
 
-  // Find-in-page notifications ------------------------------------------
-
-  // Notifies how many matches have been found in this frame so far, for a
-  // given identifier.  |finalUpdate| specifies whether this is the last
-  // update for this frame.
-  virtual void ReportFindInPageMatchCount(int identifier,
-                                          int count,
-                                          bool final_update) {}
-
-  // Notifies what tick-mark rect is currently selected.   The given
-  // identifier lets the client know which request this message belongs
-  // to, so that it can choose to ignore the message if it has moved on
-  // to other things.  The selection rect is expected to have coordinates
-  // relative to the top left corner of the web page area and represent
-  // where on the screen the selection rect is currently located.
-  virtual void ReportFindInPageSelection(int identifier,
-                                         int active_match_ordinal,
-                                         const WebRect& selection) {}
-
   // MediaStream -----------------------------------------------------
 
   // A new WebRTCPeerConnectionHandler is created.
@@ -843,6 +822,15 @@ class BLINK_EXPORT WebLocalFrameClient {
   virtual std::unique_ptr<WebSocketHandshakeThrottle>
   CreateWebSocketHandshakeThrottle() {
     return nullptr;
+  }
+
+  // Returns true when the contents of plugin are handled externally. This means
+  // the plugin element will own a content frame but the frame is than used
+  // externally to load the required handelrs.
+  virtual bool IsPluginHandledExternally(const WebElement& plugin_element,
+                                         const WebURL& url,
+                                         const WebString& suggested_mime_type) {
+    return false;
   }
 };
 

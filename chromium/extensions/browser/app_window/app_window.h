@@ -371,10 +371,6 @@ class AppWindow : public content::WebContentsDelegate,
   // the renderer.
   void GetSerializedState(base::DictionaryValue* properties) const;
 
-  // Called by the window API when events can be sent to the window for this
-  // app.
-  void WindowEventsReady();
-
   // Whether the app window wants to be alpha enabled.
   bool requested_alpha_enabled() const { return requested_alpha_enabled_; }
 
@@ -399,6 +395,9 @@ class AppWindow : public content::WebContentsDelegate,
   bool thumbnail_window() const { return thumbnail_window_; }
   void CloseWindow() { CloseContents(nullptr); }
 
+  // Called by the window API when events can be sent to the window for this
+  // app.
+  void WindowEventsReady();
 
  protected:
   ~AppWindow() override;
@@ -461,7 +460,9 @@ class AppWindow : public content::WebContentsDelegate,
       content::RenderFrameHost* frame,
       const content::BluetoothChooser::EventHandler& event_handler) override;
   bool TakeFocus(content::WebContents* source, bool reverse) override;
-  bool HandleContextMenu(const content::ContextMenuParams& params) override;
+  gfx::Size EnterPictureInPicture(const viz::SurfaceId& surface_id,
+                                  const gfx::Size& natural_size) override;
+  void ExitPictureInPicture() override;
 
   // content::WebContentsObserver implementation.
   bool OnMessageReceived(const IPC::Message& message,
@@ -533,6 +534,8 @@ class AppWindow : public content::WebContentsDelegate,
                           const std::vector<SkBitmap>& bitmaps,
                           const std::vector<gfx::Size>& original_bitmap_sizes);
 
+  bool HandleContextMenu(const content::ContextMenuParams& params) override;
+
   // The browser context with which this window is associated. AppWindow does
   // not own this object.
   content::BrowserContext* browser_context_;
@@ -575,8 +578,6 @@ class AppWindow : public content::WebContentsDelegate,
   // hidden, are considered hidden.
   bool is_hidden_ = false;
 
-  ui::WindowShowState initial_state_;
-
   // Cache the desired value of the always-on-top property. When windows enter
   // fullscreen or overlap the Windows taskbar, this property will be
   // automatically and silently switched off for security reasons. It is
@@ -600,16 +601,18 @@ class AppWindow : public content::WebContentsDelegate,
   // race condition of loading custom app icon and app content simultaneously.
   bool window_ready_ = false;
 
+  // PlzNavigate: this is called when the first navigation is ready to commit or
+  // when the window is closed.
+  FirstCommitOrWindowClosedCallback on_first_commit_or_window_closed_callback_;
+
+  ui::WindowShowState initial_state_;
+
   // If the mouse has entered the app-window. Used for ContentsMouseEvent
   // leaving and entering.
   bool mouse_has_entered_ = false;
 
   // Vivaldi: Whether |thumbnail_window| was set in the CreateParams.
   bool thumbnail_window_ = false;
-
-  // PlzNavigate: this is called when the first navigation is ready to commit or
-  // when the window is closed.
-  FirstCommitOrWindowClosedCallback on_first_commit_or_window_closed_callback_;
 
   base::WeakPtrFactory<AppWindow> image_loader_ptr_factory_;
 

@@ -119,6 +119,7 @@
 #include "third_party/blink/public/web/web_input_element.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_media_player_action.h"
+#include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/public/web/web_node.h"
 #include "third_party/blink/public/web/web_performance.h"
 #include "third_party/blink/public/web/web_plugin.h"
@@ -139,6 +140,7 @@
 #include "third_party/blink/renderer/core/clipboard/clipboard_utilities.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/icon_url.h"
+#include "third_party/blink/renderer/core/dom/ignore_opens_during_unload_count_incrementer.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
@@ -220,6 +222,7 @@
 #include "third_party/blink/renderer/core/page/print_context.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
@@ -242,7 +245,6 @@
 #include "third_party/blink/renderer/platform/loader/fetch/substitute_data.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scroll/scroll_types.h"
-#include "third_party/blink/renderer/platform/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
@@ -593,6 +595,10 @@ bool WebLocalFrameImpl::IsFocused() const {
              ViewImpl()->GetPage()->GetFocusController().FocusedFrame());
 }
 
+bool WebLocalFrameImpl::UsePrintingLayout() const {
+  return print_context_ ? print_context_->use_printing_layout() : false;
+}
+
 WebSize WebLocalFrameImpl::GetScrollOffset() const {
   if (ScrollableArea* scrollable_area = LayoutViewport())
     return scrollable_area->ScrollOffsetInt();
@@ -662,6 +668,11 @@ void WebLocalFrameImpl::DispatchUnloadEvent() {
   if (!GetFrame())
     return;
   SubframeLoadingDisabler disabler(GetFrame()->GetDocument());
+  // https://html.spec.whatwg.org/C/browsing-the-web.html#unload-a-document
+  // The ignore-opens-during-unload counter of a Document must be incremented
+  // when unloading itself.
+  IgnoreOpensDuringUnloadCountIncrementer ignore_opens_during_unload(
+      GetFrame()->GetDocument());
   GetFrame()->Loader().DispatchUnloadEvent();
 }
 
@@ -938,7 +949,7 @@ void WebLocalFrameImpl::LoadHTMLString(const WebData& data,
   CommitDataNavigation(data, WebString::FromUTF8("text/html"),
                        WebString::FromUTF8("UTF-8"), base_url, unreachable_url,
                        replace, WebFrameLoadType::kStandard, WebHistoryItem(),
-                       false, nullptr, WebNavigationTimings());
+                       false, nullptr, nullptr);
 }
 
 void WebLocalFrameImpl::StopLoading() {
@@ -1200,13 +1211,9 @@ bool WebLocalFrameImpl::HasSelection() const {
     return plugin_container->Plugin()->HasSelection();
 
   // frame()->selection()->isNone() never returns true.
-  return GetFrame()
-             ->Selection()
-             .ComputeVisibleSelectionInDOMTreeDeprecated()
-             .Start() != GetFrame()
-                             ->Selection()
-                             .ComputeVisibleSelectionInDOMTreeDeprecated()
-                             .End();
+  const auto& selection =
+      GetFrame()->Selection().ComputeVisibleSelectionInDOMTreeDeprecated();
+  return selection.Start() != selection.End();
 }
 
 WebRange WebLocalFrameImpl::SelectionRange() const {
@@ -1490,7 +1497,7 @@ void WebLocalFrameImpl::DispatchPrintEventRecursively(
     }
     if (!frame->Tree().IsDescendantOf(frame_))
       continue;
-    ToLocalFrame(frame)->DomWindow()->DispatchEvent(Event::Create(event_type));
+    ToLocalFrame(frame)->DomWindow()->DispatchEvent(*Event::Create(event_type));
   }
 }
 
@@ -1856,6 +1863,11 @@ void WebLocalFrameImpl::DidChangeContentsSize(const IntSize& size) {
     GetTextFinder()->IncreaseMarkerVersion();
 }
 
+void WebLocalFrameImpl::UpdateDevToolsOverlays() {
+  if (dev_tools_agent_)
+    dev_tools_agent_->UpdateOverlays();
+}
+
 void WebLocalFrameImpl::CreateFrameView() {
   TRACE_EVENT0("blink", "WebLocalFrameImpl::createFrameView");
 
@@ -2026,8 +2038,8 @@ void WebLocalFrameImpl::CommitNavigation(
     const WebHistoryItem& item,
     bool is_client_redirect,
     const base::UnguessableToken& devtools_navigation_token,
-    std::unique_ptr<WebDocumentLoader::ExtraData> extra_data,
-    const WebNavigationTimings& navigation_timings) {
+    std::unique_ptr<WebNavigationParams> navigation_params,
+    std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) {
   DCHECK(GetFrame());
   DCHECK(!request.IsNull());
   DCHECK(!request.Url().ProtocolIs("javascript"));
@@ -2042,9 +2054,9 @@ void WebLocalFrameImpl::CommitNavigation(
   if (is_client_redirect)
     frame_request.SetClientRedirect(ClientRedirectPolicy::kClientRedirect);
   HistoryItem* history_item = item;
-  GetFrame()->Loader().CommitNavigation(frame_request, web_frame_load_type,
-                                        history_item, std::move(extra_data),
-                                        navigation_timings);
+  GetFrame()->Loader().CommitNavigation(
+      frame_request, web_frame_load_type, history_item,
+      std::move(navigation_params), std::move(extra_data));
 }
 
 blink::mojom::CommitResult WebLocalFrameImpl::CommitSameDocumentNavigation(
@@ -2111,37 +2123,62 @@ void WebLocalFrameImpl::CommitDataNavigation(
     WebFrameLoadType web_frame_load_type,
     const WebHistoryItem& item,
     bool is_client_redirect,
-    std::unique_ptr<WebDocumentLoader::ExtraData> navigation_data,
-    const WebNavigationTimings& navigation_timings) {
+    std::unique_ptr<WebNavigationParams> navigation_params,
+    std::unique_ptr<WebDocumentLoader::ExtraData> navigation_data) {
   DCHECK(GetFrame());
 
-  // If we are loading substitute data to replace an existing load, then
-  // inherit all of the properties of that original request. This way,
-  // reload will re-attempt the original request. It is essential that
-  // we only do this when there is an unreachableURL since a non-empty
-  // unreachableURL informs FrameLoader::reload to load unreachableURL
-  // instead of the currently loaded URL.
+  // TODO(dgozman): this whole logic of rewriting the params is odd,
+  // and should be moved to the callsites instead.
   ResourceRequest request;
   HistoryItem* history_item = item;
   DocumentLoader* provisional_document_loader =
       GetFrame()->Loader().GetProvisionalDocumentLoader();
+  // If we are loading substitute data to replace an existing load, then
+  // inherit all of the properties of that original request. This way,
+  // reload will re-attempt the original request. It is essential that
+  // we only do this when there is an |unreachable_url| since a non-empty
+  // |unreachable_url| informs FrameLoader::CommitNavigation to load
+  // |unreachable_url| instead of the currently loaded URL.
   if (replace && !unreachable_url.IsEmpty() && provisional_document_loader) {
     request = provisional_document_loader->OriginalRequest();
+
     // When replacing a failed back/forward provisional navigation with an error
     // page, retain the HistoryItem for the failed provisional navigation
     // and reuse it for the error page navigation.
-    if (provisional_document_loader->LoadType() ==
-            WebFrameLoadType::kBackForward &&
+    WebFrameLoadType previous_load_type =
+        provisional_document_loader->LoadType();
+    if (previous_load_type == WebFrameLoadType::kBackForward &&
         provisional_document_loader->GetHistoryItem()) {
       history_item = provisional_document_loader->GetHistoryItem();
       web_frame_load_type = WebFrameLoadType::kBackForward;
+    } else if (previous_load_type == WebFrameLoadType::kReload ||
+               previous_load_type == WebFrameLoadType::kReloadBypassingCache) {
+      web_frame_load_type = previous_load_type;
     }
   }
   request.SetURL(base_url);
-  request.SetCheckForBrowserSideNavigation(false);
 
+  CommitDataNavigationWithRequest(
+      WrappedResourceRequest(request), data, mime_type, text_encoding,
+      unreachable_url, replace, web_frame_load_type, history_item,
+      is_client_redirect, std::move(navigation_params),
+      std::move(navigation_data));
+}
+
+void WebLocalFrameImpl::CommitDataNavigationWithRequest(
+    const WebURLRequest& request,
+    const WebData& data,
+    const WebString& mime_type,
+    const WebString& text_encoding,
+    const WebURL& unreachable_url,
+    bool replace,
+    WebFrameLoadType web_frame_load_type,
+    const WebHistoryItem& history_item,
+    bool is_client_redirect,
+    std::unique_ptr<WebNavigationParams> navigation_params,
+    std::unique_ptr<WebDocumentLoader::ExtraData> navigation_data) {
   FrameLoadRequest frame_request(
-      nullptr, request,
+      nullptr, request.ToResourceRequest(),
       SubstituteData(data, mime_type, text_encoding, unreachable_url));
   DCHECK(frame_request.GetSubstituteData().IsValid());
   frame_request.SetReplacesCurrentItem(replace);
@@ -2150,7 +2187,7 @@ void WebLocalFrameImpl::CommitDataNavigation(
 
   GetFrame()->Loader().CommitNavigation(
       frame_request, web_frame_load_type, history_item,
-      std::move(navigation_data), navigation_timings);
+      std::move(navigation_params), std::move(navigation_data));
 }
 
 WebLocalFrame::FallbackContentResult
@@ -2223,7 +2260,7 @@ void WebLocalFrameImpl::SetCommittedFirstRealLoad() {
   DCHECK(GetFrame());
   GetFrame()->Loader().StateMachine()->AdvanceTo(
       FrameLoaderStateMachine::kCommittedMultipleRealLoads);
-  GetFrame()->DidSendResourceTimingInfoToParent();
+  GetFrame()->SetShouldSendResourceTimingInfoToParent(false);
 }
 
 void WebLocalFrameImpl::NotifyUserActivation() {
@@ -2312,6 +2349,8 @@ WebNode WebLocalFrameImpl::ContextMenuNode() const {
 void WebLocalFrameImpl::WillBeDetached() {
   if (dev_tools_agent_)
     dev_tools_agent_->WillBeDestroyed();
+  if (find_in_page_)
+    find_in_page_->Dispose();
 }
 
 void WebLocalFrameImpl::WillDetachParent() {

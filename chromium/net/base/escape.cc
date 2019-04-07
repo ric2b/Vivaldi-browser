@@ -357,6 +357,12 @@ str EscapeForHTMLImpl(base::BasicStringPiece<str> input) {
   return result;
 }
 
+// Everything except alphanumerics and -._~
+// See RFC 3986 for the list of unreserved characters.
+static const Charmap kUnreservedCharmap = {
+    {0xffffffffL, 0xfc009fffL, 0x78000001L, 0xb8000001L, 0xffffffffL,
+     0xffffffffL, 0xffffffffL, 0xffffffffL}};
+
 // Everything except alphanumerics and !'()*-._~
 // See RFC 2396 for the list of reserved characters.
 static const Charmap kQueryCharmap = {{
@@ -398,6 +404,10 @@ static const Charmap kExternalHandlerCharmap = {{
 }};
 
 }  // namespace
+
+std::string EscapeAllExceptUnreserved(base::StringPiece text) {
+  return Escape(text, kUnreservedCharmap, false);
+}
 
 std::string EscapeQueryParamValue(base::StringPiece text, bool use_plus) {
   return Escape(text, kQueryCharmap, use_plus);
@@ -469,8 +479,9 @@ base::string16 UnescapeAndDecodeUTF8URLComponentWithAdjustments(
   return base::UTF8ToUTF16WithAdjustments(text, adjustments);
 }
 
-std::string UnescapeBinaryURLComponent(base::StringPiece escaped_text,
-                                       UnescapeRule::Type rules) {
+void UnescapeBinaryURLComponent(const std::string& escaped_text,
+                                UnescapeRule::Type rules,
+                                std::string* unescaped_text) {
   // Only NORMAL and REPLACE_PLUS_WITH_SPACE are supported.
   DCHECK(rules != UnescapeRule::NONE);
   DCHECK(!(rules &
@@ -479,31 +490,37 @@ std::string UnescapeBinaryURLComponent(base::StringPiece escaped_text,
   // The output of the unescaping is always smaller than the input, so we can
   // reserve the input size to make sure we have enough buffer and don't have
   // to allocate in the loop below.
-  std::string result;
-  result.reserve(escaped_text.length());
+  // Increase capacity before size, as just resizing can grow capacity
+  // needlessly beyond our requested size.
+  if (unescaped_text->capacity() < escaped_text.size())
+    unescaped_text->reserve(escaped_text.size());
+  if (unescaped_text->size() < escaped_text.size())
+    unescaped_text->resize(escaped_text.size());
 
-  for (size_t i = 0, max = escaped_text.size(); i < max;) {
+  size_t output_index = 0;
+
+  for (size_t i = 0, max = unescaped_text->size(); i < max;) {
     unsigned char byte;
     // UnescapeUnsignedByteAtIndex does bounds checking, so this is always safe
     // to call.
     if (UnescapeUnsignedByteAtIndex(escaped_text, i, &byte)) {
-      result.push_back(byte);
+      (*unescaped_text)[output_index++] = byte;
       i += 3;
       continue;
     }
 
     if ((rules & UnescapeRule::REPLACE_PLUS_WITH_SPACE) &&
         escaped_text[i] == '+') {
-      result.push_back(' ');
+      (*unescaped_text)[output_index++] = ' ';
       ++i;
       continue;
     }
 
-    result.push_back(escaped_text[i]);
-    ++i;
+    (*unescaped_text)[output_index++] = escaped_text[i++];
   }
 
-  return result;
+  DCHECK_LE(output_index, unescaped_text->size());
+  unescaped_text->resize(output_index);
 }
 
 base::string16 UnescapeForHTML(base::StringPiece16 input) {

@@ -32,10 +32,13 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_SVG_PROPERTIES_SVG_ANIMATED_PROPERTY_H_
 
 #include "base/macros.h"
+#include "third_party/blink/renderer/core/css_property_names.h"
+#include "third_party/blink/renderer/core/dom/qualified_name.h"
 #include "third_party/blink/renderer/core/svg/properties/svg_property_info.h"
 #include "third_party/blink/renderer/core/svg/properties/svg_property_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_parsing_error.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
+#include "third_party/blink/renderer/platform/heap/member.h"
 
 namespace blink {
 
@@ -54,15 +57,15 @@ class SVGAnimatedPropertyBase : public GarbageCollectedMixin {
   virtual void SetAnimatedValue(SVGPropertyBase*) = 0;
   virtual void AnimationEnded();
 
-  virtual SVGParsingError SetBaseValueAsString(const String&) = 0;
-  virtual bool NeedsSynchronizeAttribute() = 0;
+  virtual SVGParsingError AttributeChanged(const String&) = 0;
+  virtual bool NeedsSynchronizeAttribute() const;
   virtual void SynchronizeAttribute();
 
   AnimatedPropertyType GetType() const {
     return static_cast<AnimatedPropertyType>(type_);
   }
 
-  SVGElement* contextElement() const { return context_element_; }
+  SVGElement* ContextElement() const { return context_element_; }
 
   const QualifiedName& AttributeName() const { return attribute_name_; }
 
@@ -76,15 +79,20 @@ class SVGAnimatedPropertyBase : public GarbageCollectedMixin {
 
   bool IsSpecified() const;
 
-  void Trace(blink::Visitor* visitor) override {
-    visitor->Trace(context_element_);
-  }
+  void Trace(Visitor*) override;
+
+  void BaseValueChanged();
+  void EnsureAnimValUpdated();
 
  protected:
   SVGAnimatedPropertyBase(AnimatedPropertyType,
                           SVGElement*,
                           const QualifiedName& attribute_name,
                           CSSPropertyID = CSSPropertyInvalid);
+
+  void ClearBaseValueNeedsSynchronization() {
+    base_value_needs_synchronization_ = false;
+  }
 
  private:
   static_assert(kNumberOfAnimatedPropertyTypes <= (1u << 5),
@@ -95,6 +103,7 @@ class SVGAnimatedPropertyBase : public GarbageCollectedMixin {
 
   const unsigned type_ : 5;
   const unsigned css_property_id_ : kCssPropertyBits;
+  unsigned base_value_needs_synchronization_ : 1;
   TraceWrapperMember<SVGElement> context_element_;
   const QualifiedName& attribute_name_;
   DISALLOW_COPY_AND_ASSIGN(SVGAnimatedPropertyBase);
@@ -119,7 +128,8 @@ class SVGAnimatedPropertyCommon : public SVGAnimatedPropertyBase {
 
   bool IsAnimating() const override { return current_value_; }
 
-  SVGParsingError SetBaseValueAsString(const String& value) override {
+  SVGParsingError AttributeChanged(const String& value) override {
+    ClearBaseValueNeedsSynchronization();
     return base_value_->SetValueAsString(value);
   }
 
@@ -168,18 +178,6 @@ template <typename Property,
           typename PrimitiveType = typename Property::PrimitiveType>
 class SVGAnimatedProperty : public SVGAnimatedPropertyCommon<Property> {
  public:
-  bool NeedsSynchronizeAttribute() override {
-    // DOM attribute synchronization is only needed if tear-off is being touched
-    // from javascript or the property is being animated.  This prevents
-    // unnecessary attribute creation on target element.
-    return base_value_updated_ || this->IsAnimating();
-  }
-
-  void SynchronizeAttribute() override {
-    SVGAnimatedPropertyBase::SynchronizeAttribute();
-    base_value_updated_ = false;
-  }
-
   // SVGAnimated* DOM Spec implementations:
 
   // baseVal()/setBaseVal()/animVal() are only to be used from SVG DOM
@@ -188,15 +186,11 @@ class SVGAnimatedProperty : public SVGAnimatedPropertyCommon<Property> {
 
   void setBaseVal(PrimitiveType value, ExceptionState&) {
     this->BaseValue()->SetValue(value);
-    base_value_updated_ = true;
-
-    DCHECK(this->AttributeName() != QualifiedName::Null());
-    this->contextElement()->InvalidateSVGAttributes();
-    this->contextElement()->SvgAttributeBaseValChanged(this->AttributeName());
+    this->BaseValueChanged();
   }
 
   PrimitiveType animVal() {
-    this->contextElement()->EnsureAttributeAnimValUpdated();
+    this->EnsureAnimValUpdated();
     return this->CurrentValue()->Value();
   }
 
@@ -208,10 +202,7 @@ class SVGAnimatedProperty : public SVGAnimatedPropertyCommon<Property> {
       : SVGAnimatedPropertyCommon<Property>(context_element,
                                             attribute_name,
                                             initial_value,
-                                            css_property_id),
-        base_value_updated_(false) {}
-
-  bool base_value_updated_;
+                                            css_property_id) {}
 };
 
 // Implementation of SVGAnimatedProperty which uses tear-off value types.
@@ -241,13 +232,6 @@ class SVGAnimatedProperty<Property, TearOffType, void>
     UpdateAnimValTearOffIfNeeded();
   }
 
-  bool NeedsSynchronizeAttribute() override {
-    // DOM attribute synchronization is only needed if tear-off is being touched
-    // from javascript or the property is being animated.  This prevents
-    // unnecessary attribute creation on target element.
-    return base_val_tear_off_ || this->IsAnimating();
-  }
-
   // SVGAnimated* DOM Spec implementations:
 
   // baseVal()/animVal() are only to be used from SVG DOM implementation.
@@ -255,8 +239,7 @@ class SVGAnimatedProperty<Property, TearOffType, void>
   virtual TearOffType* baseVal() {
     if (!base_val_tear_off_) {
       base_val_tear_off_ =
-          TearOffType::Create(this->BaseValue(), this->contextElement(),
-                              kPropertyIsNotAnimVal, this->AttributeName());
+          TearOffType::Create(this->BaseValue(), this, kPropertyIsNotAnimVal);
     }
     return base_val_tear_off_;
   }
@@ -264,8 +247,7 @@ class SVGAnimatedProperty<Property, TearOffType, void>
   TearOffType* animVal() {
     if (!anim_val_tear_off_) {
       anim_val_tear_off_ =
-          TearOffType::Create(this->CurrentValue(), this->contextElement(),
-                              kPropertyIsAnimVal, this->AttributeName());
+          TearOffType::Create(this->CurrentValue(), this, kPropertyIsAnimVal);
     }
     return anim_val_tear_off_;
   }
@@ -315,12 +297,6 @@ class SVGAnimatedProperty<Property, void, void>
       CSSPropertyID css_property_id = CSSPropertyInvalid) {
     return new SVGAnimatedProperty<Property>(context_element, attribute_name,
                                              initial_value, css_property_id);
-  }
-
-  bool NeedsSynchronizeAttribute() override {
-    // DOM attribute synchronization is only needed if the property is being
-    // animated.
-    return this->IsAnimating();
   }
 
  protected:

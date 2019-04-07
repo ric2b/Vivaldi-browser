@@ -14,12 +14,16 @@ static_library("sync_bookmarks") {
     "bookmark_local_changes_builder.h",
     "bookmark_model_associator.cc",
     "bookmark_model_associator.h",
+    "bookmark_model_merger.cc",
+    "bookmark_model_merger.h",
     "bookmark_model_observer_impl.cc",
     "bookmark_model_observer_impl.h",
     "bookmark_model_type_processor.cc",
     "bookmark_model_type_processor.h",
     "bookmark_remote_updates_handler.cc",
     "bookmark_remote_updates_handler.h",
+    "bookmark_specifics_conversions.cc",
+    "bookmark_specifics_conversions.h",
     "bookmark_sync_service.cc",
     "bookmark_sync_service.h",
     "synced_bookmark_tracker.cc",
@@ -43,9 +47,11 @@ source_set("unit_tests") {
 
   sources = [
     "bookmark_data_type_controller_unittest.cc",
+    "bookmark_model_merger_unittest.cc",
     "bookmark_model_observer_impl_unittest.cc",
     "bookmark_model_type_processor_unittest.cc",
     "bookmark_remote_updates_handler_unittest.cc",
+    "bookmark_specifics_conversions_unittest.cc",
     "synced_bookmark_tracker_unittest.cc",
   ]
 
@@ -55,12 +61,14 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//components/bookmarks/browser",
     "//components/bookmarks/test",
+    "//components/favicon/core/test:test_support",
     "//components/history/core/browser",
     "//components/prefs:test_support",
     "//components/sync",
     "//components/sync:test_support_driver",
     "//components/sync:test_support_engine",
     "//components/sync:test_support_model",
+    "//components/undo",
     "//testing/gmock",
     "//testing/gtest",
   ]

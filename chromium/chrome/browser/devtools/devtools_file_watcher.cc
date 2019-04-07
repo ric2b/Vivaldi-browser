@@ -16,7 +16,7 @@
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/lazy_task_runner.h"
+#include "base/task/lazy_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -185,8 +185,8 @@ void DevToolsFileWatcher::SharedFileWatcher::DispatchNotifications() {
 
 namespace {
 base::SequencedTaskRunner* impl_task_runner() {
-  constexpr base::TaskTraits kImplTaskTraits = {base::MayBlock(),
-                                                base::TaskPriority::BACKGROUND};
+  constexpr base::TaskTraits kImplTaskTraits = {
+      base::MayBlock(), base::TaskPriority::BEST_EFFORT};
   static base::LazySequencedTaskRunner s_file_task_runner =
       LAZY_SEQUENCED_TASK_RUNNER_INITIALIZER(kImplTaskTraits);
 

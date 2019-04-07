@@ -53,6 +53,19 @@ public final class VolumeMap {
         }
     };
 
+    private static final SparseIntArray MIN_VOLUME_INDEX = new SparseIntArray(4) {
+        {
+            append(AudioManager.STREAM_MUSIC,
+                    getAudioManager().getStreamMinVolume(AudioManager.STREAM_MUSIC));
+            append(AudioManager.STREAM_ALARM,
+                    getAudioManager().getStreamMinVolume(AudioManager.STREAM_ALARM));
+            append(AudioManager.STREAM_SYSTEM,
+                    getAudioManager().getStreamMinVolume(AudioManager.STREAM_SYSTEM));
+            append(AudioManager.STREAM_VOICE_CALL,
+                    getAudioManager().getStreamMinVolume(AudioManager.STREAM_VOICE_CALL));
+        }
+    };
+
     private static AudioManager getAudioManager() {
         if (sAudioManager == null) {
             Context context = ContextUtils.getApplicationContext();
@@ -89,17 +102,26 @@ public final class VolumeMap {
         return db;
     }
 
+    /** Return the max volume index for the given cast type. */
+    @CalledByNative
+    static int getMaxVolumeIndex(int castType) {
+        int streamType = getStreamType(castType);
+        return MAX_VOLUME_INDEX.get(streamType);
+    }
+
     /**
      * Logs the dB value at each discrete Android volume index for the given cast type.
      * Note that this is not identical to the volume table, which may contain a different number
      * of points and at different levels.
      */
-    @CalledByNative
     static void dumpVolumeTables(int castType) {
         int streamType = getStreamType(castType);
         int maxIndex = MAX_VOLUME_INDEX.get(streamType);
-        Log.i(TAG, "Volume points for stream " + streamType + " (maxIndex=" + maxIndex + "):");
-        for (int idx = 0; idx <= maxIndex; idx++) {
+        int minIndex = MIN_VOLUME_INDEX.get(streamType);
+        Log.i(TAG,
+                "Volume points for stream " + streamType + " (maxIndex=" + maxIndex
+                        + " minIndex=" + minIndex + "):");
+        for (int idx = minIndex; idx <= maxIndex; idx++) {
             float db = getStreamVolumeDB(streamType, idx);
             float level = (float) idx / (float) maxIndex;
             Log.i(TAG, "    " + idx + "(" + level + ") -> " + db);
@@ -114,19 +136,20 @@ public final class VolumeMap {
         level = Math.min(1.0f, Math.max(0.0f, level));
         int streamType = getStreamType(castType);
         int volumeIndex = Math.round(level * (float) MAX_VOLUME_INDEX.get(streamType));
+        volumeIndex = Math.max(volumeIndex, MIN_VOLUME_INDEX.get(streamType));
         return getStreamVolumeDB(streamType, volumeIndex);
     }
 
-    @CalledByNative
     /**
      * Returns the volume level for the given dB value using the volume table for the given type.
      */
     static float dbFsToVolume(int castType, float db) {
         int streamType = getStreamType(castType);
         int maxIndex = MAX_VOLUME_INDEX.get(streamType);
+        int minIndex = MIN_VOLUME_INDEX.get(streamType);
 
-        float dbMin = getStreamVolumeDB(streamType, 0);
-        if (db <= dbMin) return 0.0f;
+        float dbMin = getStreamVolumeDB(streamType, minIndex);
+        if (db <= dbMin) return (float) minIndex / (float) maxIndex;
         float dbMax = getStreamVolumeDB(streamType, maxIndex);
         if (db >= dbMax) return 1.0f;
 
@@ -134,7 +157,7 @@ public final class VolumeMap {
         // and find the interval [dbLeft .. dbRight] that contains db, then
         // interpolate to estimate the volume level to return.
         float dbLeft = dbMin, dbRight = dbMin;
-        int idx = 1;
+        int idx = minIndex + 1;
         for (; idx <= maxIndex; idx++) {
             dbLeft = dbRight;
             dbRight = getStreamVolumeDB(streamType, idx);

@@ -33,12 +33,13 @@ namespace headless {
 
 namespace {
 static const char kResetResults[] = "reset-results";
+static const char kDumpDevToolsProtocol[] = "dump-devtools-protocol";
 }  // namespace
 
 class HeadlessProtocolBrowserTest
     : public HeadlessAsyncDevTooledBrowserTest,
       public HeadlessDevToolsClient::RawProtocolListener,
-      public runtime::Observer {
+      public runtime::ExperimentalObserver {
  public:
   HeadlessProtocolBrowserTest() {
     embedded_test_server()->ServeFilesFromSourceDirectory(
@@ -50,8 +51,12 @@ class HeadlessProtocolBrowserTest
   // HeadlessWebContentsObserver implementation.
   void DevToolsTargetReady() override {
     HeadlessAsyncDevTooledBrowserTest::DevToolsTargetReady();
-    devtools_client_->GetRuntime()->AddObserver(this);
+    devtools_client_->GetRuntime()->GetExperimental()->AddObserver(this);
     devtools_client_->GetRuntime()->Enable();
+    devtools_client_->GetRuntime()->GetExperimental()->AddBinding(
+        headless::runtime::AddBindingParams::Builder()
+            .SetName("sendProtocolMessage")
+            .Build());
     browser_devtools_client_->SetRawProtocolListener(this);
   }
 
@@ -80,23 +85,8 @@ class HeadlessProtocolBrowserTest
   }
 
   // runtime::Observer implementation.
-  void OnConsoleAPICalled(
-      const runtime::ConsoleAPICalledParams& params) override {
-    const std::vector<std::unique_ptr<runtime::RemoteObject>>& args =
-        *params.GetArgs();
-    if (args.empty())
-      return;
-    if (params.GetType() != runtime::ConsoleAPICalledType::DEBUG)
-      return;
-
-    runtime::RemoteObject* object = args[0].get();
-    if (object->GetType() != runtime::RemoteObjectType::STRING)
-      return;
-
-    DispatchMessageFromJS(object->GetValue()->GetString());
-  }
-
-  void DispatchMessageFromJS(const std::string& json_message) {
+  void OnBindingCalled(const runtime::BindingCalledParams& params) override {
+    std::string json_message = params.GetPayload();
     std::unique_ptr<base::Value> message = base::JSONReader::Read(json_message);
     const base::DictionaryValue* message_dict;
     const base::DictionaryValue* params_dict;
@@ -112,6 +102,10 @@ class HeadlessProtocolBrowserTest
     }
 
     if (method != "DONE") {
+      if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+              kDumpDevToolsProtocol)) {
+        LOG(INFO) << "FromJS: " << json_message;
+      }
       // Pass unhandled commands onto the inspector.
       browser_devtools_client_->SendRawDevToolsMessage(json_message);
       return;
@@ -156,6 +150,12 @@ class HeadlessProtocolBrowserTest
   void SendMessageToJS(const std::string& message) {
     if (test_finished_)
       return;
+
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            kDumpDevToolsProtocol)) {
+      LOG(INFO) << "ToJS: " << message;
+    }
+
     std::string encoded;
     base::Base64Encode(message, &encoded);
     devtools_client_->GetRuntime()->Evaluate("onmessage(atob(\"" + encoded +
@@ -283,39 +283,114 @@ class HeadlessProtocolCompositorBrowserTest
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
+// BeginFrameControl is not supported on MacOS yet, see: https://cs.chromium.org
+// chromium/src/headless/lib/browser/protocol/target_handler.cc?
+// rcl=5811aa08e60ba5ac7622f029163213cfbdb682f7&l=32
+#if defined(OS_MACOSX)
+#define HEADLESS_PROTOCOL_COMPOSITOR_TEST(TEST_NAME, SCRIPT_NAME) \
+  IN_PROC_BROWSER_TEST_F(HeadlessProtocolCompositorBrowserTest,   \
+                         DISABLED_##TEST_NAME) {                  \
+    test_folder_ = "/protocol/";                                  \
+    script_name_ = SCRIPT_NAME;                                   \
+    RunTest();                                                    \
+  }
+#else
 #define HEADLESS_PROTOCOL_COMPOSITOR_TEST(TEST_NAME, SCRIPT_NAME)            \
   IN_PROC_BROWSER_TEST_F(HeadlessProtocolCompositorBrowserTest, TEST_NAME) { \
     test_folder_ = "/protocol/";                                             \
     script_name_ = SCRIPT_NAME;                                              \
     RunTest();                                                               \
   }
-
-// BeginFrameControl is not supported on MacOS yet, see: https://cs.chromium.org
-// chromium/src/headless/lib/browser/protocol/target_handler.cc?
-// rcl=5811aa08e60ba5ac7622f029163213cfbdb682f7&l=32
-#if defined(OS_MACOSX)
-#define MAYBE_CompositorBasicRaf DISABLED_CompositorBasicRaf
-#define MAYBE_CompositorImageAnimation DISABLED_CompositorImageAnimation
-#define MAYBE_CompositorCssAnimation DISABLED_CompositorCssAnimation
-#define MAYBE_VirtualTimeControllerTest DISABLED_VirtualTimeControllerTest
-#else
-#define MAYBE_CompositorBasicRaf CompositorBasicRaf
-#define MAYBE_CompositorImageAnimation CompositorImageAnimation
-#define MAYBE_CompositorCssAnimation CompositorCssAnimation
-#define MAYBE_VirtualTimeControllerTest VirtualTimeControllerTest
 #endif
-HEADLESS_PROTOCOL_COMPOSITOR_TEST(MAYBE_CompositorBasicRaf,
+
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(CompositorBasicRaf,
                                   "emulation/compositor-basic-raf.js");
 HEADLESS_PROTOCOL_COMPOSITOR_TEST(
-    MAYBE_CompositorImageAnimation,
+    CompositorImageAnimation,
     "emulation/compositor-image-animation-test.js");
-HEADLESS_PROTOCOL_COMPOSITOR_TEST(MAYBE_CompositorCssAnimation,
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(CompositorCssAnimation,
                                   "emulation/compositor-css-animation-test.js");
-HEADLESS_PROTOCOL_TEST(MAYBE_VirtualTimeControllerTest,
-                       "helpers/virtual-time-controller-test.js");
-#undef MAYBE_CompositorBasicRaf
-#undef MAYBE_CompositorImageAnimation
-#undef MAYBE_CompositorCssAnimation
-#undef MAYBE_VirtualTimeControllerTest
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(VirtualTimeControllerTest,
+                                  "helpers/virtual-time-controller-test.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererHelloWorld,
+                                  "sanity/renderer-hello-world.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(
+    RendererOverrideTitleJsEnabled,
+    "sanity/renderer-override-title-js-enabled.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(
+    RendererOverrideTitleJsDisabled,
+    "sanity/renderer-override-title-js-disabled.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(
+    RendererJavaScriptConsoleErrors,
+    "sanity/renderer-javascript-console-errors.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererDelayedCompletion,
+                                  "sanity/renderer-delayed-completion.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererClientRedirectChain,
+                                  "sanity/renderer-client-redirect-chain.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(
+    RendererClientRedirectChainNoJs,
+    "sanity/renderer-client-redirect-chain-no-js.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererServerRedirectChain,
+                                  "sanity/renderer-server-redirect-chain.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(
+    RendererServerRedirectToFailure,
+    "sanity/renderer-server-redirect-to-failure.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(
+    RendererServerRedirectRelativeChain,
+    "sanity/renderer-server-redirect-relative-chain.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererMixedRedirectChain,
+                                  "sanity/renderer-mixed-redirect-chain.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererFramesRedirectChain,
+                                  "sanity/renderer-frames-redirect-chain.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererDoubleRedirect,
+                                  "sanity/renderer-double-redirect.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(
+    RendererRedirectAfterCompletion,
+    "sanity/renderer-redirect-after-completion.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(
+    RendererRedirect307PostMethod,
+    "sanity/renderer-redirect-307-post-method.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererRedirectPostChain,
+                                  "sanity/renderer-redirect-post-chain.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererRedirect307PutMethod,
+                                  "sanity/renderer-redirect-307-put-method.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererRedirect303PutGet,
+                                  "sanity/renderer-redirect-303-put-get.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererRedirectBaseUrl,
+                                  "sanity/renderer-redirect-base-url.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererRedirectNonAsciiUrl,
+                                  "sanity/renderer-redirect-non-ascii-url.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererRedirectEmptyUrl,
+                                  "sanity/renderer-redirect-empty-url.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererRedirectInvalidUrl,
+                                  "sanity/renderer-redirect-invalid-url.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererRedirectKeepsFragment,
+                                  "sanity/renderer-redirect-keeps-fragment.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(
+    RendererRedirectReplacesFragment,
+    "sanity/renderer-redirect-replaces-fragment.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererRedirectNewFragment,
+                                  "sanity/renderer-redirect-new-fragment.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(
+    RendererWindowLocationFragments,
+    "sanity/renderer-window-location-fragments.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererCookieSetFromJs,
+                                  "sanity/renderer-cookie-set-from-js.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(
+    RendererCookieSetFromJsNoCookies,
+    "sanity/renderer-cookie-set-from-js-no-cookies.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererCookieUpdatedFromJs,
+                                  "sanity/renderer-cookie-updated-from-js.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererInCrossOriginObject,
+                                  "sanity/renderer-in-cross-origin-object.js");
+
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererContentSecurityPolicy,
+                                  "sanity/renderer-content-security-policy.js");
+
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererFrameLoadEvents,
+                                  "sanity/renderer-frame-load-events.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererCssUrlFilter,
+                                  "sanity/renderer-css-url-filter.js");
+HEADLESS_PROTOCOL_COMPOSITOR_TEST(RendererCanvas, "sanity/renderer-canvas.js");
 
 }  // namespace headless

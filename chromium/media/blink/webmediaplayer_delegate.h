@@ -129,6 +129,12 @@ class WebMediaPlayerDelegate {
   virtual void DidPictureInPictureModeEnd(int delegate_id,
                                           base::OnceClosure) = 0;
 
+  // Notify that custom controls have been sent to be assigned to the
+  // Picture-in-Picture window.
+  virtual void DidSetPictureInPictureCustomControls(
+      int delegate_id,
+      const std::vector<blink::PictureInPictureControlInfo>&) = 0;
+
   // Notify that the media player in Picture-in-Picture had a change of surface.
   virtual void DidPictureInPictureSurfaceChange(int delegate_id,
                                                 const viz::SurfaceId&,
@@ -176,6 +182,10 @@ class WebMediaPlayerDelegate {
   virtual void SetIsEffectivelyFullscreen(
       int player_id,
       blink::WebFullscreenVideoStatus fullscreen_video_status) = 0;
+
+  // Returns |true| if player should be suspended automatically when tab is
+  // in background.
+  virtual bool IsBackgroundMediaSuspendEnabled() = 0;
 
  protected:
   WebMediaPlayerDelegate() = default;

@@ -77,7 +77,7 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   void RunAriaTest(const base::FilePath::CharType* file_path) {
     base::FilePath test_path = GetTestFilePath("accessibility", "aria");
     {
-      base::ThreadRestrictions::ScopedAllowIO allow_io_for_test_setup;
+      base::ScopedAllowBlockingForTesting allow_blocking;
       ASSERT_TRUE(base::PathExists(test_path)) << test_path.LossyDisplayName();
     }
     base::FilePath aria_file = test_path.Append(base::FilePath(file_path));
@@ -88,7 +88,7 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   void RunAomTest(const base::FilePath::CharType* file_path) {
     base::FilePath test_path = GetTestFilePath("accessibility", "aom");
     {
-      base::ThreadRestrictions::ScopedAllowIO allow_io_for_test_setup;
+      base::ScopedAllowBlockingForTesting allow_blocking;
       ASSERT_TRUE(base::PathExists(test_path)) << test_path.LossyDisplayName();
     }
     base::FilePath aom_file = test_path.Append(base::FilePath(file_path));
@@ -99,7 +99,7 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   void RunCSSTest(const base::FilePath::CharType* file_path) {
     base::FilePath test_path = GetTestFilePath("accessibility", "css");
     {
-      base::ThreadRestrictions::ScopedAllowIO allow_io_for_test_setup;
+      base::ScopedAllowBlockingForTesting allow_blocking;
       ASSERT_TRUE(base::PathExists(test_path)) << test_path.LossyDisplayName();
     }
     base::FilePath css_file = test_path.Append(base::FilePath(file_path));
@@ -110,7 +110,7 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   void RunHtmlTest(const base::FilePath::CharType* file_path) {
     base::FilePath test_path = GetTestFilePath("accessibility", "html");
     {
-      base::ThreadRestrictions::ScopedAllowIO allow_io_for_test_setup;
+      base::ScopedAllowBlockingForTesting allow_blocking;
       ASSERT_TRUE(base::PathExists(test_path)) << test_path.LossyDisplayName();
     }
     base::FilePath html_file = test_path.Append(base::FilePath(file_path));
@@ -412,12 +412,20 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaBanner) {
   RunAriaTest(FILE_PATH_LITERAL("aria-banner.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaBlockquote) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-blockquote.html"));
+}
+
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaBusy) {
   RunAriaTest(FILE_PATH_LITERAL("aria-busy.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaButton) {
   RunAriaTest(FILE_PATH_LITERAL("aria-button.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaCaption) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-caption.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaCell) {
@@ -733,6 +741,10 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaOption) {
   RunAriaTest(FILE_PATH_LITERAL("aria-option.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaParagraph) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-paragraph.html"));
+}
+
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaPosinset) {
   RunAriaTest(FILE_PATH_LITERAL("aria-posinset.html"));
 }
@@ -989,6 +1001,10 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityBlockquote) {
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityBody) {
   RunHtmlTest(FILE_PATH_LITERAL("body.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityBodyTabIndex) {
+  RunHtmlTest(FILE_PATH_LITERAL("body-tabindex.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityBoundsInherits) {
@@ -1412,6 +1428,21 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputReset) {
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputSearch) {
   RunHtmlTest(FILE_PATH_LITERAL("input-search.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityScrollableInput) {
+  RunHtmlTest(FILE_PATH_LITERAL("scrollable-input.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityScrollableOverflow) {
+  RunHtmlTest(FILE_PATH_LITERAL("scrollable-overflow.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityScrollableTextarea) {
+  RunHtmlTest(FILE_PATH_LITERAL("scrollable-textarea.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilitySmall) {

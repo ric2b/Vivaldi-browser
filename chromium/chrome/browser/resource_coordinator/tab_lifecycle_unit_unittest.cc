@@ -34,6 +34,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
 #include "content/public/test/web_contents_tester.h"
+#include "device/base/mock_device_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace resource_coordinator {
@@ -155,7 +156,7 @@ class TabLifecycleUnitTest : public testing::ChromeTestHarnessWithLocalDB {
   }
 
   ::testing::StrictMock<MockTabLifecycleObserver> observer_;
-  base::ObserverList<TabLifecycleObserver> observers_;
+  base::ObserverList<TabLifecycleObserver>::Unchecked observers_;
   content::WebContents* web_contents_;  // Owned by tab_strip_model_.
   std::unique_ptr<TabStripModel> tab_strip_model_;
   base::SimpleTestTickClock test_clock_;
@@ -206,8 +207,8 @@ void TabLifecycleUnitTest::TestCannotDiscardBasedOnHeuristicUsage(
   }
   {
     DecisionDetails decision_details;
-    EXPECT_FALSE(tab_lifecycle_unit.CanDiscard(DiscardReason::kProactive,
-                                               &decision_details));
+    EXPECT_FALSE(tab_lifecycle_unit.CanDiscard(
+        LifecycleUnitDiscardReason::PROACTIVE, &decision_details));
     EXPECT_FALSE(decision_details.IsPositive());
     EXPECT_EQ(failure_reason, decision_details.FailureReason());
     // There should only be one reason (e.g. no duplicates).
@@ -219,14 +220,14 @@ void TabLifecycleUnitTest::TestCannotDiscardBasedOnHeuristicUsage(
   // Heuristics shouldn't be considered for urgent or external tab discarding.
   {
     DecisionDetails decision_details;
-    EXPECT_TRUE(tab_lifecycle_unit.CanDiscard(DiscardReason::kExternal,
-                                              &decision_details));
+    EXPECT_TRUE(tab_lifecycle_unit.CanDiscard(
+        LifecycleUnitDiscardReason::EXTERNAL, &decision_details));
     EXPECT_TRUE(decision_details.IsPositive());
   }
   {
     DecisionDetails decision_details;
-    EXPECT_TRUE(tab_lifecycle_unit.CanDiscard(DiscardReason::kUrgent,
-                                              &decision_details));
+    EXPECT_TRUE(tab_lifecycle_unit.CanDiscard(
+        LifecycleUnitDiscardReason::URGENT, &decision_details));
     EXPECT_TRUE(decision_details.IsPositive());
   }
 
@@ -238,8 +239,7 @@ TEST_F(TabLifecycleUnitTest, AsTabLifecycleUnitExternal) {
   TabLifecycleUnit tab_lifecycle_unit(GetSource(), &observers_,
                                       usage_clock_.get(), web_contents_,
                                       tab_strip_model_.get());
-  EXPECT_EQ(&tab_lifecycle_unit,
-            tab_lifecycle_unit.AsTabLifecycleUnitExternal());
+  EXPECT_TRUE(tab_lifecycle_unit.AsTabLifecycleUnitExternal());
 }
 
 TEST_F(TabLifecycleUnitTest, CanDiscardByDefault) {
@@ -331,9 +331,12 @@ TEST_F(TabLifecycleUnitTest, UrgentDiscardProtections) {
                                       tab_strip_model_.get());
   // Initial external and proactive discarding are fine, but urgent discarding
   // is blocked because the tab is too recent.
-  ExpectCanDiscardTrue(&tab_lifecycle_unit, DiscardReason::kExternal);
-  ExpectCanDiscardTrue(&tab_lifecycle_unit, DiscardReason::kProactive);
-  ExpectCanDiscardFalseTrivial(&tab_lifecycle_unit, DiscardReason::kUrgent);
+  ExpectCanDiscardTrue(&tab_lifecycle_unit,
+                       LifecycleUnitDiscardReason::EXTERNAL);
+  ExpectCanDiscardTrue(&tab_lifecycle_unit,
+                       LifecycleUnitDiscardReason::PROACTIVE);
+  ExpectCanDiscardFalseTrivial(&tab_lifecycle_unit,
+                               LifecycleUnitDiscardReason::URGENT);
 
   // Advance time enough that the tab is urgent discardable.
   test_clock_.Advance(kBackgroundUrgentProtectionTime);
@@ -350,9 +353,12 @@ TEST_F(TabLifecycleUnitTest, UrgentDiscardProtections) {
   test_clock_.Advance(kBackgroundUrgentProtectionTime);
 
   // Proactive and external discarding should be fine, but not urgent.
-  ExpectCanDiscardTrue(&tab_lifecycle_unit, DiscardReason::kExternal);
-  ExpectCanDiscardTrue(&tab_lifecycle_unit, DiscardReason::kProactive);
-  ExpectCanDiscardFalseTrivial(&tab_lifecycle_unit, DiscardReason::kUrgent);
+  ExpectCanDiscardTrue(&tab_lifecycle_unit,
+                       LifecycleUnitDiscardReason::EXTERNAL);
+  ExpectCanDiscardTrue(&tab_lifecycle_unit,
+                       LifecycleUnitDiscardReason::PROACTIVE);
+  ExpectCanDiscardFalseTrivial(&tab_lifecycle_unit,
+                               LifecycleUnitDiscardReason::URGENT);
 }
 #endif  // !defined(OS_CHROMEOS)
 
@@ -411,7 +417,7 @@ TEST_F(TabLifecycleUnitTest, CannotDiscardDesktopCapture) {
   ExpectCanDiscardTrueAllReasons(&tab_lifecycle_unit);
 
   content::MediaStreamDevices desktop_capture_devices{
-      content::MediaStreamDevice(content::MEDIA_DESKTOP_VIDEO_CAPTURE,
+      content::MediaStreamDevice(content::MEDIA_GUM_DESKTOP_VIDEO_CAPTURE,
                                  "fake_media_device", "fake_media_device")};
   std::unique_ptr<content::MediaStreamUI> ui =
       MediaCaptureDevicesDispatcher::GetInstance()
@@ -471,11 +477,13 @@ TEST_F(TabLifecycleUnitTest, CannotFreezeOrDiscardWebUsbConnectionsOpen) {
   test_clock_.Advance(kBackgroundUrgentProtectionTime);
   ExpectCanDiscardTrueAllReasons(&tab_lifecycle_unit);
 
+  // Make sure there is a DeviceClient instance.
+  device::MockDeviceClient device_client;
   UsbTabHelper* usb_tab_helper =
       UsbTabHelper::GetOrCreateForWebContents(web_contents_);
-  usb_tab_helper->CreateChooserService(
+  usb_tab_helper->CreateWebUsbService(
       web_contents_->GetMainFrame(),
-      mojo::InterfaceRequest<device::mojom::UsbChooserService>());
+      mojo::InterfaceRequest<blink::mojom::WebUsbService>());
 
   // Page could be intending to use the WebUSB API, but there's no connection
   // open yet, so it can still be discarded/frozen.
@@ -578,8 +586,8 @@ TEST_F(TabLifecycleUnitTest, CannotProactivelyDiscardTabIfOriginOptedOut) {
   // should still be possible.
   {
     DecisionDetails decision_details;
-    EXPECT_FALSE(tab_lifecycle_unit.CanDiscard(DiscardReason::kProactive,
-                                               &decision_details));
+    EXPECT_FALSE(tab_lifecycle_unit.CanDiscard(
+        LifecycleUnitDiscardReason::PROACTIVE, &decision_details));
     EXPECT_FALSE(decision_details.IsPositive());
     EXPECT_EQ(DecisionFailureReason::GLOBAL_BLACKLIST,
               decision_details.FailureReason());
@@ -587,14 +595,14 @@ TEST_F(TabLifecycleUnitTest, CannotProactivelyDiscardTabIfOriginOptedOut) {
   }
   {
     DecisionDetails decision_details;
-    EXPECT_TRUE(tab_lifecycle_unit.CanDiscard(DiscardReason::kUrgent,
-                                              &decision_details));
+    EXPECT_TRUE(tab_lifecycle_unit.CanDiscard(
+        LifecycleUnitDiscardReason::URGENT, &decision_details));
     EXPECT_TRUE(decision_details.IsPositive());
   }
   {
     DecisionDetails decision_details;
-    EXPECT_TRUE(tab_lifecycle_unit.CanDiscard(DiscardReason::kExternal,
-                                              &decision_details));
+    EXPECT_TRUE(tab_lifecycle_unit.CanDiscard(
+        LifecycleUnitDiscardReason::EXTERNAL, &decision_details));
     EXPECT_TRUE(decision_details.IsPositive());
   }
 }
@@ -636,8 +644,8 @@ TEST_F(TabLifecycleUnitTest, OptInTabsGetsDiscarded) {
   tab_lifecycle_unit.SetRecentlyAudible(true);
 
   DecisionDetails decision_details;
-  EXPECT_TRUE(tab_lifecycle_unit.CanDiscard(DiscardReason::kProactive,
-                                            &decision_details));
+  EXPECT_TRUE(tab_lifecycle_unit.CanDiscard(
+      LifecycleUnitDiscardReason::PROACTIVE, &decision_details));
   EXPECT_TRUE(decision_details.IsPositive());
   EXPECT_EQ(DecisionSuccessReason::GLOBAL_WHITELIST,
             decision_details.SuccessReason());
@@ -738,25 +746,30 @@ TEST_F(TabLifecycleUnitTest, CannotFreezeOrDiscardIfSharingBrowsingInstance) {
             web_contents_->GetSiteInstance()->GetRelatedActiveContentsCount());
 
   DecisionDetails decision_details;
-  EXPECT_TRUE(tab_lifecycle_unit.CanFreeze(&decision_details));
-  EXPECT_TRUE(decision_details.IsPositive());
+  EXPECT_FALSE(tab_lifecycle_unit.CanFreeze(&decision_details));
+  EXPECT_FALSE(decision_details.IsPositive());
+  EXPECT_EQ(DecisionFailureReason::LIVE_STATE_SHARING_BROWSING_INSTANCE,
+            decision_details.FailureReason());
+
+  decision_details.Clear();
+  EXPECT_FALSE(tab_lifecycle_unit.CanDiscard(
+      LifecycleUnitDiscardReason::PROACTIVE, &decision_details));
+  EXPECT_FALSE(decision_details.IsPositive());
+  EXPECT_EQ(DecisionFailureReason::LIVE_STATE_SHARING_BROWSING_INSTANCE,
+            decision_details.FailureReason());
 
   {
     GetMutableStaticProactiveTabFreezeAndDiscardParamsForTesting()
-        ->should_protect_tabs_sharing_browsing_instance = true;
+        ->should_protect_tabs_sharing_browsing_instance = false;
     decision_details.Clear();
-    EXPECT_FALSE(tab_lifecycle_unit.CanFreeze(&decision_details));
-    EXPECT_FALSE(decision_details.IsPositive());
-    EXPECT_EQ(DecisionFailureReason::LIVE_STATE_SHARING_BROWSING_INSTANCE,
-              decision_details.FailureReason());
+    EXPECT_TRUE(tab_lifecycle_unit.CanFreeze(&decision_details));
+    EXPECT_TRUE(decision_details.IsPositive());
 
     decision_details.Clear();
 
-    EXPECT_FALSE(tab_lifecycle_unit.CanDiscard(DiscardReason::kProactive,
-                                               &decision_details));
-    EXPECT_FALSE(decision_details.IsPositive());
-    EXPECT_EQ(DecisionFailureReason::LIVE_STATE_SHARING_BROWSING_INSTANCE,
-              decision_details.FailureReason());
+    EXPECT_TRUE(tab_lifecycle_unit.CanDiscard(
+        LifecycleUnitDiscardReason::PROACTIVE, &decision_details));
+    EXPECT_TRUE(decision_details.IsPositive());
   }
 }
 

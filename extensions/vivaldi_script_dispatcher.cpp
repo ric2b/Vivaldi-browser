@@ -13,6 +13,8 @@ namespace vivaldi {
 // Called by Dispatcher::GetJsResources()
 void VivaldiAddScriptResources(
     std::vector<extensions::Dispatcher::JsResourceInfo>* resources) {
+  resources->push_back({"webViewPrivateImpl",
+                        IDR_WEB_VIEW_PRIVATE_API_IMPL_JS});
   resources->push_back({"webViewPrivateMethods",
                         IDR_WEB_VIEW_PRIVATE_API_METHODS_JS});
   resources->push_back({"webViewPrivate", IDR_WEB_VIEW_PRIVATE_JS});
@@ -29,7 +31,7 @@ void VivaldiAddRequiredModules(extensions::ScriptContext* context,
   // Require WebView.
   if (context->GetAvailability("webViewInternal").is_available() &&
       vivaldi::IsVivaldiRunning()) {
-    module_system->Require("webViewPrivateMethods");
+    module_system->Require("webViewPrivateImpl");
   }
 }
 

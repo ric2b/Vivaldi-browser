@@ -34,6 +34,10 @@ class NullExecutionContext
   void DisableEval(const String&) override {}
   String UserAgent() const override { return String(); }
 
+  HttpsState GetHttpsState() const override {
+    return CalculateHttpsState(GetSecurityOrigin());
+  }
+
   EventTarget* ErrorEventTarget() override { return nullptr; }
 
   bool TasksNeedPause() override { return tasks_need_pause_; }
@@ -42,6 +46,9 @@ class NullExecutionContext
   void DidUpdateSecurityOrigin() override {}
   SecurityContext& GetSecurityContext() override { return *this; }
   DOMTimerCoordinator* Timers() override { return nullptr; }
+  const base::UnguessableToken& GetAgentClusterID() const final {
+    return base::UnguessableToken::Null();
+  }
 
   void AddConsoleMessage(ConsoleMessage*) override {}
   void ExceptionThrown(ErrorEvent*) override {}

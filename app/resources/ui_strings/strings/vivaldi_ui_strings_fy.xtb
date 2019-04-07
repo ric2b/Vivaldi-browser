@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="fy">
+<translation id="1127811143501539442">{DAYS, plural, =1 {1 dei lyn} other {# dagen lyn}}</translation>
+<translation id="1156623771253174079">{SECONDS, plural, =1 {1 minút lyn} other {# minuten lyn}}</translation>
+<translation id="1368832886055348810">Links nei rjochts</translation>
+<translation id="1591184457164800433">{MINUTES, plural, =1 {1 minút en} other {# minuten en }}</translation>
+<translation id="1752946267035950200">{MINUTES, plural, =1 {1 minút} other {# minuten}}</translation>
+<translation id="1761785978543082658"><ph name="QUANTITY" /> B</translation>
+<translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
+<translation id="1830179671306812954">{HOURS, plural, =1 {1 oere en } other {# oeren en }}</translation>
+<translation id="1859234291848436338">Skriuw rjochting</translation>
+<translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
+<translation id="3291688615589870984">{DAYS, plural, =1 {1 dei} other {# dagen}}</translation>
+<translation id="3600566671520689681">{DAYS, plural, =1 {1 dei oer} other {# dagen oer}}</translation>
+<translation id="3618849550573277856">Syktekst "<ph name="LOOKUP_STRING" />"</translation>
+<translation id="3740362395218339114"><ph name="QUANTITY" /> GB/s</translation>
+<translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
+<translation id="3889424535448813030">Pylk rjochts</translation>
+<translation id="4968171027979920686">{SECONDS, plural, =1 {1 sekonde} other {# sekonden}}</translation>
+<translation id="5076340679995252485">&amp;Plakke</translation>
+<translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
+<translation id="5613020302032141669">Pylk links</translation>
+<translation id="5754277640426581776">{MINUTES, plural, =1 {1 min.} other {# min.}}</translation>
+<translation id="5768079895599174203">{DAYS, plural, =1 {1 dei en } other {# dagen en }}</translation>
+<translation id="5906667377645263094">{SECONDS, plural, =1 {1 sekonde oer} other {# sekonden oer}}</translation>
+<translation id="5943826764092288734">{HOURS, plural, =1 {1 oere} other {# oeren}}</translation>
+<translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
+<translation id="6404817160109697034">{SECONDS, plural, =1 {1 sek. lyn} other {# sek. lyn}}</translation>
+<translation id="6483402905448010557">{SECONDS, plural, =1 {1 sekonde lyn} other {# sekonden lyn}}</translation>
+<translation id="6863590663815976734">{HOURS, plural, =1 {1 oere oer} other {# oeren oer}}</translation>
+<translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
+<translation id="6974053822202609517">Rjochts nei links</translation>
+<translation id="7238427729722629793">{MINUTES, plural, =1 {1 min. oer} other {# min. oer}}</translation>
+<translation id="7365057348334984696">{MINUTES, plural, =1 {1 min. lyn} other {# min. lyn}}</translation>
+<translation id="7410957453383678442">{MINUTES, plural, =1 {1 minút oer} other {# minuten oer}}</translation>
+<translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
+<translation id="8106081041558092062">{HOURS, plural, =1 {1 oere lyn} other {# oeren lyn}}</translation>
+<translation id="8131263257437993507">{SECONDS, plural, =1 {1 sek. oer} other {# sekonden oer}}</translation>
+<translation id="8677655579646609597"><ph name="QUANTITY" /> KB/s</translation>
+<translation id="8798099450830957504">Standert</translation>
+<translation id="8901569739625249689"><ph name="QUANTITY" /> KB</translation>
+<translation id="9044832324875206639">{SECONDS, plural, =1 {1 sek.} other {# sek.}}</translation>
+</translationbundle>

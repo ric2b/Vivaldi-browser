@@ -36,6 +36,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -621,7 +622,7 @@ void DownloadItemImpl::OpenDownload() {
   // program that opens the file.  So instead we spawn a check to update
   // the UI if the file has been deleted in parallel with the open.
   delegate_->CheckForFileRemoval(this);
-  RecordOpen(GetEndTime(), !GetOpened());
+  RecordOpen(GetEndTime());
   opened_ = true;
   last_access_time_ = base::Time::Now();
   for (auto& observer : observers_)
@@ -806,6 +807,12 @@ const base::FilePath& DownloadItemImpl::GetForcedFilePath() const {
   // TODO(asanka): Get rid of GetForcedFilePath(). We should instead just
   // require that clients respect GetTargetFilePath() if it is already set.
   return request_info_.forced_file_path;
+}
+
+base::FilePath DownloadItemImpl::GetTemporaryFilePath() const {
+  if (state_ == TARGET_PENDING_INTERNAL || INTERRUPTED_TARGET_PENDING_INTERNAL)
+    return download_file_ ? download_file_->FullPath() : base::FilePath();
+  return base::FilePath();
 }
 
 base::FilePath DownloadItemImpl::GetFileNameToReportUser() const {
@@ -1188,7 +1195,6 @@ void DownloadItemImpl::UpdateValidatorsOnResumption(
   // HTTP_PRECONDITION_FAILED), then the download will automatically retried as
   // a full request rather than a partial. Full restarts clobber validators.
   int origin_state = 0;
-  bool is_partial = GetReceivedBytes() > 0;
   if (chain_iter != new_create_info.url_chain.end())
     origin_state |= ORIGIN_STATE_ON_RESUMPTION_ADDITIONAL_REDIRECTS;
   if (etag_ != new_create_info.etag ||
@@ -1199,8 +1205,6 @@ void DownloadItemImpl::UpdateValidatorsOnResumption(
   }
   if (content_disposition_ != new_create_info.content_disposition)
     origin_state |= ORIGIN_STATE_ON_RESUMPTION_CONTENT_DISPOSITION_CHANGED;
-  RecordOriginStateOnResumption(
-      is_partial, static_cast<OriginStateOnResumption>(origin_state));
 
   request_info_.url_chain.insert(request_info_.url_chain.end(), chain_iter,
                                  new_create_info.url_chain.end());
@@ -1468,9 +1472,14 @@ void DownloadItemImpl::Start(
     DownloadContent file_type = DownloadContentFromMimeType(mime_type_, false);
     auto in_progress_entry = delegate_->GetInProgressEntry(this);
     if (in_progress_entry) {
+      bool is_same_host_download =
+          base::StringPiece(new_create_info.url().host())
+              .ends_with(new_create_info.site_url.host());
+      DownloadConnectionSecurity state = CheckDownloadConnectionSecurity(
+          new_create_info.url(), new_create_info.url_chain);
       DownloadUkmHelper::RecordDownloadStarted(
           in_progress_entry->ukm_download_id, new_create_info.ukm_source_id,
-          file_type, download_source_);
+          file_type, download_source_, state, is_same_host_download);
     }
 
     if (!delegate_->IsOffTheRecord()) {
@@ -1814,7 +1823,7 @@ void DownloadItemImpl::Completed() {
   TransitionTo(COMPLETE_INTERNAL);
 
   bool is_parallelizable = job_ && job_->IsParallelizable();
-  RecordDownloadCompleted(start_tick_, GetReceivedBytes(), is_parallelizable,
+  RecordDownloadCompleted(GetReceivedBytes(), is_parallelizable,
                           download_source_);
   if (!delegate_->IsOffTheRecord()) {
     RecordDownloadCountWithSource(COMPLETED_COUNT_NORMAL_PROFILE,

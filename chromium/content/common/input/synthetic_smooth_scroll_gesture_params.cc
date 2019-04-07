@@ -14,15 +14,15 @@ const float kDefaultSpeedInPixelsS = 800;
 }  // namespace
 
 SyntheticSmoothScrollGestureParams::SyntheticSmoothScrollGestureParams()
-    : prevent_fling(true), speed_in_pixels_s(kDefaultSpeedInPixelsS) {}
+    : prevent_fling(true),
+      speed_in_pixels_s(kDefaultSpeedInPixelsS),
+      fling_velocity_x(0),
+      fling_velocity_y(0),
+      precise_scrolling_deltas(false),
+      scroll_by_page(false) {}
 
 SyntheticSmoothScrollGestureParams::SyntheticSmoothScrollGestureParams(
-      const SyntheticSmoothScrollGestureParams& other)
-    : SyntheticGestureParams(other),
-      anchor(other.anchor),
-      distances(other.distances),
-      prevent_fling(other.prevent_fling),
-      speed_in_pixels_s(other.speed_in_pixels_s) {}
+    const SyntheticSmoothScrollGestureParams& other) = default;
 
 SyntheticSmoothScrollGestureParams::~SyntheticSmoothScrollGestureParams() {}
 

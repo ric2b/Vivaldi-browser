@@ -17,7 +17,7 @@
 #include "contact/email_type.h"
 
 namespace sql {
-class Connection;
+class Database;
 }
 
 namespace contact {
@@ -45,7 +45,7 @@ class EmailTable {
                                ContactID contact_id);
 
  protected:
-  virtual sql::Connection& GetDB() = 0;
+  virtual sql::Database& GetDB() = 0;
   bool CreateEmailTable();
 
  private:

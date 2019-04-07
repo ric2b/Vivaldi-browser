@@ -167,6 +167,28 @@ class GpuProcessIntegrationTest(gpu_integration_test.GpuIntegrationTest):
             (sys.platform.startswith('linux') and
              not self._RunningOnAndroid()))
 
+  def _AlwaysRunsGpuProcess(self):
+    # With VizDisplayCompositor enabled we always run a GPU process for the
+    # display compositor, except on Windows where the display compositor will
+    # run in the browser process if GPU and SwiftShader are disabled.
+    system_info = self.browser.GetSystemInfo()
+    if not system_info:
+      self.fail("Browser doesn't support GetSystemInfo")
+
+    viz_status = system_info.gpu.feature_status.get('viz_display_compositor')
+    return viz_status == 'enabled_on' and sys.platform != 'win32'
+
+  @staticmethod
+  def _Filterer(workaround):
+    # Filter all entries starting with "disabled_extension_" and
+    # "disabled_webgl_extension_", as these are synthetic entries
+    # added to make it easier to read the logs.
+    banned_prefixes = ['disabled_extension_', 'disabled_webgl_extension_']
+    for p in banned_prefixes:
+      if workaround.startswith(p):
+        return False
+    return True
+
   def _CompareAndCaptureDriverBugWorkarounds(self):
     tab = self.tab
     if not tab.EvaluateJavaScript('chrome.gpuBenchmarking.hasGpuProcess()'):
@@ -175,14 +197,16 @@ class GpuProcessIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     if not tab.EvaluateJavaScript('chrome.gpuBenchmarking.hasGpuChannel()'):
       self.fail('No GPU channel detected')
 
-    browser_list = tab.EvaluateJavaScript('GetDriverBugWorkarounds()')
-    gpu_list = tab.EvaluateJavaScript(
-      'chrome.gpuBenchmarking.getGpuDriverBugWorkarounds()')
+    browser_list = [
+      x for x in tab.EvaluateJavaScript('GetDriverBugWorkarounds()')
+      if self._Filterer(x)]
+    gpu_list = [
+      x for x in tab.EvaluateJavaScript(
+        'chrome.gpuBenchmarking.getGpuDriverBugWorkarounds()')
+      if self._Filterer(x)]
 
     diff = set(browser_list).symmetric_difference(set(gpu_list))
     if len(diff) > 0:
-      print 'Test failed. Printing page contents:'
-      print tab.EvaluateJavaScript('document.body.innerHTML')
       self.fail('Browser and GPU process list of driver bug'
                 'workarounds are not equal: %s != %s, diff: %s' %
                 (browser_list, gpu_list, list(diff)))
@@ -363,6 +387,11 @@ class GpuProcessIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       # Chrome on Android doesn't support software fallback, skip it.
       # TODO(zmo): If this test runs on ChromeOS, we also need to skip it.
       return
+
+    if self._AlwaysRunsGpuProcess():
+      # The current configuration will always launch a GPU process, skip test.
+      return
+
     self.RestartBrowserIfNecessaryWithArgs([
       '--disable-gpu',
       '--disable-software-rasterizer'])

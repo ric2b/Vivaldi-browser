@@ -20,7 +20,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/sys_info.h"
-#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/ios/browser/autofill_switches.h"
@@ -41,6 +40,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/unified_consent/feature.h"
+#include "ios/chrome/browser/app_launcher/app_launcher_flags.h"
 #include "ios/chrome/browser/browsing_data/browsing_data_features.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
@@ -53,6 +53,7 @@
 #import "ios/chrome/browser/ui/history/features.h"
 #include "ios/chrome/browser/ui/main/main_feature_flags.h"
 #import "ios/chrome/browser/ui/toolbar/public/features.h"
+#import "ios/chrome/browser/ui/toolbar_container/toolbar_container_features.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/browser/web/features.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -165,9 +166,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"web-payments-native-apps", flag_descriptions::kWebPaymentsNativeAppsName,
      flag_descriptions::kWebPaymentsNativeAppsDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(payments::features::kWebPaymentsNativeApps)},
-    {"ios-captive-portal", flag_descriptions::kCaptivePortalName,
-     flag_descriptions::kCaptivePortalDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kCaptivePortalFeature)},
     {"ios-captive-portal-metrics", flag_descriptions::kCaptivePortalMetricsName,
      flag_descriptions::kCaptivePortalMetricsDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kCaptivePortalMetrics)},
@@ -205,9 +203,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"slim-navigation-manager", flag_descriptions::kSlimNavigationManagerName,
      flag_descriptions::kSlimNavigationManagerDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(web::features::kSlimNavigationManager)},
-    {"new-file-download", flag_descriptions::kNewFileDownloadName,
-     flag_descriptions::kNewFileDownloadDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(web::features::kNewFileDownload)},
     {"web-error-pages", flag_descriptions::kWebErrorPagesName,
      flag_descriptions::kWebErrorPagesDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(web::features::kWebErrorPages)},
@@ -224,7 +219,7 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"enable-autofill-credit-card-upload",
      flag_descriptions::kAutofillCreditCardUploadName,
      flag_descriptions::kAutofillCreditCardUploadDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(autofill::kAutofillUpstream)},
+     FEATURE_VALUE_TYPE(autofill::features::kAutofillUpstream)},
     {"enable-autofill-credit-card-downstream-google-pay-branding",
      flag_descriptions::kAutofillDownstreamUseGooglePayBrandingOniOSName,
      flag_descriptions::kAutofillDownstreamUseGooglePayBrandingOniOSDescription,
@@ -244,7 +239,8 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::
          kEnableAutofillCreditCardUploadUpdatePromptExplanationDescription,
      flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(autofill::kAutofillUpstreamUpdatePromptExplanation)},
+     FEATURE_VALUE_TYPE(
+         autofill::features::kAutofillUpstreamUpdatePromptExplanation)},
     {"use-sync-sandbox", flag_descriptions::kSyncSandboxName,
      flag_descriptions::kSyncSandboxDescription, flags_ui::kOsIos,
      SINGLE_VALUE_TYPE_AND_VALUE(
@@ -270,17 +266,9 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"ui-refresh-phase-1", flag_descriptions::kUIRefreshPhase1Name,
      flag_descriptions::kUIRefreshPhase1Description, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kUIRefreshPhase1)},
-    {"collections-ui-reboot", flag_descriptions::kCollectionsUIRebootName,
-     flag_descriptions::kCollectionsUIRebootDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kCollectionsUIReboot)},
     {"infobars-ui-reboot", flag_descriptions::kInfobarsUIRebootName,
      flag_descriptions::kInfobarsUIRebootDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kInfobarsUIReboot)},
-    {"context-menu-element-post-message",
-     flag_descriptions::kContextMenuElementPostMessageName,
-     flag_descriptions::kContextMenuElementPostMessageDescription,
-     flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(web::features::kContextMenuElementPostMessage)},
     {"mailto-handling-google-ui",
      flag_descriptions::kMailtoHandlingWithGoogleUIName,
      flag_descriptions::kMailtoHandlingWithGoogleUIDescription,
@@ -296,6 +284,10 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"unified-consent", flag_descriptions::kUnifiedConsentName,
      flag_descriptions::kUnifiedConsentDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(unified_consent::kUnifiedConsent)},
+    {"force-unified-consent-bump",
+     flag_descriptions::kForceUnifiedConsentBumpName,
+     flag_descriptions::kForceUnifiedConsentBumpDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(unified_consent::kForceUnifiedConsentBump)},
     {"autofill-dynamic-forms", flag_descriptions::kAutofillDynamicFormsName,
      flag_descriptions::kAutofillDynamicFormsDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(autofill::features::kAutofillDynamicForms)},
@@ -354,6 +346,10 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAutofillCacheQueryResponsesDescription,
      flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(autofill::features::kAutofillCacheQueryResponses)},
+    {"autofill-enable-company-name",
+     flag_descriptions::kAutofillEnableCompanyNameName,
+     flag_descriptions::kAutofillEnableCompanyNameDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(autofill::features::kAutofillEnableCompanyName)},
     {"autofill-manual-fallback", flag_descriptions::kAutofillManualFallbackName,
      flag_descriptions::kAutofillManualFallbackDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(autofill::features::kAutofillManualFallback)},
@@ -371,6 +367,30 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kNewPasswordFormParsingName,
      flag_descriptions::kNewPasswordFormParsingDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(password_manager::features::kNewPasswordFormParsing)},
+    {"app-launcher-refresh", flag_descriptions::kAppLauncherRefreshName,
+     flag_descriptions::kAppLauncherRefreshDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kAppLauncherRefresh)},
+    {"sync-standalone-transport",
+     flag_descriptions::kSyncStandaloneTransportName,
+     flag_descriptions::kSyncStandaloneTransportDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(switches::kSyncStandaloneTransport)},
+    {"sync-support-secondary-account",
+     flag_descriptions::kSyncSupportSecondaryAccountName,
+     flag_descriptions::kSyncSupportSecondaryAccountDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(switches::kSyncSupportSecondaryAccount)},
+    {"out-of-web-fullscreen", flag_descriptions::kOutOfWebFullscreenName,
+     flag_descriptions::kOutOfWebFullscreenDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(web::features::kOutOfWebFullscreen)},
+    {"toolbar-container-custom-view",
+     flag_descriptions::kToolbarContainerCustomViewName,
+     flag_descriptions::kToolbarContainerCustomViewDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(toolbar_container::kToolbarContainerCustomViewEnabled)},
+    {"closing-last-incognito-tab",
+     flag_descriptions::kClosingLastIncognitoTabName,
+     flag_descriptions::kClosingLastIncognitoTabDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kClosingLastIncognitoTab)},
 };
 
 // Add all switches from experimental flags to |command_line|.

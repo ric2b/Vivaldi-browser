@@ -311,7 +311,7 @@ ObjectManager* Bus::GetObjectManager(const std::string& service_name,
   }
 
   scoped_refptr<ObjectManager> object_manager =
-      new ObjectManager(this, service_name, object_path);
+      ObjectManager::Create(this, service_name, object_path);
   object_manager_table_[key] = object_manager;
 
   return object_manager.get();
@@ -995,6 +995,10 @@ std::string Bus::GetConnectionName() {
   if (!connection_)
     return "";
   return dbus_bus_get_unique_name(connection_);
+}
+
+bool Bus::IsConnected() {
+  return connection_ != nullptr;
 }
 
 dbus_bool_t Bus::OnAddWatch(DBusWatch* raw_watch) {

@@ -19,6 +19,10 @@ void FakeAssistantManagerServiceImpl::Start(const std::string& access_token,
     std::move(callback).Run();
 }
 
+void FakeAssistantManagerServiceImpl::Stop() {
+  state_ = State::STOPPED;
+}
+
 void FakeAssistantManagerServiceImpl::SetAccessToken(
     const std::string& access_token) {}
 
@@ -42,9 +46,10 @@ void FakeAssistantManagerServiceImpl::SendUpdateSettingsUiRequest(
     const std::string& update,
     UpdateSettingsUiResponseCallback callback) {}
 
-void FakeAssistantManagerServiceImpl::RequestScreenContext(
-    const gfx::Rect& region,
-    RequestScreenContextCallback callback) {}
+void FakeAssistantManagerServiceImpl::StartCachedScreenContextInteraction() {}
+
+void FakeAssistantManagerServiceImpl::StartMetalayerInteraction(
+    const gfx::Rect& region) {}
 
 void FakeAssistantManagerServiceImpl::StartVoiceInteraction() {}
 
@@ -64,6 +69,9 @@ void FakeAssistantManagerServiceImpl::RetrieveNotification(
 
 void FakeAssistantManagerServiceImpl::DismissNotification(
     mojom::AssistantNotificationPtr notification) {}
+
+void FakeAssistantManagerServiceImpl::CacheScreenContext(
+    CacheScreenContextCallback callback) {}
 
 }  // namespace assistant
 }  // namespace chromeos

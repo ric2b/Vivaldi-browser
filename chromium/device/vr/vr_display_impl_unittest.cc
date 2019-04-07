@@ -21,17 +21,10 @@ class VRDisplayImplTest : public testing::Test {
   VRDisplayImplTest() {}
   ~VRDisplayImplTest() override {}
   void onDisplaySynced() {}
-  void onPresentComplete(
-      device::mojom::XRPresentationConnectionPtr connection,
-      mojom::XRSessionControllerPtr immersive_session_controller) {
-    is_request_presenting_success_ = connection ? true : false;
-
-    immersive_session_controller_ = std::move(immersive_session_controller);
-  }
 
  protected:
   void SetUp() override {
-    device_ = std::make_unique<FakeVRDevice>(1);
+    device_ = std::make_unique<FakeVRDevice>(static_cast<mojom::XRDeviceId>(1));
     device_->SetPose(mojom::VRPose::New());
     mojom::VRServiceClientPtr proxy;
     client_ = std::make_unique<FakeVRServiceClient>(mojo::MakeRequest(&proxy));
@@ -39,9 +32,12 @@ class VRDisplayImplTest : public testing::Test {
 
   std::unique_ptr<VRDisplayImpl> MakeDisplay(
       mojom::XRSessionControllerPtr* controller) {
-    mojom::VRMagicWindowProviderPtr session;
+    mojom::XRFrameDataProviderPtr data_provider;
+    mojom::XREnvironmentIntegrationProviderPtr environment_provider;
     auto display = std::make_unique<VRDisplayImpl>(
-        device(), mojo::MakeRequest(&session), mojo::MakeRequest(controller));
+        device(), mojo::MakeRequest(&data_provider),
+        mojo::MakeRequest(&environment_provider),
+        mojo::MakeRequest(controller));
     static_cast<mojom::XRSessionController*>(display.get())
         ->SetFrameDataRestricted(true);
     return display;
@@ -49,14 +45,14 @@ class VRDisplayImplTest : public testing::Test {
 
   void RequestSession(VRDisplayImpl* display_impl) {
     device_->RequestSession(
-        mojom::XRDeviceRuntimeSessionOptionsPtr(),
-        base::BindOnce(&VRDisplayImplTest::onPresentComplete,
-                       base::Unretained(this)));
+        mojom::XRRuntimeSessionOptionsPtr(),
+        base::BindOnce(
+            [](device::mojom::XRSessionPtr session,
+               mojom::XRSessionControllerPtr immersive_session_controller) {}));
   }
 
   void ExitPresent() {
     device_->StopSession();
-    immersive_session_controller_ = nullptr;
   }
 
   bool presenting() { return device_->IsPresenting(); }
@@ -64,10 +60,8 @@ class VRDisplayImplTest : public testing::Test {
   FakeVRServiceClient* client() { return client_.get(); }
 
   base::MessageLoop message_loop_;
-  bool is_request_presenting_success_ = false;
   std::unique_ptr<FakeVRDevice> device_;
   std::unique_ptr<FakeVRServiceClient> client_;
-  mojom::XRSessionControllerPtr immersive_session_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(VRDisplayImplTest);
 };
@@ -77,6 +71,7 @@ TEST_F(VRDisplayImplTest, DevicePresentationIsolation) {
   std::unique_ptr<VRDisplayImpl> display_1 = MakeDisplay(&controller1);
   static_cast<mojom::XRSessionController*>(display_1.get())
       ->SetFrameDataRestricted(false);
+
   mojom::XRSessionControllerPtr controller2;
   std::unique_ptr<VRDisplayImpl> display_2 = MakeDisplay(&controller2);
   static_cast<mojom::XRSessionController*>(display_2.get())
@@ -92,31 +87,36 @@ TEST_F(VRDisplayImplTest, DevicePresentationIsolation) {
     EXPECT_EQ(expect_null, !data);
   };
 
-  static_cast<mojom::VRMagicWindowProvider*>(display_1.get())
+  static_cast<mojom::XRFrameDataProvider*>(display_1.get())
       ->GetFrameData(base::BindOnce(callback, false, &was_called));
+
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(was_called);
   was_called = false;
-  static_cast<mojom::VRMagicWindowProvider*>(display_2.get())
+
+  static_cast<mojom::XRFrameDataProvider*>(display_2.get())
       ->GetFrameData(base::BindOnce(callback, false, &was_called));
+
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(was_called);
   was_called = false;
 
   // Attempt to present.
   RequestSession(display_1.get());
-  EXPECT_TRUE(is_request_presenting_success_);
   EXPECT_TRUE(presenting());
   EXPECT_TRUE(device()->HasExclusiveSession());
 
-  // While a device is presenting, noone should have access to magic window.
-  static_cast<mojom::VRMagicWindowProvider*>(display_1.get())
+  // While a device is presenting, no one should have access to magic window.
+  static_cast<mojom::XRFrameDataProvider*>(display_1.get())
       ->GetFrameData(base::BindOnce(callback, true, &was_called));
+
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(was_called);
   was_called = false;
-  static_cast<mojom::VRMagicWindowProvider*>(display_2.get())
+
+  static_cast<mojom::XRFrameDataProvider*>(display_2.get())
       ->GetFrameData(base::BindOnce(callback, true, &was_called));
+
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(was_called);
   was_called = false;
@@ -128,13 +128,16 @@ TEST_F(VRDisplayImplTest, DevicePresentationIsolation) {
 
   // Once presentation had ended both services should be able to access the
   // device.
-  static_cast<mojom::VRMagicWindowProvider*>(display_1.get())
+  static_cast<mojom::XRFrameDataProvider*>(display_1.get())
       ->GetFrameData(base::BindOnce(callback, false, &was_called));
+
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(was_called);
   was_called = false;
-  static_cast<mojom::VRMagicWindowProvider*>(display_2.get())
+
+  static_cast<mojom::XRFrameDataProvider*>(display_2.get())
       ->GetFrameData(base::BindOnce(callback, false, &was_called));
+
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(was_called);
   was_called = false;

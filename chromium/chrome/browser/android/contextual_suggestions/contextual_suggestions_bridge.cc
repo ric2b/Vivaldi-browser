@@ -22,7 +22,7 @@
 #include "components/ntp_snippets/content_suggestions_service.h"
 #include "components/ntp_snippets/contextual/contextual_content_suggestions_service.h"
 #include "components/ntp_snippets/contextual/contextual_suggestions_features.h"
-#include "components/ntp_snippets/contextual/contextual_suggestions_metrics_reporter.h"
+#include "components/ntp_snippets/contextual/reporting/contextual_suggestions_metrics_reporter.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/policy_constants.h"

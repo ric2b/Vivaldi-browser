@@ -19,9 +19,11 @@ namespace views {
 namespace test {
 class HitTestNativeWidgetMac;
 class MockNativeWidgetMac;
+class WidgetTest;
 }
 
 class BridgedNativeWidget;
+class BridgedNativeWidgetHostImpl;
 
 class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate {
  public:
@@ -30,12 +32,10 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate {
 
   // Retrieves the bridge associated with the given NSWindow. Returns null if
   // the supplied handle has no associated Widget.
+  static BridgedNativeWidgetHostImpl* GetBridgeHostImplForNativeWindow(
+      gfx::NativeWindow window);
   static BridgedNativeWidget* GetBridgeForNativeWindow(
       gfx::NativeWindow window);
-
-  // Return true if the delegate's modal type is window-modal. These display as
-  // a native window "sheet", and have a different lifetime to regular windows.
-  bool IsWindowModalSheet() const;
 
   // Informs |delegate_| that the native widget is about to be destroyed.
   // BridgedNativeWidget::OnWindowWillClose() invokes this early when the
@@ -96,10 +96,9 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate {
   void SetShape(std::unique_ptr<Widget::ShapeRects> shape) override;
   void Close() override;
   void CloseNow() override;
-  void Show() override;
+  void Show(ui::WindowShowState show_state,
+            const gfx::Rect& restore_bounds) override;
   void Hide() override;
-  void ShowMaximizedWithBounds(const gfx::Rect& restored_bounds) override;
-  void ShowWithWindowState(ui::WindowShowState state) override;
   bool IsVisible() const override;
   void Activate() override;
   void Deactivate() override;
@@ -126,6 +125,7 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate {
   void SchedulePaintInRect(const gfx::Rect& rect) override;
   void SetCursor(gfx::NativeCursor cursor) override;
   bool IsMouseEventsEnabled() const override;
+  bool IsMouseButtonDown() const override;
   void ClearNativeFocus() override;
   gfx::Rect GetWorkAreaBoundsInScreen() const override;
   Widget::MoveLoopResult RunMoveLoop(
@@ -138,6 +138,7 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate {
   void SetVisibilityAnimationTransition(
       Widget::VisibilityTransition transition) override;
   bool IsTranslucentWindowOpacitySupported() const override;
+  ui::GestureRecognizer* GetGestureRecognizer() override;
   void OnSizeConstraintsChanged() override;
   void RepostNativeEvent(gfx::NativeEvent native_event) override;
   std::string GetName() const override;
@@ -145,6 +146,10 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate {
  protected:
   // Creates the NSWindow that will be passed to the BridgedNativeWidget.
   // Called by InitNativeWidget. The return value will be autoreleased.
+  // Note that some tests (in particular, views_unittests that interact
+  // with ScopedFakeNSWindowFullscreen, on 10.10) assume that these windows
+  // are autoreleased, and will crash if the window has a more precise
+  // lifetime.
   virtual NativeWidgetMacNSWindow* CreateNSWindow(
       const Widget::InitParams& params);
 
@@ -152,13 +157,18 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate {
   virtual void OnWindowDestroying(NSWindow* window) {}
 
   internal::NativeWidgetDelegate* delegate() { return delegate_; }
+  BridgedNativeWidget* bridge() const;
+  BridgedNativeWidgetHostImpl* bridge_host_for_testing() const {
+    return bridge_host_.get();
+  }
 
  private:
   friend class test::MockNativeWidgetMac;
   friend class test::HitTestNativeWidgetMac;
+  friend class views::test::WidgetTest;
 
   internal::NativeWidgetDelegate* delegate_;
-  std::unique_ptr<BridgedNativeWidget> bridge_;
+  std::unique_ptr<BridgedNativeWidgetHostImpl> bridge_host_;
 
   Widget::InitParams::Ownership ownership_;
 

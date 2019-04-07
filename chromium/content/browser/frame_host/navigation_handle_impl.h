@@ -18,6 +18,8 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/common/content_export.h"
@@ -61,7 +63,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       FrameTreeNode* frame_tree_node,
       bool is_renderer_initiated,
       bool is_same_document,
-      const base::TimeTicks& navigation_start,
+      base::TimeTicks navigation_start,
       int pending_nav_entry_id,
       bool started_from_context_menu,
       CSPDisposition should_check_main_world_csp,
@@ -78,7 +80,8 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       RequestContextType request_context_type =
           REQUEST_CONTEXT_TYPE_UNSPECIFIED,
       blink::WebMixedContentContextType mixed_content_context_type =
-          blink::WebMixedContentContextType::kBlockable);
+          blink::WebMixedContentContextType::kBlockable,
+      base::TimeTicks input_start = base::TimeTicks());
 
   ~NavigationHandleImpl() override;
 
@@ -110,7 +113,8 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   const std::vector<GURL>& GetRedirectChain() override;
   int GetFrameTreeNodeId() override;
   RenderFrameHostImpl* GetParentFrame() override;
-  const base::TimeTicks& NavigationStart() override;
+  base::TimeTicks NavigationStart() override;
+  base::TimeTicks NavigationInputStart() override;
   bool IsPost() override;
   const scoped_refptr<network::ResourceRequestBody>& GetResourceRequestBody()
       override;
@@ -150,6 +154,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       const std::string& raw_response_header) override;
   void CallDidCommitNavigationForTesting(const GURL& url) override;
   void CallResumeForTesting() override;
+  bool IsDeferredForTesting() override;
   bool WasStartedFromContextMenu() const override;
   const GURL& GetSearchableFormURL() override;
   const std::string& GetSearchableFormEncoding() override;
@@ -377,6 +382,10 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
     return GetDeferringThrottle();
   }
 
+  // Sets the READY_TO_COMMIT -> DID_COMMIT timeout.  Resets the timeout to the
+  // default value if |timeout| is zero.
+  static void SetCommitTimeoutForTesting(const base::TimeDelta& timeout);
+
  private:
   friend class NavigationHandleImplTest;
 
@@ -386,7 +395,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       FrameTreeNode* frame_tree_node,
       bool is_renderer_initiated,
       bool is_same_document,
-      const base::TimeTicks& navigation_start,
+      base::TimeTicks navigation_start,
       int pending_nav_entry_id,
       bool started_from_context_menu,
       CSPDisposition should_check_main_world_csp,
@@ -400,7 +409,8 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       ui::PageTransition transition,
       bool is_external_protocol,
       RequestContextType request_context_type,
-      blink::WebMixedContentContextType mixed_content_context_type);
+      blink::WebMixedContentContextType mixed_content_context_type,
+      base::TimeTicks input_start);
 
   NavigationThrottle::ThrottleCheckResult CheckWillStartRequest();
   NavigationThrottle::ThrottleCheckResult CheckWillRedirectRequest();
@@ -439,6 +449,12 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // throttle at index |next_index_ -1|). If the handle is not deferred, returns
   // nullptr;
   NavigationThrottle* GetDeferringThrottle() const;
+
+  // Called if READY_TO_COMMIT -> COMMIT state transition takes an unusually
+  // long time.
+  void OnCommitTimeout();
+
+  void RestartCommitTimeout();
 
   // See NavigationHandle for a description of those member variables.
   GURL url_;
@@ -492,8 +508,16 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // The time this navigation started.
   const base::TimeTicks navigation_start_;
 
+  // The time the input event that lead to this navigation started.
+  // Currently available only if the navigation was initiated by
+  // the user clicking a link in the renderer.
+  const base::TimeTicks input_start_;
+
   // The time this naviagtion was ready to commit.
   base::TimeTicks ready_to_commit_time_;
+
+  // Timer for detecting an unexpectedly long time to commit a navigation.
+  base::OneShotTimer commit_timeout_timer_;
 
   // The unique id of the corresponding NavigationEntry.
   int pending_nav_entry_id_;

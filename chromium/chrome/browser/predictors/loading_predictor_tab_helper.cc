@@ -13,8 +13,6 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(predictors::LoadingPredictorTabHelper);
-
 using content::BrowserThread;
 
 namespace predictors {
@@ -81,6 +79,7 @@ void LoadingPredictorTabHelper::DidFinishNavigation(
 
 void LoadingPredictorTabHelper::ResourceLoadComplete(
     content::RenderFrameHost* render_frame_host,
+    const content::GlobalRequestID& request_id,
     const content::mojom::ResourceLoadInfo& resource_load_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!predictor_)

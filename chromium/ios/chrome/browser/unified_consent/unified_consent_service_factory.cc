@@ -7,11 +7,12 @@
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/unified_consent/feature.h"
 #include "components/unified_consent/unified_consent_service.h"
+#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
 #include "ios/chrome/browser/sync/profile_sync_service_factory.h"
-#include "ios/chrome/browser/unified_consent/feature.h"
 #include "ios/chrome/browser/unified_consent/unified_consent_service_client_impl.h"
 
 UnifiedConsentServiceFactory::UnifiedConsentServiceFactory()
@@ -48,18 +49,21 @@ UnifiedConsentServiceFactory* UnifiedConsentServiceFactory::GetInstance() {
 std::unique_ptr<KeyedService>
 UnifiedConsentServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  if (!IsUnifiedConsentEnabled())
+  if (!unified_consent::IsUnifiedConsentFeatureEnabled())
     return nullptr;
 
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromBrowserState(context);
-  PrefService* pref_service = browser_state->GetPrefs();
+  PrefService* user_pref_service = browser_state->GetPrefs();
+  PrefService* local_pref_service = GetApplicationContext()->GetLocalState();
   std::unique_ptr<unified_consent::UnifiedConsentServiceClient> service_client =
-      std::make_unique<UnifiedConsentServiceClientImpl>(pref_service);
+      std::make_unique<UnifiedConsentServiceClientImpl>(user_pref_service,
+                                                        local_pref_service);
   identity::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForBrowserState(browser_state);
   syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForBrowserState(browser_state);
   return std::make_unique<unified_consent::UnifiedConsentService>(
-      std::move(service_client), pref_service, identity_manager, sync_service);
+      std::move(service_client), user_pref_service, identity_manager,
+      sync_service);
 }

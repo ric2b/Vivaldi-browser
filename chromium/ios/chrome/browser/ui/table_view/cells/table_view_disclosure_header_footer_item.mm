@@ -9,6 +9,8 @@
 #import "ios/chrome/browser/ui/table_view/cells/table_view_cells_constants.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#include "ios/chrome/grit/ios_strings.h"
+#include "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -47,11 +49,10 @@ constexpr float kRotationNinetyCCW = -(90 / 180.0) * M_PI;
   DisclosureDirection direction =
       self.collapsed ? DisclosureDirectionUp : DisclosureDirectionDown;
   [header setInitialDirection:direction];
-  // Use colors from styler if available.
-  if (styler.tableViewBackgroundColor)
-    header.contentView.backgroundColor = styler.tableViewBackgroundColor;
   if (styler.headerFooterTitleColor)
     header.titleLabel.textColor = styler.headerFooterTitleColor;
+  if (styler.cellHighlightColor)
+    header.highlightColor = styler.cellHighlightColor;
 }
 
 - (CGFloat)headerHeightForWidth:(CGFloat)width {
@@ -79,12 +80,17 @@ constexpr float kRotationNinetyCCW = -(90 / 180.0) * M_PI;
 @property(strong, nonatomic) UIViewPropertyAnimator* cellAnimator;
 // ImageView that holds the disclosure accessory icon.
 @property(strong, nonatomic) UIImageView* disclosureImageView;
+// The cell's default color at the moment of starting the highlight animation,
+// if no color is set defaults to clearColor.
+@property(strong, nonatomic) UIColor* cellDefaultBackgroundColor;
 @end
 
 @implementation TableViewDisclosureHeaderFooterView
 @synthesize cellAnimator = _cellAnimator;
+@synthesize cellDefaultBackgroundColor = _cellDefaultBackgroundColor;
 @synthesize disclosureDirection = disclosureDirection;
 @synthesize disclosureImageView = _disclosureImageView;
+@synthesize highlightColor = _highlightColor;
 @synthesize subtitleLabel = _subtitleLabel;
 @synthesize titleLabel = _titleLabel;
 
@@ -170,6 +176,7 @@ constexpr float kRotationNinetyCCW = -(90 / 180.0) * M_PI;
 
 - (void)prepareForReuse {
   [super prepareForReuse];
+  self.cellDefaultBackgroundColor = nil;
   if (self.cellAnimator.isRunning)
     [self.cellAnimator stopAnimation:YES];
 }
@@ -206,14 +213,12 @@ constexpr float kRotationNinetyCCW = -(90 / 180.0) * M_PI;
 #pragma mark - internal methods
 
 - (void)addAnimationHighlightToAnimator {
-  UIColor* originalBackgroundColor = self.contentView.backgroundColor;
+  UIColor* originalBackgroundColor = self.cellDefaultBackgroundColor;
   self.cellAnimator = [[UIViewPropertyAnimator alloc]
       initWithDuration:kTableViewCellSelectionAnimationDuration
                  curve:UIViewAnimationCurveLinear
             animations:^{
-              self.contentView.backgroundColor =
-                  UIColorFromRGB(kTableViewHighlightedCellColor,
-                                 kTableViewHighlightedCellColorAlpha);
+              self.contentView.backgroundColor = self.highlightColor;
             }];
   __weak TableViewDisclosureHeaderFooterView* weakSelf = self;
   [self.cellAnimator addCompletion:^(UIViewAnimatingPosition finalPosition) {
@@ -230,6 +235,15 @@ constexpr float kRotationNinetyCCW = -(90 / 180.0) * M_PI;
     self.disclosureDirection = direction;
     CGFloat angle = direction == DisclosureDirectionDown ? kRotationNinetyCW
                                                          : kRotationNinetyCCW;
+
+    // Update the accessibility hint to match the new direction.
+    self.accessibilityHint =
+        direction == DisclosureDirectionDown
+            ? l10n_util::GetNSString(
+                  IDS_IOS_RECENT_TABS_DISCLOSURE_VIEW_EXPANDED_HINT)
+            : l10n_util::GetNSString(
+                  IDS_IOS_RECENT_TABS_DISCLOSURE_VIEW_COLLAPSED_HINT);
+
     if (animate) {
       __weak TableViewDisclosureHeaderFooterView* weakSelf = self;
       [self.cellAnimator addAnimations:^{
@@ -243,9 +257,22 @@ constexpr float kRotationNinetyCCW = -(90 / 180.0) * M_PI;
   }
 }
 
+- (UIColor*)cellDefaultBackgroundColor {
+  if (!_cellDefaultBackgroundColor) {
+    _cellDefaultBackgroundColor = self.contentView.backgroundColor
+                                      ? self.contentView.backgroundColor
+                                      : [UIColor clearColor];
+  }
+  return _cellDefaultBackgroundColor;
+}
+
 #pragma mark - Accessibility
 
 - (NSString*)accessibilityLabel {
+  // If no subtitleLabel text has been set only use the titleLabel text.
+  if (![self.subtitleLabel.text length])
+    return self.titleLabel.text;
+
   return [NSString stringWithFormat:@"%@, %@", self.titleLabel.text,
                                     self.subtitleLabel.text];
 }

@@ -79,7 +79,6 @@
 <translation id="8498891568109133222">Masyadong matagal bago nakatugon ang <ph name="HOST_NAME" />.</translation>
 <translation id="8740359287975076522">Hindi makita ang &lt;abbr id="dnsDefinition"&gt;DNS address&lt;/abbr&gt; ng <ph name="HOST_NAME" />. Dina-diagnose ang problema.</translation>
 <translation id="9183425211371246419">Gumagamit ng hindi sinusuportahang protocol ang <ph name="HOST_NAME" />.</translation>
-<translation id="933612690413056017">Walang koneksyon sa Internet</translation>
 <translation id="969892804517981540">Official Build</translation>
 <translation id="988159990683914416">Bumuo ang Developer</translation>
 </translationbundle>

@@ -22,7 +22,6 @@
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_util.h"
-#include "chrome/browser/signin/unified_consent_helper.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/webui/signin/dice_turn_sync_on_helper_delegate_impl.h"
 #include "chrome/browser/ui/webui/signin/signin_utils_desktop.h"
@@ -37,9 +36,9 @@
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/browser/signin_pref_names.h"
 #include "components/sync/base/sync_prefs.h"
+#include "components/unified_consent/feature.h"
 #include "components/unified_consent/unified_consent_service.h"
 #include "content/public/browser/storage_partition.h"
-#include "net/url_request/url_request_context_getter.h"
 
 namespace {
 
@@ -255,7 +254,6 @@ void DiceTurnSyncOnHelper::LoadPolicyWithCachedCredentials() {
       policy::UserPolicySigninServiceFactory::GetForProfile(profile_);
   policy_service->FetchPolicyForSignedInUser(
       AccountIdFromAccountInfo(account_info_), dm_token_, client_id_,
-      profile_->GetRequestContext(),
       content::BrowserContext::GetDefaultStoragePartition(profile_)
           ->GetURLLoaderFactoryForBrowserProcess(),
       base::Bind(&DiceTurnSyncOnHelper::OnPolicyFetchComplete,
@@ -281,8 +279,7 @@ void DiceTurnSyncOnHelper::CreateNewSignedInProfile() {
       base::UTF8ToUTF16(account_info_.email),
       profiles::GetDefaultAvatarIconUrl(icon_index),
       base::BindRepeating(&DiceTurnSyncOnHelper::CompleteInitForNewProfile,
-                          weak_pointer_factory_.GetWeakPtr()),
-      std::string());
+                          weak_pointer_factory_.GetWeakPtr()));
 }
 
 void DiceTurnSyncOnHelper::CompleteInitForNewProfile(
@@ -410,7 +407,7 @@ void DiceTurnSyncOnHelper::AbortAndDelete() {
 }
 
 void DiceTurnSyncOnHelper::EnableUnifiedConsentIfNeeded() {
-  if (IsUnifiedConsentEnabled(profile_)) {
+  if (unified_consent::IsUnifiedConsentFeatureEnabled()) {
     UnifiedConsentServiceFactory::GetForProfile(profile_)
         ->SetUnifiedConsentGiven(true);
   }

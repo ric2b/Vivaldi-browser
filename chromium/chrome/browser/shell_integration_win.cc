@@ -6,7 +6,6 @@
 
 #include <windows.h>
 #include <objbase.h>
-#include <shlwapi.h>
 #include <shobjidl.h>
 #include <propkey.h>  // Needs to come after shobjidl.h.
 #include <stddef.h>
@@ -31,17 +30,17 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_propvariant.h"
+#include "base/win/shlwapi.h"
 #include "base/win/shortcut.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/policy/policy_path_parser.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 #include "chrome/browser/win/settings_app_monitor.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths_internal.h"
@@ -149,16 +148,15 @@ base::string16 GetExpectedAppId(const base::CommandLine& command_line,
     app_name = base::UTF8ToUTF16(web_app::GenerateApplicationNameFromURL(
         GURL(command_line.GetSwitchValueASCII(switches::kApp))));
   } else if (command_line.HasSwitch(switches::kAppId)) {
-    app_name = base::UTF8ToUTF16(
-        web_app::GenerateApplicationNameFromExtensionId(
-            command_line.GetSwitchValueASCII(switches::kAppId)));
+    app_name = base::UTF8ToUTF16(web_app::GenerateApplicationNameFromAppId(
+        command_line.GetSwitchValueASCII(switches::kAppId)));
   } else if (command_line.HasSwitch(switches::kShowAppList)) {
     app_name = GetAppListAppName();
   } else if (vivaldi::IsVivaldiRunning()) {
     // Note(yngve) Check actual application commandline, not the possibly
     // generated commanline argument, as vivaldi is by default running
     app_name = base::UTF8ToUTF16(
-      web_app::GenerateApplicationNameFromExtensionId(vivaldi::kVivaldiAppId));
+      web_app::GenerateApplicationNameFromAppId(vivaldi::kVivaldiAppId));
   } else {
     app_name = ShellUtil::GetBrowserModelId(is_per_user_install);
   }
@@ -767,7 +765,7 @@ void MigrateTaskbarPins() {
   // run-time Chrome icon is merged with the taskbar shortcut), but it is not an
   // urgent task.
   base::CreateCOMSTATaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::BACKGROUND})
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT})
       ->PostTask(FROM_HERE, base::Bind(&MigrateTaskbarPinsCallback));
 }
 

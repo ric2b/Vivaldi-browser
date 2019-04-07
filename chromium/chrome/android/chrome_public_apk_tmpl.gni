@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//base/android/linker/config.gni")
+import("//base/android/proguard/proguard.gni")
 import("//build/config/android/rules.gni")
 import("//build/config/locales.gni")
 import("//build/config/android/extract_unwind_tables.gni")
@@ -13,9 +14,6 @@ import("//third_party/leakcanary/config.gni")
 import("channel.gni")
 
 declare_args() {
-  # Enables ProGuard obfuscation of Chromium packages.
-  enable_proguard_obfuscation = true
-
   # Enable multidex in release builds.
   multidex_in_release = false
 }
@@ -27,7 +25,43 @@ default_chrome_public_jinja_variables = [
   "enable_vr=$enable_vr",
 ]
 
-template("chrome_public_apk_tmpl") {
+# A template used to declare any target that will implement a full Chromium
+# or Chrome application, either as an APK, or an app bundle module.
+#
+# Variables:
+#   target_type: Either 'android_apk' or 'android_app_bundle_module'.
+#   apk_name: For APK target types, the final APK name without a suffix.
+#   module_name: For bundle module target types, the module's name without a
+#     suffix.
+#   is_base_module: For bundle module target types, true iff this is a base
+#     application module, instead of a feature module.
+#   android_manifest: Application manifest path.
+#   android_manifest_dep: Name of target generating the android_manifest.
+#   shared_libraries: List of native shared libraries targets to include in
+#     the final target (e.g. [ ":libchrome" ]).
+#   add_unwind_tables_in_apk: Optional. If true, add the unwind tables to the
+#     final APK or bundle.
+#   is_modern: If true, indicates this corresponds to a chrome_modern_XXX
+#     target that can only run on Android L-M.
+#   png_to_webp: Optional. If true, convert image resources to webp format.
+#     requires Android K+, since these were not supported by Android properly
+#     before 4.3.0.
+#   load_library_from_apk: Optional. If true, native libraries will be loaded
+#     directly from the APK (and stored zipaligned and uncompressed). This
+#     requires either the Chromium linker, or Android M+.
+#   version_name: Application version name (e.g. "Developer Build").
+#   is_modern: Optional. true iff this is a chrome_modern derived build.
+#
+#   Plus all other variables accepted by android_apk() or
+#   android_app_bundle_module(), depending on the target type.
+#
+template("chrome_public_common_apk_or_module_tmpl") {
+  assert(defined(invoker.target_type), "target_type is required!")
+  assert(
+      invoker.target_type == "android_apk" ||
+          invoker.target_type == "android_app_bundle_module",
+      "Invalid target_type definition, should be 'android_apk' or 'android_app_bundle_module'")
+
   # Adds unwind table asset to the chrome apk for the given library target. This
   # is not part of generic apk assets target since it depends on the main shared
   # library of the apk, to extract unwind tables.
@@ -44,7 +78,22 @@ template("chrome_public_apk_tmpl") {
     }
   }
 
-  android_apk(target_name) {
+  if (!defined(invoker.target_type)) {
+    _target_type = "android_apk"
+  } else {
+    _target_type = invoker.target_type
+  }
+
+  _is_modern = defined(invoker.is_modern) && invoker.is_modern
+  assert(_is_modern || !_is_modern)  # Mark as used.
+
+  if (defined(invoker.enable_multidex)) {
+    _enable_multidex = invoker.enable_multidex
+  } else {
+    _enable_multidex = is_java_debug || multidex_in_release
+  }
+
+  target(_target_type, target_name) {
     forward_variables_from(invoker, "*")
     exclude_xxxhdpi = true
 
@@ -69,20 +118,22 @@ template("chrome_public_apk_tmpl") {
       aapt_locale_whitelist = locales - android_chrome_omitted_locales
     }
 
-    if (is_java_debug || multidex_in_release) {
+    if (_enable_multidex) {
       enable_multidex = true
-      if (!defined(negative_main_dex_globs)) {
-        negative_main_dex_globs = [
-          "*ApplicationStatus*",  # Doesn't work in non-browser process.
-          "*ChromeActivity*",  # Pulls in the world, so ensure it doesn't slip in.
-          "*GoogleApiAvailability*",  # Play Services only in browser process.
-          "*R\$*",  # Should not use resources from non-browser process.
-        ]
-      }
+      if (_target_type == "android_apk") {
+        if (!defined(negative_main_dex_globs)) {
+          negative_main_dex_globs = [
+            "*ApplicationStatus*",  # Doesn't work in non-browser process.
+            "*ChromeActivity*",  # Pulls in the world, so ensure it doesn't slip in.
+            "*GoogleApiAvailability*",  # Play Services only in browser process.
+            "*R\$*",  # Should not use resources from non-browser process.
+          ]
+        }
 
-      # Allow targets to append to the default list.
-      if (defined(extra_negative_main_dex_globs)) {
-        negative_main_dex_globs += extra_negative_main_dex_globs
+        # Allow targets to append to the default list.
+        if (defined(extra_negative_main_dex_globs)) {
+          negative_main_dex_globs += extra_negative_main_dex_globs
+        }
       }
     }
     if (!is_java_debug) {
@@ -100,7 +151,7 @@ template("chrome_public_apk_tmpl") {
             [ "//base/android/proguard/enable_obfuscation.flags" ]
       } else {
         proguard_configs +=
-            [ "//base/android/proguard/disable_chromium_obfuscation.flags" ]
+            [ "//base/android/proguard/disable_all_obfuscation.flags" ]
       }
     }
 
@@ -118,18 +169,31 @@ template("chrome_public_apk_tmpl") {
                                 (current_cpu == "arm64" || current_cpu == "x64")
       }
     }
-    command_line_flags_file = "chrome-command-line"
+    if (_target_type == "android_apk") {
+      command_line_flags_file = "chrome-command-line"
+    }
     product_version_resources_dep = "//chrome/android:product_version_resources"
 
     if (defined(invoker.add_unwind_tables_in_apk) &&
         invoker.add_unwind_tables_in_apk) {
       deps += [ ":$_unwind_asset" ]
     }
+
+    if (enable_vr && _target_type == "android_apk") {
+      deps += [ "//chrome/browser/android/vr:java" ]
+    }
   }
 }
 
-template("monochrome_public_apk_tmpl") {
-  chrome_public_apk_tmpl(target_name) {
+# The equivalent of chrome_common_apk_or_module_tmpl for all builds of
+# monochrome.
+template("monochrome_public_common_apk_or_module_tmpl") {
+  if (defined(invoker.enable_multidex)) {
+    _enable_multidex = invoker.enable_multidex
+  } else {
+    _enable_multidex = is_java_debug || multidex_in_release
+  }
+  chrome_public_common_apk_or_module_tmpl(target_name) {
     # Always build 64-bit //android_webview:monochrome because Chrome runs
     # in 32-bit mode.
     if (android_64bit_target_cpu) {
@@ -150,8 +214,10 @@ template("monochrome_public_apk_tmpl") {
     # Webview supports all locales (has no omitted ones).
     aapt_locale_whitelist = locales
 
-    # Incremental install doesn't work for monochrome. See crbug.com/663492.
-    never_incremental = true
+    if (!defined(invoker.target_type) || invoker.target_type == "android_apk") {
+      # Incremental install doesn't work for monochrome. See crbug.com/663492.
+      never_incremental = true
+    }
 
     # Strip xml namespaces for monochrome. This should only be done for apks
     # targeting API > 21 which for chrome is only Monochrome. This is due to
@@ -178,7 +244,7 @@ template("monochrome_public_apk_tmpl") {
       "//chrome/android/monochrome:monochrome_license_provider_java",
     ]
 
-    if ((is_java_debug || multidex_in_release) &&
+    if (_enable_multidex && invoker.target_type == "android_apk" &&
         !defined(invoker.negative_main_dex_globs)) {
       # WebView pulls play services into the main dex.
       negative_main_dex_globs = [
@@ -197,14 +263,44 @@ template("monochrome_public_apk_tmpl") {
       png_to_webp = true
     }
 
-    if (enable_arcore) {
-      deps += [ "//third_party/arcore-android-sdk:libdynamite_client_java" ]
+    # TODO(crbug.com/862719): Remove Java VR code from the monochrome base
+    # module once we can conditionally install the VR DFM.
+    if (enable_vr) {
+      deps += [ "//chrome/browser/android/vr:java" ]
     }
-    if (package_arcore) {
-      deps += [ "//third_party/arcore-android-sdk:libarcore_library" ]
 
-      # We store this as a separate .so in the APK and only load as needed.
-      loadable_modules = [ "${root_out_dir}/libarcore_sdk_c_minimal.so" ]
+    if (invoker.target_type == "android_apk") {
+      if (enable_arcore) {
+        deps += [ "//third_party/arcore-android-sdk:libdynamite_client_java" ]
+      }
+      if (package_arcore) {
+        # We store this as a separate .so in the APK and only load as needed.
+        if (android_64bit_target_cpu && build_apk_secondary_abi) {
+          secondary_abi_loadable_modules = [ "//third_party/arcore-android-sdk/libraries/android_arm/libarcore_sdk_c_minimal.so" ]
+        } else if (android_64bit_target_cpu && !build_apk_secondary_abi) {
+          loadable_modules = [ "//third_party/arcore-android-sdk/libraries/android_arm64/libarcore_sdk_c_minimal.so" ]
+        } else {
+          loadable_modules = [ "//third_party/arcore-android-sdk/libraries/android_arm/libarcore_sdk_c_minimal.so" ]
+        }
+      }
     }
+  }
+}
+
+# These empty templates are still being called from the clank/ BUILD.gn
+# scripts. Remove them when they have been fixed to call the
+# xxx_common_apk_or_module_tmpl templates above.
+
+template("chrome_public_apk_tmpl") {
+  chrome_public_common_apk_or_module_tmpl(target_name) {
+    forward_variables_from(invoker, "*")
+    target_type = "android_apk"
+  }
+}
+
+template("monochrome_public_apk_tmpl") {
+  monochrome_public_common_apk_or_module_tmpl(target_name) {
+    forward_variables_from(invoker, "*")
+    target_type = "android_apk"
   }
 }

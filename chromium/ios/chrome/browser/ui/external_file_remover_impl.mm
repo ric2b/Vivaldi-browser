@@ -8,7 +8,7 @@
 #include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/url_and_title.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -116,7 +116,7 @@ void ExternalFileRemoverImpl::RemoveFiles(
   NSInteger age_in_days = all_files ? 0 : kMinimumAgeInDays;
 
   base::PostTaskWithTraitsAndReply(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(^{
         [ExternalFileController removeFilesExcluding:referenced_files
                                            olderThan:age_in_days];

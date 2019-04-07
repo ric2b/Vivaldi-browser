@@ -13,9 +13,8 @@
 <translation id="2350172092385603347">స్థానీకరణ ఉపయోగించబడింది, కానీ మానిఫెస్ట్ లో default_locale పేర్కొనబడలేదు.</translation>
 <translation id="2576842806987913196">ఈ పేరుతో ఇప్పటికే CRX ఫైల్ ఉంది.</translation>
 <translation id="2753617847762399167">చట్టవిరుద్ధ పథం (ఖచ్చితంగా లేదా '..'కు సంబంధిత): '<ph name="IMAGE_PATH" />'</translation>
-<translation id="27822970480436970">నెట్‌వర్క్ అభ్యర్థనను సవరించడంలో ఈ పొడిగింపు విఫలమైంది ఎందుకంటే సవరణ మరొక పొడిగింపుతో వైరుధ్యంలో ఉంది.</translation>
 <translation id="2785530881066938471">కంటెంట్ స్క్రిప్ట్ కోసం '<ph name="RELATIVE_PATH" />' ఫైల్‌ను లోడ్ చేయలేకపోయింది. ఇది ఎన్‌కోడ్ చేయబడిన UTF-8 కాదు.</translation>
-<translation id="2903070246402204397"><ph name="EXTENSION_NAME" /> (పొడిగింపు ID "<ph name="EXTENSION_ID" />") నిర్వాహకుల ద్వారా బ్లాక్ చేయబడింది. <ph name="ADMIN_INFO" /></translation>
+<translation id="2903070246402204397"><ph name="EXTENSION_NAME" /> (ఎక్స్‌టెన్షన్‌ ID "<ph name="EXTENSION_ID" />") నిర్వాహకుల ద్వారా బ్లాక్ చేయబడింది. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">ప్యాకేజీని వ్యవస్థాపించడం సాధ్యం కాలేదు: '<ph name="ERROR_CODE" />'</translation>
 <translation id="3115238746683532089"><ph name="VENDOR_ID" /> విక్రేత నుండి తెలియని ఉత్పత్తి <ph name="PRODUCT_ID" /> (క్రమ సంఖ్య <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3144135466825225871">crx ఫైల్ భర్తీ విఫలమైంది. ఫైల్ ఉపయోగంలో ఉన్నదా అని తనిఖీ చేయండి.</translation>
@@ -57,19 +56,16 @@
 <translation id="7003844668372540529"><ph name="VENDOR_NAME" /> నుండి తెలియని ఉత్పత్తి <ph name="PRODUCT_ID" /></translation>
 <translation id="7068383018033524534">మానిఫెస్ట్ ఫైల్ చెల్లదు</translation>
 <translation id="7217838517480956708">ఈ మెషీన్ యొక్క నిర్వాహకుడికి <ph name="EXTENSION_NAME" /> ఇన్‌స్టాల్ చేయబడి ఉండటం అవసరం. దీన్ని తీసివేయడం లేదా సవరించడం సాధ్యపడదు.</translation>
+<translation id="7612608473764576263">ప్రైవేట్ కీ కోసం ఇన్‌పుట్ విలువ తప్పనిసరిగా చెల్లుబాటు అయ్యే ఫార్మాట్‌లో ఉండాలి. (PKCS#8-ఫార్మాట్‌లో, PEM-ఎన్‌కోడ్ చేసిన RSA కీ)</translation>
 <translation id="7939686037314084444">ఎక్స్‌టెన్షన్ సరిగా లోడ్ అవ్వడంలో విఫలం అయ్యింది. కనుక ఇది నెట్‌వర్క్ అభ్యర్థనలను అడ్డగించలేకపోవచ్చు.</translation>
 <translation id="7972881773422714442">ఎంపికలు: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">వినియోగదారు వైపుగా</translation>
 <translation id="8047248493720652249">ఈ పొడిగింపు డౌన్‌లోడ్ యొక్క పేరును "<ph name="ATTEMPTED_FILENAME" />"గా పేర్కొనడంలో విఫలమైంది ఎందుకంటే మరో పొడిగింపు (<ph name="EXTENSION_NAME" />) "<ph name="ACTUAL_FILENAME" />" అనే వేరే ఫైల్ పేరుని నిశ్చయించింది.</translation>
 <translation id="8284835137979141223"><ph name="VENDOR_NAME" /> నుండి <ph name="PRODUCT_NAME" /></translation>
-<translation id="8341840687457896278">వేరొక పొడిగింపు (<ph name="EXTENSION_NAME" />) వేరే ఆధారాలను అందించినందున ఈ పొడిగింపు నెట్‌వర్క్ అభ్యర్థనకు ఆధారాలను అందించడంలో విఫలమైంది.</translation>
 <translation id="8517576857589387417">మానిఫెస్ట్ ఫైల్ లేదు లేదా చదవడం సాధ్యం కాదు</translation>
 <translation id="8636666366616799973">ప్యాకేజీ చెల్లనిది. వివరాలు: '<ph name="ERROR_MESSAGE" />'.</translation>
-<translation id="8670869118777164560">వేరొక పొడిగింపు (<ph name="EXTENSION_NAME" />) నెట్‌వర్క్ అభ్యర్థనను <ph name="ACTUAL_REDIRECT_DESTINATION" />కు దారి మళ్లించినందున ఈ పొడిగింపు దీన్ని <ph name="ATTEMPTED_REDIRECT_DESTINATION" />కు దారి మళ్లించడంలో విఫలమైంది.</translation>
 <translation id="8761756413268424715">"<ph name="APP_NAME" />" మీ పరికరాల్లో ఒకదానికి ప్రాప్యతను అభ్యర్థిస్తోంది:</translation>
-<translation id="8825366169884721447">సవరణ వేరొక పొడిగింపు (<ph name="EXTENSION_NAME" />)కు వైరుధ్యంగా ఉన్నందున ఈ పొడిగింపు నెట్‌వర్క్ అభ్యర్థన యొక్క "<ph name="HEADER_NAME" />" అభ్యర్థన శీర్షికను సవరించడంలో విఫలమైంది.</translation>
 <translation id="8885905466771744233">నిర్థారించిన పొడిగింపుకు ఇప్పటికే ప్రైవేట్ కీ ఉంది. ఆ కీని మళ్ళీ ఉపయోగించండి లేదా దాన్ని మొదట తొలగించండి.</translation>
 <translation id="907841381057066561">ప్యాకేజింగ్ సమయంలో తాత్కాలిక జిప్ ఫైల్‌ను సృష్టించడంలో విఫలమైంది.</translation>
-<translation id="9111791539553342076">సవరణ వేరొక పొడిగింపు (<ph name="EXTENSION_NAME" />)కు వైరుధ్యంగా ఉన్నందున ఈ పొడిగింపు నెట్‌వర్క్ అభ్యర్థన యొక్క "<ph name="HEADER_NAME" />" ప్రతిస్పందన శీర్షికను సవరించడంలో విఫలమైంది.</translation>
 <translation id="941543339607623937">చెల్లని ప్రైవేట్ కీ.</translation>
 </translationbundle>

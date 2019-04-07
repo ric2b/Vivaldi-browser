@@ -19,7 +19,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/language_preferences.h"
@@ -34,12 +34,14 @@
 #include "chrome/browser/chromeos/login/users/chrome_user_manager_util.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_impl.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/device_network_configuration_updater.h"
 #include "chrome/browser/chromeos/policy/temp_certs_cache_nss.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/ash/login_screen_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/active_directory_password_change_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/enrollment_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
@@ -579,6 +581,10 @@ void GaiaScreenHandler::RegisterMessages() {
   AddCallback("updateOobeDialogSize",
               &GaiaScreenHandler::HandleUpdateOobeDialogSize);
   AddCallback("hideOobeDialog", &GaiaScreenHandler::HandleHideOobeDialog);
+  AddCallback("updateSigninUIState",
+              &GaiaScreenHandler::HandleUpdateSigninUIState);
+  AddCallback("showGuestForGaia",
+              &GaiaScreenHandler::HandleShowGuestForGaiaScreen);
 
   // Allow UMA metrics collection from JS.
   web_ui()->AddMessageHandler(std::make_unique<MetricsHandler>());
@@ -852,6 +858,22 @@ void GaiaScreenHandler::HandleGetIsSamlUserPasswordless(
                             base::Value(false) /* isSamlUserPasswordless */);
 }
 
+void GaiaScreenHandler::HandleUpdateSigninUIState(int state) {
+  if (LoginDisplayHost::default_host()) {
+    auto dialog_state = static_cast<ash::mojom::OobeDialogState>(state);
+    DCHECK(ash::mojom::IsKnownEnumValue(dialog_state));
+    LoginDisplayHost::default_host()->UpdateOobeDialogState(dialog_state);
+  }
+}
+
+void GaiaScreenHandler::HandleShowGuestForGaiaScreen(bool allow_guest_login,
+                                                     bool can_show_for_gaia) {
+  LoginScreenClient::Get()->login_screen()->SetAllowLoginAsGuest(
+      allow_guest_login);
+  LoginScreenClient::Get()->login_screen()->SetShowGuestButtonForGaiaScreen(
+      can_show_for_gaia);
+}
+
 void GaiaScreenHandler::OnShowAddUser() {
   signin_screen_handler_->is_account_picker_showing_first_time_ = false;
   lock_screen_utils::EnforcePolicyInputMethods(std::string());
@@ -1107,8 +1129,10 @@ void GaiaScreenHandler::ShowGaiaScreenIfReady() {
     // out of scope and the certificates will not be held in memory anymore.
     untrusted_authority_certs_cache_ =
         std::make_unique<policy::TempCertsCacheNSS>(
-            policy::TempCertsCacheNSS::
-                GetUntrustedAuthoritiesFromDeviceOncPolicy());
+            g_browser_process->platform_part()
+                ->browser_policy_connector_chromeos()
+                ->GetDeviceNetworkConfigurationUpdater()
+                ->GetAllAuthorityCertificates());
   }
 
   LoadAuthExtension(!gaia_silent_load_ /* force */, false /* offline */);

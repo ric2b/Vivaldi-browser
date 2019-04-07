@@ -34,6 +34,20 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/button/label_button_border.h"
 
+namespace {
+
+ProfileAttributesEntry* GetProfileAttributesEntry(Profile* profile) {
+  ProfileAttributesEntry* entry;
+  if (!g_browser_process->profile_manager()
+           ->GetProfileAttributesStorage()
+           .GetProfileAttributesWithPath(profile->GetPath(), &entry)) {
+    return nullptr;
+  }
+  return entry;
+}
+
+}  // namespace
+
 AvatarToolbarButton::AvatarToolbarButton(Browser* browser)
     : ToolbarButton(nullptr),
       browser_(browser),
@@ -176,6 +190,10 @@ void AvatarToolbarButton::OnAccountImageUpdated(const std::string& account_id,
   UpdateIcon();
 }
 
+void AvatarToolbarButton::OnAccountRemoved(const AccountInfo& info) {
+  UpdateIcon();
+}
+
 bool AvatarToolbarButton::IsIncognito() const {
   return profile_->IsOffTheRecord() && !profile_->IsGuestSession();
 }
@@ -189,7 +207,14 @@ bool AvatarToolbarButton::ShouldShowGenericIcon() const {
   if (!signin_ui_util::GetAccountsForDicePromos(profile_).empty())
     return false;
 #endif  // !defined(OS_CHROMEOS)
-  return g_browser_process->profile_manager()
+
+  ProfileAttributesEntry* entry = GetProfileAttributesEntry(profile_);
+  if (!entry) {
+    // This can happen if the user deletes the current profile.
+    return true;
+  }
+  return entry->IsUsingDefaultAvatar() &&
+         g_browser_process->profile_manager()
                  ->GetProfileAttributesStorage()
                  .GetNumberOfProfiles() == 1 &&
          !SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated();
@@ -249,10 +274,8 @@ gfx::ImageSkia AvatarToolbarButton::GetAvatarIcon() const {
 }
 
 gfx::Image AvatarToolbarButton::GetIconImageFromProfile() const {
-  ProfileAttributesEntry* entry;
-  if (!g_browser_process->profile_manager()
-           ->GetProfileAttributesStorage()
-           .GetProfileAttributesWithPath(profile_->GetPath(), &entry)) {
+  ProfileAttributesEntry* entry = GetProfileAttributesEntry(profile_);
+  if (!entry) {
     // This can happen if the user deletes the current profile.
     return gfx::Image();
   }
@@ -271,9 +294,13 @@ gfx::Image AvatarToolbarButton::GetIconImageFromProfile() const {
   }
 
 #if !defined(OS_CHROMEOS)
-  // If the user isn't signed in and the profile icon wasn't changed explicitly,
-  // try to use the first account icon of the sync promo.
-  if (!SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated() &&
+  // Try to show the first account icon of the sync promo when the following
+  // conditions are satisfied:
+  //  - the user is migrated to Dice
+  //  - the user isn't signed in
+  //  - the profile icon wasn't explicitly changed
+  if (AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_) &&
+      !SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated() &&
       entry->IsUsingDefaultAvatar()) {
     std::vector<AccountInfo> promo_accounts =
         signin_ui_util::GetAccountsForDicePromos(profile_);
@@ -289,15 +316,17 @@ gfx::Image AvatarToolbarButton::GetIconImageFromProfile() const {
 
 AvatarToolbarButton::SyncState AvatarToolbarButton::GetSyncState() const {
 #if !defined(OS_CHROMEOS)
-  if (profile_->IsSyncAllowed() && error_controller_.HasAvatarError()) {
+  SigninManager* signin_manager = SigninManagerFactory::GetForProfile(profile_);
+  if (signin_manager && signin_manager->IsAuthenticated() &&
+      profile_->IsSyncAllowed() && error_controller_.HasAvatarError()) {
     // When DICE is enabled and the error is an auth error, the sync-paused
     // icon is shown.
     int unused;
     const bool should_show_sync_paused_ui =
         AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_) &&
-        sync_ui_util::GetMessagesForAvatarSyncError(
-            profile_, *SigninManagerFactory::GetForProfile(profile_), &unused,
-            &unused) == sync_ui_util::AUTH_ERROR;
+        sync_ui_util::GetMessagesForAvatarSyncError(profile_, *signin_manager,
+                                                    &unused, &unused) ==
+            sync_ui_util::AUTH_ERROR;
     return should_show_sync_paused_ui ? SyncState::kPaused : SyncState::kError;
   }
 #endif  // !defined(OS_CHROMEOS)

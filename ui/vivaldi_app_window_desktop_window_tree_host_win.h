@@ -30,7 +30,8 @@ class VivaldiAppWindowDesktopWindowTreeHostWin
 
  private:
   // Overridden from DesktopWindowTreeHostWin:
-  bool GetClientAreaInsets(gfx::Insets* insets) const override;
+  bool GetClientAreaInsets(gfx::Insets* insets,
+                           HMONITOR monitor) const override;
   void HandleFrameChanged() override;
   void PostHandleMSG(UINT message, WPARAM w_param, LPARAM l_param) override;
   bool PreHandleMSG(UINT message,

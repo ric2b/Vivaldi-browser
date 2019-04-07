@@ -33,6 +33,7 @@
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/range/range.h"
@@ -77,8 +78,12 @@ bool IsInLoginOrLockScreen() {
 
 // Returns true if the current input context type is password.
 bool IsInPasswordInputContext() {
-  return ui::IMEBridge::Get()->GetCurrentInputContext().type ==
-         ui::TEXT_INPUT_TYPE_PASSWORD;
+  // Avoid getting IMEBridge instance if ash is not in browser.
+  // This is to temporarily mute the crash (http://crbug.com/867084).
+  // TODO(shuchen): This will be eventually be solved by the Mojo-based IMF.
+  return !::features::IsMultiProcessMash() &&
+         ui::IMEBridge::Get()->GetCurrentInputContext().type ==
+             ui::TEXT_INPUT_TYPE_PASSWORD;
 }
 
 class ImeMenuLabel : public views::Label {
@@ -121,10 +126,11 @@ SystemMenuButton* CreateImeMenuButton(views::ButtonListener* listener,
 class ImeTitleView : public views::View, public views::ButtonListener {
  public:
   explicit ImeTitleView(bool show_settings_button) : settings_button_(nullptr) {
+    const int separator_width = TrayConstants::separator_width();
     SetBorder(views::CreatePaddedBorder(
-        views::CreateSolidSidedBorder(0, 0, kSeparatorWidth, 0,
+        views::CreateSolidSidedBorder(0, 0, separator_width, 0,
                                       kMenuSeparatorColor),
-        gfx::Insets(kMenuSeparatorVerticalPadding - kSeparatorWidth, 0)));
+        gfx::Insets(kMenuSeparatorVerticalPadding - separator_width, 0)));
     auto box_layout =
         std::make_unique<views::BoxLayout>(views::BoxLayout::kHorizontal);
     box_layout->set_minimum_cross_axis_size(kTrayPopupItemMinHeight);
@@ -216,12 +222,13 @@ class ImeButtonsView : public views::View, public views::ButtonListener {
   void Init(bool show_emoji, bool show_handwriting, bool show_voice) {
     auto box_layout =
         std::make_unique<views::BoxLayout>(views::BoxLayout::kHorizontal);
+    const int separator_width = TrayConstants::separator_width();
     box_layout->set_minimum_cross_axis_size(kTrayPopupItemMinHeight);
     SetLayoutManager(std::move(box_layout));
     SetBorder(views::CreatePaddedBorder(
-        views::CreateSolidSidedBorder(kSeparatorWidth, 0, 0, 0,
+        views::CreateSolidSidedBorder(separator_width, 0, 0, 0,
                                       kMenuSeparatorColor),
-        gfx::Insets(kMenuSeparatorVerticalPadding - kSeparatorWidth,
+        gfx::Insets(kMenuSeparatorVerticalPadding - separator_width,
                     kMenuExtraMarginFromLeftEdge)));
 
     const int right_border = 1;
@@ -528,10 +535,8 @@ void ImeMenuTray::UpdateTrayLabel() {
   // IME.
   if (chromeos::extension_ime_util::IsArcIME(current_ime.id)) {
     CreateImageView();
-    // TODO(yhanada): We may want to update the globe icon later.
-    //                https://crbug.com/845079.
     image_view_->SetImage(
-        gfx::CreateVectorIcon(kKeyboardIcon, kTrayIconSize, kTrayIconColor));
+        gfx::CreateVectorIcon(kShelfGlobeIcon, kTrayIconSize, kTrayIconColor));
     return;
   }
 

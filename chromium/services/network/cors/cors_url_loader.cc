@@ -125,10 +125,6 @@ void CORSURLLoader::FollowRedirect(
     const base::Optional<std::vector<std::string>>&
         to_be_removed_request_headers,
     const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
-  DCHECK(!to_be_removed_request_headers.has_value());
-  DCHECK(!modified_request_headers.has_value()) << "Redirect with modified "
-                                                   "headers was not supported "
-                                                   "yet. crbug.com/845683";
   if (!network_loader_ || !is_waiting_follow_redirect_call_) {
     HandleComplete(URLLoaderCompletionStatus(net::ERR_FAILED));
     return;
@@ -141,6 +137,13 @@ void CORSURLLoader::FollowRedirect(
     HandleComplete(URLLoaderCompletionStatus(net::ERR_FAILED));
     return;
   }
+
+  if (to_be_removed_request_headers) {
+    for (const auto& name : *to_be_removed_request_headers)
+      request_.headers.RemoveHeader(name);
+  }
+  if (modified_request_headers)
+    request_.headers.MergeFrom(*modified_request_headers);
 
   request_.url = redirect_info_.new_url;
   request_.method = redirect_info_.new_method;
@@ -161,7 +164,8 @@ void CORSURLLoader::FollowRedirect(
   // in net/url_request/redirect_util.cc).
   if ((original_fetch_cors_flag && !NeedsPreflight(request_)) ||
       !fetch_cors_flag_) {
-    network_loader_->FollowRedirect(base::nullopt, base::nullopt);
+    network_loader_->FollowRedirect(to_be_removed_request_headers,
+                                    modified_request_headers);
     return;
   }
   DCHECK_NE(request_.fetch_request_mode, mojom::FetchRequestMode::kNoCORS);
@@ -235,6 +239,12 @@ void CORSURLLoader::OnReceiveRedirect(
   DCHECK(forwarding_client_);
   DCHECK(!is_waiting_follow_redirect_call_);
 
+  if (request_.fetch_redirect_mode == mojom::FetchRedirectMode::kManual) {
+    is_waiting_follow_redirect_call_ = true;
+    forwarding_client_->OnReceiveRedirect(redirect_info, response_head);
+    return;
+  }
+
   // If |CORS flag| is set and a CORS check for |request| and |response| returns
   // failure, then return a network error.
   if (fetch_cors_flag_ &&
@@ -266,15 +276,13 @@ void CORSURLLoader::OnReceiveRedirect(
     return;
   }
 
-  // TODO(yhirano): Implement the following:
-  // If |request|’s mode is "cors", |actualResponse|’s location URL includes
-  // credentials, and either |request|’s tainted origin flag is set or
-  // |request|’s origin is not same origin with |actualResponse|’s location
-  // URL’s origin, then return a network error.
-
-  // TODO(yhirano): Implement the following:
-  // If |CORS flag| is set and |actualResponse|’s location URL includes
-  // credentials, then return a network error.
+  const auto error_status = CheckRedirectLocation(
+      redirect_info.new_url, request_.fetch_request_mode,
+      request_.request_initiator, fetch_cors_flag_, tainted_);
+  if (error_status) {
+    HandleComplete(URLLoaderCompletionStatus(*error_status));
+    return;
+  }
 
   // TODO(yhirano): Implement the following (Note: this is needed when upload
   // streaming is implemented):
@@ -348,6 +356,13 @@ void CORSURLLoader::OnComplete(const URLLoaderCompletionStatus& status) {
 }
 
 void CORSURLLoader::StartRequest() {
+  if (fetch_cors_flag_ && !base::ContainsValue(url::GetCORSEnabledSchemes(),
+                                               request_.url.scheme())) {
+    HandleComplete(URLLoaderCompletionStatus(
+        CORSErrorStatus(mojom::CORSError::kCORSDisabledScheme)));
+    return;
+  }
+
   // If the CORS flag is set, |httpRequest|’s method is neither `GET` nor
   // `HEAD`, or |httpRequest|’s mode is "websocket", then append
   // `Origin`/the result of serializing a request origin with |httpRequest|, to

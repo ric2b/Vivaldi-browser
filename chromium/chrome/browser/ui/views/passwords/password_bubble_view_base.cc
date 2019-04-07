@@ -13,14 +13,15 @@
 #include "chrome/browser/ui/views/passwords/password_items_view.h"
 #include "chrome/browser/ui/views/passwords/password_pending_view.h"
 #include "chrome/browser/ui/views/passwords/password_save_confirmation_view.h"
-#include "ui/base/material_design/material_design_controller.h"
 
 #if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #endif
 
 #include "content/public/browser/render_widget_host_view.h"
+#include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "ui/vivaldi_browser_window.h"
+#include "ui/vivaldi_native_app_window_views.h"
 
 // static
 PasswordBubbleViewBase* PasswordBubbleViewBase::g_manage_passwords_bubble_ =
@@ -37,22 +38,60 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
   DCHECK(!g_manage_passwords_bubble_ ||
          !g_manage_passwords_bubble_->GetWidget()->IsVisible());
 
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  bool is_fullscreen = true;
+  if (browser->is_vivaldi()) {
+    VivaldiBrowserWindow* window =
+        static_cast<VivaldiBrowserWindow*>(browser->window());
+    VivaldiNativeAppWindowViews* native_view =
+        static_cast<VivaldiNativeAppWindowViews*>(window->GetBaseWindow());
+    bool is_fullscreen = window->IsFullscreen();
 
-  if (!browser->is_vivaldi()){
-    is_fullscreen = browser_view->IsFullscreen();
-  }
+    extensions::VivaldiUtilitiesAPI* api =
+        extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
+            browser->profile());
 
-  views::View* anchor_view = nullptr;
-  if (!is_fullscreen) {
-    if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
-      anchor_view = browser_view->GetLocationBarView();
-    } else {
-      anchor_view =
-          browser_view->GetLocationBarView()->manage_passwords_icon_view();
+    std::string flow_direction;
+    gfx::Rect rect(api->GetDialogPosition(browser->session_id().id(),
+                                          "password", &flow_direction));
+
+    // Normalize the rect
+    if (rect.x() < 0)
+      rect.set_x(0);
+    if (rect.y() < 0)
+      rect.set_y(0);
+
+    gfx::Point pos =
+        flow_direction == "down" ? rect.bottom_right() : rect.top_right();
+
+    ConvertPointToScreen(native_view, &pos);
+
+    PasswordBubbleViewBase* bubble =
+      CreateBubble(web_contents, nullptr, pos, reason);
+    DCHECK(bubble);
+    DCHECK(bubble == g_manage_passwords_bubble_);
+
+    // This will not actually show an arrow but force the code in
+    // BubbleFrameView::GetUpdatedWindowBounds() to move the popup to be within
+    // the visible rect of the screen.
+    bubble->set_arrow(views::BubbleBorder::Arrow::TOP_CENTER);
+
+    g_manage_passwords_bubble_->set_parent_window(
+        // Note(bjorgvin@vivaldi.com): Fix for VB-29962
+        web_contents->GetRenderWidgetHostView()->GetNativeView());
+
+    views::BubbleDialogDelegateView::CreateBubble(g_manage_passwords_bubble_);
+
+    if (is_fullscreen) {
+      g_manage_passwords_bubble_->AdjustForFullscreen(
+          native_view->GetBoundsInScreen());
     }
+    g_manage_passwords_bubble_->ShowForReason(reason);
+    return;
   }
+
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  bool is_fullscreen = browser_view->IsFullscreen();
+  views::View* const anchor_view =
+    is_fullscreen ? nullptr : browser_view->GetLocationBarView();
 
   PasswordBubbleViewBase* bubble =
       CreateBubble(web_contents, anchor_view, gfx::Point(), reason);
@@ -61,8 +100,7 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
 
   if (is_fullscreen)
     g_manage_passwords_bubble_->set_parent_window(
-        // Note(bjorgvin@vivaldi.com): Fix for VB-29962
-        web_contents->GetRenderWidgetHostView()->GetNativeView());
+        web_contents->GetNativeView());
 
   views::Widget* bubble_widget =
       views::BubbleDialogDelegateView::CreateBubble(g_manage_passwords_bubble_);
@@ -75,27 +113,8 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
 
   // Adjust for fullscreen after creation as it relies on the content size.
   if (is_fullscreen) {
-    if (browser->is_vivaldi()) {
-#if defined(OS_WIN)
-      // Windows needs extra adjustment for multi-monitor setups with
-      // different DPIs.
-      const int kVivaldiHorzOffsetForBubble = 300;
-      const int kVivaldiVertOffsetForBubble = 20;
-#else
-      const int kVivaldiHorzOffsetForBubble = 0;
-      const int kVivaldiVertOffsetForBubble = 0;
-#endif  // defined(OS_WIN)
-      content::WebContents* anchor =
-          static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents();
-
-      gfx::Rect rect(anchor->GetContainerBounds());
-      rect.Inset(
-          0, kVivaldiVertOffsetForBubble, kVivaldiHorzOffsetForBubble, 0);
-      g_manage_passwords_bubble_->AdjustForFullscreen(rect);
-    } else {
     g_manage_passwords_bubble_->AdjustForFullscreen(
         browser_view->GetBoundsInScreen());
-    }
   }
 
   g_manage_passwords_bubble_->ShowForReason(reason);

@@ -39,6 +39,7 @@ import os
 import re
 import shutil
 import subprocess
+import zipfile
 
 # Assume this script is stored under tools/android/roll/android_deps/
 _CHROMIUM_SRC = os.path.abspath(
@@ -50,8 +51,16 @@ _ANDROID_DEPS_SUBDIR = 'third_party/android_deps'
 # Path to BUILD.gn file under android_deps/
 _ANDROID_DEPS_BUILD_GN = _ANDROID_DEPS_SUBDIR + '/BUILD.gn'
 
-# Location of the android_deps repository directory from a root checkout.
-_ANDROID_DEPS_REPOSITORY_SUBDIR = _ANDROID_DEPS_SUBDIR + '/repository'
+# Path to updated Android SDK License under android_deps/
+_ANDROID_SDK_LICENSE_PATH = (
+    _ANDROID_DEPS_SUBDIR + '/Android_SDK_License-December_9_2016.txt')
+
+# Path to additional_readme_paths.json
+_ANDROID_DEPS_ADDITIONAL_README_PATHS = (
+    _ANDROID_DEPS_SUBDIR + '/additional_readme_paths.json')
+
+# Location of the android_deps libs directory from a root checkout.
+_ANDROID_DEPS_LIBS_SUBDIR = _ANDROID_DEPS_SUBDIR + '/libs'
 
 # Location of the build.gradle file used to configure our dependencies.
 _BUILD_GRADLE_PATH = 'tools/android/roll/android_deps/build.gradle'
@@ -60,14 +69,22 @@ _BUILD_GRADLE_PATH = 'tools/android/roll/android_deps/build.gradle'
 _GRADLE_BUILDSRC_PATH = 'tools/android/roll/android_deps/buildSrc'
 
 # The list of git-controlled files that are checked or updated by this tool.
-_UPDATED_GIT_FILES = [ 'DEPS', _ANDROID_DEPS_BUILD_GN ]
+_UPDATED_GIT_FILES = [
+  'DEPS',
+  _ANDROID_DEPS_BUILD_GN,
+  _ANDROID_DEPS_ADDITIONAL_README_PATHS,
+]
 
 # The list of files that are copied to the build directory by this script.
 # Should not include _UPDATED_GIT_FILES.
 _COPIED_PATHS = [
+  _ANDROID_SDK_LICENSE_PATH,
   _BUILD_GRADLE_PATH,
   _GRADLE_BUILDSRC_PATH,
 ]
+
+# If this file exists in an aar file then it is appended to LICENSE
+_THIRD_PARTY_LICENSE_FILENAME = 'third_party_licenses.txt'
 
 @contextlib.contextmanager
 def BuildDir(dirname=None):
@@ -258,21 +275,21 @@ def GetCipdPackageInfo(cipd_yaml_path):
   return (package_name, package_tag)
 
 
-def ParseDepsRepository(root_dir):
-  """Parse an android_deps/repository and retrieve package information.
+def ParseDeps(root_dir):
+  """Parse an android_deps/libs and retrieve package information.
 
   Args:
     root_dir: Path to a root Chromium or build directory.
   Returns:
     A directory mapping package names to tuples of
     (cipd_yaml_file, package_name, package_tag), where |cipd_yaml_file|
-    is the path to the cipd.yaml file, related to |repository_dir|,
+    is the path to the cipd.yaml file, related to |libs_dir|,
     and |package_name| and |package_tag| are the extracted from it.
   """
   result = {}
-  repository_dir = os.path.abspath(os.path.join(
-      root_dir, _ANDROID_DEPS_REPOSITORY_SUBDIR))
-  for cipd_file in FindInDirectory(repository_dir, 'cipd.yaml'):
+  libs_dir = os.path.abspath(os.path.join(
+      root_dir, _ANDROID_DEPS_LIBS_SUBDIR))
+  for cipd_file in FindInDirectory(libs_dir, 'cipd.yaml'):
     pkg_name, pkg_tag = GetCipdPackageInfo(cipd_file)
     cipd_path = os.path.dirname(cipd_file)
     cipd_path = cipd_path[len(root_dir) + 1:]
@@ -300,9 +317,13 @@ def GenerateCipdUploadCommand(cipd_pkg_info):
   Returns:
     A string holding a shell command to upload the package through cipd.
   """
-  pkg_path, _, pkg_tag = cipd_pkg_info
-  return '(cd %s; cipd create --pkg-def cipd.yaml -tag %s)' % (
-      pkg_path, pkg_tag)
+  pkg_path, pkg_name, pkg_tag = cipd_pkg_info
+  return ('(cd "{0}"; '
+          # Need to skip create step if an instance already exists with the
+          # same package name and version tag (thus the use of ||).
+          'cipd describe "{1}" -version "{2}" || '
+          'cipd create --pkg-def cipd.yaml -tag "{2}")').format(
+              pkg_path, pkg_name, pkg_tag)
 
 
 def main():
@@ -389,34 +410,43 @@ def main():
                           os.path.join(build_dir, path))
 
     print '# Use Gradle to download packages and edit/create relevant files.'
+    # This gradle command generates the new DEPS and BUILD.gn files, it can also
+    # handle special cases. Edit BuildConfigGenerator.groovy#addSpecialTreatment
+    # for such cases.
     gradle_cmd = [
         gradle_wrapper_path,
         '-b', os.path.join(build_dir, _BUILD_GRADLE_PATH),
         'setupRepository',
+        '--stacktrace',
     ]
     RunCommand(gradle_cmd)
 
-    repository_dir = os.path.join(build_dir, _ANDROID_DEPS_REPOSITORY_SUBDIR)
+    libs_dir = os.path.join(build_dir, _ANDROID_DEPS_LIBS_SUBDIR)
 
     print '# Reformat %s.' % _ANDROID_DEPS_BUILD_GN
     gn_args = ['gn', 'format', os.path.join(build_dir, _ANDROID_DEPS_BUILD_GN)]
     RunCommand(gn_args)
 
-    print '# Generate Android .aar info files.'
-    aar_files = FindInDirectory(repository_dir, '*.aar')
+    print '# Generate Android .aar info and third-party license files.'
+    aar_files = FindInDirectory(libs_dir, '*.aar')
     for aar_file in aar_files:
       aar_dirname = os.path.dirname(aar_file)
       aar_info_name = os.path.basename(aar_dirname) + '.info'
       aar_info_path = os.path.join(aar_dirname, aar_info_name)
       if not os.path.exists(aar_info_path):
         logging.info('- %s' % aar_info_name)
-        info = RunCommandAndGetOutput([aar_py, 'list', aar_file])
-        with open(aar_info_path, 'w') as f:
-          f.write(info)
+        RunCommand([aar_py, 'list', aar_file, '--output', aar_info_path])
+      with zipfile.ZipFile(aar_file) as z:
+        if _THIRD_PARTY_LICENSE_FILENAME in z.namelist():
+          license_path = os.path.join(aar_dirname, 'LICENSE')
+          # Make sure to append as we don't want to lose the existing license.
+          with open(license_path, 'a') as f:
+            f.write(z.read(_THIRD_PARTY_LICENSE_FILENAME))
+
 
     print '# Compare CIPD packages.'
-    existing_packages = ParseDepsRepository(chromium_src)
-    build_packages = ParseDepsRepository(build_dir)
+    existing_packages = ParseDeps(chromium_src)
+    build_packages = ParseDeps(build_dir)
 
     deleted_packages = []
     updated_packages = []
@@ -438,13 +468,11 @@ def main():
     for pkg in new_packages:
       logging.info('+ %s', pkg)
 
-    if not (deleted_packages or new_packages or updated_packages):
-      print 'No changes detected. All good.'
-      return
-
     # Generate CIPD package upload commands.
     cipd_packages_to_upload = sorted(updated_packages + new_packages)
     if cipd_packages_to_upload:
+      # TODO(wnwen): Check CIPD to make sure that no other package with the
+      #              same tag exists, print error otherwise.
       cipd_commands = [GenerateCipdUploadCommand(build_packages[pkg])
         for pkg in cipd_packages_to_upload]
       # Print them to the log for debugging.
@@ -452,15 +480,18 @@ def main():
                    '\n'.join(cipd_commands))
 
     if not args.update_all:
-      print 'Changes detected:'
-      if new_packages:
-        PrintPackageList(new_packages, 'new')
-      if updated_packages:
-        PrintPackageList(updated_packages, 'updated')
-      if deleted_packages:
-        PrintPackageList(deleted_packages, 'deleted')
-      print ''
-      print 'Run with --update-all to update your checkout!'
+      if not (deleted_packages or new_packages or updated_packages):
+        print 'No changes detected. All good.'
+      else:
+        print 'Changes detected:'
+        if new_packages:
+          PrintPackageList(new_packages, 'new')
+        if updated_packages:
+          PrintPackageList(updated_packages, 'updated')
+        if deleted_packages:
+          PrintPackageList(deleted_packages, 'deleted')
+        print ''
+        print 'Run with --update-all to update your checkout!'
       return
 
     # Copy updated DEPS and BUILD.gn to build directory.
@@ -483,6 +514,7 @@ def main():
 
     if cipd_packages_to_upload:
       print 'Run the following to upload new and updated CIPD packages:'
+      print 'Note: Duplicate instances with the same tag will break the build.'
       print '------------------------ cut here -----------------------------'
       print '\n'.join(cipd_commands)
       print '------------------------ cut here -----------------------------'

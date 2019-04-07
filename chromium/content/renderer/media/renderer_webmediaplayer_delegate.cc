@@ -15,6 +15,7 @@
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
+#include "third_party/blink/public/common/picture_in_picture/picture_in_picture_control_info.h"
 #include "third_party/blink/public/platform/web_fullscreen_video_status.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/web/web_scoped_user_gesture.h"
@@ -38,7 +39,11 @@ RendererWebMediaPlayerDelegate::RendererWebMediaPlayerDelegate(
     content::RenderFrame* render_frame)
     : RenderFrameObserver(render_frame),
       allow_idle_cleanup_(
-          content::GetContentClient()->renderer()->AllowIdleMediaSuspend()),
+          content::GetContentClient()->renderer()->IsIdleMediaSuspendEnabled()),
+      background_suspend_enabled_(
+          content::GetContentClient()
+              ->renderer()
+              ->IsBackgroundMediaSuspendEnabled(render_frame)),
       tick_clock_(base::DefaultTickClock::GetInstance()) {
   idle_cleanup_interval_ = base::TimeDelta::FromSeconds(5);
   idle_timeout_ = base::TimeDelta::FromSeconds(15);
@@ -140,6 +145,13 @@ void RendererWebMediaPlayerDelegate::DidPictureInPictureModeEnd(
       routing_id(), delegate_id, request_id));
 }
 
+void RendererWebMediaPlayerDelegate::DidSetPictureInPictureCustomControls(
+    int delegate_id,
+    const std::vector<blink::PictureInPictureControlInfo>& controls) {
+  Send(new MediaPlayerDelegateHostMsg_OnSetPictureInPictureCustomControls(
+      routing_id(), delegate_id, controls));
+}
+
 void RendererWebMediaPlayerDelegate::DidPictureInPictureSurfaceChange(
     int delegate_id,
     const viz::SurfaceId& surface_id,
@@ -154,6 +166,10 @@ void RendererWebMediaPlayerDelegate::
         blink::WebMediaPlayer::PipWindowResizedCallback callback) {
   picture_in_picture_window_resize_observer_ =
       std::make_pair(player_id, std::move(callback));
+}
+
+bool RendererWebMediaPlayerDelegate::IsBackgroundMediaSuspendEnabled() {
+  return background_suspend_enabled_;
 }
 
 void RendererWebMediaPlayerDelegate::DidPause(int player_id) {
@@ -215,8 +231,8 @@ void RendererWebMediaPlayerDelegate::ClearStaleFlag(int player_id) {
   if (!idle_cleanup_timer_.IsRunning() && !pending_update_task_) {
     idle_cleanup_timer_.Start(
         FROM_HERE, idle_cleanup_interval_,
-        base::Bind(&RendererWebMediaPlayerDelegate::UpdateTask,
-                   base::Unretained(this)));
+        base::BindOnce(&RendererWebMediaPlayerDelegate::UpdateTask,
+                       base::Unretained(this)));
   }
 }
 
@@ -485,8 +501,8 @@ void RendererWebMediaPlayerDelegate::UpdateTask() {
   if (!idle_player_map_.empty()) {
     idle_cleanup_timer_.Start(
         FROM_HERE, idle_cleanup_interval_,
-        base::Bind(&RendererWebMediaPlayerDelegate::UpdateTask,
-                   base::Unretained(this)));
+        base::BindOnce(&RendererWebMediaPlayerDelegate::UpdateTask,
+                       base::Unretained(this)));
   }
 }
 

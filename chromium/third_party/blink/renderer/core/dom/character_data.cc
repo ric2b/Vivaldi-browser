@@ -41,11 +41,9 @@ void CharacterData::Atomize() {
 }
 
 void CharacterData::setData(const String& data) {
-  const String& non_null_data = !data.IsNull() ? data : g_empty_string;
   unsigned old_length = length();
 
-  SetDataAndUpdate(non_null_data, 0, old_length, non_null_data.length(),
-                   kUpdateFromNonParser);
+  SetDataAndUpdate(data, 0, old_length, data.length(), kUpdateFromNonParser);
   GetDocument().DidRemoveText(*this, 0, old_length);
 }
 
@@ -171,7 +169,7 @@ bool CharacterData::ContainsOnlyWhitespace() const {
 }
 
 void CharacterData::setNodeValue(const String& node_value) {
-  setData(node_value);
+  setData(!node_value.IsNull() ? node_value : g_empty_string);
 }
 
 void CharacterData::SetDataAndUpdate(const String& new_data,
@@ -217,7 +215,7 @@ void CharacterData::DidModifyData(const String& old_data, UpdateSource source) {
   if (source != kUpdateFromParser && !IsInShadowTree()) {
     if (GetDocument().HasListenerType(
             Document::kDOMCharacterDataModifiedListener)) {
-      DispatchScopedEvent(MutationEvent::Create(
+      DispatchScopedEvent(*MutationEvent::Create(
           EventTypeNames::DOMCharacterDataModified, Event::Bubbles::kYes,
           nullptr, old_data, data_));
     }

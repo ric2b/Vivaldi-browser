@@ -646,12 +646,7 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
     download_item->SetUserData(kKey, base::WrapUnique(this));
   }
 
-  ~ExtensionDownloadsEventRouterData() override {
-    if (updated_ > 0) {
-      UMA_HISTOGRAM_PERCENTAGE("Download.OnChanged",
-                               (changed_fired_ * 100 / updated_));
-    }
-  }
+  ~ExtensionDownloadsEventRouterData() override = default;
 
   void set_is_download_completed(bool is_download_completed) {
     is_download_completed_ = is_download_completed;
@@ -1377,20 +1372,6 @@ void DownloadsAcceptDangerFunction::PromptOrWait(int download_id, int retries) {
     SendResponse(false);
     return;
   }
-
-  if (vivaldi::IsVivaldiRunning()) {
-    auto it = s_current_accept_download_requests_->find(download_id);
-    if (it != s_current_accept_download_requests_->end()) {
-      // Cancel multiple calls for the same download.
-      SendResponse(false);
-      // Make sure the download id is not removed from the shared set.
-      download_id_ = -1;
-      return;
-    }
-    s_current_accept_download_requests_->insert(download_id);
-    download_id_ = download_id;
-  }
-
   RecordApiFunctions(DOWNLOADS_FUNCTION_ACCEPT_DANGER);
   // DownloadDangerPrompt displays a modal dialog using native widgets that the
   // user must either accept or cancel. It cannot be scripted.

@@ -16,7 +16,7 @@
 #include "chrome/browser/android/feed/feed_host_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
-#include "components/feed/core/feed_host_service.h"
+#include "components/feed/content/feed_host_service.h"
 #include "components/feed/core/feed_image_manager.h"
 #include "jni/FeedImageLoaderBridge_jni.h"
 #include "ui/gfx/android/java_bitmap.h"
@@ -24,6 +24,7 @@
 
 using base::android::JavaIntArrayToIntVector;
 using base::android::JavaParamRef;
+using base::android::JavaRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 
@@ -50,17 +51,17 @@ FeedImageLoaderBridge::FeedImageLoaderBridge(
 FeedImageLoaderBridge::~FeedImageLoaderBridge() = default;
 
 void FeedImageLoaderBridge::Destroy(JNIEnv* env,
-                                    const JavaParamRef<jobject>& j_this) {
+                                    const JavaRef<jobject>& j_this) {
   delete this;
 }
 
-void FeedImageLoaderBridge::FetchImage(
-    JNIEnv* j_env,
-    const JavaParamRef<jobject>& j_this,
-    const JavaParamRef<jobjectArray>& j_urls,
-    const JavaParamRef<jobject>& j_callback) {
+void FeedImageLoaderBridge::FetchImage(JNIEnv* j_env,
+                                       const JavaRef<jobject>& j_this,
+                                       const JavaRef<jobjectArray>& j_urls,
+                                       const JavaRef<jobject>& j_callback) {
   std::vector<std::string> urls;
-  base::android::AppendJavaStringArrayToStringVector(j_env, j_urls, &urls);
+  base::android::AppendJavaStringArrayToStringVector(j_env, j_urls.obj(),
+                                                     &urls);
 
   ScopedJavaGlobalRef<jobject> callback(j_callback);
   feed_image_manager_->FetchImage(

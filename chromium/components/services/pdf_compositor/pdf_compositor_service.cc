@@ -18,7 +18,7 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service_context.h"
-#include "services/ui/public/interfaces/constants.mojom.h"
+#include "services/ws/public/mojom/constants.mojom.h"
 #include "ui/base/ui_base_features.h"
 
 #if defined(OS_WIN)
@@ -66,9 +66,9 @@ std::unique_ptr<service_manager::Service> PdfCompositorService::Create(
 void PdfCompositorService::PrepareToStart() {
   // Set up discardable memory manager.
   discardable_memory::mojom::DiscardableSharedMemoryManagerPtr manager_ptr;
-  if (!features::IsAshInBrowserProcess()) {
+  if (features::IsMultiProcessMash()) {
 #if defined(USE_AURA)
-    context()->connector()->BindInterface(ui::mojom::kServiceName,
+    context()->connector()->BindInterface(ws::mojom::kServiceName,
                                           &manager_ptr);
 #else
     NOTREACHED();

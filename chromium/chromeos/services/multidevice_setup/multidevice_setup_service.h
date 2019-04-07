@@ -14,6 +14,10 @@
 class PrefService;
 class PrefRegistrySimple;
 
+namespace cryptauth {
+class GcmDeviceInfoProvider;
+}  // namespace cryptauth
+
 namespace chromeos {
 
 namespace device_sync {
@@ -26,6 +30,8 @@ class SecureChannelClient;
 
 namespace multidevice_setup {
 
+class AndroidSmsAppHelperDelegate;
+class AuthTokenValidator;
 class MultiDeviceSetupBase;
 
 // Service which provides an implementation for mojom::MultiDeviceSetup. This
@@ -36,7 +42,11 @@ class MultiDeviceSetupService : public service_manager::Service {
   MultiDeviceSetupService(
       PrefService* pref_service,
       device_sync::DeviceSyncClient* device_sync_client,
-      secure_channel::SecureChannelClient* secure_channel_client);
+      secure_channel::SecureChannelClient* secure_channel_client,
+      AuthTokenValidator* auth_token_validator,
+      std::unique_ptr<AndroidSmsAppHelperDelegate>
+          android_sms_app_helper_delegate,
+      const cryptauth::GcmDeviceInfoProvider* gcm_device_info_provider);
   ~MultiDeviceSetupService() override;
 
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);

@@ -6,6 +6,7 @@
 
 #include "base/macros.h"
 #include "base/numerics/ranges.h"
+#include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
@@ -114,8 +115,9 @@ TEST_F(UiTest, WebVrToastStateTransitions) {
   EXPECT_FALSE(IsVisible(kWebVrExclusiveScreenToast));
 
   ui_->SetWebVrMode(true);
-  ui_->OnWebVrFrameAvailable();
-  ui_->SetCapturingState(CapturingStateModel());
+  ui_->OnWebXrFrameAvailable();
+  ui_->SetCapturingState(CapturingStateModel(), CapturingStateModel(),
+                         CapturingStateModel());
   EXPECT_TRUE(IsVisible(kWebVrExclusiveScreenToast));
 
   ui_->SetWebVrMode(false);
@@ -132,8 +134,9 @@ TEST_F(UiTest, WebVrToastTransience) {
   CreateScene(kNotInWebVr);
 
   ui_->SetWebVrMode(true);
-  ui_->OnWebVrFrameAvailable();
-  ui_->SetCapturingState(CapturingStateModel());
+  ui_->OnWebXrFrameAvailable();
+  ui_->SetCapturingState(CapturingStateModel(), CapturingStateModel(),
+                         CapturingStateModel());
   EXPECT_TRUE(IsVisible(kWebVrExclusiveScreenToast));
   EXPECT_TRUE(RunForSeconds(kToastTimeoutSeconds + kSmallDelaySeconds));
   EXPECT_FALSE(IsVisible(kWebVrExclusiveScreenToast));
@@ -174,16 +177,19 @@ TEST_F(UiTest, CaptureToasts) {
   for (auto& spec : GetIndicatorSpecs()) {
     for (int i = 0; i < 3; ++i) {
       ui_->SetWebVrMode(true);
-      ui_->OnWebVrFrameAvailable();
+      ui_->OnWebXrFrameAvailable();
 
-      CapturingStateModel state;
-      state.*spec.signal = i == 0;
+      CapturingStateModel active_capturing;
+      CapturingStateModel background_capturing;
+      CapturingStateModel potential_capturing;
+      active_capturing.*spec.signal = i == 0;
       // High accuracy location cannot be used in a background tab.
-      state.*spec.background_signal =
+      background_capturing.*spec.signal =
           i == 1 && spec.name != kLocationAccessIndicator;
-      state.*spec.potential_signal = true;
+      potential_capturing.*spec.signal = true;
 
-      ui_->SetCapturingState(state);
+      ui_->SetCapturingState(active_capturing, background_capturing,
+                             potential_capturing);
       EXPECT_TRUE(IsVisible(kWebVrExclusiveScreenToast));
       EXPECT_TRUE(IsVisible(spec.webvr_name));
       EXPECT_TRUE(RunForSeconds(kToastTimeoutSeconds + kSmallDelaySeconds));
@@ -294,11 +300,11 @@ TEST_F(UiTest, VoiceSearchHiddenWhenContentCapturingAudio) {
 
   model_->push_mode(kModeEditingOmnibox);
   model_->speech.has_or_can_request_audio_permission = true;
-  model_->capturing_state.audio_capture_enabled = false;
+  model_->active_capturing.audio_capture_enabled = false;
   EXPECT_TRUE(OnBeginFrame());
   EXPECT_TRUE(IsVisible(kOmniboxVoiceSearchButton));
 
-  model_->capturing_state.audio_capture_enabled = true;
+  model_->active_capturing.audio_capture_enabled = true;
   EXPECT_TRUE(OnBeginFrame());
   EXPECT_FALSE(IsVisible(kOmniboxVoiceSearchButton));
 }
@@ -384,15 +390,12 @@ TEST_F(UiTest, UiModeVoiceSearchFromOmnibox) {
 TEST_F(UiTest, HostedUiInWebVr) {
   CreateScene(kInWebVr);
   VerifyVisibility({kWebVrHostedUi, kWebVrFloor}, false);
-  EXPECT_TRUE(ui_->CanSendWebVrVSync());
 
   ui_->SetAlertDialogEnabled(true, nullptr, 0, 0);
-  EXPECT_FALSE(ui_->CanSendWebVrVSync());
   OnBeginFrame();
   VerifyVisibility({kWebVrHostedUi, kWebVrBackground, kWebVrFloor}, true);
 
   ui_->SetAlertDialogEnabled(false, nullptr, 0, 0);
-  EXPECT_TRUE(ui_->CanSendWebVrVSync());
   OnBeginFrame();
   VerifyVisibility({kWebVrHostedUi, kWebVrFloor}, false);
 }
@@ -466,17 +469,15 @@ TEST_F(UiTest, UiUpdatesForFullscreenChanges) {
   EXPECT_EQ(initial_position, content_group->LocalTransform());
 }
 
-TEST_F(UiTest, SecurityIconClickTriggersUnsupportedMode) {
+TEST_F(UiTest, SecurityIconClickShouldShowPageInfo) {
   CreateScene(kNotInWebVr);
 
   // Initial state.
   VerifyOnlyElementsVisible("Initial", kElementsVisibleInBrowsing);
 
-  // Clicking on security icon should trigger unsupported mode.
-  EXPECT_CALL(*browser_,
-              OnUnsupportedMode(UiUnsupportedMode::kUnhandledPageInfo));
-  browser_->OnUnsupportedMode(UiUnsupportedMode::kUnhandledPageInfo);
-  VerifyOnlyElementsVisible("Prompt invisible", kElementsVisibleInBrowsing);
+  EXPECT_CALL(*browser_, ShowPageInfo);
+  auto* security_icon = scene_->GetUiElementByName(kUrlBarSecurityButton);
+  ClickElement(security_icon);
 }
 
 TEST_F(UiTest, ClickingOmniboxTriggersUnsupportedMode) {
@@ -514,15 +515,19 @@ TEST_F(UiTest, WebInputEditingTriggersUnsupportedMode) {
   EXPECT_TRUE(scene_->GetUiElementByName(kExitPrompt)->IsVisible());
 }
 
-TEST_F(UiTest, ExitWebInputEditingOnAppButtonClick) {
+TEST_F(UiTest, ExitWebInputEditingOnMenuButtonClick) {
   CreateScene(kNotInWebVr);
   EXPECT_FALSE(scene_->GetUiElementByName(kKeyboard)->IsVisible());
   ui_->ShowSoftInput(true);
   OnBeginFrame();
   EXPECT_TRUE(scene_->GetUiElementByName(kKeyboard)->IsVisible());
-  ui_->OnAppButtonClicked();
+  InputEventList events;
+  events.push_back(
+      std::make_unique<InputEvent>(InputEvent::kMenuButtonClicked));
+  ui_->HandleMenuButtonEvents(&events);
+  base::RunLoop().RunUntilIdle();
   OnBeginFrame();
-  // Clicking app button should hide the keyboard.
+  // Clicking menu button should hide the keyboard.
   EXPECT_FALSE(scene_->GetUiElementByName(kKeyboard)->IsVisible());
 }
 
@@ -598,11 +603,11 @@ TEST_F(UiTest, ClickOnPromptBackgroundDoesNothing) {
 TEST_F(UiTest, UiUpdatesForWebVR) {
   CreateScene(kInWebVr);
 
-  model_->capturing_state.audio_capture_enabled = true;
-  model_->capturing_state.video_capture_enabled = true;
-  model_->capturing_state.screen_capture_enabled = true;
-  model_->capturing_state.location_access_enabled = true;
-  model_->capturing_state.bluetooth_connected = true;
+  model_->active_capturing.audio_capture_enabled = true;
+  model_->active_capturing.video_capture_enabled = true;
+  model_->active_capturing.screen_capture_enabled = true;
+  model_->active_capturing.location_access_enabled = true;
+  model_->active_capturing.bluetooth_connected = true;
 
   VerifyOnlyElementsVisible("Elements hidden",
                             std::set<UiElementName>{kWebVrBackground});
@@ -610,32 +615,32 @@ TEST_F(UiTest, UiUpdatesForWebVR) {
 
 // This test verifies that we ignore the WebVR frame when we're not expecting
 // WebVR presentation. You can get an unexpected frame when for example, the
-// user hits the app button to exit WebVR mode, but the site continues to pump
+// user hits the menu button to exit WebVR mode, but the site continues to pump
 // frames. If the frame is not ignored, our UI will think we're in WebVR mode.
 TEST_F(UiTest, WebVrFramesIgnoredWhenUnexpected) {
   CreateScene(kInWebVr);
 
-  ui_->OnWebVrFrameAvailable();
+  ui_->OnWebXrFrameAvailable();
   VerifyOnlyElementsVisible("Elements hidden", std::set<UiElementName>{});
   // Disable WebVR mode.
   ui_->SetWebVrMode(false);
 
   // New frame available after exiting WebVR mode.
-  ui_->OnWebVrFrameAvailable();
+  ui_->OnWebXrFrameAvailable();
   VerifyOnlyElementsVisible("Browser visible", kElementsVisibleInBrowsing);
 }
 
 TEST_F(UiTest, UiUpdateTransitionToWebVR) {
   CreateScene(kNotInWebVr);
-  model_->capturing_state.audio_capture_enabled = true;
-  model_->capturing_state.video_capture_enabled = true;
-  model_->capturing_state.screen_capture_enabled = true;
-  model_->capturing_state.location_access_enabled = true;
-  model_->capturing_state.bluetooth_connected = true;
+  model_->active_capturing.audio_capture_enabled = true;
+  model_->active_capturing.video_capture_enabled = true;
+  model_->active_capturing.screen_capture_enabled = true;
+  model_->active_capturing.location_access_enabled = true;
+  model_->active_capturing.bluetooth_connected = true;
 
   // Transition to WebVR mode
   ui_->SetWebVrMode(true);
-  ui_->OnWebVrFrameAvailable();
+  ui_->OnWebXrFrameAvailable();
 
   // All elements should be hidden.
   VerifyOnlyElementsVisible("Elements hidden", std::set<UiElementName>{});
@@ -652,11 +657,11 @@ TEST_F(UiTest, CaptureIndicatorsVisibility) {
   EXPECT_TRUE(VerifyVisibility(indicators, false));
   EXPECT_TRUE(VerifyRequiresLayout(indicators, false));
 
-  model_->capturing_state.audio_capture_enabled = true;
-  model_->capturing_state.video_capture_enabled = true;
-  model_->capturing_state.screen_capture_enabled = true;
-  model_->capturing_state.location_access_enabled = true;
-  model_->capturing_state.bluetooth_connected = true;
+  model_->active_capturing.audio_capture_enabled = true;
+  model_->active_capturing.video_capture_enabled = true;
+  model_->active_capturing.screen_capture_enabled = true;
+  model_->active_capturing.location_access_enabled = true;
+  model_->active_capturing.bluetooth_connected = true;
   EXPECT_TRUE(VerifyVisibility(indicators, true));
   EXPECT_TRUE(VerifyRequiresLayout(indicators, true));
 
@@ -673,11 +678,11 @@ TEST_F(UiTest, CaptureIndicatorsVisibility) {
   EXPECT_TRUE(VerifyRequiresLayout(indicators, true));
 
   // Ensure they can be turned off.
-  model_->capturing_state.audio_capture_enabled = false;
-  model_->capturing_state.video_capture_enabled = false;
-  model_->capturing_state.screen_capture_enabled = false;
-  model_->capturing_state.location_access_enabled = false;
-  model_->capturing_state.bluetooth_connected = false;
+  model_->active_capturing.audio_capture_enabled = false;
+  model_->active_capturing.video_capture_enabled = false;
+  model_->active_capturing.screen_capture_enabled = false;
+  model_->active_capturing.location_access_enabled = false;
+  model_->active_capturing.bluetooth_connected = false;
   EXPECT_TRUE(VerifyRequiresLayout(indicators, false));
 }
 
@@ -689,14 +694,14 @@ TEST_F(UiTest, PropagateContentBoundsOnStart) {
               OnContentScreenBoundsChanged(
                   SizeFsAreApproximatelyEqual(expected_bounds, kTolerance)));
 
-  ui_->OnProjMatrixChanged(kPixelDaydreamProjMatrix);
+  ui_->OnProjMatrixChanged(GetPixelDaydreamProjMatrix());
   OnBeginFrame();
 }
 
 TEST_F(UiTest, PropagateContentBoundsOnFullscreen) {
   CreateScene(kNotInWebVr);
 
-  ui_->OnProjMatrixChanged(kPixelDaydreamProjMatrix);
+  ui_->OnProjMatrixChanged(GetPixelDaydreamProjMatrix());
   ui_->SetFullscreen(true);
 
   gfx::SizeF expected_bounds(0.587874f, 0.330614f);
@@ -704,7 +709,7 @@ TEST_F(UiTest, PropagateContentBoundsOnFullscreen) {
               OnContentScreenBoundsChanged(
                   SizeFsAreApproximatelyEqual(expected_bounds, kTolerance)));
 
-  ui_->OnProjMatrixChanged(kPixelDaydreamProjMatrix);
+  ui_->OnProjMatrixChanged(GetPixelDaydreamProjMatrix());
   OnBeginFrame();
 }
 
@@ -712,7 +717,7 @@ TEST_F(UiTest, DontPropagateContentBoundsOnNegligibleChange) {
   CreateScene(kNotInWebVr);
 
   EXPECT_FALSE(RunForMs(0));
-  ui_->OnProjMatrixChanged(kPixelDaydreamProjMatrix);
+  ui_->OnProjMatrixChanged(GetPixelDaydreamProjMatrix());
 
   UiElement* content_quad = scene_->GetUiElementByName(kContentQuad);
   gfx::SizeF content_quad_size = content_quad->size();
@@ -722,7 +727,7 @@ TEST_F(UiTest, DontPropagateContentBoundsOnNegligibleChange) {
 
   EXPECT_CALL(*browser_, OnContentScreenBoundsChanged(testing::_)).Times(0);
 
-  ui_->OnProjMatrixChanged(kPixelDaydreamProjMatrix);
+  ui_->OnProjMatrixChanged(GetPixelDaydreamProjMatrix());
 }
 
 TEST_F(UiTest, LoadingIndicatorBindings) {
@@ -921,10 +926,10 @@ TEST_F(UiTest, OmniboxSuggestionBindings) {
   EXPECT_EQ(container->children().size(), 0u);
   EXPECT_EQ(NumVisibleInTree(kOmniboxSuggestions), 0);
 
-  model_->omnibox_suggestions.emplace_back(OmniboxSuggestion(
-      base::string16(), base::string16(), ACMatchClassifications(),
-      ACMatchClassifications(), AutocompleteMatch::Type::VOICE_SUGGEST, GURL(),
-      base::string16(), base::string16()));
+  model_->omnibox_suggestions.emplace_back(
+      OmniboxSuggestion(base::string16(), base::string16(),
+                        ACMatchClassifications(), ACMatchClassifications(),
+                        nullptr, GURL(), base::string16(), base::string16()));
   OnBeginFrame();
   EXPECT_EQ(container->children().size(), 1u);
   EXPECT_GT(NumVisibleInTree(kOmniboxSuggestions), 1);
@@ -939,10 +944,10 @@ TEST_F(UiTest, OmniboxSuggestionNavigates) {
   CreateScene(kNotInWebVr);
   GURL gurl("http://test.com/");
   model_->push_mode(kModeEditingOmnibox);
-  model_->omnibox_suggestions.emplace_back(OmniboxSuggestion(
-      base::string16(), base::string16(), ACMatchClassifications(),
-      ACMatchClassifications(), AutocompleteMatch::Type::VOICE_SUGGEST, gurl,
-      base::string16(), base::string16()));
+  model_->omnibox_suggestions.emplace_back(
+      OmniboxSuggestion(base::string16(), base::string16(),
+                        ACMatchClassifications(), ACMatchClassifications(),
+                        nullptr, gurl, base::string16(), base::string16()));
   OnBeginFrame();
 
   // Let the omnibox fade in.
@@ -998,14 +1003,18 @@ TEST_F(UiTest, CloseButtonColorBindings) {
   }
 }
 
-TEST_F(UiTest, ExitPresentAndFullscreenOnAppButtonClick) {
+TEST_F(UiTest, ExitPresentAndFullscreenOnMenuButtonClick) {
   CreateScene(kNotInWebVr);
   ui_->SetWebVrMode(true);
-  // Clicking app button should trigger to exit presentation.
+  // Clicking menu button should trigger to exit presentation.
   EXPECT_CALL(*browser_, ExitPresent());
   // And also trigger exit fullscreen.
   EXPECT_CALL(*browser_, ExitFullscreen());
-  ui_->OnAppButtonClicked();
+  InputEventList events;
+  events.push_back(
+      std::make_unique<InputEvent>(InputEvent::kMenuButtonClicked));
+  ui_->HandleMenuButtonEvents(&events);
+  base::RunLoop().RunUntilIdle();
 }
 
 
@@ -1271,8 +1280,9 @@ TEST_F(UiTest, DoNotShowIndicatorsAfterHostedUi) {
   CreateScene(kInWebVr);
   ui_->SetWebVrMode(true);
   EXPECT_FALSE(IsVisible(kWebVrExclusiveScreenToast));
-  ui_->OnWebVrFrameAvailable();
-  ui_->SetCapturingState(CapturingStateModel());
+  ui_->OnWebXrFrameAvailable();
+  ui_->SetCapturingState(CapturingStateModel(), CapturingStateModel(),
+                         CapturingStateModel());
   OnBeginFrame();
   EXPECT_TRUE(IsVisible(kWebVrExclusiveScreenToast));
   RunForSeconds(8);
@@ -1284,30 +1294,40 @@ TEST_F(UiTest, DoNotShowIndicatorsAfterHostedUi) {
   EXPECT_FALSE(IsVisible(kWebVrExclusiveScreenToast));
 }
 
-// Ensures that permissions appear on long press, and that when the app button
+// Ensures that permissions appear on long press, and that when the menu button
 // is released that we do not show the exclusive screen toast. Distinguishing
 // these cases requires knowledge of the previous state.
-TEST_F(UiTest, LongPressAppButtonInWebVrMode) {
+TEST_F(UiTest, LongPressMenuButtonInWebVrMode) {
   CreateScene(kInWebVr);
   ui_->SetWebVrMode(true);
   EXPECT_FALSE(IsVisible(kWebVrExclusiveScreenToast));
-  ui_->OnWebVrFrameAvailable();
-  ui_->SetCapturingState(CapturingStateModel());
+  ui_->OnWebXrFrameAvailable();
+  ui_->SetCapturingState(CapturingStateModel(), CapturingStateModel(),
+                         CapturingStateModel());
   OnBeginFrame();
   EXPECT_TRUE(IsVisible(kWebVrExclusiveScreenToast));
   RunForSeconds(8);
   EXPECT_FALSE(IsVisible(kWebVrExclusiveScreenToast));
-  model_->capturing_state.audio_capture_enabled = true;
-  model_->controller.app_button_long_pressed = true;
+  model_->active_capturing.audio_capture_enabled = true;
+  EXPECT_FALSE(model_->menu_button_long_pressed);
+  InputEventList events;
+  events.push_back(
+      std::make_unique<InputEvent>(InputEvent::kMenuButtonLongPressStart));
+  ui_->HandleMenuButtonEvents(&events);
   OnBeginFrame();
+  EXPECT_TRUE(model_->menu_button_long_pressed);
   EXPECT_FALSE(IsVisible(kWebVrExclusiveScreenToast));
   EXPECT_TRUE(IsVisible(kWebVrAudioCaptureIndicator));
   RunForSeconds(8);
-  EXPECT_FALSE(IsVisible(kWebVrAudioCaptureIndicator));
-  model_->controller.app_button_long_pressed = true;
   OnBeginFrame();
+  EXPECT_TRUE(model_->menu_button_long_pressed);
+  EXPECT_FALSE(IsVisible(kWebVrAudioCaptureIndicator));
   EXPECT_FALSE(IsVisible(kWebVrAudioCaptureIndicator));
   EXPECT_FALSE(IsVisible(kWebVrExclusiveScreenToast));
+  events.push_back(
+      std::make_unique<InputEvent>(InputEvent::kMenuButtonLongPressEnd));
+  ui_->HandleMenuButtonEvents(&events);
+  EXPECT_FALSE(model_->menu_button_long_pressed);
 }
 
 TEST_F(UiTest, MenuItems) {

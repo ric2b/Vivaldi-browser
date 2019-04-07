@@ -16,6 +16,10 @@
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/point.h"
 
+namespace ws {
+class WindowService;
+}  // namespace ws
+
 namespace app_list {
 
 class AppListModel;
@@ -31,6 +35,9 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // Gets the search model associated with the view delegate. The model may be
   // owned by the delegate, or owned elsewhere (e.g. a profile keyed service).
   virtual SearchModel* GetSearchModel() = 0;
+
+  // Invoked to start a new Google Assistant session.
+  virtual void StartAssistant() = 0;
 
   // Invoked to start a new search. This collects a list of search results
   // matching the raw query, which is an unhandled string typed into the search
@@ -101,6 +108,8 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // Show wallpaper context menu from the specified onscreen location.
   virtual void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
                                         ui::MenuSourceType source_type) = 0;
+
+  virtual ws::WindowService* GetWindowService() = 0;
 };
 
 }  // namespace app_list

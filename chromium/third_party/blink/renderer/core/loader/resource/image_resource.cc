@@ -24,7 +24,9 @@
 #include "third_party/blink/renderer/core/loader/resource/image_resource.h"
 
 #include <stdint.h>
+#include <algorithm>
 #include <memory>
+#include <utility>
 
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
@@ -74,7 +76,8 @@ class ImageResource::ImageResourceInfoImpl final
   USING_GARBAGE_COLLECTED_MIXIN(ImageResourceInfoImpl);
 
  public:
-  ImageResourceInfoImpl(ImageResource* resource) : resource_(resource) {
+  explicit ImageResourceInfoImpl(ImageResource* resource)
+      : resource_(resource) {
     DCHECK(resource_);
   }
   void Trace(blink::Visitor* visitor) override {
@@ -132,6 +135,14 @@ class ImageResource::ImageResourceInfoImpl final
                                             initiator_name);
   }
 
+  void LoadDeferredImage(ResourceFetcher* fetcher) override {
+    if (resource_->GetType() == Resource::kImage &&
+        resource_->StillNeedsLoad() &&
+        !fetcher->ShouldDeferImageLoad(resource_->Url())) {
+      fetcher->StartLoad(resource_);
+    }
+  }
+
   const Member<ImageResource> resource_;
 };
 
@@ -139,7 +150,7 @@ class ImageResource::ImageResourceFactory : public NonTextResourceFactory {
   STACK_ALLOCATED();
 
  public:
-  ImageResourceFactory(const FetchParameters& fetch_params)
+  explicit ImageResourceFactory(const FetchParameters& fetch_params)
       : NonTextResourceFactory(Resource::kImage),
         fetch_params_(&fetch_params) {}
 
@@ -147,7 +158,7 @@ class ImageResource::ImageResourceFactory : public NonTextResourceFactory {
                    const ResourceLoaderOptions& options) const override {
     return new ImageResource(request, options,
                              ImageResourceContent::CreateNotStarted(),
-                             fetch_params_->GetPlaceholderImageRequestType() ==
+                             fetch_params_->GetImageRequestOptimization() ==
                                  FetchParameters::kAllowPlaceholder);
   }
 
@@ -173,15 +184,16 @@ ImageResource* ImageResource::Fetch(FetchParameters& params,
   return resource;
 }
 
-bool ImageResource::CanReuse(
+Resource::MatchStatus ImageResource::CanReuse(
     const FetchParameters& params,
     scoped_refptr<const SecurityOrigin> new_source_origin) const {
   // If the image is a placeholder, but this fetch doesn't allow a
   // placeholder, then do not reuse this resource.
-  if (params.GetPlaceholderImageRequestType() !=
+  if (params.GetImageRequestOptimization() !=
           FetchParameters::kAllowPlaceholder &&
-      placeholder_option_ != PlaceholderOption::kDoNotReloadPlaceholder)
-    return false;
+      placeholder_option_ != PlaceholderOption::kDoNotReloadPlaceholder) {
+    return MatchStatus::kImagePlaceholder;
+  }
 
   return Resource::CanReuse(params, std::move(new_source_origin));
 }
@@ -234,9 +246,8 @@ void ImageResource::OnMemoryDump(WebMemoryDumpLevelOfDetail level_of_detail,
   Resource::OnMemoryDump(level_of_detail, memory_dump);
   const String name = GetMemoryDumpName() + "/image_content";
   auto* dump = memory_dump->CreateMemoryAllocatorDump(name);
-  size_t encoded_size =
-      content_->HasImage() ? content_->GetImage()->Data()->size() : 0;
-  dump->AddScalar("size", "bytes", encoded_size);
+  if (content_->HasImage() && content_->GetImage()->Data())
+    dump->AddScalar("size", "bytes", content_->GetImage()->Data()->size());
 }
 
 void ImageResource::Trace(blink::Visitor* visitor) {
@@ -573,7 +584,10 @@ void ImageResource::ReloadIfLoFiOrPlaceholderImage(
   DCHECK(!is_scheduling_reload_);
   is_scheduling_reload_ = true;
 
-  SetCachePolicyBypassingCache();
+  if (GetResourceRequest().GetPreviewsState() &
+      (WebURLRequest::kClientLoFiOn | WebURLRequest::kServerLoFiOn)) {
+    SetCachePolicyBypassingCache();
+  }
 
   // The reloaded image should not use any previews transformations.
   WebURLRequest::PreviewsState previews_state_for_reload =
@@ -629,8 +643,7 @@ void ImageResource::OnePartInMultipartReceived(
   if (!GetResponse().IsNull()) {
     CHECK_EQ(GetResponse().WasFetchedViaServiceWorker(),
              response.WasFetchedViaServiceWorker());
-    CHECK_EQ(GetResponse().ResponseTypeViaServiceWorker(),
-             response.ResponseTypeViaServiceWorker());
+    CHECK_EQ(GetResponse().GetType(), response.GetType());
   }
 
   SetResponse(response);
@@ -671,8 +684,7 @@ bool ImageResource::IsAccessAllowed(
       ImageResourceInfo::kHasSingleSecurityOrigin)
     return false;
 
-  DCHECK(security_origin);
-  if (PassesAccessControlCheck(*security_origin))
+  if (IsSameOriginOrCORSSuccessful())
     return true;
 
   return security_origin->CanReadContent(GetResponse().Url());

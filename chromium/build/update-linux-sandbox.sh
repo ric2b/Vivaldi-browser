@@ -45,6 +45,12 @@ if [ ! -f "${CHROME_SANDBOX_BUILD_PATH}" ]; then
   exit 1
 fi
 
+if readelf -d "${CHROME_SANDBOX_BUILD_PATH}" | \
+  grep "(RPATH)" > /dev/null 2>&1; then
+  echo "Build requires is_component_build=false in ${CHROME_OUT_DIR}/args.gn."
+  exit 1
+fi
+
 if [ ! -f "${CHROME_SANDBOX_INST_PATH}" ]; then
   echo -n "Could not find ${CHROME_SANDBOX_INST_PATH}, "
   echo "installing it now."

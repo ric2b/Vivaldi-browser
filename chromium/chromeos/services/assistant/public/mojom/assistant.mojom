@@ -12,6 +12,17 @@ import "mojo/public/mojom/base/time.mojom";
 
 // Interface to communicate with assistant backend.
 interface Assistant {
+  // Starts a cached screen context interaction. Results related to the screen
+  // context will be returned through the |AssistantInteractionSubscriber|
+  // interface to registered subscribers. It is illegal to call this method
+  // without having first cached screen context (see CacheScreenContext()).
+  StartCachedScreenContextInteraction();
+
+  // Starts a metalayer interaction for the selected screen |region|. Results
+  // related to the selected region will be returned through the
+  // |AssistantInteractionSubscriber| interface to registered subscribers.
+  StartMetalayerInteraction(gfx.mojom.Rect region);
+
   // Starts a new Assistant voice interaction.
   StartVoiceInteraction();
 
@@ -41,15 +52,17 @@ interface Assistant {
   // Dismisses a notification.
   DismissNotification(AssistantNotification notification);
 
-  // Asks assistant to grab screen context. |region| controls the part of the
-  // screen to snapshot. If |region| is empty, it takes fullscreen screenshot.
-  // After grabbing completion, the callback will be invoked.
-  RequestScreenContext(gfx.mojom.Rect region) => ();
+  // Caches screen context, made up of view hierarchy and screenshot data.
+  // Screen context is used to provide additional context alongside text and
+  // voice queries, and may also be used in standalone screen context
+  // interactions (see StartCachedScreenContextInteraction()).
+  CacheScreenContext() => ();
 };
 
-// Subscribes to assistant's interaction event. Responses from the assistant may
-// contain untrusted third-party content. Subscriber implementations must be
-// sure to handle the response data appropriately.
+// Subscribes to assistant's interaction event. These events are server driven
+// in response to the user's direct interaction with the assistant. Responses
+// from the assistant may contain untrusted third-party content. Subscriber
+// implementations must be sure to handle the response data appropriately.
 interface AssistantInteractionSubscriber {
   // Assistant interaction has started. In the event of a voice interaction,
   // |is_voice_interaction| will be true. This implies that the mic is open.
@@ -85,9 +98,14 @@ interface AssistantInteractionSubscriber {
 
   // Assistant got an instantaneous speech level update in dB.
   OnSpeechLevelUpdated(float speech_level);
+
+  // Assistant has started speaking. When TTS is started due to an error that
+  // occurred during the interaction, |due_to_error| is true.
+  OnTtsStarted(bool due_to_error);
 };
 
-// Subscribes to assistant's notification event.
+// Subscribes to assistant's notification event. These events are server
+// driven and pertain to push notifications.
 interface AssistantNotificationSubscriber {
   // Assistant got notification from server.
   OnShowNotification(AssistantNotification notification);
@@ -140,6 +158,9 @@ interface AudioInputObserver {
 interface DeviceActions {
   // Enables or disables WiFi.
   SetWifiEnabled(bool enabled);
+
+  // Enables or disables Bluetooth.
+  SetBluetoothEnabled(bool enabled);
 };
 
 // Enumeration of possible completions for an Assistant interaction.
@@ -150,6 +171,8 @@ enum AssistantInteractionResolution {
   kInterruption,
   // Assistant interaction completed due to error.
   kError,
+  // Assistant interaction completed due to mic timeout.
+  kMicTimeout,
   // Assistant interaction completed due to multi-device hotword loss.
   kMultiDeviceHotwordLoss,
 };

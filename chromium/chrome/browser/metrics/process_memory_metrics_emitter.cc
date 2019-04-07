@@ -38,6 +38,7 @@ using ukm::builders::Memory_Experimental;
 namespace {
 
 const char kEffectiveSize[] = "effective_size";
+const char kSize[] = "size";
 const char kAllocatedObjectsSize[] = "allocated_objects_size";
 const bool kLargeMetric = true;
 
@@ -117,18 +118,18 @@ const Metric kAllocatorDumpNamesForMetrics[] = {
      kLargeMetric, kEffectiveSize, EmitTo::kUkmAndUmaAsSize,
      &Memory_Experimental::SetPartitionAlloc_AllocatedObjects},
     {"partition_alloc/partitions/array_buffer",
-     "PartitionAlloc.Partitions.ArrayBuffer", kLargeMetric, kEffectiveSize,
+     "PartitionAlloc.Partitions.ArrayBuffer", kLargeMetric, kSize,
      EmitTo::kUkmAndUmaAsSize,
      &Memory_Experimental::SetPartitionAlloc_Partitions_ArrayBuffer},
     {"partition_alloc/partitions/buffer", "PartitionAlloc.Partitions.Buffer",
-     kLargeMetric, kEffectiveSize, EmitTo::kUkmAndUmaAsSize,
+     kLargeMetric, kSize, EmitTo::kUkmAndUmaAsSize,
      &Memory_Experimental::SetPartitionAlloc_Partitions_Buffer},
     {"partition_alloc/partitions/fast_malloc",
-     "PartitionAlloc.Partitions.FastMalloc", kLargeMetric, kEffectiveSize,
+     "PartitionAlloc.Partitions.FastMalloc", kLargeMetric, kSize,
      EmitTo::kUkmAndUmaAsSize,
      &Memory_Experimental::SetPartitionAlloc_Partitions_FastMalloc},
     {"partition_alloc/partitions/layout", "PartitionAlloc.Partitions.Layout",
-     kLargeMetric, kEffectiveSize, EmitTo::kUkmAndUmaAsSize,
+     kLargeMetric, kSize, EmitTo::kUkmAndUmaAsSize,
      &Memory_Experimental::SetPartitionAlloc_Partitions_Layout},
     {"site_storage", "SiteStorage", kLargeMetric, kEffectiveSize,
      EmitTo::kUkmAndUmaAsSize, &Memory_Experimental::SetSiteStorage},
@@ -321,6 +322,19 @@ void EmitGpuMemoryMetrics(const GlobalMemoryDump::ProcessDump& pmd,
   builder.Record(ukm_recorder);
 }
 
+void EmitUtilityMemoryMetrics(const GlobalMemoryDump::ProcessDump& pmd,
+                              ukm::SourceId ukm_source_id,
+                              ukm::UkmRecorder* ukm_recorder,
+                              const base::Optional<base::TimeDelta>& uptime,
+                              bool record_uma) {
+  Memory_Experimental builder(ukm_source_id);
+  builder.SetProcessType(static_cast<int64_t>(
+      memory_instrumentation::mojom::ProcessType::UTILITY));
+  EmitProcessUkm(pmd, "Utility", uptime, record_uma, &builder);
+
+  builder.Record(ukm_recorder);
+}
+
 void EmitAudioServiceMemoryMetrics(
     const GlobalMemoryDump::ProcessDump& pmd,
     ukm::SourceId ukm_source_id,
@@ -473,25 +487,28 @@ void ProcessMemoryMetricsEmitter::CollateResults() {
     return;
 
   uint32_t private_footprint_total_kb = 0;
+  uint32_t renderer_private_footprint_total_kb = 0;
   uint32_t shared_footprint_total_kb = 0;
-  bool record_uma = pid_scope_ == base::kNullProcessId;
+  bool emit_metrics_for_all_processes = pid_scope_ == base::kNullProcessId;
 
   base::Time now = base::Time::Now();
   for (const auto& pmd : global_dump_->process_dumps()) {
     private_footprint_total_kb += pmd.os_dump().private_footprint_kb;
     shared_footprint_total_kb += pmd.os_dump().shared_footprint_kb;
 
-    if (!record_uma && pid_scope_ != pmd.pid())
+    if (!emit_metrics_for_all_processes && pid_scope_ != pmd.pid())
       continue;
 
     switch (pmd.process_type()) {
       case memory_instrumentation::mojom::ProcessType::BROWSER: {
-        EmitBrowserMemoryMetrics(pmd, ukm::UkmRecorder::GetNewSourceID(),
-                                 GetUkmRecorder(),
-                                 GetProcessUptime(now, pmd.pid()), record_uma);
+        EmitBrowserMemoryMetrics(
+            pmd, ukm::UkmRecorder::GetNewSourceID(), GetUkmRecorder(),
+            GetProcessUptime(now, pmd.pid()), emit_metrics_for_all_processes);
         break;
       }
       case memory_instrumentation::mojom::ProcessType::RENDERER: {
+        renderer_private_footprint_total_kb +=
+            pmd.os_dump().private_footprint_kb;
         resource_coordinator::mojom::PageInfoPtr page_info;
         // If there is more than one frame being hosted in a renderer, don't
         // emit any URLs. This is not ideal, but UKM does not support
@@ -505,22 +522,27 @@ void ProcessMemoryMetricsEmitter::CollateResults() {
         }
 
         int number_of_extensions = GetNumberOfExtensions(pmd.pid());
-        EmitRendererMemoryMetrics(pmd, page_info, GetUkmRecorder(),
-                                  number_of_extensions,
-                                  GetProcessUptime(now, pmd.pid()), record_uma);
+        EmitRendererMemoryMetrics(
+            pmd, page_info, GetUkmRecorder(), number_of_extensions,
+            GetProcessUptime(now, pmd.pid()), emit_metrics_for_all_processes);
         break;
       }
       case memory_instrumentation::mojom::ProcessType::GPU: {
         EmitGpuMemoryMetrics(pmd, ukm::UkmRecorder::GetNewSourceID(),
                              GetUkmRecorder(), GetProcessUptime(now, pmd.pid()),
-                             record_uma);
+                             emit_metrics_for_all_processes);
         break;
       }
       case memory_instrumentation::mojom::ProcessType::UTILITY: {
-        if (pmd.pid() == content::GetProcessIdForAudioService())
+        if (pmd.pid() == content::GetProcessIdForAudioService()) {
           EmitAudioServiceMemoryMetrics(
               pmd, ukm::UkmRecorder::GetNewSourceID(), GetUkmRecorder(),
-              GetProcessUptime(now, pmd.pid()), record_uma);
+              GetProcessUptime(now, pmd.pid()), emit_metrics_for_all_processes);
+        } else {
+          EmitUtilityMemoryMetrics(
+              pmd, ukm::UkmRecorder::GetNewSourceID(), GetUkmRecorder(),
+              GetProcessUptime(now, pmd.pid()), emit_metrics_for_all_processes);
+        }
         break;
       }
       case memory_instrumentation::mojom::ProcessType::PLUGIN:
@@ -529,18 +551,22 @@ void ProcessMemoryMetricsEmitter::CollateResults() {
         break;
     }
   }
-  if (record_uma) {
+
+  if (emit_metrics_for_all_processes) {
     UMA_HISTOGRAM_MEMORY_LARGE_MB(
         "Memory.Experimental.Total2.PrivateMemoryFootprint",
         private_footprint_total_kb / 1024);
     UMA_HISTOGRAM_MEMORY_LARGE_MB("Memory.Total.PrivateMemoryFootprint",
                                   private_footprint_total_kb / 1024);
+    UMA_HISTOGRAM_MEMORY_LARGE_MB("Memory.Total.RendererPrivateMemoryFootprint",
+                                  renderer_private_footprint_total_kb / 1024);
     UMA_HISTOGRAM_MEMORY_LARGE_MB("Memory.Total.SharedMemoryFootprint",
                                   shared_footprint_total_kb / 1024);
+
+    Memory_Experimental(ukm::UkmRecorder::GetNewSourceID())
+        .SetTotal2_PrivateMemoryFootprint(private_footprint_total_kb / 1024)
+        .SetTotal2_SharedMemoryFootprint(shared_footprint_total_kb / 1024)
+        .Record(GetUkmRecorder());
   }
 
-  Memory_Experimental(ukm::UkmRecorder::GetNewSourceID())
-      .SetTotal2_PrivateMemoryFootprint(private_footprint_total_kb / 1024)
-      .SetTotal2_SharedMemoryFootprint(shared_footprint_total_kb / 1024)
-      .Record(GetUkmRecorder());
 }

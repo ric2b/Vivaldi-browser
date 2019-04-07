@@ -9,10 +9,11 @@
 
 #include "ash/accessibility/default_accessibility_delegate.h"
 #include "ash/screenshot_delegate.h"
+#include "ash/shell.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "components/user_manager/user_info_impl.h"
-#include "services/ui/public/cpp/input_devices/input_device_controller_client.h"
+#include "services/ws/public/cpp/input_devices/input_device_controller_client.h"
 #include "ui/gfx/image/image.h"
 #include "ui/keyboard/keyboard_ui.h"
 
@@ -42,32 +43,16 @@ class ScreenshotDelegateMash : public ScreenshotDelegate {
 
 }  // namespace
 
-ShellDelegateMash::ShellDelegateMash(service_manager::Connector* connector)
-    : connector_(connector) {}
+ShellDelegateMash::ShellDelegateMash() = default;
 
 ShellDelegateMash::~ShellDelegateMash() = default;
-
-service_manager::Connector* ShellDelegateMash::GetShellConnector() const {
-  return connector_;
-}
 
 bool ShellDelegateMash::CanShowWindowForUser(aura::Window* window) const {
   NOTIMPLEMENTED_LOG_ONCE();
   return true;
 }
 
-void ShellDelegateMash::PreInit() {
-  NOTIMPLEMENTED_LOG_ONCE();
-}
-
 std::unique_ptr<keyboard::KeyboardUI> ShellDelegateMash::CreateKeyboardUI() {
-  NOTIMPLEMENTED_LOG_ONCE();
-  return nullptr;
-}
-
-NetworkingConfigDelegate* ShellDelegateMash::GetNetworkingConfigDelegate() {
-  // TODO(mash): Provide a real implementation, perhaps by folding its behavior
-  // into an ash-side network information cache. http://crbug.com/651157
   NOTIMPLEMENTED_LOG_ONCE();
   return nullptr;
 }
@@ -81,14 +66,15 @@ AccessibilityDelegate* ShellDelegateMash::CreateAccessibilityDelegate() {
   return new DefaultAccessibilityDelegate;
 }
 
-ui::InputDeviceControllerClient*
+ws::InputDeviceControllerClient*
 ShellDelegateMash::GetInputDeviceControllerClient() {
-  if (!connector_)
+  if (!Shell::Get()->connector())
     return nullptr;  // Happens in tests.
 
   if (!input_device_controller_client_) {
     input_device_controller_client_ =
-        std::make_unique<ui::InputDeviceControllerClient>(connector_);
+        std::make_unique<ws::InputDeviceControllerClient>(
+            Shell::Get()->connector());
   }
   return input_device_controller_client_.get();
 }

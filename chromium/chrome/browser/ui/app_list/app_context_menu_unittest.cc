@@ -242,7 +242,7 @@ class AppContextMenuTest : public AppListTestBase,
                         bool can_show_app_info,
                         AppListControllerDelegate::Pinnable pinnable,
                         extensions::LaunchType launch_type) {
-    controller_.reset(new FakeAppListControllerDelegate());
+    controller_ = std::make_unique<FakeAppListControllerDelegate>();
     controller_->SetAppPinnable(app_id, pinnable);
     controller_->SetCanShowAppInfo(can_show_app_info);
     controller_->SetExtensionLaunchType(profile(), app_id, launch_type);
@@ -312,7 +312,7 @@ class AppContextMenuTest : public AppListTestBase,
   }
 
   void TestChromeApp(bool can_show_app_info) {
-    controller_.reset(new FakeAppListControllerDelegate());
+    controller_ = std::make_unique<FakeAppListControllerDelegate>();
     controller_->SetCanShowAppInfo(can_show_app_info);
     app_list::ExtensionAppContextMenu menu(menu_delegate(),
                                            profile(),
@@ -708,8 +708,7 @@ TEST_F(AppContextMenuTest, CommandIdsMatchEnumsForHistograms) {
 
 // Tests that internal app's context menu is correct.
 TEST_P(AppContextMenuTest, InternalAppMenu) {
-  for (const auto& internal_app :
-       app_list::GetInternalAppList(profile()->IsGuestSession())) {
+  for (const auto& internal_app : app_list::GetInternalAppList(profile())) {
     if (!internal_app.show_in_launcher)
       continue;
 

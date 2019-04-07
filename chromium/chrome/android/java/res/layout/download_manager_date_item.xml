@@ -7,11 +7,10 @@
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingTop="4dp"
-    android:paddingBottom="4dp"
-    android:paddingStart="12dp"
+    android:paddingTop="@dimen/download_manager_section_title_padding_top"
+    android:paddingBottom="@dimen/download_manager_section_title_padding_bottom"
+    android:paddingStart="@dimen/list_item_default_margin"
     android:maxLines="1"
     android:gravity="start|center_vertical"
-    android:textAppearance="@style/BlackTitle2"
-    android:textAlignment="viewStart"
-    />
+    android:textAppearance="@style/BlackTitle1"
+    android:textAlignment="viewStart" />

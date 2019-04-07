@@ -9,6 +9,7 @@
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller_observer.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_model.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_web_view_resizer.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -17,7 +18,9 @@
 
 FullscreenMediator::FullscreenMediator(FullscreenController* controller,
                                        FullscreenModel* model)
-    : controller_(controller), model_(model) {
+    : controller_(controller),
+      model_(model),
+      resizer_([[FullscreenWebViewResizer alloc] initWithModel:model]) {
   DCHECK(controller_);
   DCHECK(model_);
   model_->AddObserver(this);
@@ -27,6 +30,10 @@ FullscreenMediator::~FullscreenMediator() {
   // Disconnect() is expected to be called before deallocation.
   DCHECK(!controller_);
   DCHECK(!model_);
+}
+
+void FullscreenMediator::SetWebState(web::WebState* webState) {
+  resizer_.webState = webState;
 }
 
 void FullscreenMediator::ScrollToTop() {
@@ -77,6 +84,11 @@ void FullscreenMediator::AnimateModelReset() {
 }
 
 void FullscreenMediator::Disconnect() {
+  for (auto& observer : observers_) {
+    observer.FullscreenControllerWillShutDown(controller_);
+  }
+  resizer_.webState = nullptr;
+  resizer_ = nil;
   [animator_ stopAnimation:YES];
   animator_ = nil;
   model_->RemoveObserver(this);
@@ -91,6 +103,8 @@ void FullscreenMediator::FullscreenModelProgressUpdated(
   for (auto& observer : observers_) {
     observer.FullscreenProgressUpdated(controller_, model_->progress());
   }
+
+  [resizer_ updateForFullscreenProgress:model->progress()];
 }
 
 void FullscreenMediator::FullscreenModelEnabledStateChanged(
@@ -106,6 +120,13 @@ void FullscreenMediator::FullscreenModelScrollEventStarted(
     FullscreenModel* model) {
   DCHECK_EQ(model_, model);
   StopAnimating(true /* update_model */);
+  // Show the toolbars if the user begins a scroll past the bottom edge of the
+  // screen and the toolbars have been fully collapsed.
+  if (model_->is_scrolled_to_bottom() &&
+      AreCGFloatsEqual(model_->progress(), 0.0) &&
+      model_->can_collapse_toolbar()) {
+    AnimateModelReset();
+  }
 }
 
 void FullscreenMediator::FullscreenModelScrollEventEnded(
@@ -134,6 +155,8 @@ void FullscreenMediator::FullscreenModelWasReset(FullscreenModel* model) {
   for (auto& observer : observers_) {
     observer.FullscreenProgressUpdated(controller_, model_->progress());
   }
+
+  [resizer_ updateForFullscreenProgress:model_->progress()];
 }
 
 void FullscreenMediator::SetUpAnimator(FullscreenAnimatorStyle style) {
@@ -149,6 +172,7 @@ void FullscreenMediator::SetUpAnimator(FullscreenAnimatorStyle style) {
       return;
     model_->AnimationEndedWithProgress(
         [weakAnimator progressForAnimatingPosition:finalPosition]);
+    [resizer_ updateForFullscreenProgress:animator_.finalProgress];
     animator_ = nil;
   }];
 }

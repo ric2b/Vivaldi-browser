@@ -10,11 +10,11 @@
 #include "ash/focus_cycler.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/root_window_controller.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_delegate.h"
-#include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -124,9 +124,9 @@ const char WebUILoginView::kViewClassName[] =
 
 WebUILoginView::WebUILoginView(const WebViewSettings& settings)
     : settings_(settings) {
-  // TODO(mash): Support virtual keyboard under MASH. There is no
+  // TODO(crbug.com/648733): Support virtual keyboard under MASH. There is no
   // KeyboardController in the browser process under MASH.
-  if (features::IsAshInBrowserProcess()) {
+  if (!features::IsUsingWindowService()) {
     keyboard::KeyboardController::Get()->AddObserver(this);
   } else {
     NOTIMPLEMENTED();
@@ -178,20 +178,14 @@ WebUILoginView::WebUILoginView(const WebViewSettings& settings)
       ui::VKEY_S, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
       kAccelNameBootstrappingSlave;
 
-  const bool is_demo_mode_enabled =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kEnableDemoMode);
-  if (is_demo_mode_enabled) {
-    accel_map_[ui::Accelerator(ui::VKEY_D,
-                               ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)] =
-        kAccelNameDemoMode;
-  }
+  accel_map_[ui::Accelerator(
+      ui::VKEY_D, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)] = kAccelNameDemoMode;
 
   accel_map_[ui::Accelerator(ui::VKEY_I, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN)] =
       kAccelSendFeedback;
 
   for (AccelMap::iterator i(accel_map_.begin()); i != accel_map_.end(); ++i) {
-    if (features::IsAshInBrowserProcess()) {
+    if (!features::IsMultiProcessMash()) {
       // To make reset accelerator work while system tray is open, register it
       // at accelerator controller.
       ash::Shell::Get()->accelerator_controller()->Register({i->first}, this);
@@ -203,7 +197,7 @@ WebUILoginView::WebUILoginView(const WebViewSettings& settings)
     }
   }
 
-  if (features::IsAshInBrowserProcess())
+  if (!features::IsMultiProcessMash())
     ash::Shell::Get()->system_tray_notifier()->AddSystemTrayFocusObserver(this);
 }
 
@@ -211,7 +205,7 @@ WebUILoginView::~WebUILoginView() {
   for (auto& observer : observer_list_)
     observer.OnHostDestroying();
 
-  if (features::IsAshInBrowserProcess()) {
+  if (!features::IsMultiProcessMash()) {
     ash::Shell::Get()->system_tray_notifier()->RemoveSystemTrayFocusObserver(
         this);
     ash::Shell::Get()->accelerator_controller()->UnregisterAll(this);
@@ -569,8 +563,8 @@ void WebUILoginView::OnFocusLeavingSystemTray(bool reverse) {
 
 bool WebUILoginView::MoveFocusToSystemTray(bool reverse) {
   // Focus is accepted, but the Ash system tray is not available in Mash, so
-  // exit early.
-  if (!features::IsAshInBrowserProcess())
+  // exit early. https://crbug.com/782072
+  if (features::IsMultiProcessMash())
     return true;
 
   // The focus should not move to the system tray if voice interaction OOOBE is

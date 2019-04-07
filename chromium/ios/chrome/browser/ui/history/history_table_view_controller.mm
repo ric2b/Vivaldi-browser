@@ -16,6 +16,7 @@
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/context_menu/context_menu_coordinator.h"
 #include "ios/chrome/browser/ui/history/history_entries_status_item.h"
 #import "ios/chrome/browser/ui/history/history_entries_status_item_delegate.h"
@@ -64,6 +65,13 @@ const int kMaxFetchCount = 100;
 const CGFloat kSeparationSpaceBetweenSections = 9;
 // The Alpha value used by the SearchBar when disabled.
 const CGFloat kAlphaForDisabledSearchBar = 0.5;
+// The default UIButton font size used by UIKit.
+const CGFloat kButtonDefaultFontSize = 15.0;
+// Horizontal width representing UIButton's padding.
+const CGFloat kButtonHorizontalPadding = 30.0;
+// Vertical offset from the top, to center search bar and cancel button in the
+// header.
+const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
 }  // namespace
 
 @interface HistoryTableViewController ()<HistoryEntriesStatusItemDelegate,
@@ -201,6 +209,16 @@ const CGFloat kAlphaForDisabledSearchBar = 0.5;
   if (@available(iOS 11, *)) {
     self.navigationItem.searchController = self.searchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
+
+    // Center search bar and cancel button vertically so it looks centered
+    // in the header when searching.
+    UIOffset offset = UIOffsetMake(0.0f, kVerticalOffsetForSearchHeader);
+    self.searchController.searchBar.searchFieldBackgroundPositionAdjustment =
+        offset;
+    UIBarButtonItem* cancelButton = [UIBarButtonItem
+        appearanceWhenContainedInInstancesOfClasses:@[ [UISearchBar class] ]];
+    [cancelButton setTitlePositionAdjustment:offset
+                               forBarMetrics:UIBarMetricsDefault];
   } else {
     self.tableView.tableHeaderView = self.searchController.searchBar;
   }
@@ -483,6 +501,7 @@ const CGFloat kAlphaForDisabledSearchBar = 0.5;
     [self configureViewsForNonEditModeWithAnimation:YES];
     [self.tableView endUpdates];
   }
+  base::RecordAction(base::UserMetricsAction("HistoryPage_RemoveSelected"));
 }
 
 #pragma mark - UITableViewDelegate
@@ -955,28 +974,29 @@ const CGFloat kAlphaForDisabledSearchBar = 0.5;
 
 // Opens URL in a new non-incognito tab and dismisses the history view.
 - (void)openURLInNewTab:(const GURL&)URL {
-  GURL copiedURL(URL);
+  OpenNewTabCommand* command =
+      [[OpenNewTabCommand alloc] initWithURL:URL
+                                    referrer:web::Referrer()
+                                 inIncognito:NO
+                                inBackground:NO
+                                    appendTo:kLastTab];
+
   [self.localDispatcher dismissHistoryWithCompletion:^{
-    [self.loader webPageOrderedOpen:copiedURL
-                           referrer:web::Referrer()
-                        inIncognito:NO
-                       inBackground:NO
-                        originPoint:CGPointZero
-                           appendTo:kLastTab];
+    [self.loader webPageOrderedOpen:command];
     [self.presentationDelegate showActiveRegularTabFromHistory];
   }];
 }
 
 // Opens URL in a new incognito tab and dismisses the history view.
 - (void)openURLInNewIncognitoTab:(const GURL&)URL {
-  GURL copiedURL(URL);
+  OpenNewTabCommand* command =
+      [[OpenNewTabCommand alloc] initWithURL:URL
+                                    referrer:web::Referrer()
+                                 inIncognito:YES
+                                inBackground:NO
+                                    appendTo:kLastTab];
   [self.localDispatcher dismissHistoryWithCompletion:^{
-    [self.loader webPageOrderedOpen:copiedURL
-                           referrer:web::Referrer()
-                        inIncognito:YES
-                       inBackground:NO
-                        originPoint:CGPointZero
-                           appendTo:kLastTab];
+    [self.loader webPageOrderedOpen:command];
     [self.presentationDelegate showActiveIncognitoTabFromHistory];
   }];
 }
@@ -1074,6 +1094,13 @@ const CGFloat kAlphaForDisabledSearchBar = 0.5;
                target:self
                action:@selector(animateViewsConfigurationForEditingChange)];
     _editButton.accessibilityIdentifier = kHistoryToolbarEditButtonIdentifier;
+    // Buttons don't conform to dynamic types. So it's safe to just use the
+    // default font size.
+    CGSize stringSize = [titleString sizeWithAttributes:@{
+      NSFontAttributeName : [UIFont boldSystemFontOfSize:kButtonDefaultFontSize]
+    }];
+    // Include button padding to ensure string does not get truncated
+    _editButton.width = stringSize.width + kButtonHorizontalPadding;
   }
   return _editButton;
 }

@@ -65,8 +65,8 @@ class SVGFEImageElement final : public SVGFilterPrimitiveStandardAttributes,
   void ClearImageResource();
 
   void BuildPendingResource() override;
-  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
-  void RemovedFrom(ContainerNode*) override;
+  InsertionNotificationRequest InsertedInto(ContainerNode&) override;
+  void RemovedFrom(ContainerNode&) override;
 
   Member<SVGAnimatedPreserveAspectRatio> preserve_aspect_ratio_;
 

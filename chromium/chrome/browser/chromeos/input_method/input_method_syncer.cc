@@ -12,8 +12,8 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "base/task_runner.h"
-#include "base/task_scheduler/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -235,7 +235,7 @@ void InputMethodSyncer::MergeSyncedPrefs() {
                                     preferred_languages_syncable,
                                     prefs::kLanguagePreferredLanguages));
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&CheckAndResolveLocales, languages),
       base::Bind(&InputMethodSyncer::FinishMerge, weak_factory_.GetWeakPtr()));
 }

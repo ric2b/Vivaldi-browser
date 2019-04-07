@@ -16,11 +16,15 @@
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
+#include "base/strings/string_util.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_setup_controller.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/user_flow.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
@@ -34,10 +38,12 @@
 #include "components/arc/arc_features.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
+#include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "third_party/icu/source/common/unicode/locid.h"
 
 namespace arc {
 
@@ -553,14 +559,7 @@ bool IsArcStatsReportingEnabled() {
 }
 
 bool IsArcDemoModeSetupFlow() {
-  chromeos::LoginDisplayHost* const host =
-      chromeos::LoginDisplayHost::default_host();
-  if (!host)
-    return false;
-
-  const chromeos::WizardController* const wizard_controller =
-      host->GetWizardController();
-  return wizard_controller && wizard_controller->is_in_demo_mode_setup_flow();
+  return chromeos::DemoSetupController::IsOobeDemoSetupFlowInProgress();
 }
 
 void UpdateArcFileSystemCompatibilityPrefIfNeeded(
@@ -611,6 +610,9 @@ ash::mojom::AssistantAllowedState IsAssistantAllowedForProfile(
   if (profile->IsLegacySupervised())
     return ash::mojom::AssistantAllowedState::DISALLOWED_BY_SUPERVISED_USER;
 
+  if (profile->IsChild())
+    return ash::mojom::AssistantAllowedState::DISALLOWED_BY_CHILD_USER;
+
   if (chromeos::switches::IsVoiceInteractionFlagsEnabled()) {
     if (!chromeos::switches::IsVoiceInteractionLocalesSupported())
       return ash::mojom::AssistantAllowedState::DISALLOWED_BY_LOCALE;
@@ -623,6 +625,31 @@ ash::mojom::AssistantAllowedState IsAssistantAllowedForProfile(
 
     if (!IsArcAllowedForProfile(profile))
       return ash::mojom::AssistantAllowedState::DISALLOWED_BY_ARC_DISALLOWED;
+  }
+
+  if (chromeos::DemoSession::IsDeviceInDemoMode())
+    return ash::mojom::AssistantAllowedState::DISALLOWED_BY_DEMO_MODE;
+
+  if (chromeos::switches::IsAssistantEnabled()) {
+    const std::string kAllowedLocales[] = {ULOC_US, ULOC_UK, ULOC_CANADA,
+                                           ULOC_CANADA_FRENCH};
+
+    const PrefService* prefs = profile->GetPrefs();
+    std::string pref_locale =
+        prefs->GetString(language::prefs::kApplicationLocale);
+
+    if (!pref_locale.empty()) {
+      base::ReplaceChars(pref_locale, "-", "_", &pref_locale);
+      bool disallowed = !base::ContainsValue(kAllowedLocales, pref_locale);
+
+      if (disallowed &&
+          base::CommandLine::ForCurrentProcess()
+                  ->GetSwitchValueASCII(
+                      chromeos::switches::kVoiceInteractionLocales)
+                  .find(pref_locale) == std::string::npos) {
+        return ash::mojom::AssistantAllowedState::DISALLOWED_BY_LOCALE;
+      }
+    }
   }
 
   return ash::mojom::AssistantAllowedState::ALLOWED;

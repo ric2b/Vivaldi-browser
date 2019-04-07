@@ -18,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_reg_util_win.h"
 #include "base/test/test_timeouts.h"
+#include "build/build_config.h"
 #include "chrome/install_static/install_util.h"
 #include "chrome_elf/nt_registry/nt_registry.h"
 #include "chrome_elf/sha1/sha1.h"
@@ -250,8 +251,13 @@ class ThirdPartyTest : public testing::Test {
 // configurations.
 //------------------------------------------------------------------------------
 
+#if defined(OS_WIN)
+#define MAYBE_Base DISABLED_Base
+#else
+#define MAYBE_Base Base
+#endif
 // Note: The test module used in this unittest has no export table.
-TEST_F(ThirdPartyTest, Base) {
+TEST_F(ThirdPartyTest, MAYBE_Base) {
   // 1. Spawn the test process with NO blacklist.  Expect successful
   // initialization.
   base::CommandLine cmd_line1 = base::CommandLine::FromString(kTestExeFilename);
@@ -487,8 +493,15 @@ TEST_F(ThirdPartyTest, SHA1SanityCheck) {
             0);
 }
 
+// Flaky: crbug.com/868233
+#if defined(OS_WIN)
+#define MAYBE_PathCaseSensitive DISABLED_PathCaseSensitive
+#else
+#define MAYBE_PathCaseSensitive PathCaseSensitive
+#endif
+
 // Test that full section path is left alone, in terms of case.
-TEST_F(ThirdPartyTest, PathCaseSensitive) {
+TEST_F(ThirdPartyTest, MAYBE_PathCaseSensitive) {
   // Rename module to have mixed case.
   ASSERT_TRUE(MakeFileCopy(GetExeDir(), kTestDllName2, GetScopedTempDirValue(),
                            kTestDllName1MixedCase));
@@ -535,7 +548,7 @@ TEST_F(ThirdPartyTest, StatusCodes) {
   // 3. Confirm key and empty value.
   std::vector<ThirdPartyStatus> code_array;
   EXPECT_TRUE(QueryStatusCodes(&code_array));
-  EXPECT_EQ(0, code_array.size());
+  EXPECT_EQ(0u, code_array.size());
 
   // 4. Add status codes, then verify.
   ASSERT_NO_FATAL_FAILURE(
@@ -545,7 +558,7 @@ TEST_F(ThirdPartyTest, StatusCodes) {
   ASSERT_NO_FATAL_FAILURE(
       AddStatusCodeForTesting(ThirdPartyStatus::kHookVirtualProtectFailure));
   EXPECT_TRUE(QueryStatusCodes(&code_array));
-  ASSERT_EQ(3, code_array.size());
+  ASSERT_EQ(3u, code_array.size());
   EXPECT_EQ(ThirdPartyStatus::kFileEmpty, code_array[0]);
   EXPECT_EQ(ThirdPartyStatus::kLogsCreateMutexFailure, code_array[1]);
   EXPECT_EQ(ThirdPartyStatus::kHookVirtualProtectFailure, code_array[2]);
@@ -553,7 +566,7 @@ TEST_F(ThirdPartyTest, StatusCodes) {
   // 5. Reset the registry value to empty.
   EXPECT_TRUE(ResetStatusCodesForTesting());
   EXPECT_TRUE(QueryStatusCodes(&code_array));
-  EXPECT_EQ(0, code_array.size());
+  EXPECT_EQ(0u, code_array.size());
 
   // 6. Disable reg override.
   ASSERT_NO_FATAL_FAILURE(CancelRegRedirect(nt::HKCU));

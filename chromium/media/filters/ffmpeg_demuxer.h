@@ -83,7 +83,9 @@ class MEDIA_EXPORT FFmpegDemuxerStream : public DemuxerStream {
   void SetEndOfStream();
 
   // Drops queued buffers and clears end of stream state.
-  void FlushBuffers();
+  // Passing |preserve_packet_position| will prevent replay of already seen
+  // packets.
+  void FlushBuffers(bool preserve_packet_position);
 
   // Empties the queues and ignores any additional calls to Read().
   void Stop();
@@ -198,6 +200,8 @@ class MEDIA_EXPORT FFmpegDemuxerStream : public DemuxerStream {
   bool fixup_chained_ogg_;
 
   int num_discarded_packet_warnings_;
+  int64_t last_packet_pos_;
+  int64_t last_packet_dts_;
 
   DISALLOW_COPY_AND_ASSIGN(FFmpegDemuxerStream);
 };
@@ -208,7 +212,8 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
                 DataSource* data_source,
                 const EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
                 const MediaTracksUpdatedCB& media_tracks_updated_cb,
-                MediaLog* media_log);
+                MediaLog* media_log,
+                bool is_local_file);
   ~FFmpegDemuxer() override;
 
   // Demuxer implementation.
@@ -257,7 +262,7 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
   }
 
   container_names::MediaContainerName container() const {
-    return glue_->container();
+    return glue_ ? glue_->container() : container_names::CONTAINER_UNKNOWN;
   }
 
  private:
@@ -277,7 +282,7 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
   void LogMetadata(AVFormatContext* avctx, base::TimeDelta max_duration);
 
   // FFmpeg callbacks during seeking.
-  void OnSeekFrameDone(int result);
+  void OnSeekFrameSuccess();
 
   // FFmpeg callbacks during reading + helper method to initiate reads.
   void ReadFrameIfNeeded();
@@ -306,6 +311,14 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
   void AddTextStreams();
 
   void SetLiveness(DemuxerStream::Liveness liveness);
+
+  void SeekInternal(base::TimeDelta time, base::OnceClosure seek_cb);
+  void OnVideoSeekedForTrackChange(DemuxerStream* video_stream,
+                                   base::OnceClosure seek_completed_cb);
+  void SeekOnVideoTrackChange(base::TimeDelta seek_to_time,
+                              TrackChangeCB seek_completed_cb,
+                              DemuxerStream::Type stream_type,
+                              const std::vector<DemuxerStream*>& streams);
 
   DemuxerHost* host_;
 
@@ -383,6 +396,8 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
   const MediaTracksUpdatedCB media_tracks_updated_cb_;
 
   std::map<MediaTrack::Id, FFmpegDemuxerStream*> track_id_to_demux_stream_map_;
+
+  const bool is_local_file_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtr<FFmpegDemuxer> weak_this_;

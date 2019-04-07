@@ -6,7 +6,7 @@
 
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_task_environment.h"
-#include "chrome/browser/upgrade_detector.h"
+#include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 class UpgradeMetricsProviderTest : public testing::Test {
@@ -31,6 +31,7 @@ class UpgradeMetricsProviderTest : public testing::Test {
 TEST_F(UpgradeMetricsProviderTest, HistogramCheck) {
   base::test::ScopedTaskEnvironment task_environment;
   TestHistogramLevel(UpgradeDetector::UPGRADE_ANNOYANCE_NONE);
+  TestHistogramLevel(UpgradeDetector::UPGRADE_ANNOYANCE_VERY_LOW);
   TestHistogramLevel(UpgradeDetector::UPGRADE_ANNOYANCE_LOW);
   TestHistogramLevel(UpgradeDetector::UPGRADE_ANNOYANCE_ELEVATED);
   TestHistogramLevel(UpgradeDetector::UPGRADE_ANNOYANCE_HIGH);

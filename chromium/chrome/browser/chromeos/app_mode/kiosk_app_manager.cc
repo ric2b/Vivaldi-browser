@@ -18,7 +18,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/version.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/app_mode/app_session.h"
@@ -36,12 +36,15 @@
 #include "chrome/browser/extensions/external_loader.h"
 #include "chrome/browser/extensions/external_provider_impl.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chromeos/chromeos_paths.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
+#include "chromeos/cryptohome/cryptohome_util.h"
+#include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/account_id/account_id.h"
@@ -53,6 +56,7 @@
 #include "components/user_manager/user_manager.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest_handlers/kiosk_mode_info.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
 
 namespace chromeos {
@@ -98,20 +102,21 @@ void CancelDelayedCryptohomeRemoval(const cryptohome::Identification& id) {
   local_state->CommitPendingWrite();
 }
 
-void OnRemoveAppCryptohomeComplete(const cryptohome::Identification& id,
-                                   const std::string& app,
-                                   const base::Closure& callback,
-                                   bool success,
-                                   cryptohome::MountError return_code) {
-  if (success) {
+void OnRemoveAppCryptohomeComplete(
+    const cryptohome::Identification& id,
+    const std::string& app,
+    base::OnceClosure callback,
+    base::Optional<cryptohome::BaseReply> reply) {
+  cryptohome::MountError error = BaseReplyToMountError(reply);
+  if (error == cryptohome::MOUNT_ERROR_NONE) {
     CancelDelayedCryptohomeRemoval(id);
   } else {
     ScheduleDelayedCryptohomeRemoval(id, app);
-    LOG(ERROR) << "Remove cryptohome for " << app
-        << " failed, return code: " << return_code;
+    LOG(ERROR) << "Remove cryptohome for " << app << " failed, return code: "
+               << cryptohome::BaseReplyToMountError(reply.value());
   }
-  if (!callback.is_null())
-    callback.Run();
+  if (callback)
+    std::move(callback).Run();
 }
 
 void PerformDelayedCryptohomeRemovals(bool service_is_available) {
@@ -129,9 +134,14 @@ void PerformDelayedCryptohomeRemovals(bool service_is_available) {
     std::string app_id;
     it.value().GetAsString(&app_id);
     VLOG(1) << "Removing obsolete crypthome for " << app_id;
-    cryptohome::AsyncMethodCaller::GetInstance()->AsyncRemove(
-        cryptohome_id, base::Bind(&OnRemoveAppCryptohomeComplete, cryptohome_id,
-                                  app_id, base::Closure()));
+
+    cryptohome::AccountIdentifier account_id_proto;
+    account_id_proto.set_account_id(cryptohome_id.id());
+
+    DBusThreadManager::Get()->GetCryptohomeClient()->RemoveEx(
+        account_id_proto,
+        base::BindOnce(&OnRemoveAppCryptohomeComplete, cryptohome_id, app_id,
+                       base::OnceClosure()));
   }
 }
 
@@ -156,7 +166,7 @@ base::FilePath GetCrxUnpackDir() {
 
 scoped_refptr<base::SequencedTaskRunner> GetBackgroundTaskRunner() {
   return base::CreateSequencedTaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 
@@ -165,9 +175,11 @@ std::unique_ptr<ExternalCache> CreateExternalCache(
   if (g_test_overrides)
     return g_test_overrides->CreateExternalCache(delegate, true);
 
+  scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory =
+      g_browser_process->shared_url_loader_factory();
   auto cache = std::make_unique<ExternalCacheImpl>(
-      GetCrxCacheDir(), g_browser_process->system_request_context(),
-      GetBackgroundTaskRunner(), delegate, true /* always_check_updates */,
+      GetCrxCacheDir(), shared_url_loader_factory, GetBackgroundTaskRunner(),
+      delegate, true /* always_check_updates */,
       false /* wait_for_cache_initialization */);
   cache->set_flush_on_put(true);
   return cache;
@@ -468,7 +480,7 @@ void KioskAppManager::OnReadImmutableAttributes(
       } else if (!ownership_established_) {
         bool* owner_present = new bool(false);
         base::PostTaskWithTraitsAndReply(
-            FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+            FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
             base::BindOnce(&CheckOwnerFilePresence, owner_present),
             base::BindOnce(&KioskAppManager::OnOwnerFileChecked,
                            base::Unretained(this), callback,
@@ -911,9 +923,14 @@ void KioskAppManager::ClearRemovedApps(
   for (auto& entry : old_apps) {
     entry.second->ClearCache();
     const cryptohome::Identification cryptohome_id(entry.second->account_id());
-    cryptohome::AsyncMethodCaller::GetInstance()->AsyncRemove(
-        cryptohome_id, base::Bind(&OnRemoveAppCryptohomeComplete, cryptohome_id,
-                                  entry.first, cryptohomes_barrier_closure));
+    cryptohome::AccountIdentifier account_id_proto;
+    account_id_proto.set_account_id(cryptohome_id.id());
+
+    DBusThreadManager::Get()->GetCryptohomeClient()->RemoveEx(
+        account_id_proto,
+        base::BindOnce(&OnRemoveAppCryptohomeComplete, cryptohome_id,
+                       entry.first, cryptohomes_barrier_closure));
+
     apps_to_remove.push_back(entry.second->app_id());
   }
   external_cache_->RemoveExtensions(apps_to_remove);

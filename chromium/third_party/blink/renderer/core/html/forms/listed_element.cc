@@ -74,13 +74,13 @@ void ListedElement::DidMoveToNewDocument(Document& old_document) {
     SetFormAttributeTargetObserver(nullptr);
 }
 
-void ListedElement::InsertedInto(ContainerNode* insertion_point) {
+void ListedElement::InsertedInto(ContainerNode& insertion_point) {
   if (!form_was_set_by_parser_ || !form_ ||
-      NodeTraversal::HighestAncestorOrSelf(*insertion_point) !=
+      NodeTraversal::HighestAncestorOrSelf(insertion_point) !=
           NodeTraversal::HighestAncestorOrSelf(*form_.Get()))
     ResetFormOwner();
 
-  if (!insertion_point->isConnected())
+  if (!insertion_point.isConnected())
     return;
 
   HTMLElement* element = ToHTMLElement(this);
@@ -88,9 +88,9 @@ void ListedElement::InsertedInto(ContainerNode* insertion_point) {
     ResetFormAttributeTargetObserver();
 }
 
-void ListedElement::RemovedFrom(ContainerNode* insertion_point) {
+void ListedElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLElement* element = ToHTMLElement(this);
-  if (insertion_point->isConnected() && element->FastHasAttribute(formAttr)) {
+  if (insertion_point.isConnected() && element->FastHasAttribute(formAttr)) {
     SetFormAttributeTargetObserver(nullptr);
     ResetFormOwner();
     return;

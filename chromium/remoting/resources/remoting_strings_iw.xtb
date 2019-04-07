@@ -102,11 +102,11 @@
 <translation id="3171922709365450819">המכשיר הזה לא נתמך על-ידי הלקוח הזה כי נדרש עבורו אימות של צד שלישי.</translation>
 <translation id="3194245623920924351">‏שולחן עבודה מרוחק של Chrome</translation>
 <translation id="3197730452537982411">שולחן עבודה מרוחק</translation>
+<translation id="3212472844831225214">‏• הוספנו תמיכה ב-Android 9.0 Pie.</translation>
 <translation id="324272851072175193">שליחת ההוראות באימייל</translation>
 <translation id="3258789396564295715">‏תוכל לגשת למחשב זה באופן מאובטח באמצעות 'שולחן עבודה מרוחק של Chrome'.</translation>
 <translation id="3286521253923406898">‏בקר מארח Chromoting</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> מבקש אישור לבצע שינויים.</translation>
-<translation id="331779822864701136">‏• הוספת תמיכה במכשירי Android 8.0 Oreo.</translation>
 <translation id="332624996707057614">ערוך את שם המחשב</translation>
 <translation id="3339299787263251426">גש אל המחשב שלך באופן מאובטח דרך האינטרנט</translation>
 <translation id="3360306038446926262">חלונות</translation>
@@ -122,8 +122,9 @@
 <translation id="369442766917958684">פועל במצב לא מקוון.</translation>
 <translation id="3695446226812920698">איך עושים זאת</translation>
 <translation id="3718805989288361841">‏אירעה שגיאה בהגדרות המדיניות לשולחן העבודה המרוחק של Chrome. פנה למנהל המערכת כדי לקבל עזרה.</translation>
-<translation id="3759645055923345178">‏כשתהליך ההגדרה יסתיים, אפשר יהיה לגשת למחשב מדף זה על ידי הזנת ה-PIN או קוד הגישה</translation>
 <translation id="3776024066357219166">‏הפעילות של 'שולחן עבודה מרוחק של Chrome' הסתיימה.</translation>
+<translation id="3846148461359626420">‏• חוויה משופרת בהזזת התצוגה ובזום ב-iPhone X.
+• שיפורי יציבות ותיקוני באגים.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">‏אשר את החשבון ומספר ה-PIN שלך שמפורטים למטה כדי לאפשר גישה באמצעות שולחן העבודה המרוחק של Chrome.</translation>
 <translation id="3897092660631435901">תפריט</translation>
@@ -137,6 +138,7 @@
 <translation id="405887016757208221">המחשב המרוחק לא הצליח לאתחל את ההפעלה. אם הבעיה נמשכת, נסה להגדיר שוב את המארח.</translation>
 <translation id="4068946408131579958">כל החיבורים</translation>
 <translation id="409800995205263688">הערה: הגדרות המדיניות מתירות חיבורים רק בין מחשבים הנמצאים בתוך הרשת שלך.</translation>
+<translation id="4126409073460786861">‏כשתהליך ההגדרה יסתיים, צריך יהיה לרענן את הדף ואז אפשר יהיה לבחור את המכשיר שלך ולהזין את ה-PIN כדי לגשת למחשב</translation>
 <translation id="4145029455188493639">התחברת באמצעות חשבון <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">חלק מהרכיבים הדרושים חסרים. ודא שהתקנת את הגרסה העדכנית ביותר של התוכנה ונסה שוב.</translation>
 <translation id="4156740505453712750">‏כדי להגן על הגישה למחשב זה, בחר PIN באורך <ph name="BOLD_START" />שש ספרות לפחות<ph name="BOLD_END" />. PIN זה יידרש בעת התחברות ממיקום אחר.</translation>
@@ -145,7 +147,6 @@
 <translation id="4207623512727273241">הפעל את המתקין לפני שתמשיך.</translation>
 <translation id="4227991223508142681">Host Provisioning Utility</translation>
 <translation id="4240294130679914010">‏מסיר ההתקנה של מארח Chromoting</translation>
-<translation id="4249741460382919890">תיקונים כלליים ושיפורי יציבות.</translation>
 <translation id="4277463233460010382">‏מחשב זה מוגדר לאפשר ללקוח אחד או יותר להתחבר מבלי להזין PIN.</translation>
 <translation id="4277736576214464567">קוד הגישה אינו חוקי. נסה שוב.</translation>
 <translation id="4361728918881830843">‏כדי להפעיל חיבורים מרחוק למחשב אחר, התקן את 'שולחן עבודה מרוחק של Chrome' במחשב האחר ולחץ על '<ph name="BUTTON_NAME" />'.</translation>
@@ -271,6 +272,7 @@ Chrome
 <translation id="6998989275928107238">אל</translation>
 <translation id="7019153418965365059">שגיאת מארח לא מזוהה: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">סיוע מרחוק</translation>
+<translation id="7026930240735156896">יש להגדיר את המחשב לגישה מרחוק בהתאם להוראות</translation>
 <translation id="7038683108611689168">‏עזור לנו לשפר את Chromoting בכך שתאפשר לנו לאסוף סטטיסטיקות שימוש ודוחות קריסה.</translation>
 <translation id="7067321367069083429">המסך פועל כמסך מגע</translation>
 <translation id="7116737094673640201">‏ברוכים הבאים אל שולחן העבודה המרוחק של Chrome</translation>
@@ -296,7 +298,6 @@ Chrome
 <translation id="7782471917492991422">בדוק את הגדרות ניהול צריכת החשמל של המחשב כדי לוודא שאינו מוגדר לעבור למצב שינה בזמן חוסר פעילות.</translation>
 <translation id="7810127880729796595">הצג סטטיסטיקה (חיבור: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">‏חלק מהרכיבים הדרושים חסרים. ודא שאתה משתמש בגרסה העדכנית ביותר של Chrome ונסה שוב.</translation>
-<translation id="7850909060902317210">‏יש להתקין את התוכנה 'שולחן עבודה מרוחק של Chrome' ולבצע את ההוראות להשלמת ההגדרה</translation>
 <translation id="7868137160098754906">‏הזן את מספר ה-PIN עבור המחשב המרוחק.</translation>
 <translation id="7869445566579231750">אין לך הרשאה להריץ את היישום הזה.</translation>
 <translation id="7895403300744144251">מדיניות האבטחה במחשב המרוחק אינה מתירה חיבורים מהחשבון שלך.</translation>

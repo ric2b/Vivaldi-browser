@@ -19,6 +19,7 @@ class WPTManifestUnitTest(unittest.TestCase):
         self.assertFalse(host.filesystem.exists(manifest_path))
         WPTManifest.ensure_manifest(host)
         self.assertTrue(host.filesystem.exists(manifest_path))
+        self.assertEqual(host.filesystem.written_files, {manifest_path: '{"manifest": "base"}'})
 
         webkit_base = '/mock-checkout/third_party/WebKit'
         self.assertEqual(
@@ -39,11 +40,12 @@ class WPTManifestUnitTest(unittest.TestCase):
         host = MockHost()
         manifest_path = '/mock-checkout/third_party/WebKit/LayoutTests/external/wpt/MANIFEST.json'
 
-        host.filesystem.write_text_file(manifest_path, '{}')
-        self.assertTrue(host.filesystem.exists(manifest_path))
+        host.filesystem.write_text_file(manifest_path, '{"manifest": "NOT base"}')
 
+        self.assertTrue(host.filesystem.exists(manifest_path))
         WPTManifest.ensure_manifest(host)
         self.assertTrue(host.filesystem.exists(manifest_path))
+        self.assertEqual(host.filesystem.written_files, {manifest_path: '{"manifest": "base"}'})
 
         webkit_base = '/mock-checkout/third_party/WebKit'
         self.assertEqual(
@@ -66,3 +68,43 @@ class WPTManifestUnitTest(unittest.TestCase):
 
         with self.assertRaises(ScriptError):
             WPTManifest.ensure_manifest(host)
+
+    def test_all_url_items_skips_jsshell_tests(self):
+        manifest_json = '''
+{
+    "items": {
+        "manual": {},
+        "reftest": {},
+        "testharness": {
+            "test.any.js": [
+                ["/test.any.html", {}],
+                ["/test.any.js", {"jsshell": true}]
+            ]
+        }
+    }
+}
+        '''
+        manifest = WPTManifest(manifest_json)
+        self.assertEqual(manifest.all_url_items(),
+                         {u'/test.any.html': [u'/test.any.html', {}]})
+
+    def test_file_path_to_url_paths(self):
+        manifest_json = '''
+{
+    "items": {
+        "manual": {},
+        "reftest": {},
+        "testharness": {
+            "test.any.js": [
+                ["/test.any.html", {}],
+                ["/test.any.js", {"jsshell": true}]
+            ]
+        }
+    }
+}
+        '''
+        manifest = WPTManifest(manifest_json)
+        # Leading slashes should be stripped; and jsshell tests shouldn't be
+        # included.
+        self.assertEqual(manifest.file_path_to_url_paths('test.any.js'),
+                         [u'test.any.html'])

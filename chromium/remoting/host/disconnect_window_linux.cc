@@ -186,7 +186,9 @@ void DisconnectWindowGtk::Start(
   gtk_window_set_deletable(window, FALSE);
 
   // Allow custom rendering of the background pixmap.
+#if !GTK_CHECK_VERSION(3, 90, 0)
   gtk_widget_set_app_paintable(disconnect_window_, TRUE);
+#endif
   g_signal_connect(disconnect_window_, "draw", G_CALLBACK(OnDrawThunk), this);
 
   // Handle window resizing, to regenerate the background pixmap and window
@@ -199,7 +201,9 @@ void DisconnectWindowGtk::Start(
                    G_CALLBACK(OnConfigureThunk), this);
 
   // Handle mouse events to allow the user to drag the window around.
+#if !GTK_CHECK_VERSION(3, 90, 0)
   gtk_widget_set_events(disconnect_window_, GDK_BUTTON_PRESS_MASK);
+#endif
   g_signal_connect(disconnect_window_, "button-press-event",
                    G_CALLBACK(OnButtonPressThunk), this);
 
@@ -207,28 +211,40 @@ void DisconnectWindowGtk::Start(
   // The alignment sets narrow margins at the top and bottom, compared with
   // left and right.  The left margin is made larger to accommodate the
   // window movement gripper.
+  GtkWidget* button_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+  gtk_box_set_homogeneous(GTK_BOX(button_row), FALSE);
+
+#if GTK_CHECK_VERSION(3, 90, 0)
+  gtk_widget_set_margin_start(GTK_WIDGET(button_row), 24);
+  gtk_widget_set_margin_end(GTK_WIDGET(button_row), 12);
+  gtk_widget_set_margin_top(GTK_WIDGET(button_row), 8);
+  gtk_widget_set_margin_bottom(GTK_WIDGET(button_row), 8);
+  gtk_container_add(GTK_CONTAINER(window), button_row);
+#else
   G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
   GtkWidget* align = gtk_alignment_new(0, 0, 1, 1);
   gtk_alignment_set_padding(GTK_ALIGNMENT(align), 8, 8, 24, 12);
   G_GNUC_END_IGNORE_DEPRECATIONS;
   gtk_container_add(GTK_CONTAINER(window), align);
-
-#if GTK_MAJOR_VERSION == 2
-  GtkWidget* button_row = gtk_hbox_new(FALSE, 12);
-#else
-  GtkWidget* button_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_box_set_homogeneous(GTK_BOX(button_row), FALSE);
-#endif
   gtk_container_add(GTK_CONTAINER(align), button_row);
+#endif
 
   button_ = gtk_button_new_with_label(
       l10n_util::GetStringUTF8(IDS_STOP_SHARING_BUTTON).c_str());
+#if GTK_CHECK_VERSION(3, 90, 0)
+  gtk_box_pack_end(GTK_BOX(button_row), button_);
+#else
   gtk_box_pack_end(GTK_BOX(button_row), button_, FALSE, FALSE, 0);
+#endif
 
   g_signal_connect(button_, "clicked", G_CALLBACK(OnClickedThunk), this);
 
   message_ = gtk_label_new(nullptr);
+#if GTK_CHECK_VERSION(3, 90, 0)
+  gtk_box_pack_end(GTK_BOX(button_row), message_);
+#else
   gtk_box_pack_end(GTK_BOX(button_row), message_, FALSE, FALSE, 0);
+#endif
 
   // Override any theme setting for the text color, so that the text is
   // readable against the window's background pixmap.
@@ -238,15 +254,16 @@ void DisconnectWindowGtk::Start(
   gtk_label_set_attributes(GTK_LABEL(message_), attributes);
   pango_attr_list_unref(attributes);
 
-#if GTK_MAJOR_VERSION > 2
+#if !GTK_CHECK_VERSION(3, 90, 0)
+  // GTK4 always uses an RGBA visual for windows.
   GdkScreen* screen = gtk_widget_get_screen(disconnect_window_);
   GdkVisual* visual = gdk_screen_get_rgba_visual(screen);
-
   if (visual)
     gtk_widget_set_visual(disconnect_window_, visual);
-#endif
 
+  // GTK4 shows windows by default.
   gtk_widget_show_all(disconnect_window_);
+#endif
 
   // Extract the user name from the JID.
   std::string client_jid = client_session_control_->client_jid();
@@ -287,51 +304,10 @@ gboolean DisconnectWindowGtk::OnConfigure(GtkWidget* widget,
 
   // gdk_window_set_back_pixmap() is not supported in GDK3, and
   // background drawing is handled in OnDraw().
-#if GTK_MAJOR_VERSION == 2
-  // Create the depth 1 pixmap for the window shape.
-  GdkPixmap* shape_mask =
-      gdk_pixmap_new(nullptr, current_width_, current_height_, 1);
-  cairo_t* cairo_context = gdk_cairo_create(shape_mask);
-
-  // Set the arc radius for the corners.
-  const int kCornerRadius = 6;
-
-  // Initialize the whole bitmap to be transparent.
-  cairo_set_source_rgba(cairo_context, 0, 0, 0, 0);
-  cairo_set_operator(cairo_context, CAIRO_OPERATOR_SOURCE);
-  cairo_paint(cairo_context);
-
-  // Paint an opaque round rect covering the whole area (leaving the extreme
-  // corners transparent).
-  cairo_set_source_rgba(cairo_context, 1, 1, 1, 1);
-  cairo_set_operator(cairo_context, CAIRO_OPERATOR_SOURCE);
-  AddRoundRectPath(cairo_context, current_width_, current_height_,
-                   kCornerRadius);
-  cairo_fill(cairo_context);
-
-  cairo_destroy(cairo_context);
-  gdk_window_shape_combine_mask(widget->window, shape_mask, 0, 0);
-  g_object_unref(shape_mask);
-
-  // Create a full-color pixmap for the window background image.
-  GdkPixmap* background =
-      gdk_pixmap_new(nullptr, current_width_, current_height_, 24);
-  cairo_context = gdk_cairo_create(background);
-  DrawBackground(cairo_context, current_width_, current_height_);
-  cairo_destroy(cairo_context);
-
-  gdk_window_set_back_pixmap(widget->window, background, FALSE);
-  g_object_unref(background);
-  gdk_window_invalidate_rect(widget->window, nullptr, TRUE);
-#endif  // GTK_MAJOR_VERSION == 2
-
   return FALSE;
 }
 
 gboolean DisconnectWindowGtk::OnDraw(GtkWidget* widget, cairo_t* cr) {
-#if GTK_MAJOR_VERSION == 2
-  NOTREACHED();
-#endif
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   DrawBackground(cr, current_width_, current_height_);

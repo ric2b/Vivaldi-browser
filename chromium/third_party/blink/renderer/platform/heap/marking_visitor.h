@@ -124,6 +124,8 @@ class PLATFORM_EXPORT MarkingVisitor final : public Visitor {
                                  void** object_slot,
                                  TraceDescriptor desc) final {
     RegisterBackingStoreReference(object_slot);
+    if (!object)
+      return;
     Visit(object, desc);
   }
 
@@ -140,11 +142,13 @@ class PLATFORM_EXPORT MarkingVisitor final : public Visitor {
   // processing. In this case, the contents are processed separately using
   // the corresponding traits but the backing store requires marking.
   void VisitBackingStoreOnly(void* object, void** object_slot) final {
-    MarkHeaderNoTracing(HeapObjectHeader::FromPayload(object));
     RegisterBackingStoreReference(object_slot);
+    if (!object)
+      return;
+    MarkHeaderNoTracing(HeapObjectHeader::FromPayload(object));
   }
 
-  void RegisterBackingStoreCallback(void* backing_store,
+  void RegisterBackingStoreCallback(void** slot,
                                     MovingObjectCallback,
                                     void* callback_data) final;
   bool RegisterWeakTable(const void* closure,
@@ -161,7 +165,7 @@ class PLATFORM_EXPORT MarkingVisitor final : public Visitor {
   static void WriteBarrierSlow(void*);
   static void TraceMarkedBackingStoreSlow(void*);
 
-  void RegisterBackingStoreReference(void* slot);
+  void RegisterBackingStoreReference(void** slot);
 
   void ConservativelyMarkHeader(HeapObjectHeader*);
 

@@ -84,7 +84,7 @@ LayoutUnit SnapToLinesLayouter::ComputeInitialPositionAdjustment(
   // 7. Round line to an integer by adding 0.5 and then flooring it.
   LayoutUnit line_position(floorf(cue_box_.SnapToLinesPosition() + 0.5f));
 
-  WritingMode writing_mode = cue_box_.Style()->GetWritingMode();
+  WritingMode writing_mode = cue_box_.StyleRef().GetWritingMode();
   // 8. Vertical Growing Left: Add one to line then negate it.
   if (IsFlippedBlocksWritingMode(writing_mode))
     line_position = -(line_position + 1);
@@ -119,7 +119,7 @@ LayoutUnit SnapToLinesLayouter::ComputeInitialPositionAdjustment(
 // incorrect results.
 IntRect ContentBoxRelativeToAncestor(const LayoutBox& box,
                                      const LayoutBoxModelObject& ancestor) {
-  FloatRect cue_content_box(box.ContentBoxRect());
+  FloatRect cue_content_box(box.PhysicalContentBoxRect());
   // We pass UseTransforms here primarily because we use a transform for
   // non-snap-to-lines positioning (see VTTCue.cpp.)
   FloatQuad mapped_content_quad =
@@ -132,7 +132,7 @@ IntRect ContentBoxRelativeToAncestor(const LayoutBox& box,
 // timeline is mostly padding.
 IntRect PaddingBoxRelativeToAncestor(const LayoutBox& box,
                                      const LayoutBoxModelObject& ancestor) {
-  FloatRect cue_content_box(box.PaddingBoxRect());
+  FloatRect cue_content_box(box.PhysicalPaddingBoxRect());
   // We pass UseTransforms here primarily because we use a transform for
   // non-snap-to-lines positioning (see VTTCue.cpp.)
   FloatQuad mapped_content_quad =
@@ -195,7 +195,7 @@ void SnapToLinesLayouter::UpdateLayout() {
   // into which cues will not be placed.
   // 2. Horizontal: Let full dimension be the height of video's rendering area
   //    Vertical: Let full dimension be the width of video's rendering area.
-  WritingMode writing_mode = cue_box_.Style()->GetWritingMode();
+  WritingMode writing_mode = cue_box_.StyleRef().GetWritingMode();
   LayoutBlock* parent_block = cue_box_.ContainingBlock();
   LayoutUnit full_dimension = blink::IsHorizontalWritingMode(writing_mode)
                                   ? parent_block->Size().Height()
@@ -236,7 +236,7 @@ void SnapToLinesLayouter::UpdateLayout() {
   // rendering area except for a width of margin at the left of the rendering
   // area and a width of margin at the right of the rendering area.
   IntRect title_area =
-      EnclosingIntRect(cue_box_.ContainingBlock()->ContentBoxRect());
+      EnclosingIntRect(cue_box_.ContainingBlock()->PhysicalContentBoxRect());
   if (blink::IsHorizontalWritingMode(writing_mode)) {
     title_area.Move(0, margin.ToInt());
     title_area.Contract(0, (2 * margin).ToInt());

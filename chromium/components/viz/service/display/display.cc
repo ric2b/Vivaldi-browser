@@ -127,7 +127,7 @@ void Display::SetLocalSurfaceId(const LocalSurfaceId& id,
   current_surface_id_ = SurfaceId(frame_sink_id_, id);
   device_scale_factor_ = device_scale_factor;
 
-  UpdateRootSurfaceResourcesLocked();
+  UpdateRootFrameMissing();
   if (scheduler_)
     scheduler_->SetNewRootSurface(current_surface_id_);
 }
@@ -252,11 +252,11 @@ void Display::InitializeRenderer() {
   aggregator_->SetOutputColorSpace(blending_color_space_, device_color_space_);
 }
 
-void Display::UpdateRootSurfaceResourcesLocked() {
+void Display::UpdateRootFrameMissing() {
   Surface* surface = surface_manager_->GetSurfaceForId(current_surface_id_);
-  bool root_surface_resources_locked = !surface || !surface->HasActiveFrame();
+  bool root_frame_missing = !surface || !surface->HasActiveFrame();
   if (scheduler_)
-    scheduler_->SetRootSurfaceResourcesLocked(root_surface_resources_locked);
+    scheduler_->SetRootFrameMissing(root_frame_missing);
 }
 
 void Display::OnContextLost() {
@@ -282,8 +282,10 @@ bool Display::DrawAndSwap() {
 
   base::ElapsedTimer aggregate_timer;
   CompositorFrame frame = aggregator_->Aggregate(
-      current_surface_id_, scheduler_ ? scheduler_->current_frame_display_time()
-                                      : base::TimeTicks::Now());
+      current_surface_id_,
+      scheduler_ ? scheduler_->current_frame_display_time()
+                 : base::TimeTicks::Now(),
+      ++swapped_trace_id_);
   UMA_HISTOGRAM_COUNTS_1M("Compositing.SurfaceAggregator.AggregateUs",
                           aggregate_timer.Elapsed().InMicroseconds());
 
@@ -292,6 +294,9 @@ bool Display::DrawAndSwap() {
                          TRACE_EVENT_SCOPE_THREAD);
     return false;
   }
+
+  TRACE_EVENT_ASYNC_BEGIN0("viz,benchmark", "Graphics.Pipeline.DrawAndSwap",
+                           swapped_trace_id_);
 
   // Run callbacks early to allow pipelining and collect presented callbacks.
   for (const auto& surface_id : surfaces_to_ack_on_next_draw_) {
@@ -336,6 +341,9 @@ bool Display::DrawAndSwap() {
   client_->DisplayWillDrawAndSwap(should_draw, frame.render_pass_list);
 
   if (should_draw) {
+    TRACE_EVENT_ASYNC_STEP_INTO0("viz,benchmark",
+                                 "Graphics.Pipeline.DrawAndSwap",
+                                 swapped_trace_id_, "Draw");
     if (settings_.enable_draw_occlusion) {
       base::ElapsedTimer draw_occlusion_timer;
       RemoveOverdrawQuads(&frame);
@@ -371,6 +379,9 @@ bool Display::DrawAndSwap() {
 
   bool should_swap = should_draw && size_matches;
   if (should_swap) {
+    TRACE_EVENT_ASYNC_STEP_INTO0("viz,benchmark",
+                                 "Graphics.Pipeline.DrawAndSwap",
+                                 swapped_trace_id_, "Swap");
     swapped_since_resize_ = true;
 
     if (scheduler_) {
@@ -400,6 +411,9 @@ bool Display::DrawAndSwap() {
                            need_presentation_feedback);
     if (scheduler_)
       scheduler_->DidSwapBuffers();
+    TRACE_EVENT_ASYNC_STEP_INTO0("viz,benchmark",
+                                 "Graphics.Pipeline.DrawAndSwap",
+                                 swapped_trace_id_, "WaitForAck");
   } else {
     TRACE_EVENT_INSTANT0("viz", "Swap skipped.", TRACE_EVENT_SCOPE_THREAD);
 
@@ -421,6 +435,9 @@ bool Display::DrawAndSwap() {
       }
     }
 
+    ++last_acked_trace_id_;
+    TRACE_EVENT_ASYNC_END0("viz,benchmark", "Graphics.Pipeline.DrawAndSwap",
+                           last_acked_trace_id_);
     if (scheduler_) {
       scheduler_->DidSwapBuffers();
       scheduler_->DidReceiveSwapBuffersAck();
@@ -438,6 +455,9 @@ bool Display::DrawAndSwap() {
 }
 
 void Display::DidReceiveSwapBuffersAck() {
+  ++last_acked_trace_id_;
+  TRACE_EVENT_ASYNC_END0("viz,benchmark", "Graphics.Pipeline.DrawAndSwap",
+                         last_acked_trace_id_);
   if (scheduler_)
     scheduler_->DidReceiveSwapBuffersAck();
   if (renderer_)
@@ -495,7 +515,7 @@ bool Display::SurfaceDamaged(const SurfaceId& surface_id,
   }
   if (surface_id == current_surface_id_) {
     display_damaged = true;
-    UpdateRootSurfaceResourcesLocked();
+    UpdateRootFrameMissing();
   }
   if (display_damaged)
     surfaces_to_ack_on_next_draw_.push_back(surface_id);

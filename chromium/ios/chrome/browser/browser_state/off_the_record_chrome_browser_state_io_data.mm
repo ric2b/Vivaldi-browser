@@ -12,7 +12,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/prefs/pref_service.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -184,7 +184,7 @@ void OffTheRecordChromeBrowserStateIOData::InitializeInternal(
   channel_id_store = new net::SQLiteChannelIDStore(
       channel_id_path_,
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND}));
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT}));
 
   net::ChannelIDService* channel_id_service = new net::ChannelIDService(
       new net::DefaultChannelIDStore(channel_id_store.get()));
@@ -195,7 +195,7 @@ void OffTheRecordChromeBrowserStateIOData::InitializeInternal(
           cookie_path_,
           cookie_util::CookieStoreConfig::RESTORED_SESSION_COOKIES,
           cookie_util::CookieStoreConfig::COOKIE_STORE_IOS, nullptr),
-      std::move(profile_params->system_cookie_store));
+      std::move(profile_params->system_cookie_store), io_thread->net_log());
   main_context->set_cookie_store(main_cookie_store_.get());
   main_cookie_store_->SetChannelIDServiceID(channel_id_service->GetUniqueID());
 

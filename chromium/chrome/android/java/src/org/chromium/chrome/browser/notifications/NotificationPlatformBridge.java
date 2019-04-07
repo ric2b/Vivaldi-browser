@@ -525,11 +525,11 @@ public class NotificationPlatformBridge {
         nativeStoreCachedWebApkPackageForNotificationId(
                 mNativeNotificationPlatformBridge, notificationId, webApkPackage);
 
+        // Record whether it's known whether notifications can be shown to the user at all.
+        NotificationSystemStatusUtil.recordAppNotificationStatusHistogram();
+
         Context context = ContextUtils.getApplicationContext();
         Resources res = context.getResources();
-
-        // Record whether it's known whether notifications can be shown to the user at all.
-        NotificationSystemStatusUtil.recordAppNotificationStatusHistogram(context);
 
         PendingIntent clickIntent = makePendingIntent(context,
                 NotificationConstants.ACTION_CLICK_NOTIFICATION, notificationId, origin, scopeUrl,
@@ -621,10 +621,10 @@ public class NotificationPlatformBridge {
             notificationBuilder.addSettingsAction(
                     settingsIconId, settingsTitle, pendingSettingsIntent);
 
-            mNotificationManager.notify(notificationId, PLATFORM_ID, notificationBuilder.build());
+            Notification notification = notificationBuilder.build();
+            mNotificationManager.notify(notificationId, PLATFORM_ID, notification);
             NotificationUmaTracker.getInstance().onNotificationShown(
-                    NotificationUmaTracker.SystemNotificationType.SITES,
-                    notificationBuilder.mChannelId);
+                    NotificationUmaTracker.SystemNotificationType.SITES, notification);
         }
     }
 

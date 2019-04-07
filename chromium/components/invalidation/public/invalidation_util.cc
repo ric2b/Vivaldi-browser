@@ -8,12 +8,22 @@
 #include <ostream>
 #include <sstream>
 
+#include "base/json/json_string_value_serializer.h"
 #include "base/json/json_writer.h"
 #include "base/values.h"
 #include "components/invalidation/public/invalidation.h"
 #include "components/invalidation/public/invalidation_object_id.h"
 #include "google/cacheinvalidation/include/types.h"
 #include "google/cacheinvalidation/types.pb.h"
+
+namespace {
+
+const char kSourceKey[] = "source";
+const char kNameKey[] = "name";
+
+const int kDeprecatedSource = 2000;
+
+}  // namespace
 
 namespace syncer {
 
@@ -77,9 +87,48 @@ bool InvalidationObjectIdLessThan::operator()(
 std::unique_ptr<base::DictionaryValue> InvalidationObjectIdToValue(
     const invalidation::InvalidationObjectId& object_id) {
   std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
-  value->SetInteger("source", object_id.source());
-  value->SetString("name", object_id.name());
+  value->SetString(kNameKey, object_id.name());
+  value->SetInteger(kSourceKey, object_id.source());
   return value;
+}
+
+std::string SerializeInvalidationObjectId(
+    const invalidation::InvalidationObjectId& object_id) {
+  std::unique_ptr<base::DictionaryValue> value =
+      InvalidationObjectIdToValue(object_id);
+  std::string serialized_id;
+  JSONStringValueSerializer serializer(&serialized_id);
+  serializer.Serialize(*value);
+  return serialized_id;
+}
+
+bool DeserializeInvalidationObjectId(const std::string& serialized_id,
+                                     invalidation::InvalidationObjectId* id) {
+  JSONStringValueDeserializer deserializer(serialized_id);
+  int error_code;
+  std::string error_msg;
+  std::unique_ptr<base::Value> value =
+      deserializer.Deserialize(&error_code, &error_msg);
+  base::DictionaryValue* dict = nullptr;
+
+  if (!value->GetAsDictionary(&dict)) {
+    DLOG(WARNING) << "Unable to get dictionary";
+    return false;
+  }
+
+  int source = 0;
+  if (!dict->GetInteger(kSourceKey, &source)) {
+    DLOG(WARNING) << "Unable to deserialize source";
+    return false;
+  }
+
+  std::string name;
+  if (!dict->GetString(kNameKey, &name)) {
+    DLOG(WARNING) << "Unable to deserialize name";
+    return false;
+  }
+  id->Init(source, name);
+  return true;
 }
 
 std::string InvalidationObjectIdToString(
@@ -87,6 +136,24 @@ std::string InvalidationObjectIdToString(
   std::string str;
   base::JSONWriter::Write(*InvalidationObjectIdToValue(object_id), &str);
   return str;
+}
+
+TopicSet ConvertIdsToTopics(ObjectIdSet ids) {
+  TopicSet topics;
+  for (const auto& id : ids)
+    topics.insert(id.name());
+  return topics;
+}
+
+ObjectIdSet ConvertTopicsToIds(TopicSet topics) {
+  ObjectIdSet ids;
+  for (const auto& topic : topics)
+    ids.insert(invalidation::ObjectId(kDeprecatedSource, topic));
+  return ids;
+}
+
+invalidation::ObjectId ConvertTopicToId(const Topic& topic) {
+  return invalidation::ObjectId(kDeprecatedSource, topic);
 }
 
 }  // namespace syncer

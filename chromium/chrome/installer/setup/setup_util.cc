@@ -45,6 +45,7 @@
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/setup/user_hive_visitor.h"
 #include "chrome/installer/util/app_registration_data.h"
+#include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "chrome/installer/util/install_util.h"
@@ -860,12 +861,6 @@ base::Time GetConsoleSessionStartTime() {
   FILETIME filetime = {wts_info->LogonTime.u.LowPart,
                        wts_info->LogonTime.u.HighPart};
   return base::Time::FromFileTime(filetime);
-}
-
-bool OsSupportsDarkTextTiles() {
-  auto windows_version = base::win::GetVersion();
-  return windows_version == base::win::VERSION_WIN8_1 ||
-         windows_version >= base::win::VERSION_WIN10_RS1;
 }
 
 base::Optional<std::string> DecodeDMTokenSwitchValue(

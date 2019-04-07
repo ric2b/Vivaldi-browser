@@ -4,8 +4,8 @@
 
 #include "ui/aura/mus/window_tree_host_mus_init_params.h"
 
-#include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "services/ws/public/cpp/property_type_converters.h"
+#include "services/ws/public/mojom/window_manager.mojom.h"
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/display/display.h"
@@ -17,7 +17,7 @@ namespace {
 bool GetInitialDisplayId(
     const std::map<std::string, std::vector<uint8_t>>& properties,
     int64_t* display_id) {
-  auto it = properties.find(ui::mojom::WindowManager::kDisplayId_InitProperty);
+  auto it = properties.find(ws::mojom::WindowManager::kDisplayId_InitProperty);
   if (it == properties.end())
     return false;
 
@@ -28,7 +28,7 @@ bool GetInitialDisplayId(
 bool GetInitialBounds(
     const std::map<std::string, std::vector<uint8_t>>& properties,
     gfx::Rect* bounds) {
-  auto it = properties.find(ui::mojom::WindowManager::kBounds_InitProperty);
+  auto it = properties.find(ws::mojom::WindowManager::kBounds_InitProperty);
   if (it == properties.end())
     return false;
 
@@ -37,10 +37,6 @@ bool GetInitialBounds(
 }
 
 }  // namespace
-
-DisplayInitParams::DisplayInitParams() = default;
-
-DisplayInitParams::~DisplayInitParams() = default;
 
 WindowTreeHostMusInitParams::WindowTreeHostMusInitParams() = default;
 
@@ -65,9 +61,8 @@ WindowTreeHostMusInitParams CreateInitParamsForTopLevel(
     params.display_id =
         display::Screen::GetScreen()->GetDisplayMatching(bounds_in_screen).id();
   } else {
-    // TODO(jamescook): This should probably be the display for new windows,
-    // but that information isn't available at this level.
-    params.display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+    params.display_id =
+        display::Screen::GetScreen()->GetDisplayForNewWindows().id();
   }
 
   // Pass |properties| to CreateWindowPortForTopLevel() so that |properties|

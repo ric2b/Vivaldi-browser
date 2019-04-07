@@ -7,8 +7,8 @@
 #include "base/files/file_util.h"
 #include "base/memory/singleton.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/vr/metrics/metrics_helper.h"
@@ -268,7 +268,7 @@ void AssetsLoader::LoadInternal(
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
   DCHECK(component_ready_);
   base::PostTaskWithTraits(
-      FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
+      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
       base::BindOnce(&AssetsLoader::LoadAssetsTask, task_runner,
                      component_version_, component_install_dir_,
                      std::move(on_loaded)));

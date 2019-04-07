@@ -119,22 +119,22 @@ HTMLSelectElement* HTMLHRElement::OwnerSelectElement() const {
 }
 
 Node::InsertionNotificationRequest HTMLHRElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   HTMLElement::InsertedInto(insertion_point);
   if (HTMLSelectElement* select = OwnerSelectElement()) {
-    if (insertion_point == select || (IsHTMLOptGroupElement(*insertion_point) &&
-                                      insertion_point->parentNode() == select))
+    if (&insertion_point == select || (IsHTMLOptGroupElement(insertion_point) &&
+                                       insertion_point.parentNode() == select))
       select->HrInsertedOrRemoved(*this);
   }
   return kInsertionDone;
 }
 
-void HTMLHRElement::RemovedFrom(ContainerNode* insertion_point) {
-  if (auto* select = ToHTMLSelectElementOrNull(*insertion_point)) {
+void HTMLHRElement::RemovedFrom(ContainerNode& insertion_point) {
+  if (auto* select = ToHTMLSelectElementOrNull(insertion_point)) {
     if (!parentNode() || IsHTMLOptGroupElement(*parentNode()))
       select->HrInsertedOrRemoved(*this);
-  } else if (IsHTMLOptGroupElement(*insertion_point)) {
-    Node* parent = insertion_point->parentNode();
+  } else if (IsHTMLOptGroupElement(insertion_point)) {
+    Node* parent = insertion_point.parentNode();
     if (auto* select = ToHTMLSelectElementOrNull(parent))
       select->HrInsertedOrRemoved(*this);
   }

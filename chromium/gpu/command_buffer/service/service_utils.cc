@@ -165,8 +165,8 @@ GpuPreferences ParseGpuPreferences(const base::CommandLine* command_line) {
       command_line->HasSwitch(switches::kDisableGpuDriverBugWorkarounds);
   gpu_preferences.ignore_gpu_blacklist =
       command_line->HasSwitch(switches::kIgnoreGpuBlacklist);
-  gpu_preferences.use_gpu_fences_for_overlay_planes =
-      command_line->HasSwitch(switches::kUseGpuFencesForOverlayPlanes);
+  gpu_preferences.enable_webgpu =
+      command_line->HasSwitch(switches::kEnableUnsafeWebGPU);
   return gpu_preferences;
 }
 

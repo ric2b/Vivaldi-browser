@@ -63,17 +63,19 @@ class ScopedStyleResolver final
 
   void AppendActiveStyleSheets(unsigned index, const ActiveStyleSheetVector&);
   void CollectMatchingAuthorRules(ElementRuleCollector&,
-                                  CascadeOrder = kIgnoreCascadeOrder);
-  void CollectMatchingShadowHostRules(ElementRuleCollector&,
-                                      CascadeOrder = kIgnoreCascadeOrder);
+                                  ShadowV0CascadeOrder = kIgnoreCascadeOrder);
+  void CollectMatchingShadowHostRules(
+      ElementRuleCollector&,
+      ShadowV0CascadeOrder = kIgnoreCascadeOrder);
   void CollectMatchingSlottedRules(ElementRuleCollector&,
-                                   CascadeOrder = kIgnoreCascadeOrder);
+                                   ShadowV0CascadeOrder = kIgnoreCascadeOrder);
   void CollectMatchingTreeBoundaryCrossingRules(
       ElementRuleCollector&,
-      CascadeOrder = kIgnoreCascadeOrder);
-  void CollectMatchingPartPseudoRules(ElementRuleCollector&,
-                                      PartNames& part_names,
-                                      CascadeOrder = kIgnoreCascadeOrder);
+      ShadowV0CascadeOrder = kIgnoreCascadeOrder);
+  void CollectMatchingPartPseudoRules(
+      ElementRuleCollector&,
+      PartNames& part_names,
+      ShadowV0CascadeOrder = kIgnoreCascadeOrder);
   void MatchPageRules(PageRuleCollector&);
   void CollectFeaturesTo(RuleFeatureSet&,
                          HeapHashSet<Member<const StyleSheetContents>>&
@@ -87,8 +89,6 @@ class ScopedStyleResolver final
   void SetNeedsAppendAllSheets() { needs_append_all_sheets_ = true; }
   static void KeyframesRulesAdded(const TreeScope&);
   static ContainerNode& InvalidationRootForTreeScope(const TreeScope&);
-  CORE_EXPORT static bool HaveSameStyles(const ScopedStyleResolver*,
-                                         const ScopedStyleResolver*);
   void V0ShadowAddedOnV1Document();
 
   void Trace(blink::Visitor*);

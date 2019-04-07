@@ -15,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/test/scoped_task_environment.h"
 #include "device/bluetooth/bluetooth_adapter.h"
+#include "device/bluetooth/bluetooth_advertisement.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "device/bluetooth/bluetooth_gatt_connection.h"
@@ -62,12 +63,32 @@ class BluetoothTestBase : public testing::Test {
     INDICATE,
   };
 
+  // Utility struct to simplify simulating a low energy device.
+  struct LowEnergyDeviceData {
+    LowEnergyDeviceData();
+    LowEnergyDeviceData(LowEnergyDeviceData&& data);
+    ~LowEnergyDeviceData();
+
+    base::Optional<std::string> name;
+    std::string address;
+    int8_t rssi = 0;
+    base::Optional<uint8_t> flags;
+    BluetoothDevice::UUIDList advertised_uuids;
+    base::Optional<int8_t> tx_power;
+    BluetoothDevice::ServiceDataMap service_data;
+    BluetoothDevice::ManufacturerDataMap manufacturer_data;
+    BluetoothTransport transport = BLUETOOTH_TRANSPORT_LE;
+
+    DISALLOW_COPY_AND_ASSIGN(LowEnergyDeviceData);
+  };
+
   static const char kTestAdapterName[];
   static const char kTestAdapterAddress[];
 
   static const char kTestDeviceName[];
   static const char kTestDeviceNameEmpty[];
   static const char kTestDeviceNameU2f[];
+  static const char kTestDeviceNameCable[];
 
   static const char kTestDeviceAddress1[];
   static const char kTestDeviceAddress2[];
@@ -109,8 +130,12 @@ class BluetoothTestBase : public testing::Test {
   static const char kTestUUIDClientCharacteristicConfiguration[];
   static const char kTestUUIDServerCharacteristicConfiguration[];
   static const char kTestUUIDCharacteristicPresentationFormat[];
+  static const char kTestUUIDCableAdvertisement[];
   // Manufacturer data
-  static const unsigned short kTestManufacturerId;
+  static const uint16_t kTestManufacturerId;
+  // Test ephemeral ID for BLE devices that support cloud-assisted BLE protocol.
+  static const uint8_t kTestCableEid[];
+  static const char kTestUuidFormattedClientEid[];
 
   BluetoothTestBase();
   ~BluetoothTestBase() override;
@@ -144,9 +169,20 @@ class BluetoothTestBase : public testing::Test {
   // controlled by this test fixture.
   virtual void InitWithFakeAdapter() {}
 
+  // Similar to InitWithFakeAdapter(), but simulates a state where we fail to
+  // get access to the underlying radio.
+  virtual void InitFakeAdapterWithoutRadio() {}
+
   // Configures the fake adapter to lack the necessary permissions to scan for
   // devices.  Returns false if the current platform always has permission.
   virtual bool DenyPermission();
+
+  // Simulates a failure during a pending BluetoothAdapter::SetPowered()
+  // operation.
+  virtual void SimulateAdapterPowerFailure() {}
+
+  // Simulates the Adapter being switched on.
+  virtual void SimulateAdapterPoweredOn() {}
 
   // Simulates the Adapter being switched off.
   virtual void SimulateAdapterPoweredOff() {}
@@ -164,6 +200,7 @@ class BluetoothTestBase : public testing::Test {
   //   1: Name: kTestDeviceName
   //      Address:           kTestDeviceAddress1
   //      RSSI:              TestRSSI::LOWEST
+  //      Flags:             0x04
   //      Advertised UUIDs: {kTestUUIDGenericAccess, kTestUUIDGenericAttribute}
   //      Service Data:     {kTestUUIDHeartRate: [1]}
   //      ManufacturerData: {kTestManufacturerId: [1, 2, 3, 4]}
@@ -171,6 +208,7 @@ class BluetoothTestBase : public testing::Test {
   //   2: Name: kTestDeviceName
   //      Address:           kTestDeviceAddress1
   //      RSSI:              TestRSSI::LOWER
+  //      Flags:             0x05
   //      Advertised UUIDs: {kTestUUIDImmediateAlert, kTestUUIDLinkLoss}
   //      Service Data:     {kTestUUIDHeartRate: [],
   //                         kTestUUIDImmediateAlert: [0, 2]}
@@ -179,6 +217,7 @@ class BluetoothTestBase : public testing::Test {
   //   3: Name:    kTestDeviceNameEmpty
   //      Address: kTestDeviceAddress1
   //      RSSI:    TestRSSI::LOW
+  //      No Flags
   //      No Advertised UUIDs
   //      No Service Data
   //      No Manufacturer Data
@@ -186,6 +225,7 @@ class BluetoothTestBase : public testing::Test {
   //   4: Name:    kTestDeviceNameEmpty
   //      Address: kTestDeviceAddress2
   //      RSSI:    TestRSSI::MEDIUM
+  //      No Flags
   //      No Advertised UUIDs
   //      No Service Data
   //      No Manufacturer Data
@@ -193,11 +233,13 @@ class BluetoothTestBase : public testing::Test {
   //   5: No name device
   //      Address: kTestDeviceAddress1
   //      RSSI:    TestRSSI::HIGH
+  //      Flags:   0x06
   //      No Advertised UUIDs
   //      No Service Data
   //      No Tx Power
   //   6: Name:    kTestDeviceName
   //      Address: kTestDeviceAddress2
+  //      Flags:   0x18
   //      RSSI:    TestRSSI::LOWEST
   //      No Advertised UUIDs
   //      No Service Data
@@ -206,21 +248,60 @@ class BluetoothTestBase : public testing::Test {
   //      Supports BR/EDR and LE.
   //   7: Name:    kTestDeviceNameU2f
   //      Address: kTestDeviceAddress1
+  //      Flags:   0x07
   //      RSSI:    TestRSSI::LOWEST
   //      Advertised UUIDs: {kTestUUIDU2f}
   //      Service Data:     {kTestUUIDU2fControlPointLength: [0, 20]}
   //      No Manufacturer Data
   //      No Tx Power
+  //   8: Name: kTestDeviceNameCable;
+  //      Address: kTestDeviceAddress1;
+  //      Flags: 0x07;
+  //      RSSI: static_cast<int>(TestRSSI::LOWEST);
+  //      Advertised UUIDs: {BluetoothUUID(kTestUUIDU2f)};
+  //      Service Data: {
+  //                      {BluetoothUUID(kTestUUIDCableAdvertisement128),
+  //                       std::vector<uint8_t>(std::begin(kTestCableEid),
+  //                                            std::end(kTestCableEid))}};
+  //   9: Name: kTestDeviceNameCable;
+  //      Address: kTestDeviceAddress2;
+  //      Flags: = 0x07;
+  //      RSSI: static_cast<int>(TestRSSI::LOWEST);
+  //      Advertised UUIDs: {
+  //                          BluetoothUUID(kTestUUIDCableAdvertisement16),
+  //                          BluetoothUUID(kTestUuidFormattedClientEid)};
+
   virtual BluetoothDevice* SimulateLowEnergyDevice(int device_ordinal);
 
   // Simulates a connected low energy device. Used before starting a low energy
   // discovey session.
   virtual void SimulateConnectedLowEnergyDevice(
-      ConnectedDeviceType device_ordinal){};
+      ConnectedDeviceType device_ordinal) {}
 
   // Create a fake classic device and discover it. The device will have
   // name kTestDeviceName, no advertised UUIDs and address kTestDeviceAddress3.
   virtual BluetoothDevice* SimulateClassicDevice();
+
+  // Simulates a change in |device|'s pairing state.
+  virtual void SimulateDevicePaired(BluetoothDevice* device, bool is_paired) {}
+
+  // Sets |device|'s pairing code to |pin_code|.
+  virtual void SimulatePairingPinCode(BluetoothDevice* device,
+                                      std::string pin_code) {}
+
+  // Simulates a successful registration of |advertisement|.
+  virtual void SimulateAdvertisementStarted(
+      BluetoothAdvertisement* advertisement) {}
+
+  // Simulates a successful unregistration of |advertisement|.
+  virtual void SimulateAdvertisementStopped(
+      BluetoothAdvertisement* advertisement) {}
+
+  // Simulates a failure of either registering or unregistering |advertisement|
+  // with error code |error_code|.
+  virtual void SimulateAdvertisementError(
+      BluetoothAdvertisement* advertisement,
+      BluetoothAdvertisement::ErrorCode error_code) {}
 
   // Remembers |device|'s platform specific object to be used in a
   // subsequent call to methods such as SimulateGattServicesDiscovered that
@@ -238,6 +319,10 @@ class BluetoothTestBase : public testing::Test {
 
   // Simulates GattConnection disconnecting.
   virtual void SimulateGattDisconnection(BluetoothDevice* device) {}
+
+  // Simulates an event where the OS breaks the Gatt connection. Defaults to
+  // SimulateGattDisconnection(device).
+  virtual void SimulateDeviceBreaksConnection(BluetoothDevice* device);
 
   // Simulates success of discovering services. |uuids| is used to create a
   // service for each UUID string. Multiple UUIDs with the same value produce
@@ -477,6 +562,8 @@ class BluetoothTestBase : public testing::Test {
 
   // Callbacks that increment |callback_count_|, |error_callback_count_|:
   void Callback(Call expected);
+  void CreateAdvertisementCallback(Call expected,
+                                   scoped_refptr<BluetoothAdvertisement>);
   void DiscoverySessionCallback(Call expected,
                                 std::unique_ptr<BluetoothDiscoverySession>);
   void GattConnectionCallback(Call expected,
@@ -490,6 +577,8 @@ class BluetoothTestBase : public testing::Test {
   void StopNotifyCheckForPrecedingCalls(int num_of_preceding_calls);
   void ReadValueCallback(Call expected, const std::vector<uint8_t>& value);
   void ErrorCallback(Call expected);
+  void AdvertisementErrorCallback(Call expected,
+                                  BluetoothAdvertisement::ErrorCode error_code);
   void ConnectErrorCallback(Call expected,
                             enum BluetoothDevice::ConnectErrorCode);
   void GattErrorCallback(Call expected,
@@ -506,6 +595,8 @@ class BluetoothTestBase : public testing::Test {
 
   // Accessors to get callbacks bound to this fixture:
   base::Closure GetCallback(Call expected);
+  BluetoothAdapter::CreateAdvertisementCallback GetCreateAdvertisementCallback(
+      Call expected);
   BluetoothAdapter::DiscoverySessionCallback GetDiscoverySessionCallback(
       Call expected);
   BluetoothDevice::GattConnectionCallback GetGattConnectionCallback(
@@ -519,6 +610,8 @@ class BluetoothTestBase : public testing::Test {
   BluetoothRemoteGattCharacteristic::ValueCallback GetReadValueCallback(
       Call expected);
   BluetoothAdapter::ErrorCallback GetErrorCallback(Call expected);
+  BluetoothAdapter::AdvertisementErrorCallback GetAdvertisementErrorCallback(
+      Call expected);
   BluetoothDevice::ConnectErrorCallback GetConnectErrorCallback(Call expected);
   base::Callback<void(BluetoothRemoteGattService::GattErrorCode)>
   GetGattErrorCallback(Call expected);
@@ -538,25 +631,8 @@ class BluetoothTestBase : public testing::Test {
   void RemoveTimedOutDevices();
 
  protected:
-  // Utility struct and method to return required data to simulate a LE device
-  // corresponding to |device_ordinal|.
-  struct LowEnergyDeviceData {
-    LowEnergyDeviceData();
-    LowEnergyDeviceData(LowEnergyDeviceData&& data);
-    ~LowEnergyDeviceData();
-
-    base::Optional<std::string> name;
-    std::string address;
-    int8_t rssi = 0;
-    BluetoothDevice::UUIDList advertised_uuids;
-    BluetoothDevice::ServiceDataMap service_data;
-    BluetoothDevice::ManufacturerDataMap manufacturer_data;
-    base::Optional<int8_t> tx_power;
-    BluetoothTransport transport = BLUETOOTH_TRANSPORT_LE;
-
-    DISALLOW_COPY_AND_ASSIGN(LowEnergyDeviceData);
-  };
-
+  // Utility method to simplify creading a low energy device of a given
+  // |device_ordinal|.
   LowEnergyDeviceData GetLowEnergyDeviceData(int device_ordinal) const;
 
   // A ScopedTaskEnvironment is required by some implementations that will
@@ -564,8 +640,11 @@ class BluetoothTestBase : public testing::Test {
   base::test::ScopedTaskEnvironment scoped_task_environment_;
 
   scoped_refptr<BluetoothAdapter> adapter_;
+  std::vector<scoped_refptr<BluetoothAdvertisement>> advertisements_;
   std::vector<std::unique_ptr<BluetoothDiscoverySession>> discovery_sessions_;
   std::vector<std::unique_ptr<BluetoothGattConnection>> gatt_connections_;
+  BluetoothAdvertisement::ErrorCode last_advertisement_error_code_ =
+      BluetoothAdvertisement::INVALID_ADVERTISEMENT_ERROR_CODE;
   enum BluetoothDevice::ConnectErrorCode last_connect_error_code_ =
       BluetoothDevice::ERROR_UNKNOWN;
   std::vector<std::unique_ptr<BluetoothGattNotifySession>> notify_sessions_;

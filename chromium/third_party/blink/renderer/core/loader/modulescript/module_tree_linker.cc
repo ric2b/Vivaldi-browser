@@ -163,10 +163,8 @@ void ModuleTreeLinker::FetchRoot(const KURL& original_url,
   // href="https://github.com/drufball/layered-apis/blob/master/spec.md#fetch-a-module-script-graph"
   // step="1">Set url to the layered API fetching URL given url and the current
   // settings object's API base URL.</spec>
-  if (RuntimeEnabledFeatures::LayeredAPIEnabled()) {
-    url = blink::layered_api::ResolveFetchingURL(
-        url, fetch_client_settings_object_->BaseURL());
-  }
+  if (RuntimeEnabledFeatures::LayeredAPIEnabled())
+    url = blink::layered_api::ResolveFetchingURL(url);
 
 #if DCHECK_IS_ON()
   url_ = url;
@@ -188,13 +186,11 @@ void ModuleTreeLinker::FetchRoot(const KURL& original_url,
   visited_set_.insert(url);
 
   // Step 2. Perform the internal module script graph fetching procedure given
-  // ... with the top-level module fetch flag set. ...
-  ModuleScriptFetchRequest request(
-      url, destination_, options,
-      SecurityPolicy::GenerateReferrer(
-          options.GetReferrerPolicy(), url,
-          fetch_client_settings_object_->GetOutgoingReferrer()),
-      TextPosition::MinimumPosition());
+  // url, settings object, destination, options, settings object, visited set,
+  // "client", and with the top-level module fetch flag set.
+  ModuleScriptFetchRequest request(url, destination_, options,
+                                   Referrer::ClientReferrerString(),
+                                   TextPosition::MinimumPosition());
 
   InitiateInternalModuleScriptGraphFetching(
       request, ModuleGraphLevel::kTopLevelModuleFetch);
@@ -386,11 +382,9 @@ void ModuleTreeLinker::FetchDescendants(ModuleScript* module_script) {
     // procedure given url, fetch client settings object, destination, options,
     // module script's settings object, visited set, module script's base URL,
     // and with the top-level module fetch flag unset. ...
-    ModuleScriptFetchRequest request(
-        urls[i], destination_, options,
-        SecurityPolicy::GenerateReferrer(options.GetReferrerPolicy(), urls[i],
-                                         module_script->BaseURL().GetString()),
-        positions[i]);
+    ModuleScriptFetchRequest request(urls[i], destination_, options,
+                                     module_script->BaseURL().GetString(),
+                                     positions[i]);
     InitiateInternalModuleScriptGraphFetching(
         request, ModuleGraphLevel::kDependentModuleFetch);
   }

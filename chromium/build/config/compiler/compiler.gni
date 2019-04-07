@@ -43,7 +43,10 @@ declare_args() {
 
   # Enables support for ThinLTO, which links 3x-10x faster than full LTO. See
   # also http://blog.llvm.org/2016/06/thinlto-scalable-and-incremental-lto.html
-  use_thin_lto = is_cfi
+  # NOTE: See http://crbug.com/871722 to understand why this is disabled for
+  # 32-bit Android/ARM
+  use_thin_lto =
+      is_cfi || (is_android && is_official_build && target_cpu != "arm")
 
   # Tell VS to create a PDB that references information in .obj files rather
   # than copying it all. This should improve linker performance. mspdbcmf.exe
@@ -82,7 +85,7 @@ exclude_unwind_tables =
 # Linux & Mac favor speed over size.
 # TODO(brettw) it's weird that Mac and desktop Linux are different. We should
 # explore favoring size over speed in this case as well.
-optimize_for_size = is_android || is_ios
+optimize_for_size = is_android || is_ios || is_fuchsia
 
 declare_args() {
   # Whether we should consider the profile we're using to be accurate. Accurate
@@ -211,7 +214,9 @@ if (symbol_level == -1) {
     # them off, but keep them on for Official builds and Chromecast builds.
     symbol_level = 2
   } else if (using_sanitizer) {
-    # Sanitizers require symbols for filename suppressions to work.
+    # Sanitizers need line table info for stack traces. They don't need type
+    # info or variable info, so we can leave that out to speed up the build.
+    # Sanitizers also require symbols for filename suppressions to work.
     symbol_level = 1
   } else {
     symbol_level = 0

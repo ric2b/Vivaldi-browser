@@ -93,10 +93,6 @@ void RenderWidgetHostViewMac::OnFrameTokenChanged(uint32_t frame_token) {
   OnFrameTokenChangedForView(frame_token);
 }
 
-void RenderWidgetHostViewMac::DidReceiveFirstFrameAfterNavigation() {
-  host()->DidReceiveFirstFrameAfterNavigation();
-}
-
 void RenderWidgetHostViewMac::DestroyCompositorForShutdown() {
   // When RenderWidgetHostViewMac was owned by an NSView, this function was
   // necessary to ensure that the ui::Compositor did not outlive the
@@ -140,8 +136,13 @@ void RenderWidgetHostViewMac::AcceleratedWidgetCALayerParamsUpdated() {
   if (ca_layer_params)
     ns_view_bridge_->SetCALayerParams(*ca_layer_params);
 
-  if (display_link_)
-    display_link_->NotifyCurrentTime(base::TimeTicks::Now());
+  // Take this opportunity to update the VSync parameters, if needed.
+  if (display_link_) {
+    base::TimeTicks timebase;
+    base::TimeDelta interval;
+    if (display_link_->GetVSyncParameters(&timebase, &interval))
+      browser_compositor_->UpdateVSyncParameters(timebase, interval);
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -295,19 +296,6 @@ void RenderWidgetHostViewMac::InitAsFullscreen(
   NOTREACHED();
 }
 
-void RenderWidgetHostViewMac::UpdateDisplayVSyncParameters() {
-  if (!host() || !display_link_.get())
-    return;
-
-  if (!display_link_->GetVSyncParameters(&vsync_timebase_, &vsync_interval_)) {
-    vsync_timebase_ = base::TimeTicks();
-    vsync_interval_ = base::TimeDelta();
-    return;
-  }
-
-  browser_compositor_->UpdateVSyncParameters(vsync_timebase_, vsync_interval_);
-}
-
 RenderWidgetHostViewBase*
     RenderWidgetHostViewMac::GetFocusedViewForTextSelection() {
   // We obtain the TextSelection from focused RWH which is obtained from the
@@ -340,16 +328,11 @@ RenderWidgetHostImpl* RenderWidgetHostViewMac::GetWidgetForIme() {
 }
 
 void RenderWidgetHostViewMac::UpdateNSViewAndDisplayProperties() {
-  static bool is_frame_rate_limit_disabled =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableFrameRateLimit);
-  if (!is_frame_rate_limit_disabled) {
-    display_link_ = ui::DisplayLinkMac::GetForDisplay(display_.id());
-    if (!display_link_.get()) {
-      // Note that on some headless systems, the display link will fail to be
-      // created, so this should not be a fatal error.
-      LOG(ERROR) << "Failed to create display link.";
-    }
+  display_link_ = ui::DisplayLinkMac::GetForDisplay(display_.id());
+  if (!display_link_) {
+    // Note that on some headless systems, the display link will fail to be
+    // created, so this should not be a fatal error.
+    LOG(ERROR) << "Failed to create display link.";
   }
 
   if (features::IsViewsBrowserCocoa())
@@ -594,8 +577,8 @@ void RenderWidgetHostViewMac::OnTextSelectionChanged(
   ns_view_bridge_->SetTextSelection(selection->text(), selection->offset(),
                                     selection->range());
   if (host() && host()->delegate())
-    host()->delegate()->DidChangeTextSelection(selection->text(),
-                                               selection->range());
+    host()->delegate()->DidChangeTextSelection(
+        selection->text(), selection->range(), selection->offset());
 }
 
 bool RenderWidgetHostViewMac::ShouldWaitInPreCommit() {
@@ -1029,8 +1012,6 @@ void RenderWidgetHostViewMac::SubmitCompositorFrame(
 
   browser_compositor_->GetDelegatedFrameHost()->SubmitCompositorFrame(
       local_surface_id, std::move(frame), std::move(hit_test_region_list));
-
-  UpdateDisplayVSyncParameters();
 }
 
 void RenderWidgetHostViewMac::OnDidNotProduceFrame(
@@ -1040,6 +1021,11 @@ void RenderWidgetHostViewMac::OnDidNotProduceFrame(
 
 void RenderWidgetHostViewMac::ClearCompositorFrame() {
   browser_compositor_->ClearCompositorFrame();
+}
+
+void RenderWidgetHostViewMac::ResetFallbackToFirstNavigationSurface() {
+  browser_compositor_->GetDelegatedFrameHost()
+      ->ResetFallbackToFirstNavigationSurface();
 }
 
 bool RenderWidgetHostViewMac::RequestRepaintForTesting() {
@@ -1185,7 +1171,7 @@ void RenderWidgetHostViewMac::SendGesturePinchEvent(WebGestureEvent* event) {
     DCHECK(event->SourceDevice() ==
            blink::WebGestureDevice::kWebGestureDeviceTouchpad);
     host()->delegate()->GetInputEventRouter()->RouteGestureEvent(
-        this, event, ui::LatencyInfo(ui::SourceEventType::WHEEL));
+        this, event, ui::LatencyInfo(ui::SourceEventType::TOUCHPAD));
     return;
   }
   host()->ForwardGestureEvent(*event);
@@ -1224,6 +1210,10 @@ bool RenderWidgetHostViewMac::TransformPointToLocalCoordSpaceLegacy(
   return true;
 }
 
+bool RenderWidgetHostViewMac::HasFallbackSurface() const {
+  return browser_compositor_->GetDelegatedFrameHost()->HasFallbackSurface();
+}
+
 bool RenderWidgetHostViewMac::TransformPointToCoordSpaceForView(
     const gfx::PointF& point,
     RenderWidgetHostViewBase* target_view,
@@ -1234,9 +1224,10 @@ bool RenderWidgetHostViewMac::TransformPointToCoordSpaceForView(
     return true;
   }
 
-  return browser_compositor_->GetDelegatedFrameHost()
-      ->TransformPointToCoordSpaceForView(point, target_view, transformed_point,
-                                          source);
+  if (!HasFallbackSurface())
+    return false;
+  return target_view->TransformPointToLocalCoordSpace(
+      point, GetCurrentSurfaceId(), transformed_point, source);
 }
 
 viz::FrameSinkId RenderWidgetHostViewMac::GetRootFrameSinkId() {
@@ -1487,6 +1478,24 @@ void RenderWidgetHostViewMac::RouteOrProcessMouseEvent(
                                                                latency_info);
   } else {
     ProcessMouseEvent(web_event, latency_info);
+  }
+}
+
+void RenderWidgetHostViewMac::RouteOrProcessTouchEvent(
+    const blink::WebTouchEvent& const_web_event) {
+  blink::WebTouchEvent web_event = const_web_event;
+  ui::FilteredGestureProvider::TouchHandlingResult result =
+      gesture_provider_.OnTouchEvent(MotionEventWeb(web_event));
+  if (!result.succeeded)
+    return;
+
+  ui::LatencyInfo latency_info(ui::SourceEventType::OTHER);
+  latency_info.AddLatencyNumber(ui::INPUT_EVENT_LATENCY_UI_COMPONENT);
+  if (ShouldRouteEvent(web_event)) {
+    host()->delegate()->GetInputEventRouter()->RouteTouchEvent(this, &web_event,
+                                                               latency_info);
+  } else {
+    ProcessTouchEvent(web_event, latency_info);
   }
 }
 
@@ -1888,6 +1897,7 @@ void RenderWidgetHostViewMac::ForwardKeyboardEventWithCommands(
   ForwardKeyboardEventWithCommands(native_event, input_event->latency_info,
                                    commands);
 }
+
 void RenderWidgetHostViewMac::RouteOrProcessMouseEvent(
     std::unique_ptr<InputEvent> input_event) {
   if (!input_event || !input_event->web_event ||
@@ -1899,6 +1909,19 @@ void RenderWidgetHostViewMac::RouteOrProcessMouseEvent(
   const blink::WebMouseEvent& mouse_event =
       static_cast<const blink::WebMouseEvent&>(*input_event->web_event);
   RouteOrProcessMouseEvent(mouse_event);
+}
+
+void RenderWidgetHostViewMac::RouteOrProcessTouchEvent(
+    std::unique_ptr<InputEvent> input_event) {
+  if (!input_event || !input_event->web_event ||
+      !blink::WebInputEvent::IsTouchEventType(
+          input_event->web_event->GetType())) {
+    DLOG(ERROR) << "Absent or non-TouchEventType event.";
+    return;
+  }
+  const blink::WebTouchEvent& touch_event =
+      static_cast<const blink::WebTouchEvent&>(*input_event->web_event);
+  RouteOrProcessTouchEvent(touch_event);
 }
 
 void RenderWidgetHostViewMac::RouteOrProcessWheelEvent(

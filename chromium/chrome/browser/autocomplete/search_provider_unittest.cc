@@ -29,7 +29,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/google/core/browser/google_switches.h"
+#include "components/google/core/common/google_switches.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_input.h"
@@ -2948,7 +2948,7 @@ TEST_F(SearchProviderTest, ParseEntitySuggestion) {
       EXPECT_EQ(match.description,
                 base::UTF16ToUTF8(matches[j].description));
       EXPECT_EQ(match.query_params,
-                matches[j].search_terms_args->suggest_query_params);
+                matches[j].search_terms_args->additional_query_params);
       EXPECT_EQ(match.fill_into_edit,
                 base::UTF16ToUTF8(matches[j].fill_into_edit));
       EXPECT_EQ(match.type, matches[j].type);
@@ -3566,21 +3566,8 @@ TEST_F(SearchProviderTest, AnswersCache) {
   base::string16 query = base::ASCIIToUTF16("weather los angeles");
   SearchSuggestionParser::SuggestResult suggest_result(
       query, AutocompleteMatchType::SEARCH_HISTORY,
-      /*subtype_identifier=*/0,
-      /*match_contents=*/query,
-      /*match_contents_prefix=*/base::string16(),
-      /*annotation=*/base::string16(),
-      /*answer_contents=*/base::string16(),
-      /*answer_type=*/base::string16(),
-      /*answer=*/nullptr,
-      /*suggest_query_params=*/std::string(),
-      /*deletion_url=*/std::string(),
-      /*image_dominant_color=*/std::string(),
-      /*image_url=*/std::string(),
-      /*from_keyword_provider=*/false,
-      /*relevance=*/1200,
-      /*relevance_from_server=*/false,
-      /*should_prefetch=*/false,
+      /*subtype_identifier=*/0, /*from_keyword_provider=*/false,
+      /*relevance=*/1200, /*relevance_from_server=*/false,
       /*input_text=*/query);
   QueryForInput(ASCIIToUTF16("weather l"), false, false);
   provider_->transformed_default_history_results_.push_back(suggest_result);
@@ -3599,13 +3586,13 @@ TEST_F(SearchProviderTest, RemoveExtraAnswers) {
 
   ACMatches matches;
   AutocompleteMatch match1, match2, match3, match4, match5;
-  match1.answer = SuggestionAnswer::copy(&answer1);
+  match1.answer = answer1;
   match1.answer_contents = base::ASCIIToUTF16("the answer");
   match1.answer_type = base::ASCIIToUTF16("42");
-  match3.answer = SuggestionAnswer::copy(&answer2);
+  match3.answer = answer2;
   match3.answer_contents = base::ASCIIToUTF16("not to play");
   match3.answer_type = base::ASCIIToUTF16("1983");
-  match5.answer = SuggestionAnswer::copy(&answer3);
+  match5.answer = answer3;
   match5.answer_contents = base::ASCIIToUTF16("a person");
   match5.answer_type = base::ASCIIToUTF16("423");
 

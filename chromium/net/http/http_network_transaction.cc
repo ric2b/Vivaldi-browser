@@ -91,6 +91,8 @@ const size_t kMaxRestarts = 32;
 
 namespace net {
 
+const int HttpNetworkTransaction::kDrainBodyBufferSize;
+
 HttpNetworkTransaction::HttpNetworkTransaction(RequestPriority priority,
                                                HttpNetworkSession* session)
     : pending_auth_target_(HttpAuth::AUTH_NONE),
@@ -147,9 +149,9 @@ int HttpNetworkTransaction::Start(const HttpRequestInfo* request_info,
   // Now that we have an HttpRequestInfo object, update server_ssl_config_.
   session_->GetSSLConfig(*request_, &server_ssl_config_, &proxy_ssl_config_);
 
-  if (request_->load_flags & LOAD_DISABLE_CERT_REVOCATION_CHECKING) {
-    server_ssl_config_.rev_checking_enabled = false;
-    proxy_ssl_config_.rev_checking_enabled = false;
+  if (request_->load_flags & LOAD_DISABLE_CERT_NETWORK_FETCHES) {
+    server_ssl_config_.disable_cert_verification_network_fetches = true;
+    proxy_ssl_config_.disable_cert_verification_network_fetches = true;
   }
 
   if (HttpUtil::IsMethodSafe(request_info->method)) {
@@ -271,7 +273,8 @@ void HttpNetworkTransaction::PrepareForAuthRestart(HttpAuth::Target target) {
     // it first.
     if (!stream_->IsResponseBodyComplete()) {
       next_state_ = STATE_DRAIN_BODY_FOR_AUTH_RESTART;
-      read_buf_ = new IOBuffer(kDrainBodyBufferSize);  // A bit bucket.
+      read_buf_ = base::MakeRefCounted<IOBuffer>(
+          kDrainBodyBufferSize);  // A bit bucket.
       read_buf_len_ = kDrainBodyBufferSize;
       return;
     }

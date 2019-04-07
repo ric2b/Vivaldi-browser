@@ -10,11 +10,13 @@
 #include "ash/host/transformer_helper.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
+#include "ash/window_factory.h"
 #include "base/feature_list.h"
 #include "base/trace_event/trace_event.h"
-#include "services/ui/public/cpp/input_devices/input_device_controller_client.h"
-#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "services/ws/public/cpp/input_devices/input_device_controller_client.h"
+#include "services/ws/public/mojom/window_manager.mojom.h"
 #include "ui/aura/mus/input_method_mus.h"
+#include "ui/aura/null_window_targeter.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host_platform.h"
 #include "ui/base/ui_base_features.h"
@@ -35,14 +37,16 @@ namespace ash {
 
 AshWindowTreeHostPlatform::AshWindowTreeHostPlatform(
     ui::PlatformWindowInitProperties properties)
-    : aura::WindowTreeHostPlatform(std::move(properties)),
+    : aura::WindowTreeHostPlatform(std::move(properties),
+                                   window_factory::NewWindow()),
       transformer_helper_(this) {
   transformer_helper_.Init();
   InitInputMethodIfNecessary();
 }
 
 AshWindowTreeHostPlatform::AshWindowTreeHostPlatform()
-    : transformer_helper_(this) {
+    : aura::WindowTreeHostPlatform(window_factory::NewWindow()),
+      transformer_helper_(this) {
   CreateCompositor();
   transformer_helper_.Init();
   InitInputMethodIfNecessary();
@@ -84,7 +88,7 @@ void AshWindowTreeHostPlatform::SetCursorConfig(
   float scale = display.device_scale_factor();
 
   if (!display.IsInternal())
-    scale *= ui::mojom::kCursorMultiplierForExternalDisplays;
+    scale *= 1.2;
 
   ui::CursorController::GetInstance()->SetCursorConfigForWindow(
       GetAcceleratedWidget(), rotation, scale);
@@ -125,8 +129,7 @@ void AshWindowTreeHostPlatform::PrepareForShutdown() {
   // ScreenPositionClient not to be attached to the root window and for
   // ui::EventHandlers to be unable to convert the event's location to screen
   // coordinates.
-  window()->SetEventTargeter(
-      std::unique_ptr<ui::EventTargeter>(new ui::NullEventTargeter));
+  window()->SetEventTargeter(std::make_unique<aura::NullWindowTargeter>());
 
   // Do anything platform specific necessary before shutdown (eg. stop
   // listening for configuration XEvents).
@@ -179,7 +182,7 @@ void AshWindowTreeHostPlatform::InitInputMethodIfNecessary() {
 }
 
 void AshWindowTreeHostPlatform::SetTapToClickPaused(bool state) {
-  ui::InputDeviceControllerClient* input_device_controller_client =
+  ws::InputDeviceControllerClient* input_device_controller_client =
       Shell::Get()->shell_delegate()->GetInputDeviceControllerClient();
   if (!input_device_controller_client)
     return;  // Happens in tests.

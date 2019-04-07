@@ -23,7 +23,7 @@
 #include "content/browser/compositor/image_transport_factory.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/vulkan/buildflags.h"
-#include "services/ui/public/cpp/gpu/command_buffer_metrics.h"
+#include "services/ws/public/cpp/gpu/command_buffer_metrics.h"
 #include "ui/compositor/compositor.h"
 
 namespace base {
@@ -40,10 +40,6 @@ class GpuChannelEstablishFactory;
 class VulkanImplementation;
 }
 
-namespace ui {
-class ContextProviderCommandBuffer;
-}
-
 namespace viz {
 class CompositingModeReporterImpl;
 class OutputDeviceBacking;
@@ -51,6 +47,10 @@ class ServerSharedBitmapManager;
 class SoftwareOutputDevice;
 class VulkanInProcessContextProvider;
 class RasterContextProvider;
+}
+
+namespace ws {
+class ContextProviderCommandBuffer;
 }
 
 namespace content {
@@ -111,7 +111,6 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   ui::ContextFactory* GetContextFactory() override;
   ui::ContextFactoryPrivate* GetContextFactoryPrivate() override;
   viz::FrameSinkManagerImpl* GetFrameSinkManager() override;
-  viz::GLHelper* GetGLHelper() override;
 
  private:
   struct PerCompositorData;
@@ -137,7 +136,7 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   // viz::ContextLostObserver implementation.
   void OnContextLost() override;
 
-  scoped_refptr<ui::ContextProviderCommandBuffer> CreateContextCommon(
+  scoped_refptr<ws::ContextProviderCommandBuffer> CreateContextCommon(
       scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
       gpu::SurfaceHandle surface_handle,
       bool need_alpha_channel,
@@ -146,7 +145,7 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
       bool support_gles2_interface,
       bool support_raster_interface,
       bool support_grcontext,
-      ui::command_buffer_metrics::ContextType type);
+      ws::command_buffer_metrics::ContextType type);
 
   viz::FrameSinkIdAllocator frame_sink_id_allocator_;
 
@@ -165,9 +164,8 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   PerCompositorDataMap per_compositor_data_;
 
   const viz::RendererSettings renderer_settings_;
-  scoped_refptr<ui::ContextProviderCommandBuffer> shared_main_thread_contexts_;
-  std::unique_ptr<viz::GLHelper> gl_helper_;
-  base::ObserverList<ui::ContextFactoryObserver> observer_list_;
+  scoped_refptr<ws::ContextProviderCommandBuffer> shared_main_thread_contexts_;
+  base::ObserverList<ui::ContextFactoryObserver>::Unchecked observer_list_;
   scoped_refptr<base::SingleThreadTaskRunner> resize_task_runner_;
   std::unique_ptr<cc::SingleThreadTaskGraphRunner> task_graph_runner_;
   scoped_refptr<viz::RasterContextProvider> shared_worker_context_provider_;

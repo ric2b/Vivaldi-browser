@@ -9,7 +9,6 @@
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/wm/overview/overview_utils.h"
-#include "ash/wm/overview/scoped_transform_overview_window.h"
 #include "ash/wm/overview/window_grid.h"
 #include "ash/wm/overview/window_selector.h"
 #include "ash/wm/overview/window_selector_item.h"
@@ -23,10 +22,6 @@
 namespace ash {
 
 namespace {
-
-// Before dragging an overview window, the window will scale up |kPreDragScale|
-// to indicate its selection.
-constexpr float kDragWindowScale = 0.04f;
 
 // The amount of distance from the start of drag the item needs to be dragged
 // vertically for it to be closed on release.
@@ -102,14 +97,18 @@ void OverviewWindowDragController::Drag(const gfx::Point& location_in_screen) {
         ->UpdateNudge(item_, val);
     val = base::ClampToRange(val, 0.f, 1.f);
     float opacity = original_opacity_;
-    if (opacity > kItemMinOpacity) {
+    if (opacity > kItemMinOpacity)
       opacity = original_opacity_ - val * (original_opacity_ - kItemMinOpacity);
-    }
     item_->SetOpacity(opacity);
   } else if (current_drag_behavior_ == DragBehavior::kDragToSnap) {
     UpdateDragIndicatorsAndWindowGrid(location_in_screen);
     x_offset = location_in_screen.x() - previous_event_location_.x();
   }
+
+  // Update the split view divider bar status if necessary. If splitview is
+  // active when dragging the overview window, the split divider bar should be
+  // placed below the dragged window during dragging.
+  split_view_controller_->OnWindowDragStarted(item_->GetWindow());
 
   // Update the dragged |item_|'s bounds accordingly.
   gfx::Rect bounds(item_->target_bounds());
@@ -121,6 +120,13 @@ void OverviewWindowDragController::Drag(const gfx::Point& location_in_screen) {
 
 void OverviewWindowDragController::CompleteDrag(
     const gfx::Point& location_in_screen) {
+  // Update the split view divider bar stuatus if necessary. The divider bar
+  // should be placed above the dragged window after drag ends. Note here the
+  // passed paramters |snap_position_| and |location_in_screen| won't be used in
+  // this function for this case, but they are passed in as placeholders.
+  split_view_controller_->OnWindowDragEnded(item_->GetWindow(), snap_position_,
+                                            location_in_screen);
+
   // Update window grid bounds and |snap_position_| in case the screen
   // orientation was changed.
   if (current_drag_behavior_ == DragBehavior::kDragToSnap) {
@@ -163,11 +169,8 @@ void OverviewWindowDragController::CompleteDrag(
 
 void OverviewWindowDragController::StartSplitViewDragMode(
     const gfx::Point& location_in_screen) {
-  // Increase the bounds of the dragged item.
-  gfx::Rect scaled_bounds(item_->target_bounds());
-  scaled_bounds.Inset(-scaled_bounds.width() * kDragWindowScale,
-                      -scaled_bounds.height() * kDragWindowScale);
-  item_->SetBounds(scaled_bounds, OVERVIEW_ANIMATION_LAY_OUT_SELECTOR_ITEMS);
+  item_->ScaleUpSelectedItem(
+      OVERVIEW_ANIMATION_LAY_OUT_SELECTOR_ITEMS_IN_OVERVIEW);
 
   did_move_ = true;
   current_drag_behavior_ = DragBehavior::kDragToSnap;
@@ -184,6 +187,11 @@ void OverviewWindowDragController::Fling(const gfx::Point& location_in_screen,
   if (current_drag_behavior_ == DragBehavior::kDragToClose ||
       current_drag_behavior_ == DragBehavior::kUndefined) {
     if (std::abs(velocity_y) > kFlingToCloseVelocityThreshold) {
+      if (SplitViewController::ShouldAllowSplitView()) {
+        split_view_controller_->OnWindowDragEnded(
+            item_->GetWindow(), snap_position_, location_in_screen);
+      }
+
       item_->AnimateAndCloseWindow(
           (location_in_screen - initial_event_location_).y() < 0);
       did_move_ = false;
@@ -249,22 +257,9 @@ void OverviewWindowDragController::UpdateDragIndicatorsAndWindowGrid(
   SplitViewController::SnapPosition last_snap_position = snap_position_;
   snap_position_ = GetSnapPosition(location_in_screen);
 
-  // If there is already a snapped window in |snap_position_|, do not allow
-  // another window snap in the same position.
-  SplitViewController::State snapped_state = split_view_controller_->state();
-  if ((snap_position_ == SplitViewController::LEFT &&
-       snapped_state == SplitViewController::LEFT_SNAPPED) ||
-      (snap_position_ == SplitViewController::RIGHT &&
-       snapped_state == SplitViewController::RIGHT_SNAPPED)) {
-    snap_position_ = SplitViewController::NONE;
-    window_selector_->SetSplitViewDragIndicatorsIndicatorState(
-        IndicatorState::kNone, gfx::Point());
-    return;
-  }
-
   // If there is no current snapped window, update the window grid size if the
   // dragged window can be snapped if dropped.
-  if (snapped_state == SplitViewController::NO_SNAP &&
+  if (split_view_controller_->state() == SplitViewController::NO_SNAP &&
       snap_position_ != last_snap_position) {
     // Do not reposition the item that is currently being dragged.
     window_selector_->SetBoundsForWindowGridsInScreenIgnoringWindow(
@@ -357,49 +352,59 @@ SplitViewController::SnapPosition OverviewWindowDragController::GetSnapPosition(
       screen_util::GetDisplayWorkAreaBoundsInParent(item_->GetWindow()));
   ::wm::ConvertRectToScreen(item_->GetWindow()->GetRootWindow(), &area);
 
-  switch (split_view_controller_->GetCurrentScreenOrientation()) {
-    case OrientationLockType::kLandscapePrimary:
-    case OrientationLockType::kLandscapeSecondary: {
-      // The window can be snapped if it reaches close enough to the screen
-      // edge of the screen (on primary axis). The edge insets are a fixed ratio
-      // of the screen plus some padding. This matches the drag indicators ui.
-      const int screen_edge_inset_for_drag =
-          area.width() * kHighlightScreenPrimaryAxisRatio +
-          kHighlightScreenEdgePaddingDp;
-      area.Inset(screen_edge_inset_for_drag, 0);
-      if (location_in_screen.x() <= area.x()) {
-        return split_view_controller_->IsCurrentScreenOrientationPrimary()
-                   ? SplitViewController::LEFT
-                   : SplitViewController::RIGHT;
-      }
-      if (location_in_screen.x() >= area.right() - 1) {
-        return split_view_controller_->IsCurrentScreenOrientationPrimary()
-                   ? SplitViewController::RIGHT
-                   : SplitViewController::LEFT;
-      }
-      return SplitViewController::NONE;
+  const bool is_landscape =
+      split_view_controller_->IsCurrentScreenOrientationLandscape();
+  const bool is_primary =
+      split_view_controller_->IsCurrentScreenOrientationPrimary();
+
+  // If split view mode is active at the moment, and dragging an overview window
+  // to snap it to a position that already has a snapped window in place, we
+  // should show the preview window as soon as the window past the split divider
+  // bar.
+  if (split_view_controller_->IsSplitViewModeActive()) {
+    const int position =
+        is_landscape ? location_in_screen.x() : location_in_screen.y();
+    SplitViewController::SnapPosition default_snap_position =
+        split_view_controller_->default_snap_position();
+    // If we're trying to snap to a position that already has a snapped window:
+    const bool re_snap =
+        is_primary == (position < split_view_controller_->divider_position() ==
+                       (default_snap_position == SplitViewController::LEFT));
+    if (re_snap)
+      return default_snap_position;
+  }
+
+  if (is_landscape) {
+    // The window can be snapped if it reaches close enough to the screen
+    // edge of the screen (on primary axis). The edge insets are a fixed ratio
+    // of the screen plus some padding. This matches the drag indicators ui.
+    const int screen_edge_inset_for_drag =
+        area.width() * kHighlightScreenPrimaryAxisRatio +
+        kHighlightScreenEdgePaddingDp;
+    area.Inset(screen_edge_inset_for_drag, 0);
+    if (location_in_screen.x() <= area.x()) {
+      return is_primary ? SplitViewController::LEFT
+                        : SplitViewController::RIGHT;
     }
-    case OrientationLockType::kPortraitPrimary:
-    case OrientationLockType::kPortraitSecondary: {
-      const int screen_edge_inset_for_drag =
-          area.height() * kHighlightScreenPrimaryAxisRatio +
-          kHighlightScreenEdgePaddingDp;
-      area.Inset(0, screen_edge_inset_for_drag);
-      if (location_in_screen.y() <= area.y()) {
-        return split_view_controller_->IsCurrentScreenOrientationPrimary()
-                   ? SplitViewController::LEFT
-                   : SplitViewController::RIGHT;
-      }
-      if (location_in_screen.y() >= area.bottom() - 1) {
-        return split_view_controller_->IsCurrentScreenOrientationPrimary()
-                   ? SplitViewController::RIGHT
-                   : SplitViewController::LEFT;
-      }
-      return SplitViewController::NONE;
+    if (location_in_screen.x() >= area.right() - 1) {
+      return is_primary ? SplitViewController::RIGHT
+                        : SplitViewController::LEFT;
     }
-    default:
-      NOTREACHED();
-      return SplitViewController::NONE;
+    return SplitViewController::NONE;
+  } else {
+    const int screen_edge_inset_for_drag =
+        area.height() * kHighlightScreenPrimaryAxisRatio +
+        kHighlightScreenEdgePaddingDp;
+    area.Inset(0, screen_edge_inset_for_drag);
+    if (location_in_screen.y() <= area.y()) {
+      return is_primary ? SplitViewController::LEFT
+                        : SplitViewController::RIGHT;
+    }
+    if (location_in_screen.y() >= area.bottom() - 1) {
+      return is_primary ? SplitViewController::RIGHT
+                        : SplitViewController::LEFT;
+    }
+    return SplitViewController::NONE;
   }
 }
 

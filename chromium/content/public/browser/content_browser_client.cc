@@ -10,6 +10,7 @@
 #include "base/files/file_path.h"
 #include "base/guid.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "build/build_config.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/client_certificate_delegate.h"
@@ -21,6 +22,7 @@
 #include "content/public/browser/url_loader_request_interceptor.h"
 #include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/common/url_loader_throttle.h"
+#include "content/public/common/url_utils.h"
 #include "media/audio/audio_manager.h"
 #include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
@@ -79,6 +81,15 @@ GURL ContentBrowserClient::GetEffectiveURL(BrowserContext* browser_context,
   return url;
 }
 
+bool ContentBrowserClient::ShouldCompareEffectiveURLsForSiteInstanceSelection(
+    BrowserContext* browser_context,
+    content::SiteInstance* candidate_site_instance,
+    bool is_main_frame,
+    const GURL& candidate_url,
+    const GURL& destination_url) {
+  return true;
+}
+
 bool ContentBrowserClient::ShouldUseMobileFlingCurve() const {
   return false;
 }
@@ -105,9 +116,15 @@ bool ContentBrowserClient::ShouldLockToOrigin(BrowserContext* browser_context,
   return true;
 }
 
-const char* ContentBrowserClient::GetInitatorSchemeBypassingDocumentBlocking() {
+const char*
+ContentBrowserClient::GetInitiatorSchemeBypassingDocumentBlocking() {
   return nullptr;
 }
+
+void ContentBrowserClient::LogInitiatorSchemeBypassingDocumentBlocking(
+    const url::Origin& initiator_origin,
+    int render_process_id,
+    ResourceType resource_type) {}
 
 void ContentBrowserClient::GetAdditionalViewSourceSchemes(
     std::vector<std::string>* additional_schemes) {
@@ -178,7 +195,7 @@ bool ContentBrowserClient::ShouldSwapBrowsingInstancesForNavigation(
 }
 
 bool ContentBrowserClient::ShouldIsolateErrorPage(bool in_main_frame) {
-  return false;
+  return in_main_frame;
 }
 
 std::unique_ptr<media::AudioManager> ContentBrowserClient::CreateAudioManager(
@@ -206,10 +223,11 @@ ContentBrowserClient::GetOriginsRequiringDedicatedProcess() {
 }
 
 bool ContentBrowserClient::ShouldEnableStrictSiteIsolation() {
-  // By default --site-per-process is turned off for //content embedders.
-  // This ensures that embedders like ChromeCast and/or Opera are not forced
-  // into --site-per-process.
+#if defined(OS_ANDROID)
   return false;
+#else
+  return true;
+#endif
 }
 
 bool ContentBrowserClient::IsFileAccessAllowed(
@@ -309,7 +327,7 @@ void ContentBrowserClient::OnCookieChange(int process_id,
 void ContentBrowserClient::AllowWorkerFileSystem(
     const GURL& url,
     ResourceContext* context,
-    const std::vector<std::pair<int, int> >& render_frames,
+    const std::vector<GlobalFrameRoutingId>& render_frames,
     base::Callback<void(bool)> callback) {
   std::move(callback).Run(true);
 }
@@ -318,7 +336,7 @@ bool ContentBrowserClient::AllowWorkerIndexedDB(
     const GURL& url,
     const base::string16& name,
     ResourceContext* context,
-    const std::vector<std::pair<int, int> >& render_frames) {
+    const std::vector<GlobalFrameRoutingId>& render_frames) {
   return true;
 }
 
@@ -460,6 +478,10 @@ std::string ContentBrowserClient::GetDefaultDownloadName() {
 }
 
 base::FilePath ContentBrowserClient::GetShaderDiskCacheDirectory() {
+  return base::FilePath();
+}
+
+base::FilePath ContentBrowserClient::GetGrShaderDiskCacheDirectory() {
   return base::FilePath();
 }
 
@@ -649,6 +671,7 @@ bool ContentBrowserClient::WillCreateURLLoaderFactory(
     BrowserContext* browser_context,
     RenderFrameHost* frame,
     bool is_navigation,
+    const GURL& url,
     network::mojom::URLLoaderFactoryRequest* factory_request) {
   return false;
 }
@@ -712,13 +735,9 @@ bool ContentBrowserClient::ShouldForceDownloadResource(
   return false;
 }
 
-void ContentBrowserClient::CreateUsbDeviceManager(
+void ContentBrowserClient::CreateWebUsbService(
     RenderFrameHost* render_frame_host,
-    device::mojom::UsbDeviceManagerRequest request) {}
-
-void ContentBrowserClient::CreateUsbChooserService(
-    RenderFrameHost* render_frame_host,
-    device::mojom::UsbChooserServiceRequest request) {}
+    mojo::InterfaceRequest<blink::mojom::WebUsbService> request) {}
 
 bool ContentBrowserClient::ShowPaymentHandlerWindow(
     content::BrowserContext* browser_context,
@@ -736,6 +755,12 @@ ContentBrowserClient::GetWebAuthenticationRequestDelegate(
     RenderFrameHost* render_frame_host) {
   return std::make_unique<AuthenticatorRequestClientDelegate>();
 }
+
+#if defined(OS_MACOSX)
+bool ContentBrowserClient::IsWebAuthenticationTouchIdAuthenticatorSupported() {
+  return false;
+}
+#endif
 
 std::unique_ptr<net::ClientCertStore>
 ContentBrowserClient::CreateClientCertStore(ResourceContext* resource_context) {
@@ -770,5 +795,14 @@ ContentBrowserClient::CreateWindowForPictureInPicture(
     PictureInPictureWindowController* controller) {
   return nullptr;
 }
+
+bool ContentBrowserClient::IsSafeRedirectTarget(const GURL& url,
+                                                ResourceContext* context) {
+  return true;
+}
+
+void ContentBrowserClient::RegisterRendererPreferenceWatcherForWorkers(
+    BrowserContext* browser_context,
+    mojom::RendererPreferenceWatcherPtr watcher) {}
 
 }  // namespace content

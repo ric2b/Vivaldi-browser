@@ -25,6 +25,7 @@
 #include "ash/login/ui/note_action_launch_button.h"
 #include "ash/login/ui/scrollable_users_list_view.h"
 #include "ash/login/ui/views_utils.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
@@ -33,6 +34,7 @@
 #include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
+#include "base/command_line.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -46,8 +48,10 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
+#include "ui/gfx/text_constants.h"
 #include "ui/views/accessibility/ax_aura_obj_cache.h"
 #include "ui/views/background.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/styled_label.h"
@@ -77,27 +81,41 @@ constexpr int kMediumDensityMarginLeftOfAuthUserPortraitDp = 0;
 constexpr int kMediumDensityDistanceBetweenAuthUserAndUsersLandscapeDp = 220;
 constexpr int kMediumDensityDistanceBetweenAuthUserAndUsersPortraitDp = 84;
 
+// Spacing between the auth error text and the learn more button.
+constexpr int kLearnMoreButtonVerticalSpacingDp = 6;
+
+// Blue-ish color for the "learn more" button text.
+constexpr SkColor kLearnMoreButtonTextColor =
+    SkColorSetARGB(0xFF, 0x7B, 0xAA, 0xF7);
+
 constexpr char kLockContentsViewName[] = "LockContentsView";
+constexpr char kAuthErrorContainerName[] = "AuthErrorContainer";
 
-// A view which stores two preferred sizes. The embedder can control which one
-// is used.
-class MultiSizedView : public views::View {
+// Sets the preferred width for |view| with an arbitrary height.
+void SetPreferredWidthForView(views::View* view, int width) {
+  view->SetPreferredSize(gfx::Size(width, kNonEmptyHeightDp));
+}
+
+class AuthErrorLearnMoreButton : public views::Button,
+                                 public views::ButtonListener {
  public:
-  MultiSizedView(const gfx::Size& a, const gfx::Size& b) : a_(a), b_(b) {}
-  ~MultiSizedView() override = default;
-
-  void SwapPreferredSizeTo(bool use_a) {
-    if (use_a)
-      SetPreferredSize(a_);
-    else
-      SetPreferredSize(b_);
+  AuthErrorLearnMoreButton() : views::Button(this) {
+    SetLayoutManager(std::make_unique<views::FillLayout>());
+    auto* label =
+        new views::Label(l10n_util::GetStringUTF16(IDS_ASH_LEARN_MORE));
+    label->SetAutoColorReadabilityEnabled(false);
+    label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    label->SetEnabledColor(kLearnMoreButtonTextColor);
+    label->SetSubpixelRenderingEnabled(false);
+    const gfx::FontList& base_font_list = views::Label::GetDefaultFontList();
+    label->SetFontList(base_font_list.Derive(0, gfx::Font::FontStyle::NORMAL,
+                                             gfx::Font::Weight::NORMAL));
+    AddChildView(label);
   }
 
- private:
-  gfx::Size a_;
-  gfx::Size b_;
-
-  DISALLOW_COPY_AND_ASSIGN(MultiSizedView);
+  void ButtonPressed(Button* sender, const ui::Event& event) override {
+    Shell::Get()->login_screen_controller()->ShowAccountAccessHelpApp();
+  }
 };
 
 // Returns the first or last focusable child of |root|. If |reverse| is false,
@@ -159,18 +177,6 @@ void MakeSectionBold(views::StyledLabel* label,
   add_style(regular_style, *bold_start + bold_length + 1, text.length());
 }
 
-// Helper function to create a label for the dev channel info view.
-views::Label* CreateInfoLabel() {
-  views::Label* label = new views::Label();
-  label->SetAutoColorReadabilityEnabled(false);
-  label->SetEnabledColor(SK_ColorWHITE);
-  label->SetFontList(views::Label::GetDefaultFontList().Derive(
-      -1, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL));
-  label->SetSubpixelRenderingEnabled(false);
-
-  return label;
-}
-
 keyboard::KeyboardController* GetKeyboardControllerForWidget(
     const views::Widget* widget) {
   auto* keyboard_controller = keyboard::KeyboardController::Get();
@@ -185,6 +191,69 @@ keyboard::KeyboardController* GetKeyboardControllerForWidget(
 bool IsPublicAccountUser(const mojom::LoginUserInfoPtr& user) {
   return user->basic_user_info->type == user_manager::USER_TYPE_PUBLIC_ACCOUNT;
 }
+
+//
+// Computes a layout described as follows:
+//
+//    l L R r
+//
+// L R go from [0, L/R_max_fixed_width]
+// l and r go from [0, inf]
+//
+// First, width is distributed to L and R up to their maximum widths. If there
+// is not enough width for them, space will be distributed evenly in the same
+// ratio as their original sizes.
+//
+// If L and R are at max width, l and r will receive all remaining space in the
+// specified relative weighting.
+//
+// l -> left_flex_weight
+// L -> left_max_fixed_width
+// R -> right_max_fixed_width
+// r -> right_flex_weight
+//
+// Output data is in the member variables.
+//
+struct MediumViewLayout {
+  MediumViewLayout(int width,
+                   int left_flex_weight,
+                   int left_max_fixed_width,
+                   int right_max_fixed_width,
+                   int right_flex_weight) {
+    // No space to distribute.
+    if (width <= 0)
+      return;
+
+    auto set_values_from_weight = [](int width, float weight_a, float weight_b,
+                                     int* value_a, int* value_b) {
+      float total_weight = weight_a + weight_b;
+      *value_a = width * (weight_a / total_weight);
+      // Subtract to avoid floating point rounding errors, ie, guarantee that
+      // that |value_a + value_b = width|.
+      *value_b = width - *value_a;
+    };
+
+    int flex_width = width - (left_max_fixed_width + right_max_fixed_width);
+    if (flex_width < 0) {
+      // No flex available, distribute to fixed width only
+      set_values_from_weight(width, left_max_fixed_width, right_max_fixed_width,
+                             &left_fixed_width, &right_fixed_width);
+      DCHECK_EQ(width, left_fixed_width + right_fixed_width);
+    } else {
+      // Flex is available; fixed goes to maximum size, extra goes to flex.
+      left_fixed_width = left_max_fixed_width;
+      right_fixed_width = right_max_fixed_width;
+      set_values_from_weight(flex_width, left_flex_weight, right_flex_weight,
+                             &left_flex_width, &right_flex_width);
+      DCHECK_EQ(flex_width, left_flex_width + right_flex_width);
+    }
+  }
+
+  int left_fixed_width = 0;
+  int right_fixed_width = 0;
+  int left_flex_width = 0;
+  int right_flex_width = 0;
+};
 
 }  // namespace
 
@@ -220,8 +289,12 @@ LoginBubble* LockContentsView::TestApi::detachable_base_error_bubble() const {
   return view_->detachable_base_error_bubble_.get();
 }
 
-views::View* LockContentsView::TestApi::dev_channel_info() const {
-  return view_->dev_channel_info_;
+LoginBubble* LockContentsView::TestApi::warning_banner_bubble() const {
+  return view_->warning_banner_bubble_.get();
+}
+
+views::View* LockContentsView::TestApi::system_info() const {
+  return view_->system_info_;
 }
 
 LoginExpandedPublicAccountView* LockContentsView::TestApi::expanded_view()
@@ -257,9 +330,7 @@ LockContentsView::LockContentsView(
     : NonAccessibleView(kLockContentsViewName),
       screen_type_(screen_type),
       data_dispatcher_(data_dispatcher),
-      detachable_base_model_(std::move(detachable_base_model)),
-      display_observer_(this),
-      session_observer_(this) {
+      detachable_base_model_(std::move(detachable_base_model)) {
   data_dispatcher_->AddObserver(this);
   display_observer_.Add(display::Screen::GetScreen());
   Shell::Get()->login_screen_controller()->AddObserver(this);
@@ -268,6 +339,7 @@ LockContentsView::LockContentsView(
   auth_error_bubble_ = std::make_unique<LoginBubble>();
   detachable_base_error_bubble_ = std::make_unique<LoginBubble>();
   tooltip_bubble_ = std::make_unique<LoginBubble>();
+  warning_banner_bubble_ = std::make_unique<LoginBubble>();
 
   // We reuse the focusable state on this view as a signal that focus should
   // switch to the system tray. LockContentsView should otherwise not be
@@ -288,14 +360,14 @@ LockContentsView::LockContentsView(
   top_header_->SetLayoutManager(std::move(top_header_layout));
   AddChildView(top_header_);
 
-  dev_channel_info_ = new views::View();
-  auto dev_channel_info_layout = std::make_unique<views::BoxLayout>(
-      views::BoxLayout::kVertical, gfx::Insets(5, 8));
-  dev_channel_info_layout->set_cross_axis_alignment(
+  system_info_ = new views::View();
+  auto* system_info_layout =
+      system_info_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::kVertical, gfx::Insets(5, 8)));
+  system_info_layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_END);
-  dev_channel_info_->SetLayoutManager(std::move(dev_channel_info_layout));
-  dev_channel_info_->SetVisible(false);
-  top_header_->AddChildView(dev_channel_info_);
+  system_info_->SetVisible(false);
+  top_header_->AddChildView(system_info_);
 
   note_action_ = new NoteActionLaunchButton(initial_note_action_state);
   top_header_->AddChildView(note_action_);
@@ -349,19 +421,21 @@ void LockContentsView::FocusNextUser() {
     return;
   }
 
-  for (int i = 0; i < users_list_->user_count(); ++i) {
-    LoginUserView* user_view = users_list_->user_view_at(i);
-    if (!login_views_utils::HasFocusInAnyChildView(user_view))
-      continue;
+  if (users_list_) {
+    for (int i = 0; i < users_list_->user_count(); ++i) {
+      LoginUserView* user_view = users_list_->user_view_at(i);
+      if (!login_views_utils::HasFocusInAnyChildView(user_view))
+        continue;
 
-    if (i == users_list_->user_count() - 1) {
-      SwapActiveAuthBetweenPrimaryAndSecondary(true /*is_primary*/);
-      primary_big_view_->RequestFocus();
+      if (i == users_list_->user_count() - 1) {
+        SwapActiveAuthBetweenPrimaryAndSecondary(true /*is_primary*/);
+        primary_big_view_->RequestFocus();
+        return;
+      }
+
+      user_view->GetNextFocusableView()->RequestFocus();
       return;
     }
-
-    user_view->GetNextFocusableView()->RequestFocus();
-    return;
   }
 }
 
@@ -383,19 +457,21 @@ void LockContentsView::FocusPreviousUser() {
     return;
   }
 
-  for (int i = 0; i < users_list_->user_count(); ++i) {
-    LoginUserView* user_view = users_list_->user_view_at(i);
-    if (!login_views_utils::HasFocusInAnyChildView(user_view))
-      continue;
+  if (users_list_) {
+    for (int i = 0; i < users_list_->user_count(); ++i) {
+      LoginUserView* user_view = users_list_->user_view_at(i);
+      if (!login_views_utils::HasFocusInAnyChildView(user_view))
+        continue;
 
-    if (i == 0) {
-      SwapActiveAuthBetweenPrimaryAndSecondary(true /*is_primary*/);
-      primary_big_view_->RequestFocus();
+      if (i == 0) {
+        SwapActiveAuthBetweenPrimaryAndSecondary(true /*is_primary*/);
+        primary_big_view_->RequestFocus();
+        return;
+      }
+
+      user_view->GetPreviousFocusableView()->RequestFocus();
       return;
     }
-
-    user_view->GetPreviousFocusableView()->RequestFocus();
-    return;
   }
 }
 
@@ -463,11 +539,25 @@ void LockContentsView::OnUsersChanged(
     const std::vector<mojom::LoginUserInfoPtr>& users) {
   // The debug view will potentially call this method many times. Make sure to
   // invalidate any child references.
-  main_view_->RemoveAllChildViews(true /*delete_children*/);
+  primary_big_view_ = nullptr;
   opt_secondary_big_view_ = nullptr;
   users_list_ = nullptr;
-  rotation_actions_.clear();
-  users_.clear();
+  layout_actions_.clear();
+  // Removing child views can change focus, which may result in LockContentsView
+  // getting focused. Make sure to clear internal references before that happens
+  // so there is not stale-pointer usage. See crbug.com/884402.
+  main_view_->RemoveAllChildViews(true /*delete_children*/);
+
+  // Build user state list. Preserve previous state if the user already exists.
+  std::vector<UserState> new_users;
+  for (const mojom::LoginUserInfoPtr& user : users) {
+    UserState* old_state = FindStateForUser(user->basic_user_info->account_id);
+    if (old_state)
+      new_users.push_back(std::move(*old_state));
+    else
+      new_users.push_back(UserState(user));
+  }
+  users_ = std::move(new_users);
 
   // If there are no users, show gaia signin if login, otherwise crash.
   if (users.empty()) {
@@ -478,30 +568,22 @@ void LockContentsView::OnUsersChanged(
     return;
   }
 
-  // Build user state list.
-  for (const mojom::LoginUserInfoPtr& user : users)
-    users_.push_back(UserState(user));
-
-  auto box_layout =
-      std::make_unique<views::BoxLayout>(views::BoxLayout::kHorizontal);
-  main_layout_ = box_layout.get();
-  main_layout_->set_main_axis_alignment(
+  // Allocate layout and big user, which are common between all densities.
+  auto* main_layout = main_view_->SetLayoutManager(
+      std::make_unique<views::BoxLayout>(views::BoxLayout::kHorizontal));
+  main_layout->set_main_axis_alignment(
       views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
-  main_layout_->set_cross_axis_alignment(
+  main_layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
-  main_view_->SetLayoutManager(std::move(box_layout));
-
-  // Add big user.
   primary_big_view_ = AllocateLoginBigUserView(users[0], true /*is_primary*/);
-  main_view_->AddChildView(primary_big_view_);
 
   // Build layout for additional users.
-  if (users.size() == 2)
+  if (users.size() <= 2)
     CreateLowDensityLayout(users);
   else if (users.size() >= 3 && users.size() <= 6)
     CreateMediumDensityLayout(users);
   else if (users.size() >= 7)
-    CreateHighDensityLayout(users);
+    CreateHighDensityLayout(users, main_layout);
 
   LayoutAuth(primary_big_view_, opt_secondary_big_view_, false /*animate*/);
 
@@ -511,6 +593,11 @@ void LockContentsView::OnUsersChanged(
   // Force layout.
   PreferredSizeChanged();
   Layout();
+
+  // If one of the child views had focus before we deleted them, then this view
+  // will get focused. Move focus back to the primary big view.
+  if (HasFocus())
+    primary_big_view_->RequestFocus();
 }
 
 void LockContentsView::OnPinEnabledForUserChanged(const AccountId& user,
@@ -555,9 +642,8 @@ void LockContentsView::OnAuthEnabledForUserChanged(
   }
 }
 
-void LockContentsView::OnClickToUnlockEnabledForUserChanged(
-    const AccountId& user,
-    bool enabled) {
+void LockContentsView::OnTapToUnlockEnabledForUserChanged(const AccountId& user,
+                                                          bool enabled) {
   LockContentsView::UserState* state = FindStateForUser(user);
   if (!state) {
     LOG(ERROR) << "Unable to find user enabling click to auth";
@@ -608,6 +694,31 @@ void LockContentsView::OnShowEasyUnlockIcon(
   }
 }
 
+void LockContentsView::OnShowWarningBanner(const base::string16& message) {
+  DCHECK(!message.empty());
+  if (!CurrentBigUserView() || !CurrentBigUserView()->auth_user()) {
+    LOG(ERROR) << "Unable to find the current active big user to show a "
+                  "warning banner.";
+    return;
+  }
+  warning_banner_bubble_->Close();
+  // Shows warning banner as a persistent error bubble.
+  views::Label* label =
+      new views::Label(message, views::style::CONTEXT_MESSAGE_BOX_BODY_TEXT,
+                       views::style::STYLE_PRIMARY);
+  label->SetMultiLine(true);
+  label->SetAutoColorReadabilityEnabled(false);
+  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  label->SetEnabledColor(SK_ColorWHITE);
+  warning_banner_bubble_->ShowErrorBubble(
+      label, CurrentBigUserView()->auth_user()->password_view() /*anchor_view*/,
+      LoginBubble::kFlagPersistent);
+}
+
+void LockContentsView::OnHideWarningBanner() {
+  warning_banner_bubble_->Close();
+}
+
 void LockContentsView::OnLockScreenNoteStateChanged(
     mojom::TrayActionState state) {
   if (disable_lock_screen_note_)
@@ -626,34 +737,43 @@ void LockContentsView::OnLockScreenNoteStateChanged(
   }
 }
 
-void LockContentsView::OnDevChannelInfoChanged(
+void LockContentsView::OnSystemInfoChanged(
+    bool show,
     const std::string& os_version_label_text,
     const std::string& enterprise_info_text,
     const std::string& bluetooth_name) {
   DCHECK(!os_version_label_text.empty() || !enterprise_info_text.empty() ||
          !bluetooth_name.empty());
 
-  if (!dev_channel_info_->visible()) {
-    // Initialize the dev channel info view.
-    dev_channel_info_->SetVisible(true);
+  // Helper function to create a label for the system info view.
+  auto create_info_label = []() -> views::Label* {
+    views::Label* label = new views::Label();
+    label->SetAutoColorReadabilityEnabled(false);
+    label->SetEnabledColor(SK_ColorWHITE);
+    label->SetFontList(views::Label::GetDefaultFontList().Derive(
+        -1, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL));
+    label->SetSubpixelRenderingEnabled(false);
+    return label;
+  };
+
+  // Initialize the system info view.
+  if (system_info_->child_count() == 0) {
     for (int i = 0; i < 3; ++i)
-      dev_channel_info_->AddChildView(CreateInfoLabel());
+      system_info_->AddChildView(create_info_label());
   }
 
-  views::Label* version_label =
-      static_cast<views::Label*>(dev_channel_info_->child_at(0));
-  version_label->SetVisible(!os_version_label_text.empty());
-  version_label->SetText(base::UTF8ToUTF16(os_version_label_text));
+  if (show)
+    system_info_->SetVisible(true);
 
-  views::Label* enterprise_label =
-      static_cast<views::Label*>(dev_channel_info_->child_at(1));
-  enterprise_label->SetVisible(!enterprise_info_text.empty());
-  enterprise_label->SetText(base::UTF8ToUTF16(enterprise_info_text));
-
-  views::Label* bluetooth_label =
-      static_cast<views::Label*>(dev_channel_info_->child_at(2));
-  bluetooth_label->SetVisible(!bluetooth_name.empty());
-  bluetooth_label->SetText(base::UTF8ToUTF16(bluetooth_name));
+  auto update_label = [&](int index, const std::string& text) {
+    views::Label* label =
+        static_cast<views::Label*>(system_info_->child_at(index));
+    label->SetText(base::UTF8ToUTF16(text));
+    label->SetVisible(!text.empty());
+  };
+  update_label(0, os_version_label_text);
+  update_label(1, enterprise_info_text);
+  update_label(2, bluetooth_name);
 
   LayoutTopHeader();
 }
@@ -806,6 +926,11 @@ void LockContentsView::OnFocusLeavingLockScreenApps(bool reverse) {
     FindFirstOrLastFocusableChild(this, reverse)->RequestFocus();
 }
 
+void LockContentsView::OnOobeDialogStateChanged(mojom::OobeDialogState state) {
+  if (state == mojom::OobeDialogState::HIDDEN && primary_big_view_)
+    primary_big_view_->RequestFocus();
+}
+
 void LockContentsView::OnFocusLeavingSystemTray(bool reverse) {
   // This function is called when the system tray is losing focus. We want to
   // focus the first or last child in this view, or a lock screen app window if
@@ -824,8 +949,11 @@ void LockContentsView::OnFocusLeavingSystemTray(bool reverse) {
 
 void LockContentsView::OnDisplayMetricsChanged(const display::Display& display,
                                                uint32_t changed_metrics) {
-  // Ignore all metric changes except rotation.
-  if ((changed_metrics & DISPLAY_METRIC_ROTATION) == 0)
+  // Ignore all metrics except for those listed in |filter|.
+  uint32_t filter = DISPLAY_METRIC_BOUNDS | DISPLAY_METRIC_WORK_AREA |
+                    DISPLAY_METRIC_DEVICE_SCALE_FACTOR |
+                    DISPLAY_METRIC_ROTATION;
+  if ((filter & changed_metrics) == 0)
     return;
 
   DoLayout();
@@ -863,9 +991,14 @@ void LockContentsView::OnStateChanged(
 
 void LockContentsView::SuspendImminent(
     power_manager::SuspendImminent::Reason reason) {
-  LoginAuthUserView* auth_user = CurrentBigUserView()->auth_user();
-  if (auth_user)
-    auth_user->password_view()->Clear();
+  LoginBigUserView* big_user = CurrentBigUserView();
+  if (big_user && big_user->auth_user())
+    big_user->auth_user()->password_view()->Clear();
+}
+
+void LockContentsView::ShowAuthErrorMessageForDebug(int unlock_attempt) {
+  unlock_attempt_ = unlock_attempt;
+  ShowAuthErrorMessage();
 }
 
 void LockContentsView::FocusNextWidget(bool reverse) {
@@ -885,89 +1018,161 @@ void LockContentsView::FocusNextWidget(bool reverse) {
 
 void LockContentsView::CreateLowDensityLayout(
     const std::vector<mojom::LoginUserInfoPtr>& users) {
-  DCHECK_EQ(users.size(), 2u);
+  DCHECK_LE(users.size(), 2u);
 
-  // Space between auth user and alternative user.
-  main_view_->AddChildView(MakeOrientationViewWithWidths(
-      kLowDensityDistanceBetweenUsersInLandscapeDp,
-      kLowDensityDistanceBetweenUsersInPortraitDp));
+  main_view_->AddChildView(primary_big_view_);
 
-  // Build auth user.
-  opt_secondary_big_view_ =
-      AllocateLoginBigUserView(users[1], false /*is_primary*/);
-  main_view_->AddChildView(opt_secondary_big_view_);
+  if (users.size() > 1) {
+    // Space between primary user and secondary user.
+    auto* spacing_middle = new NonAccessibleView();
+    main_view_->AddChildView(spacing_middle);
+
+    // Build secondary auth user.
+    opt_secondary_big_view_ =
+        AllocateLoginBigUserView(users[1], false /*is_primary*/);
+    main_view_->AddChildView(opt_secondary_big_view_);
+
+    // Set |spacing_middle| to the correct size. If there is less spacing
+    // available than desired, use up to the available.
+    AddDisplayLayoutAction(base::BindRepeating(
+        [](views::View* host_view, views::View* big_user_view,
+           views::View* spacing_middle, views::View* secondary_big_view,
+           bool landscape) {
+          int total_width = host_view->GetPreferredSize().width();
+          int available_width =
+              total_width - (big_user_view->GetPreferredSize().width() +
+                             secondary_big_view->GetPreferredSize().width());
+          if (available_width <= 0) {
+            SetPreferredWidthForView(spacing_middle, 0);
+            return;
+          }
+
+          int desired_width = landscape
+                                  ? kLowDensityDistanceBetweenUsersInLandscapeDp
+                                  : kLowDensityDistanceBetweenUsersInPortraitDp;
+          SetPreferredWidthForView(spacing_middle,
+                                   std::min(available_width, desired_width));
+        },
+        this, primary_big_view_, spacing_middle, opt_secondary_big_view_));
+  }
 }
 
 void LockContentsView::CreateMediumDensityLayout(
     const std::vector<mojom::LoginUserInfoPtr>& users) {
-  // Insert spacing before (left of) auth.
-  main_view_->AddChildViewAt(MakeOrientationViewWithWidths(
-                                 kMediumDensityMarginLeftOfAuthUserLandscapeDp,
-                                 kMediumDensityMarginLeftOfAuthUserPortraitDp),
-                             0);
-  // Insert spacing between auth and user list.
-  main_view_->AddChildView(MakeOrientationViewWithWidths(
-      kMediumDensityDistanceBetweenAuthUserAndUsersLandscapeDp,
-      kMediumDensityDistanceBetweenAuthUserAndUsersPortraitDp));
+  // Here is a diagram of this layout:
+  //
+  //    a A x B y b
+  //
+  // a, A: spacing_left
+  // x: primary_big_view_
+  // B: spacing_middle
+  // y: users_list_
+  // b: spacing_right
+  //
+  // A and B are fixed-width spaces; a and b are flexible space that consume any
+  // additional width.
+  //
+  // A and B are the reason for custom layout; no layout manager currently
+  // supports a fixed-width view that can shrink, but not grow (ie, bounds from
+  // [0,x]). Custom layout logic is used instead, which is contained inside of
+  // the AddDisplayLayoutAction call below.
 
+  // Construct instances.
+  auto* spacing_left = new NonAccessibleView();
+  auto* spacing_middle = new NonAccessibleView();
+  auto* spacing_right = new NonAccessibleView();
   users_list_ = BuildScrollableUsersListView(users, LoginDisplayStyle::kSmall);
-  main_view_->AddChildView(users_list_);
 
-  // Insert dynamic spacing on left/right of the content which changes based on
-  // screen rotation and display size.
-  auto* left = new NonAccessibleView();
-  main_view_->AddChildViewAt(left, 0);
-  auto* right = new NonAccessibleView();
-  main_view_->AddChildView(right);
-  AddRotationAction(base::BindRepeating(
-      [](views::BoxLayout* layout, views::View* left, views::View* right,
+  // Add views as described above.
+  main_view_->AddChildView(spacing_left);
+  main_view_->AddChildView(primary_big_view_);
+  main_view_->AddChildView(spacing_middle);
+  main_view_->AddChildView(users_list_);
+  main_view_->AddChildView(spacing_right);
+
+  // Set width for the |spacing_*| views.
+  AddDisplayLayoutAction(base::BindRepeating(
+      [](views::View* host_view, views::View* big_user_view,
+         views::View* users_list, views::View* spacing_left,
+         views::View* spacing_middle, views::View* spacing_right,
          bool landscape) {
-        if (landscape) {
-          layout->SetFlexForView(left, 1);
-          layout->SetFlexForView(right, 1);
-        } else {
-          layout->SetFlexForView(left, 2);
-          layout->SetFlexForView(right, 1);
-        }
+        int total_width = host_view->GetPreferredSize().width();
+        int available_width =
+            total_width - (big_user_view->GetPreferredSize().width() +
+                           users_list->GetPreferredSize().width());
+
+        int left_max_fixed_width =
+            landscape ? kMediumDensityMarginLeftOfAuthUserLandscapeDp
+                      : kMediumDensityMarginLeftOfAuthUserPortraitDp;
+        int right_max_fixed_width =
+            landscape ? kMediumDensityDistanceBetweenAuthUserAndUsersLandscapeDp
+                      : kMediumDensityDistanceBetweenAuthUserAndUsersPortraitDp;
+
+        int left_flex_weight = landscape ? 1 : 2;
+        int right_flex_weight = 1;
+
+        MediumViewLayout medium_layout(
+            available_width, left_flex_weight, left_max_fixed_width,
+            right_max_fixed_width, right_flex_weight);
+
+        SetPreferredWidthForView(
+            spacing_left,
+            medium_layout.left_flex_width + medium_layout.left_fixed_width);
+        SetPreferredWidthForView(spacing_middle,
+                                 medium_layout.right_fixed_width);
+        SetPreferredWidthForView(spacing_right, medium_layout.right_flex_width);
       },
-      main_layout_, left, right));
+      this, primary_big_view_, users_list_, spacing_left, spacing_middle,
+      spacing_right));
 }
 
 void LockContentsView::CreateHighDensityLayout(
-    const std::vector<mojom::LoginUserInfoPtr>& users) {
-  // Insert spacing before and after the auth view.
+    const std::vector<mojom::LoginUserInfoPtr>& users,
+    views::BoxLayout* main_layout) {
+  // Insert spacing before the auth view.
   auto* fill = new NonAccessibleView();
-  main_view_->AddChildViewAt(fill, 0);
-  main_layout_->SetFlexForView(fill, 1);
+  main_view_->AddChildView(fill);
+  main_layout->SetFlexForView(fill, 1);
 
+  main_view_->AddChildView(primary_big_view_);
+
+  // Insert spacing after the auth view.
   fill = new NonAccessibleView();
   main_view_->AddChildView(fill);
-  main_layout_->SetFlexForView(fill, 1);
+  main_layout->SetFlexForView(fill, 1);
 
   users_list_ =
       BuildScrollableUsersListView(users, LoginDisplayStyle::kExtraSmall);
   main_view_->AddChildView(users_list_);
+
+  // User list size may change after a display metric change.
+  AddDisplayLayoutAction(base::BindRepeating(
+      [](views::View* view, bool landscape) { view->SizeToPreferredSize(); },
+      users_list_));
 }
 
 void LockContentsView::DoLayout() {
-  bool landscape = login_views_utils::ShouldShowLandscape(GetWidget());
-  for (auto& action : rotation_actions_)
-    action.Run(landscape);
-
   const display::Display& display =
       display::Screen::GetScreen()->GetDisplayNearestWindow(
           GetWidget()->GetNativeWindow());
+
+  // Set preferred size before running layout actions, as layout actions may
+  // depend on the preferred size to determine layout.
   SetPreferredSize(display.size());
+
+  bool landscape = login_views_utils::ShouldShowLandscape(GetWidget());
+  for (auto& action : layout_actions_)
+    action.Run(landscape);
+
+  // SizeToPreferredSize will call Layout().
   SizeToPreferredSize();
-  Layout();
 }
 
 void LockContentsView::LayoutTopHeader() {
-  int preferred_width = dev_channel_info_->GetPreferredSize().width() +
+  int preferred_width = system_info_->GetPreferredSize().width() +
                         note_action_->GetPreferredSize().width();
-  int preferred_height =
-      std::max(dev_channel_info_->GetPreferredSize().height(),
-               note_action_->GetPreferredSize().height());
+  int preferred_height = std::max(system_info_->GetPreferredSize().height(),
+                                  note_action_->GetPreferredSize().height());
   top_header_->SetPreferredSize(gfx::Size(preferred_width, preferred_height));
   top_header_->SizeToPreferredSize();
   top_header_->Layout();
@@ -983,18 +1188,10 @@ void LockContentsView::LayoutPublicSessionView() {
   expanded_view_->SetBoundsRect(bounds);
 }
 
-views::View* LockContentsView::MakeOrientationViewWithWidths(int landscape,
-                                                             int portrait) {
-  auto* view = new MultiSizedView(gfx::Size(landscape, kNonEmptyHeightDp),
-                                  gfx::Size(portrait, kNonEmptyHeightDp));
-  AddRotationAction(base::BindRepeating(&MultiSizedView::SwapPreferredSizeTo,
-                                        base::Unretained(view)));
-  return view;
-}
-
-void LockContentsView::AddRotationAction(const OnRotate& on_rotate) {
-  on_rotate.Run(login_views_utils::ShouldShowLandscape(GetWidget()));
-  rotation_actions_.push_back(on_rotate);
+void LockContentsView::AddDisplayLayoutAction(
+    const DisplayLayoutAction& layout_action) {
+  layout_action.Run(login_views_utils::ShouldShowLandscape(GetWidget()));
+  layout_actions_.push_back(layout_action);
 }
 
 void LockContentsView::SwapActiveAuthBetweenPrimaryAndSecondary(
@@ -1055,12 +1252,72 @@ void LockContentsView::LayoutAuth(LoginBigUserView* to_update,
                                   LoginBigUserView* opt_to_hide,
                                   bool animate) {
   DCHECK(to_update);
-  UpdateAuthForAuthUser(to_update->auth_user(),
-                        opt_to_hide ? opt_to_hide->auth_user() : nullptr,
-                        animate);
-  UpdateAuthForPublicAccount(
-      to_update->public_account(),
-      opt_to_hide ? opt_to_hide->public_account() : nullptr, animate);
+
+  auto capture_animation_state_pre_layout = [&](LoginBigUserView* view) {
+    if (!animate || !view)
+      return;
+    if (view->auth_user())
+      view->auth_user()->CaptureStateForAnimationPreLayout();
+  };
+
+  auto enable_auth = [&](LoginBigUserView* view) {
+    DCHECK(view);
+    if (view->auth_user()) {
+      UserState* state = FindStateForUser(
+          view->auth_user()->current_user()->basic_user_info->account_id);
+      uint32_t to_update_auth;
+      if (state->force_online_sign_in) {
+        to_update_auth = LoginAuthUserView::AUTH_ONLINE_SIGN_IN;
+      } else if (state->disable_auth) {
+        to_update_auth = LoginAuthUserView::AUTH_DISABLED;
+      } else {
+        to_update_auth = LoginAuthUserView::AUTH_PASSWORD;
+        keyboard::KeyboardController* keyboard_controller =
+            GetKeyboardController();
+        const bool is_keyboard_visible =
+            keyboard_controller ? keyboard_controller->IsKeyboardVisible()
+                                : false;
+        if (state->show_pin && !is_keyboard_visible)
+          to_update_auth |= LoginAuthUserView::AUTH_PIN;
+        if (state->enable_tap_auth)
+          to_update_auth |= LoginAuthUserView::AUTH_TAP;
+        if (state->fingerprint_state !=
+            mojom::FingerprintUnlockState::UNAVAILABLE) {
+          to_update_auth |= LoginAuthUserView::AUTH_FINGERPRINT;
+        }
+      }
+      view->auth_user()->SetAuthMethods(to_update_auth, state->show_pin);
+    } else if (view->public_account()) {
+      view->public_account()->SetAuthEnabled(true /*enabled*/, animate);
+    }
+  };
+
+  auto disable_auth = [&](LoginBigUserView* view) {
+    if (!view)
+      return;
+    if (view->auth_user()) {
+      view->auth_user()->SetAuthMethods(LoginAuthUserView::AUTH_NONE,
+                                        false /*can_use_pin*/);
+    } else if (view->public_account()) {
+      view->public_account()->SetAuthEnabled(false /*enabled*/, animate);
+    }
+  };
+
+  auto apply_animation_post_layout = [&](LoginBigUserView* view) {
+    if (!animate || !view)
+      return;
+    if (view->auth_user())
+      view->auth_user()->ApplyAnimationPostLayout();
+  };
+
+  // The high-level layout flow:
+  capture_animation_state_pre_layout(to_update);
+  capture_animation_state_pre_layout(opt_to_hide);
+  enable_auth(to_update);
+  disable_auth(opt_to_hide);
+  Layout();
+  apply_animation_post_layout(to_update);
+  apply_animation_post_layout(opt_to_hide);
 }
 
 void LockContentsView::SwapToBigUser(int user_index) {
@@ -1224,8 +1481,17 @@ void LockContentsView::ShowAuthErrorMessage() {
   MakeSectionBold(label, error_text, bold_start, bold_length);
   label->set_auto_color_readability_enabled(false);
 
+  auto* learn_more_button = new AuthErrorLearnMoreButton();
+
+  auto* container = new NonAccessibleView(kAuthErrorContainerName);
+  container->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::kVertical, gfx::Insets(),
+      kLearnMoreButtonVerticalSpacingDp));
+  container->AddChildView(label);
+  container->AddChildView(learn_more_button);
+
   auth_error_bubble_->ShowErrorBubble(
-      label, big_view->auth_user()->password_view() /*anchor_view*/,
+      container, big_view->auth_user()->password_view() /*anchor_view*/,
       LoginBubble::kFlagsNone);
 }
 
@@ -1259,7 +1525,7 @@ void LockContentsView::OnEasyUnlockIconTapped() {
         CurrentBigUserView()->GetCurrentUser()->basic_user_info->account_id;
     Shell::Get()->login_screen_controller()->HardlockPod(user);
     // TODO(jdufault): This should get called as a result of HardlockPod.
-    OnClickToUnlockEnabledForUserChanged(user, false /*enabled*/);
+    OnTapToUnlockEnabledForUserChanged(user, false /*enabled*/);
   }
 }
 
@@ -1268,6 +1534,25 @@ keyboard::KeyboardController* LockContentsView::GetKeyboardController() const {
 }
 
 void LockContentsView::OnPublicAccountTapped(bool is_primary) {
+  const LoginBigUserView* user = CurrentBigUserView();
+  // If the pod should not show an expanded view, tapping on it will launch
+  // Public Session immediately.
+  if (!user->GetCurrentUser()->public_account_info->show_expanded_view) {
+    std::string default_input_method;
+    for (const auto& keyboard :
+         user->GetCurrentUser()->public_account_info->keyboard_layouts) {
+      if (keyboard->selected) {
+        default_input_method = keyboard->ime_id;
+        break;
+      }
+    }
+    Shell::Get()->login_screen_controller()->LaunchPublicSession(
+        user->GetCurrentUser()->basic_user_info->account_id,
+        user->GetCurrentUser()->public_account_info->default_locale,
+        default_input_method);
+    return;
+  }
+
   // Set the public account user to be the active user.
   SwapActiveAuthBetweenPrimaryAndSecondary(is_primary);
 
@@ -1277,7 +1562,7 @@ void LockContentsView::OnPublicAccountTapped(bool is_primary) {
   // primary to secondary.
   // 2. LoginUserInfo in the big user could be changed if we get updates from
   // OnPublicSessionDisplayNameChanged and OnPublicSessionLocalesChanged.
-  expanded_view_->UpdateForUser(CurrentBigUserView()->GetCurrentUser());
+  expanded_view_->UpdateForUser(user->GetCurrentUser());
   SetDisplayStyle(DisplayStyle::kExclusivePublicAccountExpandedView);
 }
 
@@ -1354,73 +1639,6 @@ ScrollableUsersListView* LockContentsView::BuildScrollableUsersListView(
   return view;
 }
 
-void LockContentsView::UpdateAuthForPublicAccount(
-    LoginPublicAccountUserView* opt_to_update,
-    LoginPublicAccountUserView* opt_to_hide,
-    bool animate) {
-  if (opt_to_update)
-    opt_to_update->SetAuthEnabled(true /*enabled*/, animate);
-  if (opt_to_hide)
-    opt_to_hide->SetAuthEnabled(false /*enabled*/, animate);
-
-  Layout();
-}
-
-void LockContentsView::UpdateAuthForAuthUser(LoginAuthUserView* opt_to_update,
-                                             LoginAuthUserView* opt_to_hide,
-                                             bool animate) {
-  // Capture animation metadata before we changing state.
-  if (animate) {
-    if (opt_to_update)
-      opt_to_update->CaptureStateForAnimationPreLayout();
-    if (opt_to_hide)
-      opt_to_hide->CaptureStateForAnimationPreLayout();
-  }
-
-  // Update auth methods for |opt_to_update|. Disable auth on |opt_to_hide|.
-  if (opt_to_update) {
-    UserState* state = FindStateForUser(
-        opt_to_update->current_user()->basic_user_info->account_id);
-    uint32_t to_update_auth;
-    if (state->force_online_sign_in) {
-      to_update_auth = LoginAuthUserView::AUTH_ONLINE_SIGN_IN;
-    } else if (state->disable_auth) {
-      to_update_auth = LoginAuthUserView::AUTH_DISABLED;
-    } else {
-      to_update_auth = LoginAuthUserView::AUTH_PASSWORD;
-      keyboard::KeyboardController* keyboard_controller =
-          GetKeyboardController();
-      const bool is_keyboard_visible =
-          keyboard_controller ? keyboard_controller->IsKeyboardVisible()
-                              : false;
-      if (state->show_pin && !is_keyboard_visible &&
-          state->fingerprint_state ==
-              mojom::FingerprintUnlockState::UNAVAILABLE) {
-        to_update_auth |= LoginAuthUserView::AUTH_PIN;
-      }
-      if (state->enable_tap_auth)
-        to_update_auth |= LoginAuthUserView::AUTH_TAP;
-      if (state->fingerprint_state !=
-          mojom::FingerprintUnlockState::UNAVAILABLE) {
-        to_update_auth |= LoginAuthUserView::AUTH_FINGERPRINT;
-      }
-    }
-    opt_to_update->SetAuthMethods(to_update_auth);
-  }
-  if (opt_to_hide)
-    opt_to_hide->SetAuthMethods(LoginAuthUserView::AUTH_NONE);
-
-  Layout();
-
-  // Apply animations.
-  if (animate) {
-    if (opt_to_update)
-      opt_to_update->ApplyAnimationPostLayout();
-    if (opt_to_hide)
-      opt_to_hide->ApplyAnimationPostLayout();
-  }
-}
-
 void LockContentsView::SetDisplayStyle(DisplayStyle style) {
   const bool show_expanded_view =
       style == DisplayStyle::kExclusivePublicAccountExpandedView;
@@ -1441,7 +1659,27 @@ void LockContentsView::RegisterAccelerators() {
       AcceleratorAction::kFocusNextUser;
   accel_map_[ui::Accelerator(ui::VKEY_LEFT, 0)] =
       AcceleratorAction::kFocusPreviousUser;
+  accel_map_[ui::Accelerator(ui::VKEY_V, ui::EF_ALT_DOWN)] =
+      AcceleratorAction::kShowSystemInfo;
 
+  // Login-only accelerators:
+  if (screen_type_ == LockScreen::ScreenType::kLogin) {
+    accel_map_[ui::Accelerator(ui::VKEY_I,
+                               ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN)] =
+        AcceleratorAction::kShowFeedback;
+
+    // Show reset conflicts with rotate screen when --ash-dev-shortcuts is
+    // passed. Favor --ash-dev-shortcuts since that is explicitly added.
+    if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kAshDeveloperShortcuts)) {
+      accel_map_[ui::Accelerator(ui::VKEY_R, ui::EF_CONTROL_DOWN |
+                                                 ui::EF_SHIFT_DOWN |
+                                                 ui::EF_ALT_DOWN)] =
+          AcceleratorAction::kShowResetScreen;
+    }
+  }
+
+  // Register the accelerators.
   AcceleratorController* controller = Shell::Get()->accelerator_controller();
   for (const auto& item : accel_map_)
     controller->Register({item.first}, this);
@@ -1449,15 +1687,24 @@ void LockContentsView::RegisterAccelerators() {
 
 void LockContentsView::PerformAction(AcceleratorAction action) {
   switch (action) {
-    case AcceleratorAction::kShowFeedback:
-      Shell::Get()->login_screen_controller()->ShowFeedback();
-      return;
     case AcceleratorAction::kFocusNextUser:
       FocusNextUser();
-      return;
+      break;
     case AcceleratorAction::kFocusPreviousUser:
       FocusPreviousUser();
-      return;
+      break;
+    case AcceleratorAction::kShowSystemInfo:
+      if (!system_info_->visible()) {
+        system_info_->SetVisible(true);
+        LayoutTopHeader();
+      }
+      break;
+    case AcceleratorAction::kShowFeedback:
+      Shell::Get()->login_screen_controller()->ShowFeedback();
+      break;
+    case AcceleratorAction::kShowResetScreen:
+      Shell::Get()->login_screen_controller()->ShowResetScreen();
+      break;
     default:
       NOTREACHED();
   }

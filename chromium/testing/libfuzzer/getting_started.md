@@ -33,9 +33,8 @@ Supported sanitizer configurations are:
 | `is_ubsan_security=true` | enables [Undefined Behavior Sanitizer] to catch<sup>\[[*](reference.md#UBSan)\]</sup> undefined behavior like integer overflow. |
 | | it is possible to run libfuzzer without any sanitizers; *probably not what you want*.|
 
-Fuzz targets are built with minimal symbols by default, regardless of the value
-of `is_debug` and `symbol_level`. However if you want to run fuzz target under a
-debugger you can re-enable them by setting `sanitizer_keep_symbols=true`.
+Fuzz targets are built with minimal symbols by default. The symbol level
+can be adjusted in the usual way by setting `symbol_level`.
 
 To get the exact GN configuration that are used on our builders, see
 [Build Config].
@@ -305,7 +304,7 @@ performance and for optimization hints.
 [Seed Corpus]: efficient_fuzzer.md#Seed-Corpus
 [Undefined Behavior Sanitizer]: http://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
 [crbug/598448]: https://bugs.chromium.org/p/chromium/issues/detail?id=598448
-[quic_stream_factory_fuzzer.cc]: https://cs.chromium.org/chromium/src/net/quic/chromium/quic_stream_factory_fuzzer.cc
+[quic_stream_factory_fuzzer.cc]: https://cs.chromium.org/chromium/src/net/quic/quic_stream_factory_fuzzer.cc
 [Build Config]: reference.md#Builder-configurations
 [its own documentation]: http://llvm.org/docs/LibFuzzer.html#output
 [Getting Started with libprotobuf-mutator in Chromium]: libprotobuf-mutator.md

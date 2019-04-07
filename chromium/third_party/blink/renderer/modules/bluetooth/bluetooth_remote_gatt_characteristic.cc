@@ -18,6 +18,7 @@
 #include "third_party/blink/renderer/modules/bluetooth/bluetooth_remote_gatt_service.h"
 #include "third_party/blink/renderer/modules/bluetooth/bluetooth_remote_gatt_utils.h"
 #include "third_party/blink/renderer/modules/bluetooth/bluetooth_uuid.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 #include <memory>
 #include <utility>
@@ -55,7 +56,7 @@ void BluetoothRemoteGATTCharacteristic::RemoteCharacteristicValueChanged(
   if (!GetGatt()->connected())
     return;
   this->SetValue(BluetoothRemoteGATTUtils::ConvertWTFVectorToDataView(value));
-  DispatchEvent(Event::Create(EventTypeNames::characteristicvaluechanged));
+  DispatchEvent(*Event::Create(EventTypeNames::characteristicvaluechanged));
 }
 
 void BluetoothRemoteGATTCharacteristic::ContextDestroyed(ExecutionContext*) {
@@ -110,7 +111,7 @@ void BluetoothRemoteGATTCharacteristic::ReadValueCallback(
     DOMDataView* dom_data_view =
         BluetoothRemoteGATTUtils::ConvertWTFVectorToDataView(value.value());
     SetValue(dom_data_view);
-    DispatchEvent(Event::Create(EventTypeNames::characteristicvaluechanged));
+    DispatchEvent(*Event::Create(EventTypeNames::characteristicvaluechanged));
     resolver->Resolve(dom_data_view);
   } else {
     resolver->Reject(BluetoothError::CreateDOMException(result));

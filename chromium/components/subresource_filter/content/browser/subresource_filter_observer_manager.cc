@@ -6,9 +6,6 @@
 
 #include "components/subresource_filter/core/common/activation_state.h"
 
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(
-    subresource_filter::SubresourceFilterObserverManager);
-
 namespace subresource_filter {
 
 SubresourceFilterObserverManager::SubresourceFilterObserverManager(
@@ -52,6 +49,12 @@ void SubresourceFilterObserverManager::NotifySubframeNavigationEvaluated(
   for (auto& observer : observers_)
     observer.OnSubframeNavigationEvaluated(navigation_handle, load_policy,
                                            is_ad_subframe);
+}
+
+void SubresourceFilterObserverManager::NotifyAdSubframeDetected(
+    content::RenderFrameHost* render_frame_host) {
+  for (auto& observer : observers_)
+    observer.OnAdSubframeDetected(render_frame_host);
 }
 
 }  // namespace subresource_filter

@@ -102,11 +102,11 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="3171922709365450819">This device is not supported by this client because it requires third-party authentication.</translation>
 <translation id="3194245623920924351">Chrome Remote Desktop</translation>
 <translation id="3197730452537982411">Remote Desktop</translation>
+<translation id="3212472844831225214">• Added support for Android 9.0 Pie.</translation>
 <translation id="324272851072175193">Email these instructions</translation>
 <translation id="3258789396564295715">You may securely access this computer using Chrome Remote Desktop.</translation>
 <translation id="3286521253923406898">Chromoting Host Controller</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> wants to make changes.</translation>
-<translation id="331779822864701136">• Added support for Android 8.0 Oreo.</translation>
 <translation id="332624996707057614">Edit computer name</translation>
 <translation id="3339299787263251426">Access your computer securely over the Internet</translation>
 <translation id="3360306038446926262">Windows</translation>
@@ -122,8 +122,9 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="369442766917958684">Offline.</translation>
 <translation id="3695446226812920698">Find out how</translation>
 <translation id="3718805989288361841">There is an error with the policy settings for Chrome Remote Desktop. Contact your system administrator for assistance.</translation>
-<translation id="3759645055923345178">After setup is complete, you'll be able to access the computer from this page by entering the PIN or access code</translation>
 <translation id="3776024066357219166">Your Chrome Remote Desktop session has ended.</translation>
+<translation id="3846148461359626420">• Better panning and zooming experience on iPhone X.
+• Stability improvements and bug fixes.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Please confirm your account and PIN below to allow access by Chrome Remote Desktop.</translation>
 <translation id="3897092660631435901">Menu</translation>
@@ -137,6 +138,7 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="405887016757208221">The remote computer has failed to initialise the session. If problem persists please try to configure the host again.</translation>
 <translation id="4068946408131579958">All connections</translation>
 <translation id="409800995205263688">NOTE: Policy settings permit connections only between computers within your network.</translation>
+<translation id="4126409073460786861">After setup is complete, refresh this page, then you'll be able to access the computer by choosing your device and entering the PIN</translation>
 <translation id="4145029455188493639">Signed in as <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Some required components are missing. Please make sure that you have installed the latest version of the software and try again.</translation>
 <translation id="4156740505453712750">To protect access to this computer, please choose a PIN of <ph name="BOLD_START" />at least six digits<ph name="BOLD_END" />. This PIN will be required when connecting from another location.</translation>
@@ -145,7 +147,6 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="4207623512727273241">Please run the installer before continuing.</translation>
 <translation id="4227991223508142681">Host Provisioning Utility</translation>
 <translation id="4240294130679914010">Chromoting Host Uninstaller</translation>
-<translation id="4249741460382919890">General fixes and stability improvements.</translation>
 <translation id="4277463233460010382">This computer is configured to allow one or more clients to connect without entering a PIN.</translation>
 <translation id="4277736576214464567">The access code is invalid. Please try again.</translation>
 <translation id="4361728918881830843">To enable remote connections to a different computer, install Chrome Remote Desktop there and click “<ph name="BUTTON_NAME" />”.</translation>
@@ -271,6 +272,7 @@ PC</translation>
 <translation id="6998989275928107238">To</translation>
 <translation id="7019153418965365059">Unrecognised host error: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Remote Assistance</translation>
+<translation id="7026930240735156896">Follow the instructions to set up your computer for remote access</translation>
 <translation id="7038683108611689168">Help us improve Chromoting by allowing us to collect usage statistics and crash reports.</translation>
 <translation id="7067321367069083429">Screen acts like a touch screen</translation>
 <translation id="7116737094673640201">Welcome to Chrome Remote Desktop</translation>
@@ -296,7 +298,6 @@ PC</translation>
 <translation id="7782471917492991422">Please check your computer's power management settings and ensure that it is not configured to sleep when idle.</translation>
 <translation id="7810127880729796595">Show statistics (connection: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Some required components are missing. Please make sure that you're running the latest version of Chrome and try again.</translation>
-<translation id="7850909060902317210">Install Chrome Remote Desktop software and follow the instructions to complete setup</translation>
 <translation id="7868137160098754906">Please enter your PIN for the remote computer.</translation>
 <translation id="7869445566579231750">You do not have permission to run this application.</translation>
 <translation id="7895403300744144251">Security policies on the remote computer do not allow connections from your account.</translation>

@@ -24,13 +24,13 @@ ResourceResponseInfo::ResourceResponseInfo()
       was_fetched_via_proxy(false),
       was_fetched_via_service_worker(false),
       was_fallback_required_by_service_worker(false),
-      response_type_via_service_worker(mojom::FetchResponseType::kDefault),
-      previews_state(0),
+      response_type(mojom::FetchResponseType::kDefault),
       effective_connection_type(net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN),
       cert_status(0),
       did_service_worker_navigation_preload(false),
       should_report_corb_blocking(false),
-      async_revalidation_requested(false) {}
+      async_revalidation_requested(false),
+      did_mime_sniff(false) {}
 
 ResourceResponseInfo::ResourceResponseInfo(const ResourceResponseInfo& other) =
     default;

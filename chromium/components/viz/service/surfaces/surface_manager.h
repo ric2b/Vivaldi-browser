@@ -108,6 +108,14 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // Called when a surface has an active frame for the first time.
   void FirstSurfaceActivation(const SurfaceInfo& surface_info);
 
+  // Add |surface_id| as an observer for |sink_id|.
+  void AddActivationObserver(const FrameSinkId& sink_id,
+                             const SurfaceId& surface_id);
+
+  // Remove |surface_id| from the observers of |sink_id|.
+  void RemoveActivationObserver(const FrameSinkId& sink_id,
+                                const SurfaceId& surface_id);
+
   // Called when a CompositorFrame within |surface| has activated. |duration| is
   // a measure of the time the frame has spent waiting on dependencies to
   // arrive. If |duration| is base::nullopt, then that indicates that this frame
@@ -182,18 +190,13 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
 
   // Returns all surfaces that have a reference to child |surface_id|. Will
   // return an empty set if |surface_id| is unknown or has no references to it.
-  const base::flat_set<SurfaceId>& GetSurfacesThatReferenceChild(
+  base::flat_set<SurfaceId> GetSurfacesThatReferenceChildForTesting(
       const SurfaceId& surface_id) const;
 
-  // Returns the most recent surface associated with the |fallback_surface_id|'s
-  // FrameSinkId that was created prior to the current primary surface and
-  // verified by the viz host to be owned by the fallback surface's parent. If
-  // the FrameSinkId of the |primary_surface_id| does not match the
-  // |fallback_surface_id|'s then this method will always return the fallback
-  // surface because we cannot guarantee the latest in flight surface from the
-  // fallback frame sink is older than the primary surface.
-  Surface* GetLatestInFlightSurface(const SurfaceId& primary_surface_id,
-                                    const SurfaceId& fallback_surface_id);
+  // Returns the primary surface if it exists. Otherwise, this will return the
+  // most recent surface in |surface_range|. If no surface exists, this will
+  // return nullptr.
+  Surface* GetLatestInFlightSurface(const SurfaceRange& surface_range);
 
   // Called by SurfaceAggregator notifying us that it will use |surface| in the
   // next display frame. We will notify SurfaceObservers accordingly.
@@ -215,17 +218,6 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
     COUNT
   };
 
-  struct SurfaceReferenceInfo {
-    SurfaceReferenceInfo();
-    ~SurfaceReferenceInfo();
-
-    // Surfaces that have references to this surface.
-    base::flat_set<SurfaceId> parents;
-
-    // Surfaces that are referenced from this surface.
-    base::flat_set<SurfaceId> children;
-  };
-
   struct TemporaryReferenceData {
     TemporaryReferenceData();
     ~TemporaryReferenceData();
@@ -238,6 +230,11 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
     // timer tick and will be true on second timer tick.
     bool marked_as_old = false;
   };
+
+  // Returns the latest surface in a FrameSinkId that satisfies |is_valid|.
+  Surface* GetLatestInFlightSurfaceForFrameSinkId(
+      const SurfaceRange& surface_range,
+      const FrameSinkId& sink_id);
 
   // Returns set of live surfaces for |lifetime_manager_| is REFERENCES.
   SurfaceIdSet GetLiveSurfacesForReferences();
@@ -252,11 +249,11 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // Removes a reference from a |parent_id| to |child_id|.
   void RemoveSurfaceReferenceImpl(const SurfaceReference& reference);
 
-  // Removes all surface references to or from |surface_id|. Used when the
-  // surface is about to be deleted.
-  void RemoveAllSurfaceReferences(const SurfaceId& surface_id);
-
+  // Returns whether |surface_id| has a temporary reference or not.
   bool HasTemporaryReference(const SurfaceId& surface_id) const;
+
+  // Returns whether |surface_id| has a Persistent reference or not.
+  bool HasPersistentReference(const SurfaceId& surface_id) const;
 
   // Adds a temporary reference to |surface_id|. The reference will not have an
   // owner initially.
@@ -292,7 +289,7 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   SurfaceDependencyTracker dependency_tracker_;
 
   base::flat_map<SurfaceId, std::unique_ptr<Surface>> surface_map_;
-  base::ObserverList<SurfaceObserver> observer_list_;
+  base::ObserverList<SurfaceObserver>::Unchecked observer_list_;
   base::ThreadChecker thread_checker_;
 
   base::flat_set<SurfaceId> surfaces_to_destroy_;
@@ -309,9 +306,9 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   const base::TickClock* tick_clock_;
 
   // Keeps track of surface references for a surface. The graph of references is
-  // stored in both directions, so we know the parents and children for each
-  // surface.
-  std::unordered_map<SurfaceId, SurfaceReferenceInfo, SurfaceIdHash>
+  // stored in parent to child direction. i.e the map stores all direct children
+  // of the surface specified by |SurfaceId|.
+  std::unordered_map<SurfaceId, base::flat_set<SurfaceId>, SurfaceIdHash>
       references_;
 
   // A map of surfaces that have temporary references.
@@ -329,6 +326,15 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // the embedding client can use them.
   std::unordered_map<FrameSinkId, std::vector<LocalSurfaceId>, FrameSinkIdHash>
       temporary_reference_ranges_;
+
+  // A list of surfaces with a given FrameSinkId that have a persistent
+  // reference.
+  base::flat_map<FrameSinkId, base::flat_set<LocalSurfaceId>>
+      persistent_references_by_frame_sink_id_;
+
+  // A map storing SurfaceIds interested in knowing about activation events
+  // happending in FrameSinkId.
+  base::flat_map<FrameSinkId, base::flat_set<SurfaceId>> activation_observers_;
 
   // Timer to remove old temporary references that aren't removed after an
   // interval of time. The timer will started/stopped so it only runs if there

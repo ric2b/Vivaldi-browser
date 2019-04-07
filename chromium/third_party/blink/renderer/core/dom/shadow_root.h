@@ -48,6 +48,8 @@ class WhitespaceAttacher;
 
 enum class ShadowRootType { V0, kOpen, kClosed, kUserAgent };
 
+enum class ShadowRootSlotting { kManual, kAuto };
+
 class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(ShadowRoot);
@@ -106,8 +108,8 @@ class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
   void AttachLayoutTree(AttachContext&) override;
   void DetachLayoutTree(const AttachContext& = AttachContext()) override;
 
-  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
-  void RemovedFrom(ContainerNode*) override;
+  InsertionNotificationRequest InsertedInto(ContainerNode&) override;
+  void RemovedFrom(ContainerNode&) override;
 
   void SetNeedsAssignmentRecalc();
   bool NeedsSlotAssignmentRecalc() const;
@@ -156,6 +158,12 @@ class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
   void SetDelegatesFocus(bool flag) { delegates_focus_ = flag; }
   bool delegatesFocus() const { return delegates_focus_; }
 
+  void SetSlotting(ShadowRootSlotting slotting);
+  bool IsManualSlotting() {
+    return slotting_ ==
+           static_cast<unsigned short>(ShadowRootSlotting::kManual);
+  }
+
   bool ContainsShadowRoots() const { return child_shadow_root_count_; }
 
   StyleSheetList& StyleSheets();
@@ -187,8 +195,9 @@ class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
   unsigned short type_ : 2;
   unsigned short registered_with_parent_shadow_root_ : 1;
   unsigned short delegates_focus_ : 1;
+  unsigned short slotting_ : 1;
   unsigned short needs_distribution_recalc_ : 1;
-  unsigned short unused_ : 11;
+  unsigned short unused_ : 10;
 
   DISALLOW_COPY_AND_ASSIGN(ShadowRoot);
 };

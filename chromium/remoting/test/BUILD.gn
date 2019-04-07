@@ -70,6 +70,7 @@ static_library("test_support") {
 
   public_deps = [
     "//base",
+    "//mojo/core/embedder",
     "//net",
     "//remoting/base",
     "//remoting/client",
@@ -78,6 +79,7 @@ static_library("test_support") {
     "//remoting/codec:encoder",
     "//remoting/protocol",
     "//remoting/signaling",
+    "//services/network:test_support",
     "//third_party/webrtc/modules/desktop_capture",
     "//ui/gfx",
   ]
@@ -243,6 +245,7 @@ source_set("unit_tests") {
     ":test_support",
     "//base",
     "//net:test_support",
+    "//services/network:test_support",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/libyuv",

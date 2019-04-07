@@ -8,7 +8,11 @@
 #include "base/macros.h"
 #include "chromecast/browser/cast_content_window.h"
 #include "chromecast/browser/cast_gesture_dispatcher.h"
-#include "chromecast/graphics/cast_gesture_handler.h"
+#include "ui/aura/window_observer.h"
+
+namespace aura {
+class Window;
+}  // namespace aura
 
 namespace content {
 class WebContents;
@@ -20,49 +24,46 @@ namespace shell {
 class TouchBlocker;
 
 class CastContentWindowAura : public CastContentWindow,
-                              public CastGestureHandler {
+                              public aura::WindowObserver {
  public:
   ~CastContentWindowAura() override;
 
-  // CastContentWindow implementation.
+  // CastContentWindow implementation:
   void CreateWindowForWebContents(
       content::WebContents* web_contents,
       CastWindowManager* window_manager,
-      bool is_visible,
       CastWindowManager::WindowId z_order,
       VisibilityPriority visibility_priority) override;
+  void GrantScreenAccess() override;
+  void RevokeScreenAccess() override;
   void RequestVisibility(VisibilityPriority visibility_priority) override;
   void NotifyVisibilityChange(VisibilityType visibility_type) override;
   void RequestMoveOut() override;
   void EnableTouchInput(bool enabled) override;
 
-  // CastGestureHandler implementation:
-  bool CanHandleSwipe(CastSideSwipeOrigin swipe_origin) override;
-  void HandleSideSwipeBegin(CastSideSwipeOrigin swipe_origin,
-                            const gfx::Point& touch_location) override;
-  void HandleSideSwipeContinue(CastSideSwipeOrigin swipe_origin,
-                               const gfx::Point& touch_location) override;
-  void HandleSideSwipeEnd(CastSideSwipeOrigin swipe_origin,
-                          const gfx::Point& touch_location) override;
-  void HandleTapDownGesture(const gfx::Point& touch_location) override;
-  void HandleTapGesture(const gfx::Point& touch_location) override;
+  // aura::WindowObserver implementation:
+  void OnWindowVisibilityChanged(aura::Window* window, bool visible) override;
+  void OnWindowDestroyed(aura::Window* window) override;
 
  private:
   friend class CastContentWindow;
 
   // This class should only be instantiated by CastContentWindow::Create.
-  CastContentWindowAura(Delegate* delegate, bool is_touch_enabled);
+  CastContentWindowAura(const CastContentWindow::CreateParams& params);
 
   CastContentWindow::Delegate* const delegate_;
 
   // Utility class for detecting and dispatching gestures to delegates.
   std::unique_ptr<CastGestureDispatcher> gesture_dispatcher_;
+  CastGestureDispatcher::Priority const gesture_priority_;
 
   const bool is_touch_enabled_;
   std::unique_ptr<TouchBlocker> touch_blocker_;
 
   // TODO(seantopping): Inject in constructor.
   CastWindowManager* window_manager_ = nullptr;
+  aura::Window* window_;
+  bool has_screen_access_;
 
   DISALLOW_COPY_AND_ASSIGN(CastContentWindowAura);
 };

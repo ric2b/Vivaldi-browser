@@ -271,6 +271,7 @@ base::TimeDelta RendererImpl::GetMediaTime() {
       return restarting_audio_time_;
     }
   }
+
   return time_source_->CurrentMediaTime();
 }
 
@@ -619,12 +620,12 @@ void RendererImpl::RestartAudioRenderer(
     return;
   }
 
-  audio_renderer_->StartPlaying();
   {
     base::AutoLock lock(restarting_audio_lock_);
     audio_playing_ = true;
     pending_audio_track_change_ = false;
   }
+  audio_renderer_->StartPlaying();
   std::move(restart_completed_cb).Run();
 }
 
@@ -646,9 +647,9 @@ void RendererImpl::RestartVideoRenderer(
     return;
   }
 
-  video_renderer_->StartPlayingFrom(time);
   video_playing_ = true;
   pending_video_track_change_ = false;
+  video_renderer_->StartPlayingFrom(time);
   std::move(restart_completed_cb).Run();
 }
 
@@ -815,11 +816,15 @@ void RendererImpl::OnRendererEnded(DemuxerStream::Type type) {
     return;
 
   if (type == DemuxerStream::AUDIO) {
-    DCHECK(!audio_ended_);
+    // If all streams are ended, do not propagate a redundant ended event.
+    if (audio_ended_ && PlaybackHasEnded())
+      return;
     audio_ended_ = true;
   } else {
-    DCHECK(!video_ended_);
     DCHECK(video_renderer_);
+    // If all streams are ended, do not propagate a redundant ended event.
+    if (audio_ended_ && PlaybackHasEnded())
+      return;
     video_ended_ = true;
     video_renderer_->OnTimeStopped();
   }
@@ -904,15 +909,13 @@ void RendererImpl::OnVideoOpacityChange(bool opaque) {
 }
 
 void RendererImpl::CleanUpTrackChange(base::RepeatingClosure on_finished,
-                                      bool* pending_change,
                                       bool* ended,
                                       bool* playing) {
-  {
-    // This lock is required for setting pending_audio_track_change_, and has
-    // no effect when setting pending_video_track_change_.
-    base::AutoLock lock(restarting_audio_lock_);
-    *pending_change = *ended = *playing = false;
-  }
+  *playing = false;
+  // If either stream is alive (i.e. hasn't reached ended state), ended can be
+  // set to false. If both streams are dead, keep ended=true.
+  if ((audio_renderer_ && !audio_ended_) || (video_renderer_ && !video_ended_))
+    *ended = false;
   std::move(on_finished).Run();
 }
 
@@ -945,8 +948,7 @@ void RendererImpl::OnSelectedVideoTracksChanged(
   pending_video_track_change_ = true;
   video_renderer_->Flush(base::BindRepeating(
       &RendererImpl::CleanUpTrackChange, weak_this_,
-      base::Passed(&fix_stream_cb), &pending_video_track_change_, &video_ended_,
-      &video_playing_));
+      base::Passed(&fix_stream_cb), &video_ended_, &video_playing_));
 }
 
 void RendererImpl::OnEnabledAudioTracksChanged(
@@ -987,8 +989,7 @@ void RendererImpl::OnEnabledAudioTracksChanged(
 
   audio_renderer_->Flush(base::BindRepeating(
       &RendererImpl::CleanUpTrackChange, weak_this_,
-      base::Passed(&fix_stream_cb), &pending_audio_track_change_, &audio_ended_,
-      &audio_playing_));
+      base::Passed(&fix_stream_cb), &audio_ended_, &audio_playing_));
 }
 
 }  // namespace media

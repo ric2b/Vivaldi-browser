@@ -1150,7 +1150,7 @@ void GLES2Implementation::GetProgramInfoLog(GLuint program,
       GPU_CLIENT_LOG("------\n" << infolog << "\n------");
     }
   }
-  if (length != NULL) {
+  if (length != nullptr) {
     *length = max_size;
   }
   CheckGLError();
@@ -1294,7 +1294,7 @@ void GLES2Implementation::GetShaderInfoLog(GLuint shader,
       GPU_CLIENT_LOG("------\n" << infolog << "\n------");
     }
   }
-  if (length != NULL) {
+  if (length != nullptr) {
     *length = max_size;
   }
   CheckGLError();
@@ -1321,7 +1321,7 @@ void GLES2Implementation::GetShaderSource(GLuint shader,
       GPU_CLIENT_LOG("------\n" << source << "\n------");
     }
   }
-  if (length != NULL) {
+  if (length != nullptr) {
     *length = max_size;
   }
   CheckGLError();
@@ -2008,7 +2008,7 @@ void GLES2Implementation::TransformFeedbackVaryings(GLuint program,
     return;
   }
 
-  if (!PackStringsToBucket(count, varyings, NULL,
+  if (!PackStringsToBucket(count, varyings, nullptr,
                            "glTransformFeedbackVaryings")) {
     return;
   }
@@ -3026,6 +3026,62 @@ void GLES2Implementation::BindVertexArrayOES(GLuint array) {
   CheckGLError();
 }
 
+void GLES2Implementation::FramebufferParameteri(GLenum target,
+                                                GLenum pname,
+                                                GLint param) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glFramebufferParameteri("
+                     << GLES2Util::GetStringFramebufferTarget(target) << ", "
+                     << GLES2Util::GetStringFramebufferParameter(pname) << ", "
+                     << param << ")");
+  helper_->FramebufferParameteri(target, pname, param);
+  CheckGLError();
+}
+
+void GLES2Implementation::BindImageTexture(GLuint unit,
+                                           GLuint texture,
+                                           GLint level,
+                                           GLboolean layered,
+                                           GLint layer,
+                                           GLenum access,
+                                           GLenum format) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glBindImageTexture(" << unit
+                     << ", " << texture << ", " << level << ", "
+                     << GLES2Util::GetStringBool(layered) << ", " << layer
+                     << ", " << GLES2Util::GetStringEnum(access) << ", "
+                     << GLES2Util::GetStringEnum(format) << ")");
+  helper_->BindImageTexture(unit, texture, level, layered, layer, access,
+                            format);
+  CheckGLError();
+}
+
+void GLES2Implementation::DispatchCompute(GLuint num_groups_x,
+                                          GLuint num_groups_y,
+                                          GLuint num_groups_z) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glDispatchCompute(" << num_groups_x
+                     << ", " << num_groups_y << ", " << num_groups_z << ")");
+  helper_->DispatchCompute(num_groups_x, num_groups_y, num_groups_z);
+  CheckGLError();
+}
+
+void GLES2Implementation::MemoryBarrierEXT(GLbitfield barriers) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glMemoryBarrierEXT(" << barriers
+                     << ")");
+  helper_->MemoryBarrierEXT(barriers);
+  CheckGLError();
+}
+
+void GLES2Implementation::MemoryBarrierByRegion(GLbitfield barriers) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glMemoryBarrierByRegion("
+                     << barriers << ")");
+  helper_->MemoryBarrierByRegion(barriers);
+  CheckGLError();
+}
+
 void GLES2Implementation::FlushMappedBufferRange(GLenum target,
                                                  GLintptr offset,
                                                  GLsizeiptr size) {
@@ -3075,7 +3131,7 @@ void GLES2Implementation::GetTranslatedShaderSourceANGLE(GLuint shader,
       GPU_CLIENT_LOG("------\n" << source << "\n------");
     }
   }
-  if (length != NULL) {
+  if (length != nullptr) {
     *length = max_size;
   }
   CheckGLError();
@@ -3614,6 +3670,29 @@ void GLES2Implementation::DestroyGpuFenceCHROMIUM(GLuint gpu_fence_id) {
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glDestroyGpuFenceCHROMIUM("
                      << gpu_fence_id << ")");
   helper_->DestroyGpuFenceCHROMIUM(gpu_fence_id);
+  CheckGLError();
+}
+
+void GLES2Implementation::FramebufferTextureMultiviewLayeredANGLE(
+    GLenum target,
+    GLenum attachment,
+    GLuint texture,
+    GLint level,
+    GLint baseViewIndex,
+    GLsizei numViews) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG(
+      "[" << GetLogPrefix() << "] glFramebufferTextureMultiviewLayeredANGLE("
+          << GLES2Util::GetStringEnum(target) << ", "
+          << GLES2Util::GetStringEnum(attachment) << ", " << texture << ", "
+          << level << ", " << baseViewIndex << ", " << numViews << ")");
+  if (numViews < 0) {
+    SetGLError(GL_INVALID_VALUE, "glFramebufferTextureMultiviewLayeredANGLE",
+               "numViews < 0");
+    return;
+  }
+  helper_->FramebufferTextureMultiviewLayeredANGLE(
+      target, attachment, texture, level, baseViewIndex, numViews);
   CheckGLError();
 }
 

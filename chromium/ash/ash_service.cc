@@ -9,7 +9,6 @@
 #include "ash/shell.h"
 #include "ash/shell_delegate_mash.h"
 #include "ash/shell_init_params.h"
-#include "ash/shell_port_classic.h"
 #include "ash/ws/ash_gpu_interface_provider.h"
 #include "ash/ws/window_service_owner.h"
 #include "base/bind.h"
@@ -32,12 +31,12 @@
 #include "services/service_manager/embedder/embedded_service_info.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service_context.h"
-#include "services/ui/gpu_host/gpu_host.h"
-#include "services/ui/public/cpp/gpu/gpu.h"
-#include "services/ui/public/cpp/input_devices/input_device_controller.h"
-#include "services/ui/public/interfaces/constants.mojom.h"
-#include "services/ui/ws2/host_context_factory.h"
-#include "services/ui/ws2/window_service.h"
+#include "services/ws/gpu_host/gpu_host.h"
+#include "services/ws/host_context_factory.h"
+#include "services/ws/public/cpp/gpu/gpu.h"
+#include "services/ws/public/cpp/input_devices/input_device_controller.h"
+#include "services/ws/public/mojom/constants.mojom.h"
+#include "services/ws/window_service.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ui_base_features.h"
@@ -99,6 +98,10 @@ AshService::~AshService() {
   chromeos::PowerPolicyController::Shutdown();
   if (dbus_thread_manager_initialized_)
     chromeos::DBusThreadManager::Shutdown();
+
+  // |gpu_host_| must be completely destroyed before Env as GpuHost depends on
+  // Ozone, which Env owns.
+  gpu_host_.reset();
 }
 
 // static
@@ -115,7 +118,7 @@ void AshService::InitForMash() {
   discardable_shared_memory_manager_ =
       std::make_unique<discardable_memory::DiscardableSharedMemoryManager>();
 
-  gpu_host_ = std::make_unique<ui::gpu_host::DefaultGpuHost>(
+  gpu_host_ = std::make_unique<ws::gpu_host::DefaultGpuHost>(
       this, context()->connector(), discardable_shared_memory_manager_.get());
 
   host_frame_sink_manager_ = std::make_unique<viz::HostFrameSinkManager>();
@@ -125,10 +128,10 @@ void AshService::InitForMash() {
   base::Thread::Options thread_options(base::MessageLoop::TYPE_IO, 0);
   thread_options.priority = base::ThreadPriority::NORMAL;
   CHECK(io_thread_->StartWithOptions(thread_options));
-  gpu_ = ui::Gpu::Create(context()->connector(), ui::mojom::kServiceName,
+  gpu_ = ws::Gpu::Create(context()->connector(), ws::mojom::kServiceName,
                          io_thread_->task_runner());
 
-  context_factory_ = std::make_unique<ui::ws2::HostContextFactory>(
+  context_factory_ = std::make_unique<ws::HostContextFactory>(
       gpu_.get(), host_frame_sink_manager_.get());
 
   env_ = aura::Env::CreateInstanceToHostViz(context()->connector());
@@ -168,9 +171,7 @@ void AshService::InitForMash() {
   statistics_provider_->SetMachineStatistic("keyboard_layout", "");
 
   ShellInitParams shell_init_params;
-  shell_init_params.shell_port = std::make_unique<ash::ShellPortClassic>();
-  shell_init_params.delegate =
-      std::make_unique<ShellDelegateMash>(context()->connector());
+  shell_init_params.delegate = std::make_unique<ShellDelegateMash>();
   shell_init_params.context_factory = context_factory_.get();
   shell_init_params.context_factory_private =
       context_factory_->GetContextFactoryPrivate();
@@ -203,12 +204,12 @@ void AshService::CreateService(
     service_manager::mojom::ServiceRequest service,
     const std::string& name,
     service_manager::mojom::PIDReceiverPtr pid_receiver) {
-  DCHECK_EQ(name, ui::mojom::kServiceName);
+  DCHECK_EQ(name, ws::mojom::kServiceName);
   Shell::Get()->window_service_owner()->BindWindowService(std::move(service));
   if (base::FeatureList::IsEnabled(features::kMash)) {
-    ui::ws2::WindowService* window_service =
+    ws::WindowService* window_service =
         Shell::Get()->window_service_owner()->window_service();
-    input_device_controller_ = std::make_unique<ui::InputDeviceController>();
+    input_device_controller_ = std::make_unique<ws::InputDeviceController>();
     input_device_controller_->AddInterface(window_service->registry());
   }
   pid_receiver->SetPID(base::GetCurrentProcId());

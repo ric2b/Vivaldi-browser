@@ -39,6 +39,7 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/language_preferences.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/chromeos/login/error_screens_histogram_helper.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
@@ -315,7 +316,7 @@ SigninScreenHandler::SigninScreenHandler(
   WallpaperControllerClient::Get()->AddObserver(std::move(ptr_info));
   // TODO(tbarzic): This is needed for login UI - remove it when login switches
   // to views implementation (or otherwise, make it work under mash).
-  if (features::IsAshInBrowserProcess())
+  if (!features::IsMultiProcessMash())
     detachable_base_observer_.Add(ash::Shell::Get()->detachable_base_handler());
 }
 
@@ -543,6 +544,7 @@ void SigninScreenHandler::RegisterMessages() {
               &SigninScreenHandler::HandleGetPublicSessionKeyboardLayouts);
   AddCallback("getTabletModeState",
               &SigninScreenHandler::HandleGetTabletModeState);
+  AddCallback("getDemoModeState", &SigninScreenHandler::HandleGetDemoModeState);
   AddCallback("logRemoveUserWarningShown",
               &SigninScreenHandler::HandleLogRemoveUserWarningShown);
   AddCallback("firstIncorrectPasswordAttempt",
@@ -839,7 +841,7 @@ void SigninScreenHandler::SetupAndShowOfflineMessage(
     // error screen (offline, proxy).
     if (IsGaiaVisible() ||
         (error_screen_->GetErrorState() != NetworkError::ERROR_STATE_PORTAL)) {
-      error_screen_->FixCaptivePortal();
+      LoginDisplayHost::default_host()->HandleDisplayCaptivePortal();
     }
     const std::string network_name = GetNetworkName(network_path);
     error_screen_->SetErrorState(NetworkError::ERROR_STATE_PORTAL,
@@ -1602,6 +1604,11 @@ void SigninScreenHandler::HandleGetTabletModeState() {
          TabletModeClient::Get()->tablet_mode_enabled());
 }
 
+void SigninScreenHandler::HandleGetDemoModeState() {
+  CallJS("login.AccountPickerScreen.setDemoModeState",
+         DemoSession::IsDeviceInDemoMode());
+}
+
 void SigninScreenHandler::HandleLogRemoveUserWarningShown() {
   ProfileMetrics::LogProfileDeleteUser(
       ProfileMetrics::DELETE_PROFILE_USER_MANAGER_SHOW_WARNING);
@@ -1765,7 +1772,7 @@ void SigninScreenHandler::OnDetachableBaseRequiresUpdateChanged(
     bool requires_update) {}
 
 void SigninScreenHandler::UpdateDetachableBaseChangedError() {
-  if (!features::IsAshInBrowserProcess())
+  if (features::IsMultiProcessMash())
     return;
 
   auto pairing_status =

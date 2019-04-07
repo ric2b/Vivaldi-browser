@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-#include "ash/frame/custom_frame_view_ash.h"
+#include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -28,7 +28,7 @@
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "components/exo/surface.h"
 #include "components/exo/wm_helper.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
@@ -96,7 +96,7 @@ class ShellSurfaceWidget : public views::Widget {
   DISALLOW_COPY_AND_ASSIGN(ShellSurfaceWidget);
 };
 
-class CustomFrameView : public ash::CustomFrameViewAsh,
+class CustomFrameView : public ash::NonClientFrameViewAsh,
                         public aura::WindowObserver {
  public:
   using ShapeRects = std::vector<gfx::Rect>;
@@ -105,21 +105,28 @@ class CustomFrameView : public ash::CustomFrameViewAsh,
                   ShellSurfaceBase* shell_surface,
                   bool enabled,
                   bool client_controlled_move_resize)
-      : CustomFrameViewAsh(widget),
+      : NonClientFrameViewAsh(widget),
         shell_surface_(shell_surface),
         client_controlled_move_resize_(client_controlled_move_resize) {
     SetEnabled(enabled);
     SetVisible(enabled);
     if (!enabled)
-      CustomFrameViewAsh::SetShouldPaintHeader(false);
+      NonClientFrameViewAsh::SetShouldPaintHeader(false);
+
+    frame()->GetNativeWindow()->AddObserver(this);
   }
 
-  ~CustomFrameView() override {}
+  ~CustomFrameView() override {
+    if (frame() && frame()->GetNativeWindow() &&
+        frame()->GetNativeWindow()->HasObserver(this)) {
+      frame()->GetNativeWindow()->RemoveObserver(this);
+    }
+  }
 
-  // Overridden from ash::CustomFrameViewAsh:
+  // Overridden from ash::NonClientFrameViewAsh:
   void SetShouldPaintHeader(bool paint) override {
     if (visible()) {
-      CustomFrameViewAsh::SetShouldPaintHeader(paint);
+      NonClientFrameViewAsh::SetShouldPaintHeader(paint);
       return;
     }
     // TODO(oshima): The caption area will be unknown
@@ -156,52 +163,58 @@ class CustomFrameView : public ash::CustomFrameViewAsh,
     // the window mask layer bounds can be set correctly in function
     // SetShouldPaintHeader(). Note: this can be removed if the layer mask in
     // CustomFrameView becomes unnecessary.
-    CustomFrameViewAsh::UpdateHeaderView();
+    // TODO(oshima): Investigate if we can eliminate this.
+    NonClientFrameViewAsh::UpdateHeaderView();
+  }
+
+  void OnWindowDestroying(aura::Window* window) override {
+    DCHECK_EQ(frame()->GetNativeWindow(), window);
+    window->RemoveObserver(this);
   }
 
   // Overridden from views::NonClientFrameView:
   gfx::Rect GetBoundsForClientView() const override {
     if (visible())
-      return ash::CustomFrameViewAsh::GetBoundsForClientView();
+      return ash::NonClientFrameViewAsh::GetBoundsForClientView();
     return bounds();
   }
   gfx::Rect GetWindowBoundsForClientBounds(
       const gfx::Rect& client_bounds) const override {
     if (visible()) {
-      return ash::CustomFrameViewAsh::GetWindowBoundsForClientBounds(
+      return ash::NonClientFrameViewAsh::GetWindowBoundsForClientBounds(
           client_bounds);
     }
     return client_bounds;
   }
   int NonClientHitTest(const gfx::Point& point) override {
     if (visible() || !client_controlled_move_resize_)
-      return ash::CustomFrameViewAsh::NonClientHitTest(point);
+      return ash::NonClientFrameViewAsh::NonClientHitTest(point);
     return GetWidget()->client_view()->NonClientHitTest(point);
   }
   void GetWindowMask(const gfx::Size& size, gfx::Path* window_mask) override {
     if (visible())
-      return ash::CustomFrameViewAsh::GetWindowMask(size, window_mask);
+      return ash::NonClientFrameViewAsh::GetWindowMask(size, window_mask);
   }
   void ResetWindowControls() override {
     if (visible())
-      return ash::CustomFrameViewAsh::ResetWindowControls();
+      return ash::NonClientFrameViewAsh::ResetWindowControls();
   }
   void UpdateWindowIcon() override {
     if (visible())
-      return ash::CustomFrameViewAsh::ResetWindowControls();
+      return ash::NonClientFrameViewAsh::ResetWindowControls();
   }
   void UpdateWindowTitle() override {
     if (visible())
-      return ash::CustomFrameViewAsh::UpdateWindowTitle();
+      return ash::NonClientFrameViewAsh::UpdateWindowTitle();
   }
   void SizeConstraintsChanged() override {
     if (visible())
-      return ash::CustomFrameViewAsh::SizeConstraintsChanged();
+      return ash::NonClientFrameViewAsh::SizeConstraintsChanged();
   }
   gfx::Size GetMinimumSize() const override {
     gfx::Size minimum_size = shell_surface_->GetMinimumSize();
     if (visible()) {
-      return ash::CustomFrameViewAsh::GetWindowBoundsForClientBounds(
+      return ash::NonClientFrameViewAsh::GetWindowBoundsForClientBounds(
                  gfx::Rect(minimum_size))
           .size();
     }
@@ -307,7 +320,7 @@ class CustomWindowTargeter : public aura::WindowTargeter {
 };
 
 // A place holder to disable default implementation created by
-// ash::CustomFrameViewAsh, which triggers immersive fullscreen etc, which
+// ash::NonClientFrameViewAsh, which triggers immersive fullscreen etc, which
 // we don't need.
 class CustomWindowStateDelegate : public ash::wm::WindowStateDelegate {
  public:
@@ -318,68 +331,12 @@ class CustomWindowStateDelegate : public ash::wm::WindowStateDelegate {
   bool ToggleFullscreen(ash::wm::WindowState* window_state) override {
     return false;
   }
-  bool RestoreAlwaysOnTop(ash::wm::WindowState* window_state) override {
-    return false;
-  }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CustomWindowStateDelegate);
 };
 
 }  // namespace
-
-// Surface state associated with each configure request.
-struct ShellSurfaceBase::Config {
-  Config(uint32_t serial,
-         const gfx::Vector2d& origin_offset,
-         int resize_component,
-         std::unique_ptr<ui::CompositorLock> compositor_lock);
-  ~Config();
-
-  uint32_t serial;
-  gfx::Vector2d origin_offset;
-  int resize_component;
-  std::unique_ptr<ui::CompositorLock> compositor_lock;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-// ShellSurfaceBase, Config:
-
-ShellSurfaceBase::Config::Config(
-    uint32_t serial,
-    const gfx::Vector2d& origin_offset,
-    int resize_component,
-    std::unique_ptr<ui::CompositorLock> compositor_lock)
-    : serial(serial),
-      origin_offset(origin_offset),
-      resize_component(resize_component),
-      compositor_lock(std::move(compositor_lock)) {}
-
-ShellSurfaceBase::Config::~Config() {}
-
-////////////////////////////////////////////////////////////////////////////////
-// ShellSurfaceBase, ScopedConfigure:
-
-ShellSurfaceBase::ScopedConfigure::ScopedConfigure(
-    ShellSurfaceBase* shell_surface,
-    bool force_configure)
-    : shell_surface_(shell_surface), force_configure_(force_configure) {
-  // ScopedConfigure instances cannot be nested.
-  DCHECK(!shell_surface_->scoped_configure_);
-  shell_surface_->scoped_configure_ = this;
-}
-
-ShellSurfaceBase::ScopedConfigure::~ScopedConfigure() {
-  DCHECK_EQ(shell_surface_->scoped_configure_, this);
-  shell_surface_->scoped_configure_ = nullptr;
-  if (needs_configure_ || force_configure_)
-    shell_surface_->Configure();
-  // ScopedConfigure instance might have suppressed a widget bounds update.
-  if (shell_surface_->widget_) {
-    shell_surface_->UpdateWidgetBounds();
-    shell_surface_->UpdateShadow();
-  }
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // ShellSurfaceBase, public:
@@ -402,7 +359,6 @@ ShellSurfaceBase::ShellSurfaceBase(Surface* surface,
 }
 
 ShellSurfaceBase::~ShellSurfaceBase() {
-  DCHECK(!scoped_configure_);
   // Remove activation observer before hiding widget to prevent it from
   // casuing the configure callback to be called.
   WMHelper::GetInstance()->RemoveActivationObserver(this);
@@ -421,35 +377,6 @@ ShellSurfaceBase::~ShellSurfaceBase() {
     root_surface()->RemoveSurfaceObserver(this);
   if (has_grab_)
     wm::CaptureController::Get()->RemoveObserver(this);
-}
-
-void ShellSurfaceBase::AcknowledgeConfigure(uint32_t serial) {
-  TRACE_EVENT1("exo", "ShellSurfaceBase::AcknowledgeConfigure", "serial",
-               serial);
-
-  // Apply all configs that are older or equal to |serial|. The result is that
-  // the origin of the main surface will move and the resize direction will
-  // change to reflect the acknowledgement of configure request with |serial|
-  // at the next call to Commit().
-  while (!pending_configs_.empty()) {
-    std::unique_ptr<Config> config = std::move(pending_configs_.front());
-    pending_configs_.pop_front();
-
-    // Add the config offset to the accumulated offset that will be applied when
-    // Commit() is called.
-    pending_origin_offset_ += config->origin_offset;
-
-    // Set the resize direction that will be applied when Commit() is called.
-    pending_resize_component_ = config->resize_component;
-
-    if (config->serial == serial)
-      break;
-  }
-
-  if (widget_) {
-    UpdateWidgetBounds();
-    UpdateShadow();
-  }
 }
 
 void ShellSurfaceBase::Activate() {
@@ -576,10 +503,6 @@ void ShellSurfaceBase::SetStartupId(const char* startup_id) {
 }
 
 void ShellSurfaceBase::SetChildAxTreeId(int32_t child_ax_tree_id) {
-  // We don't expect that child ax tree id is changed once it's set.
-  DCHECK_EQ(child_ax_tree_id_, kInvalidChildAxTreeId);
-  DCHECK_NE(child_ax_tree_id, kInvalidChildAxTreeId);
-
   child_ax_tree_id_ = child_ax_tree_id;
 
   this->NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged, false);
@@ -600,6 +523,12 @@ void ShellSurfaceBase::SetGeometry(const gfx::Rect& geometry) {
   }
 
   pending_geometry_ = geometry;
+}
+
+void ShellSurfaceBase::SetDisplay(int64_t display_id) {
+  TRACE_EVENT1("exo", "ShellSurfaceBase::SetDisplay", "display_id", display_id);
+
+  pending_display_id_ = display_id;
 }
 
 void ShellSurfaceBase::SetOrigin(const gfx::Point& origin) {
@@ -728,81 +657,13 @@ void ShellSurfaceBase::OnSurfaceCommit() {
 
   SurfaceTreeHost::OnSurfaceCommit();
 
-  if (enabled() && !widget_) {
-    // Defer widget creation until surface contains some contents.
-    if (host_window()->bounds().IsEmpty()) {
-      Configure();
-      return;
-    }
+  if (!OnPreWidgetCommit())
+    return;
 
-    CreateShellSurfaceWidget(ui::SHOW_STATE_NORMAL);
-  }
-
-  // Apply the accumulated pending origin offset to reflect acknowledged
-  // configure requests.
-  origin_offset_ += pending_origin_offset_;
-  pending_origin_offset_ = gfx::Vector2d();
-
-  // Update resize direction to reflect acknowledged configure requests.
-  resize_component_ = pending_resize_component_;
-
-  // Apply new window geometry.
-  geometry_ = pending_geometry_;
-
-  // Apply new minimum/maximium size.
-  bool size_constraint_changed = minimum_size_ != pending_minimum_size_ ||
-                                 maximum_size_ != pending_maximum_size_;
-  minimum_size_ = pending_minimum_size_;
-  maximum_size_ = pending_maximum_size_;
-
-  if (widget_) {
-    UpdateWidgetBounds();
-    UpdateShadow();
-
-    // System modal container is used by clients to implement overlay
-    // windows using a single ShellSurface instance.  If hit-test
-    // region is empty, then it is non interactive window and won't be
-    // activated.
-    if (container_ == ash::kShellWindowId_SystemModalContainer) {
-      // Prevent window from being activated when hit test region is empty.
-      bool activatable = activatable_ && HasHitTestRegion();
-      if (activatable != CanActivate()) {
-        set_can_activate(activatable);
-        // Activate or deactivate window if activation state changed.
-        if (activatable) {
-          // Automatically activate only if the window is modal.
-          // Non modal window should be activated by a user action.
-          // TODO(oshima): Non modal system window does not have an associated
-          // task ID, and as a result, it cannot be activated from client side.
-          // Fix this (b/65460424) and remove this if condition.
-          if (system_modal_)
-            wm::ActivateWindow(widget_->GetNativeWindow());
-        } else if (widget_->IsActive()) {
-          wm::DeactivateWindow(widget_->GetNativeWindow());
-        }
-      }
-    }
-
-    UpdateSurfaceBounds();
-
-    // Show widget if needed.
-    if (pending_show_widget_) {
-      DCHECK(!widget_->IsClosed());
-      DCHECK(!widget_->IsVisible());
-      pending_show_widget_ = false;
-      widget_->Show();
-      if (has_grab_)
-        StartCapture();
-
-      if (container_ == ash::kShellWindowId_SystemModalContainer)
-        UpdateSystemModal();
-    }
-  }
+  CommitWidget();
+  OnPostWidgetCommit();
 
   SubmitCompositorFrame();
-
-  if (size_constraint_changed)
-    widget_->OnSizeConstraintsChanged();
 }
 
 bool ShellSurfaceBase::IsInputEnabled(Surface*) const {
@@ -862,42 +723,6 @@ void ShellSurfaceBase::OnSetFrameColors(SkColor active_color,
                                             active_frame_color_);
     widget_->GetNativeWindow()->SetProperty(ash::kFrameInactiveColorKey,
                                             inactive_frame_color_);
-  }
-}
-
-void ShellSurfaceBase::OnSetParent(Surface* parent,
-                                   const gfx::Point& position) {
-  views::Widget* parent_widget =
-      parent ? views::Widget::GetTopLevelWidgetForNativeView(parent->window())
-             : nullptr;
-  if (parent_widget) {
-    // Set parent window if using default container and the container itself
-    // is not the parent.
-    if (container_ == ash::kShellWindowId_DefaultContainer)
-      SetParentWindow(parent_widget->GetNativeWindow());
-
-    origin_ = position;
-    views::View::ConvertPointToScreen(
-        parent_widget->widget_delegate()->GetContentsView(), &origin_);
-
-    if (!widget_)
-      return;
-
-    ash::wm::WindowState* window_state =
-        ash::wm::GetWindowState(widget_->GetNativeWindow());
-    if (window_state->is_dragged())
-      return;
-
-    gfx::Rect widget_bounds = widget_->GetWindowBoundsInScreen();
-    gfx::Rect new_widget_bounds(origin_, widget_bounds.size());
-    if (new_widget_bounds != widget_bounds) {
-      base::AutoReset<bool> auto_ignore_window_bounds_changes(
-          &ignore_window_bounds_changes_, true);
-      widget_->SetBounds(new_widget_bounds);
-      UpdateSurfaceBounds();
-    }
-  } else {
-    SetParentWindow(nullptr);
   }
 }
 
@@ -1078,35 +903,6 @@ void ShellSurfaceBase::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 ////////////////////////////////////////////////////////////////////////////////
 // aura::WindowObserver overrides:
 
-void ShellSurfaceBase::OnWindowBoundsChanged(aura::Window* window,
-                                             const gfx::Rect& old_bounds,
-                                             const gfx::Rect& new_bounds,
-                                             ui::PropertyChangeReason reason) {
-  if (!widget_ || !root_surface() || ignore_window_bounds_changes_)
-    return;
-
-  if (window == widget_->GetNativeWindow()) {
-    if (new_bounds.size() == old_bounds.size())
-      return;
-
-    // If size changed then give the client a chance to produce new contents
-    // before origin on screen is changed. Retain the old origin by reverting
-    // the origin delta until the next configure is acknowledged.
-    gfx::Vector2d delta = new_bounds.origin() - old_bounds.origin();
-    origin_offset_ -= delta;
-    pending_origin_offset_accumulator_ += delta;
-
-    UpdateSurfaceBounds();
-
-    // The shadow size may be updated to match the widget. Change it back
-    // to the shadow content size. Note that this relies on wm::ShadowController
-    // being notified of the change before |this|.
-    UpdateShadow();
-
-    Configure();
-  }
-}
-
 void ShellSurfaceBase::OnWindowDestroying(aura::Window* window) {
   if (window == parent_) {
     parent_ = nullptr;
@@ -1129,7 +925,6 @@ void ShellSurfaceBase::OnWindowActivated(ActivationReason reason,
   if (gained_active == widget_->GetNativeWindow() ||
       lost_active == widget_->GetNativeWindow()) {
     DCHECK(CanActivate());
-    Configure();
     UpdateShadow();
   }
 }
@@ -1192,10 +987,9 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
   //     changed for mus/mash.
   window->SetEventTargetingPolicy(
       ash::Shell::GetAshConfig() == ash::Config::CLASSIC
-          ? ui::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS
-          : ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
-  window->SetEventTargeter(base::WrapUnique(
-      new CustomWindowTargeter(widget_, client_controlled_move_resize_)));
+          ? ws::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS
+          : ws::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
+  InstallCustomWindowTargeter();
   SetApplicationId(window, application_id_);
   SetStartupId(window, startup_id_);
   SetMainSurface(window, root_surface());
@@ -1224,56 +1018,6 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
 
   // Show widget next time Commit() is called.
   pending_show_widget_ = true;
-}
-
-void ShellSurfaceBase::Configure() {
-  // Delay configure callback if |scoped_configure_| is set.
-  if (scoped_configure_) {
-    scoped_configure_->set_needs_configure();
-    return;
-  }
-
-  gfx::Vector2d origin_offset = pending_origin_offset_accumulator_;
-  pending_origin_offset_accumulator_ = gfx::Vector2d();
-
-  int resize_component = HTCAPTION;
-  if (widget_) {
-    ash::wm::WindowState* window_state =
-        ash::wm::GetWindowState(widget_->GetNativeWindow());
-
-    // If surface is being resized, save the resize direction.
-    if (window_state->is_dragged())
-      resize_component = window_state->drag_details()->window_component;
-  }
-
-  uint32_t serial = 0;
-  if (!configure_callback_.is_null()) {
-    if (widget_) {
-      serial = configure_callback_.Run(
-          GetClientViewBounds().size(),
-          ash::wm::GetWindowState(widget_->GetNativeWindow())->GetStateType(),
-          IsResizing(), widget_->IsActive(), origin_offset);
-    } else {
-      serial = configure_callback_.Run(gfx::Size(),
-                                       ash::mojom::WindowStateType::NORMAL,
-                                       false, false, origin_offset);
-    }
-  }
-
-  if (!serial) {
-    pending_origin_offset_ += origin_offset;
-    pending_resize_component_ = resize_component;
-    return;
-  }
-
-  // Apply origin offset and resize component at the first Commit() after this
-  // configure request has been acknowledged.
-  pending_configs_.push_back(
-      std::make_unique<Config>(serial, origin_offset, resize_component,
-                               std::move(configure_compositor_lock_)));
-  LOG_IF(WARNING, pending_configs_.size() > 100)
-      << "Number of pending configure acks for shell surface has reached: "
-      << pending_configs_.size();
 }
 
 bool ShellSurfaceBase::IsResizing() const {
@@ -1308,24 +1052,9 @@ void ShellSurfaceBase::UpdateWidgetBounds() {
       return;
   }
 
-  // Return early if there is pending configure requests.
-  if (!pending_configs_.empty() || scoped_configure_)
-    return;
-
-  gfx::Rect new_widget_bounds = GetWidgetBounds();
-
-  // Set |ignore_window_bounds_changes_| as this change to window bounds
-  // should not result in a configure request.
-  DCHECK(!ignore_window_bounds_changes_);
-  ignore_window_bounds_changes_ = true;
-  if (new_widget_bounds != widget_->GetWindowBoundsInScreen())
-    SetWidgetBounds(new_widget_bounds);
-  ignore_window_bounds_changes_ = false;
-}
-
-void ShellSurfaceBase::SetWidgetBounds(const gfx::Rect& bounds) {
-  widget_->SetBounds(bounds);
-  UpdateSurfaceBounds();
+  base::Optional<gfx::Rect> bounds = GetWidgetBounds();
+  if (bounds)
+    SetWidgetBounds(*bounds);
 }
 
 void ShellSurfaceBase::UpdateSurfaceBounds() {
@@ -1374,11 +1103,19 @@ void ShellSurfaceBase::UpdateShadow() {
 
 gfx::Rect ShellSurfaceBase::GetVisibleBounds() const {
   // Use |geometry_| if set, otherwise use the visual bounds of the surface.
-  if (!geometry_.IsEmpty())
+  if (geometry_.IsEmpty()) {
+    return root_surface() ? gfx::Rect(root_surface()->content_size())
+                          : gfx::Rect();
+  }
+
+  const auto* screen = display::Screen::GetScreen();
+  display::Display display;
+
+  if (!screen->GetDisplayWithDisplayId(display_id_, &display))
     return geometry_;
 
-  return root_surface() ? gfx::Rect(root_surface()->content_size())
-                        : gfx::Rect();
+  // Convert from display to screen coordinates.
+  return geometry_ + display.bounds().OffsetFromOrigin();
 }
 
 gfx::Point ShellSurfaceBase::GetMouseLocation() const {
@@ -1404,67 +1141,17 @@ gfx::Rect ShellSurfaceBase::GetShadowBounds() const {
              : gfx::ScaleToEnclosedRect(*shadow_bounds_, 1.f / GetScale());
 }
 
+void ShellSurfaceBase::InstallCustomWindowTargeter() {
+  aura::Window* window = widget_->GetNativeWindow();
+  window->SetEventTargeter(std::make_unique<CustomWindowTargeter>(
+      widget_, client_controlled_move_resize_));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // ShellSurfaceBase, private:
 
 float ShellSurfaceBase::GetScale() const {
   return 1.f;
-}
-
-gfx::Rect ShellSurfaceBase::GetWidgetBounds() const {
-  gfx::Rect visible_bounds = GetVisibleBounds();
-  gfx::Rect new_widget_bounds =
-      widget_->non_client_view()
-          ? widget_->non_client_view()->GetWindowBoundsForClientBounds(
-                visible_bounds)
-          : visible_bounds;
-
-  if (movement_disabled_) {
-    new_widget_bounds.set_origin(origin_);
-  } else if (resize_component_ == HTCAPTION) {
-    // Preserve widget position.
-    new_widget_bounds.set_origin(widget_->GetWindowBoundsInScreen().origin());
-  } else {
-    // Compute widget origin using surface origin if the current location of
-    // surface is being anchored to one side of the widget as a result of a
-    // resize operation.
-    gfx::Rect visible_bounds = GetVisibleBounds();
-    gfx::Point origin = GetSurfaceOrigin() + visible_bounds.OffsetFromOrigin();
-    wm::ConvertPointToScreen(widget_->GetNativeWindow(), &origin);
-    new_widget_bounds.set_origin(origin);
-  }
-  return new_widget_bounds;
-}
-
-gfx::Point ShellSurfaceBase::GetSurfaceOrigin() const {
-  DCHECK(!movement_disabled_ || resize_component_ == HTCAPTION);
-
-  gfx::Rect visible_bounds = GetVisibleBounds();
-  gfx::Rect client_bounds = GetClientViewBounds();
-
-  switch (resize_component_) {
-    case HTCAPTION:
-      return gfx::Point() + origin_offset_ - visible_bounds.OffsetFromOrigin();
-    case HTBOTTOM:
-    case HTRIGHT:
-    case HTBOTTOMRIGHT:
-      return gfx::Point() - visible_bounds.OffsetFromOrigin();
-    case HTTOP:
-    case HTTOPRIGHT:
-      return gfx::Point(0, client_bounds.height() - visible_bounds.height()) -
-             visible_bounds.OffsetFromOrigin();
-    case HTLEFT:
-    case HTBOTTOMLEFT:
-      return gfx::Point(client_bounds.width() - visible_bounds.width(), 0) -
-             visible_bounds.OffsetFromOrigin();
-    case HTTOPLEFT:
-      return gfx::Point(client_bounds.width() - visible_bounds.width(),
-                        client_bounds.height() - visible_bounds.height()) -
-             visible_bounds.OffsetFromOrigin();
-    default:
-      NOTREACHED();
-      return gfx::Point();
-  }
 }
 
 void ShellSurfaceBase::SetParentWindow(aura::Window* parent) {
@@ -1490,6 +1177,66 @@ void ShellSurfaceBase::StartCapture() {
   wm::CaptureController::Get()->AddObserver(this);
   // Just capture on the window.
   widget_->SetCapture(nullptr /* view */);
+}
+
+void ShellSurfaceBase::CommitWidget() {
+  // Apply new window geometry.
+  geometry_ = pending_geometry_;
+  display_id_ = pending_display_id_;
+
+  // Apply new minimum/maximium size.
+  bool size_constraint_changed = minimum_size_ != pending_minimum_size_ ||
+                                 maximum_size_ != pending_maximum_size_;
+  minimum_size_ = pending_minimum_size_;
+  maximum_size_ = pending_maximum_size_;
+
+  if (!widget_)
+    return;
+
+  UpdateWidgetBounds();
+  UpdateShadow();
+
+  // System modal container is used by clients to implement overlay
+  // windows using a single ShellSurface instance.  If hit-test
+  // region is empty, then it is non interactive window and won't be
+  // activated.
+  if (container_ == ash::kShellWindowId_SystemModalContainer) {
+    // Prevent window from being activated when hit test region is empty.
+    bool activatable = activatable_ && HasHitTestRegion();
+    if (activatable != CanActivate()) {
+      set_can_activate(activatable);
+      // Activate or deactivate window if activation state changed.
+      if (activatable) {
+        // Automatically activate only if the window is modal.
+        // Non modal window should be activated by a user action.
+        // TODO(oshima): Non modal system window does not have an associated
+        // task ID, and as a result, it cannot be activated from client side.
+        // Fix this (b/65460424) and remove this if condition.
+        if (system_modal_)
+          wm::ActivateWindow(widget_->GetNativeWindow());
+      } else if (widget_->IsActive()) {
+        wm::DeactivateWindow(widget_->GetNativeWindow());
+      }
+    }
+  }
+
+  UpdateSurfaceBounds();
+
+  // Show widget if needed.
+  if (pending_show_widget_) {
+    DCHECK(!widget_->IsClosed());
+    DCHECK(!widget_->IsVisible());
+    pending_show_widget_ = false;
+    widget_->Show();
+    if (has_grab_)
+      StartCapture();
+
+    if (container_ == ash::kShellWindowId_SystemModalContainer)
+      UpdateSystemModal();
+  }
+
+  if (size_constraint_changed)
+    widget_->OnSizeConstraintsChanged();
 }
 
 }  // namespace exo

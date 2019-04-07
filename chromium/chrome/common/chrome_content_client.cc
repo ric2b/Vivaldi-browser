@@ -26,6 +26,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "build/build_config.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/child_process_logging.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
@@ -37,6 +38,7 @@
 #include "chrome/grit/common_resources.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/dom_distiller/core/url_constants.h"
+#include "components/net_log/chrome_net_log.h"
 #include "components/services/heap_profiling/public/cpp/client.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/cdm_info.h"
@@ -57,6 +59,7 @@
 #include "net/http/http_util.h"
 #include "pdf/buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "third_party/widevine/cdm/widevine_cdm_common.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -188,8 +191,7 @@ void ComputeBuiltInPlugins(std::vector<content::PepperPluginInfo>* plugins) {
   pdf_info.is_out_of_process = true;
   pdf_info.name = ChromeContentClient::kPDFInternalPluginName;
   pdf_info.description = kPDFPluginDescription;
-  pdf_info.path = base::FilePath::FromUTF8Unsafe(
-      ChromeContentClient::kPDFPluginPath);
+  pdf_info.path = base::FilePath(ChromeContentClient::kPDFPluginPath);
   content::WebPluginMimeType pdf_mime_type(
       kPDFPluginOutOfProcessMimeType,
       kPDFPluginExtension,
@@ -207,27 +209,24 @@ void ComputeBuiltInPlugins(std::vector<content::PepperPluginInfo>* plugins) {
   // enabled by default for the non-portable case.  This allows apps installed
   // from the Chrome Web Store to use NaCl even if the command line switch
   // isn't set.  For other uses of NaCl we check for the command line switch.
-  base::FilePath path;
-  if (base::PathService::Get(chrome::FILE_NACL_PLUGIN, &path)) {
-    content::PepperPluginInfo nacl;
-    // The nacl plugin is now built into the Chromium binary.
-    nacl.is_internal = true;
-    nacl.path = path;
-    nacl.name = nacl::kNaClPluginName;
-    content::WebPluginMimeType nacl_mime_type(nacl::kNaClPluginMimeType,
-                                              nacl::kNaClPluginExtension,
-                                              nacl::kNaClPluginDescription);
-    nacl.mime_types.push_back(nacl_mime_type);
-    content::WebPluginMimeType pnacl_mime_type(nacl::kPnaclPluginMimeType,
-                                               nacl::kPnaclPluginExtension,
-                                               nacl::kPnaclPluginDescription);
-    nacl.mime_types.push_back(pnacl_mime_type);
-    nacl.internal_entry_points.get_interface = g_nacl_get_interface;
-    nacl.internal_entry_points.initialize_module = g_nacl_initialize_module;
-    nacl.internal_entry_points.shutdown_module = g_nacl_shutdown_module;
-    nacl.permissions = ppapi::PERMISSION_PRIVATE | ppapi::PERMISSION_DEV;
-    plugins->push_back(nacl);
-  }
+  content::PepperPluginInfo nacl;
+  // The nacl plugin is now built into the Chromium binary.
+  nacl.is_internal = true;
+  nacl.path = base::FilePath(ChromeContentClient::kNaClPluginFileName);
+  nacl.name = nacl::kNaClPluginName;
+  content::WebPluginMimeType nacl_mime_type(nacl::kNaClPluginMimeType,
+                                            nacl::kNaClPluginExtension,
+                                            nacl::kNaClPluginDescription);
+  nacl.mime_types.push_back(nacl_mime_type);
+  content::WebPluginMimeType pnacl_mime_type(nacl::kPnaclPluginMimeType,
+                                             nacl::kPnaclPluginExtension,
+                                             nacl::kPnaclPluginDescription);
+  nacl.mime_types.push_back(pnacl_mime_type);
+  nacl.internal_entry_points.get_interface = g_nacl_get_interface;
+  nacl.internal_entry_points.initialize_module = g_nacl_initialize_module;
+  nacl.internal_entry_points.shutdown_module = g_nacl_shutdown_module;
+  nacl.permissions = ppapi::PERMISSION_PRIVATE | ppapi::PERMISSION_DEV;
+  plugins->push_back(nacl);
 #endif  // BUILDFLAG(ENABLE_NACL)
 }
 
@@ -572,9 +571,9 @@ void ChromeContentClient::AddPepperPlugins(
     // nothing that guarantees the component update will give us the
     // FLAPPER_VERSION_STRING version of Flash, but using this version seems
     // better than any other hardcoded alternative.
-    plugins->push_back(CreatePepperFlashInfo(
-        base::FilePath::FromUTF8Unsafe(ChromeContentClient::kNotPresent),
-        FLAPPER_VERSION_STRING, false));
+    plugins->push_back(
+        CreatePepperFlashInfo(base::FilePath(ChromeContentClient::kNotPresent),
+                              FLAPPER_VERSION_STRING, false));
 #endif  // defined(GOOGLE_CHROME_BUILD) && defined(FLAPPER_AVAILABLE)
   }
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
@@ -616,7 +615,8 @@ void ChromeContentClient::AddContentDecryptionModules(
       content::CdmCapability capability(
           {}, {media::EncryptionMode::kCenc, media::EncryptionMode::kCbcs},
           {media::CdmSessionType::kTemporary,
-           media::CdmSessionType::kPersistentLicense},
+           media::CdmSessionType::kPersistentLicense,
+           media::CdmSessionType::kPersistentUsageRecord},
           {});
 
       // Register kExternalClearKeyDifferentGuidTestKeySystem first separately.
@@ -733,6 +733,16 @@ base::RefCountedMemory* ChromeContentClient::GetDataResourceBytes(
 gfx::Image& ChromeContentClient::GetNativeImageNamed(int resource_id) const {
   return ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(
       resource_id);
+}
+
+base::DictionaryValue ChromeContentClient::GetNetLogConstants() const {
+  auto platform_dict = net_log::ChromeNetLog::GetPlatformConstants(
+      base::CommandLine::ForCurrentProcess()->GetCommandLineString(),
+      chrome::GetChannelName());
+  if (platform_dict)
+    return std::move(*platform_dict);
+  else
+    return base::DictionaryValue();
 }
 
 std::string ChromeContentClient::GetProcessTypeNameInEnglish(int type) {

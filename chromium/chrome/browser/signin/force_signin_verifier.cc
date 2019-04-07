@@ -8,11 +8,11 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "content/public/browser/network_service_instance.h"
 #include "google_apis/gaia/gaia_constants.h"
 
 namespace {
@@ -44,8 +44,7 @@ ForceSigninVerifier::ForceSigninVerifier(Profile* profile)
       oauth2_token_service_(
           ProfileOAuth2TokenServiceFactory::GetForProfile(profile)),
       signin_manager_(SigninManagerFactory::GetForProfile(profile)) {
-  g_browser_process->network_connection_tracker()->AddNetworkConnectionObserver(
-      this);
+  content::GetNetworkConnectionTracker()->AddNetworkConnectionObserver(this);
   UMA_HISTOGRAM_BOOLEAN(kForceSigninVerificationMetricsName,
                         ShouldSendRequest());
   SendRequest();
@@ -57,13 +56,11 @@ ForceSigninVerifier::~ForceSigninVerifier() {
 
 void ForceSigninVerifier::OnGetTokenSuccess(
     const OAuth2TokenService::Request* request,
-    const std::string& access_token,
-    const base::Time& expiration_time) {
+    const OAuth2AccessTokenConsumer::TokenResponse& token_response) {
   UMA_HISTOGRAM_MEDIUM_TIMES(kForceSigninVerificationSuccessTimeMetricsName,
                              base::TimeTicks::Now() - creation_time_);
   has_token_verified_ = true;
-  g_browser_process->network_connection_tracker()
-      ->RemoveNetworkConnectionObserver(this);
+  content::GetNetworkConnectionTracker()->RemoveNetworkConnectionObserver(this);
   Cancel();
 }
 
@@ -75,8 +72,8 @@ void ForceSigninVerifier::OnGetTokenFailure(
                                base::TimeTicks::Now() - creation_time_);
     has_token_verified_ = true;
     CloseAllBrowserWindows();
-    g_browser_process->network_connection_tracker()
-        ->RemoveNetworkConnectionObserver(this);
+    content::GetNetworkConnectionTracker()->RemoveNetworkConnectionObserver(
+        this);
     Cancel();
   } else {
     backoff_entry_.InformOfRequest(false);
@@ -95,16 +92,14 @@ void ForceSigninVerifier::OnConnectionChanged(
   if (backoff_request_timer_.IsRunning())
     backoff_request_timer_.Stop();
 
-  if (type != network::mojom::ConnectionType::CONNECTION_NONE)
-    SendRequest();
+  SendRequestIfNetworkAvailable(type);
 }
 
 void ForceSigninVerifier::Cancel() {
   backoff_entry_.Reset();
   backoff_request_timer_.Stop();
   access_token_request_.reset();
-  g_browser_process->network_connection_tracker()
-      ->RemoveNetworkConnectionObserver(this);
+  content::GetNetworkConnectionTracker()->RemoveNetworkConnectionObserver(this);
 }
 
 bool ForceSigninVerifier::HasTokenBeenVerified() {
@@ -112,8 +107,21 @@ bool ForceSigninVerifier::HasTokenBeenVerified() {
 }
 
 void ForceSigninVerifier::SendRequest() {
-  if (!ShouldSendRequest())
+  auto type = network::mojom::ConnectionType::CONNECTION_NONE;
+  if (content::GetNetworkConnectionTracker()->GetConnectionType(
+          &type,
+          base::BindOnce(&ForceSigninVerifier::SendRequestIfNetworkAvailable,
+                         base::Unretained(this)))) {
+    SendRequestIfNetworkAvailable(type);
+  }
+}
+
+void ForceSigninVerifier::SendRequestIfNetworkAvailable(
+    network::mojom::ConnectionType network_type) {
+  if (network_type == network::mojom::ConnectionType::CONNECTION_NONE ||
+      !ShouldSendRequest()) {
     return;
+  }
 
   std::string account_id = signin_manager_->GetAuthenticatedAccountId();
   OAuth2TokenService::ScopeSet oauth2_scopes;
@@ -123,11 +131,7 @@ void ForceSigninVerifier::SendRequest() {
 }
 
 bool ForceSigninVerifier::ShouldSendRequest() {
-  auto type = network::mojom::ConnectionType::CONNECTION_NONE;
-  g_browser_process->network_connection_tracker()->GetConnectionType(
-      &type, base::DoNothing());
   return !has_token_verified_ && access_token_request_.get() == nullptr &&
-         type != network::mojom::ConnectionType::CONNECTION_NONE &&
          signin_manager_->IsAuthenticated();
 }
 

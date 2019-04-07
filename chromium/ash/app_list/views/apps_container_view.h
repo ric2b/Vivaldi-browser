@@ -21,7 +21,6 @@ class AppListFolderItem;
 class AppListFolderView;
 class AppListModel;
 class ContentsView;
-class ExpandArrowView;
 class FolderBackgroundView;
 class PageSwitcher;
 class SuggestionChipContainerView;
@@ -75,6 +74,7 @@ class APP_LIST_EXPORT AppsContainerView : public HorizontalPage {
   void Layout() override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   const char* GetClassName() const override;
+  void OnGestureEvent(ui::GestureEvent* event) override;
 
   // HorizontalPage overrides:
   void OnWillBeHidden() override;
@@ -85,6 +85,9 @@ class APP_LIST_EXPORT AppsContainerView : public HorizontalPage {
   // list.
   gfx::Rect GetSearchBoxExpectedBounds() const;
 
+  SuggestionChipContainerView* suggestion_chip_container_view_for_test() {
+    return suggestion_chip_container_view_;
+  }
   AppsGridView* apps_grid_view() { return apps_grid_view_; }
   FolderBackgroundView* folder_background_view() {
     return folder_background_view_;
@@ -110,6 +113,10 @@ class APP_LIST_EXPORT AppsContainerView : public HorizontalPage {
   // Updates suggestion chips from app list model.
   void UpdateSuggestionChips();
 
+  // Suggestion chips and apps grid view become unfocusable if |disabled| is
+  // true. This is used to trap focus within the folder when it is opened.
+  void DisableFocusForShowingActiveFolder(bool disabled);
+
   ContentsView* contents_view_;  // Not owned.
 
   // True if new style launcher feature is enabled.
@@ -121,7 +128,6 @@ class APP_LIST_EXPORT AppsContainerView : public HorizontalPage {
   AppListFolderView* app_list_folder_view_ = nullptr;
   PageSwitcher* page_switcher_ = nullptr;
   FolderBackgroundView* folder_background_view_ = nullptr;
-  ExpandArrowView* expand_arrow_view_ = nullptr;
 
   ShowState show_state_ = SHOW_NONE;
 

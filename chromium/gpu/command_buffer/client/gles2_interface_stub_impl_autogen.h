@@ -817,6 +817,21 @@ GLboolean GLES2InterfaceStub::IsVertexArrayOES(GLuint /* array */) {
   return 0;
 }
 void GLES2InterfaceStub::BindVertexArrayOES(GLuint /* array */) {}
+void GLES2InterfaceStub::FramebufferParameteri(GLenum /* target */,
+                                               GLenum /* pname */,
+                                               GLint /* param */) {}
+void GLES2InterfaceStub::BindImageTexture(GLuint /* unit */,
+                                          GLuint /* texture */,
+                                          GLint /* level */,
+                                          GLboolean /* layered */,
+                                          GLint /* layer */,
+                                          GLenum /* access */,
+                                          GLenum /* format */) {}
+void GLES2InterfaceStub::DispatchCompute(GLuint /* num_groups_x */,
+                                         GLuint /* num_groups_y */,
+                                         GLuint /* num_groups_z */) {}
+void GLES2InterfaceStub::MemoryBarrierEXT(GLbitfield /* barriers */) {}
+void GLES2InterfaceStub::MemoryBarrierByRegion(GLbitfield /* barriers */) {}
 void GLES2InterfaceStub::SwapBuffers(GLuint64 /* swap_id */,
                                      GLbitfield /* flags */) {}
 GLuint GLES2InterfaceStub::GetMaxValueInBufferCHROMIUM(GLuint /* buffer_id */,
@@ -1223,4 +1238,11 @@ void GLES2InterfaceStub::WaitGpuFenceCHROMIUM(GLuint /* gpu_fence_id */) {}
 void GLES2InterfaceStub::DestroyGpuFenceCHROMIUM(GLuint /* gpu_fence_id */) {}
 void GLES2InterfaceStub::InvalidateReadbackBufferShadowDataCHROMIUM(
     GLuint /* buffer_id */) {}
+void GLES2InterfaceStub::FramebufferTextureMultiviewLayeredANGLE(
+    GLenum /* target */,
+    GLenum /* attachment */,
+    GLuint /* texture */,
+    GLint /* level */,
+    GLint /* baseViewIndex */,
+    GLsizei /* numViews */) {}
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_INTERFACE_STUB_IMPL_AUTOGEN_H_

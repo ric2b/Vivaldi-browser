@@ -111,10 +111,23 @@ public class ProfileSyncService {
         return sProfileSyncService;
     }
 
+    /**
+     * Overrides the initialization for tests. The tests should call resetForTests() at shutdown.
+     */
     @VisibleForTesting
     public static void overrideForTests(ProfileSyncService profileSyncService) {
         sProfileSyncService = profileSyncService;
         sInitialized = true;
+    }
+
+    /**
+     * Resets the ProfileSyncService instance. Calling get() next time will initialize with a new
+     * instance.
+     */
+    @VisibleForTesting
+    public static void resetForTests() {
+        sInitialized = false;
+        sProfileSyncService = null;
     }
 
     protected ProfileSyncService() {
@@ -281,9 +294,12 @@ public class ProfileSyncService {
         return nativeSetDecryptionPassphrase(mNativeProfileSyncServiceAndroid, passphrase);
     }
 
-    public GoogleServiceAuthError.State getAuthError() {
+    public @GoogleServiceAuthError.State int getAuthError() {
         int authErrorCode = nativeGetAuthError(mNativeProfileSyncServiceAndroid);
-        return GoogleServiceAuthError.State.fromCode(authErrorCode);
+        if (authErrorCode < 0 || authErrorCode >= GoogleServiceAuthError.State.NUM_ENTRIES) {
+            throw new IllegalArgumentException("No state for code: " + authErrorCode);
+        }
+        return authErrorCode;
     }
 
     /**

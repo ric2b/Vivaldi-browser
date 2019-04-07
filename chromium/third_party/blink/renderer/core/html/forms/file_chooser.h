@@ -30,7 +30,9 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HTML_FORMS_FILE_CHOOSER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_FORMS_FILE_CHOOSER_H_
 
+#include "third_party/blink/public/web/web_file_chooser_completion.h"
 #include "third_party/blink/public/web/web_file_chooser_params.h"
+#include "third_party/blink/renderer/core/page/popup_opening_observer.h"
 #include "third_party/blink/renderer/platform/file_metadata.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -41,7 +43,9 @@
 
 namespace blink {
 
+class ChromeClientImpl;
 class FileChooser;
+class LocalFrame;
 
 struct FileChooserFileInfo {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
@@ -60,10 +64,11 @@ struct FileChooserFileInfo {
   const FileMetadata metadata;
 };
 
-class FileChooserClient : public GarbageCollectedMixin {
+class CORE_EXPORT FileChooserClient : public PopupOpeningObserver {
  public:
   virtual void FilesChosen(const Vector<FileChooserFileInfo>&) = 0;
-  virtual ~FileChooserClient();
+  virtual LocalFrame* FrameOrNull() const = 0;
+  ~FileChooserClient() override;
 
  protected:
   FileChooser* NewFileChooser(const WebFileChooserParams&);
@@ -76,25 +81,39 @@ class FileChooserClient : public GarbageCollectedMixin {
   scoped_refptr<FileChooser> chooser_;
 };
 
-class FileChooser : public RefCounted<FileChooser> {
+class FileChooser : public RefCounted<FileChooser>,
+                    public WebFileChooserCompletion {
  public:
-  static scoped_refptr<FileChooser> Create(FileChooserClient*,
-                                           const WebFileChooserParams&);
-  ~FileChooser();
+  CORE_EXPORT static scoped_refptr<FileChooser> Create(
+      FileChooserClient*,
+      const WebFileChooserParams&);
+  ~FileChooser() override;
 
+  LocalFrame* FrameOrNull() const {
+    return client_ ? client_->FrameOrNull() : nullptr;
+  }
   void DisconnectClient() { client_ = nullptr; }
+
+  const WebFileChooserParams& Params() const { return params_; }
+
+  bool OpenFileChooser(ChromeClientImpl& chrome_client_impl);
+
+ private:
+  FileChooser(FileChooserClient*, const WebFileChooserParams&);
+
+  void DidCloseChooser();
+
+  // WebFileChooserCompletion implementation:
+  void DidChooseFile(const WebVector<WebString>& file_names) override;
+  void DidChooseFile(const WebVector<SelectedFileInfo>& files) override;
 
   // FIXME: We should probably just pass file paths that could be virtual paths
   // with proper display names rather than passing structs.
   void ChooseFiles(const Vector<FileChooserFileInfo>& files);
 
-  const WebFileChooserParams& Params() const { return params_; }
-
- private:
-  FileChooser(FileChooserClient*, const WebFileChooserParams&);
-
   WeakPersistent<FileChooserClient> client_;
   WebFileChooserParams params_;
+  Persistent<ChromeClientImpl> chrome_client_impl_;
 };
 
 }  // namespace blink

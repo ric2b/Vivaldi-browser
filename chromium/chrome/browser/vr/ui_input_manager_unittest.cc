@@ -15,11 +15,11 @@
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "chrome/browser/vr/input_event.h"
 #include "chrome/browser/vr/model/model.h"
+#include "chrome/browser/vr/render_info.h"
 #include "chrome/browser/vr/test/animation_utils.h"
 #include "chrome/browser/vr/test/constants.h"
 #include "chrome/browser/vr/test/mock_content_input_delegate.h"
 #include "chrome/browser/vr/test/ui_test.h"
-#include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
 #include "chrome/browser/vr/ui_scene_constants.h"
 #include "chrome/browser/vr/ui_scene_creator.h"
@@ -35,8 +35,9 @@ namespace vr {
 
 namespace {
 
-constexpr UiInputManager::ButtonState kUp = UiInputManager::ButtonState::UP;
-constexpr UiInputManager::ButtonState kDown = UiInputManager::ButtonState::DOWN;
+constexpr ControllerModel::ButtonState kUp = ControllerModel::ButtonState::kUp;
+constexpr ControllerModel::ButtonState kDown =
+    ControllerModel::ButtonState::kDown;
 
 constexpr gfx::Size kWindowSize = {1280, 720};
 
@@ -116,13 +117,13 @@ class UiInputManagerTest : public testing::Test {
   }
 
   void HandleInput(const gfx::Vector3dF& laser_direction,
-                   UiInputManager::ButtonState button_state) {
+                   ControllerModel::ButtonState button_state) {
     HandleInput({0, 0, 0}, laser_direction, button_state);
   }
 
   void HandleInput(const gfx::Point3F& laser_origin,
                    const gfx::Vector3dF& laser_direction,
-                   UiInputManager::ButtonState button_state) {
+                   ControllerModel::ButtonState button_state) {
     RenderInfo render_info;
     controller_model_.laser_direction = laser_direction;
     controller_model_.laser_origin = laser_origin;
@@ -502,7 +503,7 @@ TEST_F(UiInputManagerContentTest, NoMouseMovesDuringClick) {
   ControllerModel controller_model;
   controller_model.laser_direction = content_quad_center - origin;
   controller_model.laser_origin = origin;
-  controller_model.touchpad_button_state = UiInputManager::ButtonState::DOWN;
+  controller_model.touchpad_button_state = ControllerModel::ButtonState::kDown;
   ReticleModel reticle_model;
   InputEventList input_event_list;
   input_manager_->HandleInput(MsToTicks(1), RenderInfo(), controller_model,
@@ -533,7 +534,7 @@ TEST_F(UiInputManagerContentTest, AudioPermissionPromptHitTesting) {
   ControllerModel controller_model;
   controller_model.laser_direction = url_bar_center - origin;
   controller_model.laser_origin = origin;
-  controller_model.touchpad_button_state = UiInputManager::ButtonState::DOWN;
+  controller_model.touchpad_button_state = ControllerModel::ButtonState::kDown;
   ReticleModel reticle_model;
   InputEventList input_event_list;
   input_manager_->HandleInput(MsToTicks(1), RenderInfo(), controller_model,
@@ -559,7 +560,7 @@ TEST_F(UiInputManagerContentTest, TreeVsZOrder) {
   ControllerModel controller_model;
   controller_model.laser_direction = content_quad_center - origin;
   controller_model.laser_origin = origin;
-  controller_model.touchpad_button_state = UiInputManager::ButtonState::DOWN;
+  controller_model.touchpad_button_state = ControllerModel::ButtonState::kDown;
   ReticleModel reticle_model;
   InputEventList input_event_list;
   input_manager_->HandleInput(MsToTicks(1), RenderInfo(), controller_model,

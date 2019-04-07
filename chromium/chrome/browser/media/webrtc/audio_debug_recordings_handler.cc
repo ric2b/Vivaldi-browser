@@ -11,9 +11,9 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
-#include "components/webrtc_logging/browser/log_list.h"
+#include "components/webrtc_logging/browser/text_log_list.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
@@ -42,7 +42,7 @@ base::FilePath GetAudioDebugRecordingsPrefixPath(
 base::FilePath GetLogDirectoryAndEnsureExists(
     content::BrowserContext* browser_context) {
   base::FilePath log_dir_path =
-      webrtc_logging::LogList::GetWebRtcLogDirectoryForBrowserContextPath(
+      webrtc_logging::TextLogList::GetWebRtcLogDirectoryForBrowserContextPath(
           browser_context->GetPath());
   base::File::Error error;
   if (!base::CreateDirectoryAndGetError(log_dir_path, &error)) {
@@ -71,7 +71,7 @@ void AudioDebugRecordingsHandler::StartAudioDebugRecordings(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&GetLogDirectoryAndEnsureExists, browser_context_),
       base::BindOnce(&AudioDebugRecordingsHandler::DoStartAudioDebugRecordings,
                      this, host, delay, callback, error_callback));
@@ -84,7 +84,7 @@ void AudioDebugRecordingsHandler::StopAudioDebugRecordings(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const bool is_manual_stop = true;
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&GetLogDirectoryAndEnsureExists, browser_context_),
       base::BindOnce(&AudioDebugRecordingsHandler::DoStopAudioDebugRecordings,
                      this, host, is_manual_stop,

@@ -7,6 +7,8 @@
 <translation id="1037492556044956303"><ph name="DEVICE_NAME" /> додано</translation>
 <translation id="1056775291175587022">Немає мереж</translation>
 <translation id="1059194134494239015"><ph name="DISPLAY_NAME" />: <ph name="RESOLUTION" /></translation>
+<translation id="109942774857561566">Мені нудно</translation>
+<translation id="1104084341931202936">Показати налаштування спеціальних можливостей</translation>
 <translation id="1104621072296271835">Ваші пристрої працюватимуть разом ще краще</translation>
 <translation id="112308213915226829">Автоматично ховати полицю</translation>
 <translation id="1153356358378277386">Підключені пристрої</translation>
@@ -14,32 +16,41 @@
 <translation id="119944043368869598">Очистити все</translation>
 <translation id="1247372569136754018">Мікрофон (внутрішній)</translation>
 <translation id="1252999807265626933">Джерело заряджання: <ph name="POWER_SOURCE" /></translation>
+<translation id="1255033239764210633">Який прогноз погоди?</translation>
 <translation id="1267032506238418139">Зміна комбінацій клавіш</translation>
 <translation id="1270290102613614947">Екранну клавіатуру вимкнено</translation>
 <translation id="1272079795634619415">Зупинити</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
 <translation id="1290331692326790741">слабкий сигнал</translation>
 <translation id="1293264513303784526">Пристрій із портом USB типу C (ліворуч)</translation>
+<translation id="1294929383540927798">Змінити налаштування сповіщень на заблокованому екрані</translation>
+<translation id="1302880136325416935">Показати налаштування Bluetooth. <ph name="STATE_TEXT" /></translation>
 <translation id="1346748346194534595">Праворуч</translation>
 <translation id="1351937230027495976">Згорнути меню</translation>
 <translation id="1383876407941801731">Пошук</translation>
+<translation id="1419738280318246476">Щоб виконати дію зі сповіщенням, розблокуйте пристрій</translation>
 <translation id="1467432559032391204">Ліворуч</translation>
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1510238584712386396">Панель запуску</translation>
+<translation id="1520303207432623762">{NUM_APPS,plural, =1{Показати налаштування сповіщень. Сповіщення вимкнено для додатка}one{Показати налаштування сповіщень. Сповіщення вимкнено для # додатка}few{Показати налаштування сповіщень. Сповіщення вимкнено для # додатків}many{Показати налаштування сповіщень. Сповіщення вимкнено для # додатків}other{Показати налаштування сповіщень. Сповіщення вимкнено для # додатка}}</translation>
 <translation id="1525508553941733066">ЗАКРИТИ</translation>
 <translation id="1537254971476575106">Лупа для всього екрана</translation>
 <translation id="15373452373711364">Великий курсор миші</translation>
 <translation id="1550523713251050646">Натисніть, щоб побачити більше опцій</translation>
 <translation id="1567387640189251553">Після останнього введення пароля було під’єднано іншу клавіатуру. Можливо, це спроба викрасти введені символи.</translation>
+<translation id="1570871743947603115">Увімкнути/вимкнути Bluetooth. <ph name="STATE_TEXT" /></translation>
 <translation id="1608626060424371292">Вилучити цього користувача</translation>
 <translation id="1621499497873603021">До розрядження акумулятора залишилося <ph name="TIME_LEFT" /></translation>
+<translation id="1654477262762802994">Ввести голосовий запит</translation>
 <translation id="1658406695958299976">На жаль, поки не вдалося підтвердити ваш пароль. Зверніть увагу: якщо ви нещодавно змінили пароль, новий пароль буде застосовано, щойно ви вийдете з облікового запису. Скористайтеся старим паролем тут.</translation>
 <translation id="1677472565718498478">Залишилося <ph name="TIME" /></translation>
 <translation id="1698760176351776263">Адреса IPv6: <ph name="ADDRESS" /></translation>
-<translation id="170389796989115980">Адміністратор пристрою може відстежувати вашу активність.</translation>
 <translation id="1734367976349034509">Цим пристроєм керує адміністратор підприємства</translation>
+<translation id="1743570585616704562">Не розпізнано</translation>
 <translation id="1746730358044914197">Адміністратор налаштував методи введення.</translation>
 <translation id="1747827819627189109">Екранну клавіатуру ввімкнено</translation>
+<translation id="1761222317188459878">Увімкнути/вимкнути з’єднання з мережею. <ph name="STATE_TEXT" /></translation>
+<translation id="1812997170047690955">Що на моєму екрані?</translation>
 <translation id="1823873187264960516">Ethernet: <ph name="ADDRESS" /></translation>
 <translation id="1836215606488044471">Асистент (завантаження…)</translation>
 <translation id="1850504506766569011">Wi-Fi вимкнено.</translation>
@@ -74,13 +85,15 @@
 <translation id="2303600792989757991">Увімкнення чи вимкнення вікна перегляду</translation>
 <translation id="2338501278241028356">Щоб знайти пристрої поблизу, увімкніть Bluetooth</translation>
 <translation id="2339073806695260576">Щоб робити нотатки та знімки екрана, використовувати лазерний вказівник чи лупу, торкніться кнопки стилуса на полиці.</translation>
-<translation id="2351266942280602854">Мова та способи введення</translation>
+<translation id="2341729377289034582">Заблоковано у вертикальному положенні</translation>
 <translation id="2352467521400612932">Налаштування стилуса</translation>
 <translation id="2354174487190027830">Активація <ph name="NAME" /></translation>
 <translation id="2359808026110333948">Продовжити</translation>
 <translation id="2365393535144473978">Якщо ввімкнути мобільне передавання даних, увімкнеться Bluetooth.</translation>
 <translation id="2391579633712104609">180°</translation>
+<translation id="239188844683466770">Увімкнути/вимкнути режим "Не турбувати"</translation>
 <translation id="2412593942846481727">Доступне оновлення</translation>
+<translation id="2416346634399901812">Під’єднано до мережі: <ph name="NETWORK_NAME" /></translation>
 <translation id="2429753432712299108">Пристрою Bluetooth "<ph name="DEVICE_NAME" />" потрібен дозвіл на підключення. Перш ніж надати його, підтвердьте, що на пристрої відображається цей ключ доступу: <ph name="PASSKEY" /></translation>
 <translation id="2482878487686419369">Сповіщення</translation>
 <translation id="2484513351006226581">Натисніть комбінацію клавіш <ph name="KEYBOARD_SHORTCUT" />, щоб змінити розкладку клавіатури.</translation>
@@ -92,12 +105,12 @@
 <translation id="2597972630681408282">Нічний режим: <ph name="NIGHT_LIGHT_STATUS" /></translation>
 <translation id="2617342710774726426">SIM-карту заблоковано</translation>
 <translation id="2653659639078652383">Надіслати</translation>
-<translation id="2696763960464195425">Коли ви вийдете з облікового запису, вашу інформацію буде вилучено. <ph name="LEARN_MORE" /></translation>
 <translation id="2700493154570097719">Вибрати клавіатуру</translation>
 <translation id="2718395828230677721">Нічний режим</translation>
 <translation id="2727977024730340865">Підключено до зарядного пристрою низької потужності. Акумулятор може заряджатися неналежним чином.</translation>
 <translation id="2761704814324807722">Панель статусу, час: <ph name="TIME" />, <ph name="BATTERY" /></translation>
 <translation id="277257480934873581">Під’єднання до мережі <ph name="NAME" /></translation>
+<translation id="2790844815106384441">визначати, чи дозволено веб-сайтам використовувати служби локації або мікрофон, камеру чи інші функції пристрою;</translation>
 <translation id="2792498699870441125">Alt+клавіша пошуку</translation>
 <translation id="2805756323405976993">Додатки</translation>
 <translation id="2808012452536866044">Функція Better Together тепер є на новому телефоні</translation>
@@ -114,6 +127,8 @@
 <translation id="2946119680249604491">Додати з’єднання</translation>
 <translation id="2961963223658824723">Сталася помилка. Повторіть спробу за кілька секунд.</translation>
 <translation id="2963773877003373896">mod3</translation>
+<translation id="2992931425024192067">Показувати весь вміст сповіщень</translation>
+<translation id="2995447421581609334">Показати пристрої для трансляції</translation>
 <translation id="2996462380875591307">Увімкнено закріплену лупу. Щоб вимкнути її, знову натисніть комбінацію Ctrl + клавіша пошуку + D.</translation>
 <translation id="2999742336789313416"><ph name="DISPLAY_NAME" /> – загальнодоступний сеанс, керований доменом <ph name="DOMAIN" /></translation>
 <translation id="3000461861112256445">Монофонічне аудіо</translation>
@@ -123,13 +138,15 @@
 <translation id="3081696990447829002">Розгорнути меню</translation>
 <translation id="3087734570205094154">Низ</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
+<translation id="3124698051292518391">Завжди показувати полицю</translation>
 <translation id="3126069444801937830">Перезапустіть, щоб оновити</translation>
 <translation id="3147142846278915599">Панель запуску (синхронізація додатків…)</translation>
 <translation id="315116470104423982">Мобільне передавання даних</translation>
 <translation id="3151786313568798007">Орієнтація</translation>
 <translation id="3153444934357957346">Максимальна кількість паралельних входів в обліковий запис: <ph name="MULTI_PROFILE_USER_LIMIT" />.</translation>
+<translation id="3202010236269062730">{NUM_DEVICES,plural, =1{Під’єднано до пристрою}one{Під’єднано до # пристрою}few{Під’єднано до # пристроїв}many{Під’єднано до # пристроїв}other{Під’єднано до # пристрою}}</translation>
 <translation id="3236488194889173876">Немає мобільних мереж</translation>
-<translation id="3238765806255363838"><ph name="USERNAME" /> <ph name="MAIL" /></translation>
+<translation id="3255483164551725916">Що ти можеш?</translation>
 <translation id="3294437725009624529">Гість</translation>
 <translation id="332587331255250389">Замініть акумулятор</translation>
 <translation id="3351879221545518001">Зараз ви транслюєте екран.</translation>
@@ -159,10 +176,12 @@
 <translation id="3784455785234192852">Заблокувати</translation>
 <translation id="3798670284305777884">Динамік (внутрішній)</translation>
 <translation id="380165613292957338">Вітаю! Чим я можу допомогти?</translation>
+<translation id="383629559565718788">Показати налаштування клавіатури</translation>
 <translation id="3846575436967432996">Інформація про мережу не доступна</translation>
 <translation id="385051799172605136">Назад</translation>
 <translation id="3891340733213178823">Щоб вийти, двічі натисніть Ctrl+Shift+Q.</translation>
 <translation id="3893630138897523026">ChromeVox (голосові підказки)</translation>
+<translation id="3897533311200664389">Ввести текстовий запит</translation>
 <translation id="3899995891769452915">Голосовий ввід</translation>
 <translation id="3900355044994618856">Сеанс закінчиться через <ph name="SESSION_TIME_REMAINING" /></translation>
 <translation id="3901991538546252627">Під’єднання до <ph name="NAME" /></translation>
@@ -172,10 +191,14 @@
 <translation id="4017989525502048489">Лазерний вказівник</translation>
 <translation id="4065525899979931964">{NUM_APPS,plural, =1{Вимкнено для додатка}one{Вимкнено для # додатка}few{Вимкнено для # додатків}many{Вимкнено для # додатків}other{Вимкнено для # додатка}}</translation>
 <translation id="4072264167173457037">середній сигнал</translation>
+<translation id="4146833061457621061">Увімкни музику</translation>
 <translation id="4200057768455216496">Ви натиснули комбінацію клавіш для закріпленої лупи. Увімкнути?</translation>
 <translation id="4217571870635786043">Диктування</translation>
+<translation id="4261870227682513959">Показати налаштування сповіщень. Сповіщення вимкнено</translation>
+<translation id="4269883910223712419">Адміністратор цього пристрою може:</translation>
 <translation id="4274921305979314545">Підключіть Chromebook до телефона</translation>
 <translation id="4279490309300973883">Дзеркальне відображення</translation>
+<translation id="4292681942966152062">Активується мережа: <ph name="NETWORK_NAME" /></translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4331809312908958774">ОС Chrome</translation>
 <translation id="4338109981321384717">Лупа</translation>
@@ -198,12 +221,15 @@
 <translation id="4628757576491864469">Пристрої</translation>
 <translation id="4659419629803378708">ChromeVox увімкнено</translation>
 <translation id="4734965478015604180">Горизонтально</translation>
+<translation id="476166673298332917">Адміністратор цього пристрою має доступ до всієї активності, зокрема паролів і взаємодій.</translation>
 <translation id="4776917500594043016">Пароль користувача  <ph name="USER_EMAIL_ADDRESS" /></translation>
+<translation id="4778095205580009397">Google Асистент недоступний у демонстраційному сеансі.</translation>
 <translation id="479989351350248267">пошук</translation>
 <translation id="4804818685124855865">Від'єднатися</translation>
 <translation id="4849058404725798627">Підсвічувати об’єкт, вибраний на клавіатурі</translation>
 <translation id="4872237917498892622">Alt+клавіша пошуку або Shift</translation>
 <translation id="4890187583552566966">Ваш адміністратор вимкнув Google Асистент.</translation>
+<translation id="4893522937062257019">На екрані блокування</translation>
 <translation id="4895488851634969361">Акумулятор заряджений.</translation>
 <translation id="490375751687810070">Вертикально</translation>
 <translation id="4905614135390995787">Комбінація клавіш для керування режимом високого контрасту змінилася. Тепер це <ph name="NEW_SHORTCUT" />, а не <ph name="OLD_SHORTCUT" />.</translation>
@@ -211,6 +237,7 @@
 <translation id="4918086044614829423">Прийняти</translation>
 <translation id="4924411785043111640">Перезапустити й скинути</translation>
 <translation id="4961318399572185831">Трансляція екрана</translation>
+<translation id="5083553833479578423">Розблокуйте інші функції Асистента.</translation>
 <translation id="5136175204352732067">Під’єднано іншу клавіатуру</translation>
 <translation id="5168181903108465623">Доступні пристрої для трансляції</translation>
 <translation id="5207949376430453814">Підсвічувати місце введення тексту</translation>
@@ -218,6 +245,7 @@
 <translation id="523505283826916779">Налаштування доступності</translation>
 <translation id="5313326810920013265">Налаштування Bluetooth</translation>
 <translation id="5331975486040154427">Пристрій, під’єднаний до порту USB-C (ліворуч на задній панелі)</translation>
+<translation id="5379115545237091094">Забагато спроб</translation>
 <translation id="5397578532367286026">Менеджер (<ph name="MANAGER_EMAIL" />) може переглядати дії й історію цього користувача на chrome.com.</translation>
 <translation id="5430931332414098647">Миттєва точка доступу</translation>
 <translation id="5431825016875453137">OpenVPN або L2TP</translation>
@@ -238,6 +266,7 @@
 <translation id="5673434351075758678">Після синхронізації налаштувань мову змінено. Попередня мова: <ph name="FROM_LOCALE" />, нова: <ph name="TO_LOCALE" />.</translation>
 <translation id="574392208103952083">Середній</translation>
 <translation id="5744083938413354016">Перетягування дотиком</translation>
+<translation id="5750765938512549687">Bluetooth вимкнено</translation>
 <translation id="5777841717266010279">Скасувати спільний доступ до екрана?</translation>
 <translation id="57838592816432529">Вимкнути звук</translation>
 <translation id="5805697420284793859">Диспетчер вікон</translation>
@@ -248,6 +277,7 @@
 <translation id="5895138241574237353">Перезапустити</translation>
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5911533659001334206">Засіб перегляду комбінацій клавіш</translation>
+<translation id="5911909173233110115"><ph name="USERNAME" /> (<ph name="MAIL" />)</translation>
 <translation id="5916664084637901428">Увімкнути</translation>
 <translation id="592343074608792716">Цей комп’ютер Chromebook і телефон підключатимуться автоматично</translation>
 <translation id="5947494881799873997">Повернути</translation>
@@ -271,14 +301,18 @@
 <translation id="615957422585914272">Показувати екранну клавіатуру</translation>
 <translation id="6164005077879661055">Усі файли та локальні дані, пов’язані з контрольованим користувачем, буде назавжди видалено, якщо вилучити цього контрольованого користувача. Менеджер усе одно може бачити веб-сайти, які відвідував цей контрольований користувач, і його налаштування на сторінці <ph name="MANAGEMENT_URL" />.</translation>
 <translation id="6165508094623778733">Докладніше</translation>
+<translation id="6254629735336163724">Заблоковано в горизонтальному положенні</translation>
 <translation id="6259254695169772643">Вибирайте елементи за допомогою стилуса</translation>
 <translation id="6267036997247669271"><ph name="NAME" />: активація…</translation>
 <translation id="6284232397434400372">Роздільну здатність змінено</translation>
 <translation id="6297287540776456956">Виберіть область за допомогою стилуса</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> обернено на <ph name="ROTATION" /></translation>
 <translation id="632744581670418035">Накладання клавіатури</translation>
+<translation id="6344698853700675736">Увімкнути або вимкнути нічний режим</translation>
+<translation id="6376931439017688372">Bluetooth увімкнено</translation>
 <translation id="639644700271529076">Режим CAPS LOCK вимкнено</translation>
 <translation id="6406704438230478924">altgr</translation>
+<translation id="642644398083277086">Видаліть усі сповіщення</translation>
 <translation id="643147933154517414">Готово</translation>
 <translation id="6445835306623867477"><ph name="ROUTE_TITLE" /> транслюється на пристрій "<ph name="RECEIVER_NAME" />"</translation>
 <translation id="6452181791372256707">Відхилити</translation>
@@ -306,11 +340,13 @@
 <translation id="6751826523481687655">Відстеження ефективності ввімкнено</translation>
 <translation id="6785414152754474415">Акумулятор заряджений на <ph name="PERCENTAGE" />% і заряджається.</translation>
 <translation id="6803622936009808957">Не вдалося дублювати зображення екранів, оскільки не знайдено підтримувані значення роздільної здатності. Натомість запущено режим розширеного робочого столу.</translation>
+<translation id="6814658242098378692">керувати додатками, розширеннями й темами;</translation>
 <translation id="6820676911989879663">Зробіть перерву!</translation>
 <translation id="683971173229319003">Search (Пошук)+L</translation>
 <translation id="6857811139397017780">Активувати <ph name="NETWORKSERVICE" /></translation>
 <translation id="6910714959251846841">Для цього оновлення потрібно виконати Powerwash на пристрої. Докладніше про останнє оновлення додатка <ph name="SYSTEM_APP_NAME" />.</translation>
 <translation id="6911468394164995108">Під’єднатися до іншої...</translation>
+<translation id="6972754398087986839">Почати</translation>
 <translation id="6981982820502123353">Доступність</translation>
 <translation id="698231206551913481">Якщо видалити цього користувача, усі файли та локальні дані, зв’язані з ним, буде видалено назавжди.</translation>
 <translation id="7015766095477679451">Поверніться о <ph name="COME_BACK_TIME" />.</translation>
@@ -318,7 +354,8 @@
 <translation id="7037152028959403492">Ви натиснули комбінацію клавіш для високого контрасту. Увімкнути?</translation>
 <translation id="7066646422045619941">Ваш адміністратор вимкнув цю мережу.</translation>
 <translation id="7067196344162293536">Автоматичне обертання</translation>
-<translation id="7076293881109082629">Вхід</translation>
+<translation id="7068360136237591149">Відкрий файли</translation>
+<translation id="7092922358121866860">Показати налаштування нічного режиму</translation>
 <translation id="7098389117866926363">Пристрій, під’єднаний до порту USB-C (ліворуч на задній панелі)</translation>
 <translation id="7131634465328662194">Ви вийдете автоматично.</translation>
 <translation id="7143207342074048698">Під’єднання</translation>
@@ -326,12 +363,14 @@
 <translation id="7168224885072002358">Попередня роздільна здатність повернеться через <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7256634071279256947">Мікрофон на задній панелі</translation>
 <translation id="726276584504105859">Перетягніть сюди, щоб розділити екран</translation>
+<translation id="7303365578352795231">Відповідь на іншому пристрої.</translation>
 <translation id="7348093485538360975">Екранна клавіатура</translation>
 <translation id="735745346212279324">VPN від’єднано</translation>
 <translation id="7377169924702866686">Клавішу Caps Lock увімкнено.</translation>
 <translation id="7398254312354928459">З’єднання з мережею змінено</translation>
 <translation id="742594950370306541">Камера використовується.</translation>
 <translation id="743058460480092004">Камера та мікрофон використовуються.</translation>
+<translation id="7497767806359279797">Вибрати мову та клавіатуру</translation>
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7526573455193969409">Мережевий трафік може відстежуватися</translation>
 <translation id="7536035074519304529">ІР-адреса: <ph name="ADDRESS" /></translation>
@@ -340,6 +379,8 @@
 <translation id="7564874036684306347">Переміщення вікон на інший робочий стіл може спричинити неочікувану поведінку. Нові сповіщення та вікна можуть розділятися між робочими столами.</translation>
 <translation id="7569509451529460200">Шрифт Брайля та ChromeVox увімкнено</translation>
 <translation id="7593891976182323525">Клавіша пошуку або Shift</translation>
+<translation id="7604942372593434070">Доступ до даних веб-перегляду</translation>
+<translation id="7642778300616172920">Ховати конфіденційний вміст</translation>
 <translation id="7645176681409127223"><ph name="USER_NAME" /> (власник)</translation>
 <translation id="7647488630410863958">Розблокуйте пристрій, щоб переглянути сповіщення</translation>
 <translation id="7649070708921625228">Довідка</translation>
@@ -352,8 +393,12 @@
 <translation id="7798302898096527229">Щоб скасувати, натисніть клавішу Search або Shift.</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> і <ph name="MINUTE" /></translation>
 <translation id="7829386189513694949">потужний сигнал</translation>
+<translation id="7842211907556571265">Під’єднання до мережі: <ph name="NETWORK_NAME" /></translation>
 <translation id="7842569679327885685">Попередження. Експериментальна функція</translation>
 <translation id="7846634333498149051">Клавіатура</translation>
+<translation id="7886169021410746335">змінювати налаштування конфіденційності.</translation>
+<translation id="7886277072580235377">Коли ви вийдете з облікового запису, дані інтернет-сеансу буде стерто. <ph name="LEARN_MORE" /></translation>
+<translation id="788781083998633524">Надішли електронний лист</translation>
 <translation id="7904094684485781019">Адміністратор цього облікового запису заборонив паралельний вхід.</translation>
 <translation id="7933084174919150729">Google Асистент доступний лише в основному профілі.</translation>
 <translation id="79341161159229895">Обліковим записом керують <ph name="FIRST_PARENT_EMAIL" /> і <ph name="SECOND_PARENT_EMAIL" /></translation>
@@ -362,6 +407,7 @@
 <translation id="7994370417837006925">Паралельний вхід</translation>
 <translation id="8000066093800657092">Немає мережі</translation>
 <translation id="8029241286966751120">Увімкнено лупу для всього екрана. Щоб вимкнути її, знову натисніть комбінацію Ctrl + клавіша пошуку + M.</translation>
+<translation id="8030169304546394654">Роз'єднано</translation>
 <translation id="8054466585765276473">Обчислення часу роботи акумулятора.</translation>
 <translation id="8061464966246066292">Високий контраст</translation>
 <translation id="8098591350844501178">Зупинити трансляцію екрана на пристрій "<ph name="RECEIVER_NAME" />"</translation>
@@ -371,12 +417,15 @@
 <translation id="8142699993796781067">Приватна мережа</translation>
 <translation id="8152119955266188852">Ви натиснули комбінацію клавіш для лупи на весь екран. Увімкнути?</translation>
 <translation id="8190698733819146287">Налаштувати мови та введення тексту...</translation>
+<translation id="8192202700944119416">Сповіщення сховано.</translation>
 <translation id="8261506727792406068">Видалити</translation>
 <translation id="8297006494302853456">Слабкий</translation>
 <translation id="8308637677604853869">Попереднє меню</translation>
+<translation id="8341451174107936385"><ph name="UNLOCK_MORE_FEATURES" /> <ph name="GET_STARTED" /></translation>
 <translation id="8351131234907093545">Створити нотатку</translation>
 <translation id="8392451568018454956">Меню параметрів для <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="8406981827175133772">Лупа для всього екрана</translation>
+<translation id="8425213833346101688">Змінити</translation>
 <translation id="8427213022735114808">Диктування надсилає зразок вашого голосу в Google, щоб дозволити голосовий ввід у будь-якому текстовому полі.</translation>
 <translation id="8428213095426709021">Налаштування</translation>
 <translation id="8431190899827883166">Показувати дотики</translation>
@@ -389,29 +438,39 @@
 <translation id="8484916590211895857"><ph name="NAME" />: під’єднання…</translation>
 <translation id="8513108775083588393">Автообертання</translation>
 <translation id="8517041960877371778">Пристрій <ph name="DEVICE_TYPE" /> може не заряджатися, коли він увімкнений.</translation>
+<translation id="8592141010104017453">Узагалі не показувати сповіщення</translation>
+<translation id="8627191004499078455">Під’єднано до пристрою: <ph name="DEVICE_NAME" /></translation>
 <translation id="8639760480004882931">Залишилося <ph name="PERCENTAGE" /></translation>
 <translation id="8649101189709089199">Читання з екрана</translation>
 <translation id="8652175077544655965">Закрити налаштування</translation>
+<translation id="8653151467777939995">Показати налаштування сповіщень. Сповіщення ввімкнено</translation>
+<translation id="8664753092453405566">Показати список мереж. <ph name="STATE_TEXT" /></translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Зарядний пристрій низької потужності підключено</translation>
 <translation id="8683506306463609433">Відстеження ефективності активне</translation>
 <translation id="8734991477317290293">Можливо, це спроба викрасти введенні символи.</translation>
+<translation id="8735953464173050365">Показати налаштування клавіатури. Вибрано: <ph name="KEYBOARD_NAME" /></translation>
+<translation id="875593634123171288">Показати налаштування VPN</translation>
 <translation id="8809737090443522491">Введіть назву додатка або документа</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="8825534185036233643">Дзеркалювання на більше ніж двох дисплеях не підтримується.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8841375032071747811">Кнопка "Назад"</translation>
+<translation id="8843682306134542540">Заблокувати/розблокувати обертання. <ph name="STATE_TEXT" /></translation>
 <translation id="8850991929411075241">Search (Пошук)+Esc</translation>
 <translation id="8870509716567206129">Додаток не підтримує розділення екрана.</translation>
 <translation id="8874184842967597500">Не під’єднано</translation>
+<translation id="8877788021141246043">Налаштуй нагадування</translation>
 <translation id="8878886163241303700">Розширення екрана</translation>
 <translation id="8921624153894383499">Google Асистент не підтримує цю мову.</translation>
 <translation id="8938800817013097409">Пристрій, під’єднаний до порту USB-C (праворуч на задній панелі)</translation>
 <translation id="8940956008527784070">Низький заряд акумулятора (<ph name="PERCENTAGE" />%)</translation>
 <translation id="8984179138335769204">Швидкий запуск</translation>
+<translation id="899350903320462459">Щоб виконати дію зі сповіщенням, розблокуйте пристрій як <ph name="LOGIN_ID" /></translation>
 <translation id="8995603266996330174">Керується доменом <ph name="DOMAIN" /></translation>
 <translation id="9029474291399787231">Доступне оновлення Adobe Flash Player</translation>
 <translation id="9056839673611986238">Пристрій буде відновлено до попереднього стану</translation>
+<translation id="9070640332319875144">Налаштування Асистента</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9079731690316798640">Wi-Fi: <ph name="ADDRESS" /></translation>
 <translation id="9080206825613744995">Мікрофон використовується.</translation>
@@ -424,10 +483,9 @@
 <translation id="9194617393863864469">Увійти як інший користувач…</translation>
 <translation id="9201131092683066720">Акумулятор заряджений на <ph name="PERCENTAGE" />%.</translation>
 <translation id="9210037371811586452">Вихід з уніфікованого режиму робочого стола</translation>
-<translation id="921331154633982721"><ph name="LABEL" /> <ph name="SUBLABEL" /></translation>
 <translation id="9215934040295798075">Вибрати фоновий малюнок</translation>
 <translation id="923686485342484400">Щоб вийти, двічі натисніть Control Shift Q.</translation>
+<translation id="938963181863597773">Які події заплановано?</translation>
 <translation id="945522503751344254">Надіслати відгук</translation>
 <translation id="98515147261107953">Альбомна</translation>
-<translation id="995927048686010764">Автоклік</translation>
 </translationbundle>

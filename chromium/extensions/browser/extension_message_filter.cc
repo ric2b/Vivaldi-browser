@@ -118,10 +118,6 @@ void ExtensionMessageFilter::OnDestruct() const {
 }
 
 bool ExtensionMessageFilter::OnMessageReceived(const IPC::Message& message) {
-  // If we have been shut down already, return.
-  if (!browser_context_)
-    return true;
-
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(ExtensionMessageFilter, message)
     IPC_MESSAGE_HANDLER(ExtensionHostMsg_AddListener,
@@ -165,6 +161,7 @@ void ExtensionMessageFilter::OnExtensionAddListener(
     const std::string& extension_id,
     const GURL& listener_or_worker_scope_url,
     const std::string& event_name,
+    int64_t service_worker_version_id,
     int worker_thread_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!browser_context_)
@@ -181,7 +178,7 @@ void ExtensionMessageFilter::OnExtensionAddListener(
       DCHECK(listener_or_worker_scope_url.is_valid());
       event_router->AddServiceWorkerEventListener(
           event_name, process, extension_id, listener_or_worker_scope_url,
-          worker_thread_id);
+          service_worker_version_id, worker_thread_id);
     } else {
       event_router->AddEventListener(event_name, process, extension_id);
     }
@@ -198,6 +195,7 @@ void ExtensionMessageFilter::OnExtensionRemoveListener(
     const std::string& extension_id,
     const GURL& listener_or_worker_scope_url,
     const std::string& event_name,
+    int64_t service_worker_version_id,
     int worker_thread_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!browser_context_)
@@ -213,7 +211,7 @@ void ExtensionMessageFilter::OnExtensionRemoveListener(
       DCHECK(listener_or_worker_scope_url.is_valid());
       GetEventRouter()->RemoveServiceWorkerEventListener(
           event_name, process, extension_id, listener_or_worker_scope_url,
-          worker_thread_id);
+          service_worker_version_id, worker_thread_id);
     } else {
       GetEventRouter()->RemoveEventListener(event_name, process, extension_id);
     }
@@ -429,6 +427,7 @@ void ExtensionMessageFilter::OnOpenChannelToTab(
 void ExtensionMessageFilter::OnOpenMessagePort(
     int routing_id,
     const PortId& port_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!browser_context_)
     return;
 
@@ -440,6 +439,7 @@ void ExtensionMessageFilter::OnCloseMessagePort(
     int routing_id,
     const PortId& port_id,
     bool force_close) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!browser_context_)
     return;
 
@@ -449,6 +449,7 @@ void ExtensionMessageFilter::OnCloseMessagePort(
 
 void ExtensionMessageFilter::OnPostMessage(const PortId& port_id,
                                            const Message& message) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!browser_context_)
     return;
 

@@ -66,10 +66,6 @@
 #include "device/bluetooth/dbus/dbus_thread_manager_linux.h"
 #endif
 
-#if defined(OS_MACOSX)
-#include "extensions/shell/browser/shell_browser_main_parts_mac.h"
-#endif
-
 #if BUILDFLAG(ENABLE_NACL)
 #include "components/nacl/browser/nacl_browser.h"
 #include "components/nacl/browser/nacl_process_host.h"
@@ -115,9 +111,6 @@ ShellBrowserMainParts::~ShellBrowserMainParts() {
 void ShellBrowserMainParts::PreMainMessageLoopStart() {
 #if defined(USE_AURA) && defined(USE_X11)
   ui::TouchFactory::SetTouchDeviceListFromCommandLine();
-#endif
-#if defined(OS_MACOSX)
-  MainPartsPreMainMessageLoopStartMac();
 #endif
 }
 
@@ -286,8 +279,6 @@ void ShellBrowserMainParts::PostMainMessageLoopRun() {
   BrowserContextDependencyManager::GetInstance()->DestroyBrowserContextServices(
       browser_context_.get());
   extension_system_ = NULL;
-  ExtensionsBrowserClient::Set(NULL);
-  extensions_browser_client_.reset();
 
   desktop_controller_.reset();
 
@@ -309,6 +300,9 @@ void ShellBrowserMainParts::PostMainMessageLoopRun() {
 }
 
 void ShellBrowserMainParts::PostDestroyThreads() {
+  extensions_browser_client_.reset();
+  ExtensionsBrowserClient::Set(nullptr);
+
 #if defined(OS_CHROMEOS)
   network_controller_.reset();
   chromeos::NetworkHandler::Shutdown();

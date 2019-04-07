@@ -9,6 +9,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
+#include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
@@ -85,8 +86,6 @@
         (id<ApplicationCommands>)applicationCommandEndpoint {
   if ((self = [super initWithWindow:window])) {
     _dispatcher = [[CommandDispatcher alloc] init];
-    [_dispatcher startDispatchingToTarget:self
-                              forProtocol:@protocol(BrowserCommands)];
     [_dispatcher startDispatchingToTarget:applicationCommandEndpoint
                               forProtocol:@protocol(ApplicationCommands)];
     // -startDispatchingToTarget:forProtocol: doesn't pick up protocols the
@@ -171,13 +170,18 @@
   self.adaptor = [[TabGridAdaptor alloc] init];
   self.adaptor.tabGridViewController = self.mainViewController;
   self.adaptor.adaptedDispatcher =
-      static_cast<id<ApplicationCommands, BrowserCommands, OmniboxFocuser,
-                     ToolbarCommands>>(self.dispatcher);
+      static_cast<id<ApplicationCommands, OmniboxFocuser, ToolbarCommands>>(
+          self.dispatcher);
   self.adaptor.tabGridPager = mainViewController;
 
   self.regularTabsMediator = [[TabGridMediator alloc]
       initWithConsumer:mainViewController.regularTabsConsumer];
   self.regularTabsMediator.tabModel = _regularTabModel;
+  if (_regularTabModel.browserState) {
+    self.regularTabsMediator.tabRestoreService =
+        IOSChromeTabRestoreServiceFactory::GetForBrowserState(
+            _regularTabModel.browserState);
+  }
   self.incognitoTabsMediator = [[TabGridMediator alloc]
       initWithConsumer:mainViewController.incognitoTabsConsumer];
   self.incognitoTabsMediator.tabModel = _incognitoTabModel;
@@ -241,7 +245,6 @@
 }
 
 - (void)stop {
-  [self.dispatcher stopDispatchingForProtocol:@protocol(BrowserCommands)];
   [self.dispatcher stopDispatchingForProtocol:@protocol(ApplicationCommands)];
   [self.dispatcher
       stopDispatchingForProtocol:@protocol(ApplicationSettingsCommands)];
@@ -268,6 +271,16 @@
 
 - (UIViewController*)viewController {
   return self.mainViewController;
+}
+
+- (void)prepareToShowTabSwitcher:(id<TabSwitcher>)tabSwitcher {
+  DCHECK(tabSwitcher);
+  DCHECK_EQ([tabSwitcher viewController], self.mainViewController);
+  // No-op if the BVC isn't being presented.
+  if (!self.bvcContainer)
+    return;
+  [base::mac::ObjCCast<TabGridViewController>(self.mainViewController)
+      prepareForAppearance];
 }
 
 - (void)showTabSwitcher:(id<TabSwitcher>)tabSwitcher
@@ -363,22 +376,6 @@
   [self.tabSwitcher.delegate tabSwitcher:self.tabSwitcher
              shouldFinishWithActiveModel:activeTabModel
                             focusOmnibox:focusOmnibox];
-}
-
-#pragma mark - BrowserCommands
-
-- (void)openNewTab:(OpenNewTabCommand*)command {
-  DCHECK(self.regularTabModel && self.incognitoTabModel);
-  TabModel* activeTabModel =
-      command.inIncognito ? self.incognitoTabModel : self.regularTabModel;
-  // TODO(crbug.com/804587) : It is better to use the mediator to insert a
-  // webState and show the active tab.
-  DCHECK(self.tabSwitcher);
-  [self.tabSwitcher
-      dismissWithNewTabAnimationToModel:activeTabModel
-                                withURL:GURL(kChromeUINewTabURL)
-                                atIndex:NSNotFound
-                             transition:ui::PAGE_TRANSITION_TYPED];
 }
 
 #pragma mark - RecentTabsHandsetViewControllerCommand

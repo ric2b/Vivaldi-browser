@@ -18,7 +18,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/metrics/chrome_metrics_service_client.h"
@@ -89,7 +89,7 @@ void InstantiatePersistentHistograms() {
   // TODO(bcwhite): Remove this in M65 or later.
   base::PostTaskWithTraits(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(base::IgnoreResult(&base::DeleteFile),
                      std::move(active_file), /*recursive=*/false));

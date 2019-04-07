@@ -135,7 +135,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
 
  private:
   void InitializeRenderer();
-  void UpdateRootSurfaceResourcesLocked();
+  void UpdateRootFrameMissing();
 
   // ContextLostObserver implementation.
   void OnContextLost() override;
@@ -144,7 +144,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   const RendererSettings settings_;
 
   DisplayClient* client_ = nullptr;
-  base::ObserverList<DisplayObserver> observers_;
+  base::ObserverList<DisplayObserver>::Unchecked observers_;
   SurfaceManager* surface_manager_ = nullptr;
   const FrameSinkId frame_sink_id_;
   SurfaceId current_surface_id_;
@@ -171,7 +171,9 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   base::circular_deque<std::vector<Surface::PresentedCallback>>
       pending_presented_callbacks_;
 
- private:
+  int32_t swapped_trace_id_ = 0;
+  int32_t last_acked_trace_id_ = 0;
+
   DISALLOW_COPY_AND_ASSIGN(Display);
 };
 

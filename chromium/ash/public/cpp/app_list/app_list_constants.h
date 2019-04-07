@@ -59,13 +59,8 @@ ASH_PUBLIC_EXPORT extern const int kAppsGridPadding;
 ASH_PUBLIC_EXPORT extern const int kAppsGridLeftRightPadding;
 ASH_PUBLIC_EXPORT extern const int kBottomSeparatorLeftRightPadding;
 ASH_PUBLIC_EXPORT extern const int kBottomSeparatorBottomPadding;
-ASH_PUBLIC_EXPORT extern const int kSearchBoxPadding;
-ASH_PUBLIC_EXPORT extern const int kSearchBoxTopPadding;
 ASH_PUBLIC_EXPORT extern const int kSearchBoxPeekingBottomPadding;
 ASH_PUBLIC_EXPORT extern const int kSearchBoxBottomPadding;
-
-ASH_PUBLIC_EXPORT extern const int kPeekingAppListHeight;
-ASH_PUBLIC_EXPORT extern const int kShelfSize;
 
 ASH_PUBLIC_EXPORT extern const size_t kMaxFolderPages;
 ASH_PUBLIC_EXPORT extern const size_t kMaxFolderItemsPerPage;
@@ -75,6 +70,10 @@ ASH_PUBLIC_EXPORT extern const ui::ResourceBundle::FontStyle kItemTextFontStyle;
 
 ASH_PUBLIC_EXPORT extern const float kAllAppsOpacityStartPx;
 ASH_PUBLIC_EXPORT extern const float kAllAppsOpacityEndPx;
+
+ASH_PUBLIC_EXPORT extern const int kSearchResultTitleTextSizeDelta;
+ASH_PUBLIC_EXPORT extern const ui::ResourceBundle::FontStyle
+    kSearchResultTitleFontStyle;
 
 // The different ways that the app list can transition from PEEKING to
 // FULLSCREEN_ALL_APPS. These values are written to logs.  New enum

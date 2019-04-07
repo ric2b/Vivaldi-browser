@@ -57,7 +57,8 @@ DownloadOfflineContentProvider::~DownloadOfflineContentProvider() {
 }
 
 // TODO(shaktisahu) : Pass DownloadOpenSource.
-void DownloadOfflineContentProvider::OpenItem(const ContentId& id) {
+void DownloadOfflineContentProvider::OpenItem(LaunchLocation location,
+                                              const ContentId& id) {
   download::DownloadItem* item = manager_->GetDownloadByGuid(id.id);
   if (item)
     item->OpenDownload();
@@ -120,7 +121,7 @@ void DownloadOfflineContentProvider::GetAllItems(
 
 void DownloadOfflineContentProvider::GetVisualsForItem(
     const ContentId& id,
-    const VisualsCallback& callback) {
+    VisualsCallback callback) {
   // TODO(crbug.com/855330) Supply thumbnail if item is visible.
   DownloadItem* item = manager_->GetDownloadByGuid(id.id);
   if (!item)
@@ -132,7 +133,7 @@ void DownloadOfflineContentProvider::GetVisualsForItem(
   auto request = std::make_unique<ImageThumbnailRequest>(
       icon_size,
       base::BindOnce(&DownloadOfflineContentProvider::OnThumbnailRetrieved,
-                     weak_ptr_factory_.GetWeakPtr(), id, callback));
+                     weak_ptr_factory_.GetWeakPtr(), id, std::move(callback)));
   request->Start(item->GetTargetFilePath());
 
   // Dropping ownership of |request| here because it will clean itself up once
@@ -140,9 +141,13 @@ void DownloadOfflineContentProvider::GetVisualsForItem(
   request.release();
 }
 
+void DownloadOfflineContentProvider::GetShareInfoForItem(
+    const ContentId& id,
+    ShareCallback callback) {}
+
 void DownloadOfflineContentProvider::OnThumbnailRetrieved(
     const ContentId& id,
-    const VisualsCallback& callback,
+    VisualsCallback callback,
     const SkBitmap& bitmap) {
   auto visuals = std::make_unique<OfflineItemVisuals>();
   visuals->icon = gfx::Image::CreateFrom1xBitmap(bitmap);

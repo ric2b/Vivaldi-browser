@@ -16,6 +16,7 @@
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "chrome/browser/component_updater/cros_component_installer_chromeos.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chromeos/dbus/cicerone/cicerone_service.pb.h"
@@ -43,6 +44,9 @@ enum class ConciergeClientResult {
   LAUNCH_CONTAINER_APPLICATION_FAILED,
   INSTALL_LINUX_PACKAGE_FAILED,
   INSTALL_LINUX_PACKAGE_ALREADY_ACTIVE,
+  SSHFS_MOUNT_ERROR,
+  OFFLINE_WHEN_UPGRADE_REQUIRED,
+  LOAD_COMPONENT_FAILED,
   UNKNOWN_ERROR,
 };
 
@@ -88,6 +92,7 @@ class CrostiniManager : public chromeos::ConciergeClient::Observer,
   using ConciergeClientCallback =
       base::OnceCallback<void(ConciergeClientResult result)>;
   using BoolCallback = base::OnceCallback<void(bool)>;
+  using CrostiniResultCallback = ConciergeClientCallback;
 
   // The type of the callback for CrostiniManager::StartConcierge.
   using StartConciergeCallback = BoolCallback;
@@ -116,7 +121,7 @@ class CrostiniManager : public chromeos::ConciergeClient::Observer,
   // The type of the callback for CrostiniManager::GetContainerAppIcons.
   using GetContainerAppIconsCallback =
       base::OnceCallback<void(ConciergeClientResult result,
-                              std::vector<Icon>& icons)>;
+                              const std::vector<Icon>& icons)>;
   // The type of the callback for CrostiniManager::InstallLinuxPackage.
   // |failure_reason| is returned from the container upon failure
   // (INSTALL_LINUX_PACKAGE_FAILED), and not necessarily localized.
@@ -142,15 +147,19 @@ class CrostiniManager : public chromeos::ConciergeClient::Observer,
     virtual void OnConciergeStarted(ConciergeClientResult result) = 0;
     virtual void OnDiskImageCreated(ConciergeClientResult result) = 0;
     virtual void OnVmStarted(ConciergeClientResult result) = 0;
+    virtual void OnContainerStarted(ConciergeClientResult result) = 0;
+    virtual void OnSshKeysFetched(ConciergeClientResult result) = 0;
   };
 
   // Checks if the cros-termina component is installed.
-  static bool IsCrosTerminaInstalled();
+  bool IsCrosTerminaInstalled() const;
 
   // Generate the URL for Crostini terminal application.
-  static GURL GenerateVshInCroshUrl(Profile* profile,
-                                    const std::string& vm_name,
-                                    const std::string& container_name);
+  static GURL GenerateVshInCroshUrl(
+      Profile* profile,
+      const std::string& vm_name,
+      const std::string& container_name,
+      const std::vector<std::string>& terminal_args);
 
   // Generate AppLaunchParams for the Crostini terminal application.
   static AppLaunchParams GenerateTerminalAppLaunchParams(Profile* profile);
@@ -160,7 +169,7 @@ class CrostiniManager : public chromeos::ConciergeClient::Observer,
 
   // Installs the current version of cros-termina component. Attempts to apply
   // pending upgrades if a MaybeUpgradeCrostini failed.
-  void InstallTerminaComponent(BoolCallback callback);
+  void InstallTerminaComponent(CrostiniResultCallback callback);
 
   // Starts the Concierge service. |callback| is called after the method call
   // finishes.
@@ -276,10 +285,12 @@ class CrostiniManager : public chromeos::ConciergeClient::Observer,
                              Browser* browser);
 
   // Launches the crosh-in-a-window that displays a shell in an already running
-  // container on a VM.
+  // container on a VM and passes |terminal_args| as parameters to that shell
+  // which will cause them to be executed as program inside that shell.
   void LaunchContainerTerminal(Profile* profile,
                                const std::string& vm_name,
-                               const std::string& container_name);
+                               const std::string& container_name,
+                               const std::vector<std::string>& terminal_args);
 
   using RestartId = int;
   static const RestartId kUninitializedRestartId = -1;
@@ -291,11 +302,13 @@ class CrostiniManager : public chromeos::ConciergeClient::Observer,
                             RestartCrostiniCallback callback,
                             RestartObserver* observer = nullptr);
 
-  void AbortRestartCrostini(Profile* profile, RestartId id);
+  // Aborts a restart. A "next" restarter with the same <vm_name,
+  // container_name> will run, if there is one.
+  void AbortRestartCrostini(Profile* profile, RestartId restart_id);
 
-  // Can be called for testing to skip restart.
-  void set_skip_restart_for_testing() { skip_restart_for_testing_ = true; }
-  bool skip_restart_for_testing() { return skip_restart_for_testing_; }
+  // Returns true if the Restart corresponding to |restart_id| is not yet
+  // complete.
+  bool IsRestartPending(Profile* profile, RestartId restart_id);
 
   // Adds a callback to receive notification of container shutdown.
   void AddShutdownContainerCallback(
@@ -324,6 +337,12 @@ class CrostiniManager : public chromeos::ConciergeClient::Observer,
   void OnInstallLinuxPackageProgress(
       const vm_tools::cicerone::InstallLinuxPackageProgressSignal& signal)
       override;
+  void OnLxdContainerCreated(
+      const vm_tools::cicerone::LxdContainerCreatedSignal& signal) override;
+  void OnLxdContainerDownloading(
+      const vm_tools::cicerone::LxdContainerDownloadingSignal& signal) override;
+  void OnTremplinStarted(
+      const vm_tools::cicerone::TremplinStartedSignal& signal) override;
 
   void RemoveCrostini(Profile* profile,
                       std::string vm_name,
@@ -334,9 +353,26 @@ class CrostiniManager : public chromeos::ConciergeClient::Observer,
   static CrostiniManager* GetInstance();
 
   bool IsVmRunning(Profile* profile, std::string vm_name);
+  // Returns null if VM is not running.
+  base::Optional<vm_tools::concierge::VmInfo> GetVmInfo(std::string vm_name);
+  void AddRunningVmForTesting(std::string vm_name,
+                              vm_tools::concierge::VmInfo vm_info);
   bool IsContainerRunning(Profile* profile,
                           std::string vm_name,
                           std::string container_name);
+
+  // Clear the lists of running VMs and containers.
+  // Can be called for testing to skip restart.
+  void set_skip_restart_for_testing() { skip_restart_for_testing_ = true; }
+  bool skip_restart_for_testing() { return skip_restart_for_testing_; }
+  void set_component_manager_load_error_for_testing(
+      component_updater::CrOSComponentManager::Error error) {
+    component_manager_load_error_for_testing_ = error;
+  }
+
+  // If the Crostini reporting policy is set, save the last app launch
+  // time window and the Termina version in prefs for asynchronous reporting.
+  void UpdateLaunchMetricsForEnterpriseReporting(Profile* profile);
 
  private:
   friend struct base::DefaultSingletonTraits<CrostiniManager>;
@@ -379,9 +415,11 @@ class CrostiniManager : public chromeos::ConciergeClient::Observer,
 
   // Callback for CrostiniManager::InstallCrostiniComponent. Must be called on
   // the UI thread.
-  void OnInstallTerminaComponent(BoolCallback callback,
-                                 bool is_update_checked,
-                                 bool is_successful);
+  void OnInstallTerminaComponent(
+      CrostiniResultCallback callback,
+      bool is_update_checked,
+      component_updater::CrOSComponentManager::Error error,
+      const base::FilePath& result);
 
   // Callback for CrostiniClient::StartConcierge. Called after the
   // DebugDaemon service method finishes.
@@ -423,6 +461,10 @@ class CrostiniManager : public chromeos::ConciergeClient::Observer,
       GetContainerSshKeysCallback callback,
       base::Optional<vm_tools::concierge::ContainerSshKeysResponse> reply);
 
+  // Helper for CrostiniManager::MaybeUpgradeCrostini. Separated because the
+  // checking registration code may block.
+  void MaybeUpgradeCrostiniAfterTerminaCheck(bool is_registered);
+
   // Helper for CrostiniManager::CreateDiskImage. Separated so it can be run
   // off the main thread.
   void CreateDiskImageAfterSizeCheck(
@@ -431,6 +473,11 @@ class CrostiniManager : public chromeos::ConciergeClient::Observer,
       int64_t free_disk_size);
 
   bool skip_restart_for_testing_ = false;
+  component_updater::CrOSComponentManager::Error
+      component_manager_load_error_for_testing_ =
+          component_updater::CrOSComponentManager::Error::NONE;
+
+  bool is_cros_termina_registered_ = false;
   bool termina_update_check_needed_ = false;
 
   // Pending StartContainer callbacks are keyed by <owner_id, vm_name,

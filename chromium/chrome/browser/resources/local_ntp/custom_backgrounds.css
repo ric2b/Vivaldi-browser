@@ -32,11 +32,11 @@ html[dir=rtl] #edit-bg {
 }
 
 #edit-bg:hover {
-  background-color: rgb(241, 243, 244);
+  background-color: rgba(32, 33, 36, .1);
 }
 
-.non-white-bg #edit-bg:hover {
-  background-color: rgba(255, 255, 255, .1);
+#edit-bg:active {
+  background-color: rgba(32, 33, 36, .16);
 }
 
 .using-mouse-nav .bg-option:focus {
@@ -68,9 +68,13 @@ html[dir=rtl] #edit-bg {
   bottom: 44px;
   box-shadow: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
   left: auto;
-  padding: 0 0 16px 0;
+  padding: 0;
   position: fixed;
   right: 16px;
+}
+
+#edit-bg-menu {
+  padding: 0 0 16px 0;
   width: 325px;
 }
 
@@ -120,6 +124,10 @@ html[dir=rtl] .bg-option-img {
 
 .bg-option.bg-option-disabled {
   opacity: 0.28;
+}
+
+.bg-option.bg-option-disabled:focus {
+  outline: none;
 }
 
 .bg-option.bg-option-disabled:hover {
@@ -204,10 +212,17 @@ html[dir=rtl] .bg-option-text {
 }
 
 @media (max-width: 356px) {
-   #bg-sel-menu,
-   #edit-bg-dialog {
+   #bg-sel-menu {
      width: 188px;
    }
+}
+
+/* The width is decided by the longest text length plus 16px margin on the
+right, so that every text can stay on its row even on the smallest window */
+@media (max-width: 356px) {
+  #edit-bg-menu {
+    width: 232px;
+  }
 }
 
 #bg-sel-tiles {
@@ -240,6 +255,7 @@ html[dir=rtl] #bg-sel-tiles {
   height: 51px;
   line-height: 52px;
   text-align: center;
+  user-select: none;
 }
 
 #bg-sel-back {
@@ -330,28 +346,37 @@ html[dir=rtl] .is-img-sel #bg-sel-title {
   height: 64px;
   padding-left: 0;
   position: absolute;
+  user-select: none;
   width: 100%;
 }
 
 .bg-sel-footer-button {
+  border: none;
   border-radius: 4px;
   bottom: 16px;
   font-family: 'Roboto', arial, sans-serif;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
+  height: 32px;
   line-height: normal;
+  min-width: 60px;
+  padding: 0 16px;
   position: absolute;
   text-align: center;
+  transition-duration: 200ms;
+  transition-property: background-color, color, box-shadow, border;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   vertical-align: middle;
+}
+
+.bg-sel-footer-button:disabled {
+  transition: none;
 }
 
 #bg-sel-footer-done {
   background-color: rgb(241, 243, 244);
   color: rgb(128, 134, 139);
-  height: 24px;
-  padding-top: 9px;
   right: 16px;
-  width: 62px;
 }
 
 html[dir=rtl] #bg-sel-footer-done {
@@ -360,14 +385,11 @@ html[dir=rtl] #bg-sel-footer-done {
 }
 
 #bg-sel-footer-cancel {
-  background-color: #fff;
+  background-color: white;
   border: 1px solid rgb(218, 220, 224);
   color: rgb(26, 115, 232);
-  height: 23px;
   margin-right: 8px;
-  padding-top: 8px;
   right: 78px;
-  width: 66px;
 }
 
 html[dir=rtl] #bg-sel-footer-cancel {
@@ -377,23 +399,31 @@ html[dir=rtl] #bg-sel-footer-cancel {
 }
 
 #bg-sel-footer-cancel:hover {
-  background-color: rgb(154, 160, 166, 0.04);
+  background-color: rgba(66, 133, 244, 0.04);
+  border-color: rgb(210, 227, 252);
 }
 
 #bg-sel-footer-cancel:active {
-  background-color: #fff;
-  box-shadow: 0 1px 1px 0 rgba(60, 64, 67, 0.3), 0 1px 1px 1px rgba(60, 64, 67, 0.15);
-  outline: none;
+  background-color: white;
+  border-color: white;
+  box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3),
+  0 3px 6px 2px rgba(60, 64, 67, 0.15);
 }
 
 #bg-sel-footer-done.done-available:active {
-  box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 2px 6px 2px rgba(60, 64, 67, 0.15);
-  outline: none;
+  box-shadow: 0 1px 2px 0 rgba(66, 133, 244, 0.3),
+      0 3px 6px 2px rgba(66, 133, 244, 0.15);
+}
+
+#bg-sel-footer-done.done-available:hover {
+  background-color: rgb(41, 123, 231);
+  box-shadow: 0 1px 2px 0 rgba(66, 133, 244, 0.3),
+      0 1px 3px 1px rgba(66, 133, 244, 0.15);
 }
 
 #bg-sel-footer-done.done-available {
   background-color: rgb(26, 115, 232);
-  color: #FFF;
+  color: white;
 }
 
 #bg-sel-footer-toggle-text {
@@ -401,17 +431,25 @@ html[dir=rtl] #bg-sel-footer-cancel {
 }
 
 .bg-sel-tile {
-  background-color: rgba(32, 33, 36, .06);
+  background-size: cover;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 700ms;
+  width: 100%;
+}
+
+html[dir=rtl] .bg-sel-tile-bg {
+  margin: 6px 8px 0 0;
+}
+
+.bg-sel-tile-bg {
+  background-color: rgb(241, 243, 244);
   background-size: cover;
   display: inline-block;
   height: 117px;
   margin: 6px 0 0 8px;
   position: relative;
   width: 156px;
-}
-
-html[dir=rtl] .bg-sel-tile {
-  margin: 6px 8px 0 0;
 }
 
 .bg-selected {
@@ -467,6 +505,7 @@ html[dir=rtl] .selected-check {
   padding: 8px 16px 0 16px;
   position: absolute;
   text-overflow: ellipsis;
+  user-select: none;
   vertical-align: middle;
   white-space: nowrap;
   width: 124px;

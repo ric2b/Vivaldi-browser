@@ -38,26 +38,40 @@ void AppListShelfItemDelegate::ItemSelected(std::unique_ptr<ui::Event> event,
     return;
   }
 
+  // Whether to perform the "back" action for the app list. It will only be
+  // performed if other actions are not performed.
+  bool back_action = true;
+
   // End overview mode.
-  if (Shell::Get()->window_selector_controller()->IsSelecting())
-    Shell::Get()->window_selector_controller()->ToggleOverview();
+  if (Shell::Get()->window_selector_controller()->IsSelecting()) {
+    Shell::Get()->window_selector_controller()->ToggleOverview(
+        /*use_slide_animation=*/true);
+    back_action = false;
+  }
 
   // End split view mode.
-  if (Shell::Get()->split_view_controller()->IsSplitViewModeActive())
-    Shell::Get()->split_view_controller()->EndSplitView();
+  if (Shell::Get()->split_view_controller()->IsSplitViewModeActive()) {
+    Shell::Get()->split_view_controller()->EndSplitView(
+        SplitViewController::EndReason::kHomeLauncherPressed);
+    back_action = false;
+  }
 
   // Minimize all windows that aren't the app list.
   aura::Window* app_list_container =
       Shell::Get()->GetPrimaryRootWindow()->GetChildById(
           kShellWindowId_AppListTabletModeContainer);
   aura::Window::Windows windows =
-      Shell::Get()->mru_window_tracker()->BuildWindowListIgnoreModal();
+      Shell::Get()->mru_window_tracker()->BuildWindowForCycleList();
   for (auto* window : windows) {
     if (!app_list_container->Contains(window) &&
         !wm::GetWindowState(window)->IsMinimized()) {
       wm::GetWindowState(window)->Minimize();
+      back_action = false;
     }
   }
+
+  if (back_action)
+    Shell::Get()->app_list_controller()->Back();
 }
 
 void AppListShelfItemDelegate::ExecuteCommand(bool from_context_menu,

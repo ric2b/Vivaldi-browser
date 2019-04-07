@@ -42,6 +42,7 @@ source_set("authentication") {
     "//components/signin/core/browser",
     "//components/signin/ios/browser",
     "//components/strings",
+    "//components/unified_consent",
     "//google_apis",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
@@ -52,9 +53,11 @@ source_set("authentication") {
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/alert_coordinator",
+    "//ios/chrome/browser/ui/authentication/consent_bump",
     "//ios/chrome/browser/ui/collection_view/cells",
     "//ios/chrome/browser/ui/colors",
     "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/material_components",
     "//ios/chrome/browser/ui/signin_interaction/public",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/unified_consent",
@@ -112,6 +115,15 @@ source_set("authentication_ui") {
   libs = [ "UIKit.framework" ]
 }
 
+source_set("authentication_constants") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "authentication_constants.h",
+    "authentication_constants.mm",
+  ]
+  libs = [ "UIKit.framework" ]
+}
+
 source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
@@ -153,6 +165,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/ui/colors",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/signin_interaction/public",
+    "//ios/chrome/browser/unified_consent",
     "//ios/chrome/test:test_support",
     "//ios/public/provider/chrome/browser/signin:test_support",
     "//ios/third_party/material_components_ios",
@@ -179,9 +192,11 @@ source_set("eg_test_support") {
     "//components/signin/core/browser",
     "//components/signin/core/browser:account_info",
     "//components/unified_consent",
+    "//ios/chrome/app/strings:ios_strings_grit",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/ui/authentication/unified_consent:unified_consent_ui",
+    "//ios/chrome/browser/ui/authentication/unified_consent/identity_chooser:identity_chooser_ui",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
     "//ios/public/provider/chrome/browser/signin",

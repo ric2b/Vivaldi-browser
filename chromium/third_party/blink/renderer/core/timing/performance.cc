@@ -50,10 +50,10 @@
 #include "third_party/blink/renderer/core/timing/performance_observer.h"
 #include "third_party/blink/renderer/core/timing/performance_resource_timing.h"
 #include "third_party/blink/renderer/core/timing/performance_user_timing.h"
+#include "third_party/blink/renderer/core/timing/time_clamper.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_timing_info.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/time_clamper.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
@@ -85,14 +85,12 @@ DOMHighResTimeStamp GetUnixAtZeroMonotonic() {
 using PerformanceObserverVector = HeapVector<Member<PerformanceObserver>>;
 
 static const size_t kDefaultResourceTimingBufferSize = 250;
-static const size_t kDefaultFrameTimingBufferSize = 150;
 constexpr size_t kDefaultEventTimingBufferSize = 150;
 
 Performance::Performance(
     TimeTicks time_origin,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-    : frame_timing_buffer_size_(kDefaultFrameTimingBufferSize),
-      resource_timing_buffer_size_(kDefaultResourceTimingBufferSize),
+    : resource_timing_buffer_size_(kDefaultResourceTimingBufferSize),
       event_timing_buffer_max_size_(kDefaultEventTimingBufferSize),
       user_timing_(nullptr),
       time_origin_(time_origin),
@@ -143,7 +141,6 @@ PerformanceEntryVector Performance::getEntries() {
   // calls this method.
   if (navigation_timing_)
     entries.push_back(navigation_timing_);
-  entries.AppendVector(frame_timing_buffer_);
 
   if (user_timing_) {
     entries.AppendVector(user_timing_->GetMarks());
@@ -189,14 +186,6 @@ PerformanceEntryVector Performance::getEntriesByType(
       if (navigation_timing_)
         entries.push_back(navigation_timing_);
       break;
-    case PerformanceEntry::kComposite:
-    case PerformanceEntry::kRender:
-      for (const auto& frame : frame_timing_buffer_) {
-        if (type == frame->EntryTypeEnum()) {
-          entries.push_back(frame);
-        }
-      }
-      break;
     case PerformanceEntry::kMark:
       if (user_timing_)
         entries.AppendVector(user_timing_->GetMarks());
@@ -230,7 +219,7 @@ PerformanceEntryVector Performance::getEntriesByType(
 }
 
 PerformanceEntryVector Performance::getEntriesByName(
-    const String& name,
+    const AtomicString& name,
     const AtomicString& entry_type) {
   PerformanceEntryVector entries;
   PerformanceEntry::EntryType type =
@@ -273,15 +262,6 @@ PerformanceEntryVector Performance::getEntriesByName(
       entries.push_back(navigation_timing_);
   }
 
-  if (entry_type.IsNull() || type == PerformanceEntry::kComposite ||
-      type == PerformanceEntry::kRender) {
-    for (const auto& frame : frame_timing_buffer_) {
-      if (frame->name() == name &&
-          (entry_type.IsNull() || entry_type == frame->entryType()))
-        entries.push_back(frame);
-    }
-  }
-
   if (user_timing_) {
     if (entry_type.IsNull() || type == PerformanceEntry::kMark)
       entries.AppendVector(user_timing_->GetMarks(name));
@@ -309,7 +289,7 @@ void Performance::clearResourceTimings() {
 void Performance::setResourceTimingBufferSize(unsigned size) {
   resource_timing_buffer_size_ = size;
   if (IsResourceTimingBufferFull())
-    DispatchEvent(Event::Create(EventTypeNames::resourcetimingbufferfull));
+    DispatchEvent(*Event::Create(EventTypeNames::resourcetimingbufferfull));
 }
 
 bool Performance::PassesTimingAllowCheck(
@@ -490,7 +470,7 @@ void Performance::AddEventTimingBuffer(PerformanceEventTiming& entry) {
   event_timing_buffer_.push_back(&entry);
 
   if (IsEventTimingBufferFull())
-    DispatchEvent(Event::Create(EventTypeNames::eventtimingbufferfull));
+    DispatchEvent(*Event::Create(EventTypeNames::eventtimingbufferfull));
 }
 
 unsigned Performance::EventTimingBufferSize() const {
@@ -504,7 +484,7 @@ void Performance::clearEventTimings() {
 void Performance::setEventTimingBufferMaxSize(unsigned size) {
   event_timing_buffer_max_size_ = size;
   if (IsEventTimingBufferFull())
-    DispatchEvent(Event::Create(EventTypeNames::eventtimingbufferfull));
+    DispatchEvent(*Event::Create(EventTypeNames::eventtimingbufferfull));
 }
 
 void Performance::AddFirstPaintTiming(TimeTicks start_time) {
@@ -518,9 +498,6 @@ void Performance::AddFirstContentfulPaintTiming(TimeTicks start_time) {
 
 void Performance::AddPaintTiming(PerformancePaintTiming::PaintType type,
                                  TimeTicks start_time) {
-  if (!RuntimeEnabledFeatures::PerformancePaintTimingEnabled())
-    return;
-
   PerformanceEntry* entry = new PerformancePaintTiming(
       type, MonotonicTimeToDOMHighResTimeStamp(start_time));
   // Always buffer First Paint & First Contentful Paint.
@@ -535,7 +512,7 @@ void Performance::AddResourceTimingBuffer(PerformanceEntry& entry) {
   resource_timing_buffer_.push_back(&entry);
 
   if (IsResourceTimingBufferFull())
-    DispatchEvent(Event::Create(EventTypeNames::resourcetimingbufferfull));
+    DispatchEvent(*Event::Create(EventTypeNames::resourcetimingbufferfull));
 }
 
 bool Performance::IsResourceTimingBufferFull() {
@@ -545,7 +522,7 @@ bool Performance::IsResourceTimingBufferFull() {
 void Performance::AddLongTaskTiming(
     TimeTicks start_time,
     TimeTicks end_time,
-    const String& name,
+    const AtomicString& name,
     const String& frame_src,
     const String& frame_id,
     const String& frame_name,
@@ -567,7 +544,7 @@ void Performance::AddLongTaskTiming(
 }
 
 PerformanceMark* Performance::mark(ScriptState* script_state,
-                                   const String& mark_name,
+                                   const AtomicString& mark_name,
                                    ExceptionState& exception_state) {
   DoubleOrPerformanceMarkOptions startOrOptions;
   return this->mark(script_state, mark_name, startOrOptions, exception_state);
@@ -575,7 +552,7 @@ PerformanceMark* Performance::mark(ScriptState* script_state,
 
 PerformanceMark* Performance::mark(
     ScriptState* script_state,
-    const String& mark_name,
+    const AtomicString& mark_name,
     DoubleOrPerformanceMarkOptions& start_time_or_mark_options,
     ExceptionState& exception_state) {
   if (!RuntimeEnabledFeatures::CustomUserTimingEnabled()) {
@@ -610,14 +587,14 @@ PerformanceMark* Performance::mark(
   return performance_mark;
 }
 
-void Performance::clearMarks(const String& mark_name) {
+void Performance::clearMarks(const AtomicString& mark_name) {
   if (!user_timing_)
     user_timing_ = UserTiming::Create(*this);
   user_timing_->ClearMarks(mark_name);
 }
 
 PerformanceMeasure* Performance::measure(ScriptState* script_state,
-                                         const String& measure_name,
+                                         const AtomicString& measure_name,
                                          ExceptionState& exception_state) {
   return measureInternal(script_state, measure_name,
                          NativeValueTraits<StringOrDouble>::NullValue(),
@@ -628,22 +605,22 @@ PerformanceMeasure* Performance::measure(ScriptState* script_state,
 
 PerformanceMeasure* Performance::measure(
     ScriptState* script_state,
-    const String& measure_name,
+    const AtomicString& measure_name,
     const StringOrDoubleOrPerformanceMeasureOptions& start_or_options,
     ExceptionState& exception_state) {
   return measureInternal(script_state, measure_name, start_or_options,
-                         NativeValueTraits<StringOrDouble>::NullValue(), true,
+                         NativeValueTraits<StringOrDouble>::NullValue(),
                          exception_state);
 }
 
 PerformanceMeasure* Performance::measure(
     ScriptState* script_state,
-    const String& measure_name,
+    const AtomicString& measure_name,
     const StringOrDoubleOrPerformanceMeasureOptions& start_or_options,
     const StringOrDouble& end,
     ExceptionState& exception_state) {
   return measureInternal(script_state, measure_name, start_or_options, end,
-                         false, exception_state);
+                         exception_state);
 }
 
 // |start_or_options|: while in options type, the value is an object {start,
@@ -665,10 +642,9 @@ PerformanceMeasure* Performance::measure(
 // distinguish between (null or undefined) and empty.
 PerformanceMeasure* Performance::measureInternal(
     ScriptState* script_state,
-    const String& measure_name,
+    const AtomicString& measure_name,
     const StringOrDoubleOrPerformanceMeasureOptions& start_or_options,
     const StringOrDouble& end,
-    bool end_is_empty,
     ExceptionState& exception_state) {
   if (RuntimeEnabledFeatures::CustomUserTimingEnabled()) {
     if (start_or_options.IsPerformanceMeasureOptions()) {
@@ -717,7 +693,7 @@ PerformanceMeasure* Performance::measureInternal(
           StringOrDouble::FromString(start_or_options.GetAsString());
     } else {
       DCHECK(start_or_options.IsNull());
-      converted_start = StringOrDouble::FromString("null");
+      DCHECK(converted_start.IsNull());
     }
 
     StringOrDouble converted_end;
@@ -728,11 +704,7 @@ PerformanceMeasure* Performance::measureInternal(
           String::NumberToStringECMAScript(end.GetAsDouble()));
     } else {
       DCHECK(end.IsNull());
-      if (end_is_empty) {
-        converted_end = NativeValueTraits<StringOrDouble>::NullValue();
-      } else {
-        converted_end = StringOrDouble::FromString("null");
-      }
+      DCHECK(converted_end.IsNull());
     }
     measureInternal(script_state, measure_name, converted_start, converted_end,
                     ScriptValue::CreateNull(script_state), exception_state);
@@ -743,7 +715,7 @@ PerformanceMeasure* Performance::measureInternal(
 
 PerformanceMeasure* Performance::measureInternal(
     ScriptState* script_state,
-    const String& measure_name,
+    const AtomicString& measure_name,
     const StringOrDouble& start,
     const StringOrDouble& end,
     const ScriptValue& detail,
@@ -761,7 +733,7 @@ PerformanceMeasure* Performance::measureInternal(
   return performance_measure;
 }
 
-void Performance::clearMeasures(const String& measure_name) {
+void Performance::clearMeasures(const AtomicString& measure_name) {
   if (!user_timing_)
     user_timing_ = UserTiming::Create(*this);
   user_timing_->ClearMeasures(measure_name);
@@ -888,7 +860,6 @@ void Performance::BuildJSONValue(V8ObjectBuilder& builder) const {
 }
 
 void Performance::Trace(blink::Visitor* visitor) {
-  visitor->Trace(frame_timing_buffer_);
   visitor->Trace(resource_timing_buffer_);
   visitor->Trace(event_timing_buffer_);
   visitor->Trace(navigation_timing_);

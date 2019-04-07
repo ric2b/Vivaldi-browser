@@ -17,6 +17,7 @@
 #include "net/third_party/quic/core/quic_utils.h"
 #include "net/third_party/quic/core/tls_server_handshaker.h"
 #include "net/third_party/quic/platform/api/quic_containers.h"
+#include "net/third_party/quic/platform/api/quic_expect_bug.h"
 #include "net/third_party/quic/platform/api/quic_flags.h"
 #include "net/third_party/quic/platform/api/quic_ptr_util.h"
 #include "net/third_party/quic/platform/api/quic_socket_address.h"
@@ -30,7 +31,6 @@
 #include "net/third_party/quic/test_tools/quic_sent_packet_manager_peer.h"
 #include "net/third_party/quic/test_tools/quic_session_peer.h"
 #include "net/third_party/quic/test_tools/quic_spdy_session_peer.h"
-#include "net/third_party/quic/test_tools/quic_spdy_stream_peer.h"
 #include "net/third_party/quic/test_tools/quic_stream_peer.h"
 #include "net/third_party/quic/test_tools/quic_sustained_bandwidth_recorder_peer.h"
 #include "net/third_party/quic/test_tools/quic_test_utils.h"
@@ -55,7 +55,7 @@ class QuicSimpleServerSessionPeer {
   static void SetCryptoStream(QuicSimpleServerSession* s,
                               QuicCryptoServerStream* crypto_stream) {
     s->crypto_stream_.reset(crypto_stream);
-    s->static_streams()[kCryptoStreamId] = crypto_stream;
+    s->RegisterStaticStream(kCryptoStreamId, crypto_stream);
   }
 
   static QuicSpdyStream* CreateIncomingDynamicStream(QuicSimpleServerSession* s,
@@ -87,7 +87,10 @@ class MockQuicCryptoServerStream : public QuicCryptoServerStream {
                 enable_quic_stateless_reject_support),  // NOLINT
             session,
             helper) {}
-  ~MockQuicCryptoServerStream() override = default;
+  MockQuicCryptoServerStream(const MockQuicCryptoServerStream&) = delete;
+  MockQuicCryptoServerStream& operator=(const MockQuicCryptoServerStream&) =
+      delete;
+  ~MockQuicCryptoServerStream() override {}
 
   MOCK_METHOD1(SendServerConfigUpdate,
                void(const CachedNetworkParameters* cached_network_parameters));
@@ -103,8 +106,6 @@ class MockQuicCryptoServerStream : public QuicCryptoServerStream {
 
  private:
   bool encryption_established_override_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(MockQuicCryptoServerStream);
 };
 
 class MockQuicConnectionWithSendStreamData : public MockQuicConnection {
@@ -188,6 +189,7 @@ class QuicSimpleServerSessionTest
       : crypto_config_(QuicCryptoServerConfig::TESTING,
                        QuicRandom::GetInstance(),
                        crypto_test_utils::ProofSourceForTesting(),
+                       KeyExchangeSource::Default(),
                        TlsServerHandshaker::CreateSslCtx()),
         compressed_certs_cache_(
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize) {

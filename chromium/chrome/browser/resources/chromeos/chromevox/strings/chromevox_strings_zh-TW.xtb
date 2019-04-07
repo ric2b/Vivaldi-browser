@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
 <translation id="100812568230599391">將顯示樣式變更為交錯。</translation>
+<translation id="1011903154582639569">找到需要的按鍵後，輕輕一點即可輸入</translation>
 <translation id="1012173283529841972">清單項目</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1022586497894531524">你是第一次使用 ChromeVox 互動朗讀嗎？本教學課程提供了簡要的基本操作說明，可協助你開始使用 ChromeVox。</translation>
@@ -15,6 +16,7 @@
 <translation id="1065552602950927991">輸入無效</translation>
 <translation id="1080471004309605942">斜體結尾</translation>
 <translation id="1082209053475788238">沒有上一個第 6 階標題。</translation>
+<translation id="1087788677726983142">隱藏活動訊息串篩選器</translation>
 <translation id="1088219014394087294">沒有標題。</translation>
 <translation id="1106741348836243114">開啟或關閉音效回饋 (聽覺標示)。</translation>
 <translation id="1108651818222110612">副標題</translation>
@@ -77,6 +79,7 @@
 <translation id="1618597272655350600">朗讀目前位置的完整說明</translation>
 <translation id="1639634871799530612">{COUNT,plural, =1{大於符號}other{# 個大於符號}}</translation>
 <translation id="1653266918374749391">上一個第 3 階標題</translation>
+<translation id="1657616855184033958">顯示活動訊息串篩選器</translation>
 <translation id="1659072772017912254">未勾選</translation>
 <translation id="1669290819662866522">週</translation>
 <translation id="1674262202423278359">ChromeVox 導覽</translation>
@@ -136,6 +139,7 @@
 <translation id="2267945578749931355">下一個字元</translation>
 <translation id="2281234842553884450">上一個滑桿</translation>
 <translation id="2294136146931447363">斜體開頭</translation>
+<translation id="2311237334957139798">移至較低的精細度等級</translation>
 <translation id="2318372665160196757">主要元素</translation>
 <translation id="2329324941084714723">分頁面板</translation>
 <translation id="2344193891939537199">日期時間控制項</translation>
@@ -156,12 +160,14 @@
 <translation id="2462626033734746142">圓形按鈕群組</translation>
 <translation id="2471138580042810658">標題 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{星號}other{# 個星號}}</translation>
+<translation id="249330843868392562">開啟文字轉語音設定</translation>
 <translation id="2523609930580546572">ChromeVox 教學課程</translation>
 <translation id="2525706221823668172">Chromebook 鍵盤快速鍵</translation>
 <translation id="2549392850788122959">「<ph name="KEY" />」已重設。</translation>
 <translation id="2553108862507765288">grammatical mistake</translation>
 <translation id="257674075312929031">群組</translation>
 <translation id="2582407057977008361">獨立元素</translation>
+<translation id="2592212930811759050">輕觸兩下即可開始編輯</translation>
 <translation id="2606210917827248971">內含 {COUNT,plural, =1{# 個項目}other{# 個項目}}</translation>
 <translation id="2614981083756825552">MathML 版面配置</translation>
 <translation id="2624431853467395961">開啟學習模式</translation>
@@ -409,6 +415,7 @@
 <translation id="4255943572433203166">使用下方的選項自訂 ChromeVox。變更會立即生效。</translation>
 <translation id="4271220233568730077">下一個數學元素</translation>
 <translation id="4271521365602459209">沒有其他搜尋結果。</translation>
+<translation id="4275397969489577657">啟用活動訊息串記錄功能</translation>
 <translation id="4287520460805643128">沒有下一篇文章。</translation>
 <translation id="4289540628985791613">總覽</translation>
 <translation id="4300318234632215983">朗讀連結的網址</translation>
@@ -487,6 +494,7 @@
 <translation id="4973762002207131920">已切換至「<ph name="KEY" />」。</translation>
 <translation id="4975416682604111799">毫秒</translation>
 <translation id="49787999531187221">ChromeVox 現在已停用。</translation>
+<translation id="4979263087381759787">開發人員選項</translation>
 <translation id="4979404613699303341">上一個按鈕</translation>
 <translation id="4982773647088557172"><ph name="VALUE" />，<ph name="NAME" />，清單方塊</translation>
 <translation id="4983588134362688868">前往網頁頂端</translation>
@@ -498,6 +506,7 @@
 <translation id="5000760171916499057">沒有表單。</translation>
 <translation id="5005670136041063723">已無類似元素。</translation>
 <translation id="501473567976723023">1 月</translation>
+<translation id="5020651427400641814">啟用語音記錄功能</translation>
 <translation id="5041394372352067729">將點字顯示畫面移至頁面頂端</translation>
 <translation id="5042770794184672516">增加說話音量</translation>
 <translation id="5050015258024679800">上一個第 4 階標題</translation>
@@ -512,6 +521,7 @@
 <translation id="5106547198195128110">這個新版本有一些很棒的變更，說明如下：</translation>
 <translation id="5110983769041734144">沒有上一個表單欄位。</translation>
 <translation id="5111640677200759579">欄標題</translation>
+<translation id="5115892389597951922">ChromeVox 記錄</translation>
 <translation id="5136967254288895616">沒有上一個連結。</translation>
 <translation id="513774504516943387">連結</translation>
 <translation id="5158275234811857234">封面</translation>
@@ -545,6 +555,7 @@
 <translation id="5407530583102765689">{COUNT,plural, =1{分號}other{# 個分號}}</translation>
 <translation id="5411891038905756502">沒有上一個跳躍點。</translation>
 <translation id="5417034931411865818">按一下路由機碼 $1 下方的項目</translation>
+<translation id="5435274640623994081">啟用語音記錄功能</translation>
 <translation id="5436105723448703439">{COUNT,plural, =1{小於符號}other{# 個小於符號}}</translation>
 <translation id="5444587279251314700">(運作中)</translation>
 <translation id="5446809554778706307">沒有焦點。按下 Ctrl + T 鍵即可開啟新分頁。</translation>
@@ -678,6 +689,7 @@
 <translation id="6540201937398578274">使用 ChromeVox 時，搜尋鍵的功用是輔助鍵。大多數 ChromeVox 快速鍵都是使用搜尋鍵搭配其他按鍵。此外，瀏覽時也會用到方向鍵。</translation>
 <translation id="6550720799683018100">選取下方清單中的選項，即可變更目前的按鍵對應配置。</translation>
 <translation id="6561818612645211875">前往目前列的開頭</translation>
+<translation id="6583174818554398774">移至較高的精細度等級</translation>
 <translation id="6587021927234520429">沒有下一個第 4 階標題。</translation>
 <translation id="6601344353291556895">啟用詳細說明。</translation>
 <translation id="6615602925644411249">在網頁中尋找。</translation>
@@ -753,6 +765,7 @@
 <translation id="7241683698754534149">在新分頁中開啟詳細說明</translation>
 <translation id="7248671827512403053">應用程式</translation>
 <translation id="725969808843520477">下一個圓形按鈕</translation>
+<translation id="7261612856573623172">系統預設文字轉語音聲音</translation>
 <translation id="7269119382257320590">無標點符號</translation>
 <translation id="7273174640290488576">空白行</translation>
 <translation id="7274770952766771364">附註參考資料</translation>
@@ -893,6 +906,7 @@
 <translation id="8650576015643545550">沒有上一個清單。</translation>
 <translation id="8651481478098336970">靜音</translation>
 <translation id="8653646212587894517">顯示連結清單</translation>
+<translation id="8656888282555543604">啟用點字記錄功能</translation>
 <translation id="8664519043722036194">秒</translation>
 <translation id="867187640362843212">標題 5</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{直立線符號}other{# 個直立線符號}}</translation>

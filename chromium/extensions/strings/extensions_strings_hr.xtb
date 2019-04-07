@@ -13,7 +13,6 @@
 <translation id="2350172092385603347">Lokalizacija je korištena, ali default_locale nije naveden u manifestu.</translation>
 <translation id="2576842806987913196">Već postoji CRX datoteka s takvim nazivom.</translation>
 <translation id="2753617847762399167">Neispravna putanja (apsolutna ili relativna u odnosu na ".."): "<ph name="IMAGE_PATH" />"</translation>
-<translation id="27822970480436970">Ovo proširenje nije uspjelo izmijeniti mrežni zahtjev jer je izmjena u sukobu s drugim proširenjem.</translation>
 <translation id="2785530881066938471">Nije bilo moguće učitati datoteku "<ph name="RELATIVE_PATH" />" za skriptu sadržaja. Nema UTF-8 kodiranje.</translation>
 <translation id="2903070246402204397"><ph name="EXTENSION_NAME" /> (ID proširenja "<ph name="EXTENSION_ID" />") blokirao je administrator. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">Nije moguće instaliranje paketa: "<ph name="ERROR_CODE" />"</translation>
@@ -57,19 +56,16 @@
 <translation id="7003844668372540529">Nepoznati proizvod <ph name="PRODUCT_ID" />, <ph name="VENDOR_NAME" /></translation>
 <translation id="7068383018033524534">Datoteka manifesta nije važeća</translation>
 <translation id="7217838517480956708">Administrator ovog računala zahtijeva instalaciju proširenja <ph name="EXTENSION_NAME" />. Ona se ne može ukloniti ni izmijeniti.</translation>
+<translation id="7612608473764576263">Vrijednost unosa osobnog ključa mora biti u važećem formatu (RSA ključ u formatu PKCS#8 s PEM kodiranjem).</translation>
 <translation id="7939686037314084444">Proširenje se nije pravilno učitalo. Možda neće moći presresti mrežne zahtjeve.</translation>
 <translation id="7972881773422714442">Opcije: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Prema korisniku</translation>
 <translation id="8047248493720652249">To proširenje nije uspjelo dodijeliti naziv preuzimanju "<ph name="ATTEMPTED_FILENAME" />" jer je drugo proširenje (<ph name="EXTENSION_NAME" />) odredilo drugačiji naziv datoteke "<ph name="ACTUAL_FILENAME" />".</translation>
 <translation id="8284835137979141223"><ph name="PRODUCT_NAME" /> od dobavljača <ph name="VENDOR_NAME" /></translation>
-<translation id="8341840687457896278">Ovo proširenje nije uspješno dodijelilo vjerodajnice za mrežni zahtjev jer je drugo proširenje (<ph name="EXTENSION_NAME" />) dodijelilo druge vjerodajnice.</translation>
 <translation id="8517576857589387417">Datoteka manifesta nedostaje ili nije čitljiva</translation>
 <translation id="8636666366616799973">Paket je nevažeći. Pojedinosti "<ph name="ERROR_MESSAGE" />".</translation>
-<translation id="8670869118777164560">Ovo proširenje nije uspjelo preusmjeriti mrežni zahtjev na odredište <ph name="ATTEMPTED_REDIRECT_DESTINATION" /> jer ga je drugo proširenje (<ph name="EXTENSION_NAME" />) preusmjerilo na odredište <ph name="ACTUAL_REDIRECT_DESTINATION" />.</translation>
 <translation id="8761756413268424715">"<ph name="APP_NAME" />" zahtijeva pristup jednom od vaših uređaja:</translation>
-<translation id="8825366169884721447">Ovo proširenje nije uspjelo izmijeniti zaglavlje zahtjeva "<ph name="HEADER_NAME" />" mrežnog zahtjeva jer je izmjena sukobljena s drugim proširenjem (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="8885905466771744233">Osobni ključ za navedeno proširenje već postoji. Ponovo koristite taj ključ ili ga prvo izbrišite.</translation>
 <translation id="907841381057066561">Nije uspjelo stvaranje privremene sažete datoteke tijekom sažimanja.</translation>
-<translation id="9111791539553342076">Ovo proširenje nije uspjelo izmijeniti zaglavlje odgovora "<ph name="HEADER_NAME" />" mrežnog zahtjeva jer je izmjena sukobljena s drugim proširenjem (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="941543339607623937">Nevažeći osobni ključ.</translation>
 </translationbundle>

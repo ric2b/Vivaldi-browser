@@ -206,7 +206,11 @@ RoleMap BuildRoleMap() {
       {ax::mojom::Role::kTreeItem, NSAccessibilityRowRole},
       {ax::mojom::Role::kVideo, NSAccessibilityGroupRole},
       {ax::mojom::Role::kWebArea, @"AXWebArea"},
-      {ax::mojom::Role::kWindow, NSAccessibilityWindowRole},
+      // Use the group role as the BrowserNativeWidgetWindow already provides
+      // a kWindow role, and having extra window roles, which are treated
+      // specially by screen readers, can break their ability to find the
+      // content window. See http://crbug.com/875843 for more information.
+      {ax::mojom::Role::kWindow, NSAccessibilityGroupRole},
   };
 
   return RoleMap(begin(roles), end(roles));
@@ -389,13 +393,12 @@ bool AlsoUseShowMenuActionForDefaultAction(const ui::AXNodeData& data) {
     // the inner text.
     NSString* name =
         [self getStringAttribute:ax::mojom::StringAttribute::kName];
-    return [name length] > 0 ? name
-                             : base::SysUTF16ToNSString(node_->GetText());
+    return [name length] > 0 ? name : base::SysUTF8ToNSString(node_->GetText());
   } else if (eventType == ax::mojom::Event::kLiveRegionChanged &&
              node_->GetData().HasStringAttribute(
                  ax::mojom::StringAttribute::kContainerLiveStatus)) {
     // Live regions announce their inner text.
-    return base::SysUTF16ToNSString(node_->GetText());
+    return base::SysUTF8ToNSString(node_->GetText());
   }
   // Only alerts and live regions have something to announce.
   return nil;
@@ -1004,6 +1007,12 @@ bool IsNameExposedInAXValueForRole(ax::mojom::Role role) {
     default:
       return false;
   }
+}
+
+void AXPlatformNodeMac::AddAttributeToList(const char* name,
+                                           const char* value,
+                                           PlatformAttributeList* attributes) {
+  NOTREACHED();
 }
 
 }  // namespace ui

@@ -7,7 +7,6 @@
 <translation id="139305205187523129"><ph name="HOST_NAME" /> no ha enviat dades.</translation>
 <translation id="1506687042165942984">Mostra una còpia desada (és a dir, no actualitzada) d'aquesta pàgina.</translation>
 <translation id="1559528461873125649">No existeix el fitxer o el directori</translation>
-<translation id="1676269943528358898"><ph name="SITE" /> 1 normalment xifra les dades per a protegir la vostra informació. Aquest cop, quan el Google Chrome ha provat de connectar-se a <ph name="SITE" /> 2, la pàgina web ha retornat unes credencials inusuals i incorrectes. Això podria passar en cas de que un atacant estigués provant de ser <ph name="SITE" /> 3, o quan la pantalla de connexió al Wi-Fi ha interromput la connexió. La vostra informació encara és segura perquè el Google Chrome ha aturat la connexió abans que qualsevol dada fos intercanviada</translation>
 <translation id="1710259589646384581">SO</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" /> 1Proveu d'executar els Diagnòstics de Xarxa del Windows<ph name="END_LINK" /> 2.</translation>
 <translation id="194030505837763158">Vés a <ph name="LINK" /></translation>
@@ -19,17 +18,11 @@
 <translation id="2609632851001447353">Variacions</translation>
 <translation id="2650446666397867134">S'ha denegat l'accés al fitxer</translation>
 <translation id="2705137772291741111">La còpia desada (a la memòria cau) d'aquest lloc no s'ha pogut llegir.</translation>
-<translation id="2730326759066348565"><ph name="BEGIN_LINK" /> 1Executant els Diagnòstics de Connectivitat<ph name="END_LINK" /> 2</translation>
 <translation id="2784949926578158345">S'ha restablert la connexió.</translation>
 <translation id="2826760142808435982">La connexió s'ha xifrat i autenticat mitjançant <ph name="CIPHER" /> i fa servir <ph name="KX" /> com a mecanisme d'intercanvi clau.</translation>
 <translation id="2909946352844186028">S'ha detectat un canvi a la xarxa.</translation>
-<translation id="2948083400971632585">Podeu desactivar qualsevol proxy configurat per a una connexió des de les Opcions</translation>
-<translation id="298138621710431427">Ajudeu-me a corregir-ho</translation>
 <translation id="3005723025932146533">Mostra la còpia desada</translation>
-<translation id="3041612393474885105">Informació del Certificat</translation>
-<translation id="3093245981617870298">Esteu fora de línia</translation>
 <translation id="3109728660330352905">No teniu permís per veure aquesta pàgina.</translation>
-<translation id="31207688938192855"><ph name="BEGIN_LINK" /> 1Proveu d'executar els Diagnòstics de Connectivitat<ph name="END_LINK" /> 2.</translation>
 <translation id="3176929007561373547">Comproveu la configuració del servidor intermediari o contacteu amb l'administrador de la xarxa per
           assegurar-vos que el servidor intermediari funcioni correctament. Si  creieu que no és necessari
           utilitzar un servidor intermediari:
@@ -48,12 +41,10 @@
 <translation id="4522570452068850558">Detalls</translation>
 <translation id="4592951414987517459">La connexió a <ph name="DOMAIN" /> s'ha xifrat amb un sistema de xifratge modern.</translation>
 <translation id="4690462567478992370">Pareu de fer servir un certificat invàlid</translation>
-<translation id="4690954380545377795">Podríeu perdre l'accés al vostre Compte de Google o patir un robatori de identitat. El Chrome us recomana que canvieu el vostre mot de pas ara mateix</translation>
 <translation id="4708268264240856090">La connexió s'ha interromput</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" /> 1Executant els Diagnòstics de Xarxa del Windows<ph name="END_LINK" /> 2</translation>
 <translation id="4744603770635761495">Camí executable</translation>
 <translation id="4764776831041365478">És possible que la pàgina web de <ph name="URL" /> estigui temporalment inactiva o que s'hagi desplaçat permanentment a una nova adreça web.</translation>
-<translation id="4807049035289105102">Ara per ara no podeu visitiar <ph name="SITE" /> 1 perquè la pàgina web ha enviat unes credencials codificades que el Google Chrome no pot processar. Els errors de xarxa i els atacs solen ser temporals, així que, probablement, la pàgina estarà disponible de seguida.</translation>
 <translation id="5023310440958281426">Consulteu les polítiques de l'administrador</translation>
 <translation id="5115563688576182185">(64 bits)</translation>
 <translation id="5431657950005405462">No s'ha trobat el fitxer</translation>
@@ -98,7 +89,6 @@
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ha tardat massa a respondre.</translation>
 <translation id="8740359287975076522">No s'ha trobat l'&lt;abbr id="dnsDefinition"&gt;adreça DNS&lt;/abbr&gt; de <ph name="HOST_NAME" />. S'està diagnosticant el problema.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> fa servir un protocol no admès.</translation>
-<translation id="933612690413056017">No hi ha connexió a Internet</translation>
 <translation id="969892804517981540">Muntatge oficial</translation>
 <translation id="988159990683914416">Muntatge del desenvolupador</translation>
 </translationbundle>

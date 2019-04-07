@@ -5,15 +5,12 @@
 import("//build/config/chromecast_build.gni")
 import("//build/config/locales.gni")
 import("//extensions/buildflags/buildflags.gni")
+import("//media/media_options.gni")
 
 # This args block should contain arguments used within the //chromecast
 # directory. Arguments which are used in other Chrome components should
 # be instead declared in //build/config/chromecast_build.gni.
 declare_args() {
-  # chromecast_branding is used to include or exclude Google-branded components.
-  # Set it to "public" for a Chromium build.
-  chromecast_branding = "public"
-
   # The incremental build number. The Cast automated builders will set this
   # value to indicate the buildset. Note: The default value should be greater
   # than any value the builder may assign to prevent attempted automatic updates
@@ -49,6 +46,10 @@ declare_args() {
   # Set true for builds targeting Android Things.
   is_android_things = false
 
+  # Set true if the platform works as a single volume device, mapping all
+  # volume streams to a single one.
+  is_single_volume = false
+
   # Set to true to start music apps in headless mode.
   enable_headless_music_mode = false
 
@@ -82,6 +83,11 @@ declare_args() {
 
   # unified flag to pick monotonic_clock OR monotonic_clock_raw
   media_clock_monotonic_raw = !is_android && !is_cast_desktop_build
+
+  # Include 'Android' in user agent string to avoid being served desktop
+  # versions of websites.
+  # TODO(halliwell): consider making this default for all Cast hardware.
+  use_android_user_agent = false
 }
 
 declare_args() {
@@ -112,6 +118,12 @@ if (chromecast_branding == "public") {
 cast_locales = locales
 
 enable_chromecast_extensions = enable_extensions
+
+# Use Chromecast CDMs for protected content. Some Android platforms use
+# MediaDrm for CDM support.
+declare_args() {
+  use_chromecast_cdms = is_cast_using_cma_backend
+}
 
 foreach(target_type,
         [

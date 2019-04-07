@@ -149,7 +149,7 @@ class MEDIA_EXPORT AUAudioInputStream
   void CloseAudioUnit();
 
   // Reinitializes the AudioUnit to use a new output device.
-  void SwitchVoiceProcessingOutputDevice(AudioDeviceID output_device_id);
+  void ReinitializeVoiceProcessingAudioUnit();
 
   // Adds extra UMA stats when it has been detected that startup failed.
   void AddHistogramsForFailedStartup();
@@ -235,10 +235,6 @@ class MEDIA_EXPORT AUAudioInputStream
   // callbacks have started as intended after a successful call to Start().
   // This timer lives on the main browser thread.
   std::unique_ptr<base::OneShotTimer> input_callback_timer_;
-
-  // Set to true if the Start() call was delayed.
-  // See AudioManagerMac::ShouldDeferStreamStart() for details.
-  bool start_was_deferred_;
 
   // Set to true if the audio unit's IO buffer was changed when Open() was
   // called.

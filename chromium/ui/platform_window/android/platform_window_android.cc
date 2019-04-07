@@ -10,6 +10,7 @@
 #include "base/android/jni_android.h"
 #include "jni/PlatformWindowAndroid_jni.h"
 #include "ui/events/event.h"
+#include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/keyboard_code_conversion_android.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/platform_window/platform_window_delegate.h"
@@ -80,7 +81,7 @@ void PlatformWindowAndroid::SurfaceCreated(
     base::android::ScopedJavaLocalFrame scoped_local_reference_frame(env);
     window_ = ANativeWindow_fromSurface(env, jsurface);
   }
-  delegate()->OnAcceleratedWidgetAvailable(window_, device_pixel_ratio);
+  delegate()->OnAcceleratedWidgetAvailable(window_);
 }
 
 void PlatformWindowAndroid::SurfaceDestroyed(JNIEnv* env,
@@ -137,7 +138,8 @@ bool PlatformWindowAndroid::KeyEvent(JNIEnv* env,
   delegate()->DispatchEvent(&key_event);
   if (pressed && unicode_character) {
     ui::KeyEvent char_event(unicode_character,
-                            ui::KeyboardCodeFromAndroidKeyCode(key_code), 0);
+                            ui::KeyboardCodeFromAndroidKeyCode(key_code),
+                            ui::DomCode::NONE, 0);
     delegate()->DispatchEvent(&char_event);
   }
   return true;

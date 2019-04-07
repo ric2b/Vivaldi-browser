@@ -210,6 +210,8 @@ void AllowFeatureEverywhere(mojom::FeaturePolicyFeature feature,
 const FeatureNameMap& GetDefaultFeatureNameMap() {
   DEFINE_STATIC_LOCAL(FeatureNameMap, default_feature_name_map, ());
   if (default_feature_name_map.IsEmpty()) {
+    default_feature_name_map.Set("autoplay",
+                                 mojom::FeaturePolicyFeature::kAutoplay);
     default_feature_name_map.Set("camera",
                                  mojom::FeaturePolicyFeature::kCamera);
     default_feature_name_map.Set("encrypted-media",
@@ -249,10 +251,6 @@ const FeatureNameMap& GetDefaultFeatureNameMap() {
       default_feature_name_map.Set("sync-script",
                                    mojom::FeaturePolicyFeature::kSyncScript);
     }
-    if (RuntimeEnabledFeatures::FeaturePolicyAutoplayFeatureEnabled()) {
-      default_feature_name_map.Set("autoplay",
-                                   mojom::FeaturePolicyFeature::kAutoplay);
-    }
     if (RuntimeEnabledFeatures::PaymentRequestEnabled()) {
       default_feature_name_map.Set("payment",
                                    mojom::FeaturePolicyFeature::kPayment);
@@ -277,6 +275,15 @@ const FeatureNameMap& GetDefaultFeatureNameMap() {
     }
   }
   return default_feature_name_map;
+}
+
+const String& GetNameForFeature(mojom::FeaturePolicyFeature feature) {
+  const static String empty_string;
+  for (const auto& entry : GetDefaultFeatureNameMap()) {
+    if (entry.value == feature)
+      return entry.key;
+  }
+  return empty_string;
 }
 
 }  // namespace blink

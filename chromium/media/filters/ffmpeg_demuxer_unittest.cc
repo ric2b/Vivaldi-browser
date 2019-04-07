@@ -32,6 +32,7 @@
 #include "media/filters/ffmpeg_demuxer.h"
 #include "media/filters/file_data_source.h"
 #include "media/formats/mp4/avc.h"
+#include "media/formats/mp4/bitstream_converter.h"
 #include "media/media_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -157,6 +158,17 @@ class FFmpegDemuxerTest : public testing::Test {
   void InitializeDemuxerAndExpectPipelineStatus(
       media::PipelineStatus expected_pipeline_status) {
     InitializeDemuxerInternal(expected_pipeline_status, base::Time());
+  }
+
+  void SeekOnVideoTrackChangePassthrough(
+      base::TimeDelta time,
+      base::OnceCallback<void(DemuxerStream::Type,
+                              const std::vector<DemuxerStream*>&)> cb,
+      DemuxerStream::Type type,
+      const std::vector<DemuxerStream*>& streams) {
+    // The tests can't access private methods directly because gtest uses
+    // some magic macros that break the 'friend' declaration.
+    demuxer_->SeekOnVideoTrackChange(time, std::move(cb), type, streams);
   }
 
   MOCK_METHOD2(OnReadDoneCalled, void(int, int64_t));
@@ -306,7 +318,7 @@ class FFmpegDemuxerTest : public testing::Test {
 
     demuxer_.reset(new FFmpegDemuxer(
         base::ThreadTaskRunnerHandle::Get(), data_source_.get(),
-        encrypted_media_init_data_cb, tracks_updated_cb, media_log));
+        encrypted_media_init_data_cb, tracks_updated_cb, media_log, false));
   }
 
   void CreateDataSource(const std::string& name) {
@@ -1199,8 +1211,8 @@ static void ValidateAnnexB(DemuxerStream* stream,
     subsamples = buffer->decrypt_config()->subsamples();
 
   bool is_valid =
-      mp4::AVC::IsValidAnnexB(buffer->data(), buffer->data_size(),
-                              subsamples);
+      mp4::AVC::AnalyzeAnnexB(buffer->data(), buffer->data_size(), subsamples)
+          .is_conformant.value_or(false);
   EXPECT_TRUE(is_valid);
 
   if (!is_valid) {
@@ -1675,8 +1687,8 @@ TEST_F(FFmpegDemuxerTest, StreamStatusNotifications) {
   // there is no buffers ready to be returned by the Read right away, thus
   // ensuring that status changes occur while an async read is pending.
 
-  audio_stream->FlushBuffers();
-  video_stream->FlushBuffers();
+  audio_stream->FlushBuffers(true);
+  video_stream->FlushBuffers(true);
   audio_stream->Read(base::Bind(&OnReadDoneExpectEos));
   video_stream->Read(base::Bind(&OnReadDoneExpectEos));
 
@@ -1711,6 +1723,20 @@ TEST_F(FFmpegDemuxerTest, MultitrackMemoryUsage) {
   // With newly enabled demuxer streams the amount of memory used by the demuxer
   // is much higher.
   EXPECT_EQ(156011, demuxer_->GetMemoryUsage());
+}
+
+TEST_F(FFmpegDemuxerTest, SeekOnVideoTrackChangeWontSeekIfEmpty) {
+  // We only care about video tracks.
+  CreateDemuxer("bear-320x240-video-only.webm");
+  InitializeDemuxer();
+  std::vector<DemuxerStream*> streams;
+  base::RunLoop loop;
+
+  SeekOnVideoTrackChangePassthrough(
+      base::TimeDelta(), base::BindOnce(QuitLoop, loop.QuitClosure()),
+      DemuxerStream::VIDEO, streams);
+
+  loop.Run();
 }
 
 }  // namespace media

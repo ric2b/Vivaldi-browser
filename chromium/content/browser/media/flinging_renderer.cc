@@ -15,10 +15,14 @@
 namespace content {
 
 FlingingRenderer::FlingingRenderer(
-    std::unique_ptr<media::MediaController> controller)
-    : controller_(std::move(controller)) {}
+    std::unique_ptr<media::FlingingController> controller)
+    : controller_(std::move(controller)) {
+  controller_->AddMediaStatusObserver(this);
+}
 
-FlingingRenderer::~FlingingRenderer() = default;
+FlingingRenderer::~FlingingRenderer() {
+  controller_->RemoveMediaStatusObserver(this);
+};
 
 // static
 std::unique_ptr<FlingingRenderer> FlingingRenderer::Create(
@@ -43,15 +47,15 @@ std::unique_ptr<FlingingRenderer> FlingingRenderer::Create(
   if (!presentation_delegate)
     return nullptr;
 
-  auto media_controller = presentation_delegate->GetMediaController(
+  auto flinging_controller = presentation_delegate->GetFlingingController(
       render_frame_host->GetProcess()->GetID(),
       render_frame_host->GetRoutingID(), presentation_id);
 
-  if (!media_controller)
+  if (!flinging_controller)
     return nullptr;
 
   return base::WrapUnique<FlingingRenderer>(
-      new FlingingRenderer(std::move(media_controller)));
+      new FlingingRenderer(std::move(flinging_controller)));
 }
 
 // media::Renderer implementation
@@ -59,6 +63,7 @@ void FlingingRenderer::Initialize(media::MediaResource* media_resource,
                                   media::RendererClient* client,
                                   const media::PipelineStatusCB& init_cb) {
   DVLOG(2) << __func__;
+  client_ = client;
   init_cb.Run(media::PIPELINE_OK);
 }
 
@@ -76,26 +81,40 @@ void FlingingRenderer::Flush(const base::Closure& flush_cb) {
 
 void FlingingRenderer::StartPlayingFrom(base::TimeDelta time) {
   DVLOG(2) << __func__;
-  controller_->Seek(time);
-  controller_->Play();
+  controller_->GetMediaController()->Seek(time);
+
+  // After a seek when using the FlingingRenderer, WMPI will never get back to
+  // BUFFERING_HAVE_ENOUGH. This prevents Blink from getting the appropriate
+  // seek completion signals, and time updates are never re-scheduled.
+  //
+  // The FlingingRenderer doesn't need to buffer, since playback happens on a
+  // different device. This means it's ok to always send BUFFERING_HAVE_ENOUGH
+  // when sending buffering state changes. That being said, sending state
+  // changes here might be surprising, but the same signals are sent from
+  // MediaPlayerRenderer::StartPlayingFrom(), and it has been working mostly
+  // smoothly for all HLS playback.
+  client_->OnBufferingStateChange(media::BUFFERING_HAVE_ENOUGH);
 }
 
 void FlingingRenderer::SetPlaybackRate(double playback_rate) {
   DVLOG(2) << __func__;
   if (playback_rate == 0)
-    controller_->Pause();
+    controller_->GetMediaController()->Pause();
   else
-    controller_->Play();
+    controller_->GetMediaController()->Play();
 }
 
 void FlingingRenderer::SetVolume(float volume) {
   DVLOG(2) << __func__;
-  controller_->SetVolume(volume);
+  controller_->GetMediaController()->SetVolume(volume);
 }
 
 base::TimeDelta FlingingRenderer::GetMediaTime() {
-  // TODO(https://crbug.com/830871): return correct media time.
-  return base::TimeDelta();
+  return controller_->GetApproximateCurrentTime();
+}
+
+void FlingingRenderer::OnMediaStatusUpdated(const media::MediaStatus& status) {
+  // TODO(tguilbert): propagate important changes to RendererClient.
 }
 
 }  // namespace content

@@ -4,6 +4,7 @@
 
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//build/util/lastchange.gni")
 import("//build/util/process_version.gni")
 import("//components/nacl/features.gni")
 import("//extensions/buildflags/buildflags.gni")
@@ -57,14 +58,14 @@ source_set("app_shell_lib") {
     "//extensions:extensions_resources",
     "//extensions:shell_and_test_pak",
     "//extensions/browser",
-    "//extensions/browser/api:api_registration",
+    "//extensions/browser:core_api_provider",
     "//extensions/browser/kiosk",
     "//extensions/common",
+    "//extensions/common:core_api_provider",
     "//extensions/common/api",
     "//extensions/renderer",
     "//extensions/shell/browser/system_logs",
     "//extensions/shell/common/api",
-    "//extensions/shell/common/api:api_registration",
     "//extensions/shell/common/api:extensions_features",
     "//google_apis",
     "//third_party/blink/public:blink",
@@ -87,6 +88,7 @@ source_set("app_shell_lib") {
   sources = [
     "app/shell_main_delegate.cc",
     "app/shell_main_delegate.h",
+    "app/shell_main_delegate_mac.mm",
     "browser/api/feedback_private/shell_feedback_private_delegate.cc",
     "browser/api/feedback_private/shell_feedback_private_delegate.h",
     "browser/api/identity/identity_api.cc",
@@ -115,8 +117,6 @@ source_set("app_shell_lib") {
     "browser/shell_browser_main_delegate.h",
     "browser/shell_browser_main_parts.cc",
     "browser/shell_browser_main_parts.h",
-    "browser/shell_browser_main_parts_mac.h",
-    "browser/shell_browser_main_parts_mac.mm",
     "browser/shell_content_browser_client.cc",
     "browser/shell_content_browser_client.h",
     "browser/shell_desktop_controller_mac.h",
@@ -137,6 +137,8 @@ source_set("app_shell_lib") {
     "browser/shell_extension_web_contents_observer.h",
     "browser/shell_extensions_api_client.cc",
     "browser/shell_extensions_api_client.h",
+    "browser/shell_extensions_browser_api_provider.cc",
+    "browser/shell_extensions_browser_api_provider.h",
     "browser/shell_extensions_browser_client.cc",
     "browser/shell_extensions_browser_client.h",
     "browser/shell_keep_alive_requester.cc",
@@ -171,6 +173,8 @@ source_set("app_shell_lib") {
     "browser/shell_web_view_guest_delegate.h",
     "common/shell_content_client.cc",
     "common/shell_content_client.h",
+    "common/shell_extensions_api_provider.cc",
+    "common/shell_extensions_api_provider.h",
     "common/shell_extensions_client.cc",
     "common/shell_extensions_client.h",
     "common/switches.cc",
@@ -321,7 +325,7 @@ test("app_shell_unittests") {
 
   data_deps = [
     # "//gin", # TODO(dpranke): Either gin or v8 data is needed ...
-    "//third_party/mesa:osmesa",
+    "//third_party/mesa_headers",
   ]
 
   if (use_aura) {
@@ -360,8 +364,8 @@ test("app_shell_unittests") {
 process_version("version_header") {
   template_file = "common/version.h.in"
   sources = [
-    "//build/util/LASTCHANGE",
     "//chrome/VERSION",
+    lastchange_file,
   ]
   output = "$target_gen_dir/common/version.h"
 }
@@ -402,10 +406,6 @@ source_set("browser_tests") {
   if (use_aura) {
     sources += [ "browser/shell_desktop_controller_aura_browsertest.cc" ]
     deps += [ "//ui/aura" ]
-  }
-
-  if (is_mac) {
-    sources += [ "test/test_shell_main_delegate_mac.mm" ]
   }
 }
 

@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -20,13 +21,48 @@ namespace mac {
 namespace {
 API_AVAILABLE(macosx(10.12.2))
 base::ScopedCFTypeRef<SecAccessControlRef> DefaultAccessControl() {
+  // The default access control policy used for WebAuthn credentials stored by
+  // the Touch ID platform authenticator.
   return base::ScopedCFTypeRef<SecAccessControlRef>(
       SecAccessControlCreateWithFlags(
           kCFAllocatorDefault, kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-          kSecAccessControlPrivateKeyUsage | kSecAccessControlTouchIDAny,
+          kSecAccessControlPrivateKeyUsage | kSecAccessControlUserPresence,
           nullptr));
 }
 }  // namespace
+
+// static
+std::unique_ptr<TouchIdContext> TouchIdContext::CreateImpl() {
+  return base::WrapUnique(new TouchIdContext());
+}
+
+// static
+TouchIdContext::CreateFuncPtr TouchIdContext::g_create_ =
+    &TouchIdContext::CreateImpl;
+
+// static
+std::unique_ptr<TouchIdContext> TouchIdContext::Create() {
+  // Testing seam to allow faking Touch ID in tests.
+  return (*g_create_)();
+}
+
+// static
+bool TouchIdContext::TouchIdAvailableImpl() {
+  base::scoped_nsobject<LAContext> context([[LAContext alloc] init]);
+  return
+      [context canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
+                           error:nil];
+}
+
+// static
+TouchIdContext::TouchIdAvailableFuncPtr TouchIdContext::g_touch_id_available_ =
+    &TouchIdContext::TouchIdAvailableImpl;
+
+// static
+bool TouchIdContext::TouchIdAvailable() {
+  // Testing seam to allow faking Touch ID in tests.
+  return (*g_touch_id_available_)();
+}
 
 TouchIdContext::TouchIdContext()
     : context_([[LAContext alloc] init]),
@@ -41,7 +77,8 @@ TouchIdContext::~TouchIdContext() {
   [context_ invalidate];
 }
 
-void TouchIdContext::PromptTouchId(std::string reason, Callback callback) {
+void TouchIdContext::PromptTouchId(const base::string16& reason,
+                                   Callback callback) {
   callback_ = std::move(callback);
   scoped_refptr<base::SequencedTaskRunner> runner =
       base::SequencedTaskRunnerHandle::Get();
@@ -52,7 +89,7 @@ void TouchIdContext::PromptTouchId(std::string reason, Callback callback) {
   // the sign bit there.
   [context_ evaluateAccessControl:access_control_
                         operation:LAAccessControlOperationUseKeySign
-                  localizedReason:base::SysUTF8ToNSString(reason)
+                  localizedReason:base::SysUTF16ToNSString(reason)
                             reply:^(BOOL success, NSError* error) {
                               // The reply block is invoked in a separate
                               // thread. We want to invoke the callback in the

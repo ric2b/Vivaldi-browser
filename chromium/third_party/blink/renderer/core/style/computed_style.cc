@@ -52,6 +52,7 @@
 #include "third_party/blink/renderer/core/style/quotes_data.h"
 #include "third_party/blink/renderer/core/style/shadow_list.h"
 #include "third_party/blink/renderer/core/style/style_difference.h"
+#include "third_party/blink/renderer/core/style/style_fetched_image.h"
 #include "third_party/blink/renderer/core/style/style_image.h"
 #include "third_party/blink/renderer/core/style/style_inherited_variables.h"
 #include "third_party/blink/renderer/core/style/style_non_inherited_variables.h"
@@ -815,6 +816,9 @@ void ComputedStyle::UpdatePropertySpecificDifferences(
     diff.SetTextDecorationOrColorChanged();
   }
 
+  if (ComputedStyleBase::UpdatePropertySpecificDifferencesMask(*this, other))
+    diff.SetMaskChanged();
+
   bool has_clip = HasOutOfFlowPosition() && !HasAutoClip();
   bool other_has_clip = other.HasOutOfFlowPosition() && !other.HasAutoClip();
   if (has_clip != other_has_clip ||
@@ -1015,6 +1019,18 @@ InterpolationQuality ComputedStyle::GetInterpolationQuality() const {
     return kInterpolationLow;
 
   return kInterpolationDefault;
+}
+
+void ComputedStyle::LoadDeferredImages(Document& document) const {
+  if (HasBackgroundImage()) {
+    for (const FillLayer* background_layer = &BackgroundLayers();
+         background_layer; background_layer = background_layer->Next()) {
+      if (StyleImage* image = background_layer->GetImage()) {
+        if (image->IsImageResource() && image->IsLazyloadPossiblyDeferred())
+          ToStyleFetchedImage(image)->LoadDeferredImage(document);
+      }
+    }
+  }
 }
 
 void ComputedStyle::ApplyTransform(
@@ -1780,9 +1796,9 @@ Length ComputedStyle::LineHeight() const {
   // too, though this involves messily poking into CalcExpressionLength.
   if (lh.IsFixed()) {
     float multiplier = TextAutosizingMultiplier();
-    return Length(
-        TextAutosizer::ComputeAutosizedFontSize(lh.Value(), multiplier),
-        kFixed);
+    return Length(TextAutosizer::ComputeAutosizedFontSize(
+                      lh.Value(), multiplier, EffectiveZoom()),
+                  kFixed);
   }
 
   return lh;
@@ -1848,12 +1864,12 @@ void ComputedStyle::SetTextAutosizingMultiplier(float multiplier) {
   FontSelector* current_font_selector = GetFont().GetFontSelector();
   FontDescription desc(GetFontDescription());
   desc.SetSpecifiedSize(size);
-  desc.SetComputedSize(size);
 
-  float autosized_font_size =
-      TextAutosizer::ComputeAutosizedFontSize(size, multiplier);
-  float computed_size = autosized_font_size * EffectiveZoom();
-  desc.SetComputedSize(std::min(kMaximumAllowedFontSize, computed_size));
+  float computed_size = size * EffectiveZoom();
+
+  float autosized_font_size = TextAutosizer::ComputeAutosizedFontSize(
+      computed_size, multiplier, EffectiveZoom());
+  desc.SetComputedSize(std::min(kMaximumAllowedFontSize, autosized_font_size));
 
   SetFontDescription(desc);
   GetFont().Update(current_font_selector);

@@ -53,8 +53,9 @@ class DocumentType final : public Node {
   NodeType getNodeType() const override;
   Node* Clone(Document&, CloneChildrenFlag) const override;
 
-  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
-  void RemovedFrom(ContainerNode*) override;
+  InsertionNotificationRequest InsertedInto(ContainerNode&) override;
+  void RemovedFrom(ContainerNode&) override;
+  void DetachLayoutTree(const AttachContext&) final {}
 
   String name_;
   String public_id_;

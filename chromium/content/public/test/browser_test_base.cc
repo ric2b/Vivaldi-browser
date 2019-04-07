@@ -23,6 +23,7 @@
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "content/browser/browser_thread_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
 #include "content/public/app/content_main.h"
@@ -143,6 +144,11 @@ BrowserTestBase::BrowserTestBase()
   base::i18n::AllowMultipleInitializeCallsForTesting();
 
   embedded_test_server_ = std::make_unique<net::EmbeddedTestServer>();
+
+#if defined(USE_AURA)
+  ui::test::EventGeneratorDelegate::SetFactoryFunction(base::BindRepeating(
+      &aura::test::EventGeneratorDelegateAura::Create, nullptr));
+#endif
 }
 
 BrowserTestBase::~BrowserTestBase() {
@@ -211,8 +217,6 @@ void BrowserTestBase::SetUp() {
   // us to, or it's requested on the command line.
   if (!enable_pixel_output_ && !use_software_compositing_)
     command_line->AppendSwitch(switches::kDisableGLDrawingForTests);
-
-  aura::test::InitializeAuraEventGeneratorDelegate();
 #endif
 
   bool use_software_gl = true;
@@ -320,6 +324,7 @@ void BrowserTestBase::SetUp() {
   params.ui_task = ui_task.release();
   params.created_main_parts_closure = created_main_parts_closure.release();
   base::TaskScheduler::Create("Browser");
+  BrowserThreadImpl::CreateTaskExecutor();
   // TODO(phajdan.jr): Check return code, http://crbug.com/374738 .
   BrowserMain(params);
 #else
@@ -332,6 +337,10 @@ void BrowserTestBase::SetUp() {
 }
 
 void BrowserTestBase::TearDown() {
+#if defined(USE_AURA)
+  ui::test::EventGeneratorDelegate::SetFactoryFunction(
+      ui::test::EventGeneratorDelegate::FactoryFunction());
+#endif
 }
 
 bool BrowserTestBase::AllowFileAccessFromFiles() const {
@@ -499,6 +508,20 @@ void BrowserTestBase::InitializeNetworkProcess() {
     // For now, this covers all the rules used in content's tests.
     // TODO(jam: expand this when we try to make browser_tests and
     // components_browsertests work.
+    if (rule.resolver_type ==
+        net::RuleBasedHostResolverProc::Rule::kResolverTypeFail) {
+      // The host "wpad" is added automatically in TestHostResolver, so we don't
+      // need to send it to NetworkServiceTest.
+      if (rule.host_pattern != "wpad") {
+        network::mojom::RulePtr mojo_rule = network::mojom::Rule::New();
+        mojo_rule->resolver_type =
+            network::mojom::ResolverType::kResolverTypeFail;
+        mojo_rule->host_pattern = rule.host_pattern;
+        mojo_rules.push_back(std::move(mojo_rule));
+      }
+      continue;
+    }
+
     if ((rule.resolver_type !=
              net::RuleBasedHostResolverProc::Rule::kResolverTypeSystem &&
          rule.resolver_type !=
@@ -507,6 +530,14 @@ void BrowserTestBase::InitializeNetworkProcess() {
         !!rule.latency_ms || rule.replacement.empty())
       continue;
     network::mojom::RulePtr mojo_rule = network::mojom::Rule::New();
+    if (rule.resolver_type ==
+        net::RuleBasedHostResolverProc::Rule::kResolverTypeSystem) {
+      mojo_rule->resolver_type =
+          network::mojom::ResolverType::kResolverTypeSystem;
+    } else {
+      mojo_rule->resolver_type =
+          network::mojom::ResolverType::kResolverTypeIPLiteral;
+    }
     mojo_rule->host_pattern = rule.host_pattern;
     mojo_rule->replacement = rule.replacement;
     mojo_rules.push_back(std::move(mojo_rule));

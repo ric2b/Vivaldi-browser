@@ -49,6 +49,7 @@ class MediaControlDownloadButtonElement;
 class MediaControlFullscreenButtonElement;
 class MediaControlLoadingPanelElement;
 class MediaControlMuteButtonElement;
+class MediaControlDisplayCutoutFullscreenButtonElement;
 class MediaControlOverflowMenuButtonElement;
 class MediaControlOverflowMenuListElement;
 class MediaControlOverlayEnclosureElement;
@@ -85,8 +86,8 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   static bool IsTouchEvent(Event*);
 
   // Node override.
-  Node::InsertionNotificationRequest InsertedInto(ContainerNode*) override;
-  void RemovedFrom(ContainerNode*) override;
+  Node::InsertionNotificationRequest InsertedInto(ContainerNode&) override;
+  void RemovedFrom(ContainerNode&) override;
 
   // MediaControls implementation.
   void MaybeShow() override;
@@ -207,6 +208,7 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   friend class MediaControlsRotateToFullscreenDelegateTest;
   friend class MediaControlsImplTest;
   friend class MediaControlsImplInProductHelpTest;
+  friend class MediaControlDisplayCutoutFullscreenButtonElementTest;
   friend class MediaControlTimelineElementTest;
 
   // Need to be members of MediaControls for private member access.
@@ -292,7 +294,7 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   // Node
   bool IsMediaControls() const override { return true; }
   bool WillRespondToMouseMoveEvents() override { return true; }
-  void DefaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event&) override;
   bool ContainsRelatedTarget(Event*);
 
   void HandlePointerEvent(Event*);
@@ -319,7 +321,7 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   void OnExitedFullscreen();
   void OnPictureInPictureChanged();
   void OnPanelKeypress();
-  void OnMediaKeyboardEvent(Event* event) { DefaultEventHandler(event); }
+  void OnMediaKeyboardEvent(Event* event) { DefaultEventHandler(*event); }
   void OnWaiting();
   void OnLoadingProgress();
   void OnLoadedData();
@@ -348,6 +350,8 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
 
   Member<MediaControlCastButtonElement> cast_button_;
   Member<MediaControlFullscreenButtonElement> fullscreen_button_;
+  Member<MediaControlDisplayCutoutFullscreenButtonElement>
+      display_cutout_fullscreen_button_;
   Member<MediaControlDownloadButtonElement> download_button_;
 
   Member<MediaControlsMediaEventListener> media_event_listener_;

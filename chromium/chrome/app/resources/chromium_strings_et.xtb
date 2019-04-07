@@ -8,6 +8,8 @@
 <translation id="1170115874949214249">Installige Chromium oma telefoni. Saadame SMS-i teie konto taastamise telefoninumbrile.</translation>
 <translation id="1174473354587728743">Kas jagage arvutit? Saate nüüd seadistada Chromiumi just nii, nagu teile meeldib.</translation>
 <translation id="1185134272377778587">Teave Chromiumi kohta</translation>
+<translation id="1209657686917656928">{0,plural, =0{Chromium käivitatakse kohe uuesti}=1{Chromium käivitatakse uuesti 1 sekundi pärast}other{Chromium käivitatakse uuesti # sekundi pärast}}</translation>
+<translation id="1267419686153937460">{0,plural, =1{Käivitage Chromium uuesti päeva jooksul}other{Käivitage Chromium uuesti # päeva jooksul}}</translation>
 <translation id="1298199220304005244">Hangi abi Chromium OS-i kasutamise kohta</translation>
 <translation id="1396446129537741364">Chromium püüab paroole kuvada.</translation>
 <translation id="1414495520565016063">Olete Chromiumi sisse logitud.</translation>
@@ -18,13 +20,14 @@
 <translation id="1668054258064581266">Pärast konto eemaldamist Chromiumist tuleb avatud vahekaardid võib-olla uuesti laadida, et need toimiksid.</translation>
 <translation id="1688750314291223739">Seadistage sünkroonimine, et salvestada isikupärastatud brauserifunktsioonid veebi, misjuhul pääsete igast arvutist Chromiumi kaudu nende juurde.</translation>
 <translation id="1708666629004767631">Saadaval on Chromiumi uus, turvalisem versioon.</translation>
-<translation id="1716051742506968">{0,plural, =0{Chromiumi värskendus on saadaval}=1{Chromiumi värskendus on saadaval}other{Chromiumi värskendus on olnud saadaval # päeva}}</translation>
 <translation id="1766096484055239003">Administraator nõuab, et käivitaksite Chromiumi värskenduse rakendamiseks uuesti</translation>
 <translation id="1774152462503052664">Luba Chromiumil taustal töötada</translation>
 <translation id="1779356040007214683">Chromiumi turvalisemaks muutmiseks keelasime mõned laiendused, mida ei leidu veebipoes <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> ja mille lisamisest te ei pruugi teadlik olla.</translation>
 <translation id="1808667845054772817">Installi Chromium uuesti</translation>
 <translation id="1869480248812203386">Saate aidata muuta Chromiumi turvalisemaks ja lihtsamalt kasutatavaks, kui teavitate Google'it automaatselt võimalike turvaintsidentide üksikasjadest.</translation>
 <translation id="1881322772814446296">Logite sisse hallatud kontoga ja annate selle administraatorile üle Chromiumi profiili juhtimise. Teie Chromiumi andmed, näiteks rakendused, järjehoidjad, ajalugu, paroolid ja muud seaded seotakse jäädavalt kasutajaga <ph name="USER_NAME" />. Saate need andmed kustutada Google'i kontode juhtpaneeli kaudu, kuid te ei saa neid seostada teise kontoga. Võite olemasolevate Chrome'i andmete eraldi hoidmiseks luua aga uue profiili. <ph name="LEARN_MORE" /></translation>
+<translation id="1895626441344023878">{0,plural, =0{Chromiumi värskendus on saadaval}=1{Chromiumi värskendus on saadaval}other{Chromiumi värskendus on olnud saadaval # päeva}}</translation>
+<translation id="1911763535808217981">Kui selle välja lülitate, saate Google'i saitidele (nt Gmaili) sisse logida ilma Chromiumisse sisse logimata</translation>
 <translation id="1929939181775079593">Chromium ei reageeri. Kas soovite kohe taaskäivitada?</translation>
 <translation id="1966382378801805537">Chromium ei saa määrata ega seadistada vaikebrauserit</translation>
 <translation id="2008474315282236005">See kustutab seadmest ühe üksuse. Hiljem oma andmete toomiseks logige Chromiumi sisse kasutajana <ph name="USER_EMAIL" />.</translation>
@@ -51,10 +54,10 @@
 <translation id="2886012850691518054">Valikuline: aidake muuta Chromiumi paremaks, saates Google'ile automaatselt kasutusstatistikat ja krahhiaruandeid.</translation>
 <translation id="2898082584336937987">Installige Chromium oma telefoni. Saadame SMS-i teie telefoni: <ph name="PHONE_NUMBER" /></translation>
 <translation id="2910007522516064972">Teave &amp;Chromiumi kohta</translation>
-<translation id="2943431542152338750">{0,plural, =1{Käivitage Chromium uuesti päeva jooksul}other{Käivitage Chromium uuesti # päeva jooksul}}</translation>
 <translation id="2977470724722393594">Chromium on ajakohane</translation>
 <translation id="3032787606318309379">Chromiumi lisamine ...</translation>
 <translation id="3046695367536568084">Rakenduste kasutamiseks peate olema Chromiumi sisse logitud. See võimaldab Chromiumil sünkroonida teie rakendusi, järjehoidjaid, ajalugu, paroole ja muid seadeid erinevates seadmetes.</translation>
+<translation id="3052899382720782935">{0,plural, =1{Chromium käivitatakse uuesti 1 minuti pärast}other{Chromium käivitatakse uuesti # minuti pärast}}</translation>
 <translation id="3068515742935458733">Aidake Chromiumi täiustada, saates Google'ile krahhiaruandeid ja lingi <ph name="UMA_LINK" /></translation>
 <translation id="3103660991484857065">Installeril ei õnnestunud arhiivi lahti pakkida. Laadige Chromium uuesti alla.</translation>
 <translation id="3130323860337406239">Chromium kasutab teie mikrofoni.</translation>
@@ -83,6 +86,7 @@
 <translation id="3852700440713538496">Chromiumi kinnitamine tegumiribale</translation>
 <translation id="3889543394854987837">Chromiumi avamiseks ja sirvimise alustamiseks klõpsake oma nimel.</translation>
 <translation id="3898493977366060150">Veebi sirvimine Google'i nutikate funktsioonidega</translation>
+<translation id="3965668104013180445">{0,plural, =1{Chromium OS taaskäivitatakse tunni pärast}other{Chromium OS taaskäivitatakse # tunni pärast}}</translation>
 <translation id="4036079820698952681">Aidake Chromiumi paremaks muuta, teavitades meid <ph name="BEGIN_LINK" />praegustest seadetest<ph name="END_LINK" /></translation>
 <translation id="4050175100176540509">Uusimas versioonis on saadaval olulised turvatäiendused ja uued funktsioonid.</translation>
 <translation id="407254336480250557">Valige <ph name="SMALL_PRODUCT_LOGO" /> <ph name="BEGIN_BOLD" />Chromium<ph name="END_BOLD" /></translation>
@@ -97,10 +101,8 @@
 <translation id="4415566066719264597">Luba Chromiumil taustal töötada</translation>
 <translation id="4421155425831608516">Administraator on selles seadmes Chromiumisse sisselogimise keelanud.</translation>
 <translation id="4423735387467980091">Chromiumi kohandamine ja juhtimine</translation>
-<translation id="4449801103833300785">{0,plural, =1{Chromium käivitatakse uuesti tunni aja pärast}other{Chromium käivitatakse uuesti # tunni pärast}}</translation>
 <translation id="4567424176335768812">Olete sisse logitud aadressiga <ph name="USER_EMAIL_ADDRESS" />. Nüüd on teil juurdepääs oma järjehoidjatele, ajaloole ja muudele seadetele kõigis seadmetes, kuhu olete sisse logitud.</translation>
 <translation id="459535195905078186">Chromiumi rakendused</translation>
-<translation id="4604377857208775795">{0,plural, =1{Chromium käivitatakse uuesti 1 minuti pärast}other{Chromium käivitatakse uuesti # minuti pärast}}</translation>
 <translation id="4621240073146040695">Rakendus on peaaegu ajakohane! Värskenduse lõpuleviimiseks taaskäivitage Chromium.</translation>
 <translation id="4677944499843243528">Näib, et profiili kasutab Chromiumi muu protsess (<ph name="PROCESS_ID" />) mingis muus arvutis (<ph name="HOST_NAME" />). Chromium on profiili lukustanud, et seda ei saaks rikkuda. Kui olete kindel, et ükski muu protsess seda profiili ei kasuta, saate profiili avada ja Chromiumi taaskäivitada.</translation>
 <translation id="469338717132742108">Chromium OS-i puhul abi hankimine</translation>
@@ -111,22 +113,28 @@
 <translation id="4943838377383847465">Chromium on taustarežiimis.</translation>
 <translation id="4987820182225656817">Külastajad saavad kasutada Chromiumi jälgi jätmata.</translation>
 <translation id="4994636714258228724">Lisa Chromiumi</translation>
+<translation id="5021854341188256296">{0,plural, =0{Chromium OS-i värskendus on saadaval}=1{Chromium OS-i värskendus on saadaval}other{Chromium OS-i värskendus on olnud saadaval # päeva}}</translation>
 <translation id="5032989939245619637">Salvesta üksikasjad Chromiumi</translation>
 <translation id="5045248521775609809">Võtke Chromium kõikjale kaasa</translation>
 <translation id="5116586539350239523">Chromium salvestab turvaliselt teie isiklikud andmed, et te ei peaks neid uuesti sisestama.</translation>
+<translation id="5277894862589591112">Muudatuste rakendamiseks käivitage Chromium uuesti</translation>
 <translation id="5358375970380395591">Logite sisse hallatud kontoga ja annate selle administraatorile üle Chromiumi profiili juhtimise. Teie Chromiumi andmed, näiteks rakendused, järjehoidjad, ajalugu, paroolid ja muud seaded seotakse jäädavalt kasutajaga <ph name="USER_NAME" />. Saate need andmed kustutada Google'i kontode juhtpaneeli kaudu, kuid te ei saa neid seostada teise kontoga. <ph name="LEARN_MORE" /></translation>
 <translation id="5386450000063123300">Chromiumi värskendamine (<ph name="PROGRESS_PERCENT" />)</translation>
+<translation id="538767207339317086">Luba Chromiumisse sisselogimine</translation>
 <translation id="5398878173008909840">Chromiumi uus versioon on saadaval.</translation>
+<translation id="5416696090975899932">Chromium ei saa printimise eelvaadet kuvada, kui sisseehitatud PDF-vaatur puudub.</translation>
 <translation id="5427571867875391349">Määra Chromium vaikebrauseriks</translation>
 <translation id="5438241569118040789"><ph name="PAGE_TITLE" /> – Chromiumi beetaversioon</translation>
 <translation id="5466153949126434691">Chromium teeb värskendused automaatselt, nii et kasutate alati uusimat versiooni. Kui allalaadimine on lõppenud, siis Chrome taaskäivitub ja võite alustada kasutamist.</translation>
 <translation id="5479196819031988440">Chromium OS ei saa seda lehte avada.</translation>
 <translation id="5480860683791598150">Chromium vajab juurdepääsu teie asukohale, et seda selle saidiga jagada</translation>
 <translation id="549669000822060376">Oodake, kuni Chromium installib uusimad süsteemivärskendused.</translation>
+<translation id="5529843986978123325">{0,plural, =1{Chromium OS taaskäivitub 1 minuti pärast}other{Chromium OS taaskäivitub # minuti pärast}}</translation>
 <translation id="5631814766731275228">Chromiumi nimi ja pilt</translation>
 <translation id="5634636535844844681">Chromium vajab operatsioonisüsteemi Windows 7 või uuemat versiooni.</translation>
 <translation id="5680901439334282664">logige Chromiumi sisse</translation>
 <translation id="5698481217667032250">Kuva Chromium selles keeles</translation>
+<translation id="5712253116097046984">Administraator palub teil Chromium OS-i selle värskenduse rakendamiseks taaskäivitada</translation>
 <translation id="5726838626470692954">Haldur peab teid Chromiumist eemaldama ja uuesti lisama.</translation>
 <translation id="5768914737813585044">Kuva Chromium OS selles keeles</translation>
 <translation id="5796460469508169315">Chromium on peaaegu valmis.</translation>
@@ -145,6 +153,7 @@
 <translation id="6096348254544841612">Kohandage ja juhtige Chromiumi. Saadaval on värskendus.</translation>
 <translation id="6120345080069858279">Chromium salvestab selle parooli teie Google'i kontole. Te ei pea seda meeles pidama.</translation>
 <translation id="6129621093834146363"><ph name="FILE_NAME" /> on ohtlik, mistõttu Chromium blokeeris selle.</translation>
+<translation id="620022061217911843">Administraator nõuab, et taaskäivitaksite Chromium OS-i värskenduse rakendamiseks</translation>
 <translation id="6212496753309875659">Arvutis on juba Chromiumi uuem versioon. Kui tarkvara ei tööta, siis desinstallige Chromium ja proovige uuesti.</translation>
 <translation id="6248213926982192922">Määra Chromium vaikebrauseriks</translation>
 <translation id="6268381023930128611">Kas logida Chromiumist välja?</translation>
@@ -163,7 +172,6 @@
 <translation id="6510925080656968729">Desinstalli Chromium</translation>
 <translation id="6570579332384693436">Õigekirjavigade parandamiseks saadab Chromium teie tekstiväljadel sisestatud teksti Google'ile</translation>
 <translation id="6598877126913850652">Ava Chromiumi märguandeseaded</translation>
-<translation id="6664239887951090350">{0,plural, =0{Chromium käivitatakse kohe uuesti}=1{Chromium käivitatakse uuesti 1 sekundi pärast}other{Chromium käivitatakse uuesti # sekundi pärast}}</translation>
 <translation id="6676384891291319759">Pääs Internetti</translation>
 <translation id="6717134281241384636">Teie profiili ei saa kasutada, kuna see pärineb Chromiumi uuemast versioonist.
 
@@ -199,8 +207,10 @@ Kui soovite takistada kasutajal <ph name="NEW_PROFILE_NAME" /> teie kontole juur
 <ph name="BEGIN_LINK_2" />Lisateave<ph name="END_LINK_2" />
 
 Täiendavad juhised leiate aadressilt <ph name="ACCOUNT_EMAIL" />.</translation>
+<translation id="7448255348454382571">Chromium OS-i taaskäivitamine</translation>
 <translation id="7449453770951226939"><ph name="PAGE_TITLE" /> – Chromium Dev</translation>
 <translation id="7451052299415159299">Chromium vajab selle saidi puhul luba, et teie kaamerale juurde pääseda</translation>
+<translation id="7471302858145901434">{0,plural, =1{Taaskäivitage Chromium OS päeva jooksul}other{Taaskäivitage Chromium OS # päeva jooksul}}</translation>
 <translation id="7483335560992089831">Ei saa installida sama Chromiumi versiooni, mis praegu töötab. Sulgege Chromium ja proovige uuesti.</translation>
 <translation id="7549178288319965365">Teave Chromium OS-i kohta</translation>
 <translation id="7577193603922410712">Äsja rakendati Chromiumi spetsiaalne turvavärskendus. Selle jõustamiseks taaskäivitage brauser (teie vahelehed taastatakse).</translation>
@@ -226,18 +236,20 @@ Täiendavad juhised leiate aadressilt <ph name="ACCOUNT_EMAIL" />.</translation>
 <translation id="8157153840442649507">Chromium kuvatakse selles keeles</translation>
 <translation id="81770708095080097">Chromium blokeeris faili, kuna see on ohtlik.</translation>
 <translation id="8222496066431494154">Installige Chromium oma telefoni. Saadame SMS-i teie konto taastamise telefoninumbrile: <ph name="PHONE_NUMBER" />.</translation>
+<translation id="825412236959742607">Chrome eemaldas osa sisust, kuna leht kasutab liiga palju mälu.</translation>
 <translation id="8269379391216269538">Aidake muuta Chromiumi paremaks</translation>
 <translation id="8290862415967981663">Chromium blokeeris faili, kuna see võib olla ohtlik.</translation>
 <translation id="8330519371938183845">Logige sisse, et Chromium kõigis oma seadmetes sünkroonida ja isikupärastada</translation>
 <translation id="8340674089072921962">Kasutaja <ph name="USER_EMAIL_ADDRESS" /> kasutas varem Chromiumi</translation>
 <translation id="8375950122744241554">Jälgitavad kasutajaprofiilid ei ole enam alates Chromiumi versioonist 70 saadaval.</translation>
+<translation id="8379713241968949941">{0,plural, =1{Chromium käivitatakse uuesti tunni aja pärast}other{Chromium käivitatakse uuesti # tunni pärast}}</translation>
 <translation id="8453117565092476964">Installeri arhiiv on rikutud või kehtetu. Laadige Chromium uuesti alla.</translation>
 <translation id="8493179195440786826">Chromium on aegunud</translation>
 <translation id="85843667276690461">Hangi abi Chromiumi kasutamise kohta</translation>
 <translation id="8586442755830160949">Autoriõigus <ph name="YEAR" /> The Chromium Authors. Kõik õigused on kaitstud.</translation>
+<translation id="8599548569518771270">{0,plural, =0{Chromium OS taaskäivitub kohe}=1{Chromium OS taaskäivitub 1 sekundi pärast}other{Chromium OS taaskäivitub # sekundi pärast}}</translation>
 <translation id="8619360774459241877">Chromiumi käivitamine …</translation>
 <translation id="8621669128220841554">Installimine ebaõnnestus tundmatu vea tõttu. Laadige Chromium uuesti alla.</translation>
-<translation id="8628626585870903697">Chromium ei sisalda PDF-vaaturit, mida on printimise eelvaate jaoks vaja.</translation>
 <translation id="8667808506758191620">Teie <ph name="DEVICE_TYPE" /> on ajakohane.</translation>
 <translation id="8697124171261953979">Lisaks juhib see seda, mis leht kuvatakse Chromiumi käivitamisel või omnikastikeses otsingu tegemisel.</translation>
 <translation id="8704119203788522458">See on teie Chromium</translation>

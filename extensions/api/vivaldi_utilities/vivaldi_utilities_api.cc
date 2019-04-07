@@ -35,6 +35,8 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
+#include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/settings_utils.h"
 #include "chrome/browser/ui/webui/site_settings_helper.h"
@@ -177,6 +179,38 @@ const base::Value* VivaldiUtilitiesAPI::GetSharedData(const std::string& key) {
   return nullptr;
 }
 
+bool VivaldiUtilitiesAPI::SetDialogPostion(int window_id,
+                                           const std::string& dialog,
+                                           const gfx::Rect& rect,
+                                           const std::string& flow_direction) {
+  bool retval = true;
+  for (auto it = dialog_to_point_list_.begin();
+       it != dialog_to_point_list_.end(); ++it) {
+    if ((*it)->window_id() == window_id && dialog == (*it)->dialog_name()) {
+      dialog_to_point_list_.erase(it);
+      retval = false;
+      break;
+    }
+  }
+  dialog_to_point_list_.push_back(std::make_unique<DialogPosition>(
+      window_id, dialog, rect, flow_direction));
+  return retval;
+}
+
+gfx::Rect VivaldiUtilitiesAPI::GetDialogPosition(int window_id,
+                                                 const std::string& dialog,
+                                                 std::string* flow_direction) {
+  for (auto& item : dialog_to_point_list_) {
+    if (item->window_id() == window_id && dialog == item->dialog_name()) {
+      if (flow_direction) {
+        *flow_direction = item->flow_direction();
+      }
+      return item->rect();
+    }
+  }
+  return gfx::Rect();
+}
+
 void VivaldiUtilitiesAPI::CloseAllThumbnailWindows() {
   // This will close all app windows currently generating thumbnails.
   AppWindowRegistry::AppWindowList windows =
@@ -206,6 +240,33 @@ void VivaldiUtilitiesAPI::OnResume() {
     event_router_->DispatchEvent(vivaldi::utilities::OnResume::kEventName,
                                  vivaldi::utilities::OnResume::Create());
   }
+}
+
+void VivaldiUtilitiesAPI::OnPasswordIconStatusChanged(bool state) {
+  if (event_router_) {
+    event_router_->DispatchEvent(
+        vivaldi::utilities::OnPasswordIconStatusChanged::kEventName,
+        vivaldi::utilities::OnPasswordIconStatusChanged::Create(state));
+  }
+}
+
+VivaldiUtilitiesAPI::DialogPosition::DialogPosition(
+    int window_id,
+    const std::string& dialog_name,
+    const gfx::Rect rect,
+    const std::string& flow_direction)
+    : window_id_(window_id),
+      dialog_name_(dialog_name),
+      rect_(rect),
+      flow_direction_(flow_direction) {}
+
+bool UtilitiesShowPasswordDialogFunction::RunAsync() {
+  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
+                      dispatcher()->GetAssociatedWebContents());
+  chrome::ManagePasswordsForPage(browser);
+
+  SendResponse(true);
+  return true;
 }
 
 namespace ClearAllRecentlyClosedSessions =
@@ -949,6 +1010,28 @@ bool UtilitiesCanShowWelcomePageFunction::RunAsync() {
 
   results_ =
       vivaldi::utilities::CanShowWelcomePage::Results::Create(can_show_welcome);
+
+  SendResponse(true);
+  return true;
+}
+
+bool UtilitiesSetDialogPositionFunction::RunAsync() {
+  std::unique_ptr<vivaldi::utilities::SetDialogPosition::Params> params(
+      vivaldi::utilities::SetDialogPosition::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  gfx::Rect rect(params->position.left, params->position.top,
+                 params->position.width, params->position.height);
+
+  VivaldiUtilitiesAPI* api =
+    VivaldiUtilitiesAPI::GetFactoryInstance()->Get(GetProfile());
+
+  bool found = api->SetDialogPostion(
+      params->window_id, vivaldi::utilities::ToString(params->dialog_name),
+      rect, vivaldi::utilities::ToString(params->flow_direction));
+
+  results_ =
+    vivaldi::utilities::SetDialogPosition::Results::Create(found);
 
   SendResponse(true);
   return true;

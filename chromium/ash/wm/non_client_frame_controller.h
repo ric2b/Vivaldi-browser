@@ -23,18 +23,17 @@
 namespace aura {
 class PropertyConverter;
 class Window;
-class WindowManagerClient;
 }  // namespace aura
 
 namespace gfx {
 class Insets;
 }
 
-namespace ui {
+namespace ws {
 namespace mojom {
 enum class WindowType;
 }
-}  // namespace ui
+}  // namespace ws
 
 namespace ash {
 
@@ -56,10 +55,9 @@ class ASH_EXPORT NonClientFrameController
       aura::Window* parent,
       aura::Window* context,
       const gfx::Rect& bounds,
-      ui::mojom::WindowType window_type,
+      ws::mojom::WindowType window_type,
       aura::PropertyConverter* property_converter,
-      std::map<std::string, std::vector<uint8_t>>* properties,
-      aura::WindowManagerClient* window_manager_client);
+      std::map<std::string, std::vector<uint8_t>>* properties);
 
   // Returns the NonClientFrameController for the specified window, null if
   // one was not created.
@@ -73,10 +71,6 @@ class ASH_EXPORT NonClientFrameController
   static int GetMaxTitleBarButtonWidth();
 
   aura::Window* window() { return window_; }
-
-  aura::WindowManagerClient* window_manager_client() {
-    return window_manager_client_;
-  }
 
   void SetClientArea(const gfx::Insets& insets);
 
@@ -112,8 +106,6 @@ class ASH_EXPORT NonClientFrameController
 
  private:
   ~NonClientFrameController() override;
-
-  aura::WindowManagerClient* window_manager_client_;
 
   views::Widget* widget_;
   views::View* contents_view_ = nullptr;

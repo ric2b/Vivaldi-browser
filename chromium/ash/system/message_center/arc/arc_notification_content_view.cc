@@ -102,9 +102,10 @@ class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
         widget->OnMouseEvent(located_event->AsMouseEvent());
       } else if (located_event->IsScrollEvent()) {
         widget->OnScrollEvent(located_event->AsScrollEvent());
+        owner_->item_->CancelLongPress();
       } else if (located_event->IsGestureEvent() &&
                  event->type() != ui::ET_GESTURE_TAP) {
-        bool event_for_android_only = false;
+        bool slide_handled_by_android = false;
         if ((event->type() == ui::ET_GESTURE_SCROLL_BEGIN ||
              event->type() == ui::ET_GESTURE_SCROLL_UPDATE ||
              event->type() == ui::ET_GESTURE_SCROLL_END ||
@@ -120,7 +121,7 @@ class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
           if (contains && event->type() == ui::ET_GESTURE_SCROLL_BEGIN)
             swipe_captured_ = true;
 
-          event_for_android_only = contains && swipe_captured_;
+          slide_handled_by_android = contains && swipe_captured_;
         }
 
         if (event->type() == ui::ET_GESTURE_SCROLL_BEGIN)
@@ -129,8 +130,17 @@ class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
         if (event->type() == ui::ET_GESTURE_SCROLL_END)
           swipe_captured_ = false;
 
-        if (!event_for_android_only)
-          widget->OnGestureEvent(located_event->AsGestureEvent());
+        if (slide_handled_by_android &&
+            event->type() == ui::ET_GESTURE_SCROLL_BEGIN) {
+          is_current_slide_handled_by_android_ = true;
+          owner_->message_view_->DisableSlideForcibly(true);
+        } else if (is_current_slide_handled_by_android_ &&
+                   event->type() == ui::ET_GESTURE_SCROLL_END) {
+          is_current_slide_handled_by_android_ = false;
+          owner_->message_view_->DisableSlideForcibly(false);
+        }
+
+        widget->OnGestureEvent(located_event->AsGestureEvent());
       }
     }
 
@@ -152,6 +162,7 @@ class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
   }
 
   ArcNotificationContentView* const owner_;
+  bool is_current_slide_handled_by_android_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(EventForwarder);
 };
@@ -336,7 +347,7 @@ void ArcNotificationContentView::UpdateCornerRadius(int top_radius,
   bottom_radius_ = bottom_radius;
 
   if (GetWidget())
-    InstallMask();
+    UpdateMask();
 }
 
 void ArcNotificationContentView::OnSlideChanged() {
@@ -474,7 +485,7 @@ void ArcNotificationContentView::AttachSurface() {
   // (Re-)create the floating buttons after |surface_| is attached to a widget.
   MaybeCreateFloatingControlButtons();
 
-  InstallMask();
+  UpdateMask();
 }
 
 void ArcNotificationContentView::ShowCopiedSurface() {
@@ -483,15 +494,16 @@ void ArcNotificationContentView::ShowCopiedSurface() {
   DCHECK(surface_->GetWindow());
   surface_copy_ = ::wm::RecreateLayers(surface_->GetWindow());
   // |surface_copy_| is at (0, 0) in owner_->layer().
-  surface_copy_->root()->SetBounds(gfx::Rect(surface_copy_->root()->size()));
+  gfx::Rect size(surface_copy_->root()->size());
+  surface_copy_->root()->SetBounds(size);
   layer()->Add(surface_copy_->root());
 
   if (!surface_copy_mask_) {
     surface_copy_mask_ = views::Painter::CreatePaintedLayer(
         std::make_unique<message_center::NotificationBackgroundPainter>(
             top_radius_, bottom_radius_));
-    surface_copy_mask_->layer()->SetBounds(
-        gfx::Rect(surface_copy_->root()->size()));
+    surface_copy_mask_->layer()->SetBounds(size);
+    surface_copy_mask_->layer()->SetFillsBoundsOpaquely(false);
   }
   DCHECK(!surface_copy_mask_->layer()->parent());
   surface_copy_->root()->SetMaskLayer(surface_copy_mask_->layer());
@@ -511,18 +523,28 @@ void ArcNotificationContentView::HideCopiedSurface() {
 
   // Re-install the mask since the custom mask is unset by
   // |::wm::RecreateLayers()| in |ShowCopiedSurface()| method.
-  InstallMask();
+  UpdateMask();
 }
 
-void ArcNotificationContentView::InstallMask() {
+void ArcNotificationContentView::UpdateMask() {
   if (top_radius_ == 0 && bottom_radius_ == 0) {
     SetCustomMask(nullptr);
+    mask_insets_.reset();
     return;
   }
 
-  SetCustomMask(views::Painter::CreatePaintedLayer(
+  gfx::Insets new_insets = GetContentsBounds().InsetsFrom(GetVisibleBounds());
+  if (mask_insets_ == new_insets)
+    return;
+  mask_insets_ = new_insets;
+
+  auto mask_painter =
       std::make_unique<message_center::NotificationBackgroundPainter>(
-          top_radius_, bottom_radius_)));
+          top_radius_, bottom_radius_);
+  // Set insets to round visible notification corners. https://crbug.com/866777
+  mask_painter->set_insets(new_insets);
+
+  SetCustomMask(views::Painter::CreatePaintedLayer(std::move(mask_painter)));
 }
 
 void ArcNotificationContentView::AddedToWidget() {
@@ -584,6 +606,9 @@ void ArcNotificationContentView::Layout() {
     // |views::NativeViewHostAura::ShowWidget()| and |aura::Window::Show()|
     // which has DCHECK the opacity of the window.
     views::NativeViewHost::Layout();
+    // Reinstall mask to update rounded mask insets. Set null mask unless radius
+    // is set.
+    UpdateMask();
 
     // Scale notification surface if necessary.
     gfx::Transform transform;

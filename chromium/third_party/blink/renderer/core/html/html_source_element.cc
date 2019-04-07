@@ -89,7 +89,7 @@ void HTMLSourceElement::DidMoveToNewDocument(Document& old_document) {
 }
 
 Node::InsertionNotificationRequest HTMLSourceElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   HTMLElement::InsertedInto(insertion_point);
   Element* parent = parentElement();
   if (auto* media = ToHTMLMediaElementOrNull(parent))
@@ -99,10 +99,10 @@ Node::InsertionNotificationRequest HTMLSourceElement::InsertedInto(
   return kInsertionDone;
 }
 
-void HTMLSourceElement::RemovedFrom(ContainerNode* removal_root) {
+void HTMLSourceElement::RemovedFrom(ContainerNode& removal_root) {
   Element* parent = parentElement();
-  if (!parent && removal_root->IsElementNode())
-    parent = ToElement(removal_root);
+  if (!parent && removal_root.IsElementNode())
+    parent = ToElement(&removal_root);
   if (auto* media = ToHTMLMediaElementOrNull(parent))
     media->SourceWasRemoved(this);
   if (auto* picture = ToHTMLPictureElementOrNull(parent)) {
@@ -155,7 +155,7 @@ void HTMLSourceElement::CancelPendingErrorEvent() {
 
 void HTMLSourceElement::DispatchPendingEvent() {
   DVLOG(SOURCE_LOG_LEVEL) << "dispatchPendingEvent - " << (void*)this;
-  DispatchEvent(Event::CreateCancelable(EventTypeNames::error));
+  DispatchEvent(*Event::CreateCancelable(EventTypeNames::error));
 }
 
 bool HTMLSourceElement::MediaQueryMatches() const {

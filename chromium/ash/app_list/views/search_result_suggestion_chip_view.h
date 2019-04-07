@@ -26,8 +26,10 @@ class APP_LIST_EXPORT SearchResultSuggestionChipView
 
   SearchResult* result() { return item_; }
   void SetSearchResult(SearchResult* item);
+  void SetIndexInSuggestionChipContainer(size_t index);
 
   // SearchResultObserver:
+  void OnMetadataChanged() override;
   void OnResultDestroying() override;
 
   // views::ButtonListener:
@@ -37,10 +39,13 @@ class APP_LIST_EXPORT SearchResultSuggestionChipView
   void Layout() override;
   const char* GetClassName() const override;
   gfx::Size CalculatePreferredSize() const override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+
+  SuggestionChipView* suggestion_chip_view() { return suggestion_chip_view_; }
 
  private:
-  // Remove the search result item.
-  void DiscardItem();
+  // Updates the suggestion chip view's title and icon.
+  void UpdateSuggestionChipView();
 
   AppListViewDelegate* const view_delegate_;  // Owned by AppListView.
 
@@ -50,6 +55,9 @@ class APP_LIST_EXPORT SearchResultSuggestionChipView
   // The view that actually shows the icon and title.
   SuggestionChipView* suggestion_chip_view_ = nullptr;
 
+  // The index of this view in the suggestion_chip_container, only used for uma
+  // logging.
+  int index_in_suggestion_chip_container_ = -1;
   base::WeakPtrFactory<SearchResultSuggestionChipView> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultSuggestionChipView);

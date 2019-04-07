@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/time/clock.h"
 #include "components/drive/chromeos/about_resource_root_folder_id_loader.h"
 #include "components/drive/file_system_core_util.h"
 
@@ -18,13 +19,16 @@ DefaultCorpusChangeListLoader::DefaultCorpusChangeListLoader(
     ResourceMetadata* resource_metadata,
     JobScheduler* scheduler,
     AboutResourceLoader* about_resource_loader,
-    LoaderController* apply_task_controller)
+    LoaderController* apply_task_controller,
+    const base::Clock* clock)
     : logger_(logger),
       blocking_task_runner_(blocking_task_runner),
       resource_metadata_(resource_metadata),
       scheduler_(scheduler),
       loader_controller_(apply_task_controller),
       weak_ptr_factory_(this) {
+  DCHECK(clock);
+
   root_folder_id_loader_ =
       std::make_unique<AboutResourceRootFolderIdLoader>(about_resource_loader);
 
@@ -40,7 +44,8 @@ DefaultCorpusChangeListLoader::DefaultCorpusChangeListLoader(
   directory_loader_ = std::make_unique<DirectoryLoader>(
       logger_, blocking_task_runner_.get(), resource_metadata_, scheduler_,
       root_folder_id_loader_.get(), start_page_token_loader_.get(),
-      loader_controller_, util::GetDriveMyDriveRootPath());
+      loader_controller_, util::GetDriveMyDriveRootPath(),
+      util::kTeamDriveIdDefaultCorpus, clock);
 
   team_drive_list_loader_ = std::make_unique<TeamDriveListLoader>(
       logger_, blocking_task_runner_.get(), resource_metadata, scheduler_,
@@ -104,11 +109,11 @@ void DefaultCorpusChangeListLoader::OnChangeListLoadIfNeeded(
 
 void DefaultCorpusChangeListLoader::ReadDirectory(
     const base::FilePath& directory_path,
-    const ReadDirectoryEntriesCallback& entries_callback,
+    ReadDirectoryEntriesCallback entries_callback,
     const FileOperationCallback& completion_callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  directory_loader_->ReadDirectory(directory_path, entries_callback,
+  directory_loader_->ReadDirectory(directory_path, std::move(entries_callback),
                                    completion_callback);
 
   // Also start loading all of the user's contents.

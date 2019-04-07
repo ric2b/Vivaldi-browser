@@ -8,19 +8,19 @@
 #include "ash/content/ash_with_content_export.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
-#include "services/ui/ws2/gpu_interface_provider.h"
+#include "services/ws/gpu_interface_provider.h"
 
 namespace ash {
 
 // An implementation of GpuInterfaceProvider that forwards to the Gpu
 // implementation in content.
 class ASH_WITH_CONTENT_EXPORT ContentGpuInterfaceProvider
-    : public ui::ws2::GpuInterfaceProvider {
+    : public ws::GpuInterfaceProvider {
  public:
   ContentGpuInterfaceProvider();
   ~ContentGpuInterfaceProvider() override;
 
-  // ui::ws2::GpuInterfaceProvider:
+  // ws::GpuInterfaceProvider:
   void RegisterGpuInterfaces(
       service_manager::BinderRegistry* registry) override;
   void RegisterOzoneGpuInterfaces(

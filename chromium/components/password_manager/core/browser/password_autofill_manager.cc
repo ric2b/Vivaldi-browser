@@ -363,13 +363,12 @@ void PasswordAutofillManager::DidAcceptSuggestion(const base::string16& value,
     metrics_util::LogContextOfShowAllSavedPasswordsAccepted(
         metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_PASSWORD);
 
-    if (password_client_) {
+    if (password_client_ && password_client_->GetMetricsRecorder()) {
       using UserAction =
           password_manager::PasswordManagerMetricsRecorder::PageLevelUserAction;
-
-      password_client_->GetMetricsRecorder().RecordPageLevelUserAction(
+      password_client_->GetMetricsRecorder()->RecordPageLevelUserAction(
           UserAction::kShowAllPasswordsWhileSomeAreSuggested);
-      }
+    }
   } else {
     bool success =
         FillSuggestion(form_data_key_, GetUsernameFromSuggestion(value));
@@ -430,13 +429,10 @@ bool PasswordAutofillManager::GetPasswordAndRealmForUsername(
   }
 
   // Scan additional logins for a match.
-  for (autofill::PasswordFormFillData::LoginCollection::const_iterator iter =
-           fill_data.additional_logins.begin();
-       iter != fill_data.additional_logins.end(); ++iter) {
-    if (iter->first == current_username) {
-      *password_and_realm = iter->second;
-      return true;
-    }
+  auto iter = fill_data.additional_logins.find(current_username);
+  if (iter != fill_data.additional_logins.end()) {
+    *password_and_realm = iter->second;
+    return true;
   }
 
   return false;

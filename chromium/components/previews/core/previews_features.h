@@ -19,6 +19,8 @@ extern const base::Feature kOptimizationHints;
 extern const base::Feature kOptimizationHintsExperiments;
 constexpr char kOptimizationHintsExperimentNameParam[] = "experiment_name";
 extern const base::Feature kResourceLoadingHints;
+extern const base::Feature kLitePageServerPreviews;
+extern const base::Feature kAndroidOmniboxPreviewsBadge;
 
 }  // namespace features
 }  // namespace previews

@@ -33,9 +33,9 @@
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "components/ukm/ukm_source.h"
 #include "net/cert/cert_status_flags.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_source.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -86,9 +86,10 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   MOCK_CONST_METHOD0(GetPasswordStore, PasswordStore*());
   // The code inside EXPECT_CALL for PromptUserToSaveOrUpdatePasswordPtr and
   // ShowManualFallbackForSavingPtr owns the PasswordFormManager* argument.
-  MOCK_METHOD1(PromptUserToSaveOrUpdatePasswordPtr, void(PasswordFormManager*));
+  MOCK_METHOD1(PromptUserToSaveOrUpdatePasswordPtr,
+               void(PasswordFormManagerForUI*));
   MOCK_METHOD3(ShowManualFallbackForSavingPtr,
-               void(PasswordFormManager*, bool, bool));
+               void(PasswordFormManagerForUI*, bool, bool));
   MOCK_METHOD0(HideManualFallbackForSaving, void());
   MOCK_METHOD1(NotifySuccessfulLoginWithExistingPassword,
                void(const autofill::PasswordForm&));
@@ -102,17 +103,15 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   bool PromptUserToSaveOrUpdatePassword(
       std::unique_ptr<PasswordFormManagerForUI> manager,
       bool update_password) override {
-    PromptUserToSaveOrUpdatePasswordPtr(
-        static_cast<PasswordFormManager*>(manager.release()));
+    PromptUserToSaveOrUpdatePasswordPtr(manager.release());
     return false;
   }
   void ShowManualFallbackForSaving(
       std::unique_ptr<PasswordFormManagerForUI> manager,
       bool has_generated_password,
       bool is_update) override {
-    ShowManualFallbackForSavingPtr(
-        static_cast<PasswordFormManager*>(manager.release()),
-        has_generated_password, is_update);
+    ShowManualFallbackForSavingPtr(manager.release(), has_generated_password,
+                                   is_update);
   }
   void AutomaticPasswordSave(
       std::unique_ptr<PasswordFormManagerForUI> manager) override {
@@ -200,7 +199,26 @@ class PasswordManagerTest : public testing::Test {
     form.password_value = ASCIIToUTF16("p4ssword");
     form.submit_element = ASCIIToUTF16("signIn");
     form.signon_realm = "http://www.google.com";
+
+    // Fill |form.form_data|.
+    form.form_data.origin = form.origin;
+    form.form_data.action = form.action;
     form.form_data.name = ASCIIToUTF16("the-form-name");
+    form.form_data.unique_renderer_id = 10;
+
+    autofill::FormFieldData field;
+    field.name = ASCIIToUTF16("Email");
+    field.id = field.name;
+    field.form_control_type = "text";
+    field.unique_renderer_id = 2;
+    form.form_data.fields.push_back(field);
+
+    field.name = ASCIIToUTF16("Passwd");
+    field.id = field.name;
+    field.form_control_type = "password";
+    field.unique_renderer_id = 3;
+    form.form_data.fields.push_back(field);
+
     return form;
   }
 
@@ -284,6 +302,15 @@ class PasswordManagerTest : public testing::Test {
     manager()->OnPasswordFormSubmitted(&driver_, form);
   }
 
+  void TurnOnNewParsingForSaving(
+      base::test::ScopedFeatureList* scoped_feature_list) {
+    scoped_feature_list->InitWithFeatures(
+        {features::kNewPasswordFormParsing,
+         features::kNewPasswordFormParsingForSaving},
+        {});
+    manager_.reset(new PasswordManager(&client_));
+  }
+
   const GURL test_url_;
   base::MessageLoop message_loop_;
   scoped_refptr<MockPasswordStore> store_;
@@ -291,7 +318,6 @@ class PasswordManagerTest : public testing::Test {
   MockPasswordManagerDriver driver_;
   std::unique_ptr<PasswordAutofillManager> password_autofill_manager_;
   std::unique_ptr<PasswordManager> manager_;
-  PasswordForm submitted_form_;
   scoped_refptr<TestMockTimeTaskRunner> task_runner_;
 };
 
@@ -322,7 +348,7 @@ TEST_F(PasswordManagerTest, FormSubmitWithOnlyNewPasswordField) {
       .WillRepeatedly(Return(true));
   OnPasswordFormSubmitted(form);
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -401,7 +427,7 @@ TEST_F(PasswordManagerTest, FormSubmitNoGoodMatch) {
   OnPasswordFormSubmitted(form);
 
   // We still expect an add, since we didn't have a good match.
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -453,7 +479,7 @@ TEST_F(PasswordManagerTest, BestMatchFormToManager) {
   EXPECT_EQ(CalculateFormSignature(form.form_data),
             CalculateFormSignature(changed_form.form_data));
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -464,13 +490,15 @@ TEST_F(PasswordManagerTest, BestMatchFormToManager) {
 
   // Verify that PasswordFormManager to be save owns the correct pair of
   // observed and submitted forms.
-  EXPECT_EQ(form.action, form_manager_to_save->observed_form().action);
-  EXPECT_EQ(form.form_data.name,
-            form_manager_to_save->observed_form().form_data.name);
-  EXPECT_EQ(changed_form.action,
-            form_manager_to_save->submitted_form()->action);
+  // TODO(https://crbug.com/831123): Implement subsequent expectation with
+  // PasswordFormManagerInterface and avoid casting to PasswordFormManager*.
+  PasswordFormManager* form_manager =
+      static_cast<PasswordFormManager*>(form_manager_to_save.get());
+  EXPECT_EQ(form.action, form_manager->observed_form().action);
+  EXPECT_EQ(form.form_data.name, form_manager->observed_form().form_data.name);
+  EXPECT_EQ(changed_form.action, form_manager->submitted_form()->action);
   EXPECT_EQ(changed_form.form_data.name,
-            form_manager_to_save->submitted_form()->form_data.name);
+            form_manager->submitted_form()->form_data.name);
 }
 
 // As long as the is a PasswordFormManager that matches the origin, we should
@@ -503,7 +531,7 @@ TEST_F(PasswordManagerTest, AnyMatchFormToManager) {
   EXPECT_NE(CalculateFormSignature(form.form_data),
             CalculateFormSignature(changed_form.form_data));
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -514,13 +542,15 @@ TEST_F(PasswordManagerTest, AnyMatchFormToManager) {
 
   // Verify that we matched the form to a PasswordFormManager, although with the
   // worst possible match.
-  EXPECT_EQ(form.action, form_manager_to_save->observed_form().action);
-  EXPECT_EQ(form.form_data.name,
-            form_manager_to_save->observed_form().form_data.name);
-  EXPECT_EQ(changed_form.action,
-            form_manager_to_save->submitted_form()->action);
+  // TODO(https://crbug.com/831123): Implement subsequent expectation with
+  // PasswordFormManagerInterface and avoid casting to PasswordFormManager*.
+  PasswordFormManager* form_manager =
+      static_cast<PasswordFormManager*>(form_manager_to_save.get());
+  EXPECT_EQ(form.action, form_manager->observed_form().action);
+  EXPECT_EQ(form.form_data.name, form_manager->observed_form().form_data.name);
+  EXPECT_EQ(changed_form.action, form_manager->submitted_form()->action);
   EXPECT_EQ(changed_form.form_data.name,
-            form_manager_to_save->submitted_form()->form_data.name);
+            form_manager->submitted_form()->form_data.name);
 }
 
 // Tests that a credential wouldn't be saved if it is already in the store.
@@ -541,7 +571,7 @@ TEST_F(PasswordManagerTest, DontSaveAlreadySavedCredential) {
   PasswordForm incomplete_match(form);
   incomplete_match.password_value =
       form.password_value.substr(0, form.password_value.length() - 1);
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, ShowManualFallbackForSavingPtr(_, false, true))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
   manager()->ShowManualFallbackForSaving(&driver_, incomplete_match);
@@ -670,7 +700,7 @@ TEST_F(PasswordManagerTest, FormSubmit) {
       .WillRepeatedly(Return(true));
   OnPasswordFormSubmitted(form);
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -718,7 +748,7 @@ TEST_F(PasswordManagerTest, FormSubmitWithFormOnPreviousPage) {
       .WillRepeatedly(Return(true));
   OnPasswordFormSubmitted(second_form);
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
   // Navigation after form submit, no forms appear.
@@ -749,7 +779,7 @@ TEST_F(PasswordManagerTest, FormSubmitInvisibleLogin) {
   OnPasswordFormSubmitted(form);
 
   // Expect info bar to appear:
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -969,52 +999,6 @@ TEST_F(PasswordManagerTest, SyncCredentialsNotDroppedIfUpToDate) {
   manager()->OnPasswordFormsRendered(&driver_, observed, true);
 }
 
-// When there is a sync password saved, and the user successfully uses an
-// updated version of it, the obsolete one should be dropped, to avoid filling
-// it later.
-TEST_F(PasswordManagerTest, SyncCredentialsDroppedWhenObsolete) {
-  PasswordForm form(MakeSimpleGAIAForm());
-  form.password_value = ASCIIToUTF16("old pa55word");
-  // Pretend that the password store contains "old pa55word" stored for |form|.
-  EXPECT_CALL(*store_, GetLogins(_, _))
-      .WillRepeatedly(WithArg<1>(InvokeConsumer(form)));
-
-  // Load the page, pretend the password was updated.
-  PasswordForm updated_form(form);
-  updated_form.password_value = ASCIIToUTF16("n3w passw0rd");
-  std::vector<PasswordForm> observed;
-  observed.push_back(updated_form);
-  EXPECT_CALL(driver_, FillPasswordForm(_)).Times(2);
-  manager()->OnPasswordFormsParsed(&driver_, observed);
-  manager()->OnPasswordFormsRendered(&driver_, observed, true);
-
-  // Submit form and finish navigation.
-  EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
-      .WillRepeatedly(Return(true));
-  EXPECT_CALL(client_, GetPrefs()).WillRepeatedly(Return(nullptr));
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
-  ON_CALL(*client_.GetStoreResultFilter(), ShouldSaveGaiaPasswordHash(_))
-      .WillByDefault(Return(true));
-  ON_CALL(*client_.GetStoreResultFilter(), IsSyncAccountEmail(_))
-      .WillByDefault(Return(true));
-  EXPECT_CALL(*store_,
-              SaveGaiaPasswordHash(
-                  "googleuser", ASCIIToUTF16("n3w passw0rd"),
-                  metrics_util::SyncPasswordHashChange::SAVED_IN_CONTENT_AREA));
-#endif
-  manager()->ProvisionallySavePassword(updated_form, nullptr);
-
-  client_.FilterAllResultsForSaving();
-
-  // Because the user successfully uses an updated sync password, Chrome should
-  // remove the obsolete copy of it.
-  EXPECT_CALL(*store_, RemoveLogin(form));
-  EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_)).Times(0);
-  observed.clear();
-  manager()->OnPasswordFormsParsed(&driver_, observed);
-  manager()->OnPasswordFormsRendered(&driver_, observed, true);
-}
-
 // While sync credentials are not saved, they are still filled to avoid users
 // thinking they lost access to their accounts.
 TEST_F(PasswordManagerTest, SyncCredentialsStillFilled) {
@@ -1140,7 +1124,7 @@ TEST_F(PasswordManagerTest, AttemptedSavePasswordSameOriginInsecureScheme) {
 
   // Make sure |PromptUserToSaveOrUpdatePassword| gets called, and the resulting
   // form manager is saved.
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -1191,7 +1175,7 @@ TEST_F(PasswordManagerTest, DoNotSaveWithEmptyNewPasswordAndNonemptyPassword) {
       .WillRepeatedly(Return(true));
   OnPasswordFormSubmitted(form);
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -1225,7 +1209,7 @@ TEST_F(PasswordManagerTest, FormSubmitWithOnlyPasswordField) {
       .WillRepeatedly(Return(true));
   OnPasswordFormSubmitted(form);
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -1353,7 +1337,7 @@ TEST_F(PasswordManagerTest, SameDocumentNavigation) {
   EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
       .WillRepeatedly(Return(true));
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -1388,7 +1372,7 @@ TEST_F(PasswordManagerTest, SameDocumentBlacklistedSite) {
   // Prefs are needed for failure logging about blacklisting.
   EXPECT_CALL(client_, GetPrefs()).WillRepeatedly(Return(nullptr));
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -1423,7 +1407,7 @@ TEST_F(PasswordManagerTest, SavingSignupForms_NoHTMLMatch) {
       .WillRepeatedly(Return(true));
   OnPasswordFormSubmitted(submitted_form);
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -1474,7 +1458,7 @@ TEST_F(PasswordManagerTest, SavingSignupForms_NoActionMatch) {
       .WillRepeatedly(Return(true));
   OnPasswordFormSubmitted(submitted_form);
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -1526,7 +1510,7 @@ TEST_F(PasswordManagerTest, FormSubmittedChangedWithAutofillResponse) {
       .WillRepeatedly(Return(true));
   OnPasswordFormSubmitted(form);
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -1602,7 +1586,7 @@ TEST_F(PasswordManagerTest, SaveFormFetchedAfterSubmit) {
   store_consumer->OnGetPasswordStoreResults(
       std::vector<std::unique_ptr<PasswordForm>>());
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -1735,7 +1719,7 @@ TEST_F(PasswordManagerTest,
   OnPasswordFormSubmitted(form);
 
   // Verify that a normal prompt is shown instead of the force saving UI.
-  std::unique_ptr<PasswordFormManager> form_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_to_save)));
   EXPECT_CALL(client_, AutomaticPasswordSaveIndicator()).Times(0);
@@ -1856,7 +1840,7 @@ TEST_F(PasswordManagerTest, PasswordGenerationPresavePasswordAndLogin) {
           .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
       EXPECT_CALL(*store_, GetLoginsForSameOrganizationName(_, _));
     }
-    std::unique_ptr<PasswordFormManager> form_manager;
+    std::unique_ptr<PasswordFormManagerForUI> form_manager;
     if (found_matched_logins_in_store) {
       EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
           .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager)));
@@ -1915,7 +1899,7 @@ TEST_F(PasswordManagerTest,
   PasswordFormManager* form_manager =
       manager()->pending_login_managers().front().get();
 
-  EXPECT_FALSE(form_manager->has_generated_password());
+  EXPECT_FALSE(form_manager->HasGeneratedPassword());
 }
 
 TEST_F(PasswordManagerTest, ForceSavingPasswords) {
@@ -1932,7 +1916,7 @@ TEST_F(PasswordManagerTest, ForceSavingPasswords) {
   manager()->OnPasswordFormsParsed(&driver_, observed);
   manager()->OnPasswordFormsRendered(&driver_, observed, true);
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
       .WillRepeatedly(Return(true));
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
@@ -2075,7 +2059,7 @@ TEST_F(PasswordManagerTest, UpdatePasswordOfAffiliatedCredential) {
   filled_form.password_value = ASCIIToUTF16("new_password");
   OnPasswordFormSubmitted(filled_form);
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -2126,7 +2110,7 @@ TEST_F(PasswordManagerTest, ClearedFieldsSuccessCriteria) {
   observed[0].new_password_value.clear();
 
   // Check success of the submission.
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -2181,7 +2165,7 @@ TEST_F(PasswordManagerTest, NotSavingSyncPasswordHash_NotSyncCredentials) {
   // credentials are eligible for saving.
   EXPECT_CALL(*store_, SaveGaiaPasswordHash(_, _, _)).Times(0);
 
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
@@ -2209,7 +2193,7 @@ TEST_F(PasswordManagerTest, ManualFallbackForSaving) {
   manager()->OnPasswordFormsRendered(&driver_, observed, true);
 
   // The username of the stored form is the same, there should be update bubble.
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, ShowManualFallbackForSavingPtr(_, false, true))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
   manager()->ShowManualFallbackForSaving(&driver_, form);
@@ -2269,7 +2253,7 @@ TEST_F(PasswordManagerTest, ManualFallbackForSaving_SlowBackend) {
   ASSERT_TRUE(store_consumer);
   store_consumer->OnGetPasswordStoreResults(
       std::vector<std::unique_ptr<PasswordForm>>());
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, ShowManualFallbackForSavingPtr(_, false, false))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
   manager()->ShowManualFallbackForSaving(&driver_, form);
@@ -2289,7 +2273,7 @@ TEST_F(PasswordManagerTest, ManualFallbackForSaving_GeneratedPassword) {
 
   // A user accepts a password generated by Chrome. It triggers password
   // presaving and showing manual fallback.
-  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(*store_, AddLogin(_));
   EXPECT_CALL(client_, ShowManualFallbackForSavingPtr(_, true, false))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
@@ -2618,6 +2602,163 @@ TEST_F(PasswordManagerTest,
   EXPECT_THAT(manager()->provisional_save_manager(), NotNull());
   EXPECT_EQ(last_provisional_save_manager,
             manager()->provisional_save_manager());
+}
+
+// Tests that processing normal HTML form submissions works properly with the
+// new parsing. For details see scheme 1 in comments before
+// |form_managers_| in password_manager.h.
+TEST_F(PasswordManagerTest, ProcessingNormalFormSubmission) {
+  for (bool successful_submission : {false, true}) {
+    base::test::ScopedFeatureList scoped_feature_list;
+    TurnOnNewParsingForSaving(&scoped_feature_list);
+
+    EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
+        .WillRepeatedly(Return(true));
+
+    PasswordForm form(MakeSimpleForm());
+    EXPECT_CALL(*store_, GetLogins(_, _))
+        .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+
+    std::vector<PasswordForm> observed;
+    observed.push_back(form);
+    manager()->OnPasswordFormsParsed(&driver_, observed);
+    manager()->OnPasswordFormsRendered(&driver_, observed, true);
+
+    auto submitted_form = form;
+    submitted_form.form_data.fields[0].value = ASCIIToUTF16("username");
+    submitted_form.form_data.fields[1].value = ASCIIToUTF16("strong_password");
+
+    OnPasswordFormSubmitted(submitted_form);
+    EXPECT_TRUE(manager()->GetSubmittedManagerForTest());
+
+    std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
+
+    // Simulate submission.
+    if (successful_submission) {
+      EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
+          .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
+      // The form disappeared, so the submission is condered to be successful.
+      observed.clear();
+    } else {
+      EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_)).Times(0);
+    }
+    manager()->OnPasswordFormsRendered(&driver_, observed, true);
+
+    // Multiple calls of OnPasswordFormsRendered should be handled gracefully.
+    manager()->OnPasswordFormsRendered(&driver_, observed, true);
+  }
+}
+
+// Tests that processing form submissions without navigations works properly
+// with the new parsing. For details see scheme 2 in comments before
+// |form_managers_| in password_manager.h.
+TEST_F(PasswordManagerTest, ProcessingOtherSubmissionTypes) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  TurnOnNewParsingForSaving(&scoped_feature_list);
+
+  EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
+      .WillRepeatedly(Return(true));
+
+  PasswordForm form(MakeSimpleForm());
+  EXPECT_CALL(*store_, GetLogins(_, _))
+      .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+
+  std::vector<PasswordForm> observed;
+  observed.push_back(form);
+  manager()->OnPasswordFormsParsed(&driver_, observed);
+  manager()->OnPasswordFormsRendered(&driver_, observed, true);
+
+  auto submitted_form = form;
+  submitted_form.form_data.fields[0].value = ASCIIToUTF16("username");
+  submitted_form.form_data.fields[1].value = ASCIIToUTF16("strong_password");
+
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
+  EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
+      .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
+  manager()->OnPasswordFormSubmittedNoChecks(&driver_, submitted_form);
+  EXPECT_TRUE(manager()->form_managers().empty());
+}
+
+TEST_F(PasswordManagerTest, SubmittedGaiaFormWithoutVisiblePasswordField) {
+  // Tests that a submitted GAIA sign-in form which does not contain a visible
+  // password field is skipped.
+  std::vector<PasswordForm> observed;
+  PasswordForm form(MakeSimpleGAIAForm());
+  observed.push_back(form);
+  EXPECT_CALL(*store_, GetLogins(_, _))
+      .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+  manager()->OnPasswordFormsParsed(&driver_, observed);
+  manager()->OnPasswordFormsRendered(&driver_, observed, true);
+
+  EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
+      .WillRepeatedly(Return(true));
+
+  form.username_value = ASCIIToUTF16("username");
+  form.password_value = ASCIIToUTF16("password");
+  form.form_data.fields[1].is_focusable = false;
+
+  EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_)).Times(0);
+  manager()->OnPasswordFormSubmittedNoChecks(&driver_, form);
+}
+
+// Tests that PasswordFormManager and NewPasswordFormManager for the same form
+// have the same metrics recorder.
+TEST_F(PasswordManagerTest, CheckMetricsRecorder) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  TurnOnNewParsingForSaving(&scoped_feature_list);
+
+  EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
+      .WillRepeatedly(Return(true));
+
+  PasswordForm form(MakeSimpleForm());
+  EXPECT_CALL(*store_, GetLogins(_, _))
+      .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+
+  std::vector<PasswordForm> observed;
+  observed.push_back(form);
+  manager()->OnPasswordFormsParsed(&driver_, observed);
+
+  const std::vector<std::unique_ptr<PasswordFormManager>>&
+      password_form_managers = manager()->pending_login_managers();
+
+  const std::vector<std::unique_ptr<NewPasswordFormManager>>&
+      new_password_form_managers = manager()->form_managers();
+
+  ASSERT_EQ(1u, password_form_managers.size());
+  ASSERT_EQ(1u, new_password_form_managers.size());
+
+  EXPECT_TRUE(password_form_managers[0]->GetMetricsRecorder());
+  EXPECT_EQ(password_form_managers[0]->GetMetricsRecorder(),
+            new_password_form_managers[0]->GetMetricsRecorder());
+}
+
+TEST_F(PasswordManagerTest, MetricForSchemeOfSuccessfulLogins) {
+  for (bool origin_is_secure : {false, true}) {
+    SCOPED_TRACE(testing::Message("origin_is_secure = ") << origin_is_secure);
+    PasswordForm form(MakeSimpleForm());
+    form.origin =
+        GURL(origin_is_secure ? "https://example.com" : "http://example.com");
+    std::vector<PasswordForm> observed = {form};
+    EXPECT_CALL(*store_, GetLogins(_, _))
+        .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+    manager()->OnPasswordFormsParsed(&driver_, observed);
+    manager()->OnPasswordFormsRendered(&driver_, observed, true);
+
+    EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
+        .WillRepeatedly(Return(true));
+    OnPasswordFormSubmitted(form);
+
+    std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
+    EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
+        .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
+
+    observed.clear();
+    base::HistogramTester histogram_tester;
+    manager()->OnPasswordFormsParsed(&driver_, observed);
+    manager()->OnPasswordFormsRendered(&driver_, observed, true);
+    histogram_tester.ExpectUniqueSample(
+        "PasswordManager.SuccessfulLoginHappened", origin_is_secure, 1);
+  }
 }
 
 }  // namespace password_manager

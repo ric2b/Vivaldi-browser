@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Vivaldi Technologies
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved
 
 #include "chrome/browser/ui/cocoa/tab_contents/web_drag_bookmark_handler_mac.h"
 

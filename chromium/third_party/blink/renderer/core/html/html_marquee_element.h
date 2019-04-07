@@ -37,8 +37,8 @@ class HTMLMarqueeElement final : public HTMLElement {
 
   static HTMLMarqueeElement* Create(Document&);
 
-  InsertionNotificationRequest InsertedInto(ContainerNode*) final;
-  void RemovedFrom(ContainerNode*) final;
+  InsertionNotificationRequest InsertedInto(ContainerNode&) final;
+  void RemovedFrom(ContainerNode&) final;
 
   bool IsHorizontal() const;
 

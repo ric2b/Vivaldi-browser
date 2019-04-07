@@ -13,7 +13,6 @@
 <translation id="2350172092385603347">‏تم استخدام التعريب، ولكن لم يتم تحديد default_locale في البيان.</translation>
 <translation id="2576842806987913196">‏هناك ملف CRX بهذا الاسم فعلاً.</translation>
 <translation id="2753617847762399167">مسار غير قانوني (أساسي أو منتسب مع '..'): '<ph name="IMAGE_PATH" />'</translation>
-<translation id="27822970480436970">تعذّرت هذه الإضافة في تعديل طلب الشبكة نظرًا لتعارض التعديل مع إضافة أخرى.</translation>
 <translation id="2785530881066938471">‏تعذر تحميل الملف '<ph name="RELATIVE_PATH" />' للنص البرمجي للمحتوى. لأنه ليس بتشفير UTF-8.</translation>
 <translation id="2903070246402204397">تم حظر <ph name="EXTENSION_NAME" /> (معرف الإضافة "<ph name="EXTENSION_ID" />") من قِبل المشرف. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">تعذر تثبيت الحزمة: "<ph name="ERROR_CODE" />"</translation>
@@ -57,19 +56,16 @@
 <translation id="7003844668372540529">المنتج غير معروف <ph name="PRODUCT_ID" /> من <ph name="VENDOR_NAME" /></translation>
 <translation id="7068383018033524534">ملف البيان غير صالح</translation>
 <translation id="7217838517480956708">يطلب مشرف هذا الجهاز تثبيت <ph name="EXTENSION_NAME" />. لا يمكن إزالتها أو تعديلها.</translation>
+<translation id="7612608473764576263">‏يجب أن تكون قيمة الإدخال للمفتاح الخاص تنسيقًا صالحًا (PKCS#8-format مفتاح RSA بتنسيق PEM).</translation>
 <translation id="7939686037314084444">تعذّر تحميل الإضافة بشكلٍ صحيح. وقد لا تتمكن الإضافة من اعتراض طلبات الشبكة.</translation>
 <translation id="7972881773422714442">الخيارات: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">الكاميرا الأمامية للمستخدم</translation>
 <translation id="8047248493720652249">تعذّرت هذه الإضافة في تسمية التنزيل "<ph name="ATTEMPTED_FILENAME" />" نظرًا لأن هناك إضافة أخرى (<ph name="EXTENSION_NAME" />) قد حددت اسم ملف آخر "<ph name="ACTUAL_FILENAME" />".</translation>
 <translation id="8284835137979141223"><ph name="PRODUCT_NAME" /> من <ph name="VENDOR_NAME" /></translation>
-<translation id="8341840687457896278">تعذّرت هذه الإضافة في تقديم بيانات الاعتماد لطلب الشبكة، نظرًا لتقديم بيانات اعتماد مختلفة بواسطة إضافة أخرى (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="8517576857589387417">ملف البيان مفقود أو غير قابل للقراءة</translation>
 <translation id="8636666366616799973">الحزمة غير صالحة. التفاصيل: "<ph name="ERROR_MESSAGE" />".</translation>
-<translation id="8670869118777164560">تعذّرت الإضافة في إعادة توجيه طلب الشبكة إلى <ph name="ATTEMPTED_REDIRECT_DESTINATION" /> نظرًا لإعادة توجيهها بواسطة إضافة أخرى (<ph name="EXTENSION_NAME" />) إلى <ph name="ACTUAL_REDIRECT_DESTINATION" />.</translation>
 <translation id="8761756413268424715">يطلب تطبيق "<ph name="APP_NAME" />" الدخول إلى جهاز من أجهزتك:</translation>
-<translation id="8825366169884721447">تعذّرت الإضافة في تعديل عنوان الطلب "<ph name="HEADER_NAME" />" لأحد طلبات الشبكة نظرًا لتعارض التعديل مع إضافة أخرى (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="8885905466771744233">يوجد مفتاح خاص للإضافة المحددة. أعد استخدام هذا المفتاح أو احذفه أولاً.</translation>
 <translation id="907841381057066561">تعذّر إنشاء ملف مضغوط مؤقت أثناء إنشاء الحزمة.</translation>
-<translation id="9111791539553342076">تعذّرت الإضافة في تعديل عنوان الاستجابة "<ph name="HEADER_NAME" />" لأحد طلبات الشبكة نظرًا لتعارض التعديل مع إضافة أخرى (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="941543339607623937">المفتاح الخاص غير صالح.</translation>
 </translationbundle>

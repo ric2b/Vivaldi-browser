@@ -218,6 +218,14 @@ bool TestPersonalDataManager::IsDataLoaded() const {
   return true;
 }
 
+bool TestPersonalDataManager::IsSyncFeatureEnabled() const {
+  return sync_feature_enabled_;
+}
+
+AccountInfo TestPersonalDataManager::GetAccountInfoForPaymentsServer() const {
+  return account_info_;
+}
+
 void TestPersonalDataManager::ClearProfiles() {
   web_profiles_.clear();
 }

@@ -439,6 +439,8 @@ enum HistogramValue {
   ACCESSIBILITY_PRIVATE_ON_SELECT_TO_SPEAK_STATE_CHANGE_REQUESTED,
   INPUT_METHOD_PRIVATE_ON_FOCUS,
   SYSTEM_POWER_SOURCE_ONPOWERCHANGED,
+  WEB_REQUEST_ON_ACTION_IGNORED,
+  ARC_APPS_PRIVATE_ON_INSTALLED,
   // Last entry: Add new entries above, then run:
   // python tools/metrics/histograms/update_extension_histograms.py
 

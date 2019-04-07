@@ -12,11 +12,11 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/test/scoped_task_environment.h"
 #include "content/browser/web_package/signed_exchange_cert_fetcher_factory.h"
 #include "content/browser/web_package/signed_exchange_devtools_proxy.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_paths.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
 #include "net/base/test_completion_callback.h"
@@ -28,6 +28,7 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/network/network_context.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -45,10 +46,17 @@ namespace {
 const uint64_t kSignatureHeaderDate = 1520834000;
 const int kOutputBufferSize = 4096;
 
+constexpr char kTestSxgInnerURL[] = "https://test.example.org/test/";
+
 // "wildcard_example.org.public.pem.cbor" has these dummy data in "ocsp" and
 // "sct" fields.
 constexpr base::StringPiece kDummyOCSPDer = "OCSP";
-constexpr base::StringPiece kDummySCTList = "SCT";
+constexpr char kDummySCTBytes[] = {
+    0x00, 0x05,                // Length of the sct list
+    0x00, 0x03, 'S', 'C', 'T'  // List entry: length and body
+};
+constexpr base::StringPiece kDummySCTList(kDummySCTBytes,
+                                          sizeof(kDummySCTBytes));
 
 std::string GetTestFileContents(base::StringPiece name) {
   base::FilePath path;
@@ -105,20 +113,19 @@ class GMockCertVerifier : public net::CertVerifier {
  public:
   // net::CompletionOnceCallback is move-only, which GMock does not support.
   int Verify(const net::CertVerifier::RequestParams& params,
-             net::CRLSet* crl_set,
              net::CertVerifyResult* verify_result,
              net::CompletionOnceCallback callback,
              std::unique_ptr<net::CertVerifier::Request>* out_req,
              const net::NetLogWithSource& net_log) override {
-    return VerifyImpl(params, crl_set, verify_result, out_req, net_log);
+    return VerifyImpl(params, verify_result, out_req, net_log);
   }
 
-  MOCK_METHOD5(VerifyImpl,
+  MOCK_METHOD4(VerifyImpl,
                int(const net::CertVerifier::RequestParams& params,
-                   net::CRLSet* crl_set,
                    net::CertVerifyResult* verify_result,
                    std::unique_ptr<net::CertVerifier::Request>* out_req,
                    const net::NetLogWithSource& net_log));
+  MOCK_METHOD1(SetConfig, void(const net::CertVerifier::Config& config));
 };
 
 class MockCTVerifier : public net::CTVerifier {
@@ -158,7 +165,7 @@ class SignedExchangeHandlerTest
             url::Origin::Create(GURL("https://sxg.example.com/test.sxg"))) {}
 
   virtual std::string ContentType() {
-    return "application/signed-exchange;v=b1";
+    return "application/signed-exchange;v=b2";
   }
 
   void SetUp() override {
@@ -183,14 +190,15 @@ class SignedExchangeHandlerTest
   }
 
   void TearDown() override {
-    SignedExchangeHandler::SetCertVerifierForTesting(nullptr);
+    SignedExchangeHandler::SetNetworkContextForTesting(nullptr);
+    network::NetworkContext::SetCertVerifierForTesting(nullptr);
     SignedExchangeHandler::SetVerificationTimeForTesting(
         base::Optional<base::Time>());
   }
 
   void SetCertVerifier(std::unique_ptr<net::CertVerifier> cert_verifier) {
     cert_verifier_ = std::move(cert_verifier);
-    SignedExchangeHandler::SetCertVerifierForTesting(cert_verifier_.get());
+    network::NetworkContext::SetCertVerifierForTesting(cert_verifier_.get());
   }
 
   // Reads from |stream| until an error occurs or the EOF is reached.
@@ -228,6 +236,7 @@ class SignedExchangeHandlerTest
 
   bool read_header() const { return read_header_; }
   net::Error error() const { return error_; }
+  const GURL& inner_url() const { return inner_url_; }
   const network::ResourceResponseHead& resource_response() const {
     return resource_response_;
   }
@@ -245,53 +254,61 @@ class SignedExchangeHandlerTest
 
   void CreateSignedExchangeHandler(
       std::unique_ptr<net::TestURLRequestContext> context) {
-    request_context_getter_ = new net::TestURLRequestContextGetter(
-        scoped_task_environment_.GetMainThreadTaskRunner(), std::move(context));
+    url_request_context_ = std::move(context);
+    network_context_ = std::make_unique<network::NetworkContext>(
+        nullptr, mojo::MakeRequest(&network_context_ptr_),
+        url_request_context_.get());
+    SignedExchangeHandler::SetNetworkContextForTesting(network_context_.get());
 
     handler_ = std::make_unique<SignedExchangeHandler>(
         ContentType(), std::move(source_stream_),
         base::BindOnce(&SignedExchangeHandlerTest::OnHeaderFound,
                        base::Unretained(this)),
         std::move(cert_fetcher_factory_), net::LOAD_NORMAL,
-        request_context_getter_, nullptr /* devtools_proxy */);
+        nullptr /* devtools_proxy */, base::RepeatingCallback<int(void)>());
   }
 
   void WaitForHeader() {
     while (!read_header()) {
       while (source_->awaiting_completion())
         source_->CompleteNextRead();
-      scoped_task_environment_.RunUntilIdle();
+      browser_thread_bundle_.RunUntilIdle();
     }
   }
 
  protected:
   MockSignedExchangeCertFetcherFactory* mock_cert_fetcher_factory_;
   std::unique_ptr<net::CertVerifier> cert_verifier_;
+  std::unique_ptr<MockCTVerifier> mock_ct_verifier_;
   std::unique_ptr<MockCTPolicyEnforcer> mock_ct_policy_enforcer_;
   net::MockSourceStream* source_;
   std::unique_ptr<SignedExchangeHandler> handler_;
 
  private:
   void OnHeaderFound(net::Error error,
-                     const GURL&,
+                     const GURL& url,
                      const std::string&,
                      const network::ResourceResponseHead& resource_response,
                      std::unique_ptr<net::SourceStream> payload_stream) {
     read_header_ = true;
     error_ = error;
+    inner_url_ = url;
     resource_response_ = resource_response;
     payload_stream_ = std::move(payload_stream);
   }
 
   base::test::ScopedFeatureList feature_list_;
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
-  scoped_refptr<net::TestURLRequestContextGetter> request_context_getter_;
+  content::TestBrowserThreadBundle browser_thread_bundle_;
+  std::unique_ptr<net::TestURLRequestContext> url_request_context_;
+  std::unique_ptr<network::NetworkContext> network_context_;
+  network::mojom::NetworkContextPtr network_context_ptr_;
   const url::Origin request_initiator_;
   std::unique_ptr<net::MockSourceStream> source_stream_;
   std::unique_ptr<MockSignedExchangeCertFetcherFactory> cert_fetcher_factory_;
 
   bool read_header_ = false;
   net::Error error_;
+  GURL inner_url_;
   network::ResourceResponseHead resource_response_;
   std::unique_ptr<net::SourceStream> payload_stream_;
 };
@@ -304,6 +321,7 @@ TEST_P(SignedExchangeHandlerTest, Empty) {
 
   ASSERT_TRUE(read_header());
   EXPECT_EQ(net::ERR_INVALID_SIGNED_EXCHANGE, error());
+  EXPECT_TRUE(inner_url().is_empty());
 }
 
 TEST_P(SignedExchangeHandlerTest, Simple) {
@@ -334,6 +352,7 @@ TEST_P(SignedExchangeHandlerTest, Simple) {
 
   ASSERT_TRUE(read_header());
   EXPECT_EQ(net::OK, error());
+  EXPECT_EQ(kTestSxgInnerURL, inner_url());
   EXPECT_EQ(200, resource_response().headers->response_code());
   EXPECT_EQ("text/html", resource_response().mime_type);
   EXPECT_EQ("utf-8", resource_response().charset);
@@ -394,7 +413,7 @@ TEST_P(SignedExchangeHandlerTest, MimeType) {
 }
 
 TEST_P(SignedExchangeHandlerTest, HeaderParseError) {
-  const uint8_t data[] = {'s',  'x',  'g',  '1',  '-',  'b',  '1',  '\0',
+  const uint8_t data[] = {'s',  'x',  'g',  '1',  '-',  'b',  '2',  '\0',
                           0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00};
   source_->AddReadResult(reinterpret_cast<const char*>(data), sizeof(data),
                          net::OK, GetParam());
@@ -403,6 +422,7 @@ TEST_P(SignedExchangeHandlerTest, HeaderParseError) {
 
   ASSERT_TRUE(read_header());
   EXPECT_EQ(net::ERR_INVALID_SIGNED_EXCHANGE, error());
+  EXPECT_TRUE(inner_url().is_empty());
 }
 
 TEST_P(SignedExchangeHandlerTest, TruncatedInHeader) {
@@ -416,6 +436,7 @@ TEST_P(SignedExchangeHandlerTest, TruncatedInHeader) {
 
   ASSERT_TRUE(read_header());
   EXPECT_EQ(net::ERR_INVALID_SIGNED_EXCHANGE, error());
+  EXPECT_TRUE(inner_url().is_empty());
 }
 
 TEST_P(SignedExchangeHandlerTest, CertWithoutExtensionShouldBeRejected) {
@@ -446,6 +467,7 @@ TEST_P(SignedExchangeHandlerTest, CertWithoutExtensionShouldBeRejected) {
 
   ASSERT_TRUE(read_header());
   EXPECT_EQ(net::ERR_INVALID_SIGNED_EXCHANGE, error());
+  EXPECT_EQ(kTestSxgInnerURL, inner_url());
   // Drain the MockSourceStream, otherwise its destructer causes DCHECK failure.
   ReadStream(source_, nullptr);
 }
@@ -513,6 +535,7 @@ TEST_P(SignedExchangeHandlerTest, CertSha256Mismatch) {
 
   ASSERT_TRUE(read_header());
   EXPECT_EQ(net::ERR_INVALID_SIGNED_EXCHANGE, error());
+  EXPECT_EQ(kTestSxgInnerURL, inner_url());
   // Drain the MockSourceStream, otherwise its destructer causes DCHECK failure.
   ReadStream(source_, nullptr);
 }
@@ -547,6 +570,7 @@ TEST_P(SignedExchangeHandlerTest, VerifyCertFailure) {
 
   ASSERT_TRUE(read_header());
   EXPECT_EQ(net::ERR_INVALID_SIGNED_EXCHANGE, error());
+  EXPECT_EQ("https://test.example.com/test/", inner_url());
   // Drain the MockSourceStream, otherwise its destructer causes DCHECK failure.
   ReadStream(source_, nullptr);
 }
@@ -578,6 +602,7 @@ TEST_P(SignedExchangeHandlerTest, OCSPNotChecked) {
 
   ASSERT_TRUE(read_header());
   EXPECT_EQ(net::ERR_INVALID_SIGNED_EXCHANGE, error());
+  EXPECT_EQ(kTestSxgInnerURL, inner_url());
   // Drain the MockSourceStream, otherwise its destructer causes DCHECK failure.
   ReadStream(source_, nullptr);
 }
@@ -609,6 +634,7 @@ TEST_P(SignedExchangeHandlerTest, OCSPNotProvided) {
 
   ASSERT_TRUE(read_header());
   EXPECT_EQ(net::ERR_INVALID_SIGNED_EXCHANGE, error());
+  EXPECT_EQ(kTestSxgInnerURL, inner_url());
   // Drain the MockSourceStream, otherwise its destructer causes DCHECK failure.
   ReadStream(source_, nullptr);
 }
@@ -641,6 +667,7 @@ TEST_P(SignedExchangeHandlerTest, OCSPInvalid) {
 
   ASSERT_TRUE(read_header());
   EXPECT_EQ(net::ERR_INVALID_SIGNED_EXCHANGE, error());
+  EXPECT_EQ(kTestSxgInnerURL, inner_url());
   // Drain the MockSourceStream, otherwise its destructer causes DCHECK failure.
   ReadStream(source_, nullptr);
 }
@@ -674,6 +701,7 @@ TEST_P(SignedExchangeHandlerTest, OCSPRevoked) {
 
   ASSERT_TRUE(read_header());
   EXPECT_EQ(net::ERR_INVALID_SIGNED_EXCHANGE, error());
+  EXPECT_EQ(kTestSxgInnerURL, inner_url());
   // Drain the MockSourceStream, otherwise its destructer causes DCHECK failure.
   ReadStream(source_, nullptr);
 }
@@ -704,10 +732,9 @@ TEST_P(SignedExchangeHandlerTest, CertVerifierParams) {
                          CertEqualsIncludingChain(original_cert)),
                 Property(&net::CertVerifier::RequestParams::hostname,
                          "test.example.org")),
-          _ /* crl_set */, _ /* verify_result */, _ /* out_req */,
-          _ /* net_log */
+          _ /* verify_result */, _ /* out_req */, _ /* net_log */
           ))
-      .WillOnce(DoAll(SetArgPointee<2>(fake_result), Return(net::OK)));
+      .WillOnce(DoAll(SetArgPointee<1>(fake_result), Return(net::OK)));
   SetCertVerifier(std::move(gmock_cert_verifier));
 
   std::string contents = GetTestFileContents("test.example.org_test.sxg");
@@ -760,6 +787,7 @@ TEST_P(SignedExchangeHandlerTest, NotEnoughSCTsFromPubliclyTrustedCert) {
 
   ASSERT_TRUE(read_header());
   EXPECT_EQ(net::ERR_INVALID_SIGNED_EXCHANGE, error());
+  EXPECT_EQ(kTestSxgInnerURL, inner_url());
   // Drain the MockSourceStream, otherwise its destructer causes DCHECK failure.
   ReadStream(source_, nullptr);
 }
@@ -884,9 +912,8 @@ TEST_P(SignedExchangeHandlerTest, CTVerifierParams) {
       .WillOnce(
           Return(net::ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
 
-  std::unique_ptr<MockCTVerifier> ct_verifier =
-      std::make_unique<MockCTVerifier>();
-  EXPECT_CALL(*ct_verifier,
+  mock_ct_verifier_ = std::make_unique<MockCTVerifier>();
+  EXPECT_CALL(*mock_ct_verifier_,
               Verify(base::StringPiece("test.example.org"),
                      CertEqualsIncludingChain(original_cert), kDummyOCSPDer,
                      kDummySCTList, _ /* output_scts */, _ /* net_log */))
@@ -896,7 +923,8 @@ TEST_P(SignedExchangeHandlerTest, CTVerifierParams) {
       true /* delay_initialization */);
   test_url_request_context->set_ct_policy_enforcer(
       mock_ct_policy_enforcer_.get());
-  test_url_request_context->set_cert_transparency_verifier(ct_verifier.get());
+  test_url_request_context->set_cert_transparency_verifier(
+      mock_ct_verifier_.get());
   test_url_request_context->Init();
 
   // Make the MockCertVerifier treat the certificate

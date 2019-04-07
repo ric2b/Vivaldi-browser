@@ -24,20 +24,21 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
-import org.chromium.chrome.browser.explore_sites.ExploreSitesSection;
-import org.chromium.chrome.browser.locale.LocaleManager;
+import org.chromium.chrome.browser.explore_sites.ExperimentalExploreSitesSection;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.ntp.NewTabPage.OnSearchBoxScrollListener;
 import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.SiteSection;
 import org.chromium.chrome.browser.suggestions.SiteSectionViewHolder;
+import org.chromium.chrome.browser.suggestions.SiteSuggestion;
 import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
 import org.chromium.chrome.browser.suggestions.SuggestionsDependencyFactory;
 import org.chromium.chrome.browser.suggestions.Tile;
@@ -46,12 +47,17 @@ import org.chromium.chrome.browser.suggestions.TileGroup;
 import org.chromium.chrome.browser.suggestions.TileRenderer;
 import org.chromium.chrome.browser.suggestions.TileView;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.vr.VrModeObserver;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
+import org.chromium.chrome.browser.widget.textbubble.TextBubble;
+import org.chromium.components.feature_engagement.FeatureConstants;
+import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.widget.ViewRectProvider;
 
 /**
  * Layout for the new tab page. This positions the page elements in the correct vertical positions.
@@ -83,7 +89,7 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
     @Nullable
     private View mExploreSectionView; // View is null if explore flag is disabled.
     @Nullable
-    private ExploreSitesSection mExploreSection; // Null when explore sites disabled.
+    private ExperimentalExploreSitesSection mExploreSection; // Null when explore sites disabled.
 
     private OnSearchBoxScrollListener mSearchBoxScrollListener;
 
@@ -187,6 +193,13 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
             ViewStub exploreStub = findViewById(R.id.explore_sites_stub);
             mExploreSectionView = exploreStub.inflate();
         }
+
+        // Apply negative margin to the top of the N logo (which would otherwise be the height of
+        // the top toolbar) when Duet is enabled to remove some of the empty space.
+        if (FeatureUtilities.isBottomToolbarEnabled()) {
+            ((MarginLayoutParams) mSearchProviderLogoView.getLayoutParams()).topMargin =
+                    -getResources().getDimensionPixelSize(R.dimen.duet_ntp_logo_top_margin);
+        }
     }
 
     /**
@@ -225,7 +238,7 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
         mSiteSectionViewHolder.bindDataSource(mTileGroup, tileRenderer);
 
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.EXPLORE_SITES)) {
-            mExploreSection = new ExploreSitesSection(
+            mExploreSection = new ExperimentalExploreSitesSection(
                     mExploreSectionView, profile, mManager.getNavigationDelegate());
         }
 
@@ -258,11 +271,40 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
         VrModuleProvider.registerVrModeObserver(this);
         if (VrModuleProvider.getDelegate().isInVr()) onEnterVr();
 
+        maybeShowIPHOnHomepageTile();
+
         manager.addDestructionObserver(NewTabPageLayout.this ::onDestroy);
 
         mInitialized = true;
 
         TraceEvent.end(TAG + ".initialize()");
+    }
+
+    private void maybeShowIPHOnHomepageTile() {
+        if (!(FeatureUtilities.isNewTabPageButtonEnabled()
+                    && FeatureUtilities.isHomepageTileEnabled())) {
+            return;
+        }
+
+        SiteSuggestion data = getTileGroup().getHomepageTileData();
+        if (data == null) return;
+
+        // Only show the IPH bubble for users with a customized homepage.
+        if (HomepageManager.getInstance().getPrefHomepageUseDefaultUri()) return;
+
+        final Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
+        if (!tracker.shouldTriggerHelpUI(FeatureConstants.HOMEPAGE_TILE_FEATURE)) return;
+
+        View homepageView = mSiteSectionViewHolder.findTileView(data);
+        ViewRectProvider rectProvider = new ViewRectProvider(homepageView);
+
+        TextBubble textBubble = new TextBubble(homepageView.getContext(), homepageView,
+                R.string.iph_homepage_tile_text, R.string.iph_homepage_tile_text, true,
+                rectProvider);
+        textBubble.setDismissOnTouchInteraction(true);
+        textBubble.addOnDismissListener(
+                () -> tracker.dismissed(FeatureConstants.HOMEPAGE_TILE_FEATURE));
+        textBubble.show();
     }
 
     /**
@@ -302,28 +344,6 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
             }
         });
         TraceEvent.end(TAG + ".initializeSearchBoxTextView()");
-    }
-
-    /**
-     * Updates the small search engine logo shown in the search box.
-     */
-    private void updateSearchBoxLogo() {
-        TextView searchBoxTextView = mSearchBoxView.findViewById(R.id.search_box_text);
-        LocaleManager localeManager = LocaleManager.getInstance();
-        if (mSearchProviderIsGoogle && !localeManager.hasCompletedSearchEnginePromo()
-                && !localeManager.hasShownSearchEnginePromoThisSession()
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SHOW_GOOGLE_G_IN_OMNIBOX)) {
-            searchBoxTextView.setCompoundDrawablePadding(
-                    getResources().getDimensionPixelOffset(R.dimen.ntp_search_box_logo_padding));
-            ApiCompatibilityUtils.setCompoundDrawablesRelativeWithIntrinsicBounds(
-                    searchBoxTextView, R.drawable.ic_logo_googleg_24dp, 0, 0, 0);
-        } else {
-            searchBoxTextView.setCompoundDrawablePadding(0);
-
-            // Not using the relative version of this call because we only want to clear
-            // the drawables.
-            searchBoxTextView.setCompoundDrawables(null, null, null, null);
-        }
     }
 
     private void initializeVoiceSearchButton() {
@@ -551,8 +571,6 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
         updateTileGridPlaceholderVisibility();
 
         onUrlFocusAnimationChanged();
-
-        updateSearchBoxLogo();
 
         mSnapshotTileGridChanged = true;
     }

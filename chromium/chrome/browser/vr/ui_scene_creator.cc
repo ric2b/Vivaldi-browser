@@ -13,6 +13,7 @@
 #include "base/numerics/math_constants.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "cc/animation/animation_curve.h"
 #include "cc/animation/animation_target.h"
 #include "cc/animation/keyframe_effect.h"
@@ -70,7 +71,6 @@
 #include "chrome/browser/vr/ui_scene.h"
 #include "chrome/browser/vr/ui_scene_constants.h"
 #include "chrome/browser/vr/vector_icons/vector_icons.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/toolbar/vector_icons.h"
@@ -269,10 +269,8 @@ void OnSuggestionModelAdded(UiScene* scene,
               },
               base::Unretained(p_description_text))));
   element_binding->bindings().push_back(
-      VR_BIND(AutocompleteMatch::Type, SuggestionBinding, element_binding,
-              model->model()->type, VectorIcon, p_icon,
-              view->SetIcon(AutocompleteMatch::TypeToVectorIcon(
-                  value, /*is_bookmark=*/false, /*is_tab_match=*/false))));
+      VR_BIND(const gfx::VectorIcon*, SuggestionBinding, element_binding,
+              model->model()->icon, VectorIcon, p_icon, view->SetIcon(*value)));
   element_binding->set_view(background.get());
   scene->AddUiElement(kOmniboxSuggestions, std::move(background));
 }
@@ -561,15 +559,15 @@ std::unique_ptr<UiElement> CreateControllerLabel(UiElementName name,
   layout->set_contributes_to_parent_bounds(false);
   layout->AddBinding(VR_BIND_FUNC(
       LayoutAlignment, Model, model,
-      model->controller.handedness == PlatformController::kRightHanded ? LEFT
-                                                                       : RIGHT,
+      model->controller.handedness == ControllerModel::kRightHanded ? LEFT
+                                                                    : RIGHT,
       LinearLayout, layout.get(), set_x_centering));
-  layout->AddBinding(VR_BIND_FUNC(
-      LinearLayout::Direction, Model, model,
-      model->controller.handedness == PlatformController::kRightHanded
-          ? LinearLayout::kRight
-          : LinearLayout::kLeft,
-      LinearLayout, layout.get(), set_direction));
+  layout->AddBinding(
+      VR_BIND_FUNC(LinearLayout::Direction, Model, model,
+                   model->controller.handedness == ControllerModel::kRightHanded
+                       ? LinearLayout::kRight
+                       : LinearLayout::kLeft,
+                   LinearLayout, layout.get(), set_direction));
 
   auto spacer = std::make_unique<UiElement>();
   spacer->SetType(kTypeSpacer);
@@ -620,12 +618,13 @@ std::unique_ptr<UiElement> CreateControllerElement(Model* model) {
                                 -(kControllerLength - kControllerWidth) / 2);
   touchpad_button->SetCornerRadii({kControllerWidth / 2, kControllerWidth / 2,
                                    kControllerWidth / 2, kControllerWidth / 2});
-  touchpad_button->AddBinding(VR_BIND_FUNC(
-      SkColor, Model, model,
-      model->controller.touchpad_button_state == UiInputManager::DOWN
-          ? model->color_scheme().controller_button_down
-          : model->color_scheme().controller_button,
-      Rect, touchpad_button.get(), SetColor));
+  touchpad_button->AddBinding(
+      VR_BIND_FUNC(SkColor, Model, model,
+                   model->controller.touchpad_button_state ==
+                           ControllerModel::ButtonState::kDown
+                       ? model->color_scheme().controller_button_down
+                       : model->color_scheme().controller_button,
+                   Rect, touchpad_button.get(), SetColor));
   controller->AddChild(std::move(touchpad_button));
 
   auto app_button =
@@ -635,12 +634,12 @@ std::unique_ptr<UiElement> CreateControllerElement(Model* model) {
   app_button->SetSize(kControllerSmallButtonSize, kControllerSmallButtonSize);
   app_button->SetRotate(1, 0, 0, -base::kPiFloat / 2);
   app_button->SetTranslate(0.0f, 0.0f, kControllerAppButtonZ);
-  app_button->AddBinding(
-      VR_BIND_FUNC(SkColor, Model, model,
-                   model->controller.app_button_state == UiInputManager::DOWN
-                       ? model->color_scheme().controller_button_down
-                       : model->color_scheme().controller_button,
-                   VectorIcon, app_button.get(), SetColor));
+  app_button->AddBinding(VR_BIND_FUNC(
+      SkColor, Model, model,
+      model->controller.app_button_state == ControllerModel::ButtonState::kDown
+          ? model->color_scheme().controller_button_down
+          : model->color_scheme().controller_button,
+      VectorIcon, app_button.get(), SetColor));
   controller->AddChild(std::move(app_button));
 
   auto home_button =
@@ -650,12 +649,12 @@ std::unique_ptr<UiElement> CreateControllerElement(Model* model) {
   home_button->SetSize(kControllerSmallButtonSize, kControllerSmallButtonSize);
   home_button->SetRotate(1, 0, 0, -base::kPiFloat / 2);
   home_button->SetTranslate(0.0f, 0.0f, kControllerHomeButtonZ);
-  home_button->AddBinding(
-      VR_BIND_FUNC(SkColor, Model, model,
-                   model->controller.home_button_state == UiInputManager::DOWN
-                       ? model->color_scheme().controller_button_down
-                       : model->color_scheme().controller_button,
-                   VectorIcon, home_button.get(), SetColor));
+  home_button->AddBinding(VR_BIND_FUNC(
+      SkColor, Model, model,
+      model->controller.home_button_state == ControllerModel::ButtonState::kDown
+          ? model->color_scheme().controller_button_down
+          : model->color_scheme().controller_button,
+      VectorIcon, home_button.get(), SetColor));
   controller->AddChild(std::move(home_button));
 
   auto battery_layout =
@@ -712,12 +711,11 @@ EventHandlers CreateRepositioningHandlers(Model* model, UiScene* scene) {
 void BindIndicatorText(Model* model, Text* text, const IndicatorSpec& spec) {
   text->AddBinding(std::make_unique<Binding<std::pair<bool, bool>>>(
       VR_BIND_LAMBDA(
-          [](Model* model, bool CapturingStateModel::*signal,
-             bool CapturingStateModel::*background_signal) {
-            return std::make_pair(model->capturing_state.*signal,
-                                  model->capturing_state.*background_signal);
+          [](Model* model, bool CapturingStateModel::*signal) {
+            return std::make_pair(model->active_capturing.*signal,
+                                  model->background_capturing.*signal);
           },
-          base::Unretained(model), spec.signal, spec.background_signal),
+          base::Unretained(model), spec.signal),
       VR_BIND_LAMBDA(
           [](Text* view, int resource, int background_resource,
              int potential_resource, const std::pair<bool, bool>& value) {
@@ -829,9 +827,9 @@ std::unique_ptr<UiElement> CreateHostedUi(
   hosted_ui->AddBinding(VR_BIND_FUNC(
       unsigned int, Model, model, model->hosted_platform_ui.texture_id,
       PlatformUiElement, hosted_ui.get(), SetTextureId));
-  hosted_ui->AddBinding(VR_BIND_FUNC(
-      UiElementRenderer::TextureLocation, Model, model, model->content_location,
-      PlatformUiElement, hosted_ui.get(), SetTextureLocation));
+  hosted_ui->AddBinding(VR_BIND_FUNC(GlTextureLocation, Model, model,
+                                     model->content_location, PlatformUiElement,
+                                     hosted_ui.get(), SetTextureLocation));
   hosted_ui->AddBinding(std::make_unique<Binding<bool>>(
       VR_BIND_LAMBDA(
           [](Model* m) { return m->hosted_platform_ui.hosted_ui_enabled; },
@@ -1299,12 +1297,11 @@ void UiSceneCreator::CreateSystemIndicators() {
     element->SetSounds(Sounds(), audio_delegate_);
     element->AddBinding(std::make_unique<Binding<bool>>(
         VR_BIND_LAMBDA(
-            [](Model* model, bool CapturingStateModel::*signal,
-               bool CapturingStateModel::*background_signal) {
-              return model->capturing_state.*signal ||
-                     model->capturing_state.*background_signal;
+            [](Model* model, bool CapturingStateModel::*signal) {
+              return model->active_capturing.*signal ||
+                     model->background_capturing.*signal;
             },
-            base::Unretained(model_), spec.signal, spec.background_signal),
+            base::Unretained(model_), spec.signal),
         VR_BIND_LAMBDA(
             [](UiElement* view, const bool& value) {
               view->SetVisible(value);
@@ -1436,17 +1433,15 @@ void UiSceneCreator::CreateContentQuad() {
   main_content->AddBinding(
       VR_BIND_FUNC(unsigned int, Model, model_, model->content_texture_id,
                    ContentElement, main_content.get(), SetTextureId));
-  main_content->AddBinding(VR_BIND_FUNC(UiElementRenderer::TextureLocation,
-                                        Model, model_, model->content_location,
-                                        ContentElement, main_content.get(),
-                                        SetTextureLocation));
+  main_content->AddBinding(
+      VR_BIND_FUNC(GlTextureLocation, Model, model_, model->content_location,
+                   ContentElement, main_content.get(), SetTextureLocation));
   main_content->AddBinding(VR_BIND_FUNC(
       unsigned int, Model, model_, model->content_overlay_texture_id,
       ContentElement, main_content.get(), SetOverlayTextureId));
-  main_content->AddBinding(
-      VR_BIND_FUNC(UiElementRenderer::TextureLocation, Model, model_,
-                   model->content_overlay_location, ContentElement,
-                   main_content.get(), SetOverlayTextureLocation));
+  main_content->AddBinding(VR_BIND_FUNC(
+      GlTextureLocation, Model, model_, model->content_overlay_location,
+      ContentElement, main_content.get(), SetOverlayTextureLocation));
   main_content->AddBinding(VR_BIND_FUNC(
       bool, Model, model_, !model->content_overlay_texture_non_empty,
       ContentElement, main_content.get(), SetOverlayTextureEmpty));
@@ -2397,6 +2392,13 @@ void UiSceneCreator::CreateOverflowMenu() {
     button_region->AddChild(std::move(button));
   }
 
+  int new_incognito_tab_res_id = IDS_VR_MENU_NEW_PRIVATE_TAB;
+  int close_incognito_tabs_res_id = IDS_VR_MENU_CLOSE_PRIVATE_TABS;
+  if (!model_->use_new_incognito_strings) {
+    new_incognito_tab_res_id = IDS_VR_MENU_NEW_INCOGNITO_TAB;
+    close_incognito_tabs_res_id = IDS_VR_MENU_CLOSE_INCOGNITO_TABS;
+  }
+
   struct MenuItem {
     UiElementName name;
     int string_id;
@@ -2405,12 +2407,12 @@ void UiSceneCreator::CreateOverflowMenu() {
   };
   std::vector<MenuItem> menu_items = {
       {
-          kOverflowMenuNewIncognitoTabItem, IDS_VR_MENU_NEW_INCOGNITO_TAB,
+          kOverflowMenuNewIncognitoTabItem, new_incognito_tab_res_id,
           base::BindRepeating(
               [](UiBrowserInterface* browser) { browser->OpenNewTab(true); }),
           base::BindRepeating([](Model* m) { return !m->incognito; }),
       },
-      {kOverflowMenuCloseAllIncognitoTabsItem, IDS_VR_MENU_CLOSE_INCOGNITO_TABS,
+      {kOverflowMenuCloseAllIncognitoTabsItem, close_incognito_tabs_res_id,
        base::BindRepeating([](UiBrowserInterface* browser) {
          browser->CloseAllIncognitoTabs();
        }),
@@ -2542,7 +2544,7 @@ void UiSceneCreator::CreateOmnibox() {
       VR_BIND_LAMBDA(
           [](Model* m) {
             return m->speech.has_or_can_request_audio_permission &&
-                   !m->incognito && !m->capturing_state.audio_capture_enabled;
+                   !m->incognito && !m->active_capturing.audio_capture_enabled;
           },
           base::Unretained(model_)),
       VR_BIND_LAMBDA(
@@ -2652,7 +2654,7 @@ void UiSceneCreator::CreateOmnibox() {
   VR_BIND_VISIBILITY(mic_button,
                      model->speech.has_or_can_request_audio_permission &&
                          !model->incognito &&
-                         !model->capturing_state.audio_capture_enabled);
+                         !model->active_capturing.audio_capture_enabled);
   VR_BIND_BUTTON_COLORS(model_, mic_button.get(), &ColorScheme::url_bar_button,
                         &Button::SetButtonColors);
 
@@ -2661,7 +2663,7 @@ void UiSceneCreator::CreateOmnibox() {
   VR_BIND_VISIBILITY(mic_button_spacer,
                      model->speech.has_or_can_request_audio_permission &&
                          !model->incognito &&
-                         !model->capturing_state.audio_capture_enabled);
+                         !model->active_capturing.audio_capture_enabled);
 
   auto text_field_layout = Create<LinearLayout>(
       kOmniboxTextFieldLayout, kPhaseNone, LinearLayout::kRight);
@@ -2917,8 +2919,6 @@ void UiSceneCreator::CreateWebVrOverlayElements() {
                                    0,
                                    0,
                                    nullptr,
-                                   nullptr,
-                                   nullptr,
                                    false};
   indicators->AddChild(CreateWebVrIndicator(model_, browser_, app_button_spec));
 
@@ -2935,7 +2935,7 @@ void UiSceneCreator::CreateWebVrOverlayElements() {
             return std::tuple<bool, bool, bool>(
                 model->web_vr_enabled() && model->web_vr.presenting_web_vr() &&
                     model->web_vr.has_received_permissions,
-                model->controller.app_button_long_pressed,
+                model->menu_button_long_pressed,
                 model->web_vr.showing_hosted_ui);
           },
           base::Unretained(model_)),
@@ -2978,9 +2978,9 @@ void UiSceneCreator::CreateWebVrOverlayElements() {
             for (const auto& spec : specs) {
               SetVisibleInLayout(
                   scene->GetUiElementByName(spec.webvr_name),
-                  model->capturing_state.*spec.signal ||
-                      model->capturing_state.*spec.potential_signal ||
-                      model->capturing_state.*spec.background_signal);
+                  model->active_capturing.*spec.signal ||
+                      model->potential_capturing.*spec.signal ||
+                      model->background_capturing.*spec.signal);
             }
 
             e->RemoveKeyframeModels(TRANSFORM);

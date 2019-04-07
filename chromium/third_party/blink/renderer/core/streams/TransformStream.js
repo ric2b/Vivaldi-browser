@@ -23,7 +23,12 @@
   const _writable = v8.createPrivateSymbol('[[writable]]');
   const _controlledTransformStream =
       v8.createPrivateSymbol('[[controlledTransformStream]]');
+
+  // Unlike the version in the standard, the controller is passed to this.
   const _flushAlgorithm = v8.createPrivateSymbol('[[flushAlgorithm]]');
+
+  // Unlike the version in the standard, the controller is passed in as the
+  // second argument.
   const _transformAlgorithm = v8.createPrivateSymbol('[[transformAlgorithm]]');
 
   // Javascript functions. It is important to use these copies, as the ones on
@@ -45,7 +50,7 @@
   const {
     hasOwnPropertyNoThrow,
     resolvePromise,
-    CreateAlgorithmFromUnderlyingMethodPassingController,
+    CreateAlgorithmFromUnderlyingMethod,
     CallOrNoop1,
     MakeSizeAlgorithmFromSizeFunction,
     PromiseCall2,
@@ -66,31 +71,33 @@
         useCounted = true;
       }
 
-      // readable and writableType are extension points for future byte streams.
-      const readableType = transformer.readableType;
-      if (readableType !== undefined) {
-        throw new RangeError(streamErrors.invalidType);
-      }
+      const writableSizeFunction = writableStrategy.size;
+      let writableHighWaterMark = writableStrategy.highWaterMark;
 
+      const readableSizeFunction = readableStrategy.size;
+      let readableHighWaterMark = readableStrategy.highWaterMark;
+
+      // readable and writableType are extension points for future byte streams.
       const writableType = transformer.writableType;
       if (writableType !== undefined) {
         throw new RangeError(streamErrors.invalidType);
       }
 
-      const writableSizeFunction = writableStrategy.size;
       const writableSizeAlgorithm =
           MakeSizeAlgorithmFromSizeFunction(writableSizeFunction);
-      let writableHighWaterMark = writableStrategy.highWaterMark;
       if (writableHighWaterMark === undefined) {
         writableHighWaterMark = 1;
       }
       writableHighWaterMark =
           ValidateAndNormalizeHighWaterMark(writableHighWaterMark);
 
-      const readableSizeFunction = readableStrategy.size;
+      const readableType = transformer.readableType;
+      if (readableType !== undefined) {
+        throw new RangeError(streamErrors.invalidType);
+      }
+
       const readableSizeAlgorithm =
           MakeSizeAlgorithmFromSizeFunction(readableSizeFunction);
-      let readableHighWaterMark = readableStrategy.highWaterMark;
       if (readableHighWaterMark === undefined) {
         readableHighWaterMark = 0;
       }
@@ -127,6 +134,8 @@
 
   const TransformStream_prototype = TransformStream.prototype;
 
+  // The controller is passed to |transformAlgorithm| and |flushAlgorithm|,
+  // unlike in the standard.
   function CreateTransformStream(
       startAlgorithm, transformAlgorithm, flushAlgorithm, writableHighWaterMark,
       writableSizeAlgorithm, readableHighWaterMark, readableSizeAlgorithm) {
@@ -207,6 +216,8 @@
   }
 
   function TransformStreamErrorWritableAndUnblockWrite(stream, e) {
+    TransformStreamDefaultControllerClearAlgorithms(
+        stream[_transformStreamController]);
     binding.WritableStreamDefaultControllerErrorIfNeeded(
         binding.getWritableStreamController(stream[_writable]), e);
 
@@ -300,14 +311,8 @@
       if (typeof transformMethod !== 'function') {
         throw new TypeError('transformer.transform is not a function');
       }
-      transformAlgorithm = chunk => {
-        const transformPromise =
-            PromiseCall2(transformMethod, transformer, chunk, controller);
-        return thenPromise(transformPromise, undefined, e => {
-          TransformStreamError(stream, e);
-          throw e;
-        });
-      };
+      transformAlgorithm = chunk =>
+          PromiseCall2(transformMethod, transformer, chunk, controller);
     } else {
       transformAlgorithm = chunk => {
         try {
@@ -318,10 +323,15 @@
         }
       };
     }
-    const flushAlgorithm = CreateAlgorithmFromUnderlyingMethodPassingController(
-        transformer, 'flush', 0, controller, 'transformer.flush');
+    const flushAlgorithm = CreateAlgorithmFromUnderlyingMethod(
+        transformer, 'flush', 1, 'transformer.flush');
     SetUpTransformStreamDefaultController(
         stream, controller, transformAlgorithm, flushAlgorithm);
+  }
+
+  function TransformStreamDefaultControllerClearAlgorithms(controller) {
+    controller[_transformAlgorithm] = undefined;
+    controller[_flushAlgorithm] = undefined;
   }
 
   function TransformStreamDefaultControllerEnqueue(controller, chunk) {
@@ -351,6 +361,14 @@
 
   function TransformStreamDefaultControllerError(controller, e) {
     TransformStreamError(controller[_controlledTransformStream], e);
+  }
+
+  function TransformStreamDefaultControllerPerformTransform(controller, chunk) {
+    const transformPromise = controller[_transformAlgorithm](chunk, controller);
+    return thenPromise(transformPromise, undefined, r => {
+      TransformStreamError(controller[_controlledTransformStream], r);
+      throw r;
+    });
   }
 
   function TransformStreamDefaultControllerTerminate(controller) {
@@ -388,11 +406,12 @@
         // assert(binding.isWritableStreamWritable(writable),
         //        `state is "writable"`);
 
-        return controller[_transformAlgorithm](chunk);
+        return TransformStreamDefaultControllerPerformTransform(controller,
+                                                                chunk);
       });
     }
 
-    return controller[_transformAlgorithm](chunk);
+    return TransformStreamDefaultControllerPerformTransform(controller, chunk);
   }
 
   function TransformStreamDefaultSinkAbortAlgorithm(stream, reason) {
@@ -402,8 +421,9 @@
 
   function TransformStreamDefaultSinkCloseAlgorithm(stream) {
     const readable = stream[_readable];
-
-    const flushPromise = stream[_transformStreamController][_flushAlgorithm]();
+    const controller = stream[_transformStreamController];
+    const flushPromise = controller[_flushAlgorithm](controller);
+    TransformStreamDefaultControllerClearAlgorithms(controller);
 
     return thenPromise(
         flushPromise,
@@ -435,6 +455,22 @@
     return stream[_backpressureChangePromise];
   }
 
+  // A wrapper for CreateTransformStream() with only the arguments that
+  // blink::TransformStream needs. |transformAlgorithm| and |flushAlgorithm| are
+  // passed the controller, unlike in the standard.
+  function createTransformStreamSimple(transformAlgorithm, flushAlgorithm) {
+    return CreateTransformStream(() => Promise_resolve(),
+                                 transformAlgorithm, flushAlgorithm);
+  }
+
+  function getTransformStreamReadable(stream) {
+    return stream[_readable];
+  }
+
+  function getTransformStreamWritable(stream) {
+    return stream[_writable];
+  }
+
   //
   // Additions to the global object
   //
@@ -449,5 +485,10 @@
   //
   // Exports to Blink
   //
-  binding.CreateTransformStream = CreateTransformStream;
+  Object.assign(binding, {
+    createTransformStreamSimple,
+    TransformStreamDefaultControllerEnqueue,
+    getTransformStreamReadable,
+    getTransformStreamWritable
+  });
 });

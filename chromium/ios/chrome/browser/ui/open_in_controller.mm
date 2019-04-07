@@ -8,11 +8,11 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 
 #include "base/sequenced_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/open_in_controller_testing.h"
@@ -220,7 +220,7 @@ class OpenInControllerBridge
                 action:@selector(handleTapFrom:)];
     [tapRecognizer_ setDelegate:self];
     sequencedTaskRunner_ = base::CreateSequencedTaskRunnerWithTraits(
-        {base::MayBlock(), base::TaskPriority::BACKGROUND});
+        {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
     isOpenInMenuDisplayed_ = NO;
   }
   return self;
@@ -510,7 +510,7 @@ class OpenInControllerBridge
 #pragma mark File management
 
 - (void)removeDocumentAtPath:(NSString*)path {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::WILL_BLOCK);
   NSFileManager* fileManager = [NSFileManager defaultManager];
   NSError* error = nil;
   if (![fileManager removeItemAtPath:path error:&error]) {
@@ -520,7 +520,7 @@ class OpenInControllerBridge
 }
 
 + (void)removeAllStoredDocumentsAtPath:(NSString*)tempDirPath {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::WILL_BLOCK);
   NSFileManager* fileManager = [NSFileManager defaultManager];
   NSError* error = nil;
   NSArray* documentFiles =
@@ -541,7 +541,7 @@ class OpenInControllerBridge
 }
 
 + (BOOL)createDestinationDirectoryAndRemoveObsoleteFiles {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::WILL_BLOCK);
   NSString* tempDirPath = [NSTemporaryDirectory()
       stringByAppendingPathComponent:kDocumentsTempPath];
   NSFileManager* fileManager = [NSFileManager defaultManager];

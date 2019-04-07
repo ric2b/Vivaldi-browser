@@ -15,6 +15,7 @@
 
 namespace blink {
 
+class LayoutObject;
 class NGInlineItem;
 struct NGInlineItemResult;
 class ShapeResult;
@@ -36,6 +37,7 @@ struct NGInlineBoxState {
   unsigned fragment_start = 0;
   const NGInlineItem* item = nullptr;
   const ComputedStyle* style = nullptr;
+  const LayoutObject* inline_container = nullptr;
 
   // The united metrics for the current box. This includes all objects in this
   // box, including descendants, and adjusted by placement properties such as
@@ -57,14 +59,10 @@ struct NGInlineBoxState {
   // is set.
   bool has_start_edge = false;
   bool has_end_edge = false;
-  NGLineBoxStrut padding;
-  // |CreateBoxFragment()| needs margin, border+padding, and the sum of them.
   LayoutUnit margin_inline_start;
   LayoutUnit margin_inline_end;
-  LayoutUnit margin_border_padding_inline_start;
-  LayoutUnit margin_border_padding_inline_end;
-  LayoutUnit border_padding_line_over;
-  LayoutUnit border_padding_line_under;
+  NGLineBoxStrut borders;
+  NGLineBoxStrut padding;
 
   Vector<NGPendingPositions> pending_descendants;
   bool include_used_fonts = false;
@@ -87,9 +85,7 @@ struct NGInlineBoxState {
   void AccumulateUsedFonts(const ShapeResult*, FontBaseline);
 
   // Create a box fragment for this box.
-  void SetNeedsBoxFragment();
-  void SetLineRightForBoxFragment(const NGInlineItem&,
-                                  const NGInlineItemResult&);
+  void SetNeedsBoxFragment(const LayoutObject* inline_container);
 
   // In certain circumstances, the parent's rects is not a simple union of its
   // children fragments' rects, e.g., when children have margin. In such cases,
@@ -126,7 +122,8 @@ class CORE_EXPORT NGInlineLayoutStateStack {
   // Pop a box state stack.
   NGInlineBoxState* OnCloseTag(NGLineBoxFragmentBuilder::ChildList*,
                                NGInlineBoxState*,
-                               FontBaseline);
+                               FontBaseline,
+                               bool has_end_edge = true);
 
   // Compute all the pending positioning at the end of a line.
   void OnEndPlaceItems(NGLineBoxFragmentBuilder::ChildList*, FontBaseline);
@@ -183,6 +180,7 @@ class CORE_EXPORT NGInlineLayoutStateStack {
     const NGInlineItem* item;
     NGLogicalSize size;
 
+    const LayoutObject* inline_container = nullptr;
     bool has_line_left_edge = false;
     bool has_line_right_edge = false;
     NGLineBoxStrut padding;

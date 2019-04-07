@@ -11,6 +11,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/json/json_reader.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -43,7 +44,6 @@
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/interstitials/security_interstitial_page_test_utils.h"
-#include "chrome/browser/net/default_network_context_params.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_io_data.h"
@@ -198,8 +198,7 @@ enum ProceedDecision {
 };
 
 bool AreCommittedInterstitialsEnabled() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kCommittedInterstitials);
+  return base::FeatureList::IsEnabled(features::kSSLCommittedInterstitials);
 }
 
 void CheckProceedLinkExists(WebContents* tab) {
@@ -657,6 +656,11 @@ class SSLUITestBase : public InProcessBrowserTest,
         base::IntToString(command));
   }
 
+  network::mojom::NetworkContextParamsPtr CreateDefaultNetworkContextParams() {
+    return g_browser_process->system_network_context_manager()
+        ->CreateDefaultNetworkContextParams();
+  }
+
   static void GetFilePathWithHostAndPortReplacement(
       const std::string& original_file_path,
       const net::HostPortPair& host_port_pair,
@@ -1034,16 +1038,12 @@ class SSLUITest : public SSLUITestBase,
   SSLUITest() : SSLUITestBase() {}
 
  protected:
-  void MaybeSetUpCommittedInterstitialCommandLine(
-      base::CommandLine* command_line) {
+  void SetUpOnMainThread() override {
+    SSLUITestBase::SetUpOnMainThread();
     if (IsCommittedInterstitialTest()) {
-      command_line->AppendSwitch(switches::kCommittedInterstitials);
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kSSLCommittedInterstitials);
     }
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    SSLUITestBase::SetUpCommandLine(command_line);
-    MaybeSetUpCommittedInterstitialCommandLine(command_line);
   }
 
   SSLBlockingPage* GetSSLBlockingPage(WebContents* tab) override {
@@ -1164,6 +1164,7 @@ class SSLUITest : public SSLUITestBase,
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
   DISALLOW_COPY_AND_ASSIGN(SSLUITest);
 };
 
@@ -1178,7 +1179,6 @@ class SSLUITestBlock : public SSLUITest {
 
   // Browser will not run insecure content.
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    MaybeSetUpCommittedInterstitialCommandLine(command_line);
     // By overriding SSLUITest, we won't apply the flag that allows running
     // insecure content.
   }
@@ -2593,12 +2593,6 @@ IN_PROC_BROWSER_TEST_P(SSLUITest, TestBadHTTPSDownload) {
     observer.Wait();
   }
 
-  // To exit the browser cleanly (and this test) we need to complete the
-  // download after completing this test.
-  content::DownloadTestObserverTerminal dangerous_download_observer(
-      content::BrowserContext::GetDownloadManager(browser()->profile()), 1,
-      content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_ACCEPT);
-
   // Proceed through the SSL interstitial. This doesn't use
   // ProceedThroughInterstitial() since no page load will commit.
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
@@ -2606,14 +2600,15 @@ IN_PROC_BROWSER_TEST_P(SSLUITest, TestBadHTTPSDownload) {
   WaitForInterstitial(tab);
   ASSERT_NO_FATAL_FAILURE(ExpectSSLInterstitial(tab));
   {
-    content::TestNavigationObserver nav_observer(tab);
-    content::WindowedNotificationObserver observer(
-        chrome::NOTIFICATION_DOWNLOAD_INITIATED,
-        content::NotificationService::AllSources());
+    // Wait for the download to complete after proceeding with the download.
+    // This serves to verify the download was initiated, and to let the
+    // test successfully shut down and cleanup. Exiting the browser with a
+    // download still in-progress can lead to test failues.
+    content::DownloadTestObserverTerminal dangerous_download_observer(
+        content::BrowserContext::GetDownloadManager(browser()->profile()), 1,
+        content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_ACCEPT);
     SendInterstitialCommand(tab, security_interstitials::CMD_PROCEED);
-    observer.Wait();
-    if (IsCommittedInterstitialTest())
-      nav_observer.Wait();
+    dangerous_download_observer.WaitForFinished();
   }
 
   // There should still be an interstitial at this point. Press the
@@ -2624,8 +2619,6 @@ IN_PROC_BROWSER_TEST_P(SSLUITest, TestBadHTTPSDownload) {
   ASSERT_NO_FATAL_FAILURE(ExpectSSLInterstitial(tab));
   EXPECT_TRUE(chrome::CanGoBack(browser()));
   chrome::GoBack(browser(), WindowOpenDisposition::CURRENT_TAB);
-
-  dangerous_download_observer.WaitForFinished();
 }
 
 //
@@ -3638,9 +3631,11 @@ class SSLUIWorkerFetchTest : public testing::WithParamInterface<
 
   ~SSLUIWorkerFetchTest() override {}
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
+  void SetUpOnMainThread() override {
+    SSLUITestBase::SetUpOnMainThread();
     if (GetParam().second) {
-      command_line->AppendSwitch(switches::kCommittedInterstitials);
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kSSLCommittedInterstitials);
     }
   }
 
@@ -4013,18 +4008,21 @@ IN_PROC_BROWSER_TEST_P(SSLUIWorkerFetchTest,
   content::SetBrowserClientForTesting(old_browser_client);
 }
 
-// Flaky on Windows 7 (dbg) trybot, see https://crbug.com/443374.
-#if defined(OS_WIN) && !defined(NDEBUG)
+// Flaky on Windows 7 bot, see https://crbug.com/874959.
+#if defined(OS_WIN)
 #define MAYBE_MixedContentSubFrame DISABLED_MixedContentSubFrame
 #else
 #define MAYBE_MixedContentSubFrame MixedContentSubFrame
 #endif
-
 // This test checks that all mixed content requests from a dedicated worker
 // which is started from a subframe are blocked if
 // allow_running_insecure_content setting is false or
 // strict_mixed_content_checking setting is true.
 IN_PROC_BROWSER_TEST_P(SSLUIWorkerFetchTest, MAYBE_MixedContentSubFrame) {
+  // TODO(carlosil): Reenable tests once confirmed not flaky for committed
+  // interstitials.
+  if (AreCommittedInterstitialsEnabled())
+    return;
   ChromeContentBrowserClientForMixedContentTest browser_client;
   content::ContentBrowserClient* old_browser_client =
       content::SetBrowserClientForTesting(&browser_client);
@@ -5096,13 +5094,14 @@ class CommonNameMismatchBrowserTest : public CertVerifierBrowserTest,
     // Enable finch experiment for SSL common name mismatch handling.
     command_line->AppendSwitchASCII(switches::kForceFieldTrials,
                                     "SSLCommonNameMismatchHandling/Enabled/");
-    if (GetParam()) {
-      command_line->AppendSwitch(switches::kCommittedInterstitials);
-    }
   }
 
   void SetUpOnMainThread() override {
     CertVerifierBrowserTest::SetUpOnMainThread();
+    if (GetParam()) {
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kSSLCommittedInterstitials);
+    }
     host_resolver()->AddRule("*", "127.0.0.1");
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
@@ -5114,6 +5113,9 @@ class CommonNameMismatchBrowserTest : public CertVerifierBrowserTest,
                                      base::BindOnce(&CleanUpOnIOThread));
     CertVerifierBrowserTest::TearDownOnMainThread();
   }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 INSTANTIATE_TEST_CASE_P(,
@@ -5921,7 +5923,8 @@ IN_PROC_BROWSER_TEST_P(SSLUITest, SameDocumentNavigationAfterLoadSSLState) {
 }
 
 // Checks that navigations after pushState maintain the SSL status.
-IN_PROC_BROWSER_TEST_P(SSLUITest, PushStateSSLState) {
+// Flaky, see https://crbug.com/872029 and https://crbug.com/872030.
+IN_PROC_BROWSER_TEST_P(SSLUITest, DISABLED_PushStateSSLState) {
   ASSERT_TRUE(https_server_.Start());
 
   ui_test_utils::NavigateToURL(browser(),
@@ -6163,10 +6166,11 @@ class SSLUICaptivePortalListResourceBundleTest
     https_server_.ServeFilesFromSourceDirectory(base::FilePath(kDocRoot));
   }
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    CertVerifierBrowserTest::SetUpCommandLine(command_line);
+  void SetUpOnMainThread() override {
+    CertVerifierBrowserTest::SetUpOnMainThread();
     if (GetParam()) {
-      command_line->AppendSwitch(switches::kCommittedInterstitials);
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kSSLCommittedInterstitials);
     }
   }
 
@@ -6229,6 +6233,7 @@ class SSLUICaptivePortalListResourceBundleTest
   net::EmbeddedTestServer* https_server() { return &https_server_; }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
   net::EmbeddedTestServer https_server_;
 };
 
@@ -6428,15 +6433,12 @@ class SSLUIMITMSoftwareTest : public CertVerifierBrowserTest,
 
   void SetUpOnMainThread() override {
     CertVerifierBrowserTest::SetUpOnMainThread();
+    if (GetParam()) {
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kSSLCommittedInterstitials);
+    }
     host_resolver()->AddRule("*", "127.0.0.1");
     SetHSTSForHostName(browser()->profile());
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    CertVerifierBrowserTest::SetUpCommandLine(command_line);
-    if (GetParam()) {
-      command_line->AppendSwitch(switches::kCommittedInterstitials);
-    }
   }
 
   // Set up the cert verifier to return the error passed in as the cert_error
@@ -6548,7 +6550,7 @@ class SSLUIMITMSoftwareTest : public CertVerifierBrowserTest,
 
  private:
   net::EmbeddedTestServer https_server_;
-
+  base::test::ScopedFeatureList scoped_feature_list_;
   DISALLOW_COPY_AND_ASSIGN(SSLUIMITMSoftwareTest);
 };
 
@@ -6891,15 +6893,12 @@ class SuperfishSSLUITest : public CertVerifierBrowserTest,
 
   void SetUpOnMainThread() override {
     CertVerifierBrowserTest::SetUpOnMainThread();
+    if (GetParam()) {
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kSSLCommittedInterstitials);
+    }
     host_resolver()->AddRule("*", "127.0.0.1");
     ASSERT_TRUE(https_server_.Start());
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    CertVerifierBrowserTest::SetUpCommandLine(command_line);
-    if (GetParam()) {
-      command_line->AppendSwitch(switches::kCommittedInterstitials);
-    }
   }
 
  protected:
@@ -6983,6 +6982,8 @@ class SuperfishSSLUITest : public CertVerifierBrowserTest,
     }
     return net::X509Certificate::CreateFromDERCertChain(decoded_pieces);
   }
+
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 INSTANTIATE_TEST_CASE_P(, SuperfishSSLUITest, ::testing::Values(false, true));
@@ -7157,7 +7158,7 @@ IN_PROC_BROWSER_TEST_F(SymantecMessageSSLUITest, PostJune2016) {
   ui_test_utils::NavigateToURL(browser(), url);
   console_observer.Wait();
   EXPECT_TRUE(
-      base::MatchPattern(console_observer.message(), "*distrusted in M70*"));
+      base::MatchPattern(console_observer.message(), "*distrusted very soon*"));
 }
 
 // Tests that the Symantec console message is logged for subresources, but caps
@@ -7325,9 +7326,11 @@ class SSLUIDynamicInterstitialTest : public CertVerifierBrowserTest {
 
   // Adds a dynamic interstitial to |config_proto| and returns it. All of the
   // fields in the dynamic intersitial matches with |https_server_|'s
-  // SSL info.
+  // SSL info. Optionally set the flag for triggering dynamic interstitials
+  // only on non-overridable errors.
   chrome_browser_ssl::DynamicInterstitial* AddMatchingDynamicInterstitial(
-      chrome_browser_ssl::SSLErrorAssistantConfig* config_proto) {
+      chrome_browser_ssl::SSLErrorAssistantConfig* config_proto,
+      bool show_only_for_nonoverridable_errors = false) {
     chrome_browser_ssl::DynamicInterstitial* filter =
         config_proto->add_dynamic_interstitial();
     filter->set_interstitial_type(chrome_browser_ssl::DynamicInterstitial::
@@ -7350,6 +7353,10 @@ class SSLUIDynamicInterstitialTest : public CertVerifierBrowserTest {
     filter->set_mitm_software_name(kTestMITMSoftwareName);
 
     filter->set_support_url("https://google.com");
+
+    filter->set_show_only_for_nonoverridable_errors(
+        show_only_for_nonoverridable_errors);
+
     return filter;
   }
 
@@ -7624,6 +7631,39 @@ IN_PROC_BROWSER_TEST_F(SSLUIDynamicInterstitialTest,
   }
 }
 
+IN_PROC_BROWSER_TEST_F(SSLUIDynamicInterstitialTest, MismatchWhenOverridable) {
+  ASSERT_TRUE(https_server()->Start());
+
+  SetUpCertVerifier();
+
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+
+  {
+    std::unique_ptr<chrome_browser_ssl::SSLErrorAssistantConfig> config_proto =
+        CreateSSLErrorAssistantConfig();
+    AddMismatchDynamicInterstitial(config_proto.get());
+
+    // Add a matching dynamic interstitial, except for the
+    // show_only_for_nonoverridable_errors flag is set to true.
+    chrome_browser_ssl::DynamicInterstitial* match =
+        AddMatchingDynamicInterstitial(config_proto.get(), true);
+    match->set_cert_error(
+        chrome_browser_ssl::DynamicInterstitial::UNKNOWN_CERT_ERROR);
+
+    SSLErrorHandler::SetErrorAssistantProto(std::move(config_proto));
+    ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() >
+                0);
+
+    ui_test_utils::NavigateToURL(browser(), https_server()->GetURL("/"));
+    WaitForInterstitial(tab);
+
+    InterstitialPage* interstitial_page = tab->GetInterstitialPage();
+    ASSERT_TRUE(interstitial_page);
+    EXPECT_NE(CaptivePortalBlockingPage::kTypeForTesting,
+              interstitial_page->GetDelegateForTesting()->GetTypeForTesting());
+  }
+}
+
 using SSLHPKPBrowserTest = CertVerifierBrowserTest;
 
 // Test case where an HPKP report is sent.
@@ -7701,15 +7741,12 @@ class RecurrentInterstitialBrowserTest
  public:
   RecurrentInterstitialBrowserTest() : CertVerifierBrowserTest() {}
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    CertVerifierBrowserTest::SetUpCommandLine(command_line);
-    if (IsCommittedInterstitialTest()) {
-      command_line->AppendSwitch(switches::kCommittedInterstitials);
-    }
-  }
-
   void SetUpOnMainThread() override {
     CertVerifierBrowserTest::SetUpOnMainThread();
+    if (IsCommittedInterstitialTest()) {
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kSSLCommittedInterstitials);
+    }
     host_resolver()->AddRule("*", "127.0.0.1");
   }
 
@@ -7721,6 +7758,9 @@ class RecurrentInterstitialBrowserTest
 
  protected:
   bool IsCommittedInterstitialTest() { return GetParam(); }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 INSTANTIATE_TEST_CASE_P(,

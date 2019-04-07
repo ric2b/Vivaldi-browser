@@ -43,6 +43,13 @@
 // The maximum number of lines of the secondary text. Default is 1.
 @property(nonatomic, assign) NSInteger numberOfDetailTextLines;
 
+// Command to trigger when the cell is tapped. The default value is 0.
+@property(nonatomic, assign) NSInteger commandID;
+
+// YES if the cell should be tappable. The text color is grayed out when set to
+// NO (only if no |textColor| has been set). The default value is YES.
+@property(nonatomic, assign) BOOL enabled;
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_COLLECTION_VIEW_CELLS_COLLECTION_VIEW_TEXT_ITEM_H_

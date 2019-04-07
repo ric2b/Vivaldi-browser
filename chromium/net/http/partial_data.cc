@@ -5,6 +5,7 @@
 #include "net/http/partial_data.h"
 
 #include <limits>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -92,7 +93,7 @@ void PartialData::RestoreHeaders(HttpRequestHeaders* headers) const {
 }
 
 int PartialData::ShouldValidateCache(disk_cache::Entry* entry,
-                                     const CompletionCallback& callback) {
+                                     CompletionOnceCallback callback) {
   DCHECK_GE(current_range_start_, 0);
 
   // Scan the disk cache for the first cached portion within this range.
@@ -104,20 +105,22 @@ int PartialData::ShouldValidateCache(disk_cache::Entry* entry,
 
   if (sparse_entry_) {
     DCHECK(callback_.is_null());
+    // |start| will be deleted later in this method if GetAvailableRange()
+    // returns synchronously, or by GetAvailableRangeCompleted() if it returns
+    // asynchronously.
     int64_t* start = new int64_t;
-    // This callback now owns "start". We make sure to keep it
-    // in a local variable since we want to use it later.
-    CompletionCallback cb =
-        base::Bind(&PartialData::GetAvailableRangeCompleted,
-                   weak_factory_.GetWeakPtr(), base::Owned(start));
-    cached_min_len_ =
-        entry->GetAvailableRange(current_range_start_, len, start, cb);
+    CompletionOnceCallback cb =
+        base::BindOnce(&PartialData::GetAvailableRangeCompleted,
+                       weak_factory_.GetWeakPtr(), start);
+    cached_min_len_ = entry->GetAvailableRange(current_range_start_, len, start,
+                                               std::move(cb));
 
     if (cached_min_len_ == ERR_IO_PENDING) {
-      callback_ = callback;
+      callback_ = std::move(callback);
       return ERR_IO_PENDING;
     } else {
       cached_start_ = *start;
+      delete start;
     }
   } else if (!truncated_) {
     if (byte_range_.HasFirstBytePosition() &&
@@ -394,7 +397,7 @@ void PartialData::FixContentLength(HttpResponseHeaders* headers) {
 int PartialData::CacheRead(disk_cache::Entry* entry,
                            IOBuffer* data,
                            int data_len,
-                           const CompletionCallback& callback) {
+                           CompletionOnceCallback callback) {
   int read_len = std::min(data_len, cached_min_len_);
   if (!read_len)
     return 0;
@@ -402,13 +405,13 @@ int PartialData::CacheRead(disk_cache::Entry* entry,
   int rv = 0;
   if (sparse_entry_) {
     rv = entry->ReadSparseData(current_range_start_, data, read_len,
-                               callback);
+                               std::move(callback));
   } else {
     if (current_range_start_ > std::numeric_limits<int32_t>::max())
       return ERR_INVALID_ARGUMENT;
 
     rv = entry->ReadData(kDataStream, static_cast<int>(current_range_start_),
-                         data, read_len, callback);
+                         data, read_len, std::move(callback));
   }
   return rv;
 }
@@ -416,17 +419,17 @@ int PartialData::CacheRead(disk_cache::Entry* entry,
 int PartialData::CacheWrite(disk_cache::Entry* entry,
                             IOBuffer* data,
                             int data_len,
-                            const CompletionCallback& callback) {
+                            CompletionOnceCallback callback) {
   DVLOG(3) << "To write: " << data_len;
   if (sparse_entry_) {
-    return entry->WriteSparseData(
-        current_range_start_, data, data_len, callback);
+    return entry->WriteSparseData(current_range_start_, data, data_len,
+                                  std::move(callback));
   } else  {
     if (current_range_start_ > std::numeric_limits<int32_t>::max())
       return ERR_INVALID_ARGUMENT;
 
     return entry->WriteData(kDataStream, static_cast<int>(current_range_start_),
-                            data, data_len, callback, true);
+                            data, data_len, std::move(callback), true);
   }
 }
 
@@ -459,6 +462,7 @@ void PartialData::GetAvailableRangeCompleted(int64_t* start, int result) {
   DCHECK_NE(ERR_IO_PENDING, result);
 
   cached_start_ = *start;
+  delete start;
   cached_min_len_ = result;
   if (result >= 0)
     result = 1;  // Return success, go ahead and validate the entry.

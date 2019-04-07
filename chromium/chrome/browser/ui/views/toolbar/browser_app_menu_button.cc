@@ -20,8 +20,8 @@
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/extensions/browser_action_drag_data.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/toolbar/app_menu.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
@@ -107,7 +107,7 @@ void BrowserAppMenuButton::ShowMenu(bool for_drop) {
 #if defined(OS_CHROMEOS)
   // On platforms other than ChromeOS or when running under MASH, there is no
   // KeyboardController in the browser process.
-  if (features::IsAshInBrowserProcess()) {
+  if (!features::IsUsingWindowService()) {
     auto* keyboard_controller = keyboard::KeyboardController::Get();
     if (keyboard_controller->enabled() &&
         keyboard_controller->IsKeyboardVisible()) {
@@ -289,6 +289,22 @@ void BrowserAppMenuButton::OnBoundsChanged(const gfx::Rect& previous_bounds) {
         this, gfx::Insets(0, 0, 0, margin_trailing_)));
   }
   AppMenuButton::OnBoundsChanged(previous_bounds);
+}
+
+gfx::Rect BrowserAppMenuButton::GetAnchorBoundsInScreen() const {
+  gfx::Rect bounds = GetBoundsInScreen();
+  gfx::Insets insets =
+      GetInkDropInsets(this, gfx::Insets(0, 0, 0, margin_trailing_));
+  // If the button is extended, don't inset the trailing edge. The anchored menu
+  // should extend to the screen edge as well so the menu is easier to hit
+  // (Fitts's law).
+  // TODO(pbos): Make sure the button is aware of that it is being extended or
+  // not (margin_trailing_ cannot be used as it can be 0 in fullscreen on
+  // Touch). When this is implemented, use 0 as a replacement for
+  // margin_trailing_ in fullscreen only. Always keep the rest.
+  insets.Set(insets.top(), 0, insets.bottom(), 0);
+  bounds.Inset(insets);
+  return bounds;
 }
 
 gfx::Rect BrowserAppMenuButton::GetThemePaintRect() const {

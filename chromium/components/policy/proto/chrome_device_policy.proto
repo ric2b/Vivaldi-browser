@@ -171,6 +171,8 @@ message OBSOLETE_ScreenSaverProto {
 
 // Enterprise controls for auto-update behavior of Chrome OS.
 message AutoUpdateSettingsProto {
+  reserved 13;
+
   // True if we don't want the device to auto-update (target_version_prefix is
   // ignored in this case).
   optional bool update_disabled = 1;
@@ -244,12 +246,30 @@ message AutoUpdateSettingsProto {
     // No value set. Default is ROLLBACK_DISABLED.
     ROLLBACK_UNSPECIFIED = 0;
     // No rollback should happen if |target_version_prefix| specifies an older
-    // version than the currently installed Chrome OS version.
+    // version than the currently installed Chrome OS version. If this is the
+    // case, the device will still respect |target_version_prefix|, so it will
+    // not update Chrome OS.
     ROLLBACK_DISABLED = 1;
     // If |target_version_prefix| specifies an older version than the currently
     // installed Chrome OS version, the device should roll back to a Chrome OS
-    // version starting with |target_version_prefix|.
+    // version starting with |target_version_prefix|. The device does a full
+    // powerwash during the rollback, including TPM reset.
     ROLLBACK_WITH_FULL_POWERWASH = 2;
+    // If |target_version_prefix| specifies an older version than the currently
+    // installed Chrome OS version, the device should roll back to a Chrome OS
+    // version starting with |target_version_prefix|.
+    // If possible, the device tries to carry over device-level configuration
+    // including network credentials during the rollback process.
+    // If that is not possible, rolls back with a full powerwash.
+    ROLLBACK_AND_RESTORE_IF_POSSIBLE = 3;
+    // If |target_version_prefix| specifies an older version than the currently
+    // installed Chrome OS version and it's possible to carry over device-level
+    // configuration such as network credentials during the rollback process
+    // and skipping OOBE after the rollback, the device rolls back to a Chrome
+    // OS version starting with |target_version_prefix|.
+    // If this is not possible, the device will stay on the current version
+    // (same as ROLLBACK_DISABLED).
+    ROLLBACK_WITH_RESTORE_ONLY = 4;
   }
 
   // Specifies what should happen if |target_version_prefix| specifies an older
@@ -268,12 +288,11 @@ message AutoUpdateSettingsProto {
   // "DeviceAutoUpdateTimeRestrictions" in policy_templates.json.
   optional string disallowed_time_intervals = 12;
 
-  // Specifies the percent of the fleet to update per week. Each week is
-  // represented by an int in the list. For example, a list with values
-  // [5,20,100] means: by the end of week 1, 5% of devices should be updated. By
-  // the end of week 2, 20% of devices should be updated. By the end of week 3,
-  // 100% of devices should be updated.
-  repeated int32 staging_percent_of_fleet_per_week = 13;
+  // Specifies how much of the fleet to update per day as a json
+  // string that contains a list of pairs <day, percentage>. For more
+  // details and examples, see "DeviceUpdateStagingSchedule" in
+  // policy_templates.json.
+  optional string staging_schedule = 14;
 }
 
 message OBSOLETE_StartUpUrlsProto {
@@ -1053,6 +1072,12 @@ message SamlLoginAuthenticationTypeProto {
   optional Type saml_login_authentication_type = 1 [default = TYPE_DEFAULT];
 }
 
+// Setting that controls whether unaffiliated users are allowed to run Crostini
+// (true by default)
+message DeviceUnaffiliatedCrostiniAllowedProto {
+  optional bool device_unaffiliated_crostini_allowed = 1;
+}
+
 message ChromeDeviceSettingsProto {
   reserved 61;
   optional DevicePolicyRefreshRateProto device_policy_refresh_rate = 1;
@@ -1143,4 +1168,6 @@ message ChromeDeviceSettingsProto {
   optional DeviceMachinePasswordChangeRateProto
       device_machine_password_change_rate = 70;
   optional SamlLoginAuthenticationTypeProto saml_login_authentication_type = 71;
+  optional DeviceUnaffiliatedCrostiniAllowedProto
+      device_unaffiliated_crostini_allowed = 72;
 }

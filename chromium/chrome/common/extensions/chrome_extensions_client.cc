@@ -15,42 +15,25 @@
 #include "base/values.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/extensions/api/api_features.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
-#include "chrome/common/extensions/api/generated_schemas.h"
-#include "chrome/common/extensions/api/manifest_features.h"
-#include "chrome/common/extensions/api/permission_features.h"
-#include "chrome/common/extensions/chrome_aliases.h"
-#include "chrome/common/extensions/chrome_manifest_handlers.h"
+#include "chrome/common/extensions/chrome_extensions_api_provider.h"
 #include "chrome/common/extensions/manifest_handlers/theme_handler.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
-#include "chrome/grit/common_resources.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/url_constants.h"
-#include "extensions/common/api/api_features.h"
-#include "extensions/common/api/behavior_features.h"
-#include "extensions/common/api/generated_schemas.h"
-#include "extensions/common/api/manifest_features.h"
-#include "extensions/common/api/permission_features.h"
-#include "extensions/common/common_manifest_handlers.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/core_extensions_api_provider.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/extension_urls.h"
-#include "extensions/common/extensions_aliases.h"
 #include "extensions/common/features/feature_channel.h"
-#include "extensions/common/features/feature_provider.h"
-#include "extensions/common/features/json_feature_provider_source.h"
 #include "extensions/common/manifest_constants.h"
-#include "extensions/common/manifest_handler.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/permissions/api_permission_set.h"
-#include "extensions/common/permissions/permissions_info.h"
 #include "extensions/common/url_pattern.h"
 #include "extensions/common/url_pattern_set.h"
-#include "extensions/grit/extensions_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -99,31 +82,16 @@ ChromeChannelForHistogram GetChromeChannelForHistogram(
 
 }  // namespace
 
-static base::LazyInstance<ChromeExtensionsClient>::Leaky g_client =
-    LAZY_INSTANCE_INITIALIZER;
-
-static ChromeExtensionsClient::ChromeExtensionsClientInstanceFetcher
-       g_alternative_get_instance = NULL;
-
-ChromeExtensionsClient::ChromeExtensionsClient() {}
+ChromeExtensionsClient::ChromeExtensionsClient() {
+  AddAPIProvider(std::make_unique<ChromeExtensionsAPIProvider>());
+  AddAPIProvider(std::make_unique<CoreExtensionsAPIProvider>());
+}
 
 ChromeExtensionsClient::~ChromeExtensionsClient() {
 }
 
 void ChromeExtensionsClient::Initialize() {
-  // Registration could already be finalized in unit tests, where the utility
-  // thread runs in-process.
-  if (!ManifestHandler::IsRegistrationFinalized()) {
-    RegisterCommonManifestHandlers();
-    RegisterChromeManifestHandlers();
-    ManifestHandler::FinalizeRegistration();
-  }
-
-  // Set up permissions.
-  PermissionsInfo::GetInstance()->AddProvider(chrome_api_permissions_,
-                                              GetChromePermissionAliases());
-  PermissionsInfo::GetInstance()->AddProvider(extensions_api_permissions_,
-                                              GetExtensionsPermissionAliases());
+  SCOPED_UMA_HISTOGRAM_TIMER("Extensions.ChromeExtensionsClientInitTime");
 
   // Set up the scripting whitelist.
   // Whitelist ChromeVox, an accessibility extension from Google that needs
@@ -158,36 +126,6 @@ ChromeExtensionsClient::GetPermissionMessageProvider() const {
 
 const std::string ChromeExtensionsClient::GetProductName() {
   return l10n_util::GetStringUTF8(IDS_PRODUCT_NAME);
-}
-
-std::unique_ptr<FeatureProvider> ChromeExtensionsClient::CreateFeatureProvider(
-    const std::string& name) const {
-  auto provider = std::make_unique<FeatureProvider>();
-  if (name == "api") {
-    AddCoreAPIFeatures(provider.get());
-    AddChromeAPIFeatures(provider.get());
-  } else if (name == "manifest") {
-    AddCoreManifestFeatures(provider.get());
-    AddChromeManifestFeatures(provider.get());
-  } else if (name == "permission") {
-    AddCorePermissionFeatures(provider.get());
-    AddChromePermissionFeatures(provider.get());
-  } else if (name == "behavior") {
-    // Note: There are no chrome-specific behavior features.
-    AddCoreBehaviorFeatures(provider.get());
-  } else {
-    NOTREACHED();
-  }
-  return provider;
-}
-
-std::unique_ptr<JSONFeatureProviderSource>
-ChromeExtensionsClient::CreateAPIFeatureSource() const {
-  std::unique_ptr<JSONFeatureProviderSource> source(
-      new JSONFeatureProviderSource("api"));
-  source->LoadJSON(IDR_EXTENSION_API_FEATURES);
-  source->LoadJSON(IDR_CHROME_EXTENSION_API_FEATURES);
-  return source;
 }
 
 void ChromeExtensionsClient::FilterHostPermissions(
@@ -267,23 +205,6 @@ bool ChromeExtensionsClient::IsScriptableURL(
   return true;
 }
 
-bool ChromeExtensionsClient::IsAPISchemaGenerated(
-    const std::string& name) const {
-  // Test from most common to least common.
-  return api::ChromeGeneratedSchemas::IsGenerated(name) ||
-         api::GeneratedSchemas::IsGenerated(name);
-}
-
-base::StringPiece ChromeExtensionsClient::GetAPISchema(
-    const std::string& name) const {
-  // Test from most common to least common.
-  base::StringPiece chrome_schema = api::ChromeGeneratedSchemas::Get(name);
-  if (!chrome_schema.empty())
-    return chrome_schema;
-
-  return api::GeneratedSchemas::Get(name);
-}
-
 bool ChromeExtensionsClient::ShouldSuppressFatalErrors() const {
   // Suppress fatal everywhere until the cause of bugs like http://crbug/471599
   // are fixed. This would typically be:
@@ -353,21 +274,6 @@ bool ChromeExtensionsClient::ExtensionAPIEnabledInExtensionServiceWorkers()
 
 std::string ChromeExtensionsClient::GetUserAgent() const {
   return ::GetUserAgent();
-}
-
-// static
-void ChromeExtensionsClient::RegisterAlternativeGetInstance(
-         ChromeExtensionsClient::ChromeExtensionsClientInstanceFetcher func) {
-  DCHECK(g_alternative_get_instance == NULL && !g_client.IsCreated());
-  g_alternative_get_instance = func;
-}
-
-// static
-ChromeExtensionsClient* ChromeExtensionsClient::GetInstance() {
-  DCHECK(g_alternative_get_instance == NULL || !g_client.IsCreated());
-  if (g_alternative_get_instance)
-      return g_alternative_get_instance();
-  return g_client.Pointer();
 }
 
 }  // namespace extensions

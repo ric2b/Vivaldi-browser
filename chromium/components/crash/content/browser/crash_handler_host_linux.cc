@@ -30,15 +30,18 @@
 #include "base/rand_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread.h"
-#include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/breakpad/breakpad/src/client/linux/handler/exception_handler.h"
-#include "third_party/breakpad/breakpad/src/client/linux/minidump_writer/linux_dumper.h"
-#include "third_party/breakpad/breakpad/src/client/linux/minidump_writer/minidump_writer.h"
+
+#if !defined(OS_ANDROID)
+#include "third_party/breakpad/breakpad/src/client/linux/handler/exception_handler.h"  // nogncheck
+#include "third_party/breakpad/breakpad/src/client/linux/minidump_writer/linux_dumper.h"  // nogncheck
+#include "third_party/breakpad/breakpad/src/client/linux/minidump_writer/minidump_writer.h"  // nogncheck
+#endif  // ! defined(OS_ANDROID)
 
 #if defined(OS_ANDROID) && !defined(__LP64__)
 #include <sys/syscall.h>
@@ -52,6 +55,9 @@
 #endif
 
 using content::BrowserThread;
+
+#if !defined(OS_ANDROID)
+
 using google_breakpad::ExceptionHandler;
 
 namespace breakpad {
@@ -130,7 +136,7 @@ CrashHandlerHostLinux::CrashHandlerHostLinux(const std::string& process_type,
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&CrashHandlerHostLinux::Init, base::Unretained(this)));
+      base::BindOnce(&CrashHandlerHostLinux::Init, base::Unretained(this)));
 }
 
 CrashHandlerHostLinux::~CrashHandlerHostLinux() {
@@ -404,7 +410,7 @@ void CrashHandlerHostLinux::FindCrashingThreadAndDump(
 void CrashHandlerHostLinux::WriteDumpFile(BreakpadInfo* info,
                                           std::unique_ptr<char[]> crash_context,
                                           pid_t crashing_pid) {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
 
   // Set |info->distro| here because base::GetLinuxDistro() needs to run on a
   // blocking sequence.
@@ -493,6 +499,8 @@ bool CrashHandlerHostLinux::IsShuttingDown() const {
 }
 
 }  // namespace breakpad
+
+#endif  // !defined(OS_ANDROID)
 
 #if !defined(OS_CHROMEOS)
 
@@ -632,21 +640,8 @@ void CrashHandlerHost::OnFileCanReadWithoutBlocking(int fd) {
     return;
   }
 
-  base::FilePath handler_path;
-  base::FilePath database_path;
-  base::FilePath metrics_path;
-  std::string url;
-  std::map<std::string, std::string> process_annotations;
-  std::vector<std::string> arguments;
-  if (!crash_reporter::internal::BuildHandlerArgs(
-          &handler_path, &database_path, &metrics_path, &url,
-          &process_annotations, &arguments)) {
-    return;
-  }
-
-  bool result = CrashpadClient::StartHandlerForClient(
-      handler_path, database_path, metrics_path, url, process_annotations,
-      arguments, handler_fd.get());
+  bool result =
+      crash_reporter::internal::StartHandlerForClient(handler_fd.get());
   DCHECK(result);
 }
 

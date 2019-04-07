@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef UI_CHOMEOS_SEARCH_BOX_SEARCH_BOX_VIEW_BASE_H_
-#define UI_CHOMEOS_SEARCH_BOX_SEARCH_BOX_VIEW_BASE_H_
+#ifndef UI_CHROMEOS_SEARCH_BOX_SEARCH_BOX_VIEW_BASE_H_
+#define UI_CHROMEOS_SEARCH_BOX_SEARCH_BOX_VIEW_BASE_H_
 
 #include <vector>
 
@@ -66,13 +66,10 @@ class SEARCH_BOX_EXPORT SearchBoxViewBase : public views::WidgetDelegateView,
   gfx::Rect GetViewBoundsForSearchBoxContentsBounds(
       const gfx::Rect& rect) const;
 
+  views::ImageButton* assistant_button();
   views::ImageButton* back_button();
   views::ImageButton* close_button();
   views::Textfield* search_box() { return search_box_; }
-
-  void set_contents_view(views::View* contents_view) {
-    contents_view_ = contents_view;
-  }
 
   // Swaps the google icon with the back button.
   void ShowBackOrGoogleIcon(bool show_back_button);
@@ -88,11 +85,14 @@ class SEARCH_BOX_EXPORT SearchBoxViewBase : public views::WidgetDelegateView,
 
   // Overridden from views::View:
   gfx::Size CalculatePreferredSize() const override;
-  bool OnMouseWheel(const ui::MouseWheelEvent& event) override;
   void OnEnabledChanged() override;
   const char* GetClassName() const override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   void OnMouseEvent(ui::MouseEvent* event) override;
+
+  // Allows for search box to be notified of gestures occurring outside, without
+  // deactivating the searchbox.
+  void NotifyGestureEvent();
 
   // Overridden from views::WidgetDelegate:
   ax::mojom::Role GetAccessibleWindowRole() const override;
@@ -109,6 +109,12 @@ class SEARCH_BOX_EXPORT SearchBoxViewBase : public views::WidgetDelegateView,
 
   // Whether the search box is active.
   bool is_search_box_active() const { return is_search_box_active_; }
+
+  void set_show_close_button_when_active(bool show_button) {
+    show_close_button_when_active_ = show_button;
+  }
+
+  bool show_assistant_button() { return show_assistant_button_; }
 
   void OnOnSearchBoxFocusedChanged();
 
@@ -136,7 +142,7 @@ class SEARCH_BOX_EXPORT SearchBoxViewBase : public views::WidgetDelegateView,
   SkColor search_box_color() const { return search_box_color_; }
 
   // Updates the visibility of close button.
-  void UpdateCloseButtonVisisbility();
+  void UpdateButtonsVisisbility();
 
   // Overridden from views::TextfieldController:
   void ContentsChanged(views::Textfield* sender,
@@ -148,8 +154,6 @@ class SEARCH_BOX_EXPORT SearchBoxViewBase : public views::WidgetDelegateView,
 
   views::BoxLayout* box_layout() { return box_layout_; }
 
-  views::View* contents_view() { return contents_view_; }
-
   void set_is_tablet_mode(bool is_tablet_mode) {
     is_tablet_mode_ = is_tablet_mode;
   }
@@ -159,6 +163,8 @@ class SEARCH_BOX_EXPORT SearchBoxViewBase : public views::WidgetDelegateView,
   void SetSearchBoxBackgroundColor(SkColor color);
 
   void SetSearchIconImage(gfx::ImageSkia image);
+
+  void SetShowAssistantButton(bool show);
 
   // Detects |ET_MOUSE_PRESSED| and |ET_GESTURE_TAP| events on the white
   // background of the search box.
@@ -183,11 +189,12 @@ class SEARCH_BOX_EXPORT SearchBoxViewBase : public views::WidgetDelegateView,
   virtual void UpdateSearchBoxBorder() = 0;
 
   // Setup button's image, accessible name, and tooltip text etc.
+  virtual void SetupAssistantButton() = 0;
   virtual void SetupCloseButton() = 0;
   virtual void SetupBackButton() = 0;
 
   // Records in histograms the activation of the searchbox.
-  virtual void RecordSearchBoxActivationHistogram(ui::EventType event_type){};
+  virtual void RecordSearchBoxActivationHistogram(ui::EventType event_type) {}
 
   // Gets the search box background.
   SearchBoxBackground* GetSearchBoxBackground() const;
@@ -197,17 +204,21 @@ class SEARCH_BOX_EXPORT SearchBoxViewBase : public views::WidgetDelegateView,
   // Owned by views hierarchy.
   views::View* content_container_;
   views::ImageView* search_icon_ = nullptr;
+  SearchBoxImageButton* assistant_button_ = nullptr;
   SearchBoxImageButton* back_button_ = nullptr;
   SearchBoxImageButton* close_button_ = nullptr;
   views::Textfield* search_box_;
   views::View* search_box_right_space_ = nullptr;
-  views::View* contents_view_ = nullptr;
 
   // Owned by |content_container_|. It is deleted when the view is deleted.
   views::BoxLayout* box_layout_ = nullptr;
 
   // Whether the search box is active.
   bool is_search_box_active_ = false;
+  // Whether to show close button if the search box is active.
+  bool show_close_button_when_active_ = false;
+  // Whether to show assistant button.
+  bool show_assistant_button_ = false;
   // Whether tablet mode is active.
   bool is_tablet_mode_ = false;
   // The current background color.
@@ -220,4 +231,4 @@ class SEARCH_BOX_EXPORT SearchBoxViewBase : public views::WidgetDelegateView,
 
 }  // namespace search_box
 
-#endif  // UI_CHOMEOS_SEARCH_BOX_SEARCH_BOX_VIEW_BASE_H_
+#endif  // UI_CHROMEOS_SEARCH_BOX_SEARCH_BOX_VIEW_BASE_H_

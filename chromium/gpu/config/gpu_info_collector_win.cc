@@ -36,6 +36,7 @@
 #include "base/threading/thread.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/scoped_com_initializer.h"
+#include "gpu/config/nvml_info.h"
 #include "third_party/vulkan/include/vulkan/vulkan.h"
 
 namespace gpu {
@@ -124,6 +125,28 @@ bool GetAMDSwitchableInfo(bool* is_switchable,
 }
 #endif
 
+std::string ParseNVIDIARegistryDriverVersion(std::string registry_version) {
+  // The NVIDIA driver version in the registry is most commonly in the format:
+  // XX.XX.XD.DDDD
+  // Where "X" corresponds to an OS-specific digit and "D" corresponds to a
+  // digit of the actual driver version. We convert it to the following format:
+  // DDD.DD
+  // This matches with the actual driver version that NVML also returns.
+  std::string second_to_last_digits;
+  std::string last_digits;
+  if (!RE2::FullMatch(registry_version, "\\d+\\.\\d+\\.(\\d+)\\.(\\d+)",
+                      &second_to_last_digits, &last_digits)) {
+    return registry_version;
+  }
+  std::string digits = second_to_last_digits + last_digits;
+  if (digits.length() < 5u) {
+    return registry_version;
+  }
+  digits.erase(0, digits.length() - 5u);
+  DCHECK(digits.length() == 5u);
+  return digits.substr(0u, 3u) + "." + digits.substr(3u);
+}
+
 bool CollectDriverInfoD3D(const std::wstring& device_id, GPUInfo* gpu_info) {
   TRACE_EVENT0("gpu", "CollectDriverInfoD3D");
 
@@ -136,7 +159,7 @@ bool CollectDriverInfoD3D(const std::wstring& device_id, GPUInfo* gpu_info) {
 
   // create device info for the display device
   HDEVINFO device_info =
-      ::SetupDiGetClassDevs(&display_class, NULL, NULL, DIGCF_PRESENT);
+      ::SetupDiGetClassDevs(&display_class, nullptr, nullptr, DIGCF_PRESENT);
   if (device_info == INVALID_HANDLE_VALUE) {
     LOG(ERROR) << "Creating device info failed";
     return false;
@@ -155,8 +178,8 @@ bool CollectDriverInfoD3D(const std::wstring& device_id, GPUInfo* gpu_info) {
   while (SetupDiEnumDeviceInfo(device_info, index++, &device_info_data)) {
     WCHAR value[255];
     if (SetupDiGetDeviceRegistryPropertyW(
-            device_info, &device_info_data, SPDRP_DRIVER, NULL,
-            reinterpret_cast<PBYTE>(value), sizeof(value), NULL)) {
+            device_info, &device_info_data, SPDRP_DRIVER, nullptr,
+            reinterpret_cast<PBYTE>(value), sizeof(value), nullptr)) {
       HKEY key;
       std::wstring driver_key = L"System\\CurrentControlSet\\Control\\Class\\";
       driver_key += value;
@@ -165,19 +188,19 @@ bool CollectDriverInfoD3D(const std::wstring& device_id, GPUInfo* gpu_info) {
       if (result == ERROR_SUCCESS) {
         GPUInfo::GPUDevice device;
         DWORD dwcb_data = sizeof(value);
-        result = RegQueryValueExW(key, L"DriverVersion", NULL, NULL,
+        result = RegQueryValueExW(key, L"DriverVersion", nullptr, nullptr,
                                   reinterpret_cast<LPBYTE>(value), &dwcb_data);
         if (result == ERROR_SUCCESS)
           device.driver_version = base::UTF16ToASCII(std::wstring(value));
 
         dwcb_data = sizeof(value);
-        result = RegQueryValueExW(key, L"DriverDate", NULL, NULL,
+        result = RegQueryValueExW(key, L"DriverDate", nullptr, nullptr,
                                   reinterpret_cast<LPBYTE>(value), &dwcb_data);
         if (result == ERROR_SUCCESS)
           device.driver_date = base::UTF16ToASCII(std::wstring(value));
 
         dwcb_data = sizeof(value);
-        result = RegQueryValueExW(key, L"ProviderName", NULL, NULL,
+        result = RegQueryValueExW(key, L"ProviderName", nullptr, nullptr,
                                   reinterpret_cast<LPBYTE>(value), &dwcb_data);
         if (result == ERROR_SUCCESS)
           device.driver_vendor = base::UTF16ToASCII(std::wstring(value));
@@ -199,6 +222,28 @@ bool CollectDriverInfoD3D(const std::wstring& device_id, GPUInfo* gpu_info) {
             found_intel = true;
           if (device.vendor_id == 0x1002)
             found_amd = true;
+          if (device.vendor_id == 0x10de) {
+            std::string nvml_driver_version;
+            int major_cuda_compute_capability = 0;
+            int minor_cuda_compute_capability = 0;
+            bool nvml_success = GetNvmlDeviceInfo(
+                device.device_id, &nvml_driver_version,
+                &major_cuda_compute_capability, &minor_cuda_compute_capability);
+            if (nvml_success) {
+              // We use the NVML driver version instead of the registry version,
+              // since the registry version includes OS-specific digits that are
+              // not part of the actual driver version.
+              device.driver_version = nvml_driver_version;
+              device.cuda_compute_capability_major =
+                  major_cuda_compute_capability;
+            } else {
+              // If we can't get the actual driver version from NVML, do
+              // best-effort parsing of the actual driver version from the
+              // registry driver version.
+              device.driver_version =
+                  ParseNVIDIARegistryDriverVersion(device.driver_version);
+            }
+          }
           devices.push_back(device);
         }
 
@@ -303,6 +348,45 @@ bool BadAMDVulkanDriverVersion(GPUInfo* gpu_info) {
   return false;
 }
 
+bool BadVulkanDllVersion(GPUInfo* gpu_info) {
+  std::unique_ptr<FileVersionInfoWin> file_version_info(
+      static_cast<FileVersionInfoWin*>(
+          FileVersionInfoWin::CreateFileVersionInfo(
+              base::FilePath(FILE_PATH_LITERAL("vulkan-1.dll")))));
+
+  if (!file_version_info)
+    return false;
+
+  const VS_FIXEDFILEINFO* fixed_file_info =
+      static_cast<FileVersionInfoWin*>(file_version_info.get())
+          ->fixed_file_info();
+  const int major = HIWORD(fixed_file_info->dwFileVersionMS);
+  const int minor = LOWORD(fixed_file_info->dwFileVersionMS);
+  const int build_1 = HIWORD(fixed_file_info->dwFileVersionLS);
+  const int build_2 = LOWORD(fixed_file_info->dwFileVersionLS);
+
+  // From the logs, most vulkan-1.dll crashs are from the following versions.
+  // As of 7/23/2018.
+  // 0.0.0.0 -  # of crashes: 6556
+  // 1.0.26.0 - # of crashes: 5890
+  // 1.0.33.0 - # of crashes: 12271
+  // 1.0.42.0 - # of crashes: 35749
+  // 1.0.42.1 - # of crashes: 68214
+  // 1.0.51.0 - # of crashes: 5152
+  // The GPU could be from any vendor, but only some certain models would crash.
+  // For those that don't crash, they usually return failures upon GPU vulkan
+  // support querying even though the GPU drivers can support it.
+  if ((major == 0 && minor == 0 && build_1 == 0 && build_2 == 0) ||
+      (major == 1 && minor == 0 && build_1 == 26 && build_2 == 0) ||
+      (major == 1 && minor == 0 && build_1 == 33 && build_2 == 0) ||
+      (major == 1 && minor == 0 && build_1 == 42 && build_2 == 0) ||
+      (major == 1 && minor == 0 && build_1 == 42 && build_2 == 1) ||
+      (major == 1 && minor == 0 && build_1 == 51 && build_2 == 0)) {
+    return true;
+  }
+  return false;
+}
+
 bool InitVulkan(base::NativeLibrary* vulkan_library,
                 PFN_vkGetInstanceProcAddr* vkGetInstanceProcAddr,
                 PFN_vkCreateInstance* vkCreateInstance) {
@@ -370,10 +454,15 @@ void GetGpuSupportedVulkanVersionAndExtensions(
   gpu_info->supports_vulkan = false;
   gpu_info->vulkan_version = 0;
 
-  // Skip if the system has an older AMD Vulkan driver amdvlk64.dll which
-  // crashes when vkCreateInstance() gets called. This bug is fixed in the
-  // latest driver.
+  // Skip if the system has an older AMD Vulkan driver amdvlk64.dll or
+  // amdvlk32.dll which crashes when vkCreateInstance() is called. This bug has
+  // been fixed in the latest AMD driver.
   if (BadAMDVulkanDriverVersion(gpu_info)) {
+    return;
+  }
+
+  // Some early versions of vulkan-1.dll might crash
+  if (BadVulkanDllVersion(gpu_info)) {
     return;
   }
 
@@ -556,7 +645,7 @@ bool CollectBasicGraphicsInfo(GPUInfo* gpu_info) {
   DISPLAY_DEVICE dd;
   dd.cb = sizeof(DISPLAY_DEVICE);
   std::wstring id;
-  for (int i = 0; EnumDisplayDevices(NULL, i, &dd, 0); ++i) {
+  for (int i = 0; EnumDisplayDevices(nullptr, i, &dd, 0); ++i) {
     if (dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) {
       id = dd.DeviceID;
       break;

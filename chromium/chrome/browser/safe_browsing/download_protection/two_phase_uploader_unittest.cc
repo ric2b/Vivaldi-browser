@@ -12,8 +12,8 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "chrome/browser/safe_browsing/local_two_phase_testserver.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
@@ -85,7 +85,7 @@ class TwoPhaseUploaderTest : public testing::Test {
   content::TestBrowserThreadBundle thread_bundle_;
   const scoped_refptr<base::SequencedTaskRunner> task_runner_ =
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND});
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
   std::unique_ptr<network::TestNetworkServiceClient> network_service_client_;
   std::unique_ptr<network::NetworkService> network_service_;
   scoped_refptr<network::TestSharedURLLoaderFactory> shared_url_loader_factory_;

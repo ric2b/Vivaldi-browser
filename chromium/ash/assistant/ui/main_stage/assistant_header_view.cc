@@ -13,11 +13,11 @@
 #include "ash/assistant/model/assistant_query.h"
 #include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/assistant/ui/logo_view/base_logo_view.h"
-#include "ash/assistant/ui/main_stage/assistant_progress_indicator.h"
-#include "ash/strings/grit/ash_strings.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/views/border.h"
-#include "ui/views/controls/label.h"
+#include "ash/assistant/util/animation_util.h"
+#include "ash/assistant/util/assistant_util.h"
+#include "base/time/time.h"
+#include "ui/compositor/layer_animation_sequence.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/views/layout/box_layout.h"
 
 namespace ash {
@@ -26,7 +26,28 @@ namespace {
 
 // Appearance.
 constexpr int kIconSizeDip = 24;
-constexpr int kInitialHeightDip = 72;
+constexpr int kPaddingHorizontalDip = 32;
+
+// Appear animation.
+constexpr base::TimeDelta kAppearAnimationFadeInDelay =
+    base::TimeDelta::FromMilliseconds(33);
+constexpr base::TimeDelta kAppearAnimationFadeInDuration =
+    base::TimeDelta::FromMilliseconds(167);
+constexpr base::TimeDelta kAppearAnimationTranslateUpDuration =
+    base::TimeDelta::FromMilliseconds(250);
+constexpr int kAppearAnimationTranslationUpDip = 115;
+
+// Response animation.
+constexpr base::TimeDelta kResponseAnimationFadeInDelay =
+    base::TimeDelta::FromMilliseconds(50);
+constexpr base::TimeDelta kResponseAnimationFadeInDuration =
+    base::TimeDelta::FromMilliseconds(83);
+constexpr base::TimeDelta kResponseAnimationFadeOutDelay =
+    base::TimeDelta::FromMilliseconds(33);
+constexpr base::TimeDelta kResponseAnimationFadeOutDuration =
+    base::TimeDelta::FromMilliseconds(83);
+constexpr base::TimeDelta kResponseAnimationTranslateLeftDuration =
+    base::TimeDelta::FromMilliseconds(333);
 
 }  // namespace
 
@@ -50,76 +71,113 @@ gfx::Size AssistantHeaderView::CalculatePreferredSize() const {
   return gfx::Size(INT_MAX, GetHeightForWidth(INT_MAX));
 }
 
-int AssistantHeaderView::GetHeightForWidth(int width) const {
-  return greeting_label_->visible() ? kInitialHeightDip
-                                    : views::View::GetHeightForWidth(width);
-}
-
 void AssistantHeaderView::ChildVisibilityChanged(views::View* child) {
-  layout_manager_->set_cross_axis_alignment(
-      greeting_label_->visible()
-          ? views::BoxLayout::CrossAxisAlignment::CROSS_AXIS_ALIGNMENT_CENTER
-          : views::BoxLayout::CrossAxisAlignment::CROSS_AXIS_ALIGNMENT_START);
-
   PreferredSizeChanged();
 }
 
 void AssistantHeaderView::InitLayout() {
   layout_manager_ = SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(), kSpacingDip));
+      views::BoxLayout::Orientation::kVertical,
+      gfx::Insets(0, 0, kSpacingDip, 0)));
 
   layout_manager_->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::CROSS_AXIS_ALIGNMENT_CENTER);
 
   // Molecule icon.
-  BaseLogoView* molecule_icon = BaseLogoView::Create();
-  molecule_icon->SetPreferredSize(gfx::Size(kIconSizeDip, kIconSizeDip));
-  molecule_icon->SetState(BaseLogoView::State::kMoleculeWavy,
-                          /*animate=*/false);
-  AddChildView(molecule_icon);
+  molecule_icon_ = BaseLogoView::Create();
+  molecule_icon_->SetPreferredSize(gfx::Size(kIconSizeDip, kIconSizeDip));
+  molecule_icon_->SetState(BaseLogoView::State::kMoleculeWavy,
+                           /*animate=*/false);
 
-  // Greeting label.
-  greeting_label_ = new views::Label(
-      l10n_util::GetStringUTF16(IDS_ASH_ASSISTANT_PROMPT_DEFAULT));
-  greeting_label_->SetAutoColorReadabilityEnabled(false);
-  greeting_label_->SetEnabledColor(kTextColorPrimary);
-  greeting_label_->SetFontList(
-      views::Label::GetDefaultFontList()
-          .DeriveWithSizeDelta(8)
-          .DeriveWithWeight(gfx::Font::Weight::MEDIUM));
-  greeting_label_->SetHorizontalAlignment(
-      gfx::HorizontalAlignment::ALIGN_CENTER);
-  greeting_label_->SetMultiLine(true);
-  AddChildView(greeting_label_);
+  // The molecule icon will be animated on its own layer.
+  molecule_icon_->SetPaintToLayer();
+  molecule_icon_->layer()->SetFillsBoundsOpaquely(false);
 
-  // Progress indicator.
-  // Note that we add an empty border to increase the top margin.
-  progress_indicator_ = new AssistantProgressIndicator();
-  progress_indicator_->SetBorder(
-      views::CreateEmptyBorder(/*top=*/kSpacingDip, 0, 0, 0));
-  progress_indicator_->SetVisible(false);
-  AddChildView(progress_indicator_);
+  AddChildView(molecule_icon_);
 }
 
-void AssistantHeaderView::OnCommittedQueryChanged(
-    const AssistantQuery& committed_query) {
-  greeting_label_->SetVisible(false);
-  progress_indicator_->SetVisible(true);
-}
-
-void AssistantHeaderView::OnUiElementAdded(
-    const AssistantUiElement* ui_element) {
-  progress_indicator_->SetVisible(false);
-}
-
-void AssistantHeaderView::OnUiVisibilityChanged(bool visible,
-                                                AssistantSource source) {
-  if (visible)
+void AssistantHeaderView::OnResponseChanged(const AssistantResponse& response) {
+  // We only handle the first response when animating the molecule icon. For
+  // all subsequent responses the molecule icon remains unchanged.
+  if (!is_first_response_)
     return;
 
-  // When Assistant UI is being hidden, we need to restore default view state.
-  greeting_label_->SetVisible(true);
-  progress_indicator_->SetVisible(false);
+  is_first_response_ = false;
+
+  using assistant::util::CreateLayerAnimationSequence;
+  using assistant::util::CreateOpacityElement;
+  using assistant::util::CreateTransformElement;
+
+  // The molecule icon will be animated from the center of its parent, to the
+  // left hand side.
+  gfx::Transform transform;
+  transform.Translate(
+      -(width() - molecule_icon_->width()) / 2 + kPaddingHorizontalDip, 0);
+
+  // Animate the molecule icon.
+  molecule_icon_->layer()->GetAnimator()->StartTogether(
+      {// Animate the translation.
+       CreateLayerAnimationSequence(CreateTransformElement(
+           transform, kResponseAnimationTranslateLeftDuration)),
+       // Animate the opacity.
+       CreateLayerAnimationSequence(
+           // Pause...
+           ui::LayerAnimationElement::CreatePauseElement(
+               ui::LayerAnimationElement::AnimatableProperty::OPACITY,
+               kResponseAnimationFadeOutDelay),
+           // ...then fade out...
+           CreateOpacityElement(0.f, kResponseAnimationFadeOutDuration),
+           // ...hold...
+           ui::LayerAnimationElement::CreatePauseElement(
+               ui::LayerAnimationElement::AnimatableProperty::OPACITY,
+               kResponseAnimationFadeInDelay),
+           // ...and fade back in.
+           CreateOpacityElement(1.f, kResponseAnimationFadeInDuration))});
+}
+
+void AssistantHeaderView::OnUiVisibilityChanged(
+    AssistantVisibility new_visibility,
+    AssistantVisibility old_visibility,
+    AssistantSource source) {
+  if (assistant::util::IsStartingSession(new_visibility, old_visibility)) {
+    // When Assistant is starting a new session, we animate in the appearance of
+    // the molecule icon.
+    using assistant::util::CreateLayerAnimationSequence;
+    using assistant::util::CreateOpacityElement;
+    using assistant::util::CreateTransformElement;
+
+    // We're going to animate the molecule icon up into position so we'll need
+    // to apply an initial transformation.
+    gfx::Transform transform;
+    transform.Translate(0, kAppearAnimationTranslationUpDip);
+
+    // Set up our pre-animation values.
+    molecule_icon_->layer()->SetOpacity(0.f);
+    molecule_icon_->layer()->SetTransform(transform);
+
+    // Start animating molecule icon.
+    molecule_icon_->layer()->GetAnimator()->StartTogether(
+        {// Animate the transformation.
+         CreateLayerAnimationSequence(CreateTransformElement(
+             gfx::Transform(), kAppearAnimationTranslateUpDuration,
+             gfx::Tween::Type::FAST_OUT_SLOW_IN_2)),
+         // Animate the opacity to 100% with delay.
+         CreateLayerAnimationSequence(
+             ui::LayerAnimationElement::CreatePauseElement(
+                 ui::LayerAnimationElement::AnimatableProperty::OPACITY,
+                 kAppearAnimationFadeInDelay),
+             CreateOpacityElement(1.f, kAppearAnimationFadeInDuration))});
+
+    return;
+  }
+
+  if (!assistant::util::IsFinishingSession(new_visibility))
+    return;
+
+  // When Assistant is finishing a session, we need to reset view state.
+  is_first_response_ = true;
+
+  molecule_icon_->layer()->SetTransform(gfx::Transform());
 }
 
 }  // namespace ash

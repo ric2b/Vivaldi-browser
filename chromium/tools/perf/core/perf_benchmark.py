@@ -1,7 +1,6 @@
 # Copyright 2015 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-
 import json
 import os
 import sys
@@ -15,6 +14,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..',
                              '..', 'variations'))
 import fieldtrial_util  # pylint: disable=import-error
 
+
 # This function returns a list of two-tuples designed to extend
 # browser_options.profile_files_to_copy. On success, it will return two entries:
 # 1. The actual indexed ruleset file, which will be placed in a destination
@@ -22,7 +22,7 @@ import fieldtrial_util  # pylint: disable=import-error
 # 2. A default prefs 'Local State' file, which contains information about the ad
 #    tagging ruleset's version.
 def GetAdTaggingProfileFiles(chrome_output_directory):
-  """Gets ad tagging tuples for browser_options.profile_files_to_copy
+  """Gets ad tagging tuples for browser_options.profile_files_to_copy.
 
   This function looks for input files related to ad tagging, and returns tuples
   indicating where those files should be copied to in the resulting perf
@@ -41,7 +41,7 @@ def GetAdTaggingProfileFiles(chrome_output_directory):
     return []
 
   ruleset_path = os.path.join(chrome_output_directory, 'gen', 'components',
-      'subresource_filter', 'tools','GeneratedRulesetData')
+      'subresource_filter', 'tools', 'GeneratedRulesetData')
   if not os.path.exists(ruleset_path):
     return []
 
@@ -72,7 +72,7 @@ class PerfBenchmark(benchmark.Benchmark):
   """
 
   def SetExtraBrowserOptions(self, options):
-    """ To be overridden by perf benchmarks. """
+    """To be overridden by perf benchmarks."""
     pass
 
   def CustomizeBrowserOptions(self, options):
@@ -90,42 +90,54 @@ class PerfBenchmark(benchmark.Benchmark):
     #
     # The same logic applies to the ad filtering ruleset, which could be in a
     # binary format that an older build does not expect.
-    if options.browser_type != 'reference':
+    if options.browser_type != 'reference' and ('no-field-trials' not in
+        options.compatibility_mode):
       variations = self._GetVariationsBrowserArgs(options.finder_options)
       options.AppendExtraBrowserArgs(variations)
 
       options.profile_files_to_copy.extend(
           GetAdTaggingProfileFiles(self._GetOutDirectoryEstimate(options)))
 
+    # A non-sandboxed, 15-seconds-delayed gpu process is currently running in
+    # the browser to collect gpu info. A command line switch is added here to
+    # skip this gpu process for all perf tests to prevent any interference
+    # with the test results.
+    options.AppendExtraBrowserArgs(
+        '--disable-gpu-process-for-dx12-vulkan-info-collection')
     self.SetExtraBrowserOptions(options)
 
   @staticmethod
-  def _FixupTargetOS(target_os):
+  def FixupTargetOS(target_os):
     if target_os == 'darwin':
       return 'mac'
     if target_os.startswith('win'):
       return 'windows'
     if target_os.startswith('linux'):
       return 'linux'
+    if target_os == 'cros':
+      return 'chromeos'
     return target_os
 
   def _GetVariationsBrowserArgs(self, finder_options):
-    variations_dir = os.path.join(os.path.dirname(__file__), '..',
-                                  '..', '..', 'testing', 'variations')
+    chrome_root = finder_options.chrome_root
+    if chrome_root is None:
+      chrome_root = path_module.GetChromiumSrcDir()
+
+    variations_dir = os.path.join(chrome_root, 'testing', 'variations')
     possible_browser = browser_finder.FindBrowser(finder_options)
     if not possible_browser:
       return []
 
     return fieldtrial_util.GenerateArgs(
         os.path.join(variations_dir, 'fieldtrial_testing_config.json'),
-        [self._FixupTargetOS(possible_browser.target_os)])
+        [self.FixupTargetOS(possible_browser.target_os)])
 
   @staticmethod
   def _GetPossibleBuildDirectories(chrome_src_dir, browser_type):
     possible_directories = path_module.GetBuildDirectories(chrome_src_dir)
     # Special case "android-chromium" and "any" and check all
     # possible out directories.
-    if browser_type in ("android-chromium", "any"):
+    if browser_type in ('android-chromium', 'any'):
       return possible_directories
 
     # For all other browser types, just consider directories which match.
@@ -133,11 +145,13 @@ class PerfBenchmark(benchmark.Benchmark):
             if os.path.basename(p).lower() == browser_type)
 
   def _GetOutDirectoryEstimate(self, options):
-    """Gets an estimate of the output directory for this build
+    """Gets an estimate of the output directory for this build.
 
     Note that as an estimate, this may be incorrect. Callers should be aware of
     this and ensure that in the case that this returns an existing but
-    incorrect directory, nothing should critically break."""
+    incorrect directory, nothing should critically break.
+
+    """
     finder_options = options.finder_options
     if finder_options.chromium_output_dir is not None:
       return finder_options.chromium_output_dir

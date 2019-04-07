@@ -89,7 +89,6 @@ enum {
                                     // Pepper Flash plugin, downloadable from
                                     // Adobe website. Querying this path might
                                     // succeed no matter the file exists or not.
-  FILE_NACL_PLUGIN,             // Full path to the internal NaCl plugin file.
   DIR_PNACL_BASE,               // Full path to the base dir for PNaCl.
   DIR_PNACL_COMPONENT,          // Full path to the latest PNaCl version
                                 // (subdir of DIR_PNACL_BASE).
@@ -136,9 +135,13 @@ enum {
   DIR_CHILD_USERS_DEFAULT_APPS,    // Directory where installer places .crx
                                    // files to be installed when child user
                                    // session starts.
-  FILE_CHROME_OS_TPM_FIRMWARE_UPDATE_LOCATION,  // File containing the location
-                                                // of the updated TPM firmware
-                                                // binary in the file system.
+
+  // File containing the location of the updated TPM firmware binary in the file
+  // system.
+  FILE_CHROME_OS_TPM_FIRMWARE_UPDATE_LOCATION,
+
+  // Flag file indicating SRK ROCA vulnerability status.
+  FILE_CHROME_OS_TPM_FIRMWARE_UPDATE_SRK_VULNERABLE_ROCA,
 #endif  // defined(OS_CHROMEOS)
   PATH_END
 };

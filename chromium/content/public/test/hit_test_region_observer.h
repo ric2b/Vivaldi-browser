@@ -46,6 +46,8 @@ class HitTestRegionObserver : public viz::HitTestRegionObserver {
   // data to arrive.
   void WaitForHitTestData();
 
+  const std::vector<viz::AggregatedHitTestRegion>& GetHitTestData();
+
  private:
   // viz::HitTestRegionObserver:
   void OnAggregatedHitTestRegionListUpdated(

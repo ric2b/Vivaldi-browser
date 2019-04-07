@@ -5,10 +5,9 @@
 #include "components/exo/shell_surface.h"
 
 #include "ash/accessibility/accessibility_delegate.h"
-#include "ash/frame/custom_frame_view_ash.h"
+#include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/shell_test_api.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
@@ -286,9 +285,37 @@ TEST_F(ShellSurfaceTest, SetApplicationId) {
   EXPECT_EQ("pre-widget-id", *ShellSurface::GetApplicationId(window));
   shell_surface->SetApplicationId("test");
   EXPECT_EQ("test", *ShellSurface::GetApplicationId(window));
+  EXPECT_FALSE(ash::wm::GetWindowState(window)->allow_set_bounds_direct());
 
   shell_surface->SetApplicationId(nullptr);
   EXPECT_EQ(nullptr, ShellSurface::GetApplicationId(window));
+}
+
+TEST_F(ShellSurfaceTest, EmulateOverrideRedirect) {
+  gfx::Size buffer_size(64, 64);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+
+  EXPECT_FALSE(shell_surface->GetWidget());
+  surface->Attach(buffer.get());
+  surface->Commit();
+  aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
+  EXPECT_FALSE(ash::wm::GetWindowState(window)->allow_set_bounds_direct());
+
+  // Only surface with no app id with parent surface is considered
+  // override redirect.
+  std::unique_ptr<Surface> child_surface(new Surface);
+  std::unique_ptr<ShellSurface> child_shell_surface(
+      new ShellSurface(child_surface.get()));
+
+  child_surface->SetParent(surface.get(), gfx::Point());
+  child_surface->Attach(buffer.get());
+  child_surface->Commit();
+  aura::Window* child_window =
+      child_shell_surface->GetWidget()->GetNativeWindow();
+  EXPECT_TRUE(ash::wm::GetWindowState(child_window)->allow_set_bounds_direct());
 }
 
 TEST_F(ShellSurfaceTest, SetStartupId) {
@@ -433,7 +460,7 @@ TEST_F(ShellSurfaceTest, SurfaceDestroyedCallback) {
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
   shell_surface->set_surface_destroyed_callback(
-      base::Bind(&DestroyShellSurface, base::Unretained(&shell_surface)));
+      base::BindOnce(&DestroyShellSurface, base::Unretained(&shell_surface)));
 
   surface->Commit();
 
@@ -474,10 +501,17 @@ TEST_F(ShellSurfaceTest, ConfigureCallback) {
       base::Bind(&Configure, base::Unretained(&suggested_size),
                  base::Unretained(&has_state_type),
                  base::Unretained(&is_resizing), base::Unretained(&is_active)));
+
+  gfx::Rect geometry(16, 16, 32, 32);
+  shell_surface->SetGeometry(geometry);
+
   // Commit without contents should result in a configure callback with empty
   // suggested size as a mechanims to ask the client size itself.
   surface->Commit();
   EXPECT_EQ(gfx::Size(), suggested_size);
+
+  // Geometry should not be committed until surface has contents.
+  EXPECT_EQ(gfx::Size(), shell_surface->CalculatePreferredSize());
 
   shell_surface->Maximize();
   shell_surface->AcknowledgeConfigure(0);
@@ -499,6 +533,9 @@ TEST_F(ShellSurfaceTest, ConfigureCallback) {
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
   surface->Attach(buffer.get());
   surface->Commit();
+
+  EXPECT_EQ(geometry.size(), shell_surface->CalculatePreferredSize());
+
   shell_surface->GetWidget()->Activate();
   shell_surface->AcknowledgeConfigure(0);
   EXPECT_TRUE(is_active);
@@ -559,8 +596,8 @@ TEST_F(ShellSurfaceTest, FrameColors) {
   shell_surface->OnSetFrameColors(SK_ColorRED, SK_ColorTRANSPARENT);
   surface->Commit();
 
-  const ash::CustomFrameViewAsh* frame =
-      static_cast<const ash::CustomFrameViewAsh*>(
+  const ash::NonClientFrameViewAsh* frame =
+      static_cast<const ash::NonClientFrameViewAsh*>(
           shell_surface->GetWidget()->non_client_view()->frame_view());
 
   // Test if colors set before initial commit are set.

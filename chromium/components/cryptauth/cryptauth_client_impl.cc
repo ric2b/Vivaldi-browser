@@ -14,6 +14,7 @@
 #include "components/cryptauth/switches.h"
 #include "services/identity/public/cpp/identity_manager.h"
 #include "services/identity/public/cpp/primary_account_access_token_fetcher.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace cryptauth {
 
@@ -56,17 +57,16 @@ GURL CreateRequestUrl(const std::string& request_path) {
 CryptAuthClientImpl::CryptAuthClientImpl(
     std::unique_ptr<CryptAuthApiCallFlow> api_call_flow,
     identity::IdentityManager* identity_manager,
-    scoped_refptr<net::URLRequestContextGetter> url_request_context,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const DeviceClassifier& device_classifier)
     : api_call_flow_(std::move(api_call_flow)),
       identity_manager_(identity_manager),
-      url_request_context_(url_request_context),
+      url_loader_factory_(std::move(url_loader_factory)),
       device_classifier_(device_classifier),
       has_call_started_(false),
       weak_ptr_factory_(this) {}
 
-CryptAuthClientImpl::~CryptAuthClientImpl() {
-}
+CryptAuthClientImpl::~CryptAuthClientImpl() {}
 
 void CryptAuthClientImpl::GetMyDevices(
     const GetMyDevicesRequest& request,
@@ -285,14 +285,13 @@ void CryptAuthClientImpl::MakeApiCall(
   OAuth2TokenService::ScopeSet scopes;
   scopes.insert("https://www.googleapis.com/auth/cryptauth");
 
-  access_token_fetcher_ =
-      std::make_unique<identity::PrimaryAccountAccessTokenFetcher>(
-          "cryptauth_client", identity_manager_, scopes,
-          base::BindOnce(
-              &CryptAuthClientImpl::OnAccessTokenFetched<ResponseProto>,
-              weak_ptr_factory_.GetWeakPtr(), serialized_request,
-              response_callback),
-          identity::PrimaryAccountAccessTokenFetcher::Mode::kImmediate);
+  access_token_fetcher_ = std::make_unique<
+      identity::PrimaryAccountAccessTokenFetcher>(
+      "cryptauth_client", identity_manager_, scopes,
+      base::BindOnce(&CryptAuthClientImpl::OnAccessTokenFetched<ResponseProto>,
+                     weak_ptr_factory_.GetWeakPtr(), serialized_request,
+                     response_callback),
+      identity::PrimaryAccountAccessTokenFetcher::Mode::kWaitUntilAvailable);
 }
 
 template <class ResponseProto>
@@ -310,8 +309,8 @@ void CryptAuthClientImpl::OnAccessTokenFetched(
   access_token_used_ = access_token_info.token;
 
   api_call_flow_->Start(
-      CreateRequestUrl(request_path_), url_request_context_.get(),
-      access_token_used_, serialized_request,
+      CreateRequestUrl(request_path_), url_loader_factory_, access_token_used_,
+      serialized_request,
       base::Bind(&CryptAuthClientImpl::OnFlowSuccess<ResponseProto>,
                  weak_ptr_factory_.GetWeakPtr(), response_callback),
       base::Bind(&CryptAuthClientImpl::OnApiCallFailed,
@@ -337,19 +336,18 @@ void CryptAuthClientImpl::OnApiCallFailed(NetworkRequestError error) {
 // CryptAuthClientFactoryImpl
 CryptAuthClientFactoryImpl::CryptAuthClientFactoryImpl(
     identity::IdentityManager* identity_manager,
-    scoped_refptr<net::URLRequestContextGetter> url_request_context,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const DeviceClassifier& device_classifier)
     : identity_manager_(identity_manager),
-      url_request_context_(url_request_context),
+      url_loader_factory_(std::move(url_loader_factory)),
       device_classifier_(device_classifier) {}
 
-CryptAuthClientFactoryImpl::~CryptAuthClientFactoryImpl() {
-}
+CryptAuthClientFactoryImpl::~CryptAuthClientFactoryImpl() {}
 
 std::unique_ptr<CryptAuthClient> CryptAuthClientFactoryImpl::CreateInstance() {
   return std::make_unique<CryptAuthClientImpl>(
       base::WrapUnique(new CryptAuthApiCallFlow()), identity_manager_,
-      url_request_context_, device_classifier_);
+      url_loader_factory_, device_classifier_);
 }
 
 }  // namespace cryptauth

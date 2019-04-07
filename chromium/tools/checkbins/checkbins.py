@@ -14,7 +14,6 @@ import json
 import os
 import optparse
 import sys
-import re
 
 # Find /third_party/pefile based on current directory and script path.
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..',
@@ -36,17 +35,10 @@ EXCLUDED_FILES = [
                   'previous_version_mini_installer.exe',
                   ]
 
-EXCLUDED_RE_FILES = [re.compile("^"+x+"$") for x in [
-                  r'Vivaldi\..*\.exe',
-                  r'api-ms-win-.*\.dll',
-                ]]
-
 def IsPEFile(path):
   return (os.path.isfile(path) and
           os.path.splitext(path)[1].lower() in PE_FILE_EXTENSIONS and
-          os.path.basename(path) not in EXCLUDED_FILES and
-          not any([x.match(os.path.basename(path)) for x in EXCLUDED_RE_FILES])
-          )
+          os.path.basename(path) not in EXCLUDED_FILES)
 
 def main(options, args):
   directory = args[0]

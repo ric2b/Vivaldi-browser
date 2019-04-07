@@ -20,10 +20,9 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "components/viz/common/features.h"
 #include "content/browser/devtools/devtools_session.h"
 #include "content/browser/devtools/protocol/devtools_download_manager_delegate.h"
 #include "content/browser/devtools/protocol/devtools_download_manager_helper.h"
@@ -47,7 +46,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/browser_side_navigation_policy.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
@@ -60,6 +58,10 @@
 #include "ui/gfx/image/image_util.h"
 #include "ui/gfx/skbitmap_operations.h"
 #include "ui/snapshot/snapshot.h"
+
+#ifdef OS_ANDROID
+#include "content/browser/renderer_host/compositor_impl_android.h"
+#endif
 
 namespace content {
 namespace protocol {
@@ -118,16 +120,19 @@ std::unique_ptr<Page::ScreencastFrameMetadata> BuildScreencastFrameMetadata(
   const gfx::SizeF content_size_dip =
       gfx::ScaleSize(gfx::SizeF(surface_size), 1 / device_scale_factor);
   float top_offset_dip = top_controls_height * top_controls_shown_ratio;
-  if (IsUseZoomForDSFEnabled())
+  gfx::Vector2dF root_scroll_offset_dip = root_scroll_offset;
+  if (IsUseZoomForDSFEnabled()) {
     top_offset_dip /= device_scale_factor;
+    root_scroll_offset_dip.Scale(1 / device_scale_factor);
+  }
   std::unique_ptr<Page::ScreencastFrameMetadata> page_metadata =
       Page::ScreencastFrameMetadata::Create()
           .SetPageScaleFactor(page_scale_factor)
           .SetOffsetTop(top_offset_dip)
           .SetDeviceWidth(content_size_dip.width())
           .SetDeviceHeight(content_size_dip.height())
-          .SetScrollOffsetX(root_scroll_offset.x())
-          .SetScrollOffsetY(root_scroll_offset.y())
+          .SetScrollOffsetX(root_scroll_offset_dip.x())
+          .SetScrollOffsetY(root_scroll_offset_dip.y())
           .SetTimestamp(base::Time::Now().ToDoubleT())
           .Build();
   return page_metadata;
@@ -170,11 +175,16 @@ void GetMetadataFromFrame(const media::VideoFrame& frame,
       media::VideoFrameMetadata::ROOT_SCROLL_OFFSET_X, &root_scroll_offset_x);
   success &= frame.metadata()->GetDouble(
       media::VideoFrameMetadata::ROOT_SCROLL_OFFSET_Y, &root_scroll_offset_y);
+#if defined(OS_ANDROID)
   success &= frame.metadata()->GetDouble(
       media::VideoFrameMetadata::TOP_CONTROLS_HEIGHT, top_controls_height);
   success &= frame.metadata()->GetDouble(
       media::VideoFrameMetadata::TOP_CONTROLS_SHOWN_RATIO,
       top_controls_shown_ratio);
+#else
+  *top_controls_height = 0.;
+  *top_controls_shown_ratio = 0.;
+#endif  // defined(OS_ANDROID)
   DCHECK(success);
 
   root_scroll_offset->set_x(root_scroll_offset_x);
@@ -202,9 +212,13 @@ PageHandler::PageHandler(EmulationHandler* emulation_handler)
       emulation_handler_(emulation_handler),
       observer_(this),
       weak_factory_(this) {
-  if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
-      base::FeatureList::IsEnabled(
-          features::kUseVideoCaptureApiForDevToolsSnapshots)) {
+  bool create_video_consumer = true;
+#ifdef OS_ANDROID
+  // Video capture doesn't work on Android WebView. Use CopyFromSurface instead.
+  if (!CompositorImpl::IsInitialized())
+    create_video_consumer = false;
+#endif
+  if (create_video_consumer) {
     video_consumer_ = std::make_unique<DevToolsVideoConsumer>(
         base::BindRepeating(&PageHandler::OnFrameFromVideoConsumer,
                             weak_factory_.GetWeakPtr()));
@@ -262,18 +276,6 @@ void PageHandler::SetRenderer(int process_host_id,
 void PageHandler::Wire(UberDispatcher* dispatcher) {
   frontend_.reset(new Page::Frontend(dispatcher->channel()));
   Page::Dispatcher::wire(dispatcher, this);
-}
-
-void PageHandler::OnSwapCompositorFrame(
-    viz::CompositorFrameMetadata frame_metadata) {
-  if (video_consumer_)
-    return;
-
-  last_compositor_frame_metadata_ = std::move(frame_metadata);
-  has_compositor_frame_metadata_ = true;
-
-  if (screencast_enabled_)
-    InnerSwapCompositorFrame();
 }
 
 void PageHandler::OnSynchronousSwapCompositorFrame(
@@ -406,24 +408,21 @@ Response PageHandler::Close() {
   return Response::OK();
 }
 
-Response PageHandler::Reload(Maybe<bool> bypassCache,
-                             Maybe<std::string> script_to_evaluate_on_load) {
+void PageHandler::Reload(Maybe<bool> bypassCache,
+                         Maybe<std::string> script_to_evaluate_on_load,
+                         std::unique_ptr<ReloadCallback> callback) {
   WebContentsImpl* web_contents = GetWebContents();
-  if (!web_contents)
-    return Response::InternalError();
-  if (web_contents->IsCrashed() ||
-      web_contents->GetURL().scheme() == url::kDataScheme ||
-      (web_contents->GetController().GetVisibleEntry() &&
-       web_contents->GetController().GetVisibleEntry()->IsViewSourceMode())) {
-    web_contents->GetController().Reload(bypassCache.fromMaybe(false)
-                                             ? ReloadType::BYPASSING_CACHE
-                                             : ReloadType::NORMAL,
-                                         false);
-    return Response::OK();
-  } else {
-    // Handle reload in renderer except for crashed and view source mode.
-    return Response::FallThrough();
+  if (!web_contents) {
+    callback->sendFailure(Response::InternalError());
+    return;
   }
+  // It is important to fallback before triggering reload, so that
+  // renderer could prepare beforehand.
+  callback->fallThrough();
+  web_contents->GetController().Reload(bypassCache.fromMaybe(false)
+                                           ? ReloadType::BYPASSING_CACHE
+                                           : ReloadType::NORMAL,
+                                       false);
 }
 
 void PageHandler::Navigate(const std::string& url,
@@ -946,13 +945,19 @@ void PageHandler::InnerSwapCompositorFrame() {
   if (snapshot_size.IsEmpty())
     return;
 
+  double top_controls_height = 0.;
+  double top_controls_shown_ratio = 0.;
+#if defined(OS_ANDROID)
+  top_controls_height = last_compositor_frame_metadata_.top_controls_height;
+  top_controls_shown_ratio =
+      last_compositor_frame_metadata_.top_controls_shown_ratio;
+#endif
   std::unique_ptr<Page::ScreencastFrameMetadata> page_metadata =
       BuildScreencastFrameMetadata(
           surface_size, last_compositor_frame_metadata_.device_scale_factor,
           last_compositor_frame_metadata_.page_scale_factor,
           last_compositor_frame_metadata_.root_scroll_offset,
-          last_compositor_frame_metadata_.top_controls_height,
-          last_compositor_frame_metadata_.top_controls_shown_ratio);
+          top_controls_height, top_controls_shown_ratio);
   if (!page_metadata)
     return;
 

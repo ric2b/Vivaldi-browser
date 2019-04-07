@@ -12,6 +12,7 @@
 #include "base/auto_reset.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -2917,7 +2918,7 @@ class LayerTreeHostTestCommit : public LayerTreeHostTest {
   }
 
   void DidActivateTreeOnThread(LayerTreeHostImpl* impl) override {
-    EXPECT_EQ(gfx::Rect(20, 20), impl->DeviceViewport());
+    EXPECT_EQ(gfx::Rect(20, 20), impl->active_tree()->GetDeviceViewport());
     EXPECT_EQ(SK_ColorGRAY, impl->active_tree()->background_color());
     EXPECT_EQ(EventListenerProperties::kPassive,
               impl->active_tree()->event_listener_properties(
@@ -3250,7 +3251,7 @@ class LayerTreeHostTestDeviceScaleFactorScalesViewportAndLayers
     EXPECT_NEAR(impl->active_tree()->device_scale_factor(), 1.5f, 0.00001f);
 
     // Device viewport is scaled.
-    EXPECT_EQ(gfx::Rect(60, 60), impl->DeviceViewport());
+    EXPECT_EQ(gfx::Rect(60, 60), impl->active_tree()->GetDeviceViewport());
 
     FakePictureLayerImpl* root = static_cast<FakePictureLayerImpl*>(
         impl->active_tree()->root_layer_for_testing());
@@ -5355,6 +5356,8 @@ class LayerTreeHostTestElasticOverscroll : public LayerTreeHostTest {
     scoped_refptr<Layer> inner_viewport_container_layer = Layer::Create();
     inner_viewport_container_layer->SetBounds(gfx::Size(10, 10));
     scoped_refptr<Layer> overscroll_elasticity_layer = Layer::Create();
+    overscroll_elasticity_layer->SetElementId(
+        LayerIdToElementIdForTesting(overscroll_elasticity_layer->id()));
     scoped_refptr<Layer> page_scale_layer = Layer::Create();
     scoped_refptr<Layer> inner_viewport_scroll_layer = Layer::Create();
     inner_viewport_scroll_layer->SetScrollable(
@@ -5373,7 +5376,8 @@ class LayerTreeHostTestElasticOverscroll : public LayerTreeHostTest {
 
     layer_tree_host()->SetRootLayer(root_layer_);
     LayerTreeHost::ViewportLayers viewport_layers;
-    viewport_layers.overscroll_elasticity = overscroll_elasticity_layer;
+    viewport_layers.overscroll_elasticity_element_id =
+        overscroll_elasticity_layer->element_id();
     viewport_layers.page_scale = page_scale_layer;
     viewport_layers.inner_viewport_container = inner_viewport_container_layer;
     viewport_layers.inner_viewport_scroll = inner_viewport_scroll_layer;
@@ -7587,8 +7591,7 @@ class LayerTreeTestPageScaleFlags : public LayerTreeTest {
               layer->IsAffectedByPageScale()
                   ? this->affected_by_page_scale_
                   : this->not_affected_by_page_scale_;
-          EXPECT_TRUE(std::find(list.begin(), list.end(), layer->id()) !=
-                      list.end());
+          EXPECT_TRUE(base::ContainsValue(list, layer->id()));
         });
 
     EndTest();
@@ -7936,7 +7939,7 @@ class LayerTreeHostTestSubmitFrameMetadata : public LayerTreeHostTest {
                                    DrawResult draw_result) override {
     EXPECT_EQ(DRAW_SUCCESS, draw_result);
     EXPECT_EQ(0, num_swaps_);
-    drawn_viewport_ = host_impl->DeviceViewport();
+    drawn_viewport_ = host_impl->active_tree()->GetDeviceViewport();
     return draw_result;
   }
 
@@ -7946,7 +7949,10 @@ class LayerTreeHostTestSubmitFrameMetadata : public LayerTreeHostTest {
 
     EXPECT_EQ(drawn_viewport_, frame.render_pass_list.back()->output_rect);
     EXPECT_EQ(0.5f, frame.metadata.min_page_scale_factor);
+
+#if defined(OS_ANDROID)
     EXPECT_EQ(4.f, frame.metadata.max_page_scale_factor);
+#endif
 
     EXPECT_EQ(0u, frame.resource_list.size());
     EXPECT_EQ(1u, frame.render_pass_list.size());
@@ -8342,7 +8348,6 @@ class LayerTreeHostTestImageAnimation : public LayerTreeHostTest {
         PaintImageBuilder::WithDefault()
             .set_id(PaintImage::GetNextId())
             .set_paint_image_generator(generator_)
-            .set_frame_index(0u)
             .set_animation_type(PaintImage::AnimationType::ANIMATED)
             .set_repetition_count(kAnimationLoopOnce)
             .TakePaintImage();

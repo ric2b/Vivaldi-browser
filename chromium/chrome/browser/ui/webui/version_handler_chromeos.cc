@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/webui/version_handler_chromeos.h"
 
 #include "base/bind.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "content/public/browser/web_ui.h"
 
 VersionHandlerChromeOS::VersionHandlerChromeOS() : weak_factory_(this) {}
@@ -16,18 +16,18 @@ void VersionHandlerChromeOS::HandleRequestVersionInfo(
     const base::ListValue* args) {
   // Start the asynchronous load of the versions.
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&chromeos::version_loader::GetVersion,
                  chromeos::version_loader::VERSION_FULL),
       base::Bind(&VersionHandlerChromeOS::OnVersion,
                  weak_factory_.GetWeakPtr()));
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&chromeos::version_loader::GetFirmware),
       base::Bind(&VersionHandlerChromeOS::OnOSFirmware,
                  weak_factory_.GetWeakPtr()));
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&chromeos::version_loader::GetARCVersion),
       base::Bind(&VersionHandlerChromeOS::OnARCVersion,
                  weak_factory_.GetWeakPtr()));

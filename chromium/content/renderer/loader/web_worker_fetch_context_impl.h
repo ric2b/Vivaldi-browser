@@ -11,9 +11,11 @@
 #include "base/synchronization/waitable_event.h"
 #include "content/common/service_worker/service_worker_provider.mojom.h"
 #include "content/common/service_worker/service_worker_types.h"
+#include "content/public/common/renderer_preference_watcher.mojom.h"
 #include "content/public/common/renderer_preferences.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/interface_ptr_set.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -29,6 +31,7 @@ class Message;
 
 namespace content {
 
+class FrameRequestBlocker;
 class ResourceDispatcher;
 class ThreadSafeSender;
 class URLLoaderThrottleProvider;
@@ -40,7 +43,8 @@ class WebSocketHandshakeThrottleProvider;
 // service workers, ServiceWorkerFetchContextImpl class is used instead.
 class CONTENT_EXPORT WebWorkerFetchContextImpl
     : public blink::WebWorkerFetchContext,
-      public mojom::ServiceWorkerWorkerClient {
+      public mojom::ServiceWorkerWorkerClient,
+      public mojom::RendererPreferenceWatcher {
  public:
   // |service_worker_client_request| is bound to |this| to receive
   // OnControllerChanged() notifications.
@@ -62,6 +66,7 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   // chrome-extension://).
   WebWorkerFetchContextImpl(
       RendererPreferences renderer_preferences,
+      mojom::RendererPreferenceWatcherRequest watcher_request,
       mojom::ServiceWorkerWorkerClientRequest service_worker_client_request,
       mojom::ServiceWorkerWorkerClientRegistryPtrInfo
           service_worker_worker_client_registry_info,
@@ -84,6 +89,7 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory() override;
   std::unique_ptr<blink::WebURLLoaderFactory> WrapURLLoaderFactory(
       mojo::ScopedMessagePipeHandle url_loader_factory_handle) override;
+  std::unique_ptr<blink::CodeCacheLoader> CreateCodeCacheLoader() override;
   void WillSendRequest(blink::WebURLRequest&) override;
   blink::mojom::ControllerServiceWorkerMode IsControlledByServiceWorker()
       const override;
@@ -114,6 +120,8 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   void set_is_controlled_by_service_worker(
       blink::mojom::ControllerServiceWorkerMode mode);
   void set_ancestor_frame_id(int id);
+  void set_frame_request_blocker(
+      scoped_refptr<FrameRequestBlocker> frame_request_blocker);
   void set_site_for_cookies(const blink::WebURL& site_for_cookies);
   // Sets whether the worker context is a secure context.
   // https://w3c.github.io/webappsec-secure-contexts/
@@ -135,6 +143,9 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   // controller service worker. Sets nullptr if the worker context is not
   // controlled by a service worker.
   void ResetServiceWorkerURLLoaderFactory();
+
+  // Implements mojom::RendererPreferenceWatcher.
+  void NotifyUpdate(const RendererPreferences& new_prefs) override;
 
   mojo::Binding<mojom::ServiceWorkerWorkerClient> binding_;
   mojom::ServiceWorkerWorkerClientRegistryPtr
@@ -195,14 +206,25 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   // workers, this is the shadow page.
   bool is_on_sub_frame_ = false;
   int ancestor_frame_id_ = MSG_ROUTING_NONE;
+  // Set to non-null if the ancestor frame has an associated RequestBlocker,
+  // which blocks requests from this worker too when the ancestor frame is
+  // blocked.
+  scoped_refptr<FrameRequestBlocker> frame_request_blocker_;
   GURL site_for_cookies_;
   bool is_secure_context_ = false;
   GURL origin_url_;
   int appcache_host_id_ = blink::WebApplicationCacheHost::kAppCacheNoHostId;
 
-  // TODO(crbug.com/862854): Propagate preference changes from the browser
-  // process.
   RendererPreferences renderer_preferences_;
+
+  // |watcher_binding_| and |child_preference_watchers_| are for keeping track
+  // of updates in the renderer preferences.
+  mojo::Binding<mojom::RendererPreferenceWatcher> preference_watcher_binding_;
+  // Kept while staring up the worker thread. Valid until
+  // InitializeOnWorkerThread().
+  mojom::RendererPreferenceWatcherRequest preference_watcher_request_;
+  mojo::InterfacePtrSet<mojom::RendererPreferenceWatcher>
+      child_preference_watchers_;
 
   // This is owned by ThreadedMessagingProxyBase on the main thread.
   base::WaitableEvent* terminate_sync_load_event_ = nullptr;

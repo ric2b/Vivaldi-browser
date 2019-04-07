@@ -264,9 +264,11 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
       ResourceType resource_type) {}
 
   // This method is invoked when a resource associate with the frame
-  // |render_frame_host| has been loaded, successfully or not.
+  // |render_frame_host| has been loaded, successfully or not. |request_id| will
+  // only be populated for main frame resources.
   virtual void ResourceLoadComplete(
       RenderFrameHost* render_frame_host,
+      const GlobalRequestID& request_id,
       const mojom::ResourceLoadInfo& resource_load_info) {}
 
   // This method is invoked when the extdata has been set (Vivaldi).
@@ -450,7 +452,8 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
 
   // Invoked when text selection is changed.
   virtual void DidChangeTextSelection(const base::string16& text,
-                                      const gfx::Range& range) {}
+                                      const gfx::Range& range,
+                                      size_t offset) {}
 
   // Invoked when media is playing or paused.  |id| is unique per player and per
   // RenderFrameHost.  There may be multiple players within a RenderFrameHost
@@ -503,6 +506,7 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // There is a slight delay between media entering or exiting fullscreen
   // and it being detected.
   virtual void MediaEffectivelyFullscreenChanged(bool is_fullscreen) {}
+  virtual void MediaPictureInPictureChanged(bool is_picture_in_picture) {}
   virtual void MediaMutedStatusChanged(const MediaPlayerId& id, bool muted) {}
 
   // Invoked when the renderer process changes the page scale factor.
@@ -520,9 +524,6 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // focus.
   virtual void OnWebContentsLostFocus(RenderWidgetHost* render_widget_host) {}
 
-  // Notifes that a CompositorFrame was received from the renderer.
-  virtual void DidReceiveCompositorFrame() {}
-
   // Notifies that the manifest URL for the main frame changed to
   // |manifest_url|. This will be invoked when a document with a manifest loads
   // or when the manifest URL changes (possibly to nothing). It is not invoked
@@ -538,6 +539,18 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
       RenderFrameHost* render_frame_host,
       const std::string& interface_name,
       mojo::ScopedMessagePipeHandle* interface_pipe) {}
+
+  // Notifies that the RenderWidgetCompositor has issued a draw command. An
+  // observer can use this method to detect when Chrome visually updated a
+  // tab.
+  virtual void DidCommitAndDrawCompositorFrame() {}
+
+  // Called when "audible" playback starts or stops on a WebAudio AudioContext.
+  using AudioContextId = std::pair<RenderFrameHost*, int>;
+  virtual void AudioContextPlaybackStarted(
+      const AudioContextId& audio_context_id) {}
+  virtual void AudioContextPlaybackStopped(
+      const AudioContextId& audio_context_id) {}
 
   // IPC::Listener implementation.
   // DEPRECATED: Use (i.e. override) the other overload instead:

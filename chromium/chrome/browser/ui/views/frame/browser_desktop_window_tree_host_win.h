@@ -42,7 +42,8 @@ class BrowserDesktopWindowTreeHostWin : public BrowserDesktopWindowTreeHost,
 
   // Overridden from DesktopWindowTreeHostWin:
   int GetInitialShowState() const override;
-  bool GetClientAreaInsets(gfx::Insets* insets) const override;
+  bool GetClientAreaInsets(gfx::Insets* insets,
+                           HMONITOR monitor) const override;
   void HandleCreate() override;
   void HandleDestroying() override;
   void HandleFrameChanged() override;
@@ -60,6 +61,8 @@ class BrowserDesktopWindowTreeHostWin : public BrowserDesktopWindowTreeHost,
   void UpdateDWMFrame();
   gfx::Insets GetClientEdgeThicknesses() const;
   MARGINS GetDWMFrameMargins() const;
+
+  bool IsOpaqueHostedAppFrame() const;
 
   BrowserView* browser_view_;
   BrowserFrame* browser_frame_;

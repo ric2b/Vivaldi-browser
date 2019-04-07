@@ -284,6 +284,8 @@ void LayerTreeHost::FinishCommitOnImplThread(
     LayerTreeHostImpl* host_impl) {
   DCHECK(task_runner_provider_->IsImplThread());
 
+  TRACE_EVENT0("cc,benchmark", "LayerTreeHost::FinishCommitOnImplThread");
+
   LayerTreeImpl* sync_tree = host_impl->sync_tree();
   sync_tree->lifecycle().AdvanceTo(LayerTreeLifecycle::kBeginningSync);
 
@@ -329,10 +331,6 @@ void LayerTreeHost::FinishCommitOnImplThread(
     PushLayerTreeHostPropertiesTo(host_impl);
 
     sync_tree->PassSwapPromises(swap_promise_manager_.TakeSwapPromises());
-
-    // TODO(pdr): Move this into PushPropertyTreesTo or introduce a lifecycle
-    // state for it.
-    sync_tree->SetDeviceScaleFactor(device_scale_factor_);
 
     sync_tree->set_ui_resource_request_queue(
         ui_resource_manager_->TakeUIResourcesRequests());
@@ -713,8 +711,8 @@ void LayerTreeHost::RecordGpuRasterizationHistogram(
 }
 
 bool LayerTreeHost::DoUpdateLayers(Layer* root_layer) {
-  TRACE_EVENT1("cc", "LayerTreeHost::DoUpdateLayers", "source_frame_number",
-               SourceFrameNumber());
+  TRACE_EVENT1("cc,benchmark", "LayerTreeHost::DoUpdateLayers",
+               "source_frame_number", SourceFrameNumber());
 
   UpdateHudLayer(debug_state_.ShowHudInfo());
 
@@ -742,30 +740,28 @@ bool LayerTreeHost::DoUpdateLayers(Layer* root_layer) {
   gfx::Transform identity_transform;
   LayerList update_layer_list;
 
-  {
-    base::AutoReset<bool> update_property_trees(&in_update_property_trees_,
-                                                true);
+  // The non-layer-list mode is used when blink provides cc with a layer tree
+  // and cc needs to compute property trees from that.
+  // In layer lists mode, blink sends cc property trees directly so they do not
+  // need to be built here. Layer lists mode is used by BlinkGenPropertyTrees
+  // and SlimmingPaintV2.
+  if (!IsUsingLayerLists()) {
     TRACE_EVENT0("cc", "LayerTreeHost::UpdateLayers::BuildPropertyTrees");
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.cdp-perf"),
                  "LayerTreeHostCommon::ComputeVisibleRectsWithPropertyTrees");
-    PropertyTrees* property_trees = &property_trees_;
-    if (!IsUsingLayerLists()) {
-      // In SPv2 the property trees should have been built by the
-      // client already.
-      PropertyTreeBuilder::BuildPropertyTrees(
-          root_layer, page_scale_layer, inner_viewport_scroll_layer(),
-          outer_viewport_scroll_layer(), overscroll_elasticity_layer(),
-          elastic_overscroll_, page_scale_factor_, device_scale_factor_,
-          gfx::Rect(device_viewport_size_), identity_transform, property_trees);
-      TRACE_EVENT_INSTANT1("cc",
-                           "LayerTreeHost::UpdateLayers_BuiltPropertyTrees",
-                           TRACE_EVENT_SCOPE_THREAD, "property_trees",
-                           property_trees->AsTracedValue());
+    PropertyTreeBuilder::BuildPropertyTrees(
+        root_layer, page_scale_layer, inner_viewport_scroll_layer(),
+        outer_viewport_scroll_layer(), overscroll_elasticity_element_id(),
+        elastic_overscroll_, page_scale_factor_, device_scale_factor_,
+        gfx::Rect(device_viewport_size_), identity_transform, &property_trees_);
+    TRACE_EVENT_INSTANT1("cc", "LayerTreeHost::UpdateLayers_BuiltPropertyTrees",
+                         TRACE_EVENT_SCOPE_THREAD, "property_trees",
+                         property_trees_.AsTracedValue());
     } else {
       TRACE_EVENT_INSTANT1("cc",
                            "LayerTreeHost::UpdateLayers_ReceivedPropertyTrees",
                            TRACE_EVENT_SCOPE_THREAD, "property_trees",
-                           property_trees->AsTracedValue());
+                           property_trees_.AsTracedValue());
     }
 
 #if DCHECK_IS_ON()
@@ -783,8 +779,8 @@ bool LayerTreeHost::DoUpdateLayers(Layer* root_layer) {
     }
 #endif
 
-    draw_property_utils::UpdatePropertyTrees(this, property_trees);
-    draw_property_utils::FindLayersThatNeedUpdates(this, property_trees,
+    draw_property_utils::UpdatePropertyTrees(this, &property_trees_);
+    draw_property_utils::FindLayersThatNeedUpdates(this, &property_trees_,
                                                    &update_layer_list);
 
     // Dump property trees useful for debugging --blink-gen-property-trees
@@ -793,11 +789,31 @@ bool LayerTreeHost::DoUpdateLayers(Layer* root_layer) {
       VLOG(3) << "CC Property Trees:";
       std::string out;
       base::JSONWriter::WriteWithOptions(
-          *property_trees->AsTracedValue()->ToBaseValue(),
+          *property_trees_.AsTracedValue()->ToBaseValue(),
           base::JSONWriter::OPTIONS_PRETTY_PRINT, &out);
-      VLOG(3) << out;
+      std::stringstream ss(out);
+      while (!ss.eof()) {
+        std::string line;
+        std::getline(ss, line);
+        VLOG(3) << line;
+      }
+
+      VLOG(3) << "CC Layer List:";
+      for (auto* layer : *this) {
+        VLOG(3) << "layer id " << layer->id();
+        VLOG(3) << "  element_id: " << layer->element_id();
+        VLOG(3) << "  bounds: " << layer->bounds().ToString();
+        VLOG(3) << "  opacity: " << layer->opacity();
+        VLOG(3) << "  position: " << layer->position().ToString();
+        VLOG(3) << "  draws_content: " << layer->DrawsContent();
+        VLOG(3) << "  scrollable: " << layer->scrollable();
+        VLOG(3) << "  contents_opaque: " << layer->contents_opaque();
+        VLOG(3) << "  transform_tree_index: " << layer->transform_tree_index();
+        VLOG(3) << "  clip_tree_index: " << layer->clip_tree_index();
+        VLOG(3) << "  effect_tree_index: " << layer->effect_tree_index();
+        VLOG(3) << "  scroll_tree_index: " << layer->scroll_tree_index();
+      }
     }
-  }
 
   bool painted_content_has_slow_paths = false;
   bool painted_content_has_non_aa_paint = false;
@@ -1016,9 +1032,11 @@ void LayerTreeHost::RegisterViewportLayers(const ViewportLayers& layers) {
   DCHECK(IsUsingLayerLists() || !layers.page_scale ||
          layers.inner_viewport_scroll->parent() == layers.page_scale);
   DCHECK(IsUsingLayerLists() || !layers.page_scale ||
-         layers.page_scale->parent() == layers.overscroll_elasticity ||
+         layers.page_scale->parent()->element_id() ==
+             layers.overscroll_elasticity_element_id ||
          layers.page_scale->parent() == layers.inner_viewport_container);
-  viewport_layers_.overscroll_elasticity = layers.overscroll_elasticity;
+  viewport_layers_.overscroll_elasticity_element_id =
+      layers.overscroll_elasticity_element_id;
   viewport_layers_.page_scale = layers.page_scale;
   viewport_layers_.inner_viewport_container = layers.inner_viewport_container;
   viewport_layers_.outer_viewport_container = layers.outer_viewport_container;
@@ -1395,8 +1413,10 @@ void LayerTreeHost::PushLayerTreePropertiesTo(LayerTreeImpl* tree_impl) {
 
   if (viewport_layers_.inner_viewport_scroll) {
     LayerTreeImpl::ViewportLayerIds ids;
-    if (viewport_layers_.overscroll_elasticity)
-      ids.overscroll_elasticity = viewport_layers_.overscroll_elasticity->id();
+    if (viewport_layers_.overscroll_elasticity_element_id) {
+      ids.overscroll_elasticity_element_id =
+          viewport_layers_.overscroll_elasticity_element_id;
+    }
     ids.page_scale = viewport_layers_.page_scale->id();
     if (viewport_layers_.inner_viewport_container)
       ids.inner_viewport_container =
@@ -1421,19 +1441,22 @@ void LayerTreeHost::PushLayerTreePropertiesTo(LayerTreeImpl* tree_impl) {
 
   tree_impl->set_browser_controls_shrink_blink_size(
       browser_controls_shrink_blink_size_);
-  tree_impl->set_top_controls_height(top_controls_height_);
-  tree_impl->set_bottom_controls_height(bottom_controls_height_);
+  tree_impl->SetTopControlsHeight(top_controls_height_);
+  tree_impl->SetBottomControlsHeight(bottom_controls_height_);
   tree_impl->set_overscroll_behavior(overscroll_behavior_);
   tree_impl->PushBrowserControlsFromMainThread(top_controls_shown_ratio_);
   tree_impl->elastic_overscroll()->PushMainToPending(elastic_overscroll_);
   if (tree_impl->IsActiveTree())
     tree_impl->elastic_overscroll()->PushPendingToActive();
 
-  tree_impl->set_painted_device_scale_factor(painted_device_scale_factor_);
-
   tree_impl->SetRasterColorSpace(raster_color_space_id_, raster_color_space_);
 
   tree_impl->set_content_source_id(content_source_id_);
+
+  tree_impl->set_painted_device_scale_factor(painted_device_scale_factor_);
+  tree_impl->SetDeviceScaleFactor(device_scale_factor_);
+  tree_impl->SetDeviceViewportSize(device_viewport_size_);
+  tree_impl->SetViewportVisibleRect(viewport_visible_rect_);
 
   if (TakeNewLocalSurfaceIdRequest())
     tree_impl->RequestNewLocalSurfaceId();
@@ -1445,8 +1468,6 @@ void LayerTreeHost::PushLayerTreePropertiesTo(LayerTreeImpl* tree_impl) {
     tree_impl->SetPendingPageScaleAnimation(
         std::move(pending_page_scale_animation_));
   }
-
-  DCHECK(!tree_impl->ViewportSizeInvalid());
 
   tree_impl->set_has_ever_been_drawn(false);
 }
@@ -1467,8 +1488,6 @@ void LayerTreeHost::PushLayerTreeHostPropertiesTo(
   host_impl->SetContentHasNonAAPaint(content_has_non_aa_paint_);
   RecordGpuRasterizationHistogram(host_impl);
 
-  host_impl->SetViewportSize(device_viewport_size_);
-  host_impl->SetViewportVisibleRect(viewport_visible_rect_);
   host_impl->SetDebugState(debug_state_);
 }
 
@@ -1502,7 +1521,7 @@ void LayerTreeHost::BuildPropertyTreesForTesting() {
   gfx::Transform identity_transform;
   PropertyTreeBuilder::BuildPropertyTrees(
       root_layer(), page_scale_layer(), inner_viewport_scroll_layer(),
-      outer_viewport_scroll_layer(), overscroll_elasticity_layer(),
+      outer_viewport_scroll_layer(), overscroll_elasticity_element_id(),
       elastic_overscroll(), page_scale_factor(), device_scale_factor(),
       gfx::Rect(device_viewport_size()), identity_transform, property_trees());
 }

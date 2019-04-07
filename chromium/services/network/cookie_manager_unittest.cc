@@ -11,8 +11,8 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/post_task.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/time/time.h"
@@ -240,7 +240,9 @@ class CookieManagerTest : public testing::Test {
       scoped_refptr<SessionCleanupCookieStore> cleanup_store,
       scoped_refptr<SessionCleanupChannelIDStore> channel_id_store) {
     connection_error_seen_ = false;
-    cookie_monster_ = std::make_unique<net::CookieMonster>(std::move(store));
+    cookie_monster_ = std::make_unique<net::CookieMonster>(
+        std::move(store), nullptr /*channel_id_service */,
+        nullptr /* netlog */);
     cookie_service_ = std::make_unique<CookieManager>(
         cookie_monster_.get(), std::move(cleanup_store),
         std::move(channel_id_store), nullptr);

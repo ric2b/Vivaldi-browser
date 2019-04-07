@@ -7,6 +7,7 @@
 
 #include "base/logging.h"
 #include "net/third_party/quic/platform/api/quic_flags.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"  // IWYU pragma: export
 #include "testing/gtest/include/gtest/gtest.h"  // IWYU pragma: export
 
@@ -19,7 +20,7 @@ class QuicFlagSaverImpl {
 
  private:
 #define QUIC_FLAG(type, flag, value) type saved_##flag##_;
-#include "net/third_party/quic/core/quic_flags_list.h"
+#include "net/quic/quic_flags_list.h"
 #undef QUIC_FLAG
 };
 
@@ -32,7 +33,7 @@ class QuicFlagChecker {
       << "Flag set to an unexpected value.  A prior test is likely "      \
       << "setting a flag without using a QuicFlagSaver. Use QuicTest to " \
          "avoid this issue.";
-#include "net/third_party/quic/core/quic_flags_list.h"
+#include "net/quic/quic_flags_list.h"
 #undef QUIC_FLAG
   }
 };
@@ -48,6 +49,16 @@ class QuicTestWithParamImpl : public ::testing::TestWithParam<T> {
  private:
   QuicFlagChecker checker_;
   QuicFlagSaverImpl saver_;  // Save/restore all QUIC flag values.
+};
+
+class ScopedEnvironmentForThreadsImpl {
+ public:
+  ScopedEnvironmentForThreadsImpl()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::IO) {}
+
+ public:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
 };
 
 #endif  // NET_THIRD_PARTY_QUIC_PLATFORM_IMPL_QUIC_TEST_IMPL_H_

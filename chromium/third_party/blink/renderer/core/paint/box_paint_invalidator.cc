@@ -27,7 +27,7 @@ PaintInvalidationReason BoxPaintInvalidator::ComputePaintInvalidationReason() {
 
   if ((style.BackgroundLayers().ThisOrNextLayersUseContentBox() ||
        style.MaskLayers().ThisOrNextLayersUseContentBox()) &&
-      box_.PreviousContentBoxSize() != box_.ContentSize()) {
+      box_.PreviousPhysicalContentBoxRect() != box_.PhysicalContentBoxRect()) {
     return PaintInvalidationReason::kGeometry;
   }
 
@@ -225,46 +225,32 @@ void BoxPaintInvalidator::InvalidateBackground() {
   }
 }
 
-PaintInvalidationReason BoxPaintInvalidator::InvalidatePaint() {
+void BoxPaintInvalidator::InvalidatePaint() {
   InvalidateBackground();
 
-  PaintInvalidationReason reason = ComputePaintInvalidationReason();
-  if (reason == PaintInvalidationReason::kIncremental) {
-    if (box_.PreviousSize() != box_.Size()) {
-      context_.painting_layer->SetNeedsRepaint();
-      box_.InvalidateDisplayItemClients(reason);
-    } else {
-      reason = PaintInvalidationReason::kNone;
-    }
-
-    // Though we have done incremental invalidation, we still need to call
-    // ObjectPaintInvalidator with PaintInvalidationNone to do any other
-    // required operations.
-    reason = std::max(reason, ObjectPaintInvalidatorWithContext(box_, context_)
-                                  .InvalidatePaintWithComputedReason(
-                                      PaintInvalidationReason::kNone));
-  } else {
-    reason = ObjectPaintInvalidatorWithContext(box_, context_)
-                 .InvalidatePaintWithComputedReason(reason);
-  }
+  ObjectPaintInvalidatorWithContext(box_, context_)
+      .InvalidatePaintWithComputedReason(ComputePaintInvalidationReason());
 
   if (PaintLayerScrollableArea* area = box_.GetScrollableArea())
     area->InvalidatePaintOfScrollControlsIfNeeded(context_);
 
   // This is for the next invalidatePaintIfNeeded so must be at the end.
   SavePreviousBoxGeometriesIfNeeded();
-
-  return reason;
 }
 
 bool BoxPaintInvalidator::
-    NeedsToSavePreviousContentBoxSizeOrLayoutOverflowRect() {
+    NeedsToSavePreviousContentBoxRectOrLayoutOverflowRect() {
   // The LayoutView depends on the document element's layout overflow rect (see:
   // ViewBackgroundShouldFullyInvalidate) and needs to invalidate before the
   // document element invalidates. There are few document elements so the
   // previous layout overflow rect is always saved, rather than duplicating the
   // logic save-if-needed logic for this special case.
   if (box_.IsDocumentElement())
+    return true;
+
+  // Replaced elements are clipped to the content box thus we need to check
+  // for its size.
+  if (box_.IsLayoutReplaced())
     return true;
 
   // Don't save old box geometries if the paint rect is empty because we'll
@@ -294,12 +280,12 @@ bool BoxPaintInvalidator::
 void BoxPaintInvalidator::SavePreviousBoxGeometriesIfNeeded() {
   box_.GetMutableForPainting().SavePreviousSize();
 
-  if (NeedsToSavePreviousContentBoxSizeOrLayoutOverflowRect()) {
+  if (NeedsToSavePreviousContentBoxRectOrLayoutOverflowRect()) {
     box_.GetMutableForPainting()
-        .SavePreviousContentBoxSizeAndLayoutOverflowRect();
+        .SavePreviousContentBoxRectAndLayoutOverflowRect();
   } else {
     box_.GetMutableForPainting()
-        .ClearPreviousContentBoxSizeAndLayoutOverflowRect();
+        .ClearPreviousContentBoxRectAndLayoutOverflowRect();
   }
 }
 

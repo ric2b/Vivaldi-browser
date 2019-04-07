@@ -206,7 +206,7 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   ios::ChromeBrowserState* browser_state =
       chrome_test_util::GetOriginalBrowserState();
   [BookmarkPathCache
-      clearBookmarkUIPositionCacheWithPrefService:browser_state->GetPrefs()];
+      clearBookmarkTopMostRowCacheWithPrefService:browser_state->GetPrefs()];
 }
 
 #pragma mark - BookmarksTestCase Tests
@@ -852,6 +852,12 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
 }
 
 - (void)testCachePositionIsRecreated {
+  if (!IsUIRefreshPhase1Enabled()) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Legacy UI doesn't scroll completely to the bottom, this causes the "
+        @"cell to be partially hidden by the custom toolbar, making the test "
+        @"fail.");
+  }
   [BookmarksTestCase setupBookmarksWhichExceedsScreenHeight];
   [BookmarksTestCase openBookmarks];
   [BookmarksTestCase openMobileBookmarks];
@@ -879,7 +885,8 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
 
   // Ensure the Bottom 1 of Folder 1 is visible.  That means both folder and
   // scroll position are restored successfully.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Bottom 1")]
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityLabel(@"Bottom 1, 127.0.0.1")]
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 
@@ -1082,6 +1089,8 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
                          base::SysNSStringToUTF16(@"Top URL"), dummyURL);
 
   // Add URLs to Folder 1.
+  bookmark_model->AddURL(folder1, 0, base::SysNSStringToUTF16(dummyTitle),
+                         dummyURL);
   bookmark_model->AddURL(folder1, 0, base::SysNSStringToUTF16(@"Bottom 1"),
                          dummyURL);
   for (int i = 0; i < 20; i++) {
@@ -1597,7 +1606,7 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   // verify the editable textfield is gone.
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"bookmark_editing_text")]
-      assertWithMatcher:grey_nil()];
+      assertWithMatcher:grey_notVisible()];
 }
 
 + (void)tapOnContextMenuButton:(int)menuButtonId
@@ -1717,7 +1726,7 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
 }
 
 + (NSString*)contextBarSelectString {
-  return l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_SELECT);
+  return l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_EDIT);
 }
 
 + (NSString*)contextBarMoreString {
@@ -1785,7 +1794,7 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   ios::ChromeBrowserState* browser_state =
       chrome_test_util::GetOriginalBrowserState();
   [BookmarkPathCache
-      clearBookmarkUIPositionCacheWithPrefService:browser_state->GetPrefs()];
+      clearBookmarkTopMostRowCacheWithPrefService:browser_state->GetPrefs()];
 }
 
 #pragma mark - BookmarksTestCaseEntries Tests
@@ -2795,7 +2804,7 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   ios::ChromeBrowserState* browser_state =
       chrome_test_util::GetOriginalBrowserState();
   [BookmarkPathCache
-      clearBookmarkUIPositionCacheWithPrefService:browser_state->GetPrefs()];
+      clearBookmarkTopMostRowCacheWithPrefService:browser_state->GetPrefs()];
 }
 
 #pragma mark - BookmarksTestCasePromo Tests
@@ -3009,7 +3018,7 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   ios::ChromeBrowserState* browser_state =
       chrome_test_util::GetOriginalBrowserState();
   [BookmarkPathCache
-      clearBookmarkUIPositionCacheWithPrefService:browser_state->GetPrefs()];
+      clearBookmarkTopMostRowCacheWithPrefService:browser_state->GetPrefs()];
 }
 
 #pragma mark - BookmarksTestCaseAccessibility Tests
@@ -3185,7 +3194,7 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   ios::ChromeBrowserState* browser_state =
       chrome_test_util::GetOriginalBrowserState();
   [BookmarkPathCache
-      clearBookmarkUIPositionCacheWithPrefService:browser_state->GetPrefs()];
+      clearBookmarkTopMostRowCacheWithPrefService:browser_state->GetPrefs()];
 }
 
 #pragma mark - BookmarksTestFolders Tests

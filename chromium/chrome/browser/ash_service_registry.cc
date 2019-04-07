@@ -20,7 +20,7 @@
 #include "chrome/browser/chromeos/accessibility/ax_host_service.h"
 #include "chrome/browser/chromeos/prefs/pref_connector_service.h"
 #include "content/public/common/service_manager_connection.h"
-#include "services/ui/public/interfaces/constants.mojom.h"
+#include "services/ws/public/mojom/constants.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
 
@@ -36,7 +36,6 @@ struct Service {
 
 // Services shared between mash and non-mash configs.
 constexpr Service kCommonServices[] = {
-    {"autoclick_app", IDS_ASH_AUTOCLICK_APP_NAME},
     {quick_launch::mojom::kServiceName, IDS_ASH_QUICK_LAUNCH_APP_NAME},
     {shortcut_viewer::mojom::kServiceName, IDS_ASH_SHORTCUT_VIEWER_APP_NAME},
     {tap_visualizer::mojom::kServiceName, IDS_ASH_TAP_VISUALIZER_APP_NAME},
@@ -46,7 +45,7 @@ constexpr Service kCommonServices[] = {
 // it's just registered differently (see RegisterInProcessServices()).
 constexpr Service kMashServices[] = {
     {ash::mojom::kServiceName, IDS_ASH_ASH_SERVICE_NAME},
-    {ui::mojom::kServiceName, IDS_ASH_UI_SERVICE_NAME},
+    {ws::mojom::kServiceName, IDS_ASH_UI_SERVICE_NAME},
 };
 
 void RegisterOutOfProcessServicesImpl(
@@ -67,8 +66,7 @@ void RegisterOutOfProcessServices(
     ContentBrowserClient::OutOfProcessServiceMap* services) {
   RegisterOutOfProcessServicesImpl(kCommonServices, base::size(kCommonServices),
                                    services);
-  if (base::FeatureList::IsEnabled(features::kMashDeprecated) ||
-      base::FeatureList::IsEnabled(features::kMash)) {
+  if (features::IsMultiProcessMash()) {
     RegisterOutOfProcessServicesImpl(kMashServices, base::size(kMashServices),
                                      services);
   }
@@ -98,8 +96,7 @@ void RegisterInProcessServices(
     (*services)[ax::mojom::kAXHostServiceName] = info;
   }
 
-  if (base::FeatureList::IsEnabled(features::kMashDeprecated) ||
-      base::FeatureList::IsEnabled(features::kMash))
+  if (features::IsMultiProcessMash())
     return;
 
   (*services)[ash::mojom::kServiceName] =
@@ -122,7 +119,7 @@ bool ShouldTerminateOnServiceQuit(const std::string& name) {
   // Some services going down are treated as catastrophic failures, usually
   // because both the browser and the service cache data about each other's
   // state that is not rebuilt when the service restarts.
-  return name == ui::mojom::kServiceName || name == ash::mojom::kServiceName;
+  return name == ws::mojom::kServiceName || name == ash::mojom::kServiceName;
 }
 
 }  // namespace ash_service_registry

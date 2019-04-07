@@ -15,7 +15,6 @@
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
-#include "ash/shell_port.h"
 #include "ash/shutdown_controller.h"
 #include "ash/shutdown_reason.h"
 #include "ash/wallpaper/wallpaper_controller.h"
@@ -36,6 +35,7 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/wm/core/compound_event_filter.h"
+#include "ui/wm/core/cursor_manager.h"
 
 #define UMA_HISTOGRAM_LOCK_TIMES(name, sample)                     \
   UMA_HISTOGRAM_CUSTOM_TIMES(name, sample,                         \
@@ -96,6 +96,14 @@ LockStateController::~LockStateController() {
   Shell::GetPrimaryRootWindow()->GetHost()->RemoveObserver(this);
 }
 
+void LockStateController::AddObserver(LockStateObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void LockStateController::RemoveObserver(LockStateObserver* observer) {
+  observers_.RemoveObserver(observer);
+}
+
 void LockStateController::StartLockAnimation() {
   if (animating_lock_)
     return;
@@ -130,8 +138,7 @@ void LockStateController::LockWithoutAnimation() {
   animator_->StartAnimation(kPreLockContainersMask,
                             SessionStateAnimator::ANIMATION_HIDE_IMMEDIATELY,
                             SessionStateAnimator::ANIMATION_SPEED_IMMEDIATE);
-  ShellPort::Get()->OnLockStateEvent(
-      LockStateObserver::EVENT_LOCK_ANIMATION_STARTED);
+  OnLockStateEvent(LockStateObserver::EVENT_LOCK_ANIMATION_STARTED);
   Shell::Get()->session_controller()->LockScreen();
 }
 
@@ -194,9 +201,9 @@ void LockStateController::RequestShutdown(ShutdownReason reason) {
   shutting_down_ = true;
   shutdown_reason_ = reason;
 
-  ShellPort* port = ShellPort::Get();
-  port->HideCursor();
-  port->LockCursor();
+  ::wm::CursorManager* cursor_manager = Shell::Get()->cursor_manager();
+  cursor_manager->HideCursor();
+  cursor_manager->LockCursor();
 
   animator_->StartAnimation(
       SessionStateAnimator::ROOT_CONTAINER,
@@ -225,11 +232,9 @@ void LockStateController::OnChromeTerminating() {
   // This is also the case when the user signs off.
   if (!shutting_down_) {
     shutting_down_ = true;
-    Shell* shell = Shell::Get();
-    if (shell->cursor_manager()) {
-      shell->cursor_manager()->HideCursor();
-      shell->cursor_manager()->LockCursor();
-    }
+    ::wm::CursorManager* cursor_manager = Shell::Get()->cursor_manager();
+    cursor_manager->HideCursor();
+    cursor_manager->LockCursor();
     animator_->StartAnimation(SessionStateAnimator::kAllNonRootContainersMask,
                               SessionStateAnimator::ANIMATION_HIDE_IMMEDIATELY,
                               SessionStateAnimator::ANIMATION_SPEED_IMMEDIATE);
@@ -358,8 +363,7 @@ void LockStateController::StartImmediatePreLockAnimation(
   PreLockAnimation(SessionStateAnimator::ANIMATION_SPEED_MOVE_WINDOWS,
                    request_lock_on_completion);
   DispatchCancelMode();
-  ShellPort::Get()->OnLockStateEvent(
-      LockStateObserver::EVENT_LOCK_ANIMATION_STARTED);
+  OnLockStateEvent(LockStateObserver::EVENT_LOCK_ANIMATION_STARTED);
 }
 
 void LockStateController::StartCancellablePreLockAnimation() {
@@ -368,15 +372,13 @@ void LockStateController::StartCancellablePreLockAnimation() {
   VLOG(1) << "StartCancellablePreLockAnimation";
   PreLockAnimation(SessionStateAnimator::ANIMATION_SPEED_UNDOABLE, true);
   DispatchCancelMode();
-  ShellPort::Get()->OnLockStateEvent(
-      LockStateObserver::EVENT_PRELOCK_ANIMATION_STARTED);
+  OnLockStateEvent(LockStateObserver::EVENT_PRELOCK_ANIMATION_STARTED);
 }
 
 void LockStateController::PreLockAnimation(
     SessionStateAnimator::AnimationSpeed speed,
     bool request_lock_on_completion) {
-  Shell::Get()->wallpaper_controller()->PrepareWallpaperForLockScreenChange(
-      true);
+  Shell::Get()->wallpaper_controller()->UpdateWallpaperBlur(true);
   base::Closure next_animation_starter =
       base::Bind(&LockStateController::PreLockAnimationFinished,
                  weak_ptr_factory_.GetWeakPtr(), request_lock_on_completion);
@@ -400,8 +402,7 @@ void LockStateController::PreLockAnimation(
 
 void LockStateController::CancelPreLockAnimation() {
   VLOG(1) << "CancelPreLockAnimation";
-  Shell::Get()->wallpaper_controller()->PrepareWallpaperForLockScreenChange(
-      false);
+  Shell::Get()->wallpaper_controller()->UpdateWallpaperBlur(false);
   base::Closure next_animation_starter =
       base::Bind(&LockStateController::LockAnimationCancelled,
                  weak_ptr_factory_.GetWeakPtr());
@@ -520,8 +521,7 @@ void LockStateController::PostLockAnimationFinished() {
   animating_lock_ = false;
   post_lock_immediate_animation_ = false;
   VLOG(1) << "PostLockAnimationFinished";
-  ShellPort::Get()->OnLockStateEvent(
-      LockStateObserver::EVENT_LOCK_ANIMATION_FINISHED);
+  OnLockStateEvent(LockStateObserver::EVENT_LOCK_ANIMATION_FINISHED);
   if (!lock_screen_displayed_callback_.is_null())
     std::move(lock_screen_displayed_callback_).Run();
 
@@ -533,8 +533,7 @@ void LockStateController::PostLockAnimationFinished() {
 }
 
 void LockStateController::UnlockAnimationAfterUIDestroyedFinished() {
-  Shell::Get()->wallpaper_controller()->PrepareWallpaperForLockScreenChange(
-      false);
+  Shell::Get()->wallpaper_controller()->UpdateWallpaperBlur(false);
   RestoreUnlockedProperties();
 }
 
@@ -583,6 +582,11 @@ void LockStateController::AnimateWallpaperHidingIfNecessary(
                                        SessionStateAnimator::ANIMATION_FADE_OUT,
                                        speed);
   }
+}
+
+void LockStateController::OnLockStateEvent(LockStateObserver::EventType event) {
+  for (auto& observer : observers_)
+    observer.OnLockStateEvent(event);
 }
 
 }  // namespace ash

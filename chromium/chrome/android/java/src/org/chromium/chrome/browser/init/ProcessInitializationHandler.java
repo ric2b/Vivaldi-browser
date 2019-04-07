@@ -198,6 +198,13 @@ public class ProcessInitializationHandler {
     }
 
     /**
+     * @return Whether post native initialization has been completed.
+     */
+    public final boolean postNativeInitializationComplete() {
+        return mInitializedPostNative;
+    }
+
+    /**
      * Performs the post native initialization.
      */
     protected void handlePostNativeInitialization() {
@@ -337,6 +344,8 @@ public class ProcessInitializationHandler {
                 if (HomepageManager.shouldShowHomepageSetting()) {
                     RecordHistogram.recordBooleanHistogram("Settings.ShowHomeButtonPreferenceState",
                             HomepageManager.isHomepageEnabled());
+                    RecordHistogram.recordBooleanHistogram("Settings.HomePageIsCustomized",
+                            !HomepageManager.getInstance().getPrefHomepageUseDefaultUri());
                 }
             }
         });
@@ -436,9 +445,9 @@ public class ProcessInitializationHandler {
     }
 
     private void initChannelsAsync() {
-        new AsyncTask<Void, Void, Void>() {
+        new AsyncTask<Void>() {
             @Override
-            protected Void doInBackground(Void... params) {
+            protected Void doInBackground() {
                 ChannelsUpdater.getInstance().updateChannels();
                 return null;
             }
@@ -447,7 +456,7 @@ public class ProcessInitializationHandler {
     }
 
     private void initAsyncDiskTask(final Context context) {
-        new AsyncTask<Void, Void, Void>() {
+        new AsyncTask<Void>() {
             /**
              * The threshold after which it's no longer appropriate to try to attach logcat output
              * to a minidump file.
@@ -466,7 +475,7 @@ public class ProcessInitializationHandler {
             private long mAsyncTaskStartTime;
 
             @Override
-            protected Void doInBackground(Void... params) {
+            protected Void doInBackground() {
                 try {
                     TraceEvent.begin("ChromeBrowserInitializer.onDeferredStartup.doInBackground");
                     mAsyncTaskStartTime = SystemClock.uptimeMillis();
@@ -689,7 +698,7 @@ public class ProcessInitializationHandler {
                 ContextUtils.getApplicationContext().createDeviceProtectedStorageContext();
 
         // Must log async, as we're doing a file access.
-        new AsyncTask<Void, Void, Void>() {
+        new AsyncTask<Void>() {
             // Record file sizes between 1-2560KB. Expected range is 1-2048KB, so this gives
             // us a bit of buffer. These values cannot be changed, as doing so will alter
             // histogram bucketing and confuse the dashboard.
@@ -697,7 +706,7 @@ public class ProcessInitializationHandler {
             private static final int MAX_CACHE_FILE_SIZE_KB = 2560;
 
             @Override
-            protected Void doInBackground(Void... unused) {
+            protected Void doInBackground() {
                 File codeCacheDir = cacheContext.getCodeCacheDir();
                 if (codeCacheDir == null) {
                     return null;

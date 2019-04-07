@@ -5,6 +5,7 @@
 #include "ash/frame/caption_buttons/frame_caption_button.h"
 
 #include "ash/public/cpp/ash_constants.h"
+#include "ui/base/hit_test.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
@@ -16,6 +17,7 @@
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_mask.h"
 #include "ui/views/animation/ink_drop_ripple.h"
+#include "ui/views/window/hit_test_utils.h"
 
 namespace ash {
 
@@ -35,22 +37,6 @@ const float kFadeOutRatio = 0.5f;
 // The ratio applied to the button's alpha when the button is disabled.
 const float kDisabledButtonAlphaRatio = 0.5f;
 
-// Minimum theme light color contrast.
-const float kContrastLightItemThreshold = 3;
-// The amount to darken a light theme color by for use as foreground color.
-const float kThemedForegroundBlackFraction = 0.64;
-
-// This mimics |shouldUseLightForegroundOnBackground| in ColorUtils.java.
-bool UseLightColor(FrameCaptionButton::ColorMode color_mode,
-                   SkColor background_color) {
-  if (color_mode == FrameCaptionButton::ColorMode::kThemed) {
-    return color_utils::GetContrastRatio(SK_ColorWHITE, background_color) >=
-           kContrastLightItemThreshold;
-  }
-  DCHECK_EQ(color_mode, FrameCaptionButton::ColorMode::kDefault);
-  return color_utils::IsDark(background_color);
-}
-
 // Returns the amount by which the inkdrop ripple and mask should be insetted
 // from the button size in order to achieve a circular inkdrop with a size
 // equals to kInkDropHighlightSize.
@@ -68,7 +54,8 @@ gfx::Insets GetInkdropInsets(const gfx::Size& button_size) {
 const char FrameCaptionButton::kViewClassName[] = "FrameCaptionButton";
 
 FrameCaptionButton::FrameCaptionButton(views::ButtonListener* listener,
-                                       CaptionButtonIcon icon)
+                                       CaptionButtonIcon icon,
+                                       int hit_test_type)
     : Button(listener),
       icon_(icon),
       background_color_(SK_ColorWHITE),
@@ -76,6 +63,8 @@ FrameCaptionButton::FrameCaptionButton(views::ButtonListener* listener,
       paint_as_active_(false),
       alpha_(255),
       swap_images_animation_(new gfx::SlideAnimation(this)) {
+  views::SetHitTestComponent(this, hit_test_type);
+
   set_animate_on_state_change(true);
   swap_images_animation_->Reset(1);
 
@@ -94,18 +83,12 @@ FrameCaptionButton::~FrameCaptionButton() = default;
 // static
 SkColor FrameCaptionButton::GetButtonColor(ColorMode color_mode,
                                            SkColor background_color) {
-  bool use_light_color = UseLightColor(color_mode, background_color);
-
-  if (color_mode == ColorMode::kThemed) {
-    // This mimics |getThemedAssetColor| in ColorUtils.java.
-    return use_light_color
-               ? SK_ColorWHITE
-               : color_utils::AlphaBlend(SK_ColorBLACK, background_color,
-                                         255 * kThemedForegroundBlackFraction);
-  }
+  if (color_mode == ColorMode::kThemed)
+    return color_utils::GetThemedAssetColor(background_color);
 
   DCHECK_EQ(color_mode, ColorMode::kDefault);
-  return use_light_color ? gfx::kGoogleGrey200 : gfx::kGoogleGrey700;
+  return color_utils::IsDark(background_color) ? gfx::kGoogleGrey200
+                                               : gfx::kGoogleGrey700;
 }
 
 // static
@@ -298,9 +281,10 @@ int FrameCaptionButton::GetAlphaForIcon(int base_alpha) const {
 }
 
 void FrameCaptionButton::UpdateInkDropBaseColor() {
-  set_ink_drop_base_color(UseLightColor(color_mode_, background_color_)
-                              ? SK_ColorWHITE
-                              : SK_ColorBLACK);
+  set_ink_drop_base_color(
+      color_utils::IsDark(GetButtonColor(color_mode_, background_color_))
+          ? SK_ColorBLACK
+          : SK_ColorWHITE);
 }
 
 }  // namespace ash

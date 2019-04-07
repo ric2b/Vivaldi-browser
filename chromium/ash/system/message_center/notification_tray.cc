@@ -8,6 +8,7 @@
 
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/message_center/message_center_bubble.h"
+#include "ash/message_center/message_center_ui_controller.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/resources/vector_icons/vector_icons.h"
@@ -34,7 +35,6 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
-#include "ui/message_center/ui_controller.h"
 #include "ui/message_center/views/message_popup_collection.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/bubble/tray_bubble_view.h"
@@ -317,11 +317,11 @@ NotificationTray::NotificationTray(Shelf* shelf,
   tray_container()->AddChildView(counter_.get());
 
   message_center_ui_controller_ =
-      std::make_unique<message_center::UiController>(this);
+      std::make_unique<MessageCenterUiController>(this);
   popup_alignment_delegate_ =
       std::make_unique<AshPopupAlignmentDelegate>(shelf);
   popup_collection_ = std::make_unique<message_center::MessagePopupCollection>(
-      message_center(), popup_alignment_delegate_.get());
+      popup_alignment_delegate_.get());
   display::Screen* screen = display::Screen::GetScreen();
   popup_alignment_delegate_->StartObserving(
       screen, screen->GetDisplayNearestWindow(status_area_window_));
@@ -344,71 +344,46 @@ void NotificationTray::DisableAnimationsForTest(bool disable) {
 
 // Public methods.
 
-bool NotificationTray::ShowMessageCenterInternal(bool show_settings,
-                                                 bool show_by_click) {
+bool NotificationTray::ShowMessageCenter(bool show_by_click) {
   if (!ShouldShowMessageCenter())
     return false;
 
   if (IsMessageCenterVisible())
     return true;
 
-  if (switches::IsSidebarEnabled()) {
-    SidebarInitMode mode =
-        (!show_settings ? SidebarInitMode::NORMAL
-                        : SidebarInitMode::MESSAGE_CENTER_SETTINGS);
-    // TODO(yoshiki): Support non-primary desktop on multi-display environment.
-    Shell::Get()->GetPrimaryRootWindowController()->sidebar()->Show(mode);
-  } else {
-    MessageCenterBubble* message_center_bubble =
-        new MessageCenterBubble(message_center());
+  MessageCenterBubble* message_center_bubble =
+      new MessageCenterBubble(message_center());
 
-    // In the horizontal case, message center starts from the top of the shelf.
-    // In the vertical case, it starts from the bottom of NotificationTray.
-    const int max_height = (shelf()->IsHorizontalAlignment()
-                                ? shelf()->GetUserWorkAreaBounds().height()
-                                : GetBoundsInScreen().bottom() -
-                                      shelf()->GetUserWorkAreaBounds().y());
-    // Sets the maximum height, considering the padding from the top edge of
-    // screen. This padding should be applied in all types of shelf alignment.
-    message_center_bubble->SetMaxHeight(max_height - kPaddingFromScreenTop);
+  // In the horizontal case, message center starts from the top of the shelf.
+  // In the vertical case, it starts from the bottom of NotificationTray.
+  const int max_height = (shelf()->IsHorizontalAlignment()
+                              ? shelf()->GetUserWorkAreaBounds().height()
+                              : GetBoundsInScreen().bottom() -
+                                    shelf()->GetUserWorkAreaBounds().y());
+  // Sets the maximum height, considering the padding from the top edge of
+  // screen. This padding should be applied in all types of shelf alignment.
+  message_center_bubble->SetMaxHeight(max_height - kPaddingFromScreenTop);
 
-    if (show_settings)
-      message_center_bubble->SetSettingsVisible();
+  // For vertical shelf alignments, anchor to the NotificationTray, but for
+  // horizontal (i.e. bottom) shelves, anchor to the system tray.
+  TrayBackgroundView* anchor_tray = this;
+  if (shelf()->IsHorizontalAlignment())
+    anchor_tray = shelf()->GetSystemTrayAnchor();
 
-    // For vertical shelf alignments, anchor to the NotificationTray, but for
-    // horizontal (i.e. bottom) shelves, anchor to the system tray.
-    TrayBackgroundView* anchor_tray = this;
-    if (shelf()->IsHorizontalAlignment())
-      anchor_tray = shelf()->GetSystemTrayAnchor();
-
-    message_center_bubble_ = std::make_unique<NotificationBubbleWrapper>(
-        this, anchor_tray, message_center_bubble, show_by_click);
-  }
+  message_center_bubble_ = std::make_unique<NotificationBubbleWrapper>(
+      this, anchor_tray, message_center_bubble, show_by_click);
 
   shelf()->UpdateAutoHideState();
   SetIsActive(true);
   return true;
 }
 
-bool NotificationTray::ShowMessageCenter(bool show_by_click) {
-  return ShowMessageCenterInternal(false /* show_settings */, show_by_click);
-}
-
 void NotificationTray::HideMessageCenter() {
-  if ((switches::IsSidebarEnabled() && !IsMessageCenterVisible()) ||
-      (!switches::IsSidebarEnabled() && !message_center_bubble()))
+  if (!message_center_bubble())
     return;
 
   SetIsActive(false);
-  if (switches::IsSidebarEnabled()) {
-    Sidebar* sidebar =
-        RootWindowController::ForWindow(GetWidget()->GetNativeView())
-            ->sidebar();
-    if (sidebar)
-      sidebar->Hide();
-  } else {
-    message_center_bubble_.reset();
-  }
+  message_center_bubble_.reset();
   show_message_center_on_unlock_ = false;
   shelf()->UpdateAutoHideState();
 }
@@ -425,13 +400,13 @@ bool NotificationTray::ShowPopups() {
   if (IsMessageCenterVisible())
     return false;
 
-  popup_collection_->DoUpdate();
+  popup_collection_->Update();
   return true;
 }
 
-void NotificationTray::HidePopups() {
+void NotificationTray::HidePopups(bool animate) {
   DCHECK(popup_collection_.get());
-  popup_collection_->MarkAllPopupsShown();
+  popup_collection_->MarkAllPopupsShown(animate);
 }
 
 // Private methods.
@@ -442,15 +417,8 @@ bool NotificationTray::ShouldShowMessageCenter() const {
 }
 
 bool NotificationTray::IsMessageCenterVisible() const {
-  if (switches::IsSidebarEnabled()) {
-    Sidebar* sidebar =
-        RootWindowController::ForWindow(GetWidget()->GetNativeView())
-            ->sidebar();
-    return sidebar && sidebar->IsVisible();
-  } else {
-    return message_center_bubble() &&
-           message_center_bubble()->bubble()->IsVisible();
-  }
+  return message_center_bubble() &&
+         message_center_bubble()->bubble()->IsVisible();
 }
 
 void NotificationTray::UpdateAfterShelfAlignmentChange() {
@@ -524,24 +492,6 @@ bool NotificationTray::ShouldEnableExtraKeyboardAccessibility() {
 
 void NotificationTray::HideBubble(const views::TrayBubbleView* bubble_view) {
   HideBubbleWithView(bubble_view);
-}
-
-bool NotificationTray::ShowNotifierSettings() {
-  if (IsMessageCenterVisible()) {
-    if (switches::IsSidebarEnabled()) {
-      Sidebar* sidebar =
-          RootWindowController::ForWindow(GetWidget()->GetNativeView())
-              ->sidebar();
-      if (sidebar)
-        sidebar->Show(SidebarInitMode::MESSAGE_CENTER_SETTINGS);
-    } else {
-      static_cast<MessageCenterBubble*>(message_center_bubble()->bubble())
-          ->SetSettingsVisible();
-    }
-    return true;
-  }
-  return ShowMessageCenterInternal(true /* show_settings */,
-                                   false /* show_by_click */);
 }
 
 void NotificationTray::OnMessageCenterContentsChanged() {

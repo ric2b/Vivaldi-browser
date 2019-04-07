@@ -151,6 +151,7 @@ CompositorAnimations::CheckCanStartEffectOnCompositor(
     const Element& target_element,
     const Animation* animation_to_add,
     const EffectModel& effect,
+    const base::Optional<CompositorElementIdSet>& composited_element_ids,
     double animation_playback_rate) {
   const KeyframeEffectModelBase& keyframe_effect =
       ToKeyframeEffectModelBase(effect);
@@ -160,6 +161,16 @@ CompositorAnimations::CheckCanStartEffectOnCompositor(
     return FailureCode::Actionable("Animation does not affect any properties");
   }
 
+  if (composited_element_ids) {
+    // If we are going to check that we can animate these below, we need
+    // to have the UniqueID to compute the target ID.  Let's check it
+    // once in common in advance.
+    if (!target_element.GetLayoutObject() ||
+        !target_element.GetLayoutObject()->UniqueId()) {
+      return FailureCode::NonActionable("Target element has no layout");
+    }
+  }
+
   unsigned transform_property_count = 0;
   for (const auto& property : properties) {
     if (!property.IsCSSProperty()) {
@@ -167,6 +178,7 @@ CompositorAnimations::CheckCanStartEffectOnCompositor(
     }
 
     if (IsTransformRelatedCSSProperty(property)) {
+      // We use this later in computing element IDs too.
       if (target_element.GetLayoutObject() &&
           !target_element.GetLayoutObject()->IsTransformApplicable()) {
         return FailureCode::Actionable(
@@ -192,6 +204,8 @@ CompositorAnimations::CheckCanStartEffectOnCompositor(
             "Accelerated keyframe value could not be computed");
       }
 
+      CompositorElementIdNamespace property_namespace =
+          CompositorElementIdNamespace::kPrimary;
       // FIXME: Determine candidacy based on the CSSValue instead of a snapshot
       // AnimatableValue.
       switch (property.GetCSSProperty().PropertyID()) {
@@ -218,6 +232,7 @@ CompositorAnimations::CheckCanStartEffectOnCompositor(
             return FailureCode::Actionable(
                 "Filter-related property may affect surrounding pixels");
           }
+          property_namespace = CompositorElementIdNamespace::kEffectFilter;
           break;
         }
         default:
@@ -230,6 +245,17 @@ CompositorAnimations::CheckCanStartEffectOnCompositor(
             builder.Append(property.GetCSSProperty().GetPropertyName());
           }
           return FailureCode::Actionable(builder.ToString());
+      }
+      if (composited_element_ids) {
+        CompositorElementId target_element_id =
+            CompositorElementIdFromUniqueObjectId(
+                target_element.GetLayoutObject()->UniqueId(),
+                property_namespace);
+        DCHECK(target_element_id);
+        if (!composited_element_ids->Contains(target_element_id)) {
+          return FailureCode::NonActionable(
+              "Target element does not have its own compositing layer");
+        }
       }
     }
   }
@@ -274,6 +300,7 @@ CompositorAnimations::CheckCanStartElementOnCompositor(
     // the DCHECK below.
     // DCHECK(document().lifecycle().state() >=
     // DocumentLifecycle::PrePaintClean);
+    DCHECK(target_element.GetLayoutObject());
     if (const auto* paint_properties = target_element.GetLayoutObject()
                                            ->FirstFragment()
                                            .PaintProperties()) {
@@ -309,10 +336,11 @@ CompositorAnimations::CheckCanStartAnimationOnCompositor(
     const Element& target_element,
     const Animation* animation_to_add,
     const EffectModel& effect,
+    const base::Optional<CompositorElementIdSet>& composited_element_ids,
     double animation_playback_rate) {
-  FailureCode code =
-      CheckCanStartEffectOnCompositor(timing, target_element, animation_to_add,
-                                      effect, animation_playback_rate);
+  FailureCode code = CheckCanStartEffectOnCompositor(
+      timing, target_element, animation_to_add, effect, composited_element_ids,
+      animation_playback_rate);
   if (!code.Ok()) {
     return code;
   }
@@ -370,8 +398,11 @@ void CompositorAnimations::StartAnimationOnCompositor(
     Vector<int>& started_keyframe_model_ids,
     double animation_playback_rate) {
   DCHECK(started_keyframe_model_ids.IsEmpty());
-  DCHECK(CheckCanStartAnimationOnCompositor(timing, element, animation, effect,
-                                            animation_playback_rate)
+  // TODO(petermayo): Find and pass the set of valid compositor elements before
+  // BlinkGenPropertyTrees is always on.
+  DCHECK(CheckCanStartAnimationOnCompositor(
+             timing, element, animation, effect,
+             base::Optional<CompositorElementIdSet>(), animation_playback_rate)
              .Ok());
 
   const KeyframeEffectModelBase& keyframe_effect =
@@ -475,7 +506,7 @@ bool CompositorAnimations::ConvertTimingForCompositor(
   // Compositor's time offset is positive for seeking into the animation.
   out.scaled_time_offset =
       -timing.start_delay / animation_playback_rate + time_offset;
-  out.playback_rate = timing.playback_rate * animation_playback_rate;
+  out.playback_rate = animation_playback_rate;
   out.fill_mode = timing.fill_mode == Timing::FillMode::AUTO
                       ? Timing::FillMode::NONE
                       : timing.fill_mode;
@@ -532,7 +563,7 @@ void AddKeyframeToCurve(CompositorTransformAnimationCurve& curve,
 template <typename PlatformAnimationCurveType>
 void AddKeyframesToCurve(PlatformAnimationCurveType& curve,
                          const PropertySpecificKeyframeVector& keyframes) {
-  auto* last_keyframe = keyframes.back().get();
+  Keyframe::PropertySpecificKeyframe* last_keyframe = keyframes.back();
   for (const auto& keyframe : keyframes) {
     const TimingFunction* keyframe_timing_function = nullptr;
     // Ignore timing function of last frame.
@@ -542,7 +573,7 @@ void AddKeyframesToCurve(PlatformAnimationCurveType& curve,
       keyframe_timing_function = &keyframe->Easing();
 
     const AnimatableValue* value = keyframe->GetAnimatableValue();
-    AddKeyframeToCurve(curve, keyframe.get(), value, *keyframe_timing_function);
+    AddKeyframeToCurve(curve, keyframe, value, *keyframe_timing_function);
   }
 }
 

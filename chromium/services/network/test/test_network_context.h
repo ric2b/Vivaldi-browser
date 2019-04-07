@@ -16,6 +16,7 @@
 #include "net/base/ip_endpoint.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
+#include "services/network/public/mojom/host_resolver.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/proxy_resolving_socket.mojom.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom.h"
@@ -34,6 +35,7 @@ class TestNetworkContext : public mojom::NetworkContext {
   TestNetworkContext() = default;
   ~TestNetworkContext() override = default;
 
+  void SetClient(mojom::NetworkContextClientPtr client) override {}
   void CreateURLLoaderFactory(
       mojom::URLLoaderFactoryRequest request,
       mojom::URLLoaderFactoryParamsPtr params) override {}
@@ -68,6 +70,7 @@ class TestNetworkContext : public mojom::NetworkContext {
   void ClearNetworkErrorLogging(
       mojom::ClearDataFilterPtr filter,
       ClearNetworkErrorLoggingCallback callback) override {}
+  void CloseAllConnections(CloseAllConnectionsCallback callback) override {}
   void SetNetworkConditions(const base::UnguessableToken& throttling_profile_id,
                             mojom::NetworkConditionsPtr conditions) override {}
   void SetAcceptLanguage(const std::string& new_accept_language) override {}
@@ -99,7 +102,26 @@ class TestNetworkContext : public mojom::NetworkContext {
                        int32_t render_frame_id,
                        const url::Origin& origin,
                        mojom::AuthenticationHandlerPtr auth_handler) override {}
+  void LookUpProxyForURL(
+      const GURL& url,
+      ::network::mojom::ProxyLookupClientPtr proxy_lookup_client) override {}
   void CreateNetLogExporter(mojom::NetLogExporterRequest exporter) override {}
+  void ResolveHost(const net::HostPortPair& host,
+                   mojom::ResolveHostParametersPtr optional_parameters,
+                   mojom::ResolveHostClientPtr response_client) override {}
+  void CreateHostResolver(mojom::HostResolverRequest request) override {}
+  void WriteCacheMetadata(const GURL& url,
+                          net::RequestPriority priority,
+                          base::Time expected_response_time,
+                          const std::vector<uint8_t>& data) override {}
+  void VerifyCertForSignedExchange(
+      const scoped_refptr<net::X509Certificate>& certificate,
+      const GURL& url,
+      const std::string& ocsp_result,
+      const std::string& sct_list,
+      VerifyCertForSignedExchangeCallback callback) override {}
+  void IsHSTSActiveForHost(const std::string& host,
+                           IsHSTSActiveForHostCallback callback) override {}
   void AddHSTSForTesting(const std::string& host,
                          base::Time expiry,
                          bool include_subdomains,
@@ -111,6 +133,11 @@ class TestNetworkContext : public mojom::NetworkContext {
                          const GURL& url,
                          int32_t load_flags,
                          bool privacy_mode_enabled) override {}
+  void CreateP2PSocketManager(
+      mojom::P2PTrustedSocketManagerClientPtr client,
+      mojom::P2PTrustedSocketManagerRequest trusted_socket_manager,
+      mojom::P2PSocketManagerRequest socket_manager_request) override {}
+  void ResetURLLoaderFactories() override {}
 };
 
 }  // namespace network

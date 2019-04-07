@@ -39,6 +39,7 @@
 #include "ui/events/event.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/event_utils.h"
+#include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/events/test/keyboard_layout.h"
@@ -565,7 +566,7 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
       // keyboard. So they are dispatched directly to the input method. But on
       // Mac, key events don't pass through InputMethod. Hence they are
       // dispatched regularly.
-      ui::KeyEvent event(ch, ui::VKEY_UNKNOWN, flags);
+      ui::KeyEvent event(ch, ui::VKEY_UNKNOWN, ui::DomCode::NONE, flags);
 #if defined(OS_MACOSX)
       event_generator_->Dispatch(&event);
 #else
@@ -573,6 +574,15 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
 #endif
     }
   }
+
+  // Send a key to trigger MockInputMethod::DispatchKeyEvent(). Note the
+  // specific VKEY isn't used (MockInputMethod will mock a ui::VKEY_PROCESSKEY
+  // whenever it has a test composition). However, on Mac, it can't be a letter
+  // (e.g. VKEY_A) since all native character events on Mac are unicode events
+  // and don't have a meaningful ui::KeyEvent that would trigger
+  // DispatchKeyEvent(). It also can't be VKEY_ENTER, since those key events may
+  // need to be suppressed when interacting with real system IME.
+  void DispatchMockInputMethodKeyEvent() { SendKeyEvent(ui::VKEY_INSERT); }
 
   // Sends a platform-specific move (and select) to the logical start of line.
   // Eg. this should move (and select) to the right end of line for RTL text.
@@ -1708,7 +1718,7 @@ TEST_F(TextfieldTest, DragAndDrop_AcceptDrop) {
   EXPECT_EQ(ui::OSExchangeData::STRING, formats);
   EXPECT_TRUE(format_types.empty());
   EXPECT_TRUE(textfield_->CanDrop(data));
-  gfx::Point drop_point(GetCursorPositionX(6), 0);
+  gfx::PointF drop_point(GetCursorPositionX(6), 0);
   ui::DropTargetEvent drop(data, drop_point, drop_point,
       ui::DragDropTypes::DRAG_COPY | ui::DragDropTypes::DRAG_MOVE);
   EXPECT_EQ(ui::DragDropTypes::DRAG_COPY | ui::DragDropTypes::DRAG_MOVE,
@@ -1802,7 +1812,7 @@ TEST_F(TextfieldTest, DragAndDrop_ToTheRight) {
   EXPECT_TRUE(format_types.empty());
 
   // Drop "ello" after "w".
-  const gfx::Point kDropPoint(GetCursorPositionX(7), cursor_y);
+  const gfx::PointF kDropPoint(GetCursorPositionX(7), cursor_y);
   EXPECT_TRUE(textfield_->CanDrop(data));
   ui::DropTargetEvent drop_a(data, kDropPoint, kDropPoint, operations);
   EXPECT_EQ(ui::DragDropTypes::DRAG_MOVE, textfield_->OnDragUpdated(drop_a));
@@ -1854,7 +1864,7 @@ TEST_F(TextfieldTest, DragAndDrop_ToTheLeft) {
 
   // Drop " worl" after "h".
   EXPECT_TRUE(textfield_->CanDrop(data));
-  gfx::Point drop_point(GetCursorPositionX(1), cursor_y);
+  gfx::PointF drop_point(GetCursorPositionX(1), cursor_y);
   ui::DropTargetEvent drop_a(data, drop_point, drop_point, operations);
   EXPECT_EQ(ui::DragDropTypes::DRAG_MOVE, textfield_->OnDragUpdated(drop_a));
   EXPECT_EQ(ui::DragDropTypes::DRAG_MOVE, textfield_->OnPerformDrop(drop_a));
@@ -1890,7 +1900,7 @@ TEST_F(TextfieldTest, DragAndDrop_Canceled) {
   textfield_->WriteDragDataForView(nullptr, point, &data);
   EXPECT_TRUE(textfield_->CanDrop(data));
   // Drag the text over somewhere valid, outside the current selection.
-  gfx::Point drop_point(GetCursorPositionX(2), cursor_y);
+  gfx::PointF drop_point(GetCursorPositionX(2), cursor_y);
   ui::DropTargetEvent drop(data, drop_point, drop_point,
                            ui::DragDropTypes::DRAG_MOVE);
   EXPECT_EQ(ui::DragDropTypes::DRAG_MOVE, textfield_->OnDragUpdated(drop));
@@ -2000,14 +2010,7 @@ TEST_F(TextfieldTest, TextInputClientTest) {
   textfield_->clear();
 
   on_before_user_action_ = on_after_user_action_ = 0;
-
-  // Send a key to trigger MockInputMethod::DispatchKeyEvent(). Note the
-  // specific VKEY isn't used (MockInputMethod will mock a ui::VKEY_PROCESSKEY
-  // whenever it has a test composition). However, on Mac, it can't be a letter
-  // (e.g. VKEY_A) since all native character events on Mac are unicode events
-  // and don't have a meaningful ui::KeyEvent that would trigger
-  // DispatchKeyEvent().
-  SendKeyEvent(ui::VKEY_RETURN);
+  DispatchMockInputMethodKeyEvent();
 
   EXPECT_TRUE(textfield_->key_received());
   EXPECT_FALSE(textfield_->key_handled());
@@ -2021,7 +2024,7 @@ TEST_F(TextfieldTest, TextInputClientTest) {
   input_method_->SetResultTextForNextKey(UTF8ToUTF16("123"));
   on_before_user_action_ = on_after_user_action_ = 0;
   textfield_->clear();
-  SendKeyEvent(ui::VKEY_RETURN);
+  DispatchMockInputMethodKeyEvent();
   EXPECT_TRUE(textfield_->key_received());
   EXPECT_FALSE(textfield_->key_handled());
   EXPECT_FALSE(client->HasCompositionText());
@@ -2033,7 +2036,7 @@ TEST_F(TextfieldTest, TextInputClientTest) {
   input_method_->Clear();
   input_method_->SetCompositionTextForNextKey(composition);
   textfield_->clear();
-  SendKeyEvent(ui::VKEY_RETURN);
+  DispatchMockInputMethodKeyEvent();
   EXPECT_TRUE(client->HasCompositionText());
   EXPECT_STR_EQ("0123321456789", textfield_->text());
 

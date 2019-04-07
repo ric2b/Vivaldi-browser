@@ -47,6 +47,11 @@ class BackgroundProfilingTriggers {
   // Returns true if trace uploads are allowed.
   bool IsAllowedToUpload() const;
 
+  // Returns true if a control report should be sent for the given
+  // |content_process_type|.
+  // Virtual for testing.
+  virtual bool ShouldTriggerControlReport(int content_process_type) const;
+
   // Returns true if |private_footprint_kb| is large enough to trigger
   // a report for the given |content_process_type|.
   bool IsOverTriggerThreshold(int content_process_type,
@@ -64,7 +69,7 @@ class BackgroundProfilingTriggers {
       std::unique_ptr<memory_instrumentation::GlobalMemoryDump> dump);
 
   // Virtual for testing. Called when a memory report needs to be send.
-  virtual void TriggerMemoryReport();
+  virtual void TriggerMemoryReport(std::string trigger_name);
 
   ProfilingProcessHost* host_;
 

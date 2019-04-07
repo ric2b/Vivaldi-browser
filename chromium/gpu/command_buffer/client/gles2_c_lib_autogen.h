@@ -1208,6 +1208,33 @@ GLboolean GL_APIENTRY GLES2IsVertexArrayOES(GLuint array) {
 void GL_APIENTRY GLES2BindVertexArrayOES(GLuint array) {
   gles2::GetGLContext()->BindVertexArrayOES(array);
 }
+void GL_APIENTRY GLES2FramebufferParameteri(GLenum target,
+                                            GLenum pname,
+                                            GLint param) {
+  gles2::GetGLContext()->FramebufferParameteri(target, pname, param);
+}
+void GL_APIENTRY GLES2BindImageTexture(GLuint unit,
+                                       GLuint texture,
+                                       GLint level,
+                                       GLboolean layered,
+                                       GLint layer,
+                                       GLenum access,
+                                       GLenum format) {
+  gles2::GetGLContext()->BindImageTexture(unit, texture, level, layered, layer,
+                                          access, format);
+}
+void GL_APIENTRY GLES2DispatchCompute(GLuint num_groups_x,
+                                      GLuint num_groups_y,
+                                      GLuint num_groups_z) {
+  gles2::GetGLContext()->DispatchCompute(num_groups_x, num_groups_y,
+                                         num_groups_z);
+}
+void GL_APIENTRY GLES2MemoryBarrierEXT(GLbitfield barriers) {
+  gles2::GetGLContext()->MemoryBarrierEXT(barriers);
+}
+void GL_APIENTRY GLES2MemoryBarrierByRegion(GLbitfield barriers) {
+  gles2::GetGLContext()->MemoryBarrierByRegion(barriers);
+}
 void GL_APIENTRY GLES2SwapBuffers(GLuint64 swap_id, GLbitfield flags) {
   gles2::GetGLContext()->SwapBuffers(swap_id, flags);
 }
@@ -1795,6 +1822,16 @@ void GL_APIENTRY GLES2DestroyGpuFenceCHROMIUM(GLuint gpu_fence_id) {
 void GL_APIENTRY
 GLES2InvalidateReadbackBufferShadowDataCHROMIUM(GLuint buffer_id) {
   gles2::GetGLContext()->InvalidateReadbackBufferShadowDataCHROMIUM(buffer_id);
+}
+void GL_APIENTRY
+GLES2FramebufferTextureMultiviewLayeredANGLE(GLenum target,
+                                             GLenum attachment,
+                                             GLuint texture,
+                                             GLint level,
+                                             GLint baseViewIndex,
+                                             GLsizei numViews) {
+  gles2::GetGLContext()->FramebufferTextureMultiviewLayeredANGLE(
+      target, attachment, texture, level, baseViewIndex, numViews);
 }
 
 namespace gles2 {
@@ -2716,6 +2753,26 @@ extern const NameToFunc g_gles2_function_table[] = {
         reinterpret_cast<GLES2FunctionPointer>(glBindVertexArrayOES),
     },
     {
+        "glFramebufferParameteri",
+        reinterpret_cast<GLES2FunctionPointer>(glFramebufferParameteri),
+    },
+    {
+        "glBindImageTexture",
+        reinterpret_cast<GLES2FunctionPointer>(glBindImageTexture),
+    },
+    {
+        "glDispatchCompute",
+        reinterpret_cast<GLES2FunctionPointer>(glDispatchCompute),
+    },
+    {
+        "glMemoryBarrierEXT",
+        reinterpret_cast<GLES2FunctionPointer>(glMemoryBarrierEXT),
+    },
+    {
+        "glMemoryBarrierByRegion",
+        reinterpret_cast<GLES2FunctionPointer>(glMemoryBarrierByRegion),
+    },
+    {
         "glSwapBuffers", reinterpret_cast<GLES2FunctionPointer>(glSwapBuffers),
     },
     {
@@ -3150,7 +3207,12 @@ extern const NameToFunc g_gles2_function_table[] = {
             glInvalidateReadbackBufferShadowDataCHROMIUM),
     },
     {
-        NULL, NULL,
+        "glFramebufferTextureMultiviewLayeredANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glFramebufferTextureMultiviewLayeredANGLE),
+    },
+    {
+        nullptr, nullptr,
     },
 };
 

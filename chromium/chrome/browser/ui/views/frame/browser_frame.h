@@ -105,7 +105,6 @@ class BrowserFrame
                       ui::Accelerator* accelerator) const override;
   const ui::ThemeProvider* GetThemeProvider() const override;
   const ui::NativeTheme* GetNativeTheme() const override;
-  void SchedulePaintInRect(const gfx::Rect& rect) override;
   void OnNativeWidgetWorkspaceChanged() override;
   void OnNativeThemeUpdated(ui::NativeTheme* observed_theme) override;
 
@@ -119,6 +118,10 @@ class BrowserFrame
   // Returns the menu model. BrowserFrame owns the returned model.
   // Note that in multi user mode this will upon each call create a new model.
   ui::MenuModel* GetSystemMenuModel();
+
+  NativeBrowserFrame* native_browser_frame() const {
+    return native_browser_frame_;
+  }
 
  private:
   // Callback for MenuRunner.

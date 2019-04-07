@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "components/viz/common/features.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/service/surfaces/surface_hittest.h"
@@ -118,7 +119,7 @@ void CrossProcessFrameConnector::SetView(RenderWidgetHostViewChildFrame* view) {
     if (is_hidden_)
       OnVisibilityChanged(false);
     FrameMsg_ViewChanged_Params params;
-    if (features::IsAshInBrowserProcess())
+    if (!features::IsUsingWindowService())
       params.frame_sink_id = view_->GetFrameSinkId();
     frame_proxy_in_parent_renderer_->Send(new FrameMsg_ViewChanged(
         frame_proxy_in_parent_renderer_->GetRoutingID(), params));
@@ -147,8 +148,10 @@ void CrossProcessFrameConnector::RenderProcessGone() {
 
 void CrossProcessFrameConnector::FirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {
-  frame_proxy_in_parent_renderer_->Send(new FrameMsg_FirstSurfaceActivation(
-      frame_proxy_in_parent_renderer_->GetRoutingID(), surface_info));
+  if (!features::IsSurfaceSynchronizationEnabled()) {
+    frame_proxy_in_parent_renderer_->Send(new FrameMsg_FirstSurfaceActivation(
+        frame_proxy_in_parent_renderer_->GetRoutingID(), surface_info));
+  }
 }
 
 void CrossProcessFrameConnector::SendIntrinsicSizingInfoToParent(
@@ -225,17 +228,6 @@ bool CrossProcessFrameConnector::TransformPointToCoordSpaceForView(
       *transformed_point, target_view, transformed_point, source);
 }
 
-void CrossProcessFrameConnector::ForwardProcessAckedTouchEvent(
-    const TouchEventWithLatencyInfo& touch,
-    InputEventAckState ack_result) {
-  auto* main_view = GetRootRenderWidgetHostView();
-  // Note that the event's coordinates are in |view_|'s coordinate space, but
-  // since |ProcessAckedTouchEvent| doesn't use the coordinates, we don't
-  // bother to transform them back to the root coordinate space.
-  if (main_view)
-    main_view->ProcessAckedTouchEvent(touch, ack_result);
-}
-
 void CrossProcessFrameConnector::ForwardAckedTouchpadPinchGestureEvent(
     const blink::WebGestureEvent& event,
     InputEventAckState ack_result) {
@@ -255,7 +247,8 @@ void CrossProcessFrameConnector::BubbleScrollEvent(
   DCHECK(event.GetType() == blink::WebInputEvent::kGestureScrollBegin ||
          event.GetType() == blink::WebInputEvent::kGestureScrollUpdate ||
          event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
-         event.GetType() == blink::WebInputEvent::kGestureFlingStart);
+         event.GetType() == blink::WebInputEvent::kGestureFlingStart ||
+         event.GetType() == blink::WebInputEvent::kGestureFlingCancel);
   auto* parent_view = GetParentRenderWidgetHostView();
 
   if (!parent_view)
@@ -278,7 +271,9 @@ void CrossProcessFrameConnector::BubbleScrollEvent(
   if (event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
     event_router->BubbleScrollEvent(parent_view, resent_gesture_event, view_);
     is_scroll_bubbling_ = true;
-  } else if (is_scroll_bubbling_) {
+  } else if (is_scroll_bubbling_ ||
+             event.GetType() == blink::WebInputEvent::kGestureFlingCancel) {
+    // For GFC events the router decides whether to bubble them or not.
     event_router->BubbleScrollEvent(parent_view, resent_gesture_event, view_);
   }
   if (event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
@@ -336,12 +331,14 @@ void CrossProcessFrameConnector::OnSynchronizeVisualProperties(
 
 void CrossProcessFrameConnector::OnUpdateViewportIntersection(
     const gfx::Rect& viewport_intersection,
-    const gfx::Rect& compositor_visible_rect) {
+    const gfx::Rect& compositor_visible_rect,
+    bool occluded_or_obscured) {
   viewport_intersection_rect_ = viewport_intersection;
   compositor_visible_rect_ = compositor_visible_rect;
+  occluded_or_obscured_ = occluded_or_obscured;
   if (view_)
-    view_->UpdateViewportIntersection(viewport_intersection,
-                                      compositor_visible_rect);
+    view_->UpdateViewportIntersection(
+        viewport_intersection, compositor_visible_rect, occluded_or_obscured);
 
   if (IsVisible()) {
     // MaybeLogCrash will check 1) if there was a crash or not and 2) if the
@@ -362,15 +359,23 @@ void CrossProcessFrameConnector::OnVisibilityChanged(bool visible) {
   if (!view_)
     return;
 
-  // If there is an inner WebContents, it should be notified of the change in
-  // the visibility. The Show/Hide methods will not be called if an inner
-  // WebContents exists since the corresponding WebContents will itself call
-  // Show/Hide on all the RenderWidgetHostViews (including this) one.
-  if (frame_proxy_in_parent_renderer_->frame_tree_node()
-          ->render_manager()
-          ->ForInnerDelegate()) {
-    view_->host()->delegate()->OnRenderFrameProxyVisibilityChanged(visible);
-    return;
+  // NOTE(david@vivaldi.com): Make sure we are not going to handle the
+  // visibility within an inner WebContents when the current frame has a parent.
+  // This could lead into views being hidden when they shouldn't. See VB-42474.
+  // The Show/Hide methods will be called instead.
+  if (!frame_proxy_in_parent_renderer_->frame_tree_node()
+           ->current_frame_host()
+           ->GetParent()) {
+    // If there is an inner WebContents, it should be notified of the change in
+    // the visibility. The Show/Hide methods will not be called if an inner
+    // WebContents exists since the corresponding WebContents will itself call
+    // Show/Hide on all the RenderWidgetHostViews (including this) one.
+    if (frame_proxy_in_parent_renderer_->frame_tree_node()
+            ->render_manager()
+            ->ForInnerDelegate()) {
+      view_->host()->delegate()->OnRenderFrameProxyVisibilityChanged(visible);
+      return;
+    }
   }
 
   if (visible && !view_->host()->delegate()->IsHidden()) {
@@ -464,7 +469,7 @@ bool CrossProcessFrameConnector::IsHidden() const {
 
 #if defined(USE_AURA)
 void CrossProcessFrameConnector::EmbedRendererWindowTreeClientInParent(
-    ui::mojom::WindowTreeClientPtr window_tree_client) {
+    ws::mojom::WindowTreeClientPtr window_tree_client) {
   RenderWidgetHostViewBase* root = GetRootRenderWidgetHostView();
   RenderWidgetHostViewBase* parent = GetParentRenderWidgetHostView();
   if (!parent || !root)

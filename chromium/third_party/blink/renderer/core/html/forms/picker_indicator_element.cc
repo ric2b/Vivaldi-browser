@@ -68,26 +68,26 @@ LayoutObject* PickerIndicatorElement::CreateLayoutObject(const ComputedStyle&) {
   return new LayoutDetailsMarker(this);
 }
 
-void PickerIndicatorElement::DefaultEventHandler(Event* event) {
+void PickerIndicatorElement::DefaultEventHandler(Event& event) {
   if (!GetLayoutObject())
     return;
   if (!picker_indicator_owner_ ||
       picker_indicator_owner_->IsPickerIndicatorOwnerDisabledOrReadOnly())
     return;
 
-  if (event->type() == EventTypeNames::click) {
+  if (event.type() == EventTypeNames::click) {
     OpenPopup();
-    event->SetDefaultHandled();
-  } else if (event->type() == EventTypeNames::keypress &&
-             event->IsKeyboardEvent()) {
-    int char_code = ToKeyboardEvent(event)->charCode();
+    event.SetDefaultHandled();
+  } else if (event.type() == EventTypeNames::keypress &&
+             event.IsKeyboardEvent()) {
+    int char_code = ToKeyboardEvent(event).charCode();
     if (char_code == ' ' || char_code == '\r') {
       OpenPopup();
-      event->SetDefaultHandled();
+      event.SetDefaultHandled();
     }
   }
 
-  if (!event->DefaultHandled())
+  if (!event.DefaultHandled())
     HTMLDivElement::DefaultEventHandler(event);
 }
 
@@ -153,14 +153,13 @@ bool PickerIndicatorElement::IsPickerIndicatorElement() const {
 }
 
 Node::InsertionNotificationRequest PickerIndicatorElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   HTMLDivElement::InsertedInto(insertion_point);
   return kInsertionShouldCallDidNotifySubtreeInsertions;
 }
 
 void PickerIndicatorElement::DidNotifySubtreeInsertionsToDocument() {
-  if (!GetDocument().GetSettings() ||
-      !GetDocument().GetSettings()->GetAccessibilityEnabled())
+  if (!GetDocument().ExistingAXObjectCache())
     return;
   // Don't make this focusable if we are in layout tests in order to avoid to
   // break existing tests.

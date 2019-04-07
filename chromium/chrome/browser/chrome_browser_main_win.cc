@@ -27,7 +27,7 @@
 #include "base/scoped_native_library.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/version.h"
 #include "base/win/pe_image.h"
@@ -40,7 +40,6 @@
 #include "chrome/browser/conflicts/module_database_win.h"
 #include "chrome/browser/conflicts/module_event_sink_impl_win.h"
 #include "chrome/browser/first_run/first_run.h"
-#include "chrome/browser/install_verification/win/install_verification.h"
 #include "chrome/browser/memory/swap_thrashing_monitor.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
@@ -349,7 +348,7 @@ void OnModuleEvent(const ModuleWatcher::ModuleEvent& event) {
         // task.
         base::PostTaskWithTraits(
             FROM_HERE,
-            {base::MayBlock(), base::TaskPriority::BACKGROUND,
+            {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
              base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
             base::Bind(&HandleModuleLoadEventWithoutTimeDateStamp,
                        event.module_path, event.module_size, load_address));
@@ -458,8 +457,11 @@ int DoUninstallTasks(bool chrome_still_running) {
 
 ChromeBrowserMainPartsWin::ChromeBrowserMainPartsWin(
     const content::MainFunctionParams& parameters,
-    std::unique_ptr<ui::DataPack> data_pack)
-    : ChromeBrowserMainParts(parameters, std::move(data_pack)) {}
+    std::unique_ptr<ui::DataPack> data_pack,
+    ChromeFeatureListCreator* chrome_feature_list_creator)
+    : ChromeBrowserMainParts(parameters,
+                             std::move(data_pack),
+                             chrome_feature_list_creator) {}
 
 ChromeBrowserMainPartsWin::~ChromeBrowserMainPartsWin() {
 }
@@ -528,11 +530,12 @@ void ChromeBrowserMainPartsWin::PostProfileInit() {
   // What truly controls if the blocking is enabled is the presence of the
   // module blacklist cache file. This means that to disable the feature, the
   // cache must be deleted and the browser relaunched.
-  if (!ModuleDatabase::IsThirdPartyBlockingPolicyEnabled() ||
+  if (base::win::IsEnterpriseManaged() ||
+      !ModuleDatabase::IsThirdPartyBlockingPolicyEnabled() ||
       !base::FeatureList::IsEnabled(features::kThirdPartyModulesBlocking))
     ThirdPartyConflictsManager::DisableThirdPartyModuleBlocking(
         base::CreateTaskRunnerWithTraits(
-            {base::TaskPriority::BACKGROUND,
+            {base::TaskPriority::BEST_EFFORT,
              base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN,
              base::MayBlock()})
             .get());
@@ -549,18 +552,6 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
 
   UMA_HISTOGRAM_BOOLEAN("Windows.Tablet",
       base::win::IsTabletDevice(nullptr, ui::GetHiddenWindow()));
-
-  // Set up a task to verify installed modules in the current process.
-  // TODO(gab): Use base::PostTaskWithTraits() directly when we're convinced
-  // BACKGROUND work doesn't interfere with startup (i.e.
-  // https://crbug.com/726937).
-  // TODO(robertshield): remove this altogether, https://crbug.com/747557.
-  content::BrowserThread::PostAfterStartupTask(
-      FROM_HERE,
-      base::CreateTaskRunnerWithTraits(
-          {base::TaskPriority::BACKGROUND,
-           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN}),
-      base::Bind(&VerifyInstallation));
 
   InitializeChromeElf();
 
@@ -683,9 +674,8 @@ int ChromeBrowserMainPartsWin::HandleIconsCommands(
 
 // static
 bool ChromeBrowserMainPartsWin::CheckMachineLevelInstall() {
-  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
-  base::Version version;
-  InstallUtil::GetChromeVersion(dist, true, &version);
+  base::Version version =
+      InstallUtil::GetChromeVersion(true /* system_install */);
   if (version.IsValid()) {
     base::FilePath exe_path;
     base::PathService::Get(base::DIR_EXE, &exe_path);

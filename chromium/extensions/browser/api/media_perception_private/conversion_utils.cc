@@ -285,6 +285,21 @@ std::unique_ptr<Distance> DistanceProtoToIdl(const mri::Distance& distance) {
   return distance_result;
 }
 
+FramePerceptionType FramePerceptionTypeProtoToIdl(int type) {
+  switch (type) {
+    case mri::FramePerception::UNKNOWN_TYPE:
+      return FRAME_PERCEPTION_TYPE_UNKNOWN_TYPE;
+    case mri::FramePerception::FACE_DETECTION:
+      return FRAME_PERCEPTION_TYPE_FACE_DETECTION;
+    case mri::FramePerception::PERSON_DETECTION:
+      return FRAME_PERCEPTION_TYPE_PERSON_DETECTION;
+    case mri::FramePerception::MOTION_DETECTION:
+      return FRAME_PERCEPTION_TYPE_MOTION_DETECTION;
+  }
+  NOTREACHED() << "Unknown frame perception type: " << type;
+  return FRAME_PERCEPTION_TYPE_UNKNOWN_TYPE;
+}
+
 EntityType EntityTypeProtoToIdl(const mri::Entity& entity) {
   if (entity.has_type()) {
     switch (entity.type()) {
@@ -379,6 +394,14 @@ FramePerception FramePerceptionProtoToIdl(
         VideoHumanPresenceDetectionProtoToIdl(
             frame_perception.video_human_presence_detection());
   }
+  if (frame_perception.perception_types_size() > 0) {
+    frame_perception_result.frame_perception_types =
+        std::make_unique<std::vector<FramePerceptionType>>();
+    for (const auto& type : frame_perception.perception_types()) {
+      frame_perception_result.frame_perception_types->emplace_back(
+          FramePerceptionTypeProtoToIdl(type));
+    }
+  }
   return frame_perception_result;
 }
 
@@ -413,7 +436,7 @@ ImageFrame ImageFrameProtoToIdl(const mri::ImageFrame& image_frame) {
   }
 
   if (image_frame.has_pixel_data()) {
-    image_frame_result.frame = std::make_unique<std::vector<char>>(
+    image_frame_result.frame = std::make_unique<std::vector<uint8_t>>(
         image_frame.pixel_data().begin(), image_frame.pixel_data().end());
   }
 

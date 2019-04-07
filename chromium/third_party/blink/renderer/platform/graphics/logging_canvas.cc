@@ -53,6 +53,8 @@ namespace {
 
 struct VerbParams {
   STACK_ALLOCATED();
+
+ public:
   String name;
   unsigned point_count;
   unsigned point_offset;
@@ -780,21 +782,6 @@ void LoggingCanvas::onDrawPosTextH(const void* text,
   params->SetDouble("constY", const_y);
   params->SetObject("paint", ObjectForSkPaint(paint));
   this->SkCanvas::onDrawPosTextH(text, byte_length, xpos, const_y, paint);
-}
-
-void LoggingCanvas::onDrawTextOnPath(const void* text,
-                                     size_t byte_length,
-                                     const SkPath& path,
-                                     const SkMatrix* matrix,
-                                     const SkPaint& paint) {
-  AutoLogger logger(this);
-  JSONObject* params = logger.LogItemWithParams("drawTextOnPath");
-  params->SetString("text", StringForText(text, byte_length, paint));
-  params->SetObject("path", ObjectForSkPath(path));
-  if (matrix)
-    params->SetArray("matrix", ArrayForSkMatrix(*matrix));
-  params->SetObject("paint", ObjectForSkPaint(paint));
-  this->SkCanvas::onDrawTextOnPath(text, byte_length, path, matrix, paint);
 }
 
 void LoggingCanvas::onDrawTextBlob(const SkTextBlob* blob,

@@ -6,10 +6,8 @@
 
 #include <memory>
 #include "base/memory/ptr_util.h"
-#include "base/task_runner_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/test/simple_test_tick_clock.h"
-#include "base/threading/thread.h"
 #include "cc/layers/video_frame_provider.h"
 #include "cc/test/layer_test_common.h"
 #include "cc/trees/layer_tree_settings.h"
@@ -103,7 +101,7 @@ class MockVideoFrameResourceProvider
   MockVideoFrameResourceProvider(
       viz::ContextProvider* context_provider,
       viz::SharedBitmapReporter* shared_bitmap_reporter)
-      : blink::VideoFrameResourceProvider(cc::LayerTreeSettings()) {
+      : blink::VideoFrameResourceProvider(cc::LayerTreeSettings(), false) {
     blink::VideoFrameResourceProvider::Initialize(context_provider,
                                                   shared_bitmap_reporter);
   }
@@ -150,8 +148,9 @@ class VideoFrameSubmitterTest : public testing::Test {
         context_provider_.get(), nullptr);
     submitter_ = std::make_unique<VideoFrameSubmitter>(
         base::BindRepeating(
-            [](base::OnceCallback<void(
-                   bool, scoped_refptr<ui::ContextProviderCommandBuffer>)>) {}),
+            [](scoped_refptr<viz::ContextProvider>,
+               base::OnceCallback<void(
+                   bool, scoped_refptr<viz::ContextProvider>)>) {}),
         base::WrapUnique<MockVideoFrameResourceProvider>(resource_provider_));
 
     submitter_->Initialize(provider_.get());

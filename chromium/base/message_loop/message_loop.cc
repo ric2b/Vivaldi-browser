@@ -8,15 +8,17 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/debug/task_annotator.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop_task_runner.h"
 #include "base/message_loop/message_pump_default.h"
 #include "base/message_loop/message_pump_for_io.h"
 #include "base/message_loop/message_pump_for_ui.h"
+#include "base/message_loop/sequenced_task_source.h"
 #include "base/run_loop.h"
-#include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/threading/thread_id_name_manager.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -37,7 +39,7 @@ std::unique_ptr<MessagePump> ReturnPump(std::unique_ptr<MessagePump> pump) {
 
 }  // namespace
 
-class MessageLoop::Controller : public internal::IncomingTaskQueue::Observer {
+class MessageLoop::Controller : public SequencedTaskSource::Observer {
  public:
   // Constructs a MessageLoopController which controls |message_loop|, notifying
   // |task_annotator_| when tasks are queued scheduling work on |message_loop|
@@ -47,7 +49,7 @@ class MessageLoop::Controller : public internal::IncomingTaskQueue::Observer {
 
   ~Controller() override;
 
-  // IncomingTaskQueue::Observer:
+  // SequencedTaskSource::Observer:
   void WillQueueTask(PendingTask* task) final;
   void DidQueueTask(bool was_empty) final;
 
@@ -171,7 +173,7 @@ MessageLoop::~MessageLoop() {
   for (int i = 0; i < 100; ++i) {
     DeletePendingTasks();
     // If we end up with empty queues, then break out of the loop.
-    tasks_remain = incoming_task_queue_->triage_tasks().HasTasks();
+    tasks_remain = sequenced_task_source_->HasTasks();
     if (!tasks_remain)
       break;
   }
@@ -183,12 +185,22 @@ MessageLoop::~MessageLoop() {
 
   thread_task_runner_handle_.reset();
 
-  // Tell the incoming queue that we are dying.
+  // Detach this instance's Controller from |this|. After this point,
+  // |underlying_task_runner_| may still receive tasks and notify the controller
+  // but the controller will no-op (and not use this MessageLoop after free).
+  // |underlying_task_runner_| being ref-counted and potentially kept alive by
+  // many SingleThreadTaskRunner refs, the best we can do is tell it to shutdown
+  // after which it will start returning false to PostTasks that happen-after
+  // this point (note that invoking Shutdown() first would not remove the need
+  // to DisconnectFromParent() since the controller is invoked *after* a task is
+  // enqueued and the incoming queue's lock is released (see
+  // MessageLoopTaskRunner::AddToIncomingQueue()).
+  // Details : while an "in-progress post tasks" refcount in Controller in lieu
+  // of |message_loop_lock_| would be an option to handle the "pending post
+  // tasks on shutdown" case, |message_loop_lock_| would still be required to
+  // serialize ScheduleWork() call and as such that optimization isn't worth it.
   message_loop_controller_->DisconnectFromParent();
-  incoming_task_queue_->Shutdown();
-  incoming_task_queue_ = nullptr;
-  unbound_task_runner_ = nullptr;
-  task_runner_ = nullptr;
+  underlying_task_runner_->Shutdown();
 
   // OK, now make it so that no one can find us.
   if (MessageLoopCurrent::IsBoundToCurrentThreadInternal(this))
@@ -252,21 +264,29 @@ bool MessageLoop::IsType(Type type) const {
 // implementation detail. http://crbug.com/703346
 void MessageLoop::AddTaskObserver(TaskObserver* task_observer) {
   DCHECK_CALLED_ON_VALID_THREAD(bound_thread_checker_);
-  task_observers_.AddObserver(task_observer);
+  task_observers_.push_back(task_observer);
 }
 
 void MessageLoop::RemoveTaskObserver(TaskObserver* task_observer) {
   DCHECK_CALLED_ON_VALID_THREAD(bound_thread_checker_);
-  task_observers_.RemoveObserver(task_observer);
+  auto it =
+      std::find(task_observers_.begin(), task_observers_.end(), task_observer);
+  DCHECK(it != task_observers_.end());
+  task_observers_.erase(it);
+}
+
+void MessageLoop::SetAddQueueTimeToTasks(bool enable) {
+  DCHECK_CALLED_ON_VALID_THREAD(bound_thread_checker_);
+  underlying_task_runner_->SetAddQueueTimeToTasks(enable);
 }
 
 bool MessageLoop::IsIdleForTesting() {
   // Have unprocessed tasks? (this reloads the work queue if necessary)
-  if (incoming_task_queue_->triage_tasks().HasTasks())
+  if (sequenced_task_source_->HasTasks())
     return false;
 
   // Have unprocessed deferred tasks which can be processed at this run-level?
-  if (incoming_task_queue_->deferred_tasks().HasTasks() &&
+  if (pending_task_queue_.deferred_tasks().HasTasks() &&
       !RunLoop::IsNestedOnCurrentThread()) {
     return false;
   }
@@ -283,19 +303,16 @@ std::unique_ptr<MessageLoop> MessageLoop::CreateUnbound(
   return WrapUnique(new MessageLoop(type, std::move(pump_factory)));
 }
 
-// TODO(gab): Avoid bare new + WrapUnique below when introducing
-// SequencedTaskSource in follow-up @
-// https://chromium-review.googlesource.com/c/chromium/src/+/1088762.
 MessageLoop::MessageLoop(Type type, MessagePumpFactoryCallback pump_factory)
     : MessageLoopCurrent(this),
       type_(type),
       pump_factory_(std::move(pump_factory)),
-      message_loop_controller_(new Controller(this)),
-      incoming_task_queue_(MakeRefCounted<internal::IncomingTaskQueue>(
+      message_loop_controller_(
+          new Controller(this)),  // Ownership transferred on the next line.
+      underlying_task_runner_(MakeRefCounted<internal::MessageLoopTaskRunner>(
           WrapUnique(message_loop_controller_))),
-      unbound_task_runner_(MakeRefCounted<internal::MessageLoopTaskRunner>(
-          incoming_task_queue_)),
-      task_runner_(unbound_task_runner_) {
+      sequenced_task_source_(underlying_task_runner_.get()),
+      task_runner_(underlying_task_runner_) {
   // If type is TYPE_CUSTOM non-null pump_factory must be given.
   DCHECK(type_ != TYPE_CUSTOM || !pump_factory_.is_null());
 
@@ -316,9 +333,8 @@ void MessageLoop::BindToCurrentThread() {
       << "should only have one message loop per thread";
   MessageLoopCurrent::BindToCurrentThreadInternal(this);
 
+  underlying_task_runner_->BindToCurrentThread();
   message_loop_controller_->StartScheduling();
-  unbound_task_runner_->BindToCurrentThread();
-  unbound_task_runner_ = nullptr;
   SetThreadTaskRunnerHandle();
   thread_id_ = PlatformThread::CurrentId();
 
@@ -344,21 +360,18 @@ std::string MessageLoop::GetThreadName() const {
 
 void MessageLoop::SetTaskRunner(
     scoped_refptr<SingleThreadTaskRunner> task_runner) {
-  DCHECK_CALLED_ON_VALID_THREAD(bound_thread_checker_);
-
   DCHECK(task_runner);
-  DCHECK(task_runner->BelongsToCurrentThread());
-  DCHECK(!unbound_task_runner_);
-  task_runner_ = std::move(task_runner);
-  SetThreadTaskRunnerHandle();
-}
-
-void MessageLoop::ClearTaskRunnerForTesting() {
-  DCHECK_CALLED_ON_VALID_THREAD(bound_thread_checker_);
-
-  DCHECK(!unbound_task_runner_);
-  task_runner_ = nullptr;
-  thread_task_runner_handle_.reset();
+  if (thread_id_ == kInvalidThreadId) {
+    // ThreadTaskRunnerHandle will be set during BindToCurrentThread().
+    task_runner_ = std::move(task_runner);
+  } else {
+    // Once MessageLoop is bound, |task_runner_| may only be altered on the
+    // bound thread.
+    DCHECK_CALLED_ON_VALID_THREAD(bound_thread_checker_);
+    DCHECK(task_runner->BelongsToCurrentThread());
+    task_runner_ = std::move(task_runner);
+    SetThreadTaskRunnerHandle();
+  }
 }
 
 void MessageLoop::Run(bool application_tasks_allowed) {
@@ -381,7 +394,7 @@ void MessageLoop::Quit() {
 
 void MessageLoop::EnsureWorkScheduled() {
   DCHECK_CALLED_ON_VALID_THREAD(bound_thread_checker_);
-  if (incoming_task_queue_->triage_tasks().HasTasks())
+  if (sequenced_task_source_->HasTasks())
     pump_->ScheduleWork();
 }
 
@@ -397,8 +410,8 @@ bool MessageLoop::ProcessNextDelayedNonNestableTask() {
   if (RunLoop::IsNestedOnCurrentThread())
     return false;
 
-  while (incoming_task_queue_->deferred_tasks().HasTasks()) {
-    PendingTask pending_task = incoming_task_queue_->deferred_tasks().Pop();
+  while (pending_task_queue_.deferred_tasks().HasTasks()) {
+    PendingTask pending_task = pending_task_queue_.deferred_tasks().Pop();
     if (!pending_task.task.IsCancelled()) {
       RunTask(&pending_task);
       return true;
@@ -416,12 +429,12 @@ void MessageLoop::RunTask(PendingTask* pending_task) {
 
   TRACE_TASK_EXECUTION("MessageLoop::RunTask", *pending_task);
 
-  for (auto& observer : task_observers_)
-    observer.WillProcessTask(*pending_task);
+  for (TaskObserver* task_observer : task_observers_)
+    task_observer->WillProcessTask(*pending_task);
   message_loop_controller_->task_annotator().RunTask("MessageLoop::PostTask",
                                                      pending_task);
-  for (auto& observer : task_observers_)
-    observer.DidProcessTask(*pending_task);
+  for (TaskObserver* task_observer : task_observers_)
+    task_observer->DidProcessTask(*pending_task);
 
   task_execution_allowed_ = true;
 }
@@ -437,17 +450,41 @@ bool MessageLoop::DeferOrRunPendingTask(PendingTask pending_task) {
 
   // We couldn't run the task now because we're in a nested run loop
   // and the task isn't nestable.
-  incoming_task_queue_->deferred_tasks().Push(std::move(pending_task));
+  pending_task_queue_.deferred_tasks().Push(std::move(pending_task));
   return false;
 }
 
 void MessageLoop::DeletePendingTasks() {
-  incoming_task_queue_->triage_tasks().Clear();
-  incoming_task_queue_->deferred_tasks().Clear();
+  // Delete all currently pending tasks but not tasks potentially posted from
+  // their destructors. See ~MessageLoop() for the full logic mitigating against
+  // infite loops when clearing pending tasks. The ScopedClosureRunner below
+  // will be bound to a task posted at the end of the queue. After it is posted,
+  // tasks will be deleted one by one, when the bound ScopedClosureRunner is
+  // deleted and sets |deleted_all_originally_pending|, we know we've deleted
+  // all originally pending tasks.
+  bool deleted_all_originally_pending = false;
+  ScopedClosureRunner capture_deleted_all_originally_pending(BindOnce(
+      [](bool* deleted_all_originally_pending) {
+        *deleted_all_originally_pending = true;
+      },
+      Unretained(&deleted_all_originally_pending)));
+  sequenced_task_source_->InjectTask(
+      BindOnce([](ScopedClosureRunner) {},
+               std::move(capture_deleted_all_originally_pending)));
+
+  while (!deleted_all_originally_pending) {
+    PendingTask pending_task = sequenced_task_source_->TakeTask();
+
+    // New delayed tasks should be deleted after older ones.
+    if (!pending_task.delayed_run_time.is_null())
+      pending_task_queue_.delayed_tasks().Push(std::move(pending_task));
+  }
+
+  pending_task_queue_.deferred_tasks().Clear();
   // TODO(robliao): Determine if we can move delayed task destruction before
   // deferred tasks to maintain the MessagePump DoWork, DoDelayedWork, and
   // DoIdleWork processing order.
-  incoming_task_queue_->delayed_tasks().Clear();
+  pending_task_queue_.delayed_tasks().Clear();
 }
 
 void MessageLoop::ScheduleWork() {
@@ -463,17 +500,17 @@ bool MessageLoop::DoWork() {
     return false;
 
   // Execute oldest task.
-  while (incoming_task_queue_->triage_tasks().HasTasks()) {
-    PendingTask pending_task = incoming_task_queue_->triage_tasks().Pop();
+  while (sequenced_task_source_->HasTasks()) {
+    PendingTask pending_task = sequenced_task_source_->TakeTask();
     if (pending_task.task.IsCancelled())
       continue;
 
     if (!pending_task.delayed_run_time.is_null()) {
       int sequence_num = pending_task.sequence_num;
       TimeTicks delayed_run_time = pending_task.delayed_run_time;
-      incoming_task_queue_->delayed_tasks().Push(std::move(pending_task));
+      pending_task_queue_.delayed_tasks().Push(std::move(pending_task));
       // If we changed the topmost task, then it is time to reschedule.
-      if (incoming_task_queue_->delayed_tasks().Peek().sequence_num ==
+      if (pending_task_queue_.delayed_tasks().Peek().sequence_num ==
           sequence_num) {
         pump_->ScheduleDelayedWork(delayed_run_time);
       }
@@ -488,7 +525,7 @@ bool MessageLoop::DoWork() {
 
 bool MessageLoop::DoDelayedWork(TimeTicks* next_delayed_work_time) {
   if (!task_execution_allowed_ ||
-      !incoming_task_queue_->delayed_tasks().HasTasks()) {
+      !pending_task_queue_.delayed_tasks().HasTasks()) {
     *next_delayed_work_time = TimeTicks();
     return false;
   }
@@ -501,7 +538,7 @@ bool MessageLoop::DoDelayedWork(TimeTicks* next_delayed_work_time) {
   // efficient we'll be at handling the tasks.
 
   TimeTicks next_run_time =
-      incoming_task_queue_->delayed_tasks().Peek().delayed_run_time;
+      pending_task_queue_.delayed_tasks().Peek().delayed_run_time;
 
   if (next_run_time > recent_time_) {
     recent_time_ = TimeTicks::Now();  // Get a better view of Now();
@@ -511,11 +548,11 @@ bool MessageLoop::DoDelayedWork(TimeTicks* next_delayed_work_time) {
     }
   }
 
-  PendingTask pending_task = incoming_task_queue_->delayed_tasks().Pop();
+  PendingTask pending_task = pending_task_queue_.delayed_tasks().Pop();
 
-  if (incoming_task_queue_->delayed_tasks().HasTasks()) {
+  if (pending_task_queue_.delayed_tasks().HasTasks()) {
     *next_delayed_work_time = CapAtOneDay(
-        incoming_task_queue_->delayed_tasks().Peek().delayed_run_time);
+        pending_task_queue_.delayed_tasks().Peek().delayed_run_time);
   }
 
   return DeferOrRunPendingTask(std::move(pending_task));
@@ -541,15 +578,14 @@ bool MessageLoop::DoIdleWork() {
     // only one UI thread per process and, for practical purposes, restricting
     // the MessageLoop diagnostic metrics to it yields similar information.
     if (type_ == TYPE_UI)
-      incoming_task_queue_->ReportMetricsOnIdle();
+      pending_task_queue_.ReportMetricsOnIdle();
 
 #if defined(OS_WIN)
     // On Windows we activate the high resolution timer so that the wait
     // _if_ triggered by the timer happens with good resolution. If we don't
     // do this the default resolution is 15ms which might not be acceptable
     // for some tasks.
-    need_high_res_timers =
-        incoming_task_queue_->HasPendingHighResolutionTasks();
+    need_high_res_timers = pending_task_queue_.HasPendingHighResolutionTasks();
 #endif
   }
 

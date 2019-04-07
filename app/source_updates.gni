@@ -93,6 +93,13 @@ foreach(
         },
       ],
       [
+        "//ui/strings:ui_strings",
+        "//vivaldi/app/resources/ui_strings/vivaldi_ui_strings.grd",
+        {
+          translation_dir_setting = "strings"
+        },
+      ],
+      [
         "//chrome/app/resources:locale_settings",
         "//vivaldi/app/resources/locale/vivaldi_locale_strings.grd",
         {

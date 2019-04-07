@@ -35,6 +35,9 @@ bool is_console = false;
 
 bool is_markdown = false;
 
+// True while output is going into a markdown ```...``` code block.
+bool in_body = false;
+
 void EnsureInitialized() {
   if (initialized)
     return;
@@ -96,7 +99,9 @@ void OutputMarkdownDec(TextDecoration dec) {
 
 #if defined(OS_WIN)
 
-void OutputString(const std::string& output, TextDecoration dec) {
+void OutputString(const std::string& output,
+                  TextDecoration dec,
+                  HtmlEscaping escaping) {
   EnsureInitialized();
   DWORD written = 0;
 
@@ -135,6 +140,12 @@ void OutputString(const std::string& output, TextDecoration dec) {
     // at least escape the instances where this shows up in a heading.
     base::ReplaceSubstringsAfterOffset(&tmpstr, 0, "--", "\\--");
   }
+  if (is_markdown && !in_body && escaping == DEFAULT_ESCAPING) {
+    // Markdown auto-escapes < and > in code sections (and converts &lt; to
+    // &amp;tl; there), but not elsewhere.
+    base::ReplaceSubstringsAfterOffset(&tmpstr, 0, "<", "&lt;");
+    base::ReplaceSubstringsAfterOffset(&tmpstr, 0, ">", "&gt;");
+  }
   ::WriteFile(hstdout, tmpstr.c_str(), static_cast<DWORD>(tmpstr.size()),
               &written, nullptr);
 
@@ -147,7 +158,9 @@ void OutputString(const std::string& output, TextDecoration dec) {
 
 #else
 
-void OutputString(const std::string& output, TextDecoration dec) {
+void OutputString(const std::string& output,
+                  TextDecoration dec,
+                  HtmlEscaping escaping) {
   EnsureInitialized();
   if (is_markdown) {
     OutputMarkdownDec(dec);
@@ -180,6 +193,12 @@ void OutputString(const std::string& output, TextDecoration dec) {
     // Figuring out all instances of this might be difficult, but we can
     // at least escape the instances where this shows up in a heading.
     base::ReplaceSubstringsAfterOffset(&tmpstr, 0, "--", "\\--");
+  }
+  if (is_markdown && !in_body && escaping == DEFAULT_ESCAPING) {
+    // Markdown auto-escapes < and > in code sections (and converts &lt; to
+    // &amp;tl; there), but not elsewhere.
+    base::ReplaceSubstringsAfterOffset(&tmpstr, 0, "<", "&lt;");
+    base::ReplaceSubstringsAfterOffset(&tmpstr, 0, ">", "&gt;");
   }
   WriteToStdOut(tmpstr.data());
 
@@ -248,7 +267,7 @@ void PrintLongHelp(const std::string& text, const std::string& tag) {
   EnsureInitialized();
 
   bool first_header = true;
-  bool in_body = false;
+  in_body = false;
   std::size_t empty_lines = 0;
   for (const std::string& line : base::SplitString(
            text, "\n", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL)) {
@@ -279,7 +298,8 @@ void PrintLongHelp(const std::string& text, const std::string& tag) {
               the_tag = line.substr(0, line.find(':'));
             }
           }
-          OutputString("### <a name=\"" + the_tag + "\"></a>", DECORATION_NONE);
+          OutputString("### <a name=\"" + the_tag + "\"></a>", DECORATION_NONE,
+                       NO_ESCAPING);
           first_header = false;
         } else {
           OutputString("#### ", DECORATION_NONE);

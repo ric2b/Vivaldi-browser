@@ -15,6 +15,9 @@
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/system/status_area_widget_delegate.h"
+#include "ash/system/toast/toast_data.h"
+#include "ash/system/toast/toast_manager.h"
 #include "base/debug/alias.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -128,9 +131,6 @@ void LoginScreenController::AttemptUnlock(const AccountId& account_id) {
   if (!login_screen_client_)
     return;
   login_screen_client_->AttemptUnlock(account_id);
-
-  Shell::Get()->metrics()->login_metrics_recorder()->SetAuthMethod(
-      LoginMetricsRecorder::AuthMethod::kSmartlock);
 }
 
 void LoginScreenController::HardlockPod(const AccountId& account_id) {
@@ -285,6 +285,16 @@ void LoginScreenController::ShowErrorMessage(int32_t login_attempts,
   NOTIMPLEMENTED();
 }
 
+void LoginScreenController::ShowWarningBanner(const base::string16& message) {
+  if (DataDispatcher())
+    DataDispatcher()->ShowWarningBanner(message);
+}
+
+void LoginScreenController::HideWarningBanner() {
+  if (DataDispatcher())
+    DataDispatcher()->HideWarningBanner();
+}
+
 void LoginScreenController::ClearErrors() {
   NOTIMPLEMENTED();
 }
@@ -306,8 +316,8 @@ void LoginScreenController::SetAuthType(
     proximity_auth::mojom::AuthType auth_type,
     const base::string16& initial_value) {
   if (auth_type == proximity_auth::mojom::AuthType::USER_CLICK) {
-    DataDispatcher()->SetClickToUnlockEnabledForUser(account_id,
-                                                     true /*enabled*/);
+    DataDispatcher()->SetTapToUnlockEnabledForUser(account_id,
+                                                   true /*enabled*/);
   } else if (auth_type == proximity_auth::mojom::AuthType::ONLINE_SIGN_IN) {
     DataDispatcher()->SetForceOnlineSignInForUser(account_id);
   } else {
@@ -315,16 +325,11 @@ void LoginScreenController::SetAuthType(
   }
 }
 
-void LoginScreenController::LoadUsers(
-    std::vector<mojom::LoginUserInfoPtr> users,
-    bool show_guest) {
+void LoginScreenController::SetUserList(
+    std::vector<mojom::LoginUserInfoPtr> users) {
   DCHECK(DataDispatcher());
 
   DataDispatcher()->NotifyUsers(users);
-  Shelf::ForWindow(Shell::Get()->GetPrimaryRootWindow())
-      ->shelf_widget()
-      ->login_shelf_view()
-      ->SetAllowLoginAsGuest(show_guest);
 }
 
 void LoginScreenController::SetPinEnabledForUser(const AccountId& account_id,
@@ -356,13 +361,14 @@ void LoginScreenController::HandleFocusLeavingLockScreenApps(bool reverse) {
     observer.OnFocusLeavingLockScreenApps(reverse);
 }
 
-void LoginScreenController::SetDevChannelInfo(
+void LoginScreenController::SetSystemInfo(
+    bool show_if_hidden,
     const std::string& os_version_label_text,
     const std::string& enterprise_info_text,
     const std::string& bluetooth_name) {
   if (DataDispatcher()) {
-    DataDispatcher()->SetDevChannelInfo(os_version_label_text,
-                                        enterprise_info_text, bluetooth_name);
+    DataDispatcher()->SetSystemInfo(show_if_hidden, os_version_label_text,
+                                    enterprise_info_text, bluetooth_name);
   }
 }
 
@@ -414,11 +420,32 @@ void LoginScreenController::SetKioskApps(
       ->SetKioskApps(std::move(kiosk_apps));
 }
 
-void LoginScreenController::NotifyOobeDialogVisibility(bool visible) {
+void LoginScreenController::ShowKioskAppError(const std::string& message) {
+  ToastData toast_data(
+      "KioskAppError", base::UTF8ToUTF16(message), -1 /*duration_ms*/,
+      base::Optional<base::string16>(base::string16()) /*dismiss_text*/,
+      true /*visible_on_lock_screen*/);
+  Shell::Get()->toast_manager()->Show(toast_data);
+}
+
+void LoginScreenController::NotifyOobeDialogState(
+    mojom::OobeDialogState state) {
+  for (auto& observer : observers_)
+    observer.OnOobeDialogStateChanged(state);
+}
+
+void LoginScreenController::SetAllowLoginAsGuest(bool allow_guest) {
   Shelf::ForWindow(Shell::Get()->GetPrimaryRootWindow())
       ->shelf_widget()
       ->login_shelf_view()
-      ->SetLoginDialogVisible(visible);
+      ->SetAllowLoginAsGuest(allow_guest);
+}
+
+void LoginScreenController::SetShowGuestButtonForGaiaScreen(bool can_show) {
+  Shelf::ForWindow(Shell::Get()->GetPrimaryRootWindow())
+      ->shelf_widget()
+      ->login_shelf_view()
+      ->SetShowGuestButtonForGaiaScreen(can_show);
 }
 
 void LoginScreenController::SetAddUserButtonEnabled(bool enable) {
@@ -440,6 +467,10 @@ void LoginScreenController::ShowResetScreen() {
   login_screen_client_->ShowResetScreen();
 }
 
+void LoginScreenController::ShowAccountAccessHelpApp() {
+  login_screen_client_->ShowAccountAccessHelpApp();
+}
+
 void LoginScreenController::DoAuthenticateUser(const AccountId& account_id,
                                                const std::string& password,
                                                bool authenticated_by_pin,
@@ -450,11 +481,6 @@ void LoginScreenController::DoAuthenticateUser(const AccountId& account_id,
   int dummy_value;
   bool is_pin =
       authenticated_by_pin && base::StringToInt(password, &dummy_value);
-
-  Shell::Get()->metrics()->login_metrics_recorder()->SetAuthMethod(
-      is_pin ? LoginMetricsRecorder::AuthMethod::kPin
-             : LoginMetricsRecorder::AuthMethod::kPassword);
-
   login_screen_client_->AuthenticateUser(
       account_id, password, is_pin,
       base::BindOnce(&LoginScreenController::OnAuthenticateComplete,

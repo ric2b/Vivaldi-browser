@@ -31,7 +31,6 @@ class RemoteFrameClient : public FrameClient {
   virtual void Navigate(const ResourceRequest&,
                         bool should_replace_current_entry,
                         mojom::blink::BlobURLTokenPtr) = 0;
-  virtual void Reload(WebFrameLoadType, ClientRedirectPolicy) = 0;
   unsigned BackForwardLength() override = 0;
 
   // Notifies the remote frame to check whether it is done loading, after one
@@ -52,7 +51,8 @@ class RemoteFrameClient : public FrameClient {
                                  const IntRect& screen_space_rect) = 0;
 
   virtual void UpdateRemoteViewportIntersection(
-      const IntRect& viewport_intersection) = 0;
+      const IntRect& viewport_intersection,
+      bool occluded_or_obscured) = 0;
 
   virtual void AdvanceFocus(WebFocusType, LocalFrame* source) = 0;
 

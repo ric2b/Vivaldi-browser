@@ -59,7 +59,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -998,7 +998,7 @@ void ChromeLauncherController::SetVirtualKeyboardBehaviorFromPrefs() {
                : keyboard::KEYBOARD_SHOW_OVERRIDE_DISABLED);
   }
   // TODO(crbug.com/557406): Fix this interaction pattern in Mash.
-  if (features::IsAshInBrowserProcess()) {
+  if (!features::IsMultiProcessMash()) {
     const bool is_enabled = keyboard::IsKeyboardEnabled();
     if (was_enabled && !is_enabled)
       ash::Shell::Get()->DisableKeyboard();
@@ -1094,8 +1094,7 @@ void ChromeLauncherController::CloseWindowedAppsFromRemovedExtension(
     Browser* browser = *it;
     if (!browser->is_type_tabbed() && browser->is_type_popup() &&
         browser->is_app() &&
-        app_id ==
-            web_app::GetExtensionIdFromApplicationName(browser->app_name()) &&
+        app_id == web_app::GetAppIdFromApplicationName(browser->app_name()) &&
         profile == browser->profile()) {
       browser_to_close.push_back(browser);
     }
@@ -1126,25 +1125,25 @@ void ChromeLauncherController::AttachProfile(Profile* profile_to_attach) {
   // if the icon cache gets deleted upon user switch.
   std::unique_ptr<AppIconLoader> chrome_app_icon_loader =
       std::make_unique<extensions::ChromeAppIconLoader>(
-          profile_, extension_misc::EXTENSION_ICON_SMALL, this);
+          profile_, extension_misc::EXTENSION_ICON_MEDIUM, this);
   app_icon_loaders_.push_back(std::move(chrome_app_icon_loader));
 
   if (arc::IsArcAllowedForProfile(profile_)) {
     std::unique_ptr<AppIconLoader> arc_app_icon_loader =
         std::make_unique<ArcAppIconLoader>(
-            profile_, extension_misc::EXTENSION_ICON_SMALL, this);
+            profile_, extension_misc::EXTENSION_ICON_MEDIUM, this);
     app_icon_loaders_.push_back(std::move(arc_app_icon_loader));
   }
 
   std::unique_ptr<AppIconLoader> internal_app_icon_loader =
       std::make_unique<InternalAppIconLoader>(
-          profile_, extension_misc::EXTENSION_ICON_SMALL, this);
+          profile_, extension_misc::EXTENSION_ICON_MEDIUM, this);
   app_icon_loaders_.push_back(std::move(internal_app_icon_loader));
 
   if (IsCrostiniUIAllowedForProfile(profile_)) {
     std::unique_ptr<AppIconLoader> crostini_app_icon_loader =
         std::make_unique<CrostiniAppIconLoader>(
-            profile_, extension_misc::EXTENSION_ICON_SMALL, this);
+            profile_, extension_misc::EXTENSION_ICON_MEDIUM, this);
     app_icon_loaders_.push_back(std::move(crostini_app_icon_loader));
   }
 

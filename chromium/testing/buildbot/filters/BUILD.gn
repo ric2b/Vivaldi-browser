@@ -16,19 +16,42 @@
 # $ for i in $(ls -1 testing/buildbot/filters/*.browser_tests.*filter ); \
 #   do echo "    \"//$i\","; done | sort
 
+source_set("ash_unittests_filters") {
+  testonly = true
+
+  data = [
+    "//testing/buildbot/filters/chromeos.single_process_mash.fyi.ash_unittests.filter",
+  ]
+}
+
 source_set("browser_tests_filters") {
   testonly = true
 
   data = [
-    "//testing/buildbot/filters/mash.browser_tests.filter",
+    "//testing/buildbot/filters/chromeos.mash.browser_tests.filter",
+    "//testing/buildbot/filters/chromeos.mash.fyi.browser_tests.filter",
+    "//testing/buildbot/filters/chromeos.single_process_mash.browser_tests.filter",
+    "//testing/buildbot/filters/chromeos.single_process_mash.fyi.browser_tests.filter",
     "//testing/buildbot/filters/mojo.fyi.network_browser_tests.filter",
-    "//testing/buildbot/filters/viz.browser_tests.filter",
+    "//testing/buildbot/filters/webui_polymer2_browser_tests.filter",
+    "//testing/buildbot/filters/webrtc_functional.browser_tests.filter",
+    "//testing/buildbot/filters/webrtc_perf.browser_tests.filter",
   ]
 }
 
 source_set("chromeos_filters") {
   data = [
+    "//testing/buildbot/filters/chromeos.chromeos_unittests.filter",
     "//testing/buildbot/filters/chromeos.media_unittests.filter",
+    "//testing/buildbot/filters/chromeos.services_unittests.filter",
+  ]
+}
+
+source_set("content_unittests_filters") {
+  testonly = true
+
+  data = [
+    "//testing/buildbot/filters/webrtc.content_unittests.filter",
   ]
 }
 
@@ -38,18 +61,6 @@ source_set("content_browsertests_filters") {
   data = [
     "//testing/buildbot/filters/cast-linux.content_browsertests.filter",
     "//testing/buildbot/filters/mojo.fyi.network_content_browsertests.filter",
-    "//testing/buildbot/filters/site-per-process.content_browsertests.filter",
-    "//testing/buildbot/filters/surface_sync.content_browsertests.filter",
-    "//testing/buildbot/filters/viz.android.content_browsertests.filter",
-    "//testing/buildbot/filters/viz.content_browsertests.filter",
-  ]
-}
-
-source_set("content_unittests_filters") {
-  testonly = true
-
-  data = [
-    "//testing/buildbot/filters/viz.content_unittests.filter",
   ]
 }
 
@@ -60,5 +71,13 @@ source_set("fuchsia_filters") {
     "//testing/buildbot/filters/fuchsia.mojo_unittests.filter",
     "//testing/buildbot/filters/fuchsia.net_unittests.filter",
     "//testing/buildbot/filters/fuchsia.ui_base_unittests.filter",
+  ]
+}
+
+source_set("interactive_ui_tests_filters") {
+  testonly = true
+
+  data = [
+    "//testing/buildbot/filters/webui_polymer2_interactive_ui_tests.filter",
   ]
 }

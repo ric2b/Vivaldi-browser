@@ -31,6 +31,7 @@
 #include "media/gpu/gpu_jpeg_decode_accelerator_factory.h"
 #include "media/gpu/test/video_accelerator_unittest_helpers.h"
 #include "media/video/jpeg_decode_accelerator.h"
+#include "mojo/core/embedder/embedder.h"
 #include "third_party/libyuv/include/libyuv.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -533,7 +534,8 @@ bool JpegDecodeAcceleratorTestEnvironment::CreateTestJpegImage(
 void JpegDecodeAcceleratorTestEnvironment::ReadTestJpegImage(
     base::FilePath& input_file,
     TestImageFile* image_data) {
-  ASSERT_TRUE(base::ReadFileToString(input_file, &image_data->data_str));
+  ASSERT_TRUE(base::ReadFileToString(input_file, &image_data->data_str))
+      << input_file;
 
   ASSERT_TRUE(ParseJpegPicture(
       reinterpret_cast<const uint8_t*>(image_data->data_str.data()),
@@ -842,6 +844,7 @@ TEST_F(JpegDecodeAcceleratorTest, PerfSW) {
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   base::CommandLine::Init(argc, argv);
+  mojo::core::Init();
   base::ShadowingAtExitManager at_exit_manager;
 
   // Needed to enable DVLOG through --vmodule.

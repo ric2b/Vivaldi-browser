@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/keyed_service/core/service_access_type.h"
@@ -40,11 +41,13 @@
 #include "ios/public/provider/chrome/browser/test_chrome_browser_provider.h"
 #import "ios/testing/ocmock_complex_type_helper.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
+#include "ios/web/public/features.h"
 #include "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/referrer.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
+#import "ios/web/test/fakes/crw_fake_back_forward_list.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/web_state_impl.h"
 #import "net/base/mac/url_conversions.h"
@@ -68,7 +71,6 @@
 #undef catch
 
 namespace {
-const char kAppSettingsUrl[] = "app-settings://";
 const char kNewTabUrl[] = "chrome://newtab/";
 const char kGoogleUserUrl[] = "http://google.com";
 const char kGoogleRedirectUrl[] = "http://www.google.fr/";
@@ -140,10 +142,18 @@ class HistoryQueryResultsObserver
 
 HistoryQueryResultsObserver::~HistoryQueryResultsObserver() {}
 
+// TabTest is parameterized on this enum to test both LegacyNavigationManager
+// and WKBasedNavigationManager.
+enum class NavigationManagerChoice {
+  LEGACY,
+  WK_BASED,
+};
+
 // TODO(crbug.com/620465): can a TestWebState be used instead of a WebStateImpl
 // for those tests? This will require changing Tab to use a WebState instead of
 // a WebStateImpl first though.
-class TabTest : public BlockCleanupTest {
+class TabTest : public BlockCleanupTest,
+                public ::testing::WithParamInterface<NavigationManagerChoice> {
  public:
   TabTest()
       : scoped_browser_state_manager_(
@@ -152,6 +162,14 @@ class TabTest : public BlockCleanupTest {
 
   void SetUp() override {
     BlockCleanupTest::SetUp();
+
+    if (GetParam() == NavigationManagerChoice::LEGACY) {
+      scoped_feature_list_.InitAndDisableFeature(
+          web::features::kSlimNavigationManager);
+    } else {
+      scoped_feature_list_.InitAndEnableFeature(
+          web::features::kSlimNavigationManager);
+    }
 
     [[ChromeAppConstants sharedInstance]
         setCallbackSchemeForTesting:@"chromium"];
@@ -174,6 +192,15 @@ class TabTest : public BlockCleanupTest {
 
     mock_web_controller_ =
         [OCMockObject niceMockForClass:[CRWWebController class]];
+
+    if (GetParam() == NavigationManagerChoice::WK_BASED) {
+      mock_web_view_ = [OCMockObject mockForClass:[WKWebView class]];
+      fake_wk_list_ = [[CRWFakeBackForwardList alloc] init];
+      OCMStub([mock_web_view_ backForwardList]).andReturn(fake_wk_list_);
+      OCMStub([mock_web_controller_ webViewNavigationProxy])
+          .andReturn(mock_web_view_);
+    }
+
     web::WebState::CreateParams create_params(browser_state);
     web_state_impl_ = std::make_unique<web::WebStateImpl>(create_params);
     web_state_impl_->SetWebController(mock_web_controller_);
@@ -222,7 +249,13 @@ class TabTest : public BlockCleanupTest {
     web::FakeNavigationContext context2;
     context2.SetUrl(redirect_url);
     web_state_impl_->OnNavigationStarted(&context2);
+
+    if (GetParam() == NavigationManagerChoice::WK_BASED) {
+      [fake_wk_list_
+          setCurrentURL:base::SysUTF8ToNSString(redirect_url.spec())];
+    }
     [tab_ navigationManagerImpl]->CommitPendingItem();
+
     context2.SetHasCommitted(true);
     web_state_impl_->UpdateHttpResponseHeaders(redirect_url);
     web_state_impl_->OnNavigationFinished(&context2);
@@ -303,12 +336,15 @@ class TabTest : public BlockCleanupTest {
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   std::unique_ptr<web::WebStateImpl> web_state_impl_;
   __weak CRWWebController* mock_web_controller_;
+  WKWebView* mock_web_view_;
+  CRWFakeBackForwardList* fake_wk_list_;
   UIView* web_controller_view_;
   ArrayTabModel* tabModel_;
   __weak Tab* tab_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-TEST_F(TabTest, AddToHistoryWithRedirect) {
+TEST_P(TabTest, AddToHistoryWithRedirect) {
   BrowseTo(GURL(kGoogleUserUrl), GURL(kGoogleRedirectUrl), kGoogleTitle);
   history::QueryResults results;
   QueryAllHistory(&results);
@@ -317,18 +353,11 @@ TEST_F(TabTest, AddToHistoryWithRedirect) {
   CheckCurrentItem(results[0]);
 }
 
-TEST_F(TabTest, FailToOpenAppSettings) {
-  GURL app_settings_url = GURL(kAppSettingsUrl);
-  BOOL will_open_app_settings =
-      [tab_ openExternalURL:app_settings_url sourceURL:GURL() linkClicked:YES];
-  EXPECT_FALSE(will_open_app_settings);
-}
-
 // TODO(crbug.com/378098): Disabled because forward/back is now implemented in
 // CRWWebController, so this test cannot function with a mock CRWWebController.
 // Rewrite and re-enable this test when it becomes a CRWWebController or
 // NavigationManager test.
-TEST_F(TabTest, DISABLED_BackAndForward) {
+TEST_P(TabTest, DISABLED_BackAndForward) {
   BrowseTo(GURL(kGoogleUserUrl), GURL(kGoogleRedirectUrl), kGoogleTitle);
   BrowseTo(GURL(kOtherUserUrl), GURL(kOtherRedirectUrl), kOtherTitle);
 
@@ -344,7 +373,7 @@ TEST_F(TabTest, DISABLED_BackAndForward) {
 // possible with a mock
 // CRWWebController. Rewrite and re-enable this test when it becomes a
 // CRWWebController test.
-TEST_F(TabTest, DISABLED_NewTabInMiddleOfNavigation) {
+TEST_P(TabTest, DISABLED_NewTabInMiddleOfNavigation) {
   BrowseTo(GURL(kGoogleUserUrl), GURL(kGoogleRedirectUrl), kGoogleTitle);
   BrowseToNewTab();
   BrowseTo(GURL(kOtherUserUrl), GURL(kOtherRedirectUrl), kOtherTitle);
@@ -357,7 +386,7 @@ TEST_F(TabTest, DISABLED_NewTabInMiddleOfNavigation) {
   CheckHistoryResult(results[1], GURL(kGoogleRedirectUrl), kGoogleTitle);
 }
 
-TEST_F(TabTest, GetSuggestedFilenameFromContentDisposition) {
+TEST_P(TabTest, GetSuggestedFilenameFromContentDisposition) {
   // If possible, the filename should be generated from the content-disposition
   // header.
   GURL url(kValidFilenameUrl);
@@ -372,7 +401,7 @@ TEST_F(TabTest, GetSuggestedFilenameFromContentDisposition) {
               [[tab_ openInController] suggestedFilename]);
 }
 
-TEST_F(TabTest, GetSuggestedFilenameFromURL) {
+TEST_P(TabTest, GetSuggestedFilenameFromURL) {
   // If the content-disposition header does not specify a filename, this should
   // be extracted from the last component of the url.
   GURL url(kValidFilenameUrl);
@@ -386,7 +415,7 @@ TEST_F(TabTest, GetSuggestedFilenameFromURL) {
   EXPECT_NSEQ(@"filename.pdf", [[tab_ openInController] suggestedFilename]);
 }
 
-TEST_F(TabTest, GetSuggestedFilenameFromDefaultName) {
+TEST_P(TabTest, GetSuggestedFilenameFromDefaultName) {
   // If the filename cannot be extracted from the content disposition or from
   // the url, the default filename "Document.pdf" should be used.
   GURL url(kInvalidFilenameUrl);
@@ -398,7 +427,7 @@ TEST_F(TabTest, GetSuggestedFilenameFromDefaultName) {
   EXPECT_NSEQ(@"Document.pdf", [[tab_ openInController] suggestedFilename]);
 }
 
-TEST_F(TabTest, ClosingWebStateDoesNotRemoveSnapshot) {
+TEST_P(TabTest, ClosingWebStateDoesNotRemoveSnapshot) {
   id partialMock = OCMPartialMock(
       SnapshotCacheFactory::GetForBrowserState(tab_.browserState));
   SnapshotTabHelper::CreateForWebState(tab_.webState, tab_.tabId);
@@ -415,7 +444,7 @@ TEST_F(TabTest, ClosingWebStateDoesNotRemoveSnapshot) {
   }
 }
 
-TEST_F(TabTest, CallingRemoveSnapshotRemovesSnapshot) {
+TEST_P(TabTest, CallingRemoveSnapshotRemovesSnapshot) {
   id partialMock = OCMPartialMock(
       SnapshotCacheFactory::GetForBrowserState(tab_.browserState));
   SnapshotTabHelper::CreateForWebState(tab_.webState, tab_.tabId);
@@ -424,5 +453,10 @@ TEST_F(TabTest, CallingRemoveSnapshotRemovesSnapshot) {
   SnapshotTabHelper::FromWebState(tab_.webState)->RemoveSnapshot();
   EXPECT_OCMOCK_VERIFY(partialMock);
 }
+
+INSTANTIATE_TEST_CASE_P(ProgrammaticTabTest,
+                        TabTest,
+                        ::testing::Values(NavigationManagerChoice::LEGACY,
+                                          NavigationManagerChoice::WK_BASED));
 
 }  // namespace

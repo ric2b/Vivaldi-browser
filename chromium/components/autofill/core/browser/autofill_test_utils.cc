@@ -13,13 +13,12 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_external_delegate.h"
-#include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
 #include "components/autofill/core/common/autofill_constants.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/os_crypt/os_crypt_mocker.h"
@@ -36,6 +35,8 @@ namespace autofill {
 namespace test {
 
 namespace {
+
+const int kValidityStateBitfield = 1984;
 
 std::string GetRandomCardNumber() {
   const size_t length = 16;
@@ -56,7 +57,7 @@ std::unique_ptr<PrefService> PrefServiceForTesting() {
 
 std::unique_ptr<PrefService> PrefServiceForTesting(
     user_prefs::PrefRegistrySyncable* registry) {
-  AutofillManager::RegisterProfilePrefs(registry);
+  prefs::RegisterProfilePrefs(registry);
 
   PrefServiceFactory factory;
   factory.set_user_prefs(base::MakeRefCounted<TestingPrefStore>());
@@ -102,14 +103,16 @@ void CreateTestSelectField(const std::vector<const char*>& values,
   CreateTestSelectField("", "", "", values, values, values.size(), field);
 }
 
-void CreateTestAddressFormData(FormData* form) {
+void CreateTestAddressFormData(FormData* form, const char* unique_id) {
   std::vector<ServerFieldTypeSet> types;
-  CreateTestAddressFormData(form, &types);
+  CreateTestAddressFormData(form, &types, unique_id);
 }
 
 void CreateTestAddressFormData(FormData* form,
-                               std::vector<ServerFieldTypeSet>* types) {
-  form->name = ASCIIToUTF16("MyForm");
+                               std::vector<ServerFieldTypeSet>* types,
+                               const char* unique_id) {
+  form->name =
+      ASCIIToUTF16("MyForm") + ASCIIToUTF16(unique_id ? unique_id : "");
   form->origin = GURL("http://myform.com/form.html");
   form->action = GURL("http://myform.com/submit.html");
   form->main_frame_origin =
@@ -175,8 +178,10 @@ void CreateTestAddressFormData(FormData* form,
   types->push_back(type_set);
 }
 
-void CreateTestPersonalInformationFormData(FormData* form) {
-  form->name = ASCIIToUTF16("MyForm");
+void CreateTestPersonalInformationFormData(FormData* form,
+                                           const char* unique_id) {
+  form->name =
+      ASCIIToUTF16("MyForm") + ASCIIToUTF16(unique_id ? unique_id : "");
   form->origin = GURL("http://myform.com/form.html");
   form->action = GURL("http://myform.com/submit.html");
   form->main_frame_origin =
@@ -197,8 +202,10 @@ void CreateTestPersonalInformationFormData(FormData* form) {
 void CreateTestCreditCardFormData(FormData* form,
                                   bool is_https,
                                   bool use_month_type,
-                                  bool split_names) {
-  form->name = ASCIIToUTF16("MyForm");
+                                  bool split_names,
+                                  const char* unique_id) {
+  form->name =
+      ASCIIToUTF16("MyForm") + ASCIIToUTF16(unique_id ? unique_id : "");
   if (is_https) {
     form->origin = GURL("https://myform.com/form.html");
     form->action = GURL("https://myform.com/submit.html");
@@ -333,6 +340,50 @@ AutofillProfile GetVerifiedProfile2() {
   return profile;
 }
 
+AutofillProfile GetServerProfile() {
+  AutofillProfile profile(AutofillProfile::SERVER_PROFILE, "id1");
+  // Note: server profiles don't have email addresses and only have full names.
+  SetProfileInfo(&profile, "", "", "", "", "Google, Inc.", "123 Fake St.",
+                 "Apt. 42", "Mountain View", "California", "94043", "US",
+                 "1.800.555.1234");
+
+  profile.SetInfo(NAME_FULL, ASCIIToUTF16("John K. Doe"), "en");
+  profile.SetRawInfo(ADDRESS_HOME_SORTING_CODE, ASCIIToUTF16("CEDEX"));
+  profile.SetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY,
+                     ASCIIToUTF16("Santa Clara"));
+
+  profile.set_language_code("en");
+  profile.SetValidityFromBitfieldValue(kValidityStateBitfield);
+  profile.set_use_count(7);
+  profile.set_use_date(base::Time::FromTimeT(54321));
+
+  profile.GenerateServerProfileIdentifier();
+
+  return profile;
+}
+
+AutofillProfile GetServerProfile2() {
+  AutofillProfile profile(AutofillProfile::SERVER_PROFILE, "id2");
+  // Note: server profiles don't have email addresses.
+  SetProfileInfo(&profile, "", "", "", "", "Main, Inc.", "4323 Wrong St.",
+                 "Apt. 1032", "Sunnyvale", "California", "10011", "US",
+                 "+1 514-123-1234");
+
+  profile.SetInfo(NAME_FULL, ASCIIToUTF16("Jim S. Bristow"), "en");
+  profile.SetRawInfo(ADDRESS_HOME_SORTING_CODE, ASCIIToUTF16("XEDEC"));
+  profile.SetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY,
+                     ASCIIToUTF16("Santa Monica"));
+
+  profile.set_language_code("en");
+  profile.SetValidityFromBitfieldValue(kValidityStateBitfield);
+  profile.set_use_count(14);
+  profile.set_use_date(base::Time::FromTimeT(98765));
+
+  profile.GenerateServerProfileIdentifier();
+
+  return profile;
+}
+
 CreditCard GetCreditCard() {
   CreditCard credit_card(base::GenerateGUID(), kEmptyOrigin);
   SetCreditCardInfo(&credit_card, "Test User", "4111111111111111" /* Visa */,
@@ -364,6 +415,7 @@ CreditCard GetMaskedServerCard() {
   test::SetCreditCardInfo(&credit_card, "Bonnie Parker",
                           "2109" /* Mastercard */, "12", "2020", "1");
   credit_card.SetNetworkForMaskedCard(kMasterCard);
+  credit_card.set_card_type(CreditCard::CARD_TYPE_CREDIT);
   return credit_card;
 }
 
@@ -372,6 +424,7 @@ CreditCard GetMaskedServerCardAmex() {
   test::SetCreditCardInfo(&credit_card, "Justin Thyme", "8431" /* Amex */, "9",
                           "2020", "1");
   credit_card.SetNetworkForMaskedCard(kAmericanExpressCard);
+  credit_card.set_card_type(CreditCard::CARD_TYPE_PREPAID);
   return credit_card;
 }
 
@@ -529,7 +582,7 @@ void FillUploadField(AutofillUploadContents::Field* field,
     field->set_type(control_type);
   if (autocomplete)
     field->set_autocomplete(autocomplete);
-  field->set_autofill_type(autofill_type);
+  field->add_autofill_type(autofill_type);
 }
 
 void FillQueryField(AutofillQueryContents::Form::Field* field,

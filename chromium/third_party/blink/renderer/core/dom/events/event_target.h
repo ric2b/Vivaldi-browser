@@ -55,6 +55,7 @@ class DOMWindow;
 class Event;
 class EventListenerOptionsOrBoolean;
 class ExceptionState;
+class ExecutionContext;
 class LocalDOMWindow;
 class MessagePort;
 class Node;
@@ -153,15 +154,14 @@ class CORE_EXPORT EventTarget : public ScriptWrappable {
                            EventListenerOptions&);
   virtual void RemoveAllEventListeners();
 
-  DispatchEventResult DispatchEvent(Event*);
+  DispatchEventResult DispatchEvent(Event&);
 
-  void EnqueueEvent(Event*, TaskType);
+  void EnqueueEvent(Event&, TaskType);
 
   // dispatchEventForBindings is intended to only be called from
   // javascript originated calls. This method will validate and may adjust
   // the Event object before dispatching.
   bool dispatchEventForBindings(Event*, ExceptionState&);
-  virtual void UncaughtExceptionInEventHandler();
 
   // Used for legacy "onEvent" attribute APIs.
   bool SetAttributeEventListener(const AtomicString& event_type,
@@ -174,11 +174,15 @@ class CORE_EXPORT EventTarget : public ScriptWrappable {
   EventListenerVector* GetEventListeners(const AtomicString& event_type);
   Vector<AtomicString> EventTypes();
 
-  DispatchEventResult FireEventListeners(Event*);
+  DispatchEventResult FireEventListeners(Event&);
 
   static DispatchEventResult GetDispatchEventResult(const Event&);
 
-  virtual bool KeepEventInNode(Event*) { return false; }
+  virtual bool KeepEventInNode(const Event&) const { return false; }
+
+  // Returns true if the target is window, window.document, or
+  // window.document.body.
+  bool IsTopLevelNode();
 
  protected:
   EventTarget();
@@ -199,7 +203,7 @@ class CORE_EXPORT EventTarget : public ScriptWrappable {
   virtual void RemovedEventListener(const AtomicString& event_type,
                                     const RegisteredEventListener&);
 
-  virtual DispatchEventResult DispatchEventInternal(Event*);
+  virtual DispatchEventResult DispatchEventInternal(Event&);
 
   // Subclasses should likely not override these themselves; instead, they
   // should subclass EventTargetWithInlineData.
@@ -215,7 +219,7 @@ class CORE_EXPORT EventTarget : public ScriptWrappable {
   RegisteredEventListener* GetAttributeRegisteredEventListener(
       const AtomicString& event_type);
 
-  bool FireEventListeners(Event*, EventTargetData*, EventListenerVector&);
+  bool FireEventListeners(Event&, EventTargetData*, EventListenerVector&);
   void CountLegacyEvents(const AtomicString& legacy_type_name,
                          EventListenerVector*,
                          EventListenerVector*);

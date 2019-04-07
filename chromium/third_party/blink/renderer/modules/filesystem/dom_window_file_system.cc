@@ -25,14 +25,16 @@
 
 #include "third_party/blink/renderer/modules/filesystem/dom_window_file_system.h"
 
+#include "third_party/blink/public/mojom/filesystem/file_system.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/fileapi/file_error.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/modules/filesystem/dom_file_system.h"
 #include "third_party/blink/renderer/modules/filesystem/file_system_callbacks.h"
 #include "third_party/blink/renderer/modules/filesystem/local_file_system.h"
-#include "third_party/blink/renderer/platform/file_system_type.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
@@ -64,7 +66,8 @@ void DOMWindowFileSystem::webkitRequestFileSystem(
     UseCounter::Count(document, WebFeature::kFileAccessedFileSystem);
   }
 
-  FileSystemType file_system_type = static_cast<FileSystemType>(type);
+  mojom::blink::FileSystemType file_system_type =
+      static_cast<mojom::blink::FileSystemType>(type);
   if (!DOMFileSystemBase::IsValidType(file_system_type)) {
     DOMFileSystem::ReportError(document,
                                ScriptErrorCallback::Wrap(error_callback),
@@ -121,11 +124,39 @@ void DOMWindowFileSystem::webkitResolveLocalFileSystemURL(
 
 static_assert(
     static_cast<int>(DOMWindowFileSystem::kTemporary) ==
-        static_cast<int>(kFileSystemTypeTemporary),
+        static_cast<int>(mojom::blink::FileSystemType::kTemporary),
     "DOMWindowFileSystem::kTemporary should match FileSystemTypeTemporary");
 static_assert(
     static_cast<int>(DOMWindowFileSystem::kPersistent) ==
-        static_cast<int>(kFileSystemTypePersistent),
+        static_cast<int>(mojom::blink::FileSystemType::kPersistent),
     "DOMWindowFileSystem::kPersistent should match FileSystemTypePersistent");
+
+ScriptPromise DOMWindowFileSystem::chooseFileSystemEntries(
+    ScriptState* script_state,
+    LocalDOMWindow& window) {
+  if (!window.IsCurrentlyDisplayedInFrame()) {
+    return ScriptPromise::RejectWithDOMException(
+        script_state, DOMException::Create(DOMExceptionCode::kAbortError));
+  }
+
+  Document* document = window.document();
+  if (!document) {
+    return ScriptPromise::RejectWithDOMException(
+        script_state, DOMException::Create(DOMExceptionCode::kAbortError));
+  }
+
+  if (!Frame::HasTransientUserActivation(window.GetFrame())) {
+    return ScriptPromise::RejectWithDOMException(
+        script_state,
+        DOMException::Create(
+            DOMExceptionCode::kSecurityError,
+            "Must be handling a user gesture to show a file picker."));
+  }
+
+  auto* resolver = ScriptPromiseResolver::Create(script_state);
+  ScriptPromise result = resolver->Promise();
+  LocalFileSystem::From(*document)->ChooseEntry(resolver);
+  return result;
+}
 
 }  // namespace blink

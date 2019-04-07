@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/containers/span.h"
 #include "base/macros.h"
 #include "base/optional.h"
 
@@ -76,11 +77,23 @@ void IndexAndPersistRules(service_manager::Connector* connector,
                           const Extension& extension,
                           IndexAndPersistRulesCallback callback);
 
-// Returns true if |data| and |size| represent a valid data buffer containing
-// indexed ruleset data with |expected_checksum|.
-bool IsValidRulesetData(const uint8_t* data,
-                        size_t size,
-                        int expected_checksum);
+// Returns true if |data| represents a valid data buffer containing indexed
+// ruleset data with |expected_checksum|.
+bool IsValidRulesetData(base::span<const uint8_t> data, int expected_checksum);
+
+// Returns the version header used for indexed ruleset files. Only exposed for
+// testing.
+std::string GetVersionHeaderForTesting();
+
+// Returns the indexed ruleset format version.
+int GetIndexedRulesetFormatVersionForTesting();
+
+// Override the ruleset format version for testing.
+void SetIndexedRulesetFormatVersionForTesting(int version);
+
+// Strips the version header from |ruleset_data|. Returns false on version
+// mismatch.
+bool StripVersionHeaderAndParseVersion(std::string* ruleset_data);
 
 }  // namespace declarative_net_request
 }  // namespace extensions

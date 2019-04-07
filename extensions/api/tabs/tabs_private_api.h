@@ -163,6 +163,7 @@ class VivaldiPrivateTabObserver
     contents_mime_type_ = mimetype;
   }
   void UpdateAllowTabCycleIntoUI();
+  void UpdateAllowAccessKeys();
 
   bool show_images() { return show_images_; }
   bool load_from_cache_only() { return load_from_cache_only_; }

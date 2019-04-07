@@ -49,6 +49,7 @@ class InvalidationLogger {
   void OnUnregistration(const std::string& details);
   void OnStateChange(const syncer::InvalidatorState& new_state);
   void OnUpdateIds(std::map<std::string, syncer::ObjectIdSet> updated_ids);
+  void OnUpdateTopics(std::map<std::string, syncer::TopicSet> updated_topics);
   void OnDebugMessage(const base::DictionaryValue& details);
   void OnInvalidation(const syncer::ObjectIdInvalidationMap& details);
 
@@ -75,7 +76,7 @@ class InvalidationLogger {
   void EmitRegisteredHandlers();
 
   // The list of every observer currently listening for notifications.
-  base::ObserverList<InvalidationLoggerObserver> observer_list_;
+  base::ObserverList<InvalidationLoggerObserver>::Unchecked observer_list_;
 
   // The last InvalidatorState updated by the InvalidatorService.
   syncer::InvalidatorState last_invalidator_state_;

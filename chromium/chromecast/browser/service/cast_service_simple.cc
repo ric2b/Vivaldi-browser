@@ -71,13 +71,15 @@ void CastServiceSimple::StartInternal() {
   CastWebView::CreateParams params;
   params.delegate = this;
   params.enabled_for_dev = true;
+  params.window_params.delegate = this;
   cast_web_view_ =
       web_contents_manager_->CreateWebView(params, nullptr, /* site_instance */
                                            nullptr,         /* extension */
                                            GURL() /* initial_url */);
   cast_web_view_->LoadUrl(startup_url_);
+  cast_web_view_->GrantScreenAccess();
   cast_web_view_->InitializeWindow(
-      window_manager_, true /* is_visible */, CastWindowManager::APP,
+      window_manager_, CastWindowManager::APP,
       chromecast::shell::VisibilityPriority::STICKY_ACTIVITY);
 }
 

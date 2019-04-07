@@ -11,7 +11,6 @@
 #include "ash/host/ash_window_tree_host_platform.h"
 #include "ash/host/ash_window_tree_host_unified.h"
 #include "ash/public/cpp/ash_switches.h"
-#include "ash/shell_port.h"
 #include "base/command_line.h"
 #include "base/sys_info.h"
 #include "ui/aura/client/screen_position_client.h"
@@ -39,11 +38,6 @@ AshWindowTreeHost::AshWindowTreeHost()
 AshWindowTreeHost::~AshWindowTreeHost() = default;
 
 void AshWindowTreeHost::TranslateLocatedEvent(ui::LocatedEvent* event) {
-  // NOTE: This code is not called in mus/mash, it is handled on the server
-  // side.
-  // TODO(sky): remove this when mus is the default http://crbug.com/763996.
-  DCHECK_EQ(aura::Env::Mode::LOCAL, aura::Env::GetInstance()->mode());
-
   if (event->IsTouchEvent())
     return;
 
@@ -72,11 +66,6 @@ void AshWindowTreeHost::TranslateLocatedEvent(ui::LocatedEvent* event) {
 // static
 std::unique_ptr<AshWindowTreeHost> AshWindowTreeHost::Create(
     const AshWindowTreeHostInitParams& init_params) {
-  std::unique_ptr<AshWindowTreeHost> ash_window_tree_host =
-      ShellPort::Get()->CreateAshWindowTreeHost(init_params);
-  if (ash_window_tree_host)
-    return ash_window_tree_host;
-
   if (init_params.mirroring_unified) {
     return std::make_unique<AshWindowTreeHostMirroringUnified>(
         init_params.initial_bounds, init_params.display_id,

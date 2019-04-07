@@ -47,11 +47,11 @@ class ApplicationDragAndDropHost;
 class AppListItemView;
 class AppsGridViewFolderDelegate;
 class ContentsView;
+class ExpandArrowView;
 class IndicatorChipView;
 class SuggestionsContainerView;
 class PaginationController;
 class PulsingBlockView;
-class ExpandArrowView;
 
 // Represents the index to an item view in the grid.
 struct GridIndex {
@@ -151,6 +151,10 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   void UpdateDrag(Pointer pointer, const gfx::Point& point);
   void EndDrag(bool cancel);
   bool IsDraggedView(const AppListItemView* view) const;
+
+  // Whether |view| IsDraggedView and |view| is not in it's drag start position.
+  bool IsDragViewMoved(const AppListItemView& view) const;
+
   void ClearDragState();
   void SetDragViewVisible(bool visible);
 
@@ -409,11 +413,6 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   void RemoveLastItemFromReparentItemFolderIfNecessary(
       const std::string& source_folder_id);
 
-  // If user does not drop the re-parenting folder item to any valid target,
-  // cancel the re-parenting action, let the item go back to its original
-  // parent folder with UI animation.
-  void CancelFolderItemReparent(AppListItemView* drag_item_view);
-
   // Cancels any context menus showing for app items on the current page.
   void CancelContextMenusOnCurrentPage();
 
@@ -517,9 +516,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // folder during reparenting a folder item.
   bool IsDraggingForReparentInHiddenGridView() const;
 
-  // Returns the target icon bounds for |drag_item_view| to fly back
-  // to its parent |folder_item_view| in animation.
-  gfx::Rect GetTargetIconRectInFolder(AppListItemView* drag_item_view,
+  // Returns the target icon bounds for |drag_item| to fly back to its parent
+  // |folder_item_view| in animation.
+  gfx::Rect GetTargetIconRectInFolder(AppListItem* drag_item,
                                       AppListItemView* folder_item_view);
 
   // Returns true if the grid view is under an OEM folder.
@@ -531,6 +530,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // Handle focus movement triggered by arrow up and down in FULLSCREEN_ALL_APPS
   // state.
   bool HandleFocusMovementInFullscreenAllAppsState(bool arrow_up);
+
+  // Handle vertical focus movement triggered by arrow up and down.
+  bool HandleVerticalFocusMovement(bool arrow_up);
 
   // Update number of columns and rows for apps within a folder.
   void UpdateColsAndRowsForFolder();
@@ -600,6 +602,17 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   // Update the padding of tile view based on the contents bounds.
   void UpdateTilePadding();
+
+  // Returns the number of existing items in specified page. Returns 0 if |page|
+  // is out of range.
+  int GetItemsNumOfPage(int page) const;
+
+  // Starts the animation to transition the |drag_item| from |source_bounds| to
+  // the target bounds in the |folder_item_view|. Note that this animation
+  // should run only after |drag_item| is added to the folder.
+  void StartFolderDroppingAnimation(AppListItemView* folder_item_view,
+                                    AppListItem* drag_item,
+                                    const gfx::Rect& source_bounds);
 
   AppListModel* model_ = nullptr;         // Owned by AppListView.
   AppListItemList* item_list_ = nullptr;  // Not owned.

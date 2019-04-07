@@ -37,6 +37,8 @@ update_template_instance("//chrome/browser/ui:ui") {
       "//vivaldi/ui/cocoa/vivaldi_browser_window_cocoa.mm",
       "//vivaldi/ui/cocoa/vivaldi_context_menu_mac.h",
       "//vivaldi/ui/cocoa/vivaldi_context_menu_mac.mm",
+      "//vivaldi/ui/cocoa/vivaldi_fullscreen_menubar_tracker.h",
+      "//vivaldi/ui/cocoa/vivaldi_fullscreen_menubar_tracker.mm",
       "//vivaldi/ui/cocoa/vivaldi_main_menu_mac.h",
       "//vivaldi/ui/cocoa/vivaldi_main_menu_mac.mm",
       "//vivaldi/ui/cocoa/vivaldi_native_app_window_cocoa.h",
@@ -67,10 +69,12 @@ update_template_instance("//chrome/browser/ui:ui") {
   }
 }
 
-update_target("//ui/views:views") {
-  sources += [
-    "//vivaldi/ui/views/vivaldi_menu_model_adapter.cc",
-  ]
+if (!is_android) {
+  update_target("//ui/views:views") {
+    sources += [
+      "//vivaldi/ui/views/vivaldi_menu_model_adapter.cc",
+    ]
+  }
 }
 
 if (is_win) {

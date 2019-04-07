@@ -12,7 +12,6 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "crypto/sha2.h"
-#include "net/base/completion_callback.h"
 #include "net/base/hash_value.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_export.h"
@@ -23,7 +22,6 @@
 #include "services/network/public/cpp/network_switches.h"
 
 using ::net::CertVerifier;
-using ::net::CompletionCallback;
 using ::net::HashValue;
 using ::net::SHA256HashValue;
 using ::net::X509Certificate;
@@ -73,7 +71,6 @@ IgnoreErrorsCertVerifier::IgnoreErrorsCertVerifier(
 IgnoreErrorsCertVerifier::~IgnoreErrorsCertVerifier() {}
 
 int IgnoreErrorsCertVerifier::Verify(const RequestParams& params,
-                                     net::CRLSet* crl_set,
                                      net::CertVerifyResult* verify_result,
                                      net::CompletionOnceCallback callback,
                                      std::unique_ptr<Request>* out_req,
@@ -131,8 +128,12 @@ int IgnoreErrorsCertVerifier::Verify(const RequestParams& params,
     return net::OK;
   }
 
-  return verifier_->Verify(params, crl_set, verify_result, std::move(callback),
-                           out_req, net_log);
+  return verifier_->Verify(params, verify_result, std::move(callback), out_req,
+                           net_log);
+}
+
+void IgnoreErrorsCertVerifier::SetConfig(const Config& config) {
+  verifier_->SetConfig(config);
 }
 
 void IgnoreErrorsCertVerifier::set_whitelist(const SPKIHashSet& whitelist) {

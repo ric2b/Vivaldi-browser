@@ -37,10 +37,12 @@ update_target("//components/history/core/browser:browser") {
   ]
 }
 
-update_target("//components/renderer_context_menu:renderer_context_menu") {
-  sources += [
-    "//vivaldi/components/menu/vivaldi_toolkit_delegate_views.cc",
-  ]
+if (!is_android) {
+  update_target("//components/renderer_context_menu:renderer_context_menu") {
+    sources += [
+      "//vivaldi/components/menu/vivaldi_toolkit_delegate_views.cc",
+    ]
+  }
 }
 
 update_target("//components/sessions:sessions") {
@@ -107,12 +109,6 @@ update_template_instance("//third_party/blink/renderer/core/exported:exported") 
     "//vivaldi/components/blink/vivaldi_local_frame_client_impl.cc",
     "//vivaldi/components/blink/vivaldi_web_settings_impl.cc",
     "//vivaldi/components/blink/vivaldi_web_view_impl.cc",
-  ]
-}
-
-update_template_instance("//third_party/blink/renderer/core/frame:frame") {
-  sources += [
-    "//vivaldi/components/blink/vivaldi_web_local_frame_impl.cc",
   ]
 }
 

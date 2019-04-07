@@ -36,6 +36,7 @@
 #include "components/safe_browsing/android/safe_browsing_api_handler_bridge.h"
 #include "components/services/heap_profiling/public/cpp/allocator_shim.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
+#include "components/viz/common/features.h"
 #include "content/public/browser/android/browser_media_player_manager_register.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/browser/browser_thread.h"
@@ -161,13 +162,22 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
 
   CommandLineHelper::AddDisabledFeature(*cl, features::kWebPayments.name);
 
+  // WebView does not and should not support WebAuthN.
+  CommandLineHelper::AddDisabledFeature(*cl, features::kWebAuth.name);
+
+  // WebView isn't compatible with OOP-D.
+  CommandLineHelper::AddDisabledFeature(*cl,
+                                        features::kVizDisplayCompositor.name);
+
   // WebView does not support AndroidOverlay yet for video overlays.
   CommandLineHelper::AddDisabledFeature(*cl, media::kUseAndroidOverlay.name);
 
   // WebView doesn't support embedding CompositorFrameSinks which is needed for
-  // UseSurfaceLayerForVideo feature. https://crbug.com/853832
+  // UseSurfaceLayerForVideo[PIP] feature. https://crbug.com/853832
   CommandLineHelper::AddDisabledFeature(*cl,
                                         media::kUseSurfaceLayerForVideo.name);
+  CommandLineHelper::AddDisabledFeature(
+      *cl, media::kUseSurfaceLayerForVideoPIP.name);
 
   // WebView does not support EME persistent license yet, because it's not
   // clear on how user can remove persistent media licenses from UI.

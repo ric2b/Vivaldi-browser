@@ -176,6 +176,7 @@ chrome.automation.RoleType = {
   IMAGE_MAP: 'imageMap',
   INLINE_TEXT_BOX: 'inlineTextBox',
   INPUT_TIME: 'inputTime',
+  KEYBOARD: 'keyboard',
   LABEL_TEXT: 'labelText',
   LAYOUT_TABLE: 'layoutTable',
   LAYOUT_TABLE_CELL: 'layoutTableCell',
@@ -259,6 +260,7 @@ chrome.automation.RoleType = {
  * @see https://developer.chrome.com/extensions/automation#type-StateType
  */
 chrome.automation.StateType = {
+  AUTOFILL_AVAILABLE: 'autofillAvailable',
   COLLAPSED: 'collapsed',
   DEFAULT: 'default',
   EDITABLE: 'editable',
@@ -531,8 +533,8 @@ chrome.automation.AutomationNode.prototype.location;
 /**
  * Computes the bounding box of a subrange of this node in global screen
  * coordinates. Returns the same as |location| if range information is not
- * available; bounds are clipped by ancestors. The start and end indices are
- * zero-based offsets into the node's "name" string attribute.
+ * available. The start and end indices are zero-based offsets into the node's
+ * "name" string attribute.
  * @param {number} startIndex
  * @param {number} endIndex
  * @return {!chrome.automation.Rect}
@@ -1200,6 +1202,13 @@ chrome.automation.AutomationNode.prototype.restriction;
 chrome.automation.AutomationNode.prototype.checked;
 
 /**
+ * The inner html of this element. Only populated for math content.
+ * @type {(string|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-innerHtml
+ */
+chrome.automation.AutomationNode.prototype.innerHtml;
+
+/**
  * The RGBA foreground color of this subtree, as an integer.
  * @type {(number|undefined)}
  * @see https://developer.chrome.com/extensions/automation#type-color
@@ -1580,6 +1589,7 @@ chrome.automation.AutomationNode.prototype.matches = function(params) {};
  * @see https://developer.chrome.com/extensions/automation#method-getNextTextMatch
  */
 chrome.automation.AutomationNode.prototype.getNextTextMatch = function(searchStr, backward) {};
+
 
 /**
  * Get the automation tree for the tab with the given tabId, or the current tab

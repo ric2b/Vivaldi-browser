@@ -27,6 +27,8 @@ class QuicStream;
 class QUIC_EXPORT_PRIVATE QuicStreamSequencer {
  public:
   explicit QuicStreamSequencer(QuicStream* quic_stream);
+  QuicStreamSequencer(const QuicStreamSequencer&) = delete;
+  QuicStreamSequencer& operator=(const QuicStreamSequencer&) = delete;
   virtual ~QuicStreamSequencer();
 
   // If the frame is the next one we need in order to process in-order data,
@@ -57,7 +59,7 @@ class QUIC_EXPORT_PRIVATE QuicStreamSequencer {
   // to do zero-copy reads.
   void MarkConsumed(size_t num_bytes);
 
-  // Copies all of the readable data into |buffer| and marks all of the copied
+  // Appends all of the readable data to |buffer| and marks all of the appended
   // data as consumed.
   void Read(QuicString* buffer);
 
@@ -152,8 +154,6 @@ class QUIC_EXPORT_PRIVATE QuicStreamSequencer {
   // If false, only call OnDataAvailable() when it becomes newly unblocked.
   // Otherwise, call OnDataAvailable() when number of readable bytes changes.
   bool level_triggered_;
-
-  DISALLOW_COPY_AND_ASSIGN(QuicStreamSequencer);
 };
 
 }  // namespace quic

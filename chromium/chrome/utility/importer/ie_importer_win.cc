@@ -6,7 +6,7 @@
 
 #include <objbase.h>
 #include <ole2.h>
-#include <intshcut.h>
+#include <intshcut.h>  // Needs to come after ole2.h
 #include <shlobj.h>
 #include <stddef.h>
 #include <urlhist.h>
@@ -40,7 +40,6 @@
 #include "chrome/common/importer/pstore_declarations.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/utility/importer/favicon_reencode.h"
-#include "components/autofill/core/common/password_form.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -49,9 +48,7 @@ namespace {
 
 // Registry key paths from which we import IE settings.
 const base::char16 kSearchScopePath[] =
-  L"Software\\Microsoft\\Internet Explorer\\SearchScopes";
-const base::char16 kIEVersionKey[] =
-  L"Software\\Microsoft\\Internet Explorer";
+    L"Software\\Microsoft\\Internet Explorer\\SearchScopes";
 
 // NTFS stream name of favicon image data.
 const base::char16 kFaviconStreamName[] = L":favicon:$DATA";
@@ -66,11 +63,10 @@ struct AutoCompleteInfo {
 // Gets the creation time of the given file or directory.
 base::Time GetFileCreationTime(const base::string16& file) {
   base::Time creation_time;
-  base::win::ScopedHandle file_handle(
-      CreateFile(file.c_str(), GENERIC_READ,
-                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                 NULL, OPEN_EXISTING,
-                 FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, NULL));
+  base::win::ScopedHandle file_handle(CreateFile(
+      file.c_str(), GENERIC_READ,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+      OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, NULL));
   FILETIME creation_filetime;
   if (!file_handle.IsValid())
     return creation_time;
@@ -120,9 +116,9 @@ struct IEOrderBookmarkComparator {
     base::FilePath rhs_prefix;
     for (size_t i = 0; i <= lhs.path.size() && i <= rhs.path.size(); ++i) {
       const base::FilePath::StringType lhs_i =
-        (i < lhs.path.size() ? lhs.path[i] : lhs.title + L".url");
+          (i < lhs.path.size() ? lhs.path[i] : lhs.title + L".url");
       const base::FilePath::StringType rhs_i =
-        (i < rhs.path.size() ? rhs.path[i] : rhs.title + L".url");
+          (i < rhs.path.size() ? rhs.path[i] : rhs.title + L".url");
       lhs_prefix = lhs_prefix.Append(lhs_i);
       rhs_prefix = rhs_prefix.Append(rhs_i);
       if (lhs_i == rhs_i)
@@ -206,12 +202,12 @@ bool ParseFavoritesOrderBlob(const Importer* importer,
 
     // Read the file name from the ITEMIDLIST structure.
     LPCITEMIDLIST idlist = BinaryReadItemIDList(
-      base_offset + kItemIDListOffset, item_size - kItemIDListOffset, blob);
+        base_offset + kItemIDListOffset, item_size - kItemIDListOffset, blob);
     TCHAR item_filename[MAX_PATH];
     if (!idlist || !SHGetPathFromIDList(idlist, item_filename))
       return false;
     base::FilePath item_relative_path =
-      path.Append(base::FilePath(item_filename).BaseName());
+        path.Append(base::FilePath(item_filename).BaseName());
 
     // Record the retrieved information and go to the next item.
     sort_index->insert(std::make_pair(item_relative_path, item_sort_index));
@@ -244,8 +240,7 @@ bool ParseFavoritesOrderRegistryTree(
 
   // Recursively parse subfolders.
   for (base::win::RegistryKeyIterator child(key.Handle(), L"");
-       child.Valid() && !importer->cancelled();
-       ++child) {
+       child.Valid() && !importer->cancelled(); ++child) {
     base::win::RegKey subkey(key.Handle(), child.Name(), KEY_READ);
     if (subkey.Valid()) {
       base::FilePath subpath(path.Append(child.Name()));
@@ -273,9 +268,8 @@ bool ParseFavoritesOrderInfo(const Importer* importer,
 
 // Reads the sort order from registry. If failed, we don't touch the list
 // and use the default (alphabetical) order.
-void SortBookmarksInIEOrder(
-    const Importer* importer,
-    std::vector<ImportedBookmarkEntry>* bookmarks) {
+void SortBookmarksInIEOrder(const Importer* importer,
+                            std::vector<ImportedBookmarkEntry>* bookmarks) {
   std::map<base::FilePath, uint32_t> sort_index;
   if (!ParseFavoritesOrderInfo(importer, &sort_index))
     return;
@@ -310,8 +304,7 @@ bool LoadInternetShortcut(
 GURL ReadURLFromInternetShortcut(IUniformResourceLocator* url_locator) {
   base::win::ScopedCoMem<wchar_t> url;
   // GetURL can return S_FALSE (FAILED(S_FALSE) is false) when url == NULL.
-  return (FAILED(url_locator->GetURL(&url)) || !url) ?
-      GURL() : GURL(url.get());
+  return (FAILED(url_locator->GetURL(&url)) || !url) ? GURL() : GURL(url.get());
 }
 
 // Reads the URL of the favicon of the internet shortcut.
@@ -343,8 +336,8 @@ GURL ReadFaviconURLFromInternetShortcut(IUniformResourceLocator* url_locator) {
 // IE7 and above store the data.
 bool ReadFaviconDataFromInternetShortcut(const base::string16& file,
                                          std::string* data) {
-  return base::ReadFileToString(
-      base::FilePath(file + kFaviconStreamName), data);
+  return base::ReadFileToString(base::FilePath(file + kFaviconStreamName),
+                                data);
 }
 
 // Reads the favicon imaga data in the Internet cache. IE6 doesn't hold the data
@@ -415,14 +408,16 @@ void UpdateFaviconMap(
 // static
 // {E161255A-37C3-11D2-BCAA-00C04fD929DB}
 const GUID IEImporter::kPStoreAutocompleteGUID = {
-    0xe161255a, 0x37c3, 0x11d2,
-    { 0xbc, 0xaa, 0x00, 0xc0, 0x4f, 0xd9, 0x29, 0xdb }
-};
+    0xe161255a,
+    0x37c3,
+    0x11d2,
+    {0xbc, 0xaa, 0x00, 0xc0, 0x4f, 0xd9, 0x29, 0xdb}};
 // {A79029D6-753E-4e27-B807-3D46AB1545DF}
 const GUID IEImporter::kUnittestGUID = {
-    0xa79029d6, 0x753e, 0x4e27,
-    { 0xb8, 0x7, 0x3d, 0x46, 0xab, 0x15, 0x45, 0xdf }
-};
+    0xa79029d6,
+    0x753e,
+    0x4e27,
+    {0xb8, 0x7, 0x3d, 0x46, 0xab, 0x15, 0x45, 0xdf}};
 
 IEImporter::IEImporter() : edge_import_mode_(false) {}
 
@@ -463,20 +458,10 @@ void IEImporter::StartImport(const importer::SourceProfile& source_profile,
     ImportSearchEngines();
     bridge_->NotifyItemEnded(importer::SEARCH_ENGINES);
   }
-  if ((items & importer::PASSWORDS) && !cancelled()) {
-    bridge_->NotifyItemStarted(importer::PASSWORDS);
-    // Always import IE6 passwords.
-    ImportPasswordsIE6();
-
-    if (CurrentIEVersion() >= 7)
-      ImportPasswordsIE7();
-    bridge_->NotifyItemEnded(importer::PASSWORDS);
-  }
   bridge_->NotifyEnded();
 }
 
-IEImporter::~IEImporter() {
-}
+IEImporter::~IEImporter() {}
 
 void IEImporter::ImportFavorites() {
   FavoritesInfo info;
@@ -500,10 +485,8 @@ void IEImporter::ImportFavorites() {
 }
 
 void IEImporter::ImportHistory() {
-  const std::string kSchemes[] = {url::kHttpScheme,
-                                  url::kHttpsScheme,
-                                  url::kFtpScheme,
-                                  url::kFileScheme};
+  const std::string kSchemes[] = {url::kHttpScheme, url::kHttpsScheme,
+                                  url::kFtpScheme, url::kFileScheme};
   int total_schemes = arraysize(kSchemes);
 
   Microsoft::WRL::ComPtr<IUrlHistoryStg2> url_history_stg2;
@@ -523,8 +506,7 @@ void IEImporter::ImportHistory() {
     // that is used by IEnumSTATURL::Next() for filtering items by URL.
     // So need to pass an empty string here to get all history items.
     enum_url->SetFilter(L"", STATURL_QUERYFLAG_TOPLEVEL);
-    while (!cancelled() &&
-           enum_url->Next(1, &stat_url, NULL) == S_OK) {
+    while (!cancelled() && enum_url->Next(1, &stat_url, NULL) == S_OK) {
       base::string16 url_string;
       if (stat_url.pwcsUrl) {
         url_string = stat_url.pwcsUrl;
@@ -565,147 +547,6 @@ void IEImporter::ImportHistory() {
   }
 }
 
-void IEImporter::ImportPasswordsIE6() {
-  GUID AutocompleteGUID = kPStoreAutocompleteGUID;
-  if (!source_path_.empty()) {
-    // We supply a fake GUID for testting.
-    AutocompleteGUID = kUnittestGUID;
-  }
-
-  // The PStoreCreateInstance function retrieves an interface pointer
-  // to a storage provider. But this function has no associated import
-  // library or header file, we must call it using the LoadLibrary()
-  // and GetProcAddress() functions.
-  typedef HRESULT (WINAPI *PStoreCreateFunc)(IPStore**, DWORD, DWORD, DWORD);
-  HMODULE pstorec_dll = LoadLibrary(L"pstorec.dll");
-  if (!pstorec_dll)
-    return;
-  PStoreCreateFunc PStoreCreateInstance =
-      (PStoreCreateFunc)GetProcAddress(pstorec_dll, "PStoreCreateInstance");
-  if (!PStoreCreateInstance) {
-    FreeLibrary(pstorec_dll);
-    return;
-  }
-
-  Microsoft::WRL::ComPtr<IPStore> pstore;
-  HRESULT result = PStoreCreateInstance(pstore.GetAddressOf(), 0, 0, 0);
-  if (result != S_OK) {
-    FreeLibrary(pstorec_dll);
-    return;
-  }
-
-  std::vector<AutoCompleteInfo> ac_list;
-
-  // Enumerates AutoComplete items in the protected database.
-  Microsoft::WRL::ComPtr<IEnumPStoreItems> item;
-  result = pstore->EnumItems(0, &AutocompleteGUID, &AutocompleteGUID, 0,
-                             item.GetAddressOf());
-  if (result != PST_E_OK) {
-    pstore.Reset();
-    FreeLibrary(pstorec_dll);
-    return;
-  }
-
-  wchar_t* item_name;
-  while (!cancelled() && SUCCEEDED(item->Next(1, &item_name, 0))) {
-    DWORD length = 0;
-    unsigned char* buffer = NULL;
-    result = pstore->ReadItem(0, &AutocompleteGUID, &AutocompleteGUID,
-                              item_name, &length, &buffer, NULL, 0);
-    if (SUCCEEDED(result)) {
-      AutoCompleteInfo ac;
-      ac.key = item_name;
-      base::string16 data;
-      data.insert(0, reinterpret_cast<wchar_t*>(buffer),
-                  length / sizeof(wchar_t));
-
-      // The key name is always ended with ":StringData".
-      const wchar_t kDataSuffix[] = L":StringData";
-      size_t i = ac.key.rfind(kDataSuffix);
-      if (i != base::string16::npos && ac.key.substr(i) == kDataSuffix) {
-        ac.key.erase(i);
-        ac.is_url = (ac.key.find(L"://") != base::string16::npos);
-        ac_list.push_back(ac);
-        ac_list.back().data =
-            base::SplitString(data, base::string16(1, '\0'),
-                              base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-      }
-      CoTaskMemFree(buffer);
-    }
-    CoTaskMemFree(item_name);
-  }
-  // Releases them before unload the dll.
-  item.Reset();
-  pstore.Reset();
-  FreeLibrary(pstorec_dll);
-
-  size_t i;
-  for (i = 0; i < ac_list.size(); i++) {
-    if (!ac_list[i].is_url || ac_list[i].data.size() < 2)
-      continue;
-
-    GURL url(ac_list[i].key.c_str());
-    if (!(base::LowerCaseEqualsASCII(url.scheme(), url::kHttpScheme) ||
-          base::LowerCaseEqualsASCII(url.scheme(), url::kHttpsScheme))) {
-      continue;
-    }
-
-    autofill::PasswordForm form;
-    GURL::Replacements rp;
-    rp.ClearUsername();
-    rp.ClearPassword();
-    rp.ClearQuery();
-    rp.ClearRef();
-    form.origin = url.ReplaceComponents(rp);
-    form.username_value = ac_list[i].data[0];
-    form.password_value = ac_list[i].data[1];
-    form.signon_realm = url.GetOrigin().spec();
-
-    // Goes through the list to find out the username field
-    // of the web page.
-    size_t list_it, item_it;
-    for (list_it = 0; list_it < ac_list.size(); ++list_it) {
-      if (ac_list[list_it].is_url)
-        continue;
-
-      for (item_it = 0; item_it < ac_list[list_it].data.size(); ++item_it)
-        if (ac_list[list_it].data[item_it] == form.username_value) {
-          form.username_element = ac_list[list_it].key;
-          break;
-        }
-    }
-
-    bridge_->SetPasswordForm(form);
-  }
-}
-
-void IEImporter::ImportPasswordsIE7() {
-  base::string16 key_path(importer::GetIE7PasswordsKey());
-  base::win::RegKey key(HKEY_CURRENT_USER, key_path.c_str(), KEY_READ);
-  base::win::RegistryValueIterator reg_iterator(HKEY_CURRENT_USER,
-                                                key_path.c_str());
-  importer::ImporterIE7PasswordInfo password_info;
-  while (reg_iterator.Valid() && !cancelled()) {
-    // Get the size of the encrypted data.
-    DWORD value_len = 0;
-    key.ReadValue(reg_iterator.Name(), NULL, &value_len, NULL);
-    if (value_len) {
-      // Query the encrypted data.
-      password_info.encrypted_data.resize(value_len);
-      if (key.ReadValue(reg_iterator.Name(),
-                        &password_info.encrypted_data.front(),
-                        &value_len, NULL) == ERROR_SUCCESS) {
-        password_info.url_hash = reg_iterator.Name();
-        password_info.date_created = base::Time::Now();
-
-        bridge_->AddIE7PasswordInfo(password_info);
-      }
-    }
-
-    ++reg_iterator;
-  }
-}
-
 void IEImporter::ImportSearchEngines() {
   // On IE, search engines are stored in the registry, under:
   // Software\Microsoft\Internet Explorer\SearchScopes
@@ -714,7 +555,8 @@ void IEImporter::ImportSearchEngines() {
   typedef std::map<std::string, base::string16> SearchEnginesMap;
   SearchEnginesMap search_engines_map;
   for (base::win::RegistryKeyIterator key_iter(HKEY_CURRENT_USER,
-       kSearchScopePath); key_iter.Valid(); ++key_iter) {
+                                               kSearchScopePath);
+       key_iter.Valid(); ++key_iter) {
     base::string16 sub_key_name = kSearchScopePath;
     sub_key_name.append(L"\\").append(key_iter.Name());
     base::win::RegKey sub_key(HKEY_CURRENT_USER, sub_key_name.c_str(),
@@ -823,8 +665,8 @@ void IEImporter::ParseFavoritesFolder(
   // Favorites path length.  Make sure it doesn't include the trailing \.
   size_t favorites_path_len =
       favorites_path.StripTrailingSeparators().value().size();
-  base::FileEnumerator file_enumerator(
-      favorites_path, true, base::FileEnumerator::FILES);
+  base::FileEnumerator file_enumerator(favorites_path, true,
+                                       base::FileEnumerator::FILES);
   while (!(file = file_enumerator.Next()).value().empty() && !cancelled())
     file_list.push_back(file.value());
 
@@ -895,16 +737,4 @@ void IEImporter::ParseFavoritesFolder(
   for (FaviconMap::iterator iter = favicon_map.begin();
        iter != favicon_map.end(); ++iter)
     favicons->push_back(iter->second);
-}
-
-int IEImporter::CurrentIEVersion() const {
-  static int version = -1;
-  if (version < 0) {
-    wchar_t buffer[128];
-    DWORD buffer_length = sizeof(buffer);
-    base::win::RegKey reg_key(HKEY_LOCAL_MACHINE, kIEVersionKey, KEY_READ);
-    LONG result = reg_key.ReadValue(L"Version", buffer, &buffer_length, NULL);
-    version = ((result == ERROR_SUCCESS)? _wtoi(buffer) : 0);
-  }
-  return version;
 }

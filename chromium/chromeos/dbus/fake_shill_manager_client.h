@@ -147,6 +147,12 @@ class CHROMEOS_EXPORT FakeShillManagerClient
   // Initial state for fake services.
   std::map<std::string, std::string> shill_initial_state_map_;
 
+  // Carrier for fake cellular service.
+  std::string cellular_carrier_;
+
+  // URL used for cellular activation.
+  std::string cellular_olp_;
+
   // Technology type for fake cellular service.
   std::string cellular_technology_;
 
@@ -160,7 +166,7 @@ class CHROMEOS_EXPORT FakeShillManagerClient
   typedef std::map<std::string, ShillPropertyMap> DevicePropertyMap;
   DevicePropertyMap shill_device_property_map_;
 
-  base::ObserverList<ShillPropertyChangedObserver> observer_list_;
+  base::ObserverList<ShillPropertyChangedObserver>::Unchecked observer_list_;
 
   // Track the default service for signaling Manager.DefaultService.
   std::string default_service_;

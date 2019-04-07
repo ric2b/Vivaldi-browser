@@ -14,14 +14,14 @@
 #include "base/pickle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "components/version_info/version_info.h"
 #include "components/webrtc_logging/browser/log_cleanup.h"
-#include "components/webrtc_logging/browser/log_list.h"
+#include "components/webrtc_logging/browser/text_log_list.h"
 #include "components/webrtc_logging/common/partial_circular_buffer.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/load_flags.h"
@@ -84,7 +84,7 @@ WebRtcLogUploadDoneData::~WebRtcLogUploadDoneData() {}
 
 WebRtcLogUploader::WebRtcLogUploader()
     : background_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND})),
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT})),
       log_count_(0),
       post_data_(NULL),
       shutting_down_(false) {}
@@ -132,7 +132,7 @@ void WebRtcLogUploader::LoggingStoppedDoUpload(
     WriteCompressedLogToFile(compressed_log, log_file_path);
 
     base::FilePath log_list_path =
-        webrtc_logging::LogList::GetWebRtcLogListFileForDirectory(
+        webrtc_logging::TextLogList::GetWebRtcLogListFileForDirectory(
             upload_done_data.log_path);
     AddLocallyStoredLogInfoToUploadListFile(log_list_path, local_log_id);
   }
@@ -238,7 +238,7 @@ void WebRtcLogUploader::LoggingStoppedDoStore(
   webrtc_logging::DeleteOldWebRtcLogFiles(log_paths.log_path);
 
   base::FilePath log_list_path =
-      webrtc_logging::LogList::GetWebRtcLogListFileForDirectory(
+      webrtc_logging::TextLogList::GetWebRtcLogListFileForDirectory(
           log_paths.log_path);
 
   // Store the native log with a ".gz" extension.
@@ -315,7 +315,7 @@ void WebRtcLogUploader::OnSimpleLoaderComplete(
   if (!upload_done_data.log_path.empty()) {
     // TODO(jiayl): Add the RTP dump records to chrome://webrtc-logs.
     base::FilePath log_list_path =
-        webrtc_logging::LogList::GetWebRtcLogListFileForDirectory(
+        webrtc_logging::TextLogList::GetWebRtcLogListFileForDirectory(
             upload_done_data.log_path);
     background_task_runner_->PostTask(
         FROM_HERE,

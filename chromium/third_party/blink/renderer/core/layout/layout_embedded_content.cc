@@ -35,7 +35,6 @@
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_analyzer.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
-#include "third_party/blink/renderer/core/page/scrolling/root_scroller_util.h"
 #include "third_party/blink/renderer/core/paint/embedded_content_painter.h"
 
 namespace blink {
@@ -160,7 +159,7 @@ bool LayoutEmbeddedContent::NodeAtPointOverEmbeddedContentView(
   if ((inside || location_in_container.IsRectBasedTest()) && !had_result &&
       result.InnerNode() == GetNode()) {
     result.SetIsOverEmbeddedContentView(
-        ContentBoxRect().Contains(result.LocalPoint()));
+        PhysicalContentBoxRect().Contains(result.LocalPoint()));
   }
   return inside;
 }
@@ -171,8 +170,9 @@ bool LayoutEmbeddedContent::NodeAtPoint(
     const LayoutPoint& accumulated_offset,
     HitTestAction action) {
   FrameView* frame_view = ChildFrameView();
-  if (!frame_view || !frame_view->IsLocalFrameView() ||
-      !result.GetHitTestRequest().AllowsChildFrameContent()) {
+  bool skip_contents = (result.GetHitTestRequest().GetStopNode() == this ||
+                        !result.GetHitTestRequest().AllowsChildFrameContent());
+  if (!frame_view || !frame_view->IsLocalFrameView() || skip_contents) {
     return NodeAtPointOverEmbeddedContentView(result, location_in_container,
                                               accumulated_offset, action);
   }
@@ -199,8 +199,10 @@ bool LayoutEmbeddedContent::NodeAtPoint(
           LayoutPoint(BorderLeft() + PaddingLeft(), BorderTop() + PaddingTop());
       HitTestLocation new_hit_test_location(
           location_in_container, -adjusted_location - content_offset);
-      HitTestRequest new_hit_test_request(result.GetHitTestRequest().GetType() |
-                                          HitTestRequest::kChildFrameHitTest);
+      HitTestRequest new_hit_test_request(
+          result.GetHitTestRequest().GetType() |
+              HitTestRequest::kChildFrameHitTest,
+          result.GetHitTestRequest().GetStopNode());
       HitTestResult child_frame_result(new_hit_test_request,
                                        new_hit_test_location);
 
@@ -257,7 +259,7 @@ void LayoutEmbeddedContent::StyleDidChange(StyleDifference diff,
   if (!embedded_content_view)
     return;
 
-  if (Style()->Visibility() != EVisibility::kVisible) {
+  if (StyleRef().Visibility() != EVisibility::kVisible) {
     embedded_content_view->Hide();
   } else {
     embedded_content_view->Show();
@@ -271,14 +273,17 @@ void LayoutEmbeddedContent::UpdateLayout() {
   ClearNeedsLayout();
 }
 
-void LayoutEmbeddedContent::Paint(const PaintInfo& paint_info) const {
-  EmbeddedContentPainter(*this).Paint(paint_info);
-}
-
-void LayoutEmbeddedContent::PaintContents(
+void LayoutEmbeddedContent::PaintReplaced(
     const PaintInfo& paint_info,
     const LayoutPoint& paint_offset) const {
-  EmbeddedContentPainter(*this).PaintContents(paint_info, paint_offset);
+  EmbeddedContentPainter(*this).PaintReplaced(paint_info, paint_offset);
+}
+
+void LayoutEmbeddedContent::InvalidatePaint(
+    const PaintInvalidatorContext& context) const {
+  LayoutReplaced::InvalidatePaint(context);
+  if (auto* plugin = Plugin())
+    plugin->InvalidatePaint();
 }
 
 CursorDirective LayoutEmbeddedContent::GetCursor(const LayoutPoint& point,
@@ -292,19 +297,16 @@ CursorDirective LayoutEmbeddedContent::GetCursor(const LayoutPoint& point,
 }
 
 LayoutRect LayoutEmbeddedContent::ReplacedContentRect() const {
+  LayoutRect content_rect = PhysicalContentBoxRect();
+  // IFrames set as the root scroller should get their size from their parent.
+  if (ChildFrameView() && View() && IsEffectiveRootScroller())
+    content_rect = LayoutRect(LayoutPoint(), View()->ViewRect().Size());
+
   // We don't propagate sub-pixel into sub-frame layout, in other words, the
   // rect is snapped at the document boundary, and sub-pixel movement could
   // cause the sub-frame to layout due to the 1px snap difference. In order to
   // avoid that, the size of sub-frame is rounded in advance.
-  LayoutRect size_rounded_rect = ContentBoxRect();
-
-  // IFrames set as the root scroller should get their size from their parent.
-  if (ChildFrameView() && View() && RootScrollerUtil::IsEffective(*this))
-    size_rounded_rect = LayoutRect(LayoutPoint(), View()->ViewRect().Size());
-
-  size_rounded_rect.SetSize(
-      LayoutSize(RoundedIntSize(size_rounded_rect.Size())));
-  return size_rounded_rect;
+  return PreSnappedRectForPersistentSizing(content_rect);
 }
 
 void LayoutEmbeddedContent::UpdateOnEmbeddedContentViewChange() {
@@ -318,7 +320,7 @@ void LayoutEmbeddedContent::UpdateOnEmbeddedContentViewChange() {
   if (!NeedsLayout())
     UpdateGeometry(*embedded_content_view);
 
-  if (Style()->Visibility() != EVisibility::kVisible) {
+  if (StyleRef().Visibility() != EVisibility::kVisible) {
     embedded_content_view->Hide();
   } else {
     embedded_content_view->Show();

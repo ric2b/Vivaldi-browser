@@ -363,15 +363,18 @@ class NET_EXPORT NetworkQualityEstimator
   void ComputeEffectiveConnectionType();
 
   // Observer list for RTT or throughput estimates. Protected for testing.
-  base::ObserverList<RTTAndThroughputEstimatesObserver>
+  base::ObserverList<RTTAndThroughputEstimatesObserver>::Unchecked
       rtt_and_throughput_estimates_observer_list_;
 
   // Observer list for changes in effective connection type.
-  base::ObserverList<EffectiveConnectionTypeObserver>
+  base::ObserverList<EffectiveConnectionTypeObserver>::Unchecked
       effective_connection_type_observer_list_;
 
   // Params to configure the network quality estimator.
   const std::unique_ptr<NetworkQualityEstimatorParams> params_;
+
+  // Number of end to end RTT samples available when the ECT was last computed.
+  size_t end_to_end_rtt_observation_count_at_last_ect_computation_;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest,
@@ -577,8 +580,8 @@ class NET_EXPORT NetworkQualityEstimator
   EffectiveConnectionType effective_connection_type_at_last_main_frame_;
 
   // Observer lists for round trip times and throughput measurements.
-  base::ObserverList<RTTObserver> rtt_observer_list_;
-  base::ObserverList<ThroughputObserver> throughput_observer_list_;
+  base::ObserverList<RTTObserver>::Unchecked rtt_observer_list_;
+  base::ObserverList<ThroughputObserver>::Unchecked throughput_observer_list_;
 
   std::unique_ptr<nqe::internal::SocketWatcherFactory> watcher_factory_;
 
@@ -602,7 +605,6 @@ class NET_EXPORT NetworkQualityEstimator
 
   // Number of transport RTT samples available when the ECT was last computed.
   size_t transport_rtt_observation_count_last_ect_computation_;
-  size_t end_to_end_rtt_observation_count_at_last_ect_computation_;
 
   // Number of RTT observations received since the effective connection type was
   // last computed.

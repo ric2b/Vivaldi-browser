@@ -6,6 +6,7 @@
 
 #include <fuchsia/sys/cpp/fidl.h>
 #include <lib/fidl/cpp/binding_set.h>
+#include <lib/fit/function.h>
 #include <utility>
 #include <vector>
 
@@ -35,9 +36,7 @@ ComponentControllerImpl::CreateForRequest(
 }
 
 ComponentControllerImpl::ComponentControllerImpl(WebContentRunner* runner)
-    : runner_(runner),
-      controller_binding_(this),
-      frame_observer_binding_(this) {
+    : runner_(runner), controller_binding_(this) {
   DCHECK(runner);
 }
 
@@ -67,8 +66,7 @@ bool ComponentControllerImpl::BindToRequest(
         fit::bind_member(this, &ComponentControllerImpl::Kill));
   }
 
-  runner_->context()->CreateFrame(frame_observer_binding_.NewBinding(),
-                                  frame_.NewRequest());
+  runner_->context()->CreateFrame(frame_.NewRequest());
   frame_->GetNavigationController(navigation_controller_.NewRequest());
   navigation_controller_->LoadUrl(url_.spec(), nullptr);
 
@@ -80,7 +78,7 @@ bool ComponentControllerImpl::BindToRequest(
   service_directory_ = std::make_unique<base::fuchsia::ServiceDirectory>(
       std::move(startup_info.launch_info.directory_request));
   view_provider_binding_ = std::make_unique<
-      base::fuchsia::ScopedServiceBinding<fuchsia::ui::views_v1::ViewProvider>>(
+      base::fuchsia::ScopedServiceBinding<fuchsia::ui::viewsv1::ViewProvider>>(
       service_directory_.get(), this);
 
   return true;
@@ -99,12 +97,8 @@ void ComponentControllerImpl::Wait(WaitCallback callback) {
   termination_wait_callbacks_.push_back(std::move(callback));
 }
 
-void ComponentControllerImpl::OnNavigationStateChanged(
-    chromium::web::NavigationStateChangeDetails change,
-    OnNavigationStateChangedCallback callback) {}
-
 void ComponentControllerImpl::CreateView(
-    fidl::InterfaceRequest<fuchsia::ui::views_v1_token::ViewOwner> view_owner,
+    fidl::InterfaceRequest<fuchsia::ui::viewsv1token::ViewOwner> view_owner,
     fidl::InterfaceRequest<fuchsia::sys::ServiceProvider> services) {
   DCHECK(frame_);
   DCHECK(!view_is_bound_);

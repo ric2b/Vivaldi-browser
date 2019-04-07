@@ -51,7 +51,8 @@ void OffscreenCanvas::Commit(scoped_refptr<CanvasResource> canvas_resource,
   base::TimeTicks commit_start_time = WTF::CurrentTimeTicks();
   current_frame_damage_rect_.join(damage_rect);
   GetOrCreateResourceDispatcher()->DispatchFrameSync(
-      canvas_resource->Bitmap(), commit_start_time, current_frame_damage_rect_);
+      std::move(canvas_resource), commit_start_time, current_frame_damage_rect_,
+      !RenderingContext()->IsOriginTopLeft() /* needs_vertical_flip */);
   current_frame_damage_rect_ = SkIRect::MakeEmpty();
 }
 
@@ -321,7 +322,7 @@ CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
     ReplaceResourceProvider(CanvasResourceProvider::Create(
         surface_size, usage, SharedGpuContext::ContextProviderWrapper(), 0,
         context_->ColorParams(), presentation_mode,
-        std::move(dispatcher_weakptr)));
+        std::move(dispatcher_weakptr), false /* is_origin_top_left */));
 
     // The fallback chain for k*CompositedResourceUsage should never fall
     // all the way through to BitmapResourceProvider, except in unit tests.
@@ -391,7 +392,8 @@ void OffscreenCanvas::PushFrame(scoped_refptr<CanvasResource> canvas_resource,
     return;
   base::TimeTicks commit_start_time = WTF::CurrentTimeTicks();
   GetOrCreateResourceDispatcher()->DispatchFrame(
-      canvas_resource->Bitmap(), commit_start_time, current_frame_damage_rect_);
+      std::move(canvas_resource), commit_start_time, current_frame_damage_rect_,
+      !RenderingContext()->IsOriginTopLeft() /* needs_vertical_flip */);
   current_frame_damage_rect_ = SkIRect::MakeEmpty();
 }
 

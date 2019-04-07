@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/invalidation/impl/fake_invalidation_service.h"
+#include "components/invalidation/impl/profile_identity_provider.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/fake_gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
@@ -27,10 +28,6 @@
 
 namespace history {
 class HistoryService;
-}
-
-namespace net {
-class URLRequestContextGetter;
 }
 
 namespace user_prefs {
@@ -127,10 +124,6 @@ class ProfileSyncServiceBundle {
 
   // Accessors
 
-  net::URLRequestContextGetter* url_request_context() {
-    return url_request_context_.get();
-  }
-
   network::TestURLLoaderFactory* url_loader_factory() {
     return &test_url_loader_factory_;
   }
@@ -153,6 +146,10 @@ class ProfileSyncServiceBundle {
 
   sync_sessions::MockSyncSessionsClient* sync_sessions_client() {
     return &sync_sessions_client_;
+  }
+
+  invalidation::ProfileIdentityProvider* identity_provider() {
+    return identity_provider_.get();
   }
 
   invalidation::FakeInvalidationService* fake_invalidation_service() {
@@ -181,10 +178,8 @@ class ProfileSyncServiceBundle {
       local_session_event_router_;
   testing::NiceMock<sync_sessions::MockSyncSessionsClient>
       sync_sessions_client_;
+  std::unique_ptr<invalidation::ProfileIdentityProvider> identity_provider_;
   invalidation::FakeInvalidationService fake_invalidation_service_;
-  // TODO(https://crbug.com/844968): Remove references to url_request_context_
-  // once the rest of the sync engine is migrated to network service.
-  scoped_refptr<net::URLRequestContextGetter> url_request_context_;
   network::TestURLLoaderFactory test_url_loader_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileSyncServiceBundle);

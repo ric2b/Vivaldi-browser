@@ -20,7 +20,6 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_tracker.h"
-#include "chrome/browser/resource_coordinator/discard_reason.h"
 #include "chrome/browser/resource_coordinator/intervention_policy_database.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_observer.h"
@@ -89,7 +88,6 @@ class TabManager : public LifecycleUnitObserver,
   // Forward declaration of resource coordinator signal observer.
   class ResourceCoordinatorSignalObserver;
 
-  // Needs to be public for DEFINE_WEB_CONTENTS_USER_DATA_KEY.
   class WebContentsData;
 
   TabManager();
@@ -109,7 +107,7 @@ class TabManager : public LifecycleUnitObserver,
   // urgent, an aggressive fast-kill will be attempted if the sudden termination
   // disablers are allowed to be ignored (e.g. On ChromeOS, we can ignore an
   // unload handler and fast-kill the tab regardless).
-  void DiscardTab(DiscardReason reason);
+  void DiscardTab(LifecycleUnitDiscardReason reason);
 
   // Method used by the extensions API to discard tabs. If |contents| is null,
   // discards the least important tab using DiscardTab(). Otherwise discards
@@ -120,7 +118,7 @@ class TabManager : public LifecycleUnitObserver,
   // Log memory statistics for the running processes, then discards a tab.
   // Tab discard happens sometime later, as collecting the statistics touches
   // multiple threads and takes time.
-  void LogMemoryAndDiscardTab(DiscardReason reason);
+  void LogMemoryAndDiscardTab(LifecycleUnitDiscardReason reason);
 
   // Log memory statistics for the running processes.
   void LogMemory(const std::string& title);
@@ -268,7 +266,7 @@ class TabManager : public LifecycleUnitObserver,
   // min time to purge times this value.
   const int kDefaultMinMaxTimeToPurgeRatio = 4;
 
-  static void PurgeMemoryAndDiscardTab(DiscardReason reason);
+  static void PurgeMemoryAndDiscardTab(LifecycleUnitDiscardReason reason);
 
   // Returns true if the |url| represents an internal Chrome web UI page that
   // can be easily reloaded and hence makes a good choice to discard.
@@ -314,19 +312,16 @@ class TabManager : public LifecycleUnitObserver,
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
 
+  // Methods called by OnTabStripModelChanged()
+  void OnActiveTabChanged(content::WebContents* old_contents,
+                          content::WebContents* new_contents);
+  void OnTabInserted(content::WebContents* contents, bool foreground);
+
   // TabStripModelObserver:
-  void ActiveTabChanged(content::WebContents* old_contents,
-                        content::WebContents* new_contents,
-                        int index,
-                        int reason) override;
-  void TabInsertedAt(TabStripModel* tab_strip_model,
-                     content::WebContents* contents,
-                     int index,
-                     bool foreground) override;
-  void TabReplacedAt(TabStripModel* tab_strip_model,
-                     content::WebContents* old_contents,
-                     content::WebContents* new_contents,
-                     int index) override;
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override;
 
   // TabLoadTracker::Observer:
   void OnStartTracking(content::WebContents* web_contents,
@@ -346,7 +341,7 @@ class TabManager : public LifecycleUnitObserver,
 
   // Discards the less important LifecycleUnit that supports discarding under
   // |reason|.
-  content::WebContents* DiscardTabImpl(DiscardReason reason);
+  content::WebContents* DiscardTabImpl(LifecycleUnitDiscardReason reason);
 
   void OnSessionRestoreStartedLoadingTabs();
   void OnSessionRestoreFinishedLoadingTabs();
@@ -449,16 +444,13 @@ class TabManager : public LifecycleUnitObserver,
                                              base::TimeTicks now);
 
   // If enough Chrome usage time has elapsed since |lifecycle_unit| was hidden,
-  // proactively discards it. |lifecycle_unit| must be discardable.
-  // |decision_details| is the result of calling CanDiscard() on it. Returns the
+  // proactively discards it. |lifecycle_unit| must be discardable. Returns the
   // time at which this should be called again, or TimeTicks::Max() if no
   // further call is needed. Always returns a zero TimeTicks when a discard
   // happen, to check immediately if another discard should happen. |now| is the
   // current time.
-  base::TimeTicks MaybeDiscardLifecycleUnit(
-      LifecycleUnit* lifecycle_unit,
-      const DecisionDetails& decision_details,
-      base::TimeTicks now);
+  base::TimeTicks MaybeDiscardLifecycleUnit(LifecycleUnit* lifecycle_unit,
+                                            base::TimeTicks now);
 
   // LifecycleUnitObserver:
   void OnLifecycleUnitVisibilityChanged(

@@ -17,8 +17,9 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/tablet_mode/scoped_disable_internal_mouse_and_keyboard.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "base/command_line.h"
-#include "services/ui/public/cpp/input_devices/input_device_client_test_api.h"
+#include "services/ws/public/cpp/input_devices/input_device_client_test_api.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/devices/input_device.h"
 #include "ui/events/devices/touchscreen_device.h"
@@ -44,16 +45,10 @@ class VirtualKeyboardControllerTest : public AshTestBase {
   VirtualKeyboardControllerTest() = default;
   ~VirtualKeyboardControllerTest() override = default;
 
-  // Sets the event blocker on the maximized window controller.
-  void SetEventBlocker(
-      std::unique_ptr<ScopedDisableInternalMouseAndKeyboard> blocker) {
-    Shell::Get()->tablet_mode_controller()->event_blocker_ = std::move(blocker);
-  }
-
   void SetUp() override {
     AshTestBase::SetUp();
-    ui::InputDeviceClientTestApi().SetKeyboardDevices({});
-    ui::InputDeviceClientTestApi().SetTouchscreenDevices({});
+    ws::InputDeviceClientTestApi().SetKeyboardDevices({});
+    ws::InputDeviceClientTestApi().SetTouchscreenDevices({});
   }
 
   display::Display GetPrimaryDisplay() {
@@ -92,7 +87,7 @@ class MockEventBlocker : public ScopedDisableInternalMouseAndKeyboard {
     std::vector<ui::InputDevice> keyboard_devices;
     keyboard_devices.push_back(ui::InputDevice(
         1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL, "keyboard"));
-    ui::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
+    ws::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
   }
 
  private:
@@ -106,7 +101,7 @@ TEST_F(VirtualKeyboardControllerTest, RestoreKeyboardDevices) {
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
   std::unique_ptr<ScopedDisableInternalMouseAndKeyboard> blocker(
       new MockEventBlocker);
-  SetEventBlocker(std::move(blocker));
+  TabletModeControllerTestApi().set_event_blocker(std::move(blocker));
 }
 
 TEST_F(VirtualKeyboardControllerTest,
@@ -156,26 +151,21 @@ TEST_F(VirtualKeyboardControllerTest,
 }
 
 TEST_F(VirtualKeyboardControllerTest,
-       ForceToShowKeyboardWithKeysetWhenAccessibilityKeyboardIsDisabled) {
-  // TODO(mash): Turning on accessibility keyboard does not create a valid
-  // KeyboardController under MASH. See https://crbug.com/646565.
-  if (Shell::GetAshConfig() == Config::MASH_DEPRECATED)
-    return;
-
-  AccessibilityController* accessibility_controller =
-      Shell::Get()->accessibility_controller();
-  accessibility_controller->SetVirtualKeyboardEnabled(false);
-  ASSERT_FALSE(accessibility_controller->IsVirtualKeyboardEnabled());
-
+       ForceToShowKeyboardWithKeysetWhenKeyboardIsDisabled) {
   // Set up a mock ImeControllerClient to test keyset changes.
   TestImeControllerClient client;
   Shell::Get()->ime_controller()->SetClient(client.CreateInterfacePtr());
 
-  // Should show the keyboard by turning on the accesibility keyboard.
+  // Should show the keyboard by enabling it temporarily.
+  EXPECT_FALSE(keyboard::IsKeyboardEnabled());
+  EXPECT_FALSE(keyboard::GetKeyboardEnabledFromShelf());
+
   GetVirtualKeyboardController()->ForceShowKeyboardWithKeyset(
       chromeos::input_method::mojom::ImeKeyset::kEmoji);
   Shell::Get()->ime_controller()->FlushMojoForTesting();
-  EXPECT_TRUE(accessibility_controller->IsVirtualKeyboardEnabled());
+
+  EXPECT_TRUE(keyboard::GetKeyboardEnabledFromShelf());
+  EXPECT_TRUE(keyboard::IsKeyboardEnabled());
 
   // Keyset should be emoji.
   EXPECT_EQ(chromeos::input_method::mojom::ImeKeyset::kEmoji,
@@ -189,7 +179,8 @@ TEST_F(VirtualKeyboardControllerTest,
   base::RunLoop().RunUntilIdle();
 
   // The keyboard should still be disabled again.
-  EXPECT_FALSE(accessibility_controller->IsVirtualKeyboardEnabled());
+  EXPECT_FALSE(keyboard::IsKeyboardEnabled());
+  EXPECT_FALSE(keyboard::GetKeyboardEnabledFromShelf());
 
   // Keyset should be reset to none.
   Shell::Get()->ime_controller()->FlushMojoForTesting();
@@ -199,25 +190,17 @@ TEST_F(VirtualKeyboardControllerTest,
 
 TEST_F(VirtualKeyboardControllerTest,
        ForceToShowKeyboardWithKeysetTemporaryHide) {
-  // TODO(mash): Turning on accessibility keyboard does not create a valid
-  // KeyboardController under MASH. See https://crbug.com/646565.
-  if (Shell::GetAshConfig() == Config::MASH_DEPRECATED)
-    return;
-
-  AccessibilityController* accessibility_controller =
-      Shell::Get()->accessibility_controller();
-  accessibility_controller->SetVirtualKeyboardEnabled(false);
-  ASSERT_FALSE(accessibility_controller->IsVirtualKeyboardEnabled());
-
   // Set up a mock ImeControllerClient to test keyset changes.
   TestImeControllerClient client;
   Shell::Get()->ime_controller()->SetClient(client.CreateInterfacePtr());
 
-  // Should show the keyboard by turning on the accesibility keyboard.
+  // Should show the keyboard by enabling it temporarily.
   GetVirtualKeyboardController()->ForceShowKeyboardWithKeyset(
       chromeos::input_method::mojom::ImeKeyset::kEmoji);
   Shell::Get()->ime_controller()->FlushMojoForTesting();
-  EXPECT_TRUE(accessibility_controller->IsVirtualKeyboardEnabled());
+
+  EXPECT_TRUE(keyboard::GetKeyboardEnabledFromShelf());
+  EXPECT_TRUE(keyboard::IsKeyboardEnabled());
 
   // Keyset should be emoji.
   EXPECT_EQ(chromeos::input_method::mojom::ImeKeyset::kEmoji,
@@ -231,7 +214,8 @@ TEST_F(VirtualKeyboardControllerTest,
   base::RunLoop().RunUntilIdle();
 
   // The keyboard should still be enabled.
-  EXPECT_TRUE(accessibility_controller->IsVirtualKeyboardEnabled());
+  EXPECT_TRUE(keyboard::GetKeyboardEnabledFromShelf());
+  EXPECT_TRUE(keyboard::IsKeyboardEnabled());
 
   // Keyset should still be emoji.
   EXPECT_EQ(chromeos::input_method::mojom::ImeKeyset::kEmoji,
@@ -248,8 +232,8 @@ class VirtualKeyboardControllerAutoTest : public VirtualKeyboardControllerTest,
     AshTestBase::SetUp();
     // Set the current list of devices to empty so that they don't interfere
     // with the test.
-    ui::InputDeviceClientTestApi().SetKeyboardDevices({});
-    ui::InputDeviceClientTestApi().SetTouchscreenDevices({});
+    ws::InputDeviceClientTestApi().SetKeyboardDevices({});
+    ws::InputDeviceClientTestApi().SetTouchscreenDevices({});
     Shell::Get()->system_tray_notifier()->AddVirtualKeyboardObserver(this);
   }
 
@@ -289,17 +273,17 @@ TEST_F(VirtualKeyboardControllerAutoTest, DisabledIfInternalKeyboardPresent) {
   screens.push_back(
       ui::TouchscreenDevice(1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
                             "Touchscreen", gfx::Size(1024, 768), 0));
-  ui::InputDeviceClientTestApi().SetTouchscreenDevices(screens);
+  ws::InputDeviceClientTestApi().SetTouchscreenDevices(screens);
   std::vector<ui::InputDevice> keyboard_devices;
   keyboard_devices.push_back(ui::InputDevice(
       1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL, "keyboard"));
-  ui::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
+  ws::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
   ASSERT_FALSE(keyboard::IsKeyboardEnabled());
   // Remove the internal keyboard. Virtual keyboard should now show.
-  ui::InputDeviceClientTestApi().SetKeyboardDevices({});
+  ws::InputDeviceClientTestApi().SetKeyboardDevices({});
   EXPECT_TRUE(keyboard::IsKeyboardEnabled());
   // Replug in the internal keyboard. Virtual keyboard should hide.
-  ui::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
+  ws::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
   EXPECT_FALSE(keyboard::IsKeyboardEnabled());
 }
 
@@ -309,10 +293,10 @@ TEST_F(VirtualKeyboardControllerAutoTest, DisabledIfNoTouchScreen) {
   devices.push_back(
       ui::TouchscreenDevice(1, ui::InputDeviceType::INPUT_DEVICE_EXTERNAL,
                             "Touchscreen", gfx::Size(800, 600), 0));
-  ui::InputDeviceClientTestApi().SetTouchscreenDevices(devices);
+  ws::InputDeviceClientTestApi().SetTouchscreenDevices(devices);
   EXPECT_TRUE(keyboard::IsKeyboardEnabled());
   // Remove touchscreen. Keyboard should hide.
-  ui::InputDeviceClientTestApi().SetTouchscreenDevices({});
+  ws::InputDeviceClientTestApi().SetTouchscreenDevices({});
   EXPECT_FALSE(keyboard::IsKeyboardEnabled());
 }
 
@@ -321,11 +305,11 @@ TEST_F(VirtualKeyboardControllerAutoTest, SuppressedIfExternalKeyboardPresent) {
   screens.push_back(ui::TouchscreenDevice(
       1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL, "Touchscreen",
       gfx::Size(1024, 768), 0, false /* has_stylus */));
-  ui::InputDeviceClientTestApi().SetTouchscreenDevices(screens);
+  ws::InputDeviceClientTestApi().SetTouchscreenDevices(screens);
   std::vector<ui::InputDevice> keyboard_devices;
   keyboard_devices.push_back(ui::InputDevice(
       1, ui::InputDeviceType::INPUT_DEVICE_EXTERNAL, "keyboard"));
-  ui::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
+  ws::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
   ASSERT_FALSE(keyboard::IsKeyboardEnabled());
   ASSERT_TRUE(notified());
   ASSERT_TRUE(IsVirtualKeyboardSuppressed());
@@ -344,7 +328,7 @@ TEST_F(VirtualKeyboardControllerAutoTest, SuppressedIfExternalKeyboardPresent) {
   // Remove external keyboard. Should be notified that the keyboard is not
   // suppressed.
   ResetObserver();
-  ui::InputDeviceClientTestApi().SetKeyboardDevices({});
+  ws::InputDeviceClientTestApi().SetKeyboardDevices({});
   ASSERT_TRUE(keyboard::IsKeyboardEnabled());
   ASSERT_TRUE(notified());
   ASSERT_FALSE(IsVirtualKeyboardSuppressed());
@@ -359,7 +343,7 @@ TEST_F(VirtualKeyboardControllerAutoTest, HandleMultipleKeyboardsPresent) {
       2, ui::InputDeviceType::INPUT_DEVICE_EXTERNAL, "keyboard"));
   keyboards.push_back(ui::InputDevice(
       3, ui::InputDeviceType::INPUT_DEVICE_EXTERNAL, "keyboard"));
-  ui::InputDeviceClientTestApi().SetKeyboardDevices(keyboards);
+  ws::InputDeviceClientTestApi().SetKeyboardDevices(keyboards);
   ASSERT_FALSE(keyboard::IsKeyboardEnabled());
 }
 
@@ -369,35 +353,35 @@ TEST_F(VirtualKeyboardControllerAutoTest, EnabledDuringTabletMode) {
   screens.push_back(
       ui::TouchscreenDevice(1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
                             "Touchscreen", gfx::Size(1024, 768), 0));
-  ui::InputDeviceClientTestApi().SetTouchscreenDevices(screens);
+  ws::InputDeviceClientTestApi().SetTouchscreenDevices(screens);
   std::vector<ui::InputDevice> keyboard_devices;
   keyboard_devices.push_back(ui::InputDevice(
       1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL, "Keyboard"));
-  ui::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
+  ws::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
   ASSERT_FALSE(keyboard::IsKeyboardEnabled());
   // Toggle tablet mode on.
-  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+  TabletModeControllerTestApi().EnterTabletMode();
   ASSERT_TRUE(keyboard::IsKeyboardEnabled());
   // Toggle tablet mode off.
-  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
+  TabletModeControllerTestApi().LeaveTabletMode(false);
   ASSERT_FALSE(keyboard::IsKeyboardEnabled());
 }
 
 // Tests that keyboard gets suppressed in tablet mode.
-TEST_F(VirtualKeyboardControllerAutoTest, SuppressedInMaximizedMode) {
+TEST_F(VirtualKeyboardControllerAutoTest, SuppressedInTabletMode) {
   std::vector<ui::TouchscreenDevice> screens;
   screens.push_back(
       ui::TouchscreenDevice(1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
                             "Touchscreen", gfx::Size(1024, 768), 0));
-  ui::InputDeviceClientTestApi().SetTouchscreenDevices(screens);
+  ws::InputDeviceClientTestApi().SetTouchscreenDevices(screens);
   std::vector<ui::InputDevice> keyboard_devices;
   keyboard_devices.push_back(ui::InputDevice(
       1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL, "Keyboard"));
   keyboard_devices.push_back(ui::InputDevice(
       2, ui::InputDeviceType::INPUT_DEVICE_EXTERNAL, "Keyboard"));
-  ui::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
+  ws::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
   // Toggle tablet mode on.
-  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+  TabletModeControllerTestApi().EnterTabletMode();
   ASSERT_FALSE(keyboard::IsKeyboardEnabled());
   ASSERT_TRUE(notified());
   ASSERT_TRUE(IsVirtualKeyboardSuppressed());
@@ -417,12 +401,12 @@ TEST_F(VirtualKeyboardControllerAutoTest, SuppressedInMaximizedMode) {
   // suppressed.
   ResetObserver();
   keyboard_devices.pop_back();
-  ui::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
+  ws::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
   ASSERT_TRUE(keyboard::IsKeyboardEnabled());
   ASSERT_TRUE(notified());
   ASSERT_FALSE(IsVirtualKeyboardSuppressed());
   // Toggle tablet mode oFF.
-  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
+  TabletModeControllerTestApi().LeaveTabletMode(false);
   ASSERT_FALSE(keyboard::IsKeyboardEnabled());
 }
 
@@ -450,11 +434,11 @@ TEST_F(VirtualKeyboardControllerAlwaysEnabledTest, DoesNotSuppressKeyboard) {
   screens.push_back(
       ui::TouchscreenDevice(1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
                             "Touchscreen", gfx::Size(1024, 768), 0));
-  ui::InputDeviceClientTestApi().SetTouchscreenDevices(screens);
+  ws::InputDeviceClientTestApi().SetTouchscreenDevices(screens);
   std::vector<ui::InputDevice> keyboard_devices;
   keyboard_devices.push_back(ui::InputDevice(
       1, ui::InputDeviceType::INPUT_DEVICE_EXTERNAL, "keyboard"));
-  ui::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
+  ws::InputDeviceClientTestApi().SetKeyboardDevices(keyboard_devices);
   ASSERT_TRUE(keyboard::IsKeyboardEnabled());
 }
 

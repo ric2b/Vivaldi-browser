@@ -40,7 +40,9 @@ run_jsbundler("select_to_speak_copied_files") {
     "options.css",
     "options.html",
     "paragraph_utils.js",
+    "prefs_manager.js",
     "rect_utils.js",
+    "select_to_speak-2x.svg",
     "select_to_speak.js",
     "select_to_speak_gdocs_script.js",
     "select_to_speak_main.js",
@@ -146,6 +148,7 @@ test("select_to_speak_extension_tests") {
     "//chrome/third_party/mock4js/",
     "//third_party/accessibility-audit/axs_testing.js",
     "//third_party/chaijs/chai.js",
+    "//ui/webui/resources/js/cr.js",
   ]
 }
 
@@ -154,12 +157,18 @@ js2gtest("select_to_speak_extjs_tests") {
   sources = [
     "select_to_speak_keystroke_selection_test.extjs",
     "select_to_speak_mouse_selection_test.extjs",
+    "select_to_speak_prefs_test.extjs",
   ]
   gen_include_files = [
     "../chromevox/testing/callback_helper.js",
+    "mock_storage.js",
     "mock_tts.js",
     "select_to_speak_e2e_test_base.js",
     "pipe.jpg",
+  ]
+  extra_js_files = [
+    "//chrome/test/data/webui/settings/fake_settings_private.js",
+    "//chrome/test/data/webui/fake_chrome_event.js",
   ]
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 }
@@ -175,6 +184,7 @@ js_type_check("closure_compile") {
     ":metrics_utils",
     ":node_utils",
     ":paragraph_utils",
+    ":prefs_manager",
     ":rect_utils",
     ":select_to_speak",
     ":select_to_speak_options",
@@ -190,6 +200,7 @@ js_library("select_to_speak") {
     ":metrics_utils",
     ":node_utils",
     ":paragraph_utils",
+    ":prefs_manager",
     ":rect_utils",
     ":word_utils",
   ]
@@ -199,13 +210,14 @@ js_library("select_to_speak") {
     "$externs_path/chrome_extensions.js",
     "$externs_path/clipboard.js",
     "$externs_path/command_line_private.js",
-    "externs.js",
   ]
 }
 
 js_library("select_to_speak_options") {
+  deps = [
+    ":prefs_manager",
+  ]
   externs_list = [
-    "externs.js",
     "$externs_path/accessibility_private.js",
     "$externs_path/automation.js",
     "$externs_path/chrome_extensions.js",
@@ -218,25 +230,18 @@ js_library("node_utils") {
     ":paragraph_utils",
     ":rect_utils",
   ]
-  externs_list = [
-    "externs.js",
-    "$externs_path/automation.js",
-  ]
+  externs_list = [ "$externs_path/automation.js" ]
 }
 
 js_library("word_utils") {
   deps = [
     ":paragraph_utils",
   ]
-  externs_list = [
-    "externs.js",
-    "$externs_path/automation.js",
-  ]
+  externs_list = [ "$externs_path/automation.js" ]
 }
 
 js_library("paragraph_utils") {
   externs_list = [
-    "externs.js",
     "$externs_path/accessibility_private.js",
     "$externs_path/automation.js",
     "$externs_path/chrome_extensions.js",
@@ -252,7 +257,14 @@ js_library("input_handler") {
 js_library("rect_utils") {
 }
 
+js_library("prefs_manager") {
+  externs_list = [ "$externs_path/settings_private.js" ]
+}
+
 js_library("metrics_utils") {
+  deps = [
+    ":prefs_manager",
+  ]
   externs_list = [ "$externs_path/metrics_private.js" ]
 }
 

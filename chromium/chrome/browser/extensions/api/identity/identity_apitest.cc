@@ -65,6 +65,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/identity/public/cpp/identity_manager.h"
 #include "services/identity/public/cpp/identity_test_utils.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -169,7 +170,7 @@ class TestHangOAuth2MintTokenFlow : public OAuth2MintTokenFlow {
   TestHangOAuth2MintTokenFlow()
       : OAuth2MintTokenFlow(NULL, OAuth2MintTokenFlow::Parameters()) {}
 
-  void Start(net::URLRequestContextGetter* context,
+  void Start(scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
              const std::string& access_token) override {
     // Do nothing, simulating a hanging network call.
   }
@@ -191,7 +192,7 @@ class TestOAuth2MintTokenFlow : public OAuth2MintTokenFlow {
         result_(result),
         delegate_(delegate) {}
 
-  void Start(net::URLRequestContextGetter* context,
+  void Start(scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
              const std::string& access_token) override {
     switch (result_) {
       case ISSUE_ADVICE_SUCCESS: {
@@ -465,9 +466,6 @@ class IdentityTestWithSignin : public AsyncExtensionBrowserTest {
         ProfileOAuth2TokenServiceFactory::GetInstance()->GetForProfile(
             profile()));
     ASSERT_TRUE(token_service_);
-    GaiaCookieManagerServiceFactory::GetInstance()
-        ->GetForProfile(profile())
-        ->Init();
 
 #if defined(OS_CHROMEOS)
     // On ChromeOS, ProfileOAuth2TokenService does not fire
@@ -860,6 +858,19 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
       func.get(), "[{\"interactive\": true}]", browser());
   EXPECT_EQ(std::string(errors::kUserNotSignedIn), error);
   EXPECT_TRUE(func->login_ui_shown());
+  EXPECT_FALSE(func->scope_ui_shown());
+}
+
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
+                       InteractiveNotSignedAndSigninNotAllowed) {
+  browser()->profile()->GetPrefs()->SetBoolean(prefs::kSigninAllowed, false);
+  scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
+  func->set_extension(CreateExtension(CLIENT_ID | SCOPES));
+  func->set_login_ui_result(false);
+  std::string error = utils::RunFunctionAndReturnError(
+      func.get(), "[{\"interactive\": true}]", browser());
+  EXPECT_EQ(std::string(errors::kBrowserSigninNotAllowed), error);
+  EXPECT_FALSE(func->login_ui_shown());
   EXPECT_FALSE(func->scope_ui_shown());
 }
 #endif
@@ -1936,21 +1947,13 @@ class GetAuthTokenFunctionPublicSessionTest : public GetAuthTokenFunctionTest {
 
  protected:
   void SetUpInProcessBrowserTestFixture() override {
-     GetAuthTokenFunctionTest::SetUpInProcessBrowserTestFixture();
+    GetAuthTokenFunctionTest::SetUpInProcessBrowserTestFixture();
 
-     // Set up the user manager to fake a public session.
-     EXPECT_CALL(*user_manager_, IsLoggedInAsKioskApp())
-         .WillRepeatedly(Return(false));
-     EXPECT_CALL(*user_manager_, IsLoggedInAsPublicAccount())
-         .WillRepeatedly(Return(true));
-
-    // Set up fake install attributes to make the device appeared as
-    // enterprise-managed.
-     std::unique_ptr<chromeos::StubInstallAttributes> attributes =
-         std::make_unique<chromeos::StubInstallAttributes>();
-     attributes->SetCloudManaged("example.com", "fake-id");
-     policy::BrowserPolicyConnectorChromeOS::SetInstallAttributesForTesting(
-         attributes.release());
+    // Set up the user manager to fake a public session.
+    EXPECT_CALL(*user_manager_, IsLoggedInAsKioskApp())
+        .WillRepeatedly(Return(false));
+    EXPECT_CALL(*user_manager_, IsLoggedInAsPublicAccount())
+        .WillRepeatedly(Return(true));
   }
 
   scoped_refptr<Extension> CreateTestExtension(const std::string& id) {
@@ -1963,6 +1966,12 @@ class GetAuthTokenFunctionPublicSessionTest : public GetAuthTokenFunctionTest {
         .SetID(id)
         .Build();
   }
+
+  // Set up fake install attributes to make the device appeared as
+  // enterprise-managed.
+  chromeos::ScopedStubInstallAttributes test_install_attributes_{
+      chromeos::StubInstallAttributes::CreateCloudManaged("example.com",
+                                                          "fake-id")};
 
   // Owned by |user_manager_enabler|.
   chromeos::MockUserManager* user_manager_;

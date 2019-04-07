@@ -11,6 +11,7 @@
 #include "base/files/file.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/task_runner_util.h"
 #include "base/trace_event/trace_event.h"
 #include "components/subresource_filter/core/common/indexed_ruleset.h"
@@ -24,6 +25,7 @@ VerifiedRulesetDealer::VerifiedRulesetDealer() = default;
 VerifiedRulesetDealer::~VerifiedRulesetDealer() = default;
 
 base::File VerifiedRulesetDealer::OpenAndSetRulesetFile(
+    int expected_checksum,
     const base::FilePath& file_path) {
   DCHECK(CalledOnValidSequence());
   // On Windows, open the file with FLAG_SHARE_DELETE to allow deletion while
@@ -33,14 +35,17 @@ base::File VerifiedRulesetDealer::OpenAndSetRulesetFile(
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("loading"),
                "VerifiedRulesetDealer::OpenAndSetRulesetFile", "file_valid",
                file.IsValid());
-  if (file.IsValid())
+  if (file.IsValid()) {
     SetRulesetFile(file.Duplicate());
+    expected_checksum_ = expected_checksum;
+  }
   return file;
 }
 
 void VerifiedRulesetDealer::SetRulesetFile(base::File ruleset_file) {
   RulesetDealer::SetRulesetFile(std::move(ruleset_file));
-  status_ = RulesetVerificationStatus::NOT_VERIFIED;
+  status_ = RulesetVerificationStatus::kNotVerified;
+  expected_checksum_ = 0;
 }
 
 scoped_refptr<const MemoryMappedRuleset> VerifiedRulesetDealer::GetRuleset() {
@@ -48,25 +53,32 @@ scoped_refptr<const MemoryMappedRuleset> VerifiedRulesetDealer::GetRuleset() {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("loading"),
                "VerifiedRulesetDealer::GetRuleset");
 
-  // TODO(pkalinnikov): Record verification status to a histogram.
   switch (status_) {
-    case RulesetVerificationStatus::NOT_VERIFIED: {
+    case RulesetVerificationStatus::kNotVerified: {
       auto ruleset = RulesetDealer::GetRuleset();
-      if (ruleset &&
-          IndexedRulesetMatcher::Verify(ruleset->data(), ruleset->length())) {
-        status_ = RulesetVerificationStatus::INTACT;
-        return ruleset;
+      if (ruleset) {
+        if (IndexedRulesetMatcher::Verify(ruleset->data(), ruleset->length(),
+                                          expected_checksum_)) {
+          status_ = RulesetVerificationStatus::kIntact;
+        } else {
+          status_ = RulesetVerificationStatus::kCorrupt;
+          ruleset.reset();
+        }
+      } else {
+        status_ = RulesetVerificationStatus::kInvalidFile;
       }
-      status_ = RulesetVerificationStatus::CORRUPT;
-      return nullptr;
+      UMA_HISTOGRAM_ENUMERATION("SubresourceFilter.RulesetVerificationStatus",
+                                status_);
+      return ruleset;
     }
-    case RulesetVerificationStatus::INTACT: {
+    case RulesetVerificationStatus::kIntact: {
       auto ruleset = RulesetDealer::GetRuleset();
       // Note, |ruleset| can still be nullptr here if mmap fails, despite the
       // fact that it must have succeeded previously.
       return ruleset;
     }
-    case RulesetVerificationStatus::CORRUPT:
+    case RulesetVerificationStatus::kCorrupt:
+    case RulesetVerificationStatus::kInvalidFile:
       return nullptr;
     default:
       NOTREACHED();
@@ -91,11 +103,12 @@ void VerifiedRulesetDealer::Handle::GetDealerAsync(
   // corresponding task will be posted *before* a task to delete the pointer
   // upon destruction of |this| Handler.
   task_runner_->PostTask(FROM_HERE,
-                         base::Bind(std::move(callback), dealer_.get()));
+                         base::BindOnce(std::move(callback), dealer_.get()));
 }
 
 void VerifiedRulesetDealer::Handle::TryOpenAndSetRulesetFile(
     const base::FilePath& path,
+    int expected_checksum,
     base::OnceCallback<void(base::File)> callback) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
   // |base::Unretained| is safe here because the |OpenAndSetRulesetFile| task
@@ -104,7 +117,7 @@ void VerifiedRulesetDealer::Handle::TryOpenAndSetRulesetFile(
   base::PostTaskAndReplyWithResult(
       task_runner_, FROM_HERE,
       base::BindOnce(&VerifiedRulesetDealer::OpenAndSetRulesetFile,
-                     base::Unretained(dealer_.get()), path),
+                     base::Unretained(dealer_.get()), expected_checksum, path),
       std::move(callback));
 }
 
@@ -138,7 +151,7 @@ VerifiedRuleset::Handle::~Handle() {
 void VerifiedRuleset::Handle::GetRulesetAsync(
     base::Callback<void(VerifiedRuleset*)> callback) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
-  task_runner_->PostTask(FROM_HERE, base::Bind(callback, ruleset_.get()));
+  task_runner_->PostTask(FROM_HERE, base::BindOnce(callback, ruleset_.get()));
 }
 
 }  // namespace subresource_filter

@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "base/task/cancelable_task_tracker.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -130,9 +130,8 @@ MediaRouterFileDialog::MediaRouterFileDialog(
 MediaRouterFileDialog::MediaRouterFileDialog(
     MediaRouterFileDialogDelegate* delegate,
     std::unique_ptr<FileSystemDelegate> file_system_delegate)
-    : task_runner_(
-          base::TaskScheduler::GetInstance()->CreateTaskRunnerWithTraits(
-              {base::MayBlock(), base::TaskPriority::USER_VISIBLE})),
+    : task_runner_(base::CreateTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE})),
       file_system_delegate_(std::move(file_system_delegate)),
       delegate_(delegate) {}
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mac menu specific strings (included from vivaldi_native_strings.grd). -->
+<grit-part>
+  <message name="IDS_VIVALDI_APP_NAME" desc="The name of Vivaldi, displayed in the Mac Menu">
+    Vivaldi
+  </message>
+  <message name="IDS_VIV_TOOLS_MENU" desc="The menu title of the Mac tools menu.">
+    Tools
+  </message>
+
+</grit-part>

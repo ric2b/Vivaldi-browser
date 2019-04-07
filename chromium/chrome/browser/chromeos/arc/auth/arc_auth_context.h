@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/timer/timer.h"
+#include "google_apis/gaia/oauth2_token_service.h"
 #include "google_apis/gaia/ubertoken_fetcher.h"
 #include "net/base/backoff_entry.h"
 
@@ -27,15 +28,12 @@ class ArcAuthContext : public UbertokenConsumer,
                        public GaiaAuthConsumer,
                        public OAuth2TokenService::Observer {
  public:
-  explicit ArcAuthContext(Profile* profile);
+  // Creates an |ArcAuthContext| for the given |account_id|. This |account_id|
+  // must be the |account_id| used by the OAuth Token Service chain.
+  // Note: |account_id| can be the Device Account or a Secondary Account stored
+  // in Chrome OS Account Manager.
+  ArcAuthContext(Profile* profile, const std::string& account_id);
   ~ArcAuthContext() override;
-
-  ProfileOAuth2TokenService* token_service() { return token_service_; }
-  const std::string& account_id() const { return account_id_; }
-
-  // Returns full account id, including dots that are removed in CrOS for
-  // the default account id.
-  const std::string& full_account_id() const { return full_account_id_; }
 
   // Prepares the context. Calling while an inflight operation exists will
   // cancel the inflight operation.
@@ -44,6 +42,14 @@ class ArcAuthContext : public UbertokenConsumer,
   using PrepareCallback =
       base::Callback<void(net::URLRequestContextGetter* context)>;
   void Prepare(const PrepareCallback& callback);
+
+  // Creates and starts a request to fetch an access token for the given
+  // |scopes|. The caller owns the returned request. |consumer| is the object
+  // that will be called back with results if the returned request is not
+  // deleted.
+  std::unique_ptr<OAuth2TokenService::Request> StartAccessTokenRequest(
+      const OAuth2TokenService::ScopeSet& scopes,
+      OAuth2TokenService::Consumer* consumer);
 
   // OAuth2TokenService::Observer:
   void OnRefreshTokenAvailable(const std::string& account_id) override;
@@ -70,10 +76,8 @@ class ArcAuthContext : public UbertokenConsumer,
 
   // Unowned pointer.
   Profile* const profile_;
-  ProfileOAuth2TokenService* token_service_;
-
-  std::string account_id_;
-  std::string full_account_id_;
+  const std::string account_id_;
+  ProfileOAuth2TokenService* const token_service_;
 
   // Whether the merge session should be skipped. Set to true only in testing.
   bool skip_merge_session_for_testing_ = false;

@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings_delegate.h"
 #include "third_party/blink/renderer/core/page/page_animator.h"
+#include "third_party/blink/renderer/core/page/page_overlay.h"
 #include "third_party/blink/renderer/core/page/page_visibility_notifier.h"
 #include "third_party/blink/renderer/core/page/page_visibility_observer.h"
 #include "third_party/blink/renderer/core/page/page_visibility_state.h"
@@ -69,7 +70,6 @@ class PointerLockController;
 class ScopedPagePauser;
 class ScrollingCoordinator;
 class ScrollbarTheme;
-class SmoothScrollSequencer;
 class Settings;
 class ConsoleMessageStorage;
 class TopDocumentRootScrollerController;
@@ -103,9 +103,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
     DISALLOW_COPY_AND_ASSIGN(PageClients);
   };
 
-  static Page* Create(PageClients& page_clients) {
-    return new Page(page_clients);
-  }
+  static Page* Create(PageClients& page_clients);
 
   // An "ordinary" page is a fully-featured page owned by a web view.
   static Page* CreateOrdinary(PageClients&, Page* opener);
@@ -183,11 +181,9 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   ValidationMessageClient& GetValidationMessageClient() const {
     return *validation_message_client_;
   }
-  void SetValidationMessageClient(ValidationMessageClient*);
+  void SetValidationMessageClientForTesting(ValidationMessageClient*);
 
   ScrollingCoordinator* GetScrollingCoordinator();
-
-  SmoothScrollSequencer* GetSmoothScrollSequencer();
 
   DOMRectList* NonFastScrollableRectsForTesting(const LocalFrame*);
 
@@ -312,13 +308,17 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   void ReportIntervention(const String& message) override;
   bool RequestBeginMainFrameNotExpected(bool new_state) override;
   void SetLifecycleState(PageLifecycleState) override;
-  ukm::UkmRecorder* GetUkmRecorder() override;
-  int64_t GetUkmSourceId() override;
 
   void AddAutoplayFlags(int32_t flags);
   void ClearAutoplayFlags();
 
   int32_t AutoplayFlags() const;
+
+  void SetPageOverlayColor(SkColor);
+
+  void UpdatePageColorOverlay();
+
+  void PaintPageColorOverlay();
 
  private:
   friend class ScopedPagePauser;
@@ -356,10 +356,9 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   const Member<DragController> drag_controller_;
   const Member<FocusController> focus_controller_;
   const Member<ContextMenuController> context_menu_controller_;
-  const std::unique_ptr<PageScaleConstraintsSet> page_scale_constraints_set_;
+  const Member<PageScaleConstraintsSet> page_scale_constraints_set_;
   const Member<PointerLockController> pointer_lock_controller_;
   Member<ScrollingCoordinator> scrolling_coordinator_;
-  Member<SmoothScrollSequencer> smooth_scroll_sequencer_;
   const Member<BrowserControls> browser_controls_;
   const Member<ConsoleMessageStorage> console_message_storage_;
   const Member<TopDocumentRootScrollerController>
@@ -371,6 +370,8 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   Member<PluginData> plugin_data_;
 
   Member<ValidationMessageClient> validation_message_client_;
+
+  std::unique_ptr<PageOverlay> page_color_overlay_;
 
   Deprecation deprecation_;
   HostsUsingFeatures hosts_using_features_;

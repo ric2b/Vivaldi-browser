@@ -58,6 +58,7 @@ class MediaInternals;
 class RenderWidgetHelper;
 class ResourceContext;
 class ResourceDispatcherHostImpl;
+class GeneratedCodeCacheContext;
 
 // This class filters out incoming IPC messages for the renderer process on the
 // IPC thread.
@@ -72,7 +73,8 @@ class CONTENT_EXPORT RenderMessageFilter
                       net::URLRequestContextGetter* request_context,
                       RenderWidgetHelper* render_widget_helper,
                       MediaInternals* media_internals,
-                      CacheStorageContextImpl* cache_storage_context);
+                      CacheStorageContextImpl* cache_storage_context,
+                      GeneratedCodeCacheContext* generated_code_cache_context);
 
   // BrowserMessageFilter methods:
   bool OnMessageReceived(const IPC::Message& message) override;
@@ -103,6 +105,8 @@ class CONTENT_EXPORT RenderMessageFilter
   void DidGenerateCacheableMetadata(const GURL& url,
                                     base::Time expected_response_time,
                                     const std::vector<uint8_t>& data) override;
+  void FetchCachedCode(const GURL& url, FetchCachedCodeCallback) override;
+  void ClearCodeCacheEntry(const GURL& url) override;
   void DidGenerateCacheableMetadataInCacheStorage(
       const GURL& url,
       base::Time expected_response_time,
@@ -122,6 +126,9 @@ class CONTENT_EXPORT RenderMessageFilter
                                      base::ThreadPriority priority);
 #endif
 
+  void OnReceiveCachedCode(FetchCachedCodeCallback callback,
+                           const base::Time& response_time,
+                           const std::vector<uint8_t>& data);
   void OnCacheStorageOpenCallback(const GURL& url,
                                   base::Time expected_response_time,
                                   scoped_refptr<net::IOBuffer> buf,
@@ -132,6 +139,11 @@ class CONTENT_EXPORT RenderMessageFilter
 
   bool CheckBenchmarkingEnabled() const;
   bool CheckPreparsedJsCachingEnabled() const;
+
+  // NetworkContext must be called from the UI thread.
+  void DidGenerateCacheableMetadataOnUI(const GURL& url,
+                                        base::Time expected_response_time,
+                                        const std::vector<uint8_t>& data);
 
   // Cached resource request dispatcher host, guaranteed to be non-null. We do
   // not own it; it is managed by the BrowserProcess, which has a wider scope
@@ -150,6 +162,10 @@ class CONTENT_EXPORT RenderMessageFilter
 
   MediaInternals* media_internals_;
   CacheStorageContextImpl* cache_storage_context_;
+
+  // TODO(crbug.com/867347): Consider registering its own Mojo interface rather
+  // than going through RenderMessageFilter.
+  GeneratedCodeCacheContext* generated_code_cache_context_;
 
   base::WeakPtrFactory<RenderMessageFilter> weak_ptr_factory_;
 

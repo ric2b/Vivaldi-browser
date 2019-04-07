@@ -121,6 +121,14 @@ TEST_F(OfflinePageHeaderTest, Parse) {
   EXPECT_EQ("", id);
   EXPECT_TRUE(intent_url.is_empty());
 
+  EXPECT_TRUE(ParseFromHeaderValue("reason=net_error_suggestion",
+                                   &need_to_persist, &reason, &id,
+                                   &intent_url));
+  EXPECT_FALSE(need_to_persist);
+  EXPECT_EQ(OfflinePageHeader::Reason::NET_ERROR_SUGGESTION, reason);
+  EXPECT_EQ("", id);
+  EXPECT_TRUE(intent_url.is_empty());
+
   // Parse id field.
   EXPECT_TRUE(ParseFromHeaderValue("id=a1b2", &need_to_persist, &reason, &id,
                                    &intent_url));
@@ -169,6 +177,13 @@ TEST_F(OfflinePageHeaderTest, Parse) {
   EXPECT_EQ(GURL("content://foo/Bar Test"), intent_url);
 }
 
+TEST_F(OfflinePageHeaderTest, ToEmptyString) {
+  OfflinePageHeader header;
+  EXPECT_EQ("", header.GetCompleteHeaderString());
+  EXPECT_EQ("", header.GetHeaderKeyString());
+  EXPECT_EQ("", header.GetHeaderValueString());
+}
+
 TEST_F(OfflinePageHeaderTest, ToString) {
   OfflinePageHeader header;
   header.need_to_persist = true;
@@ -180,6 +195,10 @@ TEST_F(OfflinePageHeaderTest, ToString) {
       "intent_url=" +
           Base64EncodeString("content://foo/Bar \"\'\\Test"),
       header.GetCompleteHeaderString());
+  EXPECT_EQ("X-Chrome-offline", header.GetHeaderKeyString());
+  EXPECT_EQ("persist=1 reason=download id=a1b2 intent_url=" +
+                Base64EncodeString("content://foo/Bar \"\'\\Test"),
+            header.GetHeaderValueString());
 }
 
 }  // namespace offline_pages

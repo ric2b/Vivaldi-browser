@@ -208,10 +208,9 @@ scoped_refptr<AudioInputController> AudioInputController::Create(
   DCHECK(audio_manager);
   DCHECK(sync_writer);
   DCHECK(event_handler);
+  DCHECK(params.IsValid());
 
-  // TODO(https://crbug.com/803102): remove check after switching to input
-  // stream factory.
-  if (!params.IsValid() || (params.channels() > kMaxInputChannels))
+  if (params.channels() > kMaxInputChannels)
     return nullptr;
 
   if (factory_) {
@@ -553,7 +552,6 @@ void AudioInputController::DoLogAudioLevels(float level_dbfs,
 
   UpdateSilenceState(level_dbfs < kSilenceThresholdDBFS);
 
-  UMA_HISTOGRAM_PERCENTAGE("Media.MicrophoneVolume", microphone_volume_percent);
   log_string = base::StringPrintf(
       "AIC::OnData: microphone volume=%d%%", microphone_volume_percent);
   if (microphone_volume_percent < kLowLevelMicrophoneLevelPercent)

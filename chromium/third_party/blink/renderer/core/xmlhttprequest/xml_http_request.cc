@@ -477,7 +477,7 @@ void XMLHttpRequest::setTimeout(unsigned timeout,
     return;
   }
 
-  timeout_milliseconds_ = timeout;
+  timeout_ = TimeDelta::FromMilliseconds(timeout);
 
   // From http://www.w3.org/TR/XMLHttpRequest/#the-timeout-attribute:
   // Note: This implies that the timeout attribute can be set while fetching is
@@ -486,7 +486,7 @@ void XMLHttpRequest::setTimeout(unsigned timeout,
   //
   // The timeout may be overridden after send.
   if (loader_)
-    loader_->OverrideTimeout(timeout);
+    loader_->SetTimeout(timeout_);
 }
 
 void XMLHttpRequest::setResponseType(const String& response_type,
@@ -686,7 +686,7 @@ void XMLHttpRequest::open(const AtomicString& method,
     }
 
     // Similarly, timeouts are disabled for synchronous requests as well.
-    if (timeout_milliseconds_ > 0) {
+    if (!timeout_.is_zero()) {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kInvalidAccessError,
           "Synchronous requests must not set a timeout.");
@@ -747,7 +747,8 @@ bool XMLHttpRequest::InitSend(ExceptionState& exception_state) {
   if (!async_) {
     if (GetExecutionContext()->IsDocument() &&
         !GetDocument()->GetFrame()->IsFeatureEnabled(
-            mojom::FeaturePolicyFeature::kSyncXHR)) {
+            mojom::FeaturePolicyFeature::kSyncXHR,
+            ReportOptions::kReportOnFailure)) {
       LogConsoleError(GetExecutionContext(),
                       "Synchronous requests are disabled by Feature Policy.");
       HandleNetworkError();
@@ -827,12 +828,10 @@ void XMLHttpRequest::send(Document* document, ExceptionState& exception_state) {
   scoped_refptr<EncodedFormData> http_body;
 
   if (AreMethodAndURLValidForSend()) {
-    // FIXME: Per https://xhr.spec.whatwg.org/#dom-xmlhttprequest-send the
-    // Content-Type header and whether to serialize as HTML or XML should
-    // depend on |document->isHTMLDocument()|.
-    if (!HasContentTypeRequestHeader())
-      SetRequestHeaderInternal(HTTPNames::Content_Type,
-                               "application/xml;charset=UTF-8");
+    if (document->IsHTMLDocument())
+      UpdateContentTypeAndCharset("text/html;charset=UTF-8", "UTF-8");
+    else if (document->IsXMLDocument())
+      UpdateContentTypeAndCharset("application/xml;charset=UTF-8", "UTF-8");
 
     String body = CreateMarkup(document);
 
@@ -1028,7 +1027,7 @@ void XMLHttpRequest::CreateRequest(scoped_refptr<EncodedFormData> http_body,
     if (http_body && upload_) {
       upload_events = upload_->HasEventListeners();
       upload_->DispatchEvent(
-          ProgressEvent::Create(EventTypeNames::loadstart, false, 0, 0));
+          *ProgressEvent::Create(EventTypeNames::loadstart, false, 0, 0));
       // See above.
       if (!send_flag_ || loader_)
         return;
@@ -1073,9 +1072,6 @@ void XMLHttpRequest::CreateRequest(scoped_refptr<EncodedFormData> http_body,
 
   if (request_headers_.size() > 0)
     request.AddHTTPHeaderFields(request_headers_);
-
-  ThreadableLoaderOptions options;
-  options.timeout_milliseconds = timeout_milliseconds_;
 
   ResourceLoaderOptions resource_loader_options;
   resource_loader_options.security_origin = GetSecurityOrigin();
@@ -1124,29 +1120,29 @@ void XMLHttpRequest::CreateRequest(scoped_refptr<EncodedFormData> http_body,
     // TODO(yhirano): Turn this CHECK into DCHECK: see https://crbug.com/570946.
     CHECK(!loader_);
     DCHECK(send_flag_);
-    loader_ = ThreadableLoader::Create(execution_context, this, options,
-                                       resource_loader_options);
-    loader_->Start(request);
-
-    return;
-  }
-
-  // Use count for XHR synchronous requests.
-  UseCounter::Count(&execution_context, WebFeature::kXMLHttpRequestSynchronous);
-  if (GetExecutionContext()->IsDocument()) {
-    // Update histogram for usage of sync xhr within pagedismissal.
-    auto pagedismissal = GetDocument()->PageDismissalEventBeingDispatched();
-    if (pagedismissal != Document::kNoDismissal) {
-      UseCounter::Count(GetDocument(), WebFeature::kSyncXhrInPageDismissal);
-      DEFINE_STATIC_LOCAL(EnumerationHistogram, syncxhr_pagedismissal_histogram,
-                          ("XHR.Sync.PageDismissal", 5));
-      syncxhr_pagedismissal_histogram.Count(pagedismissal);
+  } else {
+    // Use count for XHR synchronous requests.
+    UseCounter::Count(&execution_context, WebFeature::kXMLHttpRequestSynchronous);
+    if (GetExecutionContext()->IsDocument()) {
+      // Update histogram for usage of sync xhr within pagedismissal.
+      auto pagedismissal = GetDocument()->PageDismissalEventBeingDispatched();
+      if (pagedismissal != Document::kNoDismissal) {
+        UseCounter::Count(GetDocument(), WebFeature::kSyncXhrInPageDismissal);
+        DEFINE_STATIC_LOCAL(EnumerationHistogram, syncxhr_pagedismissal_histogram,
+                            ("XHR.Sync.PageDismissal", 5));
+        syncxhr_pagedismissal_histogram.Count(pagedismissal);
+      }
     }
+    resource_loader_options.synchronous_policy = kRequestSynchronously;
   }
-  ThreadableLoader::LoadResourceSynchronously(execution_context, request, *this,
-                                              options, resource_loader_options);
 
-  ThrowForLoadFailureIfNeeded(exception_state, String());
+  loader_ = new ThreadableLoader(execution_context, this,
+                                 resource_loader_options);
+  loader_->SetTimeout(timeout_);
+  loader_->Start(request);
+
+  if (!async_)
+    ThrowForLoadFailureIfNeeded(exception_state, String());
 }
 
 void XMLHttpRequest::abort() {
@@ -1223,7 +1219,7 @@ bool XMLHttpRequest::InternalAbort() {
   if (!loader_)
     return true;
 
-  // Cancelling the ThreadableLoader m_loader may result in calling
+  // Cancelling the ThreadableLoader loader_ may result in calling
   // window.onload synchronously. If such an onload handler contains open()
   // call on the same XMLHttpRequest object, reentry happens.
   //
@@ -1545,7 +1541,7 @@ void XMLHttpRequest::UpdateContentTypeAndCharset(
   // http://xhr.spec.whatwg.org/#the-send()-method step 4's concilliation of
   // "charset=" in any author-provided Content-Type: request header.
   String content_type = request_headers_.Get(HTTPNames::Content_Type);
-  if (content_type.IsEmpty()) {
+  if (content_type.IsNull()) {
     SetRequestHeaderInternal(HTTPNames::Content_Type, default_content_type);
     return;
   }

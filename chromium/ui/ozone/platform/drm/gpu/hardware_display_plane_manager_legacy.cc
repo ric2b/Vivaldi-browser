@@ -9,14 +9,15 @@
 
 #include "base/bind.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/ozone/platform/drm/gpu/crtc_controller.h"
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
+#include "ui/ozone/platform/drm/gpu/drm_framebuffer.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane.h"
+#include "ui/ozone/platform/drm/gpu/hardware_display_plane_dummy.h"
 #include "ui/ozone/platform/drm/gpu/page_flip_request.h"
-#include "ui/ozone/platform/drm/gpu/scanout_buffer.h"
 
 namespace ui {
 
@@ -56,25 +57,9 @@ bool HardwareDisplayPlaneManagerLegacy::Commit(
   }
   if (plane_list->plane_list.empty())  // No assigned planes, nothing to do.
     return true;
+
   bool ret = true;
-  // The order of operations here (set new planes, pageflip, clear old planes)
-  // is designed to minimze the chance of a significant artifact occurring.
-  // The planes must be updated first because the main plane no longer contains
-  // their content. The old planes are removed last because the previous primary
-  // plane used them as overlays and thus didn't contain their content, so we
-  // must first flip to the new primary plane, which does. The error here will
-  // be the delta of (new contents, old contents), but it should be barely
-  // noticeable.
   for (const auto& flip : plane_list->legacy_page_flips) {
-    for (const auto& plane : flip.planes) {
-      if (!drm_->PageFlipOverlay(flip.crtc_id, plane.framebuffer, plane.bounds,
-                                 plane.src_rect, plane.plane)) {
-        PLOG(ERROR) << "Cannot display plane on overlay: crtc=" << flip.crtc
-                    << " plane=" << plane.plane;
-        ret = false;
-        break;
-      }
-    }
     if (!drm_->PageFlip(flip.crtc_id, flip.framebuffer, page_flip_request)) {
       // 1) Permission Denied is a legitimate error.
       // 2) Device or resource busy is possible if we're page flipping a
@@ -88,20 +73,6 @@ bool HardwareDisplayPlaneManagerLegacy::Commit(
         PLOG(ERROR) << "Cannot page flip: crtc=" << flip.crtc_id
                     << " framebuffer=" << flip.framebuffer;
         ret = false;
-      }
-    }
-  }
-  // For each element in |old_plane_list|, if it hasn't been reclaimed (by
-  // this or any other HDPL), clear the overlay contents.
-  for (HardwareDisplayPlane* plane : plane_list->old_plane_list) {
-    if (!plane->in_use() && (plane->type() != HardwareDisplayPlane::kDummy)) {
-      // This plane is being released, so we need to zero it.
-      if (!drm_->PageFlipOverlay(plane->owning_crtc(), 0, gfx::Rect(),
-                                 gfx::Rect(), plane->id())) {
-        PLOG(ERROR) << "Cannot free overlay: crtc=" << plane->owning_crtc()
-                    << " plane=" << plane->id();
-        ret = false;
-        break;
       }
     }
   }
@@ -141,7 +112,7 @@ bool HardwareDisplayPlaneManagerLegacy::ValidatePrimarySize(
     const drmModeModeInfo& mode) {
   DCHECK(primary.buffer.get());
 
-  return primary.buffer->GetSize() == gfx::Size(mode.hdisplay, mode.vdisplay);
+  return primary.buffer->size() == gfx::Size(mode.hdisplay, mode.vdisplay);
 }
 
 void HardwareDisplayPlaneManagerLegacy::RequestPlanesReadyCallback(
@@ -154,6 +125,50 @@ void HardwareDisplayPlaneManagerLegacy::RequestPlanesReadyCallback(
       std::move(callback));
 }
 
+bool HardwareDisplayPlaneManagerLegacy::InitializePlanes(DrmDevice* drm) {
+  ScopedDrmPlaneResPtr plane_resources = drm->GetPlaneResources();
+  if (!plane_resources) {
+    PLOG(ERROR) << "Failed to get plane resources.";
+    return false;
+  }
+
+  for (uint32_t i = 0; i < plane_resources->count_planes; ++i) {
+    std::unique_ptr<HardwareDisplayPlane> plane(
+        CreatePlane(plane_resources->planes[i]));
+
+    if (!plane->Initialize(drm))
+      continue;
+
+    // Overlays are not supported on the legacy path, so ignore all overlay
+    // planes.
+    if (plane->type() == HardwareDisplayPlane::kOverlay)
+      continue;
+
+    planes_.push_back(std::move(plane));
+  }
+
+  // https://crbug.com/464085: if driver reports no primary planes for a crtc,
+  // create a dummy plane for which we can assign exactly one overlay.
+  if (!has_universal_planes_) {
+    for (size_t i = 0; i < crtc_state_.size(); ++i) {
+      uint32_t id = crtc_state_[i].properties.id - 1;
+      if (std::find_if(
+              planes_.begin(), planes_.end(),
+              [id](const std::unique_ptr<HardwareDisplayPlane>& plane) {
+                return plane->id() == id;
+              }) == planes_.end()) {
+        std::unique_ptr<HardwareDisplayPlane> dummy_plane(
+            new HardwareDisplayPlaneDummy(id, 1 << i));
+        if (dummy_plane->Initialize(drm)) {
+          planes_.push_back(std::move(dummy_plane));
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
 bool HardwareDisplayPlaneManagerLegacy::SetPlaneData(
     HardwareDisplayPlaneList* plane_list,
     HardwareDisplayPlane* hw_plane,
@@ -164,18 +179,16 @@ bool HardwareDisplayPlaneManagerLegacy::SetPlaneData(
   // Legacy modesetting rejects transforms.
   if (overlay.plane_transform != gfx::OVERLAY_TRANSFORM_NONE)
     return false;
-  if ((hw_plane->type() == HardwareDisplayPlane::kDummy) ||
-      plane_list->legacy_page_flips.empty() ||
+
+  if (plane_list->legacy_page_flips.empty() ||
       plane_list->legacy_page_flips.back().crtc_id != crtc_id) {
     plane_list->legacy_page_flips.push_back(
         HardwareDisplayPlaneList::PageFlipInfo(
-            crtc_id, overlay.buffer->GetOpaqueFramebufferId(), crtc));
+            crtc_id, overlay.buffer->opaque_framebuffer_id(), crtc));
   } else {
-    plane_list->legacy_page_flips.back().planes.push_back(
-        HardwareDisplayPlaneList::PageFlipInfo::Plane(
-            hw_plane->id(), overlay.buffer->GetOpaqueFramebufferId(),
-            overlay.display_bounds, src_rect));
+    return false;
   }
+
   return true;
 }
 
@@ -189,7 +202,7 @@ bool HardwareDisplayPlaneManagerLegacy::IsCompatible(
 
   // When using legacy kms we always scanout only one plane (the primary),
   // and we always use the opaque fb. Refer to SetPlaneData above.
-  const uint32_t format = overlay.buffer->GetOpaqueFramebufferPixelFormat();
+  const uint32_t format = overlay.buffer->opaque_framebuffer_pixel_format();
   return plane->IsSupportedFormat(format);
 }
 

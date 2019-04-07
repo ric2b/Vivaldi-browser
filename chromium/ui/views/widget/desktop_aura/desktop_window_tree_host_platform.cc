@@ -135,6 +135,8 @@ void DesktopWindowTreeHostPlatform::CloseNow() {
   if (!weak_ref || got_on_closed_)
     return;
 
+  native_widget_delegate_->OnNativeWidgetDestroying();
+
   got_on_closed_ = true;
   desktop_native_widget_aura_->OnHostClosed();
 }
@@ -143,8 +145,11 @@ aura::WindowTreeHost* DesktopWindowTreeHostPlatform::AsWindowTreeHost() {
   return this;
 }
 
-void DesktopWindowTreeHostPlatform::ShowWindowWithState(
-    ui::WindowShowState show_state) {
+void DesktopWindowTreeHostPlatform::Show(ui::WindowShowState show_state,
+                                         const gfx::Rect& restore_bounds) {
+  if (show_state == ui::SHOW_STATE_MAXIMIZED && !restore_bounds.IsEmpty())
+    platform_window()->SetRestoredBoundsInPixels(ToPixelRect(restore_bounds));
+
   if (compositor()) {
     platform_window()->Show();
     compositor()->SetVisible(true);
@@ -180,12 +185,8 @@ void DesktopWindowTreeHostPlatform::ShowWindowWithState(
     native_widget_delegate_->SetInitialFocus(
         IsActive() ? show_state : ui::SHOW_STATE_INACTIVE);
   }
-}
 
-void DesktopWindowTreeHostPlatform::ShowMaximizedWithBounds(
-    const gfx::Rect& restored_bounds) {
-  // TODO: support |restored_bounds|.
-  ShowWindowWithState(ui::SHOW_STATE_MAXIMIZED);
+  desktop_native_widget_aura_->content_window()->Show();
 }
 
 bool DesktopWindowTreeHostPlatform::IsVisible() const {
@@ -253,8 +254,12 @@ gfx::Rect DesktopWindowTreeHostPlatform::GetClientAreaBoundsInScreen() const {
 }
 
 gfx::Rect DesktopWindowTreeHostPlatform::GetRestoredBounds() const {
-  NOTIMPLEMENTED_LOG_ONCE();
-  return gfx::Rect(0, 0, 640, 840);
+  gfx::Rect restored_bounds = platform_window()->GetRestoredBoundsInPixels();
+  // When window is resized, |restored bounds| is not set and empty.
+  // If |restored bounds| is empty, it returns the current window size.
+  gfx::Rect bounds =
+      !restored_bounds.IsEmpty() ? restored_bounds : GetBoundsInPixels();
+  return ToDIPRect(bounds);
 }
 
 std::string DesktopWindowTreeHostPlatform::GetWorkspace() const {
@@ -470,10 +475,6 @@ void DesktopWindowTreeHostPlatform::OnCloseRequest() {
   GetWidget()->Close();
 }
 
-void DesktopWindowTreeHostPlatform::OnAcceleratedWidgetDestroying() {
-  native_widget_delegate_->OnNativeWidgetDestroying();
-}
-
 void DesktopWindowTreeHostPlatform::OnActivationChanged(bool active) {
   is_active_ = active;
   aura::WindowTreeHostPlatform::OnActivationChanged(active);
@@ -493,6 +494,20 @@ void DesktopWindowTreeHostPlatform::Relayout() {
 
 Widget* DesktopWindowTreeHostPlatform::GetWidget() {
   return native_widget_delegate_->AsWidget();
+}
+
+gfx::Rect DesktopWindowTreeHostPlatform::ToDIPRect(
+    const gfx::Rect& rect_in_pixels) const {
+  gfx::RectF rect_in_dip = gfx::RectF(rect_in_pixels);
+  GetRootTransform().TransformRectReverse(&rect_in_dip);
+  return gfx::ToEnclosingRect(rect_in_dip);
+}
+
+gfx::Rect DesktopWindowTreeHostPlatform::ToPixelRect(
+    const gfx::Rect& rect_in_dip) const {
+  gfx::RectF rect_in_pixels = gfx::RectF(rect_in_dip);
+  GetRootTransform().TransformRect(&rect_in_pixels);
+  return gfx::ToEnclosingRect(rect_in_pixels);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

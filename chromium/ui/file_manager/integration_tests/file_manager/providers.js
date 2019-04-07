@@ -6,7 +6,29 @@
 
 (function() {
 
+/**
+ * Files app windowId.
+ */
 var appId;
+
+/**
+ * Returns provider name of the given testing provider manifest viz., the
+ * the value of the name field in the |manifest| file.
+ * @param {string} manifest Testing provider manifest file name.
+ * @return {string} Testing provider name.
+ */
+function getProviderNameForTest(manifest) {
+  if (manifest === 'manifest.json')
+    return 'Files Testing Provider test extension';
+  if (manifest === 'manifest_multiple_mounts.json')
+    return 'Files Testing Provider multiple mounts test extension';
+  if (manifest === 'manifest_source_device.json')
+    return 'Files Testing Provider device test extension';
+  if (manifest === 'manifest_source_file.json')
+    return 'Files Testing Provider file test extension';
+
+  throw new Error('unknown mainfest: '.concat(manifest));
+}
 
 /**
  * Returns steps for initializing test cases.
@@ -134,6 +156,8 @@ function getConfirmVolumeSteps(ejectExpected) {
  *     extension.
  */
 function requestMountInternal(multipleMounts, manifest) {
+  const providerName = getProviderNameForTest(manifest);
+
   StepsRunner.runGroups([
     getSetupSteps(manifest),
     showProvidersMenuSteps(),
@@ -148,7 +172,7 @@ function requestMountInternal(multipleMounts, manifest) {
       },
       // Click to install test provider.
       function(result) {
-        chrome.test.assertEq('Testing Provider', result.text);
+        chrome.test.assertEq(providerName, result.text);
         remoteCall.callRemoteTestUtil(
             'fakeMouseClick',
             appId,
@@ -182,7 +206,7 @@ function requestMountInternal(multipleMounts, manifest) {
       },
       function(result) {
         if (multipleMounts)
-          chrome.test.assertEq('Testing Provider', result.text);
+          chrome.test.assertEq(providerName, result.text);
         checkIfNoErrorsOccured(this.next);
       }
     ]
@@ -206,7 +230,7 @@ function requestMountNotInMenuInternal(manifest) {
         // clickGearMenu returns the "Add new service" menu item.
         // Here we only check these attributes because the menu item calls
         // Webstore using webview which doesn't work in the integration test.
-        chrome.test.assertEq('Install new from the webstore', element.text);
+        chrome.test.assertEq('Install new service', element.text);
         chrome.test.assertEq(
             '#install-new-extension', element.attributes.command);
         this.next();

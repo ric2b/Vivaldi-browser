@@ -120,8 +120,8 @@ hooks = [
   },
   {
     # Mac doesn't use lld so it's not included in the default clang bundle
-    # there.  lld is however needed in win cross builds, so download it there.
-    # Should run after the clang hook.
+    # there.  lld is however needed in win and Fuchsia cross builds, so
+    # download it there. Should run after the clang hook.
     'name': 'lld/mac',
     'pattern': '.',
     'condition': 'host_os == "mac" and checkout_win',
@@ -298,19 +298,6 @@ hooks = [
       '-d', 'vivaldi/chromium/tools/luci-go/linux64'
     ],
   },
-  # Pull the Syzygy binaries, used for optimization and instrumentation.
-  {
-    'name': 'syzygy-binaries',
-    'pattern': '.',
-    'condition': 'host_os == "win"',
-    'action': ['python',
-      'vivaldi/chromium/build/get_syzygy_binaries.py',
-      '--output-dir', 'vivaldi/chromium/third_party/syzygy/binaries',
-      '--revision=8164b24ebde9c5649c9a09e88a7fc0b0fcbd1bc5',
-      '--overwrite',
-      '--copy-dia-binaries',
-    ],
-  },
 
   # Pull down NPM dependencies for WebUI toolchain.
   {
@@ -432,6 +419,15 @@ hooks = [
     'condition': 'checkout_android',
     'action': [ 'python',
                'vivaldi/chromium/third_party/gvr-android-sdk/test-apks/update.py',
+    ],
+  },
+  # DOWNLOAD AR test APKs only if the environment variable is set
+  {
+    'name': 'ar_test_apks',
+    'pattern': '.',
+    'condition': 'checkout_android',
+    'action': [ 'python',
+                'vivaldi/chromium/third_party/arcore-android-sdk/test-apks/update.py',
     ],
   },
   {

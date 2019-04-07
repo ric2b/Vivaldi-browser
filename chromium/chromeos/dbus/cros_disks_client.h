@@ -50,28 +50,28 @@ enum DeviceType {
 };
 
 // Mount error code used by cros-disks.
+// These values are not the same as cros_disks::MountErrorType.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
 enum MountError {
-  MOUNT_ERROR_NONE = 0,
-  MOUNT_ERROR_UNKNOWN = 1,
-  MOUNT_ERROR_INTERNAL = 2,
-  MOUNT_ERROR_INVALID_ARGUMENT = 3,
-  MOUNT_ERROR_INVALID_PATH = 4,
-  MOUNT_ERROR_PATH_ALREADY_MOUNTED = 5,
-  MOUNT_ERROR_PATH_NOT_MOUNTED = 6,
-  MOUNT_ERROR_DIRECTORY_CREATION_FAILED = 7,
-  MOUNT_ERROR_INVALID_MOUNT_OPTIONS = 8,
-  MOUNT_ERROR_INVALID_UNMOUNT_OPTIONS = 9,
-  MOUNT_ERROR_INSUFFICIENT_PERMISSIONS = 10,
-  MOUNT_ERROR_MOUNT_PROGRAM_NOT_FOUND = 11,
-  MOUNT_ERROR_MOUNT_PROGRAM_FAILED = 12,
-  MOUNT_ERROR_INVALID_DEVICE_PATH = 100,
-  MOUNT_ERROR_UNKNOWN_FILESYSTEM = 101,
-  MOUNT_ERROR_UNSUPPORTED_FILESYSTEM = 102,
-  MOUNT_ERROR_INVALID_ARCHIVE = 201,
-  MOUNT_ERROR_NOT_AUTHENTICATED = 601,
-  MOUNT_ERROR_PATH_UNMOUNTED = 901,
-  // TODO(tbarzic): Add more error codes as they get added to cros-disks and
-  // consider doing explicit translation from cros-disks error_types.
+  MOUNT_ERROR_NONE,
+  MOUNT_ERROR_UNKNOWN,
+  MOUNT_ERROR_INTERNAL,
+  MOUNT_ERROR_INVALID_ARGUMENT,
+  MOUNT_ERROR_INVALID_PATH,
+  MOUNT_ERROR_PATH_ALREADY_MOUNTED,
+  MOUNT_ERROR_PATH_NOT_MOUNTED,
+  MOUNT_ERROR_DIRECTORY_CREATION_FAILED,
+  MOUNT_ERROR_INVALID_MOUNT_OPTIONS,
+  MOUNT_ERROR_INVALID_UNMOUNT_OPTIONS,
+  MOUNT_ERROR_INSUFFICIENT_PERMISSIONS,
+  MOUNT_ERROR_MOUNT_PROGRAM_NOT_FOUND,
+  MOUNT_ERROR_MOUNT_PROGRAM_FAILED,
+  MOUNT_ERROR_INVALID_DEVICE_PATH,
+  MOUNT_ERROR_UNKNOWN_FILESYSTEM,
+  MOUNT_ERROR_UNSUPPORTED_FILESYSTEM,
+  MOUNT_ERROR_INVALID_ARCHIVE,
+  MOUNT_ERROR_COUNT,
 };
 
 // Rename error reported by cros-disks.
@@ -173,6 +173,9 @@ class CHROMEOS_EXPORT DiskInfo {
   // Is the disk virtual.
   bool is_virtual() const { return is_virtual_; }
 
+  // Is the disk auto-mountable.
+  bool is_auto_mountable() const { return is_auto_mountable_; }
+
   // Disk file path (e.g. /dev/sdb).
   const std::string& file_path() const { return file_path_; }
 
@@ -219,6 +222,7 @@ class CHROMEOS_EXPORT DiskInfo {
   bool is_read_only_;
   bool is_hidden_;
   bool is_virtual_;
+  bool is_auto_mountable_;
 
   std::string file_path_;
   std::string label_;
@@ -267,20 +271,24 @@ struct CHROMEOS_EXPORT MountEntry {
 // by callbacks.
 class CHROMEOS_EXPORT CrosDisksClient : public DBusClient {
  public:
-  // A callback to handle the result of EnumerateAutoMountableDevices and
-  // EnumerateDevices. The argument is the enumerated device paths.
-  typedef base::Callback<void(const std::vector<std::string>& device_paths)>
+  // A callback to handle the result of EnumerateDevices.
+  // The argument is the enumerated device paths.
+  typedef base::OnceCallback<void(const std::vector<std::string>& device_paths)>
       EnumerateDevicesCallback;
 
   // A callback to handle the result of EnumerateMountEntries.
   // The argument is the enumerated mount entries.
-  typedef base::Callback<void(const std::vector<MountEntry>& entries)>
+  typedef base::OnceCallback<void(const std::vector<MountEntry>& entries)>
       EnumerateMountEntriesCallback;
 
   // A callback to handle the result of GetDeviceProperties.
   // The argument is the information about the specified device.
-  typedef base::Callback<void(const DiskInfo& disk_info)>
+  typedef base::OnceCallback<void(const DiskInfo& disk_info)>
       GetDevicePropertiesCallback;
+
+  // A callback to handle the result of Unmount.
+  // The argument is the unmount error code.
+  typedef base::OnceCallback<void(MountError error_code)> UnmountCallback;
 
   class Observer {
    public:
@@ -329,27 +337,20 @@ class CHROMEOS_EXPORT CrosDisksClient : public DBusClient {
                      VoidDBusMethodCallback callback) = 0;
 
   // Calls Unmount method.  On method call completion, |callback| is called
-  // with |true| on success, or with |false| otherwise.
+  // with the error code.
   virtual void Unmount(const std::string& device_path,
                        UnmountOptions options,
-                       VoidDBusMethodCallback callback) = 0;
-
-  // Calls EnumerateAutoMountableDevices method.  |callback| is called after the
-  // method call succeeds, otherwise, |error_callback| is called.
-  virtual void EnumerateAutoMountableDevices(
-      const EnumerateDevicesCallback& callback,
-      const base::Closure& error_callback) = 0;
+                       UnmountCallback callback) = 0;
 
   // Calls EnumerateDevices method.  |callback| is called after the
   // method call succeeds, otherwise, |error_callback| is called.
-  virtual void EnumerateDevices(const EnumerateDevicesCallback& callback,
-                                const base::Closure& error_callback) = 0;
+  virtual void EnumerateDevices(EnumerateDevicesCallback callback,
+                                base::OnceClosure error_callback) = 0;
 
   // Calls EnumerateMountEntries.  |callback| is called after the
   // method call succeeds, otherwise, |error_callback| is called.
-  virtual void EnumerateMountEntries(
-      const EnumerateMountEntriesCallback& callback,
-      const base::Closure& error_callback) = 0;
+  virtual void EnumerateMountEntries(EnumerateMountEntriesCallback callback,
+                                     base::OnceClosure error_callback) = 0;
 
   // Calls Format method. On completion, |callback| is called, with |true| on
   // success, or with |false| otherwise.
@@ -366,8 +367,8 @@ class CHROMEOS_EXPORT CrosDisksClient : public DBusClient {
   // Calls GetDeviceProperties method.  |callback| is called after the method
   // call succeeds, otherwise, |error_callback| is called.
   virtual void GetDeviceProperties(const std::string& device_path,
-                                   const GetDevicePropertiesCallback& callback,
-                                   const base::Closure& error_callback) = 0;
+                                   GetDevicePropertiesCallback callback,
+                                   base::OnceClosure error_callback) = 0;
 
   // Factory function, creates a new instance and returns ownership.
   // For normal usage, access the singleton via DBusThreadManager::Get().

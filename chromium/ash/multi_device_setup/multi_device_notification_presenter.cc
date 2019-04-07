@@ -121,10 +121,11 @@ void MultiDeviceNotificationPresenter::OnPotentialHostExistsForNewUser() {
   ShowNotification(Status::kNewUserNotificationVisible, title, message);
 }
 
-void MultiDeviceNotificationPresenter::
-    OnConnectedHostSwitchedForExistingUser() {
-  base::string16 title = l10n_util::GetStringUTF16(
-      IDS_ASH_MULTI_DEVICE_SETUP_EXISTING_USER_HOST_SWITCHED_TITLE);
+void MultiDeviceNotificationPresenter::OnConnectedHostSwitchedForExistingUser(
+    const std::string& new_host_device_name) {
+  base::string16 title = l10n_util::GetStringFUTF16(
+      IDS_ASH_MULTI_DEVICE_SETUP_EXISTING_USER_HOST_SWITCHED_TITLE,
+      base::UTF8ToUTF16(new_host_device_name));
   base::string16 message = l10n_util::GetStringUTF16(
       IDS_ASH_MULTI_DEVICE_SETUP_EXISTING_USER_HOST_SWITCHED_MESSAGE);
   ShowNotification(Status::kExistingUserHostSwitchedNotificationVisible, title,
@@ -242,8 +243,8 @@ MultiDeviceNotificationPresenter::CreateNotification(
     const base::string16& message) {
   return message_center::Notification::CreateSystemNotification(
       message_center::NotificationType::NOTIFICATION_TYPE_SIMPLE,
-      kNotificationId, title, message, gfx::Image() /* image */,
-      base::string16() /* display_source */, GURL() /* origin_url */,
+      kNotificationId, title, message, base::string16() /* display_source */,
+      GURL() /* origin_url */,
       message_center::NotifierId(
           message_center::NotifierId::NotifierType::SYSTEM_COMPONENT,
           kNotifierMultiDevice),

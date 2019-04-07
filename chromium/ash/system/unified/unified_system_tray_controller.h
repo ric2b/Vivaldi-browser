@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ash/ash_export.h"
+#include "ash/system/audio/unified_volume_slider_controller.h"
 #include "ash/system/unified/unified_system_tray_model.h"
 #include "base/macros.h"
 #include "ui/gfx/animation/animation_delegate.h"
@@ -29,7 +30,9 @@ class UnifiedSystemTrayModel;
 class UnifiedSystemTrayView;
 
 // Controller class of UnifiedSystemTrayView. Handles events of the view.
-class ASH_EXPORT UnifiedSystemTrayController : public gfx::AnimationDelegate {
+class ASH_EXPORT UnifiedSystemTrayController
+    : public gfx::AnimationDelegate,
+      public UnifiedVolumeSliderController::Delegate {
  public:
   UnifiedSystemTrayController(UnifiedSystemTrayModel* model,
                               UnifiedSystemTrayBubble* bubble = nullptr);
@@ -62,6 +65,9 @@ class ASH_EXPORT UnifiedSystemTrayController : public gfx::AnimationDelegate {
   // Called when notification removing animation is finished. Called from the
   // view.
   void OnClearAllAnimationEnded();
+  // Called when message center visibility is changed. Called from the
+  // view.
+  void OnMessageCenterVisibilityUpdated();
 
   // Handle finger dragging and expand/collapse the view. Called from view.
   void BeginDrag(const gfx::Point& location);
@@ -69,8 +75,8 @@ class ASH_EXPORT UnifiedSystemTrayController : public gfx::AnimationDelegate {
   void EndDrag(const gfx::Point& location);
   void Fling(int velocity);
 
-  // Show user selector popup widget. Called from the view.
-  void ShowUserChooserWidget();
+  // Show user selector view. Called from the view.
+  void ShowUserChooserView();
   // Show the detailed view of network. If |force| is true, it shows the
   // detailed view even if it's collapsed. Called from the view.
   void ShowNetworkDetailedView(bool force);
@@ -103,10 +109,16 @@ class ASH_EXPORT UnifiedSystemTrayController : public gfx::AnimationDelegate {
   // Ensure the main view is expanded. Called from the slider bubble controller.
   void EnsureExpanded();
 
+  // Return true if user chooser is enabled. Called from the view.
+  bool IsUserChooserEnabled() const;
+
   // gfx::AnimationDelegate:
   void AnimationEnded(const gfx::Animation* animation) override;
   void AnimationProgressed(const gfx::Animation* animation) override;
   void AnimationCanceled(const gfx::Animation* animation) override;
+
+  // UnifiedVolumeSliderController::Delegate:
+  void OnAudioSettingsButtonClicked() override;
 
   UnifiedSystemTrayModel* model() { return model_; }
 

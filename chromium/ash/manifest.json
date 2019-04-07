@@ -2,6 +2,9 @@
   "name": "ash",
   "display_name": "Ash Window Manager and Shell",
   "sandbox_type": "none",
+  "options" : {
+    "instance_sharing" : "singleton"
+  },
   "interface_provider_specs": {
     "service_manager:connector": {
       "provides": {
@@ -15,6 +18,7 @@
           "ash.mojom.AppListController",
           "ash.mojom.AshMessageCenterController",
           "ash.mojom.AssistantController",
+          "ash.mojom.AssistantVolumeControl",
           "ash.mojom.CastConfig",
           "ash.mojom.ClientImageRegistry",
           "ash.mojom.CrosDisplayConfigController",
@@ -52,7 +56,8 @@
         ],
         // Only chrome is allowed to use this (required as dbus runs in Chrome).
         "display": [
-          "ash.mojom.AshDisplayController"
+          "ash.mojom.AshDisplayController",
+          "ash.mojom.DisplayOutputProtection"
         ],
         "mus:window_manager": [ "ui.mojom.AcceleratorRegistrar" ],
         "service_manager:service_factory": [
@@ -61,20 +66,13 @@
       },
       "requires": {
         "*": [ "accessibility", "app" ],
-        "autoclick_app": [
-          "chromeos:autoclick",
-          "mash:launchable"
-        ],
         "ash_pref_connector": [ "pref_connector" ],
         "catalog": [ "directory" ],
         "local_state": [ "pref_client" ],
         "multidevice_setup": [ "multidevice_setup" ],
         "quick_launch_app": [ "mash:launchable" ],
-        "service_manager": [ "service_manager:singleton" ],
         "ui": [
-          "display_dev",
           "ozone",
-          "video_detector",
           "window_manager"
         ],
         "data_decoder": [ "image_decoder" ]

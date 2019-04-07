@@ -246,7 +246,8 @@ void Canvas2DLayerBridge::Hibernate() {
       snapshot->PaintImageForCurrentFrame().GetSkImage(), 0, 0, &copy_paint);
   hibernation_image_ = temp_hibernation_surface->makeImageSnapshot();
   ResetResourceProvider();
-  layer_->ClearTexture();
+  if (layer_)
+    layer_->ClearTexture();
 
   // shouldBeDirectComposited() may have changed.
   if (resource_host_)
@@ -280,10 +281,17 @@ CanvasResourceProvider* Canvas2DLayerBridge::GetOrCreateResourceProvider(
   }
 
   if (resource_provider && resource_provider->IsValid()) {
+#if DCHECK_IS_ON()
     // If resource provider is accelerated, a layer should already exist.
-    // If not, it could mean that the resource provider was create without
-    // going through this method, which is bad.
-    DCHECK(!IsAccelerated() || !!layer_);
+    // unless this is a canvas in low latency mode.
+    // If this DCHECK fails, it probably means that
+    // CanvasRenderingContextHost::GetOrCreateCanvasResourceProvider() was
+    // called on a 2D context before this function.
+    if (IsAccelerated()) {
+      DCHECK(!!layer_ ||
+             (resource_host_ && resource_host_->LowLatencyEnabled()));
+    }
+#endif
     return resource_provider;
   }
 
@@ -301,8 +309,10 @@ CanvasResourceProvider* Canvas2DLayerBridge::GetOrCreateResourceProvider(
   AccelerationHint adjusted_hint =
       want_acceleration ? kPreferAcceleration : kPreferNoAcceleration;
 
+  // We call Impl directly here, to allow HTMLCanvasElement to call us
+  // in GetOrCreateCanvasResourceProvider.
   resource_provider =
-      resource_host_->GetOrCreateCanvasResourceProvider(adjusted_hint);
+      resource_host_->GetOrCreateCanvasResourceProviderImpl(adjusted_hint);
 
   if (!resource_provider)
     ReportResourceProviderCreationFailure();
@@ -558,7 +568,8 @@ bool Canvas2DLayerBridge::Restore() {
 
   if (shared_gl && shared_gl->GetGraphicsResetStatusKHR() == GL_NO_ERROR) {
     CanvasResourceProvider* resource_provider =
-        resource_host_->GetOrCreateCanvasResourceProvider(kPreferAcceleration);
+        resource_host_->GetOrCreateCanvasResourceProviderImpl(
+            kPreferAcceleration);
 
     if (!resource_provider)
       ReportResourceProviderCreationFailure();

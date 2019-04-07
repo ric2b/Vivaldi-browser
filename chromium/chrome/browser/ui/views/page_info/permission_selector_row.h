@@ -67,8 +67,6 @@ class PermissionSelectorRow {
  private:
   friend class test::PageInfoBubbleViewTestApi;
 
-  void InitializeMenuButtonView(views::GridLayout* layout,
-                                const PageInfoUI::PermissionInfo& permission);
   void InitializeComboboxView(views::GridLayout* layout,
                               const PageInfoUI::PermissionInfo& permission);
 
@@ -88,7 +86,8 @@ class PermissionSelectorRow {
   internal::PermissionMenuButton* menu_button_;
   internal::PermissionCombobox* combobox_;
 
-  base::ObserverList<PermissionSelectorRowObserver, false> observer_list_;
+  base::ObserverList<PermissionSelectorRowObserver, false>::Unchecked
+      observer_list_;
 
   DISALLOW_COPY_AND_ASSIGN(PermissionSelectorRow);
 };

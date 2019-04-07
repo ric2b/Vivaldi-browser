@@ -96,6 +96,12 @@ bool isAllowedStateTransition(keyboard::KeyboardControllerState from,
           // HideKeyboard can be called at anytime for example on shutdown.
           {keyboard::KeyboardControllerState::SHOWN,
            keyboard::KeyboardControllerState::HIDDEN},
+
+          // Return to INITIAL when keyboard is disabled.
+          {keyboard::KeyboardControllerState::LOADING_EXTENSION,
+           keyboard::KeyboardControllerState::INITIAL},
+          {keyboard::KeyboardControllerState::HIDDEN,
+           keyboard::KeyboardControllerState::INITIAL},
       };
   return kAllowedStateTransition.count(std::make_pair(from, to)) == 1;
 };
@@ -204,6 +210,11 @@ void KeyboardController::DisableKeyboard() {
   if (parent_container_)
     DeactivateKeyboard();
 
+  // Return to the INITIAL state to ensure that transitions entering a state
+  // is equal to transitions leaving the state.
+  if (state_ != KeyboardControllerState::INITIAL)
+    ChangeState(KeyboardControllerState::INITIAL);
+
   // TODO(https://crbug.com/731537): Move KeyboardController members into a
   // subobject so we can just put this code into the subobject destructor.
   queued_display_change_.reset();
@@ -259,7 +270,7 @@ bool KeyboardController::HasInstance() {
   return g_keyboard_controller;
 }
 
-aura::Window* KeyboardController::GetKeyboardWindow() {
+aura::Window* KeyboardController::GetKeyboardWindow() const {
   return ui_ && ui_->HasKeyboardWindow() ? ui_->GetKeyboardWindow() : nullptr;
 }
 
@@ -271,14 +282,13 @@ void KeyboardController::NotifyKeyboardBoundsChanging(
     const gfx::Rect& new_bounds) {
   visual_bounds_in_screen_ = new_bounds;
   if (ui_->HasKeyboardWindow() && ui_->GetKeyboardWindow()->IsVisible()) {
-    const gfx::Rect occluded_bounds =
-        container_behavior_->GetOccludedBounds(new_bounds);
+    const gfx::Rect occluded_bounds_in_screen = GetWorkspaceOccludedBounds();
     notification_manager_.SendNotifications(
-        container_behavior_->OccludedBoundsAffectWorkspaceLayout(),
-        keyboard_locked(), new_bounds, occluded_bounds, observer_list_);
+        container_behavior_->OccludedBoundsAffectWorkspaceLayout(), new_bounds,
+        occluded_bounds_in_screen, observer_list_);
 
     if (keyboard::IsKeyboardOverscrollEnabled())
-      ui_->InitInsets(occluded_bounds);
+      ui_->InitInsets(occluded_bounds_in_screen);
     else
       ui_->ResetInsets();
   } else {
@@ -298,11 +308,6 @@ void KeyboardController::SetKeyboardWindowBounds(const gfx::Rect& new_bounds) {
     animator->StopAnimating();
 
   GetKeyboardWindow()->SetBounds(new_bounds);
-
-  // We need to send out this notification only if keyboard is visible since
-  // the keyboard window is resized even if keyboard is hidden.
-  if (IsKeyboardVisible())
-    NotifyKeyboardBoundsChanging(new_bounds);
 }
 
 void KeyboardController::NotifyKeyboardWindowLoaded() {
@@ -479,7 +484,11 @@ void KeyboardController::HideAnimationFinished() {
 
 void KeyboardController::ShowAnimationFinished() {
   MarkKeyboardLoadFinished();
-  NotifyKeyboardBoundsChangingAndEnsureCaretInWorkArea();
+
+  // Notify observers after animation finished to prevent reveal desktop
+  // background during animation.
+  NotifyKeyboardBoundsChanging(GetKeyboardWindow()->bounds());
+  ui_->EnsureCaretInWorkArea(GetWorkspaceOccludedBounds());
 }
 
 void KeyboardController::SetContainerBehaviorInternal(
@@ -488,7 +497,7 @@ void KeyboardController::SetContainerBehaviorInternal(
   // be wrong when container type changes and may cause the UI to be unusable.
   if (GetKeyboardWindow())
     GetKeyboardWindow()->SetEventTargeter(nullptr);
-  
+
   switch (type) {
     case ContainerType::FULL_WIDTH:
       container_behavior_ = std::make_unique<ContainerFullWidthBehavior>(this);
@@ -525,10 +534,15 @@ void KeyboardController::OnWindowBoundsChanged(
     const gfx::Rect& old_bounds,
     const gfx::Rect& new_bounds,
     ui::PropertyChangeReason reason) {
-  if (!window->IsRootWindow() || !ui_->HasKeyboardWindow())
+  if (!GetKeyboardWindow())
     return;
 
-  container_behavior_->SetCanonicalBounds(GetKeyboardWindow(), new_bounds);
+  // |window| could be the root window (for detecting screen rotations) or the
+  // keyboard window (for detecting keyboard bounds changes).
+  if (window == GetRootWindow())
+    container_behavior_->SetCanonicalBounds(GetKeyboardWindow(), new_bounds);
+  else if (window == GetKeyboardWindow())
+    NotifyKeyboardBoundsChanging(new_bounds);
 }
 
 void KeyboardController::Reload() {
@@ -625,6 +639,7 @@ void KeyboardController::PopulateKeyboardContent(
     DCHECK_EQ(state_, KeyboardControllerState::INITIAL);
     aura::Window* keyboard_window = ui_->GetKeyboardWindow();
     keyboard_window->AddPreTargetHandler(&event_filter_);
+    keyboard_window->AddObserver(this);
     parent_container_->AddChild(keyboard_window);
   }
 
@@ -695,21 +710,15 @@ void KeyboardController::PopulateKeyboardContent(
   queued_container_type_ = nullptr;
 
   ChangeState(KeyboardControllerState::SHOWN);
+
+  UMA_HISTOGRAM_ENUMERATION("InputMethod.VirtualKeyboard.ContainerBehavior",
+                            GetActiveContainerType(), ContainerType::COUNT);
 }
 
 bool KeyboardController::WillHideKeyboard() const {
   bool res = weak_factory_will_hide_.HasWeakPtrs();
   DCHECK_EQ(res, state_ == KeyboardControllerState::WILL_HIDE);
   return res;
-}
-
-void KeyboardController::
-    NotifyKeyboardBoundsChangingAndEnsureCaretInWorkArea() {
-  // Notify observers after animation finished to prevent reveal desktop
-  // background during animation.
-  NotifyKeyboardBoundsChanging(GetKeyboardWindow()->bounds());
-  ui_->EnsureCaretInWorkArea(
-      container_behavior_->GetOccludedBounds(GetKeyboardWindow()->bounds()));
 }
 
 void KeyboardController::NotifyKeyboardConfigChanged() {
@@ -774,7 +783,15 @@ void KeyboardController::ReportLingeringState() {
 }
 
 gfx::Rect KeyboardController::GetWorkspaceOccludedBounds() const {
-  return container_behavior_->GetOccludedBounds(visual_bounds_in_screen_);
+  if (!enabled())
+    return gfx::Rect();
+
+  const gfx::Rect visual_bounds_in_window(visual_bounds_in_screen_.size());
+  const gfx::Rect occluded_bounds_in_window =
+      container_behavior_->GetOccludedBounds(visual_bounds_in_window);
+  // Return occluded bounds that are relative to the screen.
+  return occluded_bounds_in_window +
+         visual_bounds_in_screen_.OffsetFromOrigin();
 }
 
 gfx::Rect KeyboardController::GetKeyboardLockScreenOffsetBounds() const {
@@ -789,12 +806,8 @@ gfx::Rect KeyboardController::GetKeyboardLockScreenOffsetBounds() const {
   return gfx::Rect();
 }
 
-void KeyboardController::SetOccludedBounds(const gfx::Rect& bounds) {
-  if (container_behavior_->GetType() != ContainerType::FULLSCREEN)
-    return;
-
-  static_cast<ContainerFullscreenBehavior&>(*container_behavior_)
-      .SetOccludedBounds(bounds);
+void KeyboardController::SetOccludedBounds(const gfx::Rect& bounds_in_window) {
+  container_behavior_->SetOccludedBounds(bounds_in_window);
 
   // Notify that only the occluded bounds have changed.
   if (IsKeyboardVisible())
@@ -835,9 +848,6 @@ void KeyboardController::SetContainerType(
     std::move(callback).Run(false);
     return;
   }
-
-  UMA_HISTOGRAM_ENUMERATION("InputMethod.VirtualKeyboard.ContainerBehavior",
-                            type, ContainerType::COUNT);
 
   if (state_ == KeyboardControllerState::SHOWN) {
     // Keyboard is already shown. Hiding the keyboard at first then switching

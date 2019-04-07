@@ -19,7 +19,9 @@
 #include "chrome/common/media_router/media_source_helper.h"
 #include "components/cast_channel/cast_socket_service.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/service_manager_connection.h"
 #include "extensions/common/extension.h"
+#include "services/service_manager/public/cpp/connector.h"
 #if defined(OS_WIN)
 #include "chrome/browser/media/router/mojo/media_route_provider_util_win.h"
 #endif
@@ -103,6 +105,7 @@ void MediaRouterDesktop::RegisterMediaRouteProvider(
   config->enable_dial_sink_query = !DialMediaRouteProviderEnabled();
   config->enable_cast_sink_query = !CastMediaRouteProviderEnabled();
   config->use_views_dialog = ShouldUseViewsDialog();
+  config->use_mirroring_service = ShouldUseMirroringService();
   std::move(callback).Run(instance_id(), std::move(config));
 
   SyncStateToMediaRouteProvider(provider_id);
@@ -276,12 +279,18 @@ void MediaRouterDesktop::InitializeDialMediaRouteProvider() {
 
   auto* dial_media_sink_service =
       media_sink_service_->GetDialMediaSinkServiceImpl();
+  std::string receiver_id_hash_token = GetReceiverIdHashToken(
+      Profile::FromBrowserContext(context())->GetPrefs());
   auto task_runner = dial_media_sink_service->task_runner();
+
+  service_manager::Connector* connector =
+      content::ServiceManagerConnection::GetForProcess()->GetConnector();
   dial_provider_ =
       std::unique_ptr<DialMediaRouteProvider, base::OnTaskRunnerDeleter>(
           new DialMediaRouteProvider(mojo::MakeRequest(&dial_provider_ptr),
                                      media_router_ptr.PassInterface(),
-                                     dial_media_sink_service, task_runner),
+                                     dial_media_sink_service, connector,
+                                     receiver_id_hash_token, task_runner),
           base::OnTaskRunnerDeleter(task_runner));
   RegisterMediaRouteProvider(MediaRouteProviderId::DIAL,
                              std::move(dial_provider_ptr), base::DoNothing());

@@ -38,11 +38,11 @@ class KEYBOARD_EXPORT NotificationManager {
   // - layout displacement bounds change
   // - general visibility change
   void SendNotifications(
-      bool bounds_affect_layout,
-      bool is_locked,
+      bool does_occluded_bounds_affect_layout,
       const gfx::Rect& visual_bounds,
       const gfx::Rect& occluded_bounds,
-      const base::ObserverList<KeyboardControllerObserver>& observers);
+      const base::ObserverList<KeyboardControllerObserver>::Unchecked&
+          observers);
 
   bool ShouldSendVisibilityNotification(bool current_visibility);
 

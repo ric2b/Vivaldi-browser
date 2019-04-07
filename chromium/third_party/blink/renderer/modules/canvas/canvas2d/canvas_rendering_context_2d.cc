@@ -168,6 +168,12 @@ bool CanvasRenderingContext2D::IsAccelerated() const {
   return layer_bridge->IsAccelerated();
 }
 
+bool CanvasRenderingContext2D::IsOriginTopLeft() const {
+  // Accelerated 2D contexts have the origin of coordinates on the bottom left,
+  // except if they are single buffered (needed for front buffer rendering).
+  return !IsAccelerated() || canvas()->ResourceProvider()->IsSingleBuffered();
+}
+
 bool CanvasRenderingContext2D::IsComposited() const {
   return IsAccelerated();
 }
@@ -223,7 +229,7 @@ void CanvasRenderingContext2D::Trace(blink::Visitor* visitor) {
 void CanvasRenderingContext2D::DispatchContextLostEvent(TimerBase*) {
   if (canvas() && ContextLostRestoredEventsEnabled()) {
     Event* event = Event::CreateCancelable(EventTypeNames::contextlost);
-    canvas()->DispatchEvent(event);
+    canvas()->DispatchEvent(*event);
     if (event->defaultPrevented()) {
       context_restorable_ = false;
     }
@@ -268,7 +274,7 @@ void CanvasRenderingContext2D::DispatchContextRestoredEvent(TimerBase*) {
   context_lost_mode_ = kNotLostContext;
   if (ContextLostRestoredEventsEnabled()) {
     Event* event(Event::Create(EventTypeNames::contextrestored));
-    canvas()->DispatchEvent(event);
+    canvas()->DispatchEvent(*event);
   }
 }
 
@@ -649,7 +655,7 @@ HitTestCanvasResult* CanvasRenderingContext2D::GetControlAndIdIfHitRegionExists(
   FloatPoint local_pos =
       box->AbsoluteToLocal(FloatPoint(location), kUseTransforms);
   if (box->HasBorderOrPadding())
-    local_pos.Move(-box->ContentBoxOffset());
+    local_pos.Move(-box->PhysicalContentBoxOffset());
   float scaleWidth = box->ContentWidth().ToFloat() == 0.0f
                          ? 1.0f
                          : canvas()->width() / box->ContentWidth();
@@ -903,9 +909,8 @@ const Font& CanvasRenderingContext2D::AccessFont() {
 void CanvasRenderingContext2D::SetIsHidden(bool hidden) {
   if (IsPaintable())
     canvas()->GetCanvas2DLayerBridge()->SetIsHidden(hidden);
-  if (hidden) {
+  if (hidden)
     PruneLocalFontCache(0);
-  }
 }
 
 bool CanvasRenderingContext2D::IsTransformInvertible() const {

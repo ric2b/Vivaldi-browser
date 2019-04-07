@@ -8,9 +8,12 @@ import android.content.Context;
 import android.view.View;
 
 import org.chromium.base.Callback;
+import org.chromium.chrome.browser.download.home.PrefetchStatusProvider;
+import org.chromium.chrome.browser.download.home.empty.EmptyCoordinator;
 import org.chromium.chrome.browser.download.home.filter.FilterCoordinator;
 import org.chromium.chrome.browser.download.home.filter.Filters.FilterType;
 import org.chromium.chrome.browser.download.home.list.ListItem.ViewListItem;
+import org.chromium.chrome.browser.download.home.storage.StorageCoordinator;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
 import org.chromium.components.offline_items_collection.OfflineContentProvider;
 import org.chromium.components.offline_items_collection.OfflineItem;
@@ -42,8 +45,9 @@ public class DateOrderedListCoordinator {
         void canDelete(List<OfflineItem> items, Callback<Boolean> callback);
     }
 
+    private final StorageCoordinator mStorageCoordinator;
     private final FilterCoordinator mFilterCoordinator;
-
+    private final EmptyCoordinator mEmptyCoordinator;
     private final DateOrderedListMediator mMediator;
     private final DateOrderedListView mView;
 
@@ -61,17 +65,30 @@ public class DateOrderedListCoordinator {
             OfflineContentProvider provider, DeleteController deleteController,
             SelectionDelegate<ListItem> selectionDelegate,
             FilterCoordinator.Observer filterObserver) {
+        // TODO(shaktisahu): Use a real provider/have this provider query the real data source.
+        PrefetchStatusProvider prefetchProvider = new PrefetchStatusProvider();
+
         ListItemModel model = new ListItemModel();
         DecoratedListItemModel decoratedModel = new DecoratedListItemModel(model);
         mView = new DateOrderedListView(context, decoratedModel);
-        mMediator = new DateOrderedListMediator(
-                offTheRecord, provider, deleteController, selectionDelegate, model);
+        mMediator = new DateOrderedListMediator(offTheRecord, provider, context::startActivity,
+                deleteController, selectionDelegate, model);
 
-        // Hook up the FilterCoordinator with our mediator.
-        mFilterCoordinator = new FilterCoordinator(context, mMediator.getFilterSource());
+        mEmptyCoordinator =
+                new EmptyCoordinator(context, prefetchProvider, mMediator.getEmptySource());
+
+        mStorageCoordinator = new StorageCoordinator(context, mMediator.getFilterSource());
+
+        mFilterCoordinator =
+                new FilterCoordinator(context, prefetchProvider, mMediator.getFilterSource());
         mFilterCoordinator.addObserver(mMediator::onFilterTypeSelected);
         mFilterCoordinator.addObserver(filterObserver);
-        decoratedModel.setHeader(new ViewListItem(Long.MAX_VALUE, mFilterCoordinator.getView()));
+        mFilterCoordinator.addObserver(mEmptyCoordinator);
+
+        decoratedModel.addHeader(
+                new ViewListItem(Long.MAX_VALUE - 1L, mStorageCoordinator.getView()));
+        decoratedModel.addHeader(
+                new ViewListItem(Long.MAX_VALUE - 2L, mFilterCoordinator.getView()));
     }
 
     /** Tears down this coordinator. */
@@ -97,5 +114,10 @@ public class DateOrderedListCoordinator {
     /** Called to delete a list of items specified by {@code items}. */
     public void onDeletionRequested(List<ListItem> items) {
         mMediator.onDeletionRequested(items);
+    }
+
+    /** Called to share a list of items specified by {@code items}. */
+    public void onShareRequested(List<ListItem> items) {
+        mMediator.onShareRequested(items);
     }
 }

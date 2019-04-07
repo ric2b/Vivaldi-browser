@@ -17,7 +17,6 @@
 #include "base/threading/thread.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
-#include "net/base/completion_callback.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
@@ -57,13 +56,13 @@ class MockServerSocket : public net::ServerSocket {
   }
 
   int Accept(std::unique_ptr<net::StreamSocket>* socket,
-             const net::CompletionCallback& callback) override {
+             net::CompletionOnceCallback callback) override {
     DCHECK(accept_callback_.is_null());
     if (accept_result_ == net::OK && mode_ == net::SYNCHRONOUS)
       *socket = CreateMockAcceptSocket();
     if (mode_ == net::ASYNC || accept_result_ == net::ERR_IO_PENDING) {
       accept_socket_ = socket;
-      accept_callback_ = callback;
+      accept_callback_ = std::move(callback);
     }
     run_loop_.Quit();
 
@@ -108,7 +107,7 @@ class MockServerSocket : public net::ServerSocket {
 
   net::IoMode mode_ = net::SYNCHRONOUS;
   int accept_result_ = net::OK;
-  net::CompletionCallback accept_callback_;
+  net::CompletionOnceCallback accept_callback_;
   std::unique_ptr<net::StreamSocket>* accept_socket_;
   base::RunLoop run_loop_;
   std::vector<std::unique_ptr<net::StaticSocketDataProvider>> data_providers_;
@@ -334,6 +333,7 @@ class TCPSocketTest : public testing::Test {
   }
 
   TestSocketObserver* observer() { return &test_observer_; }
+  SocketFactory* factory() { return factory_.get(); }
 
  private:
   base::test::ScopedTaskEnvironment scoped_task_environment_;
@@ -662,7 +662,7 @@ TEST_P(TCPSocketWithMockSocketTest,
                         mojo::ScopedDataPipeProducerHandle send_pipe_handle) {
                        std::move(callback).Run(result);
                      },
-                     std::move(callback->callback())));
+                     callback->callback()));
     accept_callbacks.push_back(std::move(callback));
   }
 
@@ -689,7 +689,7 @@ TEST_P(TCPSocketWithMockSocketTest,
                       mojo::ScopedDataPipeProducerHandle send_pipe_handle) {
                      std::move(callback).Run(result);
                    },
-                   std::move(callback->callback())));
+                   callback->callback()));
   EXPECT_EQ(net::OK, callback->WaitForResult());
 }
 
@@ -724,7 +724,7 @@ TEST_P(TCPSocketWithMockSocketTest, ServerAcceptWithObserverReadError) {
               mojom::TCPConnectedSocketPtr connected_socket,
               mojo::ScopedDataPipeConsumerHandle receive_pipe_handle,
               mojo::ScopedDataPipeProducerHandle send_pipe_handle) {
-            std::move(callback->callback()).Run(result);
+            callback->callback().Run(result);
             connected_socket_result = std::move(connected_socket);
             receive_handle = std::move(receive_pipe_handle);
             send_handle = std::move(send_pipe_handle);
@@ -772,7 +772,7 @@ TEST_P(TCPSocketWithMockSocketTest, ServerAcceptWithObserverWriteError) {
               mojom::TCPConnectedSocketPtr connected_socket,
               mojo::ScopedDataPipeConsumerHandle receive_pipe_handle,
               mojo::ScopedDataPipeProducerHandle send_pipe_handle) {
-            std::move(callback->callback()).Run(result);
+            callback->callback().Run(result);
             connected_socket_result = std::move(connected_socket);
             receive_handle = std::move(receive_pipe_handle);
             send_handle = std::move(send_pipe_handle);
@@ -1030,7 +1030,8 @@ TEST_F(TCPSocketWithMockSocketTest, SetNoDelayAndKeepAlive) {
         base::BindLambdaForTesting(
             [&](int result,
                 mojo::ScopedDataPipeConsumerHandle receive_pipe_handle,
-                mojo::ScopedDataPipeProducerHandle send_pipe_handle) {
+                mojo::ScopedDataPipeProducerHandle send_pipe_handle,
+                const base::Optional<net::SSLInfo>& ssl_info) {
               EXPECT_EQ(net::ERR_FAILED, result);
               run_loop.Quit();
             }));
@@ -1054,6 +1055,36 @@ TEST_F(TCPSocketWithMockSocketTest, SetNoDelayAndKeepAlive) {
                                 }));
     run_loop.Run();
   }
+}
+
+TEST_F(TCPSocketWithMockSocketTest, SocketDestroyedBeforeConnectCompletes) {
+  std::vector<net::MockRead> reads;
+  std::vector<net::MockWrite> writes;
+  net::StaticSocketDataProvider data_provider(reads, writes);
+  data_provider.set_connect_data(
+      net::MockConnect(net::ASYNC, net::ERR_IO_PENDING));
+  mock_client_socket_factory_.AddSocketDataProvider(&data_provider);
+
+  mojom::TCPConnectedSocketPtr client_socket;
+  net::IPEndPoint server_addr(net::IPAddress::IPv4Localhost(), 1234);
+  net::AddressList remote_addr_list(server_addr);
+  int net_error = net::OK;
+  base::RunLoop run_loop;
+  factory()->CreateTCPConnectedSocket(
+      base::nullopt, remote_addr_list, TRAFFIC_ANNOTATION_FOR_TESTS,
+      mojo::MakeRequest(&client_socket), nullptr,
+      base::BindLambdaForTesting(
+          [&](int result,
+              const base::Optional<net::IPEndPoint>& actual_local_addr,
+              const base::Optional<net::IPEndPoint>& peer_addr,
+              mojo::ScopedDataPipeConsumerHandle receive_pipe_handle,
+              mojo::ScopedDataPipeProducerHandle send_pipe_handle) {
+            net_error = result;
+            run_loop.Quit();
+          }));
+  client_socket.reset();
+  run_loop.Run();
+  EXPECT_EQ(net::ERR_ABORTED, net_error);
 }
 
 // Tests the case where net::ServerSocket::Listen() succeeds but

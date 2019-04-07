@@ -9,8 +9,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/interfaces/constants.mojom.h"
-#include "services/ui/public/interfaces/event_injector.mojom.h"
+#include "services/ws/public/mojom/constants.mojom.h"
+#include "services/ws/public/mojom/event_injector.mojom.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/mus/window_tree_client.h"
@@ -155,7 +155,7 @@ class UIControlsOzone : public ui_controls::UIControlsAura {
                                      int button_state,
                                      base::OnceClosure closure,
                                      int accelerator_state) override {
-    gfx::Point root_location = aura::Env::GetInstance()->last_mouse_location();
+    gfx::Point root_location = host_->window()->env()->last_mouse_location();
     aura::client::ScreenPositionClient* screen_position_client =
         aura::client::GetScreenPositionClient(host_->window());
     if (screen_position_client) {
@@ -218,7 +218,7 @@ class UIControlsOzone : public ui_controls::UIControlsAura {
 
  private:
   void SendEventToSink(ui::Event* event, base::OnceClosure closure) {
-    if (aura::Env::GetInstance()->mode() == aura::Env::Mode::MUS) {
+    if (host_->window()->env()->mode() == aura::Env::Mode::MUS) {
       std::unique_ptr<ui::Event> event_to_send;
       if (event->IsMouseEvent()) {
         // WindowService expects MouseEvents as PointerEvents.
@@ -294,22 +294,22 @@ class UIControlsOzone : public ui_controls::UIControlsAura {
     SendEventToSink(&mouse_event2, std::move(closure));
   }
 
-  // Returns the ui::mojom::EventInjector, which is used to send events
+  // Returns the ws::mojom::EventInjector, which is used to send events
   // to the Window Service for dispatch.
-  ui::mojom::EventInjector* GetEventInjector() {
-    DCHECK_EQ(aura::Env::Mode::MUS, aura::Env::GetInstance()->mode());
+  ws::mojom::EventInjector* GetEventInjector() {
+    DCHECK_EQ(aura::Env::Mode::MUS, host_->window()->env()->mode());
     if (!event_injector_) {
       DCHECK(aura::test::EnvTestHelper().GetWindowTreeClient());
       aura::test::EnvTestHelper()
           .GetWindowTreeClient()
           ->connector()
-          ->BindInterface(ui::mojom::kServiceName, &event_injector_);
+          ->BindInterface(ws::mojom::kServiceName, &event_injector_);
     }
     return event_injector_.get();
   }
 
   WindowTreeHost* host_;
-  ui::mojom::EventInjectorPtr event_injector_;
+  ws::mojom::EventInjectorPtr event_injector_;
 
   // Mask of the mouse buttons currently down. This is static as it needs to
   // track the state globally for all displays. A UIControlsOzone instance is

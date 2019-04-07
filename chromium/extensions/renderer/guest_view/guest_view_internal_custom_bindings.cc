@@ -162,7 +162,7 @@ void GuestViewInternalCustomBindings::AttachGuest(
   // Optional Callback Function.
   CHECK(args.Length() < 4 || args[3]->IsFunction());
 
-  int element_instance_id = args[0]->Int32Value();
+  int element_instance_id = args[0].As<v8::Int32>()->Value();
   // An element instance ID uniquely identifies a GuestViewContainer.
   auto* guest_view_container =
       guest_view::GuestViewContainer::FromID(element_instance_id);
@@ -174,7 +174,7 @@ void GuestViewInternalCustomBindings::AttachGuest(
   // Retain a weak pointer so we can easily test if the container goes away.
   auto weak_ptr = guest_view_container->GetWeakPtr();
 
-  int guest_instance_id = args[1]->Int32Value();
+  int guest_instance_id = args[1].As<v8::Int32>()->Value();
 
   std::unique_ptr<base::DictionaryValue> params = base::DictionaryValue::From(
       content::V8ValueConverter::Create()->FromV8Value(
@@ -212,7 +212,7 @@ void GuestViewInternalCustomBindings::DetachGuest(
   // Optional Callback Function.
   CHECK(args.Length() < 2 || args[1]->IsFunction());
 
-  int element_instance_id = args[0]->Int32Value();
+  int element_instance_id = args[0].As<v8::Int32>()->Value();
   // An element instance ID uniquely identifies a GuestViewContainer.
   auto* guest_view_container =
       guest_view::GuestViewContainer::FromID(element_instance_id);
@@ -250,8 +250,8 @@ void GuestViewInternalCustomBindings::AttachIframeGuest(
   CHECK(args.Length() <= num_required_params ||
         args[num_required_params]->IsFunction());
 
-  int element_instance_id = args[0]->Int32Value();
-  int guest_instance_id = args[1]->Int32Value();
+  int element_instance_id = args[0].As<v8::Int32>()->Value();
+  int guest_instance_id = args[1].As<v8::Int32>()->Value();
 
   // Get the WebLocalFrame before (possibly) executing any user-space JS while
   // getting the |params|. We track the status of the RenderFrame via an
@@ -315,7 +315,7 @@ void GuestViewInternalCustomBindings::DestroyContainer(
   if (!args[0]->IsInt32())
     return;
 
-  int element_instance_id = args[0]->Int32Value();
+  int element_instance_id = args[0].As<v8::Int32>()->Value();
   auto* guest_view_container =
       guest_view::GuestViewContainer::FromID(element_instance_id);
   if (!guest_view_container)
@@ -340,7 +340,7 @@ void GuestViewInternalCustomBindings::GetContentWindow(
   if (!args[0]->IsInt32())
     return;
 
-  int view_id = args[0]->Int32Value();
+  int view_id = args[0].As<v8::Int32>()->Value();
   if (view_id == MSG_ROUTING_NONE)
     return;
 
@@ -361,7 +361,7 @@ void GuestViewInternalCustomBindings::GetViewFromID(
   CHECK(args.Length() == 1);
   // The view ID.
   CHECK(args[0]->IsInt32());
-  int view_id = args[0]->Int32Value();
+  int view_id = args[0].As<v8::Int32>()->Value();
 
   ViewMap& view_map = weak_view_map.Get();
   auto map_entry = view_map.find(view_id);
@@ -382,7 +382,7 @@ void GuestViewInternalCustomBindings::RegisterDestructionCallback(
   // Callback function.
   CHECK(args[1]->IsFunction());
 
-  int element_instance_id = args[0]->Int32Value();
+  int element_instance_id = args[0].As<v8::Int32>()->Value();
   // An element instance ID uniquely identifies a GuestViewContainer within a
   // RenderView.
   auto* guest_view_container =
@@ -411,7 +411,7 @@ void GuestViewInternalCustomBindings::RegisterElementResizeCallback(
   // Callback function.
   CHECK(args[1]->IsFunction());
 
-  int element_instance_id = args[0]->Int32Value();
+  int element_instance_id = args[0].As<v8::Int32>()->Value();
   // An element instance ID uniquely identifies a ExtensionsGuestViewContainer
   // within a RenderView.
   auto* guest_view_container =
@@ -439,7 +439,7 @@ void GuestViewInternalCustomBindings::RegisterView(
   // A reference to the view object is stored in |weak_view_map| using its view
   // ID as the key. The reference is made weak so that it will not extend the
   // lifetime of the object.
-  int view_instance_id = args[0]->Int32Value();
+  int view_instance_id = args[0].As<v8::Int32>()->Value();
   auto* object =
       new v8::Global<v8::Object>(args.GetIsolate(), args[1].As<v8::Object>());
   weak_view_map.Get().insert(std::make_pair(view_instance_id, object));

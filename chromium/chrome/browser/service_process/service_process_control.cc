@@ -19,13 +19,13 @@
 #include "base/process/launch.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/upgrade_detector.h"
+#include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/common/service_process_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_launcher_utils.h"
@@ -60,7 +60,7 @@ void ConnectAsyncWithBackoff(
           FROM_HERE, base::BindOnce(std::move(response_callback), nullptr));
     } else {
       base::PostDelayedTaskWithTraits(
-          FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+          FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
           base::BindOnce(
               &ConnectAsyncWithBackoff, std::move(interface_provider_request),
               server_name, num_retries_left - 1, retry_delay * 2,
@@ -104,7 +104,7 @@ void ServiceProcessControl::ConnectInternal() {
   auto interface_provider_request = mojo::MakeRequest(&remote_interfaces);
   SetMojoHandle(std::move(remote_interfaces));
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(
           &ConnectAsyncWithBackoff, std::move(interface_provider_request),
           GetServiceProcessServerName(), kMaxConnectionAttempts,

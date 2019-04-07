@@ -37,7 +37,7 @@ class ControllerServiceWorkerConnector;
 // the main thread (while the implementation itself is thread agnostic).
 class CONTENT_EXPORT ServiceWorkerSubresourceLoader
     : public network::mojom::URLLoader,
-      public mojom::ServiceWorkerFetchResponseCallback,
+      public blink::mojom::ServiceWorkerFetchResponseCallback,
       public ControllerServiceWorkerConnector::Observer {
  public:
   // See the comments for ServiceWorkerSubresourceLoaderFactory's ctor (below)
@@ -74,20 +74,16 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
   void SettleFetchEventDispatch(
       base::Optional<blink::ServiceWorkerStatusCode> status);
 
-  // mojom::ServiceWorkerFetchResponseCallback overrides:
-  void OnResponse(const ServiceWorkerResponse& response,
+  // blink::mojom::ServiceWorkerFetchResponseCallback overrides:
+  void OnResponse(blink::mojom::FetchAPIResponsePtr response,
                   base::Time dispatch_event_time) override;
-  void OnResponseBlob(const ServiceWorkerResponse& response,
-                      blink::mojom::BlobPtr blob,
-                      base::Time dispatch_event_time) override;
   void OnResponseStream(
-      const ServiceWorkerResponse& response,
+      blink::mojom::FetchAPIResponsePtr response,
       blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
       base::Time dispatch_event_time) override;
   void OnFallback(base::Time dispatch_event_time) override;
 
-  void StartResponse(const ServiceWorkerResponse& response,
-                     blink::mojom::BlobPtr body_as_blob,
+  void StartResponse(blink::mojom::FetchAPIResponsePtr response,
                      blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream);
 
   // network::mojom::URLLoader overrides:
@@ -119,7 +115,8 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
   mojo::Binding<network::mojom::URLLoader> url_loader_binding_;
 
   // For handling FetchEvent response.
-  mojo::Binding<ServiceWorkerFetchResponseCallback> response_callback_binding_;
+  mojo::Binding<blink::mojom::ServiceWorkerFetchResponseCallback>
+      response_callback_binding_;
   // The blob needs to be held while it's read to keep it alive.
   blink::mojom::BlobPtr body_as_blob_;
 

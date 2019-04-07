@@ -12,7 +12,6 @@
 <translation id="1559528461873125649">해당 파일이나 디렉토리가 없습니다</translation>
 <translation id="1640244768702815859"><ph name="BEGIN_LINK" />사이트의 메인 페이지를 방문<ph name="END_LINK" />해 보세요.</translation>
 <translation id="1645368109819982629">지원되지 않는 프로토콜</translation>
-<translation id="1676269943528358898"><ph name="SITE" />에서는 사용자 정보를 보호하기 위해 일반적으로 암호화를 사용합니다. 이번에 Vivaldi에서 <ph name="SITE" />에 연결을 시도했을 때 웹사이트에서 비정상적이고 잘못된 사용자 인증 정보를 반환했습니다. 이는 공격자가 <ph name="SITE" />인 것처럼 가장하려고 하거나 Wi-Fi 로그인 화면이 연결을 방해했기 때문일 수 있습니다. 데이터 교환이 발생하기 전에 Vivaldi에서 연결을 중단했으므로 사용자 정보는 안전합니다.</translation>
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">웹페이지 소스를 보는 중</translation>
 <translation id="1734878702283171397">시스템 관리자에게 문의하세요.</translation>
@@ -21,7 +20,6 @@
 <translation id="1974060860693918893">세부정보</translation>
 <translation id="2030481566774242610"><ph name="LINK" />을(를) 찾으셨나요?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />프록시 및 방화벽 확인<ph name="END_LINK" /></translation>
-<translation id="2065985942032347596">인증 필요</translation>
 <translation id="2166378884831602661">사이트에 보안 연결할 수 없음</translation>
 <translation id="2230458221926704099"><ph name="BEGIN_LINK" />진단 프로그램<ph name="END_LINK" />을 사용하여 연결 문제를 해결하세요</translation>
 <translation id="2292556288342944218">인터넷 액세스가 차단됨</translation>
@@ -31,16 +29,12 @@
 <translation id="2609632851001447353">유사 버전</translation>
 <translation id="2650446666397867134">파일 액세스 거부됨</translation>
 <translation id="2705137772291741111">사이트의 저장된(캐시된) 사본을 읽을 수 없습니다.</translation>
-<translation id="2730326759066348565"><ph name="BEGIN_LINK" />연결 진단 실행<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">연결이 재설정되었습니다.</translation>
 <translation id="2856444702002559011">해커가 <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />에서 정보(예: 비밀번호, 메시지, 신용카드 등)를 도용하려고 할 수 있습니다. <ph name="BEGIN_LEARN_MORE_LINK" />자세히 알아보기<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">네트워크 변경이 감지되었습니다.</translation>
-<translation id="2948083400971632585">연결을 위해 구성한 프록시는 설정 페이지에서 비활성화 할 수 있습니다.</translation>
 <translation id="2991571918955627853">웹사이트에서 HSTS를 사용하므로 지금은 <ph name="SITE" />에 방문할 수 없습니다. 네트워크 오류와 공격은 대체로 일시적이므로 나중에 이 페이지가 정상적으로 작동할 수 있습니다.</translation>
 <translation id="3005723025932146533">저장된 사본 표시</translation>
-<translation id="3093245981617870298">오프라인 상태입니다.</translation>
 <translation id="3109728660330352905">이 페이지를 볼 수 있는 권한이 없습니다.</translation>
-<translation id="31207688938192855"><ph name="BEGIN_LINK" />연결 진단 실행해보기<ph name="END_LINK" />.</translation>
 <translation id="3176929007561373547">프록시 설정을 확인하거나 네트워크 관리자에게 문의하여
       프록시 서버가 작동하는지 확인하세요. 프록시 서버를 사용하지 않으려면
       다음 단계를 따르세요.
@@ -63,7 +57,6 @@
 <translation id="4165986682804962316">사이트 설정</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />방화벽 및 바이러스 백신 소프트웨어 설정 확인<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />네트워크 진단 실행해보기<ph name="END_LINK" />.</translation>
-<translation id="4304224509867189079">로그인</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" />에서 로그인 인증서를 승인하지 않았거나 로그인 인증서가 제공되지 않았을 수 있습니다.</translation>
 <translation id="4506599922270137252">시스템 관리자에게 문의</translation>
 <translation id="4522570452068850558">세부정보</translation>
@@ -72,7 +65,6 @@
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows 네트워크 진단 실행<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">실행 가능 경로</translation>
 <translation id="4764776831041365478"><ph name="URL" />의 웹페이지가 일시적으로 다운되었거나 새 웹 주소로 완전히 이동했을 수 있습니다.</translation>
-<translation id="4807049035289105102">웹사이트가 Vivaldi에서 처리할 수 없는 암호화된 사용자 인증 정보를 전송하였으므로 지금은 <ph name="SITE" />에 방문할 수 없습니다. 네트워크 오류와 공격은 대체로 일시적이므로 이후에는 이 페이지가 제대로 작동할 가능성이 높습니다.</translation>
 <translation id="5023310440958281426">관리자 정책을 확인하세요</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />프록시 주소 확인<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64비트)</translation>
@@ -126,7 +118,6 @@
 <translation id="8740359287975076522"><ph name="HOST_NAME" />의 &lt;abbr id="dnsDefinition"&gt;DNS 주소&lt;/abbr&gt;를 찾을 수 없습니다. 문제를 진단하는 중입니다.</translation>
 <translation id="9001074447101275817">프록시 <ph name="DOMAIN" />에 사용자 이름 및 비밀번호를 입력해야 합니다.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />에서 지원되지 않는 프로토콜을 사용합니다.</translation>
-<translation id="933612690413056017">인터넷에 연결되지 않음</translation>
 <translation id="969892804517981540">공식 빌드</translation>
 <translation id="988159990683914416">개발자 빌드</translation>
 </translationbundle>

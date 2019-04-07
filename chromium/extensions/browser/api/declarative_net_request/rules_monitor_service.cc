@@ -12,7 +12,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/service_manager_connection.h"
@@ -78,6 +78,16 @@ bool RulesMonitorService::HasRegisteredRuleset(
          extensions_with_rulesets_.end();
 }
 
+void RulesMonitorService::AddObserver(Observer* observer) {
+  DCHECK(observer);
+  observers_.AddObserver(observer);
+}
+
+void RulesMonitorService::RemoveObserver(Observer* observer) {
+  DCHECK(observer);
+  observers_.RemoveObserver(observer);
+}
+
 // Helper to pass information related to the ruleset being loaded.
 struct RulesMonitorService::LoadRulesetInfo {
   LoadRulesetInfo(scoped_refptr<const Extension> extension,
@@ -93,6 +103,11 @@ struct RulesMonitorService::LoadRulesetInfo {
   scoped_refptr<const Extension> extension;
   int expected_ruleset_checksum;
   URLPatternSet allowed_pages;
+
+  // True in case the checksum of the indexed ruleset changed. If true,
+  // |expected_ruleset_checksum| contains the updated checksum. This can only
+  // happen in case of an incorrect indexed ruleset format version.
+  bool checksum_updated_due_to_version_mismatch = false;
 
   DISALLOW_COPY_AND_ASSIGN(LoadRulesetInfo);
 };
@@ -169,23 +184,34 @@ class RulesMonitorService::FileSequenceState {
     // be called on this sequence itself.
     IndexAndPersistRulesCallback ruleset_reindexed_callback = base::BindOnce(
         &FileSequenceState::OnRulesetReindexed, weak_factory_.GetWeakPtr(),
-        std::move(info), std::move(ui_callback));
+        std::move(info), result, std::move(ui_callback));
     IndexAndPersistRules(connector_.get(), nullptr /*identity*/, *extension,
                          std::move(ruleset_reindexed_callback));
   }
 
   // Callback invoked when the JSON ruleset is reindexed.
-  void OnRulesetReindexed(LoadRulesetInfo info,
-                          LoadRulesetUICallback ui_callback,
-                          IndexAndPersistRulesResult result) const {
+  void OnRulesetReindexed(
+      LoadRulesetInfo info,
+      RulesetMatcher::LoadRulesetResult initial_failure_reason,
+      LoadRulesetUICallback ui_callback,
+      IndexAndPersistRulesResult result) const {
     DCHECK(GetExtensionFileTaskRunner()->RunsTasksInCurrentSequence());
 
+    // In case of updates to the ruleset version, the ruleset checksum can
+    // change.
+    if (result.success &&
+        initial_failure_reason ==
+            RulesetMatcher::LoadRulesetResult::kLoadErrorVersionMismatch) {
+      info.expected_ruleset_checksum = result.ruleset_checksum;
+      info.checksum_updated_due_to_version_mismatch = true;
+    }
+
     // The checksum of the reindexed ruleset should have been the same as the
-    // expected checksum obtained from prefs. If this is not the case, then
-    // there is some other issue (like the JSON rules file has been modified
-    // from the one used during installation or preferences are corrupted). But
-    // taking care of these is beyond our scope here, so simply signal a
-    // failure.
+    // expected checksum obtained from prefs, in all cases except when the
+    // ruleset version changes. If this is not the case, then there is some
+    // other issue (like the JSON rules file has been modified from the one used
+    // during installation or preferences are corrupted). But taking care of
+    // these is beyond our scope here, so simply signal a failure.
     bool reindexing_success =
         result.success &&
         info.expected_ruleset_checksum == result.ruleset_checksum;
@@ -315,6 +341,12 @@ void RulesMonitorService::OnExtensionUnloaded(
 void RulesMonitorService::OnRulesetLoaded(
     LoadRulesetInfo info,
     std::unique_ptr<RulesetMatcher> matcher) {
+  // Update the ruleset checksum if needed.
+  if (info.checksum_updated_due_to_version_mismatch) {
+    prefs_->SetDNRRulesetChecksum(info.extension->id(),
+                                  info.expected_ruleset_checksum);
+  }
+
   if (!matcher) {
     // The ruleset failed to load. Notify the user.
     warning_service_->AddWarnings(
@@ -328,6 +360,8 @@ void RulesMonitorService::OnRulesetLoaded(
     return;
 
   extensions_with_rulesets_.insert(info.extension->id());
+  for (auto& observer : observers_)
+    observer.OnRulesetLoaded();
 
   base::OnceClosure load_ruleset_on_io = base::BindOnce(
       &LoadRulesetOnIOThread, info.extension->id(), std::move(matcher),

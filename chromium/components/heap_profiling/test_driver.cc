@@ -12,8 +12,9 @@
 #include "base/json/json_reader.h"
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
+#include "base/sampling_heap_profiler/poisson_allocation_sampler.h"
 #include "base/stl_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/platform_thread.h"
 #include "base/trace_event/heap_profiler_event_filter.h"
 #include "base/values.h"
@@ -321,8 +322,8 @@ bool ValidateDump(base::Value* heaps_v2,
       LOG(WARNING) << "Allocation candidate (size:" << sizes_list[i].GetInt()
                    << " count:" << counts_list[i].GetInt() << ")";
     }
-    if (sizes_list[i].GetInt() == expected_alloc_size &&
-        counts_list[i].GetInt() == expected_alloc_count) {
+    if (counts_list[i].GetInt() == expected_alloc_count &&
+        sizes_list[i].GetInt() == expected_alloc_size) {
       browser_alloc_index = i;
       found_browser_alloc = true;
       break;
@@ -562,6 +563,9 @@ TestDriver::~TestDriver() {}
 bool TestDriver::RunTest(const Options& options) {
   options_ = options;
 
+  if (options_.should_sample)
+    base::PoissonAllocationSampler::Get()->SuppressRandomnessForTest(true);
+
   running_on_ui_thread_ =
       content::BrowserThread::CurrentlyOn(content::BrowserThread::UI);
 
@@ -572,8 +576,8 @@ bool TestDriver::RunTest(const Options& options) {
     } else {
       content::BrowserThread::PostTask(
           content::BrowserThread::UI, FROM_HERE,
-          base::Bind(&TestDriver::GetHasStartedOnUIThread,
-                     base::Unretained(this)));
+          base::BindOnce(&TestDriver::GetHasStartedOnUIThread,
+                         base::Unretained(this)));
       wait_for_ui_thread_.Wait();
     }
     if (has_started_) {
@@ -595,20 +599,20 @@ bool TestDriver::RunTest(const Options& options) {
   } else {
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&TestDriver::CheckOrStartProfilingOnUIThreadAndSignal,
-                   base::Unretained(this)));
+        base::BindOnce(&TestDriver::CheckOrStartProfilingOnUIThreadAndSignal,
+                       base::Unretained(this)));
     wait_for_ui_thread_.Wait();
     if (!initialization_success_)
       return false;
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&TestDriver::SetKeepSmallAllocationsOnUIThreadAndSignal,
-                   base::Unretained(this)));
+        base::BindOnce(&TestDriver::SetKeepSmallAllocationsOnUIThreadAndSignal,
+                       base::Unretained(this)));
     wait_for_ui_thread_.Wait();
     if (ShouldProfileRenderer()) {
       content::BrowserThread::PostTask(
           content::BrowserThread::UI, FROM_HERE,
-          base::Bind(
+          base::BindOnce(
               &TestDriver::
                   WaitForProfilingToStartForAllRenderersUIThreadAndSignal,
               base::Unretained(this)));
@@ -617,11 +621,13 @@ bool TestDriver::RunTest(const Options& options) {
     if (ShouldProfileBrowser()) {
       content::BrowserThread::PostTask(
           content::BrowserThread::UI, FROM_HERE,
-          base::Bind(&TestDriver::MakeTestAllocations, base::Unretained(this)));
+          base::BindOnce(&TestDriver::MakeTestAllocations,
+                         base::Unretained(this)));
     }
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&TestDriver::CollectResults, base::Unretained(this), false));
+        base::BindOnce(&TestDriver::CollectResults, base::Unretained(this),
+                       false));
     wait_for_ui_thread_.Wait();
   }
 
@@ -681,8 +687,8 @@ bool TestDriver::CheckOrStartProfilingOnUIThreadWithAsyncSignalling() {
     // has not yet been initialized. Wait for it.
     if (ShouldProfileBrowser()) {
       bool already_initialized = SetOnInitAllocatorShimCallbackForTesting(
-          base::Bind(&base::WaitableEvent::Signal,
-                     base::Unretained(&wait_for_ui_thread_)),
+          base::BindOnce(&base::WaitableEvent::Signal,
+                         base::Unretained(&wait_for_ui_thread_)),
           base::ThreadTaskRunnerHandle::Get());
       if (!already_initialized) {
         wait_for_profiling_to_start_ = true;
@@ -706,8 +712,8 @@ bool TestDriver::CheckOrStartProfilingOnUIThreadWithAsyncSignalling() {
   // start. Otherwise, wait for the Supervisor to start.
   if (ShouldProfileBrowser()) {
     SetOnInitAllocatorShimCallbackForTesting(
-        base::Bind(&base::WaitableEvent::Signal,
-                   base::Unretained(&wait_for_ui_thread_)),
+        base::BindOnce(&base::WaitableEvent::Signal,
+                       base::Unretained(&wait_for_ui_thread_)),
         base::ThreadTaskRunnerHandle::Get());
   } else {
     start_callback = base::BindOnce(&base::WaitableEvent::Signal,
@@ -846,8 +852,8 @@ void TestDriver::CollectResults(bool synchronous) {
   }
 
   Supervisor::GetInstance()->RequestTraceWithHeapDump(
-      base::Bind(&TestDriver::TraceFinished, base::Unretained(this),
-                 std::move(finish_tracing_closure)),
+      base::BindOnce(&TestDriver::TraceFinished, base::Unretained(this),
+                     std::move(finish_tracing_closure)),
       /* anonymize= */ true);
 
   if (synchronous)
@@ -865,8 +871,7 @@ bool TestDriver::ValidateBrowserAllocations(base::Value* dump_json) {
   base::Value* heaps_v2 =
       FindArgDump(base::Process::Current().Pid(), dump_json, "heaps_v2");
 
-  if (options_.mode != Mode::kAll && options_.mode != Mode::kBrowser &&
-      options_.mode != Mode::kMinimal) {
+  if (!ShouldProfileBrowser()) {
     if (heaps_v2) {
       LOG(ERROR) << "There should be no heap dump for the browser.";
       return false;
@@ -988,7 +993,8 @@ bool TestDriver::ValidateRendererAllocations(base::Value* dump_json) {
 
 bool TestDriver::ShouldProfileBrowser() {
   return options_.mode == Mode::kAll || options_.mode == Mode::kBrowser ||
-         options_.mode == Mode::kMinimal;
+         options_.mode == Mode::kMinimal ||
+         options_.mode == Mode::kUtilityAndBrowser;
 }
 
 bool TestDriver::ShouldProfileRenderer() {

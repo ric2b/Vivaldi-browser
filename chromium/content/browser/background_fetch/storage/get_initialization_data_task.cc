@@ -6,11 +6,13 @@
 
 #include "base/barrier_closure.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "content/browser/background_fetch/background_fetch.pb.h"
 #include "content/browser/background_fetch/background_fetch_data_manager.h"
+#include "content/browser/background_fetch/background_fetch_request_info.h"
 #include "content/browser/background_fetch/storage/database_helpers.h"
+#include "content/browser/background_fetch/storage/image_helpers.h"
 #include "content/browser/background_fetch/storage/mark_registration_for_deletion_task.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
@@ -69,26 +71,27 @@ class InitializationSubTask : public DatabaseTask {
 };
 
 // Fills the BackgroundFetchInitializationData with the most recent UI title.
-class GetTitleTask : public InitializationSubTask {
+class GetUIOptionsTask : public InitializationSubTask {
  public:
-  GetTitleTask(DatabaseTaskHost* host,
-               const SubTaskInit& sub_task_init,
-               base::OnceClosure done_closure)
+  GetUIOptionsTask(DatabaseTaskHost* host,
+                   const SubTaskInit& sub_task_init,
+                   base::OnceClosure done_closure)
       : InitializationSubTask(host, sub_task_init, std::move(done_closure)),
         weak_factory_(this) {}
 
-  ~GetTitleTask() override = default;
+  ~GetUIOptionsTask() override = default;
 
   void Start() override {
     service_worker_context()->GetRegistrationUserData(
         sub_task_init().service_worker_registration_id,
-        {TitleKey(sub_task_init().unique_id)},
-        base::BindOnce(&GetTitleTask::DidGetTitle, weak_factory_.GetWeakPtr()));
+        {UIOptionsKey(sub_task_init().unique_id)},
+        base::BindOnce(&GetUIOptionsTask::DidGetUIOptions,
+                       weak_factory_.GetWeakPtr()));
   }
 
  private:
-  void DidGetTitle(const std::vector<std::string>& data,
-                   blink::ServiceWorkerStatusCode status) {
+  void DidGetUIOptions(const std::vector<std::string>& data,
+                       blink::ServiceWorkerStatusCode status) {
     switch (ToDatabaseStatus(status)) {
       case DatabaseStatus::kFailed:
         FinishWithError(blink::mojom::BackgroundFetchError::STORAGE_ERROR);
@@ -98,12 +101,36 @@ class GetTitleTask : public InitializationSubTask {
         break;
     }
 
-    if (!data.empty())
-      sub_task_init().initialization_data->ui_title = data.front();
+    if (data.size() != 1u) {
+      FinishWithError(blink::mojom::BackgroundFetchError::STORAGE_ERROR);
+      return;
+    }
+
+    proto::BackgroundFetchUIOptions ui_options;
+    if (!ui_options.ParseFromString(data[0])) {
+      FinishWithError(blink::mojom::BackgroundFetchError::STORAGE_ERROR);
+      return;
+    }
+
+    if (!ui_options.title().empty())
+      sub_task_init().initialization_data->ui_title = ui_options.title();
+
+    if (!ui_options.icon().empty()) {
+      // Start an icon deserialization SubTask on another thread, then finish.
+      DeserializeIcon(std::unique_ptr<std::string>(ui_options.release_icon()),
+                      base::BindOnce(&GetUIOptionsTask::DidDeserializeIcon,
+                                     weak_factory_.GetWeakPtr()));
+    } else {
+      FinishWithError(blink::mojom::BackgroundFetchError::NONE);
+    }
+  }
+
+  void DidDeserializeIcon(SkBitmap icon) {
+    sub_task_init().initialization_data->icon = std::move(icon);
     FinishWithError(blink::mojom::BackgroundFetchError::NONE);
   }
 
-  base::WeakPtrFactory<GetTitleTask> weak_factory_;  // Keep as last.
+  base::WeakPtrFactory<GetUIOptionsTask> weak_factory_;  // Keep as last.
 };
 
 // Gets the number of completed fetches, the number of active fetches,
@@ -207,8 +234,16 @@ class GetRequestsTask : public InitializationSubTask {
         return;
       }
       DCHECK_EQ(sub_task_init().unique_id, active_request.unique_id());
-      sub_task_init().initialization_data->active_fetch_guids.push_back(
-          active_request.download_guid());
+
+      auto request_info = base::MakeRefCounted<BackgroundFetchRequestInfo>(
+          active_request.request_index(),
+          ServiceWorkerFetchRequest::ParseFromString(
+              active_request.serialized_request()));
+      request_info->SetDownloadGuid(active_request.download_guid());
+
+      sub_task_init().initialization_data->active_fetch_requests.push_back(
+          std::move(request_info));
+
       pending_requests_to_delete.push_back(PendingRequestKey(
           active_request.unique_id(), active_request.request_index()));
     }
@@ -241,48 +276,6 @@ class GetRequestsTask : public InitializationSubTask {
   base::WeakPtrFactory<GetRequestsTask> weak_factory_;  // Keep as last.
 
   DISALLOW_COPY_AND_ASSIGN(GetRequestsTask);
-};
-
-// Deserializes the icon and creates an SkBitmap from it.
-class DeserializeIconTask : public InitializationSubTask {
- public:
-  DeserializeIconTask(DatabaseTaskHost* host,
-                      const SubTaskInit& sub_task_init,
-                      base::OnceClosure done_closure,
-                      std::string* serialized_icon)
-      : InitializationSubTask(host, sub_task_init, std::move(done_closure)),
-        serialized_icon_(serialized_icon),
-        weak_factory_(this) {}
-
-  ~DeserializeIconTask() override = default;
-
-  void Start() override {
-    base::PostTaskWithTraitsAndReplyWithResult(
-        FROM_HERE,
-        {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN,
-         base::TaskPriority::BACKGROUND},
-        base::BindOnce(&DeserializeIcon, std::move(serialized_icon_)),
-        base::BindOnce(&DeserializeIconTask::StoreIcon,
-                       weak_factory_.GetWeakPtr()));
-  }
-
- private:
-  static SkBitmap DeserializeIcon(
-      std::unique_ptr<std::string> serialized_icon) {
-    return gfx::Image::CreateFrom1xPNGBytes(
-               reinterpret_cast<const unsigned char*>(serialized_icon->c_str()),
-               serialized_icon->size())
-        .AsBitmap();
-  }
-
-  void StoreIcon(SkBitmap icon) {
-    sub_task_init().initialization_data->icon = std::move(icon);
-    FinishWithError(blink::mojom::BackgroundFetchError::NONE);
-  }
-
-  std::unique_ptr<std::string> serialized_icon_;
-
-  base::WeakPtrFactory<DeserializeIconTask> weak_factory_;  // Keep as last.
 };
 
 // Fills the BackgroundFetchInitializationData with all the relevant information
@@ -382,18 +375,7 @@ class FillFromMetadataTask : public InitializationSubTask {
       }
     }
 
-    if (!metadata.icon().empty()) {
-      // Start an icon deserialization SubTask on another thread, then finish.
-      AddSubTask(std::make_unique<DeserializeIconTask>(
-          this, sub_task_init(),
-          base::BindOnce(&FillFromMetadataTask::FinishWithError,
-                         weak_factory_.GetWeakPtr(),
-                         blink::mojom::BackgroundFetchError::NONE),
-          metadata.release_icon()));
-    } else {
-      // Immediately finish.
-      FinishWithError(blink::mojom::BackgroundFetchError::NONE);
-    }
+    FinishWithError(blink::mojom::BackgroundFetchError::NONE);
   }
 
   base::WeakPtrFactory<FillFromMetadataTask> weak_factory_;  // Keep as last.
@@ -416,9 +398,9 @@ class FillBackgroundFetchInitializationDataTask : public InitializationSubTask {
   void Start() override {
     // We need 3 queries to get the initialization data. These are wrapped
     // in a BarrierClosure to avoid querying them serially.
-    // 1. Metadata (+ icon deserialization)
+    // 1. Metadata
     // 2. Request statuses and state sanitization
-    // 3. UI Title
+    // 3. UI Options (+ icon deserialization)
     base::RepeatingClosure barrier_closure = base::BarrierClosure(
         3u,
         base::BindOnce(
@@ -432,8 +414,8 @@ class FillBackgroundFetchInitializationDataTask : public InitializationSubTask {
                                                       barrier_closure));
     AddSubTask(std::make_unique<GetRequestsTask>(this, sub_task_init(),
                                                  barrier_closure));
-    AddSubTask(
-        std::make_unique<GetTitleTask>(this, sub_task_init(), barrier_closure));
+    AddSubTask(std::make_unique<GetUIOptionsTask>(this, sub_task_init(),
+                                                  barrier_closure));
   }
 
  private:
@@ -525,10 +507,23 @@ void GetInitializationDataTask::FinishWithError(
       AddDatabaseTask(std::make_unique<MarkRegistrationForDeletionTask>(
           data_manager(), data.second.registration_id, base::DoNothing()));
     }
+
+    if (data.second.error ==
+        blink::mojom::BackgroundFetchError::STORAGE_ERROR) {
+      // The subtasks only access the Service Worker storage, so if there is
+      // a storage error, that would be the cause.
+      SetStorageError(BackgroundFetchStorageError::kServiceWorkerStorageError);
+    }
   }
+
+  ReportStorageError();
 
   std::move(callback_).Run(error, std::move(results));
   Finished();  // Destroys |this|.
+}
+
+std::string GetInitializationDataTask::HistogramName() const {
+  return "GetInitializationDataTask";
 }
 
 }  // namespace background_fetch

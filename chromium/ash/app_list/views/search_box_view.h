@@ -22,6 +22,7 @@ namespace app_list {
 
 class AppListView;
 class AppListViewDelegate;
+class ContentsView;
 class SearchModel;
 
 // Subclass of search_box::SearchBoxViewBase. SearchBoxModel is its data model
@@ -45,12 +46,17 @@ class APP_LIST_EXPORT SearchBoxView : public search_box::SearchBoxViewBase,
   void UpdateModel(bool initiated_by_user) override;
   void UpdateSearchIcon() override;
   void UpdateSearchBoxBorder() override;
+  void SetupAssistantButton() override;
   void SetupCloseButton() override;
   void SetupBackButton() override;
   void RecordSearchBoxActivationHistogram(ui::EventType event_type) override;
 
   // Overridden from views::View:
-  void OnKeyEvent(ui::KeyEvent* evetn) override;
+  void OnKeyEvent(ui::KeyEvent* event) override;
+  bool OnMouseWheel(const ui::MouseWheelEvent& event) override;
+
+  // Overridden from views::ButtonListener:
+  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   // Updates the search box's background corner radius and color based on the
   // state of AppListModel.
@@ -72,8 +78,19 @@ class APP_LIST_EXPORT SearchBoxView : public search_box::SearchBoxViewBase,
   // Updates the opacity of the searchbox.
   void UpdateOpacity();
 
+  // Shows Zero State suggestions.
+  void ShowZeroStateSuggestions();
+
   // Called when the wallpaper colors change.
   void OnWallpaperColorsChanged();
+
+  // Sets the autocomplete text if autocomplete conditions are met.
+  void ProcessAutocomplete();
+
+  void set_contents_view(ContentsView* contents_view) {
+    contents_view_ = contents_view;
+  }
+  ContentsView* contents_view() { return contents_view_; }
 
  private:
   // Gets the wallpaper prominent colors.
@@ -84,6 +101,19 @@ class APP_LIST_EXPORT SearchBoxView : public search_box::SearchBoxViewBase,
   // calling |AppListViewDelegate::GetWallpaperProminentColors|.
   void OnWallpaperProminentColorsReceived(
       const std::vector<SkColor>& prominent_colors);
+
+  // Notifies SearchBoxViewDelegate that the autocomplete text is valid.
+  void AcceptAutocompleteText();
+
+  // Accepts one character in the autocomplete text and fires query.
+  void AcceptOneCharInAutocompleteText();
+
+  // Removes all autocomplete text.
+  void ClearAutocompleteText();
+
+  // After verifying autocomplete text is valid, sets the current searchbox
+  // text to the autocomplete text and sets the text highlight.
+  void SetAutocompleteText(const base::string16& autocomplete_text);
 
   // Overridden from views::TextfieldController:
   void ContentsChanged(views::Textfield* sender,
@@ -98,12 +128,26 @@ class APP_LIST_EXPORT SearchBoxView : public search_box::SearchBoxViewBase,
   void SelectionModelChanged() override;
   void Update() override;
   void SearchEngineChanged() override;
+  void ShowAssistantChanged() override;
+
+  // The range of highlighted text for autocomplete.
+  gfx::Range highlight_range_;
+
+  // The key most recently pressed.
+  ui::KeyboardCode last_key_pressed_ = ui::VKEY_UNKNOWN;
 
   AppListViewDelegate* view_delegate_;   // Not owned.
   SearchModel* search_model_ = nullptr;  // Owned by the profile-keyed service.
 
   // Owned by views hierarchy.
   app_list::AppListView* app_list_view_;
+  ContentsView* contents_view_ = nullptr;
+
+  // True if new style launcher feature is enabled.
+  const bool is_new_style_launcher_enabled_;
+
+  // True if app list search autocomplete is enabled.
+  const bool is_app_list_search_autocomplete_enabled_;
 
   base::WeakPtrFactory<SearchBoxView> weak_ptr_factory_;
 

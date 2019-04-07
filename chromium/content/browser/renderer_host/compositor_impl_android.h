@@ -25,8 +25,8 @@
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "gpu/vulkan/buildflags.h"
-#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "services/viz/privileged/interfaces/compositing/display_private.mojom.h"
+#include "services/ws/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/android/resources/resource_manager_impl.h"
 #include "ui/android/resources/ui_resource_provider.h"
@@ -148,6 +148,7 @@ class CONTENT_EXPORT CompositorImpl
       ui::CompositorLockClient* client,
       base::TimeDelta timeout) override;
   bool IsDrawingFirstVisibleFrame() const override;
+  void SetVSyncPaused(bool paused) override;
 
   // viz::HostFrameSinkClient implementation.
   void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override {
@@ -189,9 +190,16 @@ class CONTENT_EXPORT CompositorImpl
   // returns an empty surface.
   viz::LocalSurfaceId GenerateLocalSurfaceId() const;
 
+  // Tears down the display for both Viz and non-Viz, unregistering the root
+  // frame sink ID in the process.
+  void TearDownDisplayAndUnregisterRootFrameSink();
+
+  // Registers the root frame sink ID.
+  void RegisterRootFrameSink();
+
   // Viz specific functions:
   void InitializeVizLayerTreeFrameSink(
-      scoped_refptr<ui::ContextProviderCommandBuffer> context_provider);
+      scoped_refptr<ws::ContextProviderCommandBuffer> context_provider);
 
   viz::FrameSinkId frame_sink_id_;
 
@@ -240,10 +248,6 @@ class CONTENT_EXPORT CompositorImpl
   ui::CompositorLockManager lock_manager_;
   bool has_submitted_frame_since_became_visible_ = false;
 
-  // A task which runs cleanup tasks on low-end Android after a delay. Enqueued
-  // when we hide, canceled when we're shown.
-  base::CancelableOnceClosure low_end_background_cleanup_task_;
-
   // If true, we are using surface synchronization.
   const bool enable_surface_synchronization_;
 
@@ -253,6 +257,7 @@ class CONTENT_EXPORT CompositorImpl
   // Viz-specific members for communicating with the display.
   viz::mojom::DisplayPrivateAssociatedPtr display_private_;
   std::unique_ptr<viz::HostDisplayClient> display_client_;
+  bool vsync_paused_ = false;
 
   // Test-only. Called when we are notified of a swap.
   base::RepeatingCallback<void(const gfx::Size&)>

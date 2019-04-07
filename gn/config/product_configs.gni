@@ -1,6 +1,10 @@
 # Update default configurations
 
-vivaldi_compiler_configs = [ "//vivaldi/gn/config:features" ]
+vivaldi_compiler_configs = [
+  "//vivaldi/gn/config:features",
+  "//vivaldi/gn/config:extra_cfi_flags",
+]
+
 vivaldi_executable_configs = [ "//vivaldi/gn/config:disable_new_dtags" ]
 
 default_compiler_configs += vivaldi_compiler_configs

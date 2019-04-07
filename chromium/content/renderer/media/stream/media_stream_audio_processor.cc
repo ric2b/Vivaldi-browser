@@ -23,12 +23,13 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/content_switches.h"
 #include "content/renderer/media/webrtc/webrtc_audio_device_impl.h"
 #include "media/base/audio_converter.h"
 #include "media/base/audio_fifo.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
+#include "media/webrtc/echo_information.h"
+#include "media/webrtc/webrtc_switches.h"
 #include "third_party/webrtc/api/audio/echo_canceller3_factory.h"
 #include "third_party/webrtc/api/mediaconstraintsinterface.h"
 #include "third_party/webrtc/modules/audio_processing/include/audio_processing_statistics.h"
@@ -523,9 +524,9 @@ void MediaStreamAudioProcessor::OnRenderThreadChanged() {
 }
 
 void MediaStreamAudioProcessor::GetStats(AudioProcessorStats* stats) {
-  stats->typing_noise_detected =
-      (base::subtle::Acquire_Load(&typing_detected_) != false);
-  GetAudioProcessingStats(audio_processing_.get(), stats);
+  // This is the old GetStats interface from webrtc::AudioProcessorInterface.
+  // It should not be in use by Chrome any longer.
+  NOTREACHED();
 }
 
 webrtc::AudioProcessorInterface::AudioProcessorStatistics
@@ -589,8 +590,12 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
   // If the experimental AGC is enabled, check for overridden config params.
   if (properties.goog_experimental_auto_gain_control) {
     auto startup_min_volume = GetStartupMinVolumeForAgc();
-    config.Set<webrtc::ExperimentalAgc>(
-        new webrtc::ExperimentalAgc(true, startup_min_volume.value_or(0)));
+    auto* experimental_agc =
+        new webrtc::ExperimentalAgc(true, startup_min_volume.value_or(0));
+    experimental_agc->digital_adaptive_disabled =
+        base::FeatureList::IsEnabled(features::kWebRtcHybridAgc);
+
+    config.Set<webrtc::ExperimentalAgc>(experimental_agc);
   }
 
   // Create and configure the webrtc::AudioProcessing.
@@ -612,8 +617,6 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
   audio_processing_.reset(ap_builder.Create(config));
 
   // Enable the audio processing components.
-  webrtc::AudioProcessing::Config apm_config;
-
   if (playout_data_source_) {
     playout_data_source_->AddPlayoutSink(this);
   }
@@ -626,14 +629,12 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
     // updated.
     if (properties.echo_cancellation_type !=
         EchoCancellationType::kEchoCancellationAec3) {
-      echo_information_ = std::make_unique<EchoInformation>();
+      echo_information_ = std::make_unique<media::EchoInformation>();
     }
   }
 
   if (properties.goog_noise_suppression)
     EnableNoiseSuppression(audio_processing_.get(), NoiseSuppression::kHigh);
-
-  apm_config.high_pass_filter.enabled = properties.goog_highpass_filter;
 
   if (goog_typing_detection) {
     // TODO(xians): Remove this |typing_detector_| after the typing suppression
@@ -645,6 +646,14 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
   if (properties.goog_auto_gain_control)
     EnableAutomaticGainControl(audio_processing_.get());
 
+  webrtc::AudioProcessing::Config apm_config = audio_processing_->GetConfig();
+  apm_config.high_pass_filter.enabled = properties.goog_highpass_filter;
+
+  if (properties.goog_experimental_auto_gain_control) {
+    apm_config.gain_controller2.enabled =
+        base::FeatureList::IsEnabled(features::kWebRtcHybridAgc);
+    apm_config.gain_controller2.fixed_gain_db = 0.f;
+  }
   audio_processing_->ApplyConfig(apm_config);
 
   RecordProcessingState(AUDIO_PROCESSING_ENABLED);
@@ -743,9 +752,10 @@ int MediaStreamAudioProcessor::ProcessData(const float* const* process_ptrs,
                render_delay_ms);
 
   int total_delay_ms =  capture_delay_ms + render_delay_ms;
-  if (total_delay_ms > 300) {
+  if (total_delay_ms > 300 && large_delay_log_count_ < 10) {
     LOG(WARNING) << "Large audio delay, capture delay: " << capture_delay_ms
                  << "ms; render delay: " << render_delay_ms << "ms";
+    ++large_delay_log_count_;
   }
 
   webrtc::AudioProcessing* ap = audio_processing_.get();
@@ -777,7 +787,8 @@ int MediaStreamAudioProcessor::ProcessData(const float* const* process_ptrs,
 
   main_thread_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&MediaStreamAudioProcessor::UpdateAecStats, this));
+      base::BindOnce(&MediaStreamAudioProcessor::UpdateAecStats,
+                     rtc::scoped_refptr<MediaStreamAudioProcessor>(this)));
 
   // Return 0 if the volume hasn't been changed, and otherwise the new volume.
   return (agc->stream_analog_level() == volume) ?

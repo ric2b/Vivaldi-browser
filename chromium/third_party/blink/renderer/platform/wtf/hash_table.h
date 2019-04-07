@@ -607,6 +607,8 @@ class IdentityHashTranslator {
 template <typename HashTableType, typename ValueType>
 struct HashTableAddResult final {
   STACK_ALLOCATED();
+
+ public:
   HashTableAddResult(const HashTableType* container,
                      ValueType* stored_value,
                      bool is_new_entry)
@@ -826,6 +828,8 @@ class HashTable final {
   ValueType* Lookup(const T&);
   template <typename HashTranslator, typename T>
   const ValueType* Lookup(const T&) const;
+
+  ValueType** GetBufferSlot() { return &table_; }
 
   template <typename VisitorDispatcher, typename A = Allocator>
   std::enable_if_t<A::kIsGarbageCollected> Trace(VisitorDispatcher);
@@ -1665,10 +1669,7 @@ void HashTable<Key,
       }
     }
   }
-  // Notify if this is a weak table since immediately freeing a weak hash table
-  // backing may cause a use-after-free when the weak callback is called.
-  Allocator::FreeHashTableBacking(table,
-                                  Traits::kWeakHandlingFlag == kWeakHandling);
+  Allocator::FreeHashTableBacking(table);
 }
 
 template <typename Key,
@@ -2123,9 +2124,6 @@ template <typename VisitorDispatcher, typename A>
 std::enable_if_t<A::kIsGarbageCollected>
 HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::
     Trace(VisitorDispatcher visitor) {
-  if (!table_)
-    return;
-
   if (Traits::kWeakHandlingFlag == kNoWeakHandling) {
     // Strong HashTable.
     DCHECK(IsTraceableInCollectionTrait<Traits>::value);
@@ -2166,6 +2164,8 @@ HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::
 template <typename HashTableType, typename Traits>
 struct HashTableConstIteratorAdapter {
   STACK_ALLOCATED();
+
+ public:
   HashTableConstIteratorAdapter() = default;
   HashTableConstIteratorAdapter(
       const typename HashTableType::const_iterator& impl)

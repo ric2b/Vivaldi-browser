@@ -12,7 +12,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/platform_thread.h"
 #include "base/values.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
@@ -62,6 +62,10 @@ IndexedDBInternalsUI::IndexedDBInternalsUI(WebUI* web_ui)
   web_ui->RegisterMessageCallback(
       "forceClose", base::BindRepeating(&IndexedDBInternalsUI::ForceCloseOrigin,
                                         base::Unretained(this)));
+  web_ui->RegisterMessageCallback(
+      "forceSchemaDowngrade",
+      base::BindRepeating(&IndexedDBInternalsUI::ForceSchemaDowngradeOrigin,
+                          base::Unretained(this)));
 
   WebUIDataSource* source =
       WebUIDataSource::Create(kChromeUIIndexedDBInternalsHost);
@@ -210,6 +214,23 @@ void IndexedDBInternalsUI::ForceCloseOrigin(const base::ListValue* args) {
                      base::Unretained(this), partition_path, context, origin));
 }
 
+void IndexedDBInternalsUI::ForceSchemaDowngradeOrigin(
+    const base::ListValue* args) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  base::FilePath partition_path;
+  Origin origin;
+  scoped_refptr<IndexedDBContextImpl> context;
+  if (!GetOriginData(args, &partition_path, &origin, &context))
+    return;
+
+  context->TaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &IndexedDBInternalsUI::ForceSchemaDowngradeOriginOnIndexedDBThread,
+          base::Unretained(this), partition_path, context, origin));
+}
+
 void IndexedDBInternalsUI::DownloadOriginDataOnIndexedDBThread(
     const base::FilePath& partition_path,
     const scoped_refptr<IndexedDBContextImpl> context,
@@ -260,10 +281,33 @@ void IndexedDBInternalsUI::ForceCloseOriginOnIndexedDBThread(
   context->ForceClose(origin, IndexedDBContextImpl::FORCE_CLOSE_INTERNALS_PAGE);
   size_t connection_count = context->GetConnectionCount(origin);
 
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::BindOnce(&IndexedDBInternalsUI::OnForcedClose,
-                                         base::Unretained(this), partition_path,
-                                         origin, connection_count));
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&IndexedDBInternalsUI::OnForcedSchemaDowngrade,
+                     base::Unretained(this), partition_path, origin,
+                     connection_count));
+}
+
+void IndexedDBInternalsUI::ForceSchemaDowngradeOriginOnIndexedDBThread(
+    const base::FilePath& partition_path,
+    const scoped_refptr<IndexedDBContextImpl> context,
+    const Origin& origin) {
+  DCHECK(context->TaskRunner()->RunsTasksInCurrentSequence());
+
+  // Make sure the database hasn't been deleted since the page was loaded.
+  if (!context->HasOrigin(origin))
+    return;
+
+  context->ForceSchemaDowngrade(origin);
+  context->ForceClose(
+      origin, IndexedDBContextImpl::FORCE_SCHEMA_DOWNGRADE_INTERNALS_PAGE);
+  size_t connection_count = context->GetConnectionCount(origin);
+
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&IndexedDBInternalsUI::OnForcedSchemaDowngrade,
+                     base::Unretained(this), partition_path, origin,
+                     connection_count));
 }
 
 void IndexedDBInternalsUI::OnForcedClose(const base::FilePath& partition_path,
@@ -271,6 +315,16 @@ void IndexedDBInternalsUI::OnForcedClose(const base::FilePath& partition_path,
                                          size_t connection_count) {
   web_ui()->CallJavascriptFunctionUnsafe(
       "indexeddb.onForcedClose", base::Value(partition_path.value()),
+      base::Value(origin.Serialize()),
+      base::Value(static_cast<double>(connection_count)));
+}
+
+void IndexedDBInternalsUI::OnForcedSchemaDowngrade(
+    const base::FilePath& partition_path,
+    const Origin& origin,
+    size_t connection_count) {
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "indexeddb.onForcedSchemaDowngrade", base::Value(partition_path.value()),
       base::Value(origin.Serialize()),
       base::Value(static_cast<double>(connection_count)));
 }
@@ -362,7 +416,7 @@ void FileDeleter::OnDownloadUpdated(download::DownloadItem* item) {
 
 FileDeleter::~FileDeleter() {
   base::PostTaskWithTraits(FROM_HERE,
-                           {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                           {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                             base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
                            base::BindOnce(base::IgnoreResult(&base::DeleteFile),
                                           std::move(temp_dir_), true));

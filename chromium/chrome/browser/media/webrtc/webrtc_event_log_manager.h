@@ -1,4 +1,4 @@
-// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,8 @@
 
 #include <map>
 #include <memory>
-#include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/containers/flat_set.h"
@@ -20,13 +20,19 @@
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager_common.h"
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager_local.h"
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager_remote.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/upload_list/upload_list.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/webrtc_event_logger.h"
+
+class WebRTCInternalsIntegrationBrowserTest;
 
 namespace content {
 class BrowserContext;
 class NetworkConnectionTracker;
 };
+
+namespace webrtc_event_logging {
 
 // This is a singleton class running in the browser UI thread (ownership of
 // the only instance lies in BrowserContext). It is in charge of writing WebRTC
@@ -69,13 +75,20 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
   // if it was constructed and was not yet destroyed; nullptr otherwise.
   static WebRtcEventLogManager* GetInstance();
 
+  // Given a BrowserContext, return the path to the directory where its
+  // remote-bound event logs are kept.
+  // Since incognito sessions don't have such a directory, an empty
+  // base::FilePath will be returned for them.
+  static base::FilePath GetRemoteBoundWebRtcEventLogsDir(
+      content::BrowserContext* browser_context);
+
   ~WebRtcEventLogManager() override;
 
-  void EnableForBrowserContext(const content::BrowserContext* browser_context,
-                               base::OnceClosure reply) override;
+  void EnableForBrowserContext(content::BrowserContext* browser_context,
+                               base::OnceClosure reply);
 
-  void DisableForBrowserContext(const content::BrowserContext* browser_context,
-                                base::OnceClosure reply) override;
+  void DisableForBrowserContext(content::BrowserContext* browser_context,
+                                base::OnceClosure reply);
 
   void PeerConnectionAdded(int render_process_id,
                            int lid,  // Renderer-local PeerConnection ID.
@@ -119,6 +132,7 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
       int render_process_id,
       const std::string& peer_connection_id,
       size_t max_file_size_bytes,
+      size_t web_app_id,
       base::OnceCallback<void(bool, const std::string&, const std::string&)>
           reply);
 
@@ -131,6 +145,19 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
       const base::Time& delete_begin,
       const base::Time& delete_end,
       base::OnceClosure reply);
+
+  // Get the logging history (relevant only to remote-bound logs). This includes
+  // information such as when logs were captured, when they were uploaded,
+  // and what their ID in the remote server was.
+  // Must be called on the UI thread.
+  // The results to the query are posted using |reply| back to the UI thread.
+  // If |browser_context_id| is not the ID a profile for which remote-bound
+  // logging is enabled, an empty list is returned.
+  // The returned vector is sorted by capture time in ascending order.
+  void GetHistory(
+      BrowserContextId browser_context_id,
+      base::OnceCallback<void(const std::vector<UploadList::UploadInfo>&)>
+          reply);
 
   // Set (or unset) an observer that will be informed whenever a local log file
   // is started/stopped. The observer needs to be able to either run from
@@ -153,8 +180,8 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
                              base::OnceClosure reply);
 
  private:
-  friend class SigninManagerAndroidTest;       // Calls *ForTesting() methods.
-  friend class WebRtcEventLogManagerTestBase;  // Calls *ForTesting() methods.
+  friend class WebRtcEventLogManagerTestBase;
+  friend class ::WebRTCInternalsIntegrationBrowserTest;
 
   using PeerConnectionKey = WebRtcEventLogPeerConnectionKey;
 
@@ -169,8 +196,12 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
 
   WebRtcEventLogManager();
 
-  // Checks whether remote-bound logging is enabled.
-  bool IsRemoteLoggingEnabled() const;
+  bool IsRemoteLoggingAllowedForBrowserContext(
+      content::BrowserContext* browser_context) const;
+
+  // Determines the exact subclass of LogFileWriter::Factory to be used for
+  // producing remote-bound logs.
+  std::unique_ptr<LogFileWriter::Factory> CreateRemoteLogFileWriterFactory();
 
   // RenderProcessHostObserver implementation.
   void RenderProcessExited(
@@ -195,14 +226,38 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
   void OnLoggingTargetStarted(LoggingTarget target, PeerConnectionKey key);
   void OnLoggingTargetStopped(LoggingTarget target, PeerConnectionKey key);
 
-  void EnableForBrowserContextInternal(
+  void StartListeningForPrefChangeForBrowserContext(
+      content::BrowserContext* browser_context);
+  void StopListeningForPrefChangeForBrowserContext(
+      content::BrowserContext* browser_context);
+
+  void OnPrefChange(content::BrowserContext* browser_context);
+
+  // network_connection_tracker() is not available during instantiation;
+  // we get it when the first profile is loaded, which is also the earliest
+  // time when it could be needed.
+  // The LogFileWriter::Factory is similarly deferred, but for a different
+  // reason - it makes it easier to allow unit tests to inject their own.
+  // OnFirstBrowserContextLoaded() is on the UI thread.
+  // OnFirstBrowserContextLoadedInternal() is the task sent to |task_runner_|.
+  void OnFirstBrowserContextLoaded();
+  void OnFirstBrowserContextLoadedInternal(
+      network::NetworkConnectionTracker* network_connection_tracker,
+      std::unique_ptr<LogFileWriter::Factory> log_file_writer_factory);
+
+  void EnableRemoteBoundLoggingForBrowserContext(
       BrowserContextId browser_context_id,
       const base::FilePath& browser_context_dir,
-      content::NetworkConnectionTracker* network_connection_tracker,
-      net::URLRequestContextGetter* context_getter,
       base::OnceClosure reply);
-  void DisableForBrowserContextInternal(BrowserContextId browser_context_id,
-                                        base::OnceClosure reply);
+
+  void DisableRemoteBoundLoggingForBrowserContext(
+      BrowserContextId browser_context_id,
+      base::OnceClosure reply);
+
+  void RemovePendingRemoteBoundLogsForNotEnabledBrowserContext(
+      BrowserContextId browser_context_id,
+      const base::FilePath& browser_context_dir,
+      base::OnceClosure reply);
 
   void PeerConnectionAddedInternal(PeerConnectionKey key,
                                    const std::string& peer_connection_id,
@@ -217,7 +272,6 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
 
   void OnWebRtcEventLogWriteInternal(
       PeerConnectionKey key,
-      bool remote_logging_allowed,
       const std::string& message,
       base::OnceCallback<void(std::pair<bool, bool>)> reply);
 
@@ -227,12 +281,18 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
       const std::string& peer_connection_id,
       const base::FilePath& browser_context_dir,
       size_t max_file_size_bytes,
+      size_t web_app_id,
       base::OnceCallback<void(bool, const std::string&, const std::string&)>
           reply);
 
   void ClearCacheForBrowserContextInternal(BrowserContextId browser_context_id,
                                            const base::Time& delete_begin,
                                            const base::Time& delete_end);
+
+  void GetHistoryInternal(
+      BrowserContextId browser_context_id,
+      base::OnceCallback<void(const std::vector<UploadList::UploadInfo>&)>
+          reply);
 
   void RenderProcessExitedInternal(int render_process_id);
 
@@ -260,6 +320,13 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
       std::unique_ptr<WebRtcEventLogUploader::Factory> uploader_factory,
       base::OnceClosure reply);
 
+  // Sets a LogFileWriter factory for remote-bound files.
+  // Only usable in tests.
+  // Must be called before the first browser context is enabled.
+  // Effective immediately.
+  void SetRemoteLogFileWriterFactoryForTesting(
+      std::unique_ptr<LogFileWriter::Factory> factory);
+
   // It is not always feasible to check in unit tests that uploads do not occur
   // at a certain time, because that's (sometimes) racy with the event that
   // suppresses the upload. We therefore allow unit tests to glimpse into the
@@ -271,9 +338,22 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
   // TODO(crbug.com/775415): Remove this and use PostNullTaskForTesting instead.
   scoped_refptr<base::SequencedTaskRunner>& GetTaskRunnerForTesting();
 
-  void PostNullTaskForTesting(base::OnceClosure reply) override;
+  void PostNullTaskForTesting(base::OnceClosure reply);
+
+  // Documented in WebRtcRemoteEventLogManager.
+  void ShutDownForTesting(base::OnceClosure reply);
 
   static WebRtcEventLogManager* g_webrtc_event_log_manager;
+
+  // The main logic will run sequentially on this runner, on which blocking
+  // tasks are allowed.
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
+
+  // Indicates whether remote-bound logging is generally allowed, although
+  // possibly not for all profiles. This makes it possible for remote-bound to
+  // be disabled through Finch.
+  // TODO(crbug.com/775415): Remove this kill-switch.
+  const bool remote_logging_feature_enabled_;
 
   // Observer which will be informed whenever a local log file is started or
   // stopped. Its callbacks are called synchronously from |task_runner_|,
@@ -290,15 +370,18 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
   WebRtcLocalEventLogManager local_logs_manager_;
 
   // Manages remote-bound logs - logs which will be sent to a remote server.
-  // This is only possible when a command line flag is present.
-  // TODO(eladalon): Remove the command-line flag and the unique_ptr.
-  // https://crbug.com/775415
-  std::unique_ptr<WebRtcRemoteEventLogManager> remote_logs_manager_;
+  // This is only possible when the appropriate Chrome policy is configured.
+  WebRtcRemoteEventLogManager remote_logs_manager_;
+
+  // Each loaded BrowserContext is mapped to a PrefChangeRegistrar, which keeps
+  // us informed about preference changes, thereby allowing as to support
+  // dynamic refresh.
+  std::map<BrowserContextId, PrefChangeRegistrar> pref_change_registrars_;
 
   // This keeps track of which peer connections have event logging turned on
   // in WebRTC, and for which client(s).
   std::map<PeerConnectionKey, LoggingTargetBitmap>
-      peer_connections_with_event_logging_enabled_;
+      peer_connections_with_event_logging_enabled_in_webrtc_;
 
   // The set of RenderProcessHosts with which the manager is registered for
   // observation. Allows us to register for each RPH only once, and get notified
@@ -316,11 +399,14 @@ class WebRtcEventLogManager final : public content::RenderProcessHostObserver,
   // This member must only be accessed on the UI thread.
   bool first_browser_context_initializations_done_;
 
-  // The main logic will run sequentially on this runner, on which blocking
-  // tasks are allowed.
-  scoped_refptr<base::SequencedTaskRunner> task_runner_;
+  // May only be set for tests, in which case, it will be passed to
+  // |remote_logs_manager_| when (and if) produced.
+  std::unique_ptr<LogFileWriter::Factory>
+      remote_log_file_writer_factory_for_testing_;
 
   DISALLOW_COPY_AND_ASSIGN(WebRtcEventLogManager);
 };
+
+}  // namespace webrtc_event_logging
 
 #endif  // CHROME_BROWSER_MEDIA_WEBRTC_WEBRTC_EVENT_LOG_MANAGER_H_

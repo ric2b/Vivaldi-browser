@@ -16,6 +16,9 @@
 #include "media/video/mock_gpu_video_accelerator_factories.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
+using ::testing::_;
+using ::testing::AtLeast;
+
 namespace media {
 
 namespace {
@@ -77,6 +80,8 @@ class GpuMemoryBufferVideoFramePoolTest : public ::testing::Test {
         new base::ThreadTaskRunnerHandle(media_task_runner_));
     mock_gpu_factories_.reset(
         new MockGpuVideoAcceleratorFactories(gles2_.get()));
+    EXPECT_CALL(*mock_gpu_factories_.get(), SignalSyncToken(_, _))
+        .Times(AtLeast(0));
     gpu_memory_buffer_pool_.reset(new GpuMemoryBufferVideoFramePool(
         media_task_runner_, copy_task_runner_.get(),
         mock_gpu_factories_.get()));
@@ -102,8 +107,8 @@ class GpuMemoryBufferVideoFramePoolTest : public ::testing::Test {
     const int kDimension = 10;
     // Data buffers are overdimensioned to acommodate up to 16bpc samples.
     static uint8_t y_data[2 * kDimension * kDimension] = {0};
-    static uint8_t u_data[2 * kDimension * kDimension / 2] = {0};
-    static uint8_t v_data[2 * kDimension * kDimension / 2] = {0};
+    static uint8_t u_data[2 * kDimension * kDimension / 4] = {0};
+    static uint8_t v_data[2 * kDimension * kDimension / 4] = {0};
 
     const VideoPixelFormat format =
         (bit_depth > 8) ? PIXEL_FORMAT_YUV420P10 : PIXEL_FORMAT_I420;
@@ -124,6 +129,35 @@ class GpuMemoryBufferVideoFramePoolTest : public ::testing::Test {
         u_data,                                        // u_data
         v_data,                                        // v_data
         base::TimeDelta());                            // timestamp
+    EXPECT_TRUE(video_frame);
+    return video_frame;
+  }
+
+  static scoped_refptr<VideoFrame> CreateTestYUVAVideoFrame(int dimension) {
+    const int kDimension = 10;
+    static uint8_t y_data[kDimension * kDimension] = {0};
+    static uint8_t u_data[kDimension * kDimension / 4] = {0};
+    static uint8_t v_data[kDimension * kDimension / 4] = {0};
+    static uint8_t a_data[kDimension * kDimension] = {0};
+
+    constexpr VideoPixelFormat format = PIXEL_FORMAT_I420A;
+    DCHECK_LE(dimension, kDimension);
+    const gfx::Size size(dimension, dimension);
+
+    scoped_refptr<VideoFrame> video_frame =
+        VideoFrame::WrapExternalYuvaData(format,              // format
+                                         size,                // coded_size
+                                         gfx::Rect(size),     // visible_rect
+                                         size,                // natural_size
+                                         size.width(),        // y_stride
+                                         size.width() / 2,    // u_stride
+                                         size.width() / 2,    // v_stride
+                                         size.width(),        // a_stride
+                                         y_data,              // y_data
+                                         u_data,              // u_data
+                                         v_data,              // v_data
+                                         a_data,              // a_data
+                                         base::TimeDelta());  // timestamp
     EXPECT_TRUE(video_frame);
     return video_frame;
   }
@@ -416,6 +450,24 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareXB30Frame) {
       media::VideoFrameMetadata::READ_LOCK_FENCES_ENABLED));
 }
 
+TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareRGBAFrame) {
+  scoped_refptr<VideoFrame> software_frame = CreateTestYUVAVideoFrame(10);
+  scoped_refptr<VideoFrame> frame;
+  mock_gpu_factories_->SetVideoFrameOutputFormat(
+      media::GpuVideoAcceleratorFactories::OutputFormat::RGBA);
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::BindOnce(MaybeCreateHardwareFrameCallback, &frame));
+
+  RunUntilIdle();
+
+  EXPECT_NE(software_frame.get(), frame.get());
+  EXPECT_EQ(PIXEL_FORMAT_RGB32, frame->format());
+  EXPECT_EQ(1u, frame->NumTextures());
+  EXPECT_EQ(1u, gles2_->gen_textures_count());
+  EXPECT_TRUE(frame->metadata()->IsTrue(
+      media::VideoFrameMetadata::READ_LOCK_FENCES_ENABLED));
+}
+
 TEST_F(GpuMemoryBufferVideoFramePoolTest, PreservesMetadata) {
   scoped_refptr<VideoFrame> software_frame = CreateTestYUVVideoFrame(10);
   software_frame->metadata()->SetBoolean(
@@ -627,6 +679,37 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest, AbortCopies) {
   EXPECT_EQ(0u, copy_task_runner_->NumPendingTasks());
   RunUntilIdle();
   ASSERT_FALSE(frame_2);
+}
+
+// Tests that an I420 VideoFrame after an I420A is ignored, i.e. passed through.
+// See e.g. https://crbug.com/875158.
+TEST_F(GpuMemoryBufferVideoFramePoolTest, VideoFrameChangesPixelFormat) {
+  scoped_refptr<VideoFrame> software_frame_1 = CreateTestYUVAVideoFrame(10);
+  scoped_refptr<VideoFrame> frame_1;
+  mock_gpu_factories_->SetVideoFrameOutputFormat(
+      media::GpuVideoAcceleratorFactories::OutputFormat::RGBA);
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame_1,
+      base::BindOnce(MaybeCreateHardwareFrameCallback, &frame_1));
+  RunUntilIdle();
+
+  EXPECT_NE(software_frame_1.get(), frame_1.get());
+  EXPECT_EQ(PIXEL_FORMAT_RGB32, frame_1->format());
+  EXPECT_EQ(1u, frame_1->NumTextures());
+  EXPECT_EQ(1u, gles2_->gen_textures_count());
+  EXPECT_TRUE(frame_1->metadata()->IsTrue(
+      media::VideoFrameMetadata::READ_LOCK_FENCES_ENABLED));
+
+  scoped_refptr<VideoFrame> software_frame_2 = CreateTestYUVVideoFrame(10);
+  mock_gpu_factories_->SetVideoFrameOutputFormat(
+      media::GpuVideoAcceleratorFactories::OutputFormat::I420);
+  scoped_refptr<VideoFrame> frame_2;
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame_2,
+      base::BindOnce(MaybeCreateHardwareFrameCallback, &frame_2));
+  RunUntilIdle();
+
+  EXPECT_EQ(software_frame_2.get(), frame_2.get());
 }
 
 }  // namespace media

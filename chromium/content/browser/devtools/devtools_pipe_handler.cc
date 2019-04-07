@@ -20,7 +20,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
@@ -209,7 +209,7 @@ void DevToolsPipeHandler::Shutdown() {
   // If there is no write thread, only take care of the read thread.
   if (!write_thread_) {
     base::PostTaskWithTraits(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
         base::BindOnce([](base::Thread* rthread) { delete rthread; },
                        read_thread_.release()));
     return;
@@ -236,7 +236,7 @@ void DevToolsPipeHandler::Shutdown() {
 
   // Post background task that would join and destroy the threads.
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(
           [](base::Thread* rthread, base::Thread* wthread) {
             delete rthread;

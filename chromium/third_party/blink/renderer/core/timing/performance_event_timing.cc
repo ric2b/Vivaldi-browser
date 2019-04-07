@@ -5,12 +5,13 @@
 #include "third_party/blink/renderer/core/timing/performance_event_timing.h"
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
+#include "third_party/blink/renderer/core/performance_entry_names.h"
 
 namespace blink {
 
 // static
 PerformanceEventTiming* PerformanceEventTiming::Create(
-    const String& event_type,
+    const AtomicString& event_type,
     DOMHighResTimeStamp start_time,
     DOMHighResTimeStamp processing_start,
     DOMHighResTimeStamp processing_end,
@@ -18,23 +19,23 @@ PerformanceEventTiming* PerformanceEventTiming::Create(
   // TODO(npm): enable this DCHECK once https://crbug.com/852846 is fixed.
   // DCHECK_LE(start_time, processing_start);
   DCHECK_LE(processing_start, processing_end);
-  return new PerformanceEventTiming(
-      event_type, PerformanceEntry::EventKeyword(), start_time,
-      processing_start, processing_end, cancelable);
+  return new PerformanceEventTiming(event_type, PerformanceEntryNames::event,
+                                    start_time, processing_start,
+                                    processing_end, cancelable);
 }
 
 // static
 PerformanceEventTiming* PerformanceEventTiming::CreateFirstInputTiming(
     PerformanceEventTiming* entry) {
   PerformanceEventTiming* first_input = new PerformanceEventTiming(
-      entry->name(), PerformanceEntry::FirstInputKeyword(), entry->startTime(),
+      entry->name(), PerformanceEntryNames::firstInput, entry->startTime(),
       entry->processingStart(), entry->processingEnd(), entry->cancelable());
   first_input->SetDuration(entry->duration());
   return first_input;
 }
 
 PerformanceEventTiming::PerformanceEventTiming(
-    const String& event_type,
+    const AtomicString& event_type,
     const AtomicString& entry_type,
     DOMHighResTimeStamp start_time,
     DOMHighResTimeStamp processing_start,
@@ -49,7 +50,7 @@ PerformanceEventTiming::PerformanceEventTiming(
 PerformanceEventTiming::~PerformanceEventTiming() = default;
 
 PerformanceEntryType PerformanceEventTiming::EntryTypeEnum() const {
-  return entry_type_ == PerformanceEntry::EventKeyword()
+  return entry_type_ == PerformanceEntryNames::event
              ? PerformanceEntry::EntryType::kEvent
              : PerformanceEntry::EntryType::kFirstInput;
 }

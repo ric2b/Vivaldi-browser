@@ -33,13 +33,35 @@ size_t OverrideIntervalIfValid(base::StringPiece param_value,
 
 }  // namespace
 
+// Enables gamepadbuttondown, gamepadbuttonup, gamepadbuttonchange,
+// gamepadaxismove non-standard gamepad events.
+const base::Feature kEnableGamepadButtonAxisEvents{
+    "EnableGamepadButtonAxisEvents", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Overrides the gamepad polling interval.
 const base::Feature kGamepadPollingInterval{"GamepadPollingInterval",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 const char kGamepadPollingIntervalParamKey[] = "interval-ms";
 
+bool AreGamepadButtonAxisEventsEnabled() {
+  // Check if button and axis events are enabled by a field trial.
+  if (base::FeatureList::IsEnabled(kEnableGamepadButtonAxisEvents))
+    return true;
+
+  // Check if button and axis events are enabled by a command-line flag.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line &&
+      command_line->HasSwitch(switches::kEnableGamepadButtonAxisEvents)) {
+    return true;
+  }
+
+  return false;
+}
+
 size_t GetGamepadPollingInterval() {
-  size_t polling_interval = kPollingIntervalMillisecondsMax;
+  // Default to the minimum polling interval.
+  size_t polling_interval = kPollingIntervalMillisecondsMin;
 
   // Check if the polling interval is overridden by a field trial.
   if (base::FeatureList::IsEnabled(kGamepadPollingInterval)) {

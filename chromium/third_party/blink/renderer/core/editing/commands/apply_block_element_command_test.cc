@@ -37,12 +37,13 @@ TEST_F(ApplyBlockElementCommandTest, selectionCrossingOverBody) {
   GetDocument().body()->setContentEditable("false", ASSERT_NO_EXCEPTION);
   GetDocument().setDesignMode("on");
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-  Selection().SetSelectionAndEndTyping(
+  Selection().SetSelection(
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(
               Position(GetDocument().documentElement(), 1),
               Position(GetDocument().getElementById("va")->firstChild(), 2))
-          .Build());
+          .Build(),
+      SetSelectionOptions());
 
   FormatBlockCommand* command =
       FormatBlockCommand::Create(GetDocument(), HTMLNames::footerTag);
@@ -63,10 +64,11 @@ TEST_F(ApplyBlockElementCommandTest, visibilityChangeDuringCommand) {
   GetDocument().setDesignMode("on");
 
   UpdateAllLifecyclePhases();
-  Selection().SetSelectionAndEndTyping(
+  Selection().SetSelection(
       SelectionInDOMTree::Builder()
           .Collapse(Position(GetDocument().QuerySelector("li"), 0))
-          .Build());
+          .Build(),
+      SetSelectionOptions());
 
   IndentOutdentCommand* command = IndentOutdentCommand::Create(
       GetDocument(), IndentOutdentCommand::kIndent);
@@ -87,10 +89,11 @@ TEST_F(ApplyBlockElementCommandTest, IndentHeadingIntoBlockquote) {
       "</div>");
   Element* button = GetDocument().QuerySelector("button");
   Element* object = GetDocument().QuerySelector("object");
-  Selection().SetSelectionAndEndTyping(SelectionInDOMTree::Builder()
-                                           .Collapse(Position(button, 0))
-                                           .Extend(Position(object, 0))
-                                           .Build());
+  Selection().SetSelection(SelectionInDOMTree::Builder()
+                               .Collapse(Position(button, 0))
+                               .Extend(Position(object, 0))
+                               .Build(),
+                           SetSelectionOptions());
 
   IndentOutdentCommand* command = IndentOutdentCommand::Create(
       GetDocument(), IndentOutdentCommand::kIndent);
@@ -113,14 +116,52 @@ TEST_F(ApplyBlockElementCommandTest, IndentHeadingIntoBlockquote) {
 TEST_F(ApplyBlockElementCommandTest, InsertPlaceHolderAtDisconnectedPosition) {
   GetDocument().setDesignMode("on");
   InsertStyleElement(".input:nth-of-type(2n+1) { visibility:collapse; }");
-  Selection().SetSelectionAndEndTyping(SetSelectionTextToBody(
-      "^<input><input class=\"input\" style=\"position:absolute\">|"));
+  Selection().SetSelection(
+      SetSelectionTextToBody(
+          "^<input><input class=\"input\" style=\"position:absolute\">|"),
+      SetSelectionOptions());
   FormatBlockCommand* command =
       FormatBlockCommand::Create(GetDocument(), HTMLNames::preTag);
   // Crash happens here.
   EXPECT_FALSE(command->Apply());
   EXPECT_EQ(
       "<pre>|<input></pre><input class=\"input\" style=\"position:absolute\">",
+      GetSelectionTextFromBody());
+}
+
+// https://crbug.com/873084
+TEST_F(ApplyBlockElementCommandTest, FormatBlockCrossingUserModifyBoundary) {
+  InsertStyleElement("*{-webkit-user-modify:read-write}");
+  Selection().SetSelection(
+      SetSelectionTextToBody(
+          "^<b style=\"-webkit-user-modify:read-only\"><button></button></b>|"),
+      SetSelectionOptions());
+  FormatBlockCommand* command =
+      FormatBlockCommand::Create(GetDocument(), HTMLNames::preTag);
+  // Shouldn't crash here.
+  EXPECT_FALSE(command->Apply());
+  EXPECT_EQ(
+      "^<b style=\"-webkit-user-modify:read-only\"><button>|</button></b>",
+      GetSelectionTextFromBody());
+}
+
+// https://crbug.com/873084
+TEST_F(ApplyBlockElementCommandTest,
+       FormatBlockWithTableCrossingUserModifyBoundary) {
+  InsertStyleElement("*{-webkit-user-modify:read-write}");
+  Selection().SetSelection(
+      SetSelectionTextToBody("^<table></table>"
+                             "<kbd "
+                             "style=\"-webkit-user-modify:read-only\"><button><"
+                             "/button></kbd>|"),
+      SetSelectionOptions());
+  FormatBlockCommand* command =
+      FormatBlockCommand::Create(GetDocument(), HTMLNames::preTag);
+  // Shouldn't crash here.
+  EXPECT_FALSE(command->Apply());
+  EXPECT_EQ(
+      "<table>^</table>"
+      "<kbd style=\"-webkit-user-modify:read-only\"><button>|</button></kbd>",
       GetSelectionTextFromBody());
 }
 

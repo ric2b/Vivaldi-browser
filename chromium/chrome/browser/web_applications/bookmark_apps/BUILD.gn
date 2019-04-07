@@ -8,6 +8,8 @@ assert(enable_extensions)
 
 source_set("bookmark_apps") {
   sources = [
+    "external_web_apps.cc",
+    "external_web_apps.h",
     "policy/web_app_policy_constants.cc",
     "policy/web_app_policy_constants.h",
     "policy/web_app_policy_manager.cc",
@@ -16,7 +18,12 @@ source_set("bookmark_apps") {
 
   deps = [
     "//chrome/browser/extensions",
+    "//chrome/browser/web_applications:web_app_group",
+    "//chrome/browser/web_applications/components",
+    "//chrome/browser/web_applications/extensions",
     "//chrome/common",
+    "//components/favicon/content",
+    "//components/pref_registry",
     "//skia",
   ]
 }
@@ -25,12 +32,28 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "external_web_apps_unittest.cc",
     "policy/web_app_policy_manager_unittest.cc",
   ]
 
   deps = [
     ":bookmark_apps",
+    "//base",
+    "//chrome/browser",
+    "//chrome/browser/web_applications:web_app_group",
+    "//chrome/browser/web_applications:web_applications",
+    "//chrome/browser/web_applications/components",
+    "//chrome/browser/web_applications/components:test_support",
+    "//chrome/browser/web_applications/extensions",
+    "//chrome/common:constants",
+    "//chrome/test:test_support",
+    "//components/crx_file:crx_file",
+    "//components/sync_preferences:test_support",
+    "//content/test:test_support",
+    "//extensions/common",
     "//skia",
     "//testing/gmock",
+    "//testing/gtest",
+    "//url",
   ]
 }

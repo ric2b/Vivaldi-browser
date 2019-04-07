@@ -24,10 +24,9 @@ suite('SiteEntry', function() {
   const TEST_COOKIE_LIST = {
     id: 'foo',
     children: [
-      {},
-      {},
-      {},
-      {},
+      {domain: 'example.com'},
+      {domain: 'example.com'},
+      {domain: 'example.com'},
     ]
   };
 
@@ -130,7 +129,7 @@ suite('SiteEntry', function() {
         settings.routes.SITE_SETTINGS_SITE_DETAILS.path,
         settings.getCurrentRoute().path);
     assertEquals(
-        TEST_MULTIPLE_SITE_GROUP.origins[1],
+        TEST_MULTIPLE_SITE_GROUP.origins[1].origin,
         settings.getQueryParameters().get('site'));
   });
 
@@ -202,18 +201,20 @@ suite('SiteEntry', function() {
     testElement.siteGroup = TEST_MULTIPLE_SITE_GROUP;
     Polymer.dom.flush();
     const cookiesLabel = testElement.$.cookies;
-    assertEquals('', cookiesLabel.textContent.trim());
     assertTrue(cookiesLabel.hidden);
 
     // When the number of cookies is more than zero, the label appears.
     testElement.onSiteGroupChanged_(TEST_MULTIPLE_SITE_GROUP);
-    return localDataBrowserProxy.whenCalled('getNumCookiesString')
+    return localDataBrowserProxy.whenCalled('getNumCookiesList')
         .then((args) => {
-          assertEquals('example.com', args);
+          assertEquals(1, args.length);
+          assertEquals('example.com', args[0]);
+          return localDataBrowserProxy.whenCalled('getNumCookiesString');
+        })
+        .then((args) => {
+          assertEquals(3, args);
           assertFalse(cookiesLabel.hidden);
-          assertEquals(
-              `${TEST_COOKIE_LIST.children.length} cookies`,
-              cookiesLabel.textContent.trim());
+          assertEquals('· 3 cookies', cookiesLabel.textContent.trim());
         });
   });
 
@@ -222,12 +223,46 @@ suite('SiteEntry', function() {
     Polymer.dom.flush();
     const cookiesLabel = testElement.$.cookies;
     assertTrue(cookiesLabel.hidden);
-    assertEquals('', cookiesLabel.textContent.trim());
 
     testElement.onSiteGroupChanged_(TEST_SINGLE_SITE_GROUP);
     // Make sure there was never any call to the back end to retrieve cookies.
-    assertEquals(0, localDataBrowserProxy.getCallCount('getNumCookiesString'));
-    assertEquals('', cookiesLabel.textContent.trim());
+    assertEquals(0, localDataBrowserProxy.getCallCount('getNumCookiesList'));
     assertTrue(cookiesLabel.hidden);
+  });
+
+  test.only('data usage shown correctly for grouped entries', function() {
+    // Clone this object to avoid propogating changes made in this test.
+    const testSiteGroup = JSON.parse(JSON.stringify(TEST_MULTIPLE_SITE_GROUP));
+    const numBytes1 = 74622;
+    const numBytes2 = 1274;
+    const numBytes3 = 0;
+    testSiteGroup.origins[0].usage = numBytes1;
+    testSiteGroup.origins[1].usage = numBytes2;
+    testSiteGroup.origins[2].usage = numBytes3;
+    testElement.siteGroup = testSiteGroup;
+    Polymer.dom.flush();
+    return browserProxy.whenCalled('getFormattedBytes').then((args) => {
+      const sumBytes = numBytes1 + numBytes2 + numBytes3;
+      assertEquals(
+          `${sumBytes} B`,
+          testElement.root.querySelector('#displayName .data-unit')
+              .textContent.trim());
+    });
+  });
+
+  test('data usage shown correctly for ungrouped entries', function() {
+    // Clone this object to avoid propogating changes made in this test.
+    const testSiteGroup = JSON.parse(JSON.stringify(TEST_SINGLE_SITE_GROUP));
+    const numBytes = 74622;
+    testSiteGroup.origins[0].usage = numBytes;
+    testElement.siteGroup = testSiteGroup;
+    Polymer.dom.flush();
+    return browserProxy.whenCalled('getFormattedBytes').then((args) => {
+      assertEquals(
+          `${numBytes} B`,
+          testElement.root.querySelector('#displayName .data-unit')
+              .textContent.trim());
+
+    });
   });
 });

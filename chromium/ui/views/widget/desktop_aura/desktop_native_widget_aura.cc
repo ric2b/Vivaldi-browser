@@ -8,12 +8,13 @@
 #include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/client/window_parenting_client.h"
+#include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/aura/window_occlusion_tracker.h"
@@ -320,8 +321,12 @@ void DesktopNativeWidgetAura::OnHostClosed() {
   desktop_window_tree_host_ = NULL;
   content_window_ = NULL;
 
+  // |OnNativeWidgetDestroyed| may delete |this| if the object does not own
+  // itself.
+  bool should_delete_this =
+      (ownership_ == Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET);
   native_widget_delegate_->OnNativeWidgetDestroyed();
-  if (ownership_ == Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET)
+  if (should_delete_this)
     delete this;
 }
 
@@ -746,11 +751,11 @@ void DesktopNativeWidgetAura::CloseNow() {
     desktop_window_tree_host_->CloseNow();
 }
 
-void DesktopNativeWidgetAura::Show() {
+void DesktopNativeWidgetAura::Show(ui::WindowShowState show_state,
+                                   const gfx::Rect& restore_bounds) {
   if (!content_window_)
     return;
-  desktop_window_tree_host_->AsWindowTreeHost()->Show();
-  content_window_->Show();
+  desktop_window_tree_host_->Show(show_state, restore_bounds);
 }
 
 void DesktopNativeWidgetAura::Hide() {
@@ -758,23 +763,6 @@ void DesktopNativeWidgetAura::Hide() {
     return;
   desktop_window_tree_host_->AsWindowTreeHost()->Hide();
   content_window_->Hide();
-}
-
-void DesktopNativeWidgetAura::ShowMaximizedWithBounds(
-      const gfx::Rect& restored_bounds) {
-  // IsVisible() should check the same objects here for visibility.
-  if (!content_window_)
-    return;
-  desktop_window_tree_host_->ShowMaximizedWithBounds(restored_bounds);
-  content_window_->Show();
-}
-
-void DesktopNativeWidgetAura::ShowWithWindowState(ui::WindowShowState state) {
-  // IsVisible() should check the same objects here for visibility.
-  if (!content_window_)
-    return;
-  desktop_window_tree_host_->ShowWindowWithState(state);
-  content_window_->Show();
 }
 
 bool DesktopNativeWidgetAura::IsVisible() const {
@@ -912,6 +900,11 @@ bool DesktopNativeWidgetAura::IsMouseEventsEnabled() const {
   return cursor_client ? cursor_client->IsMouseEventsEnabled() : true;
 }
 
+bool DesktopNativeWidgetAura::IsMouseButtonDown() const {
+  return content_window_ ? content_window_->env()->IsMouseButtonDown()
+                         : aura::Env::GetInstance()->IsMouseButtonDown();
+}
+
 void DesktopNativeWidgetAura::ClearNativeFocus() {
   desktop_window_tree_host_->ClearNativeFocus();
 
@@ -977,8 +970,12 @@ bool DesktopNativeWidgetAura::IsTranslucentWindowOpacitySupported() const {
       desktop_window_tree_host_->IsTranslucentWindowOpacitySupported();
 }
 
+ui::GestureRecognizer* DesktopNativeWidgetAura::GetGestureRecognizer() {
+  return content_window_->env()->gesture_recognizer();
+}
+
 void DesktopNativeWidgetAura::OnSizeConstraintsChanged() {
-  int32_t behavior = ui::mojom::kResizeBehaviorNone;
+  int32_t behavior = ws::mojom::kResizeBehaviorNone;
   if (GetWidget()->widget_delegate())
     behavior = GetWidget()->widget_delegate()->GetResizeBehavior();
   content_window_->SetProperty(aura::client::kResizeBehaviorKey, behavior);
@@ -1113,7 +1110,7 @@ bool DesktopNativeWidgetAura::ShouldActivate() const {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// DesktopNativeWidgetAura, wmActivationChangeObserver implementation:
+// DesktopNativeWidgetAura, wm::ActivationChangeObserver implementation:
 
 void DesktopNativeWidgetAura::OnWindowActivated(
     wm::ActivationChangeObserver::ActivationReason reason,

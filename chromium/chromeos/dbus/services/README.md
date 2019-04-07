@@ -1,8 +1,6 @@
-This directory contains service files and implementations for D-Bus
-services provided by Chrome.
+This directory contains shared code used to implement D-Bus services.
 
-Service files (with `.conf` extensions) must be listed in the
-`dbus_service_files` rule of `chromeos/BUILD.gn` so that they can be
-deployed in Chrome OS and [Simple Chrome] builds.
+Please see [Chrome OS D-Bus Usage in Chrome] for information about adding D-Bus
+services.
 
-[Simple Chrome]: https://www.chromium.org/chromium-os/how-tos-and-troubleshooting/building-chromium-browser
+[Chrome OS D-Bus Usage in Chrome]: https://chromium.googlesource.com/chromiumos/docs/+/master/dbus_in_chrome.md

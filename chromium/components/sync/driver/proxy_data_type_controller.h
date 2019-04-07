@@ -24,7 +24,8 @@ class ProxyDataTypeController : public DataTypeController {
   // DataTypeController interface.
   bool ShouldLoadModelBeforeConfigure() const override;
   void BeforeLoadModels(ModelTypeConfigurer* configurer) override;
-  void LoadModels(const ModelLoadCallback& model_load_callback) override;
+  void LoadModels(const ConfigureContext& configure_context,
+                  const ModelLoadCallback& model_load_callback) override;
   void RegisterWithBackend(base::Callback<void(bool)> set_downloaded,
                            ModelTypeConfigurer* configurer) override;
   void StartAssociating(const StartCallback& start_callback) override;
@@ -34,7 +35,7 @@ class ProxyDataTypeController : public DataTypeController {
   void DeactivateDataType(ModelTypeConfigurer* configurer) override;
   void GetAllNodes(const AllNodesCallback& callback) override;
   void GetStatusCounters(const StatusCountersCallback& callback) override;
-  void RecordMemoryUsageHistogram() override;
+  void RecordMemoryUsageAndCountsHistograms() override;
 
  private:
   State state_;

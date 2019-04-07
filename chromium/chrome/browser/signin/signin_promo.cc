@@ -24,7 +24,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
@@ -287,7 +287,7 @@ GURL GetReauthURLWithEmailForDialog(signin_metrics::AccessPoint access_point,
 GURL GetSigninURLForDice(Profile* profile, const std::string& email) {
   DCHECK(signin::DiceMethodGreaterOrEqual(
       AccountConsistencyModeManager::GetMethodForProfile(profile),
-      signin::AccountConsistencyMethod::kDicePrepareMigration));
+      signin::AccountConsistencyMethod::kDiceMigration));
   GURL url = GaiaUrls::GetInstance()->signin_chrome_sync_dice();
   if (!email.empty())
     url = net::AppendQueryParameter(url, "email_hint", email);

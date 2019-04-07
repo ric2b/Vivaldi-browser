@@ -11,7 +11,6 @@
 #include "base/run_loop.h"
 #include "base/scoped_observer.h"
 #include "base/test/scoped_task_environment.h"
-#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/attestation/attestation.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -61,7 +60,7 @@ TEST_F(FakeCryptohomeClientTest, SignSimpleChallenge) {
   ScopedObserver<CryptohomeClient, TestObserver> scoped_observer(&observer);
   scoped_observer.Add(&fake_cryptohome_client_);
 
-  cryptohome::Identification cryptohome_id;
+  cryptohome::AccountIdentifier cryptohome_id;
   bool called = false;
   fake_cryptohome_client_.TpmAttestationSignSimpleChallenge(
       attestation::AttestationKeyType::KEY_DEVICE, cryptohome_id, "key_name",

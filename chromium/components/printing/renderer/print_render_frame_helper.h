@@ -19,7 +19,7 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
 #include "printing/buildflags/buildflags.h"
-#include "printing/pdf_metafile_skia.h"
+#include "printing/common/metafile_utils.h"
 #include "third_party/blink/public/web/web_node.h"
 #include "third_party/blink/public/web/web_print_params.h"
 #include "ui/gfx/geometry/size.h"
@@ -54,6 +54,7 @@ class WebView;
 namespace printing {
 
 struct PageSizeMargins;
+class MetafileSkia;
 class PrepareFrameAndViewForPrint;
 
 // Stores reference to frame using WebVew and unique name.
@@ -293,7 +294,7 @@ class PrintRenderFrameHelper
                          int page_count,
                          double scale_factor,
                          blink::WebLocalFrame* frame,
-                         PdfMetafileSkia* metafile,
+                         MetafileSkia* metafile,
                          gfx::Size* page_size_in_dpi,
                          gfx::Rect* content_area_in_dpi);
 
@@ -311,7 +312,7 @@ class PrintRenderFrameHelper
   // Helper methods -----------------------------------------------------------
 
   bool CopyMetafileDataToReadOnlySharedMem(
-      const PdfMetafileSkia& metafile,
+      const MetafileSkia& metafile,
       PrintHostMsg_DidPrintContent_Params* params);
 
   // Helper method to get page layout in points and fit to page if needed.
@@ -328,9 +329,6 @@ class PrintRenderFrameHelper
   static std::vector<int> GetPrintedPages(
       const PrintMsg_PrintPages_Params& params,
       int page_count);
-
-  // Helper function to find document type.
-  static SkiaDocumentType GetDocType(const PrintMsg_Print_Params& params);
 
   // Given the |device| and |canvas| to draw on, prints the appropriate headers
   // and footers using strings from |header_footer_info| on to the canvas.
@@ -368,25 +366,25 @@ class PrintRenderFrameHelper
   // |metafile| is the rendered page and should be valid.
   // Returns true if print preview should continue, false on failure.
   bool PreviewPageRendered(int page_number,
-                           std::unique_ptr<PdfMetafileSkia> metafile);
+                           std::unique_ptr<MetafileSkia> metafile);
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
   void SetPrintPagesParams(const PrintMsg_PrintPages_Params& settings);
 
   // WebView used only to print the selection.
   std::unique_ptr<PrepareFrameAndViewForPrint> prep_frame_view_;
-  bool reset_prep_frame_view_;
+  bool reset_prep_frame_view_ = false;
 
   std::unique_ptr<PrintMsg_PrintPages_Params> print_pages_params_;
   gfx::Rect printer_printable_area_;
-  bool is_print_ready_metafile_sent_;
-  bool ignore_css_margins_;
+  bool is_print_ready_metafile_sent_ = false;
+  bool ignore_css_margins_ = false;
 
-  bool is_printing_enabled_;
+  bool is_printing_enabled_ = true;
 
   // Let the browser process know of a printing failure. Only set to false when
   // the failure came from the browser in the first place.
-  bool notify_browser_of_print_failure_;
+  bool notify_browser_of_print_failure_ = true;
 
   // Used to check the prerendering status.
   const std::unique_ptr<Delegate> delegate_;
@@ -455,7 +453,7 @@ class PrintRenderFrameHelper
     const blink::WebNode& prepared_node() const;
 
     int total_page_count() const;
-    PdfMetafileSkia* metafile();
+    MetafileSkia* metafile();
     int last_error() const;
 
    private:
@@ -476,29 +474,29 @@ class PrintRenderFrameHelper
     blink::WebNode source_node_;
 
     std::unique_ptr<PrepareFrameAndViewForPrint> prep_frame_view_;
-    std::unique_ptr<PdfMetafileSkia> metafile_;
+    std::unique_ptr<MetafileSkia> metafile_;
 
     // Total page count in the renderer.
-    int total_page_count_;
+    int total_page_count_ = 0;
 
     // The current page to render.
-    int current_page_index_;
+    int current_page_index_ = 0;
 
     // List of page indices that need to be rendered.
     std::vector<int> pages_to_render_;
 
     // True, if the document source is modifiable. e.g. HTML and not PDF.
-    bool is_modifiable_;
+    bool is_modifiable_ = true;
 
     // Specifies the total number of pages in the print ready metafile.
-    int print_ready_metafile_page_count_;
+    int print_ready_metafile_page_count_ = 0;
 
     base::TimeDelta document_render_time_;
     base::TimeTicks begin_time_;
 
-    enum PrintPreviewErrorBuckets error_;
+    enum PrintPreviewErrorBuckets error_ = PREVIEW_ERROR_NONE;
 
-    State state_;
+    State state_ = UNINITIALIZED;
 
     DISALLOW_COPY_AND_ASSIGN(PrintPreviewContext);
   };
@@ -522,12 +520,12 @@ class PrintRenderFrameHelper
 
   ScriptingThrottler scripting_throttler_;
 
-  bool print_node_in_progress_;
+  bool print_node_in_progress_ = false;
   PrintPreviewContext print_preview_context_;
-  bool is_loading_;
-  bool is_scripted_preview_delayed_;
-  int ipc_nesting_level_;
-  bool render_frame_gone_;
+  bool is_loading_ = false;
+  bool is_scripted_preview_delayed_ = false;
+  int ipc_nesting_level_ = 0;
+  bool render_frame_gone_ = false;
 
   // Used to fix a race condition where the source is a PDF and print preview
   // hangs because RequestPrintPreview is called before DidStopLoading() is

@@ -278,9 +278,7 @@ void MimeUtil::AddSupportedMediaFormats() {
 
   const CodecSet mp3_codecs{MP3};
 
-  CodecSet mp4_audio_codecs;
-  mp4_audio_codecs.emplace(MP3);
-  mp4_audio_codecs.emplace(FLAC);
+  CodecSet mp4_audio_codecs{FLAC, MP3, OPUS};
 
   // Only VP9 with valid codec string vp09.xx.xx.xx.xx.xx.xx.xx is supported.
   // See ParseVp9CodecID for details.
@@ -349,9 +347,8 @@ void MimeUtil::AddSupportedMediaFormats() {
   AddContainerWithCodecs("video/x-m4v", avc_and_aac, true);
 
 #if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
-  // TODO(ddorwin): Exactly which codecs should be supported?
-  DCHECK(!mp4_video_codecs.empty());
-  AddContainerWithCodecs("video/mp2t", mp4_codecs, true);
+  CodecSet mp2t_codecs{H264, MPEG2_AAC, MPEG4_AAC, MP3};
+  AddContainerWithCodecs("video/mp2t", mp2t_codecs, true);
 #endif  // BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
 #if defined(OS_ANDROID)
   // HTTP Live Streaming (HLS).

@@ -6,12 +6,12 @@
 #define CHROME_BROWSER_VR_INPUT_EVENT_H_
 
 #include "base/time/time.h"
-#include "chrome/browser/vr/vr_ui_export.h"
+#include "chrome/browser/vr/vr_export.h"
 #include "ui/gfx/geometry/point_f.h"
 
 namespace vr {
 
-class VR_UI_EXPORT InputEvent {
+class VR_EXPORT InputEvent {
  public:
   enum Type {
     kTypeUndefined = -1,
@@ -29,6 +29,12 @@ class VR_UI_EXPORT InputEvent {
     kScrollUpdate,
     kScrollEnd,
     kScrollTypeLast = kScrollEnd,
+
+    kMenuButtonClicked,
+    kMenuButtonTypeFirst = kMenuButtonClicked,
+    kMenuButtonLongPressStart,
+    kMenuButtonLongPressEnd,
+    kMenuButtonTypeLast = kMenuButtonLongPressEnd,
 
     kNumVrInputEventTypes
   };
@@ -54,6 +60,10 @@ class VR_UI_EXPORT InputEvent {
 
   static bool IsScrollEventType(InputEvent::Type type) {
     return kScrollTypeFirst <= type && type <= kScrollTypeLast;
+  }
+
+  static bool IsMenuButtonEventType(InputEvent::Type type) {
+    return kMenuButtonTypeFirst <= type && type <= kMenuButtonTypeLast;
   }
 
   struct {

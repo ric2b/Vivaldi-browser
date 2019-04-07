@@ -120,8 +120,8 @@ void SyncBackendHostCore::OnInitializationComplete(
   // Sync manager initialization is complete, so we can schedule recurring
   // SaveChanges.
   base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&SyncBackendHostCore::StartSavingChanges,
-                            weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&SyncBackendHostCore::StartSavingChanges,
+                                weak_ptr_factory_.GetWeakPtr()));
 
   // Hang on to these for a while longer.  We're not ready to hand them back to
   // the UI thread yet.
@@ -148,8 +148,8 @@ void SyncBackendHostCore::OnInitializationComplete(
   ModelTypeConnector* model_type_connector =
       sync_manager_->GetModelTypeConnector();
   ModelTypeSet control_types = ControlTypes();
-  for (auto it = control_types.First(); it.Good(); it.Inc()) {
-    model_type_connector->RegisterDirectoryType(it.Get(), GROUP_PASSIVE);
+  for (ModelType type : control_types) {
+    model_type_connector->RegisterDirectoryType(type, GROUP_PASSIVE);
   }
 
   ModelSafeRoutingInfo routing_info;
@@ -163,7 +163,7 @@ void SyncBackendHostCore::OnInitializationComplete(
   sync_manager_->PurgeDisabledTypes(types_to_purge, ModelTypeSet(),
                                     ModelTypeSet());
   sync_manager_->ConfigureSyncer(
-      reason, new_control_types,
+      reason, new_control_types, SyncManager::SyncFeatureState::INITIALIZING,
       base::Bind(&SyncBackendHostCore::DoInitialProcessControlTypes,
                  weak_ptr_factory_.GetWeakPtr()),
       base::Closure());
@@ -491,6 +491,9 @@ void SyncBackendHostCore::DoConfigureSyncer(
                  weak_ptr_factory_.GetWeakPtr(), params.retry_callback));
 
   sync_manager_->ConfigureSyncer(params.reason, params.to_download,
+                                 params.is_sync_feature_enabled
+                                     ? SyncManager::SyncFeatureState::ON
+                                     : SyncManager::SyncFeatureState::OFF,
                                  chained_ready_task, chained_retry_task);
 }
 

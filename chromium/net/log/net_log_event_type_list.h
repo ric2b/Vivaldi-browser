@@ -1840,6 +1840,9 @@ EVENT_TYPE(QUIC_SESSION_GOAWAY_FRAME_RECEIVED)
 //   }
 EVENT_TYPE(QUIC_SESSION_GOAWAY_FRAME_SENT)
 
+// Session detected path degrading and decided to mark itself as goaway.
+EVENT_TYPE(QUIC_SESSION_CLIENT_GOAWAY_ON_PATH_DEGRADING)
+
 // Session received a PING frame.
 EVENT_TYPE(QUIC_SESSION_PING_FRAME_RECEIVED)
 
@@ -3064,3 +3067,111 @@ EVENT_TYPE(WPAD_DHCP_WIN_START_WAIT_TIMER)
 // This event is emitted if the wait timer for remaining fetchers fires. It
 // has no parameters.
 EVENT_TYPE(WPAD_DHCP_WIN_ON_WAIT_TIMER)
+
+// -----------------------------------------------------------------------------
+// CookieStore related events
+// -----------------------------------------------------------------------------
+
+// Event emitted on store creation/deletion
+//  {
+//    "persistent_store": <Whether there is an attached persistent store>,
+//    "channel_id_services": <Whether there is an attached channel id service>,
+//  }
+EVENT_TYPE(COOKIE_STORE_ALIVE)
+
+// Event emitted on cookie addition
+//  {
+//    "name": <Name of the cookie added>
+//    "value": <Value of the cookie added>
+//    "domain": <Domain of the cookie added>
+//    "path": <Path of the cookie added>
+//    "is_persistent": <Whether or not the cookie is persistent>
+//    "sync_requested": <Whether sync to the backing store was requested>
+//  }
+EVENT_TYPE(COOKIE_STORE_COOKIE_ADDED)
+
+// Event emitted on cookie deletion
+//  {
+//    "name": <Name of the cookie added>
+//    "value": <Value of the cookie added>
+//    "domain": <Domain of the cookie added>
+//    "path": <Path of the cookie added>
+//    "deletion_cause": <Reason the cookie was deleted>
+//    "httponly": <httponly field of the cookie>
+//    "secure": <If the cookie is a secure cookie>
+//    "priority": <priority of the cookie>
+//    "samesite": <SameSite setting for the cookie>
+//    "is_persistent": <Whether or not the cookie is persistent>
+//    "sync_requested": <Whether sync to the backing store was requested>
+//  }
+EVENT_TYPE(COOKIE_STORE_COOKIE_DELETED)
+
+// Event emitted on rejection of a cookie addition because of a conflict
+// with a secure cookie that would have been deleted.
+//  {
+//    "name": <Name of the cookies>
+//    "domain": <Domain of the cookies>
+//    "oldpath": <Path of the cookie that would have been deleted>
+//    "newpath": <Path of the cookie that would have been added>
+//    "oldvalue": <Value of the cookie that would have been deleted>
+//    "newvalue": <Value of the cookie that would have been added>
+//  }
+EVENT_TYPE(COOKIE_STORE_COOKIE_REJECTED_SECURE)
+
+// Event emitted on rejection of a cookie addition because of a conflict
+// with an httponly cookie.
+//  {
+//    "name": <Name of the cookies>
+//    "domain": <Domain of the cookies>
+//    "path": <Path of the cookies>
+//    "oldvalue": <Value of the cookie that would have been deleted>
+//    "newvalue": <Value of the cookie that would have been added>
+//  }
+EVENT_TYPE(COOKIE_STORE_COOKIE_REJECTED_HTTPONLY)
+
+// Event emitted on setting store session persistence
+//  {
+//    "persistence" : <Session persistence setting for the store>
+//  }
+EVENT_TYPE(COOKIE_STORE_SESSION_PERSISTENCE)
+
+// Event emitted when a particular origin is removed from the persistent
+// store on shutdown.
+//  {
+//    "origin": <Origin being filtered>
+//    "is_https": <Secure status of origin>
+//  }
+EVENT_TYPE(COOKIE_PERSISTENT_STORE_ORIGIN_FILTERED)
+
+// Event emitted when the persistent database load is started and completed.
+//  {
+//  }
+EVENT_TYPE(COOKIE_PERSISTENT_STORE_LOAD)
+
+// Event emitted when load for a particular key is started.
+//  {
+//    "key": <Key to be loaded>
+//  }
+EVENT_TYPE(COOKIE_PERSISTENT_STORE_KEY_LOAD_STARTED)
+
+// Event emitted when load for a particular key is completed.
+//  {
+//    "key": <Key to be loaded>
+//  }
+EVENT_TYPE(COOKIE_PERSISTENT_STORE_KEY_LOAD_COMPLETED)
+
+// Event emitted when a persistent store has been closed.
+//  {
+//    "type": <Classname of persistent cookie store>
+//  }
+EVENT_TYPE(COOKIE_PERSISTENT_STORE_CLOSED)
+
+// Event emitted when getting cookies is blocked by a NetworkDelegate.
+//  {
+//  }
+EVENT_TYPE(COOKIE_GET_BLOCKED_BY_NETWORK_DELEGATE)
+
+// Event emitted when setting cookies is blocked by a NetworkDelegate.
+//  {
+//  }
+EVENT_TYPE(COOKIE_SET_BLOCKED_BY_NETWORK_DELEGATE)

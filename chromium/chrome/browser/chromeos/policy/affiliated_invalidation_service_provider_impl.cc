@@ -16,7 +16,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/device_identity_provider.h"
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service_factory.h"
-#include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
+#include "chrome/browser/invalidation/deprecated_profile_invalidation_provider_factory.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -151,7 +151,8 @@ void AffiliatedInvalidationServiceProviderImpl::Observe(
   DCHECK(!is_shut_down_);
   Profile* profile = content::Details<Profile>(details).ptr();
   invalidation::ProfileInvalidationProvider* invalidation_provider =
-      invalidation::ProfileInvalidationProviderFactory::GetForProfile(profile);
+      invalidation::DeprecatedProfileInvalidationProviderFactory::GetForProfile(
+          profile);
   if (!invalidation_provider) {
     // If the Profile does not support invalidation (e.g. guest, incognito),
     // ignore it.
@@ -308,18 +309,21 @@ AffiliatedInvalidationServiceProviderImpl::FindConnectedInvalidationService() {
       url_loader_factory = g_browser_process->system_network_context_manager()
                                ->GetSharedURLLoaderFactory();
     }
+
+    identity_provider_ = std::make_unique<chromeos::DeviceIdentityProvider>(
+        chromeos::DeviceOAuth2TokenServiceFactory::Get());
+
+    DCHECK(identity_provider_);
     // If no other connected invalidation service was found and no device-global
     // invalidation service exists, create one.
-    device_invalidation_service_.reset(
-        new invalidation::TiclInvalidationService(
-            GetUserAgent(),
-            std::make_unique<chromeos::DeviceIdentityProvider>(
-                chromeos::DeviceOAuth2TokenServiceFactory::Get()),
+    device_invalidation_service_ =
+        std::make_unique<invalidation::TiclInvalidationService>(
+            GetUserAgent(), identity_provider_.get(),
             std::unique_ptr<invalidation::TiclSettingsProvider>(
                 new TiclDeviceSettingsProvider),
             g_browser_process->gcm_driver(),
             g_browser_process->system_request_context(),
-            std::move(url_loader_factory)));
+            std::move(url_loader_factory));
     device_invalidation_service_->Init(
         std::unique_ptr<syncer::InvalidationStateTracker>(
             new invalidation::InvalidatorStorage(
@@ -350,6 +354,7 @@ void
 AffiliatedInvalidationServiceProviderImpl::DestroyDeviceInvalidationService() {
   device_invalidation_service_observer_.reset();
   device_invalidation_service_.reset();
+  identity_provider_.reset();
 }
 
 }  // namespace policy

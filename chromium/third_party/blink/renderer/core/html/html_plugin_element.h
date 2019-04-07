@@ -110,7 +110,7 @@ class CORE_EXPORT HTMLPlugInElement
                     PreferPlugInsForImagesOption);
 
   // Node functions:
-  void RemovedFrom(ContainerNode* insertion_point) override;
+  void RemovedFrom(ContainerNode& insertion_point) override;
   void DidMoveToNewDocument(Document& old_document) override;
   void AttachLayoutTree(AttachContext&) override;
 
@@ -160,7 +160,7 @@ class CORE_EXPORT HTMLPlugInElement
   bool CanContainRangeEndPoint() const override { return false; }
   bool CanStartSelection() const override;
   bool WillRespondToMouseClickEvents() final;
-  void DefaultEventHandler(Event*) final;
+  void DefaultEventHandler(Event&) final;
   void DetachLayoutTree(const AttachContext& = AttachContext()) final;
   void FinishParsingChildren() final;
 
@@ -224,6 +224,8 @@ class CORE_EXPORT HTMLPlugInElement
   // off embedded_content_view_ here while the plugin is persisting but not
   // being displayed.
   Member<WebPluginContainerImpl> persisted_plugin_;
+
+  bool handled_externally_ = false;
 };
 
 inline bool IsHTMLPlugInElement(const HTMLElement& element) {

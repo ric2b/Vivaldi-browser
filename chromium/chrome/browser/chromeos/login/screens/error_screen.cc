@@ -110,15 +110,9 @@ void ErrorScreen::AllowOfflineLogin(bool allowed) {
 }
 
 void ErrorScreen::FixCaptivePortal() {
-  if (!captive_portal_window_proxy_.get()) {
-    content::WebContents* web_contents =
-        LoginDisplayHost::default_host()->GetOobeWebContents();
-    captive_portal_window_proxy_.reset(new CaptivePortalWindowProxy(
-        network_state_informer_.get(), web_contents));
-  }
+  MaybeInitCaptivePortalWindowProxy(
+      LoginDisplayHost::default_host()->GetOobeWebContents());
   captive_portal_window_proxy_->ShowIfRedirected();
-
-  LoginDisplayHost::default_host()->ShowDialogForCaptivePortal();
 }
 
 NetworkError::UIState ErrorScreen::GetUIState() const {
@@ -182,6 +176,14 @@ ErrorScreen::RegisterConnectRequestCallback(const base::Closure& callback) {
   return connect_request_callbacks_.Add(callback);
 }
 
+void ErrorScreen::MaybeInitCaptivePortalWindowProxy(
+    content::WebContents* web_contents) {
+  if (!captive_portal_window_proxy_.get()) {
+    captive_portal_window_proxy_ = std::make_unique<CaptivePortalWindowProxy>(
+        network_state_informer_.get(), web_contents);
+  }
+}
+
 void ErrorScreen::Show() {
   if (!on_hide_callback_) {
     SetHideCallback(base::Bind(&ErrorScreen::DefaultHideCallback,
@@ -214,7 +216,6 @@ void ErrorScreen::OnHide() {
   }
   network_portal_detector::GetInstance()->SetStrategy(
       PortalDetectorStrategy::STRATEGY_ID_LOGIN_SCREEN);
-  LoginDisplayHost::default_host()->HideDialogForCaptivePortal();
 }
 
 void ErrorScreen::OnUserAction(const std::string& action_id) {

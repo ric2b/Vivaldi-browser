@@ -10,7 +10,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/signin/core/browser/cookie_settings_util.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
@@ -51,7 +51,7 @@ GAIAServiceType GetGAIAServiceTypeFromHeader(const std::string& header_value) {
 
 ChromeConnectedHeaderHelper::ChromeConnectedHeaderHelper(
     AccountConsistencyMethod account_consistency)
-    : account_consistency_(account_consistency) {}
+    : SigninHeaderHelper("Mirror"), account_consistency_(account_consistency) {}
 
 // static
 std::string ChromeConnectedHeaderHelper::BuildRequestCookieIfPossible(

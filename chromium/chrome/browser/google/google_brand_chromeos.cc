@@ -7,7 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/system/statistics_provider.h"
@@ -76,7 +76,7 @@ void InitBrand(const base::Closure& callback) {
 
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::Bind(&ReadBrandFromFile), base::Bind(&SetBrand, callback));
 }

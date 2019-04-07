@@ -13,32 +13,28 @@
 #import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
-#import "ui/accelerated_widget_mac/accelerated_widget_mac.h"
 #include "ui/accelerated_widget_mac/ca_transaction_observer.h"
 #include "ui/accelerated_widget_mac/display_ca_layer_tree.h"
-#include "ui/base/ime/input_method_delegate.h"
-#include "ui/compositor/layer_owner.h"
+#include "ui/base/ime/text_input_client.h"
+#include "ui/display/display_observer.h"
 #import "ui/views/cocoa/bridged_native_widget_owner.h"
 #import "ui/views/cocoa/cocoa_mouse_capture_delegate.h"
 #import "ui/views/focus/focus_manager.h"
 #include "ui/views/views_export.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_observer.h"
+#include "ui/views_bridge_mac/mojo/bridged_native_widget.mojom.h"
 
 @class BridgedContentView;
 @class ModalShowAnimationWithLayer;
+@class NativeWidgetMacNSWindow;
 @class ViewsNSWindowDelegate;
-
-namespace ui {
-class InputMethod;
-class RecyclableCompositorMac;
-}
 
 namespace views {
 namespace test {
 class BridgedNativeWidgetTestApi;
 }
 
+class BridgedNativeWidgetHost;
 class CocoaMouseCapture;
 class CocoaWindowMoveLoop;
 class DragDropClientMac;
@@ -49,46 +45,40 @@ class View;
 // DesktopNativeWidgetMac. Serves as a helper class to bridge requests from the
 // NativeWidgetMac to the Cocoa window. Behaves a bit like an aura::Window.
 class VIEWS_EXPORT BridgedNativeWidget
-    : public ui::CATransactionCoordinator::PreCommitObserver,
-      public ui::LayerDelegate,
-      public ui::LayerOwner,
-      public ui::internal::InputMethodDelegate,
+    : public views_bridge_mac::mojom::BridgedNativeWidget,
+      public display::DisplayObserver,
+      public ui::CATransactionCoordinator::PreCommitObserver,
       public CocoaMouseCaptureDelegate,
-      public FocusChangeListener,
-      public ui::AcceleratedWidgetMacNSView,
-      public BridgedNativeWidgetOwner,
-      public DialogObserver {
+      public BridgedNativeWidgetOwner {
  public:
   // Contains NativeViewHost->gfx::NativeView associations.
   using AssociatedViews = std::map<const views::View*, NSView*>;
-
-  // Ways of changing the visibility of the bridged NSWindow.
-  enum WindowVisibilityState {
-    HIDE_WINDOW,               // Hides with -[NSWindow orderOut:].
-    SHOW_AND_ACTIVATE_WINDOW,  // Shows with -[NSWindow makeKeyAndOrderFront:].
-    SHOW_INACTIVE,             // Shows with -[NSWindow orderWindow:..]. Orders
-                               // the window above its parent if it has one.
-  };
 
   // Return the size that |window| will take for the given client area |size|,
   // based on its current style mask.
   static gfx::Size GetWindowSizeForClientSize(NSWindow* window,
                                               const gfx::Size& size);
 
-  // Creates one side of the bridge. |parent| must not be NULL.
-  explicit BridgedNativeWidget(NativeWidgetMac* parent);
+  // Creates one side of the bridge. |host| and |parent| must not be NULL.
+  BridgedNativeWidget(BridgedNativeWidgetHost* host, NativeWidgetMac* parent);
   ~BridgedNativeWidget() override;
 
-  // Initialize the bridge, "retains" ownership of |window|.
-  void Init(base::scoped_nsobject<NSWindow> window,
-            const Widget::InitParams& params);
+  // Initialize the NSWindow by taking ownership of the specified object.
+  // TODO(ccameron): When a BridgedNativeWidget is allocated across a process
+  // boundary, it will not be possible to explicitly set an NSWindow in this
+  // way.
+  void SetWindow(base::scoped_nsobject<NativeWidgetMacNSWindow> window);
 
-  // Invoked at the end of Widget::Init().
-  void OnWidgetInitDone();
+  // Create the drag drop client for this widget.
+  // TODO(ccameron): This function takes a views::View (and is not rolled into
+  // CreateContentView) because drag-drop has not been routed through |host_|
+  // yet.
+  void CreateDragDropClient(views::View* view);
 
-  // Sets or clears the focus manager to use for tracking focused views.
-  // This does NOT take ownership of |focus_manager|.
-  void SetFocusManager(FocusManager* focus_manager);
+  // Set the parent NSView for the widget.
+  // TODO(ccameron): Like SetWindow, this will need to pass a handle instead of
+  // an NSView across processes.
+  void SetParent(NSView* parent);
 
   // Changes the bounds of the window and the hosted layer if present. The
   // origin is a location in screen coordinates except for "child" windows,
@@ -97,20 +87,6 @@ class VIEWS_EXPORT BridgedNativeWidget
   // a |parent| NSWindow, the |child| attribute, and a |type| that
   // views::GetAuraWindowTypeForWidgetType does not consider a "popup" type.
   void SetBounds(const gfx::Rect& new_bounds);
-
-  // Set or clears the views::View bridged by the content view. This does NOT
-  // take ownership of |view|.
-  void SetRootView(views::View* view);
-
-  // Sets the desired visibility of the window and updates the visibility of
-  // descendant windows where necessary.
-  void SetVisibilityState(WindowVisibilityState new_state);
-
-  // Acquiring mouse capture first steals capture from any existing
-  // CocoaMouseCaptureDelegate, then captures all mouse events until released.
-  void AcquireCapture();
-  void ReleaseCapture();
-  bool HasCapture();
 
   // Start moving the window, pinned to the mouse cursor, and monitor events.
   // Return MOVE_LOOP_SUCCESSFUL on mouse up or MOVE_LOOP_CANCELED on premature
@@ -162,22 +138,9 @@ class VIEWS_EXPORT BridgedNativeWidget
   // Called by the NSWindowDelegate when the window becomes or resigns key.
   void OnWindowKeyStatusChangedTo(bool is_key);
 
-  // Called by NativeWidgetMac when the window size constraints change.
-  void OnSizeConstraintsChanged();
-
   // Called by the window show animation when it completes and wants to destroy
   // itself.
   void OnShowAnimationComplete();
-
-  // See widget.h for documentation.
-  ui::InputMethod* GetInputMethod();
-
-  // The restored bounds will be derived from the current NSWindow frame unless
-  // fullscreen or transitioning between fullscreen states.
-  gfx::Rect GetRestoredBounds() const;
-
-  // Creates a ui::Compositor which becomes responsible for drawing the window.
-  void CreateLayer(ui::LayerType layer_type, bool translucent);
 
   // Updates |associated_views_| on NativeViewHost::Attach()/Detach().
   void SetAssociationForView(const views::View* view, NSView* native_view);
@@ -187,11 +150,13 @@ class VIEWS_EXPORT BridgedNativeWidget
 
   NativeWidgetMac* native_widget_mac() { return native_widget_mac_; }
   BridgedContentView* ns_view() { return bridged_view_; }
-  NSWindow* ns_window() { return window_; }
+  BridgedNativeWidgetHost* host() { return host_; }
+  NSWindow* ns_window();
 
   TooltipManager* tooltip_manager() { return tooltip_manager_.get(); }
 
   DragDropClientMac* drag_drop_client() { return drag_drop_client_.get(); }
+  bool is_translucent_window() const { return is_translucent_window_; }
 
   // The parent widget specified in Widget::InitParams::parent. If non-null, the
   // parent will close children before the parent closes, and children will be
@@ -227,12 +192,52 @@ class VIEWS_EXPORT BridgedNativeWidget
   bool ShouldRunCustomAnimationFor(
       Widget::VisibilityTransition transition) const;
 
-  // ui::CATransactionCoordinator::PreCommitObserver implementation
+  // display::DisplayObserver:
+  void OnDisplayMetricsChanged(const display::Display& display,
+                               uint32_t metrics) override;
+
+  // ui::CATransactionCoordinator::PreCommitObserver:
   bool ShouldWaitInPreCommit() override;
   base::TimeDelta PreCommitTimeout() override;
 
-  // Overridden from ui::internal::InputMethodDelegate:
-  ui::EventDispatchDetails DispatchKeyEventPostIME(ui::KeyEvent* key) override;
+  // views_bridge_mac::mojom::BridgedNativeWidget:
+  void InitWindow(views_bridge_mac::mojom::BridgedNativeWidgetInitParamsPtr
+                      params) override;
+  void InitCompositorView() override;
+  void CreateContentView(const gfx::Rect& bounds) override;
+  void DestroyContentView() override;
+  void CloseWindow() override;
+  void CloseWindowNow() override;
+  void SetInitialBounds(const gfx::Rect& new_bounds,
+                        const gfx::Size& minimum_content_size,
+                        const gfx::Vector2d& parent_offset) override;
+  void SetBounds(const gfx::Rect& new_bounds,
+                 const gfx::Size& minimum_content_size) override;
+  void SetVisibilityState(
+      views_bridge_mac::mojom::WindowVisibilityState new_state) override;
+  void SetVisibleOnAllSpaces(bool always_visible) override;
+  void SetFullscreen(bool fullscreen) override;
+  void SetMiniaturized(bool miniaturized) override;
+  void SetSizeConstraints(const gfx::Size& min_size,
+                          const gfx::Size& max_size,
+                          bool is_resizable,
+                          bool is_maximizable) override;
+  void SetOpacity(float opacity) override;
+  void SetContentAspectRatio(const gfx::SizeF& aspect_ratio) override;
+  void SetCALayerParams(const gfx::CALayerParams& ca_layer_params) override;
+  void SetWindowTitle(const base::string16& title) override;
+  void MakeFirstResponder() override;
+  void ClearTouchBar() override;
+  void AcquireCapture() override;
+  void ReleaseCapture() override;
+
+  // TODO(ccameron): This method exists temporarily as we move all direct access
+  // of TextInputClient out of BridgedContentView.
+  void SetTextInputClient(ui::TextInputClient* text_input_client);
+
+  // Compute the window and content size, and forward them to |host_|. This will
+  // update widget and compositor size.
+  void UpdateWindowGeometry();
 
  private:
   friend class test::BridgedNativeWidgetTestApi;
@@ -243,32 +248,24 @@ class VIEWS_EXPORT BridgedNativeWidget
   // Notify descendants of a visibility change.
   void NotifyVisibilityChangeDown();
 
-  // Essentially NativeWidgetMac::GetClientAreaBoundsInScreen().size(), but no
-  // coordinate transformations are required from AppKit coordinates.
-  gfx::Size GetClientAreaSize() const;
-
-  // Creates an owned ui::Compositor. For consistency, these functions reflect
-  // those in aura::WindowTreeHost.
-  void CreateCompositor();
-  void InitCompositor();
-  void DestroyCompositor();
-
   // Installs the NSView for hosting the composited layer.
   void AddCompositorSuperview();
 
-  // Size the layer to match the client area bounds, taking into account display
-  // scale factor.
-  void UpdateLayerProperties();
+  // Query the display properties of the monitor that |window_| is on, and
+  // forward them to |host_|.
+  void UpdateWindowDisplay();
 
-  // Immediately return if there is a composited frame matching |size_in_dip|.
-  // Otherwise, asks ui::WindowResizeHelperMac to run tasks until a matching
-  // frame is ready, or a timeout occurs.
-  void MaybeWaitForFrame(const gfx::Size& size_in_dip);
+  // Return true if the delegate's modal type is window-modal. These display as
+  // a native window "sheet", and have a different lifetime to regular windows.
+  bool IsWindowModalSheet() const;
 
   // Show the window using -[NSApp beginSheet:..], modal for the parent window.
   void ShowAsModalSheet();
 
-  // Overridden from CocoaMouseCaptureDelegate:
+  // Returns true if capture exists and is currently active.
+  bool HasCapture();
+
+  // CocoaMouseCaptureDelegate:
   void PostCapturedEvent(NSEvent* event) override;
   void OnMouseCaptureLost() override;
   NSWindow* GetWindow() const override;
@@ -277,65 +274,44 @@ class VIEWS_EXPORT BridgedNativeWidget
   // Creates and attaches a new instance if not found.
   NSMutableDictionary* GetWindowProperties() const;
 
-  // Overridden from FocusChangeListener:
-  void OnWillChangeFocus(View* focused_before,
-                         View* focused_now) override;
-  void OnDidChangeFocus(View* focused_before,
-                        View* focused_now) override;
-
-  // Overridden from ui::LayerDelegate:
-  void OnPaintLayer(const ui::PaintContext& context) override;
-  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
-                                  float new_device_scale_factor) override;
-
-  // Overridden from ui::AcceleratedWidgetMac:
-  void AcceleratedWidgetCALayerParamsUpdated() override;
-
-  // Overridden from BridgedNativeWidgetOwner:
+  // BridgedNativeWidgetOwner:
   NSWindow* GetNSWindow() override;
   gfx::Vector2d GetChildWindowOffset() const override;
   bool IsVisibleParent() const override;
   void RemoveChildWindow(BridgedNativeWidget* child) override;
 
-  // DialogObserver:
-  void OnDialogModelChanged() override;
-
-  // Set |layer()| to be visible or not visible based on |window_visible_|. If
-  // the layer is not visible, then lock the compositor, so we don't draw any
-  // new frames.
-  void UpdateLayerVisibility();
-
-  views::NativeWidgetMac* native_widget_mac_;  // Weak. Owns this.
-  base::scoped_nsobject<NSWindow> window_;
+  BridgedNativeWidgetHost* const host_;       // Weak. Owns this.
+  NativeWidgetMac* const native_widget_mac_;  // Weak. Owns |host_|.
+  base::scoped_nsobject<NativeWidgetMacNSWindow> window_;
   base::scoped_nsobject<ViewsNSWindowDelegate> window_delegate_;
   base::scoped_nsobject<BridgedContentView> bridged_view_;
   base::scoped_nsobject<ModalShowAnimationWithLayer> show_animation_;
-  std::unique_ptr<ui::InputMethod> input_method_;
   std::unique_ptr<CocoaMouseCapture> mouse_capture_;
   std::unique_ptr<CocoaWindowMoveLoop> window_move_loop_;
   std::unique_ptr<TooltipManager> tooltip_manager_;
   std::unique_ptr<DragDropClientMac> drag_drop_client_;
-  FocusManager* focus_manager_;  // Weak. Owned by our Widget.
-  Widget::InitParams::Type widget_type_;
+  ui::ModalType modal_type_ = ui::MODAL_TYPE_NONE;
+  bool is_translucent_window_ = false;
 
-  BridgedNativeWidgetOwner* parent_;  // Weak. If non-null, owns this.
+  BridgedNativeWidgetOwner* parent_ = nullptr;  // Weak. If non-null, owns this.
   std::vector<BridgedNativeWidget*> child_windows_;
 
+  // The size of the content area of the window most recently sent to |host_|
+  // (and its compositor).
+  gfx::Size content_dip_size_;
+
+  // The size of the frame most recently *received from* the compositor. Note
+  // that during resize (and showing new windows), this will lag behind
+  // |content_dip_size_|, which is the frame size most recently *sent to* the
+  // compositor.
+  gfx::Size compositor_frame_dip_size_;
   base::scoped_nsobject<NSView> compositor_superview_;
   std::unique_ptr<ui::DisplayCALayerTree> display_ca_layer_tree_;
-  std::unique_ptr<ui::RecyclableCompositorMac> compositor_;
 
   // Tracks the bounds when the window last started entering fullscreen. Used to
   // provide an answer for GetRestoredBounds(), but not ever sent to Cocoa (it
   // has its own copy, but doesn't provide access to it).
   gfx::Rect bounds_before_fullscreen_;
-
-  // Tracks the origin of the window (from the top-left of the screen) when it
-  // was last reported to toolkit-views. Needed to trigger move notifications
-  // associated with a window resize since AppKit won't send move notifications
-  // when the top-left point of the window moves vertically. The origin of the
-  // window in AppKit coordinates is not actually changing in this case.
-  gfx::Point last_window_frame_origin_;
 
   // The transition types to animate when not relying on native NSWindow
   // animation behaviors. Bitmask of Widget::VisibilityTransition.
@@ -343,19 +319,19 @@ class VIEWS_EXPORT BridgedNativeWidget
 
   // Whether this window wants to be fullscreen. If a fullscreen animation is in
   // progress then it might not be actually fullscreen.
-  bool target_fullscreen_state_;
+  bool target_fullscreen_state_ = false;
 
   // Whether this window is in a fullscreen transition, and the fullscreen state
   // can not currently be changed.
-  bool in_fullscreen_transition_;
+  bool in_fullscreen_transition_ = false;
 
   // Stores the value last read from -[NSWindow isVisible], to detect visibility
   // changes.
-  bool window_visible_;
+  bool window_visible_ = false;
 
   // If true, the window is either visible, or wants to be visible but is
   // currently hidden due to having a hidden parent.
-  bool wants_to_be_visible_;
+  bool wants_to_be_visible_ = false;
 
   // If true, then ignore interactions with CATransactionCoordinator until the
   // first frame arrives.

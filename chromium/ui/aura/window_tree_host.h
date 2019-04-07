@@ -19,6 +19,7 @@
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
 #include "ui/aura/aura_export.h"
+#include "ui/aura/window.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/ime/input_method_delegate.h"
 #include "ui/compositor/compositor_observer.h"
@@ -51,7 +52,6 @@ class WindowTreeHostTestApi;
 }
 
 class WindowEventDispatcher;
-class WindowPort;
 class WindowTreeHostObserver;
 
 // WindowTreeHost bridges between a native window and the embedded RootWindow.
@@ -222,8 +222,7 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   friend class ScopedKeyboardHook;
   friend class TestScreen;  // TODO(beng): see if we can remove/consolidate.
 
-  WindowTreeHost();
-  explicit WindowTreeHost(std::unique_ptr<WindowPort> window_port);
+  explicit WindowTreeHost(std::unique_ptr<Window> window = nullptr);
 
   void DestroyCompositor();
   void DestroyDispatcher();
@@ -292,7 +291,8 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   virtual gfx::Rect GetTransformedRootWindowBoundsInPixels(
       const gfx::Size& size_in_pixels) const;
 
-  const base::ObserverList<WindowTreeHostObserver>& observers() const {
+  const base::ObserverList<WindowTreeHostObserver>::Unchecked& observers()
+      const {
     return observers_;
   }
 
@@ -309,7 +309,6 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   void OnCompositingStarted(ui::Compositor* compositor,
                             base::TimeTicks start_time) override;
   void OnCompositingEnded(ui::Compositor* compositor) override;
-  void OnCompositingLockStateChanged(ui::Compositor* compositor) override;
   void OnCompositingChildResizing(ui::Compositor* compositor) override;
   void OnCompositingShuttingDown(ui::Compositor* compositor) override;
 
@@ -319,7 +318,7 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   // the end of the dtor).
   Window* window_;  // Owning.
 
-  base::ObserverList<WindowTreeHostObserver> observers_;
+  base::ObserverList<WindowTreeHostObserver>::Unchecked observers_;
 
   std::unique_ptr<WindowEventDispatcher> dispatcher_;
 

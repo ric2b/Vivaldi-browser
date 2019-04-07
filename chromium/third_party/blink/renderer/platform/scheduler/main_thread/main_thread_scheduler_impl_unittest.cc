@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/callback.h"
@@ -30,6 +31,7 @@
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/budget_pool.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/auto_advancing_virtual_time_domain.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.h"
+#include "third_party/blink/renderer/platform/scheduler/main_thread/frame_task_queue_controller.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 using base::sequence_manager::TaskQueue;
@@ -276,7 +278,7 @@ class MainThreadSchedulerImplForTest : public MainThreadSchedulerImpl {
     return any_thread().begin_main_frame_on_critical_path;
   }
 
-  void RemoveRAILModeObserver(RAILModeObserver const* observer) {
+  void RemoveRAILModeObserver(WebRAILModeObserver const* observer) {
     main_thread_only().rail_mode_observers.RemoveObserver(observer);
   }
 
@@ -350,13 +352,18 @@ class MainThreadSchedulerImplTest : public testing::Test {
 
     page_scheduler_ =
         std::make_unique<PageSchedulerImpl>(nullptr, scheduler_.get());
-    main_frame_scheduler_ = FrameSchedulerImpl::Create(
-        page_scheduler_.get(), nullptr, FrameScheduler::FrameType::kMainFrame);
+    main_frame_scheduler_ =
+        FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr, nullptr,
+                                   FrameScheduler::FrameType::kMainFrame);
 
-    loading_task_runner_ = main_frame_scheduler_->LoadingTaskQueue();
+    auto* frame_task_queue_controller =
+        main_frame_scheduler_->FrameTaskQueueControllerForTest();
+    loading_task_runner_ = frame_task_queue_controller->LoadingTaskQueue();
     loading_control_task_runner_ =
-        main_frame_scheduler_->LoadingControlTaskQueue();
-    timer_task_runner_ = main_frame_scheduler_->ThrottleableTaskQueue();
+        frame_task_queue_controller->LoadingControlTaskQueue();
+    auto queue_traits = main_frame_scheduler_->ThrottleableTaskQueueTraits();
+    timer_task_runner_ =
+        frame_task_queue_controller->NonLoadingTaskQueue(queue_traits);
   }
 
   void TearDown() override {
@@ -767,7 +774,10 @@ class MainThreadSchedulerImplTest : public testing::Test {
 
   static scoped_refptr<TaskQueue> ThrottleableTaskQueue(
       FrameSchedulerImpl* scheduler) {
-    return scheduler->ThrottleableTaskQueue();
+    auto* frame_task_queue_controller =
+        scheduler->FrameTaskQueueControllerForTest();
+    auto queue_traits = FrameSchedulerImpl::ThrottleableTaskQueueTraits();
+    return frame_task_queue_controller->NonLoadingTaskQueue(queue_traits);
   }
 
   QueueingTimeEstimator* queueing_time_estimator() {
@@ -3358,7 +3368,7 @@ TEST_F(MainThreadSchedulerImplTest, MAIN_THREAD_GESTURE) {
   EXPECT_EQ(279u, run_order.size());
 }
 
-class MockRAILModeObserver : public WebThreadScheduler::RAILModeObserver {
+class MockRAILModeObserver : public WebRAILModeObserver {
  public:
   MOCK_METHOD1(OnRAILModeChanged, void(v8::RAILMode rail_mode));
 };
@@ -3558,7 +3568,7 @@ TEST_F(MainThreadSchedulerImplTest, EnableVirtualTimeAfterThrottling) {
   scheduler_->AddPageScheduler(page_scheduler.get());
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      FrameSchedulerImpl::Create(page_scheduler.get(), nullptr,
+      FrameSchedulerImpl::Create(page_scheduler.get(), nullptr, nullptr,
                                  FrameScheduler::FrameType::kSubframe);
 
   TaskQueue* timer_tq = ThrottleableTaskQueue(frame_scheduler.get()).get();
@@ -3647,7 +3657,7 @@ TEST_F(MainThreadSchedulerImplTest, Tracing) {
   scheduler_->AddPageScheduler(page_scheduler1.get());
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      FrameSchedulerImpl::Create(page_scheduler1.get(), nullptr,
+      FrameSchedulerImpl::Create(page_scheduler1.get(), nullptr, nullptr,
                                  FrameScheduler::FrameType::kSubframe);
 
   std::unique_ptr<PageSchedulerImpl> page_scheduler2 =
@@ -3667,6 +3677,7 @@ TEST_F(MainThreadSchedulerImplTest, Tracing) {
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat> value =
       scheduler_->AsValue(base::TimeTicks());
   EXPECT_TRUE(value);
+  EXPECT_FALSE(value->ToString().empty());
 }
 
 void RecordingTimeTestTask(

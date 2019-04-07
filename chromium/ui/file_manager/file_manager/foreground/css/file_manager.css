@@ -1678,7 +1678,7 @@ body:not([type='saveas-file']) #filename-input-box {
 
 body[type='folder'] .file,
 body[type='upload-folder'] .file,
-body[drive] .dialog-container[connection='offline'] .dim-offline {
+.dialog-container[connection='offline'] .dim-offline {
   opacity: 0.4;
 }
 
@@ -2229,15 +2229,6 @@ li#progress-center-close-view.error.single button.dismiss,
 #progress-center-close-view.quiet button.cancel,
 #progress-center li:not(.cancelable) button.cancel {
   visibility: hidden;
-}
-
-#cloud-import-banner {
-  background: rgb(33, 150, 243);
-  color: white;
-  display: flex;
-  flex: 0 0 14px;
-  font-size: 14px;
-  padding: 20px 15px;
 }
 
 .text-measure {

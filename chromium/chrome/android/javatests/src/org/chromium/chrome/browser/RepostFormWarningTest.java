@@ -75,8 +75,7 @@ public class RepostFormWarningTest {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
 
         // Verify that the form resubmission warning was not shown.
-        Assert.assertNull("Form resubmission warning shown upon first load.",
-                RepostFormWarningDialog.getCurrentDialogForTesting());
+        waitForNoReportFormWarningDialog();
     }
 
     /** Verifies that confirming the form reload performs the reload. */
@@ -97,8 +96,7 @@ public class RepostFormWarningTest {
         mCallbackHelper.getOnPageFinishedHelper().waitForCallback(1);
 
         // Verify that the reference to the dialog in RepostFormWarningDialog was cleared.
-        Assert.assertNull("Form resubmission warning dialog was not dismissed correctly.",
-                RepostFormWarningDialog.getCurrentDialogForTesting());
+        waitForNoReportFormWarningDialog();
     }
 
     /**
@@ -129,8 +127,7 @@ public class RepostFormWarningTest {
         Assert.assertTrue("Page was reloaded despite selecting Cancel.", timedOut);
 
         // Verify that the reference to the dialog in RepostFormWarningDialog was cleared.
-        Assert.assertNull("Form resubmission warning dialog was not dismissed correctly.",
-                RepostFormWarningDialog.getCurrentDialogForTesting());
+        waitForNoReportFormWarningDialog();
     }
 
     /**
@@ -152,6 +149,10 @@ public class RepostFormWarningTest {
                 (Runnable) () -> mActivityTestRule.getActivity().getCurrentTabModel().closeTab(
                         mTab));
 
+        waitForNoReportFormWarningDialog();
+    }
+
+    private void waitForNoReportFormWarningDialog() {
         CriteriaHelper.pollUiThread(
                 new Criteria("Form resubmission dialog not dismissed correctly") {
                     @Override

@@ -118,6 +118,7 @@ fi
 
 # Packages needed for development
 dev_list="\
+  binutils
   bison
   bzip2
   cdbs
@@ -133,7 +134,6 @@ dev_list="\
   git-core
   git-svn
   gperf
-  libappindicator-dev
   libappindicator3-dev
   libasound2-dev
   libbrlapi-dev
@@ -149,7 +149,6 @@ dev_list="\
   libglib2.0-dev
   libglu1-mesa-dev
   libgnome-keyring-dev
-  libgtk2.0-dev
   libgtk-3-dev
   libkrb5-dev
   libnspr4-dev
@@ -205,7 +204,6 @@ chromeos_lib_list="libpulse0 libbz2-1.0"
 
 # List of required run-time libraries
 common_lib_list="\
-  libappindicator1
   libappindicator3-1
   libasound2
   libatk1.0-0
@@ -219,7 +217,6 @@ common_lib_list="\
   libfreetype6
   libglib2.0-0
   libgnome-keyring0
-  libgtk2.0-0
   libgtk-3-0
   libpam0g
   libpango1.0-0
@@ -275,6 +272,8 @@ backwards_compatible_list="\
   language-pack-fr
   language-pack-he
   language-pack-zh-hant
+  libappindicator-dev
+  libappindicator1
   libappindicator3-1:i386
   libdconf-dev
   libdconf-dev:i386
@@ -289,6 +288,9 @@ backwards_compatible_list="\
   libgl1-mesa-dev
   libgl1-mesa-glx:i386
   libgles2-mesa-dev
+  libgtk2.0-0
+  libgtk2.0-0:i386
+  libgtk2.0-dev
   mesa-common-dev
   msttcorefonts
   ttf-dejavu-core
@@ -385,7 +387,6 @@ nacl_list="\
   libfontconfig1:i386
   libglib2.0-0:i386
   libgpm2:i386
-  libgtk2.0-0:i386
   libgtk-3-0:i386
   libncurses5:i386
   lib32ncurses5-dev

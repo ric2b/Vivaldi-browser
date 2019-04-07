@@ -9,10 +9,6 @@
 #endif
 
 VivaldiChromeUnitTestSuite::VivaldiChromeUnitTestSuite(int argc, char** argv)
-    : ChromeUnitTestSuite(argc, argv) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::VivaldiExtensionsClient::RegisterVivaldiExtensionsClient();
-#endif
-}
+    : ChromeUnitTestSuite(argc, argv) {}
 
 VivaldiChromeUnitTestSuite::~VivaldiChromeUnitTestSuite() {}

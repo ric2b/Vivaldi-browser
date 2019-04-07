@@ -10,7 +10,6 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/tablet_mode/scoped_skip_user_session_blocked_check.h"
@@ -95,6 +94,13 @@ void TabletModeWindowManager::OnOverviewModeEnded() {
 }
 
 void TabletModeWindowManager::OnSplitViewModeEnded() {
+  // The home launcher will minimize the snapped windows after ending splitview,
+  // so avoid maximizing them here.
+  if (Shell::Get()->split_view_controller()->end_reason() ==
+      SplitViewController::EndReason::kHomeLauncherPressed) {
+    return;
+  }
+
   // Maximize all snapped windows upon exiting split view mode. Note the snapped
   // window might not be tracked in our |window_state_map_|.
   MruWindowTracker::WindowList windows =
@@ -249,7 +255,7 @@ TabletModeWindowManager::TabletModeWindowManager() {
   display::Screen::GetScreen()->AddObserver(this);
   Shell::Get()->AddShellObserver(this);
   Shell::Get()->split_view_controller()->AddObserver(this);
-  event_handler_ = ShellPort::Get()->CreateTabletModeEventHandler();
+  event_handler_ = std::make_unique<wm::TabletModeEventHandler>();
 }
 
 void TabletModeWindowManager::MaximizeAllWindows() {

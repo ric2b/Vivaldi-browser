@@ -136,38 +136,6 @@ class NonSpareRendererContentBrowserClient : public TestContentBrowserClient {
   DISALLOW_COPY_AND_ASSIGN(NonSpareRendererContentBrowserClient);
 };
 
-// Sometimes the renderer process's ShutdownRequest (corresponding to the
-// ViewMsg_WasSwappedOut from a previous navigation) doesn't arrive until after
-// the browser process decides to re-use the renderer for a new purpose.  This
-// test makes sure the browser doesn't let the renderer die in that case.  See
-// http://crbug.com/87176.
-IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
-                       ShutdownRequestFromActiveTabIgnored) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  GURL test_url = embedded_test_server()->GetURL("/simple_page.html");
-  NavigateToURL(shell(), test_url);
-  RenderProcessHost* rph =
-      shell()->web_contents()->GetMainFrame()->GetProcess();
-
-  host_destructions_ = 0;
-  process_exits_ = 0;
-
-  rph->AddObserver(this);
-
-  static_cast<mojom::RendererHost*>(static_cast<RenderProcessHostImpl*>(rph))
-      ->ShutdownRequest();
-
-  // If the RPH sends a mistaken ProcessShutdown, the renderer process
-  // will take some time to die. Wait for a second tab to load in order to give
-  // that time to happen.
-  NavigateToURL(CreateBrowser(), test_url);
-
-  EXPECT_EQ(0, process_exits_);
-  if (!host_destructions_)
-    rph->RemoveObserver(this);
-}
-
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
                        GuestsAreNotSuitableHosts) {
   // Set max renderers to 1 to force running out of processes.
@@ -731,7 +699,9 @@ class AudioStartObserver : public WebContentsObserver {
 // Note: This test can't run when the Mojo Renderer is used since it does not
 // create audio streams through the normal audio pathways; at present this is
 // only used by Chromecast.
-#if BUILDFLAG(ENABLE_MOJO_RENDERER)
+//
+// crbug.com/864476: flaky on Android for unclear reasons.
+#if BUILDFLAG(ENABLE_MOJO_RENDERER) || defined(OS_ANDROID)
 #define KillProcessZerosAudioStreams DISABLED_KillProcessZerosAudioStreams
 #endif
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KillProcessZerosAudioStreams) {
@@ -740,8 +710,8 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KillProcessZerosAudioStreams) {
   embedded_test_server()->ServeFilesFromSourceDirectory(
       media::GetTestDataPath());
   ASSERT_TRUE(embedded_test_server()->Start());
-  NavigateToURL(shell(),
-                embedded_test_server()->GetURL("/webaudio_oscillator.html"));
+  ASSERT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("/webaudio_oscillator.html")));
   RenderProcessHostImpl* rph = static_cast<RenderProcessHostImpl*>(
       shell()->web_contents()->GetMainFrame()->GetProcess());
 
@@ -986,7 +956,15 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KeepAliveRendererProcess) {
     rph->RemoveObserver(this);
 }
 
-IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KeepAliveRendererProcess_Hung) {
+// Test is flaky on Android builders: https://crbug.com/875179
+#if defined(OS_ANDROID)
+#define MAYBE_KeepAliveRendererProcess_Hung \
+  DISABLED_KeepAliveRendererProcess_Hung
+#else
+#define MAYBE_KeepAliveRendererProcess_Hung KeepAliveRendererProcess_Hung
+#endif
+IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
+                       MAYBE_KeepAliveRendererProcess_Hung) {
   embedded_test_server()->RegisterRequestHandler(
       base::BindRepeating(HandleHungBeacon));
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -1013,8 +991,16 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KeepAliveRendererProcess_Hung) {
     rph->RemoveObserver(this);
 }
 
+// Test is flaky on Android builders: https://crbug.com/875179
+#if defined(OS_ANDROID)
+#define MAYBE_FetchKeepAliveRendererProcess_Hung \
+  DISABLED_FetchKeepAliveRendererProcess_Hung
+#else
+#define MAYBE_FetchKeepAliveRendererProcess_Hung \
+  FetchKeepAliveRendererProcess_Hung
+#endif
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
-                       FetchKeepAliveRendererProcess_Hung) {
+                       MAYBE_FetchKeepAliveRendererProcess_Hung) {
   embedded_test_server()->RegisterRequestHandler(
       base::BindRepeating(HandleHungBeacon));
   ASSERT_TRUE(embedded_test_server()->Start());

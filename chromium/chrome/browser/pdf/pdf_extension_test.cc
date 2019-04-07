@@ -69,6 +69,7 @@
 #include "extensions/test/result_catcher.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/cpp/features.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_tree.h"
@@ -133,7 +134,6 @@ class PDFExtensionTest : public extensions::ExtensionApiTest {
     const char* const kFailingPdfs[] = {
         "pdf_private/accessibility_crash_1.pdf",
         "pdf_private/cfuzz5.pdf",
-        "pdf_private/cfuzz6.pdf",
         "pdf_private/js.pdf",
         "pdf_private/segv-ecx.pdf",
         "pdf_private/tests.pdf",
@@ -248,6 +248,11 @@ class PDFExtensionTest : public extensions::ExtensionApiTest {
       if (static_cast<int>(base::Hash(filename) % kNumberLoadTestParts) == k) {
         LOG(INFO) << "Loading: " << pdf_file;
         bool success = LoadPdf(embedded_test_server()->GetURL("/" + pdf_file));
+        if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+          // This file has races in loading correctly or not.
+          if (pdf_file == "pdf_private/cfuzz5.pdf")
+            continue;
+        }
         EXPECT_EQ(PdfIsExpectedToLoad(pdf_file), success) << pdf_file;
       }
       ++count;
@@ -346,7 +351,7 @@ class PDFExtensionTest : public extensions::ExtensionApiTest {
   void CountPDFProcessesOnIOThread(int* result) {
     auto* service = content::PluginService::GetInstance();
     *result = service->CountPpapiPluginProcessesForProfile(
-        base::FilePath::FromUTF8Unsafe(ChromeContentClient::kPDFPluginPath),
+        base::FilePath(ChromeContentClient::kPDFPluginPath),
         browser()->profile()->GetPath());
   }
 };
@@ -1770,7 +1775,13 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, CtrlWheelInvokesCustomZoom) {
 
 #endif  // defined(OS_MACOSX)
 
-IN_PROC_BROWSER_TEST_P(PDFExtensionHitTestTest, MouseLeave) {
+#if defined(OS_WIN) && defined(ADDRESS_SANITIZER)
+// https://crbug.com/856169
+#define MAYBE_MouseLeave DISABLED_MouseLeave
+#else
+#define MAYBE_MouseLeave MouseLeave
+#endif
+IN_PROC_BROWSER_TEST_P(PDFExtensionHitTestTest, MAYBE_MouseLeave) {
   GURL url = embedded_test_server()->GetURL("/pdf/pdf_embed.html");
 
   // Load page with embedded PDF and make sure it succeeds.

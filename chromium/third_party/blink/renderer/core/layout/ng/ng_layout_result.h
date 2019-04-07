@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_margin_strut.h"
 #include "third_party/blink/renderer/core/layout/ng/list/ng_unpositioned_list_marker.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_floats_utils.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_link.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_out_of_flow_positioned_descendant.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_fragment.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
@@ -31,20 +32,18 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
  public:
   enum NGLayoutResultStatus {
     kSuccess = 0,
-    kBfcOffsetResolved = 1,
+    kBfcBlockOffsetResolved = 1,
     // When adding new values, make sure the bit size of |status_| is large
     // enough to store.
   };
 
   ~NGLayoutResult();
 
-  scoped_refptr<NGPhysicalFragment> PhysicalFragment() const {
-    return physical_fragment_;
+  scoped_refptr<const NGPhysicalFragment> PhysicalFragment() const {
+    return root_fragment_.get();
   }
-
-  scoped_refptr<NGPhysicalFragment>& MutablePhysicalFragment() {
-    return physical_fragment_;
-  }
+  NGPhysicalOffset Offset() const { return root_fragment_.Offset(); }
+  void SetOffset(NGPhysicalOffset offset) { root_fragment_.offset_ = offset; }
 
   const Vector<NGOutOfFlowPositionedDescendant>&
   OutOfFlowPositionedDescendants() const {
@@ -55,7 +54,7 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
   // the line-box's parent fragment (as floats which occur within a line-box do
   // not appear a children).
   const Vector<NGPositionedFloat>& PositionedFloats() const {
-    DCHECK(physical_fragment_->Type() == NGPhysicalFragment::kFragmentLineBox);
+    DCHECK(root_fragment_->Type() == NGPhysicalFragment::kFragmentLineBox);
     return positioned_floats_;
   }
 
@@ -71,12 +70,15 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
     return static_cast<NGLayoutResultStatus>(status_);
   }
 
-  const base::Optional<NGBfcOffset>& BfcOffset() const { return bfc_offset_; }
+  LayoutUnit BfcLineOffset() const { return bfc_line_offset_; }
+  const base::Optional<LayoutUnit>& BfcBlockOffset() const {
+    return bfc_block_offset_;
+  }
 
   const NGMarginStrut EndMarginStrut() const { return end_margin_strut_; }
 
   const LayoutUnit IntrinsicBlockSize() const {
-    DCHECK(physical_fragment_->Type() == NGPhysicalFragment::kFragmentBox);
+    DCHECK(root_fragment_->Type() == NGPhysicalFragment::kFragmentBox);
     return intrinsic_block_size_;
   }
 
@@ -98,8 +100,8 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
   bool IsPushedByFloats() const { return is_pushed_by_floats_; }
 
   // Return the types (none, left, right, both) of preceding adjoining
-  // floats. These are floats that are added while the in-flow BFC offset is
-  // still unknown. The floats may or may not be unpositioned (pending). That
+  // floats. These are floats that are added while the in-flow BFC block offset
+  // is still unknown. The floats may or may not be unpositioned (pending). That
   // depends on which layout pass we're in. Adjoining floats should be treated
   // differently when calculating clearance on a block with adjoining
   // block-start margin (in such cases we will know up front that the block will
@@ -113,13 +115,14 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
   friend class NGFragmentBuilder;
   friend class NGLineBoxFragmentBuilder;
 
-  NGLayoutResult(scoped_refptr<NGPhysicalFragment> physical_fragment,
+  NGLayoutResult(scoped_refptr<const NGPhysicalFragment> physical_fragment,
                  Vector<NGOutOfFlowPositionedDescendant>&
                      out_of_flow_positioned_descendants,
                  Vector<NGPositionedFloat>& positioned_floats,
                  const NGUnpositionedListMarker& unpositioned_list_marker,
                  std::unique_ptr<const NGExclusionSpace> exclusion_space,
-                 const base::Optional<NGBfcOffset> bfc_offset,
+                 LayoutUnit bfc_line_offset,
+                 const base::Optional<LayoutUnit> bfc_block_offset,
                  const NGMarginStrut end_margin_strut,
                  const LayoutUnit intrinsic_block_size,
                  LayoutUnit minimal_space_shortage,
@@ -130,7 +133,7 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
                  NGFloatTypes adjoining_floats,
                  NGLayoutResultStatus status);
 
-  scoped_refptr<NGPhysicalFragment> physical_fragment_;
+  NGLink root_fragment_;
   Vector<NGOutOfFlowPositionedDescendant> oof_positioned_descendants_;
 
   Vector<NGPositionedFloat> positioned_floats_;
@@ -138,7 +141,8 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
   NGUnpositionedListMarker unpositioned_list_marker_;
 
   const std::unique_ptr<const NGExclusionSpace> exclusion_space_;
-  const base::Optional<NGBfcOffset> bfc_offset_;
+  const LayoutUnit bfc_line_offset_;
+  const base::Optional<LayoutUnit> bfc_block_offset_;
   const NGMarginStrut end_margin_strut_;
   const LayoutUnit intrinsic_block_size_;
   const LayoutUnit minimal_space_shortage_;

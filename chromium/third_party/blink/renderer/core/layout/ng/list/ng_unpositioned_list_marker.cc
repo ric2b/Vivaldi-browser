@@ -75,7 +75,7 @@ bool NGUnpositionedListMarker::AddToBox(
 
     content_metrics = line_box.Metrics();
   } else {
-    NGBoxFragment content_fragment(space.GetWritingMode(),
+    NGBoxFragment content_fragment(space.GetWritingMode(), space.Direction(),
                                    ToNGPhysicalBoxFragment(content));
     content_metrics = content_fragment.BaselineMetricsWithoutSynthesize(
         {NGBaselineAlgorithmType::kFirstLine, baseline_type});
@@ -95,7 +95,7 @@ bool NGUnpositionedListMarker::AddToBox(
       ToNGPhysicalBoxFragment(*marker_layout_result->PhysicalFragment());
 
   // Compute the inline offset of the marker.
-  NGBoxFragment marker_fragment(space.GetWritingMode(),
+  NGBoxFragment marker_fragment(space.GetWritingMode(), space.Direction(),
                                 marker_physical_fragment);
   NGLogicalOffset marker_offset(
       InlineOffset(marker_fragment.Size().inline_size),
@@ -156,10 +156,10 @@ LayoutUnit NGUnpositionedListMarker::ComputeIntrudedFloatOffset(
   // Because opportunity.rect is in the content area of LI, so origin_offset
   // should plus border_scrollbar_padding.inline_start, and available_size
   // should minus border_scrollbar_padding.
-  NGBfcOffset bfc_offset = container_builder->BfcOffset().value();
   NGBfcOffset origin_offset = {
-      bfc_offset.line_offset + border_scrollbar_padding.inline_start,
-      bfc_offset.block_offset + marker_block_offset};
+      container_builder->BfcLineOffset() +
+          border_scrollbar_padding.inline_start,
+      container_builder->BfcBlockOffset().value() + marker_block_offset};
   LayoutUnit available_size = container_builder->InlineSize() -
                               border_scrollbar_padding.inline_start -
                               border_scrollbar_padding.inline_end;

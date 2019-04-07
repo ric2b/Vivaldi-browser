@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/events/gesture_event.h"
 #include "third_party/blink/renderer/core/frame/browser_controls.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
@@ -26,9 +27,9 @@
 #include "third_party/blink/renderer/core/page/scrolling/snap_coordinator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/scroll/scroll_customization.h"
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_customization.h"
 
 namespace blink {
 namespace {
@@ -55,6 +56,15 @@ SnapFlingController::GestureScrollUpdateInfo GetGestureScrollUpdateInfo(
           .is_in_inertial_phase = event.data.scroll_update.inertial_phase ==
                                   WebGestureEvent::kMomentumPhase,
           .event_time = event.TimeStamp()};
+}
+
+ScrollableArea* ScrollableAreaForSnapping(LayoutBox* layout_box) {
+  if (!layout_box)
+    return nullptr;
+
+  return layout_box->IsLayoutView()
+             ? layout_box->GetFrameView()->GetScrollableArea()
+             : layout_box->GetScrollableArea();
 }
 
 }  // namespace
@@ -120,7 +130,12 @@ AutoscrollController* ScrollManager::GetAutoscrollController() const {
 
 static bool CanPropagate(const ScrollState& scroll_state,
                          const Element& element) {
-  if (!element.GetLayoutBox()->GetScrollableArea())
+  ScrollableArea* scrollable_area = element.GetLayoutBox()->GetScrollableArea();
+  if (!scrollable_area)
+    return true;
+
+  if (!scrollable_area->UserInputScrollable(kHorizontalScrollbar) &&
+      !scrollable_area->UserInputScrollable(kVerticalScrollbar))
     return true;
 
   return (scroll_state.deltaXHint() == 0 ||
@@ -608,18 +623,12 @@ WebInputEventResult ScrollManager::HandleGestureScrollEnd(
 }
 
 LayoutBox* ScrollManager::LayoutBoxForSnapping() const {
+  if (!previous_gesture_scrolled_element_)
+    return nullptr;
   Element* document_element = frame_->GetDocument()->documentElement();
   return previous_gesture_scrolled_element_ == document_element
              ? frame_->GetDocument()->GetLayoutView()
              : previous_gesture_scrolled_element_->GetLayoutBox();
-}
-
-ScrollableArea* ScrollManager::ScrollableAreaForSnapping() const {
-  Element* document_element = frame_->GetDocument()->documentElement();
-  return previous_gesture_scrolled_element_ == document_element
-             ? frame_->View()->GetScrollableArea()
-             : previous_gesture_scrolled_element_->GetLayoutBox()
-                   ->GetScrollableArea();
 }
 
 void ScrollManager::SnapAtGestureScrollEnd() {
@@ -654,7 +663,11 @@ bool ScrollManager::GetSnapFlingInfo(const gfx::Vector2dF& natural_displacement,
 
 gfx::Vector2dF ScrollManager::ScrollByForSnapFling(
     const gfx::Vector2dF& delta) {
-  DCHECK(previous_gesture_scrolled_element_);
+  ScrollableArea* scrollable_area =
+      ScrollableAreaForSnapping(LayoutBoxForSnapping());
+  if (!scrollable_area)
+    return gfx::Vector2dF();
+
   std::unique_ptr<ScrollStateData> scroll_state_data =
       std::make_unique<ScrollStateData>();
 
@@ -672,13 +685,16 @@ gfx::Vector2dF ScrollManager::ScrollByForSnapFling(
       previous_gesture_scrolled_element_);
 
   CustomizedScroll(*scroll_state);
-
-  ScrollableArea* scrollable_area = ScrollableAreaForSnapping();
   FloatPoint end_position = scrollable_area->ScrollPosition();
   return gfx::Vector2dF(end_position.X(), end_position.Y());
 }
 
 void ScrollManager::ScrollEndForSnapFling() {
+  if (current_scroll_chain_.empty()) {
+    NotifyScrollPhaseEndForCustomizedScroll();
+    ClearGestureScrollState();
+    return;
+  }
   std::unique_ptr<ScrollStateData> scroll_state_data =
       std::make_unique<ScrollStateData>();
   scroll_state_data->is_ending = true;
@@ -800,7 +816,7 @@ WebInputEventResult ScrollManager::HandleGestureScrollEvent(
         event_target->GetDocument().domWindow(), gesture_event);
     if (gesture_dom_event) {
       DispatchEventResult gesture_dom_event_result =
-          event_target->DispatchEvent(gesture_dom_event);
+          event_target->DispatchEvent(*gesture_dom_event);
       if (gesture_dom_event_result != DispatchEventResult::kNotCanceled) {
         DCHECK(gesture_dom_event_result !=
                DispatchEventResult::kCanceledByEventHandler);

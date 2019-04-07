@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/power_monitor/power_monitor.h"
@@ -50,6 +51,10 @@ const base::TimeDelta kNativeWindowOcclusionCalculationInterval =
     base::TimeDelta::FromMinutes(10);
 #endif
 
+// The interval at which the heartbeat tab metrics should be reported.
+const base::TimeDelta kTabsHeartbeatReportingInterval =
+    base::TimeDelta::FromMinutes(5);
+
 // The global TabStatsTracker instance.
 TabStatsTracker* g_tab_stats_tracker_instance = nullptr;
 
@@ -86,6 +91,13 @@ const char TabStatsTracker::UmaStatsReportingDelegate::
 const char TabStatsTracker::UmaStatsReportingDelegate::
     kUsedTabsInIntervalHistogramNameBase[] = "Tabs.UsedInInterval.Count";
 
+const char
+    TabStatsTracker::UmaStatsReportingDelegate::kTabCountHistogramName[] =
+        "Tabs.TabCount";
+const char
+    TabStatsTracker::UmaStatsReportingDelegate::kWindowCountHistogramName[] =
+        "Tabs.WindowCount";
+
 const TabStatsDataStore::TabsStats& TabStatsTracker::tab_stats() const {
   return tab_stats_data_store_->tab_stats();
 }
@@ -121,8 +133,8 @@ TabStatsTracker::TabStatsTracker(PrefService* pref_service)
   // Call the CheckInterval method to see if the data need to be immediately
   // reported.
   daily_event_->CheckInterval();
-  timer_.Start(FROM_HERE, kDailyEventIntervalTimeDelta, daily_event_.get(),
-               &DailyEvent::CheckInterval);
+  daily_event_timer_.Start(FROM_HERE, kDailyEventIntervalTimeDelta,
+                           daily_event_.get(), &DailyEvent::CheckInterval);
 
   // Initialize the interval maps and timers associated with them.
   for (base::TimeDelta interval : kTabUsageReportingIntervals) {
@@ -131,9 +143,10 @@ TabStatsTracker::TabStatsTracker(PrefService* pref_service)
     // Setup the timer associated with this interval.
     std::unique_ptr<base::RepeatingTimer> timer =
         std::make_unique<base::RepeatingTimer>();
-    timer->Start(FROM_HERE, interval,
-                 Bind(&TabStatsTracker::OnInterval, base::Unretained(this),
-                      interval, interval_map));
+    timer->Start(
+        FROM_HERE, interval,
+        base::BindRepeating(&TabStatsTracker::OnInterval,
+                            base::Unretained(this), interval, interval_map));
     usage_interval_timers_.push_back(std::move(timer));
   }
 
@@ -141,9 +154,14 @@ TabStatsTracker::TabStatsTracker(PrefService* pref_service)
 #if defined(OS_WIN)
   native_window_occlusion_timer_.Start(
       FROM_HERE, kNativeWindowOcclusionCalculationInterval,
-      Bind(&TabStatsTracker::CalculateAndRecordNativeWindowVisibilities,
-           base::Unretained(this)));
+      base::BindRepeating(
+          &TabStatsTracker::CalculateAndRecordNativeWindowVisibilities,
+          base::Unretained(this)));
 #endif
+
+  heartbeat_timer_.Start(FROM_HERE, kTabsHeartbeatReportingInterval,
+                         base::BindRepeating(&TabStatsTracker::OnHeartbeatEvent,
+                                             base::Unretained(this)));
 }
 
 TabStatsTracker::~TabStatsTracker() {
@@ -240,15 +258,32 @@ void TabStatsTracker::OnBrowserRemoved(Browser* browser) {
   browser->tab_strip_model()->RemoveObserver(this);
 }
 
-void TabStatsTracker::TabInsertedAt(TabStripModel* model,
-                                    content::WebContents* web_contents,
-                                    int index,
-                                    bool foreground) {
+void TabStatsTracker::OnTabStripModelChanged(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  OnInitialOrInsertedTab(web_contents);
+  if (change.type() == TabStripModelChange::kInserted) {
+    for (const auto& delta : change.deltas())
+      OnInitialOrInsertedTab(delta.insert.contents);
 
-  tab_stats_data_store_->UpdateMaxTabsPerWindowIfNeeded(
-      static_cast<size_t>(model->count()));
+    tab_stats_data_store_->UpdateMaxTabsPerWindowIfNeeded(
+        static_cast<size_t>(tab_strip_model->count()));
+
+    return;
+  }
+
+  if (change.type() == TabStripModelChange::kReplaced) {
+    for (const auto& delta : change.deltas()) {
+      content::WebContents* old_contents = delta.replace.old_contents;
+      content::WebContents* new_contents = delta.replace.new_contents;
+      tab_stats_data_store_->OnTabReplaced(old_contents, new_contents);
+      web_contents_usage_observers_.insert(std::make_pair(
+          new_contents,
+          std::make_unique<WebContentsUsageObserver>(new_contents, this)));
+      web_contents_usage_observers_.erase(old_contents);
+    }
+  }
 }
 
 void TabStatsTracker::TabChangedAt(content::WebContents* web_contents,
@@ -260,18 +295,6 @@ void TabStatsTracker::TabChangedAt(content::WebContents* web_contents,
     return;
   if (web_contents->IsCurrentlyAudible())
     tab_stats_data_store_->OnTabAudible(web_contents);
-}
-
-void TabStatsTracker::TabReplacedAt(TabStripModel* tab_strip_model,
-                                    content::WebContents* old_contents,
-                                    content::WebContents* new_contents,
-                                    int index) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  tab_stats_data_store_->OnTabReplaced(old_contents, new_contents);
-  web_contents_usage_observers_.insert(std::make_pair(
-      new_contents,
-      std::make_unique<WebContentsUsageObserver>(new_contents, this)));
-  web_contents_usage_observers_.erase(old_contents);
 }
 
 void TabStatsTracker::OnResume() {
@@ -313,6 +336,11 @@ void TabStatsTracker::OnWebContentsDestroyed(
   tab_stats_data_store_->OnTabRemoved(web_contents);
 }
 
+void TabStatsTracker::OnHeartbeatEvent() {
+  reporting_delegate_->ReportHeartbeatMetrics(
+      tab_stats_data_store_->tab_stats());
+}
+
 void TabStatsTracker::UmaStatsReportingDelegate::ReportTabCountOnResume(
     size_t tab_count) {
   // Don't report the number of tabs on resume if Chrome is running in
@@ -335,6 +363,17 @@ void TabStatsTracker::UmaStatsReportingDelegate::ReportDailyMetrics(
                              tab_stats.max_tab_per_window);
   UMA_HISTOGRAM_COUNTS_10000(kMaxWindowsInADayHistogramName,
                              tab_stats.window_count_max);
+}
+
+void TabStatsTracker::UmaStatsReportingDelegate::ReportHeartbeatMetrics(
+    const TabStatsDataStore::TabsStats& tab_stats) {
+  // Don't report anything if Chrome is running in background with no visible
+  // window.
+  if (IsChromeBackgroundedWithoutWindows())
+    return;
+
+  UMA_HISTOGRAM_COUNTS_10000(kTabCountHistogramName, tab_stats.total_tab_count);
+  UMA_HISTOGRAM_COUNTS_10000(kWindowCountHistogramName, tab_stats.window_count);
 }
 
 void TabStatsTracker::UmaStatsReportingDelegate::ReportUsageDuringInterval(

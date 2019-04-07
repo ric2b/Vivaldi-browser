@@ -11,6 +11,7 @@
 #include "ash/shell.h"
 #include "ash/shell_test_api.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/window_factory.h"
 #include "base/test/scoped_feature_list.h"
 #include "ui/aura/env.h"
 #include "ui/aura/test/test_window_delegate.h"
@@ -39,7 +40,7 @@ class ScreenPositionControllerTest : public AshTestBase {
 
   void SetUp() override {
     AshTestBase::SetUp();
-    window_.reset(new aura::Window(&window_delegate_));
+    window_ = window_factory::NewWindow(&window_delegate_);
     window_->SetType(aura::client::WINDOW_TYPE_NORMAL);
     window_->Init(ui::LAYER_NOT_DRAWN);
     ParentWindowInPrimaryRootWindow(window_.get());
@@ -73,25 +74,6 @@ class ScreenPositionControllerTest : public AshTestBase {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ScreenPositionControllerTest);
-};
-
-class ScreenPositionControllerWithUiScaleTest
-    : public ScreenPositionControllerTest {
- public:
-  ScreenPositionControllerWithUiScaleTest() = default;
-  ~ScreenPositionControllerWithUiScaleTest() override = default;
-
-  // ScreenPositionControllerTest
-  void SetUp() override {
-    scoped_feature_list_.InitAndDisableFeature(
-        features::kEnableDisplayZoomSetting);
-    ScreenPositionControllerTest::SetUp();
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScreenPositionControllerWithUiScaleTest);
 };
 
 }  // namespace
@@ -282,37 +264,6 @@ TEST_F(ScreenPositionControllerTest, ConvertHostPointToScreenZoomScale) {
   EXPECT_EQ("37,37", ConvertHostPointToScreen(60, -340));
 }
 
-TEST_F(ScreenPositionControllerWithUiScaleTest,
-       ConvertHostPointToScreenUIScale) {
-  // 1st display is 2x density with 1.5 UI scale.
-  UpdateDisplay("100+100-200x200*2@1.5,100+500-200x200");
-  // Put |window_| to the 1st.
-  window_->SetBoundsInScreen(gfx::Rect(20, 20, 50, 50),
-                             display::Screen::GetScreen()->GetPrimaryDisplay());
-
-  // The point is on the 1st host.
-  EXPECT_EQ("45,45", ConvertHostPointToScreen(60, 60));
-  // The point is out of the host windows.
-  EXPECT_EQ("45,225", ConvertHostPointToScreen(60, 300));
-  // The point is on the 2nd host. Point on 2nd host (60,150) -
-  // - screen [+(150,0)]
-  EXPECT_EQ("210,49", ConvertHostPointToScreen(60, 450));
-
-  // Move |window_| to the 2nd.
-  window_->SetBoundsInScreen(gfx::Rect(300, 20, 50, 50),
-                             display_manager()->GetSecondaryDisplay());
-  aura::Window::Windows root_windows = Shell::Get()->GetAllRootWindows();
-  EXPECT_EQ(root_windows[1], window_->GetRootWindow());
-
-  // The point is on the 2nd host. (50,70) - ro
-  EXPECT_EQ("210,70", ConvertHostPointToScreen(60, 70));
-  // The point is out of the host windows.
-  EXPECT_EQ("210,-50", ConvertHostPointToScreen(60, -50));
-  // The point is on the 2nd host. Point on 1nd host (60, 60)
-  // 1/2 * 1.5 = (45,45)
-  EXPECT_EQ("45,45", ConvertHostPointToScreen(60, -340));
-}
-
 namespace {
 
 // EventHandler which tracks whether it got any MouseEvents whose location could
@@ -320,10 +271,10 @@ namespace {
 class ConvertToScreenEventHandler : public ui::EventHandler {
  public:
   ConvertToScreenEventHandler() : could_convert_to_screen_(true) {
-    aura::Env::GetInstance()->AddPreTargetHandler(this);
+    Shell::Get()->aura_env()->AddPreTargetHandler(this);
   }
   ~ConvertToScreenEventHandler() override {
-    aura::Env::GetInstance()->RemovePreTargetHandler(this);
+    Shell::Get()->aura_env()->RemovePreTargetHandler(this);
   }
 
   bool could_convert_to_screen() const { return could_convert_to_screen_; }
@@ -365,7 +316,7 @@ TEST_F(ScreenPositionControllerTest,
   // ScreenPositionClient has been detached from the root window.
   GetEventGenerator()->MoveMouseTo(800, 200);
   EXPECT_TRUE(window_->GetBoundsInScreen().Contains(
-      aura::Env::GetInstance()->last_mouse_location()));
+      Shell::Get()->aura_env()->last_mouse_location()));
 
   aura::Window::Windows root_windows = Shell::Get()->GetAllRootWindows();
   aura::WindowTracker tracker;

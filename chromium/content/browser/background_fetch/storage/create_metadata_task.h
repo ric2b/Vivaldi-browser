@@ -17,6 +17,8 @@
 
 namespace content {
 
+struct BackgroundFetchRegistration;
+
 namespace background_fetch {
 
 // Creates Background Fetch metadata entries in the database.
@@ -24,7 +26,7 @@ class CreateMetadataTask : public DatabaseTask {
  public:
   using CreateMetadataCallback =
       base::OnceCallback<void(blink::mojom::BackgroundFetchError,
-                              std::unique_ptr<proto::BackgroundFetchMetadata>)>;
+                              const BackgroundFetchRegistration&)>;
 
   CreateMetadataTask(DatabaseTaskHost* host,
                      const BackgroundFetchRegistrationId& registration_id,
@@ -38,10 +40,14 @@ class CreateMetadataTask : public DatabaseTask {
   void Start() override;
 
  private:
+  void DidGetIsQuotaAvailable(bool is_available);
+
+  void GetRegistrationUniqueId();
+
   void DidGetUniqueId(const std::vector<std::string>& data,
                       blink::ServiceWorkerStatusCode status);
 
-  void StoreIcon(std::string serialized_icon);
+  void DidSerializeIcon(std::string serialized_icon);
 
   void StoreMetadata();
 
@@ -52,6 +58,8 @@ class CreateMetadataTask : public DatabaseTask {
 
   void FinishWithError(blink::mojom::BackgroundFetchError error) override;
 
+  std::string HistogramName() const override;
+
   BackgroundFetchRegistrationId registration_id_;
   std::vector<ServiceWorkerFetchRequest> requests_;
   BackgroundFetchOptions options_;
@@ -59,6 +67,8 @@ class CreateMetadataTask : public DatabaseTask {
   CreateMetadataCallback callback_;
 
   std::unique_ptr<proto::BackgroundFetchMetadata> metadata_proto_;
+
+  std::string serialized_icon_;
 
   base::WeakPtrFactory<CreateMetadataTask> weak_factory_;  // Keep as last.
 

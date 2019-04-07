@@ -17,10 +17,14 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
+#include "base/power_monitor/power_monitor.h"
+#include "base/power_monitor/power_monitor_source.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/gtest_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -32,6 +36,7 @@
 #include "net/base/load_flags.h"
 #include "net/base/mime_sniffer.h"
 #include "net/base/net_errors.h"
+#include "net/http/http_response_info.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -190,12 +195,17 @@ class MultipleWritesInterceptor : public net::URLRequestInterceptor {
   DISALLOW_COPY_AND_ASSIGN(MultipleWritesInterceptor);
 };
 
-// Every read completes synchronously, returning a single byte.
+// Every read completes synchronously.
 class URLRequestEternalSyncReadsJob : public net::URLRequestJob {
  public:
+  // If |fill_entire_buffer| is true, each read fills the entire read buffer at
+  // once. Otherwise, one byte is read at a time.
   URLRequestEternalSyncReadsJob(net::URLRequest* request,
-                                net::NetworkDelegate* network_delegate)
-      : URLRequestJob(request, network_delegate), weak_factory_(this) {}
+                                net::NetworkDelegate* network_delegate,
+                                bool fill_entire_buffer)
+      : URLRequestJob(request, network_delegate),
+        fill_entire_buffer_(fill_entire_buffer),
+        weak_factory_(this) {}
 
   // net::URLRequestJob implementation:
   void Start() override {
@@ -206,6 +216,11 @@ class URLRequestEternalSyncReadsJob : public net::URLRequestJob {
 
   int ReadRawData(net::IOBuffer* buf, int buf_size) override {
     DCHECK_GT(buf_size, 0);
+    if (fill_entire_buffer_) {
+      memset(buf->data(), 'a', buf_size);
+      return buf_size;
+    }
+
     buf->data()[0] = 'a';
     return 1;
   }
@@ -214,6 +229,8 @@ class URLRequestEternalSyncReadsJob : public net::URLRequestJob {
   ~URLRequestEternalSyncReadsJob() override {}
 
   void StartAsync() { NotifyHeadersComplete(); }
+
+  const bool fill_entire_buffer_;
 
   base::WeakPtrFactory<URLRequestEternalSyncReadsJob> weak_factory_;
 
@@ -225,17 +242,90 @@ class EternalSyncReadsInterceptor : public net::URLRequestInterceptor {
   EternalSyncReadsInterceptor() {}
   ~EternalSyncReadsInterceptor() override {}
 
-  static GURL GetURL() { return GURL("http://eternal"); }
+  static std::string GetHostName() { return "eternal"; }
+
+  static GURL GetSingleByteURL() { return GURL("http://eternal/single-byte"); }
+  static GURL GetFillBufferURL() { return GURL("http://eternal/fill-buffer"); }
 
   // URLRequestInterceptor implementation:
   net::URLRequestJob* MaybeInterceptRequest(
       net::URLRequest* request,
       net::NetworkDelegate* network_delegate) const override {
-    return new URLRequestEternalSyncReadsJob(request, network_delegate);
+    if (request->url() == GetSingleByteURL()) {
+      return new URLRequestEternalSyncReadsJob(request, network_delegate,
+                                               false /* fill_entire_buffer */);
+    }
+    if (request->url() == GetFillBufferURL()) {
+      return new URLRequestEternalSyncReadsJob(request, network_delegate,
+                                               true /* fill_entire_buffer */);
+    }
+    return nullptr;
   }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(EternalSyncReadsInterceptor);
+};
+
+// Simulates handing over things to the disk to write before returning to the
+// caller.
+class URLRequestSimulatedCacheJob : public net::URLRequestJob {
+ public:
+  // If |fill_entire_buffer| is true, each read fills the entire read buffer at
+  // once. Otherwise, one byte is read at a time.
+  URLRequestSimulatedCacheJob(
+      net::URLRequest* request,
+      net::NetworkDelegate* network_delegate,
+      scoped_refptr<net::IOBuffer>* simulated_cache_dest)
+      : URLRequestJob(request, network_delegate),
+        simulated_cache_dest_(simulated_cache_dest),
+        weak_factory_(this) {}
+
+  // net::URLRequestJob implementation:
+  void Start() override {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&URLRequestSimulatedCacheJob::StartAsync,
+                                  weak_factory_.GetWeakPtr()));
+  }
+
+  int ReadRawData(net::IOBuffer* buf, int buf_size) override {
+    DCHECK_GT(buf_size, 0);
+
+    // Pretend this is the entire network stack, which has sent the buffer
+    // to some worker thread to be written to disk.
+    memset(buf->data(), 'a', buf_size);
+    *simulated_cache_dest_ = buf;
+
+    // The network stack will not report the read result until the write
+    // completes.
+    return net::ERR_IO_PENDING;
+  }
+
+ private:
+  ~URLRequestSimulatedCacheJob() override {}
+  void StartAsync() { NotifyHeadersComplete(); }
+
+  scoped_refptr<net::IOBuffer>* simulated_cache_dest_;
+  base::WeakPtrFactory<URLRequestSimulatedCacheJob> weak_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(URLRequestSimulatedCacheJob);
+};
+
+class SimulatedCacheInterceptor : public net::URLRequestInterceptor {
+ public:
+  explicit SimulatedCacheInterceptor(
+      scoped_refptr<net::IOBuffer>* simulated_cache_dest)
+      : simulated_cache_dest_(simulated_cache_dest) {}
+
+  net::URLRequestJob* MaybeInterceptRequest(
+      net::URLRequest* request,
+      net::NetworkDelegate* network_delegate) const override {
+    return new URLRequestSimulatedCacheJob(request, network_delegate,
+                                           simulated_cache_dest_);
+  }
+
+ private:
+  scoped_refptr<net::IOBuffer>* simulated_cache_dest_;
+  DISALLOW_COPY_AND_ASSIGN(SimulatedCacheInterceptor);
 };
 
 class RequestInterceptor : public net::URLRequestInterceptor {
@@ -426,8 +516,8 @@ class URLLoaderTest : public testing::Test {
   // EternalSyncReadsInterceptor::GetURL(), which creates URLRequestJobs where
   // all reads return a sync byte that's read synchronously.
   void AddEternalSyncReadsInterceptor() {
-    net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
-        EternalSyncReadsInterceptor::GetURL(),
+    net::URLRequestFilter::GetInstance()->AddHostnameInterceptor(
+        "http", EternalSyncReadsInterceptor::GetHostName(),
         std::make_unique<EternalSyncReadsInterceptor>());
   }
 
@@ -521,6 +611,12 @@ class URLLoaderTest : public testing::Test {
     DCHECK(ran_);
     return client_.response_head().mime_type;
   }
+
+  bool did_mime_sniff() const {
+    DCHECK(ran_);
+    return client_.response_head().did_mime_sniff;
+  }
+
   const base::Optional<net::SSLInfo>& ssl_info() const {
     DCHECK(ran_);
     return client_.ssl_info();
@@ -727,6 +823,7 @@ TEST_F(URLLoaderTest, AsyncErrorWhileReadingBodyAfterBytesReceived) {
 TEST_F(URLLoaderTest, DoNotSniffUnlessSpecified) {
   EXPECT_EQ(net::OK,
             Load(test_server()->GetURL("/content-sniffer-test0.html")));
+  EXPECT_FALSE(did_mime_sniff());
   ASSERT_TRUE(mime_type().empty());
 }
 
@@ -734,19 +831,22 @@ TEST_F(URLLoaderTest, SniffMimeType) {
   set_sniff();
   EXPECT_EQ(net::OK,
             Load(test_server()->GetURL("/content-sniffer-test0.html")));
+  EXPECT_TRUE(did_mime_sniff());
   ASSERT_EQ(std::string("text/html"), mime_type());
 }
 
 TEST_F(URLLoaderTest, RespectNoSniff) {
   set_sniff();
   EXPECT_EQ(net::OK, Load(test_server()->GetURL("/nosniff-test.html")));
+  EXPECT_FALSE(did_mime_sniff());
   ASSERT_TRUE(mime_type().empty());
 }
 
-TEST_F(URLLoaderTest, DoNotSniffHTMLFromTextPlain) {
+TEST_F(URLLoaderTest, SniffTextPlainDoesNotResultInHTML) {
   set_sniff();
   EXPECT_EQ(net::OK,
             Load(test_server()->GetURL("/content-sniffer-test1.html")));
+  EXPECT_TRUE(did_mime_sniff());
   ASSERT_EQ(std::string("text/plain"), mime_type());
 }
 
@@ -754,6 +854,7 @@ TEST_F(URLLoaderTest, DoNotSniffHTMLFromImageGIF) {
   set_sniff();
   EXPECT_EQ(net::OK,
             Load(test_server()->GetURL("/content-sniffer-test2.html")));
+  EXPECT_FALSE(did_mime_sniff());
   ASSERT_EQ(std::string("image/gif"), mime_type());
 }
 
@@ -761,6 +862,7 @@ TEST_F(URLLoaderTest, EmptyHtmlIsTextPlain) {
   set_sniff();
   EXPECT_EQ(net::OK,
             Load(test_server()->GetURL("/content-sniffer-test4.html")));
+  EXPECT_TRUE(did_mime_sniff());
   ASSERT_EQ(std::string("text/plain"), mime_type());
 }
 
@@ -776,6 +878,7 @@ TEST_F(URLLoaderTest, EmptyHtmlIsTextPlainWithAsyncResponse) {
   std::string body;
   EXPECT_EQ(net::OK, Load(MultipleWritesInterceptor::GetURL(), &body));
   EXPECT_EQ(kBody, body);
+  EXPECT_TRUE(did_mime_sniff());
   ASSERT_EQ(std::string("text/plain"), mime_type());
 }
 
@@ -790,6 +893,7 @@ TEST_F(URLLoaderTest, FirstReadNotEnoughToSniff1) {
   EXPECT_LE(first.size() + second.size(),
             static_cast<uint32_t>(net::kMaxBytesToSniff));
   LoadPacketsAndVerifyContents(first, second);
+  EXPECT_TRUE(did_mime_sniff());
   ASSERT_EQ(std::string("application/octet-stream"), mime_type());
 }
 
@@ -802,6 +906,7 @@ TEST_F(URLLoaderTest, FirstReadNotEnoughToSniff2) {
   EXPECT_GE(first.size() + second.size(),
             static_cast<uint32_t>(net::kMaxBytesToSniff));
   LoadPacketsAndVerifyContents(first, second);
+  EXPECT_TRUE(did_mime_sniff());
   ASSERT_EQ(std::string("application/octet-stream"), mime_type());
 }
 
@@ -811,6 +916,7 @@ TEST_F(URLLoaderTest, LoneReadNotEnoughToSniff) {
   set_sniff();
   std::string first(net::kMaxBytesToSniff - 100, 'a');
   LoadPacketsAndVerifyContents(first, std::string());
+  EXPECT_TRUE(did_mime_sniff());
   ASSERT_EQ(std::string("text/plain"), mime_type());
 }
 
@@ -819,6 +925,7 @@ TEST_F(URLLoaderTest, FirstReadIsEnoughToSniff) {
   set_sniff();
   std::string first(net::kMaxBytesToSniff + 100, 'a');
   LoadPacketsAndVerifyContents(first, std::string());
+  EXPECT_TRUE(did_mime_sniff());
   ASSERT_EQ(std::string("text/plain"), mime_type());
 }
 
@@ -1596,7 +1703,8 @@ TEST_F(URLLoaderTest, SSLInfoOnComplete) {
 TEST_F(URLLoaderTest, RedirectModifiedHeaders) {
   ResourceRequest request = CreateResourceRequest(
       "GET", test_server()->GetURL("/redirect307-to-echo"));
-  request.headers.AddHeadersFromString("Header1: Value1\r\nHeader2: Value2");
+  request.headers.SetHeader("Header1", "Value1");
+  request.headers.SetHeader("Header2", "Value2");
 
   base::RunLoop delete_run_loop;
   mojom::URLLoaderPtr loader;
@@ -1640,7 +1748,8 @@ TEST_F(URLLoaderTest, RedirectModifiedHeaders) {
 TEST_F(URLLoaderTest, RedirectRemoveHeader) {
   ResourceRequest request = CreateResourceRequest(
       "GET", test_server()->GetURL("/redirect307-to-echo"));
-  request.headers.AddHeadersFromString("Header1: Value1\r\nHeader2: Value2");
+  request.headers.SetHeader("Header1", "Value1");
+  request.headers.SetHeader("Header2", "Value2");
 
   base::RunLoop delete_run_loop;
   mojom::URLLoaderPtr loader;
@@ -1680,7 +1789,8 @@ TEST_F(URLLoaderTest, RedirectRemoveHeader) {
 TEST_F(URLLoaderTest, RedirectRemoveHeaderAndAddItBack) {
   ResourceRequest request = CreateResourceRequest(
       "GET", test_server()->GetURL("/redirect307-to-echo"));
-  request.headers.AddHeadersFromString("Header1: Value1\r\nHeader2: Value2");
+  request.headers.SetHeader("Header1", "Value1");
+  request.headers.SetHeader("Header2", "Value2");
 
   base::RunLoop delete_run_loop;
   mojom::URLLoaderPtr loader;
@@ -1852,8 +1962,8 @@ TEST_F(URLLoaderTest, ResourceSchedulerIntegration) {
 TEST_F(URLLoaderTest, ReadPipeClosedWhileReadTaskPosted) {
   AddEternalSyncReadsInterceptor();
 
-  ResourceRequest request =
-      CreateResourceRequest("GET", EternalSyncReadsInterceptor::GetURL());
+  ResourceRequest request = CreateResourceRequest(
+      "GET", EternalSyncReadsInterceptor::GetSingleByteURL());
 
   base::RunLoop delete_run_loop;
   mojom::URLLoaderPtr loader;
@@ -1872,6 +1982,116 @@ TEST_F(URLLoaderTest, ReadPipeClosedWhileReadTaskPosted) {
   client()->RunUntilResponseBodyArrived();
   client()->response_body_release();
   delete_run_loop.Run();
+}
+
+// Test power monitor source that can simulate entering suspend mode. Can't use
+// the one in base/ because it insists on bringing its own MessageLoop.
+class TestPowerMonitorSource : public base::PowerMonitorSource {
+ public:
+  TestPowerMonitorSource() = default;
+  ~TestPowerMonitorSource() override = default;
+
+  void Shutdown() override {}
+
+  void Suspend() { ProcessPowerEvent(SUSPEND_EVENT); }
+
+  void Resume() { ProcessPowerEvent(RESUME_EVENT); }
+
+  bool IsOnBatteryPowerImpl() override { return false; }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TestPowerMonitorSource);
+};
+
+// This tests the case where suspend mode is entered when there's a loader that
+// has received response headers but has no pending read. URLRequestJob will
+// cancel the request and call OnReadCompleted despite there being no pending
+// read, which is a bit weird, and can cause crashes if not handled properly.
+TEST_F(URLLoaderTest, EnterSuspendModeWhileNoPendingRead) {
+  AddEternalSyncReadsInterceptor();
+
+  std::unique_ptr<TestPowerMonitorSource> power_monitor_source =
+      std::make_unique<TestPowerMonitorSource>();
+  TestPowerMonitorSource* unowned_power_monitor_source =
+      power_monitor_source.get();
+  base::PowerMonitor power_monitor(std::move(power_monitor_source));
+
+  ResourceRequest request = CreateResourceRequest(
+      "GET", EternalSyncReadsInterceptor::GetFillBufferURL());
+
+  base::RunLoop delete_run_loop;
+  mojom::URLLoaderPtr loader;
+  std::unique_ptr<URLLoader> url_loader;
+  mojom::URLLoaderFactoryParams params;
+  params.process_id = mojom::kBrowserProcessId;
+  params.is_corb_enabled = false;
+  url_loader = std::make_unique<URLLoader>(
+      context(), nullptr /* network_service_client */,
+      DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request, false,
+      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      0 /* request_id */, resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */);
+
+  // This will spin the run loop until the Mojo read buffer is full. The
+  // URLLoader will end up waiting for Mojo to give it more read buffer space.
+  base::RunLoop().RunUntilIdle();
+
+  unowned_power_monitor_source->Suspend();
+
+  client()->RunUntilComplete();
+  EXPECT_EQ(net::ERR_ABORTED, client()->completion_status().error_code);
+  delete_run_loop.Run();
+
+  unowned_power_monitor_source->Resume();
+}
+
+TEST_F(URLLoaderTest, EnterSuspendDiskCacheWriteQueued) {
+  // Test to make sure that fetch abort on suspend doesn't yank out the backing
+  // for IOBuffer for an issued disk_cache Write.
+
+  GURL url("http://www.example.com");
+  scoped_refptr<net::IOBuffer> simulated_cache_dest;
+  net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
+      url, std::make_unique<SimulatedCacheInterceptor>(&simulated_cache_dest));
+
+  std::unique_ptr<TestPowerMonitorSource> power_monitor_source =
+      std::make_unique<TestPowerMonitorSource>();
+  TestPowerMonitorSource* unowned_power_monitor_source =
+      power_monitor_source.get();
+  base::PowerMonitor power_monitor(std::move(power_monitor_source));
+
+  ResourceRequest request = CreateResourceRequest("GET", url);
+
+  base::RunLoop delete_run_loop;
+  mojom::URLLoaderPtr loader;
+  std::unique_ptr<URLLoader> url_loader;
+  mojom::URLLoaderFactoryParams params;
+  params.process_id = mojom::kBrowserProcessId;
+  params.is_corb_enabled = false;
+  url_loader = std::make_unique<URLLoader>(
+      context(), nullptr /* network_service_client */,
+      DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request, false,
+      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      0 /* request_id */, resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */);
+
+  // Spin until the job has produced a (simulated) cache write.
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(simulated_cache_dest);
+
+  unowned_power_monitor_source->Suspend();
+
+  client()->RunUntilComplete();
+
+  EXPECT_EQ(net::ERR_ABORTED, client()->completion_status().error_code);
+  delete_run_loop.Run();
+
+  unowned_power_monitor_source->Resume();
+
+  // The "cache write" should still have data available.
+  EXPECT_EQ('a', simulated_cache_dest->data()[0]);
 }
 
 // A mock NetworkServiceClient that responds auth challenges with previously
@@ -1959,6 +2179,20 @@ class TestAuthNetworkServiceClient : public mojom::NetworkServiceClient {
                              bool async,
                              const std::vector<base::FilePath>& file_paths,
                              OnFileUploadRequestedCallback callback) override {
+    NOTREACHED();
+  }
+
+  void OnLoadingStateUpdate(std::vector<mojom::LoadInfoPtr> infos,
+                            OnLoadingStateUpdateCallback callback) override {
+    NOTREACHED();
+  }
+
+  void OnClearSiteData(int process_id,
+                       int routing_id,
+                       const GURL& url,
+                       const std::string& header_value,
+                       int load_flags,
+                       OnClearSiteDataCallback callback) override {
     NOTREACHED();
   }
 
@@ -2237,6 +2471,8 @@ TEST_F(URLLoaderTest, CorbExcludedWithNoCors) {
   std::unique_ptr<URLLoader> url_loader;
   mojom::URLLoaderFactoryParams params;
   params.corb_excluded_resource_type = kResourceType;
+  params.process_id = 123;
+  CrossOriginReadBlocking::AddExceptionForPlugin(123);
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
@@ -2254,6 +2490,78 @@ TEST_F(URLLoaderTest, CorbExcludedWithNoCors) {
 
   // The request body is allowed through because CORB isn't applied.
   ASSERT_NE(std::string(), body);
+
+  CrossOriginReadBlocking::RemoveExceptionForPlugin(123);
+}
+
+// This simulates a renderer that pretends to be proxying requests for Flash
+// (when browser didn't actually confirm that Flash is hosted by the given
+// process via CrossOriginReadBlocking::AddExceptionForPlugin).  We should still
+// apply CORB in this case.
+TEST_F(URLLoaderTest, CorbEffectiveWithNoCorsWhenNoActualPlugin) {
+  int kResourceType = 1;
+  ResourceRequest request =
+      CreateResourceRequest("GET", test_server()->GetURL("/hello.html"));
+  request.resource_type = kResourceType;
+  request.fetch_request_mode = mojom::FetchRequestMode::kNoCORS;
+  request.request_initiator = url::Origin::Create(GURL("http://foo.com/"));
+
+  base::RunLoop delete_run_loop;
+  mojom::URLLoaderPtr loader;
+  std::unique_ptr<URLLoader> url_loader;
+  mojom::URLLoaderFactoryParams params;
+  params.corb_excluded_resource_type = kResourceType;
+  params.process_id = 234;
+  // No call to CrossOriginReadBlocking::AddExceptionForPlugin(123) - this is
+  // what we primarily want to cover in this test.
+  url_loader = std::make_unique<URLLoader>(
+      context(), nullptr /* network_service_client */,
+      DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      mojo::MakeRequest(&loader), 0, request, false,
+      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      0 /* request_id */, resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */);
+
+  client()->RunUntilResponseBodyArrived();
+  std::string body = ReadBody();
+
+  client()->RunUntilComplete();
+
+  delete_run_loop.Run();
+
+  // The request body should be blocked by CORB.
+  ASSERT_EQ(std::string(), body);
+}
+
+// Make sure the client can't call FollowRedirect if there's no pending
+// redirect.
+TEST_F(URLLoaderTest, FollowRedirectTwice) {
+  ResourceRequest request = CreateResourceRequest(
+      "GET", test_server()->GetURL("/redirect307-to-echo"));
+  request.headers.SetHeader("Header1", "Value1");
+  request.headers.SetHeader("Header2", "Value2");
+
+  base::RunLoop delete_run_loop;
+  mojom::URLLoaderPtr loader;
+  std::unique_ptr<URLLoader> url_loader;
+  mojom::URLLoaderFactoryParams params;
+  params.process_id = mojom::kBrowserProcessId;
+  params.is_corb_enabled = false;
+  url_loader = std::make_unique<URLLoader>(
+      context(), nullptr /* network_service_client */,
+      DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request, false,
+      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      0 /* request_id */, resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */);
+
+  client()->RunUntilRedirectReceived();
+
+  url_loader->FollowRedirect(base::nullopt, base::nullopt);
+  EXPECT_DCHECK_DEATH(url_loader->FollowRedirect(base::nullopt, base::nullopt));
+
+  client()->RunUntilComplete();
+  delete_run_loop.Run();
 }
 
 }  // namespace network

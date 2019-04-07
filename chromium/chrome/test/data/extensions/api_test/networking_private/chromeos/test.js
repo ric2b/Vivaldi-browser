@@ -284,7 +284,8 @@ var availableTests = [
             HexSSID: "7769666931",
             Security: 'WEP-PSK',
             SignalStrength: 40,
-            SSID: "wifi1"
+            SSID: "wifi1",
+            TetheringState: "NotDetected"
           }
         }, {
           GUID: 'stub_wifi2_guid',
@@ -297,7 +298,8 @@ var availableTests = [
             Frequency: 5000,
             HexSSID: "77696669325F50534B",
             Security: 'WPA-PSK',
-            SSID: "wifi2_PSK"
+            SSID: "wifi2_PSK",
+            TetheringState: "NotDetected"
           }
         }], result);
 
@@ -320,7 +322,8 @@ var availableTests = [
                 HexSSID: "7769666931",
                 Security: 'WEP-PSK',
                 SignalStrength: 40,
-                SSID: "wifi1"
+                SSID: "wifi1",
+                TetheringState: "NotDetected"
               }
             }], result);
 
@@ -375,7 +378,8 @@ var availableTests = [
             HexSSID: "7769666931",
             Security: 'WEP-PSK',
             SignalStrength: 40,
-            SSID: "wifi1"
+            SSID: "wifi1",
+            TetheringState: "NotDetected"
           }
         }, {
           Connectable: true,
@@ -425,7 +429,8 @@ var availableTests = [
             HexSSID: "77696669325F50534B",
             Security: 'WPA-PSK',
             SignalStrength: 80,
-            SSID: "wifi2_PSK"
+            SSID: "wifi2_PSK",
+            TetheringState: "NotDetected"
           }
         }], result);
       }));
@@ -448,7 +453,8 @@ var availableTests = [
             HexSSID: "7769666931",
             Security: 'WEP-PSK',
             SignalStrength: 40,
-            SSID: "wifi1"
+            SSID: "wifi1",
+            TetheringState: "NotDetected"
           }
         }, {
           Connectable: true,
@@ -464,7 +470,8 @@ var availableTests = [
             HexSSID: "77696669325F50534B",
             Security: 'WPA-PSK',
             SignalStrength: 80,
-            SSID: "wifi2_PSK"
+            SSID: "wifi2_PSK",
+            TetheringState: "NotDetected"
           }
         }], result);
       }));
@@ -498,7 +505,8 @@ var availableTests = [
     chrome.networkingPrivate.getDeviceStates(callbackPass(function(result) {
       assertEq([
         {Scanning: false, State: 'Enabled', Type: 'Ethernet'},
-        {Scanning: false, State: 'Enabled', Type: 'WiFi'},
+        {Scanning: false, State: 'Enabled', Type: 'WiFi',
+         ManagedNetworkAvailable: false},
         {State: 'Uninitialized', SIMPresent: true,
          SIMLockStatus: {LockEnabled: true, LockType: '', RetriesLeft: 3},
          Type: 'Cellular' },
@@ -562,7 +570,8 @@ var availableTests = [
             FrequencyList: [2400],
             SSID: 'wifi1',
             Security: 'WEP-PSK',
-            SignalStrength: 40
+            SignalStrength: 40,
+            TetheringState: "NotDetected"
           }
         }, result);
       }));
@@ -688,6 +697,7 @@ var availableTests = [
               UserPolicy: 'WPA-PSK'
             },
             SignalStrength: 80,
+            TetheringState: "NotDetected"
           }
         }, result);
       }));
@@ -812,7 +822,8 @@ var availableTests = [
             HexSSID: "77696669325F50534B",
             Security: 'WPA-PSK',
             SignalStrength: 80,
-            SSID: "wifi2_PSK"
+            SSID: "wifi2_PSK",
+            TetheringState: "NotDetected"
           }
         }, result);
       }));

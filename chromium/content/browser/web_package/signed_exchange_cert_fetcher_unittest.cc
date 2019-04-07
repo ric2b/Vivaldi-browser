@@ -40,16 +40,17 @@ class DeferringURLLoaderThrottle final : public URLLoaderThrottle {
   }
 
   void WillRedirectRequest(
-      const net::RedirectInfo& redirect_info,
-      const network::ResourceResponseHead& response_head,
+      const net::RedirectInfo& /* redirect_info */,
+      const network::ResourceResponseHead& /* response_head */,
       bool* defer,
-      std::vector<std::string>* to_be_removed_headers) override {
+      std::vector<std::string>* /* to_be_removed_headers */,
+      net::HttpRequestHeaders* /* modified_headers */) override {
     will_redirect_request_called_ = true;
     *defer = true;
   }
 
   void WillProcessResponse(const GURL& response_url_,
-                           const network::ResourceResponseHead& response_head,
+                           network::ResourceResponseHead* response_head,
                            bool* defer) override {
     will_process_response_called_ = true;
     *defer = true;
@@ -211,7 +212,7 @@ class SignedExchangeCertFetcherTest : public testing::Test {
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             &mock_loader_factory_),
         std::move(throttles_), url, request_initiator_, force_fetch,
-        SignedExchangeVersion::kB1, std::move(callback),
+        SignedExchangeVersion::kB2, std::move(callback),
         nullptr /* devtools_proxy */,
         base::nullopt /* throttling_profile_id */);
   }

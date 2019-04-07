@@ -28,6 +28,51 @@ void SetVivaldiScrollType(int scrollType) {
 #endif
 }
 
+// Actions that should be dimmed/disabled in Mac main menu when all windows are
+// closed while application is still running.
+bool NeedsDisabledMacMenuItem(int action) {
+  switch (action) {
+    case IDC_VIV_SETTINGS:
+    case IDC_VIV_CLOSE_TAB:
+    case IDC_VIV_CLOSE_WINDOW:
+    case IDC_VIV_SAVE_AS:
+    case IDC_VIV_COMMAND_SAVE_SESSION:
+    case IDC_VIV_PRINT:
+    case IDC_VIV_FIND_IN_PAGE:
+    case IDC_VIV_PASTE_AS_PLAIN_TEXT_OR_PASTE_AND_GO:
+    case IDC_VIV_TOGGLE_BOOKMARKS_BAR:
+    case IDC_VIV_TOGGLE_PANEL:
+    case IDC_VIV_TOGGLE_STATUS_BAR:
+    case IDC_VIV_BOOKMARKS_PANEL:
+    case IDC_VIV_MAIL_PANEL:
+    case IDC_VIV_CONTACTS_PANEL:
+    case IDC_VIV_DOWNLOADS_PANEL:
+    case IDC_VIV_NOTES_PANEL:
+    case IDC_VIV_HISTORY_PANEL:
+    case IDC_VIV_WINDOW_PANEL:
+    case IDC_VIV_TOGGLE_IMAGES:
+    case IDC_VIV_COMMAND_MAIN_ZOOM_IN:
+    case IDC_VIV_COMMAND_MAIN_ZOOM_OUT:
+    case IDC_VIV_COMMAND_MAIN_ZOOM_RESET:
+    case IDC_VIV_TOGGLE_FULLSCREEN:
+    case IDC_VIV_SHOW_QUICK_COMMANDS:
+    case IDC_VIV_MANAGE_HISTORY:
+    case IDC_VIV_EXTENSIONS_PAGE:
+    case IDC_VIV_CAPTURE_PAGE_TO_DISK:
+    case IDC_VIV_CAPTURE_PAGE_TO_CLIPBOARD:
+    case IDC_VIV_CAPTURE_AREA_TO_DISK:
+    case IDC_VIV_CAPTURE_AREA_TO_CLIPBOARD:
+    case IDC_VIV_CLEAR_PRIVATE_DATA_PAGE:
+    case IDC_VIV_TASK_MANAGER:
+    case IDC_VIV_DEVELOPER_TOOLS:
+    case IDC_VIV_WINDOW_MINIMIZE:
+      return true;
+    break;
+  }
+
+  return false;
+}
+
 void UpdateCommandsForVivaldi(CommandUpdater* command_updater_) {
   command_updater_->UpdateCommandEnabled(IDC_TASK_MANAGER, true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_NEW_TAB, true);
@@ -89,6 +134,7 @@ void UpdateCommandsForVivaldi(CommandUpdater* command_updater_) {
   command_updater_->UpdateCommandEnabled(IDC_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS,
                                          true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_WINDOW_MINIMIZE, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_ALLOW_APPLE_EVENTS, true);
 }
 
 bool ExecuteVivaldiCommands(Browser* browser, int id) {
@@ -148,6 +194,7 @@ bool ExecuteVivaldiCommands(Browser* browser, int id) {
     case IDC_VIV_TOGGLE_IMAGES:
     case IDC_VIV_WINDOW_PANEL:
     case IDC_VIV_WINDOW_MINIMIZE:
+    case IDC_VIV_ALLOW_APPLE_EVENTS:
       // The API is registered with a regular profile.
       extensions::ShowMenuAPI::GetFactoryInstance()
           ->Get(browser->profile()->GetOriginalProfile())

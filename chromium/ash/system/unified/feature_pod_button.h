@@ -65,6 +65,7 @@ class FeaturePodLabelButton : public views::Button {
 
   // views::Button:
   void Layout() override;
+  void OnEnabledChanged() override;
   gfx::Size CalculatePreferredSize() const override;
   std::unique_ptr<views::InkDrop> CreateInkDrop() override;
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
@@ -73,8 +74,6 @@ class FeaturePodLabelButton : public views::Button {
   std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
 
  private:
-  void SetTooltipTextFromLabels();
-
   // Layout |child| in horizontal center with its vertical origin set to |y|.
   void LayoutInCenter(views::View* child, int y);
 
@@ -106,8 +105,21 @@ class ASH_EXPORT FeaturePodButton : public views::View,
   // Set the text of sub-label shown below the label.
   void SetSubLabel(const base::string16& sub_label);
 
+  // Set the tooltip text of the icon button.
+  void SetIconTooltip(const base::string16& text);
+
+  // Set the tooltip text of the label button.
+  void SetLabelTooltip(const base::string16& text);
+
+  // Convenience method to set both icon and label tooltip texts.
+  void SetIconAndLabelTooltips(const base::string16& text);
+
   // Show arrow to indicate that the feature has a detailed view.
   void ShowDetailedViewArrow();
+
+  // Remove the label button from keyboard focus chain. This is useful when
+  // the icon button and the label button has the same action.
+  void DisableLabelButtonFocus();
 
   // Change the toggled state. If toggled, the background color of the circle
   // will change.
@@ -127,6 +139,7 @@ class ASH_EXPORT FeaturePodButton : public views::View,
   void SetVisible(bool visible) override;
   bool HasFocus() const override;
   void RequestFocus() override;
+  void OnEnabledChanged() override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;

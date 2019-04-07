@@ -71,6 +71,14 @@ Polymer({
     },
   },
 
+  observers: [
+    'adjustHeight_(invitation_, showCloudPrintPromo)',
+  ],
+
+  listeners: {
+    'keydown': 'onKeydown_',
+  },
+
   /** @private {!EventTracker} */
   tracker_: new EventTracker(),
 
@@ -100,9 +108,6 @@ Polymer({
   attached: function() {
     this.tracker_.add(
         assert(this.$$('.sign-in')), 'click', this.onSignInClick_.bind(this));
-    this.tracker_.add(
-        assert(this.$$('#cloudprintPromo > .close-button')), 'click',
-        this.onCloudPrintPromoDismissed_.bind(this));
   },
 
   /**
@@ -111,10 +116,37 @@ Polymer({
    */
   onKeydown_: function(e) {
     e.stopPropagation();
-    if (e.key == 'Escape' && !this.$.searchBox.getSearchInput().value.trim()) {
+    const searchInput = this.$.searchBox.getSearchInput();
+    if (e.key == 'Escape' &&
+        (e.composedPath()[0] !== searchInput || !searchInput.value.trim())) {
       this.$.dialog.cancel();
       e.preventDefault();
     }
+  },
+
+  /** @private */
+  adjustHeight_: function() {
+    // Baseline size of recent list + buttons + title + search box
+    let px = 266;
+    let lines = 5;
+    if (this.invitation_) {
+      // Invitation promo size
+      px += 57;
+      lines += 4;
+    }
+    if (this.showCloudPrintPromo) {
+      // Cloud print promo size
+      px += 28;
+      lines += 2;
+    }
+    if (this.userInfo && this.userInfo.loggedIn) {
+      // User accounts select size
+      px += 14;
+      lines += 2;
+    }
+
+    // Compute sizing
+    this.$.printList.style.height = `calc(100vh - ${px}px - ${lines}rem)`;
   },
 
   /** @private */
@@ -264,6 +296,8 @@ Polymer({
               listItem.onConfigureComplete(response.success);
               if (response.success) {
                 destination.capabilities = response.capabilities;
+                if (response.policies)
+                  destination.policies = response.policies;
                 this.selectDestination_(destination);
               }
             },
@@ -289,6 +323,8 @@ Polymer({
         this.destinationStore.isPrintDestinationSearchInProgress;
     this.metrics_.record(
         print_preview.Metrics.DestinationSearchBucket.DESTINATION_SHOWN);
+    this.$.recentList.forceIronResize();
+    this.$.printList.forceIronResize();
   },
 
   /** @return {boolean} Whether the dialog is open. */

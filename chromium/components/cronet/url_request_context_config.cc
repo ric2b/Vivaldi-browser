@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -28,7 +29,7 @@
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties.h"
 #include "net/nqe/network_quality_estimator_params.h"
-#include "net/quic/chromium/quic_utils_chromium.h"
+#include "net/quic/quic_utils_chromium.h"
 #include "net/reporting/reporting_policy.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/ssl/ssl_key_logger_impl.h"
@@ -67,6 +68,8 @@ const char kQuicMigrateSessionsOnNetworkChangeV2[] =
     "migrate_sessions_on_network_change_v2";
 const char kQuicMaxTimeOnNonDefaultNetworkSeconds[] =
     "max_time_on_non_default_network_seconds";
+const char kQuicMaxMigrationsToNonDefaultNetworkOnWriteError[] =
+    "max_migrations_to_non_default_network_on_write_error";
 const char kQuicMaxMigrationsToNonDefaultNetworkOnPathDegrading[] =
     "max_migrations_to_non_default_network_on_path_degrading";
 const char kQuicUserAgentId[] = "user_agent_id";
@@ -105,6 +108,10 @@ const char kStaleDnsPersist[] = "persist_to_disk";
 // cache persistence. Default value is one minute. Only relevant if
 // "persist_to_disk" is true.
 const char kStaleDnsPersistTimer[] = "persist_delay_ms";
+// Name of boolean to allow use of stale DNS results when network resolver
+// returns ERR_NAME_NOT_RESOLVED.
+const char kStaleDnsUseStaleOnNameNotResolved[] =
+    "use_stale_on_name_not_resolved";
 
 // Rules to override DNS resolution. Intended for testing.
 // See explanation of format in net/dns/mapped_host_resolver.h.
@@ -118,6 +125,15 @@ const char kNetworkQualityEstimatorFieldTrialName[] = "NetworkQualityEstimator";
 const char kNetworkErrorLoggingFieldTrialName[] = "NetworkErrorLogging";
 // Name of boolean to enable Reporting API.
 const char kNetworkErrorLoggingEnable[] = "enable";
+// Name of list of preloaded "Report-To" headers.
+const char kNetworkErrorLoggingPreloadedReportToHeaders[] =
+    "preloaded_report_to_headers";
+// Name of list of preloaded "NEL" headers.
+const char kNetworkErrorLoggingPreloadedNELHeaders[] = "preloaded_nel_headers";
+// Name of key (for above two lists) for header origin.
+const char kNetworkErrorLoggingOrigin[] = "origin";
+// Name of key (for above two lists) for header value.
+const char kNetworkErrorLoggingValue[] = "value";
 
 // Disable IPv6 when on WiFi. This is a workaround for a known issue on certain
 // Android phones, and should not be necessary when not on one of those devices.
@@ -133,6 +149,49 @@ const bool kDefaultQuicGoAwaySessionsOnIpChange = true;
 #else
 const bool kDefaultQuicGoAwaySessionsOnIpChange = false;
 #endif
+
+// Serializes a base::Value into a string that can be used as the value of
+// JFV-encoded HTTP header [1].  If |value| is a list, we remove the outermost
+// [] delimiters from the result.
+//
+// [1] https://tools.ietf.org/html/draft-reschke-http-jfv
+std::string SerializeJFVHeader(const base::Value& value) {
+  std::string result;
+  if (!base::JSONWriter::Write(value, &result))
+    return std::string();
+  if (value.is_list()) {
+    DCHECK(result.size() >= 2);
+    return result.substr(1, result.size() - 2);
+  }
+  return result;
+}
+
+std::vector<URLRequestContextConfig::PreloadedNelAndReportingHeader>
+ParseNetworkErrorLoggingHeaders(
+    const base::Value::ListStorage& preloaded_headers_config) {
+  std::vector<URLRequestContextConfig::PreloadedNelAndReportingHeader> result;
+  for (const auto& preloaded_header_config : preloaded_headers_config) {
+    if (!preloaded_header_config.is_dict())
+      continue;
+
+    auto* origin_config = preloaded_header_config.FindKeyOfType(
+        kNetworkErrorLoggingOrigin, base::Value::Type::STRING);
+    if (!origin_config)
+      continue;
+    GURL origin_url(origin_config->GetString());
+    if (!origin_url.is_valid())
+      continue;
+    auto origin = url::Origin::Create(origin_url);
+
+    auto* value = preloaded_header_config.FindKey(kNetworkErrorLoggingValue);
+    if (!value)
+      continue;
+
+    result.push_back(URLRequestContextConfig::PreloadedNelAndReportingHeader(
+        origin, SerializeJFVHeader(*value)));
+  }
+  return result;
+}
 
 }  // namespace
 
@@ -152,6 +211,13 @@ URLRequestContextConfig::Pkp::Pkp(const std::string& host,
 
 URLRequestContextConfig::Pkp::~Pkp() {}
 
+URLRequestContextConfig::PreloadedNelAndReportingHeader::
+    PreloadedNelAndReportingHeader(const url::Origin& origin, std::string value)
+    : origin(origin), value(std::move(value)) {}
+
+URLRequestContextConfig::PreloadedNelAndReportingHeader::
+    ~PreloadedNelAndReportingHeader() = default;
+
 URLRequestContextConfig::URLRequestContextConfig(
     bool enable_quic,
     const std::string& quic_user_agent_id,
@@ -166,7 +232,8 @@ URLRequestContextConfig::URLRequestContextConfig(
     const std::string& experimental_options,
     std::unique_ptr<net::CertVerifier> mock_cert_verifier,
     bool enable_network_quality_estimator,
-    bool bypass_public_key_pinning_for_local_trust_anchors)
+    bool bypass_public_key_pinning_for_local_trust_anchors,
+    base::Optional<double> network_thread_priority)
     : enable_quic(enable_quic),
       quic_user_agent_id(quic_user_agent_id),
       enable_spdy(enable_spdy),
@@ -181,6 +248,7 @@ URLRequestContextConfig::URLRequestContextConfig(
       enable_network_quality_estimator(enable_network_quality_estimator),
       bypass_public_key_pinning_for_local_trust_anchors(
           bypass_public_key_pinning_for_local_trust_anchors),
+      network_thread_priority(network_thread_priority),
       experimental_options(experimental_options) {}
 
 URLRequestContextConfig::~URLRequestContextConfig() {}
@@ -329,6 +397,7 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
 
       bool quic_migrate_sessions_on_network_change_v2 = false;
       int quic_max_time_on_non_default_network_seconds = 0;
+      int quic_max_migrations_to_non_default_network_on_write_error = 0;
       int quic_max_migrations_to_non_default_network_on_path_degrading = 0;
       if (quic_args->GetBoolean(kQuicMigrateSessionsOnNetworkChangeV2,
                                 &quic_migrate_sessions_on_network_change_v2)) {
@@ -340,6 +409,13 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
           session_params->quic_max_time_on_non_default_network =
               base::TimeDelta::FromSeconds(
                   quic_max_time_on_non_default_network_seconds);
+        }
+        if (quic_args->GetInteger(
+                kQuicMaxMigrationsToNonDefaultNetworkOnWriteError,
+                &quic_max_migrations_to_non_default_network_on_write_error)) {
+          session_params
+              ->quic_max_migrations_to_non_default_network_on_write_error =
+              quic_max_migrations_to_non_default_network_on_write_error;
         }
         if (quic_args->GetInteger(
                 kQuicMaxMigrationsToNonDefaultNetworkOnPathDegrading,
@@ -424,6 +500,12 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
         int persist_timer;
         if (stale_dns_args->GetInteger(kStaleDnsPersistTimer, &persist_timer))
           host_cache_persistence_delay_ms = persist_timer;
+        bool use_stale_on_name_not_resolved;
+        if (stale_dns_args->GetBoolean(kStaleDnsUseStaleOnNameNotResolved,
+                                       &use_stale_on_name_not_resolved)) {
+          stale_dns_options.use_stale_on_name_not_resolved =
+              use_stale_on_name_not_resolved;
+        }
       }
     } else if (it.key() == kHostResolverRulesFieldTrialName) {
       const base::DictionaryValue* host_resolver_rules_args = nullptr;
@@ -444,6 +526,21 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
         continue;
       }
       nel_args->GetBoolean(kNetworkErrorLoggingEnable, &nel_enable);
+
+      const auto* preloaded_report_to_headers_config =
+          nel_args->FindKeyOfType(kNetworkErrorLoggingPreloadedReportToHeaders,
+                                  base::Value::Type::LIST);
+      if (preloaded_report_to_headers_config) {
+        preloaded_report_to_headers = ParseNetworkErrorLoggingHeaders(
+            preloaded_report_to_headers_config->GetList());
+      }
+
+      const auto* preloaded_nel_headers_config = nel_args->FindKeyOfType(
+          kNetworkErrorLoggingPreloadedNELHeaders, base::Value::Type::LIST);
+      if (preloaded_nel_headers_config) {
+        preloaded_nel_headers = ParseNetworkErrorLoggingHeaders(
+            preloaded_nel_headers_config->GetList());
+      }
     } else if (it.key() == kDisableIPv6OnWifi) {
       if (!it.value().GetAsBoolean(&disable_ipv6_on_wifi)) {
         LOG(ERROR) << "\"" << it.key() << "\" config params \"" << it.value()
@@ -573,17 +670,8 @@ void URLRequestContextConfig::ConfigureURLRequestContextBuilder(
   ParseAndSetExperimentalOptions(context_builder, &session_params, net_log);
   context_builder->set_http_network_session_params(session_params);
 
-  std::unique_ptr<net::CertVerifier> cert_verifier;
-  if (mock_cert_verifier) {
-    // Because |context_builder| expects CachingCertVerifier, wrap
-    // |mock_cert_verifier| into a CachingCertVerifier.
-    cert_verifier = std::make_unique<net::CachingCertVerifier>(
-        std::move(mock_cert_verifier));
-  } else {
-    // net::CertVerifier::CreateDefault() returns a CachingCertVerifier.
-    cert_verifier = net::CertVerifier::CreateDefault();
-  }
-  context_builder->SetCertVerifier(std::move(cert_verifier));
+  if (mock_cert_verifier)
+    context_builder->SetCertVerifier(std::move(mock_cert_verifier));
   // Certificate Transparency is intentionally ignored in Cronet.
   // See //net/docs/certificate-transparency.md for more details.
   context_builder->set_ct_verifier(
@@ -603,7 +691,8 @@ URLRequestContextConfigBuilder::Build() {
       http_cache_max_size, load_disable_cache, storage_path, accept_language,
       user_agent, experimental_options, std::move(mock_cert_verifier),
       enable_network_quality_estimator,
-      bypass_public_key_pinning_for_local_trust_anchors);
+      bypass_public_key_pinning_for_local_trust_anchors,
+      network_thread_priority);
 }
 
 }  // namespace cronet

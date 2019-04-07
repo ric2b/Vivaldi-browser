@@ -14,7 +14,7 @@
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -38,6 +38,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browser_sync/profile_sync_service.h"
+#include "components/policy/core/browser/url_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -216,12 +217,12 @@ bool SupervisedUserService::AccessRequestsEnabled() {
 
 void SupervisedUserService::AddURLAccessRequest(const GURL& url,
                                                 SuccessCallback callback) {
-  GURL effective_url = url_filter_.GetEmbeddedURL(url);
+  GURL effective_url = policy::url_util::GetEmbeddedURL(url);
   if (!effective_url.is_valid())
     effective_url = url;
   AddPermissionRequestInternal(
       base::BindRepeating(CreateURLAccessRequest,
-                          SupervisedUserURLFilter::Normalize(effective_url)),
+                          policy::url_util::Normalize(effective_url)),
       std::move(callback), 0);
 }
 
@@ -609,7 +610,7 @@ void SupervisedUserService::LoadBlacklist(const base::FilePath& path,
   blacklist_state_ = BlacklistLoadState::LOAD_STARTED;
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&base::PathExists, path),
       base::BindOnce(&SupervisedUserService::OnBlacklistFileChecked,

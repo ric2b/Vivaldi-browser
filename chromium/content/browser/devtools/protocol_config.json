@@ -11,7 +11,7 @@
         "options": [
             {
                 "domain": "Browser",
-                "include": ["getVersion", "getHistograms", "getHistogram", "getBrowserCommandLine"]
+                "include": ["getVersion", "getHistograms", "getHistogram", "getBrowserCommandLine", "grantPermissions", "resetPermissions"]
             },
             {
                 "domain": "DOM",
@@ -24,7 +24,7 @@
             },
             {
                 "domain": "Input",
-                "async": ["dispatchKeyEvent", "dispatchMouseEvent", "dispatchTouchEvent", "synthesizePinchGesture", "synthesizeScrollGesture", "synthesizeTapGesture"]
+                "async": ["dispatchKeyEvent", "insertText", "dispatchMouseEvent", "dispatchTouchEvent", "synthesizePinchGesture", "synthesizeScrollGesture", "synthesizeTapGesture"]
             },
             {
                 "domain": "Inspector"
@@ -51,7 +51,7 @@
                     "startScreencast", "stopScreencast", "screencastFrameAck", "handleJavaScriptDialog", "setColorPickerEnabled", "requestAppBanner",
                     "printToPDF", "bringToFront", "setDownloadBehavior", "getAppManifest", "crash", "close", "setWebLifecycleState"],
                 "include_events": ["colorPicked", "interstitialShown", "interstitialHidden", "javascriptDialogOpening", "javascriptDialogClosed", "screencastVisibilityChanged", "screencastFrame"],
-                "async": ["captureScreenshot", "printToPDF", "navigate", "getAppManifest"]
+                "async": ["captureScreenshot", "printToPDF", "navigate", "getAppManifest", "reload"]
             },
             {
                 "domain": "Runtime",
@@ -77,7 +77,8 @@
                 "async": ["getInfo"]
             },
             {
-                "domain": "Target"
+                "domain": "Target",
+                "async": ["disposeBrowserContext"]
             },
             {
                 "domain": "Tethering",
@@ -85,7 +86,7 @@
             },
             {
                 "domain": "Tracing",
-                "async": ["start", "end", "getCategories", "requestMemoryDump"]
+                "async": ["start", "getCategories", "requestMemoryDump"]
             }
         ]
     },

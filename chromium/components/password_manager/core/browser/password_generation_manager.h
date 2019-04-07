@@ -40,6 +40,11 @@ class PasswordGenerationManager {
                             PasswordManagerDriver* driver);
   virtual ~PasswordGenerationManager();
 
+  // Instructs the PasswordRequirementsService to fetch requirements for
+  // |origin|. This needs to be called to enable domain-wide password
+  // requirements overrides.
+  void PrefetchSpec(const GURL& origin);
+
   // Stores password requirements received from the autofill server for the
   // |forms| and fetches domain-wide requirements.
   void ProcessPasswordRequirements(
@@ -59,12 +64,6 @@ class PasswordGenerationManager {
   // Determines whether the PasswordGeneraitonManager has the permission to
   // fetch domain wide password requirements from gstatic.com.
   bool IsRequirementsFetchingEnabled() const;
-
-  // Determine if the form classifier should run. If yes, sends a message to the
-  // renderer.
-  // TODO(crbug.com/621442): Remove client-side form classifier when server-side
-  // classifier is ready.
-  void CheckIfFormClassifierShouldRun();
 
   // Returns a randomly generated password that should (but is not guaranteed
   // to) match the requirements of the site.

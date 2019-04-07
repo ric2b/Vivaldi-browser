@@ -77,6 +77,7 @@ target(link_target_type, "service_sources") {
 
   public_deps = [
     "//gpu/command_buffer/common:common_sources",
+    "//url:url",
   ]
   deps = [
     "//base",
@@ -161,6 +162,8 @@ target(link_target_type, "gles2_sources") {
     "gpu_tracer.h",
     "gr_cache_controller.cc",
     "gr_cache_controller.h",
+    "gr_shader_cache.cc",
+    "gr_shader_cache.h",
     "id_manager.cc",
     "id_manager.h",
     "indexed_buffer_binding_host.cc",
@@ -213,6 +216,8 @@ target(link_target_type, "gles2_sources") {
     "shader_translator.h",
     "shader_translator_cache.cc",
     "shader_translator_cache.h",
+    "shared_image_factory.cc",
+    "shared_image_factory.h",
     "texture_definition.cc",
     "texture_definition.h",
     "texture_manager.cc",
@@ -225,22 +230,30 @@ target(link_target_type, "gles2_sources") {
     "vertex_array_manager.h",
     "vertex_attrib_manager.cc",
     "vertex_attrib_manager.h",
+    "webgpu_cmd_validation.cc",
+    "webgpu_cmd_validation.h",
+    "webgpu_cmd_validation_autogen.h",
+    "webgpu_cmd_validation_implementation_autogen.h",
+    "webgpu_decoder.cc",
+    "webgpu_decoder.h",
   ]
 
   configs += [
     "//build/config:precompiled_headers",
     "//gpu:gpu_gles2_implementation",
     "//gpu:raster_implementation",
+    "//gpu:webgpu_implementation",
     "//third_party/khronos:khronos_headers",
   ]
 
   # Prefer mesa GL headers to system headers, which cause problems on Win.
-  include_dirs = [ "//third_party/mesa/src/include" ]
+  include_dirs = [ "//third_party/mesa_headers" ]
 
   public_deps = [
     "//gpu/command_buffer/common",
     "//gpu/command_buffer/common:gles2_sources",
     "//gpu/command_buffer/common:raster_sources",
+    "//gpu/command_buffer/common:webgpu_sources",
   ]
   deps = [
     ":disk_cache_proto",
@@ -248,6 +261,7 @@ target(link_target_type, "gles2_sources") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//cc/paint",
+    "//components/viz/common:resource_format_utils",
     "//gpu/command_buffer/client",
     "//gpu/command_buffer/common:gles2_utils",
     "//gpu/config",

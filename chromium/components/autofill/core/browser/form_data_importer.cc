@@ -20,7 +20,6 @@
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_country.h"
-#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_type.h"
@@ -138,7 +137,8 @@ void FormDataImporter::ImportFormData(const FormStructure& submitted_form,
   if (local_card_migration_manager_ &&
       local_card_migration_manager_->ShouldOfferLocalCardMigration(
           imported_credit_card_record_type_)) {
-    local_card_migration_manager_->AttemptToOfferLocalCardMigration();
+    local_card_migration_manager_->AttemptToOfferLocalCardMigration(
+        /*is_from_settings_page=*/false);
     return;
   }
 

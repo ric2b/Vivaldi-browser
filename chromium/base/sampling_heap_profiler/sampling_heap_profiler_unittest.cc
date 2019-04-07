@@ -22,19 +22,23 @@ class SamplingHeapProfilerTest : public ::testing::Test {
 #endif
 };
 
-class SamplesCollector : public SamplingHeapProfiler::SamplesObserver {
+class SamplesCollector : public PoissonAllocationSampler::SamplesObserver {
  public:
   explicit SamplesCollector(size_t watch_size) : watch_size_(watch_size) {}
 
-  void SampleAdded(uint32_t id, size_t size, size_t) override {
+  void SampleAdded(void* address,
+                   size_t size,
+                   size_t,
+                   PoissonAllocationSampler::AllocatorType,
+                   const char*) override {
     if (sample_added || size != watch_size_)
       return;
-    sample_id_ = id;
+    sample_address_ = address;
     sample_added = true;
   }
 
-  void SampleRemoved(uint32_t id) override {
-    if (id == sample_id_)
+  void SampleRemoved(void* address) override {
+    if (address == sample_address_)
       sample_removed = true;
   }
 
@@ -43,23 +47,42 @@ class SamplesCollector : public SamplingHeapProfiler::SamplesObserver {
 
  private:
   size_t watch_size_;
-  uint32_t sample_id_ = 0;
+  void* sample_address_ = nullptr;
 };
 
-TEST_F(SamplingHeapProfilerTest, CollectSamples) {
-  SamplingHeapProfiler::InitTLSSlot();
+TEST_F(SamplingHeapProfilerTest, SampleObserver) {
+  PoissonAllocationSampler::Init();
   SamplesCollector collector(10000);
-  SamplingHeapProfiler* profiler = SamplingHeapProfiler::GetInstance();
-  profiler->SuppressRandomnessForTest(true);
-  profiler->SetSamplingInterval(1024);
-  profiler->Start();
-  profiler->AddSamplesObserver(&collector);
+  auto* sampler = PoissonAllocationSampler::Get();
+  sampler->SuppressRandomnessForTest(true);
+  sampler->SetSamplingInterval(1024);
+  sampler->Start();
+  sampler->AddSamplesObserver(&collector);
   void* volatile p = malloc(10000);
   free(p);
-  profiler->Stop();
-  profiler->RemoveSamplesObserver(&collector);
-  CHECK(collector.sample_added);
-  CHECK(collector.sample_removed);
+  sampler->Stop();
+  sampler->RemoveSamplesObserver(&collector);
+  EXPECT_TRUE(collector.sample_added);
+  EXPECT_TRUE(collector.sample_removed);
+}
+
+TEST_F(SamplingHeapProfilerTest, SampleObserverMuted) {
+  PoissonAllocationSampler::Init();
+  SamplesCollector collector(10000);
+  auto* sampler = PoissonAllocationSampler::Get();
+  sampler->SuppressRandomnessForTest(true);
+  sampler->SetSamplingInterval(1024);
+  sampler->Start();
+  sampler->AddSamplesObserver(&collector);
+  {
+    PoissonAllocationSampler::MuteThreadSamplesScope muted_scope;
+    void* volatile p = malloc(10000);
+    free(p);
+  }
+  sampler->Stop();
+  sampler->RemoveSamplesObserver(&collector);
+  EXPECT_FALSE(collector.sample_added);
+  EXPECT_FALSE(collector.sample_removed);
 }
 
 const int kNumberOfAllocations = 10000;
@@ -98,9 +121,9 @@ class MyThread2 : public SimpleThread {
 };
 
 void CheckAllocationPattern(void (*allocate_callback)()) {
-  SamplingHeapProfiler::InitTLSSlot();
-  SamplingHeapProfiler* profiler = SamplingHeapProfiler::GetInstance();
-  profiler->SuppressRandomnessForTest(false);
+  SamplingHeapProfiler::Init();
+  auto* profiler = SamplingHeapProfiler::Get();
+  PoissonAllocationSampler::Get()->SuppressRandomnessForTest(false);
   profiler->SetSamplingInterval(10240);
   base::TimeTicks t0 = base::TimeTicks::Now();
   std::map<size_t, size_t> sums;

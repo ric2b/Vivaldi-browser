@@ -23,6 +23,23 @@ const char kSupervisedUserPseudoEmail[] = "managed_user@localhost";
 // TODO(860492): Remove this once supervised user support is removed.
 const char kSupervisedUserPseudoGaiaID[] = "managed_user_gaia_id";
 
+// Maps a vector of gaia::ListedAccount structs to a corresponding vector of
+// AccountInfo structs.
+std::vector<AccountInfo> ListedAccountsToAccountInfos(
+    const std::vector<gaia::ListedAccount>& listed_accounts) {
+  std::vector<AccountInfo> account_infos;
+
+  for (const auto& listed_account : listed_accounts) {
+    AccountInfo account_info;
+    account_info.account_id = listed_account.id;
+    account_info.gaia = listed_account.gaia_id;
+    account_info.email = listed_account.email;
+    account_infos.push_back(account_info);
+  }
+
+  return account_infos;
+}
+
 }  // namespace
 
 IdentityManager::IdentityManager(
@@ -73,6 +90,7 @@ IdentityManager::IdentityManager(
   token_service_->AddDiagnosticsObserver(this);
   token_service_->AddObserver(this);
   token_service_->set_diagnostics_client(this);
+  gaia_cookie_manager_service_->AddObserver(this);
 }
 
 IdentityManager::~IdentityManager() {
@@ -84,6 +102,7 @@ IdentityManager::~IdentityManager() {
   token_service_->RemoveObserver(this);
   token_service_->RemoveDiagnosticsObserver(this);
   token_service_->set_diagnostics_client(nullptr);
+  gaia_cookie_manager_service_->RemoveObserver(this);
 }
 
 AccountInfo IdentityManager::GetPrimaryAccountInfo() const {
@@ -135,6 +154,33 @@ bool IdentityManager::HasPrimaryAccount() const {
   return !primary_account_info_.account_id.empty();
 }
 
+#if !defined(OS_CHROMEOS)
+void IdentityManager::ClearPrimaryAccount(
+    ClearAccountTokensAction token_action,
+    signin_metrics::ProfileSignout signout_source_metric,
+    signin_metrics::SignoutDelete signout_delete_metric) {
+  SigninManager* signin_manager =
+      SigninManager::FromSigninManagerBase(signin_manager_);
+
+  switch (token_action) {
+    case IdentityManager::ClearAccountTokensAction::kDefault:
+      signin_manager->SignOut(signout_source_metric, signout_delete_metric);
+      break;
+    case IdentityManager::ClearAccountTokensAction::kKeepAll:
+      signin_manager->SignOutAndKeepAllAccounts(signout_source_metric,
+                                                signout_delete_metric);
+      break;
+    case IdentityManager::ClearAccountTokensAction::kRemoveAll:
+      signin_manager->SignOutAndRemoveAllAccounts(signout_source_metric,
+                                                  signout_delete_metric);
+      break;
+  }
+
+  // NOTE: |primary_account_| member is cleared in WillFireGoogleSignedOut()
+  // and IdentityManager::Observers are notified in GoogleSignedOut();
+}
+#endif  // defined(OS_CHROMEOS)
+
 std::vector<AccountInfo> IdentityManager::GetAccountsWithRefreshTokens() const {
   // TODO(blundell): It seems wasteful to construct this vector every time this
   // method is called, but it also seems bad to maintain the vector as an ivar
@@ -147,6 +193,17 @@ std::vector<AccountInfo> IdentityManager::GetAccountsWithRefreshTokens() const {
   }
 
   return accounts;
+}
+
+std::vector<AccountInfo> IdentityManager::GetAccountsInCookieJar(
+    const std::string& source) const {
+  // TODO(859882): Change this implementation to interact asynchronously with
+  // GaiaCookieManagerService as detailed in
+  // https://docs.google.com/document/d/1hcrJ44facCSHtMGBmPusvcoP-fAR300Hi-UFez8ffYQ/edit?pli=1#heading=h.w97eil1cygs2.
+  std::vector<gaia::ListedAccount> listed_accounts;
+  gaia_cookie_manager_service_->ListAccounts(&listed_accounts, nullptr, source);
+
+  return ListedAccountsToAccountInfos(listed_accounts);
 }
 
 bool IdentityManager::HasAccountWithRefreshToken(
@@ -163,10 +220,11 @@ IdentityManager::CreateAccessTokenFetcherForAccount(
     const std::string& account_id,
     const std::string& oauth_consumer_name,
     const OAuth2TokenService::ScopeSet& scopes,
-    AccessTokenFetcher::TokenCallback callback) {
+    AccessTokenFetcher::TokenCallback callback,
+    AccessTokenFetcher::Mode mode) {
   return std::make_unique<AccessTokenFetcher>(account_id, oauth_consumer_name,
                                               token_service_, scopes,
-                                              std::move(callback));
+                                              std::move(callback), mode);
 }
 
 void IdentityManager::RemoveAccessTokenFromCache(
@@ -232,9 +290,9 @@ void IdentityManager::WillFireGoogleSignedOut(const AccountInfo& account_info) {
   // TODO(843510): Consider setting this info and notifying observers
   // asynchronously in response to GoogleSigninSucceeded() once there are no
   // direct clients of SigninManager.
-  DCHECK(account_info.account_id == primary_account_info_.account_id);
-  DCHECK(account_info.gaia == primary_account_info_.gaia);
-  DCHECK(account_info.email == primary_account_info_.email);
+  DCHECK_EQ(account_info.account_id, primary_account_info_.account_id);
+  DCHECK_EQ(account_info.gaia, primary_account_info_.gaia);
+  DCHECK(gaia::AreEmailsSame(account_info.email, primary_account_info_.email));
   primary_account_info_ = AccountInfo();
 }
 #endif
@@ -259,7 +317,6 @@ void IdentityManager::WillFireOnRefreshTokenAvailable(
     const std::string& account_id,
     bool is_valid) {
   DCHECK(!pending_token_available_state_);
-
   AccountInfo account_info =
       account_tracker_service_->GetAccountInfo(account_id);
 
@@ -279,7 +336,7 @@ void IdentityManager::WillFireOnRefreshTokenAvailable(
     account_info.gaia = kSupervisedUserPseudoGaiaID;
   }
 
-  // The account might have already been  present (e.g., this method can fire on
+  // The account might have already been present (e.g., this method can fire on
   // updating an invalid token to a valid one or vice versa); in this case we
   // sanity-check that the cached account info has the expected values.
   auto iterator = accounts_with_refresh_tokens_.find(account_id);
@@ -380,6 +437,18 @@ void IdentityManager::OnRefreshTokenRevoked(const std::string& account_id) {
 
   for (auto& observer : observer_list_) {
     observer.OnRefreshTokenRemovedForAccount(account_info);
+  }
+}
+
+void IdentityManager::OnGaiaAccountsInCookieUpdated(
+    const std::vector<gaia::ListedAccount>& accounts,
+    const std::vector<gaia::ListedAccount>& signed_out_accounts,
+    const GoogleServiceAuthError& error) {
+  std::vector<AccountInfo> account_infos =
+      ListedAccountsToAccountInfos(accounts);
+
+  for (auto& observer : observer_list_) {
+    observer.OnAccountsInCookieUpdated(account_infos);
   }
 }
 

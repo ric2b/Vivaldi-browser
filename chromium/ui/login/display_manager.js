@@ -8,6 +8,7 @@
 
 // TODO(xiyuan): Find a better to share those constants.
 /** @const */ var SCREEN_OOBE_WELCOME = 'connect';
+/** @const */ var SCREEN_OOBE_NETWORK = 'network-selection';
 /** @const */ var SCREEN_OOBE_HID_DETECTION = 'hid-detection';
 /** @const */ var SCREEN_OOBE_EULA = 'eula';
 /** @const */ var SCREEN_OOBE_ENABLE_DEBUGGING = 'debugging';
@@ -41,9 +42,11 @@
 /** @const */ var SCREEN_ACTIVE_DIRECTORY_PASSWORD_CHANGE =
     'ad-password-change';
 /** @const */ var SCREEN_SYNC_CONSENT = 'sync-consent';
+/** @const */ var SCREEN_FINGERPRINT_SETUP = 'fingerprint-setup';
 /** @const */ var SCREEN_RECOMMEND_APPS = 'recommend-apps';
 /** @const */ var SCREEN_APP_DOWNLOADING = 'app-downloading';
 /** @const */ var SCREEN_DISCOVER = 'discover';
+/** @const */ var SCREEN_MARKETING_OPT_IN = 'marketing-opt-in';
 
 /* Accelerator identifiers. Must be kept in sync with webui_login_view.cc. */
 /** @const */ var ACCELERATOR_CANCEL = 'cancel';
@@ -137,8 +140,8 @@ cr.define('cr.ui.login', function() {
    * @const
    */
   var SCREEN_GROUPS = [[
-    SCREEN_OOBE_WELCOME, SCREEN_OOBE_EULA, SCREEN_OOBE_UPDATE,
-    SCREEN_OOBE_AUTO_ENROLLMENT_CHECK
+    SCREEN_OOBE_WELCOME, SCREEN_OOBE_NETWORK, SCREEN_OOBE_EULA,
+    SCREEN_OOBE_UPDATE, SCREEN_OOBE_AUTO_ENROLLMENT_CHECK
   ]];
   /**
    * Group of screens (screen IDs) where factory-reset screen invocation is
@@ -148,6 +151,7 @@ cr.define('cr.ui.login', function() {
    */
   var RESET_AVAILABLE_SCREEN_GROUP = [
     SCREEN_OOBE_WELCOME,
+    SCREEN_OOBE_NETWORK,
     SCREEN_OOBE_EULA,
     SCREEN_OOBE_UPDATE,
     SCREEN_OOBE_ENROLLMENT,
@@ -169,6 +173,7 @@ cr.define('cr.ui.login', function() {
     SCREEN_RECOMMEND_APPS,
     SCREEN_APP_DOWNLOADING,
     SCREEN_DISCOVER,
+    SCREEN_MARKETING_OPT_IN,
   ];
 
   /**
@@ -180,6 +185,7 @@ cr.define('cr.ui.login', function() {
   var ENABLE_DEBUGGING_AVAILABLE_SCREEN_GROUP = [
     SCREEN_OOBE_HID_DETECTION,
     SCREEN_OOBE_WELCOME,
+    SCREEN_OOBE_NETWORK,
     SCREEN_OOBE_EULA,
     SCREEN_OOBE_UPDATE,
     SCREEN_TERMS_OF_SERVICE
@@ -270,6 +276,13 @@ cr.define('cr.ui.login', function() {
      * @type {dictionary}
      */
     oobe_configuration_: {},
+
+    /**
+     * Detects multi-tap gesture that invokes demo mode setup in OOBE.
+     * @type {?MultiTapDetector}
+     * @private
+     */
+    demoModeStartListener_: null,
 
     /**
      * Error message (bubble) was shown. This is checked in tests.
@@ -450,6 +463,7 @@ cr.define('cr.ui.login', function() {
           chrome.send('toggleEnrollmentScreen');
         } else if (
             currentStepId == SCREEN_OOBE_WELCOME ||
+            currentStepId == SCREEN_OOBE_NETWORK ||
             currentStepId == SCREEN_OOBE_EULA) {
           // In this case update check will be skipped and OOBE will
           // proceed straight to enrollment screen when EULA is accepted.
@@ -491,10 +505,7 @@ cr.define('cr.ui.login', function() {
       } else if (name == ACCELERATOR_BOOTSTRAPPING_SLAVE) {
         chrome.send('setOobeBootstrappingSlave');
       } else if (name == ACCELERATOR_DEMO_MODE) {
-        if (DEMO_MODE_SETUP_AVAILABLE_SCREEN_GROUP.indexOf(currentStepId) !=
-            -1) {
           this.showEnableDemoModeDialog_();
-        }
       } else if (name == ACCELERATOR_SEND_FEEDBACK) {
         chrome.send('sendFeedback');
       }
@@ -715,6 +726,19 @@ cr.define('cr.ui.login', function() {
       if (this.currentScreen.id == SCREEN_DEVICE_DISABLED)
         return;
 
+      // Prevent initial GAIA signin load from interrupting the kiosk splash
+      // screen.
+      // TODO: remove this special case when a better fix is found for the race
+      // condition. This if statement was introduced to fix http://b/113786350.
+      if ((this.currentScreen.id == SCREEN_APP_LAUNCH_SPLASH ||
+           this.currentScreen.id == SCREEN_ARC_KIOSK_SPLASH) &&
+          screen.id == SCREEN_GAIA_SIGNIN) {
+        console.log(
+            this.currentScreen.id +
+            ' screen showing. Ignoring switch to Gaia screen.');
+        return;
+      }
+
       var screenId = screen.id;
       if (screenId == SCREEN_ACCOUNT_PICKER && this.showingViewsLogin) {
         chrome.send('hideOobeDialog');
@@ -892,6 +916,14 @@ cr.define('cr.ui.login', function() {
       }
     },
 
+    /** Initializes demo mode start listener. */
+    initializeDemoModeMultiTapListener: function() {
+      if (this.displayType_ == DISPLAY_TYPE.OOBE) {
+        this.demoModeStartListener_ = new MultiTapDetector(
+          $('outer-container'), 10, this.showEnableDemoModeDialog_.bind(this));
+      }
+    },
+
     /**
      * Prepares screens to use in login display.
      */
@@ -987,7 +1019,17 @@ cr.define('cr.ui.login', function() {
      * Shows the enable demo mode dialog.
      * @private
      */
-    showEnableDemoModeDialog_: function(promptText, requisition) {
+    showEnableDemoModeDialog_: function() {
+      var isDemoModeEnabled = loadTimeData.getBoolean('isDemoModeEnabled');
+      if (!isDemoModeEnabled) {
+        console.warn('Cannot setup demo mode, because it is disabled.');
+        return;
+      }
+
+      var currentStepId = this.screens_[this.currentStep_];
+      if (!DEMO_MODE_SETUP_AVAILABLE_SCREEN_GROUP.includes(currentStepId))
+        return;
+
       if (!this.enableDemoModeDialog_) {
         this.enableDemoModeDialog_ =
             new cr.ui.dialogs.ConfirmDialog(document.body);
@@ -996,12 +1038,13 @@ cr.define('cr.ui.login', function() {
         this.enableDemoModeDialog_.setCancelLabel(
             loadTimeData.getString('enableDemoModeDialogCancel'));
       }
+
       this.enableDemoModeDialog_.showWithTitle(
           loadTimeData.getString('enableDemoModeDialogTitle'),
           loadTimeData.getString('enableDemoModeDialogText'),
           function() {  // onOk
             chrome.send('setupDemoMode');
-          }, );
+          });
     },
 
     /**
@@ -1049,6 +1092,7 @@ cr.define('cr.ui.login', function() {
     }
 
     instance.initializeOOBEScreens();
+    instance.initializeDemoModeMultiTapListener();
 
     window.addEventListener('resize', instance.onWindowResize_.bind(instance));
   };

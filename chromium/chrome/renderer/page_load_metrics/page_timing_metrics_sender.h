@@ -8,6 +8,7 @@
 #include <bitset>
 #include <memory>
 
+#include "base/containers/flat_set.h"
 #include "base/containers/small_map.h"
 #include "base/macros.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
@@ -37,8 +38,7 @@ class PageTimingMetricsSender {
   PageTimingMetricsSender(std::unique_ptr<PageTimingSender> sender,
                           std::unique_ptr<base::OneShotTimer> timer,
                           mojom::PageLoadTimingPtr initial_timing,
-                          std::unique_ptr<PageResourceDataUse> initial_request,
-                          mojom::PageLoadDataUsePtr initial_data_use);
+                          std::unique_ptr<PageResourceDataUse> initial_request);
   ~PageTimingMetricsSender();
 
   void DidObserveLoadingBehavior(blink::WebLoadingBehaviorFlag behavior);
@@ -71,8 +71,6 @@ class PageTimingMetricsSender {
   // A list of newly observed features during page load, to be sent to the
   // browser.
   mojom::PageLoadFeaturesPtr new_features_;
-  // Additional data use observed during the page load.
-  mojom::PageLoadDataUsePtr new_data_use_;
 
   std::bitset<static_cast<size_t>(blink::mojom::WebFeature::kNumberOfFeatures)>
       features_sent_;
@@ -83,8 +81,14 @@ class PageTimingMetricsSender {
 
   bool have_sent_ipc_ = false;
 
+  // The page's resources that are currently loading,  or were completed after
+  // the last timing update.
   base::small_map<std::map<int, PageResourceDataUse>, 16>
       page_resource_data_use_;
+
+  // Set of all resources that have completed or received a transfer
+  // size update since the last timimg update.
+  base::flat_set<PageResourceDataUse*> modified_resources_;
 
   // Field trial for alternating page timing metrics sender buffer timer delay.
   // https://crbug.com/847269.

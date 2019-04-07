@@ -412,7 +412,7 @@ Chromium is unable to recover your settings.
 
       <!-- Print Preview -->
       <message name="IDS_PRINT_PREVIEW_NO_PLUGIN" desc="Message to display when the PDF viewer is missing.">
-        Chromium does not include the PDF viewer which is required for Print Preview to function.
+        Chromium cannot show the print preview when the built-in PDF viewer is missing.
       </message>
 
       <!-- Download Shelf Items -->
@@ -961,6 +961,9 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
         </message>
       </if>
       <if expr="chromeos">
+        <message name="IDS_UPDATE_RECOMMENDED_DIALOG_TITLE" desc="The window title for the Update Recommended dialog.">
+          Restart Chromium OS
+        </message>
         <message name="IDS_UPDATE_RECOMMENDED" desc="The main text of the Update Recommended dialog.">
           Chromium OS needs to be restarted to apply the update.
         </message>
@@ -1111,6 +1114,13 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
         </message>
       </if>
 
+      <!-- OOM intervention message -->
+      <if expr="is_android">
+        <message name="IDS_NEAR_OOM_REDUCTION_MESSAGE" desc="The message stating that the browser removed some content of the page using too much memory.">
+           This page uses too much memory, so Chrome removed some content.
+        </message>
+      </if>
+
       <!-- OOBE -->
       <if expr="chromeos">
         <message name="IDS_INSTALLING_UPDATE" desc="Label shown on the updates installation screen during OOBE">
@@ -1154,7 +1164,7 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
           Not now
         </message>
         <message name="IDS_DICE_WELCOME_DESCRIPTION" desc="A message on the welcome page explaining the purpose of signing in.">
-          Sign in to sync and personalize Chromium across your devices
+          Sync and personalize Chromium across your devices
         </message>
       </if>
 
@@ -1187,40 +1197,79 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
         </message>
       </if>
       <!-- Relaunch notification bubble and dialog. -->
-      <if expr="not is_android and not chromeos">
-        <message name="IDS_RELAUNCH_RECOMMENDED_TITLE" desc="The title of a dialog that tells users that a browser relaunch is recommended for an update available for some number of days.">
-          {0, plural,
-           =0 {A Chromium update is available}
-           =1 {A Chromium update is available}
-           other {A Chromium update has been available for # days}}
-        </message>
-        <message name="IDS_RELAUNCH_RECOMMENDED_BODY" desc="The body text of a dialog that tells users that a browser relaunch is recommended for an update.">
-          Your administrator asks that you relaunch Chromium to apply this update
-        </message>
-        <message name="IDS_RELAUNCH_REQUIRED_TITLE_DAYS" desc="The title of a dialog that tells users the browser must be relaunched within two or more days.">
-          {0, plural,
-           =1 {Relaunch Chromium within a day}
-           other {Relaunch Chromium within # days}}
-        </message>
-        <message name="IDS_RELAUNCH_REQUIRED_TITLE_HOURS" desc="The title of a dialog that tells users the browser must be relaunched within one or more hours.">
-          {0, plural,
-           =1 {Chromium will relaunch in an hour}
-           other {Chromium will relaunch in # hours}}
-        </message>
-        <message name="IDS_RELAUNCH_REQUIRED_TITLE_MINUTES" desc="The title of a dialog that tells users the browser must be relaunched within one or more minutes.">
-          {0, plural,
-           =1 {Chromium will relaunch in 1 minute}
-           other {Chromium will relaunch in # minutes}}
-        </message>
-        <message name="IDS_RELAUNCH_REQUIRED_TITLE_SECONDS" desc="The title of a dialog that tells users the browser must be relaunched within some number of seconds.">
-          {0, plural,
-           =0 {Chromium will relaunch now}
-           =1 {Chromium will relaunch in 1 second}
-           other {Chromium will relaunch in # seconds}}
-        </message>
-        <message name="IDS_RELAUNCH_REQUIRED_BODY" desc="The body text of a dialog that tells users the browser must be relaunched.">
-          Your administrator requires that you relaunch Chromium to apply an update
-        </message>
+      <if expr="not is_android">
+        <if expr="not chromeos">
+          <then>
+            <message name="IDS_RELAUNCH_RECOMMENDED_TITLE" desc="The title of a dialog that tells users that a browser relaunch is recommended for an update available for some number of days.">
+              {0, plural,
+               =0 {A Chromium update is available}
+               =1 {A Chromium update is available}
+               other {A Chromium update has been available for # days}}
+            </message>
+            <message name="IDS_RELAUNCH_RECOMMENDED_BODY" desc="The body text of a dialog that tells users that a browser relaunch is recommended for an update.">
+              Your administrator asks that you relaunch Chromium to apply this update
+            </message>
+            <message name="IDS_RELAUNCH_REQUIRED_TITLE_DAYS" desc="The title of a dialog that tells users the browser must be relaunched within two or more days.">
+              {0, plural,
+               =1 {Relaunch Chromium within a day}
+               other {Relaunch Chromium within # days}}
+            </message>
+            <message name="IDS_RELAUNCH_REQUIRED_TITLE_HOURS" desc="The title of a dialog that tells users the browser must be relaunched within one or more hours.">
+              {0, plural,
+               =1 {Chromium will relaunch in an hour}
+               other {Chromium will relaunch in # hours}}
+            </message>
+            <message name="IDS_RELAUNCH_REQUIRED_TITLE_MINUTES" desc="The title of a dialog that tells users the browser must be relaunched within one or more minutes.">
+              {0, plural,
+               =1 {Chromium will relaunch in 1 minute}
+               other {Chromium will relaunch in # minutes}}
+            </message>
+            <message name="IDS_RELAUNCH_REQUIRED_TITLE_SECONDS" desc="The title of a dialog that tells users the browser must be relaunched within some number of seconds.">
+              {0, plural,
+               =0 {Chromium will relaunch now}
+               =1 {Chromium will relaunch in 1 second}
+               other {Chromium will relaunch in # seconds}}
+            </message>
+            <message name="IDS_RELAUNCH_REQUIRED_BODY" desc="The body text of a dialog that tells users the browser must be relaunched.">
+              Your administrator requires that you relaunch Chromium to apply an update
+            </message>
+          </then>
+          <else>
+            <message name="IDS_RELAUNCH_RECOMMENDED_TITLE" desc="The title of a dialog that tells users that a device restart is recommended for an update available for some number of days.">
+              {0, plural,
+               =0 {A Chromium OS update is available}
+               =1 {A Chromium OS update is available}
+               other {A Chromium OS update has been available for # days}}
+            </message>
+            <message name="IDS_RELAUNCH_RECOMMENDED_BODY" desc="The body text of a dialog that tells users that a device restart is recommended for an update.">
+              Your administrator asks that you restart Chromium OS to apply this update
+            </message>
+            <message name="IDS_RELAUNCH_REQUIRED_TITLE_DAYS" desc="The title of a dialog that tells users the device must be restarted within two or more days.">
+              {0, plural,
+               =1 {Restart Chromium OS within a day}
+               other {Restart Chromium OS within # days}}
+            </message>
+            <message name="IDS_RELAUNCH_REQUIRED_TITLE_HOURS" desc="The title of a dialog that tells users the device must be restarted within one or more hours.">
+              {0, plural,
+               =1 {Chromium OS will restart in an hour}
+               other {Chromium OS will restart in # hours}}
+            </message>
+            <message name="IDS_RELAUNCH_REQUIRED_TITLE_MINUTES" desc="The title of a dialog that tells users the device must be restarted within one or more minutes.">
+              {0, plural,
+               =1 {Chromium OS will restart in 1 minute}
+               other {Chromium OS will restart in # minutes}}
+            </message>
+            <message name="IDS_RELAUNCH_REQUIRED_TITLE_SECONDS" desc="The title of a dialog that tells users the device must be restarted within some number of seconds.">
+              {0, plural,
+               =0 {Chromium OS will restart now}
+               =1 {Chromium OS will restart in 1 second}
+               other {Chromium OS will restart in # seconds}}
+            </message>
+            <message name="IDS_RELAUNCH_REQUIRED_BODY" desc="The body text of a dialog that tells users the device must be restarted.">
+              Your administrator requires that you restart Chromium OS to apply an update
+            </message>
+          </else>
+        </if>
       </if>
       <!-- Chroium launch blocking dialog. -->
       <if expr="not is_android and not chromeos">

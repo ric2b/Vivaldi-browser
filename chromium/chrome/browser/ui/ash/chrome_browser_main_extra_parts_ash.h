@@ -10,7 +10,6 @@
 #include "base/macros.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/common/buildflags.h"
-#include "chromeos/assistant/buildflags.h"
 
 namespace aura {
 class UserActivityForwarder;
@@ -20,8 +19,16 @@ namespace chromeos {
 class NetworkPortalNotificationController;
 }
 
+namespace policy {
+class DisplayRotationDefaultHandler;
+}
+
 namespace ui {
 class UserActivityDetector;
+}
+
+namespace views {
+class MusClient;
 }
 
 class AccessibilityControllerClient;
@@ -37,8 +44,8 @@ class LoginScreenClient;
 class MediaClient;
 class NetworkConnectDelegateChromeOS;
 class NightLightClient;
+class ScreenOrientationDelegateChromeos;
 class SessionControllerClient;
-class ShellStateClient;
 class SystemTrayClient;
 class TabletModeClient;
 class VolumeController;
@@ -47,10 +54,6 @@ class WallpaperControllerClient;
 
 #if BUILDFLAG(ENABLE_WAYLAND_SERVER)
 class ExoParts;
-#endif
-
-#if BUILDFLAG(ENABLE_CROS_ASSISTANT)
-class AssistantClient;
 #endif
 
 namespace internal {
@@ -95,8 +98,9 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   std::unique_ptr<AppListClientImpl> app_list_client_;
   std::unique_ptr<ChromeNewWindowClient> chrome_new_window_client_;
   std::unique_ptr<ImeControllerClient> ime_controller_client_;
+  std::unique_ptr<ScreenOrientationDelegateChromeos>
+      screen_orientation_delegate_;
   std::unique_ptr<SessionControllerClient> session_controller_client_;
-  std::unique_ptr<ShellStateClient> shell_state_client_;
   std::unique_ptr<SystemTrayClient> system_tray_client_;
   std::unique_ptr<TabletModeClient> tablet_mode_client_;
   std::unique_ptr<VolumeController> volume_controller_;
@@ -114,18 +118,19 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   std::unique_ptr<ExoParts> exo_parts_;
 #endif
 
-#if BUILDFLAG(ENABLE_CROS_ASSISTANT)
-  std::unique_ptr<AssistantClient> assistant_client_;
-#endif
-
   // Initialized in PostProfileInit in all configs:
   std::unique_ptr<CastConfigClientMediaRouter> cast_config_client_media_router_;
   std::unique_ptr<LoginScreenClient> login_screen_client_;
   std::unique_ptr<MediaClient> media_client_;
+  std::unique_ptr<policy::DisplayRotationDefaultHandler>
+      display_rotation_handler_;
 
   // Initialized in PostBrowserStart in all configs:
   std::unique_ptr<DataPromoNotification> data_promo_notification_;
   std::unique_ptr<NightLightClient> night_light_client_;
+
+  // Created for mash (both in single and multi-process).
+  std::unique_ptr<views::MusClient> mus_client_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainExtraPartsAsh);
 };

@@ -142,7 +142,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   void OnResponseBodyStreamReady(MojoResult result);
   void DeleteSelf();
   void SendResponseToClient();
-  void CompletePendingWrite();
+  void CompletePendingWrite(bool success);
   void SetRawResponseHeaders(scoped_refptr<const net::HttpResponseHeaders>);
   void SendUploadProgress(const net::UploadProgress& progress);
   void OnUploadProgressACK();
@@ -216,6 +216,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   scoped_refptr<const net::HttpResponseHeaders> raw_response_headers_;
 
   std::unique_ptr<UploadProgressTracker> upload_progress_tracker_;
+
+  // Whether a redirect is currently deferred.
+  bool deferred_redirect_ = false;
 
   bool should_pause_reading_body_ = false;
   // The response body stream is open, but transferring data is paused.

@@ -1420,9 +1420,9 @@ void ContentSecurityPolicy::DispatchViolationEvents(
   if (execution_context_->IsWorkletGlobalScope())
     return;
 
-  SecurityPolicyViolationEvent* event = SecurityPolicyViolationEvent::Create(
+  SecurityPolicyViolationEvent& event = *SecurityPolicyViolationEvent::Create(
       EventTypeNames::securitypolicyviolation, violation_data);
-  DCHECK(event->bubbles());
+  DCHECK(event.bubbles());
 
   if (execution_context_->IsDocument()) {
     Document* document = ToDocument(execution_context_);
@@ -1893,6 +1893,15 @@ ContentSecurityPolicy::ExposeForNavigationalChecks() const {
     list.self_source = self_source_->ExposeForNavigationalChecks();
 
   return list;
+}
+
+bool ContentSecurityPolicy::HasPolicyFromSource(
+    ContentSecurityPolicyHeaderSource source) const {
+  for (const auto& policy : policies_) {
+    if (policy->HeaderSource() == source)
+      return true;
+  }
+  return false;
 }
 
 }  // namespace blink

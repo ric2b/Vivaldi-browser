@@ -102,11 +102,11 @@ Untuk informasi tentang privasi, lihat Kebijakan Privasi Google (http://goo.gl/S
 <translation id="3171922709365450819">Perangkat ini tidak didukung oleh klien ini karena memerlukan autentikasi pihak ketiga.</translation>
 <translation id="3194245623920924351">Chrome Desktop Jarak Jauh</translation>
 <translation id="3197730452537982411">Desktop Jarak Jauh</translation>
+<translation id="3212472844831225214">• Dukungan tambahan untuk Android 9.0 Pie.</translation>
 <translation id="324272851072175193">Kirimkan petunjuk berikut melalui email</translation>
 <translation id="3258789396564295715">Mungkin Anda dapat mengakses komputer ini dengan aman menggunakan Chrome Desktop Jarak Jauh.</translation>
 <translation id="3286521253923406898">Pengontrol Host Chromoting</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> ingin melakukan perubahan.</translation>
-<translation id="331779822864701136">• Menambahkan dukungan untuk Android 8.0 Oreo.</translation>
 <translation id="332624996707057614">Edit nama komputer</translation>
 <translation id="3339299787263251426">Mengakses komputer melalui internet dengan aman</translation>
 <translation id="3360306038446926262">Windows</translation>
@@ -122,8 +122,9 @@ Untuk informasi tentang privasi, lihat Kebijakan Privasi Google (http://goo.gl/S
 <translation id="369442766917958684">Offline.</translation>
 <translation id="3695446226812920698">Pelajari caranya</translation>
 <translation id="3718805989288361841">Terjadi error pada setelan kebijakan untuk Chrome Desktop Jarak Jauh. Hubungi administrator sistem untuk mendapatkan bantuan.</translation>
-<translation id="3759645055923345178">Setelah penyiapan selesai, Anda dapat mengakses komputer dari halaman ini dengan memasukkan PIN atau kode akses</translation>
 <translation id="3776024066357219166">Sesi Chrome Desktop Jarak Jauh Anda telah berakhir.</translation>
+<translation id="3846148461359626420">• Pengalaman menggeser dan zoom yang lebih baik di iPhone X.
+• Penyempurnaan stabilitas dan perbaikan bug.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Konfirmasi akun dan PIN Anda di bawah guna mengizinkan akses oleh Chrome Desktop Jarak Jauh</translation>
 <translation id="3897092660631435901">Menu</translation>
@@ -137,6 +138,7 @@ Untuk informasi tentang privasi, lihat Kebijakan Privasi Google (http://goo.gl/S
 <translation id="405887016757208221">Komputer jarak jauh gagal melakukan inisialisasi sesi. Jika masalah tetap ada, coba konfigurasi ulang host.</translation>
 <translation id="4068946408131579958">Semua sambungan</translation>
 <translation id="409800995205263688">CATATAN: Setelan kebijakan hanya mengizinkan sambungan antar-komputer dalam jaringan Anda.</translation>
+<translation id="4126409073460786861">Setelah penyiapan selesai, muat ulang halaman ini, maka Anda dapat mengakses komputer dengan memilih perangkat dan memasukkan PIN</translation>
 <translation id="4145029455188493639">Login sebagai <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Beberapa komponen yang diperlukan tidak ada. Pastikan Anda memasang software versi terbaru dan coba lagi.</translation>
 <translation id="4156740505453712750">Untuk melindungi akses ke komputer ini, gunakan PIN <ph name="BOLD_START" />setidaknya enam digit<ph name="BOLD_END" />. PIN ini akan diperlukan saat menyambung dari lokasi lainnya.</translation>
@@ -145,7 +147,6 @@ Untuk informasi tentang privasi, lihat Kebijakan Privasi Google (http://goo.gl/S
 <translation id="4207623512727273241">Jalankan pemasang sebelum melanjutkan.</translation>
 <translation id="4227991223508142681">Utilitas Penyediaan Host</translation>
 <translation id="4240294130679914010">Pencopot Pemasangan Host Chromoting</translation>
-<translation id="4249741460382919890">Perbaikan umum dan peningkatan stabilitas.</translation>
 <translation id="4277463233460010382">Komputer ini dikonfigurasi untuk mengizinkan satu atau beberapa klien terhubung tanpa memasukkan PIN</translation>
 <translation id="4277736576214464567">Kode akses tidak valid. Harap coba lagi.</translation>
 <translation id="4361728918881830843">Untuk mengaktifkan sambungan jarak jauh ke komputer yang berbeda, instal Chrome Desktop Jarak Jauh di komputer tersebut, lalu klik “<ph name="BUTTON_NAME" />”.</translation>
@@ -271,6 +272,7 @@ PC</translation>
 <translation id="6998989275928107238">Kepada</translation>
 <translation id="7019153418965365059">Kesalahan host tidak dikenal: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Bantuan Jarak Jauh</translation>
+<translation id="7026930240735156896">Ikuti petunjuk menyiapkan komputer untuk akses jarak jauh</translation>
 <translation id="7038683108611689168">Bantu kami meningkatkan Chromoting dengan mengizinkan kami mengumpulkan statistik penggunaan dan laporan kerusakan.</translation>
 <translation id="7067321367069083429">Layar berfungsi seperti layar sentuh</translation>
 <translation id="7116737094673640201">Selamat Datang di Chrome Desktop Jarak Jauh</translation>
@@ -296,7 +298,6 @@ PC</translation>
 <translation id="7782471917492991422">Periksa setelan pengelolaan daya komputer Anda dan pastikan agar tidak dikonfigurasi untuk tidur ketika menganggur.</translation>
 <translation id="7810127880729796595">Tampilkan statistik (sambungan: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Beberapa komponen yang diperlukan tidak ada. Pastikan Anda menjalankan Chrome versi terbaru dan coba lagi.</translation>
-<translation id="7850909060902317210">Instal software Chrome Desktop Jarak Jauh dan ikuti petunjuk untuk menyelesaikan penyiapan</translation>
 <translation id="7868137160098754906">Masukkan PIN komputer jarak jauh Anda.</translation>
 <translation id="7869445566579231750">Anda tidak memiliki izin untuk menjalankan aplikasi ini.</translation>
 <translation id="7895403300744144251">Kebijakan keamanan di komputer jarak jauh tidak mengizinkan sambungan dari akun Anda.</translation>

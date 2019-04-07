@@ -54,21 +54,23 @@ V8AbstractEventListener::V8AbstractEventListener(v8::Isolate* isolate,
     : EventListener(kJSEventListenerType),
       is_attribute_(is_attribute),
       world_(&world),
-      isolate_(isolate),
-      worker_or_worklet_global_scope_(nullptr) {
+      isolate_(isolate) {
   if (IsMainThread())
     InstanceCounters::IncrementCounter(
         InstanceCounters::kJSEventListenerCounter);
-  else
-    worker_or_worklet_global_scope_ =
-        ToWorkerOrWorkletGlobalScope(CurrentExecutionContext(isolate));
 }
 
 V8AbstractEventListener::~V8AbstractEventListener() {
-  DCHECK(listener_.IsEmpty());
-  if (IsMainThread())
+  // For non-main threads a termination garbage collection clears out the
+  // wrapper links to CustomWrappable which result in CustomWrappable not being
+  // rooted by JavaScript objects anymore. This means that
+  // V8AbstractEventListener can be collected without while still holding a
+  // valid weak references.
+  if (IsMainThread()) {
+    DCHECK(listener_.IsEmpty());
     InstanceCounters::DecrementCounter(
         InstanceCounters::kJSEventListenerCounter);
+  }
 }
 
 // static
@@ -78,8 +80,8 @@ v8::Local<v8::Value> V8AbstractEventListener::GetListenerOrNull(
     EventListener* listener) {
   if (listener && listener->GetType() == kJSEventListenerType) {
     v8::Local<v8::Object> v8_listener =
-        static_cast<V8AbstractEventListener*>(listener)->GetListenerObject(
-            event_target->GetExecutionContext());
+        static_cast<V8AbstractEventListener*>(listener)
+            ->GetListenerObjectInternal(event_target->GetExecutionContext());
     if (!v8_listener.IsEmpty())
       return v8_listener;
   }
@@ -122,15 +124,12 @@ void V8AbstractEventListener::HandleEvent(ScriptState* script_state,
 }
 
 void V8AbstractEventListener::SetListenerObject(
-    v8::Local<v8::Object> listener) {
+    ScriptState* script_state,
+    v8::Local<v8::Object> listener,
+    const V8PrivateProperty::Symbol& property) {
   DCHECK(listener_.IsEmpty());
-  // Balanced in WrapperCleared xor ClearListenerObject.
-  if (worker_or_worklet_global_scope_) {
-    worker_or_worklet_global_scope_->RegisterEventListener(this);
-  } else {
-    keep_alive_ = this;
-  }
   listener_.Set(GetIsolate(), listener, this, &WrapperCleared);
+  Attach(script_state, listener, property, this);
 }
 
 void V8AbstractEventListener::InvokeEventHandler(
@@ -170,7 +169,7 @@ void V8AbstractEventListener::InvokeEventHandler(
 
     return_value = CallListenerFunction(script_state, js_event, event);
     if (try_catch.HasCaught())
-      event->target()->UncaughtExceptionInEventHandler();
+      event->LegacySetDidListenersThrowFlag();
 
     if (!try_catch.CanContinue()) {  // Result of TerminateExecution().
       ExecutionContext* execution_context = ToExecutionContext(context);
@@ -211,14 +210,15 @@ void V8AbstractEventListener::InvokeEventHandler(
         ToBeforeUnloadEvent(event)->setReturnValue(string_return_value);
       }
     }
-  } else if (ShouldPreventDefault(return_value) &&
+  } else if (ShouldPreventDefault(return_value, event) &&
              event->type() != EventTypeNames::beforeunload) {
     event->preventDefault();
   }
 }
 
 bool V8AbstractEventListener::ShouldPreventDefault(
-    v8::Local<v8::Value> return_value) {
+    v8::Local<v8::Value> return_value,
+    Event*) {
   // Prevent default action if the return value is false in accord with the spec
   // http://www.w3.org/TR/html5/webappapis.html#event-handler-attributes
   return return_value->IsBoolean() && !return_value.As<v8::Boolean>()->Value();
@@ -261,11 +261,6 @@ void V8AbstractEventListener::ClearListenerObject() {
     return;
   probe::AsyncTaskCanceled(GetIsolate(), this);
   listener_.Clear();
-  if (worker_or_worklet_global_scope_) {
-    worker_or_worklet_global_scope_->DeregisterEventListener(this);
-  } else {
-    keep_alive_.Clear();
-  }
 }
 
 void V8AbstractEventListener::WrapperCleared(
@@ -275,7 +270,6 @@ void V8AbstractEventListener::WrapperCleared(
 
 void V8AbstractEventListener::Trace(blink::Visitor* visitor) {
   visitor->Trace(listener_.Cast<v8::Value>());
-  visitor->Trace(worker_or_worklet_global_scope_);
   EventListener::Trace(visitor);
 }
 

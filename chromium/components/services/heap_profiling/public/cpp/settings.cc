@@ -17,6 +17,7 @@ namespace heap_profiling {
 const base::Feature kOOPHeapProfilingFeature{"OOPHeapProfiling",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 const char kOOPHeapProfilingFeatureMode[] = "mode";
+const char kOOPHeapProfilingFeatureSamplingV2[] = "sampling-v2";
 
 namespace {
 
@@ -87,6 +88,10 @@ Mode ConvertStringToMode(const std::string& mode) {
     return Mode::kGpu;
   if (mode == kMemlogModeRendererSampling)
     return Mode::kRendererSampling;
+  if (mode == kMemlogModeUtilitySampling)
+    return Mode::kUtilitySampling;
+  if (mode == kMemlogModeUtilityAndBrowser)
+    return Mode::kUtilityAndBrowser;
   DLOG(ERROR) << "Unsupported value: \"" << mode << "\" passed to --"
               << kMemlog;
   return Mode::kNone;

@@ -54,7 +54,10 @@ class FCMSyncNetworkChannel : public NetworkChannel {
 
   // Subclass should call DeliverIncomingMessage for message to reach
   // invalidations library.
-  bool DeliverIncomingMessage(const std::string& message);
+  bool DeliverIncomingMessage(const std::string& payload,
+                              const std::string& private_topic,
+                              const std::string& public_topic,
+                              const std::string& version);
 
   // Subclass should call DeliverToken for token to reach registration
   // manager.
@@ -68,7 +71,7 @@ class FCMSyncNetworkChannel : public NetworkChannel {
   int received_messages_count_;
   std::string token_;
 
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 };
 }  // namespace syncer
 

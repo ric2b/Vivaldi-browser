@@ -32,10 +32,38 @@ Polymer({
      * The string to display when there is a non-zero number of cookies.
      * @private
      */
-    cookieString_: {
-      type: String,
-      value: '',
+    cookieString_: String,
+
+    /**
+     * The position of this site-entry in its parent list.
+     */
+    listIndex: {
+      type: Number,
+      value: -1,
     },
+
+    /**
+     * The string to display showing the overall usage of this site-entry.
+     * @private
+     */
+    overallUsageString_: String,
+
+    /**
+     * An array containing the strings to display showing the individual disk
+     * usage for each origin in |siteGroup|.
+     * @type {!Array<string>}
+     * @private
+     */
+    originUsages_: {
+      type: Array,
+      value: function() {
+        return [];
+      },
+    },
+  },
+
+  listeners: {
+    'focus': 'onFocus_',
   },
 
   /** @private {?settings.LocalDataBrowserProxy} */
@@ -81,7 +109,7 @@ Polymer({
       // was computed.
     }
     originIndex = this.getIndexBoundToOriginList_(siteGroup, originIndex);
-    const url = this.toUrl(siteGroup.origins[originIndex]);
+    const url = this.toUrl(siteGroup.origins[originIndex].origin);
     return url.host;
   },
 
@@ -97,21 +125,32 @@ Polymer({
       if (this.$.collapseChild.opened)
         this.toggleCollapsible_();
       // Ungrouped site-entries should not show cookies.
-      if (this.cookieString_) {
+      if (this.cookieString_)
         this.cookieString_ = '';
-        this.fire('site-entry-resized');
-      }
     }
-    if (!siteGroup || !this.grouped_(siteGroup))
+    if (!siteGroup)
+      return;
+    this.calculateUsageInfo_(siteGroup);
+
+    if (!this.grouped_(siteGroup))
       return;
 
-    this.localDataBrowserProxy_.getNumCookiesString(this.displayName_)
-        .then(string => {
-          // If there was no cookie string previously and now there is, or vice
-          // versa, the height of this site-entry will have changed.
-          if ((this.cookieString_ == '') != (string == ''))
-            this.fire('site-entry-resized');
+    const siteList = [this.displayName_];
+    this.localDataBrowserProxy_.getNumCookiesList(siteList)
+        .then(numCookiesList => {
+          assert(siteList.length == numCookiesList.length);
 
+          const numCookies = numCookiesList[0].numCookies;
+          if (siteGroup.numCookies != numCookies)
+            this.fire('site-entry-storage-updated');
+          siteGroup.numCookies = numCookies;
+          this.notifyPath('siteGroup.numCookies');
+
+          return numCookies == 0 ?
+              Promise.resolve('') :
+              this.localDataBrowserProxy_.getNumCookiesString(numCookies);
+        })
+        .then(string => {
           this.cookieString_ = string;
         });
   },
@@ -131,7 +170,7 @@ Polymer({
       return '';
     originIndex = this.getIndexBoundToOriginList_(siteGroup, originIndex);
 
-    const url = this.toUrl(siteGroup.origins[originIndex]);
+    const url = this.toUrl(siteGroup.origins[originIndex].origin);
     const scheme = url.protocol.replace(new RegExp(':*$'), '');
     /** @type{string} */ const HTTPS_SCHEME = 'https';
     if (scheme == HTTPS_SCHEME)
@@ -149,7 +188,48 @@ Polymer({
   getSiteGroupIcon_: function(siteGroup) {
     // TODO(https://crbug.com/835712): Implement heuristic for finding a good
     // favicon.
-    return this.computeSiteIcon(siteGroup.origins[0]);
+    return this.computeSiteIcon(siteGroup.origins[0].origin);
+  },
+
+  /**
+   * Calculates the amount of disk storage used by the given group of origins
+   * and eTLD+1. Also updates the corresponding display strings.
+   * TODO(https://crbug.com/835712): Add website storage as well.
+   * @param {SiteGroup} siteGroup The eTLD+1 group of origins.
+   * @private
+   */
+  calculateUsageInfo_: function(siteGroup) {
+    const getFormattedBytesForSize = (numBytes) => {
+      if (numBytes == 0)
+        return Promise.resolve('0 B');
+      return this.browserProxy.getFormattedBytes(numBytes);
+    };
+
+    let overallUsage = 0;
+    this.originUsages_ = new Array(siteGroup.origins.length);
+    siteGroup.origins.forEach((originInfo, i) => {
+      overallUsage += originInfo.usage;
+      if (this.grouped_(siteGroup)) {
+        getFormattedBytesForSize(originInfo.usage).then((string) => {
+          this.set(`originUsages_.${i}`, string);
+        });
+      }
+    });
+
+    getFormattedBytesForSize(overallUsage).then(string => {
+      this.overallUsageString_ = string;
+    });
+  },
+
+  /**
+   * Array binding for the |originUsages_| array for use in the HTML.
+   * @param {!{base: !Array<string>}} change The change record for the array.
+   * @param {number} index The index of the array item.
+   * @return {string}
+   * @private
+   */
+  originUsagesItem_: function(change, index) {
+    return change.base[index];
   },
 
   /**
@@ -159,6 +239,8 @@ Polymer({
    * @private
    */
   navigateToSiteDetails_: function(origin) {
+    this.fire(
+        'site-entry-selected', {item: this.siteGroup, index: this.listIndex});
     settings.navigateTo(
         settings.routes.SITE_SETTINGS_SITE_DETAILS,
         new URLSearchParams('site=' + origin));
@@ -170,7 +252,7 @@ Polymer({
    * @private
    */
   onOriginTap_: function(e) {
-    this.navigateToSiteDetails_(this.siteGroup.origins[e.model.index]);
+    this.navigateToSiteDetails_(this.siteGroup.origins[e.model.index].origin);
   },
 
   /**
@@ -181,7 +263,7 @@ Polymer({
   onSiteEntryTap_: function() {
     // Individual origins don't expand - just go straight to Site Details.
     if (!this.grouped_(this.siteGroup)) {
-      this.navigateToSiteDetails_(this.siteGroup.origins[0]);
+      this.navigateToSiteDetails_(this.siteGroup.origins[0].origin);
       return;
     }
     this.toggleCollapsible_();
@@ -196,7 +278,7 @@ Polymer({
    * @private
    */
   toggleCollapsible_: function() {
-    let collapseChild =
+    const collapseChild =
         /** @type {IronCollapseElement} */ (this.$.collapseChild);
     collapseChild.toggle();
     this.$.toggleButton.setAttribute('aria-expanded', collapseChild.opened);
@@ -238,7 +320,7 @@ Polymer({
   onResetSettings_: function(e) {
     const contentSettingsTypes = this.getCategoryList();
     for (let i = 0; i < this.siteGroup.origins.length; ++i) {
-      const origin = this.siteGroup.origins[i];
+      const origin = this.siteGroup.origins[i].origin;
       this.browserProxy.setOriginPermissions(
           origin, contentSettingsTypes, settings.ContentSetting.DEFAULT);
       if (contentSettingsTypes.includes(settings.ContentSettingsTypes.PLUGINS))
@@ -281,5 +363,16 @@ Polymer({
     if (index == 0)
       return 'first';
     return '';
+  },
+
+  /**
+   * Focuses the first focusable button in this site-entry.
+   * @private
+   */
+  onFocus_: function() {
+    const button = /** @type Element */
+        (this.root.querySelector('#toggleButton *:not([hidden]) button'));
+    button.focus();
+    this.tabIndex = -1;
   },
 });

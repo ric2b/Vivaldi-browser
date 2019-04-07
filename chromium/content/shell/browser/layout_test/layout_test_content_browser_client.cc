@@ -86,6 +86,9 @@ class TestOverlayWindow : public OverlayWindow {
   void Close() override {}
   void Show() override {}
   void Hide() override {}
+  void SetPictureInPictureCustomControls(
+      const std::vector<blink::PictureInPictureControlInfo>& controls)
+      override {}
   bool IsVisible() const override { return false; }
   bool IsAlwaysOnTop() const override { return false; }
   ui::Layer* GetLayer() override { return nullptr; }
@@ -281,6 +284,14 @@ bool LayoutTestContentBrowserClient::CanCreateWindow(
     bool* no_javascript_access) {
   *no_javascript_access = false;
   return !block_popups_ || user_gesture;
+}
+
+bool LayoutTestContentBrowserClient::ShouldEnableStrictSiteIsolation() {
+  // TODO(lukasza, alexmos): Layout tests should have the same default state of
+  // site-per-process as everything else, but because of a backlog of layout
+  // test failures (see https://crbug.com/477150), layout tests still use no
+  // isolation by default.
+  return false;
 }
 
 void LayoutTestContentBrowserClient::ExposeInterfacesToFrame(

@@ -10,19 +10,23 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
-#include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
-#include "media/base/bitstream_buffer.h"
-#include "media/base/unaligned_shared_memory.h"
 #include "media/gpu/media_gpu_export.h"
-#include "media/gpu/vaapi/vaapi_jpeg_decoder.h"
-#include "media/gpu/vaapi/vaapi_wrapper.h"
 #include "media/video/jpeg_decode_accelerator.h"
 
+// These data types are defined in va/va.h using typedef, reproduced here.
+typedef struct _VAImageFormat VAImageFormat;
+typedef unsigned int VASurfaceID;
+
 namespace media {
+
+class BitstreamBuffer;
+struct JpegParseResult;
+class UnalignedSharedMemory;
+class VaapiWrapper;
+class VaapiJpegDecodeAcceleratorTest;
 
 // Class to provide JPEG decode acceleration for Intel systems with hardware
 // support for it, and on which libva is available.
@@ -46,16 +50,21 @@ class MEDIA_GPU_EXPORT VaapiJpegDecodeAccelerator
   bool IsSupported() override;
 
  private:
-  struct DecodeRequest;
+  friend class VaapiJpegDecodeAcceleratorTest;
 
   // Notifies the client that an error has occurred and decoding cannot
-  // continue.
+  // continue. The client is notified on the |task_runner_|, i.e., the thread in
+  // which |*this| was created.
   void NotifyError(int32_t bitstream_buffer_id, Error error);
-  void NotifyErrorFromDecoderThread(int32_t bitstream_buffer_id, Error error);
+
+  // Notifies the client that a decode is ready. The client is notified on the
+  // |task_runner_|, i.e., the thread in which |*this| was created.
   void VideoFrameReady(int32_t bitstream_buffer_id);
 
-  // Processes one decode |request|.
-  void DecodeTask(std::unique_ptr<DecodeRequest> request);
+  // Processes one decode request.
+  void DecodeTask(int32_t bitstream_buffer_id,
+                  std::unique_ptr<UnalignedSharedMemory> shm,
+                  scoped_refptr<VideoFrame> video_frame);
 
   // Puts contents of |va_surface| into given |video_frame|, releases the
   // surface and passes the |input_buffer_id| of the resulting picture to
@@ -63,6 +72,16 @@ class MEDIA_GPU_EXPORT VaapiJpegDecodeAccelerator
   bool OutputPicture(VASurfaceID va_surface_id,
                      int32_t input_buffer_id,
                      const scoped_refptr<VideoFrame>& video_frame);
+
+  // Decodes a JPEG picture. It will fill VA-API parameters and call
+  // corresponding VA-API methods according to the JPEG |parse_result|. Decoded
+  // data will be outputted to the given |va_surface|. Returns false on failure.
+  // |vaapi_wrapper| should be initialized in kDecode mode with
+  // VAProfileJPEGBaseline profile. |va_surface| should be created with size at
+  // least as large as the picture size.
+  static bool DoDecode(VaapiWrapper* vaapi_wrapper,
+                       const JpegParseResult& parse_result,
+                       VASurfaceID va_surface);
 
   // ChildThread's task runner.
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
@@ -77,7 +96,6 @@ class MEDIA_GPU_EXPORT VaapiJpegDecodeAccelerator
 
   // Comes after vaapi_wrapper_ to ensure its destructor is executed before
   // |vaapi_wrapper_| is destroyed.
-  std::unique_ptr<VaapiJpegDecoder> decoder_;
   base::Thread decoder_thread_;
   // Use this to post tasks to |decoder_thread_| instead of
   // |decoder_thread_.task_runner()| because the latter will be NULL once
@@ -90,6 +108,8 @@ class MEDIA_GPU_EXPORT VaapiJpegDecodeAccelerator
   gfx::Size coded_size_;
   // The VA RT format associated with |va_surface_id_|.
   unsigned int va_rt_format_;
+  // The VA image format that will be requested from the VA API.
+  std::unique_ptr<VAImageFormat> va_image_format_;
 
   // WeakPtr factory for use in posting tasks from |decoder_task_runner_| back
   // to |task_runner_|.  Since |decoder_thread_| is a fully owned member of

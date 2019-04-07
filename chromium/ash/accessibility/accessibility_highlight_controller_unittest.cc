@@ -7,6 +7,7 @@
 #include <cmath>
 #include <memory>
 
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/accessibility_cursor_ring_layer.h"
 #include "ash/accessibility/accessibility_focus_ring_controller.h"
 #include "ash/shell.h"
@@ -40,26 +41,6 @@ class MockTextInputClient : public ui::DummyTextInputClient {
   gfx::Rect caret_bounds_;
 
   DISALLOW_COPY_AND_ASSIGN(MockTextInputClient);
-};
-
-class TestAccessibilityHighlightController
-    : public AccessibilityHighlightController {
- public:
-  TestAccessibilityHighlightController() = default;
-  ~TestAccessibilityHighlightController() override = default;
-
-  void OnCaretBoundsChanged(const ui::TextInputClient* client) override {
-    AccessibilityHighlightController::OnCaretBoundsChanged(client);
-  }
-
-  void OnMouseEvent(ui::MouseEvent* event) override {
-    AccessibilityHighlightController::OnMouseEvent(event);
-  }
-
- private:
-  bool IsCursorVisible() override { return true; }
-
-  DISALLOW_COPY_AND_ASSIGN(TestAccessibilityHighlightController);
 };
 
 }  // namespace
@@ -167,7 +148,7 @@ TEST_F(AccessibilityHighlightControllerTest, TestCaretRingDrawsBluePixels) {
 
   CaptureBeforeImage(capture_bounds);
 
-  TestAccessibilityHighlightController controller;
+  AccessibilityHighlightController controller;
   controller.HighlightCaret(true);
   MockTextInputClient text_input_client;
   text_input_client.SetCaretBounds(caret_bounds);
@@ -195,7 +176,7 @@ TEST_F(AccessibilityHighlightControllerTest, TestFocusRingDrawsPixels) {
 
   CaptureBeforeImage(capture_bounds);
 
-  TestAccessibilityHighlightController controller;
+  AccessibilityHighlightController controller;
   controller.HighlightFocus(true);
   controller.SetFocusHighlightRect(focus_bounds);
 
@@ -218,7 +199,7 @@ TEST_F(AccessibilityHighlightControllerTest, CursorWorksOnMultipleDisplays) {
   aura::Window::Windows root_windows = ash::Shell::Get()->GetAllRootWindows();
   ASSERT_EQ(2u, root_windows.size());
 
-  TestAccessibilityHighlightController highlight_controller;
+  AccessibilityHighlightController highlight_controller;
   highlight_controller.HighlightCursor(true);
   gfx::Point location(90, 90);
   ui::MouseEvent event0(ui::ET_MOUSE_MOVED, location, location,
@@ -262,7 +243,7 @@ TEST_F(AccessibilityHighlightControllerTest, CaretRingDrawnOnlyWithinBounds) {
   std::unique_ptr<views::Widget> window = CreateTestWidget();
   window->SetBounds(gfx::Rect(5, 5, 300, 300));
 
-  TestAccessibilityHighlightController highlight_controller;
+  AccessibilityHighlightController highlight_controller;
   MockTextInputClient text_input_client;
   highlight_controller.HighlightCaret(true);
   gfx::Rect caret_bounds(10, 10, 40, 40);
@@ -283,6 +264,55 @@ TEST_F(AccessibilityHighlightControllerTest, CaretRingDrawnOnlyWithinBounds) {
   text_input_client.SetCaretBounds(not_visible_bounds);
   highlight_controller.OnCaretBoundsChanged(&text_input_client);
 
+  EXPECT_FALSE(focus_ring_controller->caret_layer_for_testing());
+}
+
+// Tests that a zero-width text caret still results in a visible highlight.
+// https://crbug.com/882762
+TEST_F(AccessibilityHighlightControllerTest, ZeroWidthCaretRingVisible) {
+  AccessibilityHighlightController highlight_controller;
+  MockTextInputClient text_input_client;
+  highlight_controller.HighlightCaret(true);
+
+  // Simulate a zero-width text caret.
+  gfx::Rect zero_width(0, 16);
+  text_input_client.SetCaretBounds(zero_width);
+  highlight_controller.OnCaretBoundsChanged(&text_input_client);
+
+  // Caret ring is created.
+  EXPECT_TRUE(Shell::Get()
+                  ->accessibility_focus_ring_controller()
+                  ->caret_layer_for_testing());
+
+  // Simulate an empty text caret.
+  gfx::Rect empty;
+  text_input_client.SetCaretBounds(empty);
+  highlight_controller.OnCaretBoundsChanged(&text_input_client);
+
+  // Caret ring is gone.
+  EXPECT_FALSE(Shell::Get()
+                   ->accessibility_focus_ring_controller()
+                   ->caret_layer_for_testing());
+}
+
+// Tests setting the caret bounds explicitly via AccessibilityController, rather
+// than via the input method observer. This path is used in production in mash.
+TEST_F(AccessibilityHighlightControllerTest, SetCaretBounds) {
+  std::unique_ptr<views::Widget> window = CreateTestWidget();
+  window->SetBounds(gfx::Rect(5, 5, 300, 300));
+
+  AccessibilityController* accessibility_controller =
+      Shell::Get()->accessibility_controller();
+  accessibility_controller->SetCaretHighlightEnabled(true);
+
+  // Bounds inside the active window create a highlight.
+  accessibility_controller->SetCaretBounds(gfx::Rect(10, 10, 1, 16));
+  AccessibilityFocusRingController* focus_ring_controller =
+      Shell::Get()->accessibility_focus_ring_controller();
+  EXPECT_TRUE(focus_ring_controller->caret_layer_for_testing());
+
+  // Empty bounds remove the highlight.
+  accessibility_controller->SetCaretBounds(gfx::Rect());
   EXPECT_FALSE(focus_ring_controller->caret_layer_for_testing());
 }
 

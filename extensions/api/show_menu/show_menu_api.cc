@@ -563,7 +563,7 @@ void VivaldiMenuController::Show(
   menu_->Show();
 }
 
-void VivaldiMenuController::MenuWillShow(ui::SimpleMenuModel* source) {
+void VivaldiMenuController::OnMenuWillShow(ui::SimpleMenuModel* source) {
   if (!is_shown_) {
     is_shown_ = true;
     if (source == &menu_model_ && initial_selected_id_ != -1) {

@@ -34,6 +34,7 @@ class TestSheetModel : public AuthenticatorRequestSheetModel {
 
  private:
   // AuthenticatorRequestSheetModel:
+  bool IsActivityIndicatorVisible() const override { return true; }
   bool IsBackButtonVisible() const override { return true; }
   bool IsCancelButtonVisible() const override { return true; }
   base::string16 GetCancelButtonLabel() const override {
@@ -46,6 +47,8 @@ class TestSheetModel : public AuthenticatorRequestSheetModel {
     return base::ASCIIToUTF16("Test OK");
   }
 
+  gfx::ImageSkia* GetStepIllustration() const override { return nullptr; }
+
   base::string16 GetStepTitle() const override {
     return base::ASCIIToUTF16("Test Title");
   }
@@ -55,6 +58,8 @@ class TestSheetModel : public AuthenticatorRequestSheetModel {
         "Test Description That Is Super Long So That It No Longer Fits On One "
         "Line Because Life Would Be Just Too Simple That Way");
   }
+
+  ui::MenuModel* GetOtherTransportsMenuModel() override { return nullptr; }
 
   void OnBack() override {}
   void OnAccept() override {}
@@ -67,7 +72,7 @@ class TestSheetView : public AuthenticatorRequestSheetView {
  public:
   explicit TestSheetView(std::unique_ptr<TestSheetModel> model)
       : AuthenticatorRequestSheetView(std::move(model)) {
-    InitChildViews();
+    ReInitChildViews();
   }
 
   ~TestSheetView() override = default;
@@ -96,7 +101,10 @@ class AuthenticatorDialogViewTest : public DialogBrowserTest {
   void ShowUi(const std::string& name) override {
     content::WebContents* const web_contents =
         browser()->tab_strip_model()->GetActiveWebContents();
+
     auto dialog_model = std::make_unique<AuthenticatorRequestDialogModel>();
+    dialog_model->SetCurrentStep(
+        AuthenticatorRequestDialogModel::Step::kPostMortemTimedOut);
     auto dialog = std::make_unique<AuthenticatorRequestDialogView>(
         web_contents, std::move(dialog_model));
 

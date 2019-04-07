@@ -401,7 +401,7 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
         base::BindOnce(
             &UserCloudPolicyManagerChromeOSTest::OnFatalErrorEncountered,
             base::Unretained(this)),
-        active_user->GetAccountId(), task_runner_, task_runner_));
+        active_user->GetAccountId(), task_runner_));
     manager_->AddObserver(&observer_);
     manager_->SetSignInURLLoaderFactoryForTests(
         test_signin_shared_loader_factory_);
@@ -413,7 +413,6 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
   void InitAndConnectManager() {
     manager_->Init(&schema_registry_);
     manager_->Connect(&prefs_, &device_management_service_,
-                      /*system_request_context=*/nullptr,
                       /*system_url_loader_factory=*/nullptr);
     if (should_create_token_forwarder_) {
       // Create the UserCloudPolicyTokenForwarder, which fetches the access

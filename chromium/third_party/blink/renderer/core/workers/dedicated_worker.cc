@@ -12,6 +12,7 @@
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/platform/web_layer_tree_view.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
+#include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
@@ -19,6 +20,7 @@
 #include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/inspector/main_thread_debugger.h"
+#include "third_party/blink/renderer/core/messaging/post_message_options.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
@@ -64,9 +66,9 @@ DedicatedWorker* DedicatedWorker::Create(ExecutionContext* context,
     return nullptr;
   }
 
-  KURL script_url = ResolveURL(context, url, exception_state,
-                               WebURLRequest::kRequestContextScript);
-  if (!script_url.IsValid()) {
+  KURL script_request_url = ResolveURL(context, url, exception_state,
+                                       WebURLRequest::kRequestContextScript);
+  if (!script_request_url.IsValid()) {
     // Don't throw an exception here because it's already thrown in
     // ResolveURL().
     return nullptr;
@@ -86,20 +88,21 @@ DedicatedWorker* DedicatedWorker::Create(ExecutionContext* context,
   if (context->IsWorkerGlobalScope())
     UseCounter::Count(context, WebFeature::kNestedDedicatedWorker);
 
-  DedicatedWorker* worker = new DedicatedWorker(context, script_url, options);
+  DedicatedWorker* worker =
+      new DedicatedWorker(context, script_request_url, options);
   worker->Start();
   return worker;
 }
 
 DedicatedWorker::DedicatedWorker(ExecutionContext* context,
-                                 const KURL& script_url,
+                                 const KURL& script_request_url,
                                  const WorkerOptions& options)
     : AbstractWorker(context),
-      script_url_(script_url),
+      script_request_url_(script_request_url),
       options_(options),
       context_proxy_(new DedicatedWorkerMessagingProxy(context, this)) {
   DCHECK(context->IsContextThread());
-  DCHECK(script_url_.IsValid());
+  DCHECK(script_request_url_.IsValid());
   DCHECK(context_proxy_);
 }
 
@@ -109,20 +112,47 @@ DedicatedWorker::~DedicatedWorker() {
 }
 
 void DedicatedWorker::postMessage(ScriptState* script_state,
-                                  scoped_refptr<SerializedScriptValue> message,
-                                  const MessagePortArray& ports,
+                                  const ScriptValue& message,
+                                  Vector<ScriptValue>& transfer,
+                                  ExceptionState& exception_state) {
+  PostMessageOptions options;
+  if (!transfer.IsEmpty())
+    options.setTransfer(transfer);
+  postMessage(script_state, message, options, exception_state);
+}
+
+void DedicatedWorker::postMessage(ScriptState* script_state,
+                                  const ScriptValue& message,
+                                  const PostMessageOptions& options,
                                   ExceptionState& exception_state) {
   DCHECK(GetExecutionContext()->IsContextThread());
-  // Disentangle the port in preparation for sending it to the remote context.
-  auto channels = MessagePort::DisentanglePorts(
-      ExecutionContext::From(script_state), ports, exception_state);
+
+  BlinkTransferableMessage transferable_message;
+  Transferables transferables;
+  scoped_refptr<SerializedScriptValue> serialized_message =
+      PostMessageHelper::SerializeMessageByMove(script_state->GetIsolate(),
+                                                message, options, transferables,
+                                                exception_state);
   if (exception_state.HadException())
     return;
-  v8_inspector::V8StackTraceId stack_id =
+  DCHECK(serialized_message);
+  transferable_message.message = serialized_message;
+
+  // Disentangle the port in preparation for sending it to the remote context.
+  transferable_message.ports = MessagePort::DisentanglePorts(
+      ExecutionContext::From(script_state), transferables.message_ports,
+      exception_state);
+  if (exception_state.HadException())
+    return;
+  transferable_message.user_activation =
+      PostMessageHelper::CreateUserActivationSnapshot(GetExecutionContext(),
+                                                      options);
+
+  transferable_message.sender_stack_trace_id =
       ThreadDebugger::From(script_state->GetIsolate())
           ->StoreCurrentStackTrace("Worker.postMessage");
-  context_proxy_->PostMessageToWorkerGlobalScope(std::move(message),
-                                                 std::move(channels), stack_id);
+  context_proxy_->PostMessageToWorkerGlobalScope(
+      std::move(transferable_message));
 }
 
 // https://html.spec.whatwg.org/multipage/workers.html#worker-processing-model
@@ -142,13 +172,13 @@ void DedicatedWorker::Start() {
         network::mojom::FetchRequestMode::kSameOrigin;
     network::mojom::FetchCredentialsMode fetch_credentials_mode =
         network::mojom::FetchCredentialsMode::kSameOrigin;
-    if (script_url_.ProtocolIsData()) {
+    if (script_request_url_.ProtocolIsData()) {
       fetch_request_mode = network::mojom::FetchRequestMode::kNoCORS;
       fetch_credentials_mode = network::mojom::FetchCredentialsMode::kInclude;
     }
     classic_script_loader_ = WorkerClassicScriptLoader::Create();
-    classic_script_loader_->LoadAsynchronously(
-        *GetExecutionContext(), script_url_,
+    classic_script_loader_->LoadTopLevelScriptAsynchronously(
+        *GetExecutionContext(), script_request_url_,
         WebURLRequest::kRequestContextWorker, fetch_request_mode,
         fetch_credentials_mode,
         GetExecutionContext()->GetSecurityContext().AddressSpace(),
@@ -168,8 +198,9 @@ void DedicatedWorker::Start() {
     auto* outside_settings_object =
         new FetchClientSettingsObjectSnapshot(*GetExecutionContext());
     context_proxy_->StartWorkerGlobalScope(
-        CreateGlobalScopeCreationParams(), options_, script_url_,
-        outside_settings_object, stack_id, String() /* source_code */);
+        CreateGlobalScopeCreationParams(script_request_url_), options_,
+        script_request_url_, outside_settings_object, stack_id,
+        String() /* source_code */);
     return;
   }
   NOTREACHED() << "Invalid type: " << options_.type();
@@ -217,6 +248,10 @@ bool DedicatedWorker::HasPendingActivity() const {
   return context_proxy_->HasPendingActivity() || classic_script_loader_;
 }
 
+const String DedicatedWorker::Name() const {
+  return options_.name();
+}
+
 WorkerClients* DedicatedWorker::CreateWorkerClients() {
   WorkerClients* worker_clients = WorkerClients::Create();
   CoreInitializer::GetInstance().ProvideLocalFileSystemToWorker(
@@ -252,7 +287,7 @@ void DedicatedWorker::OnFinished(const v8_inspector::V8StackTraceId& stack_id) {
   if (classic_script_loader_->Canceled()) {
     // Do nothing.
   } else if (classic_script_loader_->Failed()) {
-    DispatchEvent(Event::CreateCancelable(EventTypeNames::error));
+    DispatchEvent(*Event::CreateCancelable(EventTypeNames::error));
   } else {
     ReferrerPolicy referrer_policy = kReferrerPolicyDefault;
     if (!classic_script_loader_->GetReferrerPolicy().IsNull()) {
@@ -260,13 +295,17 @@ void DedicatedWorker::OnFinished(const v8_inspector::V8StackTraceId& stack_id) {
           classic_script_loader_->GetReferrerPolicy(),
           kDoNotSupportReferrerPolicyLegacyKeywords, &referrer_policy);
     }
+    const KURL script_response_url = classic_script_loader_->ResponseURL();
+    DCHECK(script_request_url_ == script_response_url ||
+           SecurityOrigin::AreSameSchemeHostPort(script_request_url_,
+                                                 script_response_url));
     std::unique_ptr<GlobalScopeCreationParams> creation_params =
-        CreateGlobalScopeCreationParams();
+        CreateGlobalScopeCreationParams(script_response_url);
     creation_params->referrer_policy = referrer_policy;
     auto* outside_settings_object =
         new FetchClientSettingsObjectSnapshot(*GetExecutionContext());
     context_proxy_->StartWorkerGlobalScope(
-        std::move(creation_params), options_, script_url_,
+        std::move(creation_params), options_, script_response_url,
         outside_settings_object, stack_id,
         classic_script_loader_->SourceText());
     probe::scriptImported(GetExecutionContext(),
@@ -277,7 +316,7 @@ void DedicatedWorker::OnFinished(const v8_inspector::V8StackTraceId& stack_id) {
 }
 
 std::unique_ptr<GlobalScopeCreationParams>
-DedicatedWorker::CreateGlobalScopeCreationParams() {
+DedicatedWorker::CreateGlobalScopeCreationParams(const KURL& script_url) {
   base::UnguessableToken devtools_worker_token;
   std::unique_ptr<WorkerSettings> settings;
   if (GetExecutionContext()->IsDocument()) {
@@ -296,18 +335,20 @@ DedicatedWorker::CreateGlobalScopeCreationParams() {
   ScriptType script_type = (options_.type() == "classic") ? ScriptType::kClassic
                                                           : ScriptType::kModule;
   return std::make_unique<GlobalScopeCreationParams>(
-      script_url_, script_type, GetExecutionContext()->UserAgent(),
+      script_url, script_type, GetExecutionContext()->UserAgent(),
       GetExecutionContext()->GetContentSecurityPolicy()->Headers(),
       kReferrerPolicyDefault, GetExecutionContext()->GetSecurityOrigin(),
-      GetExecutionContext()->IsSecureContext(), CreateWorkerClients(),
+      GetExecutionContext()->IsSecureContext(),
+      GetExecutionContext()->GetHttpsState(), CreateWorkerClients(),
       GetExecutionContext()->GetSecurityContext().AddressSpace(),
       OriginTrialContext::GetTokens(GetExecutionContext()).get(),
       devtools_worker_token, std::move(settings), kV8CacheOptionsDefault,
       nullptr /* worklet_module_responses_map */,
       ConnectToWorkerInterfaceProvider(GetExecutionContext(),
-                                       SecurityOrigin::Create(script_url_)),
+                                       SecurityOrigin::Create(script_url)),
       CreateBeginFrameProviderParams(),
-      GetExecutionContext()->GetSecurityContext().GetFeaturePolicy());
+      GetExecutionContext()->GetSecurityContext().GetFeaturePolicy(),
+      GetExecutionContext()->GetAgentClusterID());
 }
 
 const AtomicString& DedicatedWorker::InterfaceName() const {

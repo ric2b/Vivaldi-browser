@@ -40,6 +40,7 @@
 #include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/win/hwnd_util.h"
 #include "ui/views/window/client_view.h"
+#include "ui/views/window/hit_test_utils.h"
 
 using MD = ui::MaterialDesignController;
 
@@ -73,6 +74,17 @@ base::win::ScopedHICON CreateHICONFromSkBitmapSizedTo(
 // GlassBrowserFrameView, public:
 
 constexpr char GlassBrowserFrameView::kClassName[];
+
+SkColor GlassBrowserFrameView::GetReadableFeatureColor(
+    SkColor background_color) {
+  // BlendTowardOppositeLuma or IsDark isn't used here because those functions
+  // may use a different value for the dark/light threshold or the upper/lower
+  // bounds to which the color is blended. This will ensure the results of this
+  // function remain unchanged should those other functions behave differently.
+  // This algorithm matches the behaviour for native Windows caption buttons.
+  return color_utils::GetLuma(background_color) < 128 ? SK_ColorWHITE
+                                                      : SK_ColorBLACK;
+}
 
 GlassBrowserFrameView::GlassBrowserFrameView(BrowserFrame* frame,
                                              BrowserView* browser_view)
@@ -117,12 +129,11 @@ GlassBrowserFrameView::GlassBrowserFrameView(BrowserFrame* frame,
     // TODO(alancutter): Avoid snapshotting GetTitlebarFeatureColor() values
     // here and call it on demand in
     // HostedAppButtonContainer::UpdateIconsColor() via a delegate interface.
+    SkColor active_color = GetTitlebarFeatureColor(kActive);
+    SkColor inactive_color = GetTitlebarFeatureColor(kInactive);
     hosted_app_button_container_ = new HostedAppButtonContainer(
-        browser_view, GetTitlebarFeatureColor(kActive),
-        GetTitlebarFeatureColor(kInactive));
+        frame, browser_view, active_color, inactive_color);
     AddChildView(hosted_app_button_container_);
-    // TODO(https://crbug.com/854479): Add FrameHeaderOriginText animation here.
-    hosted_app_button_container_->StartTitlebarAnimation(base::TimeDelta());
   }
 
   minimize_button_ =
@@ -311,6 +322,15 @@ int GlassBrowserFrameView::NonClientHitTest(const gfx::Point& point) {
     return HTCLIENT;
   }
 
+  if (hosted_app_button_container_) {
+    // TODO(alancutter): Assign hit test components to all children and refactor
+    // this entire function call to just be GetHitTestComponent(this, point).
+    int hosted_app_component =
+        views::GetHitTestComponent(hosted_app_button_container_, point);
+    if (hosted_app_component != HTNOWHERE)
+      return hosted_app_component;
+  }
+
   int frame_component = frame()->client_view()->NonClientHitTest(point);
   const int client_border_thickness = ClientBorderThickness(false);
 
@@ -394,8 +414,10 @@ void GlassBrowserFrameView::UpdateWindowIcon() {
 }
 
 void GlassBrowserFrameView::UpdateWindowTitle() {
-  if (ShowCustomTitle() && !frame()->IsFullscreen())
+  if (ShowCustomTitle() && !frame()->IsFullscreen()) {
+    LayoutTitleBar();
     window_title_->SchedulePaint();
+  }
 }
 
 void GlassBrowserFrameView::ResetWindowControls() {
@@ -468,8 +490,6 @@ void GlassBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
     PaintTitlebar(canvas);
   if (!browser_view()->IsTabStripVisible())
     return;
-  if (IsToolbarVisible())
-    PaintToolbarTopStroke(canvas);
   if (ClientBorderThickness(false) > 0)
     PaintClientEdge(canvas);
 }
@@ -589,7 +609,18 @@ int GlassBrowserFrameView::TopAreaHeight(bool restored) const {
 }
 
 int GlassBrowserFrameView::TitlebarMaximizedVisualHeight() const {
-  return display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYCAPTION);
+  int maximized_height =
+      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYCAPTION);
+  if (hosted_app_button_container_) {
+    // Adding 2px of vertical padding puts at least 1 px of space on the top and
+    // bottom of the element.
+    constexpr int kVerticalPadding = 2;
+    maximized_height =
+        std::max(maximized_height,
+                 hosted_app_button_container_->GetPreferredSize().height() +
+                     kVerticalPadding);
+  }
+  return maximized_height;
 }
 
 int GlassBrowserFrameView::TitlebarHeight(bool restored) const {
@@ -606,8 +637,7 @@ SkColor GlassBrowserFrameView::GetTitlebarFeatureColor(
   const SkAlpha title_alpha = ShouldPaintAsActive(active_state)
                                   ? SK_AlphaOPAQUE
                                   : kInactiveTitlebarFeatureAlpha;
-  return SkColorSetA(color_utils::BlendTowardOppositeLuma(
-                         GetFrameColor(active_state), SK_AlphaOPAQUE),
+  return SkColorSetA(GetReadableFeatureColor(GetFrameColor(active_state)),
                      title_alpha);
 }
 
@@ -699,11 +729,6 @@ SkColor GlassBrowserFrameView::GetTitlebarColor() const {
   return GetFrameColor();
 }
 
-HostedAppButtonContainer*
-GlassBrowserFrameView::GetHostedAppButtonContainerForTesting() const {
-  return hosted_app_button_container_;
-}
-
 Windows10CaptionButton* GlassBrowserFrameView::CreateCaptionButton(
     ViewID button_type,
     int accessible_name_resource_id) {
@@ -792,6 +817,8 @@ void GlassBrowserFrameView::PaintTitlebar(gfx::Canvas* canvas) const {
 }
 
 void GlassBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) const {
+  DCHECK_LT(base::win::GetVersion(), base::win::VERSION_WIN10);
+
   // Draw the client edge images.
   gfx::Rect client_bounds = CalculateClientAreaBounds();
   const int x = client_bounds.x();
@@ -800,23 +827,22 @@ void GlassBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) const {
   const int bottom = std::max(y, height() - ClientBorderThickness(false));
 
   const ui::ThemeProvider* tp = GetThemeProvider();
-  if (base::win::GetVersion() < base::win::VERSION_WIN10) {
-    const gfx::ImageSkia* const right_image =
-        tp->GetImageSkiaNamed(IDR_CONTENT_RIGHT_SIDE);
-    const int img_w = right_image->width();
-    const int height = bottom - y;
-    canvas->TileImageInt(*right_image, right, y, img_w, height);
-    canvas->DrawImageInt(
-        *tp->GetImageSkiaNamed(IDR_CONTENT_BOTTOM_RIGHT_CORNER), right, bottom);
-    const gfx::ImageSkia* const bottom_image =
-        tp->GetImageSkiaNamed(IDR_CONTENT_BOTTOM_CENTER);
-    canvas->TileImageInt(*bottom_image, x, bottom, client_bounds.width(),
-                         bottom_image->height());
-    canvas->DrawImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_BOTTOM_LEFT_CORNER),
-                         x - img_w, bottom);
-    canvas->TileImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_LEFT_SIDE),
-                         x - img_w, y, img_w, height);
-  }
+  const gfx::ImageSkia* const right_image =
+      tp->GetImageSkiaNamed(IDR_CONTENT_RIGHT_SIDE);
+  const int img_w = right_image->width();
+  const int height = bottom - y;
+  canvas->TileImageInt(*right_image, right, y, img_w, height);
+  canvas->DrawImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_BOTTOM_RIGHT_CORNER),
+                       right, bottom);
+  const gfx::ImageSkia* const bottom_image =
+      tp->GetImageSkiaNamed(IDR_CONTENT_BOTTOM_CENTER);
+  canvas->TileImageInt(*bottom_image, x, bottom, client_bounds.width(),
+                       bottom_image->height());
+  canvas->DrawImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_BOTTOM_LEFT_CORNER),
+                       x - img_w, bottom);
+  canvas->TileImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_LEFT_SIDE), x - img_w,
+                       y, img_w, height);
+
   FillClientEdgeRects(x, y, right, bottom,
                       tp->GetColor(ThemeProperties::COLOR_TOOLBAR), canvas);
 }
@@ -904,16 +930,16 @@ void GlassBrowserFrameView::LayoutTitleBar() {
   gfx::Rect window_icon_bounds;
   const int icon_size =
       display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYSMICON);
-  constexpr int kIconMaximizedLeftMargin = 2;
   const int titlebar_visual_height =
       IsMaximized() ? TitlebarMaximizedVisualHeight() : TitlebarHeight(false);
   // Don't include the area above the screen when maximized. However it only
   // looks centered if we start from y=0 when restored.
   const int window_top = IsMaximized() ? WindowTopY() : 0;
   int next_leading_x =
-      IsMaximized()
-          ? kIconMaximizedLeftMargin
-          : display::win::ScreenWin::GetSystemMetricsInDIP(SM_CXSIZEFRAME);
+      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CXSIZEFRAME);
+  constexpr int kMaximizedLeftMargin = 2;
+  if (IsMaximized())
+    next_leading_x += kMaximizedLeftMargin;
   int next_trailing_x = MinimizeButtonX();
 
   const int y = window_top + (titlebar_visual_height - icon_size) / 2;
@@ -930,18 +956,8 @@ void GlassBrowserFrameView::LayoutTitleBar() {
 
   if (hosted_app_button_container_) {
     DCHECK(!GetProfileSwitcherButton());
-    gfx::Size container_size = hosted_app_button_container_->GetPreferredSize();
-    const int container_width = std::min(
-        container_size.width(), std::max(0, next_trailing_x - next_leading_x));
-    const int container_height = container_size.height();
-    DCHECK_LE(container_height, titlebar_visual_height);
-    // Align right.
-    hosted_app_button_container_->SetBounds(
-        next_trailing_x - container_width,
-        (titlebar_visual_height - container_height) / 2, container_width,
-        container_height);
-    hosted_app_button_container_->Layout();
-    next_trailing_x = hosted_app_button_container_->bounds().x();
+    next_trailing_x = hosted_app_button_container_->LayoutInContainer(
+        next_leading_x, next_trailing_x, window_top, titlebar_visual_height);
   }
 
   if (ShowCustomTitle()) {

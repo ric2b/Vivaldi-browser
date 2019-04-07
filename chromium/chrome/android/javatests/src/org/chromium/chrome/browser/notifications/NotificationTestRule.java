@@ -6,9 +6,6 @@ package org.chromium.chrome.browser.notifications;
 
 import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 
-import android.app.Notification;
-import android.support.test.InstrumentationRegistry;
-
 import org.junit.Assert;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
@@ -22,7 +19,6 @@ import org.chromium.chrome.test.util.browser.notifications.MockNotificationManag
 import org.chromium.chrome.test.util.browser.notifications.MockNotificationManagerProxy.NotificationEntry;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.List;
 import java.util.concurrent.TimeoutException;
@@ -40,7 +36,6 @@ public class NotificationTestRule extends ChromeActivityTestRule<ChromeTabbedAct
     private static final long POLLING_INTERVAL_MS = 50;
 
     private MockNotificationManagerProxy mMockNotificationManager;
-    private EmbeddedTestServer mTestServer;
 
     public NotificationTestRule() {
         super(ChromeTabbedActivity.class);
@@ -51,35 +46,17 @@ public class NotificationTestRule extends ChromeActivityTestRule<ChromeTabbedAct
         mMockNotificationManager = new MockNotificationManagerProxy();
         NotificationPlatformBridge.overrideNotificationManagerForTesting(mMockNotificationManager);
         startMainActivityFromLauncher();
-        mTestServer = EmbeddedTestServer.createAndStartServer(
-                InstrumentationRegistry.getInstrumentation().getContext());
     }
 
     private void tearDown() throws Exception {
         NotificationPlatformBridge.overrideNotificationManagerForTesting(null);
-        mTestServer.stopAndDestroyServer();
-    }
-
-    /** Returns the test server. */
-    @Override
-    public EmbeddedTestServer getTestServer() {
-        return mTestServer;
-    }
-
-    /**
-     * Returns the origin of the HTTP server the test is being ran on.
-     */
-    public String getOrigin() {
-        return mTestServer.getURL("/");
     }
 
     /**
      * Sets the permission to use Web Notifications for the test HTTP server's origin to |setting|.
      */
-    public void setNotificationContentSettingForCurrentOrigin(final ContentSetting setting)
+    public void setNotificationContentSettingForOrigin(final ContentSetting setting, String origin)
             throws InterruptedException, TimeoutException {
-        final String origin = getOrigin();
-
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
@@ -98,21 +75,6 @@ public class NotificationTestRule extends ChromeActivityTestRule<ChromeTabbedAct
         } else {
             Assert.assertEquals("\"default\"", permission);
         }
-    }
-
-    /**
-     * Shows a notification with |title| and |options|, waits until it has been displayed and then
-     * returns the Notification object to the caller. Requires that only a single notification is
-     * being displayed in the notification manager.
-     *
-     * @param title Title of the Web Notification to show.
-     * @param options Optional map of options to include when showing the notification.
-     * @return The Android Notification object, as shown in the framework.
-     */
-    public Notification showAndGetNotification(String title, String options)
-            throws InterruptedException, TimeoutException {
-        runJavaScriptCodeInCurrentTab("showNotification(\"" + title + "\", " + options + ");");
-        return waitForNotification().notification;
     }
 
     /**

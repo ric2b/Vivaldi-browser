@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2015-2018 Vivaldi Technologies AS. All rights reserved.
 
 [
   {
@@ -8,6 +8,30 @@
       "implemented_in": "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
     },
     "types": [
+      {
+        "id": "DialogName",
+        "type": "string",
+        "description": "Name of the dialog to set position for.",
+        "enum": [{
+          "name": "password",
+          "description": "The password dialog opening to save a password."
+        }]
+      },
+      {
+        "id": "FlowDirection",
+        "type": "string",
+        "description": "The direction a dialog would be opened from the given rect.",
+        "enum": [
+          {
+            "name": "down",
+            "description": "Dialog should position itself below the given rect."
+          },
+          {
+            "name": "up",
+            "description": "Dialog should position itself above the given rect."
+          }
+        ]
+      },
       {
         "id": "UrlValidResults",
         "type": "object",
@@ -650,6 +674,67 @@
             ]
           }
         ]
+      },
+      {
+        "name": "showPasswordDialog",
+        "type": "function",
+        "description": "Shows password manage dialog.",
+        "parameters": []
+      },
+      {
+        "name": "setDialogPosition",
+        "type": "function",
+        "description": "Sets the opening position for the given Chromium-triggered dialog.",
+        "parameters": [
+          {
+            "name": "dialogName",
+            "$ref": "DialogName",
+            "description": "The window to set the position for."
+          },
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "The window id the dialog belongs to."
+          },
+          {
+            "type": "object",
+            "name": "position",
+            "properties": {
+              "left": {
+                "type": "integer",
+                "description": "Anchor left position in client coordinates."
+              },
+              "top": {
+                "type": "integer",
+                "description": "Anchor top position in client coordinates."
+              },
+              "width": {
+                "type": "integer",
+                "description": "Anchor width."
+              },
+              "height": {
+                "type": "integer",
+                "description": "Anchor height."
+              }
+            }
+          },
+          {
+            "name": "flowDirection",
+            "$ref": "FlowDirection",
+            "description": "The direction the dialog should be positioned based on the rect."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "boolean",
+                "description": "true if the dialog is known, otherwise false."
+              }
+            ]
+          }
+        ]
       }
     ],
     "events": [
@@ -692,6 +777,18 @@
         "name": "onResume",
         "type": "function",
         "description": "Fired when the computer has resumed from suspension."
+      },
+      {
+        "name": "onPasswordIconStatusChanged",
+        "type": "function",
+        "description": "Fires for password icon status change.",
+        "parameters": [
+          {
+            "name": "show",
+            "type": "boolean",
+            "description": "Whether to show or hide icon"
+          }
+        ]
       }
     ]
   }

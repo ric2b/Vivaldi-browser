@@ -8,7 +8,13 @@
 
 int main(int argc, char** argv) {
   base::TestSuite test_suite(argc, argv);
+#if defined(CRONET_TESTS_IMPLEMENTATION)
+  // cronet_tests[_android] link the Cronet implementation into the test
+  // suite statically in many configurations, causing globals initialized by
+  // the library (e.g. TaskScheduler) to be visible to the TestSuite.
+  test_suite.DisableCheckForLeakedGlobals();
+#endif
   return base::LaunchUnitTests(
       argc, argv,
-      base::Bind(&base::TestSuite::Run, base::Unretained(&test_suite)));
+      base::BindOnce(&base::TestSuite::Run, base::Unretained(&test_suite)));
 }

@@ -377,7 +377,6 @@ Example
   action("myscript") {
     # Pass the output dir to the script.
     args = [ "-o", rebase_path(target_out_dir, root_build_dir) ]"
-
   }
 )";
 

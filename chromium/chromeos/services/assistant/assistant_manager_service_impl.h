@@ -9,8 +9,6 @@
 #include <string>
 #include <vector>
 
-// TODO(xiaohuic): replace with "base/macros.h" once we remove
-// libassistant/contrib dependency.
 #include "ash/public/interfaces/assistant_controller.mojom.h"
 #include "ash/public/interfaces/voice_interaction_controller.mojom.h"
 #include "base/threading/thread.h"
@@ -21,7 +19,6 @@
 #include "chromeos/services/assistant/assistant_settings_manager_impl.h"
 #include "chromeos/services/assistant/platform_api_impl.h"
 #include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
-#include "libassistant/contrib/core/macros.h"
 #include "libassistant/shared/internal_api/assistant_manager_delegate.h"
 #include "libassistant/shared/public/conversation_state_listener.h"
 #include "libassistant/shared/public/device_state_listener.h"
@@ -70,6 +67,7 @@ class AssistantManagerServiceImpl
   // assistant::AssistantManagerService overrides
   void Start(const std::string& access_token,
              base::OnceClosure callback) override;
+  void Stop() override;
   State GetState() const override;
   void SetAccessToken(const std::string& access_token) override;
   void EnableListening(bool enable) override;
@@ -82,6 +80,8 @@ class AssistantManagerServiceImpl
       UpdateSettingsUiResponseCallback callback) override;
 
   // mojom::Assistant overrides:
+  void StartCachedScreenContextInteraction() override;
+  void StartMetalayerInteraction(const gfx::Rect& region) override;
   void StartVoiceInteraction() override;
   void StopActiveInteraction() override;
   void SendTextQuery(const std::string& query) override;
@@ -93,10 +93,10 @@ class AssistantManagerServiceImpl
                             int action_index) override;
   void DismissNotification(
       mojom::AssistantNotificationPtr notification) override;
-  void RequestScreenContext(const gfx::Rect& region,
-                            RequestScreenContextCallback callback) override;
+  void CacheScreenContext(CacheScreenContextCallback callback) override;
 
   // AssistantActionObserver overrides:
+  void OnShowContextualQueryFallback() override;
   void OnShowHtml(const std::string& html) override;
   void OnShowSuggestions(
       const std::vector<action::Suggestion>& suggestions) override;
@@ -116,6 +116,7 @@ class AssistantManagerServiceImpl
       assistant_client::ConversationStateListener::RecognitionState state,
       const assistant_client::ConversationStateListener::RecognitionResult&
           recognition_result) override;
+  void OnRespondingStarted(bool is_error_response) override;
 
   // AssistantManagerDelegate overrides
   assistant_client::ActionModule::Result HandleModifySettingClientOp(
@@ -123,19 +124,24 @@ class AssistantManagerServiceImpl
   bool IsSettingSupported(const std::string& setting_id) override;
   bool SupportsModifySettings() override;
   void OnNotificationRemoved(const std::string& grouping_key) override;
+  // Last search source will be cleared after it is retrieved.
+  std::string GetLastSearchSource() override;
 
   // ash::mojom::VoiceInteractionObserver:
   void OnVoiceInteractionStatusChanged(
       ash::mojom::VoiceInteractionState state) override {}
   void OnVoiceInteractionSettingsEnabled(bool enabled) override;
   void OnVoiceInteractionContextEnabled(bool enabled) override;
-  void OnVoiceInteractionHotwordEnabled(bool enabled) override {}
-  void OnVoiceInteractionSetupCompleted(bool completed) override;
+  void OnVoiceInteractionHotwordEnabled(bool enabled) override;
+  void OnVoiceInteractionSetupCompleted(bool completed) override {}
   void OnAssistantFeatureAllowedChanged(
       ash::mojom::AssistantAllowedState state) override {}
+  void OnLocaleChanged(const std::string& locale) override {}
 
-  // AddDeviceStateListener overrides
+  // assistant_client::DeviceStateListener overrides:
   void OnStartFinished() override;
+  void OnTimerSoundingStarted() override;
+  void OnTimerSoundingFinished() override;
 
  private:
   void StartAssistantInternal(const std::string& access_token,
@@ -144,12 +150,8 @@ class AssistantManagerServiceImpl
 
   std::string BuildUserAgent(const std::string& arc_version) const;
 
-  // Update device id, type, and call |UpdateDeviceLocale| when assistant
-  // service starts.
+  // Update device id, type and locale
   void UpdateDeviceSettings();
-
-  // Update device locale if |is_setup_completed| is true;
-  void UpdateDeviceLocale(bool is_setup_completed);
 
   void HandleGetSettingsResponse(
       base::RepeatingCallback<void(const std::string&)> callback,
@@ -173,25 +175,28 @@ class AssistantManagerServiceImpl
       assistant_client::ConversationStateListener::RecognitionState state,
       const assistant_client::ConversationStateListener::RecognitionResult&
           recognition_result);
+  void OnRespondingStartedOnMainThread(bool is_error_response);
   void OnSpeechLevelUpdatedOnMainThread(const float speech_level);
   void OnModifySettingsAction(const std::string& modify_setting_args_proto);
 
-  void IsVoiceInteractionSetupCompleted(
-      ash::mojom::VoiceInteractionController::IsSetupCompletedCallback
-          callback);
   void RegisterFallbackMediaHandler();
 
-  void SendContextQueryAndRunCallback(RequestScreenContextCallback callback);
-
-  void OnAssistantStructureReceived(
+  void CacheAssistantStructure(
       base::OnceClosure on_done,
       ax::mojom::AssistantExtraPtr assistant_extra,
       std::unique_ptr<ui::AssistantTree> assistant_tree);
-  void OnAssistantScreenshotReceived(base::OnceClosure on_done,
-                                     const std::vector<uint8_t>& jpg_image);
+
+  void CacheAssistantScreenshot(
+      base::OnceClosure on_done,
+      const std::vector<uint8_t>& assistant_screenshot);
+
+  void SendScreenContextRequest(
+      ax::mojom::AssistantExtraPtr assistant_extra,
+      std::unique_ptr<ui::AssistantTree> assistant_tree,
+      const std::vector<uint8_t>& assistant_screenshot);
 
   State state_ = State::STOPPED;
-  PlatformApiImpl platform_api_;
+  std::unique_ptr<PlatformApiImpl> platform_api_;
   bool enable_hotword_;
   std::unique_ptr<action::CrosActionModule> action_module_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
@@ -215,6 +220,8 @@ class AssistantManagerServiceImpl
   ax::mojom::AssistantExtraPtr assistant_extra_;
   std::unique_ptr<ui::AssistantTree> assistant_tree_;
   std::vector<uint8_t> assistant_screenshot_;
+  std::string last_search_source_;
+  base::Lock last_search_source_lock_;
 
   base::Thread background_thread_;
 

@@ -39,6 +39,7 @@
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
 #include "third_party/blink/renderer/core/frame/link_highlights.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/page_scale_constraints.h"
@@ -64,18 +65,19 @@
 #include "third_party/blink/renderer/core/page/scrolling/overscroll_controller.h"
 #include "third_party/blink/renderer/core/page/scrolling/scrolling_coordinator.h"
 #include "third_party/blink/renderer/core/page/scrolling/top_document_root_scroller_controller.h"
-#include "third_party/blink/renderer/core/page/validation_message_client.h"
+#include "third_party/blink/renderer/core/page/validation_message_client_impl.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar_theme_overlay.h"
+#include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_chrome_client.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
+#include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/plugins/plugin_data.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
-#include "third_party/blink/renderer/platform/scroll/scrollbar_theme.h"
-#include "third_party/blink/renderer/platform/scroll/scrollbar_theme_overlay.h"
-#include "third_party/blink/renderer/platform/scroll/smooth_scroll_sequencer.h"
 
 namespace blink {
 
@@ -122,11 +124,16 @@ float DeviceScaleFactorDeprecated(LocalFrame* frame) {
   return page->DeviceScaleFactorDeprecated();
 }
 
-Page* Page::CreateOrdinary(PageClients& page_clients, Page* opener) {
-  Page* page = Create(page_clients);
+Page* Page::Create(PageClients& page_clients) {
+  Page* page = new Page(page_clients);
   page->SetPageScheduler(
       Platform::Current()->CurrentThread()->Scheduler()->CreatePageScheduler(
           page));
+  return page;
+}
+
+Page* Page::CreateOrdinary(PageClients& page_clients, Page* opener) {
+  Page* page = Create(page_clients);
 
   if (opener) {
     // Before: ... -> opener -> next -> ...
@@ -154,7 +161,7 @@ Page::Page(PageClients& page_clients)
       drag_controller_(DragController::Create(this)),
       focus_controller_(FocusController::Create(this)),
       context_menu_controller_(ContextMenuController::Create(this)),
-      page_scale_constraints_set_(PageScaleConstraintsSet::Create()),
+      page_scale_constraints_set_(PageScaleConstraintsSet::Create(this)),
       pointer_lock_controller_(PointerLockController::Create(this)),
       browser_controls_(BrowserControls::Create(*this)),
       console_message_storage_(new ConsoleMessageStorage()),
@@ -165,6 +172,8 @@ Page::Page(PageClients& page_clients)
           OverscrollController::Create(GetVisualViewport(), GetChromeClient())),
       link_highlights_(LinkHighlights::Create(*this)),
       plugin_data_(nullptr),
+      // TODO(pdr): Initialize |validation_message_client_| lazily.
+      validation_message_client_(ValidationMessageClientImpl::Create(*this)),
       opened_by_dom_(false),
       tab_key_cycles_through_elements_(true),
       paused_(false),
@@ -215,13 +224,6 @@ ScrollingCoordinator* Page::GetScrollingCoordinator() {
 
 PageScaleConstraintsSet& Page::GetPageScaleConstraintsSet() {
   return *page_scale_constraints_set_;
-}
-
-SmoothScrollSequencer* Page::GetSmoothScrollSequencer() {
-  if (!smooth_scroll_sequencer_)
-    smooth_scroll_sequencer_ = new SmoothScrollSequencer();
-
-  return smooth_scroll_sequencer_.Get();
 }
 
 const PageScaleConstraintsSet& Page::GetPageScaleConstraintsSet() const {
@@ -358,7 +360,8 @@ static void RestoreSVGImageAnimations() {
   }
 }
 
-void Page::SetValidationMessageClient(ValidationMessageClient* client) {
+void Page::SetValidationMessageClientForTesting(
+    ValidationMessageClient* client) {
   validation_message_client_ = client;
 }
 
@@ -701,6 +704,7 @@ void Page::DidCommitLoad(LocalFrame* frame) {
     GetVisualViewport().SetScrollOffset(ScrollOffset(), kProgrammaticScroll);
     hosts_using_features_.UpdateMeasurementsAndClear();
   }
+  GetLinkHighlights().ResetForPageNavigation();
 }
 
 void Page::AcceptLanguagesChanged() {
@@ -726,9 +730,9 @@ void Page::Trace(blink::Visitor* visitor) {
   visitor->Trace(drag_controller_);
   visitor->Trace(focus_controller_);
   visitor->Trace(context_menu_controller_);
+  visitor->Trace(page_scale_constraints_set_);
   visitor->Trace(pointer_lock_controller_);
   visitor->Trace(scrolling_coordinator_);
-  visitor->Trace(smooth_scroll_sequencer_);
   visitor->Trace(browser_controls_);
   visitor->Trace(console_message_storage_);
   visitor->Trace(global_root_scroller_controller_);
@@ -843,20 +847,6 @@ bool Page::RequestBeginMainFrameNotExpected(bool new_state) {
   return false;
 }
 
-ukm::UkmRecorder* Page::GetUkmRecorder() {
-  Frame* frame = MainFrame();
-  if (!frame->IsLocalFrame())
-    return nullptr;
-  return ToLocalFrame(frame)->GetDocument()->UkmRecorder();
-}
-
-int64_t Page::GetUkmSourceId() {
-  Frame* frame = MainFrame();
-  if (!frame->IsLocalFrame())
-    return -1;
-  return ToLocalFrame(frame)->GetDocument()->UkmSourceID();
-}
-
 void Page::AddAutoplayFlags(int32_t value) {
   autoplay_flags_ |= value;
 }
@@ -867,6 +857,59 @@ void Page::ClearAutoplayFlags() {
 
 int32_t Page::AutoplayFlags() const {
   return autoplay_flags_;
+}
+
+namespace {
+
+class ColorOverlay final : public PageOverlay::Delegate {
+ public:
+  explicit ColorOverlay(SkColor color) : color_(color) {}
+
+ private:
+  void PaintPageOverlay(const PageOverlay& page_overlay,
+                        GraphicsContext& graphics_context,
+                        const IntSize& size) const override {
+    if (DrawingRecorder::UseCachedDrawingIfPossible(
+            graphics_context, page_overlay, DisplayItem::kPageOverlay))
+      return;
+    FloatRect rect(0, 0, size.Width(), size.Height());
+    DrawingRecorder recorder(graphics_context, page_overlay,
+                             DisplayItem::kPageOverlay);
+    graphics_context.FillRect(rect, color_);
+  }
+
+  SkColor color_;
+};
+
+}  // namespace
+
+void Page::SetPageOverlayColor(SkColor color) {
+  if (page_color_overlay_)
+    page_color_overlay_.reset();
+
+  if (color == Color::kTransparent)
+    return;
+
+  if (!MainFrame() || !MainFrame()->IsLocalFrame())
+    return;
+  auto* local_frame = ToLocalFrame(MainFrame());
+  page_color_overlay_ =
+      PageOverlay::Create(local_frame, std::make_unique<ColorOverlay>(color));
+
+  // Update compositing which will create graphics layers so the page color
+  // update below will be able to attach to the root graphics layer.
+  local_frame->View()->UpdateLifecycleToCompositingCleanPlusScrolling();
+  page_color_overlay_->Update();
+}
+
+void Page::UpdatePageColorOverlay() {
+  if (page_color_overlay_)
+    page_color_overlay_->Update();
+}
+
+void Page::PaintPageColorOverlay() {
+  if (page_color_overlay_)
+    page_color_overlay_->GetGraphicsLayer()->Paint(nullptr);
 }
 
 Page::PageClients::PageClients() : chrome_client(nullptr) {}

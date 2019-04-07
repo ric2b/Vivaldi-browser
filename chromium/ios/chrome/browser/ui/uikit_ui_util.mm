@@ -565,6 +565,13 @@ bool IsRegularXRegularSizeClass(id<UITraitEnvironment> environment) {
          traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassRegular;
 }
 
+bool ShouldShowCompactToolbar() {
+  if (IsUIRefreshPhase1Enabled()) {
+    return !IsRegularXRegularSizeClass();
+  }
+  return !IsIPadIdiom();
+}
+
 bool IsSplitToolbarMode() {
   return IsCompactWidth() && !IsCompactHeight();
 }
@@ -660,4 +667,12 @@ UIEdgeInsets SafeAreaInsetsForView(UIView* view) {
   } else {
     return UIEdgeInsetsZero;
   }
+}
+
+NSString* TextForTabCount(long count) {
+  if (count <= 0)
+    return @"";
+  if (count > 99)
+    return @":)";
+  return [NSString stringWithFormat:@"%ld", count];
 }

@@ -136,17 +136,17 @@ bool SVGAnimateElement::IsSVGAnimationAttributeSettingJavaScriptURL(
 }
 
 Node::InsertionNotificationRequest SVGAnimateElement::InsertedInto(
-    ContainerNode* root_parent) {
+    ContainerNode& root_parent) {
   SVGAnimationElement::InsertedInto(root_parent);
-  if (root_parent->isConnected()) {
+  if (root_parent.isConnected()) {
     SetAttributeName(ConstructQualifiedName(
         *this, FastGetAttribute(SVGNames::attributeNameAttr)));
   }
   return kInsertionDone;
 }
 
-void SVGAnimateElement::RemovedFrom(ContainerNode* root_parent) {
-  if (root_parent->isConnected())
+void SVGAnimateElement::RemovedFrom(ContainerNode& root_parent) {
+  if (root_parent.isConnected())
     SetAttributeName(AnyQName());
   SVGAnimationElement::RemovedFrom(root_parent);
 }

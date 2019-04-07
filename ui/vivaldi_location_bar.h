@@ -3,6 +3,7 @@
 #ifndef UI_VIVALDI_LOCATION_BAR_H_
 #define UI_VIVALDI_LOCATION_BAR_H_
 
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/passwords/manage_passwords_icon_view.h"
 
@@ -48,12 +49,15 @@ class VivaldiLocationBar : public LocationBar {
 
   class VivaldiManagePasswordsIconView : public ManagePasswordsIconView {
    public:
-    VivaldiManagePasswordsIconView() = default;
+    explicit VivaldiManagePasswordsIconView(Profile* profile);
+
     virtual ~VivaldiManagePasswordsIconView() = default;
 
     void SetState(password_manager::ui::State state) override;
 
    private:
+    Profile* profile_ = nullptr;
+
     DISALLOW_COPY_AND_ASSIGN(VivaldiManagePasswordsIconView);
   };
 

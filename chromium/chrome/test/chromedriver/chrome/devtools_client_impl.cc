@@ -98,7 +98,9 @@ DevToolsClientImpl::DevToolsClientImpl(const SyncWebSocketFactory& factory,
       parser_func_(base::Bind(&internal::ParseInspectorMessage)),
       unnotified_event_(NULL),
       next_id_(1),
-      stack_count_(0) {}
+      stack_count_(0) {
+  socket_->SetId(id_);
+}
 
 DevToolsClientImpl::DevToolsClientImpl(
     const SyncWebSocketFactory& factory,
@@ -116,7 +118,9 @@ DevToolsClientImpl::DevToolsClientImpl(
       parser_func_(base::Bind(&internal::ParseInspectorMessage)),
       unnotified_event_(NULL),
       next_id_(1),
-      stack_count_(0) {}
+      stack_count_(0) {
+  socket_->SetId(id_);
+}
 
 DevToolsClientImpl::DevToolsClientImpl(DevToolsClientImpl* parent,
                                        const std::string& session_id)
@@ -151,7 +155,9 @@ DevToolsClientImpl::DevToolsClientImpl(
       parser_func_(parser_func),
       unnotified_event_(NULL),
       next_id_(1),
-      stack_count_(0) {}
+      stack_count_(0) {
+  socket_->SetId(id_);
+}
 
 DevToolsClientImpl::~DevToolsClientImpl() {
   if (parent_ != nullptr)
@@ -310,8 +316,10 @@ Status DevToolsClientImpl::SendCommandInternal(
   command.SetKey("params", params.Clone());
   std::string message = SerializeValue(&command);
   if (IsVLogOn(1)) {
-    VLOG(1) << "DEVTOOLS COMMAND " << method << " (id=" << command_id << ") "
-            << FormatValueForDisplay(params);
+    // Note: ChromeDriver log-replay depends on the format of this logging.
+    // see chromedriver/log_replay/devtools_log_reader.cc.
+    VLOG(1) << "DevTools WebSocket Command: " << method << " (id=" << command_id
+            << ") " << id_ << " " << FormatValueForDisplay(params);
   }
   if (parent_ != nullptr) {
     base::DictionaryValue params2;
@@ -433,7 +441,9 @@ Status DevToolsClientImpl::HandleMessage(int expected_id,
 
 Status DevToolsClientImpl::ProcessEvent(const internal::InspectorEvent& event) {
   if (IsVLogOn(1)) {
-    VLOG(1) << "DEVTOOLS EVENT " << event.method << " "
+    // Note: ChromeDriver log-replay depends on the format of this logging.
+    // see chromedriver/log_replay/devtools_log_reader.cc.
+    VLOG(1) << "DevTools WebSocket Event: " << event.method << " " << id_ << " "
             << FormatValueForDisplay(*event.params);
   }
   unnotified_event_listeners_ = listeners_;
@@ -507,8 +517,10 @@ Status DevToolsClientImpl::ProcessCommandResponse(
       result = FormatValueForDisplay(*response.result);
     else
       result = response.error;
-    VLOG(1) << "DEVTOOLS RESPONSE " << method << " (id=" << response.id
-            << ") " << result;
+    // Note: ChromeDriver log-replay depends on the format of this logging.
+    // see chromedriver/log_replay/devtools_log_reader.cc.
+    VLOG(1) << "DevTools WebSocket Response: " << method
+            << " (id=" << response.id << ") " << id_ << " " << result;
   }
 
   if (iter == response_info_map_.end())

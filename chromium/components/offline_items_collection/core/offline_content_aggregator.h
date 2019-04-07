@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/sequence_checker.h"
 #include "base/supports_user_data.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/offline_items_collection/core/offline_content_provider.h"
@@ -31,6 +32,8 @@ struct OfflineItem;
 //   created by the provider must also be tagged with the same namespace so that
 //   actions taken on the OfflineItem can be routed to the correct internal
 //   provider.  The namespace must also be consistent across startups.
+//
+// Methods on OfflineContentAggregator should be called from the UI thread.
 class OfflineContentAggregator : public OfflineContentProvider,
                                  public OfflineContentProvider::Observer,
                                  public base::SupportsUserData,
@@ -54,7 +57,7 @@ class OfflineContentAggregator : public OfflineContentProvider,
   void UnregisterProvider(const std::string& name_space);
 
   // OfflineContentProvider implementation.
-  void OpenItem(const ContentId& id) override;
+  void OpenItem(LaunchLocation location, const ContentId& id) override;
   void RemoveItem(const ContentId& id) override;
   void CancelDownload(const ContentId& id) override;
   void PauseDownload(const ContentId& id) override;
@@ -62,7 +65,10 @@ class OfflineContentAggregator : public OfflineContentProvider,
   void GetItemById(const ContentId& id, SingleItemCallback callback) override;
   void GetAllItems(MultipleItemCallback callback) override;
   void GetVisualsForItem(const ContentId& id,
-                         const VisualsCallback& callback) override;
+                         VisualsCallback callback) override;
+  void GetShareInfoForItem(const ContentId& id,
+                           ShareCallback callback) override;
+
   void AddObserver(OfflineContentProvider::Observer* observer) override;
   void RemoveObserver(OfflineContentProvider::Observer* observer) override;
 
@@ -90,7 +96,9 @@ class OfflineContentAggregator : public OfflineContentProvider,
   std::set<OfflineContentProvider*> pending_providers_;
 
   // A list of all currently registered observers.
-  base::ObserverList<OfflineContentProvider::Observer> observers_;
+  base::ObserverList<OfflineContentProvider::Observer>::Unchecked observers_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<OfflineContentAggregator> weak_ptr_factory_;
 

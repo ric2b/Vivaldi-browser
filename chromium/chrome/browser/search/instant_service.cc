@@ -10,7 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ntp_tiles/chrome_most_visited_sites_factory.h"
@@ -23,6 +23,7 @@
 #include "chrome/browser/search/ntp_icon_source.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search/thumbnail_source.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
@@ -37,6 +38,8 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/search.h"
+#include "components/search_engines/template_url_service.h"
+#include "components/search_engines/template_url_service_observer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -97,6 +100,44 @@ void RemoveLocalBackgroundImageCopy() {
 
 }  // namespace
 
+// Keeps track of any changes in search engine provider and notifies
+// InstantService if a third-party search provider (i.e. a third-party NTP) is
+// being used.
+class InstantService::SearchProviderObserver
+    : public TemplateURLServiceObserver {
+ public:
+  explicit SearchProviderObserver(TemplateURLService* service,
+                                  base::RepeatingCallback<void(bool)> callback)
+      : service_(service),
+        is_google_(search::DefaultSearchProviderIsGoogle(service_)),
+        callback_(std::move(callback)) {
+    DCHECK(service_);
+    service_->AddObserver(this);
+  }
+
+  ~SearchProviderObserver() override {
+    if (service_)
+      service_->RemoveObserver(this);
+  }
+
+  bool is_google() { return is_google_; }
+
+ private:
+  void OnTemplateURLServiceChanged() override {
+    is_google_ = search::DefaultSearchProviderIsGoogle(service_);
+    callback_.Run(is_google_);
+  }
+
+  void OnTemplateURLServiceShuttingDown() override {
+    service_->RemoveObserver(this);
+    service_ = nullptr;
+  }
+
+  TemplateURLService* service_;
+  bool is_google_;
+  base::RepeatingCallback<void(bool)> callback_;
+};
+
 InstantService::InstantService(Profile* profile)
     : profile_(profile), weak_ptr_factory_(this) {
   // The initialization below depends on a typical set of browser threads. Skip
@@ -117,11 +158,28 @@ InstantService::InstantService(Profile* profile)
 
   most_visited_sites_ = ChromeMostVisitedSitesFactory::NewForProfile(profile_);
   if (most_visited_sites_) {
+    bool custom_links_enabled = true;
+
+    // Determine if we are using a third-party NTP. Custom links should only be
+    // enabled for the default NTP.
+    if (features::IsCustomLinksEnabled()) {
+      TemplateURLService* template_url_service =
+          TemplateURLServiceFactory::GetForProfile(profile_);
+      if (template_url_service) {
+        search_provider_observer_ = std::make_unique<SearchProviderObserver>(
+            template_url_service,
+            base::BindRepeating(&InstantService::OnSearchProviderChanged,
+                                weak_ptr_factory_.GetWeakPtr()));
+        custom_links_enabled = search_provider_observer_->is_google();
+      }
+    }
+
     // 9 tiles are required for the custom links feature in order to balance the
     // Most Visited rows (this is due to an additional "Add" button). Otherwise,
     // Most Visited should return the regular 8 tiles.
     most_visited_sites_->SetMostVisitedURLsObserver(
         this, features::IsCustomLinksEnabled() ? 9 : 8);
+    most_visited_sites_->EnableCustomLinks(custom_links_enabled);
   }
 
   if (profile_ && profile_->GetResourceContext()) {
@@ -228,7 +286,7 @@ bool InstantService::DeleteCustomLink(const GURL& url) {
 
 bool InstantService::UndoCustomLinkAction() {
   // Non-Google search providers are not supported.
-  if (most_visited_sites_ && search::DefaultSearchProviderIsGoogle(profile_)) {
+  if (most_visited_sites_ && search_provider_observer_->is_google()) {
     most_visited_sites_->UndoCustomLinkAction();
     return true;
   }
@@ -237,7 +295,7 @@ bool InstantService::UndoCustomLinkAction() {
 
 bool InstantService::ResetCustomLinks() {
   // Non-Google search providers are not supported.
-  if (most_visited_sites_ && search::DefaultSearchProviderIsGoogle(profile_)) {
+  if (most_visited_sites_ && search_provider_observer_->is_google()) {
     most_visited_sites_->UninitializeCustomLinks();
     return true;
   }
@@ -362,6 +420,12 @@ void InstantService::OnRendererProcessTerminated(int process_id) {
   }
 }
 
+void InstantService::OnSearchProviderChanged(bool is_google) {
+  DCHECK(features::IsCustomLinksEnabled());
+  DCHECK(most_visited_sites_);
+  most_visited_sites_->EnableCustomLinks(is_google);
+}
+
 void InstantService::OnURLsAvailable(
     const std::map<ntp_tiles::SectionType, ntp_tiles::NTPTilesVector>&
         sections) {
@@ -388,8 +452,11 @@ void InstantService::OnURLsAvailable(
 void InstantService::OnIconMadeAvailable(const GURL& site_url) {}
 
 void InstantService::NotifyAboutMostVisitedItems() {
+  bool is_custom_links = features::IsCustomLinksEnabled() && most_visited_sites_
+                             ? most_visited_sites_->IsCustomLinksInitialized()
+                             : false;
   for (InstantServiceObserver& observer : observers_)
-    observer.MostVisitedItemsChanged(most_visited_items_);
+    observer.MostVisitedItemsChanged(most_visited_items_, is_custom_links);
 }
 
 void InstantService::NotifyAboutThemeInfo() {
@@ -417,9 +484,10 @@ void InstantService::BuildThemeInfo() {
   // Get theme information from theme service.
   theme_info_.reset(new ThemeBackgroundInfo());
 
-  // Get if the current theme is the default theme.
+  // Get if the current theme is the default theme (or GTK+ on linux).
   ThemeService* theme_service = ThemeServiceFactory::GetForProfile(profile_);
-  theme_info_->using_default_theme = theme_service->UsingDefaultTheme();
+  theme_info_->using_default_theme =
+      theme_service->UsingDefaultTheme() || theme_service->UsingSystemTheme();
 
   // Get theme colors.
   const ui::ThemeProvider& theme_provider =

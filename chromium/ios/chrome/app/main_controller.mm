@@ -22,7 +22,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/crl_set_remover.h"
@@ -45,7 +45,7 @@
 #import "ios/chrome/app/application_delegate/url_opener.h"
 #include "ios/chrome/app/application_mode.h"
 #import "ios/chrome/app/deferred_initialization_runner.h"
-#import "ios/chrome/app/firebase_buildflags.h"
+#import "ios/chrome/app/firebase_utils.h"
 #import "ios/chrome/app/main_controller_private.h"
 #import "ios/chrome/app/memory_monitor.h"
 #import "ios/chrome/app/spotlight/spotlight_manager.h"
@@ -112,9 +112,9 @@
 #import "ios/chrome/browser/tabs/tab_model_observer.h"
 #import "ios/chrome/browser/ui/authentication/signed_in_accounts_view_controller.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
+#include "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/show_signin_command.h"
-#import "ios/chrome/browser/ui/download/legacy_download_manager_controller.h"
 #import "ios/chrome/browser/ui/external_file_remover_factory.h"
 #import "ios/chrome/browser/ui/external_file_remover_impl.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
@@ -148,9 +148,6 @@
 #include "ios/public/provider/chrome/browser/mailto/mailto_handler_provider.h"
 #include "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_provider.h"
-#if BUILDFLAG(FIREBASE_ENABLED)
-#import "ios/third_party/firebase/Analytics/FirebaseCore.framework/Headers/FIRApp.h"
-#endif  // BUILDFLAG(FIREBASE_ENABLED)
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #import "ios/third_party/material_roboto_font_loader_ios/src/src/MDCTypographyAdditions/MDFRobotoFontLoader+MDCTypographyAdditions.h"
 #import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
@@ -158,7 +155,6 @@
 #include "ios/web/net/request_tracker_impl.h"
 #include "ios/web/net/web_http_protocol_handler_delegate.h"
 #import "ios/web/public/navigation_manager.h"
-#include "ios/web/public/web_capabilities.h"
 #import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_view_creation_util.h"
 #include "ios/web/public/webui/web_ui_ios_controller_factory.h"
@@ -1080,18 +1076,7 @@ enum class ShowTabSwitcherSnapshotResult {
                         ->GetAppDistributionProvider()
                         ->ScheduleDistributionNotifications(context,
                                                             is_first_run);
-#if BUILDFLAG(FIREBASE_ENABLED)
-                    // TODO(crbug.com/848115): Continue to initialize Firebase
-                    // until either
-                    //   - first_open event has been uploaded, or
-                    //   - ad click conversion attribution period is over.
-                    // Also need to add UMA metric to measure how often Firebase
-                    // is initialized on the client-side as a verification of
-                    // Firebase server-side metrics.
-                    if (is_first_run) {
-                      [FIRApp configure];
-                    }
-#endif  // BUILDFLAG(FIREBASE_ENABLED)
+                    InitializeFirebase(is_first_run);
                   }];
 }
 
@@ -1344,7 +1329,7 @@ enum class ShowTabSwitcherSnapshotResult {
     OpenNewTabCommand* command = [OpenNewTabCommand
         commandWithIncognito:(self.currentBVC == self.otrBVC)];
     command.userInitiated = NO;
-    [self.currentBVC.dispatcher openURL:command];
+    [self.currentBVC.dispatcher openURLInNewTab:command];
   }
 
   if (firstRun) {
@@ -1398,6 +1383,7 @@ enum class ShowTabSwitcherSnapshotResult {
 #pragma mark - Promo support
 
 - (void)scheduleShowPromo {
+  [self.mainBVC.dispatcher showConsentBumpIfNeeded];
   // Don't show promos if first run is shown.  (Note:  This flag is only YES
   // while the first run UI is visible.  However, as this function is called
   // immediately after the UI is shown, it's a safe check.)
@@ -1486,6 +1472,18 @@ enum class ShowTabSwitcherSnapshotResult {
   [self closeSettingsAnimated:YES completion:NULL];
 }
 
+- (void)prepareTabSwitcher {
+  if (GetTabSwitcherMode() != TabSwitcherMode::GRID)
+    return;
+  if ([self.viewControllerSwapper
+          respondsToSelector:(@selector(prepareToShowTabSwitcher:))]) {
+    [self.viewControllerSwapper prepareToShowTabSwitcher:_tabSwitcher];
+  } else {
+    NOTREACHED() << "Grid view controller swapper doesn't implement "
+                 << "-prepareToShowTabSwitcher: as expected.";
+  }
+}
+
 - (void)displayTabSwitcher {
   DCHECK(!_tabSwitcherIsActive);
   if (!_isProcessingVoiceSearchCommand) {
@@ -1544,7 +1542,7 @@ enum class ShowTabSwitcherSnapshotResult {
   });
 }
 
-- (void)openURL:(OpenNewTabCommand*)command {
+- (void)openURLInNewTab:(OpenNewTabCommand*)command {
   if (command.URL.is_valid()) {
     if ([command fromChrome]) {
       [self dismissModalsAndOpenSelectedTabInMode:ApplicationMode::NORMAL
@@ -1555,11 +1553,9 @@ enum class ShowTabSwitcherSnapshotResult {
     } else {
       [self dismissModalDialogsWithCompletion:^{
         self.currentBVC = [command inIncognito] ? self.otrBVC : self.mainBVC;
-        [self.currentBVC webPageOrderedOpen:[command URL]
-                                   referrer:[command referrer]
-                               inBackground:[command inBackground]
-                                originPoint:[command originPoint]
-                                   appendTo:[command appendTo]];
+        DCHECK(self.currentBVC.browserState->IsOffTheRecord() ==
+               command.inIncognito);
+        [self.currentBVC webPageOrderedOpen:command];
       }
                                dismissOmnibox:YES];
     }
@@ -1883,7 +1879,7 @@ enum class ShowTabSwitcherSnapshotResult {
   DCHECK(bvc);
   [bvc expectNewForegroundTab];
   self.currentBVC = bvc;
-  [self openURL:command];
+  [self openURLInNewTab:command];
 }
 
 - (void)startVoiceSearch {

@@ -55,10 +55,11 @@ QuicSimpleServer::QuicSimpleServer(
       crypto_config_(kSourceAddressTokenSecret,
                      quic::QuicRandom::GetInstance(),
                      std::move(proof_source),
+                     quic::KeyExchangeSource::Default(),
                      quic::TlsServerHandshaker::CreateSslCtx()),
       read_pending_(false),
       synchronous_read_count_(0),
-      read_buffer_(new IOBufferWithSize(kReadBufferSize)),
+      read_buffer_(base::MakeRefCounted<IOBufferWithSize>(kReadBufferSize)),
       quic_simple_server_backend_(quic_simple_server_backend),
       weak_factory_(this) {
   Initialize();

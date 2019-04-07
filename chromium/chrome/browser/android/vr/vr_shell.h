@@ -18,13 +18,13 @@
 #include "chrome/browser/ui/page_info/page_info_ui.h"
 #include "chrome/browser/ui/toolbar/chrome_toolbar_model_delegate.h"
 #include "chrome/browser/vr/assets_load_status.h"
-#include "chrome/browser/vr/content_input_delegate.h"
 #include "chrome/browser/vr/exit_vr_prompt_choice.h"
 #include "chrome/browser/vr/metrics/session_metrics_helper.h"
 #include "chrome/browser/vr/model/capturing_state_model.h"
+#include "chrome/browser/vr/platform_ui_input_delegate.h"
 #include "chrome/browser/vr/speech_recognizer.h"
-#include "chrome/browser/vr/ui.h"
 #include "chrome/browser/vr/ui_browser_interface.h"
+#include "chrome/browser/vr/ui_initial_state.h"
 #include "chrome/browser/vr/ui_unsupported_mode.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "device/vr/android/gvr/cardboard_gamepad_data_provider.h"
@@ -56,6 +56,8 @@ class VrGLThread;
 class VrInputConnection;
 class VrShellDelegate;
 class VrWebContentsObserver;
+enum class VrUiTestActivityResult;
+struct Assets;
 struct AutocompleteRequest;
 
 // The native instance of the Java VrShell. This class is not threadsafe and
@@ -181,11 +183,7 @@ class VrShell : device::GvrGamepadDataProvider,
   void ContentOverlaySurfaceCreated(jobject surface,
                                     gl::SurfaceTexture* texture);
   void GvrDelegateReady(gvr::ViewerType viewer_type);
-  void SendRequestPresentReply(
-      bool success,
-      device::mojom::VRSubmitFrameClientRequest,
-      device::mojom::VRPresentationProviderPtrInfo,
-      device::mojom::VRDisplayFrameTransportOptionsPtr);
+  void SendRequestPresentReply(device::mojom::XRSessionPtr);
 
   void DialogSurfaceCreated(jobject surface, gl::SurfaceTexture* texture);
 
@@ -247,7 +245,7 @@ class VrShell : device::GvrGamepadDataProvider,
 
   void ConnectPresentingService(
       device::mojom::VRDisplayInfoPtr display_info,
-      device::mojom::XRDeviceRuntimeSessionOptionsPtr options);
+      device::mojom::XRRuntimeSessionOptionsPtr options);
 
   // device::GvrGamepadDataProvider implementation.
   void UpdateGamepadData(device::GvrGamepadData) override;
@@ -302,8 +300,6 @@ class VrShell : device::GvrGamepadDataProvider,
 
   bool HasDaydreamSupport(JNIEnv* env);
 
-  void ExitVrDueToUnsupportedMode(UiUnsupportedMode mode);
-
   content::WebContents* GetNonNativePageWebContents() const;
 
   void LoadAssets();
@@ -347,7 +343,9 @@ class VrShell : device::GvrGamepadDataProvider,
   device::mojom::GeolocationConfigPtr geolocation_config_;
 
   base::CancelableClosure poll_capturing_state_task_;
-  CapturingStateModel capturing_state_;
+  CapturingStateModel active_capturing_;
+  CapturingStateModel background_capturing_;
+  CapturingStateModel potential_capturing_;
 
   // Are we currently providing a gamepad factory to the gamepad manager?
   bool gvr_gamepad_source_active_ = false;

@@ -791,7 +791,7 @@
       inherited: true,
       font: true,
       type_name: "TextRenderingMode",
-      keywords: ["auto", "optimizeSpeed", "optimizeLegibility", "geometricPrecision"],
+      keywords: ["auto", "optimizespeed", "optimizelegibility", "geometricprecision"],
       typedom_types: ["Keyword"],
       priority: "High",
     },
@@ -1393,6 +1393,7 @@
       keywords: ["none", "left", "right", "both"],
       typedom_types: ["Keyword"],
       default_value: "none",
+      style_builder_custom_functions: ["value"],
     },
     {
       name: "clip",
@@ -1452,7 +1453,7 @@
       property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
-      keywords: ["auto", "optimizeSpeed", "optimizeQuality"],
+      keywords: ["auto", "optimizespeed", "optimizequality"],
       typedom_types: ["Keyword"],
     },
     {
@@ -1691,6 +1692,7 @@
       default_value: "none",
       name_for_methods: "Floating",
       type_name: "EFloat",
+      style_builder_custom_functions: ["value"],
     },
     {
       name: "flood-color",
@@ -1870,7 +1872,7 @@
       field_group: "*",
       field_template: "keyword",
       keywords: [
-        "auto", "optimizeSpeed", "optimizeQuality",
+        "auto", "optimizespeed", "optimizequality",
         "-webkit-optimize-contrast", "pixelated"
       ],
       typedom_types: ["Keyword"],
@@ -2420,7 +2422,6 @@
     {
       name: "overscroll-behavior-x",
       property_methods: ["CSSValueFromComputedStyleInternal"],
-      runtime_flag: "CSSOverscrollBehavior",
       field_template: "keyword",
       keywords: ["auto", "contain", "none"],
       default_value: "auto",
@@ -2430,7 +2431,6 @@
     {
       name: "overscroll-behavior-y",
       property_methods: ["CSSValueFromComputedStyleInternal"],
-      runtime_flag: "CSSOverscrollBehavior",
       field_template: "keyword",
       keywords: ["auto", "contain", "none"],
       default_value: "auto",
@@ -2633,7 +2633,7 @@
       field_size: 4,
       field_template: "primitive",
       default_value: "ScrollCustomization::kScrollDirectionNone",
-      include_paths: ["third_party/blink/renderer/platform/scroll/scroll_customization.h"],
+      include_paths: ["third_party/blink/renderer/core/scroll/scroll_customization.h"],
       runtime_flag: "ScrollCustomization",
     },
     {
@@ -2881,7 +2881,7 @@
       property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
-      keywords: ["auto", "optimizeSpeed", "crispEdges", "geometricPrecision"],
+      keywords: ["auto", "optimizespeed", "crispedges", "geometricprecision"],
       typedom_types: ["Keyword"],
     },
     {
@@ -3246,7 +3246,6 @@
     {
       name: "transform-box",
       property_methods: ["CSSValueFromComputedStyleInternal"],
-      runtime_flag: "CSSTransformBox",
       field_template: "keyword",
       keywords: ["fill-box", "view-box"],
       default_value: "view-box",
@@ -4205,6 +4204,7 @@
     {
       name: "border-inline-start-color",
       property_methods: ["ParseSingleValue"],
+      valid_for_visited_link: true,
       direction_aware_options: {
         logical_side: "start",
         shorthand_for_physical_side: "borderColorShorthand",
@@ -4228,6 +4228,7 @@
     {
       name: "border-inline-end-color",
       property_methods: ["ParseSingleValue"],
+      valid_for_visited_link: true,
       direction_aware_options: {
         logical_side: "end",
         shorthand_for_physical_side: "borderColorShorthand",
@@ -4251,6 +4252,7 @@
     {
       name: "border-block-start-color",
       property_methods: ["ParseSingleValue"],
+      valid_for_visited_link: true,
       direction_aware_options: {
         logical_side: "before",
         shorthand_for_physical_side: "borderColorShorthand",
@@ -4274,6 +4276,7 @@
     {
       name: "border-block-end-color",
       property_methods: ["ParseSingleValue"],
+      valid_for_visited_link: true,
       direction_aware_options: {
         logical_side: "after",
         shorthand_for_physical_side: "borderColorShorthand",
@@ -4535,14 +4538,17 @@
     },
     {
       name: "border-block",
-      longhands: ["border-block-start", "border-block-end"],
-      property_methods: ["ParseShorthand"],
+      longhands: [
+        "border-block-start-color", "border-block-start-style", "border-block-start-width",
+        "border-block-end-color", "border-block-end-style", "border-block-end-width"
+      ],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {
       name: "border-block-color",
       longhands: ["border-block-start-color", "border-block-end-color"],
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {
@@ -4572,13 +4578,13 @@
     {
       name: "border-block-style",
       longhands: ["border-block-start-style", "border-block-end-style"],
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {
       name: "border-block-width",
       longhands: ["border-block-start-width", "border-block-end-width"],
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {
@@ -4606,14 +4612,17 @@
     },
     {
       name: "border-inline",
-      longhands: ["border-inline-start", "border-inline-end"],
-      property_methods: ["ParseShorthand"],
+      longhands: [
+        "border-inline-start-color", "border-inline-start-style", "border-inline-start-width",
+        "border-inline-end-color", "border-inline-end-style", "border-inline-end-width"
+      ],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {
       name: "border-inline-color",
       longhands: ["border-inline-start-color", "border-inline-end-color"],
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {
@@ -4643,13 +4652,13 @@
     {
       name: "border-inline-style",
       longhands: ["border-inline-start-style", "border-inline-end-style"],
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {
       name: "border-inline-width",
       longhands: ["border-inline-start-width", "border-inline-end-width"],
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {
@@ -4802,21 +4811,21 @@
       layout_dependent: true,
     },
     {
+      name: "inset",
+      longhands: ["top", "right", "bottom", "left"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
+      runtime_flag: "CSSLogical",
+    },
+    {
       name: "inset-block",
       longhands: ["inset-block-start", "inset-block-end"],
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {
       name: "inset-inline",
       longhands: ["inset-inline-start", "inset-inline-end"],
-      property_methods: ["ParseShorthand"],
-      runtime_flag: "CSSLogical",
-    },
-    {
-      name: "inset",
-      longhands: ["top", "right", "bottom", "left"],
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {
@@ -4833,13 +4842,13 @@
     {
       name: "margin-block",
       longhands: ["margin-block-start", "margin-block-end"],
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {
       name: "margin-inline",
       longhands: ["margin-inline-start", "margin-inline-end"],
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {
@@ -4869,7 +4878,6 @@
       name: "overscroll-behavior",
       longhands: ["overscroll-behavior-x", "overscroll-behavior-y"],
       property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
-      runtime_flag: "CSSOverscrollBehavior",
     },
     {
       name: "padding",
@@ -4882,13 +4890,13 @@
     {
       name: "padding-block",
       longhands: ["padding-block-start", "padding-block-end"],
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {
       name: "padding-inline",
       longhands: ["padding-inline-start", "padding-inline-end"],
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSLogical",
     },
     {

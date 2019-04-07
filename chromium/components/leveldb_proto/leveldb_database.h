@@ -24,6 +24,7 @@ namespace leveldb {
 class Cache;
 class DB;
 class Env;
+class Status;
 }  // namespace leveldb
 
 namespace leveldb_proto {
@@ -46,6 +47,9 @@ class LevelDB {
   // empty, this opens an in-memory db.
   virtual bool Init(const base::FilePath& database_dir,
                     const leveldb_env::Options& options);
+  virtual leveldb::Status Init(const base::FilePath& database_dir,
+                               const leveldb_env::Options& options,
+                               bool destroy_on_corruption);
 
   virtual bool Save(const base::StringPairs& pairs_to_save,
                     const std::vector<std::string>& keys_to_remove);
@@ -54,11 +58,19 @@ class LevelDB {
   virtual bool Load(std::vector<std::string>* entries);
   virtual bool LoadWithFilter(const KeyFilter& filter,
                               std::vector<std::string>* entries);
+  virtual bool LoadWithFilter(const KeyFilter& filter,
+                              std::vector<std::string>* entries,
+                              const leveldb::ReadOptions& options,
+                              const std::string& target_prefix);
   virtual bool LoadKeys(std::vector<std::string>* keys);
   virtual bool Get(const std::string& key, bool* found, std::string* entry);
   // Close (if currently open) and then destroy (i.e. delete) the database
   // directory.
   virtual bool Destroy();
+
+  // Returns true if we successfully read the approximate memory usage property
+  // from the LevelDB.
+  bool GetApproximateMemoryUse(uint64_t* approx_mem);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ProtoDatabaseImplLevelDBTest, TestDBInitFail);
@@ -73,6 +85,7 @@ class LevelDB {
   leveldb_env::Options open_options_;
   base::HistogramBase* open_histogram_;
   base::HistogramBase* destroy_histogram_;
+  base::HistogramBase* approx_memtable_mem_histogram_;
 
   DISALLOW_COPY_AND_ASSIGN(LevelDB);
 };

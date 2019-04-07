@@ -19,8 +19,6 @@ DISABLE(PipelineIntegrationTest, MediaSource_ConfigChange_Encrypted_MP4_CENC_Key
 DISABLE(PipelineIntegrationTest, MediaSource_ConfigChange_Encrypted_MP4_CENC_VideoOnly)
 DISABLE(PipelineIntegrationTest, MediaSource_ConfigChange_MP4)
 
-DISABLE(MediaColorTest, Yuv420pRec709H264)
-
 // Disabled video tests on mac, until the tests can be fixed
 DISABLE(MediaSourceTest, Playback_Video_WEBM_Audio_MP4)
 DISABLE_MULTI(MediaTest, VideoBearHighBitDepthMp4)

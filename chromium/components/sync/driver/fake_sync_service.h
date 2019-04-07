@@ -40,7 +40,8 @@ class FakeSyncService : public SyncService {
   // Dummy methods.
   // SyncService implementation.
   int GetDisableReasons() const override;
-  State GetState() const override;
+  TransportState GetTransportState() const override;
+  bool IsAuthenticatedAccountPrimary() const override;
   bool IsFirstSetupComplete() const override;
   bool IsLocalSyncEnabled() const override;
   void TriggerRefresh(const ModelTypeSet& types) override;
@@ -56,12 +57,10 @@ class FakeSyncService : public SyncService {
   void OnUserChoseDatatypes(bool sync_everything,
                             ModelTypeSet chosen_types) override;
   void SetFirstSetupComplete() override;
-  bool IsFirstSetupInProgress() const override;
   std::unique_ptr<SyncSetupInProgressHandle> GetSetupInProgressHandle()
       override;
   bool IsSetupInProgress() const override;
   const GoogleServiceAuthError& GetAuthError() const override;
-  bool IsEngineInitialized() const override;
   sync_sessions::OpenTabsUIDelegate* GetOpenTabsUIDelegate() override;
   bool IsPassphraseRequiredForDecryption() const override;
   base::Time GetExplicitPassphraseTime() const override;
@@ -76,7 +75,7 @@ class FakeSyncService : public SyncService {
   const LocalDeviceInfoProvider* GetLocalDeviceInfoProvider() const override;
   void ReenableDatatype(ModelType type) override;
   SyncTokenStatus GetSyncTokenStatus() const override;
-  bool QueryDetailedSyncStatus(SyncStatus* result) override;
+  bool QueryDetailedSyncStatus(SyncStatus* result) const override;
   base::Time GetLastSyncedTime() const override;
   SyncCycleSnapshot GetLastCycleSnapshot() const override;
   std::unique_ptr<base::Value> GetTypeStatusMap() override;

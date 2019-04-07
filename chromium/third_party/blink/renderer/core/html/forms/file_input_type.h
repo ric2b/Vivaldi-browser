@@ -47,8 +47,7 @@ class FileList;
 
 class CORE_EXPORT FileInputType final : public InputType,
                                         public KeyboardClickableInputTypeView,
-                                        private FileChooserClient,
-                                        private PopupOpeningObserver {
+                                        private FileChooserClient {
   USING_GARBAGE_COLLECTED_MIXIN(FileInputType);
 
  public:
@@ -73,7 +72,7 @@ class CORE_EXPORT FileInputType final : public InputType,
   void AppendToFormData(FormData&) const override;
   bool ValueMissing(const String&) const override;
   String ValueMissingText() const override;
-  void HandleDOMActivateEvent(Event*) override;
+  void HandleDOMActivateEvent(Event&) override;
   LayoutObject* CreateLayoutObject(const ComputedStyle&) const override;
   bool CanSetStringValue() const override;
   FileList* Files() override;
@@ -94,11 +93,12 @@ class CORE_EXPORT FileInputType final : public InputType,
   void CopyNonAttributeProperties(const HTMLInputElement&) override;
 
   // KeyboardClickableInputTypeView overrides.
-  void HandleKeypressEvent(KeyboardEvent*) override;
-  void HandleKeyupEvent(KeyboardEvent*) override;
+  void HandleKeypressEvent(KeyboardEvent&) override;
+  void HandleKeyupEvent(KeyboardEvent&) override;
 
   // FileChooserClient implementation.
   void FilesChosen(const Vector<FileChooserFileInfo>&) override;
+  LocalFrame* FrameOrNull() const override;
 
   // PopupOpeningObserver implementation.
   void WillOpenPopup() override;

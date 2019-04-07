@@ -10,32 +10,22 @@
 #include "ash/shell_delegate.h"
 #include "base/macros.h"
 
-namespace service_manager {
-class Connector;
-}
-
 namespace ash {
 
 class ShellDelegateMash : public ShellDelegate {
  public:
-  explicit ShellDelegateMash(service_manager::Connector* connector);
+  ShellDelegateMash();
   ~ShellDelegateMash() override;
 
   // ShellDelegate:
-  service_manager::Connector* GetShellConnector() const override;
   bool CanShowWindowForUser(aura::Window* window) const override;
-  void PreInit() override;
   std::unique_ptr<keyboard::KeyboardUI> CreateKeyboardUI() override;
-  NetworkingConfigDelegate* GetNetworkingConfigDelegate() override;
   std::unique_ptr<ScreenshotDelegate> CreateScreenshotDelegate() override;
   AccessibilityDelegate* CreateAccessibilityDelegate() override;
-  ui::InputDeviceControllerClient* GetInputDeviceControllerClient() override;
+  ws::InputDeviceControllerClient* GetInputDeviceControllerClient() override;
 
  private:
-  // |connector_| may be null in tests.
-  service_manager::Connector* connector_;
-
-  std::unique_ptr<ui::InputDeviceControllerClient>
+  std::unique_ptr<ws::InputDeviceControllerClient>
       input_device_controller_client_;
 
   DISALLOW_COPY_AND_ASSIGN(ShellDelegateMash);

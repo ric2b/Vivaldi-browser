@@ -70,6 +70,8 @@ class RenderWidgetTargeter {
         const ui::LatencyInfo& latency,
         const base::Optional<gfx::PointF>& target_location) = 0;
 
+    virtual void SetEventsBeingFlushed(bool events_being_flushed) = 0;
+
     virtual RenderWidgetHostViewBase* FindViewFromFrameSinkId(
         const viz::FrameSinkId& frame_sink_id) const = 0;
   };
@@ -78,17 +80,14 @@ class RenderWidgetTargeter {
   explicit RenderWidgetTargeter(Delegate* delegate);
   ~RenderWidgetTargeter();
 
-  void SendEventToRootView(
-      RenderWidgetHostViewBase* root_view,
-      RenderWidgetHostViewBase* target,
-      const blink::WebInputEvent& event,
-      const ui::LatencyInfo& latency);
-
   // Finds the appropriate target inside |root_view| for |event|, and dispatches
   // it through the delegate. |event| is in the coord-space of |root_view|.
+  // NOTE(igor@vivaldi.com): an extra parameter to distinguish internal
+  // invocations when flushing the queue, see comments in the implementation.
   void FindTargetAndDispatch(RenderWidgetHostViewBase* root_view,
                              const blink::WebInputEvent& event,
-                             const ui::LatencyInfo& latency);
+                             const ui::LatencyInfo& latency,
+                             bool queue_flushing = false);
 
   void ViewWillBeDestroyed(RenderWidgetHostViewBase* view);
 
@@ -121,6 +120,11 @@ class RenderWidgetTargeter {
 
   // |event| is in the coordinate space of |root_view|. |target_location|, if
   // set, is the location in |target|'s coordinate space.
+  // |target| is the current target that will be queried using its
+  // InputTargetClient interface.
+  // |frame_sink_id| is returned from the InputTargetClient to indicate where
+  // the event should be routed, and |transformed_location| is the point in
+  // that new target's coordinate space.
   void FoundFrameSinkId(base::WeakPtr<RenderWidgetHostViewBase> root_view,
                         base::WeakPtr<RenderWidgetHostViewBase> target,
                         ui::WebScopedInputEvent event,
@@ -128,7 +132,8 @@ class RenderWidgetTargeter {
                         uint32_t request_id,
                         const gfx::PointF& target_location,
                         TracingUmaTracker tracker,
-                        const viz::FrameSinkId& frame_sink_id);
+                        const viz::FrameSinkId& frame_sink_id,
+                        const gfx::PointF& transformed_location);
 
   // |event| is in the coordinate space of |root_view|. |target_location|, if
   // set, is the location in |target|'s coordinate space. If |latched_target| is
@@ -186,7 +191,6 @@ class RenderWidgetTargeter {
   std::unique_ptr<OneShotTimeoutMonitor> async_hit_test_timeout_;
 
   RenderWidgetHostViewBase* vivaldi_active_requested_view_ = nullptr;
-  RenderWidgetHostViewBase* vivaldi_active_down_target_ = nullptr;
 
   Delegate* const delegate_;
   base::WeakPtrFactory<RenderWidgetTargeter> weak_ptr_factory_;

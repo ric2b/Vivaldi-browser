@@ -8,8 +8,9 @@
 #include <utility>
 
 #include "ash/public/cpp/ash_pref_names.h"
+#include "ash/shell.h"
 #include "base/process/launch.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
@@ -161,8 +162,9 @@ std::unique_ptr<AdaptiveScreenBrightnessManager>
 AdaptiveScreenBrightnessManager::CreateInstance() {
   // TODO(jiameng): video detector below doesn't work with MASH. Temporary
   // solution is to disable logging if we're under MASH env.
+  // https://crbug.com/871914
   if (chromeos::GetDeviceType() != chromeos::DeviceType::kChromebook ||
-      !features::IsAshInBrowserProcess()) {
+      features::IsMultiProcessMash()) {
     return nullptr;
   }
 
@@ -186,7 +188,8 @@ AdaptiveScreenBrightnessManager::CreateInstance() {
           mojo::MakeRequest(&video_observer_screen_brightness_logger),
           std::make_unique<base::RepeatingTimer>(),
           base::DefaultClock::GetInstance(), std::make_unique<RealBootClock>());
-  aura::Env::GetInstance()
+  ash::Shell::Get()
+      ->aura_env()
       ->context_factory_private()
       ->GetHostFrameSinkManager()
       ->AddVideoDetectorObserver(

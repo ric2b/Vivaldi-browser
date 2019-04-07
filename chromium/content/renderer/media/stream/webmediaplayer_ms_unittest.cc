@@ -26,6 +26,9 @@
 #include "third_party/blink/public/platform/web_media_player_client.h"
 #include "third_party/blink/public/platform/web_media_player_source.h"
 
+using ::testing::Return;
+using ::testing::StrictMock;
+
 namespace content {
 
 enum class FrameType {
@@ -33,6 +36,16 @@ enum class FrameType {
   BROKEN_FRAME = -1,
   TEST_BRAKE = -2,  // Signal to pause message loop.
   MIN_TYPE = TEST_BRAKE
+};
+
+class MockSurfaceLayerBridge : public blink::WebSurfaceLayerBridge {
+ public:
+  MOCK_CONST_METHOD0(GetCcLayer, cc::Layer*());
+  MOCK_CONST_METHOD0(GetFrameSinkId, const viz::FrameSinkId&());
+  MOCK_CONST_METHOD0(GetSurfaceId, const viz::SurfaceId&());
+  MOCK_METHOD1(SetContentsOpaque, void(bool));
+  MOCK_METHOD0(CreateSurfaceLayer, void());
+  MOCK_METHOD0(ClearSurfaceId, void());
 };
 
 using TestFrame = std::pair<FrameType, scoped_refptr<media::VideoFrame>>;
@@ -90,6 +103,12 @@ class FakeWebMediaPlayerDelegate
     EXPECT_EQ(delegate_id_, delegate_id);
   }
 
+  void DidSetPictureInPictureCustomControls(
+      int delegate_id,
+      const std::vector<blink::PictureInPictureControlInfo>&) override {
+    EXPECT_EQ(delegate_id_, delegate_id);
+  }
+
   void DidPictureInPictureSurfaceChange(int delegate_id,
                                         const viz::SurfaceId&,
                                         const gfx::Size&) override {
@@ -142,6 +161,8 @@ class FakeWebMediaPlayerDelegate
       blink::WebFullscreenVideoStatus fullscreen_video_status) override {
     EXPECT_EQ(delegate_id_, delegate_id);
   }
+
+  bool IsBackgroundMediaSuspendEnabled() override { return true; }
 
   bool IsFrameHidden() override { return is_hidden_; }
   bool IsFrameClosed() override { return false; }
@@ -485,25 +506,19 @@ class WebMediaPlayerMSTest
       : render_factory_(new MockRenderFactory(message_loop_.task_runner(),
                                               &message_loop_controller_)),
         gpu_factories_(new media::MockGpuVideoAcceleratorFactories(nullptr)),
-        player_(new WebMediaPlayerMS(
-            nullptr,
-            this,
-            &delegate_,
-            std::make_unique<media::MediaLog>(),
-            std::unique_ptr<MediaStreamRendererFactory>(render_factory_),
-            message_loop_.task_runner(),
-            message_loop_.task_runner(),
-            message_loop_.task_runner(),
-            message_loop_.task_runner(),
-            gpu_factories_.get(),
-            blink::WebString())),
+        surface_layer_bridge_(
+            std::make_unique<StrictMock<MockSurfaceLayerBridge>>()),
         layer_set_(false),
         rendering_(false),
-        background_rendering_(false) {}
+        background_rendering_(false) {
+    surface_layer_bridge_ptr_ = surface_layer_bridge_.get();
+  }
   ~WebMediaPlayerMSTest() override {
     player_.reset();
     base::RunLoop().RunUntilIdle();
   }
+
+  void InitializeWebMediaPlayerMS(bool enable_surface_layer_for_video);
 
   MockMediaStreamVideoRenderer* LoadAndGetFrameProvider(bool algorithm_enabled);
 
@@ -600,6 +615,12 @@ class WebMediaPlayerMSTest
   MOCK_METHOD1(CheckSizeChanged, void(gfx::Size));
   MOCK_CONST_METHOD0(CouldPlayIfEnoughData, bool());
 
+  std::unique_ptr<blink::WebSurfaceLayerBridge> CreateMockSurfaceLayerBridge(
+      blink::WebSurfaceLayerBridgeObserver*,
+      cc::UpdateSubmissionStateCB) {
+    return std::move(surface_layer_bridge_);
+  }
+
   base::MessageLoop message_loop_;
   MockRenderFactory* render_factory_;
   std::unique_ptr<media::MockGpuVideoAcceleratorFactories> gpu_factories_;
@@ -610,6 +631,8 @@ class WebMediaPlayerMSTest
   cc::Layer* layer_;
   bool is_audio_element_ = false;
   std::vector<base::OnceClosure> frame_ready_cbs_;
+  std::unique_ptr<StrictMock<MockSurfaceLayerBridge>> surface_layer_bridge_;
+  StrictMock<MockSurfaceLayerBridge>* surface_layer_bridge_ptr_ = nullptr;
 
  private:
   // Main function trying to ask WebMediaPlayerMS to submit a frame for
@@ -620,6 +643,19 @@ class WebMediaPlayerMSTest
   bool rendering_;
   bool background_rendering_;
 };
+
+void WebMediaPlayerMSTest::InitializeWebMediaPlayerMS(
+    bool enable_surface_layer_for_video) {
+  player_ = std::make_unique<WebMediaPlayerMS>(
+      nullptr, this, &delegate_, std::make_unique<media::MediaLog>(),
+      std::unique_ptr<MediaStreamRendererFactory>(render_factory_),
+      message_loop_.task_runner(), message_loop_.task_runner(),
+      message_loop_.task_runner(), message_loop_.task_runner(),
+      gpu_factories_.get(), blink::WebString(),
+      base::BindRepeating(&WebMediaPlayerMSTest::CreateMockSurfaceLayerBridge,
+                          base::Unretained(this)),
+      enable_surface_layer_for_video);
+}
 
 MockMediaStreamVideoRenderer* WebMediaPlayerMSTest::LoadAndGetFrameProvider(
     bool algorithm_enabled) {
@@ -734,6 +770,7 @@ void WebMediaPlayerMSTest::SizeChanged() {
 }
 
 TEST_F(WebMediaPlayerMSTest, NoDataDuringLoadForVideo) {
+  InitializeWebMediaPlayerMS(false);
   EXPECT_CALL(*this, DoReadyStateChanged(
                          blink::WebMediaPlayer::kReadyStateHaveMetadata))
       .Times(0);
@@ -751,6 +788,7 @@ TEST_F(WebMediaPlayerMSTest, NoDataDuringLoadForVideo) {
 }
 
 TEST_F(WebMediaPlayerMSTest, NoWaitForFrameForAudio) {
+  InitializeWebMediaPlayerMS(false);
   is_audio_element_ = true;
   scoped_refptr<MediaStreamAudioRenderer> audio_renderer(
       new MockMediaStreamAudioRenderer());
@@ -777,6 +815,7 @@ TEST_F(WebMediaPlayerMSTest, NoWaitForFrameForAudio) {
 }
 
 TEST_F(WebMediaPlayerMSTest, NoWaitForFrameForAudioOnly) {
+  InitializeWebMediaPlayerMS(false);
   render_factory_->set_support_video_renderer(false);
   scoped_refptr<MediaStreamAudioRenderer> audio_renderer(
       new MockMediaStreamAudioRenderer());
@@ -793,6 +832,8 @@ TEST_F(WebMediaPlayerMSTest, Playing_Normal) {
   // This test sends a bunch of normal frames with increasing timestamps
   // and verifies that they are produced by WebMediaPlayerMS in appropriate
   // order.
+
+  InitializeWebMediaPlayerMS(false);
 
   MockMediaStreamVideoRenderer* provider = LoadAndGetFrameProvider(true);
 
@@ -824,6 +865,8 @@ TEST_F(WebMediaPlayerMSTest, Playing_ErrorFrame) {
   // This tests sends a broken frame to WebMediaPlayerMS, and verifies
   // OnSourceError function works as expected.
 
+  InitializeWebMediaPlayerMS(false);
+
   MockMediaStreamVideoRenderer* provider = LoadAndGetFrameProvider(false);
 
   const int kBrokenFrame = static_cast<int>(FrameType::BROKEN_FRAME);
@@ -851,6 +894,7 @@ TEST_F(WebMediaPlayerMSTest, Playing_ErrorFrame) {
 }
 
 TEST_P(WebMediaPlayerMSTest, PlayThenPause) {
+  InitializeWebMediaPlayerMS(false);
   const bool opaque_frame = testing::get<0>(GetParam());
   const bool odd_size_frame = testing::get<1>(GetParam());
   // In the middle of this test, WebMediaPlayerMS::pause will be called, and we
@@ -892,6 +936,7 @@ TEST_P(WebMediaPlayerMSTest, PlayThenPause) {
 }
 
 TEST_P(WebMediaPlayerMSTest, PlayThenPauseThenPlay) {
+  InitializeWebMediaPlayerMS(false);
   const bool opaque_frame = testing::get<0>(GetParam());
   const bool odd_size_frame = testing::get<1>(GetParam());
   // Similary to PlayAndPause test above, this one focuses on testing that
@@ -951,6 +996,7 @@ INSTANTIATE_TEST_CASE_P(,
 // During this test, we check that when we send rotated video frames, it applies
 // to player's natural size.
 TEST_F(WebMediaPlayerMSTest, RotationChange) {
+  InitializeWebMediaPlayerMS(false);
   MockMediaStreamVideoRenderer* provider = LoadAndGetFrameProvider(true);
 
   const int kTestBrake = static_cast<int>(FrameType::TEST_BRAKE);
@@ -991,6 +1037,7 @@ TEST_F(WebMediaPlayerMSTest, RotationChange) {
 // During this test, we check that web layer changes opacity according to the
 // given frames.
 TEST_F(WebMediaPlayerMSTest, OpacityChange) {
+  InitializeWebMediaPlayerMS(false);
   MockMediaStreamVideoRenderer* provider = LoadAndGetFrameProvider(true);
 
   // Push one opaque frame.
@@ -1035,6 +1082,7 @@ TEST_F(WebMediaPlayerMSTest, BackgroundRendering) {
   // WebMediaPlayerMS without an explicit notification. We should expect that
   // WebMediaPlayerMS can digest old frames, rather than piling frames up and
   // explode.
+  InitializeWebMediaPlayerMS(false);
   MockMediaStreamVideoRenderer* provider = LoadAndGetFrameProvider(true);
 
   const int kTestBrake = static_cast<int>(FrameType::TEST_BRAKE);
@@ -1083,6 +1131,7 @@ TEST_F(WebMediaPlayerMSTest, FrameSizeChange) {
   // During this test, the frame size of the input changes.
   // We need to make sure, when sizeChanged() gets called, new size should be
   // returned by GetCurrentSize().
+  InitializeWebMediaPlayerMS(false);
   MockMediaStreamVideoRenderer* provider = LoadAndGetFrameProvider(true);
 
   int tokens[] = {0,   33,  66,  100, 133, 166, 200, 233, 266, 300,
@@ -1110,7 +1159,8 @@ TEST_F(WebMediaPlayerMSTest, FrameSizeChange) {
 
 // Tests that GpuMemoryBufferVideoFramePool is called in the expected sequence.
 TEST_F(WebMediaPlayerMSTest, CreateHardwareFrames) {
-  MockMediaStreamVideoRenderer* provider = LoadAndGetFrameProvider(true);
+  InitializeWebMediaPlayerMS(false);
+  MockMediaStreamVideoRenderer* provider = LoadAndGetFrameProvider(false);
   SetGpuMemoryBufferVideoForTesting();
 
   const int kTestBrake = static_cast<int>(FrameType::TEST_BRAKE);
@@ -1128,9 +1178,11 @@ TEST_F(WebMediaPlayerMSTest, CreateHardwareFrames) {
   EXPECT_CALL(*this, DoReadyStateChanged(
                          blink::WebMediaPlayer::kReadyStateHaveEnoughData));
   EXPECT_CALL(*this, CheckSizeChanged(provider->get_standard_size()));
+
+  // Run all the tasks that will assign current frame in
+  // WebMediaPlayerMSCompositor.
   std::move(frame_ready_cbs_[0]).Run();
-  message_loop_controller_.RunAndWaitForStatus(
-      media::PipelineStatus::PIPELINE_OK);
+  base::RunLoop().RunUntilIdle();
 
   auto frame = compositor_->GetCurrentFrameWithoutUpdatingStatistics();
   ASSERT_TRUE(frame != nullptr);
@@ -1140,68 +1192,9 @@ TEST_F(WebMediaPlayerMSTest, CreateHardwareFrames) {
   EXPECT_CALL(*this, DoStopRendering());
 }
 
-// Hidden and closed trigger different events on Android and this test doesn't
-// cover that, see HiddenPlayerTests for specifics.
-#if !defined(OS_ANDROID)
-// Tests that GpuMemoryBufferVideoFramePool is not called when page is hidden.
-TEST_F(WebMediaPlayerMSTest, StopsCreatingHardwareFramesWhenHiddenOrClosed) {
-  MockMediaStreamVideoRenderer* provider = LoadAndGetFrameProvider(true);
-  SetGpuMemoryBufferVideoForTesting();
-
-  const int kTestBrake = static_cast<int>(FrameType::TEST_BRAKE);
-  static int tokens[] = {0, kTestBrake};
-  std::vector<int> timestamps(tokens, tokens + sizeof(tokens) / sizeof(int));
-  provider->QueueFrames(timestamps);
-  EXPECT_CALL(*this, DoSetCcLayer(true));
-  EXPECT_CALL(*this, DoStartRendering());
-  EXPECT_CALL(*this, DoReadyStateChanged(
-                         blink::WebMediaPlayer::kReadyStateHaveMetadata));
-  EXPECT_CALL(*this, DoReadyStateChanged(
-                         blink::WebMediaPlayer::kReadyStateHaveEnoughData));
-  EXPECT_CALL(*this, CheckSizeChanged(provider->get_standard_size()));
-  message_loop_controller_.RunAndWaitForStatus(
-      media::PipelineStatus::PIPELINE_OK);
-  ASSERT_EQ(1u, frame_ready_cbs_.size());
-  frame_ready_cbs_.clear();
-
-  // Hidden should stop passing frames to GpuMemoryBufferVideoFramePool.
-  player_->OnFrameHidden();
-  provider->QueueFrames(timestamps, false);
-  message_loop_controller_.RunAndWaitForStatus(
-      media::PipelineStatus::PIPELINE_OK);
-  ASSERT_EQ(0u, frame_ready_cbs_.size());
-
-  // Shown should resume passing frames to GpuMemoryBufferVideoFramePool.
-  player_->OnFrameShown();
-  provider->QueueFrames(timestamps, false);
-  message_loop_controller_.RunAndWaitForStatus(
-      media::PipelineStatus::PIPELINE_OK);
-  ASSERT_EQ(1u, frame_ready_cbs_.size());
-  frame_ready_cbs_.clear();
-
-  // Hidden should stop passing frames to GpuMemoryBufferVideoFramePool.
-  player_->OnFrameClosed();
-  provider->QueueFrames(timestamps, false);
-  message_loop_controller_.RunAndWaitForStatus(
-      media::PipelineStatus::PIPELINE_OK);
-  ASSERT_EQ(0u, frame_ready_cbs_.size());
-
-  // Shown should resume passing frames to GpuMemoryBufferVideoFramePool.
-  player_->OnFrameShown();
-  provider->QueueFrames(timestamps, false);
-  message_loop_controller_.RunAndWaitForStatus(
-      media::PipelineStatus::PIPELINE_OK);
-  ASSERT_EQ(1u, frame_ready_cbs_.size());
-
-  testing::Mock::VerifyAndClearExpectations(this);
-
-  EXPECT_CALL(*this, DoSetCcLayer(false));
-  EXPECT_CALL(*this, DoStopRendering());
-}
-#endif  // !defined(OS_ANDROID)
-
 #if defined(OS_ANDROID)
 TEST_F(WebMediaPlayerMSTest, HiddenPlayerTests) {
+  InitializeWebMediaPlayerMS(false);
   LoadAndGetFrameProvider(true);
 
   // Hidden status should not affect playback.

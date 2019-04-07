@@ -6,7 +6,7 @@
 
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/common/pref_names.h"
@@ -128,7 +128,7 @@ void HatsDialog::CreateAndShow(bool is_google_account) {
   std::unique_ptr<HatsDialog> hats_dialog(new HatsDialog);
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&GetFormattedSiteContext, user_locale, kDeviceInfoStopKeyword),
       base::Bind(&HatsDialog::Show, base::Passed(&hats_dialog),
                  is_google_account ? kGooglerSiteID : kSiteID));

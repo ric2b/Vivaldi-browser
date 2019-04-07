@@ -9,7 +9,7 @@
 
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
-#include "chrome/browser/chromeos/login/mojo_version_info_dispatcher.h"
+#include "chrome/browser/chromeos/login/mojo_system_info_dispatcher.h"
 #include "chrome/browser/chromeos/login/screens/chrome_user_selection_screen.h"
 #include "chrome/browser/chromeos/login/screens/gaia_view.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
@@ -28,6 +28,7 @@ namespace {
 
 constexpr char kLoginDisplay[] = "login";
 constexpr char kAccelSendFeedback[] = "send_feedback";
+constexpr char kAccelReset[] = "reset";
 
 }  // namespace
 
@@ -42,7 +43,7 @@ LoginDisplayHostMojo::LoginDisplayHostMojo()
       user_board_view_mojo_(std::make_unique<UserBoardViewMojo>()),
       user_selection_screen_(
           std::make_unique<ChromeUserSelectionScreen>(kLoginDisplay)),
-      version_info_updater_(std::make_unique<MojoVersionInfoDispatcher>()),
+      system_info_updater_(std::make_unique<MojoSystemInfoDispatcher>()),
       weak_factory_(this) {
   user_selection_screen_->SetView(user_board_view_mojo_.get());
 
@@ -104,12 +105,11 @@ void LoginDisplayHostMojo::ShowSigninUI(const std::string& email) {
   dialog_->Show();
 }
 
-void LoginDisplayHostMojo::ShowDialogForCaptivePortal() {
-  dialog_->Show();
-}
-
-void LoginDisplayHostMojo::HideDialogForCaptivePortal() {
-  dialog_->Hide();
+void LoginDisplayHostMojo::HandleDisplayCaptivePortal() {
+  if (dialog_->IsVisible())
+    GetOobeUI()->GetErrorScreen()->FixCaptivePortal();
+  else
+    dialog_->SetShouldDisplayCaptivePortal(true);
 }
 
 LoginDisplay* LoginDisplayHostMojo::GetLoginDisplay() {
@@ -190,6 +190,16 @@ void LoginDisplayHostMojo::OnStartSignInScreen(
     return;
   }
 
+  if (signin_screen_started_) {
+    // If we already have a signin screen instance, just reset the state of the
+    // oobe dialog.
+    HideOobeDialog();
+    GetOobeUI()->GetGaiaScreenView()->ShowGaiaAsync(base::nullopt);
+    return;
+  }
+
+  signin_screen_started_ = true;
+
   existing_user_controller_ = std::make_unique<ExistingUserController>();
   login_display_->set_delegate(existing_user_controller_.get());
 
@@ -203,8 +213,7 @@ void LoginDisplayHostMojo::OnStartSignInScreen(
 
   kiosk_updater_.SendKioskApps();
 
-  // Start to request version info.
-  version_info_updater_->StartUpdate();
+  system_info_updater_->StartRequest();
 
   // Update status of add user button in the shelf.
   UpdateAddUserButtonStatus();
@@ -252,11 +261,22 @@ void LoginDisplayHostMojo::ShowGaiaDialog(
       GetOobeUI()->GetGaiaScreenView()->ShowGaiaAsync(prefilled_account);
     LoadWallpaper(*prefilled_account);
   } else {
+    // Two criteria here:
+    // 1) If we have started a wizard other than Gaia signin (signified by the
+    // current_screen() changing), we need to reload the Gaia screen, otherwise
+    // dialog_->Show() will show the wrong screen. 2) While login is being
+    // loaded in, the current_screen is UNKNOWN. During this time, the
+    // GaiaScreenView is initialized, after which ShowGaiaAsync() is called to
+    // load up the Gaia screen. If we try to ShowGaiaAsync() before this
+    // initialization is complete, the Gaia screen UI can crash and get stuck.
+    if (GetOobeUI()->current_screen() != OobeScreen::SCREEN_GAIA_SIGNIN &&
+        GetOobeUI()->current_screen() != OobeScreen::SCREEN_UNKNOWN) {
+      GetOobeUI()->GetGaiaScreenView()->ShowGaiaAsync(base::nullopt);
+    }
     LoadSigninWallpaper();
   }
 
   dialog_->Show();
-  return;
 }
 
 void LoginDisplayHostMojo::HideOobeDialog() {
@@ -280,6 +300,12 @@ void LoginDisplayHostMojo::UpdateOobeDialogSize(int width, int height) {
     dialog_->UpdateSizeAndPosition(width, height);
 }
 
+void LoginDisplayHostMojo::UpdateOobeDialogState(
+    ash::mojom::OobeDialogState state) {
+  if (dialog_)
+    dialog_->SetState(state);
+}
+
 const user_manager::UserList LoginDisplayHostMojo::GetUsers() {
   return users_;
 }
@@ -287,6 +313,11 @@ const user_manager::UserList LoginDisplayHostMojo::GetUsers() {
 void LoginDisplayHostMojo::ShowFeedback() {
   DCHECK(GetOobeUI());
   GetOobeUI()->ForwardAccelerator(kAccelSendFeedback);
+}
+
+void LoginDisplayHostMojo::ShowResetScreen() {
+  DCHECK(GetOobeUI());
+  GetOobeUI()->ForwardAccelerator(kAccelReset);
 }
 
 void LoginDisplayHostMojo::UpdateAddUserButtonStatus() {

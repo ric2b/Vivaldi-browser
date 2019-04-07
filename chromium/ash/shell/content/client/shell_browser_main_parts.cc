@@ -12,7 +12,6 @@
 #include "ash/components/tap_visualizer/public/mojom/constants.mojom.h"
 #include "ash/content/content_gpu_interface_provider.h"
 #include "ash/login_status.h"
-#include "ash/public/cpp/ash_features.h"
 #include "ash/shell.h"
 #include "ash/shell/example_session_controller_client.h"
 #include "ash/shell/shell_delegate_impl.h"
@@ -20,7 +19,6 @@
 #include "ash/shell/window_type_launcher.h"
 #include "ash/shell/window_watcher.h"
 #include "ash/shell_init_params.h"
-#include "ash/shell_port_classic.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/i18n/icu_util.h"
@@ -41,7 +39,7 @@
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #include "net/base/net_module.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/ime/test_ime_driver/public/mojom/constants.mojom.h"
+#include "services/ws/ime/test_ime_driver/public/mojom/constants.mojom.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -89,12 +87,13 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
 
   ui::MaterialDesignController::Initialize();
   ash::ShellInitParams init_params;
-  init_params.shell_port = std::make_unique<ash::ShellPortClassic>();
   init_params.delegate = std::make_unique<ash::shell::ShellDelegateImpl>();
   init_params.context_factory = content::GetContextFactory();
   init_params.context_factory_private = content::GetContextFactoryPrivate();
   init_params.gpu_interface_provider =
       std::make_unique<ContentGpuInterfaceProvider>();
+  init_params.connector =
+      content::ServiceManagerConnection::GetForProcess()->GetConnector();
   ash::Shell::CreateInstance(std::move(init_params));
 
   // Initialize session controller client and create fake user sessions. The
@@ -118,11 +117,9 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
   content::ServiceManagerConnection::GetForProcess()
       ->GetConnector()
       ->StartService(quick_launch::mojom::kServiceName);
-  if (base::FeatureList::IsEnabled(features::kTapVisualizerApp)) {
-    content::ServiceManagerConnection::GetForProcess()
-        ->GetConnector()
-        ->StartService(tap_visualizer::mojom::kServiceName);
-  }
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->StartService(tap_visualizer::mojom::kServiceName);
   shortcut_viewer::mojom::ShortcutViewerPtr shortcut_viewer;
   content::ServiceManagerConnection::GetForProcess()
       ->GetConnector()

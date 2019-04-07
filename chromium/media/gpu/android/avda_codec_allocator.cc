@@ -11,8 +11,8 @@
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/sys_info.h"
+#include "base/task/task_traits.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/task_traits.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -63,7 +63,8 @@ std::unique_ptr<MediaCodecBridge> CreateMediaCodecInternal(
       codec_config->initial_expected_coded_size,
       codec_config->surface_bundle->GetJavaSurface(), media_crypto,
       codec_config->csd0, codec_config->csd1,
-      codec_config->container_color_space, codec_config->hdr_metadata, true));
+      codec_config->container_color_space, codec_config->hdr_metadata, true,
+      codec_config->on_buffers_available_cb));
 
   return codec;
 }

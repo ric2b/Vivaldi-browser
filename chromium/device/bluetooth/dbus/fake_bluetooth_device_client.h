@@ -72,6 +72,9 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothDeviceClient
   FakeBluetoothDeviceClient();
   ~FakeBluetoothDeviceClient() override;
 
+  // Causes Connect() calls to never finish.
+  void LeaveConnectionsPending();
+
   // BluetoothDeviceClient overrides
   void Init(dbus::Bus* bus, const std::string& bluetooth_service_name) override;
   void AddObserver(Observer* observer) override;
@@ -349,7 +352,7 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothDeviceClient
       BluetoothProfileServiceProvider::Delegate::Status status);
 
   // List of observers interested in event notifications from us.
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   using PropertiesMap =
       std::map<const dbus::ObjectPath, std::unique_ptr<Properties>>;
@@ -378,6 +381,8 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothDeviceClient
   // Pending prepare write requests.
   std::vector<std::pair<dbus::ObjectPath, std::vector<uint8_t>>>
       prepare_write_requests_;
+
+  bool should_leave_connections_pending_;
 };
 
 }  // namespace bluez

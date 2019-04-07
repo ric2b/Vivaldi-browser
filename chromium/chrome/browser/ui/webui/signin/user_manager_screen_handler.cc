@@ -351,8 +351,8 @@ void UserManagerScreenHandler::HandleAuthenticatedLaunchUser(
     if (!oauth_client_) {
       oauth_client_.reset(new gaia::GaiaOAuthClient(
           content::BrowserContext::GetDefaultStoragePartition(
-              web_ui()->GetWebContents()->GetBrowserContext())->
-                  GetURLRequestContext()));
+              web_ui()->GetWebContents()->GetBrowserContext())
+              ->GetURLLoaderFactoryForBrowserProcess()));
     }
 
     const std::string token = entry->GetPasswordChangeDetectionToken();
@@ -494,13 +494,6 @@ void UserManagerScreenHandler::HandleLaunchUser(const base::ListValue* args) {
       base::Bind(&UserManagerScreenHandler::OnSwitchToProfileComplete,
                  weak_ptr_factory_.GetWeakPtr()),
       ProfileMetrics::SWITCH_PROFILE_MANAGER);
-}
-
-void UserManagerScreenHandler::HandleHardlockUserPod(
-    const base::ListValue* args) {
-  std::string email;
-  CHECK(args->GetString(0, &email));
-  const AccountId account_id = AccountId::FromUserEmail(email);
 }
 
 void UserManagerScreenHandler::HandleRemoveUserWarningLoadStats(
@@ -796,8 +789,8 @@ void UserManagerScreenHandler::SendUserList() {
     profile_value->SetString(kKeyEmailAddress, entry->GetUserName());
     profile_value->SetString(kKeyDisplayName,
                              profiles::GetAvatarNameForProfile(profile_path));
-    profile_value->Set(kKeyProfilePath,
-                       base::CreateFilePathValue(profile_path));
+    profile_value->SetKey(kKeyProfilePath,
+                          base::CreateFilePathValue(profile_path));
     profile_value->SetBoolean(kKeyPublicAccount, false);
     profile_value->SetBoolean(kKeyLegacySupervisedUser,
                               entry->IsLegacySupervised());

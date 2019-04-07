@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/jumbo.gni")
 import("//media/media_options.gni")
 import("//services/catalog/public/tools/catalog.gni")
 import("//services/service_manager/public/cpp/service.gni")
@@ -9,7 +10,7 @@ import("//services/service_manager/public/service_manifest.gni")
 import("//services/service_manager/public/tools/test/service_test.gni")
 import("//testing/test.gni")
 
-component("services") {
+jumbo_component("services") {
   output_name = "media_mojo_services"
   sources = [
     "deferred_destroy_strong_binding_set.h",
@@ -110,6 +111,8 @@ component("services") {
     sources += [
       "android_mojo_media_client.cc",
       "android_mojo_media_client.h",
+      "android_mojo_util.cc",
+      "android_mojo_util.h",
       "mojo_media_drm_storage.cc",
       "mojo_media_drm_storage.h",
     ]

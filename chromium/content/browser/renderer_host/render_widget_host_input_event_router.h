@@ -15,16 +15,26 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/host/hit_test/hit_test_query.h"
 #include "components/viz/service/surfaces/surface_hittest_delegate.h"
+#include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/browser/renderer_host/input/touch_emulator_client.h"
 #include "content/browser/renderer_host/render_widget_host_view_base_observer.h"
 #include "content/browser/renderer_host/render_widget_targeter.h"
 #include "content/common/content_export.h"
+#include "content/public/common/input_event_ack_state.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
 
 struct FrameHostMsg_HittestData_Params;
+
+#if defined(OS_WIN)
+// Flaky on Windows. https://crbug.com/868308
+#define MAYBE_TouchpadPinchOverOOPIF DISABLED_TouchpadPinchOverOOPIF
+#else
+#define MAYBE_TouchpadPinchOverOOPIF TouchpadPinchOverOOPIF
+#endif  // OS_WIN
 
 namespace blink {
 class WebGestureEvent;
@@ -78,6 +88,9 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
                          blink::WebGestureEvent* event,
                          const ui::LatencyInfo& latency);
   void OnHandledTouchStartOrFirstTouchMove(uint32_t unique_touch_event_id);
+  void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& event,
+                              InputEventAckState ack_result,
+                              RenderWidgetHostViewBase* view);
   void RouteTouchEvent(RenderWidgetHostViewBase* root_view,
                        blink::WebTouchEvent *event,
                        const ui::LatencyInfo& latency);
@@ -132,12 +145,6 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   void SetCursor(const WebCursor& cursor) override;
   void ShowContextMenuAtPoint(const gfx::Point& point,
                               const ui::MenuSourceType source_type) override;
-
-  // NOTE(daniel@vivaldi.com): We're sending an extra event from the root view
-  // for mousegestures and need to be able to block the the cursor update.
-  void SetSkipCursorUpdateOnMouseEvent(bool should_skip_update) {
-    skip_cursor_update_on_mouse_event_ = should_skip_update;
-  }
 
   void MergeFrameSinkIdOwners(
       RenderWidgetHostInputEventRouter* other_input_event_router);
@@ -281,6 +288,9 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
       const blink::WebInputEvent& event,
       const ui::LatencyInfo& latency,
       const base::Optional<gfx::PointF>& target_location) override;
+  // Notify whether the events in the queue are being flushed due to touch ack
+  // timeout, or the flushing has completed.
+  void SetEventsBeingFlushed(bool events_being_flushed) override;
 
   FrameSinkIdOwnerMap owner_map_;
   TargetMap touchscreen_gesture_target_map_;
@@ -304,6 +314,12 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   // Tracked for the purpose of targeting subsequent fling cancel events.
   RenderWidgetHostViewBase* last_fling_start_target_ = nullptr;
 
+  // During scroll bubbling we bubble the GFS to the target view so that its
+  // fling controller takes care of flinging. In this case we should also send
+  // the GFC to the bubbling target so that the fling controller currently in
+  // charge of the fling progress could handle the fling cancellelation as well.
+  RenderWidgetHostViewBase* last_fling_start_bubbled_target_ = nullptr;
+
   // Tracked for the purpose of providing a root_view when dispatching emulated
   // touch/gesture events.
   RenderWidgetHostViewBase* last_emulated_event_root_view_;
@@ -320,12 +336,9 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
 
   std::unique_ptr<RenderWidgetTargeter> event_targeter_;
   bool use_viz_hit_test_ = false;
+  bool events_being_flushed_ = false;
 
   std::unique_ptr<TouchEmulator> touch_emulator_;
-
-  // NOTE(daniel@vivaldi.com): We're sending an extra event from the root view
-  // for mousegestures and need to be able to block the the cursor update.
-  bool skip_cursor_update_on_mouse_event_ = false;
 
   base::WeakPtrFactory<RenderWidgetHostInputEventRouter> weak_ptr_factory_;
 
@@ -340,7 +353,7 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessHitTestBrowserTest,
                            InputEventRouterTouchpadGestureTargetTest);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessHitTestBrowserTest,
-                           TouchpadPinchOverOOPIF);
+                           MAYBE_TouchpadPinchOverOOPIF);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessMouseWheelHitTestBrowserTest,
                            InputEventRouterWheelTargetTest);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessMacBrowserTest,

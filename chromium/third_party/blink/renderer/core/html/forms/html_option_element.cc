@@ -329,22 +329,22 @@ String HTMLOptionElement::DefaultToolTip() const {
 }
 
 Node::InsertionNotificationRequest HTMLOptionElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   HTMLElement::InsertedInto(insertion_point);
   if (HTMLSelectElement* select = OwnerSelectElement()) {
-    if (insertion_point == select || (IsHTMLOptGroupElement(*insertion_point) &&
-                                      insertion_point->parentNode() == select))
+    if (&insertion_point == select || (IsHTMLOptGroupElement(insertion_point) &&
+                                       insertion_point.parentNode() == select))
       select->OptionInserted(*this, is_selected_);
   }
   return kInsertionDone;
 }
 
-void HTMLOptionElement::RemovedFrom(ContainerNode* insertion_point) {
-  if (auto* select = ToHTMLSelectElementOrNull(*insertion_point)) {
+void HTMLOptionElement::RemovedFrom(ContainerNode& insertion_point) {
+  if (auto* select = ToHTMLSelectElementOrNull(insertion_point)) {
     if (!parentNode() || IsHTMLOptGroupElement(*parentNode()))
       select->OptionRemoved(*this);
-  } else if (IsHTMLOptGroupElement(*insertion_point)) {
-    if (auto* select = ToHTMLSelectElementOrNull(insertion_point->parentNode()))
+  } else if (IsHTMLOptGroupElement(insertion_point)) {
+    if (auto* select = ToHTMLSelectElementOrNull(insertion_point.parentNode()))
       select->OptionRemoved(*this);
   }
   HTMLElement::RemovedFrom(insertion_point);
@@ -390,13 +390,6 @@ bool HTMLOptionElement::SpatialNavigationFocused() const {
 bool HTMLOptionElement::IsDisplayNone() const {
   const ComputedStyle* style = GetComputedStyle();
   return !style || style->Display() == EDisplay::kNone;
-}
-
-String HTMLOptionElement::innerText() {
-  // A workaround for crbug.com/424578. We add ShadowRoot to an OPTION, but
-  // innerText behavior for Shadow DOM is unclear.  We just return the same
-  // string before adding ShadowRoot.
-  return textContent();
 }
 
 }  // namespace blink

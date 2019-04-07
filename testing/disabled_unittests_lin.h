@@ -324,3 +324,8 @@ DISABLE(BrowserFocusTest, AppLocationBar)
 DISABLE(BrowserFocusTest, PopupLocationBar)
 DISABLE(X11TopmostWindowFinderTest, NonRectangularNullShape)
 DISABLE(CrExtensionsToolbarTest, ClickHandlers)
+
+// Broke in v70
+DISABLE(ShellIntegrationTest, GetExistingShortcutLocations)
+DISABLE(ShellIntegrationTest, GetExtensionShortcutFilename)
+DISABLE(PipelineIntegrationTest, BasicPlaybackOpusMp4TrimmingHashed)

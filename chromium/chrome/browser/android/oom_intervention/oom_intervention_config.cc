@@ -10,6 +10,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_info.h"
 #include "chrome/common/chrome_features.h"
+#include "components/subresource_filter/core/common/common_features.h"
 
 namespace {
 
@@ -33,6 +34,7 @@ const double kDefaultSwapFreeThresholdRatio = 0.45;
 
 // Field trial parameter names.
 const char kRendererPauseParamName[] = "pause_renderer";
+const char kNavigateAdsParamName[] = "navigate_ads";
 const char kShouldDetectInRenderer[] = "detect_in_renderer";
 
 bool GetThresholdParam(const char* param,
@@ -109,6 +111,7 @@ enum class OomInterventionBrowserMonitorStatus {
 
 OomInterventionConfig::OomInterventionConfig()
     : is_intervention_enabled_(
+          base::FeatureList::IsEnabled(subresource_filter::kAdTagging) &&
           base::FeatureList::IsEnabled(features::kOomIntervention)),
       renderer_detection_args_(blink::mojom::DetectionArgs::New()) {
   if (!is_intervention_enabled_)
@@ -116,6 +119,8 @@ OomInterventionConfig::OomInterventionConfig()
 
   is_renderer_pause_enabled_ = base::GetFieldTrialParamByFeatureAsBool(
       features::kOomIntervention, kRendererPauseParamName, false);
+  is_navigate_ads_enabled_ = base::GetFieldTrialParamByFeatureAsBool(
+      features::kOomIntervention, kNavigateAdsParamName, false);
   should_detect_in_renderer_ = base::GetFieldTrialParamByFeatureAsBool(
       features::kOomIntervention, kShouldDetectInRenderer, true);
 
@@ -134,8 +139,6 @@ OomInterventionConfig::OomInterventionConfig()
     is_intervention_enabled_ = false;
     status = OomInterventionBrowserMonitorStatus::kDisabledWithInvalidParam;
   }
-  UMA_HISTOGRAM_ENUMERATION(
-      "Memory.Experimental.OomIntervention.BrowserMonitorStatus", status);
 }
 
 // static

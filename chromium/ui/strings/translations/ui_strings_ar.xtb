@@ -9,6 +9,7 @@
 <translation id="1293699935367580298">Esc</translation>
 <translation id="1306549533752902673">تطبيقات مقترحة</translation>
 <translation id="1368832886055348810">من اليسار لليمين</translation>
+<translation id="1383876407941801731">البحث</translation>
 <translation id="1398853756734560583">تكبير</translation>
 <translation id="1413622004203049571">إيقاف الإشعارات من <ph name="NOTIFIER_NAME" /></translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{دقيقة واحدة و }zero{# من الدقائق و }two{دقيقتان (#) و }few{# دقائق و }many{# دقيقة و }other{# من الدقائق و }}</translation>
@@ -40,6 +41,7 @@
 <translation id="24452542372838207">توسيع الإشعار</translation>
 <translation id="2482878487686419369">الاشعارات</translation>
 <translation id="2497284189126895209">الملفّات كلّها</translation>
+<translation id="2515586267016047495">Alt</translation>
 <translation id="2522350507219695259">اكتملت المعايرة</translation>
 <translation id="252373100621549798">شاشة عرض غير معروفة</translation>
 <translation id="2583543531130364912">معايرة الشاشة التي تعمل باللمس</translation>
@@ -63,6 +65,7 @@
 <translation id="3660179305079774227">مفتاح سهم إلى أعلى</translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> غيغابايت/ثانية</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> غيغابايت</translation>
+<translation id="3842239759367498783">متابعة القراءة من جهازك الجوّال <ph name="TITLE" /></translation>
 <translation id="385051799172605136">الرجوع إلى الوراء</translation>
 <translation id="3889424535448813030">مفتاح سهم إلى اليمين</translation>
 <translation id="3892641579809465218">العرض الداخلي</translation>
@@ -78,14 +81,12 @@
 <translation id="4724120544754982507">مركز الإشعارات، <ph name="UNREAD_NOTIFICATION_COUNT" /> من الإشعارات غير المقروءة</translation>
 <translation id="4730374152663651037">التطبيقات المستخدمة بشكل متكرر</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{يتبقى شهر واحد}zero{يتبقى # شهر}two{يتبقى شهرين (#)}few{يتبقى # أشهر}many{يتبقى # شهرًا}other{يتبقى # شهر}}</translation>
-<translation id="4820616160060340806">‏المفتاح Command+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="4841881773802181781">إدراج</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{ثانية واحدة}zero{# من الثواني}two{ثانيتان (#)}few{# ثوانٍ}many{# ثانية}other{# من الثواني}}</translation>
 <translation id="4971687151119236543">المقطع الصوتي السابق للوسائط</translation>
-<translation id="4999762576397546063">Ctrl+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="5046499563572181734">انقر هنا</translation>
 <translation id="5076340679995252485">ل&amp;صق</translation>
-<translation id="5120799197269191491">بحث+<ph name="KEY_COMBO_NAME" /></translation>
+<translation id="5137751499640340777">‏بدء "مساعد Google"</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> بيتابايت</translation>
 <translation id="5266161281976477809">مثلث الإفصاح</translation>
 <translation id="528468243742722775">‏مفتاح End</translation>
@@ -100,7 +101,6 @@
 <translation id="5906667377645263094">{SECONDS,plural, =1{يتبقى ثانية واحدة}zero{يتبقى # من الثواني}two{يتبقى ثانيتان (#)}few{يتبقى # ثانية}many{يتبقى # ثانية}other{يتبقى # من الثواني}}</translation>
 <translation id="5941711191222866238">تصغير</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{ساعة واحدة}zero{# من الساعات}two{ساعتان (#)}few{# ساعات}many{# ساعةً}other{# من الساعات}}</translation>
-<translation id="5948410903763073882">Alt+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="6012623610530968780">صفحة <ph name="SELECTED_PAGE" /> من <ph name="TOTAL_PAGE_NUM" /></translation>
 <translation id="6022924867608035986">محو نص مربع البحث</translation>
 <translation id="6040143037577758943">إغلاق</translation>
@@ -149,6 +149,8 @@
 <translation id="7814458197256864873">&amp;نسخ</translation>
 <translation id="7879499977785298635">عدم الحظر</translation>
 <translation id="7907591526440419938">فتح ملف</translation>
+<translation id="7969046989155602842">Command</translation>
+<translation id="8087772101393322318"><ph name="KEY_MODIFIER_NAME" />+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{قبل ساعة واحدة}zero{قبل # من الساعات}two{قبل ساعتين (#)}few{قبل # ساعات}many{قبل # ساعة}other{قبل # من الساعات}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{يتبقى ثانية واحدة}zero{يتبقى # من الثواني}two{يتبقى ثانيتان (#)}few{يتبقى # ثوانٍ}many{يتبقى # ثانية}other{يتبقى # من الثواني}}</translation>
 <translation id="815598010540052116">التمرير إلى أسفل</translation>
@@ -161,7 +163,6 @@
 <translation id="838869780401515933">الاختيار</translation>
 <translation id="8393700583063109961">إرسال رسالة</translation>
 <translation id="8394908167088220973">تشغيل/إيقاف الوسائط</translation>
-<translation id="8400147561352026160">Shift+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8458811141851741261">{YEARS,plural, =1{عام واحد}zero{# عام}two{عامان (#)}few{# أعوام}many{# عامًا}other{# عام}}</translation>
 <translation id="8602707065186045623">ملف <ph name="SAVEAS_EXTENSION_TYPE" /> (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> كيلوبايت/ثانية</translation>

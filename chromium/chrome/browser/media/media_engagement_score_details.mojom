@@ -26,6 +26,10 @@ struct MediaEngagementScoreDetails {
 
   // How many time the score changed `is_high` status.
   int32 high_score_changes;
+
+  // Details of the components which make up |media_playbacks|.
+  int32 audio_context_playbacks;
+  int32 media_element_playbacks;
 };
 
 struct MediaEngagementConfig {
@@ -42,6 +46,9 @@ struct MediaEngagementConfig {
   bool feature_record_data;
   bool feature_bypass_autoplay;
   bool feature_preload_data;
+  bool feature_autoplay_sound_settings;
+  bool pref_unified_autoplay;
+  bool has_custom_autoplay_policy;
   string autoplay_policy;
 
   // The current version of any preloaded component.

@@ -100,6 +100,7 @@ void DictionaryTest::set(const InternalDictionary& testing_dictionary) {
         testing_dictionary.internalEnumOrInternalEnumSequenceMember();
   }
   any_member_ = testing_dictionary.anyMember();
+  callback_function_member_ = testing_dictionary.callbackFunctionMember();
 }
 
 void DictionaryTest::get(InternalDictionary& result) {
@@ -155,6 +156,7 @@ void DictionaryTest::get(InternalDictionary& result) {
   result.setInternalEnumOrInternalEnumSequenceMember(
       internal_enum_or_internal_enum_sequence_);
   result.setAnyMember(any_member_);
+  result.setCallbackFunctionMember(callback_function_member_);
 }
 
 ScriptValue DictionaryTest::getDictionaryMemberProperties(
@@ -221,7 +223,7 @@ String DictionaryTest::stringFromIterable(
 
     v8::Local<v8::Value> value;
     if (iterator.GetValue().ToLocal(&value))
-      result.Append(ToCoreString(value->ToString()));
+      result.Append(ToCoreString(value->ToString(script_state->GetIsolate())));
   }
 
   return result.ToString();
@@ -258,6 +260,7 @@ void DictionaryTest::Reset() {
   internal_enum_or_internal_enum_sequence_ =
       InternalEnumOrInternalEnumSequence();
   any_member_ = ScriptValue();
+  callback_function_member_ = nullptr;
 }
 
 void DictionaryTest::Trace(blink::Visitor* visitor) {
@@ -265,6 +268,7 @@ void DictionaryTest::Trace(blink::Visitor* visitor) {
   visitor->Trace(element_or_null_member_);
   visitor->Trace(double_or_string_sequence_member_);
   visitor->Trace(event_target_or_null_member_);
+  visitor->Trace(callback_function_member_);
   ScriptWrappable::Trace(visitor);
 }
 

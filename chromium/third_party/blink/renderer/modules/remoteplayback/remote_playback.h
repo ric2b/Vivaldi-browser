@@ -6,7 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_REMOTEPLAYBACK_REMOTE_PLAYBACK_H_
 
 #include "mojo/public/cpp/bindings/binding.h"
-#include "third_party/blink/public/platform/modules/presentation/presentation.mojom-blink.h"
+#include "third_party/blink/public/mojom/presentation/presentation.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_availability.h"
 #include "third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_client.h"
 #include "third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_state.h"
@@ -100,9 +100,9 @@ class MODULES_EXPORT RemotePlayback final
   const Vector<KURL>& Urls() const override;
 
   // Handles the response from PresentationService::StartPresentation.
-  void HandlePresentationResponse(mojom::blink::PresentationInfoPtr,
+  void HandlePresentationResponse(mojom::blink::PresentationConnectionResultPtr,
                                   mojom::blink::PresentationErrorPtr);
-  void OnConnectionSuccess(const mojom::blink::PresentationInfo&);
+  void OnConnectionSuccess(mojom::blink::PresentationConnectionResultPtr);
   void OnConnectionError(const mojom::blink::PresentationError&);
 
   // mojom::blink::PresentationConnection implementation.

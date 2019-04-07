@@ -197,10 +197,7 @@ bool LoopbackServer::CreateDefaultPermanentItems() {
       ModelTypeSet(syncer::BOOKMARKS, syncer::NIGORI);
   permanent_folder_types.Put(syncer::NOTES);
 
-  for (ModelTypeSet::Iterator it = permanent_folder_types.First(); it.Good();
-       it.Inc()) {
-    ModelType model_type = it.Get();
-
+  for (ModelType model_type : permanent_folder_types) {
     std::unique_ptr<LoopbackServerEntity> top_level_entity =
         PersistentPermanentEntity::CreateTopLevel(model_type);
     if (!top_level_entity) {
@@ -538,8 +535,8 @@ LoopbackServer::GetEntitiesAsDictionaryValue() {
 
   // Initialize an empty ListValue for all ModelTypes.
   ModelTypeSet all_types = ModelTypeSet::All();
-  for (ModelTypeSet::Iterator it = all_types.First(); it.Good(); it.Inc()) {
-    dictionary->Set(ModelTypeToString(it.Get()),
+  for (ModelType type : all_types) {
+    dictionary->Set(ModelTypeToString(type),
                     std::make_unique<base::ListValue>());
   }
 

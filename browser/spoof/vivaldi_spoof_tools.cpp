@@ -4,7 +4,7 @@
 
 #include <string>
 
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "url/gurl.h"
 
 namespace vivaldi {

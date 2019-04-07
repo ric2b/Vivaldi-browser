@@ -16,6 +16,7 @@
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_autofill_driver.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/browser/vote_uploads_test_matchers.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -91,8 +92,10 @@ class VotesUploaderTest : public testing::Test {
                                &test_personal_data_manager_) {
     std::unique_ptr<TestingPrefServiceSimple> prefs(
         new TestingPrefServiceSimple());
-    prefs->registry()->RegisterBooleanPref(autofill::prefs::kAutofillEnabled,
-                                           true);
+    prefs->registry()->RegisterBooleanPref(
+        autofill::prefs::kAutofillCreditCardEnabled, true);
+    prefs->registry()->RegisterBooleanPref(
+        autofill::prefs::kAutofillProfileEnabled, true);
     test_autofill_client_.SetPrefs(std::move(prefs));
     mock_autofill_download_manager_ = new MockAutofillDownloadManager(
         &test_autofill_driver_, &mock_autofill_manager_);
@@ -144,16 +147,21 @@ TEST_F(VotesUploaderTest, UploadPasswordVoteUpdate) {
   submitted_form_.new_password_element = new_password_element;
   form_to_upload_.confirmation_password_element = confirmation_element;
   submitted_form_.confirmation_password_element = confirmation_element;
-  ServerFieldTypeSet expexted_field_types = {NEW_PASSWORD,
+  submitted_form_.submission_event =
+      PasswordForm::SubmissionIndicatorEvent::HTML_FORM_SUBMISSION;
+  ServerFieldTypeSet expected_field_types = {NEW_PASSWORD,
                                              CONFIRMATION_PASSWORD};
   FieldTypeMap expected_types = {{new_password_element, NEW_PASSWORD},
                                  {confirmation_element, CONFIRMATION_PASSWORD}};
+  PasswordForm::SubmissionIndicatorEvent expected_submission_event =
+      PasswordForm::SubmissionIndicatorEvent::HTML_FORM_SUBMISSION;
 
   EXPECT_CALL(*mock_autofill_download_manager_,
               StartUploadRequest(
                   AllOf(SignatureIsSameAs(form_to_upload_),
-                        UploadedAutofillTypesAre(expected_types)),
-                  false, expexted_field_types, login_form_signature_, true));
+                        UploadedAutofillTypesAre(expected_types),
+                        SubmissionEventIsSameAs(expected_submission_event)),
+                  false, expected_field_types, login_form_signature_, true));
 
   EXPECT_TRUE(votes_uploader.UploadPasswordVote(
       form_to_upload_, submitted_form_, NEW_PASSWORD, login_form_signature_));
@@ -167,11 +175,16 @@ TEST_F(VotesUploaderTest, UploadPasswordVoteSave) {
   submitted_form_.password_element = password_element;
   form_to_upload_.confirmation_password_element = confirmation_element;
   submitted_form_.confirmation_password_element = confirmation_element;
-  ServerFieldTypeSet expexted_field_types = {PASSWORD, CONFIRMATION_PASSWORD};
+  submitted_form_.submission_event =
+      PasswordForm::SubmissionIndicatorEvent::HTML_FORM_SUBMISSION;
+  ServerFieldTypeSet expected_field_types = {PASSWORD, CONFIRMATION_PASSWORD};
+  PasswordForm::SubmissionIndicatorEvent expected_submission_event =
+      PasswordForm::SubmissionIndicatorEvent::HTML_FORM_SUBMISSION;
 
   EXPECT_CALL(*mock_autofill_download_manager_,
-              StartUploadRequest(_, false, expexted_field_types,
-                                 login_form_signature_, true));
+              StartUploadRequest(
+                  SubmissionEventIsSameAs(expected_submission_event), false,
+                  expected_field_types, login_form_signature_, true));
 
   EXPECT_TRUE(votes_uploader.UploadPasswordVote(
       form_to_upload_, submitted_form_, PASSWORD, login_form_signature_));
@@ -258,6 +271,38 @@ TEST_F(VotesUploaderTest, GeneratePasswordAttributesVote_OneCharacterPassword) {
   size_t reported_length =
       form_structure.get_password_length_vote_for_testing();
   EXPECT_EQ(1u, reported_length);
+}
+
+TEST_F(VotesUploaderTest, GeneratePasswordAttributesVote_AllAsciiCharacters) {
+  autofill::FormData form;
+  autofill::FormStructure form_structure(form);
+  VotesUploader votes_uploader(&client_, true);
+  votes_uploader.GeneratePasswordAttributesVote(
+      base::UTF8ToUTF16("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqr"
+                        "stuvwxyz!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"),
+      &form_structure);
+  base::Optional<std::pair<autofill::PasswordAttribute, bool>> vote =
+      form_structure.get_password_attributes_vote_for_testing();
+  EXPECT_TRUE(vote.has_value());
+}
+
+TEST_F(VotesUploaderTest, GeneratePasswordAttributesVote_NonAsciiPassword) {
+  // Checks that password attributes vote is not generated if the password has
+  // non-ascii characters.
+  for (const auto* password :
+       {"пароль1", "パスワード", "münchen", "סיסמה-A", "Σ-12345",
+        "գաղտնաբառըTTT", "Slaptažodis", "密碼", "كلمهالسر", "mậtkhẩu!",
+        "ລະຫັດຜ່ານ-l", "စကားဝှက်ကို3", "პაროლი", "पारण शब्द"}) {
+    autofill::FormData form;
+    autofill::FormStructure form_structure(form);
+    VotesUploader votes_uploader(&client_, true);
+    votes_uploader.GeneratePasswordAttributesVote(base::UTF8ToUTF16(password),
+                                                  &form_structure);
+    base::Optional<std::pair<autofill::PasswordAttribute, bool>> vote =
+        form_structure.get_password_attributes_vote_for_testing();
+
+    EXPECT_FALSE(vote.has_value()) << password;
+  }
 }
 
 }  // namespace password_manager

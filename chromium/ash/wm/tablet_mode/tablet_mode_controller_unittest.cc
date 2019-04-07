@@ -13,6 +13,7 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/overview/window_selector_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -22,7 +23,7 @@
 #include "chromeos/accelerometer/accelerometer_types.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_power_manager_client.h"
-#include "services/ui/public/cpp/input_devices/input_device_client_test_api.h"
+#include "services/ws/public/cpp/input_devices/input_device_client_test_api.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -85,6 +86,8 @@ class TabletModeControllerTest : public AshTestBase {
     // screen rotation tests.
     display::test::DisplayManagerTestApi(Shell::Get()->display_manager())
         .SetFirstDisplayAsInternalDisplay();
+
+    test_api_ = std::make_unique<TabletModeControllerTestApi>();
   }
 
   void TearDown() override {
@@ -124,7 +127,7 @@ class TabletModeControllerTest : public AshTestBase {
   // null value initial value.
   void AttachTickClockForTest() {
     test_tick_clock_.Advance(base::TimeDelta::FromSeconds(1));
-    tablet_mode_controller()->SetTickClockForTest(&test_tick_clock_);
+    test_api_->set_tick_clock(&test_tick_clock_);
   }
 
   void AdvanceTickClock(const base::TimeDelta& delta) {
@@ -151,37 +154,37 @@ class TabletModeControllerTest : public AshTestBase {
   void OpenLid() {
     tablet_mode_controller()->LidEventReceived(
         chromeos::PowerManagerClient::LidState::OPEN,
-        tablet_mode_controller()->tick_clock_->NowTicks());
+        test_api_->tick_clock()->NowTicks());
   }
 
   void CloseLid() {
     tablet_mode_controller()->LidEventReceived(
         chromeos::PowerManagerClient::LidState::CLOSED,
-        tablet_mode_controller()->tick_clock_->NowTicks());
+        test_api_->tick_clock()->NowTicks());
   }
 
-  bool CanUseUnstableLidAngle() {
-    return tablet_mode_controller()->CanUseUnstableLidAngle();
-  }
+  bool CanUseUnstableLidAngle() { return test_api_->CanUseUnstableLidAngle(); }
 
   void SetTabletMode(bool on) {
     tablet_mode_controller()->TabletModeEventReceived(
         on ? chromeos::PowerManagerClient::TabletMode::ON
            : chromeos::PowerManagerClient::TabletMode::OFF,
-        tablet_mode_controller()->tick_clock_->NowTicks());
+        test_api_->tick_clock()->NowTicks());
   }
 
   bool AreEventsBlocked() {
-    return tablet_mode_controller()->AreEventsBlocked();
+    return tablet_mode_controller()->AreInternalInputDeviceEventsBlocked();
   }
 
-  TabletModeController::UiMode forced_ui_mode() {
-    return tablet_mode_controller()->force_ui_mode_;
+  TabletModeController::UiMode forced_ui_mode() const {
+    return test_api_->force_ui_mode();
   }
 
   base::UserActionTester* user_action_tester() { return &user_action_tester_; }
 
  private:
+  std::unique_ptr<TabletModeControllerTestApi> test_api_;
+
   base::SimpleTestTickClock test_tick_clock_;
 
   // Tracks user action counts.
@@ -698,7 +701,7 @@ TEST_F(TabletModeControllerTest, ForceTabletModeTest) {
   EXPECT_TRUE(AreEventsBlocked());
 
   // Tests that attaching a external mouse will not change the mode.
-  ui::InputDeviceClientTestApi().SetMouseDevices({ui::InputDevice(
+  ws::InputDeviceClientTestApi().SetMouseDevices({ui::InputDevice(
       3, ui::InputDeviceType::INPUT_DEVICE_EXTERNAL, "mouse")});
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(IsTabletModeStarted());
@@ -787,7 +790,7 @@ TEST_F(TabletModeControllerTest, CannotEnterTabletModeWithExternalMouse) {
   // Set the current list of devices to empty so that they don't interfere
   // with the test.
   base::RunLoop().RunUntilIdle();
-  ui::InputDeviceClientTestApi().SetMouseDevices({});
+  ws::InputDeviceClientTestApi().SetMouseDevices({});
   base::RunLoop().RunUntilIdle();
 
   OpenLidToAngle(300.0f);
@@ -797,7 +800,7 @@ TEST_F(TabletModeControllerTest, CannotEnterTabletModeWithExternalMouse) {
   EXPECT_FALSE(IsTabletModeStarted());
 
   // Attach a external mouse.
-  ui::InputDeviceClientTestApi().SetMouseDevices({ui::InputDevice(
+  ws::InputDeviceClientTestApi().SetMouseDevices({ui::InputDevice(
       3, ui::InputDeviceType::INPUT_DEVICE_EXTERNAL, "mouse")});
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(IsTabletModeStarted());
@@ -813,7 +816,7 @@ TEST_F(TabletModeControllerTest, LeaveTabletModeWhenExternalMouseConnected) {
   // Set the current list of devices to empty so that they don't interfere
   // with the test.
   base::RunLoop().RunUntilIdle();
-  ui::InputDeviceClientTestApi().SetMouseDevices({});
+  ws::InputDeviceClientTestApi().SetMouseDevices({});
   base::RunLoop().RunUntilIdle();
 
   // Start in tablet mode.
@@ -823,14 +826,14 @@ TEST_F(TabletModeControllerTest, LeaveTabletModeWhenExternalMouseConnected) {
 
   // Attach external mouse and keyboard. Verify that tablet mode has ended, but
   // events are still blocked because the keyboard is still facing the bottom.
-  ui::InputDeviceClientTestApi().SetMouseDevices({ui::InputDevice(
+  ws::InputDeviceClientTestApi().SetMouseDevices({ui::InputDevice(
       3, ui::InputDeviceType::INPUT_DEVICE_EXTERNAL, "mouse")});
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(IsTabletModeStarted());
   EXPECT_TRUE(AreEventsBlocked());
 
   // Verify that after unplugging the mouse, tablet mode will resume.
-  ui::InputDeviceClientTestApi().SetMouseDevices({});
+  ws::InputDeviceClientTestApi().SetMouseDevices({});
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(IsTabletModeStarted());
   EXPECT_TRUE(AreEventsBlocked());

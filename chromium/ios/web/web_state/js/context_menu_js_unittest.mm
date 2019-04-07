@@ -10,18 +10,11 @@
 #import <WebKit/WebKit.h>
 
 #include "base/macros.h"
-#include "base/strings/stringprintf.h"
-#include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "ios/web/public/test/js_test_util.h"
 #include "ios/web/public/test/web_test.h"
-#import "ios/web/public/test/web_test_with_web_state.h"
-#import "ios/web/public/web_state/ui/crw_web_view_proxy.h"
-#import "ios/web/public/web_state/ui/crw_web_view_scroll_view_proxy.h"
-#import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_view_creation_util.h"
 #import "ios/web/web_state/context_menu_constants.h"
-#import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
 #import "net/base/mac/url_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
@@ -52,371 +45,89 @@ using base::test::ios::WaitUntilConditionOrTimeout;
 
 namespace {
 
-// Test coordinates and expected result for __gCrWeb.getElementFromPoint call.
-struct TestCoordinatesAndExpectedValue {
-  TestCoordinatesAndExpectedValue(CGFloat x, CGFloat y, id expected_value)
-      : x(x), y(y), expected_value(expected_value) {}
-  CGFloat x = 0;
-  CGFloat y = 0;
-  id expected_value = nil;
-};
-
 // Request id used for __gCrWeb.findElementAtPoint call.
 NSString* const kRequestId = @"UNIQUE_IDENTIFIER";
 
+// The base url for loaded web pages.
 const char kTestUrl[] = "https://chromium.test/";
 
-// Page html template for image tester helper functions.
-NSString* kPageContentTemplate =
-    @"<html><body style='margin-left:10px;margin-top:10px;'>"
-     "<div style='width:100px;height:100px;'>"
-     "  <p style='position:absolute;left:25px;top:25px;"
-     "      width:50px;height:50px'>"
-     "%@"
-     "    Chrome rocks!"
-     "  </p></div></body></html>";
+// A point in the web view's coordinate space on the link returned by
+// |GetHtmlForLink()|.
+const CGPoint kPointOnLink = {5.0, 2.0};
+// A point in the web view's coordinate space on the image returned by
+// |GetHtmlForImage()|.
+const CGPoint kPointOnImage = {50.0, 10.0};
+// A point in the web view's coordinate space within the document bounds but not
+// on the image returned by |GetHtmlForImage()|.
+const CGPoint kPointOutsideImage = {50.0, 75.0};
+// A point in the web view's coordinate space outside of the document bounds.
+const CGPoint kPointOutsideDocument = {150.0, 150.0};
+
+// A base64 encoded svg image of a blue square.
+NSString* const kImageSource =
+    @"data:image/"
+    @"svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiI"
+     "HN0YW5kYWxvbmU9InllcyI/"
+     "Pgo8c3ZnIHdpZHRoPSI2MDAiIGhlaWdodD0iNjAwIiB4bWxucz0i"
+     "aHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEuMSI+"
+     "CjxyZWN0IHdpZHRoPSI"
+     "2MDAiIGhlaWdodD0iNjAwIiBmaWxsPSIjMDA2NmZmIi8+Cjwvc3ZnPg==";
+
+// Style used to size the image returned by |GetHtmlForImage()|.
+NSString* const kImageSizeStyle = @"width:100%;height:25%;";
+
+// Returns HTML for a test webpage with the given |head| and |body|.
+NSString* GetHtmlForPage(NSString* head, NSString* body) {
+  return [NSString
+      stringWithFormat:
+          @"<html><head>"
+           "<style>body { font-size:14em; }</style>"
+           "<meta name=\"viewport\" content=\"user-scalable=no, width=100\">"
+           "%@"
+           "</head><body><p>%@</p></body></html>",
+          head ? head : @"", body];
+}
+
+// Returns HTML for a link to |href|, display |text|, and inline |style|.
+NSString* GetHtmlForLink(NSString* href, NSString* text, NSString* style) {
+  NSString* style_attribute =
+      style ? [NSString stringWithFormat:@"style=\"%@\" ", style] : @"";
+  return [NSString
+      stringWithFormat:@"<a %@href=\"%@\">%@</a>", style_attribute, href, text];
+}
+
+// Returns HTML for a link to |href| and display text |text|.
+NSString* GetHtmlForLink(NSString* href, NSString* text) {
+  return GetHtmlForLink(href, text, /*style=*/nil);
+}
+
+// Returns html for an image styled to fill the width and top 25% of its
+// container. |source| must be provided, but specifying an image |title| and
+// inline |style| are optional.
+NSString* GetHtmlForImage(NSString* source, NSString* title, NSString* style) {
+  NSString* additional_css = style ? style : @"";
+  NSString* image_title =
+      title ? [NSString stringWithFormat:@"title='%@' ", title] : @"";
+  return [NSString
+      stringWithFormat:@"<img id='image' %@style='%@%@' src='%@'/>",
+                       image_title, kImageSizeStyle, additional_css, source];
+}
+
+// Returns html for an image styled to fill the width and top 25% of its
+// container.
+NSString* GetHtmlForImage() {
+  return GetHtmlForImage(kImageSource, /*title=*/nil, /*style=*/nil);
+}
+
+// Returns html for an image styled to fill the width and top 25% of its
+// container.
+NSString* ImageHtmlWithSource(NSString* source) {
+  return GetHtmlForImage(source, /*title=*/nil, /*style=*/nil);
+}
 
 }  // namespace
 
 namespace web {
-
-// Test fixture to test __gCrWeb.getElementFromPoint function defined in
-// context_menu.js.
-class ContextMenuJsTest : public web::WebTestWithWebState {
- protected:
-  // Verifies that __gCrWeb.getElementFromPoint returns |expected_value| for
-  // the given image |html|.
-  void ImageTesterHelper(NSString* html, NSDictionary* expected_value) {
-    NSString* page_content =
-        [NSString stringWithFormat:kPageContentTemplate, html];
-
-    TestCoordinatesAndExpectedValue test_data[] = {
-        // Point outside the document margins.
-        {0, 0, @{}},
-        // Point inside the <p> element.
-        {20, 20, expected_value},
-        // Point outside the <p> element.
-        {GetWebViewContentSize().width / 2, 50, @{}},
-    };
-    for (size_t i = 0; i < arraysize(test_data); i++) {
-      const TestCoordinatesAndExpectedValue& data = test_data[i];
-      LoadHtml(page_content);
-      ExecuteJavaScript(@"document.getElementsByTagName('p')");  // Force layout
-      id result = ExecuteGetElementFromPointJavaScript(data.x, data.y);
-      EXPECT_NSEQ(data.expected_value, result)
-          << " in test " << i << ": (" << data.x << ", " << data.y << ")";
-    }
-  }
-  // Returns web view's content size from the current web state.
-  CGSize GetWebViewContentSize() {
-    return web_state()->GetWebViewProxy().scrollViewProxy.contentSize;
-  }
-
-  // Executes __gCrWeb.getElementFromPoint script and syncronously returns the
-  // result. |x| and |y| are points in web view coordinate system.
-  id ExecuteGetElementFromPointJavaScript(CGFloat x, CGFloat y) {
-    CGSize contentSize = GetWebViewContentSize();
-    NSString* const script = [NSString
-        stringWithFormat:@"__gCrWeb.getElementFromPoint(%g, %g, %g, %g)", x, y,
-                         contentSize.width, contentSize.height];
-    return ExecuteJavaScript(script);
-  }
-};
-
-// Tests that __gCrWeb.getElementFromPoint function returns correct src.
-TEST_F(ContextMenuJsTest, GetImageUrlAtPoint) {
-  NSString* html =
-      @"<img id='foo' style='width:200;height:200;' src='file:///bogus'/>";
-  NSDictionary* expected_value = @{
-    kContextMenuElementSource : @"file:///bogus",
-    kContextMenuElementReferrerPolicy : @"default",
-  };
-  ImageTesterHelper(html, expected_value);
-}
-
-// Tests that __gCrWeb.getElementFromPoint function returns correct title.
-TEST_F(ContextMenuJsTest, GetImageTitleAtPoint) {
-  NSString* html =
-      @"<img id='foo' title='Hello world!'"
-       "style='width:200;height:200;' src='file:///bogus'/>";
-  NSDictionary* expected_value = @{
-    kContextMenuElementSource : @"file:///bogus",
-    kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementTitle : @"Hello world!",
-  };
-  ImageTesterHelper(html, expected_value);
-}
-
-// Tests that __gCrWeb.getElementFromPoint function returns correct href.
-TEST_F(ContextMenuJsTest, GetLinkImageUrlAtPoint) {
-  NSString* html =
-      @"<a href='file:///linky'>"
-       "<img id='foo' style='width:200;height:200;' src='file:///bogus'/>"
-       "</a>";
-  NSDictionary* expected_value = @{
-    kContextMenuElementSource : @"file:///bogus",
-    kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : @"file:///linky",
-  };
-  ImageTesterHelper(html, expected_value);
-}
-
-TEST_F(ContextMenuJsTest, TextAreaStopsProximity) {
-  NSString* html =
-      @"<html><body style='margin-left:10px;margin-top:10px;'>"
-       "<div style='width:100px;height:100px;'>"
-       "<img id='foo'"
-       "    style='position:absolute;left:0px;top:0px;width:50px;height:50px'"
-       "    src='file:///bogus' />"
-       "<input type='text' name='name'"
-       "       style='position:absolute;left:5px;top:5px; "
-       "width:40px;height:40px'/>"
-       "</div></body> </html>";
-
-  NSDictionary* success = @{
-    kContextMenuElementSource : @"file:///bogus",
-    kContextMenuElementReferrerPolicy : @"default",
-  };
-  NSDictionary* failure = @{};
-
-  TestCoordinatesAndExpectedValue test_data[] = {
-      {2, 20, success}, {10, 10, failure},
-  };
-
-  for (size_t i = 0; i < arraysize(test_data); i++) {
-    const TestCoordinatesAndExpectedValue& data = test_data[i];
-    LoadHtml(html);
-    ExecuteJavaScript(@"document.getElementsByTagName('img')");  // Force layout
-    id result = ExecuteGetElementFromPointJavaScript(data.x, data.y);
-    EXPECT_NSEQ(data.expected_value, result)
-        << " in test " << i << ": (" << data.x << ", " << data.y << ")";
-  }
-}
-
-// Tests the javascript of the url of the an image present in the DOM.
-// TODO(crbug.com/796418): This test is flaky on devices.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_LinkOfImage LinkOfImage
-#else
-#define MAYBE_LinkOfImage FLAKY_LinkOfImage
-#endif
-TEST_F(ContextMenuJsTest, MAYBE_LinkOfImage) {
-  // A page with a large image surrounded by a link.
-  static const char image[] =
-      "<a href='%s'><img width=400 height=400 src='foo'></img></a>";
-
-  // A page with a link to a destination URL.
-  ASSERT_TRUE(LoadHtml(base::StringPrintf(image, "http://destination")));
-  ExecuteJavaScript(@"document.getElementsByTagName('img')");  // Force layout.
-
-  id result = ExecuteGetElementFromPointJavaScript(20, 20);
-  NSDictionary* expected_result = @{
-    kContextMenuElementSource :
-        [NSString stringWithFormat:@"%sfoo", BaseUrl().c_str()],
-    kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : @"http://destination/",
-  };
-  EXPECT_NSEQ(expected_result, result);
-
-  // A page with a link with some JavaScript that does not result in a NOP.
-  ASSERT_TRUE(LoadHtml(
-      base::StringPrintf(image, "javascript:console.log('whatever')")));
-  result = ExecuteGetElementFromPointJavaScript(20, 20);
-  expected_result = @{
-    kContextMenuElementSource :
-        [NSString stringWithFormat:@"%sfoo", BaseUrl().c_str()],
-    kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : @"javascript:console.log(",
-  };
-  EXPECT_NSEQ(expected_result, result);
-
-  // A list of JavaScripts that result in a NOP.
-  std::vector<std::string> nop_javascripts;
-  nop_javascripts.push_back(";");
-  nop_javascripts.push_back("void(0);");
-  nop_javascripts.push_back("void(0);  void(0); void(0)");
-
-  for (auto js : nop_javascripts) {
-    // A page with a link with some JavaScript that results in a NOP.
-    const std::string javascript = std::string("javascript:") + js;
-    ASSERT_TRUE(LoadHtml(base::StringPrintf(image, javascript.c_str())));
-    result = ExecuteGetElementFromPointJavaScript(20, 20);
-    expected_result = @{
-      kContextMenuElementSource :
-          [NSString stringWithFormat:@"%sfoo", BaseUrl().c_str()],
-      kContextMenuElementReferrerPolicy : @"default",
-    };
-    // Make sure the returned JSON does not have an 'href' key.
-    EXPECT_NSEQ(expected_result, result);
-  }
-}
-
-// Tests context menu invoked on an image with "-webkit-touch-callout:none"
-// style and parent link.
-TEST_F(ContextMenuJsTest, LinkOfImageWithCalloutNone) {
-  // A page with an image surrounded by a link.
-  static const char image_html[] =
-      "<a href='%s'>"
-      "<img style='width:9;height:9;display:block;-webkit-touch-callout:none;'>"
-      "</a>";
-
-  // A page with a link to a destination URL.
-  ASSERT_TRUE(LoadHtml(base::StringPrintf(image_html, "http://destination")));
-  ExecuteJavaScript(@"document.getElementsByTagName('img')");  // Force layout.
-  id result = ExecuteGetElementFromPointJavaScript(5, 5);
-  NSDictionary* expected_result = @{
-    kContextMenuElementInnerText : @"",
-    kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : @"http://destination/",
-  };
-  EXPECT_NSEQ(expected_result, result);
-}
-
-// Tests that the GetElementFromPoint script reports "never" as the referrer
-// policy for pages that have an unsupported policy in a meta tag.
-TEST_F(ContextMenuJsTest, UnsupportedReferrerPolicy) {
-  // A page with an unsupported referrer meta tag and a 400x400 image.
-  static const char kInvalidReferrerTag[] =
-      "<meta name=\"referrer\" content=\"unsupported-value\">"
-      "<img width=400 height=400 src='foo'></img>";
-
-  // Load the invalid meta tag
-  ASSERT_TRUE(LoadHtml(kInvalidReferrerTag));
-  ExecuteJavaScript(@"document.getElementsByTagName('img')");  // Force layout
-  id result = ExecuteGetElementFromPointJavaScript(20, 20);
-  ASSERT_TRUE([result isKindOfClass:[NSDictionary class]]);
-  EXPECT_NSEQ(@"never", result[kContextMenuElementReferrerPolicy]);
-}
-
-// Tests that getElementFromPoint finds an element at the bottom of a very long
-// page.
-// TODO(crbug.com/796418): This test is flaky on devices.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_LinkOfTextFromTallPage LinkOfTextFromTallPage
-#else
-#define MAYBE_LinkOfTextFromTallPage FLAKY_LinkOfTextFromTallPage
-#endif
-TEST_F(ContextMenuJsTest, MAYBE_LinkOfTextFromTallPage) {
-  const char kHtml[] =
-      "<html><body>"
-      " <div style='height:4000px'></div>"
-      " <div><a href='http://destination'>link</a></div>"
-      "</body></html>";
-  ASSERT_TRUE(LoadHtml(kHtml));
-
-  // Scroll the webView to the bottom to make the link accessible.
-  CGFloat content_height = GetWebViewContentSize().height;
-  CGFloat scroll_view_height =
-      CGRectGetHeight(web_state()->GetWebViewProxy().scrollViewProxy.frame);
-  CGFloat offset = content_height - scroll_view_height;
-  web_state()->GetWebViewProxy().scrollViewProxy.contentOffset =
-      CGPointMake(0.0, offset);
-
-  ExecuteJavaScript(@"document.getElementsByTagName('a')");  // Force layout.
-
-  // Link is at bottom of the page content.
-  id result = ExecuteGetElementFromPointJavaScript(1, content_height - 5.0);
-  NSDictionary* expected_result = @{
-    kContextMenuElementInnerText : @"link",
-    kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : @"http://destination/",
-  };
-  EXPECT_NSEQ(expected_result, result);
-}
-
-// Tests that a callout information about a link is displayed when
-// -webkit-touch-callout property is not specified. Please see:
-// https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
-TEST_F(ContextMenuJsTest, LinkOfTextWithoutCalloutProperty) {
-  const char kLinkHtml[] = "<a href='%s'>link</a>";
-
-  ASSERT_TRUE(LoadHtml(base::StringPrintf(kLinkHtml, "http://destination")));
-  ExecuteJavaScript(@"document.getElementsByTagName('a')");  // Force layout.
-
-  id result = ExecuteGetElementFromPointJavaScript(1, 1);
-  NSDictionary* expected_result = @{
-    kContextMenuElementInnerText : @"link",
-    kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : @"http://destination/",
-  };
-  EXPECT_NSEQ(expected_result, result);
-}
-
-// Tests that a callout information about a link is displayed when
-// -webkit-touch-callout property is set to default. Please see:
-// https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
-// TODO(crbug.com/796343): This test is flaky on iOS 11 device.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_LinkOfTextWithCalloutDefault LinkOfTextWithCalloutDefault
-#else
-#define MAYBE_LinkOfTextWithCalloutDefault FLAKY_LinkOfTextWithCalloutDefault
-#endif
-TEST_F(ContextMenuJsTest, MAYBE_LinkOfTextWithCalloutDefault) {
-  const char kLinkHtml[] =
-      "<a href='%s' style='-webkit-touch-callout:default;'>link</a>";
-
-  ASSERT_TRUE(LoadHtml(base::StringPrintf(kLinkHtml, "http://destination")));
-  ExecuteJavaScript(@"document.getElementsByTagName('a')");  // Force layout.
-
-  id result = ExecuteGetElementFromPointJavaScript(1, 1);
-  NSDictionary* expected_result = @{
-    kContextMenuElementInnerText : @"link",
-    kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : @"http://destination/",
-  };
-  EXPECT_NSEQ(expected_result, result);
-}
-
-// Tests that no callout information about a link is displayed when
-// -webkit-touch-callout property is set to none. Please see:
-// https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
-TEST_F(ContextMenuJsTest, LinkOfTextWithCalloutNone) {
-  const char kLinkHtml[] =
-      "<a href='%s' style='-webkit-touch-callout:none;'>link</a>";
-
-  ASSERT_TRUE(LoadHtml(base::StringPrintf(kLinkHtml, "http://destination")));
-  ExecuteJavaScript(@"document.getElementsByTagName('a')");  // Force layout.
-
-  id result = ExecuteGetElementFromPointJavaScript(1, 1);
-  EXPECT_NSEQ(@{}, result);
-}
-
-// Tests that -webkit-touch-callout property can be inherited from ancester if
-// it's not specified. Please see:
-// https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
-TEST_F(ContextMenuJsTest, LinkOfTextWithCalloutFromAncester) {
-  const char kLinkHtml[] =
-      "<body style='-webkit-touch-callout: none'>"
-      " <a href='%s'>link</a>"
-      "</body>";
-
-  ASSERT_TRUE(LoadHtml(base::StringPrintf(kLinkHtml, "http://destination")));
-  ExecuteJavaScript(@"document.getElementsByTagName('a')");  // Force layout.
-
-  id result = ExecuteGetElementFromPointJavaScript(1, 1);
-  EXPECT_NSEQ(@{}, result);
-}
-
-// Tests that setting -webkit-touch-callout property can override the value
-// inherited from ancester. Please see:
-// https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
-TEST_F(ContextMenuJsTest, LinkOfTextWithCalloutOverride) {
-  const char kLinkHtml[] =
-      "<body style='-webkit-touch-callout: none'>"
-      " <a href='%s' style='-webkit-touch-callout: default'>link</a>"
-      "</body>";
-
-  ASSERT_TRUE(LoadHtml(base::StringPrintf(kLinkHtml, "http://destination")));
-  ExecuteJavaScript(@"document.getElementsByTagName('a')");  // Force layout.
-
-  id result = ExecuteGetElementFromPointJavaScript(1, 1);
-  NSDictionary* expected_result = @{
-    kContextMenuElementInnerText : @"link",
-    kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : @"http://destination/",
-  };
-  EXPECT_NSEQ(expected_result, result);
-}
 
 // Test fixture to test __gCrWeb.findElementAtPoint function defined in
 // context_menu.js.
@@ -432,18 +143,19 @@ class ContextMenuJsFindElementAtPointTest : public web::WebTest {
   }
 
  protected:
-  // Returns details of the DOM element at the given |x| and |y| coordinates.
-  // The given point is in the device's coordinate space.
-  id FindElementAtPoint(CGFloat x, CGFloat y) {
-    EXPECT_TRUE(web::WaitForInjectedScripts(web_view_));
+  // Returns details of the DOM element at the given |point| in the web view
+  // viewport's coordinate space.
+  id FindElementAtPoint(CGPoint point) {
+    EXPECT_TRUE(web::test::WaitForInjectedScripts(web_view_));
 
     // Force layout
-    web::ExecuteJavaScript(web_view_, @"document.getElementsByTagName('p')");
+    web::test::ExecuteJavaScript(web_view_,
+                                 @"document.getElementsByTagName('p')");
 
     // Clear previous script message response.
     script_message_handler_.lastReceivedScriptMessage = nil;
 
-    ExecuteFindElementFromPointJavaScript(x, y);
+    ExecuteFindElementFromPointJavaScript(point);
 
     // Wait for response.
     EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
@@ -459,14 +171,14 @@ class ContextMenuJsFindElementAtPointTest : public web::WebTest {
   // Returns the test page URL.
   NSURL* GetTestURL() { return net::NSURLWithGURL(GURL(kTestUrl)); }
 
-  // Executes __gCrWeb.findElementAtPoint script. |x| and |y| are points in web
-  // view coordinate system.
-  id ExecuteFindElementFromPointJavaScript(CGFloat x, CGFloat y) {
+  // Executes __gCrWeb.findElementAtPoint script with the given |point| in the
+  // web view viewport's coordinate space.
+  id ExecuteFindElementFromPointJavaScript(CGPoint point) {
+    CGSize size = GetWebViewContentSize();
     NSString* const script = [NSString
         stringWithFormat:@"__gCrWeb.findElementAtPoint('%@', %g, %g, %g, %g)",
-                         kRequestId, x, y, GetWebViewContentSize().width,
-                         GetWebViewContentSize().height];
-    return web::ExecuteJavaScript(web_view_, script);
+                         kRequestId, point.x, point.y, size.width, size.height];
+    return web::test::ExecuteJavaScript(web_view_, script);
   }
 
   // Handles script message responses sent from |web_view_|.
@@ -480,67 +192,58 @@ class ContextMenuJsFindElementAtPointTest : public web::WebTest {
 
 // Tests that the correct src and referrer are found for an image.
 TEST_F(ContextMenuJsFindElementAtPointTest, FindImageElementAtPoint) {
-  NSString* image =
-      @"<img id='foo' style='width:200;height:200;' src='file:///bogus'/>";
+  NSString* html = GetHtmlForPage(/*head=*/nil, GetHtmlForImage());
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  NSString* html = [NSString stringWithFormat:kPageContentTemplate, image];
-  ASSERT_TRUE(web::LoadHtml(web_view_, html, GetTestURL()));
-
-  id result = FindElementAtPoint(20, 20);
+  id result = FindElementAtPoint(kPointOnImage);
   NSDictionary* expected_value = @{
     kContextMenuElementRequestId : kRequestId,
-    kContextMenuElementSource : @"file:///bogus",
+    kContextMenuElementSource : kImageSource,
     kContextMenuElementReferrerPolicy : @"default",
   };
+
   EXPECT_NSEQ(expected_value, result);
 }
 
 // Tests that the correct title is found for an image.
 TEST_F(ContextMenuJsFindElementAtPointTest, FindImageElementWithTitleAtPoint) {
-  NSString* image =
-      @"<img id='foo' title='Hello world!'"
-       "style='width:200;height:200;' src='file:///bogus'/>";
+  NSString* const image_title = @"Hello world!";
+  NSString* html = GetHtmlForPage(
+      /*head=*/nil, GetHtmlForImage(kImageSource, image_title, /*style=*/nil));
 
-  NSString* html = [NSString stringWithFormat:kPageContentTemplate, image];
-  ASSERT_TRUE(web::LoadHtml(web_view_, html, GetTestURL()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  id result = FindElementAtPoint(20, 20);
+  id result = FindElementAtPoint(kPointOnImage);
   NSDictionary* expected_value = @{
     kContextMenuElementRequestId : kRequestId,
-    kContextMenuElementSource : @"file:///bogus",
+    kContextMenuElementSource : kImageSource,
     kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementTitle : @"Hello world!",
+    kContextMenuElementTitle : image_title,
   };
   EXPECT_NSEQ(expected_value, result);
 }
 
-// Tests that image details are not reutrned for a point outside of the document
+// Tests that image details are not returned for a point outside of the document
 // margins.
 TEST_F(ContextMenuJsFindElementAtPointTest,
        FindImageElementAtPointOutsideDocument) {
-  NSString* image =
-      @"<img id='foo' style='width:200;height:200;' src='file:///bogus'/>";
+  NSString* html = GetHtmlForPage(/*head=*/nil, GetHtmlForImage());
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  NSString* html = [NSString stringWithFormat:kPageContentTemplate, image];
-  ASSERT_TRUE(web::LoadHtml(web_view_, html, GetTestURL()));
-
-  id result = FindElementAtPoint(0, 0);
+  id result = FindElementAtPoint(kPointOutsideDocument);
   NSDictionary* expected_value = @{
     kContextMenuElementRequestId : kRequestId,
   };
   EXPECT_NSEQ(expected_value, result);
 }
 
-// Tests that image details are not reutrned for a point outside of the element.
+// Tests that image details are not returned for a point outside of the element.
 TEST_F(ContextMenuJsFindElementAtPointTest,
        FindImageElementAtPointOutsideElement) {
-  NSString* image =
-      @"<img id='foo' style='width:200;height:200;' src='file:///bogus'/>";
+  NSString* html = GetHtmlForPage(/*head=*/nil, GetHtmlForImage());
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  NSString* html = [NSString stringWithFormat:kPageContentTemplate, image];
-  ASSERT_TRUE(web::LoadHtml(web_view_, html, GetTestURL()));
-
-  id result = FindElementAtPoint(GetWebViewContentSize().width / 2, 50);
+  id result = FindElementAtPoint(kPointOutsideImage);
   NSDictionary* expected_value = @{
     kContextMenuElementRequestId : kRequestId,
   };
@@ -551,29 +254,18 @@ TEST_F(ContextMenuJsFindElementAtPointTest,
 
 // Tests that an image link returns details for both the image and the link
 // destination when the image source is a file:// url.
-// TODO(crbug.com/796418): This test is flaky on devices.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_FindLinkImageAtPointForFileUrl FindLinkImageAtPointForFileUrl
-#else
-#define MAYBE_FindLinkImageAtPointForFileUrl \
-  FLAKY_FindLinkImageAtPointForFileUrl
-#endif
-TEST_F(ContextMenuJsFindElementAtPointTest,
-       MAYBE_FindLinkImageAtPointForFileUrl) {
-  NSString* link_image =
-      @"<a href='file:///linky'>"
-       "<img id='foo' style='width:200;height:200;' src='file:///bogus'/>"
-       "</a>";
+TEST_F(ContextMenuJsFindElementAtPointTest, FindLinkImageAtPointForFileUrl) {
+  NSString* const image_link = @"file:///linky";
+  NSString* html = GetHtmlForPage(
+      /*head=*/nil, GetHtmlForLink(image_link, GetHtmlForImage()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  NSString* html = [NSString stringWithFormat:kPageContentTemplate, link_image];
-  ASSERT_TRUE(web::LoadHtml(web_view_, html, GetTestURL()));
-
-  id result = FindElementAtPoint(20, 20);
+  id result = FindElementAtPoint(kPointOnImage);
   NSDictionary* expected_value = @{
     kContextMenuElementRequestId : kRequestId,
-    kContextMenuElementSource : @"file:///bogus",
+    kContextMenuElementSource : kImageSource,
     kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : @"file:///linky",
+    kContextMenuElementHyperlink : image_link,
   };
   EXPECT_NSEQ(expected_value, result);
 }
@@ -582,15 +274,12 @@ TEST_F(ContextMenuJsFindElementAtPointTest,
 // outside the document.
 TEST_F(ContextMenuJsFindElementAtPointTest,
        FindLinkImageAtPointOutsideDocument) {
-  NSString* link_image =
-      @"<a href='file:///linky'>"
-       "<img id='foo' style='width:200;height:200;' src='file:///bogus'/>"
-       "</a>";
+  NSString* const image_link = @"file:///linky";
+  NSString* html = GetHtmlForPage(
+      /*head=*/nil, GetHtmlForLink(image_link, GetHtmlForImage()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  NSString* html = [NSString stringWithFormat:kPageContentTemplate, link_image];
-  ASSERT_TRUE(web::LoadHtml(web_view_, html, GetTestURL()));
-
-  id result = FindElementAtPoint(0, 0);
+  id result = FindElementAtPoint(kPointOutsideDocument);
   NSDictionary* expected_value = @{
     kContextMenuElementRequestId : kRequestId,
   };
@@ -601,15 +290,12 @@ TEST_F(ContextMenuJsFindElementAtPointTest,
 // outside the element.
 TEST_F(ContextMenuJsFindElementAtPointTest,
        FindLinkImageAtPointOutsideElement) {
-  NSString* link_image =
-      @"<a href='file:///linky'>"
-       "<img id='foo' style='width:200;height:200;' src='file:///bogus'/>"
-       "</a>";
+  NSString* const image_link = @"file:///linky";
+  NSString* html = GetHtmlForPage(
+      /*head=*/nil, GetHtmlForLink(image_link, GetHtmlForImage()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  NSString* html = [NSString stringWithFormat:kPageContentTemplate, link_image];
-  ASSERT_TRUE(web::LoadHtml(web_view_, html, GetTestURL()));
-
-  id result = FindElementAtPoint(GetWebViewContentSize().width / 2, 50);
+  id result = FindElementAtPoint(kPointOutsideImage);
   NSDictionary* expected_value = @{
     kContextMenuElementRequestId : kRequestId,
   };
@@ -618,29 +304,22 @@ TEST_F(ContextMenuJsFindElementAtPointTest,
 
 // Tests that an image link returns details for both the image and the link
 // destination when the image source is a relative url.
-// TODO(crbug.com/817385): This test is flaky on devices.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_FindLinkImageAtPointForRelativeUrl \
-  FindLinkImageAtPointForRelativeUrl
-#else
-#define MAYBE_FindLinkImageAtPointForRelativeUrl \
-  FLAKY_FindLinkImageAtPointForRelativeUrl
-#endif
 TEST_F(ContextMenuJsFindElementAtPointTest,
-       MAYBE_FindLinkImageAtPointForRelativeUrl) {
-  NSString* kLinkDest = @"http://destination/";
-  NSString* kImageHtml =
-      @"<a href='%@'><img width=400 height=400 src='foo'></img></a>";
+       FindLinkImageAtPointForRelativeUrl) {
+  NSString* const image_link = @"http://destination/";
+  NSString* const relative_image_path = @"relativeImage";
+  NSString* html = GetHtmlForPage(
+      /*head=*/nil,
+      GetHtmlForLink(image_link, ImageHtmlWithSource(relative_image_path)));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  NSString* html = [NSString stringWithFormat:kImageHtml, kLinkDest];
-  ASSERT_TRUE(web::LoadHtml(web_view_, html, GetTestURL()));
-
-  id result = FindElementAtPoint(20, 20);
+  id result = FindElementAtPoint(kPointOnImage);
   NSDictionary* expected_result = @{
     kContextMenuElementRequestId : kRequestId,
-    kContextMenuElementSource : [NSString stringWithFormat:@"%sfoo", kTestUrl],
+    kContextMenuElementSource :
+        [NSString stringWithFormat:@"%s%@", kTestUrl, relative_image_path],
     kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : kLinkDest,
+    kContextMenuElementHyperlink : image_link,
   };
   EXPECT_NSEQ(expected_result, result);
 }
@@ -648,19 +327,22 @@ TEST_F(ContextMenuJsFindElementAtPointTest,
 // Tests that an image link returns details for both the image and the link when
 // the link points to JavaScript that is not a NOP.
 TEST_F(ContextMenuJsFindElementAtPointTest, FindImageLinkedToJavaScript) {
-  NSString* kImageHtml =
-      @"<a href='javascript:console.log('whatever')'>"
-       "<img width=400 height=400 src='foo'></img></a>";
+  NSString* const image_link = @"javascript:console.log('whatever')";
+  NSString* const relative_image_path = @"relativeImage";
+  NSString* html = GetHtmlForPage(
+      /*head=*/nil,
+      GetHtmlForLink(image_link, ImageHtmlWithSource(relative_image_path)));
 
   // A page with a link with some JavaScript that does not result in a NOP.
-  ASSERT_TRUE(web::LoadHtml(web_view_, kImageHtml, GetTestURL()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  id result = FindElementAtPoint(20, 20);
+  id result = FindElementAtPoint(kPointOnImage);
   NSDictionary* expected_result = @{
     kContextMenuElementRequestId : kRequestId,
-    kContextMenuElementSource : [NSString stringWithFormat:@"%sfoo", kTestUrl],
+    kContextMenuElementSource :
+        [NSString stringWithFormat:@"%s%@", kTestUrl, relative_image_path],
     kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : @"javascript:console.log(",
+    kContextMenuElementHyperlink : image_link,
   };
   EXPECT_NSEQ(expected_result, result);
 }
@@ -669,15 +351,19 @@ TEST_F(ContextMenuJsFindElementAtPointTest, FindImageLinkedToJavaScript) {
 // when the link points to NOP JavaScript.
 TEST_F(ContextMenuJsFindElementAtPointTest,
        FindImageLinkedToNOPJavaScriptSemicolon) {
-  NSString* kImageHtml =
-      @"<a href='javascript:;'><img width=400 height=400 src='foo'></img></a>";
+  NSString* const image_link = @"javascript:;";
+  NSString* const relative_image_path = @"relativeImage";
+  NSString* html = GetHtmlForPage(
+      /*head=*/nil,
+      GetHtmlForLink(image_link, ImageHtmlWithSource(relative_image_path)));
 
-  ASSERT_TRUE(web::LoadHtml(web_view_, kImageHtml, GetTestURL()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  id result = FindElementAtPoint(20, 20);
+  id result = FindElementAtPoint(kPointOnImage);
   NSDictionary* expected_result = @{
     kContextMenuElementRequestId : kRequestId,
-    kContextMenuElementSource : [NSString stringWithFormat:@"%sfoo", kTestUrl],
+    kContextMenuElementSource :
+        [NSString stringWithFormat:@"%s%@", kTestUrl, relative_image_path],
     kContextMenuElementReferrerPolicy : @"default",
   };
   // Make sure the returned JSON does not have an 'href' key.
@@ -688,16 +374,18 @@ TEST_F(ContextMenuJsFindElementAtPointTest,
 // when the link points to NOP JavaScript.
 TEST_F(ContextMenuJsFindElementAtPointTest,
        FindImageLinkedToNOPJavaScriptVoid) {
-  NSString* kImageHtml =
-      @"<a href='javascript:void(0);'>"
-       "<img width=400 height=400 src='foo'></img></a>";
+  NSString* const image_link = @"javascript:void(0);";
+  NSString* const relative_image_path = @"relativeImage";
+  NSString* html = GetHtmlForPage(
+      /*head=*/nil,
+      GetHtmlForLink(image_link, ImageHtmlWithSource(relative_image_path)));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  ASSERT_TRUE(web::LoadHtml(web_view_, kImageHtml, GetTestURL()));
-
-  id result = FindElementAtPoint(20, 20);
+  id result = FindElementAtPoint(kPointOnImage);
   NSDictionary* expected_result = @{
     kContextMenuElementRequestId : kRequestId,
-    kContextMenuElementSource : [NSString stringWithFormat:@"%sfoo", kTestUrl],
+    kContextMenuElementSource :
+        [NSString stringWithFormat:@"%s%@", kTestUrl, relative_image_path],
     kContextMenuElementReferrerPolicy : @"default",
   };
   // Make sure the returned JSON does not have an 'href' key.
@@ -708,16 +396,15 @@ TEST_F(ContextMenuJsFindElementAtPointTest,
 // when the link points to NOP JavaScript.
 TEST_F(ContextMenuJsFindElementAtPointTest,
        FindImageLinkedToNOPJavaScriptMultipleVoid) {
-  NSString* kImageHtml =
-      @"<a href='javascript:void(0);  void(0); void(0)'>"
-       "<img width=400 height=400 src='foo'></img></a>";
+  NSString* const image_link = @"javascript:void(0);  void(0); void(0)";
+  NSString* html = GetHtmlForPage(
+      /*head=*/nil, GetHtmlForLink(image_link, GetHtmlForImage()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  ASSERT_TRUE(web::LoadHtml(web_view_, kImageHtml, GetTestURL()));
-
-  id result = FindElementAtPoint(20, 20);
+  id result = FindElementAtPoint(kPointOnImage);
   NSDictionary* expected_result = @{
     kContextMenuElementRequestId : kRequestId,
-    kContextMenuElementSource : [NSString stringWithFormat:@"%sfoo", kTestUrl],
+    kContextMenuElementSource : kImageSource,
     kContextMenuElementReferrerPolicy : @"default",
   };
   // Make sure the returned JSON does not have an 'href' key.
@@ -727,21 +414,20 @@ TEST_F(ContextMenuJsFindElementAtPointTest,
 // Tests that only the parent link details are returned for an image with
 // "-webkit-touch-callout:none" style and a parent link.
 TEST_F(ContextMenuJsFindElementAtPointTest, LinkOfImageWithCalloutNone) {
-  NSString* kLinkDest = @"http://destination/";
-  NSString* kImageHtml =
-      @"<a href='%@'><img "
-       "style='width:9;height:9;display:block;-webkit-touch-callout:none;'>"
-       "</a>";
+  NSString* const image_link = @"http://destination/";
+  NSString* image_html = GetHtmlForImage(kImageSource, /*title=*/nil,
+                                         @"-webkit-touch-callout:none;");
+  NSString* html =
+      GetHtmlForPage(/*head=*/nil, GetHtmlForLink(image_link, image_html));
 
-  NSString* html = [NSString stringWithFormat:kImageHtml, kLinkDest];
-  ASSERT_TRUE(web::LoadHtml(web_view_, html, GetTestURL()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  id result = FindElementAtPoint(5, 5);
+  id result = FindElementAtPoint(kPointOnImage);
   NSDictionary* expected_result = @{
     kContextMenuElementRequestId : kRequestId,
     kContextMenuElementInnerText : @"",
     kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : kLinkDest,
+    kContextMenuElementHyperlink : image_link,
   };
   EXPECT_NSEQ(expected_result, result);
 }
@@ -751,20 +437,19 @@ TEST_F(ContextMenuJsFindElementAtPointTest, LinkOfImageWithCalloutNone) {
 // Tests that a text input field prevents returning details for an image behind
 // the field.
 TEST_F(ContextMenuJsFindElementAtPointTest, TextAreaStopsProximity) {
-  NSString* kHtml =
-      @"<html><body style='margin-left:10px;margin-top:10px;'>"
-       "<div style='width:100px;height:100px;'>"
-       "<img id='foo'"
-       "    style='position:absolute;left:0px;top:0px;width:50px;height:50px'"
-       "    src='file:///bogus' />"
-       "<input type='text' name='name'"
-       "       style='position:absolute;left:5px;top:5px; "
-       "width:40px;height:40px'/>"
-       "</div></body> </html>";
+  NSString* body = GetHtmlForImage();
+  // Cover the image with a text input.
+  NSString* text_area =
+      [NSString stringWithFormat:
+                    @"<input type='text' name='name' "
+                    @"style='position:absolute;left:0px;width:0px;%@'/>",
+                    kImageSizeStyle];
+  body = [body stringByAppendingString:text_area];
 
-  ASSERT_TRUE(web::LoadHtml(web_view_, kHtml, GetTestURL()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, GetHtmlForPage(/*head=*/nil, body),
+                                  GetTestURL()));
 
-  id result = FindElementAtPoint(10, 10);
+  id result = FindElementAtPoint(kPointOnImage);
   NSDictionary* expected_value = @{
     kContextMenuElementRequestId : kRequestId,
   };
@@ -774,53 +459,50 @@ TEST_F(ContextMenuJsFindElementAtPointTest, TextAreaStopsProximity) {
 // Tests that __gCrWeb.findElementAtPoint reports "never" as the referrer
 // policy for pages that have an unsupported policy in a meta tag.
 TEST_F(ContextMenuJsFindElementAtPointTest, UnsupportedReferrerPolicy) {
-  // A page with an unsupported referrer meta tag and a 400x400 image.
-  NSString* kInvalidReferrerTag =
-      @"<meta name=\"referrer\" content=\"unsupported-value\">"
-       "<img width=400 height=400 src='foo'></img>";
+  // A page with an unsupported referrer meta tag and an image.
+  NSString* const head =
+      @"<meta name=\"referrer\" content=\"unsupported-value\">";
+  NSString* html = GetHtmlForPage(head, GetHtmlForImage());
 
-  // Load the invalid meta tag
-  ASSERT_TRUE(web::LoadHtml(web_view_, kInvalidReferrerTag, GetTestURL()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  id result = FindElementAtPoint(20, 20);
+  id result = FindElementAtPoint(kPointOnImage);
   ASSERT_TRUE([result isKindOfClass:[NSDictionary class]]);
   EXPECT_NSEQ(@"never", result[kContextMenuElementReferrerPolicy]);
 }
 
 // Tests that __gCrWeb.findElementAtPoint finds an element at the bottom of a
 // very long page.
-// TODO(crbug.com/796418): This test is flaky on devices.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_LinkOfTextFromTallPageFindElementAtPoint LinkOfTextFromTallPage
-#else
-#define MAYBE_LinkOfTextFromTallPageFindElementAtPoint \
-  FLAKY_LinkOfTextFromTallPage
-#endif
-TEST_F(ContextMenuJsFindElementAtPointTest, MAYBE_LinkOfTextFromTallPage) {
-  NSString* kHtml =
-      @"<html><body>"
-       " <div style='height:4000px'></div>"
-       " <div><a href='http://destination'>link</a></div>"
-       "</body></html>";
+TEST_F(ContextMenuJsFindElementAtPointTest, LinkOfTextFromTallPage) {
+  NSString* const link = @"http://destination/";
+  NSString* body = @"<div style='height:4000px'></div>";
+  body = [body stringByAppendingString:GetHtmlForLink(link, @"link")];
 
-  ASSERT_TRUE(web::LoadHtml(web_view_, kHtml, GetTestURL()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, GetHtmlForPage(/*head=*/nil, body),
+                                  GetTestURL()));
 
   // Force layout to ensure |content_height| below is correct.
-  web::ExecuteJavaScript(web_view_, @"document.getElementsByTagName('p')");
+  EXPECT_TRUE(web::test::WaitForInjectedScripts(web_view_));
+  web::test::ExecuteJavaScript(web_view_,
+                               @"document.getElementsByTagName('p')");
 
   // Scroll the webView to the bottom to make the link accessible.
   CGFloat content_height = GetWebViewContentSize().height;
+  // Fail the test with a clear error if the content height can not be fetched.
+  ASSERT_GT(content_height, 0.0);
+
   CGFloat scroll_view_height = CGRectGetHeight(web_view_.scrollView.frame);
   CGFloat offset = content_height - scroll_view_height;
   web_view_.scrollView.contentOffset = CGPointMake(0.0, offset);
 
   // Link is at bottom of the page content.
-  id result = FindElementAtPoint(1, content_height - 5.0);
+  id result = FindElementAtPoint(CGPointMake(50.0, content_height - 100));
+
   NSDictionary* expected_result = @{
     kContextMenuElementRequestId : kRequestId,
     kContextMenuElementInnerText : @"link",
     kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : @"http://destination/",
+    kContextMenuElementHyperlink : link,
   };
   EXPECT_NSEQ(expected_result, result);
 }
@@ -829,18 +511,17 @@ TEST_F(ContextMenuJsFindElementAtPointTest, MAYBE_LinkOfTextFromTallPage) {
 // -webkit-touch-callout property is not specified. Please see:
 // https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
 TEST_F(ContextMenuJsFindElementAtPointTest, LinkOfTextWithoutCalloutProperty) {
-  NSString* kLinkDest = @"http://destination/";
-  NSString* kLinkHtml = @"<a href='%@'>link</a>";
+  NSString* const link = @"http://destination/";
+  NSString* html = GetHtmlForPage(/*head=*/nil, GetHtmlForLink(link, @"link"));
 
-  NSString* html = [NSString stringWithFormat:kLinkHtml, kLinkDest];
-  ASSERT_TRUE(web::LoadHtml(web_view_, html, GetTestURL()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  id result = FindElementAtPoint(1, 1);
+  id result = FindElementAtPoint(kPointOnLink);
   NSDictionary* expected_result = @{
     kContextMenuElementRequestId : kRequestId,
     kContextMenuElementInnerText : @"link",
     kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : kLinkDest,
+    kContextMenuElementHyperlink : link,
   };
   EXPECT_NSEQ(expected_result, result);
 }
@@ -848,30 +529,20 @@ TEST_F(ContextMenuJsFindElementAtPointTest, LinkOfTextWithoutCalloutProperty) {
 // Tests that a callout information about a link is displayed when
 // -webkit-touch-callout property is set to default. Please see:
 // https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
-// TODO(crbug.com/796343): This test is flaky on iOS 11 device.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_LinkOfTextWithCalloutDefaultFindElementAtPoint \
-  LinkOfTextWithCalloutDefault
-#else
-#define MAYBE_LinkOfTextWithCalloutDefaultFindElementAtPoint \
-  FLAKY_LinkOfTextWithCalloutDefault
-#endif
-TEST_F(ContextMenuJsFindElementAtPointTest,
-       MAYBE_LinkOfTextWithCalloutDefault) {
-  NSString* kLinkDest = @"http://destination/";
-  NSString* kLinkHtml =
-      @"<a href='%@' style='-webkit-touch-callout:default;'>"
-       "link</a>";
+TEST_F(ContextMenuJsFindElementAtPointTest, LinkOfTextWithCalloutDefault) {
+  NSString* const link = @"http://destination/";
+  NSString* const link_style = @"-webkit-touch-callout:default;";
+  NSString* html =
+      GetHtmlForPage(/*head=*/nil, GetHtmlForLink(link, @"link", link_style));
 
-  NSString* html = [NSString stringWithFormat:kLinkHtml, kLinkDest];
-  ASSERT_TRUE(web::LoadHtml(web_view_, html, GetTestURL()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  id result = FindElementAtPoint(1, 1);
+  id result = FindElementAtPoint(kPointOnLink);
   NSDictionary* expected_result = @{
     kContextMenuElementRequestId : kRequestId,
     kContextMenuElementInnerText : @"link",
     kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : kLinkDest,
+    kContextMenuElementHyperlink : link,
   };
   EXPECT_NSEQ(expected_result, result);
 }
@@ -880,13 +551,14 @@ TEST_F(ContextMenuJsFindElementAtPointTest,
 // -webkit-touch-callout property is set to none. Please see:
 // https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
 TEST_F(ContextMenuJsFindElementAtPointTest, LinkOfTextWithCalloutNone) {
-  NSString* kLinkHtml =
-      @"<a href='http://destination' "
-       "style='-webkit-touch-callout:none;'>link</a>";
+  NSString* const link = @"http://destination/";
+  NSString* const link_style = @"-webkit-touch-callout:none;";
+  NSString* html =
+      GetHtmlForPage(/*head=*/nil, GetHtmlForLink(link, @"link", link_style));
 
-  ASSERT_TRUE(web::LoadHtml(web_view_, kLinkHtml, GetTestURL()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  id result = FindElementAtPoint(1, 1);
+  id result = FindElementAtPoint(kPointOnLink);
   EXPECT_NSEQ(@{kContextMenuElementRequestId : kRequestId}, result);
 }
 
@@ -894,14 +566,13 @@ TEST_F(ContextMenuJsFindElementAtPointTest, LinkOfTextWithCalloutNone) {
 // if it's not specified. Please see:
 // https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
 TEST_F(ContextMenuJsFindElementAtPointTest, LinkOfTextWithCalloutFromAncester) {
-  NSString* kLinkHtml =
-      @"<body style='-webkit-touch-callout: none'>"
-       " <a href='http://destination'>link</a>"
-       "</body>";
+  NSString* const head = @"<style>body { -webkit-touch-callout:none; }</style>";
+  NSString* const link = @"http://destination/";
+  NSString* html = GetHtmlForPage(head, GetHtmlForLink(link, @"link"));
 
-  ASSERT_TRUE(web::LoadHtml(web_view_, kLinkHtml, GetTestURL()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  id result = FindElementAtPoint(1, 1);
+  id result = FindElementAtPoint(kPointOnLink);
   EXPECT_NSEQ(@{kContextMenuElementRequestId : kRequestId}, result);
 }
 
@@ -909,21 +580,20 @@ TEST_F(ContextMenuJsFindElementAtPointTest, LinkOfTextWithCalloutFromAncester) {
 // inherited from ancester. Please see:
 // https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
 TEST_F(ContextMenuJsFindElementAtPointTest, LinkOfTextWithCalloutOverride) {
-  NSString* kLinkDest = @"http://destination/";
-  NSString* kLinkHtml =
-      @"<body style='-webkit-touch-callout: none'>"
-       " <a href='%@' style='-webkit-touch-callout: default'>link</a>"
-       "</body>";
+  NSString* const head = @"<style>body { -webkit-touch-callout:none; }</style>";
+  NSString* const link = @"http://destination/";
+  NSString* const link_style = @"-webkit-touch-callout:default;";
+  NSString* html =
+      GetHtmlForPage(head, GetHtmlForLink(link, @"link", link_style));
 
-  NSString* html = [NSString stringWithFormat:kLinkHtml, kLinkDest];
-  ASSERT_TRUE(web::LoadHtml(web_view_, html, GetTestURL()));
+  ASSERT_TRUE(web::test::LoadHtml(web_view_, html, GetTestURL()));
 
-  id result = FindElementAtPoint(1, 1);
+  id result = FindElementAtPoint(kPointOnLink);
   NSDictionary* expected_result = @{
     kContextMenuElementRequestId : kRequestId,
     kContextMenuElementInnerText : @"link",
     kContextMenuElementReferrerPolicy : @"default",
-    kContextMenuElementHyperlink : kLinkDest,
+    kContextMenuElementHyperlink : link,
   };
   EXPECT_NSEQ(expected_result, result);
 }

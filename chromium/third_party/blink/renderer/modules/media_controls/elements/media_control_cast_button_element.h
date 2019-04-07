@@ -33,8 +33,8 @@ class MediaControlCastButtonElement final : public MediaControlInputElement {
   const char* GetNameForHistograms() const final;
 
  private:
-  void DefaultEventHandler(Event*) final;
-  bool KeepEventInNode(Event*) final;
+  void DefaultEventHandler(Event&) final;
+  bool KeepEventInNode(const Event&) const final;
 
   bool IsPlayingRemotely() const;
 

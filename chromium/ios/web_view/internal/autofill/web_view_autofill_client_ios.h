@@ -31,7 +31,8 @@ class WebViewAutofillClientIOS : public AutofillClient {
       web::WebState* web_state,
       id<CWVAutofillClientIOSBridge> bridge,
       identity::IdentityManager* identity_manager,
-      scoped_refptr<AutofillWebDataService> autofill_web_data_service);
+      scoped_refptr<AutofillWebDataService> autofill_web_data_service,
+      syncer::SyncService* sync_service);
   ~WebViewAutofillClientIOS() override;
 
   // AutofillClient implementation.
@@ -43,12 +44,17 @@ class WebViewAutofillClientIOS : public AutofillClient {
   ukm::SourceId GetUkmSourceId() override;
   AddressNormalizer* GetAddressNormalizer() override;
   security_state::SecurityLevel GetSecurityLevelForUmaHistograms() override;
-  void ShowAutofillSettings() override;
+  void ShowAutofillSettings(bool show_credit_card_settings) override;
   void ShowUnmaskPrompt(const CreditCard& card,
                         UnmaskCardReason reason,
                         base::WeakPtr<CardUnmaskDelegate> delegate) override;
   void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
-  void ShowLocalCardMigrationPrompt(base::OnceClosure closure) override;
+  void ShowLocalCardMigrationDialog(
+      base::OnceClosure show_migration_dialog_closure) override;
+  void ConfirmMigrateLocalCardToCloud(
+      std::unique_ptr<base::DictionaryValue> legal_message,
+      std::vector<MigratableCreditCard>& migratable_credit_cards,
+      base::OnceClosure start_migrating_cards_closure) override;
   void ConfirmSaveAutofillProfile(const AutofillProfile& profile,
                                   base::OnceClosure callback) override;
   void ConfirmSaveCreditCardLocally(const CreditCard& card,
@@ -95,6 +101,7 @@ class WebViewAutofillClientIOS : public AutofillClient {
   __weak id<CWVAutofillClientIOSBridge> bridge_;
   identity::IdentityManager* identity_manager_;
   scoped_refptr<AutofillWebDataService> autofill_web_data_service_;
+  syncer::SyncService* sync_service_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewAutofillClientIOS);
 };

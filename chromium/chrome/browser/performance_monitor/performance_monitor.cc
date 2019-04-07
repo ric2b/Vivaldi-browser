@@ -71,9 +71,9 @@ void GatherMetricsForRenderProcess(content::RenderProcessHost* host,
 
 }  // namespace
 
-PerformanceMonitor::PerformanceMonitor() {}
+PerformanceMonitor::PerformanceMonitor() = default;
 
-PerformanceMonitor::~PerformanceMonitor() {}
+PerformanceMonitor::~PerformanceMonitor() = default;
 
 // static
 PerformanceMonitor* PerformanceMonitor::GetInstance() {
@@ -150,7 +150,7 @@ void PerformanceMonitor::GatherMetricsMapOnIOThread(
   // See https://crbug.com/821453.
   for (content::BrowserChildProcessHostIterator iter; !iter.Done(); ++iter) {
     ProcessMetricsMetadata child_process_data;
-    child_process_data.handle = iter.GetData().handle;
+    child_process_data.handle = iter.GetData().GetHandle();
     child_process_data.process_type = iter.GetData().process_type;
 
     if (iter.GetData().name == base::ASCIIToUTF16(content::kFlashPluginName)) {

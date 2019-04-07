@@ -7,6 +7,8 @@ from page_sets.rendering import rendering_shared_state
 from page_sets.rendering import rendering_story
 from page_sets.rendering import story_tags
 from page_sets.system_health import platforms
+from page_sets.login_helpers import linkedin_login
+from page_sets.login_helpers import google_login
 
 
 class ToughPinchZoomPage(rendering_story.RenderingStory):
@@ -49,65 +51,74 @@ class ToughPinchZoomPage(rendering_story.RenderingStory):
         current_scale_factor *= 1/2.0
         self.RunPinchGesture(action_runner, scale_factor=1/2.0)
 
-class GoogleSearchPinchZoomPage(ToughPinchZoomPage):
+
+class GoogleSearchPinchZoom2018Page(ToughPinchZoomPage):
 
   """ Why: top google property; a google tab is often open. """
 
   BASE_NAME = 'google_search_pinch'
+  YEAR = '2018'
   URL = 'https://www.google.com/#hl=en&q=barack+obama'
 
   def RunNavigateSteps(self, action_runner):
-    super(GoogleSearchPinchZoomPage, self).RunNavigateSteps(action_runner)
+    super(GoogleSearchPinchZoom2018Page, self).RunNavigateSteps(action_runner)
     action_runner.WaitForElement(text='Next')
 
 
-class GmailPinchZoomPage(ToughPinchZoomPage):
+class GmailPinchZoom2018Page(ToughPinchZoomPage):
 
   """ Why: productivity, top google properties """
 
   BASE_NAME = 'gmail_pinch'
+  YEAR = '2018'
   URL = 'https://mail.google.com/mail/'
 
   def RunNavigateSteps(self, action_runner):
-    super(GmailPinchZoomPage, self).RunNavigateSteps(action_runner)
+    google_login.NewLoginGoogleAccount(action_runner, 'googletest')
+    super(GmailPinchZoom2018Page, self).RunNavigateSteps(action_runner)
     action_runner.WaitForJavaScriptCondition(
         'window.gmonkey !== undefined &&'
         'document.getElementById("gb") !== null')
 
 
-class GoogleCalendarPinchZoomPage(ToughPinchZoomPage):
+class GoogleCalendarPinchZoom2018Page(ToughPinchZoomPage):
 
   """ Why: productivity, top google properties """
 
   BASE_NAME = 'google_calendar_pinch'
+  YEAR = '2018'
   URL = 'https://www.google.com/calendar/'
 
   def RunNavigateSteps(self, action_runner):
-    super(GoogleCalendarPinchZoomPage, self).RunNavigateSteps(action_runner)
-    action_runner.Wait(2)
+    google_login.NewLoginGoogleAccount(action_runner, 'googletest')
+    super(GoogleCalendarPinchZoom2018Page, self).RunNavigateSteps(
+      action_runner)
+    action_runner.WaitForElement('span[class~="sm8sCf"]')
 
 
-class GoogleImagePinchZoomPage(ToughPinchZoomPage):
+class GoogleImagePinchZoom2018Page(ToughPinchZoomPage):
 
   """ Why: tough image case; top google properties """
 
   BASE_NAME = 'google_image_pinch'
+  YEAR = '2018'
   URL = 'https://www.google.com/search?q=cats&tbm=isch'
 
 
-class YoutubePinchZoomPage(ToughPinchZoomPage):
+class YoutubePinchZoom2018Page(ToughPinchZoomPage):
 
   """ Why: #3 (Alexa global) """
 
   BASE_NAME = 'youtube_pinch'
+  YEAR = '2018'
   URL = 'http://www.youtube.com'
 
   def RunNavigateSteps(self, action_runner):
-    super(YoutubePinchZoomPage, self).RunNavigateSteps(action_runner)
-    action_runner.Wait(2)
+    super(YoutubePinchZoom2018Page, self).RunNavigateSteps(action_runner)
+    action_runner.WaitForElement(selector='#buttons')
 
 
-class BlogSpotPinchZoomPage(ToughPinchZoomPage):
+class BlogSpotPinchZoom2018Page(ToughPinchZoomPage):
 
   """
   Why: #11 (Alexa global), google property; some blogger layouts have infinite
@@ -115,90 +126,95 @@ class BlogSpotPinchZoomPage(ToughPinchZoomPage):
   """
 
   BASE_NAME = 'blogspot_pinch'
+  YEAR = '2018'
   URL = 'http://googlewebmastercentral.blogspot.com/'
 
   def RunNavigateSteps(self, action_runner):
-    super(BlogSpotPinchZoomPage, self).RunNavigateSteps(action_runner)
-    action_runner.WaitForElement(text='accessibility')
+    super(BlogSpotPinchZoom2018Page, self).RunNavigateSteps(action_runner)
+    action_runner.WaitForElement('div[class="searchBox"]')
 
 
-class FacebookPinchZoomPage(ToughPinchZoomPage):
+class FacebookPinchZoom2018Page(ToughPinchZoomPage):
 
   """ Why: top social,Public profile """
 
   BASE_NAME = 'facebook_pinch'
+  YEAR = '2018'
   URL = 'http://www.facebook.com/barackobama'
 
   def RunNavigateSteps(self, action_runner):
-    super(FacebookPinchZoomPage, self).RunNavigateSteps(action_runner)
-    action_runner.WaitForElement(text='About')
+    super(FacebookPinchZoom2018Page, self).RunNavigateSteps(action_runner)
+    action_runner.WaitForElement(text='Videos')
 
 
-class LinkedinPinchZoomPage(ToughPinchZoomPage):
+class LinkedinPinchZoom2018Page(ToughPinchZoomPage):
 
   """ Why: #12 (Alexa global),Public profile """
 
   BASE_NAME = 'linkedin_pinch'
+  YEAR = '2018'
   URL = 'http://www.linkedin.com/in/linustorvalds'
 
+  def RunNavigateSteps(self, action_runner):
+    linkedin_login.LoginDesktopAccount(action_runner, 'linkedin')
+    super(LinkedinPinchZoom2018Page, self).RunNavigateSteps(action_runner)
 
-class TwitterPinchZoomPage(ToughPinchZoomPage):
+
+class TwitterPinchZoom2018Page(ToughPinchZoomPage):
 
   """ Why: #8 (Alexa global),Picked an interesting page """
 
   BASE_NAME = 'twitter_pinch'
+  YEAR = '2018'
   URL = 'https://twitter.com/katyperry'
 
   def RunNavigateSteps(self, action_runner):
-    super(TwitterPinchZoomPage, self).RunNavigateSteps(action_runner)
-    action_runner.Wait(2)
+    super(TwitterPinchZoom2018Page, self).RunNavigateSteps(action_runner)
+    action_runner.WaitForElement(selector='.ProfileNav')
 
 
-class ESPNPinchZoomPage(ToughPinchZoomPage):
+class ESPNPinchZoom2018Page(ToughPinchZoomPage):
 
   """ Why: #1 sports """
 
   BASE_NAME = 'espn_pinch'
+  YEAR = '2018'
   URL = 'http://espn.go.com/nba'
 
 
-class WeatherDotComPinchZoomPage(ToughPinchZoomPage):
-
-  """ Why: #7 (Alexa news); #27 total time spent,Picked interesting page """
-
-  BASE_NAME = 'weather_pinch'
-  URL = 'http://www.weather.com/weather/right-now/Mountain+View+CA+94043'
-
-
-class YahooGamePinchZoomPage(ToughPinchZoomPage):
-
-  """ Why: #1 games according to Alexa (with actual games in it) """
-
-  BASE_NAME = 'yahoo_games_pinch'
-  URL = 'http://games.yahoo.com'
-
-  def RunNavigateSteps(self, action_runner):
-    super(YahooGamePinchZoomPage, self).RunNavigateSteps(action_runner)
-    action_runner.Wait(2)
+class AccuWeatherPinchZoom2018Page(ToughPinchZoomPage):
+  """ Why: #2 weather according to Alexa """
+  BASE_NAME = 'accu_weather_pinch'
+  YEAR = '2018'
+  URL = 'https://www.accuweather.com/en/us/new-york-ny/10017/weather-forecast/349727'
 
 
-class YahooNewsPinchZoomPage(ToughPinchZoomPage):
+class TwitchPinchZoom2018Page(ToughPinchZoomPage):
+  """ Why: #1 games according to Alexa  """
+  BASE_NAME = 'twitch_pinch'
+  YEAR = '2018'
+  URL = 'https://www.twitch.tv'
+
+
+class YahooNewsPinchZoom2018Page(ToughPinchZoomPage):
 
   """ Why: #1 news worldwide (Alexa global) """
 
   BASE_NAME = 'yahoo_news_pinch'
+  YEAR = '2018'
   URL = 'http://news.yahoo.com'
 
 
-class CnnPinchZoomPage(ToughPinchZoomPage):
+class CnnPinchZoom2018Page(ToughPinchZoomPage):
 
   """ Why: #2 news worldwide """
 
   BASE_NAME = 'cnn_pinch'
+  YEAR = '2018'
   URL = 'http://www.cnn.com'
 
 
-class AmazonPinchZoomPage(ToughPinchZoomPage):
+class AmazonPinchZoom2018Page(ToughPinchZoomPage):
 
   """
   Why: #1 world commerce website by visits; #3 commerce in the US by
@@ -206,29 +222,33 @@ class AmazonPinchZoomPage(ToughPinchZoomPage):
   """
 
   BASE_NAME = 'amazon_pinch'
+  YEAR = '2018'
   URL = 'http://www.amazon.com'
 
 
-class EBayPinchZoomPage(ToughPinchZoomPage):
+class EBayPinchZoom2018Page(ToughPinchZoomPage):
 
   """  Why: #1 commerce website by time spent by users in US"""
 
   BASE_NAME = 'ebay_pinch'
+  YEAR = '2018'
   URL = 'http://www.ebay.com'
 
 
-class BookingPinchZoomPage(ToughPinchZoomPage):
+class BookingPinchZoom2018Page(ToughPinchZoomPage):
 
   """ Why: #1 Alexa recreation"""
 
   BASE_NAME = 'booking_pinch'
+  YEAR = '2018'
   URL = 'http://booking.com'
 
 
-class YahooSportsPinchZoomPage(ToughPinchZoomPage):
+class YahooSportsPinchZoom2018Page(ToughPinchZoomPage):
 
   """ Why: #1 Alexa sports"""
   BASE_NAME = 'yahoo_sports_pinch'
+  YEAR = '2018'
   URL = 'http://sports.yahoo.com/'
 
 
@@ -246,41 +266,41 @@ class ToughPinchZoomCasesPageSet(story.StorySet):
 
     self.target_scale_factor = target_scale_factor
 
-    self.AddStory(GoogleSearchPinchZoomPage(
+    self.AddStory(GoogleSearchPinchZoom2018Page(
         page_set=self))
-    self.AddStory(GmailPinchZoomPage(
+    self.AddStory(GmailPinchZoom2018Page(
         page_set=self))
-    self.AddStory(GoogleCalendarPinchZoomPage(
+    self.AddStory(GoogleCalendarPinchZoom2018Page(
         page_set=self))
-    self.AddStory(GoogleImagePinchZoomPage(
+    self.AddStory(GoogleImagePinchZoom2018Page(
         page_set=self))
-    self.AddStory(YoutubePinchZoomPage(
+    self.AddStory(YoutubePinchZoom2018Page(
         page_set=self))
-    self.AddStory(BlogSpotPinchZoomPage(
+    self.AddStory(BlogSpotPinchZoom2018Page(
         page_set=self))
-    self.AddStory(FacebookPinchZoomPage(
+    self.AddStory(FacebookPinchZoom2018Page(
         page_set=self))
-    self.AddStory(LinkedinPinchZoomPage(
+    self.AddStory(LinkedinPinchZoom2018Page(
         page_set=self))
-    self.AddStory(TwitterPinchZoomPage(
+    self.AddStory(TwitterPinchZoom2018Page(
         page_set=self))
-    self.AddStory(ESPNPinchZoomPage(
+    self.AddStory(ESPNPinchZoom2018Page(
         page_set=self))
-    self.AddStory(YahooGamePinchZoomPage(
+    self.AddStory(TwitchPinchZoom2018Page(
         page_set=self))
-    self.AddStory(YahooNewsPinchZoomPage(
+    self.AddStory(YahooNewsPinchZoom2018Page(
         page_set=self))
-    self.AddStory(CnnPinchZoomPage(
+    self.AddStory(CnnPinchZoom2018Page(
         page_set=self))
-    self.AddStory(AmazonPinchZoomPage(
+    self.AddStory(AmazonPinchZoom2018Page(
         page_set=self))
-    self.AddStory(EBayPinchZoomPage(
+    self.AddStory(EBayPinchZoom2018Page(
         page_set=self))
-    self.AddStory(WeatherDotComPinchZoomPage(
+    self.AddStory(AccuWeatherPinchZoom2018Page(
         page_set=self))
-    self.AddStory(YahooSportsPinchZoomPage(
+    self.AddStory(YahooSportsPinchZoom2018Page(
         page_set=self))
-    self.AddStory(BookingPinchZoomPage(
+    self.AddStory(BookingPinchZoom2018Page(
         page_set=self))
 
 

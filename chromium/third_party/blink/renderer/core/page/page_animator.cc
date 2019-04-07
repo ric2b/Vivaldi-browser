@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/page/validation_message_client.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
@@ -80,6 +81,8 @@ void PageAnimator::ServiceScriptedAnimations(
         document->Lifecycle());
     document->ServiceScriptedAnimations(monotonic_animation_start_time);
   }
+
+  page_->GetValidationMessageClient().LayoutOverlay();
 }
 
 void PageAnimator::SetSuppressFrameRequestsWorkaroundFor704763Only(
@@ -112,6 +115,13 @@ void PageAnimator::UpdateAllLifecyclePhasesExceptPaint(LocalFrame& root_frame) {
   base::AutoReset<bool> servicing(&updating_layout_and_style_for_painting_,
                                   true);
   view->UpdateAllLifecyclePhasesExceptPaint();
+}
+
+void PageAnimator::UpdateLifecycleToLayoutClean(LocalFrame& root_frame) {
+  LocalFrameView* view = root_frame.View();
+  base::AutoReset<bool> servicing(&updating_layout_and_style_for_painting_,
+                                  true);
+  view->UpdateLifecycleToLayoutClean();
 }
 
 }  // namespace blink

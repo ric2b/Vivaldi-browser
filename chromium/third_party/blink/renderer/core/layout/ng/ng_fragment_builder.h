@@ -40,13 +40,14 @@ class CORE_EXPORT NGFragmentBuilder final : public NGContainerFragmentBuilder {
   ~NGFragmentBuilder() override;
 
   NGFragmentBuilder& SetIntrinsicBlockSize(LayoutUnit);
+  NGFragmentBuilder& SetBorders(const NGBoxStrut&);
   NGFragmentBuilder& SetPadding(const NGBoxStrut&);
   NGFragmentBuilder& SetPadding(const NGLineBoxStrut&);
 
   using NGContainerFragmentBuilder::AddChild;
 
   // Our version of AddChild captures any child NGBreakTokens.
-  NGContainerFragmentBuilder& AddChild(scoped_refptr<NGPhysicalFragment>,
+  NGContainerFragmentBuilder& AddChild(scoped_refptr<const NGPhysicalFragment>,
                                        const NGLogicalOffset&) final;
 
   // Remove all children.
@@ -62,7 +63,7 @@ class CORE_EXPORT NGFragmentBuilder final : public NGContainerFragmentBuilder {
 
   // Update if we have fragmented in this flow.
   NGFragmentBuilder& PropagateBreak(scoped_refptr<NGLayoutResult>);
-  NGFragmentBuilder& PropagateBreak(scoped_refptr<NGPhysicalFragment>);
+  NGFragmentBuilder& PropagateBreak(scoped_refptr<const NGPhysicalFragment>);
 
   void AddOutOfFlowLegacyCandidate(NGBlockNode,
                                    const NGStaticPosition&,
@@ -186,6 +187,7 @@ class CORE_EXPORT NGFragmentBuilder final : public NGContainerFragmentBuilder {
   LayoutObject* layout_object_;
 
   LayoutUnit intrinsic_block_size_;
+  NGBoxStrut borders_;
   NGBoxStrut padding_;
 
   NGPhysicalFragment::NGBoxType box_type_;

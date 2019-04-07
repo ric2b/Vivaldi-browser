@@ -26,7 +26,7 @@ class GeneratedCodeCacheTest : public testing::Test {
     ASSERT_TRUE(cache_dir_.CreateUniqueTempDir());
     cache_path_ = cache_dir_.GetPath();
     generated_code_cache_ =
-        GeneratedCodeCache::Create(cache_path_, kMaxSizeInBytes);
+        std::make_unique<GeneratedCodeCache>(cache_path_, kMaxSizeInBytes);
   }
 
   void TearDown() override {
@@ -39,7 +39,7 @@ class GeneratedCodeCacheTest : public testing::Test {
   void InitializeCache() {
     GURL url(kInitialUrl);
     url::Origin origin = url::Origin::Create(GURL(kInitialOrigin));
-    WriteToCache(url, origin, kInitialData);
+    WriteToCache(url, origin, kInitialData, base::Time::Now());
     scoped_task_environment_.RunUntilIdle();
   }
 
@@ -48,18 +48,16 @@ class GeneratedCodeCacheTest : public testing::Test {
   // to test the pending operaions path.
   void InitializeCacheAndReOpen() {
     InitializeCache();
-    generated_code_cache_.reset();
-    generated_code_cache_ =
-        GeneratedCodeCache::Create(cache_path_, kMaxSizeInBytes);
+    generated_code_cache_.reset(
+        new GeneratedCodeCache(cache_path_, kMaxSizeInBytes));
   }
 
   void WriteToCache(const GURL& url,
                     const url::Origin& origin,
-                    const std::string& data) {
-    scoped_refptr<net::IOBufferWithSize> buffer(
-        new net::IOBufferWithSize(data.length()));
-    memcpy(buffer->data(), data.c_str(), data.length());
-    generated_code_cache_->WriteData(url, origin, buffer);
+                    const std::string& data,
+                    base::Time response_time) {
+    std::vector<uint8_t> vector_data(data.begin(), data.end());
+    generated_code_cache_->WriteData(url, origin, response_time, vector_data);
   }
 
   void DeleteFromCache(const GURL& url, const url::Origin& origin) {
@@ -73,16 +71,26 @@ class GeneratedCodeCacheTest : public testing::Test {
     generated_code_cache_->FetchEntry(url, origin, callback);
   }
 
-  void FetchEntryCallback(scoped_refptr<net::IOBufferWithSize> buffer) {
-    if (!buffer || !buffer->data()) {
+  void ClearCache() {
+    generated_code_cache_->ClearCache(base::BindRepeating(
+        &GeneratedCodeCacheTest::ClearCacheComplete, base::Unretained(this)));
+  }
+
+  void ClearCacheComplete(int rv) {}
+
+  void FetchEntryCallback(const base::Time& response_time,
+                          const std::vector<uint8_t>& data) {
+    if (data.size() == 0) {
       received_ = true;
       received_null_ = true;
+      received_response_time_ = response_time;
       return;
     }
-    std::string str(buffer->data(), buffer->size());
+    std::string str(data.begin(), data.end());
     received_ = true;
     received_null_ = false;
     received_data_ = str;
+    received_response_time_ = response_time;
   }
 
  protected:
@@ -90,6 +98,7 @@ class GeneratedCodeCacheTest : public testing::Test {
   std::unique_ptr<GeneratedCodeCache> generated_code_cache_;
   base::ScopedTempDir cache_dir_;
   std::string received_data_;
+  base::Time received_response_time_;
   bool received_;
   bool received_null_;
   base::FilePath cache_path_;
@@ -98,6 +107,23 @@ class GeneratedCodeCacheTest : public testing::Test {
 constexpr char GeneratedCodeCacheTest::kInitialUrl[];
 constexpr char GeneratedCodeCacheTest::kInitialOrigin[];
 constexpr char GeneratedCodeCacheTest::kInitialData[];
+const int GeneratedCodeCacheTest::kMaxSizeInBytes;
+
+TEST_F(GeneratedCodeCacheTest, CheckResponseTime) {
+  GURL url(kInitialUrl);
+  url::Origin origin = url::Origin::Create(GURL(kInitialOrigin));
+
+  std::string data = "SerializedCodeForScript";
+  base::Time response_time = base::Time::Now();
+  WriteToCache(url, origin, data, response_time);
+  scoped_task_environment_.RunUntilIdle();
+  FetchFromCache(url, origin);
+  scoped_task_environment_.RunUntilIdle();
+
+  ASSERT_TRUE(received_);
+  EXPECT_EQ(data, received_data_);
+  EXPECT_EQ(response_time, received_response_time_);
+}
 
 TEST_F(GeneratedCodeCacheTest, FetchEntry) {
   GURL url(kInitialUrl);
@@ -117,12 +143,15 @@ TEST_F(GeneratedCodeCacheTest, WriteEntry) {
 
   InitializeCache();
   std::string data = "SerializedCodeForScript";
-  WriteToCache(new_url, origin, data);
+  base::Time response_time = base::Time::Now();
+  WriteToCache(new_url, origin, data, response_time);
+  scoped_task_environment_.RunUntilIdle();
   FetchFromCache(new_url, origin);
   scoped_task_environment_.RunUntilIdle();
 
   ASSERT_TRUE(received_);
   EXPECT_EQ(data, received_data_);
+  EXPECT_EQ(response_time, received_response_time_);
 }
 
 TEST_F(GeneratedCodeCacheTest, DeleteEntry) {
@@ -156,13 +185,15 @@ TEST_F(GeneratedCodeCacheTest, WriteEntryPendingOp) {
 
   InitializeCache();
   std::string data = "SerializedCodeForScript";
-  WriteToCache(new_url, origin, data);
+  base::Time response_time = base::Time::Now();
+  WriteToCache(new_url, origin, data, response_time);
   scoped_task_environment_.RunUntilIdle();
   FetchFromCache(new_url, origin);
   scoped_task_environment_.RunUntilIdle();
 
   ASSERT_TRUE(received_);
   EXPECT_EQ(data, received_data_);
+  EXPECT_EQ(response_time, received_response_time_);
 }
 
 TEST_F(GeneratedCodeCacheTest, DeleteEntryPendingOp) {
@@ -184,12 +215,15 @@ TEST_F(GeneratedCodeCacheTest, UpdateDataOfExistingEntry) {
 
   InitializeCache();
   std::string new_data = "SerializedCodeForScriptOverwrite";
-  WriteToCache(url, origin, new_data);
+  base::Time response_time = base::Time::Now();
+  WriteToCache(url, origin, new_data, response_time);
+  scoped_task_environment_.RunUntilIdle();
   FetchFromCache(url, origin);
   scoped_task_environment_.RunUntilIdle();
 
   ASSERT_TRUE(received_);
   EXPECT_EQ(new_data, received_data_);
+  EXPECT_EQ(response_time, received_response_time_);
 }
 
 TEST_F(GeneratedCodeCacheTest, FetchFailsForNonexistingOrigin) {
@@ -208,10 +242,10 @@ TEST_F(GeneratedCodeCacheTest, FetchEntriesFromSameOrigin) {
   url::Origin origin = url::Origin::Create(GURL(kInitialOrigin));
 
   std::string data_first_resource = "SerializedCodeForFirstResource";
-  WriteToCache(url, origin, data_first_resource);
+  WriteToCache(url, origin, data_first_resource, base::Time());
 
   std::string data_second_resource = "SerializedCodeForSecondResource";
-  WriteToCache(second_url, origin, data_second_resource);
+  WriteToCache(second_url, origin, data_second_resource, base::Time());
   scoped_task_environment_.RunUntilIdle();
 
   FetchFromCache(url, origin);
@@ -231,10 +265,10 @@ TEST_F(GeneratedCodeCacheTest, FetchSucceedsFromDifferentOrigins) {
   url::Origin origin1 = url::Origin::Create(GURL("http://example1.com"));
 
   std::string data_origin = "SerializedCodeForFirstOrigin";
-  WriteToCache(url, origin, data_origin);
+  WriteToCache(url, origin, data_origin, base::Time());
 
   std::string data_origin1 = "SerializedCodeForSecondOrigin";
-  WriteToCache(url, origin1, data_origin1);
+  WriteToCache(url, origin1, data_origin1, base::Time());
   scoped_task_environment_.RunUntilIdle();
 
   FetchFromCache(url, origin);
@@ -254,7 +288,7 @@ TEST_F(GeneratedCodeCacheTest, FetchFailsForUniqueOrigin) {
       url::Origin::Create(GURL("data:text/html,<script></script>"));
 
   std::string data = "SerializedCodeForUniqueOrigin";
-  WriteToCache(url, origin, data);
+  WriteToCache(url, origin, data, base::Time());
   scoped_task_environment_.RunUntilIdle();
 
   FetchFromCache(url, origin);
@@ -268,11 +302,12 @@ TEST_F(GeneratedCodeCacheTest, FetchFailsForInvalidOrigin) {
   url::Origin origin = url::Origin::Create(GURL("invalidURL"));
 
   std::string data = "SerializedCodeForInvalidOrigin";
-  WriteToCache(url, origin, data);
+  WriteToCache(url, origin, data, base::Time());
   scoped_task_environment_.RunUntilIdle();
 
   FetchFromCache(url, origin);
   scoped_task_environment_.RunUntilIdle();
+
   ASSERT_TRUE(received_);
   ASSERT_TRUE(received_null_);
 }
@@ -282,11 +317,25 @@ TEST_F(GeneratedCodeCacheTest, FetchFailsForInvalidURL) {
   url::Origin origin = url::Origin::Create(GURL("http://example.com"));
 
   std::string data = "SerializedCodeForInvalidURL";
-  WriteToCache(url, origin, data);
+  WriteToCache(url, origin, data, base::Time());
   scoped_task_environment_.RunUntilIdle();
 
   FetchFromCache(url, origin);
   scoped_task_environment_.RunUntilIdle();
+  ASSERT_TRUE(received_);
+  ASSERT_TRUE(received_null_);
+}
+
+TEST_F(GeneratedCodeCacheTest, ClearCache) {
+  GURL url("http://example.com/script.js");
+  url::Origin origin = url::Origin::Create(GURL("http://example.com"));
+
+  InitializeCache();
+  ClearCache();
+  scoped_task_environment_.RunUntilIdle();
+  FetchFromCache(url, origin);
+  scoped_task_environment_.RunUntilIdle();
+
   ASSERT_TRUE(received_);
   ASSERT_TRUE(received_null_);
 }

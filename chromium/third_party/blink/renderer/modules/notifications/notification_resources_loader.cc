@@ -5,8 +5,6 @@
 #include "third_party/blink/renderer/modules/notifications/notification_resources_loader.h"
 
 #include <cmath>
-#include "third_party/blink/public/platform/modules/notifications/web_notification_data.h"
-#include "third_party/blink/public/platform/modules/notifications/web_notification_resources.h"
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/threading.h"
@@ -26,11 +24,13 @@ NotificationResourcesLoader::~NotificationResourcesLoader() = default;
 
 void NotificationResourcesLoader::Start(
     ExecutionContext* context,
-    const WebNotificationData& notification_data) {
+    const mojom::blink::NotificationData& notification_data) {
   DCHECK(!started_);
   started_ = true;
 
-  size_t num_actions = notification_data.actions.size();
+  size_t num_actions = notification_data.actions.has_value()
+                           ? notification_data.actions->size()
+                           : 0;
   pending_request_count_ = 3 /* image, icon, badge */ + num_actions;
 
   // TODO(johnme): ensure image is not loaded when it will not be used.
@@ -51,15 +51,14 @@ void NotificationResourcesLoader::Start(
   action_icons_.resize(num_actions);
   for (size_t i = 0; i < num_actions; i++)
     LoadImage(context, NotificationImageLoader::Type::kActionIcon,
-              notification_data.actions[i].icon,
+              notification_data.actions.value()[i]->icon,
               WTF::Bind(&NotificationResourcesLoader::DidLoadActionIcon,
                         WrapWeakPersistent(this), i));
 }
 
-std::unique_ptr<WebNotificationResources>
+mojom::blink::NotificationResourcesPtr
 NotificationResourcesLoader::GetResources() const {
-  std::unique_ptr<WebNotificationResources> resources(
-      new WebNotificationResources());
+  auto resources = mojom::blink::NotificationResources::New();
   resources->image = image_;
   resources->icon = icon_;
   resources->badge = badge_;

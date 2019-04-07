@@ -25,7 +25,7 @@
 #include "components/viz/common/resources/single_release_callback.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/service/surfaces/surface_manager.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_delegate.h"
@@ -177,12 +177,6 @@ class CustomWindowTargeter : public aura::WindowTargeter {
     return surface->HitTest(local_point);
   }
 
-  std::unique_ptr<HitTestRects> GetExtraHitTestShapeRects(
-      aura::Window* window) const override {
-    Surface* surface = Surface::AsSurface(window);
-    return surface ? surface->GetHitTestShapeRects() : nullptr;
-  }
-
  private:
   DISALLOW_COPY_AND_ASSIGN(CustomWindowTargeter);
 };
@@ -192,12 +186,14 @@ class CustomWindowTargeter : public aura::WindowTargeter {
 ////////////////////////////////////////////////////////////////////////////////
 // Surface, public:
 
-Surface::Surface() : window_(new aura::Window(new CustomWindowDelegate(this))) {
-  window_->SetType(aura::client::WINDOW_TYPE_CONTROL);
+Surface::Surface()
+    : window_(std::make_unique<aura::Window>(new CustomWindowDelegate(this),
+                                             aura::client::WINDOW_TYPE_CONTROL,
+                                             WMHelper::GetInstance()->env())) {
   window_->SetName("ExoSurface");
   window_->SetProperty(kSurfaceKey, this);
   window_->Init(ui::LAYER_NOT_DRAWN);
-  window_->SetEventTargeter(base::WrapUnique(new CustomWindowTargeter));
+  window_->SetEventTargeter(std::make_unique<CustomWindowTargeter>());
   window_->set_owned_by_parent(false);
   WMHelper::GetInstance()->SetDragDropDelegate(window_.get());
 }
@@ -515,8 +511,8 @@ void Surface::CommitSurfaceHierarchy(bool synchronized) {
 
     window_->SetEventTargetingPolicy(
         (state_.input_region.has_value() && state_.input_region->IsEmpty())
-            ? ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY
-            : ui::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
+            ? ws::mojom::EventTargetingPolicy::DESCENDANTS_ONLY
+            : ws::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
 
     // We update contents if Attach() has been called since last commit.
     if (has_pending_contents_) {
@@ -660,17 +656,6 @@ bool Surface::HitTest(const gfx::Point& point) const {
 
 void Surface::GetHitTestMask(gfx::Path* mask) const {
   hit_test_region_.GetBoundaryPath(mask);
-}
-
-std::unique_ptr<aura::WindowTargeter::HitTestRects>
-Surface::GetHitTestShapeRects() const {
-  if (hit_test_region_.IsEmpty())
-    return nullptr;
-
-  auto rects = std::make_unique<aura::WindowTargeter::HitTestRects>();
-  for (gfx::Rect rect : hit_test_region_)
-    rects->push_back(rect);
-  return rects;
 }
 
 void Surface::SetSurfaceDelegate(SurfaceDelegate* delegate) {

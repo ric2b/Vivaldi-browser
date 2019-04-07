@@ -14,6 +14,11 @@
 #include "ash/assistant/ui/caption_bar.h"
 #include "ash/assistant/ui/dialog_plate/dialog_plate.h"
 #include "ash/assistant/ui/main_stage/assistant_main_stage.h"
+#include "ash/assistant/util/animation_util.h"
+#include "ash/assistant/util/assistant_util.h"
+#include "base/time/time.h"
+#include "ui/compositor/layer_animation_element.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/views/layout/box_layout.h"
 
 namespace ash {
@@ -22,6 +27,18 @@ namespace {
 
 // Appearance.
 constexpr int kMinHeightDip = 200;
+
+// Caption bar animation.
+constexpr base::TimeDelta kCaptionBarAnimationFadeInDelay =
+    base::TimeDelta::FromMilliseconds(283);
+constexpr base::TimeDelta kCaptionBarAnimationFadeInDuration =
+    base::TimeDelta::FromMilliseconds(167);
+
+// Dialog plate animation.
+constexpr base::TimeDelta kDialogPlateAnimationFadeInDelay =
+    base::TimeDelta::FromMilliseconds(283);
+constexpr base::TimeDelta kDialogPlateAnimationFadeInDuration =
+    base::TimeDelta::FromMilliseconds(167);
 
 }  // namespace
 
@@ -49,11 +66,15 @@ AssistantMainView::~AssistantMainView() {
 }
 
 gfx::Size AssistantMainView::CalculatePreferredSize() const {
-  // |min_height_dip_| <= |preferred_height| <= |kMaxHeightDip|.
-  int preferred_height = GetHeightForWidth(kPreferredWidthDip);
-  preferred_height = std::min(preferred_height, kMaxHeightDip);
-  preferred_height = std::max(preferred_height, min_height_dip_);
-  return gfx::Size(kPreferredWidthDip, preferred_height);
+  return gfx::Size(kPreferredWidthDip, GetHeightForWidth(kPreferredWidthDip));
+}
+
+int AssistantMainView::GetHeightForWidth(int width) const {
+  // |min_height_dip_| <= |height| <= |kMaxHeightDip|.
+  int height = views::View::GetHeightForWidth(width);
+  height = std::min(height, kMaxHeightDip);
+  height = std::max(height, min_height_dip_);
+  return height;
 }
 
 void AssistantMainView::OnBoundsChanged(const gfx::Rect& prev_bounds) {
@@ -86,6 +107,11 @@ void AssistantMainView::InitLayout() {
   // Caption bar.
   caption_bar_ = new CaptionBar();
   caption_bar_->SetButtonVisible(CaptionButtonId::kBack, false);
+
+  // The caption bar will be animated on its own layer.
+  caption_bar_->SetPaintToLayer();
+  caption_bar_->layer()->SetFillsBoundsOpaquely(false);
+
   AddChildView(caption_bar_);
 
   // Main stage.
@@ -96,19 +122,50 @@ void AssistantMainView::InitLayout() {
 
   // Dialog plate.
   dialog_plate_ = new DialogPlate(assistant_controller_);
+
+  // The dialog plate will be animated on its own layer.
+  dialog_plate_->SetPaintToLayer();
+  dialog_plate_->layer()->SetFillsBoundsOpaquely(false);
+
   AddChildView(dialog_plate_);
 }
 
-void AssistantMainView::OnUiVisibilityChanged(bool visible,
-                                              AssistantSource source) {
-  if (visible)
-    return;
+void AssistantMainView::OnUiVisibilityChanged(
+    AssistantVisibility new_visibility,
+    AssistantVisibility old_visibility,
+    AssistantSource source) {
+  if (assistant::util::IsStartingSession(new_visibility, old_visibility)) {
+    // When Assistant is starting a new session, we animate in the appearance of
+    // the caption bar and dialog plate.
+    using assistant::util::CreateLayerAnimationSequence;
+    using assistant::util::CreateOpacityElement;
 
-  // When the Assistant UI is being hidden we need to reset our minimum height
-  // restriction so that the default restrictions are restored for the next
-  // time the view is shown.
-  min_height_dip_ = kMinHeightDip;
-  PreferredSizeChanged();
+    // Animate the caption bar from 0% to 100% opacity with delay.
+    caption_bar_->layer()->SetOpacity(0.f);
+    caption_bar_->layer()->GetAnimator()->StartAnimation(
+        CreateLayerAnimationSequence(
+            ui::LayerAnimationElement::CreatePauseElement(
+                ui::LayerAnimationElement::AnimatableProperty::OPACITY,
+                kCaptionBarAnimationFadeInDelay),
+            CreateOpacityElement(1.f, kCaptionBarAnimationFadeInDuration)));
+
+    // Animate the dialog plate from 0% to 100% opacity with delay.
+    dialog_plate_->layer()->SetOpacity(0.f);
+    dialog_plate_->layer()->GetAnimator()->StartAnimation(
+        CreateLayerAnimationSequence(
+            ui::LayerAnimationElement::CreatePauseElement(
+                ui::LayerAnimationElement::AnimatableProperty::OPACITY,
+                kDialogPlateAnimationFadeInDelay),
+            CreateOpacityElement(1.f, kDialogPlateAnimationFadeInDuration)));
+
+    return;
+  }
+
+  if (assistant::util::IsFinishingSession(new_visibility)) {
+    // When Assistant is finishing a session, we need to reset view state.
+    min_height_dip_ = kMinHeightDip;
+    PreferredSizeChanged();
+  }
 }
 
 void AssistantMainView::RequestFocus() {

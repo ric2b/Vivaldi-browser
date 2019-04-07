@@ -132,8 +132,8 @@ SSLConnectJob::SSLConnectJob(const std::string& group_name,
                     : (params->privacy_mode() == PRIVACY_MODE_ENABLED
                            ? "pm/" + context.ssl_session_cache_shard
                            : context.ssl_session_cache_shard))),
-      callback_(
-          base::Bind(&SSLConnectJob::OnIOComplete, base::Unretained(this))) {}
+      callback_(base::BindRepeating(&SSLConnectJob::OnIOComplete,
+                                    base::Unretained(this))) {}
 
 SSLConnectJob::~SSLConnectJob() = default;
 
@@ -383,13 +383,6 @@ int SSLConnectJob::DoSSLConnectComplete(int result) {
 
     if (tls13_supported) {
       UMA_HISTOGRAM_CUSTOM_TIMES("Net.SSL_Connection_Latency_TLS13Experiment",
-                                 connect_duration,
-                                 base::TimeDelta::FromMilliseconds(1),
-                                 base::TimeDelta::FromMinutes(1), 100);
-    }
-
-    if (ssl_info.dummy_pq_padding_received) {
-      UMA_HISTOGRAM_CUSTOM_TIMES("Net.SSL_Connection_Latency_PQPadding",
                                  connect_duration,
                                  base::TimeDelta::FromMilliseconds(1),
                                  base::TimeDelta::FromMinutes(1), 100);

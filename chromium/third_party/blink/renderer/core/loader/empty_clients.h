@@ -266,18 +266,18 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   void DispatchDidFinishLoad() override {}
   void DispatchDidChangeThemeColor() override {}
 
-  NavigationPolicy DecidePolicyForNavigation(
-      const ResourceRequest&,
-      Document* origin_document,
-      DocumentLoader*,
-      WebNavigationType,
-      NavigationPolicy,
-      bool,
-      bool,
-      WebTriggeringEventInfo,
-      HTMLFormElement*,
-      ContentSecurityPolicyDisposition,
-      mojom::blink::BlobURLTokenPtr) override;
+  NavigationPolicy DecidePolicyForNavigation(const ResourceRequest&,
+                                             Document* origin_document,
+                                             DocumentLoader*,
+                                             WebNavigationType,
+                                             NavigationPolicy,
+                                             bool,
+                                             bool,
+                                             WebTriggeringEventInfo,
+                                             HTMLFormElement*,
+                                             ContentSecurityPolicyDisposition,
+                                             mojom::blink::BlobURLTokenPtr,
+                                             base::TimeTicks) override;
 
   void DispatchWillSendSubmitEvent(HTMLFormElement*) override;
   void DispatchWillSubmitForm(HTMLFormElement*) override;
@@ -298,8 +298,8 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
       const SubstituteData&,
       ClientRedirectPolicy,
       const base::UnguessableToken& devtools_navigation_token,
-      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data,
-      const WebNavigationTimings& navigation_timings) override;
+      std::unique_ptr<WebNavigationParams> navigation_params,
+      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) override;
 
   String UserAgent() override { return ""; }
 
@@ -414,7 +414,6 @@ class CORE_EXPORT EmptyRemoteFrameClient : public RemoteFrameClient {
   void Navigate(const ResourceRequest&,
                 bool should_replace_current_entry,
                 mojom::blink::BlobURLTokenPtr) override {}
-  void Reload(WebFrameLoadType, ClientRedirectPolicy) override {}
   unsigned BackForwardLength() override { return 0; }
   void CheckCompleted() override {}
   void ForwardPostMessage(MessageEvent*,
@@ -423,8 +422,8 @@ class CORE_EXPORT EmptyRemoteFrameClient : public RemoteFrameClient {
                           bool has_user_gesture) const override {}
   void FrameRectsChanged(const IntRect& local_frame_rect,
                          const IntRect& transformed_frame_rect) override {}
-  void UpdateRemoteViewportIntersection(
-      const IntRect& viewport_intersection) override {}
+  void UpdateRemoteViewportIntersection(const IntRect& viewport_intersection,
+                                        bool occluded_or_obscured) override {}
   void AdvanceFocus(WebFocusType, LocalFrame* source) override {}
   void VisibilityChanged(bool visible) override {}
   void SetIsInert(bool) override {}

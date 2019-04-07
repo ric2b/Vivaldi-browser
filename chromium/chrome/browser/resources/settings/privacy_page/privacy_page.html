@@ -11,6 +11,8 @@
 <link rel="import" href="../clear_browsing_data_dialog/clear_browsing_data_dialog.html">
 <link rel="import" href="../controls/settings_toggle_button.html">
 <link rel="import" href="../lifetime_browser_proxy.html">
+<link rel="import" href="../people_page/sync_browser_proxy.html">
+<link rel="import" href="../people_page/signout_dialog.html">
 <link rel="import" href="../route.html">
 <link rel="import" href="../settings_page/settings_animated_pages.html">
 <link rel="import" href="../settings_page/settings_subpage.html">
@@ -29,6 +31,9 @@
 <link rel="import" href="../site_settings/zoom_levels.html">
 <link rel="import" href="../site_settings_page/site_settings_page.html">
 
+<if expr="not chromeos">
+<link rel="import" href="chrome://resources/cr_elements/cr_toast/cr_toast.html">
+</if>
 <if expr="use_nss_certs">
   <link rel="import" href="chrome://resources/cr_components/certificate_manager/certificate_manager.html">
 </if>
@@ -38,6 +43,18 @@
 <dom-module id="settings-privacy-page">
   <template>
     <style include="settings-shared">
+<if expr="not chromeos">
+      #toast {
+        color: white;
+        left: 0;
+        z-index: 1;
+      }
+
+      :host-context([dir='rtl']) #toast {
+        left: auto;
+        right: 0;
+      }
+</if>
     </style>
     <template is="dom-if" if="[[showClearBrowsingDataDialog_]]" restamp>
       <settings-clear-browsing-data-dialog prefs="{{prefs}}"
@@ -66,9 +83,22 @@
     <settings-animated-pages id="pages" section="privacy"
         focus-config="[[focusConfig_]]">
       <neon-animatable route-path="default">
-        <div class="settings-box first">
-          <p class="privacy-explanation">$i18nRaw{improveBrowsingExperience}</p>
-        </div>
+        <template is="dom-if" if="[[!unifiedConsentEnabled_]]">
+          <div class="settings-box first">
+            <p class="privacy-explanation">
+              $i18nRaw{improveBrowsingExperience}
+            </p>
+          </div>
+        </template>
+<if expr="not chromeos">
+        <settings-toggle-button id="signinAllowedToggle"
+            pref="{{prefs.signin.allowed_on_next_startup}}"
+            label="$i18n{signinAllowedTitle}"
+            sub-label="$i18n{signinAllowedDescription}"
+            on-settings-boolean-control-change="onSigninAllowedChange_"
+            no-set-pref>
+        </settings-toggle-button>
+</if><!-- not chromeos -->
         <template is="dom-if" if="[[!unifiedConsentEnabled_]]">
           <settings-personalization-options prefs="{{prefs}}"
               page-visibility="[[pageVisibility]]"
@@ -173,7 +203,7 @@
 
       <template is="dom-if" route-path="/content/all" no-search>
         <settings-subpage page-title="$i18n{siteSettingsAllSites}">
-          <all-sites></all-sites>
+          <all-sites focus-config="[[focusConfig_]]"></all-sites>
         </settings-subpage>
       </template>
       <template is="dom-if" route-path="/content/automaticDownloads" no-search>
@@ -319,6 +349,15 @@
                 toggle-on-label="$i18n{siteSettingsSoundAllowRecommended}"
                 category="{{ContentSettingsTypes.SOUND}}">
             </category-default-setting>
+            <settings-toggle-button
+                id="block-autoplay-setting"
+                label="$i18n{siteSettingsBlockAutoplaySetting}"
+                pref="{{blockAutoplayStatus_.pref}}"
+                disabled="[[!blockAutoplayStatus_.enabled]]"
+                hidden="[[!enableBlockAutoplayContentSetting_]]"
+                on-settings-boolean-control-change="onBlockAutoplayToggleChange_"
+                no-set-pref>
+            </settings-toggle-button>
             <category-setting-exceptions
                 category="{{ContentSettingsTypes.SOUND}}"
                 block-header="$i18n{siteSettingsBlockSound}">
@@ -468,7 +507,10 @@
       </template>
       <template is="dom-if" route-path="/content/siteDetails" no-search>
         <settings-subpage page-title="[[pageTitle]]">
-          <site-details page-title="{{pageTitle}}"></site-details>
+          <site-details
+            page-title="{{pageTitle}}"
+            block-autoplay-enabled="[[blockAutoplayStatus_.pref.value]]">
+          </site-details>
         </settings-subpage>
       </template>
       <template is="dom-if" route-path="/cookies/detail" no-search>
@@ -542,6 +584,21 @@
        </template>
       </template>
     </settings-animated-pages>
+
+    <template is="dom-if" if="[[showSignoutDialog_]]" restamp>
+      <settings-signout-dialog sync-status="[[syncStatus]]"
+          on-close="onSignoutDialogClosed_">
+      </settings-signout-dialog>
+    </template>
+
+<if expr="not chromeos">
+    <cr-toast id="toast" open="[[showRestart_]]">
+      <div>$i18n{restartToApplyChanges}</div>
+      <paper-button on-click="onRestartTap_">
+        $i18n{restart}
+      </paper-button>
+    </cr-toast>
+</if>
   </template>
   <script src="privacy_page.js"></script>
 </dom-module>

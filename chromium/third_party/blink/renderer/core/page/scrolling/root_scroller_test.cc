@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/core/frame/browser_controls.h"
 #include "third_party/blink/renderer/core/frame/dom_visual_viewport.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/root_frame_viewport.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
@@ -2333,6 +2334,134 @@ TEST_F(ImplicitRootScrollerSimTest, PromotionChangesLayoutSize) {
   EXPECT_EQ(GetDocument().getElementById("container"),
             GetDocument().GetRootScrollerController().EffectiveRootScroller())
       << "Once loaded, the iframe should be promoted.";
+}
+
+// Test that we don't promote any elements implicitly if the main document have
+// vertical overflow.
+TEST_F(ImplicitRootScrollerSimTest, OverflowInMainDocumentRestrictsImplicit) {
+  WebView().ResizeWithBrowserControls(IntSize(800, 600), 50, 0, true);
+  SimRequest main_request("https://example.com/test.html", "text/html");
+  SimRequest child_request("https://example.com/child.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  main_request.Complete(R"HTML(
+          <!DOCTYPE html>
+          <style>
+            ::-webkit-scrollbar {
+              width: 0px;
+              height: 0px;
+            }
+            body, html {
+              width: 100%;
+              height: 100%;
+              margin: 0px;
+            }
+            iframe {
+              width: 100%;
+              height: 100%;
+              border: 0;
+            }
+            div {
+              position: absolute;
+              left: 0;
+              top: 0;
+              height: 150%;
+              width: 150%;
+            }
+          </style>
+          <iframe id="container" src="child.html">
+          </iframe>
+          <div id="spacer"></div>
+      )HTML");
+  child_request.Complete(R"HTML(
+        <!DOCTYPE html>
+        <style>
+          body {
+            height: 1000px;
+          }
+        </style>
+  )HTML");
+
+  Compositor().BeginFrame();
+  EXPECT_EQ(GetDocument(),
+            GetDocument().GetRootScrollerController().EffectiveRootScroller())
+      << "iframe shouldn't be promoted due to overflow in the main document.";
+
+  Element* spacer = GetDocument().getElementById("spacer");
+  spacer->style()->setProperty(&GetDocument(), "height", "100%", String(),
+                               ASSERT_NO_EXCEPTION);
+  Compositor().BeginFrame();
+
+  EXPECT_EQ(GetDocument().getElementById("container"),
+            GetDocument().GetRootScrollerController().EffectiveRootScroller())
+      << "Once vertical overflow is removed, the iframe should be promoted.";
+}
+
+TEST_F(ImplicitRootScrollerSimTest, AppliedAtFractionalZoom) {
+  // Matches Pixel 2XL screen size of 412x671 at 3.5 DevicePixelRatio.
+  WebView().SetZoomFactorForDeviceScaleFactor(3.5f);
+  WebView().ResizeWithBrowserControls(IntSize(1442, 2349), 196, 0, true);
+
+  SimRequest main_request("https://example.com/test.html", "text/html");
+  SimRequest child_request("https://example.com/child.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  main_request.Complete(R"HTML(
+          <!DOCTYPE html>
+          <style>
+            ::-webkit-scrollbar {
+              width: 0px;
+              height: 0px;
+            }
+            body, html {
+              width: 100%;
+              height: 100%;
+              margin: 0px;
+            }
+            iframe {
+              border: 0;
+              display: block;
+            }
+          </style>
+          <iframe id="container" src="child.html">
+          </iframe>
+          <script>
+            // innerHeight is non-fractional so pages don't have a great way to
+            // set the size to "exctly" 100%. Ensure we still promote in this
+            // common pattern.
+            function resize_handler() {
+              document.getElementById("container").style.height =
+                  window.innerHeight + "px";
+              document.getElementById("container").style.width =
+                  window.innerWidth + "px";
+            }
+
+            resize_handler();
+            window.addEventHandler('resize', resize_handler);
+          </script>
+      )HTML");
+
+  child_request.Complete(R"HTML(
+        <!DOCTYPE html>
+        <style>
+          body {
+            height: 1000px;
+          }
+        </style>
+  )HTML");
+
+  Compositor().BeginFrame();
+  PaintLayerScrollableArea* area = GetDocument().View()->LayoutViewport();
+  ASSERT_FALSE(area->HasVerticalOverflow());
+
+  EXPECT_EQ(GetDocument().getElementById("container"),
+            GetDocument().GetRootScrollerController().EffectiveRootScroller())
+      << "<iframe> should be promoted when URL bar is hidden";
+
+  WebView().ResizeWithBrowserControls(IntSize(1442, 2545), 196, 0, false);
+  Compositor().BeginFrame();
+
+  EXPECT_EQ(GetDocument().getElementById("container"),
+            GetDocument().GetRootScrollerController().EffectiveRootScroller())
+      << "<iframe> should remain promoted when URL bar is hidden";
 }
 
 class RootScrollerHitTest : public RootScrollerTest {

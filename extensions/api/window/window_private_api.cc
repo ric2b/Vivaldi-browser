@@ -20,6 +20,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
+#include "extensions/api/zoom/zoom_api.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
@@ -96,8 +97,8 @@ void VivaldiWindowsAPI::OnBrowserAdded(Browser* browser) {
   // In Vivaldi we add the ExtensionActionUtil object as an tabstripobserver for
   // each browser. We fetch the correct browser for each update.
   extensions::ExtensionActionUtil* utils =
-    extensions::ExtensionActionUtilFactory::GetForProfile(
-      Profile::FromBrowserContext(browser_context_));
+      extensions::ExtensionActionUtilFactory::GetForProfile(
+          Profile::FromBrowserContext(browser_context_));
 
   browser->tab_strip_model()->AddObserver(utils);
 
@@ -105,6 +106,11 @@ void VivaldiWindowsAPI::OnBrowserAdded(Browser* browser) {
       Profile::FromBrowserContext(browser_context_));
 
   browser->tab_strip_model()->AddObserver(api);
+  if (browser->is_vivaldi()) {
+    ZoomAPI* zoom_api = ZoomAPI::GetFactoryInstance()->Get(
+        Profile::FromBrowserContext(browser_context_));
+    zoom_api->AddZoomObserver(browser);
+  }
 }
 
 void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
@@ -117,9 +123,14 @@ void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
   browser->tab_strip_model()->RemoveObserver(utils);
 
   TabsPrivateAPI* api = TabsPrivateAPI::GetFactoryInstance()->Get(
-    Profile::FromBrowserContext(browser_context_));
+      Profile::FromBrowserContext(browser_context_));
 
   browser->tab_strip_model()->RemoveObserver(api);
+  if (browser->is_vivaldi()) {
+    ZoomAPI* zoom_api = ZoomAPI::GetFactoryInstance()->Get(
+        Profile::FromBrowserContext(browser_context_));
+    zoom_api->RemoveZoomObserver(browser);
+  }
 
   if (chrome::GetTotalBrowserCount() == 1) {
     BrowserList* browsers = BrowserList::GetInstance();

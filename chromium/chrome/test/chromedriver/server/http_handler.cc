@@ -257,6 +257,10 @@ HttpHandler::HttpHandler(
           kGet, "session/:sessionId/screenshot",
           WrapToCommand("Screenshot", base::Bind(&ExecuteScreenshot))),
 
+      CommandMapping(
+          kGet, "session/:sessionId/element/:id/screenshot",
+          WrapToCommand("Screenshot", base::Bind(&ExecuteElementScreenshot))),
+
       // Json wire protocol only
       // similar to /session/{session id}/window
       CommandMapping(kGet, "session/:sessionId/window_handle",
@@ -792,7 +796,7 @@ HttpHandler::PrepareStandardResponse(
       response.reset(
           new net::HttpServerResponseInfo(net::HTTP_REQUEST_TIMEOUT));
       break;
-    case kSessionNotCreatedException:
+    case kSessionNotCreated:
       response.reset(
           new net::HttpServerResponseInfo(net::HTTP_INTERNAL_SERVER_ERROR));
       break;
@@ -832,7 +836,7 @@ HttpHandler::PrepareStandardResponse(
     case kNoSuchExecutionContext:
       response.reset(new net::HttpServerResponseInfo(net::HTTP_BAD_REQUEST));
       break;
-    case kNoSuchSession:
+    case kInvalidSessionId:
     case kChromeNotReachable:
     case kDisconnected:
     case kForbidden:

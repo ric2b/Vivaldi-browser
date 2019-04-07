@@ -28,6 +28,8 @@ cast_source_set("common") {
 
   if (enable_chromecast_extensions) {
     sources += [
+      "cast_extensions_api_provider.cc",
+      "cast_extensions_api_provider.h",
       "cast_extensions_client.cc",
       "cast_extensions_client.h",
       "cast_redirect_manifest_handler.cc",
@@ -42,13 +44,12 @@ cast_source_set("common") {
 
     deps += [
       "//chromecast/common/extensions_api:api",
-      "//chromecast/common/extensions_api:api_registration",
-      "//chromecast/common/extensions_api:api_schema_generator",
       "//chromecast/common/extensions_api:extensions_features",
       "//components/version_info",
       "//extensions:extensions_resources_grd_grit",
       "//extensions/common",
-      "//extensions/common/api:generated_api_bundle_generator_schema",
+      "//extensions/common:core_api_provider",
+      "//extensions/common/api",
       "//extensions/shell:resources",
       "//extensions/shell:resources_grit",
     ]

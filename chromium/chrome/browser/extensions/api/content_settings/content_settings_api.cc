@@ -11,6 +11,8 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
@@ -24,6 +26,7 @@
 #include "chrome/browser/plugins/plugin_finder.h"
 #include "chrome/browser/plugins/plugin_installer.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/api/content_settings.h"
 #include "components/content_settings/core/browser/content_settings_info.h"
@@ -31,6 +34,7 @@
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/common/webplugininfo.h"
@@ -214,6 +218,10 @@ ContentSettingsContentSettingSetFunction::Run() {
           ->Get(content_type)
           ->IsSettingValid(setting));
 
+  const content_settings::ContentSettingsInfo* info =
+      content_settings::ContentSettingsRegistry::GetInstance()->Get(
+          content_type);
+
   // Some content setting types support the full set of values listed in
   // content_settings.json only for exceptions. For the default setting,
   // some values might not be supported.
@@ -221,9 +229,7 @@ ContentSettingsContentSettingSetFunction::Run() {
   // [ask, block] for the default setting.
   if (primary_pattern == ContentSettingsPattern::Wildcard() &&
       secondary_pattern == ContentSettingsPattern::Wildcard() &&
-      !content_settings::ContentSettingsRegistry::GetInstance()
-           ->Get(content_type)
-           ->IsDefaultSettingValid(setting)) {
+      !info->IsDefaultSettingValid(setting)) {
     static const char kUnsupportedDefaultSettingError[] =
         "'%s' is not supported as the default setting of %s.";
 
@@ -241,6 +247,15 @@ ContentSettingsContentSettingSetFunction::Run() {
     return RespondNow(Error(base::StringPrintf(kUnsupportedDefaultSettingError,
                                                setting_str.c_str(),
                                                readable_type_name.c_str())));
+  }
+
+  if (primary_pattern != secondary_pattern &&
+      secondary_pattern != ContentSettingsPattern::Wildcard() &&
+      !info->website_settings_info()->SupportsEmbeddedExceptions() &&
+      base::FeatureList::IsEnabled(::features::kPermissionDelegation)) {
+    static const char kUnsupportedEmbeddedException[] =
+        "Embedded patterns are not supported for this setting.";
+    return RespondNow(Error(kUnsupportedEmbeddedException));
   }
 
   ExtensionPrefsScope scope = kExtensionPrefsScopeRegular;
@@ -271,6 +286,18 @@ ContentSettingsContentSettingSetFunction::Run() {
       !Profile::FromBrowserContext(browser_context())
            ->HasOffTheRecordProfile()) {
     return RespondNow(Error(pref_keys::kIncognitoSessionOnlyErrorMessage));
+  }
+
+  size_t num_values = 0;
+  int histogram_value =
+      ContentSettingTypeToHistogramValue(content_type, &num_values);
+  if (primary_pattern != secondary_pattern &&
+      secondary_pattern != ContentSettingsPattern::Wildcard()) {
+    UMA_HISTOGRAM_EXACT_LINEAR("ContentSettings.ExtensionEmbeddedSettingSet",
+                               histogram_value, num_values);
+  } else {
+    UMA_HISTOGRAM_EXACT_LINEAR("ContentSettings.ExtensionNonEmbeddedSettingSet",
+                               histogram_value, num_values);
   }
 
   scoped_refptr<ContentSettingsStore> store =

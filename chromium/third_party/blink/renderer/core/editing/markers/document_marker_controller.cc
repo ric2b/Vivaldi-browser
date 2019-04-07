@@ -128,33 +128,24 @@ Member<DocumentMarkerList>& DocumentMarkerController::ListForType(
   return (*marker_lists)[marker_list_index];
 }
 
+bool DocumentMarkerController::PossiblyHasMarkers(
+    DocumentMarker::MarkerType type) const {
+  return PossiblyHasMarkers(DocumentMarker::MarkerTypes(type));
+}
+
 inline bool DocumentMarkerController::PossiblyHasMarkers(
-    DocumentMarker::MarkerTypes types) {
-  if (markers_.IsEmpty()) {
-    // It's possible for markers_ to become empty through garbage collection if
-    // all its Nodes are GC'ed since we only hold weak references, in which case
-    // possibly_existing_marker_types_ isn't reset to 0 as it is in the other
-    // codepaths that remove from markers_. Therefore, we check for this case
-    // here.
-
-    // Alternatively, we could handle this case at the time the Node is GC'ed,
-    // but that operation is more performance-sensitive than anywhere
-    // PossiblyHasMarkers() is used.
-    possibly_existing_marker_types_ = 0;
-    SetContext(nullptr);
-    return false;
-  }
-
+    DocumentMarker::MarkerTypes types) const {
+  DCHECK(!markers_.IsEmpty() ||
+         possibly_existing_marker_types_ == DocumentMarker::MarkerTypes(0));
   return possibly_existing_marker_types_.Intersects(types);
 }
 
 DocumentMarkerController::DocumentMarkerController(Document& document)
-    : possibly_existing_marker_types_(0), document_(&document) {
-}
+    : document_(&document) {}
 
 void DocumentMarkerController::Clear() {
   markers_.clear();
-  possibly_existing_marker_types_ = 0;
+  possibly_existing_marker_types_ = DocumentMarker::MarkerTypes();
   SetContext(nullptr);
 }
 
@@ -186,7 +177,7 @@ void DocumentMarkerController::AddTextMatchMarker(
 void DocumentMarkerController::AddCompositionMarker(
     const EphemeralRange& range,
     Color underline_color,
-    ui::mojom::ImeTextSpanThickness thickness,
+    ws::mojom::ImeTextSpanThickness thickness,
     Color background_color) {
   DCHECK(!document_->NeedsLayoutTreeUpdate());
   AddMarkerInternal(range, [underline_color, thickness, background_color](
@@ -199,7 +190,7 @@ void DocumentMarkerController::AddCompositionMarker(
 void DocumentMarkerController::AddActiveSuggestionMarker(
     const EphemeralRange& range,
     Color underline_color,
-    ui::mojom::ImeTextSpanThickness thickness,
+    ws::mojom::ImeTextSpanThickness thickness,
     Color background_color) {
   DCHECK(!document_->NeedsLayoutTreeUpdate());
   AddMarkerInternal(range, [underline_color, thickness, background_color](
@@ -280,7 +271,9 @@ void DocumentMarkerController::AddMarkerInternal(
 
 void DocumentMarkerController::AddMarkerToNode(const Node& node,
                                                DocumentMarker* new_marker) {
-  possibly_existing_marker_types_.Add(new_marker->GetType());
+  DCHECK_GE(ToText(node).length(), new_marker->EndOffset());
+  possibly_existing_marker_types_ = possibly_existing_marker_types_.Add(
+      DocumentMarker::MarkerTypes(new_marker->GetType()));
   SetContext(document_);
 
   Member<MarkerLists>& markers =
@@ -302,28 +295,28 @@ void DocumentMarkerController::AddMarkerToNode(const Node& node,
 
 // Moves markers from src_node to dst_node. Markers are moved if their start
 // offset is less than length. Markers that run past that point are truncated.
-void DocumentMarkerController::MoveMarkers(const Node* src_node,
+void DocumentMarkerController::MoveMarkers(const Text& src_node,
                                            int length,
-                                           const Node* dst_node) {
+                                           const Text& dst_node) {
   if (length <= 0)
     return;
 
-  if (!PossiblyHasMarkers(DocumentMarker::AllMarkers()))
+  if (!PossiblyHasMarkers(DocumentMarker::MarkerTypes::All()))
     return;
   DCHECK(!markers_.IsEmpty());
 
-  MarkerLists* src_markers = markers_.at(src_node);
+  MarkerLists* const src_markers = markers_.at(&src_node);
   if (!src_markers)
     return;
 
-  if (!markers_.Contains(dst_node)) {
-    markers_.insert(dst_node,
+  if (!markers_.Contains(&dst_node)) {
+    markers_.insert(&dst_node,
                     new MarkerLists(DocumentMarker::kMarkerTypeIndexesCount));
   }
-  MarkerLists* dst_markers = markers_.at(dst_node);
+  MarkerLists* const dst_markers = markers_.at(&dst_node);
 
   bool doc_dirty = false;
-  for (DocumentMarker::MarkerType type : DocumentMarker::AllMarkers()) {
+  for (DocumentMarker::MarkerType type : DocumentMarker::MarkerTypes::All()) {
     DocumentMarkerList* const src_list = ListForType(src_markers, type);
     if (!src_list)
       continue;
@@ -339,7 +332,7 @@ void DocumentMarkerController::MoveMarkers(const Node* src_node,
   if (!doc_dirty)
     return;
 
-  InvalidatePaintForNode(*dst_node);
+  InvalidatePaintForNode(dst_node);
 }
 
 void DocumentMarkerController::RemoveMarkersInternal(
@@ -360,7 +353,7 @@ void DocumentMarkerController::RemoveMarkersInternal(
 
   bool doc_dirty = false;
   size_t empty_lists_count = 0;
-  for (DocumentMarker::MarkerType type : DocumentMarker::AllMarkers()) {
+  for (DocumentMarker::MarkerType type : DocumentMarker::MarkerTypes::All()) {
     DocumentMarkerList* const list = ListForType(markers, type);
     if (!list || list->IsEmpty()) {
       if (list && list->IsEmpty())
@@ -383,7 +376,7 @@ void DocumentMarkerController::RemoveMarkersInternal(
   if (empty_lists_count == DocumentMarker::kMarkerTypeIndexesCount) {
     markers_.erase(&node);
     if (markers_.IsEmpty()) {
-      possibly_existing_marker_types_ = 0;
+      possibly_existing_marker_types_ = DocumentMarker::MarkerTypes();
       SetContext(nullptr);
     }
   }
@@ -479,13 +472,13 @@ DocumentMarkerController::MarkersIntersectingRange(
 }
 
 DocumentMarkerVector DocumentMarkerController::MarkersFor(
-    const Node* node,
-    DocumentMarker::MarkerTypes marker_types) {
+    const Text& text,
+    DocumentMarker::MarkerTypes marker_types) const {
   DocumentMarkerVector result;
   if (!PossiblyHasMarkers(marker_types))
     return result;
 
-  MarkerLists* markers = markers_.at(node);
+  MarkerLists* markers = markers_.at(&text);
   if (!markers)
     return result;
 
@@ -505,11 +498,11 @@ DocumentMarkerVector DocumentMarkerController::MarkersFor(
   return result;
 }
 
-DocumentMarkerVector DocumentMarkerController::Markers() {
+DocumentMarkerVector DocumentMarkerController::Markers() const {
   DocumentMarkerVector result;
-  for (MarkerMap::iterator i = markers_.begin(); i != markers_.end(); ++i) {
-    MarkerLists* markers = i->value.Get();
-    for (DocumentMarker::MarkerType type : DocumentMarker::AllMarkers()) {
+  for (const auto& node_markers : markers_) {
+    MarkerLists* markers = node_markers.value;
+    for (DocumentMarker::MarkerType type : DocumentMarker::MarkerTypes::All()) {
       DocumentMarkerList* const list = ListForType(markers, type);
       if (!list)
         continue;
@@ -525,24 +518,25 @@ DocumentMarkerVector DocumentMarkerController::Markers() {
 }
 
 DocumentMarkerVector DocumentMarkerController::ComputeMarkersToPaint(
-    const Node& node) {
+    const Text& text) const {
   // We don't render composition or spelling markers that overlap suggestion
   // markers.
   // Note: DocumentMarkerController::MarkersFor() returns markers sorted by
   // start offset.
   const DocumentMarkerVector& suggestion_markers =
-      MarkersFor(&node, DocumentMarker::kSuggestion);
+      MarkersFor(text, DocumentMarker::MarkerTypes::Suggestion());
   if (suggestion_markers.IsEmpty()) {
     // If there are no suggestion markers, we can return early as a minor
     // performance optimization.
-    DocumentMarker::MarkerTypes remaining_types = DocumentMarker::AllMarkers();
-    remaining_types.Remove(DocumentMarker::kSuggestion);
-    return MarkersFor(&node, remaining_types);
+    return MarkersFor(
+        text, DocumentMarker::MarkerTypes::AllBut(
+                  DocumentMarker::MarkerTypes(DocumentMarker::kSuggestion)));
   }
 
   const DocumentMarkerVector& markers_overridden_by_suggestion_markers =
-      MarkersFor(&node,
-                 DocumentMarker::kComposition | DocumentMarker::kSpelling);
+      MarkersFor(text,
+                 DocumentMarker::MarkerTypes(DocumentMarker::kComposition |
+                                             DocumentMarker::kSpelling));
 
   Vector<unsigned> suggestion_starts;
   Vector<unsigned> suggestion_ends;
@@ -590,12 +584,10 @@ DocumentMarkerVector DocumentMarkerController::ComputeMarkersToPaint(
 
   markers_to_paint.AppendVector(suggestion_markers);
 
-  DocumentMarker::MarkerTypes remaining_types = DocumentMarker::AllMarkers();
-  remaining_types.Remove(DocumentMarker::kComposition |
-                         DocumentMarker::kSpelling |
-                         DocumentMarker::kSuggestion);
-
-  markers_to_paint.AppendVector(MarkersFor(&node, remaining_types));
+  markers_to_paint.AppendVector(MarkersFor(
+      text, DocumentMarker::MarkerTypes::AllBut(DocumentMarker::MarkerTypes(
+                DocumentMarker::kComposition | DocumentMarker::kSpelling |
+                DocumentMarker::kSuggestion))));
 
   return markers_to_paint;
 }
@@ -658,7 +650,17 @@ void DocumentMarkerController::InvalidateRectsForAllTextMatchMarkers() {
   }
 }
 
+void DocumentMarkerController::DidProcessMarkerMap(Visitor* visitor) {
+  if (markers_.IsEmpty())
+    Clear();
+}
+
 void DocumentMarkerController::Trace(blink::Visitor* visitor) {
+  // Note: To make |DidProcessMarkerMap()| called after weak members callback
+  // of |markers_|, we should register it before tracing |markers_|.
+  visitor->template RegisterWeakMembers<
+      DocumentMarkerController, &DocumentMarkerController::DidProcessMarkerMap>(
+      this);
   visitor->Trace(markers_);
   visitor->Trace(document_);
   SynchronousMutationObserver::Trace(visitor);
@@ -684,7 +686,7 @@ void DocumentMarkerController::RemoveSpellingMarkersUnderWords(
       continue;
     MarkerLists* markers = node_markers.value;
     for (DocumentMarker::MarkerType type :
-         DocumentMarker::MisspellingMarkers()) {
+         DocumentMarker::MarkerTypes::Misspelling()) {
       DocumentMarkerList* const list = ListForType(markers, type);
       if (!list)
         continue;
@@ -721,8 +723,7 @@ void DocumentMarkerController::RemoveMarkersOfTypes(
       RemoveMarkersFromList(iterator, marker_types);
   }
 
-  possibly_existing_marker_types_.Remove(marker_types);
-  if (PossiblyHasMarkers(DocumentMarker::AllMarkers()))
+  if (PossiblyHasMarkers(DocumentMarker::MarkerTypes::AllBut(marker_types)))
     return;
   SetContext(nullptr);
 }
@@ -734,13 +735,13 @@ void DocumentMarkerController::RemoveMarkersFromList(
   bool node_can_be_removed;
 
   size_t empty_lists_count = 0;
-  if (marker_types == DocumentMarker::AllMarkers()) {
+  if (marker_types == DocumentMarker::MarkerTypes::All()) {
     needs_repainting = true;
     node_can_be_removed = true;
   } else {
     MarkerLists* markers = iterator->value.Get();
 
-    for (DocumentMarker::MarkerType type : DocumentMarker::AllMarkers()) {
+    for (DocumentMarker::MarkerType type : DocumentMarker::MarkerTypes::All()) {
       DocumentMarkerList* const list = ListForType(markers, type);
       if (!list || list->IsEmpty()) {
         if (list && list->IsEmpty())
@@ -769,7 +770,7 @@ void DocumentMarkerController::RemoveMarkersFromList(
   if (node_can_be_removed) {
     markers_.erase(iterator);
     if (markers_.IsEmpty()) {
-      possibly_existing_marker_types_ = 0;
+      possibly_existing_marker_types_ = DocumentMarker::MarkerTypes();
       SetContext(nullptr);
     }
   }
@@ -788,7 +789,7 @@ void DocumentMarkerController::RepaintMarkers(
 
     // inner loop: process each marker in the current node
     MarkerLists* markers = i->value.Get();
-    for (DocumentMarker::MarkerType type : DocumentMarker::AllMarkers()) {
+    for (DocumentMarker::MarkerType type : DocumentMarker::MarkerTypes::All()) {
       DocumentMarkerList* const list = ListForType(markers, type);
       if (!list || list->IsEmpty() || !marker_types.Contains(type))
         continue;
@@ -858,7 +859,7 @@ void DocumentMarkerController::ShowMarkers() const {
     const Node* node = node_iterator->key;
     builder.Append(String::Format("%p", node));
     MarkerLists* markers = markers_.at(node);
-    for (DocumentMarker::MarkerType type : DocumentMarker::AllMarkers()) {
+    for (DocumentMarker::MarkerType type : DocumentMarker::MarkerTypes::All()) {
       DocumentMarkerList* const list = ListForType(markers, type);
       if (!list)
         continue;
@@ -891,7 +892,7 @@ void DocumentMarkerController::DidUpdateCharacterData(CharacterData* node,
                                                       unsigned offset,
                                                       unsigned old_length,
                                                       unsigned new_length) {
-  if (!PossiblyHasMarkers(DocumentMarker::AllMarkers()))
+  if (!PossiblyHasMarkers(DocumentMarker::MarkerTypes::All()))
     return;
   DCHECK(!markers_.IsEmpty());
 

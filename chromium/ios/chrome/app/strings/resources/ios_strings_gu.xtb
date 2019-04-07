@@ -4,6 +4,7 @@
 <translation id="1016495303386450659">આઇટમ અપડેટ કરી</translation>
 <translation id="1047726139967079566">આ પૃષ્ઠને બુકમાર્ક કરો...</translation>
 <translation id="1049743911850919806">છૂપી</translation>
+<translation id="1063454504051558093">અન્ય પાસવર્ડનો ઉપયોગ કરો...</translation>
 <translation id="1076421457278169141">કોડ સ્કેન કર્યો</translation>
 <translation id="1084365883616172403">Facebook પોસ્ટ પૂર્ણ કરી છે.</translation>
 <translation id="1104948393051856124">સ્વીકારો અને ચાલુ રાખો</translation>
@@ -36,7 +37,6 @@
 <translation id="145015347812617860"><ph name="COUNT" /> આઇટમ્સ</translation>
 <translation id="1491277525950327607">સેટિંગ ટૉગલ કરવા માટે બે વાર ટૅપ કરો</translation>
 <translation id="152234381334907219">ક્યારેય ન સચવાયેલું</translation>
-<translation id="1532451416480227577">Google Pay માંથી સરનામાં અને ક્રેડિટ કાર્ડ બતાવો</translation>
 <translation id="1540800554400757039">સરનામું 1</translation>
 <translation id="1545749641540134597">QR કોડ સ્કેન કરો</translation>
 <translation id="1558704936695638228">વધુ ટૅબ વિકલ્પો માટે દબાવી રાખો</translation>
@@ -44,16 +44,15 @@
 <translation id="1582732959743469162">આનાથી તમારું હાલનું ડાઉનલોડ આગળ વધતું અટકી જશે.</translation>
 <translation id="1605658421715042784">છબી કૉપિ કરો</translation>
 <translation id="1612730193129642006">ટૅબ ગ્રિડ બતાવો</translation>
+<translation id="162035744160882748">સિંક, વૈયક્તિકરણ અને અન્ય Google સેવાઓ ચાલુ કરો</translation>
 <translation id="1644574205037202324">ઇતિહાસ</translation>
-<translation id="1646446875146297738">‘ટ્રેક કરશો નહીં' સક્ષમ કરવાનો અર્થ એ છે કે વિનંતીને તમારા બ્રાઉઝિંગ ટ્રાફિક સાથે શામેલ કરવામાં આવશે. કોઈ પણ અસર વેબસાઇટ વિનંતીનો પ્રતિસાદ આપે છે કે કેમ અને કેવી રીતે વિનંતીનું અર્થઘટન થાય છે તેના પર નિર્ભર છે. 
-
-ઉદાહરણ તરીકે, કેટલીક વેબસાઇટ આ વિનંતીનો પ્રતિસાદ તમને તેવી જાહેરાતો બતાવીને આપી શકે છે કે જે તમે મુલાકાત લીધેલી બીજા વેબસાઇટ પર આધારિત નથી. ઘણી વેબસાઇટ તો પણ તમારા બ્રાઉઝિંગ ડેટાને એકત્રિત કરશે અને તેનો ઉપયોગ - ઉદાહરણ તરીકે, સુરક્ષા વધારવા માટે, તેમની વેબસાઇટ પર કન્ટેન્ટ, સેવાઓ, જાહેરાતો અને ભલામણ પ્રદાન કરવા માટે, રિપોર્ટિંગ આંકડા જનરેટ કરવા માટે કરશે. <ph name="BEGIN_LINK" />વધુ જાણો<ph name="END_LINK" /></translation>
 <translation id="1657011748321897393">શેરિંગ નિષ્ફળ થઇ કારણ કે તમે નેટવર્ક સાથે જોડાયેલ નથી.</translation>
 <translation id="165877110639533037">કોઈ ખુલ્લા ટેબ્સ નથી</translation>
 <translation id="1687475363370981210">તમામને વાંચેલ તરીકે ચિહ્નિત કરો</translation>
 <translation id="1690731385917361335">કોઈ આઇટમ નથી</translation>
 <translation id="1700629756560807968"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> પસંદ કર્યાં</translation>
 <translation id="1740468249224277719">ઇન્સ્ટૉલ કરવા માટે બે વાર ટૅપ કરો.</translation>
+<translation id="1746815479209538200">વેબ બ્રાઉઝ કરવા માટે, નવી ટૅબ ઉમેરો.</translation>
 <translation id="17513872634828108">ટેબ્સ ખોલો</translation>
 <translation id="1752547299766512813">પાસવર્ડ સાચવો</translation>
 <translation id="1753905327828125965">સૌથી વધુ જોવાયેલ</translation>
@@ -64,6 +63,7 @@
 <translation id="1876721852596493031">ઉપયોગ ડેટા મોકલો</translation>
 <translation id="1886928167269928266">શરૂઆતથી</translation>
 <translation id="1911619930368729126">Google ડ્રાઇવ પર અપલોડ કરો</translation>
+<translation id="191179954310195971">અન્ય Google સેવાઓ</translation>
 <translation id="1941314575388338491">કૉપિ કરવા માટે બે વાર ટૅપ કરો.</translation>
 <translation id="1952728750904661634">સંચાલિત એકાઉન્ટ સાથે સાઇન ઇન કરો</translation>
 <translation id="1974060860693918893">વિગતવાર</translation>
@@ -85,7 +85,6 @@
 <translation id="2320166752086256636">કીબોર્ડ છુપાવો</translation>
 <translation id="2339560363438331454">સિંક અને Google સેવાઓ</translation>
 <translation id="2351097562818989364">તમારી અનુવાદ સેટિંગ્સ ફરીથી સેટ કરવામાં આવી છે.</translation>
-<translation id="2354750644801399986">'ટ્રેક કરશો નહીં'</translation>
 <translation id="2359808026110333948">ચાલુ રાખો</translation>
 <translation id="2381405137052800939">મૂળભૂત</translation>
 <translation id="2386793615875593361">1 પસંદ કર્યું છે</translation>
@@ -107,7 +106,7 @@
 <translation id="2704606927547763573">કૉપિ કર્યું</translation>
 <translation id="2709516037105925701">સ્વતઃભરો</translation>
 <translation id="2712127207578915686">ફાઇલ ખોલવામાં અસમર્થ છે</translation>
-<translation id="2718352093833049315">ફક્ત Wi-Fi પર</translation>
+<translation id="2718352093833049315">ફક્ત વાઇ-ફાઇ પર</translation>
 <translation id="2747003861858887689">પહેલાનું ફીલ્ડ</translation>
 <translation id="2780046210906776326">ઇમેઇલ એકાઉન્ટ્સ નથી</translation>
 <translation id="2781692009645368755">Google Pay</translation>
@@ -119,7 +118,6 @@
 <translation id="2870560284913253234">સાઇટ</translation>
 <translation id="2871695793448672541">છુપાયેલ, પાસવર્ડ</translation>
 <translation id="2898963176829412617">નવું ફોલ્ડર…</translation>
-<translation id="2903493209154104877">સરનામાંઓ</translation>
 <translation id="2909437209446960244">તાજેતરની ટૅબ</translation>
 <translation id="2916171785467530738">શોધ અને URLsને આપમેળે પૂર્ણ કરો</translation>
 <translation id="291754862089661335">QR કોડ અથવા બારકોડને આ ફ્રેમમાં મૂકો</translation>
@@ -166,10 +164,12 @@
 <translation id="3588820906588687999">નવા ટેબમાં છબી ખોલો</translation>
 <translation id="3603009562372709545">લિંક URL કૉપિ કરો</translation>
 <translation id="3607167657931203000">સ્વતઃભરણ ડેટા</translation>
+<translation id="360930808415985584">સિંક, વૈયક્તિકરણ અને વધુ બાબતોને નિયંત્રિત કરો</translation>
 <translation id="3609785682760573515">સમન્વય કરી રહ્યું છે...</translation>
-<translation id="3628119975092896051">તમારી વાંચન સૂચિ ઑફલાઇન ઉપલબ્ધ છે. તમારી વાંચન સૂચિમાં પૃષ્ઠ ઉમેરવા માટે, <ph name="SHARE_OPENING_ICON" /> ટૅપ કરો.</translation>
+<translation id="3628119975092896051">તમારી વાંચન સૂચિ ઑફલાઇન ઉપલબ્ધ છે. તમારી વાંચન સૂચિમાં પેજ ઉમેરવા માટે, <ph name="SHARE_OPENING_ICON" /> ટૅપ કરો.</translation>
 <translation id="3638472932233958418">વેબપૃષ્ઠો પહેલાથી લોડ કરો</translation>
 <translation id="3691593122358196899"><ph name="FOLDER_TITLE" /> પર બુકમાર્ક કર્યું</translation>
+<translation id="3765471630796399471">અન્ય પાસવર્ડનો ઉપયોગ કરો</translation>
 <translation id="3771033907050503522">છૂપા ટેબ્સ</translation>
 <translation id="3779810277399252432">કોઈ ઇન્ટરનેટ કનેક્શન નથી.</translation>
 <translation id="3783017676699494206">ફોટા સાચવો</translation>
@@ -194,6 +194,7 @@
 <translation id="4124987746317609294">સમય શ્રેણી</translation>
 <translation id="4172051516777682613">હંમેશા બતાવો</translation>
 <translation id="418156467088430727">ઑફલાઇન સંસ્કરણ નવા ટૅબમાં જુઓ</translation>
+<translation id="4192273449750167573">આગલી સ્ક્રીન પર તમારી સેટિંગનો રિવ્યૂ કરો</translation>
 <translation id="4237682350741091554">Chrome સમન્વયન અને વૈયક્તિકરણને <ph name="BEGIN_LINK" />સેટિંગ્સ<ph name="END_LINK" />માં સંચાલિત કરો</translation>
 <translation id="424315890655130736">પાસફ્રેઝ દાખલ કરો</translation>
 <translation id="4272631900155121838">QR કોડને સ્કેન કરવા માટે, સેટિંગ્સમાંથી કૅમેરો સક્ષમ કરો</translation>
@@ -211,6 +212,7 @@
 <translation id="4508750114462689118">સાઇન-ઇન પ્રોમો બંધ કરો</translation>
 <translation id="4526249700380860531"><ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> પર સાચવેલા પાસવર્ડ્સ જુઓ અને સંચાલિત કરો</translation>
 <translation id="4536418791685807335">ફરીથી સાઇન ઇન કરવાનો પ્રયાસ કરો.</translation>
+<translation id="4541241553780729349">Googleમાં સિંક થતો ડેટા અને તમે ઉપયોગમાં લેતા હોય તે સુવિધાઓમાં કોઈ ફેરફાર થશે નહીં</translation>
 <translation id="457386861538956877">વધુ...</translation>
 <translation id="461440297010471931">Google વડે શોધી રહ્યાં છીએ</translation>
 <translation id="4619615317237390068">અન્ય ઉપકરણોમાંથી ટૅબ્સ</translation>
@@ -231,7 +233,7 @@
 <translation id="4904877109095351937">વાંચેલ તરીકે ચિહ્નિત કરો</translation>
 <translation id="4930268273022498155">અસ્તિત્વમાંનો ડેટા કાઢી નાખો. તમે <ph name="USER_EMAIL1" /> પર પાછા સ્વિચ કરીને તેને પુનઃપ્રાપ્ત કરી શકો છો.</translation>
 <translation id="4941089862236492464">માફ કરશો, તમારી આઇટમને શેર કરવામાં સમસ્યા આવી હતી.</translation>
-<translation id="4979397965658815378">તમારા બુકમાર્ક્સ, પાસવર્ડ્સ, ઇતિહાસ અને અન્ય સેટિંગ્સને તમારા બધા ઉપકરણો પર મેળવવા માટે તમારા Google એકાઉન્ટ સાથે સાઇન ઇન કરો.</translation>
+<translation id="4979397965658815378">તમારા બુકમાર્ક, પાસવર્ડ, ઇતિહાસ અને અન્ય સેટિંગને તમારા બધા ડિવાઇસ પર મેળવવા માટે તમારા Google એકાઉન્ટ સાથે સાઇન ઇન કરો.</translation>
 <translation id="5004416275253351869">Google પ્રવૃત્તિ નિયંત્રણો</translation>
 <translation id="5005498671520578047">પાસવર્ડની કૉપિ કરો</translation>
 <translation id="5010803260590204777">ખાનગીપણે વેબ બ્રાઉઝ કરવા છૂપું ટેબ ખોલો.</translation>
@@ -245,9 +247,9 @@
 <translation id="5186185447130319458">ખાનગી</translation>
 <translation id="5190835502935405962">બુકમાર્ક્સ બાર</translation>
 <translation id="5197255632782567636">ઇન્ટરનેટ</translation>
+<translation id="5215116848420601511">Google Payનો ઉપયોગ કરતી ચુકવણી પદ્ધતિઓ અને ઍડ્રેસ</translation>
 <translation id="5228579091201413441">સમન્વયન સક્ષમ કરો</translation>
 <translation id="5244474230056479698"><ph name="EMAIL" /> પર સમન્વયિત કરી રહ્યાં છે</translation>
-<translation id="527973086555161537">ખાનગી રૂપે વેબ બ્રાઉઝ કરવા માટે ટૅબ ખોલો.</translation>
 <translation id="5300589172476337783">બતાવો</translation>
 <translation id="5317780077021120954">સાચવો</translation>
 <translation id="5327248766486351172">નામ</translation>
@@ -283,9 +285,11 @@
 <translation id="5916664084637901428">ચાલુ</translation>
 <translation id="5938160824633642847">તમારું ઉપકરણ લગભગ ભરાઈ ગયું છે. સ્પેસ બનાવો અને ફરી પ્રયાસ કરો.</translation>
 <translation id="5948291296578561264">આ તમને તમારી ફોટો લાઇબ્રેરીમાં ફોટો સાચવવા દે છે.</translation>
-<translation id="5955891643922670672">ઑફલાઇન સંસ્કરણ જોઈ રહ્યાં છે</translation>
+<translation id="5955891643922670672">ઑફલાઇન વર્ઝન જોઈ રહ્યા છે</translation>
+<translation id="5957613098218939406">વધુ વિકલ્પો</translation>
 <translation id="5964480694698977962">નવું છૂપું ટૅબ બનાવો</translation>
 <translation id="5965679971710331625">તમે સાઇન ઇન છો</translation>
+<translation id="5979837087407522202">પાસવર્ડ શોધો</translation>
 <translation id="5982717868370722439">અસ્તિત્વમાંના ડેટાને <ph name="USER_EMAIL" /> માં ઉમેરો.</translation>
 <translation id="6012140227487808125">એન્ક્રિપ્ટ કરી રહ્યું છે...</translation>
 <translation id="6021332621416007159">આમાં ખોલો...</translation>
@@ -315,6 +319,7 @@
 <translation id="6344783595350022745">ટેક્સ્ટ સાફ કરો</translation>
 <translation id="6346549652287021269">નવું ડાઉનલોડ શરૂ કરીએ?</translation>
 <translation id="6362362396625799311">કોઈ છુપા ટૅબ્સ નથી</translation>
+<translation id="6363526231572697780">કોઈ વપરાશકર્તાનું નામ નથી</translation>
 <translation id="6374469231428023295">ફરી પ્રયાસ કરો</translation>
 <translation id="6380866119319257197">જો તમે તમારો પાસફ્રેઝ ભૂલી જાઓ અથવા આ સેટિંગ બદલવા માંગતા હોવ, તો <ph name="BEGIN_LINK" />સમન્વયનને ફરીથી સેટ કરો<ph name="END_LINK" /></translation>
 <translation id="6389470377220713856">કાર્ડ પરનું નામ</translation>
@@ -330,7 +335,6 @@
 <translation id="6464071786529933911">નવા છુપા ટૅબમાં ખોલો</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> આઇટમ કાઢી નાખી</translation>
 <translation id="6541915733953096570">ગત કલાક</translation>
-<translation id="6570040839871198836">સ્વતઃભરણ ફોર્મ્સ</translation>
 <translation id="6656103420185847513">ફોલ્ડર સંપાદિત કરો</translation>
 <translation id="6657585470893396449">પાસવર્ડ</translation>
 <translation id="667999046851023355">દસ્તાવેજ</translation>
@@ -343,6 +347,7 @@
 <translation id="6797885426782475225">વૉઇસ શોધ</translation>
 <translation id="6807889908376551050">બધું બતાવો...</translation>
 <translation id="681368974849482173">આઇટમ બનાવી</translation>
+<translation id="685040365210406336">કોઈ ફેરફાર ન કરો</translation>
 <translation id="6896758677409633944">કૉપિ કરો</translation>
 <translation id="6903907808598579934">સમન્વયન ચાલુ કરો</translation>
 <translation id="6914783257214138813">જે કોઈપણ તમારી નિકાસ કરેલ પાસવર્ડની ફાઇલને જોઈ શકશે, તેમને તમારા પાસવર્ડ પણ દૃશ્યક્ષમ થશે.</translation>
@@ -372,7 +377,8 @@
 <translation id="7336264872878993241"><ph name="PERCENT" /> ટકા ડાઉનલોડ થઈ</translation>
 <translation id="7346909386216857016">બરાબર, સમજાઇ ગયું</translation>
 <translation id="7400418766976504921">URL</translation>
-<translation id="7425346204213733349">તમારા બુકમાર્ક્સ, ઇતિહાસ, પાસવર્ડ્સ અને અન્ય સેટિંગ્સમાં ફેરફારને હવે તમારા Google એકાઉન્ટ પર સમન્વયિત કરવામાં આવશે નહીં. જો કે, તમારો અસ્તિત્વમાંનો ડેટા તમારા Google એકાઉન્ટમાં સંગ્રહિત રહેશે.</translation>
+<translation id="741204030948306876">હા, હું સંમત છું</translation>
+<translation id="7425346204213733349">તમારા બુકમાર્ક, ઇતિહાસ, પાસવર્ડ અને અન્ય સેટિંગમાં ફેરફારને હવે તમારા Google એકાઉન્ટ પર સિંક કરવામાં આવશે નહીં. જો કે, તમારો અસ્તિત્વમાંનો ડેટા તમારા Google એકાઉન્ટમાં સંગ્રહિત રહેશે.</translation>
 <translation id="744343212394640790"><ph name="EMAIL" /> નથી</translation>
 <translation id="7454057999980797137">રાજ્ય / કાઉન્ટી</translation>
 <translation id="7456847797759667638">સ્થાન ખોલો...</translation>
@@ -389,12 +395,14 @@
 <translation id="7638584964844754484">ખોટો પાસફ્રેઝ</translation>
 <translation id="7649070708921625228">સહાય</translation>
 <translation id="7658239707568436148">રદ કરો</translation>
+<translation id="766891008101699113">વેબને ખાનગી રીતે બ્રાઉઝ કરવા માટે, નવી ટૅબ ઉમેરો.</translation>
 <translation id="7671141431838911305">ઇન્સ્ટોલ કરો</translation>
 <translation id="7765158879357617694">સ્થાન</translation>
 <translation id="7769602470925380267">સ્વીકારો અને સાઇન આઉટ કરો</translation>
 <translation id="7772032839648071052">પાસફ્રેઝની પુષ્ટિ કરો</translation>
+<translation id="7781829728241885113">ગઈ કાલે</translation>
 <translation id="780301667611848630">નહીં, આભાર</translation>
-<translation id="7830720446622801252">બિન-વ્યક્તિગત કરેલી સેવાઓ</translation>
+<translation id="7840771868269352570">તમે પસંદ કરેલી આઇટમ કાઢી નાખવામાં આવશે.</translation>
 <translation id="7856733331829174190">ડાઉનલોડ ન કરી શક્યાં</translation>
 <translation id="7859704718976024901">બ્રાઉઝિંગ ઇતિહાસ</translation>
 <translation id="7918293828610777738">તમારી વાંચન સૂચિ ઑફલાઇન ઉપલબ્ધ છે. તમારી વાંચન સૂચિમાં પેજ ઉમેરવા માટે, <ph name="SHARE_OPENING_ICON" /> પર અને પછી <ph name="READ_LATER_TEXT" /> પર ટૅપ કરો.</translation>
@@ -415,11 +423,9 @@
 <translation id="8080028325999236607">બધા ટૅબ્સ બંધ કરો</translation>
 <translation id="8114753159095730575">ફાઇલ ડાઉનલોડ માટે ઉપલબ્ધ છે. સ્ક્રીનના તળિયે વિકલ્પો ઉપલબ્ધ છે.</translation>
 <translation id="8160722851663543621">ઍડ્રેસ બાર અને શોધ બૉક્સમાંથી શોધ અને અમુક કુકીને તમારા ડિફૉલ્ટ શોધ એંજિન પર મોકલે છે</translation>
-<translation id="8178325540017397816">તમે પસંદ કરેલી આઇટમો કાઢી નાખવામાં આવશે</translation>
 <translation id="8205564605687841303">રદ કરો</translation>
 <translation id="8225985093977202398">કૅશ કરેલ છબીઓ અને ફાઇલો</translation>
 <translation id="8261506727792406068">કાઢી નાખો</translation>
-<translation id="8272426682713568063">ક્રેડિટ કાર્ડ્સ</translation>
 <translation id="8281781826761538115">ડિફૉલ્ટ - <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8328777765163860529">બધું બંધ કરો</translation>
 <translation id="8381750437846184350">શોધ, જાહેરાતો અને અન્ય Google સેવાઓને વ્યક્તિગત કરવા માટે Google, તમારા બ્રાઉઝિંગ ઇતિહાસનો ઉપયોગ કેવી રીતે કરે છે તે નિયંત્રિત કરો</translation>
@@ -445,7 +451,7 @@
 <translation id="8721297211384281569">સાધન મેનૂ</translation>
 <translation id="8725066075913043281">ફરી પ્રયાસ કરો</translation>
 <translation id="8730621377337864115">થઈ ગયું</translation>
-<translation id="8741995161408053644">તમારા Google એકાઉન્ટમાં <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> પર બ્રાઉઝિંગ ઇતિહાસના અન્ય સ્વરૂપો હોઇ શકે છે.</translation>
+<translation id="8741995161408053644">તમારા Google એકાઉન્ટમાં <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> પર બ્રાઉઝિંગ ઇતિહાસના અન્ય સ્વરૂપો હોઈ શકે છે.</translation>
 <translation id="8775144690796719618">અમાન્ય URL</translation>
 <translation id="8820817407110198400">બુકમાર્ક્સ</translation>
 <translation id="8840513115188359703">તમે તમારા Google એકાઉન્ટમાંથી સાઇન આઉટ થશો નહીં.</translation>
@@ -470,7 +476,7 @@
 <translation id="9203116392574189331">હેન્ડઓફ</translation>
 <translation id="9223358826628549784">ક્રેશ રિપોર્ટ મોકલ્યો.</translation>
 <translation id="932327136139879170">હોમ</translation>
-<translation id="935490618240037774">તમારા Google એકાઉન્ટ પર તમારા બુકમાર્ક્સ, ઇતિહાસ, પાસવર્ડ્સ અને અન્ય સેટિંગ્સ સમન્વયિત કરવામાં આવશે જેથી કરીને તમે તમારા બધા ઉપકરણો પર તેમનો ઉપયોગ કરી શકો</translation>
+<translation id="935490618240037774">તમારા Google એકાઉન્ટ પર તમારા બુકમાર્ક, ઇતિહાસ, પાસવર્ડ અને અન્ય સેટિંગ સિંક કરવામાં આવશે, જેથી કરીને તમે તમારા બધા ડિવાઇસ પર તેમનો ઉપયોગ કરી શકો.</translation>
 <translation id="939598580284253335">પાસફ્રેઝ દાખલ કરો</translation>
 <translation id="976982866697960176">સમન્વયિત ડેટા સંચાલિત કરો…</translation>
 <translation id="988141524645182168">અન્ય ઉપકરણો</translation>

@@ -5,6 +5,7 @@
 #include "content/browser/background_fetch/storage/database_helpers.h"
 
 #include "base/strings/string_number_conversions.h"
+#include "third_party/blink/public/platform/modules/background_fetch/background_fetch.mojom.h"
 
 namespace content {
 
@@ -23,8 +24,8 @@ std::string RegistrationKey(const std::string& unique_id) {
   return kRegistrationKeyPrefix + unique_id;
 }
 
-std::string TitleKey(const std::string& unique_id) {
-  return kTitleKeyPrefix + unique_id;
+std::string UIOptionsKey(const std::string& unique_id) {
+  return kUIOptionsKeyPrefix + unique_id;
 }
 
 std::string PendingRequestKeyPrefix(const std::string& unique_id) {
@@ -81,10 +82,83 @@ DatabaseStatus ToDatabaseStatus(blink::ServiceWorkerStatusCode status) {
     case blink::ServiceWorkerStatusCode::kErrorDiskCache:
     case blink::ServiceWorkerStatusCode::kErrorRedundant:
     case blink::ServiceWorkerStatusCode::kErrorDisallowed:
+    case blink::ServiceWorkerStatusCode::kErrorInvalidArguments:
       break;
   }
   NOTREACHED();
   return DatabaseStatus::kFailed;
+}
+
+bool ToBackgroundFetchRegistration(
+    const proto::BackgroundFetchMetadata& metadata_proto,
+    BackgroundFetchRegistration* registration) {
+  DCHECK(registration);
+  const auto& registration_proto = metadata_proto.registration();
+
+  registration->developer_id = registration_proto.developer_id();
+  registration->unique_id = registration_proto.unique_id();
+  registration->upload_total = registration_proto.upload_total();
+  registration->uploaded = registration_proto.uploaded();
+  registration->download_total = registration_proto.download_total();
+  registration->downloaded = registration_proto.downloaded();
+  switch (registration_proto.state()) {
+    case proto::BackgroundFetchRegistration_BackgroundFetchState_PENDING:
+      registration->state = blink::mojom::BackgroundFetchState::PENDING;
+      break;
+    case proto::BackgroundFetchRegistration_BackgroundFetchState_FAILURE:
+      registration->state = blink::mojom::BackgroundFetchState::FAILURE;
+      break;
+    case proto::BackgroundFetchRegistration_BackgroundFetchState_SUCCESS:
+      registration->state = blink::mojom::BackgroundFetchState::SUCCESS;
+      break;
+    default:
+      NOTREACHED();
+  }
+
+  bool did_convert = MojoFailureReasonFromRegistrationProto(
+      registration_proto.failure_reason(), &registration->failure_reason);
+  return did_convert;
+}
+
+bool MojoFailureReasonFromRegistrationProto(
+    proto::BackgroundFetchRegistration::BackgroundFetchFailureReason
+        proto_failure_reason,
+    blink::mojom::BackgroundFetchFailureReason* failure_reason) {
+  DCHECK(failure_reason);
+  switch (proto_failure_reason) {
+    case proto::BackgroundFetchRegistration::NONE:
+      *failure_reason = blink::mojom::BackgroundFetchFailureReason::NONE;
+      return true;
+    case proto::BackgroundFetchRegistration::CANCELLED_FROM_UI:
+      *failure_reason =
+          blink::mojom::BackgroundFetchFailureReason::CANCELLED_FROM_UI;
+      return true;
+    case proto::BackgroundFetchRegistration::CANCELLED_BY_DEVELOPER:
+      *failure_reason =
+          blink::mojom::BackgroundFetchFailureReason::CANCELLED_BY_DEVELOPER;
+      return true;
+    case proto::BackgroundFetchRegistration::SERVICE_WORKER_UNAVAILABLE:
+      *failure_reason = blink::mojom::BackgroundFetchFailureReason::
+          SERVICE_WORKER_UNAVAILABLE;
+      return true;
+    case proto::BackgroundFetchRegistration::QUOTA_EXCEEDED:
+      *failure_reason =
+          blink::mojom::BackgroundFetchFailureReason::QUOTA_EXCEEDED;
+      return true;
+    case proto::BackgroundFetchRegistration::TOTAL_DOWNLOAD_SIZE_EXCEEDED:
+      *failure_reason = blink::mojom::BackgroundFetchFailureReason::
+          TOTAL_DOWNLOAD_SIZE_EXCEEDED;
+      return true;
+    case proto::BackgroundFetchRegistration::FETCH_ERROR:
+      *failure_reason = blink::mojom::BackgroundFetchFailureReason::FETCH_ERROR;
+      return true;
+    case proto::BackgroundFetchRegistration::BAD_STATUS:
+      *failure_reason = blink::mojom::BackgroundFetchFailureReason::BAD_STATUS;
+      return true;
+  }
+  LOG(ERROR) << "BackgroundFetchFailureReason from the metadata proto doesn't"
+             << " match any enum value. Possible database corruption.";
+  return false;
 }
 
 }  // namespace background_fetch

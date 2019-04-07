@@ -9,6 +9,7 @@
 <translation id="1293699935367580298">Esc</translation>
 <translation id="1306549533752902673">ANBEFALEDE APPS</translation>
 <translation id="1368832886055348810">Venstre til højre</translation>
+<translation id="1383876407941801731">Søg</translation>
 <translation id="1398853756734560583">Maksimér</translation>
 <translation id="1413622004203049571">Deaktiver underretninger fra <ph name="NOTIFIER_NAME" /></translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 minut og }one{# minutter og }other{# minutter og }}</translation>
@@ -40,6 +41,7 @@
 <translation id="24452542372838207">Udvid underretning</translation>
 <translation id="2482878487686419369">Underretninger</translation>
 <translation id="2497284189126895209">Alle filer</translation>
+<translation id="2515586267016047495">Alt</translation>
 <translation id="2522350507219695259">Kalibreringen er fuldført</translation>
 <translation id="252373100621549798">Ukendt skærm</translation>
 <translation id="2583543531130364912">Kalibrer din touchskærm</translation>
@@ -63,6 +65,7 @@
 <translation id="3660179305079774227">Pil opad</translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> GB/sek.</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
+<translation id="3842239759367498783">Fortsæt med at læse via din mobilenhed <ph name="TITLE" /></translation>
 <translation id="385051799172605136">Tilbage</translation>
 <translation id="3889424535448813030">Højrepil</translation>
 <translation id="3892641579809465218">Intern skærm</translation>
@@ -78,14 +81,12 @@
 <translation id="4724120544754982507">Underretningscenter, <ph name="UNREAD_NOTIFICATION_COUNT" /> ulæste underretninger</translation>
 <translation id="4730374152663651037">OFTE ANVENDT</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{Der er 1 måned tilbage}one{Der er # måned tilbage}other{Der er # måneder tilbage}}</translation>
-<translation id="4820616160060340806">Kommando+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="4841881773802181781">Indsættelse</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 sekund}one{# sekunder}other{# sekunder}}</translation>
 <translation id="4971687151119236543">Medie: Forrige nummer</translation>
-<translation id="4999762576397546063">Ctrl+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="5046499563572181734">Tryk her</translation>
 <translation id="5076340679995252485">&amp;Indsæt</translation>
-<translation id="5120799197269191491">Søgetast+<ph name="KEY_COMBO_NAME" /></translation>
+<translation id="5137751499640340777">Start Google Assistent</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">Trekant til at vise eller skjule indhold</translation>
 <translation id="528468243742722775">End</translation>
@@ -100,7 +101,6 @@
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 sekund tilbage}one{# sekunder tilbage}other{# sekunder tilbage}}</translation>
 <translation id="5941711191222866238">Minimer</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 time}one{# timer}other{# timer}}</translation>
-<translation id="5948410903763073882">Alt+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="6012623610530968780">Side <ph name="SELECTED_PAGE" /> ud af <ph name="TOTAL_PAGE_NUM" /></translation>
 <translation id="6022924867608035986">Ryd teksten i søgefeltet</translation>
 <translation id="6040143037577758943">Luk</translation>
@@ -149,6 +149,8 @@
 <translation id="7814458197256864873">&amp;Kopier</translation>
 <translation id="7879499977785298635">Bloker ikke</translation>
 <translation id="7907591526440419938">Åbn fil</translation>
+<translation id="7969046989155602842">Kommando</translation>
+<translation id="8087772101393322318"><ph name="KEY_MODIFIER_NAME" />+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{for 1 time siden}one{for # time siden}other{for # timer siden}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{1 sek. tilbage}one{# sek. tilbage}other{# sek. tilbage}}</translation>
 <translation id="815598010540052116">Scroll Down</translation>
@@ -161,7 +163,6 @@
 <translation id="838869780401515933">markér</translation>
 <translation id="8393700583063109961">Send en besked</translation>
 <translation id="8394908167088220973">Medie: Afspil/Pause</translation>
-<translation id="8400147561352026160">Skift+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8458811141851741261">{YEARS,plural, =1{1 år}one{# år}other{# år}}</translation>
 <translation id="8602707065186045623"><ph name="SAVEAS_EXTENSION_TYPE" /> Fil (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> kB/sek.</translation>

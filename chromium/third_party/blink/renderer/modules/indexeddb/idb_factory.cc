@@ -64,6 +64,12 @@ static bool IsContextValid(ExecutionContext* context) {
   return true;
 }
 
+WebIDBFactory* IDBFactory::GetFactory() {
+  if (!web_idb_factory_)
+    web_idb_factory_ = Platform::Current()->CreateIdbFactory();
+  return web_idb_factory_.get();
+}
+
 IDBRequest* IDBFactory::GetDatabaseNames(ScriptState* script_state,
                                          ExceptionState& exception_state) {
   IDB_TRACE("IDBFactory::getDatabaseNamesRequestSetup");
@@ -94,7 +100,7 @@ IDBRequest* IDBFactory::GetDatabaseNames(ScriptState* script_state,
     return request;
   }
 
-  Platform::Current()->IdbFactory()->GetDatabaseNames(
+  GetFactory()->GetDatabaseNames(
       request->CreateWebCallbacks().release(),
       WebSecurityOrigin(
           ExecutionContext::From(script_state)->GetSecurityOrigin()),
@@ -120,7 +126,6 @@ IDBOpenDBRequest* IDBFactory::OpenInternal(ScriptState* script_state,
                                            ExceptionState& exception_state) {
   IDB_TRACE1("IDBFactory::open", "name", name.Utf8());
   IDBRequest::AsyncTraceState metrics("IDBFactory::open");
-  IDBDatabase::RecordApiCallsHistogram(kIDBOpenCall);
   DCHECK(version >= 1 || version == IDBDatabaseMetadata::kNoVersion);
   if (!IsContextValid(ExecutionContext::From(script_state)))
     return nullptr;
@@ -150,7 +155,7 @@ IDBOpenDBRequest* IDBFactory::OpenInternal(ScriptState* script_state,
     return request;
   }
 
-  Platform::Current()->IdbFactory()->Open(
+  GetFactory()->Open(
       name, version, transaction_id, request->CreateWebCallbacks().release(),
       database_callbacks->CreateWebCallbacks().release(),
       WebSecurityOrigin(
@@ -190,7 +195,6 @@ IDBOpenDBRequest* IDBFactory::DeleteDatabaseInternal(
     bool force_close) {
   IDB_TRACE1("IDBFactory::deleteDatabase", "name", name.Utf8());
   IDBRequest::AsyncTraceState metrics("IDBFactory::deleteDatabase");
-  IDBDatabase::RecordApiCallsHistogram(kIDBDeleteDatabaseCall);
   if (!IsContextValid(ExecutionContext::From(script_state)))
     return nullptr;
   if (!ExecutionContext::From(script_state)
@@ -217,7 +221,7 @@ IDBOpenDBRequest* IDBFactory::DeleteDatabaseInternal(
     return request;
   }
 
-  Platform::Current()->IdbFactory()->DeleteDatabase(
+  GetFactory()->DeleteDatabase(
       name, request->CreateWebCallbacks().release(),
       WebSecurityOrigin(
           ExecutionContext::From(script_state)->GetSecurityOrigin()),

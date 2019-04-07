@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/ios/browser/autofill_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -23,13 +23,15 @@ WebViewAutofillClientIOS::WebViewAutofillClientIOS(
     web::WebState* web_state,
     id<CWVAutofillClientIOSBridge> bridge,
     identity::IdentityManager* identity_manager,
-    scoped_refptr<AutofillWebDataService> autofill_web_data_service)
+    scoped_refptr<AutofillWebDataService> autofill_web_data_service,
+    syncer::SyncService* sync_service)
     : pref_service_(pref_service),
       personal_data_manager_(personal_data_manager),
       web_state_(web_state),
       bridge_(bridge),
       identity_manager_(identity_manager),
-      autofill_web_data_service_(autofill_web_data_service) {}
+      autofill_web_data_service_(autofill_web_data_service),
+      sync_service_(sync_service) {}
 
 WebViewAutofillClientIOS::~WebViewAutofillClientIOS() {
   HideAutofillPopup();
@@ -43,9 +45,8 @@ PrefService* WebViewAutofillClientIOS::GetPrefs() {
   return pref_service_;
 }
 
-// TODO(crbug.com/535784): Implement this when adding credit card upload.
 syncer::SyncService* WebViewAutofillClientIOS::GetSyncService() {
-  return nullptr;
+  return sync_service_;
 }
 
 identity::IdentityManager* WebViewAutofillClientIOS::GetIdentityManager() {
@@ -73,7 +74,8 @@ WebViewAutofillClientIOS::GetSecurityLevelForUmaHistograms() {
   return security_state::SecurityLevel::SECURITY_LEVEL_COUNT;
 }
 
-void WebViewAutofillClientIOS::ShowAutofillSettings() {
+void WebViewAutofillClientIOS::ShowAutofillSettings(
+    bool show_credit_card_settings) {
   NOTREACHED();
 }
 
@@ -89,9 +91,16 @@ void WebViewAutofillClientIOS::OnUnmaskVerificationResult(
   [bridge_ didReceiveUnmaskVerificationResult:result];
 }
 
-void WebViewAutofillClientIOS::ShowLocalCardMigrationPrompt(
-    base::OnceClosure closure) {
-  NOTREACHED();
+void WebViewAutofillClientIOS::ShowLocalCardMigrationDialog(
+    base::OnceClosure show_migration_dialog_closure) {
+  NOTIMPLEMENTED();
+}
+
+void WebViewAutofillClientIOS::ConfirmMigrateLocalCardToCloud(
+    std::unique_ptr<base::DictionaryValue> legal_message,
+    std::vector<MigratableCreditCard>& migratable_credit_cards,
+    base::OnceClosure start_migrating_cards_closure) {
+  NOTIMPLEMENTED();
 }
 
 void WebViewAutofillClientIOS::ConfirmSaveAutofillProfile(
@@ -144,8 +153,7 @@ void WebViewAutofillClientIOS::HideAutofillPopup() {
 }
 
 bool WebViewAutofillClientIOS::IsAutocompleteEnabled() {
-  // For browser, Autocomplete is always enabled as part of Autofill.
-  return GetPrefs()->GetBoolean(prefs::kAutofillEnabled);
+  return prefs::IsAutocompleteEnabled(GetPrefs());
 }
 
 void WebViewAutofillClientIOS::UpdateAutofillPopupDataListValues(
@@ -181,7 +189,7 @@ void WebViewAutofillClientIOS::ExecuteCommand(int id) {
 }
 
 bool WebViewAutofillClientIOS::IsAutofillSupported() {
-  return true;
+  return autofill::prefs::IsAutofillEnabled(GetPrefs());
 }
 
 bool WebViewAutofillClientIOS::AreServerCardsSupported() {

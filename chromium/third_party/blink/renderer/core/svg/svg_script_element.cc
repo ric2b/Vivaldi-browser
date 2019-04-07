@@ -68,7 +68,7 @@ void SVGScriptElement::SvgAttributeChanged(const QualifiedName& attr_name) {
 }
 
 Node::InsertionNotificationRequest SVGScriptElement::InsertedInto(
-    ContainerNode* root_parent) {
+    ContainerNode& root_parent) {
   SVGElement::InsertedInto(root_parent);
   return kInsertionShouldCallDidNotifySubtreeInsertions;
 }
@@ -155,12 +155,12 @@ Element* SVGScriptElement::CloneWithoutAttributesAndChildren(
 }
 
 void SVGScriptElement::DispatchLoadEvent() {
-  DispatchEvent(Event::Create(EventTypeNames::load));
+  DispatchEvent(*Event::Create(EventTypeNames::load));
   have_fired_load_ = true;
 }
 
 void SVGScriptElement::DispatchErrorEvent() {
-  DispatchEvent(Event::Create(EventTypeNames::error));
+  DispatchEvent(*Event::Create(EventTypeNames::error));
 }
 
 void SVGScriptElement::SetScriptElementForBinding(

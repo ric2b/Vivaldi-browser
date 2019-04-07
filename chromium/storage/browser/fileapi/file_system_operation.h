@@ -15,15 +15,12 @@
 #include "base/files/file_path.h"
 #include "base/process/process.h"
 #include "components/services/filesystem/public/interfaces/types.mojom.h"
+#include "storage/browser/blob/blob_reader.h"
 #include "storage/browser/fileapi/file_system_operation_context.h"
 #include "storage/browser/storage_browser_export.h"
 
 namespace base {
 class Time;
-}
-
-namespace net {
-class URLRequest;
 }
 
 namespace storage {
@@ -106,13 +103,13 @@ class FileSystemOperation {
   // snapshot file.  It can be set to let the chromium backend take
   // care of the life time of the snapshot file.  Otherwise (if the returned
   // file does not require any handling) the implementation can just
-  // return NULL.  In a more complex case, the implementaiton can manage
+  // return nullptr.  In a more complex case, the implementation can manage
   // the lifetime of the snapshot file on its own (e.g. by its cache system)
   // but also can be notified via the reference when the file becomes no
   // longer necessary in the javascript world.
   // Please see the comment for ShareableFileReference for details.
   //
-  using SnapshotFileCallback = base::Callback<void(
+  using SnapshotFileCallback = base::OnceCallback<void(
       base::File::Error result,
       const base::File::Info& file_info,
       const base::FilePath& platform_path,
@@ -321,10 +318,10 @@ class FileSystemOperation {
   virtual void Remove(const FileSystemURL& path, bool recursive,
                       const StatusCallback& callback) = 0;
 
-  // Writes the data read from |blob_request| using |writer_delegate|.
+  // Writes the data read from |blob_reader| using |writer_delegate|.
   virtual void Write(const FileSystemURL& url,
                      std::unique_ptr<FileWriterDelegate> writer_delegate,
-                     std::unique_ptr<net::URLRequest> blob_request,
+                     std::unique_ptr<BlobReader> blob_reader,
                      const WriteCallback& callback) = 0;
 
   // Truncates a file at |path| to |length|. If |length| is larger than
@@ -386,7 +383,7 @@ class FileSystemOperation {
   // temporary file.  Or if the implementaiton already has the local cache
   // data for |path| it can simply return the path to the cache.
   virtual void CreateSnapshotFile(const FileSystemURL& path,
-                                  const SnapshotFileCallback& callback) = 0;
+                                  SnapshotFileCallback callback) = 0;
 
   // Copies in a single file from a different filesystem.
   //

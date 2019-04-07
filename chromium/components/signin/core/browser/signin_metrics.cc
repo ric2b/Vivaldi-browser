@@ -109,6 +109,14 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
       base::RecordAction(
           base::UserMetricsAction("Signin_Signin_FromForceSigninWarning"));
       break;
+    case AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
+      base::RecordAction(
+          base::UserMetricsAction("Signin_Signin_FromSaveCardBubble"));
+      break;
+    case AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
+      base::RecordAction(
+          base::UserMetricsAction("Signin_Signin_FromManageCardsBubble"));
+      break;
     case AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED();
       break;
@@ -153,6 +161,14 @@ void RecordSigninWithDefaultUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS:
       base::RecordAction(base::UserMetricsAction(
           "Signin_SigninWithDefault_FromNTPContentSuggestions"));
+      break;
+    case AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_SigninWithDefault_FromSaveCardBubble"));
+      break;
+    case AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_SigninWithDefault_FromManageCardsBubble"));
       break;
     case AccessPoint::ACCESS_POINT_START_PAGE:
     case AccessPoint::ACCESS_POINT_NTP_LINK:
@@ -219,6 +235,14 @@ void RecordSigninNotDefaultUserActionForAccessPoint(
       base::RecordAction(base::UserMetricsAction(
           "Signin_SigninNotDefault_FromNTPContentSuggestions"));
       break;
+    case AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_SigninNotDefault_FromSaveCardBubble"));
+      break;
+    case AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_SigninNotDefault_FromManageCardsBubble"));
+      break;
     case AccessPoint::ACCESS_POINT_START_PAGE:
     case AccessPoint::ACCESS_POINT_NTP_LINK:
     case AccessPoint::ACCESS_POINT_MENU:
@@ -284,6 +308,14 @@ void RecordSigninNewAccountPreDiceUserActionForAccessPoint(
       base::RecordAction(base::UserMetricsAction(
           "Signin_SigninNewAccountPreDice_FromNTPContentSuggestions"));
       break;
+    case AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_SigninNewAccountPreDice_FromSaveCardBubble"));
+      break;
+    case AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_SigninNewAccountPreDice_FromManageCardsBubble"));
+      break;
     case AccessPoint::ACCESS_POINT_START_PAGE:
     case AccessPoint::ACCESS_POINT_NTP_LINK:
     case AccessPoint::ACCESS_POINT_MENU:
@@ -327,7 +359,7 @@ void RecordSigninNewAccountNoExistingAccountUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE:
       // clang-format off
       base::RecordAction(base::UserMetricsAction(
-          "Signin_SigninNewAccountNoExistingAccount_FromExtensionInstallBubble"));
+          "Signin_SigninNewAccountNoExistingAccount_FromExtensionInstallBubble"));  // NOLINT(whitespace/line_length)
       // clang-format on
       break;
     case AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE:
@@ -357,8 +389,16 @@ void RecordSigninNewAccountNoExistingAccountUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS:
       // clang-format off
       base::RecordAction(base::UserMetricsAction(
-          "Signin_SigninNewAccountNoExistingAccount_FromNTPContentSuggestions"));
+          "Signin_SigninNewAccountNoExistingAccount_FromNTPContentSuggestions"));  // NOLINT(whitespace/line_length)
       // clang-format on
+      break;
+    case AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_SigninNewAccountNoExistingAccount_FromSaveCardBubble"));
+      break;
+    case AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_SigninNewAccountNoExistingAccount_FromManageCardsBubble"));
       break;
     case AccessPoint::ACCESS_POINT_START_PAGE:
     case AccessPoint::ACCESS_POINT_NTP_LINK:
@@ -431,6 +471,14 @@ void RecordSigninNewAccountExistingAccountUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS:
       base::RecordAction(base::UserMetricsAction(
           "Signin_SigninNewAccountExistingAccount_FromNTPContentSuggestions"));
+      break;
+    case AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_SigninNewAccountExistingAccount_FromSaveCardBubble"));
+      break;
+    case AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_SigninNewAccountExistingAccount_FromManageCardsBubble"));
       break;
     case AccessPoint::ACCESS_POINT_START_PAGE:
     case AccessPoint::ACCESS_POINT_NTP_LINK:
@@ -865,6 +913,14 @@ void RecordSigninImpressionUserActionForAccessPoint(AccessPoint access_point) {
       base::RecordAction(
           base::UserMetricsAction("Signin_Impression_FromTabSwitcher"));
       break;
+    case AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
+      base::RecordAction(
+          base::UserMetricsAction("Signin_Impression_FromSaveCardBubble"));
+      break;
+    case AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
+      base::RecordAction(
+          base::UserMetricsAction("Signin_Impression_FromManageCardsBubble"));
+      break;
     case AccessPoint::ACCESS_POINT_CONTENT_AREA:
     case AccessPoint::ACCESS_POINT_EXTENSIONS:
     case AccessPoint::ACCESS_POINT_FORCE_SIGNIN_WARNING:
@@ -964,6 +1020,24 @@ void RecordSigninImpressionWithAccountUserActionForAccessPoint(
       } else {
         base::RecordAction(base::UserMetricsAction(
             "Signin_ImpressionWithNoAccount_FromNTPContentSuggestions"));
+      }
+      break;
+    case AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
+      if (with_account) {
+        base::RecordAction(base::UserMetricsAction(
+            "Signin_ImpressionWithAccount_FromSaveCardBubble"));
+      } else {
+        base::RecordAction(base::UserMetricsAction(
+            "Signin_ImpressionWithNoAccount_FromSaveCardBubble"));
+      }
+      break;
+    case AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
+      if (with_account) {
+        base::RecordAction(base::UserMetricsAction(
+            "Signin_ImpressionWithAccount_FromManageCardsBubble"));
+      } else {
+        base::RecordAction(base::UserMetricsAction(
+            "Signin_ImpressionWithNoAccount_FromManageCardsBubble"));
       }
       break;
     case AccessPoint::ACCESS_POINT_START_PAGE:

@@ -4,7 +4,6 @@
 
 package org.chromium.content_public.browser;
 
-import android.content.Context;
 import android.content.Intent;
 import android.view.ActionMode;
 import android.view.textclassifier.TextClassifier;
@@ -128,8 +127,8 @@ public interface SelectionPopupController {
      * handles and selection popups if focus is lost.
      * TODO(mdjones): This was added as a temporary measure to hide text UI while Reader Mode or
      * Contextual Search are showing. This should be removed in favor of proper focusing of the
-     * panel's ContentViewCore (which is currently not being added to the view hierarchy).
-     * @param focused If the ContentViewCore currently has focus.
+     * panel's WebContents (which is currently not being added to the view hierarchy).
+     * @param focused If the WebContents currently has focus.
      */
     void updateTextSelectionUI(boolean focused);
 
@@ -140,8 +139,7 @@ public interface SelectionPopupController {
      * @return {@link SelectionPopupController} object used for the give WebContents.
      *         Creates one if not present.
      */
-    static SelectionPopupController createForTesting(
-            Context context, WindowAndroid window, WebContents webContents) {
-        return SelectionPopupControllerImpl.createForTesting(context, window, webContents, null);
+    static SelectionPopupController createForTesting(WebContents webContents) {
+        return SelectionPopupControllerImpl.createForTesting(webContents);
     }
 }

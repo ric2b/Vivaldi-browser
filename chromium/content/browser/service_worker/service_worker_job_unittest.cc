@@ -24,7 +24,6 @@
 #include "content/browser/service_worker/service_worker_registration_object_host.h"
 #include "content/browser/service_worker/service_worker_registration_status.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
-#include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -862,13 +861,14 @@ void WriteResponse(ServiceWorkerStorage* storage,
   std::unique_ptr<ServiceWorkerResponseWriter> writer =
       storage->CreateResponseWriter(id);
 
-  std::unique_ptr<net::HttpResponseInfo> info(new net::HttpResponseInfo);
+  std::unique_ptr<net::HttpResponseInfo> info =
+      std::make_unique<net::HttpResponseInfo>();
   info->request_time = base::Time::Now();
   info->response_time = base::Time::Now();
   info->was_cached = false;
   info->headers = new net::HttpResponseHeaders(headers);
   scoped_refptr<HttpResponseInfoIOBuffer> info_buffer =
-      new HttpResponseInfoIOBuffer(info.release());
+      base::MakeRefCounted<HttpResponseInfoIOBuffer>(std::move(info));
 
   int rv = -1234;
   writer->WriteInfo(info_buffer.get(), base::BindOnce(&OnIOComplete, &rv));

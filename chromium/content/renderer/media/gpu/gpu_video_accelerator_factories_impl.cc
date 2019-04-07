@@ -17,6 +17,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/renderer/render_thread_impl.h"
+#include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
@@ -29,7 +30,8 @@
 #include "media/video/video_decode_accelerator.h"
 #include "media/video/video_encode_accelerator.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
+#include "services/ws/public/cpp/gpu/context_provider_command_buffer.h"
+#include "third_party/skia/include/core/SkPostConfig.h"
 
 namespace content {
 
@@ -55,7 +57,7 @@ GpuVideoAcceleratorFactoriesImpl::Create(
     scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
     const scoped_refptr<base::SingleThreadTaskRunner>& main_thread_task_runner,
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    const scoped_refptr<ui::ContextProviderCommandBuffer>& context_provider,
+    const scoped_refptr<ws::ContextProviderCommandBuffer>& context_provider,
     bool enable_video_gpu_memory_buffers,
     bool enable_media_stream_gpu_memory_buffers,
     bool enable_video_accelerator,
@@ -73,7 +75,7 @@ GpuVideoAcceleratorFactoriesImpl::GpuVideoAcceleratorFactoriesImpl(
     scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
     const scoped_refptr<base::SingleThreadTaskRunner>& main_thread_task_runner,
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    const scoped_refptr<ui::ContextProviderCommandBuffer>& context_provider,
+    const scoped_refptr<ws::ContextProviderCommandBuffer>& context_provider,
     bool enable_video_gpu_memory_buffers,
     bool enable_media_stream_gpu_memory_buffers,
     bool enable_video_accelerator,
@@ -109,10 +111,8 @@ GpuVideoAcceleratorFactoriesImpl::~GpuVideoAcceleratorFactoriesImpl() {}
 void GpuVideoAcceleratorFactoriesImpl::BindContextToTaskRunner() {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(context_provider_);
-  if (context_provider_->BindToCurrentThread() !=
-      gpu::ContextResult::kSuccess) {
+  if (context_provider_->BindToCurrentThread() != gpu::ContextResult::kSuccess)
     SetContextProviderLost();
-  }
 }
 
 bool GpuVideoAcceleratorFactoriesImpl::CheckContextLost() {
@@ -266,6 +266,17 @@ void GpuVideoAcceleratorFactoriesImpl::WaitSyncToken(
   gles2->ShallowFlushCHROMIUM();
 }
 
+void GpuVideoAcceleratorFactoriesImpl::SignalSyncToken(
+    const gpu::SyncToken& sync_token,
+    base::OnceClosure callback) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  if (CheckContextLost())
+    return;
+
+  context_provider_->ContextSupport()->SignalSyncToken(sync_token,
+                                                       std::move(callback));
+}
+
 void GpuVideoAcceleratorFactoriesImpl::ShallowFlushCHROMIUM() {
   DCHECK(task_runner_->BelongsToCurrentThread());
   if (CheckContextLost())
@@ -297,11 +308,23 @@ unsigned GpuVideoAcceleratorFactoriesImpl::ImageTextureTarget(
 }
 
 media::GpuVideoAcceleratorFactories::OutputFormat
-GpuVideoAcceleratorFactoriesImpl::VideoFrameOutputFormat(size_t bit_depth) {
+GpuVideoAcceleratorFactoriesImpl::VideoFrameOutputFormat(
+    media::VideoPixelFormat pixel_format) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   if (CheckContextLost())
     return media::GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED;
+#if defined(OS_CHROMEOS) && defined(USE_OZONE)
+  // TODO(sugoi): This configuration is currently used only for testing ChromeOS
+  // on Linux and doesn't support hardware acceleration. OSMesa did not support
+  // any hardware acceleration here, so this was never an issue, but SwiftShader
+  // revealed this issue. See https://crbug.com/859946
+  if (gpu_channel_host_->gpu_info().gl_renderer.find("SwiftShader") !=
+      std::string::npos) {
+    return media::GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED;
+  }
+#endif
   auto capabilities = context_provider_->ContextCapabilities();
+  const size_t bit_depth = media::BitDepth(pixel_format);
   if (bit_depth > 8) {
     // If high bit depth rendering is enabled, bail here, otherwise try and use
     // XR30 storage, and if not and we support RG textures, use those, albeit at
@@ -326,6 +349,15 @@ GpuVideoAcceleratorFactoriesImpl::VideoFrameOutputFormat(size_t bit_depth) {
       return media::GpuVideoAcceleratorFactories::OutputFormat::I420;
     return media::GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED;
   }
+
+  if (pixel_format == media::PIXEL_FORMAT_I420A) {
+#if SK_PMCOLOR_BYTE_ORDER(B, G, R, A)
+    return media::GpuVideoAcceleratorFactories::OutputFormat::BGRA;
+#elif SK_PMCOLOR_BYTE_ORDER(R, G, B, A)
+    return media::GpuVideoAcceleratorFactories::OutputFormat::RGBA;
+#endif
+  }
+
   if (capabilities.image_ycbcr_420v &&
       !capabilities.image_ycbcr_420v_disabled_for_video_frames) {
     return media::GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB;
@@ -368,7 +400,7 @@ GpuVideoAcceleratorFactoriesImpl::GetVideoEncodeAcceleratorSupportedProfiles() {
           .video_encode_accelerator_supported_profiles);
 }
 
-scoped_refptr<ui::ContextProviderCommandBuffer>
+scoped_refptr<ws::ContextProviderCommandBuffer>
 GpuVideoAcceleratorFactoriesImpl::GetMediaContextProvider() {
   return CheckContextLost() ? nullptr : context_provider_;
 }

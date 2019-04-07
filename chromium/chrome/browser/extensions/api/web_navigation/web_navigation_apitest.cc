@@ -218,9 +218,16 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Api) {
   ASSERT_TRUE(RunExtensionTest("webnavigation/api")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, GetFrame) {
+// Flaky on Windows. See http://crbug.com/874782
+#if defined(OS_WIN)
+#define MAYBE_GetFrame DISABLED_GetFrame
+#else
+#define MAYBE_GetFrame GetFrame
+#endif
+IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_GetFrame) {
   ASSERT_TRUE(RunExtensionTest("webnavigation/getFrame")) << message_;
 }
+#undef MAYBE_GetFrame
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ClientRedirect) {
   ASSERT_TRUE(RunExtensionTest("webnavigation/clientRedirect"))
@@ -246,9 +253,18 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Download) {
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ServerRedirectSingleProcess) {
-  // TODO(lukasza): https://crbug.com/671734: Investigate why this test fails
-  // with --site-per-process.
-  if (content::AreAllSitesIsolatedForTesting())
+  // TODO(lukasza): https://crbug.com/671734: In the long-term, //chrome-layer
+  // tests should only be run with site-per-process - remove the early return
+  // below when fixing https://crbug.com/870761 and removing the
+  // not_site_per_process_browser_tests step.
+  //
+  // This test has its expectations in
+  // serverRedirectSingleProcess/test_serverRedirectSingleProcess.js.  The
+  // expectations include exact |processId| ("exact" meaning that one cannot use
+  // a wildcard - the verification is done via chrome.test.checkDeepEq).
+  // Inclusion of |processId| means that the expectation change in
+  // site-per-process mode.
+  if (!content::AreAllSitesIsolatedForTesting())
     return;
 
   ASSERT_TRUE(StartEmbeddedTestServer());
@@ -346,7 +362,16 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_UserAction) {
   GURL url = extension->GetResourceURL(
       "a.html?" + base::IntToString(embedded_test_server()->port()));
 
+  // Register an observer for the navigation in the subframe, so the test
+  // can wait until it is fully complete. Otherwise the context menu
+  // navigation is non-deterministic on which process it will get associated
+  // with, leading to test flakiness.
+  content::TestNavigationManager nav_manager(
+      tab, embedded_test_server()->GetURL(
+               "/extensions/api_test/webnavigation/userAction/subframe.html"));
   ui_test_utils::NavigateToURL(browser(), url);
+  nav_manager.WaitForNavigationFinished();
+  EXPECT_TRUE(nav_manager.was_successful());
 
   // This corresponds to "Open link in new tab".
   content::ContextMenuParams params;

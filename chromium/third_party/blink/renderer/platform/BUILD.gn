@@ -22,21 +22,6 @@ blink_platform_avx_files = [
   "audio/cpu/x86/vector_math_avx.h",
 ]
 
-blink_platform_neon_files = [
-  "audio/cpu/arm/vector_math_neon.h",
-  "graphics/cpu/arm/webgl_image_conversion_neon.h",
-]
-
-blink_platform_msa_files = [
-  "audio/cpu/mips/vector_math_msa.h",
-  "graphics/cpu/mips/webgl_image_conversion_msa.h",
-]
-
-blink_platform_sse_files = [
-  "audio/cpu/x86/vector_math_sse.h",
-  "graphics/cpu/x86/webgl_image_conversion_sse.h",
-]
-
 make_names("font_family_names") {
   in_files = [ "fonts/font_family_names.json5" ]
   output_dir = blink_platform_output_dir
@@ -214,6 +199,11 @@ group("blink_platform_public_deps") {
     "//v8",
   ]
   public_configs = [ "//third_party/blink/renderer:features" ]
+
+  if (is_android) {
+    public_deps +=
+        [ "//third_party/blink/public/common:font_unique_name_table_proto" ]
+  }
 }
 
 declare_args() {
@@ -423,6 +413,7 @@ jumbo_component("platform") {
     "bindings/callback_function_base.h",
     "bindings/callback_interface_base.cc",
     "bindings/callback_interface_base.h",
+    "bindings/custom_wrappable.h",
     "bindings/dom_data_store.h",
     "bindings/dom_wrapper_map.h",
     "bindings/dom_wrapper_world.cc",
@@ -437,6 +428,8 @@ jumbo_component("platform") {
     "bindings/name_client.h",
     "bindings/origin_trial_features.cc",
     "bindings/origin_trial_features.h",
+    "bindings/parkable_string.cc",
+    "bindings/parkable_string.h",
     "bindings/runtime_call_stats.cc",
     "bindings/runtime_call_stats.h",
     "bindings/scoped_persistent.h",
@@ -597,9 +590,10 @@ jumbo_component("platform") {
     "feature_policy/feature_policy.h",
     "file_metadata.cc",
     "file_metadata.h",
-    "file_system_type.h",
     "fonts/alternate_font_family.h",
     "fonts/android/font_cache_android.cc",
+    "fonts/android/font_unique_name_lookup_android.cc",
+    "fonts/android/font_unique_name_lookup_android.h",
     "fonts/bitmap_glyphs_blacklist.cc",
     "fonts/bitmap_glyphs_blacklist.h",
     "fonts/canvas_rotation_in_vertical.h",
@@ -651,6 +645,8 @@ jumbo_component("platform") {
     "fonts/font_selector_client.h",
     "fonts/font_smoothing_mode.cc",
     "fonts/font_smoothing_mode.h",
+    "fonts/font_unique_name_lookup.cc",
+    "fonts/font_unique_name_lookup.h",
     "fonts/font_variant_east_asian.cc",
     "fonts/font_variant_east_asian.h",
     "fonts/font_variant_numeric.cc",
@@ -744,6 +740,7 @@ jumbo_component("platform") {
     "fonts/win/font_fallback_win.cc",
     "fonts/win/font_fallback_win.h",
     "fonts/win/font_platform_data_win.cc",
+    "geometry/blend.h",
     "geometry/cg/float_point_cg.cc",
     "geometry/cg/float_rect_cg.cc",
     "geometry/cg/float_size_cg.cc",
@@ -964,6 +961,8 @@ jumbo_component("platform") {
     "graphics/image_animation_policy.h",
     "graphics/image_data_buffer.cc",
     "graphics/image_data_buffer.h",
+    "graphics/image_decoder_wrapper.cc",
+    "graphics/image_decoder_wrapper.h",
     "graphics/image_decoding_store.cc",
     "graphics/image_decoding_store.h",
     "graphics/image_frame_generator.cc",
@@ -985,8 +984,6 @@ jumbo_component("platform") {
     "graphics/mailbox_texture_holder.h",
     "graphics/offscreen_canvas_placeholder.cc",
     "graphics/offscreen_canvas_placeholder.h",
-    "graphics/offscreen_canvas_resource_provider.cc",
-    "graphics/offscreen_canvas_resource_provider.h",
     "graphics/paint/clip_paint_property_node.cc",
     "graphics/paint/clip_paint_property_node.h",
     "graphics/paint/cull_rect.cc",
@@ -1163,8 +1160,6 @@ jumbo_component("platform") {
     "lifecycle_observer.h",
     "link_hash.cc",
     "link_hash.h",
-    "long_task_detector.cc",
-    "long_task_detector.h",
     "mac/block_exceptions.h",
     "mac/block_exceptions.mm",
     "mac/color_mac.h",
@@ -1173,9 +1168,6 @@ jumbo_component("platform") {
     "mac/graphics_context_canvas.mm",
     "mac/local_current_graphics_context.h",
     "mac/local_current_graphics_context.mm",
-    "mac/ns_scroller_imp_details.h",
-    "mac/scroll_animator_mac.h",
-    "mac/scroll_animator_mac.mm",
     "mac/theme_mac.h",
     "mac/theme_mac.mm",
     "mac/version_util_mac.h",
@@ -1210,8 +1202,6 @@ jumbo_component("platform") {
     "mojo/interface_invalidator.cc",
     "mojo/interface_invalidator.h",
     "mojo/mojo_helper.h",
-    "mojo/notification_struct_traits.cc",
-    "mojo/notification_struct_traits.h",
     "mojo/revocable_binding.h",
     "mojo/revocable_interface_ptr.h",
     "mojo/revocable_strong_binding.h",
@@ -1219,14 +1209,12 @@ jumbo_component("platform") {
     "mojo/string16_mojom_traits.h",
     "partition_alloc_memory_dump_provider.cc",
     "partition_alloc_memory_dump_provider.h",
-    "paste_mode.h",
     "peerconnection/rtc_answer_options_platform.h",
     "peerconnection/rtc_offer_options_platform.h",
     "peerconnection/rtc_session_description_request.h",
     "peerconnection/rtc_stats_request.h",
     "peerconnection/rtc_stats_response_base.h",
     "peerconnection/rtc_void_request.h",
-    "platform_chrome_client.h",
     "plugins/plugin_data.cc",
     "plugins/plugin_data.h",
     "plugins/plugin_script_forbidden_scope.cc",
@@ -1244,46 +1232,13 @@ jumbo_component("platform") {
     "probe/platform_trace_events_agent.cc",
     "probe/platform_trace_events_agent.h",
     "resolution_units.h",
-    "scoped_orientation_change_indicator.cc",
-    "scoped_orientation_change_indicator.h",
     "scroll/main_thread_scrolling_reason.h",
-    "scroll/programmatic_scroll_animator.cc",
-    "scroll/programmatic_scroll_animator.h",
+    "scroll/overscroll_behavior.h",
     "scroll/scroll_alignment.cc",
     "scroll/scroll_alignment.h",
-    "scroll/scroll_animator.cc",
-    "scroll/scroll_animator.h",
-    "scroll/scroll_animator_base.cc",
-    "scroll/scroll_animator_base.h",
-    "scroll/scroll_animator_compositor_coordinator.cc",
-    "scroll/scroll_animator_compositor_coordinator.h",
-    "scroll/scroll_customization.cc",
-    "scroll/scroll_customization.h",
     "scroll/scroll_snap_data.h",
-    "scroll/scroll_state_data.h",
     "scroll/scroll_types.h",
-    "scroll/scrollable_area.cc",
-    "scroll/scrollable_area.h",
-    "scroll/scrollbar.cc",
-    "scroll/scrollbar.h",
-    "scroll/scrollbar_layer_delegate.cc",
-    "scroll/scrollbar_layer_delegate.h",
-    "scroll/scrollbar_theme.cc",
-    "scroll/scrollbar_theme.h",
-    "scroll/scrollbar_theme_android.cc",
-    "scroll/scrollbar_theme_aura.cc",
-    "scroll/scrollbar_theme_aura.h",
-    "scroll/scrollbar_theme_mac.h",
-    "scroll/scrollbar_theme_mac.mm",
-    "scroll/scrollbar_theme_mock.cc",
-    "scroll/scrollbar_theme_mock.h",
-    "scroll/scrollbar_theme_overlay.cc",
-    "scroll/scrollbar_theme_overlay.h",
-    "scroll/scrollbar_theme_overlay_mock.h",
-    "scroll/smooth_scroll_sequencer.cc",
-    "scroll/smooth_scroll_sequencer.h",
-    "scroll/web_scroll_into_view_params.cc",
-    "scroll/web_scrollbar_theme.mm",
+    "scroll/web_scrollbar_theme_client.h",
     "serialized_resource.h",
     "shared_buffer.cc",
     "shared_buffer.h",
@@ -1367,8 +1322,6 @@ jumbo_component("platform") {
     "theme.cc",
     "theme.h",
     "theme_types.h",
-    "time_clamper.cc",
-    "time_clamper.h",
     "timer.cc",
     "timer.h",
     "transforms/affine_transform.cc",
@@ -1439,9 +1392,6 @@ jumbo_component("platform") {
   ]
 
   sources -= blink_platform_avx_files
-  sources -= blink_platform_neon_files
-  sources -= blink_platform_msa_files
-  sources -= blink_platform_sse_files
 
   # Add in the generated files.
   sources += get_target_outputs(":character_data") +
@@ -1502,10 +1452,11 @@ jumbo_component("platform") {
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/bindings:wtf_support",
     "//services/service_manager/public/cpp",
-    "//services/ui/public/cpp/gpu",
+    "//services/ws/public/cpp/gpu",
     "//skia:skcms",
     "//third_party:freetype_harfbuzz",
     "//third_party/blink/public:embedded_frame_sink_mojo_bindings_blink",
+    "//third_party/blink/public/common",
     "//third_party/ced",
     "//third_party/icu",
     "//ui/gfx",
@@ -1516,8 +1467,6 @@ jumbo_component("platform") {
     sources -= [
       "fonts/skia/font_cache_skia.cc",
       "fonts/web_font_render_style.cc",
-      "scroll/scroll_animator.cc",
-      "scroll/scroll_animator.h",
 
       # Uses LocaleMac instead.
       "text/locale_icu.cc",
@@ -1572,26 +1521,8 @@ jumbo_component("platform") {
     ]
   }
 
-  if (!use_default_render_theme) {
-    sources -= [
-      "scroll/scrollbar_theme_aura.cc",
-      "scroll/scrollbar_theme_aura.h",
-    ]
-  }
-
-  if (current_cpu == "arm") {
-    deps += [ ":blink_arm_neon" ]
-  }
-
-  if (current_cpu == "mipsel" || current_cpu == "mips64el") {
-    deps += [ ":blink_mips_msa" ]
-  }
-
   if (current_cpu == "x86" || current_cpu == "x64") {
-    deps += [
-      ":blink_x86_avx",
-      ":blink_x86_sse",
-    ]
+    deps += [ ":blink_x86_avx" ]
   }
 
   if (use_webaudio_ffmpeg) {
@@ -1613,7 +1544,8 @@ jumbo_static_library("test_support") {
 
   sources = [
     "graphics/gpu/drawing_buffer_test_helpers.h",
-    "scroll/scrollbar_test_suite.h",
+    "testing/code_cache_loader_mock.cc",
+    "testing/code_cache_loader_mock.h",
     "testing/compositor_test.cc",
     "testing/compositor_test.h",
     "testing/empty_web_media_player.cc",
@@ -1645,6 +1577,8 @@ jumbo_static_library("test_support") {
     "testing/test_paint_artifact.h",
     "testing/testing_platform_support.cc",
     "testing/testing_platform_support.h",
+    "testing/testing_platform_support_with_custom_scheduler.cc",
+    "testing/testing_platform_support_with_custom_scheduler.h",
     "testing/testing_platform_support_with_mock_scheduler.cc",
     "testing/testing_platform_support_with_mock_scheduler.h",
     "testing/testing_platform_support_with_web_rtc.cc",
@@ -1653,7 +1587,8 @@ jumbo_static_library("test_support") {
     "testing/unit_test_helpers.h",
     "testing/url_test_helpers.cc",
     "testing/url_test_helpers.h",
-    "testing/use_mock_scrollbar_settings.h",
+    "testing/viewport_layers_setup.cc",
+    "testing/viewport_layers_setup.h",
     "testing/weburl_loader_mock.cc",
     "testing/weburl_loader_mock.h",
     "testing/weburl_loader_mock_factory_impl.cc",
@@ -1718,6 +1653,7 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "audio/push_pull_fifo_multithread_test.cc",
     "audio/push_pull_fifo_test.cc",
     "audio/vector_math_test.cc",
+    "bindings/parkable_string_test.cc",
     "bindings/runtime_call_stats_test.cc",
     "drag_image_test.cc",
     "exported/file_path_conversion_test.cc",
@@ -1821,7 +1757,6 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "json/json_values_test.cc",
     "layout_unit_test.cc",
     "lifecycle_context_test.cc",
-    "long_task_detector_test.cc",
     "mac/graphics_context_canvas_test.mm",
     "mac/version_util_mac_test.mm",
     "mhtml/mhtml_parser_test.cc",
@@ -1829,16 +1764,12 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "mojo/geometry_struct_traits_test.cc",
     "mojo/interface_invalidator_test.cc",
     "mojo/kurl_security_origin_test.cc",
-    "mojo/notification_struct_traits_test.cc",
     "mojo/string16_mojom_traits_test.cc",
     "plugins/plugin_data_test.cc",
     "pod_arena_test.cc",
     "pod_free_list_arena_test.cc",
     "pod_interval_tree_test.cc",
     "pod_red_black_tree_test.cc",
-    "scoped_orientation_change_indicator_test.cc",
-    "scroll/scrollable_area_test.cc",
-    "scroll/scrollbar_theme_overlay_test.cc",
     "shared_buffer_test.cc",
     "testing/arena_test_helpers.h",
     "testing/tree_test_helpers.cc",
@@ -1861,7 +1792,6 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "text/text_run_test.cc",
     "text/unicode_utilities_test.cc",
     "text/writing_mode_utils_test.cc",
-    "time_clamper_test.cc",
     "timer_test.cc",
     "transforms/affine_transform_test.cc",
     "transforms/rotation_test.cc",
@@ -1875,7 +1805,6 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "web_vector_test.cc",
     "weborigin/known_ports_test.cc",
     "weborigin/kurl_test.cc",
-    "weborigin/origin_access_entry_test.cc",
     "weborigin/scheme_registry_test.cc",
     "weborigin/security_origin_test.cc",
     "weborigin/security_policy_test.cc",
@@ -1887,14 +1816,6 @@ jumbo_source_set("blink_platform_unittests_sources") {
     sources += [ "text/locale_mac_test.cc" ]
   } else if (is_posix || is_fuchsia) {
     sources += [ "text/locale_icu_test.cc" ]
-  }
-
-  if (!is_mac) {
-    sources += [ "scroll/scroll_animator_test.cc" ]
-  }
-
-  if (use_default_render_theme) {
-    sources += [ "scroll/scrollbar_theme_aura_test.cc" ]
   }
 
   sources += [ "testing/run_all_tests.cc" ]
@@ -1919,6 +1840,7 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "//services/viz/public/interfaces",
     "//services/viz/public/interfaces:interfaces_blink",
     "//skia",
+    "//skia:skcms",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party:freetype_harfbuzz",
@@ -2006,28 +1928,6 @@ group("blink_platform_unittests_data") {
   ]
 }
 
-if (current_cpu == "arm") {
-  source_set("blink_arm_neon") {
-    sources = blink_platform_neon_files
-    # The *NEON.cpp files fail to compile when -mthumb is passed. Force
-    # them to build in ARM mode.
-    # See https://bugs.webkit.org/show_bug.cgi?id=62916.
-    # TODO(GYP)
-    #'cflags': ['-marm'],
-    #    'conditions': [
-    #      ['OS=="android"', {
-    #        'cflags!': ['-mthumb'],
-    #      }],
-    #    ],
-  }
-}
-
-if (current_cpu == "mipsel" || current_cpu == "mips64el") {
-  source_set("blink_mips_msa") {
-    sources = blink_platform_msa_files
-  }
-}
-
 if (current_cpu == "x86" || current_cpu == "x64") {
   source_set("blink_x86_avx") {
     sources = blink_platform_avx_files
@@ -2036,14 +1936,11 @@ if (current_cpu == "x86" || current_cpu == "x64") {
       ":blink_platform_implementation",
       "//third_party/blink/renderer:non_test_config",
     ]
-    if (!is_clang && is_win) {
+    if (is_win) {
       cflags = [ "/arch:AVX" ]
     } else {
       cflags = [ "-mavx" ]
     }
-  }
-  source_set("blink_x86_sse") {
-    sources = blink_platform_sse_files
   }
 }
 
@@ -2209,6 +2106,7 @@ jumbo_source_set("unit_tests") {
   visibility = []
   visibility = [ "//third_party/blink/renderer/*" ]
   sources = [
+    "animation/animated_layers_test.cc",
     "graphics/canvas_2d_layer_bridge_test.cc",
     "graphics/canvas_color_params_test.cc",
     "graphics/canvas_resource_test.cc",

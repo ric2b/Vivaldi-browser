@@ -6,7 +6,9 @@
 #define UI_OZONE_PLATFORM_SCENIC_SCENIC_WINDOW_H_
 
 #include <fuchsia/ui/input/cpp/fidl.h>
-#include <fuchsia/ui/views_v1/cpp/fidl.h>
+#include <fuchsia/ui/viewsv1/cpp/fidl.h>
+#include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "ui/gfx/geometry/rect.h"
@@ -24,7 +26,7 @@ class PlatformWindowDelegate;
 
 class OZONE_EXPORT ScenicWindow : public PlatformWindow,
                                   public ScenicSessionListener,
-                                  public fuchsia::ui::views_v1::ViewListener,
+                                  public fuchsia::ui::viewsv1::ViewListener,
                                   public fuchsia::ui::input::InputListener {
  public:
   // Both |window_manager| and |delegate| must outlive the ScenicWindow.
@@ -33,13 +35,17 @@ class OZONE_EXPORT ScenicWindow : public PlatformWindow,
   // be used to add the view to a ViewContainer.
   ScenicWindow(ScenicWindowManager* window_manager,
                PlatformWindowDelegate* delegate,
-               fidl::InterfaceRequest<fuchsia::ui::views_v1_token::ViewOwner>
+               fidl::InterfaceRequest<fuchsia::ui::viewsv1token::ViewOwner>
                    view_owner_request);
   ~ScenicWindow() override;
 
   ScenicSession* scenic_session() { return &scenic_session_; }
   ScenicSession::ResourceId node_id() const { return node_id_; }
   float device_pixel_ratio() const { return device_pixel_ratio_; }
+
+  // Overrides texture of the window. This is used by ScenicWindowCanvas.
+  // TODO(spang): Deprecate software rendering on fuchsia.
+  void SetTexture(ScenicSession::ResourceId texture);
 
   // PlatformWindow implementation.
   gfx::Rect GetBounds() override;
@@ -61,10 +67,12 @@ class OZONE_EXPORT ScenicWindow : public PlatformWindow,
   void MoveCursorTo(const gfx::Point& location) override;
   void ConfineCursorToBounds(const gfx::Rect& bounds) override;
   PlatformImeController* GetPlatformImeController() override;
+  void SetRestoredBoundsInPixels(const gfx::Rect& bounds) override;
+  gfx::Rect GetRestoredBoundsInPixels() const override;
 
  private:
   // views::ViewListener interface.
-  void OnPropertiesChanged(fuchsia::ui::views_v1::ViewProperties properties,
+  void OnPropertiesChanged(fuchsia::ui::viewsv1::ViewProperties properties,
                            OnPropertiesChangedCallback callback) override;
 
   // fuchsia::ui::input::InputListener interface.
@@ -82,16 +90,19 @@ class OZONE_EXPORT ScenicWindow : public PlatformWindow,
 
   void UpdateSize();
 
+  // Handlers for Fuchsia input event specializations.
   bool OnMouseEvent(const fuchsia::ui::input::PointerEvent& event);
   bool OnKeyboardEvent(const fuchsia::ui::input::KeyboardEvent& event);
+  bool OnTouchEvent(const fuchsia::ui::input::PointerEvent& event);
+  bool OnFocusEvent(const fuchsia::ui::input::FocusEvent& event);
 
   ScenicWindowManager* const manager_;
   PlatformWindowDelegate* const delegate_;
   gfx::AcceleratedWidget const window_id_;
 
   // Underlying View in the view_manager.
-  fuchsia::ui::views_v1::ViewPtr view_;
-  fidl::Binding<fuchsia::ui::views_v1::ViewListener> view_listener_binding_;
+  fuchsia::ui::viewsv1::ViewPtr view_;
+  fidl::Binding<fuchsia::ui::viewsv1::ViewListener> view_listener_binding_;
 
   // Scenic session used for all drawing operations in this View.
   ScenicSession scenic_session_;
@@ -101,6 +112,12 @@ class OZONE_EXPORT ScenicWindow : public PlatformWindow,
 
   // Node ID in |scenic_session_| for the view.
   ScenicSession::ResourceId node_id_;
+
+  // Shape and material resource ids for the view in the context of the scenic
+  // session for the window. They are used to set shape and texture for the view
+  // node.
+  ScenicSession::ResourceId shape_id_;
+  ScenicSession::ResourceId material_id_;
 
   // Current view size in DIPs.
   gfx::SizeF size_dips_;

@@ -31,9 +31,9 @@
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/frame/dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -69,6 +69,7 @@ class SecurityOrigin;
 class SerializedScriptValue;
 class SourceLocation;
 class StyleMedia;
+class TrustedTypePolicyFactory;
 class USVStringOrTrustedURL;
 class V8FrameRequestCallback;
 class V8IdleRequestCallback;
@@ -311,7 +312,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void RemoveAllEventListeners() override;
 
   using EventTarget::DispatchEvent;
-  DispatchEventResult DispatchEvent(Event*, EventTarget*);
+  DispatchEventResult DispatchEvent(Event&, EventTarget*);
 
   void FinishedLoading();
 
@@ -319,8 +320,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   // recurse on its child frames.
   void SendOrientationChangeEvent();
 
-  void EnqueueWindowEvent(Event*, TaskType);
-  void EnqueueDocumentEvent(Event*, TaskType);
+  void EnqueueWindowEvent(Event&, TaskType);
+  void EnqueueDocumentEvent(Event&, TaskType);
   void EnqueuePageshowEvent(PageshowEventPersistence);
   void EnqueueHashchangeEvent(const String& old_url, const String& new_url);
   void EnqueuePopstateEvent(scoped_refptr<SerializedScriptValue>);
@@ -329,6 +330,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void StatePopped(scoped_refptr<SerializedScriptValue>);
 
   void AcceptLanguagesChanged();
+
+  TrustedTypePolicyFactory* trustedTypes() const;
 
  protected:
   // EventTarget overrides.
@@ -407,6 +410,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   HeapHashSet<Member<PostMessageTimer>> post_message_timers_;
   HeapHashSet<WeakMember<EventListenerObserver>> event_listener_observers_;
+
+  mutable Member<TrustedTypePolicyFactory> trusted_types_;
 };
 
 DEFINE_TYPE_CASTS(LocalDOMWindow,

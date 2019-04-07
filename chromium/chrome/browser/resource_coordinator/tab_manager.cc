@@ -290,8 +290,8 @@ LifecycleUnitVector TabManager::GetSortedLifecycleUnits() {
   return sorted_lifecycle_units;
 }
 
-void TabManager::DiscardTab(DiscardReason reason) {
-  if (reason == DiscardReason::kUrgent)
+void TabManager::DiscardTab(LifecycleUnitDiscardReason reason) {
+  if (reason == LifecycleUnitDiscardReason::URGENT)
     stats_collector_->RecordWillDiscardUrgently(GetNumAliveTabs());
 
 #if defined(OS_CHROMEOS)
@@ -312,10 +312,10 @@ WebContents* TabManager::DiscardTabByExtension(content::WebContents* contents) {
     return nullptr;
   }
 
-  return DiscardTabImpl(DiscardReason::kExternal);
+  return DiscardTabImpl(LifecycleUnitDiscardReason::EXTERNAL);
 }
 
-void TabManager::LogMemoryAndDiscardTab(DiscardReason reason) {
+void TabManager::LogMemoryAndDiscardTab(LifecycleUnitDiscardReason reason) {
   // Discard immediately without waiting for LogMemory() (https://crbug/850545).
   // Consider removing LogMemory() at all if nobody cares about the log.
   LogMemory("Tab Discards Memory details");
@@ -390,7 +390,7 @@ bool TabManager::IsTabRestoredInForeground(WebContents* web_contents) {
 // TabManager, private:
 
 // static
-void TabManager::PurgeMemoryAndDiscardTab(DiscardReason reason) {
+void TabManager::PurgeMemoryAndDiscardTab(LifecycleUnitDiscardReason reason) {
   TabManager* manager = g_browser_process->GetTabManager();
   manager->PurgeBrowserMemory();
   manager->DiscardTab(reason);
@@ -537,7 +537,7 @@ void TabManager::OnMemoryPressure(
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE:
       break;
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL:
-      LogMemoryAndDiscardTab(DiscardReason::kUrgent);
+      LogMemoryAndDiscardTab(LifecycleUnitDiscardReason::URGENT);
       break;
     default:
       NOTREACHED();
@@ -546,10 +546,8 @@ void TabManager::OnMemoryPressure(
   // calling PurgeBrowserMemory() before CRITICAL is reached.
 }
 
-void TabManager::ActiveTabChanged(content::WebContents* old_contents,
-                                  content::WebContents* new_contents,
-                                  int index,
-                                  int reason) {
+void TabManager::OnActiveTabChanged(content::WebContents* old_contents,
+                                    content::WebContents* new_contents) {
   // An active tab is not purged.
   // Calling GetWebContentsData() early ensures that the WebContentsData is
   // created for |new_contents|, which |stats_collector_| expects.
@@ -571,12 +569,10 @@ void TabManager::ActiveTabChanged(content::WebContents* old_contents,
   ResumeTabNavigationIfNeeded(new_contents);
 }
 
-void TabManager::TabInsertedAt(TabStripModel* tab_strip_model,
-                               content::WebContents* contents,
-                               int index,
+void TabManager::OnTabInserted(content::WebContents* contents,
                                bool foreground) {
   // Only interested in background tabs, as foreground tabs get taken care of by
-  // ActiveTabChanged.
+  // OnActiveTabChanged.
   if (foreground)
     return;
 
@@ -588,11 +584,24 @@ void TabManager::TabInsertedAt(TabStripModel* tab_strip_model,
       GetTimeToPurge(min_time_to_purge_, max_time_to_purge_));
 }
 
-void TabManager::TabReplacedAt(TabStripModel* tab_strip_model,
-                               content::WebContents* old_contents,
-                               content::WebContents* new_contents,
-                               int index) {
-  WebContentsData::CopyState(old_contents, new_contents);
+void TabManager::OnTabStripModelChanged(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
+  if (change.type() == TabStripModelChange::kInserted) {
+    for (const auto& delta : change.deltas()) {
+      OnTabInserted(delta.insert.contents,
+                    delta.insert.contents == selection.new_contents);
+    }
+  } else if (change.type() == TabStripModelChange::kReplaced) {
+    for (const auto& delta : change.deltas()) {
+      WebContentsData::CopyState(delta.replace.old_contents,
+                                 delta.replace.new_contents);
+    }
+  }
+
+  if (selection.active_tab_changed() && !tab_strip_model->empty())
+    OnActiveTabChanged(selection.old_contents, selection.new_contents);
 }
 
 void TabManager::OnStartTracking(content::WebContents* web_contents,
@@ -644,18 +653,14 @@ TabManager::WebContentsData* TabManager::GetWebContentsData(
 // TODO(jamescook): This should consider tabs with references to other tabs,
 // such as tabs created with JavaScript window.open(). Potentially consider
 // discarding the entire set together, or use that in the priority computation.
-content::WebContents* TabManager::DiscardTabImpl(DiscardReason reason) {
+content::WebContents* TabManager::DiscardTabImpl(
+    LifecycleUnitDiscardReason reason) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   for (LifecycleUnit* lifecycle_unit : GetSortedLifecycleUnits()) {
-    // TODO(chrisha): Report decision details!
-    auto old_state = lifecycle_unit->GetState();
     DecisionDetails decision_details;
     if (lifecycle_unit->CanDiscard(reason, &decision_details) &&
         lifecycle_unit->Discard(reason)) {
-      // TODO(chrisha): Move this into a LifecycleUnitObserver.
-      TabManagerStatsCollector::RecordDiscardDecision(
-          lifecycle_unit, decision_details, old_state, reason);
       TabLifecycleUnitExternal* tab_lifecycle_unit_external =
           lifecycle_unit->AsTabLifecycleUnitExternal();
       // For now, all LifecycleUnits are TabLifecycleUnitExternals.
@@ -960,7 +965,6 @@ void TabManager::PerformStateTransitions() {
   base::TimeTicks next_state_transition_time = base::TimeTicks::Max();
   const base::TimeTicks now = NowTicks();
   LifecycleUnit* oldest_discardable_lifecycle_unit = nullptr;
-  DecisionDetails oldest_discardable_lifecycle_unit_decision_details;
   LifecycleUnit* oldest_frozen_lifecycle_unit = nullptr;
 
   for (LifecycleUnit* lifecycle_unit : lifecycle_units_) {
@@ -972,15 +976,13 @@ void TabManager::PerformStateTransitions() {
     // Keep track of the discardable LifecycleUnit that has been hidden for the
     // longest time. It might be discarded below.
     DecisionDetails discard_details;
-    if (lifecycle_unit->CanDiscard(DiscardReason::kProactive,
+    if (lifecycle_unit->CanDiscard(LifecycleUnitDiscardReason::PROACTIVE,
                                    &discard_details)) {
       if (!oldest_discardable_lifecycle_unit ||
           lifecycle_unit->GetChromeUsageTimeWhenHidden() <
               oldest_discardable_lifecycle_unit
                   ->GetChromeUsageTimeWhenHidden()) {
         oldest_discardable_lifecycle_unit = lifecycle_unit;
-        oldest_discardable_lifecycle_unit_decision_details =
-            std::move(discard_details);
       }
     }
 
@@ -1016,11 +1018,9 @@ void TabManager::PerformStateTransitions() {
   // PerformStateTransitions() is scheduled immediately to check if another
   // discard should happen.
   if (oldest_discardable_lifecycle_unit && ShouldProactivelyDiscardTabs()) {
-    next_state_transition_time =
-        std::min(MaybeDiscardLifecycleUnit(
-                     oldest_discardable_lifecycle_unit,
-                     oldest_discardable_lifecycle_unit_decision_details, now),
-                 next_state_transition_time);
+    next_state_transition_time = std::min(
+        MaybeDiscardLifecycleUnit(oldest_discardable_lifecycle_unit, now),
+        next_state_transition_time);
   }
 
   // Schedule the next call to PerformStateTransitions().
@@ -1044,12 +1044,7 @@ base::TimeTicks TabManager::MaybeFreezeLifecycleUnit(
                    proactive_freeze_discard_params_.refreeze_timeout);
 
   if (now >= freeze_time) {
-    auto old_state = lifecycle_unit->GetState();
-    if (lifecycle_unit->Freeze()) {
-      // TODO(chrisha): Move this logging to an observer.
-      TabManagerStatsCollector::RecordFreezeDecision(lifecycle_unit,
-                                                     freeze_details, old_state);
-    }
+    lifecycle_unit->Freeze();
     return base::TimeTicks::Max();
   }
 
@@ -1077,7 +1072,6 @@ base::TimeTicks TabManager::MaybeUnfreezeLifecycleUnit(
 
 base::TimeTicks TabManager::MaybeDiscardLifecycleUnit(
     LifecycleUnit* lifecycle_unit,
-    const DecisionDetails& decision_details,
     base::TimeTicks now) {
   const base::TimeDelta usage_time_not_visible =
       usage_clock_.GetTotalUsageTime() -
@@ -1086,13 +1080,7 @@ base::TimeTicks TabManager::MaybeDiscardLifecycleUnit(
       GetTimeInBackgroundBeforeProactiveDiscard() - usage_time_not_visible;
 
   if (time_until_discard <= base::TimeDelta()) {
-    auto old_state = lifecycle_unit->GetState();
-    if (lifecycle_unit->Discard(DiscardReason::kProactive)) {
-      // TODO(chrisha): Move this into a LifecycleUnitObserver.
-      TabManagerStatsCollector::RecordDiscardDecision(
-          lifecycle_unit, decision_details, old_state,
-          DiscardReason::kProactive);
-    }
+    lifecycle_unit->Discard(LifecycleUnitDiscardReason::PROACTIVE);
     // Request another call to check if another discard should happen.
     return base::TimeTicks();
   }

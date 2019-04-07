@@ -47,6 +47,23 @@ TEST_F(NinjaBuildWriterTest, TwoTargets) {
   other_toolchain.GetTool(Toolchain::TYPE_LINK)
       ->set_pool(LabelPtrPair<Pool>(&other_regular_pool));
 
+  // Make another target that uses its own pool
+
+  Pool another_regular_pool(
+      setup.settings(),
+      Label(SourceDir("//another/"), "depth_pool", other_toolchain_label.dir(),
+            other_toolchain_label.name()));
+  another_regular_pool.set_depth(7);
+
+  Target target_baz(setup.settings(), Label(SourceDir("//baz/"), "baz"));
+  target_baz.set_output_type(Target::ACTION);
+  target_baz.action_values().set_script(SourceFile("//baz/script.py"));
+  target_baz.action_values().outputs() = SubstitutionList::MakeForTest(
+      "//out/Debug/out5.out", "//out/Debug/out6.out");
+  target_baz.SetToolchain(&other_toolchain);
+  target_baz.action_values().set_pool(LabelPtrPair<Pool>(&another_regular_pool));
+  ASSERT_TRUE(target_baz.OnResolved(&err));
+
   // The console pool must be in the default toolchain.
   Pool console_pool(setup.settings(), Label(SourceDir("//"), "console",
                                             setup.toolchain()->label().dir(),
@@ -63,12 +80,12 @@ TEST_F(NinjaBuildWriterTest, TwoTargets) {
   used_toolchains[setup.settings()] = setup.toolchain();
   used_toolchains[&other_settings] = &other_toolchain;
 
-  std::vector<const Target*> targets = {&target_foo, &target_bar};
+  std::vector<const Target*> targets = {&target_foo, &target_bar, &target_baz};
 
   std::ostringstream ninja_out;
   std::ostringstream depfile_out;
 
-  NinjaBuildWriter writer(setup.build_settings(), used_toolchains,
+  NinjaBuildWriter writer(setup.build_settings(), used_toolchains, targets,
                           setup.toolchain(), targets, ninja_out, depfile_out);
   ASSERT_TRUE(writer.Run(&err));
 
@@ -78,17 +95,23 @@ TEST_F(NinjaBuildWriterTest, TwoTargets) {
       "  generator = 1\n"
       "  depfile = build.ninja.d\n";
   const char expected_other_pool[] =
+      "pool other_toolchain_another_depth_pool\n"
+      "  depth = 7\n"
+      "\n"
       "pool other_toolchain_other_depth_pool\n"
       "  depth = 42\n";
   const char expected_toolchain[] = "subninja toolchain.ninja\n";
   const char expected_targets[] =
       "build bar: phony obj/bar/bar.stamp\n"
+      "build baz: phony obj/baz/baz.stamp\n"
       "build foo$:bar: phony obj/foo/bar.stamp\n"
-      "build bar$:bar: phony obj/bar/bar.stamp\n";
+      "build bar$:bar: phony obj/bar/bar.stamp\n"
+      "build baz$:baz: phony obj/baz/baz.stamp\n";
   const char expected_root_target[] =
       "build all: phony $\n"
       "    obj/foo/bar.stamp $\n"
-      "    obj/bar/bar.stamp\n";
+      "    obj/bar/bar.stamp $\n"
+      "    obj/baz/baz.stamp\n";
   const char expected_default[] = "default all\n";
   std::string out_str = ninja_out.str();
 #define EXPECT_SNIPPET(expected)                       \
@@ -133,7 +156,7 @@ TEST_F(NinjaBuildWriterTest, DuplicateOutputs) {
   std::vector<const Target*> targets = {&target_foo, &target_bar};
   std::ostringstream ninja_out;
   std::ostringstream depfile_out;
-  NinjaBuildWriter writer(setup.build_settings(), used_toolchains,
+  NinjaBuildWriter writer(setup.build_settings(), used_toolchains, targets,
                           setup.toolchain(), targets, ninja_out, depfile_out);
   ASSERT_FALSE(writer.Run(&err));
 

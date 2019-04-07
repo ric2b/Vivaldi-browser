@@ -6,16 +6,14 @@
 
 #include <utility>
 
+#include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/browser/signin_manager_base.h"
 #include "content/public/common/url_constants.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
 #include "google_apis/gaia/gaia_constants.h"
@@ -58,17 +56,12 @@ constexpr net::BackoffEntry::Policy kRetryBackoffPolicy = {
 
 }  // namespace
 
-ArcAuthContext::ArcAuthContext(Profile* profile)
-    : profile_(profile), retry_backoff_(&kRetryBackoffPolicy) {
-  // Get token service and account ID to fetch auth tokens.
-  token_service_ = ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
-  const SigninManagerBase* const signin_manager =
-      SigninManagerFactory::GetForProfile(profile);
-  CHECK(token_service_ && signin_manager);
-  account_id_ = signin_manager->GetAuthenticatedAccountId();
-
-  full_account_id_ = base::UTF16ToUTF8(
-      signin_ui_util::GetAuthenticatedUsername(signin_manager));
+ArcAuthContext::ArcAuthContext(Profile* profile, const std::string& account_id)
+    : profile_(profile),
+      account_id_(account_id),
+      token_service_(ProfileOAuth2TokenServiceFactory::GetForProfile(profile)),
+      retry_backoff_(&kRetryBackoffPolicy) {
+  DCHECK(base::ContainsValue(token_service_->GetAccounts(), account_id_));
 }
 
 ArcAuthContext::~ArcAuthContext() {
@@ -95,6 +88,14 @@ void ArcAuthContext::Prepare(const PrepareCallback& callback) {
   }
 
   StartFetchers();
+}
+
+std::unique_ptr<OAuth2TokenService::Request>
+ArcAuthContext::StartAccessTokenRequest(
+    const OAuth2TokenService::ScopeSet& scopes,
+    OAuth2TokenService::Consumer* consumer) {
+  DCHECK(token_service_->RefreshTokenIsAvailable(account_id_));
+  return token_service_->StartRequest(account_id_, scopes, consumer);
 }
 
 void ArcAuthContext::OnRefreshTokenAvailable(const std::string& account_id) {

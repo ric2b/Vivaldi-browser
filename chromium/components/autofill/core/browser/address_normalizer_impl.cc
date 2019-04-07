@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/address_i18n.h"
@@ -158,7 +158,7 @@ AddressNormalizerImpl::AddressNormalizerImpl(std::unique_ptr<Source> source,
   // of |storage| accesses an ObserverList that lives on the current sequence.
   // https://crbug.com/829122
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(
           &CreateAddressValidator, std::move(source),
           DeleteOnTaskRunnerStorageUniquePtr(

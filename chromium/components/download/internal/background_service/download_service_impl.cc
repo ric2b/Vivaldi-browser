@@ -22,9 +22,11 @@ DownloadServiceImpl::DownloadServiceImpl(std::unique_ptr<Configuration> config,
       logger_(std::move(logger)),
       controller_(std::move(controller)),
       service_config_(config_.get()),
-      startup_completed_(false) {
-  controller_->Initialize(base::Bind(
-      &DownloadServiceImpl::OnControllerInitialized, base::Unretained(this)));
+      startup_completed_(false),
+      weak_ptr_factory_(this) {
+  controller_->Initialize(
+      base::BindRepeating(&DownloadServiceImpl::OnControllerInitialized,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 DownloadServiceImpl::~DownloadServiceImpl() = default;
@@ -42,7 +44,7 @@ void DownloadServiceImpl::OnStartScheduledTask(DownloadTaskType task_type,
 
   pending_tasks_[task_type] = base::BindOnce(
       &Controller::OnStartScheduledTask, base::Unretained(controller_.get()),
-      task_type, base::Passed(&callback));
+      task_type, std::move(callback));
 }
 
 bool DownloadServiceImpl::OnStopScheduledTask(DownloadTaskType task_type) {

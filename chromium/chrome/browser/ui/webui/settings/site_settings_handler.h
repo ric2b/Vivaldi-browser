@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/scoped_observer.h"
+#include "chrome/browser/browsing_data/browsing_data_local_storage_helper.h"
 #include "chrome/browser/storage/storage_info_fetcher.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
@@ -22,9 +23,7 @@
 class HostContentSettingsMap;
 class Profile;
 
-#if defined(OS_CHROMEOS)
 class PrefChangeRegistrar;
-#endif
 
 namespace base {
 class ListValue;
@@ -85,12 +84,16 @@ class SiteSettingsHandler : public SettingsPageUIHandler,
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, GetAndSetForInvalidURLs);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, Incognito);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, GetAllSites);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, GetAllSitesLocalStorage);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, Origins);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, Patterns);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, ZoomLevels);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerInfobarTest,
                            SettingPermissionsTriggersInfobar);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, SessionOnlyException);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
+                           BlockAutoplay_SendOnRequest);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, BlockAutoplay_Update);
 
   // Asynchronously fetches the usage for a given origin. Replies back with
   // OnGetUsageInfo above.
@@ -112,6 +115,16 @@ class SiteSettingsHandler : public SettingsPageUIHandler,
   // Returns a list of sites, grouped by their effective top level domain plus
   // 1, affected by any of the content settings specified in |args|.
   void HandleGetAllSites(const base::ListValue* args);
+
+  // Called when the list of origins using local storage has been fetched, and
+  // sends this list back to the front end.
+  void OnLocalStorageFetched(
+      const std::list<BrowsingDataLocalStorageHelper::LocalStorageInfo>&
+          local_storage_info);
+
+  // Converts a given number of bytes into a human-readable format, with data
+  // units.
+  void HandleGetFormattedBytes(const base::ListValue* args);
 
   // Returns the list of site exceptions for a given content settings type.
   void HandleGetExceptionList(const base::ListValue* args);
@@ -151,6 +164,20 @@ class SiteSettingsHandler : public SettingsPageUIHandler,
   // Removes a particular zoom level for a given host.
   void HandleRemoveZoomLevel(const base::ListValue* args);
 
+  // Handles the request to send block autoplay state.
+  void HandleFetchBlockAutoplayStatus(const base::ListValue* args);
+
+  // Notifies the JS side about the state of the block autoplay toggle.
+  void SendBlockAutoplayStatus();
+
+  // Updates the block autoplay enabled pref when the UI is toggled.
+  void HandleSetBlockAutoplayEnabled(const base::ListValue* args);
+
+  void SetBrowsingDataLocalStorageHelperForTesting(
+      scoped_refptr<BrowsingDataLocalStorageHelper> helper);
+
+  BrowsingDataLocalStorageHelper* GetLocalStorageHelper();
+
   Profile* profile_;
 
   content::NotificationRegistrar notification_registrar_;
@@ -168,10 +195,10 @@ class SiteSettingsHandler : public SettingsPageUIHandler,
   // Change observer for content settings.
   ScopedObserver<HostContentSettingsMap, content_settings::Observer> observer_;
 
-#if defined(OS_CHROMEOS)
   // Change observer for prefs.
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
-#endif
+
+  scoped_refptr<BrowsingDataLocalStorageHelper> local_storage_helper_;
 
   DISALLOW_COPY_AND_ASSIGN(SiteSettingsHandler);
 };

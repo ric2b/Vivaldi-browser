@@ -33,6 +33,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/cronet/android/buildflags.h"
 #include "components/cronet/android/cronet_library_loader.h"
 #include "components/cronet/cronet_prefs_manager.h"
 #include "components/cronet/histogram_manager.h"
@@ -59,6 +60,10 @@
 #include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_interceptor.h"
 
+#if BUILDFLAG(INTEGRATED_MODE)
+#include "components/cronet/android/cronet_integrated_mode_state.h"
+#endif
+
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
@@ -82,8 +87,15 @@ CronetURLRequestContextAdapter::CronetURLRequestContextAdapter(
     std::unique_ptr<URLRequestContextConfig> context_config) {
   // Create context and pass ownership of |this| (self) to the context.
   std::unique_ptr<CronetURLRequestContextAdapter> self(this);
+#if BUILDFLAG(INTEGRATED_MODE)
+  // Create CronetURLRequestContext running in integrated network task runner.
+  context_ =
+      new CronetURLRequestContext(std::move(context_config), std::move(self),
+                                  GetIntegratedModeNetworkTaskRunner());
+#else
   context_ =
       new CronetURLRequestContext(std::move(context_config), std::move(self));
+#endif
 }
 
 CronetURLRequestContextAdapter::~CronetURLRequestContextAdapter() = default;
@@ -238,7 +250,8 @@ static jlong JNI_CronetUrlRequestContext_CreateRequestContextConfig(
     const JavaParamRef<jstring>& jexperimental_quic_connection_options,
     jlong jmock_cert_verifier,
     jboolean jenable_network_quality_estimator,
-    jboolean jbypass_public_key_pinning_for_local_trust_anchors) {
+    jboolean jbypass_public_key_pinning_for_local_trust_anchors,
+    jint jnetwork_thread_priority) {
   return reinterpret_cast<jlong>(new URLRequestContextConfig(
       jquic_enabled,
       ConvertNullableJavaStringToUTF8(env, jquic_default_user_agent_id),
@@ -253,7 +266,10 @@ static jlong JNI_CronetUrlRequestContext_CreateRequestContextConfig(
       base::WrapUnique(
           reinterpret_cast<net::CertVerifier*>(jmock_cert_verifier)),
       jenable_network_quality_estimator,
-      jbypass_public_key_pinning_for_local_trust_anchors));
+      jbypass_public_key_pinning_for_local_trust_anchors,
+      jnetwork_thread_priority >= -20 && jnetwork_thread_priority <= 19
+          ? base::Optional<double>(jnetwork_thread_priority)
+          : base::Optional<double>()));
 }
 
 // Add a QUIC hint to a URLRequestContextConfig.

@@ -8,6 +8,7 @@
 
 #include "base/stl_util.h"
 #include "build/build_config.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/fonts/font.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
@@ -22,7 +23,58 @@
 #include "third_party/blink/renderer/platform/text/text_run.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
+using testing::ElementsAre;
+
 namespace blink {
+
+namespace {
+
+ShapeResultTestInfo* TestInfo(const scoped_refptr<ShapeResult>& result) {
+  return static_cast<ShapeResultTestInfo*>(result.get());
+}
+
+// Test helper to compare all RunInfo with the expected array.
+struct ShapeResultRunData {
+  unsigned start_index;
+  unsigned num_characters;
+  unsigned num_glyphs;
+  hb_script_t script;
+
+  static Vector<ShapeResultRunData> Get(
+      const scoped_refptr<ShapeResult>& result) {
+    const ShapeResultTestInfo* test_info = TestInfo(result);
+    const unsigned num_runs = test_info->NumberOfRunsForTesting();
+    Vector<ShapeResultRunData> runs(num_runs);
+    for (unsigned i = 0; i < num_runs; i++) {
+      ShapeResultRunData& run = runs[i];
+      test_info->RunInfoForTesting(i, run.start_index, run.num_characters,
+                                   run.num_glyphs, run.script);
+    }
+    return runs;
+  }
+};
+
+bool operator==(const ShapeResultRunData& x, const ShapeResultRunData& y) {
+  return x.start_index == y.start_index &&
+         x.num_characters == y.num_characters && x.num_glyphs == y.num_glyphs &&
+         x.script == y.script;
+}
+
+void operator<<(std::ostream& output, const ShapeResultRunData& x) {
+  output << "{ start_index=" << x.start_index
+         << ", num_characters=" << x.num_characters
+         << ", num_glyphs=" << x.num_glyphs << ", script=" << x.script << " }";
+}
+
+// Create a string of the specified length, filled with |ch|.
+String CreateStringOf(UChar ch, unsigned length) {
+  UChar* data;
+  String string(StringImpl::CreateUninitialized(length, data));
+  string.Fill(ch);
+  return string;
+}
+
+}  // namespace
 
 class HarfBuzzShaperTest : public testing::Test {
  protected:
@@ -123,11 +175,6 @@ INSTANTIATE_TEST_CASE_P(HarfBuzzShaperTest,
                         ShapeParameterTest,
                         testing::Values(TextDirection::kLtr,
                                         TextDirection::kRtl));
-
-static inline ShapeResultTestInfo* TestInfo(
-    scoped_refptr<ShapeResult>& result) {
-  return static_cast<ShapeResultTestInfo*>(result.get());
-}
 
 TEST_F(HarfBuzzShaperTest, MutableUnique) {
   scoped_refptr<ShapeResult> result =
@@ -367,9 +414,13 @@ TEST_F(HarfBuzzShaperTest, ShapeLatinSegment) {
 
 // Represents the case where a part of a cluster has a different color.
 // <div>0x647<span style="color: red;">0x64A</span></div>
-// This test requires context-aware shaping which hasn't been implemented yet.
-// See crbug.com/689155
-TEST_F(HarfBuzzShaperTest, DISABLED_ShapeArabicWithContext) {
+// TODO(crbug.com/689155): Still fails on Mac, AAT?
+#if defined(OS_MACOSX)
+#define MAYBE_ShapeArabicWithContext DISABLED_ShapeArabicWithContext
+#else
+#define MAYBE_ShapeArabicWithContext ShapeArabicWithContext
+#endif
+TEST_F(HarfBuzzShaperTest, MAYBE_ShapeArabicWithContext) {
   UChar arabic_string[] = {0x647, 0x64A};
   HarfBuzzShaper shaper(String(arabic_string, 2));
 
@@ -491,6 +542,90 @@ TEST_P(ShapeParameterTest, MissingGlyph) {
   scoped_refptr<ShapeResult> result = ShapeWithParameter(&shaper);
   EXPECT_EQ(0u, result->StartIndexForResult());
   EXPECT_EQ(string.length(), result->EndIndexForResult());
+}
+
+// Test splitting runs by kMaxCharacterIndex using a simple string that has code
+// point:glyph:cluster are all 1:1.
+TEST_P(ShapeParameterTest, MaxGlyphsSimple) {
+  const unsigned length = HarfBuzzRunGlyphData::kMaxCharacterIndex + 2;
+  String string = CreateStringOf('X', length);
+  HarfBuzzShaper shaper(string);
+  scoped_refptr<ShapeResult> result = ShapeWithParameter(&shaper);
+  EXPECT_EQ(length, result->NumCharacters());
+  EXPECT_EQ(length, result->NumGlyphs());
+  Vector<ShapeResultRunData> runs = ShapeResultRunData::Get(result);
+  if (IsRtl(GetParam()))
+    runs.Reverse();
+  EXPECT_THAT(
+      runs, testing::ElementsAre(
+                ShapeResultRunData{0, length - 1, length - 1, HB_SCRIPT_LATIN},
+                ShapeResultRunData{length - 1, 1, 1, HB_SCRIPT_LATIN}));
+}
+
+// 'X' + U+0300 COMBINING GRAVE ACCENT is a cluster, but most fonts do not have
+// a pre-composed glyph for it, so code points and glyphs are 1:1. Because the
+// length is "+1" and the last character is combining, this string does not hit
+// kMaxCharacterIndex but hits kMaxGlyphs.
+TEST_P(ShapeParameterTest, MaxGlyphsClusterLatin) {
+  const unsigned length = HarfBuzzRunGlyphData::kMaxGlyphs + 1;
+  String string = CreateStringOf('X', length);
+  string.replace(1, 1, u"\u0300");
+  string.replace(length - 2, 2, u"Z\u0300");
+  HarfBuzzShaper shaper(string);
+  scoped_refptr<ShapeResult> result = ShapeWithParameter(&shaper);
+  EXPECT_EQ(length, result->NumCharacters());
+  EXPECT_EQ(length, result->NumGlyphs());
+  Vector<ShapeResultRunData> runs = ShapeResultRunData::Get(result);
+  if (IsRtl(GetParam()))
+    runs.Reverse();
+  EXPECT_THAT(
+      runs, testing::ElementsAre(
+                ShapeResultRunData{0, length - 2, length - 2, HB_SCRIPT_LATIN},
+                ShapeResultRunData{length - 2, 2u, 2u, HB_SCRIPT_LATIN}));
+}
+
+// Same as MaxGlyphsClusterLatin, but by making the length "+2", this string
+// hits kMaxCharacterIndex.
+TEST_P(ShapeParameterTest, MaxGlyphsClusterLatin2) {
+  const unsigned length = HarfBuzzRunGlyphData::kMaxGlyphs + 2;
+  String string = CreateStringOf('X', length);
+  string.replace(1, 1, u"\u0300");
+  string.replace(length - 2, 2, u"Z\u0300");
+  HarfBuzzShaper shaper(string);
+  scoped_refptr<ShapeResult> result = ShapeWithParameter(&shaper);
+  EXPECT_EQ(length, result->NumCharacters());
+  EXPECT_EQ(length, result->NumGlyphs());
+  Vector<ShapeResultRunData> runs = ShapeResultRunData::Get(result);
+  if (IsRtl(GetParam()))
+    runs.Reverse();
+  EXPECT_THAT(
+      runs, testing::ElementsAre(
+                ShapeResultRunData{0, length - 2, length - 2, HB_SCRIPT_LATIN},
+                ShapeResultRunData{length - 2, 2u, 2u, HB_SCRIPT_LATIN}));
+}
+
+TEST_P(ShapeParameterTest, MaxGlyphsClusterDevanagari) {
+  const unsigned length = HarfBuzzRunGlyphData::kMaxCharacterIndex + 2;
+  String string = CreateStringOf(0x930, length);
+  string.replace(0, 3, u"\u0930\u093F\u0902");
+  string.replace(length - 3, 3, u"\u0930\u093F\u0902");
+  HarfBuzzShaper shaper(string);
+  scoped_refptr<ShapeResult> result = ShapeWithParameter(&shaper);
+  EXPECT_EQ(length, result->NumCharacters());
+#if defined(OS_LINUX)
+  // Linux doesn't have glyphs. We can't test RunInfo without all glyphs.
+  if (result->NumGlyphs() != length)
+    return;
+#endif
+  EXPECT_EQ(length, result->NumGlyphs());
+  Vector<ShapeResultRunData> runs = ShapeResultRunData::Get(result);
+  if (IsRtl(GetParam()))
+    runs.Reverse();
+  EXPECT_THAT(
+      runs,
+      testing::ElementsAre(
+          ShapeResultRunData{0, length - 3, length - 3, HB_SCRIPT_DEVANAGARI},
+          ShapeResultRunData{length - 3, 3u, 3u, HB_SCRIPT_DEVANAGARI}));
 }
 
 TEST_P(ShapeParameterTest, ZeroWidthSpace) {
@@ -679,11 +814,9 @@ TEST_P(OffsetForPositionTest, Data) {
   scoped_refptr<ShapeResult> result =
       SplitRun(shaper.Shape(&ahem, TextDirection::kLtr), 2);
   EXPECT_EQ(data.offset_ltr,
-            result->OffsetForPosition(data.position, OnlyFullGlyphs,
-                                      DontBreakGlyphs));
-  EXPECT_EQ(data.hit_test_ltr,
-            result->OffsetForPosition(data.position, IncludePartialGlyphs,
-                                      DontBreakGlyphs));
+            result->OffsetForPosition(data.position, DontBreakGlyphs));
+  EXPECT_EQ(data.hit_test_ltr, result->CaretOffsetForHitTest(
+                                   data.position, string, DontBreakGlyphs));
   EXPECT_EQ(data.fit_ltr_ltr,
             result->OffsetToFit(data.position, TextDirection::kLtr));
   EXPECT_EQ(data.fit_ltr_rtl,
@@ -691,11 +824,9 @@ TEST_P(OffsetForPositionTest, Data) {
 
   result = SplitRun(shaper.Shape(&ahem, TextDirection::kRtl), 3);
   EXPECT_EQ(data.offset_rtl,
-            result->OffsetForPosition(data.position, OnlyFullGlyphs,
-                                      DontBreakGlyphs));
-  EXPECT_EQ(data.hit_test_rtl,
-            result->OffsetForPosition(data.position, IncludePartialGlyphs,
-                                      DontBreakGlyphs));
+            result->OffsetForPosition(data.position, DontBreakGlyphs));
+  EXPECT_EQ(data.hit_test_rtl, result->CaretOffsetForHitTest(
+                                   data.position, string, DontBreakGlyphs));
   EXPECT_EQ(data.fit_rtl_ltr,
             result->OffsetToFit(data.position, TextDirection::kLtr));
   EXPECT_EQ(data.fit_rtl_rtl,
@@ -743,12 +874,15 @@ TEST_F(HarfBuzzShaperTest, EmojiZWJSequence) {
 
 // A Value-Parameterized Test class to test OffsetForPosition() with
 // |include_partial_glyphs| parameter.
-class IncludePartialGlyphsTest : public HarfBuzzShaperTest,
-                                 public ::testing::WithParamInterface<bool> {};
+class IncludePartialGlyphsTest
+    : public HarfBuzzShaperTest,
+      public ::testing::WithParamInterface<IncludePartialGlyphsOption> {};
 
-INSTANTIATE_TEST_CASE_P(OffsetForPositionTest,
-                        IncludePartialGlyphsTest,
-                        ::testing::Bool());
+INSTANTIATE_TEST_CASE_P(
+    HarfBuzzShaperTest,
+    IncludePartialGlyphsTest,
+    ::testing::Values(IncludePartialGlyphsOption::OnlyFullGlyphs,
+                      IncludePartialGlyphsOption::IncludePartialGlyphs));
 
 TEST_P(IncludePartialGlyphsTest,
        OffsetForPositionMatchesPositionForOffsetLatin) {
@@ -758,84 +892,77 @@ TEST_P(IncludePartialGlyphsTest,
   HarfBuzzShaper shaper(string);
   scoped_refptr<ShapeResult> result = shaper.Shape(&font, direction);
 
-  bool include_partial_glyphs = GetParam();
-  IncludePartialGlyphsOption partial =
-      include_partial_glyphs ? IncludePartialGlyphs : OnlyFullGlyphs;
-
-  EXPECT_EQ(0u, result->OffsetForPosition(result->PositionForOffset(0), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(1u, result->OffsetForPosition(result->PositionForOffset(1), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(2u, result->OffsetForPosition(result->PositionForOffset(2), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(3u, result->OffsetForPosition(result->PositionForOffset(3), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(4u, result->OffsetForPosition(result->PositionForOffset(4), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(5u, result->OffsetForPosition(result->PositionForOffset(5), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(6u, result->OffsetForPosition(result->PositionForOffset(6), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(7u, result->OffsetForPosition(result->PositionForOffset(7), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(8u, result->OffsetForPosition(result->PositionForOffset(8), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(9u, result->OffsetForPosition(result->PositionForOffset(9), partial,
-                                          DontBreakGlyphs));
+  IncludePartialGlyphsOption partial = GetParam();
+  EXPECT_EQ(0u, result->OffsetForPosition(result->PositionForOffset(0), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(1u, result->OffsetForPosition(result->PositionForOffset(1), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(2u, result->OffsetForPosition(result->PositionForOffset(2), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(3u, result->OffsetForPosition(result->PositionForOffset(3), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(4u, result->OffsetForPosition(result->PositionForOffset(4), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(5u, result->OffsetForPosition(result->PositionForOffset(5), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(6u, result->OffsetForPosition(result->PositionForOffset(6), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(7u, result->OffsetForPosition(result->PositionForOffset(7), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(8u, result->OffsetForPosition(result->PositionForOffset(8), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(9u, result->OffsetForPosition(result->PositionForOffset(9), string,
+                                          partial, DontBreakGlyphs));
   EXPECT_EQ(10u, result->OffsetForPosition(result->PositionForOffset(10),
-                                           partial, DontBreakGlyphs));
+                                           string, partial, DontBreakGlyphs));
   EXPECT_EQ(11u, result->OffsetForPosition(result->PositionForOffset(11),
-                                           partial, DontBreakGlyphs));
+                                           string, partial, DontBreakGlyphs));
   EXPECT_EQ(12u, result->OffsetForPosition(result->PositionForOffset(12),
-                                           partial, DontBreakGlyphs));
+                                           string, partial, DontBreakGlyphs));
 }
 
 TEST_P(IncludePartialGlyphsTest,
        OffsetForPositionMatchesPositionForOffsetArabic) {
   UChar arabic_string[] = {0x628, 0x64A, 0x629};
+  String string(arabic_string, 3);
   TextDirection direction = TextDirection::kRtl;
 
-  HarfBuzzShaper shaper(String(arabic_string, 3));
+  HarfBuzzShaper shaper(string);
   scoped_refptr<ShapeResult> result = shaper.Shape(&font, direction);
 
-  bool include_partial_glyphs = GetParam();
-  IncludePartialGlyphsOption partial =
-      include_partial_glyphs ? IncludePartialGlyphs : OnlyFullGlyphs;
-
-  EXPECT_EQ(0u, result->OffsetForPosition(result->PositionForOffset(0), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(1u, result->OffsetForPosition(result->PositionForOffset(1), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(2u, result->OffsetForPosition(result->PositionForOffset(2), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(3u, result->OffsetForPosition(result->PositionForOffset(3), partial,
-                                          DontBreakGlyphs));
+  IncludePartialGlyphsOption partial = GetParam();
+  EXPECT_EQ(0u, result->OffsetForPosition(result->PositionForOffset(0), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(1u, result->OffsetForPosition(result->PositionForOffset(1), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(2u, result->OffsetForPosition(result->PositionForOffset(2), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(3u, result->OffsetForPosition(result->PositionForOffset(3), string,
+                                          partial, DontBreakGlyphs));
 }
 
 TEST_P(IncludePartialGlyphsTest,
        OffsetForPositionMatchesPositionForOffsetMixed) {
   UChar mixed_string[] = {0x628, 0x64A, 0x629, 0xE20, 0x65E5, 0x62};
-  HarfBuzzShaper shaper(String(mixed_string, 6));
+  String string(mixed_string, 6);
+  HarfBuzzShaper shaper(string);
   scoped_refptr<ShapeResult> result = shaper.Shape(&font, TextDirection::kLtr);
 
-  bool include_partial_glyphs = GetParam();
-  IncludePartialGlyphsOption partial =
-      include_partial_glyphs ? IncludePartialGlyphs : OnlyFullGlyphs;
-
-  EXPECT_EQ(0u, result->OffsetForPosition(result->PositionForOffset(0), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(1u, result->OffsetForPosition(result->PositionForOffset(1), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(2u, result->OffsetForPosition(result->PositionForOffset(2), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(3u, result->OffsetForPosition(result->PositionForOffset(3), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(4u, result->OffsetForPosition(result->PositionForOffset(4), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(5u, result->OffsetForPosition(result->PositionForOffset(5), partial,
-                                          DontBreakGlyphs));
-  EXPECT_EQ(6u, result->OffsetForPosition(result->PositionForOffset(6), partial,
-                                          DontBreakGlyphs));
+  IncludePartialGlyphsOption partial = GetParam();
+  EXPECT_EQ(0u, result->OffsetForPosition(result->PositionForOffset(0), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(1u, result->OffsetForPosition(result->PositionForOffset(1), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(2u, result->OffsetForPosition(result->PositionForOffset(2), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(3u, result->OffsetForPosition(result->PositionForOffset(3), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(4u, result->OffsetForPosition(result->PositionForOffset(4), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(5u, result->OffsetForPosition(result->PositionForOffset(5), string,
+                                          partial, DontBreakGlyphs));
+  EXPECT_EQ(6u, result->OffsetForPosition(result->PositionForOffset(6), string,
+                                          partial, DontBreakGlyphs));
 }
 
 TEST_F(HarfBuzzShaperTest, CachedOffsetPositionMappingForOffsetLatin) {
@@ -888,6 +1015,46 @@ TEST_F(HarfBuzzShaperTest, CachedOffsetPositionMappingMixed) {
   EXPECT_EQ(4u, sr->CachedOffsetForPosition(sr->CachedPositionForOffset(4)));
   EXPECT_EQ(5u, sr->CachedOffsetForPosition(sr->CachedPositionForOffset(5)));
   EXPECT_EQ(6u, sr->CachedOffsetForPosition(sr->CachedPositionForOffset(6)));
+}
+
+TEST_F(HarfBuzzShaperTest, PositionForOffsetMultiGlyphClusterLtr) {
+  // In this Hindi text, each code unit produces a glyph, and the first 3 glyphs
+  // form a grapheme cluster, and the last 2 glyphs form another.
+  String string(u"\u0930\u093F\u0902\u0926\u0940");
+  TextDirection direction = TextDirection::kLtr;
+  HarfBuzzShaper shaper(string);
+  scoped_refptr<ShapeResult> sr = shaper.Shape(&font, direction);
+  sr->EnsurePositionData();
+
+  // The first 3 code units should be at position 0.
+  EXPECT_EQ(0, sr->CachedPositionForOffset(0));
+  EXPECT_EQ(0, sr->CachedPositionForOffset(1));
+  EXPECT_EQ(0, sr->CachedPositionForOffset(2));
+  // The last 2 code units should be > 0, and the same position.
+  EXPECT_GT(sr->CachedPositionForOffset(3), 0);
+  EXPECT_EQ(sr->CachedPositionForOffset(3), sr->CachedPositionForOffset(4));
+}
+
+TEST_F(HarfBuzzShaperTest, PositionForOffsetMultiGlyphClusterRtl) {
+  // In this Hindi text, each code unit produces a glyph, and the first 3 glyphs
+  // form a grapheme cluster, and the last 2 glyphs form another.
+  String string(u"\u0930\u093F\u0902\u0926\u0940");
+  TextDirection direction = TextDirection::kRtl;
+  HarfBuzzShaper shaper(string);
+  scoped_refptr<ShapeResult> sr = shaper.Shape(&font, direction);
+  sr->EnsurePositionData();
+
+  // The first 3 code units should be at position 0, but since this is RTL, the
+  // position is the right edgef of the character, and thus > 0.
+  float pos0 = sr->CachedPositionForOffset(0);
+  EXPECT_GT(pos0, 0);
+  EXPECT_EQ(pos0, sr->CachedPositionForOffset(1));
+  EXPECT_EQ(pos0, sr->CachedPositionForOffset(2));
+  // The last 2 code units should be > 0, and the same position.
+  float pos3 = sr->CachedPositionForOffset(3);
+  EXPECT_GT(pos3, 0);
+  EXPECT_LT(pos3, pos0);
+  EXPECT_EQ(pos3, sr->CachedPositionForOffset(4));
 }
 
 TEST_F(HarfBuzzShaperTest, PositionForOffsetMissingGlyph) {
@@ -1283,8 +1450,15 @@ TEST_F(HarfBuzzShaperTest, SafeToBreakLatinDiscretionaryLigatures) {
             referenceResult->SnappedStartPositionForOffset(12));
 }
 
-// TODO(layout-dev): This test fails on Mac due to AAT shaping.
-TEST_F(HarfBuzzShaperTest, DISABLED_SafeToBreakArabicCommonLigatures) {
+// TODO(crbug.com/870712): This test fails on Mac due to AAT shaping and
+// font fallback differences on Android.
+#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#define MAYBE_SafeToBreakArabicCommonLigatures \
+  DISABLED_SafeToBreakArabicCommonLigatures
+#else
+#define MAYBE_SafeToBreakArabicCommonLigatures SafeToBreakArabicCommonLigatures
+#endif
+TEST_F(HarfBuzzShaperTest, MAYBE_SafeToBreakArabicCommonLigatures) {
   FontDescription::VariantLigatures ligatures;
   ligatures.common = FontDescription::kEnabledLigaturesState;
 
@@ -1316,7 +1490,12 @@ TEST_F(HarfBuzzShaperTest, DISABLED_SafeToBreakArabicCommonLigatures) {
 
 // Test when some characters are missing in |runs_|.
 // RTL on Mac may not have runs for all characters. crbug.com/774034
-TEST_P(ShapeParameterTest, DISABLED_SafeToBreakMissingRun) {
+#if defined(OS_MACOSX)
+#define MAYBE_SafeToBreakMissingRun DISABLED_SafeToBreakMissingRun
+#else
+#define MAYBE_SafeToBreakMissingRun SafeToBreakMissingRun
+#endif
+TEST_P(ShapeParameterTest, MAYBE_SafeToBreakMissingRun) {
   TextDirection direction = GetParam();
   scoped_refptr<ShapeResult> result = ShapeResult::Create(&font, 8, direction);
   result->InsertRunForTesting(2, 1, direction, {0});

@@ -20,7 +20,6 @@
 
 #include "third_party/blink/renderer/core/svg/svg_string_list.h"
 
-#include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/core/svg/svg_parser_utilities.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -116,6 +115,9 @@ SVGParsingError SVGStringList::SetValueAsString(const String& data) {
 }
 
 String SVGStringList::ValueAsString() const {
+  if (values_.IsEmpty())
+    return String();
+
   StringBuilder builder;
 
   Vector<String>::const_iterator it = values_.begin();
@@ -138,8 +140,8 @@ bool SVGStringList::CheckIndexBound(size_t index,
   if (index >= values_.size()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kIndexSizeError,
-        ExceptionMessages::IndexExceedsMaximumBound("index", index,
-                                                    values_.size()));
+        ExceptionMessages::IndexExceedsMaximumBound(
+            "index", index, static_cast<size_t>(values_.size())));
     return false;
   }
 

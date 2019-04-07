@@ -4,14 +4,14 @@
 
 package org.chromium.content.browser;
 
-import android.content.Context;
 import android.content.res.Configuration;
 
 import org.chromium.base.TraceEvent;
 import org.chromium.content.browser.webcontents.WebContentsImpl;
+import org.chromium.content.browser.webcontents.WebContentsImpl.UserDataFactory;
+import org.chromium.content.browser.webcontents.WebContentsUserData;
 import org.chromium.content_public.browser.ViewEventSink;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.WebContents.UserDataFactory;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid.ActivityStateObserver;
 
@@ -20,7 +20,6 @@ import org.chromium.ui.base.WindowAndroid.ActivityStateObserver;
  */
 public final class ViewEventSinkImpl implements ViewEventSink, ActivityStateObserver {
     private final WebContentsImpl mWebContents;
-    private Context mContext;
 
     // Whether the container view has view-level focus.
     private Boolean mHasViewFocus;
@@ -40,33 +39,13 @@ public final class ViewEventSinkImpl implements ViewEventSink, ActivityStateObse
         private static final UserDataFactory<ViewEventSinkImpl> INSTANCE = ViewEventSinkImpl::new;
     }
 
-    public static ViewEventSinkImpl create(Context context, WebContents webContents) {
-        ViewEventSinkImpl manager = webContents.getOrSetUserData(
-                ViewEventSinkImpl.class, UserDataFactoryLazyHolder.INSTANCE);
-        assert manager != null;
-        assert !manager.initialized();
-        manager.init(context);
-        return manager;
-    }
-
     public static ViewEventSinkImpl from(WebContents webContents) {
-        return webContents.getOrSetUserData(ViewEventSinkImpl.class, null);
+        return WebContentsUserData.fromWebContents(
+                webContents, ViewEventSinkImpl.class, UserDataFactoryLazyHolder.INSTANCE);
     }
 
     public ViewEventSinkImpl(WebContents webContents) {
         mWebContents = (WebContentsImpl) webContents;
-    }
-
-    private void init(Context context) {
-        mContext = context;
-    }
-
-    private boolean initialized() {
-        return mContext != null;
-    }
-
-    public Context getContext() {
-        return mContext;
     }
 
     @Override

@@ -4,12 +4,14 @@
 
 #include "third_party/blink/renderer/modules/picture_in_picture/picture_in_picture_controller_impl.h"
 
+#include "third_party/blink/public/platform/web_media_player.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/events/picture_in_picture_control_event.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
+#include "third_party/blink/renderer/modules/picture_in_picture/enter_picture_in_picture_event.h"
 #include "third_party/blink/renderer/modules/picture_in_picture/picture_in_picture_window.h"
 #include "third_party/blink/renderer/platform/feature_policy/feature_policy.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -77,6 +79,10 @@ PictureInPictureControllerImpl::IsElementAllowed(
   if (element.FastHasAttribute(HTMLNames::disablepictureinpictureAttr))
     return Status::kDisabledByAttribute;
 
+  // TODO(crbug.com/806249): Remove this when MediaStreams are supported.
+  if (element.GetLoadType() == WebMediaPlayer::kLoadTypeMediaStream)
+    return Status::kMediaStreamsNotSupportedYet;
+
   return Status::kEnabled;
 }
 
@@ -88,6 +94,9 @@ void PictureInPictureControllerImpl::EnterPictureInPicture(
         WTF::Bind(&PictureInPictureControllerImpl::OnEnteredPictureInPicture,
                   WrapPersistent(this), WrapPersistent(element),
                   WrapPersistent(resolver)));
+    // If the media element has already been given custom controls, this will
+    // ensure that they get set. Otherwise, this will do nothing.
+    element->SendCustomControlsToPipWindow();
     return;
   }
 
@@ -112,15 +121,17 @@ void PictureInPictureControllerImpl::OnEnteredPictureInPicture(
 
   picture_in_picture_element_->OnEnteredPictureInPicture();
 
-  picture_in_picture_element_->DispatchEvent(
-      Event::CreateBubble(EventTypeNames::enterpictureinpicture));
-
   // Closes the current Picture-in-Picture window if any.
   if (picture_in_picture_window_)
     picture_in_picture_window_->OnClose();
 
   picture_in_picture_window_ = new PictureInPictureWindow(
       GetSupplementable(), picture_in_picture_window_size);
+
+  picture_in_picture_element_->DispatchEvent(
+      *EnterPictureInPictureEvent::Create(
+          EventTypeNames::enterpictureinpicture,
+          WrapPersistent(picture_in_picture_window_.Get())));
 
   element->GetWebMediaPlayer()->RegisterPictureInPictureWindowResizeCallback(
       WTF::BindRepeating(&PictureInPictureWindow::OnResize,
@@ -136,6 +147,14 @@ void PictureInPictureControllerImpl::ExitPictureInPicture(
   element->exitPictureInPicture(
       WTF::Bind(&PictureInPictureControllerImpl::OnExitedPictureInPicture,
                 WrapPersistent(this), WrapPersistent(resolver)));
+}
+
+void PictureInPictureControllerImpl::SetPictureInPictureCustomControls(
+    HTMLVideoElement* element,
+    const std::vector<PictureInPictureControlInfo>& controls) {
+  element->SetPictureInPictureCustomControls(controls);
+  if (IsPictureInPictureElement(element))
+    element->SendCustomControlsToPipWindow();
 }
 
 void PictureInPictureControllerImpl::OnExitedPictureInPicture(
@@ -155,7 +174,7 @@ void PictureInPictureControllerImpl::OnExitedPictureInPicture(
 
     element->OnExitedPictureInPicture();
     element->DispatchEvent(
-        Event::CreateBubble(EventTypeNames::leavepictureinpicture));
+        *Event::CreateBubble(EventTypeNames::leavepictureinpicture));
   }
 
   if (resolver)
@@ -173,7 +192,7 @@ void PictureInPictureControllerImpl::OnPictureInPictureControlClicked(
   if (RuntimeEnabledFeatures::PictureInPictureControlEnabled() &&
       picture_in_picture_element_) {
     picture_in_picture_element_->DispatchEvent(
-        PictureInPictureControlEvent::Create(
+        *PictureInPictureControlEvent::Create(
             EventTypeNames::pictureinpicturecontrolclick, control_id));
   }
 }

@@ -49,7 +49,7 @@ class TransferCacheTest : public testing::Test {
     auto result = context_->Initialize(
         /*service=*/nullptr, attribs, gpu::SharedMemoryLimits(),
         &gpu_memory_buffer_manager_, &image_factory_,
-        /*gpu_channel_manager_delegate=*/nullptr);
+        /*gpu_channel_manager_delegate=*/nullptr, nullptr, nullptr);
 
     ASSERT_EQ(result, gpu::ContextResult::kSuccess);
     ASSERT_TRUE(context_->GetCapabilities().supports_oop_raster);
@@ -122,7 +122,7 @@ TEST_F(TransferCacheTest, Basic) {
                 decoder_id(), entry.Type(), entry.Id())));
 }
 
-TEST_F(TransferCacheTest, Eviction) {
+TEST_F(TransferCacheTest, MemoryEviction) {
   auto* service_cache = ServiceTransferCache();
   auto* context_support = ContextSupport();
 
@@ -152,6 +152,31 @@ TEST_F(TransferCacheTest, Eviction) {
       entry.UnsafeType(), entry.Id()));
 }
 
+TEST_F(TransferCacheTest, CountEviction) {
+  auto* service_cache = ServiceTransferCache();
+  auto* context_support = ContextSupport();
+
+  // Create 10 entries and leave them all unlocked.
+  std::vector<std::unique_ptr<ClientRawMemoryTransferCacheEntry>> entries;
+  for (int i = 0; i < 10; ++i) {
+    entries.emplace_back(std::make_unique<ClientRawMemoryTransferCacheEntry>(
+        std::vector<uint8_t>(4)));
+    CreateEntry(*entries[i]);
+    context_support->UnlockTransferCacheEntries(
+        {{entries[i]->UnsafeType(), entries[i]->Id()}});
+    ri()->Finish();
+  }
+
+  // These entries should be using up space.
+  EXPECT_EQ(service_cache->cache_size_for_testing(), 40u);
+
+  // Evict on the service side.
+  service_cache->SetMaxCacheEntriesForTesting(5);
+
+  // Half the entries should be evicted.
+  EXPECT_EQ(service_cache->cache_size_for_testing(), 20u);
+}
+
 TEST_F(TransferCacheTest, RawMemoryTransfer) {
   auto* service_cache = ServiceTransferCache();
 
@@ -178,10 +203,8 @@ TEST_F(TransferCacheTest, RawMemoryTransfer) {
 }
 
 TEST_F(TransferCacheTest, ImageMemoryTransfer) {
-// TODO(ericrk): This test doesn't work on Android. crbug.com/777628
-#if defined(OS_ANDROID)
+  // TODO(ericrk): This test doesn't work. crbug.com/859619
   return;
-#endif
 
   auto* service_cache = ServiceTransferCache();
 

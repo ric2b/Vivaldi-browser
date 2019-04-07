@@ -11,7 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #import "ios/net/cookies/cookie_store_ios_persistent.h"
 #import "ios/web/public/web_client.h"
 #include "ios/web_view/internal/web_view_network_delegate.h"
@@ -81,10 +81,11 @@ net::URLRequestContext* WebViewURLRequestContextGetter::GetURLRequestContext() {
         new net::SQLitePersistentCookieStore(
             cookie_path, network_task_runner_,
             base::CreateSequencedTaskRunnerWithTraits(
-                {base::MayBlock(), base::TaskPriority::BACKGROUND}),
+                {base::MayBlock(), base::TaskPriority::BEST_EFFORT}),
             true, nullptr);
     std::unique_ptr<net::CookieStoreIOS> cookie_store(
-        new net::CookieStoreIOSPersistent(persistent_store.get()));
+        new net::CookieStoreIOSPersistent(persistent_store.get(),
+                                          net_log_.get()));
     storage_->set_cookie_store(std::move(cookie_store));
 
     web::WebClient* web_client = web::GetWebClient();
@@ -112,7 +113,7 @@ net::URLRequestContext* WebViewURLRequestContextGetter::GetURLRequestContext() {
         std::make_unique<net::TransportSecurityPersister>(
             url_request_context_->transport_security_state(), base_path_,
             base::CreateSequencedTaskRunnerWithTraits(
-                {base::MayBlock(), base::TaskPriority::BACKGROUND}));
+                {base::MayBlock(), base::TaskPriority::BEST_EFFORT}));
 
     // Setup channel id store.
     base::FilePath channel_id_path;
@@ -123,7 +124,7 @@ net::URLRequestContext* WebViewURLRequestContextGetter::GetURLRequestContext() {
         new net::SQLiteChannelIDStore(
             channel_id_path,
             base::CreateSequencedTaskRunnerWithTraits(
-                {base::MayBlock(), base::TaskPriority::BACKGROUND}));
+                {base::MayBlock(), base::TaskPriority::BEST_EFFORT}));
     storage_->set_channel_id_service(std::make_unique<net::ChannelIDService>(
         new net::DefaultChannelIDStore(channel_id_db.get())));
     storage_->set_http_server_properties(

@@ -114,9 +114,9 @@ void AppCacheGroup::AddCache(AppCache* complete_cache) {
 void AppCacheGroup::RemoveCache(AppCache* cache) {
   DCHECK(cache->associated_hosts().empty());
   if (cache == newest_complete_cache_) {
-    CancelUpdate();
     AppCache* tmp_cache = newest_complete_cache_;
     newest_complete_cache_ = nullptr;
+    CancelUpdate();
     tmp_cache->set_owning_group(nullptr);  // may cause this group to be deleted
   } else {
     scoped_refptr<AppCacheGroup> protect(this);
@@ -227,7 +227,7 @@ void AppCacheGroup::RunQueuedUpdates() {
 // static
 bool AppCacheGroup::FindObserver(
     const UpdateObserver* find_me,
-    const base::ObserverList<UpdateObserver>& observer_list) {
+    const base::ObserverList<UpdateObserver>::Unchecked& observer_list) {
   return observer_list.HasObserver(find_me);
 }
 

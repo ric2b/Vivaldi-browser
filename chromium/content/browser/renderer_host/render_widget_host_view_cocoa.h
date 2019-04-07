@@ -192,6 +192,12 @@ struct DidOverscrollParams;
   // orientation.
   content::MouseWheelRailsFilterMac mouseWheelFilter_;
 
+  // Whether the direct manipulation feature is enabled.
+  bool direct_manipulation_enabled_;
+
+  // Whether the pen's tip is in contact with the stylus digital tablet.
+  bool has_pen_contact_;
+
   vivaldi::VivaldiScrollType vivaldiScrollType_;
 }
 

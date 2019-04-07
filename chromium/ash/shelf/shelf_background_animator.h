@@ -10,7 +10,6 @@
 
 #include "ash/ash_export.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/session/session_observer.h"
 #include "ash/shelf/shelf_observer.h"
 #include "ash/wallpaper/wallpaper_controller_observer.h"
 #include "base/macros.h"
@@ -43,8 +42,7 @@ class WallpaperController;
 //       states.
 class ASH_EXPORT ShelfBackgroundAnimator : public ShelfObserver,
                                            public gfx::AnimationDelegate,
-                                           public WallpaperControllerObserver,
-                                           public SessionObserver {
+                                           public WallpaperControllerObserver {
  public:
   // The maximum alpha value that can be used.
   static const int kMaxAlpha = SK_AlphaOPAQUE;
@@ -95,9 +93,6 @@ class ASH_EXPORT ShelfBackgroundAnimator : public ShelfObserver,
 
   // WallpaperControllerObserver:
   void OnWallpaperColorsChanged() override;
-
-  // SessionObserver:
-  void OnSessionStateChanged(session_manager::SessionState state) override;
 
  private:
   friend class ShelfBackgroundAnimatorTestApi;
@@ -174,7 +169,7 @@ class ASH_EXPORT ShelfBackgroundAnimator : public ShelfObserver,
   // The last background type this is animating away from.
   ShelfBackgroundType previous_background_type_ = SHELF_BACKGROUND_MAXIMIZED;
 
-  // Drives the animtion.
+  // Drives the animation.
   std::unique_ptr<gfx::SlideAnimation> animator_;
 
   // Tracks the shelf background animation values.
@@ -183,7 +178,7 @@ class ASH_EXPORT ShelfBackgroundAnimator : public ShelfObserver,
   // Tracks the item background animation values.
   AnimationValues item_background_values_;
 
-  base::ObserverList<ShelfBackgroundAnimatorObserver> observers_;
+  base::ObserverList<ShelfBackgroundAnimatorObserver>::Unchecked observers_;
 
   DISALLOW_COPY_AND_ASSIGN(ShelfBackgroundAnimator);
 };

@@ -149,7 +149,7 @@ class ChangeListLoader {
   void LoadChangeListFromServerAfterUpdate(
       ChangeListProcessor* change_list_processor,
       bool should_notify_changed_directories,
-      const base::Time& start_time,
+      base::Time start_time,
       FileError error);
 
   EventLogger* logger_;  // Not owned.
@@ -160,7 +160,7 @@ class ChangeListLoader {
   RootFolderIdLoader* root_folder_id_loader_;      // Not owned.
   StartPageTokenLoader* start_page_token_loader_;  // Not owned.
   LoaderController* loader_controller_;  // Not owned.
-  base::ObserverList<ChangeListLoaderObserver> observers_;
+  base::ObserverList<ChangeListLoaderObserver>::Unchecked observers_;
   std::vector<FileOperationCallback> pending_load_callback_;
   FileOperationCallback pending_update_check_callback_;
 

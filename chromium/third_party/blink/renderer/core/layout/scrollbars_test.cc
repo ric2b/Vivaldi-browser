@@ -20,10 +20,10 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar_theme_overlay_mock.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
-#include "third_party/blink/renderer/platform/scroll/scrollbar_theme_overlay_mock.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
@@ -64,7 +64,7 @@ class ScrollbarsTest : public SimTest {
     WebMouseEvent event(
         WebInputEvent::kMouseUp, WebFloatPoint(x, y), WebFloatPoint(x, y),
         WebPointerProperties::Button::kLeft, 0,
-        WebInputEvent::Modifiers::kLeftButtonDown, CurrentTimeTicks());
+        WebInputEvent::Modifiers::kNoModifiers, CurrentTimeTicks());
     event.SetFrameScale(1);
     GetEventHandler().HandleMouseReleaseEvent(event);
   }
@@ -194,6 +194,8 @@ TEST_F(ScrollbarsTest, ScrollbarSizeForUseZoomDSF) {
   WebViewImpl* web_view_impl =
       web_view_helper.Initialize(nullptr, &client, nullptr, nullptr);
 
+  // Needed so visual viewport supplies its own scrollbars.
+  web_view_impl->GetSettings()->SetViewportEnabled(true);
   web_view_impl->Resize(IntSize(800, 600));
 
   WebURL base_url = URLTestHelpers::ToKURL("http://example.com/");
@@ -570,6 +572,58 @@ TEST_F(ScrollbarsTest, MouseOverScrollbarInCustomCursorElement) {
   HandleMouseMoveEvent(195, 5);
 
   EXPECT_EQ(Cursor::Type::kPointer, CursorType());
+}
+
+// Ensure mouse cursor should be override when hovering over the custom
+// scrollbar.
+TEST_F(ScrollbarsTest, MouseOverCustomScrollbarInCustomCursorElement) {
+  WebView().Resize(WebSize(250, 250));
+
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <style>
+    body {
+      margin: 0;
+    }
+    #d1 {
+      width: 200px;
+      height: 200px;
+      overflow: auto;
+      cursor: move;
+    }
+    #d2 {
+      height: 400px;
+    }
+    ::-webkit-scrollbar {
+      background: none;
+      height: 5px;
+      width: 5px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background-color: black;
+    }
+    </style>
+    <div id='d1'>
+        <div id='d2'></div>
+    </div>
+  )HTML");
+  Compositor().BeginFrame();
+
+  Document& document = GetDocument();
+
+  Element* div = document.getElementById("d1");
+
+  // Ensure hittest has DIV and scrollbar.
+  HitTestResult hit_test_result = HitTest(195, 5);
+
+  EXPECT_EQ(hit_test_result.InnerElement(), div);
+  EXPECT_TRUE(hit_test_result.GetScrollbar());
+
+  HandleMouseMoveEvent(195, 5);
+
+  EXPECT_EQ(Cursor::Type::kMove, CursorType());
 }
 
 // Makes sure that mouse hover over an overlay scrollbar doesn't activate
@@ -1069,7 +1123,7 @@ TEST_F(ScrollbarsTest, CustomScrollbarChangeToMobileByEmulator) {
   DCHECK(!root_scrollable->VerticalScrollbar()->IsOverlayScrollbar());
   DCHECK(!root_scrollable->VerticalScrollbar()->GetTheme().IsMockTheme());
 
-  DCHECK(!viewport.LayerForHorizontalScrollbar()->Parent());
+  DCHECK(!viewport.LayerForHorizontalScrollbar());
 
   DCHECK(div_scrollable->VerticalScrollbar());
   DCHECK(div_scrollable->VerticalScrollbar()->IsCustomScrollbar());
@@ -1096,7 +1150,7 @@ TEST_F(ScrollbarsTest, CustomScrollbarChangeToMobileByEmulator) {
   EXPECT_FALSE(root_scrollable->VerticalScrollbar()->IsOverlayScrollbar());
   EXPECT_FALSE(root_scrollable->VerticalScrollbar()->GetTheme().IsMockTheme());
 
-  DCHECK(!viewport.LayerForHorizontalScrollbar()->Parent());
+  DCHECK(!viewport.LayerForHorizontalScrollbar());
 
   EXPECT_TRUE(div_scrollable->VerticalScrollbar());
   EXPECT_TRUE(div_scrollable->VerticalScrollbar()->IsCustomScrollbar());
@@ -1359,7 +1413,7 @@ TEST_P(ScrollbarAppearanceTest, NativeScrollbarChangeToMobileByEmulator) {
             root_scrollable->VerticalScrollbar()->IsOverlayScrollbar());
   DCHECK(!root_scrollable->VerticalScrollbar()->GetTheme().IsMockTheme());
 
-  DCHECK(!viewport.LayerForHorizontalScrollbar()->Parent());
+  DCHECK(!viewport.LayerForHorizontalScrollbar());
 
   DCHECK(div_scrollable->VerticalScrollbar());
   DCHECK(!div_scrollable->VerticalScrollbar()->IsCustomScrollbar());
@@ -1392,7 +1446,7 @@ TEST_P(ScrollbarAppearanceTest, NativeScrollbarChangeToMobileByEmulator) {
             root_scrollable->VerticalScrollbar()->IsOverlayScrollbar());
   EXPECT_FALSE(root_scrollable->VerticalScrollbar()->GetTheme().IsMockTheme());
 
-  DCHECK(!viewport.LayerForHorizontalScrollbar()->Parent());
+  DCHECK(!viewport.LayerForHorizontalScrollbar());
 
   EXPECT_TRUE(div_scrollable->VerticalScrollbar());
   EXPECT_FALSE(div_scrollable->VerticalScrollbar()->IsCustomScrollbar());
@@ -1813,6 +1867,41 @@ TEST_F(ScrollbarsTest, AutosizeTest) {
     EXPECT_FALSE(layout_viewport->HorizontalScrollbar());
     EXPECT_EQ(100, frame_view->FrameRect().Width());
     EXPECT_EQ(150, frame_view->FrameRect().Height());
+  }
+}
+
+TEST_F(ScrollbarsTest, AutosizeAlmostRemovableScrollbar) {
+  ScopedOverlayScrollbarsForTest overlay_scrollbars(false);
+  WebView().EnableAutoResizeMode(WebSize(25, 25), WebSize(800, 600));
+
+  SimRequest resource("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  resource.Complete(R"HTML(
+    <style>
+    body { margin: 0; padding: 15px }
+    #b1, #b2 { display: inline-block; width: 205px; height: 45px; }
+    #b1 { background: #888; }
+    #b2 { background: #bbb; }
+    #spacer { width: 400px; height: 490px; background: #eee; }
+    </style>
+    <div id="b1"></div><div id="b2"></div>
+    <div id="spacer"></div>
+  )HTML");
+
+  // Finish loading.
+  test::RunPendingTasks();
+
+  LocalFrameView* frame_view = WebView().MainFrameImpl()->GetFrameView();
+  ScrollableArea* layout_viewport = frame_view->LayoutViewport();
+
+  // Check three times to verify stability.
+  for (int i = 0; i < 3; i++) {
+    frame_view->SetNeedsLayout();
+    Compositor().BeginFrame();
+    EXPECT_TRUE(layout_viewport->VerticalScrollbar());
+    EXPECT_FALSE(layout_viewport->HorizontalScrollbar());
+    EXPECT_EQ(445, frame_view->Width());
+    EXPECT_EQ(600, frame_view->Height());
   }
 }
 

@@ -14,6 +14,7 @@
 #include "ash/login/ui/non_accessible_view.h"
 #include "ash/public/interfaces/user_info.mojom.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observer.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/view.h"
 
@@ -93,8 +94,9 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
   ~LoginAuthUserView() override;
 
   // Set the displayed set of auth methods. |auth_methods| contains or-ed
-  // together AuthMethod values.
-  void SetAuthMethods(uint32_t auth_methods);
+  // together AuthMethod values. |can_use_pin| should be true if the user can
+  // authenticate using PIN, even if the PIN keyboard is not displayed.
+  void SetAuthMethods(uint32_t auth_methods, bool can_use_pin);
   AuthMethods auth_methods() const { return auth_methods_; }
 
   // Add an easy unlock icon.
@@ -139,10 +141,6 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
   // Called with the result of the request started in |OnAuthSubmit|.
   void OnAuthComplete(base::Optional<bool> auth_success);
 
-  // Animates the display of ellipses after the |placeholder| text. |step| is
-  // the current index of the animation sequence.
-  void AnimateEllipses(const base::string16& placeholder, int step);
-
   // Called when the user view has been tapped. This will run |on_auth_| if tap
   // to unlock is enabled, or run |OnOnlineSignInMessageTap| if the online
   // sign-in message is shown, otherwise it will run |on_tap_|.
@@ -155,16 +153,22 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
   // bool has_tap = HasAuthMethod(AUTH_TAP).
   bool HasAuthMethod(AuthMethods auth_method) const;
 
-  // Update UI for the online sign-in message.
-  void DecorateOnlineSignInMessage();
-
   AuthMethods auth_methods_ = AUTH_NONE;
+  // True if the user's password might be a PIN. PIN is hashed differently from
+  // password. The PIN keyboard may not always be visible even when the user
+  // wants to submit a PIN, eg. the virtual keyboard hides the PIN keyboard.
+  bool can_use_pin_ = false;
   LoginUserView* user_view_ = nullptr;
   LoginPasswordView* password_view_ = nullptr;
   LoginPinView* pin_view_ = nullptr;
   views::LabelButton* online_sign_in_message_ = nullptr;
   DisabledAuthMessageView* disabled_auth_message_ = nullptr;
   FingerprintView* fingerprint_view_ = nullptr;
+  // Displays padding between:
+  // 1. Password field and pin keyboard
+  // 2. Password field and fingerprint view, when pin is not available.
+  // Preferred size will change base on current auth method.
+  NonAccessibleView* padding_below_password_view_ = nullptr;
   const OnAuthCallback on_auth_;
   const LoginUserView::OnTap on_tap_;
 
@@ -173,7 +177,7 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
   // |ApplyAnimationPostLayout|.
   std::unique_ptr<AnimationState> cached_animation_state_;
 
-  base::WeakPtrFactory<LoginAuthUserView> weak_factory_;
+  base::WeakPtrFactory<LoginAuthUserView> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(LoginAuthUserView);
 };

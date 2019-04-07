@@ -26,7 +26,7 @@
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/initialization_util.h"
+#include "base/task/task_scheduler/initialization_util.h"
 #include "base/time/time.h"
 #include "content/common/task_scheduler.h"
 #include "content/public/common/bindings_policy.h"
@@ -190,6 +190,12 @@ RenderProcessImpl::RenderProcessImpl(
 
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
+
+  if (command_line.HasSwitch(switches::kNoV8UntrustedCodeMitigations)) {
+    const char* disable_mitigations = "--no-untrusted-code-mitigations";
+    v8::V8::SetFlagsFromString(disable_mitigations,
+                               strlen(disable_mitigations));
+  }
 
   if (command_line.HasSwitch(switches::kJavaScriptFlags)) {
     std::string flags(

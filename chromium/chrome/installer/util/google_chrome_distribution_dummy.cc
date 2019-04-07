@@ -44,14 +44,6 @@ base::string16 GoogleChromeDistribution::GetPublisherName() {
   return base::string16();
 }
 
-base::string16 GoogleChromeDistribution::GetAppDescription() {
-  return base::string16();
-}
-
-std::string GoogleChromeDistribution::GetSafeBrowsingName() {
-  return std::string();
-}
-
 base::string16 GoogleChromeDistribution::GetDistributionData(HKEY root_key) {
   return base::string16();
 }

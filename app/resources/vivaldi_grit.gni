@@ -27,7 +27,7 @@ template("single_grit_action") {
   }
   deps_list = []
 
-  if (have_strings && (generate_untranslated || is_official_build)) {
+  if (have_strings && generate_untranslated) {
     name = "Extract_strings_$target_name"
     deps_list += [ ":" + name ]
     vivaldi_extract_untranslated(name) {

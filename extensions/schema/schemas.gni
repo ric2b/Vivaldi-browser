@@ -5,7 +5,7 @@
 import("//build/config/features.gni")
 
 # Common sources that are both bundled and compiled.
-sources = [
+schema_sources = [
   "autoupdate.json",
   "bookmarks_private.json",
   "browser_action_utilities.json",
@@ -37,7 +37,7 @@ sources = [
 uncompiled_sources = []
 
 root_namespace = "extensions::vivaldi::%(namespace)s"
-schema_include_rules =
+extensions_api_schema_include_rules =
     "//vivaldi/extensions/api:extensions::vivaldi::%(namespace)s"
 schema_dependencies = [
   "//crypto:crypto",

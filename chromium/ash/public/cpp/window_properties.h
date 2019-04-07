@@ -58,6 +58,11 @@ ASH_PUBLIC_EXPORT void RegisterWindowProperties(
 
 // Alphabetical sort.
 
+// A property key to store the ARC package name for a window's associated
+// ARC app.
+ASH_PUBLIC_EXPORT extern const aura::WindowProperty<std::string*>* const
+    kArcPackageNameKey;
+
 // A property key to specify if the window should (or should not) have a
 // backdrop window (typically black) that covers the desktop behind the window.
 ASH_PUBLIC_EXPORT extern const aura::WindowProperty<BackdropWindowMode>* const
@@ -76,6 +81,12 @@ ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
 ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
     kCanConsumeSystemKeysKey;
 
+// The bounds of the window control button container (min/max/restore) relative
+// to the window's frame.
+ASH_PUBLIC_EXPORT extern const aura::WindowProperty<gfx::Rect*>* const
+    kCaptionButtonBoundsKey;
+
+// The state of the frame back button, whether it's visible and enabled.
 ASH_PUBLIC_EXPORT extern const aura::WindowProperty<FrameBackButtonState>* const
     kFrameBackButtonStateKey;
 
@@ -94,6 +105,11 @@ ASH_PUBLIC_EXPORT extern const aura::WindowProperty<
 ASH_PUBLIC_EXPORT extern const aura::WindowProperty<int>* const
     kFrameImageYInsetKey;
 
+// A property to control the visibility of the frame captions buttons when in
+// tablet mode (when not in tablet mode, this property is ignored).
+ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
+    kHideCaptionButtonsInTabletModeKey;
+
 // A property key to indicate whether we should hide this window in overview
 // mode and Alt + Tab.
 ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
@@ -103,6 +119,20 @@ ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
 // Exposed because some windows want to explicitly opt-out of this.
 ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
     kHideShelfWhenFullscreenKey;
+
+// Whether entering fullscreen means that a window should automatically enter
+// immersive mode. This is false for some client windows, such as Chrome Apps.
+ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
+    kImmersiveImpliedByFullscreen;
+
+// Whether immersive is currently active (in ImmersiveFullscreenController
+// parlance, "enabled").
+ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
+    kImmersiveIsActive;
+
+// The bounds of the top container in screen coordinates.
+ASH_PUBLIC_EXPORT extern const aura::WindowProperty<gfx::Rect*>* const
+    kImmersiveTopContainerBoundsInScreen;
 
 // If true, the window is the target window for the tab-dragged window. The key
 // is used by overview to show a highlight indication to indicate which overview
@@ -123,7 +153,7 @@ ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
 ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
     kPanelAttachedKey;
 
-// Maps to ui::mojom::WindowManager::kRenderParentTitleArea_Property.
+// Maps to ws::mojom::WindowManager::kRenderParentTitleArea_Property.
 ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
     kRenderTitleAreaProperty;
 
@@ -147,7 +177,7 @@ ASH_PUBLIC_EXPORT extern const aura::WindowProperty<
 ASH_PUBLIC_EXPORT extern const aura::WindowProperty<bool>* const
     kSearchKeyAcceleratorReservedKey;
 
-// A property key to store the id for a window's shelf item.
+// A property key to store the serialized id for a window's shelf item.
 ASH_PUBLIC_EXPORT extern const aura::WindowProperty<std::string*>* const
     kShelfIDKey;
 

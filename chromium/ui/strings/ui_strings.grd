@@ -598,28 +598,25 @@ need to be translated for each locale.-->
       <message name="IDS_APP_MEDIA_STOP_KEY" desc="Media stop key">
         Media Stop
       </message>
+      <message name="IDS_APP_ALT_KEY" desc="Alt key">
+        Alt
+      </message>
+      <message name="IDS_APP_COMMAND_KEY" desc="Command key">
+        Command
+      </message>
       <message name="IDS_APP_CTRL_KEY" desc="Ctrl key">
         Ctrl
+      </message>
+      <message name="IDS_APP_SEARCH_KEY" desc="Search key">
+        Search
       </message>
       <message name="IDS_APP_SHIFT_KEY" desc="Shift key">
         Shift
       </message>
 
-      <!-- Shortcut Modifiers -->
-      <message name="IDS_APP_CONTROL_MODIFIER" desc="Control key shortcut modifier">
-        Ctrl+<ph name="KEY_COMBO_NAME">$1<ex>C</ex></ph>
-      </message>
-      <message name="IDS_APP_ALT_MODIFIER" desc="Alt key shortcut modifier">
-        Alt+<ph name="KEY_COMBO_NAME">$1<ex>C</ex></ph>
-      </message>
-      <message name="IDS_APP_SHIFT_MODIFIER" desc="Shift key shortcut modifier">
-        Shift+<ph name="KEY_COMBO_NAME">$1<ex>C</ex></ph>
-      </message>
-      <message name="IDS_APP_COMMAND_MODIFIER" desc="Command key shortcut modifier">
-        Command+<ph name="KEY_COMBO_NAME">$1<ex>C</ex></ph>
-      </message>
-      <message name="IDS_APP_SEARCH_MODIFIER" desc="Search key shortcut modifier">
-        Search+<ph name="KEY_COMBO_NAME">$1<ex>C</ex></ph>
+      <!-- Accelerator format -->
+      <message name="IDS_APP_ACCELERATOR_WITH_MODIFIER" desc="Accelerator with a modifier key">
+        <ph name="KEY_MODIFIER_NAME">$1<ex>Ctrl</ex></ph>+<ph name="KEY_COMBO_NAME">$2<ex>C</ex></ph>
       </message>
 
       <!-- Byte size units -->
@@ -794,8 +791,14 @@ need to be translated for each locale.-->
       <message name="IDS_APP_LIST_CLEAR_SEARCHBOX" desc="Tooltip for the button that clears all text from the search box in the app list.">
         Clear searchbox text
       </message>
+      <message name="IDS_APP_LIST_START_ASSISTANT" desc="Tooltip for the button that starts Google Assistant from the search box in the app list.">
+        Start Google Assistant
+      </message>
       <message name="IDS_APP_LIST_PAGE_SWITCHER" desc="Tooltip for page switcher for each page in fullscreen view which shows all apps.">
         Page <ph name="selected_page">$1<ex>1</ex></ph> of <ph name="total_page_num">$2<ex>3</ex></ph>
+      </message>
+      <message name="IDS_APP_LIST_CONTINUE_READING_ACCESSIBILE_NAME" desc="The spoken feedback text for the suggestion chip of continue reading.">
+        Continue reading from your mobile device <ph name="title">$1<ex>Title</ex></ph>
       </message>
       <message name="IDS_APP_ACCESSIBILITY_STAR_RATING_ARC" desc="Accessibility text for the star rating of a Play Store app.">
         Star rating <ph name="RATING_SCORE">$1<ex>5.0</ex></ph>

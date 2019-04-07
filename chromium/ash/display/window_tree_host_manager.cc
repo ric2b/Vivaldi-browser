@@ -31,11 +31,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "services/ui/ws2/window_service.h"
+#include "services/ws/window_service.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/client/screen_position_client.h"
-#include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tracker.h"
@@ -99,11 +98,6 @@ void ClearDisplayPropertiesOnHost(AshWindowTreeHost* ash_host) {
 aura::Window* GetWindow(AshWindowTreeHost* ash_host) {
   CHECK(ash_host->AsWindowTreeHost());
   return ash_host->AsWindowTreeHost()->window();
-}
-
-bool ShouldUpdateMirrorWindowController() {
-  return aura::Env::GetInstance()->mode() == aura::Env::Mode::LOCAL ||
-         !base::FeatureList::IsEnabled(::features::kMashDeprecated);
 }
 
 }  // namespace
@@ -673,7 +667,7 @@ void WindowTreeHostManager::OnDisplayMetricsChanged(
   // Shell creates |window_service_owner_| from Shell::Init(), but this
   // function may be called before |window_service_owner_| is created. It's safe
   // to ignore the call in this case as no clients have connected yet.
-  ui::ws2::WindowService* window_service =
+  ws::WindowService* window_service =
       Shell::Get()->window_service_owner()
           ? Shell::Get()->window_service_owner()->window_service()
           : nullptr;
@@ -698,9 +692,7 @@ void WindowTreeHostManager::OnHostResized(aura::WindowTreeHost* host) {
   display::DisplayManager* display_manager = GetDisplayManager();
   if (display_manager->UpdateDisplayBounds(display.id(),
                                            host->GetBoundsInPixels())) {
-    // The window server controls mirroring in Mus, not Ash.
-    if (ShouldUpdateMirrorWindowController())
-      mirror_window_controller_->UpdateWindow();
+    mirror_window_controller_->UpdateWindow();
     cursor_window_controller_->UpdateContainer();
   }
 }
@@ -709,9 +701,7 @@ void WindowTreeHostManager::CreateOrUpdateMirroringDisplay(
     const display::DisplayInfoList& info_list) {
   if (GetDisplayManager()->IsInMirrorMode() ||
       GetDisplayManager()->IsInUnifiedMode()) {
-    // The window server controls mirroring in Mus, not Ash.
-    if (ShouldUpdateMirrorWindowController())
-      mirror_window_controller_->UpdateWindow(info_list);
+    mirror_window_controller_->UpdateWindow(info_list);
     cursor_window_controller_->UpdateContainer();
   } else {
     NOTREACHED();
@@ -719,9 +709,7 @@ void WindowTreeHostManager::CreateOrUpdateMirroringDisplay(
 }
 
 void WindowTreeHostManager::CloseMirroringDisplayIfNotNecessary() {
-  // The window server controls mirroring in Mus, not Ash.
-  if (ShouldUpdateMirrorWindowController())
-    mirror_window_controller_->CloseIfNotNecessary();
+  mirror_window_controller_->CloseIfNotNecessary();
   // If cursor_compositing is enabled for large cursor, the cursor window is
   // always on the desktop display (the visible cursor on the non-desktop
   // display is drawn through compositor mirroring). Therefore, it's unnecessary
@@ -821,15 +809,14 @@ AshWindowTreeHost* WindowTreeHostManager::AddWindowTreeHostForDisplay(
   }
   params_with_bounds.display_id = display.id();
   params_with_bounds.device_scale_factor = display.device_scale_factor();
-  params_with_bounds.ui_scale_factor = display_info.configured_ui_scale();
   // The AshWindowTreeHost ends up owned by the RootWindowControllers created
   // by this class.
   AshWindowTreeHost* ash_host =
       AshWindowTreeHost::Create(params_with_bounds).release();
   aura::WindowTreeHost* host = ash_host->AsWindowTreeHost();
-  // When using IME service, input method is hosted by the browser process, so
-  // we don't need to create and set it here.
-  if (!Shell::ShouldUseIMEService()) {
+  // Out-of-process ash uses the IME mojo service. In-process ash uses a single
+  // input method shared between ash and browser code.
+  if (!::features::IsMultiProcessMash()) {
     DCHECK(!host->has_input_method());
     if (!input_method_) {  // Singleton input method instance for Ash.
       input_method_ = ui::CreateInputMethod(this, host->GetAcceleratedWidget());

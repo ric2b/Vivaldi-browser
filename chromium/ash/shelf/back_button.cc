@@ -34,7 +34,7 @@ BackButton::BackButton() : views::ImageButton(nullptr) {
   set_ink_drop_visible_opacity(kShelfInkDropVisibleOpacity);
 
   SetAccessibleName(l10n_util::GetStringUTF16(IDS_ASH_SHELF_BACK_BUTTON_TITLE));
-  SetSize(gfx::Size(kShelfSize, kShelfSize));
+  SetSize(gfx::Size(kShelfControlSizeNewUi, kShelfControlSizeNewUi));
   SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
 }
 
@@ -69,7 +69,9 @@ void BackButton::OnMouseReleased(const ui::MouseEvent& event) {
 
 std::unique_ptr<views::InkDropRipple> BackButton::CreateInkDropRipple() const {
   return std::make_unique<views::FloodFillInkDropRipple>(
-      size(), gfx::Insets(kShelfButtonSize / 2 - kAppListButtonRadius),
+      size(),
+      gfx::Insets(ShelfConstants::button_size() / 2 -
+                  ShelfConstants::app_list_button_radius()),
       GetInkDropCenterBasedOnLastEvent(), GetInkDropBaseColor(),
       ink_drop_visible_opacity());
 }
@@ -82,8 +84,8 @@ std::unique_ptr<views::InkDrop> BackButton::CreateInkDrop() {
 }
 
 std::unique_ptr<views::InkDropMask> BackButton::CreateInkDropMask() const {
-  return std::make_unique<views::CircleInkDropMask>(size(), GetCenterPoint(),
-                                                    kAppListButtonRadius);
+  return std::make_unique<views::CircleInkDropMask>(
+      size(), GetCenterPoint(), ShelfConstants::app_list_button_radius());
 }
 
 void BackButton::PaintButtonContents(gfx::Canvas* canvas) {

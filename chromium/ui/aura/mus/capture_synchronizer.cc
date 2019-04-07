@@ -5,7 +5,7 @@
 #include "ui/aura/mus/capture_synchronizer.h"
 
 #include "base/auto_reset.h"
-#include "services/ui/public/interfaces/window_tree.mojom.h"
+#include "services/ws/public/mojom/window_tree.mojom.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/mus/capture_synchronizer_delegate.h"
 #include "ui/aura/mus/window_mus.h"
@@ -14,7 +14,7 @@
 namespace aura {
 
 CaptureSynchronizer::CaptureSynchronizer(CaptureSynchronizerDelegate* delegate,
-                                         ui::mojom::WindowTree* window_tree)
+                                         ws::mojom::WindowTree* window_tree)
     : delegate_(delegate), window_tree_(window_tree) {}
 
 CaptureSynchronizer::~CaptureSynchronizer() {}
@@ -44,7 +44,11 @@ void CaptureSynchronizer::AttachToCaptureClient(
 
 void CaptureSynchronizer::DetachFromCaptureClient(
     client::CaptureClient* capture_client) {
-  SetCaptureWindow(nullptr);
+  if (capture_window_ &&
+      client::GetCaptureClient(capture_window_->GetWindow()->GetRootWindow()) ==
+          capture_client) {
+    SetCaptureWindow(nullptr);
+  }
   capture_client->RemoveObserver(this);
 }
 

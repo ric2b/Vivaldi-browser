@@ -54,11 +54,13 @@
           // Disabled. Class list is simply too mutable, especially in the
           // case where an element changes class on hover or on focus.
           continue;
-        } else if (attr === 'title') {
-          // 'title' is an attribute inserted by Chrome Autofill to predict
-          // how the field should be filled. Since this attribute is inserted
-          // by Chrome, it may change from build to build. Skip this
-          // attribute.
+        } else if (attr === 'autofill-prediction' ||
+                   attr === 'field_signature' ||
+                   attr === 'pm_parser_annotation' ||
+                   attr === 'title') {
+          // These attributes are inserted by Chrome.
+          // Since Chrome sets these attributes, these attributes may change
+          // from build to build. Skip these attributes.
           continue;
         } else {
           attributes.push(`@${attr}`);
@@ -126,13 +128,17 @@
     }
 
     function buildClassifier(element, attributeXPathToken, attributeValue) {
-      // Skip values that has the " character. There is just no good way to
-      // wrap this character in xslt, and the best way to handle it involves
-      // doing gynmnastics with string concatenation, as in
-      // "concat('Single', "'", 'quote. Double', '"', 'quote.')]";
-      // It is easier to just skip attributes containing the '"' character.
-      // Futhermore, attributes containing the '"' character are very rare.
-      if (!attributeValue || attributeValue.indexOf('"') >= 0) {
+      if (!attributeValue ||
+          // Skip values that has the " character. There is just no good way to
+          // wrap this character in xslt, and the best way to handle it
+          // involves doing gynmnastics with string concatenation, as in
+          // "concat('Single', "'", 'quote. Double', '"', 'quote.')]";
+          // It is easier to just skip attributes containing the '"' character.
+          // Furthermore, attributes containing the '"' character are very rare.
+          attributeValue.indexOf('"') >= 0 ||
+          // Skip values that have the \ character. JavaScript does not
+          // serialize this character correctly.
+          attributeValue.indexOf('\\') >= 0) {
         return attributeXPathToken;
       }
 
@@ -174,8 +180,8 @@
     return build(target);
   };
 
-  let autofillTriggerElementSelector = null;
-  let lastTypingEventTargetValue = null;
+  let autofillTriggerElementInfo = null;
+  let lastTypingEventInfo = null;
   let frameContext;
   let mutationObserver = null;
   let started = false;
@@ -195,6 +201,18 @@
 
   function isPasswordInputElement(element) {
     return element.getAttribute('type') === 'password';
+  }
+
+  function isChromeRecognizedPasswordField(element) {
+    const passwordManagerParserAnnotation =
+        element.getAttribute('pm_parser_annotation');
+    return passwordManagerParserAnnotation === 'password_element' ||
+           passwordManagerParserAnnotation === 'new_password_element' ||
+           passwordManagerParserAnnotation === 'confirmation_password_element';
+  }
+
+  function isChromeRecognizedUserNameField(element) {
+    return element.getAttribute('pm_parser_annotation') === 'username_element';
   }
 
   function canTriggerAutofill(element) {
@@ -227,41 +245,6 @@
     });
   }
 
-  function memorizePasswordFormInputs(passwordField) {
-    // Extract the 'form signature' value from the password's 'title'
-    // attribute.
-    const title = passwordField.getAttribute('title');
-    if (!title)
-      return;
-
-    let formSign = null;
-    const attrs = title.split('\n');
-    for (let index = 0; index < attrs.length; index++) {
-      if (attrs[index].startsWith('form signature')) {
-        formSign = attrs[index];
-      }
-    }
-    if (formSign)
-      return;
-
-    // Identify the 'user name' field and grab the field value.
-    const fields = document.querySelectorAll(`*[title*='${formSign}']`);
-    for (let index = 0; index < fields.length; index++) {
-      const field = fields[index];
-      const type = field.getAttribute('autofill-prediction');
-      if (type === 'HTML_TYPE_EMAIL') {
-        // (TODO: uwyiming@) Send the password to the UI content script. A
-        // user may then add password manager events through the Recorder
-        // Extension UI, without having to retype the password.
-        //sendRuntimeMessageToBackgroundScript({
-        //  type: RecorderMsgEnum.MEMORIZE_PASSWORD_FORM,
-        //  password: passwordField.value,
-        //  user:
-        //});
-      }
-    }
-  }
-
   function onInputChangeActionHandler(event) {
     const selector = buildXPathForElement(event.target);
     const elementReadyState = automation_helper.getElementState(event.target);
@@ -277,32 +260,59 @@
       if (document.activeElement === event.target) {
         const index = event.target.options.selectedIndex;
         console.log(`Select detected on: ${selector} with '${index}'`);
-        action.type = 'select';
+        action.type = ActionTypeEnum.SELECT;
         action.index = index;
         addActionToRecipe(action);
       } else {
-        action.type = 'validateField';
+        action.type = ActionTypeEnum.VALIDATE_FIELD;
         action.expectedValue = event.target.value;
         if (autofillPrediction) {
           action.expectedAutofillType = autofillPrediction;
         }
         addActionToRecipe(action);
       }
-    } else if (lastTypingEventTargetValue === event.target.value) {
+    } else if (lastTypingEventInfo &&
+               lastTypingEventInfo.target === event.target &&
+               lastTypingEventInfo.value === event.target.value) {
       console.log(`Typing detected on: ${selector}`);
-      action.type = 'type';
+
+      // Distinguish between typing inside password input fields and
+      // other type of text input fields.
+      //
+      // This extension generates test recipes to be consumed by the Captured
+      // Sites Automation Framework. The automation framework replays a typing
+      // action by using JavaScript to set the value of a text input field.
+      // However, to trigger the Chrome Password Manager, the automation
+      // framework must simulate user typing inside the password field by
+      // sending individual character keyboard input - because Chrome Password
+      // Manager deliberately ignores forms filled by JavaScript.
+      //
+      // Simulating keyboard input is a less reliable and therefore the less
+      // preferred way for filling text inputs. The Automation Framework uses
+      // keyboard input only when necessary. So this extension separates
+      // typing password actions from other typing actions.
+      const isPasswordField = isPasswordInputElement(event.target);
+      action.type =
+          isPasswordField ?
+            ActionTypeEnum.TYPE_PASSWORD:
+            ActionTypeEnum.TYPE;
       action.value = event.target.value;
       addActionToRecipe(action);
     } else {
       // If the user has previously clicked on a field that can trigger
       // autofill, add a trigger autofill action.
-      if (autofillTriggerElementSelector !== null) {
-        console.log(`Triggered autofill on ${autofillTriggerElementSelector}`);
-        action.type = 'autofill';
-        addActionToRecipe(action);
-        autofillTriggerElementSelector = null;
+      if (autofillTriggerElementInfo !== null) {
+        console.log(`Triggered autofill on ${autofillTriggerElementInfo.selector}`);
+        let autofillAction = {
+          selector: autofillTriggerElementInfo.selector,
+          context: frameContext,
+          visibility: autofillTriggerElementInfo.visibility
+        };
+        autofillAction.type = ActionTypeEnum.AUTOFILL;
+        addActionToRecipe(autofillAction);
+        autofillTriggerElementInfo = null;
       }
-      action.type = 'validateField';
+      action.type = ActionTypeEnum.VALIDATE_FIELD;
       action.expectedValue = event.target.value;
       if (autofillPrediction) {
         action.expectedAutofillType = autofillPrediction;
@@ -320,7 +330,7 @@
     });
   }
 
-  function deRegisterOnInputChangeActionListener(root) {
+  function unRegisterOnInputChangeActionListener(root) {
     const inputElements = root.querySelectorAll('input, select, textarea');
     inputElements.forEach((element) => {
       if (isEditableInputElement(element)) {
@@ -346,16 +356,19 @@
         // the element selector path, as the user could have clicked
         // this element to trigger autofill.
         if (isAutofillableElement(element) && canTriggerAutofill(element)) {
-          autofillTriggerElementSelector = selector;
+          autofillTriggerElementInfo = {
+            selector: selector,
+            visibility: elementReadyState
+          }
         }
       } else {
         addActionToRecipe({
           selector: selector,
           visibility: elementReadyState,
           context: frameContext,
-          type: 'click'
+          type: ActionTypeEnum.CLICK
         });
-        autofillTriggerElementSelector = null;
+        autofillTriggerElementInfo = null;
       }
     } else if (event.button === Buttons.RIGHT_BUTTON) {
       const element = event.target;
@@ -367,7 +380,7 @@
           selector: selector,
           visibility: elementReadyState,
           context: frameContext,
-          type: 'hover'
+          type: ActionTypeEnum.HOVER
         });
     }
   }
@@ -381,63 +394,113 @@
         selector: selector,
         visibility: elementReadyState,
         context: frameContext,
-        type: 'pressEnter'
+        type: ActionTypeEnum.PRESS_ENTER
       });
     }
 
     if (isEditableInputElement(event.target)) {
-      lastTypingEventTargetValue = event.target.value;
+      lastTypingEventInfo = {
+        target: event.target,
+        value: event.target.value
+      }
     } else {
-      lastTypingEventTargetValue = null;
+      lastTypingEventInfo = null;
     }
   }
 
-  function startRecording() {
-    const promise =
-      // First, obtain the current frame's context.
-      sendRuntimeMessageToBackgroundScript({
-          type: RecorderMsgEnum.GET_FRAME_CONTEXT,
-          location: location})
-      .then((context) => {
-        frameContext = context;
-        // Register on change listeners on all the input elements.
-        registerOnInputChangeActionListener(document);
-        // Register a mouse up listener on the entire document.
-        //
-        // The content script registers a 'Mouse Up' listener rather than a
-        // 'Mouse Down' to correctly handle the following scenario:
-        //
-        // A user types inside a search box, then clicks the search button.
-        //
-        // The following events will fire in quick chronological succession:
-        // * Mouse down on the search button.
-        // * Change on the search input box.
-        // * Mouse up on the search button.
-        //
-        // To capture the correct sequence of actions, the content script
-        // should tie left mouse click actions to the mouseup event.
-        document.addEventListener('mouseup', onClickActionHander);
-        // Register a key press listener on the entire document.
-        document.addEventListener('keyup', onKeyUpActionHandler);
-        // Setup mutation observer to listen for event on nodes added after
-        // recording starts.
-        mutationObserver = new MutationObserver((mutations) => {
-          mutations.forEach(mutation => {
-            mutation.addedNodes.forEach(node => {
-              if (node.nodeType === Node.ELEMENT_NODE) {
-                // Add the onchange listener on any new input elements. This
-                // way the recorder can record user interactions with new
-                // elements.
-                registerOnInputChangeActionListener(node);
-              }
-            });
+  function onPasswordFormSubmitHandler(event) {
+    const form = event.target;
+
+    // Extract the form signature value from the form.
+    const fields = form.querySelectorAll(
+        `*[form_signature][pm_parser_annotation]`);
+    let userName = null;
+    let password = null;
+    for (const field of fields) {
+      const passwordManagerAnnotation =
+          field.getAttribute('pm_parser_annotation');
+      switch (passwordManagerAnnotation) {
+        case 'password_element':
+        case 'new_password_element':
+        case 'confirmation_password_element':
+          password = field.value;
+          break;
+        case 'username_element':
+          userName = field.value;
+          break;
+        default:
+      }
+    }
+
+    if (!userName || !password) {
+      // The form is missing a user name field or a password field.
+      // The content script should not forward an incomplete password form to
+      // the recorder extension. Exit.
+      return;
+    }
+
+    sendRuntimeMessageToBackgroundScript({
+      type: RecorderMsgEnum.SET_PASSWORD_MANAGER_ACTION_PARAMS,
+      params: { userName: userName, password: password }
+    });
+  }
+
+  function registerOnPasswordFormSubmitHandler(root) {
+    const formElements = root.querySelectorAll('form');
+    formElements.forEach((form) => {
+      form.addEventListener('submit', onPasswordFormSubmitHandler, true);
+    });
+  }
+
+  function unRegisterOnPasswordFormSubmitHandler(root) {
+    const formElements = root.querySelectorAll('form');
+    formElements.forEach((form) => {
+      form.removeEventListener('submit', onPasswordFormSubmitHandler, true);
+    });
+  }
+
+  function startRecording(context) {
+      frameContext = context;
+      // Register on change listeners on all the input elements.
+      registerOnInputChangeActionListener(document);
+      registerOnPasswordFormSubmitHandler(document);
+      // Register a mouse up listener on the entire document.
+      //
+      // The content script registers a 'Mouse Up' listener rather than a
+      // 'Mouse Down' to correctly handle the following scenario:
+      //
+      // A user types inside a search box, then clicks the search button.
+      //
+      // The following events will fire in quick chronological succession:
+      // * Mouse down on the search button.
+      // * Change on the search input box.
+      // * Mouse up on the search button.
+      //
+      // To capture the correct sequence of actions, the content script
+      // should tie left mouse click actions to the mouseup event.
+      document.addEventListener('mouseup', onClickActionHander);
+      // Register a key press listener on the entire document.
+      document.addEventListener('keyup', onKeyUpActionHandler);
+      // Setup mutation observer to listen for event on nodes added after
+      // recording starts.
+      mutationObserver = new MutationObserver((mutations) => {
+        mutations.forEach(mutation => {
+          mutation.addedNodes.forEach(node => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              // Add the onchange listener on any new input elements. This
+              // way the recorder can record user interactions with new
+              // elements.
+              registerOnInputChangeActionListener(node);
+              // Add the on password form submission listener on any new
+              // form elements.
+              registerOnPasswordFormSubmitHandler(node);
+            }
           });
         });
-        mutationObserver.observe(document, {childList: true, subtree: true});
-        started = true;
-        return Promise.resolve();
       });
-    return promise;
+      mutationObserver.observe(document, {childList: true, subtree: true});
+      started = true;
+      return Promise.resolve();
   }
 
   function stopRecording() {
@@ -445,7 +508,8 @@
       mutationObserver.disconnect();
       document.removeEventListener('mousedown', onClickActionHander);
       document.removeEventListener('keyup', onKeyUpActionHandler);
-      deRegisterOnInputChangeActionListener(document);
+      unRegisterOnInputChangeActionListener(document);
+      unRegisterOnPasswordFormSubmitHandler(document);
     }
   }
 
@@ -455,8 +519,7 @@
     const iframes = document.querySelectorAll('iframe');
     // Find the target iframe.
     for (let index = 0; index < iframes.length; index++) {
-      const url = new URL(iframes[index].src,
-                          `${location.protocol}//${location.host}`);
+      const url = new URL(iframes[index].src, location.origin);
       // Try to identify the iframe using the entire URL.
       if (frameLocation.href === url.href) {
         iframe = iframes[index];
@@ -469,8 +532,7 @@
       // To handle the scenario described above, this code optionally ignores
       // the iframe url's hash.
       if (iframes === null &&
-          frameLocation.protocol === url.protocol &&
-          frameLocation.host === url.host &&
+          frameLocation.origin === url.origin &&
           frameLocation.pathname === url.pathname &&
           frameLocation.search === url.search) {
         iframe = iframes[index];
@@ -485,7 +547,7 @@
     if (iframe.name) {
       return Promise.resolve(iframe.name);
     } else {
-      return Promise.resolve('');
+      return Promise.resolve(false);
     }
   }
 
@@ -493,7 +555,7 @@
     if (!request) return;
     switch (request.type) {
       case RecorderMsgEnum.START:
-        startRecording()
+        startRecording(request.frameContext)
         .then(() => sendResponse(true))
         .catch((error) => {
           sendResponse(false);
@@ -507,6 +569,7 @@
         sendResponse(true);
         break;
       case RecorderMsgEnum.GET_IFRAME_NAME:
+        console.log(`Cross: ${request.url}`);
         queryIframeName(request.url)
         .then((context) => {
           sendResponse(context);

@@ -11,18 +11,26 @@
     <link rel="stylesheet" href="app_downloading.css">
     <link rel="stylesheet" href="oobe_flex_layout.css">
     <oobe-dialog id="app-downloading-dialog" role="dialog" has-buttons
-        aria-label$="[[i18nDynamic(locale, 'appDownloadingScreenTitle')]]"
         no-footer-padding>
       <iron-icon src="chrome://oobe/playstore.svg" slot="oobe-icon">
       </iron-icon>
-      <h1 slot="title">
-        [[i18nDynamic(locale, 'appDownloadingScreenTitle')]]
+      <h1 slot="title" hidden="[[!hasSingleApp]]">
+        [[i18nDynamic(locale, 'appDownloadingScreenTitleSingular')]]
+      </h1>
+      <h1 slot="title" hidden="[[hasSingleApp]]">
+        [[i18nDynamic(locale, 'appDownloadingScreenTitlePlural', numOfApps)]]
       </h1>
       <div slot="subtitle">
         [[i18nDynamic(locale, 'appDownloadingScreenDescription')]]
       </div>
       <div id="app-downloading-video-container" slot="footer">
-        <!-- TODO(rsgingerrs): add the app downloading video -->
+        <if expr="chromeos and _google_chrome">
+          <video loop="loop" autoplay="autoplay" muted>
+            <source
+                src="../../../internal/resources/arc_support/videos/app_downloading.mp4"
+                type="video/mp4">
+          </video>
+        </if>
       </div>
       <div slot="bottom-buttons" class="layout horizontal end-justified">
         <oobe-next-button id="app-downloading-continue-setup-button"

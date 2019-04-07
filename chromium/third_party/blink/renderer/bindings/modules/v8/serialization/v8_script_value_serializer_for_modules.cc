@@ -13,7 +13,6 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_dom_file_system.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_certificate.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
-#include "third_party/blink/renderer/platform/file_system_type.h"
 
 namespace blink {
 
@@ -49,10 +48,10 @@ bool V8ScriptValueSerializerForModules::WriteDOMObject(
   }
   if (wrapper_type_info == &V8RTCCertificate::wrapperTypeInfo) {
     RTCCertificate* certificate = wrappable->ToImpl<RTCCertificate>();
-    WebRTCCertificatePEM pem = certificate->Certificate().ToPEM();
+    rtc::RTCCertificatePEM pem = certificate->Certificate()->ToPEM();
     WriteTag(kRTCCertificateTag);
-    WriteUTF8String(pem.PrivateKey());
-    WriteUTF8String(pem.Certificate());
+    WriteUTF8String(pem.private_key().c_str());
+    WriteUTF8String(pem.certificate().c_str());
     return true;
   }
   return false;

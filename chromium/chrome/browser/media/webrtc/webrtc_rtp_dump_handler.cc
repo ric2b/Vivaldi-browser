@@ -9,7 +9,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "chrome/browser/media/webrtc/webrtc_rtp_dump_writer.h"
 #include "content/public/browser/browser_thread.h"
@@ -66,14 +66,14 @@ WebRtcRtpDumpHandler::~WebRtcRtpDumpHandler() {
 
   if (incoming_state_ != STATE_NONE && !incoming_dump_path_.empty()) {
     base::PostTaskWithTraits(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
         base::BindOnce(base::IgnoreResult(&base::DeleteFile),
                        incoming_dump_path_, false));
   }
 
   if (outgoing_state_ != STATE_NONE && !outgoing_dump_path_.empty()) {
     base::PostTaskWithTraits(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
         base::BindOnce(base::IgnoreResult(&base::DeleteFile),
                        outgoing_dump_path_, false));
   }
@@ -298,7 +298,7 @@ void WebRtcRtpDumpHandler::OnDumpEnded(const base::Closure& callback,
 
     if (!incoming_success) {
       base::PostTaskWithTraits(
-          FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+          FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
           base::BindOnce(base::IgnoreResult(&base::DeleteFile),
                          incoming_dump_path_, false));
 
@@ -314,7 +314,7 @@ void WebRtcRtpDumpHandler::OnDumpEnded(const base::Closure& callback,
 
     if (!outgoing_success) {
       base::PostTaskWithTraits(
-          FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+          FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
           base::BindOnce(base::IgnoreResult(&base::DeleteFile),
                          outgoing_dump_path_, false));
 

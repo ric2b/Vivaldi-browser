@@ -9,7 +9,7 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
-#include "third_party/blink/renderer/core/frame/dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/modules/app_banner/before_install_prompt_event.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -42,7 +42,7 @@ void AppBannerController::BannerPromptRequest(
   }
 
   mojom::AppBannerPromptReply reply =
-      frame_->DomWindow()->DispatchEvent(BeforeInstallPromptEvent::Create(
+      frame_->DomWindow()->DispatchEvent(*BeforeInstallPromptEvent::Create(
           EventTypeNames::beforeinstallprompt, *frame_, std::move(service_ptr),
           std::move(event_request), platforms, require_gesture)) ==
               DispatchEventResult::kNotCanceled

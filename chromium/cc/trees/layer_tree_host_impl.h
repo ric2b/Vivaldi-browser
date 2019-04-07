@@ -279,13 +279,15 @@ class CC_EXPORT LayerTreeHostImpl
   EventListenerTypeForTouchStartOrMoveAt(
       const gfx::Point& viewport_port,
       TouchAction* out_touch_action) override;
-  bool HasWheelEventHandlerAt(const gfx::Point& viewport_point) const override;
+  bool HasBlockingWheelEventHandlerAt(
+      const gfx::Point& viewport_point) const override;
   std::unique_ptr<SwapPromiseMonitor> CreateLatencyInfoSwapPromiseMonitor(
       ui::LatencyInfo* latency) override;
   ScrollElasticityHelper* CreateScrollElasticityHelper() override;
-  bool GetScrollOffsetForLayer(int layer_id,
+  bool GetScrollOffsetForLayer(ElementId element_id,
                                gfx::ScrollOffset* offset) override;
-  bool ScrollLayerTo(int layer_id, const gfx::ScrollOffset& offset) override;
+  bool ScrollLayerTo(ElementId element_id,
+                     const gfx::ScrollOffset& offset) override;
   bool ScrollingShouldSwitchtoMainThread() override;
 
   // BrowserControlsOffsetManagerClient implementation.
@@ -300,6 +302,10 @@ class CC_EXPORT LayerTreeHostImpl
 
   void set_resourceless_software_draw_for_testing() {
     resourceless_software_draw_ = true;
+  }
+
+  const gfx::Rect& viewport_damage_rect_for_testing() const {
+    return viewport_damage_rect_;
   }
 
   virtual void DidSendBeginMainFrame() {}
@@ -441,7 +447,8 @@ class CC_EXPORT LayerTreeHostImpl
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override;
   void SetMemoryPolicy(const ManagedMemoryPolicy& policy) override;
-  void SetTreeActivationCallback(const base::Closure& callback) override;
+  void SetTreeActivationCallback(
+      const base::RepeatingClosure& callback) override;
   void OnDraw(const gfx::Transform& transform,
               const gfx::Rect& viewport,
               bool resourceless_software_draw,
@@ -543,14 +550,6 @@ class CC_EXPORT LayerTreeHostImpl
 
   ManagedMemoryPolicy ActualManagedMemoryPolicy() const;
 
-  void SetViewportSize(const gfx::Size& device_viewport_size);
-  const gfx::Size& device_viewport_size() const {
-    return device_viewport_size_;
-  }
-
-  void SetViewportVisibleRect(const gfx::Rect& visible_rect);
-  gfx::Rect viewport_visible_rect() const { return viewport_visible_rect_; }
-
   const gfx::Transform& DrawTransform() const;
 
   std::unique_ptr<ScrollAndScaleSet> ProcessScrollDeltas();
@@ -604,6 +603,8 @@ class CC_EXPORT LayerTreeHostImpl
                                 const UIResourceBitmap& bitmap);
   // Deletes a UI resource.  May safely be called more than once.
   virtual void DeleteUIResource(UIResourceId uid);
+  // Evict all UI resources. This differs from ClearUIResources in that this
+  // will not immediately delete the resources' backing textures.
   void EvictAllUIResources();
   bool EvictedUIResourcesExist() const;
 
@@ -629,12 +630,13 @@ class CC_EXPORT LayerTreeHostImpl
   viz::CompositorFrameMetadata MakeCompositorFrameMetadata();
   RenderFrameMetadata MakeRenderFrameMetadata(FrameData* frame);
 
-  // Viewport rectangle and clip in device space.  These rects are used to
-  // prioritize raster and determine what is submitted in a CompositorFrame.
-  gfx::Rect DeviceViewport() const;
+  const gfx::Rect& external_viewport() const { return external_viewport_; }
+
   // Viewport rect to be used for tiling prioritization instead of the
   // DeviceViewport().
-  const gfx::Rect ViewportRectForTilePriority() const;
+  const gfx::Rect& viewport_rect_for_tile_priority() const {
+    return viewport_rect_for_tile_priority_;
+  }
 
   // When a SwapPromiseMonitor is created on the impl thread, it calls
   // InsertSwapPromiseMonitor() to register itself with LayerTreeHostImpl.
@@ -713,6 +715,8 @@ class CC_EXPORT LayerTreeHostImpl
 
   void SetRenderFrameObserver(
       std::unique_ptr<RenderFrameMetadataObserver> observer);
+
+  void SetActiveURL(const GURL& url);
 
  protected:
   LayerTreeHostImpl(
@@ -988,17 +992,6 @@ class CC_EXPORT LayerTreeHostImpl
   // manager, if there were no limit on memory usage.
   size_t max_memory_needed_bytes_ = 0;
 
-  // Viewport size passed in from the main thread, in physical pixels.  This
-  // value is the default size for all concepts of physical viewport (draw
-  // viewport, scrolling viewport and device viewport), but it can be
-  // overridden.
-  gfx::Size device_viewport_size_;
-
-  // Viewport clip rect passed in from the main thrad, in physical pixels.
-  // This is used for out-of-process iframes whose size exceeds the window
-  // in order to prevent full raster.
-  gfx::Rect viewport_visible_rect_;
-
   // Optional top-level constraints that can be set by the LayerTreeFrameSink.
   // - external_transform_ applies a transform above the root layer
   // - external_viewport_ is used DrawProperties, tile management and
@@ -1116,6 +1109,8 @@ class CC_EXPORT LayerTreeHostImpl
   ui::FrameMetrics frame_metrics_;
   ui::SkippedFrameTracker skipped_frame_tracker_;
   bool is_animating_for_snap_;
+
+  const PaintImage::GeneratorClientId paint_image_generator_client_id_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerTreeHostImpl);
 };

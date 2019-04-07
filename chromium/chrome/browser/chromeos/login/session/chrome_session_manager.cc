@@ -19,16 +19,19 @@
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/child_accounts/consumer_status_reporting_service_factory.h"
 #include "chrome/browser/chromeos/child_accounts/screen_time_controller_factory.h"
+#include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/lock/webui_screen_locker.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
+#include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/app_install_event_log_manager_wrapper.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/tether/tether_service.h"
+#include "chrome/browser/chromeos/tpm_firmware_update_notification.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
@@ -112,8 +115,7 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
       return;
     }
 
-    chromeos::DemoSession* demo_session =
-        chromeos::DemoSession::StartIfInDemoMode();
+    chromeos::DemoSession* demo_session = chromeos::DemoSession::Get();
     // In demo session, delay starting user session until the offline demo
     // session resources have been loaded.
     if (demo_session && demo_session->started() &&
@@ -143,6 +145,8 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
       policy::AppInstallEventLogManagerWrapper::CreateForProfile(user_profile);
     }
     arc::ArcServiceLauncher::Get()->OnPrimaryUserProfilePrepared(user_profile);
+    crostini::CrostiniManager::GetInstance()->MaybeUpgradeCrostini(
+        user_profile);
 
     if (user->GetType() == user_manager::USER_TYPE_CHILD) {
       ScreenTimeControllerFactory::GetForBrowserContext(user_profile);
@@ -182,6 +186,8 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
   }
 
   UserSessionManager::GetInstance()->CheckEolStatus(user_profile);
+  tpm_firmware_update::ShowNotificationIfNeeded(user_profile);
+  SyncConsentScreen::MaybeLaunchSyncConstentSettings(user_profile);
 }
 
 }  // namespace
@@ -218,11 +224,11 @@ void ChromeSessionManager::Initialize(
   if (parsed_command_line.HasSwitch(switches::kLoginManager) &&
       (!is_running_test || force_login_screen_in_test)) {
     VLOG(1) << "Starting Chrome with login/oobe screen.";
-    LoadOobeConfiguration();
+    oobe_configuration_->CheckConfiguration();
     StartLoginOobeSession();
     return;
   } else if (is_running_test) {
-    LoadOobeConfiguration();
+    oobe_configuration_->CheckConfiguration();
   }
 
   if (!base::SysInfo::IsRunningOnChromeOS() &&
@@ -265,21 +271,10 @@ void ChromeSessionManager::SessionStarted() {
   chromeos::WebUIScreenLocker::RequestPreload();
 }
 
-void ChromeSessionManager::LoadOobeConfiguration() {
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kOobeConfiguration))
-    return;
-  VLOG(1) << "Loading OOBE configuration ";
-  oobe_configuration_->LoadConfiguration(
-      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
-          chromeos::switches::kOobeConfiguration));
-}
-
 void ChromeSessionManager::NotifyUserLoggedIn(const AccountId& user_account_id,
                                               const std::string& user_id_hash,
                                               bool browser_restart,
                                               bool is_child) {
-  oobe_configuration_->ResetConfiguration();
   BootTimesRecorder* btl = BootTimesRecorder::Get();
   btl->AddLoginTimeMarker("UserLoggedIn-Start", false);
   session_manager::SessionManager::NotifyUserLoggedIn(

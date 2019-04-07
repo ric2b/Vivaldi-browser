@@ -13,6 +13,9 @@ namespace {
 
 class VerifyingScriptWrappableVisitor : public ScriptWrappableVisitor {
  public:
+  VerifyingScriptWrappableVisitor()
+      : ScriptWrappableVisitor(ThreadState::Current()) {}
+
   // Visitor interface.
   void Visit(const TraceWrapperV8Reference<v8::Value>&) override {}
   void Visit(DOMWrapperMap<ScriptWrappable>*,
@@ -25,6 +28,8 @@ class VerifyingScriptWrappableVisitor : public ScriptWrappableVisitor {
   void VisitBackingStoreStrongly(void* object,
                                  void** object_slot,
                                  TraceDescriptor desc) override {
+    if (!object)
+      return;
     desc.callback(this, desc.base_object_payload);
   }
 

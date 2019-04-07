@@ -15,7 +15,7 @@
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/view_ids.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
 #include "content/public/browser/notification_source.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -34,7 +34,6 @@
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/mouse_constants.h"
-#include "ui/views/style/platform_style.h"
 
 using views::LabelButtonBorder;
 
@@ -67,7 +66,6 @@ ToolbarActionView::ToolbarActionView(
   view_controller_->SetDelegate(this);
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
   set_drag_controller(delegate_);
-  SetInstallFocusRingOnFocus(views::PlatformStyle::kPreferFocusRings);
 
   set_context_menu_controller(this);
 
@@ -96,6 +94,12 @@ void ToolbarActionView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
     focus_ring()->SetPath(CreateToolbarFocusRingPath(this, gfx::Insets()));
   }
   MenuButton::OnBoundsChanged(previous_bounds);
+}
+
+gfx::Rect ToolbarActionView::GetAnchorBoundsInScreen() const {
+  gfx::Rect bounds = GetBoundsInScreen();
+  bounds.Inset(GetInkDropInsets(this, gfx::Insets()));
+  return bounds;
 }
 
 void ToolbarActionView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
@@ -135,7 +139,7 @@ std::unique_ptr<views::InkDrop> ToolbarActionView::CreateInkDrop() {
   auto ink_drop = CreateToolbarInkDrop<MenuButton>(this);
 
   ink_drop->SetShowHighlightOnHover(!delegate_->ShownInsideMenu());
-  ink_drop->SetShowHighlightOnFocus(!views::PlatformStyle::kPreferFocusRings);
+  ink_drop->SetShowHighlightOnFocus(!focus_ring());
   return ink_drop;
 }
 

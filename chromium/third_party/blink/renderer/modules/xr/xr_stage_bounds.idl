@@ -5,7 +5,8 @@
 // https://immersive-web.github.io/webxr/#xrstagebounds-interface
 [
     SecureContext,
+    Exposed=Window,
     OriginTrialEnabled=WebXR
 ] interface XRStageBounds {
-  readonly attribute FrozenArray<XRStageBoundsPoint> geometry;
+  readonly attribute FrozenArray<DOMPointReadOnly> geometry;
 };

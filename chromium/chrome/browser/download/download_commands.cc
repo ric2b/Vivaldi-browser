@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_crx_util.h"
@@ -26,7 +26,7 @@
 #include "chrome/common/safe_browsing/file_type_policies.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/theme_resources.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/safe_browsing/proto/csd.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_item_utils.h"
@@ -443,7 +443,7 @@ void DownloadCommands::CopyFileAsImageToClipboard() {
 
   if (!task_runner_) {
     task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
-        {base::MayBlock(), base::TaskPriority::BACKGROUND,
+        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
          base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
   }
   ImageClipboardCopyManager::Start(file_path, task_runner_.get());

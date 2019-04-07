@@ -13,6 +13,10 @@
 using AuthenticateUserCallback =
     ash::mojom::LoginScreenClient::AuthenticateUserCallback;
 
+namespace chromeos {
+class LoginAuthRecorder;
+}
+
 // Handles method calls sent from ash to chrome. Also sends messages from chrome
 // to ash.
 class LoginScreenClient : public ash::mojom::LoginScreenClient {
@@ -56,6 +60,8 @@ class LoginScreenClient : public ash::mojom::LoginScreenClient {
   // Returns an object which can be used to make calls to ash.
   ash::mojom::LoginScreenPtr& login_screen();
 
+  chromeos::LoginAuthRecorder* auth_recorder();
+
   // ash::mojom::LoginScreenClient:
   void AuthenticateUser(const AccountId& account_id,
                         const std::string& password,
@@ -86,6 +92,7 @@ class LoginScreenClient : public ash::mojom::LoginScreenClient {
   void LaunchKioskApp(const std::string& app_id) override;
   void LaunchArcKioskApp(const AccountId& account_id) override;
   void ShowResetScreen() override;
+  void ShowAccountAccessHelpApp() override;
 
  private:
   void SetPublicSessionKeyboardLayout(
@@ -99,6 +106,9 @@ class LoginScreenClient : public ash::mojom::LoginScreenClient {
   // Binds this object to the client interface.
   mojo::Binding<ash::mojom::LoginScreenClient> binding_;
   Delegate* delegate_ = nullptr;
+
+  // Captures authentication related user metrics for login screen.
+  std::unique_ptr<chromeos::LoginAuthRecorder> auth_recorder_;
 
   base::WeakPtrFactory<LoginScreenClient> weak_ptr_factory_;
 

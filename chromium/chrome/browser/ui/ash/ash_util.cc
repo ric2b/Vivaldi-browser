@@ -12,8 +12,8 @@
 #include "base/macros.h"
 #include "content/public/common/service_manager_connection.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
-#include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "services/ws/public/cpp/property_type_converters.h"
+#include "services/ws/public/mojom/window_manager.mojom.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/display/display.h"
@@ -21,13 +21,9 @@
 
 namespace ash_util {
 
-bool ShouldOpenAshOnStartup() {
-  return features::IsAshInBrowserProcess();
-}
-
 bool IsAcceleratorDeprecated(const ui::Accelerator& accelerator) {
   // When running in mash the browser doesn't handle ash accelerators.
-  if (!features::IsAshInBrowserProcess())
+  if (features::IsMultiProcessMash())
     return false;
 
   return ash::Shell::Get()->accelerator_controller()->IsDeprecated(accelerator);
@@ -44,8 +40,8 @@ void SetupWidgetInitParamsForContainer(views::Widget::InitParams* params,
   DCHECK_GE(container_id, ash::kShellWindowId_MinContainer);
   DCHECK_LE(container_id, ash::kShellWindowId_MaxContainer);
 
-  if (!features::IsAshInBrowserProcess()) {
-    using ui::mojom::WindowManager;
+  if (features::IsUsingWindowService()) {
+    using ws::mojom::WindowManager;
     params->mus_properties[WindowManager::kContainerId_InitProperty] =
         mojo::ConvertTo<std::vector<uint8_t>>(container_id);
     params->mus_properties[WindowManager::kDisplayId_InitProperty] =

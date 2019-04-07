@@ -6,8 +6,10 @@
 
 #include <algorithm>
 
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/media/router/data_decoder_util.h"
 #include "chrome/browser/media/router/discovery/dial/dial_device_data.h"
 #include "services/service_manager/public/cpp/connector.h"
 
@@ -26,9 +28,7 @@ static constexpr const char* kDiscoveryOnlyModelNames[3] = {
 // |model_name|: device model name.
 bool IsDiscoveryOnly(const std::string& model_name) {
   std::string lower_model_name = base::ToLowerASCII(model_name);
-  return std::find(std::begin(kDiscoveryOnlyModelNames),
-                   std::end(kDiscoveryOnlyModelNames),
-                   lower_model_name) != std::end(kDiscoveryOnlyModelNames);
+  return base::ContainsValue(kDiscoveryOnlyModelNames, lower_model_name);
 }
 
 SinkAppStatus GetSinkAppStatusFromResponse(const DialAppInfoResult& result) {
@@ -50,11 +50,11 @@ SinkAppStatus GetSinkAppStatusFromResponse(const DialAppInfoResult& result) {
 }  // namespace
 
 DialMediaSinkServiceImpl::DialMediaSinkServiceImpl(
-    std::unique_ptr<service_manager::Connector> connector,
+    service_manager::Connector* connector,
     const OnSinksDiscoveredCallback& on_sinks_discovered_cb,
     const scoped_refptr<base::SequencedTaskRunner>& task_runner)
     : MediaSinkServiceBase(on_sinks_discovered_cb),
-      connector_(std::move(connector)),
+      data_decoder_(std::make_unique<DataDecoder>(connector)),
       task_runner_(task_runner) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
@@ -74,7 +74,7 @@ void DialMediaSinkServiceImpl::Start() {
     return;
 
   description_service_ = std::make_unique<DeviceDescriptionService>(
-      connector_.get(),
+      data_decoder_.get(),
       base::BindRepeating(
           &DialMediaSinkServiceImpl::OnDeviceDescriptionAvailable,
           base::Unretained(this)),
@@ -82,7 +82,7 @@ void DialMediaSinkServiceImpl::Start() {
                           base::Unretained(this)));
 
   app_discovery_service_ =
-      std::make_unique<DialAppDiscoveryService>(connector_.get());
+      std::make_unique<DialAppDiscoveryService>(data_decoder_.get());
 
   StartTimer();
 
@@ -94,6 +94,8 @@ void DialMediaSinkServiceImpl::Start() {
 
 void DialMediaSinkServiceImpl::OnUserGesture() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(dial_registry_);
+  dial_registry_->DiscoverNow();
   RescanAppInfo();
 }
 
@@ -161,8 +163,6 @@ void DialMediaSinkServiceImpl::OnDiscoveryComplete() {
   for (const auto& sink : sinks_to_remove)
     RemoveSink(sink);
 
-  latest_sinks_.clear();
-
   // If discovered sinks are updated, then query results might have changed.
   for (const auto& query : sink_queries_)
     query.second->Notify(query.first);
@@ -177,6 +177,7 @@ void DialMediaSinkServiceImpl::OnDialDeviceEvent(
            << devices.size() << " devices";
 
   current_devices_ = devices;
+  latest_sinks_.clear();
 
   description_service_->GetDeviceDescriptions(devices);
 

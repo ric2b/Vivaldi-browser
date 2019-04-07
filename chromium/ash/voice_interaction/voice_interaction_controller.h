@@ -29,8 +29,11 @@ class ASH_EXPORT VoiceInteractionController
   void NotifyHotwordEnabled(bool enabled) override;
   void NotifySetupCompleted(bool completed) override;
   void NotifyFeatureAllowed(mojom::AssistantAllowedState state) override;
+  void NotifyNotificationEnabled(bool enabled) override;
+  void NotifyLocaleChanged(const std::string& locale) override;
   void IsSettingEnabled(IsSettingEnabledCallback callback) override;
   void IsSetupCompleted(IsSetupCompletedCallback callback) override;
+  void IsContextEnabled(IsContextEnabledCallback callback) override;
   void IsHotwordEnabled(IsHotwordEnabledCallback callback) override;
   void AddObserver(mojom::VoiceInteractionObserverPtr observer) override;
 
@@ -42,7 +45,11 @@ class ASH_EXPORT VoiceInteractionController
 
   bool setup_completed() const { return setup_completed_; }
 
+  bool context_enabled() const { return context_enabled_; }
+
   mojom::AssistantAllowedState allowed_state() const { return allowed_state_; }
+
+  bool notification_enabled() const { return notification_enabled_; }
 
   void FlushForTesting();
 
@@ -55,15 +62,23 @@ class ASH_EXPORT VoiceInteractionController
   // Whether voice interaction is enabled in system settings.
   bool settings_enabled_ = false;
 
-  // Whether voice intearction setup flow has completed.
+  // Whether voice interaction setup flow has completed.
   bool setup_completed_ = false;
+
+  // Whether screen context is enabled.
+  bool context_enabled_ = false;
 
   // Whether hotword listening is enabled.
   bool hotword_enabled_ = false;
 
-  // Whether voice intearction feature is allowed or disallowed for what reason.
+  // Whether notification is enabled.
+  bool notification_enabled_ = false;
+
+  // Whether voice interaction feature is allowed or disallowed for what reason.
   mojom::AssistantAllowedState allowed_state_ =
       mojom::AssistantAllowedState::ALLOWED;
+
+  std::string locale_;
 
   mojo::BindingSet<mojom::VoiceInteractionController> bindings_;
 

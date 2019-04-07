@@ -6,8 +6,8 @@
 #include "ash/accelerators/accelerator_controller.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
-#include "services/ui/ws2/test_window_tree_client.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
+#include "services/ws/test_window_tree_client.h"
 #include "ui/aura/window.h"
 #include "ui/base/accelerators/test_accelerator_target.h"
 #include "ui/events/event.h"
@@ -38,7 +38,7 @@ TEST_F(AcceleratorTest, PostAcceleratorWorks) {
   EXPECT_EQ(0, test_target.accelerator_count());
 
   EXPECT_TRUE(GetTestWindowTreeClient()->AckFirstEvent(
-      GetWindowTree(), ui::mojom::EventResult::UNHANDLED));
+      GetWindowTree(), ws::mojom::EventResult::UNHANDLED));
 
   // The client didn't handle the event, so |test_target| should get the
   // accelerator.

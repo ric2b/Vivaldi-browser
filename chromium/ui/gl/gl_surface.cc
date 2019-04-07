@@ -235,13 +235,16 @@ void GLSurface::SetEnableSwapTimestamps() {
   NOTREACHED();
 }
 
-void GLSurface::SetUsePlaneGpuFences() {
-  // It's fine for GLSurface derived classes to ignore the fences
-  // and synchronize using other methods.
-}
-
 int GLSurface::GetBufferCount() const {
   return 2;
+}
+
+bool GLSurface::SupportsPlaneGpuFences() const {
+  return false;
+}
+
+EGLTimestampClient* GLSurface::GetEGLTimestampClient() {
+  return nullptr;
 }
 
 GLSurface* GLSurface::GetCurrent() {
@@ -486,12 +489,12 @@ void GLSurfaceAdapter::SetEnableSwapTimestamps() {
   return surface_->SetEnableSwapTimestamps();
 }
 
-void GLSurfaceAdapter::SetUsePlaneGpuFences() {
-  surface_->SetUsePlaneGpuFences();
-}
-
 int GLSurfaceAdapter::GetBufferCount() const {
   return surface_->GetBufferCount();
+}
+
+bool GLSurfaceAdapter::SupportsPlaneGpuFences() const {
+  return surface_->SupportsPlaneGpuFences();
 }
 
 GLSurfaceAdapter::~GLSurfaceAdapter() {}

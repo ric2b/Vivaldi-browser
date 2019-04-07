@@ -19,11 +19,13 @@
 #include "content/common/input/synthetic_pinch_gesture_params.h"
 #include "content/common/input/synthetic_smooth_scroll_gesture_params.h"
 #include "content/common/input/synthetic_tap_gesture_params.h"
+#include "content/public/browser/web_contents.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/range/range.h"
 
 namespace content {
 namespace protocol {
@@ -421,11 +423,18 @@ void InputHandler::SetRenderer(int process_host_id,
   if (frame_host == host_)
     return;
   ClearInputState();
-  if (host_ && ignore_input_events_)
-    host_->GetRenderWidgetHost()->SetIgnoreInputEvents(false);
+
+  WebContents* old_web_contents = WebContents::FromRenderFrameHost(host_);
+  WebContents* new_web_contents = WebContents::FromRenderFrameHost(frame_host);
+
   host_ = frame_host;
-  if (host_ && ignore_input_events_)
-    host_->GetRenderWidgetHost()->SetIgnoreInputEvents(true);
+
+  if (ignore_input_events_ && old_web_contents != new_web_contents) {
+    if (old_web_contents)
+      old_web_contents->SetIgnoreInputEvents(false);
+    if (new_web_contents)
+      new_web_contents->SetIgnoreInputEvents(true);
+  }
 }
 
 void InputHandler::Wire(UberDispatcher* dispatcher) {
@@ -438,8 +447,9 @@ void InputHandler::OnPageScaleFactorChanged(float page_scale_factor) {
 
 Response InputHandler::Disable() {
   ClearInputState();
-  if (host_ && ignore_input_events_)
-    host_->GetRenderWidgetHost()->SetIgnoreInputEvents(false);
+  WebContents* web_contents = WebContents::FromRenderFrameHost(host_);
+  if (web_contents && ignore_input_events_)
+    web_contents->SetIgnoreInputEvents(false);
   ignore_input_events_ = false;
   touch_points_.clear();
   return Response::OK();
@@ -533,6 +543,31 @@ void InputHandler::DispatchKeyEvent(
     event.skip_in_browser = true;
 
   EnsureInjector(widget_host)->InjectKeyboardEvent(event, std::move(callback));
+}
+
+void InputHandler::InsertText(const std::string& text,
+                              std::unique_ptr<InsertTextCallback> callback) {
+  base::string16 text16 = base::UTF8ToUTF16(text);
+  base::OnceClosure closure =
+      base::BindOnce(&InsertTextCallback::sendSuccess, std::move(callback));
+
+  if (!host_ || !host_->GetRenderWidgetHost()) {
+    callback->sendFailure(Response::InternalError());
+    return;
+  }
+
+  RenderWidgetHostImpl* widget_host = host_->GetRenderWidgetHost();
+  if (!host_->GetParent() && widget_host->delegate()) {
+    RenderWidgetHostImpl* target_host =
+        widget_host->delegate()->GetFocusedRenderWidgetHost(widget_host);
+    if (target_host)
+      widget_host = target_host;
+  }
+
+  widget_host->Focus();
+  widget_host->GetWidgetInputHandler()->ImeCommitText(
+      text16, std::vector<ui::ImeTextSpan>(), gfx::Range::InvalidRange(), 0,
+      std::move(closure));
 }
 
 void InputHandler::DispatchMouseEvent(
@@ -832,8 +867,9 @@ Response InputHandler::EmulateTouchFromMouseEvent(const std::string& type,
 
 Response InputHandler::SetIgnoreInputEvents(bool ignore) {
   ignore_input_events_ = ignore;
-  if (host_)
-    host_->GetRenderWidgetHost()->SetIgnoreInputEvents(ignore);
+  WebContents* web_contents = WebContents::FromRenderFrameHost(host_);
+  if (web_contents)
+    web_contents->SetIgnoreInputEvents(ignore);
   return Response::OK();
 }
 

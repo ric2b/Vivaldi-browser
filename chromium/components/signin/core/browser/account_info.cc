@@ -19,11 +19,20 @@ bool UpdateField(bool* field, bool new_value) {
     *field = new_value;
   return should_update;
 }
-}
 
-AccountInfo::AccountInfo() : is_child_account(false) {}
+}  // namespace
+
+AccountInfo::AccountInfo() = default;
+
+AccountInfo::~AccountInfo() = default;
+
 AccountInfo::AccountInfo(const AccountInfo& other) = default;
-AccountInfo::~AccountInfo() {}
+
+AccountInfo::AccountInfo(AccountInfo&& other) noexcept = default;
+
+AccountInfo& AccountInfo::operator=(const AccountInfo& other) = default;
+
+AccountInfo& AccountInfo::operator=(AccountInfo&& other) noexcept = default;
 
 bool AccountInfo::IsEmpty() const {
   return account_id.empty() && email.empty() && gaia.empty() &&
@@ -51,6 +60,8 @@ bool AccountInfo::UpdateWith(const AccountInfo& other) {
   modified |= UpdateField(&locale, other.locale);
   modified |= UpdateField(&picture_url, other.picture_url);
   modified |= UpdateField(&is_child_account, other.is_child_account);
+  modified |= UpdateField(&is_under_advanced_protection,
+                          other.is_under_advanced_protection);
 
   return modified;
 }

@@ -47,11 +47,23 @@ MultiDeviceSetupClientImpl::Factory::BuildInstance(
 
 MultiDeviceSetupClientImpl::MultiDeviceSetupClientImpl(
     service_manager::Connector* connector)
-    : binding_(this),
+    : host_status_observer_binding_(this),
+      feature_state_observer_binding_(this),
       remote_device_cache_(
-          cryptauth::RemoteDeviceCache::Factory::Get()->BuildInstance()) {
+          cryptauth::RemoteDeviceCache::Factory::Get()->BuildInstance()),
+      host_status_with_device_(GenerateDefaultHostStatusWithDevice()),
+      feature_states_map_(GenerateDefaultFeatureStatesMap()) {
   connector->BindInterface(mojom::kServiceName, &multidevice_setup_ptr_);
-  multidevice_setup_ptr_->AddHostStatusObserver(GenerateInterfacePtr());
+  multidevice_setup_ptr_->AddHostStatusObserver(
+      GenerateHostStatusObserverInterfacePtr());
+  multidevice_setup_ptr_->AddFeatureStateObserver(
+      GenerateFeatureStatesObserverInterfacePtr());
+  multidevice_setup_ptr_->GetHostStatus(
+      base::BindOnce(&MultiDeviceSetupClientImpl::OnHostStatusChanged,
+                     base::Unretained(this)));
+  multidevice_setup_ptr_->GetFeatureStates(
+      base::BindOnce(&MultiDeviceSetupClientImpl::OnFeatureStatesChanged,
+                     base::Unretained(this)));
 }
 
 MultiDeviceSetupClientImpl::~MultiDeviceSetupClientImpl() = default;
@@ -64,19 +76,34 @@ void MultiDeviceSetupClientImpl::GetEligibleHostDevices(
 }
 
 void MultiDeviceSetupClientImpl::SetHostDevice(
-    const std::string& public_key,
+    const std::string& host_device_id,
+    const std::string& auth_token,
     mojom::MultiDeviceSetup::SetHostDeviceCallback callback) {
-  multidevice_setup_ptr_->SetHostDevice(public_key, std::move(callback));
+  multidevice_setup_ptr_->SetHostDevice(host_device_id, auth_token,
+                                        std::move(callback));
 }
 
 void MultiDeviceSetupClientImpl::RemoveHostDevice() {
   multidevice_setup_ptr_->RemoveHostDevice();
 }
 
-void MultiDeviceSetupClientImpl::GetHostStatus(GetHostStatusCallback callback) {
-  multidevice_setup_ptr_->GetHostStatus(
-      base::BindOnce(&MultiDeviceSetupClientImpl::OnGetHostStatusCompleted,
-                     base::Unretained(this), std::move(callback)));
+const MultiDeviceSetupClient::HostStatusWithDevice&
+MultiDeviceSetupClientImpl::GetHostStatus() const {
+  return host_status_with_device_;
+}
+
+void MultiDeviceSetupClientImpl::SetFeatureEnabledState(
+    mojom::Feature feature,
+    bool enabled,
+    const base::Optional<std::string>& auth_token,
+    mojom::MultiDeviceSetup::SetFeatureEnabledStateCallback callback) {
+  multidevice_setup_ptr_->SetFeatureEnabledState(feature, enabled, auth_token,
+                                                 std::move(callback));
+}
+
+const MultiDeviceSetupClient::FeatureStatesMap&
+MultiDeviceSetupClientImpl::GetFeatureStates() const {
+  return feature_states_map_;
 }
 
 void MultiDeviceSetupClientImpl::RetrySetHostNow(
@@ -95,11 +122,21 @@ void MultiDeviceSetupClientImpl::OnHostStatusChanged(
     const base::Optional<cryptauth::RemoteDevice>& host_device) {
   if (host_device) {
     remote_device_cache_->SetRemoteDevices({*host_device});
-    NotifyHostStatusChanged(host_status, remote_device_cache_->GetRemoteDevice(
-                                             host_device->GetDeviceId()));
+    host_status_with_device_ = std::make_pair(
+        host_status,
+        remote_device_cache_->GetRemoteDevice(host_device->GetDeviceId()));
   } else {
-    NotifyHostStatusChanged(host_status, base::nullopt);
+    host_status_with_device_ =
+        std::make_pair(host_status, base::nullopt /* host_device */);
   }
+
+  NotifyHostStatusChanged(host_status_with_device_);
+}
+
+void MultiDeviceSetupClientImpl::OnFeatureStatesChanged(
+    const FeatureStatesMap& feature_states_map) {
+  feature_states_map_ = feature_states_map;
+  NotifyFeatureStateChanged(feature_states_map_);
 }
 
 void MultiDeviceSetupClientImpl::OnGetEligibleHostDevicesCompleted(
@@ -118,23 +155,17 @@ void MultiDeviceSetupClientImpl::OnGetEligibleHostDevicesCompleted(
   std::move(callback).Run(eligible_host_device_refs);
 }
 
-void MultiDeviceSetupClientImpl::OnGetHostStatusCompleted(
-    GetHostStatusCallback callback,
-    mojom::HostStatus host_status,
-    const base::Optional<cryptauth::RemoteDevice>& host_device) {
-  if (host_device) {
-    remote_device_cache_->SetRemoteDevices({*host_device});
-    std::move(callback).Run(host_status, *remote_device_cache_->GetRemoteDevice(
-                                             host_device->GetDeviceId()));
-  } else {
-    std::move(callback).Run(host_status, base::nullopt);
-  }
+mojom::HostStatusObserverPtr
+MultiDeviceSetupClientImpl::GenerateHostStatusObserverInterfacePtr() {
+  mojom::HostStatusObserverPtr interface_ptr;
+  host_status_observer_binding_.Bind(mojo::MakeRequest(&interface_ptr));
+  return interface_ptr;
 }
 
-mojom::HostStatusObserverPtr
-MultiDeviceSetupClientImpl::GenerateInterfacePtr() {
-  mojom::HostStatusObserverPtr interface_ptr;
-  binding_.Bind(mojo::MakeRequest(&interface_ptr));
+mojom::FeatureStateObserverPtr
+MultiDeviceSetupClientImpl::GenerateFeatureStatesObserverInterfacePtr() {
+  mojom::FeatureStateObserverPtr interface_ptr;
+  feature_state_observer_binding_.Bind(mojo::MakeRequest(&interface_ptr));
   return interface_ptr;
 }
 

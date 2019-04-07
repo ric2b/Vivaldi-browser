@@ -28,7 +28,8 @@ class CONTENT_EXPORT TrackedChildURLLoaderFactoryBundleInfo
       std::map<std::string, network::mojom::URLLoaderFactoryPtrInfo>
           factories_info,
       PossiblyAssociatedURLLoaderFactoryPtrInfo direct_network_factory_info,
-      std::unique_ptr<HostPtrAndTaskRunner> main_thread_host_bundle);
+      std::unique_ptr<HostPtrAndTaskRunner> main_thread_host_bundle,
+      bool bypass_redirect_checks);
   ~TrackedChildURLLoaderFactoryBundleInfo() override;
 
   std::unique_ptr<HostPtrAndTaskRunner>& main_thread_host_bundle() {
@@ -114,6 +115,8 @@ class CONTENT_EXPORT HostChildURLLoaderFactoryBundle
   // ChildURLLoaderFactoryBundle overrides.
   // Returns |std::unique_ptr<TrackedChildURLLoaderFactoryBundleInfo>|.
   std::unique_ptr<network::SharedURLLoaderFactoryInfo> Clone() override;
+  std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+  CloneWithoutDefaultFactory() override;
   bool IsHostChildURLLoaderFactoryBundle() const override;
 
   // Update this bundle with |info|, and post cloned |info| to tracked bundles.

@@ -17,8 +17,8 @@
 #include "content/test/gpu_browsertest_helpers.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
-#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "services/viz/privileged/interfaces/gl/gpu_service.mojom.h"
+#include "services/ws/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -81,7 +81,7 @@ class ContextTestBase : public content::ContentBrowserTest {
   gpu::ContextSupport* context_support_ = nullptr;
 
  private:
-  scoped_refptr<ui::ContextProviderCommandBuffer> provider_;
+  scoped_refptr<ws::ContextProviderCommandBuffer> provider_;
 };
 
 }  // namespace
@@ -221,7 +221,7 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
                        MAYBE_GrContextKeepsGpuChannelAlive) {
   // Test for crbug.com/551143
   // This test verifies that holding a reference to the GrContext created by
-  // a ui::ContextProviderCommandBuffer will keep the gpu channel alive after
+  // a ws::ContextProviderCommandBuffer will keep the gpu channel alive after
   // the
   // provider has been destroyed. Without this behavior, user code would have
   // to be careful to destroy objects in the right order to avoid using freed
@@ -231,7 +231,7 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
 
   // Step 2: verify that holding onto the provider's GrContext will
   // retain the host after provider is destroyed.
-  scoped_refptr<ui::ContextProviderCommandBuffer> provider =
+  scoped_refptr<ws::ContextProviderCommandBuffer> provider =
       content::GpuBrowsertestCreateContext(GetGpuChannel());
   ASSERT_EQ(provider->BindToCurrentThread(), gpu::ContextResult::kSuccess);
 
@@ -278,7 +278,7 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
   EstablishAndWait();
   scoped_refptr<gpu::GpuChannelHost> host = GetGpuChannel();
 
-  scoped_refptr<ui::ContextProviderCommandBuffer> provider =
+  scoped_refptr<ws::ContextProviderCommandBuffer> provider =
       content::GpuBrowsertestCreateContext(GetGpuChannel());
   ContextLostRunLoop run_loop(provider.get());
   ASSERT_EQ(provider->BindToCurrentThread(), gpu::ContextResult::kSuccess);
@@ -364,6 +364,26 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest, CreateTransferBuffer) {
   buffer = impl->CreateTransferBuffer(100, &id);
   EXPECT_TRUE(buffer);
   EXPECT_GE(id, 0);
+}
+#endif
+
+class GpuProcessHostDisableGLBrowserTest : public GpuProcessHostBrowserTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    GpuProcessHostBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitchASCII(switches::kUseGL,
+                                    gl::kGLImplementationDisabledName);
+  }
+};
+
+// Android and CrOS don't support disabling GL.
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+IN_PROC_BROWSER_TEST_F(GpuProcessHostDisableGLBrowserTest, CreateAndDestroy) {
+  DCHECK(!IsChannelEstablished());
+  EstablishAndWait();
+  base::RunLoop run_loop;
+  StopGpuProcess(run_loop.QuitClosure());
+  run_loop.Run();
 }
 #endif
 

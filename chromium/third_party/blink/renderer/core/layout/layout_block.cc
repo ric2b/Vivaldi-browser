@@ -55,6 +55,7 @@
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/line/inline_text_box.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/text_autosizer.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/scrolling/root_scroller_controller.h"
@@ -71,6 +72,7 @@ namespace blink {
 
 struct SameSizeAsLayoutBlock : public LayoutBox {
   LayoutObjectChildList children;
+  scoped_refptr<const NGConstraintSpace> cached_constraint_space_;
   uint32_t bitfields;
 };
 
@@ -107,7 +109,8 @@ LayoutBlock::LayoutBlock(ContainerNode* node)
       descendants_with_floats_marked_for_layout_(false),
       has_positioned_objects_(false),
       has_percent_height_descendants_(false),
-      pagination_state_changed_(false) {
+      pagination_state_changed_(false),
+      is_legacy_initiated_out_of_flow_layout_(false) {
   // LayoutBlockFlow calls setChildrenInline(true).
   // By default, subclasses do not have inline children.
 }
@@ -161,13 +164,13 @@ void LayoutBlock::StyleWillChange(StyleDifference diff,
   if (old_style && Parent()) {
     bool old_style_contains_fixed_position =
         old_style->CanContainFixedPositionObjects(IsDocumentElement()) ||
-        ShouldApplyPaintContainment();
+        ShouldApplyPaintContainment() || ShouldApplyLayoutContainment();
     bool old_style_contains_absolute_position =
         old_style_contains_fixed_position ||
         old_style->CanContainAbsolutePositionObjects();
     bool new_style_contains_fixed_position =
         new_style.CanContainFixedPositionObjects(IsDocumentElement()) ||
-        ShouldApplyPaintContainment();
+        ShouldApplyPaintContainment() || ShouldApplyLayoutContainment();
     bool new_style_contains_absolute_position =
         new_style_contains_fixed_position ||
         new_style.CanContainAbsolutePositionObjects();
@@ -264,7 +267,7 @@ void LayoutBlock::StyleDidChange(StyleDifference diff,
   SetCanContainFixedPositionObjects(
       IsLayoutView() || IsSVGForeignObject() || IsTextControl() ||
       new_style.CanContainFixedPositionObjects(IsDocumentElement()) ||
-      ShouldApplyPaintContainment());
+      ShouldApplyPaintContainment() || ShouldApplyLayoutContainment());
 
   // It's possible for our border/padding to change, but for the overall logical
   // width or height of the block to end up being the same. We keep track of
@@ -287,10 +290,12 @@ void LayoutBlock::UpdateFromStyle() {
   if (should_clip_overflow != HasOverflowClip()) {
     if (!should_clip_overflow)
       GetScrollableArea()->InvalidateAllStickyConstraints();
-    SetMayNeedPaintInvalidationSubtree();
+    SetSubtreeShouldCheckForPaintInvalidation();
     // The overflow clip paint property depends on whether overflow clip is
     // present so we need to update paint properties if this changes.
     SetNeedsPaintPropertyUpdate();
+    if (Layer())
+      Layer()->SetNeedsCompositingInputsUpdate();
   }
   SetHasOverflowClip(should_clip_overflow);
 }
@@ -444,8 +449,8 @@ void LayoutBlock::UpdateLayout() {
   if (HasControlClip() && overflow_)
     ClearLayoutOverflow();
 
-  InvalidateBackgroundObscurationStatus();
   height_available_to_children_changed_ = false;
+  cached_constraint_space_ = nullptr;
 }
 
 bool LayoutBlock::WidthAvailableToChildrenHasChanged() {
@@ -462,7 +467,7 @@ bool LayoutBlock::WidthAvailableToChildrenHasChanged() {
   // if we have percentage padding, which is rather non-obvious. That method
   // returns true in other cases as well.
   width_available_to_children_has_changed |=
-      Style()->BoxSizing() == EBoxSizing::kBorderBox &&
+      StyleRef().BoxSizing() == EBoxSizing::kBorderBox &&
       NeedsPreferredWidthsRecalculation() &&
       View()->GetLayoutState()->ContainingBlockLogicalWidthChanged();
 
@@ -551,14 +556,14 @@ void LayoutBlock::AddOverflowFromPositionedObjects() {
   for (auto* positioned_object : *positioned_descendants) {
     // Fixed positioned elements don't contribute to layout overflow, since they
     // don't scroll with the content.
-    if (positioned_object->Style()->GetPosition() != EPosition::kFixed)
+    if (positioned_object->StyleRef().GetPosition() != EPosition::kFixed)
       AddOverflowFromChild(*positioned_object,
                            ToLayoutSize(positioned_object->Location()));
   }
 }
 
 void LayoutBlock::AddVisualOverflowFromTheme() {
-  if (!Style()->HasAppearance())
+  if (!StyleRef().HasAppearance())
     return;
 
   IntRect inflated_rect = PixelSnappedBorderBoxRect();
@@ -570,10 +575,10 @@ void LayoutBlock::AddVisualOverflowFromTheme() {
 static inline bool ChangeInAvailableLogicalHeightAffectsChild(
     LayoutBlock* parent,
     LayoutBox& child) {
-  if (parent->Style()->BoxSizing() != EBoxSizing::kBorderBox)
+  if (parent->StyleRef().BoxSizing() != EBoxSizing::kBorderBox)
     return false;
-  return parent->Style()->IsHorizontalWritingMode() &&
-         !child.Style()->IsHorizontalWritingMode();
+  return parent->StyleRef().IsHorizontalWritingMode() &&
+         !child.StyleRef().IsHorizontalWritingMode();
 }
 
 void LayoutBlock::UpdateBlockChildDirtyBitsBeforeLayout(bool relayout_children,
@@ -695,19 +700,19 @@ bool LayoutBlock::SimplifiedLayout() {
 void LayoutBlock::MarkFixedPositionObjectForLayoutIfNeeded(
     LayoutObject* child,
     SubtreeLayoutScope& layout_scope) {
-  if (child->Style()->GetPosition() != EPosition::kFixed)
+  if (child->StyleRef().GetPosition() != EPosition::kFixed)
     return;
 
   bool has_static_block_position =
-      child->Style()->HasStaticBlockPosition(IsHorizontalWritingMode());
+      child->StyleRef().HasStaticBlockPosition(IsHorizontalWritingMode());
   bool has_static_inline_position =
-      child->Style()->HasStaticInlinePosition(IsHorizontalWritingMode());
+      child->StyleRef().HasStaticInlinePosition(IsHorizontalWritingMode());
   if (!has_static_block_position && !has_static_inline_position)
     return;
 
   LayoutObject* o = child->Parent();
   while (!o->IsLayoutView() &&
-         o->Style()->GetPosition() != EPosition::kAbsolute)
+         o->StyleRef().GetPosition() != EPosition::kAbsolute)
     o = o->Parent();
   // The LayoutView is absolute-positioned, but does not move.
   if (o->IsLayoutView())
@@ -789,7 +794,7 @@ void LayoutBlock::LayoutPositionedObjects(bool relayout_children,
 void LayoutBlock::LayoutPositionedObject(LayoutBox* positioned_object,
                                          bool relayout_children,
                                          PositionedLayoutBehavior info) {
-  positioned_object->SetMayNeedPaintInvalidation();
+  positioned_object->SetShouldCheckForPaintInvalidation();
 
   SubtreeLayoutScope layout_scope(*positioned_object);
   // If positionedObject is fixed-positioned and moves with an absolute-
@@ -801,11 +806,20 @@ void LayoutBlock::LayoutPositionedObject(LayoutBox* positioned_object,
     return;
   }
 
-  if (!positioned_object->NormalChildNeedsLayout() &&
-      (relayout_children || height_available_to_children_changed_ ||
-       (!IsLayoutNGBlockFlow() &&
-        NeedsLayoutDueToStaticPosition(positioned_object))))
-    layout_scope.SetChildNeedsLayout(positioned_object);
+  if (!positioned_object->NormalChildNeedsLayout()) {
+    bool update_child_needs_layout =
+        relayout_children || height_available_to_children_changed_;
+    if (!update_child_needs_layout) {
+      if (!positioned_object->IsLayoutNGObject() ||
+          ToLayoutBlock(positioned_object)
+              ->IsLegacyInitiatedOutOfFlowLayout()) {
+        update_child_needs_layout |=
+            NeedsLayoutDueToStaticPosition(positioned_object);
+      }
+    }
+    if (update_child_needs_layout)
+      layout_scope.SetChildNeedsLayout(positioned_object);
+  }
 
   LayoutUnit logical_top_estimate;
   bool is_paginated = View()->GetLayoutState()->IsPaginated();
@@ -949,9 +963,9 @@ void LayoutBlock::RemovePositionedObject(LayoutBox* o) {
     parent->MarkContainerNeedsCollectInlines();
 }
 
-PaintInvalidationReason LayoutBlock::InvalidatePaint(
+void LayoutBlock::InvalidatePaint(
     const PaintInvalidatorContext& context) const {
-  return BlockPaintInvalidator(*this).InvalidatePaint(context);
+  BlockPaintInvalidator(*this).InvalidatePaint(context);
 }
 
 void LayoutBlock::ClearPreviousVisualRects() {
@@ -1075,9 +1089,9 @@ void LayoutBlock::DirtyForLayoutFromPercentageHeightDescendants(
 
 LayoutUnit LayoutBlock::TextIndentOffset() const {
   LayoutUnit cw;
-  if (Style()->TextIndent().IsPercentOrCalc())
+  if (StyleRef().TextIndent().IsPercentOrCalc())
     cw = ContainingBlock()->AvailableLogicalWidth();
-  return MinimumValueForLength(Style()->TextIndent(), cw);
+  return MinimumValueForLength(StyleRef().TextIndent(), cw);
 }
 
 bool LayoutBlock::IsPointInOverflowControl(
@@ -1241,7 +1255,7 @@ PositionWithAffinity LayoutBlock::PositionForPointIfOutsideAtomicInlineLevel(
 
 static inline bool IsChildHitTestCandidate(LayoutBox* box) {
   return box->Size().Height() &&
-         box->Style()->Visibility() == EVisibility::kVisible &&
+         box->StyleRef().Visibility() == EVisibility::kVisible &&
          !box->IsOutOfFlowPositioned() && !box->IsLayoutFlowThread();
 }
 
@@ -1269,7 +1283,7 @@ PositionWithAffinity LayoutBlock::PositionForPoint(
   while (last_candidate_box && !IsChildHitTestCandidate(last_candidate_box))
     last_candidate_box = last_candidate_box->PreviousSiblingBox();
 
-  bool blocks_are_flipped = Style()->IsFlippedBlocksWritingMode();
+  bool blocks_are_flipped = StyleRef().IsFlippedBlocksWritingMode();
   if (last_candidate_box) {
     if (point_in_logical_contents.Y() >
             LogicalTopForChild(*last_candidate_box) ||
@@ -1493,7 +1507,7 @@ void LayoutBlock::ComputeBlockPreferredLogicalWidths(
         // will attempt to overlap the float if the negative margin is smaller
         // than the float width.
         bool ltr = containing_block
-                       ? containing_block->Style()->IsLeftToRightDirection()
+                       ? containing_block->StyleRef().IsLeftToRightDirection()
                        : style_to_use.IsLeftToRightDirection();
         LayoutUnit margin_logical_left = ltr ? margin_start : margin_end;
         LayoutUnit margin_logical_right = ltr ? margin_end : margin_start;
@@ -1620,8 +1634,8 @@ LayoutUnit LayoutBlock::BaselinePosition(
     //        the theme is turned off, checkboxes/radios will still have decent
     //        baselines.
     // FIXME: Need to patch form controls to deal with vertical lines.
-    if (Style()->HasAppearance() &&
-        !LayoutTheme::GetTheme().IsControlContainer(Style()->Appearance())) {
+    if (StyleRef().HasAppearance() &&
+        !LayoutTheme::GetTheme().IsControlContainer(StyleRef().Appearance())) {
       return Size().Height() + MarginTop() +
              LayoutTheme::GetTheme().BaselinePositionAdjustment(StyleRef());
     }
@@ -1715,7 +1729,7 @@ bool LayoutBlock::UseLogicalBottomMarginEdgeForInlineBlockBaseline() const {
   // We likewise avoid using the last line box in the case of size containment,
   // where the block's contents shouldn't be considered when laying out its
   // ancestors or siblings.
-  return (!Style()->IsOverflowVisible() &&
+  return (!StyleRef().IsOverflowVisible() &&
           !ShouldIgnoreOverflowPropertyForInlineBlockBaseline()) ||
          ShouldApplySizeContainment();
 }
@@ -1764,7 +1778,8 @@ const LayoutBlock* LayoutBlock::EnclosingFirstLineStyleBlock() const {
   const LayoutBlock* first_line_block = this;
   bool has_pseudo = false;
   while (true) {
-    has_pseudo = first_line_block->Style()->HasPseudoStyle(kPseudoIdFirstLine);
+    has_pseudo =
+        first_line_block->StyleRef().HasPseudoStyle(kPseudoIdFirstLine);
     if (has_pseudo)
       break;
     LayoutObject* parent_block = first_line_block->Parent();
@@ -1852,7 +1867,7 @@ void LayoutBlock::AddOutlineRects(
 
 LayoutBox* LayoutBlock::CreateAnonymousBoxWithSameTypeAs(
     const LayoutObject* parent) const {
-  return CreateAnonymousWithParentAndDisplay(parent, Style()->Display());
+  return CreateAnonymousWithParentAndDisplay(parent, StyleRef().Display());
 }
 
 void LayoutBlock::PaginatedContentWasLaidOut(
@@ -1903,15 +1918,17 @@ LayoutUnit LayoutBlock::CollapsedMarginAfterForChild(
 bool LayoutBlock::HasMarginBeforeQuirk(const LayoutBox* child) const {
   // If the child has the same directionality as we do, then we can just return
   // its margin quirk.
-  if (!child->IsWritingModeRoot())
+  if (!child->IsWritingModeRoot()) {
     return child->IsLayoutBlock() ? ToLayoutBlock(child)->HasMarginBeforeQuirk()
-                                  : child->Style()->HasMarginBeforeQuirk();
+                                  : child->StyleRef().HasMarginBeforeQuirk();
+  }
 
   // The child has a different directionality. If the child is parallel, then
   // it's just flipped relative to us. We can use the opposite edge.
-  if (child->IsHorizontalWritingMode() == IsHorizontalWritingMode())
+  if (child->IsHorizontalWritingMode() == IsHorizontalWritingMode()) {
     return child->IsLayoutBlock() ? ToLayoutBlock(child)->HasMarginAfterQuirk()
-                                  : child->Style()->HasMarginAfterQuirk();
+                                  : child->StyleRef().HasMarginAfterQuirk();
+  }
 
   // The child is perpendicular to us and box sides are never quirky in
   // html.css, and we don't really care about whether or not authors specified
@@ -1922,15 +1939,17 @@ bool LayoutBlock::HasMarginBeforeQuirk(const LayoutBox* child) const {
 bool LayoutBlock::HasMarginAfterQuirk(const LayoutBox* child) const {
   // If the child has the same directionality as we do, then we can just return
   // its margin quirk.
-  if (!child->IsWritingModeRoot())
+  if (!child->IsWritingModeRoot()) {
     return child->IsLayoutBlock() ? ToLayoutBlock(child)->HasMarginAfterQuirk()
-                                  : child->Style()->HasMarginAfterQuirk();
+                                  : child->StyleRef().HasMarginAfterQuirk();
+  }
 
   // The child has a different directionality. If the child is parallel, then
   // it's just flipped relative to us. We can use the opposite edge.
-  if (child->IsHorizontalWritingMode() == IsHorizontalWritingMode())
+  if (child->IsHorizontalWritingMode() == IsHorizontalWritingMode()) {
     return child->IsLayoutBlock() ? ToLayoutBlock(child)->HasMarginBeforeQuirk()
-                                  : child->Style()->HasMarginBeforeQuirk();
+                                  : child->StyleRef().HasMarginBeforeQuirk();
+  }
 
   // The child is perpendicular to us and box sides are never quirky in
   // html.css, and we don't really care about whether or not authors specified
@@ -1968,6 +1987,14 @@ LayoutBlock* LayoutBlock::CreateAnonymousWithParentAndDisplay(
   layout_block->SetDocumentForAnonymous(&parent->GetDocument());
   layout_block->SetStyle(std::move(new_style));
   return layout_block;
+}
+
+const NGConstraintSpace* LayoutBlock::CachedConstraintSpace() const {
+  return cached_constraint_space_.get();
+}
+
+void LayoutBlock::SetCachedConstraintSpace(const NGConstraintSpace& space) {
+  cached_constraint_space_ = &space;
 }
 
 bool LayoutBlock::RecalcNormalFlowChildOverflowIfNeeded(
@@ -2172,7 +2199,7 @@ bool LayoutBlock::HasDefiniteLogicalHeight() const {
 }
 
 bool LayoutBlock::NeedsPreferredWidthsRecalculation() const {
-  return (HasRelativeLogicalHeight() && Style()->LogicalWidth().IsAuto()) ||
+  return (HasRelativeLogicalHeight() && StyleRef().LogicalWidth().IsAuto()) ||
          LayoutBox::NeedsPreferredWidthsRecalculation();
 }
 

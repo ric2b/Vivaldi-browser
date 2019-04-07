@@ -7,26 +7,12 @@
 namespace aura {
 namespace test {
 
-AuraMusWmTestBase::AuraMusWmTestBase() {}
+AuraMusClientTestBase::AuraMusClientTestBase() = default;
 
-AuraMusWmTestBase::~AuraMusWmTestBase() {}
-
-void AuraMusWmTestBase::SetUp() {
-  // Run AuraTestBase::SetUp() first because it puts an InProcessContextFactory
-  // in env.
-  EnableMusWithTestWindowTree();
-  AuraTestBase::SetUp();
-}
-
-AuraMusClientTestBase::AuraMusClientTestBase() {}
-
-AuraMusClientTestBase::~AuraMusClientTestBase() {}
+AuraMusClientTestBase::~AuraMusClientTestBase() = default;
 
 void AuraMusClientTestBase::SetUp() {
-  // Run AuraTestBase::SetUp() first because it puts an InProcessContextFactory
-  // in env.
-  ConfigureBackend(BackendType::MUS2);
-  set_window_manager_delegate(nullptr);
+  ConfigureEnvMode(Env::Mode::MUS);
   AuraTestBase::SetUp();
 }
 

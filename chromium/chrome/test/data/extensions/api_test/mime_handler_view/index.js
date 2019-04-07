@@ -58,6 +58,18 @@ function checkStreamDetailsNoFile() {
   chrome.test.assertTrue(streamDetails.tabId != -1);
 }
 
+// The following helper methods are used in BrowserPlugin-specific tests.
+function dummyTouchStartHandler(e) {
+}
+
+function ensurePageIsScrollable() {
+  document.body.style = " width: 100%; height: 100%; overflow: scroll;";
+  let div = document.createElement("div");
+  div.style = "width: 1000px; height: 500px; margin: 50%;";
+  document.body.appendChild(div);
+  window.scrollTo(0, 0);
+}
+
 var tests = [
   function testBasic() {
     checkStreamDetails('testBasic.csv', false);
@@ -249,14 +261,14 @@ var tests = [
 
   function testBeforeUnloadNoDialog() {
     checkStreamDetails('testBeforeUnloadNoDialog.csv', false);
-    chrome.mimeHandlerPrivate.setShowBeforeUnloadDialog(false);
-    chrome.test.succeed();
+    chrome.mimeHandlerPrivate.setShowBeforeUnloadDialog(
+        false, chrome.test.succeed);
   },
 
   function testBeforeUnloadShowDialog() {
     checkStreamDetails('testBeforeUnloadShowDialog.csv', false);
-    chrome.mimeHandlerPrivate.setShowBeforeUnloadDialog(true);
-    chrome.test.succeed();
+    chrome.mimeHandlerPrivate.setShowBeforeUnloadDialog(
+        true, chrome.test.succeed);
   },
 ];
 

@@ -47,11 +47,6 @@ inline CMTime TimeDeltaToCMTime(const base::TimeDelta& time_delta) {
       TimeDeltaToCoreMediaGlueCMTime(time_delta));
 }
 
-inline const CMTimeRange& CoreMediaGlueCMTimeRangeToCMTimeRange(
-    const CMTimeRange time_range) {
-  return reinterpret_cast<const CMTimeRange&>(time_range);
-}
-
 MEDIA_EXPORT AudioChannelLayoutTag
 ChromeChannelLayoutToCoreAudioTag(ChannelLayout chrome_layout);
 

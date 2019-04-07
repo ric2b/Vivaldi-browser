@@ -19,6 +19,7 @@
 #include "cc/base/devtools_instrumentation.h"
 #include "cc/base/histograms.h"
 #include "cc/paint/image_transfer_cache_entry.h"
+#include "cc/raster/scoped_grcontext_access.h"
 #include "cc/raster/tile_task.h"
 #include "cc/tiles/mipmap_util.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
@@ -42,6 +43,12 @@ namespace {
 static const int kNormalMaxItemsInCacheForGpu = 2000;
 static const int kThrottledMaxItemsInCacheForGpu = 100;
 static const int kSuspendedMaxItemsInCacheForGpu = 0;
+
+// The maximum number of images that we can lock simultaneously in our working
+// set. This is separate from the memory limit, as keeping very large numbers
+// of small images simultaneously locked can lead to performance issues and
+// memory spikes.
+static const int kMaxItemsInWorkingSet = 256;
 
 // lock_count │ used  │ result state
 // ═══════════╪═══════╪══════════════════
@@ -157,7 +164,9 @@ bool ShouldGenerateMips(const DrawImage& draw_image,
 // draw/scale can be done directly, calls directly into PaintImage::Decode.
 // if not, decodes to a compatible temporary pixmap and then converts that into
 // the |target_pixmap|.
-bool DrawAndScaleImage(const DrawImage& draw_image, SkPixmap* target_pixmap) {
+bool DrawAndScaleImage(const DrawImage& draw_image,
+                       SkPixmap* target_pixmap,
+                       PaintImage::GeneratorClientId client_id) {
   // We will pass color_space explicitly to PaintImage::Decode, so pull it out
   // of the pixmap and populate a stand-alone value.
   // note: To pull colorspace out of the pixmap, we create a new pixmap with
@@ -181,7 +190,7 @@ bool DrawAndScaleImage(const DrawImage& draw_image, SkPixmap* target_pixmap) {
   if (supported_size == pixmap.bounds().size() && can_directly_decode) {
     SkImageInfo info = pixmap.info();
     return paint_image.Decode(pixmap.writable_addr(), &info, color_space,
-                              draw_image.frame_index());
+                              draw_image.frame_index(), client_id);
   }
 
   // If we can't decode/scale directly, we will handle this in up to 3 steps.
@@ -199,7 +208,7 @@ bool DrawAndScaleImage(const DrawImage& draw_image, SkPixmap* target_pixmap) {
   SkPixmap decode_pixmap(decode_bitmap.info(), decode_bitmap.getPixels(),
                          decode_bitmap.rowBytes());
   if (!paint_image.Decode(decode_pixmap.writable_addr(), &decode_info,
-                          color_space, draw_image.frame_index())) {
+                          color_space, draw_image.frame_index(), client_id)) {
     return false;
   }
 
@@ -663,17 +672,21 @@ GrGLuint GpuImageDecodeCache::GlIdFromSkImage(const SkImage* image) {
   return info.fID;
 }
 
-GpuImageDecodeCache::GpuImageDecodeCache(viz::RasterContextProvider* context,
-                                         bool use_transfer_cache,
-                                         SkColorType color_type,
-                                         size_t max_working_set_bytes,
-                                         int max_texture_size)
+GpuImageDecodeCache::GpuImageDecodeCache(
+    viz::RasterContextProvider* context,
+    bool use_transfer_cache,
+    SkColorType color_type,
+    size_t max_working_set_bytes,
+    int max_texture_size,
+    PaintImage::GeneratorClientId generator_client_id)
     : color_type_(color_type),
       use_transfer_cache_(use_transfer_cache),
       context_(context),
       max_texture_size_(max_texture_size),
+      generator_client_id_(generator_client_id),
       persistent_cache_(PersistentCache::NO_AUTO_EVICT),
-      max_working_set_bytes_(max_working_set_bytes) {
+      max_working_set_bytes_(max_working_set_bytes),
+      max_working_set_items_(kMaxItemsInWorkingSet) {
   // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
   // Don't register a dump provider in these cases.
   if (base::ThreadTaskRunnerHandle::IsSet()) {
@@ -1111,7 +1124,11 @@ void GpuImageDecodeCache::UploadImageInTask(const DrawImage& draw_image) {
   if (context_->GetLock())
     context_lock.emplace(context_);
 
+  base::Optional<ScopedGrContextAccess> gr_context_access;
+  if (!use_transfer_cache_)
+    gr_context_access.emplace(context_);
   base::AutoLock lock(lock_);
+
   ImageData* image_data = GetImageDataForDrawImage(
       draw_image, InUseCacheKey::FromDrawImage(draw_image));
   DCHECK(image_data);
@@ -1285,7 +1302,9 @@ void GpuImageDecodeCache::OwnershipChanged(const DrawImage& draw_image,
   // If we have no image refs on an image, we should unbudget it.
   if (!has_any_refs && image_data->is_budgeted) {
     DCHECK_GE(working_set_bytes_, image_data->size);
+    DCHECK_GE(working_set_items_, 1u);
     working_set_bytes_ -= image_data->size;
+    working_set_items_ -= 1;
     image_data->is_budgeted = false;
   }
 
@@ -1324,6 +1343,7 @@ void GpuImageDecodeCache::OwnershipChanged(const DrawImage& draw_image,
   if (has_any_refs && !image_data->is_budgeted &&
       CanFitInWorkingSet(image_data->size)) {
     working_set_bytes_ += image_data->size;
+    working_set_items_ += 1;
     image_data->is_budgeted = true;
   }
 
@@ -1388,9 +1408,15 @@ bool GpuImageDecodeCache::EnsureCapacity(size_t required_size) {
 bool GpuImageDecodeCache::CanFitInWorkingSet(size_t size) const {
   lock_.AssertAcquired();
 
+  if (working_set_items_ >= max_working_set_items_)
+    return false;
+
   base::CheckedNumeric<uint32_t> new_size(working_set_bytes_);
   new_size += size;
-  return new_size.IsValid() && new_size.ValueOrDie() <= max_working_set_bytes_;
+  if (!new_size.IsValid() || new_size.ValueOrDie() > max_working_set_bytes_)
+    return false;
+
+  return true;
 }
 
 bool GpuImageDecodeCache::ExceedsPreferredCount() const {
@@ -1459,7 +1485,7 @@ void GpuImageDecodeCache::DecodeImageIfNecessary(const DrawImage& draw_image,
     // Set |pixmap| to the desired colorspace to decode into.
     pixmap.setColorSpace(
         ColorSpaceForImageDecode(draw_image, image_data->mode));
-    if (!DrawAndScaleImage(draw_image, &pixmap)) {
+    if (!DrawAndScaleImage(draw_image, &pixmap, generator_client_id_)) {
       DLOG(ERROR) << "DrawAndScaleImage failed.";
       backing_memory->Unlock();
       backing_memory.reset();

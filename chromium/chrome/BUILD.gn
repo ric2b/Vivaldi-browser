@@ -238,6 +238,7 @@ if (!is_android && !is_mac) {
           "/DELAYLOAD:uxtheme.dll",
           "/DELAYLOAD:ole32.dll",
           "/DELAYLOAD:oleaut32.dll",
+          "/DELAYLOAD:winhttp.dll",
         ]
 
         if (current_cpu == "x64") {
@@ -284,7 +285,11 @@ if (!is_android && !is_mac) {
         }
 
         if (is_desktop_linux && !is_component_build && !using_sanitizer) {
-          version_script = "//build/linux/chrome.map"
+          if (is_safestack) {
+            version_script = "//build/linux/chrome.safestack.map"
+          } else {
+            version_script = "//build/linux/chrome.map"
+          }
           inputs = [
             version_script,
           ]
@@ -435,6 +440,7 @@ if (is_win) {
       "/DELAYLOAD:comdlg32.dll",
       "/DELAYLOAD:crypt32.dll",
       "/DELAYLOAD:cryptui.dll",
+      "/DELAYLOAD:dbghelp.dll",
       "/DELAYLOAD:dhcpcsvc.dll",
       "/DELAYLOAD:dwmapi.dll",
       "/DELAYLOAD:imagehlp.dll",
@@ -1570,19 +1576,11 @@ copy("visual_elements_resources") {
   if (is_chrome_branded) {
     sources += [
       "//chrome/app/theme/$branding_path_component/win/tiles/LogoBeta.png",
-      "//chrome/app/theme/$branding_path_component/win/tiles/LogoBetaLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/LogoCanary.png",
-      "//chrome/app/theme/$branding_path_component/win/tiles/LogoCanaryLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/LogoDev.png",
-      "//chrome/app/theme/$branding_path_component/win/tiles/LogoDevLight.png",
-      "//chrome/app/theme/$branding_path_component/win/tiles/LogoLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoBeta.png",
-      "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoBetaLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoCanary.png",
-      "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoCanaryLight.png",
       "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoDev.png",
-      "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoDevLight.png",
-      "//chrome/app/theme/$branding_path_component/win/tiles/SmallLogoLight.png",
     ]
   }
 
@@ -1829,6 +1827,7 @@ if (is_android) {
       "//chrome/gpu",
       "//chrome/renderer",
       "//chrome/utility",
+      "//components/minidump_uploader",
       "//components/safe_browsing/android:safe_browsing_mobile",
       "//components/services/heap_profiling",
       "//content/public/app:both",
@@ -1857,7 +1856,7 @@ if (enable_resource_whitelist_generation) {
     deps = [
       "//chrome/android:libchrome",
     ]
-    input = "$root_out_dir/libchrome$shlib_extension.whitelist"
+    input = "$root_out_dir/lib.unstripped/libchrome$shlib_extension"
     output = chrome_resource_whitelist
   }
 }

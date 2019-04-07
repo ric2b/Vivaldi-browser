@@ -9,6 +9,7 @@
 
 #include <list>
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
@@ -19,6 +20,7 @@
 #include "net/base/completion_once_callback.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/host_resolver_proc.h"
+#include "net/dns/host_resolver_source.h"
 
 namespace net {
 
@@ -55,6 +57,14 @@ int ParseAddressList(const std::string& host_list,
 //
 // By default, MockHostResolvers include a single rule that maps all hosts to
 // 127.0.0.1.
+//
+// Separate rules are used for separate HostResolverSource (eg
+// HostResolverSource::SYSTEM for requests that should only be resolved using
+// the system resolver).  Use rules_map() to access the separate rules if tests
+// involve requests specifying sources:
+//
+//    host_resolver->rules_map()[HostResolverSource::DNS]->AddRule("foo.com",
+//                                                                 "1.2.3.4");
 
 // Base class shared by MockHostResolver and MockCachingHostResolver.
 class MockHostResolverBase
@@ -62,12 +72,21 @@ class MockHostResolverBase
       public base::SupportsWeakPtr<MockHostResolverBase> {
  private:
   class RequestImpl;
+  class LegacyRequestImpl;
 
  public:
   ~MockHostResolverBase() override;
 
-  RuleBasedHostResolverProc* rules() { return rules_.get(); }
-  void set_rules(RuleBasedHostResolverProc* rules) { rules_ = rules; }
+  RuleBasedHostResolverProc* rules() {
+    return rules_map_[HostResolverSource::ANY].get();
+  }
+  void set_rules(RuleBasedHostResolverProc* rules) {
+    rules_map_[HostResolverSource::ANY] = rules;
+  }
+  std::map<HostResolverSource, scoped_refptr<RuleBasedHostResolverProc>>
+  rules_map() {
+    return rules_map_;
+  }
 
   // Controls whether resolutions complete synchronously or asynchronously.
   void set_synchronous_mode(bool is_synchronous) {
@@ -83,6 +102,11 @@ class MockHostResolverBase
   }
 
   // HostResolver methods:
+  std::unique_ptr<ResolveHostRequest> CreateRequest(
+      const HostPortPair& host,
+      const NetLogWithSource& net_log,
+      const base::Optional<ResolveHostParameters>& optional_parameters)
+      override;
   int Resolve(const RequestInfo& info,
               RequestPriority priority,
               AddressList* addresses,
@@ -135,21 +159,34 @@ class MockHostResolverBase
  private:
   typedef std::map<size_t, RequestImpl*> RequestMap;
 
+  // Handle resolution for |request|. Expected to be called only the RequestImpl
+  // object itself.
+  int Resolve(RequestImpl* request);
+
   // Resolve as IP or from |cache_| return cached error or
   // DNS_CACHE_MISS if failed.
   int ResolveFromIPLiteralOrCache(
-      const RequestInfo& info,
+      const HostPortPair& host,
+      AddressFamily requested_address_family,
+      HostResolverFlags flags,
+      HostResolverSource source,
+      bool allow_cache,
       AddressList* addresses,
       HostCache::EntryStaleness* stale_info = nullptr);
   // Resolve via |proc_|.
-  int ResolveProc(const RequestInfo& info, AddressList* addresses);
+  int ResolveProc(const HostPortPair& host,
+                  AddressFamily requested_address_family,
+                  HostResolverFlags flags,
+                  HostResolverSource source,
+                  AddressList* addresses);
   // Resolve request stored in |requests_|. Pass rv to callback.
   void ResolveNow(size_t id);
 
   RequestPriority last_request_priority_;
   bool synchronous_mode_;
   bool ondemand_mode_;
-  scoped_refptr<RuleBasedHostResolverProc> rules_;
+  std::map<HostResolverSource, scoped_refptr<RuleBasedHostResolverProc>>
+      rules_map_;
   std::unique_ptr<HostCache> cache_;
   RequestMap requests_;
   size_t next_request_id_;
@@ -198,6 +235,11 @@ class RuleBasedHostResolverProc : public HostResolverProc {
   void AddRuleForAddressFamily(const std::string& host_pattern,
                                AddressFamily address_family,
                                const std::string& ip_literal);
+
+  void AddRuleWithFlags(const std::string& host_pattern,
+                        const std::string& ip_literal,
+                        HostResolverFlags flags,
+                        const std::string& canonical_name = "");
 
   // Same as AddRule(), but the replacement is expected to be an IPv4 or IPv6
   // literal. This can be used in place of AddRule() to bypass the system's
@@ -287,6 +329,13 @@ RuleBasedHostResolverProc* CreateCatchAllHostResolverProc();
 // HangingHostResolver never completes its |Resolve| request.
 class HangingHostResolver : public HostResolver {
  public:
+  HangingHostResolver();
+  ~HangingHostResolver() override;
+  std::unique_ptr<ResolveHostRequest> CreateRequest(
+      const HostPortPair& host,
+      const NetLogWithSource& net_log,
+      const base::Optional<ResolveHostParameters>& optional_parameters)
+      override;
   int Resolve(const RequestInfo& info,
               RequestPriority priority,
               AddressList* addresses,
@@ -303,6 +352,16 @@ class HangingHostResolver : public HostResolver {
   bool HasCached(base::StringPiece hostname,
                  HostCache::Entry::Source* source_out,
                  HostCache::EntryStaleness* stale_out) const override;
+
+  // Use to detect cancellations since there's otherwise no externally-visible
+  // differentiation between a cancelled and a hung task.
+  int num_cancellations() const { return num_cancellations_; }
+
+ private:
+  class RequestImpl;
+
+  int num_cancellations_ = 0;
+  base::WeakPtrFactory<HangingHostResolver> weak_ptr_factory_{this};
 };
 
 // This class sets the default HostResolverProc for a particular scope.  The

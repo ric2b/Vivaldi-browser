@@ -63,26 +63,34 @@ class OneClickTestProfileSyncService
             Profile::FromBrowserContext(profile))));
   }
 
-  bool IsFirstSetupInProgress() const override {
-    return first_setup_in_progress_;
+  bool IsFirstSetupComplete() const override { return first_setup_complete_; }
+
+  bool IsSetupInProgress() const override { return setup_in_progress_; }
+
+  int GetDisableReasons() const override { return DISABLE_REASON_NONE; }
+
+  TransportState GetTransportState() const override { return state_; }
+
+  void set_first_setup_complete(bool complete) {
+    first_setup_complete_ = complete;
   }
 
-  State GetState() const override { return state_; }
-
-  void set_first_setup_in_progress(bool in_progress) {
-    first_setup_in_progress_ = in_progress;
+  void set_setup_in_progress(bool in_progress) {
+    setup_in_progress_ = in_progress;
   }
 
-  void set_state(State state) { state_ = state; }
+  void set_state(TransportState state) { state_ = state; }
 
  private:
   explicit OneClickTestProfileSyncService(InitParams init_params)
       : browser_sync::TestProfileSyncService(std::move(init_params)),
-        first_setup_in_progress_(false),
-        state_(State::INITIALIZING) {}
+        first_setup_complete_(false),
+        setup_in_progress_(false),
+        state_(TransportState::INITIALIZING) {}
 
-  bool first_setup_in_progress_;
-  State state_;
+  bool first_setup_complete_;
+  bool setup_in_progress_;
+  TransportState state_;
 
   DISALLOW_COPY_AND_ASSIGN(OneClickTestProfileSyncService);
 };
@@ -198,8 +206,9 @@ TEST_F(OneClickSigninSyncObserverTest, WebContentsDestroyed) {
 TEST_F(OneClickSigninSyncObserverTest,
        OnSyncStateChanged_SyncConfiguredSuccessfully) {
   CreateSyncObserver(kContinueUrl);
-  sync_service_->set_first_setup_in_progress(false);
-  sync_service_->set_state(syncer::SyncService::State::ACTIVE);
+  sync_service_->set_first_setup_complete(true);
+  sync_service_->set_setup_in_progress(false);
+  sync_service_->set_state(syncer::SyncService::TransportState::ACTIVE);
 
   EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_));
   sync_service_->NotifyObservers();
@@ -211,8 +220,9 @@ TEST_F(OneClickSigninSyncObserverTest,
 TEST_F(OneClickSigninSyncObserverTest,
        OnSyncStateChanged_SyncConfigurationFailed) {
   CreateSyncObserver(kContinueUrl);
-  sync_service_->set_first_setup_in_progress(false);
-  sync_service_->set_state(syncer::SyncService::State::INITIALIZING);
+  sync_service_->set_first_setup_complete(true);
+  sync_service_->set_setup_in_progress(false);
+  sync_service_->set_state(syncer::SyncService::TransportState::INITIALIZING);
 
   EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_)).Times(0);
   sync_service_->NotifyObservers();
@@ -224,8 +234,9 @@ TEST_F(OneClickSigninSyncObserverTest,
 TEST_F(OneClickSigninSyncObserverTest,
        OnSyncStateChanged_SyncConfigurationInProgress) {
   CreateSyncObserver(kContinueUrl);
-  sync_service_->set_first_setup_in_progress(true);
-  sync_service_->set_state(syncer::SyncService::State::INITIALIZING);
+  sync_service_->set_first_setup_complete(false);
+  sync_service_->set_setup_in_progress(true);
+  sync_service_->set_state(syncer::SyncService::TransportState::INITIALIZING);
 
   EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_)).Times(0);
   sync_service_->NotifyObservers();
@@ -243,8 +254,9 @@ TEST_F(OneClickSigninSyncObserverTest,
       signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS,
       signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT, false);
   CreateSyncObserver(continue_url.spec());
-  sync_service_->set_first_setup_in_progress(false);
-  sync_service_->set_state(syncer::SyncService::State::ACTIVE);
+  sync_service_->set_first_setup_complete(true);
+  sync_service_->set_setup_in_progress(false);
+  sync_service_->set_state(syncer::SyncService::TransportState::ACTIVE);
 
   EXPECT_CALL(*web_contents_observer_, DidStartNavigation(_)).Times(0);
   sync_service_->NotifyObservers();

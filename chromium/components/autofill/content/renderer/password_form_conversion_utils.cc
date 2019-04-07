@@ -799,7 +799,6 @@ bool GetPasswordForm(
     password_form->new_password_element =
         FieldName(new_password, "anonymous_new_password");
     password_form->new_password_value = new_password->value;
-    password_form->new_password_value_is_default = new_password->is_default;
     if (autocomplete_cache.RetrieveFor(new_password) ==
         AutocompleteFlag::NEW_PASSWORD) {
       password_form->new_password_marked_by_site = true;
@@ -917,7 +916,7 @@ bool IsGaiaWithSkipSavePasswordForm(const blink::WebFormElement& form) {
 
 std::unique_ptr<PasswordForm> CreatePasswordFormFromWebForm(
     const WebFormElement& web_form,
-    const FieldValueAndPropertiesMaskMap* field_value_and_properties_map,
+    const FieldDataManager* field_data_manager,
     const FormsPredictionsMap* form_predictions,
     UsernameDetectorCache* username_detector_cache) {
   if (web_form.IsNull())
@@ -936,10 +935,10 @@ std::unique_ptr<PasswordForm> CreatePasswordFormFromWebForm(
   if (control_elements.empty())
     return nullptr;
 
-  if (!WebFormElementToFormData(
-          web_form, blink::WebFormControlElement(),
-          field_value_and_properties_map, form_util::EXTRACT_VALUE,
-          &password_form->form_data, nullptr /* FormFieldData */)) {
+  if (!WebFormElementToFormData(web_form, blink::WebFormControlElement(),
+                                field_data_manager, form_util::EXTRACT_VALUE,
+                                &password_form->form_data,
+                                nullptr /* FormFieldData */)) {
     return nullptr;
   }
 
@@ -954,7 +953,7 @@ std::unique_ptr<PasswordForm> CreatePasswordFormFromWebForm(
 
 std::unique_ptr<PasswordForm> CreatePasswordFormFromUnownedInputElements(
     const WebLocalFrame& frame,
-    const FieldValueAndPropertiesMaskMap* field_value_and_properties_map,
+    const FieldDataManager* field_data_manager,
     const FormsPredictionsMap* form_predictions,
     UsernameDetectorCache* username_detector_cache) {
   std::vector<blink::WebElement> fieldsets;
@@ -967,7 +966,7 @@ std::unique_ptr<PasswordForm> CreatePasswordFormFromUnownedInputElements(
   auto password_form = std::make_unique<PasswordForm>();
   if (!UnownedPasswordFormElementsAndFieldSetsToFormData(
           fieldsets, control_elements, nullptr, frame.GetDocument(),
-          field_value_and_properties_map, form_util::EXTRACT_VALUE,
+          field_data_manager, form_util::EXTRACT_VALUE,
           &password_form->form_data, nullptr /* FormFieldData */)) {
     return nullptr;
   }

@@ -11,7 +11,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequence_checker.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "components/leveldb_proto/proto_database_impl.h"
 #include "media/capabilities/video_decode_stats.pb.h"
 
@@ -39,7 +39,7 @@ std::unique_ptr<VideoDecodeStatsDB> VideoDecodeStatsDBImplFactory::CreateDB() {
   auto proto_db =
       std::make_unique<leveldb_proto::ProtoDatabaseImpl<DecodeStatsProto>>(
           base::CreateSequencedTaskRunnerWithTraits(
-              {base::MayBlock(), base::TaskPriority::BACKGROUND,
+              {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN}));
 
   return std::make_unique<VideoDecodeStatsDBImpl>(std::move(proto_db), db_dir_);

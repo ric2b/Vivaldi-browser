@@ -17,17 +17,16 @@
 #include "content/browser/service_worker/service_worker_response_type.h"
 #include "content/browser/service_worker/service_worker_url_job_wrapper.h"
 #include "content/browser/url_loader_factory_getter.h"
-#include "content/common/service_worker/service_worker_types.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
 #include "third_party/blink/public/mojom/blob/blob.mojom.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_response.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_stream_handle.mojom.h"
 
 namespace content {
 
-struct ServiceWorkerResponse;
 class ServiceWorkerVersion;
 
 // S13nServiceWorker:
@@ -60,25 +59,27 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
   //    to the network this will call |loader_callback| with a null
   //    RequestHandler, which will be then handled by NavigationURLLoaderImpl.
   // 2. If it is decided that the request should be sent to the SW,
-  //    this job dispatches a FetchEvent in StartRequest.
-  // 3. In DidDispatchFetchEvent() this job determines the request's
-  //    final destination, and may still call |loader_callback| with null
-  //    RequestHandler if it turns out that we need to fallback to the network.
-  // 4. Otherwise if the SW returned a stream or blob as a response
-  //    this job calls |loader_callback| with a RequestHandler bound from
-  //    StartResponse().
-  // 5. Then StartResponse() will be called with a
-  //    network::mojom::URLLoaderClientPtr that is connected to
-  //    NavigationURLLoaderImpl (for resource loading for navigation).
-  //    This forwards the blob/stream data pipe to the NavigationURLLoader if
-  //    the response body was sent as a blob/stream.
+  //    this job calls |loader_callback|, passing StartRequest as the
+  //    RequestHandler.
+  // 3. At this point, the NavigationURLLoaderImpl can throttle the request,
+  //    and invoke the RequestHandler later with a possibly modified request.
+  // 4. StartRequest is invoked. This dispatches a FetchEvent.
+  // 5. DidDispatchFetchEvent() determines the request's final destination. If
+  //    it turns out we need to fallback to network, it calls
+  //    |fallback_callback|.
+  // 6. Otherwise if the SW returned a stream or blob as a response
+  //    this job passes the response to the network::mojom::URLLoaderClientPtr
+  //    connected to NavigationURLLoaderImpl (for resource loading for
+  //    navigation), that was given to StartRequest. This forwards the
+  //    blob/stream data pipe to the NavigationURLLoader.
   //
   // Loads for shared workers work similarly, except SharedWorkerScriptLoader
   // is used instead of NavigationURLLoaderImpl.
   ServiceWorkerNavigationLoader(
       NavigationLoaderInterceptor::LoaderCallback loader_callback,
+      NavigationLoaderInterceptor::FallbackCallback fallback_callback,
       Delegate* delegate,
-      const network::ResourceRequest& resource_request,
+      const network::ResourceRequest& tentative_resource_request,
       scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter);
 
   ~ServiceWorkerNavigationLoader() override;
@@ -87,6 +88,7 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
   void FallbackToNetwork();
   void ForwardToServiceWorker();
   bool ShouldFallbackToNetwork();
+  bool ShouldForwardToServiceWorker();
   bool WasCanceled() const;
 
   // The navigation request that was holding this job is
@@ -102,42 +104,26 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
   class StreamWaiter;
 
   // For FORWARD_TO_SERVICE_WORKER case.
-  void StartRequest();
+  void StartRequest(const network::ResourceRequest& resource_request,
+                    network::mojom::URLLoaderRequest request,
+                    network::mojom::URLLoaderClientPtr client);
   void DidPrepareFetchEvent(scoped_refptr<ServiceWorkerVersion> version,
                             EmbeddedWorkerStatus initial_worker_status);
   void DidDispatchFetchEvent(
       blink::ServiceWorkerStatusCode status,
       ServiceWorkerFetchDispatcher::FetchEventResult fetch_result,
-      const ServiceWorkerResponse& response,
+      blink::mojom::FetchAPIResponsePtr response,
       blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
-      blink::mojom::BlobPtr body_as_blob,
       scoped_refptr<ServiceWorkerVersion> version);
 
-  // Used as the RequestHandler passed to |loader_callback_| when the service
-  // worker chooses to handle a resource request. Returns the response to
-  // |client|. |body_as_blob| is kept around until BlobDataHandle is created
-  // from blob_uuid just to make sure the blob is kept alive.
-  void StartResponse(const ServiceWorkerResponse& response,
+  void StartResponse(blink::mojom::FetchAPIResponsePtr response,
                      scoped_refptr<ServiceWorkerVersion> version,
-                     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
-                     blink::mojom::BlobPtr body_as_blob,
-                     network::mojom::URLLoaderRequest request,
-                     network::mojom::URLLoaderClientPtr client);
+                     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream);
 
-  // Used as the RequestHandler passed to |loader_callback_| on error. Returns a
-  // network error to |client|.
-  void StartErrorResponse(network::mojom::URLLoaderRequest request,
-                          network::mojom::URLLoaderClientPtr client);
-
-  // Calls url_loader_client_->OnReceiveResopnse() with |response_head_|.
+  // Calls url_loader_client_->OnReceiveResponse() with |response_head_|.
   void CommitResponseHeaders();
-  // Calls url_loader_client_->OnComplete(). Expected to be called after
-  // CommitResponseHeaders (i.e. status_ == kSentHeader).
+  // Calls url_loader_client_->OnComplete().
   void CommitCompleted(int error_code);
-
-  // Calls |loader_callback_| with StartErrorResponse callback. Must not be
-  // called once either StartResponse or StartErrorResponse is called.
-  void ReturnNetworkError();
 
   // network::mojom::URLLoader:
   void FollowRedirect(const base::Optional<std::vector<std::string>>&
@@ -155,10 +141,22 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
   void OnConnectionClosed();
   void DeleteIfNeeded();
 
+  void ReportDestination(
+      ServiceWorkerMetrics::MainResourceRequestDestination destination);
+
   ResponseType response_type_ = ResponseType::NOT_DETERMINED;
   NavigationLoaderInterceptor::LoaderCallback loader_callback_;
+  NavigationLoaderInterceptor::FallbackCallback fallback_callback_;
 
-  Delegate* delegate_;
+  // |delegate_| is non-null and owns |this| until DetachedFromRequest() is
+  // called. Once that is called, |delegate_| is reset to null and |this| owns
+  // itself, self-destructing when a connection error on |binding_| occurs.
+  //
+  // Note: A WeakPtr wouldn't be super safe here because the delegate can
+  // conceivably still be alive and used for another loader, after calling
+  // DetachedFromRequest() for this loader.
+  Delegate* delegate_ = nullptr;
+
   network::ResourceRequest resource_request_;
   scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter_;
   std::unique_ptr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
@@ -181,8 +179,6 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
     kCancelled
   };
   Status status_ = Status::kNotStarted;
-
-  bool detached_from_request_ = false;
 
   base::WeakPtrFactory<ServiceWorkerNavigationLoader> weak_factory_;
 

@@ -7,10 +7,12 @@
 #include "build/build_config.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/platform/web_audio_latency_hint.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
@@ -103,8 +105,8 @@ AudioContext* AudioContext::Create(Document& document,
   if (RuntimeEnabledFeatures::AutoplayIgnoresWebAudioEnabled()) {
     document.AddConsoleMessage(ConsoleMessage::Create(
         kOtherMessageSource, kWarningMessageLevel,
-        "The Web Audio autoplay policy will be re-enabled in Chrome 70 (October"
-        " 2018). Please check that your website is compatible with it. "
+        "The Web Audio autoplay policy will be re-enabled in Chrome 71 ("
+        "December 2018). Please check that your website is compatible with it. "
         "https://goo.gl/7K7WLu"));
   }
 
@@ -164,7 +166,6 @@ void AudioContext::Trace(blink::Visitor* visitor) {
 
 ScriptPromise AudioContext::suspendContext(ScriptState* script_state) {
   DCHECK(IsMainThread());
-  GraphAutoLocker locker(this);
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   ScriptPromise promise = resolver->Promise();
@@ -466,6 +467,34 @@ void AudioContext::RecordAutoplayMetrics() {
 
 void AudioContext::ContextDestroyed(ExecutionContext*) {
   Uninitialize();
+}
+
+void AudioContext::NotifyAudibleAudioStarted() {
+  DCHECK(IsMainThread());
+
+  if (!audio_context_manager_) {
+    Document* document = GetDocument();
+
+    // If there's no document don't bother to try to create the mojom interface.
+    // This can happen if the document has been reloaded while the audio thread
+    // is still running.
+    if (!document) {
+      return;
+    }
+
+    document->GetFrame()->GetInterfaceProvider().GetInterface(
+        mojo::MakeRequest(&audio_context_manager_));
+  }
+
+  DCHECK(audio_context_manager_);
+  audio_context_manager_->AudioContextAudiblePlaybackStarted(context_id_);
+}
+
+void AudioContext::NotifyAudibleAudioStopped() {
+  DCHECK(IsMainThread());
+  DCHECK(audio_context_manager_);
+
+  audio_context_manager_->AudioContextAudiblePlaybackStopped(context_id_);
 }
 
 }  // namespace blink

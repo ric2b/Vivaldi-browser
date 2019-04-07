@@ -14,7 +14,7 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_local.h"
 #include "build/build_config.h"
 #include "third_party/webrtc/rtc_base/refcount.h"
@@ -43,7 +43,7 @@ base::TaskTraits TaskQueuePriority2Traits(TaskQueue::Priority priority) {
 #endif
       break;
     case TaskQueue::Priority::LOW:
-      return {base::MayBlock(), base::TaskPriority::BACKGROUND};
+      return {base::MayBlock(), base::TaskPriority::BEST_EFFORT};
     case TaskQueue::Priority::NORMAL:
     default:
 #if defined(OS_ANDROID)
@@ -139,20 +139,24 @@ void TaskQueue::Impl::Stop() {
   WaitableEvent event(WaitableEvent::ResetPolicy::MANUAL,
                       WaitableEvent::InitialState::NOT_SIGNALED);
   task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&TaskQueue::Impl::Deactivate, this, &event));
+      FROM_HERE, base::BindOnce(&TaskQueue::Impl::Deactivate,
+                                rtc::scoped_refptr<Impl>(this), &event));
   event.Wait();
 }
 
 void TaskQueue::Impl::PostTask(std::unique_ptr<QueuedTask> task) {
-  task_runner_->PostTask(FROM_HERE, base::BindOnce(&TaskQueue::Impl::RunTask,
-                                                   this, base::Passed(&task)));
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&TaskQueue::Impl::RunTask, rtc::scoped_refptr<Impl>(this),
+                     std::move(task)));
 }
 
 void TaskQueue::Impl::PostDelayedTask(std::unique_ptr<QueuedTask> task,
                                       uint32_t milliseconds) {
   task_runner_->PostDelayedTask(
       FROM_HERE,
-      base::BindOnce(&TaskQueue::Impl::RunTask, this, base::Passed(&task)),
+      base::BindOnce(&TaskQueue::Impl::RunTask, rtc::scoped_refptr<Impl>(this),
+                     std::move(task)),
       base::TimeDelta::FromMilliseconds(milliseconds));
 }
 

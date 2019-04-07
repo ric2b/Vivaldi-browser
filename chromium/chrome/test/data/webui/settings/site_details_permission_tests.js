@@ -28,6 +28,8 @@ suite('SiteDetailsPermission', function() {
             settings.ContentSettingsTypes.CAMERA,
             [test_util.createRawSiteException('https://www.example.com')])]);
 
+    loadTimeData.overrideValues({enableBlockAutoplayContentSetting: true});
+
     browserProxy = new TestSiteSettingsPrefsBrowserProxy();
     settings.SiteSettingsPrefsBrowserProxyImpl.instance_ = browserProxy;
     PolymerTest.clearBody();
@@ -165,7 +167,10 @@ suite('SiteDetailsPermission', function() {
         source: testSource,
       };
       assertEquals(
-          permissionSourcesNoSetting[testSource],
+          permissionSourcesNoSetting[testSource] +
+              (permissionSourcesNoSetting[testSource].length === 0 ?
+                   'Block (default)\nAllow\nBlock\nAsk' :
+                   '\nBlock (default)\nAllow\nBlock\nAsk'),
           testElement.$.permissionItem.innerText.trim());
       assertEquals(
           permissionSourcesNoSetting[testSource] != '',
@@ -197,7 +202,8 @@ suite('SiteDetailsPermission', function() {
         source: settings.SiteSettingSource.EXTENSION,
       };
       assertEquals(
-          extensionSourceStrings[testSetting],
+          extensionSourceStrings[testSetting] +
+              '\nBlock (default)\nAllow\nBlock\nAsk',
           testElement.$.permissionItem.innerText.trim());
       assertTrue(testElement.$.permissionItem.classList.contains('two-line'));
       assertTrue(testElement.$.permission.disabled);
@@ -221,7 +227,8 @@ suite('SiteDetailsPermission', function() {
         source: settings.SiteSettingSource.POLICY,
       };
       assertEquals(
-          policySourceStrings[testSetting],
+          policySourceStrings[testSetting] +
+              '\nBlock (default)\nAllow\nBlock\nAsk',
           testElement.$.permissionItem.innerText.trim());
       assertTrue(testElement.$.permissionItem.classList.contains('two-line'));
       assertTrue(testElement.$.permission.disabled);
@@ -236,7 +243,9 @@ suite('SiteDetailsPermission', function() {
       setting: settings.ContentSetting.ASK,
       source: settings.SiteSettingSource.DEFAULT,
     };
-    assertEquals('', testElement.$.permissionItem.innerText.trim());
+    assertEquals(
+        'Ask (default)\nAllow\nBlock\nAsk',
+        testElement.$.permissionItem.innerText.trim());
     assertFalse(testElement.$.permissionItem.classList.contains('two-line'));
     assertFalse(testElement.$.permission.disabled);
   });
@@ -252,7 +261,8 @@ suite('SiteDetailsPermission', function() {
       source: settings.SiteSettingSource.DRM_DISABLED,
     };
     assertEquals(
-        'To change this setting, first turn on identifiers',
+        'To change this setting, first turn on identifiers' +
+            '\nAllow\nBlock\nAsk',
         testElement.$.permissionItem.innerText.trim());
     assertTrue(testElement.$.permissionItem.classList.contains('two-line'));
     assertTrue(testElement.$.permission.disabled);
@@ -268,7 +278,8 @@ suite('SiteDetailsPermission', function() {
       source: settings.SiteSettingSource.ADS_FILTER_BLACKLIST,
     };
     assertEquals(
-        'Site tends to show intrusive ads',
+        'Site tends to show intrusive ads' +
+            '\nAllow\nBlock\nAsk',
         testElement.$.permissionItem.innerText.trim());
     assertTrue(testElement.$.permissionItem.classList.contains('two-line'));
     assertFalse(testElement.$.permission.disabled);
@@ -281,7 +292,8 @@ suite('SiteDetailsPermission', function() {
       source: settings.SiteSettingSource.PREFERENCE,
     };
     assertEquals(
-        'Block if site tends to show intrusive ads',
+        'Block if site tends to show intrusive ads' +
+            '\nAllow\nBlock\nAsk',
         testElement.$.permissionItem.innerText.trim());
     assertTrue(testElement.$.permissionItem.classList.contains('two-line'));
     assertFalse(testElement.$.permission.disabled);
@@ -294,7 +306,8 @@ suite('SiteDetailsPermission', function() {
       source: settings.SiteSettingSource.DEFAULT,
     };
     assertEquals(
-        'Block if site tends to show intrusive ads',
+        'Block if site tends to show intrusive ads' +
+            '\nBlock (default)\nAllow\nBlock\nAsk',
         testElement.$.permissionItem.innerText.trim());
     assertTrue(testElement.$.permissionItem.classList.contains('two-line'));
     assertFalse(testElement.$.permission.disabled);
@@ -306,8 +319,89 @@ suite('SiteDetailsPermission', function() {
       setting: settings.ContentSetting.ALLOW,
       source: settings.SiteSettingSource.PREFERENCE,
     };
-    assertEquals('', testElement.$.permissionItem.innerText.trim());
+    assertEquals(
+        'Block (default)\nAllow\nBlock\nAsk',
+        testElement.$.permissionItem.innerText.trim());
     assertFalse(testElement.$.permissionItem.classList.contains('two-line'));
     assertFalse(testElement.$.permission.disabled);
+  });
+
+  test('sound setting default string is correct', function() {
+    const origin = 'https://www.example.com';
+    browserProxy.setPrefs(prefs);
+    testElement.category = settings.ContentSettingsTypes.SOUND;
+    testElement.label = 'Sound';
+    testElement.site = {
+      origin: origin,
+      embeddingOrigin: '',
+      setting: settings.ContentSetting.ALLOW,
+      source: settings.SiteSettingSource.PREFERENCE,
+    };
+
+    return browserProxy.whenCalled('getDefaultValueForContentType')
+        .then((args) => {
+          // Check getDefaultValueForContentType was called for sound category.
+          assertEquals(settings.ContentSettingsTypes.SOUND, args);
+
+          // The default option will always be the first in the menu.
+          assertEquals(
+              'Allow (default)', testElement.$.permission.options[0].text,
+              'Default setting string should match prefs');
+          browserProxy.resetResolver('getDefaultValueForContentType');
+          const defaultPrefs = test_util.createSiteSettingsPrefs(
+              [test_util.createContentSettingTypeToValuePair(
+                  settings.ContentSettingsTypes.SOUND,
+                  test_util.createDefaultContentSetting(
+                      {setting: settings.ContentSetting.BLOCK}))],
+              []);
+          browserProxy.setPrefs(defaultPrefs);
+          return browserProxy.whenCalled('getDefaultValueForContentType');
+        })
+        .then((args) => {
+          assertEquals(settings.ContentSettingsTypes.SOUND, args);
+          assertEquals(
+              'Mute (default)', testElement.$.permission.options[0].text,
+              'Default setting string should match prefs');
+          browserProxy.resetResolver('getDefaultValueForContentType');
+          testElement.useAutomaticLabel = true;
+          const defaultPrefs = test_util.createSiteSettingsPrefs(
+              [test_util.createContentSettingTypeToValuePair(
+                  settings.ContentSettingsTypes.SOUND,
+                  test_util.createDefaultContentSetting(
+                      {setting: settings.ContentSetting.ALLOW}))],
+              []);
+          browserProxy.setPrefs(defaultPrefs);
+          return browserProxy.whenCalled('getDefaultValueForContentType');
+        })
+        .then((args) => {
+          assertEquals(settings.ContentSettingsTypes.SOUND, args);
+          assertEquals(
+              'Automatic (default)', testElement.$.permission.options[0].text,
+              'Default setting string should match prefs');
+        });
+  });
+
+  test('sound setting block string is correct', function() {
+    const origin = 'https://www.example.com';
+    browserProxy.setPrefs(prefs);
+    testElement.category = settings.ContentSettingsTypes.SOUND;
+    testElement.label = 'Sound';
+    testElement.site = {
+      origin: origin,
+      embeddingOrigin: '',
+      setting: settings.ContentSetting.ALLOW,
+      source: settings.SiteSettingSource.PREFERENCE,
+    };
+
+    return browserProxy.whenCalled('getDefaultValueForContentType')
+        .then((args) => {
+          // Check getDefaultValueForContentType was called for sound category.
+          assertEquals(settings.ContentSettingsTypes.SOUND, args);
+
+          // The block option will always be the third in the menu.
+          assertEquals(
+              'Mute', testElement.$.permission.options[2].text,
+              'Block setting string should match prefs');
+        });
   });
 });

@@ -15,6 +15,7 @@
 #include "ash/client_image_registry.h"
 #include "ash/display/ash_display_controller.h"
 #include "ash/display/cros_display_config.h"
+#include "ash/display/display_output_protection.h"
 #include "ash/events/event_rewriter_controller.h"
 #include "ash/first_run/first_run_helper.h"
 #include "ash/highlighter/highlighter_controller.h"
@@ -32,7 +33,6 @@
 #include "ash/shelf/shelf_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
-#include "ash/shell_state.h"
 #include "ash/shutdown_controller.h"
 #include "ash/system/locale/locale_notification_controller.h"
 #include "ash/system/model/system_tray_model.h"
@@ -86,6 +86,11 @@ void BindAssistantControllerRequestOnMainThread(
   Shell::Get()->assistant_controller()->BindRequest(std::move(request));
 }
 
+void BindAssistantVolumeControlRequestOnMainThread(
+    mojom::AssistantVolumeControlRequest request) {
+  Shell::Get()->assistant_controller()->BindRequest(std::move(request));
+}
+
 void BindCrosDisplayConfigControllerRequestOnMainThread(
     mojom::CrosDisplayConfigControllerRequest request) {
   Shell::Get()->cros_display_config()->BindRequest(std::move(request));
@@ -103,6 +108,11 @@ void BindCastConfigOnMainThread(mojom::CastConfigRequest request) {
 void BindClientImageRegistryRequestOnMainThread(
     mojom::ClientImageRegistryRequest request) {
   Shell::Get()->client_image_registry()->BindRequest(std::move(request));
+}
+
+void BindDisplayOutputProtectionRequestOnMainThread(
+    mojom::DisplayOutputProtectionRequest request) {
+  Shell::Get()->display_output_protection()->BindRequest(std::move(request));
 }
 
 void BindDockedMagnifierControllerRequestOnMainThread(
@@ -173,10 +183,6 @@ void BindShelfRequestOnMainThread(mojom::ShelfControllerRequest request) {
   Shell::Get()->shelf_controller()->BindRequest(std::move(request));
 }
 
-void BindShellStateOnMainThread(mojom::ShellStateRequest request) {
-  Shell::Get()->shell_state()->BindRequest(std::move(request));
-}
-
 void BindShutdownControllerRequestOnMainThread(
     mojom::ShutdownControllerRequest request) {
   Shell::Get()->shutdown_controller()->BindRequest(std::move(request));
@@ -236,6 +242,9 @@ void RegisterInterfaces(
     registry->AddInterface(
         base::BindRepeating(&BindAssistantControllerRequestOnMainThread),
         main_thread_task_runner);
+    registry->AddInterface(
+        base::BindRepeating(&BindAssistantVolumeControlRequestOnMainThread),
+        main_thread_task_runner);
   }
   registry->AddInterface(
       base::BindRepeating(&BindAshDisplayControllerRequestOnMainThread),
@@ -250,6 +259,9 @@ void RegisterInterfaces(
                          main_thread_task_runner);
   registry->AddInterface(
       base::BindRepeating(&BindClientImageRegistryRequestOnMainThread),
+      main_thread_task_runner);
+  registry->AddInterface(
+      base::BindRepeating(&BindDisplayOutputProtectionRequestOnMainThread),
       main_thread_task_runner);
   if (features::IsDockedMagnifierEnabled()) {
     registry->AddInterface(
@@ -294,8 +306,6 @@ void RegisterInterfaces(
   registry->AddInterface(
       base::BindRepeating(&BindSessionControllerRequestOnMainThread),
       main_thread_task_runner);
-  registry->AddInterface(base::BindRepeating(&BindShellStateOnMainThread),
-                         main_thread_task_runner);
   registry->AddInterface(base::BindRepeating(&BindShelfRequestOnMainThread),
                          main_thread_task_runner);
   registry->AddInterface(

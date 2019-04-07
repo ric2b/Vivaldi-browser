@@ -68,21 +68,4 @@ void TabManager::ResourceCoordinatorSignalObserver::
       ->RecordExpectedTaskQueueingDuration(web_contents, duration);
 }
 
-void TabManager::ResourceCoordinatorSignalObserver::
-    OnNonPersistentNotificationCreated(
-        content::WebContents* web_contents,
-        const PageNavigationIdentity& page_navigation_id) {
-  // TODO(sebmarchand): Add the wiring to forward this signal where it should be
-  // used.
-}
-
-void TabManager::ResourceCoordinatorSignalObserver::
-    OnLoadTimePerformanceEstimate(
-        content::WebContents* web_contents,
-        const PageNavigationIdentity& page_navigation_id,
-        base::TimeDelta cpu_usage_estimate,
-        uint64_t private_footprint_kb_estimate) {
-  // TODO(siggi): Persist the measurement associated to |url|'s site.
-}
-
 }  // namespace resource_coordinator

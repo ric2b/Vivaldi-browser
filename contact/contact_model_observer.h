@@ -9,6 +9,8 @@
 #ifndef CONTACT_CONTACT_MODEL_OBSERVER_H_
 #define CONTACT_CONTACT_MODEL_OBSERVER_H_
 
+#include "base/observer_list_types.h"
+
 #include "contact_type.h"
 
 namespace contact {
@@ -16,7 +18,7 @@ namespace contact {
 class ContactService;
 
 // Observer for the Contact Model/Service.
-class ContactModelObserver {
+class ContactModelObserver : public base::CheckedObserver {
  public:
   // Invoked when the model has finished loading.
   virtual void ContactModelLoaded(ContactService* model) {}
@@ -37,7 +39,7 @@ class ContactModelObserver {
                                 const ContactRow& row) {}
 
  protected:
-  virtual ~ContactModelObserver() {}
+  ~ContactModelObserver() override {}
 };
 
 }  // namespace contact

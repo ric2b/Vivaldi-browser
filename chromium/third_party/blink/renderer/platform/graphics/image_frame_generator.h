@@ -30,6 +30,7 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
+#include "cc/paint/paint_image.h"
 #include "third_party/blink/renderer/platform/image-decoders/image_decoder.h"
 #include "third_party/blink/renderer/platform/image-decoders/segment_reader.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
@@ -85,7 +86,8 @@ class PLATFORM_EXPORT ImageFrameGenerator final
                       const SkImageInfo&,
                       void* pixels,
                       size_t row_bytes,
-                      ImageDecoder::AlphaOption);
+                      ImageDecoder::AlphaOption,
+                      cc::PaintImage::GeneratorClientId);
 
   // Decodes YUV components directly into the provided memory planes. Must not
   // be called unless getYUVComponentSizes has been called and returned true.
@@ -113,6 +115,18 @@ class PLATFORM_EXPORT ImageFrameGenerator final
   bool GetYUVComponentSizes(SegmentReader*, SkYUVSizeInfo*);
 
  private:
+  class ClientMutexLocker {
+   public:
+    ClientMutexLocker(ImageFrameGenerator* generator,
+                      cc::PaintImage::GeneratorClientId client_id);
+    ~ClientMutexLocker();
+
+   private:
+    ImageFrameGenerator* generator_;
+    cc::PaintImage::GeneratorClientId client_id_;
+    Mutex* mutex_;
+  };
+
   ImageFrameGenerator(const SkISize& full_size,
                       bool is_multi_frame,
                       const ColorBehavior&,
@@ -128,46 +142,30 @@ class PLATFORM_EXPORT ImageFrameGenerator final
 
   void SetHasAlpha(size_t index, bool has_alpha);
 
-  SkBitmap TryToResumeDecode(SegmentReader*,
-                             bool all_data_received,
-                             size_t index,
-                             const SkISize& scaled_size,
-                             SkBitmap::Allocator&,
-                             ImageDecoder::AlphaOption,
-                             ImageDecoder::HighBitDepthDecodingOption);
-  // This method should only be called while decode_mutex_ is locked.
-  // Returns a pointer to frame |index|'s ImageFrame, if available.
-  // Sets |used_external_allocator| to true if the the image was decoded into
-  // |external_allocator|'s memory.
-  ImageFrame* Decode(SegmentReader*,
-                     bool all_data_received,
-                     size_t index,
-                     ImageDecoder**,
-                     SkBitmap::Allocator& external_allocator,
-                     ImageDecoder::AlphaOption,
-                     ImageDecoder::HighBitDepthDecodingOption,
-                     const SkISize& scaled_size,
-                     bool& used_external_allocator);
-
   const SkISize full_size_;
-
   // Parameters used to create internal ImageDecoder objects.
   const ColorBehavior decoder_color_behavior_;
-
   const bool is_multi_frame_;
-  bool decode_failed_;
-  bool yuv_decoding_failed_;
-  size_t frame_count_;
+  const std::vector<SkISize> supported_sizes_;
+
+  // Prevents concurrent access to all variables below.
+  Mutex generator_mutex_;
+
+  bool decode_failed_ = false;
+  bool yuv_decoding_failed_ = false;
+  size_t frame_count_ = 0u;
   Vector<bool> has_alpha_;
-  std::vector<SkISize> supported_sizes_;
+
+  struct ClientMutex {
+    int ref_count = 0;
+    Mutex mutex;
+  };
+  // Note that it is necessary to use unordered_map here to ensure that
+  // references to entries in the map, stored in ClientMutexLocker, remain valid
+  // across insertions into the map.
+  std::unordered_map<cc::PaintImage::GeneratorClientId, ClientMutex> mutex_map_;
 
   std::unique_ptr<ImageDecoderFactory> image_decoder_factory_;
-
-  // Prevents multiple decode operations on the same data.
-  Mutex decode_mutex_;
-
-  // Protect concurrent access to has_alpha_.
-  Mutex alpha_mutex_;
 
   DISALLOW_COPY_AND_ASSIGN(ImageFrameGenerator);
 };

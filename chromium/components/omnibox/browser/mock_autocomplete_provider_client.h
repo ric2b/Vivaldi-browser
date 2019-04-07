@@ -15,7 +15,6 @@
 #include "components/omnibox/browser/autocomplete_scheme_classifier.h"
 #include "components/omnibox/browser/contextual_suggestions_service.h"
 #include "components/omnibox/browser/document_suggestions_service.h"
-#include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
@@ -62,8 +61,6 @@ class MockAutocompleteProviderClient
     return document_suggestions_service_.get();
   }
 
-  MOCK_CONST_METHOD0(GetSearchTermsData, const SearchTermsData&());
-
   // Can't mock scoped_refptr :\.
   scoped_refptr<ShortcutsBackend> GetShortcutsBackend() override {
     return nullptr;
@@ -77,7 +74,7 @@ class MockAutocompleteProviderClient
   }
 
   MOCK_CONST_METHOD0(GetAcceptLanguages, std::string());
-  MOCK_METHOD0(GetEmbedderRepresentationOfAboutScheme, std::string());
+  MOCK_CONST_METHOD0(GetEmbedderRepresentationOfAboutScheme, std::string());
   MOCK_METHOD0(GetBuiltinURLs, std::vector<base::string16>());
   MOCK_METHOD0(GetBuiltinsToProvideAsUserTypes, std::vector<base::string16>());
   MOCK_CONST_METHOD0(GetCurrentVisitTimestamp, base::Time());
@@ -85,6 +82,9 @@ class MockAutocompleteProviderClient
   MOCK_CONST_METHOD0(SearchSuggestEnabled, bool());
   MOCK_CONST_METHOD0(IsPersonalizedUrlDataCollectionActive, bool());
   MOCK_CONST_METHOD0(IsAuthenticated, bool());
+  MOCK_CONST_METHOD0(IsUnifiedConsentGiven, bool());
+  MOCK_CONST_METHOD0(IsSyncActive, bool());
+
   MOCK_METHOD6(
       Classify,
       void(const base::string16& text,

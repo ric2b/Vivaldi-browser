@@ -8,9 +8,15 @@
 #include <utility>
 
 #include "base/no_destructor.h"
+#include "base/numerics/safe_conversions.h"
+#include "pdf/pdfium/pdfium_mem_buffer_file_write.h"
+#include "pdf/pdfium/pdfium_print.h"
+#include "printing/nup_parameters.h"
 #include "printing/units.h"
 #include "third_party/pdfium/public/cpp/fpdf_scopers.h"
+#include "third_party/pdfium/public/fpdf_ppo.h"
 #include "third_party/pdfium/public/fpdfview.h"
+#include "ui/gfx/geometry/size.h"
 
 using printing::ConvertUnitDouble;
 using printing::kPointsPerInch;
@@ -89,6 +95,57 @@ int CalculatePosition(FPDF_PAGE page,
   return rotate;
 }
 
+ScopedFPDFDocument LoadPdfData(base::span<const uint8_t> pdf_buffer) {
+  if (!base::IsValueInRangeForNumericType<int>(pdf_buffer.size()))
+    return nullptr;
+  return ScopedFPDFDocument(
+      FPDF_LoadMemDocument(pdf_buffer.data(), pdf_buffer.size(), nullptr));
+}
+
+ScopedFPDFDocument CreatePdfDoc(
+    std::vector<base::span<const uint8_t>> input_buffers) {
+  if (input_buffers.empty())
+    return nullptr;
+
+  ScopedFPDFDocument doc(FPDF_CreateNewDocument());
+  size_t index = 0;
+  for (auto input_buffer : input_buffers) {
+    ScopedFPDFDocument single_page_doc = LoadPdfData(input_buffer);
+    if (!FPDF_ImportPages(doc.get(), single_page_doc.get(), "1", index++)) {
+      return nullptr;
+    }
+  }
+
+  return doc;
+}
+
+std::vector<uint8_t> CreateNupPdfDocument(FPDF_DOCUMENT doc,
+                                          size_t pages_per_sheet,
+                                          const gfx::Size& page_size) {
+  int page_size_width = page_size.width();
+  int page_size_height = page_size.height();
+
+  printing::NupParameters nup_params;
+  bool is_landscape = PDFiumPrint::IsSourcePdfLandscape(doc);
+  nup_params.SetParameters(pages_per_sheet, is_landscape);
+  bool paper_is_landscape = page_size_width > page_size_height;
+  if (nup_params.landscape() != paper_is_landscape)
+    std::swap(page_size_width, page_size_height);
+
+  ScopedFPDFDocument output_doc_nup(FPDF_ImportNPagesToOne(
+      doc, page_size_width, page_size_height, nup_params.num_pages_on_x_axis(),
+      nup_params.num_pages_on_y_axis()));
+
+  if (!output_doc_nup)
+    return std::vector<uint8_t>();
+
+  PDFiumMemBufferFileWrite output_file_write;
+  if (!FPDF_SaveAsCopy(output_doc_nup.get(), &output_file_write, 0))
+    return std::vector<uint8_t>();
+
+  return output_file_write.TakeBuffer();
+}
+
 }  // namespace
 
 PDFEngineExports::RenderingSettings::RenderingSettings(int dpi_x,
@@ -123,13 +180,12 @@ PDFiumEngineExports::PDFiumEngineExports() {}
 PDFiumEngineExports::~PDFiumEngineExports() {}
 
 #if defined(OS_WIN)
-bool PDFiumEngineExports::RenderPDFPageToDC(const void* pdf_buffer,
-                                            int buffer_size,
-                                            int page_number,
-                                            const RenderingSettings& settings,
-                                            HDC dc) {
-  ScopedFPDFDocument doc(
-      FPDF_LoadMemDocument(pdf_buffer, buffer_size, nullptr));
+bool PDFiumEngineExports::RenderPDFPageToDC(
+    base::span<const uint8_t> pdf_buffer,
+    int page_number,
+    const RenderingSettings& settings,
+    HDC dc) {
+  ScopedFPDFDocument doc = LoadPdfData(pdf_buffer);
   if (!doc)
     return false;
   ScopedFPDFPage page(FPDF_LoadPage(doc.get(), page_number));
@@ -211,13 +267,11 @@ void PDFiumEngineExports::SetPDFUsePrintMode(int mode) {
 #endif  // defined(OS_WIN)
 
 bool PDFiumEngineExports::RenderPDFPageToBitmap(
-    const void* pdf_buffer,
-    int pdf_buffer_size,
+    base::span<const uint8_t> pdf_buffer,
     int page_number,
     const RenderingSettings& settings,
     void* bitmap_buffer) {
-  ScopedFPDFDocument doc(
-      FPDF_LoadMemDocument(pdf_buffer, pdf_buffer_size, nullptr));
+  ScopedFPDFDocument doc = LoadPdfData(pdf_buffer);
   if (!doc)
     return false;
   ScopedFPDFPage page(FPDF_LoadPage(doc.get(), page_number));
@@ -245,12 +299,32 @@ bool PDFiumEngineExports::RenderPDFPageToBitmap(
   return true;
 }
 
-bool PDFiumEngineExports::GetPDFDocInfo(const void* pdf_buffer,
-                                        int buffer_size,
+std::vector<uint8_t> PDFiumEngineExports::ConvertPdfPagesToNupPdf(
+    std::vector<base::span<const uint8_t>> input_buffers,
+    size_t pages_per_sheet,
+    const gfx::Size& page_size) {
+  ScopedFPDFDocument doc = CreatePdfDoc(std::move(input_buffers));
+  if (!doc)
+    return std::vector<uint8_t>();
+
+  return CreateNupPdfDocument(doc.get(), pages_per_sheet, page_size);
+}
+
+std::vector<uint8_t> PDFiumEngineExports::ConvertPdfDocumentToNupPdf(
+    base::span<const uint8_t> input_buffer,
+    size_t pages_per_sheet,
+    const gfx::Size& page_size) {
+  ScopedFPDFDocument doc = LoadPdfData(input_buffer);
+  if (!doc)
+    return std::vector<uint8_t>();
+
+  return CreateNupPdfDocument(doc.get(), pages_per_sheet, page_size);
+}
+
+bool PDFiumEngineExports::GetPDFDocInfo(base::span<const uint8_t> pdf_buffer,
                                         int* page_count,
                                         double* max_page_width) {
-  ScopedFPDFDocument doc(
-      FPDF_LoadMemDocument(pdf_buffer, buffer_size, nullptr));
+  ScopedFPDFDocument doc = LoadPdfData(pdf_buffer);
   if (!doc)
     return false;
 
@@ -276,13 +350,12 @@ bool PDFiumEngineExports::GetPDFDocInfo(const void* pdf_buffer,
   return true;
 }
 
-bool PDFiumEngineExports::GetPDFPageSizeByIndex(const void* pdf_buffer,
-                                                int pdf_buffer_size,
-                                                int page_number,
-                                                double* width,
-                                                double* height) {
-  ScopedFPDFDocument doc(
-      FPDF_LoadMemDocument(pdf_buffer, pdf_buffer_size, nullptr));
+bool PDFiumEngineExports::GetPDFPageSizeByIndex(
+    base::span<const uint8_t> pdf_buffer,
+    int page_number,
+    double* width,
+    double* height) {
+  ScopedFPDFDocument doc = LoadPdfData(pdf_buffer);
   if (!doc)
     return false;
   return FPDF_GetPageSizeByIndex(doc.get(), page_number, width, height) != 0;

@@ -29,11 +29,13 @@ class MediaRouterViewsUI : public MediaRouterUIBase,
 
   // MediaRouterUIBase:
   std::vector<MediaSinkWithCastModes> GetEnabledSinks() const override;
+  void Close() override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(MediaRouterViewsUITest, NotifyObserver);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterViewsUITest, RemovePseudoSink);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterViewsUITest, ConnectingState);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterViewsUITest, DisconnectingState);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterViewsUITest, AddAndRemoveIssue);
 
   // MediaRouterUIBase:
@@ -63,8 +65,12 @@ class MediaRouterViewsUI : public MediaRouterUIBase,
   // is selected and casting starts.
   base::Optional<MediaSink::Id> local_file_sink_id_;
 
+  // This value is set when the UI requests a route to be terminated, and gets
+  // reset when the route is removed.
+  base::Optional<MediaRoute::Id> terminating_route_id_;
+
   // Observers for dialog model updates.
-  base::ObserverList<CastDialogController::Observer> observers_;
+  base::ObserverList<CastDialogController::Observer>::Unchecked observers_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaRouterViewsUI);
 };

@@ -60,9 +60,6 @@ void MockInputRouterClient::OnSetWhiteListedTouchAction(
   white_listed_touch_action_ = white_listed_touch_action;
 }
 
-void MockInputRouterClient::DidStopFlinging() {
-}
-
 void MockInputRouterClient::DidStartScrollingViewport() {}
 
 void MockInputRouterClient::ForwardGestureEventWithLatencyInfo(
@@ -111,6 +108,10 @@ cc::TouchAction MockInputRouterClient::GetAndResetWhiteListedTouchAction() {
   cc::TouchAction white_listed_touch_action = white_listed_touch_action_;
   white_listed_touch_action_ = cc::kTouchActionAuto;
   return white_listed_touch_action;
+}
+
+bool MockInputRouterClient::NeedsBeginFrameForFlingProgress() {
+  return false;
 }
 
 }  // namespace content

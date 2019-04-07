@@ -12,6 +12,7 @@ import android.support.test.InstrumentationRegistry;
 import org.junit.Assert;
 import org.junit.runner.Description;
 
+import org.chromium.chrome.browser.vr.TestVrShellDelegate;
 import org.chromium.chrome.browser.vr.rules.HeadTrackingMode;
 import org.chromium.chrome.browser.vr.rules.HeadTrackingMode.SupportedMode;
 import org.chromium.chrome.browser.vr.rules.VrTestRule;
@@ -51,28 +52,63 @@ public class HeadTrackingUtils {
         private float[] mRotationEulerAngles;
         private float[] mRoomSpacePosition;
 
+        /**
+         * Sets the head pose using a quaternion.
+         *
+         * @param x The X component of the quaternion.
+         * @param y The Y component of the quaternion.
+         * @param z The Z component of the quaternion.
+         * @param w The W component of the quaternion.
+         * @return The updated FakePose instance.
+         */
         public FakePose setQuaternion(float x, float y, float z, float w) {
             mQuaternion = new float[] {x, y, z, w};
             mRotationEulerAngles = null;
             return this;
         }
 
+        /**
+         * Sets the head pose using Euler angles.
+         *
+         * @param rollDeg The head pose's roll component in degrees.
+         * @param pitchDeg The head pose's pitch component in degrees.
+         * @param yawDeg The head pose's yaw component in degrees.
+         * @return The updated FakePose instance.
+         */
         public FakePose setRotationEulerAngles(float rollDeg, float pitchDeg, float yawDeg) {
             mRotationEulerAngles = new float[] {rollDeg, pitchDeg, yawDeg};
             mQuaternion = null;
             return this;
         }
 
+        /**
+         * Sets the head pose's positional coordinates in room space.
+         *
+         * @param x The X position of the head pose in meters.
+         * @param y The Y position of the head pose in meters.
+         * @param z The Z position of the head pose in meters.
+         * @return The updated FakePose instance.
+         */
         public FakePose setRoomSpacePosition(float x, float y, float z) {
             mRoomSpacePosition = new float[] {x, y, z};
             return this;
         }
 
+        /**
+         * Clears any previously set room space head pose position.
+         *
+         * @return The updated FakePose instance.
+         */
         public FakePose clearRoomSpacePosition() {
             mRoomSpacePosition = null;
             return this;
         }
 
+        /**
+         * Formats the FakePose's stored data into a format usable as an extra in an Intent.
+         *
+         * @return A float array containing all the data of the FakePose instance.
+         */
         public float[] getDataForExtra() {
             if (mQuaternion == null && mRotationEulerAngles == null) {
                 throw new IllegalArgumentException(
@@ -100,6 +136,9 @@ public class HeadTrackingUtils {
      */
     public static void checkForAndApplyHeadTrackingModeAnnotation(
             VrTestRule rule, Description desc) {
+        // This is even more broken on standalone devices, and can't be disabled at the shared
+        // preference level, so no-op here.
+        if (TestVrShellDelegate.isOnStandalone()) return;
         // Check if the test has a HeadTrackingMode annotation
         HeadTrackingMode annotation = desc.getAnnotation(HeadTrackingMode.class);
         if (annotation == null) return;
@@ -126,7 +165,7 @@ public class HeadTrackingUtils {
      *
      * @param rule The VrTestRule used by the current test case.
      * @param pose The FakePose instance containing the pose data that will be sent to the head
-     *     tracking service.
+     *        tracking service.
      */
     public static void setHeadPose(VrTestRule rule, FakePose pose) {
         restartHeadTrackingServiceIfNecessary(rule);
@@ -134,7 +173,8 @@ public class HeadTrackingUtils {
         Intent poseIntent = new Intent(ACTION_SET_FAKE_TRACKER_POSE);
         poseIntent.putExtra(EXTRA_FAKE_TRACKER_POSE, pose.getDataForExtra());
         poseIntent.setComponent(HEAD_TRACKING_COMPONENT);
-        Assert.assertTrue(InstrumentationRegistry.getContext().startService(poseIntent) != null);
+        Assert.assertTrue("Could not set head pose",
+                InstrumentationRegistry.getContext().startService(poseIntent) != null);
         rule.setTrackerDirty();
         // TODO(bsheedy): Remove this sleep. Could either expose poses up to Java and wait until
         // we receive a pose that's the same as the one we set or see if the head tracking service
@@ -181,7 +221,8 @@ public class HeadTrackingUtils {
         Intent modeIntent = new Intent(ACTION_SET_FAKE_TRACKER_MODE);
         modeIntent.putExtra(EXTRA_FAKE_TRACKER_MODE, supportedModeToString(mode));
         modeIntent.setComponent(HEAD_TRACKING_COMPONENT);
-        Assert.assertTrue(InstrumentationRegistry.getContext().startService(modeIntent) != null);
+        Assert.assertTrue("Could not set head tracking mode",
+                InstrumentationRegistry.getContext().startService(modeIntent) != null);
         rule.setTrackerDirty();
     }
 
@@ -203,7 +244,8 @@ public class HeadTrackingUtils {
         Intent typeIntent = new Intent(ACTION_SET_TRACKER_TYPE);
         typeIntent.putExtra(EXTRA_TRACKER_TYPE, "fake");
         typeIntent.setComponent(HEAD_TRACKING_COMPONENT);
-        Assert.assertTrue(InstrumentationRegistry.getContext().startService(typeIntent) != null);
+        Assert.assertTrue("Could not restart head tracking service",
+                InstrumentationRegistry.getContext().startService(typeIntent) != null);
         rule.setTrackerDirty();
     }
 }

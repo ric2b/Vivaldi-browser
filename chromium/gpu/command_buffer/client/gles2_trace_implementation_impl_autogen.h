@@ -1763,6 +1763,41 @@ void GLES2TraceImplementation::BindVertexArrayOES(GLuint array) {
   gl_->BindVertexArrayOES(array);
 }
 
+void GLES2TraceImplementation::FramebufferParameteri(GLenum target,
+                                                     GLenum pname,
+                                                     GLint param) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::FramebufferParameteri");
+  gl_->FramebufferParameteri(target, pname, param);
+}
+
+void GLES2TraceImplementation::BindImageTexture(GLuint unit,
+                                                GLuint texture,
+                                                GLint level,
+                                                GLboolean layered,
+                                                GLint layer,
+                                                GLenum access,
+                                                GLenum format) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::BindImageTexture");
+  gl_->BindImageTexture(unit, texture, level, layered, layer, access, format);
+}
+
+void GLES2TraceImplementation::DispatchCompute(GLuint num_groups_x,
+                                               GLuint num_groups_y,
+                                               GLuint num_groups_z) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::DispatchCompute");
+  gl_->DispatchCompute(num_groups_x, num_groups_y, num_groups_z);
+}
+
+void GLES2TraceImplementation::MemoryBarrierEXT(GLbitfield barriers) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::MemoryBarrierEXT");
+  gl_->MemoryBarrierEXT(barriers);
+}
+
+void GLES2TraceImplementation::MemoryBarrierByRegion(GLbitfield barriers) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::MemoryBarrierByRegion");
+  gl_->MemoryBarrierByRegion(barriers);
+}
+
 void GLES2TraceImplementation::SwapBuffers(GLuint64 swap_id, GLbitfield flags) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::SwapBuffers");
   gl_->SwapBuffers(swap_id, flags);
@@ -2609,6 +2644,19 @@ void GLES2TraceImplementation::InvalidateReadbackBufferShadowDataCHROMIUM(
   TRACE_EVENT_BINARY_EFFICIENT0(
       "gpu", "GLES2Trace::InvalidateReadbackBufferShadowDataCHROMIUM");
   gl_->InvalidateReadbackBufferShadowDataCHROMIUM(buffer_id);
+}
+
+void GLES2TraceImplementation::FramebufferTextureMultiviewLayeredANGLE(
+    GLenum target,
+    GLenum attachment,
+    GLuint texture,
+    GLint level,
+    GLint baseViewIndex,
+    GLsizei numViews) {
+  TRACE_EVENT_BINARY_EFFICIENT0(
+      "gpu", "GLES2Trace::FramebufferTextureMultiviewLayeredANGLE");
+  gl_->FramebufferTextureMultiviewLayeredANGLE(target, attachment, texture,
+                                               level, baseViewIndex, numViews);
 }
 
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_TRACE_IMPLEMENTATION_IMPL_AUTOGEN_H_

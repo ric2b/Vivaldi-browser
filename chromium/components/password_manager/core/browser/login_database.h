@@ -19,11 +19,15 @@
 #include "components/password_manager/core/browser/password_store_change.h"
 #include "components/password_manager/core/browser/psl_matching_helper.h"
 #include "components/password_manager/core/browser/statistics_table.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 #include "sql/meta_table.h"
 
 #if defined(OS_IOS)
 #include "base/gtest_prod_util.h"
+#endif
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+#include "components/password_manager/core/browser/password_recovery_util_mac.h"
 #endif
 
 namespace password_manager {
@@ -45,6 +49,12 @@ class LoginDatabase {
   // should be called.
   virtual bool Init();
 
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  // Registers utility which is used to save password recovery status on MacOS.
+  void InitPasswordRecoveryUtil(
+      std::unique_ptr<PasswordRecoveryUtilMac> password_recovery_util);
+#endif
+
   // Reports usage metrics to UMA.
   void ReportMetrics(const std::string& sync_username,
                      bool custom_passphrase_sync_enabled);
@@ -55,6 +65,12 @@ class LoginDatabase {
   // primary key columns contain the values associated with the removed form.
   PasswordStoreChangeList AddLogin(const autofill::PasswordForm& form)
       WARN_UNUSED_RESULT;
+
+  // This function does the same thing as AddLogin() with the difference that
+  // doesn't check if a site is already blacklisted before adding it. This is
+  // needed for tests that will require to have duplicates in the database.
+  PasswordStoreChangeList AddBlacklistedLoginForTesting(
+      const autofill::PasswordForm& form) WARN_UNUSED_RESULT;
 
   // Updates existing password form. Returns the list of applied changes
   // ({}, {UPDATE}). The password is looked up by the tuple {origin,
@@ -141,6 +157,15 @@ class LoginDatabase {
   // whether further use of this login database will succeed is unspecified.
   bool DeleteAndRecreateDatabaseFile();
 
+  // On MacOS, it deletes all logins from the database that cannot be decrypted
+  // when encryption key from Keychain is available. If the Keychain is locked,
+  // it does nothing and returns ENCRYPTION_UNAVAILABLE. If it's not running on
+  // MacOS, it does nothing and returns SUCCESS. This can be used when syncing
+  // logins from the cloud to rewrite entries that can't be used anymore (due to
+  // modification of the encryption key). If one of the logins couldn't be
+  // removed from the database, returns ITEM_FAILURE.
+  DatabaseCleanupResult DeleteUndecryptableLogins();
+
   // Returns the encrypted password value for the specified |form|.  Returns an
   // empty string if the row for this |form| is not found.
   std::string GetEncryptedPassword(const autofill::PasswordForm& form) const;
@@ -220,7 +245,7 @@ class LoginDatabase {
   void InitializeStatementStrings(const SQLTableBuilder& builder);
 
   base::FilePath db_path_;
-  mutable sql::Connection db_;
+  mutable sql::Database db_;
   sql::MetaTable meta_table_;
   StatisticsTable stats_table_;
 
@@ -239,6 +264,10 @@ class LoginDatabase {
   std::string synced_statement_;
   std::string blacklisted_statement_;
   std::string encrypted_statement_;
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  std::unique_ptr<PasswordRecoveryUtilMac> password_recovery_util_;
+#endif
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
   // Whether password values should be encrypted.

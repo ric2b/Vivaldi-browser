@@ -1290,7 +1290,7 @@ TEST_P(GLES2DecoderManualInitTest, ReadPixelsAsyncError) {
   EXPECT_CALL(*gl_, DeleteBuffersARB(1, _)).Times(1);
   EXPECT_CALL(*gl_, BindBuffer(GL_PIXEL_PACK_BUFFER_ARB, _)).Times(2);
   EXPECT_CALL(*gl_,
-              BufferData(GL_PIXEL_PACK_BUFFER_ARB, _, NULL, GL_STREAM_READ))
+              BufferData(GL_PIXEL_PACK_BUFFER_ARB, _, nullptr, GL_STREAM_READ))
       .Times(1);
 
   ReadPixels cmd;
@@ -1336,7 +1336,7 @@ class GLES2ReadPixelsAsyncTest : public GLES2DecoderManualInitTest {
     EXPECT_CALL(*gl_, BindBuffer(GL_PIXEL_PACK_BUFFER_ARB, kServiceBufferId))
         .Times(1);
     EXPECT_CALL(*gl_, BindBuffer(GL_PIXEL_PACK_BUFFER_ARB, 0)).Times(1);
-    EXPECT_CALL(*gl_, BufferData(GL_PIXEL_PACK_BUFFER_ARB, kBufferSize, NULL,
+    EXPECT_CALL(*gl_, BufferData(GL_PIXEL_PACK_BUFFER_ARB, kBufferSize, nullptr,
                                  GL_STREAM_READ))
         .Times(1);
     GLsync sync = reinterpret_cast<GLsync>(kServiceSyncId);
@@ -3053,7 +3053,7 @@ void GLES2DecoderWithShaderTest::CheckRenderbufferChangesMarkFBOAsNotComplete(
 
   Framebuffer* framebuffer =
       framebuffer_manager->GetFramebuffer(client_framebuffer_id_);
-  ASSERT_TRUE(framebuffer != NULL);
+  ASSERT_TRUE(framebuffer != nullptr);
   framebuffer_manager->MarkAsComplete(framebuffer);
   EXPECT_TRUE(framebuffer_manager->IsComplete(framebuffer));
 
@@ -3142,7 +3142,7 @@ void GLES2DecoderWithShaderTest::CheckTextureChangesMarkFBOAsNotComplete(
 
   Framebuffer* framebuffer =
       framebuffer_manager->GetFramebuffer(client_framebuffer_id_);
-  ASSERT_TRUE(framebuffer != NULL);
+  ASSERT_TRUE(framebuffer != nullptr);
   framebuffer_manager->MarkAsComplete(framebuffer);
   EXPECT_TRUE(framebuffer_manager->IsComplete(framebuffer));
 
@@ -4037,6 +4037,49 @@ TEST_P(GLES2DecoderTestWithDrawRectangle, FramebufferDrawRectangleClear) {
 INSTANTIATE_TEST_CASE_P(Service,
                         GLES2DecoderTestWithDrawRectangle,
                         ::testing::Bool());
+
+TEST_P(GLES2DecoderManualInitTest, MESAFramebufferFlipYExtensionEnabled) {
+  InitState init;
+  init.gl_version = "OpenGL ES 3.1";
+  init.context_type = CONTEXT_TYPE_WEBGL1;
+  init.extensions = "GL_MESA_framebuffer_flip_y";
+  InitDecoder(init);
+
+  EXPECT_TRUE(feature_info()->validators()->framebuffer_parameter.IsValid(
+      GL_FRAMEBUFFER_FLIP_Y_MESA));
+
+  EXPECT_CALL(*gl_, FramebufferParameteri(_, _, _))
+      .Times(1)
+      .RetiresOnSaturation();
+
+  DoBindFramebuffer(GL_FRAMEBUFFER, client_framebuffer_id_,
+                    kServiceFramebufferId);
+  cmds::FramebufferParameteri cmd;
+  cmd.Init(GL_FRAMEBUFFER, GL_FRAMEBUFFER_FLIP_Y_MESA, 1);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
+
+TEST_P(GLES2DecoderManualInitTest, MESAFramebufferFlipYExtensionDisabled) {
+  InitState init;
+  init.gl_version = "OpenGL ES 3.1";
+  init.context_type = CONTEXT_TYPE_WEBGL1;
+  InitDecoder(init);
+
+  EXPECT_FALSE(feature_info()->validators()->framebuffer_parameter.IsValid(
+      GL_FRAMEBUFFER_FLIP_Y_MESA));
+
+  EXPECT_CALL(*gl_, FramebufferParameteri(_, _, _))
+      .Times(0)
+      .RetiresOnSaturation();
+
+  DoBindFramebuffer(GL_FRAMEBUFFER, client_framebuffer_id_,
+                    kServiceFramebufferId);
+  cmds::FramebufferParameteri cmd;
+  cmd.Init(GL_FRAMEBUFFER, GL_FRAMEBUFFER_FLIP_Y_MESA, 1);
+  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
 
 // TODO(gman): PixelStorei
 

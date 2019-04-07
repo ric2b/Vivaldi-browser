@@ -9,11 +9,11 @@
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/interfaces/ime/ime.mojom.h"
+#include "services/ws/public/mojom/ime/ime.mojom.h"
 #include "ui/aura/aura_export.h"
 #include "ui/base/ime/input_method_base.h"
 
-namespace ui {
+namespace ws {
 namespace mojom {
 enum class EventResult;
 }
@@ -27,7 +27,7 @@ class TextInputClientImpl;
 
 class AURA_EXPORT InputMethodMus : public ui::InputMethodBase {
  public:
-  using EventResultCallback = base::OnceCallback<void(ui::mojom::EventResult)>;
+  using EventResultCallback = base::OnceCallback<void(ws::mojom::EventResult)>;
 
   InputMethodMus(ui::internal::InputMethodDelegate* delegate,
                  InputMethodMusDelegate* input_method_mus_delegate);
@@ -47,6 +47,7 @@ class AURA_EXPORT InputMethodMus : public ui::InputMethodBase {
   void CancelComposition(const ui::TextInputClient* client) override;
   void OnInputLocaleChanged() override;
   bool IsCandidatePopupOpen() const override;
+  void ShowVirtualKeyboardIfEnabled() override;
 
  private:
   friend class InputMethodMusTestApi;
@@ -78,11 +79,11 @@ class AURA_EXPORT InputMethodMus : public ui::InputMethodBase {
   InputMethodMusDelegate* input_method_mus_delegate_;
 
   // May be null in tests.
-  ui::mojom::IMEDriverPtr ime_driver_;
-  ui::mojom::InputMethodPtr input_method_ptr_;
+  ws::mojom::IMEDriverPtr ime_driver_;
+  ws::mojom::InputMethodPtr input_method_ptr_;
   // Typically this is the same as |input_method_ptr_|, but it may be mocked
   // in tests.
-  ui::mojom::InputMethod* input_method_ = nullptr;
+  ws::mojom::InputMethod* input_method_ = nullptr;
   std::unique_ptr<TextInputClientImpl> text_input_client_;
 
   // Callbacks supplied to DispatchKeyEvent() are added here while awaiting

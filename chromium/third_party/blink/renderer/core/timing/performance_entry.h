@@ -56,19 +56,17 @@ class CORE_EXPORT PerformanceEntry : public ScriptWrappable {
   enum EntryType : PerformanceEntryType {
     kInvalid = 0,
     kNavigation = 1 << 0,
-    kComposite = 1 << 1,
-    kMark = 1 << 2,
-    kMeasure = 1 << 3,
-    kRender = 1 << 4,
-    kResource = 1 << 5,
-    kLongTask = 1 << 6,
-    kTaskAttribution = 1 << 7,
-    kPaint = 1 << 8,
-    kEvent = 1 << 9,
-    kFirstInput = 1 << 10,
+    kMark = 1 << 1,
+    kMeasure = 1 << 2,
+    kResource = 1 << 3,
+    kLongTask = 1 << 4,
+    kTaskAttribution = 1 << 5,
+    kPaint = 1 << 6,
+    kEvent = 1 << 7,
+    kFirstInput = 1 << 8,
   };
 
-  String name() const;
+  const AtomicString& name() const { return name_; }
   DOMHighResTimeStamp startTime() const;
   virtual AtomicString entryType() const = 0;
   virtual PerformanceEntryType EntryTypeEnum() const = 0;
@@ -81,8 +79,6 @@ class CORE_EXPORT PerformanceEntry : public ScriptWrappable {
   ScriptValue toJSONForBinding(ScriptState*) const;
 
   bool IsResource() const { return EntryTypeEnum() == kResource; }
-  bool IsRender() const { return EntryTypeEnum() == kRender; }
-  bool IsComposite() const { return EntryTypeEnum() == kComposite; }
   bool IsMark() const { return EntryTypeEnum() == kMark; }
   bool IsMeasure() const { return EntryTypeEnum() == kMeasure; }
 
@@ -93,22 +89,11 @@ class CORE_EXPORT PerformanceEntry : public ScriptWrappable {
     return a->startTime() < b->startTime();
   }
 
-  static const AtomicString& CompositeKeyword();
-  static const AtomicString& EventKeyword();
-  static const AtomicString& FirstInputKeyword();
-  static const AtomicString& LongtaskKeyword();
-  static const AtomicString& MarkKeyword();
-  static const AtomicString& MeasureKeyword();
-  static const AtomicString& NavigationKeyword();
-  static const AtomicString& PaintKeyword();
-  static const AtomicString& RenderKeyword();
-  static const AtomicString& ResourceKeyword();
-  static const AtomicString& TaskattributionKeyword();
   static PerformanceEntry::EntryType ToEntryTypeEnum(
       const AtomicString& entry_type);
 
  protected:
-  PerformanceEntry(const String& name,
+  PerformanceEntry(const AtomicString& name,
                    double start_time,
                    double finish_time);
   virtual void BuildJSONValue(V8ObjectBuilder&) const;
@@ -117,7 +102,7 @@ class CORE_EXPORT PerformanceEntry : public ScriptWrappable {
   double duration_;
 
  private:
-  const String name_;
+  const AtomicString name_;
   const double start_time_;
   const int index_;
 };

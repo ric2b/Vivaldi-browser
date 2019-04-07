@@ -6,7 +6,9 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/time/time.h"
 #include "components/sync/test/fake_server/fake_server.h"
+#include "net/base/net_errors.h"
 
 using syncer::HttpPostProviderInterface;
 
@@ -76,15 +78,25 @@ bool FakeServerHttpPostProvider::MakeSynchronousPost(int* error_code,
                                             base::Unretained(&post_complete));
 
   bool result = fake_server_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&FakeServer::HandleCommand, fake_server_,
-                            base::ConstRef(request_content_),
-                            base::ConstRef(signal_closure), &post_error_code,
-                            &post_response_code, &post_response));
+      FROM_HERE,
+      base::BindOnce(&FakeServer::HandleCommand, fake_server_,
+                     base::ConstRef(request_content_),
+                     base::ConstRef(signal_closure), &post_error_code,
+                     &post_response_code, &post_response));
 
   if (!result)
     return false;
 
-  post_complete.Wait();
+  // Note: This is a potential deadlock. Here we're on the sync thread, and
+  // we're waiting for something to happen on the UI thread (where the
+  // FakeServer lives). If at the same time, ProfileSyncService is trying to
+  // Stop() the sync thread, we're deadlocked. For a lack of better ideas, let's
+  // just give up after a few seconds.
+  // TODO(crbug.com/869404): Maybe the FakeServer should live on its own thread.
+  if (!post_complete.TimedWait(base::TimeDelta::FromSeconds(5))) {
+    *error_code = net::ERR_TIMED_OUT;
+    return false;
+  }
   post_error_code_ = post_error_code;
   post_response_code_ = post_response_code;
   response_ = post_response;

@@ -6,6 +6,7 @@
 
 #include <math.h>
 
+#include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "third_party/blink/public/platform/web_gesture_event.h"
@@ -38,7 +39,11 @@ TouchActionFilter::TouchActionFilter()
     : suppress_manipulation_events_(false),
       drop_current_tap_ending_event_(false),
       allow_current_double_tap_event_(true),
-      force_enable_zoom_(false) {}
+      force_enable_zoom_(false) {
+  ResetTouchAction();
+}
+
+TouchActionFilter::~TouchActionFilter() {}
 
 FilterGestureEventResult TouchActionFilter::FilterGestureEvent(
     WebGestureEvent* gesture_event) {
@@ -50,11 +55,22 @@ FilterGestureEventResult TouchActionFilter::FilterGestureEvent(
   switch (gesture_event->GetType()) {
     case WebInputEvent::kGestureScrollBegin: {
       DCHECK(!suppress_manipulation_events_);
-      DCHECK(!touchscreen_scroll_in_progress_);
-      touchscreen_scroll_in_progress_ = true;
-      // TODO(https://crbug.com/851644): Make sure the value is properly set.
-      if (!scrolling_touch_action_.has_value())
+      // In VR or virtual keyboard (https://crbug.com/880701),
+      // GestureScrollBegin could come without GestureTapDown.
+      if (!gesture_sequence_in_progress_) {
+        gesture_sequence_in_progress_ = true;
+        if (!scrolling_touch_action_.has_value())
+          SetTouchAction(cc::kTouchActionAuto);
+      }
+      gesture_sequence_.append("B");
+      if (!scrolling_touch_action_.has_value()) {
+        static auto* crash_key = base::debug::AllocateCrashKeyString(
+            "scrollbegin-gestures", base::debug::CrashKeySize::Size256);
+        base::debug::SetCrashKeyString(crash_key, gesture_sequence_);
+        gesture_sequence_.clear();
+        // https://crbug.com/869375, temporary fix to prevent crash.
         SetTouchAction(cc::kTouchActionAuto);
+      }
       suppress_manipulation_events_ =
           ShouldSuppressManipulation(*gesture_event);
       return suppress_manipulation_events_
@@ -66,6 +82,7 @@ FilterGestureEventResult TouchActionFilter::FilterGestureEvent(
       if (suppress_manipulation_events_)
         return FilterGestureEventResult::kFilterGestureEventFiltered;
 
+      gesture_sequence_.append("U");
       // Scrolls restricted to a specific axis shouldn't permit movement
       // in the perpendicular axis.
       //
@@ -74,6 +91,14 @@ FilterGestureEventResult TouchActionFilter::FilterGestureEvent(
       // two-finger scrolling but a "touch-action: pan-x pinch-zoom" region
       // doesn't.
       // TODO(mustaq): Add it to spec?
+      if (!scrolling_touch_action_.has_value()) {
+        static auto* crash_key = base::debug::AllocateCrashKeyString(
+            "scrollupdate-gestures", base::debug::CrashKeySize::Size256);
+        base::debug::SetCrashKeyString(crash_key, gesture_sequence_);
+        gesture_sequence_.clear();
+        // https://crbug.com/869375, temporary fix to prevent crash.
+        SetTouchAction(cc::kTouchActionAuto);
+      }
       if (IsYAxisActionDisallowed(scrolling_touch_action_.value())) {
         gesture_event->data.scroll_update.delta_y = 0;
         gesture_event->data.scroll_update.velocity_y = 0;
@@ -91,8 +116,8 @@ FilterGestureEventResult TouchActionFilter::FilterGestureEvent(
       break;
 
     case WebInputEvent::kGestureScrollEnd:
-      DCHECK(touchscreen_scroll_in_progress_);
-      touchscreen_scroll_in_progress_ = false;
+      gesture_sequence_.clear();
+      gesture_sequence_in_progress_ = false;
       ReportGestureEventFiltered(suppress_manipulation_events_);
       return FilterManipulationEventAndResetState()
                  ? FilterGestureEventResult::kFilterGestureEventFiltered
@@ -101,6 +126,7 @@ FilterGestureEventResult TouchActionFilter::FilterGestureEvent(
     case WebInputEvent::kGesturePinchBegin:
     case WebInputEvent::kGesturePinchUpdate:
     case WebInputEvent::kGesturePinchEnd:
+      gesture_sequence_.append("P");
       ReportGestureEventFiltered(suppress_manipulation_events_);
       return suppress_manipulation_events_
                  ? FilterGestureEventResult::kFilterGestureEventFiltered
@@ -109,6 +135,8 @@ FilterGestureEventResult TouchActionFilter::FilterGestureEvent(
     // The double tap gesture is a tap ending event. If a double tap gesture is
     // filtered out, replace it with a tap event.
     case WebInputEvent::kGestureDoubleTap:
+      gesture_sequence_in_progress_ = false;
+      gesture_sequence_.append("D");
       DCHECK_EQ(1, gesture_event->data.tap.tap_count);
       if (!allow_current_double_tap_event_)
         gesture_event->SetType(WebInputEvent::kGestureTap);
@@ -117,10 +145,16 @@ FilterGestureEventResult TouchActionFilter::FilterGestureEvent(
 
     // If double tap is disabled, there's no reason for the tap delay.
     case WebInputEvent::kGestureTapUnconfirmed: {
+      gesture_sequence_.append("C");
       DCHECK_EQ(1, gesture_event->data.tap.tap_count);
-      // TODO(https://crbug.com/851644): Make sure the value is properly set.
-      if (!scrolling_touch_action_.has_value())
+      if (!scrolling_touch_action_.has_value()) {
+        static auto* crash_key = base::debug::AllocateCrashKeyString(
+            "tapunconfirmed-gestures", base::debug::CrashKeySize::Size256);
+        base::debug::SetCrashKeyString(crash_key, gesture_sequence_);
+        gesture_sequence_.clear();
+        // https://crbug.com/869375, temporary fix to prevent crash.
         SetTouchAction(cc::kTouchActionAuto);
+      }
       allow_current_double_tap_event_ = (scrolling_touch_action_.value() &
                                          cc::kTouchActionDoubleTapZoom) != 0;
       if (!allow_current_double_tap_event_) {
@@ -131,7 +165,16 @@ FilterGestureEventResult TouchActionFilter::FilterGestureEvent(
     }
 
     case WebInputEvent::kGestureTap:
+      gesture_sequence_in_progress_ = false;
+      gesture_sequence_.append("A");
+      if (drop_current_tap_ending_event_) {
+        drop_current_tap_ending_event_ = false;
+        return FilterGestureEventResult::kFilterGestureEventFiltered;
+      }
+      break;
+
     case WebInputEvent::kGestureTapCancel:
+      gesture_sequence_.append("K");
       if (drop_current_tap_ending_event_) {
         drop_current_tap_ending_event_ = false;
         return FilterGestureEventResult::kFilterGestureEventFiltered;
@@ -139,17 +182,22 @@ FilterGestureEventResult TouchActionFilter::FilterGestureEvent(
       break;
 
     case WebInputEvent::kGestureTapDown:
+      gesture_sequence_in_progress_ = true;
       // If the gesture is hitting a region that has a non-blocking (such as a
       // passive) event listener.
       if (gesture_event->is_source_touch_event_set_non_blocking)
         SetTouchAction(cc::kTouchActionAuto);
       scrolling_touch_action_ = allowed_touch_action_;
-      // TODO(https://crbug.com/851644): The value may not set in the case when
-      // the gesture event is flushed due to touch ack time out after the finger
-      // is lifted up. Make sure the value is properly set.
-      if (!scrolling_touch_action_.has_value())
-        SetTouchAction(cc::kTouchActionAuto);
+      if (scrolling_touch_action_.has_value())
+        gesture_sequence_.append("O1");
+      else
+        gesture_sequence_.append("O2");
       DCHECK(!drop_current_tap_ending_event_);
+      break;
+
+    case WebInputEvent::kGestureLongTap:
+    case WebInputEvent::kGestureTwoFingerTap:
+      gesture_sequence_in_progress_ = false;
       break;
 
     default:
@@ -200,13 +248,22 @@ void TouchActionFilter::OnSetTouchAction(cc::TouchAction touch_action) {
   scrolling_touch_action_ = allowed_touch_action_;
 }
 
+void TouchActionFilter::SetActiveTouchInProgress(
+    bool active_touch_in_progress) {
+  active_touch_in_progress_ = active_touch_in_progress;
+}
+
 void TouchActionFilter::ReportAndResetTouchAction() {
+  if (has_touch_event_handler_)
+    gesture_sequence_.append("R1");
+  else
+    gesture_sequence_.append("R0");
   ReportTouchAction();
   ResetTouchAction();
 }
 
 void TouchActionFilter::ReportTouchAction() {
-  // TODO(https://crbug.com/851644): make sure the value is properly set.
+  // https://crbug.com/869375, temporary fix to prevent crash.
   if (!scrolling_touch_action_.has_value())
     SetTouchAction(cc::kTouchActionAuto);
   // Report the effective touch action computed by blink such as
@@ -214,6 +271,10 @@ void TouchActionFilter::ReportTouchAction() {
   // Since |cc::kTouchActionAuto| is equivalent to |cc::kTouchActionMax|, we
   // must add one to the upper bound to be able to visualize the number of
   // times |cc::kTouchActionAuto| is hit.
+  // https://crbug.com/879511, remove this temporary fix.
+  if (!scrolling_touch_action_.has_value())
+    return;
+
   UMA_HISTOGRAM_ENUMERATION("TouchAction.EffectiveTouchAction",
                             scrolling_touch_action_.value(),
                             cc::kTouchActionMax + 1);
@@ -226,6 +287,10 @@ void TouchActionFilter::ReportTouchAction() {
         "TouchAction.EquivalentEffectiveAndWhiteListed",
         scrolling_touch_action_.value() == white_listed_touch_action_.value());
   }
+}
+
+void TouchActionFilter::AppendToGestureSequenceForDebugging(const char* str) {
+  gesture_sequence_.append(str);
 }
 
 void TouchActionFilter::ResetTouchAction() {
@@ -303,13 +368,18 @@ void TouchActionFilter::OnHasTouchEventHandlers(bool has_handlers) {
   if (has_handlers && has_touch_event_handler_ == has_handlers)
     return;
   has_touch_event_handler_ = has_handlers;
-  ResetTouchAction();
-  // If a page has a touch event handler, this function can be called twice with
-  // has_handlers = false first and then true later. When it is true, we need to
-  // reset the |scrolling_touch_action_|. However, we do not want to reset it if
-  // there is an active scroll in progress.
-  if (has_touch_event_handler_ && !touchscreen_scroll_in_progress_)
-    scrolling_touch_action_.reset();
+  if (has_touch_event_handler_)
+    gesture_sequence_.append("L1");
+  else
+    gesture_sequence_.append("L0");
+  // We have set the associated touch action if the touch start already happened
+  // or there is a gesture in progress. In these cases, we should not reset the
+  // associated touch action.
+  if (!gesture_sequence_in_progress_ && !active_touch_in_progress_) {
+    ResetTouchAction();
+    if (has_touch_event_handler_)
+      scrolling_touch_action_.reset();
+  }
 }
 
 }  // namespace content

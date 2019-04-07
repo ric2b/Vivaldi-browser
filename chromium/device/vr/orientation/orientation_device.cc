@@ -23,11 +23,11 @@ using gfx::Vector3dF;
 namespace {
 static constexpr int kDefaultPumpFrequencyHz = 60;
 
-mojom::VRDisplayInfoPtr CreateVRDisplayInfo(unsigned int id) {
+mojom::VRDisplayInfoPtr CreateVRDisplayInfo(mojom::XRDeviceId id) {
   static const char DEVICE_NAME[] = "VR Orientation Device";
 
   mojom::VRDisplayInfoPtr display_info = mojom::VRDisplayInfo::New();
-  display_info->index = id;
+  display_info->id = id;
   display_info->displayName = DEVICE_NAME;
   display_info->capabilities = mojom::VRDisplayCapabilities::New();
   display_info->capabilities->hasPosition = false;
@@ -52,7 +52,7 @@ display::Display::Rotation GetRotation() {
 VROrientationDevice::VROrientationDevice(
     mojom::SensorProviderPtr* sensor_provider,
     base::OnceClosure ready_callback)
-    : VRDeviceBase(VRDeviceId::ORIENTATION_DEVICE_ID),
+    : VRDeviceBase(mojom::XRDeviceId::ORIENTATION_DEVICE_ID),
       ready_callback_(std::move(ready_callback)),
       binding_(this) {
   (*sensor_provider)
@@ -139,16 +139,16 @@ void VROrientationDevice::HandleSensorError() {
 }
 
 void VROrientationDevice::RequestSession(
-    mojom::XRDeviceRuntimeSessionOptionsPtr options,
+    mojom::XRRuntimeSessionOptionsPtr options,
     mojom::XRRuntime::RequestSessionCallback callback) {
   DCHECK(!options->immersive);
-  // TODO(offenwanger): Perform a check to see if sensors are available when
-  // RequestSession is called for non-immersive sessions.
-  std::move(callback).Run(nullptr, nullptr);
+  // TODO(http://crbug.com/695937): Perform a check to see if sensors are
+  // available when RequestSession is called for non-immersive sessions.
+  ReturnNonImmersiveSession(std::move(callback));
 }
 
 void VROrientationDevice::OnMagicWindowFrameDataRequest(
-    mojom::VRMagicWindowProvider::GetFrameDataCallback callback) {
+    mojom::XRFrameDataProvider::GetFrameDataCallback callback) {
   mojom::VRPosePtr pose = mojom::VRPose::New();
   pose->orientation.emplace(4);
 

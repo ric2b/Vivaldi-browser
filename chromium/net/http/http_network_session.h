@@ -28,7 +28,7 @@
 #include "net/dns/host_resolver.h"
 #include "net/http/http_auth_cache.h"
 #include "net/http/http_stream_factory.h"
-#include "net/quic/chromium/quic_stream_factory.h"
+#include "net/quic/quic_stream_factory.h"
 #include "net/socket/next_proto.h"
 #include "net/spdy/spdy_session_pool.h"
 #include "net/ssl/ssl_client_auth_cache.h"
@@ -178,10 +178,18 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     // If true, connection migration v2 may be used to migrate active QUIC
     // sessions to alternative network if current network connectivity is poor.
     bool quic_migrate_sessions_early_v2;
+    // If true, a new connection may be kicked off on an alternate network when
+    // a connection fails on the default network before handshake is confirmed.
+    bool quic_retry_on_alternate_network_before_handshake;
+    // If true, the quic session may mark itself as GOAWAY on path degrading.
+    bool quic_go_away_on_path_degrading;
     // Maximum time the session could be on the non-default network before
     // migrates back to default network. Defaults to
     // kMaxTimeOnNonDefaultNetwork.
     base::TimeDelta quic_max_time_on_non_default_network;
+    // Maximum number of migrations to the non-default network on write error
+    // per network for each session.
+    int quic_max_migrations_to_non_default_network_on_write_error;
     // Maximum number of migrations to the non-default network on path
     // degrading per network for each session.
     int quic_max_migrations_to_non_default_network_on_path_degrading;

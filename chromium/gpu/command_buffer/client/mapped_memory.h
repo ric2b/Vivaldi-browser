@@ -60,14 +60,14 @@ class GPU_EXPORT MemoryChunk {
   //   size: the size of the memory block to allocate.
   //
   // Returns:
-  //   the pointer to the allocated memory block, or NULL if out of
+  //   the pointer to the allocated memory block, or nullptr if out of
   //   memory.
   void* Alloc(unsigned int size) {
     return allocator_.Alloc(size);
   }
 
   // Gets the offset to a memory block given the base memory and the address.
-  // It translates NULL to FencedAllocator::kInvalidOffset.
+  // It translates nullptr to FencedAllocator::kInvalidOffset.
   unsigned int GetOffset(void* pointer) {
     return allocator_.GetOffset(pointer);
   }
@@ -101,8 +101,7 @@ class GPU_EXPORT MemoryChunk {
   // Returns true if pointer is in the range of this block.
   bool IsInChunk(void* pointer) const {
     return pointer >= shm_->memory() &&
-           pointer <
-               reinterpret_cast<const int8_t*>(shm_->memory()) + shm_->size();
+           pointer < static_cast<const int8_t*>(shm_->memory()) + shm_->size();
   }
 
   // Returns true of any memory in this chunk is in use or free pending token.
@@ -162,7 +161,7 @@ class GPU_EXPORT MappedMemoryManager {
   //   shm_id: pointer to variable to receive the shared memory id.
   //   shm_offset: pointer to variable to receive the shared memory offset.
   // Returns:
-  //   pointer to allocated block of memory. NULL if failure.
+  //   pointer to allocated block of memory. nullptr if failure.
   void* Alloc(
       unsigned int size, int32_t* shm_id, unsigned int* shm_offset);
 
@@ -230,11 +229,10 @@ class GPU_EXPORT MappedMemoryManager {
 // A class that will manage the lifetime of a mapped memory allocation
 class GPU_EXPORT ScopedMappedMemoryPtr {
  public:
-  ScopedMappedMemoryPtr(
-      uint32_t size,
-      CommandBufferHelper* helper,
-      MappedMemoryManager* mapped_memory_manager)
-      : buffer_(NULL),
+  ScopedMappedMemoryPtr(uint32_t size,
+                        CommandBufferHelper* helper,
+                        MappedMemoryManager* mapped_memory_manager)
+      : buffer_(nullptr),
         size_(0),
         shm_id_(0),
         shm_offset_(0),
@@ -248,9 +246,7 @@ class GPU_EXPORT ScopedMappedMemoryPtr {
     Release();
   }
 
-  bool valid() const {
-    return buffer_ != NULL;
-  }
+  bool valid() const { return buffer_ != nullptr; }
 
   void SetFlushAfterRelease(bool flush_after_release) {
     flush_after_release_ = flush_after_release;

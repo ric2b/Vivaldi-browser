@@ -64,6 +64,7 @@
 #include "net/base/upload_data_stream.h"
 #include "net/base/upload_file_element_reader.h"
 #include "net/base/url_util.h"
+#include "net/cert/crl_set.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_policy_status.h"
 #include "net/cert/do_nothing_ct_verifier.h"
@@ -91,8 +92,8 @@
 #include "net/log/test_net_log_util.h"
 #include "net/net_buildflags.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
-#include "net/quic/chromium/mock_crypto_client_stream_factory.h"
-#include "net/quic/chromium/quic_server_info.h"
+#include "net/quic/mock_crypto_client_stream_factory.h"
+#include "net/quic/quic_server_info.h"
 #include "net/socket/socket_test_util.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/ssl/channel_id_service.h"
@@ -2739,6 +2740,12 @@ TEST_F(URLRequestTest, DoNotSendCookies_ViaPolicy) {
 
     EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
+    TestNetLogEntry::List entries;
+    net_log_.GetEntries(&entries);
+    for (const auto& entry : entries) {
+      EXPECT_NE(entry.type,
+                NetLogEventType::COOKIE_GET_BLOCKED_BY_NETWORK_DELEGATE);
+    }
   }
 
   // Verify that the cookie isn't sent.
@@ -2758,6 +2765,11 @@ TEST_F(URLRequestTest, DoNotSendCookies_ViaPolicy) {
 
     EXPECT_EQ(1, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
+    TestNetLogEntry::List entries;
+    net_log_.GetEntries(&entries);
+    ExpectLogContainsSomewhereAfter(
+        entries, 0, NetLogEventType::COOKIE_GET_BLOCKED_BY_NETWORK_DELEGATE,
+        NetLogEventPhase::NONE);
   }
 }
 
@@ -2784,6 +2796,12 @@ TEST_F(URLRequestTest, DoNotSaveCookies_ViaPolicy) {
 
     EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
+    TestNetLogEntry::List entries;
+    net_log_.GetEntries(&entries);
+    for (const auto& entry : entries) {
+      EXPECT_NE(entry.type,
+                NetLogEventType::COOKIE_SET_BLOCKED_BY_NETWORK_DELEGATE);
+    }
   }
 
   // Try to set-up another cookie and update the previous cookie.
@@ -2801,6 +2819,11 @@ TEST_F(URLRequestTest, DoNotSaveCookies_ViaPolicy) {
 
     EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(2, network_delegate.blocked_set_cookie_count());
+    TestNetLogEntry::List entries;
+    net_log_.GetEntries(&entries);
+    ExpectLogContainsSomewhereAfter(
+        entries, 0, NetLogEventType::COOKIE_SET_BLOCKED_BY_NETWORK_DELEGATE,
+        NetLogEventPhase::NONE);
   }
 
   // Verify the cookies weren't saved or updated.
@@ -4126,17 +4149,10 @@ std::unique_ptr<test_server::HttpResponse> HandleRedirectConnect(
   return std::move(http_response);
 }
 
-}  // namespace
-
 class TestSSLConfigService : public SSLConfigService {
  public:
-  TestSSLConfigService(bool online_rev_checking,
-                       bool rev_checking_required_local_anchors,
-                       bool token_binding_enabled)
-      : online_rev_checking_(online_rev_checking),
-        rev_checking_required_local_anchors_(
-            rev_checking_required_local_anchors),
-        token_binding_enabled_(token_binding_enabled),
+  explicit TestSSLConfigService(bool token_binding_enabled)
+      : token_binding_enabled_(token_binding_enabled),
         min_version_(kDefaultSSLVersionMin),
         max_version_(kDefaultSSLVersionMax) {}
   ~TestSSLConfigService() override = default;
@@ -4147,9 +4163,6 @@ class TestSSLConfigService : public SSLConfigService {
   // SSLConfigService:
   void GetSSLConfig(SSLConfig* config) override {
     *config = SSLConfig();
-    config->rev_checking_enabled = online_rev_checking_;
-    config->rev_checking_required_local_anchors =
-        rev_checking_required_local_anchors_;
     config->version_min = min_version_;
     config->version_max = max_version_;
     if (token_binding_enabled_) {
@@ -4157,13 +4170,18 @@ class TestSSLConfigService : public SSLConfigService {
     }
   }
 
+  bool CanShareConnectionWithClientCerts(
+      const std::string& hostname) const override {
+    return false;
+  }
+
  private:
-  const bool online_rev_checking_;
-  const bool rev_checking_required_local_anchors_;
   const bool token_binding_enabled_;
   uint16_t min_version_;
   uint16_t max_version_;
 };
+
+}  // namespace
 
 // TODO(svaldez): Update tests to use EmbeddedTestServer.
 #if !defined(OS_IOS)
@@ -4172,8 +4190,8 @@ class TokenBindingURLRequestTest : public URLRequestTestHTTP {
   TokenBindingURLRequestTest() = default;
 
   void SetUp() override {
-    ssl_config_service_ =
-        std::make_unique<TestSSLConfigService>(false, false, true);
+    ssl_config_service_ = std::make_unique<TestSSLConfigService>(
+        true /* token_binding_enabled */);
     default_context().set_ssl_config_service(ssl_config_service_.get());
     channel_id_service_ =
         std::make_unique<ChannelIDService>(new DefaultChannelIDStore(NULL));
@@ -5614,9 +5632,11 @@ class AsyncDelegateLogger : public base::RefCounted<AsyncDelegateLogger> {
                   LoadState expected_second_load_state,
                   LoadState expected_third_load_state,
                   Callback callback) {
-    AsyncDelegateLogger* logger = new AsyncDelegateLogger(
+    // base::MakeRefCounted<AsyncDelegateLogger> is unavailable here, since the
+    // constructor of AsyncDelegateLogger is private.
+    auto logger = base::WrapRefCounted(new AsyncDelegateLogger(
         url_request, expected_first_load_state, expected_second_load_state,
-        expected_third_load_state, std::move(callback));
+        expected_third_load_state, std::move(callback)));
     logger->Start();
   }
 
@@ -6716,9 +6736,14 @@ TEST_F(URLRequestTestHTTP, TestPostChunkedDataAfterStart) {
     r->Start();
     EXPECT_TRUE(r->is_pending());
 
+    // Pump messages until we start sending headers..
     base::RunLoop().RunUntilIdle();
+
+    // And now wait for completion.
+    base::RunLoop run_loop;
+    d.set_on_complete(run_loop.QuitClosure());
     AddDataToUpload(writer.get());
-    d.RunUntilComplete();
+    run_loop.Run();
 
     VerifyReceivedDataMatchesChunks(r.get(), &d);
   }
@@ -8791,15 +8816,16 @@ TEST_F(URLRequestTestHTTP, Post302RedirectGet) {
 
   // Set headers (some of which are specific to the POST).
   HttpRequestHeaders headers;
-  headers.AddHeadersFromString(
-    "Content-Type: multipart/form-data; "
-    "boundary=----WebKitFormBoundaryAADeAA+NAAWMAAwZ\r\n"
-    "Accept: text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,"
-    "text/plain;q=0.8,image/png,*/*;q=0.5\r\n"
-    "Accept-Language: en-US,en\r\n"
-    "Accept-Charset: ISO-8859-1,*,utf-8\r\n"
-    "Content-Length: 11\r\n"
-    "Origin: http://localhost:1337/");
+  headers.SetHeader("Content-Type",
+                    "multipart/form-data;"
+                    "boundary=----WebKitFormBoundaryAADeAA+NAAWMAAwZ");
+  headers.SetHeader("Accept",
+                    "text/xml,application/xml,application/xhtml+xml,"
+                    "text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5");
+  headers.SetHeader("Accept-Language", "en-US,en");
+  headers.SetHeader("Accept-Charset", "ISO-8859-1,*,utf-8");
+  headers.SetHeader("Content-Length", "11");
+  headers.SetHeader("Origin", "http://localhost:1337/");
   req->SetExtraRequestHeaders(headers);
   req->Start();
   d.RunUntilComplete();
@@ -10803,8 +10829,6 @@ class HTTPSFallbackTest : public TestWithScopedTaskEnvironment {
  public:
   HTTPSFallbackTest() : context_(true) {
     ssl_config_service_ = std::make_unique<TestSSLConfigService>(
-        false /* online revocation checking */,
-        false /* require rev. checking for local anchors */,
         false /* token binding enabled */);
     context_.set_ssl_config_service(ssl_config_service_.get());
   }
@@ -11011,8 +11035,9 @@ class HTTPSOCSPTest : public HTTPSRequestTest {
 
   void SetUp() override {
     context_.SetCTPolicyEnforcer(std::make_unique<DefaultCTPolicyEnforcer>());
-    SetupContext();
     context_.Init();
+
+    context_.cert_verifier()->SetConfig(GetCertVerifierConfig());
 
     scoped_refptr<X509Certificate> root_cert =
         ImportCertFromFile(GetTestCertsDirectory(), "ocsp-test-root.pem");
@@ -11077,15 +11102,13 @@ class HTTPSOCSPTest : public HTTPSRequestTest {
   }
 
  protected:
-  // SetupContext configures the URLRequestContext that will be used for making
-  // connetions to testserver. This can be overridden in test subclasses for
-  // different behaviour.
-  virtual void SetupContext() {
-    ssl_config_service_ = std::make_unique<TestSSLConfigService>(
-        true /* online revocation checking */,
-        false /* require rev. checking for local anchors */,
-        false /* token binding enabled */);
-    context_.set_ssl_config_service(ssl_config_service_.get());
+  // GetCertVerifierConfig() configures the URLRequestContext that will be used
+  // for making connections to the testserver. This can be overridden in test
+  // subclasses for different behaviour.
+  virtual CertVerifier::Config GetCertVerifierConfig() {
+    CertVerifier::Config config;
+    config.enable_rev_checking = true;
+    return config;
   }
 
   std::unique_ptr<ScopedTestRoot> test_root_;
@@ -11684,12 +11707,9 @@ INSTANTIATE_TEST_CASE_P(OCSPVerify,
 
 class HTTPSAIATest : public HTTPSOCSPTest {
  public:
-  void SetupContext() override {
-    ssl_config_service_ = std::make_unique<TestSSLConfigService>(
-        false /* online revocation checking */,
-        false /* require rev. checking for local anchors */,
-        false /* token binding enabled */);
-    context_.set_ssl_config_service(ssl_config_service_.get());
+  CertVerifier::Config GetCertVerifierConfig() override {
+    CertVerifier::Config config;
+    return config;
   }
 };
 
@@ -11729,12 +11749,10 @@ TEST_F(HTTPSAIATest, AIAFetching) {
 
 class HTTPSHardFailTest : public HTTPSOCSPTest {
  protected:
-  void SetupContext() override {
-    ssl_config_service_ = std::make_unique<TestSSLConfigService>(
-        false /* online revocation checking */,
-        true /* require rev. checking for local anchors */,
-        false /* token binding enabled */);
-    context_.set_ssl_config_service(ssl_config_service_.get());
+  CertVerifier::Config GetCertVerifierConfig() override {
+    CertVerifier::Config config;
+    config.require_rev_checking_local_anchors = true;
+    return config;
   }
 };
 
@@ -11774,30 +11792,10 @@ TEST_F(HTTPSHardFailTest, FailsOnOCSPInvalid) {
 
 class HTTPSEVCRLSetTest : public HTTPSOCSPTest {
  protected:
-  void SetupContext() override {
-    ssl_config_service_ = std::make_unique<TestSSLConfigService>(
-        false /* online revocation checking */,
-        false /* require rev. checking for local anchors */,
-        false /* token binding enabled */);
-    context_.set_ssl_config_service(ssl_config_service_.get());
+  CertVerifier::Config GetCertVerifierConfig() override {
+    CertVerifier::Config config;
+    return config;
   }
-};
-
-// Helper class to set the global CRLSet, and on destruction restore the
-// previously set one.
-class ScopedSetCRLSet {
- public:
-  ScopedSetCRLSet(scoped_refptr<CRLSet> crl_set) {
-    prev_crl_set_ = SSLConfigService::GetCRLSet();
-    SSLConfigService::SetCRLSetForTesting(std::move(crl_set));
-  }
-
-  ~ScopedSetCRLSet() {
-    SSLConfigService::SetCRLSetForTesting(std::move(prev_crl_set_));
-  }
-
- private:
-  scoped_refptr<CRLSet> prev_crl_set_;
 };
 
 TEST_F(HTTPSEVCRLSetTest, MissingCRLSetAndInvalidOCSP) {
@@ -11810,7 +11808,6 @@ TEST_F(HTTPSEVCRLSetTest, MissingCRLSetAndInvalidOCSP) {
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status =
       SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
-  ScopedSetCRLSet set_crlset(nullptr);
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11832,7 +11829,6 @@ TEST_F(HTTPSEVCRLSetTest, MissingCRLSetAndRevokedOCSP) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_REVOKED;
-  ScopedSetCRLSet set_crlset(nullptr);
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11860,7 +11856,6 @@ TEST_F(HTTPSEVCRLSetTest, MissingCRLSetAndGoodOCSP) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_OK;
-  ScopedSetCRLSet set_crlset(nullptr);
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11883,7 +11878,9 @@ TEST_F(HTTPSEVCRLSetTest, ExpiredCRLSet) {
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status =
       SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
-  ScopedSetCRLSet set_crlset(CRLSet::ExpiredCRLSetForTesting());
+  CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
+  cert_verifier_config.crl_set = CRLSet::ExpiredCRLSetForTesting();
+  context_.cert_verifier()->SetConfig(cert_verifier_config);
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11906,8 +11903,10 @@ TEST_F(HTTPSEVCRLSetTest, FreshCRLSetCovered) {
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status =
       SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
-  ScopedSetCRLSet set_crlset(
-      CRLSet::ForTesting(false, &kOCSPTestCertSPKI, "", "", {}));
+  CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
+  cert_verifier_config.crl_set =
+      CRLSet::ForTesting(false, &kOCSPTestCertSPKI, "", "", {});
+  context_.cert_verifier()->SetConfig(cert_verifier_config);
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11931,7 +11930,9 @@ TEST_F(HTTPSEVCRLSetTest, FreshCRLSetNotCovered) {
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status =
       SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
-  ScopedSetCRLSet set_crlset(CRLSet::EmptyCRLSetForTesting());
+  CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
+  cert_verifier_config.crl_set = CRLSet::EmptyCRLSetForTesting();
+  context_.cert_verifier()->SetConfig(cert_verifier_config);
 
   CertStatus cert_status = 0;
   DoConnection(ssl_options, &cert_status);
@@ -11949,12 +11950,9 @@ TEST_F(HTTPSEVCRLSetTest, FreshCRLSetNotCovered) {
 
 class HTTPSCRLSetTest : public HTTPSOCSPTest {
  protected:
-  void SetupContext() override {
-    ssl_config_service_ = std::make_unique<TestSSLConfigService>(
-        false /* online revocation checking */,
-        false /* require rev. checking for local anchors */,
-        false /* token binding enabled */);
-    context_.set_ssl_config_service(ssl_config_service_.get());
+  CertVerifier::Config GetCertVerifierConfig() override {
+    CertVerifier::Config config;
+    return config;
   }
 
   void SetUp() override {
@@ -11971,7 +11969,9 @@ TEST_F(HTTPSCRLSetTest, ExpiredCRLSet) {
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status =
       SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
-  ScopedSetCRLSet set_crlset(CRLSet::ExpiredCRLSetForTesting());
+  CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
+  cert_verifier_config.crl_set = CRLSet::ExpiredCRLSetForTesting();
+  context_.cert_verifier()->SetConfig(cert_verifier_config);
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11994,7 +11994,10 @@ TEST_F(HTTPSCRLSetTest, ExpiredCRLSetAndRevoked) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_REVOKED;
-  ScopedSetCRLSet set_crlset(CRLSet::ExpiredCRLSetForTesting());
+
+  CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
+  cert_verifier_config.crl_set = CRLSet::ExpiredCRLSetForTesting();
+  context_.cert_verifier()->SetConfig(cert_verifier_config);
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -12015,8 +12018,11 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevoked) {
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_OK;
   ssl_options.cert_serial = 10;
-  ScopedSetCRLSet set_crlset(
-      CRLSet::ForTesting(false, &kOCSPTestCertSPKI, "\x0a", "", {}));
+
+  CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
+  cert_verifier_config.crl_set =
+      CRLSet::ForTesting(false, &kOCSPTestCertSPKI, "\x0a", "", {});
+  context_.cert_verifier()->SetConfig(cert_verifier_config);
 
   CertStatus cert_status = 0;
   DoConnection(ssl_options, &cert_status);
@@ -12041,8 +12047,10 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevokedBySubject) {
   ssl_options.cert_common_name = kCommonName;
 
   {
-    ScopedSetCRLSet set_crlset(
-        CRLSet::ForTesting(false, nullptr, "", kCommonName, {}));
+    CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
+    cert_verifier_config.crl_set =
+        CRLSet::ForTesting(false, nullptr, "", kCommonName, {});
+    context_.cert_verifier()->SetConfig(cert_verifier_config);
 
     CertStatus cert_status = 0;
     DoConnection(ssl_options, &cert_status);
@@ -12064,8 +12072,10 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevokedBySubject) {
       sizeof(kTestServerSPKISHA256));
 
   {
-    ScopedSetCRLSet set_crlset(
-        CRLSet::ForTesting(false, nullptr, "", kCommonName, {spki_hash}));
+    CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
+    cert_verifier_config.crl_set =
+        CRLSet::ForTesting(false, nullptr, "", kCommonName, {spki_hash});
+    context_.cert_verifier()->SetConfig(cert_verifier_config);
 
     CertStatus cert_status = 0;
     DoConnection(ssl_options, &cert_status);

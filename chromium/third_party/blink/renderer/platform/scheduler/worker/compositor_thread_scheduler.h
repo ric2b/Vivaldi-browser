@@ -8,10 +8,10 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "components/scheduling_metrics/task_duration_metric_reporter.h"
 #include "third_party/blink/public/platform/scheduler/single_thread_idle_task_runner.h"
 #include "third_party/blink/public/platform/web_thread_type.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
-#include "third_party/blink/renderer/platform/scheduler/util/task_duration_metric_reporter.h"
 #include "third_party/blink/renderer/platform/scheduler/worker/compositor_metrics_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/worker/non_main_thread_scheduler_impl.h"
 
@@ -46,7 +46,7 @@ class PLATFORM_EXPORT CompositorThreadScheduler
   void AddTaskObserver(base::MessageLoop::TaskObserver* task_observer) override;
   void RemoveTaskObserver(
       base::MessageLoop::TaskObserver* task_observer) override;
-  void AddRAILModeObserver(RAILModeObserver*) override {}
+  void AddRAILModeObserver(WebRAILModeObserver*) override {}
   void Shutdown() override;
 
   // SingleThreadIdleTaskRunner::Delegate:

@@ -12,24 +12,15 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.Display;
 
+import com.google.vr.ndk.base.DaydreamApi;
+
 import org.chromium.chrome.R;
 
 /**
  * Utilities dealing with extracting information about VR intents.
  */
 public class VrIntentUtils {
-    // The Daydream Home app adds this extra to auto-present intents.
-    public static final String AUTOPRESENT_WEVBVR_EXTRA = "browser.vr.AUTOPRESENT_WEBVR";
     public static final String DAYDREAM_CATEGORY = "com.google.intent.category.DAYDREAM";
-    // Tells Chrome not to relaunch itself when receiving a VR intent. This is used by tests since
-    // the relaunch logic does not work properly with the DON flow skipped.
-    public static final String AVOID_RELAUNCH_EXTRA =
-            "org.chromium.chrome.browser.vr.AVOID_RELAUNCH";
-    // Tells Chrome to attempts a relaunch of the intent if it is received outside of VR and doesn't
-    // have the Daydream category set. This is a workaround for https://crbug.com/854327 where
-    // launchInVr can sometimes launch the given intent before entering VR.
-    public static final String ENABLE_TEST_RELAUNCH_WORKAROUND_EXTRA =
-            "org.chromium.chrome.browser.vr.ENABLE_TEST_RELUANCH_WORKAROUND";
 
     static final String VR_FRE_INTENT_EXTRA = "org.chromium.chrome.browser.vr.VR_FRE";
 
@@ -44,7 +35,7 @@ public class VrIntentUtils {
         // addition to the category, DAYDREAM_VR_EXTRA tells us that this intent is coming directly
         // from VR.
         return intent != null && intent.hasCategory(DAYDREAM_CATEGORY)
-                && !launchedFromRecentApps(intent) && VrShellDelegate.isVrEnabled();
+                && !launchedFromRecentApps(intent);
     }
 
     /**
@@ -70,7 +61,6 @@ public class VrIntentUtils {
      * @return The intermediate VR activity intent.
      */
     public static Intent setupVrFreIntent(Context context, Intent freIntent) {
-        if (!VrShellDelegate.isVrEnabled()) return freIntent;
         Intent intent = new Intent();
         intent.setClassName(context, VrFirstRunActivity.class.getName());
         intent.addCategory(DAYDREAM_CATEGORY);
@@ -82,7 +72,6 @@ public class VrIntentUtils {
      * @return Options that a VR-specific Chrome activity should be launched with.
      */
     public static Bundle getVrIntentOptions(Context context) {
-        if (!VrShellDelegate.isVrEnabled()) return null;
         // These options are used to start the Activity with a custom animation to keep it hidden
         // for a few hundred milliseconds - enough time for us to draw the first black view.
         // The animation is sufficient to hide the 2D screenshot but not to the 2D UI while the
@@ -91,7 +80,7 @@ public class VrIntentUtils {
         // overlay view added in {@link startWithVrIntentPreNative}.
         int animation = VrShellDelegate.USE_HIDE_ANIMATION ? R.anim.stay_hidden : 0;
         ActivityOptions options = ActivityOptions.makeCustomAnimation(context, animation, 0);
-        if (VrShellDelegate.getVrClassesWrapper().bootsToVr()) {
+        if (VrShellDelegate.bootsToVr()) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
                 assert false;
             } else {
@@ -131,6 +120,6 @@ public class VrIntentUtils {
      * @return the intent with VR flags set.
      */
     public static Intent setupVrIntent(Intent intent) {
-        return VrShellDelegate.getVrClassesWrapper().setupVrIntent(intent);
+        return DaydreamApi.setupVrIntent(intent);
     }
 }

@@ -10,6 +10,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource.h"
+#include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
 using testing::_;
@@ -29,9 +30,6 @@ class MockCanvasResourceDispatcher : public CanvasResourceDispatcher {
 class CanvasResourceDispatcherTest : public testing::Test {
  public:
   void DispatchOneFrame();
-  OffscreenCanvasResourceProvider* GetResourceProvider() {
-    return dispatcher_->offscreen_canvas_resource_provider_.get();
-  }
 
   unsigned GetNumUnreclaimedFramesPosted() {
     return dispatcher_->num_unreclaimed_frames_posted_;
@@ -41,13 +39,24 @@ class CanvasResourceDispatcherTest : public testing::Test {
     return dispatcher_->latest_unposted_image_.get();
   }
 
-  unsigned GetLatestUnpostedResourceId() {
+  viz::ResourceId GetLatestUnpostedResourceId() {
     return dispatcher_->latest_unposted_resource_id_;
+  }
+
+  viz::ResourceId GetCurrentResourceId() {
+    return dispatcher_->next_resource_id_;
   }
 
  protected:
   CanvasResourceDispatcherTest() {
     dispatcher_ = std::make_unique<MockCanvasResourceDispatcher>();
+    resource_provider_ = CanvasResourceProvider::Create(
+        IntSize(10, 10),
+        CanvasResourceProvider::kSoftwareCompositedResourceUsage,
+        nullptr,  // context_provider_wrapper
+        0,        // msaa_sample_count
+        CanvasColorParams(), CanvasResourceProvider::kDefaultPresentationMode,
+        dispatcher_->GetWeakPtr());
   }
 
   MockCanvasResourceDispatcher* Dispatcher() { return dispatcher_.get(); }
@@ -55,13 +64,13 @@ class CanvasResourceDispatcherTest : public testing::Test {
  private:
   scoped_refptr<StaticBitmapImage> PrepareStaticBitmapImage();
   std::unique_ptr<MockCanvasResourceDispatcher> dispatcher_;
+  std::unique_ptr<CanvasResourceProvider> resource_provider_;
 };
 
 void CanvasResourceDispatcherTest::DispatchOneFrame() {
-  sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(10, 10);
-  dispatcher_->DispatchFrame(
-      StaticBitmapImage::Create(surface->makeImageSnapshot()),
-      base::TimeTicks(), SkIRect::MakeEmpty());
+  dispatcher_->DispatchFrame(resource_provider_->ProduceFrame(),
+                             base::TimeTicks(), SkIRect::MakeEmpty(),
+                             false /* needs_vertical_flip */);
 }
 
 TEST_F(CanvasResourceDispatcherTest, PlaceholderRunsNormally) {
@@ -72,7 +81,7 @@ TEST_F(CanvasResourceDispatcherTest, PlaceholderRunsNormally) {
   EXPECT_CALL(*(Dispatcher()), PostImageToPlaceholder(_, post_resource_id));
   DispatchOneFrame();
   EXPECT_EQ(1u, GetNumUnreclaimedFramesPosted());
-  EXPECT_EQ(1u, GetResourceProvider()->GetNextResourceId());
+  EXPECT_EQ(1u, GetCurrentResourceId());
   Mock::VerifyAndClearExpectations(Dispatcher());
 
   // Post second frame
@@ -80,7 +89,7 @@ TEST_F(CanvasResourceDispatcherTest, PlaceholderRunsNormally) {
   EXPECT_CALL(*(Dispatcher()), PostImageToPlaceholder(_, post_resource_id));
   DispatchOneFrame();
   EXPECT_EQ(2u, GetNumUnreclaimedFramesPosted());
-  EXPECT_EQ(2u, GetResourceProvider()->GetNextResourceId());
+  EXPECT_EQ(2u, GetCurrentResourceId());
   Mock::VerifyAndClearExpectations(Dispatcher());
 
   // Post third frame
@@ -88,7 +97,7 @@ TEST_F(CanvasResourceDispatcherTest, PlaceholderRunsNormally) {
   EXPECT_CALL(*(Dispatcher()), PostImageToPlaceholder(_, post_resource_id));
   DispatchOneFrame();
   EXPECT_EQ(3u, GetNumUnreclaimedFramesPosted());
-  EXPECT_EQ(3u, GetResourceProvider()->GetNextResourceId());
+  EXPECT_EQ(3u, GetCurrentResourceId());
   EXPECT_EQ(nullptr, GetLatestUnpostedImage());
   Mock::VerifyAndClearExpectations(Dispatcher());
 
@@ -123,7 +132,7 @@ TEST_F(CanvasResourceDispatcherTest, PlaceholderBeingBlocked) {
   DispatchOneFrame();
   unsigned post_resource_id = 4u;
   EXPECT_EQ(3u, GetNumUnreclaimedFramesPosted());
-  EXPECT_EQ(post_resource_id, GetResourceProvider()->GetNextResourceId());
+  EXPECT_EQ(post_resource_id, GetCurrentResourceId());
   EXPECT_TRUE(GetLatestUnpostedImage());
   EXPECT_EQ(post_resource_id, GetLatestUnpostedResourceId());
 
@@ -131,7 +140,7 @@ TEST_F(CanvasResourceDispatcherTest, PlaceholderBeingBlocked) {
   post_resource_id++;
   DispatchOneFrame();
   EXPECT_EQ(3u, GetNumUnreclaimedFramesPosted());
-  EXPECT_EQ(post_resource_id, GetResourceProvider()->GetNextResourceId());
+  EXPECT_EQ(post_resource_id, GetCurrentResourceId());
   EXPECT_TRUE(GetLatestUnpostedImage());
   EXPECT_EQ(post_resource_id, GetLatestUnpostedResourceId());
 
@@ -146,7 +155,7 @@ TEST_F(CanvasResourceDispatcherTest, PlaceholderBeingBlocked) {
   // Reclaim 1 frame and post 1 frame, so numPostImagesUnresponded remains as 3
   EXPECT_EQ(3u, GetNumUnreclaimedFramesPosted());
   // Not generating new resource Id
-  EXPECT_EQ(post_resource_id, GetResourceProvider()->GetNextResourceId());
+  EXPECT_EQ(post_resource_id, GetCurrentResourceId());
   EXPECT_FALSE(GetLatestUnpostedImage());
   EXPECT_EQ(0u, GetLatestUnpostedResourceId());
   Mock::VerifyAndClearExpectations(Dispatcher());

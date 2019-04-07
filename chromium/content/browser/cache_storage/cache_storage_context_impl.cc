@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/cache_storage/cache_storage_manager.h"
 #include "content/public/browser/browser_context.h"
@@ -36,7 +36,7 @@ void CacheStorageContextImpl::Init(
   is_incognito_ = user_data_directory.empty();
   scoped_refptr<base::SequencedTaskRunner> cache_task_runner =
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 
   // This thread-hopping antipattern is needed here for some unit tests, where

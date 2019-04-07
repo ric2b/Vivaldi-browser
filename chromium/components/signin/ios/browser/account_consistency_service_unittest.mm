@@ -149,12 +149,14 @@ class AccountConsistencyServiceTest : public PlatformTest {
     web_view_load_expection_count_ = 0;
     gaia_cookie_manager_service_.reset(new MockGaiaCookieManagerService());
     signin_client_.reset(new TestSigninClient(&prefs_));
+    account_tracker_service_.Initialize(&prefs_, base::FilePath());
     signin_manager_.reset(new FakeSigninManager(
         signin_client_.get(), nullptr, &account_tracker_service_, nullptr));
-    account_tracker_service_.Initialize(signin_client_.get());
+    signin_manager_->Initialize(nullptr);
     settings_map_ = new HostContentSettingsMap(
         &prefs_, false /* incognito_profile */, false /* guest_profile */,
-        false /* store_last_modified */);
+        false /* store_last_modified */,
+        false /* migrate_requesting_and_top_level_origin_settings */);
     cookie_settings_ =
         new content_settings::CookieSettings(settings_map_.get(), &prefs_, "");
     account_reconcilor_ =

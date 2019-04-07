@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <map>
 #include <memory>
+#include <utility>
 
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
@@ -42,10 +43,10 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/autofill/local_card_migration_icon_view.h"
 #include "chrome/browser/ui/views/autofill/save_card_icon_view.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_platform_style.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "chrome/browser/ui/views/location_bar/background_with_1_px_border.h"
 #include "chrome/browser/ui/views/location_bar/content_setting_image_view.h"
 #include "chrome/browser/ui/views/location_bar/keyword_hint_view.h"
@@ -70,6 +71,7 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/security_state/core/security_state.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/toolbar/toolbar_model.h"
 #include "components/toolbar/vector_icons.h"
 #include "components/translate/core/browser/language_state.h"
@@ -206,17 +208,18 @@ void LocationBarView::Init() {
   keyword_hint_view_ = new KeywordHintView(this, profile(), tint());
   AddChildView(keyword_hint_view_);
 
+  SkColor icon_color = GetColor(OmniboxPart::RESULTS_ICON);
+
   std::vector<std::unique_ptr<ContentSettingImageModel>> models =
       ContentSettingImageModel::GenerateContentSettingImageModels();
   for (auto& model : models) {
     ContentSettingImageView* image_view =
         new ContentSettingImageView(std::move(model), this, font_list);
+    image_view->SetIconColor(icon_color);
     content_setting_views_.push_back(image_view);
     image_view->SetVisible(false);
     AddChildView(image_view);
   }
-
-  SkColor icon_color = GetColor(OmniboxPart::RESULTS_ICON);
 
   std::vector<PageActionIconType> page_action_icon_types;
   // |browser_| may be null when LocationBarView is used for non-Browser windows
@@ -227,7 +230,7 @@ void LocationBarView::Init() {
   }
   page_action_icon_container_view_ = new PageActionIconContainerView(
       page_action_icon_types, GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
-      GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING), browser_, this,
+      GetLayoutConstant(LOCATION_BAR_BETWEEN_ELEMENTS_PADDING), browser_, this,
       delegate_);
   AddChildView(page_action_icon_container_view_);
   page_action_icon_container_view_->SetIconColor(icon_color);
@@ -237,8 +240,8 @@ void LocationBarView::Init() {
   page_action_icons_.push_back(manage_passwords_icon_view_);
 
   if (browser_) {
-    save_credit_card_icon_view_ =
-        new autofill::SaveCardIconView(command_updater(), browser_, this);
+    save_credit_card_icon_view_ = new autofill::SaveCardIconView(
+        command_updater(), browser_, this, font_list);
     page_action_icons_.push_back(save_credit_card_icon_view_);
   }
   translate_icon_view_ = new TranslateIconView(command_updater(), this);
@@ -278,8 +281,6 @@ void LocationBarView::Init() {
 
   size_animation_.Reset(1);
 
-  // This is for hover effect mouse event handling.
-  set_notify_enter_exit_on_child(true);
   hover_animation_.SetSlideDuration(200);
 }
 
@@ -362,9 +363,7 @@ void LocationBarView::SelectAll() {
 }
 
 views::View* LocationBarView::GetSecurityBubbleAnchorView() {
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial())
-    return this;
-  return location_icon_view()->GetImageView();
+  return this;
 }
 
 bool LocationBarView::ShowPageInfoDialog(WebContents* contents) {
@@ -475,9 +474,11 @@ void LocationBarView::Layout() {
   location_icon_view_->SetVisible(false);
   keyword_hint_view_->SetVisible(false);
 
-  const int item_padding = GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING);
+  const int edge_padding = GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING);
+  const int internal_padding =
+      GetLayoutConstant(LOCATION_BAR_BETWEEN_ELEMENTS_PADDING);
 
-  int leading_edit_item_padding = item_padding;
+  int leading_edit_item_padding = edge_padding;
   if (OmniboxFieldTrial::IsJogTextfieldOnPopupEnabled()) {
     // With jog enabled, the text should be indented only if these are all true:
     //  - The popup is open.
@@ -512,10 +513,10 @@ void LocationBarView::Layout() {
   // an extended I-beam click target without affecting actual layout.
   leading_edit_item_padding -= omnibox_view_->GetInsets().left();
 
-  LocationBarLayout leading_decorations(
-      LocationBarLayout::LEFT_EDGE, item_padding, leading_edit_item_padding);
+  LocationBarLayout leading_decorations(LocationBarLayout::LEFT_EDGE,
+                                        leading_edit_item_padding);
   LocationBarLayout trailing_decorations(LocationBarLayout::RIGHT_EDGE,
-                                         item_padding, item_padding);
+                                         edge_padding);
 
   const base::string16 keyword(omnibox_view_->model()->keyword());
   // In some cases (e.g. fullscreen mode) we may have 0 height.  We still want
@@ -532,7 +533,7 @@ void LocationBarView::Layout() {
   if (ShouldShowKeywordBubble()) {
     leading_decorations.AddDecoration(
         vertical_padding, location_height, false, kLeadingDecorationMaxFraction,
-        item_padding, item_padding, selected_keyword_view_);
+        edge_padding, internal_padding, selected_keyword_view_);
     if (selected_keyword_view_->keyword() != keyword) {
       selected_keyword_view_->SetKeyword(keyword);
       const TemplateURL* template_url =
@@ -551,18 +552,20 @@ void LocationBarView::Layout() {
     location_icon_view_->SetLabel(GetLocationIconText());
     leading_decorations.AddDecoration(
         vertical_padding, location_height, false, kLeadingDecorationMaxFraction,
-        item_padding, item_padding, location_icon_view_);
+        edge_padding, internal_padding, location_icon_view_);
   } else {
-    leading_decorations.AddDecoration(vertical_padding, location_height,
+    leading_decorations.AddDecoration(vertical_padding, location_height, false,
+                                      0, edge_padding, internal_padding,
                                       location_icon_view_);
   }
 
   auto add_trailing_decoration = [&trailing_decorations, vertical_padding,
-                                  location_height, item_padding](View* view) {
+                                  location_height, edge_padding,
+                                  internal_padding](View* view) {
     if (view->visible()) {
       trailing_decorations.AddDecoration(vertical_padding, location_height,
-                                         false, 0, item_padding, item_padding,
-                                         view);
+                                         false, 0, edge_padding,
+                                         internal_padding, view);
     }
   };
 
@@ -590,7 +593,7 @@ void LocationBarView::Layout() {
       omnibox_view_->model()->is_keyword_hint() &&
       !omnibox_view_->IsImeComposing()) {
     trailing_decorations.AddDecoration(vertical_padding, location_height, true,
-                                       0, item_padding, item_padding,
+                                       0, edge_padding, internal_padding,
                                        keyword_hint_view_);
     keyword_hint_view_->SetKeyword(keyword, GetOmniboxPopupView()->IsOpen(),
                                    tint());
@@ -780,9 +783,10 @@ int LocationBarView::GetAvailableDecorationTextHeight() {
 // LocationBarView, private:
 
 int LocationBarView::IncrementalMinimumWidth(views::View* view) const {
-  return view->visible() ? (GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING) +
-                            view->GetMinimumSize().width())
-                         : 0;
+  return view->visible()
+             ? (GetLayoutConstant(LOCATION_BAR_BETWEEN_ELEMENTS_PADDING) +
+                view->GetMinimumSize().width())
+             : 0;
 }
 
 SkColor LocationBarView::GetBorderColor() const {
@@ -965,6 +969,9 @@ base::string16 LocationBarView::GetLocationIconText() const {
   if (GetToolbarModel()->GetURL().SchemeIs(content::kChromeUIScheme))
     return l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_NAME);
 
+  if (GetToolbarModel()->GetURL().SchemeIs(url::kFileScheme))
+    return l10n_util::GetStringUTF16(IDS_OMNIBOX_FILE);
+
   if (delegate_->GetWebContents()) {
     // On ChromeOS, this can be called using web_contents from
     // SimpleWebViewDialog::GetWebContents() which always returns null.
@@ -983,17 +990,20 @@ base::string16 LocationBarView::GetLocationIconText() const {
 }
 
 bool LocationBarView::ShouldShowKeywordBubble() const {
-  return !omnibox_view_->model()->keyword().empty() &&
-         !omnibox_view_->model()->is_keyword_hint();
+  return omnibox_view_->model()->is_keyword_selected();
 }
 
 bool LocationBarView::ShouldShowLocationIconText() const {
-  if (!GetToolbarModel()->input_in_progress() &&
-      (GetToolbarModel()->GetURL().SchemeIs(content::kChromeUIScheme) ||
-       GetToolbarModel()->GetURL().SchemeIs(extensions::kExtensionScheme)))
-    return true;
+  const auto* toolbar_model = GetToolbarModel();
+  if (!toolbar_model->input_in_progress()) {
+    const GURL& url = toolbar_model->GetURL();
+    if (url.SchemeIs(content::kChromeUIScheme) ||
+        url.SchemeIs(extensions::kExtensionScheme) ||
+        url.SchemeIs(url::kFileScheme))
+      return true;
+  }
 
-  return !GetToolbarModel()->GetSecureVerboseText().empty();
+  return !toolbar_model->GetSecureVerboseText().empty();
 }
 
 bool LocationBarView::ShouldAnimateLocationIconTextVisibilityChange() const {
@@ -1189,15 +1199,6 @@ void LocationBarView::OnPaintBorder(gfx::Canvas* canvas) {
   BrowserView::Paint1pxHorizontalLine(canvas, border_color, bounds, true);
 }
 
-void LocationBarView::OnMouseEntered(const ui::MouseEvent& event) {
-  // Only show the hover animation when omnibox is in unfocused steady state.
-  if (!omnibox_view_->HasFocus())
-    hover_animation_.Show();
-}
-void LocationBarView::OnMouseExited(const ui::MouseEvent& event) {
-  hover_animation_.Hide();
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // LocationBarView, private views::DragController implementation:
 
@@ -1307,6 +1308,16 @@ void LocationBarView::OnOmniboxBlurred() {
 
   if (IsRounded())
     RefreshBackground();
+}
+
+void LocationBarView::OnOmniboxHovered(bool is_hovering) {
+  if (is_hovering) {
+    // Only show the hover animation when omnibox is in unfocused steady state.
+    if (!omnibox_view_->HasFocus())
+      hover_animation_.Show();
+  } else {
+    hover_animation_.Hide();
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

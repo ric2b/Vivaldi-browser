@@ -12,7 +12,9 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "content/browser/background_fetch/background_fetch_delegate_proxy.h"
 #include "content/browser/background_fetch/background_fetch_registration_id.h"
 #include "content/browser/background_fetch/background_fetch_request_info.h"
@@ -23,8 +25,6 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace content {
-
-class BackgroundFetchRequestManager;
 
 // The JobController will be responsible for coordinating communication with the
 // DownloadManager. It will get requests from the RequestManager and dispatch
@@ -46,13 +46,14 @@ class CONTENT_EXPORT BackgroundFetchJobController final
       base::RepeatingCallback<void(const std::string& /* unique_id */,
                                    uint64_t /* download_total */,
                                    uint64_t /* downloaded */)>;
+
   BackgroundFetchJobController(
       BackgroundFetchDelegateProxy* delegate_proxy,
+      BackgroundFetchScheduler* scheduler,
       const BackgroundFetchRegistrationId& registration_id,
       const BackgroundFetchOptions& options,
       const SkBitmap& icon,
       uint64_t bytes_downloaded,
-      BackgroundFetchRequestManager* request_manager,
       ProgressCallback progress_callback,
       BackgroundFetchScheduler::FinishedCallback finished_callback);
   ~BackgroundFetchJobController() override;
@@ -63,18 +64,34 @@ class CONTENT_EXPORT BackgroundFetchJobController final
   void InitializeRequestStatus(
       int completed_downloads,
       int total_downloads,
-      const std::vector<std::string>& outstanding_guids,
+      std::vector<scoped_refptr<BackgroundFetchRequestInfo>>
+          active_fetch_requests,
       const std::string& ui_title);
 
   // Gets the number of bytes downloaded for jobs that are currently running.
   uint64_t GetInProgressDownloadedBytes();
 
-  // Updates the UI (currently only job title) that's shown to the user as part
-  // of a notification for instance.
-  void UpdateUI(const std::string& title);
+  // Updates the UI that's shown to the user as part of a notification for
+  // instance.
+  void UpdateUI(const base::Optional<std::string>& title,
+                const base::Optional<SkBitmap>& icon);
+
+  // Returns a unique_ptr to a BackgroundFetchRegistration object
+  // created with member fields.
+  std::unique_ptr<BackgroundFetchRegistration> NewRegistration(
+      blink::mojom::BackgroundFetchState state) const;
 
   // Returns the options with which this job is fetching data.
   const BackgroundFetchOptions& options() const { return options_; }
+
+  // Returns total downloaded bytes.
+  int downloaded() const { return complete_requests_downloaded_bytes_cache_; }
+
+  // Returns total size of downloads, as indicated by the developer.
+  int download_total() const { return total_downloads_size_; }
+
+  // Returns the number of requests that comprise the whole job.
+  int total_downloads() const { return total_downloads_; }
 
   base::WeakPtr<BackgroundFetchJobController> GetWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
@@ -91,10 +108,15 @@ class CONTENT_EXPORT BackgroundFetchJobController final
 
   // BackgroundFetchScheduler::Controller implementation:
   bool HasMoreRequests() override;
-  void StartRequest(scoped_refptr<BackgroundFetchRequestInfo> request) override;
+  void StartRequest(scoped_refptr<BackgroundFetchRequestInfo> request,
+                    RequestFinishedCallback request_finished_callback) override;
   void Abort(BackgroundFetchReasonToAbort reason_to_abort) override;
 
  private:
+  // Returns reason_to_abort_ as blink::mojom::BackgroundFetchFailureReason.
+  // TODO(crbug.com/876691): Get rid of BackgroundFetchReasonToAbort and remove
+  // this converter.
+  blink::mojom::BackgroundFetchFailureReason MojoFailureReason() const;
 
   // Options for the represented background fetch registration.
   BackgroundFetchOptions options_;
@@ -102,16 +124,18 @@ class CONTENT_EXPORT BackgroundFetchJobController final
   // Icon for the represented background fetch registration.
   SkBitmap icon_;
 
-  // Map from in-progress |download_guid|s to number of bytes downloaded.
-  base::flat_map<std::string, uint64_t> active_request_download_bytes_;
+  // Number of bytes downloaded for the active request.
+  uint64_t active_request_downloaded_bytes_ = 0;
+
+  // Finished callback to invoke when the active request has finished.
+  RequestFinishedCallback active_request_finished_callback_;
 
   // Cache of downloaded byte count stored by the DataManager, to enable
   // delivering progress events without having to read from the database.
   uint64_t complete_requests_downloaded_bytes_cache_;
 
-  // The RequestManager's lifetime is controlled by the BackgroundFetchContext
-  // and will be kept alive until after the JobController is destroyed.
-  BackgroundFetchRequestManager* request_manager_;
+  // Total downloads size, as indicated by the developer.
+  int total_downloads_size_ = 0;
 
   // Proxy for interacting with the BackgroundFetchDelegate across thread
   // boundaries. It is owned by the BackgroundFetchContext.
@@ -125,6 +149,10 @@ class CONTENT_EXPORT BackgroundFetchJobController final
 
   // Number of the requests that have been completed so far.
   int completed_downloads_ = 0;
+
+  // The reason background fetch was aborted.
+  BackgroundFetchReasonToAbort reason_to_abort_ =
+      BackgroundFetchReasonToAbort::NONE;
 
   base::WeakPtrFactory<BackgroundFetchJobController> weak_ptr_factory_;
 

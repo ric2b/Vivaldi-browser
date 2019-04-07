@@ -28,6 +28,8 @@
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_features.h"
+#include "components/arc/arc_prefs.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
@@ -82,6 +84,18 @@ arc::mojom::SecurityType TranslateONCWifiSecurityType(
   return arc::mojom::SecurityType::NONE;
 }
 
+arc::mojom::TetheringClientState TranslateTetheringState(
+    const std::string& tethering_state) {
+  if (tethering_state == onc::tethering_state::kTetheringConfirmedState)
+    return arc::mojom::TetheringClientState::CONFIRMED;
+  else if (tethering_state == onc::tethering_state::kTetheringNotDetectedState)
+    return arc::mojom::TetheringClientState::NOT_DETECTED;
+  else if (tethering_state == onc::tethering_state::kTetheringSuspectedState)
+    return arc::mojom::TetheringClientState::SUSPECTED;
+  NOTREACHED() << "Invalid tethering state: " << tethering_state;
+  return arc::mojom::TetheringClientState::NOT_DETECTED;
+}
+
 arc::mojom::WiFiPtr TranslateONCWifi(const base::DictionaryValue* dict) {
   arc::mojom::WiFiPtr wifi = arc::mojom::WiFi::New();
 
@@ -102,6 +116,14 @@ arc::mojom::WiFiPtr TranslateONCWifi(const base::DictionaryValue* dict) {
   dict->GetInteger(onc::wifi::kSignalStrength, &wifi->signal_strength);
 
   return wifi;
+}
+
+// Extracts WiFi's tethering client state from a dictionary of WiFi properties.
+arc::mojom::TetheringClientState GetWifiTetheringClientState(
+    const base::DictionaryValue* dict) {
+  std::string tethering_state;
+  dict->GetString(onc::wifi::kTetheringState, &tethering_state);
+  return TranslateTetheringState(tethering_state);
 }
 
 std::vector<std::string> TranslateStringArray(const base::ListValue* list) {
@@ -179,6 +201,9 @@ void TranslateONCNetworkTypeDetails(const base::DictionaryValue* dict,
                                     arc::mojom::NetworkConfiguration* mojo) {
   std::string type = GetStringFromOncDictionary(
       dict, onc::network_config::kType, true /* required */);
+  // This property will be updated as required by the relevant network types
+  // below.
+  mojo->tethering_client_state = arc::mojom::TetheringClientState::NOT_DETECTED;
   if (type == onc::network_type::kCellular) {
     mojo->type = arc::mojom::NetworkType::CELLULAR;
   } else if (type == onc::network_type::kEthernet) {
@@ -187,11 +212,11 @@ void TranslateONCNetworkTypeDetails(const base::DictionaryValue* dict,
     mojo->type = arc::mojom::NetworkType::VPN;
   } else if (type == onc::network_type::kWiFi) {
     mojo->type = arc::mojom::NetworkType::WIFI;
-
     const base::DictionaryValue* wifi_dict = nullptr;
     dict->GetDictionary(onc::network_config::kWiFi, &wifi_dict);
     DCHECK(wifi_dict);
     mojo->wifi = TranslateONCWifi(wifi_dict);
+    mojo->tethering_client_state = GetWifiTetheringClientState(wifi_dict);
   } else if (type == onc::network_type::kWimax) {
     mojo->type = arc::mojom::NetworkType::WIMAX;
   } else {
@@ -359,6 +384,12 @@ ArcNetHostImpl* ArcNetHostImpl::GetForBrowserContext(
   return ArcNetHostImplFactory::GetForBrowserContext(context);
 }
 
+// static
+ArcNetHostImpl* ArcNetHostImpl::GetForBrowserContextForTesting(
+    content::BrowserContext* context) {
+  return ArcNetHostImplFactory::GetForBrowserContextForTesting(context);
+}
+
 ArcNetHostImpl::ArcNetHostImpl(content::BrowserContext* context,
                                ArcBridgeService* bridge_service)
     : arc_bridge_service_(bridge_service), weak_factory_(this) {
@@ -376,6 +407,10 @@ ArcNetHostImpl::~ArcNetHostImpl() {
   arc_bridge_service_->net()->SetHost(nullptr);
 }
 
+void ArcNetHostImpl::SetPrefService(PrefService* pref_service) {
+  pref_service_ = pref_service;
+}
+
 void ArcNetHostImpl::OnConnectionReady() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
@@ -390,7 +425,7 @@ void ArcNetHostImpl::OnConnectionReady() {
   const chromeos::NetworkState* default_network =
       GetShillBackedNetwork(GetStateHandler()->DefaultNetwork());
   if (default_network && default_network->type() == shill::kTypeVPN &&
-      default_network->vpn_provider_type() == shill::kProviderArcVpn) {
+      default_network->GetVpnProviderType() == shill::kProviderArcVpn) {
     VLOG(0) << "Disconnecting stale ARC VPN " << default_network->path();
     GetNetworkConnectionHandler()->DisconnectNetwork(
         default_network->path(), base::Bind(&ArcVpnSuccessCallback),
@@ -793,7 +828,7 @@ std::string ArcNetHostImpl::LookupArcVpnServicePath() {
         GetShillBackedNetwork(state);
     if (!shill_backed_network)
       continue;
-    if (shill_backed_network->vpn_provider_type() == shill::kProviderArcVpn) {
+    if (shill_backed_network->GetVpnProviderType() == shill::kProviderArcVpn) {
       return shill_backed_network->path();
     }
   }
@@ -928,6 +963,14 @@ void ArcNetHostImpl::AndroidVpnStateChanged(mojom::ConnectionStateType state) {
   GetNetworkConnectionHandler()->DisconnectNetwork(
       service_path, base::Bind(&ArcVpnSuccessCallback),
       base::Bind(&ArcVpnErrorCallback));
+}
+
+void ArcNetHostImpl::SetAlwaysOnVpn(const std::string& vpn_package,
+                                    bool lockdown) {
+  // pref_service_ should be set by ArcServiceLauncher.
+  DCHECK(pref_service_);
+  pref_service_->SetString(prefs::kAlwaysOnVpnPackage, vpn_package);
+  pref_service_->SetBoolean(prefs::kAlwaysOnVpnLockdown, lockdown);
 }
 
 void ArcNetHostImpl::DisconnectArcVpn() {

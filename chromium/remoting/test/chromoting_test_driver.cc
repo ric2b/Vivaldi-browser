@@ -9,11 +9,12 @@
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
 #include "base/test/test_switches.h"
 #include "google_apis/google_api_keys.h"
+#include "mojo/core/embedder/embedder.h"
 #include "net/base/escape.h"
 #include "remoting/test/chromoting_test_driver_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -189,6 +190,8 @@ int main(int argc, char* argv[]) {
   }
 
   base::TaskScheduler::CreateAndStartWithDefaultParams("ChromotingTestDriver");
+
+  mojo::core::Init();
 
   // Update the logging verbosity level if user specified one.
   std::string verbosity_level(

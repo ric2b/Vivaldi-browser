@@ -12,9 +12,8 @@
 
 #include "base/callback.h"
 #include "content/common/content_export.h"
-#include "content/public/common/presentation_connection_message.h"
-#include "media/base/media_controller.h"
-#include "third_party/blink/public/platform/modules/presentation/presentation.mojom.h"
+#include "media/base/flinging_controller.h"
+#include "third_party/blink/public/mojom/presentation/presentation.mojom.h"
 
 namespace content {
 
@@ -22,11 +21,11 @@ struct PresentationRequest;
 class PresentationScreenAvailabilityListener;
 
 using PresentationConnectionCallback =
-    base::OnceCallback<void(const blink::mojom::PresentationInfo&)>;
+    base::OnceCallback<void(blink::mojom::PresentationConnectionResultPtr)>;
 using PresentationConnectionErrorCallback =
     base::OnceCallback<void(const blink::mojom::PresentationError&)>;
-using DefaultPresentationConnectionCallback =
-    base::RepeatingCallback<void(const blink::mojom::PresentationInfo&)>;
+using DefaultPresentationConnectionCallback = base::RepeatingCallback<void(
+    blink::mojom::PresentationConnectionResultPtr)>;
 
 struct PresentationConnectionStateChangeInfo {
   explicit PresentationConnectionStateChangeInfo(
@@ -170,11 +169,11 @@ class CONTENT_EXPORT ControllerPresentationServiceDelegate
                          int render_frame_id,
                          const std::string& presentation_id) = 0;
 
-  // Gets a MediaController for a given presentation ID.
+  // Gets a FlingingController for a given presentation ID.
   // |render_process_id|, |render_frame_id|: ID of originating frame.
   // |presentation_id|: The ID of the presentation for which we want a
   // Controller.
-  virtual std::unique_ptr<media::MediaController> GetMediaController(
+  virtual std::unique_ptr<media::FlingingController> GetFlingingController(
       int render_process_id,
       int render_frame_id,
       const std::string& presentation_id) = 0;
@@ -190,20 +189,6 @@ class CONTENT_EXPORT ControllerPresentationServiceDelegate
       int render_frame_id,
       const blink::mojom::PresentationInfo& connection,
       const PresentationConnectionStateChangedCallback& state_changed_cb) = 0;
-
-  // Connect |controller_connection| owned by the controlling frame to the
-  // local presentation represented by |presentation_info|.
-  // |render_process_id|, |render_frame_id|: ID of originating frame.
-  // |controller_connection|: Pointer to controller's presentation connection,
-  // ownership passed from controlling frame to the local presentation.
-  // |receiver_connection_request|: Mojo InterfaceRequest to be bind to receiver
-  // page's presentation connection.
-  virtual void ConnectToPresentation(
-      int render_process_id,
-      int render_frame_id,
-      const blink::mojom::PresentationInfo& presentation_info,
-      PresentationConnectionPtr controller_connection_ptr,
-      PresentationConnectionRequest receiver_connection_request) = 0;
 };
 
 // An interface implemented by embedders to handle

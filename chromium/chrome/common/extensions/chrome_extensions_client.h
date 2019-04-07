@@ -8,12 +8,9 @@
 #include <memory>
 
 #include "base/compiler_specific.h"
-#include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "chrome/common/extensions/permissions/chrome_api_permissions.h"
 #include "chrome/common/extensions/permissions/chrome_permission_message_provider.h"
 #include "extensions/common/extensions_client.h"
-#include "extensions/common/permissions/extensions_api_permissions.h"
 #include "url/gurl.h"
 
 namespace extensions {
@@ -32,10 +29,6 @@ class ChromeExtensionsClient : public ExtensionsClient {
   const PermissionMessageProvider& GetPermissionMessageProvider()
       const override;
   const std::string GetProductName() override;
-  std::unique_ptr<FeatureProvider> CreateFeatureProvider(
-      const std::string& name) const override;
-  std::unique_ptr<JSONFeatureProviderSource> CreateAPIFeatureSource()
-      const override;
   void FilterHostPermissions(const URLPatternSet& hosts,
                              URLPatternSet* new_hosts,
                              PermissionIDSet* permissions) const override;
@@ -45,8 +38,6 @@ class ChromeExtensionsClient : public ExtensionsClient {
       const Extension* extension,
       const APIPermissionSet& api_permissions) const override;
   bool IsScriptableURL(const GURL& url, std::string* error) const override;
-  bool IsAPISchemaGenerated(const std::string& name) const override;
-  base::StringPiece GetAPISchema(const std::string& name) const override;
   bool ShouldSuppressFatalErrors() const override;
   void RecordDidSuppressFatalError() override;
   const GURL& GetWebstoreBaseURL() const override;
@@ -57,16 +48,7 @@ class ChromeExtensionsClient : public ExtensionsClient {
   bool ExtensionAPIEnabledInExtensionServiceWorkers() const override;
   std::string GetUserAgent() const override;
 
-  typedef ChromeExtensionsClient* (*ChromeExtensionsClientInstanceFetcher)();
-  static void RegisterAlternativeGetInstance(
-      ChromeExtensionsClientInstanceFetcher func);
-
-  // Get the LazyInstance for ChromeExtensionsClient.
-  static ChromeExtensionsClient* GetInstance();
-
  private:
-  const ChromeAPIPermissions chrome_api_permissions_;
-  const ExtensionsAPIPermissions extensions_api_permissions_;
   const ChromePermissionMessageProvider permission_message_provider_;
 
   // A whitelist of extensions that can script anywhere. Do not add to this
@@ -77,8 +59,6 @@ class ChromeExtensionsClient : public ExtensionsClient {
 
   GURL webstore_base_url_;
   GURL webstore_update_url_;
-
-  friend struct base::LazyInstanceTraitsBase<ChromeExtensionsClient>;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeExtensionsClient);
 };

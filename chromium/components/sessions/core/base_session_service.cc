@@ -9,7 +9,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/sessions/core/base_session_service_delegate.h"
@@ -123,7 +123,7 @@ void BaseSessionService::StartSaveTimer() {
       base::ThreadTaskRunnerHandle::IsSet() && !weak_factory_.HasWeakPtrs()) {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&BaseSessionService::Save, weak_factory_.GetWeakPtr()),
+        base::BindOnce(&BaseSessionService::Save, weak_factory_.GetWeakPtr()),
         base::TimeDelta::FromMilliseconds(kSaveDelayMS));
   }
 }

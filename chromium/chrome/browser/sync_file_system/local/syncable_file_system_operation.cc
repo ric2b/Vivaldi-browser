@@ -215,7 +215,7 @@ void SyncableFileSystemOperation::Remove(
 void SyncableFileSystemOperation::Write(
     const FileSystemURL& url,
     std::unique_ptr<storage::FileWriterDelegate> writer_delegate,
-    std::unique_ptr<net::URLRequest> blob_request,
+    std::unique_ptr<storage::BlobReader> blob_reader,
     const WriteCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   if (!operation_runner_.get()) {
@@ -229,7 +229,7 @@ void SyncableFileSystemOperation::Write(
       weak_factory_.GetWeakPtr(),
       base::Bind(
           &FileSystemOperation::Write, base::Unretained(impl_.get()), url,
-          base::Passed(&writer_delegate), base::Passed(&blob_request),
+          base::Passed(&writer_delegate), base::Passed(&blob_reader),
           base::Bind(&self::DidWrite, weak_factory_.GetWeakPtr(), callback))));
   operation_runner_->PostOperationTask(std::move(task));
 }
@@ -277,9 +277,9 @@ void SyncableFileSystemOperation::Cancel(
 
 void SyncableFileSystemOperation::CreateSnapshotFile(
     const FileSystemURL& path,
-    const SnapshotFileCallback& callback) {
+    SnapshotFileCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  impl_->CreateSnapshotFile(path, callback);
+  impl_->CreateSnapshotFile(path, std::move(callback));
 }
 
 void SyncableFileSystemOperation::CopyInForeignFile(

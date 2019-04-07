@@ -274,8 +274,10 @@ class CHROMEOS_EXPORT CrasAudioHandler : public CrasAudioClient::Observer,
   // the use case. It should be called from a user initiated action.
   void SwitchToFrontOrRearMic();
 
-  // Returns if system AEC is supported in CRAS.
-  bool system_aec_supported() const;
+  // All Chrome OS boards support this feature. Web applications will need
+  // to opt into original trial to use experimental native echo cancellation.
+  // Check crbug.com/853196 for usage.
+  bool system_aec_supported() const { return true; };
 
  protected:
   explicit CrasAudioHandler(
@@ -478,20 +480,11 @@ class CHROMEOS_EXPORT CrasAudioHandler : public CrasAudioClient::Observer,
   // Handle dbus callback for GetDefaultOutputBufferSize.
   void HandleGetDefaultOutputBufferSize(base::Optional<int> buffer_size);
 
-  // Calling dbus to get system AEC supported flag.
-  void GetSystemAecSupported();
-
-  // Calling dbus to get system AEC supported flag on main thread.
-  void GetSystemAecSupportedOnMainThread();
-
-  // Handle dbus callback for GetSystemAecSupported.
-  void HandleGetSystemAecSupported(base::Optional<bool> system_aec_supported);
-
   void OnVideoCaptureStartedOnMainThread(media::VideoFacingMode facing);
   void OnVideoCaptureStoppedOnMainThread(media::VideoFacingMode facing);
 
   scoped_refptr<AudioDevicesPrefHandler> audio_pref_handler_;
-  base::ObserverList<AudioObserver> observers_;
+  base::ObserverList<AudioObserver>::Unchecked observers_;
 
   // Audio data and state.
   AudioDeviceMap audio_devices_;
@@ -532,8 +525,6 @@ class CHROMEOS_EXPORT CrasAudioHandler : public CrasAudioClient::Observer,
 
   // Default output buffer size in frames.
   int32_t default_output_buffer_size_;
-
-  bool system_aec_supported_ = false;
 
   int num_active_output_streams_ = 0;
 

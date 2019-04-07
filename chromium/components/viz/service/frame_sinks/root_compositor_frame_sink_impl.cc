@@ -34,13 +34,17 @@ RootCompositorFrameSinkImpl::Create(
   std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source;
   ExternalBeginFrameSourceMojo* external_begin_frame_source_mojo = nullptr;
 
+  // BeginFrameSource::source_id component that changes on process restart.
+  uint32_t restart_id = display_provider->GetRestartId();
+
   if (params->external_begin_frame_controller.is_pending() &&
       params->external_begin_frame_controller_client) {
     auto owned_external_begin_frame_source_mojo =
         std::make_unique<ExternalBeginFrameSourceMojo>(
             std::move(params->external_begin_frame_controller),
             mojom::ExternalBeginFrameControllerClientPtr(
-                std::move(params->external_begin_frame_controller_client)));
+                std::move(params->external_begin_frame_controller_client)),
+            restart_id);
     external_begin_frame_source_mojo =
         owned_external_begin_frame_source_mojo.get();
     external_begin_frame_source =
@@ -48,12 +52,12 @@ RootCompositorFrameSinkImpl::Create(
   } else {
 #if defined(OS_ANDROID)
     external_begin_frame_source =
-        std::make_unique<ExternalBeginFrameSourceAndroid>();
+        std::make_unique<ExternalBeginFrameSourceAndroid>(restart_id);
 #else
     synthetic_begin_frame_source = std::make_unique<DelayBasedBeginFrameSource>(
         std::make_unique<DelayBasedTimeSource>(
             base::ThreadTaskRunnerHandle::Get().get()),
-        display_provider->GetRestartId());
+        restart_id);
 #endif
   }
 
@@ -135,6 +139,17 @@ void RootCompositorFrameSinkImpl::SetDisplayVSyncParameters(
   if (synthetic_begin_frame_source_)
     synthetic_begin_frame_source_->OnUpdateVSyncParameters(timebase, interval);
 }
+
+void RootCompositorFrameSinkImpl::ForceImmediateDrawAndSwapIfPossible() {
+  display_->ForceImmediateDrawAndSwapIfPossible();
+}
+
+#if defined(OS_ANDROID)
+void RootCompositorFrameSinkImpl::SetVSyncPaused(bool paused) {
+  if (external_begin_frame_source_)
+    external_begin_frame_source_->OnSetBeginFrameSourcePaused(paused);
+}
+#endif  // defined(OS_ANDROID)
 
 void RootCompositorFrameSinkImpl::SetNeedsBeginFrame(bool needs_begin_frame) {
   support_->SetNeedsBeginFrame(needs_begin_frame);

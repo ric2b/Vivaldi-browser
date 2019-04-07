@@ -12,8 +12,8 @@
 #include <vector>
 
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
-#include "services/ui/public/interfaces/screen_provider.mojom.h"
-#include "services/ui/public/interfaces/window_tree.mojom.h"
+#include "services/ws/public/mojom/screen_provider_observer.mojom.h"
+#include "services/ws/public/mojom/window_tree.mojom.h"
 #include "ui/aura/aura_export.h"
 
 namespace aura {
@@ -60,17 +60,18 @@ class AURA_EXPORT WindowTreeClientDelegate {
   // StartPointerWatcher(). |target| may be null for events that were sent to
   // windows owned by other processes.
   virtual void OnPointerEventObserved(const ui::PointerEvent& event,
-                                      int64_t display_id,
+                                      const gfx::Point& location_in_screen,
                                       Window* target) = 0;
 
   virtual PropertyConverter* GetPropertyConverter() = 0;
 
-  // See ui::mojom::ScreenProviderObserver for details on this.
+  // See ws::mojom::ScreenProviderObserver for details on this.
   // TODO(sky): consider moving ScreenMus from views to aura.
   virtual void OnDisplaysChanged(
-      std::vector<ui::mojom::WsDisplayPtr> ws_displays,
+      std::vector<ws::mojom::WsDisplayPtr> ws_displays,
       int64_t primary_display_id,
-      int64_t internal_display_id) {}
+      int64_t internal_display_id,
+      int64_t display_id_for_new_windows) {}
 
  protected:
   virtual ~WindowTreeClientDelegate() {}

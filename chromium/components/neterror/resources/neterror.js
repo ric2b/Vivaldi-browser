@@ -118,11 +118,13 @@ function downloadButtonClick() {
   if (window.errorPageController) {
     errorPageController.downloadButtonClick();
     var downloadButton = document.getElementById('download-button');
-    if (downloadButton.classList.contains('download-button-alternate')) {
-      downloadButton.classList.add('download-button-alternate-disabled');
-    }
     downloadButton.disabled = true;
     downloadButton.textContent = downloadButton.disabledText;
+
+    document.getElementById('download-link-wrapper')
+        .classList.add(HIDDEN_CLASS);
+    document.getElementById('download-link-clicked-wrapper')
+        .classList.remove(HIDDEN_CLASS);
   }
 }
 
@@ -157,6 +159,75 @@ var primaryControlOnLeft = true;
 primaryControlOnLeft = false;
 // </if>
 
+function toggleErrorInformationPopup() {
+  document.getElementById('error-information-popup-container')
+      .classList.toggle(HIDDEN_CLASS);
+}
+
+function getSuggestedContentDiv(item) {
+  var visual = '';
+    if (item.thumbnail_data_uri) {
+      // html_inline.py will try to replace src attributes with data URIs using
+      // a simple regex. The following is obfuscated slightly to avoid that.
+      var src = 'src';
+      visual = `<img ${src}="${item.thumbnail_data_uri}">`;
+    }
+    return `
+<div class="offline-content-suggestion"
+  onclick="launchOfflineItem('${item.ID}', '${item.name_space}')">
+  <div class="offline-content-suggestion-image">${visual}</div>
+  <div>
+    <div class="offline-content-suggestion-title">${item.title}</div>
+    <span class="offline-content-suggestion-attribution">${
+                                                           item.attribution
+                                                         }</span>
+    <span class="offline-content-suggestion-freshness">${
+                                                         item.date_modified
+                                                       }</span>
+  </div>
+</div>`;
+}
+
+function launchOfflineItem(itemID, name_space) {
+  errorPageController.launchOfflineItem(itemID, name_space);
+}
+
+function launchDownloadsPage() {
+  errorPageController.launchDownloadsPage();
+}
+
+// Populates a summary of suggested offline content.
+function offlineContentSummaryAvailable(summary) {
+  if (!summary || !loadTimeData.valueExists('offlineContentSummary'))
+    return;
+
+  document.getElementById('offline-content-summary').hidden = false;
+}
+
+// Populates a list of suggested offline content.
+// TODO(https://crbug.com/852872): Finish implementing offline content list UI.
+function offlineContentAvailable(content) {
+  if (!content || !loadTimeData.valueExists('offlineContentList'))
+    return;
+
+  var contentTitle = loadTimeData.getValue('offlineContentList').title;
+  var contentOpenAllButton =
+      loadTimeData.getValue('offlineContentList').actionText;
+  var suggestionsHTML = [];
+  suggestionsHTML.push(`<p style="text-align: center;">${contentTitle}</p>`);
+  for (var c of content)
+    suggestionsHTML.push(getSuggestedContentDiv(c));
+  suggestionsHTML.push(`
+<div>
+  <a class="link-button" onclick="launchDownloadsPage()">${
+                                                           contentOpenAllButton
+                                                         }</a>
+</div>`);
+  var offlineContentDiv = document.getElementById('offline-content-list');
+  offlineContentDiv.innerHTML = suggestionsHTML.join('\n');
+  offlineContentDiv.hidden = false;
+}
+
 function onDocumentLoad() {
   var controlButtonDiv = document.getElementById('control-buttons');
   var reloadButton = document.getElementById('reload-button');
@@ -172,6 +243,27 @@ function onDocumentLoad() {
   var downloadButtonVisible =
       loadTimeData.valueExists('downloadButton') &&
       loadTimeData.getValue('downloadButton').msg;
+
+  // If offline content suggestions will be visible, the usual buttons will not
+  // be presented.
+  var offlineContentVisible =
+      loadTimeData.valueExists('suggestedOfflineContentPresentationMode');
+  if (offlineContentVisible) {
+    document.querySelector('.nav-wrapper').classList.add(HIDDEN_CLASS);
+    detailsButton.classList.add(HIDDEN_CLASS);
+
+    if (downloadButtonVisible)
+      document.getElementById('download-link').hidden = false;
+
+    document.getElementById('download-links-wrapper')
+        .classList.remove(HIDDEN_CLASS);
+    document.getElementById('error-information-popup-container')
+        .classList.add('use-popup-container', HIDDEN_CLASS)
+    document.getElementById('error-information-button')
+        .classList.remove(HIDDEN_CLASS);
+
+    return;
+  }
 
   var primaryButton, secondaryButton;
   if (showSavedCopyButton.primary) {
@@ -200,16 +292,6 @@ function onDocumentLoad() {
       showSavedCopyButton.style.display == 'none' &&
       downloadButton.style.display == 'none') {
     detailsButton.classList.add('singular');
-  }
-
-  // Check for customization of downloadButton style if it's visible.
-  if (downloadButtonVisible &&
-      loadTimeData.valueExists('alternateDownloadButtonStyle')) {
-    downloadButton.classList.add('download-button-alternate');
-    reloadButton.disabled = true;
-    reloadButton.classList.add('reload-button-alternate');
-  } else if (downloadButtonVisible) {
-    downloadButton.classList.add('download-button');
   }
 
   // Show control buttons.

@@ -169,6 +169,11 @@ import org.chromium.chrome.browser.ChromeActivity;
     }
 
     @Override
+    public boolean willChangeDensityInVr(ChromeActivity activity) {
+        return VrShellDelegate.willChangeDensityInVr(activity);
+    }
+
+    @Override
     public void onSaveInstanceState(Bundle outState) {
         VrShellDelegate.onSaveInstanceState(outState);
     }

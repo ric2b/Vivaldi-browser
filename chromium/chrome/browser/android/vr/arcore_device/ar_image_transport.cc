@@ -5,6 +5,7 @@
 #include "chrome/browser/android/vr/arcore_device/ar_image_transport.h"
 
 #include "base/android/android_hardware_buffer_compat.h"
+#include "base/android/scoped_hardware_buffer_handle.h"
 #include "base/containers/queue.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "chrome/browser/android/vr/mailbox_to_surface_bridge.h"
@@ -74,8 +75,7 @@ bool ARImageTransport::Initialize() {
 
   glDisable(GL_DEPTH_TEST);
   glDepthMask(GL_FALSE);
-  web_vr_renderer_ = std::make_unique<vr::WebVrRenderer>();
-  vr::BaseQuadRenderer::CreateBuffers();
+  ar_renderer_ = std::make_unique<ArRenderer>();
   glGenTextures(1, &camera_texture_id_arcore_);
 
   SetupHardwareBuffers();
@@ -122,9 +122,9 @@ void ARImageTransport::ResizeSharedBuffer(const gfx::Size& size,
 
   auto img = base::MakeRefCounted<gl::GLImageAHardwareBuffer>(size);
 
-  AHardwareBuffer* ahb =
-      buffer->shared_gpu_memory_buffer->GetHandle().android_hardware_buffer;
-  bool ret = img->Initialize(ahb, false /* preserved */);
+  base::android::ScopedHardwareBufferHandle ahb =
+      buffer->shared_gpu_memory_buffer->CloneHandle().android_hardware_buffer;
+  bool ret = img->Initialize(ahb.get(), false /* preserved */);
   if (!ret) {
     DLOG(WARNING) << __FUNCTION__ << ": ERROR: failed to initialize image!";
     return;
@@ -191,7 +191,7 @@ gpu::MailboxHolder ARImageTransport::TransferFrame(
 
   // Don't need face culling, depth testing, blending, etc. Turn it all off.
   // TODO(klausw): see if we can do this one time on initialization. That would
-  // be a tiny bit more efficient, but is only safe if ARCore and WebVrRenderer
+  // be a tiny bit more efficient, but is only safe if ARCore and ArRenderer
   // don't modify these states.
   glDisable(GL_CULL_FACE);
   glDisable(GL_SCISSOR_TEST);
@@ -202,7 +202,7 @@ gpu::MailboxHolder ARImageTransport::TransferFrame(
   // Draw the ARCore texture!
   float uv_transform_floats[16];
   uv_transform.matrix().asColMajorf(uv_transform_floats);
-  web_vr_renderer_->Draw(camera_texture_id_arcore_, uv_transform_floats, 0, 0);
+  ar_renderer_->Draw(camera_texture_id_arcore_, uv_transform_floats, 0, 0);
 
   glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, 0);
 

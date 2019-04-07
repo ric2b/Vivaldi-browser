@@ -21,9 +21,21 @@ template("vivaldi_extract_untranslated") {
                            "original_source",
                            "vivaldi_source",
                            "deps",
+                           "extra_grit_defines",
+                           "grit_defines",
+                           "grit_additional_defines",
                          ])
   if (!defined(original_source)) {
     original_source = source
+  }
+  if (!defined(extra_grit_defines)) {
+    extra_grit_defines = []
+  }
+  if (!defined(grit_defines)) {
+    grit_defines = []
+  }
+  if (!defined(grit_additional_defines)) {
+    grit_additional_defines = []
   }
   if (defined(vivaldi_source)) {
     file_target1= get_path_info(vivaldi_source, "name")
@@ -52,7 +64,7 @@ template("vivaldi_extract_untranslated") {
       args = [
         "--locale", locale,
         "--vivaldi-file", file_target,
-      ]
+      ] + grit_defines + extra_grit_defines + grit_additional_defines
       if (defined(vivaldi_source)) {
         args += [
           "--messages",
@@ -74,7 +86,7 @@ template("vivaldi_extract_untranslated") {
     outputs = [ _untranslated_target_prefix+".pot" ]
     args = [
       "--vivaldi-file", file_target,
-    ]
+    ] + grit_defines + extra_grit_defines + grit_additional_defines
     if (defined(vivaldi_source)) {
       args += [
         "--messages",

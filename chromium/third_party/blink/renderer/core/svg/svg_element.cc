@@ -312,17 +312,6 @@ static inline bool TransformUsesBoxSize(const ComputedStyle& style) {
 static FloatRect ComputeTransformReferenceBox(const SVGElement& element) {
   const LayoutObject& layout_object = *element.GetLayoutObject();
   const ComputedStyle& style = layout_object.StyleRef();
-  if (!RuntimeEnabledFeatures::CSSTransformBoxEnabled()) {
-    FloatRect reference_box = layout_object.ObjectBoundingBox();
-    // Set the reference origin to zero when transform-origin (x/y) has a
-    // non-percentage unit.
-    const TransformOrigin& transform_origin = style.GetTransformOrigin();
-    if (transform_origin.X().GetType() != kPercent)
-      reference_box.SetX(0);
-    if (transform_origin.Y().GetType() != kPercent)
-      reference_box.SetY(0);
-    return reference_box;
-  }
   if (style.TransformBox() == ETransformBox::kFillBox)
     return layout_object.ObjectBoundingBox();
   DCHECK_EQ(style.TransformBox(), ETransformBox::kViewBox);
@@ -378,7 +367,7 @@ AffineTransform SVGElement::CalculateTransform(
 }
 
 Node::InsertionNotificationRequest SVGElement::InsertedInto(
-    ContainerNode* root_parent) {
+    ContainerNode& root_parent) {
   Element::InsertedInto(root_parent);
   UpdateRelativeLengthsInformation();
 
@@ -393,26 +382,26 @@ Node::InsertionNotificationRequest SVGElement::InsertedInto(
   return kInsertionDone;
 }
 
-void SVGElement::RemovedFrom(ContainerNode* root_parent) {
-  bool was_in_document = root_parent->isConnected();
+void SVGElement::RemovedFrom(ContainerNode& root_parent) {
+  bool was_in_document = root_parent.isConnected();
 
   if (was_in_document && HasRelativeLengths()) {
     // The root of the subtree being removed should take itself out from its
     // parent's relative length set. For the other nodes in the subtree we don't
     // need to do anything: they will get their own removedFrom() notification
     // and just clear their sets.
-    if (root_parent->IsSVGElement() && !parentNode()) {
+    if (root_parent.IsSVGElement() && !parentNode()) {
       DCHECK(ToSVGElement(root_parent)
-                 ->elements_with_relative_lengths_.Contains(this));
-      ToSVGElement(root_parent)->UpdateRelativeLengthsInformation(false, this);
+                 .elements_with_relative_lengths_.Contains(this));
+      ToSVGElement(root_parent).UpdateRelativeLengthsInformation(false, this);
     }
 
     elements_with_relative_lengths_.clear();
   }
 
-  SECURITY_DCHECK(!root_parent->IsSVGElement() ||
+  SECURITY_DCHECK(!root_parent.IsSVGElement() ||
                   !ToSVGElement(root_parent)
-                       ->elements_with_relative_lengths_.Contains(this));
+                       .elements_with_relative_lengths_.Contains(this));
 
   Element::RemovedFrom(root_parent);
 
@@ -682,36 +671,30 @@ bool SVGElement::InUseShadowTree() const {
 }
 
 void SVGElement::ParseAttribute(const AttributeModificationParams& params) {
+  // Note about the 'class' attribute:
+  // The "special storage" (SVGAnimatedString) for the 'class' attribute (and
+  // the 'className' property) is updated by the follow block (|class_name_|
+  // registered in |attribute_to_property_map_|.). SvgAttributeChanged then
+  // triggers the resulting style updates (instead of
+  // Element::ParseAttribute). We don't tell Element about the change to avoid
+  // parsing the class list twice.
   if (SVGAnimatedPropertyBase* property = PropertyFromAttribute(params.name)) {
-    SVGParsingError parse_error =
-        property->SetBaseValueAsString(params.new_value);
+    SVGParsingError parse_error = property->AttributeChanged(params.new_value);
     ReportAttributeParsingError(parse_error, params.name, params.new_value);
     return;
   }
 
-  if (params.name == HTMLNames::classAttr) {
-    // SVG animation has currently requires special storage of values so we set
-    // the className here. svgAttributeChanged actually causes the resulting
-    // style updates (instead of Element::parseAttribute). We don't
-    // tell Element about the change to avoid parsing the class list twice
-    SVGParsingError parse_error =
-        class_name_->SetBaseValueAsString(params.new_value);
-    ReportAttributeParsingError(parse_error, params.name, params.new_value);
-  } else if (params.name == tabindexAttr) {
-    Element::ParseAttribute(params);
-  } else {
-    // standard events
-    const AtomicString& event_name =
-        HTMLElement::EventNameForAttributeName(params.name);
-    if (!event_name.IsNull()) {
-      SetAttributeEventListener(
-          event_name,
-          CreateAttributeEventListener(this, params.name, params.new_value,
-                                       EventParameterName()));
-    } else {
-      Element::ParseAttribute(params);
-    }
+  const AtomicString& event_name =
+      HTMLElement::EventNameForAttributeName(params.name);
+  if (!event_name.IsNull()) {
+    SetAttributeEventListener(
+        event_name,
+        CreateAttributeEventListener(this, params.name, params.new_value,
+                                     EventParameterName()));
+    return;
   }
+
+  Element::ParseAttribute(params);
 }
 
 // If the attribute is not present in the map, the map will return the "empty
@@ -918,7 +901,7 @@ bool SVGElement::SendSVGLoadEventIfPossible() {
     return false;
   if ((IsStructurallyExternal() || IsSVGSVGElement(*this)) &&
       HasLoadListener(this))
-    DispatchEvent(Event::Create(EventTypeNames::load));
+    DispatchEvent(*Event::Create(EventTypeNames::load));
   return true;
 }
 

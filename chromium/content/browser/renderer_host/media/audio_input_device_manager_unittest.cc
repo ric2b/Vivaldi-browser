@@ -50,7 +50,8 @@ class MockAudioInputDeviceManagerListener
 // TODO(henrika): there are special restrictions for Android since
 // AudioInputDeviceManager::Open() must be called on the audio thread.
 // This test suite must be modified to run on Android.
-#if defined(OS_ANDROID)
+// Flaky on Linux. See http://crbug.com/867397.
+#if defined(OS_ANDROID) || defined(OS_LINUX)
 #define MAYBE_AudioInputDeviceManagerTest DISABLED_AudioInputDeviceManagerTest
 #else
 #define MAYBE_AudioInputDeviceManagerTest AudioInputDeviceManagerTest
@@ -311,9 +312,9 @@ class AudioInputDeviceManagerNoDevicesTest
         std::make_unique<media::AudioThreadImpl>());
 
     // Devices to request from AudioInputDeviceManager.
-    devices_.emplace_back(MEDIA_TAB_AUDIO_CAPTURE, "tab_capture",
+    devices_.emplace_back(MEDIA_GUM_TAB_AUDIO_CAPTURE, "tab_capture",
                           "Tab capture");
-    devices_.emplace_back(MEDIA_DESKTOP_AUDIO_CAPTURE, "desktop_capture",
+    devices_.emplace_back(MEDIA_GUM_DESKTOP_AUDIO_CAPTURE, "desktop_capture",
                           "Desktop capture");
     devices_.emplace_back(MEDIA_DEVICE_AUDIO_CAPTURE, "fake_device",
                           "Fake Device");

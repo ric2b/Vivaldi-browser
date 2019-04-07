@@ -20,9 +20,15 @@ namespace {
 
 smb_client::SmbService* GetSmbService(Profile* profile) {
   smb_client::SmbService* const service = smb_client::SmbService::Get(profile);
-  DCHECK(service);
-
   return service;
+}
+
+base::Value BuildShareList(const std::vector<smb_client::SmbUrl>& shares) {
+  base::Value shares_list(base::Value::Type::LIST);
+  for (const auto& share : shares) {
+    shares_list.GetList().push_back(base::Value(share.ToString()));
+  }
+  return shares_list;
 }
 
 }  // namespace
@@ -54,6 +60,9 @@ void SmbHandler::HandleSmbMount(const base::ListValue* args) {
   CHECK(args->GetString(3, &password));
 
   smb_client::SmbService* const service = GetSmbService(profile_);
+  if (!service) {
+    return;
+  }
 
   chromeos::file_system_provider::MountOptions mo;
   mo.display_name = mount_name.empty() ? mount_url : mount_name;
@@ -79,6 +88,9 @@ void SmbHandler::HandleSmbMountResponse(SmbMountResult result) {
 
 void SmbHandler::HandleStartDiscovery(const base::ListValue* args) {
   smb_client::SmbService* const service = GetSmbService(profile_);
+  if (!service) {
+    return;
+  }
 
   service->GatherSharesInNetwork(base::BindRepeating(
       &SmbHandler::HandleGatherSharesResponse, weak_ptr_factory_.GetWeakPtr()));
@@ -91,9 +103,10 @@ void SmbHandler::HandleGatherSharesResponse(
     std::move(stored_mount_call_).Run();
   }
 
-  // TODO(zentaro): Pass the shares discovered back to the UI.
-  // https://crbug.com/852199.
+  AllowJavascript();
+  FireWebUIListener("on-shares-found", BuildShareList(shares_gathered));
 }
+
 
 }  // namespace settings
 }  // namespace chromeos

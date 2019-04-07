@@ -14,6 +14,7 @@ import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.Toast;
@@ -24,7 +25,7 @@ import org.chromium.chromecast.base.Both;
 import org.chromium.chromecast.base.CastSwitches;
 import org.chromium.chromecast.base.Controller;
 import org.chromium.chromecast.base.Observable;
-import org.chromium.chromecast.base.ScopeFactories;
+import org.chromium.chromecast.base.Observers;
 import org.chromium.chromecast.base.Unit;
 
 /**
@@ -44,6 +45,10 @@ public class CastWebContentsActivity extends Activity {
     private final Controller<Unit> mCreatedState = new Controller<>();
     // Tracks whether this Activity is between onResume() and onPause().
     private final Controller<Unit> mResumedState = new Controller<>();
+    // Tracks whether this Activity is between onStart() and onStop().
+    private final Controller<Unit> mStartedState = new Controller<>();
+    // Tracks whether the user has left according to onUserLeaveHint().
+    private final Controller<Unit> mUserLeftState = new Controller<>();
     // Tracks the most recent Intent for the Activity.
     private final Controller<Intent> mGotIntentState = new Controller<>();
     // Set this to cause the Activity to finish.
@@ -60,7 +65,7 @@ public class CastWebContentsActivity extends Activity {
                 mIsFinishingState.andThen(mGotIntentState).map(Both::getSecond);
         Observable<?> createdAndNotTestingState =
                 mCreatedState.and(Observable.not(mIsTestingState));
-        createdAndNotTestingState.watch(() -> {
+        createdAndNotTestingState.subscribe(x -> {
             // Register handler for web content stopped event while we have an Intent.
             IntentFilter filter = new IntentFilter();
             filter.addAction(CastIntents.ACTION_ON_WEB_CONTENT_STOPPED);
@@ -68,7 +73,7 @@ public class CastWebContentsActivity extends Activity {
                 mIsFinishingState.set("Stopped by intent: " + intent.getAction());
             });
         });
-        createdAndNotTestingState.watch(ScopeFactories.onEnter(() -> {
+        createdAndNotTestingState.subscribe(Observers.onEnter(x -> {
             // Do this in onCreate() only if not testing.
             if (!CastBrowserHelper.initializeBrowser(getApplicationContext())) {
                 Toast.makeText(this, R.string.browser_process_initialization_failed,
@@ -77,30 +82,36 @@ public class CastWebContentsActivity extends Activity {
                 mIsFinishingState.set("Failed to initialize browser");
             }
 
-            // Set flags to both exit sleep mode when this activity starts and
-            // avoid entering sleep mode while playing media. We cannot distinguish
-            // between video and audio so this applies to both.
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
             setContentView(R.layout.cast_web_contents_activity);
 
             mSurfaceHelper = new CastWebContentsSurfaceHelper(this, /* hostActivity */
-                    CastWebContentsView.onLayout(this,
+                    CastWebContentsView.onLayoutActivity(this,
                             (FrameLayout) findViewById(R.id.web_contents_container),
                             CastSwitches.getSwitchValueColor(
                                     CastSwitches.CAST_APP_BACKGROUND_COLOR, Color.BLACK)),
                     (Uri uri) -> mIsFinishingState.set("Delayed teardown for URI: " + uri));
         }));
 
+        mCreatedState.map(x -> getWindow())
+                .and(mGotIntentState)
+                .subscribe(Observers.onEnter(Both.adapt((Window window, Intent intent) -> {
+                    // Set flags to both exit sleep mode when this activity starts and
+                    // avoid entering sleep mode while playing media. If an app that shouldn't turn
+                    // on the screen is launching, we don't add TURN_SCREEN_ON.
+                    if (CastWebContentsIntentUtils.shouldTurnOnScreen(intent))
+                        window.addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                })));
+
         // Initialize the audio manager in onCreate() if tests haven't already.
-        mCreatedState.and(Observable.not(mAudioManagerState)).watch(ScopeFactories.onEnter(() -> {
+        mCreatedState.and(Observable.not(mAudioManagerState)).subscribe(Observers.onEnter(x -> {
             mAudioManagerState.set(CastAudioManager.getAudioManager(this));
         }));
 
         // Clean up stream mute state on pause events.
         mAudioManagerState.andThen(Observable.not(mResumedState))
-                .watch(ScopeFactories.onEnter((CastAudioManager audioManager, Unit u) -> {
+                .map(Both::getFirst)
+                .subscribe(Observers.onEnter((CastAudioManager audioManager) -> {
                     audioManager.releaseStreamMuteIfNecessary(AudioManager.STREAM_MUSIC);
                 }));
 
@@ -111,22 +122,27 @@ public class CastWebContentsActivity extends Activity {
                 .map(Intent::getExtras)
                 .map(CastWebContentsSurfaceHelper.StartParams::fromBundle)
                 // Use the duplicate-filtering functionality of Controller to drop duplicate params.
-                .watch(ScopeFactories.onEnter(startParamsState::set));
-        startParamsState.watch(ScopeFactories.onEnter(this ::notifyNewWebContents));
+                .subscribe(Observers.onEnter(startParamsState::set));
+        startParamsState.subscribe(Observers.onEnter(this ::notifyNewWebContents));
 
-        mIsFinishingState.watch(ScopeFactories.onEnter((String reason) -> {
+        mIsFinishingState.subscribe(Observers.onEnter((String reason) -> {
             if (DEBUG) Log.d(TAG, "Finishing activity: " + reason);
             finish();
         }));
 
         // If a new Intent arrives after finishing, start a new Activity instead of recycling this.
-        gotIntentAfterFinishingState.watch(ScopeFactories.onEnter((Intent intent) -> {
+        gotIntentAfterFinishingState.subscribe(Observers.onEnter((Intent intent) -> {
             Log.d(TAG, "Got intent while finishing current activity, so start new activity.");
             int flags = intent.getFlags();
             flags = flags & ~Intent.FLAG_ACTIVITY_SINGLE_TOP;
             intent.setFlags(flags);
             startActivity(intent);
         }));
+
+        Observable<?> stoppingBecauseUserLeftState =
+                Observable.not(mStartedState).and(mUserLeftState);
+        stoppingBecauseUserLeftState.subscribe(Observers.onEnter(
+                x -> { mIsFinishingState.set("User left and activity stopped."); }));
     }
 
     @Override
@@ -150,6 +166,7 @@ public class CastWebContentsActivity extends Activity {
     @Override
     protected void onStart() {
         if (DEBUG) Log.d(TAG, "onStart");
+        mStartedState.set(Unit.unit());
         super.onStart();
     }
 
@@ -170,6 +187,7 @@ public class CastWebContentsActivity extends Activity {
     @Override
     protected void onStop() {
         if (DEBUG) Log.d(TAG, "onStop");
+        mStartedState.reset();
         super.onStop();
     }
 
@@ -181,6 +199,12 @@ public class CastWebContentsActivity extends Activity {
         }
         mCreatedState.reset();
         super.onDestroy();
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        mUserLeftState.set(Unit.unit());
+        super.onUserLeaveHint();
     }
 
     @Override

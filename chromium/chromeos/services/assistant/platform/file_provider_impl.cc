@@ -4,24 +4,16 @@
 
 #include "chromeos/services/assistant/platform/file_provider_impl.h"
 
-#include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/path_service.h"
+#include "chromeos/grit/chromeos_resources.h"
+#include "chromeos/services/assistant/utils.h"
+#include "ui/base/resource/resource_bundle.h"
 
 namespace chromeos {
 namespace assistant {
 namespace {
 
 constexpr int kReadFileSizeLimitInBytes = 10 * 1024 * 1024;
-
-// Get the root path for assistant files.
-base::FilePath GetRootPath() {
-  base::FilePath home_dir;
-  CHECK(base::PathService::Get(base::DIR_HOME, &home_dir));
-  // Ensures DIR_HOME is overridden after primary user sign-in.
-  CHECK_NE(base::GetHomeDir(), home_dir);
-  return home_dir;
-}
 
 }  // namespace
 
@@ -80,6 +72,37 @@ bool FileProviderImpl::WriteSecureFile(const std::string& path,
 
 void FileProviderImpl::CleanAssistantData() {
   base::DeleteFile(root_path_, true);
+}
+
+bool FileProviderImpl::GetResource(uint16_t resource_id, std::string* out) {
+  int chrome_resource_id = -1;
+  switch (resource_id) {
+    case assistant_client::resource_ids::kGeneralError:
+      chrome_resource_id = IDR_ASSISTANT_SPEECH_RECOGNITION_ERROR;
+      break;
+    case assistant_client::resource_ids::kWifiNeedsSetupError:
+    case assistant_client::resource_ids::kWifiNotConnectedError:
+    case assistant_client::resource_ids::kWifiCannotConnectError:
+    case assistant_client::resource_ids::kNetworkConnectingError:
+    // These above do not apply to ChromeOS, but let it fall through to get a
+    // generic error.
+    case assistant_client::resource_ids::kNetworkCannotReachServerError:
+      chrome_resource_id = IDR_ASSISTANT_NO_INTERNET_ERROR;
+      break;
+    case assistant_client::resource_ids::kDefaultHotwordResourceId:
+      chrome_resource_id = IDR_ASSISTANT_HOTWORD_MODEL;
+      break;
+    default:
+      break;
+  }
+
+  if (chrome_resource_id < 0)
+    return false;
+
+  auto data = ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
+      chrome_resource_id);
+  out->assign(data.data(), data.length());
+  return true;
 }
 
 }  // namespace assistant

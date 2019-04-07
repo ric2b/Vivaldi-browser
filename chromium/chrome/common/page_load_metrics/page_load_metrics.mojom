@@ -130,6 +130,10 @@ struct PageLoadTiming {
   InteractiveTiming interactive_timing;
   PaintTiming paint_timing;
   ParseTiming parse_timing;
+  // Time between user input and navigation start. This is set for navigations
+  // where the input start timing is known; currently when the navigation is
+  // initiated by a link click in the renderer.
+  mojo_base.mojom.TimeDelta? input_to_navigation_start;
 
   // If you add additional members, also be sure to update page_load_timing.h.
 };
@@ -151,15 +155,24 @@ struct PageLoadFeatures {
   array<int32> animated_css_properties;
 };
 
-// Data used for the page load.
-struct PageLoadDataUse {
-  // Network bytes received for the page load.
+struct ResourceDataUpdate {
+  // The id for the resource request.
+  int32 request_id = 0;
+
+  // Network bytes received for the resource since the last timing update
+  // from renderer to browser.
+  int64 delta_bytes = 0;
+
+  // Total network bytes received for the resource across timing updates. This
+  // is the aggregate of the |delta_bytes| from each timing update.
   int64 received_data_length = 0;
 
-  // The number of bytes saved by the data reduction proxy. Will be zero when
-  // data reduction proxy is not used. Can be negative if the proxy inflated the
-  // resource.
-  int64 data_reduction_proxy_bytes_saved = 0;
+  // Whether this resource load has completed.
+  bool is_complete;
+
+  // Compression ratio estimated from the response headers if data saver was
+  // used.
+  double data_reduction_proxy_compression_ratio_estimate;
 };
 
 // Sent from renderer to browser process when the PageLoadTiming for the
@@ -168,5 +181,5 @@ interface PageLoadMetrics {
   UpdateTiming(PageLoadTiming page_load_timing,
                PageLoadMetadata page_load_metadata,
                PageLoadFeatures new_features,
-               PageLoadDataUse data_use);
+               array<ResourceDataUpdate> resources);
 };

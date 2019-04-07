@@ -79,6 +79,7 @@ class ProfileImpl : public Profile {
       const base::FilePath& partition_path) override;
 #endif
   base::FilePath GetPath() const override;
+  base::FilePath GetCachePath() const override;
   content::DownloadManagerDelegate* GetDownloadManagerDelegate() override;
   content::ResourceContext* GetResourceContext() override;
   content::BrowserPluginGuestManager* GetGuestManager() override;
@@ -105,6 +106,8 @@ class ProfileImpl : public Profile {
       bool in_memory) override;
   void RegisterInProcessServices(StaticServiceMap* services) override;
   std::string GetMediaDeviceIDSalt() override;
+  download::InProgressDownloadManager* RetriveInProgressDownloadManager()
+      override;
 
   // Profile implementation:
   scoped_refptr<base::SequencedTaskRunner> GetIOTaskRunner() override;

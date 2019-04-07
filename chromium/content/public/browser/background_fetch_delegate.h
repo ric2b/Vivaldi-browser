@@ -13,7 +13,10 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/resource_request_info.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 
 class GURL;
 
@@ -25,6 +28,10 @@ namespace net {
 class HttpRequestHeaders;
 struct NetworkTrafficAnnotationTag;
 }  // namespace net
+
+namespace url {
+class Origin;
+}  // namespace url
 
 namespace content {
 struct BackgroundFetchResponse;
@@ -38,6 +45,7 @@ enum class BackgroundFetchReasonToAbort {
   ABORTED_BY_DEVELOPER,
   TOTAL_DOWNLOAD_SIZE_EXCEEDED,
   SERVICE_WORKER_UNAVAILABLE,
+  QUOTA_EXCEEDED,
 };
 
 // Interface for launching background fetches. Implementing classes would
@@ -47,6 +55,7 @@ enum class BackgroundFetchReasonToAbort {
 class CONTENT_EXPORT BackgroundFetchDelegate {
  public:
   using GetIconDisplaySizeCallback = base::OnceCallback<void(const gfx::Size&)>;
+  using GetPermissionForOriginCallback = base::OnceCallback<void(bool)>;
 
   // Client interface that a BackgroundFetchDelegate would use to signal the
   // progress of a background fetch.
@@ -95,6 +104,13 @@ class CONTENT_EXPORT BackgroundFetchDelegate {
   // Gets size of the icon to display with the Background Fetch UI.
   virtual void GetIconDisplaySize(GetIconDisplaySizeCallback callback) = 0;
 
+  // Checks whether |origin| has permission to start a Background Fetch.
+  // |wc_getter| can be null, which means this is running from a worker context.
+  virtual void GetPermissionForOrigin(
+      const url::Origin& origin,
+      const ResourceRequestInfo::WebContentsGetter& wc_getter,
+      GetPermissionForOriginCallback callback) = 0;
+
   // Creates a new download grouping identified by |job_unique_id|. Further
   // downloads started by DownloadUrl will also use this |job_unique_id| so that
   // a notification can be updated with the current status. If the download was
@@ -118,9 +134,10 @@ class CONTENT_EXPORT BackgroundFetchDelegate {
   virtual void Abort(const std::string& job_unique_id) = 0;
 
   // Updates the UI shown for the fetch job associated with |job_unique_id| to
-  // display a new |title|.
+  // display a new |title| or |icon|.
   virtual void UpdateUI(const std::string& job_unique_id,
-                        const std::string& title) = 0;
+                        const base::Optional<std::string>& title,
+                        const base::Optional<SkBitmap>& icon) = 0;
 
   // Set the client that the delegate should communicate changes to.
   void SetDelegateClient(base::WeakPtr<Client> client) { client_ = client; }

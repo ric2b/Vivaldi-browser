@@ -24,6 +24,8 @@ const wchar_t kBinariesAppGuid[] = L"";
 
 const wchar_t kBinariesPathName[] = L"";
 
+const char kSafeBrowsingName[] = "vivaldi";
+
 const InstallConstants kInstallModes[] = {
     // The primary install mode for stable Google Chrome.
     {

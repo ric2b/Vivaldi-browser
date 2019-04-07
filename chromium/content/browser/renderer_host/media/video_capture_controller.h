@@ -48,6 +48,11 @@ class CONTENT_EXPORT VideoCaptureController
       std::unique_ptr<VideoCaptureDeviceLauncher> device_launcher,
       base::RepeatingCallback<void(const std::string&)> emit_log_message_cb);
 
+  // Warning: This value should not be changed, because doing so would change
+  // the meaning of logged UMA events for histograms Media.VideoCapture.Error
+  // and Media.VideoCapture.MaxFrameDropExceeded.
+  static constexpr int kMaxConsecutiveFrameDropForSameReasonCount = 10;
+
   base::WeakPtr<VideoCaptureController> GetWeakPtrForIOThread();
 
   // Start video capturing and try to use the resolution specified in |params|.
@@ -109,7 +114,8 @@ class CONTENT_EXPORT VideoCaptureController
           buffer_read_permission,
       media::mojom::VideoFrameInfoPtr frame_info) override;
   void OnBufferRetired(int buffer_id) override;
-  void OnError() override;
+  void OnError(media::VideoCaptureError error) override;
+  void OnFrameDropped(media::VideoCaptureFrameDropReason reason) override;
   void OnLog(const std::string& message) override;
   void OnStarted() override;
   void OnStartedUsingGpuDecode() override;
@@ -117,7 +123,7 @@ class CONTENT_EXPORT VideoCaptureController
   // Implementation of VideoCaptureDeviceLauncher::Callbacks interface:
   void OnDeviceLaunched(
       std::unique_ptr<LaunchedVideoCaptureDevice> device) override;
-  void OnDeviceLaunchFailed() override;
+  void OnDeviceLaunchFailed(media::VideoCaptureError error) override;
   void OnDeviceLaunchAborted() override;
 
   void OnDeviceConnectionLost();
@@ -196,6 +202,16 @@ class CONTENT_EXPORT VideoCaptureController
         buffer_read_permission_;
   };
 
+  struct FrameDropLogState {
+    FrameDropLogState(media::VideoCaptureFrameDropReason reason =
+                          media::VideoCaptureFrameDropReason::kNone);
+
+    int drop_count = 0;
+    media::VideoCaptureFrameDropReason drop_reason =
+        media::VideoCaptureFrameDropReason::kNone;
+    bool max_log_count_exceeded = false;
+  };
+
   ~VideoCaptureController() override;
 
   // Find a client of |id| and |handler| in |clients|.
@@ -219,8 +235,8 @@ class CONTENT_EXPORT VideoCaptureController
       const std::vector<BufferContext>::iterator& buffer_state_iter);
 
   using EventHandlerAction =
-      base::Callback<void(VideoCaptureControllerEventHandler* client,
-                          VideoCaptureControllerID id)>;
+      base::RepeatingCallback<void(VideoCaptureControllerEventHandler* client,
+                                   VideoCaptureControllerID id)>;
   void PerformForClientsWithOpenSession(EventHandlerAction action);
 
   void EmitLogMessage(const std::string& message, int verbose_log_level);
@@ -242,6 +258,8 @@ class CONTENT_EXPORT VideoCaptureController
   // Takes on only the states 'STARTING', 'STARTED' and 'ERROR'. 'ERROR' is an
   // absorbing state which stops the flow of data to clients.
   VideoCaptureState state_;
+
+  FrameDropLogState frame_drop_log_state_;
 
   int next_buffer_context_id_ = 0;
 

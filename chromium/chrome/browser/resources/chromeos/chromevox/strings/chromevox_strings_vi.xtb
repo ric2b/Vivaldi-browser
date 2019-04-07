@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="vi">
 <translation id="100812568230599391">Thay đổi kiểu hiển thị thành đan xen.</translation>
+<translation id="1011903154582639569">Tìm phím rồi nhấc tay lên để nhập</translation>
 <translation id="1012173283529841972">Mục danh sách</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1022586497894531524">Đây là lần đầu tiên bạn sử dụng tính năng phản hồi bằng giọng nói của ChromeVox? Hướng dẫn nhanh này sẽ giải thích các thông tin cơ bản để bắt đầu với ChromeVox.</translation>
@@ -15,6 +16,7 @@
 <translation id="1065552602950927991">Nhập vào không hợp lệ</translation>
 <translation id="1080471004309605942">Cuối chữ in nghiêng</translation>
 <translation id="1082209053475788238">Không có tiêu đề cấp 6 trước nào.</translation>
+<translation id="1087788677726983142">Ẩn các bộ lọc luồng sự kiện</translation>
 <translation id="1088219014394087294">Không có tiêu đề nào.</translation>
 <translation id="1106741348836243114">Bật hoặc tắt phản hồi bằng âm thanh (kết nối tai nghe).</translation>
 <translation id="1108651818222110612">phụ đề</translation>
@@ -77,6 +79,7 @@ Nếu bạn đã đọc xong hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="1618597272655350600">Thông báo mô tả đầy đủ của vị trí hiện tại</translation>
 <translation id="1639634871799530612">{COUNT,plural, =1{dấu lớn hơn}other{# dấu lớn hơn}}</translation>
 <translation id="1653266918374749391">Tiêu đề cấp 3 trước</translation>
+<translation id="1657616855184033958">Hiển thị các bộ lọc luồng sự kiện</translation>
 <translation id="1659072772017912254">Chưa chọn</translation>
 <translation id="1669290819662866522">tuần</translation>
 <translation id="1674262202423278359">Điều hướng ChromeVox</translation>
@@ -136,6 +139,7 @@ Nếu bạn đã đọc xong hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="2267945578749931355">Ký tự tiếp theo</translation>
 <translation id="2281234842553884450">Thanh trượt trước</translation>
 <translation id="2294136146931447363">Đầu chữ in nghiêng</translation>
+<translation id="2311237334957139798">Chuyển về độ chi tiết trước đó</translation>
 <translation id="2318372665160196757">Chính</translation>
 <translation id="2329324941084714723">Bảng điều khiển tab</translation>
 <translation id="2344193891939537199">Kiểm soát ngày giờ</translation>
@@ -156,12 +160,14 @@ Nếu bạn đã đọc xong hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="2462626033734746142">Nhóm nút radio</translation>
 <translation id="2471138580042810658">Tiêu đề 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{dấu hoa thị}other{# dấu hoa thị}}</translation>
+<translation id="249330843868392562">Mở tùy chọn cài đặt chuyển văn bản sang lời nói</translation>
 <translation id="2523609930580546572">Hướng dẫn về ChromeVox</translation>
 <translation id="2525706221823668172">Phím tắt Chromebook</translation>
 <translation id="2549392850788122959"><ph name="KEY" /> đã được đặt lại.</translation>
 <translation id="2553108862507765288">lỗi ngữ pháp</translation>
 <translation id="257674075312929031">Nhóm</translation>
 <translation id="2582407057977008361">Loại trừ</translation>
+<translation id="2592212930811759050">Nhấn đúp để bắt đầu chỉnh sửa</translation>
 <translation id="2606210917827248971">với {COUNT,plural, =1{# mục}other{# mục}}</translation>
 <translation id="2614981083756825552">Bố cục toán học ML</translation>
 <translation id="2624431853467395961">Mở chế độ học</translation>
@@ -409,6 +415,7 @@ Nếu bạn đã đọc xong hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="4255943572433203166">Sử dụng các tùy chọn bên dưới để tùy chỉnh ChromeVox. Các thay đổi sẽ có hiệu lực ngay lập tức.</translation>
 <translation id="4271220233568730077">Biểu thức toán tiếp theo</translation>
 <translation id="4271521365602459209">Không còn kết quả nào nữa.</translation>
+<translation id="4275397969489577657">Bật ghi nhật ký luồng sự kiện</translation>
 <translation id="4287520460805643128">Không có bài viết tiếp theo nào.</translation>
 <translation id="4289540628985791613">Tổng quan</translation>
 <translation id="4300318234632215983">Thông báo URL ở sau liên kết</translation>
@@ -487,6 +494,7 @@ Nếu bạn đã đọc xong hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="4973762002207131920">Được chuyển thành <ph name="KEY" />.</translation>
 <translation id="4975416682604111799">mili giây</translation>
 <translation id="49787999531187221">ChromeVox hiện không hoạt động.</translation>
+<translation id="4979263087381759787">Tùy chọn của nhà phát triển</translation>
 <translation id="4979404613699303341">Nút trước</translation>
 <translation id="4982773647088557172"><ph name="VALUE" />, <ph name="NAME" />, hộp danh sách</translation>
 <translation id="4983588134362688868">Chuyển đến đầu trang</translation>
@@ -498,6 +506,7 @@ Nếu bạn đã đọc xong hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="5000760171916499057">Không có biểu mẫu nào.</translation>
 <translation id="5005670136041063723">Không có phần tử tương tự nào khác.</translation>
 <translation id="501473567976723023">Tháng 1</translation>
+<translation id="5020651427400641814">Bật tính năng ghi nhật ký bằng lời nói</translation>
 <translation id="5041394372352067729">Di chuyển màn hình chữ nổi về đầu trang</translation>
 <translation id="5042770794184672516">Tăng âm lượng giọng nói</translation>
 <translation id="5050015258024679800">Tiêu đề cấp 4 trước</translation>
@@ -512,6 +521,7 @@ Nếu bạn đã đọc xong hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="5106547198195128110">Chúng tôi có một số thay đổi thú vị trong bản phát hành mới này. Dưới đây là những tính năng mới:</translation>
 <translation id="5110983769041734144">Không có trường biểu mẫu trước nào.</translation>
 <translation id="5111640677200759579">Tiêu đề cột</translation>
+<translation id="5115892389597951922">Nhật ký ChromeVox</translation>
 <translation id="5136967254288895616">Không có liên kết trước nào.</translation>
 <translation id="513774504516943387">lnk</translation>
 <translation id="5158275234811857234">Trang bìa</translation>
@@ -545,6 +555,7 @@ Nếu bạn đã đọc xong hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="5407530583102765689">{COUNT,plural, =1{dấu chấm phẩy}other{# dấu chấm phẩy}}</translation>
 <translation id="5411891038905756502">Không có điểm nhảy trước nào.</translation>
 <translation id="5417034931411865818">Nhấp vào mục bên dưới phím định tuyến $1</translation>
+<translation id="5435274640623994081">Bật ghi nhật ký âm báo</translation>
 <translation id="5436105723448703439">{COUNT,plural, =1{dấu nhỏ hơn}other{# dấu nhỏ hơn}}</translation>
 <translation id="5444587279251314700">(hiện hoạt)</translation>
 <translation id="5446809554778706307">Không có tiêu điểm. Hãy nhấn tổ hợp phím Ctrl+T để mở tab mới.</translation>
@@ -678,6 +689,7 @@ Nếu bạn đã đọc xong hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="6540201937398578274">Trong ChromeVox, phím Tìm kiếm là phím bổ trợ. Hầu hết các phím tắt trên ChromeVox đều bắt đầu bằng phím Tìm kiếm. Ngoài ra, bạn có thể sử dụng các phím mũi tên để di chuyển.</translation>
 <translation id="6550720799683018100">Thay đổi sơ đồ bàn phím hiện tại bằng cách chọn một tùy chọn từ danh sách bên dưới.</translation>
 <translation id="6561818612645211875">Đi tới đầu hàng hiện tại</translation>
+<translation id="6583174818554398774">Chuyển tới độ chi tiết tiếp theo</translation>
 <translation id="6587021927234520429">Không có tiêu đề cấp 4 tiếp theo nào.</translation>
 <translation id="6601344353291556895">Bật mô tả chi tiết.</translation>
 <translation id="6615602925644411249">Tìm trong trang.</translation>
@@ -753,6 +765,7 @@ Nếu bạn đã đọc xong hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="7241683698754534149">Mở mô tả dài trong tab mới</translation>
 <translation id="7248671827512403053">Ứng dụng</translation>
 <translation id="725969808843520477">Nút radio tiếp theo</translation>
+<translation id="7261612856573623172">Giọng nói của tính năng chuyển văn bản sang lời nói trong hệ thống</translation>
 <translation id="7269119382257320590">Không có dấu câu</translation>
 <translation id="7273174640290488576">Trống</translation>
 <translation id="7274770952766771364">Tham chiếu chú thích</translation>
@@ -893,6 +906,7 @@ Nếu bạn đã đọc xong hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="8650576015643545550">Không có danh sách trước nào.</translation>
 <translation id="8651481478098336970">tắt tiếng</translation>
 <translation id="8653646212587894517">Hiển thị danh sách liên kết</translation>
+<translation id="8656888282555543604">Bật ghi nhật ký chữ nổi</translation>
 <translation id="8664519043722036194">giây</translation>
 <translation id="867187640362843212">Tiêu đề 5</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{dấu sổ thẳng}other{# dấu sổ thẳng}}</translation>

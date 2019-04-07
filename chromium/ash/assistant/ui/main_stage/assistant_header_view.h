@@ -12,16 +12,15 @@
 
 namespace views {
 class BoxLayout;
-class Label;
 }  // namespace views
 
 namespace ash {
 
 class AssistantController;
-class AssistantProgressIndicator;
+class BaseLogoView;
 
 // AssistantHeaderView is the child of UiElementContainerView which provides
-// the Assistant icon. On first launch, it also displays a greeting to the user.
+// the Assistant icon.
 class AssistantHeaderView : public views::View,
                             public AssistantInteractionModelObserver,
                             public AssistantUiModelObserver {
@@ -31,15 +30,15 @@ class AssistantHeaderView : public views::View,
 
   // views::View:
   gfx::Size CalculatePreferredSize() const override;
-  int GetHeightForWidth(int width) const override;
   void ChildVisibilityChanged(views::View* child) override;
 
   // AssistantInteractionModelObserver:
-  void OnCommittedQueryChanged(const AssistantQuery& committed_query) override;
-  void OnUiElementAdded(const AssistantUiElement* ui_element) override;
+  void OnResponseChanged(const AssistantResponse& response) override;
 
   // AssistantUiModelObserver:
-  void OnUiVisibilityChanged(bool visible, AssistantSource source) override;
+  void OnUiVisibilityChanged(AssistantVisibility new_visibility,
+                             AssistantVisibility old_visibility,
+                             AssistantSource source) override;
 
  private:
   void InitLayout();
@@ -47,8 +46,11 @@ class AssistantHeaderView : public views::View,
   AssistantController* const assistant_controller_;  // Owned by Shell.
 
   views::BoxLayout* layout_manager_;  // Owned by view hierarchy.
-  views::Label* greeting_label_;      // Owned by view hierarchy.
-  AssistantProgressIndicator* progress_indicator_;  // Owned by view hierarchy.
+  BaseLogoView* molecule_icon_;       // Owned by view hierarchy.
+
+  // True if this is the first query response received for the current Assistant
+  // UI session, false otherwise.
+  bool is_first_response_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantHeaderView);
 };

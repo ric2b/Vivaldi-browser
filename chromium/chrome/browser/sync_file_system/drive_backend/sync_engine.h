@@ -21,7 +21,7 @@
 #include "components/drive/drive_notification_observer.h"
 #include "components/drive/service/drive_service_interface.h"
 #include "components/signin/core/browser/signin_manager_base.h"
-#include "content/public/browser/network_connection_tracker.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 class OAuth2TokenService;
@@ -69,7 +69,7 @@ class SyncEngine
       public LocalChangeProcessor,
       public drive::DriveNotificationObserver,
       public drive::DriveServiceObserver,
-      public content::NetworkConnectionTracker::NetworkConnectionObserver,
+      public network::NetworkConnectionTracker::NetworkConnectionObserver,
       public SigninManagerBase::Observer {
  public:
   typedef RemoteFileSyncService::Observer SyncServiceObserver;
@@ -139,14 +139,15 @@ class SyncEngine
                         const SyncStatusCallback& callback) override;
 
   // drive::DriveNotificationObserver overrides.
-  void OnNotificationReceived() override;
+  void OnNotificationReceived(const std::set<std::string>& ids) override;
+  void OnNotificationTimerFired() override;
   void OnPushNotificationEnabled(bool enabled) override;
 
   // drive::DriveServiceObserver overrides.
   void OnReadyToSendRequests() override;
   void OnRefreshTokenInvalid() override;
 
-  // content::NetworkConnectionTracker::NetworkConnectionObserver overrides.
+  // network::NetworkConnectionTracker::NetworkConnectionObserver overrides.
   void OnConnectionChanged(network::mojom::ConnectionType type) override;
 
   // SigninManagerBase::Observer overrides.
@@ -231,8 +232,8 @@ class SyncEngine
   std::unique_ptr<WorkerObserver> worker_observer_;
   std::unique_ptr<SyncWorkerInterface> sync_worker_;
 
-  base::ObserverList<SyncServiceObserver> service_observers_;
-  base::ObserverList<FileStatusObserver> file_status_observers_;
+  base::ObserverList<SyncServiceObserver>::Unchecked service_observers_;
+  base::ObserverList<FileStatusObserver>::Unchecked file_status_observers_;
   leveldb::Env* env_override_;
 
   CallbackTracker callback_tracker_;

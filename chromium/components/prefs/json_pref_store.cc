@@ -104,6 +104,8 @@ void RecordJsonDataSizeHistogram(const base::FilePath& path, size_t size) {
   // The histogram below is an expansion of the UMA_HISTOGRAM_CUSTOM_COUNTS
   // macro adapted to allow for a dynamically suffixed histogram name.
   // Note: The factory creates and owns the histogram.
+  // This histogram is expired but the code was intentionally left behind so
+  // it can be re-enabled on Stable in a single config tweak if needed.
   base::HistogramBase* histogram = base::Histogram::FactoryGet(
       "Settings.JsonDataReadSizeKilobytes." + spaceless_basename, 1, 10000, 50,
       base::HistogramBase::kUmaTargetedHistogramFlag);
@@ -132,8 +134,8 @@ std::unique_ptr<JsonPrefStore::ReadResult> ReadPrefsFromDisk(
 
 JsonPrefStore::JsonPrefStore(
     const base::FilePath& pref_filename,
-    scoped_refptr<base::SequencedTaskRunner> file_task_runner,
-    std::unique_ptr<PrefFilter> pref_filter)
+    std::unique_ptr<PrefFilter> pref_filter,
+    scoped_refptr<base::SequencedTaskRunner> file_task_runner)
     : path_(pref_filename),
       file_task_runner_(std::move(file_task_runner)),
       prefs_(new base::DictionaryValue()),
@@ -272,7 +274,9 @@ void JsonPrefStore::ReadPrefsAsync(ReadErrorDelegate* error_delegate) {
       base::Bind(&JsonPrefStore::OnFileRead, AsWeakPtr()));
 }
 
-void JsonPrefStore::CommitPendingWrite(base::OnceClosure done_callback) {
+void JsonPrefStore::CommitPendingWrite(
+    base::OnceClosure reply_callback,
+    base::OnceClosure synchronous_done_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Schedule a write for any lossy writes that are outstanding to ensure that
@@ -282,13 +286,19 @@ void JsonPrefStore::CommitPendingWrite(base::OnceClosure done_callback) {
   if (writer_.HasPendingWrite() && !read_only_)
     writer_.DoScheduledWrite();
 
-  if (done_callback) {
-    // Since disk operations occur on |file_task_runner_|, the reply of a task
-    // posted to |file_task_runner_| will run after currently pending disk
-    // operations. Also, by definition of PostTaskAndReply(), the reply will run
-    // on the current sequence.
+  // Since disk operations occur on |file_task_runner_|, the reply of a task
+  // posted to |file_task_runner_| will run after currently pending disk
+  // operations. Also, by definition of PostTaskAndReply(), the reply (in the
+  // |reply_callback| case will run on the current sequence.
+
+  if (synchronous_done_callback) {
+    file_task_runner_->PostTask(FROM_HERE,
+                                std::move(synchronous_done_callback));
+  }
+
+  if (reply_callback) {
     file_task_runner_->PostTaskAndReply(FROM_HERE, base::DoNothing(),
-                                        std::move(done_callback));
+                                        std::move(reply_callback));
   }
 }
 
@@ -336,8 +346,8 @@ void JsonPrefStore::PostWriteCallback(
 
   // We can't run |on_next_write_reply| on the current thread. Bounce back to
   // the |reply_task_runner| which is the correct sequenced thread.
-  reply_task_runner->PostTask(FROM_HERE,
-                              base::Bind(on_next_write_reply, write_success));
+  reply_task_runner->PostTask(
+      FROM_HERE, base::BindOnce(on_next_write_reply, write_success));
 }
 
 void JsonPrefStore::RegisterOnNextSuccessfulWriteReply(
@@ -444,7 +454,7 @@ void JsonPrefStore::OnFileRead(std::unique_ptr<ReadResult> read_result) {
 
 JsonPrefStore::~JsonPrefStore() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CommitPendingWrite(base::OnceClosure());
+  CommitPendingWrite();
 }
 
 bool JsonPrefStore::SerializeData(std::string* output) {

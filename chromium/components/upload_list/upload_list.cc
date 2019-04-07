@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 
 UploadList::UploadInfo::UploadInfo(const std::string& upload_id,
                                    const base::Time& upload_time,
@@ -66,7 +66,7 @@ void UploadList::RequestSingleUploadAsync(const std::string& local_id) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
   base::PostTaskWithTraits(
       FROM_HERE, LoadingTaskTraits(),
-      base::Bind(&UploadList::RequestSingleUpload, this, local_id));
+      base::BindOnce(&UploadList::RequestSingleUpload, this, local_id));
 }
 
 void UploadList::GetUploads(size_t max_count,

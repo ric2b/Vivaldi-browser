@@ -11,7 +11,6 @@
 #include "components/browser_sync/sync_auth_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/sync/driver/signin_manager_wrapper.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "content/public/browser/browser_thread.h"
 #if !defined(OS_ANDROID)
@@ -38,14 +37,18 @@ VivaldiSyncManager::VivaldiSyncManager(
       invalidation_service_(invalidation_service),
       weak_factory_(this) {
   auto vivaldi_sync_auth_manager = std::make_unique<VivaldiSyncAuthManager>(
-      &sync_prefs_, signin_ ? signin_->GetIdentityManager() : nullptr,
+      &sync_prefs_, identity_manager_,
       base::BindRepeating(&VivaldiSyncManager::AccountStateChanged,
                           base::Unretained(this)),
       base::BindRepeating(&VivaldiSyncManager::CredentialsChanged,
                           base::Unretained(this)),
       base::BindRepeating(&VivaldiSyncManager::NotifyAccessTokenRequested,
                           base::Unretained(this)),
+#if !defined(OS_ANDROID)
       sync_client_->GetPrefService()->GetString(vivaldiprefs::kSyncUsername));
+#else
+      std::string("_antonio_"));
+#endif
   vivaldi_sync_auth_manager_ = vivaldi_sync_auth_manager.get();
   auth_manager_.reset(vivaldi_sync_auth_manager.release());
 }
@@ -174,7 +177,7 @@ void VivaldiSyncManager::SetToken(bool start_sync,
   // This can only really happens when switching between sync servers and
   // using different accounts at the same time.
   std::string current_account =
-      auth_manager_->GetAuthenticatedAccountInfo().account_id;
+      auth_manager_->GetActiveAccountInfo().account_info.account_id;
   if (!current_account.empty() && current_account != account_id) {
     Logout();
     return;
@@ -236,7 +239,8 @@ void VivaldiSyncManager::SyncStartupCompleted() {
 
 void VivaldiSyncManager::SyncStartupFailed() {
   sync_startup_tracker_.reset();
-  if (!IsSyncAllowed())
+  if (!HasDisableReason(DISABLE_REASON_PLATFORM_OVERRIDE) &&
+      !HasDisableReason(DISABLE_REASON_ENTERPRISE_POLICY))
     Logout();
   NotifyEngineInitFailed();
 }

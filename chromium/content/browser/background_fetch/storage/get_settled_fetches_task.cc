@@ -17,9 +17,11 @@ namespace background_fetch {
 GetSettledFetchesTask::GetSettledFetchesTask(
     DatabaseTaskHost* host,
     BackgroundFetchRegistrationId registration_id,
+    std::unique_ptr<BackgroundFetchRequestMatchParams> match_params,
     SettledFetchesCallback callback)
     : DatabaseTask(host),
       registration_id_(registration_id),
+      match_params_(std::move(match_params)),
       settled_fetches_callback_(std::move(callback)),
       weak_factory_(this) {}
 
@@ -48,8 +50,7 @@ void GetSettledFetchesTask::DidOpenCache(
     CacheStorageCacheHandle handle,
     blink::mojom::CacheStorageError error) {
   if (error != blink::mojom::CacheStorageError::kSuccess) {
-    // TODO(crbug.com/780025): Log failures to UMA.
-    error_ = blink::mojom::BackgroundFetchError::STORAGE_ERROR;
+    SetStorageError(BackgroundFetchStorageError::kCacheStorageError);
   } else {
     DCHECK(handle.value());
     handle_ = std::move(handle);
@@ -64,9 +65,8 @@ void GetSettledFetchesTask::DidGetCompletedRequests(
   switch (ToDatabaseStatus(status)) {
     case DatabaseStatus::kOk:
       break;
-    // TODO(crbug.com/780025): Log failures to UMA.
     case DatabaseStatus::kFailed:
-      error_ = blink::mojom::BackgroundFetchError::STORAGE_ERROR;
+      SetStorageError(BackgroundFetchStorageError::kServiceWorkerStorageError);
       break;
     case DatabaseStatus::kNotFound:
       background_fetch_succeeded_ = false;
@@ -80,7 +80,7 @@ void GetSettledFetchesTask::DidGetCompletedRequests(
     if (!completed_requests_.back().ParseFromString(
             serialized_completed_request)) {
       // Service worker database has been corrupted. Abandon fetches.
-      error_ = blink::mojom::BackgroundFetchError::STORAGE_ERROR;
+      SetStorageError(BackgroundFetchStorageError::kServiceWorkerStorageError);
       background_fetch_succeeded_ = false;
       AbandonFetches(registration_id_.service_worker_registration_id());
       break;
@@ -92,6 +92,11 @@ void GetSettledFetchesTask::DidGetCompletedRequests(
 }
 
 void GetSettledFetchesTask::GetResponses() {
+  // Handle potential errors.
+  if (HasStorageError()) {
+    FinishWithError(blink::mojom::BackgroundFetchError::STORAGE_ERROR);
+    return;
+  }
   if (error_ != blink::mojom::BackgroundFetchError::NONE) {
     FinishWithError(error_);
     return;
@@ -101,19 +106,42 @@ void GetSettledFetchesTask::GetResponses() {
     return;
   }
 
-  base::RepeatingClosure barrier_closure = base::BarrierClosure(
-      completed_requests_.size(),
-      base::BindOnce(&GetSettledFetchesTask::FinishWithError,
-                     weak_factory_.GetWeakPtr(),
-                     blink::mojom::BackgroundFetchError::NONE));
+  if (!match_params_->FilterByRequest()) {
+    // No request to match against has been specified. Process all completed
+    // requests.
+    // TODO(crbug.com/863016): Process all requests here, not just the
+    // completed ones.
+    base::RepeatingClosure barrier_closure = base::BarrierClosure(
+        completed_requests_.size(),
+        base::BindOnce(&GetSettledFetchesTask::FinishWithError,
+                       weak_factory_.GetWeakPtr(),
+                       blink::mojom::BackgroundFetchError::NONE));
+    settled_fetches_.reserve(completed_requests_.size());
+    for (const auto& completed_request : completed_requests_) {
+      settled_fetches_.emplace_back();
+      settled_fetches_.back().request =
+          std::move(ServiceWorkerFetchRequest::ParseFromString(
+              completed_request.serialized_request()));
+      FillResponse(&settled_fetches_.back(), barrier_closure);
+    }
+    return;
+  }
 
-  settled_fetches_.reserve(completed_requests_.size());
-  for (const auto& completed_request : completed_requests_) {
-    settled_fetches_.emplace_back();
-    settled_fetches_.back().request =
-        std::move(ServiceWorkerFetchRequest::ParseFromString(
-            completed_request.serialized_request()));
-    FillResponse(&settled_fetches_.back(), barrier_closure);
+  // Get response(s) only for the relevant fetch.
+  settled_fetches_.emplace_back();
+  settled_fetches_.back().request = match_params_->request_to_match();
+
+  if (match_params_->match_all()) {
+    FillResponses(base::BindOnce(&GetSettledFetchesTask::FinishWithError,
+                                 weak_factory_.GetWeakPtr(),
+                                 blink::mojom::BackgroundFetchError::NONE));
+    return;
+  } else {
+    FillResponse(&settled_fetches_.back(),
+                 base::BindOnce(&GetSettledFetchesTask::FinishWithError,
+                                weak_factory_.GetWeakPtr(),
+                                blink::mojom::BackgroundFetchError::NONE));
+    return;
   }
 }
 
@@ -125,47 +153,114 @@ void GetSettledFetchesTask::FillResponse(
 
   auto request =
       std::make_unique<ServiceWorkerFetchRequest>(settled_fetch->request);
-
-  handle_.value()->Match(std::move(request), nullptr /* match_params */,
+  handle_.value()->Match(std::move(request),
+                         match_params_->cloned_cache_query_params(),
                          base::BindOnce(&GetSettledFetchesTask::DidMatchRequest,
                                         weak_factory_.GetWeakPtr(),
                                         settled_fetch, std::move(callback)));
+}
+
+void GetSettledFetchesTask::FillResponses(base::OnceClosure callback) {
+  DCHECK(match_params_->match_all());
+  DCHECK(match_params_->FilterByRequest());
+  DCHECK(!settled_fetches_.empty());
+  DCHECK(handle_.value());
+
+  // Make a copy.
+  auto request = std::make_unique<ServiceWorkerFetchRequest>(
+      match_params_->request_to_match());
+
+  handle_.value()->MatchAll(
+      std::move(request), match_params_->cloned_cache_query_params(),
+      base::BindOnce(&GetSettledFetchesTask::DidMatchAllResponsesForRequest,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void GetSettledFetchesTask::DidMatchRequest(
     BackgroundFetchSettledFetch* settled_fetch,
     base::OnceClosure callback,
     blink::mojom::CacheStorageError error,
-    std::unique_ptr<ServiceWorkerResponse> cache_response) {
-  if (error != blink::mojom::CacheStorageError::kSuccess) {
-    DCHECK(settled_fetch);
+    blink::mojom::FetchAPIResponsePtr cache_response) {
+  DCHECK(settled_fetch);
+
+  // Handle error cases.
+  if (error == blink::mojom::CacheStorageError::kErrorNotFound) {
+    // This is currently being called once a fetch finishes, or when match() is
+    // called.
+    // In the first case, not finding a response is an error state. In the
+    // second case, it just means the developer passed a non-matching request.
+    // The if condition below picks the first one.
+    // TODO(crbug.com/863016): Once we stop sending settled_fetches with
+    // BackgroundFetch events, this won't be a storage error.
+    if (!match_params_->FilterByRequest())
+      SetStorageError(BackgroundFetchStorageError::kCacheStorageError);
+  } else if (error != blink::mojom::CacheStorageError::kSuccess) {
+    SetStorageError(BackgroundFetchStorageError::kCacheStorageError);
+  }
+
+  if (!cache_response) {
     FillUncachedResponse(settled_fetch, std::move(callback));
     return;
   }
-  settled_fetch->response = std::move(*cache_response);
+  settled_fetch->response = std::move(cache_response);
   std::move(callback).Run();
 }
 
+void GetSettledFetchesTask::DidMatchAllResponsesForRequest(
+    base::OnceClosure callback,
+    blink::mojom::CacheStorageError error,
+    std::vector<blink::mojom::FetchAPIResponsePtr> cache_responses) {
+  if (error != blink::mojom::CacheStorageError::kSuccess &&
+      error != blink::mojom::CacheStorageError::kErrorNotFound) {
+    SetStorageError(BackgroundFetchStorageError::kCacheStorageError);
+  }
+
+  if (error != blink::mojom::CacheStorageError::kSuccess) {
+    DCHECK(!settled_fetches_.empty());
+    FillUncachedResponse(&settled_fetches_.back(), std::move(callback));
+    return;
+  }
+
+  settled_fetches_.clear();
+  settled_fetches_.reserve(cache_responses.size());
+  for (size_t i = 0; i < cache_responses.size(); ++i) {
+    settled_fetches_.emplace_back();
+    settled_fetches_.back().request = match_params_->request_to_match();
+    settled_fetches_.back().response = std::move(cache_responses[i]);
+  }
+  std::move(callback).Run();
+}
+
+// TODO(crbug.com/863016): Get rid of this method.
 void GetSettledFetchesTask::FillUncachedResponse(
     BackgroundFetchSettledFetch* settled_fetch,
     base::OnceClosure callback) {
   background_fetch_succeeded_ = false;
 
   // TODO(rayankans): Fill unmatched response with error reports.
-  settled_fetch->response.response_type =
+  DCHECK(!settled_fetch->response);
+  settled_fetch->response = blink::mojom::FetchAPIResponse::New();
+  settled_fetch->response->response_type =
       network::mojom::FetchResponseType::kError;
-  settled_fetch->response.url_list.push_back(settled_fetch->request.url);
+  settled_fetch->response->url_list.push_back(settled_fetch->request.url);
 
   std::move(callback).Run();
 }
 
 void GetSettledFetchesTask::FinishWithError(
     blink::mojom::BackgroundFetchError error) {
+  if (HasStorageError())
+    error = blink::mojom::BackgroundFetchError::STORAGE_ERROR;
+  ReportStorageError();
   std::move(settled_fetches_callback_)
       .Run(error, background_fetch_succeeded_, std::move(settled_fetches_),
            {} /* blob_data_handles */);
   Finished();  // Destroys |this|.
 }
+
+std::string GetSettledFetchesTask::HistogramName() const {
+  return "GetSettledFetchesTask";
+};
 
 }  // namespace background_fetch
 

@@ -11,12 +11,14 @@ function SwitchAccessInterface() {}
 
 SwitchAccessInterface.prototype = {
   /**
-   * Move to the next/previous interesting node. If |doNext| is true, move to
-   * the next node. Otherwise, move to the previous node.
-   *
-   * @param {boolean} doNext
+   * Move to the next interesting node.
    */
-  moveToNode: function(doNext) {},
+  moveForward: function() {},
+
+  /**
+   * Move to the previous interesting node.
+   */
+  moveBackward: function() {},
 
   /**
    * Perform the default action on the current node.
@@ -99,25 +101,5 @@ SwitchAccessInterface.prototype = {
    * @param {number} keyCode
    * @return {boolean}
    */
-  keyCodeIsUsed: function(keyCode) {},
-
-  /**
-   * Move to the next sibling of the current node if it has one.
-   */
-  debugMoveToNext: function() {},
-
-  /**
-   * Move to the previous sibling of the current node if it has one.
-   */
-  debugMoveToPrevious: function() {},
-
-  /**
-   * Move to the first child of the current node if it has one.
-   */
-  debugMoveToFirstChild: function() {},
-
-  /**
-   * Move to the parent of the current node if it has one.
-   */
-  debugMoveToParent: function() {}
+  keyCodeIsUsed: function(keyCode) {}
 };

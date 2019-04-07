@@ -24,7 +24,6 @@
 #include "content/browser/service_worker/service_worker_url_job_wrapper.h"
 #include "content/common/content_export.h"
 #include "content/common/service_worker/service_worker.mojom.h"
-#include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
 #include "mojo/public/cpp/system/data_pipe.h"
@@ -37,6 +36,7 @@
 #include "services/network/public/mojom/request_context_frame_type.mojom.h"
 #include "storage/common/blob_storage/blob_storage_constants.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_response.mojom.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -148,6 +148,8 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   base::WeakPtr<ServiceWorkerURLRequestJob> GetWeakPtr();
 
  private:
+  using ResponseHeaderMap = base::flat_map<std::string, std::string>;
+
   class FileSizeResolver;
   class NavigationPreloadMetrics;
   friend class service_worker_url_request_job_unittest::DelayHelper;
@@ -190,16 +192,15 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   void DidDispatchFetchEvent(
       blink::ServiceWorkerStatusCode status,
       ServiceWorkerFetchDispatcher::FetchEventResult fetch_result,
-      const ServiceWorkerResponse& response,
+      blink::mojom::FetchAPIResponsePtr response,
       blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
-      blink::mojom::BlobPtr body_as_blob,
       scoped_refptr<ServiceWorkerVersion> version);
-  void SetResponse(const ServiceWorkerResponse& response);
+  void SetResponse(blink::mojom::FetchAPIResponsePtr response);
 
   // Populates |http_response_headers_|.
   void CreateResponseHeader(int status_code,
                             const std::string& status_text,
-                            const ServiceWorkerHeaderMap& headers);
+                            ResponseHeaderMap headers);
 
   // Creates |http_response_info_| using |http_response_headers_| and calls
   // NotifyHeadersComplete.
@@ -250,6 +251,9 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   void OnNavigationPreloadResponse();
 
   void MaybeReportNavigationPreloadMetrics();
+
+  void ReportDestination(
+      ServiceWorkerMetrics::MainResourceRequestDestination destination);
 
   // Not owned.
   Delegate* delegate_;
@@ -335,6 +339,9 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   ServiceWorkerHeaderList cors_exposed_header_names_;
 
   std::unique_ptr<FileSizeResolver> file_size_resolver_;
+
+  bool started_fetch_dispatch_ = false;
+  bool reported_destination_ = false;
 
   base::WeakPtrFactory<ServiceWorkerURLRequestJob> weak_factory_;
 

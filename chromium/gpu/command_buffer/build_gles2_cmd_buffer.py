@@ -683,6 +683,10 @@ _NAMED_TYPE_INFO = {
       'GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER',
     ],
   },
+  'FramebufferParameter' : {
+    'type': 'GLenum',
+    'valid' : [],
+  },
   'MatrixMode': {
     'type': 'GLenum',
     'is_complete': True,
@@ -1749,6 +1753,8 @@ _NAMED_TYPE_INFO = {
 #               'extension': True.
 # not_shared:   For GENn types, True if objects can't be shared between contexts
 # es3:          ES3 API. True if the function requires an ES3 or WebGL2 context.
+# es31:         ES31 API. True if the function requires an WebGL2Compute
+#               context.
 
 _FUNCTION_INFO = {
   'ActiveTexture': {
@@ -1799,6 +1805,13 @@ _FUNCTION_INFO = {
     'gl_test_func': 'glBindFramebufferEXT',
     'gen_func': 'GenFramebuffersEXT',
     'trace_level': 1,
+  },
+  'BindImageTexture':{
+    'cmd_args': 'GLuint unit, GLuint texture, GLint level, GLboolean layered, '
+                'GLint layer, GLenum access, GLenum format',
+    'unit_test': False,
+    'trace_level': 2,
+    'es31': True,
   },
   'BindRenderbuffer': {
     'type': 'Bind',
@@ -2173,6 +2186,12 @@ _FUNCTION_INFO = {
   'DisableVertexAttribArray': {
     'decoder_func': 'DoDisableVertexAttribArray',
     'impl_func': False,
+    'unit_test': False,
+  },
+  'DispatchCompute': {
+    'cmd_args': 'GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z',
+    'trace_level': 2,
+    'es31': True,
     'unit_test': False,
   },
   'DrawArrays': {
@@ -2810,6 +2829,20 @@ _FUNCTION_INFO = {
     'es3': True,
     'result': ['uint32_t'],
     'trace_level': 1,
+  },
+  # MemoryBarrierEXT is in order to avoid the conflicting MemoryBarrier macro
+  # in windows.
+  'MemoryBarrierEXT': {
+    'cmd_args': 'GLbitfield barriers',
+    'unit_test': False,
+    'trace_level': 2,
+    'es31': True
+  },
+  'MemoryBarrierByRegion': {
+    'cmd_args': 'GLbitfield barriers',
+    'unit_test': False,
+    'trace_level': 2,
+    'es31': True
   },
   'OverlayPromotionHintCHROMIUM': {
     'decoder_func': 'DoOverlayPromotionHintCHROMIUM',
@@ -4058,6 +4091,20 @@ _FUNCTION_INFO = {
     'impl_func': True,
     'internal': True,
     'es3': True,
+  },
+  'FramebufferParameteri': {
+    'decoder_func': 'DoFramebufferParameteri',
+    'unit_test': False,
+    'extension': 'MESA_framebuffer_flip_y',
+    'extension_flag': 'mesa_framebuffer_flip_y',
+  },
+  'FramebufferTextureMultiviewLayeredANGLE': {
+    'decoder_func': 'DoFramebufferTextureMultiviewLayeredANGLE',
+    'unit_test': False,
+    'extension': 'ANGLE_multiview',
+    'extension_flag': 'angle_multiview',
+    'trace_level': 1,
+    'es3': True
   },
 }
 

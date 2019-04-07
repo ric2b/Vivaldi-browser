@@ -8,6 +8,7 @@
 #include "services/device/public/mojom/sensor.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
@@ -337,7 +338,7 @@ void Sensor::HandleError(DOMExceptionCode code,
 void Sensor::NotifyReading() {
   DCHECK_EQ(state_, SensorState::kActivated);
   last_reported_timestamp_ = sensor_proxy_->GetReading().timestamp();
-  DispatchEvent(Event::Create(EventTypeNames::reading));
+  DispatchEvent(*Event::Create(EventTypeNames::reading));
 }
 
 void Sensor::NotifyActivated() {
@@ -353,13 +354,13 @@ void Sensor::NotifyActivated() {
         WTF::Bind(&Sensor::NotifyReading, WrapWeakPersistent(this)));
   }
 
-  DispatchEvent(Event::Create(EventTypeNames::activate));
+  DispatchEvent(*Event::Create(EventTypeNames::activate));
 }
 
 void Sensor::NotifyError(DOMException* error) {
   DCHECK_NE(state_, SensorState::kIdle);
   state_ = SensorState::kIdle;
-  DispatchEvent(SensorErrorEvent::Create(EventTypeNames::error, error));
+  DispatchEvent(*SensorErrorEvent::Create(EventTypeNames::error, error));
 }
 
 bool Sensor::IsIdleOrErrored() const {

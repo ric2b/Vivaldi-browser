@@ -196,9 +196,10 @@ bool WebRtcAudioRenderer::Initialize(WebRtcAudioRendererSource* source) {
     DCHECK(!source_);
   }
 
+  media::AudioSinkParameters sink_params(session_id_, output_device_id_);
+  sink_params.processing_id = source->GetAudioProcessingId();
   sink_ = AudioDeviceFactory::NewAudioRendererSink(
-      AudioDeviceFactory::kSourceWebRtc, source_render_frame_id_, session_id_,
-      output_device_id_);
+      AudioDeviceFactory::kSourceWebRtc, source_render_frame_id_, sink_params);
 
   if (sink_->GetOutputDeviceInfo().device_status() !=
       media::OUTPUT_DEVICE_STATUS_OK) {
@@ -384,10 +385,12 @@ void WebRtcAudioRenderer::SwitchOutputDevice(
     DCHECK_NE(state_, UNINITIALIZED);
   }
 
+  media::AudioSinkParameters sink_params(session_id_, device_id);
+  sink_params.processing_id = source_->GetAudioProcessingId();
   scoped_refptr<media::AudioRendererSink> new_sink =
       AudioDeviceFactory::NewAudioRendererSink(
           AudioDeviceFactory::kSourceWebRtc, source_render_frame_id_,
-          session_id_, device_id);
+          sink_params);
   media::OutputDeviceStatus status =
       new_sink->GetOutputDeviceInfo().device_status();
   if (status != media::OUTPUT_DEVICE_STATUS_OK) {
@@ -534,8 +537,10 @@ void WebRtcAudioRenderer::UpdateSourceVolume(
     // object is an exception (bug?).  So, to work around that, we need to make
     // sure we call SetVolume on the signaling thread.
     signaling_thread_->PostTask(
-        FROM_HERE, base::BindOnce(&webrtc::AudioSourceInterface::SetVolume,
-                                  source, volume));
+        FROM_HERE,
+        base::BindOnce(&webrtc::AudioSourceInterface::SetVolume,
+                       rtc::scoped_refptr<webrtc::AudioSourceInterface>(source),
+                       volume));
   } else {
     source->SetVolume(volume);
   }

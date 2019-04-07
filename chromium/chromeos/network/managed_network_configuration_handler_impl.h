@@ -21,6 +21,7 @@
 
 namespace base {
 class DictionaryValue;
+class Value;
 }
 
 namespace chromeos {
@@ -56,6 +57,12 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandlerImpl
   void SetProperties(
       const std::string& service_path,
       const base::DictionaryValue& user_settings,
+      const base::Closure& callback,
+      const network_handler::ErrorCallback& error_callback) override;
+
+  void SetManagerProperty(
+      const std::string& property_name,
+      const base::Value& value,
       const base::Closure& callback,
       const network_handler::ErrorCallback& error_callback) override;
 
@@ -98,10 +105,10 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandlerImpl
       const std::string& profile_path,
       onc::ONCSource* onc_source) const override;
 
-  bool IsNetworkBlockedByPolicy(const std::string& type,
-                                const std::string& guid,
-                                const std::string& profile_path,
-                                const std::string& hex_ssid) const override;
+  bool AllowOnlyPolicyNetworksToConnect() const override;
+  bool AllowOnlyPolicyNetworksToConnectIfAvailable() const override;
+  bool AllowOnlyPolicyNetworksToAutoconnect() const override;
+  std::vector<std::string> GetBlacklistedHexSSIDs() const override;
 
   // NetworkProfileObserver overrides
   void OnProfileAdded(const NetworkProfile& profile) override;
@@ -234,7 +241,10 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandlerImpl
   // associated set of GUIDs is empty.
   UserToModifiedPoliciesMap queued_modified_policies_;
 
-  base::ObserverList<NetworkPolicyObserver, true> observers_;
+  base::ObserverList<NetworkPolicyObserver, true>::Unchecked observers_;
+
+  bool user_policy_applied_;
+  bool device_policy_applied_;
 
   // For Shill client callbacks
   base::WeakPtrFactory<ManagedNetworkConfigurationHandlerImpl>

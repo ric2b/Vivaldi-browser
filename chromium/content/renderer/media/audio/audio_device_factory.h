@@ -11,6 +11,8 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
+#include "media/audio/audio_sink_parameters.h"
+#include "media/audio/audio_source_parameters.h"
 #include "media/base/audio_latency.h"
 #include "media/base/output_device_info.h"
 
@@ -18,7 +20,7 @@ namespace media {
 class AudioRendererSink;
 class SwitchableAudioRendererSink;
 class AudioCapturerSource;
-}
+}  // namespace media
 
 namespace content {
 
@@ -51,16 +53,10 @@ class CONTENT_EXPORT AudioDeviceFactory {
 
   // Creates a sink for AudioRendererMixer.
   // |render_frame_id| refers to the RenderFrame containing the entity
-  // producing the audio. If |session_id| is nonzero, it is used by the browser
-  // to select the correct input device ID and its associated output device, if
-  // it exists. If |session_id| is zero, |device_id| identify the output device
-  // to use.
-  // If |session_id| is zero and |device_id| is empty, the default output
-  // device will be selected.
+  // producing the audio.
   static scoped_refptr<media::AudioRendererSink> NewAudioRendererMixerSink(
       int render_frame_id,
-      int session_id,
-      const std::string& device_id);
+      const media::AudioSinkParameters& params);
 
   // Creates an AudioRendererSink bound to an AudioOutputDevice.
   // Basing on |source_type| and build configuration, audio played out through
@@ -70,8 +66,7 @@ class CONTENT_EXPORT AudioDeviceFactory {
   static scoped_refptr<media::AudioRendererSink> NewAudioRendererSink(
       SourceType source_type,
       int render_frame_id,
-      int session_id,
-      const std::string& device_id);
+      const media::AudioSinkParameters& params);
 
   // Creates a SwitchableAudioRendererSink bound to an AudioOutputDevice
   // Basing on |source_type| and build configuration, audio played out through
@@ -79,22 +74,20 @@ class CONTENT_EXPORT AudioDeviceFactory {
   static scoped_refptr<media::SwitchableAudioRendererSink>
   NewSwitchableAudioRendererSink(SourceType source_type,
                                  int render_frame_id,
-                                 int session_id,
-                                 const std::string& device_id);
+                                 const media::AudioSinkParameters& params);
 
   // A helper to get device info in the absence of AudioOutputDevice.
   // Must be called on renderer thread only.
   static media::OutputDeviceInfo GetOutputDeviceInfo(
       int render_frame_id,
-      int session_id,
-      const std::string& device_id);
+      const media::AudioSinkParameters& params);
 
   // Creates an AudioCapturerSource using the currently registered factory.
   // |render_frame_id| refers to the RenderFrame containing the entity
   // consuming the audio.
   static scoped_refptr<media::AudioCapturerSource> NewAudioCapturerSource(
       int render_frame_id,
-      int session_id);
+      const media::AudioSourceParameters& params);
 
  protected:
   AudioDeviceFactory();
@@ -109,23 +102,22 @@ class CONTENT_EXPORT AudioDeviceFactory {
   // output device.
   virtual scoped_refptr<media::AudioRendererSink> CreateFinalAudioRendererSink(
       int render_frame_id,
-      int sesssion_id,
-      const std::string& device_id) = 0;
+      const media::AudioSinkParameters& params) = 0;
 
   virtual scoped_refptr<media::AudioRendererSink> CreateAudioRendererSink(
       SourceType source_type,
       int render_frame_id,
-      int sesssion_id,
-      const std::string& device_id) = 0;
+      const media::AudioSinkParameters& params) = 0;
 
   virtual scoped_refptr<media::SwitchableAudioRendererSink>
-  CreateSwitchableAudioRendererSink(SourceType source_type,
-                                    int render_frame_id,
-                                    int sesssion_id,
-                                    const std::string& device_id) = 0;
+  CreateSwitchableAudioRendererSink(
+      SourceType source_type,
+      int render_frame_id,
+      const media::AudioSinkParameters& params) = 0;
 
   virtual scoped_refptr<media::AudioCapturerSource> CreateAudioCapturerSource(
-      int render_frame_id) = 0;
+      int render_frame_id,
+      const media::AudioSourceParameters& params) = 0;
 
  private:
   // The current globally registered factory. This is NULL when we should
@@ -134,8 +126,7 @@ class CONTENT_EXPORT AudioDeviceFactory {
 
   static scoped_refptr<media::AudioRendererSink> NewFinalAudioRendererSink(
       int render_frame_id,
-      int session_id,
-      const std::string& device_id);
+      const media::AudioSinkParameters& params);
 
   DISALLOW_COPY_AND_ASSIGN(AudioDeviceFactory);
 };

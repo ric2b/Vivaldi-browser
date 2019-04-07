@@ -186,6 +186,7 @@ video::-webkit-media-controls-mute-button,
 video::-internal-media-controls-cast-icon,
 video::-webkit-media-controls-fullscreen-button,
 audio::-webkit-media-controls-fullscreen-button,
+video::-internal-media-controls-display-cutout-fullscreen-button,
 video::-internal-media-controls-cast-button,
 audio::-internal-media-controls-cast-button,
 video::-internal-media-controls-overflow-button,
@@ -210,6 +211,7 @@ video::-internal-media-controls-picture-in-picture-button {
 video::-webkit-media-controls.sizing-small input[pseudo="-webkit-media-controls-play-button" i],
 video::-webkit-media-controls.sizing-small input[pseudo="-webkit-media-controls-mute-button" i],
 video::-webkit-media-controls.sizing-small input[pseudo="-webkit-media-controls-fullscreen-button" i],
+video::-webkit-media-controls.sizing-small input[pseudo="-internal-media-controls-display-cutout-fullscreen-button" i],
 video::-webkit-media-controls.sizing-small input[pseudo="-internal-media-controls-overflow-button" i] {
   width: 48px;
   height: 48px;
@@ -219,6 +221,7 @@ video::-webkit-media-controls.sizing-small input[pseudo="-internal-media-control
 video::-webkit-media-controls.sizing-medium input[pseudo="-webkit-media-controls-play-button" i],
 video::-webkit-media-controls.sizing-medium input[pseudo="-webkit-media-controls-mute-button" i],
 video::-webkit-media-controls.sizing-medium input[pseudo="-webkit-media-controls-fullscreen-button" i],
+video::-webkit-media-controls.sizing-medium input[pseudo="-internal-media-controls-display-cutout-fullscreen-button" i],
 video::-webkit-media-controls.sizing-medium input[pseudo="-internal-media-controls-overflow-button" i] {
   width: 64px;
   height: 64px;
@@ -230,6 +233,7 @@ video::-webkit-media-controls.sizing-medium input[pseudo="-internal-media-contro
 video::-webkit-media-controls.sizing-large input[pseudo="-webkit-media-controls-play-button" i],
 video::-webkit-media-controls.sizing-large input[pseudo="-webkit-media-controls-mute-button" i],
 video::-webkit-media-controls.sizing-large input[pseudo="-webkit-media-controls-fullscreen-button" i],
+video::-webkit-media-controls.sizing-large input[pseudo="-internal-media-controls-display-cutout-fullscreen-button" i],
 video::-webkit-media-controls.sizing-large input[pseudo="-internal-media-controls-overflow-button" i] {
   width: 64px;
   height: 64px;
@@ -296,6 +300,14 @@ video::-webkit-media-controls:not(.audio-only) [pseudo="-webkit-media-controls-p
   background-image: -webkit-image-set(url(ic_volume_off_white.svg) 1x);
 }
 
+video::-internal-media-controls-display-cutout-fullscreen-button {
+  background-image: -webkit-image-set(url(ic_display_cutout_fullscreen.svg) 1x);
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+}
+
 audio::-webkit-media-controls-fullscreen-button,
 video::-webkit-media-controls-fullscreen-button {
   background-image: -webkit-image-set(url(ic_fullscreen.svg) 1x);
@@ -316,6 +328,7 @@ audio::-webkit-media-controls-mute-button:disabled,
 video::-internal-media-controls-overflow-button:disabled,
 video::-webkit-media-controls-mute-button:disabled,
 video::-webkit-media-controls-fullscreen-button:disabled {
+  background-color: initial;
   opacity: 0.3;
 }
 
@@ -380,6 +393,15 @@ video::-webkit-media-controls-overlay-play-button {
   position: relative;
   opacity: 1;
   transition: opacity 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+/**
+ * The overlay-play-button is disabled if the video element is loaded via
+ * MHTML, and a ruleset for input[type=button]:disabled in themeWin.css has
+ * higher priority than the above ruleset.
+ */
+video::-webkit-media-controls-overlay-play-button:disabled {
+  background: transparent;
 }
 
 video::-webkit-media-controls-overlay-play-button.hidden {
@@ -545,6 +567,20 @@ video::-webkit-media-controls.sizing-large div[pseudo="-internal-media-controls-
       (var(--overlay-play-button-width, 48px)
           + 40px /* timeline height + padding-bottom */)
       / -2);
+}
+
+div[pseudo="-internal-media-controls-loading-panel" i]::-internal-media-controls-loading-panel-spinner-mask-1-background {
+  left: 0;
+  background-image: -webkit-image-set(
+    url(default_100_percent/modern/loading_mask_1.svg) 1x);
+  background-position: center left;
+}
+
+div[pseudo="-internal-media-controls-loading-panel" i]::-internal-media-controls-loading-panel-spinner-mask-2-background {
+  left: -100%;
+  background-image: -webkit-image-set(
+    url(default_100_percent/modern/loading_mask_2.svg) 1x);
+  background-position: center right;
 }
 
 input[pseudo="-webkit-media-controls-timeline" i]::-internal-media-controls-segmented-track {

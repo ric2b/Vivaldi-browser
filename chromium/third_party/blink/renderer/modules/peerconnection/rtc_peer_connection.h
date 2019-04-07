@@ -34,7 +34,6 @@
 #include <memory>
 
 #include "third_party/blink/public/platform/web_media_constraints.h"
-#include "third_party/blink/public/platform/web_rtc_configuration.h"
 #include "third_party/blink/public/platform/web_rtc_peer_connection_handler.h"
 #include "third_party/blink/public/platform/web_rtc_peer_connection_handler_client.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
@@ -72,7 +71,6 @@ class V8RTCPeerConnectionErrorCallback;
 class V8RTCSessionDescriptionCallback;
 class V8RTCStatsCallback;
 class V8VoidFunction;
-struct WebRTCConfiguration;
 
 class MODULES_EXPORT RTCPeerConnection final
     : public EventTargetWithInlineData,
@@ -112,6 +110,8 @@ class MODULES_EXPORT RTCPeerConnection final
       V8VoidFunction*,
       V8RTCPeerConnectionErrorCallback* = nullptr);
   RTCSessionDescription* localDescription();
+  RTCSessionDescription* currentLocalDescription();
+  RTCSessionDescription* pendingLocalDescription();
 
   ScriptPromise setRemoteDescription(ScriptState*,
                                      const RTCSessionDescriptionInit&);
@@ -121,9 +121,12 @@ class MODULES_EXPORT RTCPeerConnection final
       V8VoidFunction*,
       V8RTCPeerConnectionErrorCallback* = nullptr);
   RTCSessionDescription* remoteDescription();
+  RTCSessionDescription* currentRemoteDescription();
+  RTCSessionDescription* pendingRemoteDescription();
 
   String signalingState() const;
 
+  void getConfiguration(RTCConfiguration&);
   void setConfiguration(ScriptState*, const RTCConfiguration&, ExceptionState&);
 
   // Certificate management
@@ -234,6 +237,7 @@ class MODULES_EXPORT RTCPeerConnection final
   void DidModifyTransceivers(std::vector<std::unique_ptr<WebRTCRtpTransceiver>>,
                              bool is_remote_description) override;
   void DidAddRemoteDataChannel(WebRTCDataChannelHandler*) override;
+  void DidNoteInterestingUsage(int usage_pattern) override;
   void ReleasePeerConnectionHandler() override;
   void ClosePeerConnection() override;
 
@@ -283,7 +287,7 @@ class MODULES_EXPORT RTCPeerConnection final
   };
 
   RTCPeerConnection(ExecutionContext*,
-                    WebRTCConfiguration,
+                    webrtc::PeerConnectionInterface::RTCConfiguration,
                     WebMediaConstraints,
                     ExceptionState&);
   void Dispose();
@@ -437,7 +441,7 @@ class MODULES_EXPORT RTCPeerConnection final
   // information is surfaced from webrtc. This has the value "kPlanB" or
   // "kUnifiedPlan", if constructed with "kDefault" it is translated to one or
   // the other.
-  WebRTCSdpSemantics sdp_semantics_;
+  webrtc::SdpSemantics sdp_semantics_;
 };
 
 }  // namespace blink

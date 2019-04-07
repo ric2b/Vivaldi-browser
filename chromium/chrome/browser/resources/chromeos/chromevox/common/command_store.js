@@ -247,6 +247,13 @@ cvox.CommandStore.CMD_WHITELIST = {
       {announce: true, msgId: 'previous_granularity', category: 'navigation'},
   'nextGranularity':
       {announce: true, msgId: 'next_granularity', category: 'navigation'},
+  'previousAtGranularity': {
+    announce: true,
+    msgId: 'previous_at_granularity',
+    category: 'navigation'
+  },
+  'nextAtGranularity':
+      {announce: true, msgId: 'next_at_granularity', category: 'navigation'},
 
   'previousCharacter': {
     backward: true,
@@ -431,6 +438,8 @@ cvox.CommandStore.CMD_WHITELIST = {
     'disallowOOBE': true,
     category: 'help_commands'
   },
+  'showTtsSettings':
+      {announce: false, msgId: 'show_tts_settings', category: 'help_commands'},
   'toggleBrailleCaptions':
       {announce: false, msgId: 'braille_captions', category: 'help_commands'},
   'reportIssue': {

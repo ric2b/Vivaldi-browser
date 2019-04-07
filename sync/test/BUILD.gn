@@ -2,25 +2,6 @@
 
 import("//build/config/jumbo.gni")
 
-jumbo_source_set("sync_integration_unittest"){
-  testonly = true
-  sources = [
-    "integration/single_client_notes_sync_test.cpp",
-    "integration/two_client_notes_sync_test.cpp",
-    "vivaldi_single_client_bookmarks_sync_test.cc",
-    "vivaldi_two_client_bookmarks_sync_test.cc",
-  ]
-  public_deps = [
-    ":fake_server",
-  ]
-  deps = [
-    "//components/reading_list/features:flags",
-    "//components/sync/protocol",
-    "//skia",
-    "//testing/gtest",
-  ]
-}
-
 jumbo_source_set("sync_integration_testsupport"){
   testonly = true
   sources = [

@@ -57,6 +57,7 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/cpp/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "url/gurl.h"
 
@@ -551,8 +552,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
   NavigateToURL(shell(), kWebUIUrl);
 
-  bool js_executed = content::ExecuteScript(shell(), kJSCodeForAppendingFrame);
-  EXPECT_TRUE(js_executed);
+  EXPECT_TRUE(content::ExecuteScript(shell(), kJSCodeForAppendingFrame));
 }
 
 // Observer class to track the creation of RenderFrameHost objects. It is used
@@ -745,6 +745,7 @@ class ResourceLoadObserver : public WebContentsObserver {
   // WebContentsObserver implementation:
   void ResourceLoadComplete(
       content::RenderFrameHost* render_frame_host,
+      const GlobalRequestID& request_id,
       const mojom::ResourceLoadInfo& resource_load_info) override {
     EXPECT_NE(nullptr, render_frame_host);
     resource_load_infos_.push_back(resource_load_info.Clone());
@@ -1557,8 +1558,10 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
   void ExitFullscreenModeForTab(WebContents*) override {
     is_fullscreen_ = false;
 
-    if (waiting_for_ == kFullscreenExit)
+    if (waiting_for_ == kFullscreenExit) {
+      waiting_for_ = kNothing;
       run_loop_->Quit();
+    }
   }
 
   bool IsFullscreenForTabOrPending(
@@ -1574,8 +1577,10 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
                       bool* was_blocked) override {
     popup_ = std::move(new_contents);
 
-    if (waiting_for_ == kNewContents)
+    if (waiting_for_ == kNewContents) {
+      waiting_for_ = kNothing;
       run_loop_->Quit();
+    }
   }
 
   // JavaScriptDialogManager
@@ -1590,8 +1595,10 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
     last_message_ = base::UTF16ToUTF8(message_text);
     *did_suppress_message = true;
 
-    if (waiting_for_ == kDialog)
+    if (waiting_for_ == kDialog) {
+      waiting_for_ = kNothing;
       run_loop_->Quit();
+    }
   }
 
   void RunBeforeUnloadDialog(WebContents* web_contents,
@@ -1600,8 +1607,10 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
                              DialogClosedCallback callback) override {
     std::move(callback).Run(true, base::string16());
 
-    if (waiting_for_ == kDialog)
+    if (waiting_for_ == kDialog) {
+      waiting_for_ = kNothing;
       run_loop_->Quit();
+    }
   }
 
   bool HandleJavaScriptDialog(WebContents* web_contents,
@@ -1614,7 +1623,12 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
                      bool reset_state) override {}
 
  private:
-  enum { kDialog, kNewContents, kFullscreenExit } waiting_for_;
+  enum {
+    kNothing,
+    kDialog,
+    kNewContents,
+    kFullscreenExit
+  } waiting_for_ = kNothing;
 
   std::string last_message_;
 
@@ -2132,6 +2146,68 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       DialogsFromJavaScriptEndFullscreenEvenInInnerWC) {
+  WebContentsImpl* top_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  TestWCDelegateForDialogsAndFullscreen top_test_delegate;
+  top_contents->SetDelegate(&top_test_delegate);
+
+  GURL url("about:blank");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  FrameTreeNode* root = top_contents->GetFrameTree()->root();
+  ASSERT_EQ(0U, root->child_count());
+
+  std::string script =
+      "var iframe = document.createElement('iframe');"
+      "document.body.appendChild(iframe);";
+  EXPECT_TRUE(content::ExecuteScript(root->current_frame_host(), script));
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+
+  ASSERT_EQ(1U, root->child_count());
+  RenderFrameHost* frame = root->child_at(0)->current_frame_host();
+  ASSERT_NE(nullptr, frame);
+
+  WebContentsImpl* inner_contents =
+      static_cast<WebContentsImpl*>(CreateAndAttachInnerContents(frame));
+  TestWCDelegateForDialogsAndFullscreen inner_test_delegate;
+  inner_contents->SetDelegate(&inner_test_delegate);
+
+  // A dialog from the inner WebContents should make the outer contents lose
+  // fullscreen.
+  top_contents->EnterFullscreenMode(url, blink::WebFullscreenOptions());
+  EXPECT_TRUE(top_contents->IsFullscreenForCurrentTab());
+  script = "alert('hi')";
+  inner_test_delegate.WillWaitForDialog();
+  EXPECT_TRUE(content::ExecuteScript(inner_contents, script));
+  inner_test_delegate.Wait();
+  EXPECT_FALSE(top_contents->IsFullscreenForCurrentTab());
+
+  inner_contents->SetDelegate(nullptr);
+  inner_contents->SetJavaScriptDialogManagerForTesting(nullptr);
+
+  top_contents->SetDelegate(nullptr);
+  top_contents->SetJavaScriptDialogManagerForTesting(nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, FileChooserEndsFullscreen) {
+  WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
+  TestWCDelegateForDialogsAndFullscreen test_delegate;
+  wc->SetDelegate(&test_delegate);
+
+  GURL url("about:blank");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  wc->EnterFullscreenMode(url, blink::WebFullscreenOptions());
+  EXPECT_TRUE(wc->IsFullscreenForCurrentTab());
+  wc->RunFileChooser(wc->GetMainFrame(), FileChooserParams());
+  EXPECT_FALSE(wc->IsFullscreenForCurrentTab());
+
+  wc->SetDelegate(nullptr);
+  wc->SetJavaScriptDialogManagerForTesting(nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        PopupsFromJavaScriptEndFullscreen) {
   WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
   TestWCDelegateForDialogsAndFullscreen test_delegate;
@@ -2367,7 +2443,12 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, UpdateLoadState) {
   // Wait for the response to be ready, but never finish it.
   EXPECT_TRUE(frame_pauser.WaitForResponse());
   EXPECT_FALSE(frame_pauser.was_successful());
-  waiter.Wait(net::LOAD_STATE_WAITING_FOR_DELEGATE, paused_host);
+  // Note: the pausing only works for the non-network service path because of
+  // http://crbug.com/791049.
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    waiter.Wait(net::LOAD_STATE_IDLE, base::string16());
+  else
+    waiter.Wait(net::LOAD_STATE_WAITING_FOR_DELEGATE, paused_host);
 
   load_resource(a_frame, "/a_img");
   a_response->WaitForRequest();
@@ -2390,10 +2471,12 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, UpdateLoadState) {
   waiter.Wait(net::LOAD_STATE_READING_RESPONSE, a_host);
   a_response->Done();
 
-  // Now the only request in flight should be the delayed frame.
-  waiter.Wait(net::LOAD_STATE_WAITING_FOR_DELEGATE, paused_host);
-  frame_pauser.ResumeNavigation();
-  waiter.Wait(net::LOAD_STATE_IDLE, base::string16());
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    // Now the only request in flight should be the delayed frame.
+    waiter.Wait(net::LOAD_STATE_WAITING_FOR_DELEGATE, paused_host);
+    frame_pauser.ResumeNavigation();
+    waiter.Wait(net::LOAD_STATE_IDLE, base::string16());
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, NotifyPreferencesChanged) {
@@ -2630,6 +2713,40 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, NotifyFullscreenAcquired) {
   }
 }
 
+// Regression test for https://crbug.com/855018.
+// RenderFrameHostImpls exit fullscreen as soon as they are swapped out.
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, FullscreenAfterFrameSwap) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+
+  GURL url_a = embedded_test_server()->GetURL("a.com", "/title1.html");
+  GURL url_b = embedded_test_server()->GetURL("b.com", "/title1.html");
+
+  // 1) Navigate. There is initially no fullscreen frame.
+  EXPECT_TRUE(NavigateToURL(shell(), url_a));
+  RenderFrameHostImpl* main_frame =
+      static_cast<RenderFrameHostImpl*>(web_contents->GetMainFrame());
+  EXPECT_EQ(0u, web_contents->fullscreen_frame_tree_nodes_.size());
+
+  // 2) Make it fullscreen.
+  FullscreenWebContentsObserver observer(web_contents, main_frame);
+  EXPECT_TRUE(
+      ExecuteScript(main_frame, "document.body.webkitRequestFullscreen();"));
+  observer.Wait();
+  EXPECT_EQ(1u, web_contents->fullscreen_frame_tree_nodes_.size());
+
+  // 3) Navigate cross origin. Act as if the old frame was very slow delivering
+  //    the swapout ack and stayed in pending deletion for a while. Even if the
+  //    frame is still present, it must be removed from the list of frame in
+  //    fullscreen immediately.
+  auto filter = base::MakeRefCounted<SwapoutACKMessageFilter>();
+  main_frame->GetProcess()->AddFilter(filter.get());
+  main_frame->DisableSwapOutTimerForTesting();
+  EXPECT_TRUE(NavigateToURL(shell(), url_b));
+  EXPECT_EQ(0u, web_contents->fullscreen_frame_tree_nodes_.size());
+}
+
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        NotifyFullscreenAcquired_Navigate) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -2744,6 +2861,65 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_EQ(nodes, web_contents->fullscreen_frame_tree_nodes_);
   EXPECT_EQ(main_frame_id,
             web_contents->current_fullscreen_frame_tree_node_id_);
+}
+
+class MockDidOpenRequestedURLObserver : public WebContentsObserver {
+ public:
+  explicit MockDidOpenRequestedURLObserver(Shell* shell)
+      : WebContentsObserver(shell->web_contents()) {}
+
+  MOCK_METHOD8(DidOpenRequestedURL,
+               void(WebContents* new_contents,
+                    RenderFrameHost* source_render_frame_host,
+                    const GURL& url,
+                    const Referrer& referrer,
+                    WindowOpenDisposition disposition,
+                    ui::PageTransition transition,
+                    bool started_from_context_menu,
+                    bool renderer_initiated));
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockDidOpenRequestedURLObserver);
+};
+
+// Test WebContentsObserver::DidOpenRequestedURL for ctrl-click-ed links.
+// This is a regression test for https://crbug.com/864736 (although it also
+// covers slightly more ground than just the |is_renderer_initiated| value).
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, CtrlClickSubframeLink) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // Load a page with a subframe link.
+  GURL main_url(
+      embedded_test_server()->GetURL("/ctrl-click-subframe-link.html"));
+  NavigateToURL(shell(), main_url);
+
+  // Start intercepting the DidOpenRequestedURL callback.
+  MockDidOpenRequestedURLObserver mock_observer(shell());
+  WebContents* new_web_contents1 = nullptr;
+  RenderFrameHost* subframe = shell()->web_contents()->GetAllFrames()[1];
+  EXPECT_CALL(mock_observer,
+              DidOpenRequestedURL(
+                  ::testing::_,  // new_contents (captured via SaveArg below)
+                  subframe,      // source_render_frame_host
+                  embedded_test_server()->GetURL("/title1.html"),
+                  ::testing::Field(&Referrer::url, main_url),
+                  WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                  ::testing::Truly([](ui::PageTransition arg) {
+                    return ui::PageTransitionCoreTypeIs(
+                        arg, ui::PAGE_TRANSITION_LINK);
+                  }),
+                  false,  // started_from_context_menu
+                  true))  // is_renderer_initiated
+      .WillOnce(testing::SaveArg<0>(&new_web_contents1));
+
+  // Simulate a ctrl click on the link and ask GMock to verify that the
+  // MockDidOpenRequestedURLObserver got called with the expected args.
+  WebContentsAddedObserver new_web_contents_observer;
+  EXPECT_TRUE(ExecuteScript(
+      shell(), "window.domAutomationController.send(ctrlClickLink());"));
+  WebContents* new_web_contents2 = new_web_contents_observer.GetWebContents();
+  EXPECT_TRUE(testing::Mock::VerifyAndClearExpectations(&mock_observer));
+  EXPECT_EQ(new_web_contents1, new_web_contents2);
 }
 
 }  // namespace content

@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "chromecast/graphics/cast_window_manager.h"
+#include "chromecast/graphics/gestures/cast_gesture_handler.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/events/event.h"
 
@@ -112,17 +113,38 @@ class CastContentWindow {
     virtual ~Delegate() {}
   };
 
+  // The parameters used to create a CastContentWindow instance.
+  struct CreateParams {
+    // The delegate for the CastContentWindow. Must be non-null.
+    Delegate* delegate = nullptr;
+
+    // True if this CastContentWindow is for a headless build.
+    bool is_headless = false;
+
+    // Enable touch input for this CastContentWindow instance.
+    bool enable_touch_input = false;
+
+    // True if this CastContentWindow is for running a remote control app.
+    bool is_remote_control_mode = false;
+
+    // True if this app should turn on the screen.
+    bool turn_on_screen = true;
+
+    // Gesture priority for when the window is visible.
+    CastGestureHandler::Priority gesture_priority =
+        CastGestureHandler::Priority::NONE;
+
+    CreateParams() = default;
+  };
+
   // Creates the platform specific CastContentWindow. |delegate| should outlive
   // the created CastContentWindow.
-  static std::unique_ptr<CastContentWindow> Create(
-      CastContentWindow::Delegate* delegate,
-      bool is_headless,
-      bool enable_touch_input);
+  static std::unique_ptr<CastContentWindow> Create(const CreateParams& params);
 
   virtual ~CastContentWindow() {}
 
-  // Creates a full-screen window for |web_contents| and displays it if
-  // |is_visible| is true.
+  // Creates a full-screen window for |web_contents| and displays it if screen
+  // access has been granted.
   // |web_contents| should outlive this CastContentWindow.
   // |window_manager| should outlive this CastContentWindow.
   // TODO(seantopping): This method probably shouldn't exist; this class should
@@ -130,9 +152,16 @@ class CastContentWindow {
   virtual void CreateWindowForWebContents(
       content::WebContents* web_contents,
       CastWindowManager* window_manager,
-      bool is_visible,
       CastWindowManager::WindowId z_order,
       VisibilityPriority visibility_priority) = 0;
+
+  // Allows the window to be shown on the screen. The window cannot be shown on
+  // the screen until this is called.
+  virtual void GrantScreenAccess() = 0;
+
+  // Prevents the window from being shown on the screen until
+  // GrantScreenAccess() is called.
+  virtual void RevokeScreenAccess() = 0;
 
   // Enables touch input to be routed to the window's WebContents.
   virtual void EnableTouchInput(bool enabled) = 0;

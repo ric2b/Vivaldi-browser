@@ -5,7 +5,8 @@
 #include "content/browser/network_service_client.h"
 
 #include "base/optional.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
+#include "content/browser/browsing_data/clear_site_data_handler.h"
 #include "content/browser/devtools/devtools_url_loader_interceptor.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/ssl/ssl_client_auth_handler.h"
@@ -423,6 +424,53 @@ void NetworkServiceClient::OnCookieChange(int process_id,
                                           bool blocked_by_policy) {
   GetContentClient()->browser()->OnCookieChange(
       process_id, routing_id, url, first_party_url, cookie, blocked_by_policy);
+}
+
+void NetworkServiceClient::OnLoadingStateUpdate(
+    std::vector<network::mojom::LoadInfoPtr> infos,
+    OnLoadingStateUpdateCallback callback) {
+  auto rdh_infos = std::make_unique<ResourceDispatcherHostImpl::LoadInfoList>();
+
+  // TODO(jam): once ResourceDispatcherHost is gone remove the translation
+  // (other than adding the WebContents callback).
+  for (auto& info : infos) {
+    ResourceDispatcherHostImpl::LoadInfo load_info;
+    load_info.host = std::move(info->host);
+    load_info.load_state.state = static_cast<net::LoadState>(info->load_state);
+    load_info.load_state.param = std::move(info->state_param);
+    load_info.upload_position = info->upload_position;
+    load_info.upload_size = info->upload_size;
+    load_info.web_contents_getter =
+        info->process_id
+            ? base::BindRepeating(WebContentsImpl::FromRenderFrameHostID,
+                                  info->process_id, info->routing_id)
+            : base::BindRepeating(WebContents::FromFrameTreeNodeId,
+                                  info->routing_id);
+    rdh_infos->push_back(std::move(load_info));
+  }
+
+  auto* rdh = ResourceDispatcherHostImpl::Get();
+  ResourceDispatcherHostImpl::UpdateLoadStateOnUI(rdh->loader_delegate_,
+                                                  std::move(rdh_infos));
+
+  std::move(callback).Run();
+}
+
+void NetworkServiceClient::OnClearSiteData(int process_id,
+                                           int routing_id,
+                                           const GURL& url,
+                                           const std::string& header_value,
+                                           int load_flags,
+                                           OnClearSiteDataCallback callback) {
+  base::RepeatingCallback<WebContents*(void)> web_contents_getter =
+      process_id
+          ? base::BindRepeating(WebContentsImpl::FromRenderFrameHostID,
+                                process_id, routing_id)
+          : base::BindRepeating(WebContents::FromFrameTreeNodeId, routing_id);
+
+  ClearSiteDataHandler::HandleHeader(std::move(web_contents_getter), url,
+                                     header_value, load_flags,
+                                     std::move(callback));
 }
 
 }  // namespace content

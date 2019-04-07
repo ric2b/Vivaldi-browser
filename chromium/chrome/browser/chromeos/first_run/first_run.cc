@@ -21,11 +21,9 @@
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
-#include "chrome/browser/ui/webui/chromeos/assistant_optin/assistant_optin_ui.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/assistant/buildflags.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_service_manager.h"
@@ -33,7 +31,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_info.h"
 #include "components/signin/core/browser/account_tracker_service.h"
-#include "components/signin/core/browser/signin_manager.h"
+#include "components/signin/core/browser/signin_manager_base.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_observer.h"
@@ -125,23 +123,15 @@ class DialogLauncher : public content::NotificationObserver {
     // Whether the account is supported for voice interaction.
     bool account_supported = false;
     SigninManagerBase* signin_manager =
-        SigninManagerFactory::GetForProfile(profile_);
+        SigninManagerFactory::GetForProfileIfExists(profile_);
     if (signin_manager) {
       std::string hosted_domain =
           signin_manager->GetAuthenticatedAccountInfo().hosted_domain;
       if (hosted_domain == AccountTrackerService::kNoHostedDomainFound ||
-          hosted_domain == "google.com")
+          hosted_domain == "google.com") {
         account_supported = true;
+      }
     }
-
-#if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
-    // Launch Assistant OOBE flow if Assistant is enabled.
-    if (account_supported && chromeos::switches::IsAssistantEnabled()) {
-      chromeos::AssistantOptInDialog::Show();
-      delete this;
-      return;
-    }
-#endif
 
     // If voice interaction value prop needs to be shown, the tutorial will be
     // shown after the voice interaction OOBE flow.

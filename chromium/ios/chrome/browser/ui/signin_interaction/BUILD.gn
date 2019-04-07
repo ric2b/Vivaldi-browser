@@ -13,6 +13,7 @@ source_set("signin_interaction") {
   ]
   deps = [
     "//base",
+    "//components//unified_consent",
     "//components/prefs",
     "//components/signin/core/browser",
     "//ios/chrome/browser",

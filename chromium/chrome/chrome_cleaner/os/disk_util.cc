@@ -4,7 +4,6 @@
 
 #include "chrome/chrome_cleaner/os/disk_util.h"
 
-#include <softpub.h>
 #include <stdint.h>
 
 #include <algorithm>
@@ -33,6 +32,7 @@
 #include "base/win/registry.h"
 #include "base/win/shortcut.h"
 #include "base/win/windows_version.h"
+#include "chrome/chrome_cleaner/constants/version.h"
 #include "chrome/chrome_cleaner/os/file_path_sanitization.h"
 #include "chrome/chrome_cleaner/os/layered_service_provider_api.h"
 #include "chrome/chrome_cleaner/os/pre_fetched_paths.h"
@@ -135,22 +135,6 @@ void CollectMatchingPathsRecursive(
   }
 }
 
-// Return whether an executable is whitelisted. On success, |file_information|
-// receives the file version information. |file_information| is not modified by
-// this function but cannot be const because of the accessors prototype in base.
-bool IsExecutableWhiteListed(FileVersionInfo* file_information) {
-  DCHECK(file_information);
-  bool white_listed = false;
-  base::string16 company_name = file_information->company_name();
-  for (const base::string16& white_listed_name : company_white_list) {
-    if (company_name.compare(white_listed_name) == 0) {
-      white_listed = true;
-      break;
-    }
-  }
-  return white_listed;
-}
-
 void AppendFileInformationField(const wchar_t* field_name,
                                 const base::string16& field,
                                 base::string16* information) {
@@ -249,7 +233,8 @@ base::FilePath AppendProductPath(const base::FilePath& base_path) {
     return base_path.Append(file_version_info->company_short_name())
         .Append(file_version_info->product_short_name());
   } else {
-    return base_path.Append(L"Google").Append(L"Chrome Cleanup Tool Test");
+    return base_path.Append(COMPANY_SHORTNAME_STRING)
+        .Append(L"Chrome Cleanup Tool Test");
   }
 }
 
@@ -461,15 +446,11 @@ bool ExpandEnvPath(const base::FilePath& path, base::FilePath* expanded_path) {
 void ExpandWow64Path(const base::FilePath& path,
                      base::FilePath* expanded_path) {
   DCHECK(expanded_path);
-  base::FilePath system_path;
+  base::FilePath system_path =
+      PreFetchedPaths::GetInstance()->GetCsidlSystemFolder();
 
   *expanded_path = path;
 
-  if (!base::PathService::Get(CsidlToPathServiceKey(CSIDL_SYSTEM),
-                              &system_path)) {
-    LOG(ERROR) << "Can't retrieve system directory.";
-    return;
-  }
   base::FilePath native_path = system_path.DirName().Append(L"sysnative");
   if (system_path.IsParent(path) &&
       system_path.AppendRelativePath(path, &native_path) &&
@@ -520,10 +501,28 @@ base::string16 FileInformationToString(
   return content;
 }
 
+bool IsExecutableOnDefaultReportingWhiteList(const base::FilePath& file_path) {
+  std::unique_ptr<FileVersionInfo> file_information(
+      FileVersionInfo::CreateFileVersionInfo(file_path));
+  if (!file_information)
+    return false;
+
+  bool white_listed = false;
+  base::string16 company_name = file_information->company_name();
+  for (const base::string16& white_listed_name : company_white_list) {
+    if (company_name.compare(white_listed_name) == 0) {
+      white_listed = true;
+      break;
+    }
+  }
+  return white_listed;
+}
+
 bool RetrieveDetailedFileInformation(
     const base::FilePath& file_path,
     internal::FileInformation* file_information,
-    bool* white_listed) {
+    bool* white_listed,
+    ReportingWhiteListCallback white_list_callback) {
   DCHECK(file_information);
   DCHECK(white_listed);
 
@@ -531,9 +530,7 @@ bool RetrieveDetailedFileInformation(
   if (!TryToExpandPath(file_path, &expanded_path))
     return false;
 
-  std::unique_ptr<FileVersionInfo> version(
-      FileVersionInfo::CreateFileVersionInfo(expanded_path));
-  if (version.get() && IsExecutableWhiteListed(version.get())) {
+  if (std::move(white_list_callback).Run(file_path)) {
     *white_listed = true;
     return false;
   }
@@ -543,14 +540,16 @@ bool RetrieveDetailedFileInformation(
   RetrievePathInformation(expanded_path, file_information);
 
   // Retrieve the detailed file information.
-  if (!ComputeDigestSHA256(expanded_path, &file_information->sha256)) {
+  if (!ComputeSHA256DigestOfPath(expanded_path, &file_information->sha256)) {
     LOG(ERROR) << "Unable to compute digest SHA256 for: '"
                << file_information->path << "'";
     return false;
   }
 
   // Set the executable version information, when available.
-  if (version.get()) {
+  std::unique_ptr<FileVersionInfo> version(
+      FileVersionInfo::CreateFileVersionInfo(expanded_path));
+  if (version) {
     file_information->company_name = version->company_name();
     file_information->company_short_name = version->company_short_name();
     file_information->product_name = version->product_name();
@@ -587,7 +586,8 @@ bool RetrieveFileInformation(const base::FilePath& file_path,
   }
 }
 
-bool ComputeDigestSHA256(const base::FilePath& path, std::string* digest) {
+bool ComputeSHA256DigestOfPath(const base::FilePath& path,
+                               std::string* digest) {
   DCHECK(digest);
 
   base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ);
@@ -602,6 +602,21 @@ bool ComputeDigestSHA256(const base::FilePath& path, std::string* digest) {
       break;
     ctx->Update(buffer, count);
   }
+
+  char digest_bytes[crypto::kSHA256Length];
+  ctx->Finish(digest_bytes, crypto::kSHA256Length);
+
+  *digest = base::HexEncode(digest_bytes, crypto::kSHA256Length);
+  return true;
+}
+
+bool ComputeSHA256DigestOfString(const std::string& content,
+                                 std::string* digest) {
+  DCHECK(digest);
+
+  std::unique_ptr<SecureHash> ctx(SecureHash::Create(SecureHash::SHA256));
+
+  ctx->Update(content.c_str(), content.length());
 
   char digest_bytes[crypto::kSHA256Length];
   ctx->Finish(digest_bytes, crypto::kSHA256Length);

@@ -27,6 +27,7 @@
 #include "net/http/http_response_headers.h"
 #include "services/device/public/mojom/geolocation_context.mojom.h"
 #include "services/device/public/mojom/wake_lock.mojom.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "ui/base/window_open_disposition.h"
 
 #if defined(OS_WIN)
@@ -69,6 +70,7 @@ struct AXEventNotificationDetails;
 struct AXLocationChangeNotificationDetails;
 struct ContextMenuParams;
 struct FileChooserParams;
+struct GlobalRequestID;
 
 namespace mojom {
 class CreateNewWindowParams;
@@ -363,6 +365,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // associated with |render_frame_host|.
   virtual void ResourceLoadComplete(
       RenderFrameHost* render_frame_host,
+      const GlobalRequestID& request_id,
       mojom::ResourceLoadInfoPtr resource_load_info) {}
 
   // Request to print a frame that is in a different process than its parent.
@@ -377,6 +380,18 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   // Returns the visibility of the delegate.
   virtual Visibility GetVisibility() const;
+
+  // Get the UKM source ID for current content. This is used for providing
+  // data about the content to the URL-keyed metrics service.
+  // Note: This is also exposed by the RenderWidgetHostDelegate.
+  virtual ukm::SourceId GetUkmSourceIdForLastCommittedSource() const;
+
+  // Notify observers if WebAudio AudioContext has started (or stopped) playing
+  // audible sounds.
+  virtual void AudioContextPlaybackStarted(RenderFrameHost* host,
+                                           int context_id){};
+  virtual void AudioContextPlaybackStopped(RenderFrameHost* host,
+                                           int context_id){};
 
  protected:
   virtual ~RenderFrameHostDelegate() {}

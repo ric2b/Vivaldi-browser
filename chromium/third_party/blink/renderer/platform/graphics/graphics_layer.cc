@@ -41,8 +41,6 @@
 #include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_point.h"
 #include "third_party/blink/public/platform/web_size.h"
-#include "third_party/blink/renderer/platform/bindings/runtime_call_stats.h"
-#include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/drag_image.h"
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
@@ -878,7 +876,8 @@ void GraphicsLayer::SetContentsToImage(
     }
     image_layer_->SetImage(std::move(paint_image), matrix,
                            image_orientation.UsesWidthAsHeight());
-    image_layer_->SetContentsOpaque(image->CurrentFrameKnownToBeOpaque());
+    // Image layers can not be marked as opaque due to crbug.com/870857.
+    image_layer_->SetContentsOpaque(false);
     UpdateContentsRect();
   } else if (image_layer_) {
     UnregisterContentsLayer(image_layer_.get());
@@ -1006,6 +1005,9 @@ void GraphicsLayer::SetLayerState(const PropertyTreeState& layer_state,
   }
   layer_state_->state = layer_state;
   layer_state_->offset = layer_offset;
+
+  CHECK(layer_state_->state.Transform() && layer_state_->state.Clip() &&
+        layer_state_->state.Effect());
 }
 
 void GraphicsLayer::SetContentsLayerState(const PropertyTreeState& layer_state,

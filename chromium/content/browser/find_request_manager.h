@@ -20,6 +20,7 @@
 
 namespace content {
 
+class FindInPageClient;
 class RenderFrameHost;
 class RenderFrameHostImpl;
 class WebContentsImpl;
@@ -46,22 +47,29 @@ class CONTENT_EXPORT FindRequestManager {
   // activated, cleared, or remain highlighted.
   void StopFinding(StopFindAction action);
 
-  // Called when a reply is received from a frame with the results from a
-  // find request.
-  void OnFindReply(RenderFrameHostImpl* rfh,
-                   int request_id,
-                   int number_of_matches,
-                   const gfx::Rect& selection_rect,
-                   int active_match_ordinal,
-                   bool final_update);
+  // Handles the final update from |rfh| for the find request with id
+  // |request_id|.
+  void HandleFinalUpdateForFrame(RenderFrameHostImpl* rfh, int request_id);
 
-  // Called when a reply for ActivateNearestFindResult is received.
-  void OnActivateNearestFindResultReply(RenderFrameHostImpl* rfh,
-                                        int request_id,
-                                        const gfx::Rect& active_match_rect,
-                                        int number_of_matches,
-                                        int active_match_ordinal,
-                                        bool final_update);
+  // The number of matches on |rfh| has changed from |old_count| to |new_count|.
+  // This method updates the total number of matches and also updates
+  // |active_match_ordinal_| accordingly.
+  void UpdatedFrameNumberOfMatches(RenderFrameHostImpl* rfh,
+                                   unsigned int old_count,
+                                   unsigned int new_count);
+
+  bool ShouldIgnoreReply(RenderFrameHostImpl* rfh, int request_id);
+
+  void SetActiveMatchRect(const gfx::Rect& active_match_rect);
+
+  void SetActiveMatchOrdinal(RenderFrameHostImpl* rfh,
+                             int request_id,
+                             int active_match_ordinal);
+
+  // Sends the find results (as they currently are) to the WebContents.
+  // |final_update| is true if we have received all of the updates from
+  // every frame for this request.
+  void NotifyFindReply(int request_id, bool final_update);
 
   // Removes a frame from the set of frames being searched. This should be
   // called whenever a frame is discovered to no longer exist.
@@ -128,12 +136,9 @@ class CONTENT_EXPORT FindRequestManager {
   // with ID |request_id|. Advances the |find_request_queue_| if appropriate.
   void AdvanceQueue(int request_id);
 
-  // Sends a find IPC containing the find request |request| to the RenderFrame
-  // associated with |rfh|.
-  void SendFindIPC(const FindRequest& request, RenderFrameHost* rfh);
-
-  // Sends the find results (as they currently are) to the WebContents.
-  void NotifyFindReply(int request_id, bool final_update);
+  // Sends find request |request| through mojo to the RenderFrame associated
+  // with |rfh|.
+  void SendFindRequest(const FindRequest& request, RenderFrameHost* rfh);
 
   // Returns the initial frame in search order. This will be either the first
   // frame, if searching forward, or the last frame, if searching backward.
@@ -283,10 +288,11 @@ class CONTENT_EXPORT FindRequestManager {
   // |current_request_.id| (the latest request).
   bool pending_active_match_ordinal_;
 
-  // The number of matches found in each frame. There will necessarily be
+  // The FindInPageClient associated with each frame. There will necessarily be
   // entries in this map for every frame that is being (or has been) searched in
   // the current find session, and no other frames.
-  std::unordered_map<RenderFrameHost*, int> matches_per_frame_;
+  std::unordered_map<RenderFrameHost*, std::unique_ptr<FindInPageClient>>
+      find_in_page_clients_;
 
   // The total number of matches found in the current find-in-page session. This
   // should always be equal to the sum of all the entries in

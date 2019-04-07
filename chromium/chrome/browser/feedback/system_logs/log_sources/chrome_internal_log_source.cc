@@ -11,7 +11,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/google/google_brand.h"
@@ -212,7 +212,7 @@ void ChromeInternalLogSource::Fetch(SysLogsSourceCallback callback) {
              SysLogsSourceCallback callback) {
             SystemLogsResponse* response_ptr = response.get();
             base::PostTaskWithTraitsAndReply(
-                FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+                FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
                 base::BindOnce(&PopulateEntriesAsync, response_ptr),
                 base::BindOnce(std::move(callback), std::move(response)));
           },

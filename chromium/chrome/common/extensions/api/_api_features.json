@@ -91,6 +91,10 @@
     "dependencies": ["permission:appview"],
     "contexts": ["blessed_extension"]
   },
+  "arcAppsPrivate": {
+    "dependencies": ["permission:arcAppsPrivate"],
+    "contexts": ["blessed_extension"]
+  },
   "autofillPrivate": [{
     "dependencies": ["permission:autofillPrivate"],
     "contexts": ["blessed_extension"]
@@ -132,7 +136,8 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://bookmarks/*"
+      "chrome://bookmarks/*",
+      "chrome://welcome/email"
     ]
   }],
   "bookmarks.export": [{
@@ -366,6 +371,10 @@
   },
   "echoPrivate": {
     "dependencies": ["permission:echoPrivate"],
+    "contexts": ["blessed_extension"]
+  },
+  "enterprise.hardwarePlatform": {
+    "dependencies": ["permission:enterprise.hardwarePlatform"],
     "contexts": ["blessed_extension"]
   },
   "enterprise.deviceAttributes": {
@@ -666,6 +675,7 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
+      "chrome://multidevice-setup/*",
       "chrome://settings/*"
     ],
     "platforms": ["chromeos"]

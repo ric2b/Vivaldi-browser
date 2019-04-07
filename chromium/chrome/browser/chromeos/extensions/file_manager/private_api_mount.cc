@@ -10,7 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_util.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
@@ -225,8 +225,12 @@ bool FileManagerPrivateRemoveMountFunction::RunAsync() {
   switch (volume->type()) {
     case file_manager::VOLUME_TYPE_REMOVABLE_DISK_PARTITION:
     case file_manager::VOLUME_TYPE_MOUNTED_ARCHIVE_FILE: {
+      chromeos::UnmountOptions unmount_options = chromeos::UNMOUNT_OPTIONS_NONE;
+      if (volume->is_read_only())
+        unmount_options = chromeos::UNMOUNT_OPTIONS_LAZY;
+
       DiskMountManager::GetInstance()->UnmountPath(
-          volume->mount_path().value(), chromeos::UNMOUNT_OPTIONS_NONE,
+          volume->mount_path().value(), unmount_options,
           DiskMountManager::UnmountPathCallback());
       break;
     }

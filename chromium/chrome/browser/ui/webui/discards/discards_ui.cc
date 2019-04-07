@@ -13,7 +13,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/resource_coordinator/discard_reason.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom.h"
 #include "chrome/browser/resource_coordinator/tab_activity_watcher.h"
@@ -34,9 +33,9 @@
 
 namespace {
 
-resource_coordinator::DiscardReason GetDiscardReason(bool urgent) {
-  return urgent ? resource_coordinator::DiscardReason::kUrgent
-                : resource_coordinator::DiscardReason::kProactive;
+mojom::LifecycleUnitDiscardReason GetDiscardReason(bool urgent) {
+  return urgent ? mojom::LifecycleUnitDiscardReason::URGENT
+                : mojom::LifecycleUnitDiscardReason::PROACTIVE;
 }
 
 mojom::LifecycleUnitVisibility GetLifecycleUnitVisibility(
@@ -78,10 +77,7 @@ double GetSiteEngagementScore(content::WebContents* contents) {
 
   auto* engagement_svc = SiteEngagementService::Get(
       Profile::FromBrowserContext(contents->GetBrowserContext()));
-  double engagement =
-      engagement_svc->GetDetails(nav_entry->GetURL()).total_score;
-
-  return engagement;
+  return engagement_svc->GetDetails(nav_entry->GetURL()).total_score;
 }
 
 class DiscardsDetailsProviderImpl : public mojom::DiscardsDetailsProvider {
@@ -127,9 +123,12 @@ class DiscardsDetailsProviderImpl : public mojom::DiscardsDetailsProvider {
       info->cannot_freeze_reasons = freeze_details.GetFailureReasonStrings();
       resource_coordinator::DecisionDetails discard_details;
       info->can_discard = lifecycle_unit->CanDiscard(
-          resource_coordinator::DiscardReason::kProactive, &discard_details);
+          mojom::LifecycleUnitDiscardReason::PROACTIVE, &discard_details);
       info->cannot_discard_reasons = discard_details.GetFailureReasonStrings();
-      info->discard_count = tab_lifecycle_unit_external->GetDiscardCount();
+      info->discard_count = lifecycle_unit->GetDiscardCount();
+      // This is only valid if the state is PENDING_DISCARD or DISCARD, but the
+      // javascript code takes care of that.
+      info->discard_reason = lifecycle_unit->GetDiscardReason();
       info->utility_rank = rank++;
       const base::TimeTicks last_focused_time =
           lifecycle_unit->GetLastFocusedTime();
@@ -148,6 +147,11 @@ class DiscardsDetailsProviderImpl : public mojom::DiscardsDetailsProvider {
       if (info->has_reactivation_score)
         info->reactivation_score = reactivation_score.value();
       info->site_engagement_score = GetSiteEngagementScore(contents);
+      // TODO(crbug.com/876340): The focus is used to compute the page lifecycle
+      // state. This should be replaced with the actual page lifecycle state
+      // information from Blink, but this depends on implementing the passive
+      // state and plumbing it to the browser.
+      info->has_focus = lifecycle_unit->GetLastFocusedTime().is_max();
 
       infos.push_back(std::move(info));
     }

@@ -9,7 +9,7 @@
 #include "base/feature_list.h"
 #import "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -20,6 +20,7 @@
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/unified_consent/feature.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/experimental_flags.h"
@@ -44,7 +45,8 @@
 #import "ios/chrome/browser/ui/commands/settings_main_page_commands.h"
 #import "ios/chrome/browser/ui/settings/about_chrome_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/accounts_collection_view_controller.h"
-#import "ios/chrome/browser/ui/settings/autofill_collection_view_controller.h"
+#import "ios/chrome/browser/ui/settings/autofill_credit_card_collection_view_controller.h"
+#import "ios/chrome/browser/ui/settings/autofill_profile_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/bandwidth_management_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/cells/account_signin_item.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_detail_item.h"
@@ -63,7 +65,6 @@
 #import "ios/chrome/browser/ui/signin_interaction/public/signin_presenter.h"
 #import "ios/chrome/browser/ui/signin_interaction/signin_interaction_coordinator.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
-#include "ios/chrome/browser/unified_consent/feature.h"
 #include "ios/chrome/browser/voice/speech_input_locale_config.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -93,8 +94,25 @@ namespace {
 
 const CGFloat kAccountProfilePhotoDimension = 40.0f;
 
+NSString* const kSyncAndGoogleServicesImageName = @"sync_and_google_services";
+NSString* const kSettingsSearchEngineImageName = @"settings_search_engine";
+NSString* const kSettingsPasswordsImageName = @"settings_passwords";
+NSString* const kSettingsAutofillCreditCardImageName =
+    @"settings_payment_methods";
+NSString* const kSettingsAutofillProfileImageName = @"settings_addresses";
+NSString* const kSettingsVoiceSearchImageName = @"settings_voice_search";
+NSString* const kSettingsPrivacyImageName = @"settings_privacy";
+NSString* const kSettingsContentSettingsImageName =
+    @"settings_content_settings";
+NSString* const kSettingsBandwidthImageName = @"settings_bandwidth";
+NSString* const kSettingsAboutChromeImageName = @"settings_about_chrome";
+NSString* const kSettingsDebugImageName = @"settings_debug";
+NSString* const kSettingsArticleSuggestionsImageName =
+    @"settings_article_suggestions";
+
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierSignIn = kSectionIdentifierEnumZero,
+  SectionIdentifierAccount,
   SectionIdentifierBasics,
   SectionIdentifierAdvanced,
   SectionIdentifierInfo,
@@ -109,7 +127,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeHeader,
   ItemTypeSearchEngine,
   ItemTypeSavedPasswords,
-  ItemTypeAutofill,
+  ItemTypeAutofillCreditCard,
+  ItemTypeAutofillProfile,
   ItemTypeVoiceSearch,
   ItemTypePrivacy,
   ItemTypeContentSettings,
@@ -225,7 +244,8 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   SettingsDetailItem* _voiceSearchDetailItem;
   SettingsDetailItem* _defaultSearchEngineItem;
   SettingsDetailItem* _savePasswordsDetailItem;
-  SettingsDetailItem* _autoFillDetailItem;
+  SettingsDetailItem* _autoFillProfileDetailItem;
+  SettingsDetailItem* _autoFillCreditCardDetailItem;
 
   // YES if the user used at least once the sign-in promo view buttons.
   BOOL _signinStarted;
@@ -298,7 +318,9 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
         password_manager::prefs::kCredentialsEnableService,
         &_prefChangeRegistrar);
     _prefObserverBridge->ObserveChangesForPreference(
-        autofill::prefs::kAutofillEnabled, &_prefChangeRegistrar);
+        autofill::prefs::kAutofillCreditCardEnabled, &_prefChangeRegistrar);
+    _prefObserverBridge->ObserveChangesForPreference(
+        autofill::prefs::kAutofillProfileEnabled, &_prefChangeRegistrar);
 
     _settingsMainPageDispatcher = self;
     _dispatcher = dispatcher;
@@ -350,11 +372,11 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 
   CollectionViewModel* model = self.collectionViewModel;
 
-  // Sign in/Account section
-  [model addSectionWithIdentifier:SectionIdentifierSignIn];
   AuthenticationService* authService =
       AuthenticationServiceFactory::GetForBrowserState(_browserState);
   if (!authService->IsAuthenticated()) {
+    // Sign in section
+    [model addSectionWithIdentifier:SectionIdentifierSignIn];
     if ([SigninPromoViewMediator
             shouldDisplaySigninPromoViewWithAccessPoint:
                 signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS
@@ -374,15 +396,22 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
     [model addItem:[self signInTextItem]
         toSectionWithIdentifier:SectionIdentifierSignIn];
   } else {
+    // Account section
+    [model addSectionWithIdentifier:SectionIdentifierAccount];
     _hasRecordedSigninImpression = NO;
     [_signinPromoViewMediator signinPromoViewRemoved];
     _signinPromoViewMediator = nil;
     [model addItem:[self accountCellItem]
-        toSectionWithIdentifier:SectionIdentifierSignIn];
+        toSectionWithIdentifier:SectionIdentifierAccount];
   }
-  if (IsUnifiedConsentEnabled()) {
+  if (unified_consent::IsUnifiedConsentFeatureEnabled()) {
+    if (![model hasSectionForSectionIdentifier:SectionIdentifierAccount]) {
+      // Add the Account section for the Google services cell, if the user is
+      // signed-out.
+      [model addSectionWithIdentifier:SectionIdentifierAccount];
+    }
     [model addItem:[self googleServicesCellItem]
-        toSectionWithIdentifier:SectionIdentifierSignIn];
+        toSectionWithIdentifier:SectionIdentifierAccount];
   }
 
   // Basics section
@@ -400,7 +429,9 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
       toSectionWithIdentifier:SectionIdentifierBasics];
   [model addItem:[self savePasswordsDetailItem]
       toSectionWithIdentifier:SectionIdentifierBasics];
-  [model addItem:[self autoFillDetailItem]
+  [model addItem:[self AutoFillCreditCardDetailItem]
+      toSectionWithIdentifier:SectionIdentifierBasics];
+  [model addItem:[self autoFillProfileDetailItem]
       toSectionWithIdentifier:SectionIdentifierBasics];
 
   // Advanced Section
@@ -423,8 +454,12 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
       toSectionWithIdentifier:SectionIdentifierAdvanced];
   [model addItem:[self contentSettingsDetailItem]
       toSectionWithIdentifier:SectionIdentifierAdvanced];
-  [model addItem:[self bandwidthManagementDetailItem]
-      toSectionWithIdentifier:SectionIdentifierAdvanced];
+  if (!unified_consent::IsUnifiedConsentFeatureEnabled()) {
+    // When unified consent flag is enabled, the bandwidth settings is available
+    // under the Google services and sync settings.
+    [model addItem:[self bandwidthManagementDetailItem]
+        toSectionWithIdentifier:SectionIdentifierAdvanced];
+  }
 
   // Info Section
   [model addSectionWithIdentifier:SectionIdentifierInfo];
@@ -498,7 +533,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
                              text:l10n_util::GetNSString(
                                       IDS_IOS_GOOGLE_SERVICES_SETTINGS_TITLE)
                        detailText:nil
-                    iconImageName:nil];
+                    iconImageName:kSyncAndGoogleServicesImageName];
 }
 
 - (CollectionViewItem*)accountCellItem {
@@ -522,7 +557,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
                           text:l10n_util::GetNSString(
                                    IDS_IOS_SEARCH_ENGINE_SETTING_TITLE)
                     detailText:defaultSearchEngineName
-                 iconImageName:@"settings_search_engine"];
+                 iconImageName:kSettingsSearchEngineImageName];
   _defaultSearchEngineItem.accessibilityIdentifier =
       kSettingsSearchEngineCellId;
   return _defaultSearchEngineItem;
@@ -533,24 +568,40 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
       [self detailItemWithType:ItemTypeSavedPasswords
                           text:l10n_util::GetNSString(IDS_IOS_PASSWORDS)
                     detailText:nil
-                 iconImageName:@"settings_passwords"];
+                 iconImageName:kSettingsPasswordsImageName];
 
   return _savePasswordsDetailItem;
 }
 
-- (CollectionViewItem*)autoFillDetailItem {
-  BOOL autofillEnabled =
-      _browserState->GetPrefs()->GetBoolean(autofill::prefs::kAutofillEnabled);
-  NSString* autofillDetail = autofillEnabled
-                                 ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
-                                 : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
-  _autoFillDetailItem =
-      [self detailItemWithType:ItemTypeAutofill
-                          text:l10n_util::GetNSString(IDS_IOS_AUTOFILL)
-                    detailText:autofillDetail
-                 iconImageName:@"settings_autofill_forms"];
+- (CollectionViewItem*)AutoFillCreditCardDetailItem {
+  BOOL autofillCreditCardEnabled =
+      autofill::prefs::IsCreditCardAutofillEnabled(_browserState->GetPrefs());
+  NSString* detailText = autofillCreditCardEnabled
+                             ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
+                             : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
+  _autoFillCreditCardDetailItem = [self
+      detailItemWithType:ItemTypeAutofillCreditCard
+                    text:l10n_util::GetNSString(IDS_AUTOFILL_PAYMENT_METHODS)
+              detailText:detailText
+           iconImageName:kSettingsAutofillCreditCardImageName];
 
-  return _autoFillDetailItem;
+  return _autoFillCreditCardDetailItem;
+}
+
+- (CollectionViewItem*)autoFillProfileDetailItem {
+  BOOL autofillProfileEnabled =
+      autofill::prefs::IsProfileAutofillEnabled(_browserState->GetPrefs());
+  NSString* detailText = autofillProfileEnabled
+                             ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
+                             : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
+  _autoFillProfileDetailItem =
+      [self detailItemWithType:ItemTypeAutofillProfile
+                          text:l10n_util::GetNSString(
+                                   IDS_AUTOFILL_ADDRESSES_SETTINGS_TITLE)
+                    detailText:detailText
+                 iconImageName:kSettingsAutofillProfileImageName];
+
+  return _autoFillProfileDetailItem;
 }
 
 - (CollectionViewItem*)voiceSearchDetailItem {
@@ -566,7 +617,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
                           text:l10n_util::GetNSString(
                                    IDS_IOS_VOICE_SEARCH_SETTING_TITLE)
                     detailText:languageName
-                 iconImageName:@"settings_voice_search"];
+                 iconImageName:kSettingsVoiceSearchImageName];
   _voiceSearchDetailItem.accessibilityIdentifier = kSettingsVoiceSearchCellId;
   return _voiceSearchDetailItem;
 }
@@ -577,7 +628,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
                           text:l10n_util::GetNSString(
                                    IDS_OPTIONS_ADVANCED_SECTION_TITLE_PRIVACY)
                     detailText:nil
-                 iconImageName:@"settings_privacy"];
+                 iconImageName:kSettingsPrivacyImageName];
 }
 
 - (CollectionViewItem*)contentSettingsDetailItem {
@@ -585,7 +636,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
       detailItemWithType:ItemTypeContentSettings
                     text:l10n_util::GetNSString(IDS_IOS_CONTENT_SETTINGS_TITLE)
               detailText:nil
-           iconImageName:@"settings_content_settings"];
+           iconImageName:kSettingsContentSettingsImageName];
 }
 
 - (CollectionViewItem*)bandwidthManagementDetailItem {
@@ -593,21 +644,21 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
                              text:l10n_util::GetNSString(
                                       IDS_IOS_BANDWIDTH_MANAGEMENT_SETTINGS)
                        detailText:nil
-                    iconImageName:@"settings_bandwidth"];
+                    iconImageName:kSettingsBandwidthImageName];
 }
 
 - (CollectionViewItem*)aboutChromeDetailItem {
   return [self detailItemWithType:ItemTypeAboutChrome
                              text:l10n_util::GetNSString(IDS_IOS_PRODUCT_NAME)
                        detailText:nil
-                    iconImageName:@"settings_about_chrome"];
+                    iconImageName:kSettingsAboutChromeImageName];
 }
 
 - (SettingsSwitchItem*)showMemoryDebugSwitchItem {
   SettingsSwitchItem* showMemoryDebugSwitchItem =
       [self switchItemWithType:ItemTypeMemoryDebugging
                          title:@"Show memory debug tools"
-                 iconImageName:@"settings_debug"
+                 iconImageName:kSettingsDebugImageName
                withDefaultsKey:nil];
   showMemoryDebugSwitchItem.on = [_showMemoryDebugToolsEnabled value];
 
@@ -619,7 +670,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
       [self switchItemWithType:ItemTypeArticlesForYou
                          title:l10n_util::GetNSString(
                                    IDS_IOS_CONTENT_SUGGESTIONS_SETTING_TITLE)
-                 iconImageName:@"settings_article_suggestions"
+                 iconImageName:kSettingsArticleSuggestionsImageName
                withDefaultsKey:nil];
   articlesForYouSwitchItem.on = [_articlesEnabled value];
 
@@ -630,14 +681,14 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 - (SettingsSwitchItem*)viewSourceSwitchItem {
   return [self switchItemWithType:ItemTypeViewSource
                             title:@"View source menu"
-                    iconImageName:@"settings_debug"
+                    iconImageName:kSettingsDebugImageName
                   withDefaultsKey:kDevViewSourceKey];
 }
 
 - (SettingsSwitchItem*)logJavascriptConsoleSwitchItem {
   return [self switchItemWithType:ItemTypeLogJavascript
                             title:@"Log JS"
-                    iconImageName:@"settings_debug"
+                    iconImageName:kSettingsDebugImageName
                   withDefaultsKey:kLogJavascriptKey];
 }
 
@@ -645,14 +696,14 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   return [self detailItemWithType:ItemTypeCollectionCellCatalog
                              text:@"Collection Cell Catalog"
                        detailText:nil
-                    iconImageName:@"settings_debug"];
+                    iconImageName:kSettingsDebugImageName];
 }
 
 - (SettingsDetailItem*)tableViewCatalogDetailItem {
   return [self detailItemWithType:ItemTypeTableCellCatalog
                              text:@"TableView Cell Catalog"
                        detailText:nil
-                    iconImageName:@"settings_debug"];
+                    iconImageName:kSettingsDebugImageName];
 }
 #endif  // CHROMIUM_BUILD && !defined(NDEBUG)
 
@@ -832,8 +883,12 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
       controller = [[SavePasswordsCollectionViewController alloc]
           initWithBrowserState:_browserState];
       break;
-    case ItemTypeAutofill:
-      controller = [[AutofillCollectionViewController alloc]
+    case ItemTypeAutofillCreditCard:
+      controller = [[AutofillCreditCardCollectionViewController alloc]
+          initWithBrowserState:_browserState];
+      break;
+    case ItemTypeAutofillProfile:
+      controller = [[AutofillProfileCollectionViewController alloc]
           initWithBrowserState:_browserState];
       break;
     case ItemTypeVoiceSearch:
@@ -985,6 +1040,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
       [[GoogleServicesSettingsCoordinator alloc]
           initWithBaseViewController:self.navigationController
                         browserState:_browserState];
+  _googleServicesSettingsCoordinator.dispatcher = self.dispatcher;
   _googleServicesSettingsCoordinator.navigationController =
       self.navigationController;
   _googleServicesSettingsCoordinator.delegate = self;
@@ -1052,12 +1108,12 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
 
 - (void)reloadAccountCell {
   if (![self.collectionViewModel hasItemForItemType:ItemTypeAccount
-                                  sectionIdentifier:SectionIdentifierSignIn]) {
+                                  sectionIdentifier:SectionIdentifierAccount]) {
     return;
   }
   NSIndexPath* accountCellIndexPath =
       [self.collectionViewModel indexPathForItemType:ItemTypeAccount
-                                   sectionIdentifier:SectionIdentifierSignIn];
+                                   sectionIdentifier:SectionIdentifierAccount];
   CollectionViewAccountItem* identityAccountItem =
       base::mac::ObjCCast<CollectionViewAccountItem>(
           [self.collectionViewModel itemAtIndexPath:accountCellIndexPath]);
@@ -1235,14 +1291,24 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
     [self reconfigureCellsForItems:@[ _savePasswordsDetailItem ]];
   }
 
-  if (preferenceName == autofill::prefs::kAutofillEnabled) {
-    BOOL autofillEnabled =
-        _browserState->GetPrefs()->GetBoolean(preferenceName);
-    NSString* autofillDetail =
-        autofillEnabled ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
-                        : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
-    _autoFillDetailItem.detailText = autofillDetail;
-    [self reconfigureCellsForItems:@[ _autoFillDetailItem ]];
+  if (preferenceName == autofill::prefs::kAutofillProfileEnabled) {
+    BOOL autofillProfileEnabled =
+        autofill::prefs::IsProfileAutofillEnabled(_browserState->GetPrefs());
+    NSString* detailText = autofillProfileEnabled
+                               ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
+                               : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
+    _autoFillProfileDetailItem.detailText = detailText;
+    [self reconfigureCellsForItems:@[ _autoFillProfileDetailItem ]];
+  }
+
+  if (preferenceName == autofill::prefs::kAutofillCreditCardEnabled) {
+    BOOL autofillCreditCardEnabled =
+        autofill::prefs::IsCreditCardAutofillEnabled(_browserState->GetPrefs());
+    NSString* detailText = autofillCreditCardEnabled
+                               ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
+                               : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
+    _autoFillCreditCardDetailItem.detailText = detailText;
+    [self reconfigureCellsForItems:@[ _autoFillCreditCardDetailItem ]];
   }
 }
 

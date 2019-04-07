@@ -17,7 +17,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "net/base/net_errors.h"
@@ -94,7 +94,7 @@ class NetworkMetricsProvider::EffectiveConnectionTypeObserver
   void OnEffectiveConnectionTypeChanged(
       net::EffectiveConnectionType type) override {
     DCHECK(thread_checker_.CalledOnValidThread());
-    callback_task_runner_->PostTask(FROM_HERE, base::Bind(callback_, type));
+    callback_task_runner_->PostTask(FROM_HERE, base::BindOnce(callback_, type));
   }
 
   // Notifies |this| when there is a change in the effective connection type.
@@ -126,7 +126,7 @@ NetworkMetricsProvider::NetworkMetricsProvider(
       min_effective_connection_type_(net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN),
       max_effective_connection_type_(net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN),
       weak_ptr_factory_(this) {
-  net::NetworkChangeNotifier::AddConnectionTypeObserver(this);
+  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
   connection_type_ = net::NetworkChangeNotifier::GetConnectionType();
   if (connection_type_ != net::NetworkChangeNotifier::CONNECTION_UNKNOWN)
     network_change_notifier_initialized_ = true;
@@ -157,7 +157,7 @@ NetworkMetricsProvider::NetworkMetricsProvider(
 
 NetworkMetricsProvider::~NetworkMetricsProvider() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  net::NetworkChangeNotifier::RemoveConnectionTypeObserver(this);
+  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
 
   if (network_quality_estimator_provider_) {
     scoped_refptr<base::SequencedTaskRunner> network_quality_task_runner =
@@ -232,7 +232,7 @@ void NetworkMetricsProvider::ProvideSystemProfileMetrics(
     WriteWifiAccessPointProto(info, network);
 }
 
-void NetworkMetricsProvider::OnConnectionTypeChanged(
+void NetworkMetricsProvider::OnNetworkChanged(
     net::NetworkChangeNotifier::ConnectionType type) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // To avoid reporting an ambiguous connection type for users on flaky
@@ -318,7 +318,7 @@ void NetworkMetricsProvider::ProbeWifiPHYLayerProtocol() {
   DCHECK(thread_checker_.CalledOnValidThread());
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&net::GetWifiPHYLayerProtocol),
       base::BindOnce(&NetworkMetricsProvider::OnWifiPHYLayerProtocolResult,

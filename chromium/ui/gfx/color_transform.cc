@@ -13,7 +13,7 @@
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkColorSpaceXform.h"
+#include "third_party/skia/third_party/skcms/skcms.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/icc_profile.h"
 #include "ui/gfx/skia_color_space_util.h"
@@ -101,7 +101,8 @@ float FromLinear(ColorSpace::TransferID id, float v) {
       float c1 = 3424.0f / 4096.0f;
       float c2 = (2413.0f / 4096.0f) * 32.0f;
       float c3 = (2392.0f / 4096.0f) * 32.0f;
-      return pow((c1 + c2 * pow(v, m1)) / (1.0f + c3 * pow(v, m1)), m2);
+      float p = powf(v, m1);
+      return powf((c1 + c2 * p) / (1.0f + c3 * p), m2);
     }
 
     // Spec: http://www.arib.or.jp/english/html/overview/doc/2-STD-B67v1_0.pdf
@@ -168,8 +169,8 @@ float ToLinear(ColorSpace::TransferID id, float v) {
       float c1 = 3424.0f / 4096.0f;
       float c2 = (2413.0f / 4096.0f) * 32.0f;
       float c3 = (2392.0f / 4096.0f) * 32.0f;
-      v = pow(max(pow(v, 1.0f / m2) - c1, 0.0f) / (c2 - c3 * pow(v, 1.0f / m2)),
-              1.0f / m1);
+      float p = pow(v, 1.0f / m2);
+      v = powf(max(p - c1, 0.0f) / (c2 - c3 * p), 1.0f / m1);
       // This matches the scRGB definition that 1.0 means 80 nits.
       // TODO(hubbe): It would be *nice* if 1.0 meant more than that, but
       // that might be difficult to do right now.
@@ -922,39 +923,18 @@ class SkiaColorTransform : public ColorTransformStep {
     return false;
   }
   void Transform(ColorTransform::TriStim* colors, size_t num) const override {
-    // Transform to SkColors.
-    std::vector<uint8_t> sk_colors(4 * num);
-    for (size_t i = 0; i < num; ++i) {
-      float rgb[3] = {colors[i].x(), colors[i].y(), colors[i].z()};
-      for (size_t c = 0; c < 3; ++c) {
-        int value_int = static_cast<int>(255.f * rgb[c] + 0.5f);
-        value_int = min(value_int, 255);
-        value_int = max(value_int, 0);
-        sk_colors[4 * i + c] = value_int;
-      }
-      sk_colors[4 * i + 3] = 255;
-    }
+    // We could do this either using Skia or skcms, but since skcms can handle
+    // TriStim directly as skcms_PixelFormat_RGB_fff, let's use that.
+    skcms_ICCProfile src_profile, dst_profile;
+    src_->toProfile(&src_profile);
+    dst_->toProfile(&dst_profile);
 
-    // Perform the transform.
-    std::unique_ptr<SkColorSpaceXform> xform =
-        SkColorSpaceXform::New(src_.get(), dst_.get());
-    DCHECK(xform);
-    if (!xform)
-      return;
-    std::vector<uint8_t> sk_colors_transformed(4 * num);
-    bool xform_apply_result = xform->apply(
-        SkColorSpaceXform::kRGBA_8888_ColorFormat, sk_colors_transformed.data(),
-        SkColorSpaceXform::kRGBA_8888_ColorFormat, sk_colors.data(), num,
-        kOpaque_SkAlphaType);
-    DCHECK(xform_apply_result);
-    sk_colors = sk_colors_transformed;
+    const skcms_PixelFormat kFFF = skcms_PixelFormat_RGB_fff;
+    const skcms_AlphaFormat kUPM = skcms_AlphaFormat_Unpremul;
 
-    // Convert back to TriStim.
-    for (size_t i = 0; i < num; ++i) {
-      colors[i].set_x(sk_colors[4 * i + 0] / 255.f);
-      colors[i].set_y(sk_colors[4 * i + 1] / 255.f);
-      colors[i].set_z(sk_colors[4 * i + 2] / 255.f);
-    }
+    bool xform_result = skcms_Transform(colors, kFFF, kUPM, &src_profile,
+                                        colors, kFFF, kUPM, &dst_profile, num);
+    DCHECK(xform_result);
   }
 
  private:

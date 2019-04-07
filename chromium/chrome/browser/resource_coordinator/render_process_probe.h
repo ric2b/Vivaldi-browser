@@ -35,23 +35,26 @@ class RenderProcessProbe {
 
   virtual ~RenderProcessProbe() = default;
 
-  // Starts the automatic, timed process metrics collection cycle.
-  // Can only be invoked from the UI thread.
-  virtual void StartGatherCycle() = 0;
-
-  // Starts a single immediate collection cycle, if a cycle is not already
-  // in progress. If the timed gather cycle is running, this will preempt the
-  // next cycle and reset the metronome.
+  // Starts a single collection cycle if a cycle is not already in progress.
+  // If a cycle is already in progress, this method will simply return.
   virtual void StartSingleGather() = 0;
 };
 
 class RenderProcessProbeImpl : public RenderProcessProbe {
  public:
-  void StartGatherCycle() override;
-
   void StartSingleGather() override;
 
  protected:
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class MeasurementOutcome {
+    kMeasurementSuccess = 0,
+    kMeasurementPartialSuccess = 1,
+    kMeasurementFailure = 2,
+
+    kMaxValue = kMeasurementFailure,
+  };
+
   static constexpr base::TimeDelta kUninitializedCPUTime =
       base::TimeDelta::FromMicroseconds(-1);
 
@@ -81,38 +84,30 @@ class RenderProcessProbeImpl : public RenderProcessProbe {
       base::TimeTicks collection_start_time,
       bool success,
       std::unique_ptr<memory_instrumentation::GlobalMemoryDump> dump);
-  // (4) Initiate the next render process metrics collection cycle if the
-  // cycle has been started and |restart_cycle| is true, which consists of a
-  // delayed call to perform (1) via a timer.
-  // Virtual for testing.
-  virtual void FinishCollectionOnUIThread(bool restart_cycle);
+  // (4) Finish the collection cycle on the UI thread.
+  void FinishCollectionOnUIThread(
+      mojom::ProcessResourceMeasurementBatchPtr batch);
 
-  // Allows FieldTrial parameters to override defaults.
-  void UpdateWithFieldTrialParams();
+  // Test seams.
+  virtual void RegisterRenderProcesses();
+  virtual void StartMemoryMeasurement(base::TimeTicks collection_start_time);
+  virtual base::ProcessId GetProcessId(int host_id,
+                                       const RenderProcessInfo& info);
 
   SystemResourceCoordinator* EnsureSystemResourceCoordinator();
 
-  // Dispatch the collected metrics, return true if the cycle should restart.
+  // Dispatch the collected metrics.
   // Virtual for testing.
-  virtual bool DispatchMetrics(mojom::ProcessResourceMeasurementBatchPtr batch);
+  virtual void DispatchMetricsOnUIThread(
+      mojom::ProcessResourceMeasurementBatchPtr batch);
 
   // A map of currently running render process host IDs to process.
   // This map is accessed alternatively from the UI thread and the IO thread,
   // but only one of the two at a time.
   RenderProcessInfoMap render_process_info_map_;
 
-  // Time duration between measurements.
-  base::TimeDelta interval_;
-
-  // Timer to signal the |RenderProcessProbe| instance
-  // to conduct its measurements as a regular interval;
-  base::OneShotTimer timer_;
-
   // Number of measurements collected so far.
   size_t current_gather_cycle_ = 0u;
-
-  // True if StartGatherCycle has been called.
-  bool is_gather_cycle_started_ = false;
 
   // True while a gathering cycle is underways on a background thread.
   bool is_gathering_ = false;

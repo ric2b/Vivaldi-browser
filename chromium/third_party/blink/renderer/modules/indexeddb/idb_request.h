@@ -33,8 +33,8 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
+#include "third_party/blink/public/common/indexeddb/web_idb_types.h"
 #include "third_party/blink/public/platform/modules/indexeddb/web_idb_cursor.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_types.h"
 #include "third_party/blink/public/platform/web_blob_info.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
@@ -294,7 +294,6 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   // EventTarget
   const AtomicString& InterfaceName() const override;
   ExecutionContext* GetExecutionContext() const final;
-  void UncaughtExceptionInEventHandler() final;
 
   // Called by a version change transaction that has finished to set this
   // request back from DONE (following "upgradeneeded") back to PENDING (for
@@ -344,7 +343,7 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   virtual void EnqueueResponse(int64_t);
 
   // EventTarget
-  DispatchEventResult DispatchEventInternal(Event*) override;
+  DispatchEventResult DispatchEventInternal(Event&) override;
 
   // Can be nullptr for requests that are not associated with a transaction,
   // i.e. delete requests and completed or unsuccessful open requests.
@@ -407,12 +406,6 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   bool did_fire_upgrade_needed_event_ = false;
   bool prevent_propagation_ = false;
   bool result_dirty_ = true;
-
-  // Transactions should be aborted after event dispatch if an exception was
-  // not caught. This is cleared before dispatch, set by a call to
-  // UncaughtExceptionInEventHandler() during dispatch, and checked afterwards
-  // to abort if necessary.
-  bool did_throw_in_event_handler_ = false;
 
   // Pointer back to the WebIDBCallbacks that holds a persistent reference to
   // this object.

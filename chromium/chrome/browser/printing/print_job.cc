@@ -13,7 +13,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -42,8 +42,7 @@ void HoldRefCallback(scoped_refptr<PrintJob> job, base::OnceClosure callback) {
 PrintJob::PrintJob()
     : is_job_pending_(false),
       is_canceling_(false),
-      task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      quit_factory_(this) {
+      task_runner_(base::ThreadTaskRunnerHandle::Get()) {
   DCHECK(base::MessageLoopForUI::IsCurrent());
 }
 
@@ -166,11 +165,10 @@ void PrintJob::StartPrinting() {
 void PrintJob::Stop() {
   DCHECK(RunsTasksInCurrentSequence());
 
-  if (quit_factory_.HasWeakPtrs()) {
+  if (quit_closure_) {
     // In case we're running a nested run loop to wait for a job to finish,
     // and we finished before the timeout, quit the nested loop right away.
-    Quit();
-    quit_factory_.InvalidateWeakPtrs();
+    std::move(quit_closure_).Run();
   }
 
   // Be sure to live long enough.
@@ -212,11 +210,12 @@ bool PrintJob::FlushJob(base::TimeDelta timeout) {
   // Make sure the object outlive this message loop.
   scoped_refptr<PrintJob> handle(this);
 
+  base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
+  quit_closure_ = loop.QuitClosure();
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::BindOnce(&PrintJob::Quit, quit_factory_.GetWeakPtr()),
-      timeout);
+      FROM_HERE, loop.QuitClosure(), timeout);
 
-  base::RunLoop(base::RunLoop::Type::kNestableTasksAllowed).Run();
+  loop.Run();
 
   return true;
 }
@@ -494,7 +493,7 @@ void PrintJob::ControlledWorkerShutdown() {
   base::PostTaskWithTraitsAndReply(
       FROM_HERE,
       {base::MayBlock(), base::WithBaseSyncPrimitives(),
-       base::TaskPriority::BACKGROUND,
+       base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&PrintJobWorker::Stop, base::Unretained(worker_.get())),
       base::BindOnce(&PrintJob::HoldUntilStopIsCalled, this));
@@ -514,10 +513,6 @@ bool PrintJob::PostTask(const base::Location& from_here,
 }
 
 void PrintJob::HoldUntilStopIsCalled() {
-}
-
-void PrintJob::Quit() {
-  base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 void PrintJob::set_settings(const PrintSettings& settings) {

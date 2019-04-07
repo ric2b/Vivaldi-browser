@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
 #include "third_party/blink/renderer/core/exported/web_settings_impl.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -295,9 +296,6 @@ bool WebPagePopupImpl::InitializePage() {
   page_->GetSettings().SetMinimumFontSize(main_settings.GetMinimumFontSize());
   page_->GetSettings().SetMinimumLogicalFontSize(
       main_settings.GetMinimumLogicalFontSize());
-  // FIXME: Should we support enabling a11y while a popup is shown?
-  page_->GetSettings().SetAccessibilityEnabled(
-      main_settings.GetAccessibilityEnabled());
   page_->GetSettings().SetScrollAnimatorEnabled(
       main_settings.GetScrollAnimatorEnabled());
   page_->GetSettings().SetAvailablePointerTypes(
@@ -338,7 +336,7 @@ void WebPagePopupImpl::PostMessageToPopup(const String& message) {
     return;
   ScriptForbiddenScope::AllowUserAgentScript allow_script;
   if (LocalDOMWindow* window = ToLocalFrame(page_->MainFrame())->DomWindow())
-    window->DispatchEvent(MessageEvent::Create(message));
+    window->DispatchEvent(*MessageEvent::Create(message));
 }
 
 void WebPagePopupImpl::DestroyPage() {
@@ -355,7 +353,10 @@ AXObject* WebPagePopupImpl::RootAXObject() {
   Document* document = ToLocalFrame(page_->MainFrame())->GetDocument();
   if (!document)
     return nullptr;
-  AXObjectCache* cache = document->GetOrCreateAXObjectCache();
+  AXObjectCache* cache = document->ExistingAXObjectCache();
+  // There should never be a circumstance when RootAXObject() is triggered
+  // and the AXObjectCache doesn't already exist. It's called when trying
+  // to attach the accessibility tree of the pop-up to the host page.
   DCHECK(cache);
   return ToAXObjectCacheBase(cache)->GetOrCreate(document->GetLayoutView());
 }

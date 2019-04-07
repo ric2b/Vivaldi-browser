@@ -212,7 +212,9 @@ static LayoutBoxModelObject* NextContinuation(LayoutObject* layout_object) {
 AXLayoutObject::AXLayoutObject(LayoutObject* layout_object,
                                AXObjectCacheImpl& ax_object_cache)
     : AXNodeObject(layout_object->GetNode(), ax_object_cache),
-      layout_object_(layout_object) {
+      layout_object_(layout_object),
+      is_autofill_available_(false) {
+// TODO(aleventhal) Get correct current state of autofill.
 #if DCHECK_IS_ON()
   layout_object_->SetHasAXObject(true);
 #endif
@@ -233,6 +235,16 @@ LayoutBoxModelObject* AXLayoutObject::GetLayoutBoxModelObject() const {
   return ToLayoutBoxModelObject(layout_object_);
 }
 
+bool IsProgrammaticallyScrollable(LayoutBox* box) {
+  if (!box->HasOverflowClip()) {
+    // If overflow is visible it is not scrollable.
+    return false;
+  }
+  // Return true if the content is larger than the available space.
+  return box->PixelSnappedScrollWidth() != box->PixelSnappedClientWidth() ||
+         box->PixelSnappedScrollHeight() != box->PixelSnappedClientHeight();
+}
+
 ScrollableArea* AXLayoutObject::GetScrollableAreaIfScrollable() const {
   if (IsWebArea())
     return DocumentFrameView()->LayoutViewport();
@@ -241,10 +253,24 @@ ScrollableArea* AXLayoutObject::GetScrollableAreaIfScrollable() const {
     return nullptr;
 
   LayoutBox* box = ToLayoutBox(layout_object_);
-  if (!box->CanBeScrolledAndHasScrollableArea())
-    return nullptr;
 
-  return box->GetScrollableArea();
+  // This should possibly use box->CanBeScrolledAndHasScrollableArea() as it
+  // used to; however, accessibility must consider any kind of non-visible
+  // overflow as programmatically scrollable. Unfortunately
+  // LayoutBox::CanBeScrolledAndHasScrollableArea() method calls
+  // LayoutBox::CanBeProgramaticallyScrolled() which does not consider
+  // visibility:hidden content to be programmatically scrollable, although it
+  // certainly is, and can even be scrolled by selecting and using shift+arrow
+  // keys. It should be noticed that the new code used here reduces the overall
+  // amount of work as well.
+  // It is not sufficient to expose it only in the anoymous child, because that
+  // child is truncated in platform accessibility trees, which present the
+  // textfield as a leaf.
+  ScrollableArea* scrollable_area = box->GetScrollableArea();
+  if (scrollable_area && IsProgrammaticallyScrollable(box))
+    return scrollable_area;
+
+  return nullptr;
 }
 
 static bool IsImageOrAltText(LayoutBoxModelObject* box, Node* node) {
@@ -280,14 +306,14 @@ AccessibilityRole AXLayoutObject::NativeAccessibilityRoleIgnoringAria() const {
     if (node && node->IsLink())
       return kImageMapRole;
     if (IsHTMLInputElement(node))
-      return HasPopup() ? kPopUpButtonRole : kButtonRole;
+      return ButtonRoleType();
     if (IsSVGImage())
       return kSVGRootRole;
+
     return kImageRole;
   }
-  // Note: if JavaScript is disabled, the layoutObject won't be a
-  // LayoutHTMLCanvas.
-  if (IsHTMLCanvasElement(node) && layout_object_->IsCanvas())
+
+  if (IsHTMLCanvasElement(node))
     return kCanvasRole;
 
   if (css_box && css_box->IsLayoutView())
@@ -651,7 +677,7 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
   if (layout_object_->IsBR())
     return false;
 
-  if (CanSetFocusAttribute())
+  if (CanSetFocusAttribute() && GetNode() && !IsHTMLBodyElement(GetNode()))
     return false;
 
   if (IsLink())
@@ -767,12 +793,15 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
   if (IsCanvas()) {
     if (CanvasHasFallbackContent())
       return false;
-    LayoutHTMLCanvas* canvas = ToLayoutHTMLCanvas(layout_object_);
-    if (canvas->Size().Height() <= 1 || canvas->Size().Width() <= 1) {
+
+    const auto* canvas = ToLayoutHTMLCanvasOrNull(layout_object_);
+    if (canvas &&
+        (canvas->Size().Height() <= 1 || canvas->Size().Width() <= 1)) {
       if (ignored_reasons)
         ignored_reasons->push_back(IgnoredReason(kAXProbablyPresentational));
       return true;
     }
+
     // Otherwise fall through; use presence of help text, title, or description
     // to decide.
   }
@@ -1100,7 +1129,7 @@ String AXLayoutObject::ImageDataUrl(const IntSize& max_size) const {
   if (!buffer)
     return String();
 
-  return buffer->ToDataURL("image/png", 1.0);
+  return buffer->ToDataURL(kMimeTypePng, 1.0);
 }
 
 String AXLayoutObject::GetText() const {
@@ -1873,15 +1902,19 @@ AXObject* AXLayoutObject::RawNextSibling() const {
 }
 
 void AXLayoutObject::AddChildren() {
-  DCHECK(!IsDetached());
+  if (IsDetached())
+    return;
+
+  if (IsHTMLCanvasElement(GetNode()))
+    return AXNodeObject::AddChildren();
+
   // If the need to add more children in addition to existing children arises,
   // childrenChanged should have been called, leaving the object with no
   // children.
   DCHECK(!have_children_);
-
   have_children_ = true;
 
-  HeapVector<Member<AXObject>> owned_children;
+  AXObjectVector owned_children;
   ComputeAriaOwnsChildren(owned_children);
 
   for (AXObject* obj = RawFirstChild(); obj; obj = obj->RawNextSibling()) {
@@ -1894,7 +1927,6 @@ void AXLayoutObject::AddChildren() {
   AddHiddenChildren();
   AddPopupChildren();
   AddImageMapChildren();
-  AddCanvasChildren();
   AddRemoteSVGChildren();
   AddTableChildren();
   AddInlineTextBoxChildren(false);
@@ -2289,7 +2321,7 @@ bool AXLayoutObject::OnNativeSetSelectionAction(const AXSelection& selection) {
 
   if (anchor_object->GetLayoutObject()->GetNode() &&
       anchor_object->GetLayoutObject()->GetNode()->DispatchEvent(
-          Event::CreateCancelableBubble(EventTypeNames::selectstart)) !=
+          *Event::CreateCancelableBubble(EventTypeNames::selectstart)) !=
           DispatchEventResult::kNotCanceled)
     return false;
 
@@ -2440,6 +2472,16 @@ void AXLayoutObject::HandleAriaExpandedChanged() {
   } else {
     AXObjectCache().PostNotification(this,
                                      AXObjectCacheImpl::kAXExpandedChanged);
+  }
+}
+
+void AXLayoutObject::HandleAutofillStateChanged(bool is_available) {
+  if (is_autofill_available_ != is_available) {
+    is_autofill_available_ = is_available;
+    // Reusing the value change event in order to invalidate, even though the
+    // value did not necessarily change.
+    // TODO(dmazzoni) change to using a MarkDirty() API.
+    AXObjectCache().PostNotification(this, AXObjectCacheImpl::kAXValueChanged);
   }
 }
 
@@ -3342,18 +3384,6 @@ void AXLayoutObject::AddImageMapChildren() {
         AXObjectCache().Remove(area_object->AXObjectID());
     }
   }
-}
-
-void AXLayoutObject::AddCanvasChildren() {
-  if (!IsHTMLCanvasElement(GetNode()))
-    return;
-
-  // If it's a canvas, it won't have laid out children, but it might have
-  // accessible fallback content.  Clear m_haveChildren because
-  // AXNodeObject::addChildren will expect it to be false.
-  DCHECK(!children_.size());
-  have_children_ = false;
-  AXNodeObject::AddChildren();
 }
 
 void AXLayoutObject::AddPopupChildren() {

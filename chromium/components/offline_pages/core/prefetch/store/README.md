@@ -23,7 +23,7 @@ class PrefetchStore {
   // Definition of the callback that is going to run the core of the command in
   // the |Execute| method.
   template <typename T>
-  using RunCallback = base::OnceCallback<T(sql::Connection*)>;
+  using RunCallback = base::OnceCallback<T(sql::Database*)>;
 
   // Definition of the callback used to pass the result back to the caller of
   // |Execute| method.
@@ -45,11 +45,12 @@ class PrefetchStore {
   // its result back to calling thread through |result_callback|.
   // Calling |Execute| when store is NOT_INITIALIZED will cause the store
   // initialization to start.
-  // Store initialization status needs to be SUCCESS for test task to run, or
-  // FAILURE, in which case the |db| pointer passed to |run_callback| will be
-  // null and such case should be gracefully handled.
+  // Store initialization status needs to be SUCCESS for |run_callback| to run.
+  // If initialization fails, |result_callback| is invoked with |default_value|.
   template <typename T>
-  void Execute(RunCallback<T> run_callback, ResultCallback<T> result_callback);
+  void Execute(RunCallback<T> run_callback,
+               ResultCallback<T> result_callback,
+               T default_value);
 
   // Gets the initialization status of the store.
   InitializationStatus initialization_status() const;
@@ -57,7 +58,7 @@ class PrefetchStore {
 ```
 
 It allows for enough flexibility to execute `run_callback` on a background
-(blocking) task runner with a `sql::Connection` pointer provided, and then
+(blocking) task runner with a `sql::Database` pointer provided, and then
 return result using `result_callback`.
 
 ## How to implement your command
@@ -73,16 +74,11 @@ Signature of the callback to run on a background thread is defined by
 following (in this example `bool` is used as a sample return type.
 
 ```cpp
-bool ExampleRunCallback(sql::Connection* db) {
-  // Run function should start from ensuring that provided `db` pointer is not
-  // nullptr. If it is, there has been an error opening or initializing the DB.
-  // Such case is possible and it would not be appropriate to CHECK/DCHECK in
-  // that case. Code written against PrefetchStore is supposed to handle error
-  // cases like that gracefully.
-  if (!db)
-    return false;
+bool ExampleRunCallback(sql::Database* db) {
+  // Note that the run function won't be called if the database fails to
+  // initialize, so db is always non-null.
 
-  // Next it's best to start a transaction, which can be aborted without making
+  // It's best to start a transaction, which can be aborted without making
   // changes to the data. This is one of the reasons to go with provided store
   // interface.
   sql::Transaction transaction(db);
@@ -118,6 +114,9 @@ bool ExampleRunCallback(sql::Connection* db) {
 Return of the RunCallback will be provided to ResultCallback using a move
 semantics. This is how result is made available on the foreground thread.
 ResultCallback takes over ownership of the passed in result.
+
+If the database fails to initialize, the RunCallback isn't called and instead,
+the default_value provided to Execute is passed to the ResultCallback.
 
 ```cpp
 void ExampleResultCallback(bool success) {

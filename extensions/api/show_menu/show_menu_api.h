@@ -122,7 +122,7 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate,
   bool GetIconForCommandId(int command_id, gfx::Image* icon) const override;
   void CommandIdHighlighted(int command_id) override;
   void ExecuteCommand(int command_id, int event_flags) override;
-  void MenuWillShow(ui::SimpleMenuModel* source) override;
+  void OnMenuWillShow(ui::SimpleMenuModel* source) override;
   void MenuClosed(ui::SimpleMenuModel* source) override;
 
   // bookmarks::BookmarkModelObserver

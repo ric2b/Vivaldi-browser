@@ -21,8 +21,9 @@ class CORE_EXPORT NGPhysicalBoxFragment final
                         const ComputedStyle& style,
                         NGStyleVariant style_variant,
                         NGPhysicalSize size,
-                        Vector<scoped_refptr<NGPhysicalFragment>>& children,
-                        const NGPixelSnappedPhysicalBoxStrut& padding,
+                        Vector<NGLink>& children,
+                        const NGPhysicalBoxStrut& border,
+                        const NGPhysicalBoxStrut& padding,
                         const NGPhysicalOffsetRect& contents_ink_overflow,
                         Vector<NGBaseline>& baselines,
                         NGBoxType box_type,
@@ -30,15 +31,18 @@ class CORE_EXPORT NGPhysicalBoxFragment final
                         unsigned,  // NGBorderEdges::Physical
                         scoped_refptr<NGBreakToken> break_token = nullptr);
 
-  // True if this is an anonymous inline box for ::first-line.
-  bool IsFirstLineAnonymousInlineBox() const;
-
   const NGBaseline* Baseline(const NGBaselineRequest&) const;
 
-  const NGPixelSnappedPhysicalBoxStrut& Padding() const { return padding_; }
+  const NGPhysicalBoxStrut Borders() const { return borders_; }
+
+  const NGPhysicalBoxStrut Padding() const { return padding_; }
+
+  NGPixelSnappedPhysicalBoxStrut PixelSnappedPadding() const {
+    return padding_.SnapToDevicePixels();
+  }
 
   bool HasSelfPaintingLayer() const;
-  bool ChildrenInline() const;
+  bool ChildrenInline() const { return children_inline_; }
 
   // True if overflow != 'visible', except for certain boxes that do not allow
   // overflow clip; i.e., AllowOverflowClip() returns false.
@@ -68,11 +72,12 @@ class CORE_EXPORT NGPhysicalBoxFragment final
 
   UBiDiLevel BidiLevel() const override;
 
-  scoped_refptr<NGPhysicalFragment> CloneWithoutOffset() const;
+  scoped_refptr<const NGPhysicalFragment> CloneWithoutOffset() const;
 
  private:
   Vector<NGBaseline> baselines_;
-  NGPixelSnappedPhysicalBoxStrut padding_;
+  NGPhysicalBoxStrut borders_;
+  NGPhysicalBoxStrut padding_;
   NGPhysicalOffsetRect descendant_outlines_;
 };
 

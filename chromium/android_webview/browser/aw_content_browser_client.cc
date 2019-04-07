@@ -5,6 +5,7 @@
 #include "android_webview/browser/aw_content_browser_client.h"
 
 #include <utility>
+#include <vector>
 
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_browser_main_parts.h"
@@ -202,8 +203,6 @@ AwBrowserContext* AwContentBrowserClient::GetAwBrowserContext() {
 }
 
 AwContentBrowserClient::AwContentBrowserClient() : net_log_(new net::NetLog()) {
-  frame_interfaces_.AddInterface(base::BindRepeating(
-      &autofill::ContentAutofillDriverFactory::BindAutofillDriver));
   // Although WebView does not support password manager feature, renderer code
   // could still request this interface, so we register a dummy binder which
   // just drops the incoming request, to avoid the 'Failed to locate a binder
@@ -356,7 +355,7 @@ bool AwContentBrowserClient::AllowSetCookie(const GURL& url,
 void AwContentBrowserClient::AllowWorkerFileSystem(
     const GURL& url,
     content::ResourceContext* context,
-    const std::vector<std::pair<int, int> >& render_frames,
+    const std::vector<content::GlobalFrameRoutingId>& render_frames,
     base::Callback<void(bool)> callback) {
   callback.Run(true);
 }
@@ -365,7 +364,7 @@ bool AwContentBrowserClient::AllowWorkerIndexedDB(
     const GURL& url,
     const base::string16& name,
     content::ResourceContext* context,
-    const std::vector<std::pair<int, int> >& render_frames) {
+    const std::vector<content::GlobalFrameRoutingId>& render_frames) {
   return true;
 }
 
@@ -572,6 +571,20 @@ void AwContentBrowserClient::BindInterfaceRequestFromFrame(
                                      render_frame_host);
 }
 
+bool AwContentBrowserClient::BindAssociatedInterfaceRequestFromFrame(
+    content::RenderFrameHost* render_frame_host,
+    const std::string& interface_name,
+    mojo::ScopedInterfaceEndpointHandle* handle) {
+  if (interface_name == autofill::mojom::AutofillDriver::Name_) {
+    autofill::ContentAutofillDriverFactory::BindAutofillDriver(
+        autofill::mojom::AutofillDriverAssociatedRequest(std::move(*handle)),
+        render_frame_host);
+    return true;
+  }
+
+  return false;
+}
+
 void AwContentBrowserClient::ExposeInterfacesToRenderer(
     service_manager::BinderRegistry* registry,
     blink::AssociatedInterfaceRegistry* associated_registry,
@@ -702,9 +715,9 @@ AwContentBrowserClient::CreateLoginDelegate(
     scoped_refptr<net::HttpResponseHeaders> response_headers,
     bool first_auth_attempt,
     LoginAuthRequiredCallback auth_required_callback) {
-  return base::MakeRefCounted<AwLoginDelegate>(
-      auth_info, web_contents_getter, first_auth_attempt,
-      std::move(auth_required_callback));
+  return AwLoginDelegate::Create(auth_info, web_contents_getter,
+                                 first_auth_attempt,
+                                 std::move(auth_required_callback));
 }
 
 bool AwContentBrowserClient::HandleExternalProtocol(
@@ -725,6 +738,14 @@ void AwContentBrowserClient::RegisterOutOfProcessServices(
     OutOfProcessServiceMap* services) {
   (*services)[heap_profiling::mojom::kServiceName] =
       base::BindRepeating(&base::ASCIIToUTF16, "Heap Profiling Service");
+}
+
+bool AwContentBrowserClient::ShouldEnableStrictSiteIsolation() {
+  // TODO(lukasza): When/if we eventually add OOPIF support for AW we should
+  // consider running AW tests with and without site-per-process (and this might
+  // require returning true below).  Adding OOPIF support for AW is tracked by
+  // https://crbug.com/869494.
+  return false;
 }
 
 // static

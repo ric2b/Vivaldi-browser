@@ -32,8 +32,6 @@ void OnDownloadStarted(download::DownloadItem* item,
 
 }  // namespace
 
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(PDFPluginPlaceholderObserver);
-
 PDFPluginPlaceholderObserver::PDFPluginPlaceholderObserver(
     content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents) {}
@@ -96,8 +94,8 @@ void PDFPluginPlaceholderObserver::OnOpenPDF(
         })");
   std::unique_ptr<download::DownloadUrlParameters> params =
       std::make_unique<download::DownloadUrlParameters>(
-          url, web_contents()->GetRenderViewHost()->GetProcess()->GetID(),
-          web_contents()->GetRenderViewHost()->GetRoutingID(),
+          url, render_frame_host->GetRenderViewHost()->GetProcess()->GetID(),
+          render_frame_host->GetRenderViewHost()->GetRoutingID(),
           render_frame_host->GetRoutingID(),
           storage_partition->GetURLRequestContext(), traffic_annotation);
   params->set_referrer(referrer.url);

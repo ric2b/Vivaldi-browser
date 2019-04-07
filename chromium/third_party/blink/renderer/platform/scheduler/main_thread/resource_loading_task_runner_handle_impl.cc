@@ -5,7 +5,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/task/sequence_manager/task_queue.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/renderer/platform/scheduler/child/task_queue_with_task_type.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.h"
 
 namespace blink {
@@ -24,8 +23,7 @@ ResourceLoadingTaskRunnerHandleImpl::WrapTaskRunner(
 ResourceLoadingTaskRunnerHandleImpl::ResourceLoadingTaskRunnerHandleImpl(
     scoped_refptr<MainThreadTaskQueue> task_queue)
     : task_queue_(std::move(task_queue)),
-      task_runner_(TaskQueueWithTaskType::Create(
-          task_queue_,
+      task_runner_(task_queue_->CreateTaskRunner(
           TaskType::kNetworkingWithURLLoaderAnnotation)){};
 
 ResourceLoadingTaskRunnerHandleImpl::~ResourceLoadingTaskRunnerHandleImpl() {
@@ -37,6 +35,7 @@ ResourceLoadingTaskRunnerHandleImpl::~ResourceLoadingTaskRunnerHandleImpl() {
 
 void ResourceLoadingTaskRunnerHandleImpl::DidChangeRequestPriority(
     net::RequestPriority priority) {
+  task_queue_->SetNetRequestPriority(priority);
   FrameSchedulerImpl* frame_scheduler = task_queue_->GetFrameScheduler();
   if (frame_scheduler) {
     frame_scheduler->DidChangeResourceLoadingPriority(task_queue_, priority);

@@ -72,6 +72,7 @@ class InterfaceProvider;
 namespace content {
 
 class BrowserContext;
+class BrowserPluginGuest;
 class BrowserPluginGuestDelegate;
 class InterstitialPage;
 class RenderFrameHost;
@@ -394,6 +395,12 @@ class WebContents : public PageNavigator,
   // both renderer accessibility, and a native browser accessibility tree.
   virtual bool IsFullAccessibilityModeForTesting() const = 0;
 
+  virtual ui::AXMode GetAccessibilityMode() const = 0;
+
+  virtual void SetAccessibilityMode(ui::AXMode mode) = 0;
+
+  virtual base::string16 DumpAccessibilityTree(bool internal) = 0;
+
   virtual const PageImportanceSignals& GetPageImportanceSignals() const = 0;
 
   // External data.
@@ -534,6 +541,10 @@ class WebContents : public PageNavigator,
   // Returns the outer WebContents of this WebContents if any.
   // Otherwise, return nullptr.
   virtual WebContents* GetOuterWebContents() = 0;
+
+  // Returns the root WebContents of the WebContents tree. Always returns
+  // non-null value.
+  virtual WebContents* GetOutermostWebContents() = 0;
 
   // Invoked when visible security state changes.
   virtual void DidChangeVisibleSecurityState() = 0;
@@ -913,10 +924,11 @@ class WebContents : public PageNavigator,
 
   // Returns true if other views are allowed, false otherwise.
   virtual bool GetAllowOtherViews() = 0;
-
-  // Returns true if the WebContents has completed its first meaningful paint.
-  virtual bool CompletedFirstVisuallyNonEmptyPaint() const = 0;
 #endif  // OS_ANDROID
+
+  // Returns true if the WebContents has completed its first meaningful paint
+  // since the last navigation.
+  virtual bool CompletedFirstVisuallyNonEmptyPaint() const = 0;
 
   // TODO(https://crbug.com/826293): This is a simple mitigation to validate
   // that an action that requires a user gesture actually has one in the
@@ -924,6 +936,13 @@ class WebContents : public PageNavigator,
   // renderer. This should be eventually merged into and accounted for in the
   // user activation work.
   virtual bool HasRecentInteractiveInputEvent() const = 0;
+
+  // Sets a flag that causes the WebContents to ignore input events.
+  virtual void SetIgnoreInputEvents(bool ignore_input_events) = 0;
+
+  // Returns guest browser plugin object, or NULL if this WebContents is not a
+  // guest.
+  virtual BrowserPluginGuest* GetBrowserPluginGuest() const = 0;
 
  private:
   // This interface should only be implemented inside content.

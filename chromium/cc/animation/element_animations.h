@@ -64,7 +64,7 @@ class CC_ANIMATION_EXPORT ElementAnimations
   void RemoveKeyframeEffect(KeyframeEffect* keyframe_effect);
   bool IsEmpty() const;
 
-  typedef base::ObserverList<KeyframeEffect> KeyframeEffectsList;
+  typedef base::ObserverList<KeyframeEffect>::Unchecked KeyframeEffectsList;
   const KeyframeEffectsList& keyframe_effects_list() const {
     return keyframe_effects_list_;
   }
@@ -148,6 +148,12 @@ class CC_ANIMATION_EXPORT ElementAnimations
   void NotifyClientFilterAnimated(const FilterOperations& filter,
                                   int target_property_id,
                                   KeyframeModel* keyframe_model) override;
+  void NotifyClientSizeAnimated(const gfx::SizeF& size,
+                                int target_property_id,
+                                KeyframeModel* keyframe_model) override{};
+  void NotifyClientColorAnimated(SkColor color,
+                                 int target_property_id,
+                                 KeyframeModel* keyframe_model) override{};
   void NotifyClientTransformOperationsAnimated(
       const TransformOperations& operations,
       int target_property_id,

@@ -110,7 +110,7 @@ class CONTENT_EXPORT CacheStorageManager
                     CacheStorageOwner owner,
                     const std::string& cache_name,
                     std::unique_ptr<ServiceWorkerFetchRequest> request,
-                    std::unique_ptr<ServiceWorkerResponse> response,
+                    blink::mojom::FetchAPIResponsePtr response,
                     CacheStorage::ErrorCallback callback);
 
   // This must be called before creating any of the public *Cache functions
@@ -204,7 +204,7 @@ class CONTENT_EXPORT CacheStorageManager
   // |cache_task_runner_|.
   CacheStorageMap cache_storage_map_;
 
-  base::ObserverList<CacheStorageContextImpl::Observer> observers_;
+  base::ObserverList<CacheStorageContextImpl::Observer>::Unchecked observers_;
 
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
   base::WeakPtr<storage::BlobStorageContext> blob_context_;

@@ -87,6 +87,18 @@
             "description": "The new zoom level"
           }
         ]
+      },
+      {
+        "name": "onUIZoomChanged",
+        "type": "function",
+        "description": "Fired when the UI zoom changes.",
+        "parameters": [
+          {
+            "type": "number",
+            "name": "zoomlevel",
+            "description": "The new UI zoom level"
+          }
+        ]
       }
     ]
   }

@@ -49,14 +49,15 @@ class AudioWorkletThreadTest : public PageTestBase {
 
   std::unique_ptr<AudioWorkletThread> CreateAudioWorkletThread() {
     std::unique_ptr<AudioWorkletThread> thread =
-        AudioWorkletThread::Create(nullptr, *reporting_proxy_);
+        AudioWorkletThread::Create(*reporting_proxy_);
     Document* document = &GetDocument();
     thread->Start(
         std::make_unique<GlobalScopeCreationParams>(
             document->Url(), ScriptType::kModule, document->UserAgent(),
             Vector<CSPHeaderAndType>(), document->GetReferrerPolicy(),
             document->GetSecurityOrigin(), document->IsSecureContext(),
-            nullptr /* worker_clients */, document->AddressSpace(),
+            document->GetHttpsState(), nullptr /* worker_clients */,
+            document->AddressSpace(),
             OriginTrialContext::GetTokens(document).get(),
             base::UnguessableToken::Create(), nullptr /* worker_settings */,
             kV8CacheOptionsDefault, new WorkletModuleResponsesMap),

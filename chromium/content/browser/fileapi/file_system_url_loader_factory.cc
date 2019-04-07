@@ -15,8 +15,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "build/build_config.h"
 #include "components/services/filesystem/public/interfaces/types.mojom.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -446,14 +446,6 @@ class FileSystemFileURLLoader : public FileSystemEntryURLLoader {
           original_request_.url.ReplaceComponents(replacements);
       head_.encoded_data_length = 0;
       client_->OnReceiveRedirect(redirect_info, head_);
-
-      // Restart the request with a directory loader.
-      network::ResourceRequest new_request = original_request_;
-      new_request.url = redirect_info.new_url;
-      FileSystemDirectoryURLLoader::CreateAndStart(
-          new_request, binding_.Unbind(), client_.PassInterface(),
-          std::move(params_), io_task_runner_);
-      MaybeDeleteSelf();
       return;
     }
 
@@ -522,6 +514,7 @@ class FileSystemFileURLLoader : public FileSystemEntryURLLoader {
         SniffMimeType(file_data_->data(), result, url_.ToGURL(), type_hint,
                       net::ForceSniffFileUrlsForHtml::kDisabled,
                       &head_.mime_type);
+        head_.did_mime_sniff = true;
       }
 
       client_->OnReceiveResponse(head_);

@@ -20,7 +20,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/signin/unified_consent_helper.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/common/channel_info.h"
@@ -76,8 +75,8 @@ ScopedJavaLocalRef<jintArray> JNI_ProfileSyncService_ModelTypeSetToJavaIntArray(
     JNIEnv* env,
     syncer::ModelTypeSet types) {
   std::vector<int> type_vector;
-  for (syncer::ModelTypeSet::Iterator it = types.First(); it.Good(); it.Inc()) {
-    type_vector.push_back(it.Get());
+  for (syncer::ModelType type : types) {
+    type_vector.push_back(type);
   }
   return base::android::ToJavaIntArray(env, type_vector);
 }
@@ -366,18 +365,15 @@ jboolean ProfileSyncServiceAndroid::IsUrlKeyedDataCollectionEnabled(
     const base::android::JavaParamRef<jobject>& obj,
     jboolean personalized) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  bool is_unified_consent_enabled = IsUnifiedConsentEnabled(profile_);
   std::unique_ptr<UrlKeyedDataCollectionConsentHelper>
       unified_consent_url_helper;
   if (personalized) {
     unified_consent_url_helper = UrlKeyedDataCollectionConsentHelper::
-        NewPersonalizedDataCollectionConsentHelper(is_unified_consent_enabled,
-                                                   sync_service_);
+        NewPersonalizedDataCollectionConsentHelper(sync_service_);
   } else {
     PrefService* pref_service = profile_->GetPrefs();
     unified_consent_url_helper = UrlKeyedDataCollectionConsentHelper::
-        NewAnonymizedDataCollectionConsentHelper(is_unified_consent_enabled,
-                                                 pref_service, sync_service_);
+        NewAnonymizedDataCollectionConsentHelper(pref_service, sync_service_);
   }
 
   return unified_consent_url_helper->IsEnabled();

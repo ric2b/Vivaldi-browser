@@ -25,6 +25,7 @@
 #include "third_party/blink/public/platform/web_pointer_properties.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatcher.h"
+#include "third_party/blink/renderer/core/dom/events/event_path.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -173,7 +174,6 @@ MouseEvent* MouseEvent::Create(const AtomicString& event_type,
 
 MouseEvent::MouseEvent()
     : position_type_(PositionType::kPosition),
-      has_cached_relative_position_(false),
       button_(0),
       buttons_(0),
       related_target_(nullptr),
@@ -427,17 +427,17 @@ DispatchEventResult MouseEvent::DispatchEvent(EventDispatcher& dispatcher) {
   // event. This is not part of the DOM specs, but is used for compatibility
   // with the ondblclick="" attribute. This is treated as a separate event in
   // other DOM-compliant browsers like Firefox, and so we do the same.
-  MouseEvent* double_click_event = MouseEvent::Create();
-  double_click_event->InitMouseEventInternal(
+  MouseEvent& double_click_event = *MouseEvent::Create();
+  double_click_event.InitMouseEventInternal(
       EventTypeNames::dblclick, bubbles(), cancelable(), view(), detail(),
       screenX(), screenY(), clientX(), clientY(), GetModifiers(), button(),
       related_target, sourceCapabilities(), buttons());
-  double_click_event->SetComposed(composed());
+  double_click_event.SetComposed(composed());
 
   // Inherit the trusted status from the original event.
-  double_click_event->SetTrusted(isTrusted());
+  double_click_event.SetTrusted(isTrusted());
   if (DefaultHandled())
-    double_click_event->SetDefaultHandled();
+    double_click_event.SetDefaultHandled();
   DispatchEventResult double_click_dispatch_result =
       EventDispatcher::DispatchEvent(dispatcher.GetNode(), double_click_event);
   if (double_click_dispatch_result != DispatchEventResult::kNotCanceled)
@@ -508,9 +508,9 @@ void MouseEvent::ComputeRelativePosition() {
     if (LocalFrameView* view = n->GetLayoutObject()->View()->GetFrameView())
       layer_location_ = view->DocumentToFrame(scaled_page_location);
 
-    // FIXME: This logic is a wrong implementation of convertToLayerCoords.
+    // FIXME: Does this differ from PaintLayer::ConvertToLayerCoords?
     for (PaintLayer* layer = n->GetLayoutObject()->EnclosingLayer(); layer;
-         layer = layer->Parent()) {
+         layer = layer->ContainingLayer()) {
       layer_location_ -= DoubleSize(layer->Location().X().ToDouble(),
                                     layer->Location().Y().ToDouble());
     }
@@ -527,6 +527,7 @@ int MouseEvent::layerX() {
 
   // TODO(mustaq): Remove the PointerEvent specific code when mouse has
   // fractional coordinates. See crbug.com/655786.
+
   return IsPointerEvent() ? layer_location_.X()
                           : static_cast<int>(layer_location_.X());
 }
@@ -537,24 +538,29 @@ int MouseEvent::layerY() {
 
   // TODO(mustaq): Remove the PointerEvent specific code when mouse has
   // fractional coordinates. See crbug.com/655786.
+
   return IsPointerEvent() ? layer_location_.Y()
                           : static_cast<int>(layer_location_.Y());
 }
 
-int MouseEvent::offsetX() {
+double MouseEvent::offsetX() {
   if (!HasPosition())
     return 0;
   if (!has_cached_relative_position_)
     ComputeRelativePosition();
-  return std::round(offset_location_.X());
+  return (RuntimeEnabledFeatures::FractionalMouseEventEnabled())
+             ? offset_location_.X()
+             : std::round(offset_location_.X());
 }
 
-int MouseEvent::offsetY() {
+double MouseEvent::offsetY() {
   if (!HasPosition())
     return 0;
   if (!has_cached_relative_position_)
     ComputeRelativePosition();
-  return std::round(offset_location_.Y());
+  return (RuntimeEnabledFeatures::FractionalMouseEventEnabled())
+             ? offset_location_.Y()
+             : std::round(offset_location_.Y());
 }
 
 }  // namespace blink

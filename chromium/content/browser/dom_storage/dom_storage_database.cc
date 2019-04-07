@@ -35,7 +35,7 @@ DOMStorageDatabase::~DOMStorageDatabase() {
   if (known_to_be_empty_ && !file_path_.empty()) {
     // Delete the db and any lingering journal file from disk.
     Close();
-    sql::Connection::Delete(file_path_);
+    sql::Database::Delete(file_path_);
   }
 }
 
@@ -148,7 +148,7 @@ bool DOMStorageDatabase::LazyOpen(bool create_if_needed) {
     return false;
   }
 
-  db_.reset(new sql::Connection());
+  db_.reset(new sql::Database());
   db_->set_histogram_tag("DOMStorageDatabase");
 
   // This db does not use [meta] table, store mmap status data elsewhere.
@@ -173,7 +173,7 @@ bool DOMStorageDatabase::LazyOpen(bool create_if_needed) {
     }
   }
 
-  // sql::Connection uses UTF-8 encoding, but WebCore style databases use
+  // sql::Database uses UTF-8 encoding, but WebCore style databases use
   // UTF-16, so ensure we match.
   ignore_result(db_->Execute("PRAGMA encoding=\"UTF-16\""));
 
@@ -186,12 +186,8 @@ bool DOMStorageDatabase::LazyOpen(bool create_if_needed) {
     // and whether it's usable (i.e. not corrupted).
     SchemaVersion current_version = DetectSchemaVersion();
 
-    if (current_version == V2) {
+    if (current_version == V2)
       return true;
-    } else if (current_version == V1) {
-      if (UpgradeVersion1To2())
-        return true;
-    }
   }
 
   // This is the exceptional case - to try and recover we'll attempt
@@ -206,7 +202,7 @@ DOMStorageDatabase::SchemaVersion DOMStorageDatabase::DetectSchemaVersion() {
   // Connection::Open() may succeed even if the file we try and open is not a
   // database, however in the case that the database is corrupted to the point
   // that SQLite doesn't actually think it's a database,
-  // sql::Connection::GetCachedStatement will DCHECK when we later try and
+  // sql::Database::GetCachedStatement will DCHECK when we later try and
   // run statements. So we run a query here that will not DCHECK but fail
   // on an invalid database to verify that what we've opened is usable.
   if (db_->ExecuteAndReturnErrorCode("PRAGMA auto_vacuum") != SQLITE_OK)
@@ -218,20 +214,7 @@ DOMStorageDatabase::SchemaVersion DOMStorageDatabase::DetectSchemaVersion() {
       !db_->DoesColumnExist("ItemTable", "value"))
     return INVALID;
 
-  // We must use a unique statement here as we aren't going to step it.
-  sql::Statement statement(
-      db_->GetUniqueStatement("SELECT key,value from ItemTable LIMIT 1"));
-  if (statement.DeclaredColumnType(0) != sql::COLUMN_TYPE_TEXT)
-    return INVALID;
-
-  switch (statement.DeclaredColumnType(1)) {
-    case sql::COLUMN_TYPE_BLOB:
-      return V2;
-    case sql::COLUMN_TYPE_TEXT:
-      return V1;
-    default:
-      return INVALID;
-  }
+  return V2;
 }
 
 bool DOMStorageDatabase::CreateTableV2() {
@@ -254,39 +237,12 @@ bool DOMStorageDatabase::DeleteFileAndRecreate() {
   tried_to_recreate_ = true;
 
   // If it's not a directory and we can delete the file, try and open it again.
-  if (!base::DirectoryExists(file_path_) &&
-      sql::Connection::Delete(file_path_)) {
+  if (!base::DirectoryExists(file_path_) && sql::Database::Delete(file_path_)) {
     return LazyOpen(true);
   }
 
   failed_to_open_ = true;
   return false;
-}
-
-bool DOMStorageDatabase::UpgradeVersion1To2() {
-  DCHECK(IsOpen());
-  DCHECK(DetectSchemaVersion() == V1);
-
-  sql::Statement statement(db_->GetCachedStatement(SQL_FROM_HERE,
-      "SELECT * FROM ItemTable"));
-  DCHECK(statement.is_valid());
-
-  // Need to migrate from TEXT value column to BLOB.
-  // Store the current database content so we can re-insert
-  // the data into the new V2 table.
-  DOMStorageValuesMap values;
-  while (statement.Step()) {
-    base::string16 key = statement.ColumnString16(0);
-    base::NullableString16 value(statement.ColumnString16(1), false);
-    values[key] = value;
-  }
-
-  sql::Transaction migration(db_.get());
-  return migration.Begin() &&
-      db_->Execute("DROP TABLE ItemTable") &&
-      CreateTableV2() &&
-      CommitChanges(false, values) &&
-      migration.Commit();
 }
 
 void DOMStorageDatabase::Close() {

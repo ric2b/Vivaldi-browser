@@ -53,6 +53,7 @@
 #include "third_party/blink/public/web/web_dom_event.h"
 #include "third_party/blink/public/web/web_form_element.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
+#include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/public/web/web_node.h"
 #include "third_party/blink/public/web/web_plugin.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
@@ -155,6 +156,29 @@ void ResetWheelAndTouchEventHandlerProperties(LocalFrame& frame) {
   chrome_client.SetEventListenerProperties(
       &frame, cc::EventListenerClass::kTouchEndOrCancel,
       cc::EventListenerProperties::kNone);
+}
+
+void SetupDocumentLoader(
+    DocumentLoader* document_loader,
+    std::unique_ptr<WebNavigationParams> navigation_params) {
+  if (!navigation_params) {
+    document_loader->GetTiming().SetNavigationStart(CurrentTimeTicks());
+    return;
+  }
+
+  const WebNavigationTimings& navigation_timings =
+      navigation_params->navigation_timings;
+  document_loader->UpdateNavigationTimings(
+      navigation_timings.navigation_start, navigation_timings.redirect_start,
+      navigation_timings.redirect_end, navigation_timings.fetch_start,
+      navigation_timings.input_start);
+
+  document_loader->SetSourceLocation(navigation_params->source_location);
+  if (navigation_params->is_user_activated)
+    document_loader->SetUserActivated();
+
+  document_loader->SetServiceWorkerNetworkProvider(
+      std::move(navigation_params->service_worker_network_provider));
 }
 
 }  // namespace
@@ -501,7 +525,8 @@ NavigationPolicy LocalFrameClientImpl::DecidePolicyForNavigation(
     HTMLFormElement* form,
     ContentSecurityPolicyDisposition
         should_check_main_world_content_security_policy,
-    mojom::blink::BlobURLTokenPtr blob_url_token) {
+    mojom::blink::BlobURLTokenPtr blob_url_token,
+    base::TimeTicks input_start_time) {
   if (!web_frame_->Client())
     return kNavigationPolicyIgnore;
 
@@ -513,8 +538,8 @@ NavigationPolicy LocalFrameClientImpl::DecidePolicyForNavigation(
       wrapped_resource_request);
   navigation_info.navigation_type = type;
   navigation_info.default_policy = static_cast<WebNavigationPolicy>(policy);
-  navigation_info.extra_data =
-      web_document_loader ? web_document_loader->GetExtraData() : nullptr;
+  // TODO(dgozman): remove this after some Canary coverage.
+  CHECK(!web_document_loader || !web_document_loader->GetExtraData());
   navigation_info.replaces_current_history_item = replaces_current_history_item;
   navigation_info.is_client_redirect = is_client_redirect;
   navigation_info.triggering_event_info = triggering_event_info;
@@ -524,6 +549,7 @@ NavigationPolicy LocalFrameClientImpl::DecidePolicyForNavigation(
           ? kWebContentSecurityPolicyDispositionCheck
           : kWebContentSecurityPolicyDispositionDoNotCheck;
   navigation_info.blob_url_token = blob_url_token.PassInterface().PassHandle();
+  navigation_info.input_start = input_start_time;
 
   // Can be null.
   LocalFrame* local_parent_frame = GetLocalParentFrame(web_frame_);
@@ -741,16 +767,14 @@ DocumentLoader* LocalFrameClientImpl::CreateDocumentLoader(
     const SubstituteData& data,
     ClientRedirectPolicy client_redirect_policy,
     const base::UnguessableToken& devtools_navigation_token,
-    std::unique_ptr<WebDocumentLoader::ExtraData> extra_data,
-    const WebNavigationTimings& navigation_timings) {
+    std::unique_ptr<WebNavigationParams> navigation_params,
+    std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) {
   DCHECK(frame);
 
   WebDocumentLoaderImpl* document_loader = WebDocumentLoaderImpl::Create(
       frame, request, data, client_redirect_policy, devtools_navigation_token);
+  SetupDocumentLoader(document_loader, std::move(navigation_params));
   document_loader->SetExtraData(std::move(extra_data));
-  document_loader->UpdateNavigationTimings(
-      navigation_timings.navigation_start, navigation_timings.redirect_start,
-      navigation_timings.redirect_end, navigation_timings.fetch_start);
   if (web_frame_->Client())
     web_frame_->Client()->DidCreateDocumentLoader(document_loader);
   return document_loader;
@@ -1114,6 +1138,14 @@ void LocalFrameClientImpl::FrameRectsChanged(const IntRect& frame_rect) {
   web_frame_->Client()->FrameRectsChanged(frame_rect);
 }
 
+bool LocalFrameClientImpl::IsPluginHandledExternally(
+    HTMLPlugInElement& plugin_element,
+    const KURL& resource_url,
+    const String& suggesed_mime_type) {
+  return web_frame_->Client()->IsPluginHandledExternally(
+      &plugin_element, resource_url, suggesed_mime_type);
+}
+
 std::unique_ptr<WebWorkerFetchContext>
 LocalFrameClientImpl::CreateWorkerFetchContext() {
   DCHECK(web_frame_->Client());
@@ -1128,6 +1160,10 @@ LocalFrameClientImpl::CreateWorkerContentSettingsClient() {
 
 void LocalFrameClientImpl::SetMouseCapture(bool capture) {
   web_frame_->Client()->SetMouseCapture(capture);
+}
+
+bool LocalFrameClientImpl::UsePrintingLayout() const {
+  return web_frame_->UsePrintingLayout();
 }
 
 STATIC_ASSERT_ENUM(DownloadCrossOriginRedirects::kFollow,

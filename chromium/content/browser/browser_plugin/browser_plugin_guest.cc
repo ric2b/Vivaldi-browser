@@ -16,6 +16,7 @@
 #include "base/pickle.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "components/viz/common/features.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "content/browser/browser_plugin/browser_plugin_embedder.h"
@@ -422,7 +423,8 @@ void BrowserPluginGuest::PointerLockPermissionResponse(bool allow) {
 
 void BrowserPluginGuest::FirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {
-  if (features::IsAshInBrowserProcess()) {
+  if (!features::IsUsingWindowService() &&
+      !features::IsSurfaceSynchronizationEnabled()) {
     SendMessageToEmbedder(
         std::make_unique<BrowserPluginMsg_FirstSurfaceActivation>(
             browser_plugin_instance_id(), surface_info));
@@ -450,6 +452,10 @@ void BrowserPluginGuest::ResendEventToEmbedder(
     ui::LatencyInfo latency_info =
         ui::WebInputEventTraits::CreateLatencyInfoForWebGestureEvent(
             resent_gesture_event);
+    // The touch action may not be set for the embedder because the
+    // GestureScrollBegin is sent to the guest view. In this case, set the touch
+    // action of the embedder to Auto to prevent crash.
+    GetOwnerRenderWidgetHost()->input_router()->ForceSetTouchActionAuto();
     view->ProcessGestureEvent(resent_gesture_event, latency_info);
   } else if (event.GetType() == blink::WebInputEvent::kMouseWheel) {
     blink::WebMouseWheelEvent resent_wheel_event;
@@ -680,7 +686,7 @@ void BrowserPluginGuest::RenderViewReady() {
   // In case we've created a new guest render process after a crash, let the
   // associated BrowserPlugin know. We only need to send this if we're attached,
   // as guest_crashed_ is cleared automatically on attach anyways.
-  if (attached() && features::IsAshInBrowserProcess()) {
+  if (attached() && !features::IsUsingWindowService()) {
     RenderWidgetHostViewGuest* rwhv = static_cast<RenderWidgetHostViewGuest*>(
         web_contents()->GetRenderWidgetHostView());
     if (rwhv) {
@@ -787,11 +793,12 @@ void BrowserPluginGuest::Attach(
   // change embedders before attach completes. If the embedder goes away,
   // so does the guest and so we will never call WillAttachComplete because
   // we have a weak ptr.
-  delegate_->WillAttach(embedder_web_contents, browser_plugin_instance_id,
-                        params.is_full_page_plugin,
-                        base::Bind(&BrowserPluginGuest::OnWillAttachComplete,
-                                   weak_ptr_factory_.GetWeakPtr(),
-                                   embedder_web_contents, params));
+  delegate_->WillAttach(
+      embedder_web_contents, browser_plugin_instance_id,
+      params.is_full_page_plugin,
+      base::BindOnce(&BrowserPluginGuest::OnWillAttachComplete,
+                     weak_ptr_factory_.GetWeakPtr(), embedder_web_contents,
+                     params));
 }
 
 void BrowserPluginGuest::OnWillAttachComplete(
@@ -939,7 +946,7 @@ void BrowserPluginGuest::OnImeCommitText(
       ->GetWidget()
       ->GetWidgetInputHandler()
       ->ImeCommitText(text, ui_ime_text_spans, replacement_range,
-                      relative_cursor_pos);
+                      relative_cursor_pos, base::OnceClosure());
 }
 
 void BrowserPluginGuest::OnImeFinishComposingText(

@@ -107,8 +107,8 @@ namespace em = enterprise_management;
 using net::test_server::BasicHttpResponse;
 using net::test_server::HttpRequest;
 using net::test_server::HttpResponse;
-using testing::Return;
 using testing::_;
+using testing::Return;
 
 namespace chromeos {
 
@@ -289,7 +289,7 @@ class SecretInterceptingFakeCryptohomeClient : public FakeCryptohomeClient {
  public:
   SecretInterceptingFakeCryptohomeClient();
 
-  void MountEx(const cryptohome::Identification& id,
+  void MountEx(const cryptohome::AccountIdentifier& id,
                const cryptohome::AuthorizationRequest& auth,
                const cryptohome::MountRequest& request,
                DBusMethodCallback<cryptohome::BaseReply> callback) override;
@@ -306,7 +306,7 @@ SecretInterceptingFakeCryptohomeClient::
     SecretInterceptingFakeCryptohomeClient() {}
 
 void SecretInterceptingFakeCryptohomeClient::MountEx(
-    const cryptohome::Identification& id,
+    const cryptohome::AccountIdentifier& id,
     const cryptohome::AuthorizationRequest& auth,
     const cryptohome::MountRequest& request,
     DBusMethodCallback<cryptohome::BaseReply> callback) {
@@ -1078,8 +1078,10 @@ void SAMLPolicyTest::SetUpInProcessBrowserTestFixture() {
   // Initialize device policy.
   std::set<std::string> device_affiliation_ids;
   device_affiliation_ids.insert(kAffiliationID);
-  policy::affiliation_test_helper::SetDeviceAffiliationID(
-      &test_helper_, fake_session_manager_client_, device_affiliation_ids);
+  auto affiliation_helper = policy::AffiliationTestHelper::CreateForCloud(
+      fake_session_manager_client_);
+  ASSERT_NO_FATAL_FAILURE((affiliation_helper.SetDeviceAffiliationIDs(
+      &test_helper_, device_affiliation_ids)));
 
   // Initialize user policy.
   EXPECT_CALL(provider_, IsInitializationComplete(_))

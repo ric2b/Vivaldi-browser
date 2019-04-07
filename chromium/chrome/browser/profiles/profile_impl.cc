@@ -27,8 +27,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
 #include "base/version.h"
@@ -97,6 +97,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/net/safe_search_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -132,6 +133,7 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "services/identity/identity_service.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "services/identity/public/mojom/constants.mojom.h"
 #include "services/network/public/cpp/features.h"
 #include "services/preferences/public/cpp/in_process_service_factory.h"
@@ -147,6 +149,9 @@
 #include "chrome/browser/chromeos/device_sync/device_sync_client_factory.h"
 #include "chrome/browser/chromeos/locale_change_guard.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
+#include "chrome/browser/chromeos/multidevice_setup/android_sms_app_helper_delegate_impl.h"
+#include "chrome/browser/chromeos/multidevice_setup/auth_token_validator_factory.h"
+#include "chrome/browser/chromeos/multidevice_setup/auth_token_validator_impl.h"
 #include "chrome/browser/chromeos/net/delay_network_call.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/policy/user_policy_manager_factory_chromeos.h"
@@ -154,6 +159,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/secure_channel/secure_channel_client_provider.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
+#include "chrome/browser/signin/chrome_device_id_helper.h"
 #include "chromeos/account_manager/account_manager.h"
 #include "chromeos/account_manager/account_manager_factory.h"
 #include "chromeos/assistant/buildflags.h"
@@ -174,7 +180,9 @@
 
 #endif
 
-#if !defined(OS_ANDROID)
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/download/download_manager_service.h"
+#else
 #include "chrome/browser/apps/foundation/app_service/app_service.h"
 #include "chrome/browser/apps/foundation/app_service/public/mojom/constants.mojom.h"
 #include "components/zoom/zoom_event_manager.h"
@@ -265,7 +273,7 @@ void CreateProfileDirectory(base::SequencedTaskRunner* io_task_runner,
   DVLOG(1) << "Creating directory " << path.value();
   if (base::CreateDirectory(path) && create_readme) {
     base::PostTaskWithTraits(FROM_HERE,
-                             {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                             {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                               base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
                              base::Bind(&CreateProfileReadme, path));
   }
@@ -337,7 +345,14 @@ Profile* Profile::CreateProfile(const base::FilePath& path,
     NOTREACHED();
   }
 
-  return new ProfileImpl(path, delegate, create_mode, io_task_runner);
+  auto profile = base::WrapUnique(
+      new ProfileImpl(path, delegate, create_mode, io_task_runner));
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS) && !defined(OS_ANDROID) && \
+    !defined(OS_CHROMEOS)
+  if (create_mode == CREATE_MODE_SYNCHRONOUS && profile->IsLegacySupervised())
+    return nullptr;
+#endif
+  return profile.release();
 }
 
 // static
@@ -385,6 +400,7 @@ void ProfileImpl::RegisterProfilePrefs(
   registry->RegisterStringPref(prefs::kProfileName, std::string(),
                                user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 #endif
+  registry->RegisterIntegerPref(prefs::kProfileLocalAvatarIndex, -1);
 
   registry->RegisterStringPref(prefs::kSupervisedUserId, std::string());
 #if defined(OS_ANDROID)
@@ -399,7 +415,15 @@ void ProfileImpl::RegisterProfilePrefs(
 
 #if BUILDFLAG(ENABLE_PRINTING)
   registry->RegisterBooleanPref(prefs::kPrintingEnabled, true);
-#endif
+#if defined(OS_CHROMEOS)
+  registry->RegisterIntegerPref(prefs::kPrintingAllowedColorModes, 0);
+  registry->RegisterIntegerPref(prefs::kPrintingAllowedDuplexModes, 0);
+  registry->RegisterListPref(prefs::kPrintingAllowedPageSizes);
+  registry->RegisterIntegerPref(prefs::kPrintingColorDefault, 0);
+  registry->RegisterIntegerPref(prefs::kPrintingDuplexDefault, 0);
+  registry->RegisterDictionaryPref(prefs::kPrintingSizeDefault);
+#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(ENABLE_PRINTING)
   registry->RegisterBooleanPref(prefs::kPrintPreviewDisabled, false);
   registry->RegisterStringPref(
       prefs::kPrintPreviewDefaultDestinationSelectionRules, std::string());
@@ -489,8 +513,7 @@ ProfileImpl::ProfileImpl(
 #else
   configuration_policy_provider_ =
       policy::UserCloudPolicyManagerFactory::CreateForOriginalBrowserContext(
-          this, force_immediate_policy_load, io_task_runner_,
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+          this, force_immediate_policy_load, io_task_runner_);
 #endif
   profile_policy_connector_ =
       policy::ProfilePolicyConnectorFactory::CreateForBrowserContext(
@@ -685,6 +708,8 @@ void ProfileImpl::DoFinalInit() {
         profile_helper->GetUserByProfile(this));
   }
 
+  MigrateSigninScopedDeviceId(this);
+
   if (chromeos::UserSessionManager::GetInstance()
           ->RestartToApplyPerSessionFlagsIfNeed(this, true)) {
     return;
@@ -718,7 +743,8 @@ void ProfileImpl::DoFinalInit() {
   signin_ui_util::InitializePrefsForProfile(this);
 #endif
 
-  content::URLDataSource::Add(this, new PrefsInternalsSource(this));
+  content::URLDataSource::Add(this,
+                              std::make_unique<PrefsInternalsSource>(this));
 
   ScheduleUpdateCTPolicy();
 }
@@ -773,10 +799,10 @@ ProfileImpl::~ProfileImpl() {
 }
 
 std::string ProfileImpl::GetProfileUserName() const {
-  const SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfileIfExists(this);
-  if (signin_manager)
-    return signin_manager->GetAuthenticatedAccountInfo().email;
+  const identity::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfileIfExists(this);
+  if (identity_manager)
+    return identity_manager->GetPrimaryAccountInfo().email;
 
   return std::string();
 }
@@ -796,6 +822,10 @@ ProfileImpl::CreateZoomLevelDelegate(const base::FilePath& partition_path) {
 
 base::FilePath ProfileImpl::GetPath() const {
   return path_;
+}
+
+base::FilePath ProfileImpl::GetCachePath() const {
+  return base_cache_path_;
 }
 
 scoped_refptr<base::SequencedTaskRunner> ProfileImpl::GetIOTaskRunner() {
@@ -1171,14 +1201,13 @@ void ProfileImpl::RegisterInProcessServices(StaticServiceMap* services) {
   if (base::FeatureList::IsEnabled(
           chromeos::features::kEnableUnifiedMultiDeviceSetup) &&
       base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi)) {
-    chromeos::multidevice_setup::MultiDeviceSetupService::RegisterProfilePrefs(
-        pref_registry_.get());
     service_manager::EmbeddedServiceInfo info;
     info.task_runner = base::ThreadTaskRunnerHandle::Get();
     info.factory = base::BindRepeating(
         &ProfileImpl::CreateMultiDeviceSetupService, base::Unretained(this));
     services->emplace(chromeos::multidevice_setup::mojom::kServiceName, info);
   }
+
 #endif
 
 #if !defined(OS_ANDROID)
@@ -1209,6 +1238,16 @@ void ProfileImpl::RegisterInProcessServices(StaticServiceMap* services) {
 
 std::string ProfileImpl::GetMediaDeviceIDSalt() {
   return media_device_id_salt_->GetSalt();
+}
+
+download::InProgressDownloadManager*
+ProfileImpl::RetriveInProgressDownloadManager() {
+#if defined(OS_ANDROID)
+  return DownloadManagerService::GetInstance()
+      ->RetriveInProgressDownloadManager(this);
+#else
+  return nullptr;
+#endif
 }
 
 bool ProfileImpl::IsSameProfile(Profile* profile) {
@@ -1490,7 +1529,8 @@ ProfileImpl::CreateDeviceSyncService() {
   return std::make_unique<chromeos::device_sync::DeviceSyncService>(
       IdentityManagerFactory::GetForProfile(this),
       gcm::GCMProfileServiceFactory::GetForProfile(this)->driver(),
-      chromeos::GcmDeviceInfoProviderImpl::GetInstance(), GetRequestContext());
+      chromeos::GcmDeviceInfoProviderImpl::GetInstance(),
+      GetURLLoaderFactory());
 }
 
 std::unique_ptr<service_manager::Service>
@@ -1499,7 +1539,12 @@ ProfileImpl::CreateMultiDeviceSetupService() {
       GetPrefs(),
       chromeos::device_sync::DeviceSyncClientFactory::GetForProfile(this),
       chromeos::secure_channel::SecureChannelClientProvider::GetInstance()
-          ->GetClient());
+          ->GetClient(),
+      chromeos::multidevice_setup::AuthTokenValidatorFactory::GetForProfile(
+          this),
+      std::make_unique<
+          chromeos::multidevice_setup::AndroidSmsAppHelperDelegateImpl>(this),
+      chromeos::GcmDeviceInfoProviderImpl::GetInstance());
 }
 
 #endif  // defined(OS_CHROMEOS)

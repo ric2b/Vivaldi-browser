@@ -25,14 +25,12 @@ NGOutOfFlowLayoutPart::NGOutOfFlowLayoutPart(
     NGFragmentBuilder* container_builder,
     bool contains_absolute,
     bool contains_fixed,
-    const NGBoxStrut& scrollbar_sizes,
+    const NGBoxStrut& borders_and_scrollers,
     const NGConstraintSpace& container_space,
     const ComputedStyle& container_style)
     : container_builder_(container_builder),
       contains_absolute_(contains_absolute),
       contains_fixed_(contains_fixed) {
-  NGBoxStrut borders_and_scrollers =
-      ComputeBorders(container_space, container_style) + scrollbar_sizes;
   NGPhysicalBoxStrut physical_borders = borders_and_scrollers.ConvertToPhysical(
       container_style.GetWritingMode(), container_style.Direction());
 
@@ -383,7 +381,10 @@ scoped_refptr<NGLayoutResult> NGOutOfFlowLayoutPart::LayoutDescendant(
     layout_result = GenerateFragment(descendant.node, container_info,
                                      block_estimate, node_position);
   }
-
+  if (node.GetLayoutBox()->IsLayoutNGObject()) {
+    ToLayoutBlock(node.GetLayoutBox())
+        ->SetIsLegacyInitiatedOutOfFlowLayout(false);
+  }
   // Compute logical offset, NGAbsolutePhysicalPosition is calculated relative
   // to the padding box so add back the container's borders.
   NGBoxStrut inset = node_position.inset.ConvertToLogical(

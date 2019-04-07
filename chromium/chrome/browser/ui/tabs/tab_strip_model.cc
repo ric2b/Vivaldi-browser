@@ -310,12 +310,6 @@ void TabStripModel::InsertWebContentsAt(int index,
   bool pin = (add_types & ADD_PINNED) != 0;
   index = ConstrainInsertionIndex(index, pin);
 
-  // In tab dragging situations, if the last tab in the window was detached
-  // then the user aborted the drag, we will have the |closing_all_| member
-  // set (see DetachWebContentsAt) which will mess with our mojo here. We need
-  // to clear this bit.
-  closing_all_ = false;
-
   // Have to get the active contents before we monkey with the contents
   // otherwise we run into problems when we try to change the active contents
   // since the old contents and the new contents will be the same...
@@ -350,6 +344,8 @@ void TabStripModel::InsertWebContentsAt(int index,
   if (manager)
     data->set_blocked(manager->IsDialogActive());
 
+  TabStripSelectionChange selection(GetActiveWebContents(), selection_model_);
+
   contents_data_.insert(contents_data_.begin() + index, std::move(data));
 
   selection_model_.IncrementFrom(index);
@@ -360,8 +356,16 @@ void TabStripModel::InsertWebContentsAt(int index,
   if (active) {
     ui::ListSelectionModel new_model = selection_model_;
     new_model.SetSelectedIndex(index);
-    SetSelection(std::move(new_model), Notify::kDefault);
+    selection = SetSelection(std::move(new_model),
+                             TabStripModelObserver::CHANGE_REASON_NONE,
+                             /*triggered_by_other_operation=*/true);
   }
+
+  TabStripModelChange change(
+      TabStripModelChange::kInserted,
+      TabStripModelChange::CreateInsertDelta(raw_contents, index));
+  for (auto& observer : observers_)
+    observer.OnTabStripModelChanged(this, change, selection);
 }
 
 std::unique_ptr<content::WebContents> TabStripModel::ReplaceWebContentsAt(
@@ -373,6 +377,7 @@ std::unique_ptr<content::WebContents> TabStripModel::ReplaceWebContentsAt(
 
   FixOpenersAndGroupsReferencing(index);
 
+  TabStripSelectionChange selection(GetActiveWebContents(), selection_model_);
   WebContents* raw_new_contents = new_contents.get();
   std::unique_ptr<WebContents> old_contents =
       contents_data_[index]->ReplaceWebContents(std::move(new_contents));
@@ -393,12 +398,20 @@ std::unique_ptr<content::WebContents> TabStripModel::ReplaceWebContentsAt(
   // too. We do this as nearly all observers need to treat a replacement of the
   // selected contents as the selection changing.
   if (active_index() == index) {
+    selection.new_contents = raw_new_contents;
+    selection.reason = TabStripModelObserver::CHANGE_REASON_REPLACED;
     for (auto& observer : observers_) {
-      observer.ActiveTabChanged(old_contents.get(), raw_new_contents,
-                                active_index(),
+      observer.ActiveTabChanged(selection.old_contents, selection.new_contents,
+                                index,
                                 TabStripModelObserver::CHANGE_REASON_REPLACED);
     }
   }
+
+  TabStripModelChange change(TabStripModelChange::kReplaced,
+                             TabStripModelChange::CreateReplaceDelta(
+                                 old_contents.get(), raw_new_contents, index));
+  for (auto& observer : observers_)
+    observer.OnTabStripModelChanged(this, change, selection);
 
   return old_contents;
 }
@@ -448,7 +461,6 @@ std::unique_ptr<content::WebContents> TabStripModel::DetachWebContentsImpl(
   contents_data_.erase(contents_data_.begin() + index);
 
   if (empty()) {
-    closing_all_ = true;
     selection_model_.Clear();
   } else {
     int old_active = active_index();
@@ -474,6 +486,7 @@ std::unique_ptr<content::WebContents> TabStripModel::DetachWebContentsImpl(
 void TabStripModel::SendDetachWebContentsNotifications(
     DetachNotifications* notifications) {
   bool was_any_tab_selected = false;
+  std::vector<TabStripModelChange::Delta> deltas;
 
   // Sort the DetachedWebContents in decreasing order of
   // |index_before_any_removals|. This is because |index_before_any_removals| is
@@ -504,7 +517,22 @@ void TabStripModel::SendDetachWebContentsNotifications(
           dwc->contents.get(), dwc->index_before_any_removals,
           notifications->initially_active_web_contents == dwc->contents.get());
     }
+
+    deltas.push_back(TabStripModelChange::CreateRemoveDelta(
+        dwc->contents.get(), dwc->index_before_any_removals,
+        notifications->will_delete));
   }
+
+  TabStripSelectionChange selection;
+  selection.old_contents = notifications->initially_active_web_contents;
+  selection.new_contents = GetActiveWebContents();
+  selection.old_model = notifications->selection_model;
+  selection.new_model = selection_model_;
+  selection.reason = TabStripModelObserver::CHANGE_REASON_NONE;
+
+  TabStripModelChange change(TabStripModelChange::kRemoved, deltas);
+  for (auto& observer : observers_)
+    observer.OnTabStripModelChanged(this, change, selection);
 
   for (auto& dwc : notifications->detached_web_contents) {
     if (notifications->selection_model.IsSelected(
@@ -518,8 +546,7 @@ void TabStripModel::SendDetachWebContentsNotifications(
         observer.TabDeactivated(notifications->initially_active_web_contents);
 
       if (!empty()) {
-        NotifyIfActiveTabChanged(notifications->initially_active_web_contents,
-                                 Notify::kDefault);
+        NotifyIfActiveTabChanged(selection);
       }
       notifications->initially_active_web_contents = nullptr;
     }
@@ -547,14 +574,9 @@ void TabStripModel::ActivateTabAt(int index, bool user_gesture) {
   ui::ListSelectionModel new_model = selection_model_;
   new_model.SetSelectedIndex(index);
   SetSelection(std::move(new_model),
-               user_gesture ? Notify::kUserGesture : Notify::kDefault);
-}
-
-void TabStripModel::AddTabAtToSelection(int index) {
-  DCHECK(ContainsIndex(index));
-  ui::ListSelectionModel new_model = selection_model_;
-  new_model.AddIndexToSelection(index);
-  SetSelection(std::move(new_model), Notify::kDefault);
+               user_gesture ? TabStripModelObserver::CHANGE_REASON_USER_GESTURE
+                            : TabStripModelObserver::CHANGE_REASON_NONE,
+               /*triggered_by_other_operation=*/false);
 }
 
 void TabStripModel::MoveWebContentsAt(int index,
@@ -782,7 +804,8 @@ void TabStripModel::ExtendSelectionTo(int index) {
   DCHECK(ContainsIndex(index));
   ui::ListSelectionModel new_model = selection_model_;
   new_model.SetSelectionFromAnchorTo(index);
-  SetSelection(std::move(new_model), Notify::kDefault);
+  SetSelection(std::move(new_model), TabStripModelObserver::CHANGE_REASON_NONE,
+               /*triggered_by_other_operation=*/false);
 }
 
 void TabStripModel::ToggleSelectionAt(int index) {
@@ -804,13 +827,15 @@ void TabStripModel::ToggleSelectionAt(int index) {
     new_model.set_anchor(index);
     new_model.set_active(index);
   }
-  SetSelection(std::move(new_model), Notify::kDefault);
+  SetSelection(std::move(new_model), TabStripModelObserver::CHANGE_REASON_NONE,
+               /*triggered_by_other_operation=*/false);
 }
 
 void TabStripModel::AddSelectionFromAnchorTo(int index) {
   ui::ListSelectionModel new_model = selection_model_;
   new_model.AddSelectionFromAnchorTo(index);
-  SetSelection(std::move(new_model), Notify::kDefault);
+  SetSelection(std::move(new_model), TabStripModelObserver::CHANGE_REASON_NONE,
+               /*triggered_by_other_operation=*/false);
 }
 
 bool TabStripModel::IsTabSelected(int index) const {
@@ -820,7 +845,8 @@ bool TabStripModel::IsTabSelected(int index) const {
 
 void TabStripModel::SetSelectionFromModel(ui::ListSelectionModel source) {
   DCHECK_NE(ui::ListSelectionModel::kUnselectedIndex, source.active());
-  SetSelection(std::move(source), Notify::kDefault);
+  SetSelection(std::move(source), TabStripModelObserver::CHANGE_REASON_NONE,
+               /*triggered_by_other_operation=*/false);
 }
 
 const ui::ListSelectionModel& TabStripModel::selection_model() const {
@@ -1460,51 +1486,67 @@ WebContents* TabStripModel::GetWebContentsAtImpl(int index) const {
   return contents_data_[index]->web_contents();
 }
 
-void TabStripModel::NotifyIfActiveTabChanged(WebContents* old_contents,
-                                             Notify notify_types) {
-  WebContents* new_contents = GetWebContentsAtImpl(active_index());
-  if (old_contents == new_contents)
+void TabStripModel::NotifyIfActiveTabChanged(
+    const TabStripSelectionChange& selection) {
+  if (!selection.active_tab_changed())
     return;
 
   content::RenderWidgetHost* track_host = nullptr;
-  if (notify_types == Notify::kUserGesture &&
-      new_contents->GetRenderWidgetHostView()) {
-    track_host = new_contents->GetRenderWidgetHostView()->GetRenderWidgetHost();
+  if (selection.new_contents &&
+      selection.new_contents->GetRenderWidgetHostView()) {
+    track_host = selection.new_contents->GetRenderWidgetHostView()
+                     ->GetRenderWidgetHost();
   }
   RenderWidgetHostVisibilityTracker tracker(track_host);
 
-  int reason = notify_types == Notify::kUserGesture
-                   ? TabStripModelObserver::CHANGE_REASON_USER_GESTURE
-                   : TabStripModelObserver::CHANGE_REASON_NONE;
   for (auto& observer : observers_) {
-    observer.ActiveTabChanged(old_contents, new_contents, active_index(),
-                              reason);
+    observer.ActiveTabChanged(selection.old_contents, selection.new_contents,
+                              active_index(), selection.reason);
   }
 }
 
 void TabStripModel::NotifyIfActiveOrSelectionChanged(
-    WebContents* old_contents,
-    Notify notify_types,
-    const ui::ListSelectionModel& old_model) {
-  NotifyIfActiveTabChanged(old_contents, notify_types);
+    const TabStripSelectionChange& selection) {
+  NotifyIfActiveTabChanged(selection);
 
-  if (selection_model() != old_model) {
+  if (selection.selection_changed()) {
     for (auto& observer : observers_)
-      observer.TabSelectionChanged(this, old_model);
+      observer.TabSelectionChanged(this, selection.old_model);
   }
 }
 
-void TabStripModel::SetSelection(ui::ListSelectionModel new_model,
-                                 Notify notify_types) {
-  WebContents* old_contents = GetActiveWebContents();
-  ui::ListSelectionModel old_model;
-  old_model = selection_model_;
-  if (old_contents && new_model.active() != selection_model_.active()) {
+TabStripSelectionChange TabStripModel::SetSelection(
+    ui::ListSelectionModel new_model,
+    TabStripModelObserver::ChangeReason reason,
+    bool triggered_by_other_operation) {
+  TabStripSelectionChange selection;
+  selection.old_model = selection_model_;
+  selection.old_contents = GetActiveWebContents();
+  selection.new_model = new_model;
+  selection.reason = reason;
+
+  if (selection.old_contents &&
+      selection.old_model.active() != selection.new_model.active()) {
     for (auto& observer : observers_)
-      observer.TabDeactivated(old_contents);
+      observer.TabDeactivated(selection.old_contents);
   }
+
+  // This is done after notifying TabDeactivated() because caller can assume
+  // that TabStripModel::active_index() would return the index for
+  // |selection.old_contents|.
   selection_model_ = new_model;
-  NotifyIfActiveOrSelectionChanged(old_contents, notify_types, old_model);
+  selection.new_contents = GetActiveWebContents();
+
+  NotifyIfActiveOrSelectionChanged(selection);
+
+  if (!triggered_by_other_operation &&
+      (selection.active_tab_changed() || selection.selection_changed())) {
+    TabStripModelChange change;
+    for (auto& observer : observers_)
+      observer.OnTabStripModelChanged(this, change, selection);
+  }
+
+  return selection;
 }
 
 void TabStripModel::SelectRelativeTab(bool next) {
@@ -1524,6 +1566,8 @@ void TabStripModel::MoveWebContentsAtImpl(int index,
                                           bool select_after_move) {
   FixOpenersAndGroupsReferencing(index);
 
+  TabStripSelectionChange selection(GetActiveWebContents(), selection_model_);
+
   std::unique_ptr<WebContentsData> moved_data =
       std::move(contents_data_[index]);
   WebContents* web_contents = moved_data->web_contents();
@@ -1536,9 +1580,16 @@ void TabStripModel::MoveWebContentsAtImpl(int index,
     // TODO(sky): why doesn't this code notify observers?
     selection_model_.SetSelectedIndex(to_position);
   }
+  selection.new_model = selection_model_;
 
   for (auto& observer : observers_)
     observer.TabMoved(web_contents, index, to_position);
+
+  TabStripModelChange change(
+      TabStripModelChange::kMoved,
+      TabStripModelChange::CreateMoveDelta(web_contents, index, to_position));
+  for (auto& observer : observers_)
+    observer.OnTabStripModelChanged(this, change, selection);
 }
 
 void TabStripModel::MoveSelectedTabsToImpl(int index,

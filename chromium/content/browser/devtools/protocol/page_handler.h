@@ -68,7 +68,6 @@ class PageHandler : public DevToolsDomainHandler,
   void Wire(UberDispatcher* dispatcher) override;
   void SetRenderer(int process_host_id,
                    RenderFrameHostImpl* frame_host) override;
-  void OnSwapCompositorFrame(viz::CompositorFrameMetadata frame_metadata);
   void OnSynchronousSwapCompositorFrame(
       viz::CompositorFrameMetadata frame_metadata);
   void DidAttachInterstitialPage();
@@ -93,8 +92,9 @@ class PageHandler : public DevToolsDomainHandler,
 
   Response Crash() override;
   Response Close() override;
-  Response Reload(Maybe<bool> bypassCache,
-                  Maybe<std::string> script_to_evaluate_on_load) override;
+  void Reload(Maybe<bool> bypassCache,
+              Maybe<std::string> script_to_evaluate_on_load,
+              std::unique_ptr<ReloadCallback> callback) override;
   void Navigate(const std::string& url,
                 Maybe<std::string> referrer,
                 Maybe<std::string> transition_type,

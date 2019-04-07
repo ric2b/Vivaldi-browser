@@ -23,7 +23,7 @@
 #include "base/lazy_instance.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
 #include "components/metrics/enabled_state_provider.h"
 #include "components/metrics/gpu/gpu_metrics_provider.h"
@@ -165,11 +165,8 @@ void AwMetricsServiceClient::Initialize(
 }
 
 void AwMetricsServiceClient::InitializeWithClientId() {
-  // The guid must have already been initialized at this point, either
-  // synchronously or asynchronously depending on the kEnableWebViewFinch flag
-  DCHECK_EQ(g_client_id.Get().length(), kGuidSize);
+  DCHECK_EQ(g_client_id.Get().length(), kGuidSize);  // Must have client ID
   pref_service_->SetString(metrics::prefs::kMetricsClientID, g_client_id.Get());
-
   in_sample_ = IsInSample(g_client_id.Get());
 
   metrics_state_manager_ = metrics::MetricsStateManager::Create(

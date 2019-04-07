@@ -20,7 +20,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
 #include "chrome/browser/ui/views/payments/payment_request_row_view.h"
@@ -38,7 +38,6 @@
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
@@ -981,9 +980,8 @@ std::unique_ptr<views::View> PaymentSheetViewController::CreateDataSourceRow() {
   views::StyledLabel::RangeStyleInfo link_style =
       views::StyledLabel::RangeStyleInfo::CreateForLink();
 
-  // This is the harmony color, so not needed when MD is default.
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial())
-    link_style.override_color = gfx::kGoogleBlue700;
+  // TODO(pbos): Investigate whether this override is necessary.
+  link_style.override_color = gfx::kGoogleBlue700;
 
   data_source_label->AddStyleRange(
       gfx::Range(link_begin, link_begin + link_length), link_style);

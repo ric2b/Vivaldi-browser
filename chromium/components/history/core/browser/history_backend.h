@@ -47,6 +47,10 @@ namespace base {
 class SingleThreadTaskRunner;
 }
 
+namespace syncer {
+class ModelTypeControllerDelegate;
+}
+
 namespace history {
 struct DownloadRow;
 class HistoryBackendClient;
@@ -427,9 +431,10 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   bool GetURLByID(URLID url_id, URLRow* url_row);
 
-  // Returns the sync bridge for syncing typed urls. The returned service
-  // is owned by |this| object.
-  TypedURLSyncBridge* GetTypedURLSyncBridge() const;
+  // Returns the sync controller delegate for syncing typed urls. The returned
+  // delegate is owned by |this| object.
+  base::WeakPtr<syncer::ModelTypeControllerDelegate>
+  GetTypedURLSyncControllerDelegate();
 
   // Deleting ------------------------------------------------------------------
 
@@ -953,7 +958,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   mutable base::hash_map<std::string, int> host_ranks_;
 
   // List of observers
-  base::ObserverList<HistoryBackendObserver> observers_;
+  base::ObserverList<HistoryBackendObserver>::Unchecked observers_;
 
   // Used to manage syncing of the typed urls datatype. It will be null before
   // HistoryBackend::Init is called. Defined after observers_ because

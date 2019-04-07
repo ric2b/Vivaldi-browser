@@ -16,12 +16,10 @@
 <translation id="1620510694547887537">カメラ</translation>
 <translation id="1640244768702815859"><ph name="BEGIN_LINK" />サイトのトップページにアクセス<ph name="END_LINK" />してみてください。</translation>
 <translation id="1645368109819982629">未対応のプロトコル</translation>
-<translation id="1676269943528358898"><ph name="SITE" />は通常、あなたの情報を保護するために暗号化を行います。今回Vivaldiが<ph name="SITE" />に接続しようとしたところ、ウェブサイトが普段とは異なった不正な証明書を返しました。これは、攻撃者が<ph name="SITE" />に偽装しようとしていたり、Wi-Fiのログイン画面が接続に割り込んだりすることで発生することがあります。Vivaldiは、データのやり取りが行われる前に接続を中止しました。あなたの情報は引き続き安全です。</translation>
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">ウェブページのソースを表示しています</translation>
 <translation id="1734878702283171397">システム管理者にお問い合わせください。</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windowsのネットワーク診断を試す<ph name="END_LINK" />。</translation>
-<translation id="1789575671122666129">ポップアップ</translation>
 <translation id="1834321415901700177">このサイトには有害なプログラムが含まれています</translation>
 <translation id="1916770123977586577">更新後の設定をこのサイトに適用するには、このページを再読み込みしてください</translation>
 <translation id="1919345977826869612">広告</translation>
@@ -29,11 +27,11 @@
 <translation id="1974060860693918893">詳細</translation>
 <translation id="2030481566774242610">もしかして: <ph name="LINK" />？</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシとファイアウォールを確認する<ph name="END_LINK" /></translation>
-<translation id="2065985942032347596">認証が必要</translation>
 <translation id="2091887806945687916">音声</translation>
 <translation id="2147827593068025794">バックグラウンド同期</translation>
 <translation id="2166378884831602661">このサイトは安全に接続できません</translation>
 <translation id="2187317261103489799">検出（デフォルト）</translation>
+<translation id="2224337661447660594">インターネットに接続されていません</translation>
 <translation id="2230458221926704099"><ph name="BEGIN_LINK" />診断アプリ<ph name="END_LINK" />を使用して接続を修正してください</translation>
 <translation id="2292556288342944218">インターネットアクセスがブロックされています</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" />にはユーザー名とパスワードが必要です。</translation>
@@ -50,20 +48,14 @@
 <translation id="2649204054376361687"><ph name="COUNTRY" /> <ph name="CITY" /></translation>
 <translation id="2650446666397867134">ファイルへのアクセスが拒否されました</translation>
 <translation id="2705137772291741111">このサイトの保存(キャッシュ)されたコピーを読み取れませんでした。</translation>
-<translation id="2730326759066348565"><ph name="BEGIN_LINK" />接続性診断を実行<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">接続がリセットされました。</translation>
 <translation id="2826760142808435982">接続は <ph name="CIPHER" /> を使用して暗号化および認証されており、<ph name="KX" /> が鍵交換メカニズムとして使用されています。</translation>
 <translation id="2856444702002559011"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />では、悪意のあるユーザーによって、パスワード、メッセージ、クレジットカードなどの情報が盗まれる可能性があります。<ph name="BEGIN_LEARN_MORE_LINK" />詳しい情報<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">ネットワークの変更が検出されました。</translation>
-<translation id="2948083400971632585">接続用に構成したプロキシは、設定ページから無効にすることができます。</translation>
-<translation id="298138621710431427">こちらの解決にご協力ください</translation>
 <translation id="2991571918955627853"><ph name="SITE" />ではHSTSが使用されているため、現在アクセスできません。通常、ネットワークエラーやネットワークへの攻撃は一時的なものです。しばらくするとページにアクセスできるようになります。</translation>
 <translation id="3005723025932146533">保存済みのコピーを表示</translation>
 <translation id="301521992641321250">自動ブロックされました</translation>
-<translation id="3041612393474885105">証明書情報</translation>
-<translation id="3093245981617870298">ネットワークに接続していません。</translation>
 <translation id="3109728660330352905">このページを表示する権限がありません。</translation>
-<translation id="31207688938192855"><ph name="BEGIN_LINK" />接続性診断を試す<ph name="END_LINK" />。</translation>
 <translation id="3154506275960390542">このページのフォームは安全に送信されない可能性があります。送信したデータを途中で他者に閲覧されたり、悪意のあるユーザーによってサーバーが受信するデータを書き換えられたりする可能性があります。</translation>
 <translation id="3176929007561373547">プロキシの設定を確認するか、ネットワーク管理者に問い合わせて、プロキシサーバーが正常に
       動作しているかどうかを確認してください。プロキシサーバーを使用していない場合は
@@ -87,6 +79,7 @@
 <translation id="3681007416295224113">証明書情報</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />プロキシ、ファイアウォール、DNSの設定を確認する<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">プロキシサーバーを使用している場合...</translation>
+<translation id="3950820424414687140">ログイン</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" />はブロックされています</translation>
 <translation id="3987940399970879459">1 MB未満</translation>
 <translation id="4075732493274867456">クライアントとサーバーの両方がサポートするSSLプロトコルのバージョンまたは暗号化方式が見つかりません。</translation>
@@ -100,7 +93,6 @@
 <translation id="4235360514405112390">有効</translation>
 <translation id="4250431568374086873">このサイトへの接続は完全には保護されていません</translation>
 <translation id="4265872034478892965">管理者によって許可</translation>
-<translation id="4304224509867189079">ログイン</translation>
 <translation id="4312866146174492540">ブロック（デフォルト）</translation>
 <translation id="4356973930735388585">このサイトを利用すると、悪意のあるユーザーによって危険なプログラム（写真、パスワード、メッセージ、クレジット カード番号などの情報を盗み取るか削除するプログラム）がお使いのパソコンにインストールされる可能性があります。</translation>
 <translation id="4408413947728134509">Cookie <ph name="NUM_COOKIES" /></translation>
@@ -110,24 +102,19 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">拡張機能を無効にしてみてください。</translation>
 <translation id="4592951414987517459"><ph name="DOMAIN" /> への接続は新しい暗号スイートにより暗号化されています。</translation>
-<translation id="4611292653554630842">ログイン</translation>
 <translation id="4690462567478992370">無効な証明書の使用を中止する</translation>
-<translation id="4690954380545377795">Vivaldi アカウントにアクセスできなくなったり、個人情報を盗まれたりする可能性があります。Vivaldi は今すぐパスワードを変更することをお勧めします。</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">接続が中断されました</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windowsのネットワーク診断を実行<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">実行ファイルのパス</translation>
 <translation id="4750917950439032686">このサイトに送信した情報（パスワード、クレジット カード番号など）が第三者に見られることはありません。</translation>
 <translation id="4764776831041365478"><ph name="URL" />のウェブページは一時的に停止しているか、新しいウェブアドレスに移動した可能性があります。</translation>
-<translation id="4807049035289105102"><ph name="SITE" />はVivaldiの扱えない寄せ集めの証明書を返したため、現在アクセスすることができません。通常、ネットワーク エラーやネットワークへの攻撃は一時的なものです。しばらくするとページにアクセスできるようになります。</translation>
-<translation id="4913131542719409934">認証が必要です</translation>
 <translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">警告を再度有効にする</translation>
 <translation id="5023310440958281426">管理者のポリシーを確認してください</translation>
 <translation id="5039804452771397117">許可</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />プロキシアドレスを確認する<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="522700295135997067">このサイトでパスワードを盗まれた可能性があります</translation>
 <translation id="5287240709317226393">Cookie を表示</translation>
 <translation id="5355557959165512791"><ph name="SITE" />は証明書が失効しているため、現在アクセスできません。通常、ネットワークエラーやネットワークへの攻撃は一時的なものです。しばらくするとページにアクセスできるようになります。</translation>
 <translation id="5386426401304769735">このサイトの証明書チェーンには SHA-1 を使って署名された証明書が含まれています。</translation>
@@ -154,7 +141,6 @@
 <translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 個が使用中}other{# 個が使用中}}</translation>
 <translation id="5990559369517809815">サーバーへのリクエストは拡張機能によってブロックされています。</translation>
 <translation id="6051221802930200923"><ph name="SITE" />では証明書ピンニングが使用されているため、現在アクセスできません。通常、ネットワークエラーやネットワークへの攻撃は一時的なものです。しばらくするとページにアクセスできるようになります。</translation>
-<translation id="6080696365213338172">管理者が提供する証明書を使用してコンテンツにアクセスしています。<ph name="DOMAIN" /> に提供するデータは管理者によって傍受される可能性があります。</translation>
 <translation id="6146055958333702838">ケーブルを確認し、使用している可能性があるネットワークデバイス(ルーター、モデムなど)を
     再起動してください。</translation>
 <translation id="614940544461990577">次をお試しください:</translation>
@@ -171,7 +157,6 @@
 <translation id="6417515091412812850">証明書が失効しているかを確認できません。</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" />で接続が拒否されました。</translation>
 <translation id="6447842834002726250">Cookie</translation>
-<translation id="6556239504065605927">保護された接続</translation>
 <translation id="6569060085658103619">拡張機能のページを表示しています</translation>
 <translation id="6657585470893396449">パスワード</translation>
 <translation id="6685834062052613830">ログアウトして設定を完了してください</translation>
@@ -214,6 +199,7 @@
 <translation id="8150722005171944719"><ph name="URL" />のファイルを読むことができません。削除されたか移動された可能性があります。ファイルに対するアクセス権がない場合もあります。</translation>
 <translation id="8184538546369750125">グローバルのデフォルト値（[許可]）を使用</translation>
 <translation id="8205463626947051446">わずらわしい広告がよく表示されるサイト</translation>
+<translation id="8211406090763984747">この接続は保護されています</translation>
 <translation id="8225771182978767009">このサイトは、このパソコンを設定したユーザーによってブロックされています。</translation>
 <translation id="8241712895048303527">このサイトでブロック</translation>
 <translation id="8288807391153049143">証明書を表示</translation>
@@ -234,7 +220,6 @@
 <translation id="9169664750068251925">このサイトでは常にブロック</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />ではサポートされていないプロトコルが使用されています。</translation>
 <translation id="9219103736887031265">画像</translation>
-<translation id="933612690413056017">インターネット接続がありません</translation>
 <translation id="969892804517981540">公式ビルド</translation>
 <translation id="988159990683914416">デベロッパービルド</translation>
 </translationbundle>

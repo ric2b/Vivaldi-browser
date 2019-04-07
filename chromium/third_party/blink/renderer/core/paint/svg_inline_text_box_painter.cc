@@ -11,7 +11,6 @@
 #include "third_party/blink/renderer/core/editing/markers/text_match_marker.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/layout/api/line_layout_api_shim.h"
-#include "third_party/blink/renderer/core/layout/api/selection_state.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/layout/line/inline_flow_box.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_inline_text.h"
@@ -49,7 +48,7 @@ bool SVGInlineTextBoxPainter::ShouldPaintSelection(
   // pattern or feImage (element reference.)
   if (paint_info.IsRenderingResourceSubtree())
     return false;
-  return svg_inline_text_box_.GetSelectionState() != SelectionState::kNone;
+  return svg_inline_text_box_.IsSelected();
 }
 
 static bool HasShadow(const PaintInfo& paint_info, const ComputedStyle& style) {
@@ -77,7 +76,7 @@ void SVGInlineTextBoxPainter::Paint(const PaintInfo& paint_info,
          paint_info.phase == PaintPhase::kSelection);
   DCHECK(svg_inline_text_box_.Truncation() == kCNoTruncation);
 
-  if (svg_inline_text_box_.GetLineLayoutItem().Style()->Visibility() !=
+  if (svg_inline_text_box_.GetLineLayoutItem().StyleRef().Visibility() !=
           EVisibility::kVisible ||
       !svg_inline_text_box_.Len())
     return;
@@ -209,7 +208,7 @@ void SVGInlineTextBoxPainter::PaintTextFragments(
 
 void SVGInlineTextBoxPainter::PaintSelectionBackground(
     const PaintInfo& paint_info) {
-  if (svg_inline_text_box_.GetLineLayoutItem().Style()->Visibility() !=
+  if (svg_inline_text_box_.GetLineLayoutItem().StyleRef().Visibility() !=
       EVisibility::kVisible)
     return;
 
@@ -263,7 +262,7 @@ static inline LayoutObject* FindLayoutObjectDefininingTextDecoration(
         LineLayoutAPIShim::LayoutObjectFrom(parent_box->GetLineLayoutItem());
 
     if (layout_object->Style() &&
-        layout_object->Style()->GetTextDecoration() != TextDecoration::kNone)
+        layout_object->StyleRef().GetTextDecoration() != TextDecoration::kNone)
       break;
 
     parent_box = parent_box->Parent();
@@ -303,8 +302,8 @@ void SVGInlineTextBoxPainter::PaintDecoration(const PaintInfo& paint_info,
                                               TextDecoration decoration,
                                               const SVGTextFragment& fragment) {
   if (svg_inline_text_box_.GetLineLayoutItem()
-          .Style()
-          ->TextDecorationsInEffect() == TextDecoration::kNone)
+          .StyleRef()
+          .TextDecorationsInEffect() == TextDecoration::kNone)
     return;
 
   if (fragment.width <= 0)

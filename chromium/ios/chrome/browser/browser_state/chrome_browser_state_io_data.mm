@@ -23,7 +23,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/about_handler/about_protocol_handler.h"
 #include "components/content_settings/core/browser/content_settings_provider.h"
@@ -357,7 +357,7 @@ void ChromeBrowserStateIOData::Init(
         std::make_unique<net::TransportSecurityPersister>(
             transport_security_state_.get(), profile_params_->path,
             base::CreateSequencedTaskRunnerWithTraits(
-                {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                  base::TaskShutdownBehavior::BLOCK_SHUTDOWN}));
   }
 
@@ -428,7 +428,7 @@ ChromeBrowserStateIOData::SetUpJobFactoryDefaults(
       url::kFileScheme,
       std::make_unique<net::FileProtocolHandler>(
           base::CreateTaskRunnerWithTraits(
-              {base::MayBlock(), base::TaskPriority::BACKGROUND,
+              {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})));
   DCHECK(set_protocol);
 

@@ -72,14 +72,7 @@ bool IsArcAvailable() {
 }
 
 bool IsWebstoreSearchEnabled() {
-  const auto* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(chromeos::switches::kArcAvailability)) {
-    const std::string value =
-        command_line->GetSwitchValueASCII(chromeos::switches::kArcAvailability);
-
-    return value == kAvailabilityNone;
-  }
-  return true;
+  return false;
 }
 
 bool IsPlayStoreAvailable() {
@@ -209,6 +202,23 @@ void SetArcCpuRestriction(bool do_restrict) {
 bool IsArcDataCleanupOnStartRequested() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       chromeos::switches::kArcDataCleanupOnStart);
+}
+
+// static
+int32_t GetLcdDensityForDeviceScaleFactor(float device_scale_factor) {
+  // Keep this consistent with wayland_client.cpp on Android side.
+  // TODO(oshima): Consider sending this through wayland.
+  constexpr float kEpsilon = 0.001;
+  if (std::abs(device_scale_factor - 2.25f) < kEpsilon)
+    return 280;
+  if (std::abs(device_scale_factor - 1.6f) < kEpsilon)
+    return 213;  // TVDPI
+
+  constexpr float kChromeScaleToAndroidScaleRatio = 0.75f;
+  constexpr int32_t kDefaultDensityDpi = 160;
+  return static_cast<int32_t>(
+      std::max(1.0f, device_scale_factor * kChromeScaleToAndroidScaleRatio) *
+      kDefaultDensityDpi);
 }
 
 }  // namespace arc

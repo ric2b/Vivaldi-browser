@@ -14,7 +14,6 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread.h"
-#include "net/base/completion_callback.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
@@ -121,7 +120,8 @@ class TLSClientSocketTestBase {
                mojo::ScopedDataPipeConsumerHandle* consumer_handle,
                mojo::ScopedDataPipeProducerHandle* producer_handle, int result,
                mojo::ScopedDataPipeConsumerHandle receive_pipe_handle,
-               mojo::ScopedDataPipeProducerHandle send_pipe_handle) {
+               mojo::ScopedDataPipeProducerHandle send_pipe_handle,
+               const base::Optional<net::SSLInfo>& ssl_info) {
               *consumer_handle = std::move(receive_pipe_handle);
               *producer_handle = std::move(send_pipe_handle);
               std::move(cb).Run(result);
@@ -308,7 +308,8 @@ TEST_F(TLSClientSocketTest, UpgradeToTLSTwice) {
       base::BindLambdaForTesting(
           [&](int result,
               mojo::ScopedDataPipeConsumerHandle receive_pipe_handle,
-              mojo::ScopedDataPipeProducerHandle send_pipe_handle) {
+              mojo::ScopedDataPipeProducerHandle send_pipe_handle,
+              const base::Optional<net::SSLInfo>& ssl_info) {
             net_error = result;
             run_loop.Quit();
           }));
@@ -354,7 +355,8 @@ TEST_F(TLSClientSocketTest, UpgradeToTLSWithCustomSSLConfig) {
       base::BindLambdaForTesting(
           [&](int result,
               mojo::ScopedDataPipeConsumerHandle receive_pipe_handle,
-              mojo::ScopedDataPipeProducerHandle send_pipe_handle) {
+              mojo::ScopedDataPipeProducerHandle send_pipe_handle,
+              const base::Optional<net::SSLInfo>& ssl_info) {
             net_error = result;
             run_loop.Quit();
           }));

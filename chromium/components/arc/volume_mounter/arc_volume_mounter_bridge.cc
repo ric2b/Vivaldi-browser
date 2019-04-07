@@ -7,7 +7,8 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
+#include "chromeos/disks/disk.h"
 #include "chromeos/disks/disk_mount_manager.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
@@ -77,38 +78,6 @@ void ArcVolumeMounterBridge::OnConnectionReady() {
                                 weak_ptr_factory_.GetWeakPtr()));
 }
 
-void ArcVolumeMounterBridge::OnAutoMountableDiskEvent(
-    chromeos::disks::DiskMountManager::DiskEvent event,
-    const chromeos::disks::DiskMountManager::Disk& disk) {
-  // Ignored. DiskEvents will be maintained in Vold during MountEvents.
-}
-
-void ArcVolumeMounterBridge::OnBootDeviceDiskEvent(
-    chromeos::disks::DiskMountManager::DiskEvent event,
-    const chromeos::disks::DiskMountManager::Disk& disk) {
-  // Ignored. ARC doesn't care about boot device disk events.
-}
-
-void ArcVolumeMounterBridge::OnDeviceEvent(
-    chromeos::disks::DiskMountManager::DeviceEvent event,
-    const std::string& device_path) {
-  // Ignored. ARC doesn't care about events other than Disk and Mount events.
-}
-
-void ArcVolumeMounterBridge::OnFormatEvent(
-    chromeos::disks::DiskMountManager::FormatEvent event,
-    chromeos::FormatError error_code,
-    const std::string& device_path) {
-  // Ignored. ARC doesn't care about events other than Disk and Mount events.
-}
-
-void ArcVolumeMounterBridge::OnRenameEvent(
-    chromeos::disks::DiskMountManager::RenameEvent event,
-    chromeos::RenameError error_code,
-    const std::string& device_path) {
-  // Ignored. ARC doesn't care about events other than Disk and Mount events.
-}
-
 void ArcVolumeMounterBridge::OnMountEvent(
     DiskMountManager::MountEvent event,
     chromeos::MountError error_code,
@@ -119,7 +88,7 @@ void ArcVolumeMounterBridge::OnMountEvent(
   }
 
   // Get disks informations that are needed by Android MountService.
-  const chromeos::disks::DiskMountManager::Disk* disk =
+  const chromeos::disks::Disk* disk =
       DiskMountManager::GetInstance()->FindDiskBySourcePath(
           mount_info.source_path);
   std::string fs_uuid, device_label;

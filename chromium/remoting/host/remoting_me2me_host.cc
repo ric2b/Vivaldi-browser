@@ -26,7 +26,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringize_macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "build/build_config.h"
 #include "components/policy/policy_constants.h"
 #include "ipc/ipc_channel.h"
@@ -99,6 +99,7 @@
 #include "remoting/protocol/transport_context.h"
 #include "remoting/signaling/push_notification_subscriber.h"
 #include "remoting/signaling/xmpp_signal_strategy.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/webrtc/rtc_base/scoped_ref_ptr.h"
 
 #if defined(OS_POSIX)
@@ -1430,9 +1431,8 @@ void HostProcess::InitializeSignaling() {
       oauth_credentials(new OAuthTokenGetter::OAuthAuthorizationCredentials(
           xmpp_server_config_.username, oauth_refresh_token_,
           use_service_account_));
-  oauth_token_getter_.reset(
-      new OAuthTokenGetterImpl(std::move(oauth_credentials),
-                               context_->url_request_context_getter(), false));
+  oauth_token_getter_.reset(new OAuthTokenGetterImpl(
+      std::move(oauth_credentials), context_->url_loader_factory(), false));
   signaling_connector_.reset(new SignalingConnector(
       xmpp_signal_strategy, std::move(dns_blackhole_checker),
       oauth_token_getter_.get(),
@@ -1513,7 +1513,7 @@ void HostProcess::StartHost() {
           signal_strategy_.get(),
           std::make_unique<protocol::ChromiumPortAllocatorFactory>(),
           std::make_unique<ChromiumUrlRequestFactory>(
-              context_->url_request_context_getter()),
+              context_->url_loader_factory()),
           network_settings, protocol::TransportRole::SERVER);
   transport_context->set_ice_config_url(
       ServiceUrls::GetInstance()->ice_config_url(), oauth_token_getter_.get());
@@ -1713,7 +1713,11 @@ int HostProcessMain() {
     // Required for any calls into GTK functions, such as the Disconnect and
     // Continue windows, though these should not be used for the Me2Me case
     // (crbug.com/104377).
+#if GTK_CHECK_VERSION(3, 90, 0)
+    gtk_init();
+#else
     gtk_init(nullptr, nullptr);
+#endif
   }
 
   // Need to prime the host OS version value for linux to prevent IO on the

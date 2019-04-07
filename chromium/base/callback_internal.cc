@@ -11,8 +11,16 @@ namespace internal {
 
 namespace {
 
-bool ReturnFalse(const BindStateBase*) {
-  return false;
+bool QueryCancellationTraitsForNonCancellables(
+    const BindStateBase*,
+    BindStateBase::CancellationQueryMode mode) {
+  switch (mode) {
+    case BindStateBase::IS_CANCELLED:
+      return false;
+    case BindStateBase::MAYBE_VALID:
+      return true;
+  }
+  NOTREACHED();
 }
 
 }  // namespace
@@ -23,15 +31,18 @@ void BindStateBaseRefCountTraits::Destruct(const BindStateBase* bind_state) {
 
 BindStateBase::BindStateBase(InvokeFuncStorage polymorphic_invoke,
                              void (*destructor)(const BindStateBase*))
-    : BindStateBase(polymorphic_invoke, destructor, &ReturnFalse) {
-}
+    : BindStateBase(polymorphic_invoke,
+                    destructor,
+                    &QueryCancellationTraitsForNonCancellables) {}
 
-BindStateBase::BindStateBase(InvokeFuncStorage polymorphic_invoke,
-                             void (*destructor)(const BindStateBase*),
-                             bool (*is_cancelled)(const BindStateBase*))
+BindStateBase::BindStateBase(
+    InvokeFuncStorage polymorphic_invoke,
+    void (*destructor)(const BindStateBase*),
+    bool (*query_cancellation_traits)(const BindStateBase*,
+                                      CancellationQueryMode))
     : polymorphic_invoke_(polymorphic_invoke),
       destructor_(destructor),
-      is_cancelled_(is_cancelled) {}
+      query_cancellation_traits_(query_cancellation_traits) {}
 
 CallbackBase& CallbackBase::operator=(CallbackBase&& c) noexcept = default;
 CallbackBase::CallbackBase(const CallbackBaseCopyable& c)
@@ -59,6 +70,11 @@ void CallbackBase::Reset() {
 bool CallbackBase::IsCancelled() const {
   DCHECK(bind_state_);
   return bind_state_->IsCancelled();
+}
+
+bool CallbackBase::MaybeValid() const {
+  DCHECK(bind_state_);
+  return bind_state_->MaybeValid();
 }
 
 bool CallbackBase::EqualsInternal(const CallbackBase& other) const {

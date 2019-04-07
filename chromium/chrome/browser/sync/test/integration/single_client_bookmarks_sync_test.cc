@@ -68,7 +68,7 @@ class UssSwitchToggler : public testing::WithParamInterface<bool> {
   base::test::ScopedFeatureList override_features_;
 };
 
-class SingleClientBookmarksSyncTest : public SyncTest {
+class SingleClientBookmarksSyncTest : public UssSwitchToggler, public SyncTest {
  public:
   SingleClientBookmarksSyncTest() : SyncTest(SINGLE_CLIENT) {}
   ~SingleClientBookmarksSyncTest() override {}
@@ -99,32 +99,8 @@ void SingleClientBookmarksSyncTest::VerifyBookmarkModelMatchesFakeServer(
   }
 }
 
-// TODO(crbug.com/516866): Merge the two fixtures into one when all tests are
-// passing for USS.
-class SingleClientBookmarksSyncTestIncludingUssTests
-    : public UssSwitchToggler,
-      public SingleClientBookmarksSyncTest {
- public:
-  SingleClientBookmarksSyncTestIncludingUssTests(){};
-  ~SingleClientBookmarksSyncTestIncludingUssTests() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SingleClientBookmarksSyncTestIncludingUssTests);
-};
-
-IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTestIncludingUssTests, Sanity) {
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest, Sanity) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
-
-  // TODO(crbug.com/516866): Move the following block after adding the bookmark
-  // nodes to the model upon implementing the merge logic in USS. This is here
-  // to make sure that when sync starts, the model is completely empty and
-  // doesn't require any merge logic which isn't the general case obviously.
-
-  // Setup sync, wait for its completion, and make sure changes were synced.
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
-  ASSERT_TRUE(
-      UpdatedProgressMarkerChecker(GetSyncService(kSingleProfileIndex)).Wait());
-  ASSERT_TRUE(ModelMatchesVerifier(kSingleProfileIndex));
 
   // Starting state:
   // other_node
@@ -170,8 +146,11 @@ IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTestIncludingUssTests, Sanity) {
         GURL("http://www.microsoft.com"));
   }
 
-  // TODO(crbug.com/516866): Call SetupSync() here upon implementing the merge
-  // logic in USS. Refer the TODO above for details.
+  // Setup sync, wait for its completion, and make sure changes were synced.
+  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  ASSERT_TRUE(
+      UpdatedProgressMarkerChecker(GetSyncService(kSingleProfileIndex)).Wait());
+  ASSERT_TRUE(ModelMatchesVerifier(kSingleProfileIndex));
 
   //  Ultimately we want to end up with the following model; but this test is
   //  more about the journey than the destination.
@@ -294,8 +273,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTestIncludingUssTests, Sanity) {
 }
 
 #if !defined(VIVALDI_RENAMED_SYNC_CLIENT_TESTS)
-IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTestIncludingUssTests,
-                       CommitLocalCreations) {
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest, CommitLocalCreations) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   // Starting state:
@@ -336,8 +314,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTestIncludingUssTests,
   EXPECT_TRUE(ModelMatchesVerifier(kSingleProfileIndex));
 }
 
-IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTestIncludingUssTests,
-                       InjectedBookmark) {
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest, InjectedBookmark) {
   std::string title = "Montreal Canadiens";
   fake_server::EntityBuilderFactory entity_builder_factory;
   fake_server::BookmarkEntityBuilder bookmark_builder =
@@ -356,7 +333,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTestIncludingUssTests,
 // Test that a client doesn't mutate the favicon data in the process
 // of storing the favicon data from sync to the database or in the process
 // of requesting data from the database for sync.
-IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
                        SetFaviconHiDPIDifferentCodec) {
   // Set the supported scale factors to 1x and 2x such that
   // BookmarkModel::GetFavicon() requests both 1x and 2x.
@@ -401,7 +378,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
 
 // Test that a client deletes favicons from sync when they have been removed
 // from the local database.
-IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest, DeleteFaviconFromSync) {
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest, DeleteFaviconFromSync) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(ModelMatchesVerifier(kSingleProfileIndex));
 
@@ -427,7 +404,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest, DeleteFaviconFromSync) {
       GetBookmarkModel(kSingleProfileIndex)->GetFavicon(bookmark).IsEmpty());
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
                        BookmarkAllNodesRemovedEvent) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   // Starting state:
@@ -489,8 +466,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
 }
 
 #if !defined(VIVALDI_RENAMED_SYNC_CLIENT_TESTS)
-IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTestIncludingUssTests,
-                       DownloadDeletedBookmark) {
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest, DownloadDeletedBookmark) {
   std::string title = "Patrick Star";
   fake_server::EntityBuilderFactory entity_builder_factory;
   fake_server::BookmarkEntityBuilder bookmark_builder =
@@ -520,7 +496,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTestIncludingUssTests,
                   .Wait());
 }
 
-IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTestIncludingUssTests,
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
                        DownloadModifiedBookmark) {
   std::string title = "Syrup";
   GURL original_url = GURL("https://en.wikipedia.org/?title=Maple_syrup");
@@ -559,8 +535,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTestIncludingUssTests,
   ASSERT_EQ(1, CountBookmarksWithTitlesMatching(kSingleProfileIndex, title));
 }
 
-IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTestIncludingUssTests,
-                       DownloadBookmarkFolder) {
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest, DownloadBookmarkFolder) {
   const std::string title = "Seattle Sounders FC";
   fake_server::EntityBuilderFactory entity_builder_factory;
   fake_server::BookmarkEntityBuilder bookmark_builder =
@@ -577,13 +552,53 @@ IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTestIncludingUssTests,
 }
 #endif
 
-IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest, E2E_ONLY(SanitySetup)) {
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
+                       DownloadBookmarkFoldersWithPositions) {
+  const std::string title0 = "Folder left";
+  const std::string title1 = "Folder middle";
+  const std::string title2 = "Folder right";
+
+  fake_server::EntityBuilderFactory entity_builder_factory;
+
+  fake_server::BookmarkEntityBuilder bookmark0_builder =
+      entity_builder_factory.NewBookmarkEntityBuilder(title0);
+  bookmark0_builder.SetIndex(0);
+
+  fake_server::BookmarkEntityBuilder bookmark1_builder =
+      entity_builder_factory.NewBookmarkEntityBuilder(title1);
+  bookmark1_builder.SetIndex(1);
+
+  fake_server::BookmarkEntityBuilder bookmark2_builder =
+      entity_builder_factory.NewBookmarkEntityBuilder(title2);
+  bookmark2_builder.SetIndex(2);
+
+  fake_server_->InjectEntity(bookmark0_builder.BuildFolder());
+  fake_server_->InjectEntity(bookmark2_builder.BuildFolder());
+  fake_server_->InjectEntity(bookmark1_builder.BuildFolder());
+
+  DisableVerifier();
+  ASSERT_TRUE(SetupClients());
+
+  ASSERT_TRUE(SetupSync());
+
+  EXPECT_EQ(1, CountFoldersWithTitlesMatching(kSingleProfileIndex, title0));
+  EXPECT_EQ(1, CountFoldersWithTitlesMatching(kSingleProfileIndex, title1));
+  EXPECT_EQ(1, CountFoldersWithTitlesMatching(kSingleProfileIndex, title2));
+
+  const BookmarkNode* bar = GetBookmarkBarNode(kSingleProfileIndex);
+  ASSERT_EQ(3, bar->child_count());
+  EXPECT_EQ(base::ASCIIToUTF16(title0), bar->GetChild(0)->GetTitle());
+  EXPECT_EQ(base::ASCIIToUTF16(title1), bar->GetChild(1)->GetTitle());
+  EXPECT_EQ(base::ASCIIToUTF16(title2), bar->GetChild(2)->GetTitle());
+}
+
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest, E2E_ONLY(SanitySetup)) {
   ASSERT_TRUE(SetupSync()) <<  "SetupSync() failed.";
 }
 
 #if !defined(VIVALDI_RENAMED_SYNC_CLIENT_TESTS)
 INSTANTIATE_TEST_CASE_P(USS,
-                        SingleClientBookmarksSyncTestIncludingUssTests,
+                        SingleClientBookmarksSyncTest,
                         ::testing::Values(false, true));
 #endif
 

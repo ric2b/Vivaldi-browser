@@ -45,6 +45,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "services/network/public/cpp/features.h"
 #include "ui/display/display_switches.h"
 
 #if defined(USE_AURA)
@@ -378,6 +379,10 @@ IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestAllowTransparencyAttribute) {
 
 IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestAPIMethodExistence) {
   RunTest("testAPIMethodExistence", "web_view/apitest");
+}
+
+IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestCustomElementCallbacksInaccessible) {
+  RunTest("testCustomElementCallbacksInaccessible", "web_view/apitest");
 }
 
 IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestAssignSrcAfterCrash) {

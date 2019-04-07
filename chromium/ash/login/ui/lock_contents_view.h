@@ -47,7 +47,6 @@ class LoginBigUserView;
 class LoginBubble;
 class LoginDetachableBaseModel;
 class LoginExpandedPublicAccountView;
-class LoginPublicAccountUserView;
 class LoginUserView;
 class NoteActionLaunchButton;
 class ScrollableUsersListView;
@@ -84,7 +83,8 @@ class ASH_EXPORT LockContentsView
     LoginBubble* tooltip_bubble() const;
     LoginBubble* auth_error_bubble() const;
     LoginBubble* detachable_base_error_bubble() const;
-    views::View* dev_channel_info() const;
+    LoginBubble* warning_banner_bubble() const;
+    views::View* system_info() const;
     LoginExpandedPublicAccountView* expanded_view() const;
     views::View* main_view() const;
 
@@ -101,9 +101,11 @@ class ASH_EXPORT LockContentsView
   };
 
   enum class AcceleratorAction {
-    kShowFeedback,
     kFocusNextUser,
     kFocusPreviousUser,
+    kShowSystemInfo,
+    kShowFeedback,
+    kShowResetScreen,
   };
 
   // Number of login attempts before a login dialog is shown. For example, if
@@ -134,6 +136,7 @@ class ASH_EXPORT LockContentsView
   void SetAvatarForUser(const AccountId& account_id,
                         const mojom::UserAvatarPtr& avatar) override;
   void OnFocusLeavingLockScreenApps(bool reverse) override;
+  void OnOobeDialogStateChanged(mojom::OobeDialogState state) override;
 
   // LoginDataDispatcher::Observer:
   void OnUsersChanged(
@@ -144,15 +147,18 @@ class ASH_EXPORT LockContentsView
       bool enabled,
       const base::Optional<base::Time>& auth_reenabled_time) override;
   void OnLockScreenNoteStateChanged(mojom::TrayActionState state) override;
-  void OnClickToUnlockEnabledForUserChanged(const AccountId& user,
-                                            bool enabled) override;
+  void OnTapToUnlockEnabledForUserChanged(const AccountId& user,
+                                          bool enabled) override;
   void OnForceOnlineSignInForUser(const AccountId& user) override;
   void OnShowEasyUnlockIcon(
       const AccountId& user,
       const mojom::EasyUnlockIconOptionsPtr& icon) override;
-  void OnDevChannelInfoChanged(const std::string& os_version_label_text,
-                               const std::string& enterprise_info_text,
-                               const std::string& bluetooth_name) override;
+  void OnShowWarningBanner(const base::string16& message) override;
+  void OnHideWarningBanner() override;
+  void OnSystemInfoChanged(bool show,
+                           const std::string& os_version_label_text,
+                           const std::string& enterprise_info_text,
+                           const std::string& bluetooth_name) override;
   void OnPublicSessionDisplayNameChanged(
       const AccountId& account_id,
       const std::string& display_name) override;
@@ -191,6 +197,8 @@ class ASH_EXPORT LockContentsView
   // chromeos::PowerManagerClient::Observer:
   void SuspendImminent(power_manager::SuspendImminent::Reason reason) override;
 
+  void ShowAuthErrorMessageForDebug(int unlock_attempt);
+
  private:
   class UserState {
    public:
@@ -210,7 +218,7 @@ class ASH_EXPORT LockContentsView
     DISALLOW_COPY_AND_ASSIGN(UserState);
   };
 
-  using OnRotate = base::RepeatingCallback<void(bool landscape)>;
+  using DisplayLayoutAction = base::RepeatingCallback<void(bool landscape)>;
 
   // Focus the next/previous widget.
   void FocusNextWidget(bool reverse);
@@ -223,7 +231,8 @@ class ASH_EXPORT LockContentsView
       const std::vector<mojom::LoginUserInfoPtr>& users);
   // 7+ users.
   void CreateHighDensityLayout(
-      const std::vector<mojom::LoginUserInfoPtr>& users);
+      const std::vector<mojom::LoginUserInfoPtr>& users,
+      views::BoxLayout* main_layout);
 
   // Lay out the entire view. This is called when the view is attached to a
   // widget and when the screen is rotated.
@@ -236,16 +245,9 @@ class ASH_EXPORT LockContentsView
   // Lay out the expanded public session view.
   void LayoutPublicSessionView();
 
-  // Creates a new view with |landscape| and |portrait| preferred sizes.
-  // |landscape| and |portrait| specify the width of the preferred size; the
-  // height is an arbitrary non-zero value. The correct size is chosen
-  // dynamically based on screen orientation. The view will respond to
-  // orientation changes.
-  views::View* MakeOrientationViewWithWidths(int landscape, int portrait);
-
-  // Adds |on_rotate| to |rotation_actions_| and immediately executes it with
+  // Adds |layout_action| to |layout_actions_| and immediately executes it with
   // the current rotation.
-  void AddRotationAction(const OnRotate& on_rotate);
+  void AddDisplayLayoutAction(const DisplayLayoutAction& layout_action);
 
   // Change the active |auth_user_|. If |is_primary| is true, the active auth
   // switches to |opt_secondary_big_view_|. If |is_primary| is false, the active
@@ -323,18 +325,6 @@ class ASH_EXPORT LockContentsView
       const std::vector<mojom::LoginUserInfoPtr>& users,
       LoginDisplayStyle display_style);
 
-  // Update the auth enable/disabled for public account user.
-  // Both |opt_to_update| and |opt_to_hide| could be null.
-  void UpdateAuthForPublicAccount(LoginPublicAccountUserView* opt_to_update,
-                                  LoginPublicAccountUserView* opt_to_hide,
-                                  bool animate);
-
-  // Update the auth method for regular user.
-  // Both |opt_to_update| and |opt_to_hide| could be null.
-  void UpdateAuthForAuthUser(LoginAuthUserView* opt_to_update,
-                             LoginAuthUserView* opt_to_hide,
-                             bool animate);
-
   // Change the visibility of child views based on the |style|.
   void SetDisplayStyle(DisplayStyle style);
 
@@ -359,7 +349,7 @@ class ASH_EXPORT LockContentsView
   LoginBigUserView* opt_secondary_big_view_ = nullptr;
   ScrollableUsersListView* users_list_ = nullptr;
 
-  // View that contains the note action button and the dev channel info labels,
+  // View that contains the note action button and the system info labels,
   // placed on the top right corner of the screen without affecting layout of
   // other views.
   views::View* top_header_ = nullptr;
@@ -367,21 +357,20 @@ class ASH_EXPORT LockContentsView
   // View for launching a note taking action handler from the lock screen.
   NoteActionLaunchButton* note_action_ = nullptr;
 
-  // View for showing the version, enterprise and bluetooth info in dev and
-  // canary channels.
-  views::View* dev_channel_info_ = nullptr;
+  // View for showing the version, enterprise and bluetooth info.
+  views::View* system_info_ = nullptr;
 
   // Contains authentication user and the additional user views.
   NonAccessibleView* main_view_ = nullptr;
-  // Layout used for |main_view_|. Pointer owned by the View base class.
-  views::BoxLayout* main_layout_ = nullptr;
 
-  // Actions that should be executed when rotation changes. A full layout pass
-  // is performed after all actions are executed.
-  std::vector<OnRotate> rotation_actions_;
+  // Actions that should be executed before a new layout happens caused by a
+  // display change (eg. screen rotation). A full layout pass is performed after
+  // all actions are executed.
+  std::vector<DisplayLayoutAction> layout_actions_;
 
-  ScopedObserver<display::Screen, display::DisplayObserver> display_observer_;
-  ScopedSessionObserver session_observer_;
+  ScopedObserver<display::Screen, display::DisplayObserver> display_observer_{
+      this};
+  ScopedSessionObserver session_observer_{this};
 
   // Bubbles for displaying authentication error.
   std::unique_ptr<LoginBubble> auth_error_bubble_;
@@ -390,6 +379,9 @@ class ASH_EXPORT LockContentsView
   std::unique_ptr<LoginBubble> detachable_base_error_bubble_;
 
   std::unique_ptr<LoginBubble> tooltip_bubble_;
+
+  // Bubble for displaying warning banner message.
+  std::unique_ptr<LoginBubble> warning_banner_bubble_;
 
   int unlock_attempt_ = 0;
 

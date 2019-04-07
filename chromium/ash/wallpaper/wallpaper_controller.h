@@ -148,6 +148,11 @@ class ASH_EXPORT WallpaperController : public mojom::WallpaperController,
   // Returns true if the active user is allowed to open the wallpaper picker.
   bool CanOpenWallpaperPicker();
 
+  // Returns whether any wallpaper has been shown. It returns false before the
+  // first wallpaper is set (which happens momentarily after startup), and will
+  // always return true thereafter.
+  bool HasShownAnyWallpaper() const;
+
   // Shows the wallpaper and alerts observers of changes. Does not show the
   // image if |preview_mode| is false and the current wallpaper is still being
   // previewed. See comments for |confirm_preview_wallpaper_callback_|.
@@ -159,19 +164,22 @@ class ASH_EXPORT WallpaperController : public mojom::WallpaperController,
   // including device policy).
   bool IsPolicyControlled(const AccountId& account_id, bool is_ephemeral) const;
 
-  // Prepares wallpaper to lock screen transition. Will apply blur if
-  // |locking| is true and remove it otherwise.
-  void PrepareWallpaperForLockScreenChange(bool locking);
+  // Update the blurred state of the current wallpaper. Applies blur if |blur|
+  // is true and blur is allowed by the controller, otherwise any existing blur
+  // is removed.
+  void UpdateWallpaperBlur(bool blur);
 
   // Wallpaper should be dimmed for login, lock, OOBE and add user screens.
   bool ShouldApplyDimming() const;
 
-  // Returns whether blur is enabled for login, lock, OOBE and add user screens.
-  // See crbug.com/775591.
-  bool IsBlurEnabled() const;
+  // Returns whether the current wallpaper is allowed to be blurred. See
+  // https://crbug.com/775591.
+  bool IsBlurAllowed() const;
 
   // Returns whether the current wallpaper is blurred.
-  bool IsWallpaperBlurred() const { return is_wallpaper_blurred_; }
+  // Note: this returns false when there's no wallpaper yet. Check
+  // |HasShownAnyWallpaper| if there's need to distinguish.
+  bool IsWallpaperBlurred() const;
 
   // Sets wallpaper info for |account_id| and saves it to local state if
   // |is_ephemeral| is false. Returns false if it fails (which happens if local
@@ -541,7 +549,7 @@ class ASH_EXPORT WallpaperController : public mojom::WallpaperController,
   // Bindings for the WallpaperController interface.
   mojo::BindingSet<mojom::WallpaperController> bindings_;
 
-  base::ObserverList<WallpaperControllerObserver> observers_;
+  base::ObserverList<WallpaperControllerObserver>::Unchecked observers_;
 
   mojo::AssociatedInterfacePtrSet<mojom::WallpaperObserver> mojo_observers_;
 

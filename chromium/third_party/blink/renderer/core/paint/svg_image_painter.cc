@@ -19,7 +19,7 @@ namespace blink {
 
 void SVGImagePainter::Paint(const PaintInfo& paint_info) {
   if (paint_info.phase != PaintPhase::kForeground ||
-      layout_svg_image_.Style()->Visibility() != EVisibility::kVisible ||
+      layout_svg_image_.StyleRef().Visibility() != EVisibility::kVisible ||
       !layout_svg_image_.ImageResource()->HasImage())
     return;
 
@@ -41,6 +41,8 @@ void SVGImagePainter::Paint(const PaintInfo& paint_info) {
         !DrawingRecorder::UseCachedDrawingIfPossible(
             paint_context.GetPaintInfo().context, layout_svg_image_,
             paint_context.GetPaintInfo().phase)) {
+      if (RuntimeEnabledFeatures::PaintTouchActionRectsEnabled())
+        SVGModelObjectPainter::RecordHitTestData(layout_svg_image_, paint_info);
       DrawingRecorder recorder(paint_context.GetPaintInfo().context,
                                layout_svg_image_,
                                paint_context.GetPaintInfo().phase);

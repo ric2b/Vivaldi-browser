@@ -17,6 +17,15 @@ namespace {
 namespace proto = url_pattern_index::proto;
 using FindRuleStrategy =
     url_pattern_index::UrlPatternIndexMatcher::FindRuleStrategy;
+
+// A helper function to get the checksum on a data buffer.
+int LocalGetChecksum(const uint8_t* data, size_t size) {
+  uint32_t hash = base::PersistentHash(data, size);
+
+  // Strip off the sign bit since this needs to be persisted in preferences
+  // which don't support unsigned ints.
+  return static_cast<int>(hash & 0x7fffffff);
+}
 }  // namespace
 
 // RulesetIndexer --------------------------------------------------------------
@@ -25,6 +34,13 @@ using FindRuleStrategy =
 // Keep this in sync with the version number in
 // tools/perf/core/default_local_state.json.
 const int RulesetIndexer::kIndexedFormatVersion = 20;
+
+// This static assert is meant to catch cases where
+// url_pattern_index::kUrlPatternIndexFormatVersion is incremented without
+// updating RulesetIndexer::kIndexedFormatVersion.
+static_assert(url_pattern_index::kUrlPatternIndexFormatVersion == 1,
+              "kUrlPatternIndexFormatVersion has changed, make sure you've "
+              "also updated RulesetIndexer::kIndexedFormatVersion above.");
 
 RulesetIndexer::RulesetIndexer()
     : blacklist_(&builder_), whitelist_(&builder_), deactivation_(&builder_) {}
@@ -62,16 +78,38 @@ void RulesetIndexer::Finish() {
   builder_.Finish(url_rules_index_offset);
 }
 
+int RulesetIndexer::GetChecksum() const {
+  return LocalGetChecksum(data(), size());
+}
+
 // IndexedRulesetMatcher -------------------------------------------------------
 
 // static
-bool IndexedRulesetMatcher::Verify(const uint8_t* buffer, size_t size) {
+bool IndexedRulesetMatcher::Verify(const uint8_t* buffer,
+                                   size_t size,
+                                   int expected_checksum) {
   TRACE_EVENT_BEGIN1(TRACE_DISABLED_BY_DEFAULT("loading"),
                      "IndexedRulesetMatcher::Verify", "size", size);
   SCOPED_UMA_HISTOGRAM_TIMER(
       "SubresourceFilter.IndexRuleset.Verify2.WallDuration");
+  // TODO(ericrobinson): Log metrics for how often a zero checksum is
+  // encountered.  Remove the verifier once we've updated the ruleset at least
+  // once.  The verifier detects a subset of the errors detected by the
+  // checksum, and is unneeded once expected_checksum is consistently nonzero.
   flatbuffers::Verifier verifier(buffer, size);
-  bool valid = flat::VerifyIndexedRulesetBuffer(verifier);
+  VerifyStatus status = VerifyStatus::kPass;
+  if (expected_checksum &&
+      expected_checksum != LocalGetChecksum(buffer, size)) {
+    status = flat::VerifyIndexedRulesetBuffer(verifier)
+                 ? VerifyStatus::kChecksumFailVerifierPass
+                 : VerifyStatus::kChecksumFailVerifierFail;
+  } else if (!flat::VerifyIndexedRulesetBuffer(verifier)) {
+    status = expected_checksum == 0 ? VerifyStatus::kVerifierFailChecksumZero
+                                    : VerifyStatus::kVerifierFailChecksumPass;
+  }
+  UMA_HISTOGRAM_ENUMERATION("SubresourceFilter.IndexRuleset.Verify.Status",
+                            status);
+  bool valid = (status == VerifyStatus::kPass);
   TRACE_EVENT_END1(TRACE_DISABLED_BY_DEFAULT("loading"),
                    "IndexedRulesetMatcher::Verify", "valid", valid);
   return valid;

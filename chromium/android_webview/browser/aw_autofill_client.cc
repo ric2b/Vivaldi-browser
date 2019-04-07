@@ -15,7 +15,6 @@
 #include "components/autofill/core/browser/autofill_popup_delegate.h"
 #include "components/autofill/core/browser/suggestion.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_service_factory.h"
@@ -32,8 +31,6 @@ using base::android::ConvertUTF16ToJavaString;
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 using content::WebContents;
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(android_webview::AwAutofillClient);
 
 namespace android_webview {
 
@@ -250,7 +247,7 @@ void AwAutofillClient::SuggestionSelected(JNIEnv* env,
   }
 }
 
-void AwAutofillClient::ShowAutofillSettings() {
+void AwAutofillClient::ShowAutofillSettings(bool show_credit_card_settings) {
   NOTIMPLEMENTED();
 }
 
@@ -265,7 +262,15 @@ void AwAutofillClient::OnUnmaskVerificationResult(PaymentsRpcResult result) {
   NOTIMPLEMENTED();
 }
 
-void AwAutofillClient::ShowLocalCardMigrationPrompt(base::OnceClosure closure) {
+void AwAutofillClient::ShowLocalCardMigrationDialog(
+    base::OnceClosure show_migration_dialog_closure) {
+  NOTIMPLEMENTED();
+}
+
+void AwAutofillClient::ConfirmMigrateLocalCardToCloud(
+    std::unique_ptr<base::DictionaryValue> legal_message,
+    std::vector<autofill::MigratableCreditCard>& migratable_credit_cards,
+    base::OnceClosure start_migrating_cards_closure) {
   NOTIMPLEMENTED();
 }
 

@@ -18,9 +18,9 @@
 #include "base/metrics/persistent_histogram_allocator.h"
 #include "base/metrics/persistent_memory_allocator.h"
 #include "base/strings/string_piece.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/task_runner.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
 #include "base/time/time.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
@@ -107,7 +107,7 @@ scoped_refptr<base::TaskRunner> CreateBackgroundTaskRunner() {
     return scoped_refptr<base::TaskRunner>(g_task_runner_for_testing);
 
   return base::CreateTaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 
@@ -629,10 +629,11 @@ void FileMetricsProvider::ScheduleSourcesCheck() {
   std::swap(sources_to_check_, *check_list);
   task_runner_->PostTaskAndReply(
       FROM_HERE,
-      base::Bind(&FileMetricsProvider::CheckAndMergeMetricSourcesOnTaskRunner,
-                 base::Unretained(check_list)),
-      base::Bind(&FileMetricsProvider::RecordSourcesChecked,
-                 weak_factory_.GetWeakPtr(), base::Owned(check_list)));
+      base::BindOnce(
+          &FileMetricsProvider::CheckAndMergeMetricSourcesOnTaskRunner,
+          base::Unretained(check_list)),
+      base::BindOnce(&FileMetricsProvider::RecordSourcesChecked,
+                     weak_factory_.GetWeakPtr(), base::Owned(check_list)));
 }
 
 void FileMetricsProvider::RecordSourcesChecked(SourceInfoList* checked) {
@@ -673,7 +674,8 @@ void FileMetricsProvider::RecordSourcesChecked(SourceInfoList* checked) {
 }
 
 void FileMetricsProvider::DeleteFileAsync(const base::FilePath& path) {
-  task_runner_->PostTask(FROM_HERE, base::Bind(DeleteFileWhenPossible, path));
+  task_runner_->PostTask(FROM_HERE,
+                         base::BindOnce(DeleteFileWhenPossible, path));
 }
 
 void FileMetricsProvider::RecordSourceAsRead(SourceInfo* source) {

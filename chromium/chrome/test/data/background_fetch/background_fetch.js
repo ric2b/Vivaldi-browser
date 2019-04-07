@@ -86,8 +86,13 @@ function StartSingleFileDownloadWithCorrectDownloadTotal() {
 }
 
 // Listens for a postMessage from sw.js and sends the result to the test.
-navigator.serviceWorker.addEventListener('message', (event) => {
-  if (['backgroundfetched', 'backgroundfetchfail'].includes(event.data))
+navigator.serviceWorker.addEventListener('message', event => {
+  const expectedResponses = [
+    'backgroundfetchsuccess',
+    'backgroundfetchfail',
+    'permissionerror',
+  ];
+  if (expectedResponses.includes(event.data))
     sendResultToTest(event.data);
   else
     sendErrorToTest(Error('Unexpected message received: ' + event.data));
@@ -115,4 +120,26 @@ function RunFetchTillCompletionWithMissingResource() {
     return swRegistration.backgroundFetch.fetch(
         kBackgroundFetchId, resources);
   }).catch(sendErrorToTest);
+}
+
+// Starts a Background Fetch that should fail due to a missing resource.
+function RunFetchAnExpectAnException() {
+  const resources = [
+    '/background_fetch/types_of_cheese.txt',
+    '/background_fetch/missing_cat.txt',
+  ];
+  navigator.serviceWorker.ready.then(swRegistration => {
+    return swRegistration.backgroundFetch.fetch(kBackgroundFetchId, resources);
+  }).then(sendErrorToTest)
+    .catch(e => sendResultToTest(e.message));
+}
+
+function StartFetchFromServiceWorker() {
+  navigator.serviceWorker.ready.then(reg => reg.active.postMessage('fetch'));
+}
+
+function StartFetchFromIframe() {
+  const iframe = document.createElement('iframe');
+  iframe.src = '/background_fetch/background_fetch_iframe.html';
+  document.body.appendChild(iframe);
 }

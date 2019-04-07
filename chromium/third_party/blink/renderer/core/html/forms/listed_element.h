@@ -97,8 +97,8 @@ class CORE_EXPORT ListedElement : public GarbageCollectedMixin {
  protected:
   ListedElement();
 
-  void InsertedInto(ContainerNode*);
-  void RemovedFrom(ContainerNode*);
+  void InsertedInto(ContainerNode&);
+  void RemovedFrom(ContainerNode&);
   void DidMoveToNewDocument(Document& old_document);
 
   // FIXME: Remove usage of setForm. resetFormOwner should be enough, and

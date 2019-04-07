@@ -16,7 +16,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -191,9 +191,10 @@ class HttpRequest {
 
     std::string request = base::StrCat(pieces);
     scoped_refptr<net::IOBuffer> base_buffer =
-        new net::IOBuffer(request.size());
+        base::MakeRefCounted<net::IOBuffer>(request.size());
     memcpy(base_buffer->data(), request.data(), request.size());
-    request_ = new net::DrainableIOBuffer(base_buffer.get(), request.size());
+    request_ = base::MakeRefCounted<net::DrainableIOBuffer>(
+        std::move(base_buffer), request.size());
 
     DoSendRequest(net::OK);
   }
@@ -534,7 +535,7 @@ AndroidDeviceManager::HandlerThread::~HandlerThread() {
     return;
   // Shut down thread on a thread other than UI so it can join a thread.
   base::PostTaskWithTraits(FROM_HERE,
-                           {base::MayBlock(), base::TaskPriority::BACKGROUND},
+                           {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
                            base::BindOnce(&HandlerThread::StopThread, thread_));
 }
 

@@ -364,6 +364,13 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
       std::vector<std::unique_ptr<RenderSurfaceImpl>>* old_render_surfaces,
       LayerTreeImpl* layer_tree_impl);
 
+  // This function checks if the layer's hit test region is a rectangle so that
+  // we may be able to use |visible_layer_rect| for viz hit test. It returns
+  // true when the following three conditions are met:
+  // 1) All clips preserve 2d axis.
+  // 2) There are no mask layers.
+  bool ClippedHitTestRegionIsRectangle(int effect_node_id) const;
+
  private:
   void UpdateOpacities(EffectNode* node, EffectNode* parent_node);
   void UpdateIsDrawn(EffectNode* node, EffectNode* parent_node);
@@ -411,6 +418,18 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   // value for the LayerTree while on the impl thread this is the current value
   // on the active tree.
   const gfx::ScrollOffset current_scroll_offset(ElementId id) const;
+
+  // Returns the scroll offset taking into account any adjustments that may be
+  // included due to pixel snapping.
+  //
+  // Note: Using this method may causes the associated transform node for this
+  // scroll node to update its transforms.
+  //
+  // TODO(crbug.com/585458): Updating single transform node only works for
+  // simple cases but we really should update the whole transform tree otherwise
+  // we are ignoring any parent transform node that needs updating and thus our
+  // snap amount can be incorrect.
+  const gfx::ScrollOffset GetPixelSnappedScrollOffset(int scroll_node_id) const;
 
   // Collects deltas for scroll changes on the impl thread that need to be
   // reported to the main thread during the main frame. As such, should only be
@@ -460,6 +479,7 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   void CopyCompleteTreeState(const ScrollTree& other);
 #endif
 
+  ScrollNode* FindNodeFromElementId(ElementId id);
   const ScrollNode* FindNodeFromElementId(ElementId id) const;
 
  private:

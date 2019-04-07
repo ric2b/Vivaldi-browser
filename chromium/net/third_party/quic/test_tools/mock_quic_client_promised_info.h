@@ -8,7 +8,7 @@
 #include <string>
 
 #include "base/macros.h"
-#include "net/third_party/quic/core/quic_client_promised_info.h"
+#include "net/third_party/quic/core/http/quic_client_promised_info.h"
 #include "net/third_party/quic/core/quic_packets.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -19,7 +19,7 @@ class MockQuicClientPromisedInfo : public QuicClientPromisedInfo {
  public:
   MockQuicClientPromisedInfo(QuicSpdyClientSessionBase* session,
                              QuicStreamId id,
-                             std::string url);
+                             QuicString url);
   ~MockQuicClientPromisedInfo() override;
 
   MOCK_METHOD2(HandleClientRequest,

@@ -8,6 +8,7 @@
 #include "base/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "content/browser/background_fetch/background_fetch.pb.h"
+#include "content/browser/background_fetch/background_fetch_request_match_params.h"
 #include "content/browser/background_fetch/storage/database_task.h"
 #include "content/browser/cache_storage/cache_storage_cache_handle.h"
 #include "storage/browser/blob/blob_data_handle.h"
@@ -15,19 +16,26 @@
 
 namespace content {
 
+class BackgroundFetchRequestMatchParams;
+
 namespace background_fetch {
 
 class GetSettledFetchesTask : public DatabaseTask {
  public:
+  // TODO(nator): Remove BlobDataHandle since we're not using them.
   using SettledFetchesCallback = base::OnceCallback<void(
       blink::mojom::BackgroundFetchError,
       bool,
       std::vector<BackgroundFetchSettledFetch>,
       std::vector<std::unique_ptr<storage::BlobDataHandle>>)>;
 
-  GetSettledFetchesTask(DatabaseTaskHost* host,
-                        BackgroundFetchRegistrationId registration_id,
-                        SettledFetchesCallback callback);
+  // Gets settled fetches from cache storage, filtered according to
+  // |match_params|.
+  GetSettledFetchesTask(
+      DatabaseTaskHost* host,
+      BackgroundFetchRegistrationId registration_id,
+      std::unique_ptr<BackgroundFetchRequestMatchParams> match_params,
+      SettledFetchesCallback callback);
 
   ~GetSettledFetchesTask() override;
 
@@ -51,14 +59,24 @@ class GetSettledFetchesTask : public DatabaseTask {
   void FillResponse(BackgroundFetchSettledFetch* settled_fetch,
                     base::OnceClosure callback);
 
+  void FillResponses(base::OnceClosure callback);
+
   void DidMatchRequest(BackgroundFetchSettledFetch* settled_fetch,
                        base::OnceClosure callback,
                        blink::mojom::CacheStorageError error,
-                       std::unique_ptr<ServiceWorkerResponse> cache_response);
+                       blink::mojom::FetchAPIResponsePtr cache_response);
+
+  void DidMatchAllResponsesForRequest(
+      base::OnceClosure callback,
+      blink::mojom::CacheStorageError error,
+      std::vector<blink::mojom::FetchAPIResponsePtr> cache_responses);
 
   void FinishWithError(blink::mojom::BackgroundFetchError error) override;
 
+  std::string HistogramName() const override;
+
   BackgroundFetchRegistrationId registration_id_;
+  std::unique_ptr<BackgroundFetchRequestMatchParams> match_params_;
   SettledFetchesCallback settled_fetches_callback_;
 
   // SettledFetchesCallback params.

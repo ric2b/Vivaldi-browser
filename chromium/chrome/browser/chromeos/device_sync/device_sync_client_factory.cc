@@ -12,26 +12,27 @@
 #include "chromeos/chromeos_features.h"
 #include "chromeos/services/device_sync/public/cpp/device_sync_client.h"
 #include "chromeos/services/device_sync/public/cpp/device_sync_client_impl.h"
+#include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 
-namespace {
-
-bool IsEnrollmentAllowedByPolicy(content::BrowserContext* context) {
-  // We allow CryptAuth enrollments if at least one of the features which
-  // depends on CryptAuth is enabled by enterprise policy.
-  PrefService* pref_service = Profile::FromBrowserContext(context)->GetPrefs();
-  return pref_service->GetBoolean(prefs::kEasyUnlockAllowed) ||
-         pref_service->GetBoolean(prefs::kInstantTetheringAllowed);
-}
-
-}  // namespace
-
 namespace chromeos {
 
 namespace device_sync {
+
+namespace {
+
+// CryptAuth enrollment is allowed only if at least one multi-device feature is
+// enabled. This ensures that we do not unnecessarily register devices on the
+// CryptAuth back-end when the registration would never actually be used.
+bool IsEnrollmentAllowedByPolicy(content::BrowserContext* context) {
+  return multidevice_setup::AreAnyMultiDeviceFeaturesAllowed(
+      Profile::FromBrowserContext(context)->GetPrefs());
+}
+
+}  // namespace
 
 // Class that wraps DeviceSyncClient in a KeyedService.
 class DeviceSyncClientHolder : public KeyedService {

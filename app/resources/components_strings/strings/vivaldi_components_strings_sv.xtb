@@ -16,12 +16,10 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1640244768702815859">Försök <ph name="BEGIN_LINK" />besöka webbplatsens startsida<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protokoll som ej stöds</translation>
-<translation id="1676269943528358898"><ph name="SITE" /> använder normalt kryptering för att skydda din information. När Vivaldi försökte ansluta till <ph name="SITE" /> den här gången sände webbplatsen tillbaka ovanliga och inkorrekta uppgifter. Det kan uppstå när en angripare försöker låtsas vara <ph name="SITE" />, eller när en inloggingssida för trådlöst nät har avbrutit förbindelsen. Din information är fortfarande säker eftersom Vivaldi stoppade anslutningen innan data utväxlades.</translation>
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">Du visar källkoden till en webbsida</translation>
 <translation id="1734878702283171397">Försök att kontakta systemadministratören.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Försök köra Windows nätverksdiagnostik<ph name="END_LINK" />.</translation>
-<translation id="1789575671122666129">Popup-fönster</translation>
 <translation id="1834321415901700177">Den här webbplatsen innehåller skadliga program</translation>
 <translation id="1916770123977586577">Läs in sidan igen för att tillämpa dina uppdaterade inställningar för webbplatsen</translation>
 <translation id="1919345977826869612">Annonser</translation>
@@ -29,11 +27,11 @@
 <translation id="1974060860693918893">Avancerat</translation>
 <translation id="2030481566774242610">Menade du <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrollera mellanservern (proxyn) och brandväggen<ph name="END_LINK" /></translation>
-<translation id="2065985942032347596">Autentisering krävs</translation>
 <translation id="2091887806945687916">Ljud</translation>
 <translation id="2147827593068025794">Bakgrundssynkronisering</translation>
 <translation id="2166378884831602661">Webbplatsen kan inte tillhandahålla en säker anslutning</translation>
 <translation id="2187317261103489799">Identifiera (standard)</translation>
+<translation id="2224337661447660594">Inget internet</translation>
 <translation id="2230458221926704099">Åtgärda anslutningsproblemet med hjälp av <ph name="BEGIN_LINK" />diagnostiseringsappen<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Internetanslutningen har blockerats</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> kräver användarnamn och lösenord.</translation>
@@ -50,20 +48,14 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Åtkomst till filen nekades</translation>
 <translation id="2705137772291741111">Det gick inte att läsa den sparade (cachelagrade) kopian av webbplatsen.</translation>
-<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Kör anslutningsdiagnostik<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Anslutningen  återställdes.</translation>
 <translation id="2826760142808435982">Anslutningen är krypterad och verifieras med <ph name="CIPHER" /> och använder <ph name="KX" /> som nyckelutbytesmekanism.</translation>
 <translation id="2856444702002559011">En angripare kan försöka stjäla dina uppgifter från <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (t.ex. lösenord, meddelanden eller kreditkortsuppgifter). <ph name="BEGIN_LEARN_MORE_LINK" />Läs mer<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">En nätverksförändring upptäcktes.</translation>
-<translation id="2948083400971632585">Du kan inaktivera mellanservrar (proxy) konfigurerade för en anslutning från inställningssidan.</translation>
-<translation id="298138621710431427">Hjälp mig lösa detta</translation>
 <translation id="2991571918955627853">Du kan inte besöka <ph name="SITE" /> just nu eftersom webbplatsen använder HSTS. Nätverksfel och attacker är ofta tillfälliga, så sidan kommer förmodligen att fungera senare.</translation>
 <translation id="3005723025932146533">Visa sparad kopia</translation>
 <translation id="301521992641321250">Blockerades automatiskt</translation>
-<translation id="3041612393474885105">Certifikatinformation</translation>
-<translation id="3093245981617870298">Du är inte ansluten.</translation>
 <translation id="3109728660330352905">Du är inte behörig att se den här sidan.</translation>
-<translation id="31207688938192855"><ph name="BEGIN_LINK" />Försök köra anslutningsdiagnostik<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Den här sidan innehåller ett formulär som kanske inte kan skickas säkert. Data som skickas kan visas av andra vid överföringen eller modifieras av en obehörig innan den tas emot av servern.</translation>
 <translation id="3176929007561373547">Kontrollera dina proxyinställningar eller kontakta nätverksadministratören om du vill
       kontrollera att proxyservern fungerar. Om du inte tror att du ska
@@ -87,6 +79,7 @@
 <translation id="3681007416295224113">Certifikatinformation</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Kontrollera mellanservern (proxy), brandväggen och DNS-konfigurationen<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Om du använder en proxyserver ...</translation>
+<translation id="3950820424414687140">Logga in</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> har blockerats</translation>
 <translation id="3987940399970879459">Mindre än 1 MB</translation>
 <translation id="4075732493274867456">Klienten och servern har inte stöd för en gemensam SSL-protokollversion eller chiffersvit.</translation>
@@ -100,7 +93,6 @@
 <translation id="4235360514405112390">Giltigt</translation>
 <translation id="4250431568374086873">Anslutningen till den här webbplatsen är inte helt säker</translation>
 <translation id="4265872034478892965">Beviljades av administratören</translation>
-<translation id="4304224509867189079">Logga in</translation>
 <translation id="4312866146174492540">Blockera (standard)</translation>
 <translation id="4356973930735388585">Det kan hända att angripare på den här webbplatsen försöker installera skadliga program på datorn som stjäl eller raderar dina uppgifter (t.ex. foton, lösenord, meddelanden och kreditkort).</translation>
 <translation id="4408413947728134509">Kakor <ph name="NUM_COOKIES" /></translation>
@@ -110,24 +102,19 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Testa att inaktivera tilläggen.</translation>
 <translation id="4592951414987517459">Anslutningen till <ph name="DOMAIN" /> är krypterad med en modern krypteringssvit.</translation>
-<translation id="4611292653554630842">Logga in</translation>
 <translation id="4690462567478992370">Sluta använda ett ogiltigt certifikat</translation>
-<translation id="4690954380545377795">Du kan förlora tillgången till Vivaldi-kontot eller bli utsatt för identitetsstöld. Vivaldi rekommenderar att du ändrar lösenordet nu.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Anslutningen avbröts</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Köra Windows nätverksdiagnostik<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Sökväg till körbar fil</translation>
 <translation id="4750917950439032686">Dina uppgifter (till exempel lösenord eller kreditkortsnummer) är privata när de skickas till den här webbplatsen.</translation>
 <translation id="4764776831041365478">Webbsidan på <ph name="URL" /> kan ligga nere för tillfället eller kan ha flyttats permanent till en ny webbadress.</translation>
-<translation id="4807049035289105102">Du kan inte besöka <ph name="SITE" /> just nu eftersom webbsidan sände förvrängda uppgifter som inte Vivaldi kan hantera. Nätverksfel och attacker är ofta tillfälliga, så sidan kommer förmodligen att fungera senare.</translation>
-<translation id="4913131542719409934">Autentisering krävs</translation>
 <translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">Aktivera varningar igen</translation>
 <translation id="5023310440958281426">Kontrollera administratörsprinciperna</translation>
 <translation id="5039804452771397117">Tillåt</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Kontrollera adressen till mellanservern (proxyn)<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bitar)</translation>
-<translation id="522700295135997067">Webbplatsen kan ha stulit ditt lösenord nyss</translation>
 <translation id="5287240709317226393">Visa kakor</translation>
 <translation id="5355557959165512791">Det går inte att besöka <ph name="SITE" /> just nu eftersom dess certifikat har återkallats. Nätverksfel och attacker är ofta tillfälliga, så sidan kommer förmodligen att fungera senare.</translation>
 <translation id="5386426401304769735">Certifikatkedjan för den här webbplatsen innehåller ett certifikat som signerades med SHA-1.</translation>
@@ -154,7 +141,6 @@
 <translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 används}other{# används}}</translation>
 <translation id="5990559369517809815">Förfrågningar till servern har blockerats av ett tillägg.</translation>
 <translation id="6051221802930200923">Du kan inte besöka <ph name="SITE" /> just nu eftersom tekniken att fästa certifikat används på webbplatsen. Nätverksfel och attacker är ofta tillfälliga, så sidan kommer förmodligen att fungera senare.</translation>
-<translation id="6080696365213338172">Du har visat innehåll med hjälp av ett certifikat från en administratör. Det innebär att data som du har angett på <ph name="DOMAIN" /> även kan visas av administratören.</translation>
 <translation id="6146055958333702838">Kontrollera kablar och starta om routrar, modem och andra nätverksenheter
     som används.</translation>
 <translation id="614940544461990577">Försök:</translation>
@@ -171,7 +157,6 @@
 <translation id="6417515091412812850">Det gick inte att kontrollera om certifikatet har återkallats.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> avvisade anslutningen.</translation>
 <translation id="6447842834002726250">Kakor (cookies)</translation>
-<translation id="6556239504065605927">Säker anslutning</translation>
 <translation id="6569060085658103619">Du visar en tilläggssida</translation>
 <translation id="6657585470893396449">Lösenord</translation>
 <translation id="6685834062052613830">Logga ut och slutför konfigurationen</translation>
@@ -214,6 +199,7 @@
 <translation id="8150722005171944719">Det går inte att läsa filen på <ph name="URL" />. Den kan ha tagits bort eller flyttats, eller så krävs behörighet för att få åtkomst till den.</translation>
 <translation id="8184538546369750125">Använd global standardinställning (Tillåt)</translation>
 <translation id="8205463626947051446">Webbplatsen brukar visa påträngande annonser</translation>
+<translation id="8211406090763984747">Anslutningen är säker</translation>
 <translation id="8225771182978767009">Personen som konfigurerade datorn har valt att blockera den här webbplatsen.</translation>
 <translation id="8241712895048303527">Blockera på den här webbplatsen</translation>
 <translation id="8288807391153049143">Visa certifikat</translation>
@@ -234,7 +220,6 @@
 <translation id="9169664750068251925">Blockera alltid på den här webbplatsen</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> använder ett protokoll som inte stöds.</translation>
 <translation id="9219103736887031265">Bilder</translation>
-<translation id="933612690413056017">Det finns ingen internetanslutning</translation>
 <translation id="969892804517981540">Officiell version</translation>
 <translation id="988159990683914416">Utvecklarversion</translation>
 </translationbundle>

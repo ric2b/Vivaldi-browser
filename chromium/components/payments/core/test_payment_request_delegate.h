@@ -21,18 +21,6 @@
 
 namespace payments {
 
-class TestPaymentsClientDelegate
-    : public autofill::payments::PaymentsClientUnmaskDelegate {
- public:
-  TestPaymentsClientDelegate();
-  ~TestPaymentsClientDelegate();
-
- private:
-  // autofill::payments::PaymentsClientUnmaskDelegate:
-  void OnDidGetRealPan(autofill::AutofillClient::PaymentsRpcResult result,
-                       const std::string& real_pan) override;
-};
-
 class TestPaymentRequestDelegate : public PaymentRequestDelegate {
  public:
   explicit TestPaymentRequestDelegate(
@@ -41,6 +29,7 @@ class TestPaymentRequestDelegate : public PaymentRequestDelegate {
 
   // PaymentRequestDelegate
   void ShowDialog(PaymentRequest* request) override {}
+  void RetryDialog() override {}
   void CloseDialog() override {}
   void ShowErrorMessage() override {}
   void ShowProcessingSpinner() override {}
@@ -66,7 +55,6 @@ class TestPaymentRequestDelegate : public PaymentRequestDelegate {
 
  private:
   base::MessageLoop loop_;
-  TestPaymentsClientDelegate payments_client_delegate_;
   autofill::PersonalDataManager* personal_data_manager_;
   std::string locale_;
   const GURL last_committed_url_;

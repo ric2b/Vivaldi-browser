@@ -78,7 +78,6 @@
 <translation id="8498891568109133222">Hostu <ph name="HOST_NAME" /> bilo je potrebno previše vremena za odgovor.</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;DNS adresa poslužitelja&lt;/abbr&gt;<ph name="HOST_NAME" />nije pronađena. U tijeku je dijagnosticiranje problema.</translation>
 <translation id="9183425211371246419">Host <ph name="HOST_NAME" /> upotrebljava nepodržane protokole.</translation>
-<translation id="933612690413056017">Nema internetske veze</translation>
 <translation id="969892804517981540">Službeni sastavak</translation>
 <translation id="988159990683914416">Sastavak razvojnog programera</translation>
 </translationbundle>

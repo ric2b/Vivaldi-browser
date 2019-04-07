@@ -26,7 +26,6 @@
 #include "content/renderer/media/webrtc/webrtc_media_stream_track_adapter_map.h"
 #include "ipc/ipc_platform_file.h"
 #include "third_party/blink/public/platform/web_media_stream_source.h"
-#include "third_party/blink/public/platform/web_rtc_configuration.h"
 #include "third_party/blink/public/platform/web_rtc_peer_connection_handler.h"
 #include "third_party/blink/public/platform/web_rtc_stats_request.h"
 #include "third_party/blink/public/platform/web_rtc_stats_response.h"
@@ -103,15 +102,15 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
 
   // Initialize method only used for unit test.
   bool InitializeForTest(
-      const blink::WebRTCConfiguration& server_configuration,
+      const webrtc::PeerConnectionInterface::RTCConfiguration&
+          server_configuration,
       const blink::WebMediaConstraints& options,
       const base::WeakPtr<PeerConnectionTracker>& peer_connection_tracker);
 
   // blink::WebRTCPeerConnectionHandler implementation
-  bool Initialize(
-      const blink::WebRTCConfiguration& server_configuration,
-      const blink::WebMediaConstraints& options,
-      blink::WebRTCSdpSemantics original_sdp_semantics_value) override;
+  bool Initialize(const webrtc::PeerConnectionInterface::RTCConfiguration&
+                      server_configuration,
+                  const blink::WebMediaConstraints& options) override;
 
   void CreateOffer(const blink::WebRTCSessionDescriptionRequest& request,
                    const blink::WebMediaConstraints& options) override;
@@ -132,9 +131,16 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
 
   blink::WebRTCSessionDescription LocalDescription() override;
   blink::WebRTCSessionDescription RemoteDescription() override;
+  blink::WebRTCSessionDescription CurrentLocalDescription() override;
+  blink::WebRTCSessionDescription CurrentRemoteDescription() override;
+  blink::WebRTCSessionDescription PendingLocalDescription() override;
+  blink::WebRTCSessionDescription PendingRemoteDescription() override;
 
+  const webrtc::PeerConnectionInterface::RTCConfiguration& GetConfiguration()
+      const override;
   webrtc::RTCErrorType SetConfiguration(
-      const blink::WebRTCConfiguration& configuration) override;
+      const webrtc::PeerConnectionInterface::RTCConfiguration& configuration)
+      override;
   bool AddICECandidate(
       scoped_refptr<blink::WebRTCICECandidate> candidate) override;
   bool AddICECandidate(
@@ -217,6 +223,7 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
                       int sdp_mline_index,
                       int component,
                       int address_family);
+  void OnInterestingUsage(int usage_pattern);
 
  private:
   // Record info about the first SessionDescription from the local and
@@ -235,6 +242,11 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
       const std::string& sdp,
       const std::string& type,
       webrtc::SdpParseError* error);
+
+  blink::WebRTCSessionDescription GetWebRTCSessionDescriptionOnSignalingThread(
+      base::OnceCallback<const webrtc::SessionDescriptionInterface*()>
+          description_cb,
+      const char* log_text);
 
   // Report to UMA whether an IceConnectionState has occurred. It only records
   // the first occurrence of a given state.
@@ -294,6 +306,8 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
 
   void RunSynchronousClosureOnSignalingThread(const base::Closure& closure,
                                               const char* trace_event_name);
+  void RunSynchronousOnceClosureOnSignalingThread(base::OnceClosure closure,
+                                                  const char* trace_event_name);
 
   // Corresponds to the experimental RTCPeerConnection.id read-only attribute.
   const std::string id_;
@@ -328,11 +342,7 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
   // In Plan B, senders and receivers are added or removed independently of one
   // another. In Unified Plan, senders and receivers are created in pairs as
   // transceivers. Transceivers may become inactive, but are never removed.
-  // The value of this member affects the behavior of some methods and what
-  // information is surfaced from webrtc. After Initialize(), this is the actual
-  // mode used, meaning "kDefault" is no longer a valid value.
   // TODO(hbos): Implement transceiver behaviors. https://crbug.com/777617
-  blink::WebRTCSdpSemantics sdp_semantics_;
   // Content layer correspondents of |webrtc::RtpSenderInterface|.
   std::vector<std::unique_ptr<RTCRtpSender>> rtp_senders_;
   // Content layer correspondents of |webrtc::RtpReceiverInterface|.

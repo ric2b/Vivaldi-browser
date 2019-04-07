@@ -140,6 +140,9 @@ std::unique_ptr<HttpResponse> HandleEchoTitle(const HttpRequest& request) {
 
 // /echoall?QUERY
 // Responds with the list of QUERY and the request headers.
+//
+// Alternative form:
+// /echoall/nocache?QUERY prevents caching of the response.
 std::unique_ptr<HttpResponse> HandleEchoAll(const HttpRequest& request) {
   std::unique_ptr<BasicHttpResponse> http_response(new BasicHttpResponse);
 
@@ -167,6 +170,13 @@ std::unique_ptr<HttpResponse> HandleEchoAll(const HttpRequest& request) {
 
   http_response->set_content_type("text/html");
   http_response->set_content(body);
+
+  if (base::EndsWith(request.GetURL().path_piece(), "/nocache",
+                     base::CompareCase::SENSITIVE)) {
+    http_response->AddCustomHeader("Cache-Control",
+                                   "no-cache, no-store, must-revalidate");
+  }
+
   return std::move(http_response);
 }
 
@@ -247,9 +257,10 @@ std::unique_ptr<HttpResponse> HandleExpectAndSetCookie(
   http_response->set_content_type("text/html");
   if (got_all_expected) {
     for (const auto& cookie : query_list.at("set")) {
-      http_response->AddCustomHeader(
-          "Set-Cookie", UnescapeBinaryURLComponent(
-                            cookie, UnescapeRule::REPLACE_PLUS_WITH_SPACE));
+      std::string unescaped_cookie;
+      UnescapeBinaryURLComponent(cookie, UnescapeRule::REPLACE_PLUS_WITH_SPACE,
+                                 &unescaped_cookie);
+      http_response->AddCustomHeader("Set-Cookie", unescaped_cookie);
     }
   }
 
@@ -498,7 +509,8 @@ std::unique_ptr<HttpResponse> HandleAuthDigest(const HttpRequest& request) {
 std::unique_ptr<HttpResponse> HandleServerRedirect(HttpStatusCode redirect_code,
                                                    const HttpRequest& request) {
   GURL request_url = request.GetURL();
-  std::string dest = UnescapeBinaryURLComponent(request_url.query());
+  std::string dest;
+  UnescapeBinaryURLComponent(request_url.query(), &dest);
 
   std::unique_ptr<BasicHttpResponse> http_response(new BasicHttpResponse);
   http_response->set_code(redirect_code);
@@ -518,8 +530,11 @@ std::unique_ptr<HttpResponse> HandleCrossSiteRedirect(
   if (!ShouldHandle(request, "/cross-site"))
     return nullptr;
 
-  std::string dest_all = UnescapeBinaryURLComponent(
-      request.relative_url.substr(std::string("/cross-site").size() + 1));
+  std::string dest_all;
+  UnescapeBinaryURLComponent(
+
+      request.relative_url.substr(std::string("/cross-site").size() + 1),
+      &dest_all);
 
   std::string dest;
   size_t delimiter = dest_all.find("/");
@@ -543,7 +558,8 @@ std::unique_ptr<HttpResponse> HandleCrossSiteRedirect(
 // Returns a meta redirect to URL.
 std::unique_ptr<HttpResponse> HandleClientRedirect(const HttpRequest& request) {
   GURL request_url = request.GetURL();
-  std::string dest = UnescapeBinaryURLComponent(request_url.query());
+  std::string dest;
+  UnescapeBinaryURLComponent(request_url.query(), &dest);
 
   std::unique_ptr<BasicHttpResponse> http_response(new BasicHttpResponse);
   http_response->set_content_type("text/html");

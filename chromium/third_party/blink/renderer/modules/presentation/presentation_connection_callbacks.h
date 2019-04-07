@@ -5,7 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_PRESENTATION_PRESENTATION_CONNECTION_CALLBACKS_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PRESENTATION_PRESENTATION_CONNECTION_CALLBACKS_H_
 
-#include "third_party/blink/public/platform/modules/presentation/presentation.mojom-blink.h"
+#include "third_party/blink/public/mojom/presentation/presentation.mojom-blink.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/noncopyable.h"
 
@@ -28,11 +28,14 @@ class PresentationConnectionCallbacks final {
                                   ControllerPresentationConnection*);
   ~PresentationConnectionCallbacks() = default;
 
-  void HandlePresentationResponse(mojom::blink::PresentationInfoPtr,
+  void HandlePresentationResponse(mojom::blink::PresentationConnectionResultPtr,
                                   mojom::blink::PresentationErrorPtr);
 
  private:
-  void OnSuccess(const mojom::blink::PresentationInfo&);
+  void OnSuccess(
+      const mojom::blink::PresentationInfo&,
+      mojom::blink::PresentationConnectionPtr connection_ptr,
+      mojom::blink::PresentationConnectionRequest connection_request);
   void OnError(const mojom::blink::PresentationError&);
 
   Persistent<ScriptPromiseResolver> resolver_;

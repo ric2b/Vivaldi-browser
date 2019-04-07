@@ -107,7 +107,7 @@ WorkerFetchContext::WorkerFetchContext(
         SubresourceFilter::Create(global_scope, std::move(web_filter));
   }
 }
-const FetchClientSettingsObject*
+const FetchClientSettingsObjectImpl*
 WorkerFetchContext::GetFetchClientSettingsObject() const {
   return fetch_client_settings_object_.Get();
 }
@@ -118,6 +118,11 @@ KURL WorkerFetchContext::GetSiteForCookies() const {
 
 SubresourceFilter* WorkerFetchContext::GetSubresourceFilter() const {
   return subresource_filter_.Get();
+}
+
+PreviewsResourceLoadingHints*
+WorkerFetchContext::GetPreviewsResourceLoadingHints() const {
+  return nullptr;
 }
 
 bool WorkerFetchContext::AllowScriptFromSource(const KURL& url) const {
@@ -276,6 +281,10 @@ std::unique_ptr<WebURLLoader> WorkerFetchContext::CreateURLLoader(
       wrapped, CreateResourceLoadingTaskRunnerHandle());
 }
 
+std::unique_ptr<CodeCacheLoader> WorkerFetchContext::CreateCodeCacheLoader() {
+  return web_context_->CreateCodeCacheLoader();
+}
+
 blink::mojom::ControllerServiceWorkerMode
 WorkerFetchContext::IsControlledByServiceWorker() const {
   return web_context_->IsControlledByServiceWorker();
@@ -291,8 +300,6 @@ void WorkerFetchContext::PrepareRequest(ResourceRequest& request,
   probe::applyUserAgentOverride(global_scope_, &user_agent);
   DCHECK(!user_agent.IsNull());
   request.SetHTTPUserAgent(AtomicString(user_agent));
-
-  FrameLoader::UpgradeInsecureRequest(request, global_scope_);
 
   WrappedResourceRequest webreq(request);
   web_context_->WillSendRequest(webreq);
@@ -390,6 +397,7 @@ void WorkerFetchContext::PopulateResourceRequest(
     const ClientHintsPreferences& hints_preferences,
     const FetchParameters::ResourceWidth& resource_width,
     ResourceRequest& out_request) {
+  FrameLoader::UpgradeInsecureRequest(out_request, global_scope_);
   SetFirstPartyCookieAndRequestorOrigin(out_request);
 }
 

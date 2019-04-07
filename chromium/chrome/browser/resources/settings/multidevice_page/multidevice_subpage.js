@@ -12,34 +12,71 @@ cr.exportPath('settings');
 Polymer({
   is: 'settings-multidevice-subpage',
 
-  behaviors: [I18nBehavior],
+  behaviors: [
+    MultiDeviceFeatureBehavior,
+    CrNetworkListenerBehavior,
+  ],
 
   properties: {
-    /** SettingsPrefsElement 'prefs' Object reference. See prefs.js. */
-    prefs: {
-      type: Object,
-      notify: true,
-    },
-
-    // TODO(jordynass): Set this based on data in this.prefs.
-    /**
-     * If a host has been verified, this is true if that host is and enabled and
-     * false if it is disabled. Otherwise it is undefined.
-     * @type {boolean|undefined}
-     */
-    hostEnabled: {
-      type: Boolean,
-      notify: true,
-    },
-
     /** @type {?SettingsRoutes} */
     routes: {
       type: Object,
       value: settings.routes,
     },
 
-    /** @type {MultiDevicePageContentData} */
-    pageContentData: Object,
+    /** Overridden from NetworkListenerBehavior. */
+    networkingPrivate: {
+      type: Object,
+      value: chrome.networkingPrivate,
+    },
+
+    /** Overridden from NetworkListenerBehavior. */
+    networkListChangeSubscriberSelectors_: {
+      type: Array,
+      value: () => ['settings-multidevice-tether-item'],
+    },
+
+    /** Overridden from NetworkListenerBehavior. */
+    networksChangeSubscriberSelectors_: {
+      type: Array,
+      value: () => ['settings-multidevice-tether-item'],
+    },
+
+    // TODO(jordynass): Once the service provides this data via pageContentData,
+    // replace this property with that path.
+    /**
+     * If SMS Connect requires setup, it displays a paper button prompting the
+     * setup flow. If it is already set up, it displays a regular toggle for the
+     * feature.
+     * @private {boolean}
+     */
+    androidMessagesRequiresSetup_: {
+      type: Boolean,
+      value: true,
+    },
+  },
+
+  /** @private {?settings.MultiDeviceBrowserProxy} */
+  browserProxy_: null,
+
+  /** @override */
+  created: function() {
+    this.browserProxy_ = settings.MultiDeviceBrowserProxyImpl.getInstance();
+  },
+
+  /** @private */
+  handleAndroidMessagesButtonClick_: function() {
+    this.browserProxy_.setUpAndroidSms();
+  },
+
+  listeners: {
+    'show-networks': 'onShowNetworks_',
+  },
+
+  onShowNetworks_: function() {
+    settings.navigateTo(
+        settings.routes.INTERNET_NETWORKS,
+        new URLSearchParams('type=' + CrOnc.Type.TETHER));
   },
 
   /**
@@ -51,12 +88,28 @@ Polymer({
         settings.MultiDeviceSettingsMode.HOST_SET_VERIFIED;
   },
 
+  /** @private */
+  handleForgetDeviceClick_: function() {
+    this.$.forgetDeviceDialog.showModal();
+  },
+
+  /** @private */
+  onForgetDeviceDialogCancelClick_: function() {
+    this.$.forgetDeviceDialog.close();
+  },
+
+  /** @private */
+  onForgetDeviceDialogConfirmClick_: function() {
+    this.fire('forget-device-requested');
+    this.$.forgetDeviceDialog.close();
+  },
+
   /**
    * @return {string}
    * @private
    */
   getStatusText_: function() {
-    return this.hostEnabled ? this.i18n('multideviceEnabled') :
+    return this.isSuiteOn() ? this.i18n('multideviceEnabled') :
                               this.i18n('multideviceDisabled');
   },
 });

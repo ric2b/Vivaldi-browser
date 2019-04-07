@@ -349,8 +349,9 @@ void InfoBarUiTest::ShowUi(const std::string& name) {
     case IBD::ALTERNATE_NAV_INFOBAR_DELEGATE: {
       AutocompleteMatch match;
       match.destination_url = GURL("http://intranetsite/");
-      AlternateNavInfoBarDelegate::Create(GetWebContents(), base::string16(),
-                                          match, GURL("http://example.com/"));
+      AlternateNavInfoBarDelegate::CreateForOmniboxNavigation(
+          GetWebContents(), base::string16(), match,
+          GURL("http://example.com/"));
       break;
     }
 
@@ -414,8 +415,7 @@ void InfoBarUiTest::ShowUi(const std::string& name) {
     case IBD::DATA_REDUCTION_PROXY_PREVIEW_INFOBAR_DELEGATE:
       PreviewsInfoBarDelegate::Create(
           GetWebContents(), previews::PreviewsType::LOFI, base::Time::Now(),
-          true, true,
-          PreviewsInfoBarDelegate::OnDismissPreviewsInfobarCallback(), nullptr);
+          true, true, OnDismissPreviewsUICallback(), nullptr);
       break;
 
     case IBD::AUTOMATION_INFOBAR_DELEGATE:
@@ -424,8 +424,7 @@ void InfoBarUiTest::ShowUi(const std::string& name) {
 
     case IBD::PAGE_LOAD_CAPPING_INFOBAR_DELEGATE:
       PageLoadCappingInfoBarDelegate::Create(
-          1 * 1024 * 1024, GetWebContents(),
-          PageLoadCappingInfoBarDelegate::PauseCallback());
+          GetWebContents(), PageLoadCappingInfoBarDelegate::PauseCallback());
       break;
 
     case IBD::BLOATED_RENDERER_INFOBAR_DELEGATE:

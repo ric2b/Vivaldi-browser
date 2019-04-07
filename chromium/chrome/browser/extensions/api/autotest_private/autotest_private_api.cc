@@ -31,15 +31,19 @@
 #include "ash/public/interfaces/constants.mojom.h"
 #include "base/feature_list.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/crostini/crostini_manager.h"
+#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/login_screen_client.h"
+#include "chrome/browser/ui/views/crostini/crostini_installer_view.h"
 #include "chrome/common/chrome_features.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/printing/printer_configuration.h"
+#include "components/arc/arc_prefs.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/common/service_manager_connection.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
@@ -573,6 +577,8 @@ AutotestPrivateSetPlayStoreEnabledFunction::Run() {
       return RespondNow(
           Error("ARC enabled state cannot be changed for the current user"));
     }
+    profile->GetPrefs()->SetBoolean(arc::prefs::kArcLocationServiceEnabled,
+                                    true);
     return RespondNow(NoArguments());
   } else {
     return RespondNow(Error("ARC is not available for the current user"));
@@ -580,6 +586,44 @@ AutotestPrivateSetPlayStoreEnabledFunction::Run() {
 #endif
   return RespondNow(Error("ARC is not available for the current platform"));
 }
+
+ExtensionFunction::ResponseAction
+AutotestPrivateRunCrostiniInstallerFunction::Run() {
+  DVLOG(1) << "AutotestPrivateInstallCrostiniFunction";
+#if defined(OS_CHROMEOS)
+  if (!IsCrostiniUIAllowedForProfile(ProfileManager::GetActiveUserProfile())) {
+    return RespondNow(Error("Crostini is not available for the current user"));
+  }
+  // Run GUI installer which will install crostini vm / container and
+  // start terminal app on completion.  After starting the installer,
+  // we call RestartCrostini and we will be put in the pending restarters
+  // queue and be notified on success/otherwise of installation.
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  CrostiniInstallerView::Show(profile);
+  CrostiniInstallerView::GetActiveViewForTesting()->Accept();
+  crostini::CrostiniManager::GetInstance()->RestartCrostini(
+      profile, kCrostiniDefaultVmName, kCrostiniDefaultContainerName,
+      base::BindOnce(
+          &AutotestPrivateRunCrostiniInstallerFunction::CrostiniRestarted,
+          this));
+
+  return RespondLater();
+#else
+  return RespondNow(
+      Error("Crostini is not available for the current platform"));
+#endif
+}
+
+#if defined(OS_CHROMEOS)
+void AutotestPrivateRunCrostiniInstallerFunction::CrostiniRestarted(
+    crostini::ConciergeClientResult result) {
+  if (result == crostini::ConciergeClientResult::SUCCESS) {
+    Respond(NoArguments());
+  } else {
+    Respond(Error("Error installing crostini"));
+  }
+}
+#endif
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<AutotestPrivateAPI>>::
     DestructorAtExit g_autotest_private_api_factory = LAZY_INSTANCE_INITIALIZER;

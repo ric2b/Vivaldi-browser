@@ -35,7 +35,7 @@ class GURL;
 
 namespace content {
 
-struct BackgroundFetchSettledFetch;
+struct BackgroundFetchRegistration;
 class EmbeddedWorkerRegistry;
 class EmbeddedWorkerTestHelper;
 class MockRenderProcessHost;
@@ -43,7 +43,6 @@ class ServiceWorkerContextCore;
 class ServiceWorkerContextWrapper;
 class TestBrowserContext;
 struct PlatformNotificationData;
-struct PushEventPayload;
 
 // In-Process EmbeddedWorker test helper.
 //
@@ -95,10 +94,6 @@ class EmbeddedWorkerTestHelper {
   // If |user_data_directory| is empty, the context makes storage stuff in
   // memory.
   explicit EmbeddedWorkerTestHelper(const base::FilePath& user_data_directory);
-  // S13nServiceWorker
-  EmbeddedWorkerTestHelper(
-      const base::FilePath& user_data_directory,
-      scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter);
   virtual ~EmbeddedWorkerTestHelper();
 
   // Registers a Mojo endpoint object derived from
@@ -172,24 +167,18 @@ class EmbeddedWorkerTestHelper {
   virtual void OnActivateEvent(
       mojom::ServiceWorker::DispatchActivateEventCallback callback);
   virtual void OnBackgroundFetchAbortEvent(
-      const std::string& developer_id,
-      const std::string& unique_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
+      const BackgroundFetchRegistration& registration,
       mojom::ServiceWorker::DispatchBackgroundFetchAbortEventCallback callback);
   virtual void OnBackgroundFetchClickEvent(
-      const std::string& developer_id,
-      mojom::BackgroundFetchState state,
+      const BackgroundFetchRegistration& registration,
       mojom::ServiceWorker::DispatchBackgroundFetchClickEventCallback callback);
   virtual void OnBackgroundFetchFailEvent(
-      const std::string& developer_id,
-      const std::string& unique_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
+      const BackgroundFetchRegistration& registration,
       mojom::ServiceWorker::DispatchBackgroundFetchFailEventCallback callback);
-  virtual void OnBackgroundFetchedEvent(
-      const std::string& developer_id,
-      const std::string& unique_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
-      mojom::ServiceWorker::DispatchBackgroundFetchedEventCallback callback);
+  virtual void OnBackgroundFetchSuccessEvent(
+      const BackgroundFetchRegistration& registration,
+      mojom::ServiceWorker::DispatchBackgroundFetchSuccessEventCallback
+          callback);
   virtual void OnCookieChangeEvent(
       const net::CanonicalCookie& cookie,
       ::network::mojom::CookieChangeCause cause,
@@ -203,7 +192,7 @@ class EmbeddedWorkerTestHelper {
       int embedded_worker_id,
       const network::ResourceRequest& request,
       blink::mojom::FetchEventPreloadHandlePtr preload_handle,
-      mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
+      blink::mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
       mojom::ServiceWorker::DispatchFetchEventCallback finish_callback);
   virtual void OnNotificationClickEvent(
       const std::string& notification_id,
@@ -216,7 +205,7 @@ class EmbeddedWorkerTestHelper {
       const PlatformNotificationData& notification_data,
       mojom::ServiceWorker::DispatchNotificationCloseEventCallback callback);
   virtual void OnPushEvent(
-      const PushEventPayload& payload,
+      base::Optional<std::string> payload,
       mojom::ServiceWorker::DispatchPushEventCallback callback);
   virtual void OnAbortPaymentEvent(
       payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
@@ -229,6 +218,7 @@ class EmbeddedWorkerTestHelper {
       payments::mojom::PaymentRequestEventDataPtr data,
       payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
       mojom::ServiceWorker::DispatchPaymentRequestEventCallback callback);
+  virtual void OnSetIdleTimerDelayToZero(int embedded_worker_id);
 
   // These functions simulate making Mojo calls to the browser.
   void SimulateWorkerReadyForInspection(int embedded_worker_id);
@@ -246,6 +236,11 @@ class EmbeddedWorkerTestHelper {
   blink::mojom::ServiceWorkerHost* GetServiceWorkerHost(
       int embedded_worker_id) {
     return embedded_worker_id_host_map_[embedded_worker_id].get();
+  }
+
+  mojom::EmbeddedWorkerInstanceHostProxy* GetEmbeddedWorkerInstanceHost(
+      int embedded_worker_id) {
+    return embedded_worker_id_instance_host_ptr_map_[embedded_worker_id].get();
   }
 
  private:
@@ -266,24 +261,18 @@ class EmbeddedWorkerTestHelper {
   void OnActivateEventStub(
       mojom::ServiceWorker::DispatchActivateEventCallback callback);
   void OnBackgroundFetchAbortEventStub(
-      const std::string& developer_id,
-      const std::string& unique_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
+      const BackgroundFetchRegistration& registration,
       mojom::ServiceWorker::DispatchBackgroundFetchAbortEventCallback callback);
   void OnBackgroundFetchClickEventStub(
-      const std::string& developer_id,
-      mojom::BackgroundFetchState state,
+      const BackgroundFetchRegistration& registration,
       mojom::ServiceWorker::DispatchBackgroundFetchClickEventCallback callback);
   void OnBackgroundFetchFailEventStub(
-      const std::string& developer_id,
-      const std::string& unique_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
+      const BackgroundFetchRegistration& registration,
       mojom::ServiceWorker::DispatchBackgroundFetchFailEventCallback callback);
-  void OnBackgroundFetchedEventStub(
-      const std::string& developer_id,
-      const std::string& unique_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
-      mojom::ServiceWorker::DispatchBackgroundFetchedEventCallback callback);
+  void OnBackgroundFetchSuccessEventStub(
+      const BackgroundFetchRegistration& registration,
+      mojom::ServiceWorker::DispatchBackgroundFetchSuccessEventCallback
+          callback);
   void OnCookieChangeEventStub(
       const net::CanonicalCookie& cookie,
       ::network::mojom::CookieChangeCause cause,
@@ -297,7 +286,7 @@ class EmbeddedWorkerTestHelper {
       int embedded_worker_id,
       const network::ResourceRequest& request,
       blink::mojom::FetchEventPreloadHandlePtr preload_handle,
-      mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
+      blink::mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
       mojom::ServiceWorker::DispatchFetchEventCallback finish_callback);
   void OnNotificationClickEventStub(
       const std::string& notification_id,
@@ -310,7 +299,7 @@ class EmbeddedWorkerTestHelper {
       const PlatformNotificationData& notification_data,
       mojom::ServiceWorker::DispatchNotificationCloseEventCallback callback);
   void OnPushEventStub(
-      const PushEventPayload& payload,
+      base::Optional<std::string> payload,
       mojom::ServiceWorker::DispatchPushEventCallback callback);
   void OnAbortPaymentEventStub(
       payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,

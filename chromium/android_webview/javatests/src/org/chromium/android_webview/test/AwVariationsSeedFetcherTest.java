@@ -4,6 +4,8 @@
 
 package org.chromium.android_webview.test;
 
+import static org.chromium.android_webview.test.OnlyRunIn.ProcessMode.SINGLE_PROCESS;
+
 import android.annotation.SuppressLint;
 import android.app.job.JobInfo;
 import android.app.job.JobParameters;
@@ -24,9 +26,7 @@ import org.chromium.android_webview.services.AwVariationsSeedFetcher;
 import org.chromium.android_webview.services.ServiceInit;
 import org.chromium.android_webview.test.util.VariationsTestUtils;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.base.test.util.parameter.SkipCommandLineParameterization;
 import org.chromium.components.background_task_scheduler.TaskIds;
 import org.chromium.components.variations.firstrun.VariationsSeedFetcher;
 import org.chromium.components.variations.firstrun.VariationsSeedFetcher.SeedInfo;
@@ -42,8 +42,8 @@ import java.util.concurrent.TimeoutException;
 /**
  * Test AwVariationsSeedFetcher.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
-@SkipCommandLineParameterization
+@RunWith(AwJUnit4ClassRunner.class)
+@OnlyRunIn(SINGLE_PROCESS)
 public class AwVariationsSeedFetcherTest {
     private static final int JOB_ID = TaskIds.WEBVIEW_VARIATIONS_SEED_FETCH_JOB_ID;
 

@@ -23,7 +23,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -74,7 +74,7 @@
 #include "net/proxy_resolution/pac_file_fetcher_impl.h"
 #include "net/proxy_resolution/proxy_config_service.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
-#include "net/quic/chromium/quic_utils_chromium.h"
+#include "net/quic/quic_utils_chromium.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/ssl/ssl_key_logger_impl.h"
 #include "net/url_request/url_fetcher.h"
@@ -124,7 +124,6 @@ class WrappedCertVerifierForIOThreadTesting : public net::CertVerifier {
 
   // CertVerifier implementation
   int Verify(const RequestParams& params,
-             net::CRLSet* crl_set,
              net::CertVerifyResult* verify_result,
              net::CompletionOnceCallback callback,
              std::unique_ptr<Request>* out_req,
@@ -133,7 +132,13 @@ class WrappedCertVerifierForIOThreadTesting : public net::CertVerifier {
     if (!g_cert_verifier_for_io_thread_testing)
       return net::ERR_FAILED;
     return g_cert_verifier_for_io_thread_testing->Verify(
-        params, crl_set, verify_result, std::move(callback), out_req, net_log);
+        params, verify_result, std::move(callback), out_req, net_log);
+  }
+
+  void SetConfig(const Config& config) override {
+    if (!g_cert_verifier_for_io_thread_testing)
+      return;
+    return g_cert_verifier_for_io_thread_testing->SetConfig(config);
   }
 };
 
@@ -279,11 +284,6 @@ IOThread::IOThread(
       weak_factory_(this) {
   scoped_refptr<base::SingleThreadTaskRunner> io_thread_proxy =
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
-  ChromeNetworkDelegate::InitializePrefsOnUIThread(
-      nullptr,
-      nullptr,
-      nullptr,
-      local_state);
 
   BrowserThread::SetIOThreadDelegate(this);
 
@@ -360,6 +360,11 @@ void IOThread::Init() {
 #endif
 
   ConstructSystemRequestContext();
+
+  // Prevent DCHECK failures when a NetworkContext is created with an encrypted
+  // cookie store.
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService))
+    content::GetNetworkServiceImpl()->set_os_crypt_is_configured();
 }
 
 void IOThread::CleanUp() {

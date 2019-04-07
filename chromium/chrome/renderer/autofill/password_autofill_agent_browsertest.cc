@@ -1098,6 +1098,7 @@ TEST_F(PasswordAutofillAgentTest,
 }
 
 TEST_F(PasswordAutofillAgentTest, SendPasswordFormsTest_EmptyForm) {
+  base::RunLoop().RunUntilIdle();
   fake_driver_.reset_password_forms_calls();
   LoadHTML(kEmptyFormHTML);
   base::RunLoop().RunUntilIdle();
@@ -1108,6 +1109,7 @@ TEST_F(PasswordAutofillAgentTest, SendPasswordFormsTest_EmptyForm) {
 }
 
 TEST_F(PasswordAutofillAgentTest, SendPasswordFormsTest_FormWithoutPasswords) {
+  base::RunLoop().RunUntilIdle();
   fake_driver_.reset_password_forms_calls();
   LoadHTML(kFormWithoutPasswordsHTML);
   base::RunLoop().RunUntilIdle();
@@ -1119,6 +1121,7 @@ TEST_F(PasswordAutofillAgentTest, SendPasswordFormsTest_FormWithoutPasswords) {
 
 TEST_F(PasswordAutofillAgentTest,
        SendPasswordFormsTest_UndetectedPasswordField) {
+  base::RunLoop().RunUntilIdle();
   fake_driver_.reset_password_forms_calls();
   LoadHTML(kFormWithoutPasswordsHTML);
   // Emulate that a password field appears but we don't detect that.
@@ -1206,6 +1209,8 @@ TEST_F(PasswordAutofillAgentTest, SendPasswordFormsTest_ReloadTab) {
 }
 
 TEST_F(PasswordAutofillAgentTest, SendPasswordFormsTest_Redirection) {
+  base::RunLoop().RunUntilIdle();
+
   fake_driver_.reset_password_forms_calls();
   LoadHTML(kEmptyWebpage);
   base::RunLoop().RunUntilIdle();
@@ -2563,7 +2568,6 @@ TEST_F(PasswordAutofillAgentTest, FillSuggestionPasswordChangeForms) {
   // Simulate the browser sending the login info, but set |wait_for_username|
   // to prevent the form from being immediately filled.
   fill_data_.wait_for_username = true;
-  fill_data_.is_possible_change_password_form = true;
   SimulateOnFillPasswordForm(fill_data_);
 
   for (const auto& selected_element : {username_element_, password_element_}) {
@@ -2589,7 +2593,6 @@ TEST_F(PasswordAutofillAgentTest,
 
   ClearUsernameAndPasswordFields();
   fill_data_.wait_for_username = true;
-  fill_data_.is_possible_change_password_form = true;
   SimulateOnFillPasswordForm(fill_data_);
   // Simulate a user clicking on the username element. This should produce a
   // message.
@@ -2607,7 +2610,6 @@ TEST_F(PasswordAutofillAgentTest,
 
   ClearUsernameAndPasswordFields();
   fill_data_.wait_for_username = true;
-  fill_data_.is_possible_change_password_form = true;
   SimulateOnFillPasswordForm(fill_data_);
   // Simulate a user clicking on the password element. This should produce a
   // message.
@@ -2984,7 +2986,6 @@ TEST_F(PasswordAutofillAgentTest,
 
   const struct {
     const char* html_form;
-    bool is_possible_change_password_form;
     bool does_trigger_autocomplete_on_fill;
     const char* fill_data_username_field_name;
     const char* fill_data_password_field_name;
@@ -2995,39 +2996,37 @@ TEST_F(PasswordAutofillAgentTest,
   } test_cases[] = {
       // Password form without name or id attributes specified for the input
       // fields.
-      {kFormContainsEmptyNamesHTML, false, true, kDummyUsernameField,
+      {kFormContainsEmptyNamesHTML, true, kDummyUsernameField,
        kDummyPasswordField, kAliceUsername, kAlicePassword, true, true},
 
       // Password form with ambiguous name or id attributes specified for the
       // input fields.
-      {kFormContainsAmbiguousNamesHTML, false, true, "credentials",
-       "credentials", kAliceUsername, kAlicePassword, true, true},
+      {kFormContainsAmbiguousNamesHTML, true, "credentials", "credentials",
+       kAliceUsername, kAlicePassword, true, true},
 
       // Change password form without name or id attributes specified for the
       // input fields and |autocomplete='current-password'| attribute for old
       // password field.
-      {kChangePasswordFormContainsEmptyNamesHTML, true, true,
-       kDummyUsernameField, kDummyPasswordField, kAliceUsername, kAlicePassword,
-       true, true},
+      {kChangePasswordFormContainsEmptyNamesHTML, true, kDummyUsernameField,
+       kDummyPasswordField, kAliceUsername, kAlicePassword, true, true},
 
       // Change password form without username field.
-      {kChangePasswordFormButNoUsername, true, true, kEmpty,
-       kDummyPasswordField, kEmpty, kAlicePassword, false, true},
+      {kChangePasswordFormButNoUsername, true, kEmpty, kDummyPasswordField,
+       kEmpty, kAlicePassword, false, true},
 
       // Change password form without name or id attributes specified for the
       // input fields and |autocomplete='new-password'| attribute for new
       // password fields. This form *do not* trigger |OnFillPasswordForm| from
       // browser.
-      {kChangePasswordFormButNoOldPassword, true, false, kDummyUsernameField,
+      {kChangePasswordFormButNoOldPassword, false, kDummyUsernameField,
        kDummyPasswordField, kEmpty, kEmpty, false, false},
 
       // Change password form without name or id attributes specified for the
       // input fields but |autocomplete='current-password'| or
       // |autocomplete='new-password'| attributes are missing for old and new
       // password fields respectively.
-      {kChangePasswordFormButNoAutocompleteAttribute, true, true,
-       kDummyUsernameField, kDummyPasswordField, kAliceUsername, kAlicePassword,
-       true, true},
+      {kChangePasswordFormButNoAutocompleteAttribute, true, kDummyUsernameField,
+       kDummyPasswordField, kAliceUsername, kAlicePassword, true, true},
   };
 
   for (const auto& test_case : test_cases) {
@@ -3059,8 +3058,6 @@ TEST_F(PasswordAutofillAgentTest,
     UpdateOriginForHTML(test_case.html_form);
     if (test_case.does_trigger_autocomplete_on_fill) {
       // Prepare |fill_data_| to trigger autocomplete.
-      fill_data_.is_possible_change_password_form =
-          test_case.is_possible_change_password_form;
       fill_data_.username_field.name =
           ASCIIToUTF16(test_case.fill_data_username_field_name);
       fill_data_.password_field.name =
@@ -3284,8 +3281,7 @@ TEST_F(PasswordAutofillAgentTest, ShowAutofillSignaturesFlag) {
 
     // Check only form signature attribute. The full test is in
     // "PasswordGenerationAgentTestForHtmlAnnotation.*".
-    WebString form_signature_attribute =
-        WebString::FromASCII(kDebugAttributeForFormSignature);
+    WebString form_signature_attribute = WebString::FromASCII("form_signature");
     EXPECT_EQ(form_element.HasAttribute(form_signature_attribute),
               show_signatures);
   }

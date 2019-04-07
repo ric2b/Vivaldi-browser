@@ -37,15 +37,15 @@ declare_overrides() {
 
   enable_hangout_services_extension = true
 
-  enable_precompiled_headers = !is_official_build && !use_cc_wrapper
+  enable_precompiled_headers = !is_official_build && cc_wrapper != ""
 
   if (is_win) {
     skip_archive_compression = is_component_build
   }
 
-  #if (is_mac && !is_component_build) {
-  #  # We need to force SDK 10.12 for Mac builds due to VB-40761
-  #  # Static builds are mostly built by the builder
-  #  mac_use_sdk = "10.13"
-  #}
+  if (is_mac) { # && !is_component_build) {
+    # We need to force SDK 10.13 for Mac builds
+    # since Chromium don't compile with 10.14
+    mac_use_sdk = "10.13"
+  }
 }

@@ -24,6 +24,27 @@ uintptr_t key_from_ptr(T* ptr) {
 
 }  // namespace
 
+class AsyncDispatcher::ExceptionState : public LinkNode<ExceptionState> {
+ public:
+  explicit ExceptionState(AsyncDispatcher* async_dispatcher) {
+    async_dispatcher->exception_list_.Append(this);
+  }
+  ~ExceptionState() { RemoveFromList(); }
+
+  async_exception_t* exception() {
+    // ExceptionState objects are allocated in-place in the |state| field of an
+    // enclosing async_exceptionwait_t, so async_exception_t address can be
+    // calculated by subtracting state offset in async_exception_t from |this|.
+    static_assert(std::is_standard_layout<async_exception_t>(),
+                  "async_wait_t is expected to have standard layout.");
+    return reinterpret_cast<async_exception_t*>(
+        reinterpret_cast<uint8_t*>(this) - offsetof(async_exception_t, state));
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ExceptionState);
+};
+
 class AsyncDispatcher::WaitState : public LinkNode<WaitState> {
  public:
   explicit WaitState(AsyncDispatcher* async_dispatcher) {
@@ -82,6 +103,7 @@ AsyncDispatcher::AsyncDispatcher() : ops_storage_({}) {
                                   ZX_EVENT_SIGNALED, ZX_WAIT_ASYNC_REPEATING);
   ZX_DCHECK(status == ZX_OK, status);
 
+  ops_storage_.version = ASYNC_OPS_V2;
   ops_storage_.v1.now = NowOp;
   ops_storage_.v1.begin_wait = BeginWaitOp;
   ops_storage_.v1.cancel_wait = CancelWaitOp;
@@ -89,18 +111,27 @@ AsyncDispatcher::AsyncDispatcher() : ops_storage_({}) {
   ops_storage_.v1.cancel_task = CancelTaskOp;
   ops_storage_.v1.queue_packet = QueuePacketOp;
   ops_storage_.v1.set_guest_bell_trap = SetGuestBellTrapOp;
+  ops_storage_.v2.bind_exception_port = BindExceptionPortOp;
+  ops_storage_.v2.unbind_exception_port = UnbindExceptionPortOp;
   ops = &ops_storage_;
 
-  DCHECK(!async_get_default());
-  async_set_default(this);
+  DCHECK(!async_get_default_dispatcher());
+  async_set_default_dispatcher(this);
 }
 
 AsyncDispatcher::~AsyncDispatcher() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK_EQ(async_get_default(), this);
+  DCHECK_EQ(async_get_default_dispatcher(), this);
 
   // Some waits and tasks may be canceled while the dispatcher is being
   // destroyed, so pop-from-head until none remain.
+
+  while (!exception_list_.empty()) {
+    ExceptionState* state = exception_list_.head()->value();
+    async_exception_t* exception = state->exception();
+    state->~ExceptionState();
+    exception->handler(this, exception, ZX_ERR_CANCELED, nullptr);
+  }
 
   while (!wait_list_.empty()) {
     WaitState* state = wait_list_.head()->value();
@@ -116,7 +147,7 @@ AsyncDispatcher::~AsyncDispatcher() {
     task->handler(this, task, ZX_ERR_CANCELED);
   }
 
-  async_set_default(nullptr);
+  async_set_default_dispatcher(nullptr);
 }
 
 zx_status_t AsyncDispatcher::DispatchOrWaitUntil(zx_time_t deadline) {
@@ -127,8 +158,7 @@ zx_status_t AsyncDispatcher::DispatchOrWaitUntil(zx_time_t deadline) {
   if (status != ZX_OK)
     return status;
 
-  if (packet.type == ZX_PKT_TYPE_SIGNAL_ONE ||
-      packet.type == ZX_PKT_TYPE_SIGNAL_REP) {
+  if (ZX_PKT_IS_SIGNAL_ONE(packet.type) || ZX_PKT_IS_SIGNAL_REP(packet.type)) {
     if (packet.key == key_from_ptr(&timer_)) {
       // |timer_| has expired.
       DCHECK(packet.signal.observed & ZX_TIMER_SIGNALED);
@@ -142,16 +172,23 @@ zx_status_t AsyncDispatcher::DispatchOrWaitUntil(zx_time_t deadline) {
       return ZX_ERR_CANCELED;
     } else {
       DCHECK_EQ(packet.type, ZX_PKT_TYPE_SIGNAL_ONE);
-      async_wait_t* wait = reinterpret_cast<async_wait_t*>(packet.key);
+      auto* wait = reinterpret_cast<async_wait_t*>(packet.key);
 
-      // Clean the state before invoking the handler: it may destroy the wait.
-      WaitState* state = reinterpret_cast<WaitState*>(&wait->state);
+      // Clean the state before invoking the handler: it may destroy |*wait|.
+      auto* state = reinterpret_cast<WaitState*>(&wait->state);
       state->~WaitState();
 
       wait->handler(this, wait, packet.status, &packet.signal);
 
       return ZX_OK;
     }
+  } else if (ZX_PKT_IS_EXCEPTION(packet.type)) {
+    auto* exception = reinterpret_cast<async_exception_t*>(packet.key);
+
+    // |exception| may have been deleted by the time |handler| returns.
+    exception->handler(this, exception, packet.status, &packet);
+
+    return ZX_OK;
   }
 
   NOTREACHED();
@@ -165,39 +202,54 @@ void AsyncDispatcher::Stop() {
   ZX_DCHECK(status == ZX_OK, status);
 }
 
-zx_time_t AsyncDispatcher::NowOp(async_t* async) {
+zx_time_t AsyncDispatcher::NowOp(async_dispatcher_t* async) {
   DCHECK(async);
   return zx_clock_get(ZX_CLOCK_MONOTONIC);
 }
 
-zx_status_t AsyncDispatcher::BeginWaitOp(async_t* async, async_wait_t* wait) {
+zx_status_t AsyncDispatcher::BeginWaitOp(async_dispatcher_t* async,
+                                         async_wait_t* wait) {
   return static_cast<AsyncDispatcher*>(async)->BeginWait(wait);
 }
 
-zx_status_t AsyncDispatcher::CancelWaitOp(async_t* async, async_wait_t* wait) {
+zx_status_t AsyncDispatcher::CancelWaitOp(async_dispatcher_t* async,
+                                          async_wait_t* wait) {
   return static_cast<AsyncDispatcher*>(async)->CancelWait(wait);
 }
 
-zx_status_t AsyncDispatcher::PostTaskOp(async_t* async, async_task_t* task) {
+zx_status_t AsyncDispatcher::PostTaskOp(async_dispatcher_t* async,
+                                        async_task_t* task) {
   return static_cast<AsyncDispatcher*>(async)->PostTask(task);
 }
 
-zx_status_t AsyncDispatcher::CancelTaskOp(async_t* async, async_task_t* task) {
+zx_status_t AsyncDispatcher::CancelTaskOp(async_dispatcher_t* async,
+                                          async_task_t* task) {
   return static_cast<AsyncDispatcher*>(async)->CancelTask(task);
 }
 
-zx_status_t AsyncDispatcher::QueuePacketOp(async_t* async,
+zx_status_t AsyncDispatcher::QueuePacketOp(async_dispatcher_t* async,
                                            async_receiver_t* receiver,
                                            const zx_packet_user_t* data) {
   return ZX_ERR_NOT_SUPPORTED;
 }
 
-zx_status_t AsyncDispatcher::SetGuestBellTrapOp(async_t* async,
+zx_status_t AsyncDispatcher::SetGuestBellTrapOp(async_dispatcher_t* async,
                                                 async_guest_bell_trap_t* trap,
                                                 zx_handle_t guest,
                                                 zx_vaddr_t addr,
                                                 size_t length) {
   return ZX_ERR_NOT_SUPPORTED;
+}
+
+zx_status_t AsyncDispatcher::BindExceptionPortOp(async_dispatcher_t* async,
+                                                 async_exception_t* exception) {
+  return static_cast<AsyncDispatcher*>(async)->BindExceptionPort(exception);
+}
+
+zx_status_t AsyncDispatcher::UnbindExceptionPortOp(
+    async_dispatcher_t* async,
+    async_exception_t* exception) {
+  return static_cast<AsyncDispatcher*>(async)->UnbindExceptionPort(exception);
 }
 
 zx_status_t AsyncDispatcher::BeginWait(async_wait_t* wait) {
@@ -220,10 +272,13 @@ zx_status_t AsyncDispatcher::BeginWait(async_wait_t* wait) {
 zx_status_t AsyncDispatcher::CancelWait(async_wait_t* wait) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  zx_status_t status =
-      port_.cancel(wait->object, reinterpret_cast<uintptr_t>(wait));
+  if (!wait->state.reserved[0])
+    return ZX_ERR_NOT_FOUND;
+
+  zx_status_t status = port_.cancel(*zx::unowned_handle(wait->object),
+                                    reinterpret_cast<uintptr_t>(wait));
   if (status == ZX_OK) {
-    WaitState* state = reinterpret_cast<WaitState*>(&(wait->state));
+    auto* state = reinterpret_cast<WaitState*>(&(wait->state));
     state->~WaitState();
   }
 
@@ -268,10 +323,44 @@ zx_status_t AsyncDispatcher::CancelTask(async_task_t* task) {
   if (!task->state.reserved[0])
     return ZX_ERR_NOT_FOUND;
 
-  TaskState* state = reinterpret_cast<TaskState*>(&task->state);
+  auto* state = reinterpret_cast<TaskState*>(&task->state);
   state->~TaskState();
 
   return ZX_OK;
+}
+
+zx_status_t AsyncDispatcher::BindExceptionPort(async_exception_t* exception) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  static_assert(
+      sizeof(AsyncDispatcher::ExceptionState) <= sizeof(async_state_t),
+      "ExceptionState is too big");
+  ExceptionState* state = new (&exception->state) ExceptionState(this);
+
+  zx_status_t status = zx_task_bind_exception_port(
+      exception->task, port_.get(), reinterpret_cast<uintptr_t>(exception),
+      exception->options);
+  if (status != ZX_OK)
+    state->~ExceptionState();
+
+  return status;
+}
+
+zx_status_t AsyncDispatcher::UnbindExceptionPort(async_exception_t* exception) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  if (!exception->state.reserved[0])
+    return ZX_ERR_NOT_FOUND;
+
+  zx_status_t status = zx_task_bind_exception_port(
+      exception->task, ZX_HANDLE_INVALID,
+      reinterpret_cast<uintptr_t>(exception), exception->options);
+  if (status == ZX_OK) {
+    auto* state = reinterpret_cast<ExceptionState*>(&exception->state);
+    state->~ExceptionState();
+  }
+
+  return status;
 }
 
 void AsyncDispatcher::DispatchTasks() {

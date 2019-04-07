@@ -170,6 +170,11 @@ Polymer({
   openDialogs_: [],
 
   /** @override */
+  ready: function() {
+    cr.ui.FocusOutlineManager.forDocument(document);
+  },
+
+  /** @override */
   attached: function() {
     this.nativeLayer_ = print_preview.NativeLayer.getInstance();
     this.documentInfo_ = new print_preview.DocumentInfo();
@@ -320,6 +325,8 @@ Polymer({
     this.notifyPath('documentInfo_.title');
     this.notifyPath('documentInfo_.pageCount');
     this.$.model.setStickySettings(settings.serializedAppStateStr);
+    this.$.model.setPolicySettings(
+        settings.headerFooter, settings.isHeaderFooterManaged);
     this.measurementSystem_ = new print_preview.MeasurementSystem(
         settings.thousandsDelimeter, settings.decimalDelimeter,
         settings.unitType);

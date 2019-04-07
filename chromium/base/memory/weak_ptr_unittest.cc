@@ -392,6 +392,54 @@ TEST(WeakPtrTest, InvalidateWeakPtrs) {
   EXPECT_FALSE(factory.HasWeakPtrs());
 }
 
+// Tests that WasInvalidated() is true only for invalidated WeakPtrs (not
+// nullptr) and doesn't DCHECK (e.g. because of a dereference attempt).
+TEST(WeakPtrTest, WasInvalidatedByFactoryDestruction) {
+  WeakPtr<int> ptr;
+  EXPECT_FALSE(ptr.WasInvalidated());
+
+  // Test |data| destroyed. That is, the typical pattern when |data| (and its
+  // associated factory) go out of scope.
+  {
+    int data = 0;
+    WeakPtrFactory<int> factory(&data);
+    ptr = factory.GetWeakPtr();
+
+    // Verify that a live WeakPtr is not reported as Invalidated.
+    EXPECT_FALSE(ptr.WasInvalidated());
+  }
+
+  // Checking validity shouldn't read beyond the stack frame.
+  EXPECT_TRUE(ptr.WasInvalidated());
+  ptr = nullptr;
+  EXPECT_FALSE(ptr.WasInvalidated());
+}
+
+// As above, but testing InvalidateWeakPtrs().
+TEST(WeakPtrTest, WasInvalidatedByInvalidateWeakPtrs) {
+  int data = 0;
+  WeakPtrFactory<int> factory(&data);
+  WeakPtr<int> ptr = factory.GetWeakPtr();
+  EXPECT_FALSE(ptr.WasInvalidated());
+  factory.InvalidateWeakPtrs();
+  EXPECT_TRUE(ptr.WasInvalidated());
+  ptr = nullptr;
+  EXPECT_FALSE(ptr.WasInvalidated());
+}
+
+// A WeakPtr should not be reported as 'invalidated' if nullptr was assigned to
+// it.
+TEST(WeakPtrTest, WasInvalidatedWhilstNull) {
+  int data = 0;
+  WeakPtrFactory<int> factory(&data);
+  WeakPtr<int> ptr = factory.GetWeakPtr();
+  EXPECT_FALSE(ptr.WasInvalidated());
+  ptr = nullptr;
+  EXPECT_FALSE(ptr.WasInvalidated());
+  factory.InvalidateWeakPtrs();
+  EXPECT_FALSE(ptr.WasInvalidated());
+}
+
 TEST(WeakPtrTest, MaybeValidOnSameSequence) {
   int data;
   WeakPtrFactory<int> factory(&data);

@@ -20,7 +20,7 @@ void LoginDataDispatcher::Observer::OnAuthEnabledForUserChanged(
     bool enabled,
     const base::Optional<base::Time>& auth_reenabled_time) {}
 
-void LoginDataDispatcher::Observer::OnClickToUnlockEnabledForUserChanged(
+void LoginDataDispatcher::Observer::OnTapToUnlockEnabledForUserChanged(
     const AccountId& user,
     bool enabled) {}
 
@@ -34,7 +34,13 @@ void LoginDataDispatcher::Observer::OnShowEasyUnlockIcon(
     const AccountId& user,
     const mojom::EasyUnlockIconOptionsPtr& icon) {}
 
-void LoginDataDispatcher::Observer::OnDevChannelInfoChanged(
+void LoginDataDispatcher::Observer::OnShowWarningBanner(
+    const base::string16& message) {}
+
+void LoginDataDispatcher::Observer::OnHideWarningBanner() {}
+
+void LoginDataDispatcher::Observer::OnSystemInfoChanged(
+    bool show,
     const std::string& os_version_label_text,
     const std::string& enterprise_info_text,
     const std::string& bluetooth_name) {}
@@ -95,10 +101,10 @@ void LoginDataDispatcher::SetAuthEnabledForUser(
   }
 }
 
-void LoginDataDispatcher::SetClickToUnlockEnabledForUser(const AccountId& user,
-                                                         bool enabled) {
+void LoginDataDispatcher::SetTapToUnlockEnabledForUser(const AccountId& user,
+                                                       bool enabled) {
   for (auto& observer : observers_)
-    observer.OnClickToUnlockEnabledForUserChanged(user, enabled);
+    observer.OnTapToUnlockEnabledForUserChanged(user, enabled);
 }
 
 void LoginDataDispatcher::SetForceOnlineSignInForUser(const AccountId& user) {
@@ -118,13 +124,24 @@ void LoginDataDispatcher::ShowEasyUnlockIcon(
     observer.OnShowEasyUnlockIcon(user, icon);
 }
 
-void LoginDataDispatcher::SetDevChannelInfo(
+void LoginDataDispatcher::ShowWarningBanner(const base::string16& message) {
+  for (auto& observer : observers_)
+    observer.OnShowWarningBanner(message);
+}
+
+void LoginDataDispatcher::HideWarningBanner() {
+  for (auto& observer : observers_)
+    observer.OnHideWarningBanner();
+}
+
+void LoginDataDispatcher::SetSystemInfo(
+    bool show_if_hidden,
     const std::string& os_version_label_text,
     const std::string& enterprise_info_text,
     const std::string& bluetooth_name) {
   for (auto& observer : observers_) {
-    observer.OnDevChannelInfoChanged(os_version_label_text,
-                                     enterprise_info_text, bluetooth_name);
+    observer.OnSystemInfoChanged(show_if_hidden, os_version_label_text,
+                                 enterprise_info_text, bluetooth_name);
   }
 }
 

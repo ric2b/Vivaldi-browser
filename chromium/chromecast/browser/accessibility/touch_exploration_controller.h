@@ -12,6 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
+#include "chromecast/browser/accessibility/accessibility_sound_player.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/events/event.h"
 #include "ui/events/event_rewriter.h"
@@ -39,25 +40,13 @@ class TouchExplorationControllerDelegate {
  public:
   virtual ~TouchExplorationControllerDelegate() {}
 
-  // This function should be called when the passthrough earcon should be
-  // played.
-  virtual void PlayPassthroughEarcon() = 0;
-
-  // This function should be called when the exit screen earcon should be
-  // played.
-  virtual void PlayExitScreenEarcon() = 0;
-
-  // This function should be called when the enter screen earcon should be
-  // played.
-  virtual void PlayEnterScreenEarcon() = 0;
-
-  // This function should be called when the touch type earcon should
-  // be played.
-  virtual void PlayTouchTypeEarcon() = 0;
-
   // Called when the user performed an accessibility gesture while in touch
   // accessibility mode, that should be forwarded to ChromeVox.
   virtual void HandleAccessibilityGesture(ax::mojom::Gesture gesture) = 0;
+
+  // Called when the user has performed a single tap, if it is not within
+  // lift activation bounds.
+  virtual void HandleTap(const gfx::Point touch_location) = 0;
 };
 
 // TouchExplorationController is used in tandem with "Spoken Feedback" to
@@ -178,7 +167,8 @@ class TouchExplorationController : public ui::EventRewriter,
  public:
   TouchExplorationController(
       aura::Window* root_window,
-      TouchExplorationControllerDelegate* delegate);
+      TouchExplorationControllerDelegate* delegate,
+      AccessibilitySoundPlayer* accessibility_sound_player);
   ~TouchExplorationController() override;
 
   // Make synthesized touch events are anchored at this point. This is
@@ -190,13 +180,6 @@ class TouchExplorationController : public ui::EventRewriter,
   // |bounds| are in root window coordinates.
   void SetExcludeBounds(const gfx::Rect& bounds);
 
-  // Updates |lift_activation_bounds_|. See |lift_activation_bounds_| for more
-  // information.
-  void SetLiftActivationBounds(const gfx::Rect& bounds);
-
- private:
-  friend class TouchExplorationControllerTestApi;
-
   // Overridden from ui::EventRewriter
   ui::EventRewriteStatus RewriteEvent(
       const ui::Event& event,
@@ -204,6 +187,9 @@ class TouchExplorationController : public ui::EventRewriter,
   ui::EventRewriteStatus NextDispatchEvent(
       const ui::Event& last_event,
       std::unique_ptr<ui::Event>* new_event) override;
+
+ private:
+  friend class TouchExplorationControllerTestApi;
 
   // Event handlers based on the current state - see State, below.
   ui::EventRewriteStatus InNoFingersDown(
@@ -224,9 +210,6 @@ class TouchExplorationController : public ui::EventRewriter,
   ui::EventRewriteStatus InTouchExploration(
       const ui::TouchEvent& event,
       std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus InCornerPassthrough(
-      const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
   ui::EventRewriteStatus InOneFingerPassthrough(
       const ui::TouchEvent& event,
       std::unique_ptr<ui::Event>* rewritten_event);
@@ -242,9 +225,6 @@ class TouchExplorationController : public ui::EventRewriter,
   ui::EventRewriteStatus InTwoFingerTap(
       const ui::TouchEvent& event,
       std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus InEdgePassthrough(
-      const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
 
   // Returns the current time of the tick clock.
   base::TimeTicks Now();
@@ -255,13 +235,6 @@ class TouchExplorationController : public ui::EventRewriter,
   // we treat that as a single mouse move (touch exploration) event.
   void StartTapTimer();
   void OnTapTimerFired();
-
-  // This timer is started every timer we get the first press event and the
-  // finger is in the corner of the screen.
-  // It fires after the corner passthrough delay elapses. If the
-  // user is still in the corner by the time this timer fires, all subsequent
-  // fingers added on the screen will be passed through.
-  void OnPassthroughTimerFired();
 
   // Dispatch a new event outside of the event rewriting flow.
   void DispatchEvent(ui::Event* event);
@@ -390,11 +363,6 @@ class TouchExplorationController : public ui::EventRewriter,
     // all fingers.
     ONE_FINGER_PASSTHROUGH,
 
-    // If the user has pressed and held down the left corner past long press,
-    // then as long as they are holding the corner, all subsequent fingers
-    // registered will be in passthrough.
-    CORNER_PASSTHROUGH,
-
     // If the user added another finger in SINGLE_TAP_PRESSED, or if the user
     // has multiple fingers fingers down in any other state between
     // passthrough, touch exploration, and gestures, they must release
@@ -406,10 +374,6 @@ class TouchExplorationController : public ui::EventRewriter,
     // If the user taps the screen with two fingers and releases both fingers
     // before the grace period has passed, spoken feedback will be silenced.
     TWO_FINGER_TAP,
-
-    // If the user enters the screen from the edge, pass events through,
-    // so that they are available to the system gesture handler.
-    EDGE_PASSTHROUGH,
   };
 
   enum AnchorPointState {
@@ -425,8 +389,6 @@ class TouchExplorationController : public ui::EventRewriter,
     TOP_EDGE = 1 << 1,
     LEFT_EDGE = 1 << 2,
     BOTTOM_EDGE = 1 << 3,
-    BOTTOM_LEFT_CORNER = LEFT_EDGE | BOTTOM_EDGE,
-    BOTTOM_RIGHT_CORNER = RIGHT_EDGE | BOTTOM_EDGE,
   };
 
   // Given a point, if it is within the given inset of an edge, returns the
@@ -448,8 +410,11 @@ class TouchExplorationController : public ui::EventRewriter,
 
   aura::Window* root_window_;
 
-  // Handles volume control. Not owned.
+  // Handles accessibility gestures. Not owned.
   TouchExplorationControllerDelegate* delegate_;
+
+  // Handles earcons. Not owned.
+  AccessibilitySoundPlayer* accessibility_sound_player_;
 
   // A set of touch ids for fingers currently touching the screen.
   std::vector<int> current_touch_ids_;
@@ -497,9 +462,6 @@ class TouchExplorationController : public ui::EventRewriter,
 
   // A timer that fires after the double-tap delay.
   base::OneShotTimer tap_timer_;
-
-  // A timer that fires to enter passthrough.
-  base::OneShotTimer passthrough_timer_;
 
   // A timer to fire an indicating sound when sliding to change volume.
   base::RepeatingTimer sound_timer_;

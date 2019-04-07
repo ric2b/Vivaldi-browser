@@ -62,10 +62,9 @@ TEST_F(ModelTypeTest, IsProxyType) {
 // numbers.
 TEST_F(ModelTypeTest, ModelTypeToFromSpecificsFieldNumber) {
   ModelTypeSet protocol_types = ProtocolTypes();
-  for (ModelTypeSet::Iterator iter = protocol_types.First(); iter.Good();
-       iter.Inc()) {
-    int field_number = GetSpecificsFieldNumberFromModelType(iter.Get());
-    EXPECT_EQ(iter.Get(), GetModelTypeFromSpecificsFieldNumber(field_number));
+  for (ModelType type : protocol_types) {
+    int field_number = GetSpecificsFieldNumberFromModelType(type);
+    EXPECT_EQ(type, GetModelTypeFromSpecificsFieldNumber(field_number));
   }
 }
 
@@ -76,9 +75,9 @@ TEST_F(ModelTypeTest, ModelTypeOfInvalidSpecificsFieldNumber) {
 TEST_F(ModelTypeTest, ModelTypeHistogramMapping) {
   std::set<int> histogram_values;
   ModelTypeSet all_types = ModelTypeSet::All();
-  for (ModelTypeSet::Iterator it = all_types.First(); it.Good(); it.Inc()) {
-    SCOPED_TRACE(ModelTypeToString(it.Get()));
-    int histogram_value = ModelTypeToHistogramInt(it.Get());
+  for (ModelType type : all_types) {
+    SCOPED_TRACE(ModelTypeToString(type));
+    int histogram_value = ModelTypeToHistogramInt(type);
 
     EXPECT_TRUE(histogram_values.insert(histogram_value).second)
         << "Expected histogram values to be unique";
@@ -87,7 +86,7 @@ TEST_F(ModelTypeTest, ModelTypeHistogramMapping) {
     // UMA_HISTOGRAM that use this mapping specify MODEL_TYPE_COUNT as the
     // maximum possible value.  If you break this assumption, you should update
     // those histograms.
-    if (it.Get() == NOTES)
+    if (type == NOTES)
       continue;
 
     EXPECT_LT(histogram_value, MODEL_TYPE_COUNT);
@@ -97,9 +96,9 @@ TEST_F(ModelTypeTest, ModelTypeHistogramMapping) {
 TEST_F(ModelTypeTest, ModelTypeToStableIdentifier) {
   std::set<int> identifiers;
   ModelTypeSet all_types = ModelTypeSet::All();
-  for (ModelTypeSet::Iterator it = all_types.First(); it.Good(); it.Inc()) {
-    SCOPED_TRACE(ModelTypeToString(it.Get()));
-    int stable_identifier = ModelTypeToStableIdentifier(it.Get());
+  for (ModelType type : all_types) {
+    SCOPED_TRACE(ModelTypeToString(type));
+    int stable_identifier = ModelTypeToStableIdentifier(type);
     EXPECT_GT(stable_identifier, 0);
     EXPECT_TRUE(identifiers.insert(stable_identifier).second)
         << "Expected identifier values to be unique";
@@ -124,11 +123,11 @@ TEST_F(ModelTypeTest, ModelTypeSetFromString) {
 
 TEST_F(ModelTypeTest, DefaultFieldValues) {
   ModelTypeSet types = ProtocolTypes();
-  for (ModelTypeSet::Iterator it = types.First(); it.Good(); it.Inc()) {
-    SCOPED_TRACE(ModelTypeToString(it.Get()));
+  for (ModelType type : types) {
+    SCOPED_TRACE(ModelTypeToString(type));
 
     sync_pb::EntitySpecifics specifics;
-    AddDefaultFieldValue(it.Get(), &specifics);
+    AddDefaultFieldValue(type, &specifics);
     EXPECT_TRUE(specifics.IsInitialized());
 
     std::string tmp;
@@ -138,14 +137,13 @@ TEST_F(ModelTypeTest, DefaultFieldValues) {
     EXPECT_TRUE(from_string.ParseFromString(tmp));
     EXPECT_TRUE(from_string.IsInitialized());
 
-    EXPECT_EQ(it.Get(), GetModelTypeFromSpecifics(from_string));
+    EXPECT_EQ(type, GetModelTypeFromSpecifics(from_string));
   }
 }
 
 TEST_F(ModelTypeTest, ModelTypeToRootTagValues) {
   ModelTypeSet all_types = ModelTypeSet::All();
-  for (ModelTypeSet::Iterator it = all_types.First(); it.Good(); it.Inc()) {
-    ModelType model_type = it.Get();
+  for (ModelType model_type : all_types) {
     std::string root_tag = ModelTypeToRootTag(model_type);
     if (IsProxyType(model_type)) {
       EXPECT_EQ(root_tag, std::string());
@@ -163,8 +161,7 @@ TEST_F(ModelTypeTest, ModelTypeToRootTagValues) {
 
 TEST_F(ModelTypeTest, ModelTypeStringMapping) {
   ModelTypeSet all_types = ModelTypeSet::All();
-  for (ModelTypeSet::Iterator it = all_types.First(); it.Good(); it.Inc()) {
-    ModelType model_type = it.Get();
+  for (ModelType model_type : all_types) {
     const char* model_type_string = ModelTypeToString(model_type);
     ModelType converted_model_type = ModelTypeFromString(model_type_string);
     if (IsRealDataType(model_type))
@@ -176,8 +173,7 @@ TEST_F(ModelTypeTest, ModelTypeStringMapping) {
 
 TEST_F(ModelTypeTest, ModelTypeNotificationTypeMapping) {
   ModelTypeSet all_types = ModelTypeSet::All();
-  for (ModelTypeSet::Iterator it = all_types.First(); it.Good(); it.Inc()) {
-    ModelType model_type = it.Get();
+  for (ModelType model_type : all_types) {
     std::string notification_type;
     bool ret = RealModelTypeToNotificationType(model_type, &notification_type);
     if (ret) {

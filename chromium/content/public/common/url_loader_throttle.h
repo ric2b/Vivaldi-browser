@@ -57,6 +57,13 @@ class CONTENT_EXPORT URLLoaderThrottle {
 
     virtual void SetPriority(net::RequestPriority priority);
 
+    // Updates the response head which is deferred to be sent. This method needs
+    // to be called when the response is deferred on
+    // URLLoaderThrottle::WillProcessResponse() and before calling
+    // Delegate::Resume().
+    virtual void UpdateDeferredResponseHead(
+        const network::ResourceResponseHead& new_response_head);
+
     // Pauses/resumes reading response body if the resource is fetched from
     // network.
     virtual void PauseReadingBodyFromNet();
@@ -82,24 +89,42 @@ class CONTENT_EXPORT URLLoaderThrottle {
   virtual void DetachFromCurrentSequence();
 
   // Called before the resource request is started.
+  // |request| needs to be modified before the callback return (i.e.
+  // asynchronously touching the pointer in defer case is not valid)
+  // When |request->url| is modified it will make an internal redirect, which
+  // might have some side-effects: drop upload streams data might be dropped,
+  // redirect count may be reached, and cross-origin redirect are not supported
+  // (at least until we have the demand).
+  //
+  // Implementations should be aware that throttling can happen multiple times
+  // for the same |request|, even after one instance of the same throttle
+  // subclass already modified the request. This happens, e.g., when a service
+  // worker initially elects to handle a request but then later falls back to
+  // network, so new throttles are created for another URLLoaderFactory to
+  // handle the request.
   virtual void WillStartRequest(network::ResourceRequest* request, bool* defer);
 
   // Called when the request was redirected.  |redirect_info| contains the
   // redirect responses's HTTP status code and some information about the new
   // request that will be sent if the redirect is followed, including the new
   // URL and new method.
+  //
+  // Request headers added to |to_be_removed_request_headers| will be removed
+  // before the redirect is followed. Headers added to
+  // |modified_request_headers| will be merged into the existing request headers
+  // before the redirect is followed.
   virtual void WillRedirectRequest(
       const net::RedirectInfo& redirect_info,
       const network::ResourceResponseHead& response_head,
       bool* defer,
-      std::vector<std::string>* to_be_removed_request_headers);
+      std::vector<std::string>* to_be_removed_request_headers,
+      net::HttpRequestHeaders* modified_request_headers);
 
   // Called when the response headers and meta data are available.
   // TODO(776312): Migrate this URL to ResourceResponseHead.
-  virtual void WillProcessResponse(
-      const GURL& response_url,
-      const network::ResourceResponseHead& response_head,
-      bool* defer);
+  virtual void WillProcessResponse(const GURL& response_url,
+                                   network::ResourceResponseHead* response_head,
+                                   bool* defer);
 
   void set_delegate(Delegate* delegate) { delegate_ = delegate; }
 

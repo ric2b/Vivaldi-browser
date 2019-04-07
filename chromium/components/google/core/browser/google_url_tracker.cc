@@ -15,8 +15,8 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/google/core/browser/google_pref_names.h"
-#include "components/google/core/browser/google_switches.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_switches.h"
+#include "components/google/core/common/google_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "net/base/load_flags.h"
@@ -33,8 +33,10 @@ const base::Feature GoogleURLTracker::kNoSearchDomainCheck{
 
 GoogleURLTracker::GoogleURLTracker(
     std::unique_ptr<GoogleURLTrackerClient> client,
-    Mode mode)
+    Mode mode,
+    network::NetworkConnectionTracker* network_connection_tracker)
     : client_(std::move(client)),
+      network_connection_tracker_(network_connection_tracker),
       google_url_(
           mode == ALWAYS_DOT_COM_MODE
               ? kDefaultGoogleHomepage
@@ -43,7 +45,7 @@ GoogleURLTracker::GoogleURLTracker(
       already_loaded_(false),
       need_to_load_(false),
       weak_ptr_factory_(this) {
-  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
+  network_connection_tracker_->AddNetworkConnectionObserver(this);
   client_->set_google_url_tracker(this);
 
   // Because this function can be called during startup, when kicking off a URL
@@ -119,10 +121,10 @@ void GoogleURLTracker::OnURLLoaderComplete(
   }
 }
 
-void GoogleURLTracker::OnNetworkChanged(
-    net::NetworkChangeNotifier::ConnectionType type) {
+void GoogleURLTracker::OnConnectionChanged(
+    network::mojom::ConnectionType type) {
   // Ignore destructive signals.
-  if (type == net::NetworkChangeNotifier::CONNECTION_NONE)
+  if (type == network::mojom::ConnectionType::CONNECTION_NONE)
     return;
   already_loaded_ = false;
   StartLoadIfDesirable();
@@ -132,7 +134,7 @@ void GoogleURLTracker::Shutdown() {
   client_.reset();
   simple_loader_.reset();
   weak_ptr_factory_.InvalidateWeakPtrs();
-  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
+  network_connection_tracker_->RemoveNetworkConnectionObserver(this);
 }
 
 void GoogleURLTracker::SetNeedToLoad() {

@@ -23,7 +23,9 @@
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_context_getter_observer.h"
+#include "services/network/network_change_manager.h"
 #include "services/network/network_context.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/mojom/service.mojom.h"
@@ -107,6 +109,13 @@ class BrowserStateServiceManagerConnectionHolder
   DISALLOW_COPY_AND_ASSIGN(BrowserStateServiceManagerConnectionHolder);
 };
 
+// Passed to NetworkConnectionTracker to bind a NetworkChangeManagerRequest.
+void BindNetworkChangeManagerRequest(
+    network::NetworkChangeManager* network_change_manager,
+    network::mojom::NetworkChangeManagerRequest request) {
+  network_change_manager->AddRequest(std::move(request));
+}
+
 }  // namespace
 
 // static
@@ -168,13 +177,7 @@ BrowserState::~BrowserState() {
 
 network::mojom::URLLoaderFactory* BrowserState::GetURLLoaderFactory() {
   if (!url_loader_factory_) {
-    DCHECK(!network_context_);
-    DCHECK(!network_context_owner_);
-
-    net::URLRequestContextGetter* request_context = GetRequestContext();
-    DCHECK(request_context);
-    network_context_owner_ = std::make_unique<NetworkContextOwner>(
-        request_context, &network_context_);
+    CreateNetworkContextIfNecessary();
     auto url_loader_factory_params =
         network::mojom::URLLoaderFactoryParams::New();
     url_loader_factory_params->process_id = network::mojom::kBrowserProcessId;
@@ -185,6 +188,34 @@ network::mojom::URLLoaderFactory* BrowserState::GetURLLoaderFactory() {
   }
 
   return url_loader_factory_.get();
+}
+
+network::mojom::CookieManager* BrowserState::GetCookieManager() {
+  if (!cookie_manager_) {
+    CreateNetworkContextIfNecessary();
+    network_context_->GetCookieManager(mojo::MakeRequest(&cookie_manager_));
+  }
+  return cookie_manager_.get();
+}
+
+network::NetworkConnectionTracker* BrowserState::GetNetworkConnectionTracker() {
+  if (!network_connection_tracker_) {
+    DCHECK(!network_change_manager_);
+    network_change_manager_ =
+        std::make_unique<network::NetworkChangeManager>(nullptr);
+    network_connection_tracker_ =
+        std::make_unique<network::NetworkConnectionTracker>(base::BindRepeating(
+            &BindNetworkChangeManagerRequest,
+            base::Unretained(network_change_manager_.get())));
+  }
+  return network_connection_tracker_.get();
+}
+
+void BrowserState::GetProxyResolvingSocketFactory(
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  CreateNetworkContextIfNecessary();
+
+  network_context_->CreateProxyResolvingSocketFactory(std::move(request));
 }
 
 scoped_refptr<network::SharedURLLoaderFactory>
@@ -198,6 +229,18 @@ BrowserState::GetURLDataManagerIOSBackendOnIOThread() {
   if (!url_data_manager_ios_backend_)
     url_data_manager_ios_backend_ = new URLDataManagerIOSBackend();
   return url_data_manager_ios_backend_;
+}
+
+void BrowserState::CreateNetworkContextIfNecessary() {
+  if (network_context_owner_)
+    return;
+
+  DCHECK(!network_context_);
+
+  net::URLRequestContextGetter* request_context = GetRequestContext();
+  DCHECK(request_context);
+  network_context_owner_ =
+      std::make_unique<NetworkContextOwner>(request_context, &network_context_);
 }
 
 // static

@@ -125,6 +125,16 @@ void WriteEntriesToFile(const std::string& entries, base::FilePath file_path) {
                << file_path.value();
   }
 }
+
+void DeleteFile(base::FilePath file_path) {
+  if (file_path.empty())
+    return;
+
+  if (!base::DeleteFile(file_path, false)) {
+    LOG(ERROR) << "Could not delete download cache file: " << file_path.value();
+  }
+}
+
 }  // namespace
 
 InProgressCacheImpl::InProgressCacheImpl(
@@ -160,9 +170,10 @@ void InProgressCacheImpl::OnInitialized(base::OnceClosure callback,
   if (!entries.empty()) {
     if (!entries_.ParseFromArray(entries.data(), entries.size())) {
       // TODO(crbug.com/778425): Get UMA for errors.
+      // If the data cannot be parsed, just call the callback and the cache
+      // will be overwritten by the next write.
       LOG(ERROR) << "Could not read download entries from file "
                  << "because there was a parse failure.";
-      return;
     }
   }
 
@@ -209,6 +220,18 @@ void InProgressCacheImpl::RemoveEntry(const std::string& guid) {
   std::string entries_string = EntriesToString(entries_);
   task_runner_->PostTask(FROM_HERE, base::BindOnce(&WriteEntriesToFile,
                                                    entries_string, file_path_));
+}
+
+std::vector<DownloadEntry> InProgressCacheImpl::GetAllEntries() {
+  if (initialization_status_ != CACHE_INITIALIZED) {
+    LOG(ERROR) << "Cache is not initialized, cannot get all entries.";
+    return std::vector<DownloadEntry>();
+  }
+  return DownloadDBConversions::DownloadEntriesFromProto(entries_);
+}
+
+void InProgressCacheImpl::Destroy() {
+  task_runner_->PostTask(FROM_HERE, base::BindOnce(&DeleteFile, file_path_));
 }
 
 }  // namespace download

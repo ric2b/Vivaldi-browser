@@ -435,6 +435,20 @@ error::Error GLES2DecoderPassthroughImpl::DoBindFramebuffer(
   return error::kNoError;
 }
 
+error::Error GLES2DecoderPassthroughImpl::DoBindImageTexture(GLuint unit,
+                                                             GLuint texture,
+                                                             GLint level,
+                                                             GLboolean layered,
+                                                             GLint layer,
+                                                             GLenum access,
+                                                             GLenum format) {
+  api()->glBindImageTextureEXTFn(
+      unit,
+      GetTextureServiceID(api(), texture, resources_, bind_generates_resource_),
+      level, layered, layer, access, format);
+  return error::kNoError;
+}
+
 error::Error GLES2DecoderPassthroughImpl::DoBindRenderbuffer(
     GLenum target,
     GLuint renderbuffer) {
@@ -1039,6 +1053,15 @@ error::Error GLES2DecoderPassthroughImpl::DoDisableVertexAttribArray(
   return error::kNoError;
 }
 
+error::Error GLES2DecoderPassthroughImpl::DoDispatchCompute(
+    GLuint num_groups_x,
+    GLuint num_groups_y,
+    GLuint num_groups_z) {
+  BindPendingImagesForSamplersIfNeeded();
+  api()->glDispatchComputeFn(num_groups_x, num_groups_y, num_groups_z);
+  return error::kNoError;
+}
+
 error::Error GLES2DecoderPassthroughImpl::DoDrawArrays(GLenum mode,
                                                        GLint first,
                                                        GLsizei count) {
@@ -1157,6 +1180,13 @@ error::Error GLES2DecoderPassthroughImpl::DoFlushMappedBufferRange(
   return error::kNoError;
 }
 
+error::Error GLES2DecoderPassthroughImpl::DoFramebufferParameteri(GLenum target,
+                                                                  GLenum pname,
+                                                                  GLint param) {
+  api()->glFramebufferParameteriFn(target, pname, param);
+  return error::kNoError;
+}
+
 error::Error GLES2DecoderPassthroughImpl::DoFramebufferRenderbuffer(
     GLenum target,
     GLenum attachment,
@@ -1205,6 +1235,26 @@ error::Error GLES2DecoderPassthroughImpl::DoFramebufferTextureLayer(
   api()->glFramebufferTextureLayerFn(
       target, attachment,
       GetTextureServiceID(api(), texture, resources_, false), level, layer);
+  return error::kNoError;
+}
+
+error::Error
+GLES2DecoderPassthroughImpl::DoFramebufferTextureMultiviewLayeredANGLE(
+    GLenum target,
+    GLenum attachment,
+    GLuint texture,
+    GLint level,
+    GLint base_view_index,
+    GLsizei num_views) {
+  if (IsEmulatedFramebufferBound(target)) {
+    InsertError(GL_INVALID_OPERATION,
+                "Cannot change the attachments of the default framebuffer.");
+    return error::kNoError;
+  }
+  api()->glFramebufferTextureMultiviewLayeredANGLEFn(
+      target, attachment,
+      GetTextureServiceID(api(), texture, resources_, false), level,
+      base_view_index, num_views);
   return error::kNoError;
 }
 
@@ -2044,6 +2094,18 @@ error::Error GLES2DecoderPassthroughImpl::DoLinkProgram(GLuint program) {
   // context preemption and GPU watchdog checks.
   ExitCommandProcessingEarly();
 
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoMemoryBarrierEXT(
+    GLbitfield barriers) {
+  api()->glMemoryBarrierEXTFn(barriers);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoMemoryBarrierByRegion(
+    GLbitfield barriers) {
+  api()->glMemoryBarrierByRegionFn(barriers);
   return error::kNoError;
 }
 

@@ -14,7 +14,17 @@ import java.util.Date;
 
 /** An abstract class that represents a variety of possible list items to show in downloads home. */
 public abstract class ListItem {
+    private static final long DATE_SEPARATOR_HASH_CODE_OFFSET = 10;
+    private static final long SECTION_SEPARATOR_HASH_CODE_OFFSET = 100;
+    private static final long SECTION_HEADER_HASH_CODE_OFFSET = 1000;
+
     public final long stableId;
+
+    /** Indicates that we are in multi-select mode and the item is currently selected. */
+    public boolean selected;
+
+    /** Whether animation should be shown for the recent change in selection state for this item. */
+    public boolean showSelectedAnimation;
 
     /** Creates a {@link ListItem} instance. */
     ListItem(long stableId) {
@@ -60,9 +70,69 @@ public abstract class ListItem {
         }
     }
 
+    /** A {@link ListItem} representing a section header. */
+    public static class SectionHeaderListItem extends DateListItem {
+        public final int filter;
+        public boolean isFirstSectionOfDay;
+
+        /**
+         * Creates a {@link SectionHeaderListItem} instance for a given {@code filter} and
+         * {@code timestamp}.
+         */
+        public SectionHeaderListItem(int filter, long timestamp) {
+            super(generateStableId(timestamp, filter), new Date(timestamp));
+            this.filter = filter;
+        }
+
+        @VisibleForTesting
+        static long generateStableId(long timestamp, int filter) {
+            long hash = new Date(timestamp).hashCode();
+            return hash + filter + SECTION_HEADER_HASH_CODE_OFFSET;
+        }
+    }
+
+    /** A {@link ListItem} representing a divider that separates sections and dates. */
+    public static class SeparatorViewListItem extends DateListItem {
+        private final boolean mIsDateDivider;
+
+        /**
+         * Creates a separator to be shown at the end of a given date.
+         * @param timestamp The date corresponding to this group of downloads.
+         */
+        public SeparatorViewListItem(long timestamp) {
+            super(generateStableId(timestamp), new Date(timestamp));
+            mIsDateDivider = true;
+        }
+
+        /**
+         * Creates a separator to be shown at the end of a section for a given section on a given
+         * date.
+         * @param timestamp The date corresponding to the section.
+         * @param filter The type of downloads contained in this section.
+         */
+        public SeparatorViewListItem(long timestamp, int filter) {
+            super(generateStableId(timestamp, filter), new Date(timestamp));
+            mIsDateDivider = false;
+        }
+
+        /** Whether this view represents a date divider. */
+        public boolean isDateDivider() {
+            return mIsDateDivider;
+        }
+
+        private static long generateStableId(long timestamp) {
+            return ((long) (new Date(timestamp).hashCode())) + DATE_SEPARATOR_HASH_CODE_OFFSET;
+        }
+
+        private static long generateStableId(long timestamp, int filter) {
+            return generateStableId(timestamp) + filter + SECTION_SEPARATOR_HASH_CODE_OFFSET;
+        }
+    }
+
     /** A {@link ListItem} that involves a {@link OfflineItem}. */
     public static class OfflineItemListItem extends DateListItem {
         public final OfflineItem item;
+        public boolean spanFullWidth;
 
         /** Creates an {@link OfflineItemListItem} wrapping {@code item}. */
         public OfflineItemListItem(OfflineItem item) {

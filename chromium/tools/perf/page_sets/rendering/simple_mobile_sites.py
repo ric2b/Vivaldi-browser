@@ -36,21 +36,25 @@ class SimplePage(rendering_story.RenderingStory):
       action_runner.ScrollPage(direction='down', speed_in_pixels_per_second=300)
 
 
-class SimpleEbayPage(SimplePage):
+class SimpleEbay2018Page(SimplePage):
   BASE_NAME = 'ebay_scroll'
+  YEAR = '2018'
   URL = 'http://www.ebay.co.uk/'
 
 
-class SimpleFlickrPage(SimplePage):
+class SimpleFlickr2018Page(SimplePage):
   BASE_NAME = 'flickr_scroll'
-  URL = 'https://www.flickr.com/'
+  YEAR = '2018'
+  URL = 'https://www.flickr.com/photos/flickr/albums/72157639858715274'
 
 
-class SimpleNYCGovPage(SimplePage):
+class SimpleNYCGov2018Page(SimplePage):
   BASE_NAME = 'nyc_gov_scroll'
+  YEAR = '2018'
   URL = 'http://www.nyc.gov'
 
 
-class SimpleNYTimesPage(SimplePage):
+class SimpleNYTimes2018Page(SimplePage):
   BASE_NAME = 'nytimes_scroll'
+  YEAR = '2018'
   URL = 'http://m.nytimes.com/'

@@ -5,6 +5,7 @@
 #include "media/gpu/vaapi/accelerated_video_encoder.h"
 
 #include "media/base/video_frame.h"
+#include "media/gpu/gpu_video_encode_accelerator_helpers.h"
 #include "media/video/video_encode_accelerator.h"
 
 namespace media {
@@ -52,6 +53,10 @@ void AcceleratedVideoEncoder::EncodeJob::Execute() {
   }
 
   std::move(execute_callback_).Run();
+}
+
+size_t AcceleratedVideoEncoder::GetBitstreamBufferSize() const {
+  return GetEncodeBitstreamBufferSize();
 }
 
 }  // namespace media

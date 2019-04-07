@@ -5,9 +5,11 @@
 #import "ios/chrome/browser/ui/authentication/unified_consent/unified_consent_view_controller.h"
 
 #include "base/logging.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "ios/chrome/browser/application_context.h"
+#import "ios/chrome/browser/ui/authentication/authentication_constants.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/identity_picker_view.h"
+#import "ios/chrome/browser/ui/authentication/unified_consent/unified_consent_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/util/label_link_controller.h"
@@ -28,27 +30,14 @@ NSString* const kUnifiedConsentScrollViewIdentifier =
 namespace {
 
 // Sizes.
-// Header image sizes.
-const CGFloat kHeaderImageHeight = 88.;
-const CGFloat kHeaderImageWidth = 360.;
 // Size of the small icons next to the text.
 const CGFloat kIconSize = 16.;
-// Separator line height.
-const CGFloat kSeparatorHeight = 1.;
 
-// Font sizes
-const CGFloat kTitleFontSize = 23.;
-const CGFloat kTextFontSize = 12.;
-
-// Horizontal margin between the container view and any elements inside.
-const CGFloat kHorizontalMargin = 16.;
 // Horizontal margin between the small icon and the text next to it.
 const CGFloat kIconTextMargin = 16.;
 // Horizontal margin on the left part of the separator.
 const CGFloat kLeftSeparatorMargin =
-    kHorizontalMargin + kIconSize + kIconTextMargin;
-// Vertical margin between the header image and the main title.
-const CGFloat kHeaderTitleMargin = 19.;
+    kAuthenticationHorizontalMargin + kIconSize + kIconTextMargin;
 // Vertical margin the main title and the identity picker.
 const CGFloat KTitlePickerMargin = 17.;
 // Vertical margin above the first text and after the last text.
@@ -58,20 +47,9 @@ const CGFloat kVerticalBetweenTextMargin = 25.;
 // Vertical margin between separator and text.
 const CGFloat kVerticalSeparatorTextMargin = 16.;
 
-// Color displayed in the non-safe area.
-const int kHeaderBackgroundColor = 0xf8f9fa;
-// Alpha for the separator color.
-const CGFloat kSeparatorColorAlpha = 0.12;
-// Alpha for the title color.
-const CGFloat kTitleColorAlpha = 0.87;
-// Alpha for the text color.
-const CGFloat kTextColorAlpha = 0.54;
-
 // URL for the Settings link.
 const char* const kSettingsSyncURL = "internal://settings-sync";
 
-// Header image name.
-NSString* const kHeaderImageName = @"unified_consent_header";
 // Assistant icon name.
 NSString* const kAssistantIconName = @"ic_assistant";
 // Google icon name.
@@ -115,6 +93,7 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
     _imageBackgroundViewHeightConstraint;
 @synthesize noIdentityConstraint = _noIdentityConstraint;
 @synthesize openSettingsStringId = _openSettingsStringId;
+@synthesize interactable = _interactable;
 @synthesize scrollView = _scrollView;
 @synthesize settingsLinkController = _settingsLinkController;
 @synthesize withIdentityConstraint = _withIdentityConstraint;
@@ -131,7 +110,7 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
   self.noIdentityConstraint.active = NO;
   self.withIdentityConstraint.active = YES;
   [self.identityPickerView setIdentityName:fullName email:email];
-  [self setSettingsLinkURLShown:YES];
+  [self setSettingsLinkURLShown:self.interactable];
 }
 
 - (void)updateIdentityPickerViewWithAvatar:(UIImage*)avatar {
@@ -147,10 +126,12 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
 }
 
 - (void)scrollToBottom {
+  // Add one point to make sure that it is actually scrolled to the bottom (as
+  // there are some issues when the fonts are increased).
   CGPoint bottomOffset =
       CGPointMake(0, self.scrollView.contentSize.height -
                          self.scrollView.bounds.size.height +
-                         self.scrollView.contentInset.bottom);
+                         self.scrollView.contentInset.bottom + 1);
   [self.scrollView setContentOffset:bottomOffset animated:YES];
 }
 
@@ -160,6 +141,15 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
   CGFloat scrollLimit =
       self.scrollView.contentSize.height + self.scrollView.contentInset.bottom;
   return scrollPosition >= scrollLimit;
+}
+
+- (void)setInteractable:(BOOL)interactable {
+  _interactable = interactable;
+  if (!self.viewLoaded)
+    return;
+
+  self.identityPickerView.canChangeIdentity = interactable;
+  [self setSettingsLinkURLShown:interactable];
 }
 
 #pragma mark - UIViewController
@@ -173,7 +163,7 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
   self.scrollView.accessibilityIdentifier = kUnifiedConsentScrollViewIdentifier;
   if (@available(iOS 11, *)) {
     // The observed behavior was buggy. When the view appears on the screen,
-    // the scrollvie was not scrolled all the way to the top. Adjusting the
+    // the scrollview was not scrolled all the way to the top. Adjusting the
     // safe area manually fixes the issue.
     self.scrollView.contentInsetAdjustmentBehavior =
         UIScrollViewContentInsetAdjustmentNever;
@@ -189,13 +179,14 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
   // areas (like the status bar).
   UIView* imageBackgroundView = [[UIView alloc] initWithFrame:CGRectZero];
   imageBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;
-  imageBackgroundView.backgroundColor = UIColorFromRGB(kHeaderBackgroundColor);
+  imageBackgroundView.backgroundColor =
+      UIColorFromRGB(kAuthenticationHeaderBackgroundColor);
   [container addSubview:imageBackgroundView];
 
   // Header image.
   UIImageView* headerImageView = [[UIImageView alloc] initWithFrame:CGRectZero];
   headerImageView.translatesAutoresizingMaskIntoConstraints = NO;
-  headerImageView.image = [UIImage imageNamed:kHeaderImageName];
+  headerImageView.image = [UIImage imageNamed:kAuthenticationHeaderImageName];
   [container addSubview:headerImageView];
 
   // Title.
@@ -203,17 +194,19 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
   title.translatesAutoresizingMaskIntoConstraints = NO;
   title.text = l10n_util::GetNSString(IDS_IOS_ACCOUNT_UNIFIED_CONSENT_TITLE);
   _consentStringIds.push_back(IDS_IOS_ACCOUNT_UNIFIED_CONSENT_TITLE);
-  title.textColor = [UIColor colorWithWhite:0 alpha:kTitleColorAlpha];
-  title.font = [UIFont systemFontOfSize:kTitleFontSize];
+  title.textColor =
+      [UIColor colorWithWhite:0 alpha:kAuthenticationTitleColorAlpha];
+  title.font = [UIFont preferredFontForTextStyle:kAuthenticationTitleFontStyle];
   title.numberOfLines = 0;
 
   [container addSubview:title];
   // Identity picker view.
   self.identityPickerView =
       [[IdentityPickerView alloc] initWithFrame:CGRectZero];
+  self.identityPickerView.canChangeIdentity = self.interactable;
   self.identityPickerView.translatesAutoresizingMaskIntoConstraints = NO;
   [self.identityPickerView addTarget:self
-                              action:@selector(identityPickerAction:)
+                              action:@selector(identityPickerAction:forEvent:)
                     forControlEvents:UIControlEventTouchUpInside];
   [container addSubview:self.identityPickerView];
 
@@ -239,7 +232,7 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
   UIView* separator = [[UIView alloc] initWithFrame:CGRectZero];
   separator.translatesAutoresizingMaskIntoConstraints = NO;
   separator.backgroundColor =
-      [UIColor colorWithWhite:0 alpha:kSeparatorColorAlpha];
+      [UIColor colorWithWhite:0 alpha:kAuthenticationSeparatorColorAlpha];
   [container addSubview:separator];
   // Customize label.
   self.openSettingsStringId = IDS_IOS_ACCOUNT_UNIFIED_CONSENT_SETTINGS;
@@ -263,15 +256,15 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
   };
   NSDictionary* metrics = @{
     @"TitlePickerMargin" : @(KTitlePickerMargin),
-    @"HMargin" : @(kHorizontalMargin),
+    @"HMargin" : @(kAuthenticationHorizontalMargin),
     @"VBetweenText" : @(kVerticalBetweenTextMargin),
     @"VSeparatorText" : @(kVerticalSeparatorTextMargin),
     @"LeftSeparMrg" : @(kLeftSeparatorMargin),
     @"VTextMargin" : @(kVerticalTextMargin),
-    @"SeparatorHeight" : @(kSeparatorHeight),
-    @"HeaderHeight" : @(kHeaderImageHeight),
-    @"HeaderWidth" : @(kHeaderImageWidth),
-    @"HeaderTitleMargin" : @(kHeaderTitleMargin),
+    @"SeparatorHeight" : @(kAuthenticationSeparatorHeight),
+    @"HeaderHeight" : @(kAuthenticationHeaderImageHeight),
+    @"HeaderWidth" : @(kAuthenticationHeaderImageWidth),
+    @"HeaderTitleMargin" : @(kAuthenticationHeaderTitleMargin),
   };
   NSArray* constraints = @[
     // Horitizontal constraints.
@@ -332,6 +325,11 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
   [self updateScrollViewAndImageBackgroundView];
 }
 
+- (void)viewDidAppear:(BOOL)animated {
+  [super viewDidAppear:animated];
+  [self.delegate unifiedConsentViewControllerViewDidAppear:self];
+}
+
 // Updates the scroll view content inset, used by pre iOS 11.
 - (void)viewWillTransitionToSize:(CGSize)size
        withTransitionCoordinator:
@@ -354,7 +352,8 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
   dispatch_async(dispatch_get_main_queue(), ^{
     // Having a layout of the parent view makes the scroll view not being
     // presented at the top. Scrolling to the top is required.
-    CGPoint topOffset = CGPointMake(0, -self.scrollView.contentInset.top);
+    CGPoint topOffset = CGPointMake(self.scrollView.contentOffset.x,
+                                    -self.scrollView.contentInset.top);
     [self.scrollView setContentOffset:topOffset animated:NO];
     self.scrollView.delegate = self;
     [self sendDidReachBottomIfReached];
@@ -363,8 +362,13 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
 
 #pragma mark - UI actions
 
-- (void)identityPickerAction:(id)sender {
-  [self.delegate unifiedConsentViewControllerDidTapIdentityPickerView:self];
+- (void)identityPickerAction:(id)sender forEvent:(UIEvent*)event {
+  UITouch* touch = event.allTouches.anyObject;
+  [self.delegate
+      unifiedConsentViewControllerDidTapIdentityPickerView:self
+                                                   atPoint:
+                                                       [touch
+                                                           locationInView:nil]];
 }
 
 #pragma mark - Private
@@ -383,10 +387,11 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
   DCHECK(parentView);
   UILabel* label = [[UILabel alloc] initWithFrame:CGRectZero];
   label.translatesAutoresizingMaskIntoConstraints = NO;
-  label.font = [UIFont systemFontOfSize:kTextFontSize];
+  label.font = [UIFont preferredFontForTextStyle:kAuthenticationTextFontStyle];
   label.text = l10n_util::GetNSString(stringId);
   _consentStringIds.push_back(stringId);
-  label.textColor = [UIColor colorWithWhite:0 alpha:kTextColorAlpha];
+  label.textColor =
+      [UIColor colorWithWhite:0 alpha:kAuthenticationTextColorAlpha];
   label.numberOfLines = 0;
   [parentView addSubview:label];
   UIImageView* image = [[UIImageView alloc] initWithFrame:CGRectZero];
@@ -400,7 +405,7 @@ NSString* const kSyncCompleteIconName = @"ic_sync_complete";
     @"V:[image(IconSize)]",
   ];
   NSDictionary* metrics = @{
-    @"HMargin" : @(kHorizontalMargin),
+    @"HMargin" : @(kAuthenticationHorizontalMargin),
     @"IconSize" : @(kIconSize),
     @"IconTextMargin" : @(kIconTextMargin),
   };

@@ -35,9 +35,17 @@ bool HasTransientParentWindow(const aura::Window* window) {
 
 aura::Window* GetSystemModalContainer(aura::Window* root,
                                       aura::Window* window) {
-  aura::Window* transient_parent = ::wm::GetTransientParent(window);
   DCHECK_EQ(ui::MODAL_TYPE_SYSTEM,
             window->GetProperty(aura::client::kModalKey));
+
+  // If |window| is already in a system modal container in |root|, re-use it.
+  for (auto modal_container_id : kSystemModalContainerIds) {
+    aura::Window* modal_container = root->GetChildById(modal_container_id);
+    if (window->parent() == modal_container)
+      return modal_container;
+  }
+
+  aura::Window* transient_parent = ::wm::GetTransientParent(window);
 
   // If screen lock is not active and user session is active,
   // all modal windows are placed into the normal modal container.
@@ -87,6 +95,7 @@ aura::Window* GetDefaultParent(aura::Window* window,
   switch (window->type()) {
     case aura::client::WINDOW_TYPE_NORMAL:
     case aura::client::WINDOW_TYPE_POPUP:
+    case aura::client::WINDOW_TYPE_PANEL:
       if (window->GetProperty(aura::client::kModalKey) == ui::MODAL_TYPE_SYSTEM)
         return GetSystemModalContainer(target_root, window);
       if (HasTransientParentWindow(window))
@@ -95,10 +104,6 @@ aura::Window* GetDefaultParent(aura::Window* window,
     case aura::client::WINDOW_TYPE_CONTROL:
       return target_root->GetChildById(
           kShellWindowId_UnparentedControlContainer);
-    case aura::client::WINDOW_TYPE_PANEL:
-      if (window->GetProperty(kPanelAttachedKey))
-        return target_root->GetChildById(kShellWindowId_PanelContainer);
-      return GetContainerFromAlwaysOnTopController(target_root, window);
     case aura::client::WINDOW_TYPE_MENU:
       return target_root->GetChildById(kShellWindowId_MenuContainer);
     case aura::client::WINDOW_TYPE_TOOLTIP:

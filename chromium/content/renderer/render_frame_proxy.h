@@ -196,7 +196,8 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   void FrameRectsChanged(const blink::WebRect& local_frame_rect,
                          const blink::WebRect& screen_space_rect) override;
   void UpdateRemoteViewportIntersection(
-      const blink::WebRect& viewport_intersection) override;
+      const blink::WebRect& viewport_intersection,
+      bool occluded_or_obscured) override;
   void VisibilityChanged(bool visible) override;
   void SetIsInert(bool) override;
   void SetInheritedEffectiveTouchAction(cc::TouchAction) override;
@@ -217,7 +218,8 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
 
   void Init(blink::WebRemoteFrame* frame,
             RenderViewImpl* render_view,
-            RenderWidget* render_widget);
+            RenderWidget* render_widget,
+            bool parent_is_local);
 
   void ResendVisualProperties();
 
@@ -287,6 +289,8 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // Stores the WebRemoteFrame we are associated with.
   blink::WebRemoteFrame* web_frame_;
   std::string unique_name_;
+
+  // Can be nullptr when this RenderFrameProxy's parent is not a RenderFrame.
   std::unique_ptr<ChildFrameCompositingHelper> compositing_helper_;
 
   RenderViewImpl* render_view_;
@@ -316,6 +320,7 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
 
   gfx::Rect last_intersection_rect_;
   gfx::Rect last_compositor_visible_rect_;
+  bool last_occluded_or_obscured_ = false;
 
 #if defined(USE_AURA)
   std::unique_ptr<MusEmbeddedFrame> mus_embedded_frame_;

@@ -15,8 +15,8 @@
 #include "base/sha1.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "chrome/browser/conflicts/module_blacklist_cache_util_win.h"
 #include "chrome_elf/third_party_dlls/logging_api.h"
 #include "chrome_elf/third_party_dlls/packed_list_format.h"
@@ -72,7 +72,7 @@ ModuleLoadAttemptLogListener::ModuleLoadAttemptLogListener(
     OnModuleBlockedCallback on_module_blocked_callback)
     : on_module_blocked_callback_(std::move(on_module_blocked_callback)),
       background_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::TaskPriority::BACKGROUND,
+          {base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN,
            base::MayBlock()})),
       // The event starts signaled so that the logs are drained once when the

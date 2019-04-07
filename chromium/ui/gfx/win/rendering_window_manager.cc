@@ -4,96 +4,76 @@
 
 #include "ui/gfx/win/rendering_window_manager.h"
 
-#include "base/callback.h"
-#include "base/memory/singleton.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/bind.h"
+#include "base/no_destructor.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 
 namespace gfx {
 
 // static
 RenderingWindowManager* RenderingWindowManager::GetInstance() {
-  return base::Singleton<RenderingWindowManager>::get();
+  static base::NoDestructor<RenderingWindowManager> instance;
+  return instance.get();
 }
 
 void RenderingWindowManager::RegisterParent(HWND parent) {
-  base::AutoLock lock(lock_);
-
-  info_.emplace(parent, EmeddingInfo());
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  registered_hwnds_.emplace(parent, nullptr);
 }
 
-void SetParentAndMoveToBottom(HWND child, HWND parent) {
+void RenderingWindowManager::RegisterChild(HWND parent,
+                                           HWND child,
+                                           DWORD expected_child_process_id) {
+  if (!child)
+    return;
+
+  // This can be called from any thread, if we're not on the correct thread then
+  // PostTask back to the UI thread before doing anything.
+  if (!task_runner_->BelongsToCurrentThread()) {
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&RenderingWindowManager::RegisterChild,
+                                  base::Unretained(this), parent, child,
+                                  expected_child_process_id));
+    return;
+  }
+
+  // Check that |parent| was registered as a HWND that could have a child HWND.
+  auto it = registered_hwnds_.find(parent);
+  if (it == registered_hwnds_.end())
+    return;
+
+  // Check that |child| belongs to the GPU process.
+  DWORD child_process_id = 0;
+  DWORD child_thread_id = GetWindowThreadProcessId(child, &child_process_id);
+  if (!child_thread_id || child_process_id != expected_child_process_id) {
+    DLOG(ERROR) << "Child HWND not owned by GPU process.";
+    return;
+  }
+
+  it->second = child;
+
   ::SetParent(child, parent);
   // Move D3D window behind Chrome's window to avoid losing some messages.
   ::SetWindowPos(child, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 }
 
-bool RenderingWindowManager::RegisterChild(HWND parent, HWND child) {
-  if (!child)
-    return false;
-
-  base::AutoLock lock(lock_);
-
-  auto it = info_.find(parent);
-  if (it == info_.end())
-    return false;
-
-  EmeddingInfo& info = it->second;
-  if (info.child)
-    return false;
-
-  info.child = child;
-
-  // DoSetParentOnChild() was already called for |parent|. Call ::SetParent()
-  // now but from a worker thread instead of the IO thread. The ::SetParent()
-  // call could block the IO thread waiting on the UI thread and deadlock.
-  if (info.call_set_parent) {
-    base::PostTaskWithTraits(
-        FROM_HERE, {base::TaskPriority::USER_BLOCKING},
-        base::BindOnce(&SetParentAndMoveToBottom, child, parent));
-  }
-
-  return true;
-}
-
-void RenderingWindowManager::DoSetParentOnChild(HWND parent) {
-  HWND child;
-  {
-    base::AutoLock lock(lock_);
-
-    auto it = info_.find(parent);
-    if (it == info_.end())
-      return;
-
-    EmeddingInfo& info = it->second;
-
-    DCHECK(!info.call_set_parent);
-    info.call_set_parent = true;
-
-    // Call SetParentAndMoveToBottom() once RegisterChild() is called.
-    if (!info.child)
-      return;
-
-    child = info.child;
-  }
-
-  SetParentAndMoveToBottom(child, parent);
-}
-
 void RenderingWindowManager::UnregisterParent(HWND parent) {
-  base::AutoLock lock(lock_);
-  info_.erase(parent);
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  registered_hwnds_.erase(parent);
 }
 
 bool RenderingWindowManager::HasValidChildWindow(HWND parent) {
-  base::AutoLock lock(lock_);
-  auto it = info_.find(parent);
-  if (it == info_.end())
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  auto it = registered_hwnds_.find(parent);
+  if (it == registered_hwnds_.end())
     return false;
-  return !!it->second.child && ::IsWindow(it->second.child);
+  return !!it->second && ::IsWindow(it->second);
 }
 
-RenderingWindowManager::RenderingWindowManager() {}
-RenderingWindowManager::~RenderingWindowManager() {}
+RenderingWindowManager::RenderingWindowManager()
+    : task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
+
+RenderingWindowManager::~RenderingWindowManager() = default;
 
 }  // namespace gfx

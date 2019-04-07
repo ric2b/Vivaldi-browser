@@ -9,6 +9,7 @@ import org.chromium.chrome.browser.download.DownloadItem;
 import org.chromium.chrome.browser.download.DownloadNotifier;
 import org.chromium.chrome.browser.download.DownloadServiceDelegate;
 import org.chromium.components.offline_items_collection.ContentId;
+import org.chromium.components.offline_items_collection.LaunchLocation;
 import org.chromium.components.offline_items_collection.LegacyHelpers;
 import org.chromium.components.offline_items_collection.OfflineContentProvider;
 import org.chromium.components.offline_items_collection.OfflineItem;
@@ -66,7 +67,7 @@ public class OfflineContentAggregatorNotificationBridgeUi
 
     /** @see OfflineContentProvider#openItem(ContentId) */
     public void openItem(ContentId id) {
-        mProvider.openItem(id);
+        mProvider.openItem(LaunchLocation.NOTIFICATION, id);
     }
 
     // OfflineContentProvider.Observer implementation.
@@ -124,6 +125,7 @@ public class OfflineContentAggregatorNotificationBridgeUi
     public void destroyServiceDelegate() {}
 
     private void getVisualsAndUpdateItem(OfflineItem item) {
+        if (item.refreshVisuals) mVisualsCache.remove(item.id);
         if (needsVisualsForUi(item)) {
             if (!mVisualsCache.containsKey(item.id)) {
                 // We don't have any visuals for this item yet.  Stash the current OfflineItem and,
@@ -214,8 +216,9 @@ public class OfflineContentAggregatorNotificationBridgeUi
             case OfflineItemState.PENDING:
             case OfflineItemState.INTERRUPTED:
             case OfflineItemState.PAUSED:
+            case OfflineItemState.COMPLETE:
                 return true;
-            // OfflineItemState.FAILED, OfflineItemState.COMPLETE,
+            // OfflineItemState.FAILED,
             // OfflineItemState.CANCELLED
             default:
                 return false;

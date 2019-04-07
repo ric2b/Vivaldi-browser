@@ -39,6 +39,7 @@ namespace test {
 class MessagePopupCollectionTest;
 }
 
+class LockScreenController;
 class MessageCenterObserver;
 class MessageCenterImplTest;
 class NotificationBlocker;
@@ -52,8 +53,10 @@ class MESSAGE_CENTER_EXPORT MessageCenter {
     NON_PINNED,
   };
 
-  // Creates the global message center object.
+  // Creates the global message center object with default LockScreenController.
   static void Initialize();
+  // Creates the global message center object with custom LockScreenController.
+  static void Initialize(std::unique_ptr<LockScreenController> controller);
 
   // Returns the global message center object. Returns null if Initialize is
   // not called.
@@ -211,7 +214,7 @@ class MESSAGE_CENTER_EXPORT MessageCenter {
   friend class MessageCenterImplTestWithoutChangeQueue;
   friend class UiControllerTest;
   friend class TrayViewControllerTest;
-  friend class test::MessagePopupCollectionTest;
+  friend class MessagePopupCollectionTest;
   virtual void DisableTimersForTest() = 0;
 
   MessageCenter();

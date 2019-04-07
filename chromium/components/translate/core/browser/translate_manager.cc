@@ -368,7 +368,7 @@ void TranslateManager::TranslatePage(const std::string& original_source_lang,
       base::Bind(&TranslateManager::OnTranslateScriptFetchComplete,
                  GetWeakPtr(), source_lang, target_lang);
 
-  script->Request(callback);
+  script->Request(callback, translate_driver_->IsIncognito());
 }
 
 void TranslateManager::RevertTranslation() {
@@ -556,6 +556,15 @@ bool TranslateManager::ignore_missing_key_for_testing_ = false;
 // static
 void TranslateManager::SetIgnoreMissingKeyForTesting(bool ignore) {
   ignore_missing_key_for_testing_ = ignore;
+}
+
+// static
+bool TranslateManager::IsAvailable(const TranslatePrefs* prefs) {
+  // These conditions mirror the conditions in InitiateTranslation.
+  return base::FeatureList::IsEnabled(translate::kTranslateUI) &&
+         (ignore_missing_key_for_testing_ ||
+          ::google_apis::HasAPIKeyConfigured()) &&
+         prefs->IsOfferTranslateEnabled();
 }
 
 void TranslateManager::InitTranslateEvent(const std::string& src_lang,

@@ -4,8 +4,9 @@
 
 #include "chrome/browser/profiling_host/background_profiling_triggers.h"
 
+#include "base/rand_util.h"
 #include "base/stl_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
@@ -24,6 +25,8 @@ namespace {
 #if defined(OS_ANDROID)
 // Check memory usage every 5 minutes.
 const int kRepeatingCheckMemoryDelayInMinutes = 5;
+// Every 5 min, rate of 1/300 for shipping a control memlog report.
+const int kControlPopulationSamplingRate = 300;
 
 const size_t kBrowserProcessMallocTriggerKb = 100 * 1024;    // 100 MB
 const size_t kGPUProcessMallocTriggerKb = 40 * 1024;         // 40 MB
@@ -34,6 +37,8 @@ const uint32_t kHighWaterMarkThresholdKb = 50 * 1024;  // 50 MB
 #else
 // Check memory usage every 15 minutes.
 const int kRepeatingCheckMemoryDelayInMinutes = 15;
+// Every 15 min, rate of 1/100 for shipping a control memlog report.
+const int kControlPopulationSamplingRate = 100;
 
 const size_t kBrowserProcessMallocTriggerKb = 400 * 1024;    // 400 MB
 const size_t kGPUProcessMallocTriggerKb = 400 * 1024;        // 400 MB
@@ -115,6 +120,12 @@ bool BackgroundProfilingTriggers::IsOverTriggerThreshold(
   }
 }
 
+bool BackgroundProfilingTriggers::ShouldTriggerControlReport(
+    int content_process_type) const {
+  return (content_process_type == content::ProcessType::PROCESS_TYPE_BROWSER) &&
+         base::RandGenerator(kControlPopulationSamplingRate) == 0;
+}
+
 void BackgroundProfilingTriggers::PerformMemoryUsageChecks() {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
 
@@ -145,6 +156,17 @@ void BackgroundProfilingTriggers::OnReceivedMemoryDump(
     return;
   }
 
+  // Sample a control population.
+  for (const auto& proc : dump->process_dumps()) {
+    if (base::ContainsValue(profiled_pids, proc.pid()) &&
+        ShouldTriggerControlReport(
+            GetContentProcessType(proc.process_type()))) {
+      TriggerMemoryReport("MEMLOG_CONTROL_TRIGGER");
+      return;
+    }
+  }
+
+  // Detect whether memory footprint is too high and send a memlog report.
   bool should_send_report = false;
   for (const auto& proc : dump->process_dumps()) {
     if (!base::ContainsValue(profiled_pids, proc.pid()))
@@ -179,13 +201,14 @@ void BackgroundProfilingTriggers::OnReceivedMemoryDump(
       }
     }
 
-    TriggerMemoryReport();
+    TriggerMemoryReport("MEMLOG_BACKGROUND_TRIGGER");
   }
 }
 
-void BackgroundProfilingTriggers::TriggerMemoryReport() {
+void BackgroundProfilingTriggers::TriggerMemoryReport(
+    std::string trigger_name) {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
-  host_->RequestProcessReport("MEMLOG_BACKGROUND_TRIGGER");
+  host_->RequestProcessReport(std::move(trigger_name));
 }
 
 }  // namespace heap_profiling

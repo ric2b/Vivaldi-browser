@@ -172,7 +172,7 @@ void ArgumentSpecUnitTest::RunTest(RunTestParams& params) {
     }
   } else if (should_throw) {
     EXPECT_EQ(params.expected_thrown_message,
-              gin::V8ToString(try_catch.Message()->Get()));
+              gin::V8ToString(isolate, try_catch.Message()->Get()));
   }
 }
 
@@ -858,13 +858,13 @@ TEST_F(ArgumentSpecUnitTest, V8Conversion) {
     ArgumentSpec spec(ArgumentType::INTEGER);
     ExpectSuccess(spec, "1", base::BindOnce([](v8::Local<v8::Value> value) {
                     ASSERT_TRUE(value->IsInt32());
-                    EXPECT_EQ(1, value->Int32Value());
+                    EXPECT_EQ(1, value.As<v8::Int32>()->Value());
                   }));
     // The conversion should handle the -0 value (which is considered an
     // integer but stored in v8 has a number) by converting it to a 0 integer.
     ExpectSuccess(spec, "-0", base::BindOnce([](v8::Local<v8::Value> value) {
                     ASSERT_TRUE(value->IsInt32());
-                    EXPECT_EQ(0, value->Int32Value());
+                    EXPECT_EQ(0, value.As<v8::Int32>()->Value());
                   }));
   }
 

@@ -73,6 +73,10 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   // net::URLRequest load flags (0 by default).
   int load_flags = 0;
 
+  // If false, calls set_allow_credentials(false) on the
+  // net::URLRequest.
+  bool allow_credentials = true;
+
   // If this request originated from a pepper plugin running in a child
   // process, this identifies which process it came from. Otherwise, it
   // is zero.
@@ -180,7 +184,7 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   bool do_not_prompt_for_login = false;
 
   // The routing id of the RenderFrame.
-  int render_frame_id = 0;
+  int render_frame_id = MSG_ROUTING_NONE;
 
   // True if |frame_id| is the main frame of a RenderView.
   bool is_main_frame = false;

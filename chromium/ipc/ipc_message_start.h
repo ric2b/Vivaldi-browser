@@ -52,7 +52,6 @@ enum IPCMessageStart {
   MediaPipelineMsgStart,
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
   EncryptedMediaMsgStart,
-  ServiceWorkerMsgStart,
   CastMsgStart,
   ChromeExtensionMsgStart,
   GinJavaBridgeMsgStart,

@@ -13,10 +13,11 @@
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
@@ -25,6 +26,7 @@
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/machine_level_user_cloud_policy_controller.h"
 #include "chrome/browser/policy/test/local_policy_test_server.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -36,14 +38,16 @@
 #include "components/policy/core/common/cloud/mock_cloud_external_data_manager.h"
 #include "components/policy/core/common/cloud/mock_device_management_service.h"
 #include "components/policy/core/common/policy_switches.h"
-#include "content/public/browser/browser_thread.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_data_stream.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/test/widget_test.h"
 
-using content::BrowserThread;
+#if defined(OS_MACOSX)
+#include "chrome/browser/policy/cloud/machine_level_user_cloud_policy_browsertest_mac_util.h"
+#endif
+
 using testing::DoAll;
 using testing::Invoke;
 using testing::InvokeWithoutArgs;
@@ -67,20 +71,21 @@ class MachineLevelUserCloudPolicyControllerObserver
  public:
   void OnPolicyRegisterFinished(bool succeeded) override {
     if (!succeeded) {
+      EXPECT_EQ(0u, chrome::GetTotalBrowserCount());
+#if defined(OS_MACOSX)
+      PostAppControllerNSNotifications();
+#endif
       // Close the error dialog.
       ASSERT_EQ(1u, views::test::WidgetTest::GetAllWidgets().size());
       (*views::test::WidgetTest::GetAllWidgets().begin())->Close();
     }
     EXPECT_EQ(should_succeed_, succeeded);
     is_finished_ = true;
-    if (run_loop_)
-      run_loop_->Quit();
     g_browser_process->browser_policy_connector()
         ->machine_level_user_cloud_policy_controller()
         ->RemoveObserver(this);
   }
 
-  void SetRunLoop(base::RunLoop* run_loop) { run_loop_ = run_loop; }
   void SetShouldSucceed(bool should_succeed) {
     should_succeed_ = should_succeed;
   }
@@ -88,7 +93,6 @@ class MachineLevelUserCloudPolicyControllerObserver
   bool IsFinished() { return is_finished_; }
 
  private:
-  base::RunLoop* run_loop_ = nullptr;
   bool is_finished_ = false;
   bool should_succeed_ = false;
 };
@@ -338,7 +342,7 @@ class MachineLevelUserCloudPolicyManagerTest : public InProcessBrowserTest {
         MachineLevelUserCloudPolicyStore::Create(
             dm_token, client_id, user_data_dir,
             base::CreateSequencedTaskRunnerWithTraits(
-                {base::MayBlock(), base::TaskPriority::BACKGROUND}));
+                {base::MayBlock(), base::TaskPriority::BEST_EFFORT}));
     policy_store->AddObserver(&observer);
 
     base::FilePath policy_dir =
@@ -347,9 +351,7 @@ class MachineLevelUserCloudPolicyManagerTest : public InProcessBrowserTest {
     std::unique_ptr<MachineLevelUserCloudPolicyManager> manager =
         std::make_unique<MachineLevelUserCloudPolicyManager>(
             std::move(policy_store), nullptr, policy_dir,
-            base::ThreadTaskRunnerHandle::Get(),
-            content::BrowserThread::GetTaskRunnerForThread(
-                content::BrowserThread::IO));
+            base::ThreadTaskRunnerHandle::Get());
     manager->Init(&schema_registry);
 
     manager->store()->RemoveObserver(&observer);
@@ -394,17 +396,40 @@ class MachineLevelUserCloudPolicyEnrollmentTest
     histogram_tester_.ExpectTotalCount(kEnrollmentResultMetrics, 0);
   }
 
+  void TearDownInProcessBrowserTestFixture() override {
+    // Test body is skipped if enrollment failed as Chrome quit early.
+    // Verify the enrollment result in the tear down instead.
+    if (!is_enrollment_token_valid()) {
+      VerifyEnrollmentResult();
+    }
+  }
+
   void CreatedBrowserMainParts(content::BrowserMainParts* parts) override {
     static_cast<ChromeBrowserMainParts*>(parts)->AddParts(
         new ChromeBrowserExtraSetUp(&observer_));
   }
 
-  void WaitForPolicyRegisterFinished() {
-    if (!observer_.IsFinished()) {
-      base::RunLoop run_loop;
-      observer_.SetRunLoop(&run_loop);
-      run_loop.Run();
+  void VerifyEnrollmentResult() {
+    EXPECT_EQ(is_enrollment_token_valid() ? "fake_device_management_token"
+                                          : std::string(),
+              BrowserDMTokenStorage::Get()->RetrieveDMToken());
+
+    // Verify the enrollment result.
+    MachineLevelUserCloudPolicyEnrollmentResult expected_result;
+    if (is_enrollment_token_valid() && storage_enabled()) {
+      expected_result = MachineLevelUserCloudPolicyEnrollmentResult::kSuccess;
+    } else if (is_enrollment_token_valid() && !storage_enabled()) {
+      expected_result =
+          MachineLevelUserCloudPolicyEnrollmentResult::kFailedToStore;
+    } else {
+      expected_result =
+          MachineLevelUserCloudPolicyEnrollmentResult::kFailedToFetch;
     }
+
+    // Verify the metrics.
+    histogram_tester_.ExpectBucketCount(kEnrollmentResultMetrics,
+                                        expected_result, 1);
+    histogram_tester_.ExpectTotalCount(kEnrollmentResultMetrics, 1);
   }
 
  protected:
@@ -422,34 +447,18 @@ class MachineLevelUserCloudPolicyEnrollmentTest
 };
 
 IN_PROC_BROWSER_TEST_P(MachineLevelUserCloudPolicyEnrollmentTest, Test) {
-  WaitForPolicyRegisterFinished();
+  // Test body is ran only if enrollment is succeeded.
+  EXPECT_TRUE(is_enrollment_token_valid());
 
-  EXPECT_EQ(is_enrollment_token_valid() ? "fake_device_management_token"
-                                        : std::string(),
-            BrowserDMTokenStorage::Get()->RetrieveDMToken());
+  EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
 
-  MachineLevelUserCloudPolicyEnrollmentResult expected_result;
-  if (is_enrollment_token_valid() && storage_enabled()) {
-    expected_result = MachineLevelUserCloudPolicyEnrollmentResult::kSuccess;
-  } else if (is_enrollment_token_valid() && !storage_enabled()) {
-    expected_result =
-        MachineLevelUserCloudPolicyEnrollmentResult::kFailedToStore;
-  } else {
-    expected_result =
-        MachineLevelUserCloudPolicyEnrollmentResult::kFailedToFetch;
-  }
-  histogram_tester_.ExpectBucketCount(kEnrollmentResultMetrics, expected_result,
-                                      1);
-  histogram_tester_.ExpectTotalCount(kEnrollmentResultMetrics, 1);
-
+  VerifyEnrollmentResult();
 #if defined(OS_MACOSX)
   // Verify the last mericis of launch is recorded in
   // applicationDidFinishNotification.
-  if (is_enrollment_token_valid()) {
-    EXPECT_EQ(1u, histogram_tester_
-                      .GetAllSamples("Startup.OSX.DockIconWillFinishBouncing")
-                      .size());
-  }
+  EXPECT_EQ(1u, histogram_tester_
+                    .GetAllSamples("Startup.OSX.DockIconWillFinishBouncing")
+                    .size());
 #endif
 }
 

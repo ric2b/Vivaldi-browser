@@ -6,7 +6,6 @@
 #define CHROME_BROWSER_VR_UI_TEST_INPUT_H_
 
 #include "base/time/time.h"
-#include "chrome/browser/vr/elements/ui_element_name.h"
 #include "ui/gfx/geometry/point_f.h"
 
 namespace vr {
@@ -15,14 +14,17 @@ namespace vr {
 // element names for interaction during testing.
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.vr
 enum class UserFriendlyElementName : int {
-  kUrl = 0,         // URL bar
-  kBackButton,      // Back button on the URL bar
-  kForwardButton,   // Forward button in the overflow menu
-  kReloadButton,    // Reload button in the overflow menu
-  kOverflowMenu,    // Overflow menu
-  kPageInfoButton,  // Page info button on the URL bar
-  kBrowsingDialog,  // 2D fallback UI, e.g. permission prompts
-  kContentQuad,     // Main content quad showing web contents
+  kUrl = 0,          // URL bar
+  kBackButton,       // Back button on the URL bar
+  kForwardButton,    // Forward button in the overflow menu
+  kReloadButton,     // Reload button in the overflow menu
+  kOverflowMenu,     // Overflow menu
+  kPageInfoButton,   // Page info button on the URL bar
+  kBrowsingDialog,   // 2D fallback UI, e.g. permission prompts
+  kContentQuad,      // Main content quad showing web contents
+  kNewIncognitoTab,  // Button to open a new Incognito tab in the overflow menu
+  kCloseIncognitoTabs,  // Button to close all Incognito tabs in the overflow
+                        // menu
 };
 
 // These are used to report the current state of the UI after performing an
@@ -41,7 +43,11 @@ enum class VrUiTestActivityResult : int {
 enum class VrControllerTestAction : int {
   kClick,
   kHover,
+  kEnableMockedController,
   kRevertToRealController,
+  kClickDown,
+  kClickUp,
+  kMove,
 };
 
 // Holds all information necessary to perform a simulated controller action on
@@ -67,9 +73,6 @@ struct UiTestState {
   // The total number of frames that have been rendered since tracking started.
   base::TimeTicks start_time = base::TimeTicks::Now();
 };
-
-UiElementName UserFriendlyElementNameToUiElementName(
-    UserFriendlyElementName name);
 
 }  // namespace vr
 

@@ -7,6 +7,12 @@
 typedef (ArrayBuffer or ArrayBufferView) BufferSource;
 typedef unsigned long long DOMTimeStamp;
 
+
+// https://heycam.github.io/webidl/#Function
+
+callback Function = any (any... arguments);
+
+
 // typedefs used in multiple files.
 
 typedef object JSON;

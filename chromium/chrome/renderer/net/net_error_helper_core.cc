@@ -40,6 +40,9 @@
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
+using OfflineContentOnNetErrorFeatureState =
+    error_page::LocalizedError::OfflineContentOnNetErrorFeatureState;
+
 namespace {
 
 // |NetErrorNavigationCorrectionTypes| enum id for Web search query.
@@ -424,7 +427,9 @@ struct NetErrorHelperCore::ErrorPageInfo {
         show_cached_copy_button_in_page(false),
         download_button_in_page(false),
         is_finished_loading(false),
-        auto_reload_triggered(false) {}
+        auto_reload_triggered(false),
+        offline_content_feature_state(
+            OfflineContentOnNetErrorFeatureState::kDisabled) {}
 
   // Information about the failed page load.
   error_page::Error error;
@@ -466,6 +471,10 @@ struct NetErrorHelperCore::ErrorPageInfo {
   // True if the auto-reload timer has fired and a reload is or has been in
   // flight.
   bool auto_reload_triggered;
+
+  // State of the offline content on net error page feature. Only enabled if
+  // the feature is enabled, and the error page is an offline error.
+  OfflineContentOnNetErrorFeatureState offline_content_feature_state;
 };
 
 NetErrorHelperCore::NavigationCorrectionParams::NavigationCorrectionParams() {}
@@ -594,6 +603,12 @@ void NetErrorHelperCore::OnCommitLoad(FrameType frame_type, const GURL& url) {
   // change) with no corresponding OnStartLoad.
   uncommitted_load_started_ = false;
 
+#if defined(OS_ANDROID)
+  // Don't need this state. It will be refreshed if another error page is
+  // loaded.
+  available_content_helper_.Reset();
+#endif
+
   // Track if an error occurred due to a page button press.
   // This isn't perfect; if (for instance), the server is slow responding
   // to a request generated from the page reload button, and the user hits
@@ -660,6 +675,19 @@ void NetErrorHelperCore::OnFinishLoad(FrameType frame_type) {
   delegate_->EnablePageHelperFunctions(
       static_cast<net::Error>(committed_error_page_info_->error.reason()));
 
+#if defined(OS_ANDROID)
+  if (committed_error_page_info_->offline_content_feature_state ==
+      OfflineContentOnNetErrorFeatureState::kEnabledList) {
+    available_content_helper_.FetchAvailableContent(base::BindOnce(
+        &Delegate::OfflineContentAvailable, base::Unretained(delegate_)));
+  } else if (committed_error_page_info_->offline_content_feature_state ==
+             OfflineContentOnNetErrorFeatureState::kEnabledSummary) {
+    available_content_helper_.FetchSummary(
+        base::BindOnce(&Delegate::OfflineContentSummaryAvailable,
+                       base::Unretained(delegate_)));
+  }
+#endif
+
   if (committed_error_page_info_->needs_load_navigation_corrections) {
     // If there is another pending error page load, |fix_url| should have been
     // cleared.
@@ -705,13 +733,14 @@ void NetErrorHelperCore::PrepareErrorPage(FrameType frame_type,
     bool show_saved_copy_button_in_page;
     bool show_cached_copy_button_in_page;
     bool download_button_in_page;
+    OfflineContentOnNetErrorFeatureState offline_content_feature_state;
     if (error_html) {
       delegate_->GenerateLocalizedErrorPage(
           error, is_failed_post,
           false /* No diagnostics dialogs allowed for subframes. */, nullptr,
           &reload_button_in_page, &show_saved_copy_button_in_page,
           &show_cached_copy_button_in_page, &download_button_in_page,
-          error_html);
+          &offline_content_feature_state, error_html);
     }
   }
 }
@@ -778,7 +807,8 @@ void NetErrorHelperCore::PrepareErrorPageForMainFrame(
         &pending_error_page_info->reload_button_in_page,
         &pending_error_page_info->show_saved_copy_button_in_page,
         &pending_error_page_info->show_cached_copy_button_in_page,
-        &pending_error_page_info->download_button_in_page, error_html);
+        &pending_error_page_info->download_button_in_page,
+        &pending_error_page_info->offline_content_feature_state, error_html);
   }
 }
 
@@ -839,7 +869,8 @@ void NetErrorHelperCore::OnNavigationCorrectionsFetched(
         &pending_error_page_info_->reload_button_in_page,
         &pending_error_page_info_->show_saved_copy_button_in_page,
         &pending_error_page_info_->show_cached_copy_button_in_page,
-        &pending_error_page_info_->download_button_in_page, &error_html);
+        &pending_error_page_info_->download_button_in_page,
+        &pending_error_page_info_->offline_content_feature_state, &error_html);
   } else {
     // Since |navigation_correction_params| in |pending_error_page_info_| is
     // NULL, this won't trigger another attempt to load corrections.
@@ -1049,4 +1080,17 @@ void NetErrorHelperCore::TrackClick(int tracking_id) {
   delegate_->SendTrackingRequest(
       committed_error_page_info_->navigation_correction_params->url,
       request_body);
+}
+
+void NetErrorHelperCore::LaunchOfflineItem(const std::string& id,
+                                           const std::string& name_space) {
+#if defined(OS_ANDROID)
+  available_content_helper_.LaunchItem(id, name_space);
+#endif
+}
+
+void NetErrorHelperCore::LaunchDownloadsPage() {
+#if defined(OS_ANDROID)
+  available_content_helper_.LaunchDownloadsPage();
+#endif
 }

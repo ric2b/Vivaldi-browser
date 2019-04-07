@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "base/values.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
@@ -24,15 +24,8 @@ TEST_F(AutofillAddressPolicyHandlerTest, Default) {
   PrefValueMap prefs;
   AutofillAddressPolicyHandler handler;
   handler.ApplyPolicySettings(policy, &prefs);
-
-  // Temporary fix for M69. The pref is enabled by default unless it's disabled
-  // by policy.
-  const base::Value* value = nullptr;
-  ASSERT_TRUE(prefs.GetValue(autofill::prefs::kAutofillProfileEnabled, &value));
-  EXPECT_TRUE(value);
-  bool autofill_profile_enabled = false;
-  ASSERT_TRUE(value->GetAsBoolean(&autofill_profile_enabled));
-  EXPECT_TRUE(autofill_profile_enabled);
+  EXPECT_FALSE(
+      prefs.GetValue(autofill::prefs::kAutofillProfileEnabled, nullptr));
 }
 
 TEST_F(AutofillAddressPolicyHandlerTest, Enabled) {
@@ -45,14 +38,9 @@ TEST_F(AutofillAddressPolicyHandlerTest, Enabled) {
   AutofillAddressPolicyHandler handler;
   handler.ApplyPolicySettings(policy, &prefs);
 
-  // Temporary fix for M69. The pref is enabled by default unless it's disabled
-  // by policy.
-  const base::Value* value = nullptr;
-  ASSERT_TRUE(prefs.GetValue(autofill::prefs::kAutofillProfileEnabled, &value));
-  EXPECT_TRUE(value);
-  bool autofill_profile_enabled = false;
-  ASSERT_TRUE(value->GetAsBoolean(&autofill_profile_enabled));
-  EXPECT_TRUE(autofill_profile_enabled);
+  // Enabling Autofill for profiles should not set the prefs.
+  EXPECT_FALSE(
+      prefs.GetValue(autofill::prefs::kAutofillProfileEnabled, nullptr));
 }
 
 TEST_F(AutofillAddressPolicyHandlerTest, Disabled) {

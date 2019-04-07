@@ -5,7 +5,7 @@
 #include "chrome/browser/browsing_data/site_data_size_collector.h"
 
 #include "base/files/file_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
 #include "content/public/browser/browser_thread.h"
@@ -147,7 +147,7 @@ void SiteDataSizeCollector::OnCookiesModelInfoLoaded(
   base::FilePath cookie_file_path = default_storage_partition_path_
       .Append(chrome::kCookieFilename);
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&GetFileSizeBlocking, cookie_file_path),
       base::Bind(&SiteDataSizeCollector::OnStorageSizeFetched,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -202,7 +202,7 @@ void SiteDataSizeCollector::OnChannelIDModelInfoLoaded(
   base::FilePath channel_id_file_path = default_storage_partition_path_
       .Append(chrome::kChannelIDFilename);
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&GetFileSizeBlocking, channel_id_file_path),
       base::Bind(&SiteDataSizeCollector::OnStorageSizeFetched,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -239,7 +239,7 @@ void SiteDataSizeCollector::OnFlashLSOInfoLoaded(
   base::FilePath pepper_data_dir_path = default_storage_partition_path_
       .Append(content::kPepperDataDirname);
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&base::ComputeDirectorySize, pepper_data_dir_path),
       base::Bind(&SiteDataSizeCollector::OnStorageSizeFetched,
                  weak_ptr_factory_.GetWeakPtr()));

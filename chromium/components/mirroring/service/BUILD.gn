@@ -2,38 +2,31 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
 import("//testing/test.gni")
 
-source_set("interface") {
-  sources = [
-    "interface.cc",
-    "interface.h",
-  ]
-
-  public_deps = [
-    "//base",
-  ]
-
-  deps = [
-    "//media/capture/mojom:video_capture",
-    "//media/cast:common",
-    "//media/mojo/interfaces",
-    "//media/mojo/interfaces:remoting",
-    "//net",
-    "//services/network/public/mojom",
-  ]
+service_manifest("manifest") {
+  name = "mirroring"
+  source = "manifest.json"
 }
 
-source_set("service") {
+component("mirroring_service") {
   sources = [
     "captured_audio_input.cc",
     "captured_audio_input.h",
+    "features.cc",
+    "features.h",
     "media_remoter.cc",
     "media_remoter.h",
     "message_dispatcher.cc",
     "message_dispatcher.h",
     "mirror_settings.cc",
     "mirror_settings.h",
+    "mirroring_service.cc",
+    "mirroring_service.h",
     "receiver_response.cc",
     "receiver_response.h",
     "remoting_sender.cc",
@@ -59,7 +52,7 @@ source_set("service") {
   ]
 
   deps = [
-    ":interface",
+    "//components/mirroring/mojom:service",
     "//components/version_info",
     "//crypto",
     "//media",
@@ -76,8 +69,11 @@ source_set("service") {
     "//net",
     "//services/network/public/cpp",
     "//services/network/public/mojom",
+    "//services/service_manager/public/cpp:cpp",
     "//ui/gfx",
   ]
+
+  defines = [ "IS_MIRRORING_SERVICE_IMPL" ]
 }
 
 source_set("unittests") {
@@ -101,23 +97,21 @@ source_set("unittests") {
   ]
 
   deps = [
-    ":interface",
-    ":service",
+    ":mirroring_service",
     "//base",
     "//base/test:test_support",
+    "//components/mirroring/mojom:service",
     "//media",
     "//media/capture/mojom:video_capture",
     "//media/cast:common",
     "//media/cast:net",
     "//media/cast:sender",
     "//media/cast:test_support",
-    "//media/cast:test_support",
     "//media/mojo/interfaces",
     "//media/mojo/interfaces:remoting",
     "//mojo/public/cpp/bindings",
     "//net",
     "//services/network:test_support",
-    "//services/network/public/cpp",
     "//services/network/public/mojom",
     "//testing/gmock",
     "//testing/gtest",

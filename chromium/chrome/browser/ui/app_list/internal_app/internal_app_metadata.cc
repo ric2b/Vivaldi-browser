@@ -7,11 +7,13 @@
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "ash/public/cpp/resources/grit/ash_public_unscaled_resources.h"
 #include "base/logging.h"
+#include "base/metrics/user_metrics.h"
 #include "base/no_destructor.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
@@ -20,9 +22,12 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
+#include "chrome/browser/ui/webui/chromeos/login/discover/discover_window_manager.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/arc/metrics/arc_metrics_constants.h"
+#include "components/arc/property/arc_property_bridge.h"
 #include "components/crx_file/id_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/serialized_navigation_entry.h"
@@ -44,11 +49,21 @@ namespace app_list {
 
 namespace {
 constexpr char kChromeCameraAppId[] = "hfhhnacclhffhdffklopdkcgdhifgngh";
-constexpr char kAndroidCameraAppId[] = "goamfaniemdfcajgcmmflhchgkmbngka";
-constexpr char kAndroidLegacyCameraAppId[] = "obfofkigjfamlldmipdegnjlcpincibc";
-}  // namespace
 
-const std::vector<InternalApp>& GetInternalAppList(bool is_guest_mode) {
+// Generated as ArcAppListPrefs::GetAppIdByPackageName(
+//     "com.google.android.GoogleCameraArc").
+constexpr char kAndroidCameraAppId[] = "goamfaniemdfcajgcmmflhchgkmbngka";
+// Generated as ArcAppListPrefs::GetAppIdByPackageName(
+//     "com.android.camera2").
+constexpr char kAndroidLegacyCameraAppId[] = "obfofkigjfamlldmipdegnjlcpincibc";
+// Generated as ArcAppListPrefs::GetAppIdByPackageName(
+//     "com.android.googlecameramigration").
+constexpr char kAndroidCameraMigrationAppId[] =
+    "ngmkobaiicipbagcngcmilfkhejlnfci";
+
+const std::vector<InternalApp>& GetInternalAppListImpl(bool get_all,
+                                                       const Profile* profile) {
+  DCHECK(get_all || profile);
   static const base::NoDestructor<std::vector<InternalApp>>
       internal_app_list_static(
           {{kInternalAppIdKeyboardShortcutViewer,
@@ -57,20 +72,21 @@ const std::vector<InternalApp>& GetInternalAppList(bool is_guest_mode) {
             /*recommendable=*/false,
             /*searchable=*/true,
             /*show_in_launcher=*/false,
+            InternalAppName::kKeyboardShortcutViewer,
             IDS_LAUNCHER_SEARCHABLE_KEYBOARD_SHORTCUT_VIEWER},
 
            {kInternalAppIdSettings, IDS_INTERNAL_APP_SETTINGS,
             IDR_SETTINGS_LOGO_192,
             /*recommendable=*/true,
             /*searchable=*/true,
-            /*show_in_launcher=*/true,
+            /*show_in_launcher=*/true, InternalAppName::kSettings,
             /*searchable_string_resource_id=*/0},
 
            {kInternalAppIdContinueReading, IDS_INTERNAL_APP_CONTINUOUS_READING,
             IDR_PRODUCT_LOGO_256,
             /*recommendable=*/true,
             /*searchable=*/false,
-            /*show_in_launcher=*/false,
+            /*show_in_launcher=*/false, InternalAppName::kContinueReading,
             /*searchable_string_resource_id=*/0}});
 
   static base::NoDestructor<std::vector<InternalApp>> internal_app_list;
@@ -79,19 +95,38 @@ const std::vector<InternalApp>& GetInternalAppList(bool is_guest_mode) {
                             internal_app_list_static->begin(),
                             internal_app_list_static->end());
 
-  if (!is_guest_mode) {
+  const bool add_camera_app = get_all || !profile->IsGuestSession();
+  if (add_camera_app) {
     internal_app_list->push_back(
         {kInternalAppIdCamera, IDS_INTERNAL_APP_CAMERA, IDR_CAMERA_LOGO_192,
          /*recommendable=*/true,
          /*searchable=*/true,
-         /*show_in_launcher=*/true,
+         /*show_in_launcher=*/true, InternalAppName::kCamera,
          /*searchable_string_resource_id=*/0});
+  }
+
+  const bool add_discover_app =
+      get_all || !chromeos::ProfileHelper::IsEphemeralUserProfile(profile);
+  if (add_discover_app) {
+    internal_app_list->push_back(
+        {kInternalAppIdDiscover, IDS_INTERNAL_APP_DISCOVER,
+         IDR_DISCOVER_APP_192,
+         /*recommendable=*/false,
+         /*searchable=*/true,
+         /*show_in_launcher=*/true, InternalAppName::kDiscover,
+         /*searchable_string_resource_id=*/IDS_INTERNAL_APP_DISCOVER});
   }
   return *internal_app_list;
 }
 
+}  // namespace
+
+const std::vector<InternalApp>& GetInternalAppList(const Profile* profile) {
+  return GetInternalAppListImpl(false, profile);
+}
+
 const InternalApp* FindInternalApp(const std::string& app_id) {
-  for (const auto& app : GetInternalAppList(false)) {
+  for (const auto& app : GetInternalAppListImpl(true, nullptr)) {
     if (app_id == app.app_id)
       return &app;
   }
@@ -113,9 +148,26 @@ int GetIconResourceIdByAppId(const std::string& app_id) {
   return app ? app->icon_resource_id : 0;
 }
 
-void ShowCameraApp(const std::string& app_id,
-                   Profile* profile,
-                   int event_flags) {
+void OnGetMigrationProperty(Profile* profile,
+                            int event_flags,
+                            const base::Optional<std::string>& result) {
+  const char* app_id = kAndroidCameraAppId;
+  if (!result.has_value() || result.value() != "true") {
+    VLOG(1) << "GCA migration is not finished. Launch migration app.";
+    app_id = kAndroidCameraMigrationAppId;
+  }
+
+  AppListClientImpl* controller = AppListClientImpl::GetInstance();
+  if (!arc::LaunchApp(profile, app_id, event_flags,
+                      arc::UserInteractionType::APP_STARTED_FROM_LAUNCHER,
+                      controller->GetAppListDisplayId())) {
+    arc::LaunchApp(profile, kAndroidLegacyCameraAppId, event_flags,
+                   arc::UserInteractionType::APP_STARTED_FROM_LAUNCHER,
+                   controller->GetAppListDisplayId());
+  }
+}
+
+void ShowCameraApp(Profile* profile, int event_flags) {
   std::string chrome_app_id(kChromeCameraAppId);
   const extensions::ExtensionRegistry* registry =
       extensions::ExtensionRegistry::Get(profile);
@@ -123,18 +175,17 @@ void ShowCameraApp(const std::string& app_id,
       registry->GetInstalledExtension(chrome_app_id);
 
   bool arc_enabled = arc::IsArcPlayStoreEnabledForProfile(profile);
-  bool media_consolidated =
+  bool chrome_camera_migrated =
       profile->GetPrefs()->GetBoolean(prefs::kCameraMediaConsolidated);
   AppListClientImpl* controller = AppListClientImpl::GetInstance();
-  if (arc_enabled && (!extension || media_consolidated)) {
-    // Open ARC++ camera app.
-    if (!arc::LaunchApp(profile, kAndroidCameraAppId, event_flags,
-                        arc::UserInteractionType::APP_STARTED_FROM_LAUNCHER,
-                        controller->GetAppListDisplayId())) {
-      arc::LaunchApp(profile, kAndroidLegacyCameraAppId, event_flags,
-                     arc::UserInteractionType::APP_STARTED_FROM_LAUNCHER,
-                     controller->GetAppListDisplayId());
-    }
+
+  if (arc_enabled && (!extension || chrome_camera_migrated)) {
+    // Open Google camera app or GCA migration app according to GCA
+    // migration system property.
+    arc::ArcPropertyBridge* property =
+        arc::ArcPropertyBridge::GetForBrowserContext(profile);
+    property->GetGcaMigrationProperty(
+        base::BindOnce(&OnGetMigrationProperty, profile, event_flags));
   } else if (extension) {
     // Open Chrome camera app.
     AppLaunchParams params = CreateAppLaunchParamsWithEventFlags(
@@ -157,11 +208,17 @@ void OpenInternalApp(const std::string& app_id,
                      Profile* profile,
                      int event_flags) {
   if (app_id == kInternalAppIdKeyboardShortcutViewer) {
-    keyboard_shortcut_viewer_util::ShowKeyboardShortcutViewer();
+    keyboard_shortcut_viewer_util::ToggleKeyboardShortcutViewer();
   } else if (app_id == kInternalAppIdSettings) {
     chrome::ShowSettingsSubPageForProfile(profile, std::string());
   } else if (app_id == kInternalAppIdCamera) {
-    ShowCameraApp(app_id, profile, event_flags);
+    ShowCameraApp(profile, event_flags);
+  } else if (app_id == kInternalAppIdDiscover) {
+#if defined(OS_CHROMEOS)
+    base::RecordAction(base::UserMetricsAction("ShowDiscover"));
+    chromeos::DiscoverWindowManager::GetInstance()
+        ->ShowChromeDiscoverPageForProfile(profile);
+#endif
   }
 }
 
@@ -234,12 +291,18 @@ bool HasRecommendableForeignTab(Profile* profile,
   return has_recommendation;
 }
 
+InternalAppName GetInternalAppNameByAppId(
+    const std::string& app_id) {
+  const auto* app = FindInternalApp(app_id);
+  DCHECK(app);
+  return app->internal_app_name;
+}
 
 size_t GetNumberOfInternalAppsShowInLauncherForTest(std::string* apps_name,
-                                                    bool is_guest_mode) {
+                                                    const Profile* profile) {
   size_t num_of_internal_apps_show_in_launcher = 0u;
   std::vector<std::string> internal_apps_name;
-  for (const auto& app : GetInternalAppList(is_guest_mode)) {
+  for (const auto& app : GetInternalAppList(profile)) {
     if (app.show_in_launcher) {
       ++num_of_internal_apps_show_in_launcher;
       if (apps_name) {

@@ -50,6 +50,9 @@ const char kSettingDeviceName[] = "deviceName";
 // Option to disable scaling. True if scaling is disabled else false.
 const char kSettingDisableScaling[] = "disableScaling";
 
+// Default DPI
+const char kSettingDpiDefault[] = "dpiDefault";
+
 // Horizontal DPI
 const char kSettingDpiHorizontal[] = "dpiHorizontal";
 
@@ -137,6 +140,9 @@ const char kSettingPageRangeTo[] = "to";
 // Page size of document to print.
 const char kSettingPageWidth[] = "pageWidth";
 const char kSettingPageHeight[] = "pageHeight";
+
+// Policies affecting printing destination.
+const char kSettingPolicies[] = "policies";
 
 const char kSettingPreviewModifiable[] = "previewModifiable";
 

@@ -8,13 +8,15 @@
 #include "net/third_party/quic/core/quic_session.h"
 #include "net/third_party/quic/core/quic_stream.h"
 #include "net/third_party/quic/platform/api/quic_export.h"
-#include "net/third_party/quic/quartc/quartc_stream_interface.h"
+#include "net/third_party/quic/platform/api/quic_mem_slice_span.h"
 
 namespace quic {
 
-// Implements a QuartcStreamInterface using a QuicStream.
-class QUIC_EXPORT_PRIVATE QuartcStream : public QuicStream,
-                                         public QuartcStreamInterface {
+// Sends and receives data with a particular QUIC stream ID, reliably and
+// in-order. To send/receive data out of order, use separate streams. To
+// send/receive unreliably, close a stream after reliability is no longer
+// needed.
+class QUIC_EXPORT_PRIVATE QuartcStream : public QuicStream {
  public:
   QuartcStream(QuicStreamId id, QuicSession* session);
 
@@ -33,27 +35,54 @@ class QUIC_EXPORT_PRIVATE QuartcStream : public QuicStream,
       const QuicReferenceCountedPointer<QuicAckListenerInterface>& ack_listener)
       override;
 
-  // QuartcStreamInterface overrides.
-  uint32_t stream_id() override;
+  void OnCanWrite() override;
 
-  uint64_t bytes_buffered() override;
+  // QuartcStream interface methods.
 
-  bool fin_sent() override;
+  // Whether the stream should be cancelled instead of retransmitted on loss.
+  // If set to true, the stream will reset itself instead of retransmitting lost
+  // stream frames.  Defaults to false.
+  bool cancel_on_loss();
+  void set_cancel_on_loss(bool cancel_on_loss);
 
-  int stream_error() override;
+  // Marks this stream as finished writing.  Asynchronously sends a FIN and
+  // closes the write-side.  It is not necessary to call FinishWriting() if the
+  // last call to Write() sends a FIN.
+  void FinishWriting();
 
-  void Write(QuicMemSliceSpan data, const WriteParameters& param) override;
+  // Implemented by the user of the QuartcStream to receive incoming
+  // data and be notified of state changes.
+  class Delegate {
+   public:
+    virtual ~Delegate() {}
 
-  void FinishWriting() override;
+    // Called when the stream receives data.  Called with |size| == 0 after all
+    // stream data has been delivered (once the stream receives a FIN bit).
+    // Note that the same packet may include both data and a FIN bit, causing
+    // this method to be called twice.
+    virtual void OnReceived(QuartcStream* stream,
+                            const char* data,
+                            size_t size) = 0;
 
-  void FinishReading() override;
+    // Called when the stream is closed, either locally or by the remote
+    // endpoint.  Streams close when (a) fin bits are both sent and received,
+    // (b) Close() is called, or (c) the stream is reset.
+    // TODO(zhihuang) Creates a map from the integer error_code to WebRTC native
+    // error code.
+    virtual void OnClose(QuartcStream* stream) = 0;
 
-  void Close() override;
+    // Called when the contents of the stream's buffer changes.
+    virtual void OnBufferChanged(QuartcStream* stream) = 0;
+  };
 
-  void SetDelegate(QuartcStreamInterface::Delegate* delegate) override;
+  // The |delegate| is not owned by QuartcStream.
+  void SetDelegate(Delegate* delegate);
 
  private:
-  QuartcStreamInterface::Delegate* delegate_ = nullptr;
+  Delegate* delegate_ = nullptr;
+
+  // Whether the stream should cancel itself instead of retransmitting frames.
+  bool cancel_on_loss_ = false;
 };
 
 }  // namespace quic

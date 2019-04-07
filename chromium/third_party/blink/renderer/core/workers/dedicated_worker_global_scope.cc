@@ -31,11 +31,13 @@
 #include "third_party/blink/renderer/core/workers/dedicated_worker_global_scope.h"
 
 #include <memory>
+#include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/inspector/thread_debugger.h"
+#include "third_party/blink/renderer/core/messaging/post_message_options.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/script/fetch_client_settings_object_snapshot.h"
 #include "third_party/blink/renderer/core/script/modulator.h"
@@ -50,10 +52,12 @@
 namespace blink {
 
 DedicatedWorkerGlobalScope::DedicatedWorkerGlobalScope(
+    const String& name,
     std::unique_ptr<GlobalScopeCreationParams> creation_params,
     DedicatedWorkerThread* thread,
     base::TimeTicks time_origin)
-    : WorkerGlobalScope(std::move(creation_params), thread, time_origin) {}
+    : WorkerGlobalScope(std::move(creation_params), thread, time_origin),
+      name_(name) {}
 
 DedicatedWorkerGlobalScope::~DedicatedWorkerGlobalScope() = default;
 
@@ -82,21 +86,45 @@ void DedicatedWorkerGlobalScope::ImportModuleScript(
                     new WorkerModuleTreeClient(modulator));
 }
 
-void DedicatedWorkerGlobalScope::postMessage(
-    ScriptState* script_state,
-    scoped_refptr<SerializedScriptValue> message,
-    const MessagePortArray& ports,
-    ExceptionState& exception_state) {
+const String DedicatedWorkerGlobalScope::name() const {
+  return name_;
+}
+
+void DedicatedWorkerGlobalScope::postMessage(ScriptState* script_state,
+                                             const ScriptValue& message,
+                                             Vector<ScriptValue>& transfer,
+                                             ExceptionState& exception_state) {
+  PostMessageOptions options;
+  if (!transfer.IsEmpty())
+    options.setTransfer(transfer);
+  postMessage(script_state, message, options, exception_state);
+}
+
+void DedicatedWorkerGlobalScope::postMessage(ScriptState* script_state,
+                                             const ScriptValue& message,
+                                             const PostMessageOptions& options,
+                                             ExceptionState& exception_state) {
+  Transferables transferables;
+  scoped_refptr<SerializedScriptValue> serialized_message =
+      PostMessageHelper::SerializeMessageByMove(script_state->GetIsolate(),
+                                                message, options, transferables,
+                                                exception_state);
+  if (exception_state.HadException())
+    return;
+  DCHECK(serialized_message);
+  BlinkTransferableMessage transferable_message;
+  transferable_message.message = serialized_message;
   // Disentangle the port in preparation for sending it to the remote context.
-  auto channels = MessagePort::DisentanglePorts(
-      ExecutionContext::From(script_state), ports, exception_state);
+  transferable_message.ports = MessagePort::DisentanglePorts(
+      ExecutionContext::From(script_state), transferables.message_ports,
+      exception_state);
   if (exception_state.HadException())
     return;
   ThreadDebugger* debugger = ThreadDebugger::From(script_state->GetIsolate());
-  v8_inspector::V8StackTraceId stack_id =
+  transferable_message.sender_stack_trace_id =
       debugger->StoreCurrentStackTrace("postMessage");
-  WorkerObjectProxy().PostMessageToWorkerObject(std::move(message),
-                                                std::move(channels), stack_id);
+  WorkerObjectProxy().PostMessageToWorkerObject(
+      std::move(transferable_message));
 }
 
 DedicatedWorkerObjectProxy& DedicatedWorkerGlobalScope::WorkerObjectProxy()

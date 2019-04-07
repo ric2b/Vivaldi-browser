@@ -42,6 +42,7 @@
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/resource_throttle.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -55,8 +56,10 @@
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
+#include "content/public/test/navigation_handle_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
+#include "content/public/test/url_loader_interceptor.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_download_manager_delegate.h"
 #include "content/shell/common/shell_switches.h"
@@ -259,7 +262,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       "var xhr = new XMLHttpRequest();\n"
       "xhr.open('GET', url);\n"
       "xhr.send();\n";
-  EXPECT_TRUE(ExecuteScript(shell()->web_contents(), script));
+  EXPECT_TRUE(ExecJs(shell()->web_contents(), script));
   // The renderer may not be killed immediately (if it is indeed killed), so
   // reload, block and verify its liveness.
   ReloadBlockUntilNavigationsComplete(shell(), 1);
@@ -325,10 +328,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // Navigate with Javascript.
   {
     GURL navigate_url = embedded_test_server()->base_url();
-    std::string script = "document.location = '" +
-                         navigate_url.spec() + "';";
+    std::string script = JsReplace("document.location = $1", navigate_url);
     TestNavigationObserver same_tab_observer(shell()->web_contents(), 1);
-    EXPECT_TRUE(ExecuteScript(shell(), script));
+    EXPECT_TRUE(ExecJs(shell(), script));
     same_tab_observer.Wait();
     EXPECT_EQ(2, controller.GetEntryCount());
     NavigationEntryImpl* entry = controller.GetLastCommittedEntry();
@@ -377,7 +379,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(data_url, entry->GetURL());
 
   // Passes if renderer is still alive.
-  EXPECT_TRUE(ExecuteScript(shell(), "console.log('Success');"));
+  EXPECT_TRUE(ExecJs(shell(), "console.log('Success');"));
 }
 
 IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, UniqueIDs) {
@@ -392,7 +394,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, UniqueIDs) {
 
   // Use JavaScript to click the link and load the iframe.
   std::string script = "document.getElementById('link').click()";
-  EXPECT_TRUE(ExecuteScript(shell(), script));
+  EXPECT_TRUE(ExecJs(shell(), script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   ASSERT_EQ(2, controller.GetEntryCount());
 
@@ -494,21 +496,13 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
 namespace {
 
-int RendererHistoryLength(Shell* shell) {
-  int value = 0;
-  EXPECT_TRUE(ExecuteScriptAndExtractInt(
-      shell, "domAutomationController.send(history.length)", &value));
-  return value;
-}
-
 // Does a renderer-initiated location.replace navigation to |url|, replacing the
 // current entry.
 bool RendererLocationReplace(Shell* shell, const GURL& url) {
   WebContents* web_contents = shell->web_contents();
   WaitForLoadStop(web_contents);
   TestNavigationObserver same_tab_observer(web_contents, 1);
-  EXPECT_TRUE(
-      ExecuteScript(shell, "window.location.replace('" + url.spec() + "');"));
+  EXPECT_TRUE(ExecJs(shell, JsReplace("window.location.replace($1)", url)));
   same_tab_observer.Wait();
   if (!IsLastCommittedEntryOfPageType(web_contents, PAGE_TYPE_NORMAL))
     return false;
@@ -527,24 +521,24 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(NavigateToURL(
       shell(), embedded_test_server()->GetURL("/simple_page.html")));
   EXPECT_EQ(1, controller.GetEntryCount());
-  EXPECT_EQ(1, RendererHistoryLength(shell()));
+  EXPECT_EQ(1, EvalJs(shell(), "history.length"));
 
   EXPECT_TRUE(RendererLocationReplace(
       shell(), embedded_test_server()->GetURL("/title1.html")));
   EXPECT_EQ(1, controller.GetEntryCount());
-  EXPECT_EQ(1, RendererHistoryLength(shell()));
+  EXPECT_EQ(1, EvalJs(shell(), "history.length"));
 
   // Now create two more entries and go back, to test replacing an entry without
   // pruning the forward history.
   EXPECT_TRUE(
       NavigateToURL(shell(), embedded_test_server()->GetURL("/title2.html")));
   EXPECT_EQ(2, controller.GetEntryCount());
-  EXPECT_EQ(2, RendererHistoryLength(shell()));
+  EXPECT_EQ(2, EvalJs(shell(), "history.length"));
 
   EXPECT_TRUE(
       NavigateToURL(shell(), embedded_test_server()->GetURL("/title3.html")));
   EXPECT_EQ(3, controller.GetEntryCount());
-  EXPECT_EQ(3, RendererHistoryLength(shell()));
+  EXPECT_EQ(3, EvalJs(shell(), "history.length"));
 
   controller.GoBack();
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
@@ -555,7 +549,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(RendererLocationReplace(
       shell(), embedded_test_server()->GetURL("/simple_page.html?page1b")));
   EXPECT_EQ(3, controller.GetEntryCount());
-  EXPECT_EQ(3, RendererHistoryLength(shell()));
+  EXPECT_EQ(3, EvalJs(shell(), "history.length"));
   EXPECT_TRUE(controller.CanGoForward());
 
   // Note that there's no way to access the renderer's notion of the history
@@ -576,15 +570,15 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
             shell()->web_contents()->GetMainFrame()->GetEnabledBindings());
 
   ShellAddedObserver observer;
-  std::string page_url = embedded_test_server()->GetURL(
-      "/navigation_controller/simple_page_1.html").spec();
+  GURL page_url = embedded_test_server()->GetURL(
+      "/navigation_controller/simple_page_1.html");
   EXPECT_TRUE(
-      ExecuteScript(shell(), "window.open('" + page_url + "', '_blank')"));
+      ExecJs(shell(), JsReplace("window.open($1, '_blank');", page_url)));
   Shell* shell2 = observer.GetShell();
   EXPECT_TRUE(WaitForLoadStop(shell2->web_contents()));
 
   EXPECT_EQ(1, shell2->web_contents()->GetController().GetEntryCount());
-  EXPECT_EQ(1, RendererHistoryLength(shell2));
+  EXPECT_EQ(1, EvalJs(shell2, "history.length"));
 
   // Again, as above, there's no way to access the renderer's notion of the
   // history offset via JavaScript. Checking just the history length, again,
@@ -850,7 +844,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, SubframeOnEmptyPage) {
   ShellAddedObserver new_shell_observer;
   {
     std::string script = "window.open()";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
   }
   Shell* new_shell = new_shell_observer.GetShell();
   ASSERT_NE(new_shell->web_contents(), shell()->web_contents());
@@ -868,7 +862,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, SubframeOnEmptyPage) {
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = 'data:text/html,<p>some page</p>';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(new_root, script));
+    EXPECT_TRUE(ExecJs(new_root, script));
     capturer.Wait();
   }
   ASSERT_EQ(1U, new_root->child_count());
@@ -879,8 +873,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, SubframeOnEmptyPage) {
       "foo.com", "/navigation_controller/simple_page_2.html");
   {
     LoadCommittedCapturer capturer(new_shell->web_contents());
-    std::string script = "location.assign('" + frame_url.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(new_root->child_at(0), script));
+    std::string script = JsReplace("location.assign($1);", frame_url);
+    EXPECT_TRUE(ExecJs(new_root->child_at(0), script));
     capturer.Wait();
   }
 
@@ -896,7 +890,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, SubframeOnEmptyPage) {
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + grandchild_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(new_root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(new_root->child_at(0), script));
     capturer.Wait();
   }
   ASSERT_EQ(1U, new_root->child_at(0)->child_count());
@@ -917,7 +911,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // Pop open a new window to about:blank.
   ShellAddedObserver new_shell_observer;
-  EXPECT_TRUE(ExecuteScript(root, "var w = window.open('about:blank')"));
+  EXPECT_TRUE(ExecJs(root, "var w = window.open('about:blank')"));
   Shell* new_shell = new_shell_observer.GetShell();
   ASSERT_NE(new_shell->web_contents(), shell()->web_contents());
   FrameTreeNode* new_root =
@@ -930,10 +924,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // Make a new iframe in it using document.write from the opener.
   {
     LoadCommittedCapturer capturer(new_shell->web_contents());
-    std::string script = "w.document.write("
-                         "\"<iframe src='" + url1.spec() + "'></iframe>\");"
-                         "w.document.close();";
-    EXPECT_TRUE(ExecuteScript(root->current_frame_host(), script));
+    std::string html = "<iframe src='" + url1.spec() + "'></iframe>";
+    std::string script = JsReplace(
+        "w.document.write($1);"
+        "w.document.close();",
+        html);
+    EXPECT_TRUE(ExecJs(root->current_frame_host(), script));
     capturer.Wait();
   }
   ASSERT_EQ(1U, new_root->child_count());
@@ -946,7 +942,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   {
     LoadCommittedCapturer capturer(new_root->child_at(0));
     std::string script = "location.href = '" + url2.spec() + "';";
-    EXPECT_TRUE(ExecuteScript(new_root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(new_root->child_at(0), script));
     capturer.Wait();
   }
   EXPECT_EQ(blank_url, new_root->current_url());
@@ -958,7 +954,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   {
     LoadCommittedCapturer capturer(new_root);
     std::string script = "history.replaceState({}, 'foo', 'foo');";
-    EXPECT_TRUE(ExecuteScript(new_root, script));
+    EXPECT_TRUE(ExecJs(new_root, script));
     capturer.Wait();
   }
   EXPECT_EQ(embedded_test_server()->GetURL("/navigation_controller/foo"),
@@ -1093,7 +1089,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     // Load via a fragment link click.
     FrameNavigateParamsCapturer capturer(root);
     std::string script = "document.getElementById('fraglink').click()";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(), ui::PAGE_TRANSITION_LINK));
@@ -1105,7 +1101,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     // Load via link click.
     FrameNavigateParamsCapturer capturer(root);
     std::string script = "document.getElementById('thelink').click()";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(), ui::PAGE_TRANSITION_LINK));
@@ -1118,8 +1114,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigateParamsCapturer capturer(root);
     GURL frame_url(embedded_test_server()->GetURL(
         "/navigation_controller/simple_page_2.html"));
-    std::string script = "location.assign('" + frame_url.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    std::string script = JsReplace("location.assign($1);", frame_url);
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(),
@@ -1134,7 +1130,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigateParamsCapturer capturer(root);
     std::string script =
         "history.pushState({}, 'page 1', 'simple_page_1.html')";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(),
@@ -1148,8 +1144,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   FrameNavigateParamsCapturer capturer(root);
   GURL frame_url(embedded_test_server()->GetURL(
       "foo.com", "/navigation_controller/simple_page_1.html"));
-  std::string script = "location.replace('" + frame_url.spec() + "')";
-  EXPECT_TRUE(ExecuteScript(root, script));
+  std::string script = JsReplace("location.replace($1);", frame_url);
+  EXPECT_TRUE(ExecJs(root, script));
   capturer.Wait();
   EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
       capturer.transition(),
@@ -1206,7 +1202,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   {
     // Back from the renderer side.
     FrameNavigateParamsCapturer capturer(root);
-    EXPECT_TRUE(ExecuteScript(root, "history.back()"));
+    EXPECT_TRUE(ExecJs(root, "history.back()"));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(),
@@ -1220,7 +1216,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   {
     // Forward from the renderer side.
     FrameNavigateParamsCapturer capturer(root);
-    EXPECT_TRUE(ExecuteScript(root, "history.forward()"));
+    EXPECT_TRUE(ExecJs(root, "history.forward()"));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(),
@@ -1234,7 +1230,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   {
     // Back from the renderer side via history.go().
     FrameNavigateParamsCapturer capturer(root);
-    EXPECT_TRUE(ExecuteScript(root, "history.go(-1)"));
+    EXPECT_TRUE(ExecJs(root, "history.go(-1)"));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(),
@@ -1248,7 +1244,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   {
     // Forward from the renderer side via history.go().
     FrameNavigateParamsCapturer capturer(root);
-    EXPECT_TRUE(ExecuteScript(root, "history.go(1)"));
+    EXPECT_TRUE(ExecJs(root, "history.go(1)"));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(),
@@ -1273,7 +1269,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   {
     // Reload from the renderer side.
     FrameNavigateParamsCapturer capturer(root);
-    EXPECT_TRUE(ExecuteScript(root, "location.reload()"));
+    EXPECT_TRUE(ExecJs(root, "location.reload()"));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(),
@@ -1288,8 +1284,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigateParamsCapturer capturer(root);
     GURL frame_url(embedded_test_server()->GetURL(
         "/navigation_controller/simple_page_1.html"));
-    std::string script = "location.replace('" + frame_url.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    std::string script = JsReplace("location.replace($1);", frame_url);
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(),
@@ -1322,7 +1318,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigateParamsCapturer capturer(root);
     std::string script =
         "history.replaceState({}, 'page 2', 'simple_page_2.html')";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(),
@@ -1338,7 +1334,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       "/navigation_controller/page_with_links.html"));
   EXPECT_TRUE(NavigateToURL(shell(), url_links));
   std::string script = "document.getElementById('fraglink').click()";
-  EXPECT_TRUE(ExecuteScript(root, script));
+  EXPECT_TRUE(ExecJs(root, script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   {
@@ -1372,7 +1368,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   EXPECT_TRUE(NavigateToURL(shell(), url1));
   script = "history.pushState({}, 'page 2', 'simple_page_2.html')";
-  EXPECT_TRUE(ExecuteScript(root, script));
+  EXPECT_TRUE(ExecJs(root, script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   {
@@ -1434,11 +1430,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, ReloadWithUrlAnchor) {
       "/navigation_controller/reload-with-url-anchor.html#center-element"));
   EXPECT_TRUE(NavigateToURL(shell(), url));
 
-  double window_scroll_y = 0;
-  std::string get_window_scroll_y =
-      "domAutomationController.send(window.scrollY);";
-  EXPECT_TRUE(ExecuteScriptAndExtractDouble(shell(), get_window_scroll_y,
-                                            &window_scroll_y));
+  double window_scroll_y = EvalJs(shell(), "window.scrollY").ExtractDouble();
 
   // The 'center-element' y-position is 2000px. 2000px is an arbitrary value.
   double expected_window_scroll_y = 2000;
@@ -1456,8 +1448,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, ReloadWithUrlAnchor) {
   // Reload.
   ReloadBlockUntilNavigationsComplete(shell(), 1);
 
-  EXPECT_TRUE(ExecuteScriptAndExtractDouble(shell(), get_window_scroll_y,
-                                            &window_scroll_y));
+  window_scroll_y = EvalJs(shell(), "window.scrollY").ExtractDouble();
   EXPECT_FLOAT_EQ(expected_window_scroll_y, window_scroll_y);
 }
 
@@ -1474,11 +1465,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   std::string script_scroll_down = "window.scroll(0, 2100)";
   EXPECT_TRUE(ExecuteScript(shell(), script_scroll_down));
 
-  std::string get_window_scroll_y =
-      "domAutomationController.send(window.scrollY)";
-  double window_scroll_y = 0;
-  EXPECT_TRUE(ExecuteScriptAndExtractDouble(shell(), get_window_scroll_y,
-                                            &window_scroll_y));
+  double window_scroll_y = EvalJs(shell(), "window.scrollY").ExtractDouble();
 
   double expected_window_scroll_y = 2100;
   if (IsUseZoomForDSFEnabled()) {
@@ -1495,8 +1482,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // Reload.
   ReloadBlockUntilNavigationsComplete(shell(), 1);
 
-  EXPECT_TRUE(ExecuteScriptAndExtractDouble(shell(), get_window_scroll_y,
-                                            &window_scroll_y));
+  window_scroll_y = EvalJs(shell(), "window.scrollY").ExtractDouble();
   EXPECT_FLOAT_EQ(expected_window_scroll_y, window_scroll_y);
 }
 
@@ -1599,7 +1585,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     // Load via a fragment link click.
     FrameNavigateParamsCapturer capturer(root->child_at(0));
     std::string script = "document.getElementById('fraglink').click()";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
@@ -1611,8 +1597,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigateParamsCapturer capturer(root->child_at(0));
     GURL frame_url(embedded_test_server()->GetURL(
         "/navigation_controller/simple_page_1.html"));
-    std::string script = "location.assign('" + frame_url.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    std::string script = JsReplace("location.assign($1);", frame_url);
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
@@ -1624,8 +1610,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     LoadCommittedCapturer capturer(root->child_at(0));
     GURL frame_url(embedded_test_server()->GetURL(
         "/navigation_controller/simple_page_2.html"));
-    std::string script = "location.replace('" + frame_url.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    std::string script = JsReplace("location.replace($1);", frame_url);
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -1636,7 +1622,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigateParamsCapturer capturer(root->child_at(0));
     std::string script =
         "history.pushState({}, 'page 1', 'simple_page_1.html')";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
@@ -1648,7 +1634,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     LoadCommittedCapturer capturer(root->child_at(0));
     std::string script =
         "history.replaceState({}, 'page 2', 'simple_page_2.html')";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -1657,7 +1643,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   {
     // Reload.
     LoadCommittedCapturer capturer(root->child_at(0));
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), "location.reload()"));
+    EXPECT_TRUE(ExecJs(root->child_at(0), "location.reload()"));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -1671,7 +1657,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + frame_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -1729,7 +1715,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     // Do a fragment link click.
     FrameNavigateParamsCapturer capturer(root);
     std::string script = "document.getElementById('fraglink').click()";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(), ui::PAGE_TRANSITION_LINK));
@@ -1741,7 +1727,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     // Do a non-fragment link click.
     FrameNavigateParamsCapturer capturer(root);
     std::string script = "document.getElementById('thelink').click()";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(), ui::PAGE_TRANSITION_LINK));
@@ -1768,7 +1754,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     // Do a fragment link click.
     FrameNavigateParamsCapturer capturer(root->child_at(0));
     std::string script = "document.getElementById('fraglink').click()";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
@@ -1780,7 +1766,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     // Do a non-fragment link click.
     FrameNavigateParamsCapturer capturer(root->child_at(0));
     std::string script = "document.getElementById('thelink').click()";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
@@ -1809,7 +1795,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     LoadCommittedCapturer capturer(shell()->web_contents());
     std::string script = "var iframe = document.createElement('iframe');"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -1836,7 +1822,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     LoadCommittedCapturer capturer(shell()->web_contents());
     std::string script = "var iframe = document.createElement('iframe');"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -1855,7 +1841,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = 'about:blank';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -1877,9 +1863,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       "/navigation_controller/simple_page_1.html"));
   {
     LoadCommittedCapturer capturer(root->child_at(0)->child_at(0));
-    std::string script = "var frames = document.getElementsByTagName('iframe');"
-                         "frames[0].src = '" + frame_url.spec() + "';";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    std::string script = JsReplace(
+        "var frames = document.getElementsByTagName('iframe');"
+        "frames[0].src = $1;",
+        frame_url);
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -1903,9 +1891,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       "foo.com", "/navigation_controller/simple_page_2.html"));
   {
     LoadCommittedCapturer capturer(root->child_at(1));
-    std::string script = "var frames = document.getElementsByTagName('iframe');"
-                         "frames[1].src = '" + foo_url.spec() + "';";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    std::string script = JsReplace(
+        "var frames = document.getElementsByTagName('iframe');"
+        "frames[1].src = $1;",
+        foo_url);
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -1930,7 +1920,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     LoadCommittedCapturer capturer(root->child_at(0)->child_at(0));
     std::string script = "var frames = document.getElementsByTagName('iframe');"
                          "frames[0].src = 'about:blank';";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
@@ -1980,12 +1970,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   GURL slow_url(embedded_test_server()->GetURL(
       "/navigation_controller/simple_page_2.html"));
   TestNavigationManager subframe_delayer(shell()->web_contents(), slow_url);
-  {
-    std::string script = "var iframe = document.createElement('iframe');"
-                         "iframe.src = '" + slow_url.spec() + "';"
-                         "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
-  }
+  std::string script_template =
+      "var iframe = document.createElement('iframe');"
+      "iframe.src = $1;"
+      "document.body.appendChild(iframe);";
+
+  EXPECT_TRUE(ExecJs(root, JsReplace(script_template, slow_url)));
   EXPECT_TRUE(subframe_delayer.WaitForRequestStart());
 
   // Stop the request so that we can wait for load stop below, without ending up
@@ -1995,13 +1985,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // 2. A nested iframe with a cross-site URL should be able to commit.
   GURL foo_url(embedded_test_server()->GetURL(
       "foo.com", "/navigation_controller/simple_page_1.html"));
-  {
-    std::string script = "var iframe = document.createElement('iframe');"
-                         "iframe.src = '" + foo_url.spec() + "';"
-                         "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
-    WaitForLoadStopWithoutSuccessCheck(shell()->web_contents());
-  }
+  EXPECT_TRUE(ExecJs(root->child_at(0), JsReplace(script_template, foo_url)));
+  WaitForLoadStopWithoutSuccessCheck(shell()->web_contents());
 
   // TODO(creis): Check subframe entries once we create them in this case.
   // See https://crbug.com/608402.
@@ -2028,7 +2013,7 @@ IN_PROC_BROWSER_TEST_F(
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + no_commit_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
   }
   EXPECT_EQ(GURL(), root->child_at(0)->current_url());
 
@@ -2040,7 +2025,7 @@ IN_PROC_BROWSER_TEST_F(
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + foo_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -2068,7 +2053,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   {
     FrameNavigateParamsCapturer capturer(root);
     std::string script = "history.pushState({}, 'foo', 'foo')";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
     EXPECT_TRUE(capturer.is_same_document());
@@ -2082,7 +2067,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + child_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -2103,7 +2088,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + grandchild_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -2134,14 +2119,14 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + child_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
   }
 
   // 2. Change the iframe's name.
-  EXPECT_TRUE(ExecuteScript(root->child_at(0), "window.name = 'foo';"));
+  EXPECT_TRUE(ExecJs(root->child_at(0), "window.name = 'foo';"));
 
   // 3. A nested iframe with a cross-site URL should be able to commit.
   GURL bar_url(embedded_test_server()->GetURL(
@@ -2151,7 +2136,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + bar_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
 
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
@@ -2186,7 +2171,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + frame_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -2215,7 +2200,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + foo_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -2241,7 +2226,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + foo_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root->child_at(1), script));
+    EXPECT_TRUE(ExecJs(root->child_at(1), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -2267,7 +2252,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + foo_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -2292,7 +2277,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                          "iframe.src = '" + frame_url.spec() + "';"
                          "document.body.appendChild(iframe);";
     FrameTreeNode* child = root->child_at(2);
-    EXPECT_TRUE(ExecuteScript(child, script));
+    EXPECT_TRUE(ExecJs(child, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -2349,7 +2334,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + frame_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
   }
   NavigationEntryImpl* entry = controller.GetLastCommittedEntry();
@@ -2387,7 +2372,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + foo_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
   }
 
@@ -2398,7 +2383,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + foo_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root->child_at(1), script));
+    EXPECT_TRUE(ExecJs(root->child_at(1), script));
     capturer.Wait();
   }
   GURL bar_url(embedded_test_server()->GetURL(
@@ -2443,7 +2428,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
         root->child_at(1)->current_frame_host());
     std::string script = "var frames = document.getElementsByTagName('iframe');"
                          "frames[1].src = '" + baz_url.spec() + "';";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     // Wait for the RenderFrame to go away, if this will be cross-process.
     if (AreAllSitesIsolatedForTesting())
       deleted_observer.WaitUntilDeleted();
@@ -2513,7 +2498,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // 2. Same document navigation in the main frame.
   std::string push_script = "history.pushState({}, 'page 2', 'page_2.html')";
-  EXPECT_TRUE(ExecuteScript(root, push_script));
+  EXPECT_TRUE(ExecJs(root, push_script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   // The entry should have a FrameNavigationEntry for the subframe.
@@ -2527,7 +2512,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + subframe_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -2564,7 +2549,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + frame_url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
   }
   NavigationEntryImpl* entry1 = controller.GetLastCommittedEntry();
@@ -2810,7 +2795,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                              ->frame_entry->document_sequence_number());
 
   // Inject a JS value so that we can check for it later.
-  EXPECT_TRUE(content::ExecuteScript(root, "foo=3;"));
+  EXPECT_TRUE(ExecJs(root, "foo=3;"));
 
   // 7. Go back again, to the data URL in the nested iframe.
   {
@@ -2836,12 +2821,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
             entry3->root_node()->children[0]->children[0]->frame_entry->url());
 
   // Verify that we did not reload the main frame. See https://crbug.com/586234.
-  {
-    int value = 0;
-    EXPECT_TRUE(ExecuteScriptAndExtractInt(
-        root, "domAutomationController.send(foo)", &value));
-    EXPECT_EQ(3, value);
-  }
+  EXPECT_EQ(3, EvalJs(root, "foo"));
 
   // 8. Go back again, to the data URL in the first subframe.
   {
@@ -3104,14 +3084,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(blank_url, root->child_at(0)->current_url());
 
   // Verify that the parent was able to script the iframe.
-  std::string expected_text("Injected text");
-  {
-    std::string value;
-    EXPECT_TRUE(ExecuteScriptAndExtractString(
-        root->child_at(0),
-        "domAutomationController.send(document.body.innerHTML)", &value));
-    EXPECT_EQ(expected_text, value);
-  }
+  EXPECT_EQ("Injected text",
+            EvalJs(root->child_at(0), "document.body.innerHTML"));
 
   EXPECT_EQ(1, controller.GetEntryCount());
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
@@ -3142,13 +3116,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(blank_url, root->child_at(0)->current_url());
 
   // Verify that the parent was able to script the iframe.
-  {
-    std::string value;
-    EXPECT_TRUE(ExecuteScriptAndExtractString(
-        root->child_at(0),
-        "domAutomationController.send(document.body.innerHTML)", &value));
-    EXPECT_EQ(expected_text, value);
-  }
+  EXPECT_EQ("Injected text",
+            EvalJs(root->child_at(0), "document.body.innerHTML"));
 
   EXPECT_EQ(2, controller.GetEntryCount());
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
@@ -3197,9 +3166,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
             entry->root_node()->children[0]->children[0]->frame_entry->url());
 
   // Set a value in the form which will be stored in the PageState.
-  EXPECT_TRUE(
-      ExecuteScript(root->child_at(0)->child_at(0),
-                    "document.getElementById('itext').value = 'modified';"));
+  EXPECT_TRUE(ExecJs(root->child_at(0)->child_at(0),
+                     "document.getElementById('itext').value = 'modified';"));
 
   // 2. Navigate the main frame same-site, destroying the subframes.
   GURL main_url_2(embedded_test_server()->GetURL(
@@ -3241,13 +3209,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // With injected about:blank iframes, we never restore form values from
   // PageState.
-  std::string form_value = "fail";
-  EXPECT_TRUE(
-      ExecuteScriptAndExtractString(root->child_at(0)->child_at(0),
-                                    "window.domAutomationController.send("
-                                    "document.getElementById('itext').value);",
-                                    &form_value));
-  EXPECT_EQ("", form_value);
+  EXPECT_EQ("", EvalJs(root->child_at(0)->child_at(0),
+                       "document.getElementById('itext').value"));
 }
 
 // Verify that we correctly load a nested iframe created by an injected iframe
@@ -3295,9 +3258,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
             entry->root_node()->children[0]->children[0]->frame_entry->url());
 
   // Set a value in the form which will be stored in the PageState.
-  EXPECT_TRUE(
-      ExecuteScript(root->child_at(0)->child_at(0),
-                    "document.getElementById('itext').value = 'modified';"));
+  EXPECT_TRUE(ExecJs(root->child_at(0)->child_at(0),
+                     "document.getElementById('itext').value = 'modified';"));
 
   // 2. Navigate the main frame same-site, destroying the subframes.
   GURL main_url_2(embedded_test_server()->GetURL(
@@ -3347,13 +3309,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // Note that restoring form values in srcdoc frames created via static html is
   // expected to work and is tested by
   // RenderFrameHostManagerTest.RestoreSubframeFileAccessForHistoryNavigation.
-  std::string form_value = "fail";
-  EXPECT_TRUE(
-      ExecuteScriptAndExtractString(root->child_at(0)->child_at(0),
-                                    "window.domAutomationController.send("
-                                    "document.getElementById('itext').value);",
-                                    &form_value));
-  EXPECT_EQ("", form_value);
+  EXPECT_EQ("", EvalJs(root->child_at(0)->child_at(0),
+                       "document.getElementById('itext').value"));
 }
 
 // Verify that we can load about:blank in an iframe when going back to a page,
@@ -3461,7 +3418,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(main_url, root->current_url());
 
   // Check that the renderer is still alive.
-  EXPECT_TRUE(ExecuteScript(shell(), "console.log('Success');"));
+  EXPECT_TRUE(ExecJs(shell(), "console.log('Success');"));
 
   EXPECT_EQ(2, controller.GetEntryCount());
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
@@ -3531,7 +3488,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     TestNavigationObserver observer(shell()->web_contents());
     std::string script = "history.replaceState({}, '', '/server-redirect?" +
                          frame_redirect_dest_url.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     observer.Wait();
   }
 
@@ -3587,7 +3544,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     TestNavigationObserver observer(shell()->web_contents());
     std::string script = "history.replaceState({}, '', '/server-redirect?" +
                          frame_redirect_dest_url.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(root->child_at(1), script));
+    EXPECT_TRUE(ExecJs(root->child_at(1), script));
     observer.Wait();
   }
 
@@ -3635,7 +3592,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     TestNavigationObserver observer(shell()->web_contents());
     std::string script = "history.replaceState({}, '', '/server-redirect?" +
                          redirect_dest_url.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     observer.Wait();
   }
 
@@ -3703,7 +3660,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     TestNavigationObserver observer(shell()->web_contents());
     std::string script = "history.replaceState({}, '', '/server-redirect?" +
                          frame_redirect_dest_url.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     observer.Wait();
   }
 
@@ -3752,7 +3709,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     TestNavigationObserver observer(shell()->web_contents());
     std::string script = "history.replaceState({}, '', '/server-redirect?" +
                          redirect_dest_url.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     observer.Wait();
   }
 
@@ -3943,14 +3900,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(blank_url, new_entry->root_node()->children[0]->frame_entry->url());
 
   // Verify that the parent was able to script the iframe.
-  std::string expected_text("Injected text");
-  {
-    std::string value;
-    EXPECT_TRUE(ExecuteScriptAndExtractString(
-        root->child_at(0),
-        "domAutomationController.send(document.body.innerHTML)", &value));
-    EXPECT_EQ(expected_text, value);
-  }
+  EXPECT_EQ("Injected text",
+            EvalJs(root->child_at(0), "document.body.innerHTML"));
 }
 
 // Verifies that the |frame_unique_name| is set to the correct frame, so that we
@@ -3983,7 +3934,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string script = "var iframe = document.createElement('iframe');"
                          "iframe.src = '" + url.spec() + "';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -4009,7 +3960,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                          "iframe.src = '" + url.spec() + "';"
                          "iframe.name = 'foo';"
                          "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -4489,7 +4440,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, CloneNamedWindow) {
   EXPECT_TRUE(NavigateToURL(shell(), url_1));
 
   // Name the window.
-  EXPECT_TRUE(ExecuteScript(shell(), "window.name = 'foo';"));
+  EXPECT_TRUE(ExecJs(shell(), "window.name = 'foo';"));
 
   // Navigate it.
   GURL url_2(embedded_test_server()->GetURL(
@@ -4520,7 +4471,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), url_1));
 
   // Name the window.
-  EXPECT_TRUE(ExecuteScript(shell(), "window.name = 'foo';"));
+  EXPECT_TRUE(ExecJs(shell(), "window.name = 'foo';"));
 
   // Navigate it.
   GURL url_2(embedded_test_server()->GetURL(
@@ -4528,7 +4479,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), url_2));
 
   // Clear the name.
-  EXPECT_TRUE(ExecuteScript(shell(), "window.name = '';"));
+  EXPECT_TRUE(ExecJs(shell(), "window.name = '';"));
 
   // Navigate it again.
   EXPECT_TRUE(NavigateToURL(shell(), url_1));
@@ -4637,7 +4588,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                        "document.body.appendChild(iframe);";
   {
     LoadCommittedCapturer capturer(shell()->web_contents());
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -4666,7 +4617,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // 4. Add the iframe again.
   {
     LoadCommittedCapturer capturer(shell()->web_contents());
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -4702,7 +4653,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // 2. Do a same document fragment navigation.
   std::string script = "document.getElementById('fraglink').click()";
-  EXPECT_TRUE(ExecuteScript(root, script));
+  EXPECT_TRUE(ExecJs(root, script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   frame_entry = controller.GetLastCommittedEntry()->GetFrameEntry(root);
@@ -4718,7 +4669,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     std::string add_script = "var iframe = document.createElement('iframe');"
                              "iframe.src = '" + url.spec() + "';"
                              "document.body.appendChild(iframe);";
-    EXPECT_TRUE(ExecuteScript(root, add_script));
+    EXPECT_TRUE(ExecJs(root, add_script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
@@ -4739,7 +4690,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_NE(dsn_2, dsn_3);
 
   // 4. Do a same document fragment navigation in the subframe.
-  EXPECT_TRUE(ExecuteScript(subframe, script));
+  EXPECT_TRUE(ExecJs(subframe, script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   subframe_entry = controller.GetLastCommittedEntry()->GetFrameEntry(subframe);
@@ -4977,7 +4928,7 @@ void DoReplaceStateWhilePending(Shell* shell,
     capturer.set_wait_for_load(false);
     std::string script =
         "history.replaceState({}, '', '" + replace_state_filename + "')";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
 
     // The fact that there was a pending entry shouldn't interfere with the
@@ -5070,7 +5021,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigateParamsCapturer capturer(root);
     capturer.set_wait_for_load(false);
     std::string script = "history.pushState({}, '', 'pushed')";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
     EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
     EXPECT_TRUE(capturer.is_same_document());
@@ -5107,7 +5058,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // Go to the second page.
   std::string script = "document.getElementById('thelink').click()";
-  EXPECT_TRUE(ExecuteScript(root, script));
+  EXPECT_TRUE(ExecJs(root, script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(2, controller.GetEntryCount());
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
@@ -5176,7 +5127,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     // location.replace() to cause an inert commit.
     TestNavigationObserver replace_load_observer(shell()->web_contents());
     std::string script = "location.replace('" + url3.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     replace_load_observer.Wait();
   }
 
@@ -5258,7 +5209,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigateParamsCapturer capturer(root);
     std::string script =
         "history.replaceState({}, 'replaced', 'replaced')";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     capturer.Wait();
   }
 
@@ -5387,6 +5338,11 @@ class RenderProcessKilledObserver : public WebContentsObserver {
 // not modify the underlying last committed entry.)  Not crashing means that
 // the test is successful.
 IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, ReloadOriginalRequest) {
+  // TODO(lukasza): https://crbug.com/417518: Get tests working with
+  // --site-per-process.
+  if (SiteIsolationPolicy::UseDedicatedProcessesForAllSites())
+    return;
+
   GURL original_url(embedded_test_server()->GetURL(
       "/navigation_controller/simple_page_1.html"));
   EXPECT_TRUE(NavigateToURL(shell(), original_url));
@@ -5401,7 +5357,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, ReloadOriginalRequest) {
   {
     std::string script = "location.replace('" + redirect_url.spec() + "');";
     FrameNavigateParamsCapturer capturer(root);
-    EXPECT_TRUE(ExecuteScript(shell(), script));
+    EXPECT_TRUE(ExecJs(shell(), script));
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(),
@@ -5443,7 +5399,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, ReloadOriginalRequest) {
   }
 
   // Make sure the renderer is still alive.
-  EXPECT_TRUE(ExecuteScript(shell(), "console.log('Success');"));
+  EXPECT_TRUE(ExecJs(shell(), "console.log('Success');"));
 }
 
 // This test shows that the initial "about:blank" URL is elided from the
@@ -5466,7 +5422,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                             ->root();
 
   EXPECT_EQ(1, controller.GetEntryCount());
-  EXPECT_EQ(1, RendererHistoryLength(shell()));
+  EXPECT_EQ(1, EvalJs(shell(), "history.length"));
 
   // Add an iframe with no 'src'.
 
@@ -5474,11 +5430,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       "var iframe = document.createElement('iframe');"
       "iframe.id = 'frame';"
       "document.body.appendChild(iframe);";
-  EXPECT_TRUE(ExecuteScript(root, script));
+  EXPECT_TRUE(ExecJs(root, script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   EXPECT_EQ(1, controller.GetEntryCount());
-  EXPECT_EQ(1, RendererHistoryLength(shell()));
+  EXPECT_EQ(1, EvalJs(shell(), "history.length"));
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
 
   ASSERT_EQ(1U, root->child_count());
@@ -5492,11 +5448,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // "about:blank" as the URL in the iframe.
 
   script = "history.pushState({}, '', 'notarealurl.html')";
-  EXPECT_TRUE(ExecuteScript(root, script));
+  EXPECT_TRUE(ExecJs(root, script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   EXPECT_EQ(2, controller.GetEntryCount());
-  EXPECT_EQ(2, RendererHistoryLength(shell()));
+  EXPECT_EQ(2, EvalJs(shell(), "history.length"));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
 
   // Load the iframe; the initial "about:blank" URL should be elided and thus we
@@ -5508,7 +5464,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   EXPECT_EQ(2, controller.GetEntryCount());
-  EXPECT_EQ(2, RendererHistoryLength(shell()));
+  EXPECT_EQ(2, EvalJs(shell(), "history.length"));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
 
   EXPECT_EQ(frame_url, frame->current_url());
@@ -5522,7 +5478,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   }
 
   EXPECT_EQ(2, controller.GetEntryCount());
-  EXPECT_EQ(2, RendererHistoryLength(shell()));
+  EXPECT_EQ(2, EvalJs(shell(), "history.length"));
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
 
   // There is some open discussion over whether this should send the iframe
@@ -5540,11 +5496,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // Do a same document navigation in the subframe.
   std::string fragment_script = "location.href = \"#foo\";";
-  EXPECT_TRUE(ExecuteScript(frame->current_frame_host(), fragment_script));
+  EXPECT_TRUE(ExecJs(frame->current_frame_host(), fragment_script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   EXPECT_EQ(2, controller.GetEntryCount());
-  EXPECT_EQ(2, RendererHistoryLength(shell()));
+  EXPECT_EQ(2, EvalJs(shell(), "history.length"));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
 
   GURL frame_url_2 = embedded_test_server()->GetURL(
@@ -5561,7 +5517,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // Verify the process is still alive by running script.  We can't just call
   // IsRenderFrameLive after the navigation since it might not have disconnected
   // yet.
-  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), "true;"));
+  EXPECT_TRUE(ExecJs(root->current_frame_host(), "true;"));
   EXPECT_TRUE(root->current_frame_host()->IsRenderFrameLive());
 
   // TODO(creis): We should probably go back to frame_url here instead of the
@@ -5588,7 +5544,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                             ->root();
 
   EXPECT_EQ(1, controller.GetEntryCount());
-  EXPECT_EQ(1, RendererHistoryLength(shell()));
+  EXPECT_EQ(1, EvalJs(shell(), "history.length"));
 
   // Add an iframe with a 'src'.
 
@@ -5599,11 +5555,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       "iframe.src = '" + frame_url_1.spec() + "';"
       "iframe.id = 'frame';"
       "document.body.appendChild(iframe);";
-  EXPECT_TRUE(ExecuteScript(root, script));
+  EXPECT_TRUE(ExecJs(root, script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   EXPECT_EQ(1, controller.GetEntryCount());
-  EXPECT_EQ(1, RendererHistoryLength(shell()));
+  EXPECT_EQ(1, EvalJs(shell(), "history.length"));
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
 
   ASSERT_EQ(1U, root->child_count());
@@ -5616,11 +5572,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // old navigation entry has frame_url_1 as the URL in the iframe.
 
   script = "document.getElementById('fraglink').click()";
-  EXPECT_TRUE(ExecuteScript(root, script));
+  EXPECT_TRUE(ExecJs(root, script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   EXPECT_EQ(2, controller.GetEntryCount());
-  EXPECT_EQ(2, RendererHistoryLength(shell()));
+  EXPECT_EQ(2, EvalJs(shell(), "history.length"));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
 
   EXPECT_EQ(frame_url_1, frame->current_url());
@@ -5634,7 +5590,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   EXPECT_EQ(3, controller.GetEntryCount());
-  EXPECT_EQ(3, RendererHistoryLength(shell()));
+  EXPECT_EQ(3, EvalJs(shell(), "history.length"));
   EXPECT_EQ(2, controller.GetLastCommittedEntryIndex());
 
   EXPECT_EQ(frame_url_2, frame->current_url());
@@ -5648,7 +5604,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   }
 
   EXPECT_EQ(3, controller.GetEntryCount());
-  EXPECT_EQ(3, RendererHistoryLength(shell()));
+  EXPECT_EQ(3, EvalJs(shell(), "history.length"));
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
 
   // There is some open discussion over whether this should send the iframe back
@@ -5666,11 +5622,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // Do a same document navigation in the subframe.
   std::string fragment_script = "location.href = \"#foo\";";
-  EXPECT_TRUE(ExecuteScript(frame->current_frame_host(), fragment_script));
+  EXPECT_TRUE(ExecJs(frame->current_frame_host(), fragment_script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   EXPECT_EQ(2, controller.GetEntryCount());
-  EXPECT_EQ(2, RendererHistoryLength(shell()));
+  EXPECT_EQ(2, EvalJs(shell(), "history.length"));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
 
   // Go back.
@@ -5683,7 +5639,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // Verify the process is still alive by running script.  We can't just call
   // IsRenderFrameLive after the navigation since it might not have disconnected
   // yet.
-  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), "true;"));
+  EXPECT_TRUE(ExecJs(root->current_frame_host(), "true;"));
   EXPECT_TRUE(root->current_frame_host()->IsRenderFrameLive());
 
   // TODO(creis): It's a bit surprising to go to frame_url_1 here instead of
@@ -5713,7 +5669,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                             ->root();
 
   EXPECT_EQ(1, controller.GetEntryCount());
-  EXPECT_EQ(1, RendererHistoryLength(shell()));
+  EXPECT_EQ(1, EvalJs(shell(), "history.length"));
 
   // Add an iframe with a 'src'.
 
@@ -5724,11 +5680,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       "iframe.src = '" + frame_url_1.spec() + "';"
       "iframe.id = 'frame';"
       "document.body.appendChild(iframe);";
-  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), script));
+  EXPECT_TRUE(ExecJs(root->current_frame_host(), script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   EXPECT_EQ(1, controller.GetEntryCount());
-  EXPECT_EQ(1, RendererHistoryLength(shell()));
+  EXPECT_EQ(1, EvalJs(shell(), "history.length"));
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
 
   ASSERT_EQ(1U, root->child_count());
@@ -5741,19 +5697,19 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   GURL frame_url_2 = embedded_test_server()->GetURL(
       "/navigation_controller/simple_page_1.html#foo");
   std::string fragment_script = "location.href = \"#foo\";";
-  EXPECT_TRUE(ExecuteScript(frame->current_frame_host(), fragment_script));
+  EXPECT_TRUE(ExecJs(frame->current_frame_host(), fragment_script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(2, controller.GetEntryCount());
-  EXPECT_EQ(2, RendererHistoryLength(shell()));
+  EXPECT_EQ(2, EvalJs(shell(), "history.length"));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(frame_url_2, frame->current_url());
 
   // Do a fragment navigation at the top level.
   std::string link_script = "document.getElementById('fraglink').click()";
-  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), link_script));
+  EXPECT_TRUE(ExecJs(root->current_frame_host(), link_script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(3, controller.GetEntryCount());
-  EXPECT_EQ(3, RendererHistoryLength(shell()));
+  EXPECT_EQ(3, EvalJs(shell(), "history.length"));
   EXPECT_EQ(2, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(frame_url_2, frame->current_url());
 
@@ -5763,7 +5719,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   NavigateFrameToURL(frame, frame_url_3);
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(4, controller.GetEntryCount());
-  EXPECT_EQ(4, RendererHistoryLength(shell()));
+  EXPECT_EQ(4, EvalJs(shell(), "history.length"));
   EXPECT_EQ(3, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(frame_url_3, frame->current_url());
 
@@ -5775,7 +5731,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     observer.Wait();
   }
   EXPECT_EQ(4, controller.GetEntryCount());
-  EXPECT_EQ(4, RendererHistoryLength(shell()));
+  EXPECT_EQ(4, EvalJs(shell(), "history.length"));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(links_url, root->current_url());
 
@@ -5802,7 +5758,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // Verify the process is still alive by running script.  We can't just call
   // IsRenderFrameLive after the navigation since it might not have disconnected
   // yet.
-  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), "true;"));
+  EXPECT_TRUE(ExecJs(root->current_frame_host(), "true;"));
   EXPECT_TRUE(root->current_frame_host()->IsRenderFrameLive());
 
   // TODO(creis): It's a bit surprising to go to frame_url_1 here instead of
@@ -5826,7 +5782,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                             ->root();
 
   EXPECT_EQ(1, controller.GetEntryCount());
-  EXPECT_EQ(1, RendererHistoryLength(shell()));
+  EXPECT_EQ(1, EvalJs(shell(), "history.length"));
 
   // Add an iframe with no 'src'.
   GURL blank_url(url::kAboutBlankURL);
@@ -5834,10 +5790,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       "var iframe = document.createElement('iframe');"
       "iframe.id = 'frame';"
       "document.body.appendChild(iframe);";
-  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), script));
+  EXPECT_TRUE(ExecJs(root->current_frame_host(), script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(1, controller.GetEntryCount());
-  EXPECT_EQ(1, RendererHistoryLength(shell()));
+  EXPECT_EQ(1, EvalJs(shell(), "history.length"));
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
   ASSERT_EQ(1U, root->child_count());
   FrameTreeNode* frame = root->child_at(0);
@@ -5850,17 +5806,17 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       "iframe.contentWindow.document.write("
       "    \"<a id='fraglink' href='#frag'>fragment link</a>\");"
       "iframe.contentWindow.document.close();";
-  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), document_write_script));
+  EXPECT_TRUE(ExecJs(root->current_frame_host(), document_write_script));
 
   // Click the link to do a same document navigation.  Due to the
   // document.write, the new URL matches the parent frame's URL.
   GURL frame_url_2(embedded_test_server()->GetURL(
       "/navigation_controller/page_with_links.html#frag"));
   std::string link_script = "document.getElementById('fraglink').click()";
-  EXPECT_TRUE(ExecuteScript(frame->current_frame_host(), link_script));
+  EXPECT_TRUE(ExecJs(frame->current_frame_host(), link_script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(2, controller.GetEntryCount());
-  EXPECT_EQ(2, RendererHistoryLength(shell()));
+  EXPECT_EQ(2, EvalJs(shell(), "history.length"));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(frame_url_2, frame->current_url());
 
@@ -5874,7 +5830,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // Verify the process is still alive by running script.  We can't just call
   // IsRenderFrameLive after the navigation since it might not have disconnected
   // yet.
-  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), "true;"));
+  EXPECT_TRUE(ExecJs(root->current_frame_host(), "true;"));
   EXPECT_TRUE(root->current_frame_host()->IsRenderFrameLive());
 
   EXPECT_EQ(blank_url, frame->current_url());
@@ -5896,7 +5852,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                             ->root();
 
   EXPECT_EQ(1, controller.GetEntryCount());
-  EXPECT_EQ(1, RendererHistoryLength(shell()));
+  EXPECT_EQ(1, EvalJs(shell(), "history.length"));
 
   // Add an iframe with no 'src'.
   GURL blank_url(url::kAboutBlankURL);
@@ -5904,10 +5860,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       "var iframe = document.createElement('iframe');"
       "iframe.id = 'frame';"
       "document.body.appendChild(iframe);";
-  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), script));
+  EXPECT_TRUE(ExecJs(root->current_frame_host(), script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(1, controller.GetEntryCount());
-  EXPECT_EQ(1, RendererHistoryLength(shell()));
+  EXPECT_EQ(1, EvalJs(shell(), "history.length"));
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
   ASSERT_EQ(1U, root->child_count());
   FrameTreeNode* frame = root->child_at(0);
@@ -5915,21 +5871,22 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(blank_url, frame->current_url());
 
   // Do a document.write in the subframe to create a link to click.
-  std::string document_write_script =
+  std::string html = "<a id='fraglink' href='#frag'>fragment link</a>";
+  std::string document_write_script = JsReplace(
       "var iframe = document.getElementById('frame');"
-      "iframe.contentWindow.document.write("
-      "    \"<a id='fraglink' href='#frag'>fragment link</a>\");"
-      "iframe.contentWindow.document.close();";
-  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), document_write_script));
+      "iframe.contentWindow.document.write($1);"
+      "iframe.contentWindow.document.close();",
+      html);
+  EXPECT_TRUE(ExecJs(root->current_frame_host(), document_write_script));
 
   // Click the link to do a same document navigation.  Due to the
   // document.write, the new URL matches the parent frame's URL.
   GURL frame_url_2("data:text/html,Top level page#frag");
   std::string link_script = "document.getElementById('fraglink').click()";
-  EXPECT_TRUE(ExecuteScript(frame->current_frame_host(), link_script));
+  EXPECT_TRUE(ExecJs(frame->current_frame_host(), link_script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(2, controller.GetEntryCount());
-  EXPECT_EQ(2, RendererHistoryLength(shell()));
+  EXPECT_EQ(2, EvalJs(shell(), "history.length"));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(frame_url_2, frame->current_url());
 
@@ -5943,7 +5900,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // Verify the process is still alive by running script.  We can't just call
   // IsRenderFrameLive after the navigation since it might not have disconnected
   // yet.
-  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), "true;"));
+  EXPECT_TRUE(ExecJs(root->current_frame_host(), "true;"));
   EXPECT_TRUE(root->current_frame_host()->IsRenderFrameLive());
 
   EXPECT_EQ(blank_url, frame->current_url());
@@ -6108,7 +6065,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       "b.com", "/navigation_controller/simple_page_2.html"));
   std::string replace_script = "location.replace('" + url_b.spec() + "')";
   TestNavigationObserver replace_observer(shell()->web_contents());
-  EXPECT_TRUE(ExecuteScript(shell()->web_contents(), replace_script));
+  EXPECT_TRUE(ExecJs(shell()->web_contents(), replace_script));
   replace_observer.Wait();
   EXPECT_EQ(3, controller.GetEntryCount());
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
@@ -6120,8 +6077,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // Navigate forward twice using script.  In https://crbug.com/623319, this
   // caused a mismatch between the NavigationEntry's URL and PageState.
-  EXPECT_TRUE(ExecuteScript(shell()->web_contents(),
-                            "history.forward(); history.forward();"));
+  EXPECT_TRUE(
+      ExecJs(shell()->web_contents(), "history.forward(); history.forward();"));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(url_b, root->current_url());
@@ -6193,7 +6150,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       "b.com", "/navigation_controller/page_with_data_iframe.html"));
   std::string replace_script = "location.replace('" + url_b.spec() + "')";
   TestNavigationObserver replace_observer(shell()->web_contents());
-  EXPECT_TRUE(ExecuteScript(shell()->web_contents(), replace_script));
+  EXPECT_TRUE(ExecJs(shell()->web_contents(), replace_script));
   replace_observer.Wait();
   EXPECT_EQ(3, controller.GetEntryCount());
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
@@ -6208,8 +6165,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // we want to ensure that the subframes target entry index 1 and not 2.  In
   // https://crbug.com/623319, the subframes targeted the wrong entry, leading
   // to a URL spoof and renderer kill.
-  EXPECT_TRUE(ExecuteScript(shell()->web_contents(),
-                            "history.forward(); history.forward();"));
+  EXPECT_TRUE(
+      ExecJs(shell()->web_contents(), "history.forward(); history.forward();"));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_TRUE(root->current_frame_host()->IsRenderFrameLive());
@@ -6269,7 +6226,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     TestNavigationObserver observer(shell()->web_contents());
     std::string script =
         "history.replaceState({}, '', '/server-redirect?" + url_3.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     observer.Wait();
   }
 
@@ -6327,7 +6284,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     TestNavigationObserver observer(shell()->web_contents());
     std::string script = "history.replaceState({}, '', '/server-redirect?" +
                          frame_url2.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
+    EXPECT_TRUE(ExecJs(root->child_at(0), script));
     observer.Wait();
   }
 
@@ -6427,8 +6384,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, PostViaOpenUrlMsg) {
 
   // Submit the form.
   TestNavigationObserver form_post_observer(shell()->web_contents(), 1);
-  EXPECT_TRUE(ExecuteScript(shell()->web_contents(),
-                            "document.getElementById('form').submit();"));
+  EXPECT_TRUE(ExecJs(shell()->web_contents(),
+                     "document.getElementById('form').submit();"));
   form_post_observer.Wait();
 
   // Verify that we arrived at the expected location.
@@ -6437,9 +6394,170 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, PostViaOpenUrlMsg) {
 
   // Verify that POST body was correctly passed to the server and ended up in
   // the body of the page.
+  EXPECT_EQ(
+      "text=value\n",
+      EvalJs(shell(), "document.getElementsByTagName('pre')[0].innerText"));
+}
+
+// This test verifies that reloading a POST request that is uncacheable won't
+// incorrectly result in a GET request.  This is a regression test for
+// https://crbug.com/860807.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, UncacheablePost) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "/form_that_posts_to_echoall_nocache.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  WebContents* web_contents = shell()->web_contents();
+  EXPECT_EQ(0, web_contents->GetController().GetLastCommittedEntryIndex());
+
+  // Submit the form.
+  TestNavigationObserver form_post_observer(web_contents, 1);
+  EXPECT_TRUE(
+      ExecuteScript(web_contents, "document.getElementById('form').submit();"));
+  form_post_observer.Wait();
+
+  // Verify that we arrived at the expected location.
+  GURL target_url(embedded_test_server()->GetURL("/echoall/nocache"));
+  EXPECT_EQ(target_url, web_contents->GetLastCommittedURL());
+  EXPECT_EQ(1, web_contents->GetController().GetLastCommittedEntryIndex());
+
+  // Verify that this was a POST request.
+  std::string request_headers;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      web_contents,
+      "window.domAutomationController.send("
+      "document.getElementsByTagName('pre')[1].innerText);",
+      &request_headers));
+  EXPECT_THAT(request_headers, ::testing::HasSubstr("POST /echoall/nocache"));
+
+  // Verify that POST body was correctly passed to the server and ended up in
+  // the body of the page.
   std::string body;
   EXPECT_TRUE(ExecuteScriptAndExtractString(
-      shell()->web_contents(),
+      web_contents,
+      "window.domAutomationController.send("
+      "document.getElementsByTagName('pre')[0].innerText);",
+      &body));
+  EXPECT_EQ("text=value\n", body);
+
+  // Extract the response nonce.
+  std::string old_response_nonce;
+  std::string response_nonce_extraction_script = R"(
+      domAutomationController.send(
+          document.getElementById('response-nonce').innerText); )";
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      web_contents, response_nonce_extraction_script, &old_response_nonce));
+
+  // Go back.
+  {
+    TestNavigationObserver observer(web_contents);
+    web_contents->GetController().GoBack();
+    observer.Wait();
+  }
+  EXPECT_EQ(main_url, web_contents->GetLastCommittedURL());
+  EXPECT_EQ(0, web_contents->GetController().GetLastCommittedEntryIndex());
+
+  // Go forward.
+  {
+    TestNavigationObserver navigation_observer(web_contents);
+    NavigationHandleObserver handle_observer(web_contents, target_url);
+    web_contents->GetController().GoForward();
+    navigation_observer.Wait();
+
+    // Verify that the previous response response really was treated as
+    // uncacheable.
+    EXPECT_TRUE(handle_observer.is_error());
+    EXPECT_EQ(net::ERR_CACHE_MISS, handle_observer.net_error_code());
+  }
+  EXPECT_EQ(target_url, web_contents->GetLastCommittedURL());
+  EXPECT_EQ(1, web_contents->GetController().GetLastCommittedEntryIndex());
+
+  // Reload
+  {
+    TestNavigationObserver observer(web_contents);
+    web_contents->GetController().Reload(content::ReloadType::NORMAL,
+                                         false);  // check_for_repost
+    observer.Wait();
+  }
+  EXPECT_EQ(target_url, web_contents->GetLastCommittedURL());
+  EXPECT_EQ(1, web_contents->GetController().GetLastCommittedEntryIndex());
+
+  // MAIN VERIFICATION for https://crbug.com/860807: Verify that the reload was
+  // a POST request.
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      web_contents,
+      "window.domAutomationController.send("
+      "document.getElementsByTagName('pre')[1].innerText);",
+      &request_headers));
+  EXPECT_THAT(request_headers, ::testing::HasSubstr("POST /echoall/nocache"));
+
+  // Verify that POST body was correctly passed to the server and ended up in
+  // the body of the page.  This is supplementary verification against
+  // https://crbug.com/860807.
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      web_contents,
+      "window.domAutomationController.send("
+      "document.getElementsByTagName('pre')[0].innerText);",
+      &body));
+  EXPECT_EQ("text=value\n", body);
+
+  // Extract the new response nonce and verify that it did change (e.g. that the
+  // reload did load fresh content).
+  std::string new_response_nonce;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      web_contents, response_nonce_extraction_script, &new_response_nonce));
+  EXPECT_NE(new_response_nonce, old_response_nonce);
+}
+
+// This test verifies that it is possible to reload a POST request that
+// initially failed (e.g. because the network was offline or the host was
+// unreachable during the initial navigation).  This is a regression test for
+// https://crbug.com/869117.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       ReloadOfInitiallyFailedPost) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "/form_that_posts_to_echoall_nocache.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  WebContents* web_contents = shell()->web_contents();
+  EXPECT_EQ(0, web_contents->GetController().GetLastCommittedEntryIndex());
+
+  // Submit the form while simulating "network down" conditions.
+  GURL target_url(embedded_test_server()->GetURL("/echoall/nocache"));
+  {
+    std::unique_ptr<URLLoaderInterceptor> interceptor =
+        URLLoaderInterceptor::SetupRequestFailForURL(
+            target_url, net::ERR_INTERNET_DISCONNECTED);
+    TestNavigationObserver form_post_observer(web_contents, 1);
+    EXPECT_TRUE(ExecuteScript(web_contents,
+                              "document.getElementById('form').submit();"));
+    form_post_observer.Wait();
+  }
+  EXPECT_EQ(target_url, web_contents->GetLastCommittedURL());
+  EXPECT_EQ(1, web_contents->GetController().GetLastCommittedEntryIndex());
+
+  // Reload
+  {
+    TestNavigationObserver observer(web_contents);
+    web_contents->GetController().Reload(content::ReloadType::NORMAL,
+                                         false);  // check_for_repost
+    observer.Wait();
+  }
+  EXPECT_EQ(target_url, web_contents->GetLastCommittedURL());
+  EXPECT_EQ(1, web_contents->GetController().GetLastCommittedEntryIndex());
+
+  // Verify that the reload was a POST request.
+  std::string request_headers;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      web_contents,
+      "window.domAutomationController.send("
+      "document.getElementsByTagName('pre')[1].innerText);",
+      &request_headers));
+  EXPECT_THAT(request_headers, ::testing::HasSubstr("POST /echoall/nocache"));
+
+  // Verify that POST body was correctly passed to the server and ended up in
+  // the body of the page.
+  std::string body;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      web_contents,
       "window.domAutomationController.send("
       "document.getElementsByTagName('pre')[0].innerText);",
       &body));
@@ -6494,7 +6612,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // Removing the first child of the main frame should remove the corresponding
   // FrameTreeNode.
-  EXPECT_TRUE(ExecuteScript(root, kRemoveFrameScript));
+  EXPECT_TRUE(ExecJs(root, kRemoveFrameScript));
   EXPECT_EQ(2U, root->child_count());
 
   // However, the FrameNavigationEntry objects for the frame that was removed
@@ -6535,7 +6653,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
       "f.src = '1-1.html';"
       "document.body.appendChild(f);";
   TestNavigationObserver observer(web_contents, 1);
-  EXPECT_TRUE(ExecuteScript(subframe, add_matching_name_frame_script));
+  EXPECT_TRUE(ExecJs(subframe, add_matching_name_frame_script));
   EXPECT_EQ(1U, subframe->child_count());
   observer.Wait();
 
@@ -6575,7 +6693,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // |tree_node| will becoma a dangling pointer when the frame is removed below.
   auto* tree_node = nav_entry->root_node()->children[0].get();
 
-  EXPECT_TRUE(ExecuteScript(root, kRemoveFrameScript));
+  EXPECT_TRUE(ExecJs(root, kRemoveFrameScript));
   EXPECT_EQ(0U, root->child_count());
   EXPECT_EQ(0U, nav_entry->root_node()->children.size());
 
@@ -6588,7 +6706,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(1U, nav_entry->root_node()->children.size());
   EXPECT_NE(tree_node, nav_entry->root_node()->children[0].get());
 
-  EXPECT_TRUE(ExecuteScript(root, kRemoveFrameScript));
+  EXPECT_TRUE(ExecJs(root, kRemoveFrameScript));
   EXPECT_EQ(0U, root->child_count());
 }
 
@@ -6619,7 +6737,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     TestNavigationObserver observer(web_contents);
     std::string script = "history.replaceState({}, '', '/server-redirect?" +
                          redirect_dest_url.spec() + "')";
-    EXPECT_TRUE(ExecuteScript(root, script));
+    EXPECT_TRUE(ExecJs(root, script));
     observer.Wait();
   }
 
@@ -6646,10 +6764,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // Verify the expected origin through JavaScript. It also has the additional
   // verification of the process also being still alive.
-  std::string origin;
-  EXPECT_TRUE(ExecuteScriptAndExtractString(
-      web_contents, "domAutomationController.send(document.origin)", &origin));
-  EXPECT_EQ(start_url.GetOrigin().spec(), origin + "/");
+  EXPECT_EQ(url::Origin::Create(start_url).Serialize(),
+            EvalJs(web_contents, "document.origin"));
 }
 
 // Helper to trigger a history-back navigation in the WebContents after the
@@ -6737,10 +6853,8 @@ IN_PROC_BROWSER_TEST_F(
 
   // Verify the expected origin through JavaScript. It also has the additional
   // verification of the process also being still alive.
-  std::string origin;
-  EXPECT_TRUE(ExecuteScriptAndExtractString(
-      web_contents, "domAutomationController.send(document.origin)", &origin));
-  EXPECT_EQ(start_url.GetOrigin().spec(), origin + "/");
+  EXPECT_EQ(url::Origin::Create(start_url).Serialize(),
+            EvalJs(web_contents, "document.origin"));
 }
 
 // Test that verifies that Referer and Origin http headers are correctly sent
@@ -6764,7 +6878,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // 3. http://x.com:.../echoall/
   TestNavigationObserver form_post_observer(shell()->web_contents(), 1);
   EXPECT_TRUE(
-      ExecuteScript(shell(), "document.getElementById('text-form').submit();"));
+      ExecJs(shell(), "document.getElementById('text-form').submit();"));
   form_post_observer.Wait();
 
   // Verify that we arrived at the expected, redirected location.
@@ -6772,12 +6886,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
             shell()->web_contents()->GetLastCommittedURL());
 
   // Get the http request headers.
-  std::string headers;
-  EXPECT_TRUE(ExecuteScriptAndExtractString(
-      shell(),
-      "window.domAutomationController.send("
-      "document.getElementsByTagName('pre')[1].innerText);",
-      &headers));
+  std::string headers =
+      EvalJs(shell(), "document.getElementsByTagName('pre')[1].innerText")
+          .ExtractString();
 
   // Verify the Origin and Referer headers.
   EXPECT_THAT(headers, ::testing::HasSubstr("Origin: null"));
@@ -6919,7 +7030,7 @@ void ExecuteJavaScriptAndWaitForLoadStop(WebContents* web_contents,
   // JavaScript asynchronously.
   TestNavigationObserver observer(web_contents);
 
-  // ExecuteScript() sets a user gesture flag internally for testing, but we
+  // ExecJs() sets a user gesture flag internally for testing, but we
   // want to run JavaScript without the flag.  Call ExecuteJavaScriptForTests
   // directory.
   static_cast<WebContentsImpl*>(web_contents)
@@ -7206,8 +7317,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   NavigationHandleCommitObserver push_state_observer(shell()->web_contents(),
                                                      kPushStateURL);
   std::string push_state =
-      "history.pushState({}, \"title 1\", \"" + kPushStateURL.spec() + "\");";
-  EXPECT_TRUE(ExecuteScript(shell()->web_contents(), push_state));
+      JsReplace("history.pushState({}, 'title 1', $1);", kPushStateURL);
+  EXPECT_TRUE(ExecJs(shell()->web_contents(), push_state));
   NavigationEntry* last_committed =
       shell()->web_contents()->GetController().GetLastCommittedEntry();
   ASSERT_TRUE(last_committed);
@@ -7471,17 +7582,13 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // The opener should not be able to script the page, which should be another
   // error message and not a blank page.
-  std::string result;
-  EXPECT_TRUE(ExecuteScriptAndExtractString(
-      shell(),
-      "domAutomationController.send((function() {\n"
-      "  try {\n"
-      "    return w.document.body.innerHTML;\n"
-      "  } catch (e) {\n"
-      "    return e.toString();\n"
-      "  }\n"
-      "})())",
-      &result));
+  std::string result = EvalJs(shell(),
+                              "try {\n"
+                              "  w.document.body.innerHTML;\n"
+                              "} catch (e) {\n"
+                              "  e.toString();\n"
+                              "}")
+                           .ExtractString();
   DLOG(INFO) << "Result: " << result;
   EXPECT_THAT(result,
               ::testing::MatchesRegex("SecurityError: Blocked a frame with "
@@ -7527,8 +7634,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     TestNavigationObserver observer(shell()->web_contents());
     controller.GoBack();
     observer.Wait();
+    GURL x_frame_options_deny_url =
+        embedded_test_server()->GetURL("/x-frame-options-deny.html");
+    EXPECT_EQ(x_frame_options_deny_url, root->child_at(0)->current_url());
+    EXPECT_EQ(net::ERR_BLOCKED_BY_RESPONSE, observer.last_net_error_code());
+    EXPECT_FALSE(observer.last_navigation_succeeded());
   }
-  EXPECT_EQ(GURL("data:,"), root->child_at(0)->current_url());
 
   // Go back again.  This would have been same-document if the prior navigation
   // had succeeded.
@@ -7731,25 +7842,19 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
 
   // Repeatedly create and remove a frame from a script.
-  std::string result;
   std::string script = R"(
-        var iterations_left = 5;
-        function runOneIteration() {
-          if (iterations_left == 0) {
-            domAutomationController.send("done-with-test");
-            return;
-          }
-
-          var iframe = document.createElement("iframe");
-          document.body.appendChild(iframe);
-          document.body.removeChild(iframe);
-
-          iterations_left = iterations_left - 1;
-          setTimeout(runOneIteration, 0);
-        }
-        runOneIteration(); )";
-  EXPECT_TRUE(ExecuteScriptAndExtractString(shell(), script, &result));
-  EXPECT_EQ("done-with-test", result);
+        (async () => {
+           for (let i = 0; i < 5; i++) {
+             // Create and remove an iframe.
+             let iframe = document.createElement('iframe');
+             document.body.appendChild(iframe);
+             document.body.removeChild(iframe);
+             // Let the message loop run (this works in an async function).
+             await new Promise(resolve => setTimeout(resolve, 0));
+           }
+           return 'done-with-test';
+        })(); )";
+  EXPECT_EQ("done-with-test", EvalJs(shell(), script));
 
   // Grab the last committed entry.
   const NavigationControllerImpl& controller =
@@ -8007,13 +8112,8 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, HistoryBackInUnloadCancelsReload) {
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   // Test what is in the loaded document.
-  std::string html_content;
-  EXPECT_TRUE(ExecuteScriptAndExtractString(
-      shell(), "domAutomationController.send(document.body.textContent)",
-      &html_content));
-
   EXPECT_EQ("First part of the response... ...and the second part!",
-            html_content);
+            EvalJs(shell(), "document.body.textContent"));
 }
 
 // Data URLs can have a reference fragment like any other URLs. In this test,

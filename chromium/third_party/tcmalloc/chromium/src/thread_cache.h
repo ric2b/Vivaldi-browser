@@ -42,21 +42,16 @@
 #ifdef HAVE_STDINT_H
 #include <stdint.h>                     // for uint32_t, uint64_t
 #endif
-#include <sys/types.h>                  // for ssize_t
+#include <sys/types.h>  // for ssize_t
 #include "base/commandlineflags.h"
 #include "common.h"
+#include "free_list.h"         // for FL_Pop, FL_PopRange, etc
+#include "internal_logging.h"  // for ASSERT, etc
 #include "linked_list.h"
 #include "maybe_threads.h"
-#include "page_heap_allocator.h"
-#include "sampler.h"
-#include "static_vars.h"
-
-#include "common.h"            // for SizeMap, kMaxSize, etc
-#include "internal_logging.h"  // for ASSERT, etc
-#include "linked_list.h"       // for SLL_Pop, SLL_PopRange, etc
 #include "page_heap_allocator.h"  // for PageHeapAllocator
-#include "sampler.h"           // for Sampler
-#include "static_vars.h"       // for Static
+#include "sampler.h"              // for Sampler
+#include "static_vars.h"          // for Static
 
 DECLARE_int64(tcmalloc_sample_parameter);
 
@@ -97,6 +92,17 @@ class ThreadCache {
   bool SampleAllocation(size_t k);
 
   bool TryRecordAllocationFast(size_t k);
+
+  // Record additional bytes allocated.
+  void AddToByteAllocatedTotal(size_t k) { total_bytes_allocated_ += k; }
+
+  // Return the total number of bytes allocated from this heap.  The value will
+  // wrap when there is an overflow, and so only the differences between two
+  // values should be relied on (and even then, modulo 2^32).
+  uint32 GetTotalBytesAllocated() const;
+
+  // On the current thread, return GetTotalBytesAllocated().
+  static uint32 GetBytesAllocatedOnCurrentThread();
 
   static void         InitModule();
   static void         InitTSD();
@@ -204,7 +210,7 @@ class ThreadCache {
 
     uint32_t Push(void* ptr) {
       uint32_t length = length_ + 1;
-      SLL_Push(&list_, ptr);
+      FL_Push(&list_, ptr);
       length_ = length;
       return length;
     }
@@ -213,29 +219,29 @@ class ThreadCache {
       ASSERT(list_ != NULL);
       length_--;
       if (length_ < lowater_) lowater_ = length_;
-      return SLL_Pop(&list_);
+      return FL_Pop(&list_);
     }
 
     bool TryPop(void **rv) {
-      if (SLL_TryPop(&list_, rv)) {
-        length_--;
-        if (PREDICT_FALSE(length_ < lowater_)) lowater_ = length_;
-        return true;
-      }
-      return false;
+      if (list_ == NULL)
+        return false;
+      *rv = Pop();
+      return true;
     }
 
     void* Next() {
-      return SLL_Next(&list_);
+      if (list_ == NULL)
+        return NULL;
+      return FL_Next(list_);
     }
 
     void PushRange(int N, void *start, void *end) {
-      SLL_PushRange(&list_, start, end);
+      FL_PushRange(&list_, start, end);
       length_ += N;
     }
 
     void PopRange(int N, void **start, void **end) {
-      SLL_PopRange(&list_, N, start, end);
+      FL_PopRange(&list_, N, start, end);
       ASSERT(length_ >= N);
       length_ -= N;
       if (length_ < lowater_) lowater_ = length_;
@@ -327,6 +333,14 @@ class ThreadCache {
   int32         size_;                     // Combined size of data
   int32         max_size_;                 // size_ > max_size_ --> Scavenge()
 
+  // The following is the tally of bytes allocated on a thread as a response to
+  // any flavor of malloc() call.  The aggegated amount includes all padding to
+  // the smallest class that can hold the request, or to the nearest whole page
+  // when a large allocation is made without using a class.  This sum is
+  // currently used for Chromium profiling, where tallies are kept of the amount
+  // of memory allocated during the running of each task on each thread.
+  uint32 total_bytes_allocated_;  // Total, modulo 2^32.
+
   // We sample allocations, biased by the size of the allocation
   Sampler       sampler_;               // A sampler
 
@@ -361,6 +375,10 @@ extern PageHeapAllocator<ThreadCache> threadcache_allocator;
 
 inline int ThreadCache::HeapsInUse() {
   return threadcache_allocator.inuse();
+}
+
+inline uint32 ThreadCache::GetTotalBytesAllocated() const {
+  return total_bytes_allocated_;
 }
 
 inline ATTRIBUTE_ALWAYS_INLINE void* ThreadCache::Allocate(

@@ -7,6 +7,8 @@
 # This script is used to generate an HFS file system with several types of
 # files of different sizes.
 
+set -eu
+
 FILESYSTEM_TYPE="$1"
 RAMDISK_SIZE="$2"
 OUT_FILE="$3"
@@ -32,12 +34,6 @@ fi
 RAMDISK_VOLUME=$(hdiutil attach -nomount ram://$RAMDISK_SIZE)
 diskutil erasevolume "${FILESYSTEM_TYPE}" "${VOLUME_NAME}" ${RAMDISK_VOLUME}
 diskutil mount ${RAMDISK_VOLUME}
-
-function clean_on_exit {
-    diskutil unmount force ${RAMDISK_VOLUME} &> /dev/null
-    diskutil eject ${RAMDISK_VOLUME} &> /dev/null
-}
-trap clean_on_exit INT TERM EXIT
 
 pushd "/Volumes/${VOLUME_NAME}"
 

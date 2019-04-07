@@ -4,8 +4,13 @@ import read_deps_file as deps_utils
 import datetime
 import platform
 import shlex
+import shutil
 
 SRC = os.path.dirname(os.path.dirname(__file__))
+hooks_folder = os.path.join(SRC, "scripts", "templates", "hooks")
+chromium_hooks_folder = os.path.join(SRC, "scripts", "templates", "chromium_hooks")
+git_hooks_folder = os.path.join(SRC, ".git", "hooks")
+chromium_git_hooks_folder = os.path.join(SRC, ".git", "modules", "chromium", "hooks")
 
 depot_tools_path = os.path.abspath(os.path.join(SRC, "chromium/third_party/depot_tools"))
 os.environ["PATH"] = os.pathsep.join([depot_tools_path, os.environ["PATH"]])
@@ -28,6 +33,11 @@ OS_CHOICES = {
   "x86":"x86",
   "x64":"x64",
 }
+
+def copy_files(src, dst):
+  for f in os.listdir(src):
+    if not os.access(os.path.join(dst, f), os.R_OK):
+      shutil.copy(os.path.join(src, f), os.path.join(dst, f))
 
 def IsAndroidEnabled():
   if "ANDROID_ENABLED" in os.environ:
@@ -88,6 +98,8 @@ prefix_name = os.path.split(sourcedir)[1]
 workdir = os.path.abspath(os.path.join(sourcedir,".."))
 extra_subprocess_flags = {}
 if platform.system() == "Windows":
+  import check_win_python
+  check_win_python.CheckPythonInstall()
   try:
     import win32con
     extra_subprocess_flags["creationflags"] = win32con.NORMAL_PRIORITY_CLASS
@@ -157,8 +169,9 @@ if "--clobber-out" in sys.argv:
     subprocess.call(["git", "clean", "-fdx"], cwd=sourcedir)
     subprocess.call(["git", "submodule", "foreach", "--recursive", "git clean -fdx"], cwd=sourcedir)
 
-
-
+if "CHROME_HEADLESS" not in os.environ:
+  copy_files(hooks_folder, git_hooks_folder)
+  copy_files(chromium_hooks_folder, chromium_git_hooks_folder)
 
 deps_content = deps_utils.GetDepsContent("DEPS")
 (deps, hooks, deps_vars, recursion) = deps_content

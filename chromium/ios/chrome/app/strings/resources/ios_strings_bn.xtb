@@ -4,6 +4,7 @@
 <translation id="1016495303386450659">আইটেম আপডেট হয়েছে</translation>
 <translation id="1047726139967079566">এই পৃষ্ঠাটি বুকমার্ক করুন...</translation>
 <translation id="1049743911850919806">ছদ্মবেশী</translation>
+<translation id="1063454504051558093">অন্য পাসওয়ার্ড ব্যবহার করুন...</translation>
 <translation id="1076421457278169141">কোড স্ক্যান করা হয়েছে</translation>
 <translation id="1084365883616172403">Facebook পোষ্ট সম্পূর্ণ হয়েছে৷</translation>
 <translation id="1104948393051856124">স্বীকার করুন ও চালিয়ে যান</translation>
@@ -36,7 +37,6 @@
 <translation id="145015347812617860"><ph name="COUNT" />টি আইটেম</translation>
 <translation id="1491277525950327607">সেটিং টগল করতে দুবার আলতো চাপুন</translation>
 <translation id="152234381334907219">কখনও সংরক্ষিত হয়নি</translation>
-<translation id="1532451416480227577">Google Pay তে সেভ থাকা ঠিকানা এবং ক্রেডিট কার্ডগুলি দেখুন</translation>
 <translation id="1540800554400757039">ঠিকানা ১</translation>
 <translation id="1545749641540134597">QR কোড স্ক্যান করুন</translation>
 <translation id="1558704936695638228">আরও ট্যাব বিকল্পগুলির জন্য বোতাম প্রেস করে ধরে রাখুন</translation>
@@ -44,16 +44,15 @@
 <translation id="1582732959743469162">এর ফলে আপনি এখন যা ডাউনলোড করছেন সেগুলি সব বন্ধ হয়ে যাবে।</translation>
 <translation id="1605658421715042784">ছবি কপি করুন</translation>
 <translation id="1612730193129642006">ট্যাব গ্রিড দেখান</translation>
+<translation id="162035744160882748">সিঙ্ক, ব্যক্তিগতকরণ এবং অন্যান্য Google পরিষেবাগুলি চালু করুন</translation>
 <translation id="1644574205037202324">ইতিহাস</translation>
-<translation id="1646446875146297738">‘ট্র্যাক করবেন না’ সক্ষম করার মানে হল যে আপনার ব্রাউজিং ট্রাফিকের সাথে একটি অনুরোধ অন্তর্ভুক্ত করা হবে৷ একটি ওয়েবসাইট অনুরোধটিতে সাড়া দেবে কিনা এবং কিভাবে অনুরোধটিকে ব্যাখ্যা করে তার উপর যেকোনো ফল নির্ভর করে৷
-
-উদাহরণস্বরূপ, কিছু কিছু ওয়েবসাইট আপনার পরিদর্শন করা অন্যান্য ওয়েবসাইটগুলির উপর ভিত্তি না করে বিজ্ঞাপনগুলি দেখানোর মাধ্যমে এই অনুরোধটিতে প্রতিক্রিয়া জানাতে পারে৷ এমনও অনেক ওয়েবসাইট রয়েছে যা তা সত্বেও আপনার ব্রাউজিং ডেটা সংগ্রহ এবং ব্যবহার করবে - উদাহরণস্বরূপ, তাদের ওয়েবসাইটগুলির নিরাপত্তা ব্যবস্থার উন্নতি ঘটাতে, সামগ্রী, পরিষেবা, বিজ্ঞাপন এবং প্রস্তাবগুলি সরবরাহ করতে এবং প্রতিবেদনের পরিসংখ্যান তৈরি করতে৷ <ph name="BEGIN_LINK" />আরও জানুন<ph name="END_LINK" /></translation>
 <translation id="1657011748321897393">শেয়ার করা ব্যার্থ হয়েছে কারণ আপনি নেটওয়ার্কের সাথে সংযুক্ত নন৷</translation>
 <translation id="165877110639533037">কোনো ট্যাব খোলা নেই</translation>
 <translation id="1687475363370981210">সমস্ত পঠিত হিসেবে চিহ্নিত করুন</translation>
 <translation id="1690731385917361335">কোনো আইটেম নেই</translation>
 <translation id="1700629756560807968"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" />টি নির্বাচিত</translation>
 <translation id="1740468249224277719">ইনস্টল করতে দুবার ট্যাপ করুন।</translation>
+<translation id="1746815479209538200">ওয়েব ব্রাউজ করতে, একটি নতুন ট্যাব যোগ করুন।</translation>
 <translation id="17513872634828108">খোলা ট্যাব</translation>
 <translation id="1752547299766512813">পাসওয়ার্ডগুলি সেভ করুন</translation>
 <translation id="1753905327828125965">সর্বাধিক দেখা</translation>
@@ -64,6 +63,7 @@
 <translation id="1876721852596493031">ব্যবহারের ডেটা পাঠান</translation>
 <translation id="1886928167269928266">শুরুর সময়</translation>
 <translation id="1911619930368729126">Google ড্রাইভে আপলোড করুন</translation>
+<translation id="191179954310195971">Google-এর অন্য পরিষেবা</translation>
 <translation id="1941314575388338491">কপি করতে দুবার আলতো চাপুন।</translation>
 <translation id="1952728750904661634">পরিচালিত অ্যাকাউন্ট দিয়ে প্রবেশ করুন</translation>
 <translation id="1974060860693918893">উন্নত</translation>
@@ -85,7 +85,6 @@
 <translation id="2320166752086256636">কীবোর্ড লুকান</translation>
 <translation id="2339560363438331454">সিঙ্ক এবং Google পরিষেবাগুলি</translation>
 <translation id="2351097562818989364">আপনার অনুবাদ সেটিংস আবার সেট করা হয়েছে৷</translation>
-<translation id="2354750644801399986">'ট্র্যাক করবেন না'</translation>
 <translation id="2359808026110333948">অবিরত</translation>
 <translation id="2381405137052800939">প্রাথমিক বিষয়াদি</translation>
 <translation id="2386793615875593361">১টি নির্বাচিত</translation>
@@ -119,7 +118,6 @@
 <translation id="2870560284913253234">সাইট</translation>
 <translation id="2871695793448672541">লুকানো, পাসওয়ার্ড</translation>
 <translation id="2898963176829412617">নতুন ফোল্ডার...</translation>
-<translation id="2903493209154104877">ঠিকানা</translation>
 <translation id="2909437209446960244">সাম্প্রতিক ট্যাবগুলি</translation>
 <translation id="2916171785467530738">সার্চ এবং ইউআরএলগুলি নিজে থেকে সম্পূর্ণ হতে দিন</translation>
 <translation id="291754862089661335">এই ফ্রেমের মধ্যে QR কোড বা বারকোড স্থাপন করুন</translation>
@@ -166,10 +164,12 @@
 <translation id="3588820906588687999">নতুন ট্যাবে ছবি খুলুন</translation>
 <translation id="3603009562372709545">লিঙ্ক URL কপি করুন</translation>
 <translation id="3607167657931203000">ডেটা স্বতঃপূর্ণ করুন</translation>
+<translation id="360930808415985584">সিঙ্ক, নিজের মতন করে সাজিয়ে নেওয়া এবং আরও অনেক কিছু নিয়ন্ত্রণ করুন</translation>
 <translation id="3609785682760573515">সিঙ্ক হচ্ছে...</translation>
 <translation id="3628119975092896051">আপনার পড়ার তালিকা অফলাইনে উপলব্ধ। আপনার পড়ার তালিকায় কোনো পৃষ্ঠা যোগ করতে <ph name="SHARE_OPENING_ICON" /> আলতো চাপুন।</translation>
 <translation id="3638472932233958418">পূর্বলোড ওয়েবপৃষ্ঠা</translation>
 <translation id="3691593122358196899"><ph name="FOLDER_TITLE" /> এ বুকমার্ক করা হয়েছে</translation>
+<translation id="3765471630796399471">অন্য পাসওয়ার্ড ব্যবহার করুন</translation>
 <translation id="3771033907050503522">ছদ্মবেশী ট্যাবগুলি</translation>
 <translation id="3779810277399252432">কোনও ইন্টারনেট সংযোগ নেই৷</translation>
 <translation id="3783017676699494206">ছবি সেভ করুন</translation>
@@ -194,6 +194,7 @@
 <translation id="4124987746317609294">সময় সীমা</translation>
 <translation id="4172051516777682613">সর্বদা দেখান</translation>
 <translation id="418156467088430727">নতুন ট্যাবে অফলাইন সংস্করণ দেখুন</translation>
+<translation id="4192273449750167573">পরবর্তী স্ক্রিনে আপনার সেটিংস পর্যালোচনা করুন</translation>
 <translation id="4237682350741091554"><ph name="BEGIN_LINK" />সেটিংস<ph name="END_LINK" /> থেকে Chrome সিঙ্ক এবং ব্যক্তিগতকরণ পরিচালনা করুন</translation>
 <translation id="424315890655130736">পাসফ্রেজ লিখুন</translation>
 <translation id="4272631900155121838">একটি QR কোড স্ক্যান করতে, সেটিংস থেকে ক্যামেরা সক্ষম করুন</translation>
@@ -211,6 +212,7 @@
 <translation id="4508750114462689118">সাইন-ইন প্রচার বন্ধ করুন</translation>
 <translation id="4526249700380860531"><ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> এ গিয়ে সংরক্ষণ করা পাসওয়ার্ডগুলি দেখুন ও পরিচালনা করুন</translation>
 <translation id="4536418791685807335">আবার সাইন ইন করার চেষ্টা করুন।</translation>
+<translation id="4541241553780729349">Google-এ সিঙ্ক করা ডেটা এবং আপনার ব্যবহার করা বৈশিষ্ট্য পরিবর্তন হবে না</translation>
 <translation id="457386861538956877">আরও...</translation>
 <translation id="461440297010471931">Google এর মাধ্যমে সার্চ করা হচ্ছে</translation>
 <translation id="4619615317237390068">অন্যান্য ডিভাইসগুলি থেকে ট্যাব</translation>
@@ -245,9 +247,9 @@
 <translation id="5186185447130319458">ব্যক্তিগত</translation>
 <translation id="5190835502935405962">বুকমার্ক দণ্ড</translation>
 <translation id="5197255632782567636">ইন্টারনেট</translation>
+<translation id="5215116848420601511">Google Pay ব্যবহার করে এমন পেমেন্টের পদ্ধতি এবং ঠিকানা</translation>
 <translation id="5228579091201413441">সিঙ্ক সক্ষম করুন</translation>
 <translation id="5244474230056479698"><ph name="EMAIL" /> এ সিঙ্ক হচ্ছে</translation>
-<translation id="527973086555161537">গোপনে ইন্টারনেট ব্রাউজ করতে একটি ট্যাব খুলুন।</translation>
 <translation id="5300589172476337783">দেখান</translation>
 <translation id="5317780077021120954">সেভ করুন</translation>
 <translation id="5327248766486351172">নাম</translation>
@@ -285,8 +287,10 @@
 <translation id="5938160824633642847">আপনার ডিভাইসে পর্যাপ্ত জায়গা নেই। জায়গা খালি করে আবার চেষ্টা করুন।</translation>
 <translation id="5948291296578561264">এর ফলে আপনি ফটো লাইব্রেরিতে ফটো সেভ করতে পারবেন।</translation>
 <translation id="5955891643922670672">অফলাইন সংস্করণ দেখছেন</translation>
+<translation id="5957613098218939406">আরও বিকল্পগুলি</translation>
 <translation id="5964480694698977962">নতুন ছদ্মবেশী ট্যাব তৈরি করুন।</translation>
 <translation id="5965679971710331625">আপনি প্রবেশ করেছেন</translation>
+<translation id="5979837087407522202">পাসওয়ার্ড খুঁজুন</translation>
 <translation id="5982717868370722439">বিদ্যমান ডেটা <ph name="USER_EMAIL" /> এ যোগ করুন।</translation>
 <translation id="6012140227487808125">এনক্রিপ্ট হচ্ছে...</translation>
 <translation id="6021332621416007159">এতে খুলুন...</translation>
@@ -316,6 +320,7 @@
 <translation id="6344783595350022745">পাঠ্য সাফ করুন</translation>
 <translation id="6346549652287021269">নতুন ডাউনলোড শুরু করবেন?</translation>
 <translation id="6362362396625799311">কোনো ছদ্মবেশী ট্যাব নেই</translation>
+<translation id="6363526231572697780">ব্যবহারকারীর নাম নেই</translation>
 <translation id="6374469231428023295">আবার চেষ্টা করুন</translation>
 <translation id="6380866119319257197">আপনি যদি আপনার পাসফ্রেজ ভুলে যান বা এই সেটিং পরিবর্তন করতে চান, তাহলে <ph name="BEGIN_LINK" />সিঙ্ক পুনরায় সেট করুন<ph name="END_LINK" /></translation>
 <translation id="6389470377220713856">কার্ডে থাকা নাম</translation>
@@ -331,7 +336,6 @@
 <translation id="6464071786529933911">নতুন ছদ্মবেশী ট্যাবে খুলুন</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" />টি আইটেম মোছা হয়েছে</translation>
 <translation id="6541915733953096570">গত এক ঘণ্টা</translation>
-<translation id="6570040839871198836">স্বতঃপূর্ণ ফর্মগুলি</translation>
 <translation id="6656103420185847513">ফোল্ডার সম্পাদনা করুন</translation>
 <translation id="6657585470893396449">পাসওয়ার্ড</translation>
 <translation id="667999046851023355">দস্তাবেজ</translation>
@@ -344,6 +348,7 @@
 <translation id="6797885426782475225">ভয়েস সার্চ</translation>
 <translation id="6807889908376551050">সমস্ত দেখান...</translation>
 <translation id="681368974849482173">আইটেম তৈরি করা হয়েছে</translation>
+<translation id="685040365210406336">কোনও পরিবর্তন করবেন না</translation>
 <translation id="6896758677409633944">অনুলিপি</translation>
 <translation id="6903907808598579934">সিঙ্ক চালু করুন</translation>
 <translation id="6914783257214138813">এক্সপোর্ট করা ফাইল যারা দেখতে পান তারা আপনার পাসওয়ার্ডগুলিও দেখতে পাবেন।</translation>
@@ -373,6 +378,7 @@
 <translation id="7336264872878993241"><ph name="PERCENT" /> শতাংশ ডাউনলোড হয়েছে</translation>
 <translation id="7346909386216857016">ঠিক আছে, বুঝেছি</translation>
 <translation id="7400418766976504921">URL</translation>
+<translation id="741204030948306876">হ্যাঁ, আমি রাজি</translation>
 <translation id="7425346204213733349">আপনার বুকমার্ক, ইতিহাস, পাসওয়ার্ড এবং অন্যান্য সেটিংসে করা পরিবর্তন আর আপনার Google অ্যাকাউন্টের সাথে সিঙ্ক করা হবে না। অবশ্য, আপনার বিদ্যমান ডেটা আপনার Google অ্যাকাউন্টে সঞ্চিত থাকবে।</translation>
 <translation id="744343212394640790"><ph name="EMAIL" /> না</translation>
 <translation id="7454057999980797137">রাজ্য / দেশ</translation>
@@ -390,12 +396,14 @@
 <translation id="7638584964844754484">ত্রুটিপূর্ণ পাসফ্রেজ</translation>
 <translation id="7649070708921625228">সহায়তা</translation>
 <translation id="7658239707568436148">বাতিল</translation>
+<translation id="766891008101699113">ব্যক্তিগতভাবে ওয়েব ব্রাউজ করতে, একটি নতুন ট্যাব যোগ করুন।</translation>
 <translation id="7671141431838911305">ইনস্টল করুন</translation>
 <translation id="7765158879357617694">সরান</translation>
 <translation id="7769602470925380267">স্বীকার করে প্রস্থান করুন</translation>
 <translation id="7772032839648071052">পাসফ্রেজ নিশ্চিত করুন</translation>
+<translation id="7781829728241885113">গতকাল</translation>
 <translation id="780301667611848630">না থাক</translation>
-<translation id="7830720446622801252">ব্যক্তিগতকৃত নয় এমন পরিষেবাগুলি</translation>
+<translation id="7840771868269352570">আপনার বেছে নেওয়া আইটেমগুলি সরানো হবে।</translation>
 <translation id="7856733331829174190">ডাউনলোড করা যায়নি</translation>
 <translation id="7859704718976024901">ব্রাউজিং ইতিহাস</translation>
 <translation id="7918293828610777738">আপনার পড়ার তালিকাটি অফলাইনে উপলভ্য। আপনার পড়ার তালিকায় কোনও পৃষ্ঠা যোগ করতে <ph name="SHARE_OPENING_ICON" />  তারপর <ph name="READ_LATER_TEXT" /> ট্যাপ করুন।</translation>
@@ -416,11 +424,9 @@
 <translation id="8080028325999236607">সমস্ত ট্যাব বন্ধ করুন</translation>
 <translation id="8114753159095730575">ফাইল ডাউনলোড করা যাবে। স্ক্রিনের নিচের দিকে বিকল্পগুলি উপলভ্য।</translation>
 <translation id="8160722851663543621">অ্যাড্রেস বার এবং সার্চ বক্স থেকে সার্চের তথ্য এবং কিছু কুকি আপনার ডিফল্ট সার্চ ইঞ্জিনে পাঠায়</translation>
-<translation id="8178325540017397816">আপনার বেছে নেওয়া আইটেমগুলি সরানো হবে</translation>
 <translation id="8205564605687841303">বাতিল করুন</translation>
 <translation id="8225985093977202398">সঞ্চিত ছবি এবং ফাইলগুলি</translation>
 <translation id="8261506727792406068">মুছুন</translation>
-<translation id="8272426682713568063">ক্রেডিট কার্ডসমূহ</translation>
 <translation id="8281781826761538115">ডিফল্ট - <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8328777765163860529">সমস্ত বন্ধ করুন</translation>
 <translation id="8381750437846184350">সার্চ, বিজ্ঞাপন এবং অন্যান্য Google পরিষেবা ব্যক্তিগতকৃত করতে Google কিভাবে আপনার ব্রাউজিং ইতিহাস ব্যবহার করে তা নিয়ন্ত্রণ করুন</translation>

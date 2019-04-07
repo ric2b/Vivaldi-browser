@@ -15,7 +15,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -164,7 +164,7 @@ void ComponentExtensionIMEManagerImpl::Load(Profile* profile,
   // url won't be override by IME component extensions.
   base::FilePath* copied_file_path = new base::FilePath(file_path);
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&CheckFilePath, base::Unretained(copied_file_path)),
       base::Bind(&OnFilePathChecked, base::Unretained(profile),
                  base::Owned(new std::string(extension_id)),

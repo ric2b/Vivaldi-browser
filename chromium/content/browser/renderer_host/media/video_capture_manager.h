@@ -97,7 +97,7 @@ class CONTENT_EXPORT VideoCaptureManager
   void DisconnectClient(VideoCaptureController* controller,
                         VideoCaptureControllerID client_id,
                         VideoCaptureControllerEventHandler* client_handler,
-                        bool aborted_due_to_error);
+                        media::VideoCaptureError error);
 
   // Called by VideoCaptureHost to pause to update video buffer specified by
   // |client_id| and |client_handler|. If all clients of |controller| are
@@ -179,7 +179,8 @@ class CONTENT_EXPORT VideoCaptureManager
 
   // VideoCaptureDeviceLaunchObserver implementation:
   void OnDeviceLaunched(VideoCaptureController* controller) override;
-  void OnDeviceLaunchFailed(VideoCaptureController* controller) override;
+  void OnDeviceLaunchFailed(VideoCaptureController* controller,
+                            media::VideoCaptureError error) override;
   void OnDeviceLaunchAborted() override;
   void OnDeviceConnectionLost(VideoCaptureController* controller) override;
 
@@ -264,7 +265,7 @@ class CONTENT_EXPORT VideoCaptureManager
   void EmitLogMessage(const std::string& message, int verbose_log_level);
 
   // Only accessed on Browser::IO thread.
-  base::ObserverList<MediaStreamProviderListener> listeners_;
+  base::ObserverList<MediaStreamProviderListener>::Unchecked listeners_;
   media::VideoCaptureSessionId new_capture_session_id_;
 
   // An entry is kept in this map for every session that has been created via
@@ -288,7 +289,7 @@ class CONTENT_EXPORT VideoCaptureManager
   const std::unique_ptr<VideoCaptureProvider> video_capture_provider_;
   base::RepeatingCallback<void(const std::string&)> emit_log_message_cb_;
 
-  base::ObserverList<media::VideoCaptureObserver> capture_observers_;
+  base::ObserverList<media::VideoCaptureObserver>::Unchecked capture_observers_;
 
   // Local cache of the enumerated DeviceInfos. GetDeviceSupportedFormats() will
   // use this list if the device is not started, otherwise it will retrieve the

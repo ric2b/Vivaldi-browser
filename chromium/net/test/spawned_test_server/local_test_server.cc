@@ -91,7 +91,7 @@ bool LocalTestServer::GetTestServerPath(base::FilePath* testserver_path) const {
 bool LocalTestServer::StartInBackground() {
   DCHECK(!started());
 
-  base::ThreadRestrictions::ScopedAllowIO allow_io_from_test_code;
+  base::ScopedAllowBlockingForTesting allow_blocking;
 
   // Get path to Python server script.
   base::FilePath testserver_path;
@@ -233,6 +233,9 @@ bool LocalTestServer::AddCommandLineArguments(
       break;
     case TYPE_BASIC_AUTH_PROXY:
       command_line->AppendArg("--basic-auth-proxy");
+      break;
+    case TYPE_PROXY:
+      command_line->AppendArg("--proxy");
       break;
     default:
       NOTREACHED();

@@ -48,10 +48,12 @@ class SimpleFontData;
 struct HarfBuzzRunGlyphData {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
-  static constexpr unsigned kMaxCharacterIndex = (1 << 15) - 1;
+  static constexpr unsigned kCharacterIndexBits = 15;
+  static constexpr unsigned kMaxCharacterIndex = (1 << kCharacterIndexBits) - 1;
+  static constexpr unsigned kMaxGlyphs = 1 << kCharacterIndexBits;
 
   uint16_t glyph;
-  unsigned character_index : 15;
+  unsigned character_index : kCharacterIndexBits;
   unsigned safe_to_break_before : 1;
   float advance;
   FloatSize offset;
@@ -73,14 +75,13 @@ struct ShapeResult::RunInfo {
           hb_script_t script,
           unsigned start_index,
           unsigned num_glyphs,
-          unsigned num_characters,
-          Vector<unsigned> graphemes)
+          unsigned num_characters)
       : font_data_(const_cast<SimpleFontData*>(font)),
         direction_(dir),
         canvas_rotation_(canvas_rotation),
         script_(script),
-        glyph_data_(num_glyphs),
-        graphemes_(graphemes),
+        glyph_data_(
+            std::min(num_glyphs, HarfBuzzRunGlyphData::kMaxCharacterIndex + 1)),
         start_index_(start_index),
         num_characters_(num_characters),
         width_(0.0f) {}
@@ -107,6 +108,10 @@ struct ShapeResult::RunInfo {
   void CharacterIndexForXPosition(float,
                                   BreakGlyphsOption,
                                   GlyphIndexResult*) const;
+  unsigned LimitNumGlyphs(unsigned start_glyph,
+                          unsigned* num_glyphs_in_out,
+                          const bool is_ltr,
+                          const hb_glyph_info_t* glyph_infos);
   void SetGlyphAndPositions(unsigned index,
                             uint16_t glyph_id,
                             float advance,
@@ -172,18 +177,9 @@ struct ShapeResult::RunInfo {
     auto glyphs = FindGlyphDataRange(start, end);
     unsigned number_of_glyphs = std::distance(glyphs.begin, glyphs.end);
 
-    Vector<unsigned> sub_graphemes;
-    if (graphemes_.size()) {
-      sub_graphemes.resize(number_of_characters);
-      for (unsigned i = 0; i < number_of_characters; ++i) {
-        sub_graphemes[i] = graphemes_[start + i];
-      }
-    }
-
     auto run = std::make_unique<RunInfo>(
         font_data_.get(), direction_, canvas_rotation_, script_,
-        start_index_ + start, number_of_glyphs, number_of_characters,
-        std::move(sub_graphemes));
+        start_index_ + start, number_of_glyphs, number_of_characters);
 
     static_assert(base::is_trivially_copyable<HarfBuzzRunGlyphData>::value,
                   "HarfBuzzRunGlyphData should be trivially copyable");

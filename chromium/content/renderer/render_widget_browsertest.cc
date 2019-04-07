@@ -70,7 +70,8 @@ TEST_F(RenderWidgetTest, OnSynchronizeVisualProperties) {
   render_thread_->sink().ClearMessages();
   viz::ParentLocalSurfaceIdAllocator local_surface_id_allocator;
   gfx::Size size(100, 100);
-  visual_properties.local_surface_id = local_surface_id_allocator.GenerateId();
+  visual_properties.local_surface_id =
+      local_surface_id_allocator.GetCurrentLocalSurfaceId();
   visual_properties.new_size = size;
   visual_properties.compositor_viewport_pixel_size = size;
   OnSynchronizeVisualProperties(visual_properties);
@@ -98,23 +99,18 @@ TEST_F(RenderWidgetTest, OnSynchronizeVisualProperties) {
 }
 
 class RenderWidgetInitialSizeTest : public RenderWidgetTest {
- public:
-  RenderWidgetInitialSizeTest() : RenderWidgetTest(), initial_size_(200, 100) {
-    local_surface_id_ = local_surface_id_allocator_.GenerateId();
-  }
-
  protected:
   std::unique_ptr<VisualProperties> InitialVisualProperties() override {
     std::unique_ptr<VisualProperties> initial_visual_properties(
         new VisualProperties());
     initial_visual_properties->new_size = initial_size_;
     initial_visual_properties->compositor_viewport_pixel_size = initial_size_;
-    initial_visual_properties->local_surface_id = local_surface_id_;
+    initial_visual_properties->local_surface_id =
+        local_surface_id_allocator_.GetCurrentLocalSurfaceId();
     return initial_visual_properties;
   }
 
-  gfx::Size initial_size_;
-  viz::LocalSurfaceId local_surface_id_;
+  gfx::Size initial_size_ = gfx::Size(200, 100);
   viz::ParentLocalSurfaceIdAllocator local_surface_id_allocator_;
 };
 
@@ -125,20 +121,23 @@ TEST_F(RenderWidgetTest, HitTestAPI) {
       "<iframe style='width: 200px; height: 100px;'"
       "srcdoc='<body style=\"margin: 0px; height: 100px; width: 200px;\">"
       "</body>'></iframe><div></body>");
+  gfx::PointF point;
   viz::FrameSinkId main_frame_sink_id =
-      widget()->GetFrameSinkIdAtPoint(gfx::Point(10, 10));
+      widget()->GetFrameSinkIdAtPoint(gfx::Point(10, 10), &point);
   EXPECT_EQ(static_cast<uint32_t>(widget()->routing_id()),
             main_frame_sink_id.sink_id());
   EXPECT_EQ(static_cast<uint32_t>(RenderThreadImpl::Get()->GetClientId()),
             main_frame_sink_id.client_id());
+  EXPECT_EQ(gfx::PointF(10, 10), point);
 
   // Targeting a child frame should also return the FrameSinkId for the main
   // widget.
   viz::FrameSinkId frame_sink_id =
-      widget()->GetFrameSinkIdAtPoint(gfx::Point(150, 150));
+      widget()->GetFrameSinkIdAtPoint(gfx::Point(150, 150), &point);
   EXPECT_EQ(static_cast<uint32_t>(widget()->routing_id()),
             frame_sink_id.sink_id());
   EXPECT_EQ(main_frame_sink_id.client_id(), frame_sink_id.client_id());
+  EXPECT_EQ(gfx::PointF(150, 150), point);
 }
 
 TEST_F(RenderWidgetTest, GetCompositionRangeValidComposition) {

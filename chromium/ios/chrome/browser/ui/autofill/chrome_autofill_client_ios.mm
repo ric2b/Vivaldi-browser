@@ -10,12 +10,11 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "components/autofill/core/browser/autofill_credit_card_filling_infobar_delegate_mobile.h"
-#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_save_card_infobar_delegate_mobile.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_view.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/common/autofill_features.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/ios/browser/autofill_util.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/infobars/core/infobar.h"
@@ -44,13 +43,9 @@ namespace {
 // Creates and returns an infobar for saving credit cards.
 std::unique_ptr<infobars::InfoBar> CreateSaveCardInfoBarMobile(
     std::unique_ptr<autofill::AutofillSaveCardInfoBarDelegateMobile> delegate) {
-  if (!base::FeatureList::IsEnabled(autofill::kAutofillUpstream))
-    return ::CreateConfirmInfoBar(std::move(delegate));
-
   SaveCardInfoBarController* controller = [[SaveCardInfoBarController alloc]
       initWithInfoBarDelegate:delegate.get()];
-  auto infobar = std::make_unique<InfoBarIOS>(controller, std::move(delegate));
-  return infobar;
+  return std::make_unique<InfoBarIOS>(controller, std::move(delegate));
 }
 
 }  // namespace
@@ -134,7 +129,8 @@ ChromeAutofillClientIOS::GetSecurityLevelForUmaHistograms() {
   return result.security_level;
 }
 
-void ChromeAutofillClientIOS::ShowAutofillSettings() {
+void ChromeAutofillClientIOS::ShowAutofillSettings(
+    bool show_credit_card_settings) {
   NOTREACHED();
 }
 
@@ -174,9 +170,16 @@ void ChromeAutofillClientIOS::ConfirmSaveCreditCardLocally(
           /*local_save_card_callback=*/callback, GetPrefs())));
 }
 
-void ChromeAutofillClientIOS::ShowLocalCardMigrationPrompt(
-    base::OnceClosure closure) {
-  NOTREACHED();
+void ChromeAutofillClientIOS::ShowLocalCardMigrationDialog(
+    base::OnceClosure show_migration_dialog_closure) {
+  NOTIMPLEMENTED();
+}
+
+void ChromeAutofillClientIOS::ConfirmMigrateLocalCardToCloud(
+    std::unique_ptr<base::DictionaryValue> legal_message,
+    std::vector<MigratableCreditCard>& migratable_credit_cards,
+    base::OnceClosure start_migrating_cards_closure) {
+  NOTIMPLEMENTED();
 }
 
 void ChromeAutofillClientIOS::ConfirmSaveCreditCardToCloud(
@@ -238,8 +241,7 @@ void ChromeAutofillClientIOS::HideAutofillPopup() {
 }
 
 bool ChromeAutofillClientIOS::IsAutocompleteEnabled() {
-  // For browser, Autocomplete is always enabled as part of Autofill.
-  return GetPrefs()->GetBoolean(prefs::kAutofillEnabled);
+  return prefs::IsAutocompleteEnabled(GetPrefs());
 }
 
 void ChromeAutofillClientIOS::UpdateAutofillPopupDataListValues(

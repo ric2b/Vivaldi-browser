@@ -57,10 +57,15 @@
 
 - (BOOL)webViewScrollViewShouldScrollToTop:
     (CRWWebViewScrollViewProxy*)webViewScrollViewProxy {
-  // Inform FullscreenUIElements that the content is going to be scrolled to the
-  // top.
-  self.mediator->ScrollToTop();
-  return YES;
+  if (self.model->progress() > 0.05) {
+    // Inform FullscreenUIElements that the content is going to be scrolled to
+    // the top.
+    self.mediator->ScrollToTop();
+    return YES;
+  } else {
+    self.mediator->AnimateModelReset();
+    return NO;
+  }
 }
 
 @end

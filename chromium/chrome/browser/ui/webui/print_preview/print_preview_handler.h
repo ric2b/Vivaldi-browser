@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 
 #include "base/files/file_path.h"
@@ -92,8 +93,8 @@ class PrintPreviewHandler
 
   // Send the print preview page count and fit to page scaling
   void SendPageCountReady(int page_count,
-                          int request_id,
-                          int fit_to_page_scaling);
+                          int fit_to_page_scaling,
+                          int request_id);
 
   // Send the default page layout
   void SendPageLayoutReady(const base::DictionaryValue& layout,
@@ -103,7 +104,7 @@ class PrintPreviewHandler
   // Notify the WebUI that the page preview is ready.
   void SendPagePreviewReady(int page_index,
                             int preview_uid,
-                            int preview_response_id);
+                            int preview_request_id);
 
   int regenerate_preview_request_count() const {
     return regenerate_preview_request_count_;
@@ -144,7 +145,11 @@ class PrintPreviewHandler
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewPdfGeneratedBrowserTest,
                            MANUAL_DummyTest);
   friend class PrintPreviewHandlerTest;
-  FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, InitialSettings);
+  FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, InitialSettingsSimple);
+  FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest,
+                           InitialSettingsEnableHeaderFooter);
+  FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest,
+                           InitialSettingsDisableHeaderFooter);
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, GetPrinters);
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, GetPrinterCapabilities);
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, Print);
@@ -155,6 +160,8 @@ class PrintPreviewHandler
   content::WebContents* preview_web_contents() const;
 
   PrintPreviewUI* print_preview_ui() const;
+
+  PrefService* GetPrefs() const;
 
   // Whether the the handler should be receiving messages from the renderer to
   // forward to the Print Preview JS in response to preview request with id
@@ -317,6 +324,9 @@ class PrintPreviewHandler
   // Whether we have already logged the number of printers this session.
   bool has_logged_printers_count_;
 
+  // The settings used for the most recent preview request.
+  std::unique_ptr<base::DictionaryValue> last_preview_settings_;
+
   // Holds token service to get OAuth2 access tokens.
   std::unique_ptr<AccessTokenService> token_service_;
 
@@ -346,6 +356,9 @@ class PrintPreviewHandler
 
   // Maps preview request ids to callbacks.
   std::map<int, std::string> preview_callbacks_;
+
+  // Set of preview request ids for failed previews.
+  std::set<int> preview_failures_;
 
   base::WeakPtrFactory<PrintPreviewHandler> weak_factory_;
 

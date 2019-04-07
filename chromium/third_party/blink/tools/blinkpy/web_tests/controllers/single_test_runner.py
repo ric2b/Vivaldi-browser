@@ -113,18 +113,8 @@ class SingleTestRunner(object):
         if self._should_fetch_expected_checksum():
             image_hash = self._port.expected_checksum(self._test_name)
 
-        test_base = self._port.lookup_virtual_test_base(self._test_name)
-        if test_base:
-            # If the file actually exists under the virtual dir, we want to use it (largely for virtual references),
-            # but we want to use the extra command line args either way.
-            if self._filesystem.exists(self._port.abspath_for_test(self._test_name)):
-                test_name = self._test_name
-            else:
-                test_name = test_base
-            args = self._port.lookup_virtual_test_args(self._test_name)
-        else:
-            test_name = self._test_name
-            args = self._port.lookup_physical_test_args(self._test_name)
+        args = self._port.args_for_test(self._test_name)
+        test_name = self._port.name_for_test(self._test_name)
         return DriverInput(test_name, self._timeout_ms, image_hash, self._should_run_pixel_test, args)
 
     def run(self):
@@ -189,18 +179,35 @@ class SingleTestRunner(object):
         if (test_failures.has_failure_type(test_failures.FailureTimeout, failures) or
                 test_failures.has_failure_type(test_failures.FailureCrash, failures)):
             return
+        # We usually don't want to create a new baseline if there isn't one
+        # existing (which usually means this baseline isn't necessary, e.g.
+        # an image-first test without text expectation files). However, in the
+        # following cases, we do:
+        # 1. The failure is MISSING; a baseline is apparently needed.
+        # 2. A testharness.js test fails assertions: testharness.js tests
+        #    without baselines are implicitly expected to pass all assertions;
+        #    if there are failed assertions we need to create a new baseline.
+        #    Note that the created baseline might be redundant, but users can
+        #    optimize them later with optimize-baselines.
         self._save_baseline_data(driver_output.text, '.txt',
-                                 test_failures.has_failure_type(test_failures.FailureMissingResult, failures))
+                                 test_failures.has_failure_type(test_failures.FailureMissingResult, failures) or
+                                 test_failures.has_failure_type(test_failures.FailureTestHarnessAssertion, failures))
         self._save_baseline_data(driver_output.audio, '.wav',
                                  test_failures.has_failure_type(test_failures.FailureMissingAudio, failures))
         self._save_baseline_data(driver_output.image, '.png',
                                  test_failures.has_failure_type(test_failures.FailureMissingImage, failures))
 
-    def _save_baseline_data(self, data, extension, is_missing):
+    def _save_baseline_data(self, data, extension, force_create_new_baseline):
         if data is None:
             return
+
         port = self._port
         fs = self._filesystem
+
+        # Do not create a new baseline unless we are specifically told so.
+        current_expected_path = port.expected_filename(self._test_name, extension)
+        if not fs.exists(current_expected_path) and not force_create_new_baseline:
+            return
 
         flag_specific_dir = port.baseline_flag_specific_dir()
         if flag_specific_dir:
@@ -222,11 +229,9 @@ class SingleTestRunner(object):
             _log.info('Removing the current baseline "%s"', port.relative_test_filename(output_path))
             fs.remove(output_path)
 
+        # Note that current_expected_path may change because of the above file removal.
         current_expected_path = port.expected_filename(self._test_name, extension)
-        if not fs.exists(current_expected_path):
-            if not is_missing or not self._options.reset_results:
-                return
-        elif fs.sha1(current_expected_path) == hashlib.sha1(data).hexdigest():
+        if fs.exists(current_expected_path) and fs.sha1(current_expected_path) == hashlib.sha1(data).hexdigest():
             if self._options.reset_results:
                 _log.info('Not writing new expected result "%s" because it is the same as the current expected result',
                           port.relative_test_filename(output_path))

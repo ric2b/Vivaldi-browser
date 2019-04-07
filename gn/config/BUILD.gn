@@ -1,6 +1,7 @@
 import("features.gni")
 import("product.gni")
 import("//build/toolchain/cc_wrapper.gni")
+import("//build/config/sanitizers/sanitizers.gni")
 
 config("enable_disabled_tests") {
   # Turns off the disabling of unittests performed by
@@ -29,7 +30,7 @@ config("features") {
   if (is_official_build) {
     defines += [ "VIVALDI_PRODUCT_VERSION=\"$official_product_kind_string\"" ]
   }
-  if (use_cc_wrapper) {
+  if (cc_wrapper != "") {
     defines += [ "VIVALDI_WIN_COMPILE_CACHE" ]
   }
   if (is_win) {
@@ -46,5 +47,16 @@ config("disable_new_dtags") {
 config("linux_386_linking") {
   if (is_linux && current_cpu == "x86") {
     ldflags = [ "-z", "notext", ]
+  }
+}
+
+config("extra_cfi_flags") {
+  cflags = []
+  if (is_cfi && current_toolchain == default_toolchain) {
+    extra_cfi_blacklist_path =
+          rebase_path("//vivaldi/gn/config/cfi/blacklist.txt", root_build_dir)
+    cflags += [
+      "-fsanitize-blacklist=$extra_cfi_blacklist_path",
+    ]
   }
 }

@@ -14,6 +14,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/url_formatter/idn_spoof_checker.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -623,6 +624,13 @@ const IDNTestCase idn_cases[] = {
      L"\x0ed0\x0e9a.com",
      false},
 
+    // Lao character that looks like n.
+    // ก11.com
+    {"xn--11-lqi.com",
+     L"\x0e01"
+     L"11.com",
+     false},
+
     // At one point the skeleton of 'w' was 'vv', ensure that
     // that it's treated as 'w'.
     {"xn--wder-qqa.com",
@@ -1018,6 +1026,7 @@ TEST(UrlFormatterTest, IDNToUnicode) {
 
 TEST(UrlFormatterTest, FormatUrl) {
   FormatUrlTypes default_format_type = kFormatUrlOmitUsernamePassword;
+  // clang-format off
   const UrlTestData tests[] = {
       {"Empty URL", "", default_format_type, net::UnescapeRule::NORMAL, L"", 0},
 
@@ -1220,29 +1229,26 @@ TEST(UrlFormatterTest, FormatUrl) {
        net::UnescapeRule::NORMAL, L"https://ftp.google.com/", 8},
 
       // -------- omit trivial subdomains --------
-      {"omit trivial subdomains - trim www", "http://www.google.com/",
-       kFormatUrlOmitTrivialSubdomains, net::UnescapeRule::NORMAL,
-       L"http://google.com/", 7},
-      {"omit trivial subdomains - trim m", "http://m.google.com/",
-       kFormatUrlOmitTrivialSubdomains, net::UnescapeRule::NORMAL,
-       L"http://google.com/", 7},
-      {"omit trivial subdomains - trim m and www", "http://m.www.google.com/",
-       kFormatUrlOmitTrivialSubdomains, net::UnescapeRule::NORMAL,
-       L"http://google.com/", 7},
-      {"omit trivial subdomains - trim m from middle",
-       "http://en.m.wikipedia.org/", kFormatUrlOmitTrivialSubdomains,
-       net::UnescapeRule::NORMAL, L"http://en.wikipedia.org/", 7},
-      {"omit trivial subdomains - exclude private registries",
-       "http://www.blogspot.com/", kFormatUrlOmitTrivialSubdomains,
-       net::UnescapeRule::NORMAL, L"http://blogspot.com/", 7},
+      {"omit trivial subdomains - trim leading www",
+      "http://www.wikipedia.org/", kFormatUrlOmitTrivialSubdomains,
+      net::UnescapeRule::NORMAL, L"http://wikipedia.org/", 7},
+      {"omit trivial subdomains - don't trim leading m",
+      "http://m.google.com/", kFormatUrlOmitTrivialSubdomains,
+      net::UnescapeRule::NORMAL, L"http://m.google.com/", 7},
+      {"omit trivial subdomains - don't trim www after a leading m",
+      "http://m.www.google.com/", kFormatUrlOmitTrivialSubdomains,
+      net::UnescapeRule::NORMAL, L"http://m.www.google.com/", 7},
+      {"omit trivial subdomains - trim first www only",
+      "http://www.www.www.wikipedia.org/", kFormatUrlOmitTrivialSubdomains,
+      net::UnescapeRule::NORMAL, L"http://www.www.wikipedia.org/", 7},
+      {"omit trivial subdomains - don't trim www from middle",
+      "http://en.www.wikipedia.org/", kFormatUrlOmitTrivialSubdomains,
+      net::UnescapeRule::NORMAL, L"http://en.www.wikipedia.org/", 7},
       {"omit trivial subdomains - don't do blind substring matches for www",
-       "http://wwww.google.com/", kFormatUrlOmitTrivialSubdomains,
-       net::UnescapeRule::NORMAL, L"http://wwww.google.com/", 7},
-      {"omit trivial subdomains - don't do blind substring matches for m",
-       "http://foom.google.com/", kFormatUrlOmitTrivialSubdomains,
-       net::UnescapeRule::NORMAL, L"http://foom.google.com/", 7},
+       "http://foowww.google.com/", kFormatUrlOmitTrivialSubdomains,
+       net::UnescapeRule::NORMAL, L"http://foowww.google.com/", 7},
       {"omit trivial subdomains - don't crash on multiple delimiters",
-       "http://www...m..foobar...google.com/", kFormatUrlOmitTrivialSubdomains,
+       "http://www....foobar...google.com/", kFormatUrlOmitTrivialSubdomains,
        net::UnescapeRule::NORMAL, L"http://...foobar...google.com/", 7},
 
       {"omit trivial subdomains - sanity check for ordinary subdomains",
@@ -1255,9 +1261,9 @@ TEST(UrlFormatterTest, FormatUrl) {
        "http://google.com/www.m.foobar", kFormatUrlOmitTrivialSubdomains,
        net::UnescapeRule::NORMAL, L"http://google.com/www.m.foobar", 7},
       {"omit trivial subdomains - sanity check for IDN",
-       "http://www.xn--cy2a840a.m.xn--cy2a840a.com",
+       "http://www.xn--cy2a840a.www.xn--cy2a840a.com",
        kFormatUrlOmitTrivialSubdomains, net::UnescapeRule::NORMAL,
-       L"http://\x89c6\x9891.\x89c6\x9891.com/", 7},
+       L"http://\x89c6\x9891.www.\x89c6\x9891.com/", 7},
 
       {"omit trivial subdomains but leave registry and domain alone - trivial",
        "http://google.com/", kFormatUrlOmitTrivialSubdomains,
@@ -1268,6 +1274,10 @@ TEST(UrlFormatterTest, FormatUrl) {
       {"omit trivial subdomains but leave registry and domain alone - co.uk",
        "http://m.co.uk/", kFormatUrlOmitTrivialSubdomains,
        net::UnescapeRule::NORMAL, L"http://m.co.uk/", 7},
+      {"omit trivial subdomains but leave eTLD (effective TLD) alone",
+       "http://www.appspot.com/", kFormatUrlOmitTrivialSubdomains,
+       net::UnescapeRule::NORMAL, L"http://www.appspot.com/", 7},
+
 
       {"omit trivial subdomains but leave intranet hostnames alone",
        "http://router/", kFormatUrlOmitTrivialSubdomains,
@@ -1316,6 +1326,7 @@ TEST(UrlFormatterTest, FormatUrl) {
        kFormatUrlOmitDefaults | kFormatUrlTrimAfterHost,
        net::UnescapeRule::NORMAL, L"google.com", 0},
   };
+  // clang-format on
 
   for (size_t i = 0; i < arraysize(tests); ++i) {
     size_t prefix_len;
@@ -1550,7 +1561,7 @@ TEST(UrlFormatterTest, FormatUrlRoundTripQueryEscaped) {
 }
 
 TEST(UrlFormatterTest, FormatUrlWithOffsets) {
-  CheckAdjustedOffsets(std::string(),  kFormatUrlOmitNothing,
+  CheckAdjustedOffsets(std::string(), kFormatUrlOmitNothing,
                        net::UnescapeRule::NORMAL, nullptr);
 
   const size_t basic_offsets[] = {
@@ -1728,18 +1739,11 @@ TEST(UrlFormatterTest, FormatUrlWithOffsets) {
                        net::UnescapeRule::NORMAL, omit_https_with_auth_offsets);
 
   const size_t strip_trivial_subdomains_offsets_1[] = {
-      0, 1, 2,  3,  4,  5,  6,  7,  kNpos, kNpos, kNpos, 7,  kNpos, 7,
-      8, 9, 10, 11, 12, 13, 14, 15, 16,    17,    18,    19, 20,    21};
+      0, 1,  2,  3,  4,  5,  6,  7,  kNpos, kNpos, kNpos, 7,  8,
+      9, 10, 11, 12, 13, 14, 15, 16, 17,    18,    19,    20, 21};
   CheckAdjustedOffsets(
-      "http://www.m.google.com/foo/", kFormatUrlOmitTrivialSubdomains,
+      "http://www.google.com/foo/", kFormatUrlOmitTrivialSubdomains,
       net::UnescapeRule::NORMAL, strip_trivial_subdomains_offsets_1);
-
-  const size_t strip_trivial_subdomains_offsets_2[] = {
-      0,  1,     2,     3,     4,  5,  6,  7,  kNpos, 7,  8,  9,
-      10, kNpos, kNpos, kNpos, 10, 11, 12, 13, 14,    15, 16, 17};
-  CheckAdjustedOffsets(
-      "http://m.en.www.foo.com/", kFormatUrlOmitTrivialSubdomains,
-      net::UnescapeRule::NORMAL, strip_trivial_subdomains_offsets_2);
 
   const size_t strip_trivial_subdomains_from_idn_offsets[] = {
       0,     1,     2,     3,     4,     5,     6,     7,     kNpos, kNpos,

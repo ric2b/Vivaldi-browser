@@ -12,7 +12,7 @@ Polymer({
 
   behaviors: [
     I18nBehavior, settings.RouteObserverBehavior, WebUIListenerBehavior,
-    NetworkListenerBehavior
+    CrNetworkListenerBehavior
   ],
 
   properties: {
@@ -39,6 +39,7 @@ Polymer({
     deviceStates: {
       type: Object,
       notify: true,
+      observer: 'onDeviceStatesChanged_',
     },
 
     /**
@@ -78,7 +79,19 @@ Polymer({
     },
 
     /** @private {!chrome.networkingPrivate.GlobalPolicy|undefined} */
-    globalPolicy_: Object,
+    globalPolicy_: {
+      type: Object,
+      value: null,
+    },
+
+    /**
+     * Whether a managed network is available in the visible network list.
+     * @private {boolean}
+     */
+    managedNetworkAvailable: {
+      type: Boolean,
+      value: false,
+    },
 
     /** Overridden from NetworkListenerBehavior. */
     networkListChangeSubscriberSelectors_: {
@@ -125,7 +138,7 @@ Polymer({
       }
     },
 
-    /** @private {!Map<string, string>} */
+    /** @private {!Map<string, Element>} */
     focusConfig_: {
       type: Object,
       value: function() {
@@ -239,18 +252,21 @@ Polymer({
       return;
 
     // Focus the subpage arrow where appropriate.
-    let selector;
+    let element;
     if (route == settings.routes.INTERNET_NETWORKS) {
       // iron-list makes the correct timing to focus an item in the list
       // very complicated, and the item may not exist, so just focus the
       // entire list for now.
-      selector = '* /deep/ #networkList';
+      let subPage = this.$$('settings-internet-subpage');
+      if (subPage)
+        element = subPage.$$('#networkList');
     } else if (this.detailType_) {
-      selector =
-          '* /deep/ #' + this.detailType_ + ' /deep/ .subpage-arrow button';
+      element = this.$$('network-summary')
+                    .$$(`#${this.detailType_}`)
+                    .$$('.subpage-arrow button');
     }
-    if (selector && this.querySelector(selector))
-      this.focusConfig_.set(oldRoute.path, selector);
+    if (element)
+      this.focusConfig_.set(oldRoute.path, element);
     else
       this.focusConfig_.delete(oldRoute.path);
   },
@@ -274,10 +290,14 @@ Polymer({
    */
   onShowConfig_: function(event) {
     const properties = event.detail;
-    let configAndConnect = !properties.GUID;  // New configuration
-    this.showConfig_(
-        configAndConnect, properties.Type, properties.GUID,
-        CrOnc.getNetworkName(properties));
+    if (!properties.GUID) {
+      // New configuration
+      this.showConfig_(true /* configAndConnect */, properties.Type);
+    } else {
+      this.showConfig_(
+          false /* configAndConnect */, properties.Type, properties.GUID,
+          CrOnc.getNetworkName(properties));
+    }
   },
 
   /**
@@ -351,6 +371,21 @@ Polymer({
       subpageType = CrOnc.Type.CELLULAR;
     }
     return deviceStates[subpageType];
+  },
+
+  /**
+   * @param {!CrOnc.DeviceStateProperties|undefined} newValue
+   * @param {!CrOnc.DeviceStateProperties|undefined} oldValue
+   * @private
+   */
+  onDeviceStatesChanged_: function(newValue, oldValue) {
+    let wifiDeviceState = this.getDeviceState_(CrOnc.Type.WI_FI, newValue);
+    let managedNetworkAvailable = false;
+    if (!!wifiDeviceState)
+      managedNetworkAvailable = !!wifiDeviceState.ManagedNetworkAvailable;
+
+    if (this.managedNetworkAvailable != managedNetworkAvailable)
+      this.managedNetworkAvailable = managedNetworkAvailable;
   },
 
   /**
@@ -517,10 +552,16 @@ Polymer({
 
   /**
    * @param {!chrome.networkingPrivate.GlobalPolicy} globalPolicy
+   * @param {boolean} managedNetworkAvailable
    * @return {boolean}
    */
-  allowAddConnection_: function(globalPolicy) {
-    return !globalPolicy.AllowOnlyPolicyNetworksToConnect;
+  allowAddConnection_: function(globalPolicy, managedNetworkAvailable) {
+    if (!globalPolicy)
+      return true;
+
+    return !globalPolicy.AllowOnlyPolicyNetworksToConnect &&
+        (!globalPolicy.AllowOnlyPolicyNetworksToConnectIfAvailable ||
+         !managedNetworkAvailable);
   },
 
   /**
@@ -528,7 +569,8 @@ Polymer({
    * @return {string}
    */
   getAddThirdPartyVpnLabel_: function(provider) {
-    return this.i18n('internetAddThirdPartyVPN', provider.ProviderName);
+    return this.i18n(
+        'internetAddThirdPartyVPN', provider.ProviderName || '');
   },
 
   /**

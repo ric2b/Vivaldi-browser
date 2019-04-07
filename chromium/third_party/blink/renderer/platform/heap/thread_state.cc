@@ -43,6 +43,7 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/platform/bindings/runtime_call_stats.h"
+#include "third_party/blink/renderer/platform/heap/address_cache.h"
 #include "third_party/blink/renderer/platform/heap/blink_gc_memory_dump_provider.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
@@ -51,12 +52,12 @@
 #include "third_party/blink/renderer/platform/heap/heap_stats_collector.h"
 #include "third_party/blink/renderer/platform/heap/marking_visitor.h"
 #include "third_party/blink/renderer/platform/heap/page_pool.h"
-#include "third_party/blink/renderer/platform/heap/safe_point.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/web_memory_allocator_dump.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/web_process_memory_dump.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/wtf/stack_util.h"
 #include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
@@ -167,7 +168,12 @@ ThreadState::ThreadState()
       weak_persistent_region_(std::make_unique<PersistentRegion>()),
       start_of_stack_(reinterpret_cast<intptr_t*>(WTF::GetStackStart())),
       end_of_stack_(reinterpret_cast<intptr_t*>(WTF::GetStackStart())),
-      safe_point_scope_marker_(nullptr),
+#if HAS_FEATURE(safe_stack)
+      start_of_unsafe_stack_(
+          reinterpret_cast<intptr_t*>(__builtin___get_unsafe_stack_top())),
+      end_of_unsafe_stack_(
+          reinterpret_cast<intptr_t*>(__builtin___get_unsafe_stack_bottom())),
+#endif
       sweep_forbidden_(false),
       no_allocation_count_(0),
       gc_forbidden_count_(0),
@@ -323,24 +329,15 @@ void ThreadState::VisitAsanFakeStackForPointer(MarkingVisitor* visitor,
 NO_SANITIZE_ADDRESS
 NO_SANITIZE_THREAD
 void ThreadState::VisitStack(MarkingVisitor* visitor) {
-  if (stack_state_ == BlinkGC::kNoHeapPointersOnStack)
-    return;
+  DCHECK_EQ(current_gc_data_.stack_state, BlinkGC::kHeapPointersOnStack);
 
   Address* start = reinterpret_cast<Address*>(start_of_stack_);
-  // If there is a safepoint scope marker we should stop the stack
-  // scanning there to not touch active parts of the stack. Anything
-  // interesting beyond that point is in the safepoint stack copy.
-  // If there is no scope marker the thread is blocked and we should
-  // scan all the way to the recorded end stack pointer.
   Address* end = reinterpret_cast<Address*>(end_of_stack_);
-  Address* safe_point_scope_marker =
-      reinterpret_cast<Address*>(safe_point_scope_marker_);
-  Address* current = safe_point_scope_marker ? safe_point_scope_marker : end;
 
   // Ensure that current is aligned by address size otherwise the loop below
   // will read past start address.
-  current = reinterpret_cast<Address*>(reinterpret_cast<intptr_t>(current) &
-                                       ~(sizeof(Address) - 1));
+  Address* current = reinterpret_cast<Address*>(
+      reinterpret_cast<intptr_t>(end) & ~(sizeof(Address) - 1));
 
   for (; current < start; ++current) {
     Address ptr = *current;
@@ -356,17 +353,32 @@ void ThreadState::VisitStack(MarkingVisitor* visitor) {
     VisitAsanFakeStackForPointer(visitor, ptr);
   }
 
-  for (Address ptr : safe_point_stack_copy_) {
-#if defined(MEMORY_SANITIZER)
-    // See the comment above.
-    __msan_unpoison(&ptr, sizeof(ptr));
-#endif
+#if HAS_FEATURE(safe_stack)
+  start = reinterpret_cast<Address*>(start_of_unsafe_stack_);
+  end = reinterpret_cast<Address*>(end_of_unsafe_stack_);
+  current = end;
+
+  for (; current < start; ++current) {
+    Address ptr = *current;
+    // SafeStack And MSan are not compatible
     heap_->CheckAndMarkPointer(visitor, ptr);
     VisitAsanFakeStackForPointer(visitor, ptr);
+  }
+#endif
+}
+
+void ThreadState::VisitDOMWrappers(Visitor* visitor) {
+  if (trace_dom_wrappers_) {
+    ThreadHeapStatsCollector::Scope stats_scope(
+        Heap().stats_collector(), ThreadHeapStatsCollector::kVisitDOMWrappers);
+    trace_dom_wrappers_(isolate_, visitor);
   }
 }
 
 void ThreadState::VisitPersistents(Visitor* visitor) {
+  ThreadHeapStatsCollector::Scope stats_scope(
+      Heap().stats_collector(),
+      ThreadHeapStatsCollector::kVisitPersistentRoots);
   {
     ThreadHeapStatsCollector::Scope stats_scope(
         Heap().stats_collector(),
@@ -379,11 +391,6 @@ void ThreadState::VisitPersistents(Visitor* visitor) {
     ThreadHeapStatsCollector::Scope stats_scope(
         Heap().stats_collector(), ThreadHeapStatsCollector::kVisitPersistents);
     persistent_region_->TracePersistentNodes(visitor);
-  }
-  if (trace_dom_wrappers_) {
-    ThreadHeapStatsCollector::Scope stats_scope(
-        Heap().stats_collector(), ThreadHeapStatsCollector::kVisitDOMWrappers);
-    trace_dom_wrappers_(isolate_, visitor);
   }
 }
 
@@ -959,7 +966,6 @@ void ThreadState::FinishSnapshot() {
   gc_state_ = kNoGCScheduled;
   SetGCPhase(GCPhase::kSweeping);
   SetGCPhase(GCPhase::kNone);
-  Heap().stats_collector()->NotifySweepingCompleted();
 }
 
 void ThreadState::AtomicPauseEpilogue(BlinkGC::MarkingType marking_type,
@@ -1038,11 +1044,19 @@ void ThreadState::CompleteSweep() {
     return;
 
   {
-    AtomicPauseScope atomic_pause_scope(this);
+    // CompleteSweep may be called during regular mutator exececution, from a
+    // task, or from the atomic pause in which the atomic scope has already been
+    // opened.
+    const bool was_in_atomic_pause = in_atomic_pause();
+    if (!was_in_atomic_pause)
+      EnterAtomicPause();
+    ScriptForbiddenScope script_forbidden;
     SweepForbiddenScope scope(this);
     ThreadHeapStatsCollector::EnabledScope stats_scope(
         Heap().stats_collector(), ThreadHeapStatsCollector::kCompleteSweep);
     Heap().CompleteSweep();
+    if (!was_in_atomic_pause)
+      LeaveAtomicPause();
   }
   PostSweep();
 }
@@ -1208,6 +1222,16 @@ void UpdateHistograms(const ThreadHeapStatsCollector::Event& event) {
 
 }  // namespace
 
+void ThreadState::UpdateStatisticsAfterSweeping() {
+  DCHECK(!IsSweepingInProgress());
+  DCHECK(Heap().stats_collector()->is_started());
+  Heap().stats_collector()->NotifySweepingCompleted();
+  if (IsMainThread())
+    UpdateHistograms(Heap().stats_collector()->previous());
+  // Emit trace counters for all threads.
+  UpdateTraceCounters(*Heap().stats_collector());
+}
+
 void ThreadState::PostSweep() {
   DCHECK(CheckThread());
 
@@ -1220,74 +1244,36 @@ void ThreadState::PostSweep() {
   for (auto* const observer : observers_)
     observer->OnCompleteSweepDone();
 
-  Heap().stats_collector()->NotifySweepingCompleted();
-  if (IsMainThread())
-    UpdateHistograms(Heap().stats_collector()->previous());
-  // Emit trace counters for all threads.
-  UpdateTraceCounters(*Heap().stats_collector());
+  if (!in_atomic_pause()) {
+    // Immediately update the statistics if running outside of the atomic pause.
+    UpdateStatisticsAfterSweeping();
+  }
 }
 
 void ThreadState::SafePoint(BlinkGC::StackState stack_state) {
   DCHECK(CheckThread());
 
   RunScheduledGC(stack_state);
-  stack_state_ = BlinkGC::kHeapPointersOnStack;
 }
-
-#ifdef ADDRESS_SANITIZER
-// When we are running under AddressSanitizer with
-// detect_stack_use_after_return=1 then stack marker obtained from
-// SafePointScope will point into a fake stack.  Detect this case by checking if
-// it falls in between current stack frame and stack start and use an arbitrary
-// high enough value for it.  Don't adjust stack marker in any other case to
-// match behavior of code running without AddressSanitizer.
-NO_SANITIZE_ADDRESS static void* AdjustScopeMarkerForAdressSanitizer(
-    void* scope_marker) {
-  Address start = reinterpret_cast<Address>(WTF::GetStackStart());
-  Address end = reinterpret_cast<Address>(&start);
-  CHECK_LT(end, start);
-
-  if (end <= scope_marker && scope_marker < start)
-    return scope_marker;
-
-  // 256 is as good an approximation as any else.
-  const size_t kBytesToCopy = sizeof(Address) * 256;
-  if (static_cast<size_t>(start - end) < kBytesToCopy)
-    return start;
-
-  return end + kBytesToCopy;
-}
-#endif
 
 // TODO(haraken): The first void* pointer is unused. Remove it.
 using PushAllRegistersCallback = void (*)(void*, ThreadState*, intptr_t*);
 extern "C" void PushAllRegisters(void*, ThreadState*, PushAllRegistersCallback);
 
-static void EnterSafePointAfterPushRegisters(void*,
-                                             ThreadState* state,
-                                             intptr_t* stack_end) {
+static void DidPushRegisters(void*, ThreadState* state, intptr_t* stack_end) {
   state->RecordStackEnd(stack_end);
-  state->CopyStackUntilSafePointScope();
-}
-
-void ThreadState::EnterSafePoint(BlinkGC::StackState stack_state,
-                                 void* scope_marker) {
-  DCHECK(CheckThread());
-#ifdef ADDRESS_SANITIZER
-  if (stack_state == BlinkGC::kHeapPointersOnStack)
-    scope_marker = AdjustScopeMarkerForAdressSanitizer(scope_marker);
+#if HAS_FEATURE(safe_stack)
+  state->RecordUnsafeStackEnd(
+      reinterpret_cast<intptr_t*>(__builtin___get_unsafe_stack_ptr()));
 #endif
-  DCHECK(stack_state == BlinkGC::kNoHeapPointersOnStack || scope_marker);
-  DCHECK(IsGCForbidden());
-  stack_state_ = stack_state;
-  safe_point_scope_marker_ = scope_marker;
-  PushAllRegisters(nullptr, this, EnterSafePointAfterPushRegisters);
 }
 
-void ThreadState::LeaveSafePoint() {
+void ThreadState::PushRegistersAndVisitStack() {
   DCHECK(CheckThread());
-  stack_state_ = BlinkGC::kHeapPointersOnStack;
-  ClearSafePointScopeMarker();
+  DCHECK(IsGCForbidden());
+  DCHECK_EQ(current_gc_data_.stack_state, BlinkGC::kHeapPointersOnStack);
+  PushAllRegisters(nullptr, this, DidPushRegisters);
+  VisitStack(static_cast<MarkingVisitor*>(CurrentVisitor()));
 }
 
 void ThreadState::AddObserver(BlinkGCObserver* observer) {
@@ -1312,32 +1298,6 @@ void ThreadState::ReportMemoryToV8() {
                  static_cast<int64_t>(reported_memory_to_v8_);
   isolate_->AdjustAmountOfExternalAllocatedMemory(diff);
   reported_memory_to_v8_ = current_heap_size;
-}
-
-void ThreadState::CopyStackUntilSafePointScope() {
-  if (!safe_point_scope_marker_ ||
-      stack_state_ == BlinkGC::kNoHeapPointersOnStack)
-    return;
-
-  Address* to = reinterpret_cast<Address*>(safe_point_scope_marker_);
-  Address* from = reinterpret_cast<Address*>(end_of_stack_);
-  CHECK_LT(from, to);
-  CHECK_LE(to, reinterpret_cast<Address*>(start_of_stack_));
-  size_t slot_count = static_cast<size_t>(to - from);
-// Catch potential performance issues.
-#if defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER)
-  // ASan/LSan use more space on the stack and we therefore
-  // increase the allowed stack copying for those builds.
-  DCHECK_LT(slot_count, 2048u);
-#else
-  DCHECK_LT(slot_count, 1024u);
-#endif
-
-  DCHECK(!safe_point_stack_copy_.size());
-  safe_point_stack_copy_.resize(slot_count);
-  for (size_t i = 0; i < slot_count; ++i) {
-    safe_point_stack_copy_[i] = from[i];
-  }
 }
 
 void ThreadState::RegisterStaticPersistentNode(
@@ -1452,7 +1412,7 @@ void ThreadState::IncrementalMarkingStart(BlinkGC::GCReason reason) {
   CompleteSweep();
   Heap().stats_collector()->NotifyMarkingStarted(reason);
   {
-    ThreadHeapStatsCollector::Scope stats_scope(
+    ThreadHeapStatsCollector::EnabledScope stats_scope(
         Heap().stats_collector(),
         ThreadHeapStatsCollector::kIncrementalMarkingStartMarking, "reason",
         GcReasonString(reason));
@@ -1470,7 +1430,7 @@ void ThreadState::IncrementalMarkingStart(BlinkGC::GCReason reason) {
 }
 
 void ThreadState::IncrementalMarkingStep() {
-  ThreadHeapStatsCollector::Scope stats_scope(
+  ThreadHeapStatsCollector::EnabledScope stats_scope(
       Heap().stats_collector(),
       ThreadHeapStatsCollector::kIncrementalMarkingStep);
   VLOG(2) << "[state:" << this << "] "
@@ -1487,7 +1447,7 @@ void ThreadState::IncrementalMarkingStep() {
 }
 
 void ThreadState::IncrementalMarkingFinalize() {
-  ThreadHeapStatsCollector::Scope stats_scope(
+  ThreadHeapStatsCollector::EnabledScope stats_scope(
       Heap().stats_collector(),
       ThreadHeapStatsCollector::kIncrementalMarkingFinalize);
   VLOG(2) << "[state:" << this << "] "
@@ -1571,27 +1531,27 @@ void ThreadState::CollectGarbage(BlinkGC::StackState stack_state,
           << " reason: " << GcReasonString(reason);
 }
 
-void ThreadState::RunAtomicPause(BlinkGC::StackState stack_state,
-                                 BlinkGC::MarkingType marking_type,
-                                 BlinkGC::SweepingType sweeping_type,
-                                 BlinkGC::GCReason reason) {
-  {
-    ThreadHeapStatsCollector::EnabledScope stats1(
-        Heap().stats_collector(), ThreadHeapStatsCollector::kAtomicPhase);
-    AtomicPauseScope atomic_pause_scope(this);
-    {
-      ThreadHeapStatsCollector::EnabledScope stats2(
-          Heap().stats_collector(),
-          ThreadHeapStatsCollector::kAtomicPhaseMarking, "lazySweeping",
-          sweeping_type == BlinkGC::kLazySweeping ? "yes" : "no", "gcReason",
-          GcReasonString(reason));
-      AtomicPausePrologue(stack_state, marking_type, reason);
-      MarkPhaseVisitRoots();
-      CHECK(MarkPhaseAdvanceMarking(TimeTicks::Max()));
-      MarkPhaseEpilogue(marking_type);
-    }
-    AtomicPauseEpilogue(marking_type, sweeping_type);
-  }
+void ThreadState::AtomicPauseMarkPrologue(BlinkGC::StackState stack_state,
+                                          BlinkGC::MarkingType marking_type,
+                                          BlinkGC::GCReason reason) {
+  AtomicPausePrologue(stack_state, marking_type, reason);
+  MarkPhaseVisitRoots();
+  MarkPhaseVisitNotFullyConstructedObjects();
+}
+
+void ThreadState::AtomicPauseMarkTransitiveClosure() {
+  CHECK(MarkPhaseAdvanceMarking(TimeTicks::Max()));
+}
+
+void ThreadState::AtomicPauseMarkEpilogue(BlinkGC::MarkingType marking_type) {
+  MarkPhaseEpilogue(marking_type);
+}
+
+void ThreadState::AtomicPauseSweepAndCompact(
+    BlinkGC::MarkingType marking_type,
+    BlinkGC::SweepingType sweeping_type) {
+  AtomicPauseScope atomic_pause_scope(this);
+  AtomicPauseEpilogue(marking_type, sweeping_type);
   if (marking_type == BlinkGC::kTakeSnapshot) {
     FinishSnapshot();
     CHECK(!IsSweepingInProgress());
@@ -1606,6 +1566,33 @@ void ThreadState::RunAtomicPause(BlinkGC::StackState stack_state,
     DCHECK(sweeping_type == BlinkGC::kLazySweeping);
     // The default behavior is lazy sweeping.
     ScheduleIdleLazySweep();
+  }
+}
+
+void ThreadState::RunAtomicPause(BlinkGC::StackState stack_state,
+                                 BlinkGC::MarkingType marking_type,
+                                 BlinkGC::SweepingType sweeping_type,
+                                 BlinkGC::GCReason reason) {
+  {
+    ThreadHeapStatsCollector::DevToolsScope stats1(
+        Heap().stats_collector(), ThreadHeapStatsCollector::kAtomicPhase);
+    {
+      AtomicPauseScope atomic_pause_scope(this);
+      ThreadHeapStatsCollector::EnabledScope stats2(
+          Heap().stats_collector(),
+          ThreadHeapStatsCollector::kAtomicPhaseMarking, "lazySweeping",
+          sweeping_type == BlinkGC::kLazySweeping ? "yes" : "no", "gcReason",
+          GcReasonString(reason));
+      AtomicPauseMarkPrologue(stack_state, marking_type, reason);
+      AtomicPauseMarkTransitiveClosure();
+      AtomicPauseMarkEpilogue(marking_type);
+    }
+    AtomicPauseSweepAndCompact(marking_type, sweeping_type);
+  }
+  if (!IsSweepingInProgress()) {
+    // Sweeping was finished during the atomic pause. Update statistics needs to
+    // run outside of the top-most stats scope.
+    UpdateStatisticsAfterSweeping();
   }
 }
 
@@ -1668,25 +1655,29 @@ void ThreadState::AtomicPausePrologue(BlinkGC::StackState stack_state,
 }
 
 void ThreadState::MarkPhaseVisitRoots() {
-  // StackFrameDepth should be disabled so we don't trace most of the object
-  // graph in one incremental marking step.
+  // StackFrameDepth should be disabled to avoid eagerly tracing into the object
+  // graph when just visiting roots.
   DCHECK(!Heap().GetStackFrameDepth().IsEnabled());
 
-  // 1. Trace persistent roots.
-  Heap().VisitPersistentRoots(current_gc_data_.visitor.get());
+  Visitor* visitor = current_gc_data_.visitor.get();
 
-  // 2. Trace objects reachable from the stack.
-  {
-    SafePointScope safe_point_scope(current_gc_data_.stack_state, this);
-    Heap().VisitStackRoots(current_gc_data_.visitor.get());
+  VisitPersistents(visitor);
+
+  VisitDOMWrappers(visitor);
+
+  if (current_gc_data_.stack_state == BlinkGC::kHeapPointersOnStack) {
+    ThreadHeapStatsCollector::Scope stats_scope(
+        Heap().stats_collector(), ThreadHeapStatsCollector::kVisitStackRoots);
+    AddressCache::EnabledScope address_cache_scope(Heap().address_cache());
+    PushRegistersAndVisitStack();
   }
 }
 
 bool ThreadState::MarkPhaseAdvanceMarking(TimeTicks deadline) {
   StackFrameDepthScope stack_depth_scope(&Heap().GetStackFrameDepth());
-  // 3. Transitive closure to trace objects including ephemerons.
-  return Heap().AdvanceMarkingStackProcessing(current_gc_data_.visitor.get(),
-                                              deadline);
+  return Heap().AdvanceMarking(
+      reinterpret_cast<MarkingVisitor*>(current_gc_data_.visitor.get()),
+      deadline);
 }
 
 bool ThreadState::ShouldVerifyMarking() const {
@@ -1698,12 +1689,13 @@ bool ThreadState::ShouldVerifyMarking() const {
   return should_verify_marking;
 }
 
+void ThreadState::MarkPhaseVisitNotFullyConstructedObjects() {
+  Heap().MarkNotFullyConstructedObjects(
+      reinterpret_cast<MarkingVisitor*>(current_gc_data_.visitor.get()));
+}
+
 void ThreadState::MarkPhaseEpilogue(BlinkGC::MarkingType marking_type) {
   Visitor* visitor = current_gc_data_.visitor.get();
-  // Finish marking of not-fully-constructed objects.
-  Heap().MarkNotFullyConstructedObjects(visitor);
-  CHECK(Heap().AdvanceMarkingStackProcessing(visitor, TimeTicks::Max()));
-
   {
     // See ProcessHeap::CrossThreadPersistentMutex().
     MutexLocker persistent_lock(ProcessHeap::CrossThreadPersistentMutex());

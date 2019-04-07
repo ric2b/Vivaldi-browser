@@ -16,26 +16,30 @@
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
-#include "net/nqe/network_quality_estimator.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
+#include "services/network/public/cpp/features.h"
 
 namespace data_reduction_proxy {
 
 WarmupURLFetcher::WarmupURLFetcher(
     const scoped_refptr<net::URLRequestContextGetter>&
         url_request_context_getter,
-    WarmupURLFetcherCallback callback)
+    WarmupURLFetcherCallback callback,
+    GetHttpRttCallback get_http_rtt_callback)
     : is_fetch_in_flight_(false),
       previous_attempt_counts_(0),
       url_request_context_getter_(url_request_context_getter),
-      callback_(callback) {
-  DCHECK(url_request_context_getter_);
-  DCHECK(url_request_context_getter_->GetURLRequestContext()
-             ->network_quality_estimator());
+      callback_(callback),
+      get_http_rtt_callback_(get_http_rtt_callback) {
+  // TODO(crbug.com/721403): DRP is disabled with network service enabled. When
+  // DRP is switched to mojo, we won't need URLRequestContext.
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    DCHECK(url_request_context_getter_);
+  }
 }
 
 WarmupURLFetcher::~WarmupURLFetcher() {}
@@ -64,10 +68,15 @@ base::TimeDelta WarmupURLFetcher::GetFetchWaitTime() const {
   DCHECK_LT(0u, previous_attempt_counts_);
   DCHECK_GE(2u, previous_attempt_counts_);
 
-  if (previous_attempt_counts_ == 1)
-    return base::TimeDelta::FromSeconds(30);
+  if (previous_attempt_counts_ == 1) {
+    return base::TimeDelta::FromSeconds(GetFieldTrialParamByFeatureAsInt(
+        features::kDataReductionProxyRobustConnection,
+        "warmup_url_fetch_wait_timer_first_retry_seconds", 1));
+  }
 
-  return base::TimeDelta::FromSeconds(60);
+  return base::TimeDelta::FromSeconds(GetFieldTrialParamByFeatureAsInt(
+      features::kDataReductionProxyRobustConnection,
+      "warmup_url_fetch_wait_timer_second_retry_seconds", 30));
 }
 
 void WarmupURLFetcher::FetchWarmupURLNow() {
@@ -236,12 +245,8 @@ base::TimeDelta WarmupURLFetcher::GetFetchTimeout() const {
   DCHECK_LT(0u, http_rtt_multiplier);
   DCHECK_GE(1000u, http_rtt_multiplier);
 
-  const net::NetworkQualityEstimator* network_quality_estimator =
-      url_request_context_getter_->GetURLRequestContext()
-          ->network_quality_estimator();
-
   base::Optional<base::TimeDelta> http_rtt_estimate =
-      network_quality_estimator->GetHttpRTT();
+      get_http_rtt_callback_.Run();
   if (!http_rtt_estimate)
     return max_timeout;
 

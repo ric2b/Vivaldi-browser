@@ -37,6 +37,7 @@ schema_sources_ = [
   "developer_private.idl",
   "downloads.idl",
   "downloads_internal.idl",
+  "enterprise_hardware_platform.idl",
   "font_settings.json",
   "gcm.json",
   "history.json",
@@ -90,6 +91,7 @@ if (is_chromeos || is_mac || is_win) {
 
 if (is_chromeos) {
   schema_sources_ += [
+    "arc_apps_private.idl",
     "certificate_provider.idl",
     "certificate_provider_internal.idl",
     "easy_unlock_private.idl",

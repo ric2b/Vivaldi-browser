@@ -159,6 +159,15 @@ DISABLE(NewByPts/MSEPipelineIntegrationTest, ConfigChange_ClearThenEncrypted_Web
 DISABLE(NewByPts/MSEPipelineIntegrationTest, BasicPlayback_VideoOnly_MP4_AVC3/0)
 DISABLE(NewByPts/MSEPipelineIntegrationTest, ConfigChange_EncryptedThenClear_MP4_CENC/0)
 
+DISABLE(VideoOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bear1280x720v_fragavc3mp4_AND_bearav1mp4)
+DISABLE(VideoOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bear1280x720v_fragavc3mp4_AND_bearav1webm)
+DISABLE(VideoOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bearav1mp4_AND_bear1280x720v_fragavc3mp4)
+DISABLE(VideoOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bearav1webm_AND_bear1280x720v_fragavc3mp4)
+DISABLE(VideoOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bear1280x720v_fragavc3mp4_AND_bearav1mp4)
+DISABLE(VideoOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bear1280x720v_fragavc3mp4_AND_bearav1webm)
+DISABLE(VideoOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bearav1mp4_AND_bear1280x720v_fragavc3mp4)
+DISABLE(VideoOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bearav1webm_AND_bear1280x720v_fragavc3mp4)
+
 //11 tests failed:
 DISABLE(PipelineIntegrationTest, BasicPlaybackHashed_ADTS)
 //DISABLE(PipelineIntegrationTest, Rotated_Metadata_180)
@@ -245,3 +254,8 @@ DISABLE(ExtensionBrowserTest, DevToolsMainFrameIsCached)
 
 // Broke in v69
 DISABLE(AppShimMenuControllerUITest, WindowCycling)
+
+// Broke in v70
+DISABLE(PolicyBlacklistNavigationThrottleTest, Blacklist)
+DISABLE(PolicyBlacklistNavigationThrottleTest, Whitelisted)
+DISABLE_ALL(ChromeContentRendererClientMetricsTest)

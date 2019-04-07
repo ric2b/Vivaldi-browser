@@ -11,8 +11,8 @@
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/test/fake_vr_device.h"
 #include "device/vr/test/fake_vr_service_client.h"
-#include "device/vr/test/mock_vr_display_impl.h"
 #include "device/vr/vr_device_base.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace device {
@@ -21,7 +21,7 @@ namespace {
 
 class VRDeviceBaseForTesting : public VRDeviceBase {
  public:
-  VRDeviceBaseForTesting() : VRDeviceBase(VRDeviceId::FAKE_DEVICE_ID) {}
+  VRDeviceBaseForTesting() : VRDeviceBase(mojom::XRDeviceId::FAKE_DEVICE_ID) {}
   ~VRDeviceBaseForTesting() override = default;
 
   void SetVRDisplayInfoForTest(mojom::VRDisplayInfoPtr display_info) {
@@ -35,7 +35,7 @@ class VRDeviceBaseForTesting : public VRDeviceBase {
   bool ListeningForActivate() { return listening_for_activate; }
 
   void RequestSession(
-      mojom::XRDeviceRuntimeSessionOptionsPtr options,
+      mojom::XRRuntimeSessionOptionsPtr options,
       mojom::XRRuntime::RequestSessionCallback callback) override {}
 
  private:
@@ -95,14 +95,6 @@ class VRDeviceTest : public testing::Test {
     client_ = std::make_unique<FakeVRServiceClient>(mojo::MakeRequest(&proxy));
   }
 
-  std::unique_ptr<MockVRDisplayImpl> MakeMockDisplay(VRDeviceBase* device) {
-    mojom::VRMagicWindowProviderPtr session;
-    mojom::XRSessionControllerPtr controller;
-    return std::make_unique<testing::NiceMock<MockVRDisplayImpl>>(
-        device, mojo::MakeRequest(&session), mojo::MakeRequest(&controller),
-        false);
-  }
-
   std::unique_ptr<VRDeviceBaseForTesting> MakeVRDevice() {
     std::unique_ptr<VRDeviceBaseForTesting> device =
         std::make_unique<VRDeviceBaseForTesting>();
@@ -110,9 +102,9 @@ class VRDeviceTest : public testing::Test {
     return device;
   }
 
-  mojom::VRDisplayInfoPtr MakeVRDisplayInfo(unsigned int device_id) {
+  mojom::VRDisplayInfoPtr MakeVRDisplayInfo(mojom::XRDeviceId device_id) {
     mojom::VRDisplayInfoPtr display_info = mojom::VRDisplayInfo::New();
-    display_info->index = device_id;
+    display_info->id = device_id;
     display_info->capabilities = mojom::VRDisplayCapabilities::New();
     return display_info;
   }
@@ -158,7 +150,8 @@ TEST_F(VRDeviceTest, DisplayActivateRegsitered) {
 }
 
 TEST_F(VRDeviceTest, NoMagicWindowPosesWhileBrowsing) {
-  auto device = std::make_unique<FakeVRDevice>(1);
+  auto device =
+      std::make_unique<FakeVRDevice>(static_cast<device::mojom::XRDeviceId>(1));
   device->SetPose(mojom::VRPose::New());
 
   device->GetFrameData(base::BindOnce(

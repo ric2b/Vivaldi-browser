@@ -408,7 +408,7 @@ TEST_F('BackgroundTest', 'FocusInputElement', function() {
     }.bind(this));
 });
 
-// Flaky, see http://crbug.com/643902.
+// Flaky, see https://crbug.com/622387.
 TEST_F('BackgroundTest', 'DISABLED_UseEditableState', function() {
   this.runWithLoadedTree(
     function() {/*!
@@ -498,7 +498,7 @@ SYNC_TEST_F('BackgroundTest', 'GlobsToRegExp', function() {
       Background.globsToRegExp_(['url1*', 'u?l2', '*url3']).toString());
 });
 
-// Flaky, see http://crbug.com/635032
+// Flaky, see https://crbug.com/622387.
 TEST_F('BackgroundTest', 'DISABLED_ActiveOrInactive', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(function() {/*!
@@ -1167,7 +1167,7 @@ TEST_F('BackgroundTest', 'HeadingLevels', function() {
   });
 });
 
-// Flaky, see crbug.com/693928.
+// Flaky, see https://crbug.com/622387.
 TEST_F('BackgroundTest', 'DISABLED_EditableNavigation', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(function(root) {/*!
@@ -1185,7 +1185,8 @@ TEST_F('BackgroundTest', 'DISABLED_EditableNavigation', function() {
   });
 });
 
-TEST_F('BackgroundTest', 'NavigationMovesFocus', function() {
+// Flaky, see https://crbug.com/622387.
+TEST_F('BackgroundTest', 'DISABLED_NavigationMovesFocus', function() {
   this.runWithLoadedTree(function(root) {/*!
     <p>start</p>
     <input type="text"></input>
@@ -1440,7 +1441,7 @@ TEST_F('BackgroundTest', 'TableColumnHeaders', function() {
   });
 });
 
-// Flaky, see http://crbug.com/825429.
+// Flaky, see https://crbug.com/622387.
 TEST_F('BackgroundTest', 'DISABLED_ActiveDescendantUpdates', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(function(root) {/*!
@@ -1473,7 +1474,8 @@ TEST_F('BackgroundTest', 'DISABLED_ActiveDescendantUpdates', function() {
   });
 });
 
-TEST_F('BackgroundTest', 'NavigationEscapesEdit', function() {
+// Flaky, see https://crbug.com/622387.
+TEST_F('BackgroundTest', 'DISABLED_NavigationEscapesEdit', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(function() {/*!
     <p>before content editable</p>
@@ -1634,13 +1636,86 @@ TEST_F('BackgroundTest', 'NavigationIgnoresDescriptions', function() {
   });
 });
 
-TEST_F('BackgroundTest', 'DocumentTitleChanged', function() {
+TEST_F('BackgroundTest', 'MathContentViaInnerHtml', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(function(root) {/*
-    <script>
-      setTimeout(function() {document.title = 'New title';}, 100);
-    </script>
+    <div role="math">
+      <semantics>
+        <mrow class="MJX-TeXAtom-ORD">
+          <mstyle displaystyle="true" scriptlevel="0">
+            <mi>a</mi>
+            <mo stretchy="false">(</mo>
+            <mi>y</mi>
+            <mo>+</mo>
+            <mi>m</mi>
+            <msup>
+              <mo stretchy="false">)</mo>
+              <mrow class="MJX-TeXAtom-ORD">
+                <mn>2</mn>
+              </mrow>
+            </msup>
+            <mo>+</mo>
+            <mi>b</mi>
+            <mo stretchy="false">(</mo>
+            <mi>y</mi>
+            <mo>+</mo>
+            <mi>m</mi>
+            <mo stretchy="false">)</mo>
+            <mo>+</mo>
+            <mi>c</mi>
+            <mo>=</mo>
+            <mn>0.</mn>
+          </mstyle>
+        </mrow>
+        <annotation encoding="application/x-tex">{\displaystyle a(y+m)^{2}+b(y+m)+c=0.}</annotation>
+      </semantics>
+    </div>
   */}, function(root) {
-    mockFeedback.expectSpeech('New title').replay();
+    mockFeedback
+        .call(doCmd('nextObject'))
+        .expectSpeech('a ( y + m ) squared + b ( y + m ) + c = 0 .')
+        .expectSpeech('Press up, down, left, or right to explore math.')
+        .replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'GestureGranularity', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function(root) {/*
+    <p>This is a test</p>
+  */}, function(root) {
+    var doGesture = (gesture) => {
+      return () => { GestureCommandHandler.onAccessibilityGesture_(gesture) };
+    };
+    mockFeedback
+        .call(doGesture('swipeLeft3'))
+        .expectSpeech('Word')
+        .call(doGesture('swipeDown1'))
+        .expectSpeech('is')
+        .call(doGesture('swipeDown1'))
+        .expectSpeech('a')
+        .call(doGesture('swipeUp1'))
+        .expectSpeech('is')
+
+        .call(doGesture('swipeLeft3'))
+        .expectSpeech('Character')
+        .call(doGesture('swipeDown1'))
+        .expectSpeech('s')
+        .call(doGesture('swipeUp1'))
+        .expectSpeech('i')
+
+        .call(doGesture('swipeLeft3'))
+        .expectSpeech('Line')
+        .call(doGesture('swipeUp1'))
+        .expectSpeech('This is a test')
+
+        .call(doGesture('swipeRight3'))
+        .expectSpeech('Character')
+        .call(doGesture('swipeRight3'))
+        .expectSpeech('Word')
+        .call(doGesture('swipeRight3'))
+        .expectSpeech('Line')
+
+        .replay();
   });
 });

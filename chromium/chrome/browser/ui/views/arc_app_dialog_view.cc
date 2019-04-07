@@ -14,7 +14,7 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/app_list/arc/arc_usb_host_permission_manager.h"
 #include "chrome/browser/ui/browser_dialogs.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/strings/grit/components_strings.h"
@@ -137,7 +137,8 @@ ArcAppDialogView::ArcAppDialogView(Profile* profile,
   if (!subheading_text.empty())
     AddMultiLineLabel(text_container, subheading_text);
 
-  icon_loader_.reset(new ArcAppIconLoader(profile_, kIconSourceSize, this));
+  icon_loader_ = std::make_unique<ArcAppIconLoader>(
+      profile_, kIconSourceSize, this);
   // The dialog will show once the icon is loaded.
   icon_loader_->FetchImage(app_id_);
   chrome::RecordDialogCreation(chrome::DialogIdentifier::ARC_APP);

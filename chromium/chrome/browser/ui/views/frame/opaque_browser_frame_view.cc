@@ -9,9 +9,11 @@
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/ui/extensions/hosted_app_browser_controller.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/hosted_app_button_container.h"
 #include "chrome/browser/ui/views/frame/opaque_browser_frame_view_layout.h"
 #include "chrome/browser/ui/views/frame/opaque_browser_frame_view_platform_specific.h"
 #include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
@@ -29,6 +31,7 @@
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/image/image.h"
@@ -39,6 +42,7 @@
 #include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/window/frame_background.h"
+#include "ui/views/window/hit_test_utils.h"
 #include "ui/views/window/window_shape.h"
 
 #if defined(OS_LINUX)
@@ -51,8 +55,16 @@
 
 using content::WebContents;
 
+namespace {
+
+constexpr SkColor kTitleBarFeatureColor = SK_ColorWHITE;
+
+}  // namespace
+
 ///////////////////////////////////////////////////////////////////////////////
 // OpaqueBrowserFrameView, public:
+
+const char OpaqueBrowserFrameView::kClassName[] = "OpaqueBrowserFrameView";
 
 OpaqueBrowserFrameView::OpaqueBrowserFrameView(
     BrowserFrame* frame,
@@ -69,6 +81,11 @@ OpaqueBrowserFrameView::OpaqueBrowserFrameView(
       frame_background_(new views::FrameBackground()) {
   layout_->set_delegate(this);
   SetLayoutManager(std::unique_ptr<views::LayoutManager>(layout_));
+
+  // This must be initialised before the call to GetFrameColor().
+  platform_observer_.reset(OpaqueBrowserFrameViewPlatformSpecific::Create(
+      this, layout_,
+      ThemeServiceFactory::GetForProfile(browser_view->browser()->profile())));
 
   minimize_button_ = InitWindowCaptionButton(IDR_MINIMIZE,
                                              IDR_MINIMIZE_H,
@@ -106,15 +123,21 @@ OpaqueBrowserFrameView::OpaqueBrowserFrameView(
 
   window_title_ = new views::Label(browser_view->GetWindowTitle());
   window_title_->SetVisible(browser_view->ShouldShowWindowTitle());
-  window_title_->SetEnabledColor(SK_ColorWHITE);
+  // Readability is ensured by |GetReadableFrameForegroundColor()|.
+  window_title_->SetAutoColorReadabilityEnabled(false);
   window_title_->SetSubpixelRenderingEnabled(false);
   window_title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   window_title_->set_id(VIEW_ID_WINDOW_TITLE);
   AddChildView(window_title_);
 
-  platform_observer_.reset(OpaqueBrowserFrameViewPlatformSpecific::Create(
-      this, layout_,
-      ThemeServiceFactory::GetForProfile(browser_view->browser()->profile())));
+  if (extensions::HostedAppBrowserController::IsForExperimentalHostedAppBrowser(
+          browser_view->browser())) {
+    hosted_app_button_container_ = new HostedAppButtonContainer(
+        frame, browser_view, GetReadableFrameForegroundColor(kActive),
+        GetReadableFrameForegroundColor(kInactive));
+    hosted_app_button_container_->set_id(VIEW_ID_HOSTED_APP_BUTTON_CONTAINER);
+    AddChildView(hosted_app_button_container_);
+  }
 }
 
 OpaqueBrowserFrameView::~OpaqueBrowserFrameView() {}
@@ -220,7 +243,7 @@ int OpaqueBrowserFrameView::NonClientHitTest(const gfx::Point& point) {
     gfx::Rect sysmenu_rect(IconBounds());
     // In maximized mode we extend the rect to the screen corner to take
     // advantage of Fitts' Law.
-    if (layout_->IsTitleBarCondensed())
+    if (IsFrameCondensed())
       sysmenu_rect.SetRect(0, 0, sysmenu_rect.right(), sysmenu_rect.bottom());
     sysmenu_rect = GetMirroredRect(sysmenu_rect);
     if (sysmenu_rect.Contains(point))
@@ -244,6 +267,15 @@ int OpaqueBrowserFrameView::NonClientHitTest(const gfx::Point& point) {
       minimize_button_->GetMirroredBounds().Contains(point))
     return HTMINBUTTON;
 
+  if (hosted_app_button_container_) {
+    // TODO(alancutter): Assign hit test components to all children and refactor
+    // this entire function call to just be GetHitTestComponent(this, point).
+    int hosted_app_component =
+        views::GetHitTestComponent(hosted_app_button_container_, point);
+    if (hosted_app_component != HTNOWHERE)
+      return hosted_app_component;
+  }
+
   views::WidgetDelegate* delegate = frame()->widget_delegate();
   if (!delegate) {
     LOG(WARNING) << "delegate is null, returning safe default.";
@@ -264,7 +296,7 @@ void OpaqueBrowserFrameView::GetWindowMask(const gfx::Size& size,
                                            gfx::Path* window_mask) {
   DCHECK(window_mask);
 
-  if (layout_->IsTitleBarCondensed() || frame()->IsFullscreen())
+  if (IsFrameCondensed())
     return;
 
   views::GetDefaultWindowMask(
@@ -276,6 +308,8 @@ void OpaqueBrowserFrameView::ResetWindowControls() {
   minimize_button_->SetState(views::Button::STATE_NORMAL);
   maximize_button_->SetState(views::Button::STATE_NORMAL);
   // The close button isn't affected by this constraint.
+  if (hosted_app_button_container_)
+    hosted_app_button_container_->UpdateContentSettingViewsVisibility();
 }
 
 void OpaqueBrowserFrameView::UpdateWindowIcon() {
@@ -284,19 +318,33 @@ void OpaqueBrowserFrameView::UpdateWindowIcon() {
 }
 
 void OpaqueBrowserFrameView::UpdateWindowTitle() {
-  if (!frame()->IsFullscreen())
+  if (!frame()->IsFullscreen() && ShouldShowWindowTitle()) {
+    Layout();
     window_title_->SchedulePaint();
+  }
 }
 
 void OpaqueBrowserFrameView::SizeConstraintsChanged() {}
 
 void OpaqueBrowserFrameView::ActivationChanged(bool active) {
   BrowserNonClientFrameView::ActivationChanged(active);
+  if (hosted_app_button_container_)
+    hosted_app_button_container_->SetPaintAsActive(active);
   MaybeRedrawFrameButtons();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // OpaqueBrowserFrameView, views::View overrides:
+
+const char* OpaqueBrowserFrameView::GetClassName() const {
+  return kClassName;
+}
+
+void OpaqueBrowserFrameView::ChildPreferredSizeChanged(views::View* child) {
+  BrowserNonClientFrameView::ChildPreferredSizeChanged(child);
+  if (browser_view()->initialized() && child == hosted_app_button_container_)
+    Layout();
+}
 
 void OpaqueBrowserFrameView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kTitleBar;
@@ -413,10 +461,6 @@ bool OpaqueBrowserFrameView::IsMinimized() const {
   return frame()->IsMinimized();
 }
 
-bool OpaqueBrowserFrameView::IsFullscreen() const {
-  return frame()->IsFullscreen();
-}
-
 bool OpaqueBrowserFrameView::IsTabStripVisible() const {
   return browser_view()->IsTabStripVisible();
 }
@@ -455,6 +499,11 @@ bool OpaqueBrowserFrameView::UseCustomFrame() const {
   return frame()->UseCustomFrame();
 }
 
+bool OpaqueBrowserFrameView::IsFrameCondensed() const {
+  return BrowserNonClientFrameView::IsFrameCondensed() ||
+         !ShouldShowCaptionButtons();
+}
+
 bool OpaqueBrowserFrameView::EverHasVisibleBackgroundTabShapes() const {
   return BrowserNonClientFrameView::EverHasVisibleBackgroundTabShapes();
 }
@@ -468,7 +517,9 @@ void OpaqueBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
   if (frame()->IsFullscreen())
     return;  // Nothing is visible, so don't bother to paint.
 
-  frame_background_->set_frame_color(GetFrameColor());
+  SkColor frame_color = GetFrameColor();
+  window_title_->SetEnabledColor(GetReadableFrameForegroundColor(kUseCurrent));
+  frame_background_->set_frame_color(frame_color);
   frame_background_->set_use_custom_frame(frame()->UseCustomFrame());
   frame_background_->set_is_active(ShouldPaintAsActive());
   frame_background_->set_incognito(browser_view()->IsIncognito());
@@ -481,7 +532,7 @@ void OpaqueBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
   frame_background_->set_theme_overlay_image(GetFrameOverlayImage());
   frame_background_->set_top_area_height(GetTopAreaHeight());
 
-  if (layout_->IsTitleBarCondensed())
+  if (IsFrameCondensed())
     PaintMaximizedFrameBorder(canvas);
   else
     PaintRestoredFrameBorder(canvas);
@@ -494,8 +545,6 @@ void OpaqueBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
    * So we'd need to sample the background color at the right location and
    * synthesize a good shadow color. */
 
-  if (IsToolbarVisible() && IsTabStripVisible())
-    PaintToolbarTopStroke(canvas);
   PaintClientEdge(canvas);
 }
 
@@ -572,6 +621,19 @@ bool OpaqueBrowserFrameView::ShouldShowWindowTitleBar() const {
       IsMaximized());
 }
 
+SkColor OpaqueBrowserFrameView::GetReadableFrameForegroundColor(
+    ActiveState active_state) const {
+  if (extensions::HostedAppBrowserController::IsForExperimentalHostedAppBrowser(
+          browser_view()->browser())) {
+    base::Optional<SkColor> theme_color =
+        browser_view()->browser()->hosted_app_controller()->GetThemeColor();
+    if (theme_color)
+      return color_utils::GetThemedAssetColor(*theme_color);
+  }
+  return color_utils::GetReadableColor(kTitleBarFeatureColor,
+                                       GetFrameColor(active_state));
+}
+
 void OpaqueBrowserFrameView::PaintRestoredFrameBorder(
     gfx::Canvas* canvas) const {
   const ui::ThemeProvider* tp = GetThemeProvider();
@@ -618,7 +680,7 @@ void OpaqueBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) const {
   }
 
   // In maximized mode, the only edge to draw is the top one, so we're done.
-  if (layout_->IsTitleBarCondensed())
+  if (IsFrameCondensed())
     return;
 
   const ui::ThemeProvider* tp = GetThemeProvider();

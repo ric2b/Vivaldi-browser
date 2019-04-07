@@ -30,8 +30,6 @@
 
 #include "third_party/blink/renderer/core/svg/svg_animated_integer_optional_integer.h"
 
-#include "third_party/blink/renderer/core/svg/svg_element.h"
-
 namespace blink {
 
 SVGAnimatedIntegerOptionalInteger::SVGAnimatedIntegerOptionalInteger(
@@ -75,7 +73,7 @@ void SVGAnimatedIntegerOptionalInteger::AnimationEnded() {
   second_integer_->AnimationEnded();
 }
 
-bool SVGAnimatedIntegerOptionalInteger::NeedsSynchronizeAttribute() {
+bool SVGAnimatedIntegerOptionalInteger::NeedsSynchronizeAttribute() const {
   return first_integer_->NeedsSynchronizeAttribute() ||
          second_integer_->NeedsSynchronizeAttribute();
 }

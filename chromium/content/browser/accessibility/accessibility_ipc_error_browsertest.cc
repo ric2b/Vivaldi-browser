@@ -132,9 +132,11 @@ IN_PROC_BROWSER_TEST_F(AccessibilityIpcErrorBrowserTest,
 
 #if defined(OS_ANDROID)
 // http://crbug.com/542704
-#define MAYBE_MultipleBadAccessibilityIPCsKillsRenderer DISABLED_MultipleBadAccessibilityIPCsKillsRenderer
+#define MAYBE_MultipleBadAccessibilityIPCsKillsRenderer \
+  DISABLED_MultipleBadAccessibilityIPCsKillsRenderer
 #else
-#define MAYBE_MultipleBadAccessibilityIPCsKillsRenderer MultipleBadAccessibilityIPCsKillsRenderer
+#define MAYBE_MultipleBadAccessibilityIPCsKillsRenderer \
+  MultipleBadAccessibilityIPCsKillsRenderer
 #endif
 IN_PROC_BROWSER_TEST_F(AccessibilityIpcErrorBrowserTest,
                        MAYBE_MultipleBadAccessibilityIPCsKillsRenderer) {
@@ -161,7 +163,10 @@ IN_PROC_BROWSER_TEST_F(AccessibilityIpcErrorBrowserTest,
   // will reject.
   AXEventNotificationDetails bad_accessibility_event;
   bad_accessibility_event.updates.resize(1);
-  bad_accessibility_event.updates[0].node_id_to_clear = -2;
+  bad_accessibility_event.updates[0].root_id = 1;
+  bad_accessibility_event.updates[0].nodes.resize(1);
+  bad_accessibility_event.updates[0].nodes[0].id = 1;
+  bad_accessibility_event.updates[0].nodes[0].child_ids.push_back(2);
 
   // We should be able to reset accessibility |max_iterations-1| times
   // (see render_frame_host_impl.cc - kMaxAccessibilityResets),

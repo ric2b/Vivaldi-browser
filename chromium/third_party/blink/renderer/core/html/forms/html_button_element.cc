@@ -104,43 +104,42 @@ void HTMLButtonElement::ParseAttribute(
   }
 }
 
-void HTMLButtonElement::DefaultEventHandler(Event* event) {
-  if (event->type() == EventTypeNames::DOMActivate &&
-      !IsDisabledFormControl()) {
+void HTMLButtonElement::DefaultEventHandler(Event& event) {
+  if (event.type() == EventTypeNames::DOMActivate && !IsDisabledFormControl()) {
     if (Form() && type_ == SUBMIT) {
       Form()->PrepareForSubmission(event, this);
-      event->SetDefaultHandled();
+      event.SetDefaultHandled();
     }
     if (Form() && type_ == RESET) {
       Form()->reset();
-      event->SetDefaultHandled();
+      event.SetDefaultHandled();
     }
   }
 
-  if (event->IsKeyboardEvent()) {
-    if (event->type() == EventTypeNames::keydown &&
-        ToKeyboardEvent(event)->key() == " ") {
+  if (event.IsKeyboardEvent()) {
+    if (event.type() == EventTypeNames::keydown &&
+        ToKeyboardEvent(event).key() == " ") {
       SetActive(true);
       // No setDefaultHandled() - IE dispatches a keypress in this case.
       return;
     }
-    if (event->type() == EventTypeNames::keypress) {
-      switch (ToKeyboardEvent(event)->charCode()) {
+    if (event.type() == EventTypeNames::keypress) {
+      switch (ToKeyboardEvent(event).charCode()) {
         case '\r':
-          DispatchSimulatedClick(event);
-          event->SetDefaultHandled();
+          DispatchSimulatedClick(&event);
+          event.SetDefaultHandled();
           return;
         case ' ':
           // Prevent scrolling down the page.
-          event->SetDefaultHandled();
+          event.SetDefaultHandled();
           return;
       }
     }
-    if (event->type() == EventTypeNames::keyup &&
-        ToKeyboardEvent(event)->key() == " ") {
+    if (event.type() == EventTypeNames::keyup &&
+        ToKeyboardEvent(event).key() == " ") {
       if (IsActive())
-        DispatchSimulatedClick(event);
-      event->SetDefaultHandled();
+        DispatchSimulatedClick(&event);
+      event.SetDefaultHandled();
       return;
     }
   }
@@ -211,7 +210,7 @@ bool HTMLButtonElement::MatchesDefaultPseudoClass() const {
 }
 
 Node::InsertionNotificationRequest HTMLButtonElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   InsertionNotificationRequest request =
       HTMLFormControlElement::InsertedInto(insertion_point);
   LogAddElementIfIsolatedWorldAndInDocument("button", typeAttr, formmethodAttr,

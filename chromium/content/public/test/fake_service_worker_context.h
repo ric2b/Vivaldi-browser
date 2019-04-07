@@ -6,8 +6,10 @@
 #define CONTENT_PUBLIC_TEST_FAKE_SERVICE_WORKER_CONTEXT_H_
 
 #include <string>
+#include <tuple>
 
 #include "base/callback_forward.h"
+#include "base/observer_list.h"
 #include "content/public/browser/service_worker_context.h"
 
 class GURL;
@@ -22,6 +24,9 @@ class ServiceWorkerContextObserver;
 // what you need.
 class FakeServiceWorkerContext : public ServiceWorkerContext {
  public:
+  using StartServiceWorkerAndDispatchLongRunningMessageArgs =
+      std::tuple<GURL, blink::TransferableMessage, ResultCallback>;
+
   FakeServiceWorkerContext();
   ~FakeServiceWorkerContext() override;
 
@@ -50,18 +55,43 @@ class FakeServiceWorkerContext : public ServiceWorkerContext {
       const GURL& pattern,
       ServiceWorkerContext::StartWorkerCallback info_callback,
       base::OnceClosure failure_callback) override;
+  void StartServiceWorkerAndDispatchLongRunningMessage(
+      const GURL& pattern,
+      blink::TransferableMessage message,
+      FakeServiceWorkerContext::ResultCallback result_callback) override;
   void StartServiceWorkerForNavigationHint(
       const GURL& document_url,
       StartServiceWorkerForNavigationHintCallback callback) override;
   void StopAllServiceWorkersForOrigin(const GURL& origin) override;
   void StopAllServiceWorkers(base::OnceClosure callback) override;
 
+  // Explicitly notify ServiceWorkerContextObservers added to this context.
+  void NotifyObserversOnVersionActivated(int64_t version_id, const GURL& scope);
+  void NotifyObserversOnVersionRedundant(int64_t version_id, const GURL& scope);
+  void NotifyObserversOnNoControllees(int64_t version_id, const GURL& scope);
+
   bool start_service_worker_for_navigation_hint_called() {
     return start_service_worker_for_navigation_hint_called_;
   }
 
+  std::vector<StartServiceWorkerAndDispatchLongRunningMessageArgs>&
+  start_service_worker_and_dispatch_long_running_message_calls() {
+    return start_service_worker_and_dispatch_long_running_message_calls_;
+  };
+
+  const std::vector<GURL>& stop_all_service_workers_for_origin_calls() {
+    return stop_all_service_workers_for_origin_calls_;
+  }
+
  private:
   bool start_service_worker_for_navigation_hint_called_ = false;
+
+  std::vector<StartServiceWorkerAndDispatchLongRunningMessageArgs>
+      start_service_worker_and_dispatch_long_running_message_calls_;
+
+  std::vector<GURL> stop_all_service_workers_for_origin_calls_;
+
+  base::ObserverList<ServiceWorkerContextObserver, true>::Unchecked observers_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeServiceWorkerContext);
 };

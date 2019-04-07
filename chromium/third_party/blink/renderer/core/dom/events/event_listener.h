@@ -21,6 +21,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_DOM_EVENTS_EVENT_LISTENER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_DOM_EVENTS_EVENT_LISTENER_H_
 
+#include "third_party/blink/renderer/bindings/core/v8/custom_wrappable_adapter.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -28,12 +29,11 @@
 
 namespace blink {
 
+class DOMWrapperWorld;
 class Event;
 class ExecutionContext;
 
-class CORE_EXPORT EventListener
-    : public GarbageCollectedFinalized<EventListener>,
-      public NameClient {
+class CORE_EXPORT EventListener : public CustomWrappableAdapter {
  public:
   enum ListenerType {
     kJSEventListenerType,
@@ -42,7 +42,7 @@ class CORE_EXPORT EventListener
     kConditionEventListenerType,
   };
 
-  virtual ~EventListener() = default;
+  ~EventListener() override = default;
   virtual bool operator==(const EventListener&) const = 0;
   virtual void handleEvent(ExecutionContext*, Event*) = 0;
   virtual const String& Code() const { return g_empty_string; }
@@ -52,9 +52,18 @@ class CORE_EXPORT EventListener
   }
   virtual bool IsAttribute() const { return false; }
 
+  // Only DevTools is allowed to use this method.
+  // This method may return an empty handle.
+  virtual v8::Local<v8::Object> GetListenerObjectForInspector(
+      ExecutionContext* execution_context) {
+    return v8::Local<v8::Object>();
+  }
+
+  // Only DevTools is allowed to use this method.
+  virtual DOMWrapperWorld* GetWorldForInspector() const { return nullptr; }
+
   ListenerType GetType() const { return type_; }
 
-  virtual void Trace(blink::Visitor* visitor) {}
   const char* NameInHeapSnapshot() const override { return "EventListener"; }
 
  protected:

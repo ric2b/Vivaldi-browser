@@ -112,11 +112,11 @@ static inline bool IsWellFormedDocument(Document* document) {
 #endif
 
 Node::InsertionNotificationRequest SVGUseElement::InsertedInto(
-    ContainerNode* root_parent) {
+    ContainerNode& root_parent) {
   // This functions exists to assure assumptions made in the code regarding
   // SVGElementInstance creation/destruction are satisfied.
   SVGGraphicsElement::InsertedInto(root_parent);
-  if (!root_parent->isConnected())
+  if (!root_parent.isConnected())
     return kInsertionDone;
 #if DCHECK_IS_ON()
   DCHECK(!target_element_instance_ || !IsWellFormedDocument(&GetDocument()));
@@ -125,9 +125,9 @@ Node::InsertionNotificationRequest SVGUseElement::InsertedInto(
   return kInsertionDone;
 }
 
-void SVGUseElement::RemovedFrom(ContainerNode* root_parent) {
+void SVGUseElement::RemovedFrom(ContainerNode& root_parent) {
   SVGGraphicsElement::RemovedFrom(root_parent);
-  if (root_parent->isConnected()) {
+  if (root_parent.isConnected()) {
     ClearResourceReference();
     CancelShadowTreeRecreation();
   }
@@ -212,6 +212,8 @@ void SVGUseElement::UpdateTargetReference() {
   ResourceLoaderOptions options;
   options.initiator_info.name = localName();
   FetchParameters params(ResourceRequest(element_url_), options);
+  params.MutableResourceRequest().SetFetchRequestMode(
+      network::mojom::FetchRequestMode::kSameOrigin);
   DocumentResource::FetchSVGDocument(params, GetDocument().Fetcher(), this);
 }
 
@@ -698,7 +700,7 @@ FloatRect SVGUseElement::GetBBox() {
 void SVGUseElement::DispatchPendingEvent() {
   DCHECK(IsStructurallyExternal());
   DCHECK(have_fired_load_event_);
-  DispatchEvent(Event::Create(EventTypeNames::load));
+  DispatchEvent(*Event::Create(EventTypeNames::load));
 }
 
 void SVGUseElement::NotifyFinished(Resource* resource) {
@@ -708,7 +710,7 @@ void SVGUseElement::NotifyFinished(Resource* resource) {
 
   InvalidateShadowTree();
   if (!ResourceIsValid()) {
-    DispatchEvent(Event::Create(EventTypeNames::error));
+    DispatchEvent(*Event::Create(EventTypeNames::error));
   } else if (!resource->WasCanceled()) {
     if (have_fired_load_event_)
       return;

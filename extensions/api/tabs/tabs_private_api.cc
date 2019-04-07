@@ -13,7 +13,7 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
@@ -61,8 +61,6 @@
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "ui/strings/grit/ui_strings.h"
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(extensions::VivaldiPrivateTabObserver);
 
 using content::WebContents;
 
@@ -456,6 +454,9 @@ VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
   prefs_registrar_.Add(vivaldiprefs::kWebpagesFocusTrap,
                        base::Bind(&VivaldiPrivateTabObserver::OnPrefsChanged,
                                   weak_ptr_factory_.GetWeakPtr()));
+  prefs_registrar_.Add(vivaldiprefs::kWebpagesAccessKeys,
+                       base::Bind(&VivaldiPrivateTabObserver::OnPrefsChanged,
+                                  weak_ptr_factory_.GetWeakPtr()));
 }
 
 VivaldiPrivateTabObserver::~VivaldiPrivateTabObserver() {}
@@ -467,7 +468,11 @@ void VivaldiPrivateTabObserver::OnPrefsChanged(const std::string& path) {
   if (path == vivaldiprefs::kWebpagesFocusTrap) {
     UpdateAllowTabCycleIntoUI();
     CommitSettings();
+  } else if (path == vivaldiprefs::kWebpagesAccessKeys) {
+    UpdateAllowAccessKeys();
+    CommitSettings();
   }
+
 }
 
 void VivaldiPrivateTabObserver::BroadcastTabInfo() {
@@ -541,6 +546,7 @@ void VivaldiPrivateTabObserver::RenderViewCreated(
   SetLoadFromCacheOnly(load_from_cache_only_);
   SetEnablePlugins(enable_plugins_);
   UpdateAllowTabCycleIntoUI();
+  UpdateAllowAccessKeys();
   CommitSettings();
 
   const GURL& site = render_view_host->GetSiteInstance()->GetSiteURL();
@@ -587,6 +593,7 @@ void VivaldiPrivateTabObserver::RenderViewHostChanged(
   SetLoadFromCacheOnly(load_from_cache_only_);
   SetEnablePlugins(enable_plugins_);
   UpdateAllowTabCycleIntoUI();
+  UpdateAllowAccessKeys();
   CommitSettings();
 }
 
@@ -604,6 +611,16 @@ void VivaldiPrivateTabObserver::UpdateAllowTabCycleIntoUI() {
     // Avoid breaking tests.
     render_prefs->allow_tab_cycle_from_webpage_into_ui = true;
   }
+}
+
+void VivaldiPrivateTabObserver::UpdateAllowAccessKeys() {
+  content::RendererPreferences* render_prefs =
+    web_contents()->GetMutableRendererPrefs();
+  DCHECK(render_prefs);
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  render_prefs->allow_access_keys =
+      profile->GetPrefs()->GetBoolean(vivaldiprefs::kWebpagesAccessKeys);
 }
 
 void VivaldiPrivateTabObserver::SetShowImages(bool show_images) {

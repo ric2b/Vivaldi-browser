@@ -50,6 +50,11 @@ class BASE_EXPORT BindStateBase
  public:
   REQUIRE_ADOPTION_FOR_REFCOUNTED_TYPE();
 
+  enum CancellationQueryMode {
+    IS_CANCELLED,
+    MAYBE_VALID,
+  };
+
   using InvokeFuncStorage = void(*)();
 
  private:
@@ -57,7 +62,8 @@ class BASE_EXPORT BindStateBase
                 void (*destructor)(const BindStateBase*));
   BindStateBase(InvokeFuncStorage polymorphic_invoke,
                 void (*destructor)(const BindStateBase*),
-                bool (*is_cancelled)(const BindStateBase*));
+                bool (*query_cancellation_traits)(const BindStateBase*,
+                                                  CancellationQueryMode mode));
 
   ~BindStateBase() = default;
 
@@ -73,7 +79,11 @@ class BASE_EXPORT BindStateBase
   friend struct ::base::FakeBindState;
 
   bool IsCancelled() const {
-    return is_cancelled_(this);
+    return query_cancellation_traits_(this, IS_CANCELLED);
+  }
+
+  bool MaybeValid() const {
+    return query_cancellation_traits_(this, MAYBE_VALID);
   }
 
   // In C++, it is safe to cast function pointers to function pointers of
@@ -84,7 +94,8 @@ class BASE_EXPORT BindStateBase
 
   // Pointer to a function that will properly destroy |this|.
   void (*destructor_)(const BindStateBase*);
-  bool (*is_cancelled_)(const BindStateBase*);
+  bool (*query_cancellation_traits_)(const BindStateBase*,
+                                     CancellationQueryMode mode);
 
   DISALLOW_COPY_AND_ASSIGN(BindStateBase);
 };
@@ -110,7 +121,15 @@ class BASE_EXPORT CallbackBase {
 
   // Returns true if the callback invocation will be nop due to an cancellation.
   // It's invalid to call this on uninitialized callback.
+  //
+  // Must be called on the Callback's destination sequence.
   bool IsCancelled() const;
+
+  // If this returns false, the callback invocation will be a nop due to a
+  // cancellation. This may(!) still return true, even on a cancelled callback.
+  //
+  // This function is thread-safe.
+  bool MaybeValid() const;
 
   // Returns the Callback into an uninitialized state.
   void Reset();

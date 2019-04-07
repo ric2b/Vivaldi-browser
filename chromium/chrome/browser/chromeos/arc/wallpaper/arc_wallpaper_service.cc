@@ -10,7 +10,7 @@
 
 #include "base/logging.h"
 #include "base/memory/singleton.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_bridge_service.h"
@@ -252,7 +252,7 @@ void ArcWallpaperService::OnGetWallpaperImageCallback(
     GetWallpaperCallback callback,
     const gfx::ImageSkia& image) {
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&EncodeImagePng, image), std::move(callback));
 }
 

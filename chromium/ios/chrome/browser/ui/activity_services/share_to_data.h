@@ -19,6 +19,7 @@
                  title:(NSString*)title
        isOriginalTitle:(BOOL)isOriginalTitle
        isPagePrintable:(BOOL)isPagePrintable
+      isPageSearchable:(BOOL)isPageSearchable
              userAgent:(web::UserAgentType)userAgent
     thumbnailGenerator:(ThumbnailGeneratorBlock)thumbnailGenerator;
 
@@ -33,11 +34,16 @@
 @property(nonatomic, readonly) NSURL* shareNSURL;
 @property(nonatomic, readonly) NSURL* passwordManagerNSURL;
 
+// Title to be shared (not nil).
 @property(nonatomic, readonly, copy) NSString* title;
+// Whether the title was provided by the page (i.e., was not generated from
+// the url).
 @property(nonatomic, readonly, assign) BOOL isOriginalTitle;
+// Whether the page is printable or not.
 @property(nonatomic, readonly, assign) BOOL isPagePrintable;
+// Whether FindInPage can be enabled for this page.
+@property(nonatomic, readonly, assign) BOOL isPageSearchable;
 @property(nonatomic, readonly, assign) web::UserAgentType userAgent;
-@property(nonatomic, strong) UIImage* image;
 @property(nonatomic, copy) ThumbnailGeneratorBlock thumbnailGenerator;
 
 @end

@@ -10,10 +10,12 @@
 #include <string>
 
 #include "base/component_export.h"
+#include "base/containers/span.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "net/http/http_auth_preferences.h"
@@ -42,6 +44,7 @@ class STHReporter;
 
 namespace network {
 
+class CRLSetDistributor;
 class NetworkContext;
 class NetworkUsageAccumulator;
 class MojoNetLog;
@@ -61,6 +64,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
                  net::NetLog* net_log = nullptr);
 
   ~NetworkService() override;
+
+  // Call to inform the NetworkService that OSCrypt::SetConfig() has already
+  // been invoked, so OSCrypt::SetConfig() does not need to be called before
+  // encrypted storage can be used.
+  void set_os_crypt_is_configured();
 
   // Can be used to seed a NetworkContext with a consumer-configured
   // URLRequestContextBuilder, which |params| will then be applied to. The
@@ -114,6 +122,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
 
   // mojom::NetworkService implementation:
   void SetClient(mojom::NetworkServiceClientPtr client) override;
+  void StartNetLog(base::File file, base::Value constants) override;
   void CreateNetworkContext(mojom::NetworkContextRequest request,
                             mojom::NetworkContextParamsPtr params) override;
   void ConfigureStubHostResolver(
@@ -133,13 +142,22 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   void GetTotalNetworkUsages(
       mojom::NetworkService::GetTotalNetworkUsagesCallback callback) override;
   void UpdateSignedTreeHead(const net::ct::SignedTreeHead& sth) override;
+  void UpdateCRLSet(base::span<const uint8_t> crl_set) override;
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   void SetCryptConfig(mojom::CryptConfigPtr crypt_config) override;
 #endif
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  void SetEncryptionKey(const std::string& encryption_key) override;
+#endif
+  void AddCorbExceptionForPlugin(uint32_t process_id) override;
+  void RemoveCorbExceptionForPlugin(uint32_t process_id) override;
 
   // Returns the shared HttpAuthHandlerFactory for the NetworkService, creating
   // one if needed.
   net::HttpAuthHandlerFactory* GetHttpAuthHandlerFactory();
+
+  // Notification that a URLLoader is about to start.
+  void OnBeforeURLRequest();
 
   bool quic_disabled() const { return quic_disabled_; }
   bool HasRawHeadersAccess(uint32_t process_id) const;
@@ -158,6 +176,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   }
 
   certificate_transparency::STHReporter* sth_reporter();
+  CRLSetDistributor* crl_set_distributor() {
+    return crl_set_distributor_.get();
+  }
 
   bool os_crypt_config_set() const { return os_crypt_config_set_; }
 
@@ -175,7 +196,20 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   // context.
   void OnNetworkContextConnectionClosed(NetworkContext* network_context);
 
-  std::unique_ptr<MojoNetLog> owned_net_log_;
+  // Starts the timer to call NetworkServiceClient::OnLoadingStateUpdate(), if
+  // timer isn't already running, |waiting_on_load_state_ack_| is false, and
+  // there are live URLLoaders.
+  // Only works when network service is enabled.
+  void MaybeStartUpdateLoadInfoTimer();
+
+  // Checks all pending requests and updates the load info if necessary.
+  void UpdateLoadInfo();
+
+  // Invoked once the browser has acknowledged receiving the previous LoadInfo.
+  // Starts timer call UpdateLoadInfo() again, if needed.
+  void AckUpdateLoadInfo();
+
+  MojoNetLog* network_service_net_log_ = nullptr;
   // TODO(https://crbug.com/767450): Remove this, once Chrome no longer creates
   // its own NetLog.
   net::NetLog* net_log_;
@@ -230,6 +264,15 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   bool os_crypt_config_set_ = false;
 
   std::unique_ptr<certificate_transparency::STHDistributor> sth_distributor_;
+  std::unique_ptr<CRLSetDistributor> crl_set_distributor_;
+
+  // A timer that periodically calls UpdateLoadInfo while there are pending
+  // loads and not waiting on an ACK from the client for the last sent
+  // LoadInfo callback.
+  base::OneShotTimer update_load_info_timer_;
+  // True if a LoadInfoList has been sent to the client, but has yet to be
+  // acknowledged.
+  bool waiting_on_load_state_ack_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkService);
 };

@@ -3,19 +3,27 @@
 // found in the LICENSE file.
 
 #include "ash/public/cpp/ash_pref_names.h"
+#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/stylus_utils.h"
 #include "base/sys_info.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/stub_install_attributes.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/chromeos_switches.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/arc/arc_util.h"
 #include "components/prefs/pref_service.h"
+#include "services/ws/public/cpp/input_devices/input_device_client_test_api.h"
+#include "ui/events/devices/input_device.h"
+#include "ui/events/devices/touchscreen_device.h"
+#include "ui/events/test/event_generator.h"
 
 namespace {
 
@@ -131,6 +139,26 @@ IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, UnknownDeviceType) {
       << message_;
 }
 
+IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, AssistantSupported) {
+  // Enable native Assistant.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(chromeos::switches::kAssistantFeature);
+
+  ASSERT_TRUE(RunPlatformAppTestWithArg("chromeos_info_private/extended",
+                                        "assistant supported"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, AssistantUnsupported) {
+  // Disable native Assistant.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(chromeos::switches::kAssistantFeature);
+
+  ASSERT_TRUE(RunPlatformAppTestWithArg("chromeos_info_private/extended",
+                                        "assistant unsupported"))
+      << message_;
+}
+
 IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, StylusUnsupported) {
   ASSERT_TRUE(RunPlatformAppTestWithArg("chromeos_info_private/extended",
                                         "stylus unsupported"))
@@ -138,9 +166,58 @@ IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, StylusUnsupported) {
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, StylusSupported) {
-  ash::stylus_utils::SetHasStylusInputForTesting();
+  ws::InputDeviceClientTestApi test_api;
+  ui::TouchscreenDevice touchscreen(1,
+                                    ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+                                    "Touchscreen", gfx::Size(1024, 768), 0);
+  touchscreen.has_stylus = true;
+  test_api.SetTouchscreenDevices({touchscreen});
+
   ASSERT_TRUE(RunPlatformAppTestWithArg("chromeos_info_private/extended",
                                         "stylus supported"))
+      << message_;
+}
+
+// TODO(https://crbug.com/814675): Excluded from Mash because pointer events
+// aren't seen.
+IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, StylusSeen) {
+  ws::InputDeviceClientTestApi test_api;
+  ui::TouchscreenDevice touchscreen(1,
+                                    ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+                                    "Touchscreen", gfx::Size(1024, 768), 0);
+  touchscreen.has_stylus = true;
+  test_api.SetTouchscreenDevices({touchscreen});
+
+  ui::test::EventGenerator generator(browser()->window()->GetNativeWindow());
+  generator.EnterPenPointerMode();
+  generator.PressTouch();
+  generator.ReleaseTouch();
+  generator.ExitPenPointerMode();
+
+  ASSERT_TRUE(RunPlatformAppTestWithArg("chromeos_info_private/extended",
+                                        "stylus seen"))
+      << message_;
+}
+
+class ChromeOSInfoPrivateInternalStylusTest : public ChromeOSInfoPrivateTest {
+ public:
+  ChromeOSInfoPrivateInternalStylusTest() = default;
+  ~ChromeOSInfoPrivateInternalStylusTest() override = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    ChromeOSInfoPrivateTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(ash::switches::kHasInternalStylus);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ChromeOSInfoPrivateInternalStylusTest);
+};
+
+IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateInternalStylusTest,
+                       StylusSeenInternal) {
+  ash::stylus_utils::SetHasStylusInputForTesting();
+  ASSERT_TRUE(RunPlatformAppTestWithArg("chromeos_info_private/extended",
+                                        "stylus seen"))
       << message_;
 }
 
@@ -182,18 +259,11 @@ class ChromeOSManagedDeviceInfoPrivateTest : public ChromeOSInfoPrivateTest {
   ChromeOSManagedDeviceInfoPrivateTest() = default;
   ~ChromeOSManagedDeviceInfoPrivateTest() override = default;
 
- protected:
-  void SetUpInProcessBrowserTestFixture() override {
-    // Set up fake install attributes.
-    std::unique_ptr<chromeos::StubInstallAttributes> attributes =
-        std::make_unique<chromeos::StubInstallAttributes>();
-    attributes->SetCloudManaged("fake-domain", "fake-id");
-    policy::BrowserPolicyConnectorChromeOS::SetInstallAttributesForTesting(
-        attributes.release());
-    ChromeOSInfoPrivateTest::SetUpInProcessBrowserTestFixture();
-  }
-
  private:
+  chromeos::ScopedStubInstallAttributes test_install_attributes_{
+      chromeos::StubInstallAttributes::CreateCloudManaged("fake-domain",
+                                                          "fake-id")};
+
   DISALLOW_COPY_AND_ASSIGN(ChromeOSManagedDeviceInfoPrivateTest);
 };
 

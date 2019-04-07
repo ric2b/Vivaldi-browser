@@ -14,7 +14,7 @@
 #include "components/autofill/core/browser/legal_message_line.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/infobars/core/infobar.h"
 #include "components/infobars/core/infobar_manager.h"
@@ -96,11 +96,18 @@ base::string16 AutofillSaveCardInfoBarDelegateMobile::GetDescriptionText()
   if (!IsGooglePayBrandingEnabled())
     return base::string16();
 
-  return IsAutofillUpstreamUpdatePromptExplanationExperimentEnabled()
-             ? l10n_util::GetStringUTF16(
-                   IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V3)
-             : l10n_util::GetStringUTF16(
-                   IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V2);
+  if (OfferStoreUnmaskedCards() &&
+      !IsAutofillNoLocalSaveOnUploadSuccessExperimentEnabled()) {
+    return l10n_util::GetStringUTF16(
+        features::IsAutofillUpstreamUpdatePromptExplanationExperimentEnabled()
+            ? IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V3_WITH_DEVICE
+            : IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V2_WITH_DEVICE);
+  } else {
+    return l10n_util::GetStringUTF16(
+        features::IsAutofillUpstreamUpdatePromptExplanationExperimentEnabled()
+            ? IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V3
+            : IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V2);
+  }
 }
 
 int AutofillSaveCardInfoBarDelegateMobile::GetIconId() const {
@@ -110,9 +117,10 @@ int AutofillSaveCardInfoBarDelegateMobile::GetIconId() const {
 
 base::string16 AutofillSaveCardInfoBarDelegateMobile::GetMessageText() const {
   return l10n_util::GetStringUTF16(
-      IsGooglePayBrandingEnabled() || !upload_
+      IsGooglePayBrandingEnabled()
           ? IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD_V3
-          : IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD);
+          : upload_ ? IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD
+                    : IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_LOCAL);
 }
 
 infobars::InfoBarDelegate::InfoBarIdentifier

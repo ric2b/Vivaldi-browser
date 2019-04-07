@@ -51,6 +51,9 @@ DesktopAutomationHandler = function(node) {
   /** @private {string} */
   this.lastRootUrl_ = '';
 
+  /** @private {boolean} */
+  this.shouldIgnoreDocumentSelectionFromAction_ = false;
+
   this.addListener_(
       EventType.ACTIVEDESCENDANTCHANGED, this.onActiveDescendantChanged);
   this.addListener_(EventType.ALERT, this.onAlert);
@@ -63,8 +66,6 @@ DesktopAutomationHandler = function(node) {
   this.addListener_(EventType.CHILDREN_CHANGED, this.onChildrenChanged);
   this.addListener_(
       EventType.DOCUMENT_SELECTION_CHANGED, this.onDocumentSelectionChanged);
-  this.addListener_(
-      EventType.DOCUMENT_TITLE_CHANGED, this.onDocumentTitleChanged);
   this.addListener_(EventType.EXPANDED_CHANGED, this.onEventIfInRange);
   this.addListener_(EventType.FOCUS, this.onFocus);
   this.addListener_(EventType.HOVER, this.onHover);
@@ -107,13 +108,6 @@ DesktopAutomationHandler.VMIN_VALUE_CHANGE_DELAY_MS = 50;
  */
 DesktopAutomationHandler.announceActions = false;
 
-/**
- * The url of the keyboard.
- * @const {string}
- */
-DesktopAutomationHandler.KEYBOARD_URL =
-    'chrome-extension://jkghodnilhceideoidjikpgommlajknk/inputview.html';
-
 DesktopAutomationHandler.prototype = {
   __proto__: BaseAutomationHandler.prototype,
 
@@ -137,16 +131,20 @@ DesktopAutomationHandler.prototype = {
       return;
 
     // Decide whether to announce and sync this event.
-    if (!DesktopAutomationHandler.announceActions && evt.eventFrom == 'action')
+    if (!DesktopAutomationHandler.announceActions &&
+        evt.eventFrom == 'action' &&
+        EventSourceState.get() != EventSourceType.TOUCH_GESTURE)
       return;
 
     var prevRange = ChromeVoxState.instance.currentRange;
 
     ChromeVoxState.instance.setCurrentRange(cursors.Range.fromNode(node));
 
-    // Don't output if focused node hasn't changed.
+    // Don't output if focused node hasn't changed. Allow focus announcements
+    // when interacting via touch. Touch never sets focus without a double tap.
     if (prevRange && evt.type == 'focus' &&
-        ChromeVoxState.instance.currentRange.equals(prevRange))
+        ChromeVoxState.instance.currentRange.equals(prevRange) &&
+        EventSourceState.get() != EventSourceType.TOUCH_GESTURE)
       return;
 
     var output = new Output();
@@ -240,12 +238,22 @@ DesktopAutomationHandler.prototype = {
     if (!GestureCommandHandler.getEnabled())
       return;
 
+    EventSourceState.set(EventSourceType.TOUCH_GESTURE);
+
     var target = evt.target;
     if (!AutomationPredicate.object(target)) {
       target = AutomationUtil.findNodePre(
                    target, Dir.FORWARD, AutomationPredicate.object) ||
           target;
     }
+
+    while (target && !AutomationPredicate.object(target))
+      target = target.parent;
+
+
+    if (!target)
+      return;
+
     if (ChromeVoxState.instance.currentRange &&
         target == ChromeVoxState.instance.currentRange.start.node)
       return;
@@ -339,6 +347,11 @@ DesktopAutomationHandler.prototype = {
     if (!anchor)
       return;
 
+    // A caller requested this event be ignored.
+    if (this.shouldIgnoreDocumentSelectionFromAction_ &&
+        evt.eventFrom == 'action')
+      return;
+
     // Editable selection.
     if (anchor.state[StateType.EDITABLE]) {
       anchor = AutomationUtil.getEditableRoot(anchor) || anchor;
@@ -347,16 +360,6 @@ DesktopAutomationHandler.prototype = {
     }
 
     // Non-editable selections are handled in |Background|.
-  },
-
-  /**
-   * @param {!AutomationEvent} evt
-   */
-  onDocumentTitleChanged: function(evt) {
-    var t = evt.target;
-    var output = new Output();
-    output.format('$name', t);
-    output.go();
   },
 
   /**
@@ -453,6 +456,14 @@ DesktopAutomationHandler.prototype = {
         AutomationUtil.isDescendantOf(cur.end.node, evt.target)) {
       new Output().withLocation(cur, null, evt.type).go();
     }
+  },
+
+  /**
+   * Sets whether document selections from actions should be ignored.
+   * @param {boolean} val
+   */
+  ignoreDocumentSelectionFromAction: function(val) {
+    this.shouldIgnoreDocumentSelectionFromAction_ = val;
   },
 
   /**
@@ -639,9 +650,9 @@ DesktopAutomationHandler.prototype = {
         (!opt_onFocus && target != voxTarget &&
          target.root.role != RoleType.DESKTOP &&
          voxTarget.root.role != RoleType.DESKTOP &&
-         voxTarget.root.url.indexOf(DesktopAutomationHandler.KEYBOARD_URL) !=
-             0) &&
-            !AutomationUtil.isDescendantOf(target, voxTarget))
+         !AutomationUtil.isDescendantOf(target, voxTarget) &&
+         !AutomationUtil.getAncestors(voxTarget.root)
+              .find((n) => n.role == RoleType.KEYBOARD)))
       return false;
 
     if (!this.textEditHandler_ || this.textEditHandler_.node !== target) {

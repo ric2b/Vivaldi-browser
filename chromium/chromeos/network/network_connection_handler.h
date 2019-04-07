@@ -91,6 +91,9 @@ class CHROMEOS_EXPORT NetworkConnectionHandler {
   // Trying to configure a network that is blocked by policy.
   static const char kErrorBlockedByPolicy[];
 
+  // The HexSSID is missing.
+  static const char kErrorHexSsidRequired[];
+
   // Network activation failed.
   static const char kErrorActivateFailed[];
 
@@ -203,7 +206,7 @@ class CHROMEOS_EXPORT NetworkConnectionHandler {
       const base::Closure& success_callback,
       const network_handler::ErrorCallback& error_callback);
 
-  base::ObserverList<NetworkConnectionObserver, true> observers_;
+  base::ObserverList<NetworkConnectionObserver, true>::Unchecked observers_;
 
   // Delegate used to start a connection to a tether network.
   TetherDelegate* tether_delegate_;

@@ -59,6 +59,7 @@ struct ChildProcessLauncherPriority {
   ChildProcessLauncherPriority(bool visible,
                                bool has_media_stream,
                                unsigned int frame_depth,
+                               bool intersects_viewport,
                                bool boost_for_pending_views,
                                bool should_boost_for_pending_views
 #if defined(OS_ANDROID)
@@ -69,6 +70,7 @@ struct ChildProcessLauncherPriority {
       : visible(visible),
         has_media_stream(has_media_stream),
         frame_depth(frame_depth),
+        intersects_viewport(intersects_viewport),
         boost_for_pending_views(boost_for_pending_views),
         should_boost_for_pending_views(should_boost_for_pending_views)
 #if defined(OS_ANDROID)
@@ -107,6 +109,12 @@ struct ChildProcessLauncherPriority {
   // compare this property for two ChildProcessLauncherPriority instances with
   // matching |visible| properties.
   unsigned int frame_depth;
+
+  // |intersects_viewport| is true if this process is responsible for a frame
+  // which intersects a viewport which has |visible| visibility. It only makes
+  // sense to compare this property for two ChildProcessLauncherPriority
+  // instances with matching |visible| properties.
+  bool intersects_viewport;
 
   // |boost_for_pending_views| is true if this process is responsible for a
   // pending view (this is used to boost priority of a process responsible for

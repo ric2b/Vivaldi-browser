@@ -13,7 +13,7 @@
 #include "base/containers/queue.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "chrome/browser/android/vr/arcore_device/ar_image_transport.h"
@@ -43,20 +43,19 @@ constexpr std::array<float, 6> kDisplayCoordinatesForTransform = {
 gfx::Transform ConvertUvsToTransformMatrix(const std::vector<float>& uvs) {
   // We're creating a matrix that transforms viewport UV coordinates (for a
   // screen-filling quad, origin at bottom left, u=1 at right, v=1 at top) to
-  // camera texture UV coordinates. This matrix is used with
-  // vr::WebVrRenderer to compute texture coordinates for copying an
-  // appropriately cropped and rotated subsection of the camera image. The
-  // SampleData is a bit unfortunate. ARCore doesn't provide a way to get a
-  // matrix directly. There's a function to transform UV vectors individually,
-  // which obviously can't be used from a shader, so we run that on selected
-  // vectors and recreate the matrix from the result.
+  // camera texture UV coordinates. This matrix is used to compute texture
+  // coordinates for copying an appropriately cropped and rotated subsection of
+  // the camera image. The SampleData is a bit unfortunate. ARCore doesn't
+  // provide a way to get a matrix directly. There's a function to transform UV
+  // vectors individually, which obviously can't be used from a shader, so we
+  // run that on selected vectors and recreate the matrix from the result.
 
   // Assumes that |uvs| is the result of transforming the display coordinates
   // from kDisplayCoordinatesForTransform. This combines the solved matrix with
   // a Y flip because ARCore's "normalized screen space" coordinates have the
   // origin at the top left to match 2D Android APIs, so it needs a Y flip to
   // get an origin at bottom left as used for textures.
-  DCHECK(uvs.size() == 6);
+  DCHECK_EQ(uvs.size(), 6U);
   float u00 = uvs[0];
   float v00 = uvs[1];
   float u10 = uvs[2];
@@ -83,7 +82,7 @@ struct ARCoreHitTestRequest {
   ARCoreHitTestRequest() = default;
   ~ARCoreHitTestRequest() = default;
   mojom::XRRayPtr ray;
-  mojom::VRMagicWindowProvider::RequestHitTestCallback callback;
+  mojom::XREnvironmentIntegrationProvider::RequestHitTestCallback callback;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ARCoreHitTestRequest);
@@ -176,7 +175,7 @@ bool ARCoreGl::InitializeGl() {
 void ARCoreGl::ProduceFrame(
     const gfx::Size& frame_size,
     display::Display::Rotation display_rotation,
-    mojom::VRMagicWindowProvider::GetFrameDataCallback callback) {
+    mojom::XRFrameDataProvider::GetFrameDataCallback callback) {
   TRACE_EVENT0("gpu", __FUNCTION__);
   DCHECK(IsOnGlThread());
   DCHECK(is_initialized_);
@@ -252,7 +251,7 @@ void ARCoreGl::ProduceFrame(
 
 void ARCoreGl::RequestHitTest(
     mojom::XRRayPtr ray,
-    mojom::VRMagicWindowProvider::RequestHitTestCallback callback) {
+    mojom::XREnvironmentIntegrationProvider::RequestHitTestCallback callback) {
   DCHECK(IsOnGlThread());
   DCHECK(is_initialized_);
 
@@ -266,7 +265,7 @@ void ARCoreGl::RequestHitTest(
 void ARCoreGl::ProcessFrame(
     mojom::XRFrameDataPtr frame_data,
     const gfx::Size& frame_size,
-    mojom::VRMagicWindowProvider::GetFrameDataCallback callback) {
+    mojom::XRFrameDataProvider::GetFrameDataCallback callback) {
   DCHECK(IsOnGlThread());
   DCHECK(is_initialized_);
 

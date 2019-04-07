@@ -8,7 +8,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/grit/components_resources.h"
 #include "components/security_interstitials/core/common_string_util.h"
 #include "components/security_interstitials/core/metrics_helper.h"
@@ -93,6 +93,10 @@ void SafeBrowsingLoudErrorUI::PopulateStringsForHtml(
       "hide_primary_button",
       always_show_back_to_safety() ? false : !controller()->CanGoBack());
 
+  load_time_data->SetBoolean(
+      "billing",
+      interstitial_reason() == BaseSafeBrowsingErrorUI::SB_REASON_BILLING);
+
   switch (interstitial_reason()) {
     case BaseSafeBrowsingErrorUI::SB_REASON_MALWARE:
       PopulateMalwareLoadTimeData(load_time_data);
@@ -103,10 +107,13 @@ void SafeBrowsingLoudErrorUI::PopulateStringsForHtml(
     case BaseSafeBrowsingErrorUI::SB_REASON_PHISHING:
       PopulatePhishingLoadTimeData(load_time_data);
       break;
+    case BaseSafeBrowsingErrorUI::SB_REASON_BILLING:
+      PopulateBillingLoadTimeData(load_time_data);
+      break;
   }
 
   // Not used by this interstitial.
-  load_time_data->SetString("recurrentErrorParagraph", base::string16());
+  load_time_data->SetString("recurrentErrorParagraph", "");
   load_time_data->SetBoolean("show_recurrent_error_paragraph", false);
 
   PopulateExtendedReportingOption(load_time_data);
@@ -309,8 +316,33 @@ void SafeBrowsingLoudErrorUI::PopulateExtendedReportingOption(
                              is_extended_reporting_enabled());
 }
 
+void SafeBrowsingLoudErrorUI::PopulateBillingLoadTimeData(
+    base::DictionaryValue* load_time_data) {
+  load_time_data->SetBoolean("phishing", false);
+  load_time_data->SetBoolean("overridable", true);
+  load_time_data->SetBoolean("hide_primary_button", false);
+
+  load_time_data->SetString("heading",
+                            l10n_util::GetStringUTF16(IDS_BILLING_HEADING));
+  load_time_data->SetString(
+      "primaryParagraph",
+      l10n_util::GetStringUTF16(IDS_BILLING_PRIMARY_PARAGRAPH));
+
+  load_time_data->SetString(
+      "primaryButtonText",
+      l10n_util::GetStringUTF16(IDS_BILLING_PRIMARY_BUTTON));
+  load_time_data->SetString(
+      "proceedButtonText",
+      l10n_util::GetStringUTF16(IDS_BILLING_PROCEED_BUTTON));
+
+  load_time_data->SetString("openDetails", "");
+  load_time_data->SetString("closeDetails", "");
+  load_time_data->SetString("explanationParagraph", "");
+  load_time_data->SetString("finalParagraph", "");
+}
+
 int SafeBrowsingLoudErrorUI::GetHTMLTemplateId() const {
   return IDR_SECURITY_INTERSTITIAL_HTML;
-};
+}
 
-}  // security_interstitials
+}  // namespace security_interstitials

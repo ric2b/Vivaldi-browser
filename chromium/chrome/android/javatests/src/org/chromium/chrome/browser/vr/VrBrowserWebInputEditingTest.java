@@ -7,8 +7,7 @@ package org.chromium.chrome.browser.vr;
 import static org.chromium.chrome.browser.vr.XrTestFramework.PAGE_LOAD_TIMEOUT_S;
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_CHECK_INTERVAL_SHORT_MS;
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_LONG_MS;
-import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_DEVICE_DAYDREAM;
-import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM;
+import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE;
 
 import android.graphics.PointF;
 import android.support.test.filters.MediumTest;
@@ -27,7 +26,6 @@ import org.chromium.chrome.browser.vr.rules.ChromeTabbedActivityVrTestRule;
 import org.chromium.chrome.browser.vr.util.NativeUiUtils;
 import org.chromium.chrome.browser.vr.util.VrBrowserTransitionUtils;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 
 /**
@@ -35,7 +33,7 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@Restriction({RESTRICTION_TYPE_DEVICE_DAYDREAM, RESTRICTION_TYPE_VIEWER_DAYDREAM})
+@Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
 public class VrBrowserWebInputEditingTest {
     // We explicitly instantiate a rule here instead of using parameterization since this class
     // only ever runs in ChromeTabbedActivity.
@@ -59,54 +57,72 @@ public class VrBrowserWebInputEditingTest {
     @MediumTest
     @CommandLineFlags.Add("enable-features=VrLaunchIntents")
     public void testWebInputFocus() throws InterruptedException {
-        // Load page in VR and make sure the controller is pointed at the content quad.
-        mVrTestRule.loadUrl(
-                VrBrowserTestFramework.getFileUrlForHtmlTestFile("test_web_input_editing"),
-                PAGE_LOAD_TIMEOUT_S);
+        testWebInputFocusImpl(
+                VrBrowserTestFramework.getFileUrlForHtmlTestFile("test_web_input_editing"));
+    }
+
+    /**
+     * Verifies the same thing as testWebInputFocus, but with the input box in a cross-origin
+     * iframe.
+     * Automation of a manual test in https://crbug.com/862153
+     */
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add("enable-features=VrLaunchIntents")
+    public void testWebInputFocusIframe() throws InterruptedException {
+        testWebInputFocusImpl(VrBrowserTestFramework.getFileUrlForHtmlTestFile(
+                "test_web_input_editing_iframe_outer"));
+    }
+
+    private void testWebInputFocusImpl(String url) throws InterruptedException {
+        mVrTestRule.loadUrl(url, PAGE_LOAD_TIMEOUT_S);
         VrBrowserTransitionUtils.forceEnterVrBrowserOrFail(POLL_TIMEOUT_LONG_MS);
 
-        VrShellImpl vrShellImpl = (VrShellImpl) TestVrShellDelegate.getVrShellForTesting();
+        VrShell vrShell = TestVrShellDelegate.getVrShellForTesting();
         MockBrowserKeyboardInterface keyboard = new MockBrowserKeyboardInterface();
-        vrShellImpl.getInputMethodManageWrapperForTesting().setBrowserKeyboardInterfaceForTesting(
+        vrShell.getInputMethodManageWrapperForTesting().setBrowserKeyboardInterfaceForTesting(
                 keyboard);
 
         // The webpage reacts to the first controller click by focusing its input field. Verify that
         // focus gain spawns the keyboard by clicking in the center of the page.
         NativeUiUtils.clickElementAndWaitForUiQuiescence(
                 UserFriendlyElementName.CONTENT_QUAD, new PointF());
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                Boolean visible = keyboard.getLastKeyboardVisibility();
-                return visible != null && visible;
-            }
-        }, POLL_TIMEOUT_LONG_MS, POLL_CHECK_INTERVAL_SHORT_MS);
+        CriteriaHelper.pollInstrumentationThread(
+                ()
+                        -> {
+                    Boolean visible = keyboard.getLastKeyboardVisibility();
+                    return visible != null && visible;
+                },
+                "Keyboard did not show from focusing a web input box", POLL_TIMEOUT_LONG_MS,
+                POLL_CHECK_INTERVAL_SHORT_MS);
 
         // Add text to the input field via the input connection and verify that the keyboard
         // interface is called to update the indices.
-        VrInputConnection ic = vrShellImpl.getVrInputConnectionForTesting();
+        VrInputConnection ic = vrShell.getVrInputConnectionForTesting();
         TextEditAction[] edits = {new TextEditAction(TextEditActionType.COMMIT_TEXT, "i", 1)};
         ic.onKeyboardEdit(edits);
         // Inserting 'i' should move the cursor by one character and there should be no composition.
         MockBrowserKeyboardInterface.Indices expectedIndices =
                 new MockBrowserKeyboardInterface.Indices(1, 1, -1, -1);
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                MockBrowserKeyboardInterface.Indices indices = keyboard.getLastIndices();
-                return indices == null ? false : indices.equals(expectedIndices);
-            }
-        }, POLL_TIMEOUT_LONG_MS, POLL_CHECK_INTERVAL_SHORT_MS);
+        CriteriaHelper.pollInstrumentationThread(
+                ()
+                        -> {
+                    MockBrowserKeyboardInterface.Indices indices = keyboard.getLastIndices();
+                    return indices == null ? false : indices.equals(expectedIndices);
+                },
+                "Inputting text did not move cursor the expected amount", POLL_TIMEOUT_LONG_MS,
+                POLL_CHECK_INTERVAL_SHORT_MS);
 
         // The second click should result in a focus loss and should hide the keyboard.
         NativeUiUtils.clickElementAndWaitForUiQuiescence(
                 UserFriendlyElementName.CONTENT_QUAD, new PointF());
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                Boolean visible = keyboard.getLastKeyboardVisibility();
-                return visible != null && !visible;
-            }
-        }, POLL_TIMEOUT_LONG_MS, POLL_CHECK_INTERVAL_SHORT_MS);
+        CriteriaHelper.pollInstrumentationThread(
+                ()
+                        -> {
+                    Boolean visible = keyboard.getLastKeyboardVisibility();
+                    return visible != null && !visible;
+                },
+                "Keyboard did not hide from unfocusing a web input box", POLL_TIMEOUT_LONG_MS,
+                POLL_CHECK_INTERVAL_SHORT_MS);
     }
 }

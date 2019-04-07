@@ -160,6 +160,8 @@ void PopulateURLLoadTiming(const net::LoadTimingInfo& load_timing,
   url_timing->SetPushEnd(load_timing.push_end);
 }
 
+// This is complementary to ConvertNetPriorityToWebKitPriority, defined in
+// service_worker_context_client.cc.
 net::RequestPriority ConvertWebKitPriorityToNetPriority(
     const WebURLRequest::Priority& priority) {
   switch (priority) {
@@ -212,7 +214,6 @@ int GetInfoFromDataURL(const GURL& url,
   info->content_length = data->length();
   info->encoded_data_length = 0;
   info->encoded_body_length = 0;
-  info->previews_state = PREVIEWS_OFF;
 
   return net::OK;
 }
@@ -603,6 +604,10 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
                                       SyncLoadResponse* sync_load_response) {
   DCHECK(request_id_ == -1);
 
+  // Notify Blink's scheduler with the initial resource fetch priority.
+  task_runner_handle_->DidChangeRequestPriority(
+      ConvertWebKitPriorityToNetPriority(request.GetPriority()));
+
   url_ = request.Url();
   use_stream_on_response_ = request.UseStreamOnResponse();
   report_raw_headers_ = request.ReportRawHeaders();
@@ -637,6 +642,8 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
          request.GetFrameType() ==
              network::mojom::RequestContextFrameType::kNone);
 
+  // TODO(domfarolino): Retrieve the referrer in the form of a referrer member
+  // instead of the header field. See https://crbug.com/850813.
   GURL referrer_url(
       request.HttpHeaderField(WebString::FromASCII("Referer")).Latin1());
   const std::string& method = request.HttpMethod().Latin1();
@@ -719,6 +726,8 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
     resource_request->do_not_prompt_for_login = true;
   }
   resource_request->report_raw_headers = request.ReportRawHeaders();
+  // TODO(ryansturm): Remove resource_request->previews_state once it is no
+  // longer used in a network delegate. https://crbug.com/842233
   resource_request->previews_state =
       static_cast<int>(request.GetPreviewsState());
   resource_request->throttling_profile_id = request.GetDevToolsToken();
@@ -750,6 +759,17 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
         std::make_unique<WebURLLoaderImpl::RequestPeerImpl>(this, discard_body);
   }
 
+  auto throttles = extra_data->TakeURLLoaderThrottles();
+  // The frame request blocker is only for a frame's subresources.
+  if (extra_data->frame_request_blocker() &&
+      !IsResourceTypeFrame(
+          static_cast<ResourceType>(resource_request->resource_type))) {
+    auto throttle =
+        extra_data->frame_request_blocker()->GetThrottleIfRequestsBlocked();
+    if (throttle)
+      throttles.push_back(std::move(throttle));
+  }
+
   if (sync_load_response) {
     DCHECK(defers_loading_ == NOT_DEFERRING);
 
@@ -761,9 +781,8 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
     resource_dispatcher_->StartSync(
         std::move(resource_request), request.RequestorID(),
         GetTrafficAnnotationTag(request), sync_load_response,
-        url_loader_factory_, extra_data->TakeURLLoaderThrottles(),
-        request.TimeoutInterval(), std::move(download_to_blob_registry),
-        std::move(peer));
+        url_loader_factory_, std::move(throttles), request.TimeoutInterval(),
+        std::move(download_to_blob_registry), std::move(peer));
     return;
   }
 
@@ -774,7 +793,7 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
       std::move(resource_request), request.RequestorID(), task_runner_,
       GetTrafficAnnotationTag(request), false /* is_sync */,
       request.PassResponsePipeToClient(), std::move(peer), url_loader_factory_,
-      extra_data->TakeURLLoaderThrottles(), std::move(response_override),
+      std::move(throttles), std::move(response_override),
       &continue_navigation_function);
   extra_data->set_continue_navigation_function(
       std::move(continue_navigation_function));
@@ -800,7 +819,7 @@ bool WebURLLoaderImpl::Context::OnReceivedRedirect(
       this, TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
 
   WebURLResponse response;
-  PopulateURLResponse(url_, info, &response, report_raw_headers_);
+  PopulateURLResponse(url_, info, &response, report_raw_headers_, request_id_);
 
   url_ = WebURL(redirect_info.new_url);
   return client_->WillFollowRedirect(
@@ -822,7 +841,7 @@ void WebURLLoaderImpl::Context::OnReceivedResponse(
       this, TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
 
   WebURLResponse response;
-  PopulateURLResponse(url_, info, &response, report_raw_headers_);
+  PopulateURLResponse(url_, info, &response, report_raw_headers_, request_id_);
 
   bool show_raw_listing = false;
   if (info.mime_type == "text/vnd.chromium.ftp-dir") {
@@ -1158,7 +1177,8 @@ void WebURLLoaderImpl::PopulateURLResponse(
     const WebURL& url,
     const network::ResourceResponseInfo& info,
     WebURLResponse* response,
-    bool report_security_info) {
+    bool report_security_info,
+    int request_id) {
   response->SetURL(url);
   response->SetResponseTime(info.response_time);
   response->SetMIMEType(WebString::FromUTF8(info.mime_type));
@@ -1183,8 +1203,7 @@ void WebURLLoaderImpl::PopulateURLResponse(
   response->SetWasFetchedViaServiceWorker(info.was_fetched_via_service_worker);
   response->SetWasFallbackRequiredByServiceWorker(
       info.was_fallback_required_by_service_worker);
-  response->SetResponseTypeViaServiceWorker(
-      info.response_type_via_service_worker);
+  response->SetType(info.response_type);
   response->SetURLListViaServiceWorker(info.url_list_via_service_worker);
   response->SetCacheStorageCacheName(
       info.is_in_cache_storage
@@ -1213,9 +1232,8 @@ void WebURLLoaderImpl::PopulateURLResponse(
   extra_data->set_was_alpn_negotiated(info.was_alpn_negotiated);
   extra_data->set_was_alternate_protocol_available(
       info.was_alternate_protocol_available);
-  extra_data->set_previews_state(
-      static_cast<PreviewsState>(info.previews_state));
   extra_data->set_effective_connection_type(info.effective_connection_type);
+  extra_data->set_request_id(request_id);
 
   // If there's no received headers end time, don't set load timing.  This is
   // the case for non-HTTP requests, requests that don't go over the wire, and
@@ -1326,7 +1344,7 @@ void WebURLLoaderImpl::LoadSynchronously(
   }
 
   PopulateURLResponse(final_url, sync_load_response.info, &response,
-                      request.ReportRawHeaders());
+                      request.ReportRawHeaders(), context_->request_id());
   encoded_data_length = sync_load_response.info.encoded_data_length;
   encoded_body_length = sync_load_response.info.encoded_body_length;
   if (sync_load_response.downloaded_blob) {

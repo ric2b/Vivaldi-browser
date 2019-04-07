@@ -10,6 +10,7 @@
 #include "ui/aura/env.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
+#include "ui/aura/mus/window_tree_host_mus_init_params.h"
 #include "ui/aura/test/mus/window_tree_client_private.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -47,10 +48,10 @@ TestScreen::~TestScreen() {
 
 WindowTreeHost* TestScreen::CreateHostForPrimaryDisplay() {
   DCHECK(!host_);
-  if (window_tree_client_ && window_tree_client_->config() ==
-                                 WindowTreeClient::Config::kMashDeprecated) {
-    host_ = WindowTreeClientPrivate(window_tree_client_)
-                .CallWmNewDisplayAdded(GetPrimaryDisplay());
+  if (window_tree_client_) {
+    host_ =
+        new WindowTreeHostMus(CreateInitParamsForTopLevel(window_tree_client_));
+    host_->SetBoundsInPixels(gfx::Rect(GetPrimaryDisplay().GetSizeInPixel()));
   } else {
     host_ = WindowTreeHost::Create(ui::PlatformWindowInitProperties{gfx::Rect(
                                        GetPrimaryDisplay().GetSizeInPixel())})
@@ -160,7 +161,10 @@ void TestScreen::OnWindowDestroying(Window* window) {
 }
 
 gfx::Point TestScreen::GetCursorScreenPoint() {
-  return Env::GetInstance()->last_mouse_location();
+  // This may be hit during shutdown, after |host_| has been destroyed.
+  return host_ && host_->window()
+             ? host_->window()->env()->last_mouse_location()
+             : gfx::Point();
 }
 
 bool TestScreen::IsWindowUnderCursor(gfx::NativeWindow window) {

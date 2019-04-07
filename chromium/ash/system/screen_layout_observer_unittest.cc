@@ -160,25 +160,6 @@ class ScreenLayoutObserverTestMultiMirroring
   DISALLOW_COPY_AND_ASSIGN(ScreenLayoutObserverTestMultiMirroring);
 };
 
-class ScreenLayoutObserverTestMultiMirroringWithUiScale
-    : public ScreenLayoutObserverTestMultiMirroring {
- public:
-  ScreenLayoutObserverTestMultiMirroringWithUiScale() = default;
-  ~ScreenLayoutObserverTestMultiMirroringWithUiScale() override = default;
-
-  // ScreenLayoutObserverTestMultiMirroring
-  void SetUp() override {
-    scoped_feature_list_.InitAndDisableFeature(
-        features::kEnableDisplayZoomSetting);
-    ScreenLayoutObserverTestMultiMirroring::SetUp();
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScreenLayoutObserverTestMultiMirroringWithUiScale);
-};
-
 // Instantiate the boolean which is used to enable/disable multi-mirroring in
 // the parameterized tests.
 INSTANTIATE_TEST_CASE_P(,
@@ -293,42 +274,6 @@ TEST_P(ScreenLayoutObserverTestMultiMirroring, DisplayNotifications) {
   EXPECT_TRUE(GetDisplayNotificationText().empty());
 }
 
-TEST_P(ScreenLayoutObserverTestMultiMirroringWithUiScale,
-       DisplayNotifications) {
-  Shell::Get()->screen_layout_observer()->set_show_notifications_for_testing(
-      true);
-
-  UpdateDisplay("400x400@1.5");
-  EXPECT_EQ(l10n_util::GetStringFUTF16(
-                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED,
-                GetFirstDisplayName(), base::UTF8ToUTF16("600x600")),
-            GetDisplayNotificationAdditionalText());
-  EXPECT_EQ(l10n_util::GetStringUTF16(
-                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED_TITLE),
-            GetDisplayNotificationText());
-
-  // UI-scale to 1.0
-  CloseNotification();
-  UpdateDisplay("400x400");
-  EXPECT_EQ(l10n_util::GetStringFUTF16(
-                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED,
-                GetFirstDisplayName(), base::UTF8ToUTF16("400x400")),
-            GetDisplayNotificationAdditionalText());
-  EXPECT_EQ(l10n_util::GetStringUTF16(
-                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED_TITLE),
-            GetDisplayNotificationText());
-
-  // Resize the first display.
-  UpdateDisplay("400x400@1.5,200x200");
-  EXPECT_EQ(l10n_util::GetStringFUTF16(
-                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED,
-                GetFirstDisplayName(), base::UTF8ToUTF16("600x600")),
-            GetDisplayNotificationAdditionalText());
-  EXPECT_EQ(l10n_util::GetStringUTF16(
-                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED_TITLE),
-            GetDisplayNotificationText());
-}
-
 // Zooming in Unified Mode results in display size changes rather than changes
 // in the UI scales, in which case, we still want to show a notification when
 // the source of change is not the settings ui.
@@ -343,7 +288,8 @@ TEST_F(ScreenLayoutObserverTest, ZoomingInUnifiedModeNotification) {
   // Using keyboard shortcuts to change the zoom should result in a
   // notification.
   CloseNotification();
-  EXPECT_TRUE(display_manager()->ZoomInternalDisplay(false /* up */));
+  int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  EXPECT_TRUE(display_manager()->ZoomDisplay(display_id, false /* up */));
   EXPECT_EQ(l10n_util::GetStringFUTF16(
                 IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED,
                 GetUnifiedDisplayName(), base::UTF8ToUTF16("400x200")),
@@ -353,7 +299,7 @@ TEST_F(ScreenLayoutObserverTest, ZoomingInUnifiedModeNotification) {
             GetDisplayNotificationText());
 
   CloseNotification();
-  EXPECT_TRUE(display_manager()->ZoomInternalDisplay(true /* up */));
+  EXPECT_TRUE(display_manager()->ZoomDisplay(display_id, true /* up */));
   EXPECT_EQ(l10n_util::GetStringFUTF16(
                 IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED,
                 GetUnifiedDisplayName(), base::UTF8ToUTF16("800x400")),
@@ -368,7 +314,7 @@ TEST_F(ScreenLayoutObserverTest, ZoomingInUnifiedModeNotification) {
   CloseNotification();
   Shell::Get()->screen_layout_observer()->SetDisplayChangedFromSettingsUI(
       display::kUnifiedDisplayId);
-  EXPECT_TRUE(display_manager()->ZoomInternalDisplay(false /* up */));
+  EXPECT_TRUE(display_manager()->ZoomDisplay(display_id, false /* up */));
   EXPECT_TRUE(GetDisplayNotificationAdditionalText().empty());
   EXPECT_TRUE(GetDisplayNotificationText().empty());
 }

@@ -354,7 +354,7 @@ void ContainerNode::DidInsertNodeVector(
   }
   DispatchSubtreeModifiedEvent();
 
-  if (AXObjectCache* cache = GetDocument().GetOrCreateAXObjectCache())
+  if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
     cache->DidInsertChildrenOfNode(this);
 }
 
@@ -700,14 +700,15 @@ Node* ContainerNode::RemoveChild(Node* old_child,
   }
 
   {
-    SlotAssignmentRecalcForbiddenScope forbid_slot_recalc(GetDocument());
     HTMLFrameOwnerElement::PluginDisposeSuspendScope suspend_plugin_dispose;
     TreeOrderedMap::RemoveScope tree_remove_scope;
-
     Node* prev = child->previousSibling();
     Node* next = child->nextSibling();
-    RemoveBetween(prev, next, *child);
-    NotifyNodeRemoved(*child);
+    {
+      SlotAssignmentRecalcForbiddenScope forbid_slot_recalc(GetDocument());
+      RemoveBetween(prev, next, *child);
+      NotifyNodeRemoved(*child);
+    }
     ChildrenChanged(ChildrenChange::ForRemoval(*child, prev, next,
                                                kChildrenChangeSourceAPI));
   }
@@ -926,7 +927,7 @@ void ContainerNode::NotifyNodeInsertedInternal(
     if (!isConnected() && !IsInShadowTree() && !node.IsContainerNode())
       continue;
     if (Node::kInsertionShouldCallDidNotifySubtreeInsertions ==
-        node.InsertedInto(this))
+        node.InsertedInto(*this))
       post_insertion_notification_targets.push_back(&node);
     if (ShadowRoot* shadow_root = node.GetShadowRoot())
       NotifyNodeInsertedInternal(*shadow_root,
@@ -944,17 +945,40 @@ void ContainerNode::NotifyNodeRemoved(Node& root) {
     // since the virtual call to removedFrom is not needed.
     if (!node.IsContainerNode() && !node.IsInTreeScope())
       continue;
-    node.RemovedFrom(this);
+    node.RemovedFrom(*this);
     if (ShadowRoot* shadow_root = node.GetShadowRoot())
       NotifyNodeRemoved(*shadow_root);
   }
 }
 
+#if DCHECK_IS_ON()
+namespace {
+
+bool AttachedAllowedWhenAttaching(Node* node) {
+  return node->getNodeType() == Node::kCommentNode ||
+         node->getNodeType() == Node::kProcessingInstructionNode;
+}
+
+bool ChildAttachedAllowedWhenAttachingChildren(ContainerNode* node) {
+  if (node->IsShadowRoot())
+    return true;
+  if (node->IsV0InsertionPoint())
+    return true;
+  if (IsHTMLSlotElement(node))
+    return true;
+  if (IsShadowHost(node))
+    return true;
+  return false;
+}
+
+}  // namespace
+#endif
+
 DISABLE_CFI_PERF
 void ContainerNode::AttachLayoutTree(AttachContext& context) {
   for (Node* child = firstChild(); child; child = child->nextSibling()) {
 #if DCHECK_IS_ON()
-    DCHECK(child->NeedsAttach() ||
+    DCHECK(child->NeedsAttach() || AttachedAllowedWhenAttaching(child) ||
            ChildAttachedAllowedWhenAttachingChildren(this));
 #endif
     if (child->NeedsAttach())
@@ -981,11 +1005,10 @@ void ContainerNode::ChildrenChanged(const ChildrenChange& change) {
   GetDocument().IncDOMTreeVersion();
   GetDocument().NotifyChangeChildren(*this);
   InvalidateNodeListCachesInAncestors(nullptr, nullptr, &change);
-  if (change.IsChildInsertion()) {
-    if (!ChildNeedsStyleRecalc()) {
-      SetChildNeedsStyleRecalc();
-      MarkAncestorsWithChildNeedsStyleRecalc();
-    }
+  if (!ChildNeedsStyleRecalc() && change.IsChildInsertion() &&
+      change.sibling_changed->NeedsStyleRecalc()) {
+    SetChildNeedsStyleRecalc();
+    MarkAncestorsWithChildNeedsStyleRecalc();
   }
 }
 
@@ -1277,15 +1300,15 @@ static void DispatchChildInsertionEvents(Node& child) {
   if (c->parentNode() &&
       document->HasListenerType(Document::kDOMNodeInsertedListener)) {
     c->DispatchScopedEvent(
-        MutationEvent::Create(EventTypeNames::DOMNodeInserted,
-                              Event::Bubbles::kYes, c->parentNode()));
+        *MutationEvent::Create(EventTypeNames::DOMNodeInserted,
+                               Event::Bubbles::kYes, c->parentNode()));
   }
 
   // dispatch the DOMNodeInsertedIntoDocument event to all descendants
   if (c->isConnected() && document->HasListenerType(
                               Document::kDOMNodeInsertedIntoDocumentListener)) {
     for (; c; c = NodeTraversal::Next(*c, &child)) {
-      c->DispatchScopedEvent(MutationEvent::Create(
+      c->DispatchScopedEvent(*MutationEvent::Create(
           EventTypeNames::DOMNodeInsertedIntoDocument, Event::Bubbles::kNo));
     }
   }
@@ -1319,7 +1342,7 @@ static void DispatchChildRemovalEvents(Node& child) {
           Document::InDOMNodeRemovedHandlerState::kDOMNodeRemoved);
     }
     NodeChildRemovalTracker scope(child);
-    c->DispatchScopedEvent(MutationEvent::Create(
+    c->DispatchScopedEvent(*MutationEvent::Create(
         EventTypeNames::DOMNodeRemoved, Event::Bubbles::kYes, c->parentNode()));
     document.SetInDOMNodeRemovedHandlerState(original_document_state);
     c->SetInDOMNodeRemovedHandler(original_node_flag);
@@ -1340,7 +1363,7 @@ static void DispatchChildRemovalEvents(Node& child) {
     }
     NodeChildRemovalTracker scope(child);
     for (; c; c = NodeTraversal::Next(*c, &child)) {
-      c->DispatchScopedEvent(MutationEvent::Create(
+      c->DispatchScopedEvent(*MutationEvent::Create(
           EventTypeNames::DOMNodeRemovedFromDocument, Event::Bubbles::kNo));
     }
     document.SetInDOMNodeRemovedHandlerState(original_document_state);
@@ -1444,7 +1467,6 @@ void ContainerNode::RebuildChildrenLayoutTrees(
   // This is done in ContainerNode::AttachLayoutTree but will never be cleared
   // if we don't enter ContainerNode::AttachLayoutTree so we do it here.
   ClearChildNeedsStyleRecalc();
-  ClearChildNeedsReattachLayoutTree();
 }
 
 void ContainerNode::CheckForSiblingStyleChanges(SiblingCheckType change_type,
@@ -1620,23 +1642,5 @@ Element* ContainerNode::getElementById(const AtomicString& id) const {
 NodeListsNodeData& ContainerNode::EnsureNodeLists() {
   return EnsureRareData().EnsureNodeLists();
 }
-
-#if DCHECK_IS_ON()
-bool ChildAttachedAllowedWhenAttachingChildren(ContainerNode* node) {
-  if (node->IsShadowRoot())
-    return true;
-
-  if (node->IsV0InsertionPoint())
-    return true;
-
-  if (IsHTMLSlotElement(node))
-    return true;
-
-  if (IsShadowHost(node))
-    return true;
-
-  return false;
-}
-#endif
 
 }  // namespace blink

@@ -68,6 +68,10 @@ void WebViewImpl::SetAllowTabCycleIntoUI(
   web_settings_->SetAllowTabCycleIntoUI(allow_tab_cycle_from_webpage_into_ui);
 }
 
+void WebViewImpl::SetAllowAccessKeys(const bool allow_access_keys) {
+  web_settings_->SetAllowAccessKeys(allow_access_keys);
+}
+
 void WebViewImpl::LoadImageAt(const WebPoint& point) {
   HitTestResult result = HitTestResultForRootFramePos(LayoutPoint(point));
   Node* node = result.InnerNode();

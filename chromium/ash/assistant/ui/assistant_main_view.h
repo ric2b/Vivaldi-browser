@@ -23,13 +23,16 @@ class AssistantMainView : public views::View, public AssistantUiModelObserver {
 
   // views::View:
   gfx::Size CalculatePreferredSize() const override;
+  int GetHeightForWidth(int width) const override;
   void ChildPreferredSizeChanged(views::View* child) override;
   void ChildVisibilityChanged(views::View* child) override;
   void OnBoundsChanged(const gfx::Rect& prev_bounds) override;
   void RequestFocus() override;
 
   // AssistantUiModelObserver:
-  void OnUiVisibilityChanged(bool visible, AssistantSource source) override;
+  void OnUiVisibilityChanged(AssistantVisibility new_visibility,
+                             AssistantVisibility old_visibility,
+                             AssistantSource source) override;
 
  private:
   void InitLayout();

@@ -75,6 +75,7 @@ js_library("app") {
     "//ui/webui/resources/js:event_tracker",
     "//ui/webui/resources/js:util",
     "//ui/webui/resources/js:webui_listener_tracker",
+    "//ui/webui/resources/js/cr/ui:focus_outline_manager",
   ]
 }
 
@@ -258,6 +259,7 @@ js_library("margin_control_container") {
   deps = [
     ":margin_control",
     ":settings_behavior",
+    ":state",
     "../data:coordinate2d",
     "../data:margins",
     "../data:measurement_system",
@@ -306,6 +308,7 @@ js_library("destination_list") {
     "..:native_layer",
     "../data:destination",
     "//ui/webui/resources/js:i18n_behavior",
+    "//ui/webui/resources/js:list_property_update_behavior",
   ]
 }
 

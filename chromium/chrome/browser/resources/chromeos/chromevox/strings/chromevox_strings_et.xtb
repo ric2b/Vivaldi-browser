@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="et">
 <translation id="100812568230599391">Aktiveeri vahelehtedega kuvastiil.</translation>
+<translation id="1011903154582639569">Leidke soovitud klahv ja tõstke sisestamiseks sõrm ekraanilt</translation>
 <translation id="1012173283529841972">Loendiüksus</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1022586497894531524">Kas kasutate esimest korda ChromeVoxi suulist tagasisidet? Selles kiirõpetuses selgitatakse ChromeVoxi kasutamiseks vajalikku põhiteavet.</translation>
@@ -15,6 +16,7 @@
 <translation id="1065552602950927991">Kehtetu sisend</translation>
 <translation id="1080471004309605942">Kursiivi lõpp</translation>
 <translation id="1082209053475788238">Eelmist 6. taseme pealkirja ei ole.</translation>
+<translation id="1087788677726983142">Sündmuste voo filtrite peitmine</translation>
 <translation id="1088219014394087294">Pealkirju ei ole.</translation>
 <translation id="1106741348836243114">Lülitage helitagasiside (helisignaalid) sisse või välja.</translation>
 <translation id="1108651818222110612">tiiter</translation>
@@ -77,6 +79,7 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="1618597272655350600">Esitab praeguse asukoha täpse kirjelduse</translation>
 <translation id="1639634871799530612">{COUNT,plural, =1{suurem kui}other{# märki „suurem kui”}}</translation>
 <translation id="1653266918374749391">Eelmine 3. taseme pealkiri</translation>
+<translation id="1657616855184033958">Sündmuste voo filtrite kuvamine</translation>
 <translation id="1659072772017912254">Märkimata</translation>
 <translation id="1669290819662866522">nädal</translation>
 <translation id="1674262202423278359">ChromeVoxi navigeerimine</translation>
@@ -136,6 +139,7 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="2267945578749931355">Järgmine tärk</translation>
 <translation id="2281234842553884450">Eelmine liugur</translation>
 <translation id="2294136146931447363">Kursiivi algus</translation>
+<translation id="2311237334957139798">Eelmisele tasemele liikumine</translation>
 <translation id="2318372665160196757">Peamine</translation>
 <translation id="2329324941084714723">Vahelehepaneel</translation>
 <translation id="2344193891939537199">Kuupäeva ja kellaaja valimine</translation>
@@ -156,12 +160,14 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="2462626033734746142">Raadionuppude rühm</translation>
 <translation id="2471138580042810658">6. pealkiri</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{tärn}other{# tärni}}</translation>
+<translation id="249330843868392562">Ava kõnesünteesi seaded</translation>
 <translation id="2523609930580546572">ChromeVoxi õpetused</translation>
 <translation id="2525706221823668172">Chromebooki klaviatuuri otseteed</translation>
 <translation id="2549392850788122959"><ph name="KEY" /> on lähtestatud.</translation>
 <translation id="2553108862507765288">grammatical mistake</translation>
 <translation id="257674075312929031">Rühm</translation>
 <translation id="2582407057977008361">Kõrvale</translation>
+<translation id="2592212930811759050">Topeltpuudutage muutmise alustamiseks</translation>
 <translation id="2606210917827248971">koos {COUNT,plural, =1{# üksusega}other{# üksusega}}</translation>
 <translation id="2614981083756825552">Math ML-i paigutus</translation>
 <translation id="2624431853467395961">Õppimisrežiimi avamine</translation>
@@ -409,6 +415,7 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="4255943572433203166">Kohandage ChromeVoxi allolevate valikute abil. Muudatused jõustuvad kohe.</translation>
 <translation id="4271220233568730077">Järgmine valem</translation>
 <translation id="4271521365602459209">Rohkem tulemusi pole.</translation>
+<translation id="4275397969489577657">Sündmuste voo logimise lubamine</translation>
 <translation id="4287520460805643128">Järgmist artiklit pole.</translation>
 <translation id="4289540628985791613">Ülevaade</translation>
 <translation id="4300318234632215983">Esita liURL</translation>
@@ -487,6 +494,7 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="4973762002207131920">Lülituti klahvitabelile <ph name="KEY" />.</translation>
 <translation id="4975416682604111799">millisekundid</translation>
 <translation id="49787999531187221">ChromeVox ei ole enam aktiivne.</translation>
+<translation id="4979263087381759787">Arendaja valikud</translation>
 <translation id="4979404613699303341">Eelmine nupp</translation>
 <translation id="4982773647088557172"><ph name="VALUE" />, <ph name="NAME" />, loendiboks</translation>
 <translation id="4983588134362688868">Saate liikuda lehe algusesse</translation>
@@ -498,6 +506,7 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="5000760171916499057">Vorme ei ole.</translation>
 <translation id="5005670136041063723">Pole rohkem sarnaseid elemente.</translation>
 <translation id="501473567976723023">Jaanuar</translation>
+<translation id="5020651427400641814">Luba kõnelogimine</translation>
 <translation id="5041394372352067729">Braille' kuva lehe ülaserva liigutamine</translation>
 <translation id="5042770794184672516">Suurenda kõne helitugevust</translation>
 <translation id="5050015258024679800">Eelmine 4. taseme pealkiri</translation>
@@ -512,6 +521,7 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="5106547198195128110">See uus väljalase hõlmab põnevaid muudatusi. Uuendused on järgmised.</translation>
 <translation id="5110983769041734144">Eelmist vormivälja ei ole.</translation>
 <translation id="5111640677200759579">Veeru päis</translation>
+<translation id="5115892389597951922">ChromeVoxi logi</translation>
 <translation id="5136967254288895616">Eelmist linki ei ole.</translation>
 <translation id="513774504516943387">lnk</translation>
 <translation id="5158275234811857234">Kaas</translation>
@@ -545,6 +555,7 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="5407530583102765689">{COUNT,plural, =1{semikoolon}other{# semikoolonit}}</translation>
 <translation id="5411891038905756502">Eelmist siirdepunkti ei ole.</translation>
 <translation id="5417034931411865818">Klõpsake marsruutimisklahvi $1 all oleval üksusel</translation>
+<translation id="5435274640623994081">Helisignaali logimise lubamine</translation>
 <translation id="5436105723448703439">{COUNT,plural, =1{vähem kui}other{# märki „vähem kui”}}</translation>
 <translation id="5444587279251314700">(aktiivne)</translation>
 <translation id="5446809554778706307">Fookus puudub. Uue vahekaardi avamiseks vajutage klahve Ctrl + T.</translation>
@@ -678,6 +689,7 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="6540201937398578274">ChromeVoxis kasutatakse muuteklahvina otsinguklahvi. Enamik ChromeVoxi otseteid põhinevad otsinguklahvil. Navigeerimiseks kasutatakse ka nooleklahve.</translation>
 <translation id="6550720799683018100">Muutke praegust klahvitabelit, tehes valiku allolevas loendis.</translation>
 <translation id="6561818612645211875">Mine praeguse rea algusesse</translation>
+<translation id="6583174818554398774">Järgmisele tasemele liikumine</translation>
 <translation id="6587021927234520429">Järgmist 4. taseme pealkirja ei ole.</translation>
 <translation id="6601344353291556895">Paljusõnaliste kirjelduste lubamine.</translation>
 <translation id="6615602925644411249">Lehelt otsimine.</translation>
@@ -753,6 +765,7 @@ Chrome'i brauseri menüü avamiseks vajutage klahvikombinatsiooni Alt + F.</tran
 <translation id="7241683698754534149">Avab pika kirjelduse uuel vahelehel</translation>
 <translation id="7248671827512403053">Rakendus</translation>
 <translation id="725969808843520477">Järgmine raadionupp</translation>
+<translation id="7261612856573623172">Süsteemi kõnesünteesi hääl</translation>
 <translation id="7269119382257320590">Kirjavahemärkideta</translation>
 <translation id="7273174640290488576">Tühi</translation>
 <translation id="7274770952766771364">Märkuse viide</translation>
@@ -893,6 +906,7 @@ Chrome'i brauseri menüü avamiseks vajutage klahvikombinatsiooni Alt + F.</tran
 <translation id="8650576015643545550">Eelmist loendit ei ole.</translation>
 <translation id="8651481478098336970">vaigistab heli</translation>
 <translation id="8653646212587894517">Kuva linkide loend</translation>
+<translation id="8656888282555543604">Braille' logimise lubamine</translation>
 <translation id="8664519043722036194">sekundid</translation>
 <translation id="867187640362843212">5. pealkiri</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{püstkriips}other{# püstkriipsu}}</translation>

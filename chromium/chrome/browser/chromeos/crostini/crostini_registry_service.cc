@@ -4,20 +4,21 @@
 
 #include "chrome/browser/chromeos/crostini/crostini_registry_service.h"
 
-#include <map>
-#include <string>
+#include <utility>
 
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/grit/generated_resources.h"
 #include "chromeos/dbus/vm_applications/apps.pb.h"
 #include "components/crx_file/id_util.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -37,7 +38,6 @@ constexpr char kCrostiniWindowAppIdPrefix[] = "org.chromium.termina.";
 // This comes after kCrostiniWindowAppIdPrefix
 constexpr char kWMClassPrefix[] = "wmclass.";
 
-constexpr char kCrostiniRegistryPref[] = "crostini.registry";
 constexpr char kCrostiniIconFolder[] = "crostini.icons";
 
 // Keys for the Dictionary stored in prefs for each app.
@@ -56,14 +56,20 @@ constexpr char kAppLastLaunchTimeKey[] = "last_launch_time";
 constexpr char kCrostiniAppsInstalledHistogram[] =
     "Crostini.AppsInstalledAtLogin";
 
-// A hard-coded mapping from WMClass to app names.
-// This is used to deal with the Linux apps that don't specify the correct
-// WMClass in their desktop files so that their aura windows can be identified
-// with their respective app IDs.
-const std::map<std::string, std::string> wmclass_to_name = {
-    {"Octave-gui", "GNU Octave"},
-    {"MuseScore2", "MuseScore 2"},
-    {"XnViewMP", "XnView Multi Platform"}};
+const std::string* GetAppNameForWMClass(base::StringPiece wmclass) {
+  // A hard-coded mapping from WMClass to app names.
+  // This is used to deal with the Linux apps that don't specify the correct
+  // WMClass in their desktop files so that their aura windows can be identified
+  // with their respective app IDs.
+  static const std::map<std::string, std::string> kWMClassToNname = {
+      {"Octave-gui", "GNU Octave"},
+      {"MuseScore2", "MuseScore 2"},
+      {"XnViewMP", "XnView Multi Platform"}};
+  const auto it = kWMClassToNname.find(wmclass.as_string());
+  if (it == kWMClassToNname.end())
+    return nullptr;
+  return &it->second;
+}
 
 std::string GenerateAppId(const std::string& desktop_file_id,
                           const std::string& vm_name,
@@ -137,8 +143,8 @@ enum class FindAppIdResult { NoMatch, UniqueMatch, NonUniqueMatch };
 // Looks for an app where prefs_key is set to search_value. Returns the apps id
 // if there was only one app matching, otherwise returns an empty string.
 FindAppIdResult FindAppId(const base::DictionaryValue* prefs,
-                          const base::StringPiece& prefs_key,
-                          const base::StringPiece& search_value,
+                          base::StringPiece prefs_key,
+                          base::StringPiece search_value,
                           std::string* result,
                           bool require_startup_notify = false,
                           bool need_display = false,
@@ -277,7 +283,7 @@ std::string CrostiniRegistryService::Registration::ContainerName() const {
 
 std::string CrostiniRegistryService::Registration::Name() const {
   if (is_terminal_app_)
-    return kCrostiniTerminalAppName;
+    return l10n_util::GetStringUTF8(IDS_CROSTINI_TERMINAL_APP_NAME);
   return LocalizedString(kAppNameKey);
 }
 
@@ -369,7 +375,7 @@ std::string CrostiniRegistryService::GetCrostiniShelfAppId(
     const std::string* window_app_id,
     const std::string* window_startup_id) {
   const base::DictionaryValue* apps =
-      prefs_->GetDictionary(kCrostiniRegistryPref);
+      prefs_->GetDictionary(prefs::kCrostiniRegistry);
   std::string app_id;
 
   if (window_startup_id) {
@@ -391,8 +397,9 @@ std::string CrostiniRegistryService::GetCrostiniShelfAppId(
   if (!base::StartsWith(*window_app_id, kCrostiniWindowAppIdPrefix,
                         base::CompareCase::SENSITIVE)) {
     if (FindAppId(apps, kAppDesktopFileIdKey, *window_app_id, &app_id) ==
-        FindAppIdResult::UniqueMatch)
+        FindAppIdResult::UniqueMatch) {
       return app_id;
+    }
     return kCrostiniAppIdPrefix + *window_app_id;
   }
 
@@ -414,21 +421,24 @@ std::string CrostiniRegistryService::GetCrostiniShelfAppId(
     return kCrostiniAppIdPrefix + *window_app_id;
 
   if (FindAppId(apps, kAppDesktopFileIdKey, key, &app_id) ==
-      FindAppIdResult::UniqueMatch)
+      FindAppIdResult::UniqueMatch) {
     return app_id;
+  }
 
   if (FindAppId(apps, kAppNameKey, key, &app_id,
                 false /* require_startup_notification */,
                 true /* need_display */,
-                true /* ignore_space */) == FindAppIdResult::UniqueMatch)
+                true /* ignore_space */) == FindAppIdResult::UniqueMatch) {
     return app_id;
+  }
 
-  auto it = wmclass_to_name.find(key.as_string());
-  if (it != wmclass_to_name.end() &&
-      FindAppId(apps, kAppNameKey, it->second, &app_id,
+  const std::string* app_name = GetAppNameForWMClass(key);
+  if (app_name &&
+      FindAppId(apps, kAppNameKey, *app_name, &app_id,
                 false /* require_startup_notification */,
-                true /* need_display */) == FindAppIdResult::UniqueMatch)
+                true /* need_display */) == FindAppIdResult::UniqueMatch) {
     return app_id;
+  }
 
   return kCrostiniAppIdPrefix + *window_app_id;
 }
@@ -436,20 +446,21 @@ std::string CrostiniRegistryService::GetCrostiniShelfAppId(
 bool CrostiniRegistryService::IsCrostiniShelfAppId(
     const std::string& shelf_app_id) {
   if (base::StartsWith(shelf_app_id, kCrostiniAppIdPrefix,
-                       base::CompareCase::SENSITIVE))
+                       base::CompareCase::SENSITIVE)) {
     return true;
+  }
   if (shelf_app_id == kCrostiniTerminalId)
     return true;
   // TODO(timloh): We need to handle desktop files that have been removed.
   // For example, running windows with a no-longer-valid app id will try to
   // use the ExtensionContextMenuModel.
-  return prefs_->GetDictionary(kCrostiniRegistryPref)->FindKey(shelf_app_id) !=
-         nullptr;
+  return prefs_->GetDictionary(prefs::kCrostiniRegistry)
+             ->FindKey(shelf_app_id) != nullptr;
 }
 
 std::vector<std::string> CrostiniRegistryService::GetRegisteredAppIds() const {
   const base::DictionaryValue* apps =
-      prefs_->GetDictionary(kCrostiniRegistryPref);
+      prefs_->GetDictionary(prefs::kCrostiniRegistry);
   std::vector<std::string> result;
   for (const auto& item : apps->DictItems())
     result.push_back(item.first);
@@ -461,7 +472,7 @@ std::vector<std::string> CrostiniRegistryService::GetRegisteredAppIds() const {
 base::Optional<CrostiniRegistryService::Registration>
 CrostiniRegistryService::GetRegistration(const std::string& app_id) const {
   const base::DictionaryValue* apps =
-      prefs_->GetDictionary(kCrostiniRegistryPref);
+      prefs_->GetDictionary(prefs::kCrostiniRegistry);
   const base::Value* pref_registration =
       apps->FindKeyOfType(app_id, base::Value::Type::DICTIONARY);
 
@@ -475,11 +486,9 @@ CrostiniRegistryService::GetRegistration(const std::string& app_id) const {
 
 void CrostiniRegistryService::RecordStartupMetrics() {
   const base::DictionaryValue* apps =
-      prefs_->GetDictionary(kCrostiniRegistryPref);
+      prefs_->GetDictionary(prefs::kCrostiniRegistry);
 
   if (!IsCrostiniEnabled(profile_))
-    return;
-  if (!IsCrostiniUIAllowedForProfile(profile_))
     return;
 
   size_t num_apps = 0;
@@ -558,7 +567,7 @@ void CrostiniRegistryService::ClearApplicationList(
   std::vector<std::string> removed_apps;
   // The DictionaryPrefUpdate should be destructed before calling the observer.
   {
-    DictionaryPrefUpdate update(prefs_, kCrostiniRegistryPref);
+    DictionaryPrefUpdate update(prefs_, prefs::kCrostiniRegistry);
     base::DictionaryValue* apps = update.Get();
 
     for (const auto& item : apps->DictItems()) {
@@ -605,7 +614,7 @@ void CrostiniRegistryService::UpdateApplicationList(
 
   // The DictionaryPrefUpdate should be destructed before calling the observer.
   {
-    DictionaryPrefUpdate update(prefs_, kCrostiniRegistryPref);
+    DictionaryPrefUpdate update(prefs_, prefs::kCrostiniRegistry);
     base::DictionaryValue* apps = update.Get();
     for (const App& app : app_list.apps()) {
       if (app.desktop_file_id().empty()) {
@@ -712,7 +721,7 @@ void CrostiniRegistryService::RemoveAppData(const std::string& app_id) {
 
   // Remove local data on filesystem for the icons.
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&DeleteIconFolderFromFileThread, GetAppPath(app_id)));
 }
 
@@ -725,7 +734,7 @@ void CrostiniRegistryService::RemoveObserver(Observer* observer) {
 }
 
 void CrostiniRegistryService::AppLaunched(const std::string& app_id) {
-  DictionaryPrefUpdate update(prefs_, kCrostiniRegistryPref);
+  DictionaryPrefUpdate update(prefs_, prefs::kCrostiniRegistry);
   base::DictionaryValue* apps = update.Get();
 
   base::Value* app = apps->FindKey(app_id);
@@ -745,12 +754,6 @@ void CrostiniRegistryService::SetCurrentTime(base::Value* dictionary,
   DCHECK(dictionary);
   int64_t time = clock_->Now().ToDeltaSinceWindowsEpoch().InMicroseconds();
   dictionary->SetKey(key, base::Value(base::Int64ToString(time)));
-}
-
-// static
-void CrostiniRegistryService::RegisterProfilePrefs(
-    PrefRegistrySimple* registry) {
-  registry->RegisterDictionaryPref(kCrostiniRegistryPref);
 }
 
 void CrostiniRegistryService::RequestIcon(const std::string& app_id,
@@ -796,10 +799,11 @@ void CrostiniRegistryService::RequestIcon(const std::string& app_id,
                      weak_ptr_factory_.GetWeakPtr(), app_id, scale_factor));
 }
 
-void CrostiniRegistryService::OnContainerAppIcon(const std::string& app_id,
-                                                 ui::ScaleFactor scale_factor,
-                                                 ConciergeClientResult result,
-                                                 std::vector<Icon>& icons) {
+void CrostiniRegistryService::OnContainerAppIcon(
+    const std::string& app_id,
+    ui::ScaleFactor scale_factor,
+    ConciergeClientResult result,
+    const std::vector<Icon>& icons) {
   if (result != ConciergeClientResult::SUCCESS) {
     // Add this to the list of retryable icon requests so we redo this when
     // we get feedback from the container that it's available.
@@ -811,7 +815,7 @@ void CrostiniRegistryService::OnContainerAppIcon(const std::string& app_id,
   // Now install the icon that we received.
   const base::FilePath icon_path = GetIconPath(app_id, scale_factor);
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&InstallIconFromFileThread, icon_path, icons[0].content),
       base::BindOnce(&CrostiniRegistryService::OnIconInstalled,
                      weak_ptr_factory_.GetWeakPtr(), app_id, scale_factor));

@@ -76,18 +76,15 @@ std::string GetNigoriName(const Nigori& nigori) {
 // Returns a set of KeyParams for the cryptographer. Each input 'n' value
 // results in a different set of parameters.
 KeyParams GetNthKeyParams(int n) {
-  KeyParams params;
-  params.hostname = std::string("localhost");
-  params.username = std::string("userX");
-  params.password = base::StringPrintf("pw%02d", n);
-  return params;
+  return {KeyDerivationParams::CreateForPbkdf2("localhost", "userX"),
+          base::StringPrintf("pw%02d", n)};
 }
 
 // Modifies the input/output parameter |specifics| by encrypting it with
 // a Nigori intialized with the specified KeyParams.
 void EncryptUpdate(const KeyParams& params, EntitySpecifics* specifics) {
   Nigori nigori;
-  nigori.InitByDerivation(params.hostname, params.username, params.password);
+  nigori.InitByDerivation(params.derivation_params, params.password);
 
   EntitySpecifics original_specifics = *specifics;
   std::string plaintext;
@@ -242,8 +239,7 @@ class ModelTypeWorkerTest : public ::testing::Test {
     for (int i = 0; i <= foreign_encryption_key_index_; ++i) {
       Nigori nigori;
       KeyParams params = GetNthKeyParams(i);
-      nigori.InitByDerivation(params.hostname, params.username,
-                              params.password);
+      nigori.InitByDerivation(params.derivation_params, params.password);
 
       sync_pb::NigoriKey* key = bag.add_key();
 
@@ -255,8 +251,7 @@ class ModelTypeWorkerTest : public ::testing::Test {
     // Re-create the last nigori from that loop.
     Nigori last_nigori;
     KeyParams params = GetNthKeyParams(foreign_encryption_key_index_);
-    last_nigori.InitByDerivation(params.hostname, params.username,
-                                 params.password);
+    last_nigori.InitByDerivation(params.derivation_params, params.password);
 
     // Serialize and encrypt the bag with the last nigori.
     std::string serialized_bag;
@@ -493,7 +488,7 @@ class ModelTypeWorkerTest : public ::testing::Test {
 
   bool is_processor_disconnected_;
 
-  base::ObserverList<TypeDebugInfoObserver> type_observers_;
+  base::ObserverList<TypeDebugInfoObserver>::Unchecked type_observers_;
 
   std::unique_ptr<NonBlockingTypeDebugInfoEmitter> emitter_;
 
@@ -1249,8 +1244,8 @@ void GetLocalChangesRequestTest::ScheduleBlockingWait(
     scoped_refptr<GetLocalChangesRequest> request) {
   blocking_thread_.task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&GetLocalChangesRequestTest::BlockingWaitForResponse,
-                 base::Unretained(this), request));
+      base::BindOnce(&GetLocalChangesRequestTest::BlockingWaitForResponse,
+                     base::Unretained(this), request));
 }
 
 // Tests that request doesn't block when cancelation signal is already signaled.

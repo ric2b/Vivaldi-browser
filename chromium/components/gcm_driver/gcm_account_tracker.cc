@@ -98,8 +98,9 @@ void GCMAccountTracker::ScheduleReportTokens() {
 
   reporting_weak_ptr_factory_.InvalidateWeakPtrs();
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&GCMAccountTracker::ReportTokens,
-                            reporting_weak_ptr_factory_.GetWeakPtr()),
+      FROM_HERE,
+      base::BindOnce(&GCMAccountTracker::ReportTokens,
+                     reporting_weak_ptr_factory_.GetWeakPtr()),
       GetTimeToNextTokenReporting());
 }
 
@@ -306,7 +307,8 @@ void GCMAccountTracker::GetToken(AccountInfos::iterator& account_iter) {
           account_iter->first, kGCMAccountTrackerName, scopes,
           base::BindOnce(
               &GCMAccountTracker::OnAccessTokenFetchCompleteForAccount,
-              base::Unretained(this), account_iter->first));
+              base::Unretained(this), account_iter->first),
+          identity::AccessTokenFetcher::Mode::kImmediate);
 
   DCHECK(pending_token_requests_.count(account_iter->first) == 0);
   pending_token_requests_.emplace(account_iter->first,

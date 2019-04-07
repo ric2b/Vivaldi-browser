@@ -95,6 +95,7 @@
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/fullscreen_controller.h"
 #include "third_party/blink/renderer/core/frame/link_highlights.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -132,28 +133,22 @@
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/frame_tree.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/core/page/page_overlay.h"
 #include "third_party/blink/renderer/core/page/page_popup_client.h"
 #include "third_party/blink/renderer/core/page/pointer_lock_controller.h"
 #include "third_party/blink/renderer/core/page/scrolling/top_document_root_scroller_controller.h"
-#include "third_party/blink/renderer/core/page/touch_disambiguation.h"
-#include "third_party/blink/renderer/core/page/validation_message_client_impl.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/first_meaningful_paint_detector.h"
-#include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 #include "third_party/blink/renderer/platform/animation/compositor_animation_host.h"
 #include "third_party/blink/renderer/platform/cursor.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
-#include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_mutator_client.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_mutator_impl.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
-#include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/image-decoders/image_decoder.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
@@ -163,7 +158,6 @@
 #include "third_party/blink/renderer/platform/scheduler/public/page_lifecycle_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
-#include "third_party/blink/renderer/platform/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
 
@@ -186,7 +180,6 @@ static const float doubleTapZoomContentMinimumMargin = 2;
 static const double doubleTapZoomAnimationDurationInSeconds = 0.25;
 static const float doubleTapZoomAlreadyLegibleRatio = 1.2f;
 
-static const double multipleTargetsZoomAnimationDurationInSeconds = 0.25;
 static const double findInPageAnimationDurationInSeconds = 0;
 
 // Constants for viewport anchoring on resize.
@@ -259,26 +252,6 @@ class EmptyEventListener final : public EventListener {
   EmptyEventListener() : EventListener(kCPPEventListenerType) {}
 
   void handleEvent(ExecutionContext* execution_context, Event*) override {}
-};
-
-class ColorOverlay final : public PageOverlay::Delegate {
- public:
-  explicit ColorOverlay(SkColor color) : color_(color) {}
-
- private:
-  void PaintPageOverlay(const PageOverlay& page_overlay,
-                        GraphicsContext& graphics_context,
-                        const IntSize& size) const override {
-    if (DrawingRecorder::UseCachedDrawingIfPossible(
-            graphics_context, page_overlay, DisplayItem::kPageOverlay))
-      return;
-    FloatRect rect(0, 0, size.Width(), size.Height());
-    DrawingRecorder recorder(graphics_context, page_overlay,
-                             DisplayItem::kPageOverlay);
-    graphics_context.FillRect(rect, color_);
-  }
-
-  SkColor color_;
 };
 
 }  // namespace
@@ -368,7 +341,6 @@ WebViewImpl::WebViewImpl(WebViewClient* client,
   page_ =
       Page::CreateOrdinary(page_clients, opener ? opener->GetPage() : nullptr);
   CoreInitializer::GetInstance().ProvideModulesToPage(*page_, client_);
-  page_->SetValidationMessageClient(ValidationMessageClientImpl::Create(*this));
   SetVisibilityState(visibility_state, true);
 
   InitializeLayerTreeView();
@@ -383,10 +355,6 @@ WebViewImpl::WebViewImpl(WebViewClient* client,
 
 WebViewImpl::~WebViewImpl() {
   DCHECK(!page_);
-}
-
-ValidationMessageClient* WebViewImpl::GetValidationMessageClient() const {
-  return page_ ? &page_->GetValidationMessageClient() : nullptr;
 }
 
 WebDevToolsAgentImpl* WebViewImpl::MainFrameDevToolsAgentImpl() {
@@ -609,54 +577,6 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
 
   switch (event.GetType()) {
     case WebInputEvent::kGestureTap: {
-      // Don't trigger a disambiguation popup on sites designed for mobile
-      // devices.  Instead, assume that the page has been designed with big
-      // enough buttons and links.  Don't trigger a disambiguation popup when
-      // screencasting, since it's implemented outside of compositor pipeline
-      // and is not being screencasted itself. This leads to bad user
-      // experience.
-      WebDevToolsAgentImpl* dev_tools = MainFrameDevToolsAgentImpl();
-      VisualViewport& visual_viewport = GetPage()->GetVisualViewport();
-      bool screencast_enabled = dev_tools && dev_tools->ScreencastEnabled();
-      if (event.data.tap.width > 0 &&
-          !visual_viewport.ShouldDisableDesktopWorkarounds() &&
-          !screencast_enabled) {
-        IntRect bounding_box(visual_viewport.ViewportToRootFrame(
-            IntRect(event.PositionInWidget().x - event.data.tap.width / 2,
-                    event.PositionInWidget().y - event.data.tap.height / 2,
-                    event.data.tap.width, event.data.tap.height)));
-
-        // TODO(bokan): We shouldn't pass details of the VisualViewport offset
-        // to render_view_impl.  crbug.com/459591
-        WebSize visual_viewport_offset =
-            FlooredIntSize(visual_viewport.GetScrollOffset());
-
-        if (web_settings_->MultiTargetTapNotificationEnabled()) {
-          Vector<IntRect> good_targets;
-          HeapVector<Member<Node>> highlight_nodes;
-          FindGoodTouchTargets(bounding_box, MainFrameImpl()->GetFrame(),
-                               good_targets, highlight_nodes);
-          // FIXME: replace touch adjustment code when numberOfGoodTargets == 1?
-          // Single candidate case is currently handled by:
-          // https://bugs.webkit.org/show_bug.cgi?id=85101
-          if (good_targets.size() >= 2 && client_ &&
-              client_->DidTapMultipleTargets(visual_viewport_offset,
-                                             bounding_box, good_targets)) {
-            // Stash the position of the node that would've been used absent
-            // disambiguation, for UMA purposes.
-            last_tap_disambiguation_best_candidate_position_ =
-                RoundedIntPoint(targeted_event.GetHitTestLocation().Point()) -
-                RoundedIntSize(targeted_event.GetHitTestResult().LocalPoint());
-
-            EnableTapHighlights(highlight_nodes);
-            GetPage()->GetLinkHighlights().StartHighlightAnimationIfNeeded();
-            event_result = WebInputEventResult::kHandledSystem;
-            event_cancelled = true;
-            break;
-          }
-        }
-      }
-
       {
         ContextMenuAllowedScope scope;
         event_result =
@@ -727,58 +647,6 @@ WebInputEventResult WebViewImpl::HandleGestureEvent(
   }
   WidgetClient()->DidHandleGestureEvent(event, event_cancelled);
   return event_result;
-}
-
-namespace {
-// This enum is used to back a histogram, and should therefore be treated as
-// append-only.
-enum TapDisambiguationResult {
-  kUmaTapDisambiguationOther = 0,
-  kUmaTapDisambiguationBackButton = 1,
-  kUmaTapDisambiguationTappedOutside = 2,
-  kUmaTapDisambiguationTappedInsideDeprecated = 3,
-  kUmaTapDisambiguationTappedInsideSameNode = 4,
-  kUmaTapDisambiguationTappedInsideDifferentNode = 5,
-  kUmaTapDisambiguationCount = 6,
-};
-
-void RecordTapDisambiguation(TapDisambiguationResult result) {
-  UMA_HISTOGRAM_ENUMERATION("Touchscreen.TapDisambiguation", result,
-                            kUmaTapDisambiguationCount);
-}
-
-}  // namespace
-
-void WebViewImpl::ResolveTapDisambiguation(base::TimeTicks timestamp,
-                                           WebPoint tap_viewport_offset,
-                                           bool is_long_press) {
-  WebGestureEvent event(is_long_press ? WebInputEvent::kGestureLongPress
-                                      : WebInputEvent::kGestureTap,
-                        WebInputEvent::kNoModifiers, timestamp,
-                        blink::kWebGestureDeviceTouchscreen);
-
-  event.SetPositionInWidget(FloatPoint(tap_viewport_offset));
-
-  {
-    // Compute UMA stat about whether the node selected by disambiguation UI was
-    // different from the one preferred by the regular hit-testing + adjustment
-    // logic.
-    WebGestureEvent scaled_event =
-        TransformWebGestureEvent(MainFrameImpl()->GetFrameView(), event);
-    GestureEventWithHitTestResults targeted_event =
-        page_->DeprecatedLocalMainFrame()->GetEventHandler().TargetGestureEvent(
-            scaled_event);
-    WebPoint node_position =
-        RoundedIntPoint(targeted_event.GetHitTestLocation().Point()) -
-        RoundedIntSize(targeted_event.GetHitTestResult().LocalPoint());
-    TapDisambiguationResult result =
-        (node_position == last_tap_disambiguation_best_candidate_position_)
-            ? kUmaTapDisambiguationTappedInsideSameNode
-            : kUmaTapDisambiguationTappedInsideDifferentNode;
-    RecordTapDisambiguation(result);
-  }
-
-  HandleGestureEvent(event);
 }
 
 bool WebViewImpl::StartPageScaleAnimation(const IntPoint& target_position,
@@ -1323,26 +1191,6 @@ void WebViewImpl::ZoomToFindInPageRect(const WebRect& rect_in_root_frame) {
                           findInPageAnimationDurationInSeconds);
 }
 
-bool WebViewImpl::ZoomToMultipleTargetsRect(const WebRect& rect_in_root_frame) {
-  // TODO(lukasza): https://crbug.com/734209: Add OOPIF support.
-  if (!MainFrameImpl())
-    return false;
-
-  float scale;
-  WebPoint scroll;
-
-  ComputeScaleAndScrollForBlockRect(
-      WebPoint(rect_in_root_frame.x, rect_in_root_frame.y), rect_in_root_frame,
-      nonUserInitiatedPointPadding, MinimumPageScaleFactor(), scale, scroll);
-
-  if (scale <= PageScaleFactor())
-    return false;
-
-  StartPageScaleAnimation(scroll, false, scale,
-                          multipleTargetsZoomAnimationDurationInSeconds);
-  return true;
-}
-
 #if !defined(OS_MACOSX)
 // Mac has no way to open a context menu based on a keyboard event.
 WebInputEventResult WebViewImpl::SendContextMenuEvent() {
@@ -1715,8 +1563,6 @@ void WebViewImpl::BeginFrame(base::TimeTicks last_frame_time) {
   DocumentLifecycle::AllowThrottlingScope throttling_scope(
       MainFrameImpl()->GetFrame()->GetDocument()->Lifecycle());
   PageWidgetDelegate::Animate(*page_, last_frame_time);
-  if (auto* client = GetValidationMessageClient())
-    client->LayoutOverlay();
 }
 
 void WebViewImpl::UpdateLifecycle(LifecycleUpdate requested_update) {
@@ -1729,22 +1575,13 @@ void WebViewImpl::UpdateLifecycle(LifecycleUpdate requested_update) {
 
   PageWidgetDelegate::UpdateLifecycle(*page_, *MainFrameImpl()->GetFrame(),
                                       requested_update);
+  if (requested_update == LifecycleUpdate::kLayout)
+    return;
+
   UpdateLayerTreeBackgroundColor();
 
   if (requested_update == LifecycleUpdate::kPrePaint)
     return;
-
-  if (auto* client = GetValidationMessageClient())
-    client->PaintOverlay();
-  if (WebDevToolsAgentImpl* devtools = MainFrameDevToolsAgentImpl())
-    devtools->PaintOverlay();
-  if (page_color_overlay_)
-    page_color_overlay_->GetGraphicsLayer()->Paint(nullptr);
-
-  // TODO(chrishtr): link highlights don't currently paint themselves, it's
-  // still driven by cc.  Fix this.
-  // TODO(pdr): Move this to LocalFrameView::UpdateLifecyclePhasesInternal.
-  GetPage()->GetLinkHighlights().UpdateGeometry();
 
   if (LocalFrameView* view = MainFrameImpl()->GetFrameView()) {
     LocalFrame* frame = MainFrameImpl()->GetFrame();
@@ -1920,6 +1757,11 @@ WebInputEventResult WebViewImpl::HandleInputEvent(
       interactive_detector->OnInvalidatingInputEvent(input_event.TimeStamp());
     }
   }
+
+  // Skip the pointerrawmove for mouse capture case.
+  if (mouse_capture_node_ &&
+      input_event.GetType() == WebInputEvent::kPointerRawMove)
+    return WebInputEventResult::kHandledSystem;
 
   if (mouse_capture_node_ &&
       WebInputEvent::IsMouseEventType(input_event.GetType())) {
@@ -2590,7 +2432,7 @@ void WebViewImpl::DisableAutoResizeMode() {
 }
 
 void WebViewImpl::SetDefaultPageScaleLimits(float min_scale, float max_scale) {
-  return GetPage()->SetDefaultPageScaleLimits(min_scale, max_scale);
+  GetPage()->SetDefaultPageScaleLimits(min_scale, max_scale);
 }
 
 void WebViewImpl::SetInitialPageScaleOverride(
@@ -2637,29 +2479,17 @@ PageScaleConstraintsSet& WebViewImpl::GetPageScaleConstraintsSet() const {
   return GetPage()->GetPageScaleConstraintsSet();
 }
 
-void WebViewImpl::RefreshPageScaleFactorAfterLayout() {
+void WebViewImpl::RefreshPageScaleFactor() {
   if (!MainFrame() || !GetPage() || !GetPage()->MainFrame() ||
       !GetPage()->MainFrame()->IsLocalFrame() ||
       !GetPage()->DeprecatedLocalMainFrame()->View())
     return;
-  LocalFrameView* view = GetPage()->DeprecatedLocalMainFrame()->View();
-
   UpdatePageDefinedViewportConstraints(MainFrameImpl()
                                            ->GetFrame()
                                            ->GetDocument()
                                            ->GetViewportData()
                                            .GetViewportDescription());
   GetPageScaleConstraintsSet().ComputeFinalConstraints();
-
-  int vertical_scrollbar_width = 0;
-  if (view->LayoutViewport()->VerticalScrollbar() &&
-      !view->LayoutViewport()->VerticalScrollbar()->IsOverlayScrollbar()) {
-    vertical_scrollbar_width =
-        view->LayoutViewport()->VerticalScrollbar()->Width();
-  }
-  GetPageScaleConstraintsSet().AdjustFinalConstraintsToContentsSize(
-      ContentsSize(), vertical_scrollbar_width,
-      GetSettings()->ShrinksViewportContentToFit());
 
   float new_page_scale_factor = PageScaleFactor();
   if (GetPageScaleConstraintsSet().NeedsReset() &&
@@ -2793,19 +2623,16 @@ IntSize WebViewImpl::ContentsSize() const {
 }
 
 WebSize WebViewImpl::ContentsPreferredMinimumSize() {
-  if (MainFrameImpl()) {
-    MainFrameImpl()
-        ->GetFrame()
-        ->View()
-        ->UpdateLifecycleToCompositingCleanPlusScrolling();
-  }
-
   Document* document = page_->MainFrame()->IsLocalFrame()
                            ? page_->DeprecatedLocalMainFrame()->GetDocument()
                            : nullptr;
   if (!document || !document->GetLayoutView() || !document->documentElement() ||
       !document->documentElement()->GetLayoutBox())
     return WebSize();
+
+  // The preferred size requires an up-to-date layout tree.
+  DCHECK(!document->NeedsLayoutTreeUpdate() &&
+         !document->View()->NeedsLayout());
 
   // Needed for computing MinPreferredWidth.
   FontCachePurgePreventer fontCachePurgePreventer;
@@ -3124,12 +2951,6 @@ void WebViewImpl::DidCommitLoad(bool is_new_navigation,
 
   // Give the visual viewport's scroll layer its initial size.
   GetPage()->GetVisualViewport().MainFrameDidChangeSize();
-
-  // Make sure link highlight from previous page is cleared.
-  // TODO(pdr): Move this to Page::DidCommitLoad.
-  GetPage()->GetLinkHighlights().ResetForPageNavigation();
-  if (!MainFrameImpl())
-    return;
 }
 
 void WebViewImpl::ResizeAfterLayout() {
@@ -3153,25 +2974,35 @@ void WebViewImpl::ResizeAfterLayout() {
   }
 
   if (GetPageScaleConstraintsSet().ConstraintsDirty())
-    RefreshPageScaleFactorAfterLayout();
+    RefreshPageScaleFactor();
 
   resize_viewport_anchor_->ResizeFrameView(MainFrameSize());
 }
 
-void WebViewImpl::LayoutUpdated() {
+void WebViewImpl::MainFrameLayoutUpdated() {
   DCHECK(MainFrameImpl());
   if (!client_)
     return;
 
-  UpdatePageOverlays();
-
-  fullscreen_controller_->DidUpdateLayout();
-  client_->DidUpdateLayout();
+  fullscreen_controller_->DidUpdateMainFrameLayout();
+  client_->DidUpdateMainFrameLayout();
 }
 
 void WebViewImpl::DidChangeContentsSize() {
-  GetPageScaleConstraintsSet().DidChangeContentsSize(ContentsSize(),
-                                                     PageScaleFactor());
+  if (!GetPage()->MainFrame()->IsLocalFrame())
+    return;
+
+  LocalFrameView* view = ToLocalFrame(GetPage()->MainFrame())->View();
+
+  int vertical_scrollbar_width = 0;
+  if (view && view->LayoutViewport()) {
+    Scrollbar* vertical_scrollbar = view->LayoutViewport()->VerticalScrollbar();
+    if (vertical_scrollbar && !vertical_scrollbar->IsOverlayScrollbar())
+      vertical_scrollbar_width = vertical_scrollbar->Width();
+  }
+
+  GetPageScaleConstraintsSet().DidChangeContentsSize(
+      ContentsSize(), vertical_scrollbar_width, PageScaleFactor());
 }
 
 void WebViewImpl::PageScaleFactorChanged() {
@@ -3202,21 +3033,7 @@ void WebViewImpl::SetZoomFactorOverride(float zoom_factor) {
 }
 
 void WebViewImpl::SetPageOverlayColor(SkColor color) {
-  if (page_color_overlay_)
-    page_color_overlay_.reset();
-
-  if (color == Color::kTransparent)
-    return;
-
-  page_color_overlay_ = PageOverlay::Create(
-      MainFrameImpl(), std::make_unique<ColorOverlay>(color));
-
-  // Run compositing update before calling updatePageOverlays.
-  MainFrameImpl()
-      ->GetFrameView()
-      ->UpdateLifecycleToCompositingCleanPlusScrolling();
-
-  UpdatePageOverlays();
+  page_->SetPageOverlayColor(color);
 }
 
 WebPageImportanceSignals* WebViewImpl::PageImportanceSignals() {
@@ -3315,8 +3132,8 @@ void WebViewImpl::RegisterViewportLayersWithCompositor() {
   VisualViewport& visual_viewport = GetPage()->GetVisualViewport();
 
   WebLayerTreeView::ViewportLayers viewport_layers;
-  viewport_layers.overscroll_elasticity =
-      visual_viewport.OverscrollElasticityLayer()->CcLayer();
+  viewport_layers.overscroll_elasticity_element_id =
+      visual_viewport.GetCompositorOverscrollElasticityElementId();
   viewport_layers.page_scale = visual_viewport.PageScaleLayer()->CcLayer();
   viewport_layers.inner_viewport_container =
       visual_viewport.ContainerLayer()->CcLayer();
@@ -3558,15 +3375,6 @@ base::WeakPtr<CompositorMutatorImpl> WebViewImpl::EnsureCompositorMutator(
   DCHECK(mutator_task_runner_);
   *mutator_task_runner = mutator_task_runner_;
   return mutator_;
-}
-
-void WebViewImpl::UpdatePageOverlays() {
-  if (page_color_overlay_)
-    page_color_overlay_->Update();
-  if (auto* client = GetValidationMessageClient())
-    client->LayoutOverlay();
-  if (WebDevToolsAgentImpl* devtools = MainFrameDevToolsAgentImpl())
-    devtools->LayoutOverlay();
 }
 
 float WebViewImpl::DeviceScaleFactor() const {

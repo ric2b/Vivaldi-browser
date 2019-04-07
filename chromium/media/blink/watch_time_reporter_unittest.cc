@@ -236,14 +236,14 @@ class WatchTimeReporterTest
         mojom::VideoDecodeStatsRecorderRequest request) override {
       FAIL();
     }
-    void Initialize(bool is_mse,
-                    bool is_top_frame,
-                    const url::Origin& untrusted_top_origin) override {}
+    void Initialize(bool is_mse, mojom::MediaURLScheme url_scheme) override {}
     void OnError(PipelineStatus status) override {}
     void SetIsEME() override {}
     void SetTimeToMetadata(base::TimeDelta elapsed) override {}
     void SetTimeToFirstFrame(base::TimeDelta elapsed) override {}
     void SetTimeToPlayReady(base::TimeDelta elapsed) override {}
+    void SetContainerName(
+        container_names::MediaContainerName container_name) override {}
 
    private:
     WatchTimeReporterTest* parent_;

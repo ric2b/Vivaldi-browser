@@ -58,6 +58,7 @@
 #include "media/video/fake_video_encode_accelerator.h"
 #include "media/video/h264_parser.h"
 #include "media/video/video_encode_accelerator.h"
+#include "mojo/core/embedder/embedder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(USE_VAAPI)
@@ -1477,10 +1478,7 @@ VEAClient::VEAClient(TestStream* test_stream,
 
 // Helper function to create VEA.
 static std::unique_ptr<VideoEncodeAccelerator> CreateVideoEncodeAccelerator(
-    VideoPixelFormat input_format,
-    const gfx::Size& input_visible_size,
-    VideoCodecProfile output_profile,
-    uint32_t initial_bitrate,
+    const VideoEncodeAccelerator::Config& config,
     VideoEncodeAccelerator::Client* client,
     const gpu::GpuPreferences& gpu_preferences) {
   if (g_fake_encoder) {
@@ -1488,14 +1486,14 @@ static std::unique_ptr<VideoEncodeAccelerator> CreateVideoEncodeAccelerator(
         new FakeVideoEncodeAccelerator(
             scoped_refptr<base::SingleThreadTaskRunner>(
                 base::ThreadTaskRunnerHandle::Get())));
-    if (encoder->Initialize(input_format, input_visible_size, output_profile,
-                            initial_bitrate, client))
+    if (encoder->Initialize(config, client))
       return encoder;
     return nullptr;
   } else {
-    return GpuVideoEncodeAcceleratorFactory::CreateVEA(
-        input_format, input_visible_size, output_profile, initial_bitrate,
-        client, gpu_preferences);
+    // TODO(johnylin): add level testing in video_encode_accelerator_unittest
+    //                 crbug.com/863327
+    return GpuVideoEncodeAcceleratorFactory::CreateVEA(config, client,
+                                                       gpu_preferences);
   }
 }
 
@@ -1505,9 +1503,10 @@ void VEAClient::CreateEncoder() {
   DVLOG(1) << "Profile: " << test_stream_->requested_profile
            << ", initial bitrate: " << requested_bitrate_;
 
-  encoder_ = CreateVideoEncodeAccelerator(
+  const VideoEncodeAccelerator::Config config(
       kInputFormat, test_stream_->visible_size, test_stream_->requested_profile,
-      requested_bitrate_, this, gpu::GpuPreferences());
+      requested_bitrate_, requested_framerate_);
+  encoder_ = CreateVideoEncodeAccelerator(config, this, gpu::GpuPreferences());
   if (!encoder_) {
     LOG(ERROR) << "Failed creating a VideoEncodeAccelerator.";
     SetState(CS_ERROR);
@@ -1688,7 +1687,7 @@ void VEAClient::BitstreamBufferReady(
 
     if (quality_validator_) {
       scoped_refptr<DecoderBuffer> buffer(DecoderBuffer::CopyFrom(
-          reinterpret_cast<const uint8_t*>(shm->memory()),
+          static_cast<const uint8_t*>(shm->memory()),
           static_cast<int>(metadata.payload_size_bytes)));
       quality_validator_->AddDecodeBuffer(buffer);
     }
@@ -2125,9 +2124,10 @@ void SimpleVEAClientBase::CreateEncoder() {
   LOG_ASSERT(g_env->test_streams_.size());
 
   gfx::Size visible_size(width_, height_);
-  encoder_ = CreateVideoEncodeAccelerator(
+  const VideoEncodeAccelerator::Config config(
       kInputFormat, visible_size, g_env->test_streams_[0]->requested_profile,
-      bitrate_, this, gpu::GpuPreferences());
+      bitrate_, fps_);
+  encoder_ = CreateVideoEncodeAccelerator(config, this, gpu::GpuPreferences());
   if (!encoder_) {
     LOG(ERROR) << "Failed creating a VideoEncodeAccelerator.";
     SetState(CS_ERROR);
@@ -2585,6 +2585,7 @@ class VEATestSuite : public base::TestSuite {
 }  // namespace media
 
 int main(int argc, char** argv) {
+  mojo::core::Init();
   media::VEATestSuite test_suite(argc, argv);
 
   base::ShadowingAtExitManager at_exit_manager;

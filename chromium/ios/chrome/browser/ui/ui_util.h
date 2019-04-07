@@ -42,6 +42,10 @@ bool IsIPhoneX();
 // Returns whether the UI Refresh Infobar will be used.
 bool IsRefreshInfobarEnabled();
 
+// Returns whether the flag is enabled for switching to the regular tabs panel
+// in tab switcher when the last incognito tab is closed.
+bool IsClosingLastIncognitoTabEnabled();
+
 // Returns whether the UI Refresh Location Bar will be used.
 bool IsRefreshLocationBarEnabled();
 
@@ -53,6 +57,9 @@ bool IsUIRefreshPhase1Enabled();
 
 // Returns the height of the status bar, accounting for orientation.
 CGFloat StatusBarHeight();
+
+// Returns the approximate corner radius of the current device.
+CGFloat DeviceCornerRadius();
 
 // Returns the closest pixel-aligned value less than |value|, taking the scale
 // factor into account. At a scale of 1, equivalent to floor().

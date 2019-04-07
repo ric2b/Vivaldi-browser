@@ -36,8 +36,8 @@ constexpr char kAffiliationID[] = "some-affiliation-id";
 constexpr char kAnotherAffiliationID[] = "another-affiliation-id";
 
 struct Params {
-  explicit Params(bool affiliated) : affiliated_(affiliated) {}
-  bool affiliated_;
+  explicit Params(bool _affiliated) : affiliated(_affiliated) {}
+  bool affiliated;
 };
 
 }  // namespace
@@ -56,29 +56,26 @@ class UnaffiliatedArcAllowedTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     DevicePolicyCrosBrowserTest::SetUpCommandLine(command_line);
     arc::SetArcAvailableCommandLineForTesting(command_line);
-    affiliation_test_helper::AppendCommandLineSwitchesForLoginManager(
+    AffiliationTestHelper::AppendCommandLineSwitchesForLoginManager(
         command_line);
   }
 
   void SetUpInProcessBrowserTestFixture() override {
     DevicePolicyCrosBrowserTest::SetUpInProcessBrowserTestFixture();
+
     UserPolicyBuilder user_policy;
     DevicePolicyCrosTestHelper test_helper;
 
-    std::set<std::string> device_affiliation_ids;
-    device_affiliation_ids.insert(kAffiliationID);
-    affiliation_test_helper::SetDeviceAffiliationID(
-        &test_helper, session_manager_client(), device_affiliation_ids);
+    const std::set<std::string> device_affiliation_ids = {kAffiliationID};
+    const std::set<std::string> user_affiliation_ids = {
+        GetParam().affiliated ? kAffiliationID : kAnotherAffiliationID};
 
-    std::set<std::string> user_affiliation_ids;
-    if (GetParam().affiliated_)
-      user_affiliation_ids.insert(kAffiliationID);
-    else
-      user_affiliation_ids.insert(kAnotherAffiliationID);
-
-    affiliation_test_helper::SetUserAffiliationIDs(
-        &user_policy, session_manager_client(), affiliated_account_id_,
-        user_affiliation_ids);
+    AffiliationTestHelper affiliation_helper =
+        AffiliationTestHelper::CreateForCloud(session_manager_client());
+    ASSERT_NO_FATAL_FAILURE(affiliation_helper.SetDeviceAffiliationIDs(
+        &test_helper, device_affiliation_ids));
+    ASSERT_NO_FATAL_FAILURE(affiliation_helper.SetUserAffiliationIDs(
+        &user_policy, affiliated_account_id_, user_affiliation_ids));
   }
 
   void TearDownOnMainThread() override {
@@ -116,16 +113,16 @@ class UnaffiliatedArcAllowedTest
 };
 
 IN_PROC_BROWSER_TEST_P(UnaffiliatedArcAllowedTest, PRE_ProfileTest) {
-  affiliation_test_helper::PreLoginUser(affiliated_account_id_);
+  AffiliationTestHelper::PreLoginUser(affiliated_account_id_);
 }
 
 IN_PROC_BROWSER_TEST_P(UnaffiliatedArcAllowedTest, ProfileTest) {
-  affiliation_test_helper::LoginUser(affiliated_account_id_);
+  AffiliationTestHelper::LoginUser(affiliated_account_id_);
   const user_manager::User* user =
       user_manager::UserManager::Get()->FindUser(affiliated_account_id_);
   const Profile* profile =
       chromeos::ProfileHelper::Get()->GetProfileByUser(user);
-  const bool affiliated = GetParam().affiliated_;
+  const bool affiliated = GetParam().affiliated;
 
   EXPECT_EQ(affiliated, user->IsAffiliated());
   EXPECT_TRUE(arc::IsArcAllowedForProfile(profile))

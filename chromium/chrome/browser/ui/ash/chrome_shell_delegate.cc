@@ -16,18 +16,15 @@
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
-#include "chrome/browser/chromeos/policy/display_rotation_default_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/chrome_keyboard_ui.h"
 #include "chrome/browser/ui/ash/chrome_screenshot_grabber.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
-#include "chrome/browser/ui/ash/network/networking_config_delegate_chromeos.h"
 #include "chrome/browser/ui/ash/session_controller_client.h"
 #include "chrome/browser/ui/ash/session_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -35,7 +32,7 @@
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/url_constants.h"
-#include "services/ui/public/cpp/input_devices/input_device_controller_client.h"
+#include "services/ws/public/cpp/input_devices/input_device_controller_client.h"
 #include "ui/aura/window.h"
 #include "ui/base/ui_base_features.h"
 #include "url/url_constants.h"
@@ -86,46 +83,20 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
 
 }  // namespace
 
-ChromeShellDelegate::ChromeShellDelegate()
-    : networking_config_delegate_(
-          std::make_unique<chromeos::NetworkingConfigDelegateChromeos>()) {
-}
+ChromeShellDelegate::ChromeShellDelegate() = default;
 
-ChromeShellDelegate::~ChromeShellDelegate() {}
-
-service_manager::Connector* ChromeShellDelegate::GetShellConnector() const {
-  return content::ServiceManagerConnection::GetForProcess()->GetConnector();
-}
+ChromeShellDelegate::~ChromeShellDelegate() = default;
 
 bool ChromeShellDelegate::CanShowWindowForUser(aura::Window* window) const {
   return ::CanShowWindowForUser(window,
                                 base::BindRepeating(&GetActiveBrowserContext));
 }
 
-void ChromeShellDelegate::PreInit() {
-  // TODO: port to mash. http://crbug.com/678949.
-  if (!features::IsAshInBrowserProcess())
-    return;
-
-  // Object owns itself and deletes itself in OnWindowTreeHostManagerShutdown().
-  // Setup is done in OnShellInitialized() so this needs to be constructed after
-  // Shell is constructed but before OnShellInitialized() is called. Depends on
-  // CroSettings. TODO(stevenjb): Move to src/ash.
-  new policy::DisplayRotationDefaultHandler();
-}
-
 void ChromeShellDelegate::OpenKeyboardShortcutHelpPage() const {
-  Profile* profile = ProfileManager::GetActiveUserProfile();
-  Browser* browser = chrome::FindTabbedBrowser(profile, false);
-
-  if (!browser) {
-    browser = new Browser(Browser::CreateParams(profile, true));
-    browser->window()->Show();
-  }
-
-  browser->window()->Activate();
-
-  NavigateParams params(browser, GURL(kKeyboardShortcutHelpPageUrl),
+  chrome::ScopedTabbedBrowserDisplayer scoped_tabbed_browser_displayer(
+      ProfileManager::GetActiveUserProfile());
+  NavigateParams params(scoped_tabbed_browser_displayer.browser(),
+                        GURL(kKeyboardShortcutHelpPageUrl),
                         ui::PAGE_TRANSITION_AUTO_BOOKMARK);
   params.disposition = WindowOpenDisposition::SINGLETON_TAB;
   Navigate(&params);
@@ -140,17 +111,12 @@ ash::AccessibilityDelegate* ChromeShellDelegate::CreateAccessibilityDelegate() {
   return new AccessibilityDelegateImpl;
 }
 
-ash::NetworkingConfigDelegate*
-ChromeShellDelegate::GetNetworkingConfigDelegate() {
-  return networking_config_delegate_.get();
-}
-
 std::unique_ptr<ash::ScreenshotDelegate>
 ChromeShellDelegate::CreateScreenshotDelegate() {
   return std::make_unique<ChromeScreenshotGrabber>();
 }
 
-ui::InputDeviceControllerClient*
+ws::InputDeviceControllerClient*
 ChromeShellDelegate::GetInputDeviceControllerClient() {
   return g_browser_process->platform_part()->GetInputDeviceControllerClient();
 }

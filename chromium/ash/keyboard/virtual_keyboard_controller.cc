@@ -8,7 +8,6 @@
 
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/ime/ime_controller.h"
-#include "ash/keyboard/keyboard_ui.h"
 #include "ash/public/cpp/config.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
@@ -37,21 +36,21 @@ bool IsVirtualKeyboardEnabled() {
       keyboard::switches::kEnableVirtualKeyboard);
 }
 
-void DisableVirtualKeyboard() {
-  // Reset the accessibility keyboard settings.
-  AccessibilityController* accessibility_controller =
-      Shell::Get()->accessibility_controller();
-  if (!accessibility_controller)
-    return;
+void ResetVirtualKeyboard() {
+  keyboard::SetKeyboardEnabledFromShelf(false);
+  if (!keyboard::IsKeyboardEnabled())
+    Shell::Get()->DisableKeyboard();
 
-  DCHECK(accessibility_controller->IsVirtualKeyboardEnabled());
-  accessibility_controller->SetVirtualKeyboardEnabled(false);
+  // Reset the keyset after disabling the virtual keyboard to prevent the IME
+  // extension from accidentally loading the default keyset while it's shutting
+  // down. See https://crbug.com/875456.
+  Shell::Get()->ime_controller()->OverrideKeyboardKeyset(
+      chromeos::input_method::mojom::ImeKeyset::kNone);
 }
 
 void MoveKeyboardToDisplayInternal(const display::Display& display) {
   // Remove the keyboard from curent root window controller
   TRACE_EVENT0("vk", "MoveKeyboardToDisplayInternal");
-  Shell::Get()->keyboard_ui()->Hide();
   RootWindowController::ForWindow(
       keyboard::KeyboardController::Get()->GetRootWindow())
       ->DeactivateKeyboard(keyboard::KeyboardController::Get());
@@ -126,20 +125,8 @@ void VirtualKeyboardController::ForceShowKeyboardWithKeyset(
                              base::Unretained(this)));
 }
 
-void VirtualKeyboardController::OnTabletModeStarted() {
-  if (IsVirtualKeyboardEnabled()) {
-    SetKeyboardEnabled(true);
-  } else {
-    UpdateKeyboardEnabled();
-  }
-}
-
-void VirtualKeyboardController::OnTabletModeEnded() {
-  if (IsVirtualKeyboardEnabled()) {
-    SetKeyboardEnabled(false);
-  } else {
-    UpdateKeyboardEnabled();
-  }
+void VirtualKeyboardController::OnTabletModeEventsBlockingChanged() {
+  UpdateKeyboardEnabled();
 }
 
 void VirtualKeyboardController::OnTouchscreenDeviceConfigurationChanged() {
@@ -238,12 +225,12 @@ void VirtualKeyboardController::UpdateKeyboardEnabled() {
   if (IsVirtualKeyboardEnabled()) {
     SetKeyboardEnabled(Shell::Get()
                            ->tablet_mode_controller()
-                           ->IsTabletModeWindowManagerEnabled());
+                           ->AreInternalInputDeviceEventsBlocked());
     return;
   }
   bool ignore_internal_keyboard = Shell::Get()
                                       ->tablet_mode_controller()
-                                      ->IsTabletModeWindowManagerEnabled();
+                                      ->AreInternalInputDeviceEventsBlocked();
   bool is_internal_keyboard_active =
       has_internal_keyboard_ && !ignore_internal_keyboard;
   SetKeyboardEnabled(!is_internal_keyboard_active && has_touchscreen_ &&
@@ -274,27 +261,13 @@ void VirtualKeyboardController::ForceShowKeyboard() {
     return;
   }
 
-  // Otherwise, force enable the virtual keyboard by turning on the
-  // accessibility keyboard.
-  // TODO(https://crbug.com/818567): This is risky as enabling accessibility
-  // keyboard is a persistent setting, so we have to ensure that we disable it
-  // again when the keyboard is closed.
-  AccessibilityController* accessibility_controller =
-      Shell::Get()->accessibility_controller();
-  DCHECK(!accessibility_controller->IsVirtualKeyboardEnabled());
+  // Otherwise, temporarily enable the virtual keyboard until it is dismissed.
+  DCHECK(!keyboard::GetKeyboardEnabledFromShelf());
+  keyboard::SetKeyboardEnabledFromShelf(true);
+  Shell::Get()->EnableKeyboard();
 
-  // TODO(mash): Turning on accessibility keyboard does not create a valid
-  // KeyboardController under MASH. See https://crbug.com/646565.
-  if (Shell::GetAshConfig() == Config::MASH_DEPRECATED)
-    return;
-
-  // Onscreen keyboard has not been enabled yet, forces to bring out the
-  // keyboard for one time.
-  accessibility_controller->SetVirtualKeyboardEnabled(true);
-  keyboard_enabled_using_accessibility_prefs_ = true;
   keyboard_controller = keyboard::KeyboardController::Get();
   DCHECK(keyboard_controller->enabled());
-
   keyboard_controller->ShowKeyboard(false);
 }
 
@@ -309,16 +282,9 @@ void VirtualKeyboardController::OnKeyboardHidden(bool is_temporary_hide) {
   if (is_temporary_hide)
     return;
 
-  Shell::Get()->ime_controller()->OverrideKeyboardKeyset(
-      chromeos::input_method::mojom::ImeKeyset::kNone);
-
-  if (keyboard_enabled_using_accessibility_prefs_) {
-    keyboard_enabled_using_accessibility_prefs_ = false;
-
-    // Posts a task to disable the virtual keyboard.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(DisableVirtualKeyboard));
-  }
+  // Post a task to reset the virtual keyboard to its original state.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(ResetVirtualKeyboard));
 }
 
 void VirtualKeyboardController::OnActiveUserSessionChanged(

@@ -19,6 +19,8 @@
 #include "third_party/blink/renderer/platform/transforms/transformation_matrix.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
+#include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
+
 namespace blink {
 
 class Element;
@@ -34,8 +36,11 @@ class XRLayer;
 class XRPresentationContext;
 class XRView;
 
-class XRSession final : public EventTargetWithInlineData {
+class XRSession final : public EventTargetWithInlineData,
+                        public device::mojom::blink::XRSessionClient,
+                        public ActiveScriptWrappable<XRSession> {
   DEFINE_WRAPPERTYPEINFO();
+  USING_GARBAGE_COLLECTED_MIXIN(XRSession);
 
  public:
   enum EnvironmentBlendMode {
@@ -45,6 +50,7 @@ class XRSession final : public EventTargetWithInlineData {
   };
 
   XRSession(XRDevice*,
+            device::mojom::blink::XRSessionClientRequest client_request,
             bool immersive,
             bool environment_integration,
             XRPresentationContext* output_context,
@@ -139,9 +145,21 @@ class XRSession final : public EventTargetWithInlineData {
 
   void OnPoseReset();
 
+  const device::mojom::blink::VRDisplayInfoPtr& GetVRDisplayInfo() {
+    return display_info_;
+  }
+  bool External() const { return is_external_; }
+  // Incremented every time display_info_ is changed, so that other objects that
+  // depend on it can know when they need to update.
+  unsigned int DisplayInfoPtrId() const { return display_info_id_; }
+
   void SetNonImmersiveProjectionMatrix(const WTF::Vector<float>&);
+  void SetXRDisplayInfo(device::mojom::blink::VRDisplayInfoPtr display_info);
 
   void Trace(blink::Visitor*) override;
+
+  // ScriptWrappable
+  bool HasPendingActivity() const override;
 
  private:
   class XRSessionResizeObserverDelegate;
@@ -155,8 +173,12 @@ class XRSession final : public EventTargetWithInlineData {
   XRInputSourceEvent* CreateInputSourceEvent(const AtomicString&,
                                              XRInputSource*);
 
-  void OnFocus();
-  void OnBlur();
+  // XRSessionClient
+  void OnChanged(device::mojom::blink::VRDisplayInfoPtr) override;
+  void OnExitPresent() override;
+  void OnFocus() override;
+  void OnBlur() override;
+
   bool HasAppropriateFocus();
 
   void OnHitTestResults(
@@ -174,6 +196,13 @@ class XRSession final : public EventTargetWithInlineData {
   InputSourceMap input_sources_;
   Member<ResizeObserver> resize_observer_;
   Member<XRCanvasInputProvider> canvas_input_provider_;
+
+  bool has_device_focus_ = true;
+  bool is_external_ = false;
+  int display_info_id_ = 0;
+  device::mojom::blink::VRDisplayInfoPtr display_info_;
+
+  mojo::Binding<device::mojom::blink::XRSessionClient> client_binding_;
 
   TraceWrapperMember<XRFrameRequestCallbackCollection> callback_collection_;
   std::unique_ptr<TransformationMatrix> base_pose_matrix_;

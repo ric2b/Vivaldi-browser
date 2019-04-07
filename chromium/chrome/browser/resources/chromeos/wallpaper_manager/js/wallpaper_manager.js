@@ -392,10 +392,10 @@ WallpaperManager.prototype.placeWallpaperPicker_ = function() {
   var text = $('no-images-message').querySelector('.text');
   // Adjust the relative position of the "no images" icon and text.
   if (text.offsetWidth > icon.offsetWidth) {
-    icon.style.WebkitMarginStart =
+    icon.style.marginInlineStart =
         (text.offsetWidth - icon.offsetWidth) / 2 + 'px';
   } else {
-    text.style.WebkitMarginStart =
+    text.style.marginInlineStart =
         (icon.offsetWidth - text.offsetWidth) / 2 + 'px';
   }
 
@@ -406,7 +406,7 @@ WallpaperManager.prototype.placeWallpaperPicker_ = function() {
   var columnWidth = GRID_IMAGE_WIDTH_CSS + GRID_IMAGE_PADDING_CSS;
   var columnCount = Math.floor((totalWidth - totalPadding) / columnWidth);
   var imageGridTotalWidth = columnCount * columnWidth;
-  this.document_.querySelector('.dialog-main').style.WebkitMarginStart =
+  this.document_.querySelector('.dialog-main').style.marginInlineStart =
       (totalWidth - imageGridTotalWidth - totalPadding) + 'px';
 
   $('current-wallpaper-info-bar').style.width =
@@ -427,7 +427,7 @@ WallpaperManager.prototype.placeWallpaperPicker_ = function() {
   $('current-wallpaper-more-info').style.width =
       (imageGridTotalWidth - GRID_IMAGE_PADDING_CSS - moreInfoColumnPadding -
        $('current-wallpaper-image').offsetWidth -
-       $('current-wallpaper-image').style.WebkitMarginEnd -
+       $('current-wallpaper-image').style.marginInlineEnd -
        $('current-wallpaper-more-options').offsetWidth) +
       'px';
 };
@@ -1061,6 +1061,9 @@ WallpaperManager.prototype.onWallpaperChanged_ = function(
   $('wallpaper-set-by-message').textContent = '';
   $('wallpaper-grid').classList.remove('small');
 
+  if (this.useNewWallpaperPicker_)
+    this.wallpaperGrid_.checkmark.focus();
+
   // Disables daily refresh if user selects a non-daily wallpaper.
   if (activeItem && activeItem.source !== Constants.WallpaperSourceEnum.Daily)
     this.disableDailyRefresh_();
@@ -1548,10 +1551,9 @@ WallpaperManager.prototype.onFileSystemError_ = function(e) {
  * Handles changing of selectedItem in wallpaper manager.
  */
 WallpaperManager.prototype.onSelectedItemChanged_ = function() {
-  this.setWallpaperAttribution(this.selectedItem_);
-
   if (!this.selectedItem_ || this.selectedItem_.source == 'ADDNEW')
     return;
+  this.setWallpaperAttribution(this.selectedItem_);
 
   if (this.selectedItem_.baseURL &&
       (this.useNewWallpaperPicker_ ||

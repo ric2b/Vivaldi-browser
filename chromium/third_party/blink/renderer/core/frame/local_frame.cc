@@ -33,12 +33,14 @@
 #include <memory>
 
 #include "services/network/public/cpp/features.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/platform/interface_provider.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/scheduler/web_resource_loading_task_runner_handle.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/core/CoreProbeSink.h"
 #include "third_party/blink/renderer/core/aom/computed_accessible_node.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
@@ -48,6 +50,7 @@
 #include "third_party/blink/renderer/core/dom/document_parser.h"
 #include "third_party/blink/renderer/core/dom/document_type.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/dom/ignore_opens_during_unload_count_incrementer.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
@@ -59,11 +62,14 @@
 #include "third_party/blink/renderer/core/frame/ad_tracker.h"
 #include "third_party/blink/renderer/core/frame/content_settings_client.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
+#include "third_party/blink/renderer/core/frame/feature_policy_violation_report_body.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/performance_monitor.h"
+#include "third_party/blink/renderer/core/frame/report.h"
+#include "third_party/blink/renderer/core/frame/reporting_context.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
 #include "third_party/blink/renderer/core/html/html_plugin_element.h"
@@ -88,6 +94,7 @@
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/object_painter.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
+#include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
@@ -97,9 +104,9 @@
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/blink_resource_coordinator_base.h"
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/frame_resource_coordinator.h"
 #include "third_party/blink/renderer/platform/json/json_values.h"
-#include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
+#include "third_party/blink/renderer/platform/network/network_utils.h"
 #include "third_party/blink/renderer/platform/plugins/plugin_data.h"
 #include "third_party/blink/renderer/platform/plugins/plugin_script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -143,54 +150,6 @@ bool ShouldUseClientLoFiForRequest(
 
   return true;
 }
-
-class EmptyFrameScheduler final : public FrameScheduler {
- public:
-  EmptyFrameScheduler() { DCHECK(IsMainThread()); }
-
-  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(
-      TaskType type) override {
-    return Platform::Current()->MainThread()->GetTaskRunner();
-  }
-
-  std::unique_ptr<scheduler::WebResourceLoadingTaskRunnerHandle>
-  CreateResourceLoadingTaskRunnerHandle() override {
-    return scheduler::WebResourceLoadingTaskRunnerHandle::CreateUnprioritized(
-        GetTaskRunner(TaskType::kNetworkingWithURLLoaderAnnotation));
-  }
-
-  void SetFrameVisible(bool) override {}
-  bool IsFrameVisible() const override { return false; }
-  bool IsPageVisible() const override { return false; }
-  void SetPaused(bool) override {}
-  void SetCrossOrigin(bool) override {}
-  bool IsCrossOrigin() const override { return false; }
-  void SetIsAdFrame() override {}
-  bool IsAdFrame() const override { return false; }
-  void TraceUrlChange(const String& override) override {}
-  FrameScheduler::FrameType GetFrameType() const override {
-    return FrameScheduler::FrameType::kSubframe;
-  }
-  PageScheduler* GetPageScheduler() const override { return nullptr; }
-  WebScopedVirtualTimePauser CreateWebScopedVirtualTimePauser(
-      const String&,
-      WebScopedVirtualTimePauser::VirtualTaskDuration) override {
-    return WebScopedVirtualTimePauser();
-  }
-  void DidStartProvisionalLoad(bool is_main_frame) override {}
-  void DidCommitProvisionalLoad(bool is_web_history_inert_commit,
-                                bool is_reload,
-                                bool is_main_frame) override {}
-  void OnFirstMeaningfulPaint() override {}
-  std::unique_ptr<ActiveConnectionHandle> OnActiveConnectionCreated() override {
-    return nullptr;
-  }
-  bool IsExemptFromBudgetBasedThrottling() const override { return false; }
-  std::unique_ptr<blink::mojom::blink::PauseSubresourceLoadingHandle>
-  GetPauseSubresourceLoadingHandle() override {
-    return nullptr;
-  }
-};
 
 }  // namespace
 
@@ -300,6 +259,7 @@ void LocalFrame::Trace(blink::Visitor* visitor) {
   visitor->Trace(input_method_controller_);
   visitor->Trace(text_suggestion_controller_);
   visitor->Trace(computed_node_mapping_);
+  visitor->Trace(smooth_scroll_sequencer_);
   Frame::Trace(visitor);
   Supplementable<LocalFrame>::Trace(visitor);
 }
@@ -321,23 +281,6 @@ void LocalFrame::ScheduleNavigation(Document& origin_document,
 
 void LocalFrame::Navigate(const FrameLoadRequest& request) {
   loader_.StartNavigation(request);
-}
-
-void LocalFrame::Reload(WebFrameLoadType load_type,
-                        ClientRedirectPolicy client_redirect_policy) {
-  DCHECK(IsReloadLoadType(load_type));
-  if (client_redirect_policy == ClientRedirectPolicy::kNotClientRedirect) {
-    if (!loader_.GetDocumentLoader()->GetHistoryItem())
-      return;
-    FrameLoadRequest request = FrameLoadRequest(
-        nullptr,
-        loader_.ResourceRequestForReload(load_type, client_redirect_policy));
-    request.SetClientRedirect(client_redirect_policy);
-    loader_.StartNavigation(request, load_type);
-  } else {
-    DCHECK_EQ(WebFrameLoadType::kReload, load_type);
-    navigation_scheduler_->ScheduleReload();
-  }
 }
 
 void LocalFrame::Detach(FrameDetachType type) {
@@ -367,6 +310,11 @@ void LocalFrame::Detach(FrameDetachType type) {
   // child frame during or after detaching children results in an attached
   // frame on a detached DOM tree, which is bad.
   SubframeLoadingDisabler disabler(*GetDocument());
+  // https://html.spec.whatwg.org/C/browsing-the-web.html#unload-a-document
+  // The ignore-opens-during-unload counter of a Document must be incremented
+  // both when unloading itself and when unloading its descendants.
+  IgnoreOpensDuringUnloadCountIncrementer ignore_opens_during_unload(
+      GetDocument());
   loader_.DispatchUnloadEvent();
   DetachChildren();
 
@@ -506,6 +454,23 @@ Frame* LocalFrame::FindFrameForNavigation(const AtomicString& name,
   return frame;
 }
 
+void LocalFrame::Reload(WebFrameLoadType load_type,
+                        ClientRedirectPolicy client_redirect_policy) {
+  DCHECK(IsReloadLoadType(load_type));
+  if (client_redirect_policy == ClientRedirectPolicy::kNotClientRedirect) {
+    if (!loader_.GetDocumentLoader()->GetHistoryItem())
+      return;
+    FrameLoadRequest request = FrameLoadRequest(
+        nullptr,
+        loader_.ResourceRequestForReload(load_type, client_redirect_policy));
+    request.SetClientRedirect(client_redirect_policy);
+    loader_.StartNavigation(request, load_type);
+  } else {
+    DCHECK_EQ(WebFrameLoadType::kReload, load_type);
+    navigation_scheduler_->ScheduleReload();
+  }
+}
+
 LocalWindowProxy* LocalFrame::WindowProxy(DOMWrapperWorld& world) {
   return ToLocalWindowProxy(Frame::GetWindowProxy(world));
 }
@@ -559,7 +524,7 @@ void LocalFrame::DidResume() {
   DCHECK(RuntimeEnabledFeatures::PageLifecycleEnabled());
   if (GetDocument()) {
     const TimeTicks resume_event_start = CurrentTimeTicks();
-    GetDocument()->DispatchEvent(Event::Create(EventTypeNames::resume));
+    GetDocument()->DispatchEvent(*Event::Create(EventTypeNames::resume));
     const TimeTicks resume_event_end = CurrentTimeTicks();
     DEFINE_STATIC_LOCAL(
         CustomCountHistogram, resume_histogram,
@@ -638,22 +603,14 @@ scoped_refptr<InspectorTaskRunner> LocalFrame::GetInspectorTaskRunner() {
 void LocalFrame::StartPrinting(const FloatSize& page_size,
                                const FloatSize& original_page_size,
                                float maximum_shrink_ratio) {
-  SetPrinting(/*printing=*/true, /*use_printing_layout=*/true, page_size,
-              original_page_size, maximum_shrink_ratio);
-}
-
-void LocalFrame::StartPrintingWithoutPrintingLayout() {
-  SetPrinting(/*printing=*/true, /*use_printing_layout=*/false, FloatSize(),
-              FloatSize(), 0);
+  SetPrinting(true, page_size, original_page_size, maximum_shrink_ratio);
 }
 
 void LocalFrame::EndPrinting() {
-  SetPrinting(/*printing=*/false, /*use_printing_layout=*/false, FloatSize(),
-              FloatSize(), 0);
+  SetPrinting(false, FloatSize(), FloatSize(), 0);
 }
 
 void LocalFrame::SetPrinting(bool printing,
-                             bool use_printing_layout,
                              const FloatSize& page_size,
                              const FloatSize& original_page_size,
                              float maximum_shrink_ratio) {
@@ -669,7 +626,7 @@ void LocalFrame::SetPrinting(bool printing,
   if (TextAutosizer* text_autosizer = GetDocument()->GetTextAutosizer())
     text_autosizer->UpdatePageInfo();
 
-  if (use_printing_layout && ShouldUsePrintingLayout()) {
+  if (ShouldUsePrintingLayout()) {
     View()->ForceLayoutForPagination(page_size, original_page_size,
                                      maximum_shrink_ratio);
   } else {
@@ -687,7 +644,7 @@ void LocalFrame::SetPrinting(bool printing,
        child = child->Tree().NextSibling()) {
     if (child->IsLocalFrame()) {
       if (printing)
-        ToLocalFrame(child)->StartPrintingWithoutPrintingLayout();
+        ToLocalFrame(child)->StartPrinting();
       else
         ToLocalFrame(child)->EndPrinting();
     }
@@ -700,19 +657,22 @@ void LocalFrame::SetPrinting(bool printing,
 }
 
 bool LocalFrame::ShouldUsePrintingLayout() const {
+  if (!GetDocument()->Printing())
+    return false;
+
   // Only the top frame being printed should be fitted to page size.
   // Subframes should be constrained by parents only.
-  // This function considers the following three kinds of frames as top frames:
+  // This function considers the following two kinds of frames as top frames:
   // -- frame with no parent;
-  // -- frame's parent is remote frame;
   // -- frame's parent is not in printing mode.
-  // Among them, if a frame's parent is a remote frame, but in printing mode,
-  // this frame should not use printing layout either. But in that case, this
-  // frame is a local top frame, the printing must start from
-  // StartPrintingWithoutPrintingLayout() so this function won't been called.
-  return GetDocument()->Printing() &&
-         (!Tree().Parent() || !Tree().Parent()->IsLocalFrame() ||
-          !ToLocalFrame(Tree().Parent())->GetDocument()->Printing());
+  // For the second type, it is a bit complicated when its parent is a remote
+  // frame. In such case, we can not check its document or other internal
+  // status. However, if the parent is in printing mode, this frame's printing
+  // must have started with |use_printing_layout| as false in print context.
+  return !Tree().Parent() ||
+         (Tree().Parent()->IsLocalFrame() &&
+          !ToLocalFrame(Tree().Parent())->GetDocument()->Printing()) ||
+         (!Tree().Parent()->IsLocalFrame() && Client()->UsePrintingLayout());
 }
 
 FloatSize LocalFrame::ResizePageRectsKeepingRatio(
@@ -890,18 +850,6 @@ String LocalFrame::GetLayerTreeAsTextForTesting(unsigned flags) const {
                                        static_cast<LayerTreeFlags>(flags));
     }
   }
-
-  if (flags & kLayerTreeIncludesPaintInvalidations) {
-    std::unique_ptr<JSONArray> object_paint_invalidations =
-        view_->TrackedObjectPaintInvalidationsAsJSON();
-    if (object_paint_invalidations && object_paint_invalidations->size()) {
-      if (!layers)
-        layers = JSONObject::Create();
-      layers->SetArray("objectPaintInvalidations",
-                       std::move(object_paint_invalidations));
-    }
-  }
-
   return layers ? layers->ToPrettyJSONString() : String();
 }
 
@@ -914,13 +862,11 @@ inline LocalFrame::LocalFrame(LocalFrameClient* client,
                               FrameOwner* owner,
                               InterfaceRegistry* interface_registry)
     : Frame(client, page, owner, LocalWindowProxyManager::Create(*this)),
-      frame_scheduler_(page.GetPageScheduler()
-                           ? page.GetPageScheduler()->CreateFrameScheduler(
-                                 client->GetFrameBlameContext(),
-                                 IsMainFrame()
-                                     ? FrameScheduler::FrameType::kMainFrame
-                                     : FrameScheduler::FrameType::kSubframe)
-                           : std::make_unique<EmptyFrameScheduler>()),
+      frame_scheduler_(page.GetPageScheduler()->CreateFrameScheduler(
+          this,
+          client->GetFrameBlameContext(),
+          IsMainFrame() ? FrameScheduler::FrameType::kMainFrame
+                        : FrameScheduler::FrameType::kSubframe)),
       loader_(this),
       navigation_scheduler_(NavigationScheduler::Create(this)),
       script_controller_(ScriptController::Create(
@@ -1035,6 +981,17 @@ bool LocalFrame::CanNavigate(const Frame& target_frame,
             SecurityOrigin::Create(destination_url).get())) {
       return true;
     }
+
+    String target_domain = NetworkUtils::GetDomainAndRegistry(
+        target_frame.GetSecurityContext()->GetSecurityOrigin()->Domain(),
+        NetworkUtils::kIncludePrivateRegistries);
+    String destination_domain = NetworkUtils::GetDomainAndRegistry(
+        destination_url.Host(), NetworkUtils::kIncludePrivateRegistries);
+    if (!target_domain.IsEmpty() && !destination_domain.IsEmpty() &&
+        target_domain == destination_domain) {
+      return true;
+    }
+
     // Frame-busting used to be generally allowed in most situations, but may
     // now blocked if the document initiating the navigation has never received
     // a user gesture and the navigation isn't same-origin with the target.
@@ -1315,20 +1272,17 @@ void ScopedFrameBlamer::LeaveContext() {
     context->Leave();
 }
 
-void LocalFrame::MaybeAllowImagePlaceholder(FetchParameters& params) const {
-  if (GetSettings() && GetSettings()->GetFetchImagePlaceholders()) {
-    params.SetAllowImagePlaceholder();
-    return;
-  }
+bool LocalFrame::IsClientLoFiAllowed(const ResourceRequest& request) const {
+  return Client() && ShouldUseClientLoFiForRequest(
+                         request, Client()->GetPreviewsStateForFrame());
+}
 
-  if (Client() &&
-      ShouldUseClientLoFiForRequest(params.GetResourceRequest(),
-                                    Client()->GetPreviewsStateForFrame())) {
-    params.MutableResourceRequest().SetPreviewsState(
-        params.GetResourceRequest().GetPreviewsState() |
-        WebURLRequest::kClientLoFiOn);
-    params.SetAllowImagePlaceholder();
-  }
+bool LocalFrame::IsLazyLoadingImageAllowed() const {
+  if (!RuntimeEnabledFeatures::LazyImageLoadingEnabled())
+    return false;
+  if (Owner() && !Owner()->ShouldLazyLoadChildren())
+    return false;
+  return true;
 }
 
 WebURLLoaderFactory* LocalFrame::GetURLLoaderFactory() {
@@ -1353,9 +1307,12 @@ WebPluginContainerImpl* LocalFrame::GetWebPluginContainer(Node* node) const {
 }
 
 void LocalFrame::SetViewportIntersectionFromParent(
-    const IntRect& viewport_intersection) {
-  if (remote_viewport_intersection_ != viewport_intersection) {
+    const IntRect& viewport_intersection,
+    bool occluded_or_obscured) {
+  if (remote_viewport_intersection_ != viewport_intersection ||
+      occluded_or_obscured_by_ancestor_ != occluded_or_obscured) {
     remote_viewport_intersection_ = viewport_intersection;
+    occluded_or_obscured_by_ancestor_ = occluded_or_obscured;
     if (View()) {
       View()->SetNeedsIntersectionObservation(LocalFrameView::kRequired);
       View()->ScheduleAnimation();
@@ -1374,7 +1331,9 @@ void LocalFrame::ForceSynchronousDocumentInstall(
   GetDocument()->Shutdown();
 
   DomWindow()->InstallNewDocument(
-      mime_type, DocumentInit::Create().WithFrame(this), false);
+      mime_type,
+      DocumentInit::Create().WithDocumentLoader(loader_.GetDocumentLoader()),
+      false);
   loader_.StateMachine()->AdvanceTo(
       FrameLoaderStateMachine::kCommittedFirstRealLoad);
 
@@ -1448,7 +1407,61 @@ void LocalFrame::BindPreviewsResourceLoadingHintsRequest(
   DCHECK(!previews_resource_loading_hints_receiver_);
   previews_resource_loading_hints_receiver_ =
       std::make_unique<PreviewsResourceLoadingHintsReceiverImpl>(
-          std::move(request));
+          std::move(request), GetDocument());
+}
+
+SmoothScrollSequencer& LocalFrame::GetSmoothScrollSequencer() {
+  if (!IsLocalRoot())
+    return LocalFrameRoot().GetSmoothScrollSequencer();
+  if (!smooth_scroll_sequencer_)
+    smooth_scroll_sequencer_ = new SmoothScrollSequencer();
+  return *smooth_scroll_sequencer_;
+}
+
+ukm::UkmRecorder* LocalFrame::GetUkmRecorder() {
+  Document* document = GetDocument();
+  if (!document)
+    return nullptr;
+  return document->UkmRecorder();
+}
+
+int64_t LocalFrame::GetUkmSourceId() {
+  Document* document = GetDocument();
+  if (!document)
+    return ukm::kInvalidSourceId;
+  return document->UkmSourceID();
+}
+
+const mojom::blink::ReportingServiceProxyPtr& LocalFrame::GetReportingService()
+    const {
+  if (!reporting_service_) {
+    Platform::Current()->GetConnector()->BindInterface(
+        Platform::Current()->GetBrowserServiceName(), &reporting_service_);
+  }
+  return reporting_service_;
+}
+
+void LocalFrame::ReportFeaturePolicyViolation(
+    mojom::FeaturePolicyFeature feature) const {
+  if (!RuntimeEnabledFeatures::FeaturePolicyReportingEnabled())
+    return;
+  const String& feature_name = GetNameForFeature(feature);
+  FeaturePolicyViolationReportBody* body = new FeaturePolicyViolationReportBody(
+      feature_name, "Feature policy violation", SourceLocation::Capture());
+  Report* report =
+      new Report("feature-policy", GetDocument()->Url().GetString(), body);
+  ReportingContext::From(GetDocument())->QueueReport(report);
+
+  bool is_null;
+  int line_number = body->lineNumber(is_null);
+  line_number = is_null ? 0 : line_number;
+  int column_number = body->columnNumber(is_null);
+  column_number = is_null ? 0 : column_number;
+
+  // Send the feature policy violation report to the Reporting API.
+  GetReportingService()->QueueFeaturePolicyViolationReport(
+      GetDocument()->Url(), feature_name, "Feature policy violation",
+      body->sourceFile(), line_number, column_number);
 }
 
 }  // namespace blink

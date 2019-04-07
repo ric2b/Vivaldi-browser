@@ -14,19 +14,18 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/extensions/external_cache_delegate.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/settings/device_settings_service.h"
+#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/extensions/external_provider_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/common/extension_urls.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_fetcher_impl.h"
-#include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -45,22 +44,17 @@ class ExternalCacheImplTest : public testing::Test,
                               public ExternalCacheDelegate {
  public:
   ExternalCacheImplTest()
-      : thread_bundle_(content::TestBrowserThreadBundle::REAL_IO_THREAD) {}
+      : thread_bundle_(content::TestBrowserThreadBundle::REAL_IO_THREAD),
+        test_shared_loader_factory_(
+            base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+                &test_url_loader_factory_)) {}
   ~ExternalCacheImplTest() override = default;
 
-  net::URLRequestContextGetter* request_context_getter() {
-    return request_context_getter_.get();
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory() {
+    return test_shared_loader_factory_;
   }
 
   const base::DictionaryValue* provided_prefs() { return prefs_.get(); }
-
-  // testing::Test overrides:
-  void SetUp() override {
-    request_context_getter_ = new net::TestURLRequestContextGetter(
-        content::BrowserThread::GetTaskRunnerForThread(
-            content::BrowserThread::IO));
-    fetcher_factory_.reset(new net::TestURLFetcherFactory());
-  }
 
   // ExternalCacheDelegate:
   void OnExtensionListsUpdated(const base::DictionaryValue* prefs) override {
@@ -125,16 +119,15 @@ class ExternalCacheImplTest : public testing::Test,
  private:
   content::TestBrowserThreadBundle thread_bundle_;
 
-  scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
-  std::unique_ptr<net::TestURLFetcherFactory> fetcher_factory_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
+  scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
 
   base::ScopedTempDir cache_dir_;
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<base::DictionaryValue> prefs_;
   std::map<std::string, std::string> installed_extensions_;
 
-  ScopedTestDeviceSettingsService test_device_settings_service_;
-  ScopedTestCrosSettings test_cros_settings_;
+  ScopedCrosSettingsTestHelper cros_settings_test_helper_;
 
   DISALLOW_COPY_AND_ASSIGN(ExternalCacheImplTest);
 };
@@ -142,7 +135,7 @@ class ExternalCacheImplTest : public testing::Test,
 TEST_F(ExternalCacheImplTest, Basic) {
   base::FilePath cache_dir(CreateCacheDir(false));
   ExternalCacheImpl external_cache(
-      cache_dir, request_context_getter(),
+      cache_dir, url_loader_factory(),
       base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()}), this, true,
       false);
   external_cache.use_null_connector_for_test();
@@ -261,7 +254,7 @@ TEST_F(ExternalCacheImplTest, Basic) {
 TEST_F(ExternalCacheImplTest, PreserveInstalled) {
   base::FilePath cache_dir(CreateCacheDir(false));
   ExternalCacheImpl external_cache(
-      cache_dir, request_context_getter(),
+      cache_dir, url_loader_factory(),
       base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()}), this, true,
       false);
   external_cache.use_null_connector_for_test();

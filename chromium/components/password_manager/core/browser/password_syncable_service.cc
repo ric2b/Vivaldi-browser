@@ -16,6 +16,7 @@
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_store_sync.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/sync/model/sync_error_factory.h"
 #include "net/base/escape.h"
 
@@ -145,10 +146,46 @@ syncer::SyncMergeResult PasswordSyncableService::MergeDataAndStartSyncing(
   std::vector<std::unique_ptr<autofill::PasswordForm>> password_entries;
   PasswordEntryMap new_local_entries;
   if (!ReadFromPasswordStore(&password_entries, &new_local_entries)) {
-    merge_result.set_error(sync_error_factory->CreateAndUploadError(
-        FROM_HERE, "Failed to get passwords from store."));
-    metrics_util::LogPasswordSyncState(metrics_util::NOT_SYNCING_FAILED_READ);
-    return merge_result;
+    if (!base::FeatureList::IsEnabled(features::kDeleteUndecryptableLogins)) {
+      merge_result.set_error(sync_error_factory->CreateAndUploadError(
+          FROM_HERE, "Failed to get passwords from store."));
+      metrics_util::LogPasswordSyncState(metrics_util::NOT_SYNCING_FAILED_READ);
+      return merge_result;
+    }
+
+    // On MacOS it may happen that some passwords cannot be decrypted due to
+    // modification of encryption key in Keychain (https://crbug.com/730625).
+    // Delete those logins from the store, they should be automatically updated
+    // with Sync data.
+    DatabaseCleanupResult cleanup_result =
+        password_store_->DeleteUndecryptableLogins();
+
+    if (cleanup_result == DatabaseCleanupResult::kEncryptionUnavailable) {
+      merge_result.set_error(sync_error_factory->CreateAndUploadError(
+          FROM_HERE, "Failed to get encryption key during database cleanup."));
+      metrics_util::LogPasswordSyncState(
+          metrics_util::NOT_SYNCING_FAILED_DECRYPTION);
+      return merge_result;
+    }
+
+    if (cleanup_result != DatabaseCleanupResult::kSuccess) {
+      merge_result.set_error(sync_error_factory->CreateAndUploadError(
+          FROM_HERE, "Failed to cleanup database."));
+      metrics_util::LogPasswordSyncState(
+          metrics_util::NOT_SYNCING_FAILED_CLEANUP);
+      return merge_result;
+    }
+
+    // Try to read all entries again. If deletion of passwords which couldn't
+    // be deleted didn't help, return an error.
+    password_entries.clear();
+    new_local_entries.clear();
+    if (!ReadFromPasswordStore(&password_entries, &new_local_entries)) {
+      merge_result.set_error(sync_error_factory->CreateAndUploadError(
+          FROM_HERE, "Failed to get passwords from store."));
+      metrics_util::LogPasswordSyncState(metrics_util::NOT_SYNCING_FAILED_READ);
+      return merge_result;
+    }
   }
 
   if (password_entries.size() != new_local_entries.size()) {

@@ -99,8 +99,8 @@ namespace gpu {
 namespace gles2 {
 
 GLES2DecoderTestBase::GLES2DecoderTestBase()
-    : surface_(NULL),
-      context_(NULL),
+    : surface_(nullptr),
+      context_(nullptr),
       client_buffer_id_(100),
       client_framebuffer_id_(101),
       client_program_id_(102),
@@ -300,7 +300,7 @@ void GLES2DecoderTestBase::InitDecoderWithWorkarounds(
   EXPECT_CALL(*gl_, BindBuffer(GL_ARRAY_BUFFER, kServiceAttrib0BufferId))
       .Times(1)
       .RetiresOnSaturation();
-  EXPECT_CALL(*gl_, VertexAttribPointer(0, 1, GL_FLOAT, GL_FALSE, 0, NULL))
+  EXPECT_CALL(*gl_, VertexAttribPointer(0, 1, GL_FLOAT, GL_FALSE, 0, nullptr))
       .Times(1)
       .RetiresOnSaturation();
   EXPECT_CALL(*gl_, BindBuffer(GL_ARRAY_BUFFER, 0))
@@ -486,7 +486,7 @@ void GLES2DecoderTestBase::InitDecoderWithWorkarounds(
                                                           &shared_memory_id_);
   shared_memory_offset_ = kSharedMemoryOffset;
   shared_memory_address_ =
-      reinterpret_cast<int8_t*>(buffer->memory()) + shared_memory_offset_;
+      static_cast<int8_t*>(buffer->memory()) + shared_memory_offset_;
   shared_memory_base_ = buffer->memory();
   ClearSharedMemory();
 
@@ -603,7 +603,7 @@ void GLES2DecoderTestBase::ResetDecoder() {
   decoder_.reset();
   group_->Destroy(mock_decoder_.get(), false);
   command_buffer_service_.reset();
-  ::gl::MockGLInterface::SetGLInterface(NULL);
+  ::gl::MockGLInterface::SetGLInterface(nullptr);
   gl_.reset();
   gl::init::ShutdownGL(false);
 }
@@ -792,12 +792,11 @@ void GLES2DecoderTestBase::SetBucketAsCStrings(uint32_t bucket_id,
   for (GLsizei ii = 0; ii < count; ++ii) {
     if (str && str[ii]) {
       size_t str_len = strlen(str[ii]);
-      memcpy(reinterpret_cast<char*>(shared_memory_address_) + offset,
-             str[ii], str_len);
+      memcpy(static_cast<char*>(shared_memory_address_) + offset, str[ii],
+             str_len);
       offset += str_len;
     }
-    memcpy(reinterpret_cast<char*>(shared_memory_address_) + offset,
-           &str_end, 1);
+    memcpy(static_cast<char*>(shared_memory_address_) + offset, &str_end, 1);
     offset += 1;
   }
   cmd::SetBucketData cmd2;
@@ -1668,7 +1667,7 @@ void GLES2DecoderTestBase::DoVertexAttribDivisorANGLE(
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
 }
 
-void GLES2DecoderTestBase::AddExpectationsForGenVertexArraysOES(){
+void GLES2DecoderTestBase::AddExpectationsForGenVertexArraysOES() {
   if (group_->feature_info()->feature_flags().native_vertex_array_object) {
       EXPECT_CALL(*gl_, GenVertexArraysOES(1, _))
           .WillOnce(SetArgPointee<1>(kServiceVertexArrayId))
@@ -1676,7 +1675,7 @@ void GLES2DecoderTestBase::AddExpectationsForGenVertexArraysOES(){
   }
 }
 
-void GLES2DecoderTestBase::AddExpectationsForDeleteVertexArraysOES(){
+void GLES2DecoderTestBase::AddExpectationsForDeleteVertexArraysOES() {
   if (group_->feature_info()->feature_flags().native_vertex_array_object) {
       EXPECT_CALL(*gl_, DeleteVertexArraysOES(1, _))
           .Times(1)
@@ -2244,11 +2243,11 @@ void GLES2DecoderTestBase::SetupTexture() {
   DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
   DoTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                shared_memory_id_, kSharedMemoryOffset);
-};
+}
 
 void GLES2DecoderTestBase::SetupSampler() {
   DoBindSampler(0, client_sampler_id_, kServiceSamplerId);
-};
+}
 
 void GLES2DecoderTestBase::DeleteVertexBuffer() {
   DoDeleteBuffer(client_buffer_id_, kServiceBufferId);
@@ -2281,7 +2280,7 @@ void GLES2DecoderTestBase::AddExpectationsForSimulatedAttrib0WithError(
         GL_ARRAY_BUFFER, 0, num_vertices * sizeof(GLfloat) * 4, _))
         .Times(1)
         .RetiresOnSaturation();
-    EXPECT_CALL(*gl_, VertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, NULL))
+    EXPECT_CALL(*gl_, VertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, nullptr))
         .Times(1)
         .RetiresOnSaturation();
     EXPECT_CALL(*gl_, VertexAttribDivisorANGLE(0, 0))
@@ -2308,7 +2307,7 @@ void GLES2DecoderTestBase::SetupMockGLBehaviors() {
       .WillByDefault(WithArg<1>(Invoke(
           &gl_states_,
           &GLES2DecoderTestBase::MockGLStates::OnBindArrayBuffer)));
-  ON_CALL(*gl_, VertexAttribPointer(_, _, _, _, _, NULL))
+  ON_CALL(*gl_, VertexAttribPointer(_, _, _, _, _, nullptr))
       .WillByDefault(InvokeWithoutArgs(
           &gl_states_,
           &GLES2DecoderTestBase::MockGLStates::OnVertexAttribNullPointer));
@@ -2405,7 +2404,7 @@ void GLES2DecoderPassthroughTestBase::OnSwapBuffers(uint64_t swap_id,
                                                     uint32_t flags) {}
 
 void GLES2DecoderPassthroughTestBase::SetUp() {
-  base::CommandLine::Init(0, NULL);
+  base::CommandLine::Init(0, nullptr);
   auto* command_line = base::CommandLine::ForCurrentProcess();
   command_line->AppendSwitchASCII(switches::kUseGL,
                                   gl::kGLImplementationANGLEName);
@@ -2462,7 +2461,7 @@ void GLES2DecoderPassthroughTestBase::SetUp() {
                                                           &shared_memory_id_);
   shared_memory_offset_ = kSharedMemoryOffset;
   shared_memory_address_ =
-      reinterpret_cast<int8_t*>(buffer->memory()) + shared_memory_offset_;
+      static_cast<int8_t*>(buffer->memory()) + shared_memory_offset_;
   shared_memory_base_ = buffer->memory();
   shared_memory_size_ = kSharedBufferSize - shared_memory_offset_;
 

@@ -12,7 +12,8 @@
 #include "chrome/browser/ui/media_router/cast_dialog_controller.h"
 #include "chrome/browser/ui/views/media_router/cast_dialog_metrics.h"
 #include "ui/base/models/simple_menu_model.h"
-#include "ui/views/bubble/bubble_dialog_delegate.h"
+#include "ui/views/bubble/bubble_border.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/menu/menu_runner.h"
 
@@ -35,12 +36,17 @@ class CastDialogView : public views::BubbleDialogDelegateView,
                        public CastDialogController::Observer,
                        public ui::SimpleMenuModel::Delegate {
  public:
-  // Instantiates and shows the singleton dialog. The dialog must not be
-  // currently shown.
-  static void ShowDialog(views::View* anchor_view,
-                         CastDialogController* controller,
-                         Browser* browser,
-                         const base::Time& start_time);
+  // Shows the singleton dialog anchored to the Cast toolbar icon. Requires that
+  // BrowserActionsContainer exists for |browser|.
+  static void ShowDialogWithToolbarAction(CastDialogController* controller,
+                                          Browser* browser,
+                                          const base::Time& start_time);
+
+  // Shows the singleton dialog anchored to the top-center of the browser
+  // window.
+  static void ShowDialogTopCentered(CastDialogController* controller,
+                                    Browser* browser,
+                                    const base::Time& start_time);
 
   // No-op if the dialog is currently not shown.
   static void HideDialog();
@@ -57,13 +63,10 @@ class CastDialogView : public views::BubbleDialogDelegateView,
   base::string16 GetWindowTitle() const override;
 
   // ui::DialogModel:
-  base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   int GetDialogButtons() const override;
-  bool IsDialogButtonEnabled(ui::DialogButton button) const override;
 
   // views::DialogDelegate:
   views::View* CreateExtraView() override;
-  bool Accept() override;
   bool Close() override;
 
   // CastDialogController::Observer:
@@ -83,7 +86,6 @@ class CastDialogView : public views::BubbleDialogDelegateView,
   void ExecuteCommand(int command_id, int event_flags) override;
 
   // Called by tests.
-  size_t selected_sink_index_for_test() const { return selected_sink_index_; }
   const std::vector<CastDialogSinkButton*>& sink_buttons_for_test() const {
     return sink_buttons_;
   }
@@ -98,7 +100,19 @@ class CastDialogView : public views::BubbleDialogDelegateView,
   }
 
  private:
+  friend class CastDialogViewTest;
+  FRIEND_TEST_ALL_PREFIXES(CastDialogViewTest, ShowAndHideDialog);
+
+  // Instantiates and shows the singleton dialog. The dialog must not be
+  // currently shown.
+  static void ShowDialog(views::View* anchor_view,
+                         views::BubbleBorder::Arrow anchor_position,
+                         CastDialogController* controller,
+                         Browser* browser,
+                         const base::Time& start_time);
+
   CastDialogView(views::View* anchor_view,
+                 views::BubbleBorder::Arrow anchor_position,
                  CastDialogController* controller,
                  Browser* browser,
                  const base::Time& start_time);
@@ -111,7 +125,7 @@ class CastDialogView : public views::BubbleDialogDelegateView,
   void ShowNoSinksView();
   void ShowScrollView();
 
-  // Applies the stored sink selection and scroll state.
+  // Applies the stored scroll state.
   void RestoreSinkListState();
 
   // Populates the scroll view containing sinks using the data in |model|.
@@ -120,14 +134,17 @@ class CastDialogView : public views::BubbleDialogDelegateView,
   // Shows the sources menu that allows the user to choose a source to cast.
   void ShowSourcesMenu();
 
-  // Populates the sources menu with the sources supported by |sink|.
-  void UpdateSourcesMenu(const UIMediaSink& sink);
-
-  void SelectSinkAtIndex(size_t index);
-
-  const UIMediaSink& GetSelectedSink() const;
+  void SinkPressed(size_t index);
 
   void MaybeSizeToContents();
+
+  // Returns the cast mode that is selected in the sources menu and supported by
+  // |sink|. Returns nullopt if no such cast mode exists.
+  base::Optional<MediaCastMode> GetCastModeToUse(const UIMediaSink& sink) const;
+
+  // Disables sink buttons for sinks that do not support the currently selected
+  // source.
+  void DisableUnsupportedSinks();
 
   // Posts a delayed task to record the number of sinks shown with the metrics
   // recorder.
@@ -143,13 +160,9 @@ class CastDialogView : public views::BubbleDialogDelegateView,
   // Title shown at the top of the dialog.
   base::string16 dialog_title_;
 
-  // The index of the selected item on the sink list.
-  size_t selected_sink_index_ = 0;
-
   // The source selected in the sources menu. This defaults to "tab"
-  // (presentation or tab mirroring) under the assumption that all sinks support
-  // at least one of them. "Tab" is represented by a single item in the sources
-  // menu.
+  // (presentation or tab mirroring). "Tab" is represented by a single item in
+  // the sources menu.
   int selected_source_;
 
   // Contains references to sink buttons in the order they appear.

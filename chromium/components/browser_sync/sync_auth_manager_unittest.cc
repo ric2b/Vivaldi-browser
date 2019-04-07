@@ -64,7 +64,7 @@ class SyncAuthManagerTest : public testing::Test {
 
 TEST_F(SyncAuthManagerTest, ProvidesNothingInLocalSyncMode) {
   auto auth_manager = CreateAuthManagerForLocalSync();
-  EXPECT_TRUE(auth_manager->GetAuthenticatedAccountInfo().IsEmpty());
+  EXPECT_TRUE(auth_manager->GetActiveAccountInfo().account_info.IsEmpty());
   syncer::SyncCredentials credentials = auth_manager->GetCredentials();
   EXPECT_TRUE(credentials.account_id.empty());
   EXPECT_TRUE(credentials.email.empty());
@@ -90,10 +90,16 @@ TEST_F(SyncAuthManagerTest, IgnoresEventsIfNotRegistered) {
   // none of this should result in any callback calls.
   std::string account_id =
       identity_env()->MakePrimaryAccountAvailable("test@email.com").account_id;
-  ASSERT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id, account_id);
+  // Without RegisterForAuthNotifications, the active account should always be
+  // reported as empty.
+  EXPECT_TRUE(
+      auth_manager->GetActiveAccountInfo().account_info.account_id.empty());
   identity_env()->SetRefreshTokenForPrimaryAccount();
+  EXPECT_TRUE(
+      auth_manager->GetActiveAccountInfo().account_info.account_id.empty());
   identity_env()->ClearPrimaryAccount();
-  ASSERT_TRUE(auth_manager->GetAuthenticatedAccountInfo().account_id.empty());
+  EXPECT_TRUE(
+      auth_manager->GetActiveAccountInfo().account_info.account_id.empty());
 }
 
 TEST_F(SyncAuthManagerTest, ForwardsPrimaryAccountEvents) {
@@ -108,9 +114,10 @@ TEST_F(SyncAuthManagerTest, ForwardsPrimaryAccountEvents) {
   auto auth_manager =
       CreateAuthManager(account_state_changed.Get(), credentials_changed.Get());
 
-  ASSERT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id, account_id);
-
   auth_manager->RegisterForAuthNotifications();
+
+  ASSERT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
+            account_id);
 
   // Sign out of the account.
   EXPECT_CALL(account_state_changed, Run());
@@ -119,14 +126,45 @@ TEST_F(SyncAuthManagerTest, ForwardsPrimaryAccountEvents) {
   // not get a |credentials_changed| call here.
   EXPECT_CALL(credentials_changed, Run()).Times(testing::AtMost(1));
   identity_env()->ClearPrimaryAccount();
-  EXPECT_TRUE(auth_manager->GetAuthenticatedAccountInfo().account_id.empty());
+  EXPECT_TRUE(
+      auth_manager->GetActiveAccountInfo().account_info.account_id.empty());
 
   // Sign in to a different account.
   EXPECT_CALL(account_state_changed, Run());
   std::string second_account_id =
       identity_env()->MakePrimaryAccountAvailable("test@email.com").account_id;
-  EXPECT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id,
+  EXPECT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
             second_account_id);
+}
+
+TEST_F(SyncAuthManagerTest, ClearsAuthErrorOnSignout) {
+  // Start out already signed in before the SyncAuthManager is created.
+  std::string account_id =
+      identity_env()->MakePrimaryAccountAvailable("test@email.com").account_id;
+
+  auto auth_manager = CreateAuthManager();
+
+  auth_manager->RegisterForAuthNotifications();
+
+  ASSERT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
+            account_id);
+  ASSERT_EQ(auth_manager->GetLastAuthError().state(),
+            GoogleServiceAuthError::NONE);
+
+  // Sign out of the account.
+  // The ordering of removing the refresh token and the actual sign-out is
+  // undefined, see comment on IdentityManager::Observer. Here, explicitly
+  // revoke the refresh token first to force an auth error.
+  identity_env()->RemoveRefreshTokenForPrimaryAccount();
+
+  ASSERT_NE(auth_manager->GetLastAuthError().state(),
+            GoogleServiceAuthError::NONE);
+
+  // Now actually sign out, i.e. remove the primary account. This should clear
+  // the auth error, since it's now not meaningful anymore.
+  identity_env()->ClearPrimaryAccount();
+  EXPECT_EQ(auth_manager->GetLastAuthError().state(),
+            GoogleServiceAuthError::NONE);
 }
 #endif  // !OS_CHROMEOS
 
@@ -142,9 +180,10 @@ TEST_F(SyncAuthManagerTest, ForwardsCredentialsEvents) {
   auto auth_manager =
       CreateAuthManager(account_state_changed.Get(), credentials_changed.Get());
 
-  ASSERT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id, account_id);
-
   auth_manager->RegisterForAuthNotifications();
+
+  ASSERT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
+            account_id);
 
   // During Sync startup, the SyncEngine attempts to connect to the server
   // without an access token, resulting in a call to ConnectionStatusChanged
@@ -181,8 +220,9 @@ TEST_F(SyncAuthManagerTest, RequestsAccessTokenOnSyncStartup) {
   std::string account_id =
       identity_env()->MakePrimaryAccountAvailable("test@email.com").account_id;
   auto auth_manager = CreateAuthManager();
-  ASSERT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id, account_id);
   auth_manager->RegisterForAuthNotifications();
+  ASSERT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
+            account_id);
 
   // During Sync startup, the SyncEngine attempts to connect to the server
   // without an access token, resulting in a call to ConnectionStatusChanged
@@ -201,8 +241,9 @@ TEST_F(SyncAuthManagerTest,
   std::string account_id =
       identity_env()->MakePrimaryAccountAvailable("test@email.com").account_id;
   auto auth_manager = CreateAuthManager();
-  ASSERT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id, account_id);
   auth_manager->RegisterForAuthNotifications();
+  ASSERT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
+            account_id);
 
   // During Sync startup, the SyncEngine attempts to connect to the server
   // without an access token, resulting in a call to ConnectionStatusChanged
@@ -224,8 +265,9 @@ TEST_F(SyncAuthManagerTest, AbortsAccessTokenFetchOnPersistentFailure) {
   std::string account_id =
       identity_env()->MakePrimaryAccountAvailable("test@email.com").account_id;
   auto auth_manager = CreateAuthManager();
-  ASSERT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id, account_id);
   auth_manager->RegisterForAuthNotifications();
+  ASSERT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
+            account_id);
 
   // During Sync startup, the SyncEngine attempts to connect to the server
   // without an access token, resulting in a call to ConnectionStatusChanged
@@ -249,8 +291,9 @@ TEST_F(SyncAuthManagerTest, FetchesNewAccessTokenWithBackoffOnServerError) {
   std::string account_id =
       identity_env()->MakePrimaryAccountAvailable("test@email.com").account_id;
   auto auth_manager = CreateAuthManager();
-  ASSERT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id, account_id);
   auth_manager->RegisterForAuthNotifications();
+  ASSERT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
+            account_id);
 
   // During Sync startup, the SyncEngine attempts to connect to the server
   // without an access token, resulting in a call to ConnectionStatusChanged
@@ -276,8 +319,9 @@ TEST_F(SyncAuthManagerTest, ExposesServerError) {
   std::string account_id =
       identity_env()->MakePrimaryAccountAvailable("test@email.com").account_id;
   auto auth_manager = CreateAuthManager();
-  ASSERT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id, account_id);
   auth_manager->RegisterForAuthNotifications();
+  ASSERT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
+            account_id);
 
   // During Sync startup, the SyncEngine attempts to connect to the server
   // without an access token, resulting in a call to ConnectionStatusChanged
@@ -303,8 +347,9 @@ TEST_F(SyncAuthManagerTest, RequestsNewAccessTokenOnExpiry) {
   std::string account_id =
       identity_env()->MakePrimaryAccountAvailable("test@email.com").account_id;
   auto auth_manager = CreateAuthManager();
-  ASSERT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id, account_id);
   auth_manager->RegisterForAuthNotifications();
+  ASSERT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
+            account_id);
 
   // During Sync startup, the SyncEngine attempts to connect to the server
   // without an access token, resulting in a call to ConnectionStatusChanged
@@ -336,8 +381,9 @@ TEST_F(SyncAuthManagerTest, RequestsNewAccessTokenOnRefreshTokenUpdate) {
   std::string account_id =
       identity_env()->MakePrimaryAccountAvailable("test@email.com").account_id;
   auto auth_manager = CreateAuthManager();
-  ASSERT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id, account_id);
   auth_manager->RegisterForAuthNotifications();
+  ASSERT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
+            account_id);
 
   // During Sync startup, the SyncEngine attempts to connect to the server
   // without an access token, resulting in a call to ConnectionStatusChanged
@@ -369,8 +415,9 @@ TEST_F(SyncAuthManagerTest, DoesNotRequestAccessTokenAutonomously) {
   std::string account_id =
       identity_env()->MakePrimaryAccountAvailable("test@email.com").account_id;
   auto auth_manager = CreateAuthManager();
-  ASSERT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id, account_id);
   auth_manager->RegisterForAuthNotifications();
+  ASSERT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
+            account_id);
 
   // Do *not* call ConnectionStatusChanged here (which is what usually kicks off
   // the token fetch).
@@ -395,8 +442,9 @@ TEST_F(SyncAuthManagerTest, ClearsCredentialsOnRefreshTokenRemoval) {
   std::string account_id =
       identity_env()->MakePrimaryAccountAvailable("test@email.com").account_id;
   auto auth_manager = CreateAuthManager();
-  ASSERT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id, account_id);
   auth_manager->RegisterForAuthNotifications();
+  ASSERT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
+            account_id);
 
   // During Sync startup, the SyncEngine attempts to connect to the server
   // without an access token, resulting in a call to ConnectionStatusChanged
@@ -435,8 +483,9 @@ TEST_F(SyncAuthManagerTest, ClearsCredentialsOnInvalidRefreshToken) {
   std::string account_id =
       identity_env()->MakePrimaryAccountAvailable("test@email.com").account_id;
   auto auth_manager = CreateAuthManager();
-  ASSERT_EQ(auth_manager->GetAuthenticatedAccountInfo().account_id, account_id);
   auth_manager->RegisterForAuthNotifications();
+  ASSERT_EQ(auth_manager->GetActiveAccountInfo().account_info.account_id,
+            account_id);
 
   // During Sync startup, the SyncEngine attempts to connect to the server
   // without an access token, resulting in a call to ConnectionStatusChanged

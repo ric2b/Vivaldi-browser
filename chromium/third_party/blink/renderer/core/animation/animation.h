@@ -228,7 +228,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
   bool CompositorPendingForTesting() const { return compositor_pending_; }
 
  protected:
-  DispatchEventResult DispatchEventInternal(Event*) override;
+  DispatchEventResult DispatchEventInternal(Event&) override;
   void AddedEventListener(const AtomicString& event_type,
                           RegisteredEventListener&) override;
 
@@ -253,8 +253,8 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
   void BeginUpdatingState();
   void EndUpdatingState();
 
-  CompositorAnimations::FailureCode CheckCanStartAnimationOnCompositorInternal(
-      const base::Optional<CompositorElementIdSet>&) const;
+  CompositorAnimations::FailureCode CheckCanStartAnimationOnCompositorInternal()
+      const;
   void CreateCompositorAnimation();
   void DestroyCompositorAnimation();
   void AttachCompositorTimeline();

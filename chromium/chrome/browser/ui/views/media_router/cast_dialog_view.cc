@@ -13,9 +13,15 @@
 #include "chrome/browser/ui/media_router/cast_dialog_model.h"
 #include "chrome/browser/ui/media_router/media_cast_mode.h"
 #include "chrome/browser/ui/media_router/ui_media_sink.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/media_router/cast_dialog_no_sinks_view.h"
 #include "chrome/browser/ui/views/media_router/cast_dialog_sink_button.h"
+#include "chrome/browser/ui/views/media_router/cast_toolbar_button.h"
+#include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/media_router/media_sink.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
@@ -23,6 +29,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/vector_icon_types.h"
+#include "ui/views/bubble/bubble_border.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/scroll_view.h"
@@ -42,28 +49,26 @@ constexpr int kAlternativeSourceButtonId = -1;
 // presenting and mirroring a tab.
 constexpr int kTabSource = PRESENTATION | TAB_MIRROR;
 
-bool SupportsTabSource(const UIMediaSink& sink) {
-  return base::ContainsKey(sink.cast_modes, PRESENTATION) ||
-         base::ContainsKey(sink.cast_modes, TAB_MIRROR);
-}
-
-bool SupportsDesktopSource(const UIMediaSink& sink) {
-  return base::ContainsKey(sink.cast_modes, DESKTOP_MIRROR);
-}
-
 }  // namespace
 
 // static
-void CastDialogView::ShowDialog(views::View* anchor_view,
-                                CastDialogController* controller,
-                                Browser* browser,
-                                const base::Time& start_time) {
-  DCHECK(!instance_);
-  DCHECK(!start_time.is_null());
-  instance_ = new CastDialogView(anchor_view, controller, browser, start_time);
-  views::Widget* widget =
-      views::BubbleDialogDelegateView::CreateBubble(instance_);
-  widget->Show();
+void CastDialogView::ShowDialogWithToolbarAction(
+    CastDialogController* controller,
+    Browser* browser,
+    const base::Time& start_time) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  DCHECK(browser_view->toolbar()->browser_actions());
+  views::View* action_view = browser_view->toolbar()->cast_button();
+  ShowDialog(action_view, views::BubbleBorder::TOP_RIGHT, controller, browser,
+             start_time);
+}
+
+// static
+void CastDialogView::ShowDialogTopCentered(CastDialogController* controller,
+                                           Browser* browser,
+                                           const base::Time& start_time) {
+  ShowDialog(BrowserView::GetBrowserViewForBrowser(browser)->top_container(),
+             views::BubbleBorder::TOP_CENTER, controller, browser, start_time);
 }
 
 // static
@@ -95,20 +100,8 @@ base::string16 CastDialogView::GetWindowTitle() const {
   return dialog_title_;
 }
 
-base::string16 CastDialogView::GetDialogButtonLabel(
-    ui::DialogButton button) const {
-  return sink_buttons_.empty()
-             ? l10n_util::GetStringUTF16(IDS_MEDIA_ROUTER_START_CASTING_BUTTON)
-             : sink_buttons_.at(selected_sink_index_)->GetActionText();
-}
-
 int CastDialogView::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_OK;
-}
-
-bool CastDialogView::IsDialogButtonEnabled(ui::DialogButton button) const {
-  return !sink_buttons_.empty() &&
-         GetSelectedSink().state != UIMediaSinkState::CONNECTING;
+  return ui::DIALOG_BUTTON_NONE;
 }
 
 views::View* CastDialogView::CreateExtraView() {
@@ -120,44 +113,27 @@ views::View* CastDialogView::CreateExtraView() {
   return sources_button_;
 }
 
-bool CastDialogView::Accept() {
-  scroll_position_ = scroll_view_->GetVisibleRect().y();
-  const UIMediaSink& sink = GetSelectedSink();
-  if (!sink.route_id.empty()) {
-    controller_->StopCasting(sink.route_id);
-    metrics_.OnStopCasting();
-  } else {
-    // Go through cast modes in the order of preference to find one that is
-    // supported and selected.
-    for (MediaCastMode cast_mode : {PRESENTATION, TAB_MIRROR, DESKTOP_MIRROR}) {
-      if ((cast_mode & selected_source_) &&
-          base::ContainsKey(sink.cast_modes, cast_mode)) {
-        controller_->StartCasting(sink.id, cast_mode);
-        metrics_.OnStartCasting(base::Time::Now(), selected_sink_index_);
-        break;
-      }
-    }
-  }
-  return false;
-}
-
 bool CastDialogView::Close() {
   return Cancel();
 }
 
 void CastDialogView::OnModelUpdated(const CastDialogModel& model) {
   if (model.media_sinks().empty()) {
+    scroll_position_ = 0;
     ShowNoSinksView();
+    if (sources_button_)
+      sources_button_->SetEnabled(false);
   } else {
-    // If |sink_buttons_| is empty, the sink list was empty before this update.
-    // In that case, select the first active sink, so that its session can be
-    // stopped with one click.
-    if (sink_buttons_.empty())
-      selected_sink_index_ = model.GetFirstActiveSinkIndex().value_or(0);
-    ShowScrollView();
+    if (scroll_view_)
+      scroll_position_ = scroll_view_->GetVisibleRect().y();
+    else
+      ShowScrollView();
     PopulateScrollView(model.media_sinks());
     RestoreSinkListState();
     metrics_.OnSinksLoaded(base::Time::Now());
+    if (sources_button_)
+      sources_button_->SetEnabled(true);
+    DisableUnsupportedSinks();
   }
   dialog_title_ = model.dialog_header();
   MaybeSizeToContents();
@@ -172,10 +148,17 @@ void CastDialogView::OnControllerInvalidated() {
 
 void CastDialogView::ButtonPressed(views::Button* sender,
                                    const ui::Event& event) {
-  if (sender->tag() == kAlternativeSourceButtonId)
+  if (sender->tag() == kAlternativeSourceButtonId) {
     ShowSourcesMenu();
-  else
-    SelectSinkAtIndex(sender->tag());
+  } else {
+    // SinkPressed() invokes a refresh of the sink list, which deletes the
+    // sink button. So we must call this after the button is done handling the
+    // press event.
+    content::BrowserThread::PostTask(
+        content::BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&CastDialogView::SinkPressed, weak_factory_.GetWeakPtr(),
+                       sender->tag()));
+  }
 }
 
 gfx::Size CastDialogView::CalculatePreferredSize() const {
@@ -199,14 +182,31 @@ bool CastDialogView::IsCommandIdEnabled(int command_id) const {
 
 void CastDialogView::ExecuteCommand(int command_id, int event_flags) {
   selected_source_ = command_id;
+  DisableUnsupportedSinks();
   metrics_.OnCastModeSelected();
 }
 
+// static
+void CastDialogView::ShowDialog(views::View* anchor_view,
+                                views::BubbleBorder::Arrow anchor_position,
+                                CastDialogController* controller,
+                                Browser* browser,
+                                const base::Time& start_time) {
+  DCHECK(!instance_);
+  DCHECK(!start_time.is_null());
+  instance_ = new CastDialogView(anchor_view, anchor_position, controller,
+                                 browser, start_time);
+  views::Widget* widget =
+      views::BubbleDialogDelegateView::CreateBubble(instance_);
+  widget->Show();
+}
+
 CastDialogView::CastDialogView(views::View* anchor_view,
+                               views::BubbleBorder::Arrow anchor_position,
                                CastDialogController* controller,
                                Browser* browser,
                                const base::Time& start_time)
-    : BubbleDialogDelegateView(anchor_view, views::BubbleBorder::TOP_RIGHT),
+    : BubbleDialogDelegateView(anchor_view, anchor_position),
       selected_source_(kTabSource),
       controller_(controller),
       browser_(browser),
@@ -248,7 +248,6 @@ void CastDialogView::ShowNoSinksView() {
     delete scroll_view_;
     scroll_view_ = nullptr;
     sink_buttons_.clear();
-    selected_sink_index_ = 0;
   }
   no_sinks_view_ = new CastDialogNoSinksView(browser_);
   AddChildView(no_sinks_view_);
@@ -269,18 +268,12 @@ void CastDialogView::ShowScrollView() {
 }
 
 void CastDialogView::RestoreSinkListState() {
-  if (selected_sink_index_ < sink_buttons_.size()) {
-    sink_buttons_.at(selected_sink_index_)->SnapInkDropToActivated();
-    SelectSinkAtIndex(selected_sink_index_);
-  } else if (sink_buttons_.size() > 0u) {
-    sink_buttons_.at(0)->SnapInkDropToActivated();
-    SelectSinkAtIndex(0);
-  }
-
   views::ScrollBar* scroll_bar =
       const_cast<views::ScrollBar*>(scroll_view_->vertical_scroll_bar());
-  if (scroll_bar)
+  if (scroll_bar) {
     scroll_view_->ScrollToPosition(scroll_bar, scroll_position_);
+    scroll_view_->Layout();
+  }
 }
 
 void CastDialogView::PopulateScrollView(const std::vector<UIMediaSink>& sinks) {
@@ -302,14 +295,11 @@ void CastDialogView::PopulateScrollView(const std::vector<UIMediaSink>& sinks) {
 }
 
 void CastDialogView::ShowSourcesMenu() {
-  sources_menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
-  const UIMediaSink& sink = GetSelectedSink();
+  if (!sources_menu_model_) {
+    sources_menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
 
-  if (SupportsTabSource(sink)) {
     sources_menu_model_->AddCheckItemWithStringId(
         kTabSource, IDS_MEDIA_ROUTER_TAB_MIRROR_CAST_MODE);
-  }
-  if (SupportsDesktopSource(sink)) {
     sources_menu_model_->AddCheckItemWithStringId(
         DESKTOP_MIRROR, IDS_MEDIA_ROUTER_DESKTOP_MIRROR_CAST_MODE);
   }
@@ -322,39 +312,46 @@ void CastDialogView::ShowSourcesMenu() {
                                   ui::MENU_SOURCE_MOUSE);
 }
 
-void CastDialogView::UpdateSourcesMenu(const UIMediaSink& sink) {
-  bool supports_desktop_source = SupportsDesktopSource(sink);
-  // If desktop mirroring is supported, show the sources menu button so that
-  // the user can switch sources.
-  if (sources_button_)
-    sources_button_->SetEnabled(supports_desktop_source);
-  if (!supports_desktop_source && selected_source_ == DESKTOP_MIRROR)
-    selected_source_ = kTabSource;
-}
-
-void CastDialogView::SelectSinkAtIndex(size_t index) {
-  if (selected_sink_index_ != index &&
-      selected_sink_index_ < sink_buttons_.size()) {
-    sink_buttons_.at(selected_sink_index_)->SetSelected(false);
+void CastDialogView::SinkPressed(size_t index) {
+  const UIMediaSink& sink = sink_buttons_.at(index)->sink();
+  if (sink.route_id.empty()) {
+    base::Optional<MediaCastMode> cast_mode = GetCastModeToUse(sink);
+    if (cast_mode) {
+      controller_->StartCasting(sink.id, cast_mode.value());
+      metrics_.OnStartCasting(base::Time::Now(), index);
+    }
+  } else {
+    controller_->StopCasting(sink.route_id);
+    metrics_.OnStopCasting();
   }
-  CastDialogSinkButton* selected_button = sink_buttons_.at(index);
-  selected_button->SetSelected(true);
-  selected_sink_index_ = index;
-
-  UpdateSourcesMenu(selected_button->sink());
-  // Update the text on the main action button.
-  DialogModelChanged();
-}
-
-const UIMediaSink& CastDialogView::GetSelectedSink() const {
-  DCHECK_GT(sink_buttons_.size(), selected_sink_index_);
-  return sink_buttons_.at(selected_sink_index_)->sink();
 }
 
 void CastDialogView::MaybeSizeToContents() {
   // The widget may be null if this is called while the dialog is opening.
   if (GetWidget())
     SizeToContents();
+}
+
+base::Optional<MediaCastMode> CastDialogView::GetCastModeToUse(
+    const UIMediaSink& sink) const {
+  // Go through cast modes in the order of preference to find one that is
+  // supported and selected.
+  for (MediaCastMode cast_mode : {PRESENTATION, TAB_MIRROR, DESKTOP_MIRROR}) {
+    if ((cast_mode & selected_source_) &&
+        base::ContainsKey(sink.cast_modes, cast_mode)) {
+      return cast_mode;
+    }
+  }
+  return base::nullopt;
+}
+
+void CastDialogView::DisableUnsupportedSinks() {
+  for (CastDialogSinkButton* sink_button : sink_buttons_) {
+    const bool enable =
+        sink_button->sink().state == UIMediaSinkState::CONNECTED ||
+        GetCastModeToUse(sink_button->sink()).has_value();
+    sink_button->SetEnabled(enable);
+  }
 }
 
 void CastDialogView::RecordSinkCountWithDelay() {

@@ -8,10 +8,6 @@
 // This file lists all the command IDs understood by e.g. the browser.
 // It is used by Windows RC files, Mac NIB files, and other platforms too.
 
-// Mac NIB files (e.g. chrome/app/nibs/MainMenu.xib) include ID numbers rather
-// than the corresponding #define labels.  If you change a given command's
-// number, any NIB files that refer to it will also need to be updated.
-
 // clang-format off
 
 // Values below IDC_MinimumLabelValue are reserved for dynamic menu items.
@@ -127,7 +123,7 @@
 
 // Show various bits of UI
 #define IDC_OPEN_FILE                   40000
-#define IDC_CREATE_HOSTED_APP           40002
+#define IDC_CREATE_SHORTCUT             40002
 #define IDC_DEVELOPER_MENU              40003
 #define IDC_DEV_TOOLS                   40004
 #define IDC_DEV_TOOLS_CONSOLE           40005
@@ -183,7 +179,7 @@
 #define IDC_CUSTOMIZE_TOUCH_BAR         40251
 #define IDC_SHOW_BETA_FORUM             40252
 #define IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS 40253
-#define IDC_TOGGLE_CONFIRM_TO_QUIT_OPTION 40254
+#define IDC_INSTALL_PWA                 40254
 
 // Spell-check
 // Insert any additional suggestions before _LAST; these have to be consecutive.
@@ -359,8 +355,13 @@
 #define IDC_OPEN_LINK_IN_PROFILE_FIRST 52300
 #define IDC_OPEN_LINK_IN_PROFILE_LAST  52399
 
-// Start smart text selection action
-#define IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION 52400
+// Start smart text selection actions
+#define IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION1 52400
+#define IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION2 52401
+#define IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION3 52402
+#define IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION4 52403
+#define IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION5 52404
+#define IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION_LAST IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION5
 
 // NOTE: The last valid command value is 57343 (0xDFFF)
 // See http://msdn.microsoft.com/en-us/library/t2zechd4(VS.71).aspx

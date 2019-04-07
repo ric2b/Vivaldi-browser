@@ -12,6 +12,7 @@
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "media/base/android/media_codec_bridge_impl.h"
 #include "media/base/android/media_codec_util.h"
 #include "media/base/bind_to_current_loop.h"
@@ -87,6 +88,16 @@ bool ConfigSupported(const VideoDecoderConfig& config,
     default:
       return false;
   }
+}
+
+void OutputBufferReleased(bool using_async_api,
+                          base::RepeatingClosure pump_cb,
+                          bool is_drained_or_draining) {
+  // The asynchronous API doesn't need pumping upon calls to ReleaseOutputBuffer
+  // unless we're draining or drained.
+  if (using_async_api && !is_drained_or_draining)
+    return;
+  pump_cb.Run();
 }
 
 }  // namespace
@@ -284,7 +295,7 @@ void MediaCodecVideoDecoder::OnMediaCryptoReady(
 void MediaCodecVideoDecoder::OnKeyAdded() {
   DVLOG(2) << __func__;
   waiting_for_key_ = false;
-  StartTimer();
+  StartTimerOrPumpCodec();
 }
 
 void MediaCodecVideoDecoder::StartLazyInit() {
@@ -426,6 +437,15 @@ void MediaCodecVideoDecoder::CreateCodec() {
           media_crypto_);
   config->initial_expected_coded_size = decoder_config_.coded_size();
   config->surface_bundle = target_surface_bundle_;
+
+  // Use the asynchronous API if we can.
+  if (device_info_->IsAsyncApiSupported()) {
+    using_async_api_ = true;
+    config->on_buffers_available_cb = BindToCurrentLoop(
+        base::BindRepeating(&MediaCodecVideoDecoder::StartTimerOrPumpCodec,
+                            weak_factory_.GetWeakPtr()));
+  }
+
   // Note that this might be the same surface bundle that we've been using, if
   // we're reinitializing the codec without changing surfaces.  That's fine.
   video_frame_factory_->SetSurfaceBundle(target_surface_bundle_);
@@ -443,10 +463,14 @@ void MediaCodecVideoDecoder::OnCodecConfigured(
     EnterTerminalState(State::kError);
     return;
   }
+
   codec_ = std::make_unique<CodecWrapper>(
       CodecSurfacePair(std::move(codec), std::move(surface_bundle)),
-      BindToCurrentLoop(base::Bind(&MediaCodecVideoDecoder::StartTimer,
-                                   weak_factory_.GetWeakPtr())));
+      base::BindRepeating(&OutputBufferReleased, using_async_api_,
+                          BindToCurrentLoop(base::BindRepeating(
+                              &MediaCodecVideoDecoder::StartTimerOrPumpCodec,
+                              weak_factory_.GetWeakPtr()))),
+      base::SequencedTaskRunnerHandle::Get());
 
   // If the target surface changed while codec creation was in progress,
   // transition to it immediately.
@@ -459,7 +483,7 @@ void MediaCodecVideoDecoder::OnCodecConfigured(
   // Cache the frame information that goes with this codec.
   CacheFrameInformation();
 
-  StartTimer();
+  StartTimerOrPumpCodec();
 }
 
 void MediaCodecVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
@@ -514,16 +538,24 @@ void MediaCodecVideoDecoder::PumpCodec(bool force_start_timer) {
       did_work = true;
   } while (did_input || did_output);
 
+  if (using_async_api_)
+    return;
+
   if (did_work || force_start_timer)
-    StartTimer();
+    StartTimerOrPumpCodec();
   else
     StopTimerIfIdle();
 }
 
-void MediaCodecVideoDecoder::StartTimer() {
+void MediaCodecVideoDecoder::StartTimerOrPumpCodec() {
   DVLOG(4) << __func__;
   if (state_ != State::kRunning)
     return;
+
+  if (using_async_api_) {
+    PumpCodec(false);
+    return;
+  }
 
   idle_timer_ = base::ElapsedTimer();
 
@@ -542,6 +574,8 @@ void MediaCodecVideoDecoder::StartTimer() {
 
 void MediaCodecVideoDecoder::StopTimerIfIdle() {
   DVLOG(4) << __func__;
+  DCHECK(!using_async_api_);
+
   // Stop the timer if we've been idle for one second. Chosen arbitrarily.
   const auto kTimeout = base::TimeDelta::FromSeconds(1);
   if (idle_timer_.Elapsed() > kTimeout) {
@@ -701,6 +735,8 @@ void MediaCodecVideoDecoder::RunEosDecodeCb(int reset_generation) {
 void MediaCodecVideoDecoder::ForwardVideoFrame(
     int reset_generation,
     const scoped_refptr<VideoFrame>& frame) {
+  DVLOG(3) << __func__ << " : "
+           << (frame ? frame->AsHumanReadableString() : "null");
   if (reset_generation == reset_generation_) {
     // TODO(liberato): We might actually have a SW decoder.  Consider setting
     // this to false if so, especially for higher bitrates.
@@ -769,7 +805,7 @@ void MediaCodecVideoDecoder::OnCodecDrained() {
 
   if (drain_type == DrainType::kForDestroy) {
     // Post the delete in case the caller uses |this| after we return.
-    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+    base::SequencedTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
     return;
   }
 

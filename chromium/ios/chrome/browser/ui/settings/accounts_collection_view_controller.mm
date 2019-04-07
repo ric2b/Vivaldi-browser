@@ -14,6 +14,7 @@
 #include "components/signin/core/browser/signin_manager.h"
 #import "components/signin/ios/browser/oauth2_token_service_observer_bridge.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/unified_consent/feature.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/signin/account_tracker_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
@@ -135,7 +136,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
     _closeSettingsOnAddAccount = closeSettingsOnAddAccount;
     browser_sync::ProfileSyncService* syncService =
         ProfileSyncServiceFactory::GetForBrowserState(_browserState);
-    _syncObserver.reset(new SyncObserverBridge(self, syncService));
+    if (!unified_consent::IsUnifiedConsentFeatureEnabled()) {
+      // When unified consent flag is enabled, the sync settings are available
+      // in the "Google Services and sync" settings.
+      _syncObserver.reset(new SyncObserverBridge(self, syncService));
+    }
     _tokenServiceObserver.reset(new OAuth2TokenServiceObserverBridge(
         ProfileOAuth2TokenServiceFactory::GetForBrowserState(_browserState),
         self));
@@ -232,11 +237,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addItem:[self addAccountItem]
       toSectionWithIdentifier:SectionIdentifierAccounts];
 
-  // Sync and Google Activity section.
-  [model addSectionWithIdentifier:SectionIdentifierSync];
-  [model addItem:[self syncItem] toSectionWithIdentifier:SectionIdentifierSync];
-  [model addItem:[self googleActivityControlsItem]
-      toSectionWithIdentifier:SectionIdentifierSync];
+  if (!unified_consent::IsUnifiedConsentFeatureEnabled()) {
+    // Sync and Google Activity section.
+    // When unified consent flag is enabled, those settings are available in
+    // the Google Services and sync settings.
+    [model addSectionWithIdentifier:SectionIdentifierSync];
+    [model addItem:[self syncItem]
+        toSectionWithIdentifier:SectionIdentifierSync];
+    [model addItem:[self googleActivityControlsItem]
+        toSectionWithIdentifier:SectionIdentifierSync];
+  }
 
   // Sign out section.
   [model addSectionWithIdentifier:SectionIdentifierSignOut];

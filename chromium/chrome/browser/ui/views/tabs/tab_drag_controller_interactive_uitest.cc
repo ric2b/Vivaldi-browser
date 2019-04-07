@@ -273,8 +273,8 @@ class ScreenEventGeneratorDelegate
   ~ScreenEventGeneratorDelegate() override {}
 
   // EventGeneratorDelegateAura overrides:
-  aura::WindowTreeHost* GetHostAt(const gfx::Point& point) const override {
-    return root_window_->GetHost();
+  ui::EventTarget* GetTargetAt(const gfx::Point& point) override {
+    return root_window_->GetHost()->window();
   }
 
   aura::client::ScreenPositionClient* GetScreenPositionClient(
@@ -426,8 +426,9 @@ class DetachToBrowserTabDragControllerTest
     if (input_source() == INPUT_SOURCE_MOUSE)
       return;
 #if defined(OS_CHROMEOS)
-    event_generator_.reset(new ui::test::EventGenerator(
-        new ScreenEventGeneratorDelegate(ash::wm::GetRootWindowAt(point))));
+    event_generator_ = std::make_unique<ui::test::EventGenerator>(
+        std::make_unique<ScreenEventGeneratorDelegate>(
+            ash::wm::GetRootWindowAt(point)));
 #endif
   }
 
@@ -708,8 +709,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   std::unique_ptr<aura::Window> masked_window(
       aura::test::CreateTestWindowWithDelegate(&masked_window_delegate, 10,
                                                test, browser_window->parent()));
-  masked_window->SetEventTargeter(
-      std::unique_ptr<ui::EventTargeter>(new MaskedWindowTargeter()));
+  masked_window->SetEventTargeter(std::make_unique<MaskedWindowTargeter>());
 
   ASSERT_FALSE(masked_window->GetEventHandlerForPoint(
       gfx::Point(bounds.width() - 11, 0)));
@@ -1313,8 +1313,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   gfx::Point tab_2_center(GetCenterInScreenCoordinates(tab_strip->tab_at(2)));
   ASSERT_TRUE(PressInput(tab_1_center));
   ASSERT_TRUE(ReleaseInput());
-  browser()->tab_strip_model()->AddTabAtToSelection(1);
-  browser()->tab_strip_model()->AddTabAtToSelection(2);
+  browser()->tab_strip_model()->ToggleSelectionAt(2);
   // Press mouse button in the second tab and drag it enough to detach.
   ASSERT_TRUE(PressInput(tab_2_center));
   ASSERT_TRUE(DragInputToNotifyWhenDone(
@@ -1412,8 +1411,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest, MAYBE_DragAll) {
   // Add another tab.
   AddTabAndResetBrowser(browser());
   TabStrip* tab_strip = GetTabStripForBrowser(browser());
-  browser()->tab_strip_model()->AddTabAtToSelection(0);
-  browser()->tab_strip_model()->AddTabAtToSelection(1);
+  browser()->tab_strip_model()->ToggleSelectionAt(0);
   const gfx::Rect initial_bounds = browser()->window()->GetBounds();
 
   // Move to the first tab and drag it enough so that it would normally
@@ -1488,8 +1486,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   Browser* browser2 = CreateAnotherWindowBrowserAndRelayout();
   TabStrip* tab_strip2 = GetTabStripForBrowser(browser2);
 
-  browser()->tab_strip_model()->AddTabAtToSelection(0);
-  browser()->tab_strip_model()->AddTabAtToSelection(1);
+  browser()->tab_strip_model()->ToggleSelectionAt(0);
 
   // Move to the first tab and drag it enough so that it detaches, but not
   // enough that it attaches to browser2.
@@ -1563,8 +1560,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   Browser* browser2 = CreateAnotherWindowBrowserAndRelayout();
   TabStrip* tab_strip2 = GetTabStripForBrowser(browser2);
 
-  browser()->tab_strip_model()->AddTabAtToSelection(0);
-  browser()->tab_strip_model()->AddTabAtToSelection(1);
+  browser()->tab_strip_model()->ToggleSelectionAt(0);
 
   // Move to the first tab and drag it enough so that it detaches, but not
   // enough that it attaches to browser2.

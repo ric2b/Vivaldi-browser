@@ -35,8 +35,9 @@
 #include "third_party/blink/renderer/core/clipboard/clipboard_mime_types.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_utilities.h"
 #include "third_party/blink/renderer/core/clipboard/dragged_isolated_file_system.h"
+#include "third_party/blink/renderer/core/clipboard/paste_mode.h"
 #include "third_party/blink/renderer/core/clipboard/system_clipboard.h"
-#include "third_party/blink/renderer/platform/paste_mode.h"
+#include "third_party/blink/renderer/platform/file_metadata.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 
 namespace blink {
@@ -72,17 +73,17 @@ DataObject* DataObject::Create() {
 
 DataObject::~DataObject() = default;
 
-size_t DataObject::length() const {
+uint32_t DataObject::length() const {
   return item_list_.size();
 }
 
-DataObjectItem* DataObject::Item(unsigned long index) {
+DataObjectItem* DataObject::Item(uint32_t index) {
   if (index >= length())
     return nullptr;
   return item_list_[index];
 }
 
-void DataObject::DeleteItem(unsigned long index) {
+void DataObject::DeleteItem(uint32_t index) {
   if (index >= length())
     return;
   item_list_.EraseAt(index);

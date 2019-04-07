@@ -26,8 +26,7 @@ class WebContentRunner;
 // request. Each ComponentControllerImpl instance manages its own
 // chromium::web::Frame.
 class ComponentControllerImpl : public fuchsia::sys::ComponentController,
-                                public chromium::web::FrameObserver,
-                                public fuchsia::ui::views_v1::ViewProvider {
+                                public fuchsia::ui::viewsv1::ViewProvider {
  public:
   ~ComponentControllerImpl() override;
 
@@ -46,22 +45,14 @@ class ComponentControllerImpl : public fuchsia::sys::ComponentController,
   void Detach() override;
   void Wait(WaitCallback callback) override;
 
-  // chromium::web::FrameObserver implementation.
-  void OnNavigationStateChanged(
-      chromium::web::NavigationStateChangeDetails change,
-      OnNavigationStateChangedCallback callback) override;
-
-  // fuchsia::ui::views_v1::ViewProvider implementation.
+  // fuchsia::ui::viewsv1::ViewProvider implementation.
   void CreateView(
-      fidl::InterfaceRequest<::fuchsia::ui::views_v1_token::ViewOwner>
-          view_owner,
+      fidl::InterfaceRequest<::fuchsia::ui::viewsv1token::ViewOwner> view_owner,
       fidl::InterfaceRequest<::fuchsia::sys::ServiceProvider> services)
       override;
 
  private:
-  friend class WebContentRunner;
-
-  ComponentControllerImpl(WebContentRunner* runner);
+  explicit ComponentControllerImpl(WebContentRunner* runner);
 
   // Binds |this| to a Runner::StartComponent() call. Returns false on failure
   // (e.g. when the URL in |startup_info| is invalid).
@@ -77,12 +68,11 @@ class ComponentControllerImpl : public fuchsia::sys::ComponentController,
   chromium::web::NavigationControllerPtr navigation_controller_;
 
   fidl::Binding<fuchsia::sys::ComponentController> controller_binding_;
-  fidl::Binding<chromium::web::FrameObserver> frame_observer_binding_;
 
   // Objects used for binding and exporting the ViewProvider service.
   std::unique_ptr<base::fuchsia::ServiceDirectory> service_directory_;
   std::unique_ptr<
-      base::fuchsia::ScopedServiceBinding<fuchsia::ui::views_v1::ViewProvider>>
+      base::fuchsia::ScopedServiceBinding<fuchsia::ui::viewsv1::ViewProvider>>
       view_provider_binding_;
 
   std::vector<WaitCallback> termination_wait_callbacks_;

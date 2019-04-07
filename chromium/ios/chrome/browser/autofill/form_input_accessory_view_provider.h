@@ -5,6 +5,8 @@
 #ifndef IOS_CHROME_BROWSER_AUTOFILL_FORM_INPUT_ACCESSORY_VIEW_PROVIDER_H_
 #define IOS_CHROME_BROWSER_AUTOFILL_FORM_INPUT_ACCESSORY_VIEW_PROVIDER_H_
 
+#import <UIKit/UIKit.h>
+
 namespace web {
 struct FormActivityParams;
 class WebState;
@@ -12,14 +14,6 @@ class WebState;
 
 @protocol FormInputAccessoryViewDelegate;
 @protocol FormInputAccessoryViewProvider;
-@class FormInputAccessoryViewController;
-
-#import <UIKit/UIKit.h>
-
-// Block type to indicate that a FormInputAccessoryViewProvider has an accessory
-// view to provide.
-typedef void (^AccessoryViewAvailableCompletion)(
-    BOOL inputAccessoryViewAvailable);
 
 // Block type to provide an accessory view asynchronously.
 typedef void (^AccessoryViewReadyCompletion)(
@@ -33,29 +27,16 @@ typedef void (^AccessoryViewReadyCompletion)(
 @property(nonatomic, assign) id<FormInputAccessoryViewDelegate>
     accessoryViewDelegate;
 
-// Determines asynchronously if this provider has a view available for the
-// specified form/field and invokes |completionHandler| with the answer.
-- (void)
-checkIfAccessoryViewIsAvailableForForm:(const web::FormActivityParams&)params
-                              webState:(web::WebState*)webState
-                     completionHandler:
-                         (AccessoryViewAvailableCompletion)completionHandler;
-
 // Asynchronously retrieves an accessory view from this provider for the
-// specified form/field and returns it via |accessoryViewUpdateBlock|.
+// specified form/field and returns it via |accessoryViewUpdateBlock|. View
+// will be nil if no accessories are available from this provider.
 - (void)retrieveAccessoryViewForForm:(const web::FormActivityParams&)params
                             webState:(web::WebState*)webState
             accessoryViewUpdateBlock:
                 (AccessoryViewReadyCompletion)accessoryViewUpdateBlock;
 
 // Notifies this provider that the accessory view is going away.
-- (void)inputAccessoryViewControllerDidReset:
-    (FormInputAccessoryViewController*)controller;
-
-// Notifies this provider that the accessory view frame is changing. If the
-// view provided by this provider needs to change, the updated view should be
-// set using |accessoryViewUpdateBlock|.
-- (void)resizeAccessoryView;
+- (void)inputAccessoryViewControllerDidReset;
 
 @end
 

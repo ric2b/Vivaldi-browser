@@ -20,27 +20,19 @@ using base::Value;
 namespace cast_channel {
 
 namespace {
-// Reserved message namespaces for internal messages.
-constexpr char kCastInternalNamespacePrefix[] = "urn:x-cast:com.google.cast.";
-constexpr char kAuthNamespace[] = "urn:x-cast:com.google.cast.tp.deviceauth";
-constexpr char kHeartbeatNamespace[] =
-    "urn:x-cast:com.google.cast.tp.heartbeat";
-constexpr char kConnectionNamespace[] =
-    "urn:x-cast:com.google.cast.tp.connection";
-constexpr char kReceiverNamespace[] = "urn:x-cast:com.google.cast.receiver";
-constexpr char kBroadcastNamespace[] = "urn:x-cast:com.google.cast.broadcast";
-
 // Text payload keys.
 constexpr char kTypeNodeId[] = "type";
 constexpr char kRequestIdNodeId[] = "requestId";
 
-// Cast application protocol message types.
+// Cast application protocol message types. Keep in sync with CastMessageType.
 constexpr char kKeepAlivePingType[] = "PING";
 constexpr char kKeepAlivePongType[] = "PONG";
 constexpr char kGetAppAvailabilityRequestType[] = "GET_APP_AVAILABILITY";
 constexpr char kConnectionRequestType[] = "CONNECT";
+constexpr char kCloseConnectionRequestType[] = "CLOSE";
 constexpr char kBroadcastRequestType[] = "APPLICATION_BROADCAST";
 constexpr char kLaunchRequestType[] = "LAUNCH";
+constexpr char kStopRequestType[] = "STOP";
 constexpr char kReceiverStatusType[] = "RECEIVER_STATUS";
 constexpr char kLaunchErrorType[] = "LAUNCH_ERROR";
 
@@ -107,6 +99,7 @@ std::unique_ptr<base::DictionaryValue> GetDictionaryFromCastMessage(
   if (!message.has_payload_utf8())
     return nullptr;
 
+  // TODO(https://crbug.com/809249): Parse JSON using data_decoder service.
   return base::DictionaryValue::From(
       base::JSONReader::Read(message.payload_utf8()));
 }
@@ -116,13 +109,6 @@ bool IsCastInternalNamespace(const std::string& message_namespace) {
   // messages.
   return base::StartsWith(message_namespace, kCastInternalNamespacePrefix,
                           base::CompareCase::SENSITIVE);
-}
-
-CastMessageType ParseMessageType(const CastMessage& message) {
-  std::unique_ptr<base::DictionaryValue> dictionary =
-      GetDictionaryFromCastMessage(message);
-  return dictionary ? ParseMessageTypeFromPayload(*dictionary)
-                    : CastMessageType::kOther;
 }
 
 CastMessageType ParseMessageTypeFromPayload(const base::Value& payload) {
@@ -142,10 +128,14 @@ const char* CastMessageTypeToString(CastMessageType message_type) {
       return kGetAppAvailabilityRequestType;
     case CastMessageType::kConnect:
       return kConnectionRequestType;
+    case CastMessageType::kCloseConnection:
+      return kCloseConnectionRequestType;
     case CastMessageType::kBroadcast:
       return kBroadcastRequestType;
     case CastMessageType::kLaunch:
       return kLaunchRequestType;
+    case CastMessageType::kStop:
+      return kStopRequestType;
     case CastMessageType::kReceiverStatus:
       return kReceiverStatusType;
     case CastMessageType::kLaunchError:
@@ -166,10 +156,14 @@ CastMessageType CastMessageTypeFromString(const std::string& type) {
     return CastMessageType::kGetAppAvailability;
   if (type == kConnectionRequestType)
     return CastMessageType::kConnect;
+  if (type == kCloseConnectionRequestType)
+    return CastMessageType::kCloseConnection;
   if (type == kBroadcastRequestType)
     return CastMessageType::kBroadcast;
   if (type == kLaunchRequestType)
     return CastMessageType::kLaunch;
+  if (type == kStopRequestType)
+    return CastMessageType::kStop;
   if (type == kReceiverStatusType)
     return CastMessageType::kReceiverStatus;
   if (type == kLaunchErrorType)
@@ -347,6 +341,17 @@ CastMessage CreateLaunchRequest(const std::string& source_id,
                            kPlatformReceiverId);
 }
 
+CastMessage CreateStopRequest(const std::string& source_id,
+                              int request_id,
+                              const std::string& session_id) {
+  Value dict(Value::Type::DICTIONARY);
+  dict.SetKey(kTypeNodeId, Value(kStopRequestType));
+  dict.SetKey(kRequestIdNodeId, Value(request_id));
+  dict.SetKey("sessionId", Value(session_id));
+  return CreateCastMessage(kReceiverNamespace, dict, source_id,
+                           kPlatformReceiverId);
+}
+
 CastMessage CreateCastMessage(const std::string& message_namespace,
                               const base::Value& message,
                               const std::string& source_id,
@@ -406,8 +411,7 @@ LaunchSessionResponse::LaunchSessionResponse(LaunchSessionResponse&& other) =
     default;
 LaunchSessionResponse::~LaunchSessionResponse() = default;
 
-LaunchSessionResponse GetLaunchSessionResponse(
-    const base::DictionaryValue& payload) {
+LaunchSessionResponse GetLaunchSessionResponse(const base::Value& payload) {
   const Value* type_value =
       payload.FindKeyOfType(kTypeNodeId, Value::Type::STRING);
   if (!type_value)

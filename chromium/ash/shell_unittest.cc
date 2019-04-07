@@ -24,6 +24,7 @@
 #include "ash/test/ash_test_helper.h"
 #include "ash/test_shell_delegate.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
+#include "ash/window_factory.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -33,9 +34,12 @@
 #include "components/prefs/testing_pref_service.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
+#include "ui/aura/test/mus/test_window_tree_client_delegate.h"
+#include "ui/aura/test/mus/test_window_tree_client_setup.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/events/test/events_test_utils.h"
 #include "ui/events/test/test_event_handler.h"
@@ -80,7 +84,6 @@ void ExpectAllContainers() {
       Shell::GetContainer(root_window, kShellWindowId_DefaultContainer));
   EXPECT_TRUE(
       Shell::GetContainer(root_window, kShellWindowId_AlwaysOnTopContainer));
-  EXPECT_TRUE(Shell::GetContainer(root_window, kShellWindowId_PanelContainer));
   EXPECT_TRUE(Shell::GetContainer(root_window, kShellWindowId_ShelfContainer));
   EXPECT_TRUE(
       Shell::GetContainer(root_window, kShellWindowId_SystemModalContainer));
@@ -178,6 +181,7 @@ class ShellTest : public AshTestBase {
   // TODO(jamescook): Convert to AshTestBase::CreateTestWidget().
   views::Widget* CreateTestWindow(views::Widget::InitParams params) {
     views::Widget* widget = new views::Widget;
+    params.context = CurrentContext();
     widget->Init(params);
     return widget;
   }
@@ -262,6 +266,7 @@ TEST_F(ShellTest, CreateWindowWithPreferredSize) {
   // Don't specify bounds, parent or context.
   params.delegate = new WindowWithPreferredSize;
   views::Widget widget;
+  params.context = CurrentContext();
   widget.Init(params);
 
   // Widget is centered on secondary display.
@@ -496,7 +501,7 @@ TEST_F(ShellTest, FullscreenWindowHidesShelf) {
 // Various assertions around auto-hide behavior.
 // TODO(jamescook): Move this to ShelfTest.
 TEST_F(ShellTest, ToggleAutoHide) {
-  std::unique_ptr<aura::Window> window(new aura::Window(NULL));
+  std::unique_ptr<aura::Window> window = window_factory::NewWindow();
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);
   window->SetType(aura::client::WINDOW_TYPE_NORMAL);
   window->Init(ui::LAYER_TEXTURED);
@@ -541,11 +546,11 @@ TEST_F(ShellTest, TestPreTargetHandlerOrder) {
 // Verifies an EventHandler added to Env gets notified from EventGenerator.
 TEST_F(ShellTest, EnvPreTargetHandler) {
   ui::test::TestEventHandler event_handler;
-  aura::Env::GetInstance()->AddPreTargetHandler(&event_handler);
+  Shell::Get()->aura_env()->AddPreTargetHandler(&event_handler);
   ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow());
   generator.MoveMouseBy(1, 1);
   EXPECT_NE(0, event_handler.num_mouse_events());
-  aura::Env::GetInstance()->RemovePreTargetHandler(&event_handler);
+  Shell::Get()->aura_env()->RemovePreTargetHandler(&event_handler);
 }
 
 // Verifies keyboard is re-enabled on proper timing.
@@ -584,7 +589,69 @@ class ShellTest2 : public AshTestBase {
 };
 
 TEST_F(ShellTest2, DontCrashWhenWindowDeleted) {
-  window_.reset(new aura::Window(NULL));
+  // DontCrashWhenWindowDeletedSingleProcess covers the SingleProcessMash case.
+  if (::features::IsSingleProcessMash())
+    return;
+
+  // This test explicitly uses aura::Env::GetInstance() rather than
+  // Shell->aura_env() as the Window outlives the Shell. In order for a Window
+  // to outlive Shell the Window must be created outside of Ash, which uses
+  // aura::Env::GetInstance() as the Env.
+  window_ = std::make_unique<aura::Window>(
+      nullptr, aura::client::WINDOW_TYPE_UNKNOWN, aura::Env::GetInstance());
+  window_->Init(ui::LAYER_NOT_DRAWN);
+}
+
+// This verifies WindowObservers are removed when a window is destroyed after
+// the Shell is destroyed. This scenario (aura::Windows being deleted after the
+// Shell) occurs if someone is holding a reference to an unparented Window, as
+// is the case with a RenderWidgetHostViewAura that isn't on screen. As long as
+// everything is ok, we won't crash. If there is a bug, window's destructor will
+// notify some deleted object (say VideoDetector or ActivationController) and
+// this will crash.
+class ShellTest3 : public AshTestBase {
+ public:
+  ShellTest3() = default;
+  ~ShellTest3() override = default;
+
+  void SetUp() override {
+    AshTestBase::SetUp();
+    if (!::features::IsSingleProcessMash())
+      return;
+    window_service_setup_ = std::make_unique<aura::TestWindowTreeClientSetup>();
+    window_service_setup_->InitWithoutEmbed(&test_window_tree_client_delegate_);
+    aura::Env::GetInstance()->SetWindowTreeClient(
+        window_service_setup_->window_tree_client());
+  }
+
+  void TearDown() override {
+    AshTestBase::TearDown();
+    if (!::features::IsSingleProcessMash())
+      return;
+    window_.reset();
+    window_service_setup_.reset();
+    aura::Env::GetInstance()->SetWindowTreeClient(nullptr);
+  }
+
+ protected:
+  std::unique_ptr<aura::Window> window_;
+
+ private:
+  aura::TestWindowTreeClientDelegate test_window_tree_client_delegate_;
+  std::unique_ptr<aura::TestWindowTreeClientSetup> window_service_setup_;
+
+  DISALLOW_COPY_AND_ASSIGN(ShellTest3);
+};
+
+TEST_F(ShellTest3, DontCrashWhenWindowDeletedSingleProcess) {
+  if (!::features::IsSingleProcessMash())
+    return;
+  // This test explicitly uses aura::Env::GetInstance() rather than
+  // Shell->aura_env() as the Window outlives the Shell. In order for a Window
+  // to outlive Shell the Window must be created outside of Ash, which uses
+  // aura::Env::GetInstance() as the Env.
+  window_ = std::make_unique<aura::Window>(
+      nullptr, aura::client::WINDOW_TYPE_UNKNOWN, aura::Env::GetInstance());
   window_->Init(ui::LAYER_NOT_DRAWN);
 }
 

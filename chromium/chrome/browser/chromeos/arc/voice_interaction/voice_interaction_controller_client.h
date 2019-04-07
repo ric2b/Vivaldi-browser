@@ -58,6 +58,8 @@ class VoiceInteractionControllerClient
   void NotifyHotwordEnabled();
   void NotifySetupCompleted();
   void NotifyFeatureAllowed();
+  void NotifyNotificationEnabled();
+  void NotifyLocaleChanged();
 
   // user_manager::UserManager::UserSessionStateObserver overrides:
   void ActiveUserChanged(const user_manager::User* active_user) override;
@@ -86,7 +88,7 @@ class VoiceInteractionControllerClient
   ash::mojom::VoiceInteractionState voice_interaction_state_ =
       ash::mojom::VoiceInteractionState::STOPPED;
 
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   DISALLOW_COPY_AND_ASSIGN(VoiceInteractionControllerClient);
 };

@@ -80,7 +80,6 @@
 <translation id="8498891568109133222">Per ilgai laukta <ph name="HOST_NAME" /> atsako.</translation>
 <translation id="8740359287975076522">Nepavyko rasti <ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;DNS adreso&lt;/abbr&gt;. Nustatoma problema.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> naudojamas nepalaikomas protokolas.</translation>
-<translation id="933612690413056017">Nėra interneto ryšio</translation>
 <translation id="969892804517981540">Oficialiai pagaminta</translation>
 <translation id="988159990683914416">Vykdymo programa sukurta</translation>
 </translationbundle>

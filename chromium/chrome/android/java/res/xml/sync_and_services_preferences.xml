@@ -4,13 +4,23 @@
      found in the LICENSE file. -->
 
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <org.chromium.chrome.browser.preferences.SignInPreference
+        android:key="sign_in"
+        android:title="@string/sign_in_to_chrome"/>
+
+    <org.chromium.chrome.browser.preferences.SyncErrorCardPreference
+        android:key="sync_error_card"
+        android:icon="@drawable/sync_error"
+        android:title="@string/sync_error_card_title"/>
+    <Preference
+        android:key="sync_error_card_divider"
+        android:layout="@layout/divider_preference"/>
+
     <org.chromium.chrome.browser.preferences.ChromeSwitchPreference
         android:persistent="false"
         android:key="use_sync_and_all_services"
         android:title="@string/use_sync_and_all_services"/>
-
     <Preference
-        android:key="sign_out_divider"
         android:layout="@layout/divider_preference"/>
     <org.chromium.chrome.browser.preferences.SigninExpandablePreferenceGroup
         android:persistent="false"
@@ -18,10 +28,6 @@
         android:title="@string/sync_and_personalization_title"
         android:summary="@string/sync_and_personalization_summary">
 
-        <org.chromium.chrome.browser.preferences.SyncErrorCardPreference
-            android:key="sync_error_card"
-            android:icon="@drawable/sync_error"
-            android:title="@string/sync_error_card_title"/>
         <org.chromium.chrome.browser.preferences.ChromeBaseCheckBoxPreference
             android:key="sync_autofill"
             android:persistent="false"
@@ -32,11 +38,11 @@
             android:title="@string/sync_bookmarks"/>
         <org.chromium.chrome.browser.preferences.ChromeBaseCheckBoxPreference
             android:persistent="false"
-            android:key="payments_integration"
-            android:title="@string/payments_integration"/>
+            android:key="sync_payments_integration"
+            android:title="@string/sync_payments_integration"/>
         <org.chromium.chrome.browser.preferences.ChromeBaseCheckBoxPreference
             android:persistent="false"
-            android:key="sync_omnibox"
+            android:key="sync_history"
             android:title="@string/sync_history"/>
         <org.chromium.chrome.browser.preferences.ChromeBaseCheckBoxPreference
             android:persistent="false"
@@ -57,8 +63,8 @@
             android:summary="@string/sync_activity_and_interactions_summary"/>
         <org.chromium.chrome.browser.preferences.ChromeBasePreference
             android:key="google_activity_controls"
-            android:title="@string/sign_in_google_activity_controls"
-            android:summary="@string/sign_in_google_activity_controls_message"/>
+            android:title="@string/sign_in_google_activity_controls_title"
+            android:summary="@string/sign_in_google_activity_controls_summary"/>
         <org.chromium.chrome.browser.preferences.ChromeBasePreference
             android:key="encryption"
             android:title="@string/sync_encryption"/>
@@ -102,10 +108,10 @@
             android:key="safe_browsing_scout_reporting"
             android:title="@string/safe_browsing_scout_reporting_title"
             android:summary="@string/safe_browsing_scout_reporting_summary"/>
-        <org.chromium.chrome.browser.preferences.ChromeBasePreference
+        <org.chromium.chrome.browser.preferences.ChromeBaseCheckBoxPreference
             android:key="usage_and_crash_reports"
             android:title="@string/usage_and_crash_reports_title"
-            android:fragment="org.chromium.chrome.browser.preferences.privacy.UsageAndCrashReportsPreferenceFragment"/>
+            android:summary="@string/usage_and_crash_reports_summary"/>
         <org.chromium.chrome.browser.preferences.ChromeBaseCheckBoxPreference
             android:key="url_keyed_anonymized_data"
             android:title="@string/url_keyed_anonymized_data_title"

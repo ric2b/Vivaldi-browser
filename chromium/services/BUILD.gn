@@ -31,6 +31,7 @@ service_test("services_unittests") {
       "//services/audio:tests",
       "//services/data_decoder:tests",
       "//services/device:tests",
+      "//services/media_session:tests",
       "//services/preferences:tests",
       "//services/proxy_resolver:tests",
       "//services/resource_coordinator:tests",
@@ -45,11 +46,11 @@ service_test("services_unittests") {
 
   if (use_aura) {
     deps += [
-      "//services/ui/ime:tests",
-      "//services/ui/input_devices:tests",
-      "//services/ui/public/cpp/tests",
-      "//services/ui/public/interfaces:tests",
-      "//services/ui/ws2:tests",
+      "//services/ws:tests",
+      "//services/ws/ime:tests",
+      "//services/ws/input_devices:tests",
+      "//services/ws/public/cpp/tests",
+      "//services/ws/public/mojom:tests",
     ]
   }
 
@@ -75,10 +76,6 @@ service_test("services_unittests") {
     # or iOS, so any tests which use the ServiceTest framework to connect to
     # standalone services must be added here.
     deps += [ "//services/video_capture:tests" ]
-  }
-
-  if (is_chromeos) {
-    deps += [ "//services/ui/display:tests" ]
   }
 
   test_runner = "//services/test:run_all_service_tests"
@@ -110,8 +107,8 @@ catalog("services_unittests_catalog") {
 
   if (use_aura) {
     catalog_deps += [
-      "//services/ui/ime:tests_catalog",
-      "//services/ui/ws2:tests_catalog",
+      "//services/ws/ime:tests_catalog",
+      "//services/ws:tests_catalog",
     ]
   }
 }

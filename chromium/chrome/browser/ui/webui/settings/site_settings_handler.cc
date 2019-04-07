@@ -17,11 +17,12 @@
 #include "base/macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/values.h"
-#include "chrome/browser/browsing_data/browsing_data_local_storage_helper.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/web_site_settings_uma_util.h"
+#include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/media/unified_autoplay_config.h"
 #include "chrome/browser/permissions/chooser_context_base.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker.h"
 #include "chrome/browser/permissions/permission_manager.h"
@@ -34,11 +35,14 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/site_settings_helper.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/crx_file/id_util.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
@@ -54,9 +58,6 @@
 #include "ui/base/text/bytes_formatting.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/common/pref_names.h"
-#include "components/prefs/pref_change_registrar.h"
-#include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #endif
 
@@ -66,6 +67,7 @@ namespace {
 
 constexpr char kEffectiveTopLevelDomainPlus1Name[] = "etldPlus1";
 constexpr char kOriginList[] = "origins";
+constexpr char kNumCookies[] = "numCookies";
 constexpr char kZoom[] = "zoom";
 
 // Return an appropriate API Permission ID for the given string name.
@@ -149,12 +151,44 @@ void CreateOrAppendSiteGroupEntry(
   }
 }
 
+// Converts a given |site_group_map| to a list of base::DictionaryValues, adding
+// the site engagement score for each origin.
+void ConvertSiteGroupMapToListValue(
+    const std::map<std::string, std::set<std::string>>& site_group_map,
+    base::Value* list_value,
+    Profile* profile) {
+  DCHECK_EQ(base::Value::Type::LIST, list_value->type());
+  DCHECK(profile);
+  SiteEngagementService* engagement_service =
+      SiteEngagementService::Get(profile);
+  for (const auto& entry : site_group_map) {
+    // eTLD+1 is the effective top level domain + 1.
+    base::Value site_group(base::Value::Type::DICTIONARY);
+    site_group.SetKey(kEffectiveTopLevelDomainPlus1Name,
+                      base::Value(entry.first));
+    base::Value origin_list(base::Value::Type::LIST);
+    for (const std::string& origin : entry.second) {
+      base::Value origin_object(base::Value::Type::DICTIONARY);
+      origin_object.SetKey("origin", base::Value(origin));
+      origin_object.SetKey(
+          "engagement",
+          base::Value(engagement_service->GetScore(GURL(origin))));
+      origin_object.SetKey("usage", base::Value(0));
+      origin_list.GetList().emplace_back(std::move(origin_object));
+    }
+    site_group.SetKey(kNumCookies, base::Value(0));
+    site_group.SetKey(kOriginList, std::move(origin_list));
+    list_value->GetList().push_back(std::move(site_group));
+  }
+}
+
 }  // namespace
 
-
 SiteSettingsHandler::SiteSettingsHandler(Profile* profile)
-    : profile_(profile), observer_(this) {
-}
+    : profile_(profile),
+      observer_(this),
+      pref_change_registrar_(nullptr),
+      local_storage_helper_(nullptr) {}
 
 SiteSettingsHandler::~SiteSettingsHandler() {
 }
@@ -188,6 +222,10 @@ void SiteSettingsHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "getAllSites",
       base::BindRepeating(&SiteSettingsHandler::HandleGetAllSites,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getFormattedBytes",
+      base::BindRepeating(&SiteSettingsHandler::HandleGetFormattedBytes,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getExceptionList",
@@ -235,6 +273,14 @@ void SiteSettingsHandler::RegisterMessages() {
       "removeZoomLevel",
       base::BindRepeating(&SiteSettingsHandler::HandleRemoveZoomLevel,
                           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "setBlockAutoplayEnabled",
+      base::BindRepeating(&SiteSettingsHandler::HandleSetBlockAutoplayEnabled,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "fetchBlockAutoplayStatus",
+      base::BindRepeating(&SiteSettingsHandler::HandleFetchBlockAutoplayStatus,
+                          base::Unretained(this)));
 }
 
 void SiteSettingsHandler::OnJavascriptAllowed() {
@@ -263,9 +309,16 @@ void SiteSettingsHandler::OnJavascriptAllowed() {
               base::Bind(&SiteSettingsHandler::OnZoomLevelChanged,
                          base::Unretained(this)));
 
-#if defined(OS_CHROMEOS)
   pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(profile_->GetPrefs());
+
+  // If the block autoplay pref changes send the new status.
+  pref_change_registrar_->Add(
+      prefs::kBlockAutoplayEnabled,
+      base::Bind(&SiteSettingsHandler::SendBlockAutoplayStatus,
+                 base::Unretained(this)));
+
+#if defined(OS_CHROMEOS)
   pref_change_registrar_->Add(
       prefs::kEnableDRM,
       base::Bind(&SiteSettingsHandler::OnPrefEnableDrmChanged,
@@ -277,6 +330,7 @@ void SiteSettingsHandler::OnJavascriptDisallowed() {
   observer_.RemoveAll();
   notification_registrar_.RemoveAll();
   host_zoom_map_subscription_.reset();
+  pref_change_registrar_->Remove(prefs::kBlockAutoplayEnabled);
 #if defined(OS_CHROMEOS)
   pref_change_registrar_->Remove(prefs::kEnableDRM);
 #endif
@@ -341,6 +395,14 @@ void SiteSettingsHandler::OnContentSettingChanged(
         base::Value(secondary_pattern == ContentSettingsPattern::Wildcard()
                         ? ""
                         : secondary_pattern.ToString()));
+  }
+
+  // If the default sound content setting changed then we should send block
+  // autoplay status.
+  if (primary_pattern == ContentSettingsPattern() &&
+      secondary_pattern == ContentSettingsPattern() &&
+      content_type == CONTENT_SETTINGS_TYPE_SOUND) {
+    SendBlockAutoplayStatus();
   }
 }
 
@@ -425,9 +487,7 @@ void SiteSettingsHandler::HandleClearUsage(
                             base::Unretained(this), barrier));
 
     // Also clear the *local* storage data.
-    scoped_refptr<BrowsingDataLocalStorageHelper> local_storage_helper =
-        new BrowsingDataLocalStorageHelper(profile_);
-    local_storage_helper->DeleteOrigin(url, barrier);
+    GetLocalStorageHelper()->DeleteOrigin(url, barrier);
   }
 }
 
@@ -560,6 +620,10 @@ void SiteSettingsHandler::HandleGetAllSites(const base::ListValue* args) {
   // TODO(https://crbug.com/835712): Assess performance of this method for
   // unusually large numbers of stored content settings.
 
+  // Add sites that are using any local storage to the list.
+  GetLocalStorageHelper()->StartFetching(base::BindRepeating(
+      &SiteSettingsHandler::OnLocalStorageFetched, base::Unretained(this)));
+
   // Retrieve a list of embargoed settings to check separately. This ensures
   // that only settings included in |content_types| will be listed in all sites.
   ContentSettingsForOneType embargo_settings;
@@ -584,9 +648,6 @@ void SiteSettingsHandler::HandleGetAllSites(const base::ListValue* args) {
 
   // Convert |types| to a list of ContentSettingsTypes.
   for (ContentSettingsType content_type : content_types) {
-    // TODO(https://crbug.com/835712): Add extension content settings, plus
-    // sites that use any non-zero amount of storage.
-
     ContentSettingsForOneType entries;
     map->GetSettingsForOneType(content_type, std::string(), &entries);
     for (const ContentSettingPatternSource& e : entries) {
@@ -596,21 +657,51 @@ void SiteSettingsHandler::HandleGetAllSites(const base::ListValue* args) {
     }
   }
 
-  // Convert |all_sites_map| to a list of base::DictionaryValues.
   base::Value result(base::Value::Type::LIST);
-  for (const auto& entry : all_sites_map) {
-    // eTLD+1 is the effective top level domain + 1.
-    base::Value site_group(base::Value::Type::DICTIONARY);
-    site_group.SetKey(kEffectiveTopLevelDomainPlus1Name,
-                      base::Value(entry.first));
-    base::Value origin_list(base::Value::Type::LIST);
-    for (const std::string& origin : entry.second) {
-      origin_list.GetList().emplace_back(origin);
-    }
-    site_group.SetKey(kOriginList, std::move(origin_list));
-    result.GetList().push_back(std::move(site_group));
-  }
+  ConvertSiteGroupMapToListValue(all_sites_map, &result, profile);
   ResolveJavascriptCallback(*callback_id, result);
+}
+
+void SiteSettingsHandler::OnLocalStorageFetched(
+    const std::list<BrowsingDataLocalStorageHelper::LocalStorageInfo>&
+        local_storage_info) {
+  std::map<std::string, int> origin_size_map;
+  std::map<std::string, std::set<std::string>> all_sites_map;
+  for (const BrowsingDataLocalStorageHelper::LocalStorageInfo& info :
+       local_storage_info) {
+    origin_size_map.emplace(info.origin_url.spec(), info.size);
+    CreateOrAppendSiteGroupEntry(&all_sites_map, info.origin_url);
+  }
+  base::Value result(base::Value::Type::LIST);
+  ConvertSiteGroupMapToListValue(all_sites_map, &result, profile_);
+
+  // Merge the origin usage number into |result|.
+  for (size_t i = 0; i < result.GetList().size(); ++i) {
+    base::Value* site_group = &result.GetList()[i];
+    base::Value* origin_list = site_group->FindKey(kOriginList);
+
+    for (size_t i = 0; i < origin_list->GetList().size(); ++i) {
+      base::Value* origin_info = &origin_list->GetList()[i];
+      const std::string& origin = origin_info->FindKey("origin")->GetString();
+      const auto& size_info = origin_size_map.find(origin);
+      if (size_info != origin_size_map.end())
+        origin_info->SetKey("usage", base::Value(size_info->second));
+    }
+  }
+  FireWebUIListener("onLocalStorageListFetched", result);
+}
+
+void SiteSettingsHandler::HandleGetFormattedBytes(const base::ListValue* args) {
+  AllowJavascript();
+
+  CHECK_EQ(2U, args->GetSize());
+  const base::Value* callback_id;
+  CHECK(args->Get(0, &callback_id));
+  int num_bytes;
+  CHECK(args->GetInteger(1, &num_bytes));
+
+  const base::string16 string = ui::FormatBytes(num_bytes);
+  ResolveJavascriptCallback(*callback_id, base::Value(string));
 }
 
 void SiteSettingsHandler::HandleGetExceptionList(const base::ListValue* args) {
@@ -1051,6 +1142,61 @@ void SiteSettingsHandler::HandleRemoveZoomLevel(const base::ListValue* args) {
   host_zoom_map = content::HostZoomMap::GetDefaultForBrowserContext(profile_);
   double default_level = host_zoom_map->GetDefaultZoomLevel();
   host_zoom_map->SetZoomLevelForHost(origin, default_level);
+}
+
+void SiteSettingsHandler::HandleFetchBlockAutoplayStatus(
+    const base::ListValue* args) {
+  AllowJavascript();
+  SendBlockAutoplayStatus();
+}
+
+void SiteSettingsHandler::SendBlockAutoplayStatus() {
+  if (!IsJavascriptAllowed())
+    return;
+
+  base::DictionaryValue status;
+
+  // Whether the block autoplay toggle should be checked.
+  base::DictionaryValue pref;
+  pref.SetKey(
+      "value",
+      base::Value(
+          UnifiedAutoplayConfig::ShouldBlockAutoplay(profile_) &&
+          UnifiedAutoplayConfig::IsBlockAutoplayUserModifiable(profile_)));
+  status.SetKey("pref", std::move(pref));
+
+  // Whether the block autoplay toggle should be enabled.
+  status.SetKey("enabled",
+                base::Value(UnifiedAutoplayConfig::IsBlockAutoplayUserModifiable(
+                    profile_)));
+
+  FireWebUIListener("onBlockAutoplayStatusChanged", status);
+}
+
+void SiteSettingsHandler::HandleSetBlockAutoplayEnabled(
+    const base::ListValue* args) {
+  AllowJavascript();
+
+  if (!UnifiedAutoplayConfig::IsBlockAutoplayUserModifiable(profile_))
+    return;
+
+  CHECK_EQ(1U, args->GetSize());
+  bool value;
+  CHECK(args->GetBoolean(0, &value));
+
+  profile_->GetPrefs()->SetBoolean(prefs::kBlockAutoplayEnabled, value);
+}
+
+void SiteSettingsHandler::SetBrowsingDataLocalStorageHelperForTesting(
+    scoped_refptr<BrowsingDataLocalStorageHelper> helper) {
+  DCHECK(!local_storage_helper_);
+  local_storage_helper_ = helper;
+}
+
+BrowsingDataLocalStorageHelper* SiteSettingsHandler::GetLocalStorageHelper() {
+  if (!local_storage_helper_)
+    local_storage_helper_ = new BrowsingDataLocalStorageHelper(profile_);
+  return local_storage_helper_.get();
 }
 
 }  // namespace settings

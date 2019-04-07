@@ -17,7 +17,10 @@ namespace blink {
 
 V8EmbedderGraphBuilder::V8EmbedderGraphBuilder(v8::Isolate* isolate,
                                                Graph* graph)
-    : isolate_(isolate), current_parent_(nullptr), graph_(graph) {}
+    : ScriptWrappableVisitor(ThreadState::Current()),
+      isolate_(isolate),
+      current_parent_(nullptr),
+      graph_(graph) {}
 
 void V8EmbedderGraphBuilder::BuildEmbedderGraphCallback(
     v8::Isolate* isolate,
@@ -156,6 +159,8 @@ void V8EmbedderGraphBuilder::VisitWithWrappers(
 void V8EmbedderGraphBuilder::VisitBackingStoreStrongly(void* object,
                                                        void** object_slot,
                                                        TraceDescriptor desc) {
+  if (!object)
+    return;
   desc.callback(this, desc.base_object_payload);
 }
 

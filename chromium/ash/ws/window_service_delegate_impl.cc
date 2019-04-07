@@ -12,11 +12,12 @@
 #include "ash/wm/non_client_frame_controller.h"
 #include "ash/wm/top_level_window_factory.h"
 #include "ash/wm/toplevel_window_event_handler.h"
+#include "ash/wm/window_finder.h"
 #include "ash/wm/window_util.h"
 #include "base/bind.h"
 #include "mojo/public/cpp/bindings/map.h"
-#include "services/ui/public/interfaces/window_manager.mojom.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_manager.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/env.h"
@@ -80,12 +81,11 @@ std::unique_ptr<aura::Window> WindowServiceDelegateImpl::NewTopLevel(
     const base::flat_map<std::string, std::vector<uint8_t>>& properties) {
   std::map<std::string, std::vector<uint8_t>> property_map =
       mojo::FlatMapToMap(properties);
-  ui::mojom::WindowType window_type =
+  ws::mojom::WindowType window_type =
       aura::GetWindowTypeFromProperties(property_map);
 
-  auto* window =
-      CreateAndParentTopLevelWindow(nullptr /* window_manager */, window_type,
-                                    property_converter, &property_map);
+  auto* window = CreateAndParentTopLevelWindow(window_type, property_converter,
+                                               &property_map);
   return base::WrapUnique<aura::Window>(window);
 }
 
@@ -107,7 +107,7 @@ bool WindowServiceDelegateImpl::StoreAndSetCursor(aura::Window* window,
 
 void WindowServiceDelegateImpl::RunWindowMoveLoop(
     aura::Window* window,
-    ui::mojom::MoveLoopSource source,
+    ws::mojom::MoveLoopSource source,
     const gfx::Point& cursor,
     DoneCallback callback) {
   if (!ShouldStartMoveLoop(window)) {
@@ -115,11 +115,11 @@ void WindowServiceDelegateImpl::RunWindowMoveLoop(
     return;
   }
 
-  if (source == ui::mojom::MoveLoopSource::MOUSE)
+  if (source == ws::mojom::MoveLoopSource::MOUSE)
     window->SetCapture();
 
   const ::wm::WindowMoveSource aura_source =
-      source == ui::mojom::MoveLoopSource::MOUSE
+      source == ws::mojom::MoveLoopSource::MOUSE
           ? ::wm::WINDOW_MOVE_SOURCE_MOUSE
           : ::wm::WINDOW_MOVE_SOURCE_TOUCH;
   Shell::Get()
@@ -195,8 +195,12 @@ void WindowServiceDelegateImpl::SetModalType(aura::Window* window,
   window->SetProperty(aura::client::kModalKey, type);
 
   // Reparent the window if it will become, or will no longer be, system modal.
-  if (type == ui::MODAL_TYPE_SYSTEM || old_type == ui::MODAL_TYPE_SYSTEM)
-    wm::GetDefaultParent(window, window->GetBoundsInScreen())->AddChild(window);
+  if (type == ui::MODAL_TYPE_SYSTEM || old_type == ui::MODAL_TYPE_SYSTEM) {
+    aura::Window* const parent =
+        wm::GetDefaultParent(window, window->GetBoundsInScreen());
+    if (parent != window->parent())
+      parent->AddChild(window);
+  }
 }
 
 ui::SystemInputInjector* WindowServiceDelegateImpl::GetSystemInputInjector() {
@@ -205,6 +209,20 @@ ui::SystemInputInjector* WindowServiceDelegateImpl::GetSystemInputInjector() {
         ui::OzonePlatform::GetInstance()->CreateSystemInputInjector();
   }
   return system_input_injector_.get();
+}
+
+aura::WindowTreeHost* WindowServiceDelegateImpl::GetWindowTreeHostForDisplayId(
+    int64_t display_id) {
+  RootWindowController* root_window_controller =
+      Shell::GetRootWindowControllerWithDisplayId(display_id);
+  return root_window_controller ? root_window_controller->GetHost() : nullptr;
+}
+
+aura::Window* WindowServiceDelegateImpl::GetTopmostWindowAtPoint(
+    const gfx::Point& location_in_screen,
+    const std::set<aura::Window*>& ignore,
+    aura::Window** real_topmost) {
+  return wm::GetTopmostWindowAtPoint(location_in_screen, ignore, real_topmost);
 }
 
 }  // namespace ash

@@ -63,7 +63,6 @@ public abstract class SigninFragmentBase
     private static final String SETTINGS_LINK_OPEN = "<LINK1>";
     private static final String SETTINGS_LINK_CLOSE = "</LINK1>";
 
-    private static final String ARGUMENT_ACCESS_POINT = "SigninFragmentBase.AccessPoint";
     private static final String ARGUMENT_ACCOUNT_NAME = "SigninFragmentBase.AccountName";
     private static final String ARGUMENT_CHILD_ACCOUNT_STATUS =
             "SigninFragmentBase.ChildAccountStatus";
@@ -75,22 +74,21 @@ public abstract class SigninFragmentBase
     private static final int ADD_ACCOUNT_REQUEST_CODE = 1;
 
     @IntDef({SigninFlowType.DEFAULT, SigninFlowType.FORCED, SigninFlowType.CHOOSE_ACCOUNT,
-            SigninFlowType.ADD_ACCOUNT})
+            SigninFlowType.ADD_ACCOUNT, SigninFlowType.CONSENT_BUMP})
     @Retention(RetentionPolicy.SOURCE)
     @interface SigninFlowType {
         int DEFAULT = 0;
         int FORCED = 1;
         int CHOOSE_ACCOUNT = 2;
         int ADD_ACCOUNT = 3;
+        int CONSENT_BUMP = 4;
     }
 
-    private @SigninAccessPoint int mSigninAccessPoint;
     private @SigninFlowType int mSigninFlowType;
     private @ChildAccountStatus.Status int mChildAccountStatus;
 
     private SigninView mView;
     private ConsentTextTracker mConsentTextTracker;
-    private @StringRes int mCancelButtonTextId = R.string.cancel;
 
     private boolean mAccountSelectionPending;
     private @Nullable String mRequestedAccountName;
@@ -114,13 +112,10 @@ public abstract class SigninFragmentBase
     /**
      * Creates an argument bundle for the default SigninFragmentBase flow (account selection is
      * enabled, etc.).
-     * @param accessPoint The access point for starting sign-in flow.
      * @param accountName The account to preselect or null to preselect the default account.
      */
-    protected static Bundle createArguments(
-            @SigninAccessPoint int accessPoint, @Nullable String accountName) {
+    protected static Bundle createArguments(@Nullable String accountName) {
         Bundle result = new Bundle();
-        result.putInt(ARGUMENT_ACCESS_POINT, accessPoint);
         result.putInt(ARGUMENT_SIGNIN_FLOW_TYPE, SigninFlowType.DEFAULT);
         result.putString(ARGUMENT_ACCOUNT_NAME, accountName);
         return result;
@@ -129,13 +124,10 @@ public abstract class SigninFragmentBase
     /**
      * Creates an argument bundle for "Choose account" sign-in flow. Account selection dialog will
      * be shown at the start of the sign-in process.
-     * @param accessPoint The access point for starting sign-in flow.
      * @param accountName The account to preselect or null to preselect the default account.
      */
-    protected static Bundle createArgumentsForChooseAccountFlow(
-            @SigninAccessPoint int accessPoint, @Nullable String accountName) {
+    protected static Bundle createArgumentsForChooseAccountFlow(@Nullable String accountName) {
         Bundle result = new Bundle();
-        result.putInt(ARGUMENT_ACCESS_POINT, accessPoint);
         result.putInt(ARGUMENT_SIGNIN_FLOW_TYPE, SigninFlowType.CHOOSE_ACCOUNT);
         result.putString(ARGUMENT_ACCOUNT_NAME, accountName);
         return result;
@@ -144,28 +136,35 @@ public abstract class SigninFragmentBase
     /**
      * Creates an argument bundle for "Add account" sign-in flow. Activity to add an account will be
      * shown at the start of the sign-in process.
-     * @param accessPoint The access point for starting sign-in flow.
      */
-    protected static Bundle createArgumentsForAddAccountFlow(@SigninAccessPoint int accessPoint) {
+    protected static Bundle createArgumentsForAddAccountFlow() {
         Bundle result = new Bundle();
-        result.putInt(ARGUMENT_ACCESS_POINT, accessPoint);
         result.putInt(ARGUMENT_SIGNIN_FLOW_TYPE, SigninFlowType.ADD_ACCOUNT);
         return result;
     }
 
     /**
      * Creates an argument bundle for a custom SigninFragmentBase flow.
-     * @param accessPoint The access point for starting sign-in flow.
      * @param accountName The account to preselect.
      * @param childAccountStatus Whether the selected account is a child one.
      */
-    protected static Bundle createArgumentsForForcedSigninFlow(@SigninAccessPoint int accessPoint,
+    protected static Bundle createArgumentsForForcedSigninFlow(
             String accountName, @ChildAccountStatus.Status int childAccountStatus) {
         Bundle result = new Bundle();
-        result.putInt(ARGUMENT_ACCESS_POINT, accessPoint);
         result.putInt(ARGUMENT_SIGNIN_FLOW_TYPE, SigninFlowType.FORCED);
         result.putString(ARGUMENT_ACCOUNT_NAME, accountName);
         result.putInt(ARGUMENT_CHILD_ACCOUNT_STATUS, childAccountStatus);
+        return result;
+    }
+
+    /**
+     * Creates an argument bundle for the consent bump screen.
+     * @param accountName The name of the signed in account.
+     */
+    protected static Bundle createArgumentsForConsentBumpFlow(String accountName) {
+        Bundle result = new Bundle();
+        result.putInt(ARGUMENT_SIGNIN_FLOW_TYPE, SigninFlowType.CONSENT_BUMP);
+        result.putString(ARGUMENT_ACCOUNT_NAME, accountName);
         return result;
     }
 
@@ -193,14 +192,30 @@ public abstract class SigninFragmentBase
     protected abstract void onSigninAccepted(String accountName, boolean isDefaultAccount,
             boolean settingsClicked, Runnable callback);
 
-    /** Returns the access point that initiated the sign-in flow. */
-    protected @SigninAccessPoint int getSigninAccessPoint() {
-        return mSigninAccessPoint;
+    /**
+     * Returns the string resource id for the title TextView. This is invoked once from
+     * {@link #onCreateView}. Subclasses may override this method to customize the title text.
+     */
+    @StringRes
+    protected int getTitleTextId() {
+        return R.string.signin_title;
     }
+
+    /**
+     * Returns the string resource id for the negative button. This is invoked once from
+     * {@link #onCreateView}.
+     */
+    @StringRes
+    protected abstract int getNegativeButtonTextId();
 
     /** Returns whether this fragment is in "force sign-in" mode. */
     protected boolean isForcedSignin() {
         return mSigninFlowType == SigninFlowType.FORCED;
+    }
+
+    /** Returns whether this fragment is in Consent bump mode. */
+    protected boolean isConsentBump() {
+        return mSigninFlowType == SigninFlowType.CONSENT_BUMP;
     }
 
     @Override
@@ -208,7 +223,6 @@ public abstract class SigninFragmentBase
         super.onCreate(savedInstanceState);
 
         Bundle arguments = getSigninArguments();
-        initAccessPoint(arguments.getInt(ARGUMENT_ACCESS_POINT, -1));
         mRequestedAccountName = arguments.getString(ARGUMENT_ACCOUNT_NAME, null);
         mChildAccountStatus =
                 arguments.getInt(ARGUMENT_CHILD_ACCOUNT_STATUS, ChildAccountStatus.NOT_CHILD);
@@ -243,23 +257,6 @@ public abstract class SigninFragmentBase
                 getResources().getDimensionPixelSize(R.dimen.user_picture_size), badgeConfig);
     }
 
-    private void initAccessPoint(@SigninAccessPoint int accessPoint) {
-        assert accessPoint == SigninAccessPoint.AUTOFILL_DROPDOWN
-                || accessPoint == SigninAccessPoint.BOOKMARK_MANAGER
-                || accessPoint == SigninAccessPoint.NTP_CONTENT_SUGGESTIONS
-                || accessPoint == SigninAccessPoint.RECENT_TABS
-                || accessPoint == SigninAccessPoint.SETTINGS
-                || accessPoint == SigninAccessPoint.SIGNIN_PROMO
-                || accessPoint
-                        == SigninAccessPoint.START_PAGE : "invalid access point: " + accessPoint;
-
-        mSigninAccessPoint = accessPoint;
-        if (accessPoint == SigninAccessPoint.START_PAGE
-                || accessPoint == SigninAccessPoint.SIGNIN_PROMO) {
-            mCancelButtonTextId = R.string.no_thanks;
-        }
-    }
-
     @Override
     public void onDestroy() {
         super.onDestroy();
@@ -291,10 +288,12 @@ public abstract class SigninFragmentBase
         mView.getDetailsDescriptionView().setMovementMethod(LinkMovementMethod.getInstance());
 
         final Drawable endImageViewDrawable;
-        if (isForcedSignin()) {
+        if (mSigninFlowType == SigninFlowType.FORCED) {
             endImageViewDrawable = SigninView.getCheckmarkDrawable(getContext());
             mView.getRefuseButton().setVisibility(View.GONE);
             mView.getAcceptButtonEndPadding().setVisibility(View.INVISIBLE);
+        } else if (mSigninFlowType == SigninFlowType.CONSENT_BUMP) {
+            endImageViewDrawable = SigninView.getCheckmarkDrawable(getContext());
         } else {
             endImageViewDrawable = SigninView.getExpandArrowDrawable(getContext());
         }
@@ -302,6 +301,11 @@ public abstract class SigninFragmentBase
 
         updateConsentText();
         setHasAccounts(true); // Assume there are accounts, updateAccounts will set the real value.
+
+        // When a fragment that was in the FragmentManager backstack becomes visible again, the view
+        // will be recreated by onCreateView. Update the state of this recreated UI.
+        if (mSelectedAccountName != null) updateProfileData();
+
         return mView;
     }
 
@@ -338,7 +342,7 @@ public abstract class SigninFragmentBase
 
     /** Sets texts for immutable elements. Accept button text is set by {@link #setHasAccounts}. */
     private void updateConsentText() {
-        mConsentTextTracker.setText(mView.getTitleView(), R.string.signin_title);
+        mConsentTextTracker.setText(mView.getTitleView(), getTitleTextId());
         mConsentTextTracker.setText(
                 mView.getSyncDescriptionView(), R.string.signin_sync_description);
 
@@ -351,7 +355,7 @@ public abstract class SigninFragmentBase
 
         mConsentTextTracker.setText(mView.getGoogleServicesDescriptionView(),
                 R.string.signin_google_services_description);
-        mConsentTextTracker.setText(mView.getRefuseButton(), mCancelButtonTextId);
+        mConsentTextTracker.setText(mView.getRefuseButton(), getNegativeButtonTextId());
         mConsentTextTracker.setText(mView.getMoreButton(), R.string.more);
     }
 
@@ -382,7 +386,7 @@ public abstract class SigninFragmentBase
     }
 
     private void onAccountPickerClicked() {
-        if (isForcedSignin() || !areControlsEnabled()) return;
+        if (isForcedSignin() || isConsentBump() || !areControlsEnabled()) return;
         showAccountPicker();
     }
 
@@ -489,9 +493,9 @@ public abstract class SigninFragmentBase
     private void recordConsent(TextView confirmationView) {
         // TODO(crbug.com/831257): Provide the account id synchronously from AccountManagerFacade.
         final AccountIdProvider accountIdProvider = AccountIdProvider.getInstance();
-        new AsyncTask<Void, Void, String>() {
+        new AsyncTask<String>() {
             @Override
-            public String doInBackground(Void... params) {
+            public String doInBackground() {
                 return accountIdProvider.getAccountId(mSelectedAccountName);
             }
 

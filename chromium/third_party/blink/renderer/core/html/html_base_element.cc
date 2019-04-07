@@ -48,16 +48,16 @@ void HTMLBaseElement::ParseAttribute(
 }
 
 Node::InsertionNotificationRequest HTMLBaseElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   HTMLElement::InsertedInto(insertion_point);
-  if (insertion_point->isConnected())
+  if (insertion_point.isConnected())
     GetDocument().ProcessBaseElement();
   return kInsertionDone;
 }
 
-void HTMLBaseElement::RemovedFrom(ContainerNode* insertion_point) {
+void HTMLBaseElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLElement::RemovedFrom(insertion_point);
-  if (insertion_point->isConnected())
+  if (insertion_point.isConnected())
     GetDocument().ProcessBaseElement();
 }
 
@@ -96,21 +96,7 @@ KURL HTMLBaseElement::href() const {
 
 void HTMLBaseElement::setHref(const USVStringOrTrustedURL& stringOrUrl,
                               ExceptionState& exception_state) {
-  DCHECK(stringOrUrl.IsUSVString() ||
-         RuntimeEnabledFeatures::TrustedDOMTypesEnabled());
-  DCHECK(!stringOrUrl.IsNull());
-
-  if (stringOrUrl.IsUSVString() && GetDocument().RequireTrustedTypes()) {
-    exception_state.ThrowTypeError(
-        "This document requires `TrustedURL` assignment.");
-    return;
-  }
-
-  AtomicString value(stringOrUrl.IsUSVString()
-                         ? stringOrUrl.GetAsUSVString()
-                         : stringOrUrl.GetAsTrustedURL()->toString());
-
-  setAttribute(hrefAttr, value);
+  setAttribute(hrefAttr, stringOrUrl, exception_state);
 }
 
 }  // namespace blink

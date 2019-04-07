@@ -9,7 +9,6 @@
 
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
-#include "device/vr/oculus/oculus_gamepad_data_fetcher.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/vr_device_base.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -19,27 +18,27 @@ namespace device {
 
 class OculusRenderLoop;
 
-class OculusDevice : public VRDeviceBase,
-                     public mojom::XRSessionController,
-                     public OculusGamepadDataProvider {
+class DEVICE_VR_EXPORT OculusDevice
+    : public VRDeviceBase,
+      public mojom::XRSessionController,
+      public mojom::IsolatedXRGamepadProviderFactory {
  public:
   explicit OculusDevice();
   ~OculusDevice() override;
 
   // VRDeviceBase
   void RequestSession(
-      mojom::XRDeviceRuntimeSessionOptionsPtr options,
+      mojom::XRRuntimeSessionOptionsPtr options,
       mojom::XRRuntime::RequestSessionCallback callback) override;
   void OnMagicWindowFrameDataRequest(
-      mojom::VRMagicWindowProvider::GetFrameDataCallback callback) override;
-  void OnRequestSessionResult(
-      mojom::XRRuntime::RequestSessionCallback callback,
-      bool result,
-      mojom::VRSubmitFrameClientRequest request,
-      mojom::VRPresentationProviderPtrInfo provider_info,
-      mojom::VRDisplayFrameTransportOptionsPtr transport_options);
+      mojom::XRFrameDataProvider::GetFrameDataCallback callback) override;
+  void OnRequestSessionResult(mojom::XRRuntime::RequestSessionCallback callback,
+                              bool result,
+                              mojom::XRSessionPtr session);
 
   bool IsInitialized() { return !!session_; }
+
+  mojom::IsolatedXRGamepadProviderFactoryPtr BindGamepadFactory();
 
  private:
   // XRSessionController
@@ -47,27 +46,22 @@ class OculusDevice : public VRDeviceBase,
 
   void OnPresentingControllerMojoConnectionError();
 
-  // OculusGamepadDataProvider
-  void RegisterDataFetcher(OculusGamepadDataFetcher*) override;
+  // mojom::IsolatedXRGamepadProviderFactory
+  void GetIsolatedXRGamepadProvider(
+      mojom::IsolatedXRGamepadProviderRequest provider_request) override;
 
   void OnPresentationEnded();
   void StartOvrSession();
   void StopOvrSession();
 
-  void OnControllerUpdated(ovrInputState input,
-                           ovrInputState remote,
-                           ovrTrackingState tracking,
-                           bool has_touch,
-                           bool has_remote);
-
   std::unique_ptr<OculusRenderLoop> render_loop_;
-  OculusGamepadDataFetcher* data_fetcher_ = nullptr;
-  mojom::VRDisplayInfoPtr display_info_;
   ovrSession session_ = nullptr;
-  OculusGamepadDataFetcher::Factory* oculus_gamepad_factory_ = nullptr;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
 
   mojo::Binding<mojom::XRSessionController> exclusive_controller_binding_;
+  mojo::Binding<mojom::IsolatedXRGamepadProviderFactory>
+      gamepad_provider_factory_binding_;
+  mojom::IsolatedXRGamepadProviderRequest provider_request_;
 
   base::WeakPtrFactory<OculusDevice> weak_ptr_factory_;
 

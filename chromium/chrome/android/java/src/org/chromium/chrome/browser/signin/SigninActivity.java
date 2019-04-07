@@ -19,6 +19,11 @@ import org.chromium.chrome.browser.SynchronousInitializationActivity;
 // TODO(https://crbug.com/820491): extend AsyncInitializationActivity.
 public class SigninActivity extends SynchronousInitializationActivity {
     private static final String TAG = "SigninActivity";
+    private static final String ARGUMENT_FRAGMENT_NAME = "SigninActivity.FragmentName";
+    private static final String ARGUMENT_FRAGMENT_ARGS = "SigninActivity.FragmentArgs";
+    private static final String ARGUMENT_INTERCEPT_BACK = "SigninActivity.InterceptBack";
+
+    private boolean mInterceptBack;
 
     /**
      * Creates an {@link Intent} which can be used to start sign-in flow.
@@ -26,7 +31,8 @@ public class SigninActivity extends SynchronousInitializationActivity {
      */
     public static Intent createIntent(
             Context context, @AccountSigninActivity.AccessPoint int accessPoint) {
-        return createIntentInternal(context, SigninFragment.createArguments(accessPoint));
+        return createIntentInternal(
+                context, SigninFragment.class, SigninFragment.createArguments(accessPoint), false);
     }
 
     /**
@@ -36,8 +42,8 @@ public class SigninActivity extends SynchronousInitializationActivity {
      */
     public static Intent createIntentForPromoDefaultFlow(
             Context context, @SigninAccessPoint int accessPoint, String accountName) {
-        return createIntentInternal(context,
-                SigninFragment.createArgumentsForPromoDefaultFlow(accessPoint, accountName));
+        return createIntentInternal(context, SigninFragment.class,
+                SigninFragment.createArgumentsForPromoDefaultFlow(accessPoint, accountName), false);
     }
 
     /**
@@ -48,8 +54,9 @@ public class SigninActivity extends SynchronousInitializationActivity {
      */
     public static Intent createIntentForPromoChooseAccountFlow(
             Context context, @SigninAccessPoint int accessPoint, String accountName) {
-        return createIntentInternal(context,
-                SigninFragment.createArgumentsForPromoChooseAccountFlow(accessPoint, accountName));
+        return createIntentInternal(context, SigninFragment.class,
+                SigninFragment.createArgumentsForPromoChooseAccountFlow(accessPoint, accountName),
+                false);
     }
 
     /**
@@ -59,13 +66,25 @@ public class SigninActivity extends SynchronousInitializationActivity {
      */
     public static Intent createIntentForPromoAddAccountFlow(
             Context context, @SigninAccessPoint int accessPoint) {
-        return createIntentInternal(
-                context, SigninFragment.createArgumentsForPromoAddAccountFlow(accessPoint));
+        return createIntentInternal(context, SigninFragment.class,
+                SigninFragment.createArgumentsForPromoAddAccountFlow(accessPoint), false);
     }
 
-    private static Intent createIntentInternal(Context context, Bundle fragmentArguments) {
+    /**
+     * Creates an {@link Intent} which can be used to start consent bump flow.
+     * @param accountName The name of the signed in account.
+     */
+    public static Intent createIntentForConsentBump(Context context, String accountName) {
+        return createIntentInternal(context, ConsentBumpFragment.class,
+                ConsentBumpFragment.createArguments(accountName), true);
+    }
+
+    private static Intent createIntentInternal(Context context,
+            Class<? extends Fragment> fragmentName, Bundle fragmentArgs, boolean interceptBack) {
         Intent intent = new Intent(context, SigninActivity.class);
-        intent.putExtras(fragmentArguments);
+        intent.putExtra(ARGUMENT_FRAGMENT_NAME, fragmentName.getName());
+        intent.putExtra(ARGUMENT_FRAGMENT_ARGS, fragmentArgs);
+        intent.putExtra(ARGUMENT_INTERCEPT_BACK, interceptBack);
         return intent;
     }
 
@@ -77,9 +96,24 @@ public class SigninActivity extends SynchronousInitializationActivity {
         FragmentManager fragmentManager = getSupportFragmentManager();
         Fragment fragment = fragmentManager.findFragmentById(R.id.fragment_container);
         if (fragment == null) {
-            fragment = new SigninFragment();
-            fragment.setArguments(getIntent().getExtras());
+            String fragmentName = getIntent().getStringExtra(ARGUMENT_FRAGMENT_NAME);
+            Bundle fragmentArgs = getIntent().getBundleExtra(ARGUMENT_FRAGMENT_ARGS);
+            fragment = Fragment.instantiate(this, fragmentName, fragmentArgs);
             fragmentManager.beginTransaction().add(R.id.fragment_container, fragment).commit();
         }
+        mInterceptBack = getIntent().getBooleanExtra(ARGUMENT_INTERCEPT_BACK, false);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (!mInterceptBack) {
+            super.onBackPressed();
+            return;
+        }
+        int backStackEntryCount = getSupportFragmentManager().getBackStackEntryCount();
+        // Ditch the button click if fragment manager back stack is empty.
+        if (backStackEntryCount == 0) return;
+        // Let FragmentActivity pop the stack, as it has additional safety checks.
+        super.onBackPressed();
     }
 }

@@ -61,13 +61,15 @@ FetchRequestData* CreateCopyOfFetchRequestDataForFetch(
   }
   // FIXME: Set ForceOriginHeaderFlag.
   request->SetSameOriginDataURLFlag(true);
-  request->SetReferrer(original->GetReferrer());
+  request->SetReferrerString(original->ReferrerString());
+  request->SetReferrerPolicy(original->GetReferrerPolicy());
   request->SetMode(original->Mode());
   request->SetCredentials(original->Credentials());
   request->SetCacheMode(original->CacheMode());
   request->SetRedirect(original->Redirect());
   request->SetIntegrity(original->Integrity());
   request->SetImportance(original->Importance());
+  request->SetPriority(original->Priority());
   request->SetKeepalive(original->Keepalive());
   request->SetIsHistoryNavigation(original->IsHistoryNavigation());
   if (original->URLLoaderFactory()) {
@@ -272,7 +274,7 @@ Request* Request::CreateRequestWithRequestOrString(
     request->SetIsHistoryNavigation(false);
 
     // "Set |request|’s referrer to "client"."
-    request->SetReferrerString(FetchRequestData::ClientReferrerString());
+    request->SetReferrerString(AtomicString(Referrer::ClientReferrerString()));
 
     // "Set |request|’s referrer policy to the empty string."
     request->SetReferrerPolicy(kReferrerPolicyDefault);
@@ -313,7 +315,8 @@ Request* Request::CreateRequestWithRequestOrString(
         //
         //     parsedReferrer’s origin is not same origin with origin"
         //
-        request->SetReferrerString(FetchRequestData::ClientReferrerString());
+        request->SetReferrerString(
+            AtomicString(Referrer::ClientReferrerString()));
       } else {
         // "Set |request|'s referrer to |parsedReferrer|."
         request->SetReferrerString(AtomicString(parsed_referrer.GetString()));
@@ -719,9 +722,8 @@ String Request::referrer() const {
   // "The referrer attribute's getter must return the empty string if
   // request's referrer is no referrer, "about:client" if request's referrer
   // is client and request's referrer, serialized, otherwise."
-  DCHECK_EQ(FetchRequestData::NoReferrerString(), AtomicString());
-  DCHECK_EQ(FetchRequestData::ClientReferrerString(),
-            AtomicString("about:client"));
+  DCHECK_EQ(Referrer::NoReferrer(), String());
+  DCHECK_EQ(Referrer::ClientReferrerString(), "about:client");
   return request_->ReferrerString();
 }
 

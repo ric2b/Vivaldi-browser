@@ -5,9 +5,12 @@
 #include "chrome/browser/vr/test/ui_pixel_test.h"
 
 #include "build/build_config.h"
+#include "chrome/browser/vr/gl_texture_location.h"
 #include "chrome/browser/vr/model/model.h"
+#include "chrome/browser/vr/render_info.h"
 #include "chrome/browser/vr/test/animation_utils.h"
 #include "chrome/browser/vr/test/constants.h"
+#include "chrome/browser/vr/text_input_delegate.h"
 #include "third_party/skia/include/core/SkImageEncoder.h"
 #include "third_party/skia/include/core/SkStream.h"
 #include "ui/gl/gl_bindings.h"
@@ -53,16 +56,14 @@ void UiPixelTest::MakeUi(const UiInitialState& ui_initial_state,
                          const ToolbarState& toolbar_state) {
   ui_ = std::make_unique<Ui>(browser_.get(), nullptr, nullptr, nullptr, nullptr,
                              ui_initial_state);
-  ui_->OnGlInitialized(content_texture_,
-                       vr::UiElementRenderer::kTextureLocationLocal,
-                       content_overlay_texture_,
-                       vr::UiElementRenderer::kTextureLocationLocal, 0);
+  ui_->OnGlInitialized(content_texture_, kGlTextureLocationLocal,
+                       content_overlay_texture_, kGlTextureLocationLocal, 0);
   ui_->GetBrowserUiWeakPtr()->SetToolbarState(toolbar_state);
 }
 
 void UiPixelTest::DrawUi(const gfx::Vector3dF& laser_direction,
                          const gfx::Point3F& laser_origin,
-                         UiInputManager::ButtonState button_state,
+                         ControllerModel::ButtonState button_state,
                          float controller_opacity,
                          const gfx::Transform& controller_transform,
                          const gfx::Transform& view_matrix,
@@ -73,8 +74,8 @@ void UiPixelTest::DrawUi(const gfx::Vector3dF& laser_direction,
   controller_model.opacity = controller_opacity;
   controller_model.laser_origin = laser_origin;
   controller_model.touchpad_button_state = button_state;
-  controller_model.app_button_state = UiInputManager::ButtonState::UP;
-  controller_model.home_button_state = UiInputManager::ButtonState::UP;
+  controller_model.app_button_state = ControllerModel::ButtonState::kUp;
+  controller_model.home_button_state = ControllerModel::ButtonState::kUp;
   RenderInfo render_info;
   render_info.head_pose = view_matrix;
   render_info.left_eye_model.view_matrix = view_matrix;

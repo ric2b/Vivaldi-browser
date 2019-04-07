@@ -12,12 +12,14 @@
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "services/metrics/public/cpp/metrics_export.h"
+#include "services/metrics/public/cpp/ukm_source.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/metrics/public/mojom/ukm_interface.mojom.h"
 #include "url/gurl.h"
 
 class IOSChromePasswordManagerClient;
 class MediaEngagementSession;
+class PlatformNotificationServiceImpl;
 class PluginInfoHostImpl;
 
 namespace autofill {
@@ -27,11 +29,11 @@ class TestAutofillClient;
 namespace blink {
 class Document;
 class NavigatorVR;
-}
+}  // namespace blink
 
 namespace cc {
 class UkmManager;
-}
+}  // namespace cc
 
 namespace content {
 class CrossSiteDocumentResourceHandler;
@@ -41,7 +43,7 @@ class PluginServiceImpl;
 
 namespace download {
 class DownloadUkmHelper;
-}
+}  // namespace download
 
 namespace password_manager {
 class PasswordManagerMetricsRecorder;
@@ -49,21 +51,15 @@ class PasswordManagerMetricsRecorder;
 
 namespace payments {
 class JourneyLogger;
-}
+}  // namespace payments
 
 namespace metrics {
 class UkmRecorderInterface;
-}
-
-namespace media {
-class MediaMetricsProvider;
-class VideoDecodePerfHistory;
-class WatchTimeRecorder;
-}  // namespace media
+}  // namespace metrics
 
 namespace translate {
 class TranslateRankerImpl;
-}
+}  // namespace translate
 
 namespace ukm {
 
@@ -73,7 +69,7 @@ class TestRecordingHelper;
 namespace internal {
 class SourceUrlRecorderWebContentsObserver;
 class SourceUrlRecorderWebStateObserver;
-}
+}  // namespace internal
 
 // This feature controls whether UkmService should be created.
 METRICS_EXPORT extern const base::Feature kUkmFeature;
@@ -100,10 +96,16 @@ class METRICS_EXPORT UkmRecorder {
   // Disables sampling for testing purposes.
   virtual void DisableSamplingForTesting(){};
 
+ protected:
+  // Type-safe wrappers for Update<X> functions.
+  void RecordOtherURL(base::UkmSourceId source_id, const GURL& url);
+  void RecordAppURL(base::UkmSourceId source_id, const GURL& url);
+
  private:
   friend DelegatingUkmRecorder;
   friend IOSChromePasswordManagerClient;
   friend MediaEngagementSession;
+  friend PlatformNotificationServiceImpl;
   friend PluginInfoHostImpl;
   friend TestRecordingHelper;
   friend autofill::TestAutofillClient;
@@ -116,9 +118,6 @@ class METRICS_EXPORT UkmRecorder {
   friend download::DownloadUkmHelper;
   friend internal::SourceUrlRecorderWebContentsObserver;
   friend internal::SourceUrlRecorderWebStateObserver;
-  friend media::MediaMetricsProvider;
-  friend media::VideoDecodePerfHistory;
-  friend media::WatchTimeRecorder;
   friend metrics::UkmRecorderInterface;
   friend password_manager::PasswordManagerMetricsRecorder;
   friend payments::JourneyLogger;
@@ -133,6 +132,13 @@ class METRICS_EXPORT UkmRecorder {
   // Associates the SourceId with an app URL for APP_ID sources. This method
   // should only be called by AppSourceUrlRecorder and DelegatingUkmRecorder.
   virtual void UpdateAppURL(SourceId source_id, const GURL& url) = 0;
+
+  // Associates navigation data with the UkmSource keyed by |source_id|. This
+  // should only be called by SourceUrlRecorderWebContentsObserver, for
+  // navigation sources.
+  virtual void RecordNavigation(
+      SourceId source_id,
+      const UkmSource::NavigationData& navigation_data) = 0;
 
   DISALLOW_COPY_AND_ASSIGN(UkmRecorder);
 };

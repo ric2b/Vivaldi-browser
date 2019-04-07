@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "components/crash/content/app/breakpad_linux.h"
 #include "components/crash/content/browser/crash_dump_manager_android.h"
 
@@ -41,7 +41,7 @@ void ChildProcessCrashObserver::OnChildExit(
   // NOTIFICATION_RENDERER_PROCESS_CLOSED.
 
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&breakpad::CrashDumpManager::ProcessMinidumpFileFromChild,
                  base::Unretained(breakpad::CrashDumpManager::GetInstance()),
                  crash_dump_dir_, info));

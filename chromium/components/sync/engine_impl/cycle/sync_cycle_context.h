@@ -80,7 +80,7 @@ class SyncCycleContext {
   }
   int32_t max_commit_batch_size() const { return max_commit_batch_size_; }
 
-  base::ObserverList<SyncEngineEventListener>* listeners() {
+  base::ObserverList<SyncEngineEventListener>::Unchecked* listeners() {
     return &listeners_;
   }
 
@@ -90,6 +90,10 @@ class SyncCycleContext {
 
   void set_hierarchy_conflict_detected(bool value) {
     client_status_.set_hierarchy_conflict_detected(value);
+  }
+
+  void set_is_sync_feature_enabled(bool value) {
+    client_status_.set_is_sync_feature_enabled(value);
   }
 
   const sync_pb::ClientStatus& client_status() const { return client_status_; }
@@ -132,7 +136,7 @@ class SyncCycleContext {
   }
 
  private:
-  base::ObserverList<SyncEngineEventListener> listeners_;
+  base::ObserverList<SyncEngineEventListener>::Unchecked listeners_;
 
   ServerConnectionManager* const connection_manager_;
   syncable::Directory* const directory_;

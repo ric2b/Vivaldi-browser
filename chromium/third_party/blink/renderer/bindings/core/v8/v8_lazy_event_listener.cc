@@ -90,7 +90,8 @@ v8::Local<v8::Value> V8LazyEventListener::CallListenerFunction(
   DCHECK(!js_event.IsEmpty());
   ExecutionContext* execution_context =
       ToExecutionContext(script_state->GetContext());
-  v8::Local<v8::Object> listener_object = GetListenerObject(execution_context);
+  v8::Local<v8::Object> listener_object =
+      GetListenerObjectInternal(execution_context);
   if (listener_object.IsEmpty())
     return v8::Local<v8::Value>();
 
@@ -203,7 +204,9 @@ void V8LazyEventListener::CompileScript(ScriptState* script_state,
 
   wrapped_function->SetName(V8String(GetIsolate(), function_name_));
 
-  SetListenerObject(wrapped_function);
+  SetListenerObject(script_state, wrapped_function,
+                    V8PrivateProperty::GetV8EventListenerOrEventHandlerListener(
+                        GetIsolate()));
 }
 
 void V8LazyEventListener::FireErrorEvent(v8::Local<v8::Context> v8_context,

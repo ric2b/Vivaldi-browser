@@ -4,7 +4,7 @@
 
 #include "components/sync/test/fake_sync_encryption_handler.h"
 
-#include "components/sync/base/passphrase_type.h"
+#include "components/sync/base/passphrase_enums.h"
 #include "components/sync/protocol/nigori_specifics.pb.h"
 #include "components/sync/syncable/nigori_util.h"
 
@@ -19,7 +19,9 @@ FakeSyncEncryptionHandler::~FakeSyncEncryptionHandler() {}
 
 void FakeSyncEncryptionHandler::Init() {
   // Set up a basic cryptographer.
-  KeyParams keystore_params = {"localhost", "dummy", "keystore_key"};
+  KeyParams keystore_params = {
+      KeyDerivationParams::CreateForPbkdf2("localhost", "dummy"),
+      "keystore_key"};
   cryptographer_.AddKey(keystore_params);
 }
 
@@ -41,13 +43,18 @@ void FakeSyncEncryptionHandler::ApplyNigoriUpdate(
     DVLOG(1) << "OnPassPhraseRequired Sent";
     sync_pb::EncryptedData pending_keys = cryptographer_.GetPendingKeys();
     for (auto& observer : observers_)
-      observer.OnPassphraseRequired(REASON_DECRYPTION, pending_keys);
+      observer.OnPassphraseRequired(
+          REASON_DECRYPTION,
+          KeyDerivationParams::CreateForPbkdf2("localhost", "dummy"),
+          pending_keys);
   } else if (!cryptographer_.is_ready()) {
     DVLOG(1) << "OnPassphraseRequired sent because cryptographer is not "
              << "ready";
     for (auto& observer : observers_) {
-      observer.OnPassphraseRequired(REASON_ENCRYPTION,
-                                    sync_pb::EncryptedData());
+      observer.OnPassphraseRequired(
+          REASON_ENCRYPTION,
+          KeyDerivationParams::CreateForPbkdf2("localhost", "dummy"),
+          sync_pb::EncryptedData());
     }
   }
 }

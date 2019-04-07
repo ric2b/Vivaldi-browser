@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 
+#include "components/invalidation/impl/deprecated_invalidator_registrar.h"
 #include "components/invalidation/impl/invalidator_registrar.h"
 #include "components/invalidation/public/invalidation_service.h"
 
@@ -40,7 +41,7 @@ class VivaldiInvalidationService : public invalidation::InvalidationService {
 
  private:
   std::string client_id_;
-  syncer::InvalidatorRegistrar invalidator_registrar_;
+  syncer::DeprecatedInvalidatorRegistrar invalidator_registrar_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiInvalidationService);
 };

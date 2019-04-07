@@ -4,6 +4,7 @@
 
 #include "ash/system/tray/tray_constants.h"
 
+#include "ash/public/cpp/ash_features.h"
 #include "base/logging.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_palette.h"
@@ -53,7 +54,6 @@ const SkColor kHeaderTextColorNormal = SkColorSetARGB(0x7f, 0, 0, 0);
 
 const SkColor kMobileNotConnectedXIconColor = SkColorSetRGB(0xb2, 0xb2, 0xb2);
 
-const int kTrayIconSize = 16;
 const SkColor kTrayIconColor = SK_ColorWHITE;
 const SkColor kOobeTrayIconColor = gfx::kGoogleGrey600;
 
@@ -67,7 +67,6 @@ const int kMenuEdgeEffectivePadding =
     kMenuExtraMarginFromLeftEdge + (kMenuButtonSize - kMenuIconSize) / 2;
 
 const int kHitRegionPadding = 4;
-const int kSeparatorWidth = 1;
 
 const SkColor kMenuSeparatorColor = SkColorSetA(SK_ColorBLACK, 0x1F);
 
@@ -85,5 +84,11 @@ static_assert(kTrayMenuWidth == kUnifiedFeaturePodHorizontalSidePadding * 2 +
                                     kUnifiedFeaturePodSize.width() *
                                         kUnifiedFeaturePodItemsInRow,
               "Total feature pod width does not match kTrayMenuWidth");
+
+// static
+int TrayConstants::GetTrayIconSize() {
+  return features::IsSystemTrayUnifiedEnabled() ? kUnifiedTrayIconSize
+                                                : kTrayIconSize;
+}
 
 }  // namespace ash

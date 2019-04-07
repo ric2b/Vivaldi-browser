@@ -4,30 +4,27 @@
 
 #include "device/fido/get_assertion_task.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "base/bind.h"
 #include "device/base/features.h"
 #include "device/fido/authenticator_get_assertion_response.h"
 #include "device/fido/ctap2_device_operation.h"
-#include "device/fido/ctap_empty_authenticator_request.h"
-#include "device/fido/device_response_converter.h"
-#include "device/fido/u2f_command_constructor.h"
 #include "device/fido/u2f_sign_operation.h"
 
 namespace device {
 
 namespace {
 
-bool ResponseContainsUserIdentifiableInfo(
-    const AuthenticatorGetAssertionResponse& response) {
-  const auto& user_entity = response.user_entity();
-  if (!user_entity)
-    return false;
-
-  return user_entity->user_display_name() || user_entity->user_name() ||
-         user_entity->user_icon_url();
+bool MayFallbackToU2fWithAppIdExtension(
+    const FidoDevice& device,
+    const CtapGetAssertionRequest& request) {
+  bool ctap2_device_supports_u2f =
+      device.device_info() &&
+      base::ContainsKey(device.device_info()->versions(),
+                        ProtocolVersion::kU2f);
+  return request.alternative_application_parameter() &&
+         ctap2_device_supports_u2f;
 }
 
 }  // namespace
@@ -51,87 +48,76 @@ void GetAssertionTask::StartTask() {
   }
 }
 
-void GetAssertionTask::GetAssertion() {
+void GetAssertionTask::GetAssertion(bool enforce_user_presence) {
+  // If appId extension was used in the request and device is a hybrid U2F/CTAP2
+  // device, then first issue a silent GetAssertionRequest. If no credentials in
+  // allowed credential list are recognized, it's possible that the credential
+  // is registered via U2F. Under these circumstances, the request should be
+  // issued via the U2F protocol. Otherwise, proceed with a normal GetAssertion
+  // request.
+  auto uv_configuration = request_.user_verification();
+  bool is_silent_authentication = false;
+  if (!enforce_user_presence &&
+      MayFallbackToU2fWithAppIdExtension(*device(), request_)) {
+    is_silent_authentication = true;
+    request_.SetUserPresenceRequired(false /* user_presence_required */);
+    request_.SetUserVerification(UserVerificationRequirement::kDiscouraged);
+  }
+
   sign_operation_ =
       std::make_unique<Ctap2DeviceOperation<CtapGetAssertionRequest,
                                             AuthenticatorGetAssertionResponse>>(
           device(), request_,
-          base::BindOnce(&GetAssertionTask::OnCtapGetAssertionResponseReceived,
-                         weak_factory_.GetWeakPtr()),
+          base::BindOnce(&GetAssertionTask::GetAssertionCallbackWithU2fFallback,
+                         weak_factory_.GetWeakPtr(), is_silent_authentication,
+                         uv_configuration, std::move(callback_)),
           base::BindOnce(&ReadCTAPGetAssertionResponse));
   sign_operation_->Start();
 }
 
 void GetAssertionTask::U2fSign() {
-  DCHECK(!device()->device_info());
   DCHECK_EQ(ProtocolVersion::kU2f, device()->supported_protocol());
 
-  sign_operation_ = std::make_unique<U2fSignOperation>(
-      device(), request_,
-      base::BindOnce(&GetAssertionTask::OnCtapGetAssertionResponseReceived,
-                     weak_factory_.GetWeakPtr()));
+  sign_operation_ = std::make_unique<U2fSignOperation>(device(), request_,
+                                                       std::move(callback_));
   sign_operation_->Start();
 }
 
-bool GetAssertionTask::CheckRequirementsOnReturnedUserEntities(
-    const AuthenticatorGetAssertionResponse& response) {
-  // If assertion has been made without user verification, user identifiable
-  // information must not be included.
-  if (!response.auth_data().obtained_user_verification() &&
-      ResponseContainsUserIdentifiableInfo(response)) {
-    return false;
-  }
-
-  // For resident key credentials, user id of the user entity is mandatory.
-  if ((!request_.allow_list() || request_.allow_list()->empty()) &&
-      !response.user_entity()) {
-    return false;
-  }
-
-  // When multiple accounts exist for specified RP ID, user entity is mandatory.
-  if (response.num_credentials().value_or(0u) > 1 && !response.user_entity()) {
-    return false;
-  }
-
-  return true;
-}
-
-bool GetAssertionTask::CheckRequirementsOnReturnedCredentialId(
-    const AuthenticatorGetAssertionResponse& response) {
-  if (device()->device_info() &&
-      device()->device_info()->options().supports_resident_key()) {
-    return true;
-  }
-
-  const auto& allow_list = request_.allow_list();
-  return allow_list &&
-         (allow_list->size() == 1 ||
-          std::any_of(allow_list->cbegin(), allow_list->cend(),
-                      [&response](const auto& credential) {
-                        return credential.id() == response.raw_credential_id();
-                      }));
-}
-
-void GetAssertionTask::OnCtapGetAssertionResponseReceived(
+void GetAssertionTask::GetAssertionCallbackWithU2fFallback(
+    bool is_silent_authentication,
+    UserVerificationRequirement user_verification_configuration,
+    GetAssertionTaskCallback callback,
     CtapDeviceResponseCode response_code,
-    base::Optional<AuthenticatorGetAssertionResponse> device_response) {
-  if (response_code != CtapDeviceResponseCode::kSuccess) {
-    std::move(callback_).Run(response_code, base::nullopt);
+    base::Optional<AuthenticatorGetAssertionResponse> response_data) {
+  DCHECK(device()->device_info());
+  if (!(is_silent_authentication &&
+        MayFallbackToU2fWithAppIdExtension(*device(), request_))) {
+    std::move(callback).Run(response_code, std::move(response_data));
     return;
   }
 
-  // TODO(martinkr): CheckRpIdHash invocation needs to move into the Request
-  // handler. See https://crbug.com/863988.
-  if (!device_response ||
-      !request_.CheckResponseRpIdHash(device_response->GetRpIdHash()) ||
-      !CheckRequirementsOnReturnedCredentialId(*device_response) ||
-      !CheckRequirementsOnReturnedUserEntities(*device_response)) {
-    std::move(callback_).Run(CtapDeviceResponseCode::kCtap2ErrOther,
-                             base::nullopt);
-    return;
-  }
+  DCHECK(!callback_ && !request_.user_presence_required());
+  request_.SetUserPresenceRequired(true /* true */);
+  callback_ = std::move(callback);
 
-  std::move(callback_).Run(response_code, std::move(device_response));
+  // Credential was recognized by the device. As this authentication was
+  // silent authentication (i.e. user touch was not provided), try again with
+  // user presence enforced and with the original user verification
+  // configuration.
+  if (response_code == CtapDeviceResponseCode::kSuccess) {
+    DCHECK_EQ(UserVerificationRequirement::kDiscouraged,
+              request_.user_verification());
+    DCHECK_EQ(ProtocolVersion::kCtap, device()->supported_protocol());
+    request_.SetUserVerification(user_verification_configuration);
+    GetAssertion(true /* enforce_user_presence */);
+  } else {
+    // An error occurred or no credentials in the allowed list were recognized.
+    // However, as the relying party has provided appId extension, try again
+    // with U2F protocol to make sure that authentication via appID credential
+    // is also attempted.
+    device()->set_supported_protocol(ProtocolVersion::kU2f);
+    U2fSign();
+  }
 }
 
 }  // namespace device

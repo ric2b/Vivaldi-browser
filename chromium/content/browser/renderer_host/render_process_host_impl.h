@@ -28,14 +28,13 @@
 #include "content/browser/cache_storage/cache_storage_dispatcher_host.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
+#include "content/browser/media/video_decoder_proxy.h"
 #include "content/browser/renderer_host/embedded_frame_sink_provider_impl.h"
 #include "content/browser/renderer_host/frame_sink_provider_impl.h"
 #include "content/browser/renderer_host/media/renderer_audio_output_stream_factory_context_impl.h"
-#include "content/common/associated_interface_registry_impl.h"
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/child_control.mojom.h"
 #include "content/common/content_export.h"
-#include "content/common/indexed_db/indexed_db.mojom.h"
 #include "content/common/media/media_stream.mojom.h"
 #include "content/common/media/renderer_audio_output_stream_factory.mojom.h"
 #include "content/common/renderer.mojom.h"
@@ -53,9 +52,12 @@
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/mojom/service.mojom.h"
-#include "services/ui/public/interfaces/gpu.mojom.h"
 #include "services/viz/public/interfaces/compositing/compositing_mode_watcher.mojom.h"
+#include "services/ws/public/mojom/gpu.mojom.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
+#include "third_party/blink/public/mojom/associated_interfaces/associated_interfaces.mojom.h"
 #include "third_party/blink/public/mojom/dom_storage/storage_partition_service.mojom.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gl/gpu_switching_observer.h"
 
@@ -69,10 +71,14 @@ class MessageLoop;
 class SharedPersistentMemoryAllocator;
 }
 
+namespace viz {
+class GpuClient;
+}
+
 namespace content {
 class BrowserPluginMessageFilter;
 class ChildConnection;
-class GpuClientImpl;
+class FileSystemManagerImpl;
 class IndexedDBDispatcherHost;
 class InProcessChildThreadParams;
 class MediaStreamTrackMetricsHost;
@@ -121,7 +127,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
       public ChildProcessLauncher::Client,
       public ui::GpuSwitchingObserver,
       public mojom::RouteProvider,
-      public mojom::AssociatedInterfaceProvider,
+      public blink::mojom::AssociatedInterfaceProvider,
       public mojom::RendererHost {
  public:
   // Special depth used when there are no PriorityClients.
@@ -152,6 +158,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void UpdateClientPriority(PriorityClient* client) override;
   int VisibleClientCount() const override;
   unsigned int GetFrameDepth() const override;
+  bool GetIntersectsViewport() const override;
   bool IsForGuestsOnly() const override;
   StoragePartition* GetStoragePartition() const override;
   bool Shutdown(int exit_code) override;
@@ -220,6 +227,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void LockToOrigin(const GURL& lock_url) override;
   void BindCacheStorage(blink::mojom::CacheStorageRequest request,
                         const url::Origin& origin) override;
+  void CleanupCorbExceptionForPluginUponDestruction() override;
 
   mojom::RouteProvider* GetRemoteRouteProvider();
 
@@ -261,11 +269,16 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Implementation of FilterURL below that can be shared with the mock class.
   static void FilterURL(RenderProcessHost* rph, bool empty_allowed, GURL* url);
 
-  // Returns true if |host| is suitable for launching a new view with |site_url|
-  // in the given |browser_context|.
+  // Returns true if |host| is suitable for rendering a page in the given
+  // |browser_context|, where the page would utilize |site_url| as its
+  // SiteInstance site URL, and its process would be locked to |lock_url|.
+  // |site_url| and |lock_url| may differ in cases where an effective URL is
+  // not the actual site that the process is locked to, which happens for
+  // hosted apps.
   static bool IsSuitableHost(RenderProcessHost* host,
                              BrowserContext* browser_context,
-                             const GURL& site_url);
+                             const GURL& site_url,
+                             const GURL& lock_url);
 
   // Returns an existing RenderProcessHost for |url| in |browser_context|,
   // if one exists.  Otherwise a new RenderProcessHost should be created and
@@ -273,25 +286,45 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // This should only be used for process-per-site mode, which can be enabled
   // globally with a command line flag or per-site, as determined by
   // SiteInstanceImpl::ShouldUseProcessPerSite.
-  static RenderProcessHost* GetProcessHostForSite(
+  // Important: |url| should be a full URL and *not* a site URL.
+  static RenderProcessHost* GetSoleProcessHostForURL(
       BrowserContext* browser_context,
       const GURL& url);
 
-  // Registers the given |process| to be used for any instance of |url|
-  // within |browser_context|.
+  // Variant of the above that takes in a SiteInstance site URL and the
+  // process's origin lock URL, when they are known.
+  static RenderProcessHost* GetSoleProcessHostForSite(
+      BrowserContext* browser_context,
+      const GURL& site_url,
+      const GURL& lock_url);
+
+  // Registers the given |process| to be used for all sites identified by
+  // |site_instance| within |browser_context|.
   // This should only be used for process-per-site mode, which can be enabled
   // globally with a command line flag or per-site, as determined by
   // SiteInstanceImpl::ShouldUseProcessPerSite.
-  static void RegisterProcessHostForSite(
-      BrowserContext* browser_context,
-      RenderProcessHost* process,
-      const GURL& url);
+  static void RegisterSoleProcessHostForSite(BrowserContext* browser_context,
+                                             RenderProcessHost* process,
+                                             SiteInstanceImpl* site_instance);
 
   // Returns a suitable RenderProcessHost to use for |site_instance|. Depending
   // on the SiteInstance's ProcessReusePolicy and its url, this may be an
   // existing RenderProcessHost or a new one.
+  //
+  // This is the main entrypoint into the process assignment logic, which
+  // handles all cases.  These cases include:
+  // - process-per-site: see
+  //   RegisterSoleProcessHostForSite/GetSoleProcessHostForSite.
+  // - TDI: see GetDefaultSubframeProcessHost.
+  // - REUSE_PENDING_OR_COMMITTED reuse policy (for ServiceWorkers and OOPIFs):
+  //   see FindReusableProcessHostForSiteInstance.
+  // - normal process reuse when over process limit:  see
+  //   GetExistingProcessHost.
+  // - using the spare RenderProcessHost when possible: see
+  //   MaybeTakeSpareRenderProcessHost.
+  // - process creation when an existing process couldn't be found: see
+  //   CreateRenderProcessHost.
   static RenderProcessHost* GetProcessHostForSiteInstance(
-      BrowserContext* browser_context,
       SiteInstanceImpl* site_instance);
 
   // Should be called when |browser_context| is used in a navigation.
@@ -412,6 +445,15 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // before the process shuts down.
   void DelayProcessShutdownForUnload(const base::TimeDelta& timeout);
 
+  FileSystemManagerImpl* GetFileSystemManagerForTesting() {
+    return file_system_manager_impl_.get();
+  }
+
+  // Adds a CORB (Cross-Origin Read Blocking) exception for |process_id|.  The
+  // exception will be removed when the corresponding RenderProcessHostImpl is
+  // destroyed (see |cleanup_corb_exception_for_plugin_upon_destruction_|).
+  static void AddCorbExceptionForPlugin(int process_id);
+
  protected:
   // A proxy for our IPC::Channel that lives on the IO thread.
   std::unique_ptr<IPC::ChannelProxy> channel_;
@@ -436,7 +478,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   friend class ChildProcessLauncherBrowserTest_ChildSpawnFail_Test;
   friend class VisitRelayingRenderProcessHost;
   friend class StoragePartitonInterceptor;
-  friend class SecurityExploitBrowserTest;
   class ConnectionFilterController;
   class ConnectionFilterImpl;
 
@@ -461,14 +502,14 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void RegisterMojoInterfaces();
 
   // mojom::RouteProvider:
-  void GetRoute(
-      int32_t routing_id,
-      mojom::AssociatedInterfaceProviderAssociatedRequest request) override;
+  void GetRoute(int32_t routing_id,
+                blink::mojom::AssociatedInterfaceProviderAssociatedRequest
+                    request) override;
 
-  // mojom::AssociatedInterfaceProvider:
+  // blink::mojom::AssociatedInterfaceProvider:
   void GetAssociatedInterface(
       const std::string& name,
-      mojom::AssociatedInterfaceAssociatedRequest request) override;
+      blink::mojom::AssociatedInterfaceAssociatedRequest request) override;
 
   // mojom::RendererHost
   using BrowserHistogramCallback =
@@ -476,7 +517,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void GetBrowserHistogram(const std::string& name,
                            BrowserHistogramCallback callback) override;
   void SuddenTerminationChanged(bool enabled) override;
-  void ShutdownRequest() override;
 
   void BindRouteProvider(mojom::RouteProviderAssociatedRequest request);
 
@@ -488,6 +528,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void CreateStoragePartitionService(
       blink::mojom::StoragePartitionServiceRequest request);
   void CreateRendererHost(mojom::RendererHostAssociatedRequest request);
+  void BindVideoDecoderService(media::mojom::InterfaceFactoryRequest request);
 
   // Control message handlers.
   void OnUserMetricsRecordAction(const std::string& action);
@@ -543,20 +584,19 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Get an existing RenderProcessHost associated with the given browser
   // context, if possible.  The renderer process is chosen randomly from
   // suitable renderers that share the same context and type (determined by the
-  // site url).
+  // site url of |site_instance|).
   // Returns nullptr if no suitable renderer process is available, in which case
   // the caller is free to create a new renderer.
   static RenderProcessHost* GetExistingProcessHost(
-      content::BrowserContext* browser_context,
-      const GURL& site_url);
+      SiteInstanceImpl* site_instance);
   FRIEND_TEST_ALL_PREFIXES(RenderProcessHostUnitTest,
                            GuestsAreNotSuitableHosts);
 
-  // Returns a RenderProcessHost that is rendering |site_url| in one of its
-  // frames, or that is expecting a navigation to |site_url|.
-  static RenderProcessHost* FindReusableProcessHostForSite(
-      BrowserContext* browser_context,
-      const GURL& site_url);
+  // Returns a RenderProcessHost that is rendering a URL corresponding to
+  // |site_instance| in one of its frames, or that is expecting a navigation to
+  // that SiteInstance.
+  static RenderProcessHost* FindReusableProcessHostForSiteInstance(
+      SiteInstanceImpl* site_instance);
 
   void CreateMediaStreamDispatcherHost(
       MediaStreamManager* media_stream_manager,
@@ -646,10 +686,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Mojo interfaces provided to the child process are registered here if they
   // need consistent delivery ordering with legacy IPC, and are process-wide in
   // nature (e.g. metrics, memory usage).
-  std::unique_ptr<AssociatedInterfaceRegistryImpl> associated_interfaces_;
+  std::unique_ptr<blink::AssociatedInterfaceRegistry> associated_interfaces_;
 
   mojo::AssociatedBinding<mojom::RouteProvider> route_provider_binding_;
-  mojo::AssociatedBindingSet<mojom::AssociatedInterfaceProvider, int32_t>
+  mojo::AssociatedBindingSet<blink::mojom::AssociatedInterfaceProvider, int32_t>
       associated_interface_provider_bindings_;
 
   // These fields are cached values that are updated in
@@ -662,6 +702,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // widgets the lowest depth of all hidden clients. Initialized to max depth
   // when there are no clients.
   unsigned int frame_depth_ = kMaxFrameDepthForPriority;
+  // |intersects_viewport_| similar to |frame_depth_| can be used to rank
+  // processes of same visibility. It indicates process has frames that
+  // intersect with the viewport.
+  bool intersects_viewport_ = false;
 #if defined(OS_ANDROID)
   // Highest importance of all clients that contribute priority.
   ChildProcessImportance effective_importance_ = ChildProcessImportance::NORMAL;
@@ -715,7 +759,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   StoragePartitionImpl* storage_partition_impl_;
 
   // The observers watching our lifetime.
-  base::ObserverList<RenderProcessHostObserver> observers_;
+  base::ObserverList<RenderProcessHostObserver>::Unchecked observers_;
 
   // True if the process can be shut down suddenly.  If this is true, then we're
   // sure that all the RenderViews in the process can be shutdown suddenly.  If
@@ -757,7 +801,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
                   BrowserThread::DeleteOnIOThread>
       audio_output_stream_factory_context_;
 
-  scoped_refptr<P2PSocketDispatcherHost> p2p_socket_dispatcher_host_;
+  std::unique_ptr<P2PSocketDispatcherHost> p2p_socket_dispatcher_host_;
 
   // Must be accessed on UI thread.
   std::vector<int> aec_dump_consumers_;
@@ -770,6 +814,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   std::unique_ptr<MediaStreamTrackMetricsHost, BrowserThread::DeleteOnIOThread>
       media_stream_track_metrics_host_;
+
+  std::unique_ptr<VideoDecoderProxy> video_decoder_proxy_;
 
   // Forwards messages between WebRTCInternals in the browser process
   // and PeerConnectionTracker in the renderer process.
@@ -808,7 +854,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
 #endif
 
   scoped_refptr<ResourceMessageFilter> resource_message_filter_;
-  std::unique_ptr<GpuClientImpl, BrowserThread::DeleteOnIOThread> gpu_client_;
+  std::unique_ptr<FileSystemManagerImpl, BrowserThread::DeleteOnIOThread>
+      file_system_manager_impl_;
+  std::unique_ptr<viz::GpuClient, BrowserThread::DeleteOnIOThread> gpu_client_;
   std::unique_ptr<PushMessagingManager, BrowserThread::DeleteOnIOThread>
       push_messaging_manager_;
 
@@ -836,6 +884,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
   FrameSinkProviderImpl frame_sink_provider_;
   std::unique_ptr<mojo::Binding<viz::mojom::CompositingModeReporter>>
       compositing_mode_reporter_;
+
+  bool cleanup_corb_exception_for_plugin_upon_destruction_ = false;
 
   base::WeakPtrFactory<RenderProcessHostImpl> weak_factory_;
 

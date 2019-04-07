@@ -102,11 +102,11 @@
 <translation id="3171922709365450819">이 클라이언트에서는 타사 승인이 필요하기 때문에 이 기기를 지원하지 않습니다.</translation>
 <translation id="3194245623920924351">Chrome 원격 데스크톱</translation>
 <translation id="3197730452537982411">원격 데스크톱</translation>
+<translation id="3212472844831225214">• Android 9.0 Pie 지원 추가</translation>
 <translation id="324272851072175193">이 도움말을 이메일로 보내기</translation>
 <translation id="3258789396564295715">Chrome 원격 데스크톱을 사용하여 컴퓨터에 안전하게 액세스할 수 있습니다.</translation>
 <translation id="3286521253923406898">Chromoting 호스트 컨트롤러</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" />에서 시스템을 변경하려고 합니다.</translation>
-<translation id="331779822864701136">• Android 8.0 Oreo가 지원됩니다.</translation>
 <translation id="332624996707057614">컴퓨터 이름 수정</translation>
 <translation id="3339299787263251426">인터넷을 통해 안전하게 컴퓨터에 액세스</translation>
 <translation id="3360306038446926262">Windows</translation>
@@ -122,8 +122,9 @@
 <translation id="369442766917958684">오프라인.</translation>
 <translation id="3695446226812920698">자세히 알아보기</translation>
 <translation id="3718805989288361841">Chrome 원격 데스크톱 관련 정책 설정에 오류가 있습니다. 시스템 관리자에게 도움을 요청하세요.</translation>
-<translation id="3759645055923345178">설정이 완료되면 PIN 또는 액세스 코드를 입력하여 이 페이지에서 컴퓨터에 액세스할 수 있습니다.</translation>
 <translation id="3776024066357219166">Chrome 원격 데스크톱 세션이 종료되었습니다.</translation>
+<translation id="3846148461359626420">• iPhone X 화면 이동 및 확대/축소 개선
+• 안정성 개선 및 버그 수정</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Chrome 원격 데스크톱스으로 액세스할 수 있도록 아래 계정 및 PIN을 확인하세요.</translation>
 <translation id="3897092660631435901">메뉴</translation>
@@ -137,6 +138,7 @@
 <translation id="405887016757208221">원격 컴퓨터가 세션을 초기화하는 데 실패했습니다. 문제가 지속되면 호스트를 다시 구성해 보시기 바랍니다.</translation>
 <translation id="4068946408131579958">모든 연결</translation>
 <translation id="409800995205263688">참고: 정책 설정에 따라 네트워크 내에 있는 컴퓨터 간의 연결만 허용됩니다.</translation>
+<translation id="4126409073460786861">설정이 완료된 후 이 페이지를 새로고침하면 기기를 선택하고 PIN을 입력하여 컴퓨터에 액세스할 수 있습니다.</translation>
 <translation id="4145029455188493639"><ph name="EMAIL_ADDRESS" /> 계정으로 로그인했습니다.</translation>
 <translation id="4155497795971509630">일부 필수 구성요소가 누락되었습니다. 소프트웨어의 최신 버전을 설치했는지 확인한 뒤 다시 시도해주세요.</translation>
 <translation id="4156740505453712750">액세스 제한을 통해 이 컴퓨터를 보호하려면 <ph name="BOLD_START" />최소 6자리<ph name="BOLD_END" />의 PIN을 선택하세요. 이 PIN은 다른 위치에서 연결할 때 필요합니다.</translation>
@@ -145,7 +147,6 @@
 <translation id="4207623512727273241">계속하기 전에 설치 프로그램을 실행하세요.</translation>
 <translation id="4227991223508142681">호스트 프로비저닝 유틸리티</translation>
 <translation id="4240294130679914010">Chromoting 호스트 제거 프로그램</translation>
-<translation id="4249741460382919890">일반적인 수정 및 안정성 개선</translation>
 <translation id="4277463233460010382">이 컴퓨터는 한 개 이상의 클라이언트가 PIN을 입력하지 않고도 연결할 수 있도록 구성되었습니다.</translation>
 <translation id="4277736576214464567">액세스 코드가 잘못되었습니다. 다시 시도해 주세요.</translation>
 <translation id="4361728918881830843">다른 컴퓨터에 원격 연결을 사용하려면 Chrome 원격 데스크톱을 설치하고 '<ph name="BUTTON_NAME" />' 버튼을 클릭하세요.</translation>
@@ -271,6 +272,7 @@ PC</translation>
 <translation id="6998989275928107238">받는사람</translation>
 <translation id="7019153418965365059">알 수 없는 호스트 오류입니다. <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">원격 지원</translation>
+<translation id="7026930240735156896">안내에 따라 컴퓨터에서 원격으로 액세스할 수 있도록 설정하세요.</translation>
 <translation id="7038683108611689168">사용 통계 및 비정상 종료 보고서 수집을 허용하여 Chromoting 개선에 참여하겠습니다.</translation>
 <translation id="7067321367069083429">화면이 터치스크린처럼 작동합니다</translation>
 <translation id="7116737094673640201">Chrome 원격 데스크톱에 오신 것을 환영합니다.</translation>
@@ -296,7 +298,6 @@ PC</translation>
 <translation id="7782471917492991422">컴퓨터의 전원 관리 설정을 확인하고 유휴 상태일 때 절전 모드로 전환되도록 설정되지 않았는지 확인하세요.</translation>
 <translation id="7810127880729796595">통계 보기(연결: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">일부 필수 구성요소가 누락되었습니다. Chrome 최신 버전을 실행하고 있는지 확인한 뒤 다시 시도해 주세요.</translation>
-<translation id="7850909060902317210">Chrome 원격 데스크톱 소프트웨어를 설치하고 안내에 따라 설정을 완료합니다.</translation>
 <translation id="7868137160098754906">원격 컴퓨터의 PIN을 입력하세요.</translation>
 <translation id="7869445566579231750">이 애플리케이션을 실행할 수 있는 권한이 없습니다.</translation>
 <translation id="7895403300744144251">원격 컴퓨터의 보안 정책으로 인해 내 계정에서 연결할 수 없습니다.</translation>

@@ -49,7 +49,6 @@ class APP_LIST_EXPORT SuggestionChipView : public views::Button {
   void OnPaintBackground(gfx::Canvas* canvas) override;
   void OnFocus() override;
   void OnBlur() override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // views::InkDropHost:
   std::unique_ptr<views::InkDrop> CreateInkDrop() override;
@@ -58,6 +57,7 @@ class APP_LIST_EXPORT SuggestionChipView : public views::Button {
 
   void SetIcon(const gfx::ImageSkia& icon);
 
+  void SetText(const base::string16& text);
   const base::string16& GetText() const;
 
  private:

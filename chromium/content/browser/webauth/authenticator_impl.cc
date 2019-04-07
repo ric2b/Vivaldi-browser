@@ -18,6 +18,7 @@
 #include "content/browser/bad_message.h"
 #include "content/browser/webauth/authenticator_type_converters.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -30,6 +31,7 @@
 #include "content/public/common/service_manager_connection.h"
 #include "crypto/sha2.h"
 #include "device/base/features.h"
+#include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/fido/authenticator_selection_criteria.h"
 #include "device/fido/ctap_get_assertion_request.h"
 #include "device/fido/ctap_make_credential_request.h"
@@ -218,8 +220,7 @@ device::CtapGetAssertionRequest CreateCtapGetAssertionRequest(
 
   if (!options->cable_authentication_data.empty()) {
     request_parameter.SetCableExtension(
-        mojo::ConvertTo<
-            std::vector<device::FidoCableDiscovery::CableDiscoveryData>>(
+        mojo::ConvertTo<std::vector<device::CableDiscoveryData>>(
             options->cable_authentication_data));
   }
   return request_parameter;
@@ -280,7 +281,7 @@ CreateMakeCredentialResponse(
 blink::mojom::GetAssertionAuthenticatorResponsePtr CreateGetAssertionResponse(
     const std::string& client_data_json,
     device::AuthenticatorGetAssertionResponse response_data,
-    bool echo_appid_extension) {
+    base::Optional<bool> echo_appid_extension) {
   auto response = blink::mojom::GetAssertionAuthenticatorResponse::New();
   auto common_info = blink::mojom::CommonCredentialInfo::New();
   common_info->client_data_json.assign(client_data_json.begin(),
@@ -291,7 +292,10 @@ blink::mojom::GetAssertionAuthenticatorResponsePtr CreateGetAssertionResponse(
   response->authenticator_data =
       response_data.auth_data().SerializeToByteArray();
   response->signature = response_data.signature();
-  response->echo_appid_extension = echo_appid_extension;
+  if (echo_appid_extension) {
+    response->echo_appid_extension = true;
+    response->appid_extension = *echo_appid_extension;
+  }
   response_data.user_entity()
       ? response->user_handle.emplace(response_data.user_entity()->user_id())
       : response->user_handle.emplace();
@@ -307,6 +311,32 @@ std::string Base64UrlEncode(const base::span<const uint8_t> input) {
   return ret;
 }
 
+base::flat_set<device::FidoTransportProtocol> GetTransportsEnabledByFlags() {
+  base::flat_set<device::FidoTransportProtocol> transports;
+  transports.insert(device::FidoTransportProtocol::kUsbHumanInterfaceDevice);
+  transports.insert(device::FidoTransportProtocol::kInternal);
+
+  // TODO(crbug.com/885165): We should not directly access the BLE stack here.
+  // It is used by //device/fido, so its availability should be checked there.
+  if (!device::BluetoothAdapterFactory::Get().IsLowEnergySupported())
+    return transports;
+
+  if (base::FeatureList::IsEnabled(features::kWebAuthBle)) {
+    transports.insert(device::FidoTransportProtocol::kBluetoothLowEnergy);
+  }
+
+#if defined(OS_WIN)
+  if (base::FeatureList::IsEnabled(features::kWebAuthCable) &&
+      base::FeatureList::IsEnabled(features::kWebAuthCableWin)) {
+#else
+  if (base::FeatureList::IsEnabled(features::kWebAuthCable)) {
+#endif  // defined(OS_WIN)
+    transports.insert(
+        device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy);
+  }
+  return transports;
+}
+
 }  // namespace
 
 AuthenticatorImpl::AuthenticatorImpl(RenderFrameHost* render_frame_host)
@@ -320,21 +350,12 @@ AuthenticatorImpl::AuthenticatorImpl(RenderFrameHost* render_frame_host,
     : WebContentsObserver(WebContents::FromRenderFrameHost(render_frame_host)),
       render_frame_host_(render_frame_host),
       connector_(connector),
+      transports_(GetTransportsEnabledByFlags()),
       timer_(std::move(timer)),
       binding_(this),
       weak_factory_(this) {
   DCHECK(render_frame_host_);
   DCHECK(timer_);
-
-  protocols_.insert(device::FidoTransportProtocol::kUsbHumanInterfaceDevice);
-  if (base::FeatureList::IsEnabled(features::kWebAuthBle)) {
-    protocols_.insert(device::FidoTransportProtocol::kBluetoothLowEnergy);
-  }
-
-  if (base::FeatureList::IsEnabled(features::kWebAuthCable)) {
-    protocols_.insert(
-        device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy);
-  }
 }
 
 AuthenticatorImpl::~AuthenticatorImpl() {
@@ -354,6 +375,13 @@ void AuthenticatorImpl::Bind(blink::mojom::AuthenticatorRequest request) {
   binding_.Bind(std::move(request));
 }
 
+void AuthenticatorImpl::UpdateRequestDelegate() {
+  DCHECK(!request_delegate_);
+  request_delegate_ =
+      GetContentClient()->browser()->GetWebAuthenticationRequestDelegate(
+          render_frame_host_);
+}
+
 bool AuthenticatorImpl::IsFocused() const {
   return render_frame_host_->IsCurrent() && request_delegate_->IsFocused();
 }
@@ -362,37 +390,15 @@ bool AuthenticatorImpl::IsFocused() const {
 std::string AuthenticatorImpl::SerializeCollectedClientDataToJson(
     const std::string& type,
     const url::Origin& origin,
-    base::span<const uint8_t> challenge,
-    base::Optional<base::span<const uint8_t>> token_binding) {
+    base::span<const uint8_t> challenge) {
   static constexpr char kTypeKey[] = "type";
   static constexpr char kChallengeKey[] = "challenge";
   static constexpr char kOriginKey[] = "origin";
-  static constexpr char kTokenBindingKey[] = "tokenBinding";
 
   base::DictionaryValue client_data;
   client_data.SetKey(kTypeKey, base::Value(type));
   client_data.SetKey(kChallengeKey, base::Value(Base64UrlEncode(challenge)));
   client_data.SetKey(kOriginKey, base::Value(origin.Serialize()));
-
-  if (token_binding) {
-    base::DictionaryValue token_binding_dict;
-    static constexpr char kTokenBindingStatusKey[] = "status";
-    static constexpr char kTokenBindingIdKey[] = "id";
-    static constexpr char kTokenBindingSupportedStatus[] = "supported";
-    static constexpr char kTokenBindingPresentStatus[] = "present";
-
-    if (token_binding->empty()) {
-      token_binding_dict.SetKey(kTokenBindingStatusKey,
-                                base::Value(kTokenBindingSupportedStatus));
-    } else {
-      token_binding_dict.SetKey(kTokenBindingStatusKey,
-                                base::Value(kTokenBindingPresentStatus));
-      token_binding_dict.SetKey(kTokenBindingIdKey,
-                                base::Value(Base64UrlEncode(*token_binding)));
-    }
-
-    client_data.SetKey(kTokenBindingKey, std::move(token_binding_dict));
-  }
 
   if (base::RandDouble() < 0.2) {
     // An extra key is sometimes added to ensure that RPs do not make
@@ -419,10 +425,7 @@ void AuthenticatorImpl::MakeCredential(
     return;
   }
 
-  DCHECK(!request_delegate_);
-  request_delegate_ =
-      GetContentClient()->browser()->GetWebAuthenticationRequestDelegate(
-          render_frame_host_);
+  UpdateRequestDelegate();
   if (!request_delegate_) {
     InvokeCallbackAndCleanup(std::move(callback),
                              blink::mojom::AuthenticatorStatus::PENDING_REQUEST,
@@ -460,11 +463,10 @@ void AuthenticatorImpl::MakeCredential(
 
   DCHECK(make_credential_response_callback_.is_null());
   make_credential_response_callback_ = std::move(callback);
-  request_delegate_->DidStartRequest();
 
   timer_->Start(
       FROM_HERE, options->adjusted_timeout,
-      base::Bind(&AuthenticatorImpl::OnTimeout, base::Unretained(this)));
+      base::BindOnce(&AuthenticatorImpl::OnTimeout, base::Unretained(this)));
   if (!connector_)
     connector_ = ServiceManagerConnection::GetForProcess()->GetConnector();
 
@@ -472,8 +474,7 @@ void AuthenticatorImpl::MakeCredential(
   // TODO(kpaulhamus): Fetch and add the Token Binding ID public key used to
   // communicate with the origin.
   client_data_json_ = SerializeCollectedClientDataToJson(
-      client_data::kCreateType, caller_origin, std::move(options->challenge),
-      base::nullopt);
+      client_data::kCreateType, caller_origin, std::move(options->challenge));
 
   const bool individual_attestation =
       options->attestation ==
@@ -482,11 +483,6 @@ void AuthenticatorImpl::MakeCredential(
 
   attestation_preference_ = options->attestation;
 
-  // Communication using Cable protocol is only supported for GetAssertion
-  // request on CTAP2 devices.
-  protocols_.erase(
-      device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy);
-
   auto authenticator_selection_criteria =
       options->authenticator_selection
           ? mojo::ConvertTo<device::AuthenticatorSelectionCriteria>(
@@ -494,15 +490,27 @@ void AuthenticatorImpl::MakeCredential(
           : device::AuthenticatorSelectionCriteria();
 
   request_ = std::make_unique<device::MakeCredentialRequestHandler>(
-      connector_, protocols_,
+      connector_, transports_,
       CreateCtapMakeCredentialRequest(
           ConstructClientDataHash(client_data_json_), options,
           individual_attestation),
       std::move(authenticator_selection_criteria),
       base::BindOnce(&AuthenticatorImpl::OnRegisterResponse,
-                     weak_factory_.GetWeakPtr()),
-      base::BindOnce(&AuthenticatorImpl::MaybeCreatePlatformAuthenticator,
-                     base::Unretained(this)));
+                     weak_factory_.GetWeakPtr()));
+
+  request_delegate_->RegisterActionCallbacks(
+      base::BindOnce(&AuthenticatorImpl::Cancel,
+                     weak_factory_.GetWeakPtr()) /* cancel_callback */,
+      base::BindRepeating(
+          &device::FidoRequestHandlerBase::StartAuthenticatorRequest,
+          request_->GetWeakPtr()) /* request_callback */,
+      base::BindRepeating(
+          &device::FidoRequestHandlerBase::PowerOnBluetoothAdapter,
+          request_->GetWeakPtr()) /* bluetooth_adapter_power_on_callback */);
+  request_->set_observer(request_delegate_.get());
+
+  request_->SetPlatformAuthenticatorOrMarkUnavailable(
+      CreatePlatformAuthenticatorIfAvailable());
 }
 
 // mojom:Authenticator
@@ -515,10 +523,7 @@ void AuthenticatorImpl::GetAssertion(
     return;
   }
 
-  DCHECK(!request_delegate_);
-  request_delegate_ =
-      GetContentClient()->browser()->GetWebAuthenticationRequestDelegate(
-          render_frame_host_);
+  UpdateRequestDelegate();
   if (!request_delegate_) {
     InvokeCallbackAndCleanup(std::move(callback),
                              blink::mojom::AuthenticatorStatus::PENDING_REQUEST,
@@ -546,28 +551,22 @@ void AuthenticatorImpl::GetAssertion(
     return;
   }
 
-  base::Optional<std::array<uint8_t, crypto::kSHA256Length>>
-      alternative_application_parameter;
   if (options->appid) {
-    auto appid_hash = ProcessAppIdExtension(*options->appid, caller_origin);
-    if (!appid_hash) {
+    alternative_application_parameter_ =
+        ProcessAppIdExtension(*options->appid, caller_origin);
+    if (!alternative_application_parameter_) {
       std::move(callback).Run(blink::mojom::AuthenticatorStatus::INVALID_DOMAIN,
                               nullptr);
       return;
     }
-
-    alternative_application_parameter = std::move(appid_hash);
-    // TODO(agl): needs a test once a suitable, mock U2F device exists.
-    echo_appid_extension_ = true;
   }
 
   DCHECK(get_assertion_response_callback_.is_null());
   get_assertion_response_callback_ = std::move(callback);
-  request_delegate_->DidStartRequest();
 
   timer_->Start(
       FROM_HERE, options->adjusted_timeout,
-      base::Bind(&AuthenticatorImpl::OnTimeout, base::Unretained(this)));
+      base::BindOnce(&AuthenticatorImpl::OnTimeout, base::Unretained(this)));
 
   if (!connector_)
     connector_ = ServiceManagerConnection::GetForProcess()->GetConnector();
@@ -576,27 +575,58 @@ void AuthenticatorImpl::GetAssertion(
   // TODO(kpaulhamus): Fetch and add the Token Binding ID public key used to
   // communicate with the origin.
   client_data_json_ = SerializeCollectedClientDataToJson(
-      client_data::kGetType, caller_origin, std::move(options->challenge),
-      base::nullopt);
+      client_data::kGetType, caller_origin, std::move(options->challenge));
 
+  auto ctap_request = CreateCtapGetAssertionRequest(
+      ConstructClientDataHash(client_data_json_), std::move(options),
+      alternative_application_parameter_);
+
+  auto opt_platform_authenticator_info =
+      CreatePlatformAuthenticatorIfAvailableAndCheckIfCredentialExists(
+          ctap_request);
   request_ = std::make_unique<device::GetAssertionRequestHandler>(
-      connector_, protocols_,
-      CreateCtapGetAssertionRequest(
-          ConstructClientDataHash(client_data_json_), std::move(options),
-          std::move(alternative_application_parameter)),
+      connector_, transports_, std::move(ctap_request),
       base::BindOnce(&AuthenticatorImpl::OnSignResponse,
-                     weak_factory_.GetWeakPtr()),
-      base::BindOnce(&AuthenticatorImpl::MaybeCreatePlatformAuthenticator,
-                     base::Unretained(this)));
+                     weak_factory_.GetWeakPtr()));
+
+  request_delegate_->RegisterActionCallbacks(
+      base::BindOnce(&AuthenticatorImpl::Cancel,
+                     weak_factory_.GetWeakPtr()) /* cancel_callback */,
+      base::BindRepeating(
+          &device::FidoRequestHandlerBase::StartAuthenticatorRequest,
+          request_->GetWeakPtr()) /* request_callback */,
+      base::BindRepeating(
+          &device::FidoRequestHandlerBase::PowerOnBluetoothAdapter,
+          request_->GetWeakPtr()) /* bluetooth_adapter_power_on_callback */);
+  request_->set_observer(request_delegate_.get());
+
+  request_->SetPlatformAuthenticatorOrMarkUnavailable(
+      std::move(opt_platform_authenticator_info));
 }
 
 void AuthenticatorImpl::IsUserVerifyingPlatformAuthenticatorAvailable(
     IsUserVerifyingPlatformAuthenticatorAvailableCallback callback) {
-  bool result = false;
+  const bool result = IsUserVerifyingPlatformAuthenticatorAvailableImpl();
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), result));
+}
+
+bool AuthenticatorImpl::IsUserVerifyingPlatformAuthenticatorAvailableImpl() {
 #if defined(OS_MACOSX)
-  result = device::fido::mac::TouchIdAuthenticator::IsAvailable();
+  // Touch ID is disabled, regardless of hardware support, if the embedder
+  // doesn't support it or if this is an Incognito session. N.B.
+  // request_delegate_ may be nullptr at this point.
+  if (!GetContentClient()
+           ->browser()
+           ->IsWebAuthenticationTouchIdAuthenticatorSupported() ||
+      browser_context()->IsOffTheRecord()) {
+    return false;
+  }
+
+  return device::fido::mac::TouchIdAuthenticator::IsAvailable();
+#else
+  return false;
 #endif
-  std::move(callback).Run(result);
 }
 
 void AuthenticatorImpl::DidFinishNavigation(
@@ -619,7 +649,8 @@ void AuthenticatorImpl::DidFinishNavigation(
 // Callback to handle the async registration response from a U2fDevice.
 void AuthenticatorImpl::OnRegisterResponse(
     device::FidoReturnCode status_code,
-    base::Optional<device::AuthenticatorMakeCredentialResponse> response_data) {
+    base::Optional<device::AuthenticatorMakeCredentialResponse> response_data,
+    device::FidoTransportProtocol transport_used) {
   if (!request_) {
     // Either the callback was called immediately and |request_| has not yet
     // been assigned (this is a bug), or a navigation caused the request to be
@@ -632,6 +663,10 @@ void AuthenticatorImpl::OnRegisterResponse(
       // Duplicate registration: the new credential would be created on an
       // authenticator that already contains one of the credentials in
       // |exclude_credentials|.
+      DCHECK(request_delegate_);
+      request_delegate_->DidFailWithInterestingReason(
+          AuthenticatorRequestClientDelegate::InterestingFailureReason::
+              kKeyAlreadyRegistered);
       InvokeCallbackAndCleanup(
           std::move(make_credential_response_callback_),
           blink::mojom::AuthenticatorStatus::CREDENTIAL_EXCLUDED, nullptr,
@@ -645,10 +680,18 @@ void AuthenticatorImpl::OnRegisterResponse(
           Focus::kDoCheck);
       return;
     case device::FidoReturnCode::kUserConsentButCredentialNotRecognized:
+      // TODO(crbug/876109): This isn't strictly unreachable.
       NOTREACHED();
+      return;
+    case device::FidoReturnCode::kUserConsentDenied:
+      InvokeCallbackAndCleanup(
+          std::move(make_credential_response_callback_),
+          blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr,
+          Focus::kDoCheck);
       return;
     case device::FidoReturnCode::kSuccess:
       DCHECK(response_data.has_value());
+      request_delegate_->UpdateLastTransportUsed(transport_used);
 
       if (attestation_preference_ !=
           blink::mojom::AttestationConveyancePreference::NONE) {
@@ -660,7 +703,10 @@ void AuthenticatorImpl::OnRegisterResponse(
         return;
       }
 
-      response_data->EraseAttestationStatement();
+      if (!response_data->IsSelfAttestation()) {
+        response_data->EraseAttestationStatement();
+      }
+
       InvokeCallbackAndCleanup(
           std::move(make_credential_response_callback_),
           blink::mojom::AuthenticatorStatus::SUCCESS,
@@ -722,7 +768,8 @@ void AuthenticatorImpl::OnRegisterResponseAttestationDecided(
 
 void AuthenticatorImpl::OnSignResponse(
     device::FidoReturnCode status_code,
-    base::Optional<device::AuthenticatorGetAssertionResponse> response_data) {
+    base::Optional<device::AuthenticatorGetAssertionResponse> response_data,
+    device::FidoTransportProtocol transport_used) {
   if (!request_) {
     // Either the callback was called immediately and |request_| has not yet
     // been assigned (this is a bug), or a navigation caused the request to be
@@ -733,6 +780,10 @@ void AuthenticatorImpl::OnSignResponse(
   switch (status_code) {
     case device::FidoReturnCode::kUserConsentButCredentialNotRecognized:
       // No authenticators contained the credential.
+      DCHECK(request_delegate_);
+      request_delegate_->DidFailWithInterestingReason(
+          AuthenticatorRequestClientDelegate::InterestingFailureReason::
+              kKeyNotRegistered);
       InvokeCallbackAndCleanup(
           std::move(get_assertion_response_callback_),
           blink::mojom::AuthenticatorStatus::CREDENTIAL_NOT_RECOGNIZED,
@@ -745,24 +796,35 @@ void AuthenticatorImpl::OnSignResponse(
           blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr);
       return;
     case device::FidoReturnCode::kUserConsentButCredentialExcluded:
+      // TODO(crbug/876109): This isn't strictly unreachable.
       NOTREACHED();
+      return;
+    case device::FidoReturnCode::kUserConsentDenied:
+      InvokeCallbackAndCleanup(
+          std::move(get_assertion_response_callback_),
+          blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr);
       return;
     case device::FidoReturnCode::kSuccess:
       DCHECK(response_data.has_value());
+      request_delegate_->UpdateLastTransportUsed(transport_used);
+
+      base::Optional<bool> echo_appid_extension;
+      if (alternative_application_parameter_) {
+        echo_appid_extension = (response_data->GetRpIdHash() ==
+                                *alternative_application_parameter_);
+      }
       InvokeCallbackAndCleanup(
           std::move(get_assertion_response_callback_),
           blink::mojom::AuthenticatorStatus::SUCCESS,
           CreateGetAssertionResponse(std::move(client_data_json_),
                                      std::move(*response_data),
-                                     echo_appid_extension_));
+                                     echo_appid_extension));
       return;
   }
   NOTREACHED();
 }
 
-void AuthenticatorImpl::OnTimeout() {
-  // TODO(crbug.com/814418): Add layout tests to verify timeouts are
-  // indistinguishable from NOT_ALLOWED_ERROR cases.
+void AuthenticatorImpl::FailWithNotAllowedErrorAndCleanup() {
   DCHECK(make_credential_response_callback_ ||
          get_assertion_response_callback_);
   if (make_credential_response_callback_) {
@@ -775,6 +837,24 @@ void AuthenticatorImpl::OnTimeout() {
         std::move(get_assertion_response_callback_),
         blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr);
   }
+}
+
+void AuthenticatorImpl::OnTimeout() {
+  DCHECK(request_delegate_);
+  request_delegate_->DidFailWithInterestingReason(
+      AuthenticatorRequestClientDelegate::InterestingFailureReason::kTimeout);
+
+  // TODO(crbug.com/814418): Add layout tests to verify timeouts are
+  // indistinguishable from NOT_ALLOWED_ERROR cases.
+  FailWithNotAllowedErrorAndCleanup();
+}
+
+void AuthenticatorImpl::Cancel() {
+  // If response callback is invoked already, then ignore cancel request.
+  if (!make_credential_response_callback_ && !get_assertion_response_callback_)
+    return;
+
+  FailWithNotAllowedErrorAndCleanup();
 }
 
 void AuthenticatorImpl::InvokeCallbackAndCleanup(
@@ -807,21 +887,65 @@ void AuthenticatorImpl::Cleanup() {
   make_credential_response_callback_.Reset();
   get_assertion_response_callback_.Reset();
   client_data_json_.clear();
-  echo_appid_extension_ = false;
+  alternative_application_parameter_.reset();
 }
 
-std::unique_ptr<device::FidoAuthenticator>
-AuthenticatorImpl::MaybeCreatePlatformAuthenticator() {
+BrowserContext* AuthenticatorImpl::browser_context() const {
+  return content::WebContents::FromRenderFrameHost(render_frame_host_)
+      ->GetBrowserContext();
+}
+
 #if defined(OS_MACOSX)
+namespace {
+std::unique_ptr<device::fido::mac::TouchIdAuthenticator>
+CreateTouchIdAuthenticatorIfAvailable(
+    const AuthenticatorRequestClientDelegate* request_delegate) {
+  // Not all embedders may provide an authenticator config.
   auto opt_authenticator_config =
-      request_delegate_->GetTouchIdAuthenticatorConfig();
-  if (opt_authenticator_config) {
-    return device::fido::mac::TouchIdAuthenticator::CreateIfAvailable(
-        std::move(opt_authenticator_config->keychain_access_group),
-        std::move(opt_authenticator_config->metadata_secret));
+      request_delegate->GetTouchIdAuthenticatorConfig();
+  if (!opt_authenticator_config) {
+    return nullptr;
   }
-#endif  // defined(OS_MACOSX)
-  return nullptr;
+  return device::fido::mac::TouchIdAuthenticator::CreateIfAvailable(
+      std::move(opt_authenticator_config->keychain_access_group),
+      std::move(opt_authenticator_config->metadata_secret));
+}
+}  // namespace
+#endif
+
+base::Optional<device::PlatformAuthenticatorInfo>
+AuthenticatorImpl::CreatePlatformAuthenticatorIfAvailable() {
+  // Incognito mode disables platform authenticators, so check for availability
+  // first.
+  if (!IsUserVerifyingPlatformAuthenticatorAvailableImpl()) {
+    return base::nullopt;
+  }
+#if defined(OS_MACOSX)
+  return device::PlatformAuthenticatorInfo(
+      CreateTouchIdAuthenticatorIfAvailable(request_delegate_.get()), false);
+#else
+  return base::nullopt;
+#endif
+}
+
+base::Optional<device::PlatformAuthenticatorInfo> AuthenticatorImpl::
+    CreatePlatformAuthenticatorIfAvailableAndCheckIfCredentialExists(
+        const device::CtapGetAssertionRequest& request) {
+  // Incognito mode disables platform authenticators, so check for availability
+  // first.
+  if (!IsUserVerifyingPlatformAuthenticatorAvailableImpl()) {
+    return base::nullopt;
+  }
+#if defined(OS_MACOSX)
+  std::unique_ptr<device::fido::mac::TouchIdAuthenticator> authenticator =
+      CreateTouchIdAuthenticatorIfAvailable(request_delegate_.get());
+  const bool has_credential =
+      authenticator->HasCredentialForGetAssertionRequest(request);
+  return device::PlatformAuthenticatorInfo(std::move(authenticator),
+                                           has_credential);
+#else
+  return base::nullopt;
+#endif
 }
 
 }  // namespace content

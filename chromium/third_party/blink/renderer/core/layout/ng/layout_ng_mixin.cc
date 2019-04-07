@@ -20,8 +20,6 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_relative_utils.h"
-#include "third_party/blink/renderer/core/page/scrolling/root_scroller_util.h"
-#include "third_party/blink/renderer/core/paint/adjust_paint_offset_scope.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_block_flow_painter.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
 
@@ -136,7 +134,7 @@ void LayoutNGMixin<Base>::AddScrollingOverflowFromChildren() {
       } else {
         continue;
       }
-      child_scrollable_overflow.offset += child->Offset();
+      child_scrollable_overflow.offset += child.Offset();
       children_overflow.Unite(child_scrollable_overflow);
     }
   }
@@ -216,13 +214,15 @@ scoped_refptr<NGLayoutResult> LayoutNGMixin<Base>::CachedLayoutResult(
     NGBreakToken* break_token) const {
   if (!RuntimeEnabledFeatures::LayoutNGFragmentCachingEnabled())
     return nullptr;
-  if (!cached_result_ || break_token || Base::NeedsLayout())
+  if (!cached_result_ || !Base::cached_constraint_space_ || break_token ||
+      Base::NeedsLayout())
     return nullptr;
-  if (constraint_space != *cached_constraint_space_)
+  if (constraint_space != *Base::cached_constraint_space_)
     return nullptr;
   // The checks above should be enough to bail if layout is incomplete, but
   // let's verify:
-  DCHECK(IsBlockLayoutComplete(*cached_constraint_space_, *cached_result_));
+  DCHECK(
+      IsBlockLayoutComplete(*Base::cached_constraint_space_, *cached_result_));
   // If we used to contain abspos items, we can't reuse the fragment, because
   // we can't be sure that the list of items hasn't changed (as we bubble them
   // up during layout). In the case of newly-added abspos items to this
@@ -232,11 +232,6 @@ scoped_refptr<NGLayoutResult> LayoutNGMixin<Base>::CachedLayoutResult(
   if (cached_result_->OutOfFlowPositionedDescendants().size())
     return nullptr;
   return cached_result_->CloneWithoutOffset();
-}
-
-template <typename Base>
-const NGConstraintSpace* LayoutNGMixin<Base>::CachedConstraintSpace() const {
-  return cached_constraint_space_.get();
 }
 
 template <typename Base>
@@ -251,7 +246,7 @@ void LayoutNGMixin<Base>::SetCachedLayoutResult(
   if (constraint_space.IsIntermediateLayout())
     return;
 
-  cached_constraint_space_ = &constraint_space;
+  Base::cached_constraint_space_ = &constraint_space;
   cached_result_ = layout_result;
 }
 
@@ -263,17 +258,76 @@ LayoutNGMixin<Base>::CachedLayoutResultForTesting() {
 
 template <typename Base>
 void LayoutNGMixin<Base>::SetPaintFragment(
-    scoped_refptr<const NGPhysicalFragment> fragment) {
-  paint_fragment_ = NGPaintFragment::Create(std::move(fragment));
+    NGPaintFragment* last_paint_fragment,
+    scoped_refptr<NGPaintFragment> paint_fragment) {
+  if (paint_fragment) {
+    // When paint fragment is replaced, the subtree needs paint invalidation to
+    // re-compute paint properties in NGPaintFragment.
+    Base::SetSubtreeShouldDoFullPaintInvalidation();
+  }
 
-  // When paint fragment is replaced, the subtree needs paint invalidation to
-  // re-compute paint properties in NGPaintFragment.
-  Base::SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kSubtree);
+  if (last_paint_fragment) {
+    last_paint_fragment->SetNext(std::move(paint_fragment));
+  } else {
+    paint_fragment_ = std::move(paint_fragment);
+  }
 }
 
 template <typename Base>
-void LayoutNGMixin<Base>::ClearPaintFragment() {
-  paint_fragment_ = nullptr;
+void LayoutNGMixin<Base>::SetPaintFragment(
+    const NGBreakToken* break_token,
+    scoped_refptr<const NGPhysicalFragment> fragment,
+    NGPhysicalOffset offset) {
+  // TODO(kojii): There are cases where the first call has break_token.
+  // Investigate why and handle appropriately.
+  // DCHECK(!break_token || paint_fragment_);
+  NGPaintFragment* last_paint_fragment = nullptr;
+  if (break_token && paint_fragment_) {
+    last_paint_fragment = paint_fragment_->Last(*break_token);
+    // TODO(kojii): Sometimes an unknown break_token is given. Need to
+    // investigate why, and handle appropriately. For now, just keep it to avoid
+    // crashes and use-after-free.
+    if (!last_paint_fragment)
+      last_paint_fragment = paint_fragment_->Last();
+    DCHECK(last_paint_fragment);
+  }
+  SetPaintFragment(
+      last_paint_fragment,
+      fragment ? NGPaintFragment::Create(fragment, offset) : nullptr);
+}
+
+template <typename Base>
+void LayoutNGMixin<Base>::UpdatePaintFragmentFromCachedLayoutResult(
+    const NGBreakToken* break_token,
+    scoped_refptr<const NGPhysicalFragment> fragment,
+    NGPhysicalOffset fragment_offset) {
+  DCHECK(fragment);
+  // TODO(kojii): There are cases where the first call has break_token.
+  // Investigate why and handle appropriately.
+  // DCHECK(!break_token || paint_fragment_);
+  NGPaintFragment* paint_fragment = nullptr;
+  NGPaintFragment* last_paint_fragment = nullptr;
+  if (!break_token) {
+    paint_fragment = paint_fragment_.get();
+  } else if (paint_fragment_) {
+    last_paint_fragment = paint_fragment_->Last(*break_token);
+    // TODO(kojii): Sometimes an unknown break_token is given. Need to
+    // investigate why, and handle appropriately. For now, just keep it to avoid
+    // crashes and use-after-free.
+    if (!last_paint_fragment)
+      last_paint_fragment = paint_fragment_->Last();
+    DCHECK(last_paint_fragment);
+    paint_fragment = last_paint_fragment->Next();
+  }
+
+  if (!paint_fragment) {
+    SetPaintFragment(
+        last_paint_fragment,
+        NGPaintFragment::Create(std::move(fragment), fragment_offset));
+    return;
+  }
+
+  paint_fragment->UpdatePhysicalFragmentFromCachedLayoutResult(fragment);
 }
 
 template <typename Base>
@@ -314,7 +368,7 @@ bool LayoutNGMixin<Base>::NodeAtPoint(
   // LayoutBox in the paint layer, regardless of writing mode or whether the box
   // was placed by NG or legacy.
   const LayoutPoint physical_offset = accumulated_offset + Base::Location();
-  if (!RootScrollerUtil::IsEffective(*this)) {
+  if (!this->IsEffectiveRootScroller()) {
     // Check if we need to do anything at all.
     // If we have clipping, then we can't have any spillout.
     LayoutRect overflow_box = Base::HasOverflowClip()

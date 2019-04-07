@@ -5,13 +5,21 @@
 #include <memory>
 #include <utility>
 
+#include "base/containers/span.h"
+#include "base/files/file_util.h"
+#include "base/files/scoped_temp_dir.h"
+#include "base/json/json_file_value_serializer.h"
 #include "base/optional.h"
+#include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "net/base/escape.h"
 #include "net/base/mock_network_change_notifier.h"
+#include "net/base/url_util.h"
 #include "net/dns/dns_config_service.h"
 #include "net/dns/host_resolver.h"
 #include "net/http/http_auth_handler_factory.h"
@@ -19,13 +27,18 @@
 #include "net/net_buildflags.h"
 #include "net/proxy_resolution/proxy_config.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/http_request.h"
+#include "net/test/embedded_test_server/http_response.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/test_data_directory.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_context.h"
 #include "services/network/network_context.h"
 #include "services/network/network_service.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/network_change_manager.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/test/test_network_service_client.h"
 #include "services/network/test/test_url_loader_client.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_test.h"
@@ -45,6 +58,14 @@ const char kNetworkServiceName[] = "network";
 
 const base::FilePath::CharType kServicesTestData[] =
     FILE_PATH_LITERAL("services/test/data");
+
+// Returns a new URL with key=value pair added to the query.
+GURL AddQuery(const GURL& url,
+              const std::string& key,
+              const std::string& value) {
+  return GURL(url.spec() + (url.has_query() ? "&" : "?") + key + "=" +
+              net::EscapeQueryParamValue(value, false));
+}
 
 mojom::NetworkContextParamsPtr CreateContextParams() {
   mojom::NetworkContextParamsPtr params = mojom::NetworkContextParams::New();
@@ -426,11 +447,11 @@ TEST_F(NetworkServiceTest, DnsClientEnableDisable) {
 }
 
 TEST_F(NetworkServiceTest, DnsOverHttpsEnableDisable) {
-  const GURL kServer1 = GURL("https://foo/");
+  const std::string kServer1 = "https://foo/";
   const bool kServer1UsePost = false;
-  const GURL kServer2 = GURL("https://bar/");
+  const std::string kServer2 = "https://bar/dns-query{?dns}";
   const bool kServer2UsePost = true;
-  const GURL kServer3 = GURL("https://grapefruit/");
+  const std::string kServer3 = "https://grapefruit/resolver/query{?dns}";
   const bool kServer3UsePost = false;
 
   // HostResolver::GetDnsClientForTesting() returns nullptr if the stub resolver
@@ -450,8 +471,8 @@ TEST_F(NetworkServiceTest, DnsOverHttpsEnableDisable) {
 
   mojom::DnsOverHttpsServerPtr dns_over_https_server =
       mojom::DnsOverHttpsServer::New();
-  dns_over_https_server->url = kServer1;
-  dns_over_https_server->use_posts = kServer1UsePost;
+  dns_over_https_server->server_template = kServer1;
+  dns_over_https_server->use_post = kServer1UsePost;
   dns_over_https_servers_ptr.emplace_back(std::move(dns_over_https_server));
 
   service()->ConfigureStubHostResolver(true /* stub_resolver_enabled */,
@@ -461,20 +482,20 @@ TEST_F(NetworkServiceTest, DnsOverHttpsEnableDisable) {
       service()->host_resolver()->GetDnsOverHttpsServersForTesting();
   ASSERT_TRUE(dns_over_https_servers);
   ASSERT_EQ(1u, dns_over_https_servers->size());
-  EXPECT_EQ(kServer1, (*dns_over_https_servers)[0].server);
+  EXPECT_EQ(kServer1, (*dns_over_https_servers)[0].server_template);
   EXPECT_EQ(kServer1UsePost, (*dns_over_https_servers)[0].use_post);
 
   // Enable DNS over HTTPS for two servers.
 
   dns_over_https_servers_ptr.clear();
   dns_over_https_server = mojom::DnsOverHttpsServer::New();
-  dns_over_https_server->url = kServer2;
-  dns_over_https_server->use_posts = kServer2UsePost;
+  dns_over_https_server->server_template = kServer2;
+  dns_over_https_server->use_post = kServer2UsePost;
   dns_over_https_servers_ptr.emplace_back(std::move(dns_over_https_server));
 
   dns_over_https_server = mojom::DnsOverHttpsServer::New();
-  dns_over_https_server->url = kServer3;
-  dns_over_https_server->use_posts = kServer3UsePost;
+  dns_over_https_server->server_template = kServer3;
+  dns_over_https_server->use_post = kServer3UsePost;
   dns_over_https_servers_ptr.emplace_back(std::move(dns_over_https_server));
 
   service()->ConfigureStubHostResolver(true /* stub_resolver_enabled */,
@@ -484,9 +505,9 @@ TEST_F(NetworkServiceTest, DnsOverHttpsEnableDisable) {
       service()->host_resolver()->GetDnsOverHttpsServersForTesting();
   ASSERT_TRUE(dns_over_https_servers);
   ASSERT_EQ(2u, dns_over_https_servers->size());
-  EXPECT_EQ(kServer2, (*dns_over_https_servers)[0].server);
+  EXPECT_EQ(kServer2, (*dns_over_https_servers)[0].server_template);
   EXPECT_EQ(kServer2UsePost, (*dns_over_https_servers)[0].use_post);
-  EXPECT_EQ(kServer3, (*dns_over_https_servers)[1].server);
+  EXPECT_EQ(kServer3, (*dns_over_https_servers)[1].server_template);
   EXPECT_EQ(kServer3UsePost, (*dns_over_https_servers)[1].use_post);
 
   // Destroying the primary NetworkContext should disable DNS over HTTPS.
@@ -510,7 +531,7 @@ TEST_F(NetworkServiceTest,
   std::vector<mojom::DnsOverHttpsServerPtr> dns_over_https_servers;
   mojom::DnsOverHttpsServerPtr dns_over_https_server =
       mojom::DnsOverHttpsServer::New();
-  dns_over_https_server->url = GURL("https://foo/");
+  dns_over_https_server->server_template = "https://foo/{?dns}";
   dns_over_https_servers.emplace_back(std::move(dns_over_https_server));
   service()->ConfigureStubHostResolver(true /* stub_resolver_enabled */,
                                        std::move(dns_over_https_servers));
@@ -531,7 +552,7 @@ TEST_F(NetworkServiceTest,
   // still no primary NetworkContext.
   dns_over_https_servers.clear();
   dns_over_https_server = mojom::DnsOverHttpsServer::New();
-  dns_over_https_server->url = GURL("https://foo2/");
+  dns_over_https_server->server_template = "https://foo2/{?dns}";
   dns_over_https_servers.emplace_back(std::move(dns_over_https_server));
   service()->ConfigureStubHostResolver(true /* stub_resolver_enabled */,
                                        std::move(dns_over_https_servers));
@@ -729,6 +750,38 @@ TEST_F(NetworkServiceTestWithService, Basic) {
   EXPECT_EQ(net::OK, client()->completion_status().error_code);
 }
 
+// Verifies that a passed net log file is successfully opened and sane data
+// written to it.
+TEST_F(NetworkServiceTestWithService, StartsNetLog) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  base::FilePath log_dir = temp_dir.GetPath();
+  base::FilePath log_path = log_dir.Append(FILE_PATH_LITERAL("test_log.json"));
+
+  base::DictionaryValue dict;
+  dict.SetString("amiatest", "iamatest");
+
+  base::File log_file(log_path,
+                      base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
+  network_service_->StartNetLog(std::move(log_file), std::move(dict));
+  CreateNetworkContext();
+  LoadURL(test_server()->GetURL("/echo"));
+  EXPECT_EQ(net::OK, client()->completion_status().error_code);
+
+  // |log_file| is closed on destruction of the NetworkService.
+  Shutdown();
+
+  // |log_file| is closed on another thread, so have to wait for that to happen.
+  RunUntilIdle();
+
+  JSONFileValueDeserializer deserializer(log_path);
+  std::unique_ptr<base::Value> log_dict =
+      deserializer.Deserialize(nullptr, nullptr);
+  ASSERT_TRUE(log_dict);
+  ASSERT_EQ(log_dict->FindKey("constants")->FindKey("amiatest")->GetString(),
+            "iamatest");
+}
+
 // Verifies that raw headers are only reported if requested.
 TEST_F(NetworkServiceTestWithService, RawRequestHeadersAbsent) {
   CreateNetworkContext();
@@ -861,6 +914,200 @@ TEST_F(NetworkServiceTestWithService, SetNetworkConditions) {
   EXPECT_EQ(net::OK, client()->completion_status().error_code);
 }
 
+// CRLSets are not supported on iOS and Android system verifiers.
+#if !defined(OS_IOS) && !defined(OS_ANDROID)
+
+// Verifies CRLSets take effect if configured on the service.
+TEST_F(NetworkServiceTestWithService, CRLSetIsApplied) {
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
+  test_server.AddDefaultHandlers(base::FilePath(kServicesTestData));
+  ASSERT_TRUE(test_server.Start());
+
+  CreateNetworkContext();
+
+  uint32_t options = mojom::kURLLoadOptionSendSSLInfoWithResponse |
+                     mojom::kURLLoadOptionSendSSLInfoForCertificateError;
+  // Make sure the test server loads fine with no CRLSet.
+  LoadURL(test_server.GetURL("/echo"), options);
+  ASSERT_EQ(net::OK, client()->completion_status().error_code);
+
+  // Send a CRLSet that blocks the leaf cert.
+  std::string crl_set_bytes;
+  EXPECT_TRUE(base::ReadFileToString(
+      net::GetTestCertsDirectory().AppendASCII("crlset_by_leaf_spki.raw"),
+      &crl_set_bytes));
+
+  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)));
+  network_service_.FlushForTesting();
+
+  // Flush all connections in the context, to force a new connection. A new
+  // verification should be attempted, due to the configuration having
+  // changed, thus forcing the CRLSet to be checked.
+  base::RunLoop run_loop;
+  context()->CloseAllConnections(run_loop.QuitClosure());
+  run_loop.Run();
+
+  // Make sure the connection fails, due to the certificate being revoked.
+  LoadURL(test_server.GetURL("/echo"), options);
+  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
+            client()->completion_status().error_code);
+  ASSERT_TRUE(client()->completion_status().ssl_info.has_value());
+  EXPECT_TRUE(client()->completion_status().ssl_info->cert_status &
+              net::CERT_STATUS_REVOKED);
+}
+
+// Verifies CRLSets configured before creating a new network context are
+// applied to that network context.
+TEST_F(NetworkServiceTestWithService, CRLSetIsPassedToNewContexts) {
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
+  test_server.AddDefaultHandlers(base::FilePath(kServicesTestData));
+  ASSERT_TRUE(test_server.Start());
+
+  // Send a CRLSet that blocks the leaf cert, even while no NetworkContexts
+  // exist.
+  std::string crl_set_bytes;
+  EXPECT_TRUE(base::ReadFileToString(
+      net::GetTestCertsDirectory().AppendASCII("crlset_by_leaf_spki.raw"),
+      &crl_set_bytes));
+
+  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)));
+  network_service_.FlushForTesting();
+
+  // Configure a new NetworkContext.
+  CreateNetworkContext();
+
+  uint32_t options = mojom::kURLLoadOptionSendSSLInfoWithResponse |
+                     mojom::kURLLoadOptionSendSSLInfoForCertificateError;
+  // Make sure the connection fails, due to the certificate being revoked.
+  LoadURL(test_server.GetURL("/echo"), options);
+  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
+            client()->completion_status().error_code);
+  ASSERT_TRUE(client()->completion_status().ssl_info.has_value());
+  EXPECT_TRUE(client()->completion_status().ssl_info->cert_status &
+              net::CERT_STATUS_REVOKED);
+}
+
+// Verifies newer CRLSets (by sequence number) are applied.
+TEST_F(NetworkServiceTestWithService, CRLSetIsUpdatedIfNewer) {
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
+  test_server.AddDefaultHandlers(base::FilePath(kServicesTestData));
+  ASSERT_TRUE(test_server.Start());
+
+  // Send a CRLSet that only allows the root cert if it matches a known SPKI
+  // hash (that matches the test server chain)
+  std::string crl_set_bytes;
+  ASSERT_TRUE(base::ReadFileToString(
+      net::GetTestCertsDirectory().AppendASCII("crlset_by_root_subject.raw"),
+      &crl_set_bytes));
+
+  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)));
+  network_service_.FlushForTesting();
+
+  CreateNetworkContext();
+
+  uint32_t options = mojom::kURLLoadOptionSendSSLInfoWithResponse |
+                     mojom::kURLLoadOptionSendSSLInfoForCertificateError;
+  // Make sure the connection loads, due to the root being whitelisted.
+  LoadURL(test_server.GetURL("/echo"), options);
+  ASSERT_EQ(net::OK, client()->completion_status().error_code);
+
+  // Send a new CRLSet that removes trust in the root.
+  ASSERT_TRUE(base::ReadFileToString(net::GetTestCertsDirectory().AppendASCII(
+                                         "crlset_by_root_subject_no_spki.raw"),
+                                     &crl_set_bytes));
+
+  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)));
+  network_service_.FlushForTesting();
+
+  // Flush all connections in the context, to force a new connection. A new
+  // verification should be attempted, due to the configuration having
+  // changed, thus forcing the CRLSet to be checked.
+  base::RunLoop run_loop;
+  context()->CloseAllConnections(run_loop.QuitClosure());
+  run_loop.Run();
+
+  // Make sure the connection fails, due to the certificate being revoked.
+  LoadURL(test_server.GetURL("/echo"), options);
+  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
+            client()->completion_status().error_code);
+  ASSERT_TRUE(client()->completion_status().ssl_info.has_value());
+  EXPECT_TRUE(client()->completion_status().ssl_info->cert_status &
+              net::CERT_STATUS_REVOKED);
+}
+
+// Verifies that attempting to send an older CRLSet (by sequence number)
+// does not apply to existing or new contexts.
+TEST_F(NetworkServiceTestWithService, CRLSetDoesNotDowngrade) {
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
+  test_server.AddDefaultHandlers(base::FilePath(kServicesTestData));
+  ASSERT_TRUE(test_server.Start());
+
+  // Send a CRLSet that blocks the root certificate by subject name.
+  std::string crl_set_bytes;
+  ASSERT_TRUE(base::ReadFileToString(net::GetTestCertsDirectory().AppendASCII(
+                                         "crlset_by_root_subject_no_spki.raw"),
+                                     &crl_set_bytes));
+
+  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)));
+  network_service_.FlushForTesting();
+
+  CreateNetworkContext();
+
+  uint32_t options = mojom::kURLLoadOptionSendSSLInfoWithResponse |
+                     mojom::kURLLoadOptionSendSSLInfoForCertificateError;
+  // Make sure the connection fails, due to the certificate being revoked.
+  LoadURL(test_server.GetURL("/echo"), options);
+  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
+            client()->completion_status().error_code);
+  ASSERT_TRUE(client()->completion_status().ssl_info.has_value());
+  EXPECT_TRUE(client()->completion_status().ssl_info->cert_status &
+              net::CERT_STATUS_REVOKED);
+
+  // Attempt to configure an older CRLSet that allowed trust in the root.
+  ASSERT_TRUE(base::ReadFileToString(
+      net::GetTestCertsDirectory().AppendASCII("crlset_by_root_subject.raw"),
+      &crl_set_bytes));
+
+  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)));
+  network_service_.FlushForTesting();
+
+  // Flush all connections in the context, to force a new connection. A new
+  // verification should be attempted, due to the configuration having
+  // changed, thus forcing the CRLSet to be checked.
+  base::RunLoop run_loop;
+  context()->CloseAllConnections(run_loop.QuitClosure());
+  run_loop.Run();
+
+  // Make sure the connection still fails, due to the newer CRLSet still
+  // applying.
+  LoadURL(test_server.GetURL("/echo"), options);
+  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
+            client()->completion_status().error_code);
+  ASSERT_TRUE(client()->completion_status().ssl_info.has_value());
+  EXPECT_TRUE(client()->completion_status().ssl_info->cert_status &
+              net::CERT_STATUS_REVOKED);
+
+  // Create a new NetworkContext and ensure the latest CRLSet is still
+  // applied.
+  network_context_.reset();
+  CreateNetworkContext();
+
+  // The newer CRLSet that blocks the connection should still apply, even to
+  // new NetworkContexts.
+  LoadURL(test_server.GetURL("/echo"), options);
+  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
+            client()->completion_status().error_code);
+  ASSERT_TRUE(client()->completion_status().ssl_info.has_value());
+  EXPECT_TRUE(client()->completion_status().ssl_info->cert_status &
+              net::CERT_STATUS_REVOKED);
+}
+
+#endif  // !defined(OS_IOS) && !defined(OS_ANDROID)
+
 // The SpawnedTestServer does not work on iOS.
 #if !defined(OS_IOS)
 
@@ -932,6 +1179,20 @@ class AllowBadCertsNetworkServiceClient : public mojom::NetworkServiceClient {
     NOTREACHED();
   }
 
+  void OnLoadingStateUpdate(std::vector<mojom::LoadInfoPtr> infos,
+                            OnLoadingStateUpdateCallback callback) override {
+    NOTREACHED();
+  }
+
+  void OnClearSiteData(int process_id,
+                       int routing_id,
+                       const GURL& url,
+                       const std::string& header_value,
+                       int load_flags,
+                       OnClearSiteDataCallback callback) override {
+    NOTREACHED();
+  }
+
  private:
   mojo::Binding<mojom::NetworkServiceClient> binding_;
 
@@ -990,6 +1251,10 @@ TEST_F(NetworkServiceTestWithService,
   network_service_->CreateNetworkContext(mojo::MakeRequest(&network_context),
                                          CreateContextParams());
   network_context.set_connection_error_handler(run_loop.QuitClosure());
+
+  // Wait until the new NetworkContext has been created, so it's not created
+  // after the primary NetworkContext is destroyed.
+  network_service_.FlushForTesting();
 
   // Destroying |cert_validating_network_context| should result in destroying
   // |network_context| as well.
@@ -1138,6 +1403,236 @@ class NetworkServiceNetworkChangeTest
 TEST_F(NetworkServiceNetworkChangeTest, MAYBE_NetworkChangeManagerRequest) {
   TestNetworkChangeManagerClient manager_client(service());
   manager_client.WaitForNotification(mojom::ConnectionType::CONNECTION_3G);
+}
+
+class NetworkServiceClearSiteDataTest : public NetworkServiceTest {
+ public:
+  NetworkServiceClearSiteDataTest() {
+    // |NetworkServiceNetworkDelegate::HandleClearSiteDataHeader| requires
+    // Network Service.
+    scoped_feature_list_.InitAndEnableFeature(
+        network::features::kNetworkService);
+  }
+  ~NetworkServiceClearSiteDataTest() override = default;
+
+  void CreateNetworkContext() {
+    mojom::NetworkContextParamsPtr context_params =
+        mojom::NetworkContextParams::New();
+    service()->CreateNetworkContext(mojo::MakeRequest(&network_context_),
+                                    std::move(context_params));
+  }
+
+  void LoadURL(const GURL& url, int options = mojom::kURLLoadOptionNone) {
+    ResourceRequest request;
+    request.url = url;
+    request.method = "GET";
+    request.request_initiator = url::Origin();
+    StartLoadingURL(request, 0 /* process_id */, options);
+    client_->RunUntilComplete();
+  }
+
+  void StartLoadingURL(const ResourceRequest& request,
+                       uint32_t process_id,
+                       int options = mojom::kURLLoadOptionNone) {
+    client_.reset(new TestURLLoaderClient());
+    mojom::URLLoaderFactoryPtr loader_factory;
+    mojom::URLLoaderFactoryParamsPtr params =
+        mojom::URLLoaderFactoryParams::New();
+    params->process_id = process_id;
+    params->is_corb_enabled = false;
+    network_context_->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
+                                             std::move(params));
+
+    loader_factory->CreateLoaderAndStart(
+        mojo::MakeRequest(&loader_), 1, 1, options, request,
+        client_->CreateInterfacePtr(),
+        net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
+  }
+
+  net::EmbeddedTestServer* https_server() { return https_server_.get(); }
+  TestURLLoaderClient* client() { return client_.get(); }
+
+ protected:
+  void SetUp() override {
+    // Set up HTTPS server.
+    https_server_.reset(new net::EmbeddedTestServer(
+        net::test_server::EmbeddedTestServer::TYPE_HTTPS));
+    https_server_->SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
+    https_server_->RegisterRequestHandler(base::BindRepeating(
+        &NetworkServiceClearSiteDataTest::HandleHTTPSRequest,
+        base::Unretained(this)));
+    ASSERT_TRUE(https_server_->Start());
+  }
+
+  // Responds with the header "<header>" if we have "header"=<header> query
+  // parameters in the url.
+  std::unique_ptr<net::test_server::HttpResponse> HandleHTTPSRequest(
+      const net::test_server::HttpRequest& request) {
+    std::string header;
+    if (net::GetValueForKeyInQuery(request.GetURL(), "header", &header)) {
+      std::unique_ptr<net::test_server::RawHttpResponse> response(
+          new net::test_server::RawHttpResponse("HTTP/1.1 200 OK\r\n", ""));
+
+      // Newlines are encoded as '%0A' in URLs.
+      const std::string newline_escape = "%0A";
+      std::size_t pos = header.find(newline_escape);
+      while (pos != std::string::npos) {
+        header.replace(pos, newline_escape.length(), "\r\n");
+        pos = header.find(newline_escape);
+      }
+
+      response->AddHeader(header);
+      return response;
+    }
+
+    return nullptr;
+  }
+
+  std::unique_ptr<net::EmbeddedTestServer> https_server_;
+  std::unique_ptr<TestURLLoaderClient> client_;
+  mojom::NetworkContextPtr network_context_;
+  mojom::URLLoaderPtr loader_;
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(NetworkServiceClearSiteDataTest);
+};
+
+class ClearSiteDataNetworkServiceClient : public TestNetworkServiceClient {
+ public:
+  explicit ClearSiteDataNetworkServiceClient(
+      mojom::NetworkServiceClientRequest request)
+      : TestNetworkServiceClient(std::move(request)) {}
+  ~ClearSiteDataNetworkServiceClient() override = default;
+
+  // Needed these two cookie overrides to avoid NOTREACHED().
+  void OnCookiesRead(int process_id,
+                     int routing_id,
+                     const GURL& url,
+                     const GURL& first_party_url,
+                     const net::CookieList& cookie_list,
+                     bool blocked_by_policy) override {}
+
+  void OnCookieChange(int process_id,
+                      int routing_id,
+                      const GURL& url,
+                      const GURL& first_party_url,
+                      const net::CanonicalCookie& cookie,
+                      bool blocked_by_policy) override {}
+
+  void OnClearSiteData(int process_id,
+                       int routing_id,
+                       const GURL& url,
+                       const std::string& header_value,
+                       int load_flags,
+                       OnClearSiteDataCallback callback) override {
+    ++on_clear_site_data_counter_;
+    last_on_clear_site_data_header_value_ = header_value;
+    std::move(callback).Run();
+  }
+
+  int on_clear_site_data_counter() const { return on_clear_site_data_counter_; }
+  const std::string& last_on_clear_site_data_header_value() const {
+    return last_on_clear_site_data_header_value_;
+  }
+
+  void ClearOnClearSiteDataCounter() {
+    on_clear_site_data_counter_ = 0;
+    last_on_clear_site_data_header_value_.clear();
+  }
+
+ private:
+  int on_clear_site_data_counter_ = 0;
+  std::string last_on_clear_site_data_header_value_;
+};
+
+// Check that |NetworkServiceNetworkDelegate| handles Clear-Site-Data header
+// w/ and w/o |NetworkServiceCient|.
+TEST_F(NetworkServiceClearSiteDataTest, ClearSiteDataNetworkServiceCient) {
+  const char kClearCookiesHeader[] = "Clear-Site-Data: \"cookies\"";
+  CreateNetworkContext();
+
+  // Null |NetworkServiceCient|. The request should complete without being
+  // deferred.
+  EXPECT_EQ(nullptr, service()->client());
+  GURL url = https_server()->GetURL("/foo");
+  url = AddQuery(url, "header", kClearCookiesHeader);
+  LoadURL(url);
+  EXPECT_EQ(net::OK, client()->completion_status().error_code);
+
+  // With |NetworkServiceCient|. The request should go through
+  // |ClearSiteDataNetworkServiceClient| and complete.
+  mojom::NetworkServiceClientPtr client_ptr;
+  auto client_impl = std::make_unique<ClearSiteDataNetworkServiceClient>(
+      mojo::MakeRequest(&client_ptr));
+  service()->SetClient(std::move(client_ptr));
+  url = https_server()->GetURL("/bar");
+  url = AddQuery(url, "header", kClearCookiesHeader);
+  EXPECT_EQ(0, client_impl->on_clear_site_data_counter());
+  LoadURL(url);
+  EXPECT_EQ(net::OK, client()->completion_status().error_code);
+  EXPECT_EQ(1, client_impl->on_clear_site_data_counter());
+}
+
+// Check that headers are handled and passed to the client correctly.
+TEST_F(NetworkServiceClearSiteDataTest, HandleClearSiteDataHeaders) {
+  const char kClearCookiesHeaderValue[] = "\"cookies\"";
+  const char kClearCookiesHeader[] = "Clear-Site-Data: \"cookies\"";
+  CreateNetworkContext();
+
+  mojom::NetworkServiceClientPtr client_ptr;
+  auto client_impl = std::make_unique<ClearSiteDataNetworkServiceClient>(
+      mojo::MakeRequest(&client_ptr));
+  service()->SetClient(std::move(client_ptr));
+
+  // |passed_header_value| are only checked if |should_call_client| is true.
+  const struct TestCase {
+    std::string response_headers;
+    bool should_call_client;
+    std::string passed_header_value;
+  } kTestCases[] = {
+      // The throttle does not defer requests if there are no interesting
+      // response headers.
+      {"", false, ""},
+      {"Set-Cookie: abc=123;", false, ""},
+      {"Content-Type: image/png;", false, ""},
+
+      // Both malformed and valid Clear-Site-Data headers will defer requests
+      // and be passed to the client. It's client's duty to detect malformed
+      // headers.
+      {"Clear-Site-Data: cookies", true, "cookies"},
+      {"Clear-Site-Data: \"unknown type\"", true, "\"unknown type\""},
+      {"Clear-Site-Data: \"cookies\", \"unknown type\"", true,
+       "\"cookies\", \"unknown type\""},
+      {kClearCookiesHeader, true, kClearCookiesHeaderValue},
+      {base::StringPrintf("Content-Type: image/png;\n%s", kClearCookiesHeader),
+       true, kClearCookiesHeaderValue},
+      {base::StringPrintf("%s\nContent-Type: image/png;", kClearCookiesHeader),
+       true, kClearCookiesHeaderValue},
+
+      // Multiple instances of the header will be parsed correctly.
+      {base::StringPrintf("%s\n%s", kClearCookiesHeader, kClearCookiesHeader),
+       true, "\"cookies\", \"cookies\""},
+  };
+
+  for (const TestCase& test_case : kTestCases) {
+    SCOPED_TRACE(
+        base::StringPrintf("Headers:\n%s", test_case.response_headers.c_str()));
+
+    GURL url = https_server()->GetURL("/foo");
+    url = AddQuery(url, "header", test_case.response_headers);
+    EXPECT_EQ(0, client_impl->on_clear_site_data_counter());
+    LoadURL(url);
+
+    EXPECT_EQ(net::OK, client()->completion_status().error_code);
+    if (test_case.should_call_client) {
+      EXPECT_EQ(1, client_impl->on_clear_site_data_counter());
+      EXPECT_EQ(test_case.passed_header_value,
+                client_impl->last_on_clear_site_data_header_value());
+    } else {
+      EXPECT_EQ(0, client_impl->on_clear_site_data_counter());
+    }
+    client_impl->ClearOnClearSiteDataCounter();
+  }
 }
 
 }  // namespace

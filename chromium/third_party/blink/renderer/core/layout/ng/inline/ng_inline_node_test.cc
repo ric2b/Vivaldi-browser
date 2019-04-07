@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_line_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_text_fragment.h"
@@ -114,6 +115,12 @@ class NGInlineNodeTest : public NGLayoutTest {
     for (const auto& child : line->Children()) {
       fragments_out->push_back(ToNGPhysicalTextFragment(child.get()));
     }
+  }
+
+  const String& GetText() const {
+    NGInlineNodeData* data = layout_block_flow_->GetNGInlineNodeData();
+    CHECK(data);
+    return data->text_content;
   }
 
   Vector<NGInlineItem>& Items() {
@@ -399,7 +406,8 @@ TEST_F(NGInlineNodeTest, MinMaxSize) {
   LoadAhem();
   SetupHtml("t", "<div id=t style='font:10px Ahem'>AB CDEF</div>");
   NGInlineNodeForTest node = CreateInlineNode();
-  MinMaxSize sizes = node.ComputeMinMaxSize(MinMaxSizeInput());
+  MinMaxSize sizes =
+      node.ComputeMinMaxSize(WritingMode::kHorizontalTb, MinMaxSizeInput());
   EXPECT_EQ(40, sizes.min_size);
   EXPECT_EQ(70, sizes.max_size);
 }
@@ -408,7 +416,8 @@ TEST_F(NGInlineNodeTest, MinMaxSizeElementBoundary) {
   LoadAhem();
   SetupHtml("t", "<div id=t style='font:10px Ahem'>A B<span>C D</span></div>");
   NGInlineNodeForTest node = CreateInlineNode();
-  MinMaxSize sizes = node.ComputeMinMaxSize(MinMaxSizeInput());
+  MinMaxSize sizes =
+      node.ComputeMinMaxSize(WritingMode::kHorizontalTb, MinMaxSizeInput());
   // |min_content| should be the width of "BC" because there is an element
   // boundary between "B" and "C" but no break opportunities.
   EXPECT_EQ(20, sizes.min_size);
@@ -427,7 +436,8 @@ TEST_F(NGInlineNodeTest, MinMaxSizeFloats) {
   )HTML");
 
   NGInlineNodeForTest node = CreateInlineNode();
-  MinMaxSize sizes = node.ComputeMinMaxSize(MinMaxSizeInput());
+  MinMaxSize sizes =
+      node.ComputeMinMaxSize(WritingMode::kHorizontalTb, MinMaxSizeInput());
 
   EXPECT_EQ(50, sizes.min_size);
   EXPECT_EQ(130, sizes.max_size);
@@ -446,7 +456,8 @@ TEST_F(NGInlineNodeTest, MinMaxSizeFloatsClearance) {
   )HTML");
 
   NGInlineNodeForTest node = CreateInlineNode();
-  MinMaxSize sizes = node.ComputeMinMaxSize(MinMaxSizeInput());
+  MinMaxSize sizes =
+      node.ComputeMinMaxSize(WritingMode::kHorizontalTb, MinMaxSizeInput());
 
   EXPECT_EQ(50, sizes.min_size);
   EXPECT_EQ(160, sizes.max_size);
@@ -613,6 +624,21 @@ TEST_F(NGInlineNodeTest, InvalidateRemoveFloat) {
   ASSERT_TRUE(span);
   span->remove();
   EXPECT_TRUE(layout_block_flow_->NeedsCollectInlines());
+}
+
+TEST_F(NGInlineNodeTest, SpaceRestoredByInsertingWord) {
+  SetupHtml("t", "<div id=t>before <span id=x></span> after</div>");
+  EXPECT_FALSE(layout_block_flow_->NeedsCollectInlines());
+  EXPECT_EQ(String("before after"), GetText());
+
+  Element* span = GetElementById("x");
+  ASSERT_TRUE(span);
+  Text* text = Text::Create(GetDocument(), "mid");
+  span->appendChild(text);
+  // EXPECT_TRUE(layout_block_flow_->NeedsCollectInlines());
+
+  ForceLayout();
+  EXPECT_EQ(String("before mid after"), GetText());
 }
 
 }  // namespace blink

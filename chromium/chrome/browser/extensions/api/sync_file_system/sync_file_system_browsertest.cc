@@ -9,7 +9,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
@@ -106,7 +106,7 @@ class SyncFileSystemTest : public extensions::PlatformAppBrowserTest,
 
   // drive::FakeDriveService::ChangeObserver override.
   void OnNewChangeAvailable() override {
-    sync_engine()->OnNotificationReceived();
+    sync_engine()->OnNotificationTimerFired();
   }
 
   SyncFileSystemService* sync_file_system_service() {

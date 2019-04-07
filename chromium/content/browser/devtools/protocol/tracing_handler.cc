@@ -24,7 +24,6 @@
 #include "base/trace_event/trace_event_impl.h"
 #include "base/trace_event/tracing_agent.h"
 #include "components/tracing/common/trace_startup_config.h"
-#include "components/viz/common/features.h"
 #include "content/browser/devtools/devtools_frame_trace_recorder.h"
 #include "content/browser/devtools/devtools_io_context.h"
 #include "content/browser/devtools/devtools_session.h"
@@ -35,10 +34,10 @@
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/content_features.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
 #include "services/tracing/public/mojom/constants.mojom.h"
 
@@ -218,10 +217,7 @@ TracingHandler::TracingHandler(FrameTreeNode* frame_tree_node_,
       return_as_stream_(false),
       gzip_compression_(false),
       weak_factory_(this) {
-  bool use_video_capture_api =
-      base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
-      base::FeatureList::IsEnabled(
-          features::kUseVideoCaptureApiForDevToolsSnapshots);
+  bool use_video_capture_api = true;
 #ifdef OS_ANDROID
   // Video capture API cannot be used on Android WebView.
   if (!CompositorImpl::IsInitialized())
@@ -409,12 +405,30 @@ void TracingHandler::Start(Maybe<std::string> categories,
                                                    options.fromMaybe(""));
   }
 
-  // If inspected target is a render process Tracing.start will be handled by
-  // tracing agent in the renderer.
-  if (frame_tree_node_)
-    callback->fallThrough();
+  // GPU process id can only be retrieved on IO thread. Do some thread hopping.
+  BrowserThread::PostTaskAndReplyWithResult(
+      BrowserThread::IO, FROM_HERE, base::BindOnce([]() {
+        GpuProcessHost* gpu_process_host =
+            GpuProcessHost::Get(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
+                                /* force_create */ false);
+        return gpu_process_host ? gpu_process_host->process_id()
+                                : base::kNullProcessId;
+      }),
+      base::BindOnce(&TracingHandler::StartTracingWithGpuPid,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
+}
 
-  SetupProcessFilter(nullptr);
+void TracingHandler::StartTracingWithGpuPid(
+    std::unique_ptr<StartCallback> callback,
+    base::ProcessId gpu_pid) {
+  // Check if tracing was stopped in mid-air.
+  if (!did_initiate_recording_) {
+    callback->sendFailure(Response::Error(
+        "Tracing was stopped before start has been completed."));
+    return;
+  }
+
+  SetupProcessFilter(gpu_pid, nullptr);
 
   TracingController::GetInstance()->StartTracing(
       trace_config_, base::BindRepeating(&TracingHandler::OnRecordingEnabled,
@@ -423,14 +437,20 @@ void TracingHandler::Start(Maybe<std::string> categories,
 }
 
 void TracingHandler::SetupProcessFilter(
+    base::ProcessId gpu_pid,
     RenderFrameHost* new_render_frame_host) {
   if (!frame_tree_node_)
     return;
 
   base::ProcessId browser_pid = base::Process::Current().Pid();
   std::unordered_set<base::ProcessId> included_process_ids({browser_pid});
+
+  if (gpu_pid != base::kNullProcessId)
+    included_process_ids.insert(gpu_pid);
+
   if (new_render_frame_host)
     AppendProcessId(new_render_frame_host, &included_process_ids);
+
   for (FrameTreeNode* node :
        frame_tree_node_->frame_tree()->SubtreeNodes(frame_tree_node_)) {
     RenderFrameHost* frame_host = node->current_frame_host();
@@ -467,14 +487,12 @@ void TracingHandler::OnProcessReady(RenderProcessHost* process_host) {
       trace_config_, base::RepeatingCallback<void()>());
 }
 
-void TracingHandler::End(std::unique_ptr<EndCallback> callback) {
+Response TracingHandler::End() {
   // Startup tracing triggered by --trace-config-file is a special case, where
   // tracing is started automatically upon browser startup and can be stopped
   // via DevTools.
-  if (!did_initiate_recording_ && !IsStartupTracingActive()) {
-    callback->sendFailure(Response::Error("Tracing is not started"));
-    return;
-  }
+  if (!did_initiate_recording_ && !IsStartupTracingActive())
+    return Response::Error("Tracing is not started");
 
   scoped_refptr<TracingController::TraceDataEndpoint> endpoint;
   if (return_as_stream_) {
@@ -493,12 +511,8 @@ void TracingHandler::End(std::unique_ptr<EndCallback> callback) {
     endpoint = new DevToolsTraceEndpointProxy(weak_factory_.GetWeakPtr());
     StopTracing(endpoint, tracing::mojom::kChromeTraceEventLabel);
   }
-  // If inspected target is a render process Tracing.end will be handled by
-  // tracing agent in the renderer.
-  if (frame_tree_node_)
-    callback->fallThrough();
-  else
-    callback->sendSuccess();
+
+  return Response::OK();
 }
 
 void TracingHandler::GetCategories(
@@ -511,10 +525,14 @@ void TracingHandler::GetCategories(
 
 void TracingHandler::OnRecordingEnabled(
     std::unique_ptr<StartCallback> callback) {
-  EmitFrameTree();
+  if (!did_initiate_recording_) {
+    callback->sendFailure(Response::Error(
+        "Tracing was stopped before start has been completed."));
+    return;
+  }
 
-  if (!frame_tree_node_)
-    callback->sendSuccess();
+  EmitFrameTree();
+  callback->sendSuccess();
 
   bool screenshot_enabled;
   TRACE_EVENT_CATEGORY_GROUP_ENABLED(
@@ -663,7 +681,8 @@ void TracingHandler::ReadyToCommitNavigation(
                        "FrameCommittedInBrowser", TRACE_EVENT_SCOPE_THREAD,
                        "data", std::move(data));
 
-  SetupProcessFilter(navigation_handle->GetRenderFrameHost());
+  SetupProcessFilter(base::kNullProcessId,
+                     navigation_handle->GetRenderFrameHost());
   TracingController::GetInstance()->StartTracing(
       trace_config_, base::RepeatingCallback<void()>());
 }

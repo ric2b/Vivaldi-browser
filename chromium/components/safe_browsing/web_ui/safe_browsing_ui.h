@@ -9,7 +9,6 @@
 #include "components/safe_browsing/proto/csd.pb.h"
 #include "components/safe_browsing/proto/webui.pb.h"
 #include "components/sync/protocol/user_event_specifics.pb.h"
-#include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
@@ -22,6 +21,7 @@ struct DefaultSingletonTraits;
 
 namespace safe_browsing {
 class WebUIInfoSingleton;
+class ReferrerChainProvider;
 
 class SafeBrowsingUIHandler : public content::WebUIMessageHandler {
  public:
@@ -65,8 +65,18 @@ class SafeBrowsingUIHandler : public content::WebUIMessageHandler {
   // currently open chrome://safe-browsing tab was opened.
   void GetPGResponses(const base::ListValue* args);
 
+  // Get the current referrer chain for a given URL.
+  void GetReferrerChain(const base::ListValue* args);
+
+  // Get the list of log messages that have been received since the oldest
+  // currently open chrome://safe-browsing tab was opened.
+  void GetLogMessages(const base::ListValue* args);
+
   // Register callbacks for WebUI messages.
   void RegisterMessages() override;
+
+  // Sets the WebUI for testing
+  void SetWebUIForTesting(content::WebUI* web_ui);
 
  private:
   friend class WebUIInfoSingleton;
@@ -99,6 +109,11 @@ class SafeBrowsingUIHandler : public content::WebUIMessageHandler {
   void NotifyPGResponseJsListener(
       int token,
       const LoginReputationClientResponse& response);
+
+  // Called when any new log messages are received while one or more WebUI tabs
+  // are open.
+  void NotifyLogMessageJsListener(const base::Time& timestamp,
+                                  const std::string& message);
 
   content::BrowserContext* browser_context_;
 
@@ -167,6 +182,12 @@ class WebUIInfoSingleton {
   // Clear the list of sent PhishGuard pings and responses.
   void ClearPGPings();
 
+  // Log an arbitrary message. Frequently used for debugging.
+  void LogMessage(const std::string& message);
+
+  // Clear the log messages.
+  void ClearLogMessages();
+
   // Register the new WebUI listener object.
   void RegisterWebUIInstance(SafeBrowsingUIHandler* webui);
 
@@ -218,6 +239,18 @@ class WebUIInfoSingleton {
     return pg_responses_;
   }
 
+  ReferrerChainProvider* referrer_chain_provider() {
+    return referrer_chain_provider_;
+  }
+
+  void set_referrer_chain_provider(ReferrerChainProvider* provider) {
+    referrer_chain_provider_ = provider;
+  }
+
+  const std::vector<std::pair<base::Time, std::string>>& log_messages() {
+    return log_messages_;
+  }
+
  private:
   WebUIInfoSingleton();
   ~WebUIInfoSingleton();
@@ -260,8 +293,47 @@ class WebUIInfoSingleton {
   // due to being used by functions that call AllowJavascript(), which is not
   // marked const.
   std::vector<SafeBrowsingUIHandler*> webui_instances_;
+
+  // List of messages logged since the oldest currently open
+  // chrome://safe-browsing tab was opened.
+  std::vector<std::pair<base::Time, std::string>> log_messages_;
+
+  // The current referrer chain provider, if any. Can be nullptr.
+  ReferrerChainProvider* referrer_chain_provider_ = nullptr;
+
   DISALLOW_COPY_AND_ASSIGN(WebUIInfoSingleton);
 };
+
+// Used for streaming messages to the WebUIInfoSingleton. Collects streamed
+// messages, then sends them to the WebUIInfoSingleton when destroyed. Intended
+// to be used in CRSBLOG macro.
+class CrSBLogMessage {
+ public:
+  CrSBLogMessage();
+  ~CrSBLogMessage();
+
+  std::ostream& stream() { return stream_; }
+
+ private:
+  std::ostringstream stream_;
+};
+
+// Used to consume a stream so that we don't even evaluate the streamed data if
+// there are no chrome://safe-browsing tabs open.
+class CrSBLogVoidify {
+ public:
+  CrSBLogVoidify() = default;
+
+  // This has to be an operator with a precedence lower than <<,
+  // but higher than ?:
+  void operator&(std::ostream&) {}
+};
+
+#define CRSBLOG                                         \
+  (!::safe_browsing::WebUIInfoSingleton::HasListener()) \
+      ? static_cast<void>(0)                            \
+      : ::safe_browsing::CrSBLogVoidify() &             \
+            ::safe_browsing::CrSBLogMessage().stream()
 
 }  // namespace safe_browsing
 

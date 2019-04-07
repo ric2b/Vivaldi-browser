@@ -23,7 +23,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
@@ -48,7 +48,8 @@
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
-#include "net/url_request/url_fetcher.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/simple_url_loader.h"
 
 namespace chromeos {
 namespace {
@@ -99,8 +100,13 @@ const char kServicesCustomizationKey[] = "customization.manifest_cache";
 // Empty customization document that doesn't customize anything.
 const char kEmptyServicesCustomizationManifest[] = "{ \"version\": \"1.0\" }";
 
+struct CustomizationDocumentTestOverride {
+  ServicesCustomizationDocument* customization_document = nullptr;
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory;
+};
+
 // Global overrider for ServicesCustomizationDocument for tests.
-ServicesCustomizationDocument* g_test_services_customization_document = NULL;
+CustomizationDocumentTestOverride* g_test_overrides = nullptr;
 
 // Services customization document load results reported via the
 // "ServicesCustomization.LoadResult" histogram.
@@ -417,14 +423,13 @@ void ServicesCustomizationDocument::ApplyingTask::Finished(bool success) {
 ServicesCustomizationDocument::ServicesCustomizationDocument()
     : CustomizationDocument(kAcceptedManifestVersion),
       num_retries_(0),
-      fetch_started_(false),
+      load_started_(false),
       network_delay_(
           base::TimeDelta::FromMilliseconds(kDefaultNetworkRetryDelayMS)),
       apply_tasks_started_(0),
       apply_tasks_finished_(0),
       apply_tasks_success_(0),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 ServicesCustomizationDocument::ServicesCustomizationDocument(
     const std::string& manifest)
@@ -442,8 +447,8 @@ ServicesCustomizationDocument::~ServicesCustomizationDocument() {}
 
 // static
 ServicesCustomizationDocument* ServicesCustomizationDocument::GetInstance() {
-  if (g_test_services_customization_document)
-    return g_test_services_customization_document;
+  if (g_test_overrides)
+    return g_test_overrides->customization_document;
 
   return base::Singleton<
       ServicesCustomizationDocument,
@@ -522,7 +527,7 @@ ServicesCustomizationDocument::EnsureCustomizationAppliedClosure() {
 }
 
 void ServicesCustomizationDocument::StartFetching() {
-  if (IsReady() || fetch_started_)
+  if (IsReady() || load_started_)
     return;
 
   if (!url_.is_valid()) {
@@ -542,10 +547,10 @@ void ServicesCustomizationDocument::StartFetching() {
   }
 
   if (url_.is_valid()) {
-    fetch_started_ = true;
+    load_started_ = true;
     if (url_.SchemeIsFile()) {
       base::PostTaskWithTraitsAndReplyWithResult(
-          FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
+          FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
           base::BindOnce(&ReadFileInBackground, base::FilePath(url_.path())),
           base::BindOnce(&ServicesCustomizationDocument::OnManifestRead,
                          weak_ptr_factory_.GetWeakPtr()));
@@ -560,7 +565,7 @@ void ServicesCustomizationDocument::OnManifestRead(
   if (!manifest.empty())
     LoadManifestFromString(manifest);
 
-  fetch_started_ = false;
+  load_started_ = false;
 }
 
 void ServicesCustomizationDocument::StartFileFetch() {
@@ -570,14 +575,20 @@ void ServicesCustomizationDocument::StartFileFetch() {
 }
 
 void ServicesCustomizationDocument::DoStartFileFetch() {
-  url_fetcher_ = net::URLFetcher::Create(url_, net::URLFetcher::GET, this);
-  url_fetcher_->SetRequestContext(g_browser_process->system_request_context());
-  url_fetcher_->AddExtraRequestHeader("Accept: application/json");
-  url_fetcher_->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
-                             net::LOAD_DO_NOT_SAVE_COOKIES |
-                             net::LOAD_DISABLE_CACHE |
-                             net::LOAD_DO_NOT_SEND_AUTH_DATA);
-  url_fetcher_->Start();
+  auto request = std::make_unique<network::ResourceRequest>();
+  request->url = url_;
+  request->load_flags = net::LOAD_DISABLE_CACHE;
+  request->allow_credentials = false;
+  request->headers.SetHeader("Accept", "application/json");
+
+  url_loader_ = network::SimpleURLLoader::Create(std::move(request),
+                                                 NO_TRAFFIC_ANNOTATION_YET);
+
+  url_loader_->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
+      g_test_overrides ? g_test_overrides->url_loader_factory.get()
+                       : g_browser_process->shared_url_loader_factory().get(),
+      base::BindOnce(&ServicesCustomizationDocument::OnSimpleLoaderComplete,
+                     base::Unretained(this)));
 }
 
 bool ServicesCustomizationDocument::LoadManifestFromString(
@@ -609,19 +620,20 @@ void ServicesCustomizationDocument::OnManifestLoaded() {
   }
 }
 
-void ServicesCustomizationDocument::OnURLFetchComplete(
-    const net::URLFetcher* source) {
+void ServicesCustomizationDocument::OnSimpleLoaderComplete(
+    std::unique_ptr<std::string> response_body) {
+  int response_code = -1;
   std::string mime_type;
-  std::string data;
-  if (source->GetStatus().is_success() &&
-      source->GetResponseCode() == net::HTTP_OK &&
-      source->GetResponseHeaders()->GetMimeType(&mime_type) &&
-      mime_type == "application/json" &&
-      source->GetResponseAsString(&data)) {
-    LoadManifestFromString(data);
-  } else if (source->GetResponseCode() == net::HTTP_NOT_FOUND) {
+  if (url_loader_->ResponseInfo() && url_loader_->ResponseInfo()->headers) {
+    response_code = url_loader_->ResponseInfo()->headers->response_code();
+    url_loader_->ResponseInfo()->headers->GetMimeType(&mime_type);
+  }
+
+  if (response_body && mime_type == "application/json") {
+    LoadManifestFromString(*response_body);
+  } else if (response_code == net::HTTP_NOT_FOUND) {
     LOG(ERROR) << "Customization manifest is missing on server: "
-               << source->GetURL().spec();
+               << url_.spec();
     OnCustomizationNotFound();
   } else {
     if (num_retries_ < kMaxFetchRetries) {
@@ -636,12 +648,12 @@ void ServicesCustomizationDocument::OnURLFetchComplete(
     }
     // This doesn't stop fetching manifest on next restart.
     LOG(ERROR) << "URL fetch for services customization failed:"
-               << " response code = " << source->GetResponseCode()
-               << " URL = " << source->GetURL().spec();
+               << " response code = " << response_code
+               << " URL = " << url_.spec();
 
     LogManifestLoadResult(HISTOGRAM_LOAD_RESULT_RETRIES_FAIL);
   }
-  fetch_started_ = false;
+  load_started_ = false;
 }
 
 bool ServicesCustomizationDocument::ApplyOOBECustomization() {
@@ -782,15 +794,19 @@ std::string ServicesCustomizationDocument::GetOemAppsFolderNameImpl(
 }
 
 // static
-void ServicesCustomizationDocument::InitializeForTesting() {
-  g_test_services_customization_document = new ServicesCustomizationDocument;
-  g_test_services_customization_document->network_delay_ = base::TimeDelta();
+void ServicesCustomizationDocument::InitializeForTesting(
+    scoped_refptr<network::SharedURLLoaderFactory> factory) {
+  g_test_overrides = new CustomizationDocumentTestOverride;
+  g_test_overrides->customization_document = new ServicesCustomizationDocument;
+  g_test_overrides->customization_document->network_delay_ = base::TimeDelta();
+  g_test_overrides->url_loader_factory = std::move(factory);
 }
 
 // static
 void ServicesCustomizationDocument::ShutdownForTesting() {
-  delete g_test_services_customization_document;
-  g_test_services_customization_document = NULL;
+  delete g_test_overrides->customization_document;
+  delete g_test_overrides;
+  g_test_overrides = nullptr;
 }
 
 void ServicesCustomizationDocument::StartOEMWallpaperDownload(
@@ -860,7 +876,7 @@ void ServicesCustomizationDocument::CheckAndApplyWallpaper() {
       weak_ptr_factory_.GetWeakPtr(), base::Passed(std::move(exists)),
       base::Passed(std::move(applying)));
   base::PostTaskWithTraitsAndReply(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       check_file_exists, on_checked_closure);
 }
 

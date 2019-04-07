@@ -13,12 +13,13 @@
 namespace blink {
 
 NGLayoutResult::NGLayoutResult(
-    scoped_refptr<NGPhysicalFragment> physical_fragment,
+    scoped_refptr<const NGPhysicalFragment> physical_fragment,
     Vector<NGOutOfFlowPositionedDescendant>& oof_positioned_descendants,
     Vector<NGPositionedFloat>& positioned_floats,
     const NGUnpositionedListMarker& unpositioned_list_marker,
     std::unique_ptr<const NGExclusionSpace> exclusion_space,
-    const base::Optional<NGBfcOffset> bfc_offset,
+    LayoutUnit bfc_line_offset,
+    const base::Optional<LayoutUnit> bfc_block_offset,
     const NGMarginStrut end_margin_strut,
     const LayoutUnit intrinsic_block_size,
     LayoutUnit minimal_space_shortage,
@@ -28,10 +29,10 @@ NGLayoutResult::NGLayoutResult(
     bool is_pushed_by_floats,
     NGFloatTypes adjoining_floats,
     NGLayoutResultStatus status)
-    : physical_fragment_(std::move(physical_fragment)),
-      unpositioned_list_marker_(unpositioned_list_marker),
+    : unpositioned_list_marker_(unpositioned_list_marker),
       exclusion_space_(std::move(exclusion_space)),
-      bfc_offset_(bfc_offset),
+      bfc_line_offset_(bfc_line_offset),
+      bfc_block_offset_(bfc_block_offset),
       end_margin_strut_(end_margin_strut),
       intrinsic_block_size_(intrinsic_block_size),
       minimal_space_shortage_(minimal_space_shortage),
@@ -41,6 +42,7 @@ NGLayoutResult::NGLayoutResult(
       is_pushed_by_floats_(is_pushed_by_floats),
       adjoining_floats_(adjoining_floats),
       status_(status) {
+  root_fragment_.fragment_ = std::move(physical_fragment);
   oof_positioned_descendants_.swap(oof_positioned_descendants);
   positioned_floats_.swap(positioned_floats);
 }
@@ -60,9 +62,9 @@ scoped_refptr<NGLayoutResult> NGLayoutResult::CloneWithoutOffset() const {
     exclusion_space = std::make_unique<NGExclusionSpace>(*exclusion_space_);
   }
   return base::AdoptRef(new NGLayoutResult(
-      physical_fragment_->CloneWithoutOffset(), oof_positioned_descendants,
-      positioned_floats, unpositioned_list_marker_, std::move(exclusion_space),
-      bfc_offset_, end_margin_strut_, intrinsic_block_size_,
+      PhysicalFragment(), oof_positioned_descendants, positioned_floats,
+      unpositioned_list_marker_, std::move(exclusion_space), bfc_line_offset_,
+      bfc_block_offset_, end_margin_strut_, intrinsic_block_size_,
       minimal_space_shortage_, initial_break_before_, final_break_after_,
       has_forced_break_, is_pushed_by_floats_, adjoining_floats_, Status()));
 }

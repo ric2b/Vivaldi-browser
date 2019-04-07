@@ -26,6 +26,7 @@
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/safe_browsing/features.h"
+#include "components/safe_browsing/password_protection/metrics_util.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -38,11 +39,6 @@
 #include "ui/events/event_constants.h"
 
 namespace {
-
-const char kSyncPasswordPageInfoHistogramName[] =
-    "PasswordProtection.PageInfoAction.SyncPasswordEntry";
-const char kEnterprisePasswordPageInfoHistogramName[] =
-    "PasswordProtection.PageInfoAction.NonGaiaEnterprisePasswordEntry";
 
 class ClickEvent : public ui::Event {
  public:
@@ -131,6 +127,7 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
     constexpr char kInternal[] = "Internal";
     constexpr char kInternalExtension[] = "InternalExtension";
     constexpr char kInternalViewSource[] = "InternalViewSource";
+    constexpr char kFile[] = "File";
     constexpr char kSecure[] = "Secure";
     constexpr char kMalware[] = "Malware";
     constexpr char kDeceptive[] = "Deceptive";
@@ -144,6 +141,7 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
 
     const GURL internal_url("chrome://settings");
     const GURL internal_extension_url("chrome-extension://example");
+    const GURL file_url("file:///Users/homedirname/folder/file.pdf");
     // Note the following two URLs are not really necessary to get the different
     // versions of Page Info to appear, but are here to indicate the type of
     // URL each IdentityInfo type would normally be associated with.
@@ -165,6 +163,8 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
       url = GURL(content::kViewSourceScheme +
                  std::string(url::kStandardSchemeSeparator) +
                  embedded_test_server()->GetURL(kTestHtml).spec());
+    } else if (name == kFile) {
+      url = file_url;
     }
 
     ui_test_utils::NavigateToURL(browser(), url);
@@ -240,7 +240,8 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
                                                std::move(chosen_object_list));
     }
 
-    if (name != kInsecure && name.find(kInternal) == std::string::npos) {
+    if (name != kInsecure && name.find(kInternal) == std::string::npos &&
+        name != kFile) {
       // The bubble may be PageInfoBubbleView or InternalPageInfoBubbleView. The
       // latter is only used for |kInternal|, so it is safe to static_cast here.
       static_cast<PageInfoBubbleView*>(PageInfoBubbleView::GetPageInfoBubble())
@@ -346,22 +347,13 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
             OpenSiteSettingsForUrl(browser(), GURL(url::kAboutBlankURL)));
 }
 
-// Test opening "Site Details" via Page Info from a file:// URL goes to "Content
-// Settings".
-IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
-                       SiteSettingsLinkWithFileUrl) {
-  GURL url = GURL("file:///Users/homedirname/folder/file.pdf");
-  EXPECT_EQ(GURL(chrome::kChromeUIContentSettingsURL),
-            OpenSiteSettingsForUrl(browser(), url));
-}
-
 // Test opening page info bubble that matches
 // SB_THREAT_TYPE_SIGN_IN_PASSWORD_REUSE threat type.
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
                        VerifySignInPasswordReusePageInfoBubble) {
   ASSERT_TRUE(embedded_test_server()->Start());
   base::HistogramTester histograms;
-  histograms.ExpectTotalCount(kSyncPasswordPageInfoHistogramName, 0);
+  histograms.ExpectTotalCount(safe_browsing::kSyncPasswordPageInfoHistogram, 0);
   ui_test_utils::NavigateToURL(browser(), embedded_test_server()->GetURL("/"));
 
   // Update security state of the current page to match
@@ -397,22 +389,26 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
   // PasswordProtection.PageInfoAction.SyncPasswordEntry histogram.
   PerformMouseClickOnView(change_password_button);
   EXPECT_THAT(
-      histograms.GetAllSamples(kSyncPasswordPageInfoHistogramName),
+      histograms.GetAllSamples(safe_browsing::kSyncPasswordPageInfoHistogram),
       testing::ElementsAre(
-          base::Bucket(safe_browsing::PasswordProtectionService::SHOWN, 1),
+          base::Bucket(static_cast<int>(safe_browsing::WarningAction::SHOWN),
+                       1),
           base::Bucket(
-              safe_browsing::PasswordProtectionService::CHANGE_PASSWORD, 1)));
+              static_cast<int>(safe_browsing::WarningAction::CHANGE_PASSWORD),
+              1)));
 
   PerformMouseClickOnView(whitelist_password_reuse_button);
   EXPECT_THAT(
-      histograms.GetAllSamples(kSyncPasswordPageInfoHistogramName),
+      histograms.GetAllSamples(safe_browsing::kSyncPasswordPageInfoHistogram),
       testing::ElementsAre(
-          base::Bucket(safe_browsing::PasswordProtectionService::SHOWN, 1),
+          base::Bucket(static_cast<int>(safe_browsing::WarningAction::SHOWN),
+                       1),
           base::Bucket(
-              safe_browsing::PasswordProtectionService::CHANGE_PASSWORD, 1),
-          base::Bucket(
-              safe_browsing::PasswordProtectionService::MARK_AS_LEGITIMATE,
-              1)));
+              static_cast<int>(safe_browsing::WarningAction::CHANGE_PASSWORD),
+              1),
+          base::Bucket(static_cast<int>(
+                           safe_browsing::WarningAction::MARK_AS_LEGITIMATE),
+                       1)));
   // Security state will change after whitelisting.
   helper->GetSecurityInfo(&security_info);
   EXPECT_EQ(security_state::MALICIOUS_CONTENT_STATUS_NONE,
@@ -460,22 +456,28 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
   // PasswordProtection.PageInfoAction.NonGaiaEnterprisePasswordEntry histogram.
   PerformMouseClickOnView(change_password_button);
   EXPECT_THAT(
-      histograms.GetAllSamples(kEnterprisePasswordPageInfoHistogramName),
+      histograms.GetAllSamples(
+          safe_browsing::kEnterprisePasswordPageInfoHistogram),
       testing::ElementsAre(
-          base::Bucket(safe_browsing::PasswordProtectionService::SHOWN, 1),
+          base::Bucket(static_cast<int>(safe_browsing::WarningAction::SHOWN),
+                       1),
           base::Bucket(
-              safe_browsing::PasswordProtectionService::CHANGE_PASSWORD, 1)));
+              static_cast<int>(safe_browsing::WarningAction::CHANGE_PASSWORD),
+              1)));
 
   PerformMouseClickOnView(whitelist_password_reuse_button);
   EXPECT_THAT(
-      histograms.GetAllSamples(kEnterprisePasswordPageInfoHistogramName),
+      histograms.GetAllSamples(
+          safe_browsing::kEnterprisePasswordPageInfoHistogram),
       testing::ElementsAre(
-          base::Bucket(safe_browsing::PasswordProtectionService::SHOWN, 1),
+          base::Bucket(static_cast<int>(safe_browsing::WarningAction::SHOWN),
+                       1),
           base::Bucket(
-              safe_browsing::PasswordProtectionService::CHANGE_PASSWORD, 1),
-          base::Bucket(
-              safe_browsing::PasswordProtectionService::MARK_AS_LEGITIMATE,
-              1)));
+              static_cast<int>(safe_browsing::WarningAction::CHANGE_PASSWORD),
+              1),
+          base::Bucket(static_cast<int>(
+                           safe_browsing::WarningAction::MARK_AS_LEGITIMATE),
+                       1)));
   // Security state will change after whitelisting.
   helper->GetSecurityInfo(&security_info);
   EXPECT_EQ(security_state::MALICIOUS_CONTENT_STATUS_NONE,
@@ -506,6 +508,11 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
 // Shows the Page Info bubble for a chrome page that displays the source HTML.
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
                        InvokeUi_InternalViewSource) {
+  ShowAndVerifyUi();
+}
+
+// Shows the Page Info bubble for a file:// URL.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, InvokeUi_File) {
   ShowAndVerifyUi();
 }
 
@@ -566,7 +573,7 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
   EXPECT_EQ(PageInfoBubbleView::BUBBLE_NONE,
             PageInfoBubbleView::GetShownBubbleType());
   OpenPageInfoBubble(browser());
-  EXPECT_EQ(PageInfoBubbleView::BUBBLE_PAGE_INFO,
+  EXPECT_EQ(PageInfoBubbleView::BUBBLE_INTERNAL_PAGE,
             PageInfoBubbleView::GetShownBubbleType());
   ui_test_utils::NavigateToURL(browser(), GetSimplePageUrl());
   EXPECT_EQ(PageInfoBubbleView::BUBBLE_NONE,
@@ -579,7 +586,7 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
   EXPECT_EQ(PageInfoBubbleView::BUBBLE_NONE,
             PageInfoBubbleView::GetShownBubbleType());
   OpenPageInfoBubble(browser());
-  EXPECT_EQ(PageInfoBubbleView::BUBBLE_PAGE_INFO,
+  EXPECT_EQ(PageInfoBubbleView::BUBBLE_INTERNAL_PAGE,
             PageInfoBubbleView::GetShownBubbleType());
   ui_test_utils::NavigateToURL(browser(), GetIframePageUrl());
   EXPECT_EQ(PageInfoBubbleView::BUBBLE_NONE,
@@ -592,13 +599,13 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
   EXPECT_EQ(PageInfoBubbleView::BUBBLE_NONE,
             PageInfoBubbleView::GetShownBubbleType());
   OpenPageInfoBubble(browser());
-  EXPECT_EQ(PageInfoBubbleView::BUBBLE_PAGE_INFO,
+  EXPECT_EQ(PageInfoBubbleView::BUBBLE_INTERNAL_PAGE,
             PageInfoBubbleView::GetShownBubbleType());
   content::NavigateIframeToURL(
       browser()->tab_strip_model()->GetActiveWebContents(), "test",
       GetSimplePageUrl());
   // Expect that the bubble is still open even after a subframe navigation has
   // happened.
-  EXPECT_EQ(PageInfoBubbleView::BUBBLE_PAGE_INFO,
+  EXPECT_EQ(PageInfoBubbleView::BUBBLE_INTERNAL_PAGE,
             PageInfoBubbleView::GetShownBubbleType());
 }

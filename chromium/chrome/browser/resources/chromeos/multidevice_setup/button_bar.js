@@ -11,22 +11,30 @@ Polymer({
 
   properties: {
     /**
-     *  Translated text to display on the forward-naviation button.
-     *
-     *  Undefined if the visible page has no forward-navigation button.
-     *
-     *  @type {string|undefined}
+     * Translated text to display on the forward-naviation button. Undefined if
+     * the visible page has no forward-navigation button.
+     * @type {string|undefined}
      */
-    forwardButtonText: String,
+    forwardButtonText: {
+      type: String,
+      value: '',
+    },
 
     /**
-     *  Translated text to display on the backward-naviation button.
-     *
-     *  Undefined if the visible page has no backward-navigation button.
-     *
-     *  @type {string|undefined}
+     * Whether the forward button should be disabled.
+     * @type {boolean}
      */
-    backwardButtonText: String,
+    forwardButtonDisabled: {type: Boolean, value: false},
+
+    /**
+     * Translated text to display on the backward-naviation button. undefined if
+     * the visible page has no backward-navigation button.
+     * @type {string|undefined}
+     */
+    backwardButtonText: {
+      type: String,
+      value: '',
+    },
   },
 
   /** @private */

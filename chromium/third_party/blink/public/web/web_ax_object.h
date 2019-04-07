@@ -44,7 +44,6 @@ class SkMatrix44;
 namespace blink {
 
 class AXObject;
-class ScopedAXObjectCache;
 class WebAXObject;
 class WebNode;
 class WebDocument;
@@ -65,20 +64,6 @@ class BLINK_EXPORT WebAXSparseAttributeClient {
   virtual void AddObjectAttribute(WebAXObjectAttribute, const WebAXObject&) = 0;
   virtual void AddObjectVectorAttribute(WebAXObjectVectorAttribute,
                                         const WebVector<WebAXObject>&) = 0;
-};
-
-// An instance of this class, while kept alive, indicates that accessibility
-// should be temporarily enabled. If accessibility was enabled globally
-// (WebSettings::setAccessibilityEnabled), this will have no effect.
-class WebScopedAXContext {
- public:
-  BLINK_EXPORT WebScopedAXContext(WebDocument& root_document);
-  BLINK_EXPORT ~WebScopedAXContext();
-
-  BLINK_EXPORT WebAXObject Root() const;
-
- private:
-  std::unique_ptr<ScopedAXObjectCache> private_;
 };
 
 // A container for passing around a reference to AXObject.
@@ -131,6 +116,7 @@ class WebAXObject {
   BLINK_EXPORT void GetSparseAXAttributes(WebAXSparseAttributeClient&) const;
 
   BLINK_EXPORT bool IsAnchor() const;
+  BLINK_EXPORT bool IsAutofillAvailable() const;
   BLINK_EXPORT WebAXCheckedState CheckedState() const;
   BLINK_EXPORT bool IsCheckable() const;
   BLINK_EXPORT bool IsClickable() const;

@@ -93,8 +93,7 @@ ExtensionFunction::ResponseAction IdentityGetAuthTokenFunction::Run() {
 
 void IdentityGetAuthTokenFunction::OnGetTokenSuccess(
     const OAuth2TokenService::Request* request,
-    const std::string& access_token,
-    const base::Time& expiration_time) {
+    const OAuth2AccessTokenConsumer::TokenResponse& token_response) {
   // Tests may override the mint token flow.
   if (!mint_token_flow_) {
     const OAuth2Info& oauth2_info = OAuth2Info::GetOAuth2Info(extension());
@@ -112,9 +111,9 @@ void IdentityGetAuthTokenFunction::OnGetTokenSuccess(
 
   // Use the logging-in-user access token to mint an access token for this app.
   mint_token_flow_->Start(
-      content::BrowserContext::GetDefaultStoragePartition(browser_context())->
-          GetURLRequestContext(),
-      access_token);
+      content::BrowserContext::GetDefaultStoragePartition(browser_context())
+          ->GetURLLoaderFactoryForBrowserProcess(),
+      token_response.access_token);
 }
 
 void IdentityGetAuthTokenFunction::OnGetTokenFailure(

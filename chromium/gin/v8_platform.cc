@@ -16,9 +16,9 @@
 #include "base/logging.h"
 #include "base/rand_util.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_scheduler.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_scheduler/task_scheduler.h"
+#include "base/task/task_traits.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "gin/per_isolate_data.h"
@@ -119,7 +119,11 @@ class TimeClamper {
   TimeClamper() : secret_(base::RandUint64()) {}
 
   double ClampTimeResolution(double time_seconds) const {
-    DCHECK_GE(time_seconds, 0);
+    bool was_negative = false;
+    if (time_seconds < 0) {
+      was_negative = true;
+      time_seconds = -time_seconds;
+    }
     // For each clamped time interval, compute a pseudorandom transition
     // threshold. The reported time will either be the start of that interval or
     // the next one depending on which side of the threshold |time_seconds| is.
@@ -128,7 +132,9 @@ class TimeClamper {
     double tick_threshold = ThresholdFor(clamped_time);
 
     if (time_seconds >= tick_threshold)
-      return (interval + 1) * kResolutionSeconds;
+      clamped_time = (interval + 1) * kResolutionSeconds;
+    if (was_negative)
+      clamped_time = -clamped_time;
     return clamped_time;
   }
 

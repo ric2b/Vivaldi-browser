@@ -30,12 +30,8 @@ include_rules = [
   "+services/preferences/public",
   "+services/service_manager/embedder",
   "+services/service_manager/public",
-  "+services/ui/common",
-  "+services/ui/gpu_host/gpu_host.h",
-  "+services/ui/gpu_host/gpu_host_delegate.h",
-  "+services/ui/public",
-  "+services/ui/ws2",
   "+services/viz/public",
+  "+services/ws",
   "+skia/ext",
   "+third_party/cros_system_api",
   "+third_party/icu",
@@ -52,7 +48,6 @@ include_rules = [
   "-ash/components",
 
   # Ash can talk to public interfaces for mini-apps.
-  "+ash/components/autoclick/public",
   "+ash/components/quick_launch/public",
   "+ash/components/tap_visualizer/public",
 
@@ -98,7 +93,7 @@ include_rules = [
   "-ui/events/devices",
 
   # Enums and supporting classes or observers that are safe (should be moved to
-  # services/ui/public/cpp). http://crbug.com/747544.
+  # services/ws/public/cpp). http://crbug.com/747544.
   "+ui/events/devices/device_hotplug_event_observer.h",
   "+ui/events/devices/input_device.h",
   "+ui/events/devices/input_device_event_observer.h",
@@ -131,23 +126,10 @@ specific_include_rules = {
   "shell.cc": [
     "+ash/host/ash_window_tree_host_init_params.h"
   ],
-  "shell_port_classic.cc": [
-    "+ash/host/ash_window_tree_host.h",
-    "+ash/host/ash_window_tree_host_init_params.h",
-    "+ui/ozone/public"
-  ],
-  "shell_port_mash\.cc": [
-    "+ash/host/ash_window_tree_host_init_params.h",
-    "+ash/host/ash_window_tree_host_mus.h",
-  ],
   "window_manager.cc": [
     "+ash/host/ash_window_tree_host.h"
   ],
   "window_service_delegate_impl.cc": [
     "+ash/host/ash_window_tree_host.h"
-  ],
-  "window_manager_service.cc": [
-    "+chromeos/cryptohome",
-    "+services/ui/service.h"
   ],
 }

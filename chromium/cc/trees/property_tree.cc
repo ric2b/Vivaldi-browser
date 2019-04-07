@@ -374,9 +374,19 @@ gfx::Vector2dF StickyPositionOffset(TransformTree* tree, TransformNode* node) {
     scroll_position -= transform_node->snap_amount;
   }
 
-  gfx::RectF clip(
-      scroll_position,
-      gfx::SizeF(property_trees.scroll_tree.container_bounds(scroll_node->id)));
+  gfx::RectF clip = constraint.constraint_box_rect;
+  clip.Offset(scroll_position.x(), scroll_position.y());
+
+  // The clip region may need to be offset by the outer viewport bounds, e.g. if
+  // the top bar hides/shows. Position sticky should never attach to the inner
+  // viewport since it shouldn't be affected by pinch-zoom.
+  DCHECK(!scroll_node->scrolls_inner_viewport);
+  if (scroll_node->scrolls_outer_viewport) {
+    clip.set_width(clip.width() +
+                   property_trees.outer_viewport_container_bounds_delta().x());
+    clip.set_height(clip.height() +
+                    property_trees.outer_viewport_container_bounds_delta().y());
+  }
 
   gfx::Vector2dF ancestor_sticky_box_offset;
   if (sticky_data->nearest_node_shifting_sticky_box !=
@@ -1162,6 +1172,21 @@ bool EffectTree::CreateOrReuseRenderSurfaces(
   return render_surfaces_changed;
 }
 
+bool EffectTree::ClippedHitTestRegionIsRectangle(int effect_id) const {
+  const EffectNode* effect_node = Node(effect_id);
+  for (; effect_node->id != kContentsRootNodeId;
+       effect_node = Node(effect_node->target_id)) {
+    gfx::Transform to_target;
+    if (!property_trees()->GetToTarget(effect_node->transform_id,
+                                       effect_node->target_id, &to_target) ||
+        !to_target.Preserves2dAxisAlignment())
+      return false;
+    if (effect_node->mask_layer_id != Layer::INVALID_ID)
+      return false;
+  }
+  return true;
+}
+
 void TransformTree::UpdateNodeAndAncestorsHaveIntegerTranslations(
     TransformNode* node,
     TransformNode* parent_node) {
@@ -1242,6 +1267,14 @@ void ScrollTree::CopyCompleteTreeState(const ScrollTree& other) {
   synced_scroll_offset_map_ = other.synced_scroll_offset_map_;
 }
 #endif
+
+ScrollNode* ScrollTree::FindNodeFromElementId(ElementId id) {
+  auto iterator = property_trees()->element_id_to_scroll_node_index.find(id);
+  if (iterator == property_trees()->element_id_to_scroll_node_index.end())
+    return nullptr;
+
+  return Node(iterator->second);
+}
 
 const ScrollNode* ScrollTree::FindNodeFromElementId(ElementId id) const {
   auto iterator = property_trees()->element_id_to_scroll_node_index.find(id);
@@ -1409,6 +1442,33 @@ const gfx::ScrollOffset ScrollTree::current_scroll_offset(ElementId id) const {
   return GetSyncedScrollOffset(id)
              ? GetSyncedScrollOffset(id)->Current(property_trees()->is_active)
              : gfx::ScrollOffset();
+}
+
+const gfx::ScrollOffset ScrollTree::GetPixelSnappedScrollOffset(
+    int scroll_node_id) const {
+  const ScrollNode* scroll_node = Node(scroll_node_id);
+  DCHECK(scroll_node);
+  gfx::ScrollOffset offset = current_scroll_offset(scroll_node->element_id);
+
+  const TransformNode* transform_node =
+      property_trees()->transform_tree.Node(scroll_node->transform_id);
+  DCHECK(offset == transform_node->scroll_offset)
+      << "Transform node scroll offset does not match the actual offset, this "
+         "means the snapped_amount calculation will be incorrect";
+
+  if (transform_node->scrolls) {
+    // If necessary perform a update for this node to ensure snap amount is
+    // accurate. This method is used by scroll timeline, so it is possible for
+    // it to get called before transform tree has gone through a full update
+    // cycle so this node snap amount may be stale.
+    if (transform_node->needs_local_transform_update)
+      property_trees()->transform_tree.UpdateTransforms(transform_node->id);
+
+    offset.set_x(offset.x() - transform_node->snap_amount.x());
+    offset.set_y(offset.y() - transform_node->snap_amount.y());
+  }
+
+  return offset;
 }
 
 gfx::ScrollOffset ScrollTree::PullDeltaForMainThread(

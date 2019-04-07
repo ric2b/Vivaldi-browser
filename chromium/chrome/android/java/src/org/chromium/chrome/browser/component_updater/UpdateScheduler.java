@@ -86,11 +86,13 @@ public class UpdateScheduler {
     }
 
     @CalledByNative
-    private void finishTask() {
+    private void finishTask(boolean reschedule) {
         assert mTaskFinishedCallback != null;
         mTaskFinishedCallback.taskFinished(false);
         mTaskFinishedCallback = null;
-        scheduleInternal(mDelayMs);
+        if (reschedule) {
+            scheduleInternal(mDelayMs);
+        }
     }
 
     @CalledByNative

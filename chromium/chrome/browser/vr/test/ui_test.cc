@@ -6,10 +6,10 @@
 
 #include "chrome/browser/vr/elements/rect.h"
 #include "chrome/browser/vr/model/model.h"
+#include "chrome/browser/vr/render_info.h"
 #include "chrome/browser/vr/test/animation_utils.h"
 #include "chrome/browser/vr/test/constants.h"
 #include "chrome/browser/vr/ui.h"
-#include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
 #include "chrome/browser/vr/ui_scene_creator.h"
 #include "ui/gfx/geometry/vector3d_f.h"
@@ -251,13 +251,13 @@ void UiTest::ClickElement(UiElement* element) {
   controller_model.laser_direction = direction;
   controller_model.laser_origin = origin;
 
-  controller_model.touchpad_button_state = UiInputManager::ButtonState::DOWN;
+  controller_model.touchpad_button_state = ControllerModel::ButtonState::kDown;
   ui_instance_->input_manager()->HandleInput(current_time_, render_info,
                                              controller_model, &reticle_model,
                                              &input_event_list);
   OnBeginFrame();
 
-  controller_model.touchpad_button_state = UiInputManager::ButtonState::UP;
+  controller_model.touchpad_button_state = ControllerModel::ButtonState::kUp;
   ui_instance_->input_manager()->HandleInput(current_time_, render_info,
                                              controller_model, &reticle_model,
                                              &input_event_list);

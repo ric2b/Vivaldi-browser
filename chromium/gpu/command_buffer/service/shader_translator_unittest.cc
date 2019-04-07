@@ -2,10 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <GLES2/gl2.h>
-
 #include "gpu/command_buffer/service/shader_translator.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_version_info.h"
 
 namespace gpu {
@@ -41,8 +40,8 @@ class ShaderTranslatorTest : public testing::Test {
                                            false));
   }
   void TearDown() override {
-    vertex_translator_ = NULL;
-    fragment_translator_ = NULL;
+    vertex_translator_ = nullptr;
+    fragment_translator_ = nullptr;
   }
 
   scoped_refptr<ShaderTranslator> vertex_translator_;
@@ -80,8 +79,8 @@ class ES3ShaderTranslatorTest : public testing::Test {
                                            false));
   }
   void TearDown() override {
-    vertex_translator_ = NULL;
-    fragment_translator_ = NULL;
+    vertex_translator_ = nullptr;
+    fragment_translator_ = nullptr;
   }
 
   scoped_refptr<ShaderTranslator> vertex_translator_;

@@ -4,6 +4,8 @@
 
 package org.chromium.android_webview.test.services;
 
+import static org.chromium.android_webview.test.OnlyRunIn.ProcessMode.SINGLE_PROCESS;
+
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -23,8 +25,9 @@ import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.services.IVariationsSeedServer;
 import org.chromium.android_webview.services.VariationsSeedServer;
+import org.chromium.android_webview.test.AwJUnit4ClassRunner;
+import org.chromium.android_webview.test.OnlyRunIn;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.test.BaseJUnit4ClassRunner;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -33,7 +36,8 @@ import java.io.IOException;
 /**
  * Test VariationsSeedServer.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
+@RunWith(AwJUnit4ClassRunner.class)
+@OnlyRunIn(SINGLE_PROCESS)
 public class VariationsSeedServerTest {
     private static final long BINDER_TIMEOUT_MILLIS = 10000;
 

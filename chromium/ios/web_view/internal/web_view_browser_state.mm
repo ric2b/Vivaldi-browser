@@ -11,15 +11,18 @@
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/threading/thread_restrictions.h"
-#include "components/autofill/core/browser/autofill_manager.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/gcm_driver/gcm_channel_status_syncer.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
+#include "components/password_manager/core/browser/password_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/in_memory_pref_store.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_filter.h"
 #include "components/prefs/pref_service_factory.h"
 #include "components/signin/ios/browser/active_state_manager.h"
+#include "components/sync/base/pref_names.h"
+#include "components/sync/base/sync_prefs.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "ios/web/public/web_thread.h"
@@ -29,6 +32,8 @@
 #include "ios/web_view/internal/content_settings/web_view_host_content_settings_map_factory.h"
 #include "ios/web_view/internal/language/web_view_language_model_manager_factory.h"
 #include "ios/web_view/internal/language/web_view_url_language_histogram_factory.h"
+#import "ios/web_view/internal/passwords/web_view_password_manager_internals_service_factory.h"
+#include "ios/web_view/internal/passwords/web_view_password_store_factory.h"
 #include "ios/web_view/internal/pref_names.h"
 #include "ios/web_view/internal/signin/web_view_account_fetcher_service_factory.h"
 #include "ios/web_view/internal/signin/web_view_account_tracker_service_factory.h"
@@ -39,7 +44,9 @@
 #include "ios/web_view/internal/signin/web_view_signin_error_controller_factory.h"
 #include "ios/web_view/internal/signin/web_view_signin_manager_factory.h"
 #import "ios/web_view/internal/sync/web_view_gcm_profile_service_factory.h"
+#import "ios/web_view/internal/sync/web_view_model_type_store_service_factory.h"
 #import "ios/web_view/internal/sync/web_view_profile_invalidation_provider_factory.h"
+#import "ios/web_view/internal/sync/web_view_profile_sync_service_factory.h"
 #include "ios/web_view/internal/translate/web_view_translate_accept_languages_factory.h"
 #include "ios/web_view/internal/translate/web_view_translate_ranker_factory.h"
 #include "ios/web_view/internal/web_view_url_request_context_getter.h"
@@ -157,14 +164,18 @@ void WebViewBrowserState::RegisterPrefs(
   pref_registry->RegisterStringPref(prefs::kAcceptLanguages,
                                     l10n_util::GetLocaleOverride());
   pref_registry->RegisterBooleanPref(prefs::kOfferTranslateEnabled, true);
+  pref_registry->RegisterBooleanPref(prefs::kSavingBrowserHistoryDisabled,
+                                     true);
   translate::TranslatePrefs::RegisterProfilePrefs(pref_registry);
 
 #if BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
-  autofill::AutofillManager::RegisterProfilePrefs(pref_registry);
+  autofill::prefs::RegisterProfilePrefs(pref_registry);
+  password_manager::PasswordManager::RegisterProfilePrefs(pref_registry);
 #endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
 
 #if BUILDFLAG(IOS_WEB_VIEW_ENABLE_SYNC)
   gcm::GCMChannelStatusSyncer::RegisterProfilePrefs(pref_registry);
+  syncer::SyncPrefs::RegisterProfilePrefs(pref_registry);
 #endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_SYNC)
 
   // Instantiate all factories to setup dependency graph for pref registration.
@@ -176,6 +187,8 @@ void WebViewBrowserState::RegisterPrefs(
 #if BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
   WebViewPersonalDataManagerFactory::GetInstance();
   WebViewWebDataServiceWrapperFactory::GetInstance();
+  WebViewPasswordManagerInternalsServiceFactory::GetInstance();
+  WebViewPasswordStoreFactory::GetInstance();
 #endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
 
 #if BUILDFLAG(IOS_WEB_VIEW_ENABLE_SYNC)
@@ -191,6 +204,8 @@ void WebViewBrowserState::RegisterPrefs(
   WebViewIdentityManagerFactory::GetInstance();
   WebViewGCMProfileServiceFactory::GetInstance();
   WebViewProfileInvalidationProviderFactory::GetInstance();
+  WebViewProfileSyncServiceFactory::GetInstance();
+  WebViewModelTypeStoreServiceFactory::GetInstance();
 #endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_SYNC)
 
   BrowserStateDependencyManager::GetInstance()

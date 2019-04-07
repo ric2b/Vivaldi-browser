@@ -146,9 +146,10 @@ vs-chromium-project.txt
 /chrome/test/data/perf/private/
 /chrome/test/data/perf/third_party/
 /chrome/test/data/plugin/
+/chrome/test/data/vr/
+/chrome/test/data/webrtc/resources
 /chrome/test/data/xr/webvr_info/
 /chrome/test/data/xr/webxr_samples/
-/chrome/test/data/webrtc/resources
 /chrome/test/media_router/internal
 /chrome/test/python_tests/
 /chrome/tools/memory
@@ -193,6 +194,7 @@ vs-chromium-project.txt
 /ios/third_party/earl_grey/src
 /ios/third_party/fishhook/src
 /ios/third_party/gcdwebserver/src
+/ios/third_party/gtx/src
 /ios/third_party/material_components_ios/src
 /ios/third_party/material_font_disk_loader_ios/src
 /ios/third_party/material_internationalization_ios/src
@@ -264,6 +266,7 @@ vs-chromium-project.txt
 /tools/json_schema_compiler/test/json_schema_compiler_tests.xml
 /tools/metrics/actions/actions.old.xml
 /tools/metrics/histograms/histograms.before.pretty-print.xml
+/tools/metrics/histograms/enums.before.pretty-print.xml
 /tools/page_cycler/acid3
 /tools/swarming_client
 /tools/tryserver
@@ -272,6 +275,7 @@ vs-chromium-project.txt
 /ui/keyboard/keyboard_mojom_bindings.xml
 /ui/surface/surface.xml
 /ui/surface/surface_gpu_tests.xml
+/ui/webui/internal
 /v8
 /webkit/data
 /webpagereplay_logs/

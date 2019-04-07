@@ -28,11 +28,12 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom.h"
+#include "third_party/blink/public/mojom/payments/payment_app.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_client.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_event_status.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
-#include "third_party/blink/public/platform/modules/payments/payment_app.mojom.h"
+#include "third_party/blink/public/platform/modules/background_fetch/background_fetch.mojom.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_error.h"
 #include "third_party/blink/public/web/modules/service_worker/web_service_worker_context_client.h"
 #include "third_party/blink/public/web/modules/service_worker/web_service_worker_context_proxy.h"
@@ -55,8 +56,8 @@ class WebURLResponse;
 namespace content {
 
 struct PlatformNotificationData;
-struct PushEventPayload;
 class EmbeddedWorkerInstanceClientImpl;
+class HostChildURLLoaderFactoryBundle;
 class ServiceWorkerNetworkProvider;
 class ServiceWorkerProviderContext;
 class ServiceWorkerTimeoutTimer;
@@ -99,6 +100,8 @@ class CONTENT_EXPORT ServiceWorkerContextClient
       mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
       std::unique_ptr<EmbeddedWorkerInstanceClientImpl> embedded_worker_client,
       mojom::EmbeddedWorkerStartTimingPtr start_timing,
+      mojom::RendererPreferenceWatcherRequest preference_watcher_request,
+      std::unique_ptr<URLLoaderFactoryBundleInfo> subresource_loaders,
       scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner);
   ~ServiceWorkerContextClient() override;
 
@@ -126,6 +129,7 @@ class CONTENT_EXPORT ServiceWorkerContextClient
   void ClearCachedMetadata(const blink::WebURL&) override;
   void WorkerReadyForInspection() override;
   void WorkerContextFailedToStart() override;
+  void FailedToLoadInstalledScript() override;
   void WorkerScriptLoaded() override;
   void WorkerContextStarted(
       blink::WebServiceWorkerContextProxy* proxy) override;
@@ -159,7 +163,7 @@ class CONTENT_EXPORT ServiceWorkerContextClient
       int request_id,
       blink::mojom::ServiceWorkerEventStatus status,
       double dispatch_event_time) override;
-  void DidHandleBackgroundFetchedEvent(
+  void DidHandleBackgroundFetchSuccessEvent(
       int request_id,
       blink::mojom::ServiceWorkerEventStatus status,
       double dispatch_event_time) override;
@@ -250,7 +254,7 @@ class CONTENT_EXPORT ServiceWorkerContextClient
   // client, which means it is coming through the ControllerServiceWorkerImpl.
   void DispatchOrQueueFetchEvent(
       blink::mojom::DispatchFetchEventParamsPtr params,
-      mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
+      blink::mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
       DispatchFetchEventCallback callback);
 
  private:
@@ -283,30 +287,27 @@ class CONTENT_EXPORT ServiceWorkerContextClient
       DispatchInstallEventCallback callback) override;
   void DispatchActivateEvent(DispatchActivateEventCallback callback) override;
   void DispatchBackgroundFetchAbortEvent(
-      const std::string& developer_id,
-      const std::string& unique_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
+      const BackgroundFetchRegistration& registration,
       DispatchBackgroundFetchAbortEventCallback callback) override;
   void DispatchBackgroundFetchClickEvent(
-      const std::string& developer_id,
-      mojom::BackgroundFetchState state,
+      const BackgroundFetchRegistration& registration,
       DispatchBackgroundFetchClickEventCallback callback) override;
   void DispatchBackgroundFetchFailEvent(
-      const std::string& developer_id,
-      const std::string& unique_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
+      const BackgroundFetchRegistration& registration,
       DispatchBackgroundFetchFailEventCallback callback) override;
-  void DispatchBackgroundFetchedEvent(
-      const std::string& developer_id,
-      const std::string& unique_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
-      DispatchBackgroundFetchedEventCallback callback) override;
+  void DispatchBackgroundFetchSuccessEvent(
+      const BackgroundFetchRegistration& registration,
+      DispatchBackgroundFetchSuccessEventCallback callback) override;
   void DispatchExtendableMessageEvent(
       mojom::ExtendableMessageEventPtr event,
       DispatchExtendableMessageEventCallback callback) override;
+  void DispatchExtendableMessageEventWithCustomTimeout(
+      mojom::ExtendableMessageEventPtr event,
+      base::TimeDelta timeout,
+      DispatchExtendableMessageEventCallback callback) override;
   void DispatchFetchEvent(
       blink::mojom::DispatchFetchEventParamsPtr params,
-      mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
+      blink::mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
       DispatchFetchEventCallback callback) override;
   void DispatchNotificationClickEvent(
       const std::string& notification_id,
@@ -318,7 +319,7 @@ class CONTENT_EXPORT ServiceWorkerContextClient
       const std::string& notification_id,
       const PlatformNotificationData& notification_data,
       DispatchNotificationCloseEventCallback callback) override;
-  void DispatchPushEvent(const PushEventPayload& payload,
+  void DispatchPushEvent(const base::Optional<std::string>& payload,
                          DispatchPushEventCallback callback) override;
   void DispatchSyncEvent(const std::string& tag,
                          bool last_chance,
@@ -388,9 +389,14 @@ class CONTENT_EXPORT ServiceWorkerContextClient
   // the last task finished.
   void OnIdleTimeout();
 
+  void OnRequestedTermination(bool will_be_terminated);
+
   // Returns true if the worker has requested to be terminated by the browser
   // process. It does this due to idle timeout.
   bool RequestedTermination() const;
+
+  // Stops the worker context. Called on the main thread.
+  void StopWorker();
 
   // Keeps the mapping from version id to ServiceWorker object.
   void AddServiceWorkerObject(int64_t version_id, WebServiceWorkerImpl* worker);
@@ -412,6 +418,8 @@ class CONTENT_EXPORT ServiceWorkerContextClient
   const bool is_starting_installed_worker_;
 
   RendererPreferences renderer_preferences_;
+  // Passed on creation of ServiceWorkerFetchContext.
+  mojom::RendererPreferenceWatcherRequest preference_watcher_request_;
 
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
   scoped_refptr<base::TaskRunner> worker_task_runner_;
@@ -445,6 +453,15 @@ class CONTENT_EXPORT ServiceWorkerContextClient
   // Accessed on the worker thread. Passed to the browser process after worker
   // startup completes.
   mojom::EmbeddedWorkerStartTimingPtr start_timing_;
+
+  // S13nServiceWorker:
+  // A URLLoaderFactory instance used for subresource loading.
+  scoped_refptr<HostChildURLLoaderFactoryBundle> loader_factories_;
+
+  // Out-of-process NetworkService:
+  // Detects disconnection from the network service.
+  network::mojom::URLLoaderFactoryPtr
+      network_service_connection_error_handler_holder_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerContextClient);
 };

@@ -18,13 +18,14 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/sw_reporter_installer_win.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/chrome_cleaner_fetcher_win.h"
@@ -115,7 +116,7 @@ void OnChromeCleanerFetched(
     ChromeCleanerFetchStatus fetch_status) {
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(VerifyAndRenameDownloadedCleaner, downloaded_path,
                      fetch_status),
@@ -193,7 +194,9 @@ ChromeCleanerControllerDelegate::~ChromeCleanerControllerDelegate() = default;
 void ChromeCleanerControllerDelegate::FetchAndVerifyChromeCleaner(
     FetchedCallback fetched_callback) {
   FetchChromeCleaner(
-      base::BindOnce(&OnChromeCleanerFetched, base::Passed(&fetched_callback)));
+      base::BindOnce(&OnChromeCleanerFetched, base::Passed(&fetched_callback)),
+      g_browser_process->system_network_context_manager()
+          ->GetURLLoaderFactory());
 }
 
 bool ChromeCleanerControllerDelegate::IsMetricsAndCrashReportingEnabled() {

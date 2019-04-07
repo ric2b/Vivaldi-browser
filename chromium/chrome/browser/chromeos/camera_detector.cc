@@ -10,8 +10,8 @@
 #include "base/location.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "components/storage_monitor/udev_util_linux.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -48,7 +48,7 @@ void CameraDetector::StartPresenceCheck(const base::Closure& callback) {
   presence_check_in_progress_ = true;
   base::PostTaskAndReplyWithResult(
       base::CreateTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})
           .get(),
       FROM_HERE, base::Bind(&CameraDetector::CheckPresence),

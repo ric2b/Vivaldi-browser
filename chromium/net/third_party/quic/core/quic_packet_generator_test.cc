@@ -14,6 +14,7 @@
 #include "net/third_party/quic/core/crypto/quic_encrypter.h"
 #include "net/third_party/quic/core/quic_simple_buffer_allocator.h"
 #include "net/third_party/quic/core/quic_utils.h"
+#include "net/third_party/quic/platform/api/quic_expect_bug.h"
 #include "net/third_party/quic/platform/api/quic_socket_address.h"
 #include "net/third_party/quic/platform/api/quic_string.h"
 #include "net/third_party/quic/platform/api/quic_string_piece.h"
@@ -39,6 +40,8 @@ namespace {
 class MockDelegate : public QuicPacketGenerator::DelegateInterface {
  public:
   MockDelegate() {}
+  MockDelegate(const MockDelegate&) = delete;
+  MockDelegate& operator=(const MockDelegate&) = delete;
   ~MockDelegate() override {}
 
   MOCK_METHOD2(ShouldGeneratePacket,
@@ -71,9 +74,6 @@ class MockDelegate : public QuicPacketGenerator::DelegateInterface {
     EXPECT_CALL(*this, ShouldGeneratePacket(NO_RETRANSMITTABLE_DATA, _))
         .WillRepeatedly(Return(true));
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockDelegate);
 };
 
 // Simple struct for describing the contents of a packet.
@@ -588,9 +588,9 @@ TEST_F(QuicPacketGeneratorTest, ConsumeDataFastPath) {
   SerializedPacket packet = packets_.back();
   EXPECT_TRUE(!packet.retransmittable_frames.empty());
   EXPECT_EQ(STREAM_FRAME, packet.retransmittable_frames.front().type);
-  QuicStreamFrame* stream_frame =
+  const QuicStreamFrame& stream_frame =
       packet.retransmittable_frames.front().stream_frame;
-  EXPECT_EQ(10000u, stream_frame->data_length + stream_frame->offset);
+  EXPECT_EQ(10000u, stream_frame.data_length + stream_frame.offset);
 }
 
 TEST_F(QuicPacketGeneratorTest, ConsumeDataLarge) {
@@ -614,9 +614,9 @@ TEST_F(QuicPacketGeneratorTest, ConsumeDataLarge) {
   SerializedPacket packet = packets_.back();
   EXPECT_TRUE(!packet.retransmittable_frames.empty());
   EXPECT_EQ(STREAM_FRAME, packet.retransmittable_frames.front().type);
-  QuicStreamFrame* stream_frame =
+  const QuicStreamFrame& stream_frame =
       packet.retransmittable_frames.front().stream_frame;
-  EXPECT_EQ(10000u, stream_frame->data_length + stream_frame->offset);
+  EXPECT_EQ(10000u, stream_frame.data_length + stream_frame.offset);
 }
 
 TEST_F(QuicPacketGeneratorTest, ConsumeDataLargeSendAckFalse) {
@@ -649,9 +649,9 @@ TEST_F(QuicPacketGeneratorTest, ConsumeDataLargeSendAckFalse) {
   SerializedPacket packet = packets_.back();
   EXPECT_TRUE(!packet.retransmittable_frames.empty());
   EXPECT_EQ(STREAM_FRAME, packet.retransmittable_frames.front().type);
-  QuicStreamFrame* stream_frame =
+  const QuicStreamFrame& stream_frame =
       packet.retransmittable_frames.front().stream_frame;
-  EXPECT_EQ(10000u, stream_frame->data_length + stream_frame->offset);
+  EXPECT_EQ(10000u, stream_frame.data_length + stream_frame.offset);
 }
 
 TEST_F(QuicPacketGeneratorTest, ConsumeDataLargeSendAckTrue) {
@@ -688,9 +688,9 @@ TEST_F(QuicPacketGeneratorTest, ConsumeDataLargeSendAckTrue) {
   SerializedPacket packet = packets_.back();
   EXPECT_TRUE(!packet.retransmittable_frames.empty());
   EXPECT_EQ(STREAM_FRAME, packet.retransmittable_frames.front().type);
-  QuicStreamFrame* stream_frame =
+  const QuicStreamFrame& stream_frame =
       packet.retransmittable_frames.front().stream_frame;
-  EXPECT_EQ(10000u, stream_frame->data_length + stream_frame->offset);
+  EXPECT_EQ(10000u, stream_frame.data_length + stream_frame.offset);
 }
 
 TEST_F(QuicPacketGeneratorTest, NotWritableThenBatchOperations) {

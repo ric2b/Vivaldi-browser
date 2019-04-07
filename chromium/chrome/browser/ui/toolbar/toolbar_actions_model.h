@@ -288,7 +288,7 @@ class ToolbarActionsModel : public extensions::ExtensionActionAPI::Observer,
   bool IsActionVisible(const std::string& action_id) const;
 
   // Our observers.
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   // The Profile this toolbar model is for.
   Profile* profile_;

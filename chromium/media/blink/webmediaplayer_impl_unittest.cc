@@ -45,6 +45,7 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/picture_in_picture/picture_in_picture_control_info.h"
 #include "third_party/blink/public/platform/web_fullscreen_video_status.h"
 #include "third_party/blink/public/platform/web_media_player.h"
 #include "third_party/blink/public/platform/web_media_player_client.h"
@@ -229,6 +230,9 @@ class MockWebMediaPlayerDelegate : public WebMediaPlayerDelegate {
                     blink::WebMediaPlayer::PipWindowOpenedCallback));
   MOCK_METHOD2(DidPictureInPictureModeEnd,
                void(int, blink::WebMediaPlayer::PipWindowClosedCallback));
+  MOCK_METHOD2(DidSetPictureInPictureCustomControls,
+               void(int,
+                    const std::vector<blink::PictureInPictureControlInfo>&));
   MOCK_METHOD3(DidPictureInPictureSurfaceChange,
                void(int, const viz::SurfaceId&, const gfx::Size&));
   MOCK_METHOD2(RegisterPictureInPictureWindowResizeCallback,
@@ -258,6 +262,10 @@ class MockWebMediaPlayerDelegate : public WebMediaPlayerDelegate {
 
   bool IsFrameClosed() override { return is_closed_; }
 
+  bool IsBackgroundMediaSuspendEnabled() override {
+    return is_background_media_suspend_enabled_;
+  }
+
   void SetIdleForTesting(bool is_idle) { is_idle_ = is_idle; }
 
   void SetStaleForTesting(bool is_stale) {
@@ -279,6 +287,10 @@ class MockWebMediaPlayerDelegate : public WebMediaPlayerDelegate {
 
   void SetFrameClosedForTesting(bool is_closed) { is_closed_ = is_closed; }
 
+  void SetBackgroundMediaSuspendEnabledForTesting(bool enable) {
+    is_background_media_suspend_enabled_ = enable;
+  }
+
   int player_id() { return player_id_; }
 
  private:
@@ -288,6 +300,7 @@ class MockWebMediaPlayerDelegate : public WebMediaPlayerDelegate {
   bool is_stale_ = false;
   bool is_hidden_ = false;
   bool is_closed_ = false;
+  bool is_background_media_suspend_enabled_ = false;
 };
 
 class MockSurfaceLayerBridge : public blink::WebSurfaceLayerBridge {
@@ -360,13 +373,14 @@ class WebMediaPlayerImplTest : public testing::Test {
         RendererFactorySelector::FactoryType::DEFAULT);
 
     mojom::MediaMetricsProviderPtr provider;
-    MediaMetricsProvider::Create(VideoDecodePerfHistory::SaveCallback(),
-                                 mojo::MakeRequest(&provider));
+    MediaMetricsProvider::Create(
+        false, base::BindRepeating([]() { return ukm::kInvalidSourceId; }),
+        VideoDecodePerfHistory::SaveCallback(), mojo::MakeRequest(&provider));
 
     // Initialize provider since none of the tests below actually go through the
     // full loading/pipeline initialize phase. If this ever changes the provider
     // will start DCHECK failing.
-    provider->Initialize(false, false, url::Origin());
+    provider->Initialize(false, mojom::MediaURLScheme::kHttp);
 
     audio_sink_ = base::WrapRefCounted(new NiceMock<MockAudioRendererSink>());
 
@@ -385,7 +399,9 @@ class WebMediaPlayerImplTest : public testing::Test {
         base::BindOnce(&WebMediaPlayerImplTest::CreateMockSurfaceLayerBridge,
                        base::Unretained(this)),
         viz::TestContextProvider::Create(),
-        base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideo));
+        base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideo)
+            ? WebMediaPlayerParams::SurfaceLayerMode::kAlways
+            : WebMediaPlayerParams::SurfaceLayerMode::kNever);
 
     auto compositor = std::make_unique<StrictMock<MockVideoFrameCompositor>>(
         params->video_frame_compositor_task_runner());
@@ -533,17 +549,7 @@ class WebMediaPlayerImplTest : public testing::Test {
   }
 
   void SetUpMediaSuspend(bool enable) {
-#if defined(OS_ANDROID)
-    if (!enable) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kDisableMediaSuspend);
-    }
-#else
-    if (enable) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kEnableMediaSuspend);
-    }
-#endif
+    delegate_.SetBackgroundMediaSuspendEnabledForTesting(enable);
   }
 
   bool IsVideoLockedWhenPausedWhenHidden() const {
@@ -1391,9 +1397,7 @@ TEST_F(WebMediaPlayerImplTest, PlaybackRateChangeMediaLogs) {
 }
 
 // Tests delegate methods are called when Picture-in-Picture is triggered.
-// Disabling this test only in the Beta branch where VideoSurfaceLayer is not
-// enabled by defaulty.
-TEST_F(WebMediaPlayerImplTest, DISABLED_PictureInPictureTriggerCallback) {
+TEST_F(WebMediaPlayerImplTest, PictureInPictureTriggerCallback) {
   InitializeWebMediaPlayerImpl();
 
   EXPECT_CALL(*surface_layer_bridge_ptr_, CreateSurfaceLayer());

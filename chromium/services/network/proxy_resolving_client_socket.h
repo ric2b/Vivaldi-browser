@@ -15,7 +15,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "net/base/completion_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
 #include "net/log/net_log_with_source.h"
@@ -127,7 +126,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) ProxyResolvingClientSocket
   std::unique_ptr<net::ClientSocketHandle> socket_handle_;
 
   const net::SSLConfig ssl_config_;
-  net::ProxyResolutionService::Request* proxy_resolve_request_;
+  std::unique_ptr<net::ProxyResolutionService::Request> proxy_resolve_request_;
   net::ProxyInfo proxy_info_;
   const GURL url_;
   const bool use_tls_;

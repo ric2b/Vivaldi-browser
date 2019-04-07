@@ -27,7 +27,7 @@ namespace {
 
 using RequestResult = APIBindingHooks::RequestResult;
 
-constexpr char kSendRequest[] = "extension.sendRequest";
+constexpr char kSendExtensionRequest[] = "extension.sendRequest";
 constexpr char kGetURL[] = "extension.getURL";
 constexpr char kGetBackgroundPage[] = "extension.getBackgroundPage";
 constexpr char kGetViews[] = "extension.getViews";
@@ -116,7 +116,7 @@ RequestResult ExtensionHooksDelegate::HandleRequest(
     Handler handler;
     base::StringPiece method;
   } kHandlers[] = {
-      {&ExtensionHooksDelegate::HandleSendRequest, kSendRequest},
+      {&ExtensionHooksDelegate::HandleSendRequest, kSendExtensionRequest},
       {&ExtensionHooksDelegate::HandleGetURL, kGetURL},
       {&ExtensionHooksDelegate::HandleGetBackgroundPage, kGetBackgroundPage},
       {&ExtensionHooksDelegate::HandleGetExtensionTabs, kGetExtensionTabs},
@@ -136,7 +136,7 @@ RequestResult ExtensionHooksDelegate::HandleRequest(
   if (!handler)
     return RequestResult(RequestResult::NOT_HANDLED);
 
-  if (method_name == kSendRequest) {
+  if (method_name == kSendExtensionRequest) {
     messaging_util::MassageSendMessageArguments(context->GetIsolate(), false,
                                                 arguments);
   }
@@ -238,7 +238,7 @@ RequestResult ExtensionHooksDelegate::HandleGetURL(
   DCHECK(arguments[0]->IsString());
   DCHECK(script_context->extension());
 
-  std::string path = gin::V8ToString(arguments[0]);
+  std::string path = gin::V8ToString(script_context->isolate(), arguments[0]);
 
   RequestResult result(RequestResult::HANDLED);
   result.return_value =
@@ -283,8 +283,8 @@ APIBindingHooks::RequestResult ExtensionHooksDelegate::HandleGetViews(
 
     if (!v8_view_type->IsUndefined()) {
       DCHECK(v8_view_type->IsString());
-      std::string view_type_string =
-          base::ToUpperASCII(gin::V8ToString(v8_view_type));
+      std::string view_type_string = base::ToUpperASCII(
+          gin::V8ToString(script_context->isolate(), v8_view_type));
       if (view_type_string != "ALL") {
         bool success = GetViewTypeFromString(view_type_string, &view_type);
         DCHECK(success);

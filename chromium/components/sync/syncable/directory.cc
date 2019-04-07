@@ -46,10 +46,9 @@ const base::FilePath::CharType Directory::kSyncDatabaseFilename[] =
 
 Directory::PersistedKernelInfo::PersistedKernelInfo() {
   ModelTypeSet protocol_types = ProtocolTypes();
-  for (ModelTypeSet::Iterator iter = protocol_types.First(); iter.Good();
-       iter.Inc()) {
-    ResetDownloadProgress(iter.Get());
-    transaction_version[iter.Get()] = 0;
+  for (ModelType type : protocol_types) {
+    ResetDownloadProgress(type);
+    transaction_version[type] = 0;
   }
 }
 
@@ -456,11 +455,15 @@ void Directory::ClearDirtyMetahandles(const ScopedKernelLock& lock) {
   kernel_->dirty_metahandles.clear();
 }
 
-bool Directory::SafeToPurgeFromMemory(WriteTransaction* trans,
-                                      const EntryKernel* const entry) const {
-  bool safe = entry->ref(IS_DEL) && !entry->is_dirty() &&
-              !entry->ref(SYNCING) && !entry->ref(IS_UNAPPLIED_UPDATE) &&
-              !entry->ref(IS_UNSYNCED);
+bool Directory::SafeToPurgeFromMemory(const EntryKernel& entry) const {
+  return entry.ref(IS_DEL) && !entry.is_dirty() && !entry.ref(SYNCING) &&
+         !entry.ref(IS_UNAPPLIED_UPDATE) && !entry.ref(IS_UNSYNCED);
+}
+
+bool Directory::SafeToPurgeFromMemoryForTransaction(
+    WriteTransaction* trans,
+    const EntryKernel* const entry) const {
+  bool safe = SafeToPurgeFromMemory(*entry);
 
   if (safe) {
     int64_t handle = entry->ref(META_HANDLE);
@@ -552,7 +555,7 @@ bool Directory::VacuumAfterSaveChanges(const SaveChangesSnapshot& snapshot) {
     MetahandlesMap::iterator found =
         kernel_->metahandles_map.find((*i)->ref(META_HANDLE));
     if (found != kernel_->metahandles_map.end() &&
-        SafeToPurgeFromMemory(&trans, found->second.get())) {
+        SafeToPurgeFromMemoryForTransaction(&trans, found->second.get())) {
       // We now drop deleted metahandles that are up to date on both the client
       // and the server.
       std::unique_ptr<EntryKernel> entry = std::move(found->second);
@@ -692,9 +695,8 @@ void Directory::PurgeEntriesWithTypeIn(ModelTypeSet disabled_types,
     ScopedKernelLock lock(this);
 
     bool found_progress = false;
-    for (ModelTypeSet::Iterator iter = disabled_types.First(); iter.Good();
-         iter.Inc()) {
-      if (!kernel_->persisted_info.HasEmptyDownloadProgress(iter.Get()))
+    for (ModelType type : disabled_types) {
+      if (!kernel_->persisted_info.HasEmptyDownloadProgress(type))
         found_progress = true;
     }
 
@@ -735,14 +737,13 @@ void Directory::PurgeEntriesWithTypeIn(ModelTypeSet disabled_types,
     delete_journal_->AddJournalBatch(&trans, entries_to_journal);
 
     // Ensure meta tracking for these data types reflects the purged state.
-    for (ModelTypeSet::Iterator it = disabled_types.First(); it.Good();
-         it.Inc()) {
-      kernel_->persisted_info.transaction_version[it.Get()] = 0;
+    for (ModelType type : disabled_types) {
+      kernel_->persisted_info.transaction_version[type] = 0;
 
       // Don't discard progress markers or context for unapplied types.
-      if (!types_to_unapply.Has(it.Get())) {
-        kernel_->persisted_info.ResetDownloadProgress(it.Get());
-        kernel_->persisted_info.datatype_context[it.Get()].Clear();
+      if (!types_to_unapply.Has(type)) {
+        kernel_->persisted_info.ResetDownloadProgress(type);
+        kernel_->persisted_info.datatype_context[type].Clear();
       }
     }
 
@@ -936,6 +937,22 @@ size_t Directory::EstimateMemoryUsageByType(ModelType model_type) {
   return memory_usage;
 }
 
+size_t Directory::CountEntriesByType(ModelType model_type) const {
+  ScopedKernelLock lock(this);
+  int count = 0;
+  for (const auto& handle_and_kernel : kernel_->metahandles_map) {
+    EntryKernel* entry = handle_and_kernel.second.get();
+    if (GetModelTypeFromSpecifics(entry->ref(SPECIFICS)) != model_type) {
+      continue;
+    }
+    if (SafeToPurgeFromMemory(*entry)) {
+      continue;
+    }
+    ++count;
+  }
+  return count;
+}
+
 void Directory::SetDownloadProgress(
     ModelType model_type,
     const sync_pb::DataTypeProgressMarker& new_progress) {
@@ -980,9 +997,9 @@ ModelTypeSet Directory::InitialSyncEndedTypes() {
   syncable::ReadTransaction trans(FROM_HERE, this);
   ModelTypeSet protocol_types = ProtocolTypes();
   ModelTypeSet initial_sync_ended_types;
-  for (ModelTypeSet::Iterator i = protocol_types.First(); i.Good(); i.Inc()) {
-    if (InitialSyncEndedForType(&trans, i.Get())) {
-      initial_sync_ended_types.Put(i.Get());
+  for (ModelType type : protocol_types) {
+    if (InitialSyncEndedForType(&trans, type)) {
+      initial_sync_ended_types.Put(type);
     }
   }
   return initial_sync_ended_types;

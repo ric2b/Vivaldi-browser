@@ -60,6 +60,12 @@ class UnifiedSystemTrayBubble : public TrayBubbleBase,
   // Ensure the bubble is expanded.
   void EnsureExpanded();
 
+  // Show audio settings detailed view.
+  void ShowAudioDetailedView();
+
+  // Update bubble bounds and focus if necessary.
+  void UpdateBubble();
+
   // Update layer transform during expand / collapse animation. During
   // animation, the height of the view changes, but resizing of the bubble is
   // performance bottleneck. This method makes use of layer transform to avoid

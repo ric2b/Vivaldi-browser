@@ -27,17 +27,17 @@
 //
 // Expected Use:
 //  QuicStreamSequencerBuffer buffer(2.5 * 8 * 1024);
-//  std::string source(1024, 'a');
-//  QuicStringPiece std::string_piece(source.data(), source.size());
+//  QuicString source(1024, 'a');
+//  QuicStringPiece string_piece(source.data(), source.size());
 //  size_t written = 0;
-//  buffer.OnStreamData(800, std::string_piece, GetEpollClockNow(), &written);
-//  source = std::string{800, 'b'};
-//  QuicStringPiece std::string_piece1(source.data(), 800);
+//  buffer.OnStreamData(800, string_piece, GetEpollClockNow(), &written);
+//  source = QuicString{800, 'b'};
+//  QuicStringPiece string_piece1(source.data(), 800);
 //  // Try to write to [1, 801), but should fail due to overlapping,
 //  // res should be QUIC_INVALID_STREAM_DATA
-//  auto res = buffer.OnStreamData(1, std::string_piece1, &written));
+//  auto res = buffer.OnStreamData(1, string_piece1, &written));
 //  // write to [0, 800), res should be QUIC_NO_ERROR
-//  auto res = buffer.OnStreamData(0, std::string_piece1, GetEpollClockNow(),
+//  auto res = buffer.OnStreamData(0, string_piece1, GetEpollClockNow(),
 //                                  &written);
 //
 //  // Read into a iovec array with total capacity of 120 bytes.
@@ -88,6 +88,9 @@ class QUIC_EXPORT_PRIVATE QuicStreamSequencerBuffer {
   };
 
   explicit QuicStreamSequencerBuffer(size_t max_capacity_bytes);
+  QuicStreamSequencerBuffer(const QuicStreamSequencerBuffer&) = delete;
+  QuicStreamSequencerBuffer& operator=(const QuicStreamSequencerBuffer&) =
+      delete;
   ~QuicStreamSequencerBuffer();
 
   // Free the space used to buffer data.
@@ -124,10 +127,6 @@ class QUIC_EXPORT_PRIVATE QuicStreamSequencerBuffer {
   // Fills in one iovec with data from the next readable region.
   // Returns false if there is no readable region available.
   bool GetReadableRegion(iovec* iov) const;
-
-  // Copies all of the readable data into |buffer| and marks all of the copied
-  // data as consumed.
-  void Read(QuicString* buffer);
 
   // Called after GetReadableRegions() to free up |bytes_used| space if these
   // bytes are processed.
@@ -225,8 +224,6 @@ class QUIC_EXPORT_PRIVATE QuicStreamSequencerBuffer {
 
   // Currently received data.
   QuicIntervalSet<QuicStreamOffset> bytes_received_;
-
-  DISALLOW_COPY_AND_ASSIGN(QuicStreamSequencerBuffer);
 };
 }  // namespace quic
 

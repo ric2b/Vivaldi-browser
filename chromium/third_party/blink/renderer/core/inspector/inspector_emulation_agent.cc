@@ -23,36 +23,32 @@
 #include "third_party/blink/renderer/platform/wtf/time.h"
 
 namespace blink {
-
 using protocol::Maybe;
 using protocol::Response;
 
-namespace EmulationAgentState {
-static const char kScriptExecutionDisabled[] = "scriptExecutionDisabled";
-static const char kScrollbarsHidden[] = "scrollbarsHidden";
-static const char kDocumentCookieDisabled[] = "documentCookieDisabled";
-static const char kTouchEventEmulationEnabled[] = "touchEventEmulationEnabled";
-static const char kMaxTouchPoints[] = "maxTouchPoints";
-static const char kEmulatedMedia[] = "emulatedMedia";
-static const char kDefaultBackgroundColorOverrideRGBA[] =
-    "defaultBackgroundColorOverrideRGBA";
-static const char kNavigatorPlatform[] = "navigatorPlatform";
-static const char kVirtualTimeBudget[] = "virtualTimeBudget";
-static const char kVirtualTimeBudgetInitalOffset[] =
-    "virtualTimeBudgetInitalOffset";
-static const char kInitialVirtualTime[] = "initialVirtualTime";
-static const char kVirtualTimeOffset[] = "virtualTimeOffset";
-static const char kVirtualTimePolicy[] = "virtualTimePolicy";
-static const char kVirtualTimeTaskStarvationCount[] =
-    "virtualTimeTaskStarvationCount";
-static const char kWaitForNavigation[] = "waitForNavigation";
-static const char kUserAgentOverride[] = "userAgentOverride";
-static const char kAcceptLanguageOverride[] = "acceptLanguage";
-}  // namespace EmulationAgentState
-
 InspectorEmulationAgent::InspectorEmulationAgent(
     WebLocalFrameImpl* web_local_frame_impl)
-    : web_local_frame_(web_local_frame_impl) {}
+    : web_local_frame_(web_local_frame_impl),
+      default_background_color_override_rgba_(&agent_state_,
+                                              /*default_value=*/WTF::String()),
+      script_execution_disabled_(&agent_state_, /*default_value=*/false),
+      scrollbars_hidden_(&agent_state_, /*default_value=*/false),
+      document_cookie_disabled_(&agent_state_, /*default_value=*/false),
+      touch_event_emulation_enabled_(&agent_state_, /*default_value=*/false),
+      max_touch_points_(&agent_state_, /*default_value=*/1),
+      emulated_media_(&agent_state_, /*default_value=*/WTF::String()),
+      navigator_platform_override_(&agent_state_,
+                                   /*default_value=*/WTF::String()),
+      user_agent_override_(&agent_state_, /*default_value=*/WTF::String()),
+      accept_language_override_(&agent_state_,
+                                /*default_value=*/WTF::String()),
+      virtual_time_budget_(&agent_state_, /*default_value*/ 0.0),
+      virtual_time_budget_initial_offset_(&agent_state_, /*default_value=*/0.0),
+      initial_virtual_time_(&agent_state_, /*default_value=*/0.0),
+      virtual_time_offset_(&agent_state_, /*default_value=*/0.0),
+      virtual_time_policy_(&agent_state_, /*default_value=*/WTF::String()),
+      virtual_time_task_starvation_count_(&agent_state_, /*default_value=*/0),
+      wait_for_navigation_(&agent_state_, /*default_value=*/false) {}
 
 InspectorEmulationAgent::~InspectorEmulationAgent() = default;
 
@@ -61,101 +57,69 @@ WebViewImpl* InspectorEmulationAgent::GetWebViewImpl() {
 }
 
 void InspectorEmulationAgent::Restore() {
-  String user_agent;
-  state_->getString(EmulationAgentState::kUserAgentOverride, &user_agent);
-  String accept_language;
-  state_->getString(EmulationAgentState::kAcceptLanguageOverride,
-                    &accept_language);
-  String navigator_platform;
-  state_->getString(EmulationAgentState::kNavigatorPlatform,
-                    &navigator_platform);
-  setUserAgentOverride(user_agent, accept_language, navigator_platform);
+  setUserAgentOverride(user_agent_override_.Get(),
+                       accept_language_override_.Get(),
+                       navigator_platform_override_.Get());
   if (!web_local_frame_)
     return;
 
   // Following code only runs for pages.
-  if (state_->booleanProperty(EmulationAgentState::kScriptExecutionDisabled,
-                              false)) {
+  if (script_execution_disabled_.Get())
     GetWebViewImpl()->GetDevToolsEmulator()->SetScriptExecutionDisabled(true);
-  }
-  if (state_->booleanProperty(EmulationAgentState::kScrollbarsHidden, false))
+  if (scrollbars_hidden_.Get())
     GetWebViewImpl()->GetDevToolsEmulator()->SetScrollbarsHidden(true);
-  if (state_->booleanProperty(EmulationAgentState::kDocumentCookieDisabled,
-                              false)) {
+  if (document_cookie_disabled_.Get())
     GetWebViewImpl()->GetDevToolsEmulator()->SetDocumentCookieDisabled(true);
-  }
-  setTouchEmulationEnabled(
-      state_->booleanProperty(EmulationAgentState::kTouchEventEmulationEnabled,
-                              false),
-      state_->integerProperty(EmulationAgentState::kMaxTouchPoints, 1));
-  String emulated_media;
-  state_->getString(EmulationAgentState::kEmulatedMedia, &emulated_media);
-  setEmulatedMedia(emulated_media);
-  auto* rgba_value =
-      state_->get(EmulationAgentState::kDefaultBackgroundColorOverrideRGBA);
-  if (rgba_value) {
-    blink::protocol::ErrorSupport errors;
-    auto rgba = protocol::DOM::RGBA::fromValue(rgba_value, &errors);
-    if (!errors.hasErrors()) {
-      setDefaultBackgroundColorOverride(
-          Maybe<protocol::DOM::RGBA>(std::move(rgba)));
+  setTouchEmulationEnabled(touch_event_emulation_enabled_.Get(),
+                           max_touch_points_.Get());
+  setEmulatedMedia(emulated_media_.Get());
+  if (!default_background_color_override_rgba_.Get().IsNull()) {
+    std::unique_ptr<protocol::Value> parsed = protocol::StringUtil::parseJSON(
+        default_background_color_override_rgba_.Get());
+    if (parsed) {
+      blink::protocol::ErrorSupport errors;
+      auto rgba = protocol::DOM::RGBA::fromValue(parsed.get(), &errors);
+      if (!errors.hasErrors()) {
+        setDefaultBackgroundColorOverride(
+            Maybe<protocol::DOM::RGBA>(std::move(rgba)));
+      }
     }
   }
 
-  String virtual_time_policy;
-  if (state_->getString(EmulationAgentState::kVirtualTimePolicy,
-                        &virtual_time_policy)) {
-    // Tell the scheduler about the saved virtual time progress to ensure that
-    // virtual time monotonically advances despite the cross origin navigation.
-    // This should be done regardless of the virtual time mode.
-    double offset = 0;
-    state_->getDouble(EmulationAgentState::kVirtualTimeOffset, &offset);
-    web_local_frame_->View()->Scheduler()->SetInitialVirtualTimeOffset(
-        base::TimeDelta::FromMillisecondsD(offset));
+  if (virtual_time_policy_.Get().IsNull())
+    return;
+  // Tell the scheduler about the saved virtual time progress to ensure that
+  // virtual time monotonically advances despite the cross origin navigation.
+  // This should be done regardless of the virtual time mode.
+  web_local_frame_->View()->Scheduler()->SetInitialVirtualTimeOffset(
+      base::TimeDelta::FromMillisecondsD(virtual_time_offset_.Get()));
 
-    // Set initial time baselines for all modes.
-    double initial_virtual_time = 0;
-    bool has_initial_time = state_->getDouble(
-        EmulationAgentState::kInitialVirtualTime, &initial_virtual_time);
-    Maybe<double> initial_time = has_initial_time
-                                     ? Maybe<double>()
-                                     : Maybe<double>(initial_virtual_time);
+  // Preserve wait for navigation in all modes.
+  bool wait_for_navigation = wait_for_navigation_.Get();
 
-    // Preserve wait for navigation in all modes.
-    bool wait_for_navigation = false;
-    state_->getBoolean(EmulationAgentState::kWaitForNavigation,
-                       &wait_for_navigation);
+  // Reinstate the stored policy.
+  double virtual_time_ticks_base_ms;
 
-    // Reinstate the stored policy.
-    double virtual_time_ticks_base_ms;
-
-    // For Pause, do not pass budget or starvation count.
-    if (virtual_time_policy ==
-        protocol::Emulation::VirtualTimePolicyEnum::Pause) {
-      setVirtualTimePolicy(protocol::Emulation::VirtualTimePolicyEnum::Pause,
-                           Maybe<double>(), Maybe<int>(), wait_for_navigation,
-                           std::move(initial_time),
-                           &virtual_time_ticks_base_ms);
-      return;
-    }
-
-    // Calculate remaining budget for the advancing modes.
-    double budget = 0;
-    state_->getDouble(EmulationAgentState::kVirtualTimeBudget, &budget);
-    double inital_offset = 0;
-    state_->getDouble(EmulationAgentState::kVirtualTimeBudgetInitalOffset,
-                      &inital_offset);
-    double budget_remaining = budget + inital_offset - offset;
-    DCHECK_GE(budget_remaining, 0);
-
-    int starvation_count = 0;
-    state_->getInteger(EmulationAgentState::kVirtualTimeTaskStarvationCount,
-                       &starvation_count);
-
-    setVirtualTimePolicy(virtual_time_policy, budget_remaining,
-                         starvation_count, wait_for_navigation,
-                         std::move(initial_time), &virtual_time_ticks_base_ms);
+  // For Pause, do not pass budget or starvation count.
+  if (virtual_time_policy_.Get() ==
+      protocol::Emulation::VirtualTimePolicyEnum::Pause) {
+    setVirtualTimePolicy(protocol::Emulation::VirtualTimePolicyEnum::Pause,
+                         Maybe<double>(), Maybe<int>(), wait_for_navigation,
+                         initial_virtual_time_.Get(),
+                         &virtual_time_ticks_base_ms);
+    return;
   }
+
+  // Calculate remaining budget for the advancing modes.
+  double budget_remaining = virtual_time_budget_.Get() +
+                            virtual_time_budget_initial_offset_.Get() -
+                            virtual_time_offset_.Get();
+  DCHECK_GE(budget_remaining, 0);
+
+  setVirtualTimePolicy(virtual_time_policy_.Get(), budget_remaining,
+                       virtual_time_task_starvation_count_.Get(),
+                       wait_for_navigation, initial_virtual_time_.Get(),
+                       &virtual_time_ticks_base_ms);
 }
 
 Response InspectorEmulationAgent::disable() {
@@ -198,11 +162,9 @@ Response InspectorEmulationAgent::setScriptExecutionDisabled(bool value) {
   Response response = AssertPage();
   if (!response.isSuccess())
     return response;
-  if (state_->booleanProperty(EmulationAgentState::kScriptExecutionDisabled,
-                              false) == value) {
+  if (script_execution_disabled_.Get() == value)
     return response;
-  }
-  state_->setBoolean(EmulationAgentState::kScriptExecutionDisabled, value);
+  script_execution_disabled_.Set(value);
   GetWebViewImpl()->GetDevToolsEmulator()->SetScriptExecutionDisabled(value);
   return response;
 }
@@ -211,11 +173,9 @@ Response InspectorEmulationAgent::setScrollbarsHidden(bool hidden) {
   Response response = AssertPage();
   if (!response.isSuccess())
     return response;
-  if (state_->booleanProperty(EmulationAgentState::kScrollbarsHidden, false) ==
-      hidden) {
+  if (scrollbars_hidden_.Get() == hidden)
     return response;
-  }
-  state_->setBoolean(EmulationAgentState::kScrollbarsHidden, hidden);
+  scrollbars_hidden_.Set(hidden);
   GetWebViewImpl()->GetDevToolsEmulator()->SetScrollbarsHidden(hidden);
   return response;
 }
@@ -224,11 +184,9 @@ Response InspectorEmulationAgent::setDocumentCookieDisabled(bool disabled) {
   Response response = AssertPage();
   if (!response.isSuccess())
     return response;
-  if (state_->booleanProperty(EmulationAgentState::kDocumentCookieDisabled,
-                              false) == disabled) {
+  if (document_cookie_disabled_.Get() == disabled)
     return response;
-  }
-  state_->setBoolean(EmulationAgentState::kDocumentCookieDisabled, disabled);
+  document_cookie_disabled_.Set(disabled);
   GetWebViewImpl()->GetDevToolsEmulator()->SetDocumentCookieDisabled(disabled);
   return response;
 }
@@ -245,8 +203,8 @@ Response InspectorEmulationAgent::setTouchEmulationEnabled(
         "Touch points must be between 1 and " +
         String::Number(WebTouchEvent::kTouchesLengthCap));
   }
-  state_->setBoolean(EmulationAgentState::kTouchEventEmulationEnabled, enabled);
-  state_->setInteger(EmulationAgentState::kMaxTouchPoints, max_points);
+  touch_event_emulation_enabled_.Set(enabled);
+  max_touch_points_.Set(max_points);
   GetWebViewImpl()->GetDevToolsEmulator()->SetTouchEventEmulationEnabled(
       enabled, max_points);
   return response;
@@ -256,7 +214,7 @@ Response InspectorEmulationAgent::setEmulatedMedia(const String& media) {
   Response response = AssertPage();
   if (!response.isSuccess())
     return response;
-  state_->setString(EmulationAgentState::kEmulatedMedia, media);
+  emulated_media_.Set(media);
   GetWebViewImpl()->GetPage()->GetSettings().SetMediaTypeOverride(media);
   return response;
 }
@@ -279,7 +237,7 @@ Response InspectorEmulationAgent::setVirtualTimePolicy(
   Response response = AssertPage();
   if (!response.isSuccess())
     return response;
-  state_->setString(EmulationAgentState::kVirtualTimePolicy, policy);
+  virtual_time_policy_.Set(policy);
 
   PendingVirtualTimePolicy new_policy;
   new_policy.policy = PageScheduler::VirtualTimePolicy::kPause;
@@ -306,24 +264,21 @@ Response InspectorEmulationAgent::setVirtualTimePolicy(
 
   if (virtual_time_budget_ms.isJust()) {
     new_policy.virtual_time_budget_ms = virtual_time_budget_ms.fromJust();
-    state_->setDouble(EmulationAgentState::kVirtualTimeBudget,
-                      *new_policy.virtual_time_budget_ms);
+    virtual_time_budget_.Set(*new_policy.virtual_time_budget_ms);
     // Record the current virtual time offset so Restore can compute how much
     // budget is left.
-    state_->setDouble(
-        EmulationAgentState::kVirtualTimeBudgetInitalOffset,
-        state_->doubleProperty(EmulationAgentState::kVirtualTimeOffset, 0.0));
+    virtual_time_budget_initial_offset_.Set(virtual_time_offset_.Get());
   } else {
-    state_->remove(EmulationAgentState::kVirtualTimeBudget);
+    virtual_time_budget_.Clear();
   }
 
   if (max_virtual_time_task_starvation_count.isJust()) {
     new_policy.max_virtual_time_task_starvation_count =
         max_virtual_time_task_starvation_count.fromJust();
-    state_->setDouble(EmulationAgentState::kVirtualTimeTaskStarvationCount,
-                      *new_policy.max_virtual_time_task_starvation_count);
+    virtual_time_task_starvation_count_.Set(
+        *new_policy.max_virtual_time_task_starvation_count);
   } else {
-    state_->remove(EmulationAgentState::kVirtualTimeTaskStarvationCount);
+    virtual_time_task_starvation_count_.Clear();
   }
 
   InnerEnable();
@@ -334,14 +289,13 @@ Response InspectorEmulationAgent::setVirtualTimePolicy(
 
   // This needs to happen before we apply virtual time.
   if (initial_virtual_time.isJust()) {
-    state_->setDouble(EmulationAgentState::kInitialVirtualTime,
-                      initial_virtual_time.fromJust());
+    initial_virtual_time_.Set(initial_virtual_time.fromJust());
     web_local_frame_->View()->Scheduler()->SetInitialVirtualTime(
         base::Time::FromDoubleT(initial_virtual_time.fromJust()));
   }
 
   if (wait_for_navigation.fromMaybe(false)) {
-    state_->setBoolean(EmulationAgentState::kWaitForNavigation, true);
+    wait_for_navigation_.Set(true);
     pending_virtual_time_policy_ = std::move(new_policy);
   } else {
     ApplyVirtualTimePolicy(new_policy);
@@ -382,7 +336,7 @@ void InspectorEmulationAgent::ApplyVirtualTimePolicy(
 
 void InspectorEmulationAgent::FrameStartedLoading(LocalFrame*) {
   if (pending_virtual_time_policy_) {
-    state_->setBoolean(EmulationAgentState::kWaitForNavigation, false);
+    wait_for_navigation_.Set(false);
     ApplyVirtualTimePolicy(*pending_virtual_time_policy_);
     pending_virtual_time_policy_ = base::nullopt;
   }
@@ -396,15 +350,12 @@ void InspectorEmulationAgent::WillSendRequest(
     const ResourceResponse& redirect_response,
     const FetchInitiatorInfo& initiator_info,
     Resource::Type resource_type) {
-  String accept_lang_override;
-  state_->getString(EmulationAgentState::kAcceptLanguageOverride,
-                    &accept_lang_override);
-  if (!accept_lang_override.IsEmpty() &&
+  if (!accept_language_override_.Get().IsEmpty() &&
       request.HttpHeaderField("Accept-Language").IsEmpty()) {
     request.SetHTTPHeaderField(
         "Accept-Language",
-        AtomicString(
-            NetworkUtils::GenerateAcceptLanguageHeader(accept_lang_override)));
+        AtomicString(NetworkUtils::GenerateAcceptLanguageHeader(
+            accept_language_override_.Get())));
   }
 }
 
@@ -413,7 +364,7 @@ Response InspectorEmulationAgent::setNavigatorOverrides(
   Response response = AssertPage();
   if (!response.isSuccess())
     return response;
-  state_->setString(EmulationAgentState::kNavigatorPlatform, platform);
+  navigator_platform_override_.Set(platform);
   GetWebViewImpl()->GetPage()->GetSettings().SetNavigatorPlatformOverride(
       platform);
   return response;
@@ -424,22 +375,19 @@ void InspectorEmulationAgent::VirtualTimeBudgetExpired() {
   DCHECK(web_local_frame_);
   web_local_frame_->View()->Scheduler()->SetVirtualTimePolicy(
       PageScheduler::VirtualTimePolicy::kPause);
-  state_->setString(EmulationAgentState::kVirtualTimePolicy,
-                    protocol::Emulation::VirtualTimePolicyEnum::Pause);
+  virtual_time_policy_.Set(protocol::Emulation::VirtualTimePolicyEnum::Pause);
   GetFrontend()->virtualTimeBudgetExpired();
 }
 
 void InspectorEmulationAgent::OnVirtualTimeAdvanced(
     WTF::TimeDelta virtual_time_offset) {
-  state_->setDouble(EmulationAgentState::kVirtualTimeOffset,
-                    virtual_time_offset.InMillisecondsF());
+  virtual_time_offset_.Set(virtual_time_offset.InMillisecondsF());
   GetFrontend()->virtualTimeAdvanced(virtual_time_offset.InMillisecondsF());
 }
 
 void InspectorEmulationAgent::OnVirtualTimePaused(
     WTF::TimeDelta virtual_time_offset) {
-  state_->setDouble(EmulationAgentState::kVirtualTimeOffset,
-                    virtual_time_offset.InMillisecondsF());
+  virtual_time_offset_.Set(virtual_time_offset.InMillisecondsF());
   GetFrontend()->virtualTimePaused(virtual_time_offset.InMillisecondsF());
 }
 
@@ -451,13 +399,13 @@ Response InspectorEmulationAgent::setDefaultBackgroundColorOverride(
   if (!color.isJust()) {
     // Clear the override and state.
     GetWebViewImpl()->ClearBaseBackgroundColorOverride();
-    state_->remove(EmulationAgentState::kDefaultBackgroundColorOverrideRGBA);
+    default_background_color_override_rgba_.Clear();
     return Response::OK();
   }
 
   blink::protocol::DOM::RGBA* rgba = color.fromJust();
-  state_->setValue(EmulationAgentState::kDefaultBackgroundColorOverrideRGBA,
-                   rgba->toValue());
+  default_background_color_override_rgba_.Set(
+      rgba->toValue()->serialize());
   // Clamping of values is done by Color() constructor.
   int alpha = lroundf(255.0f * rgba->getA(1.0f));
   GetWebViewImpl()->SetBaseBackgroundColorOverride(
@@ -497,32 +445,24 @@ Response InspectorEmulationAgent::setUserAgentOverride(
     protocol::Maybe<String> platform) {
   if (!user_agent.IsEmpty() || accept_language.isJust() || platform.isJust())
     InnerEnable();
-  state_->setString(EmulationAgentState::kUserAgentOverride, user_agent);
-  state_->setString(EmulationAgentState::kAcceptLanguageOverride,
-                    accept_language.fromMaybe(String()));
-  state_->setString(EmulationAgentState::kNavigatorPlatform,
-                    platform.fromMaybe(String()));
+  user_agent_override_.Set(user_agent);
+  accept_language_override_.Set(accept_language.fromMaybe(String()));
+  navigator_platform_override_.Set(platform.fromMaybe(String()));
   if (web_local_frame_) {
     GetWebViewImpl()->GetPage()->GetSettings().SetNavigatorPlatformOverride(
-        platform.fromMaybe(String()));
+        navigator_platform_override_.Get());
   }
   return Response::OK();
 }
 
 void InspectorEmulationAgent::ApplyAcceptLanguageOverride(String* accept_lang) {
-  String accept_lang_override;
-  state_->getString(EmulationAgentState::kAcceptLanguageOverride,
-                    &accept_lang_override);
-  if (!accept_lang_override.IsEmpty())
-    *accept_lang = accept_lang_override;
+  if (!accept_language_override_.Get().IsEmpty())
+    *accept_lang = accept_language_override_.Get();
 }
 
 void InspectorEmulationAgent::ApplyUserAgentOverride(String* user_agent) {
-  String user_agent_override;
-  state_->getString(EmulationAgentState::kUserAgentOverride,
-                    &user_agent_override);
-  if (!user_agent_override.IsEmpty())
-    *user_agent = user_agent_override;
+  if (!user_agent_override_.Get().IsEmpty())
+    *user_agent = user_agent_override_.Get();
 }
 
 void InspectorEmulationAgent::InnerEnable() {

@@ -71,3 +71,6 @@ DISABLE(ExtensionBrowserTest, DevToolsMainFrameIsCached)
 
 // We have changed the configuration tested by this
 DISABLE(RulesRegistryServiceTest, DefaultRulesRegistryRegistered)
+
+// Assumes US keyboard layout
+DISABLE(OmniboxViewTest, SearchDisabledDontCrashOnQuestionMark)

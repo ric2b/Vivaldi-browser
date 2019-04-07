@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/common/safe_browsing/archive_analyzer_results.h"
 #include "chrome/services/file_util/public/mojom/constants.mojom.h"
 #include "chrome/services/file_util/public/mojom/safe_archive_analyzer.mojom.h"
@@ -28,7 +28,7 @@ void SandboxedZipAnalyzer::Start() {
 
   base::PostTaskWithTraits(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&SandboxedZipAnalyzer::PrepareFileToAnalyze, this));
 }

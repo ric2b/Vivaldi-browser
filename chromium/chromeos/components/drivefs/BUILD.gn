@@ -6,8 +6,6 @@ assert(is_chromeos, "Non-ChromeOS builds cannot depend on //chromeos")
 
 component("drivefs") {
   sources = [
-    "drive_file_stream_service_provider_delegate.cc",
-    "drive_file_stream_service_provider_delegate.h",
     "drivefs_host.cc",
     "drivefs_host.h",
     "drivefs_host_observer.h",
@@ -27,6 +25,7 @@ component("drivefs") {
     "//mojo/public/cpp/platform",
     "//net",
     "//services/identity/public/mojom",
+    "//services/network/public/cpp:cpp",
     "//services/service_manager/public/cpp",
   ]
   defines = [ "IS_DRIVEFS_IMPL" ]
@@ -63,6 +62,7 @@ source_set("unit_tests") {
     "//mojo/public/cpp/bindings",
     "//net",
     "//services/identity/public/mojom",
+    "//services/network/public/cpp:cpp",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp/test:test_support",
     "//testing/gmock",

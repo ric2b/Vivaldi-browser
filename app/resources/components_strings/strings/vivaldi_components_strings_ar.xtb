@@ -79,7 +79,6 @@
 <translation id="8498891568109133222">استغرق <ph name="HOST_NAME" /> وقتًا أطول مما يجب للاستجابة.</translation>
 <translation id="8740359287975076522">‏تعذر العثور على &lt;/abbr&gt;عنوان نظام أسماء النطاقات (DNS)‏&lt;abbr id="dnsDefinition"&gt; لـ <ph name="HOST_NAME" />. جارٍ تشخيص المشكلة.</translation>
 <translation id="9183425211371246419">يستخدم <ph name="HOST_NAME" /> بروتوكول غير مدعوم.</translation>
-<translation id="933612690413056017">لا يوجد اتصال بالإنترنت</translation>
 <translation id="969892804517981540">البنية الرسمية</translation>
 <translation id="988159990683914416">بنية المطوِّر</translation>
 </translationbundle>

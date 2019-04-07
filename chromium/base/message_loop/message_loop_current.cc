@@ -74,6 +74,11 @@ void MessageLoopCurrent::RemoveTaskObserver(TaskObserver* task_observer) {
   current_->RemoveTaskObserver(task_observer);
 }
 
+void MessageLoopCurrent::SetAddQueueTimeToTasks(bool enable) {
+  DCHECK_CALLED_ON_VALID_THREAD(current_->bound_thread_checker_);
+  current_->SetAddQueueTimeToTasks(enable);
+}
+
 void MessageLoopCurrent::SetNestableTasksAllowed(bool allowed) {
   DCHECK_CALLED_ON_VALID_THREAD(current_->bound_thread_checker_);
   if (allowed) {
@@ -172,6 +177,18 @@ void MessageLoopCurrentForUI::Abort() {
   static_cast<MessageLoopForUI*>(current_)->Abort();
 }
 #endif  // defined(OS_ANDROID)
+
+#if defined(OS_WIN)
+void MessageLoopCurrentForUI::AddMessagePumpObserver(
+    MessagePumpForUI::Observer* observer) {
+  pump_->AddObserver(observer);
+}
+
+void MessageLoopCurrentForUI::RemoveMessagePumpObserver(
+    MessagePumpForUI::Observer* observer) {
+  pump_->RemoveObserver(observer);
+}
+#endif  // defined(OS_WIN)
 
 #endif  // !defined(OS_NACL)
 

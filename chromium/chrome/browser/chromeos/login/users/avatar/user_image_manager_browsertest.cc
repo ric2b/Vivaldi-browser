@@ -49,6 +49,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chromeos/chromeos_paths.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
@@ -334,8 +335,8 @@ class UserImageManagerTest : public LoginManagerTest,
       AccountId::FromUserEmailGaiaId(kTestUser2, kTestUser2GaiaId);
   const AccountId enterprise_account_id_ =
       AccountId::FromUserEmailGaiaId(kEnterpriseUser1, kEnterpriseUser1GaiaId);
-  const cryptohome::Identification cryptohome_id_ =
-      cryptohome::Identification(enterprise_account_id_);
+  const cryptohome::AccountIdentifier cryptohome_id_ =
+      cryptohome::CreateAccountIdentifierFromAccountId(enterprise_account_id_);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(UserImageManagerTest);
@@ -619,12 +620,6 @@ class UserImageManagerPolicyTest : public UserImageManagerTest,
     DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
         std::unique_ptr<SessionManagerClient>(fake_session_manager_client_));
 
-    // Set up fake install attributes.
-    std::unique_ptr<chromeos::StubInstallAttributes> attributes =
-        std::make_unique<chromeos::StubInstallAttributes>();
-    attributes->SetCloudManaged("fake-domain", "fake-id");
-    policy::BrowserPolicyConnectorChromeOS::SetInstallAttributesForTesting(
-        attributes.release());
     UserImageManagerTest::SetUpInProcessBrowserTestFixture();
   }
 
@@ -683,6 +678,8 @@ class UserImageManagerPolicyTest : public UserImageManagerTest,
     return policy;
   }
 
+  ScopedStubInstallAttributes test_install_attributes_{
+      StubInstallAttributes::CreateCloudManaged("fake-domain", "fake-id")};
   policy::UserPolicyBuilder user_policy_;
   policy::DevicePolicyBuilder device_policy_;
   scoped_refptr<ownership::MockOwnerKeyUtil> owner_key_util_;

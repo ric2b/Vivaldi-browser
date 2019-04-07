@@ -21,6 +21,7 @@
 
 class BrowserView;
 class OpaqueBrowserFrameViewLayout;
+class HostedAppButtonContainer;
 class OpaqueBrowserFrameViewPlatformSpecific;
 class TabIconView;
 
@@ -40,6 +41,8 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
                                public TabIconViewModel,
                                public OpaqueBrowserFrameViewLayoutDelegate {
  public:
+  static const char kClassName[];
+
   // Constructs a non-client view for an BrowserFrame.
   OpaqueBrowserFrameView(BrowserFrame* frame,
                          BrowserView* browser_view,
@@ -71,6 +74,8 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   bool HasClientEdge() const override;
 
   // views::View:
+  const char* GetClassName() const override;
+  void ChildPreferredSizeChanged(views::View* child) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnNativeThemeChanged(const ui::NativeTheme* native_theme) override;
 
@@ -97,7 +102,6 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   gfx::ImageSkia GetIncognitoAvatarIcon() const override;
   bool IsMaximized() const override;
   bool IsMinimized() const override;
-  bool IsFullscreen() const override;
   bool IsTabStripVisible() const override;
   int GetTabStripHeight() const override;
   bool IsToolbarVisible() const override;
@@ -105,7 +109,12 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   gfx::Size GetNewTabButtonPreferredSize() const override;
   int GetTopAreaHeight() const override;
   bool UseCustomFrame() const override;
+  bool IsFrameCondensed() const override;
   bool EverHasVisibleBackgroundTabShapes() const override;
+
+  HostedAppButtonContainer* hosted_app_button_container_for_testing() {
+    return hosted_app_button_container_;
+  }
 
  protected:
   views::ImageButton* minimize_button() const { return minimize_button_; }
@@ -161,6 +170,10 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   // Returns true if the view should draw its own custom title bar.
   bool ShouldShowWindowTitleBar() const;
 
+  // Returns the color to use for text and other title bar elements given the
+  // frame background color for |active_state|.
+  SkColor GetReadableFrameForegroundColor(ActiveState active_state) const;
+
   // Paint various sub-components of this view.  The *FrameBorder() functions
   // also paint the background of the titlebar area, since the top frame border
   // and titlebar background are a contiguous component.
@@ -187,6 +200,8 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   // The window icon and title.
   TabIconView* window_icon_;
   views::Label* window_title_;
+
+  HostedAppButtonContainer* hosted_app_button_container_ = nullptr;
 
   // Background painter for the window frame.
   std::unique_ptr<views::FrameBackground> frame_background_;

@@ -154,6 +154,8 @@ void WebURLRequest::SetHTTPReferrer(const WebString& web_referrer,
   DCHECK_EQ(Referrer::NoReferrer(), String());
   String referrer =
       web_referrer.IsEmpty() ? Referrer::NoReferrer() : String(web_referrer);
+  // TODO(domfarolino): Stop storing ResourceRequest's generated referrer as a
+  // header and instead use a separate member. See https://crbug.com/850813.
   resource_request_->SetHTTPReferrer(
       Referrer(referrer, static_cast<ReferrerPolicy>(referrer_policy)));
 }
@@ -353,14 +355,6 @@ WebURLRequest::Priority WebURLRequest::GetPriority() const {
 
 void WebURLRequest::SetPriority(WebURLRequest::Priority priority) {
   resource_request_->SetPriority(static_cast<ResourceLoadPriority>(priority));
-}
-
-bool WebURLRequest::CheckForBrowserSideNavigation() const {
-  return resource_request_->CheckForBrowserSideNavigation();
-}
-
-void WebURLRequest::SetCheckForBrowserSideNavigation(bool check) {
-  resource_request_->SetCheckForBrowserSideNavigation(check);
 }
 
 bool WebURLRequest::WasDiscarded() const {

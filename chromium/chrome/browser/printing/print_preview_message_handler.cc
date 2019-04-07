@@ -8,7 +8,6 @@
 
 #include <memory>
 #include <utility>
-#include <vector>
 
 #include "base/bind.h"
 #include "base/memory/ref_counted.h"
@@ -24,21 +23,16 @@
 #include "components/printing/browser/print_composite_client.h"
 #include "components/printing/browser/print_manager_utils.h"
 #include "components/printing/common/print_messages.h"
-#include "components/services/pdf_compositor/public/cpp/pdf_service_mojo_types.h"
-#include "components/services/pdf_compositor/public/cpp/pdf_service_mojo_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
-#include "printing/page_size_margins.h"
 #include "printing/print_job_constants.h"
 #include "printing/print_settings.h"
 
 using content::BrowserThread;
 using content::WebContents;
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(printing::PrintPreviewMessageHandler);
 
 namespace printing {
 
@@ -51,7 +45,7 @@ void StopWorker(int document_cookie) {
       g_browser_process->print_job_manager()->queue();
   scoped_refptr<PrinterQuery> printer_query =
       queue->PopPrinterQuery(document_cookie);
-  if (printer_query.get()) {
+  if (printer_query) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(&PrinterQuery::StopWorker, printer_query));
@@ -112,8 +106,8 @@ void PrintPreviewMessageHandler::OnRequestPrintPreview(
   PrintPreviewUI::SetInitialParams(GetPrintPreviewDialog(), params);
 }
 
-void PrintPreviewMessageHandler::OnDidGetPreviewPageCount(
-    const PrintHostMsg_DidGetPreviewPageCount_Params& params,
+void PrintPreviewMessageHandler::OnDidStartPreview(
+    const PrintHostMsg_DidStartPreview_Params& params,
     const PrintHostMsg_PreviewIds& ids) {
   if (params.page_count <= 0) {
     NOTREACHED();
@@ -125,7 +119,7 @@ void PrintPreviewMessageHandler::OnDidGetPreviewPageCount(
     return;
 
   print_preview_ui->ClearAllPreviewData();
-  print_preview_ui->OnDidGetPreviewPageCount(params, ids.request_id);
+  print_preview_ui->OnDidStartPreview(params, ids.request_id);
 }
 
 void PrintPreviewMessageHandler::OnDidPreviewPage(
@@ -147,12 +141,9 @@ void PrintPreviewMessageHandler::OnDidPreviewPage(
 
     // Use utility process to convert skia metafile to pdf.
     client->DoCompositePageToPdf(
-        params.document_cookie, render_frame_host, params.page_number,
-        content.metafile_data_handle, content.data_size,
-        content.subframe_content_info,
+        params.document_cookie, render_frame_host, page_number, content,
         base::BindOnce(&PrintPreviewMessageHandler::OnCompositePdfPageDone,
-                       weak_ptr_factory_.GetWeakPtr(), params.page_number,
-                       ids));
+                       weak_ptr_factory_.GetWeakPtr(), page_number, ids));
   } else {
     NotifyUIPreviewPageReady(
         page_number, ids,
@@ -182,8 +173,7 @@ void PrintPreviewMessageHandler::OnMetafileReadyForPrinting(
     DCHECK(client);
 
     client->DoCompositeDocumentToPdf(
-        params.document_cookie, render_frame_host, content.metafile_data_handle,
-        content.data_size, content.subframe_content_info,
+        params.document_cookie, render_frame_host, content,
         base::BindOnce(&PrintPreviewMessageHandler::OnCompositePdfDocumentDone,
                        weak_ptr_factory_.GetWeakPtr(),
                        params.expected_pages_count, ids));
@@ -262,9 +252,7 @@ void PrintPreviewMessageHandler::NotifyUIPreviewPageReady(
     return;
 
   // Don't bother notifying the UI if this request has been cancelled already.
-  bool cancel = false;
-  PrintPreviewUI::GetCurrentPrintPreviewStatus(ids, &cancel);
-  if (cancel)
+  if (PrintPreviewUI::ShouldCancelRequest(ids))
     return;
 
   print_preview_ui->SetPrintPreviewDataForIndex(page_number,
@@ -293,7 +281,7 @@ void PrintPreviewMessageHandler::OnCompositePdfPageDone(
     const PrintHostMsg_PreviewIds& ids,
     mojom::PdfCompositor::Status status,
     base::ReadOnlySharedMemoryRegion region) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (status != mojom::PdfCompositor::Status::SUCCESS) {
     DLOG(ERROR) << "Compositing pdf failed with error " << status;
     return;
@@ -308,7 +296,7 @@ void PrintPreviewMessageHandler::OnCompositePdfDocumentDone(
     const PrintHostMsg_PreviewIds& ids,
     mojom::PdfCompositor::Status status,
     base::ReadOnlySharedMemoryRegion region) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (status != mojom::PdfCompositor::Status::SUCCESS) {
     DLOG(ERROR) << "Compositing pdf failed with error " << status;
     return;
@@ -336,8 +324,7 @@ bool PrintPreviewMessageHandler::OnMessageReceived(
 
   handled = true;
   IPC_BEGIN_MESSAGE_MAP(PrintPreviewMessageHandler, message)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetPreviewPageCount,
-                        OnDidGetPreviewPageCount)
+    IPC_MESSAGE_HANDLER(PrintHostMsg_DidStartPreview, OnDidStartPreview)
     IPC_MESSAGE_HANDLER(PrintHostMsg_PrintPreviewFailed,
                         OnPrintPreviewFailed)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetDefaultPageLayout,

@@ -24,14 +24,16 @@ class AwRenderViewExt : public content::RenderViewObserver {
 
   // RenderViewObserver:
   void DidCommitCompositorFrame() override;
-  void DidUpdateLayout() override;
+  void DidUpdateMainFrameLayout() override;
   void OnDestruct() override;
 
-  void CheckContentsSize();
-  void PostCheckContentsSize();
+  void UpdateContentsSize();
 
   gfx::Size last_sent_contents_size_;
-  base::OneShotTimer check_contents_size_timer_;
+
+  // Whether the contents size may have changed and |UpdateContentsSize| needs
+  // to be called.
+  bool needs_contents_size_update_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(AwRenderViewExt);
 };

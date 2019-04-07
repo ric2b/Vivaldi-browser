@@ -239,11 +239,13 @@ class DrmDevice::IOWatcher : public base::MessagePumpLibevent::FdWatcher {
 
 DrmDevice::DrmDevice(const base::FilePath& device_path,
                      base::File file,
-                     bool is_primary_device)
+                     bool is_primary_device,
+                     std::unique_ptr<GbmDevice> gbm)
     : device_path_(device_path),
       file_(std::move(file)),
       page_flip_manager_(new PageFlipManager()),
-      is_primary_device_(is_primary_device) {}
+      is_primary_device_(is_primary_device),
+      gbm_(std::move(gbm)) {}
 
 DrmDevice::~DrmDevice() {}
 
@@ -256,10 +258,10 @@ bool DrmDevice::Initialize() {
   }
 
   // Use atomic only if kernel allows it.
-  if (SetCapability(DRM_CLIENT_CAP_ATOMIC, 1))
+  is_atomic_ = SetCapability(DRM_CLIENT_CAP_ATOMIC, 1);
+  if (is_atomic_)
     plane_manager_.reset(new HardwareDisplayPlaneManagerAtomic());
-
-  if (!plane_manager_)
+  else
     plane_manager_.reset(new HardwareDisplayPlaneManagerLegacy());
   if (!plane_manager_->Initialize(this)) {
     LOG(ERROR) << "Failed to initialize the plane manager for "

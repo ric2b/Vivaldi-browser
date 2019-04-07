@@ -20,7 +20,6 @@
 <translation id="1974060860693918893">پیشرفته</translation>
 <translation id="2030481566774242610">منظورتان <ph name="LINK" /> بود؟</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />بررسی پروکسی و دیوار آتش<ph name="END_LINK" /></translation>
-<translation id="2065985942032347596">احراز هویت لازم است</translation>
 <translation id="2166378884831602661">این سایت نمی‌تواند اتصالی ایمن ارائه دهد</translation>
 <translation id="2230458221926704099">با استفاده از <ph name="BEGIN_LINK" />برنامه عیب‌یابی<ph name="END_LINK" />، مشکل اتصالتان را برطرف کنید</translation>
 <translation id="2292556288342944218">دسترسی شما به اینترنت مسدود است</translation>
@@ -30,16 +29,12 @@
 <translation id="2609632851001447353">انواع مختلف</translation>
 <translation id="2650446666397867134">دسترسی به فایل رد شد</translation>
 <translation id="2705137772291741111">کپی ذخیره‌شده (ذخیره موقت‌شده) این سایت قابل خواندن نبود.</translation>
-<translation id="2730326759066348565"><ph name="BEGIN_LINK" /> درحال اجرای عیب‌یابی اتصالات <ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">اتصال مجدداً برقرار شد.</translation>
 <translation id="2856444702002559011">شاید مهاجم‌ها در تلاش باشند اطلاعات شما (مانند گذرواژه‌ها، پیام‌ها یا کارت‌های اعتباری) را از <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> سرقت کنند. <ph name="BEGIN_LEARN_MORE_LINK" />بیشتر بدانید<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">تغییر شبکه تشخیص داده شد.</translation>
-<translation id="2948083400971632585">می‌توانید تمام پروکسی‌های تنظیم شده بر روی اتصالات را از طریق صفحه‌ی تنظیمات غیرفعال کنید.</translation>
 <translation id="2991571918955627853">‏درحال‌حاضر نمی‌توانید از <ph name="SITE" /> دیدن کنید، زیرا این وب‌سایت از HSTS استفاده می‌کند. خطاهای شبکه و حمله‌ها معمولاً موقتی هستند، بنابراین احتمالاً این صفحه بعداً کار خواهد کرد.</translation>
 <translation id="3005723025932146533">نمایش کپی ذخیره شده</translation>
-<translation id="3093245981617870298">شما آفلاین هستید.</translation>
 <translation id="3109728660330352905">شما اجازه مشاهده این صفحه را ندارید.</translation>
-<translation id="31207688938192855"><ph name="BEGIN_LINK" /> از عیب‌یابی اتصالات استفاده کنید <ph name="END_LINK" />.</translation>
 <translation id="3176929007561373547">تنظیمات پروکسی‌ را بررسی کنید یا با سرپرست شبکه‌‌تان تماس بگیرید تا
       مطمئن شوید سرور پروکسی کار می‌کند. اگر مطمئن نیستید که باید از سرور
       پروکسی استفاده کنید:
@@ -62,17 +57,14 @@
 <translation id="4165986682804962316">تنظیمات سایت</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />بررسی پیکربندی آنتی‌ویروس و دیوار آتش<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" /> از عیب‌یابی شبکه استفاده کنید <ph name="END_LINK" />.</translation>
-<translation id="4304224509867189079">ورود به سیستم</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> گواهی ورود به سیستمتان را نپذیرفت یا ممکن است گواهی‌ای ارائه نشده باشد.</translation>
 <translation id="4506599922270137252">تماس با سرپرست سیستم</translation>
 <translation id="4522570452068850558">جزئیات</translation>
 <translation id="4558551763791394412">افزونه‌ها را غیرفعال کنید.</translation>
-<translation id="4611292653554630842">ورود</translation>
 <translation id="4708268264240856090">اتصال شما قطع شد</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" /> راه‌اندازی عیب‌یابی شبکه‌ی ویندوز <ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">مسیر قابل اجرا</translation>
 <translation id="4764776831041365478">ممکن است صفحهٔ وب <ph name="URL" /> موقتاً خراب باشد یا ممکن است برای همیشه به آدرس وب جدید منتقل شده باشد.</translation>
-<translation id="4913131542719409934">احراز هویت مورد نیاز است</translation>
 <translation id="5023310440958281426">خط‌مشی‌های سرپرست سیستمتان را بررسی کنید</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />بررسی آدرس پروکسی<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(۶۴ بیت)</translation>
@@ -129,7 +121,6 @@
 <translation id="8740359287975076522">‏<ph name="HOST_NAME" />’s &lt;abbr id="dnsDefinition"&gt;آدرس DNS&lt;/abbr&gt; پیدا نشد. درحال بررسی برای تشخیص مشکل.</translation>
 <translation id="9001074447101275817">پروکسی <ph name="DOMAIN" /> نیاز به یک نام کاربری و گذرواژه دارد.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> از یک پروتکل پشتیبانی‌نشده استفاده می‌کند.</translation>
-<translation id="933612690413056017">اتصال اینترنت قطع است</translation>
 <translation id="969892804517981540">ساخت رسمی</translation>
 <translation id="988159990683914416">ساخت برنامه‌نویس</translation>
 </translationbundle>

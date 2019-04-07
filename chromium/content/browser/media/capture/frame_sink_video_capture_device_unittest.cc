@@ -9,11 +9,14 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/containers/flat_map.h"
+#include "base/memory/read_only_shared_memory_region.h"
+#include "base/memory/shared_memory_mapping.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "media/base/video_frame.h"
 #include "media/capture/video/video_frame_receiver.h"
 #include "media/capture/video_capture_types.h"
+#include "mojo/public/cpp/base/shared_memory_utils.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/viz/privileged/interfaces/compositing/frame_sink_video_capture.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -110,6 +113,9 @@ class MockFrameSinkVideoCapturer : public viz::mojom::FrameSinkVideoCapturer {
   }
   MOCK_METHOD0(MockStop, void());
   MOCK_METHOD0(RequestRefreshFrame, void());
+  MOCK_METHOD2(CreateOverlay,
+               void(int32_t stacking_index,
+                    viz::mojom::FrameSinkVideoCaptureOverlayRequest request));
 
  private:
   mojo::Binding<viz::mojom::FrameSinkVideoCapturer> binding_;
@@ -181,20 +187,21 @@ class MockVideoFrameReceiver : public media::VideoFrameReceiver {
                     Buffer::ScopedAccessPermission* buffer_read_permission,
                     const media::mojom::VideoFrameInfo* frame_info));
   MOCK_METHOD1(OnBufferRetired, void(int buffer_id));
-  MOCK_METHOD0(OnError, void());
+  MOCK_METHOD1(OnError, void(media::VideoCaptureError error));
+  MOCK_METHOD1(OnFrameDropped, void(media::VideoCaptureFrameDropReason reason));
   MOCK_METHOD1(OnLog, void(const std::string& message));
   MOCK_METHOD0(OnStarted, void());
   void OnStartedUsingGpuDecode() final { NOTREACHED(); }
 
-  mojo::ScopedSharedBufferHandle TakeBufferHandle(int buffer_id) {
+  base::ReadOnlySharedMemoryRegion TakeBufferHandle(int buffer_id) {
     DCHECK_NOT_ON_DEVICE_THREAD();
     const auto it = buffer_handles_.find(buffer_id);
     if (it == buffer_handles_.end()) {
       ADD_FAILURE() << "Missing entry for buffer_id=" << buffer_id;
-      return mojo::ScopedSharedBufferHandle();
+      return base::ReadOnlySharedMemoryRegion();
     }
-    CHECK(it->second->is_shared_buffer_handle());
-    auto buffer = std::move(it->second->get_shared_buffer_handle());
+    CHECK(it->second->is_read_only_shmem_region());
+    auto buffer = std::move(it->second->get_read_only_shmem_region());
     buffer_handles_.erase(it);
     return buffer;
   }
@@ -343,12 +350,11 @@ class FrameSinkVideoCaptureDeviceTest : public testing::Test {
       int frame_number,
       MockFrameSinkVideoConsumerFrameCallbacks* callbacks) {
     // Allocate a buffer and fill it with values based on |frame_number|.
-    const size_t buffer_size =
-        media::VideoFrame::AllocationSize(kFormat, kResolution);
-    mojo::ScopedSharedBufferHandle buffer =
-        mojo::SharedBufferHandle::Create(buffer_size);
-    memset(buffer->Map(buffer_size).get(), GetFrameFillValue(frame_number),
-           buffer_size);
+    base::MappedReadOnlyRegion region = mojo::CreateReadOnlySharedMemoryRegion(
+        media::VideoFrame::AllocationSize(kFormat, kResolution));
+    CHECK(region.IsValid());
+    memset(region.mapping.memory(), GetFrameFillValue(frame_number),
+           region.mapping.size());
 
     viz::mojom::FrameSinkVideoConsumerFrameCallbacksPtr callbacks_ptr;
     callbacks->Bind(mojo::MakeRequest(&callbacks_ptr));
@@ -356,13 +362,12 @@ class FrameSinkVideoCaptureDeviceTest : public testing::Test {
     // to the device thread before calling OnFrameCaptured().
     POST_DEVICE_TASK(base::BindOnce(
         [](FrameSinkVideoCaptureDevice* device,
-           mojo::ScopedSharedBufferHandle buffer, size_t buffer_size,
-           int frame_number,
+           base::ReadOnlySharedMemoryRegion data, int frame_number,
            mojo::InterfacePtrInfo<
                viz::mojom::FrameSinkVideoConsumerFrameCallbacks>
                callbacks_info) {
           device->OnFrameCaptured(
-              std::move(buffer), buffer_size,
+              std::move(data),
               media::mojom::VideoFrameInfo::New(
                   kMinCapturePeriod * frame_number,
                   base::Value(base::Value::Type::DICTIONARY), kFormat,
@@ -371,8 +376,8 @@ class FrameSinkVideoCaptureDeviceTest : public testing::Test {
               viz::mojom::FrameSinkVideoConsumerFrameCallbacksPtr(
                   std::move(callbacks_info)));
         },
-        base::Unretained(device_.get()), std::move(buffer), buffer_size,
-        frame_number, callbacks_ptr.PassInterface()));
+        base::Unretained(device_.get()), std::move(region.region), frame_number,
+        callbacks_ptr.PassInterface()));
   }
 
   // Returns a byte value based on the given |frame_number|.
@@ -384,13 +389,14 @@ class FrameSinkVideoCaptureDeviceTest : public testing::Test {
   // given |frame_number|.
   static bool IsExpectedBufferContentForFrame(
       int frame_number,
-      mojo::ScopedSharedBufferHandle buffer) {
-    const size_t buffer_size =
+      base::ReadOnlySharedMemoryRegion buffer) {
+    const auto mapping = buffer.Map();
+    const size_t frame_allocation_size =
         media::VideoFrame::AllocationSize(kFormat, kResolution);
-    const auto mapping = buffer->Map(buffer_size);
-    const uint8_t* src = static_cast<uint8_t*>(mapping.get());
+    CHECK_LE(frame_allocation_size, mapping.size());
+    const uint8_t* src = mapping.GetMemoryAs<const uint8_t>();
     const uint8_t expected_value = GetFrameFillValue(frame_number);
-    for (size_t i = 0; i < buffer_size; ++i) {
+    for (size_t i = 0; i < frame_allocation_size; ++i) {
       if (src[i] != expected_value) {
         return false;
       }
@@ -413,7 +419,7 @@ TEST_F(FrameSinkVideoCaptureDeviceTest, CapturesAndDeliversFrames) {
   auto receiver_ptr = std::make_unique<MockVideoFrameReceiver>();
   auto* const receiver = receiver_ptr.get();
   EXPECT_CALL(*receiver, OnStarted());
-  EXPECT_CALL(*receiver, OnError()).Times(0);
+  EXPECT_CALL(*receiver, OnError(_)).Times(0);
 
   AllocateAndStartSynchronouslyWithExpectations(std::move(receiver_ptr));
   // From this point, there is no reason the capturer should be re-started.
@@ -454,7 +460,7 @@ TEST_F(FrameSinkVideoCaptureDeviceTest, CapturesAndDeliversFrames) {
         const int buffer_id = buffer_ids[frame_number - first_frame_number];
 
         auto buffer = receiver->TakeBufferHandle(buffer_id);
-        ASSERT_TRUE(buffer.is_valid());
+        ASSERT_TRUE(buffer.IsValid());
         EXPECT_TRUE(
             IsExpectedBufferContentForFrame(frame_number, std::move(buffer)));
 
@@ -552,7 +558,7 @@ TEST_F(FrameSinkVideoCaptureDeviceTest, ShutsDownOnFatalError) {
   Sequence sequence;
   EXPECT_CALL(*receiver, OnStarted()).InSequence(sequence);
   EXPECT_CALL(*receiver, OnLog(StrNe(""))).InSequence(sequence);
-  EXPECT_CALL(*receiver, OnError()).InSequence(sequence);
+  EXPECT_CALL(*receiver, OnError(_)).InSequence(sequence);
 
   AllocateAndStartSynchronouslyWithExpectations(std::move(receiver_ptr));
 
@@ -578,7 +584,7 @@ TEST_F(FrameSinkVideoCaptureDeviceTest, ShutsDownOnFatalError) {
   {
     EXPECT_CALL(*receiver, OnStarted()).Times(0);
     EXPECT_CALL(*receiver, OnLog(StrNe("")));
-    EXPECT_CALL(*receiver, OnError());
+    EXPECT_CALL(*receiver, OnError(_));
     EXPECT_CALL(capturer_, MockStart(_)).Times(0);
 
     POST_DEVICE_METHOD_CALL(AllocateAndStartWithReceiver, GetCaptureParams(),

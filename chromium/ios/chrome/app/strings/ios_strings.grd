@@ -193,7 +193,7 @@ locale.  The strings in this file are specific to iOS.
         YES, I'M IN
       </message>
       <message name="IDS_IOS_ACCOUNT_UNIFIED_CONSENT_PERSONALIZED" desc="Description on the sign-in consent dialog to explain the benefit to sign-in. [Length: unlimited] [iOS only]" translateable="false">
-      Personalized Google services like Google Pay
+      More personal Google services, like better page suggestions
       </message>
       <message name="IDS_IOS_ACCOUNT_UNIFIED_CONSENT_SYNC_DATA" desc="Description on the sign-in consent dialog to explain the benefit to sign-in. [Length: unlimited] [iOS only]" translateable="false">
       Your passwords, history &amp; more on all devices
@@ -219,9 +219,6 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_APP_LAUNCHER_OPEN_APP_BUTTON_LABEL" desc="Label of a button to open an application. [Length: 10em] [iOS only]">
         Open
       </message>
-      <message name="IDS_IOS_AUTOFILL" desc="Title for the view in Settings for enabling/disabling Autofill. [Length: 15em] [iOS only]">
-        Autofill Forms
-      </message>
       <message name="IDS_IOS_AUTOFILL_ACCNAME_HIDE_KEYBOARD" desc="The accessible name for the hide keyboard button in the keyboard accessory shown when filling out forms. [Length: unlimited] [iOS only]">
         Hide keyboard
       </message>
@@ -240,9 +237,6 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_AUTOFILL_ADDRESS2" desc="Title of the field of a profile address representing the second line of the address. [Length: 15em] [iOS only]">
         Address 2
       </message>
-      <message name="IDS_IOS_AUTOFILL_ADDRESSES_GROUP_NAME" desc="The name of the Addresses group of the Autofill settings. Title case. [Length: 20em] [iOS only]">
-        Addresses
-      </message>
       <message name="IDS_IOS_AUTOFILL_CARDHOLDER" desc="Title of the field representing the full name of a credit card holder. [Length: 15em] [iOS only]">
         Name on Card
       </message>
@@ -257,9 +251,6 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_AUTOFILL_COUNTRY" desc="Title of the field of a profile address representing the country/nation of the address. [Length: 15em] [iOS only]">
         Country
-      </message>
-      <message name="IDS_IOS_AUTOFILL_CREDITCARDS_GROUP_NAME" desc="The name of the Credit Cards group of the Autofill dialog. Title case. [Length: 20em] [iOS only]">
-        Credit Cards
       </message>
       <message name="IDS_IOS_AUTOFILL_DIALOG_PLACEHOLDER_EXPIRY_MONTH" desc="The placeholder text for credit card expiration month in the payments card unmask dialog. [Length: 4em] [iOS only]">
         MM
@@ -285,14 +276,14 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_AUTOFILL_FULLNAME" desc="Title of the field of a profile address representing the full name of the addressee. [Length: 15em] [iOS only]">
         Full Name
       </message>
+      <message name="IDS_IOS_AUTOFILL_INPUT_BAR_DONE" desc="The title for the button above the keyboard used to dismiss it. [6em]">
+        Done
+      </message>
       <message name="IDS_IOS_AUTOFILL_PHONE" desc="Title of the field of a profile address representing the phone number of the addressee. [Length: 15em] [iOS only]">
         Phone
       </message>
       <message name="IDS_IOS_AUTOFILL_STATE" desc="Title of the field of a profile address representing the state/county/district/oblast of the address. [Length: 15em] [iOS only]">
         State / County
-      </message>
-      <message name="IDS_IOS_AUTOFILL_USE_WALLET_DATA" desc="The text for the checkbox that controls the Autofill/Google Pay integration feature. 'Google Pay' should not be translated as it is the product name. [Length: 50em] [iOS only]">
-        Show addresses and credit cards from Google Pay
       </message>
       <message name="IDS_IOS_AUTOFILL_WALLET_SERVER_NAME" desc="The name of the data source for non-local card and address info. Title case. 'Google Pay' should not be translated as it is the product name. [Length: 15em] [iOS only]">
         Google Pay
@@ -301,7 +292,7 @@ locale.  The strings in this file are specific to iOS.
         Zip Code
       </message>
       <message name="IDS_IOS_BANDWIDTH_MANAGEMENT_LEARN_URL" translateable="false">
-        https://support.google.com/chrome/answer/2392284?p=mobile_bandwidth&amp;hl=[GRITLANGCODE]
+        https://support.google.com/chrome/answer/2392284?p=mobile_bandwidth&amp;hl=[GRITLANGCODE]&amp;ios=1
       </message>
       <message name="IDS_IOS_BANDWIDTH_MANAGEMENT_SETTINGS" desc="Title for the bandwidth management panel in settings [Length: 30em] [iOS only]">
         Bandwidth
@@ -511,7 +502,7 @@ locale.  The strings in this file are specific to iOS.
         Clear Browsing Data
       </message>
       <message name="IDS_IOS_CONFIRM_CLEAR_BUTTON_TITLE" desc="Title for the UIAlertController indicating browsing data selected will be removed. [Length: 20em] [iOS only]">
-        The items you selected will be removed
+        The items you selected will be removed.
       </message>
       <message name="IDS_IOS_CONFIRM_CLEAR_BUTTON" desc="Accessibility label for the button used to confirm clearing data. [iOS only]">
         Confirm Clear Browsing Data
@@ -524,6 +515,27 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_CLEAR_SAVED_PASSWORDS" desc="Label for the option in settings to clear saved passwords. In titlecase. [Length: 20em] [iOS only]">
         Saved Passwords
+      </message>
+      <message name="IDS_IOS_CONSENT_BUMP_IM_IN" desc="Title for the Consent Bump 'accept' button. If the user press this button, then the users agrees to the consent bump prompt.">
+        Yes, I'm in
+      </message>
+      <message name="IDS_IOS_CONSENT_BUMP_NO_CHANGE_TEXT" desc="Text for the Consent Bump personalization option to not make any change to the existing sync options. [iOS only]">
+        The data sync to Google and the features you use will not change
+      </message>
+      <message name="IDS_IOS_CONSENT_BUMP_NO_CHANGE_TITLE" desc="Title for the Consent Bump personalization option to not make any change to the existing sync options. [iOS only]">
+        Make no changes
+      </message>
+      <message name="IDS_IOS_CONSENT_BUMP_MORE" desc="Title for the button in the ConsentBump to display more options for personalizing the sync settings. [iOS only]">
+        More Options
+      </message>
+      <message name="IDS_IOS_CONSENT_BUMP_PERSONALIZATION_TITLE" desc="Title for the Consent Bump personalization menu, presented when the user wants more informations and control over the sync personalization. [iOS only]">
+        Control Sync, Personalization, and More
+      </message>
+      <message name="IDS_IOS_CONSENT_BUMP_REVIEW_TITLE" desc="Title for the Consent Bump personalization option to review the existing settings once the current screen is dismissed. [iOS only]">
+        Review your settings on the next screen
+      </message>
+      <message name="IDS_IOS_CONSENT_BUMP_TURN_ON_TITLE" desc="Title for the Consent Bump personalization option to turn on the sync. [iOS only]">
+        Turn on sync, personalization, and other Google services
       </message>
       <message name="IDS_IOS_CONTENT_CONTEXT_ADDTOREADINGLIST" desc="The iOS menu item for adding a link to the reading list.">
         Read Later
@@ -765,6 +777,12 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_READING_LIST_TEXT" desc="Feature in the settings for the user to enable/disable, to sync reading list links between devices. [iOS only]">
         Reading List
       </message>
+      <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_AUTOCOMPLETE_WALLET" desc="Label for the checkbox that controls the Autofill/Payments integration feature. 'Google Pay' should not be translated as it is the product name. [iOS only]">
+        Payment methods and addresses using Google Pay
+      </message>
+      <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_SETTINGS_TEXT" desc="Feature in the settings for the user to enable/disable, to sync settings data between devices. [iOS only]">
+        Settings
+      </message>
       <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_SYNC_EVERYTHING" desc="Feature in the settings for the user enable or disable all the Google sync features. [iOS only]">
         Use sync and all services
       </message>
@@ -775,7 +793,7 @@ locale.  The strings in this file are specific to iOS.
         Sync and Personalization
       </message>
       <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_NON_PERSONALIZED_SERVICES_TEXT" desc="Section title for the list of all the non-personalized features to enable/disable in the settings. Related to 'Communicates with Google to improve browsing and Chrome'. [iOS only]">
-        Non-personalized Services
+        Other Google Services
       </message>
       <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_TITLE" desc="Title for the view in the Settings for enabling/disabling Sync and all the Google services. [Length: 26em] [iOS only]">
         Sync and Google Services
@@ -845,6 +863,15 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_MANAGED_SWITCH_TITLE" desc="The title of the Switch from a managed account dialog. [40em]">
         Sign out of managed account
+      </message>
+      <message name="IDS_IOS_MANUAL_FALLBACK_NO_USERNAME" desc="The title for disabled buttons on the manual fallback passwords UI when a credential doesn't contains a username. [30em]">
+        No Username
+      </message>
+      <message name="IDS_IOS_MANUAL_FALLBACK_USE_OTHER_PASSWORD" desc="The title for the manual fallback UI with all passwords without filter. [30em]">
+        Use Other Password
+      </message>
+      <message name="IDS_IOS_MANUAL_FALLBACK_USE_OTHER_PASSWORD_WITH_DOTS" desc="The title for the button at the end of the manual fallback passwords UI. The button is used to open a new screen with the list of all the user credentials. [30em]">
+        Use Other Password...
       </message>
       <message name="IDS_IOS_MICROPHONE_USAGE_DESCRIPTION" desc="Specifies the reason for accessing the user's microphone while the app is in use [Length: unlimited] [iOS only].">
         This lets you search faster using your voice.
@@ -927,6 +954,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_OPEN_TABS_RECENTLY_SYNCED" desc="Relative time display for small time deltas, anything less than a minute [Length: 10em] [iOS only]">
         Seconds ago
       </message>
+      <message name="IDS_IOS_OPEN_TABS_SYNCED_YESTERDAY" desc="Relative time display for time deltas that cover yesterday [Length: 10em] [iOS only]">
+        Yesterday
+      </message>
       <message name="IDS_IOS_OPTIONS_ACCOUNTS_ADD_ACCOUNT_BUTTON" desc="The title of the Add account button on the accounts settings screen [iOS only] [30em]">
         Add Account…
       </message>
@@ -962,14 +992,6 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_OPTIONS_DATA_USAGE_ONLY_WIFI" desc="Title for the option to only send usage data and/or preload webpages when on wifi. [Length: 20em] [iOS only]">
         Only on Wi-Fi
-      </message>
-      <message name="IDS_IOS_OPTIONS_DO_NOT_TRACK_MOBILE" desc="Title for opening the setting for the 'Do Not Track' header. [Length: 15em]">
-        ‘Do Not Track’
-      </message>
-      <message name="IDS_IOS_OPTIONS_ENABLE_DO_NOT_TRACK_BUBBLE_TEXT_MOBILE" desc="The text of a confirmation dialog that confirms that the user want to send the 'Do Not Track' header">
-        Enabling ‘Do Not Track’ means that a request will be included with your browsing traffic. Any effect depends on whether a website responds to the request, and how the request is interpreted.
-
-For example, some websites may respond to this request by showing you ads that aren't based on other websites you've visited. Many websites will still collect and use your browsing data - for example to improve security, to provide content, services, ads and recommendations on their websites, and to generate reporting statistics. <ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more<ph name="END_LINK">END_LINK</ph>
       </message>
       <message name="IDS_IOS_OPTIONS_ENABLE_HANDOFF_TO_OTHER_DEVICES" desc="Title for the option to enable Handoff. [Length: 20em] [iOS only]">
         Handoff
@@ -1297,6 +1319,9 @@ Handoff must also be enabled in the General section of Settings, and your device
       <message name="IDS_IOS_SETTINGS_USERNAME_COPY_MENU_ITEM" desc="Context menu item available on the username cell in the detailed view of a stored credential. The user can select it to copy the username to clipboard. [Length: should be one short word, is under 5em in English]">
         Copy
       </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORD_PLACEHOLDER_SEARCH" desc="The iOS placeholder for searching passwords in the saved list [Length: 30em] [iOS only]">
+        Search Passwords
+      </message>
       <message name="IDS_IOS_SETTINGS_PASSWORD_COPY_BUTTON" desc="Button that the user can press to copy the password to clipboard. [Length: 12em]">
         Copy
       </message>
@@ -1368,6 +1393,9 @@ Handoff must also be enabled in the General section of Settings, and your device
       </message>
       <message name="IDS_IOS_SHARE_GPLUS_COMPLETE" desc="Message shown when Google+ share has been posted. [Length: Unknown. Keep it short.] [iOS only]">
         Google+ post completed.
+      </message>
+      <message name="IDS_IOS_SHARE_MENU_COPY" desc="Text label of the Copy action in the extension menu that copies the current URL to the pasteboard. [iOS only]">
+        Copy
       </message>
       <message name="IDS_IOS_SHARE_MENU_FIND_IN_PAGE" desc="Text label to the Find in Page action in the extension menu that open the 'Find in Page' menu. [iOS only]">
         Find in Page
@@ -1614,10 +1642,10 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
         No Open Tabs
       </message>
       <message name="IDS_IOS_TAB_GRID_INCOGNITO_TABS_EMPTY_STATE_BODY" desc="Text body shown in the Incognito Tabs page when the grid is empty, explaining that the user can open a new tab. [iOS only]">
-        Open a tab to browse the web privately.
+        To browse the web privately, add a new tab.
       </message>
       <message name="IDS_IOS_TAB_GRID_REGULAR_TABS_EMPTY_STATE_BODY" desc="Text body shown in the Regular Tabs page (as opposed to the Incognito Tabs page) when the grid is empty, explaining that the user can open a new tab. [iOS only]">
-        Open a tab to browse the web.
+        To browse the web, add a new tab.
       </message>
       <message name="IDS_IOS_TAB_GRID_CREATE_NEW_INCOGNITO_TAB" desc="The accessibility label for the button that creates new incognito tabs. [iOS only]">
         Create new incognito tab.
@@ -1719,7 +1747,7 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
         Help
       </message>
       <message name="IDS_IOS_TOOLS_MENU_HELP_URL" translateable="false">
-        https://support.google.com/chrome/?p=chrome_help&amp;hl=[GRITLANGCODE]
+        https://support.google.com/chrome/?p=chrome_help&amp;hl=[GRITLANGCODE]&amp;ios=1
       </message>
       <message name="IDS_IOS_TOOLS_MENU_HISTORY" desc="The Tools menu item for opening the navigation history menu">
         History

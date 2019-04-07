@@ -21,13 +21,13 @@ class GLES2Interface;
 }  // namespace gles2
 }  // namespace gpu
 
-namespace ui {
-class ContextProviderCommandBuffer;
-}  // namespace ui
-
 namespace viz {
 class GLHelper;
 }  // namespace viz
+
+namespace ws {
+class ContextProviderCommandBuffer;
+}  // namespace ws
 
 namespace content {
 
@@ -36,12 +36,13 @@ class CONTENT_EXPORT WebGraphicsContext3DProviderImpl
       public viz::ContextLostObserver {
  public:
   WebGraphicsContext3DProviderImpl(
-      scoped_refptr<ui::ContextProviderCommandBuffer> provider);
+      scoped_refptr<ws::ContextProviderCommandBuffer> provider);
   ~WebGraphicsContext3DProviderImpl() override;
 
   // WebGraphicsContext3DProvider implementation.
   bool BindToCurrentThread() override;
   gpu::gles2::GLES2Interface* ContextGL() override;
+  gpu::webgpu::WebGPUInterface* WebGPUInterface() override;
   GrContext* GetGrContext() override;
   const gpu::Capabilities& GetCapabilities() const override;
   const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const override;
@@ -51,7 +52,7 @@ class CONTENT_EXPORT WebGraphicsContext3DProviderImpl
       base::RepeatingCallback<void(const char*, int32_t)>) override;
   cc::ImageDecodeCache* ImageDecodeCache() override;
 
-  ui::ContextProviderCommandBuffer* context_provider() const {
+  ws::ContextProviderCommandBuffer* context_provider() const {
     return provider_.get();
   }
 
@@ -59,7 +60,7 @@ class CONTENT_EXPORT WebGraphicsContext3DProviderImpl
   // viz::ContextLostObserver implementation.
   void OnContextLost() override;
 
-  scoped_refptr<ui::ContextProviderCommandBuffer> provider_;
+  scoped_refptr<ws::ContextProviderCommandBuffer> provider_;
   std::unique_ptr<viz::GLHelper> gl_helper_;
   base::RepeatingClosure context_lost_callback_;
   std::unique_ptr<cc::ImageDecodeCache> image_decode_cache_;

@@ -9,31 +9,37 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "content/public/browser/browser_main_parts.h"
+#include "webrunner/browser/context_impl.h"
 #include "webrunner/fidl/chromium/web/cpp/fidl.h"
+
+namespace display {
+class Screen;
+}
 
 namespace webrunner {
 
-class ContextImpl;
 class WebRunnerBrowserContext;
-class WebRunnerScreen;
 
 class WebRunnerBrowserMainParts : public content::BrowserMainParts {
  public:
   explicit WebRunnerBrowserMainParts(zx::channel context_channel);
   ~WebRunnerBrowserMainParts() override;
 
+  ContextImpl* context() { return context_service_.get(); }
+
   // content::BrowserMainParts overrides.
   void PreMainMessageLoopRun() override;
   void PreDefaultMainMessageLoopRun(base::OnceClosure quit_closure) override;
+  void PostMainMessageLoopRun() override;
 
  private:
   zx::channel context_channel_;
 
-  std::unique_ptr<WebRunnerScreen> screen_;
+  std::unique_ptr<display::Screen> screen_;
   std::unique_ptr<WebRunnerBrowserContext> browser_context_;
-
-  std::unique_ptr<ContextImpl> context_impl_;
+  std::unique_ptr<ContextImpl> context_service_;
   std::unique_ptr<fidl::Binding<chromium::web::Context>> context_binding_;
 
   base::OnceClosure quit_closure_;

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/auto_reset.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "components/viz/common/surfaces/surface_info.h"
@@ -24,7 +25,7 @@ DisplayScheduler::DisplayScheduler(BeginFrameSource* begin_frame_source,
       inside_surface_damaged_(false),
       visible_(false),
       output_surface_lost_(false),
-      root_surface_resources_locked_(true),
+      root_frame_missing_(true),
       inside_begin_frame_deadline_interval_(false),
       needs_draw_(false),
       expecting_root_surface_damage_because_of_resize_(false),
@@ -65,15 +66,13 @@ void DisplayScheduler::SetVisible(bool visible) {
   ScheduleBeginFrameDeadline();
 }
 
-// If we try to draw when the root surface resources are locked, the
-// draw will fail.
-void DisplayScheduler::SetRootSurfaceResourcesLocked(bool locked) {
-  TRACE_EVENT1("viz", "DisplayScheduler::SetRootSurfaceResourcesLocked",
-               "locked", locked);
-  if (root_surface_resources_locked_ == locked)
+void DisplayScheduler::SetRootFrameMissing(bool missing) {
+  TRACE_EVENT1("viz", "DisplayScheduler::SetRootFrameMissing", "missing",
+               missing);
+  if (root_frame_missing_ == missing)
     return;
 
-  root_surface_resources_locked_ = locked;
+  root_frame_missing_ = missing;
   MaybeStartObservingBeginFrames();
   ScheduleBeginFrameDeadline();
 }
@@ -293,11 +292,11 @@ void DisplayScheduler::StopObservingBeginFrames() {
   }
 }
 
-bool DisplayScheduler::ShouldDraw() {
+bool DisplayScheduler::ShouldDraw() const {
   // Note: When any of these cases becomes true, MaybeStartObservingBeginFrames
   // must be called to ensure the draw will happen.
   return needs_draw_ && !output_surface_lost_ && visible_ &&
-         !root_surface_resources_locked_;
+         !root_frame_missing_;
 }
 
 void DisplayScheduler::OnBeginFrameSourcePausedChanged(bool paused) {
@@ -330,7 +329,11 @@ bool DisplayScheduler::OnSurfaceDamaged(const SurfaceId& surface_id,
   bool damaged = client_->SurfaceDamaged(surface_id, ack);
   ProcessSurfaceDamage(surface_id, ack, damaged);
 
-  return damaged;
+  // If we are not visible, return false. We may never draw in this
+  // state, and other displays may have embedded this surface without
+  // damage. Those displays shouldn't have their frame production
+  // blocked by waiting for this ack.
+  return damaged && visible_;
 }
 
 void DisplayScheduler::OnSurfaceDiscarded(const SurfaceId& surface_id) {
@@ -396,9 +399,8 @@ DisplayScheduler::DesiredBeginFrameDeadlineMode() const {
     return BeginFrameDeadlineMode::kLate;
   }
 
-  if (root_surface_resources_locked_) {
-    TRACE_EVENT_INSTANT0("viz", "Root surface resources locked",
-                         TRACE_EVENT_SCOPE_THREAD);
+  if (root_frame_missing_) {
+    TRACE_EVENT_INSTANT0("viz", "Root frame missing", TRACE_EVENT_SCOPE_THREAD);
     return BeginFrameDeadlineMode::kLate;
   }
 
@@ -486,6 +488,7 @@ bool DisplayScheduler::AttemptDrawAndSwap() {
     if (pending_swaps_ < max_pending_swaps_)
       return DrawAndSwap();
   } else {
+    ReportNotDrawReason();
     // We are going idle, so reset expectations.
     // TODO(eseckler): Should we avoid going idle if
     // |expecting_root_surface_damage_because_of_resize_| is true?
@@ -523,6 +526,17 @@ void DisplayScheduler::DidReceiveSwapBuffersAck() {
   pending_swaps_--;
   TRACE_EVENT_ASYNC_END0("viz", "DisplayScheduler:pending_swaps", swap_id);
   ScheduleBeginFrameDeadline();
+}
+
+void DisplayScheduler::ReportNotDrawReason() {
+  DCHECK(!ShouldDraw());
+  UMA_HISTOGRAM_BOOLEAN("DisplayScheduler.ShouldNotDraw.DrawNotNeeded",
+                        !needs_draw_);
+  UMA_HISTOGRAM_BOOLEAN("DisplayScheduler.ShouldNotDraw.OutputSurfaceLost",
+                        output_surface_lost_);
+  UMA_HISTOGRAM_BOOLEAN("DisplayScheduler.ShouldNotDraw.NotVisible", !visible_);
+  UMA_HISTOGRAM_BOOLEAN("DisplayScheduler.ShouldNotDraw.RootFrameMissing",
+                        root_frame_missing_);
 }
 
 }  // namespace viz

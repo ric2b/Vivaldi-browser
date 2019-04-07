@@ -75,9 +75,9 @@ void VivaldiRuntimeFeatures::LoadRuntimeFeatures() {
     path = path.AppendASCII(kRuntimeFeaturesFilename);
 
     store_ = new JsonPrefStore(path,
+                               std::unique_ptr<PrefFilter>(),
                                base::CreateSequencedTaskRunnerWithTraits(
-                                  { base::MayBlock()}) .get(),
-                               std::unique_ptr<PrefFilter>());
+                                  { base::MayBlock()}) .get());
     store_->ReadPrefs();
 
     if (!GetFlags(&flags_)) {

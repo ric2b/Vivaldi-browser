@@ -10,11 +10,11 @@
 #include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/ui/omnibox/omnibox_theme.h"
+#include "chrome/browser/ui/views/location_bar/icon_label_bubble_view.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/animation/ink_drop_host_view.h"
-#include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/widget/widget_observer.h"
 
@@ -34,8 +34,8 @@ class BubbleDialogDelegateView;
 
 // Represents an inbuilt (as opposed to an extension) page action icon that
 // shows a bubble when clicked.
-// TODO(spqchan): Convert this to subclass Button.
-class PageActionIconView : public views::InkDropHostView {
+// TODO(ellyjones): Convert this to subclass Button.
+class PageActionIconView : public IconLabelBubbleView {
  public:
   class Delegate {
    public:
@@ -69,22 +69,18 @@ class PageActionIconView : public views::InkDropHostView {
 
   PageActionIconView(CommandUpdater* command_updater,
                      int command_id,
-                     Delegate* delegate);
+                     Delegate* delegate,
+                     const gfx::FontList& = gfx::FontList());
   ~PageActionIconView() override;
 
   // Returns true if a related bubble is showing.
-  bool IsBubbleShowing() const;
+  bool IsBubbleShowing() const override;
+
+  SkColor GetTextColor() const override;
 
   // Enables or disables the associated command.
   // Returns true if the command is enabled.
   bool SetCommandEnabled(bool enabled) const;
-
-  // Sets the image that should be displayed in |image_|.
-  void SetImage(const gfx::ImageSkia* image_skia);
-
-  // Returns the image currently displayed, which can be empty if not set.
-  // The returned image is owned by |image_|.
-  const gfx::ImageSkia& GetImage() const;
 
   // Sets the tooltip text.
   void SetTooltipText(const base::string16& tooltip);
@@ -95,12 +91,10 @@ class PageActionIconView : public views::InkDropHostView {
   // Invoked after the icon is pressed.
   virtual void OnPressed(bool activated) {}
 
-  // views::InkDropHostView:
+  // views::IconLabelBubbleView:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool GetTooltipText(const gfx::Point& p,
                       base::string16* tooltip) const override;
-  gfx::Size CalculatePreferredSize() const override;
-  void Layout() override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
@@ -171,9 +165,6 @@ class PageActionIconView : public views::InkDropHostView {
 
   WidgetObserver widget_observer_;
 
-  // The image shown in the button.
-  views::ImageView* image_;
-
   // The size of the icon image (excluding the ink drop).
   int icon_size_;
 
@@ -198,9 +189,6 @@ class PageActionIconView : public views::InkDropHostView {
   // pressed event. If this is true then the mouse released event is ignored to
   // prevent the bubble from reshowing.
   bool suppress_mouse_released_action_;
-
-  // The focus ring used for this view.
-  std::unique_ptr<views::FocusRing> focus_ring_;
 
   DISALLOW_COPY_AND_ASSIGN(PageActionIconView);
 };

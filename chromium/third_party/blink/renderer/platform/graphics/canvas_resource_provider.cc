@@ -41,12 +41,14 @@ class CanvasResourceProviderTexture : public CanvasResourceProvider {
       const CanvasColorParams color_params,
       base::WeakPtr<WebGraphicsContext3DProviderWrapper>
           context_provider_wrapper,
-      base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher)
+      base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher,
+      bool is_origin_top_left)
       : CanvasResourceProvider(size,
                                color_params,
                                std::move(context_provider_wrapper),
                                std::move(resource_dispatcher)),
-        msaa_sample_count_(msaa_sample_count) {}
+        msaa_sample_count_(msaa_sample_count),
+        is_origin_top_left_(is_origin_top_left) {}
 
   ~CanvasResourceProviderTexture() override = default;
 
@@ -116,15 +118,21 @@ class CanvasResourceProviderTexture : public CanvasResourceProvider {
     auto* gr = GetGrContext();
     DCHECK(gr);
 
-    SkImageInfo info = SkImageInfo::Make(
+    const SkImageInfo info = SkImageInfo::Make(
         Size().Width(), Size().Height(), ColorParams().GetSkColorType(),
         kPremul_SkAlphaType, ColorParams().GetSkColorSpaceForSkSurfaces());
+
+    const enum GrSurfaceOrigin surface_origin =
+        is_origin_top_left_ ? kTopLeft_GrSurfaceOrigin
+                            : kBottomLeft_GrSurfaceOrigin;
+
     return SkSurface::MakeRenderTarget(gr, SkBudgeted::kNo, info,
-                                       msaa_sample_count_,
+                                       msaa_sample_count_, surface_origin,
                                        ColorParams().GetSkSurfaceProps());
   }
 
   const unsigned msaa_sample_count_;
+  const bool is_origin_top_left_;
 };
 
 // CanvasResourceProviderTextureGpuMemoryBuffer
@@ -143,15 +151,18 @@ class CanvasResourceProviderTextureGpuMemoryBuffer final
       const CanvasColorParams color_params,
       base::WeakPtr<WebGraphicsContext3DProviderWrapper>
           context_provider_wrapper,
-      base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher)
+      base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher,
+      bool is_origin_top_left)
       : CanvasResourceProviderTexture(size,
                                       msaa_sample_count,
                                       color_params,
                                       std::move(context_provider_wrapper),
-                                      std::move(resource_dispatcher)) {}
+                                      std::move(resource_dispatcher),
+                                      is_origin_top_left) {}
 
   ~CanvasResourceProviderTextureGpuMemoryBuffer() override = default;
   bool SupportsDirectCompositing() const override { return true; }
+  bool SupportsSingleBuffering() const override { return true; }
 
  private:
   scoped_refptr<CanvasResource> CreateResource() final {
@@ -264,6 +275,7 @@ class CanvasResourceProviderRamGpuMemoryBuffer final
 
   ~CanvasResourceProviderRamGpuMemoryBuffer() override = default;
   bool SupportsDirectCompositing() const override { return true; }
+  bool SupportsSingleBuffering() const override { return true; }
 
  private:
   scoped_refptr<CanvasResource> CreateResource() final {
@@ -319,6 +331,7 @@ class CanvasResourceProviderSharedBitmap : public CanvasResourceProviderBitmap {
   }
   ~CanvasResourceProviderSharedBitmap() override = default;
   bool SupportsDirectCompositing() const override { return true; }
+  bool SupportsSingleBuffering() const override { return true; }
 
  private:
   scoped_refptr<CanvasResource> CreateResource() final {
@@ -394,7 +407,8 @@ std::unique_ptr<CanvasResourceProvider> CanvasResourceProvider::Create(
     unsigned msaa_sample_count,
     const CanvasColorParams& color_params,
     PresentationMode presentation_mode,
-    base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher) {
+    base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher,
+    bool is_origin_top_left) {
   const ResourceType* resource_type_fallback_list = nullptr;
   size_t list_length = 0;
 
@@ -447,7 +461,7 @@ std::unique_ptr<CanvasResourceProvider> CanvasResourceProvider::Create(
         provider =
             std::make_unique<CanvasResourceProviderTextureGpuMemoryBuffer>(
                 size, msaa_sample_count, color_params, context_provider_wrapper,
-                resource_dispatcher);
+                resource_dispatcher, is_origin_top_left);
         break;
       case kRamGpuMemoryBufferResourceType:
         if (!SharedGpuContext::IsGpuCompositingEnabled())
@@ -476,7 +490,7 @@ std::unique_ptr<CanvasResourceProvider> CanvasResourceProvider::Create(
           continue;
         provider = std::make_unique<CanvasResourceProviderTexture>(
             size, msaa_sample_count, color_params, context_provider_wrapper,
-            resource_dispatcher);
+            resource_dispatcher, is_origin_top_left);
         break;
       case kBitmapResourceType:
         provider = std::make_unique<CanvasResourceProviderBitmap>(
@@ -530,13 +544,19 @@ void CanvasResourceProvider::CanvasImageProvider::ReleaseLockedImages() {
 
 void CanvasResourceProvider::CanvasImageProvider::CanUnlockImage(
     ScopedDecodedDrawImage image) {
-  if (locked_images_.empty()) {
+  if (!cleanup_task_pending_) {
+    cleanup_task_pending_ = true;
     Platform::Current()->CurrentThread()->GetTaskRunner()->PostTask(
-        FROM_HERE, base::BindOnce(&CanvasImageProvider::ReleaseLockedImages,
+        FROM_HERE, base::BindOnce(&CanvasImageProvider::CleanupLockedImages,
                                   weak_factory_.GetWeakPtr()));
   }
 
   locked_images_.push_back(std::move(image));
+}
+
+void CanvasResourceProvider::CanvasImageProvider::CleanupLockedImages() {
+  cleanup_task_pending_ = false;
+  ReleaseLockedImages();
 }
 
 CanvasResourceProvider::CanvasResourceProvider(
@@ -699,6 +719,7 @@ void CanvasResourceProvider::InvalidateSurface() {
   canvas_image_provider_.reset();
   xform_canvas_ = nullptr;
   surface_ = nullptr;
+  single_buffer_ = nullptr;
 }
 
 uint32_t CanvasResourceProvider::ContentUniqueID() const {
@@ -736,6 +757,11 @@ void CanvasResourceProvider::ClearRecycledResources() {
 }
 
 scoped_refptr<CanvasResource> CanvasResourceProvider::NewOrRecycledResource() {
+  if (IsSingleBuffered()) {
+    if (!single_buffer_)
+      single_buffer_ = CreateResource();
+    return single_buffer_;
+  }
   if (recycled_resources_.size()) {
     scoped_refptr<CanvasResource> resource =
         std::move(recycled_resources_.back());
@@ -743,6 +769,13 @@ scoped_refptr<CanvasResource> CanvasResourceProvider::NewOrRecycledResource() {
     return resource;
   }
   return CreateResource();
+}
+
+void CanvasResourceProvider::TryEnableSingleBuffering() {
+  if (IsSingleBuffered() || !SupportsSingleBuffering())
+    return;
+  SetResourceRecyclingEnabled(false);
+  is_single_buffered_ = true;
 }
 
 }  // namespace blink

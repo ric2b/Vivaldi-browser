@@ -19,8 +19,8 @@
 #include "base/logging.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -117,11 +117,12 @@ class Coordinator::TraceStreamer : public base::SupportsWeakPtr<TraceStreamer> {
     // Bail out if we are in the middle of writing events for another label to
     // the stream, since we do not want to interleave chunks for different
     // fields. For example, we do not want to mix |traceEvent| chunks with
-    // |battor| chunks.
+    // |systrace| chunks.
     //
-    // If we receive a |battor| chunk from an agent while writing |traceEvent|
-    // chunks to the stream, we wait until all agents that send |traceEvent|
-    // chunks are done, and then, we start writing |battor| chunks.
+    // If we receive a |systemTraceEvents| chunk from an agent while writing
+    // |traceEvent| chunks to the stream, we wait until all agents that send
+    // |traceEvent| chunks are done, and then, we start writing
+    // |systemTraceEvents| chunks.
     if (!streaming_label_.empty() && streaming_label_ != label)
       return;
 
@@ -275,7 +276,7 @@ Coordinator::Coordinator(AgentRegistry* agent_registry)
   DCHECK(agent_registry_);
   constexpr base::TaskTraits traits = {base::MayBlock(),
                                        base::WithBaseSyncPrimitives(),
-                                       base::TaskPriority::BACKGROUND};
+                                       base::TaskPriority::BEST_EFFORT};
   background_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(traits);
 }
 

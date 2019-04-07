@@ -266,6 +266,11 @@
 #define glDeleteVertexArraysOES GLES2_GET_FUN(DeleteVertexArraysOES)
 #define glIsVertexArrayOES GLES2_GET_FUN(IsVertexArrayOES)
 #define glBindVertexArrayOES GLES2_GET_FUN(BindVertexArrayOES)
+#define glFramebufferParameteri GLES2_GET_FUN(FramebufferParameteri)
+#define glBindImageTexture GLES2_GET_FUN(BindImageTexture)
+#define glDispatchCompute GLES2_GET_FUN(DispatchCompute)
+#define glMemoryBarrierEXT GLES2_GET_FUN(MemoryBarrierEXT)
+#define glMemoryBarrierByRegion GLES2_GET_FUN(MemoryBarrierByRegion)
 #define glSwapBuffers GLES2_GET_FUN(SwapBuffers)
 #define glGetMaxValueInBufferCHROMIUM GLES2_GET_FUN(GetMaxValueInBufferCHROMIUM)
 #define glEnableFeatureCHROMIUM GLES2_GET_FUN(EnableFeatureCHROMIUM)
@@ -403,5 +408,7 @@
 #define glDestroyGpuFenceCHROMIUM GLES2_GET_FUN(DestroyGpuFenceCHROMIUM)
 #define glInvalidateReadbackBufferShadowDataCHROMIUM \
   GLES2_GET_FUN(InvalidateReadbackBufferShadowDataCHROMIUM)
+#define glFramebufferTextureMultiviewLayeredANGLE \
+  GLES2_GET_FUN(FramebufferTextureMultiviewLayeredANGLE)
 
 #endif  // GPU_GLES2_GL2CHROMIUM_AUTOGEN_H_

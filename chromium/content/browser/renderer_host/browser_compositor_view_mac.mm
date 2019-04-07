@@ -60,9 +60,7 @@ BrowserCompositorMac::BrowserCompositorMac(
   // content (otherwise this solid color will be flashed during navigation).
   root_layer_->SetColor(SK_ColorTRANSPARENT);
   delegated_frame_host_.reset(new DelegatedFrameHost(
-      frame_sink_id, this,
-      base::FeatureList::IsEnabled(features::kVizDisplayCompositor),
-      true /* should_register_frame_sink_id */));
+      frame_sink_id, this, true /* should_register_frame_sink_id */));
 
   SetRenderWidgetHostIsHidden(render_widget_host_is_hidden);
   SetNSViewAttachedToWindow(false);
@@ -265,7 +263,7 @@ void BrowserCompositorMac::TransitionToState(State new_state) {
     root_layer_->parent()->RemoveObserver(this);
     root_layer_->parent()->Remove(root_layer_.get());
     delegated_frame_host_->WasHidden();
-    delegated_frame_host_->ResetCompositor();
+    delegated_frame_host_->DetachFromCompositor();
     state_ = HasNoCompositor;
   }
 
@@ -287,7 +285,8 @@ void BrowserCompositorMac::TransitionToState(State new_state) {
 
   // Transition HasDetachedCompositor -> HasAttachedCompositor.
   if (state_ == HasDetachedCompositor && new_state < HasDetachedCompositor) {
-    delegated_frame_host_->SetCompositor(recyclable_compositor_->compositor());
+    delegated_frame_host_->AttachToCompositor(
+        recyclable_compositor_->compositor());
     delegated_frame_host_->WasShown(GetRendererLocalSurfaceId(), dfh_size_dip_,
                                     false /* record_presentation_time */);
 
@@ -308,7 +307,7 @@ void BrowserCompositorMac::TransitionToState(State new_state) {
     // Marking the DelegatedFrameHost as removed from the window hierarchy is
     // necessary to remove all connections to its old ui::Compositor.
     delegated_frame_host_->WasHidden();
-    delegated_frame_host_->ResetCompositor();
+    delegated_frame_host_->DetachFromCompositor();
     state_ = HasDetachedCompositor;
   }
 
@@ -327,7 +326,8 @@ void BrowserCompositorMac::TransitionToState(State new_state) {
     DCHECK(parent_ui_layer_);
     DCHECK(parent_ui_layer_->GetCompositor());
     DCHECK(!root_layer_->parent());
-    delegated_frame_host_->SetCompositor(parent_ui_layer_->GetCompositor());
+    delegated_frame_host_->AttachToCompositor(
+        parent_ui_layer_->GetCompositor());
     delegated_frame_host_->WasShown(GetRendererLocalSurfaceId(), dfh_size_dip_,
                                     false /* record_presentation_time */);
     parent_ui_layer_->Add(root_layer_.get());
@@ -416,10 +416,6 @@ void BrowserCompositorMac::DidNavigate() {
   is_first_navigation_ = false;
 }
 
-void BrowserCompositorMac::DidReceiveFirstFrameAfterNavigation() {
-  client_->DidReceiveFirstFrameAfterNavigation();
-}
-
 bool BrowserCompositorMac::ShouldContinueToPauseForFrame() const {
   if (state_ == UseParentLayerCompositor)
     return false;
@@ -496,7 +492,9 @@ void BrowserCompositorMac::LayerDestroyed(ui::Layer* layer) {
   SetParentUiLayer(nullptr);
 }
 
-ui::Compositor* BrowserCompositorMac::GetCompositorForTesting() const {
+ui::Compositor* BrowserCompositorMac::GetCompositor() const {
+  if (parent_ui_layer_)
+    return parent_ui_layer_->GetCompositor();
   if (recyclable_compositor_)
     return recyclable_compositor_->compositor();
   return nullptr;

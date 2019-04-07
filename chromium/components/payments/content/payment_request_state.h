@@ -18,7 +18,7 @@
 #include "components/payments/core/payments_profile_comparator.h"
 #include "content/public/browser/payment_app_provider.h"
 #include "content/public/browser/web_contents.h"
-#include "third_party/blink/public/platform/modules/payments/payment_request.mojom.h"
+#include "third_party/blink/public/mojom/payments/payment_request.mojom.h"
 
 namespace autofill {
 class AutofillProfile;
@@ -130,6 +130,12 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate,
   autofill::AutofillProfile* selected_contact_profile() const {
     return selected_contact_profile_;
   }
+  autofill::AutofillProfile* invalid_shipping_profile() const {
+    return invalid_shipping_profile_;
+  }
+  autofill::AutofillProfile* invalid_contact_profile() const {
+    return invalid_contact_profile_;
+  }
   // Returns the currently selected instrument for this PaymentRequest flow.
   // It's not guaranteed to be complete. Returns nullptr if there is no selected
   // instrument.
@@ -180,6 +186,13 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate,
   // Checks whether getting all available instruments is finished.
   bool is_get_all_instruments_finished() {
     return get_all_instruments_finished_;
+  }
+
+  // Returns true after is_get_all_instruments_finished() is true and supported
+  // payment method are found. Should not be called before
+  // is_get_all_instruments_finished() is true.
+  bool are_requested_methods_supported() const {
+    return are_requested_methods_supported_;
   }
 
   const std::string& GetApplicationLocale();
@@ -270,10 +283,13 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate,
 
   StatusCallback can_make_payment_callback_;
   StatusCallback are_requested_methods_supported_callback_;
+  bool are_requested_methods_supported_;
 
   autofill::AutofillProfile* selected_shipping_profile_;
   autofill::AutofillProfile* selected_shipping_option_error_profile_;
   autofill::AutofillProfile* selected_contact_profile_;
+  autofill::AutofillProfile* invalid_shipping_profile_;
+  autofill::AutofillProfile* invalid_contact_profile_;
   PaymentInstrument* selected_instrument_;
 
   // Number of pending service worker payment instruments waiting for
@@ -296,7 +312,7 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate,
 
   PaymentsProfileComparator profile_comparator_;
 
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   base::WeakPtrFactory<PaymentRequestState> weak_ptr_factory_;
 

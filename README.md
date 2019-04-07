@@ -31,6 +31,9 @@ The file `README` has the original readme from the developpers.
 
 ```
 # ssh $USER@$FAST_MACHINE
+# cd /var/tmp/
+# mkdir -p ${USER:0:2}
+# cd ${USER:0:2}
 # wget Miniconda.sh
 # bash Miniconda.sh -b -p /var/tmp/...
 # source /var/tmp/.../bin/activate
@@ -40,30 +43,30 @@ The file `README` has the original readme from the developpers.
 git clone --depth=1 https://github.com/ric2b/Vivaldi-browser w
 
 wget https://vivaldi.com/source/vivaldi-source-2.0...tar.xz
-tar --xz -xf v0
+tar --xz -xf ...
 mv vivaldi-source v0
 ls v0/.git/*/*/*
 rm -rf v0/.git
 
-cp w/.git README.MD v0
+cp w/.git README.md v0
 cd v0
-git status
+git status | grep -v chromium
 git add .
-git status
-git commit -m 'Added version 2.0...'
-git status
+git status | grep -v chromium
+git commit -m 'Added version 2.0...' --author '... <...>' | grep -v chromium
+git status | grep -v chromium
 cd ..
 
 wget https://vivaldi.com/source/vivaldi-source-2.1...tar.xz
-tar --xz -xf v1
+tar --xz -xf ...
 mv vivaldi-source v1
 ls v0/.git/*/*/*
 rm -rf v1/.git
 
-cp w/.git README.MD v1
+cp w/.git README.md v1
 ...
 
-git status
+git status | grep -v chromium
 git push
 cd ..
 

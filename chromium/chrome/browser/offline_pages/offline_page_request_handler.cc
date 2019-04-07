@@ -4,7 +4,7 @@
 
 #include "chrome/browser/offline_pages/offline_page_request_handler.h"
 
-#include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
@@ -13,8 +13,8 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -415,10 +415,9 @@ void GetPagesToServeURL(
   }
 
   OfflinePageUtils::SelectPagesForURL(
-      web_contents->GetBrowserContext(), url, URLSearchMode::SEARCH_BY_ALL_URLS,
-      tab_id,
-      base::Bind(&SelectPagesForURLDone, url, offline_header, network_state,
-                 job, web_contents_getter));
+      web_contents->GetBrowserContext(), url, tab_id,
+      base::BindOnce(&SelectPagesForURLDone, url, offline_header, network_state,
+                     job, web_contents_getter));
 }
 
 // Do all the things needed to be done on UI thread after a trusted offline
@@ -702,7 +701,15 @@ OfflinePageRequestHandler::GetAccessEntryPoint() const {
       return AccessEntryPoint::FILE_URL_INTENT;
     case OfflinePageHeader::Reason::CONTENT_URL_INTENT:
       return AccessEntryPoint::CONTENT_URL_INTENT;
-    default:
+    case OfflinePageHeader::Reason::PROGRESS_BAR:
+      return AccessEntryPoint::PROGRESS_BAR;
+    case OfflinePageHeader::Reason::SUGGESTION:
+      return AccessEntryPoint::NTP_SUGGESTIONS_OR_BOOKMARKS;
+    case OfflinePageHeader::Reason::NET_ERROR_SUGGESTION:
+      return AccessEntryPoint::NET_ERROR_PAGE;
+    case OfflinePageHeader::Reason::NONE:
+    case OfflinePageHeader::Reason::NET_ERROR:
+    case OfflinePageHeader::Reason::RELOAD:
       break;
   }
 
@@ -967,7 +974,7 @@ void OfflinePageRequestHandler::DidOpenForServing(int result) {
 }
 
 void OfflinePageRequestHandler::DidSeekForServing(int64_t result) {
-  DCHECK(result <= 0);
+  DCHECK_LE(result, 0);
 
   ReportSeekResult(result);
 

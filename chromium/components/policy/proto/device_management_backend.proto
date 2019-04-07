@@ -165,13 +165,17 @@ message DeviceRegisterResponse {
     // controlled through the cloud policy infrastructure. Auto-enrollment is
     // supported in that mode.
     ENTERPRISE = 0;
-    // Devices in RETAIL mode also have no local owner and get their device
-    // settings from the cloud, but additionally this mode enables the demo
-    // account on the device.
-    RETAIL = 1;
+    // DEPRECATED: Devices in RETAIL mode also have no local owner and get their
+    // device settings from the cloud, but additionally this mode enables the
+    // demo account on the device.
+    RETAIL_DEPRECATED = 1;
     // Devices in CHROME_AD mode are in enterprises with AD.  Device settings
     // are controlled through the AD policy infrastructure.
     CHROME_AD = 2;
+    // Devices in DEMO mode have no local owner and get their device settings
+    // from the cloud. They are controlled by demo mode domain and provide
+    // customized demo experience to the users.
+    DEMO = 3;
   }
   optional DeviceMode enrollment_type = 3 [default = ENTERPRISE];
 
@@ -236,6 +240,10 @@ message DeviceServiceApiAccessRequest {
     // Authcode will be used by Android (ARC) subsystem
     // (this is typically requested during ARC Kiosk session setup)
     ANDROID_OS = 1;
+    // Authcode will be used by Chrome OS Demo Mode. This auth code can be used
+    // to access Google Docs.
+    // Please see go/cros-demo-mode and go/demo-mode-account-brainstorm.
+    CHROME_OS_DEMO_MODE = 2;
   };
 
   // Device type indicates the intended use of the auth code.
@@ -517,6 +525,17 @@ message PolicyData {
   // Gaia id of the user the policy is intended for.
   // Should be fetched with user policy.
   optional string gaia_id = 29;
+
+  // Indicate this device's market segment.
+  enum MarketSegment {
+    MARKET_SEGMENT_UNSPECIFIED = 0;
+    ENROLLED_EDUCATION = 1;
+    ENROLLED_ENTERPRISE = 2;
+  }
+
+  // This field should only be set for Device Policy response.
+  // See go/cros-rlz-segments
+  optional MarketSegment market_segment = 30;
 }
 
 message PolicyFetchResponse {
@@ -748,6 +767,15 @@ message CPUTempInfo {
   optional int32 cpu_temp = 2;
 }
 
+// Chrome release channel, shared for different reports.
+enum Channel {
+  CHANNEL_UNKNOWN = 0;
+  CHANNEL_CANARY = 1;
+  CHANNEL_DEV = 2;
+  CHANNEL_BETA = 3;
+  CHANNEL_STABLE = 4;
+}
+
 // Report device level status.
 message DeviceStatusReportRequest {
   reserved 4, 7, 13, 20;
@@ -807,6 +835,9 @@ message DeviceStatusReportRequest {
 
   // TPM version information.
   optional TpmVersionInfo tpm_version_info = 21;
+
+  // Release channel (stable, beta, etc.).
+  optional Channel channel = 22;
 }
 
 message OsUpdateStatus {
@@ -890,14 +921,7 @@ message BrowserReport {
   // user agent.
   optional string browser_version = 1;
 
-  // Chrome browser channel,
-  enum Channel {
-    UNKNOWN = 0;
-    CANARY = 1;
-    DEV = 2;
-    BETA = 3;
-    STABLE = 4;
-  }
+  // Release channel (stable, beta, etc.).
   optional Channel channel = 2;
 
   // Required. The path to the browser executable so that we can uniquely
@@ -923,90 +947,31 @@ message ChromeDesktopReportRequest {
   optional BrowserReport browser_report = 4;
 }
 
-// A validation result from validating a policy value that was contained in
+// A validation issue from validating a policy value that was contained in
 // the payload of the policy fetch response.
-message PolicyValueValidationResult {
-  // Policy proto tag of the policy which caused this validation message.
-  // For device policy (i.e. when |policy_type| in
-  // PolicyValidationReportRequest is google/chromeos/device), this is a
-  // proto tag from ChromeDeviceSettingsProto. Example: proto tag = 1 would mean
-  // the device_policy_refresh_rate policy in this case.
-  // For user policy (i.e. when |policy_type| in
-  // PolicyValidationReportRequest is google/chromeos/user), this is a
-  // proto tag from ChromeSettingsProto. Example: proto tag = 3 would mean the
-  // HomepageLocation policy in this case.
-  // Proto tags are used because they are consistent identifiers shared across
-  // the server and the client implementation.
-  optional int32 policy_proto_tag = 1;
+message PolicyValueValidationIssue {
+  // Policy name of the faulty value.
+  optional string policy_name = 1;
 
-  enum ValidationResultSeverity {
+  enum ValueValidationIssueSeverity {
     // Default value for when a severity is not specified.
-    VALIDATION_RESULT_SEVERITY_UNSPECIFIED = 0;
+    VALUE_VALIDATION_ISSUE_SEVERITY_UNSPECIFIED = 0;
 
     // This result is a warning. The policy blob has not been rejected.
-    VALIDATION_RESULT_SEVERITY_WARNING = 1;
+    VALUE_VALIDATION_ISSUE_SEVERITY_WARNING = 1;
 
     // This result is an error. The policy blob was rejected completely and not
     // updated on the device.
-    VALIDATION_RESULT_SEVERITY_ERROR = 2;
+    VALUE_VALIDATION_ISSUE_SEVERITY_ERROR = 2;
   }
 
   // Severity of this policy value validation result.
-  optional ValidationResultSeverity severity = 2;
+  optional ValueValidationIssueSeverity severity = 2;
 
-  // If the error occurred in a policy which is a JSON value, this
-  // is the JSON path to the element where the error was raised.
-  // For example, if a validation message was raised in an ONC policy and the
-  // error is that the Security field of the WiFi NetworkConfiguration with guid
-  // ABC has an invalid value, ErrorType would be ERROR_TYPE_UNKNOWN_ENUM_VALUE
-  // and detailed_error_path would be:
-  // "$.NetworkConfigurations[?(@.GUID=='ABC')].WiFi.Security".
-  // If the error was that a NetworkConfigurations element is missing a GUID,
-  // ErrorType would be ERROR_TYPE_MISSING_FIELD and the path would be:
-  // "$.NetworkConfigurations[1].GUID".
-  optional string detailed_error_path = 3;
-
-  enum ErrorType {
-    // An enum value was received which is not known in this version of the
-    // proto.
-    ERROR_TYPE_UNSPECIFIED = 0;
-
-    // For JSON (e.g. ONC) policies: The JSON blob could not be
-    // parsed. |detailed_error_path| will be empty.
-    ERROR_TYPE_PARSE_ERROR = 1;
-
-    // For JSON (e.g. ONC) policies: A field had an invalid type.
-    // |detailed_error_path| will be set to the path of the field.
-    ERROR_TYPE_INVALID_TYPE = 3;
-
-    // For JSON (e.g. ONC) policies: A required field was not found.
-    // |detailed_error_path| will be set to the path of the missing
-    // field.
-    ERROR_TYPE_MISSING_FIELD = 4;
-
-    // For ONC policy: An enum field had a value not known by the
-    // client. |detailed_error_path| will be set to the path of the
-    // field.
-    ERROR_TYPE_UNKNOWN_ENUM_VALUE = 5;
-
-    // For ONC policy: The value of a field was out of bounds.
-    // |detailed_error_path| will be set to the path of the
-    // field.
-    ERROR_TYPE_OUT_OF_BOUNDS = 6;
-
-    // For ONC policy: A GUID-referenced element could not be
-    // resolved. |detailed_error_path| will be set to the reference
-    // field.
-    ERROR_TYPE_INVALID_REFERENCE = 7;
-  }
-
-  // The type of the error message.
-  optional ErrorType error_type = 4;
-
-  // Debug info about the error message. This will not be presented to the
-  // administrator. It can give additional clues about what went wrong so the
-  // developers can diagnose the issue.
-  optional string error_debug_info = 5;
+  // Message containing detailed information about the value validation warning
+  // or error (e.g. type and specific location). This message is intended as
+  // debug information for developers (not localized).
+  optional string debug_message = 3;
 }
 
 // This message is used to upload the result of cloud policy validation after a
@@ -1069,7 +1034,7 @@ message PolicyValidationReportRequest {
     VALIDATION_RESULT_TYPE_BAD_DEVICE_ID = 10;
     // Username doesn't match.
     // Client behavior: Policy blob rejected.
-    VALIDATION_RESULT_TYPE_USER_MISMATCH = 11;
+    VALIDATION_RESULT_TYPE_BAD_USER = 11;
     // Policy payload protobuf parse error.
     // Client behavior: Policy blob rejected.
     VALIDATION_RESULT_TYPE_POLICY_PARSE_ERROR = 12;
@@ -1080,22 +1045,22 @@ message PolicyValidationReportRequest {
     // There were validation warnings during validation of policy values in the
     // payload. See |policy_value_validation_results|.
     // Client behavior: Policy blob accepted.
-    VALIDATION_RESULT_TYPE_POLICY_VALUE_WARNINGS = 14;
+    VALIDATION_RESULT_TYPE_VALUE_WARNING = 14;
     // There were validation errors during validation of policy values in the
     // payload. There may also have been warnings. See
     // |policy_value_validation_results| - that list will contain at least one
     // payload validation errors, and zero or more payload validation warnings.
     // Client behavior: Policy blob rejected.
-    VALIDATION_RESULT_TYPE_POLICY_VALUE_ERRORS = 15;
+    VALIDATION_RESULT_TYPE_VALUE_ERROR = 15;
   }
 
   // The validation result.
   optional ValidationResultType validation_result_type = 3;
 
-  // Value validation results in the policy payload. Will be filled if
-  // |validation_result_type| is VALIDATION_RESULT_TYPE_POLICY_VALUE_WARNINGS
-  // or VALIDATION_RESULT_TYPE_POLICY_VALUE_ERRORS.
-  repeated PolicyValueValidationResult policy_value_validation_results = 4;
+  // Value validation issues in the policy payload. Will be filled if
+  // |validation_result_type| is VALIDATION_RESULT_TYPE_VALUE_WARNING
+  // or VALIDATION_RESULT_TYPE_VALUE_ERROR.
+  repeated PolicyValueValidationIssue policy_value_validation_issues = 4;
 }
 
 // Response from DMServer to a policy validation report.
@@ -1106,6 +1071,14 @@ message AndroidStatus {
   optional string status_payload = 1;
   // DroidGuard response obtained from DroidGuard server.
   optional string droid_guard_info = 2;
+}
+
+message CrostiniStatus {
+  // Time stamp of last launch of a Crostini app with three day granularity,
+  // The timestamp is milliseconds since Epoch in UTC timezone (Java time).
+  optional int64 last_launch_time_window_start_timestamp = 1;
+  // The VM image version at the time of the last launch.
+  optional string last_launch_vm_image_version = 2;
 }
 
 // Report current active session (a user on one device) level status.
@@ -1129,6 +1102,9 @@ message SessionStatusReportRequest {
   // Format of the id is as specified in tz database e.g. Pacific/Honolulu. For
   // more details check third_party/icu/source/i18n/unicode/timezone.h.
   optional string time_zone = 9;
+
+  // Information about Crostini status.
+  optional CrostiniStatus crostini_status = 10;
 }
 
 // Response from DMServer to update devices' status.
@@ -1414,6 +1390,9 @@ message RemoteCommand {
 
     // Wipe all the users off of the device.
     DEVICE_WIPE_USERS = 5;
+
+    // Start Chrome Remote Desktop session (limited to Kiosk sessions only).
+    DEVICE_START_CRD_SESSION = 6;
   }
 
   // The command type.
@@ -1791,6 +1770,27 @@ message AppInstallReportRequest {
 // push-installs.
 message AppInstallReportResponse {}
 
+// Request from device to stop using a previously issued service account.
+// The identity of a freshly-issued service account will be returned by a
+// subsequent device policy fetch (see the |service_account_identity| field in
+// |PolicyData| and auth codes tied to the new service account can be retrieved
+// by subsequent |DeviceServiceApiAccessRequest| requests.
+message RefreshAccountRequest {
+  enum AccountType {
+    ACCOUNT_TYPE_UNSPECIFIED = 0;
+
+    // Refresh demo mode user account.
+    // See go/cros-demo-mode and go/demo-mode-account-brainstorm.
+    CHROME_OS_DEMO_MODE = 1;
+  }
+
+  optional AccountType account_type = 1;
+}
+
+// Response from server after receiving a request to refresh the service
+// account.
+message RefreshAccountResponse {}
+
 // Request from the DMAgent on the device to the DMServer.  This is
 // container for all requests from device to server.  The overall HTTP
 // request MUST be in the following format:
@@ -1825,6 +1825,7 @@ message AppInstallReportResponse {}
 //     * register_browser
 //     * policy_validation_report
 //     * device_initial_enrollment_state
+//     * refresh_account
 //   * devicetype: MUST BE "1" for Android, "2" for Chrome OS or "3" for Chrome
 //     browser.
 //   * apptype: MUST BE Android or Chrome.
@@ -1841,7 +1842,8 @@ message AppInstallReportResponse {}
 //   * For unregister, policy, status, cert_upload, remote_commands,
 //     gcm_id_update, active_directory_enroll_play_user,
 //     active_directory_play_activity, active_directory_user_signin,
-//     policy_validation_report and chrome_desktop_report requests
+//     policy_validation_report, chrome_desktop_report
+//     and refresh_account requests
 //     Authorization: GoogleDMToken token=<dm token from register>
 //
 //   * The Authorization header isn't used for enterprise_check,
@@ -1878,6 +1880,7 @@ message AppInstallReportResponse {}
 //   app_install_report: app_install_report_request
 //   policy_validation_report: policy_validation_report_request
 //   device_initial_enrollment_state: device_initial_enrollment_state_request
+//   refresh_account: refresh_account_request
 //
 message DeviceManagementRequest {
   reserved 24;  // unused previous version of chrome_desktop_report_request.
@@ -1967,6 +1970,9 @@ message DeviceManagementRequest {
   // Query for initial enrollment details.
   optional DeviceInitialEnrollmentStateRequest
       device_initial_enrollment_state_request = 28;
+
+  // Request from device to wipe an old account and get a new account.
+  optional RefreshAccountRequest refresh_account_request = 29;
 }
 
 // Response from server to device.
@@ -2103,4 +2109,7 @@ message DeviceManagementResponse {
   // Response to initial enrollment details query.
   optional DeviceInitialEnrollmentStateResponse
       device_initial_enrollment_state_response = 27;
+
+  // Response to refresh account request.
+  optional RefreshAccountResponse refresh_account_response = 28;
 }

@@ -38,7 +38,7 @@ def AddArguments(parser):
 
 def Run(args, _parser):
   logging.info('Starting server')
-  server_addr = ('', args.port)
+  server_addr = (args.address, args.port)
 
   static_files = os.path.join(os.path.dirname(__file__), 'static')
 
@@ -47,5 +47,6 @@ def Run(args, _parser):
   httpd = BaseHTTPServer.HTTPServer(server_addr, SupersizeHTTPRequestHandler)
 
   sa = httpd.socket.getsockname()
-  logging.warning('Server ready at http://%s:%d', sa[0], sa[1])
+  logging.warning('Server ready at http://%s:%d?data_url=data.ndjson',
+                  sa[0], sa[1])
   httpd.serve_forever()

@@ -175,8 +175,10 @@ bool CreateUploadDataSourcesFromResourceRequest(
         break;
 
       case network::DataElement::TYPE_FILE:
-        // Should not be hit in the Network Service case.
-        NOTREACHED();
+        // TODO(https://crbug.com/715679): This may not work when network
+        // process is sandboxed.
+        data_sources->push_back(
+            std::make_unique<FileUploadDataSource>(element.path()));
         break;
 
       default:
@@ -300,7 +302,8 @@ WebRequestInfo::WebRequestInfo(
     std::unique_ptr<ExtensionNavigationUIData> navigation_ui_data,
     int32_t routing_id,
     content::ResourceContext* resource_context,
-    const network::ResourceRequest& request)
+    const network::ResourceRequest& request,
+    bool is_async)
     : id(request_id),
       url(request.url),
       site_for_cookies(request.site_for_cookies),
@@ -311,6 +314,7 @@ WebRequestInfo::WebRequestInfo(
       is_browser_side_navigation(!!navigation_ui_data),
       initiator(request.request_initiator),
       type(static_cast<content::ResourceType>(request.resource_type)),
+      is_async(is_async),
       extra_request_headers(request.headers),
       logger(std::make_unique<NetworkServiceLogger>()),
       resource_context(resource_context) {
@@ -348,11 +352,7 @@ void WebRequestInfo::AddResponseInfoFromResourceResponse(
   if (response_headers)
     response_code = response_headers->response_code();
   response_ip = response.socket_address.host();
-
-  // TODO(https://crbug.com/721414): We have no apparent source for this
-  // information yet in the Network Service case. Should indicate whether or not
-  // the response data came from cache.
-  response_from_cache = false;
+  response_from_cache = response.was_fetched_via_cache;
 }
 
 void WebRequestInfo::InitializeWebViewAndFrameData(

@@ -44,14 +44,17 @@ class MEDIA_EXPORT AVC {
       const AVCDecoderConfigurationRecord& avc_config,
       std::vector<uint8_t>* buffer);
 
-  // Verifies that the contents of |buffer| conform to
-  // Section 7.4.1.2.3 of ISO/IEC 14496-10.
+  // Analyzes the contents of |buffer| for conformance to Section 7.4.1.2.3 of
+  // ISO/IEC 14496-10. Also analyzes |buffer| and reports if it looks like a
+  // keyframe, if such can be determined. Determination of keyframe-ness is done
+  // only if |buffer| is conformant or if lack of conformance is detected after
+  // detecting keyframe-ness.
   // |subsamples| contains the information about what parts of the buffer are
   // encrypted and which parts are clear.
-  // Returns true if |buffer| contains conformant Annex B data
-  static bool IsValidAnnexB(const uint8_t* buffer,
-                            size_t size,
-                            const std::vector<SubsampleEntry>& subsamples);
+  static BitstreamConverter::AnalysisResult AnalyzeAnnexB(
+      const uint8_t* buffer,
+      size_t size,
+      const std::vector<SubsampleEntry>& subsamples);
 
   // Given a |buffer| and |subsamples| information and |pts| pointer into the
   // |buffer| finds the index of the subsample |ptr| is pointing into.
@@ -77,15 +80,16 @@ class AVCBitstreamConverter : public BitstreamConverter {
 #endif  // BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
 
   // BitstreamConverter interface
-  bool ConvertFrame(std::vector<uint8_t>* frame_buf,
-                    bool is_keyframe,
-                    std::vector<SubsampleEntry>* subsamples) const override;
-
-  bool IsValid(std::vector<uint8_t>* frame_buf,
-               std::vector<SubsampleEntry>* subsamples) const override;
+  bool ConvertAndAnalyzeFrame(std::vector<uint8_t>* frame_buf,
+                              bool is_keyframe,
+                              std::vector<SubsampleEntry>* subsamples,
+                              AnalysisResult* analysis_result) const override;
 
  private:
   ~AVCBitstreamConverter() override;
+  AnalysisResult Analyze(
+      std::vector<uint8_t>* frame_buf,
+      std::vector<SubsampleEntry>* subsamples) const override;
   std::unique_ptr<AVCDecoderConfigurationRecord> avc_config_;
 
 #if BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)

@@ -62,14 +62,7 @@ class BrowserDistribution {
 
   virtual base::string16 GetPublisherName();
 
-  virtual base::string16 GetAppDescription();
-
   virtual base::string16 GetLongAppDescription();
-
-  // Vivaldi customization.
-  virtual base::string16 GetArguments();
-
-  virtual std::string GetSafeBrowsingName();
 
 #if defined(OS_WIN)
   virtual base::string16 GetDistributionData(HKEY root_key);
@@ -78,6 +71,9 @@ class BrowserDistribution {
   virtual void UpdateInstallStatus(bool system_install,
       installer::ArchiveType archive_type,
       installer::InstallStatus install_status);
+
+  // Vivaldi customization.
+  virtual base::string16 GetArguments();
 
  protected:
   explicit BrowserDistribution(

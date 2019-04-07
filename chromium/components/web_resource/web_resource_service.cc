@@ -16,7 +16,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/prefs/pref_service.h"
 #include "net/base/load_flags.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -105,8 +105,9 @@ void WebResourceService::ScheduleFetch(int64_t delay_ms) {
     return;
   fetch_scheduled_ = true;
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&WebResourceService::StartFetch,
-                            weak_ptr_factory_.GetWeakPtr()),
+      FROM_HERE,
+      base::BindOnce(&WebResourceService::StartFetch,
+                     weak_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(delay_ms));
 }
 

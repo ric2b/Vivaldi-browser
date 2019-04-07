@@ -58,7 +58,7 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
  public:
   explicit ThreadedWorkletThreadForTest(
       WorkerReportingProxy& worker_reporting_proxy)
-      : WorkerThread(nullptr, worker_reporting_proxy) {}
+      : WorkerThread(worker_reporting_proxy) {}
   ~ThreadedWorkletThreadForTest() override = default;
 
   WorkerBackingThread& GetWorkerBackingThread() override {
@@ -203,8 +203,8 @@ class ThreadedWorkletMessagingProxyForTest
             document->Url(), ScriptType::kModule, document->UserAgent(),
             document->GetContentSecurityPolicy()->Headers(),
             document->GetReferrerPolicy(), document->GetSecurityOrigin(),
-            document->IsSecureContext(), worker_clients,
-            document->AddressSpace(),
+            document->IsSecureContext(), document->GetHttpsState(),
+            worker_clients, document->AddressSpace(),
             OriginTrialContext::GetTokens(document).get(),
             base::UnguessableToken::Create(), std::move(worker_settings),
             kV8CacheOptionsDefault, new WorkletModuleResponsesMap),

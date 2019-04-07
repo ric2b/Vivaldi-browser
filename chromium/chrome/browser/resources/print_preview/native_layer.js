@@ -22,6 +22,7 @@ print_preview.PreviewSettings;
  *   printerDescription: (string | undefined),
  *   cupsEnterprisePrinter: (boolean | undefined),
  *   printerOptions: (Object | undefined),
+ *   policies: (print_preview.Policies | undefined),
  * }}
  */
 print_preview.LocalDestinationInfo;
@@ -38,6 +39,8 @@ print_preview.LocalDestinationInfo;
  *   documentHasSelection: boolean,
  *   shouldPrintSelectionOnly: boolean,
  *   printerName: string,
+ *   headerFooter: ?boolean,
+ *   isHeaderFooterManaged: boolean,
  *   serializedAppStateStr: ?string,
  *   serializedDefaultDestinationSelectionRulesStr: ?string,
  * }}
@@ -72,6 +75,7 @@ print_preview.CapabilitiesResponse;
  *   printerId: string,
  *   success: boolean,
  *   capabilities: !print_preview.Cdd,
+ *   policies: (print_preview.Policies | undefined),
  * }}
  */
 print_preview.PrinterSetupResponse;

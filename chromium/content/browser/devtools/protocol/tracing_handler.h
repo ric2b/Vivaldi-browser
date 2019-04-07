@@ -69,7 +69,7 @@ class TracingHandler : public DevToolsDomainHandler, public Tracing::Backend {
              Maybe<std::string> transfer_compression,
              Maybe<Tracing::TraceConfig> config,
              std::unique_ptr<StartCallback> callback) override;
-  void End(std::unique_ptr<EndCallback> callback) override;
+  Response End() override;
   void GetCategories(std::unique_ptr<GetCategoriesCallback> callback) override;
   void RequestMemoryDump(
       std::unique_ptr<RequestMemoryDumpCallback> callback) override;
@@ -116,7 +116,9 @@ class TracingHandler : public DevToolsDomainHandler, public Tracing::Backend {
   CONTENT_EXPORT static base::trace_event::TraceConfig
       GetTraceConfigFromDevToolsConfig(
           const base::DictionaryValue& devtools_config);
-  void SetupProcessFilter(RenderFrameHost*);
+  void SetupProcessFilter(base::ProcessId gpu_pid, RenderFrameHost*);
+  void StartTracingWithGpuPid(std::unique_ptr<StartCallback>,
+                              base::ProcessId gpu_pid);
   void AppendProcessId(RenderFrameHost*,
                        std::unordered_set<base::ProcessId>* process_set);
   void OnProcessReady(RenderProcessHost*);

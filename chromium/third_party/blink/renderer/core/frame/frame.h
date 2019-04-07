@@ -39,7 +39,6 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/frame/frame_lifecycle.h"
-#include "third_party/blink/renderer/core/frame/frame_types.h"
 #include "third_party/blink/renderer/core/frame/frame_view.h"
 #include "third_party/blink/renderer/core/loader/frame_loader_types.h"
 #include "third_party/blink/renderer/core/page/frame_tree.h"
@@ -72,6 +71,10 @@ enum class FrameDetachType { kRemove, kSwap };
 // Status of user gesture.
 enum class UserGestureStatus { kActive, kNone };
 
+// Whether to report policy violations when checking whether a feature is
+// enabled.
+enum class ReportOptions { kReportOnFailure, kDoNotReport };
+
 // Frame is the base class of LocalFrame and RemoteFrame and should only contain
 // functionality shared between both. In particular, any method related to
 // input, layout, or painting probably belongs on LocalFrame.
@@ -102,7 +105,6 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
                                   UserGestureStatus) = 0;
   // Synchronously begins a navigation.
   virtual void Navigate(const FrameLoadRequest&) = 0;
-  virtual void Reload(WebFrameLoadType, ClientRedirectPolicy) = 0;
 
   // The base Detach() method must be the last line of overrides of Detach().
   virtual void Detach(FrameDetachType);
@@ -225,9 +227,15 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
     return lifecycle_.GetState() == FrameLifecycle::kAttached;
   }
 
-  // Tests whether the feature-policy controlled feature is enabled by policy in
-  // the given frame.
-  bool IsFeatureEnabled(mojom::FeaturePolicyFeature) const;
+  // Tests whether the policy-controlled feature is enabled in this frame.
+  // Optionally sends a report to any registered reporting observers or
+  // Report-To endpoints, via ReportFeaturePolicyViolation(), if the feature is
+  // disabled.
+  bool IsFeatureEnabled(
+      mojom::FeaturePolicyFeature,
+      ReportOptions report_on_failure = ReportOptions::kDoNotReport) const;
+  virtual void ReportFeaturePolicyViolation(mojom::FeaturePolicyFeature) const {
+  }
 
   // Called to make a frame inert or non-inert. A frame is inert when there
   // is a modal dialog displayed within an ancestor frame, and this frame

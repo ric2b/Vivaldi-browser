@@ -61,8 +61,7 @@ class AppMenu : public views::MenuDelegate,
   void RemoveObserver(AppMenuObserver* observer);
 
   // MenuDelegate overrides:
-  const gfx::FontList* GetLabelFontList(int command_id) const override;
-  bool GetShouldUseNormalForegroundColor(int command_id) const override;
+  void GetLabelStyle(int command_id, LabelStyle* style) const override;
   base::string16 GetTooltipText(int command_id,
                                 const gfx::Point& p) const override;
   bool IsTriggerableEvent(views::MenuItemView* menu,
@@ -194,7 +193,7 @@ class AppMenu : public views::MenuDelegate,
   // The bit mask of RunFlags.
   const int run_flags_;
 
-  base::ObserverList<AppMenuObserver> observer_list_;
+  base::ObserverList<AppMenuObserver>::Unchecked observer_list_;
 
   // Records the time from when menu opens to when the user selects a menu item.
   base::ElapsedTimer menu_opened_timer_;

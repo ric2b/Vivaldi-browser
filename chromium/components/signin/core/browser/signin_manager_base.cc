@@ -12,7 +12,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_info.h"
 #include "components/signin/core/browser/account_tracker_service.h"
@@ -42,15 +42,12 @@ SigninManagerBase::SigninManagerBase(
 SigninManagerBase::~SigninManagerBase() {}
 
 // static
-void SigninManagerBase::RegisterProfilePrefs(
-    user_prefs::PrefRegistrySyncable* registry) {
+void SigninManagerBase::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(prefs::kGoogleServicesHostedDomain,
                                std::string());
   registry->RegisterStringPref(prefs::kGoogleServicesLastAccountId,
                                std::string());
   registry->RegisterStringPref(prefs::kGoogleServicesLastUsername,
-                               std::string());
-  registry->RegisterStringPref(prefs::kGoogleServicesSigninScopedDeviceId,
                                std::string());
   registry->RegisterStringPref(prefs::kGoogleServicesAccountId, std::string());
   registry->RegisterStringPref(prefs::kGoogleServicesUserAccountId,

@@ -7,16 +7,16 @@
 
 #include <memory>
 
-#include "services/ui/ws2/window_service_delegate.h"
+#include "services/ws/window_service_delegate.h"
 
 namespace ash {
 
-class WindowServiceDelegateImpl : public ui::ws2::WindowServiceDelegate {
+class WindowServiceDelegateImpl : public ws::WindowServiceDelegate {
  public:
   WindowServiceDelegateImpl();
   ~WindowServiceDelegateImpl() override;
 
-  // ui::ws2::WindowServiceDelegate:
+  // ws::WindowServiceDelegate:
   std::unique_ptr<aura::Window> NewTopLevel(
       aura::PropertyConverter* property_converter,
       const base::flat_map<std::string, std::vector<uint8_t>>& properties)
@@ -24,7 +24,7 @@ class WindowServiceDelegateImpl : public ui::ws2::WindowServiceDelegate {
   void OnUnhandledKeyEvent(const ui::KeyEvent& key_event) override;
   bool StoreAndSetCursor(aura::Window* window, ui::Cursor cursor) override;
   void RunWindowMoveLoop(aura::Window* window,
-                         ui::mojom::MoveLoopSource source,
+                         ws::mojom::MoveLoopSource source,
                          const gfx::Point& cursor,
                          DoneCallback callback) override;
   void CancelWindowMoveLoop() override;
@@ -42,6 +42,11 @@ class WindowServiceDelegateImpl : public ui::ws2::WindowServiceDelegate {
                            ui::mojom::TextInputStatePtr state) override;
   void SetModalType(aura::Window* window, ui::ModalType type) override;
   ui::SystemInputInjector* GetSystemInputInjector() override;
+  aura::WindowTreeHost* GetWindowTreeHostForDisplayId(
+      int64_t display_id) override;
+  aura::Window* GetTopmostWindowAtPoint(const gfx::Point& location_in_screen,
+                                        const std::set<aura::Window*>& ignores,
+                                        aura::Window** real_topmost) override;
 
  private:
   std::unique_ptr<ui::SystemInputInjector> system_input_injector_;

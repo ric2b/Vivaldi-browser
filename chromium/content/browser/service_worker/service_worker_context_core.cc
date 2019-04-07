@@ -21,6 +21,7 @@
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
+#include "content/browser/service_worker/service_worker_consts.h"
 #include "content/browser/service_worker/service_worker_context_core_observer.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_info.h"
@@ -197,6 +198,7 @@ class RegistrationDeletionListener
   scoped_refptr<ServiceWorkerRegistration> registration_;
   base::OnceClosure callback_;
 };
+
 }  // namespace
 
 const base::FilePath::CharType
@@ -442,6 +444,13 @@ void ServiceWorkerContextCore::RegisterServiceWorker(
     const blink::mojom::ServiceWorkerRegistrationOptions& options,
     RegistrationCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  std::string error_message;
+  if (!IsValidRegisterRequest(script_url, options.scope, &error_message)) {
+    std::move(callback).Run(
+        blink::ServiceWorkerStatusCode::kErrorInvalidArguments, error_message,
+        blink::mojom::kInvalidServiceWorkerRegistrationId);
+    return;
+  }
   was_service_worker_registered_ = true;
   job_coordinator_->Register(
       script_url, options,
@@ -571,6 +580,26 @@ void ServiceWorkerContextCore::UnregistrationComplete(
         FROM_HERE, &ServiceWorkerContextCoreObserver::OnRegistrationDeleted,
         registration_id, pattern);
   }
+}
+
+bool ServiceWorkerContextCore::IsValidRegisterRequest(
+    const GURL& script_url,
+    const GURL& scope_url,
+    std::string* out_error) const {
+  if (!scope_url.is_valid() || !script_url.is_valid()) {
+    *out_error = ServiceWorkerConsts::kBadMessageInvalidURL;
+    return false;
+  }
+  if (ServiceWorkerUtils::ContainsDisallowedCharacter(scope_url, script_url,
+                                                      out_error)) {
+    return false;
+  }
+  std::vector<GURL> urls = {scope_url, script_url};
+  if (!ServiceWorkerUtils::AllOriginsMatchAndCanAccessServiceWorkers(urls)) {
+    *out_error = ServiceWorkerConsts::kBadMessageImproperOrigins;
+    return false;
+  }
+  return true;
 }
 
 ServiceWorkerRegistration* ServiceWorkerContextCore::GetLiveRegistration(
@@ -749,7 +778,7 @@ void ServiceWorkerContextCore::OnVersionStateChanged(
     ServiceWorkerVersion* version) {
   observer_list_->Notify(
       FROM_HERE, &ServiceWorkerContextCoreObserver::OnVersionStateChanged,
-      version->version_id(), version->status());
+      version->version_id(), version->scope(), version->status());
 }
 
 void ServiceWorkerContextCore::OnDevToolsRoutingIdChanged(
@@ -807,9 +836,9 @@ void ServiceWorkerContextCore::OnControlleeAdded(
     ServiceWorkerVersion* version,
     const std::string& client_uuid,
     const ServiceWorkerClientInfo& client_info) {
-  observer_list_->Notify(FROM_HERE,
-                         &ServiceWorkerContextCoreObserver::OnControlleeAdded,
-                         version->version_id(), client_uuid, client_info);
+  observer_list_->Notify(
+      FROM_HERE, &ServiceWorkerContextCoreObserver::OnControlleeAdded,
+      version->version_id(), version->scope(), client_uuid, client_info);
 }
 
 void ServiceWorkerContextCore::OnControlleeRemoved(
@@ -817,7 +846,13 @@ void ServiceWorkerContextCore::OnControlleeRemoved(
     const std::string& client_uuid) {
   observer_list_->Notify(FROM_HERE,
                          &ServiceWorkerContextCoreObserver::OnControlleeRemoved,
-                         version->version_id(), client_uuid);
+                         version->version_id(), version->scope(), client_uuid);
+}
+
+void ServiceWorkerContextCore::OnNoControllees(ServiceWorkerVersion* version) {
+  observer_list_->Notify(FROM_HERE,
+                         &ServiceWorkerContextCoreObserver::OnNoControllees,
+                         version->version_id(), version->scope());
 }
 
 ServiceWorkerProcessManager* ServiceWorkerContextCore::process_manager() {

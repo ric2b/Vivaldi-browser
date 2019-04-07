@@ -28,7 +28,6 @@
 
 #include "base/macros.h"
 #include "third_party/blink/public/platform/web_scoped_virtual_time_pauser.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_streamer.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/script/script.h"
 #include "third_party/blink/renderer/core/script/script_element_base.h"
@@ -88,18 +87,16 @@ class CORE_EXPORT PendingScript
   virtual void Trace(blink::Visitor*);
   const char* NameInHeapSnapshot() const override { return "PendingScript"; }
 
-  virtual Script* GetSource(const KURL& document_url,
-                            bool& error_occurred) const = 0;
+  // Returns nullptr when "script's script is null", i.e. an error occurred.
+  virtual Script* GetSource(const KURL& document_url) const = 0;
 
   // https://html.spec.whatwg.org/multipage/scripting.html#the-script-is-ready
   virtual bool IsReady() const = 0;
   virtual bool IsExternal() const = 0;
-  virtual bool ErrorOccurred() const = 0;
   virtual bool WasCanceled() const = 0;
 
   // Support for script streaming.
-  virtual bool StartStreamingIfPossible(ScriptStreamer::Type,
-                                        base::OnceClosure) = 0;
+  virtual bool StartStreamingIfPossible(base::OnceClosure) = 0;
   virtual bool IsCurrentlyStreaming() const = 0;
 
   // Used only for tracing, and can return a null URL.
@@ -152,7 +149,6 @@ class CORE_EXPORT PendingScript
  private:
   static void ExecuteScriptBlockInternal(
       Script*,
-      bool error_occurred,
       ScriptElementBase*,
       bool was_canceled,
       bool is_external,

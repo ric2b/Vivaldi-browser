@@ -162,6 +162,12 @@
       <message desc='The description of the nextGranularity key.  Navigation granularity can be e.g. "sentence level", "word level".  Granularity is also referred as "level of detail".  c.f. http://chromevox.com/tutorial/text_navigation.html Displayed in the Options page.' name="IDS_CHROMEVOX_NEXT_GRANULARITY">
         Increase navigation granularity
       </message>
+      <message desc="The description of the previousAtGranularity gesture. Displayed in the Options page." name="IDS_CHROMEVOX_PREVIOUS_AT_GRANULARITY">
+        Move to previous at granularity
+      </message>
+      <message desc='The description of the nextGranularity gesture.  Navigation granularity can be e.g. "word level".  Granularity is also referred as "level of detail".  c.f. http://chromevox.com/tutorial/text_navigation.html Displayed in the Options page.' name="IDS_CHROMEVOX_NEXT_AT_GRANULARITY">
+        Move to next at granularity
+      </message>
       <message desc="The description of the actOnCurrentItem key. The current item is the HTML element which has focus.  Taking action is similar to using the mouse to click on the element. Displayed in the Options page." name="IDS_CHROMEVOX_ACT_ON_CURRENT_ITEM">
         Take action on current item
       </message>
@@ -559,8 +565,32 @@
       <message desc="An option for setting the key combination that will be used as the ChromeVox modifier key (aka, the 'Cvox' key)." name="IDS_CHROMEVOX_OPTIONS_CVOX_MODIFIER_KEY">
         ChromeVox modifier key
       </message>
+      <message desc="List of chromevox developer options." name="IDS_CHROMEVOX_OPTIONS_DEVELOPER_OPTIONS">
+        Developer Options
+      </message>
+      <message desc="Enable chromevox earcon logging." name="IDS_CHROMEVOX_OPTIONS_DEVELOPER_EARCON_LOGGING">
+        Enable earcon logging
+      </message>
+      <message desc="Enable chromevox speech logging." name="IDS_CHROMEVOX_OPTIONS_DEVELOPER_SPEECH_LOGGING">
+        Enable speech logging
+      </message>
+      <message desc="Enable event stream logging in chromevox for developer options." name="IDS_CHROMEVOX_OPTIONS_EVENT_STREAM_LOGGING">
+        Enable event stream logging
+      </message>
+      <message desc="Show event stream filters options for event stream logging." name="IDS_CHROMEVOX_OPTIONS_SHOW_EVENT_STREAM_FILTERS">
+        Show event stream filters
+      </message>
+      <message desc="Hide event stream filters options for event stream logging." name="IDS_CHROMEVOX_OPTIONS_HIDE_EVENT_STREAM_FILTERS">
+        Hide event stream filters
+      </message>
+      <message desc="Enable chromevox braille logging." name="IDS_CHROMEVOX_OPTIONS_DEVELOPER_BRAILLE_LOGGING">
+        Enable braille logging
+      </message>
       <message desc="The title of ChromeVox Learn Mode page.  The keyboard explorer voices the name of each key when the user presses it." name="IDS_CHROMEVOX_KBEXPLORER_TITLE">
         ChromeVox Learn Mode
+      </message>
+      <message desc="The title of ChromeVox Log page." name="IDS_CHROMEVOX_LOG_TITLE">
+        ChromeVox Log
       </message>
       <message desc="The instructions for ChromeVox Learn Mode.  The keyboard explorer voices the name of each key when the user presses it. * These instructions describe how to use the keyboard explorer." name="IDS_CHROMEVOX_KBEXPLORER_INSTRUCTIONS">
         Press any key to learn its name. Ctrl+W will close learn mode.
@@ -2995,6 +3025,18 @@ If you're done with the tutorial, use ChromeVox to navigate to the Close button 
       </message>
       <message desc="A hint to the user for how to interact with math content using the keyboard." name="IDS_CHROMEVOX_HINT_MATH_KEYBOARD">
         Press up, down, left, or right to explore math.
+      </message>
+      <message desc="Voice name for the system default Text-to-Speech voice" name="IDS_CHROMEVOX_SYSTEM_VOICE">
+        System Text-to-Speech voice
+      </message>
+      <message desc="Menu item text for a command to open the text to speech settings page" name="IDS_CHROMEVOX_SHOW_TTS_SETTINGS">
+        Open text-to-speech settings
+      </message>
+      <message desc="A hint to the user on how to interact with the virtual on screen keyboard." name="IDS_CHROMEVOX_HINT_TOUCH_TYPE">
+        Find a key, then lift to type
+      </message>
+      <message desc="Hint for how to start editing a text field while exploring the screen using touch exploration." name="IDS_CHROMEVOX_HINT_DOUBLE_TAP_TO_EDIT">
+        Double tap to start editing
       </message>
     </messages>
   </release>

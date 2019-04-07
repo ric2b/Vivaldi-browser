@@ -11,18 +11,15 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/win/scoped_hstring.h"
 #include "device/bluetooth/bluetooth_device.h"
+#include "device/bluetooth/bluetooth_gatt_discoverer_winrt.h"
 
 namespace device {
 
 namespace {
 
 using ABI::Windows::Devices::Bluetooth::GenericAttributeProfile::
-    GattDeviceService;
-using ABI::Windows::Devices::Bluetooth::GenericAttributeProfile::
     IGattDeviceService;
-using ABI::Windows::Foundation::Collections::IVectorView;
 using Microsoft::WRL::ComPtr;
 
 }  // namespace
@@ -76,11 +73,74 @@ BluetoothRemoteGattServiceWinrt::GetIncludedServices() const {
   return {};
 }
 
+void BluetoothRemoteGattServiceWinrt::UpdateCharacteristics(
+    BluetoothGattDiscovererWinrt* gatt_discoverer) {
+  const auto* gatt_characteristics =
+      gatt_discoverer->GetCharacteristics(attribute_handle_);
+  DCHECK(gatt_characteristics);
+
+  // Instead of clearing out |characteristics_| and creating each characteristic
+  // from scratch, we create a new map and move already existing characteristics
+  // into it in order to preserve pointer stability.
+  CharacteristicMap characteristics;
+  for (const auto& gatt_characteristic : *gatt_characteristics) {
+    auto characteristic = BluetoothRemoteGattCharacteristicWinrt::Create(
+        this, gatt_characteristic.Get());
+    if (!characteristic)
+      continue;
+
+    std::string identifier = characteristic->GetIdentifier();
+    auto iter = characteristics_.find(identifier);
+    if (iter != characteristics_.end()) {
+      iter = characteristics.emplace(std::move(*iter)).first;
+    } else {
+      iter = characteristics
+                 .emplace(std::move(identifier), std::move(characteristic))
+                 .first;
+    }
+
+    static_cast<BluetoothRemoteGattCharacteristicWinrt*>(iter->second.get())
+        ->UpdateDescriptors(gatt_discoverer);
+  }
+
+  std::swap(characteristics, characteristics_);
+  SetDiscoveryComplete(true);
+}
+
+IGattDeviceService*
+BluetoothRemoteGattServiceWinrt::GetDeviceServiceForTesting() {
+  return gatt_service_.Get();
+}
+
+// static
+uint8_t BluetoothRemoteGattServiceWinrt::ToProtocolError(
+    GattErrorCode error_code) {
+  switch (error_code) {
+    case GATT_ERROR_UNKNOWN:
+      return 0xF0;
+    case GATT_ERROR_FAILED:
+      return 0x01;
+    case GATT_ERROR_IN_PROGRESS:
+      return 0x09;
+    case GATT_ERROR_INVALID_LENGTH:
+      return 0x0D;
+    case GATT_ERROR_NOT_PERMITTED:
+      return 0x02;
+    case GATT_ERROR_NOT_AUTHORIZED:
+      return 0x08;
+    case GATT_ERROR_NOT_PAIRED:
+      return 0x0F;
+    case GATT_ERROR_NOT_SUPPORTED:
+      return 0x06;
+  }
+
+  NOTREACHED();
+  return 0x00;
+}
+
 BluetoothRemoteGattServiceWinrt::BluetoothRemoteGattServiceWinrt(
     BluetoothDevice* device,
-    Microsoft::WRL::ComPtr<ABI::Windows::Devices::Bluetooth::
-                               GenericAttributeProfile::IGattDeviceService>
-        gatt_service,
+    ComPtr<IGattDeviceService> gatt_service,
     BluetoothUUID uuid,
     uint16_t attribute_handle)
     : device_(device),
@@ -90,6 +150,5 @@ BluetoothRemoteGattServiceWinrt::BluetoothRemoteGattServiceWinrt(
       identifier_(base::StringPrintf("%s/%s_%04x",
                                      device_->GetIdentifier().c_str(),
                                      uuid_.value().c_str(),
-                                     attribute_handle_)) {}
-
+                                     attribute_handle)) {}
 }  // namespace device

@@ -160,6 +160,10 @@ void AppendDeviceState(
       properties->sim_lock_status = std::move(sim_lock_status);
     }
   }
+  if (device && type == ::onc::network_config::kWiFi) {
+    properties->managed_network_available = std::make_unique<bool>(
+        GetStateHandler()->GetAvailableManagedWifiNetwork());
+  }
   device_state_list->push_back(std::move(properties));
 }
 
@@ -847,7 +851,8 @@ void NetworkingPrivateChromeOS::GetPropertiesCallback(
     const DictionaryCallback& callback,
     const std::string& service_path,
     const base::DictionaryValue& dictionary) {
-  std::unique_ptr<base::DictionaryValue> dictionary_copy(dictionary.DeepCopy());
+  std::unique_ptr<base::DictionaryValue> dictionary_copy =
+      dictionary.CreateDeepCopy();
   AppendThirdPartyProviderName(dictionary_copy.get());
   if (managed)
     SetManagedActiveProxyValues(guid, dictionary_copy.get());

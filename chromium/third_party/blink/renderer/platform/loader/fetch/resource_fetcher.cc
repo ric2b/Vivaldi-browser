@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/platform/instance_counters.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
+#include "third_party/blink/renderer/platform/loader/cors/cors.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_context.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
@@ -59,11 +60,13 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/weborigin/known_ports.h"
+#include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 #include "third_party/blink/renderer/platform/weborigin/security_violation_reporting_policy.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/cstring.h"
+#include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 
@@ -154,6 +157,13 @@ ResourceLoadPriority TypeToPriority(Resource::Type type) {
   return ResourceLoadPriority::kUnresolved;
 }
 
+static bool IsCacheableHTTPMethod(const AtomicString& method) {
+  // Per http://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html#sec13.10,
+  // these methods always invalidate the cache entry.
+  return method != HTTPNames::POST && method != HTTPNames::PUT &&
+         method != "DELETE";
+}
+
 bool ShouldResourceBeAddedToMemoryCache(const FetchParameters& params,
                                         Resource* resource) {
   if (!IsMainThread())
@@ -161,6 +171,8 @@ bool ShouldResourceBeAddedToMemoryCache(const FetchParameters& params,
   if (params.Options().data_buffering_policy == kDoNotBufferData)
     return false;
   if (IsRawResource(*resource))
+    return false;
+  if (!IsCacheableHTTPMethod(params.GetResourceRequest().HttpMethod()))
     return false;
   return true;
 }
@@ -408,9 +420,11 @@ bool ResourceFetcher::ResourceNeedsLoad(Resource* resource,
   // - images are disabled
   // - instructed to defer loading images from network
   if (resource->GetType() == Resource::kImage &&
-      ShouldDeferImageLoad(resource->Url()))
+      (ShouldDeferImageLoad(resource->Url()) ||
+       params.GetImageRequestOptimization() ==
+           FetchParameters::kDeferImageLoad)) {
     return false;
-
+  }
   return policy != kUse || resource->StillNeedsLoad();
 }
 
@@ -654,7 +668,7 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
           : SecurityViolationReportingPolicy::kReport;
 
   // Note that resource_request.GetRedirectStatus() may return kFollowedRedirect
-  // here since e.g. DocumentThreadableLoader may create a new Resource from
+  // here since e.g. ThreadableLoader may create a new Resource from
   // a ResourceRequest that originates from the ResourceRequest passed to
   // the redirect handling callback.
 
@@ -713,7 +727,7 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
   KURL url = MemoryCache::RemoveFragmentIdentifierIfNeeded(params.Url());
   base::Optional<ResourceRequestBlockedReason> blocked_reason =
       Context().CanRequest(resource_type, resource_request, url, options,
-                           reporting_policy, params.GetOriginRestriction(),
+                           reporting_policy,
                            resource_request.GetRedirectStatus());
 
   if (Context().IsAdResource(url, resource_type,
@@ -746,11 +760,23 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
   if (!params.Url().IsValid())
     return ResourceRequestBlockedReason::kOther;
 
-  params.MutableOptions().cors_flag =
-      !origin || !origin->CanRequest(params.Url());
-
-  if (options.cors_handling_by_resource_fetcher ==
-      kEnableCORSHandlingByResourceFetcher) {
+  if (!RuntimeEnabledFeatures::OutOfBlinkCORSEnabled() &&
+      options.cors_handling_by_resource_fetcher ==
+          kEnableCORSHandlingByResourceFetcher) {
+    if (CORS::IsCORSEnabledRequestMode(
+            resource_request.GetFetchRequestMode())) {
+      DCHECK(origin);
+      if (!origin->CanRequest(params.Url())) {
+        params.MutableOptions().cors_flag = true;
+        // Cross-origin requests are only allowed certain registered schemes.
+        if (!SchemeRegistry::ShouldTreatURLSchemeAsCORSEnabled(
+                url.Protocol())) {
+          // This won't create a CORS related console error.
+          // TODO(yhirano): Fix this.
+          return ResourceRequestBlockedReason::kOther;
+        }
+      }
+    }
     bool allow_stored_credentials = false;
     switch (resource_request.GetFetchCredentialsMode()) {
       case network::mojom::FetchCredentialsMode::kOmit:
@@ -1081,8 +1107,11 @@ Resource* ResourceFetcher::MatchPreload(const FetchParameters& params,
 
   Resource* resource = it->value;
 
-  if (resource->MustRefetchDueToIntegrityMetadata(params))
+  if (resource->MustRefetchDueToIntegrityMetadata(params)) {
+    if (!params.IsSpeculativePreload() && !params.IsLinkPreload())
+      PrintPreloadWarning(resource, Resource::MatchStatus::kIntegrityMismatch);
     return nullptr;
+  }
 
   if (params.IsSpeculativePreload())
     return resource;
@@ -1092,18 +1121,85 @@ Resource* ResourceFetcher::MatchPreload(const FetchParameters& params,
   }
 
   const ResourceRequest& request = params.GetResourceRequest();
-  if (request.DownloadToBlob())
+  if (request.DownloadToBlob()) {
+    PrintPreloadWarning(resource, Resource::MatchStatus::kBlobRequest);
     return nullptr;
+  }
 
-  if (IsImageResourceDisallowedToBeReused(*resource) ||
-      !resource->CanReuse(params, GetSourceOrigin(params.Options())))
+  if (IsImageResourceDisallowedToBeReused(*resource)) {
+    PrintPreloadWarning(resource, Resource::MatchStatus::kImageLoadingDisabled);
     return nullptr;
+  }
 
-  if (!resource->MatchPreload(params, Context().GetLoadingTaskRunner().get()))
+  const Resource::MatchStatus match_status =
+      resource->CanReuse(params, GetSourceOrigin(params.Options()));
+  if (match_status != Resource::MatchStatus::kOk) {
+    PrintPreloadWarning(resource, match_status);
     return nullptr;
+  }
+
+  if (!resource->MatchPreload(params, Context().GetLoadingTaskRunner().get())) {
+    PrintPreloadWarning(resource, Resource::MatchStatus::kUnknownFailure);
+    return nullptr;
+  }
+
   preloads_.erase(it);
   matched_preloads_.push_back(resource);
   return resource;
+}
+
+void ResourceFetcher::PrintPreloadWarning(Resource* resource,
+                                          Resource::MatchStatus status) {
+  if (!resource->IsLinkPreload())
+    return;
+
+  StringBuilder builder;
+  builder.Append("A preload for '");
+  builder.Append(resource->Url());
+  builder.Append("' is found, but is not used ");
+
+  switch (status) {
+    case Resource::MatchStatus::kOk:
+      NOTREACHED();
+      break;
+    case Resource::MatchStatus::kUnknownFailure:
+      builder.Append("due to an unknown reason.");
+      break;
+    case Resource::MatchStatus::kIntegrityMismatch:
+      builder.Append("due to an integrity mismatch.");
+      break;
+    case Resource::MatchStatus::kBlobRequest:
+      builder.Append("because the new request loads the content as a blob.");
+      break;
+    case Resource::MatchStatus::kImageLoadingDisabled:
+      builder.Append("because image loading is disabled.");
+      break;
+    case Resource::MatchStatus::kSynchronousFlagDoesNotMatch:
+      builder.Append("because the new request is synchronous.");
+      break;
+    case Resource::MatchStatus::kRequestModeDoesNotMatch:
+      builder.Append("because the request mode does not match. ");
+      builder.Append("Consider taking a look at crossorigin attribute.");
+      break;
+    case Resource::MatchStatus::kRequestCredentialsModeDoesNotMatch:
+      builder.Append("because the request credentials mode does not match. ");
+      builder.Append("Consider taking a look at crossorigin attribute.");
+      break;
+    case Resource::MatchStatus::kKeepaliveSet:
+      builder.Append("because the keepalive flag is set.");
+      break;
+    case Resource::MatchStatus::kRequestMethodDoesNotMatch:
+      builder.Append("because the request HTTP method does not match.");
+      break;
+    case Resource::MatchStatus::kRequestHeadersDoNotMatch:
+      builder.Append("because the request headers do not match.");
+      break;
+    case Resource::MatchStatus::kImagePlaceholder:
+      builder.Append("due to different image placeholder policies.");
+      break;
+  }
+  Context().AddWarningConsoleMessage(builder.ToString(),
+                                     FetchContext::kOtherSource);
 }
 
 void ResourceFetcher::InsertAsPreloadIfNecessary(Resource* resource,
@@ -1229,8 +1325,9 @@ ResourceFetcher::DetermineRevalidationPolicyInternal(
   if (is_static_data)
     return kUse;
 
-  if (!existing_resource.CanReuse(fetch_params,
-                                  GetSourceOrigin(fetch_params.Options()))) {
+  if (existing_resource.CanReuse(fetch_params,
+                                 GetSourceOrigin(fetch_params.Options())) !=
+      Resource::MatchStatus::kOk) {
     RESOURCE_LOADING_DVLOG(1) << "ResourceFetcher::DetermineRevalidationPolicy "
                                  "reloading due to Resource::CanReuse() "
                                  "returning false.";
@@ -1769,7 +1866,6 @@ void ResourceFetcher::EmulateLoadStartedForInspector(
   Context().CanRequest(resource->GetType(), resource->LastResourceRequest(),
                        resource->LastResourceRequest().Url(), params.Options(),
                        SecurityViolationReportingPolicy::kReport,
-                       params.GetOriginRestriction(),
                        resource->LastResourceRequest().GetRedirectStatus());
   RequestLoadStarted(resource->Identifier(), resource, params, kUse);
 }

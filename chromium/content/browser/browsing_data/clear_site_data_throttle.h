@@ -34,6 +34,9 @@ namespace content {
 
 class WebContents;
 
+// TODO(crbug.com/876931): To be removed after Network Service was enabled by
+// default. The header will be handled by |NetworkServiceNetworkDelegate| and
+// |ClearSiteDataHandler| instead.
 // This throttle parses the Clear-Site-Data header and executes the clearing
 // of browsing data. The resource load is delayed until the header is parsed
 // and, if valid, until the browsing data are deleted. See the W3C working draft

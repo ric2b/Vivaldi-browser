@@ -6,6 +6,7 @@
 
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/gtest_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/env.h"
 #include "ui/aura/test/aura_test_base.h"
@@ -1448,8 +1449,7 @@ class WindowDelegateChangingWindowVisibility : public MockWindowDelegate {
 }  // namespace
 
 // Verify that if a window changes its visibility every time it is notified that
-// its occlusion state changed, the occlusion state of all IsVisible() windows
-// is set to VISIBLE and no infinite loop is entered.
+// its occlusion state changed, a DCHECK occurs.
 TEST_F(WindowOcclusionTrackerTest, OcclusionStatesDontBecomeStable) {
   test::WindowOcclusionTrackerTestApi test_api;
 
@@ -1489,13 +1489,11 @@ TEST_F(WindowOcclusionTrackerTest, OcclusionStatesDontBecomeStable) {
   // Once the maximum number of times that occlusion can be recomputed is
   // reached, the occlusion state of all IsVisible() windows should be set to
   // VISIBLE.
-  delegate_a->set_expectation(Window::OcclusionState::VISIBLE);
-  delegate_d->set_expectation(Window::OcclusionState::HIDDEN);
-  EXPECT_FALSE(test_api.WasOcclusionRecomputedTooManyTimes());
-  window_d->Hide();
-  EXPECT_TRUE(test_api.WasOcclusionRecomputedTooManyTimes());
-  EXPECT_FALSE(delegate_a->is_expecting_call());
-  EXPECT_FALSE(delegate_d->is_expecting_call());
+  EXPECT_DCHECK_DEATH({
+    delegate_a->set_expectation(Window::OcclusionState::VISIBLE);
+    delegate_d->set_expectation(Window::OcclusionState::HIDDEN);
+    window_d->Hide();
+  });
 }
 
 // Verify that the occlusion states are correctly updated when a branch of the
@@ -1525,6 +1523,72 @@ TEST_F(WindowOcclusionTrackerTest, HideTreeBranch) {
   window_b->Hide();
   EXPECT_FALSE(delegate_b->is_expecting_call());
   EXPECT_FALSE(delegate_c->is_expecting_call());
+}
+
+// Verify that a window covered by a shaped window isn't considered occluded.
+TEST_F(WindowOcclusionTrackerTest, WindowWithAlphaShape) {
+  // Create 2 superposed tracked windows.
+  MockWindowDelegate* delegate_a = new MockWindowDelegate();
+  delegate_a->set_expectation(Window::OcclusionState::VISIBLE);
+  CreateTrackedWindow(delegate_a, gfx::Rect(0, 0, 10, 10));
+  EXPECT_FALSE(delegate_a->is_expecting_call());
+
+  MockWindowDelegate* delegate_b = new MockWindowDelegate();
+  delegate_a->set_expectation(Window::OcclusionState::OCCLUDED);
+  delegate_b->set_expectation(Window::OcclusionState::VISIBLE);
+  Window* window_b = CreateTrackedWindow(delegate_b, gfx::Rect(0, 0, 10, 10));
+  EXPECT_FALSE(delegate_a->is_expecting_call());
+  EXPECT_FALSE(delegate_b->is_expecting_call());
+
+  // Set a shape for the top window. The window underneath should no longer be
+  // occluded.
+  auto shape = std::make_unique<ui::Layer::ShapeRects>();
+  shape->emplace_back(0, 0, 5, 5);
+  delegate_a->set_expectation(Window::OcclusionState::VISIBLE);
+  window_b->layer()->SetAlphaShape(std::move(shape));
+  EXPECT_FALSE(delegate_a->is_expecting_call());
+
+  // Clear the shape for the top window. The window underneath should be
+  // occluded.
+  delegate_a->set_expectation(Window::OcclusionState::OCCLUDED);
+  window_b->layer()->SetAlphaShape(nullptr);
+  EXPECT_FALSE(delegate_a->is_expecting_call());
+}
+
+// Verify that a window covered by a window whose parent has an alpha shape
+// isn't considered occluded.
+TEST_F(WindowOcclusionTrackerTest, WindowWithParentAlphaShape) {
+  // Create a child and parent that cover another window.
+  MockWindowDelegate* delegate_a = new MockWindowDelegate();
+  delegate_a->set_expectation(Window::OcclusionState::VISIBLE);
+  CreateTrackedWindow(delegate_a, gfx::Rect(0, 0, 20, 20));
+  EXPECT_FALSE(delegate_a->is_expecting_call());
+
+  MockWindowDelegate* delegate_b = new MockWindowDelegate();
+  delegate_b->set_expectation(Window::OcclusionState::VISIBLE);
+  Window* window_b = CreateTrackedWindow(delegate_b, gfx::Rect(0, 0, 10, 10));
+  EXPECT_FALSE(delegate_b->is_expecting_call());
+
+  MockWindowDelegate* delegate_c = new MockWindowDelegate();
+  delegate_a->set_expectation(Window::OcclusionState::OCCLUDED);
+  delegate_c->set_expectation(Window::OcclusionState::VISIBLE);
+  CreateTrackedWindow(delegate_c, gfx::Rect(0, 0, 20, 20), window_b);
+  EXPECT_FALSE(delegate_a->is_expecting_call());
+  EXPECT_FALSE(delegate_c->is_expecting_call());
+
+  // Set a shape for |window_b|. |window_a| and |window_b| should no longer be
+  // occluded.
+  auto shape = std::make_unique<ui::Layer::ShapeRects>();
+  shape->emplace_back(0, 0, 5, 5);
+  delegate_a->set_expectation(Window::OcclusionState::VISIBLE);
+  window_b->layer()->SetAlphaShape(std::move(shape));
+  EXPECT_FALSE(delegate_a->is_expecting_call());
+
+  // Clear the shape for |window_b|. |window_a| and |window_b| should be
+  // occluded.
+  delegate_a->set_expectation(Window::OcclusionState::OCCLUDED);
+  window_b->layer()->SetAlphaShape(nullptr);
+  EXPECT_FALSE(delegate_a->is_expecting_call());
 }
 
 namespace {
@@ -1606,11 +1670,9 @@ TEST_F(WindowOcclusionTrackerTest,
 
   delegate_a->set_expectation(Window::OcclusionState::HIDDEN);
   delegate_b->set_expectation(Window::OcclusionState::HIDDEN);
-  EXPECT_FALSE(test_api.WasOcclusionRecomputedTooManyTimes());
-  window_b->Hide();
   // Hiding a child to |window_a| and hiding it shouldn't cause occlusion to be
-  // recomputed too many times.
-  EXPECT_FALSE(test_api.WasOcclusionRecomputedTooManyTimes());
+  // recomputed too many times (i.e. the call below shouldn't DCHECK).
+  window_b->Hide();
   EXPECT_FALSE(delegate_a->is_expecting_call());
   EXPECT_FALSE(delegate_b->is_expecting_call());
 }

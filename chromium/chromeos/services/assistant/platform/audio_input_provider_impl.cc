@@ -137,16 +137,37 @@ void AudioInputImpl::RemoveObserver(
     task_runner_->PostTask(FROM_HERE,
                            base::BindOnce(&AudioInputImpl::StopRecording,
                                           weak_factory_.GetWeakPtr()));
+
+    // Reset the sequence checker since assistant may call from different thread
+    // after restart.
+    DETACH_FROM_SEQUENCE(observer_sequence_checker_);
   }
 }
 
 void AudioInputImpl::SetMicState(bool mic_open) {
-  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   if (!default_on_) {
-    if (mic_open)
-      source_->Start();
-    else
-      source_->Stop();
+    if (mic_open) {
+      task_runner_->PostTask(FROM_HERE,
+                             base::BindOnce(&AudioInputImpl::StartRecording,
+                                            weak_factory_.GetWeakPtr()));
+    } else {
+      task_runner_->PostTask(FROM_HERE,
+                             base::BindOnce(&AudioInputImpl::StopRecording,
+                                            weak_factory_.GetWeakPtr()));
+    }
+  }
+}
+
+void AudioInputImpl::OnHotwordEnabled(bool enable) {
+  default_on_ = enable;
+  if (default_on_) {
+    task_runner_->PostTask(FROM_HERE,
+                           base::BindOnce(&AudioInputImpl::StartRecording,
+                                          weak_factory_.GetWeakPtr()));
+  } else {
+    task_runner_->PostTask(FROM_HERE,
+                           base::BindOnce(&AudioInputImpl::StopRecording,
+                                          weak_factory_.GetWeakPtr()));
   }
 }
 
@@ -178,6 +199,10 @@ int64_t AudioInputProviderImpl::GetCurrentAudioTime() {
 
 void AudioInputProviderImpl::SetMicState(bool mic_open) {
   audio_input_.SetMicState(mic_open);
+}
+
+void AudioInputProviderImpl::OnHotwordEnabled(bool enable) {
+  audio_input_.OnHotwordEnabled(enable);
 }
 
 }  // namespace assistant

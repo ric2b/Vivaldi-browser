@@ -16,7 +16,7 @@ declare_args() {
 }
 
 component("chromeos") {
-  configs += [ "//third_party/nss:system_nss_no_ssl_config" ]
+  configs += [ "//build/config/linux/nss:system_nss_no_ssl_config" ]
   public_deps = [
     "//dbus",
   ]
@@ -57,9 +57,6 @@ component("chromeos") {
     "//third_party/protobuf:protobuf_lite",
     "//ui/gfx/geometry",  # For accelerometer.
     "//url",
-  ]
-  data_deps = [
-    ":dbus_service_files",
   ]
   sources = [
     "accelerometer/accelerometer_reader.cc",
@@ -227,6 +224,8 @@ component("chromeos") {
     "dbus/fake_media_analytics_client.h",
     "dbus/fake_modem_messaging_client.cc",
     "dbus/fake_modem_messaging_client.h",
+    "dbus/fake_oobe_configuration_client.cc",
+    "dbus/fake_oobe_configuration_client.h",
     "dbus/fake_permission_broker_client.cc",
     "dbus/fake_permission_broker_client.h",
     "dbus/fake_power_manager_client.cc",
@@ -271,6 +270,8 @@ component("chromeos") {
     "dbus/media_analytics_client.h",
     "dbus/modem_messaging_client.cc",
     "dbus/modem_messaging_client.h",
+    "dbus/oobe_configuration_client.cc",
+    "dbus/oobe_configuration_client.h",
     "dbus/permission_broker_client.cc",
     "dbus/permission_broker_client.h",
     "dbus/pipe_reader.cc",
@@ -279,20 +280,8 @@ component("chromeos") {
     "dbus/power_manager_client.h",
     "dbus/power_policy_controller.cc",
     "dbus/power_policy_controller.h",
-    "dbus/services/chrome_features_service_provider.cc",
-    "dbus/services/chrome_features_service_provider.h",
     "dbus/services/cros_dbus_service.cc",
     "dbus/services/cros_dbus_service.h",
-    "dbus/services/drive_file_stream_service_provider.cc",
-    "dbus/services/drive_file_stream_service_provider.h",
-    "dbus/services/liveness_service_provider.cc",
-    "dbus/services/liveness_service_provider.h",
-    "dbus/services/proxy_resolution_service_provider.cc",
-    "dbus/services/proxy_resolution_service_provider.h",
-    "dbus/services/virtual_file_request_service_provider.cc",
-    "dbus/services/virtual_file_request_service_provider.h",
-    "dbus/services/vm_applications_service_provider.cc",
-    "dbus/services/vm_applications_service_provider.h",
     "dbus/session_manager_client.cc",
     "dbus/session_manager_client.h",
     "dbus/shill_client_helper.cc",
@@ -319,6 +308,8 @@ component("chromeos") {
     "dbus/update_engine_client.h",
     "dbus/upstart_client.cc",
     "dbus/upstart_client.h",
+    "dbus/util/account_identifier_operators.cc",
+    "dbus/util/account_identifier_operators.h",
     "dbus/util/tpm_util.cc",
     "dbus/util/tpm_util.h",
     "dbus/util/version_loader.cc",
@@ -327,6 +318,8 @@ component("chromeos") {
     "dbus/virtual_file_provider_client.h",
     "dbus/volume_state.cc",
     "dbus/volume_state.h",
+    "disks/disk.cc",
+    "disks/disk.h",
     "disks/disk_mount_manager.cc",
     "disks/disk_mount_manager.h",
     "disks/suspend_unmount_manager.cc",
@@ -500,6 +493,7 @@ component("chromeos") {
     "network/shill_property_util.h",
     "network/tether_constants.cc",
     "network/tether_constants.h",
+    "policy_certificate_provider.h",
     "printing/ppd_cache.cc",
     "printing/ppd_cache.h",
     "printing/ppd_line_reader.cc",
@@ -563,22 +557,6 @@ component("chromeos") {
   }
 }
 
-copy("dbus_service_files") {
-  sources = [
-    "dbus/services/org.chromium.ChromeFeaturesService.conf",
-    "dbus/services/org.chromium.DisplayService.conf",
-    "dbus/services/org.chromium.DriveFileStreamService.conf",
-    "dbus/services/org.chromium.KioskAppService.conf",
-    "dbus/services/org.chromium.LivenessService.conf",
-    "dbus/services/org.chromium.NetworkProxyService.conf",
-    "dbus/services/org.chromium.VirtualFileRequestService.conf",
-    "dbus/services/org.chromium.VmApplicationsService.conf",
-  ]
-  outputs = [
-    "$root_out_dir/dbus/{{source_file_part}}",
-  ]
-}
-
 # This must be a static library instead of a source set because some of the
 # files pull in things with dependencies that aren't linked in all cases.
 #
@@ -635,6 +613,8 @@ static_library("test_support") {
     "network/mock_managed_network_configuration_handler.h",
     "network/mock_network_device_handler.cc",
     "network/mock_network_device_handler.h",
+    "network/mock_network_state_handler.cc",
+    "network/mock_network_state_handler.h",
     "network/network_state_test.cc",
     "network/network_state_test.h",
     "network/onc/onc_test_utils.cc",
@@ -675,7 +655,7 @@ static_library("test_support_without_gmock") {
 test("chromeos_unittests") {
   configs += [
     "//build/config/linux/dbus",
-    "//third_party/nss:system_nss_no_ssl_config",
+    "//build/config/linux/nss:system_nss_no_ssl_config",
   ]
   deps = [
     ":attestation_proto",
@@ -732,7 +712,6 @@ test("chromeos_unittests") {
     "dbus/power_manager_client_unittest.cc",
     "dbus/power_policy_controller_unittest.cc",
     "dbus/services/cros_dbus_service_unittest.cc",
-    "dbus/services/proxy_resolution_service_provider_unittest.cc",
     "dbus/shill_client_unittest_base.cc",
     "dbus/shill_client_unittest_base.h",
     "dbus/shill_device_client_unittest.cc",
@@ -743,6 +722,7 @@ test("chromeos_unittests") {
     "dbus/shill_third_party_vpn_driver_client_unittest.cc",
     "dbus/util/version_loader_unittest.cc",
     "disks/disk_mount_manager_unittest.cc",
+    "disks/disk_unittest.cc",
     "disks/suspend_unmount_manager_unittest.cc",
     "geolocation/simple_geolocation_unittest.cc",
     "login/auth/authpolicy_login_helper_unittest.cc",
@@ -818,6 +798,10 @@ test("chromeos_unittests") {
 if (cros_board != "") {
   generate_vm_runner_script("cros_vm_launcher") {
     generated_script = "$root_build_dir/bin/launch_cros_vm"
+
+    # Assume every time we build cros_vm_launcher, we also build chrome and
+    # want to deploy it to the VM.
+    deploy_chrome = true
   }
 
   # The sanity test's actual binary is baked into the vm image. All we need to
@@ -832,10 +816,32 @@ if (cros_board != "") {
     # need the toolchain in the data.
     need_toolchain = true
   }
+
+  group("cros_chrome_deploy") {
+    # The following run-time dependencies are needed to deploy chrome to a
+    # ChromeOS device. See the link for the full list:
+    # https://codesearch.chromium.org/chromium/src/third_party/chromite/lib/chrome_util.py?l=341
+    # Most of these are copy targets, for which GN doesn't add their outputs
+    # as runtime-deps. See the link below for more details:
+    # https://chromium.googlesource.com/chromium/src/+/master/tools/gn/docs/reference.md#actions-and-copies
+    data_deps = [
+      "//chrome:xdg_mime",
+      "//mojo/core:shared_library_arc32",
+      "//mojo/core:shared_library_arc64",
+    ]
+
+    # TODO(bpastene): Figure out what's generating resources/chromeos/ and
+    # declare it as a dep instead of adding the dir directly.
+    data = [
+      "$root_out_dir/resources/chromeos/",
+    ]
+  }
+
   group("cros_vm_sanity_test") {
     testonly = true
     write_runtime_deps = "$root_out_dir/cros_vm_sanity_test.runtime_deps"
     data_deps = [
+      ":cros_chrome_deploy",
       "//:chromiumos_preflight",  # Builds the browser.
       ":cros_vm_sanity_test_wrapper",  # Builds the test wrapper.
     ]

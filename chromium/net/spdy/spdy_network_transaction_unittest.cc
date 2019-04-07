@@ -380,7 +380,8 @@ class SpdyNetworkTransactionTest : public TestWithScopedTaskEnvironment {
     const int kSize = 3000;
 
     int bytes_read = 0;
-    scoped_refptr<IOBufferWithSize> buf(new IOBufferWithSize(kSize));
+    scoped_refptr<IOBufferWithSize> buf =
+        base::MakeRefCounted<IOBufferWithSize>(kSize);
     TestCompletionCallback callback;
     while (true) {
       int rv = trans->Read(buf.get(), kSize, callback.callback());
@@ -2335,7 +2336,7 @@ TEST_F(SpdyNetworkTransactionTest, StartTransactionOnReadCallback) {
   rv = callback.WaitForResult();
 
   const int kSize = 3000;
-  scoped_refptr<IOBuffer> buf(new IOBuffer(kSize));
+  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(kSize);
   rv = trans->Read(
       buf.get(), kSize,
       base::Bind(&SpdyNetworkTransactionTest::StartTransactionCallback,
@@ -2384,7 +2385,7 @@ TEST_F(SpdyNetworkTransactionTest, DeleteSessionOnReadCallback) {
   // Setup a user callback which will delete the session, and clear out the
   // memory holding the stream object. Note that the callback deletes trans.
   const int kSize = 3000;
-  scoped_refptr<IOBuffer> buf(new IOBuffer(kSize));
+  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(kSize);
   rv = trans->Read(
       buf.get(),
       kSize,
@@ -4398,7 +4399,8 @@ TEST_F(SpdyNetworkTransactionTest, BufferFull) {
   do {
     // Read small chunks at a time.
     const int kSmallReadSize = 3;
-    scoped_refptr<IOBuffer> buf(new IOBuffer(kSmallReadSize));
+    scoped_refptr<IOBuffer> buf =
+        base::MakeRefCounted<IOBuffer>(kSmallReadSize);
     rv = trans->Read(buf.get(), kSmallReadSize, read_callback.callback());
     if (rv == ERR_IO_PENDING) {
       data.Resume();
@@ -4478,7 +4480,8 @@ TEST_F(SpdyNetworkTransactionTest, Buffering) {
   do {
     // Read small chunks at a time.
     const int kSmallReadSize = 14;
-    scoped_refptr<IOBuffer> buf(new IOBuffer(kSmallReadSize));
+    scoped_refptr<IOBuffer> buf =
+        base::MakeRefCounted<IOBuffer>(kSmallReadSize);
     rv = trans->Read(buf.get(), kSmallReadSize, read_callback.callback());
     if (rv == ERR_IO_PENDING) {
       data.Resume();
@@ -4558,7 +4561,8 @@ TEST_F(SpdyNetworkTransactionTest, BufferedAll) {
   do {
     // Read small chunks at a time.
     const int kSmallReadSize = 14;
-    scoped_refptr<IOBuffer> buf(new IOBuffer(kSmallReadSize));
+    scoped_refptr<IOBuffer> buf =
+        base::MakeRefCounted<IOBuffer>(kSmallReadSize);
     rv = trans->Read(buf.get(), kSmallReadSize, read_callback.callback());
     if (rv > 0) {
       EXPECT_EQ(kSmallReadSize, rv);
@@ -4635,7 +4639,8 @@ TEST_F(SpdyNetworkTransactionTest, BufferedClosed) {
   do {
     // Read small chunks at a time.
     const int kSmallReadSize = 14;
-    scoped_refptr<IOBuffer> buf(new IOBuffer(kSmallReadSize));
+    scoped_refptr<IOBuffer> buf =
+        base::MakeRefCounted<IOBuffer>(kSmallReadSize);
     rv = trans->Read(buf.get(), kSmallReadSize, read_callback.callback());
     if (rv == ERR_IO_PENDING) {
       data.Resume();
@@ -4708,7 +4713,7 @@ TEST_F(SpdyNetworkTransactionTest, BufferedCancelled) {
   TestCompletionCallback read_callback;
 
   const int kReadSize = 256;
-  scoped_refptr<IOBuffer> buf(new IOBuffer(kReadSize));
+  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(kReadSize);
   rv = trans->Read(buf.get(), kReadSize, read_callback.callback());
   ASSERT_EQ(ERR_IO_PENDING, rv) << "Unexpected read: " << rv;
 
@@ -6546,9 +6551,9 @@ TEST_F(SpdyNetworkTransactionTest, WindowUpdateSent) {
 
   // Issue a read which will cause a WINDOW_UPDATE to be sent and window
   // size increased to default.
-  scoped_refptr<IOBuffer> buf(new IOBuffer(kTargetSize));
+  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(kTargetSize);
   EXPECT_EQ(static_cast<int>(kTargetSize),
-            trans->Read(buf.get(), kTargetSize, CompletionCallback()));
+            trans->Read(buf.get(), kTargetSize, CompletionOnceCallback()));
   EXPECT_EQ(static_cast<int>(stream_max_recv_window_size),
             stream->stream()->recv_window_size());
   EXPECT_THAT(base::StringPiece(buf->data(), kTargetSize), Each(Eq('x')));
@@ -7668,6 +7673,7 @@ TEST_F(SpdyNetworkTransactionTest, PushCanceledByServerAfterClaimed) {
 #if BUILDFLAG(ENABLE_WEBSOCKETS)
 
 TEST_F(SpdyNetworkTransactionTest, WebSocketOpensNewConnection) {
+  base::HistogramTester histogram_tester;
   NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
   helper.RunPreTestSetup();
 
@@ -7768,12 +7774,18 @@ TEST_F(SpdyNetworkTransactionTest, WebSocketOpensNewConnection) {
   // HTTP/2 connection is still open, but WebSocket request did not pool to it.
   ASSERT_TRUE(spdy_session);
 
-  base::RunLoop().RunUntilIdle();
   data1.Resume();
+  base::RunLoop().RunUntilIdle();
   helper.VerifyDataConsumed();
+
+  // Server did not advertise WebSocket support.
+  histogram_tester.ExpectUniqueSample("Net.SpdySession.ServerSupportsWebSocket",
+                                      /* support_websocket = false */ 0,
+                                      /* expected_count = */ 1);
 }
 
 TEST_F(SpdyNetworkTransactionTest, WebSocketOverHTTP2) {
+  base::HistogramTester histogram_tester;
   auto session_deps = std::make_unique<SpdySessionDependencies>();
   session_deps->enable_websocket_over_http2 = true;
   NormalSpdyTransactionHelper helper(request_, HIGHEST, log_,
@@ -7889,6 +7901,11 @@ TEST_F(SpdyNetworkTransactionTest, WebSocketOverHTTP2) {
   ASSERT_THAT(rv, IsOk());
 
   helper.VerifyDataConsumed();
+
+  // Server advertised WebSocket support.
+  histogram_tester.ExpectUniqueSample("Net.SpdySession.ServerSupportsWebSocket",
+                                      /* support_websocket = true */ 1,
+                                      /* expected_count = */ 1);
 }
 
 TEST_F(SpdyNetworkTransactionTest, WebSocketNegotiatesHttp2) {

@@ -64,6 +64,7 @@ for m in re.findall(r"(.*node_modules/((@[^/]+)?[^@][^/]+))", maindeps):
     else:
       entry["licensetype"] = pjson[preferred]
   if "licensetype" in entry and entry["licensetype"] not in [
+    "(MIT AND Zlib)",
     "Apache 2.0",
     "Apache License, Version 2.0",
     "Apache-2.0",

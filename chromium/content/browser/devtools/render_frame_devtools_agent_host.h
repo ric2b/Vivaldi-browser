@@ -178,7 +178,6 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   void DidAttachInterstitialPage() override;
   void DidDetachInterstitialPage() override;
   void OnVisibilityChanged(content::Visibility visibility) override;
-  void DidReceiveCompositorFrame() override;
   void OnPageScaleFactorChanged(float page_scale_factor) override;
 
   bool IsChildFrame();
@@ -190,6 +189,9 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   void GrantPolicy();
   void RevokePolicy();
   void SetFrameTreeNode(FrameTreeNode* frame_tree_node);
+
+  bool ShouldAllowSession(DevToolsSession* session,
+                          RenderFrameHostImpl* frame_host);
 
 #if defined(OS_ANDROID)
   device::mojom::WakeLock* GetWakeLock();

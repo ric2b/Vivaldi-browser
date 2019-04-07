@@ -4,6 +4,7 @@
 
 #include "device/bluetooth/test/bluetooth_test.h"
 
+#include <iterator>
 #include <memory>
 
 #include "base/bind.h"
@@ -15,12 +16,20 @@
 
 namespace device {
 
+BluetoothTestBase::LowEnergyDeviceData::LowEnergyDeviceData() = default;
+
+BluetoothTestBase::LowEnergyDeviceData::LowEnergyDeviceData(
+    LowEnergyDeviceData&& data) = default;
+
+BluetoothTestBase::LowEnergyDeviceData::~LowEnergyDeviceData() = default;
+
 const char BluetoothTestBase::kTestAdapterName[] = "FakeBluetoothAdapter";
 const char BluetoothTestBase::kTestAdapterAddress[] = "A1:B2:C3:D4:E5:F6";
 
 const char BluetoothTestBase::kTestDeviceName[] = "FakeBluetoothDevice";
 const char BluetoothTestBase::kTestDeviceNameEmpty[] = "";
 const char BluetoothTestBase::kTestDeviceNameU2f[] = "U2F FakeDevice";
+const char BluetoothTestBase::kTestDeviceNameCable[] = "Cable FakeDevice";
 
 const char BluetoothTestBase::kTestDeviceAddress1[] = "01:00:00:90:1E:BE";
 const char BluetoothTestBase::kTestDeviceAddress2[] = "02:00:00:8B:74:63";
@@ -59,13 +68,19 @@ const char BluetoothTestBase::kTestUUIDServerCharacteristicConfiguration[] =
     "00002903-0000-1000-8000-00805f9b34fb";
 const char BluetoothTestBase::kTestUUIDCharacteristicPresentationFormat[] =
     "00002904-0000-1000-8000-00805f9b34fb";
+const char BluetoothTestBase::kTestUUIDCableAdvertisement[] =
+    "0000fde2-0000-1000-8000-00805f9b34fb";
 // Manufacturer kTestAdapterAddress
-const unsigned short BluetoothTestBase::kTestManufacturerId = 0x00E0;
+const uint16_t BluetoothTestBase::kTestManufacturerId = 0x00E0;
+const uint8_t BluetoothTestBase::kTestCableEid[] = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15};
+const char BluetoothTestBase::kTestUuidFormattedClientEid[] =
+    "00010203-0405-0607-0809-101112131415";
 
 BluetoothTestBase::BluetoothTestBase() : weak_factory_(this) {}
 
 BluetoothTestBase::~BluetoothTestBase() = default;
-
 void BluetoothTestBase::StartLowEnergyDiscoverySession() {
   adapter_->StartDiscoverySessionWithFilter(
       std::make_unique<BluetoothDiscoveryFilter>(BLUETOOTH_TRANSPORT_LE),
@@ -102,6 +117,11 @@ BluetoothDevice* BluetoothTestBase::SimulateLowEnergyDevice(
 BluetoothDevice* BluetoothTestBase::SimulateClassicDevice() {
   NOTIMPLEMENTED();
   return nullptr;
+}
+
+void BluetoothTestBase::SimulateDeviceBreaksConnection(
+    BluetoothDevice* device) {
+  SimulateGattDisconnection(device);
 }
 
 bool BluetoothTestBase::SimulateLocalGattCharacteristicNotificationsRequest(
@@ -153,6 +173,18 @@ void BluetoothTestBase::DeleteDevice(BluetoothDevice* device) {
 
 void BluetoothTestBase::Callback(Call expected) {
   ++callback_count_;
+
+  if (expected == Call::EXPECTED)
+    ++actual_success_callback_calls_;
+  else
+    unexpected_success_callback_ = true;
+}
+
+void BluetoothTestBase::CreateAdvertisementCallback(
+    Call expected,
+    scoped_refptr<BluetoothAdvertisement> advertisement) {
+  ++callback_count_;
+  advertisements_.push_back(std::move(advertisement));
 
   if (expected == Call::EXPECTED)
     ++actual_success_callback_calls_;
@@ -244,6 +276,18 @@ void BluetoothTestBase::ErrorCallback(Call expected) {
     unexpected_error_callback_ = true;
 }
 
+void BluetoothTestBase::AdvertisementErrorCallback(
+    Call expected,
+    BluetoothAdvertisement::ErrorCode error_code) {
+  ++error_callback_count_;
+  last_advertisement_error_code_ = error_code;
+
+  if (expected == Call::EXPECTED)
+    ++actual_error_callback_calls_;
+  else
+    unexpected_error_callback_ = true;
+}
+
 void BluetoothTestBase::ConnectErrorCallback(
     Call expected,
     enum BluetoothDevice::ConnectErrorCode error_code) {
@@ -316,6 +360,14 @@ base::Closure BluetoothTestBase::GetCallback(Call expected) {
                     expected);
 }
 
+BluetoothAdapter::CreateAdvertisementCallback
+BluetoothTestBase::GetCreateAdvertisementCallback(Call expected) {
+  if (expected == Call::EXPECTED)
+    ++expected_success_callback_calls_;
+  return base::Bind(&BluetoothTestBase::CreateAdvertisementCallback,
+                    weak_factory_.GetWeakPtr(), expected);
+}
+
 BluetoothAdapter::DiscoverySessionCallback
 BluetoothTestBase::GetDiscoverySessionCallback(Call expected) {
   if (expected == Call::EXPECTED)
@@ -377,6 +429,14 @@ BluetoothAdapter::ErrorCallback BluetoothTestBase::GetErrorCallback(
                     weak_factory_.GetWeakPtr(), expected);
 }
 
+BluetoothAdapter::AdvertisementErrorCallback
+BluetoothTestBase::GetAdvertisementErrorCallback(Call expected) {
+  if (expected == Call::EXPECTED)
+    ++expected_error_callback_calls_;
+  return base::Bind(&BluetoothTestBase::AdvertisementErrorCallback,
+                    weak_factory_.GetWeakPtr(), expected);
+}
+
 BluetoothDevice::ConnectErrorCallback
 BluetoothTestBase::GetConnectErrorCallback(Call expected) {
   if (expected == Call::EXPECTED)
@@ -417,6 +477,8 @@ BluetoothTestBase::GetReentrantStartNotifySessionErrorCallback(
 }
 
 void BluetoothTestBase::ResetEventCounts() {
+  last_advertisement_error_code_ =
+      BluetoothAdvertisement::INVALID_ADVERTISEMENT_ERROR_CODE;
   last_connect_error_code_ = BluetoothDevice::ERROR_UNKNOWN;
   callback_count_ = 0;
   error_callback_count_ = 0;
@@ -434,13 +496,6 @@ void BluetoothTestBase::RemoveTimedOutDevices() {
   adapter_->RemoveTimedOutDevices();
 }
 
-BluetoothTestBase::LowEnergyDeviceData::LowEnergyDeviceData() = default;
-
-BluetoothTestBase::LowEnergyDeviceData::LowEnergyDeviceData(
-    LowEnergyDeviceData&& data) = default;
-
-BluetoothTestBase::LowEnergyDeviceData::~LowEnergyDeviceData() = default;
-
 BluetoothTestBase::LowEnergyDeviceData
 BluetoothTestBase::GetLowEnergyDeviceData(int device_ordinal) const {
   LowEnergyDeviceData device_data;
@@ -448,6 +503,7 @@ BluetoothTestBase::GetLowEnergyDeviceData(int device_ordinal) const {
     case 1:
       device_data.name = kTestDeviceName;
       device_data.address = kTestDeviceAddress1;
+      device_data.flags = 0x04;
       device_data.rssi = static_cast<int>(TestRSSI::LOWEST);
       device_data.advertised_uuids = {BluetoothUUID(kTestUUIDGenericAccess),
                                       BluetoothUUID(kTestUUIDGenericAttribute)};
@@ -458,6 +514,7 @@ BluetoothTestBase::GetLowEnergyDeviceData(int device_ordinal) const {
     case 2:
       device_data.name = kTestDeviceName;
       device_data.address = kTestDeviceAddress1;
+      device_data.flags = 0x05;
       device_data.rssi = static_cast<int>(TestRSSI::LOWER);
       device_data.advertised_uuids = {BluetoothUUID(kTestUUIDImmediateAlert),
                                       BluetoothUUID(kTestUUIDLinkLoss)};
@@ -479,21 +536,43 @@ BluetoothTestBase::GetLowEnergyDeviceData(int device_ordinal) const {
       break;
     case 5:
       device_data.address = kTestDeviceAddress1;
+      device_data.flags = 0x06;
       device_data.rssi = static_cast<int>(TestRSSI::HIGH);
       break;
     case 6:
       device_data.name = kTestDeviceName;
       device_data.address = kTestDeviceAddress2;
+      device_data.flags = 0x18;
       device_data.rssi = static_cast<int>(TestRSSI::LOWEST);
       device_data.transport = BLUETOOTH_TRANSPORT_DUAL;
       break;
     case 7:
       device_data.name = kTestDeviceNameU2f;
       device_data.address = kTestDeviceAddress1;
+      device_data.flags = 0x07;
       device_data.rssi = static_cast<int>(TestRSSI::LOWEST);
       device_data.advertised_uuids = {BluetoothUUID(kTestUUIDU2f)};
       device_data.service_data = {
           {BluetoothUUID(kTestUUIDU2fControlPointLength), {0, 20}}};
+      break;
+    case 8:
+      device_data.name = kTestDeviceNameCable;
+      device_data.address = kTestDeviceAddress1;
+      device_data.flags = 0x07;
+      device_data.rssi = static_cast<int>(TestRSSI::LOWEST);
+      device_data.service_data = {
+          {BluetoothUUID(kTestUUIDCableAdvertisement),
+           std::vector<uint8_t>(std::begin(kTestCableEid),
+                                std::end(kTestCableEid))}};
+      break;
+    case 9:
+      device_data.name = kTestDeviceNameCable;
+      device_data.address = kTestDeviceAddress2;
+      device_data.flags = 0x07;
+      device_data.rssi = static_cast<int>(TestRSSI::LOWEST);
+      device_data.advertised_uuids = {
+          BluetoothUUID(kTestUUIDCableAdvertisement),
+          BluetoothUUID(kTestUuidFormattedClientEid)};
       break;
     default:
       NOTREACHED();

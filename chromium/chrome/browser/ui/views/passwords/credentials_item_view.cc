@@ -7,8 +7,8 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/autofill/core/common/password_form.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -90,9 +90,7 @@ CredentialsItemView::CredentialsItemView(
 
   // TODO(tapted): Check these (and the STYLE_ values below) against the spec on
   // http://crbug.com/651681.
-  const int kLabelContext = ChromeLayoutProvider::Get()->IsHarmonyMode()
-                                ? CONTEXT_BODY_TEXT_SMALL
-                                : CONTEXT_DEPRECATED_SMALL;
+  const int kLabelContext = CONTEXT_BODY_TEXT_SMALL;
 
   if (!upper_text.empty()) {
     upper_label_ = new views::Label(upper_text, kLabelContext,

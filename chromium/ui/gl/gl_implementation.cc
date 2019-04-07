@@ -20,6 +20,7 @@
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "ui/gl/gl_bindings.h"
+#include "ui/gl/gl_features.h"
 #include "ui/gl/gl_gl_api_implementation.h"
 #include "ui/gl/gl_version_info.h"
 
@@ -32,7 +33,6 @@ const struct {
   GLImplementation implementation;
 } kGLImplementationNamePairs[] = {
     {kGLImplementationDesktopName, kGLImplementationDesktopGL},
-    {kGLImplementationOSMesaName, kGLImplementationOSMesaGL},
     {kGLImplementationSwiftShaderName, kGLImplementationSwiftShaderGL},
 #if defined(OS_MACOSX)
     {kGLImplementationAppleName, kGLImplementationAppleGL},
@@ -97,7 +97,6 @@ gfx::ExtensionSet GetGLExtensionsFromCurrentContext(
 }  // namespace
 
 base::ThreadLocalPointer<CurrentGL>* g_current_gl_context_tls = NULL;
-OSMESAApi* g_current_osmesa_context;
 
 #if defined(USE_EGL)
 EGLApi* g_current_egl_context;
@@ -121,13 +120,7 @@ GLImplementation GetNamedGLImplementation(const std::string& name) {
 }
 
 GLImplementation GetSoftwareGLImplementation() {
-#if (defined(OS_WIN) ||                                                     \
-     (defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(USE_OZONE)) || \
-     (defined(OS_MACOSX) && defined(USE_EGL)))
   return kGLImplementationSwiftShaderGL;
-#else
-  return kGLImplementationOSMesaGL;
-#endif
 }
 
 const char* GetGLImplementationName(GLImplementation implementation) {
@@ -150,7 +143,6 @@ GLImplementation GetGLImplementation() {
 bool HasDesktopGLFeatures() {
   return kGLImplementationDesktopGL == g_gl_implementation ||
          kGLImplementationDesktopGLCoreProfile == g_gl_implementation ||
-         kGLImplementationOSMesaGL == g_gl_implementation ||
          kGLImplementationAppleGL == g_gl_implementation;
 }
 
@@ -216,9 +208,7 @@ std::string FilterGLExtensionList(
   auto is_disabled = [&disabled_extensions](const base::StringPiece& ext) {
     return base::ContainsValue(disabled_extensions, ext);
   };
-  extension_vec.erase(
-      std::remove_if(extension_vec.begin(), extension_vec.end(), is_disabled),
-      extension_vec.end());
+  base::EraseIf(extension_vec, is_disabled);
 
   return base::JoinString(extension_vec, " ");
 }

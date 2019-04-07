@@ -6,7 +6,9 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_constants.h"
 #include "ios/chrome/browser/ui/ui_util.h"
+#import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/common/favicon/favicon_view.h"
+#import "ios/chrome/common/material_timing.h"
 #import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 
@@ -18,6 +20,8 @@ namespace {
 
 const CGFloat kCountWidth = 20;
 const CGFloat kCountBorderWidth = 24;
+
+const int kBackgroundColor = 0xE8F1FC;
 
 }  // namespace
 
@@ -42,18 +46,32 @@ const CGFloat kCountBorderWidth = 24;
 
     _iconView = [[UIImageView alloc] initWithFrame:self.bounds];
 
+    UIImageView* iconBackground = [[UIImageView alloc] init];
+    iconBackground.image = [[UIImage imageNamed:@"ntp_most_visited_tile"]
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    iconBackground.tintColor = UIColorFromRGB(kBackgroundColor);
+
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    iconBackground.translatesAutoresizingMaskIntoConstraints = NO;
 
+    [self.contentView addSubview:iconBackground];
     [self.contentView addSubview:_titleLabel];
     [self.contentView addSubview:_iconView];
 
     [NSLayoutConstraint activateConstraints:@[
       [_iconView.widthAnchor constraintEqualToConstant:kIconSize],
+      [iconBackground.widthAnchor
+          constraintEqualToAnchor:_iconView.widthAnchor],
       [_iconView.heightAnchor constraintEqualToAnchor:_iconView.widthAnchor],
+      [iconBackground.heightAnchor
+          constraintEqualToAnchor:iconBackground.widthAnchor],
       [_iconView.centerXAnchor
           constraintEqualToAnchor:_titleLabel.centerXAnchor],
     ]];
+
+    AddSameCenterXConstraint(iconBackground, _iconView);
+    AddSameCenterYConstraint(iconBackground, _iconView);
 
     ApplyVisualConstraintsWithMetrics(
         @[ @"V:|[icon]-(space)-[title]", @"H:|[title]|" ],
@@ -63,6 +81,18 @@ const CGFloat kCountBorderWidth = 24;
     self.isAccessibilityElement = YES;
   }
   return self;
+}
+
+- (void)setHighlighted:(BOOL)highlighted {
+  [super setHighlighted:highlighted];
+
+  [UIView transitionWithView:self
+                    duration:ios::material::kDuration8
+                     options:UIViewAnimationOptionCurveEaseInOut
+                  animations:^{
+                    self.alpha = highlighted ? 0.5 : 1.0;
+                  }
+                  completion:nil];
 }
 
 + (CGSize)defaultSize {

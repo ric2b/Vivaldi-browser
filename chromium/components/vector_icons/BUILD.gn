@@ -16,11 +16,13 @@ aggregate_vector_icons("components_vector_icons") {
     "close.icon",
     "close_rounded.icon",
     "edit.icon",
+    "ethernet.icon",
     "folder.icon",
     "folder_managed.icon",
     "folder_managed_touch.icon",
     "folder_touch.icon",
     "forward_arrow.icon",
+    "headset.icon",
     "help_outline.icon",
     "info_outline.icon",
     "location_on.icon",
@@ -39,6 +41,7 @@ aggregate_vector_icons("components_vector_icons") {
     "usb.icon",
     "videocam.icon",
     "warning.icon",
+    "wifi_add.icon",
   ]
 }
 

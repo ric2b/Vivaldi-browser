@@ -11,7 +11,7 @@
 
 #include "base/files/file_util.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_appcache_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_cache_storage_helper.h"
@@ -187,7 +187,7 @@ void StorageHandler::UpdateDownloadsSize() {
       file_manager::util::GetDownloadsFolderForProfile(profile_);
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&base::ComputeDirectorySize, downloads_path),
       base::Bind(&StorageHandler::OnGetDownloadsSize,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -363,7 +363,7 @@ void StorageHandler::UpdateOtherUsersSize() {
       continue;
     other_users_.push_back(user);
     DBusThreadManager::Get()->GetCryptohomeClient()->GetAccountDiskUsage(
-        cryptohome::Identification(user->GetAccountId()),
+        cryptohome::CreateAccountIdentifierFromAccountId(user->GetAccountId()),
         base::BindOnce(&StorageHandler::OnGetOtherUserSize,
                        weak_ptr_factory_.GetWeakPtr()));
   }

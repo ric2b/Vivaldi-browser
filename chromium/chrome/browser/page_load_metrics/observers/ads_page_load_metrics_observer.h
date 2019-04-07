@@ -16,8 +16,8 @@
 #include "components/subresource_filter/content/browser/subresource_filter_observer.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
 #include "components/subresource_filter/core/common/load_policy.h"
-#include "components/ukm/ukm_source.h"
 #include "net/http/http_response_info.h"
+#include "services/metrics/public/cpp/ukm_source.h"
 
 // This observer labels each sub-frame as an ad or not, and keeps track of
 // relevant per-frame and whole-page byte statistics.
@@ -58,6 +58,10 @@ class AdsPageLoadMetricsObserver
                         bool started_in_foreground) override;
   ObservePolicy OnCommit(content::NavigationHandle* navigation_handle,
                          ukm::SourceId source_id) override;
+  void RecordAdFrameData(FrameTreeNodeId ad_id,
+                         AdTypes ad_types,
+                         content::RenderFrameHost* ad_host,
+                         bool frame_navigated);
   void OnDidFinishSubFrameNavigation(
       content::NavigationHandle* navigation_handle) override;
   ObservePolicy FlushMetricsOnAppEnterBackground(
@@ -72,12 +76,14 @@ class AdsPageLoadMetricsObserver
   struct AdFrameData {
     AdFrameData(FrameTreeNodeId frame_tree_node_id,
                 AdTypes ad_types,
-                AdOriginStatus origin_status);
+                AdOriginStatus origin_status,
+                bool frame_navigated);
     size_t frame_bytes;
     size_t frame_bytes_uncached;
     const FrameTreeNodeId frame_tree_node_id;
     AdTypes ad_types;
     AdOriginStatus origin_status;
+    bool frame_navigated;
   };
 
   // subresource_filter::SubresourceFilterObserver:
@@ -85,6 +91,8 @@ class AdsPageLoadMetricsObserver
       content::NavigationHandle* navigation_handle,
       subresource_filter::LoadPolicy load_policy,
       bool is_ad_subframe) override;
+  void OnAdSubframeDetected(
+      content::RenderFrameHost* render_frame_host) override;
   void OnSubresourceFilterGoingAway() override;
 
   // Determines if the URL of a frame matches the SubresourceFilter block

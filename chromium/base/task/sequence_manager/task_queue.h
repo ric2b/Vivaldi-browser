@@ -5,6 +5,8 @@
 #ifndef BASE_TASK_SEQUENCE_MANAGER_TASK_QUEUE_H_
 #define BASE_TASK_SEQUENCE_MANAGER_TASK_QUEUE_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -25,6 +27,7 @@ class BlameContext;
 namespace sequence_manager {
 
 namespace internal {
+struct AssociatedThreadId;
 class GracefulQueueShutdownHelper;
 class SequenceManagerImpl;
 class TaskQueueImpl;
@@ -310,7 +313,13 @@ class BASE_EXPORT TaskQueue : public SingleThreadTaskRunner {
 
   void SetObserver(Observer* observer);
 
-  // SingleThreadTaskRunner implementation
+  // Create a task runner for this TaskQueue which will annotate all
+  // posted tasks with the given task type.
+  scoped_refptr<SingleThreadTaskRunner> CreateTaskRunner(int task_type);
+
+  // TODO(kraynov): Drop this implementation and introduce
+  // GetDefaultTaskRunner() method instead.
+  // SingleThreadTaskRunner implementation:
   bool RunsTasksInCurrentSequence() const override;
   bool PostDelayedTask(const Location& from_here,
                        OnceClosure task,
@@ -350,14 +359,12 @@ class BASE_EXPORT TaskQueue : public SingleThreadTaskRunner {
   mutable Lock impl_lock_;
   std::unique_ptr<internal::TaskQueueImpl> impl_;
 
-  const PlatformThreadId thread_id_;
-
   const WeakPtr<internal::SequenceManagerImpl> sequence_manager_;
 
   const scoped_refptr<internal::GracefulQueueShutdownHelper>
       graceful_queue_shutdown_helper_;
 
-  THREAD_CHECKER(main_thread_checker_);
+  scoped_refptr<internal::AssociatedThreadId> associated_thread_;
 
   DISALLOW_COPY_AND_ASSIGN(TaskQueue);
 };

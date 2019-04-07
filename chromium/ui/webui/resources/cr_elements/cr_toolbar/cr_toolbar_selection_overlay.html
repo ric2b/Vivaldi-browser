@@ -1,7 +1,8 @@
-<link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
-<link rel="import" href="chrome://resources/cr_elements/icons.html">
-<link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
+<link rel="import" href="../../html/polymer.html">
+
+<link rel="import" href="../cr_icons_css.html">
+<link rel="import" href="../icons.html">
+<link rel="import" href="../paper_button_style_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 
@@ -9,7 +10,6 @@
   <template>
     <style include="cr-icons paper-button-style">
       :host {
-        -webkit-padding-start: var(--cr-toolbar-field-margin, 0);
         background: white;
         border-bottom: 1px solid var(--google-grey-300);
         bottom: 0;
@@ -17,6 +17,7 @@
         display: flex;
         left: 0;
         opacity: 0;
+        padding-inline-start: var(--cr-toolbar-field-margin, 0);
         pointer-events: none;
         position: absolute;
         right: 0;
@@ -42,7 +43,7 @@
       }
 
       paper-button {
-        -webkit-margin-start: 8px;
+        margin-inline-start: 8px;
       }
 
       #number-selected {
@@ -50,9 +51,9 @@
       }
 
       paper-icon-button-light {
-        -webkit-margin-end: 24px;
-        -webkit-margin-start: 2px;
         height: 36px;
+        margin-inline-end: 24px;
+        margin-inline-start: 2px;
         width: 36px;
       }
 

@@ -248,6 +248,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   const base::FilePath& GetFullPath() const override;
   const base::FilePath& GetTargetFilePath() const override;
   const base::FilePath& GetForcedFilePath() const override;
+  base::FilePath GetTemporaryFilePath() const override;
   base::FilePath GetFileNameToReportUser() const override;
   TargetDisposition GetTargetDisposition() const override;
   const std::string& GetHash() const override;
@@ -679,7 +680,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   DownloadDangerType danger_type_ = DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS;
 
   // The views of this item in the download shelf and download contents.
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   // Our delegate.
   DownloadItemImplDelegate* delegate_ = nullptr;

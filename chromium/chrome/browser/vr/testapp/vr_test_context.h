@@ -5,17 +5,15 @@
 #ifndef CHROME_BROWSER_VR_TESTAPP_VR_TEST_CONTEXT_H_
 #define CHROME_BROWSER_VR_TESTAPP_VR_TEST_CONTEXT_H_
 
-#include "base/macros.h"
-
-#include <cstdint>
+#include <memory>
 #include <queue>
 
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "chrome/browser/vr/content_input_delegate.h"
 #include "chrome/browser/vr/model/controller_model.h"
 #include "chrome/browser/vr/ui_browser_interface.h"
 #include "chrome/browser/vr/ui_interface.h"
-#include "chrome/browser/vr/ui_renderer.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/transform.h"
 
@@ -25,8 +23,7 @@ class Event;
 
 namespace vr {
 
-class GraphicsDelegate;
-class TextInputDelegate;
+class CompositorDelegate;
 class TestKeyboardDelegate;
 class Ui;
 struct Model;
@@ -35,10 +32,9 @@ struct Model;
 // manipulates the UI according to user input.
 class VrTestContext : public vr::UiBrowserInterface {
  public:
-  VrTestContext();
+  explicit VrTestContext(CompositorDelegate* compositor_delgate);
   ~VrTestContext() override;
 
-  void OnGlInitialized(std::unique_ptr<GraphicsDelegate> graphics_delegate);
   // TODO(vollick): we should refactor VrShellGl's rendering logic and use it
   // directly. crbug.com/767282
   void DrawFrame();
@@ -76,6 +72,7 @@ class VrTestContext : public vr::UiBrowserInterface {
   void set_window_size(const gfx::Size& size) { window_size_ = size; }
 
  private:
+  void InitializeGl();
   unsigned int CreateTexture(SkColor color);
   void CreateFakeVoiceSearchResult();
   void CycleWebVrModes();
@@ -120,11 +117,10 @@ class VrTestContext : public vr::UiBrowserInterface {
   int tab_id_ = 0;
   bool hosted_ui_enabled_ = false;
 
-  std::unique_ptr<TextInputDelegate> text_input_delegate_;
-  std::unique_ptr<TestKeyboardDelegate> keyboard_delegate_;
-  std::unique_ptr<GraphicsDelegate> graphics_delegate_;
+  CompositorDelegate* compositor_delegate_;
+  TestKeyboardDelegate* keyboard_delegate_;
 
-  PlatformController::Handedness handedness_ = PlatformController::kRightHanded;
+  ControllerModel::Handedness handedness_ = ControllerModel::kRightHanded;
 
   std::queue<InputEventList> input_event_lists_;
 

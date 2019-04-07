@@ -27,7 +27,7 @@
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
@@ -212,7 +212,9 @@ void GetFormAndField(autofill::FormData* form,
     prefObserverBridge_ = std::make_unique<PrefObserverBridge>(self);
     prefChangeRegistrar_.Init(prefService);
     prefObserverBridge_->ObserveChangesForPreference(
-        autofill::prefs::kAutofillEnabled, &prefChangeRegistrar_);
+        autofill::prefs::kAutofillCreditCardEnabled, &prefChangeRegistrar_);
+    prefObserverBridge_->ObserveChangesForPreference(
+        autofill::prefs::kAutofillProfileEnabled, &prefChangeRegistrar_);
 
     jsAutofillManager_ = [[JsAutofillManager alloc]
         initWithReceiver:webState_->GetJSInjectionReceiver()];
@@ -689,9 +691,6 @@ void GetFormAndField(autofill::FormData* form,
 #pragma mark - PrefObserverDelegate
 
 - (void)onPreferenceChanged:(const std::string&)preferenceName {
-  if (preferenceName != autofill::prefs::kAutofillEnabled)
-    return;
-
   // Processing the page can be needed here if Autofill is enabled in settings
   // when the page is already loaded.
   if ([self isAutofillEnabled])
@@ -701,7 +700,7 @@ void GetFormAndField(autofill::FormData* form,
 #pragma mark - Private methods.
 
 - (BOOL)isAutofillEnabled {
-  if (!prefService_->GetBoolean(autofill::prefs::kAutofillEnabled))
+  if (!autofill::prefs::IsAutofillEnabled(prefService_))
     return NO;
 
   web::URLVerificationTrustLevel trustLevel;

@@ -35,13 +35,15 @@ class MockPasswordProtectionService : public PasswordProtectionService {
   MOCK_METHOD0(IsExtendedReporting, bool());
   MOCK_METHOD0(IsIncognito, bool());
   MOCK_METHOD0(IsHistorySyncEnabled, bool());
+  MOCK_METHOD0(IsUnderAdvancedProtection, bool());
   MOCK_METHOD0(OnPolicySpecifiedPasswordChanged, void());
   MOCK_METHOD1(MaybeLogPasswordReuseDetectedEvent, void(content::WebContents*));
   MOCK_METHOD1(UserClickedThroughSBInterstitial, bool(content::WebContents*));
   MOCK_METHOD2(ShowInterstitial,
                void(content::WebContents*, ReusedPasswordType));
-  MOCK_METHOD2(IsPingingEnabled,
+  MOCK_METHOD3(IsPingingEnabled,
                bool(LoginReputationClientRequest::TriggerType,
+                    ReusedPasswordType,
                     RequestOutcome*));
   MOCK_METHOD3(ShowModalWarning,
                void(content::WebContents*,
@@ -60,7 +62,7 @@ class MockPasswordProtectionService : public PasswordProtectionService {
                     LoginReputationClientRequest::Frame*));
   MOCK_METHOD3(MaybeLogPasswordReuseLookupEvent,
                void(content::WebContents*,
-                    PasswordProtectionService::RequestOutcome,
+                    RequestOutcome,
                     const safe_browsing::LoginReputationClientResponse*));
   MOCK_METHOD3(CanShowInterstitial,
                bool(RequestOutcome, ReusedPasswordType, const GURL&));

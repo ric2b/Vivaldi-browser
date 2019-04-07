@@ -55,8 +55,7 @@
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_test_user_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/settings/device_settings_service.h"
+#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/ui/ash/test_wallpaper_controller.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chromeos/chromeos_switches.h"
@@ -177,14 +176,12 @@ class ProfileManagerTest : public testing::Test {
   // Helper function to create a profile with |name| for a profile |manager|.
   void CreateProfileAsync(ProfileManager* manager,
                           const std::string& name,
-                          bool is_supervised,
                           MockObserver* mock_observer) {
     manager->CreateProfileAsync(temp_dir_.GetPath().AppendASCII(name),
                                 base::Bind(&MockObserver::OnProfileCreated,
                                            base::Unretained(mock_observer)),
                                 base::UTF8ToUTF16(name),
-                                profiles::GetDefaultAvatarIconUrl(0),
-                                is_supervised ? "Dummy ID" : std::string());
+                                profiles::GetDefaultAvatarIconUrl(0));
   }
 
   // Helper function to add a profile with |profile_name| to |profile_manager|'s
@@ -232,8 +229,7 @@ class ProfileManagerTest : public testing::Test {
         profile_helper->GetProfilePathByUserIdHash(user_id_hash));
   }
 
-  chromeos::ScopedTestDeviceSettingsService test_device_settings_service_;
-  chromeos::ScopedTestCrosSettings test_cros_settings_;
+  chromeos::ScopedCrosSettingsTestHelper cros_settings_test_helper_;
 #endif
 
   content::TestBrowserThreadBundle thread_bundle_;
@@ -447,7 +443,7 @@ TEST_F(ProfileManagerTest, LoadExistingProfile) {
       .Times(testing::AtLeast(1));
 
   ProfileManager* profile_manager = g_browser_process->profile_manager();
-  CreateProfileAsync(profile_manager, profile_name, false, &mock_observer1);
+  CreateProfileAsync(profile_manager, profile_name, &mock_observer1);
 
   // Make sure a real profile is created before continuing.
   content::RunAllTasksUntilIdle();
@@ -491,9 +487,9 @@ TEST_F(ProfileManagerTest, CreateProfileAsyncMultipleRequests) {
 
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   const std::string profile_name = "New Profile";
-  CreateProfileAsync(profile_manager, profile_name, false, &mock_observer1);
-  CreateProfileAsync(profile_manager, profile_name, false, &mock_observer2);
-  CreateProfileAsync(profile_manager, profile_name, false, &mock_observer3);
+  CreateProfileAsync(profile_manager, profile_name, &mock_observer1);
+  CreateProfileAsync(profile_manager, profile_name, &mock_observer2);
+  CreateProfileAsync(profile_manager, profile_name, &mock_observer3);
 
   content::RunAllTasksUntilIdle();
 }
@@ -508,38 +504,10 @@ TEST_F(ProfileManagerTest, CreateProfilesAsync) {
 
   ProfileManager* profile_manager = g_browser_process->profile_manager();
 
-  CreateProfileAsync(profile_manager, profile_name1, false, &mock_observer);
-  CreateProfileAsync(profile_manager, profile_name2, false, &mock_observer);
+  CreateProfileAsync(profile_manager, profile_name1, &mock_observer);
+  CreateProfileAsync(profile_manager, profile_name2, &mock_observer);
 
   content::RunAllTasksUntilIdle();
-}
-
-TEST_F(ProfileManagerTest, CreateProfileAsyncCheckOmitted) {
-  std::string name = "0 Supervised Profile";
-
-  MockObserver mock_observer;
-  EXPECT_CALL(mock_observer, OnProfileCreated(
-      testing::NotNull(), NotFail())).Times(testing::AtLeast(2));
-
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  ProfileAttributesStorage& storage =
-      profile_manager->GetProfileAttributesStorage();
-  EXPECT_EQ(0u, storage.GetNumberOfProfiles());
-
-  CreateProfileAsync(profile_manager, name, true, &mock_observer);
-  content::RunAllTasksUntilIdle();
-
-  ASSERT_EQ(1u, storage.GetNumberOfProfiles());
-  // Supervised profiles should start out omitted from the profile list.
-  EXPECT_TRUE(storage.GetAllProfilesAttributesSortedByName()[0]->IsOmitted());
-
-  name = "1 Regular Profile";
-  CreateProfileAsync(profile_manager, name, false, &mock_observer);
-  content::RunAllTasksUntilIdle();
-
-  ASSERT_EQ(2u, storage.GetNumberOfProfiles());
-  // Non-supervised profiles should be included in the profile list.
-  EXPECT_FALSE(storage.GetAllProfilesAttributesSortedByName()[1]->IsOmitted());
 }
 
 TEST_F(ProfileManagerTest, AddProfileToStorageCheckOmitted) {
@@ -548,16 +516,19 @@ TEST_F(ProfileManagerTest, AddProfileToStorageCheckOmitted) {
       profile_manager->GetProfileAttributesStorage();
   EXPECT_EQ(0u, storage.GetNumberOfProfiles());
 
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   const base::FilePath supervised_path =
       temp_dir_.GetPath().AppendASCII("Supervised");
   TestingProfile* supervised_profile =
       new TestingProfile(supervised_path, nullptr);
-  supervised_profile->GetPrefs()->SetString(prefs::kSupervisedUserId, "An ID");
+  supervised_profile->GetPrefs()->SetString(
+      prefs::kSupervisedUserId, supervised_users::kChildAccountSUID);
 
   // RegisterTestingProfile adds the profile to the cache and takes ownership.
   profile_manager->RegisterTestingProfile(supervised_profile, true, false);
   ASSERT_EQ(1u, storage.GetNumberOfProfiles());
   EXPECT_TRUE(storage.GetAllProfilesAttributesSortedByName()[0]->IsOmitted());
+#endif
 
   const base::FilePath nonsupervised_path =
       temp_dir_.GetPath().AppendASCII("Non-Supervised");
@@ -565,10 +536,16 @@ TEST_F(ProfileManagerTest, AddProfileToStorageCheckOmitted) {
       new TestingProfile(nonsupervised_path, nullptr);
   profile_manager->RegisterTestingProfile(nonsupervised_profile, true, false);
 
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   EXPECT_EQ(2u, storage.GetNumberOfProfiles());
+#else
+  EXPECT_EQ(1u, storage.GetNumberOfProfiles());
+#endif
   ProfileAttributesEntry* entry;
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   ASSERT_TRUE(storage.GetProfileAttributesWithPath(supervised_path, &entry));
   EXPECT_TRUE(entry->IsOmitted());
+#endif
 
   ASSERT_TRUE(storage.GetProfileAttributesWithPath(nonsupervised_path, &entry));
   EXPECT_FALSE(entry->IsOmitted());
@@ -1299,8 +1276,8 @@ TEST_F(ProfileManagerTest, ActiveProfileDeleted) {
   EXPECT_CALL(mock_observer, OnProfileCreated(
       testing::NotNull(), NotFail())).Times(testing::AtLeast(3));
 
-  CreateProfileAsync(profile_manager, profile_name1, false, &mock_observer);
-  CreateProfileAsync(profile_manager, profile_name2, false, &mock_observer);
+  CreateProfileAsync(profile_manager, profile_name1, &mock_observer);
+  CreateProfileAsync(profile_manager, profile_name2, &mock_observer);
   content::RunAllTasksUntilIdle();
 
   EXPECT_EQ(2u, profile_manager->GetLoadedProfiles().size());
@@ -1333,7 +1310,7 @@ TEST_F(ProfileManagerTest, LastProfileDeleted) {
   EXPECT_CALL(mock_observer, OnProfileCreated(
       testing::NotNull(), NotFail())).Times(testing::AtLeast(1));
 
-  CreateProfileAsync(profile_manager, profile_name1, false, &mock_observer);
+  CreateProfileAsync(profile_manager, profile_name1, &mock_observer);
   content::RunAllTasksUntilIdle();
 
   EXPECT_EQ(1u, profile_manager->GetLoadedProfiles().size());
@@ -1371,7 +1348,7 @@ TEST_F(ProfileManagerTest, LastProfileDeletedWithGuestActiveProfile) {
   EXPECT_CALL(mock_observer, OnProfileCreated(
       testing::NotNull(), NotFail())).Times(testing::AtLeast(2));
 
-  CreateProfileAsync(profile_manager, profile_name1, false, &mock_observer);
+  CreateProfileAsync(profile_manager, profile_name1, &mock_observer);
   content::RunAllTasksUntilIdle();
 
   EXPECT_EQ(1u, profile_manager->GetLoadedProfiles().size());
@@ -1624,7 +1601,7 @@ TEST_F(ProfileManagerTest, ActiveProfileDeletedNeedsToLoadNextProfile) {
   MockObserver mock_observer;
   EXPECT_CALL(mock_observer, OnProfileCreated(
       testing::NotNull(), NotFail())).Times(testing::AtLeast(2));
-  CreateProfileAsync(profile_manager, profile_name1, false, &mock_observer);
+  CreateProfileAsync(profile_manager, profile_name1, &mock_observer);
   content::RunAllTasksUntilIdle();
 
   // Track the profile, but don't load it.
@@ -1671,7 +1648,7 @@ TEST_F(ProfileManagerTest, ActiveProfileDeletedNextProfileDeletedToo) {
   MockObserver mock_observer;
   EXPECT_CALL(mock_observer, OnProfileCreated(
       testing::NotNull(), NotFail())).Times(testing::AtLeast(2));
-  CreateProfileAsync(profile_manager, profile_name1, false, &mock_observer);
+  CreateProfileAsync(profile_manager, profile_name1, &mock_observer);
   content::RunAllTasksUntilIdle();
 
   // Create the other profiles, but don't load them. Assign a fake avatar icon

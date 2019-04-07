@@ -37,7 +37,7 @@ class API_AVAILABLE(macosx(10.12.2)) OperationBase : public Operation {
         metadata_secret_(std::move(metadata_secret)),
         keychain_access_group_(std::move(keychain_access_group)),
         callback_(std::move(callback)),
-        touch_id_context_(std::make_unique<TouchIdContext>()) {}
+        touch_id_context_(TouchIdContext::Create()) {}
 
   ~OperationBase() override = default;
 
@@ -56,13 +56,13 @@ class API_AVAILABLE(macosx(10.12.2)) OperationBase : public Operation {
   // PromptTouchId triggers a Touch ID consent dialog with the given reason
   // string. Subclasses implement the PromptTouchIdDone callback to receive the
   // result.
-  void PromptTouchId(std::string reason) {
+  void PromptTouchId(const base::string16& reason) {
     // The callback passed to TouchIdContext::Prompt will not fire if the
     // TouchIdContext itself has been deleted. Since that it is owned by this
     // class, there is no need to bind the callback to a weak ref here.
     touch_id_context_->PromptTouchId(
-        std::move(reason), base::BindOnce(&OperationBase::PromptTouchIdDone,
-                                          base::Unretained(this)));
+        reason, base::BindOnce(&OperationBase::PromptTouchIdDone,
+                               base::Unretained(this)));
   }
 
   // Callback for |PromptTouchId|.
@@ -96,7 +96,9 @@ class API_AVAILABLE(macosx(10.12.2)) OperationBase : public Operation {
   }
 
   const std::string& metadata_secret() const { return metadata_secret_; }
-
+  const std::string& keychain_access_group() const {
+    return keychain_access_group_;
+  }
   const Request& request() const { return request_; }
   Callback& callback() { return callback_; }
 

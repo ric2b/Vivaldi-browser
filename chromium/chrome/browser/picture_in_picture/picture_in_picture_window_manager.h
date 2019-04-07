@@ -29,10 +29,17 @@ class PictureInPictureWindowManager {
   // Returns the singleton instance.
   static PictureInPictureWindowManager* GetInstance();
 
+  // Some PIP windows (e.g. from ARC) may not have a WebContents as the source
+  // of the PIP content. This function lets them provide their own window
+  // controller directly.
+  void EnterPictureInPictureWithController(
+      content::PictureInPictureWindowController* pip_window_controller);
   gfx::Size EnterPictureInPicture(content::WebContents*,
                                   const viz::SurfaceId&,
                                   const gfx::Size&);
   void ExitPictureInPicture();
+
+  content::WebContents* GetWebContents();
 
  private:
   friend struct base::DefaultSingletonTraits<PictureInPictureWindowManager>;
@@ -47,7 +54,7 @@ class PictureInPictureWindowManager {
   // Closes the active Picture-in-Picture window.
   // There MUST be a window open.
   // This is suffixed with "Internal" to keep consistency with the method above.
-  void CloseWindowInternal();
+  void CloseWindowInternal(bool should_reset_pip_player);
 
   PictureInPictureWindowManager();
   ~PictureInPictureWindowManager();

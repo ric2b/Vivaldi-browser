@@ -50,7 +50,12 @@ class CORE_EXPORT ThreadableLoaderClient {
  public:
   virtual void DidSendData(unsigned long long /*bytesSent*/,
                            unsigned long long /*totalBytesToBeSent*/) {}
-  virtual void DidReceiveRedirectTo(const KURL&) {}
+  // Note that redirects for redirect modes kError and kManual are still
+  // notified here. A client must return false in such cases.
+  virtual bool WillFollowRedirect(const KURL& new_url,
+                                  const ResourceResponse&) {
+    return true;
+  }
   virtual void DidReceiveResponse(unsigned long /*identifier*/,
                                   const ResourceResponse&,
                                   std::unique_ptr<WebDataConsumerHandle>) {}
@@ -60,8 +65,6 @@ class CORE_EXPORT ThreadableLoaderClient {
   virtual void DidFail(const ResourceError&) {}
   virtual void DidFailRedirectCheck() {}
   virtual void DidReceiveResourceTiming(const ResourceTimingInfo&) {}
-
-  virtual bool IsDocumentThreadableLoaderClient() { return false; }
 
   virtual void DidDownloadData(int /*dataLength*/) {}
   // Called for requests that had DownloadToBlob set to true. Can be called with

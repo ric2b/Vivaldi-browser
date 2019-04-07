@@ -16,9 +16,9 @@
 #include "chrome/browser/ui/bookmarks/bookmark_editor.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/sync/sync_promo_ui.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/harmony/textfield_layout.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/sync/bubble_sync_promo_view.h"
+#include "chrome/browser/ui/views/textfield_layout.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -80,7 +80,6 @@ views::Widget* BookmarkBubbleView::ShowBubble(
   bubble_widget->Show();
   // Select the entire title textfield contents when the bubble is first shown.
   bookmark_bubble_->name_field_->SelectAll(true);
-  bookmark_bubble_->SetArrowPaintType(views::BubbleBorder::PAINT_TRANSPARENT);
 
   if (bookmark_bubble_->observer_) {
     BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile);

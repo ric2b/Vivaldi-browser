@@ -9,17 +9,19 @@
 #include <utility>
 #include <vector>
 
-#include "ash/ime/test_ime_controller.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_task_environment.h"
+#include "chrome/browser/ui/ash/test_ime_controller.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ime/chromeos/fake_input_method_delegate.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/chromeos/input_method_util.h"
+#include "ui/base/ime/chromeos/mock_ime_candidate_window_handler.h"
 #include "ui/base/ime/chromeos/mock_input_method_manager.h"
+#include "ui/base/ime/ime_bridge.h"
 
 using chromeos::input_method::FakeInputMethodDelegate;
 using chromeos::input_method::InputMethodDescriptor;
@@ -156,7 +158,7 @@ class ImeControllerClientTest : public testing::Test {
   TestInputMethodManager input_method_manager_;
 
   // Mock of mojo interface in ash.
-  ash::TestImeController ime_controller_;
+  TestImeController ime_controller_;
 
  private:
   base::test::ScopedTaskEnvironment scoped_task_environment_;
@@ -247,6 +249,12 @@ TEST_F(ImeControllerClientTest, ShowImeMenuOnShelf) {
 }
 
 TEST_F(ImeControllerClientTest, InputMethodChanged) {
+  ui::IMEBridge::Initialize();
+  std::unique_ptr<chromeos::MockIMECandidateWindowHandler>
+      mock_candidate_window =
+          std::make_unique<chromeos::MockIMECandidateWindowHandler>();
+  ui::IMEBridge::Get()->SetCandidateWindowHandler(mock_candidate_window.get());
+
   ImeControllerClient client(&input_method_manager_);
   client.InitForTesting(ime_controller_.CreateInterfacePtr());
 
@@ -265,6 +273,16 @@ TEST_F(ImeControllerClientTest, InputMethodChanged) {
   EXPECT_EQ("id2", ime_controller_.available_imes_[1]->id);
   EXPECT_EQ(base::ASCIIToUTF16("name2"),
             ime_controller_.available_imes_[1]->name);
+  EXPECT_FALSE(ime_controller_.show_mode_indicator_);
+
+  // Simulate a switch and show message.
+  input_method_manager_.state_->current_ime_id_ = "id1";
+  client.InputMethodChanged(&input_method_manager_, nullptr /* profile */,
+                            true /* show_message */);
+  client.FlushMojoForTesting();
+
+  // Mode indicator should be shown.
+  EXPECT_TRUE(ime_controller_.show_mode_indicator_);
 }
 
 TEST_F(ImeControllerClientTest, NoActiveState) {
@@ -283,7 +301,6 @@ TEST_F(ImeControllerClientTest, NoActiveState) {
 TEST_F(ImeControllerClientTest, MenuItemChanged) {
   ImeControllerClient client(&input_method_manager_);
   client.InitForTesting(ime_controller_.CreateInterfacePtr());
-
   const bool is_selection_item = true;
   InputMethodMenuItem item1("key1", "label1", is_selection_item,
                             true /* checked */);

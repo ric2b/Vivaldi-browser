@@ -816,6 +816,7 @@ void FeatureInfo::InitializeFeatures() {
       case CONTEXT_TYPE_WEBGL1:
       case CONTEXT_TYPE_WEBGL2:
       case CONTEXT_TYPE_WEBGL2_COMPUTE:
+      case CONTEXT_TYPE_WEBGPU:
         break;
     }
   }
@@ -1084,10 +1085,8 @@ void FeatureInfo::InitializeFeatures() {
 #if defined(OS_MACOSX) || defined(OS_CHROMEOS)
   // TODO(dcastagna): Determine ycbcr_420v_image on CrOS at runtime
   // querying minigbm. https://crbug.com/646148
-  if (gl::GetGLImplementation() != gl::kGLImplementationOSMesaGL) {
-    AddExtensionString("GL_CHROMIUM_ycbcr_420v_image");
-    feature_flags_.chromium_image_ycbcr_420v = true;
-  }
+  AddExtensionString("GL_CHROMIUM_ycbcr_420v_image");
+  feature_flags_.chromium_image_ycbcr_420v = true;
 #endif
 
   if (gfx::HasExtension(extensions, "GL_APPLE_ycbcr_422")) {
@@ -1491,6 +1490,21 @@ void FeatureInfo::InitializeFeatures() {
   // https://github.com/KhronosGroup/WebGL/pull/2583
   feature_flags_.separate_stencil_ref_mask_writemask =
       !(gl_version_info_->is_d3d) && !IsWebGLContext();
+
+  if (gfx::HasExtension(extensions, "GL_MESA_framebuffer_flip_y")) {
+    feature_flags_.mesa_framebuffer_flip_y = true;
+    validators_.framebuffer_parameter.AddValue(GL_FRAMEBUFFER_FLIP_Y_MESA);
+    AddExtensionString("GL_MESA_framebuffer_flip_y");
+  }
+
+  // Only supporting ANGLE_multiview in passthrough mode - not implemented in
+  // validating command decoder. The extension is only available in ANGLE and in
+  // that case Chromium should be using passthrough by default.
+  if (is_passthrough_cmd_decoder_ &&
+      gfx::HasExtension(extensions, "GL_ANGLE_multiview")) {
+    AddExtensionString("GL_ANGLE_multiview");
+    feature_flags_.angle_multiview = true;
+  }
 }
 
 void FeatureInfo::InitializeFloatAndHalfFloatFeatures(
@@ -1622,13 +1636,13 @@ void FeatureInfo::InitializeFloatAndHalfFloatFeatures(
     // Nearest filter needed for framebuffer completeness on some drivers.
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, width, 0, GL_RGBA,
-                 GL_FLOAT, NULL);
+                 GL_FLOAT, nullptr);
     glBindFramebufferEXT(GL_FRAMEBUFFER, fb_id);
     glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                               GL_TEXTURE_2D, tex_id, 0);
     GLenum status_rgba = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, width, 0, GL_RGB, GL_FLOAT,
-                 NULL);
+                 nullptr);
     GLenum status_rgb = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER);
 
     // For desktop systems, check to see if we support rendering to the full
@@ -1644,7 +1658,7 @@ void FeatureInfo::InitializeFloatAndHalfFloatFeatures(
       DCHECK_EQ(arraysize(internal_formats), arraysize(formats));
       for (size_t i = 0; i < arraysize(formats); ++i) {
         glTexImage2D(GL_TEXTURE_2D, 0, internal_formats[i], width, width, 0,
-                     formats[i], GL_FLOAT, NULL);
+                     formats[i], GL_FLOAT, nullptr);
         full_float_support &= glCheckFramebufferStatusEXT(GL_FRAMEBUFFER) ==
                               GL_FRAMEBUFFER_COMPLETE;
       }

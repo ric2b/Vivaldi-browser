@@ -55,13 +55,13 @@ std::unique_ptr<base::DictionaryValue> GetFingerprintsInfo(
 }  // namespace
 
 FingerprintHandler::FingerprintHandler(Profile* profile)
-    : profile_(profile), binding_(this), weak_ptr_factory_(this) {
+    : profile_(profile),
+      binding_(this),
+      session_observer_(this),
+      weak_ptr_factory_(this) {
   service_manager::Connector* connector =
       content::ServiceManagerConnection::GetForProcess()->GetConnector();
   connector->BindInterface(device::mojom::kServiceName, &fp_service_);
-  device::mojom::FingerprintObserverPtr observer;
-  binding_.Bind(mojo::MakeRequest(&observer));
-  fp_service_->AddFingerprintObserver(std::move(observer));
   user_id_ = ProfileHelper::Get()->GetUserIdHashFromProfile(profile);
 }
 
@@ -110,12 +110,16 @@ void FingerprintHandler::RegisterMessages() {
 void FingerprintHandler::OnJavascriptAllowed() {
   // SessionManager may not exist in some tests.
   if (SessionManager::Get())
-    SessionManager::Get()->AddObserver(this);
+    session_observer_.Add(SessionManager::Get());
+
+  device::mojom::FingerprintObserverPtr observer;
+  binding_.Bind(mojo::MakeRequest(&observer));
+  fp_service_->AddFingerprintObserver(std::move(observer));
 }
 
 void FingerprintHandler::OnJavascriptDisallowed() {
-  if (SessionManager::Get())
-    SessionManager::Get()->RemoveObserver(this);
+  session_observer_.RemoveAll();
+  binding_.Close();
 }
 
 void FingerprintHandler::OnRestarted() {}
@@ -123,6 +127,10 @@ void FingerprintHandler::OnRestarted() {}
 void FingerprintHandler::OnEnrollScanDone(uint32_t scan_result,
                                           bool enroll_session_complete,
                                           int percent_complete) {
+  VLOG(1) << "Receive fingerprint enroll scan result. scan_result="
+          << scan_result
+          << ", enroll_session_complete=" << enroll_session_complete
+          << ", percent_complete=" << percent_complete;
   auto scan_attempt = std::make_unique<base::DictionaryValue>();
   scan_attempt->SetInteger("result", scan_result);
   scan_attempt->SetBoolean("isComplete", enroll_session_complete);
@@ -134,6 +142,8 @@ void FingerprintHandler::OnEnrollScanDone(uint32_t scan_result,
 void FingerprintHandler::OnAuthScanDone(
     uint32_t scan_result,
     const base::flat_map<std::string, std::vector<std::string>>& matches) {
+  VLOG(1) << "Receive fingerprint auth scan result. scan_result="
+          << scan_result;
   if (SessionManager::Get()->session_state() == SessionState::LOCKED)
     return;
 
@@ -160,7 +170,9 @@ void FingerprintHandler::OnAuthScanDone(
   FireWebUIListener("on-fingerprint-attempt-received", *fingerprint_attempt);
 }
 
-void FingerprintHandler::OnSessionFailed() {}
+void FingerprintHandler::OnSessionFailed() {
+  LOG(ERROR) << "Fingerprint session failed.";
+}
 
 void FingerprintHandler::OnSessionStateChanged() {
   SessionState state = SessionManager::Get()->session_state();
@@ -214,6 +226,8 @@ void FingerprintHandler::HandleGetNumFingerprints(const base::ListValue* args) {
 }
 
 void FingerprintHandler::HandleStartEnroll(const base::ListValue* args) {
+  AllowJavascript();
+
   // Determines what the newly added fingerprint's name should be.
   for (int i = 1; i <= kMaxAllowedFingerprints; ++i) {
     std::string fingerprint_name = l10n_util::GetStringFUTF8(
@@ -228,6 +242,7 @@ void FingerprintHandler::HandleStartEnroll(const base::ListValue* args) {
 
 void FingerprintHandler::HandleCancelCurrentEnroll(
     const base::ListValue* args) {
+  AllowJavascript();
   fp_service_->CancelCurrentEnrollSession(
       base::Bind(&FingerprintHandler::OnCancelCurrentEnrollSession,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -307,11 +322,13 @@ void FingerprintHandler::OnSetRecordLabel(const std::string& callback_id,
 
 void FingerprintHandler::HandleStartAuthentication(
     const base::ListValue* args) {
+  AllowJavascript();
   fp_service_->StartAuthSession();
 }
 
 void FingerprintHandler::HandleEndCurrentAuthentication(
     const base::ListValue* args) {
+  AllowJavascript();
   fp_service_->EndCurrentAuthSession(
       base::Bind(&FingerprintHandler::OnEndCurrentAuthSession,
                  weak_ptr_factory_.GetWeakPtr()));

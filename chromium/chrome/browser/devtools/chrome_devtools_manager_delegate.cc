@@ -6,11 +6,13 @@
 
 #include <utility>
 
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/devtools/chrome_devtools_session.h"
 #include "chrome/browser/devtools/device/android_device_manager.h"
 #include "chrome/browser/devtools/device/tcp_device_provider.h"
+#include "chrome/browser/devtools/devtools_browser_context_manager.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/devtools/protocol/target_handler.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -24,6 +26,7 @@
 #include "components/guest_view/browser/guest_view_base.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_registry.h"
@@ -95,21 +98,20 @@ void ChromeDevToolsManagerDelegate::Inspect(
   DevToolsWindow::OpenDevToolsWindow(agent_host, nullptr);
 }
 
-bool ChromeDevToolsManagerDelegate::HandleCommand(
+void ChromeDevToolsManagerDelegate::HandleCommand(
     DevToolsAgentHost* agent_host,
     content::DevToolsAgentHostClient* client,
-    base::DictionaryValue* command_dict) {
+    std::unique_ptr<base::DictionaryValue> command_dict,
+    const std::string& message,
+    NotHandledCallback callback) {
   DCHECK(sessions_.find(client) != sessions_.end());
-  auto response = sessions_[client]->dispatcher()->dispatch(
-      protocol::toProtocolValue(command_dict, 1000));
-  return response != protocol::DispatchResponse::Status::kFallThrough;
+  sessions_[client]->HandleCommand(std::move(command_dict), message,
+                                   std::move(callback));
 }
 
 std::string ChromeDevToolsManagerDelegate::GetTargetType(
     content::WebContents* web_contents) {
-  auto& all_tabs = AllTabContentses();
-  auto it = std::find(all_tabs.begin(), all_tabs.end(), web_contents);
-  if (it != all_tabs.end())
+  if (base::ContainsValue(AllTabContentses(), web_contents))
     return DevToolsAgentHost::kTypePage;
 
   std::string extension_name;
@@ -128,11 +130,12 @@ std::string ChromeDevToolsManagerDelegate::GetTargetTitle(
   return extension_name;
 }
 
-bool ChromeDevToolsManagerDelegate::AllowInspectingWebContents(
-    content::WebContents* web_contents) {
-  return AllowInspection(
-      Profile::FromBrowserContext(web_contents->GetBrowserContext()),
-      web_contents);
+bool ChromeDevToolsManagerDelegate::AllowInspectingRenderFrameHost(
+    content::RenderFrameHost* rfh) {
+  Profile* profile =
+      Profile::FromBrowserContext(rfh->GetProcess()->GetBrowserContext());
+  return AllowInspection(profile, extensions::ProcessManager::Get(profile)
+                                      ->GetExtensionForRenderFrameHost(rfh));
 }
 
 // static
@@ -218,6 +221,28 @@ std::string ChromeDevToolsManagerDelegate::GetDiscoveryPageHTML() {
   return ui::ResourceBundle::GetSharedInstance()
       .GetRawDataResource(IDR_DEVTOOLS_DISCOVERY_PAGE_HTML)
       .as_string();
+}
+
+std::vector<content::BrowserContext*>
+ChromeDevToolsManagerDelegate::GetBrowserContexts() {
+  return DevToolsBrowserContextManager::GetInstance().GetBrowserContexts();
+}
+
+content::BrowserContext*
+ChromeDevToolsManagerDelegate::GetDefaultBrowserContext() {
+  return DevToolsBrowserContextManager::GetInstance()
+      .GetDefaultBrowserContext();
+}
+
+content::BrowserContext* ChromeDevToolsManagerDelegate::CreateBrowserContext() {
+  return DevToolsBrowserContextManager::GetInstance().CreateBrowserContext();
+}
+
+void ChromeDevToolsManagerDelegate::DisposeBrowserContext(
+    content::BrowserContext* context,
+    DisposeCallback callback) {
+  DevToolsBrowserContextManager::GetInstance().DisposeBrowserContext(
+      context, std::move(callback));
 }
 
 bool ChromeDevToolsManagerDelegate::HasBundledFrontendResources() {

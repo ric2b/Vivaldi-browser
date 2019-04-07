@@ -75,6 +75,9 @@ class CastWebView {
     // The delegate for the CastWebView. Must be non-null.
     Delegate* delegate = nullptr;
 
+    // Parameters for creating the content window for this CastWebView.
+    shell::CastContentWindow::CreateParams window_params;
+
     // Identifies the activity that is hosted by this CastWebView.
     std::string activity_id = "";
 
@@ -84,12 +87,6 @@ class CastWebView {
     // Whether this CastWebView is granted media access.
     bool allow_media_access = false;
 
-    // True if this CastWebView is for a headless build.
-    bool is_headless = false;
-
-    // Enable touch input for this CastWebView intance.
-    bool enable_touch_input = false;
-
     // Enable development mode for this CastWebView. Whitelists certain
     // functionality for the WebContents, like remote debugging and debugging
     // interfaces.
@@ -97,6 +94,9 @@ class CastWebView {
 
     // Enable/Force 720p resolution for this CastWebView instance.
     bool force_720p_resolution = false;
+
+    // Whether this CastWebView should be managed by web ui window manager.
+    bool managed = true;
 
     CreateParams();
   };
@@ -122,16 +122,23 @@ class CastWebView {
   // |is_visible| is true. |z_order| determines how this window is layered in
   // relationt other windows (higher value == more foreground).
   virtual void InitializeWindow(CastWindowManager* window_manager,
-                                bool is_visible,
                                 CastWindowManager::WindowId z_order,
                                 VisibilityPriority initial_priority) = 0;
+
+  // Allows the page to be shown on the screen. The page cannot be shown on the
+  // screen until this is called.
+  virtual void GrantScreenAccess() = 0;
+
+  // Prevents the page from being shown on the screen until GrantScreenAccess()
+  // is called.
+  virtual void RevokeScreenAccess() = 0;
 
   // Observer interface:
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
  private:
-  base::ObserverList<Observer> observer_list_;
+  base::ObserverList<Observer>::Unchecked observer_list_;
 
   DISALLOW_COPY_AND_ASSIGN(CastWebView);
 };

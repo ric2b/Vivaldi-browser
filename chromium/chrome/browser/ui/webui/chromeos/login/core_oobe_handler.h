@@ -130,6 +130,8 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void HandleEnableVirtualKeyboard(bool enabled);
   void HandleEnableScreenMagnifier(bool enabled);
   void HandleEnableSpokenFeedback(bool /* enabled */);
+  void HandleEnableSelectToSpeak(bool /* enabled */);
+  void HandleEnableDockedMagnifier(bool /* enabled */);
   void HandleInitialized();
   void HandleSkipUpdateEnrollAfterEula();
   void HandleUpdateCurrentScreen(const std::string& screen);

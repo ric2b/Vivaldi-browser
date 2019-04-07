@@ -40,6 +40,8 @@ jumbo_source_set("browser_sources") {
   visibility = [ "./*" ]
 
   sources = [
+    "activity.cc",
+    "activity.h",
     "api_activity_monitor.cc",
     "api_activity_monitor.h",
     "app_sorting.h",
@@ -109,6 +111,8 @@ jumbo_source_set("browser_sources") {
     "event_router.h",
     "event_router_factory.cc",
     "event_router_factory.h",
+    "events/event_ack_data.cc",
+    "events/event_ack_data.h",
     "events/lazy_event_dispatch_util.cc",
     "events/lazy_event_dispatch_util.h",
     "events/lazy_event_dispatcher.cc",
@@ -169,19 +173,12 @@ jumbo_source_set("browser_sources") {
     "extension_registry_factory.cc",
     "extension_registry_factory.h",
     "extension_registry_observer.h",
-    "extension_request_limiting_throttle.cc",
-    "extension_request_limiting_throttle.h",
     "extension_service_worker_message_filter.cc",
     "extension_service_worker_message_filter.h",
     "extension_system.cc",
     "extension_system.h",
     "extension_system_provider.cc",
     "extension_system_provider.h",
-    "extension_throttle_entry.cc",
-    "extension_throttle_entry.h",
-    "extension_throttle_entry_interface.h",
-    "extension_throttle_manager.cc",
-    "extension_throttle_manager.h",
     "extension_user_script_loader.cc",
     "extension_user_script_loader.h",
     "extension_util.cc",
@@ -190,6 +187,7 @@ jumbo_source_set("browser_sources") {
     "extension_web_contents_observer.h",
     "extension_zoom_request_client.cc",
     "extension_zoom_request_client.h",
+    "extensions_browser_api_provider.h",
     "extensions_browser_client.cc",
     "extensions_browser_client.h",
     "external_install_info.cc",
@@ -413,6 +411,21 @@ jumbo_source_set("browser_sources") {
   ]
 }
 
+# NOTE: This is separate from ":browser" because it depends on
+# //extensions/browser/api:api_registration, which in turn depends on
+# :browser.
+source_set("core_api_provider") {
+  sources = [
+    "core_extensions_browser_api_provider.cc",
+    "core_extensions_browser_api_provider.h",
+  ]
+
+  deps = [
+    ":browser",
+    "//extensions/browser/api:api_registration",
+  ]
+}
+
 source_set("browser_tests") {
   testonly = true
   sources = [
@@ -497,6 +510,8 @@ jumbo_source_set("test_support") {
     "browsertest_util.h",
     "preload_check_test_util.cc",
     "preload_check_test_util.h",
+    "test_event_router_observer.cc",
+    "test_event_router_observer.h",
     "value_store/test_value_store_factory.cc",
     "value_store/test_value_store_factory.h",
     "value_store/testing_value_store.cc",
@@ -528,6 +543,7 @@ source_set("unit_tests") {
     "api/declarative/rules_registry_unittest.cc",
     "api/declarative_net_request/flat_ruleset_indexer_unittest.cc",
     "api/declarative_net_request/indexed_rule_unittest.cc",
+    "api/declarative_net_request/indexed_ruleset_format_version_unittest.cc",
     "api/declarative_webrequest/webrequest_condition_attribute_unittest.cc",
     "api/declarative_webrequest/webrequest_condition_unittest.cc",
     "api/document_scan/document_scan_api_unittest.cc",
@@ -543,6 +559,7 @@ source_set("unit_tests") {
     "api/networking_private/networking_private_chromeos_unittest.cc",
     "api/power/power_api_unittest.cc",
     "api/runtime/restart_after_delay_api_unittest.cc",
+    "api/socket/mojo_data_pump_unittest.cc",
     "api/sockets_tcp/sockets_tcp_api_unittest.cc",
     "api/sockets_udp/sockets_udp_api_unittest.cc",
     "api/storage/settings_quota_unittest.cc",
@@ -551,6 +568,7 @@ source_set("unit_tests") {
     "api/system_network/system_network_api_unittest.cc",
     "api/web_request/form_data_parser_unittest.cc",
     "api/web_request/upload_data_presenter_unittest.cc",
+    "api/web_request/web_request_info_unittest.cc",
     "api/web_request/web_request_permissions_unittest.cc",
     "api/web_request/web_request_time_tracker_unittest.cc",
     "app_window/app_window_geometry_cache_unittest.cc",
@@ -564,15 +582,12 @@ source_set("unit_tests") {
     "event_router_unittest.cc",
     "extension_api_frame_id_map_unittest.cc",
     "extension_creator_filter_unittest.cc",
+    "extension_creator_unittest.cc",
     "extension_function_histogram_value_unittest.cc",
     "extension_icon_image_unittest.cc",
     "extension_pref_value_map_unittest.cc",
     "extension_registrar_unittest.cc",
     "extension_registry_unittest.cc",
-    "extension_throttle_simulation_unittest.cc",
-    "extension_throttle_test_support.cc",
-    "extension_throttle_test_support.h",
-    "extension_throttle_unittest.cc",
     "file_highlighter_unittest.cc",
     "file_reader_unittest.cc",
     "image_loader_unittest.cc",
@@ -677,5 +692,6 @@ source_set("unit_tests") {
   data = [
     "//extensions/browser/extension_function_histogram_value.h",
     "//tools/metrics/histograms/enums.xml",
+    "//extensions/browser/api/declarative_net_request/flat/extension_ruleset.fbs",
   ]
 }

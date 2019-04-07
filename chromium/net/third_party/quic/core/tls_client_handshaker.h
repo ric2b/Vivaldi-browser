@@ -27,9 +27,10 @@ class QUIC_EXPORT_PRIVATE TlsClientHandshaker
                       const QuicServerId& server_id,
                       ProofVerifier* proof_verifier,
                       SSL_CTX* ssl_ctx,
-                      // Takes ownership of |verify_context|.
-                      ProofVerifyContext* verify_context,
+                      std::unique_ptr<ProofVerifyContext> verify_context,
                       const QuicString& user_agent_id);
+  TlsClientHandshaker(const TlsClientHandshaker&) = delete;
+  TlsClientHandshaker& operator=(const TlsClientHandshaker&) = delete;
 
   ~TlsClientHandshaker() override;
 
@@ -120,8 +121,6 @@ class QUIC_EXPORT_PRIVATE TlsClientHandshaker
   bool handshake_confirmed_ = false;
   QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters>
       crypto_negotiated_params_;
-
-  DISALLOW_COPY_AND_ASSIGN(TlsClientHandshaker);
 };
 
 }  // namespace quic

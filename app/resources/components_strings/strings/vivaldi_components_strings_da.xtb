@@ -16,12 +16,10 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1640244768702815859">Prøv at <ph name="BEGIN_LINK" />gå til websitets startside<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Ikke-understøttet protokol</translation>
-<translation id="1676269943528358898"><ph name="SITE" /> bruger normalt kryptering til at beskytte dine oplysninger. Da Google Chrome prøvede at forbinde til <ph name="SITE" /> denne gang, sendte websitet usædvanlige og ukorrekte informationer. Dette kan ske når en angriber prøver at udgive sig for at være <ph name="SITE" />, eller en Wi-Fi login-skærm har forhindret forbindelsen. Dine oplysninger er stadig sikre fordi Google Chrome stoppede forbindelsen før nogle data blev udvekslet.</translation>
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">Du ser kilden for en webside</translation>
 <translation id="1734878702283171397">Prøv at kontakte systemadministratoren.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Prøv at køre Windows Netværksdiagnosticering<ph name="END_LINK" />.</translation>
-<translation id="1789575671122666129">Pop op-vinduer</translation>
 <translation id="1834321415901700177">Dette website indeholder skadelige programmer</translation>
 <translation id="1916770123977586577">Anvend dine opdaterede indstillinger ved at genindlæse denne side</translation>
 <translation id="1919345977826869612">Annoncer</translation>
@@ -29,11 +27,11 @@
 <translation id="1974060860693918893">Avanceret</translation>
 <translation id="2030481566774242610">Mente du <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrollerer din proxy og din firewall<ph name="END_LINK" /></translation>
-<translation id="2065985942032347596">Godkendelse påkrævet</translation>
 <translation id="2091887806945687916">Lyd</translation>
 <translation id="2147827593068025794">Synkronisering i baggrunden</translation>
 <translation id="2166378884831602661">Dette website kan ikke levere en sikker forbindelse</translation>
 <translation id="2187317261103489799">Registrer (standard)</translation>
+<translation id="2224337661447660594">Der er ingen internetforbindelse</translation>
 <translation id="2230458221926704099">Ret problemerne med din forbindelse ved hjælp af <ph name="BEGIN_LINK" />diagnosticerings-appen<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Din internetadgang er blokeret</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> kræver et brugernavn og en adgangskode.</translation>
@@ -50,20 +48,14 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Der blev nægtet adgang til filen</translation>
 <translation id="2705137772291741111">Den gemte (cachelagrede) kopi af dette website kunne ikke læses.</translation>
-<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Kører forbindelsesdiagnostik<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Forbindelsen blev nulstillet.</translation>
 <translation id="2826760142808435982">Forbindelsen er krypteret og godkendt ved hjælp af <ph name="CIPHER" />, og den anvender <ph name="KX" /> som primær udvekslingsmekanisme.</translation>
 <translation id="2856444702002559011">Brugere med ondsindede hensigter kan forsøge at stjæle dine oplysninger fra <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (f.eks. adgangskoder, beskeder eller kreditkort). <ph name="BEGIN_LEARN_MORE_LINK" />Få flere oplysninger<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Der blev registreret en netværksændring.</translation>
-<translation id="2948083400971632585">Du kan deaktivere enhver proxy konfigureret for en forbindelse fra Indstillinger-siden.</translation>
-<translation id="298138621710431427">Hjælp mig med at løse dette</translation>
 <translation id="2991571918955627853">Du kan ikke besøge <ph name="SITE" /> lige nu, da websitet bruger HSTS. Netværksfejl og angreb er normalt midlertidige, så siden vil sandsynligvis fungere senere.</translation>
 <translation id="3005723025932146533">Vis gemt kopi</translation>
 <translation id="301521992641321250">Automatisk blokeret</translation>
-<translation id="3041612393474885105">Certifikatoplysninger</translation>
-<translation id="3093245981617870298">Du er offline.</translation>
 <translation id="3109728660330352905">Du har ikke tilladelse til at se denne side.</translation>
-<translation id="31207688938192855"><ph name="BEGIN_LINK" />Prøv at køre forbindelsesdiagnosticeringen<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Denne side indeholder en formular, der muligvis ikke kan indsendes sikkert. Dine indsendte data kan ses af andre eller kan blive ændret af en hacker, så serveren, du sender til, modtager forkerte oplysninger.</translation>
 <translation id="3176929007561373547">Kontrollér dine proxyindstillinger, eller kontakt din netværksadministrator
       for at sikre, at proxyserveren fungerer. Hvis du ikke mener,
@@ -87,6 +79,7 @@
 <translation id="3681007416295224113">Certifikatoplysninger</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Kontrollerer proxy-, firewall- og DNS-konfigurationen<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Hvis du bruger en proxyserver...</translation>
+<translation id="3950820424414687140">Log ind</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> er blokeret</translation>
 <translation id="3987940399970879459">Mindre end 1 MB</translation>
 <translation id="4075732493274867456">Klienten og serveren understøtter ikke en fælles SSL-protokolversion eller et fælles krypteringsprogram.</translation>
@@ -100,7 +93,6 @@
 <translation id="4235360514405112390">Gyldig</translation>
 <translation id="4250431568374086873">Din forbindelse til dette website er ikke helt sikker</translation>
 <translation id="4265872034478892965">Tilladt af din administrator</translation>
-<translation id="4304224509867189079">Log ind</translation>
 <translation id="4312866146174492540">Bloker (standard)</translation>
 <translation id="4356973930735388585">Hackere på dette website vil muligvis forsøge at installere skadelige programmer på din computer, som stjæler eller sletter dine oplysninger (f.eks. billeder, adgangskoder, beskeder og kreditkortoplysninger).</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
@@ -110,24 +102,19 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Prøv at deaktivere dine udvidelser.</translation>
 <translation id="4592951414987517459">Din forbindelse til <ph name="DOMAIN" /> er krypteret ved hjælp af en moderne krypteringspakke.</translation>
-<translation id="4611292653554630842">Log ind</translation>
 <translation id="4690462567478992370">Stor brugen af et ugyldigt certifikat</translation>
-<translation id="4690954380545377795">Du kan miste adgangen til din Google-konto eller opleve identitetstyveri. Chrome anbefaler dig at skifte din adgangskode nu.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Din forbindelse blev afbrudt</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Kører Windows Netværksdiagnosticering<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Eksekverbar sti</translation>
 <translation id="4750917950439032686">Dine oplysninger (f.eks. adgangskoder eller kreditkortnumre) er private, når de sendes til dette website.</translation>
 <translation id="4764776831041365478">Websiden på <ph name="URL" /> kan være midlertidigt nede, eller også er den permanent flyttet til en ny webadresse.</translation>
-<translation id="4807049035289105102">Du kan ikke besøge<ph name="SITE" /> lige nu, fordi websiden sendte berørte informationer som Google Chrome ikke kan behandle. Netværksfejl og angreb er ofte midlertidige, så denne side vil formentlig virke senere.</translation>
-<translation id="4913131542719409934">Godkendelse er påkrævet</translation>
 <translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">Genaktiver advarsler</translation>
 <translation id="5023310440958281426">Læs din administrators politikker</translation>
 <translation id="5039804452771397117">Tillad</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Kontrollerer proxy-adressen<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="522700295135997067">Dette website kan netop have stjålet din adgangskode</translation>
 <translation id="5287240709317226393">Vis cookies</translation>
 <translation id="5355557959165512791">Du kan ikke besøge <ph name="SITE" /> lige nu, da dets certifikat er blevet tilbagekaldt. Netværksfejl og angreb er normalt midlertidige, så siden vil sandsynligvis fungere igen senere.</translation>
 <translation id="5386426401304769735">Certifikatkæden for dette website indeholder et certifikat, der er signeret med SHA-1.</translation>
@@ -154,7 +141,6 @@
 <translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 i brug}other{# i brug}}</translation>
 <translation id="5990559369517809815">Anmodninger til serveren er blokeret af en udvidelse.</translation>
 <translation id="6051221802930200923">Du kan ikke besøge <ph name="SITE" /> lige nu, da websitet bruger certifikatlåsning. Netværksfejl og angreb er normalt midlertidige, så siden vil sandsynligvis fungere igen senere.</translation>
-<translation id="6080696365213338172">Du har opnået adgang til indhold vha. et administratorcertifikat. De data, du angiver til <ph name="DOMAIN" />, kan indhentes af din administrator.</translation>
 <translation id="6146055958333702838">Kontrollér eventuelle kabler, og genstart alle routere, modemmer eller andre
     netværksenheder, du bruger.</translation>
 <translation id="614940544461990577">Prøv at:</translation>
@@ -171,7 +157,6 @@
 <translation id="6417515091412812850">Kan ikke kontrollere, om certifikatet er tilbagekaldt.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> nægtede at oprette forbindelse.</translation>
 <translation id="6447842834002726250">Cookies</translation>
-<translation id="6556239504065605927">Sikker forbindelse</translation>
 <translation id="6569060085658103619">Du ser en udvidelsesside</translation>
 <translation id="6657585470893396449">Adgangskode</translation>
 <translation id="6685834062052613830">Log ud, og fuldfør konfigurationen</translation>
@@ -214,6 +199,7 @@
 <translation id="8150722005171944719">Filen i <ph name="URL" /> kan ikke læses. Den kan være blevet fjernet, flyttet, eller også forhindrer filtilladelser muligvis adgangen.</translation>
 <translation id="8184538546369750125">Brug global standard (tillad)</translation>
 <translation id="8205463626947051446">Websitet har tendens til at vise påtrængende annoncer</translation>
+<translation id="8211406090763984747">Forbindelsen er sikker</translation>
 <translation id="8225771182978767009">Den person, der har konfigureret denne computer, har valgt at blokere dette website.</translation>
 <translation id="8241712895048303527">Bloker på dette website</translation>
 <translation id="8288807391153049143">Vis certifikat</translation>
@@ -234,7 +220,6 @@
 <translation id="9169664750068251925">Bloker altid på dette website</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> anvender en ikke-understøttet protokol.</translation>
 <translation id="9219103736887031265">Billeder</translation>
-<translation id="933612690413056017">Der er ingen internetforbindelse</translation>
 <translation id="969892804517981540">Officiel version</translation>
 <translation id="988159990683914416">Udviklerversion</translation>
 </translationbundle>

@@ -61,6 +61,7 @@ void InputIPC::CreateStream(media::AudioInputIPCDelegate* delegate,
       std::move(stream_request), std::move(client), nullptr,
       log_ ? std::move(log_) : nullptr, device_id_, params, total_segments,
       automatic_gain_control, std::move(invalid_key_press_count_buffer),
+      /*processing config*/ nullptr,
       base::BindOnce(&InputIPC::StreamCreated, weak_factory_.GetWeakPtr()));
 }
 
@@ -119,6 +120,9 @@ void InputIPC::CloseStream() {
   if (stream_client_binding_.is_bound())
     stream_client_binding_.Close();
   stream_.reset();
+
+  // Make sure we don't get any stale stream creation messages.
+  weak_factory_.InvalidateWeakPtrs();
 }
 
 void InputIPC::OnError() {

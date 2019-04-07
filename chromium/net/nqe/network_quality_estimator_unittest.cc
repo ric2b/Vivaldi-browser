@@ -1414,6 +1414,73 @@ TEST_F(NetworkQualityEstimatorTest, TestTransportRttUsedForHttpRttComputation) {
   }
 }
 
+// Tests that the end to end RTT is used for computing the lower bound for HTTP
+// RTT.
+TEST_F(NetworkQualityEstimatorTest, TestEndToEndRttUsedForHttpRttComputation) {
+  const struct {
+    base::TimeDelta http_rtt;
+    base::TimeDelta end_to_end_rtt;
+    bool is_end_to_end_rtt_sample_count_enough;
+    base::TimeDelta expected_http_rtt;
+    EffectiveConnectionType expected_type;
+  } tests[] = {
+      {
+          base::TimeDelta::FromMilliseconds(200),
+          base::TimeDelta::FromMilliseconds(100), true,
+          base::TimeDelta::FromMilliseconds(200), EFFECTIVE_CONNECTION_TYPE_4G,
+      },
+      {
+          // |http_rtt| is lower than |end_to_end_rtt|. The HTTP RTT estimate
+          // should be set to |end_to_end_rtt|.
+          base::TimeDelta::FromMilliseconds(100),
+          base::TimeDelta::FromMilliseconds(200), true,
+          base::TimeDelta::FromMilliseconds(200), EFFECTIVE_CONNECTION_TYPE_4G,
+      },
+      {
+          // Not enough samples. End to End RTT should not be used.
+          base::TimeDelta::FromMilliseconds(100),
+          base::TimeDelta::FromMilliseconds(200), false,
+          base::TimeDelta::FromMilliseconds(100), EFFECTIVE_CONNECTION_TYPE_4G,
+      },
+      {
+          base::TimeDelta::FromMilliseconds(100),
+          base::TimeDelta::FromMilliseconds(4000), true,
+          base::TimeDelta::FromMilliseconds(4000),
+          EFFECTIVE_CONNECTION_TYPE_SLOW_2G,
+      },
+  };
+
+  for (const auto& test : tests) {
+    std::map<std::string, std::string> variation_params;
+    variation_params["add_default_platform_observations"] = "false";
+    variation_params["use_end_to_end_rtt"] = "true";
+    TestNetworkQualityEstimator estimator(variation_params);
+
+    base::SimpleTestTickClock tick_clock;
+    tick_clock.Advance(base::TimeDelta::FromSeconds(1));
+    estimator.SetTickClockForTesting(&tick_clock);
+
+    estimator.SetStartTimeNullHttpRtt(test.http_rtt);
+    estimator.set_start_time_null_end_to_end_rtt(test.end_to_end_rtt);
+
+    // Minimum number of end to end RTT samples that should be present before
+    // transport RTT estimate can be used to clamp the HTTP RTT.
+    if (test.is_end_to_end_rtt_sample_count_enough) {
+      estimator.set_start_time_null_end_to_end_rtt_observation_count(
+          estimator.params()->http_rtt_transport_rtt_min_count());
+    } else {
+      estimator.set_start_time_null_end_to_end_rtt_observation_count(
+          estimator.params()->http_rtt_transport_rtt_min_count() - 1);
+    }
+
+    // Ensure ECT is recomputed.
+    estimator.RunOneRequest();
+
+    EXPECT_EQ(test.expected_http_rtt, estimator.GetHttpRTT().value());
+    EXPECT_EQ(test.expected_type, estimator.GetEffectiveConnectionType());
+  }
+}
+
 // Tests that the network quality is computed at the specified interval, and
 // that the network quality observers are notified of any change.
 TEST_F(NetworkQualityEstimatorTest, TestRTTAndThroughputEstimatesObserver) {
@@ -1838,7 +1905,8 @@ TEST_F(NetworkQualityEstimatorTest, TestGlobalSocketWatcherThrottle) {
 
 // TestTCPSocketRTT requires kernel support for tcp_info struct, and so it is
 // enabled only on certain platforms.
-#if defined(TCP_INFO) || defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(TCP_INFO) || (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || \
+    defined(OS_ANDROID)
 #define MAYBE_TestTCPSocketRTT TestTCPSocketRTT
 #else
 #define MAYBE_TestTCPSocketRTT DISABLED_TestTCPSocketRTT
@@ -2787,10 +2855,10 @@ TEST_F(NetworkQualityEstimatorTest,
   // When a cached estimate is available, RTT observations from the external
   // estimate provider and platform must be discarded.
   estimator.AddAndNotifyObserversOfRTT(nqe::internal::Observation(
-      1, base::TimeTicks::Now(), base::Optional<int32_t>(),
+      1, base::TimeTicks::Now(), INT32_MIN,
       DEPRECATED_NETWORK_QUALITY_OBSERVATION_SOURCE_HTTP_EXTERNAL_ESTIMATE));
   estimator.AddAndNotifyObserversOfRTT(nqe::internal::Observation(
-      1, base::TimeTicks::Now(), base::Optional<int32_t>(),
+      1, base::TimeTicks::Now(), INT32_MIN,
       NETWORK_QUALITY_OBSERVATION_SOURCE_DEFAULT_HTTP_FROM_PLATFORM));
   EXPECT_EQ(3u, rtt_observer.observations().size());
   EXPECT_EQ(
@@ -2802,9 +2870,9 @@ TEST_F(NetworkQualityEstimatorTest,
       estimator
           .rtt_ms_observations_[nqe::internal::OBSERVATION_CATEGORY_TRANSPORT]
           .Size());
-  estimator.AddAndNotifyObserversOfRTT(nqe::internal::Observation(
-      1, base::TimeTicks::Now(), base::Optional<int32_t>(),
-      NETWORK_QUALITY_OBSERVATION_SOURCE_HTTP));
+  estimator.AddAndNotifyObserversOfRTT(
+      nqe::internal::Observation(1, base::TimeTicks::Now(), INT32_MIN,
+                                 NETWORK_QUALITY_OBSERVATION_SOURCE_HTTP));
   EXPECT_EQ(4u, rtt_observer.observations().size());
   EXPECT_EQ(
       3u,
@@ -2825,16 +2893,16 @@ TEST_F(NetworkQualityEstimatorTest,
   // cached estimate is received.
   EXPECT_EQ(1u, estimator.http_downstream_throughput_kbps_observations_.Size());
   estimator.AddAndNotifyObserversOfThroughput(nqe::internal::Observation(
-      1, base::TimeTicks::Now(), base::Optional<int32_t>(),
+      1, base::TimeTicks::Now(), INT32_MIN,
       DEPRECATED_NETWORK_QUALITY_OBSERVATION_SOURCE_HTTP_EXTERNAL_ESTIMATE));
   estimator.AddAndNotifyObserversOfThroughput(nqe::internal::Observation(
-      1, base::TimeTicks::Now(), base::Optional<int32_t>(),
+      1, base::TimeTicks::Now(), INT32_MIN,
       NETWORK_QUALITY_OBSERVATION_SOURCE_DEFAULT_HTTP_FROM_PLATFORM));
   EXPECT_EQ(2u, throughput_observer.observations().size());
   EXPECT_EQ(2u, estimator.http_downstream_throughput_kbps_observations_.Size());
-  estimator.AddAndNotifyObserversOfThroughput(nqe::internal::Observation(
-      1, base::TimeTicks::Now(), base::Optional<int32_t>(),
-      NETWORK_QUALITY_OBSERVATION_SOURCE_HTTP));
+  estimator.AddAndNotifyObserversOfThroughput(
+      nqe::internal::Observation(1, base::TimeTicks::Now(), INT32_MIN,
+                                 NETWORK_QUALITY_OBSERVATION_SOURCE_HTTP));
   EXPECT_EQ(3u, throughput_observer.observations().size());
   EXPECT_EQ(3u, estimator.http_downstream_throughput_kbps_observations_.Size());
 
@@ -2934,6 +3002,78 @@ TEST_F(NetworkQualityEstimatorTest, HangingRequestUsingHttpOnly) {
   histogram_tester.ExpectTotalCount("NQE.RTT.NotAHangingRequest.MinHttpBound",
                                     2);
   histogram_tester.ExpectTotalCount("NQE.RTT.HangingRequest", 2);
+}
+
+// Tests that the hanging request is correctly detected using end-to-end RTT.
+TEST_F(NetworkQualityEstimatorTest, HangingRequestEndToEndUsingHttpOnly) {
+  std::map<std::string, std::string> variation_params;
+  variation_params["add_default_platform_observations"] = "false";
+  variation_params["hanging_request_http_rtt_upper_bound_http_rtt_multiplier"] =
+      "6";
+  variation_params["hanging_request_upper_bound_min_http_rtt_msec"] = "500";
+  variation_params["use_end_to_end_rtt"] = "true";
+
+  int end_to_end_rtt_milliseconds = 1000;
+  int hanging_request_http_rtt_upper_bound_transport_rtt_multiplier = 8;
+
+  TestNetworkQualityEstimator estimator(variation_params);
+  estimator.SetStartTimeNullHttpRtt(base::TimeDelta::FromMilliseconds(10));
+
+  base::RunLoop().RunUntilIdle();
+  estimator.set_start_time_null_end_to_end_rtt(
+      base::TimeDelta::FromMilliseconds(end_to_end_rtt_milliseconds));
+  estimator.SimulateNetworkChange(
+      NetworkChangeNotifier::ConnectionType::CONNECTION_UNKNOWN, "test");
+
+  const struct {
+    base::TimeDelta observed_http_rtt;
+    bool is_end_to_end_rtt_sample_count_enough;
+    bool expect_hanging_request;
+    std::string histogram_name;
+  } tests[] = {
+      {base::TimeDelta::FromMilliseconds(10), true, false,
+       "NQE.RTT.NotAHangingRequest.EndToEndRTT"},
+      {base::TimeDelta::FromMilliseconds(10), false, false,
+       "NQE.RTT.NotAHangingRequest.HttpRTT"},
+      {base::TimeDelta::FromMilliseconds(100), true, false,
+       "NQE.RTT.NotAHangingRequest.EndToEndRTT"},
+      // |observed_http_rtt| is not large enough. Request is expected to be
+      // classified as not hanging.
+      {base::TimeDelta::FromMilliseconds(
+           (end_to_end_rtt_milliseconds *
+            hanging_request_http_rtt_upper_bound_transport_rtt_multiplier) -
+           1),
+       true, false, "NQE.RTT.NotAHangingRequest.EndToEndRTT"},
+      // |observed_http_rtt| is large. Request is expected to be classified as
+      // hanging.
+      {base::TimeDelta::FromMilliseconds(
+           (end_to_end_rtt_milliseconds *
+            hanging_request_http_rtt_upper_bound_transport_rtt_multiplier) +
+           1),
+       true, true, "NQE.RTT.HangingRequest"},
+      // Not enough end-to-end RTT samples. Request is expected to be classified
+      // as hanging.
+      {base::TimeDelta::FromMilliseconds(
+           end_to_end_rtt_milliseconds *
+               hanging_request_http_rtt_upper_bound_transport_rtt_multiplier -
+           1),
+       false, true, "NQE.RTT.HangingRequest"},
+  };
+
+  for (const auto& test : tests) {
+    base::HistogramTester histogram_tester;
+    if (test.is_end_to_end_rtt_sample_count_enough) {
+      estimator.set_start_time_null_end_to_end_rtt_observation_count(
+          estimator.params()->http_rtt_transport_rtt_min_count());
+    } else {
+      estimator.set_start_time_null_end_to_end_rtt_observation_count(
+          estimator.params()->http_rtt_transport_rtt_min_count() - 1);
+    }
+    EXPECT_EQ(test.expect_hanging_request,
+              estimator.IsHangingRequest(test.observed_http_rtt));
+    histogram_tester.ExpectBucketCount(
+        test.histogram_name, test.observed_http_rtt.InMilliseconds(), 1);
+  }
 }
 
 TEST_F(NetworkQualityEstimatorTest, HangingRequestUsingTransportAndHttpOnly) {

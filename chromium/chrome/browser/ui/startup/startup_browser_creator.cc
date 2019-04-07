@@ -25,8 +25,8 @@
 #include "base/metrics/statistics_recorder.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_tokenizer.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/task/post_task.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -85,7 +85,7 @@
 #endif
 
 #if defined(OS_MACOSX)
-#include "chrome/browser/web_applications/web_app_mac.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_shortcut_mac.h"
 #endif
 
 #if defined(OS_WIN)
@@ -239,10 +239,10 @@ base::LazyInstance<ProfileLaunchObserver>::DestructorAtExit
 // The file is overwritten if it exists. This function should only be called in
 // the blocking pool.
 void DumpBrowserHistograms(const base::FilePath& output_file) {
-  base::AssertBlockingAllowed();
-
   std::string output_string(
       base::StatisticsRecorder::ToJSON(base::JSON_VERBOSITY_LEVEL_FULL));
+
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
   base::WriteFile(output_file, output_string.data(),
                   static_cast<int>(output_string.size()));
 }
@@ -471,7 +471,15 @@ void StartupBrowserCreator::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   // creation.
   registry->RegisterBooleanPref(prefs::kHasSeenWelcomePage, true);
 #if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
+  // TODO(scottchen): To make this testable early by trybots, instead of hiding
+  // behind GOOGLE_CHROME_BUILD, use a function that returns true for official
+  // builds and conditionally returns true based on a command line switch to
+  // be set by tests.
   registry->RegisterBooleanPref(prefs::kHasSeenGoogleAppsPromoPage, true);
+  registry->RegisterBooleanPref(prefs::kHasSeenEmailPromoPage, true);
+  // This  will be set to true for newly created profiles, and is used to
+  // indicate which users went through FRE after NUX is enabled.
+  registry->RegisterBooleanPref(prefs::kOnboardDuringNUX, false);
 #endif  // defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
 }
 
@@ -657,7 +665,7 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
     if (!output_file.empty()) {
       base::PostTaskWithTraits(
           FROM_HERE,
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
           base::BindOnce(&DumpBrowserHistograms, output_file));
     }
@@ -925,7 +933,7 @@ void StartupBrowserCreator::ProcessCommandLineAlreadyRunning(
     profile_manager->CreateProfileAsync(
         profile_path,
         base::Bind(&ProcessCommandLineOnProfileCreated, command_line, cur_dir),
-        base::string16(), std::string(), std::string());
+        base::string16(), std::string());
     return;
   }
   StartupBrowserCreator startup_browser_creator;

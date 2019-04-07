@@ -18,6 +18,7 @@
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/common/media/media_stream_controls.h"
+#include "content/public/common/media_stream_request.h"
 #include "content/renderer/media/stream/local_media_stream_audio_source.h"
 #include "content/renderer/media/stream/media_stream_audio_processor.h"
 #include "content/renderer/media/stream/media_stream_audio_source.h"
@@ -53,22 +54,65 @@ using EchoCancellationType = AudioProcessingProperties::EchoCancellationType;
 
 namespace {
 
-void CopyFirstString(const blink::StringConstraint& constraint,
-                     std::string* destination) {
-  if (!constraint.Exact().IsEmpty())
-    *destination = constraint.Exact()[0].Utf8();
-}
-
-bool IsDeviceSource(const std::string& source) {
-  return source.empty();
-}
-
-void InitializeTrackControls(const blink::WebMediaConstraints& constraints,
-                             TrackControls* track_controls) {
+void InitializeAudioTrackControls(const blink::WebUserMediaRequest& web_request,
+                                  TrackControls* track_controls) {
+  const blink::WebMediaConstraints& constraints =
+      web_request.AudioConstraints();
   DCHECK(!constraints.IsNull());
   track_controls->requested = true;
-  CopyFirstString(constraints.Basic().media_stream_source,
-                  &track_controls->stream_source);
+
+  MediaStreamType* stream_type = &track_controls->stream_type;
+  *stream_type = MEDIA_NO_SERVICE;
+
+  std::string source_constraint =
+      constraints.Basic().media_stream_source.Exact().IsEmpty()
+          ? std::string()
+          : constraints.Basic().media_stream_source.Exact()[0].Utf8();
+  if (!source_constraint.empty()) {
+    if (source_constraint == kMediaStreamSourceTab) {
+      *stream_type = MEDIA_GUM_TAB_AUDIO_CAPTURE;
+    } else if (source_constraint == kMediaStreamSourceDesktop ||
+               source_constraint == kMediaStreamSourceSystem) {
+      *stream_type = MEDIA_GUM_DESKTOP_AUDIO_CAPTURE;
+    }
+  } else {
+    *stream_type = MEDIA_DEVICE_AUDIO_CAPTURE;
+  }
+}
+
+void InitializeVideoTrackControls(const blink::WebUserMediaRequest& web_request,
+                                  TrackControls* track_controls) {
+  if (web_request.MediaRequestType() ==
+      blink::WebUserMediaRequest::MediaType::kDisplayMedia) {
+    track_controls->requested = true;
+    track_controls->stream_type = MEDIA_DISPLAY_VIDEO_CAPTURE;
+    return;
+  }
+
+  DCHECK_EQ(blink::WebUserMediaRequest::MediaType::kUserMedia,
+            web_request.MediaRequestType());
+  const blink::WebMediaConstraints& constraints =
+      web_request.VideoConstraints();
+  DCHECK(!constraints.IsNull());
+  track_controls->requested = true;
+
+  MediaStreamType* stream_type = &track_controls->stream_type;
+  *stream_type = MEDIA_NO_SERVICE;
+
+  std::string source_constraint =
+      constraints.Basic().media_stream_source.Exact().IsEmpty()
+          ? std::string()
+          : constraints.Basic().media_stream_source.Exact()[0].Utf8();
+  if (!source_constraint.empty()) {
+    if (source_constraint == kMediaStreamSourceTab) {
+      *stream_type = MEDIA_GUM_TAB_VIDEO_CAPTURE;
+    } else if (source_constraint == kMediaStreamSourceDesktop ||
+               source_constraint == kMediaStreamSourceScreen) {
+      *stream_type = MEDIA_GUM_DESKTOP_VIDEO_CAPTURE;
+    }
+  } else {
+    *stream_type = MEDIA_DEVICE_VIDEO_CAPTURE;
+  }
 }
 
 bool IsSameDevice(const MediaStreamDevice& device,
@@ -88,18 +132,6 @@ bool IsSameSource(const blink::WebMediaStreamSource& source,
   const MediaStreamDevice& other_device = other_source_extra_data->device();
 
   return IsSameDevice(device, other_device);
-}
-
-bool IsValidAudioContentSource(const std::string& source) {
-  return source == kMediaStreamSourceTab ||
-         source == kMediaStreamSourceDesktop ||
-         source == kMediaStreamSourceSystem;
-}
-
-bool IsValidVideoContentSource(const std::string& source) {
-  return source == kMediaStreamSourceTab ||
-         source == kMediaStreamSourceDesktop ||
-         source == kMediaStreamSourceScreen;
 }
 
 void SurfaceAudioProcessingSettings(blink::WebMediaStreamSource* source) {
@@ -432,14 +464,14 @@ void UserMediaProcessor::SetupAudioInput() {
   DCHECK(current_request_info_->web_request().Audio());
 
   auto& audio_controls = current_request_info_->stream_controls()->audio;
-  InitializeTrackControls(
-      current_request_info_->web_request().AudioConstraints(), &audio_controls);
-  if (IsDeviceSource(audio_controls.stream_source)) {
+  InitializeAudioTrackControls(current_request_info_->web_request(),
+                               &audio_controls);
+  if (IsDeviceMediaType(audio_controls.stream_type)) {
     GetMediaDevicesDispatcher()->GetAudioInputCapabilities(base::BindOnce(
         &UserMediaProcessor::SelectAudioDeviceSettings,
         weak_factory_.GetWeakPtr(), current_request_info_->web_request()));
   } else {
-    if (!IsValidAudioContentSource(audio_controls.stream_source)) {
+    if (!IsAudioInputMediaType(audio_controls.stream_type)) {
       blink::WebString failed_constraint_name =
           blink::WebString::FromASCII(current_request_info_->web_request()
                                           .AudioConstraints()
@@ -516,8 +548,8 @@ void UserMediaProcessor::SelectAudioSettings(
       settings.hotword_enabled();
   current_request_info_->SetAudioCaptureSettings(
       settings,
-      !IsDeviceSource(
-          current_request_info_->stream_controls()->audio.stream_source));
+      !IsDeviceMediaType(
+          current_request_info_->stream_controls()->audio.stream_type));
 
   // No further audio setup required. Continue with video.
   SetupVideoInput();
@@ -531,15 +563,22 @@ void UserMediaProcessor::SetupVideoInput() {
     GenerateStreamForCurrentRequestInfo();
     return;
   }
+
   auto& video_controls = current_request_info_->stream_controls()->video;
-  InitializeTrackControls(
-      current_request_info_->web_request().VideoConstraints(), &video_controls);
-  if (IsDeviceSource(video_controls.stream_source)) {
+  InitializeVideoTrackControls(current_request_info_->web_request(),
+                               &video_controls);
+
+  if (video_controls.stream_type == MEDIA_DISPLAY_VIDEO_CAPTURE) {
+    SelectVideoContentSettings(false /* allow_device_id_constraint */);
+    return;
+  }
+
+  if (IsDeviceMediaType(video_controls.stream_type)) {
     GetMediaDevicesDispatcher()->GetVideoInputCapabilities(base::BindOnce(
         &UserMediaProcessor::SelectVideoDeviceSettings,
         weak_factory_.GetWeakPtr(), current_request_info_->web_request()));
   } else {
-    if (!IsValidVideoContentSource(video_controls.stream_source)) {
+    if (!IsVideoInputMediaType(video_controls.stream_type)) {
       blink::WebString failed_constraint_name =
           blink::WebString::FromASCII(current_request_info_->web_request()
                                           .VideoConstraints()
@@ -549,7 +588,7 @@ void UserMediaProcessor::SetupVideoInput() {
       GetUserMediaRequestFailed(result, failed_constraint_name);
       return;
     }
-    SelectVideoContentSettings();
+    SelectVideoContentSettings(true /* allow_device_id_constraint */);
   }
 }
 
@@ -565,8 +604,8 @@ void UserMediaProcessor::SelectVideoDeviceSettings(
     return;
 
   DCHECK(current_request_info_->stream_controls()->video.requested);
-  DCHECK(IsDeviceSource(
-      current_request_info_->stream_controls()->video.stream_source));
+  DCHECK(IsDeviceMediaType(
+      current_request_info_->stream_controls()->video.stream_type));
 
   VideoDeviceCaptureCapabilities capabilities;
   capabilities.device_capabilities = std::move(video_input_capabilities);
@@ -599,13 +638,14 @@ void UserMediaProcessor::SelectVideoDeviceSettings(
   GenerateStreamForCurrentRequestInfo();
 }
 
-void UserMediaProcessor::SelectVideoContentSettings() {
+void UserMediaProcessor::SelectVideoContentSettings(
+    bool allow_device_id_constraint) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(current_request_info_);
   gfx::Size screen_size = GetScreenSize();
   VideoCaptureSettings settings = SelectSettingsVideoContentCapture(
       current_request_info_->web_request().VideoConstraints(),
-      current_request_info_->stream_controls()->video.stream_source,
+      current_request_info_->stream_controls()->video.stream_type,
       screen_size.width(), screen_size.height());
   if (!settings.HasValue()) {
     blink::WebString failed_constraint_name =
@@ -615,8 +655,10 @@ void UserMediaProcessor::SelectVideoContentSettings() {
                               failed_constraint_name);
     return;
   }
-  current_request_info_->stream_controls()->video.device_id =
-      settings.device_id();
+  if (allow_device_id_constraint) {
+    current_request_info_->stream_controls()->video.device_id =
+        settings.device_id();
+  }
   current_request_info_->SetVideoCaptureSettings(settings,
                                                  true /* is_content_capture */);
   GenerateStreamForCurrentRequestInfo();

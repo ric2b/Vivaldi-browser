@@ -15,7 +15,7 @@
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/google/core/browser/google_url_tracker.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/signin/core/browser/chrome_connected_header_helper.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/variations/net/variations_http_headers.h"
@@ -258,12 +258,10 @@ OneGoogleBarLoaderImpl::OneGoogleBarLoaderImpl(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     GoogleURLTracker* google_url_tracker,
     const std::string& application_locale,
-    const base::Optional<std::string>& api_url_override,
     bool account_consistency_mirror_required)
     : url_loader_factory_(url_loader_factory),
       google_url_tracker_(google_url_tracker),
       application_locale_(application_locale),
-      api_url_override_(api_url_override),
       account_consistency_mirror_required_(account_consistency_mirror_required),
       weak_ptr_factory_(this) {}
 
@@ -292,8 +290,7 @@ GURL OneGoogleBarLoaderImpl::GetApiUrl() const {
     google_base_url = google_url_tracker_->google_url();
   }
 
-  GURL api_url =
-      google_base_url.Resolve(api_url_override_.value_or(kNewTabOgbApiPath));
+  GURL api_url = google_base_url.Resolve(kNewTabOgbApiPath);
 
   // Add the "hl=" parameter.
   api_url = net::AppendQueryParameter(api_url, "hl", application_locale_);

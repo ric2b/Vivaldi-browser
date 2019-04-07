@@ -4,17 +4,16 @@
 
 #include "components/download/public/common/in_progress_download_manager.h"
 
-#include "base/command_line.h"
 #include "base/optional.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/download/database/download_db_entry.h"
 #include "components/download/database/download_db_impl.h"
 #include "components/download/database/download_namespace.h"
 #include "components/download/database/in_progress/in_progress_cache_impl.h"
-#include "components/download/database/switches.h"
 #include "components/download/internal/common/download_db_cache.h"
 #include "components/download/internal/common/resource_downloader.h"
+#include "components/download/public/common/download_features.h"
 #include "components/download/public/common/download_file.h"
 #include "components/download/public/common/download_item_impl.h"
 #include "components/download/public/common/download_start_observer.h"
@@ -35,6 +34,10 @@ std::unique_ptr<DownloadItemImpl> CreateDownloadItemImpl(
     DownloadItemImplDelegate* delegate,
     const DownloadDBEntry entry) {
   if (!entry.download_info)
+    return nullptr;
+
+  // DownloadDBEntry migrated from in-progress cache doesn't have Ids.
+  if (!entry.download_info->id)
     return nullptr;
 
   base::Optional<InProgressInfo> in_progress_info =
@@ -275,27 +278,18 @@ void InProgressDownloadManager::InterceptDownloadFromNavigation(
 
 void InProgressDownloadManager::Initialize(
     const base::FilePath& metadata_cache_dir) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableDownloadDB)) {
-    // TODO(qinmin): migrate all the data from InProgressCache into
-    // |download_db_|.
-    download_db_cache_ =
-        std::make_unique<DownloadDBCache>(std::make_unique<DownloadDBImpl>(
-            DownloadNamespace::NAMESPACE_BROWSER_DOWNLOAD, metadata_cache_dir));
-    download_db_cache_->Initialize(base::BindOnce(
-        &InProgressDownloadManager::OnInitialized, weak_factory_.GetWeakPtr()));
-  } else {
-    download_metadata_cache_ = std::make_unique<InProgressCacheImpl>(
-        metadata_cache_dir.empty()
-            ? base::FilePath()
-            : metadata_cache_dir.Append(kDownloadMetadataStoreFilename),
-        base::CreateSequencedTaskRunnerWithTraits(
-            {base::MayBlock(), base::TaskPriority::BACKGROUND,
-             base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN}));
-    download_metadata_cache_->Initialize(base::BindOnce(
-        &InProgressDownloadManager::OnInitialized, weak_factory_.GetWeakPtr(),
-        std::make_unique<std::vector<DownloadDBEntry>>()));
-  }
+  // TODO(qinmin): remove |download_metadata_cache_| when migration is done for
+  // most clients.
+  download_metadata_cache_ = std::make_unique<InProgressCacheImpl>(
+      metadata_cache_dir.empty()
+          ? base::FilePath()
+          : metadata_cache_dir.Append(kDownloadMetadataStoreFilename),
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN}));
+  download_metadata_cache_->Initialize(
+      base::BindOnce(&InProgressDownloadManager::OnMetadataCacheInitialized,
+                     weak_factory_.GetWeakPtr(), metadata_cache_dir));
 }
 
 void InProgressDownloadManager::ShutDown() {
@@ -449,11 +443,14 @@ void InProgressDownloadManager::StartDownloadWithItem(
     }
   }
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableDownloadDB)) {
-    download_db_cache_->AddOrReplaceEntry(CreateDownloadDBEntryFromItem(
-        *download, info->download_source, info->fetch_error_body,
-        info->request_headers));
+  if (download_db_cache_) {
+    base::Optional<DownloadDBEntry> entry_opt =
+        download_db_cache_->RetrieveEntry(download->GetGuid());
+    if (!entry_opt.has_value()) {
+      download_db_cache_->AddOrReplaceEntry(CreateDownloadDBEntryFromItem(
+          *download, UkmInfo(info->download_source, GetUniqueDownloadId()),
+          info->fetch_error_body, info->request_headers));
+    }
     download->RemoveObserver(download_db_cache_.get());
     download->AddObserver(download_db_cache_.get());
   } else {
@@ -488,12 +485,38 @@ void InProgressDownloadManager::StartDownloadWithItem(
     download_start_observer_->OnDownloadStarted(download);
 }
 
+void InProgressDownloadManager::OnMetadataCacheInitialized(
+    const base::FilePath& metadata_cache_dir) {
+  download_db_cache_ = std::make_unique<DownloadDBCache>(
+      metadata_cache_dir.empty()
+          ? std::make_unique<DownloadDB>()
+          : std::make_unique<DownloadDBImpl>(
+                DownloadNamespace::NAMESPACE_BROWSER_DOWNLOAD,
+                metadata_cache_dir));
+  download_db_cache_->Initialize(
+      download_metadata_cache_->GetAllEntries(),
+      base::BindOnce(&InProgressDownloadManager::OnInitialized,
+                     weak_factory_.GetWeakPtr()));
+}
+
 void InProgressDownloadManager::OnInitialized(
+    bool success,
     std::unique_ptr<std::vector<DownloadDBEntry>> entries) {
-  for (const auto& entry : *entries) {
-    auto item = CreateDownloadItemImpl(this, entry);
-    item->AddObserver(download_db_cache_.get());
-    in_progress_downloads_.emplace_back(std::move(item));
+  // Destroy the in-progress cache as it is no longer needed on success.
+  if (success) {
+    download_metadata_cache_->Destroy();
+    download_metadata_cache_.reset();
+  } else {
+    download_db_cache_.reset();
+  }
+  if (base::FeatureList::IsEnabled(features::kDownloadDBForNewDownloads)) {
+    for (const auto& entry : *entries) {
+      auto item = CreateDownloadItemImpl(this, entry);
+      if (!item)
+        continue;
+      item->AddObserver(download_db_cache_.get());
+      in_progress_downloads_.emplace_back(std::move(item));
+    }
   }
   is_initialized_ = true;
   for (auto& callback : on_initialized_callbacks_)
@@ -525,4 +548,5 @@ std::vector<std::unique_ptr<download::DownloadItemImpl>>
 InProgressDownloadManager::TakeInProgressDownloads() {
   return std::move(in_progress_downloads_);
 }
+
 }  // namespace download

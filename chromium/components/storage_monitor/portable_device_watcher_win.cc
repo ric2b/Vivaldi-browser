@@ -18,7 +18,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/win/scoped_co_mem.h"
 #include "base/win/scoped_propvariant.h"
@@ -501,7 +501,7 @@ void PortableDeviceWatcherWin::Init(HWND hwnd) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   notifications_ = RegisterPortableDeviceNotification(hwnd);
   media_task_runner_ = base::CreateCOMSTATaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
   EnumerateAttachedDevices();
 }

@@ -10,9 +10,13 @@
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #include "base/values.h"
+#import "ios/web/navigation/wk_navigation_util.h"
+#import "ios/web/public/crw_navigation_item_storage.h"
+#import "ios/web/public/crw_session_storage.h"
 #import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/test/fakes/test_web_state_delegate.h"
 #import "ios/web/public/test/web_test_with_web_state.h"
+#import "ios/web/public/web_client.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_unittest_util.h"
 
@@ -22,6 +26,7 @@
 
 using base::test::ios::WaitUntilConditionOrTimeout;
 using base::test::ios::kWaitForJSCompletionTimeout;
+using base::test::ios::kWaitForPageLoadTimeout;
 
 namespace web {
 
@@ -251,6 +256,45 @@ TEST_F(WebStateTest, SetHasOpener) {
   ASSERT_FALSE(web_state()->HasOpener());
   web_state()->SetHasOpener(true);
   EXPECT_TRUE(web_state()->HasOpener());
+}
+
+// Verifies that large session can be restored. SlimNavigationManagder has max
+// session size limit of |wk_navigation_util::kMaxSessionSize|.
+TEST_F(WebStateTest, RestoreLargeSession) {
+  // Create session storage with large number of items.
+  const int kItemCount = 100;
+  NSMutableArray<CRWNavigationItemStorage*>* item_storages =
+      [NSMutableArray arrayWithCapacity:kItemCount];
+  for (unsigned int i = 0; i < kItemCount; i++) {
+    CRWNavigationItemStorage* item = [[CRWNavigationItemStorage alloc] init];
+    item.virtualURL = GURL(base::StringPrintf("http://www.%u.com", i));
+    item.title = base::ASCIIToUTF16(base::StringPrintf("Test%u", i));
+    [item_storages addObject:item];
+  }
+
+  // Restore the session.
+  WebState::CreateParams params(GetBrowserState());
+  CRWSessionStorage* session_storage = [[CRWSessionStorage alloc] init];
+  session_storage.itemStorages = item_storages;
+  auto web_state = WebState::CreateWithStorageSession(params, session_storage);
+  NavigationManager* navigation_manager = web_state->GetNavigationManager();
+  // TODO(crbug.com/873729): The session will not be restored until
+  // LoadIfNecessary call. Fix the bug and remove extra call.
+  navigation_manager->LoadIfNecessary();
+
+  // Verify that session was fully restored.
+  int kExpectedItemCount = web::GetWebClient()->IsSlimNavigationManagerEnabled()
+                               ? wk_navigation_util::kMaxSessionSize
+                               : kItemCount;
+  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForPageLoadTimeout, ^{
+    bool restored = navigation_manager->GetItemCount() == kExpectedItemCount;
+    if (!restored) {
+      EXPECT_FALSE(navigation_manager->CanGoBack());
+      EXPECT_FALSE(navigation_manager->CanGoForward());
+    }
+    return restored;
+  }));
+  EXPECT_EQ(kExpectedItemCount, navigation_manager->GetItemCount());
 }
 
 }  // namespace web

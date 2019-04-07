@@ -124,9 +124,9 @@ class TetherService
   void OnReady() override;
 
   // chromeos::multidevice_setup::MultiDeviceSetupClient::Observer:
-  void OnHostStatusChanged(
-      chromeos::multidevice_setup::mojom::HostStatus host_status,
-      const base::Optional<cryptauth::RemoteDeviceRef>& host_device) override;
+  void OnFeatureStatesChanged(
+      const chromeos::multidevice_setup::MultiDeviceSetupClient::
+          FeatureStatesMap& feature_states_map) override;
 
   // Callback when the controlling pref changes.
   void OnPrefsChanged();
@@ -154,6 +154,10 @@ class TetherService
       TestMultiDeviceSetupClientInitiallyHasNoVerifiedHost);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
                            TestMultiDeviceSetupClientLosesVerifiedHost);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
+                           TestBetterTogetherSuiteInitiallyDisabled);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
+                           TestBetterTogetherSuiteBecomesDisabled);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestBleAdvertisingNotSupported);
   FRIEND_TEST_ALL_PREFIXES(
       TetherServiceTest,
@@ -178,13 +182,13 @@ class TetherService
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestCellularIsAvailable);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestDisabled);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestEnabled);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestEnabled_MultiDeviceFlags);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestBluetoothNotification);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestBluetoothNotPresent);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestMetricsFalsePositives);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestWifiNotPresent);
 
-  // Reflects InstantTethering_TechnologyStateAndReason enum in enums.xml. Do
-  // not rearrange.
+  // Reflects InstantTethering_FeatureState enum in enums.xml. Do not rearrange.
   enum TetherFeatureState {
     // Note: Value 0 was previously OTHER_OR_UNKNOWN, but this was a vague
     // description.
@@ -201,17 +205,13 @@ class TetherService
     BLE_NOT_PRESENT = 9,
     WIFI_NOT_PRESENT = 10,
     SUSPENDED = 11,
-    MULTIDEVICE_HOST_UNVERIFIED = 12,
+    BETTER_TOGETHER_SUITE_DISABLED = 12,
     TETHER_FEATURE_STATE_MAX
   };
 
   // For debug logs.
   static std::string TetherFeatureStateToString(
       const TetherFeatureState& state);
-
-  void OnHostStatusReceived(
-      chromeos::multidevice_setup::mojom::HostStatus host_status,
-      const base::Optional<cryptauth::RemoteDeviceRef>& host_device);
 
   void GetBluetoothAdapter();
   void OnBluetoothAdapterFetched(
@@ -242,7 +242,7 @@ class TetherService
   bool IsAllowedByPolicy() const;
 
   // Whether Tether is enabled.
-  bool IsEnabledbyPreference() const;
+  bool IsEnabledByPreference() const;
 
   TetherFeatureState GetTetherFeatureState();
 
@@ -270,6 +270,8 @@ class TetherService
   // Whether the device and service have been suspended (e.g. the laptop lid
   // was closed).
   bool suspended_ = false;
+
+  bool is_adapter_being_fetched_ = false;
 
   chromeos::multidevice_setup::mojom::HostStatus host_status_ =
       chromeos::multidevice_setup::mojom::HostStatus::kNoEligibleHosts;

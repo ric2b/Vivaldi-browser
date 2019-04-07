@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/string_or_trusted_html.h"
 #include "third_party/blink/renderer/bindings/core/v8/string_or_trusted_script_url.h"
 #include "third_party/blink/renderer/bindings/core/v8/usv_string_or_trusted_url.h"
+#include "third_party/blink/renderer/core/accessibility/ax_context.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/animation/css/css_animations.h"
 #include "third_party/blink/renderer/core/aom/computed_accessible_node.h"
@@ -81,7 +82,6 @@
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
-#include "third_party/blink/renderer/core/editing/iterators/text_iterator.h"
 #include "third_party/blink/renderer/core/editing/selection_template.h"
 #include "third_party/blink/renderer/core/editing/serializers/serialization.h"
 #include "third_party/blink/renderer/core/editing/set_selection_options.h"
@@ -119,6 +119,7 @@
 #include "third_party/blink/renderer/core/html/parser/nesting_level_incrementer.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/intersection_observer/element_intersection_observer_data.h"
+#include "third_party/blink/renderer/core/invisible_dom/activate_invisible_event.h"
 #include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
@@ -139,6 +140,8 @@
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/resize_observer/resize_observation.h"
+#include "third_party/blink/renderer/core/scroll/scrollable_area.h"
+#include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
 #include "third_party/blink/renderer/core/svg/svg_a_element.h"
 #include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/core/svg_names.h"
@@ -153,8 +156,6 @@
 #include "third_party/blink/renderer/platform/bindings/v8_per_context_data.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/scroll/scrollable_area.h"
-#include "third_party/blink/renderer/platform/scroll/smooth_scroll_sequencer.h"
 #include "third_party/blink/renderer/platform/wtf/bit_vector.h"
 #include "third_party/blink/renderer/platform/wtf/hash_functions.h"
 #include "third_party/blink/renderer/platform/wtf/text/cstring.h"
@@ -1403,17 +1404,21 @@ DOMRect* Element::getBoundingClientRect() {
 }
 
 const AtomicString& Element::computedRole() {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
-  std::unique_ptr<ScopedAXObjectCache> cache =
-      ScopedAXObjectCache::Create(GetDocument());
-  return cache->Get()->ComputedRoleForNode(this);
+  Document& document = GetDocument();
+  if (!document.IsActive())
+    return g_null_atom;
+  document.UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
+  AXContext ax_context(document);
+  return ax_context.GetAXObjectCache().ComputedRoleForNode(this);
 }
 
 String Element::computedName() {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
-  std::unique_ptr<ScopedAXObjectCache> cache =
-      ScopedAXObjectCache::Create(GetDocument());
-  return cache->Get()->ComputedNameForNode(this);
+  Document& document = GetDocument();
+  if (!document.IsActive())
+    return String();
+  document.UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
+  AXContext ax_context(document);
+  return ax_context.GetAXObjectCache().ComputedNameForNode(this);
 }
 
 AccessibleNode* Element::ExistingAccessibleNode() const {
@@ -1432,6 +1437,57 @@ AccessibleNode* Element::accessibleNode() {
 
   ElementRareData& rare_data = EnsureElementRareData();
   return rare_data.EnsureAccessibleNode(this);
+}
+
+const AtomicString& Element::invisible() const {
+  return FastGetAttribute(invisibleAttr);
+}
+
+void Element::setInvisible(const AtomicString& value) {
+  setAttribute(invisibleAttr, value);
+}
+
+void Element::DispatchActivateInvisibleEventIfNeeded() {
+  if (!RuntimeEnabledFeatures::InvisibleDOMEnabled())
+    return;
+  // Traverse all inclusive flat-tree ancestor and send activateinvisible
+  // on the ones that have the invisible attribute. Default event handler
+  // will remove invisible attribute of all invisible element if the event is
+  // not canceled, making this element and all ancestors visible again.
+  // We're saving them and the retargeted activated element as DOM structure
+  // may change due to event handlers.
+  HeapVector<Member<Element>> invisible_ancestors;
+  HeapVector<Member<Element>> activated_elements;
+  for (Node& ancestor : FlatTreeTraversal::InclusiveAncestorsOf(*this)) {
+    if (ancestor.IsElementNode() && ToElement(ancestor).invisible()) {
+      invisible_ancestors.push_back(ToElement(ancestor));
+      activated_elements.push_back(ancestor.GetTreeScope().Retarget(*this));
+    }
+  }
+  auto* activated_element_iterator = activated_elements.begin();
+  for (Element* ancestor : invisible_ancestors) {
+    DCHECK(activated_element_iterator != activated_elements.end());
+    ancestor->DispatchEvent(
+        *ActivateInvisibleEvent::Create(*activated_element_iterator));
+    ++activated_element_iterator;
+  }
+}
+
+void Element::InvisibleAttributeChanged() {
+  SetNeedsStyleRecalc(
+      kLocalStyleChange,
+      StyleChangeReasonForTracing::Create(StyleChangeReason::kInvisibleChange));
+}
+
+void Element::DefaultEventHandler(Event& event) {
+  if (RuntimeEnabledFeatures::InvisibleDOMEnabled() &&
+      event.type() == EventTypeNames::activateinvisible &&
+      event.target() == this) {
+    removeAttribute(invisibleAttr);
+    event.SetDefaultHandled();
+    return;
+  }
+  ContainerNode::DefaultEventHandler(event);
 }
 
 bool Element::toggleAttribute(const AtomicString& qualified_name,
@@ -1581,19 +1637,11 @@ void Element::SetSynchronizedLazyAttribute(const QualifiedName& name,
 void Element::setAttribute(const QualifiedName& name,
                            const StringOrTrustedHTML& stringOrHTML,
                            ExceptionState& exception_state) {
-  DCHECK(stringOrHTML.IsString() ||
-         RuntimeEnabledFeatures::TrustedDOMTypesEnabled());
-  if (stringOrHTML.IsString() && GetDocument().RequireTrustedTypes()) {
-    exception_state.ThrowTypeError(
-        "This document requires `TrustedHTML` assignment.");
-    return;
+  String valueString =
+      TrustedHTML::GetString(stringOrHTML, &GetDocument(), exception_state);
+  if (!exception_state.HadException()) {
+    setAttribute(name, AtomicString(valueString));
   }
-
-  String valueString = stringOrHTML.IsString()
-                           ? stringOrHTML.GetAsString()
-                           : stringOrHTML.GetAsTrustedHTML()->toString();
-
-  setAttribute(name, AtomicString(valueString));
 }
 
 void Element::setAttribute(const QualifiedName& name,
@@ -1617,19 +1665,11 @@ void Element::setAttribute(const QualifiedName& name,
 void Element::setAttribute(const QualifiedName& name,
                            const USVStringOrTrustedURL& stringOrURL,
                            ExceptionState& exception_state) {
-  DCHECK(stringOrURL.IsUSVString() ||
-         RuntimeEnabledFeatures::TrustedDOMTypesEnabled());
-  if (stringOrURL.IsUSVString() && GetDocument().RequireTrustedTypes()) {
-    exception_state.ThrowTypeError(
-        "This document requires `TrustedURL` assignment.");
-    return;
+  String url =
+      TrustedURL::GetString(stringOrURL, &GetDocument(), exception_state);
+  if (!exception_state.HadException()) {
+    setAttribute(name, AtomicString(url));
   }
-
-  String valueString = stringOrURL.IsUSVString()
-                           ? stringOrURL.GetAsUSVString()
-                           : stringOrURL.GetAsTrustedURL()->toString();
-
-  setAttribute(name, AtomicString(valueString));
 }
 
 ALWAYS_INLINE void Element::SetAttributeInternal(
@@ -1722,6 +1762,10 @@ void Element::AttributeChanged(const AttributeModificationParams& params) {
       GetElementData()->presentation_attribute_style_is_dirty_ = true;
       SetNeedsStyleRecalc(kLocalStyleChange,
                           StyleChangeReasonForTracing::FromAttribute(name));
+    } else if (RuntimeEnabledFeatures::InvisibleDOMEnabled() &&
+               name == HTMLNames::invisibleAttr &&
+               params.old_value.IsNull() != params.new_value.IsNull()) {
+      InvisibleAttributeChanged();
     }
   }
 
@@ -1969,14 +2013,14 @@ LayoutObject* Element::CreateLayoutObject(const ComputedStyle& style) {
 }
 
 Node::InsertionNotificationRequest Element::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   // need to do superclass processing first so isConnected() is true
   // by the time we reach updateId
   ContainerNode::InsertedInto(insertion_point);
 
   DCHECK(!HasRareData() || !GetElementRareData()->HasPseudoElements());
 
-  if (!insertion_point->IsInTreeScope())
+  if (!insertion_point.IsInTreeScope())
     return kInsertionDone;
 
   if (HasRareData()) {
@@ -1995,7 +2039,7 @@ Node::InsertionNotificationRequest Element::InsertedInto(
       CustomElement::TryToUpgrade(this);
   }
 
-  TreeScope& scope = insertion_point->GetTreeScope();
+  TreeScope& scope = insertion_point.GetTreeScope();
   if (scope != GetTreeScope())
     return kInsertionDone;
 
@@ -2013,8 +2057,8 @@ Node::InsertionNotificationRequest Element::InsertedInto(
   return kInsertionDone;
 }
 
-void Element::RemovedFrom(ContainerNode* insertion_point) {
-  bool was_in_document = insertion_point->isConnected();
+void Element::RemovedFrom(ContainerNode& insertion_point) {
+  bool was_in_document = insertion_point.isConnected();
   if (HasRareData()) {
     // If we detached the layout tree with LazyReattachIfAttached, we might not
     // have cleared the pseudo elements if we remove the element before calling
@@ -2026,10 +2070,10 @@ void Element::RemovedFrom(ContainerNode* insertion_point) {
 
   if (Fullscreen::IsFullscreenElement(*this)) {
     SetContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(false);
-    if (insertion_point->IsElementNode()) {
-      ToElement(insertion_point)->SetContainsFullScreenElement(false);
+    if (insertion_point.IsElementNode()) {
+      ToElement(insertion_point).SetContainsFullScreenElement(false);
       ToElement(insertion_point)
-          ->SetContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(
+          .SetContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(
               false);
     }
   }
@@ -2039,10 +2083,10 @@ void Element::RemovedFrom(ContainerNode* insertion_point) {
 
   SetSavedLayerScrollOffset(ScrollOffset());
 
-  if (insertion_point->IsInTreeScope() && GetTreeScope() == GetDocument()) {
+  if (insertion_point.IsInTreeScope() && GetTreeScope() == GetDocument()) {
     const AtomicString& id_value = GetIdAttribute();
     if (!id_value.IsNull())
-      UpdateId(insertion_point->GetTreeScope(), id_value, g_null_atom);
+      UpdateId(insertion_point.GetTreeScope(), id_value, g_null_atom);
 
     const AtomicString& name_value = GetNameAttribute();
     if (!name_value.IsNull())
@@ -2057,7 +2101,7 @@ void Element::RemovedFrom(ContainerNode* insertion_point) {
     if (GetCustomElementState() == CustomElementState::kCustom)
       CustomElement::EnqueueDisconnectedCallback(this);
     else if (IsUpgradedV0CustomElement())
-      V0CustomElement::DidDetach(this, insertion_point->GetDocument());
+      V0CustomElement::DidDetach(this, insertion_point.GetDocument());
 
     if (NeedsStyleInvalidation()) {
       GetDocument()
@@ -2130,8 +2174,6 @@ void Element::AttachLayoutTree(AttachContext& context) {
     rare_data->ClearPseudoElements();
   }
 
-  SelectorFilterParentScope filter_scope(*this);
-
   AttachContext children_context(context);
 
   LayoutObject* layout_object = GetLayoutObject();
@@ -2155,16 +2197,8 @@ void Element::AttachLayoutTree(AttachContext& context) {
   AttachPseudoElement(kPseudoIdAfter, children_context);
   AttachPseudoElement(kPseudoIdBackdrop, children_context);
 
-  // We create the first-letter element after the :before, :after and
-  // children are attached because the first letter text could come
-  // from any of them.
-  //
-  // TODO(futhark@chromium.org: Replace with AttachPseudoElement when we create
-  // ::first-letter elements during style recalc.
-  if (PseudoElement* first_letter =
-          CreatePseudoElementIfNeeded(kPseudoIdFirstLetter)) {
-    first_letter->AttachLayoutTree(children_context);
-  }
+  UpdateFirstLetterPseudoElement(StyleUpdatePhase::kAttachLayoutTree);
+  AttachPseudoElement(kPseudoIdFirstLetter, children_context);
 
   if (layout_object) {
     if (!layout_object->IsFloatingOrOutOfFlowPositioned())
@@ -2180,9 +2214,7 @@ void Element::DetachLayoutTree(const AttachContext& context) {
   RemoveCallbackSelectors();
   if (HasRareData()) {
     ElementRareData* data = GetElementRareData();
-    if (context.performing_reattach)
-      data->SetPseudoElement(kPseudoIdFirstLetter, nullptr);
-    else
+    if (!context.performing_reattach)
       data->ClearPseudoElements();
 
     // attachLayoutTree() will clear the computed style for us when inside
@@ -2217,6 +2249,7 @@ void Element::DetachLayoutTree(const AttachContext& context) {
 
   DetachPseudoElement(kPseudoIdAfter, context);
   DetachPseudoElement(kPseudoIdBackdrop, context);
+  DetachPseudoElement(kPseudoIdFirstLetter, context);
 
   if (!context.performing_reattach && IsUserActionElement()) {
     if (IsHovered())
@@ -2251,8 +2284,7 @@ scoped_refptr<ComputedStyle> Element::StyleForLayoutObject() {
                                            ? CustomStyleForLayoutObject()
                                            : OriginalStyleForLayoutObject();
   if (!style) {
-    DCHECK(IsBeforePseudoElement() || IsAfterPseudoElement() ||
-           GetPseudoId() == kPseudoIdBackdrop);
+    DCHECK(IsPseudoElement());
     return nullptr;
   }
 
@@ -2299,7 +2331,16 @@ bool Element::ShouldCallRecalcStyleForChildren(StyleRecalcChange change) {
 void Element::RecalcStyle(StyleRecalcChange change) {
   DCHECK(GetDocument().InStyleRecalc());
   DCHECK(!GetDocument().Lifecycle().InDetach());
-  DCHECK(!ParentOrShadowHostNode()->NeedsStyleRecalc());
+  // If we are re-attaching in a Shadow DOM v0 tree, we recalc down to the
+  // distributed nodes to propagate kReattach down the flat tree (See
+  // V0InsertionPoint::DidRecalcStyle). That means we may have a shadow-
+  // including parent (V0InsertionPoint) with dirty recalc bit in the case where
+  // fallback content has been redistributed to a different insertion point.
+  // This will not happen for Shadow DOM v1 because we walk assigned nodes and
+  // slots themselves are assigned and part of the flat tree.
+  DCHECK(
+      !ParentOrShadowHostNode()->NeedsStyleRecalc() ||
+      (ParentOrShadowHostNode()->IsV0InsertionPoint() && change == kReattach));
   DCHECK(InActiveDocument());
 
   if (HasCustomStyleCallbacks())
@@ -2348,6 +2389,8 @@ void Element::RecalcStyle(StyleRecalcChange change) {
         change = kReattach;
       if (change == kReattach)
         SetNeedsReattachLayoutTree();
+      else if (GetStyleChangeType() == kSubtreeStyleChange)
+        change = kForce;
     }
 
     // Needed because the RebuildLayoutTree code needs to see what the
@@ -2365,14 +2408,11 @@ void Element::RecalcStyle(StyleRecalcChange change) {
   }
 
   if (ShouldCallRecalcStyleForChildren(change)) {
-    // TODO(futhark@chromium.org): Pseudo elements are feature-less and match
-    // the same features as their originating element. Move the filter scope
-    // inside the if-block for shadow-including descendants below.
-    SelectorFilterParentScope filter_scope(*this);
 
     UpdatePseudoElement(kPseudoIdBefore, change);
 
     if (change > kUpdatePseudoElements || ChildNeedsStyleRecalc()) {
+      SelectorFilterParentScope filter_scope(*this);
       if (ShadowRoot* root = GetShadowRoot()) {
         if (root->ShouldCallRecalcStyle(change))
           root->RecalcStyle(change);
@@ -2382,13 +2422,11 @@ void Element::RecalcStyle(StyleRecalcChange change) {
 
     UpdatePseudoElement(kPseudoIdAfter, change);
 
-    // If our children have changed then we need to force the first-letter
-    // checks as we don't know if they effected the first letter or not.
-    // This can be seen when a child transitions from floating to
-    // non-floating we have to take it into account for the first letter.
-    UpdatePseudoElement(
-        kPseudoIdFirstLetter,
-        change < kForce && ChildNeedsStyleRecalc() ? kForce : change);
+    // If we are re-attaching us or any of our descendants, we need to attach
+    // the descendants before we know if this element generates a ::first-letter
+    // and which element the ::first-letter inherits style from.
+    if (change < kReattach && !ChildNeedsReattachLayoutTree())
+      UpdateFirstLetterPseudoElement(StyleUpdatePhase::kRecalc);
 
     ClearChildNeedsStyleRecalc();
   }
@@ -2421,7 +2459,6 @@ scoped_refptr<ComputedStyle> Element::PropagateInheritedProperties(
 
 StyleRecalcChange Element::RecalcOwnStyle(StyleRecalcChange change) {
   DCHECK(GetDocument().InStyleRecalc());
-  DCHECK(!ParentOrShadowHostNode()->NeedsStyleRecalc());
   DCHECK(change >= kIndependentInherit || NeedsStyleRecalc());
   DCHECK(ParentComputedStyle());
   DCHECK(!GetNonAttachedStyle());
@@ -2519,7 +2556,6 @@ void Element::RebuildLayoutTree(WhitespaceAttacher& whitespace_attacher) {
     whitespace_attacher.DidReattachElement(this,
                                            reattach_context.previous_in_flow);
   } else {
-    SelectorFilterParentScope filter_scope(*this);
     // We create a local WhitespaceAttacher when rebuilding children of an
     // element with a LayoutObject since whitespace nodes do not rely on layout
     // objects further up the tree. Also, if this Element's layout object is an
@@ -2545,7 +2581,8 @@ void Element::RebuildLayoutTree(WhitespaceAttacher& whitespace_attacher) {
       RebuildChildrenLayoutTrees(*child_attacher);
     RebuildPseudoElementLayoutTree(kPseudoIdBefore, *child_attacher);
     RebuildPseudoElementLayoutTree(kPseudoIdBackdrop, *child_attacher);
-    RebuildPseudoElementLayoutTree(kPseudoIdFirstLetter, *child_attacher);
+    RebuildFirstLetterLayoutTree();
+    ClearChildNeedsReattachLayoutTree();
   }
   DCHECK(!NeedsStyleRecalc());
   DCHECK(!ChildNeedsStyleRecalc());
@@ -2565,30 +2602,33 @@ void Element::RebuildShadowRootLayoutTree(
 void Element::RebuildPseudoElementLayoutTree(
     PseudoId pseudo_id,
     WhitespaceAttacher& whitespace_attacher) {
-  PseudoElement* element = GetPseudoElement(pseudo_id);
-  if (pseudo_id == kPseudoIdFirstLetter) {
-    // Need to create a ::first-letter element here for the following case:
-    //
-    // <style>#outer::first-letter {...}</style>
-    // <div id=outer><div id=inner style="display:none">Text</div></div>
-    // <script> outer.offsetTop; inner.style.display = "block" </script>
-    //
-    // The creation of FirstLetterPseudoElement relies on the layout tree of the
-    // block contents. In this case, the ::first-letter element is not created
-    // initially since the #inner div is not displayed. On RecalcStyle it's not
-    // created since the layout tree is still not built, and AttachLayoutTree
-    // for #inner will not update the ::first-letter of outer. However, we end
-    // up here for #outer after AttachLayoutTree is called on #inner at which
-    // point the layout sub-tree is available for deciding on creating the
-    // ::first-letter.
-    if (!element)
-      element = CreatePseudoElementIfNeeded(pseudo_id);
-    else if (UpdateFirstLetter(element))
-      return;
+  if (PseudoElement* element = GetPseudoElement(pseudo_id)) {
+    if (element->NeedsRebuildLayoutTree(whitespace_attacher))
+      element->RebuildLayoutTree(whitespace_attacher);
   }
+}
 
-  if (element && element->NeedsRebuildLayoutTree(whitespace_attacher))
-    element->RebuildLayoutTree(whitespace_attacher);
+void Element::RebuildFirstLetterLayoutTree() {
+  // Need to create a ::first-letter element here for the following case:
+  //
+  // <style>#outer::first-letter {...}</style>
+  // <div id=outer><div id=inner style="display:none">Text</div></div>
+  // <script> outer.offsetTop; inner.style.display = "block" </script>
+  //
+  // The creation of FirstLetterPseudoElement relies on the layout tree of the
+  // block contents. In this case, the ::first-letter element is not created
+  // initially since the #inner div is not displayed. On RecalcStyle it's not
+  // created since the layout tree is still not built, and AttachLayoutTree
+  // for #inner will not update the ::first-letter of outer. However, we end
+  // up here for #outer after AttachLayoutTree is called on #inner at which
+  // point the layout sub-tree is available for deciding on creating the
+  // ::first-letter.
+  UpdateFirstLetterPseudoElement(StyleUpdatePhase::kRebuildLayoutTree);
+  if (PseudoElement* element = GetPseudoElement(kPseudoIdFirstLetter)) {
+    WhitespaceAttacher whitespace_attacher;
+    if (element->NeedsRebuildLayoutTree(whitespace_attacher))
+      element->RebuildLayoutTree(whitespace_attacher);
+  }
 }
 
 void Element::UpdateCallbackSelectors(const ComputedStyle* old_style,
@@ -2642,7 +2682,7 @@ ShadowRoot& Element::CreateAndAttachShadowRoot(ShadowRootType type) {
     shadow_root->SetNeedsDistributionRecalc();
   }
 
-  shadow_root->InsertedInto(this);
+  shadow_root->InsertedInto(*this);
   SetChildNeedsStyleRecalc();
   SetNeedsStyleRecalc(kSubtreeStyleChange, StyleChangeReasonForTracing::Create(
                                                StyleChangeReason::kShadow));
@@ -2827,7 +2867,8 @@ ShadowRoot* Element::attachShadow(const ShadowRootInit& shadow_root_init_dict,
   DCHECK(!shadow_root_init_dict.hasMode() || !GetShadowRoot());
   bool delegates_focus = shadow_root_init_dict.hasDelegatesFocus() &&
                          shadow_root_init_dict.delegatesFocus();
-  return &AttachShadowRootInternal(type, delegates_focus);
+  bool manual_slotting = shadow_root_init_dict.slotting() == "manual";
+  return &AttachShadowRootInternal(type, delegates_focus, manual_slotting);
 }
 
 ShadowRoot& Element::CreateShadowRootInternal() {
@@ -2844,7 +2885,8 @@ ShadowRoot& Element::CreateUserAgentShadowRoot() {
 }
 
 ShadowRoot& Element::AttachShadowRootInternal(ShadowRootType type,
-                                              bool delegates_focus) {
+                                              bool delegates_focus,
+                                              bool manual_slotting) {
   // SVG <use> is a special case for using this API to create a closed shadow
   // root.
   DCHECK(CanAttachShadowRoot() || IsSVGUseElement(*this));
@@ -2855,6 +2897,8 @@ ShadowRoot& Element::AttachShadowRootInternal(ShadowRootType type,
   GetDocument().SetShadowCascadeOrder(ShadowCascadeOrder::kShadowCascadeV1);
   ShadowRoot& shadow_root = CreateAndAttachShadowRoot(type);
   shadow_root.SetDelegatesFocus(delegates_focus);
+  shadow_root.SetSlotting(manual_slotting ? ShadowRootSlotting::kManual
+                                          : ShadowRootSlotting::kAuto);
   return shadow_root;
 }
 
@@ -2955,7 +2999,6 @@ void Element::ChildrenChanged(const ChildrenChange& change) {
         ToElement(change.sibling_changed), change.sibling_before_change,
         change.sibling_after_change);
 
-  // TODO(hayato): Confirm that we can skip this if a shadow tree is v1.
   if (ShadowRoot* shadow_root = GetShadowRoot())
     shadow_root->SetNeedsDistributionRecalcWillBeSetNeedsAssignmentRecalc();
 }
@@ -3400,17 +3443,17 @@ Element* Element::AdjustedFocusedElementInTreeScope() const {
 void Element::DispatchFocusEvent(Element* old_focused_element,
                                  WebFocusType type,
                                  InputDeviceCapabilities* source_capabilities) {
-  DispatchEvent(FocusEvent::Create(EventTypeNames::focus, Event::Bubbles::kNo,
-                                   GetDocument().domWindow(), 0,
-                                   old_focused_element, source_capabilities));
+  DispatchEvent(*FocusEvent::Create(EventTypeNames::focus, Event::Bubbles::kNo,
+                                    GetDocument().domWindow(), 0,
+                                    old_focused_element, source_capabilities));
 }
 
 void Element::DispatchBlurEvent(Element* new_focused_element,
                                 WebFocusType type,
                                 InputDeviceCapabilities* source_capabilities) {
-  DispatchEvent(FocusEvent::Create(EventTypeNames::blur, Event::Bubbles::kNo,
-                                   GetDocument().domWindow(), 0,
-                                   new_focused_element, source_capabilities));
+  DispatchEvent(*FocusEvent::Create(EventTypeNames::blur, Event::Bubbles::kNo,
+                                    GetDocument().domWindow(), 0,
+                                    new_focused_element, source_capabilities));
 }
 
 void Element::DispatchFocusInEvent(
@@ -3423,7 +3466,7 @@ void Element::DispatchFocusInEvent(
 #endif
   DCHECK(event_type == EventTypeNames::focusin ||
          event_type == EventTypeNames::DOMFocusIn);
-  DispatchScopedEvent(FocusEvent::Create(
+  DispatchScopedEvent(*FocusEvent::Create(
       event_type, Event::Bubbles::kYes, GetDocument().domWindow(), 0,
       old_focused_element, source_capabilities));
 }
@@ -3437,7 +3480,7 @@ void Element::DispatchFocusOutEvent(
 #endif
   DCHECK(event_type == EventTypeNames::focusout ||
          event_type == EventTypeNames::DOMFocusOut);
-  DispatchScopedEvent(FocusEvent::Create(
+  DispatchScopedEvent(*FocusEvent::Create(
       event_type, Event::Bubbles::kYes, GetDocument().domWindow(), 0,
       new_focused_element, source_capabilities));
 }
@@ -3480,20 +3523,11 @@ void Element::SetInnerHTMLFromString(const String& html) {
 
 void Element::setInnerHTML(const StringOrTrustedHTML& string_or_html,
                            ExceptionState& exception_state) {
-  DCHECK(string_or_html.IsString() ||
-         RuntimeEnabledFeatures::TrustedDOMTypesEnabled());
-
-  if (string_or_html.IsString() && GetDocument().RequireTrustedTypes()) {
-    exception_state.ThrowTypeError(
-        "This document requires `TrustedHTML` assignment.");
-    return;
+  String html =
+      TrustedHTML::GetString(string_or_html, &GetDocument(), exception_state);
+  if (!exception_state.HadException()) {
+    SetInnerHTMLFromString(html, exception_state);
   }
-
-  String html = string_or_html.IsString()
-                    ? string_or_html.GetAsString()
-                    : string_or_html.GetAsTrustedHTML()->toString();
-
-  SetInnerHTMLFromString(html, exception_state);
 }
 
 void Element::setInnerHTML(const StringOrTrustedHTML& string_or_html) {
@@ -3537,20 +3571,11 @@ void Element::SetOuterHTMLFromString(const String& html,
 
 void Element::setOuterHTML(const StringOrTrustedHTML& string_or_html,
                            ExceptionState& exception_state) {
-  DCHECK(string_or_html.IsString() ||
-         RuntimeEnabledFeatures::TrustedDOMTypesEnabled());
-
-  if (string_or_html.IsString() && GetDocument().RequireTrustedTypes()) {
-    exception_state.ThrowTypeError(
-        "This document requires `TrustedHTML` assignment.");
-    return;
+  String html =
+      TrustedHTML::GetString(string_or_html, &GetDocument(), exception_state);
+  if (!exception_state.HadException()) {
+    SetOuterHTMLFromString(html, exception_state);
   }
-
-  String html = string_or_html.IsString()
-                    ? string_or_html.GetAsString()
-                    : string_or_html.GetAsTrustedHTML()->toString();
-
-  SetOuterHTMLFromString(html, exception_state);
 }
 
 Node* Element::InsertAdjacent(const String& where,
@@ -3697,20 +3722,11 @@ void Element::insertAdjacentHTML(const String& where,
 void Element::insertAdjacentHTML(const String& where,
                                  const StringOrTrustedHTML& string_or_html,
                                  ExceptionState& exception_state) {
-  DCHECK(string_or_html.IsString() ||
-         RuntimeEnabledFeatures::TrustedDOMTypesEnabled());
-
-  if (string_or_html.IsString() && GetDocument().RequireTrustedTypes()) {
-    exception_state.ThrowTypeError(
-        "This document requires `TrustedHTML` assignment.");
-    return;
+  String markup =
+      TrustedHTML::GetString(string_or_html, &GetDocument(), exception_state);
+  if (!exception_state.HadException()) {
+    insertAdjacentHTML(where, markup, exception_state);
   }
-
-  String markup = string_or_html.IsString()
-                      ? string_or_html.GetAsString()
-                      : string_or_html.GetAsTrustedHTML()->toString();
-
-  insertAdjacentHTML(where, markup, exception_state);
 }
 
 void Element::setPointerCapture(int pointer_id,
@@ -3758,19 +3774,6 @@ bool Element::HasProcessedPointerCapture(int pointer_id) const {
   return GetDocument().GetFrame() &&
          GetDocument().GetFrame()->GetEventHandler().HasProcessedPointerCapture(
              pointer_id, this);
-}
-
-String Element::innerText() {
-  // We need to update layout, since plainText uses line boxes in the layout
-  // tree.
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
-
-  if (!GetLayoutObject() && !HasDisplayContentsStyle())
-    return textContent(true);
-
-  return PlainText(
-      EphemeralRange::RangeOfContents(*this),
-      TextIteratorBehavior::Builder().SetForInnerText(true).Build());
 }
 
 String Element::outerText() {
@@ -3979,35 +3982,99 @@ void Element::CancelFocusAppearanceUpdate() {
     GetDocument().CancelFocusAppearanceUpdate();
 }
 
+void Element::UpdateFirstLetterPseudoElement(StyleUpdatePhase phase) {
+  // Update the ::first-letter pseudo elements presence and its style. This
+  // method may be called from style recalc or layout tree rebuilding/
+  // reattachment. In order to know if an element generates a ::first-letter
+  // element, we need to know if:
+  //
+  // * The element generates a block level box to which ::first-letter applies.
+  // * The element's layout subtree generates any first letter text.
+  // * None of the descendant blocks generate a ::first-letter element.
+  //   (This is not correct according to spec as all block containers should be
+  //   able to generate ::first-letter elements around the first letter of the
+  //   first formatted text, but Blink is only supporting a single
+  //   ::first-letter element which is the innermost block generating a
+  //   ::first-letter).
+  //
+  // We do not always do this at style recalc time as that would have required
+  // us to collect the information about how the layout tree will look like
+  // after the layout tree is attached. So, instead we will wait until we have
+  // an up-to-date layout sub-tree for the element we are considering for
+  // ::first-letter.
+  //
+  // The StyleUpdatePhase tells where we are in the process of updating style
+  // and layout tree.
+
+  PseudoElement* element = GetPseudoElement(kPseudoIdFirstLetter);
+  if (!element) {
+    element = CreatePseudoElementIfNeeded(kPseudoIdFirstLetter);
+    // If we are in Element::AttachLayoutTree, don't mess up the ancestor flags
+    // for layout tree attachment/rebuilding. We will unconditionally call
+    // AttachLayoutTree for the created pseudo element immediately after this
+    // call.
+    if (element && phase != StyleUpdatePhase::kAttachLayoutTree)
+      element->SetNeedsReattachLayoutTree();
+    return;
+  }
+
+  if (phase == StyleUpdatePhase::kRebuildLayoutTree &&
+      element->NeedsReattachLayoutTree()) {
+    // We were already updated in RecalcStyle and ready for reattach.
+    DCHECK(element->GetNonAttachedStyle());
+    return;
+  }
+
+  if (!CanGeneratePseudoElement(kPseudoIdFirstLetter)) {
+    GetElementRareData()->SetPseudoElement(kPseudoIdFirstLetter, nullptr);
+    return;
+  }
+
+  LayoutObject* remaining_text_layout_object =
+      FirstLetterPseudoElement::FirstLetterTextLayoutObject(*element);
+
+  if (!remaining_text_layout_object) {
+    GetElementRareData()->SetPseudoElement(kPseudoIdFirstLetter, nullptr);
+    return;
+  }
+
+  bool text_node_changed =
+      remaining_text_layout_object !=
+      ToFirstLetterPseudoElement(element)->RemainingTextLayoutObject();
+
+  if (phase == StyleUpdatePhase::kAttachLayoutTree) {
+    // RemainingTextLayoutObject should have been cleared from DetachLayoutTree.
+    DCHECK(!ToFirstLetterPseudoElement(element)->RemainingTextLayoutObject());
+    DCHECK(text_node_changed);
+    scoped_refptr<ComputedStyle> pseudo_style = element->StyleForLayoutObject();
+    if (PseudoElementLayoutObjectIsNeeded(pseudo_style.get()))
+      element->SetNonAttachedStyle(std::move(pseudo_style));
+    else
+      GetElementRareData()->SetPseudoElement(kPseudoIdFirstLetter, nullptr);
+    return;
+  }
+
+  element->RecalcStyle(text_node_changed ? kReattach : kForce);
+
+  if (element->NeedsReattachLayoutTree() &&
+      !PseudoElementLayoutObjectIsNeeded(element->GetNonAttachedStyle())) {
+    GetElementRareData()->SetPseudoElement(kPseudoIdFirstLetter, nullptr);
+  }
+}
+
 void Element::UpdatePseudoElement(PseudoId pseudo_id,
                                   StyleRecalcChange change) {
-  // TODO(futhark@chromium.org): Update ::first-letter pseudo elements and style
-  // as part of style recalc also when re-attaching.
-  if (change == kReattach && pseudo_id == kPseudoIdFirstLetter)
-    return;
-
   PseudoElement* element = GetPseudoElement(pseudo_id);
   if (!element) {
-    if (change >= kUpdatePseudoElements)
-      element = CreatePseudoElementIfNeeded(pseudo_id);
-    // TODO(futhark@chromium.org): We cannot SetNeedsReattachLayoutTree() for
-    // ::first-letter inside CreatePseudoElementIfNeeded() because it may be
-    // called from layout tree attachment.
-    if (element && pseudo_id == kPseudoIdFirstLetter)
+    if (change < kUpdatePseudoElements)
+      return;
+    if ((element = CreatePseudoElementIfNeeded(pseudo_id)))
       element->SetNeedsReattachLayoutTree();
     return;
   }
 
   if (change == kUpdatePseudoElements ||
       element->ShouldCallRecalcStyle(change)) {
-    if (pseudo_id == kPseudoIdFirstLetter) {
-      if (UpdateFirstLetter(element))
-        return;
-      // Need to clear the cached style if the PseudoElement wants a recalc so
-      // it computes a new style.
-      if (element->NeedsStyleRecalc())
-        MutableComputedStyle()->RemoveCachedPseudoStyle(kPseudoIdFirstLetter);
-    }
     if (CanGeneratePseudoElement(pseudo_id)) {
       element->RecalcStyle(change == kUpdatePseudoElements ? kForce : change);
       if (!element->NeedsReattachLayoutTree())
@@ -4016,37 +4083,7 @@ void Element::UpdatePseudoElement(PseudoId pseudo_id,
         return;
     }
     GetElementRareData()->SetPseudoElement(pseudo_id, nullptr);
-  } else if (pseudo_id == kPseudoIdFirstLetter &&
-             change >= kUpdatePseudoElements &&
-             !FirstLetterPseudoElement::FirstLetterTextLayoutObject(*element)) {
-    // We can end up here if we change to a float, for example. We need to
-    // cleanup the first-letter PseudoElement and then fix the text of the
-    // original remaining text LayoutObject. This can be seen in Test 7 of
-    // fast/css/first-letter-removed-added.html
-    GetElementRareData()->SetPseudoElement(kPseudoIdFirstLetter, nullptr);
   }
-}
-
-// If we're updating first letter, and the current first letter layoutObject
-// is not the same as the one we're currently using we need to re-create
-// the first letter layoutObject.
-bool Element::UpdateFirstLetter(Element* element) {
-  LayoutObject* remaining_text_layout_object =
-      FirstLetterPseudoElement::FirstLetterTextLayoutObject(*element);
-  if (!remaining_text_layout_object ||
-      remaining_text_layout_object !=
-          ToFirstLetterPseudoElement(element)->RemainingTextLayoutObject()) {
-    // We have to clear out the old first letter here because when it is
-    // disposed it will set the original text back on the remaining text
-    // layoutObject. If we dispose after creating the new one we will get
-    // incorrect results due to setting the first letter back.
-    if (remaining_text_layout_object)
-      element->ReattachLayoutTree();
-    else
-      GetElementRareData()->SetPseudoElement(kPseudoIdFirstLetter, nullptr);
-    return true;
-  }
-  return false;
 }
 
 PseudoElement* Element::CreatePseudoElementIfNeeded(PseudoId pseudo_id) {
@@ -4055,15 +4092,13 @@ PseudoElement* Element::CreatePseudoElementIfNeeded(PseudoId pseudo_id) {
   if (!CanGeneratePseudoElement(pseudo_id))
     return nullptr;
   if (pseudo_id == kPseudoIdFirstLetter) {
-    if (IsSVGElement())
-      return nullptr;
     if (!FirstLetterPseudoElement::FirstLetterTextLayoutObject(*this))
       return nullptr;
   }
 
   PseudoElement* pseudo_element = PseudoElement::Create(this, pseudo_id);
   EnsureElementRareData().SetPseudoElement(pseudo_id, pseudo_element);
-  pseudo_element->InsertedInto(this);
+  pseudo_element->InsertedInto(*this);
 
   scoped_refptr<ComputedStyle> pseudo_style =
       pseudo_element->StyleForLayoutObject();
@@ -4076,12 +4111,6 @@ PseudoElement* Element::CreatePseudoElementIfNeeded(PseudoId pseudo_id) {
     GetDocument().AddToTopLayer(pseudo_element, this);
 
   pseudo_element->SetNonAttachedStyle(std::move(pseudo_style));
-
-  // TODO(futhark@chromium.org): We cannot SetNeedsReattachLayoutTree() for
-  // ::first-letter inside CreatePseudoElementIfNeeded() because it may be
-  // called from layout tree attachment.
-  if (pseudo_id != kPseudoIdFirstLetter)
-    pseudo_element->SetNeedsReattachLayoutTree();
 
   probe::pseudoElementCreated(pseudo_element);
 
@@ -4143,9 +4172,14 @@ scoped_refptr<ComputedStyle> Element::StyleForPseudoElement(
   if (is_before_or_after) {
     const ComputedStyle* layout_parent_style = style;
     if (style->Display() == EDisplay::kContents) {
-      Node* layout_parent = LayoutTreeBuilderTraversal::LayoutParent(*this);
-      DCHECK(layout_parent);
-      layout_parent_style = layout_parent->GetComputedStyle();
+      // TODO(futhark@chromium.org): Calling getComputedStyle for elements
+      // outside the flat tree should return empty styles, but currently we do
+      // not. See issue https://crbug.com/831568. We can replace the if-test
+      // with DCHECK(layout_parent) when that issue is fixed.
+      if (Node* layout_parent =
+              LayoutTreeBuilderTraversal::LayoutParent(*this)) {
+        layout_parent_style = layout_parent->GetComputedStyle();
+      }
     }
     return GetDocument().EnsureStyleResolver().PseudoStyleForElement(
         this, request, style, layout_parent_style);
@@ -4168,6 +4202,8 @@ scoped_refptr<ComputedStyle> Element::StyleForPseudoElement(
 
 bool Element::CanGeneratePseudoElement(PseudoId pseudo_id) const {
   if (pseudo_id == kPseudoIdBackdrop && !IsInTopLayer())
+    return false;
+  if (pseudo_id == kPseudoIdFirstLetter && IsSVGElement())
     return false;
   if (const ComputedStyle* style = GetComputedStyle())
     return style->CanGeneratePseudoElement(pseudo_id);
@@ -4469,9 +4505,9 @@ inline void Element::UpdateId(TreeScope& scope,
   DCHECK_NE(old_id, new_id);
 
   if (!old_id.IsEmpty())
-    scope.RemoveElementById(old_id, this);
+    scope.RemoveElementById(old_id, *this);
   if (!new_id.IsEmpty())
-    scope.AddElementById(new_id, this);
+    scope.AddElementById(new_id, *this);
 
   NamedItemType type = GetNamedItemType();
   if (type == NamedItemType::kNameOrId ||
@@ -4689,37 +4725,37 @@ void Element::DetachAllAttrNodesFromElement() {
 }
 
 Node::InsertionNotificationRequest Node::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   DCHECK(!ChildNeedsStyleInvalidation());
   DCHECK(!NeedsStyleInvalidation());
-  DCHECK(insertion_point->isConnected() || insertion_point->IsInShadowTree() ||
+  DCHECK(insertion_point.isConnected() || insertion_point.IsInShadowTree() ||
          IsContainerNode());
-  if (insertion_point->isConnected()) {
+  if (insertion_point.isConnected()) {
     SetFlag(kIsConnectedFlag);
-    insertion_point->GetDocument().IncrementNodeCount();
+    insertion_point.GetDocument().IncrementNodeCount();
   }
   if (ParentOrShadowHostNode()->IsInShadowTree())
     SetFlag(kIsInShadowTreeFlag);
   if (ChildNeedsDistributionRecalc() &&
-      !insertion_point->ChildNeedsDistributionRecalc())
-    insertion_point->MarkAncestorsWithChildNeedsDistributionRecalc();
+      !insertion_point.ChildNeedsDistributionRecalc())
+    insertion_point.MarkAncestorsWithChildNeedsDistributionRecalc();
   if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
-    cache->ChildrenChanged(insertion_point);
+    cache->ChildrenChanged(&insertion_point);
   return kInsertionDone;
 }
 
-void Node::RemovedFrom(ContainerNode* insertion_point) {
-  DCHECK(insertion_point->isConnected() || IsContainerNode() ||
+void Node::RemovedFrom(ContainerNode& insertion_point) {
+  DCHECK(insertion_point.isConnected() || IsContainerNode() ||
          IsInShadowTree());
-  if (insertion_point->isConnected()) {
+  if (insertion_point.isConnected()) {
     ClearFlag(kIsConnectedFlag);
-    insertion_point->GetDocument().DecrementNodeCount();
+    insertion_point.GetDocument().DecrementNodeCount();
   }
   if (IsInShadowTree() && !ContainingTreeScope().RootNode().IsShadowRoot())
     ClearFlag(kIsInShadowTreeFlag);
   if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache()) {
     cache->Remove(this);
-    cache->ChildrenChanged(insertion_point);
+    cache->ChildrenChanged(&insertion_point);
   }
 }
 

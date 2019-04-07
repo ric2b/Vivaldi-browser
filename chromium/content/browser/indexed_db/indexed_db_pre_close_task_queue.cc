@@ -6,7 +6,10 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "third_party/blink/public/common/indexeddb/indexeddb_metadata.h"
 #include "third_party/leveldatabase/env_chromium.h"
+
+using blink::IndexedDBDatabaseMetadata;
 
 namespace content {
 
@@ -45,9 +48,10 @@ void IndexedDBPreCloseTaskQueue::Start(
     OnComplete();
     return;
   }
-  timeout_timer_->Start(FROM_HERE, timeout_time_,
-                        base::Bind(&IndexedDBPreCloseTaskQueue::StopForTimout,
-                                   ptr_factory_.GetWeakPtr()));
+  timeout_timer_->Start(
+      FROM_HERE, timeout_time_,
+      base::BindOnce(&IndexedDBPreCloseTaskQueue::StopForTimout,
+                     ptr_factory_.GetWeakPtr()));
   leveldb::Status status = std::move(metadata_fetcher).Run(&metadata_);
   if (!status.ok()) {
     StopForMetadataError(status);

@@ -59,6 +59,9 @@ message ChromeUserPopulation {
   }
   optional ProfileManagementStatus profile_management_status = 5
       [default = UNKNOWN];
+
+  // Indicates if user opted in advanced protection program (a.k.a Titanium).
+  optional bool is_under_advanced_protection = 6;
 }
 
 message ClientPhishingRequest {
@@ -556,6 +559,9 @@ message ClientDownloadRequest {
     optional int64 length = 4;
     optional SignatureInfo signature = 5;
     optional ImageHeaders image_headers = 6;
+
+    // Indicates if the given file is password protected.
+    optional bool is_encrypted = 7;
   }
 
   repeated ArchivedBinary archived_binary = 22;
@@ -650,7 +656,9 @@ message ReferrerChainEntry {
     UNDEFINED = 0;
 
     // Navigation is initiated by the browser process. e.g. user enters url into
-    // address bar, or user opens a bookmark.
+    // address bar, or user opens a bookmark. This isn't perfect reliable due to
+    // some edge cases, such as forward/back navigation and opening a link from
+    // context menu.
     BROWSER_INITIATED = 1;
 
     // Navigation is initiated by the renderer process and there is no user

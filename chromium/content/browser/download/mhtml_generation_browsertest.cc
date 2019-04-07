@@ -57,6 +57,7 @@ class FindTrackingDelegate : public WebContentsDelegate {
     web_contents->SetDelegate(this);
 
     blink::WebFindOptions options;
+    options.run_synchronously_for_testing = true;
     options.match_case = false;
 
     web_contents->Find(global_request_id++, base::UTF8ToUTF16(search_),
@@ -149,7 +150,7 @@ class MHTMLGenerationTest : public ContentBrowserTest {
   }
 
   int64_t ReadFileSizeFromDisk(base::FilePath path) {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_to_test_file_size;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     int64_t file_size;
     if (!base::GetFileSize(path, &file_size)) return -1;
     return file_size;
@@ -249,7 +250,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTML) {
   EXPECT_GT(ReadFileSizeFromDisk(path), 100);  // Verify the actual file size.
 
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     std::string mhtml;
     ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
     EXPECT_THAT(mhtml,
@@ -411,7 +412,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateNonBinaryMHTMLWithImage) {
   EXPECT_GT(ReadFileSizeFromDisk(path), 100);  // Verify the actual file size.
 
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     std::string mhtml;
     ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
     EXPECT_THAT(mhtml, HasSubstr("Content-Transfer-Encoding: base64"));
@@ -438,7 +439,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateBinaryMHTMLWithImage) {
   EXPECT_GT(ReadFileSizeFromDisk(path), 100);  // Verify the actual file size.
 
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     std::string mhtml;
     ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
     EXPECT_THAT(mhtml, HasSubstr("Content-Transfer-Encoding: binary"));
@@ -460,7 +461,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLIgnoreNoStore) {
 
   std::string mhtml;
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
   }
 
@@ -488,7 +489,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLObeyNoStoreMainFrame) {
 
   std::string mhtml;
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
   }
 
@@ -519,7 +520,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest,
 
   std::string mhtml;
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
   }
 
@@ -546,7 +547,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLObeyNoStoreSubFrame) {
 
   std::string mhtml;
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
   }
 
@@ -589,7 +590,7 @@ IN_PROC_BROWSER_TEST_F(
 
   std::string mhtml;
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(base::ReadFileToString(params.file_path, &mhtml));
   }
 }
@@ -616,7 +617,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest,
 
   std::string mhtml;
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(base::ReadFileToString(params.file_path, &mhtml));
   }
 }
@@ -657,7 +658,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationSitePerProcessTest, GenerateMHTML) {
 
   std::string mhtml;
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
   }
 
@@ -686,7 +687,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, RemovePopupOverlay) {
 
   std::string mhtml;
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
   }
 
@@ -727,7 +728,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLWithExtraData) {
 
   std::string mhtml;
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
   }
 

@@ -109,24 +109,16 @@ template("mac_toolchain") {
     } else {
       toolchain_cc_wrapper = cc_wrapper
     }
-    if (defined(toolchain_args.use_cc_wrapper)) {
-      toolchain_use_cc_wrapper = toolchain_args.use_cc_wrapper
-    } else {
-      toolchain_use_cc_wrapper = use_cc_wrapper
-    }
 
     # Compute the compiler prefix.
     if (toolchain_uses_goma) {
       assert(toolchain_cc_wrapper == "",
              "Goma and cc_wrapper can't be used together.")
       compiler_prefix = "$goma_dir/gomacc "
-    } else if (toolchain_use_cc_wrapper && toolchain_cc_wrapper != "") {
+    } else if (toolchain_cc_wrapper != "") {
       compiler_prefix = toolchain_cc_wrapper + " "
     } else {
       compiler_prefix = ""
-    }
-    if (toolchain_cc_wrapper != "") {
-      # Dummy statement to get around no-effect assignment error
     }
 
     cc = compiler_prefix + _cc

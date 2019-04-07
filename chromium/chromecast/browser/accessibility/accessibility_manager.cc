@@ -5,7 +5,8 @@
 #include "chromecast/browser/accessibility/accessibility_manager.h"
 
 #include "chromecast/graphics/accessibility/focus_ring_controller.h"
-#include "chromecast/graphics/accessibility/partial_magnification_controller.h"
+#include "chromecast/graphics/accessibility/fullscreen_magnification_controller.h"
+#include "chromecast/graphics/cast_window_manager_aura.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/wm/public/activation_client.h"
@@ -14,10 +15,11 @@ namespace chromecast {
 namespace shell {
 
 AccessibilityManager::AccessibilityManager(
-    aura::WindowTreeHost* window_tree_host)
-    : window_tree_host_(window_tree_host) {
-  DCHECK(window_tree_host);
-  aura::Window* root_window = window_tree_host->window()->GetRootWindow();
+    CastWindowManagerAura* window_manager)
+    : window_tree_host_(window_manager->window_tree_host()),
+      accessibility_sound_proxy_(std::make_unique<AccessibilitySoundPlayer>()) {
+  DCHECK(window_tree_host_);
+  aura::Window* root_window = window_tree_host_->window()->GetRootWindow();
   wm::ActivationClient* activation_client =
       wm::GetActivationClient(root_window);
   focus_ring_controller_ =
@@ -26,10 +28,13 @@ AccessibilityManager::AccessibilityManager(
       std::make_unique<AccessibilityFocusRingController>(root_window);
   touch_exploration_manager_ = std::make_unique<TouchExplorationManager>(
       root_window, activation_client,
-      accessibility_focus_ring_controller_.get());
-  triple_tap_detector_ = std::make_unique<TripleTapDetector>(root_window, this);
+      accessibility_focus_ring_controller_.get(), &accessibility_sound_proxy_,
+      window_manager->GetGestureHandler());
+  magnify_gesture_detector_ =
+      std::make_unique<MultipleTapDetector>(root_window, this);
   magnification_controller_ =
-      std::make_unique<PartialMagnificationController>(root_window);
+      std::make_unique<FullscreenMagnificationController>(
+          root_window, window_manager->GetGestureHandler());
 }
 
 AccessibilityManager::~AccessibilityManager() {}
@@ -69,8 +74,18 @@ void AccessibilityManager::HideHighlights() {
   accessibility_focus_ring_controller_->HideHighlights();
 }
 
-void AccessibilityManager::EnableTouchExploration(bool enable) {
+void AccessibilityManager::SetScreenReader(bool enable) {
   touch_exploration_manager_->Enable(enable);
+
+  // TODO(rdaum): Until we can fix triple-tap and two finger gesture conflicts
+  // between TouchExplorationController, FullscreenMagnifier, and
+  // TripleTapDetector, we have to make sure magnification is not on while
+  // screenreader is active.
+  // The triple-tap gesture can still be enabled, but will not do anything until
+  // screenreader is disabled again.
+  if (enable) {
+    magnification_controller_->SetEnabled(false);
+  }
 }
 
 void AccessibilityManager::SetTouchAccessibilityAnchorPoint(
@@ -83,17 +98,30 @@ aura::WindowTreeHost* AccessibilityManager::window_tree_host() const {
   return window_tree_host_;
 }
 
-void AccessibilityManager::SetMagnificationGestureEnabled(bool enabled) {
-  triple_tap_detector_->set_enabled(enabled);
+void AccessibilityManager::SetMagnificationGestureEnabled(
+    bool gesture_enabled) {
+  magnify_gesture_detector_->set_enabled(gesture_enabled);
+
+  // If the gesture is not enabled, make sure that magnification is turned off,
+  // in case we're already in magnification. Otherwise the user will be stuck in
+  // magnifier and unable to get out.
+  if (!gesture_enabled) {
+    magnification_controller_->SetEnabled(false);
+  }
 }
 
 bool AccessibilityManager::IsMagnificationGestureEnabled() const {
-  return triple_tap_detector_->enabled();
+  return magnify_gesture_detector_->enabled();
 }
 
 void AccessibilityManager::OnTripleTap(const gfx::Point& tap_location) {
   magnification_controller_->SetEnabled(
       !magnification_controller_->IsEnabled());
+}
+
+void AccessibilityManager::SetAccessibilitySoundPlayer(
+    std::unique_ptr<AccessibilitySoundPlayer> player) {
+  accessibility_sound_proxy_.ResetPlayer(std::move(player));
 }
 
 }  // namespace shell

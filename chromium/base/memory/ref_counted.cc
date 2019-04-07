@@ -21,6 +21,10 @@ bool RefCountedThreadSafeBase::HasOneRef() const {
   return ref_count_.IsOne();
 }
 
+bool RefCountedThreadSafeBase::HasAtLeastOneRef() const {
+  return !ref_count_.IsZero();
+}
+
 #if DCHECK_IS_ON()
 RefCountedThreadSafeBase::~RefCountedThreadSafeBase() {
   DCHECK(in_dtor_) << "RefCountedThreadSafe object deleted without "
@@ -28,7 +32,10 @@ RefCountedThreadSafeBase::~RefCountedThreadSafeBase() {
 }
 #endif
 
-#if defined(ARCH_CPU_64_BIT)
+// This is a security check. In 32-bit-archs, an attacker would run out of
+// address space after allocating at most 2^32 scoped_refptrs. This replicates
+// that boundary for 64-bit-archs.
+#if defined(ARCH_CPU_64_BITS)
 void RefCountedBase::AddRefImpl() const {
   // Check if |ref_count_| overflow only on 64 bit archs since the number of
   // objects may exceed 2^32.
@@ -43,6 +50,9 @@ bool RefCountedThreadSafeBase::Release() const {
 }
 void RefCountedThreadSafeBase::AddRef() const {
   AddRefImpl();
+}
+void RefCountedThreadSafeBase::AddRefWithCheck() const {
+  AddRefWithCheckImpl();
 }
 #endif
 

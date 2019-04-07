@@ -11,8 +11,8 @@
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "components/storage_monitor/removable_device_constants.h"
@@ -110,9 +110,10 @@ void MediaStorageUtil::FilterAttachedDevices(DeviceIdSet* devices,
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   base::PostTaskWithTraitsAndReply(
       FROM_HERE,
-      {base::TaskPriority::BACKGROUND, base::MayBlock(),
+      {base::TaskPriority::BEST_EFFORT, base::MayBlock(),
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::Bind(&FilterAttachedDevicesOnBackgroundSequence, devices), done);
+      base::BindOnce(&FilterAttachedDevicesOnBackgroundSequence, devices),
+      done);
 }
 
 // TODO(kmadhusu) Write unit tests for GetDeviceInfoFromPath().

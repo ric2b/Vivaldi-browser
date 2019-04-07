@@ -4,6 +4,7 @@
 
 #include "ash/system/unified/top_shortcuts_view.h"
 
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/public/cpp/ash_view_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
@@ -67,10 +68,14 @@ void TopShortcutButtonContainer::Layout() {
     total_horizontal_size += child_horizontal_size;
     num_visible++;
   }
-  int spacing = std::max(kUnifiedTopShortcutButtonMinSpacing,
+
+  int spacing = 0;
+  if (num_visible > 1) {
+    spacing = std::max(kUnifiedTopShortcutButtonMinSpacing,
                          std::min(kUnifiedTopShortcutButtonDefaultSpacing,
                                   (child_area.width() - total_horizontal_size) /
                                       (num_visible - 1)));
+  }
 
   int sign_out_button_width = 0;
   if (sign_out_button_ && sign_out_button_->visible()) {
@@ -141,6 +146,7 @@ TopShortcutsView::TopShortcutsView(UnifiedSystemTrayController* controller)
   if (Shell::Get()->session_controller()->login_status() !=
       LoginStatus::NOT_LOGGED_IN) {
     user_avatar_button_ = new UserAvatarButton(this);
+    user_avatar_button_->SetEnabled(controller->IsUserChooserEnabled());
     container_->AddChildView(user_avatar_button_);
   }
 
@@ -154,13 +160,13 @@ TopShortcutsView::TopShortcutsView(UnifiedSystemTrayController* controller)
 
   lock_button_ = new TopShortcutButton(this, kUnifiedMenuLockIcon,
                                        IDS_ASH_STATUS_TRAY_LOCK);
-  lock_button_->SetEnabled(can_show_web_ui &&
+  lock_button_->SetVisible(can_show_web_ui &&
                            Shell::Get()->session_controller()->CanLockScreen());
   container_->AddChildView(lock_button_);
 
   settings_button_ = new TopShortcutButton(this, kUnifiedMenuSettingsIcon,
                                            IDS_ASH_STATUS_TRAY_SETTINGS);
-  settings_button_->SetEnabled(can_show_web_ui);
+  settings_button_->SetVisible(can_show_web_ui);
   container_->AddChildView(settings_button_);
 
   bool reboot = Shell::Get()->shutdown_controller()->reboot_on_shutdown();
@@ -176,27 +182,24 @@ TopShortcutsView::TopShortcutsView(UnifiedSystemTrayController* controller)
 
   collapse_button_ = new CollapseButton(this);
   AddChildView(collapse_button_);
+
+  OnAccessibilityStatusChanged();
+
+  Shell::Get()->accessibility_controller()->AddObserver(this);
 }
 
-TopShortcutsView::~TopShortcutsView() = default;
+TopShortcutsView::~TopShortcutsView() {
+  Shell::Get()->accessibility_controller()->RemoveObserver(this);
+}
 
 void TopShortcutsView::SetExpandedAmount(double expanded_amount) {
   collapse_button_->SetExpandedAmount(expanded_amount);
 }
 
-void TopShortcutsView::RequestInitFocus() {
-  if (user_avatar_button_) {
-    user_avatar_button_->RequestFocus();
-    return;
-  }
-
-  sign_out_button_->RequestFocus();
-}
-
 void TopShortcutsView::ButtonPressed(views::Button* sender,
                                      const ui::Event& event) {
   if (sender == user_avatar_button_)
-    controller_->ShowUserChooserWidget();
+    controller_->ShowUserChooserView();
   else if (sender == sign_out_button_)
     controller_->HandleSignOutAction();
   else if (sender == lock_button_)
@@ -207,6 +210,11 @@ void TopShortcutsView::ButtonPressed(views::Button* sender,
     controller_->HandlePowerAction();
   else if (sender == collapse_button_)
     controller_->ToggleExpanded();
+}
+
+void TopShortcutsView::OnAccessibilityStatusChanged() {
+  collapse_button_->SetEnabled(
+      !Shell::Get()->accessibility_controller()->IsSpokenFeedbackEnabled());
 }
 
 }  // namespace ash

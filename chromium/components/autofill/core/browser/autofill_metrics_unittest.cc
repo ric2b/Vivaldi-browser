@@ -20,7 +20,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/time/time.h"
-#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_external_delegate.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
@@ -38,9 +37,9 @@
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/prefs/pref_service.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "components/ukm/ukm_source.h"
 #include "components/webdata/common/web_data_results.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_source.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/rect.h"
@@ -1924,10 +1923,11 @@ TEST_F(AutofillMetricsTest, QualityMetrics_BasedOnAutocomplete) {
   std::unique_ptr<TestFormStructure> form_structure =
       std::make_unique<TestFormStructure>(form);
   TestFormStructure* form_structure_ptr = form_structure.get();
-  form_structure->DetermineHeuristicTypes(nullptr /* ukm_service */,
-                                          0 /* source_id */);
-  autofill_manager_->mutable_form_structures()->push_back(
-      std::move(form_structure));
+  form_structure->DetermineHeuristicTypes();
+  ASSERT_TRUE(autofill_manager_->mutable_form_structures()
+                  ->emplace(form_structure_ptr->form_signature(),
+                            std::move(form_structure))
+                  .second);
 
   AutofillQueryResponseContents response;
   // Server response will match with autocomplete.
@@ -7401,7 +7401,13 @@ TEST_F(AutofillMetricsTest, RecordCardUploadDecisionMetric_NoUkmService) {
 }
 
 // Test the ukm recorded when Suggestion is shown.
-TEST_F(AutofillMetricsTest, AutofillSuggestionShownTest) {
+// Flaky on Win.  http://crbug.com/876954
+#if defined(OS_WIN)
+#define MAYBE_AutofillSuggestionShownTest DISABLED_AutofillSuggestionShownTest
+#else
+#define MAYBE_AutofillSuggestionShownTest AutofillSuggestionShownTest
+#endif
+TEST_F(AutofillMetricsTest, MAYBE_AutofillSuggestionShownTest) {
   RecreateCreditCards(true /* include_local_credit_card */,
                       false /* include_masked_server_credit_card */,
                       false /* include_full_server_credit_card */);
@@ -7505,7 +7511,7 @@ TEST_F(AutofillMetricsTest, DynamicFormMetrics) {
       AutofillMetrics::FORM_EVENT_DYNAMIC_CHANGE_AFTER_REFILL, 0);
 
   // Trigger a refill, the refill metric should be updated.
-  autofill_manager_->TriggerRefill(form, &form_structure);
+  autofill_manager_->TriggerRefill(form);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address",
       AutofillMetrics::FORM_EVENT_DID_SEE_DYNAMIC_FORM, 2);

@@ -7,7 +7,7 @@
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/platform_util_internal.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -61,7 +61,7 @@ void OpenItem(Profile* profile,
               const OpenOperationCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::PostTaskWithTraits(FROM_HERE,
-                           {base::MayBlock(), base::TaskPriority::BACKGROUND},
+                           {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
                            base::BindOnce(&VerifyAndOpenItemOnBlockingThread,
                                           full_path, item_type, callback));
 }

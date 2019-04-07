@@ -17,10 +17,11 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/sync/driver/configure_context.h"
 #include "components/sync/driver/data_type_controller_mock.h"
 #include "components/sync/driver/fake_generic_change_processor.h"
 #include "components/sync/driver/fake_sync_client.h"
@@ -85,8 +86,6 @@ class AutofillWalletDataTypeControllerTest : public testing::Test,
   void SetUp() override {
     prefs_.registry()->RegisterBooleanPref(
         autofill::prefs::kAutofillWalletImportEnabled, true);
-    prefs_.registry()->RegisterBooleanPref(
-        autofill::prefs::kAutofillCreditCardEnabled, true);
 
     web_data_service_ = base::MakeRefCounted<FakeWebDataService>(
         base::ThreadTaskRunnerHandle::Get(),
@@ -124,6 +123,7 @@ class AutofillWalletDataTypeControllerTest : public testing::Test,
 
   void Start() {
     autofill_wallet_dtc_->LoadModels(
+        syncer::ConfigureContext(),
         base::Bind(&AutofillWalletDataTypeControllerTest::OnLoadFinished,
                    base::Unretained(this)));
     base::RunLoop().RunUntilIdle();
@@ -178,8 +178,7 @@ TEST_F(AutofillWalletDataTypeControllerTest, DatatypeDisabledWhileRunning) {
   EXPECT_EQ(syncer::DataTypeController::RUNNING, autofill_wallet_dtc_->state());
   EXPECT_FALSE(last_error_.IsSet());
   EXPECT_EQ(syncer::AUTOFILL_WALLET_DATA, last_type_);
-  GetPrefService()->SetBoolean(autofill::prefs::kAutofillWalletImportEnabled,
-                               false);
+  autofill::prefs::SetPaymentsIntegrationEnabled(GetPrefService(), false);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(last_error_.IsSet());
 }
@@ -187,8 +186,7 @@ TEST_F(AutofillWalletDataTypeControllerTest, DatatypeDisabledWhileRunning) {
 TEST_F(AutofillWalletDataTypeControllerTest, DatatypeDisabledAtStartup) {
   SetStartExpectations();
   web_data_service_->LoadDatabase();
-  GetPrefService()->SetBoolean(autofill::prefs::kAutofillWalletImportEnabled,
-                               false);
+  autofill::prefs::SetPaymentsIntegrationEnabled(GetPrefService(), false);
   EXPECT_EQ(syncer::DataTypeController::NOT_RUNNING,
             autofill_wallet_dtc_->state());
   Start();

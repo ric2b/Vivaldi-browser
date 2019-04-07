@@ -8,7 +8,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/default_clock.h"
 #include "chrome/browser/data_use_measurement/page_load_capping/chrome_page_load_capping_features.h"
 #include "chrome/browser/data_use_measurement/page_load_capping/page_load_capping_blacklist.h"
@@ -40,7 +40,7 @@ void PageLoadCappingService::Initialize(const base::FilePath& profile_path) {
     // Get the background thread to run SQLite on.
     scoped_refptr<base::SequencedTaskRunner> background_task_runner =
         base::CreateSequencedTaskRunnerWithTraits(
-            {base::MayBlock(), base::TaskPriority::BACKGROUND});
+            {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
 
     opt_out_store = std::make_unique<blacklist::OptOutStoreSQL>(
         content::BrowserThread::GetTaskRunnerForThread(

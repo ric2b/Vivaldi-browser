@@ -66,6 +66,14 @@ std::wstring GetChromeInstallSubDirectory();
 // their browsing data.
 std::wstring GetRegistryPath();
 
+// Returns the path "Software\Google\Update\Clients\<guid>" where "<guid>" is
+// the current install mode's appguid.
+std::wstring GetClientsKeyPath();
+
+// Returns the path "Software\Google\Update\ClientState\<guid>" where "<guid>"
+// is the current install mode's appguid.
+std::wstring GetClientStateKeyPath();
+
 // Returns the path
 // "Software\Microsoft\Windows\CurrentVersion\Uninstall\[kCompanyPathName ]
 // kProductPathName[install_suffix]. This is the key used for the browser's
@@ -132,6 +140,9 @@ int GetIconResourceIndex();
 
 // Get sandbox id of current install mode.
 const wchar_t* GetSandboxSidPrefix();
+
+// Returns the brand-specific safe browsing client name.
+std::string GetSafeBrowsingName();
 
 // Returns true if usage stats collecting is enabled for this user for the
 // current executable.

@@ -532,7 +532,7 @@ LanguageSettingsPrivateGetTranslateTargetLanguageFunction::Run() {
   Profile* profile = chrome_details_.GetProfile();
   language::LanguageModel* language_model =
       LanguageModelManagerFactory::GetForBrowserContext(profile)
-          ->GetDefaultModel();
+          ->GetPrimaryModel();
   return RespondNow(OneArgument(
       std::make_unique<base::Value>(TranslateService::GetTargetLanguage(
           profile->GetPrefs(), language_model))));
@@ -562,7 +562,9 @@ void PopulateInputMethodListFromDescriptors(
       input_method.enabled.reset(new bool(true));
     if (descriptor.options_page_url().is_valid())
       input_method.has_options_page.reset(new bool(true));
-    if (!allowed_ids.empty() && util->IsKeyboardLayout(input_method.id) &&
+    if (!allowed_ids.empty() &&
+        (util->IsKeyboardLayout(input_method.id) ||
+         chromeos::extension_ime_util::IsArcIME(input_method.id)) &&
         allowed_ids.count(input_method.id) == 0) {
       input_method.is_prohibited_by_policy.reset(new bool(true));
     }

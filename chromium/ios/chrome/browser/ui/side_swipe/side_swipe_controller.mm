@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/feature_list.h"
+#import "base/ios/block_types.h"
 #include "base/scoped_observer.h"
 #include "components/reading_list/core/reading_list_model.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -241,7 +242,8 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 
   // Since the toolbar and the contentView can overlap, check the toolbar frame
   // first, and confirm the right gesture recognizer is firing.
-  if ([self.toolbarInteractionHandler isInsideToolbar:location]) {
+  if ([self.toolbarInteractionHandler
+          isInsideToolbar:[gesture.view convertPoint:location toView:nil]]) {
     if (![gesture isEqual:panGestureRecognizer_]) {
       return NO;
     }

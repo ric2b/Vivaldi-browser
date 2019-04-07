@@ -80,12 +80,14 @@ class TopBackgroundView : public views::View {
   // well to catch 'em all.
   void OnMouseMoved(const ui::MouseEvent& event) override {
     auto pair = GetParentWidgetAndEvent(this, &event);
-    pair.widget->OnMouseEvent(&pair.event);
+    if (pair.widget)
+      pair.widget->OnMouseEvent(&pair.event);
   }
 
   void OnMouseEvent(ui::MouseEvent* event) override {
     auto pair = GetParentWidgetAndEvent(this, event);
-    pair.widget->OnMouseEvent(&pair.event);
+    if (pair.widget)
+      pair.widget->OnMouseEvent(&pair.event);
 
     // If the original event isn't marked as "handled" then it will propagate up
     // the view hierarchy and might be double-handled. https://crbug.com/870341
@@ -94,10 +96,14 @@ class TopBackgroundView : public views::View {
 
   gfx::NativeCursor GetCursor(const ui::MouseEvent& event) override {
     auto pair = GetParentWidgetAndEvent(this, &event);
-    views::View* omnibox_view =
-        pair.widget->GetRootView()->GetEventHandlerForPoint(
-            pair.event.location());
-    return omnibox_view->GetCursor(pair.event);
+    if (pair.widget) {
+      views::View* omnibox_view =
+          pair.widget->GetRootView()->GetEventHandlerForPoint(
+              pair.event.location());
+      return omnibox_view->GetCursor(pair.event);
+    }
+
+    return nullptr;
   }
 #endif  // !USE_AURA
 };
@@ -145,6 +151,10 @@ RoundedOmniboxResultsFrame::RoundedOmniboxResultsFrame(views::View* contents,
       gfx::kPlaceholderColor);
   border->SetCornerRadius(corner_radius);
   border->set_md_shadow_elevation(kElevation);
+  // Use a darker shadow that's more visible on darker tints.
+  border->set_md_shadow_color(tint == OmniboxTint::DARK ? SK_ColorBLACK
+                                                        : gfx::kGoogleGrey800);
+
   SetBorder(std::move(border));
 
   AddChildView(contents_host_);

@@ -105,82 +105,11 @@
 #include <errno.h>
 #include <process.h>
 #include <windows.h>
-#include "third_party/blink/renderer/platform/wtf/date_math.h"
-#include "third_party/blink/renderer/platform/wtf/dtoa/double-conversion.h"
-#include "third_party/blink/renderer/platform/wtf/hash_map.h"
-#include "third_party/blink/renderer/platform/wtf/math_extras.h"
-#include "third_party/blink/renderer/platform/wtf/thread_specific.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
-#include "third_party/blink/renderer/platform/wtf/wtf_thread_data.h"
 
 namespace WTF {
-
-// THREADNAME_INFO comes from
-// <http://msdn.microsoft.com/en-us/library/xcb2z8hs.aspx>.
-#pragma pack(push, 8)
-typedef struct tagTHREADNAME_INFO {
-  DWORD dw_type;       // must be 0x1000
-  LPCSTR sz_name;      // pointer to name (in user addr space)
-  DWORD dw_thread_id;  // thread ID (-1=caller thread)
-  DWORD dw_flags;      // reserved for future use, must be zero
-} THREADNAME_INFO;
-#pragma pack(pop)
-
-namespace internal {
-
-ThreadIdentifier CurrentThreadSyscall() {
-  return static_cast<ThreadIdentifier>(GetCurrentThreadId());
-}
-
-}  // namespace internal
-
-void InitializeThreading() {
-  // This should only be called once.
-  WTFThreadData::Initialize();
-
-  InitializeDates();
-  // Force initialization of static DoubleToStringConverter converter variable
-  // inside EcmaScriptConverter function while we are in single thread mode.
-  double_conversion::DoubleToStringConverter::EcmaScriptConverter();
-}
-
-namespace {
-DWORD g_current_thread_key;
-bool g_current_thread_key_initialized = false;
-}  // namespace
-
-void InitializeCurrentThread() {
-  DCHECK(!g_current_thread_key_initialized);
-
-  // This key is never destroyed.
-  g_current_thread_key = ::TlsAlloc();
-
-  CHECK_NE(g_current_thread_key, TLS_OUT_OF_INDEXES);
-  g_current_thread_key_initialized = true;
-}
-
-ThreadIdentifier CurrentThread() {
-  // This doesn't use WTF::ThreadSpecific (e.g. WTFThreadData) because
-  // ThreadSpecific now depends on currentThread. It is necessary to avoid this
-  // or a similar loop:
-  //
-  // currentThread
-  // -> wtfThreadData
-  // -> ThreadSpecific::operator*
-  // -> isMainThread
-  // -> currentThread
-  static_assert(sizeof(ThreadIdentifier) <= sizeof(void*),
-                "ThreadIdentifier must fit in a void*.");
-  DCHECK(g_current_thread_key_initialized);
-  void* value = ::TlsGetValue(g_current_thread_key);
-  if (UNLIKELY(!value)) {
-    value = reinterpret_cast<void*>(internal::CurrentThreadSyscall());
-    DCHECK(value);
-    ::TlsSetValue(g_current_thread_key, value);
-  }
-  return reinterpret_cast<intptr_t>(::TlsGetValue(g_current_thread_key));
-}
 
 MutexBase::MutexBase(bool recursive) {
   mutex_.recursion_count_ = 0;
@@ -193,6 +122,8 @@ MutexBase::~MutexBase() {
 
 void MutexBase::lock() {
   EnterCriticalSection(&mutex_.internal_mutex_);
+  DCHECK(!mutex_.recursion_count_)
+      << "WTF does not support recursive mutex acquisition!";
   ++mutex_.recursion_count_;
 }
 
@@ -218,6 +149,8 @@ bool Mutex::TryLock() {
     // check in the lock method (presumably due to performance?). This
     // means lock() will succeed even if the current thread has already
     // entered the critical section.
+    DCHECK(!mutex_.recursion_count_)
+        << "WTF does not support recursive mutex acquisition!";
     if (mutex_.recursion_count_ > 0) {
       LeaveCriticalSection(&mutex_.internal_mutex_);
       return false;
@@ -236,6 +169,8 @@ bool RecursiveMutex::TryLock() {
   if (result == 0) {  // We didn't get the lock.
     return false;
   }
+  DCHECK(!mutex_.recursion_count_)
+      << "WTF does not support recursive mutex acquisition!";
   ++mutex_.recursion_count_;
   return true;
 }
@@ -248,6 +183,8 @@ ThreadCondition::~ThreadCondition() {}
 
 void ThreadCondition::Wait(Mutex& mutex) {
   PlatformMutex& platform_mutex = mutex.Impl();
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  --platform_mutex.recursion_count_;
   BOOL result = SleepConditionVariableCS(
       &condition_, &platform_mutex.internal_mutex_, INFINITE);
   DCHECK_NE(result, 0);
@@ -271,7 +208,9 @@ bool ThreadCondition::TimedWait(Mutex& mutex, double absolute_time) {
           ? INFINITE
           : ((absolute_time - current_time) * 1000.0);
 
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
   PlatformMutex& platform_mutex = mutex.Impl();
+  --platform_mutex.recursion_count_;
   BOOL result = SleepConditionVariableCS(
       &condition_, &platform_mutex.internal_mutex_, interval);
   ++platform_mutex.recursion_count_;
@@ -286,25 +225,6 @@ void ThreadCondition::Signal() {
 void ThreadCondition::Broadcast() {
   WakeAllConditionVariable(&condition_);
 }
-
-#if DCHECK_IS_ON()
-static bool g_thread_created = false;
-
-Mutex& GetThreadCreatedMutex() {
-  static Mutex g_thread_created_mutex;
-  return g_thread_created_mutex;
-}
-
-bool IsBeforeThreadCreated() {
-  MutexLocker locker(GetThreadCreatedMutex());
-  return !g_thread_created;
-}
-
-void WillCreateThread() {
-  MutexLocker locker(GetThreadCreatedMutex());
-  g_thread_created = true;
-}
-#endif
 
 }  // namespace WTF
 

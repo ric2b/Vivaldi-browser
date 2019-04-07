@@ -104,20 +104,12 @@
       status: "experimental",
     },
     {
-      name: "AudioWorklet",
-      status: "stable",
-    },
-    {
       name: "AutomationControlled",
       settable_from_internals: true,
     },
     {
       // Flag set by the media::kAutoplayIgnoreWebAudio feature flag.
       name: "AutoplayIgnoresWebAudio",
-      settable_from_internals: true,
-    },
-    {
-      name: "AutoplayMutedVideos",
       settable_from_internals: true,
     },
     {
@@ -155,16 +147,11 @@
       status: "stable"
     },
     {
-      name: "Budget",
-      status: "stable",
-    },
-    {
-      name: "BudgetQuery",
-      origin_trial_feature_name: "BudgetQuery",
-      status: "experimental",
-    },
-    {
       name: "CacheInlineScriptCode"
+    },
+    {
+      name: "CacheStorageAddAllRejectsDuplicates",
+      status: "experimental",
     },
     {
       name: "CacheStyleSheetWithMediaQueries",
@@ -213,11 +200,6 @@
       status: "experimental",
     },
     {
-      name: "CompositeOpaqueScrollers",
-      settable_from_internals: true,
-      status: "stable",
-    },
-    {
       name: "CompositorTouchAction",
       status: "test",
     },
@@ -255,10 +237,6 @@
       status: "experimental",
     },
     {
-      name: "CSSDisplayContents",
-      status: "stable",
-    },
-    {
       name: "CSSEnvironmentVariables",
       status: "stable",
     },
@@ -292,6 +270,7 @@
     {
       name: "CSSLogical",
       status: "experimental",
+      settable_from_internals: true,
     },
     {
       name: "CSSMaskSourceType",
@@ -315,10 +294,6 @@
     },
     {
       name: "CSSOMSmoothScroll",
-      status: "stable",
-    },
-    {
-      name: "CSSOverscrollBehavior",
       status: "stable",
     },
     // Do not ship CSSPaintAPIArguments without shipping CSSVariables2 first.
@@ -346,10 +321,6 @@
     {
       name: "CSSSnapSize",
       status: "experimental",
-    },
-    {
-      name: "CSSTransformBox",
-      status: "stable",
     },
     {
       name: "CSSVariables2",
@@ -389,10 +360,6 @@
       status: "experimental",
     },
     {
-      name: "DeviceMemoryHeader",
-      status: "stable",
-    },
-    {
       name: "DisableHardwareNoiseSuppression",
       origin_trial_feature_name: "DisableHardwareNoiseSuppression",
       status: "experimental",
@@ -415,8 +382,8 @@
       name: "DocumentWrite",
     },
     {
-      name: "EmbedderCSPEnforcement",
-      status: "stable",
+      // http://crbug.com/707656 content editable in LayoutNG.
+      name: "EditingNG",
     },
     {
       name: "EncryptedMediaEncryptionSchemeQuery",
@@ -426,6 +393,10 @@
       name: "EncryptedMediaHdcpPolicyCheck",
       origin_trial_feature_name: "EncryptedMediaHdcpPolicyCheck",
       status: "experimental",
+    },
+    {
+      name: "EncryptedMediaPersistentUsageRecordSession",
+      status: "test",
     },
     {
       name: "EventTiming",
@@ -470,10 +441,6 @@
       status: "experimental",
     },
     {
-      name: "ExtendedImageBitmapOptions",
-      status: "experimental",
-    },
-    {
       name: "ExtendedTextMetrics",
       status: "experimental",
     },
@@ -485,16 +452,12 @@
       name: "FastMobileScrolling",
     },
     {
-      name: "FeaturePolicyAutoplayFeature",
-      status: "stable"
-    },
-    {
-      name: "FeaturePolicyForPermissions",
-      status: "stable"
-    },
-    {
       name: "FeaturePolicyJavaScriptInterface",
       origin_trial_feature_name: "FeaturePolicyJSAPI",
+      status: "experimental"
+    },
+    {
+      name: "FeaturePolicyReporting",
       status: "experimental"
     },
     {
@@ -505,11 +468,11 @@
       status: "stable",
     },
     {
-      name: "FocusOptions",
-      status: "stable",
+      name: "FontCacheScaling",
+      status: "test",
     },
     {
-      name: "FontCacheScaling",
+      name: "FontSrcLocalMatching",
       status: "test",
     },
     // For simulating Android's overlay fullscreen video in layout tests on Linux.
@@ -552,11 +515,20 @@
       status: "experimental",
     },
     {
+      name: "GamepadButtonAxisEvents",
+      status: "experimental",
+    },
+    {
       name: "GamepadExtensions",
+      origin_trial_feature_name: "WebVR1.1M62",
       status: "experimental",
     },
     {
       name: "GamepadVibration",
+      status: "experimental",
+    },
+    {
+      name: "GetDisplayMedia",
       status: "experimental",
     },
     {
@@ -565,9 +537,18 @@
     },
     {
       name: "HeapIncrementalMarking",
+      status: "stable",
     },
     {
       name: "HeapIncrementalMarkingStress"
+    },
+    {
+      name: "HeapUnifiedGarbageCollection",
+    },
+    // Only exposed when a translation engine is available
+    // and experimental features are enabled.
+    {
+      name: "HrefTranslate",
     },
     // https://crbug.com/766694 for testing disabling the feature.
     {
@@ -585,10 +566,6 @@
     },
     {
       name: "IdleTimeColdModeSpellChecking",
-      status: "stable",
-    },
-    {
-      name: "ImageDecodingAttribute",
       status: "stable",
     },
     {
@@ -623,6 +600,14 @@
     },
     {
       name: "InterventionReporting",
+      status: "stable",
+    },
+    {
+      name: "InvisibleDOM",
+      status: "experimental",
+    },
+    {
+      name: "IsolatedCodeCache",
       status: "experimental",
     },
     {
@@ -630,10 +615,6 @@
       // between animation frames (see crbug.com/581518).
       name: "JankTracking",
       status: "experimental",
-    },
-    {
-      name: "JSImageDecode",
-      status: "stable",
     },
     {
       name: "KeyboardMap",
@@ -648,7 +629,7 @@
     },
     {
       name: "LayoutNG",
-      implied_by: ["LayoutNGBlockFragmentation", "LayoutNGFlexBox"],
+      implied_by: ["LayoutNGBlockFragmentation", "LayoutNGFlexBox", "EditingNG"],
     },
     {
       name: "LayoutNGBlockFragmentation",
@@ -667,6 +648,12 @@
       name: "LazyFrameVisibleLoadTimeMetrics",
     },
     {
+      name: "LazyImageLoading",
+    },
+    {
+      name: "LazyImageVisibleLoadTimeMetrics",
+    },
+    {
       name: "LazyInitializeMediaControls",
       // This is enabled by features::kLazyInitializeMediaControls.
     },
@@ -675,16 +662,16 @@
       status: "experimental",
     },
     {
-      name: "LongTaskObserver",
-      status: "stable",
-    },
-    {
       name: "LongTaskV2",
     },
     {
       name: "LowLatencyCanvas",
       origin_trial_feature_name: "LowLatencyCanvas",
       status: "experimental",
+    },
+    {
+      name:"ManualSlotting",
+      status:"test",
     },
     {
       name: "MediaCapabilities",
@@ -705,10 +692,6 @@
     {
       name: "MediaCaptureDepthVideoKind",
       status: "experimental",
-    },
-    {
-      name: "MediaCaptureFromVideo",
-      status: "stable",
     },
     // Set to reflect the MediaCastOverlayButton feature.
     {
@@ -748,7 +731,7 @@
     },
     {
       name: "MediaStreamTrackContentHint",
-      status: "experimental",
+      status: "stable",
     },
     // This is enabled by default on Windows only. The only part that's
     // "experimental" is the support on other platforms.
@@ -802,10 +785,6 @@
       status: "stable",
     },
     {
-      name: "NetInfoDownlink",
-      status: "stable",
-    },
-    {
       name: "NetInfoDownlinkHeader",
       status: "stable",
     },
@@ -814,23 +793,11 @@
       status: "stable",
     },
     {
-      name: "NetInfoEffectiveType",
-      status: "stable",
-    },
-    {
       name: "NetInfoEffectiveTypeHeader",
       status: "stable",
     },
     {
-      name: "NetInfoRtt",
-      status: "stable",
-    },
-    {
       name: "NetInfoRttHeader",
-      status: "stable",
-    },
-    {
-      name: "NetInfoSaveData",
       status: "stable",
     },
     {
@@ -839,6 +806,10 @@
     // Not a web exposed feature, enabled from the command line.
     {
       name: "NewRemotePlaybackPipeline",
+    },
+    {
+      name: "NoIdleEncodingForLayoutTests",
+      status: "test",
     },
     {
       name: "NotificationConstructor",
@@ -851,7 +822,7 @@
     },
     {
       name: "NotificationInlineReplies",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "Notifications",
@@ -882,10 +853,6 @@
     },
     {
       name: "OrientationEvent",
-    },
-    {
-      name: "OriginPolicy",
-      status: "test",
     },
     {
       name: "OriginTrials",
@@ -939,15 +906,14 @@
       status: "stable",
     },
     {
+      name: "PassiveDocumentWheelEventListeners",
+    },
+    {
       name: "PassPaintVisualRectToCompositor",
     },
     {
       name: "PaymentApp",
       status: "experimental",
-    },
-    {
-      name: "PaymentDetailsModifierData",
-      status: "stable",
     },
     // PaymentRequest is enabled by default on Android
     {
@@ -955,19 +921,11 @@
       status: "experimental",
     },
     {
-      name: "PaymentRequestBasicCard",
-      status: "stable",
-    },
-    {
       name: "PaymentRetry",
       status: "experimental",
     },
     {
       name: "PerformanceNavigationTiming2",
-      status: "stable",
-    },
-    {
-      name: "PerformancePaintTiming",
       status: "stable",
     },
     {
@@ -996,11 +954,19 @@
       status: "experimental",
     },
     {
-      name: "PreciseMemoryInfo",
+      name: "PointerRawMove",
+      status: "experimental",
     },
     {
-      name: "PreferredImageRasterBounds",
-      settable_from_internals: true,
+      name: "Portals",
+      status: "test",
+    },
+    {
+      name: "PostMessageOptions",
+      status: "stable",
+    },
+    {
+      name: "PreciseMemoryInfo",
     },
     // This feature is deprecated and we are evangelizing affected sites.
     // See https://crbug.com/346236 for current status.
@@ -1057,28 +1023,12 @@
       status: "stable",
     },
     {
-      name: "RenderingPipelineThrottlingLoadingIframes",
-      status: "stable",
-    },
-    {
-      name: "RenderUnicodeControlCharacters",
-      status: "stable",
-    },
-    {
       name: "ReportingObserver",
       implied_by: ["DeprecationReporting", "InterventionReporting"],
       status: "stable",
     },
     {
-      name: "RequestIsHistoryNavigation",
-      status: "stable",
-    },
-    {
       name: "RequireCSSExtensionForFile",
-      status: "stable",
-    },
-    {
-      name: "ResizeObserver",
       status: "stable",
     },
     {
@@ -1087,16 +1037,27 @@
     },
     {
       name: "RestrictAppCacheToSecureContexts",
-      status: "experimental",
-    },
-    {
-      name: "RestrictCanRequestURLCharacterSet",
       status: "stable",
+    },
+    // Enables the use of the RTCIceTransport with extensions.
+    {
+      name: "RTCIceTransportExtension",
+      status: "test",
     },
     {
       name: "RtcPeerConnectionId",
       origin_trial_feature_name: "RtcPeerConnectionId",
       status: "experimental",
+    },
+    // Enables the use of the RTCQuicStream object.
+    {
+      name: "RTCQuicStream",
+      status: "test",
+    },
+    // Enables the use of the RTCQuicTransport object.
+    {
+      name: "RTCQuicTransport",
+      status: "test",
     },
     {
       name: "RTCRtpSenderParameters",
@@ -1112,6 +1073,9 @@
     // RTCPeerConnection construction (unless otherwise specified).
     {
       name: "RTCUnifiedPlanByDefault",
+    },
+    {
+      name: "ScheduledScriptStreaming",
     },
     {
       name: "ScriptedSpeech",
@@ -1152,10 +1116,6 @@
       status: "experimental",
     },
     {
-      name: "ServerTiming",
-      status: "stable",
-    },
-    {
       name: "ServiceWorkerScriptFullCodeCache",
     },
     {
@@ -1178,6 +1138,7 @@
     },
     {
       name: "ShapeDetection",
+      origin_trial_feature_name: "ShapeDetection",
       status: "experimental",
     },
     {
@@ -1194,11 +1155,10 @@
       status: "experimental",
     },
     {
-      name: "SlimmingPaintV2",
+      name: "SignedHTTPExchange",
     },
     {
-      name: "SlotInFlatTree",
-      status: "stable",
+      name: "SlimmingPaintV2",
     },
     {
       name: "SMIL",
@@ -1225,11 +1185,7 @@
       status: "experimental",
     },
     {
-      name: "StopInBackground",
-      status: "test",
-    },
-    {
-      name: "StopNonTimersInBackground",
+      name: "TestReporting",
       status: "test",
     },
     {
@@ -1309,15 +1265,11 @@
       status: "experimental",
     },
     {
-      name: "VisibilityCollapseRow",
-      status: "stable",
-    },
-    {
-      name: "VisualViewportAPI",
-      status: "stable",
-    },
-    {
       name: "WakeLock",
+      status: "experimental",
+    },
+    {
+      name: "WakeLockNavigator",
       status: "experimental",
     },
     {
@@ -1330,6 +1282,11 @@
     },
     {
       name: "WebAssemblyStreaming",
+      status: "experimental",
+    },
+    {
+      name: "WebAssemblyThreads",
+      origin_trial_feature_name: "WebAssemblyThreads",
       status: "experimental",
     },
     {
@@ -1384,16 +1341,12 @@
     },
     {
       name: "WebUSBOnDedicatedWorkers",
-      status: "experimental",
-      depends_on: ["WebUSB"],
-    },
-    {
-      name: "WebUSBOnSharedWorkers",
-      status: "test",
+      status: "stable",
       depends_on: ["WebUSB"],
     },
     {
       name: "WebVR",
+      origin_trial_feature_name: "WebVR1.1M62",
       status: "experimental",
     },
     {
@@ -1419,21 +1372,20 @@
       status: "experimental"
     },
     {
-      name: "WindowPostMessageOptions",
+      name: "WorkerNosniffBlock",
       status: "experimental",
     },
     {
-      name: "WorkerNosniffBlock",
-      status: "test",
-    },
-    {
       name: "WorkerNosniffWarn",
-      status: "test",
+      status: "stable",
       implied_by: ["WorkerNosniffBlock"],
     },
     {
       name: "WorkStealingInScriptRunner",
       status: "experimental",
+    },
+    {
+      name: "WritableFiles",
     },
     {
       name: "XSLT",

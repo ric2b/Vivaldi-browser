@@ -24,6 +24,7 @@
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
+#include "media/base/bind_to_current_loop.h"
 #include "media/base/cdm_factory.h"
 #include "media/base/decoder_factory.h"
 #include "media/base/media_switches.h"
@@ -40,7 +41,7 @@
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "services/service_manager/public/cpp/connect.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
+#include "services/ws/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/blink/public/platform/web_surface_layer_bridge.h"
 #include "third_party/blink/public/platform/web_video_frame_submitter.h"
 #include "third_party/blink/public/web/blink.h"
@@ -100,38 +101,26 @@ class FrameFetchContext : public media::ResourceFetchContext {
   DISALLOW_COPY_AND_ASSIGN(FrameFetchContext);
 };
 
-void ObtainAndSetContextProvider(
-    base::OnceCallback<void(bool,
-                            scoped_refptr<ui::ContextProviderCommandBuffer>)>
-        set_context_provider_callback,
-    std::pair<media::GpuVideoAcceleratorFactories*, bool> gpu_info) {
-  if (gpu_info.first) {
-    scoped_refptr<ui::ContextProviderCommandBuffer> context_provider =
-        gpu_info.first->GetMediaContextProvider();
-    std::move(set_context_provider_callback)
-        .Run(gpu_info.second, std::move(context_provider));
-  } else {
-    std::move(set_context_provider_callback).Run(false, nullptr);
-  }
-}
-
 // Obtains the media ContextProvider and calls the given callback on the same
 // thread this is called on. Obtaining the media ContextProvider requires
-// getting GPuVideoAcceleratorFactories, which must be done on the main
-// thread.
-void PostMediaContextProviderToCallback(
+// establishing a GPUChannelHost, which must be done on the main thread.
+void PostContextProviderToCallback(
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
-    base::OnceCallback<void(bool,
-                            scoped_refptr<ui::ContextProviderCommandBuffer>)>
-        set_context_provider_callback) {
-  base::PostTaskAndReplyWithResult(
-      main_task_runner.get(), FROM_HERE, base::BindOnce([]() {
-        return std::pair<media::GpuVideoAcceleratorFactories*, bool>(
-            content::RenderThreadImpl::current()->GetGpuFactories(),
-            !content::RenderThreadImpl::current()->IsGpuCompositingDisabled());
-      }),
-      base::BindOnce(&ObtainAndSetContextProvider,
-                     std::move(set_context_provider_callback)));
+    scoped_refptr<viz::ContextProvider> unwanted_context_provider,
+    blink::WebSubmitterConfigurationCallback set_context_provider_callback) {
+  main_task_runner->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](scoped_refptr<viz::ContextProvider> unwanted_context_provider,
+             blink::WebSubmitterConfigurationCallback cb) {
+            auto* rti = content::RenderThreadImpl::current();
+            auto context_provider = rti->GetVideoFrameCompositorContextProvider(
+                unwanted_context_provider);
+            std::move(cb).Run(!rti->IsGpuCompositingDisabled(),
+                              std::move(context_provider));
+          },
+          std::move(unwanted_context_provider),
+          media::BindToCurrentLoop(std::move(set_context_provider_callback))));
 }
 
 }  // namespace
@@ -139,7 +128,30 @@ void PostMediaContextProviderToCallback(
 namespace content {
 
 // static
-bool MediaFactory::VideoSurfaceLayerEnabled() {
+media::WebMediaPlayerParams::SurfaceLayerMode
+MediaFactory::GetVideoSurfaceLayerMode() {
+  // LayoutTests do not support SurfaceLayer by default at the moment.
+  // See https://crbug.com/838128
+  content::RenderThreadImpl* render_thread =
+      content::RenderThreadImpl::current();
+  if (render_thread && render_thread->layout_test_mode() &&
+      !render_thread->LayoutTestModeUsesDisplayCompositorPixelDump()) {
+    return media::WebMediaPlayerParams::SurfaceLayerMode::kNever;
+  }
+
+  if (features::IsMultiProcessMash())
+    return media::WebMediaPlayerParams::SurfaceLayerMode::kNever;
+
+  if (base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideo))
+    return media::WebMediaPlayerParams::SurfaceLayerMode::kAlways;
+
+  if (base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideoPIP))
+    return media::WebMediaPlayerParams::SurfaceLayerMode::kOnDemand;
+
+  return media::WebMediaPlayerParams::SurfaceLayerMode::kNever;
+}
+
+bool MediaFactory::VideoSurfaceLayerEnabledForMS() {
   // LayoutTests do not support SurfaceLayer by default at the moment.
   // See https://crbug.com/838128
   content::RenderThreadImpl* render_thread =
@@ -149,8 +161,8 @@ bool MediaFactory::VideoSurfaceLayerEnabled() {
     return false;
   }
 
-  return base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideo) &&
-         features::IsAshInBrowserProcess();
+  return base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideoMS) &&
+         !features::IsMultiProcessMash();
 }
 
 MediaFactory::MediaFactory(
@@ -214,7 +226,7 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
       GetWebMediaStreamFromWebMediaPlayerSource(source);
   if (!web_stream.IsNull())
     return CreateWebMediaPlayerForMediaStream(client, sink_id, security_origin,
-                                              web_frame);
+                                              web_frame, layer_tree_view);
 
   // If |source| was not a MediaStream, it must be a URL.
   // TODO(guidou): Fix this when support for other srcObject types is added.
@@ -229,7 +241,8 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
   scoped_refptr<media::SwitchableAudioRendererSink> audio_renderer_sink =
       AudioDeviceFactory::NewSwitchableAudioRendererSink(
           AudioDeviceFactory::kSourceMediaElement,
-          render_frame_->GetRoutingID(), 0, sink_id.Utf8());
+          render_frame_->GetRoutingID(),
+          media::AudioSinkParameters(0, sink_id.Utf8()));
 
   const WebPreferences webkit_preferences =
       render_frame_->GetWebkitPreferences();
@@ -295,22 +308,34 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
   scoped_refptr<base::SingleThreadTaskRunner>
       video_frame_compositor_task_runner;
   std::unique_ptr<blink::WebVideoFrameSubmitter> submitter;
-  bool use_surface_layer_for_video = VideoSurfaceLayerEnabled();
-  if (use_surface_layer_for_video) {
-    // TODO(lethalantidote): Use a separate task_runner. https://crbug/753605.
+  media::WebMediaPlayerParams::SurfaceLayerMode use_surface_layer_for_video =
+      GetVideoSurfaceLayerMode();
+  bool use_sync_primitives = false;
+  if (use_surface_layer_for_video ==
+      media::WebMediaPlayerParams::SurfaceLayerMode::kAlways) {
+    // Run the compositor / frame submitter on its own thread.
     video_frame_compositor_task_runner =
-        render_thread->GetMediaThreadTaskRunner();
-    submitter = blink::WebVideoFrameSubmitter::Create(
-        base::BindRepeating(
-            &PostMediaContextProviderToCallback,
-            RenderThreadImpl::current()->GetCompositorMainThreadTaskRunner()),
-        settings);
+        render_thread->CreateVideoFrameCompositorTaskRunner();
+    // We must use sync primitives on this thread.
+    use_sync_primitives = true;
   } else {
+    // Run on the cc thread, even if we may switch to SurfaceLayer mode later
+    // if we're in kOnDemand mode.  We do this to avoid switching threads when
+    // switching to SurfaceLayer.
     video_frame_compositor_task_runner =
         render_thread->compositor_task_runner()
             ? render_thread->compositor_task_runner()
             : render_frame_->GetTaskRunner(
                   blink::TaskType::kInternalMediaRealTime);
+  }
+
+  if (use_surface_layer_for_video !=
+      media::WebMediaPlayerParams::SurfaceLayerMode::kNever) {
+    submitter = blink::WebVideoFrameSubmitter::Create(
+        base::BindRepeating(
+            &PostContextProviderToCallback,
+            RenderThreadImpl::current()->GetCompositorMainThreadTaskRunner()),
+        settings, use_sync_primitives);
   }
 
   DCHECK(layer_tree_view);
@@ -516,7 +541,8 @@ blink::WebMediaPlayer* MediaFactory::CreateWebMediaPlayerForMediaStream(
     blink::WebMediaPlayerClient* client,
     const blink::WebString& sink_id,
     const blink::WebSecurityOrigin& security_origin,
-    blink::WebLocalFrame* frame) {
+    blink::WebLocalFrame* frame,
+    blink::WebLayerTreeView* layer_tree_view) {
   RenderThreadImpl* const render_thread = RenderThreadImpl::current();
 
   scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner =
@@ -525,6 +551,7 @@ blink::WebMediaPlayer* MediaFactory::CreateWebMediaPlayerForMediaStream(
     compositor_task_runner =
         render_frame_->GetTaskRunner(blink::TaskType::kInternalMediaRealTime);
 
+  DCHECK(layer_tree_view);
   return new WebMediaPlayerMS(
       frame, client, GetWebMediaPlayerDelegate(),
       std::make_unique<RenderMediaLog>(
@@ -533,7 +560,9 @@ blink::WebMediaPlayer* MediaFactory::CreateWebMediaPlayerForMediaStream(
       CreateMediaStreamRendererFactory(), render_thread->GetIOTaskRunner(),
       compositor_task_runner, render_thread->GetMediaThreadTaskRunner(),
       render_thread->GetWorkerTaskRunner(), render_thread->GetGpuFactories(),
-      sink_id);
+      sink_id,
+      base::BindOnce(&blink::WebSurfaceLayerBridge::Create, layer_tree_view),
+      VideoSurfaceLayerEnabledForMS());
 }
 
 media::RendererWebMediaPlayerDelegate*

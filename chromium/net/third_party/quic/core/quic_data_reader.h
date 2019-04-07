@@ -34,6 +34,8 @@ class QUIC_EXPORT_PRIVATE QuicDataReader {
  public:
   // Caller must provide an underlying buffer to work on.
   QuicDataReader(const char* data, const size_t len, Endianness endianness);
+  QuicDataReader(const QuicDataReader&) = delete;
+  QuicDataReader& operator=(const QuicDataReader&) = delete;
 
   // Empty destructor.
   ~QuicDataReader() {}
@@ -139,8 +141,6 @@ class QUIC_EXPORT_PRIVATE QuicDataReader {
 
   QuicString DebugString() const;
 
-  QuicString VerboseDebugString() const;
-
  private:
   // Returns true if the underlying buffer has enough room to read the given
   // amount of bytes.
@@ -161,8 +161,6 @@ class QUIC_EXPORT_PRIVATE QuicDataReader {
 
   // The endianness to read integers and floating numbers.
   Endianness endianness_;
-
-  DISALLOW_COPY_AND_ASSIGN(QuicDataReader);
 };
 
 }  // namespace quic

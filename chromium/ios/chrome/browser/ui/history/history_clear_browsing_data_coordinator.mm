@@ -7,6 +7,7 @@
 #import <UIKit/UIKit.h>
 
 #include "base/mac/foundation_util.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #include "ios/chrome/browser/ui/history/history_local_commands.h"
 #import "ios/chrome/browser/ui/history/public/history_presentation_delegate.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data_local_commands.h"
@@ -79,15 +80,15 @@
 #pragma mark - ClearBrowsingDataLocalCommands
 
 - (void)openURL:(const GURL&)URL {
-  GURL copiedURL(URL);
+  OpenNewTabCommand* command =
+      [[OpenNewTabCommand alloc] initWithURL:URL
+                                    referrer:web::Referrer()
+                                 inIncognito:NO
+                                inBackground:NO
+                                    appendTo:kLastTab];
   [self dismissClearBrowsingDataWithCompletion:^() {
     [self.localDispatcher dismissHistoryWithCompletion:^{
-      [self.loader webPageOrderedOpen:copiedURL
-                             referrer:web::Referrer()
-                          inIncognito:NO
-                         inBackground:NO
-                          originPoint:CGPointZero
-                             appendTo:kLastTab];
+      [self.loader webPageOrderedOpen:command];
       [self.presentationDelegate showActiveRegularTabFromHistory];
     }];
   }];
@@ -100,12 +101,19 @@
   [self.historyClearBrowsingDataNavigationController
       dismissViewControllerAnimated:YES
                          completion:^() {
-                           if (completionHandler) {
-                             completionHandler();
-                           }
+                           // completionHandler might trigger
+                           // dismissHistoryWithCompletion, which will call
+                           // stopWithCompletion:, so
+                           // historyClearBrowsingDataNavigationController needs
+                           // to be nil, otherwise stopWithCompletion: will call
+                           // dismiss with nothing to dismiss and therefore not
+                           // trigger its own completionHandler.
                            self.clearBrowsingDataTableViewController = nil;
                            self.historyClearBrowsingDataNavigationController =
                                nil;
+                           if (completionHandler) {
+                             completionHandler();
+                           }
                          }];
 }
 

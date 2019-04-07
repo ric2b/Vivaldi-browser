@@ -38,7 +38,8 @@ class CONTENT_EXPORT SyntheticWebMouseWheelEventBuilder {
                                          float dx,
                                          float dy,
                                          int modifiers,
-                                         bool precise);
+                                         bool precise,
+                                         bool scroll_by_page = false);
   static blink::WebMouseWheelEvent Build(float x,
                                          float y,
                                          float global_x,
@@ -46,7 +47,8 @@ class CONTENT_EXPORT SyntheticWebMouseWheelEventBuilder {
                                          float dx,
                                          float dy,
                                          int modifiers,
-                                         bool precise);
+                                         bool precise,
+                                         bool scroll_by_page = false);
 };
 
 class CONTENT_EXPORT SyntheticWebKeyboardEventBuilder {
@@ -97,6 +99,11 @@ class CONTENT_EXPORT SyntheticWebTouchEvent : public blink::WebTouchEvent {
   void SetTimestamp(base::TimeTicks timestamp);
 
   int FirstFreeIndex();
+
+ private:
+  // A pointer id of each touch pointer. Every time when a pointer is pressed
+  // the screen, it will be assigned to a new pointer id.
+  unsigned pointer_id_;
 };
 
 }  // namespace content

@@ -20,8 +20,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/syslog_logging.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/common/chrome_paths.h"
@@ -117,8 +117,8 @@ std::string BrowserDMTokenStorageLinux::InitEnrollmentToken() {
   if (!base::ReadFileToString(token_file_path, &enrollment_token))
     return std::string();
 
-  return std::string(
-      base::TrimWhitespaceASCII(enrollment_token, base::TRIM_TRAILING));
+  return base::TrimWhitespaceASCII(enrollment_token, base::TRIM_ALL)
+      .as_string();
 }
 
 std::string BrowserDMTokenStorageLinux::InitDMToken() {

@@ -60,7 +60,7 @@ enum KioskLaunchType {
 };
 
 // Application install splash screen minimum show time in milliseconds.
-constexpr int kAppInstallSplashScreenMinTimeMS = 3000;
+constexpr int kAppInstallSplashScreenMinTimeMS = 10000;
 
 // Parameters for test:
 bool skip_splash_wait = false;
@@ -321,7 +321,7 @@ void AppLaunchController::OnProfileLoaded(Profile* profile) {
   profile_->InitChromeOSPreferences();
 
   // Reset virtual keyboard to use IME engines in app profile early.
-  if (features::IsAshInBrowserProcess()) {
+  if (!features::IsUsingWindowService()) {
     if (keyboard::IsKeyboardEnabled())
       ash::Shell::Get()->EnableKeyboard();
   } else {
@@ -355,6 +355,10 @@ void AppLaunchController::CleanUp() {
   splash_wait_timer_.Stop();
 
   host_->Finalize(base::OnceClosure());
+
+  // Make sure that any kiosk launch errors get written to disk before we kill
+  // the browser.
+  g_browser_process->local_state()->CommitPendingWrite();
 }
 
 void AppLaunchController::OnNetworkWaitTimedout() {

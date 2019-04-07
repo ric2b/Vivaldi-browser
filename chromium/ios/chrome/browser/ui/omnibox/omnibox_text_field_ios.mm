@@ -18,7 +18,7 @@
 #include "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/ui/animation_util.h"
-#include "ios/chrome/browser/ui/omnibox/omnibox_util.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 #import "ios/chrome/browser/ui/reversed_animation.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_constants.h"
@@ -927,6 +927,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   [_selection setTextColor:_displayedTextColor];
   [_selection setOpaque:NO];
   [_selection setBackgroundColor:[UIColor clearColor]];
+  _selection.lineBreakMode = NSLineBreakByClipping;
   [self addSubview:_selection];
   [self hideTextAndCursor];
 }

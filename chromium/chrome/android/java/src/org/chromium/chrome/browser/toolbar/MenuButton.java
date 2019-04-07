@@ -5,19 +5,22 @@
 package org.chromium.chrome.browser.toolbar;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.View.AccessibilityDelegate;
 import android.view.View.OnTouchListener;
 import android.widget.FrameLayout;
 
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.widget.TintedImageButton;
 
 /**
  * The overflow menu button.
  */
 class MenuButton extends FrameLayout {
-    /** The view for the menu button. */
-    private View mMenuButtonView;
+    /** The {@link TintedImageButton} for the menu button. */
+    private TintedImageButton mMenuTintedImageButton;
 
     /** The view for the update badge. */
     private View mUpdateBadgeView;
@@ -29,7 +32,7 @@ class MenuButton extends FrameLayout {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        mMenuButtonView = findViewById(R.id.menu_button);
+        mMenuTintedImageButton = findViewById(R.id.menu_button);
         mUpdateBadgeView = findViewById(R.id.menu_badge);
     }
 
@@ -38,7 +41,12 @@ class MenuButton extends FrameLayout {
      *                        clicked.
      */
     void setTouchListener(OnTouchListener onTouchListener) {
-        mMenuButtonView.setOnTouchListener(onTouchListener);
+        mMenuTintedImageButton.setOnTouchListener(onTouchListener);
+    }
+
+    @Override
+    public void setAccessibilityDelegate(AccessibilityDelegate delegate) {
+        mMenuTintedImageButton.setAccessibilityDelegate(delegate);
     }
 
     /**
@@ -56,6 +64,14 @@ class MenuButton extends FrameLayout {
     }
 
     View getMenuButton() {
-        return mMenuButtonView;
+        return mMenuTintedImageButton;
+    }
+
+    /**
+     * @param tintList The {@link ColorStateList} that will tint the menu button (the badge is not
+     *                 tinted).
+     */
+    void setTint(ColorStateList tintList) {
+        mMenuTintedImageButton.setTint(tintList);
     }
 }

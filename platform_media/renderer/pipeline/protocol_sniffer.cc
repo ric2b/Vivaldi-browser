@@ -99,8 +99,6 @@ std::string GetContainerName(container_names::MediaContainerName container) {
       return "DASH (MPEG-DASH)";
     case container_names::CONTAINER_SMOOTHSTREAM:
       return "SmoothStreaming";
-    case container_names::CONTAINER_MAX:
-      break;
     }
   NOTREACHED();
   return "";
@@ -140,9 +138,17 @@ ProtocolSniffer::~ProtocolSniffer() {
 
 // static
 bool ProtocolSniffer::ShouldSniffProtocol(const std::string& content_type) {
-
   bool should_sniff = !IPCDemuxer::CanPlayType(content_type);
-
+#if defined(OS_MACOSX)
+  // NOTE(jarle@vivalid.com): We cannot trust this mime type. Use the sniffer
+  // to determine the content type, so the correct decoder can be selected.
+  // Ref. VB-40530, VB-43812.
+  if (!should_sniff && (content_type == "video/mp4")) {
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << " overriding sniff decision";
+    should_sniff = true;
+  }
+#endif
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " sniff MimeType : '" << content_type << "' : "
           << (should_sniff ? "Yes" : "No");

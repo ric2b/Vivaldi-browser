@@ -8,9 +8,10 @@
 #include <string>
 #include <utility>
 
+#include "base/containers/span.h"
 #include "components/pwg_encoder/bitmap_image.h"
 #include "components/pwg_encoder/pwg_encoder.h"
-#include "components/services/pdf_compositor/public/cpp/pdf_service_mojo_utils.h"
+#include "mojo/public/cpp/base/shared_memory_utils.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "pdf/pdf.h"
 #include "printing/pdf_render_settings.h"
@@ -29,13 +30,14 @@ base::ReadOnlySharedMemoryRegion RenderPdfPagesToPwgRaster(
   if (!pdf_mapping.IsValid())
     return invalid_pwg_region;
 
+  auto pdf_data = pdf_mapping.GetMemoryAsSpan<const uint8_t>();
+
   // Get the page count and reserve 64 KB per page in |pwg_data| below.
   static constexpr size_t kEstimatedSizePerPage = 64 * 1024;
   static constexpr size_t kMaxPageCount =
       std::numeric_limits<size_t>::max() / kEstimatedSizePerPage;
   int total_page_count = 0;
-  if (!chrome_pdf::GetPDFDocInfo(pdf_mapping.memory(), pdf_mapping.size(),
-                                 &total_page_count, nullptr) ||
+  if (!chrome_pdf::GetPDFDocInfo(pdf_data, &total_page_count, nullptr) ||
       total_page_count <= 0 ||
       static_cast<size_t>(total_page_count) >= kMaxPageCount) {
     return invalid_pwg_region;
@@ -53,10 +55,9 @@ base::ReadOnlySharedMemoryRegion RenderPdfPagesToPwgRaster(
       page_number = total_page_count - 1 - page_number;
 
     if (!chrome_pdf::RenderPDFPageToBitmap(
-            pdf_mapping.memory(), pdf_mapping.size(), page_number,
-            image.pixel_data(), image.size().width(), image.size().height(),
-            settings.dpi.width(), settings.dpi.height(), settings.autorotate,
-            settings.use_color)) {
+            pdf_data, page_number, image.pixel_data(), image.size().width(),
+            image.size().height(), settings.dpi.width(), settings.dpi.height(),
+            settings.autorotate, settings.use_color)) {
       return invalid_pwg_region;
     }
 
@@ -98,7 +99,7 @@ base::ReadOnlySharedMemoryRegion RenderPdfPagesToPwgRaster(
   }
 
   base::MappedReadOnlyRegion region_mapping =
-      CreateReadOnlySharedMemoryRegion(pwg_data.size());
+      mojo::CreateReadOnlySharedMemoryRegion(pwg_data.size());
   if (!region_mapping.IsValid())
     return invalid_pwg_region;
 

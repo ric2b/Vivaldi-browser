@@ -8,7 +8,7 @@
 
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
-#include "content/public/browser/notification_observer.h"
+#include "components/zoom/zoom_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 
@@ -16,21 +16,16 @@ namespace extensions {
 
 class ZoomAPI;
 
-class ZoomEventRouter : public content::NotificationObserver {
+class ZoomEventRouter {
  public:
   explicit ZoomEventRouter(content::BrowserContext* context);
-  ~ZoomEventRouter() override;
-
- private:
-  void DefaultZoomChanged();
   // This method dispatches events to the extension message service.
   void DispatchEvent(const std::string& event_name,
                      std::unique_ptr<base::ListValue> event_args);
-  // content::NotificationObserver implementation.
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
+  ~ZoomEventRouter();
 
+ private:
+  void DefaultZoomChanged();
   std::unique_ptr<ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
       default_zoom_level_subscription_;
 
@@ -39,16 +34,20 @@ class ZoomEventRouter : public content::NotificationObserver {
   DISALLOW_COPY_AND_ASSIGN(ZoomEventRouter);
 };
 
-class ZoomAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
+class ZoomAPI : public BrowserContextKeyedAPI,
+                public EventRouter::Observer,
+                public zoom::ZoomObserver {
  public:
   explicit ZoomAPI(content::BrowserContext* context);
   ~ZoomAPI() override;
-
   // KeyedService implementation.
   void Shutdown() override;
 
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<ZoomAPI>* GetFactoryInstance();
+
+  void AddZoomObserver(Browser* browser);
+  void RemoveZoomObserver(Browser* browser);
 
   // EventRouter::Observer implementation.
   void OnListenerAdded(const EventListenerInfo& details) override;
@@ -56,6 +55,9 @@ class ZoomAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
  private:
   friend class BrowserContextKeyedAPIFactory<ZoomAPI>;
   content::BrowserContext* browser_context_;
+  // ZoomObserver implementation.
+  void OnZoomChanged(
+    const zoom::ZoomController::ZoomChangedEventData& data) override;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "ZoomAPI"; }
@@ -68,10 +70,10 @@ class ZoomAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
 class ZoomSetVivaldiUIZoomFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("zoom.setVivaldiUIZoom", ZOOM_SET_VIVALDI_UI_ZOOM)
-  ZoomSetVivaldiUIZoomFunction();
+  ZoomSetVivaldiUIZoomFunction() = default;
 
  private:
-  ~ZoomSetVivaldiUIZoomFunction() override;
+  ~ZoomSetVivaldiUIZoomFunction() override = default;
   // ExtensionFunction:
   bool RunAsync() override;
 
@@ -81,10 +83,10 @@ class ZoomSetVivaldiUIZoomFunction : public ChromeAsyncExtensionFunction {
 class ZoomGetVivaldiUIZoomFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("zoom.getVivaldiUIZoom", ZOOM_GET_VIVALDI_UI_ZOOM)
-  ZoomGetVivaldiUIZoomFunction();
+  ZoomGetVivaldiUIZoomFunction() = default;
 
  private:
-  ~ZoomGetVivaldiUIZoomFunction() override;
+  ~ZoomGetVivaldiUIZoomFunction() override = default;
   // ExtensionFunction:
   bool RunAsync() override;
 
@@ -94,10 +96,10 @@ class ZoomGetVivaldiUIZoomFunction : public ChromeAsyncExtensionFunction {
 class ZoomSetDefaultZoomFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("zoom.setDefaultZoom", ZOOM_SET_DEFAULT_ZOOM)
-  ZoomSetDefaultZoomFunction();
+  ZoomSetDefaultZoomFunction() = default;
 
  private:
-  ~ZoomSetDefaultZoomFunction() override;
+  ~ZoomSetDefaultZoomFunction() override = default;
   // ExtensionFunction:
   bool RunAsync() override;
 
@@ -107,10 +109,10 @@ class ZoomSetDefaultZoomFunction : public ChromeAsyncExtensionFunction {
 class ZoomGetDefaultZoomFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("zoom.getDefaultZoom", ZOOM_GET_DEFAULT_ZOOM)
-  ZoomGetDefaultZoomFunction();
+  ZoomGetDefaultZoomFunction() = default;
 
  private:
-  ~ZoomGetDefaultZoomFunction() override;
+  ~ZoomGetDefaultZoomFunction() override = default;
   // ExtensionFunction:
   bool RunAsync() override;
 

@@ -14,8 +14,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -176,7 +176,7 @@ void ChromeOSMetricsProvider::InitTaskGetFullHardwareClass(
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
       {base::MayBlock(), base::WithBaseSyncPrimitives(),
-       base::TaskPriority::BACKGROUND,
+       base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&GetFullHardwareClassOnBackgroundThread),
       base::BindOnce(&ChromeOSMetricsProvider::SetFullHardwareClass,

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_id_provider.h"
 #include "cc/animation/keyframed_animation_curve.h"
@@ -203,8 +204,8 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
         root_layer->layer_tree_host()->inner_viewport_scroll_layer();
     Layer* outer_viewport_scroll_layer =
         root_layer->layer_tree_host()->outer_viewport_scroll_layer();
-    const Layer* overscroll_elasticity_layer =
-        root_layer->layer_tree_host()->overscroll_elasticity_layer();
+    const ElementId overscroll_elasticity_element_id =
+        root_layer->layer_tree_host()->overscroll_elasticity_element_id();
     gfx::Vector2dF elastic_overscroll =
         root_layer->layer_tree_host()->elastic_overscroll();
     float page_scale_factor = 1.f;
@@ -217,7 +218,7 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
     update_layer_list_.clear();
     PropertyTreeBuilder::BuildPropertyTrees(
         root_layer, page_scale_layer, inner_viewport_scroll_layer,
-        outer_viewport_scroll_layer, overscroll_elasticity_layer,
+        outer_viewport_scroll_layer, overscroll_elasticity_element_id,
         elastic_overscroll, page_scale_factor, device_scale_factor,
         gfx::Rect(device_viewport_size), gfx::Transform(), property_trees);
     draw_property_utils::UpdatePropertyTrees(root_layer->layer_tree_host(),
@@ -236,8 +237,8 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
         root_layer->layer_tree_impl()->InnerViewportScrollLayer();
     LayerImpl* outer_viewport_scroll_layer =
         root_layer->layer_tree_impl()->OuterViewportScrollLayer();
-    const LayerImpl* overscroll_elasticity_layer =
-        root_layer->layer_tree_impl()->OverscrollElasticityLayer();
+    const ElementId overscroll_elasticity_element_id =
+        root_layer->layer_tree_impl()->OverscrollElasticityElementId();
     gfx::Vector2dF elastic_overscroll =
         root_layer->layer_tree_impl()->elastic_overscroll()->Current(
             root_layer->layer_tree_impl()->IsActiveTree());
@@ -252,7 +253,7 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
         root_layer->layer_tree_impl()->property_trees();
     PropertyTreeBuilder::BuildPropertyTrees(
         root_layer, page_scale_layer, inner_viewport_scroll_layer,
-        outer_viewport_scroll_layer, overscroll_elasticity_layer,
+        outer_viewport_scroll_layer, overscroll_elasticity_element_id,
         elastic_overscroll, page_scale_factor, device_scale_factor,
         gfx::Rect(device_viewport_size), gfx::Transform(), property_trees);
     draw_property_utils::UpdatePropertyTreesAndRenderSurfaces(
@@ -304,8 +305,7 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
 
   bool VerifyLayerInList(scoped_refptr<Layer> layer,
                          const LayerList* layer_list) {
-    return std::find(layer_list->begin(), layer_list->end(), layer) !=
-           layer_list->end();
+    return base::ContainsValue(*layer_list, layer);
   }
 
  private:
@@ -3051,7 +3051,7 @@ TEST_F(LayerTreeHostCommonTest, OcclusionBySiblingOfTarget) {
   LayerImpl* surface_child_ptr = surface_child.get();
   LayerImpl* surface_child_mask_ptr = surface_child_mask.get();
 
-  host_impl.SetViewportSize(root->bounds());
+  host_impl.active_tree()->SetDeviceViewportSize(root->bounds());
 
   surface_child->test_properties()->SetMaskLayer(std::move(surface_child_mask));
   surface->test_properties()->AddChild(std::move(surface_child));
@@ -3101,7 +3101,7 @@ TEST_F(LayerTreeHostCommonTest, TextureLayerSnapping) {
   fractional_translate.Translate(10.5f, 20.3f);
   child->test_properties()->transform = fractional_translate;
 
-  host_impl.SetViewportSize(root->bounds());
+  host_impl.active_tree()->SetDeviceViewportSize(root->bounds());
 
   root->test_properties()->AddChild(std::move(child));
   host_impl.active_tree()->SetRootLayerForTesting(std::move(root));
@@ -3161,7 +3161,7 @@ TEST_F(LayerTreeHostCommonTest,
   occluding_child->SetDrawsContent(true);
   occluding_child->SetContentsOpaque(true);
 
-  host_impl.SetViewportSize(root->bounds());
+  host_impl.active_tree()->SetDeviceViewportSize(root->bounds());
 
   child->test_properties()->AddChild(std::move(grand_child));
   root->test_properties()->AddChild(std::move(child));
@@ -6445,6 +6445,7 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionSubpixelScroll) {
   sticky_position.is_sticky = true;
   sticky_position.is_anchored_bottom = true;
   sticky_position.bottom_offset = 10.0f;
+  sticky_position.constraint_box_rect = gfx::RectF(0, 0, 100, 100);
   sticky_position.scroll_container_relative_sticky_box_rect =
       gfx::Rect(0, 200, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
@@ -6491,6 +6492,7 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionBottom) {
   sticky_position.is_sticky = true;
   sticky_position.is_anchored_bottom = true;
   sticky_position.bottom_offset = 10.0f;
+  sticky_position.constraint_box_rect = gfx::RectF(0, 0, 100, 100);
   sticky_position.scroll_container_relative_sticky_box_rect =
       gfx::Rect(0, 150, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
@@ -6548,18 +6550,20 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionBottom) {
 
 TEST_F(LayerTreeHostCommonTest, StickyPositionBottomOuterViewportDelta) {
   scoped_refptr<Layer> root = Layer::Create();
+  scoped_refptr<Layer> page_scale = Layer::Create();
   scoped_refptr<Layer> scroller = Layer::Create();
   scoped_refptr<Layer> outer_clip = Layer::Create();
   scoped_refptr<Layer> outer_viewport = Layer::Create();
   scoped_refptr<Layer> sticky_pos = Layer::Create();
-  root->AddChild(scroller);
+  root->AddChild(page_scale);
+  page_scale->AddChild(scroller);
   scroller->AddChild(outer_clip);
   outer_clip->AddChild(outer_viewport);
   outer_viewport->AddChild(sticky_pos);
   host()->SetRootLayer(root);
   scroller->SetElementId(LayerIdToElementIdForTesting(scroller->id()));
   LayerTreeHost::ViewportLayers viewport_layers;
-  viewport_layers.page_scale = root;
+  viewport_layers.page_scale = page_scale;
   viewport_layers.inner_viewport_container = root;
   viewport_layers.outer_viewport_container = outer_clip;
   viewport_layers.inner_viewport_scroll = scroller;
@@ -6570,6 +6574,7 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionBottomOuterViewportDelta) {
   sticky_position.is_sticky = true;
   sticky_position.is_anchored_bottom = true;
   sticky_position.bottom_offset = 10.0f;
+  sticky_position.constraint_box_rect = gfx::RectF(0, 0, 100, 100);
   sticky_position.scroll_container_relative_sticky_box_rect =
       gfx::Rect(0, 70, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
@@ -6648,6 +6653,7 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionLeftRight) {
   sticky_position.is_anchored_right = true;
   sticky_position.left_offset = 10.f;
   sticky_position.right_offset = 10.f;
+  sticky_position.constraint_box_rect = gfx::RectF(0, 0, 100, 100);
   sticky_position.scroll_container_relative_sticky_box_rect =
       gfx::Rect(145, 0, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
@@ -8068,7 +8074,7 @@ TEST_F(LayerTreeHostCommonTest, ViewportBoundsDeltaAffectVisibleContentRect) {
   // Device viewport accomidated the root and the browser controls.
   gfx::Size device_viewport_size = gfx::Size(300, 600);
 
-  host_impl.SetViewportSize(device_viewport_size);
+  host_impl.active_tree()->SetDeviceViewportSize(device_viewport_size);
   host_impl.active_tree()->SetRootLayerForTesting(
       LayerImpl::Create(host_impl.active_tree(), 1));
 
@@ -9745,8 +9751,7 @@ TEST_F(LayerTreeHostCommonTest, LargeTransformTest) {
 
   // The root layer should be in the RenderSurfaceList.
   const auto* rsl = render_surface_list_impl();
-  EXPECT_NE(std::find(rsl->begin(), rsl->end(), GetRenderSurface(root)),
-            rsl->end());
+  EXPECT_TRUE(base::ContainsValue(*rsl, GetRenderSurface(root)));
 }
 
 TEST_F(LayerTreeHostCommonTest, PropertyTreesRebuildWithOpacityChanges) {
@@ -10522,8 +10527,8 @@ TEST_F(LayerTreeHostCommonTest, VisibleRectClippedByViewport) {
   gfx::Size device_viewport_size = gfx::Size(300, 600);
   gfx::Rect viewport_visible_rect = gfx::Rect(100, 100, 200, 200);
 
-  host_impl.SetViewportSize(device_viewport_size);
-  host_impl.SetViewportVisibleRect(viewport_visible_rect);
+  host_impl.active_tree()->SetDeviceViewportSize(device_viewport_size);
+  host_impl.active_tree()->SetViewportVisibleRect(viewport_visible_rect);
   host_impl.active_tree()->SetRootLayerForTesting(
       LayerImpl::Create(host_impl.active_tree(), 1));
 

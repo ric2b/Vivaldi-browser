@@ -239,6 +239,7 @@ const OncFieldSignature wifi_with_state_fields[] = {
     {::onc::wifi::kFrequency, &kIntegerSignature},
     {::onc::wifi::kFrequencyList, &kIntegerListSignature},
     {::onc::wifi::kSignalStrength, &kIntegerSignature},
+    {::onc::wifi::kTetheringState, &kStringSignature},
     {NULL}};
 
 const OncFieldSignature wimax_fields[] = {
@@ -365,6 +366,8 @@ const OncFieldSignature global_network_configuration_fields[] = {
     {::onc::global_network_config::kAllowOnlyPolicyNetworksToAutoconnect,
      &kBoolSignature},
     {::onc::global_network_config::kAllowOnlyPolicyNetworksToConnect,
+     &kBoolSignature},
+    {::onc::global_network_config::kAllowOnlyPolicyNetworksToConnectIfAvailable,
      &kBoolSignature},
     {::onc::global_network_config::kBlacklistedHexSSIDs, &kStringListSignature},
     {::onc::global_network_config::kDisableNetworkTypes, &kStringListSignature},

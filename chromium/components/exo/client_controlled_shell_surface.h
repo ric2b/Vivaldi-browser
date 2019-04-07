@@ -9,7 +9,6 @@
 #include <string>
 
 #include "ash/display/screen_orientation_controller.h"
-#include "ash/display/window_tree_host_manager.h"
 #include "ash/wm/client_controlled_state.h"
 #include "base/callback.h"
 #include "base/macros.h"
@@ -19,7 +18,7 @@
 #include "ui/display/display_observer.h"
 
 namespace ash {
-class CustomFrameViewAsh;
+class NonClientFrameViewAsh;
 class ImmersiveFullscreenController;
 class WideFrameView;
 
@@ -40,17 +39,15 @@ enum class Orientation { PORTRAIT, LANDSCAPE };
 class ClientControlledShellSurface
     : public ShellSurfaceBase,
       public display::DisplayObserver,
-      public ash::WindowTreeHostManager::Observer,
       public ui::CompositorLockClient {
  public:
-  using GeometryChangedCallback =
-      base::RepeatingCallback<void(const gfx::Rect& geometry)>;
-
   ClientControlledShellSurface(Surface* surface,
                                bool can_minimize,
                                int container);
   ~ClientControlledShellSurface() override;
 
+  using GeometryChangedCallback =
+      base::RepeatingCallback<void(const gfx::Rect& geometry)>;
   void set_geometry_changed_callback(const GeometryChangedCallback& callback) {
     geometry_changed_callback_ = callback;
   }
@@ -58,6 +55,9 @@ class ClientControlledShellSurface
   void set_client_controlled_move_resize(bool client_controlled_move_resize) {
     client_controlled_move_resize_ = client_controlled_move_resize;
   }
+
+  // Set bounds in root window coordinates relative to the given display.
+  void SetBounds(int64_t display_id, const gfx::Rect& bounds);
 
   // Called when the client was maximized.
   void SetMaximized();
@@ -186,7 +186,6 @@ class ClientControlledShellSurface
   void SetOrientationLock(ash::OrientationLockType orientation_lock);
 
   // Overridden from SurfaceDelegate:
-  void OnSurfaceCommit() override;
   bool IsInputEnabled(Surface* surface) const override;
   void OnSetFrame(SurfaceFrameType type) override;
   void OnSetFrameColors(SkColor active_color, SkColor inactive_color) override;
@@ -206,18 +205,11 @@ class ClientControlledShellSurface
   void OnDeviceScaleFactorChanged(float old_dsf, float new_dsf) override;
 
   // Overridden from aura::WindowObserver:
-  void OnWindowBoundsChanged(aura::Window* window,
-                             const gfx::Rect& old_bounds,
-                             const gfx::Rect& new_bounds,
-                             ui::PropertyChangeReason reason) override;
   void OnWindowAddedToRootWindow(aura::Window* window) override;
 
   // Overridden from display::DisplayObserver:
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override;
-
-  // Overridden from ash::WindowTreeHostManager::Observer:
-  void OnDisplayConfigurationChanged() override;
 
   // Overridden from ui::CompositorLockClient:
   void CompositorLockTimedOut() override;
@@ -236,13 +228,15 @@ class ClientControlledShellSurface
   class ScopedSetBoundsLocally;
   class ScopedLockedToRoot;
 
-  // Overridden from ShellSurface:
+  // Overridden from ShellSurfaceBase:
   void SetWidgetBounds(const gfx::Rect& bounds) override;
   gfx::Rect GetShadowBounds() const override;
   void InitializeWindowState(ash::wm::WindowState* window_state) override;
   float GetScale() const override;
-  gfx::Rect GetWidgetBounds() const override;
+  base::Optional<gfx::Rect> GetWidgetBounds() const override;
   gfx::Point GetSurfaceOrigin() const override;
+  bool OnPreWidgetCommit() override;
+  void OnPostWidgetCommit() override;
 
   // Update frame status. This may create (or destroy) a wide frame
   // that spans the full work area width if the surface didn't cover
@@ -264,11 +258,10 @@ class ClientControlledShellSurface
   void EnsureCompositorIsLockedForOrientationChange();
 
   ash::wm::WindowState* GetWindowState();
-  ash::CustomFrameViewAsh* GetFrameView();
-  const ash::CustomFrameViewAsh* GetFrameView() const;
+  ash::NonClientFrameViewAsh* GetFrameView();
+  const ash::NonClientFrameViewAsh* GetFrameView() const;
 
   GeometryChangedCallback geometry_changed_callback_;
-  int64_t primary_display_id_;
 
   int top_inset_height_ = 0;
   int pending_top_inset_height_ = 0;
@@ -307,6 +300,8 @@ class ClientControlledShellSurface
   // widget is not created yet orientation lock is being set.
   ash::OrientationLockType initial_orientation_lock_ =
       ash::OrientationLockType::kAny;
+
+  bool preserve_widget_bounds_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ClientControlledShellSurface);
 };

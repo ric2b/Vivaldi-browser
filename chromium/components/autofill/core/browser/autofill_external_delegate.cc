@@ -12,13 +12,13 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/i18n/case_conversion.h"
+#include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autocomplete_history_manager.h"
 #include "components/autofill/core/browser/autofill_driver.h"
-#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
@@ -92,7 +92,7 @@ void AutofillExternalDelegate::OnSuggestionsReturned(
   // go between the values and menu items. Skip this when using the Native Views
   // implementation, which has its own logic for distinguishing footer rows.
   // TODO(crbug.com/831603): Remove this when the relevant feature is on 100%.
-  if (!suggestions.empty() && !autofill::ShouldUseNativeViews()) {
+  if (!suggestions.empty() && !features::ShouldUseNativeViews()) {
     suggestions.push_back(Suggestion());
     suggestions.back().frontend_id = POPUP_ITEM_ID_SEPARATOR;
   }
@@ -223,7 +223,7 @@ void AutofillExternalDelegate::DidAcceptSuggestion(const base::string16& value,
                                                    int position) {
   if (identifier == POPUP_ITEM_ID_AUTOFILL_OPTIONS) {
     // User selected 'Autofill Options'.
-    manager_->ShowAutofillSettings();
+    manager_->ShowAutofillSettings(popup_type_ == PopupType::kCreditCards);
   } else if (identifier == POPUP_ITEM_ID_CLEAR_FORM) {
     // User selected 'Clear form'.
     driver_->RendererShouldClearFilledSection();
@@ -404,14 +404,10 @@ void AutofillExternalDelegate::InsertDataListValues(
   // the list of datalist values.
   std::set<base::string16> data_list_set(data_list_values_.begin(),
                                          data_list_values_.end());
-  suggestions->erase(
-      std::remove_if(
-          suggestions->begin(), suggestions->end(),
-          [&data_list_set](const Suggestion& suggestion) {
-            return suggestion.frontend_id == POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY &&
-                   base::ContainsKey(data_list_set, suggestion.value);
-          }),
-      suggestions->end());
+  base::EraseIf(*suggestions, [&data_list_set](const Suggestion& suggestion) {
+    return suggestion.frontend_id == POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY &&
+           base::ContainsKey(data_list_set, suggestion.value);
+  });
 
 #if !defined(OS_ANDROID)
   // Insert the separator between the datalist and Autofill/Autocomplete values
@@ -434,14 +430,21 @@ void AutofillExternalDelegate::InsertDataListValues(
 
 base::string16 AutofillExternalDelegate::GetSettingsSuggestionValue()
     const {
-  if (GetPopupType() == PopupType::kAddresses)
-    return l10n_util::GetStringUTF16(IDS_AUTOFILL_MANAGE_ADDRESSES);
+  switch (GetPopupType()) {
+    case PopupType::kAddresses:
+      return l10n_util::GetStringUTF16(IDS_AUTOFILL_MANAGE_ADDRESSES);
 
-  if (GetPopupType() == PopupType::kCreditCards)
-    return l10n_util::GetStringUTF16(IDS_AUTOFILL_MANAGE_PAYMENT_METHODS);
+    case PopupType::kCreditCards:
+      return l10n_util::GetStringUTF16(IDS_AUTOFILL_MANAGE_PAYMENT_METHODS);
 
-  DCHECK_EQ(GetPopupType(), PopupType::kPersonalInformation);
-  return l10n_util::GetStringUTF16(IDS_AUTOFILL_MANAGE);
+    case PopupType::kPersonalInformation:
+    case PopupType::kUnspecified:
+      return l10n_util::GetStringUTF16(IDS_AUTOFILL_MANAGE);
+
+    case PopupType::kPasswords:
+      NOTREACHED();
+      return base::string16();
+  }
 }
 
 }  // namespace autofill

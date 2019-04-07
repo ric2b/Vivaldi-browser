@@ -15,7 +15,15 @@ namespace ash {
 // after the message center opens is recorded.
 class MessageCenterScrollBar : public views::OverlayScrollBar {
  public:
-  MessageCenterScrollBar();
+  class Observer {
+   public:
+    // Called when scroll event is triggered.
+    virtual void OnMessageCenterScrolled() = 0;
+    virtual ~Observer() = default;
+  };
+
+  // |observer| can be null.
+  explicit MessageCenterScrollBar(Observer* observer);
 
  private:
   // View overrides:
@@ -25,8 +33,13 @@ class MessageCenterScrollBar : public views::OverlayScrollBar {
   // ui::EventHandler overrides:
   void OnGestureEvent(ui::GestureEvent* event) override;
 
+  // views::ScrollDelegate overrides:
+  bool OnScroll(float dx, float dy) override;
+
   // False if no event is recorded yet. True if the first event is recorded.
   bool stats_recorded_ = false;
+
+  Observer* const observer_;
 
   DISALLOW_COPY_AND_ASSIGN(MessageCenterScrollBar);
 };

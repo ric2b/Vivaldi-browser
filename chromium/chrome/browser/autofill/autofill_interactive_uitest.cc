@@ -45,7 +45,6 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
-#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/autofill_manager_test_delegate.h"
 #include "components/autofill/core/browser/autofill_profile.h"
@@ -194,6 +193,7 @@ static const char kTestEventFormString[] =
     " onchange=\"selectchange = true\" onblur=\"selectblur = true\" >"
     " <option value=\"\" selected=\"yes\">--</option>"
     " <option value=\"CA\">California</option>"
+    " <option value=\"NY\">New York</option>"
     " <option value=\"TX\">Texas</option>"
     " </select><br>"
     "<label for=\"zip\">ZIP code:</label>"
@@ -232,10 +232,9 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
  protected:
   explicit AutofillInteractiveTestBase(bool popup_views_enabled)
       : https_server_(net::EmbeddedTestServer::TYPE_HTTPS),
-        cert_verifier_(&mock_cert_verifier_),
         popup_views_enabled_(popup_views_enabled) {
-    scoped_feature_list_.InitWithFeatureState(kAutofillExpandedPopupViews,
-                                              popup_views_enabled_);
+    scoped_feature_list_.InitWithFeatureState(
+        features::kAutofillExpandedPopupViews, popup_views_enabled_);
   }
 
   ~AutofillInteractiveTestBase() override {}
@@ -265,21 +264,21 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
 
     // By default, all SSL cert checks are valid. Can be overriden in tests if
     // needed.
-    cert_verifier_.set_default_result(net::OK);
+    cert_verifier_.mock_cert_verifier()->set_default_result(net::OK);
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     AutofillUiTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(switches::kUseMockCertVerifierForTesting);
+    cert_verifier_.SetUpCommandLine(command_line);
   }
 
   void SetUpInProcessBrowserTestFixture() override {
     AutofillUiTest::SetUpInProcessBrowserTestFixture();
-    ProfileIOData::SetCertVerifierForTesting(&mock_cert_verifier_);
+    cert_verifier_.SetUpInProcessBrowserTestFixture();
   }
 
   void TearDownInProcessBrowserTestFixture() override {
-    ProfileIOData::SetCertVerifierForTesting(nullptr);
+    cert_verifier_.TearDownInProcessBrowserTestFixture();
     AutofillUiTest::TearDownInProcessBrowserTestFixture();
   }
 
@@ -609,12 +608,10 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
  private:
   net::EmbeddedTestServer https_server_;
 
-  net::MockCertVerifier mock_cert_verifier_;
-
   // Similar to net::MockCertVerifier, but also updates the CertVerifier
   // used by the NetworkService. This is needed for when tests run with
   // the NetworkService enabled.
-  CertVerifierBrowserTest::CertVerifier cert_verifier_;
+  ChromeMockCertVerifier cert_verifier_;
 
   net::TestURLFetcherFactory url_fetcher_factory_;
 
@@ -715,8 +712,9 @@ IN_PROC_BROWSER_TEST_P(AutofillInteractiveTest, ClearTwoSection) {
   ExpectFilledTestForm();
 }
 
-// Test that autofill doesn't refill a field initially modified by the user.
-IN_PROC_BROWSER_TEST_P(AutofillInteractiveTest, ModifyFieldAndFill) {
+// Test that autofill doesn't refill a text field initially modified by the
+// user.
+IN_PROC_BROWSER_TEST_P(AutofillInteractiveTest, ModifyTextFieldAndFill) {
   CreateTestProfile();
 
   // Load the test page.
@@ -732,11 +730,39 @@ IN_PROC_BROWSER_TEST_P(AutofillInteractiveTest, ModifyFieldAndFill) {
   AcceptSuggestionUsingArrowDown();
 
   ExpectFieldValue("firstname", "Milton");
-  ExpectFieldValue("lastname", "Waddams");  // Modified by the user.
+  ExpectFieldValue("lastname", "Waddams");
   ExpectFieldValue("address1", "4120 Freidrich Lane");
   ExpectFieldValue("address2", "Basement");
-  ExpectFieldValue("city", "Montreal");
+  ExpectFieldValue("city", "Montreal");  // Modified by the user.
   ExpectFieldValue("state", "TX");
+  ExpectFieldValue("zip", "78744");
+  ExpectFieldValue("country", "US");
+  ExpectFieldValue("phone", "15125551234");
+}
+
+// Test that autofill doesn't refill a select field initially modified by the
+// user.
+IN_PROC_BROWSER_TEST_P(AutofillInteractiveTest, ModifySelectFieldAndFill) {
+  CreateTestProfile();
+
+  // Load the test page.
+  ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
+      browser(), GURL(std::string(kDataURIPrefix) + kTestShippingFormString)));
+
+  // Modify a field.
+  FocusFieldByName("state");
+  FillElementWithValue("state", "CA");
+
+  // Fill
+  FocusFirstNameField();
+  AcceptSuggestionUsingArrowDown();
+
+  ExpectFieldValue("firstname", "Milton");
+  ExpectFieldValue("lastname", "Waddams");
+  ExpectFieldValue("address1", "4120 Freidrich Lane");
+  ExpectFieldValue("address2", "Basement");
+  ExpectFieldValue("city", "Austin");
+  ExpectFieldValue("state", "CA");  // Modified by the user.
   ExpectFieldValue("zip", "78744");
   ExpectFieldValue("country", "US");
   ExpectFieldValue("phone", "15125551234");
@@ -2705,6 +2731,84 @@ IN_PROC_BROWSER_TEST_P(AutofillDynamicFormInteractiveTest,
   // Both fields must be filled after a refill.
   ExpectFieldValue("state_first", "Texas");
   ExpectFieldValue("state_second", "Texas");
+  ExpectFieldValue("city", "Austin");
+  ExpectFieldValue("company", "Initech");
+  ExpectFieldValue("email", "red.swingline@initech.com");
+  ExpectFieldValue("phone", "15125551234");
+}
+
+// Test that we can autofill forms that dynamically change the element that
+// has been clicked on.
+IN_PROC_BROWSER_TEST_P(AutofillDynamicFormInteractiveTest,
+                       DynamicFormFill_FirstElementDisappears) {
+  CreateTestProfile();
+
+  GURL url = embedded_test_server()->GetURL(
+      "a.com", "/autofill/dynamic_form_element_invalid.html");
+  ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(browser(), url));
+  TriggerFormFill("firstname");
+
+  // Wait for the re-fill to happen.
+  bool has_refilled = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      GetWebContents(), "hasRefilled()", &has_refilled));
+  ASSERT_TRUE(has_refilled);
+
+  // Make sure the new form was filled correctly.
+  ExpectFieldValue("firstname2", "Milton");
+  ExpectFieldValue("address1", "4120 Freidrich Lane");
+  ExpectFieldValue("city", "Austin");
+  ExpectFieldValue("company", "Initech");
+  ExpectFieldValue("email", "red.swingline@initech.com");
+  ExpectFieldValue("phone", "15125551234");
+}
+
+// Test that we can autofill forms that dynamically change the element that
+// has been clicked on, even though the form has no name.
+IN_PROC_BROWSER_TEST_P(AutofillDynamicFormInteractiveTest,
+                       DynamicFormFill_FirstElementDisappearsNoNameForm) {
+  CreateTestProfile();
+
+  GURL url = embedded_test_server()->GetURL(
+      "a.com", "/autofill/dynamic_form_element_invalid_noname_form.html");
+  ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(browser(), url));
+  TriggerFormFill("firstname");
+
+  // Wait for the re-fill to happen.
+  bool has_refilled = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      GetWebContents(), "hasRefilled()", &has_refilled));
+  ASSERT_TRUE(has_refilled);
+
+  // Make sure the new form was filled correctly.
+  ExpectFieldValue("firstname2", "Milton");
+  ExpectFieldValue("address1", "4120 Freidrich Lane");
+  ExpectFieldValue("city", "Austin");
+  ExpectFieldValue("company", "Initech");
+  ExpectFieldValue("email", "red.swingline@initech.com");
+  ExpectFieldValue("phone", "15125551234");
+}
+
+// Test that we can autofill forms that dynamically change the element that
+// has been clicked on, even though the elements are unowned.
+IN_PROC_BROWSER_TEST_P(AutofillDynamicFormInteractiveTest,
+                       DynamicFormFill_FirstElementDisappearsUnowned) {
+  CreateTestProfile();
+
+  GURL url = embedded_test_server()->GetURL(
+      "a.com", "/autofill/dynamic_form_element_invalid_unowned.html");
+  ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(browser(), url));
+  TriggerFormFill("firstname");
+
+  // Wait for the re-fill to happen.
+  bool has_refilled = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      GetWebContents(), "hasRefilled()", &has_refilled));
+  ASSERT_TRUE(has_refilled);
+
+  // Make sure the new form was filled correctly.
+  ExpectFieldValue("firstname2", "Milton");
+  ExpectFieldValue("address1", "4120 Freidrich Lane");
   ExpectFieldValue("city", "Austin");
   ExpectFieldValue("company", "Initech");
   ExpectFieldValue("email", "red.swingline@initech.com");

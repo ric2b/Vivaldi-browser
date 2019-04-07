@@ -10,8 +10,9 @@
 #include "base/run_loop.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "ui/aura/env.h"
+#include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
-#include "ui/aura/window_port.h"
 #include "ui/base/layout.h"
 #include "ui/compositor/compositor.h"
 #include "ui/events/event.h"
@@ -42,22 +43,23 @@ namespace aura {
 // static
 std::unique_ptr<WindowTreeHost> WindowTreeHost::Create(
     ui::PlatformWindowInitProperties properties) {
-  return std::make_unique<WindowTreeHostPlatform>(std::move(properties));
+  return std::make_unique<WindowTreeHostPlatform>(
+      std::move(properties),
+      std::make_unique<aura::Window>(nullptr, client::WINDOW_TYPE_UNKNOWN,
+                                     Env::GetInstance()));
 }
 
 WindowTreeHostPlatform::WindowTreeHostPlatform(
-    ui::PlatformWindowInitProperties properties) {
+    ui::PlatformWindowInitProperties properties,
+    std::unique_ptr<Window> window)
+    : WindowTreeHost(std::move(window)) {
   bounds_ = properties.bounds;
   CreateCompositor();
   CreateAndSetPlatformWindow(std::move(properties));
 }
 
-WindowTreeHostPlatform::WindowTreeHostPlatform()
-    : WindowTreeHostPlatform(nullptr) {}
-
-WindowTreeHostPlatform::WindowTreeHostPlatform(
-    std::unique_ptr<WindowPort> window_port)
-    : WindowTreeHost(std::move(window_port)),
+WindowTreeHostPlatform::WindowTreeHostPlatform(std::unique_ptr<Window> window)
+    : WindowTreeHost(std::move(window)),
       widget_(gfx::kNullAcceleratedWidget),
       current_cursor_(ui::CursorType::kNull) {}
 
@@ -86,7 +88,7 @@ WindowTreeHostPlatform::~WindowTreeHostPlatform() {
   DestroyCompositor();
   DestroyDispatcher();
 
-  // |platform_window_| might have already been destroyed by this time.
+  // |platform_window_| may not exist yet.
   if (platform_window_)
     platform_window_->Close();
 }
@@ -236,15 +238,12 @@ void WindowTreeHostPlatform::OnLostCapture() {
 }
 
 void WindowTreeHostPlatform::OnAcceleratedWidgetAvailable(
-    gfx::AcceleratedWidget widget,
-    float device_pixel_ratio) {
+    gfx::AcceleratedWidget widget) {
   widget_ = widget;
   // This may be called before the Compositor has been created.
   if (compositor())
     WindowTreeHost::OnAcceleratedWidgetAvailable();
 }
-
-void WindowTreeHostPlatform::OnAcceleratedWidgetDestroying() {}
 
 void WindowTreeHostPlatform::OnAcceleratedWidgetDestroyed() {
   gfx::AcceleratedWidget widget = compositor()->ReleaseAcceleratedWidget();

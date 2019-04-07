@@ -13,6 +13,7 @@
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "media/base/limits.h"
 #include "media/base/video_util.h"
+#include "mojo/public/cpp/base/shared_memory_utils.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -140,21 +141,27 @@ void LameWindowCapturerChromeOS::RequestRefreshFrame() {
   // continuously.
 }
 
+void LameWindowCapturerChromeOS::CreateOverlay(
+    int32_t stacking_index,
+    viz::mojom::FrameSinkVideoCaptureOverlayRequest request) {
+  // LameWindowCapturerChromeOS only supports one overlay at a time. If one
+  // already exists, the following will cause it to be dropped.
+  overlay_ =
+      std::make_unique<LameCaptureOverlayChromeOS>(this, std::move(request));
+}
+
 class LameWindowCapturerChromeOS::InFlightFrame
     : public viz::mojom::FrameSinkVideoConsumerFrameCallbacks {
  public:
   InFlightFrame(base::WeakPtr<LameWindowCapturerChromeOS> capturer,
-                BufferAndSize buffer)
+                base::MappedReadOnlyRegion buffer)
       : capturer_(std::move(capturer)), buffer_(std::move(buffer)) {}
 
   ~InFlightFrame() final { Done(); }
 
-  mojo::ScopedSharedBufferHandle CloneBufferHandle() {
-    return buffer_.first->Clone(
-        mojo::SharedBufferHandle::AccessMode::READ_WRITE);
+  base::ReadOnlySharedMemoryRegion CloneBufferHandle() {
+    return buffer_.region.Duplicate();
   }
-
-  size_t buffer_size() const { return buffer_.second; }
 
   VideoFrame* video_frame() const { return video_frame_.get(); }
   void set_video_frame(scoped_refptr<VideoFrame> frame) {
@@ -164,12 +171,23 @@ class LameWindowCapturerChromeOS::InFlightFrame
   const gfx::Rect& content_rect() const { return content_rect_; }
   void set_content_rect(const gfx::Rect& rect) { content_rect_ = rect; }
 
+  void set_overlay_renderer(LameCaptureOverlayChromeOS::OnceRenderer renderer) {
+    overlay_renderer_ = std::move(renderer);
+  }
+  void RenderOptionalOverlay() {
+    if (overlay_renderer_) {
+      std::move(overlay_renderer_).Run(video_frame_.get());
+    }
+  }
+
   void Done() final {
+    video_frame_ = nullptr;
+
     if (auto* capturer = capturer_.get()) {
       DCHECK_GT(capturer->in_flight_count_, 0);
       --capturer->in_flight_count_;
       // If the capture size hasn't changed, return the buffer to the pool.
-      if (buffer_.second ==
+      if (buffer_.mapping.size() ==
           VideoFrame::AllocationSize(media::PIXEL_FORMAT_I420,
                                      capturer->capture_size_)) {
         capturer->buffer_pool_.emplace_back(std::move(buffer_));
@@ -177,20 +195,27 @@ class LameWindowCapturerChromeOS::InFlightFrame
       capturer_ = nullptr;
     }
 
-    buffer_.first.reset();
-    buffer_.second = 0;
+    buffer_ = base::MappedReadOnlyRegion();
   }
 
   void ProvideFeedback(double utilization) final {}
 
  private:
   base::WeakPtr<LameWindowCapturerChromeOS> capturer_;
-  BufferAndSize buffer_;
+  base::MappedReadOnlyRegion buffer_;
   scoped_refptr<VideoFrame> video_frame_;
   gfx::Rect content_rect_;
+  LameCaptureOverlayChromeOS::OnceRenderer overlay_renderer_;
 
   DISALLOW_COPY_AND_ASSIGN(InFlightFrame);
 };
+
+void LameWindowCapturerChromeOS::OnOverlayConnectionLost(
+    LameCaptureOverlayChromeOS* overlay) {
+  if (overlay_.get() == overlay) {
+    overlay_.reset();
+  }
+}
 
 void LameWindowCapturerChromeOS::CaptureNextFrame() {
   // If the maximum frame in-flight count has been reached, skip this frame.
@@ -201,30 +226,22 @@ void LameWindowCapturerChromeOS::CaptureNextFrame() {
   // Attempt to re-use a buffer from the pool. Otherwise, create a new one.
   const size_t allocation_size =
       VideoFrame::AllocationSize(media::PIXEL_FORMAT_I420, capture_size_);
-  BufferAndSize buffer;
+  base::MappedReadOnlyRegion buffer;
   if (buffer_pool_.empty()) {
-    buffer.first = mojo::SharedBufferHandle::Create(allocation_size);
-    if (!buffer.first.is_valid()) {
-      // If creating the shared memory failed, abort the frame, and hope this
-      // is a transient problem.
+    buffer = mojo::CreateReadOnlySharedMemoryRegion(allocation_size);
+    if (!buffer.IsValid()) {
+      // If the shared memory region creation failed, just abort this frame,
+      // hoping the issue is a transient one (e.g., lack of an available region
+      // in the address space).
       return;
     }
-    buffer.second = allocation_size;
   } else {
     buffer = std::move(buffer_pool_.back());
     buffer_pool_.pop_back();
-    DCHECK(buffer.first.is_valid());
-    DCHECK_EQ(buffer.second, allocation_size);
+    DCHECK(buffer.IsValid());
+    DCHECK_EQ(buffer.mapping.size(), allocation_size);
   }
-
-  // Map the shared memory buffer, to populate its data.
-  mojo::ScopedSharedBufferMapping mapping = buffer.first->Map(buffer.second);
-  if (!mapping) {
-    // If the shared memory mapping failed, just abort this frame, hoping the
-    // issue is a transient one (e.g., lack of an available region in address
-    // space).
-    return;
-  }
+  void* const backing_memory = buffer.mapping.memory();
 
   // At this point, frame capture will proceed. Create an InFlightFrame to track
   // population and consumption of the frame, and to eventually return the
@@ -240,13 +257,10 @@ void LameWindowCapturerChromeOS::CaptureNextFrame() {
   }
   in_flight_frame->set_video_frame(VideoFrame::WrapExternalData(
       media::PIXEL_FORMAT_I420, capture_size_, gfx::Rect(capture_size_),
-      capture_size_, static_cast<uint8_t*>(mapping.get()), allocation_size,
+      capture_size_, static_cast<uint8_t*>(backing_memory), allocation_size,
       begin_time - first_frame_reference_time_));
   auto* const frame = in_flight_frame->video_frame();
   DCHECK(frame);
-  frame->AddDestructionObserver(
-      base::BindOnce(base::DoNothing::Once<mojo::ScopedSharedBufferMapping>(),
-                     std::move(mapping)));
   VideoFrameMetadata* const metadata = frame->metadata();
   metadata->SetTimeTicks(VideoFrameMetadata::CAPTURE_BEGIN_TIME, begin_time);
   metadata->SetInteger(VideoFrameMetadata::COLOR_SPACE,
@@ -272,6 +286,10 @@ void LameWindowCapturerChromeOS::CaptureNextFrame() {
     return;
   }
   DCHECK(target_);
+
+  if (overlay_) {
+    in_flight_frame->set_overlay_renderer(overlay_->MakeRenderer(content_rect));
+  }
 
   // Request a copy of the Layer associated with the |target_| aura::Window.
   auto request = std::make_unique<viz::CopyOutputRequest>(
@@ -308,6 +326,8 @@ void LameWindowCapturerChromeOS::DidCopyFrame(
     return;  // Copy request failed, punt.
   }
 
+  in_flight_frame->RenderOptionalOverlay();
+
   // The result may be smaller than what was requested, if unforeseen clamping
   // to the source boundaries occurred by the executor of the copy request.
   // However, the result should never contain more than what was requested.
@@ -328,12 +348,11 @@ void LameWindowCapturerChromeOS::DeliverFrame(
                                   base::TimeTicks::Now());
 
   // Clone the buffer handle for the consumer.
-  mojo::ScopedSharedBufferHandle buffer_for_consumer =
+  base::ReadOnlySharedMemoryRegion handle =
       in_flight_frame->CloneBufferHandle();
-  if (!buffer_for_consumer.is_valid()) {
+  if (!handle.IsValid()) {
     return;  // This should only fail if the OS is exhausted of handles.
   }
-  const size_t buffer_allocation_size = in_flight_frame->buffer_size();
 
   // Assemble frame layout, format, and metadata into a mojo struct to send to
   // the consumer.
@@ -346,10 +365,6 @@ void LameWindowCapturerChromeOS::DeliverFrame(
   const gfx::Rect update_rect = frame->visible_rect();
   const gfx::Rect content_rect = in_flight_frame->content_rect();
 
-  // Drop the VideoFrame wrapper, which will unmap the shared memory from this
-  // process.
-  in_flight_frame->set_video_frame(nullptr);
-
   // Create a mojo message pipe and bind to the InFlightFrame to wait for the
   // Done() signal from the consumer. The mojo::StrongBinding takes ownership of
   // the InFlightFrame.
@@ -358,9 +373,8 @@ void LameWindowCapturerChromeOS::DeliverFrame(
                           mojo::MakeRequest(&callbacks));
 
   // Send the frame to the consumer.
-  consumer_->OnFrameCaptured(std::move(buffer_for_consumer),
-                             buffer_allocation_size, std::move(info),
-                             update_rect, content_rect, std::move(callbacks));
+  consumer_->OnFrameCaptured(std::move(handle), std::move(info), update_rect,
+                             content_rect, std::move(callbacks));
 }
 
 void LameWindowCapturerChromeOS::OnWindowDestroying(aura::Window* window) {

@@ -36,7 +36,7 @@
   git reset --hard ${new_gitsha}
   git log --oneline ${curr_gitsha}..${new_gitsha} > $changes
 
-  echo -n Bug: > $bugs
+  echo -n 'Bug: ' > $bugs
 
   # This extracts BUG= lines from the log, extracts the numbers part, removes
   # whitespace and deletes empty lines. Then, split on ',', sort, uniquify and
@@ -60,6 +60,11 @@
   rm -rf $tmpdir/dom-distiller-dist/*
   pushd dom-distiller-dist
   cp -r $tmpdir/dom-distiller/out/package/* .
+
+  # Stop rolling python/plugin_pb2.py for protobuf backward compatibility.
+  # See https://crbug.com/874509
+  git checkout -- python/plugin_pb2.py
+
   git add .
   if [[ $(git status --short | wc -l) -ne 0 ]]; then
     git commit -a -m "Package for ${new_gitsha}"
@@ -87,9 +92,10 @@
     echo "Roll DOM Distiller JavaScript distribution package"
     echo
     echo "Diff since last roll:"
-    echo "https://github.com/chromium/dom-distiller/compare/${curr_gitsha}...${new_gitsha}"
+    echo "https://chromium.googlesource.com/chromium/dom-distiller/+/${curr_gitsha}..${new_gitsha}"
     echo
     echo "Picked up changes:"
+    echo "https://chromium.googlesource.com/chromium/dom-distiller/+log/${curr_gitsha}..${new_gitsha}"
     cat $changes
     echo
     cat $bugs

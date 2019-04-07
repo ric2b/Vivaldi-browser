@@ -8,28 +8,23 @@
  * Checks if the files initially added by the C++ side are displayed, and
  * that files subsequently added are also displayed.
  *
- * @param {string} path Directory path to be tested.
+ * @param {string} path Path to be tested, Downloads or Drive.
+ * @param {Array<TestEntryInfo>} defaultEntries Default file entries.
  */
-function fileDisplay(path) {
+function fileDisplay(path, defaultEntries) {
   var appId;
 
-  var expectedFilesBefore =
-      TestEntryInfo.getExpectedRows(path == RootPath.DRIVE ?
-          BASIC_DRIVE_ENTRY_SET : BASIC_LOCAL_ENTRY_SET).sort();
-
-  var expectedFilesAfter =
-      expectedFilesBefore.concat([ENTRIES.newlyAdded.getExpectedRow()]).sort();
+  const defaultList = TestEntryInfo.getExpectedRows(defaultEntries).sort();
 
   StepsRunner.run([
-    // Open Files app on local downloads.
+    // Open Files app on the given |path| with default file entries.
     function() {
       setupAndWaitUntilReady(null, path, this.next);
     },
-    // Verify the file list.
+    // Verify the default file list.
     function(result) {
       appId = result.windowId;
-      var filesBefore = result.fileList;
-      chrome.test.assertEq(expectedFilesBefore, filesBefore);
+      chrome.test.assertEq(defaultList, result.fileList);
       this.next();
     },
     // Add new file entries.
@@ -38,14 +33,19 @@ function fileDisplay(path) {
     },
     // Wait for the new file entries.
     function() {
-      remoteCall.waitForFileListChange(appId, expectedFilesBefore.length).
-          then(this.next);
+      remoteCall.waitForFileListChange(appId, defaultList.length)
+          .then(this.next);
     },
     // Verify the new file list.
-    function(filesAfter) {
-      chrome.test.assertEq(expectedFilesAfter, filesAfter);
-      checkIfNoErrorsOccured(this.next);
+    function(fileList) {
+      const expectedList =
+          defaultList.concat([ENTRIES.newlyAdded.getExpectedRow()]).sort();
+      chrome.test.assertEq(expectedList, fileList);
+      this.next();
     },
+    function() {
+      checkIfNoErrorsOccured(this.next);
+    }
   ]);
 }
 
@@ -53,14 +53,106 @@ function fileDisplay(path) {
  * Tests files display in Downloads.
  */
 testcase.fileDisplayDownloads = function() {
-  fileDisplay(RootPath.DOWNLOADS);
+  fileDisplay(RootPath.DOWNLOADS, BASIC_LOCAL_ENTRY_SET);
 };
 
 /**
  * Tests files display in Google Drive.
  */
 testcase.fileDisplayDrive = function() {
-  fileDisplay(RootPath.DRIVE);
+  fileDisplay(RootPath.DRIVE, BASIC_DRIVE_ENTRY_SET);
+};
+
+/**
+ * Tests file display rendering in offline Google Drive.
+ */
+testcase.fileDisplayDriveOffline = function() {
+  var appId;
+
+  const driveFiles = [ENTRIES.hello, ENTRIES.pinned, ENTRIES.photos];
+
+  StepsRunner.run([
+    // Open Files app on Drive with the given test files.
+    function() {
+      setupAndWaitUntilReady(null, RootPath.DRIVE, this.next, [], driveFiles);
+    },
+    // Retrieve all file list entries that could be rendered 'offline'.
+    function(result) {
+      appId = result.windowId;
+      const offlineEntry = '#file-list .table-row.file.dim-offline';
+      remoteCall.callRemoteTestUtil(
+          'queryAllElements', appId, [offlineEntry, ['opacity']], this.next);
+    },
+    // Check: the hello.txt file only should be rendered 'offline'.
+    function(elements) {
+      chrome.test.assertEq(1, elements.length);
+      chrome.test.assertEq(0, elements[0].text.indexOf('hello.txt'));
+      this.next(elements[0].styles);
+    },
+    // Check: hello.txt must have 'offline' CSS render style (opacity).
+    function(style) {
+      chrome.test.assertEq('0.4', style.opacity);
+      this.next();
+    },
+    // Retrieve file entries that are 'available offline' (not dimmed).
+    function() {
+      const availableEntry = '#file-list .table-row:not(.dim-offline)';
+      remoteCall.callRemoteTestUtil(
+          'queryAllElements', appId, [availableEntry, ['opacity']], this.next);
+    },
+    // Check: these files should have 'available offline' CSS style.
+    function(elements) {
+      chrome.test.assertEq(2, elements.length);
+
+      function checkRenderedInAvailableOfflineStyle(element, fileName) {
+        chrome.test.assertEq(0, element.text.indexOf(fileName));
+        chrome.test.assertEq('1', element.styles.opacity);
+      }
+
+      // Directories are shown as 'available offline'.
+      checkRenderedInAvailableOfflineStyle(elements[0], 'photos');
+
+      // Pinned files are shown as 'available offline'.
+      checkRenderedInAvailableOfflineStyle(elements[1], 'pinned');
+
+      this.next();
+    },
+    function() {
+      checkIfNoErrorsOccured(this.next);
+    }
+  ]);
+};
+
+/**
+ * Tests file display rendering in online Google Drive.
+ */
+testcase.fileDisplayDriveOnline = function() {
+  var appId;
+
+  StepsRunner.run([
+    // Open Files app on Drive.
+    function() {
+      setupAndWaitUntilReady(
+          null, RootPath.DRIVE, this.next, [], BASIC_DRIVE_ENTRY_SET);
+    },
+    // Retrieve all file list row entries.
+    function(result) {
+      appId = result.windowId;
+      const fileEntry = '#file-list .table-row';
+      remoteCall.callRemoteTestUtil(
+          'queryAllElements', appId, [fileEntry, ['opacity']], this.next);
+    },
+    // Check: all files must have 'online' CSS style (not dimmed).
+    function(elements) {
+      chrome.test.assertEq(BASIC_DRIVE_ENTRY_SET.length, elements.length);
+      for (let i = 0; i < elements.length; ++i)
+        chrome.test.assertEq('1', elements[i].styles.opacity);
+      this.next();
+    },
+    function() {
+      checkIfNoErrorsOccured(this.next);
+    }
+  ]);
 };
 
 /**

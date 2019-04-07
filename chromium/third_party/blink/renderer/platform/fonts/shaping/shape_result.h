@@ -64,6 +64,8 @@ enum class AdjustMidCluster {
 struct ShapeResultCharacterData {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
   float x_position;
+  // Set for the logical first character of a cluster.
+  unsigned is_cluster_base : 1;
   unsigned safe_to_break_before : 1;
 };
 
@@ -111,10 +113,13 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
   // even when the result is in vertical flow.
   const FloatRect& Bounds() const { return glyph_bounding_box_; }
   unsigned NumCharacters() const { return num_characters_; }
-  CharacterRange GetCharacterRange(unsigned from, unsigned to) const;
+  unsigned NumGlyphs() const { return num_glyphs_; }
+  CharacterRange GetCharacterRange(const StringView& text,
+                                   unsigned from,
+                                   unsigned to) const;
   // The character start/end index of a range shape result.
-  unsigned StartIndexForResult() const;
-  unsigned EndIndexForResult() const;
+  unsigned StartIndexForResult() const { return start_index_; }
+  unsigned EndIndexForResult() const { return start_index_ + num_characters_; }
   void FallbackFonts(HashSet<const SimpleFontData*>*) const;
   TextDirection Direction() const {
     return static_cast<TextDirection>(direction_);
@@ -145,21 +150,34 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
   // whether |x| is on the left-half or the right-half of the glyph, it
   // determines the left-boundary or the right-boundary, then computes the
   // offset from the bidi direction.
-  unsigned OffsetForHitTest(float x, BreakGlyphsOption) const;
+  unsigned CaretOffsetForHitTest(float x,
+                                 const StringView& text,
+                                 BreakGlyphsOption) const;
   // Returns the offset that can fit to between |x| and the left or the right
   // edge. The side of the edge is determined by |line_direction|.
   unsigned OffsetToFit(float x, TextDirection line_direction) const;
   unsigned OffsetForPosition(float x,
+                             const StringView& text,
                              IncludePartialGlyphsOption include_partial_glyphs,
                              BreakGlyphsOption break_glyphs_option) const {
-    return include_partial_glyphs == OnlyFullGlyphs
-               ? OffsetForPosition(x, break_glyphs_option)
-               : OffsetForHitTest(x, break_glyphs_option);
+    if (include_partial_glyphs == OnlyFullGlyphs) {
+      // TODO(kojii): Consider prohibiting OnlyFullGlyphs+BreakGlyphs, used only
+      // in tests.
+      if (break_glyphs_option == BreakGlyphs)
+        EnsureGraphemes(text);
+      return OffsetForPosition(x, break_glyphs_option);
+    }
+    return CaretOffsetForHitTest(x, text, break_glyphs_option);
   }
 
   // Returns the position for a given offset, relative to StartIndexForResult.
   float PositionForOffset(unsigned offset,
                           AdjustMidCluster = AdjustMidCluster::kToEnd) const;
+  // Similar to |PositionForOffset| with mid-glyph (mid-ligature) support.
+  float CaretPositionForOffset(
+      unsigned offset,
+      const StringView& text,
+      AdjustMidCluster = AdjustMidCluster::kToEnd) const;
   LayoutUnit SnappedStartPositionForOffset(unsigned offset) const {
     return LayoutUnit::FromFloatFloor(PositionForOffset(offset));
   }
@@ -217,8 +235,7 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
   RunInfo* InsertRunForTesting(unsigned start_index,
                                unsigned num_characters,
                                TextDirection,
-                               Vector<uint16_t> safe_break_offsets = {},
-                               Vector<unsigned> graphemes = {});
+                               Vector<uint16_t> safe_break_offsets = {});
 #if DCHECK_IS_ON()
   void CheckConsistency() const;
 #endif
@@ -235,9 +252,14 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
         new ShapeResult(font_data, num_characters, direction));
   }
 
+  // Ensure |grapheme_| is computed. |BreakGlyphs| is valid only when
+  // |grapheme_| is computed.
+  void EnsureGraphemes(const StringView& text) const;
+
   struct GlyphIndexResult {
     STACK_ALLOCATED();
 
+   public:
     unsigned run_index = 0;
     // The total number of characters of runs_[0..run_index - 1].
     unsigned characters_on_left_runs = 0;
@@ -275,12 +297,14 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
 
     // Returns the offset of the last character that fully fits before the given
     // x-position.
-    unsigned OffsetForPosition(float x) const;
+    unsigned OffsetForPosition(float x, bool rtl) const;
 
     // Returns the x-position for a given offset.
-    float PositionForOffset(unsigned offset) const;
+    float PositionForOffset(unsigned offset, bool rtl) const;
 
    private:
+    // This vector is indexed by visual-offset; the character offset from the
+    // left edge regardless of the TextDirection.
     Vector<ShapeResultCharacterData> data_;
     unsigned start_offset_;
     float width_;
@@ -299,6 +323,8 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
                              unsigned start_glyph,
                              unsigned num_glyphs,
                              hb_buffer_t*);
+  template <bool is_horizontal_run>
+  void ComputeGlyphBounds(const ShapeResult::RunInfo&);
   void InsertRun(std::unique_ptr<ShapeResult::RunInfo>,
                  unsigned start_glyph,
                  unsigned num_glyphs,
@@ -306,6 +332,8 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
   void InsertRun(std::unique_ptr<ShapeResult::RunInfo>);
   void InsertRunForIndex(unsigned start_character_index);
   void ReorderRtlRuns(unsigned run_size_before);
+  unsigned ComputeStartIndex() const;
+  void UpdateStartIndex();
 
   float LineLeftBounds() const;
   float LineRightBounds() const;
@@ -316,6 +344,7 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
   scoped_refptr<const SimpleFontData> primary_font_;
   mutable std::unique_ptr<CharacterPositionData> character_position_;
 
+  unsigned start_index_;
   unsigned num_characters_;
   unsigned num_glyphs_ : 30;
 

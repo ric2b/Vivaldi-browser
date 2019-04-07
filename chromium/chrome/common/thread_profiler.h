@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/profiler/stack_sampling_profiler.h"
@@ -73,6 +72,13 @@ class ThreadProfiler {
   static void StartOnChildThread(
       metrics::CallStackProfileParams::Thread thread);
 
+  // Sets the callback to use for reporting browser process profiles. This
+  // indirection is required to avoid a dependency on unnecessary metrics code
+  // in child processes.
+  static void SetBrowserProcessReceiverCallback(
+      const base::RepeatingCallback<void(base::TimeTicks,
+                                         metrics::SampledProfile)>& callback);
+
   // This function must be called within child processes to supply the Service
   // Manager's connector, to bind the interface through which a profile is sent
   // back to the browser process.
@@ -92,26 +98,11 @@ class ThreadProfiler {
       scoped_refptr<base::SingleThreadTaskRunner> owning_thread_task_runner =
           scoped_refptr<base::SingleThreadTaskRunner>());
 
-  // Gets the completed callback for the ultimate receiver of the profile.
-  metrics::CallStackProfileBuilder::CompletedCallback GetReceiverCallback(
-      const metrics::CallStackProfileParams& profile_params);
-
-  // Receives |profile| from the metrics::CallStackProfileBuilder and forwards
-  // it on to the original |receiver_callback|.  Note that we must obtain and
-  // bind the original receiver callback prior to the start of collection
-  // because the collection start time is currently recorded when obtaining the
-  // callback in some collection scenarios. The implementation contains a TODO
-  // to fix this.
-  static void ReceiveStartupProfile(
-      const metrics::CallStackProfileBuilder::CompletedCallback&
-          receiver_callback,
-      base::StackSamplingProfiler::CallStackProfile profile);
-  static void ReceivePeriodicProfile(
-      const metrics::CallStackProfileBuilder::CompletedCallback&
-          receiver_callback,
+  // Posts a task on |owning_thread_task_runner| to start the next periodic
+  // sampling collection on the completion of the previous collection.
+  static void OnPeriodicCollectionCompleted(
       scoped_refptr<base::SingleThreadTaskRunner> owning_thread_task_runner,
-      base::WeakPtr<ThreadProfiler> thread_profiler,
-      base::StackSamplingProfiler::CallStackProfile profile);
+      base::WeakPtr<ThreadProfiler> thread_profiler);
 
   // Posts a delayed task to start the next periodic sampling collection.
   void ScheduleNextPeriodicCollection();
@@ -121,9 +112,7 @@ class ThreadProfiler {
 
   scoped_refptr<base::SingleThreadTaskRunner> owning_thread_task_runner_;
 
-  // TODO(wittman): Make const after cleaning up the existing continuous
-  // collection support.
-  metrics::CallStackProfileParams periodic_profile_params_;
+  const metrics::CallStackProfileParams periodic_profile_params_;
 
   std::unique_ptr<base::StackSamplingProfiler> startup_profiler_;
 

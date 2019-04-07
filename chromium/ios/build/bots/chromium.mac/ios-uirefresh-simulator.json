@@ -1,8 +1,8 @@
 {
   "comments": [
-    "UIRefresh tests for iPhone device."
+    "UIRefresh tests for iPhone simulator."
   ],
-  "xcode build version": "9C40b",
+  "xcode build version": "10a254a",
   "gn_args": [
     "goma_dir=\"$(goma_dir)\"",
     "additional_target_cpus=[\"x86\"]",
@@ -20,7 +20,12 @@
         "--disable-features=UIRefreshPhase1"
       ],
       "device type": "iPhone 5s",
-      "os": "11.2"
+      "os": "12.0",
+      "dimensions": [
+        { "os": "Mac-10.13.4", "pool": "Chrome" },
+        { "os": "Mac-10.13.5", "pool": "Chrome" },
+        { "os": "Mac-10.13.6", "pool": "Chrome" }
+      ]
     },
     {
       "include": "uirefresh_unittests.json",
@@ -28,7 +33,12 @@
         "--disable-features=UIRefreshPhase1"
       ],
       "device type": "iPhone X",
-      "os": "11.2"
+      "os": "12.0",
+      "dimensions": [
+        { "os": "Mac-10.13.4", "pool": "Chrome" },
+        { "os": "Mac-10.13.5", "pool": "Chrome" },
+        { "os": "Mac-10.13.6", "pool": "Chrome" }
+      ]
     },
     {
       "include": "uirefresh_unittests.json",
@@ -36,7 +46,12 @@
         "--disable-features=UIRefreshPhase1"
       ],
       "device type": "iPad Air",
-      "os": "11.2"
+      "os": "12.0",
+      "dimensions": [
+        { "os": "Mac-10.13.4", "pool": "Chrome" },
+        { "os": "Mac-10.13.5", "pool": "Chrome" },
+        { "os": "Mac-10.13.6", "pool": "Chrome" }
+      ]
     },
     {
       "include": "screen_size_dependent_tests.json",
@@ -44,7 +59,12 @@
         "--disable-features=UIRefreshPhase1"
       ],
       "device type": "iPhone 6",
-      "os": "11.2"
+      "os": "12.0",
+      "dimensions": [
+        { "os": "Mac-10.13.4", "pool": "Chrome" },
+        { "os": "Mac-10.13.5", "pool": "Chrome" },
+        { "os": "Mac-10.13.6", "pool": "Chrome" }
+      ]
     },
     {
       "include": "screen_size_dependent_tests.json",
@@ -52,7 +72,12 @@
         "--disable-features=UIRefreshPhase1"
       ],
       "device type": "iPad Air",
-      "os": "11.2"
+      "os": "12.0",
+      "dimensions": [
+        { "os": "Mac-10.13.4", "pool": "Chrome" },
+        { "os": "Mac-10.13.5", "pool": "Chrome" },
+        { "os": "Mac-10.13.6", "pool": "Chrome" }
+      ]
     },
     {
       "include": "eg_cq_tests.json",
@@ -60,7 +85,12 @@
         "--disable-features=UIRefreshPhase1"
       ],
       "device type": "iPhone X",
-      "os": "11.2"
+      "os": "12.0",
+      "dimensions": [
+        { "os": "Mac-10.13.4", "pool": "Chrome" },
+        { "os": "Mac-10.13.5", "pool": "Chrome" },
+        { "os": "Mac-10.13.6", "pool": "Chrome" }
+      ]
     },
     {
       "include": "eg_cq_tests.json",
@@ -68,7 +98,12 @@
         "--disable-features=UIRefreshPhase1"
       ],
       "device type": "iPad Air",
-      "os": "11.2"
+      "os": "12.0",
+      "dimensions": [
+        { "os": "Mac-10.13.4", "pool": "Chrome" },
+        { "os": "Mac-10.13.5", "pool": "Chrome" },
+        { "os": "Mac-10.13.6", "pool": "Chrome" }
+      ]
     },
     {
       "include": "eg_tests.json",
@@ -76,7 +111,12 @@
         "--disable-features=UIRefreshPhase1"
       ],
       "device type": "iPhone X",
-      "os": "11.2"
+      "os": "12.0",
+      "dimensions": [
+        { "os": "Mac-10.13.4", "pool": "Chrome" },
+        { "os": "Mac-10.13.5", "pool": "Chrome" },
+        { "os": "Mac-10.13.6", "pool": "Chrome" }
+      ]
     },
     {
       "include": "eg_tests.json",
@@ -84,7 +124,12 @@
         "--disable-features=UIRefreshPhase1"
       ],
       "device type": "iPad Air",
-      "os": "11.2"
+      "os": "12.0",
+      "dimensions": [
+        { "os": "Mac-10.13.4", "pool": "Chrome" },
+        { "os": "Mac-10.13.5", "pool": "Chrome" },
+        { "os": "Mac-10.13.6", "pool": "Chrome" }
+      ]
     }
   ]
 }

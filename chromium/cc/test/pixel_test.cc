@@ -44,6 +44,7 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/viz/privileged/interfaces/gl/gpu_host.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gl/init/gl_factory.h"
 
 namespace cc {
 
@@ -206,6 +207,8 @@ void PixelTest::SetUpGLWithoutRenderer(bool flipped_output_surface) {
 
   auto context_provider = base::MakeRefCounted<TestInProcessContextProvider>(
       /*enable_oop_rasterization=*/false, /*support_locking=*/false);
+  gpu::ContextResult result = context_provider->BindToCurrentThread();
+  DCHECK_EQ(result, gpu::ContextResult::kSuccess);
   output_surface_ = std::make_unique<PixelTestOutputSurface>(
       std::move(context_provider), flipped_output_surface);
   output_surface_->BindToClient(output_surface_client_.get());
@@ -217,7 +220,8 @@ void PixelTest::SetUpGLWithoutRenderer(bool flipped_output_surface) {
 
   child_context_provider_ = base::MakeRefCounted<TestInProcessContextProvider>(
       /*enable_oop_rasterization=*/false, /*support_locking=*/false);
-  child_context_provider_->BindToCurrentThread();
+  result = child_context_provider_->BindToCurrentThread();
+  DCHECK_EQ(result, gpu::ContextResult::kSuccess);
   child_resource_provider_ =
       std::make_unique<viz::ClientResourceProvider>(true);
 }
@@ -255,10 +259,15 @@ void PixelTest::SetUpGpuServiceOnGpuThread(base::WaitableEvent* event) {
                           mojo::MakeRequest(&gpu_host_proxy));
   gpu_service_->InitializeWithHost(
       std::move(gpu_host_proxy), gpu::GpuProcessActivityFlags(),
+      gl::init::CreateOffscreenGLSurface(gfx::Size()),
       nullptr /* sync_point_manager */, nullptr /* shutdown_event */);
   task_executor_ = base::MakeRefCounted<gpu::GpuInProcessThreadService>(
-      gpu_thread_->task_runner(), gpu_service_->sync_point_manager(),
-      gpu_service_->mailbox_manager(), gpu_service_->share_group(),
+      gpu_thread_->task_runner(), gpu_service_->scheduler(),
+      gpu_service_->sync_point_manager(), gpu_service_->mailbox_manager(),
+      gpu_service_->share_group(),
+      gpu_service_->gpu_channel_manager()
+          ->default_offscreen_surface()
+          ->GetFormat(),
       gpu_service_->gpu_feature_info(),
       gpu_service_->gpu_channel_manager()->gpu_preferences());
   event->Signal();
@@ -307,7 +316,8 @@ void PixelTest::SetUpSkiaRendererDDL() {
       base::MakeRefCounted<viz::VizProcessContextProvider>(
           task_executor_, gpu::kNullSurfaceHandle,
           gpu_memory_buffer_manager_.get(), image_factory,
-          gpu_channel_manager_delegate, gpu::SharedMemoryLimits());
+          gpu_channel_manager_delegate, gpu::SharedMemoryLimits(),
+          false /* requires_alpha_channel */);
   child_context_provider_->BindToCurrentThread();
   child_resource_provider_ =
       std::make_unique<viz::ClientResourceProvider>(true);

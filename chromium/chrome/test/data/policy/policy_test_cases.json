@@ -43,15 +43,15 @@
   },
 
   "OverrideSecurityRestrictionsOnInsecureOrigin": {
-    "os": ["win", "linux", "mac"],
-    "test_policy": { "OverrideSecurityRestrictionsOnInsecureOrigin": ["http://example.com/"] },
+    "os": ["win", "linux", "mac", "android", "chromeos"],
+    "test_policy": { "OverrideSecurityRestrictionsOnInsecureOrigin": ["http://example.com/","*.example.com"] },
     "pref_mappings": [ { "pref": "unsafely_treat_insecure_origin_as_secure" } ]
   },
 
   "UnsafelyTreatInsecureOriginAsSecure": {
     "note": "This policy is deprecated.",
     "os": ["win", "linux", "mac"],
-    "test_policy": { "UnsafelyTreatInsecureOriginAsSecure": ["http://example.com/"] },
+    "test_policy": { "UnsafelyTreatInsecureOriginAsSecure": ["http://example.com/","*.example.com"] },
     "pref_mappings": [ { "pref": "unsafely_treat_insecure_origin_as_secure" } ]
   },
 
@@ -292,11 +292,67 @@
     ]
   },
 
+  "PrintHeaderFooter": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "PrintHeaderFooter": true },
+    "pref_mappings": [
+      { "pref": "printing.print_header_footer" }
+    ]
+  },
+
   "CloudPrintProxyEnabled": {
     "os": [],
     "test_policy": { "CloudPrintProxyEnabled": true },
     "pref_mappings": [
       { "pref": "cloud_print.enabled" }
+    ]
+  },
+
+  "PrintingAllowedColorModes": {
+    "os": ["chromeos"],
+    "test_policy": { "PrintingAllowedColorModes": "monochrome" },
+    "pref_mappings": [
+      { "pref": "printing.allowed_color_modes" }
+    ]
+  },
+
+  "PrintingAllowedDuplexModes": {
+    "os": ["chromeos"],
+    "test_policy": { "PrintingAllowedDuplexModes": "duplex" },
+    "pref_mappings": [
+      { "pref": "printing.allowed_duplex_modes" }
+    ]
+  },
+
+  "PrintingAllowedPageSizes": {
+    "os": ["chromeos"],
+    "test_policy": { "PrintingAllowedPageSizes": [{"WidthUm": 210000, "HeightUm": 297000}] },
+    "pref_mappings": [
+      { "pref": "printing.allowed_page_sizes" }
+    ]
+  },
+
+  "PrintingColorDefault": {
+    "os": ["chromeos"],
+    "test_policy": { "PrintingColorDefault": "monochrome" },
+    "pref_mappings": [
+      { "pref": "printing.color_default" }
+    ]
+  },
+
+  "PrintingDuplexDefault": {
+    "os": ["chromeos"],
+    "test_policy": { "PrintingDuplexDefault": "long-edge" },
+    "pref_mappings": [
+      { "pref": "printing.duplex_default" }
+    ]
+  },
+
+  "PrintingSizeDefault": {
+    "os": ["chromeos"],
+    "test_policy": { "PrintingSizeDefault": {"WidthUm": 210000, "HeightUm": 297000} },
+    "pref_mappings": [
+      { "pref": "printing.size_default" }
     ]
   },
 
@@ -469,11 +525,29 @@
   },
 
   "AutofillAddressEnabled": {
-    "note": "The pref behind this policy is always set and therefore cannot be tested with this generic test"
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "AutofillAddressEnabled": false },
+    "pref_mappings": [
+      { "pref": "autofill.profile_enabled",
+        "indicator_tests": [
+          { "policy": { "AutofillAddressEnabled": false } }
+        ]
+      }
+    ]
   },
 
   "AutofillCreditCardEnabled": {
-    "note": "The pref behind this policy is always set and therefore cannot be tested with this generic test"
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "AutofillCreditCardEnabled": false },
+    "pref_mappings": [
+      { "pref": "autofill.credit_card_enabled",
+        "indicator_tests": [
+          { "policy": { "AutofillCreditCardEnabled": false } }
+        ]
+      }
+    ]
   },
 
   "DisabledPlugins.0": {
@@ -566,7 +640,7 @@
     "os": ["win", "linux", "mac"],
     "test_policy": { "SigninAllowed": true },
     "pref_mappings": [
-      { "pref": "signin.allowed" }
+      { "pref": "signin.allowed_on_next_startup" }
     ]
   },
 
@@ -2250,6 +2324,43 @@
     ]
   },
 
+  "BrowserSignin.DesktopNoForce": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "BrowserSignin": 1 },
+    "pref_mappings": [
+      { "pref": "signin.allowed_on_next_startup",
+        "indicator_tests": [
+          { "policy": { "BrowserSignin": 1 } }
+        ]
+      }
+    ]
+  },
+
+  "BrowserSignin.DesktopForce": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "BrowserSignin": 2 },
+    "pref_mappings": [
+      { "pref": "signin.allowed_on_next_startup" },
+      { "pref": "profile.force_browser_signin",
+        "local_state": true
+      },
+      { "pref": "profile.browser_guest_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "BrowserSignin.AndroidForce": {
+    "os": ["android"],
+    "test_policy": { "BrowserSignin": 2 },
+    "pref_mappings": [
+      { "pref": "signin.allowed" },
+      { "pref": "profile.force_browser_signin",
+        "local_state": true
+      }
+    ]
+  },
+
   "MachineLevelUserCloudPolicyEnrollmentToken": {
     "os": ["win", "linux", "mac"],
     "test_policy": {"MachineLevelUserCloudPolicyEnrollmentToken": ""},
@@ -2435,7 +2546,7 @@
   },
 
   "RelaunchNotification": {
-    "os": ["win", "linux", "mac"],
+    "os": ["win", "linux", "mac", "chromeos"],
     "test_policy": { "RelaunchNotification": 1 },
     "pref_mappings": [
       { "pref": "browser.relaunch_notification",
@@ -3118,6 +3229,23 @@
     ]
   },
 
+  "ReportCrostiniUsageEnabled": {
+    "os": ["chromeos"],
+    "can_be_recommended": false,
+    "test_policy": { "ReportCrostiniUsageEnabled": false },
+    "pref_mappings": [
+      { "pref": "crostini.usage_reporting_enabled" }
+    ]
+  },
+
+  "SmsMessagesAllowed": {
+    "os": ["chromeos"],
+    "test_policy": { "SmsMessagesAllowed": false },
+    "pref_mappings": [
+      { "pref": "multidevice.sms_connect_allowed" }
+    ]
+  },
+
   "InstantTetheringAllowed": {
     "os": ["chromeos"],
     "test_policy": { "InstantTetheringAllowed": false },
@@ -3171,6 +3299,44 @@
           { "policy": { "url_keyed_anonymized_data_collection.enabled": false } }
         ]
       }
+    ]
+  },
+
+  "NetworkFileSharesAllowed": {
+    "os": ["chromeos"],
+    "test_policy": { "NetworkFileSharesAllowed": false },
+    "pref_mappings": [
+      { "pref": "network_file_shares.allowed" }
+    ]
+  },
+
+  "WebRtcEventLogCollectionAllowed": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "WebRtcEventLogCollectionAllowed": false },
+    "pref_mappings": [
+      { "pref": "webrtc.event_logs_collection" }
+    ]
+  },
+
+  "PowerSmartDimEnabled": {
+    "os": ["chromeos"],
+    "test_policy": { "PowerSmartDimEnabled": false },
+    "pref_mappings": [
+      { "pref": "power.smart_dim_enabled" }
+    ]
+  },
+
+  "CoalesceH2ConnectionsWithClientCertificatesForHosts": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "CoalesceH2ConnectionsWithClientCertificatesForHosts": ["example.com"] },
+    "pref_mappings": [ { "pref": "ssl.client_certs.h2_coalescing_hosts", "local_state": true } ]
+  },
+
+  "NetBiosShareDiscoveryEnabled": {
+    "os": ["chromeos"],
+    "test_policy": { "NetBiosShareDiscoveryEnabled": true },
+    "pref_mappings": [
+      { "pref": "network_file_shares.netbios_discovery.enabled" }
     ]
   },
 
@@ -3335,6 +3501,9 @@
   },
 
   "DeviceLocalAccountAutoLoginBailoutEnabled": {
+  },
+
+  "DeviceLocalAccountManagedSessionEnabled": {
   },
 
   "DeviceLocalAccountPromptForNetworkWhenOffline": {
@@ -3709,6 +3878,24 @@
     ]
   },
 
+  "CrostiniAllowed": {
+    "os": ["chromeos"],
+    "test_policy": { "CrostiniAllowed": false },
+    "pref_mappings": [
+      { "pref": "crostini.user_allowed_by_policy" }
+    ]
+  },
+
+  "DeviceUnaffiliatedCrostiniAllowed": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "device_unaffiliated_crostini_allowed": false
+    },
+    "pref_mappings": [
+      { "pref": "cros.device.unaffiliated_crostini_allowed"}
+    ]
+  },
+
   "DeviceSamlLoginAuthenticationType": {
   },
 
@@ -3797,9 +3984,12 @@
     "test_policy": {"UpdateTimeRestrictions": [{"start" : {"day_of_week" : "Wednesday", "minutes": 30, "hours": 3}, "end": {"day_of_week" : "Thursday", "minutes": 20, "hours": 13}}, {"start": {"day_of_week": "Monday", "minutes": 45, "hours": 1}, "end": {"day_of_week": "Monday", "minutes": 50, "hours": 15}}]}
   },
 
-  "DeviceUpdateStagingPercentOfFleetPerWeek": {
+  "DeviceUpdateStagingSchedule": {
     "os": ["chromeos"],
     "note": "Chrome OS device policy used by update_engine only, not used in Chrome."
+  },
+
+  "WebAppInstallForceList": {
   },
 
   "----- Chrome Frame policies -------------------------------------------": {},
@@ -3851,5 +4041,37 @@
     "can_be_recommended": false,
     "test_policy": { "SafeSitesFilterBehavior": 0 },
     "note": "pref_mappings cannot be tested here as the code where the pref will be registered is not yet ready."
+  },
+
+  "ReportVersionData": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "ReportVersionData": false },
+    "pref_mappings": [
+      { "pref": "enterprise_reporting.report_version_data" }
+    ]
+  },
+
+  "ReportPolicyData": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "ReportPolicyData": false },
+    "pref_mappings": [
+      { "pref": "enterprise_reporting.report_policy_data" }
+    ]
+  },
+
+  "ReportMachineIDData": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "ReportMachineIDData": false },
+    "pref_mappings": [
+      { "pref": "enterprise_reporting.report_machine_id_data" }
+    ]
+  },
+
+  "ReportUserIDData": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "ReportUserIDData": false },
+    "pref_mappings": [
+      { "pref": "enterprise_reporting.report_user_id_data" }
+    ]
   }
 }

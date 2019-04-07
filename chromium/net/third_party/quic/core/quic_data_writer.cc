@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <limits>
 
+#include "net/third_party/quic/core/crypto/quic_random.h"
 #include "net/third_party/quic/core/quic_utils.h"
 #include "net/third_party/quic/platform/api/quic_bug_tracker.h"
 #include "net/third_party/quic/platform/api/quic_flags.h"
@@ -46,17 +47,6 @@ bool QuicDataWriter::WriteUInt64(uint64_t value) {
     value = QuicEndian::HostToNet64(value);
   }
   return WriteBytes(&value, sizeof(value));
-}
-
-bool QuicDataWriter::WriteUInt8AtOffset(uint8_t value, size_t offset) {
-  if (offset > length_) {
-    return false;
-  }
-  size_t old_length = length_;
-  length_ = offset;
-  bool result = WriteBytes(&value, sizeof(value));
-  length_ = old_length;
-  return result;
 }
 
 bool QuicDataWriter::WriteBytesToUInt64(size_t num_bytes, uint64_t value) {
@@ -189,6 +179,17 @@ bool QuicDataWriter::WriteConnectionId(uint64_t connection_id) {
 
 bool QuicDataWriter::WriteTag(uint32_t tag) {
   return WriteBytes(&tag, sizeof(tag));
+}
+
+bool QuicDataWriter::WriteRandomBytes(QuicRandom* random, size_t length) {
+  char* dest = BeginWrite(length);
+  if (!dest) {
+    return false;
+  }
+
+  random->RandBytes(dest, length);
+  length_ += length;
+  return true;
 }
 
 // Converts a uint64_t into an IETF/Quic formatted Variable Length

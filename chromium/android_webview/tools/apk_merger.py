@@ -37,12 +37,12 @@ BUILD_ANDROID_DIR = os.path.join(SRC_DIR, 'build', 'android')
 BUILD_ANDROID_GYP_DIR = os.path.join(BUILD_ANDROID_DIR, 'gyp')
 sys.path.append(BUILD_ANDROID_GYP_DIR)
 
-import finalize_apk # pylint: disable=import-error
-from util import build_utils # pylint: disable=import-error
+import finalize_apk # pylint: disable=import-error,wrong-import-position
+from util import build_utils # pylint: disable=import-error,wrong-import-position
 
 sys.path.append(BUILD_ANDROID_DIR)
 
-from pylib import constants  # pylint: disable=import-error
+from pylib import constants  # pylint: disable=import-error,wrong-import-position
 
 DEFAULT_ZIPALIGN_PATH = os.path.join(
     SRC_DIR, 'third_party', 'android_tools', 'sdk', 'build-tools',
@@ -87,7 +87,7 @@ def GetDiffFiles(dcmp, base_dir):
     copy_files.extend(
         GetNonDirFiles(os.path.join(dcmp.right, file_name), base_dir))
 
-# we cannot merge APKs with files with similar names but different contents
+  # we cannot merge APKs with files with similar names but different contents
   if len(dcmp.diff_files) > 0:
     raise ApkMergeFailure('found differing files: %s in %s and %s' %
                           (dcmp.diff_files, dcmp.left, dcmp.right))

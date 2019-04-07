@@ -4,7 +4,7 @@
 
 #include "services/network/test/test_network_service_client.h"
 
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 
 namespace network {
 
@@ -102,6 +102,20 @@ void TestNetworkServiceClient::OnFileUploadRequested(
     }
   }
   std::move(callback).Run(net::OK, std::move(files));
+}
+
+void TestNetworkServiceClient::OnLoadingStateUpdate(
+    std::vector<mojom::LoadInfoPtr> infos,
+    OnLoadingStateUpdateCallback callback) {}
+
+void TestNetworkServiceClient::OnClearSiteData(
+    int process_id,
+    int routing_id,
+    const GURL& url,
+    const std::string& header_value,
+    int load_flags,
+    OnClearSiteDataCallback callback) {
+  NOTREACHED();
 }
 
 }  // namespace network

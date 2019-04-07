@@ -23,6 +23,7 @@
 #include "services/data_decoder/public/cpp/testing_json_parser.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "services/network/test/test_network_connection_tracker.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -68,29 +69,19 @@ class OneGoogleBarLoaderImplTest : public testing::Test {
  public:
   OneGoogleBarLoaderImplTest()
       : OneGoogleBarLoaderImplTest(
-            /*api_url_override=*/base::nullopt,
-            /*account_consistency_mirror_required=*/false) {}
-
-  explicit OneGoogleBarLoaderImplTest(
-      const base::Optional<std::string>& api_url_override)
-      : OneGoogleBarLoaderImplTest(
-            api_url_override,
             /*account_consistency_mirror_required=*/false) {}
 
   explicit OneGoogleBarLoaderImplTest(bool account_consistency_mirror_required)
-      : OneGoogleBarLoaderImplTest(/*api_url_override=*/base::nullopt,
-                                   account_consistency_mirror_required) {}
-
-  OneGoogleBarLoaderImplTest(
-      const base::Optional<std::string>& api_url_override,
-      bool account_consistency_mirror_required)
       : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
+        test_network_connection_tracker_(
+            true /* respond_synchronously */,
+            network::mojom::ConnectionType::CONNECTION_UNKNOWN),
         google_url_tracker_(std::make_unique<GoogleURLTrackerClientStub>(),
-                            GoogleURLTracker::ALWAYS_DOT_COM_MODE),
+                            GoogleURLTracker::ALWAYS_DOT_COM_MODE,
+                            &test_network_connection_tracker_),
         test_shared_loader_factory_(
             base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
                 &test_url_loader_factory_)),
-        api_url_override_(api_url_override),
         account_consistency_mirror_required_(
             account_consistency_mirror_required) {}
 
@@ -103,7 +94,7 @@ class OneGoogleBarLoaderImplTest : public testing::Test {
 
     one_google_bar_loader_ = std::make_unique<OneGoogleBarLoaderImpl>(
         test_shared_loader_factory_, &google_url_tracker_, kApplicationLocale,
-        api_url_override_, account_consistency_mirror_required_);
+        account_consistency_mirror_required_);
   }
 
   void SetUpResponseWithData(const std::string& response) {
@@ -140,10 +131,10 @@ class OneGoogleBarLoaderImplTest : public testing::Test {
 
   data_decoder::TestingJsonParser::ScopedFactoryOverride factory_override_;
 
+  network::TestNetworkConnectionTracker test_network_connection_tracker_;
   GoogleURLTracker google_url_tracker_;
   network::TestURLLoaderFactory test_url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
-  base::Optional<std::string> api_url_override_;
   bool account_consistency_mirror_required_;
 
   GURL last_request_url_;
@@ -375,57 +366,4 @@ TEST_F(OneGoogleBarLoaderImplWithMirrorAccountConsistencyTest,
   EXPECT_FALSE(
       last_request_headers().HasHeader(signin::kChromeConnectedHeader));
 #endif
-}
-
-class OneGoogleBarLoaderImplWithRelativeApiUrlOverrideTest
-    : public OneGoogleBarLoaderImplTest {
- public:
-  OneGoogleBarLoaderImplWithRelativeApiUrlOverrideTest()
-      : OneGoogleBarLoaderImplTest(std::string("/testapi?q=a")) {}
-};
-
-TEST_F(OneGoogleBarLoaderImplWithRelativeApiUrlOverrideTest,
-       RequestUrlRespectsOverride) {
-  SetUpResponseWithData(kMinimalValidResponse);
-
-  // Trigger a request.
-  base::MockCallback<OneGoogleBarLoader::OneGoogleCallback> callback;
-  one_google_bar_loader()->Load(callback.Get());
-
-  base::RunLoop loop;
-  EXPECT_CALL(callback, Run(_, _)).WillOnce(Quit(&loop));
-  loop.Run();
-
-  // Make sure the request URL corresponds to the override, but also contains
-  // the "hl=" query param.
-  EXPECT_EQ("/testapi", last_request_url().path());
-  std::string expected_query =
-      base::StringPrintf("q=a&hl=%s&async=fixed:0", kApplicationLocale);
-  EXPECT_EQ(expected_query, last_request_url().query());
-}
-
-class OneGoogleBarLoaderImplWithAbsoluteApiUrlOverrideTest
-    : public OneGoogleBarLoaderImplTest {
- public:
-  OneGoogleBarLoaderImplWithAbsoluteApiUrlOverrideTest()
-      : OneGoogleBarLoaderImplTest(std::string("http://test.com/path?q=a")) {}
-};
-
-TEST_F(OneGoogleBarLoaderImplWithAbsoluteApiUrlOverrideTest,
-       RequestUrlRespectsOverride) {
-  SetUpResponseWithData(kMinimalValidResponse);
-
-  // Trigger a request.
-  base::MockCallback<OneGoogleBarLoader::OneGoogleCallback> callback;
-  one_google_bar_loader()->Load(callback.Get());
-
-  base::RunLoop loop;
-  EXPECT_CALL(callback, Run(_, _)).WillOnce(Quit(&loop));
-  loop.Run();
-
-  // Make sure the request URL corresponds to the override, but also contains
-  // the "hl=" query param.
-  GURL expected_url = GURL(base::StringPrintf(
-      "http://test.com/path?q=a&hl=%s&async=fixed:0", kApplicationLocale));
-  EXPECT_EQ(expected_url, last_request_url());
 }

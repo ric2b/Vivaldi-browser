@@ -18,8 +18,8 @@
 #include "base/sequenced_task_runner.h"
 #include "base/sha1.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/time/time.h"
 #include "base/win/registry.h"
 #include "chrome/browser/conflicts/module_blacklist_cache_util_win.h"
@@ -35,6 +35,9 @@
 #endif
 
 namespace {
+
+using ModuleBlockingDecision =
+    ModuleBlacklistCacheUpdater::ModuleBlockingDecision;
 
 // The maximum number of modules allowed in the cache. This keeps the cache
 // from growing indefinitely.
@@ -123,28 +126,51 @@ ModuleBlacklistCacheUpdater::CacheUpdateResult UpdateModuleBlacklistCache(
   return result;
 }
 
-// Inserts a module into |modules|. Also does the type conversion.
-void InsertPackedListModule(
-    ModuleInfoKey module_key,
-    std::vector<third_party_dlls::PackedListModule>* modules) {
-  DCHECK(modules);
-
-  // Do the insertion.
-  modules->emplace_back();
-  third_party_dlls::PackedListModule& module = modules->back();
-
+// Populates a third_party_dlls::PackedListModule entry from a ModuleInfoKey.
+void PopulatePackedListModule(
+    const ModuleInfoKey& module_key,
+    third_party_dlls::PackedListModule* packed_list_module) {
   // Hash the basename.
   const std::string module_basename = base::UTF16ToUTF8(
       base::i18n::ToLower(module_key.module_path.BaseName().value()));
   base::SHA1HashBytes(reinterpret_cast<const uint8_t*>(module_basename.data()),
-                      module_basename.length(), module.basename_hash);
+                      module_basename.length(),
+                      packed_list_module->basename_hash);
 
   // Hash the code id.
   const std::string module_code_id = GenerateCodeId(module_key);
   base::SHA1HashBytes(reinterpret_cast<const uint8_t*>(module_code_id.data()),
-                      module_code_id.length(), module.code_id_hash);
+                      module_code_id.length(),
+                      packed_list_module->code_id_hash);
 
-  module.time_date_stamp = CalculateTimeDateStamp(base::Time::Now());
+  packed_list_module->time_date_stamp =
+      CalculateTimeDateStamp(base::Time::Now());
+}
+
+// Returns true if a ModuleBlockingDecision means that the module should be
+// added to the blacklist cache.
+bool ShouldInsertInBlacklistCache(ModuleBlockingDecision blocking_decision) {
+  switch (blocking_decision) {
+    case ModuleBlockingDecision::kUnknown:
+      break;
+
+    // All of these are reasons that allow the module to be loaded.
+    case ModuleBlockingDecision::kAllowedIME:
+    case ModuleBlockingDecision::kAllowedSameCertificate:
+    case ModuleBlockingDecision::kAllowedSameDirectory:
+    case ModuleBlockingDecision::kAllowedMicrosoft:
+    case ModuleBlockingDecision::kAllowedWhitelisted:
+    case ModuleBlockingDecision::kTolerated:
+      return false;
+
+    // The following are reasons for the module to be blocked.
+    case ModuleBlockingDecision::kDisallowedExplicit:
+    case ModuleBlockingDecision::kDisallowedImplicit:
+      return true;
+  }
+
+  NOTREACHED() << static_cast<int>(blocking_decision);
+  return false;
 }
 
 }  // namespace
@@ -156,13 +182,16 @@ ModuleBlacklistCacheUpdater::ModuleBlacklistCacheUpdater(
     ModuleDatabaseEventSource* module_database_event_source,
     const CertificateInfo& exe_certificate_info,
     scoped_refptr<ModuleListFilter> module_list_filter,
+    const std::vector<third_party_dlls::PackedListModule>&
+        initial_blacklisted_modules,
     OnCacheUpdatedCallback on_cache_updated_callback)
     : module_database_event_source_(module_database_event_source),
       exe_certificate_info_(exe_certificate_info),
       module_list_filter_(std::move(module_list_filter)),
+      initial_blacklisted_modules_(initial_blacklisted_modules),
       on_cache_updated_callback_(std::move(on_cache_updated_callback)),
       background_sequence_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})),
       weak_ptr_factory_(this) {
   DCHECK(module_list_filter_);
@@ -205,101 +234,55 @@ void ModuleBlacklistCacheUpdater::OnNewModuleFound(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // The module id is always positive.
-  if (module_key.module_id + 1 > module_blocking_decisions_.size())
-    module_blocking_decisions_.resize(module_key.module_id + 1);
+  if (module_key.module_id + 1 > module_blocking_state_.size())
+    module_blocking_state_.resize(module_key.module_id + 1);
 
-  if (module_data.module_properties & ModuleInfoData::kPropertyBlocked) {
-    InsertPackedListModule(module_key, &blocked_modules_);
+  // Create a "packed list module" entry for this module.
+  third_party_dlls::PackedListModule packed_list_module;
+  PopulatePackedListModule(module_key, &packed_list_module);
 
-    module_blocking_decisions_[module_key.module_id] =
-        ModuleBlockingDecision::kBlocked;
-    return;
-  }
+  // Determine if the module was in the initial blacklist cache.
+  auto& blocking_state = module_blocking_state_[module_key.module_id];
+  blocking_state.was_in_blacklist_cache =
+      std::binary_search(std::begin(initial_blacklisted_modules_),
+                         std::end(initial_blacklisted_modules_),
+                         packed_list_module, internal::ModuleLess());
 
-  // Only consider loaded modules.
-  if ((module_data.module_properties & ModuleInfoData::kPropertyLoadedModule) ==
-      0) {
-    module_blocking_decisions_[module_key.module_id] =
-        ModuleBlockingDecision::kNotLoaded;
-    return;
-  }
+  // Make note of the fact that the module was blocked. It could be that the
+  // module subsequently ends up being loaded, but an earlier load attempt was
+  // blocked (ie, the injector actively worked around the blocking logic). This
+  // is a one way switch so that it doesn't get reset if the module is analyzed
+  // a second time.
+  if (module_data.module_properties & ModuleInfoData::kPropertyBlocked)
+    blocking_state.was_blocked = true;
 
-  // First check if this module is a part of Chrome.
+  // Make note of the fact that the module was loaded. This is a one-way toggle
+  // for the same reasons as above.
+  if (module_data.module_properties & ModuleInfoData::kPropertyLoadedModule)
+    blocking_state.was_loaded = true;
 
-  // Explicitly whitelist modules whose signing cert's Subject field matches the
-  // one in the current executable. No attempt is made to check the validity of
-  // module signatures or of signing certs.
-  if (exe_certificate_info_.type != CertificateType::NO_CERTIFICATE &&
-      exe_certificate_info_.subject ==
-          module_data.inspection_result->certificate_info.subject) {
-    module_blocking_decisions_[module_key.module_id] =
-        ModuleBlockingDecision::kAllowedSameCertificate;
-    return;
-  }
+  // Determine the current blocking decision. This can change at runtime as the
+  // module list component changes so re-run this analysis every time through.
+  blocking_state.blocking_decision =
+      DetermineModuleBlockingDecision(module_key, module_data);
 
-// For developer builds only, whitelist modules in the same directory as the
-// executable.
-#if !defined(OFFICIAL_BUILD)
-  base::FilePath exe_path;
-  if (base::PathService::Get(base::DIR_EXE, &exe_path) &&
-      exe_path.DirName().IsParent(module_key.module_path)) {
-    module_blocking_decisions_[module_key.module_id] =
-        ModuleBlockingDecision::kAllowedSameDirectory;
-    return;
-  }
-#endif
+  if (blocking_state.was_blocked)
+    blocked_modules_.push_back(packed_list_module);
 
-  // Second, check if the module is seemingly signed by Microsoft. Again, no
-  // attempt is made to check the validity of the certificate.
-  if (IsMicrosoftModule(
-          module_data.inspection_result->certificate_info.subject)) {
-    module_blocking_decisions_[module_key.module_id] =
-        ModuleBlockingDecision::kAllowedMicrosoft;
-    return;
-  }
+  if (ShouldInsertInBlacklistCache(blocking_state.blocking_decision)) {
+    newly_blacklisted_modules_.push_back(packed_list_module);
 
-  // Skip modules whitelisted by the Module List component.
-  if (module_list_filter_->IsWhitelisted(module_key, module_data)) {
-    module_blocking_decisions_[module_key.module_id] =
-        ModuleBlockingDecision::kAllowedWhitelisted;
-    return;
-  }
-
-  // It is preferable to mark a whitelisted IME as allowed because it is
-  // whitelisted, not because it's a shell extension. Thus, check for the module
-  // type after. Note that shell extensions are blocked.
-  if (module_data.module_properties & ModuleInfoData::kPropertyIme) {
-    module_blocking_decisions_[module_key.module_id] =
-        ModuleBlockingDecision::kAllowedIME;
-    return;
-  }
-
-  // Some blacklisted modules are allowed to load.
-  std::unique_ptr<chrome::conflicts::BlacklistAction> blacklist_action =
-      module_list_filter_->IsBlacklisted(module_key, module_data);
-  if (blacklist_action && blacklist_action->allow_load()) {
-    module_blocking_decisions_[module_key.module_id] =
-        ModuleBlockingDecision::kTolerated;
-    return;
-  }
-
-  // Now it has been determined that the module should be blocked.
-  module_blocking_decisions_[module_key.module_id] =
-      ModuleBlockingDecision::kBlacklisted;
-
-  // Insert the blacklisted module.
-  InsertPackedListModule(module_key, &newly_blacklisted_modules_);
-
-  // Signal the module database that this module will be added to the cache.
-  // Note that observers that care about this information should register to
-  // the Module Database's observer interface after the ModuleBlacklistCache
-  // instance.
-  // The Module Database can be null during tests.
-  auto* module_database = ModuleDatabase::GetInstance();
-  if (module_database) {
-    module_database->OnModuleAddedToBlacklist(
-        module_key.module_path, module_key.module_size,
-        module_key.module_time_date_stamp);
+    // Signal the module database that this module will be added to the cache.
+    // Note that observers that care about this information should register to
+    // the Module Database's observer interface after the ModuleBlacklistCache
+    // instance.
+    // The Module Database can be null during tests.
+    auto* module_database = ModuleDatabase::GetInstance();
+    if (module_database) {
+      module_database->OnModuleAddedToBlacklist(
+          module_key.module_path, module_key.module_size,
+          module_key.module_time_date_stamp);
+    }
   }
 }
 
@@ -316,19 +299,99 @@ void ModuleBlacklistCacheUpdater::OnModuleDatabaseIdle() {
   StartModuleBlacklistCacheUpdate();
 }
 
-ModuleBlacklistCacheUpdater::ModuleBlockingDecision
-ModuleBlacklistCacheUpdater::GetModuleBlockingDecision(
+const ModuleBlacklistCacheUpdater::ModuleBlockingState&
+ModuleBlacklistCacheUpdater::GetModuleBlockingState(
     ModuleInfoKey module_key) const {
-  DCHECK(module_blocking_decisions_.size() > module_key.module_id);
-  DCHECK_NE(module_blocking_decisions_[module_key.module_id],
+  DCHECK_GT(module_blocking_state_.size(),
+            static_cast<size_t>(module_key.module_id));
+  DCHECK_NE(module_blocking_state_[module_key.module_id].blocking_decision,
             ModuleBlockingDecision::kUnknown);
-  return module_blocking_decisions_[module_key.module_id];
+  return module_blocking_state_[module_key.module_id];
 }
 
 void ModuleBlacklistCacheUpdater::OnTimerExpired() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   StartModuleBlacklistCacheUpdate();
+}
+
+ModuleBlacklistCacheUpdater::ModuleListState
+ModuleBlacklistCacheUpdater::DetermineModuleListState(
+    const ModuleInfoKey& module_key,
+    const ModuleInfoData& module_data) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (module_list_filter_->IsWhitelisted(module_key, module_data))
+    return ModuleListState::kWhitelisted;
+  std::unique_ptr<chrome::conflicts::BlacklistAction> blacklist_action =
+      module_list_filter_->IsBlacklisted(module_key, module_data);
+  if (!blacklist_action)
+    return ModuleListState::kUnlisted;
+  return blacklist_action->allow_load() ? ModuleListState::kTolerated
+                                        : ModuleListState::kBlacklisted;
+}
+
+ModuleBlacklistCacheUpdater::ModuleBlockingDecision
+ModuleBlacklistCacheUpdater::DetermineModuleBlockingDecision(
+    const ModuleInfoKey& module_key,
+    const ModuleInfoData& module_data) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // First check if this module is a part of Chrome's installation. This can
+  // override explicit directions in the module list. This prevents us from
+  // shooting ourselves in the foot by accidentally issuing a blacklisting
+  // rule that blocks one of our own modules.
+
+  // Explicitly whitelist modules whose signing cert's Subject field matches the
+  // one in the current executable. No attempt is made to check the validity of
+  // module signatures or of signing certs.
+  if (exe_certificate_info_.type != CertificateType::NO_CERTIFICATE &&
+      exe_certificate_info_.subject ==
+          module_data.inspection_result->certificate_info.subject) {
+    return ModuleBlockingDecision::kAllowedSameCertificate;
+  }
+
+#if !defined(OFFICIAL_BUILD)
+  // For developer builds only, whitelist modules in the same directory as the
+  // executable.
+  base::FilePath exe_path;
+  if (base::PathService::Get(base::DIR_EXE, &exe_path) &&
+      exe_path.DirName().IsParent(module_key.module_path)) {
+    return ModuleBlockingDecision::kAllowedSameDirectory;
+  }
+#endif
+
+  // Get the state of the module with respect to the module list component. If
+  // there are explicit directions in the list then respect those.
+  switch (DetermineModuleListState(module_key, module_data)) {
+    case ModuleListState::kUnlisted:
+      break;
+    case ModuleListState::kWhitelisted:
+      return ModuleBlockingDecision::kAllowedWhitelisted;
+    case ModuleListState::kTolerated:
+      return ModuleBlockingDecision::kTolerated;
+    case ModuleListState::kBlacklisted:
+      return ModuleBlockingDecision::kDisallowedExplicit;
+  }
+
+  // If the module isn't explicitly listed in the module list then it is either
+  // implicitly whitelisted or implicitly blacklisted by other policy.
+
+  // Check if the module is seemingly signed by Microsoft. Again, no attempt is
+  // made to check the validity of the certificate.
+  if (IsMicrosoftModule(
+          module_data.inspection_result->certificate_info.subject)) {
+    return ModuleBlockingDecision::kAllowedMicrosoft;
+  }
+
+  // It is preferable to mark a whitelisted IME as allowed because it is
+  // whitelisted, not because it's a shell extension. Thus, check for the module
+  // type after. Note that shell extensions are blocked.
+  if (module_data.module_properties & ModuleInfoData::kPropertyIme)
+    return ModuleBlockingDecision::kAllowedIME;
+
+  // Getting here means that the module is implicitly blacklisted.
+  return ModuleBlockingDecision::kDisallowedImplicit;
 }
 
 void ModuleBlacklistCacheUpdater::StartModuleBlacklistCacheUpdate() {

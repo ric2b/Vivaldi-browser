@@ -15,11 +15,11 @@
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/prefs/pref_service.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+#include "services/identity/public/cpp/access_token_fetcher.h"
 #include "services/identity/public/cpp/access_token_info.h"
 
 namespace identity {
 class IdentityManager;
-class PrimaryAccountAccessTokenFetcher;
 }  // namespace identity
 
 namespace network {
@@ -30,34 +30,28 @@ class SharedURLLoaderFactory;
 
 namespace autofill {
 
+class AccountInfoGetter;
+class MigratableCreditCard;
+
 namespace payments {
 
+// Callback type for MigrateCards callback. |result| is the Payments Rpc result.
+// |save_result| is an unordered_map parsed from the response whose key is the
+// unique id (guid) for each card and value is the server save result string.
+// |display_text| is the returned tip from Payments to show on the UI.
+typedef base::OnceCallback<void(
+    AutofillClient::PaymentsRpcResult result,
+    std::unique_ptr<std::unordered_map<std::string, std::string>> save_result,
+    const std::string& display_text)>
+    MigrateCardsCallback;
+
+// Billable service number is defined in Payments server to distinguish
+// different requests.
+const int kUnmaskCardBillableServiceNumber = 70154;
+const int kUploadCardBillableServiceNumber = 70073;
+const int kMigrateCardsBillableServiceNumber = 70264;
+
 class PaymentsRequest;
-
-class PaymentsClientUnmaskDelegate {
- public:
-  // Returns the real PAN retrieved from Payments. |real_pan| will be empty
-  // on failure.
-  virtual void OnDidGetRealPan(AutofillClient::PaymentsRpcResult result,
-                               const std::string& real_pan) = 0;
-};
-
-class PaymentsClientSaveDelegate {
- public:
-  // Returns the legal message retrieved from Payments. On failure or not
-  // meeting Payments's conditions for upload, |legal_message| will contain
-  // nullptr.
-  virtual void OnDidGetUploadDetails(
-      AutofillClient::PaymentsRpcResult result,
-      const base::string16& context_token,
-      std::unique_ptr<base::DictionaryValue> legal_message) = 0;
-
-  // Returns the result of an upload request.
-  // If |result| == |AutofillClient::SUCCESS|, |server_id| may, optionally,
-  // contain the opaque identifier for the card on the server.
-  virtual void OnDidUploadCard(AutofillClient::PaymentsRpcResult result,
-                               const std::string& server_id) = 0;
-};
 
 // PaymentsClient issues Payments RPCs and manages responses and failure
 // conditions. Only one request may be active at a time. Initiating a new
@@ -93,6 +87,7 @@ class PaymentsClient {
     ~UploadRequestDetails();
 
     int64_t billing_customer_number = 0;
+    int detected_values;
     CreditCard card;
     base::string16 cvc;
     std::vector<AutofillProfile> profiles;
@@ -102,17 +97,29 @@ class PaymentsClient {
     std::vector<const char*> active_experiments;
   };
 
+  // A collection of the information required to make local credit cards
+  // migration request.
+  struct MigrationRequestDetails {
+    MigrationRequestDetails();
+    MigrationRequestDetails(const MigrationRequestDetails& other);
+    ~MigrationRequestDetails();
+
+    int64_t billing_customer_number = 0;
+    base::string16 context_token;
+    std::string risk_data;
+    std::string app_locale;
+  };
+
   // |url_loader_factory| is reference counted so it has no lifetime or
   // ownership requirements. |pref_service| is used to get the registered
-  // preference value, |identity_manager|, |unmask_delegate| and |save_delegate|
+  // preference value, |identity_manager| and |account_info_getter|
   // must all outlive |this|. Either delegate might be nullptr.
   // |is_off_the_record| denotes incognito mode.
   PaymentsClient(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      PrefService* pref_service,
-      identity::IdentityManager* identity_manager,
-      PaymentsClientUnmaskDelegate* unmask_delegate,
-      PaymentsClientSaveDelegate* save_delegate,
+      PrefService* const pref_service,
+      identity::IdentityManager* const identity_manager,
+      AccountInfoGetter* const account_info_getter,
       bool is_off_the_record = false);
 
   virtual ~PaymentsClient();
@@ -124,15 +131,12 @@ class PaymentsClient {
   // accepted an upload prompt.
   void Prepare();
 
-  // Sets up the |save_delegate_|. Necessary because CreditCardSaveManager
-  // requires PaymentsClient during initialization, so PaymentsClient can't
-  // start with save_delegate_ initialized.
-  virtual void SetSaveDelegate(PaymentsClientSaveDelegate* save_delegate);
-
   PrefService* GetPrefService() const;
 
   // The user has attempted to unmask a card with the given cvc.
-  void UnmaskCard(const UnmaskRequestDetails& request_details);
+  void UnmaskCard(const UnmaskRequestDetails& request_details,
+                  base::OnceCallback<void(AutofillClient::PaymentsRpcResult,
+                                          const std::string&)> callback);
 
   // Determine if the user meets the Payments service's conditions for upload.
   // The service uses |addresses| (from which names and phone numbers are
@@ -141,20 +145,38 @@ class PaymentsClient {
   // being considered for upload. |detected_values| is a bitmask of
   // CreditCardSaveManager::DetectedValue values that relays what data is
   // actually available for upload in order to make more informed upload
-  // decisions. If the conditions are met, the legal message will be returned
-  // via OnDidGetUploadDetails. |active_experiments| is used by Payments server
-  // to track requests that were triggered by enabled features.
+  // decisions. |callback| is the callback function when get response from
+  // server. |billable_service_number| is used to set the billable service
+  // number in the GetUploadDetails request. If the conditions are met, the
+  // legal message will be returned via |callback|. |active_experiments| is used
+  // by Payments server to track requests that were triggered by enabled
+  // features.
   virtual void GetUploadDetails(
       const std::vector<AutofillProfile>& addresses,
       const int detected_values,
       const std::string& pan_first_six,
       const std::vector<const char*>& active_experiments,
-      const std::string& app_locale);
+      const std::string& app_locale,
+      base::OnceCallback<void(AutofillClient::PaymentsRpcResult,
+                              const base::string16&,
+                              std::unique_ptr<base::DictionaryValue>)> callback,
+      const int billable_service_number);
 
   // The user has indicated that they would like to upload a card with the given
   // cvc. This request will fail server-side if a successful call to
   // GetUploadDetails has not already been made.
-  virtual void UploadCard(const UploadRequestDetails& details);
+  virtual void UploadCard(
+      const UploadRequestDetails& details,
+      base::OnceCallback<void(AutofillClient::PaymentsRpcResult,
+                              const std::string&)> callback);
+
+  // The user has indicated that they would like to migrate their local credit
+  // cards. This request will fail server-side if a successful call to
+  // GetUploadDetails has not already been made.
+  virtual void MigrateCards(
+      const MigrationRequestDetails& details,
+      const std::vector<MigratableCreditCard>& migratable_credit_cards,
+      MigrateCardsCallback callback);
 
   // Cancels and clears the current |request_|.
   void CancelRequest();
@@ -202,12 +224,11 @@ class PaymentsClient {
   // The pref service for this client.
   PrefService* const pref_service_;
 
+  // Provided in constructor; not owned by PaymentsClient.
   identity::IdentityManager* const identity_manager_;
 
-  // Delegates for the results of the various requests to Payments. Both must
-  // outlive |this|.
-  PaymentsClientUnmaskDelegate* const unmask_delegate_;
-  PaymentsClientSaveDelegate* save_delegate_;
+  // Provided in constructor; not owned by PaymentsClient.
+  AccountInfoGetter* const account_info_getter_;
 
   // The current request.
   std::unique_ptr<PaymentsRequest> request_;
@@ -218,8 +239,8 @@ class PaymentsClient {
   // The URL loader being used to issue the current request.
   std::unique_ptr<network::SimpleURLLoader> simple_url_loader_;
 
-  // The current OAuth2 token fetcher.
-  std::unique_ptr<identity::PrimaryAccountAccessTokenFetcher> token_fetcher_;
+  // The OAuth2 token fetcher for any account.
+  std::unique_ptr<identity::AccessTokenFetcher> token_fetcher_;
 
   // The OAuth2 token, or empty if not fetched.
   std::string access_token_;

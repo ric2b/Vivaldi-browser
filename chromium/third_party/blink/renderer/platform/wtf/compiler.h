@@ -57,8 +57,16 @@
 #if defined(__clang__)
 #define NO_SANITIZE_UNRELATED_CAST \
   __attribute__((no_sanitize("cfi-unrelated-cast", "vptr")))
+#define NO_SANITIZE_CFI_ICALL __attribute__((no_sanitize("cfi-icall")))
 #else
 #define NO_SANITIZE_UNRELATED_CAST
+#define NO_SANITIZE_CFI_ICALL
+#endif
+
+#if defined(COMPILER_MSVC)
+#define WTF_NOINLINE __declspec(noinline)
+#else
+#define WTF_NOINLINE __attribute__((noinline))
 #endif
 
 #endif /* WTF_Compiler_h */

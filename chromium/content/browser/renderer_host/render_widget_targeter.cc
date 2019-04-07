@@ -14,6 +14,7 @@
 #include "ui/events/blink/blink_event_util.h"
 
 #include "app/vivaldi_apptools.h"
+#include "browser/renderer_host/vivaldi_input_router_helper.h"
 
 namespace content {
 
@@ -120,41 +121,11 @@ RenderWidgetTargeter::RenderWidgetTargeter(Delegate* delegate)
 
 RenderWidgetTargeter::~RenderWidgetTargeter() = default;
 
-void RenderWidgetTargeter::SendEventToRootView(
-    RenderWidgetHostViewBase* root_view,
-    RenderWidgetHostViewBase* target,
-    const blink::WebInputEvent& event,
-    const ui::LatencyInfo& latency) {
-  if (vivaldi::IsVivaldiRunning() && target != root_view &&
-    // Switch Tabs by Scrolling & Use Ctrl+Scroll to Zoom Page
-    // We can not test for mouse wheel here and send the event to the root view
-    // here as that breaks page scrolling on mac when using swipe gestures on
-    // the trackpad. The event needs to go the the correct view so that a page,
-    // or a scrollable element inside a page, can be correctly scrolled. Sending
-    // it to the root view means history navigtion can occur when regular
-    // scrolling should take place.
-    /*event.GetType() == blink::WebInputEvent::kMouseWheel ||*/
-      // Mouse Gestures
-      (event.GetType() == blink::WebInputEvent::kMouseUp ||
-      (event.GetType() == blink::WebInputEvent::kMouseDown &&
-        event.GetModifiers() & blink::WebInputEvent::kRightButtonDown) ||
-      (event.GetType() == blink::WebInputEvent::kMouseMove &&
-        (event.GetModifiers() & blink::WebInputEvent::kAltKey ||
-        event.GetModifiers() & blink::WebInputEvent::kRightButtonDown)))) {
-    // NOTE(tomas@vivaldi.com): Send the event to the root view, so that mouse
-    // gestures can work. See VB-41799, VB-41071, VB-42761
-    auto* event_router = root_view->host()->delegate()->GetInputEventRouter();
-    event_router->SetSkipCursorUpdateOnMouseEvent(true);
-    delegate_->DispatchEventToTarget(root_view, root_view, event, latency,
-                                ComputeEventLocation(event));
-    event_router->SetSkipCursorUpdateOnMouseEvent(false);
-  }
-}
-
 void RenderWidgetTargeter::FindTargetAndDispatch(
     RenderWidgetHostViewBase* root_view,
     const blink::WebInputEvent& event,
-    const ui::LatencyInfo& latency) {
+    const ui::LatencyInfo& latency,
+    bool queue_flushing) {
   DCHECK(blink::WebInputEvent::IsMouseEventType(event.GetType()) ||
          event.GetType() == blink::WebInputEvent::kMouseWheel ||
          blink::WebInputEvent::IsTouchEventType(event.GetType()) ||
@@ -164,19 +135,20 @@ void RenderWidgetTargeter::FindTargetAndDispatch(
            static_cast<const blink::WebGestureEvent&>(event).SourceDevice() ==
                blink::WebGestureDevice::kWebGestureDeviceTouchpad)));
 
-  RenderWidgetTargetResult result =
-      delegate_->FindTargetSynchronously(root_view, event);
-
-  RenderWidgetHostViewBase* target = result.view;
-
   if (request_in_flight_) {
+    DCHECK(!queue_flushing);
+    if (vivaldi::IsVivaldiRunning()) {
+      // NOTE(bjorgvin@vivaldi.com): VB-41799 Page is loading.
+      // NOTE(igor@vivaldi.com): forward event immediately without any waiting.
+      RenderWidgetTargetResult result =
+          delegate_->FindTargetSynchronously(root_view, event);
+      VivaldiInputRouterHelper::SendEventCopyToUI(root_view, result.view, event,
+                                                  latency);
+    }
     if (!requests_.empty()) {
       auto& request = requests_.back();
-      if (MergeEventIfPossible(event, &request.event)) {
-        // NOTE(bjorgvin@vivaldi.com): VB-41799 Page is loading.
-        SendEventToRootView(root_view, target, event, latency);
+      if (MergeEventIfPossible(event, &request.event))
         return;
-      }
     }
     TargetingRequest request;
     request.root_view = root_view->GetWeakPtr();
@@ -188,14 +160,21 @@ void RenderWidgetTargeter::FindTargetAndDispatch(
     return;
   }
 
-  SendEventToRootView(root_view, target, event, latency);
+  RenderWidgetTargetResult result =
+      delegate_->FindTargetSynchronously(root_view, event);
 
+  RenderWidgetHostViewBase* target = result.view;
+  // NOTE(igor@vivaldi.com): When !queue_flushing we are called from
+  // FlushEventQueue the second time for the same event after we already
+  // forwarded the event in the code above before it was added to the requests_
+  // queue.
+  if (vivaldi::IsVivaldiRunning() && !queue_flushing) {
+    VivaldiInputRouterHelper::SendEventCopyToUI(root_view, target, event,
+                                                latency);
+  }
   auto* event_ptr = &event;
   async_depth_ = 0;
-  // TODO(kenrb, wjmaclean): Asynchronous hit tests don't work properly with
-  // GuestViews, so rely on the synchronous result.
-  // See https://crbug.com/802378.
-  if (result.should_query_view && !target->IsRenderWidgetHostViewGuest()) {
+  if (result.should_query_view) {
     // TODO(kenrb, sadrul): When all event types support asynchronous hit
     // testing, we should be able to have FindTargetSynchronously return the
     // view and location to use for the renderer hit test query.
@@ -212,10 +191,6 @@ void RenderWidgetTargeter::FindTargetAndDispatch(
 
 void RenderWidgetTargeter::ViewWillBeDestroyed(RenderWidgetHostViewBase* view) {
   unresponsive_views_.erase(view);
-  if (vivaldi::IsVivaldiRunning() && vivaldi_active_down_target_ == view) {
-    vivaldi_active_down_target_ = nullptr;
-  }
-
   if (vivaldi::IsVivaldiRunning() && vivaldi_active_requested_view_ == view) {
     // NOTE(espen@vivaldi.com) The view we are in the progress of querying is
     // about to be destroyed. This can happen for guest views when we navigate
@@ -273,6 +248,7 @@ void RenderWidgetTargeter::QueryClient(
 }
 
 void RenderWidgetTargeter::FlushEventQueue() {
+  bool events_being_flushed = false;
   while (!request_in_flight_ && !requests_.empty()) {
     auto request = std::move(requests_.front());
     requests_.pop();
@@ -282,9 +258,16 @@ void RenderWidgetTargeter::FlushEventQueue() {
       continue;
     }
     request.tracker->Stop();
+    // Only notify the delegate once that the current event queue is being
+    // flushed. Once all the events are flushed, notify the delegate again.
+    if (!events_being_flushed) {
+      delegate_->SetEventsBeingFlushed(true);
+      events_being_flushed = true;
+    }
     FindTargetAndDispatch(request.root_view.get(), *request.event,
-                          request.latency);
+                          request.latency, true);
   }
+  delegate_->SetEventsBeingFlushed(false);
 }
 
 void RenderWidgetTargeter::FoundFrameSinkId(
@@ -295,7 +278,8 @@ void RenderWidgetTargeter::FoundFrameSinkId(
     uint32_t request_id,
     const gfx::PointF& target_location,
     TracingUmaTracker tracker,
-    const viz::FrameSinkId& frame_sink_id) {
+    const viz::FrameSinkId& frame_sink_id,
+    const gfx::PointF& transformed_location) {
   tracker.Stop();
   if (request_id != last_request_id_ || !request_in_flight_) {
     // This is a response to a request that already timed out, so the event
@@ -321,10 +305,8 @@ void RenderWidgetTargeter::FoundFrameSinkId(
       unresponsive_views_.find(view) != unresponsive_views_.end()) {
     FoundTarget(root_view.get(), view, *event, latency, target_location, false);
   } else {
-    gfx::PointF location = target_location;
-    target->TransformPointToCoordSpaceForView(location, view, &location);
-    QueryClient(root_view.get(), view, *event, latency, location, target.get(),
-                target_location);
+    QueryClient(root_view.get(), view, *event, latency, transformed_location,
+                target.get(), target_location);
   }
 }
 
@@ -340,7 +322,6 @@ void RenderWidgetTargeter::FoundTarget(
     UMA_HISTOGRAM_COUNTS_100("Event.AsyncTargeting.AsyncClientDepth",
                              async_depth_);
   }
-
   // RenderWidgetHostViewMac can be deleted asynchronously, in which case the
   // View will be valid but there will no longer be a RenderWidgetHostImpl.
   if (!root_view || !root_view->GetRenderWidgetHost())
@@ -348,26 +329,6 @@ void RenderWidgetTargeter::FoundTarget(
 
   delegate_->DispatchEventToTarget(root_view, target, event, latency,
                                    target_location);
-
-  if (vivaldi::IsVivaldiRunning()) {
-    // NOTE(espen@vivaldi.com): Work around a problem with multi document setups
-    // like Vivaldi is. When seleting text with a mouse in edit fields we must
-    // make sure the final up event gets sent to the same document to reset it
-    // a proper state. See VB-42829. Regular Chrome does not have this problem
-    // as there is only one document in action.
-    if (event.GetType() == blink::WebInputEvent::kMouseDown &&
-        (event.GetModifiers() & blink::WebInputEvent::kLeftButtonDown)) {
-      vivaldi_active_down_target_ = target;
-    } else if (event.GetType() == blink::WebInputEvent::kMouseUp &&
-               vivaldi_active_down_target_) {
-      if (vivaldi_active_down_target_ != target) {
-        delegate_->DispatchEventToTarget(root_view, vivaldi_active_down_target_,
-                                         event, latency, target_location);
-      }
-      vivaldi_active_down_target_ = nullptr;
-    }
-  }
-
   FlushEventQueue();
 }
 

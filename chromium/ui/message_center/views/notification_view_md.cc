@@ -82,7 +82,7 @@ const float kActionButtonInkDropRippleVisibleOpacity = 0.08f;
 // Highlight (hover) ink drop opacity of action buttons.
 const float kActionButtonInkDropHighlightVisibleOpacity = 0.08f;
 // Text color of action button.
-constexpr SkColor kActionButtonTextColor = gfx::kGoogleBlue700;
+constexpr SkColor kActionButtonTextColor = gfx::kGoogleBlue600;
 // Background color of the large image.
 constexpr SkColor kLargeImageBackgroundColor = SkColorSetRGB(0xf5, 0xf5, 0xf5);
 
@@ -430,7 +430,7 @@ NotificationInputContainerMD::CreateInkDropRipple() const {
 }
 
 SkColor NotificationInputContainerMD::GetInkDropBaseColor() const {
-  return gfx::kGoogleBlue700;
+  return gfx::kGoogleBlue600;
 }
 
 bool NotificationInputContainerMD::HandleKeyEvent(views::Textfield* sender,
@@ -467,7 +467,7 @@ void NotificationInputContainerMD::ButtonPressed(views::Button* sender,
 class InlineSettingsRadioButton : public views::RadioButton {
  public:
   InlineSettingsRadioButton(const base::string16& label_text)
-      : views::RadioButton(label_text, 1 /* group */, true /* force_md */) {
+      : views::RadioButton(label_text, 1 /* group */) {
     label()->SetFontList(GetTextFontList());
     label()->SetEnabledColor(kRegularTextColorMD);
     label()->SetSubpixelRenderingEnabled(false);
@@ -1259,6 +1259,11 @@ void NotificationViewMD::SetManuallyExpandedOrCollapsed(bool value) {
 }
 
 void NotificationViewMD::OnSettingsButtonPressed(const ui::Event& event) {
+  // TODO(yamaguchi): remove this line and call CloseSwipeControl() from parent
+  // view of this view. The parent view should activate the swipe control of
+  // the slider attached to this view.
+  CloseSwipeControl();
+
   if (settings_row_)
     ToggleInlineSettings(event);
   else

@@ -27,9 +27,9 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/version.h"
 #include "base/win/com_init_util.h"
 #include "base/win/scoped_bstr.h"
@@ -168,7 +168,7 @@ void AntiVirusMetricsProvider::AsyncInit(const base::Closure& done_callback) {
   // these requirements.
   base::PostTaskAndReplyWithResult(
       base::CreateCOMSTATaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
           .get(),
       FROM_HERE,
@@ -241,7 +241,7 @@ AntiVirusMetricsProvider::ResultCode
 AntiVirusMetricsProvider::FillAntiVirusProductsFromWSC(
     std::vector<AvProduct>* products) {
   std::vector<AvProduct> result_list;
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
 
   Microsoft::WRL::ComPtr<IWSCProductList> product_list;
   HRESULT result =
@@ -339,7 +339,7 @@ AntiVirusMetricsProvider::ResultCode
 AntiVirusMetricsProvider::FillAntiVirusProductsFromWMI(
     std::vector<AvProduct>* products) {
   std::vector<AvProduct> result_list;
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
 
   Microsoft::WRL::ComPtr<IWbemLocator> wmi_locator;
   HRESULT hr =
@@ -473,7 +473,7 @@ AntiVirusMetricsProvider::FillAntiVirusProductsFromWMI(
 
 void AntiVirusMetricsProvider::MaybeAddUnregisteredAntiVirusProducts(
     std::vector<AvProduct>* products) {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
 
   // Trusteer Rapport does not register with WMI or Security Center so do some
   // "best efforts" detection here.

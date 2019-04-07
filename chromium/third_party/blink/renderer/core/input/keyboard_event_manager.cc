@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
@@ -221,7 +222,7 @@ WebInputEventResult KeyboardEventManager::KeyEvent(
         initial_key_event, frame_->GetDocument()->domWindow());
 
     return EventHandlingUtil::ToWebInputEventResult(
-        node->DispatchEvent(dom_event));
+        node->DispatchEvent(*dom_event));
   }
 
   WebKeyboardEvent key_down_event = initial_key_event;
@@ -233,7 +234,7 @@ WebInputEventResult KeyboardEventManager::KeyEvent(
     keydown->SetDefaultPrevented(true);
   keydown->SetTarget(node);
 
-  DispatchEventResult dispatch_result = node->DispatchEvent(keydown);
+  DispatchEventResult dispatch_result = node->DispatchEvent(*keydown);
   if (dispatch_result != DispatchEventResult::kNotCanceled)
     return EventHandlingUtil::ToWebInputEventResult(dispatch_result);
   // If frame changed as a result of keydown dispatch, then return early to
@@ -273,7 +274,7 @@ WebInputEventResult KeyboardEventManager::KeyEvent(
       key_press_event, frame_->GetDocument()->domWindow());
   keypress->SetTarget(node);
   return EventHandlingUtil::ToWebInputEventResult(
-      node->DispatchEvent(keypress));
+      node->DispatchEvent(*keypress));
 }
 
 void KeyboardEventManager::CapsLockStateMayHaveChanged() {
@@ -410,7 +411,7 @@ void KeyboardEventManager::DefaultTabEventHandler(KeyboardEvent* event) {
 
 void KeyboardEventManager::DefaultEscapeEventHandler(KeyboardEvent* event) {
   if (HTMLDialogElement* dialog = frame_->GetDocument()->ActiveModalDialog())
-    dialog->DispatchEvent(Event::CreateCancelable(EventTypeNames::cancel));
+    dialog->DispatchEvent(*Event::CreateCancelable(EventTypeNames::cancel));
 }
 
 static OverrideCapsLockState g_override_caps_lock_state;

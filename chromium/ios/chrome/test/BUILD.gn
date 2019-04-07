@@ -4,6 +4,7 @@
 
 import("//ios/build/config.gni")
 import("//ios/public/provider/chrome/browser/build_config.gni")
+import("//ios/third_party/firebase/firebase.gni")
 import("//testing/test.gni")
 
 # All tests needs to be listed in that target to be built as part of
@@ -141,6 +142,7 @@ test("ios_chrome_unittests") {
     "//ios/chrome/browser:unit_tests",
     "//ios/chrome/browser/app_launcher:unit_tests",
     "//ios/chrome/browser/autofill:unit_tests",
+    "//ios/chrome/browser/autofill/manual_fill:unit_tests",
     "//ios/chrome/browser/browser_state:unit_tests",
     "//ios/chrome/browser/browsing_data:unit_tests",
     "//ios/chrome/browser/crash_report:unit_tests",
@@ -177,6 +179,7 @@ test("ios_chrome_unittests") {
     "//ios/chrome/browser/ui/app_launcher:unit_tests",
     "//ios/chrome/browser/ui/authentication:unit_tests",
     "//ios/chrome/browser/ui/autofill/cells:unit_tests",
+    "//ios/chrome/browser/ui/autofill/manual_fill:unit_tests",
     "//ios/chrome/browser/ui/bookmarks:unit_tests",
     "//ios/chrome/browser/ui/bookmarks/cells:unit_tests",
     "//ios/chrome/browser/ui/broadcaster:unit_tests",
@@ -234,6 +237,7 @@ test("ios_chrome_unittests") {
     "//ios/chrome/browser/ui/table_view/cells:unit_tests",
     "//ios/chrome/browser/ui/tabs:unit_tests",
     "//ios/chrome/browser/ui/toolbar:unit_tests",
+    "//ios/chrome/browser/ui/toolbar/adaptive:unit_tests",
     "//ios/chrome/browser/ui/toolbar/clean:unit_tests",
     "//ios/chrome/browser/ui/toolbar/legacy:unit_tests",
     "//ios/chrome/browser/ui/tools_menu:unit_tests",
@@ -246,6 +250,7 @@ test("ios_chrome_unittests") {
     "//ios/chrome/browser/web:unit_tests_internal",
     "//ios/chrome/browser/web_resource:unit_tests",
     "//ios/chrome/browser/web_state_list:unit_tests",
+    "//ios/chrome/browser/web_state_list/web_usage_enabler:unit_tests",
     "//ios/chrome/browser/webui:unit_tests",
     "//ios/chrome/common:unit_tests",
     "//ios/chrome/content_widget_extension:unit_tests",
@@ -253,6 +258,10 @@ test("ios_chrome_unittests") {
     "//ios/chrome/test/base:unit_tests",
     "//ios/testing:http_server_bundle_data",
   ]
+  if (ios_enable_firebase_sdk) {
+    # This is required here so Firebase SDK can supply ldflags to app bundle.
+    deps += [ "//ios/third_party/firebase" ]
+  }
 
   assert_no_deps = ios_assert_no_deps
 }

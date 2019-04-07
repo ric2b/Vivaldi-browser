@@ -48,15 +48,15 @@ class NetBenchmarkingWrapper : public v8::Extension {
   v8::Local<v8::FunctionTemplate> GetNativeFunctionTemplate(
       v8::Isolate* isolate,
       v8::Local<v8::String> name) override {
-    if (name->Equals(v8::String::NewFromUtf8(isolate, "ClearCache"))) {
+    if (name->StringEquals(v8::String::NewFromUtf8(isolate, "ClearCache"))) {
       return v8::FunctionTemplate::New(isolate, ClearCache);
-    } else if (name->Equals(v8::String::NewFromUtf8(
+    } else if (name->StringEquals(v8::String::NewFromUtf8(
                    isolate, "ClearHostResolverCache"))) {
       return v8::FunctionTemplate::New(isolate, ClearHostResolverCache);
-    } else if (name->Equals(
+    } else if (name->StringEquals(
                    v8::String::NewFromUtf8(isolate, "ClearPredictorCache"))) {
       return v8::FunctionTemplate::New(isolate, ClearPredictorCache);
-    } else if (name->Equals(
+    } else if (name->StringEquals(
                    v8::String::NewFromUtf8(isolate, "CloseConnections"))) {
       return v8::FunctionTemplate::New(isolate, CloseConnections);
     }
@@ -78,8 +78,7 @@ class NetBenchmarkingWrapper : public v8::Extension {
   }
 
   static void ClearCache(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    int rv;
-    GetNetBenchmarking().ClearCache(&rv);
+    GetNetBenchmarking().ClearCache();
     WebCache::Clear();
   }
 

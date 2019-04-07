@@ -10,7 +10,7 @@
 #include <memory>
 
 #include "base/memory/weak_ptr.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
 #include "net/http/http_cache.h"
 
 namespace net {
@@ -67,7 +67,7 @@ class NET_EXPORT_PRIVATE HttpCache::Writers {
   // |callback|.
   int Read(scoped_refptr<IOBuffer> buf,
            int buf_len,
-           const CompletionCallback& callback,
+           CompletionOnceCallback callback,
            Transaction* transaction);
 
   // Invoked when StopCaching is called on a member transaction.
@@ -164,12 +164,12 @@ class NET_EXPORT_PRIVATE HttpCache::Writers {
     scoped_refptr<IOBuffer> read_buf;
     int read_buf_len;
     int write_len;
-    const CompletionCallback callback;
+    CompletionOnceCallback callback;
     WaitingForRead(scoped_refptr<IOBuffer> read_buf,
                    int len,
-                   const CompletionCallback& consumer_callback);
+                   CompletionOnceCallback consumer_callback);
     ~WaitingForRead();
-    WaitingForRead(const WaitingForRead&);
+    WaitingForRead(WaitingForRead&&);
   };
   using WaitingForReadMap = std::map<Transaction*, WaitingForRead>;
 
@@ -277,7 +277,7 @@ class NET_EXPORT_PRIVATE HttpCache::Writers {
   // written.
   bool should_keep_entry_ = true;
 
-  CompletionCallback callback_;  // Callback for active_transaction_.
+  CompletionOnceCallback callback_;  // Callback for active_transaction_.
 
   // Since cache_ can destroy |this|, |cache_callback_| is only invoked at the
   // end of DoLoop().

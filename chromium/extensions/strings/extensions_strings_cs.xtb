@@ -13,7 +13,6 @@
 <translation id="2350172092385603347">Byla použita lokalizace, ale v manifestu nebyl zadán parametr default_locale.</translation>
 <translation id="2576842806987913196">Soubor CRX s tímto názvem již existuje.</translation>
 <translation id="2753617847762399167">Neplatná cesta (absolutní nebo relativní s „..“): <ph name="IMAGE_PATH" /></translation>
-<translation id="27822970480436970">Tomuto rozšíření se nepodařilo upravit požadavek sítě, protože úprava byla v konfliktu s dalším rozšířením.</translation>
 <translation id="2785530881066938471">Nelze načíst soubor <ph name="RELATIVE_PATH" /> s obsahovým skriptem. Soubor není kódován ve formátu UTF-8.</translation>
 <translation id="2903070246402204397">Rozšíření <ph name="EXTENSION_NAME" /> (ID rozšíření <ph name="EXTENSION_ID" />) je blokováno administrátorem. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">Nepodařilo se nainstalovat balíček: <ph name="ERROR_CODE" /></translation>
@@ -57,19 +56,16 @@
 <translation id="7003844668372540529">Neznámý produkt <ph name="PRODUCT_ID" /> od dodavatele <ph name="VENDOR_NAME" /></translation>
 <translation id="7068383018033524534">Soubor manifestu je neplatný</translation>
 <translation id="7217838517480956708">Správce tohoto počítače vyžaduje instalaci rozšíření <ph name="EXTENSION_NAME" />. Nelze je odebrat ani upravit.</translation>
+<translation id="7612608473764576263">Vstupní hodnota pro soukromý klíč musí mít platný formát (klíč RSA ve formátu PKCS#8 a kódováním PEM).</translation>
 <translation id="7939686037314084444">Rozšíření se nepodařilo správně načíst. Je možné, že nebude moci zachytávat síťové požadavky.</translation>
 <translation id="7972881773422714442">Možnosti: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Přední</translation>
 <translation id="8047248493720652249">Tomuto rozšíření se nepodařilo pojmenovat stahovaný soubor „<ph name="ATTEMPTED_FILENAME" />“, protože jiné rozšíření (<ph name="EXTENSION_NAME" />) vybralo jiný název souboru „<ph name="ACTUAL_FILENAME" />“.</translation>
 <translation id="8284835137979141223">Zařízení <ph name="PRODUCT_NAME" /> od dodavatele <ph name="VENDOR_NAME" /></translation>
-<translation id="8341840687457896278">Tomuto rozšíření se nepodařilo poskytnout pověření síťovému požadavku, protože jiné rozšíření (<ph name="EXTENSION_NAME" />) poskytlo odlišná pověření.</translation>
 <translation id="8517576857589387417">Soubor manifestu chybí nebo je nečitelný</translation>
 <translation id="8636666366616799973">Balíček je neplatný. Podrobnosti: <ph name="ERROR_MESSAGE" /></translation>
-<translation id="8670869118777164560">Tomuto rozšíření se nepodařilo přesměrovat požadavek sítě do umístění <ph name="ATTEMPTED_REDIRECT_DESTINATION" />, protože jej jiné rozšíření (<ph name="EXTENSION_NAME" />) přesměrovalo do umístění <ph name="ACTUAL_REDIRECT_DESTINATION" />.</translation>
 <translation id="8761756413268424715">Aplikace <ph name="APP_NAME" /> žádá o přístup k jednomu z vašich zařízení:</translation>
-<translation id="8825366169884721447">Tomuto rozšíření se nepodařilo změnit záhlaví <ph name="HEADER_NAME" /> síťového požadavku, protože změna byla v konfliktu s jiným rozšířením (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="8885905466771744233">Pro zadané rozšíření již existuje soukromý klíč. Použijte tento klíč znovu, nebo jej nejprve smažte.</translation>
 <translation id="907841381057066561">Během balení se nepodařilo vytvořit dočasný soubor ZIP.</translation>
-<translation id="9111791539553342076">Tomuto rozšíření se nepodařilo změnit záhlaví odpovědi <ph name="HEADER_NAME" /> síťového požadavku, protože změna byla v konfliktu s jiným rozšířením (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="941543339607623937">Neplatný soukromý klíč</translation>
 </translationbundle>

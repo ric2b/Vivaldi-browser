@@ -90,7 +90,7 @@ MetadataModel.prototype.get = function(entries, names) {
       }
 
       // Store cache.
-      this.cache_.storeProperties(requestId, requestedEntries, list);
+      this.cache_.storeProperties(requestId, requestedEntries, list, names);
 
       // Invoke callbacks.
       var i = 0;
@@ -163,6 +163,15 @@ MetadataModel.prototype.addEventListener = function(type, callback) {
 };
 
 /**
+ * Removes event listener from internal cache object.
+ * @param {string} type Name of the event to removed.
+ * @param {function(Event):undefined} callback Event listener.
+ */
+MetadataModel.prototype.removeEventListener = function(type, callback) {
+  this.cache_.removeEventListener(type, callback);
+};
+
+/**
  * @param {!Array<!Entry>} entries
  * @param {!Array<string>} names
  * @param {!MetadataCacheSet} cache
@@ -206,7 +215,7 @@ function MetadataProviderCallbackRequest(entries, names, cache, fulfill) {
  */
 MetadataProviderCallbackRequest.prototype.storeProperties = function(
     requestId, entries, objects) {
-  this.cache_.storeProperties(requestId, entries, objects);
+  this.cache_.storeProperties(requestId, entries, objects, this.names_);
   if (this.cache_.hasFreshCache(this.entries_, this.names_)) {
     this.fulfill_(this.cache_.get(this.entries_, this.names_));
     return true;

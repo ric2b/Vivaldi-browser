@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ta">
 <translation id="100812568230599391">தற்போதைய காட்சி நடை: ஒன்றின் மேல் ஒன்று.</translation>
+<translation id="1011903154582639569">சொற்களை உள்ளிட, ஒரு விசையைக் கண்டறிந்து அதைத் தட்டவும்</translation>
 <translation id="1012173283529841972">பட்டியல் உருப்படி</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1022586497894531524">ChromeVox பேச்சு வடிவக் கருத்தை முதல் முறையாகப் பயன்படுத்துகிறீர்களா? இந்த விரைவான பயிற்சியில், ChromeVoxஐப் பயன்படுத்தத் தொடங்குவதற்குத் தேவைப்படும் முக்கியமான விஷயங்களைத் தெரிந்துகொள்வீர்கள்.</translation>
@@ -15,6 +16,7 @@
 <translation id="1065552602950927991">தவறான உள்ளீடு</translation>
 <translation id="1080471004309605942">சாய்வு உரையின் இறுதி</translation>
 <translation id="1082209053475788238">முந்தைய 6 ஆம் நிலை தலைப்பு இல்லை.</translation>
+<translation id="1087788677726983142">நிகழ்வு வரிசை வடிப்பான்களை மறை</translation>
 <translation id="1088219014394087294">தலைப்புகள் இல்லை.</translation>
 <translation id="1106741348836243114">ஒலி மறுமொழியை (ஆடியோ செய்திகள்) இயக்கு அல்லது முடக்கு.</translation>
 <translation id="1108651818222110612">துணை தலைப்பு</translation>
@@ -77,6 +79,7 @@
 <translation id="1618597272655350600">தற்போதைய நிலையின் முழு விளக்கத்தை அறிவிக்கிறது</translation>
 <translation id="1639634871799530612">{COUNT,plural, =1{அதிகத்திற்கான குறி}other{# அதிகத்திற்கான குறிகள்}}</translation>
 <translation id="1653266918374749391">முந்தைய, 3 ஆம் படிநிலை தலைப்பு</translation>
+<translation id="1657616855184033958">நிகழ்வு வரிசை வடிப்பான்களைக் காட்டு</translation>
 <translation id="1659072772017912254">தேர்ந்தெடுக்கப்படவில்லை</translation>
 <translation id="1669290819662866522">வாரம்</translation>
 <translation id="1674262202423278359">ChromeVox வழிநடத்துதல்</translation>
@@ -136,6 +139,7 @@
 <translation id="2267945578749931355">அடுத்த எழுத்து</translation>
 <translation id="2281234842553884450">முந்தைய ஸ்லைடர்</translation>
 <translation id="2294136146931447363">சாய்வு உரையின் தொடக்கம்</translation>
+<translation id="2311237334957139798">விவர நிலையில் முந்தையதற்கு நகரும்</translation>
 <translation id="2318372665160196757">முதன்மை</translation>
 <translation id="2329324941084714723">தாவல் பலகம்</translation>
 <translation id="2344193891939537199">நாள் நேரக் கட்டுப்பாடு</translation>
@@ -156,12 +160,14 @@
 <translation id="2462626033734746142">ரேடியோ பட்டன் குழு</translation>
 <translation id="2471138580042810658">தலைப்பு 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{உடுக்குறி}other{# உடுக்குறிகள்}}</translation>
+<translation id="249330843868392562">‘உரையிலிருந்து பேச்சு’ அமைப்புகளைத் திற</translation>
 <translation id="2523609930580546572">ChromeVox பயிற்சி</translation>
 <translation id="2525706221823668172">Chromebook விசைப்பலகைக் குறுக்குவழிகள்</translation>
 <translation id="2549392850788122959"><ph name="KEY" /> மீட்டமைக்கப்பட்டுள்ளது.</translation>
 <translation id="2553108862507765288">இலக்கணப் பிழை</translation>
 <translation id="257674075312929031">குழு</translation>
 <translation id="2582407057977008361">Aside</translation>
+<translation id="2592212930811759050">திருத்துவதற்கு, இருமுறை தட்டவும்</translation>
 <translation id="2606210917827248971">பட்டியலில் {COUNT,plural, =1{# உருப்படி}other{# உருப்படிகள்}}</translation>
 <translation id="2614981083756825552">கணித ML தளவமைப்பு</translation>
 <translation id="2624431853467395961">கற்றல் பயன்முறையைத் திறக்கவும்</translation>
@@ -409,6 +415,7 @@
 <translation id="4255943572433203166">ChromeVox ஐத் தனிப்பயனாக்க, கீழேயுள்ள விருப்பங்களைப் பயன்படுத்துக. மாற்றங்கள் உடனடியாகச் செயல்படுத்தப்படும்.</translation>
 <translation id="4271220233568730077">அடுத்த கணிதம்</translation>
 <translation id="4271521365602459209">மேலும் முடிவுகள் இல்லை.</translation>
+<translation id="4275397969489577657">நிகழ்வு வரிசைப் பதிவிடலை இயக்கு</translation>
 <translation id="4287520460805643128">அடுத்த உறுப்பு இல்லை.</translation>
 <translation id="4289540628985791613">மேலோட்டம்</translation>
 <translation id="4300318234632215983">இணைப்புக்குப் பின் இருக்கும் URL ஐ அறிவிக்கவும்</translation>
@@ -487,6 +494,7 @@
 <translation id="4973762002207131920"><ph name="KEY" /> க்கு மாற்றப்பட்டது.</translation>
 <translation id="4975416682604111799">மில்லிவினாடிகள்</translation>
 <translation id="49787999531187221">ChromeVox இப்போது செயலற்று உள்ளது.</translation>
+<translation id="4979263087381759787">டெவெலப்பர் விருப்பங்கள்</translation>
 <translation id="4979404613699303341">முந்தைய பொத்தான்</translation>
 <translation id="4982773647088557172"><ph name="VALUE" />, <ph name="NAME" />, பட்டியல் பெட்டி</translation>
 <translation id="4983588134362688868">பக்கத்தின் மேல்பகுதிக்குச் செல்லவும்</translation>
@@ -498,6 +506,7 @@
 <translation id="5000760171916499057">வடிவங்கள் இல்லை.</translation>
 <translation id="5005670136041063723">மேலும் ஒத்த கூறுகள் இல்லை.</translation>
 <translation id="501473567976723023">ஜனவரி</translation>
+<translation id="5020651427400641814">பேச்சுப் பதிவை இயக்கவும்</translation>
 <translation id="5041394372352067729">பக்கத்தின் மேல்பகுதிக்கு பிரெய்ல் காட்சியை நகர்த்து</translation>
 <translation id="5042770794184672516">பேச்சு ஒலியளவை அதிகரி</translation>
 <translation id="5050015258024679800">முந்தைய 4 ஆம் படிநிலை தலைப்பு</translation>
@@ -512,6 +521,7 @@
 <translation id="5106547198195128110">இந்தப் புதிய வெளியீட்டில் சில அற்புதமான மாற்றங்களைச் செய்துள்ளோம்; அந்தப் புதிய அம்சங்களை இங்கே பார்க்கவும்:</translation>
 <translation id="5110983769041734144">முந்தைய படிவப் புலம் இல்லை.</translation>
 <translation id="5111640677200759579">நெடுவரிசை மேற்தலைப்பு</translation>
+<translation id="5115892389597951922">ChromeVox பதிவு</translation>
 <translation id="5136967254288895616">முந்தைய இணைப்பு இல்லை.</translation>
 <translation id="513774504516943387">lnk</translation>
 <translation id="5158275234811857234">அட்டை</translation>
@@ -545,6 +555,7 @@
 <translation id="5407530583102765689">{COUNT,plural, =1{அரைப்புள்ளி}other{# அரைப்புள்ளிகள்}}</translation>
 <translation id="5411891038905756502">முந்தைய தாவல் புள்ளி இல்லை.</translation>
 <translation id="5417034931411865818">ரூட்டிங் விசை $1க்குக் கீழுள்ள உருப்படியைக் கிளிக் செய்யவும்</translation>
+<translation id="5435274640623994081">ஆடியோ செய்திகள் பதிவிடலை இயக்கு</translation>
 <translation id="5436105723448703439">{COUNT,plural, =1{குறைவிற்கான குறி}other{# குறைவிற்கான குறிகள்}}</translation>
 <translation id="5444587279251314700">(செயலில்)</translation>
 <translation id="5446809554778706307">ஃபோகஸ் இல்லை. புதிய தாவலைத் திறக்க, Ctrl+T விசைகளை அழுத்தவும்.</translation>
@@ -678,6 +689,7 @@
 <translation id="6540201937398578274">ChromeVox இல், தேடல் விசை என்பது மாற்றி விசையாகும். பெரும்பாலான ChromeVox குறுக்குவழிகள் தேடல் விசையுடன் தொடங்கும். வழிசெலுத்த, அம்புக்குறி விசைகளையும் பயன்படுத்தலாம்.</translation>
 <translation id="6550720799683018100">கீழேயுள்ள பட்டியலிலிருந்து விருப்பத்தைத் தேர்ந்தெடுப்பதன் மூலம் தற்போதைய விசைவரைபடத்தை மாற்றலாம்.</translation>
 <translation id="6561818612645211875">நடப்பு வரிசையின் தொடக்கத்திற்குச் செல்</translation>
+<translation id="6583174818554398774">விவர நிலையில் அடுத்ததற்கு நகரும்</translation>
 <translation id="6587021927234520429">அடுத்த 4 ஆம் நிலை தலைப்பு இல்லை.</translation>
 <translation id="6601344353291556895">சொற்களஞ்சிய விளக்கங்களை இயக்கு.</translation>
 <translation id="6615602925644411249">பக்கத்தில் கண்டறி.</translation>
@@ -753,6 +765,7 @@ Chrome உலாவி மெனுவைத் திறக்க, Alt+F வி
 <translation id="7241683698754534149">நீண்ட விளக்கத்தைப் புதிய தாவலில் திறக்கவும்</translation>
 <translation id="7248671827512403053">பயன்பாடு</translation>
 <translation id="725969808843520477">அடுத்த ரேடியோ பட்டன்</translation>
+<translation id="7261612856573623172">சாதனத்தின் இயல்பு ‘உரையிலிருந்து பேச்சுக்கான' குரல்</translation>
 <translation id="7269119382257320590">நிறுத்தற்குறி இல்லை</translation>
 <translation id="7273174640290488576">வெற்று</translation>
 <translation id="7274770952766771364">குறிப்பு மேற்கோள்</translation>
@@ -893,6 +906,7 @@ Chrome உலாவி மெனுவைத் திறக்க, Alt+F வி
 <translation id="8650576015643545550">முந்தைய பட்டியல் இல்லை.</translation>
 <translation id="8651481478098336970">ஒலியை அடக்கும்</translation>
 <translation id="8653646212587894517">இணைப்புகளின் பட்டியலைக் காட்டு</translation>
+<translation id="8656888282555543604">பிரெய்ல் பதிவிடலை இயக்கு</translation>
 <translation id="8664519043722036194">நொடிகள்</translation>
 <translation id="867187640362843212">தலைப்பு 5</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{குத்துக் கோடு}other{# செங்குத்தான குத்துக் கோடுகள்}}</translation>

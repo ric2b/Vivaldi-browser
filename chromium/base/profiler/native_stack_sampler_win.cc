@@ -6,7 +6,6 @@
 
 #include <windows.h>
 
-#include <objbase.h>
 #include <stddef.h>
 #include <winternl.h>
 
@@ -21,21 +20,13 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/profiler/win32_stack_frame_unwinder.h"
+#include "base/sampling_heap_profiler/module_cache.h"
 #include "base/stl_util.h"
-#include "base/strings/string16.h"
-#include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "base/win/pe_image.h"
-#include "base/win/scoped_handle.h"
 
 namespace base {
 
 using Frame = StackSamplingProfiler::Frame;
-using InternalFrame = StackSamplingProfiler::InternalFrame;
-using Module = StackSamplingProfiler::Module;
-using InternalModule = StackSamplingProfiler::InternalModule;
 using ProfileBuilder = StackSamplingProfiler::ProfileBuilder;
 
 // Stack recording functions --------------------------------------------------
@@ -203,34 +194,6 @@ void RecordStack(CONTEXT* context, std::vector<RecordedFrame>* stack) {
 #endif
 }
 
-// Gets the unique build ID for a module. Windows build IDs are created by a
-// concatenation of a GUID and AGE fields found in the headers of a module. The
-// GUID is stored in the first 16 bytes and the AGE is stored in the last 4
-// bytes. Returns the empty string if the function fails to get the build ID.
-//
-// Example:
-// dumpbin chrome.exe /headers | find "Format:"
-//   ... Format: RSDS, {16B2A428-1DED-442E-9A36-FCE8CBD29726}, 10, ...
-//
-// The resulting buildID string of this instance of chrome.exe is
-// "16B2A4281DED442E9A36FCE8CBD2972610".
-//
-// Note that the AGE field is encoded in decimal, not hex.
-std::string GetBuildIDForModule(HMODULE module_handle) {
-  GUID guid;
-  DWORD age;
-  win::PEImage(module_handle).GetDebugId(&guid, &age, /* pdb_file= */ nullptr);
-  const int kGUIDSize = 39;
-  string16 build_id;
-  int result =
-      ::StringFromGUID2(guid, WriteInto(&build_id, kGUIDSize), kGUIDSize);
-  if (result != kGUIDSize)
-    return std::string();
-  RemoveChars(build_id, L"{}-", &build_id);
-  build_id += StringPrintf(L"%d", age);
-  return UTF16ToUTF8(build_id);
-}
-
 // ScopedDisablePriorityBoost -------------------------------------------------
 
 // Disables priority boost on a thread for the lifetime of the object.
@@ -382,6 +345,8 @@ void SuspendThreadAndRecordStack(
   RecordStack(&thread_context, stack);
 }
 
+}  // namespace
+
 // NativeStackSamplerWin ------------------------------------------------------
 
 class NativeStackSamplerWin : public NativeStackSampler {
@@ -392,19 +357,13 @@ class NativeStackSamplerWin : public NativeStackSampler {
 
   // StackSamplingProfiler::NativeStackSampler:
   void ProfileRecordingStarting() override;
-  std::vector<InternalFrame> RecordStackFrames(
+  std::vector<Frame> RecordStackFrames(
       StackBuffer* stack_buffer,
       ProfileBuilder* profile_builder) override;
 
  private:
-  // Attempts to query the module filename, base address, and id for
-  // |module_handle|, and returns them in an InternalModule object.
-  static InternalModule GetModuleForHandle(HMODULE module_handle);
-
-  // Creates a set of internal frames with the information represented by
-  // |stack|.
-  std::vector<InternalFrame> CreateInternalFrames(
-      const std::vector<RecordedFrame>& stack);
+  // Creates a set of frames with the information represented by |stack|.
+  std::vector<Frame> CreateFrames(const std::vector<RecordedFrame>& stack);
 
   win::ScopedHandle thread_handle_;
 
@@ -413,8 +372,8 @@ class NativeStackSamplerWin : public NativeStackSampler {
   // The stack base address corresponding to |thread_handle_|.
   const void* const thread_stack_base_address_;
 
-  // The internal module objects, indexed by the module handle.
-  std::map<HMODULE, InternalModule> module_cache_;
+  // The module objects, indexed by the module handle.
+  std::map<HMODULE, ModuleCache::Module> module_cache_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeStackSamplerWin);
 };
@@ -433,7 +392,7 @@ void NativeStackSamplerWin::ProfileRecordingStarting() {
   module_cache_.clear();
 }
 
-std::vector<InternalFrame> NativeStackSamplerWin::RecordStackFrames(
+std::vector<Frame> NativeStackSamplerWin::RecordStackFrames(
     StackBuffer* stack_buffer,
     ProfileBuilder* profile_builder) {
   DCHECK(stack_buffer);
@@ -443,58 +402,43 @@ std::vector<InternalFrame> NativeStackSamplerWin::RecordStackFrames(
                               stack_buffer->buffer(), stack_buffer->size(),
                               &stack, profile_builder, test_delegate_);
 
-  return CreateInternalFrames(stack);
+  return CreateFrames(stack);
 }
 
-// static
-InternalModule NativeStackSamplerWin::GetModuleForHandle(
-    HMODULE module_handle) {
-  wchar_t module_name[MAX_PATH];
-  DWORD result_length =
-      ::GetModuleFileName(module_handle, module_name, size(module_name));
-  if (result_length == 0)
-    return InternalModule();
-
-  const std::string& module_id = GetBuildIDForModule(module_handle);
-  if (module_id.empty())
-    return InternalModule();
-
-  return InternalModule(reinterpret_cast<uintptr_t>(module_handle), module_id,
-                        FilePath(module_name));
-}
-
-std::vector<InternalFrame> NativeStackSamplerWin::CreateInternalFrames(
+std::vector<Frame> NativeStackSamplerWin::CreateFrames(
     const std::vector<RecordedFrame>& stack) {
-  std::vector<InternalFrame> internal_frames;
-  internal_frames.reserve(stack.size());
+  std::vector<Frame> frames;
+  frames.reserve(stack.size());
 
   for (const auto& frame : stack) {
     auto frame_ip = reinterpret_cast<uintptr_t>(frame.instruction_pointer);
 
     HMODULE module_handle = frame.module.Get();
     if (!module_handle) {
-      internal_frames.emplace_back(frame_ip, InternalModule());
+      frames.emplace_back(frame_ip, ModuleCache::Module());
       continue;
     }
 
     auto loc = module_cache_.find(module_handle);
     if (loc != module_cache_.end()) {
-      internal_frames.emplace_back(frame_ip, loc->second);
+      frames.emplace_back(frame_ip, loc->second);
       continue;
     }
 
-    InternalModule internal_module = GetModuleForHandle(module_handle);
-    if (internal_module.is_valid)
-      module_cache_.insert(std::make_pair(module_handle, internal_module));
+    ModuleCache::Module module =
+        ModuleCache::CreateModuleForHandle(module_handle);
+    if (module.is_valid)
+      module_cache_.insert(std::make_pair(module_handle, module));
 
-    internal_frames.emplace_back(frame_ip, std::move(internal_module));
+    frames.emplace_back(frame_ip, std::move(module));
   }
 
-  return internal_frames;
+  return frames;
 }
 
-}  // namespace
+// NativeStackSampler ---------------------------------------------------------
 
+// static
 std::unique_ptr<NativeStackSampler> NativeStackSampler::Create(
     PlatformThreadId thread_id,
     NativeStackSamplerTestDelegate* test_delegate) {
@@ -512,6 +456,7 @@ std::unique_ptr<NativeStackSampler> NativeStackSampler::Create(
   return std::unique_ptr<NativeStackSampler>();
 }
 
+// static
 size_t NativeStackSampler::GetStackBufferSize() {
   // The default Win32 reserved stack size is 1 MB and Chrome Windows threads
   // currently always use the default, but this allows for expansion if it

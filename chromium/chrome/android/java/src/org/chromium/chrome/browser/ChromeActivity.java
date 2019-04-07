@@ -261,7 +261,6 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     private BottomSheet mBottomSheet;
     private ContextualSuggestionsCoordinator mContextualSuggestionsCoordinator;
     private ScrimView mScrimView;
-    private ManualFillingCoordinator mManualFillingController;
     private float mStatusBarScrimFraction;
     private int mBaseStatusBarColor;
     private int mScrimColor;
@@ -278,6 +277,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     private Runnable mRecordMultiWindowModeScreenWidthRunnable;
 
     private final DiscardableReferencePool mReferencePool = new DiscardableReferencePool();
+    private final ManualFillingCoordinator mManualFillingController =
+            new ManualFillingCoordinator();
 
     private AssistStatusHandler mAssistStatusHandler;
 
@@ -296,10 +297,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
     private ActivityTabStartupMetricsTracker mActivityTabStartupMetricsTracker;
 
-    /** Used to detect in {@link #postInflationStartup} if onStart was called in the mean time
-     * (while the inflation was being done on a background thread) and thus some onStart work that
-     * requires the UI to be inflated has to be done belatedly after inflation. */
-    private boolean mOnStartCalled;
+    /** Whether or not the activity is in started state. */
+    private boolean mStarted;
 
     /**
      * @param factory The {@link AppMenuHandlerFactory} for creating {@link #mAppMenuHandler}
@@ -363,7 +362,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                 // do
 
                 // so for newer users.
-                if (!ChromePreferenceManager.getInstance().getAllowLowEndDeviceUi()) {
+                if (!ChromePreferenceManager.getInstance().readBoolean(
+                            ChromePreferenceManager.ALLOW_LOW_END_DEVICE_UI, true)) {
                     CommandLine.getInstance().appendSwitch(
                             BaseSwitches.DISABLE_LOW_END_DEVICE_MODE);
                 }
@@ -402,7 +402,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
             // If onStart was called before postLayoutInflation (because inflation was done in a
             // background thread) then make sure to call the relevant methods belatedly.
-            if (mOnStartCalled) {
+            if (mStarted) {
                 mCompositorViewHolder.onStart();
                 mSnackbarManager.onStart();
             }
@@ -498,10 +498,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     @Override
     protected void onInitialLayoutInflationComplete() {
         mInflateInitialLayoutEndMs = SystemClock.elapsedRealtime();
-        // Set the status bar color to black by default. This is an optimization for
-        // Chrome not to draw under status and navigation bars when we use the default
-        // black status bar
-        setStatusBarColor(null, Color.BLACK);
+        // Set the status bar color to white by default.
+        boolean isTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(this);
+        int defaultThemeColor = ColorUtils.getDefaultThemeColor(getResources(), true, false);
+        setStatusBarColor(isTablet ? Color.BLACK : defaultThemeColor, true);
 
         ViewGroup rootView = (ViewGroup) getWindow().getDecorView().getRootView();
         mCompositorViewHolder = (CompositorViewHolder) findViewById(R.id.compositor_view_holder);
@@ -516,7 +516,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         rootView.setFitsSystemWindows(false);
 
         // Add a custom view right after the root view that stores the insets to access later.
-        // ContentViewCore needs the insets to determine the portion of the screen obscured by
+        // WebContents needs the insets to determine the portion of the screen obscured by
         // non-content displaying things such as the OSK.
         mInsetObserverView = InsetObserverView.create(this);
         rootView.addView(mInsetObserverView, 0);
@@ -545,8 +545,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             mToolbarManager = new ToolbarManager(this, toolbarContainer, mAppMenuHandler,
                     mAppMenuPropertiesDelegate, getCompositorViewHolder().getInvalidator(),
                     urlFocusChangedCallback);
-            mFindToolbarManager = new FindToolbarManager(
-                    this, mToolbarManager.getActionModeController().getActionModeCallback());
+            mFindToolbarManager =
+                    new FindToolbarManager(this, mToolbarManager.getActionModeControllerCallback());
             mAppMenuHandler.addObserver(new AppMenuObserver() {
                 @Override
                 public void onMenuVisibilityChanged(boolean isVisible) {
@@ -618,7 +618,6 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             @Override
             public void onShown(Tab tab) {
                 setStatusBarColor(tab, tab.getThemeColor());
-                OfflineIndicatorController.onUpdate();
             }
 
             @Override
@@ -687,13 +686,6 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      */
     public FindToolbarManager getFindToolbarManager() {
         return mFindToolbarManager;
-    }
-
-    /**
-     * @return The {@link KeyboardAccessoryCoordinator} that belongs to this activity.
-     */
-    public KeyboardAccessoryCoordinator getKeyboardAccessory() {
-        return mManualFillingController.getKeyboardAccessory();
     }
 
     /**
@@ -888,6 +880,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     }
 
     private void createContextReporterIfNeeded() {
+        if (!mStarted) return; // Sync state reporting should work only in started state.
         if (mContextReporter != null || getActivityTab() == null) return;
 
         final SyncController syncController = SyncController.get(this);
@@ -937,7 +930,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         }
         VrModuleProvider.getDelegate().maybeRegisterVrEntryHook(this);
 
-        OfflineIndicatorController.onUpdate();
+        getManualFillingController().onResume();
     }
 
     @Override
@@ -955,6 +948,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         RecordUserAction.record("MobileGoToBackground");
         Tab tab = getActivityTab();
         if (tab != null) getTabContentManager().cacheTabThumbnail(tab);
+        getManualFillingController().onPause();
 
         VrModuleProvider.getDelegate().maybeUnregisterVrEntryHook();
         markSessionEnd();
@@ -972,13 +966,13 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
         if (GSAState.getInstance(this).isGsaAvailable() && !SysUtils.isLowEndDevice()) {
             GSAAccountChangeListener.getInstance().disconnect();
-            if (mSyncStateChangedListener != null) {
-                ProfileSyncService syncService = ProfileSyncService.get();
-                if (syncService != null) {
-                    syncService.removeSyncStateChangedListener(mSyncStateChangedListener);
-                }
-                mSyncStateChangedListener = null;
+        }
+        if (mSyncStateChangedListener != null) {
+            ProfileSyncService syncService = ProfileSyncService.get();
+            if (syncService != null) {
+                syncService.removeSyncStateChangedListener(mSyncStateChangedListener);
             }
+            mSyncStateChangedListener = null;
         }
         if (mContextReporter != null) mContextReporter.disable();
 
@@ -1152,7 +1146,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         }
         mScreenWidthDp = config.screenWidthDp;
         mScreenHeightDp = config.screenHeightDp;
-        mOnStartCalled = true;
+        mStarted = true;
     }
 
     @Override
@@ -1167,7 +1161,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         // If postInflationStartup hasn't been called yet (because inflation was done asynchronously
         // and has not yet completed), it no longer needs to do the belated onStart code since we
         // were stopped in the mean time.
-        mOnStartCalled = false;
+        mStarted = false;
     }
 
     @Override
@@ -1266,10 +1260,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             mTabContentManager = null;
         }
 
-        if (mManualFillingController != null) {
-            mManualFillingController.destroy();
-            mManualFillingController = null;
-        }
+        mManualFillingController.destroy();
 
         if (mActivityTabStartupMetricsTracker != null) {
             mActivityTabStartupMetricsTracker.destroy();
@@ -1312,7 +1303,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      * @return The {@link ModalDialogManager} created for this class.
      */
     protected ModalDialogManager createModalDialogManager() {
-        return new ModalDialogManager(new AppModalPresenter(this), ModalDialogManager.APP_MODAL);
+        return new ModalDialogManager(
+                new AppModalPresenter(this), ModalDialogManager.ModalDialogType.APP);
     }
 
     /**
@@ -1367,10 +1359,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         maybeRemoveWindowBackground();
         DownloadManagerService.getDownloadManagerService().onActivityLaunched();
 
+        VrModuleProvider.getDelegate().onNativeLibraryAvailable();
         if (getSavedInstanceState() == null && getIntent() != null) {
             VrModuleProvider.getDelegate().onNewIntentWithNative(this, getIntent());
         }
-        VrModuleProvider.getDelegate().onNativeLibraryAvailable();
         super.finishNativeInitialization();
 
         ViewGroup coordinator = findViewById(R.id.coordinator);
@@ -1379,9 +1371,13 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             setStatusBarColor(null, mBaseStatusBarColor);
         }, coordinator);
 
-        mManualFillingController = new ManualFillingCoordinator(getWindowAndroid(),
-                findViewById(R.id.keyboard_accessory_stub),
-                findViewById(R.id.keyboard_accessory_sheet_stub));
+        ViewStub accessoryBarStub = findViewById(R.id.keyboard_accessory_stub);
+        ViewStub accessorySheetStub = findViewById(R.id.keyboard_accessory_sheet_stub);
+        if (accessoryBarStub != null && accessorySheetStub != null) {
+            mManualFillingController.initialize(getWindowAndroid(),
+                    findViewById(R.id.keyboard_accessory_stub),
+                    findViewById(R.id.keyboard_accessory_sheet_stub));
+        }
 
         if (mToolbarManager != null && mToolbarManager.getToolbar() != null) {
             mToolbarManager.getToolbar().setScrim(mScrimView);
@@ -1434,8 +1430,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        if (item != null && onMenuOrKeyboardAction(item.getItemId(), true)) {
-            return true;
+        if (item != null) {
+            if (mManualFillingController != null) mManualFillingController.dismiss();
+            if (onMenuOrKeyboardAction(item.getItemId(), true)) return true;
         }
         return super.onOptionsItemSelected(item);
     }

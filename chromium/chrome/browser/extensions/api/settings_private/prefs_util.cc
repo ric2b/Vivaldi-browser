@@ -14,7 +14,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/components/proximity_auth/proximity_auth_pref_names.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/browsing_data/core/pref_names.h"
 #include "components/component_updater/pref_names.h"
@@ -117,8 +117,6 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   // Miscellaneous
   (*s_whitelist)[::prefs::kAlternateErrorPagesEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[autofill::prefs::kAutofillEnabled] =
-      settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[autofill::prefs::kAutofillProfileEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[autofill::prefs::kAutofillCreditCardEnabled] =
@@ -178,6 +176,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[drive::prefs::kDisableDrive] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+#if defined(OS_CHROMEOS)
+  (*s_whitelist)[::prefs::kNetworkFileSharesAllowed] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+#endif
 
   // Printing settings.
   (*s_whitelist)[::prefs::kLocalDiscoveryNotificationsEnabled] =
@@ -195,6 +197,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[password_manager::prefs::kCredentialsEnableService] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[password_manager::prefs::kCredentialsEnableAutosignin] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+
+  // Privacy page
+  (*s_whitelist)[::prefs::kSigninAllowedOnNextStartup] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Sync and personalization page.
@@ -289,12 +295,12 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   // kEnableAutoScreenLock is read-only.
   (*s_whitelist)[ash::prefs::kEnableAutoScreenLock] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kEnableQuickUnlockFingerprint] =
-      settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[proximity_auth::prefs::kEasyUnlockProximityThreshold] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)[proximity_auth::prefs::kProximityAuthIsChromeOSLoginEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[ash::prefs::kMessageCenterLockScreenMode] =
+      settings_api::PrefType::PREF_TYPE_STRING;
 
   // Accessibility.
   (*s_whitelist)[ash::prefs::kAccessibilitySpokenFeedbackEnabled] =
@@ -362,6 +368,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[arc::prefs::kVoiceInteractionContextEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[arc::prefs::kVoiceInteractionHotwordEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[arc::prefs::kVoiceInteractionNotificationEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Misc.
@@ -461,6 +469,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)[::prefs::kLanguageRemapDiamondKeyTo] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[::prefs::kLanguageRemapExternalCommandKeyTo] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[::prefs::kLanguageRemapExternalMetaKeyTo] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)[::prefs::kLanguageSendFunctionKeys] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kLanguageXkbAutoRepeatEnabled] =
@@ -469,10 +481,6 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)[::prefs::kLanguageXkbAutoRepeatInterval] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
-
-  // Multidevice settings.
-  (*s_whitelist)[arc::prefs::kSmsConnectEnabled] =
-      settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Native Printing settings.
   (*s_whitelist)[::prefs::kUserNativePrintersAllowed] =

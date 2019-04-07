@@ -49,7 +49,7 @@ Node* DocumentType::Clone(Document& factory, CloneChildrenFlag) const {
 }
 
 Node::InsertionNotificationRequest DocumentType::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   Node::InsertedInto(insertion_point);
 
   // DocumentType can only be inserted into a Document.
@@ -60,7 +60,7 @@ Node::InsertionNotificationRequest DocumentType::InsertedInto(
   return kInsertionDone;
 }
 
-void DocumentType::RemovedFrom(ContainerNode* insertion_point) {
+void DocumentType::RemovedFrom(ContainerNode& insertion_point) {
   GetDocument().SetDoctype(nullptr);
   Node::RemovedFrom(insertion_point);
 }

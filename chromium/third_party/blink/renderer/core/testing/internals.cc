@@ -72,7 +72,7 @@
 #include "third_party/blink/renderer/core/editing/plain_text_range.h"
 #include "third_party/blink/renderer/core/editing/selection_template.h"
 #include "third_party/blink/renderer/core/editing/serializers/serialization.h"
-#include "third_party/blink/renderer/core/editing/spellcheck/idle_spell_check_callback.h"
+#include "third_party/blink/renderer/core/editing/spellcheck/idle_spell_check_controller.h"
 #include "third_party/blink/renderer/core/editing/spellcheck/spell_check_requester.h"
 #include "third_party/blink/renderer/core/editing/spellcheck/spell_checker.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
@@ -125,6 +125,9 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
+#include "third_party/blink/renderer/core/scroll/programmatic_scroll_animator.h"
+#include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/core/style_property_shorthand.h"
 #include "third_party/blink/renderer/core/svg/svg_image_element.h"
 #include "third_party/blink/renderer/core/svg_names.h"
@@ -161,9 +164,6 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_priority.h"
 #include "third_party/blink/renderer/platform/network/network_state_notifier.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/scroll/programmatic_scroll_animator.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_animator_base.h"
-#include "third_party/blink/renderer/platform/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
 #include "third_party/blink/renderer/platform/text/layout_locale.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
@@ -175,7 +175,7 @@
 
 namespace blink {
 
-using ui::mojom::ImeTextSpanThickness;
+using ws::mojom::ImeTextSpanThickness;
 
 namespace {
 
@@ -225,7 +225,7 @@ static base::Optional<DocumentMarker::MarkerType> MarkerTypeFrom(
 static base::Optional<DocumentMarker::MarkerTypes> MarkerTypesFrom(
     const String& marker_type) {
   if (marker_type.IsEmpty() || DeprecatedEqualIgnoringCase(marker_type, "all"))
-    return DocumentMarker::AllMarkers();
+    return DocumentMarker::MarkerTypes::All();
   base::Optional<DocumentMarker::MarkerType> type = MarkerTypeFrom(marker_type);
   if (!type)
     return base::nullopt;
@@ -241,12 +241,6 @@ static SpellCheckRequester* GetSpellCheckRequester(Document* document) {
 static ScrollableArea* ScrollableAreaForNode(Node* node) {
   if (!node)
     return nullptr;
-
-  if (node->IsDocumentNode()) {
-    // This can be removed after root layer scrolling is enabled.
-    if (LocalFrameView* frame_view = ToDocument(node)->View())
-      return frame_view->LayoutViewport();
-  }
 
   LayoutObject* layout_object = node->GetLayoutObject();
   if (!layout_object || !layout_object->IsBox())
@@ -942,7 +936,7 @@ unsigned Internals::markerCountForNode(Node* node,
 
   return node->GetDocument()
       .Markers()
-      .MarkersFor(node, marker_types.value())
+      .MarkersFor(ToText(*node), marker_types.value())
       .size();
 }
 
@@ -950,9 +944,8 @@ unsigned Internals::activeMarkerCountForNode(Node* node) {
   DCHECK(node);
 
   // Only TextMatch markers can be active.
-  DocumentMarker::MarkerType marker_type = DocumentMarker::kTextMatch;
-  DocumentMarkerVector markers =
-      node->GetDocument().Markers().MarkersFor(node, marker_type);
+  DocumentMarkerVector markers = node->GetDocument().Markers().MarkersFor(
+      ToText(*node), DocumentMarker::MarkerTypes::TextMatch());
 
   unsigned active_marker_count = 0;
   for (const auto& marker : markers) {
@@ -977,8 +970,8 @@ DocumentMarker* Internals::MarkerAt(Node* node,
     return nullptr;
   }
 
-  DocumentMarkerVector markers =
-      node->GetDocument().Markers().MarkersFor(node, marker_types.value());
+  DocumentMarkerVector markers = node->GetDocument().Markers().MarkersFor(
+      ToText(*node), marker_types.value());
   if (markers.size() <= index)
     return nullptr;
   return markers[index];
@@ -1325,15 +1318,16 @@ void Internals::setAutofilledValue(Element* element,
   }
 
   if (auto* input = ToHTMLInputElementOrNull(*element)) {
-    input->DispatchScopedEvent(Event::CreateBubble(EventTypeNames::keydown));
+    input->DispatchScopedEvent(*Event::CreateBubble(EventTypeNames::keydown));
     input->SetAutofillValue(value);
-    input->DispatchScopedEvent(Event::CreateBubble(EventTypeNames::keyup));
+    input->DispatchScopedEvent(*Event::CreateBubble(EventTypeNames::keyup));
   }
 
   if (auto* textarea = ToHTMLTextAreaElementOrNull(*element)) {
-    textarea->DispatchScopedEvent(Event::CreateBubble(EventTypeNames::keydown));
+    textarea->DispatchScopedEvent(
+        *Event::CreateBubble(EventTypeNames::keydown));
     textarea->SetAutofillValue(value);
-    textarea->DispatchScopedEvent(Event::CreateBubble(EventTypeNames::keyup));
+    textarea->DispatchScopedEvent(*Event::CreateBubble(EventTypeNames::keyup));
   }
 
   if (auto* select = ToHTMLSelectElementOrNull(*element))
@@ -1589,7 +1583,7 @@ String Internals::idleTimeSpellCheckerState(Document* document,
                                             ExceptionState& exception_state) {
   static const char* const kTexts[] = {
 #define V(state) #state,
-      FOR_EACH_IDLE_SPELL_CHECK_CALLBACK_STATE(V)
+      FOR_EACH_IDLE_SPELL_CHECK_CONTROLLER_STATE(V)
 #undef V
   };
 
@@ -1600,10 +1594,10 @@ String Internals::idleTimeSpellCheckerState(Document* document,
     return String();
   }
 
-  IdleSpellCheckCallback::State state = document->GetFrame()
-                                            ->GetSpellChecker()
-                                            .GetIdleSpellCheckCallback()
-                                            .GetState();
+  IdleSpellCheckController::State state = document->GetFrame()
+                                              ->GetSpellChecker()
+                                              .GetIdleSpellCheckController()
+                                              .GetState();
   auto* const* const it = std::begin(kTexts) + static_cast<size_t>(state);
   DCHECK_GE(it, std::begin(kTexts)) << "Unknown state value";
   DCHECK_LT(it, std::end(kTexts)) << "Unknown state value";
@@ -1621,7 +1615,7 @@ void Internals::runIdleTimeSpellChecker(Document* document,
 
   document->GetFrame()
       ->GetSpellChecker()
-      .GetIdleSpellCheckCallback()
+      .GetIdleSpellCheckController()
       .ForceInvocationForTesting();
 }
 
@@ -3060,7 +3054,7 @@ ScriptPromise Internals::addOneToPromise(ScriptState* script_state,
 ScriptPromise Internals::promiseCheck(ScriptState* script_state,
                                       long arg1,
                                       bool arg2,
-                                      const Dictionary& arg3,
+                                      const ScriptValue& arg3,
                                       const String& arg4,
                                       const Vector<String>& arg5,
                                       ExceptionState& exception_state) {
@@ -3074,7 +3068,7 @@ ScriptPromise Internals::promiseCheck(ScriptState* script_state,
 
 ScriptPromise Internals::promiseCheckWithoutExceptionState(
     ScriptState* script_state,
-    const Dictionary& arg1,
+    const ScriptValue& arg1,
     const String& arg2,
     const Vector<String>& arg3) {
   return ScriptPromise::Cast(script_state,
@@ -3452,4 +3446,9 @@ void Internals::BypassLongCompileThresholdOnce(
   }
   return performance_monitor->BypassLongCompileThresholdOnceForTesting();
 }
+
+unsigned Internals::LifecycleUpdateCount() const {
+  return document_->View()->LifecycleUpdateCountForTesting();
+}
+
 }  // namespace blink

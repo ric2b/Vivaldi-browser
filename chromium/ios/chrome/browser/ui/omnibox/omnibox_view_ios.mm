@@ -24,7 +24,7 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/ui/omnibox/chrome_omnibox_client_ios.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_text_field_paste_delegate.h"
-#include "ios/chrome/browser/ui/omnibox/omnibox_util.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 #include "ios/chrome/browser/ui/omnibox/web_omnibox_edit_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
@@ -279,11 +279,18 @@ void OmniboxViewIOS::SetWindowTextAndCaretPos(const base::string16& text,
 
   if (notify_text_changed)
     model()->OnChanged();
+
+  SetCaretPos(caret_pos);
 }
 
-// TODO(crbug.com/726702): Implement this and have |SetWindowTextAndCaretPos()|
-// call it.
-void OmniboxViewIOS::SetCaretPos(size_t caret_pos) {}
+void OmniboxViewIOS::SetCaretPos(size_t caret_pos) {
+  DCHECK(caret_pos <= field_.text.length || caret_pos == 0);
+  UITextPosition* start = field_.beginningOfDocument;
+  UITextPosition* newPosition =
+      [field_ positionFromPosition:start offset:caret_pos];
+  field_.selectedTextRange =
+      [field_ textRangeFromPosition:newPosition toPosition:newPosition];
+}
 
 void OmniboxViewIOS::RevertAll() {
   ignore_popup_updates_ = true;

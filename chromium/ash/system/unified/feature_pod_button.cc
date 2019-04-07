@@ -53,8 +53,16 @@ void FeaturePodIconButton::PaintButtonContents(gfx::Canvas* canvas) {
   gfx::Rect rect(GetContentsBounds());
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
-  flags.setColor(toggled_ ? kUnifiedMenuButtonColorActive
-                          : kUnifiedMenuButtonColor);
+
+  SkColor color = kUnifiedMenuButtonColor;
+  if (enabled()) {
+    if (toggled_)
+      color = kUnifiedMenuButtonColorActive;
+  } else {
+    color = kUnifiedMenuButtonColorDisabled;
+  }
+  flags.setColor(color);
+
   flags.setStyle(cc::PaintFlags::kFill_Style);
   canvas->DrawCircle(gfx::PointF(rect.CenterPoint()), rect.width() / 2, flags);
 
@@ -104,14 +112,12 @@ FeaturePodLabelButton::FeaturePodLabelButton(views::ButtonListener* listener)
 
   ConfigureFeaturePodLabel(label_);
   ConfigureFeaturePodLabel(sub_label_);
-  label_->SetEnabledColor(kUnifiedMenuTextColor);
-  sub_label_->SetEnabledColor(kUnifiedMenuSecondaryTextColor);
   sub_label_->SetVisible(false);
 
   detailed_view_arrow_->set_can_process_events_within_subtree(false);
-  detailed_view_arrow_->SetImage(
-      gfx::CreateVectorIcon(kUnifiedMenuMoreIcon, kUnifiedMenuIconColor));
   detailed_view_arrow_->SetVisible(false);
+
+  OnEnabledChanged();
 
   AddChildView(label_);
   AddChildView(detailed_view_arrow_);
@@ -140,6 +146,17 @@ void FeaturePodLabelButton::Layout() {
       gfx::Point(label_->bounds().right() + kUnifiedFeaturePodArrowSpacing,
                  label_->bounds().CenterPoint().y() - arrow_size.height() / 2),
       arrow_size));
+}
+
+void FeaturePodLabelButton::OnEnabledChanged() {
+  label_->SetEnabledColor(enabled() ? kUnifiedMenuTextColor
+                                    : kUnifiedMenuTextColorDisabled);
+  sub_label_->SetEnabledColor(enabled() ? kUnifiedMenuSecondaryTextColor
+                                        : kUnifiedMenuTextColorDisabled);
+  detailed_view_arrow_->SetImage(gfx::CreateVectorIcon(
+      kUnifiedMenuMoreIcon,
+      enabled() ? kUnifiedMenuIconColor : kUnifiedMenuIconColorDisabled));
+  SchedulePaint();
 }
 
 gfx::Size FeaturePodLabelButton::CalculatePreferredSize() const {
@@ -190,26 +207,18 @@ std::unique_ptr<views::InkDropMask> FeaturePodLabelButton::CreateInkDropMask()
 
 void FeaturePodLabelButton::SetLabel(const base::string16& label) {
   label_->SetText(label);
-  SetTooltipTextFromLabels();
   InvalidateLayout();
 }
 
 void FeaturePodLabelButton::SetSubLabel(const base::string16& sub_label) {
   sub_label_->SetText(sub_label);
   sub_label_->SetVisible(true);
-  SetTooltipTextFromLabels();
   InvalidateLayout();
 }
 
 void FeaturePodLabelButton::ShowDetailedViewArrow() {
   detailed_view_arrow_->SetVisible(true);
   InvalidateLayout();
-}
-
-void FeaturePodLabelButton::SetTooltipTextFromLabels() {
-  SetTooltipText(
-      l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_FEATURE_POD_BUTTON_TOOLTIP,
-                                 label_->text(), sub_label_->text()));
 }
 
 void FeaturePodLabelButton::LayoutInCenter(views::View* child, int y) {
@@ -243,10 +252,12 @@ FeaturePodButton::~FeaturePodButton() = default;
 void FeaturePodButton::SetVectorIcon(const gfx::VectorIcon& icon) {
   icon_button_->SetImage(views::Button::STATE_NORMAL,
                          gfx::CreateVectorIcon(icon, kUnifiedMenuIconColor));
+  icon_button_->SetImage(
+      views::Button::STATE_DISABLED,
+      gfx::CreateVectorIcon(icon, kUnifiedMenuIconColorDisabled));
 }
 
 void FeaturePodButton::SetLabel(const base::string16& label) {
-  icon_button_->SetTooltipText(label);
   label_button_->SetLabel(label);
   Layout();
   label_button_->SchedulePaint();
@@ -258,10 +269,27 @@ void FeaturePodButton::SetSubLabel(const base::string16& sub_label) {
   label_button_->SchedulePaint();
 }
 
+void FeaturePodButton::SetIconTooltip(const base::string16& text) {
+  icon_button_->SetTooltipText(text);
+}
+
+void FeaturePodButton::SetLabelTooltip(const base::string16& text) {
+  label_button_->SetTooltipText(text);
+}
+
+void FeaturePodButton::SetIconAndLabelTooltips(const base::string16& text) {
+  SetIconTooltip(text);
+  SetLabelTooltip(text);
+}
+
 void FeaturePodButton::ShowDetailedViewArrow() {
   label_button_->ShowDetailedViewArrow();
   Layout();
   label_button_->SchedulePaint();
+}
+
+void FeaturePodButton::DisableLabelButtonFocus() {
+  label_button_->SetFocusBehavior(FocusBehavior::NEVER);
 }
 
 void FeaturePodButton::SetToggled(bool toggled) {
@@ -289,6 +317,12 @@ bool FeaturePodButton::HasFocus() const {
 
 void FeaturePodButton::RequestFocus() {
   label_button_->RequestFocus();
+}
+
+void FeaturePodButton::OnEnabledChanged() {
+  icon_button_->SetEnabled(enabled());
+  label_button_->SetEnabled(enabled());
+  SchedulePaint();
 }
 
 void FeaturePodButton::ButtonPressed(views::Button* sender,

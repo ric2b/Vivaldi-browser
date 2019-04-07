@@ -63,15 +63,6 @@ bool IsProbablyNotUsername(const base::string16& s) {
   return !s.empty() && DoesStringContainOnlyDigits(s) && s.size() < 3;
 }
 
-// Update |credential| to reflect usage.
-void UpdateMetadataForUsage(PasswordForm* credential) {
-  ++credential->times_used;
-
-  // Remove alternate usernames. At this point we assume that we have found
-  // the right username.
-  credential->other_possible_usernames.clear();
-}
-
 // Returns true iff |best_matches| contain a preferred credential with a
 // username other than |preferred_username|.
 bool DidPreferenceChange(
@@ -150,8 +141,7 @@ PasswordFormManager::PasswordFormManager(
                              true /* should_migrate_http_passwords */,
                              true /* should_query_suppressed_https_forms */)),
       form_fetcher_(form_fetcher ? form_fetcher : owned_form_fetcher_.get()),
-      votes_uploader_(client, observed_form.IsPossibleChangePasswordForm()),
-      is_main_frame_secure_(client->IsMainFrameSecure()) {
+      votes_uploader_(client, observed_form.IsPossibleChangePasswordForm()) {
   // Non-HTML forms should not need any interaction with the renderer, and hence
   // no driver. Note that cloned PasswordFormManager instances can have HTML
   // forms without drivers as well.
@@ -328,12 +318,10 @@ void PasswordFormManager::Save() {
     form_saver_->Save(pending_credentials_, best_matches_);
   } else {
     ProcessUpdate();
-    std::vector<PasswordForm> credentials_to_update;
-    base::Optional<PasswordForm> old_primary_key =
-        UpdatePendingAndGetOldKey(&credentials_to_update);
+    std::vector<PasswordForm> credentials_to_update =
+        FindOtherCredentialsToUpdate();
     form_saver_->Update(pending_credentials_, best_matches_,
-                        &credentials_to_update,
-                        old_primary_key ? &old_primary_key.value() : nullptr);
+                        &credentials_to_update, nullptr);
   }
 
   // This is not in ProcessUpdate() to catch PSL matched credentials.
@@ -366,12 +354,10 @@ void PasswordFormManager::Update(
   pending_credentials_.preferred = true;
   is_new_login_ = false;
   ProcessUpdate();
-  std::vector<PasswordForm> more_credentials_to_update;
-  base::Optional<PasswordForm> old_primary_key =
-      UpdatePendingAndGetOldKey(&more_credentials_to_update);
+  std::vector<PasswordForm> more_credentials_to_update =
+      FindOtherCredentialsToUpdate();
   form_saver_->Update(pending_credentials_, best_matches_,
-                      &more_credentials_to_update,
-                      old_primary_key ? &old_primary_key.value() : nullptr);
+                      &more_credentials_to_update, nullptr);
 
   password_manager_->UpdateFormManagers();
 }
@@ -602,7 +588,7 @@ void PasswordFormManager::ProcessUpdate() {
   DCHECK(!IsNewLogin() && pending_credentials_.preferred);
   DCHECK(!client_->IsIncognito());
 
-  UpdateMetadataForUsage(&pending_credentials_);
+  password_manager_util::UpdateMetadataForUsage(&pending_credentials_);
 
   base::RecordAction(
       base::UserMetricsAction("PasswordManager_LoginFollowingAutofill"));
@@ -627,17 +613,14 @@ void PasswordFormManager::CreatePendingCredentials() {
 
   // Look for the actually submitted credentials in the list of previously saved
   // credentials that were available to autofilling.
-  // This first match via FindBestSavedMatch focuses on matches by username and
-  // falls back to password based matches if |submitted_form_| has no username
-  // filled.
   const PasswordForm* saved_form = FindBestSavedMatch(submitted_form_.get());
-  if (saved_form != nullptr) {
+  if (saved_form) {
     // The user signed in with a login we autofilled.
     pending_credentials_ = *saved_form;
     SetPasswordOverridden(pending_credentials_.password_value !=
                           password_to_save.first);
 
-    if (IsPendingCredentialsPublicSuffixMatch()) {
+    if (pending_credentials_.is_public_suffix_match) {
       // If the autofilled credentials were a PSL match or credentials stored
       // from Android apps, store a copy with the current origin and signon
       // realm. This ensures that on the next visit, a precise match is found.
@@ -649,11 +632,7 @@ void PasswordFormManager::CreatePendingCredentials() {
       // If this isn't updated, then password generation uploads are off for
       // sites where PSL matching is required to fill the login form, as two
       // PASSWORD votes are uploaded per saved password instead of one.
-      //
-      // TODO(gcasto): It would be nice if other state were shared such that if
-      // say a password was updated on one match it would update on all related
-      // passwords. This is a much larger change.
-      UpdateMetadataForUsage(&pending_credentials_);
+      password_manager_util::UpdateMetadataForUsage(&pending_credentials_);
 
       // Update |pending_credentials_| in order to be able correctly save it.
       pending_credentials_.origin = submitted_form_->origin;
@@ -669,8 +648,7 @@ void PasswordFormManager::CreatePendingCredentials() {
       // actually correspond to two different accounts (see
       // http://crbug.com/385619). In that case the user should be asked again
       // before saving the password. This is ensured by setting
-      // |password_overriden_| on |pending_credentials_| to false and setting
-      // |origin| and |signon_realm| to correct values.
+      // |password_overriden_| on |pending_credentials_| to false.
       //
       // There is still the edge case when the autofilled credentials represent
       // the same account as |submitted_form_| but the stored password
@@ -748,14 +726,8 @@ void PasswordFormManager::CreatePendingCredentials() {
     }
   }
 
-  if (!IsValidAndroidFacetURI(pending_credentials_.signon_realm)) {
+  if (!IsValidAndroidFacetURI(pending_credentials_.signon_realm))
     pending_credentials_.action = submitted_form_->action;
-    // If the user selected credentials we autofilled from a PasswordForm
-    // that contained no action URL (IE6/7 imported passwords, for example),
-    // bless it with the action URL from the observed form. See b/1107719.
-    if (pending_credentials_.action.is_empty())
-      pending_credentials_.action = observed_form_.action;
-  }
 
   pending_credentials_.password_value = password_to_save.first;
   pending_credentials_.preferred = submitted_form_->preferred;
@@ -773,7 +745,9 @@ void PasswordFormManager::CreatePendingCredentials() {
     pending_credentials_.display_name = submitted_form_->display_name;
     pending_credentials_.federation_origin = submitted_form_->federation_origin;
     pending_credentials_.icon_url = submitted_form_->icon_url;
-    // Take the correct signon_realm for federated credentials.
+    // It's important to override |signon_realm| for federated credentials
+    // because it has format "federation://" + origin_host + "/" +
+    // federation_host
     pending_credentials_.signon_realm = submitted_form_->signon_realm;
   }
 
@@ -887,6 +861,10 @@ void PasswordFormManager::OnPasswordsRevealed() {
   votes_uploader_.set_has_passwords_revealed_vote(true);
 }
 
+bool PasswordFormManager::HasGeneratedPassword() const {
+  return has_generated_password_;
+}
+
 void PasswordFormManager::SetHasGeneratedPassword(bool generated_password) {
   has_generated_password_ = generated_password;
   votes_uploader_.set_has_generated_password(generated_password);
@@ -908,6 +886,10 @@ void PasswordFormManager::SetGenerationPopupWasShown(
                                                      is_manual_generation);
 }
 
+bool PasswordFormManager::RetryPasswordFormPasswordUpdate() const {
+  return retry_password_form_password_update_;
+}
+
 void PasswordFormManager::LogSubmitPassed() {
   metrics_recorder_->LogSubmitPassed();
 }
@@ -918,6 +900,10 @@ void PasswordFormManager::LogSubmitFailed() {
 
 void PasswordFormManager::MarkGenerationAvailable() {
   metrics_recorder_->MarkGenerationAvailable();
+}
+
+bool PasswordFormManager::IsPossibleChangePasswordFormWithoutUsername() const {
+  return is_possible_change_password_form_without_username_;
 }
 
 FormFetcher* PasswordFormManager::GetFormFetcher() {
@@ -962,20 +948,6 @@ bool PasswordFormManager::IsPasswordOverridden() const {
 
 const autofill::PasswordForm* PasswordFormManager::GetPreferredMatch() const {
   return preferred_match_;
-}
-
-void PasswordFormManager::WipeStoreCopyIfOutdated() {
-  UMA_HISTOGRAM_BOOLEAN(
-      "PasswordManager.StoreReadyWhenWiping",
-      form_fetcher_->GetState() == FormFetcher::State::NOT_WAITING);
-
-  form_saver_->WipeOutdatedCopies(pending_credentials_, &best_matches_,
-                                  &preferred_match_);
-}
-
-void PasswordFormManager::SaveGenerationFieldDetectedByClassifier(
-    const base::string16& generation_field) {
-  votes_uploader_.SaveGenerationFieldDetectedByClassifier(generation_field);
 }
 
 void PasswordFormManager::ResetStoredMatches() {
@@ -1047,56 +1019,26 @@ void PasswordFormManager::SetUserAction(UserAction user_action) {
   metrics_recorder_->SetUserAction(user_action);
 }
 
-base::Optional<PasswordForm> PasswordFormManager::UpdatePendingAndGetOldKey(
-    std::vector<PasswordForm>* credentials_to_update) {
-  base::Optional<PasswordForm> old_primary_key;
-  bool update_related_credentials = false;
+std::vector<PasswordForm> PasswordFormManager::FindOtherCredentialsToUpdate() {
+  std::vector<autofill::PasswordForm> credentials_to_update;
+  if (!pending_credentials_.federation_origin.unique())
+    return credentials_to_update;
 
-  if (pending_credentials_.federation_origin.unique() &&
-      !IsValidAndroidFacetURI(pending_credentials_.signon_realm) &&
-      (pending_credentials_.password_element.empty() ||
-       pending_credentials_.username_element.empty() ||
-       pending_credentials_.submit_element.empty())) {
-    // Given that |password_element| and |username_element| are part of Sync and
-    // PasswordStore primary key, the old primary key must be used in order to
-    // match and update the existing entry.
-    old_primary_key = pending_credentials_;
-    // TODO(crbug.com/833171) It is possible for best_matches to not contain the
-    // username being updated. Add comments and a test, when we realise why.
-    auto best_match = best_matches_.find(pending_credentials_.username_value);
-    if (best_match != best_matches_.end()) {
-      old_primary_key->username_element = best_match->second->username_element;
-      old_primary_key->password_element = best_match->second->password_element;
-    }
-    pending_credentials_.password_element = observed_form_.password_element;
-    pending_credentials_.username_element = observed_form_.username_element;
-    pending_credentials_.submit_element = observed_form_.submit_element;
-    update_related_credentials = true;
-  } else {
-    update_related_credentials =
-        pending_credentials_.federation_origin.unique();
-  }
-
-  // If this was a password update, then update all non-best matches entries
-  // with the same username and the same old password.
-  if (update_related_credentials) {
-    auto updated_password_it =
-        best_matches_.find(pending_credentials_.username_value);
-    DCHECK(best_matches_.end() != updated_password_it);
-    const base::string16& old_password =
-        updated_password_it->second->password_value;
-    for (auto* not_best_match : not_best_matches_) {
-      if (not_best_match->username_value ==
-              pending_credentials_.username_value &&
-          not_best_match->password_value == old_password) {
-        credentials_to_update->push_back(*not_best_match);
-        credentials_to_update->back().password_value =
-            pending_credentials_.password_value;
-      }
+  auto updated_password_it =
+      best_matches_.find(pending_credentials_.username_value);
+  DCHECK(best_matches_.end() != updated_password_it);
+  const base::string16& old_password =
+      updated_password_it->second->password_value;
+  for (auto* not_best_match : not_best_matches_) {
+    if (not_best_match->username_value == pending_credentials_.username_value &&
+        not_best_match->password_value == old_password) {
+      credentials_to_update.push_back(*not_best_match);
+      credentials_to_update.back().password_value =
+          pending_credentials_.password_value;
     }
   }
 
-  return old_primary_key;
+  return credentials_to_update;
 }
 
 }  // namespace password_manager

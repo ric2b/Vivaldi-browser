@@ -160,7 +160,8 @@ void AudioFileReader::Close() {
 }
 
 int AudioFileReader::Read(
-    std::vector<std::unique_ptr<AudioBus>>* decoded_audio_packets) {
+    std::vector<std::unique_ptr<AudioBus>>* decoded_audio_packets,
+    int packets_to_read) {
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   if (ipc_audio_decoder_) {
       return ipc_audio_decoder_->Read(decoded_audio_packets);
@@ -177,7 +178,8 @@ int AudioFileReader::Read(
                           &total_frames, decoded_audio_packets);
 
   AVPacket packet;
-  while (ReadPacket(&packet)) {
+  int packets_read = 0;
+  while (packets_read++ < packets_to_read && ReadPacket(&packet)) {
     const auto status = decode_loop.DecodePacket(&packet, frame_ready_cb);
     av_packet_unref(&packet);
 
@@ -285,6 +287,10 @@ bool AudioFileReader::OnNewFrame(
       DVLOG(2) << "Shrinking AAC frame from " << frames_read << " to "
                << new_frames_read << " based on packet duration.";
       frames_read = new_frames_read;
+
+      // The above process may delete the entire packet.
+      if (!frames_read)
+        return true;
     }
   }
 

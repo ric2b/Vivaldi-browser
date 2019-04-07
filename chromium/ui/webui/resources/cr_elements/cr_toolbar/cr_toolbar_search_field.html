@@ -1,7 +1,8 @@
-<link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/cr_elements/cr_search_field/cr_search_field_behavior.html">
-<link rel="import" href="chrome://resources/cr_elements/icons.html">
-<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
+<link rel="import" href="../../html/polymer.html">
+
+<link rel="import" href="../cr_search_field/cr_search_field_behavior.html">
+<link rel="import" href="../icons.html">
+<link rel="import" href="../shared_style_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-spinner/paper-spinner-lite.html">
@@ -60,9 +61,9 @@
       /* Input field. */
       #searchTerm {
         -webkit-font-smoothing: antialiased;
-        -webkit-margin-start: 2px;
         flex: 1;
         line-height: 185%;
+        margin-inline-start: 2px;
         position: relative;
       }
 
@@ -101,10 +102,10 @@
 
       /** Wide layout. */
       :host(:not([narrow])) {
-        -webkit-padding-end: 0;
         background: rgba(0, 0, 0, 0.22);
         border-radius: 2px;
         cursor: text;
+        padding-inline-end: 0;
         width: var(--cr-toolbar-field-width, 680px);
       }
 
@@ -128,7 +129,7 @@
 
       :host([narrow][showing-search]) #icon,
       :host([narrow][showing-search]) paper-spinner-lite {
-        -webkit-margin-start: 18px;  /* Line up with Menu icon. */
+        margin-inline-start: 18px;  /* Line up with Menu icon. */
       }
     </style>
     <template is="dom-if" id="spinnerTemplate">

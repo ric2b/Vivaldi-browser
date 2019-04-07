@@ -9,7 +9,7 @@
 #include "base/files/file_util.h"
 #include "base/process/process_info.h"
 #include "base/strings/string_split.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -101,7 +101,7 @@ void SingleLogFileLogSource::Fetch(SysLogsSourceCallback callback) {
   auto* response_ptr = response.get();
   base::PostTaskWithTraitsAndReply(
       FROM_HERE,
-      base::TaskTraits(base::MayBlock(), base::TaskPriority::BACKGROUND),
+      base::TaskTraits(base::MayBlock(), base::TaskPriority::BEST_EFFORT),
       base::BindOnce(&SingleLogFileLogSource::ReadFile,
                      weak_ptr_factory_.GetWeakPtr(),
                      kMaxNumAllowedLogRotationsDuringFileRead, response_ptr),

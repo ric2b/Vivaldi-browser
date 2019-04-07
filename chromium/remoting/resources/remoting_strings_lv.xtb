@@ -102,11 +102,11 @@ Lai saņemtu informāciju par konfidencialitāti, skatiet Google konfidencialit�
 <translation id="3171922709365450819">Šis klients neatbalsta šo ierīci, jo ierīcei ir nepieciešama trešās puses autentifikācija.</translation>
 <translation id="3194245623920924351">Chrome attālā darbvirsma</translation>
 <translation id="3197730452537982411">Attālā darbvirsma</translation>
+<translation id="3212472844831225214">• Pievienots Android 9.0 Pie atbalsts.</translation>
 <translation id="324272851072175193">Sūtīt šos norādījumus pa e-pastu</translation>
 <translation id="3258789396564295715">Varat izveidot drošu savienojumu ar šo datoru, izmantojot Chrome attālo darbvirsmu.</translation>
 <translation id="3286521253923406898">Chrome saites saimniekdatora kontrolleris</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> vēlas veikt izmaiņas.</translation>
-<translation id="331779822864701136">• Pievienots Android 8.0 Oreo atbalsts.</translation>
 <translation id="332624996707057614">Rediģējiet datora nosaukumu.</translation>
 <translation id="3339299787263251426">Droši piekļūstiet savam datoram, izmantojot internetu.</translation>
 <translation id="3360306038446926262">Logi</translation>
@@ -122,8 +122,9 @@ Lai saņemtu informāciju par konfidencialitāti, skatiet Google konfidencialit�
 <translation id="369442766917958684">Bezsaistē.</translation>
 <translation id="3695446226812920698">Uzzināt vairāk</translation>
 <translation id="3718805989288361841">Radās kļūda Chrome attālās darbvirsmas politikas iestatījumos. Sazinieties ar sistēmas administratoru, lai saņemtu palīdzību.</translation>
-<translation id="3759645055923345178">Pēc iestatīšanas varēsiet piekļūt datoram no šīs lapas, ievadot PIN vai piekļuves kodu.</translation>
 <translation id="3776024066357219166">Jūsu Chrome attālās darbvirsmas sesija ir pārtraukta.</translation>
+<translation id="3846148461359626420">• Uzlabota pārvietošanas un tālummaiņas funkciju darbība iPhone X ierīcēs.
+• Stabilitātes uzlabojumi un kļūdu labojumi.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Lai atļautu piekļuvi, izmantojot Chrome attālo darbvirsmu, lūdzu, apstipriniet kontu un PIN kodu.</translation>
 <translation id="3897092660631435901">Izvēlne</translation>
@@ -137,6 +138,7 @@ Lai saņemtu informāciju par konfidencialitāti, skatiet Google konfidencialit�
 <translation id="405887016757208221">Attālajam datoram neizdevās inicializēt sesiju. Ja problēma atkārtojas, lūdzu, mēģiniet vēlreiz konfigurēt saimniekdatoru.</translation>
 <translation id="4068946408131579958">Visi savienojumi</translation>
 <translation id="409800995205263688">PIEZĪME. Saskaņā ar politikas iestatījumiem savienojumus ir atļauts veidot tikai starp jūsu tīkla datoriem.</translation>
+<translation id="4126409073460786861">Kad iestatīšana ir pabeigta, atsvaidziniet šo lapu, pēc tam varēsiet piekļūt datoram, izvēloties ierīci un ievadot PIN kodu</translation>
 <translation id="4145029455188493639">Pierakstījies kā <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Trūkst dažu nepieciešamo komponentu. Pārbaudiet, vai ir instalēta programmatūras jaunākā versija, un mēģiniet vēlreiz.</translation>
 <translation id="4156740505453712750">Lai izveidotu drošu savienojumu ar šo datoru, lūdzu, izvēlieties tādu PIN, kura garums ir <ph name="BOLD_START" />vismaz seši cipari<ph name="BOLD_END" />. Šis PIN būs nepieciešams, lai izveidotu savienojumu no citas atrašanās vietas.</translation>
@@ -145,7 +147,6 @@ Lai saņemtu informāciju par konfidencialitāti, skatiet Google konfidencialit�
 <translation id="4207623512727273241">Lūdzu, vispirms palaidiet instalēšanas programmu.</translation>
 <translation id="4227991223508142681">Resursdatora nodrošināšanas utilīta</translation>
 <translation id="4240294130679914010">Chrome saites saimniekdatora atinstalēšanas programma</translation>
-<translation id="4249741460382919890">Vispārīgi labojumi un stabilitātes uzlabojumi.</translation>
 <translation id="4277463233460010382">Šajā datorā ir konfigurēta atļauja vienam vai vairākiem klientiem izveidot savienojumu, neievadot PIN kodu.</translation>
 <translation id="4277736576214464567">Piekļuves kods nav derīgs. Lūdzu, mēģiniet vēlreiz.</translation>
 <translation id="4361728918881830843">Lai iespējotu attālus savienojumus ar citu datoru, instalējiet Chrome attālo darbvirsmu attiecīgajā datorā un noklikšķiniet uz <ph name="BUTTON_NAME" />.</translation>
@@ -271,6 +272,7 @@ dators</translation>
 <translation id="6998989275928107238">Kam</translation>
 <translation id="7019153418965365059">Neatpazīta saimniekdatora kļūda: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Attālā palīdzība</translation>
+<translation id="7026930240735156896">Sekojiet norādījumiem, lai iestatītu datoru attālai piekļuvei</translation>
 <translation id="7038683108611689168">Palīdziet mums uzlabot Chrome saiti, ļaujot mums apkopot lietojuma statistiku un avāriju pārskatus.</translation>
 <translation id="7067321367069083429">Ekrāns darbojas kā skārienekrāns</translation>
 <translation id="7116737094673640201">Laipni lūdzam Chrome attālajā darbvirsmā!</translation>
@@ -296,7 +298,6 @@ dators</translation>
 <translation id="7782471917492991422">Lūdzu, pārbaudiet datora barošanas pārvaldības iestatījumus: datoram ir jābūt konfigurētam tā, lai netiktu aktivizēts miega režīms, kad dators netiek lietots.</translation>
 <translation id="7810127880729796595">Rādīt statistiku (savienojums: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Trūkst dažu nepieciešamo komponentu. Pārbaudiet, vai izmantojat jaunāko Chrome versiju un mēģiniet vēlreiz.</translation>
-<translation id="7850909060902317210">Instalējiet programmatūru “Chrome attālā darbvirsma” un ievērojiet norādījumus, lai pabeigtu iestatīšanu</translation>
 <translation id="7868137160098754906">Lūdzu, ievadiet attālā datora PIN.</translation>
 <translation id="7869445566579231750">Jums nav atļauju, lai palaistu šo lietojumprogrammu.</translation>
 <translation id="7895403300744144251">Drošības politiku dēļ attālajā datorā nav atļauti savienojumi no jūsu konta.</translation>

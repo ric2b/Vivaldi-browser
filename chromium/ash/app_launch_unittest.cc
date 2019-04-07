@@ -8,8 +8,9 @@
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "services/service_manager/public/cpp/service_test.h"
-#include "services/ui/public/interfaces/constants.mojom.h"
-#include "services/ui/public/interfaces/window_server_test.mojom.h"
+#include "services/ws/public/mojom/constants.mojom.h"
+#include "services/ws/public/mojom/window_server_test.mojom.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/views/layout/layout_provider.h"
 
 namespace ash {
@@ -35,13 +36,17 @@ class AppLaunchTest : public service_manager::test::ServiceTest {
   DISALLOW_COPY_AND_ASSIGN(AppLaunchTest);
 };
 
-// TODO(sky): reenable this once it is actually uses ash with ws2.
-TEST_F(AppLaunchTest, DISABLED_TestQuickLaunch) {
+TEST_F(AppLaunchTest, TestQuickLaunch) {
+  // This test launches ash in a separate service. That doesn't make sense with
+  // SingleProcessMash.
+  if (features::IsSingleProcessMash())
+    return;
+
   connector()->StartService(mojom::kServiceName);
   connector()->StartService(quick_launch::mojom::kServiceName);
 
-  ui::mojom::WindowServerTestPtr test_interface;
-  connector()->BindInterface(ui::mojom::kServiceName, &test_interface);
+  ws::mojom::WindowServerTestPtr test_interface;
+  connector()->BindInterface(ws::mojom::kServiceName, &test_interface);
 
   base::RunLoop run_loop;
   bool success = false;

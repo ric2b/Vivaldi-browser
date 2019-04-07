@@ -13,6 +13,8 @@
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/chromeos_features.h"
 #include "chromeos/services/device_sync/public/cpp/fake_device_sync_client.h"
+#include "chromeos/services/multidevice_setup/public/cpp/fake_multidevice_setup_client.h"
+#include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
 #include "components/cryptauth/fake_remote_device_provider.h"
 #include "components/cryptauth/remote_device.h"
 #include "components/cryptauth/remote_device_ref.h"
@@ -41,6 +43,37 @@ class TestObserver : public TetherHostFetcher::Observer {
   size_t num_updates_ = 0;
 };
 
+// This should be identical to TetherHostSource in tether_host_fetcher_impl.cc.
+enum class TetherHostSource {
+  UNKNOWN,
+  MULTIDEVICE_SETUP_CLIENT,
+  DEVICE_SYNC_CLIENT,
+  REMOTE_DEVICE_PROVIDER
+};
+
+// This should be identical to GetTetherHostSourceBasedOnFlags() in
+// tether_host_fetcher_impl.cc, but with the NOTREACHED() replaced by
+// EXPECT_TRUE(false).
+TetherHostSource GetTetherHostSourceBasedOnFlags() {
+  if (base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi) &&
+      base::FeatureList::IsEnabled(
+          chromeos::features::kEnableUnifiedMultiDeviceSetup)) {
+    return TetherHostSource::MULTIDEVICE_SETUP_CLIENT;
+  }
+  if (base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi) &&
+      !base::FeatureList::IsEnabled(
+          chromeos::features::kEnableUnifiedMultiDeviceSetup)) {
+    return TetherHostSource::DEVICE_SYNC_CLIENT;
+  }
+  if (!base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi) &&
+      !base::FeatureList::IsEnabled(
+          chromeos::features::kEnableUnifiedMultiDeviceSetup)) {
+    return TetherHostSource::REMOTE_DEVICE_PROVIDER;
+  }
+  EXPECT_TRUE(false);  // NOTREACHED() alternative
+  return TetherHostSource::UNKNOWN;
+}
+
 }  // namespace
 
 class TetherHostFetcherImplTest : public testing::Test {
@@ -55,6 +88,8 @@ class TetherHostFetcherImplTest : public testing::Test {
         std::make_unique<cryptauth::FakeRemoteDeviceProvider>();
     fake_device_sync_client_ =
         std::make_unique<device_sync::FakeDeviceSyncClient>();
+    fake_multidevice_setup_client_ = std::make_unique<
+        chromeos::multidevice_setup::FakeMultiDeviceSetupClient>();
   }
 
   void TearDown() override {
@@ -64,20 +99,36 @@ class TetherHostFetcherImplTest : public testing::Test {
     tether_host_fetcher_.reset();
   }
 
-  void SetMultiDeviceApiEnabled() {
-    scoped_feature_list_.InitAndEnableFeature(features::kMultiDeviceApi);
+  void SetMultiDeviceApiAndSetupFeaturesEnabled() {
+    scoped_feature_list_.InitWithFeatures(
+        {chromeos::features::kMultiDeviceApi,
+         chromeos::features::
+             kEnableUnifiedMultiDeviceSetup} /* enabled_features */,
+        {} /* disabled_features */);
+  }
+
+  void SetOnlyMultiDeviceApiFeatureEnabled() {
+    scoped_feature_list_.InitWithFeatures(
+        {chromeos::features::kMultiDeviceApi} /* enabled_features */,
+        {chromeos::features::
+             kEnableUnifiedMultiDeviceSetup} /* disabled_features */);
   }
 
   void InitializeTest() {
     SetSyncedDevices(test_remote_device_list_);
 
+    TetherHostSource tether_host_source = GetTetherHostSourceBasedOnFlags();
     tether_host_fetcher_ = TetherHostFetcherImpl::Factory::NewInstance(
-        base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi)
-            ? nullptr
-            : fake_remote_device_provider_.get(),
-        base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi)
+        tether_host_source == TetherHostSource::REMOTE_DEVICE_PROVIDER
+            ? fake_remote_device_provider_.get()
+            : nullptr,
+        tether_host_source == TetherHostSource::DEVICE_SYNC_CLIENT
             ? fake_device_sync_client_.get()
+            : nullptr,
+        tether_host_source == TetherHostSource::MULTIDEVICE_SETUP_CLIENT
+            ? fake_multidevice_setup_client_.get()
             : nullptr);
+
     test_observer_ = std::make_unique<TestObserver>();
     tether_host_fetcher_->AddObserver(test_observer_.get());
   }
@@ -121,6 +172,10 @@ class TetherHostFetcherImplTest : public testing::Test {
           cryptauth::SoftwareFeatureState::kSupported;
     }
 
+    // Mark the first device enabled instead of supported.
+    list[0].software_features[cryptauth::SoftwareFeature::MAGIC_TETHER_HOST] =
+        cryptauth::SoftwareFeatureState::kEnabled;
+
     return list;
   }
 
@@ -135,16 +190,39 @@ class TetherHostFetcherImplTest : public testing::Test {
   }
 
   void SetSyncedDevices(cryptauth::RemoteDeviceList devices) {
-    if (base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi)) {
+    TetherHostSource tether_host_source = GetTetherHostSourceBasedOnFlags();
+    if (tether_host_source == TetherHostSource::MULTIDEVICE_SETUP_CLIENT ||
+        tether_host_source == TetherHostSource::DEVICE_SYNC_CLIENT) {
       fake_device_sync_client_->set_synced_devices(
           CreateTestRemoteDeviceRefList(devices));
-    } else {
-      fake_remote_device_provider_->set_synced_remote_devices(devices);
+
+      if (devices.empty()) {
+        fake_multidevice_setup_client_->SetHostStatusWithDevice(std::make_pair(
+            multidevice_setup::mojom::HostStatus::kNoEligibleHosts,
+            base::nullopt /* host_device */));
+        fake_multidevice_setup_client_->SetFeatureState(
+            multidevice_setup::mojom::Feature::kInstantTethering,
+            multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost);
+        return;
+      }
+
+      fake_multidevice_setup_client_->SetHostStatusWithDevice(std::make_pair(
+          multidevice_setup::mojom::HostStatus::kHostVerified,
+          cryptauth::RemoteDeviceRef(
+              std::make_shared<cryptauth::RemoteDevice>(devices[0]))));
+      fake_multidevice_setup_client_->SetFeatureState(
+          multidevice_setup::mojom::Feature::kInstantTethering,
+          multidevice_setup::mojom::FeatureState::kEnabledByUser);
+      return;
     }
+
+    fake_remote_device_provider_->set_synced_remote_devices(devices);
   }
 
   void NotifyNewDevicesSynced() {
-    if (base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi))
+    TetherHostSource tether_host_source = GetTetherHostSourceBasedOnFlags();
+    if (tether_host_source == TetherHostSource::MULTIDEVICE_SETUP_CLIENT ||
+        tether_host_source == TetherHostSource::DEVICE_SYNC_CLIENT)
       fake_device_sync_client_->NotifyNewDevicesSynced();
     else
       fake_remote_device_provider_->NotifyObserversDeviceListChanged();
@@ -225,14 +303,25 @@ class TetherHostFetcherImplTest : public testing::Test {
         .software_features[cryptauth::SoftwareFeature::MAGIC_TETHER_HOST] =
         cryptauth::SoftwareFeatureState::kNotSupported;
 
-    cryptauth::RemoteDeviceRefList host_device_list(
-        CreateTestRemoteDeviceRefList({test_remote_device_list_[0],
-                                       test_remote_device_list_[1],
-                                       test_remote_device_list_[2]}));
-
     SetSyncedDevices(test_remote_device_list_);
     NotifyNewDevicesSynced();
-    VerifyAllTetherHosts(host_device_list);
+
+    cryptauth::RemoteDeviceRefList expected_host_device_list;
+    switch (GetTetherHostSourceBasedOnFlags()) {
+      case TetherHostSource::MULTIDEVICE_SETUP_CLIENT:
+        expected_host_device_list =
+            CreateTestRemoteDeviceRefList({test_remote_device_list_[0]});
+        break;
+      case TetherHostSource::DEVICE_SYNC_CLIENT:
+      case TetherHostSource::REMOTE_DEVICE_PROVIDER:
+        expected_host_device_list = CreateTestRemoteDeviceRefList(
+            {test_remote_device_list_[0], test_remote_device_list_[1],
+             test_remote_device_list_[2]});
+        break;
+      case TetherHostSource::UNKNOWN:
+        expected_host_device_list = CreateTestRemoteDeviceRefList({});
+    }
+    VerifyAllTetherHosts(expected_host_device_list);
   }
 
   cryptauth::RemoteDeviceList test_remote_device_list_;
@@ -245,6 +334,8 @@ class TetherHostFetcherImplTest : public testing::Test {
   std::unique_ptr<cryptauth::FakeRemoteDeviceProvider>
       fake_remote_device_provider_;
   std::unique_ptr<device_sync::FakeDeviceSyncClient> fake_device_sync_client_;
+  std::unique_ptr<chromeos::multidevice_setup::FakeMultiDeviceSetupClient>
+      fake_multidevice_setup_client_;
 
   std::unique_ptr<TetherHostFetcher> tether_host_fetcher_;
 
@@ -254,44 +345,68 @@ class TetherHostFetcherImplTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(TetherHostFetcherImplTest);
 };
 
+// TestHasSyncedTetherHosts
 TEST_F(TetherHostFetcherImplTest, TestHasSyncedTetherHosts) {
   TestHasSyncedTetherHosts();
 }
-
 TEST_F(TetherHostFetcherImplTest,
-       TestHasSyncedTetherHosts_MultideviceApiEnabled) {
-  SetMultiDeviceApiEnabled();
+       TestHasSyncedTetherHosts_MultideviceApiAndSetupEnabled) {
+  SetMultiDeviceApiAndSetupFeaturesEnabled();
+  TestHasSyncedTetherHosts();
+}
+TEST_F(TetherHostFetcherImplTest,
+       TestHasSyncedTetherHosts_OnlyMultideviceApiEnabled) {
+  SetOnlyMultiDeviceApiFeatureEnabled();
   TestHasSyncedTetherHosts();
 }
 
+// TestFetchAllTetherHosts
 TEST_F(TetherHostFetcherImplTest, TestFetchAllTetherHosts) {
   TestFetchAllTetherHosts();
 }
-
 TEST_F(TetherHostFetcherImplTest,
-       TestFetchAllTetherHosts_MultideviceApiEnabled) {
-  SetMultiDeviceApiEnabled();
+       TestFetchAllTetherHosts_MultideviceApiAndSetupEnabled) {
+  SetMultiDeviceApiAndSetupFeaturesEnabled();
+  TestFetchAllTetherHosts();
+}
+TEST_F(TetherHostFetcherImplTest,
+       TestFetchAllTetherHosts_OnlyMultideviceApiEnabled) {
+  SetOnlyMultiDeviceApiFeatureEnabled();
   TestFetchAllTetherHosts();
 }
 
+// TestSingleTetherHost
 TEST_F(TetherHostFetcherImplTest, TestSingleTetherHost) {
   TestSingleTetherHost();
 }
-
-TEST_F(TetherHostFetcherImplTest, TestSingleTetherHost_MultideviceApiEnabled) {
-  SetMultiDeviceApiEnabled();
+TEST_F(TetherHostFetcherImplTest,
+       TestSingleTetherHost_MultideviceApiAndSetupEnabled) {
+  SetMultiDeviceApiAndSetupFeaturesEnabled();
+  TestSingleTetherHost();
+}
+TEST_F(TetherHostFetcherImplTest,
+       TestSingleTetherHost_OnlyMultideviceApiEnabled) {
+  SetOnlyMultiDeviceApiFeatureEnabled();
   TestSingleTetherHost();
 }
 
+// TestSingleTetherHost_IdDoesNotCorrespondToDevice
 TEST_F(TetherHostFetcherImplTest,
        TestSingleTetherHost_IdDoesNotCorrespondToDevice) {
   InitializeTest();
   VerifySingleTetherHost("nonexistentId", base::nullopt);
 }
-
-TEST_F(TetherHostFetcherImplTest,
-       TestSingleTetherHost_IdDoesNotCorrespondToDevice_MultideviceApiEnabled) {
-  SetMultiDeviceApiEnabled();
+TEST_F(
+    TetherHostFetcherImplTest,
+    TestSingleTetherHost_IdDoesNotCorrespondToDevice_MultideviceApiAndSetupEnabled) {
+  SetMultiDeviceApiAndSetupFeaturesEnabled();
+  InitializeTest();
+  VerifySingleTetherHost("nonexistentId", base::nullopt);
+}
+TEST_F(
+    TetherHostFetcherImplTest,
+    TestSingleTetherHost_IdDoesNotCorrespondToDevice_OnlyMultideviceApiEnabled) {
+  SetOnlyMultiDeviceApiFeatureEnabled();
   InitializeTest();
   VerifySingleTetherHost("nonexistentId", base::nullopt);
 }

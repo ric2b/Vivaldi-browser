@@ -233,33 +233,14 @@ void ExecuteScriptWaitForTitle(content::WebContents* web_contents,
 }
 
 #if defined (USE_AURA)
-views::View* FindWebView(views::View* view) {
-  base::queue<views::View*> queue;
-  queue.push(view);
-  while (!queue.empty()) {
-    views::View* current = queue.front();
-    queue.pop();
-    if (std::string(current->GetClassName()).find("WebView") !=
-        std::string::npos) {
-      return current;
-    }
-
-    for (int i = 0; i < current->child_count(); ++i)
-      queue.push(current->child_at(i));
-  }
-  return nullptr;
-}
-
 // Waits for select control shown/closed.
 class SelectControlWaiter : public aura::WindowObserver,
                             public aura::EnvObserver {
  public:
-  SelectControlWaiter() {
-    aura::Env::GetInstanceDontCreate()->AddObserver(this);
-  }
+  SelectControlWaiter() { aura::Env::GetInstance()->AddObserver(this); }
 
   ~SelectControlWaiter() override {
-    aura::Env::GetInstanceDontCreate()->RemoveObserver(this);
+    aura::Env::GetInstance()->RemoveObserver(this);
   }
 
   void Wait(bool wait_for_widget_shown) {
@@ -1143,41 +1124,6 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, ReloadEmbedder) {
   ASSERT_TRUE(launched_again_listener.WaitUntilSatisfied());
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewBrowserPluginSpecificTest, AcceptTouchEvents) {
-  // This test only makes sense for non-OOPIF WebView, since with
-  // GuestViewCrossProcessFrames events are routed directly to the
-  // guest, so the embedder does not need to know about the installation of
-  // touch handlers.
-  ASSERT_FALSE(
-      base::FeatureList::IsEnabled(::features::kGuestViewCrossProcessFrames));
-
-  LoadAppWithGuest("web_view/accept_touch_events");
-
-  content::RenderViewHost* embedder_rvh =
-      GetEmbedderWebContents()->GetRenderViewHost();
-
-  bool embedder_has_touch_handler =
-      content::RenderViewHostTester::HasTouchEventHandler(embedder_rvh);
-  EXPECT_FALSE(embedder_has_touch_handler);
-
-  SendMessageToGuestAndWait("install-touch-handler", "installed-touch-handler");
-
-  // Note that we need to wait for the installed/registered touch handler to
-  // appear in browser process before querying |embedder_rvh|.
-  // In practice, since we do a roundrtip from browser process to guest and
-  // back, this is sufficient.
-  embedder_has_touch_handler =
-      content::RenderViewHostTester::HasTouchEventHandler(embedder_rvh);
-  EXPECT_TRUE(embedder_has_touch_handler);
-
-  SendMessageToGuestAndWait("uninstall-touch-handler",
-                            "uninstalled-touch-handler");
-  // Same as the note above about waiting.
-  embedder_has_touch_handler =
-      content::RenderViewHostTester::HasTouchEventHandler(embedder_rvh);
-  EXPECT_FALSE(embedder_has_touch_handler);
-}
-
 // This test ensures JavaScript errors ("Cannot redefine property") do not
 // happen when a <webview> is removed from DOM and added back.
 IN_PROC_BROWSER_TEST_F(WebViewTest, AddRemoveWebView_AddRemoveWebView) {
@@ -1291,6 +1237,12 @@ IN_PROC_BROWSER_TEST_F(WebViewSizeTest,
 
 IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestAPIMethodExistence) {
   TestHelper("testAPIMethodExistence", "web_view/shim", NO_TEST_SERVER);
+}
+
+IN_PROC_BROWSER_TEST_F(WebViewTest,
+                       Shim_TestCustomElementCallbacksInaccessible) {
+  TestHelper("testCustomElementCallbacksInaccessible", "web_view/shim",
+             NO_TEST_SERVER);
 }
 
 // Tests the existence of WebRequest API event objects on the request
@@ -4210,65 +4162,6 @@ class WebViewScrollGuestContentBrowserPluginSpecificTest
   }
 };
 
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
-#define MAYBE_ScrollGuestContent DISABLED_ScrollGuestContent
-#else
-#define MAYBE_ScrollGuestContent ScrollGuestContent
-#endif
-IN_PROC_BROWSER_TEST_F(WebViewScrollGuestContentBrowserPluginSpecificTest,
-                       MAYBE_ScrollGuestContent) {
-  LoadAppWithGuest("web_view/scrollable_embedder_and_guest");
-
-  content::WebContents* embedder_contents = GetEmbedderWebContents();
-  content::RenderFrameSubmissionObserver embedder_frame_observer(
-      embedder_contents);
-
-  std::vector<content::WebContents*> guest_web_contents_list;
-  GetGuestViewManager()->WaitForNumGuestsCreated(1u);
-  GetGuestViewManager()->GetGuestWebContentsList(&guest_web_contents_list);
-  ASSERT_EQ(1u, guest_web_contents_list.size());
-
-  content::WebContents* guest_contents = guest_web_contents_list[0];
-  content::RenderFrameSubmissionObserver guest_frame_observer(guest_contents);
-
-  gfx::Rect embedder_rect = embedder_contents->GetContainerBounds();
-  gfx::Rect guest_rect = guest_contents->GetContainerBounds();
-  guest_rect.set_x(guest_rect.x() - embedder_rect.x());
-  guest_rect.set_y(guest_rect.y() - embedder_rect.y());
-
-  gfx::Vector2dF default_offset;
-  guest_frame_observer.WaitForScrollOffset(default_offset);
-  embedder_frame_observer.WaitForScrollOffset(default_offset);
-
-  gfx::Point guest_scroll_location(guest_rect.width() / 2, 0);
-
-  float gesture_distance = 15.f;
-  {
-    gfx::Vector2dF expected_offset(0.f, gesture_distance);
-
-    content::SimulateGestureScrollSequence(
-        guest_contents, guest_scroll_location,
-        gfx::Vector2dF(0, -gesture_distance));
-
-    guest_frame_observer.WaitForScrollOffset(expected_offset);
-  }
-
-  embedder_frame_observer.WaitForScrollOffset(default_offset);
-
-  // Use fling gesture to scroll back, velocity should be big enough to scroll
-  // content back.
-  float fling_velocity = 300.f;
-  {
-    content::SimulateGestureFlingSequence(
-        guest_contents, guest_scroll_location,
-        gfx::Vector2dF(0, fling_velocity));
-
-    guest_frame_observer.WaitForScrollOffset(default_offset);
-  }
-
-  embedder_frame_observer.WaitForScrollOffset(default_offset);
-}
-
 #if defined(USE_AURA)
 // This verifies the fix for crbug.com/694393 .
 IN_PROC_BROWSER_TEST_F(WebViewScrollGuestContentBrowserPluginSpecificTest,
@@ -4317,112 +4210,6 @@ IN_PROC_BROWSER_TEST_F(WebViewScrollGuestContentBrowserPluginSpecificTest,
                                          gfx::Vector2dF(0, -gesture_distance));
 
   mock_overscroll_controller->WaitForConsumedScroll();
-}
-#endif
-
-#if defined(USE_AURA)
-// TODO(wjmaclean): when WebViewTest is re-enabled on the site-isolation
-// bots, then re-enable this test class as well.
-// https://crbug.com/503751
-class WebViewFocusBrowserPluginSpecificTest
-    : public WebViewBrowserPluginSpecificTest {
- public:
-  ~WebViewFocusBrowserPluginSpecificTest() override {}
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    WebViewBrowserPluginSpecificTest::SetUpCommandLine(command_line);
-
-    command_line->AppendSwitchASCII(
-        switches::kTouchEventFeatureDetection,
-        switches::kTouchEventFeatureDetectionEnabled);
-  }
-
-  void ForceCompositorFrame(
-      content::RenderFrameSubmissionObserver& frame_observer) {
-    while (!RequestFrame(GetEmbedderWebContents())) {
-      // RequestFrame failed because we were waiting on an ack ... wait a short
-      // time and retry.
-      base::RunLoop run_loop;
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, run_loop.QuitClosure(),
-          base::TimeDelta::FromMilliseconds(10));
-      run_loop.Run();
-    }
-    frame_observer.WaitForAnyFrameSubmission();
-  }
-};
-
-// The following test verifies that a views::WebView hosting an embedder
-// gains focus on touchstart.
-IN_PROC_BROWSER_TEST_F(WebViewFocusBrowserPluginSpecificTest,
-                       TouchFocusesEmbedder) {
-  LoadAppWithGuest("web_view/accept_touch_events");
-
-  content::WebContents* web_contents = GetEmbedderWebContents();
-  content::RenderViewHost* embedder_rvh = web_contents->GetRenderViewHost();
-  content::RenderFrameSubmissionObserver frame_observer(
-      GetEmbedderWebContents());
-
-  bool embedder_has_touch_handler =
-      content::RenderViewHostTester::HasTouchEventHandler(embedder_rvh);
-  EXPECT_FALSE(embedder_has_touch_handler);
-
-  SendMessageToGuestAndWait("install-touch-handler", "installed-touch-handler");
-
-  // Note that we need to wait for the installed/registered touch handler to
-  // appear in browser process before querying |embedder_rvh|.
-  // In practice, since we do a roundrtip from browser process to guest and
-  // back, this is sufficient.
-  embedder_has_touch_handler =
-      content::RenderViewHostTester::HasTouchEventHandler(embedder_rvh);
-  EXPECT_TRUE(embedder_has_touch_handler);
-
-  extensions::AppWindow* app_window = GetFirstAppWindowForBrowser(browser());
-  aura::Window* window = app_window->GetNativeWindow();
-  EXPECT_TRUE(app_window);
-  EXPECT_TRUE(window);
-  views::Widget* widget = views::Widget::GetWidgetForNativeView(window);
-  EXPECT_TRUE(widget->GetRootView());
-  // We only expect a single views::webview in the view hierarchy.
-  views::View* aura_webview = FindWebView(widget->GetRootView());
-  ASSERT_TRUE(aura_webview);
-  gfx::Rect bounds(aura_webview->bounds());
-  EXPECT_TRUE(aura_webview->IsFocusable());
-
-  views::View* other_focusable_view = new views::View();
-  other_focusable_view->SetBounds(bounds.x() + bounds.width(), bounds.y(), 100,
-                                  100);
-  other_focusable_view->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
-  // Focusable views require an accessible name to pass accessibility checks.
-  other_focusable_view->GetViewAccessibility().OverrideName("Any name");
-  aura_webview->parent()->AddChildView(other_focusable_view);
-  other_focusable_view->SetPosition(gfx::Point(bounds.x() + bounds.width(), 0));
-
-  // Sync changes to compositor.
-  ForceCompositorFrame(frame_observer);
-
-  aura_webview->RequestFocus();
-  // Verify that other_focusable_view can steal focus from aura_webview.
-  EXPECT_TRUE(aura_webview->HasFocus());
-  other_focusable_view->RequestFocus();
-  EXPECT_TRUE(other_focusable_view->HasFocus());
-  EXPECT_FALSE(aura_webview->HasFocus());
-
-  // Compute location of guest within embedder so we can more accurately
-  // target our touch event.
-  gfx::Rect guest_rect = GetGuestWebContents()->GetContainerBounds();
-  gfx::Point embedder_origin =
-      GetEmbedderWebContents()->GetContainerBounds().origin();
-  guest_rect.Offset(-embedder_origin.x(), -embedder_origin.y());
-
-  // Generate and send synthetic touch event.
-  content::InputEventAckWaiter waiter(
-      GetGuestWebContents()->GetRenderWidgetHostView()->GetRenderWidgetHost(),
-      blink::WebInputEvent::kTouchStart);
-  content::SimulateTouchPressAt(GetEmbedderWebContents(),
-                                guest_rect.CenterPoint());
-  waiter.Wait();
-  EXPECT_TRUE(aura_webview->HasFocus());
 }
 #endif
 
@@ -4644,22 +4431,20 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, AutoResizeMessages) {
       guest->GetRenderWidgetHostView()->GetRenderWidgetHost()));
 }
 
-// Flaky under MSan: crbug.com/837757
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_BP_AutoResizeMessages DISABLED_AutoResizeMessages
-#else
-#define MAYBE_BP_AutoResizeMessages AutoResizeMessages
-#endif
-IN_PROC_BROWSER_TEST_F(WebViewBrowserPluginSpecificTest,
-                       MAYBE_BP_AutoResizeMessages) {
-  LoadAppWithGuest("web_view/simple");
-  content::WebContents* embedder = GetEmbedderWebContents();
-  content::WebContents* guest = GetGuestWebContents();
+// Test that a guest sees the synthetic wheel events of a touchpad pinch.
+IN_PROC_BROWSER_TEST_F(WebViewTest, TouchpadPinchSyntheticWheelEvents) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  LoadAppWithGuest("web_view/touchpad_pinch");
+  content::WebContents* guest_contents = GetGuestWebContents();
 
-  // Helper function as this test requires inspecting a number of content::
-  // internal objects.
-  EXPECT_TRUE(content::TestChildOrGuestAutoresize(
-      true,
-      embedder->GetRenderWidgetHostView()->GetRenderWidgetHost()->GetProcess(),
-      guest->GetRenderWidgetHostView()->GetRenderWidgetHost()));
+  ExtensionTestMessageListener synthetic_wheel_listener("Seen wheel event",
+                                                        false);
+
+  const gfx::Rect contents_rect = guest_contents->GetContainerBounds();
+  const gfx::Point pinch_position(contents_rect.width() / 2,
+                                  contents_rect.height() / 2);
+  content::SimulateGesturePinchSequence(guest_contents, pinch_position, 1.23,
+                                        blink::kWebGestureDeviceTouchpad);
+
+  ASSERT_TRUE(synthetic_wheel_listener.WaitUntilSatisfied());
 }

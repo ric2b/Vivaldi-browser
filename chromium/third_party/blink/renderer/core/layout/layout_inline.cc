@@ -70,8 +70,18 @@ struct SameSizeAsLayoutInline : public LayoutBoxModelObject {
 static_assert(sizeof(LayoutInline) == sizeof(SameSizeAsLayoutInline),
               "LayoutInline should stay small");
 
-LayoutInline::LayoutInline(Element* element) : LayoutBoxModelObject(element) {
+LayoutInline::LayoutInline(Element* element)
+    : LayoutBoxModelObject(element), line_boxes_() {
   SetChildrenInline(true);
+}
+
+LayoutInline::~LayoutInline() {
+#if DCHECK_IS_ON()
+  if (IsInLayoutNGInlineFormattingContext())
+    DCHECK(!first_paint_fragment_);
+  else
+    line_boxes_.AssertIsEmpty();
+#endif
 }
 
 LayoutInline* LayoutInline::CreateAnonymous(Document* document) {
@@ -105,13 +115,6 @@ void LayoutInline::WillBeDestroyed() {
 
   if (!DocumentBeingDestroyed()) {
     if (FirstLineBox()) {
-      // We can't wait for LayoutBoxModelObject::destroy to clear the selection,
-      // because by then we will have nuked the line boxes.
-      // FIXME: The FrameSelection should be responsible for this when it
-      // is notified of DOM mutations.
-      if (IsSelectionBorder())
-        View()->ClearSelection();
-
       // If line boxes are contained inside a root, that means we're an inline.
       // In that case, we need to remove all the line boxes so that the parent
       // lines aren't pointing to deleted children. If the first line box does
@@ -126,9 +129,30 @@ void LayoutInline::WillBeDestroyed() {
     }
   }
 
-  line_boxes_.DeleteLineBoxes();
+  DeleteLineBoxes();
 
   LayoutBoxModelObject::WillBeDestroyed();
+}
+
+void LayoutInline::DeleteLineBoxes() {
+  if (IsInLayoutNGInlineFormattingContext())
+    SetFirstInlineFragment(nullptr);
+  else
+    MutableLineBoxes()->DeleteLineBoxes();
+}
+
+void LayoutInline::SetFirstInlineFragment(NGPaintFragment* fragment) {
+  CHECK(IsInLayoutNGInlineFormattingContext());
+  NGPaintFragment::ResetInlineFragmentsFor(this);
+  first_paint_fragment_ = fragment;
+}
+
+void LayoutInline::InLayoutNGInlineFormattingContextWillChange(bool new_value) {
+  DeleteLineBoxes();
+
+  // Because |first_paint_fragment_| and |line_boxes_| are union, when one is
+  // deleted, the other should be initialized to nullptr.
+  DCHECK(new_value ? !first_paint_fragment_ : !line_boxes_.First());
 }
 
 LayoutInline* LayoutInline::InlineElementContinuation() const {
@@ -269,8 +293,8 @@ void LayoutInline::UpdateAlwaysCreateLineBoxes(bool full_layout) {
       (parent_layout_inline && parent_layout_inline->AlwaysCreateLineBoxes()) ||
       (parent_layout_inline &&
        parent_style.VerticalAlign() != EVerticalAlign::kBaseline) ||
-      Style()->VerticalAlign() != EVerticalAlign::kBaseline ||
-      Style()->GetTextEmphasisMark() != TextEmphasisMark::kNone ||
+      StyleRef().VerticalAlign() != EVerticalAlign::kBaseline ||
+      StyleRef().GetTextEmphasisMark() != TextEmphasisMark::kNone ||
       (check_fonts &&
        (!StyleRef().HasIdenticalAscentDescentAndLineGap(parent_style) ||
         parent_style.LineHeight() != StyleRef().LineHeight()));
@@ -400,7 +424,7 @@ void LayoutInline::AddChildIgnoringContinuation(LayoutObject* new_child,
     // collect the x/y offsets from inline parents later.
     if (LayoutObject* positioned_ancestor =
             InFlowPositionedInlineAncestor(this))
-      new_style->SetPosition(positioned_ancestor->Style()->GetPosition());
+      new_style->SetPosition(positioned_ancestor->StyleRef().GetPosition());
 
     LayoutBlockFlow* new_box =
         LayoutBlockFlow::CreateAnonymous(&GetDocument(), std::move(new_style));
@@ -689,7 +713,7 @@ void LayoutInline::GenerateCulledLineBoxRects(
   if (!CulledInlineFirstLineBox())
     return;
 
-  bool is_horizontal = Style()->IsHorizontalWritingMode();
+  bool is_horizontal = StyleRef().IsHorizontalWritingMode();
 
   LayoutUnit logical_top, logical_height;
   for (LayoutObject* curr = FirstChild(); curr; curr = curr->NextSibling()) {
@@ -869,19 +893,19 @@ static LayoutUnit ComputeMargin(const LayoutInline* layout_object,
 }
 
 LayoutUnit LayoutInline::MarginLeft() const {
-  return ComputeMargin(this, Style()->MarginLeft());
+  return ComputeMargin(this, StyleRef().MarginLeft());
 }
 
 LayoutUnit LayoutInline::MarginRight() const {
-  return ComputeMargin(this, Style()->MarginRight());
+  return ComputeMargin(this, StyleRef().MarginRight());
 }
 
 LayoutUnit LayoutInline::MarginTop() const {
-  return ComputeMargin(this, Style()->MarginTop());
+  return ComputeMargin(this, StyleRef().MarginTop());
 }
 
 LayoutUnit LayoutInline::MarginBottom() const {
-  return ComputeMargin(this, Style()->MarginBottom());
+  return ComputeMargin(this, StyleRef().MarginBottom());
 }
 
 bool LayoutInline::NodeAtPoint(HitTestResult& result,
@@ -908,9 +932,9 @@ bool LayoutInline::NodeAtPoint(HitTestResult& result,
     return false;
   }
 
-  return line_boxes_.HitTest(LineLayoutBoxModel(this), result,
-                             location_in_container, accumulated_offset,
-                             hit_test_action);
+  return LineBoxes()->HitTest(LineLayoutBoxModel(this), result,
+                              location_in_container, accumulated_offset,
+                              hit_test_action);
 }
 
 namespace {
@@ -1034,12 +1058,12 @@ class LinesBoundingBoxGeneratorContext {
 LayoutRect LayoutInline::LinesBoundingBox() const {
   if (const NGPhysicalBoxFragment* box_fragment =
           EnclosingBlockFlowFragmentOf(*this)) {
-    LayoutRect result;
+    NGPhysicalOffsetRect bounding_box;
     auto children =
         NGInlineFragmentTraversal::SelfFragmentsOf(*box_fragment, this);
     for (const auto& child : children)
-      result.Unite(child.RectInContainerBox().ToLayoutRect());
-    return result;
+      bounding_box.UniteIfNonZero(child.RectInContainerBox());
+    return bounding_box.ToLayoutRect();
   }
 
   if (!AlwaysCreateLineBoxes()) {
@@ -1071,7 +1095,7 @@ LayoutRect LayoutInline::LinesBoundingBox() const {
         logical_right_side = curr->LogicalRight();
     }
 
-    bool is_horizontal = Style()->IsHorizontalWritingMode();
+    bool is_horizontal = StyleRef().IsHorizontalWritingMode();
 
     LayoutUnit x = is_horizontal ? logical_left_side : FirstLineBox()->X();
     LayoutUnit y = is_horizontal ? FirstLineBox()->Y() : logical_left_side;
@@ -1138,7 +1162,7 @@ LayoutRect LayoutInline::CulledInlineVisualOverflowBoundingBox() const {
   LinesBoundingBoxGeneratorContext context(float_result);
   GenerateCulledLineBoxRects(context, this);
   LayoutRect result(EnclosingLayoutRect(float_result));
-  bool is_horizontal = Style()->IsHorizontalWritingMode();
+  bool is_horizontal = StyleRef().IsHorizontalWritingMode();
   for (LayoutObject* curr = FirstChild(); curr; curr = curr->NextSibling()) {
     if (curr->IsFloatingOrOutOfFlowPositioned())
       continue;
@@ -1184,7 +1208,10 @@ LayoutRect LayoutInline::LinesVisualOverflowBoundingBox() const {
       child_rect.offset += child.offset_to_container_box;
       result.Unite(child_rect);
     }
-    return result.ToLayoutRect();
+    LayoutRect rect = result.ToLayoutRect();
+    if (HasFlippedBlocksWritingMode())
+      ContainingBlock()->FlipForWritingMode(rect);
+    return rect;
   }
 
   if (!AlwaysCreateLineBoxes())
@@ -1215,7 +1242,7 @@ LayoutRect LayoutInline::LinesVisualOverflowBoundingBox() const {
 
   LayoutRect rect(logical_left_side, logical_top, logical_width,
                   logical_height);
-  if (!Style()->IsHorizontalWritingMode())
+  if (!StyleRef().IsHorizontalWritingMode())
     rect = rect.TransposedRect();
   return rect;
 }
@@ -1274,7 +1301,7 @@ LayoutRect LayoutInline::LocalVisualRectIgnoringVisibility() const {
 
 LayoutRect LayoutInline::VisualOverflowRect() const {
   LayoutRect overflow_rect = LinesVisualOverflowBoundingBox();
-  LayoutUnit outline_outset(Style()->OutlineOutsetExtent());
+  LayoutUnit outline_outset(StyleRef().OutlineOutsetExtent());
   if (outline_outset) {
     Vector<LayoutRect> rects;
     if (GetDocument().InNoQuirksMode()) {
@@ -1312,13 +1339,13 @@ bool LayoutInline::MapToVisualRectInAncestorSpaceInternal(
   if (!container)
     return true;
 
-  bool preserve3d = container->Style()->Preserves3D();
+  bool preserve3d = container->StyleRef().Preserves3D();
 
   TransformState::TransformAccumulation accumulation =
       preserve3d ? TransformState::kAccumulateTransform
                  : TransformState::kFlattenTransform;
 
-  if (Style()->HasInFlowPosition() && Layer()) {
+  if (StyleRef().HasInFlowPosition() && Layer()) {
     // Apply the in-flow position offset when invalidating a rectangle. The
     // layer is translated, but the layout box isn't, so we need to do this to
     // get the right dirty rect. Since this is called from LayoutObject::
@@ -1362,7 +1389,7 @@ LayoutSize LayoutInline::OffsetFromContainerInternal(
 
 PaintLayerType LayoutInline::LayerTypeRequired() const {
   return IsInFlowPositioned() || CreatesGroup() ||
-                 Style()->ShouldCompositeForCurrentAnimations() ||
+                 StyleRef().ShouldCompositeForCurrentAnimations() ||
                  ShouldApplyPaintContainment()
              ? kNormalPaintLayer
              : kNoPaintLayer;
@@ -1404,7 +1431,7 @@ void LayoutInline::UpdateHitTestResult(HitTestResult& result,
 
 void LayoutInline::DirtyLineBoxes(bool full_layout) {
   if (full_layout) {
-    line_boxes_.DeleteLineBoxes();
+    DeleteLineBoxes();
     return;
   }
 
@@ -1431,7 +1458,7 @@ void LayoutInline::DirtyLineBoxes(bool full_layout) {
       }
     }
   } else {
-    line_boxes_.DirtyLineBoxes();
+    MutableLineBoxes()->DirtyLineBoxes();
   }
 }
 
@@ -1442,20 +1469,18 @@ InlineFlowBox* LayoutInline::CreateInlineFlowBox() {
 InlineFlowBox* LayoutInline::CreateAndAppendInlineFlowBox() {
   SetAlwaysCreateLineBoxes();
   InlineFlowBox* flow_box = CreateInlineFlowBox();
-  line_boxes_.AppendLineBox(flow_box);
+  MutableLineBoxes()->AppendLineBox(flow_box);
   return flow_box;
 }
 
 void LayoutInline::DirtyLinesFromChangedChild(
     LayoutObject* child,
     MarkingBehavior marking_behavior) {
-  // During layout tree construction, we can't detect whether this node is
-  // in LayoutNG or not.
-  if (Parent() && EnclosingNGBlockFlow()) {
+  if (IsInLayoutNGInlineFormattingContext()) {
     SetAncestorLineBoxDirty();
     return;
   }
-  line_boxes_.DirtyLinesFromChangedChild(
+  MutableLineBoxes()->DirtyLinesFromChangedChild(
       LineLayoutItem(this), LineLayoutItem(child),
       marking_behavior == kMarkContainerChain);
 }
@@ -1470,7 +1495,7 @@ LayoutUnit LayoutInline::LineHeight(
       return LayoutUnit(s->ComputedLineHeight());
   }
 
-  return LayoutUnit(Style()->ComputedLineHeight());
+  return LayoutUnit(StyleRef().ComputedLineHeight());
 }
 
 LayoutUnit LayoutInline::BaselinePosition(
@@ -1516,23 +1541,17 @@ LayoutSize LayoutInline::OffsetForInFlowPositionedInline(
 
   // Per http://www.w3.org/TR/CSS2/visudet.html#abs-non-replaced-width an
   // absolute positioned box with a static position should locate itself as
-  // though it is a normal flow box in relation to its containing block. If this
-  // relative-positioned inline has a negative offset we need to compensate for
-  // it so that we align the positioned object with the edge of its containing
-  // block.
-  if (child.Style()->HasStaticInlinePosition(
-          Style()->IsHorizontalWritingMode()))
-    logical_offset.SetWidth(
-        std::max(LayoutUnit(), -OffsetForInFlowPosition().Width()));
-  else
+  // though it is a normal flow box in relation to its containing block.
+  if (!child.StyleRef().HasStaticInlinePosition(
+          StyleRef().IsHorizontalWritingMode()))
     logical_offset.SetWidth(inline_position);
 
-  if (!child.Style()->HasStaticBlockPosition(
-          Style()->IsHorizontalWritingMode()))
+  if (!child.StyleRef().HasStaticBlockPosition(
+          StyleRef().IsHorizontalWritingMode()))
     logical_offset.SetHeight(block_position);
 
-  return Style()->IsHorizontalWritingMode() ? logical_offset
-                                            : logical_offset.TransposedSize();
+  return StyleRef().IsHorizontalWritingMode() ? logical_offset
+                                              : logical_offset.TransposedSize();
 }
 
 void LayoutInline::ImageChanged(WrappedImagePtr,
@@ -1592,18 +1611,24 @@ void LayoutInline::AddOutlineRectsForContinuations(
     const LayoutPoint& additional_offset,
     IncludeBlockVisualOverflowOrNot include_block_overflows) const {
   if (LayoutBoxModelObject* continuation = Continuation()) {
+    if (continuation->NeedsLayout()) {
+      // TODO(mstensho): Prevent this from happening. Before we can get the
+      // outlines of an object, we obviously need to have laid it out. We may
+      // currently end up in a situation where the continuation's layout isn't
+      // up-to-date here. This happens when calculating the overflow rectangle
+      // while laying out one of the earlier anonymous blocks that form the
+      // continuation chain. The outlines from the continuations should probably
+      // not be part of the overflow rectangle of that anonymous block at
+      // all. Yet, here we are. Bail.
+      return;
+    }
+    LayoutPoint offset = additional_offset;
     if (continuation->IsInline())
-      continuation->AddOutlineRects(
-          rects,
-          additional_offset + (continuation->ContainingBlock()->Location() -
-                               ContainingBlock()->Location()),
-          include_block_overflows);
+      offset += continuation->ContainingBlock()->Location();
     else
-      continuation->AddOutlineRects(
-          rects,
-          additional_offset + (ToLayoutBox(continuation)->Location() -
-                               ContainingBlock()->Location()),
-          include_block_overflows);
+      offset += ToLayoutBox(continuation)->Location();
+    offset -= ContainingBlock()->Location();
+    continuation->AddOutlineRects(rects, offset, include_block_overflows);
   }
 }
 
@@ -1622,15 +1647,15 @@ void LayoutInline::ComputeSelfHitTestRects(
 
 void LayoutInline::AddAnnotatedRegions(Vector<AnnotatedRegionValue>& regions) {
   // Convert the style regions to absolute coordinates.
-  if (Style()->Visibility() != EVisibility::kVisible)
+  if (StyleRef().Visibility() != EVisibility::kVisible)
     return;
 
-  if (Style()->DraggableRegionMode() == EDraggableRegionMode::kNone)
+  if (StyleRef().DraggableRegionMode() == EDraggableRegionMode::kNone)
     return;
 
   AnnotatedRegionValue region;
   region.draggable =
-      Style()->DraggableRegionMode() == EDraggableRegionMode::kDrag;
+      StyleRef().DraggableRegionMode() == EDraggableRegionMode::kDrag;
   region.bounds = LayoutRect(LinesBoundingBox());
 
   LayoutObject* container = ContainingBlock();

@@ -9,6 +9,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/unguessable_token.h"
+#include "content/browser/appcache/appcache_navigation_handle.h"
 #include "content/browser/devtools/shared_worker_devtools_manager.h"
 #include "content/browser/interface_provider_filtering.h"
 #include "content/browser/renderer_interface_binders.h"
@@ -22,8 +23,10 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/renderer_preference_watcher.mojom.h"
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/message_port/message_port_channel.h"
+#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 #include "third_party/blink/public/platform/web_feature.mojom.h"
 #include "third_party/blink/public/web/worker_content_settings_proxy.mojom.h"
 
@@ -39,7 +42,7 @@ void AllowFileSystemOnIOThreadResponse(base::OnceCallback<void(bool)> callback,
 
 void AllowFileSystemOnIOThread(const GURL& url,
                                ResourceContext* resource_context,
-                               std::vector<std::pair<int, int>> render_frames,
+                               std::vector<GlobalFrameRoutingId> render_frames,
                                base::OnceCallback<void(bool)> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   GetContentClient()->browser()->AllowWorkerFileSystem(
@@ -50,7 +53,7 @@ void AllowFileSystemOnIOThread(const GURL& url,
 bool AllowIndexedDBOnIOThread(const GURL& url,
                               const base::string16& name,
                               ResourceContext* resource_context,
-                              std::vector<std::pair<int, int>> render_frames) {
+                              std::vector<GlobalFrameRoutingId> render_frames) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   return GetContentClient()->browser()->AllowWorkerIndexedDB(
       url, name, resource_context, render_frames);
@@ -125,8 +128,9 @@ void SharedWorkerHost::Start(
     mojom::SharedWorkerFactoryPtr factory,
     mojom::ServiceWorkerProviderInfoForSharedWorkerPtr
         service_worker_provider_info,
-    network::mojom::URLLoaderFactoryAssociatedPtrInfo script_loader_factory,
-    std::unique_ptr<URLLoaderFactoryBundleInfo> factory_bundle) {
+    network::mojom::URLLoaderFactoryAssociatedPtrInfo
+        main_script_loader_factory,
+    std::unique_ptr<URLLoaderFactoryBundleInfo> subresource_loader_factories) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   AdvanceTo(Phase::kStarted);
 
@@ -146,6 +150,14 @@ void SharedWorkerHost::Start(
       RenderProcessHost::FromID(process_id_)->GetBrowserContext(),
       &renderer_preferences);
 
+  // Create a RendererPreferenceWatcher to observe updates in the preferences.
+  mojom::RendererPreferenceWatcherPtr watcher_ptr;
+  mojom::RendererPreferenceWatcherRequest preference_watcher_request =
+      mojo::MakeRequest(&watcher_ptr);
+  GetContentClient()->browser()->RegisterRendererPreferenceWatcherForWorkers(
+      RenderProcessHost::FromID(process_id_)->GetBrowserContext(),
+      std::move(watcher_ptr));
+
   // Set up content settings interface.
   blink::mojom::WorkerContentSettingsProxyPtr content_settings;
   content_settings_ = std::make_unique<SharedWorkerContentSettingsProxyImpl>(
@@ -161,37 +173,43 @@ void SharedWorkerHost::Start(
       mojom::kNavigation_SharedWorkerSpec, process_id_,
       mojo::MakeRequest(&interface_provider)));
 
-  // Add the network factory to the bundle to pass to the renderer. The bundle
-  // is only provided (along with |script_loader_factory|) if
-  // NetworkService/S13nSW is enabled.
-  DCHECK(!script_loader_factory || factory_bundle);
-  if (factory_bundle) {
-    network::mojom::URLLoaderFactoryPtrInfo network_factory_info;
+  // Add the default factory to the bundle for subresource loading to pass to
+  // the renderer. The bundle is only provided if
+  // NetworkService/S13nServiceWorker is enabled.
+  // TODO(nhiroki): We might need to set the default factory to AppCache
+  // instead, as we do for frames, if requests from this shared worker are
+  // supposed to go through AppCache. Currently, we set the default factory to a
+  // direct network.
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled()) {
+    DCHECK(subresource_loader_factories);
+    DCHECK(!subresource_loader_factories->default_factory_info());
     if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
-      // NetworkService is on: Use the network service.
+      network::mojom::URLLoaderFactoryPtrInfo network_factory_info;
       CreateNetworkFactory(mojo::MakeRequest(&network_factory_info));
+      subresource_loader_factories->default_factory_info() =
+          std::move(network_factory_info);
     } else {
-      // NetworkService is off: RenderProcessHost gives us a non-NetworkService
-      // network factory.
+      // Use the non-NetworkService network factory for the process when
+      // NetworkService is off.
+      network::mojom::URLLoaderFactoryPtr default_factory;
       RenderProcessHost::FromID(process_id_)
-          ->CreateURLLoaderFactory(mojo::MakeRequest(&network_factory_info));
+          ->CreateURLLoaderFactory(mojo::MakeRequest(&default_factory));
+      subresource_loader_factories->default_factory_info() =
+          default_factory.PassInterface();
     }
-    DCHECK(!factory_bundle->default_factory_info());
-    factory_bundle->default_factory_info() = std::move(network_factory_info);
-
-    // TODO(falken): We might need to set the default factory to AppCache
-    // instead, as we do for frames, if requests from this shared worker are
-    // supposed to go through AppCache.
   }
 
   // Send the CreateSharedWorker message.
   factory_ = std::move(factory);
   factory_->CreateSharedWorker(
       std::move(info), pause_on_start, devtools_worker_token,
-      renderer_preferences, std::move(content_settings),
-      std::move(service_worker_provider_info), std::move(script_loader_factory),
-      std::move(factory_bundle), std::move(host), std::move(worker_request_),
-      std::move(interface_provider));
+      renderer_preferences, std::move(preference_watcher_request),
+      std::move(content_settings), std::move(service_worker_provider_info),
+      appcache_handle_ ? appcache_handle_->appcache_host_id()
+                       : kAppCacheNoHostId,
+      std::move(main_script_loader_factory),
+      std::move(subresource_loader_factories), std::move(host),
+      std::move(worker_request_), std::move(interface_provider));
 
   // Monitor the lifetime of the worker.
   worker_.set_connection_error_handler(base::BindOnce(
@@ -366,11 +384,12 @@ void SharedWorkerHost::OnFeatureUsed(blink::mojom::WebFeature feature) {
     info.client->OnFeatureUsed(feature);
 }
 
-std::vector<std::pair<int, int>>
+std::vector<GlobalFrameRoutingId>
 SharedWorkerHost::GetRenderFrameIDsForWorker() {
-  std::vector<std::pair<int, int>> result;
+  std::vector<GlobalFrameRoutingId> result;
+  result.reserve(clients_.size());
   for (const ClientInfo& info : clients_)
-    result.push_back(std::make_pair(info.process_id, info.frame_id));
+    result.push_back(GlobalFrameRoutingId(info.process_id, info.frame_id));
   return result;
 }
 
@@ -414,6 +433,12 @@ void SharedWorkerHost::AddClient(mojom::SharedWorkerClientPtr client,
 void SharedWorkerHost::BindDevToolsAgent(
     blink::mojom::DevToolsAgentAssociatedRequest request) {
   worker_->BindDevToolsAgent(std::move(request));
+}
+
+void SharedWorkerHost::SetAppCacheHandle(
+    std::unique_ptr<AppCacheNavigationHandle> appcache_handle) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  appcache_handle_ = std::move(appcache_handle);
 }
 
 void SharedWorkerHost::OnClientConnectionLost() {

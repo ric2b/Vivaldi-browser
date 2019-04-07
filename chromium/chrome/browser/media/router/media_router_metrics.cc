@@ -49,6 +49,8 @@ const char MediaRouterMetrics::kHistogramCloseLatency[] =
     "MediaRouter.Ui.Action.CloseLatency";
 const char MediaRouterMetrics::kHistogramDialParsingError[] =
     "MediaRouter.Dial.ParsingError";
+const char MediaRouterMetrics::kHistogramDialFetchAppInfo[] =
+    "MediaRouter.Dial.FetchAppInfo";
 const char MediaRouterMetrics::kHistogramIconClickLocation[] =
     "MediaRouter.Icon.Click.Location";
 const char MediaRouterMetrics::kHistogramMediaRouterCastingSource[] =
@@ -137,7 +139,7 @@ void MediaRouterMetrics::RecordMediaRouterCastingSource(MediaCastMode source) {
 void MediaRouterMetrics::RecordMediaRouterFileFormat(
     const media::container_names::MediaContainerName format) {
   UMA_HISTOGRAM_ENUMERATION(kHistogramMediaRouterFileFormat, format,
-                            media::container_names::CONTAINER_MAX);
+                            media::container_names::CONTAINER_MAX + 1);
 }
 
 // static
@@ -153,6 +155,13 @@ void MediaRouterMetrics::RecordDialParsingError(
   UMA_HISTOGRAM_ENUMERATION(
       kHistogramDialParsingError, parsing_error,
       SafeDialDeviceDescriptionParser::ParsingError::kTotalCount);
+}
+
+// static
+void MediaRouterMetrics::RecordDialFetchAppInfo(
+    DialAppInfoResultCode result_code) {
+  UMA_HISTOGRAM_ENUMERATION(kHistogramDialFetchAppInfo, result_code,
+                            DialAppInfoResultCode::kCount);
 }
 
 // static

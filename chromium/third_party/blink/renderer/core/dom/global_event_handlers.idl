@@ -34,6 +34,7 @@
     NoInterfaceObject // Always used on target of 'implements'
 ] interface GlobalEventHandlers {
     attribute EventHandler onabort;
+    [RuntimeEnabled=InvisibleDOM] attribute EventHandler onactivateinvisible;
     attribute EventHandler onblur;
     attribute EventHandler oncancel;
     attribute EventHandler oncanplay;
@@ -107,6 +108,7 @@
     attribute EventHandler onlostpointercapture;
     attribute EventHandler onpointerdown;
     attribute EventHandler onpointermove;
+    [RuntimeEnabled=PointerRawMove] attribute EventHandler onpointerrawmove;
     attribute EventHandler onpointerup;
     attribute EventHandler onpointercancel;
     attribute EventHandler onpointerover;

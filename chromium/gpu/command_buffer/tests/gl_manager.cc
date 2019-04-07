@@ -36,6 +36,7 @@
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
+#include "gpu/ipc/common/gpu_client_ids.h"
 #include "gpu/ipc/in_process_command_buffer.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -100,13 +101,21 @@ class GpuMemoryBufferImpl : public gfx::GpuMemoryBuffer {
     NOTREACHED();
     return gfx::GpuMemoryBufferId(0);
   }
-  gfx::GpuMemoryBufferHandle GetHandle() const override {
+  gfx::GpuMemoryBufferType GetType() const override {
+    return gfx::NATIVE_PIXMAP;
+  }
+  gfx::GpuMemoryBufferHandle CloneHandle() const override {
     NOTREACHED();
     return gfx::GpuMemoryBufferHandle();
   }
   ClientBuffer AsClientBuffer() override {
     return reinterpret_cast<ClientBuffer>(this);
   }
+  void OnMemoryDump(
+      base::trace_event::ProcessMemoryDump* pmd,
+      const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
+      uint64_t tracing_process_id,
+      int importance) const override {}
 
   base::RefCountedBytes* bytes() { return bytes_.get(); }
 
@@ -158,13 +167,21 @@ class IOSurfaceGpuMemoryBuffer : public gfx::GpuMemoryBuffer {
     NOTREACHED();
     return gfx::GpuMemoryBufferId(0);
   }
-  gfx::GpuMemoryBufferHandle GetHandle() const override {
+  gfx::GpuMemoryBufferType GetType() const override {
+    return gfx::IO_SURFACE_BUFFER;
+  }
+  gfx::GpuMemoryBufferHandle CloneHandle() const override {
     NOTREACHED();
     return gfx::GpuMemoryBufferHandle();
   }
   ClientBuffer AsClientBuffer() override {
     return reinterpret_cast<ClientBuffer>(this);
   }
+  void OnMemoryDump(
+      base::trace_event::ProcessMemoryDump* pmd,
+      const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
+      uint64_t tracing_process_id,
+      int importance) const override {}
 
   IOSurfaceRef iosurface() { return iosurface_; }
 
@@ -221,15 +238,15 @@ GLManager::~GLManager() {
   if (!use_count_) {
     if (base_share_group_) {
       delete base_share_group_;
-      base_share_group_ = NULL;
+      base_share_group_ = nullptr;
     }
     if (base_surface_) {
       delete base_surface_;
-      base_surface_ = NULL;
+      base_surface_ = nullptr;
     }
     if (base_context_) {
       delete base_context_;
-      base_context_ = NULL;
+      base_context_ = nullptr;
     }
   }
 }
@@ -283,14 +300,14 @@ void GLManager::InitializeWithWorkaroundsImpl(
     mailbox_manager_ = &owned_mailbox_manager_;
   }
 
-  gl::GLShareGroup* share_group = NULL;
+  gl::GLShareGroup* share_group = nullptr;
   if (options.share_group_manager) {
     share_group = options.share_group_manager->share_group();
   } else if (options.share_mailbox_manager) {
     share_group = options.share_mailbox_manager->share_group();
   }
 
-  gles2::ContextGroup* context_group = NULL;
+  gles2::ContextGroup* context_group = nullptr;
   scoped_refptr<gles2::ShareGroup> client_share_group;
   if (options.share_group_manager) {
     context_group = options.share_group_manager->decoder_->GetContextGroup();
@@ -298,7 +315,7 @@ void GLManager::InitializeWithWorkaroundsImpl(
       options.share_group_manager->gles2_implementation()->share_group();
   }
 
-  gl::GLContext* real_gl_context = NULL;
+  gl::GLContext* real_gl_context = nullptr;
   if (options.virtual_manager &&
       !gpu_preferences_.use_passthrough_cmd_decoder) {
     real_gl_context = options.virtual_manager->context();
@@ -353,7 +370,8 @@ void GLManager::InitializeWithWorkaroundsImpl(
   command_buffer_->set_handler(decoder_.get());
 
   surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
-  ASSERT_TRUE(surface_.get() != NULL) << "could not create offscreen surface";
+  ASSERT_TRUE(surface_.get() != nullptr)
+      << "could not create offscreen surface";
 
   if (base_context_) {
     context_ = scoped_refptr<gl::GLContext>(new gpu::GLContextVirtual(
@@ -373,7 +391,7 @@ void GLManager::InitializeWithWorkaroundsImpl(
       g_gpu_feature_info.ApplyToGLContext(context_.get());
     }
   }
-  ASSERT_TRUE(context_.get() != NULL) << "could not create GL context";
+  ASSERT_TRUE(context_.get() != nullptr) << "could not create GL context";
 
   ASSERT_TRUE(context_->MakeCurrent(surface_.get()));
 
@@ -508,14 +526,13 @@ int32_t GLManager::CreateImage(ClientBuffer buffer,
     gfx::GpuMemoryBuffer* gpu_memory_buffer =
         reinterpret_cast<gfx::GpuMemoryBuffer*>(buffer);
     DCHECK(gpu_memory_buffer);
-    if (gpu_memory_buffer->GetHandle().type == gfx::NATIVE_PIXMAP) {
-      gfx::GpuMemoryBufferHandle handle =
-          gfx::CloneHandleForIPC(gpu_memory_buffer->GetHandle());
+    if (gpu_memory_buffer->GetType() == gfx::NATIVE_PIXMAP) {
+      gfx::GpuMemoryBufferHandle handle = gpu_memory_buffer->CloneHandle();
       gfx::BufferFormat format = gpu_memory_buffer->GetFormat();
       gl_image = gpu_memory_buffer_factory_->AsImageFactory()
                      ->CreateImageForGpuMemoryBuffer(
-                         handle, size, format, internalformat,
-                         gpu::InProcessCommandBuffer::kGpuClientId,
+                         std::move(handle), size, format, internalformat,
+                         gpu::kInProcessCommandBufferClientId,
                          gpu::kNullSurfaceHandle);
       if (!gl_image)
         return -1;

@@ -41,16 +41,12 @@
 namespace blink {
 
 class SecurityOrigin;
-struct CrossThreadFetchParametersData;
 
 // A FetchParameters is a "parameter object" for
 // ResourceFetcher::requestResource to avoid the method having too many
 // arguments.
 //
-// There are cases where we need to copy a FetchParameters across threads, and
-// CrossThreadFetchParametersData is a struct for the purpose. When you add a
-// member variable to this class, do not forget to add the corresponding
-// one in CrossThreadFetchParametersData and write copying logic.
+// This class is thread-bound. Do not copy/pass an instance across threads.
 class PLATFORM_EXPORT FetchParameters {
   DISALLOW_NEW();
 
@@ -61,14 +57,12 @@ class PLATFORM_EXPORT FetchParameters {
     kInDocument,  // The request was discovered in the main document
     kInserted     // The request was discovered in a document.write()
   };
-  enum OriginRestriction {
-    kUseDefaultOriginRestrictionForType,
-    kRestrictToSameOrigin,
-    kNoOriginRestriction
-  };
-  enum PlaceholderImageRequestType {
-    kDisallowPlaceholder = 0,  // The requested image must not be a placeholder.
-    kAllowPlaceholder,         // The image is allowed to be a placeholder.
+  enum ImageRequestOptimization {
+    kNone = 0,          // No optimization.
+    kAllowPlaceholder,  // The image is allowed to be a placeholder.
+    kDeferImageLoad,  // Defer loading the image from network. Full image might
+                      // still load if the request is already-loaded or in
+                      // memory cache.
   };
   struct ResourceWidth {
     DISALLOW_NEW();
@@ -79,7 +73,6 @@ class PLATFORM_EXPORT FetchParameters {
   };
 
   explicit FetchParameters(const ResourceRequest&);
-  explicit FetchParameters(std::unique_ptr<CrossThreadFetchParametersData>);
   FetchParameters(const ResourceRequest&, const ResourceLoaderOptions&);
   ~FetchParameters();
 
@@ -156,10 +149,6 @@ class PLATFORM_EXPORT FetchParameters {
   // credentials mode.
   void SetCrossOriginAccessControl(const SecurityOrigin*,
                                    network::mojom::FetchCredentialsMode);
-  OriginRestriction GetOriginRestriction() const { return origin_restriction_; }
-  void SetOriginRestriction(OriginRestriction restriction) {
-    origin_restriction_ = restriction;
-  }
   const IntegrityMetadataSet IntegrityMetadata() const {
     return options_.integrity_metadata;
   }
@@ -185,18 +174,19 @@ class PLATFORM_EXPORT FetchParameters {
 
   void MakeSynchronous();
 
-  PlaceholderImageRequestType GetPlaceholderImageRequestType() const {
-    return placeholder_image_request_type_;
+  ImageRequestOptimization GetImageRequestOptimization() const {
+    return image_request_optimization_;
   }
 
   // Configures the request to load an image placeholder if the request is
   // eligible (e.g. the url's protocol is HTTP, etc.). If this request is
   // non-eligible, this method doesn't modify the ResourceRequest. Calling this
-  // method sets m_placeholderImageRequestType to the appropriate value.
+  // method sets image_request_optimization_ to the appropriate value.
   void SetAllowImagePlaceholder();
 
-  // Gets a copy of the data suitable for passing to another thread.
-  std::unique_ptr<CrossThreadFetchParametersData> CopyData() const;
+  // Configures the request to load an image as a placeholder and sets the
+  // Client LoFi preview bit.
+  void SetClientLoFiPlaceholder();
 
  private:
   ResourceRequest resource_request_;
@@ -207,49 +197,10 @@ class PLATFORM_EXPORT FetchParameters {
   ResourceLoaderOptions options_;
   SpeculativePreloadType speculative_preload_type_;
   DeferOption defer_;
-  OriginRestriction origin_restriction_;
   ResourceWidth resource_width_;
   ClientHintsPreferences client_hint_preferences_;
-  PlaceholderImageRequestType placeholder_image_request_type_;
+  ImageRequestOptimization image_request_optimization_;
   bool is_stale_revalidation_ = false;
-};
-
-// This class is needed to copy a FetchParameters across threads, because it
-// has some members which cannot be transferred across threads (AtomicString
-// for example).
-// There are some rules / restrictions:
-//  - This struct cannot contain an object that cannot be transferred across
-//    threads (e.g., AtomicString)
-//  - Non-simple members need explicit copying (e.g., String::IsolatedCopy,
-//    KURL::Copy) rather than the copy constructor or the assignment operator.
-struct CrossThreadFetchParametersData {
-  WTF_MAKE_NONCOPYABLE(CrossThreadFetchParametersData);
-  USING_FAST_MALLOC(CrossThreadFetchParametersData);
-
- public:
-  CrossThreadFetchParametersData()
-      : decoder_options(TextResourceDecoderOptions::kPlainTextContent),
-        options(ResourceLoaderOptions()) {}
-
-  std::unique_ptr<CrossThreadResourceRequestData> resource_request;
-  TextResourceDecoderOptions decoder_options;
-  CrossThreadResourceLoaderOptionsData options;
-  FetchParameters::SpeculativePreloadType speculative_preload_type;
-  FetchParameters::DeferOption defer;
-  FetchParameters::OriginRestriction origin_restriction;
-  FetchParameters::ResourceWidth resource_width;
-  ClientHintsPreferences client_hint_preferences;
-  FetchParameters::PlaceholderImageRequestType placeholder_image_request_type;
-};
-
-template <>
-struct CrossThreadCopier<FetchParameters> {
-  STATIC_ONLY(CrossThreadCopier);
-  using Type =
-      WTF::PassedWrapper<std::unique_ptr<CrossThreadFetchParametersData>>;
-  static Type Copy(const FetchParameters& fetch_params) {
-    return WTF::Passed(fetch_params.CopyData());
-  }
 };
 
 }  // namespace blink

@@ -295,7 +295,7 @@ ResourceId CreateResource(DisplayResourceProvider* parent_resource_provider,
       child_resource_provider, size, is_overlay_candidate);
 
   int child_id = parent_resource_provider->CreateChild(
-      base::BindRepeating([](const std::vector<ReturnedResource>&) {}));
+      base::BindRepeating([](const std::vector<ReturnedResource>&) {}), true);
 
   // Transfer resource to the parent.
   std::vector<ResourceId> resource_ids_to_transfer;
@@ -1333,6 +1333,40 @@ TEST_F(UnderlayTest, DisallowsTransparentCandidates) {
   ASSERT_EQ(0U, candidate_list.size());
 }
 
+TEST_F(UnderlayTest, DisallowFilteredQuadOnTop) {
+  std::unique_ptr<RenderPass> pass = CreateRenderPass();
+
+  int render_pass_id = 3;
+  RenderPassDrawQuad* quad =
+      pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
+  quad->SetNew(pass->shared_quad_state_list.back(), kOverlayRect, kOverlayRect,
+               render_pass_id, 0, gfx::RectF(), gfx::Size(),
+               gfx::Vector2dF(1, 1), gfx::PointF(), gfx::RectF(), false);
+
+  CreateFullscreenCandidateQuad(
+      resource_provider_.get(), child_resource_provider_.get(),
+      child_provider_.get(), pass->shared_quad_state_list.back(), pass.get())
+      ->needs_blending = false;
+  pass->shared_quad_state_list.front()->opacity = 1.0;
+
+  cc::FilterOperations filters;
+  filters.Append(cc::FilterOperation::CreateBlurFilter(10.f));
+
+  OverlayCandidateList candidate_list;
+  OverlayProcessor::FilterOperationsMap render_pass_filters;
+  OverlayProcessor::FilterOperationsMap render_pass_background_filters;
+
+  render_pass_background_filters[render_pass_id] = &filters;
+
+  RenderPassList pass_list;
+  pass_list.push_back(std::move(pass));
+  overlay_processor_->ProcessForOverlays(
+      resource_provider_.get(), &pass_list, GetIdentityColorMatrix(),
+      render_pass_filters, render_pass_background_filters, &candidate_list,
+      nullptr, nullptr, &damage_rect_, &content_bounds_);
+  ASSERT_EQ(0U, candidate_list.size());
+}
+
 TEST_F(TransparentUnderlayTest, AllowsOpaqueCandidates) {
   std::unique_ptr<RenderPass> pass = CreateRenderPass();
   CreateFullscreenCandidateQuad(
@@ -1771,6 +1805,43 @@ TEST_F(UnderlayTest, DamageNotSubtractedForNonConsecutiveIdenticalUnderlays) {
   EXPECT_EQ(kOverlayRect, damage_rect_);
 }
 
+// An identical overlay that is occluded should not have damage subtracted until
+// it has been unoccluded for more than one frame.
+TEST_F(UnderlayTest, DamageSubtractedForOneFrameAfterBecomingUnoccluded) {
+  for (int i = 0; i < 3; ++i) {
+    std::unique_ptr<RenderPass> pass = CreateRenderPass();
+    if (i == 0) {
+      // Add an overlapping quad above the candidate for the first frame.
+      CreateFullscreenOpaqueQuad(resource_provider_.get(),
+                                 pass->shared_quad_state_list.back(),
+                                 pass.get());
+    }
+    CreateFullscreenCandidateQuad(
+        resource_provider_.get(), child_resource_provider_.get(),
+        child_provider_.get(), pass->shared_quad_state_list.back(), pass.get());
+
+    damage_rect_ = kOverlayRect;
+
+    OverlayCandidateList candidate_list;
+    OverlayProcessor::FilterOperationsMap render_pass_filters;
+    OverlayProcessor::FilterOperationsMap render_pass_background_filters;
+    RenderPassList pass_list;
+    pass_list.push_back(std::move(pass));
+    overlay_processor_->ProcessForOverlays(
+        resource_provider_.get(), &pass_list, GetIdentityColorMatrix(),
+        render_pass_filters, render_pass_background_filters, &candidate_list,
+        nullptr, nullptr, &damage_rect_, &content_bounds_);
+
+    // The damage rect should not be subtracted if the underlay is occluded
+    // (i==0) or it is unoccluded for the first time (i==1).
+    if (i < 2)
+      EXPECT_FALSE(damage_rect_.IsEmpty());
+  }
+  // The second time the same overlay rect is scheduled it should be subtracted
+  // from the damage rect.
+  EXPECT_TRUE(damage_rect_.IsEmpty());
+}
+
 TEST_F(UnderlayTest, DamageNotSubtractedWhenQuadsAboveOverlap) {
   for (int i = 0; i < 2; ++i) {
     std::unique_ptr<RenderPass> pass = CreateRenderPass();
@@ -1857,6 +1928,39 @@ TEST_F(UnderlayTest, PrimaryPlaneOverlayIsTransparentWithUnderlay) {
 
   EXPECT_EQ(2U, candidate_list.size());
   ASSERT_EQ(false, candidate_list[0].is_opaque);
+}
+
+TEST_F(UnderlayTest, UpdateDamageWhenChangingUnderlays) {
+  output_surface_->GetOverlayCandidateValidator()->AddExpectedRect(
+      gfx::RectF(kOverlayTopLeftRect));
+
+  for (size_t i = 0; i < 2; ++i) {
+    std::unique_ptr<RenderPass> pass = CreateRenderPass();
+
+    if (i == 0) {
+      CreateCandidateQuadAt(
+          resource_provider_.get(), child_resource_provider_.get(),
+          child_provider_.get(), pass->shared_quad_state_list.back(),
+          pass.get(), kOverlayRect);
+    }
+
+    CreateCandidateQuadAt(resource_provider_.get(),
+                          child_resource_provider_.get(), child_provider_.get(),
+                          pass->shared_quad_state_list.back(), pass.get(),
+                          kOverlayTopLeftRect);
+
+    OverlayCandidateList candidate_list;
+    OverlayProcessor::FilterOperationsMap render_pass_filters;
+    OverlayProcessor::FilterOperationsMap render_pass_background_filters;
+    RenderPassList pass_list;
+    pass_list.push_back(std::move(pass));
+    overlay_processor_->ProcessForOverlays(
+        resource_provider_.get(), &pass_list, GetIdentityColorMatrix(),
+        render_pass_filters, render_pass_background_filters, &candidate_list,
+        nullptr, nullptr, &damage_rect_, &content_bounds_);
+  }
+
+  EXPECT_EQ(kOverlayRect, damage_rect_);
 }
 
 TEST_F(UnderlayCastTest, NoOverlayContentBounds) {

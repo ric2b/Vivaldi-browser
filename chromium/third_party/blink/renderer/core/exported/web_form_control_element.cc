@@ -79,6 +79,8 @@ bool WebFormControlElement::IsAutofilled() const {
 bool WebFormControlElement::UserHasEditedTheField() const {
   if (auto* input = ToHTMLInputElementOrNull(*private_))
     return input->UserHasEditedTheField();
+  if (auto* select_element = ToHTMLSelectElementOrNull(*private_))
+    return select_element->UserHasEditedTheField();
   return true;
 }
 
@@ -133,10 +135,10 @@ void WebFormControlElement::SetAutofillValue(const WebString& value) {
                                             nullptr);
     }
     Unwrap<Element>()->DispatchScopedEvent(
-        Event::CreateBubble(EventTypeNames::keydown));
+        *Event::CreateBubble(EventTypeNames::keydown));
     Unwrap<TextControlElement>()->SetAutofillValue(value);
     Unwrap<Element>()->DispatchScopedEvent(
-        Event::CreateBubble(EventTypeNames::keyup));
+        *Event::CreateBubble(EventTypeNames::keyup));
     if (!Focused()) {
       Unwrap<Element>()->DispatchBlurEvent(nullptr, kWebFocusTypeForward,
                                            nullptr);

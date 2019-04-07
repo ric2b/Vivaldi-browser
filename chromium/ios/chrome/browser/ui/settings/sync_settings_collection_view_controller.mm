@@ -8,9 +8,9 @@
 
 #include "base/auto_reset.h"
 #include "base/mac/foundation_util.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/browser_sync/profile_sync_service.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -332,6 +332,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
   for (int i = 0; i < SyncSetupService::kNumberOfSyncableDatatypes; ++i) {
     SyncSetupService::SyncableDatatype dataType =
         static_cast<SyncSetupService::SyncableDatatype>(i);
+    if (dataType == SyncSetupService::kSyncUserEvent) {
+      // This data type should only be used with the unified consent UI.
+      continue;
+    }
     [model addItem:[self switchItemForDataType:dataType]
         toSectionWithIdentifier:SectionIdentifierSyncServices];
   }
@@ -413,10 +417,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (CollectionViewItem*)switchItemForAutofillWalletImport {
+  NSString* title = l10n_util::GetNSString(
+      IDS_AUTOFILL_ENABLE_PAYMENTS_INTEGRATION_CHECKBOX_LABEL);
   SyncSwitchItem* autofillWalletImportItem =
       [self switchItemWithType:ItemTypeAutofillWalletImport
-                         title:l10n_util::GetNSString(
-                                   IDS_IOS_AUTOFILL_USE_WALLET_DATA)
+                         title:title
                       subTitle:nil];
   autofillWalletImportItem.on = [self isAutofillWalletImportOn];
   autofillWalletImportItem.enabled = [self isAutofillWalletImportItemEnabled];
@@ -829,16 +834,21 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   // Syncable data types cells
   NSMutableArray* switchsToReconfigure = [[NSMutableArray alloc] init];
-  for (NSUInteger index = 0;
+  for (NSInteger index = 0;
        index < SyncSetupService::kNumberOfSyncableDatatypes; ++index) {
+    SyncSetupService::SyncableDatatype dataType =
+        static_cast<SyncSetupService::SyncableDatatype>(index);
+    if (dataType == SyncSetupService::kSyncUserEvent) {
+      // This data type should only be used with the unified consent UI.
+      continue;
+    }
     NSIndexPath* indexPath = [self.collectionViewModel
         indexPathForItemType:ItemTypeSyncableDataType
            sectionIdentifier:SectionIdentifierSyncServices
                      atIndex:index];
     SyncSwitchItem* syncSwitchItem = base::mac::ObjCCastStrict<SyncSwitchItem>(
         [self.collectionViewModel itemAtIndexPath:indexPath]);
-    SyncSetupService::SyncableDatatype dataType =
-        (SyncSetupService::SyncableDatatype)syncSwitchItem.dataType;
+    DCHECK_EQ(index, syncSwitchItem.dataType);
     syncer::ModelType modelType = _syncSetupService->GetModelType(dataType);
     syncSwitchItem.on = _syncSetupService->IsDataTypePreferred(modelType);
     syncSwitchItem.enabled = [self shouldSyncableItemsBeEnabled];
@@ -967,6 +977,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
       return IDS_SYNC_DATATYPE_PREFERENCES;
     case SyncSetupService::kSyncReadingList:
       return IDS_SYNC_DATATYPE_READING_LIST;
+    case SyncSetupService::kSyncUserEvent:
+    // Not supported for the code before the unified consent.
     case SyncSetupService::kNumberOfSyncableDatatypes:
       NOTREACHED();
   }
@@ -1000,13 +1012,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (BOOL)isAutofillWalletImportOn {
-  return _browserState->GetPrefs()->GetBoolean(
-      autofill::prefs::kAutofillWalletImportEnabled);
+  return autofill::prefs::IsPaymentsIntegrationEnabled(
+      _browserState->GetPrefs());
 }
 
 - (void)setAutofillWalletImportOn:(BOOL)on {
-  _browserState->GetPrefs()->SetBoolean(
-      autofill::prefs::kAutofillWalletImportEnabled, on);
+  autofill::prefs::SetPaymentsIntegrationEnabled(_browserState->GetPrefs(), on);
 }
 
 - (NSInteger)tagForIndexPath:(NSIndexPath*)indexPath {

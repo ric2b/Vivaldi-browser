@@ -181,7 +181,7 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
     @Override
     public void showRepostFormWarningDialog() {
         // TODO(mkosiba) We should be using something akin to the JsResultReceiver as the
-        // callback parameter (instead of ContentViewCore) and implement a way of converting
+        // callback parameter (instead of WebContents) and implement a way of converting
         // that to a pair of messages.
         final int msgContinuePendingReload = 1;
         final int msgCancelPendingReload = 2;
@@ -321,7 +321,7 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
                 ? mAwSettings.getBlockNetworkLoads() && URLUtil.isNetworkUrl(url) : true;
     }
 
-    private static class GetDisplayNameTask extends AsyncTask<Void, Void, String[]> {
+    private static class GetDisplayNameTask extends AsyncTask<String[]> {
         final int mProcessId;
         final int mRenderId;
         final int mModeFlags;
@@ -341,7 +341,7 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
         }
 
         @Override
-        protected String[] doInBackground(Void...voids) {
+        protected String[] doInBackground() {
             String[] displayNames = new String[mFilePaths.length];
             for (int i = 0; i < mFilePaths.length; i++) {
                 displayNames[i] = resolveFileName(mFilePaths[i]);

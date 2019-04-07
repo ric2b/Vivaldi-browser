@@ -29,10 +29,13 @@ class AppDownloadingScreenView;
 class AppLaunchSplashScreenView;
 class ArcKioskSplashScreenView;
 class ArcTermsOfServiceScreenView;
+class AssistantOptInFlowScreenView;
 class AutoEnrollmentCheckScreenView;
 class BaseScreenHandler;
 class ControllerPairingScreenView;
 class CoreOobeView;
+class DemoPreferencesScreenView;
+class DemoSetupScreenView;
 class DeviceDisabledScreenView;
 class EnableDebuggingScreenView;
 class EncryptionMigrationScreenView;
@@ -40,6 +43,7 @@ class EnrollmentScreenView;
 class EulaView;
 class ErrorScreen;
 class DiscoverScreenView;
+class FingerprintSetupScreenView;
 class GaiaView;
 class HIDDetectionView;
 class HostPairingScreenView;
@@ -47,17 +51,16 @@ class KioskAppMenuHandler;
 class KioskAutolaunchScreenView;
 class KioskEnableScreenView;
 class LoginScreenContext;
+class MarketingOptInScreenView;
 class NativeWindowDelegate;
+class NetworkScreenView;
 class NetworkStateInformer;
-class WelcomeView;
 class OobeDisplayChooser;
 class RecommendAppsScreenView;
+class ResetView;
 class SigninScreenHandler;
 class SigninScreenHandlerDelegate;
 class SupervisedUserCreationScreenHandler;
-class ResetView;
-class DemoSetupScreenView;
-class DemoPreferencesScreenView;
 class SyncConsentScreenView;
 class TermsOfServiceScreenView;
 class UserBoardView;
@@ -66,6 +69,7 @@ class UpdateView;
 class UpdateRequiredView;
 class VoiceInteractionValuePropScreenView;
 class WaitForContainerReadyScreenView;
+class WelcomeView;
 class WrongHWIDScreenView;
 
 // A custom WebUI that defines datasource for out-of-box-experience (OOBE) UI:
@@ -77,13 +81,14 @@ class OobeUI : public content::WebUIController,
  public:
   // List of known types of OobeUI. Type added as path in chrome://oobe url, for
   // example chrome://oobe/user-adding.
-  static const char kOobeDisplay[];
-  static const char kLoginDisplay[];
-  static const char kLockDisplay[];
-  static const char kUserAddingDisplay[];
   static const char kAppLaunchSplashDisplay[];
   static const char kArcKioskSplashDisplay[];
+  static const char kDiscoverDisplay[];
   static const char kGaiaSigninDisplay[];
+  static const char kLockDisplay[];
+  static const char kLoginDisplay[];
+  static const char kOobeDisplay[];
+  static const char kUserAddingDisplay[];
 
   class Observer {
    public:
@@ -110,6 +115,7 @@ class OobeUI : public content::WebUIController,
   ResetView* GetResetView();
   DemoSetupScreenView* GetDemoSetupScreenView();
   DemoPreferencesScreenView* GetDemoPreferencesScreenView();
+  FingerprintSetupScreenView* GetFingerprintSetupScreenView();
   KioskAutolaunchScreenView* GetKioskAutolaunchScreenView();
   KioskEnableScreenView* GetKioskEnableScreenView();
   TermsOfServiceScreenView* GetTermsOfServiceScreenView();
@@ -132,9 +138,12 @@ class OobeUI : public content::WebUIController,
   VoiceInteractionValuePropScreenView* GetVoiceInteractionValuePropScreenView();
   WaitForContainerReadyScreenView* GetWaitForContainerReadyScreenView();
   UpdateRequiredView* GetUpdateRequiredScreenView();
+  AssistantOptInFlowScreenView* GetAssistantOptInFlowScreenView();
   GaiaView* GetGaiaScreenView();
   UserBoardView* GetUserBoardView();
   DiscoverScreenView* GetDiscoverScreenView();
+  NetworkScreenView* GetNetworkScreenView();
+  MarketingOptInScreenView* GetMarketingOptInScreenView();
 
   // ShutdownPolicyHandler::Delegate
   void OnShutdownPolicyChanged(bool reboot_on_shutdown) override;
@@ -215,6 +224,10 @@ class OobeUI : public content::WebUIController,
   void AddWebUIHandler(std::unique_ptr<BaseWebUIHandler> handler);
   void AddScreenHandler(std::unique_ptr<BaseScreenHandler> handler);
 
+  // Configures all the relevant screen shandlers and resources for OOBE/Login
+  // display type.
+  void ConfigureOobeDisplay();
+
   // Type of UI.
   std::string display_type_;
 
@@ -254,7 +267,7 @@ class OobeUI : public content::WebUIController,
   std::vector<base::Closure> ready_callbacks_;
 
   // List of registered observers.
-  base::ObserverList<Observer> observer_list_;
+  base::ObserverList<Observer>::Unchecked observer_list_;
 
   // Observer of CrosSettings watching the kRebootOnShutdown policy.
   std::unique_ptr<ShutdownPolicyHandler> shutdown_policy_handler_;

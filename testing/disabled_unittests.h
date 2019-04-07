@@ -162,3 +162,15 @@ DISABLE_ALL(EncryptedMediaSupportedTypesWidevineHwSecureTest)
 // Disabled since it fails when we disable access keys
 DISABLE(BrowserKeyEventsTest, AccessKeys)
 
+// Supposed to be disabled, but misspelled
+DISABLE_MULTI(WebRtcGetUserMediaBrowserTest, DISABLE_SrcObjectReplaceInactiveTracks)
+
+// Broke in v70.46. Only breaks in vivaldi, not raw Chrome. VB-44518
+DISABLE(PictureInPictureWindowControllerBrowserTest, PreloadNoneSrcChangeThenLoad)
+DISABLE(PictureInPictureWindowControllerBrowserTest,
+        ChangeVideoSrcToMediaStreamKeepsPictureInPictureWindowOpened)
+DISABLE(PictureInPictureWindowControllerBrowserTest,
+        UpdateVideoSrcKeepsPictureInPictureWindowOpened)
+
+// Failed when AV1 was enabled
+DISABLE(PipelineIntegrationTest, BasicPlayback_VideoOnly_AV1_Mp4)

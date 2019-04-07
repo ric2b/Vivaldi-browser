@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/files/file_path.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/drive/chromeos/change_list_loader_observer.h"
 #include "components/drive/chromeos/drive_change_list_loader.h"
@@ -44,6 +45,7 @@ class TeamDriveChangeListLoader : public DriveChangeListLoader,
   ~TeamDriveChangeListLoader() override;
 
   const base::FilePath& root_entry_path() const { return root_entry_path_; }
+  base::WeakPtr<TeamDriveChangeListLoader> GetWeakPtr();
 
   // DriveChangeListLoader overrides
   void AddChangeListLoaderObserver(ChangeListLoaderObserver* observer) override;
@@ -54,7 +56,7 @@ class TeamDriveChangeListLoader : public DriveChangeListLoader,
   bool IsRefreshing() override;
   void LoadIfNeeded(const FileOperationCallback& callback) override;
   void ReadDirectory(const base::FilePath& directory_path,
-                     const ReadDirectoryEntriesCallback& entries_callback,
+                     ReadDirectoryEntriesCallback entries_callback,
                      const FileOperationCallback& completion_callback) override;
   void CheckForUpdates(const FileOperationCallback& callback) override;
 
@@ -72,9 +74,12 @@ class TeamDriveChangeListLoader : public DriveChangeListLoader,
 
   const std::string team_drive_id_;
   const base::FilePath root_entry_path_;
-  base::ObserverList<ChangeListLoaderObserver> change_list_loader_observers_;
+  base::ObserverList<ChangeListLoaderObserver>::Unchecked
+      change_list_loader_observers_;
 
   THREAD_CHECKER(thread_checker_);
+
+  base::WeakPtrFactory<TeamDriveChangeListLoader> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(TeamDriveChangeListLoader);
 };

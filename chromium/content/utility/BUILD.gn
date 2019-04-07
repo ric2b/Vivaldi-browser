@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/jumbo.gni")
+import("//chromeos/assistant/assistant.gni")
 import("//media/media_options.gni")
 
 jumbo_source_set("utility") {
@@ -17,8 +18,6 @@ jumbo_source_set("utility") {
   sources = [
     "in_process_utility_thread.cc",
     "in_process_utility_thread.h",
-    "utility_blink_platform_impl.cc",
-    "utility_blink_platform_impl.h",
     "utility_blink_platform_with_sandbox_support_impl.cc",
     "utility_blink_platform_with_sandbox_support_impl.h",
     "utility_main.cc",
@@ -66,6 +65,17 @@ jumbo_source_set("utility") {
       "//media/mojo:buildflags",
       "//media/mojo/interfaces:constants",
       "//media/mojo/services",
+    ]
+  }
+
+  if (is_chromeos) {
+    deps += [ "//chromeos/assistant:buildflags" ]
+  }
+
+  if (enable_cros_libassistant) {
+    deps += [
+      "//chromeos/services/assistant/audio_decoder:lib",
+      "//chromeos/services/assistant/public/mojom",
     ]
   }
 }

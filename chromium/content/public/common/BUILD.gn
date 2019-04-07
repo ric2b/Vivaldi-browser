@@ -171,6 +171,8 @@ jumbo_source_set("common_sources") {
     "menu_item.h",
     "mhtml_generation_params.cc",
     "mhtml_generation_params.h",
+    "mime_handler_view_mode.cc",
+    "mime_handler_view_mode.h",
     "notification_resources.cc",
     "notification_resources.h",
     "origin_util.h",
@@ -184,11 +186,8 @@ jumbo_source_set("common_sources") {
     "persistent_notification_status.h",
     "platform_notification_data.cc",
     "platform_notification_data.h",
-    "presentation_connection_message.cc",
-    "presentation_connection_message.h",
     "previews_state.h",
     "process_type.h",
-    "push_event_payload.h",
     "push_subscription_options.h",
     "referrer.cc",
     "referrer.h",
@@ -334,6 +333,9 @@ source_set("feature_h264_with_openh264_ffmpeg") {
 }
 
 mojom("interfaces") {
+  # We don't want Blink variants of these bindings to be generated.
+  disable_variants = true
+
   # Must depend on //content/public/common/ instead, for component build.
   visibility = [
     ":common_sources",
@@ -354,6 +356,8 @@ mojom("interfaces") {
     "fullscreen_video_element.mojom",
     "load_timing_info.mojom",
     "push_messaging_status.mojom",
+    "renderer_preference_watcher.mojom",
+    "renderer_preferences.mojom",
     "resource_load_info.mojom",
     "resource_usage_reporter.mojom",
     "transferrable_url_loader.mojom",
@@ -368,6 +372,7 @@ mojom("interfaces") {
   public_deps = [
     ":resource_type_bindings",
     "//services/network/public/mojom",
+    "//third_party/blink/public:mojo_bindings",
     "//url/mojom:url_mojom_gurl",
     "//url/mojom:url_mojom_origin",
   ]

@@ -38,7 +38,11 @@
 #include "services/network/public/mojom/request_context_frame_type.mojom.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
+
+// Note for S13nServiceWorker: All tests are skipped as we don't use
+// ServiceWorkerWriteToCacheJob when S13nServiceWorker is enabled.
 
 namespace content {
 namespace service_worker_write_to_cache_job_unittest {
@@ -446,6 +450,9 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
 };
 
 TEST_F(ServiceWorkerWriteToCacheJobTest, Normal) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   mock_protocol_handler_->SetCreateJobCallback(
       base::Bind(&CreateNormalURLRequestJob));
   request_->Start();
@@ -456,6 +463,9 @@ TEST_F(ServiceWorkerWriteToCacheJobTest, Normal) {
 }
 
 TEST_F(ServiceWorkerWriteToCacheJobTest, InvalidMimeType) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   mock_protocol_handler_->SetCreateJobCallback(
       base::Bind(&CreateInvalidMimeTypeJob));
   request_->Start();
@@ -467,6 +477,9 @@ TEST_F(ServiceWorkerWriteToCacheJobTest, InvalidMimeType) {
 }
 
 TEST_F(ServiceWorkerWriteToCacheJobTest, SSLCertificateError) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   mock_protocol_handler_->SetCreateJobCallback(
       base::Bind(&CreateSSLCertificateErrorJob));
   request_->Start();
@@ -488,6 +501,9 @@ class ServiceWorkerWriteToCacheLocalhostTest
 
 TEST_F(ServiceWorkerWriteToCacheLocalhostTest,
        SSLCertificateError_AllowInsecureLocalhost) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kAllowInsecureLocalhost);
 
@@ -502,6 +518,9 @@ TEST_F(ServiceWorkerWriteToCacheLocalhostTest,
 }
 
 TEST_F(ServiceWorkerWriteToCacheLocalhostTest, SSLCertificateError) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   mock_protocol_handler_->SetCreateJobCallback(
       base::Bind(&CreateSSLCertificateErrorJob));
   request_->Start();
@@ -514,6 +533,9 @@ TEST_F(ServiceWorkerWriteToCacheLocalhostTest, SSLCertificateError) {
 
 TEST_F(ServiceWorkerWriteToCacheLocalhostTest,
        CertStatusError_AllowInsecureLocalhost) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kAllowInsecureLocalhost);
 
@@ -528,6 +550,9 @@ TEST_F(ServiceWorkerWriteToCacheLocalhostTest,
 }
 
 TEST_F(ServiceWorkerWriteToCacheLocalhostTest, CertStatusError) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   mock_protocol_handler_->SetCreateJobCallback(
       base::Bind(&CreateCertStatusErrorJob));
   request_->Start();
@@ -539,6 +564,9 @@ TEST_F(ServiceWorkerWriteToCacheLocalhostTest, CertStatusError) {
 }
 
 TEST_F(ServiceWorkerWriteToCacheJobTest, CertStatusError) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   mock_protocol_handler_->SetCreateJobCallback(
       base::Bind(&CreateCertStatusErrorJob));
   request_->Start();
@@ -550,6 +578,9 @@ TEST_F(ServiceWorkerWriteToCacheJobTest, CertStatusError) {
 }
 
 TEST_F(ServiceWorkerWriteToCacheJobTest, Update_SameScript) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   std::string response = GenerateLongResponse();
   CreateIncumbent(response);
   scoped_refptr<ServiceWorkerVersion> version = UpdateScript(response);
@@ -557,6 +588,9 @@ TEST_F(ServiceWorkerWriteToCacheJobTest, Update_SameScript) {
 }
 
 TEST_F(ServiceWorkerWriteToCacheJobTest, Update_SameSizeScript) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   std::string response = GenerateLongResponse();
   CreateIncumbent(response);
 
@@ -592,6 +626,9 @@ TEST_F(ServiceWorkerWriteToCacheJobTest, Update_SameSizeScript) {
 }
 
 TEST_F(ServiceWorkerWriteToCacheJobTest, Update_TruncatedScript) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   std::string response = GenerateLongResponse();
   CreateIncumbent(response);
 
@@ -621,6 +658,9 @@ TEST_F(ServiceWorkerWriteToCacheJobTest, Update_TruncatedScript) {
 }
 
 TEST_F(ServiceWorkerWriteToCacheJobTest, Update_ElongatedScript) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   std::string original_response = GenerateLongResponse();
   CreateIncumbent(original_response);
 
@@ -644,6 +684,9 @@ TEST_F(ServiceWorkerWriteToCacheJobTest, Update_ElongatedScript) {
 }
 
 TEST_F(ServiceWorkerWriteToCacheJobTest, Update_EmptyScript) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   // Create empty incumbent.
   CreateIncumbent(std::string());
 
@@ -664,6 +707,9 @@ TEST_F(ServiceWorkerWriteToCacheJobTest, Update_EmptyScript) {
 }
 
 TEST_F(ServiceWorkerWriteToCacheJobTest, Error) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   mock_protocol_handler_->SetCreateJobCallback(
       base::Bind(&CreateFailedURLRequestJob));
   request_->Start();
@@ -675,6 +721,9 @@ TEST_F(ServiceWorkerWriteToCacheJobTest, Error) {
 }
 
 TEST_F(ServiceWorkerWriteToCacheJobTest, FailedWriteHeadersToCache) {
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   mock_protocol_handler_->SetCreateJobCallback(
       base::Bind(&CreateNormalURLRequestJob));
   DisableCache();

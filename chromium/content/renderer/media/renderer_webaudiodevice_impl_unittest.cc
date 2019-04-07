@@ -80,29 +80,29 @@ class RendererWebAudioDeviceImplTest
     webaudio_device_->SetMediaTaskRunnerForTesting(message_loop_.task_runner());
   }
 
-  MOCK_METHOD1(CreateAudioCapturerSource,
-               scoped_refptr<media::AudioCapturerSource>(int));
-  MOCK_METHOD3(CreateFinalAudioRendererSink,
-               scoped_refptr<media::AudioRendererSink>(int,
-                                                       int,
-                                                       const std::string&));
-  MOCK_METHOD4(
-      CreateSwitchableAudioRendererSink,
-      scoped_refptr<media::SwitchableAudioRendererSink>(SourceType,
-                                                        int,
-                                                        int,
-                                                        const std::string&));
+  MOCK_METHOD2(CreateAudioCapturerSource,
+               scoped_refptr<media::AudioCapturerSource>(
+                   int,
+                   const media::AudioSourceParameters&));
+  MOCK_METHOD2(CreateFinalAudioRendererSink,
+               scoped_refptr<media::AudioRendererSink>(
+                   int,
+                   const media::AudioSinkParameters&));
+  MOCK_METHOD3(CreateSwitchableAudioRendererSink,
+               scoped_refptr<media::SwitchableAudioRendererSink>(
+                   SourceType,
+                   int,
+                   const media::AudioSinkParameters&));
 
   scoped_refptr<media::AudioRendererSink> CreateAudioRendererSink(
       SourceType source_type,
       int render_frame_id,
-      int session_id,
-      const std::string& device_id) override {
+      const media::AudioSinkParameters& params) override {
     scoped_refptr<media::MockAudioRendererSink> mock_sink =
         new media::MockAudioRendererSink(
-            device_id, media::OUTPUT_DEVICE_STATUS_OK,
-            MockGetOutputDeviceParameters(render_frame_id, session_id,
-                                          device_id));
+            params.device_id, media::OUTPUT_DEVICE_STATUS_OK,
+            MockGetOutputDeviceParameters(render_frame_id, params.session_id,
+                                          params.device_id));
 
     EXPECT_CALL(*mock_sink.get(), Start());
     EXPECT_CALL(*mock_sink.get(), Play());

@@ -28,25 +28,23 @@ namespace crashpad {
 //!
 //! See StartHandlerAtCrash() for documentation on the input arguments.
 //!
-//! \param[out] A argv_strings vector of arguments suitable for starting the
-//!     handler with.
-void BuildHandlerArgvStrings(
+//! \return A vector of arguments suitable for starting the handler with.
+std::vector<std::string> BuildHandlerArgvStrings(
     const base::FilePath& handler,
     const base::FilePath& database,
     const base::FilePath& metrics_dir,
     const std::string& url,
     const std::map<std::string, std::string>& annotations,
-    const std::vector<std::string>& arguments,
-    std::vector<std::string>* argv_strings);
+    const std::vector<std::string>& arguments);
 
 //! \brief Flattens a string vector into a const char* vector suitable for use
 //!     in an exec() call.
 //!
-//! \param[in] argv_strings Arguments to be passed to child process, typically
-//!     created by BuildHandlerArgvStrings().
-//! \param[out] argv argv suitable for starting the child process.
-void ConvertArgvStrings(const std::vector<std::string>& argv_strings,
-                        std::vector<const char*>* argv);
+//! \param[in] strings A vector of string data. This vector must remain valid
+//!     for the lifetime of \a c_strings.
+//! \param[out] c_strings A vector of pointers to the string data in \a strings.
+void StringVectorToCStringVector(const std::vector<std::string>& strings,
+                                 std::vector<const char*>* c_strings);
 
 }  // namespace crashpad
 

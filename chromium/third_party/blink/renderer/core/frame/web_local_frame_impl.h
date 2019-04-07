@@ -31,6 +31,9 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_WEB_LOCAL_FRAME_IMPL_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_WEB_LOCAL_FRAME_IMPL_H_
 
+#include <memory>
+#include <set>
+
 #include "base/single_thread_task_runner.h"
 #include "third_party/blink/public/platform/web_file_system_type.h"
 #include "third_party/blink/public/web/devtools_agent.mojom-blink.h"
@@ -45,8 +48,6 @@
 #include "third_party/blink/renderer/platform/heap/self_keep_alive.h"
 #include "third_party/blink/renderer/platform/wtf/compiler.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
-
-#include <memory>
 
 namespace blink {
 
@@ -264,8 +265,8 @@ class CORE_EXPORT WebLocalFrameImpl final
       const WebHistoryItem&,
       bool is_client_redirect,
       const base::UnguessableToken& devtools_navigation_token,
-      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data,
-      const WebNavigationTimings& navigation_timings) override;
+      std::unique_ptr<WebNavigationParams> navigation_params,
+      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) override;
   blink::mojom::CommitResult CommitSameDocumentNavigation(
       const WebURL&,
       WebFrameLoadType,
@@ -282,8 +283,20 @@ class CORE_EXPORT WebLocalFrameImpl final
       WebFrameLoadType,
       const WebHistoryItem&,
       bool is_client_redirect,
-      std::unique_ptr<WebDocumentLoader::ExtraData> navigation_data,
-      const WebNavigationTimings& navigation_timings) override;
+      std::unique_ptr<WebNavigationParams> navigation_params,
+      std::unique_ptr<WebDocumentLoader::ExtraData> navigation_data) override;
+  void CommitDataNavigationWithRequest(
+      const WebURLRequest&,
+      const WebData&,
+      const WebString& mime_type,
+      const WebString& text_encoding,
+      const WebURL& unreachable_url,
+      bool replace,
+      WebFrameLoadType,
+      const WebHistoryItem&,
+      bool is_client_redirect,
+      std::unique_ptr<WebNavigationParams> navigation_params,
+      std::unique_ptr<WebDocumentLoader::ExtraData> navigation_data) override;
   FallbackContentResult MaybeRenderFallbackContent(
       const WebURLError&) const override;
   void ReportContentSecurityPolicyViolation(
@@ -305,18 +318,13 @@ class CORE_EXPORT WebLocalFrameImpl final
   void DidCallAddSearchProvider() override;
   void DidCallIsSearchProviderInstalled() override;
   void ReplaceSelection(const WebString&) override;
-  void RequestFind(int identifier,
-                   const WebString& search_text,
-                   const WebFindOptions&) override;
   bool Find(int identifier,
             const WebString& search_text,
             const WebFindOptions&,
             bool wrap_within_frame,
             bool* active_now = nullptr) override;
   void StopFindingForTesting(mojom::StopFindAction) override;
-
   void SetTickmarks(const WebVector<WebRect>&) override;
-  WebPlugin* GetWebPluginForFind() override;
   WebNode ContextMenuNode() const override;
   WebFrameWidget* FrameWidget() const override;
   void CopyImageAt(const WebPoint&) override;
@@ -363,6 +371,8 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   void DidChangeContentsSize(const IntSize&);
 
+  void UpdateDevToolsOverlays();
+
   void CreateFrameView();
 
   static WebLocalFrameImpl* FromFrame(LocalFrame*);
@@ -404,7 +414,7 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   ContentSettingsClient& GetContentSettingsClient() {
     return content_settings_client_;
-  };
+  }
 
   SharedWorkerRepositoryClientImpl* SharedWorkerRepositoryClient() const {
     return shared_worker_repository_client_.get();
@@ -439,9 +449,10 @@ class CORE_EXPORT WebLocalFrameImpl final
   // Returns true if the frame is focused.
   bool IsFocused() const;
 
-  virtual void Trace(blink::Visitor*);
+  // Returns true if our print context suggests using printing layout.
+  bool UsePrintingLayout() const;
 
-  bool snapshotPage(SkBitmap&, bool, float, float) override;
+  virtual void Trace(blink::Visitor*);
 
  private:
   friend LocalFrameClientImpl;
@@ -535,4 +546,4 @@ DEFINE_TYPE_CASTS(WebLocalFrameImpl,
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_WEB_LOCAL_FRAME_IMPL_H_

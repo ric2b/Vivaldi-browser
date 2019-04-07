@@ -7,10 +7,13 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/test/test_message_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chromecast/media/cma/test/mock_cma_backend_factory.h"
 #include "media/audio/fake_audio_log_factory.h"
 #include "media/audio/test_audio_thread.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromecast {
@@ -23,27 +26,38 @@ const ::media::AudioParameters kDefaultAudioParams(
     ::media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
     ::media::CHANNEL_LAYOUT_STEREO,
     ::media::AudioParameters::kAudioCDSampleRate,
-    16,
     256);
 
 void OnLogMessage(const std::string& message) {}
 
+std::unique_ptr<service_manager::Connector> CreateConnector() {
+  service_manager::mojom::ConnectorRequest request;
+  return service_manager::Connector::Create(&request);
+}
+
 class CastAudioManagerAlsaTest : public testing::Test {
  public:
-  CastAudioManagerAlsaTest() : media_thread_("CastMediaThread") {
+  CastAudioManagerAlsaTest()
+      : media_thread_("CastMediaThread"), connector_(CreateConnector()) {
     CHECK(media_thread_.Start());
 
+    backend_factory_ = std::make_unique<MockCmaBackendFactory>();
     audio_manager_ = std::make_unique<CastAudioManagerAlsa>(
         std::make_unique<::media::TestAudioThread>(), &audio_log_factory_,
-        std::make_unique<MockCmaBackendFactory>(), media_thread_.task_runner(),
-        false);
+        base::BindRepeating(&CastAudioManagerAlsaTest::GetCmaBackendFactory,
+                            base::Unretained(this)),
+        base::ThreadTaskRunnerHandle::Get(), media_thread_.task_runner(),
+        connector_.get(), false);
   }
 
   ~CastAudioManagerAlsaTest() override { audio_manager_->Shutdown(); }
+  CmaBackendFactory* GetCmaBackendFactory() { return backend_factory_.get(); }
 
  protected:
   base::TestMessageLoop message_loop_;
+  std::unique_ptr<MockCmaBackendFactory> backend_factory_;
   base::Thread media_thread_;
+  std::unique_ptr<service_manager::Connector> connector_;
   ::media::FakeAudioLogFactory audio_log_factory_;
   std::unique_ptr<CastAudioManagerAlsa> audio_manager_;
 };

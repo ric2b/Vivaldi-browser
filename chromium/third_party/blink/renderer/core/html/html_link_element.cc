@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/html/cross_origin_attribute.h"
@@ -70,6 +71,9 @@ void HTMLLinkElement::ParseAttribute(
   const AtomicString& value = params.new_value;
   if (name == relAttr) {
     rel_attribute_ = LinkRelAttribute(value);
+    if (rel_attribute_.IsImport()) {
+      Deprecation::CountDeprecation(GetDocument(), WebFeature::kHTMLImports);
+    }
     rel_list_->DidUpdateAttributeValue(params.old_value, value);
     Process();
   } else if (name == hrefAttr) {
@@ -110,6 +114,8 @@ void HTMLLinkElement::ParseAttribute(
     importance_ = value;
   } else if (name == disabledAttr) {
     UseCounter::Count(GetDocument(), WebFeature::kHTMLLinkElementDisabled);
+    if (params.reason == AttributeModificationReason::kByParser)
+      UseCounter::Count(GetDocument(), WebFeature::kHTMLLinkElementDisabledByParser);
     if (LinkStyle* link = GetLinkStyle())
       link->SetDisabledState(!value.IsNull());
   } else {
@@ -201,10 +207,10 @@ void HTMLLinkElement::Process() {
 }
 
 Node::InsertionNotificationRequest HTMLLinkElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   HTMLElement::InsertedInto(insertion_point);
   LogAddElementIfIsolatedWorldAndInDocument("link", relAttr, hrefAttr);
-  if (!insertion_point->isConnected())
+  if (!insertion_point.isConnected())
     return kInsertionDone;
   DCHECK(isConnected());
   if (!ShouldLoadLink() && IsInShadowTree()) {
@@ -224,12 +230,12 @@ Node::InsertionNotificationRequest HTMLLinkElement::InsertedInto(
   return kInsertionDone;
 }
 
-void HTMLLinkElement::RemovedFrom(ContainerNode* insertion_point) {
+void HTMLLinkElement::RemovedFrom(ContainerNode& insertion_point) {
   // Store the result of isConnected() here before Node::removedFrom(..) clears
   // the flags.
   bool was_connected = isConnected();
   HTMLElement::RemovedFrom(insertion_point);
-  if (!insertion_point->isConnected())
+  if (!insertion_point.isConnected())
     return;
 
   link_loader_->Abort();
@@ -238,8 +244,8 @@ void HTMLLinkElement::RemovedFrom(ContainerNode* insertion_point) {
     DCHECK(!GetLinkStyle() || !GetLinkStyle()->HasSheet());
     return;
   }
-  GetDocument().GetStyleEngine().RemoveStyleSheetCandidateNode(
-      *this, *insertion_point);
+  GetDocument().GetStyleEngine().RemoveStyleSheetCandidateNode(*this,
+                                                               insertion_point);
   if (link_)
     link_->OwnerRemoved();
 }
@@ -259,27 +265,28 @@ bool HTMLLinkElement::StyleSheetIsLoading() const {
 }
 
 void HTMLLinkElement::LinkLoaded() {
-  DispatchEvent(Event::Create(EventTypeNames::load));
+  DispatchEvent(*Event::Create(EventTypeNames::load));
 }
 
 void HTMLLinkElement::LinkLoadingErrored() {
-  DispatchEvent(Event::Create(EventTypeNames::error));
+  DispatchEvent(*Event::Create(EventTypeNames::error));
 }
 
 void HTMLLinkElement::DidStartLinkPrerender() {
-  DispatchEvent(Event::Create(EventTypeNames::webkitprerenderstart));
+  DispatchEvent(*Event::Create(EventTypeNames::webkitprerenderstart));
 }
 
 void HTMLLinkElement::DidStopLinkPrerender() {
-  DispatchEvent(Event::Create(EventTypeNames::webkitprerenderstop));
+  DispatchEvent(*Event::Create(EventTypeNames::webkitprerenderstop));
 }
 
 void HTMLLinkElement::DidSendLoadForLinkPrerender() {
-  DispatchEvent(Event::Create(EventTypeNames::webkitprerenderload));
+  DispatchEvent(*Event::Create(EventTypeNames::webkitprerenderload));
 }
 
 void HTMLLinkElement::DidSendDOMContentLoadedForLinkPrerender() {
-  DispatchEvent(Event::Create(EventTypeNames::webkitprerenderdomcontentloaded));
+  DispatchEvent(
+      *Event::Create(EventTypeNames::webkitprerenderdomcontentloaded));
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>

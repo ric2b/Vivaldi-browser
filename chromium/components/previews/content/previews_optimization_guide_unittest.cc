@@ -6,12 +6,14 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -86,12 +88,26 @@ class PreviewsOptimizationGuideTest : public testing::Test {
                                   TRAFFIC_ANNOTATION_FOR_TESTS);
   }
 
+  void MaybeLoadOptimizationHintsCallback(
+      const GURL& document_gurl,
+      const std::vector<std::string>& resource_patterns) {
+    loaded_hints_document_gurl_ = document_gurl;
+    loaded_hints_resource_patterns_ = resource_patterns;
+  }
+
   void ResetGuide() {
     guide_.reset();
     RunUntilIdle();
   }
 
   base::FilePath temp_dir() const { return temp_dir_.GetPath(); }
+
+  const GURL& loaded_hints_document_gurl() const {
+    return loaded_hints_document_gurl_;
+  }
+  const std::vector<std::string>& loaded_hints_resource_patterns() const {
+    return loaded_hints_resource_patterns_;
+  }
 
  protected:
   void RunUntilIdle() {
@@ -102,6 +118,17 @@ class PreviewsOptimizationGuideTest : public testing::Test {
   void DoExperimentFlagTest(base::Optional<std::string> experiment_name,
                             bool expect_enabled);
 
+  // This is a helper function for initializing fixed number of ResourceLoading
+  // hints.
+  void InitializeFixedCountResourceLoadingHints();
+
+  // This is a helper function for initializing multiple ResourceLoading hints.
+  // The generated hint proto contains hints for |key_count| keys.
+  // |page_patterns_per_key| page patterns are specified per key.
+  // For each page pattern, 2 resource loading hints are specified in the proto.
+  void InitializeMultipleResourceLoadingHints(size_t key_count,
+                                              size_t page_patterns_per_key);
+
  private:
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::ScopedTempDir temp_dir_;
@@ -110,6 +137,9 @@ class PreviewsOptimizationGuideTest : public testing::Test {
   std::unique_ptr<TestOptimizationGuideService> optimization_guide_service_;
 
   net::TestURLRequestContext context_;
+
+  GURL loaded_hints_document_gurl_;
+  std::vector<std::string> loaded_hints_resource_patterns_;
 
   DISALLOW_COPY_AND_ASSIGN(PreviewsOptimizationGuideTest);
 };
@@ -156,14 +186,6 @@ TEST_F(PreviewsOptimizationGuideTest,
   EXPECT_FALSE(
       guide()->IsWhitelisted(*CreateRequestWithURL(GURL("https://google.com")),
                              PreviewsType::NOSCRIPT));
-
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://m.facebook.com"), PreviewsType::RESOURCE_LOADING_HINTS));
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://m.twitter.com/example"),
-      PreviewsType::RESOURCE_LOADING_HINTS));
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://google.com"), PreviewsType::RESOURCE_LOADING_HINTS));
 }
 
 // Test when resource loading hints are enabled.
@@ -205,17 +227,6 @@ TEST_F(PreviewsOptimizationGuideTest,
   EXPECT_FALSE(
       guide()->IsWhitelisted(*CreateRequestWithURL(GURL("https://google.com")),
                              PreviewsType::RESOURCE_LOADING_HINTS));
-
-  EXPECT_TRUE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://m.facebook.com"), PreviewsType::RESOURCE_LOADING_HINTS));
-  EXPECT_TRUE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://m.facebook.com/example.html"),
-      PreviewsType::RESOURCE_LOADING_HINTS));
-  EXPECT_TRUE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://m.twitter.com/example"),
-      PreviewsType::RESOURCE_LOADING_HINTS));
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://google.com"), PreviewsType::RESOURCE_LOADING_HINTS));
 }
 
 // Test when both NoScript and resource loading hints are enabled.
@@ -260,16 +271,6 @@ TEST_F(
   EXPECT_FALSE(
       guide()->IsWhitelisted(*CreateRequestWithURL(GURL("https://google.com")),
                              PreviewsType::RESOURCE_LOADING_HINTS));
-
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://m.facebook.com"), PreviewsType::RESOURCE_LOADING_HINTS));
-  EXPECT_TRUE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://m.twitter.com/example"),
-      PreviewsType::RESOURCE_LOADING_HINTS));
-  EXPECT_TRUE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://m.twitter.com"), PreviewsType::RESOURCE_LOADING_HINTS));
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://google.com"), PreviewsType::RESOURCE_LOADING_HINTS));
 }
 
 // This is a helper function for testing the experiment flags on the config for
@@ -327,16 +328,11 @@ void PreviewsOptimizationGuideTest::DoExperimentFlagTest(
   EXPECT_TRUE(guide()->IsWhitelisted(
       *CreateRequestWithURL(GURL("https://m.twitter.com/example")),
       PreviewsType::NOSCRIPT));
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://m.twitter.com/example"),
-      PreviewsType::RESOURCE_LOADING_HINTS));
   // Google (which is not configured at all) should always have both NOSCRIPT
   // and RESOURCE_LOADING_HINTS disabled.
   EXPECT_FALSE(
       guide()->IsWhitelisted(*CreateRequestWithURL(GURL("https://google.com")),
                              PreviewsType::NOSCRIPT));
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://google.com"), PreviewsType::RESOURCE_LOADING_HINTS));
 }
 
 TEST_F(PreviewsOptimizationGuideTest,
@@ -610,21 +606,280 @@ TEST_F(PreviewsOptimizationGuideTest, IsWhitelistedWithMultipleHintMatches) {
       CreateRequestWithURL(GURL("https://outdoor.sports.yahoo.com"));
   // Uses "sports.yahoo.com" match before "yahoo.com" match.
   EXPECT_FALSE(guide()->IsWhitelisted(*request5, PreviewsType::NOSCRIPT));
+}
 
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://yahoo.com"), PreviewsType::RESOURCE_LOADING_HINTS));
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://m.facebook.com"), PreviewsType::RESOURCE_LOADING_HINTS));
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://m.twitter.com/example"),
+void PreviewsOptimizationGuideTest::InitializeFixedCountResourceLoadingHints() {
+  optimization_guide::proto::Configuration config;
+  optimization_guide::proto::Hint* hint1 = config.add_hints();
+  hint1->set_key("somedomain.org");
+  hint1->set_key_representation(optimization_guide::proto::HOST_SUFFIX);
+
+  // Page hint for "/news/"
+  optimization_guide::proto::PageHint* page_hint1 = hint1->add_page_hints();
+  page_hint1->set_page_pattern("/news/");
+  optimization_guide::proto::Optimization* optimization1 =
+      page_hint1->add_whitelisted_optimizations();
+  optimization1->set_optimization_type(
+      optimization_guide::proto::RESOURCE_LOADING);
+  optimization_guide::proto::ResourceLoadingHint* resource_loading_hint1 =
+      optimization1->add_resource_loading_hints();
+  resource_loading_hint1->set_loading_optimization_type(
+      optimization_guide::proto::LOADING_BLOCK_RESOURCE);
+  resource_loading_hint1->set_resource_pattern("news_cruft.js");
+
+  // Page hint for "football"
+  optimization_guide::proto::PageHint* page_hint2 = hint1->add_page_hints();
+  page_hint2->set_page_pattern("football");
+  optimization_guide::proto::Optimization* optimization2 =
+      page_hint2->add_whitelisted_optimizations();
+  optimization2->set_optimization_type(
+      optimization_guide::proto::RESOURCE_LOADING);
+  optimization_guide::proto::ResourceLoadingHint* resource_loading_hint2 =
+      optimization2->add_resource_loading_hints();
+  resource_loading_hint2->set_loading_optimization_type(
+      optimization_guide::proto::LOADING_BLOCK_RESOURCE);
+  resource_loading_hint2->set_resource_pattern("football_cruft.js");
+
+  optimization_guide::proto::ResourceLoadingHint* resource_loading_hint3 =
+      optimization2->add_resource_loading_hints();
+  resource_loading_hint3->set_loading_optimization_type(
+      optimization_guide::proto::LOADING_BLOCK_RESOURCE);
+  resource_loading_hint3->set_resource_pattern("barball_cruft.js");
+  ProcessHints(config, "2.0.0");
+
+  RunUntilIdle();
+}
+
+void PreviewsOptimizationGuideTest::InitializeMultipleResourceLoadingHints(
+    size_t key_count,
+    size_t page_patterns_per_key) {
+  optimization_guide::proto::Configuration config;
+
+  for (size_t key_index = 0; key_index < key_count; ++key_index) {
+    optimization_guide::proto::Hint* hint = config.add_hints();
+    hint->set_key("somedomain" + base::NumberToString(key_index) + ".org");
+    hint->set_key_representation(optimization_guide::proto::HOST_SUFFIX);
+
+    for (size_t page_pattern_index = 0;
+         page_pattern_index < page_patterns_per_key; ++page_pattern_index) {
+      // Page hint for "/news/"
+      optimization_guide::proto::PageHint* page_hint = hint->add_page_hints();
+      page_hint->set_page_pattern("/news/" +
+                                  base::NumberToString(page_pattern_index));
+      optimization_guide::proto::Optimization* optimization1 =
+          page_hint->add_whitelisted_optimizations();
+      optimization1->set_optimization_type(
+          optimization_guide::proto::RESOURCE_LOADING);
+
+      optimization_guide::proto::ResourceLoadingHint* resource_loading_hint_1 =
+          optimization1->add_resource_loading_hints();
+      resource_loading_hint_1->set_loading_optimization_type(
+          optimization_guide::proto::LOADING_BLOCK_RESOURCE);
+      resource_loading_hint_1->set_resource_pattern("news_cruft_1.js");
+
+      optimization_guide::proto::ResourceLoadingHint* resource_loading_hint_2 =
+          optimization1->add_resource_loading_hints();
+      resource_loading_hint_2->set_loading_optimization_type(
+          optimization_guide::proto::LOADING_BLOCK_RESOURCE);
+      resource_loading_hint_2->set_resource_pattern("news_cruft_2.js");
+    }
+  }
+  ProcessHints(config, "2.0.0");
+
+  RunUntilIdle();
+}
+
+TEST_F(PreviewsOptimizationGuideTest, MaybeLoadOptimizationHints) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList scoped_list;
+  scoped_list.InitAndEnableFeature(features::kResourceLoadingHints);
+
+  InitializeFixedCountResourceLoadingHints();
+
+  EXPECT_TRUE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(GURL("https://somedomain.org/")),
+      base::DoNothing()));
+  EXPECT_TRUE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(GURL("https://www.somedomain.org/news/football")),
+      base::BindOnce(
+          &PreviewsOptimizationGuideTest::MaybeLoadOptimizationHintsCallback,
+          base::Unretained(this))));
+  EXPECT_FALSE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(GURL("https://www.unknown.com")),
+      base::DoNothing()));
+
+  RunUntilIdle();
+  histogram_tester.ExpectUniqueSample(
+      "ResourceLoadingHints.PageHints.ProcessedCount", 2, 1);
+  histogram_tester.ExpectUniqueSample(
+      "ResourceLoadingHints.ResourceHints.TotalReceived", 3, 1);
+  histogram_tester.ExpectUniqueSample(
+      "ResourceLoadingHints.PageHints.TotalReceived", 2, 1);
+
+  // Verify loaded hint data for www.somedomain.org
+  EXPECT_EQ(GURL("https://www.somedomain.org/news/football"),
+            loaded_hints_document_gurl());
+  EXPECT_EQ(1ul, loaded_hints_resource_patterns().size());
+  EXPECT_EQ("news_cruft.js", loaded_hints_resource_patterns().front());
+
+  // Verify whitelisting from loaded page hints.
+  EXPECT_TRUE(guide()->IsWhitelisted(
+      *CreateRequestWithURL(
+          GURL("https://www.somedomain.org/news/weather/raininginseattle")),
       PreviewsType::RESOURCE_LOADING_HINTS));
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://google.com"), PreviewsType::RESOURCE_LOADING_HINTS));
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://outdoor.sports.yahoo.com"),
+  EXPECT_TRUE(guide()->IsWhitelisted(
+      *CreateRequestWithURL(
+          GURL("https://www.somedomain.org/football/seahawksrebuildingyear")),
       PreviewsType::RESOURCE_LOADING_HINTS));
-  EXPECT_FALSE(guide()->IsHostWhitelistedAtNavigation(
-      GURL("https://outdoor.sports.yahoo.com/index.html"),
+  EXPECT_FALSE(guide()->IsWhitelisted(
+      *CreateRequestWithURL(GURL("https://www.somedomain.org/unhinted")),
+      PreviewsType::RESOURCE_LOADING_HINTS));
+}
+
+// Test that optimization hints with multiple page patterns is processed
+// correctly.
+TEST_F(PreviewsOptimizationGuideTest,
+       LoadManyResourceLoadingOptimizationHints) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList scoped_list;
+  scoped_list.InitAndEnableFeature(features::kResourceLoadingHints);
+
+  const size_t key_count = 20;
+  const size_t page_patterns_per_key = 25;
+
+  ASSERT_EQ(previews::params::GetMaxPageHintsInMemoryThreshhold(),
+            key_count * page_patterns_per_key);
+
+  // Count of page patterns is within the threshold.
+  ASSERT_LE(key_count * page_patterns_per_key,
+            previews::params::GetMaxPageHintsInMemoryThreshhold());
+
+  InitializeMultipleResourceLoadingHints(key_count, page_patterns_per_key);
+
+  EXPECT_TRUE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(GURL("https://somedomain0.org/")),
+      base::DoNothing()));
+  EXPECT_TRUE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(GURL("https://www.somedomain0.org/news0/football")),
+      base::BindOnce(
+          &PreviewsOptimizationGuideTest::MaybeLoadOptimizationHintsCallback,
+          base::Unretained(this))));
+  EXPECT_TRUE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(
+          GURL("https://www.somedomain0.org/news499/football")),
+      base::BindOnce(
+          &PreviewsOptimizationGuideTest::MaybeLoadOptimizationHintsCallback,
+          base::Unretained(this))));
+  EXPECT_TRUE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(
+          GURL("https://www.somedomain0.org/news500/football")),
+      base::BindOnce(
+          &PreviewsOptimizationGuideTest::MaybeLoadOptimizationHintsCallback,
+          base::Unretained(this))));
+
+  EXPECT_TRUE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(GURL("https://somedomain19.org/")),
+      base::DoNothing()));
+  EXPECT_FALSE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(GURL("https://somedomain20.org/")),
+      base::DoNothing()));
+  EXPECT_FALSE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(GURL("https://www.unknown.com")),
+      base::DoNothing()));
+
+  RunUntilIdle();
+  histogram_tester.ExpectUniqueSample(
+      "ResourceLoadingHints.PageHints.ProcessedCount", page_patterns_per_key,
+      key_count);
+  histogram_tester.ExpectUniqueSample(
+      "ResourceLoadingHints.ResourceHints.TotalReceived",
+      key_count * page_patterns_per_key * 2, 1);
+  histogram_tester.ExpectUniqueSample(
+      "ResourceLoadingHints.PageHints.TotalReceived",
+      key_count * page_patterns_per_key, 1);
+}
+
+// Test that only up to GetMaxPageHintsInMemoryThreshhold() page hints
+// are loaded to the memory.
+TEST_F(PreviewsOptimizationGuideTest,
+       LoadTooManyResourceLoadingOptimizationHints) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList scoped_list;
+  scoped_list.InitAndEnableFeature(features::kResourceLoadingHints);
+
+  const size_t key_count = 21;
+  const size_t page_patterns_per_key = 25;
+
+  ASSERT_EQ(previews::params::GetMaxPageHintsInMemoryThreshhold(),
+            20u * page_patterns_per_key);
+
+  // Provide more page patterns than the threshold.
+  ASSERT_GT(key_count * page_patterns_per_key,
+            previews::params::GetMaxPageHintsInMemoryThreshhold());
+
+  InitializeMultipleResourceLoadingHints(key_count, page_patterns_per_key);
+
+  EXPECT_TRUE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(GURL("https://somedomain0.org/")),
+      base::DoNothing()));
+  EXPECT_TRUE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(GURL("https://www.somedomain0.org/news0/football")),
+      base::BindOnce(
+          &PreviewsOptimizationGuideTest::MaybeLoadOptimizationHintsCallback,
+          base::Unretained(this))));
+
+  EXPECT_TRUE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(GURL("https://somedomain19.org/")),
+      base::DoNothing()));
+  EXPECT_TRUE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(
+          GURL("https://www.somedomain19.org/news0/football")),
+      base::BindOnce(
+          &PreviewsOptimizationGuideTest::MaybeLoadOptimizationHintsCallback,
+          base::Unretained(this))));
+
+  // The last page pattern should be dropped since it exceeds the threshold
+  // count.
+  EXPECT_FALSE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(GURL("https://somedomain20.org/")),
+      base::DoNothing()));
+  EXPECT_FALSE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(
+          GURL("https://www.somedomain20.org/news0/football")),
+      base::BindOnce(
+          &PreviewsOptimizationGuideTest::MaybeLoadOptimizationHintsCallback,
+          base::Unretained(this))));
+
+  RunUntilIdle();
+  histogram_tester.ExpectUniqueSample(
+      "ResourceLoadingHints.PageHints.ProcessedCount", page_patterns_per_key,
+      key_count);
+  histogram_tester.ExpectUniqueSample(
+      "ResourceLoadingHints.ResourceHints.TotalReceived",
+      key_count * page_patterns_per_key * 2, 1);
+  histogram_tester.ExpectUniqueSample(
+      "ResourceLoadingHints.PageHints.TotalReceived",
+      key_count * page_patterns_per_key, 1);
+}
+
+TEST_F(PreviewsOptimizationGuideTest,
+       MaybeLoadOptimizationHintsWithoutEnabledPageHintsFeature) {
+  // Without PageHints-oriented feature enabled, never see
+  // enabled, the optimization should be disabled.
+  base::test::ScopedFeatureList scoped_list;
+  scoped_list.InitAndDisableFeature(features::kResourceLoadingHints);
+
+  InitializeFixedCountResourceLoadingHints();
+
+  EXPECT_FALSE(guide()->MaybeLoadOptimizationHints(
+      *CreateRequestWithURL(GURL("https://www.somedomain.org")),
+      base::DoNothing()));
+
+  RunUntilIdle();
+
+  EXPECT_FALSE(guide()->IsWhitelisted(
+      *CreateRequestWithURL(
+          GURL("https://www.somedomain.org/news/weather/raininginseattle")),
       PreviewsType::RESOURCE_LOADING_HINTS));
 }
 

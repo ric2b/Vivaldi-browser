@@ -8,8 +8,10 @@
 #include <memory>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "media/base/decrypt_config.h"
+#include "media/base/media_switches.h"
 #include "media/formats/mp4/box_definitions.h"
 #include "media/formats/mp4/box_reader.h"
 #include "media/video/h264_parser.h"
@@ -171,15 +173,21 @@ bool AVC::ConvertConfigToAnnexB(const AVCDecoderConfigurationRecord& avc_config,
   return true;
 }
 
-// Verifies AnnexB NALU order according to ISO/IEC 14496-10 Section 7.4.1.2.3
-bool AVC::IsValidAnnexB(const uint8_t* buffer,
-                        size_t size,
-                        const std::vector<SubsampleEntry>& subsamples) {
+// static
+BitstreamConverter::AnalysisResult AVC::AnalyzeAnnexB(
+    const uint8_t* buffer,
+    size_t size,
+    const std::vector<SubsampleEntry>& subsamples) {
   DVLOG(3) << __func__;
   DCHECK(buffer);
 
-  if (size == 0)
-    return true;
+  BitstreamConverter::AnalysisResult result;
+  result.is_conformant = false;  // Will change if needed before return.
+
+  if (size == 0) {
+    result.is_conformant = true;
+    return result;
+  }
 
   H264Parser parser;
   parser.SetEncryptedStream(buffer, size, subsamples);
@@ -205,7 +213,7 @@ bool AVC::IsValidAnnexB(const uint8_t* buffer,
           case H264NALU::kAUD:
             if (order_state > kAUDAllowed) {
               DVLOG(1) << "Unexpected AUD in order_state " << order_state;
-              return false;
+              return result;
             }
             order_state = kBeforeFirstVCL;
             break;
@@ -221,7 +229,7 @@ bool AVC::IsValidAnnexB(const uint8_t* buffer,
             if (order_state > kBeforeFirstVCL) {
               DVLOG(1) << "Unexpected NALU type " << nalu.nal_unit_type
                        << " in order_state " << order_state;
-              return false;
+              return result;
             }
             order_state = kBeforeFirstVCL;
             break;
@@ -229,7 +237,7 @@ bool AVC::IsValidAnnexB(const uint8_t* buffer,
           case H264NALU::kSPSExt:
             if (last_nalu_type != H264NALU::kSPS) {
               DVLOG(1) << "SPS extension does not follow an SPS.";
-              return false;
+              return result;
             }
             break;
 
@@ -240,22 +248,26 @@ bool AVC::IsValidAnnexB(const uint8_t* buffer,
           case H264NALU::kIDRSlice:
             if (order_state > kAfterFirstVCL) {
               DVLOG(1) << "Unexpected VCL in order_state " << order_state;
-              return false;
+              return result;
             }
+
+            if (!result.is_keyframe.has_value())
+              result.is_keyframe = nalu.nal_unit_type == H264NALU::kIDRSlice;
+
             order_state = kAfterFirstVCL;
             break;
 
           case H264NALU::kCodedSliceAux:
             if (order_state != kAfterFirstVCL) {
               DVLOG(1) << "Unexpected extension in order_state " << order_state;
-              return false;
+              return result;
             }
             break;
 
           case H264NALU::kEOSeq:
             if (order_state != kAfterFirstVCL) {
               DVLOG(1) << "Unexpected EOSeq in order_state " << order_state;
-              return false;
+              return result;
             }
             order_state = kEOStreamAllowed;
             break;
@@ -263,7 +275,7 @@ bool AVC::IsValidAnnexB(const uint8_t* buffer,
           case H264NALU::kEOStream:
             if (order_state < kAfterFirstVCL) {
               DVLOG(1) << "Unexpected EOStream in order_state " << order_state;
-              return false;
+              return result;
             }
             order_state = kNoMoreDataAllowed;
             break;
@@ -274,7 +286,7 @@ bool AVC::IsValidAnnexB(const uint8_t* buffer,
                   order_state < kEOStreamAllowed)) {
               DVLOG(1) << "Unexpected NALU type " << nalu.nal_unit_type
                        << " in order_state " << order_state;
-              return false;
+              return result;
             }
             break;
 
@@ -284,25 +296,30 @@ bool AVC::IsValidAnnexB(const uint8_t* buffer,
                 order_state != kAfterFirstVCL) {
               DVLOG(1) << "Unexpected NALU type " << nalu.nal_unit_type
                        << " in order_state " << order_state;
-              return false;
+              return result;
             }
         }
         last_nalu_type = nalu.nal_unit_type;
         break;
 
       case H264Parser::kInvalidStream:
-        return false;
+        return result;
 
       case H264Parser::kUnsupportedStream:
         NOTREACHED() << "AdvanceToNextNALU() returned kUnsupportedStream!";
-        return false;
+        return result;
 
       case H264Parser::kEOStream:
         done = true;
     }
   }
 
-  return order_state >= kAfterFirstVCL;
+  if (order_state < kAfterFirstVCL)
+    return result;
+
+  result.is_conformant = true;
+  DCHECK(result.is_keyframe.has_value());
+  return result;
 }
 
 AVCBitstreamConverter::AVCBitstreamConverter(
@@ -316,10 +333,11 @@ AVCBitstreamConverter::AVCBitstreamConverter(
 
 AVCBitstreamConverter::~AVCBitstreamConverter() = default;
 
-bool AVCBitstreamConverter::ConvertFrame(
+bool AVCBitstreamConverter::ConvertAndAnalyzeFrame(
     std::vector<uint8_t>* frame_buf,
     bool is_keyframe,
-    std::vector<SubsampleEntry>* subsamples) const {
+    std::vector<SubsampleEntry>* subsamples,
+    AnalysisResult* analysis_result) const {
   // Convert the AVC NALU length fields to Annex B headers, as expected by
   // decoding libraries. Since this may enlarge the size of the buffer, we also
   // update the clear byte count for each subsample if encryption is used to
@@ -328,7 +346,16 @@ bool AVCBitstreamConverter::ConvertFrame(
   RCHECK(AVC::ConvertFrameToAnnexB(avc_config_->length_size, frame_buf,
                                    subsamples));
 
-  if (is_keyframe) {
+  // |is_keyframe| may be incorrect. Analyze the frame to see if it is a
+  // keyframe. |is_keyframe| will be used if the analysis is inconclusive or if
+  // not kMseBufferByPts.
+  // Also, provide the analysis result to the caller via out parameter
+  // |analysis_result|.
+  *analysis_result = Analyze(frame_buf, subsamples);
+
+  if (base::FeatureList::IsEnabled(kMseBufferByPts)
+          ? analysis_result->is_keyframe.value_or(is_keyframe)
+          : is_keyframe) {
     // If this is a keyframe, we (re-)inject SPS and PPS headers at the start of
     // a frame. If subsample info is present, we also update the clear byte
     // count for that first subsample.
@@ -338,14 +365,16 @@ bool AVCBitstreamConverter::ConvertFrame(
   return true;
 }
 
-bool AVCBitstreamConverter::IsValid(
+BitstreamConverter::AnalysisResult AVCBitstreamConverter::Analyze(
     std::vector<uint8_t>* frame_buf,
     std::vector<SubsampleEntry>* subsamples) const {
 #if BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
-  if (disable_validation_)
-    return true;
+  if (disable_validation_) {
+    BitstreamConverter::AnalysisResult result;
+    return result;
+  }
 #endif  // BUILDFLAG(ENABLE_DOLBY_VISION_DEMUXING)
-  return AVC::IsValidAnnexB(frame_buf->data(), frame_buf->size(), *subsamples);
+  return AVC::AnalyzeAnnexB(frame_buf->data(), frame_buf->size(), *subsamples);
 }
 
 }  // namespace mp4

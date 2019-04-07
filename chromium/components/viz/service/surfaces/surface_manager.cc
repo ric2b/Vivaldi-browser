@@ -30,16 +30,17 @@
 namespace viz {
 namespace {
 
+const char kUmaAliveSurfaces[] = "Compositing.SurfaceManager.AliveSurfaces";
+
+const char kUmaTemporaryReferences[] =
+    "Compositing.SurfaceManager.TemporaryReferences";
+
 constexpr base::TimeDelta kExpireInterval = base::TimeDelta::FromSeconds(10);
 
 const char kUmaRemovedTemporaryReference[] =
     "Compositing.SurfaceManager.RemovedTemporaryReference";
 
 }  // namespace
-
-SurfaceManager::SurfaceReferenceInfo::SurfaceReferenceInfo() = default;
-
-SurfaceManager::SurfaceReferenceInfo::~SurfaceReferenceInfo() = default;
 
 SurfaceManager::TemporaryReferenceData::TemporaryReferenceData() = default;
 
@@ -66,6 +67,7 @@ SurfaceManager::~SurfaceManager() {
   // destroyed.
   temporary_references_.clear();
   temporary_reference_ranges_.clear();
+  persistent_references_by_frame_sink_id_.clear();
   // Create a copy of the children set as RemoveSurfaceReferenceImpl below will
   // mutate that set.
   base::flat_set<SurfaceId> children(
@@ -246,6 +248,13 @@ void SurfaceManager::GarbageCollectSurfaces() {
 
   SurfaceIdSet reachable_surfaces = GetLiveSurfacesForReferences();
 
+  // Log the number of reachable surfaces after a garbage collection.
+  UMA_HISTOGRAM_CUSTOM_COUNTS(kUmaAliveSurfaces, reachable_surfaces.size(), 1,
+                              200, 50);
+  // Log the number of temporary references after a garbage collection.
+  UMA_HISTOGRAM_CUSTOM_COUNTS(kUmaTemporaryReferences,
+                              temporary_references_.size(), 1, 200, 50);
+
   std::vector<SurfaceId> surfaces_to_delete;
 
   // Delete all destroyed and unreachable surfaces.
@@ -269,15 +278,56 @@ const base::flat_set<SurfaceId>& SurfaceManager::GetSurfacesReferencedByParent(
   auto iter = references_.find(surface_id);
   if (iter == references_.end())
     return empty_surface_id_set_;
-  return iter->second.children;
+  return iter->second;
 }
 
-const base::flat_set<SurfaceId>& SurfaceManager::GetSurfacesThatReferenceChild(
+base::flat_set<SurfaceId>
+SurfaceManager::GetSurfacesThatReferenceChildForTesting(
     const SurfaceId& surface_id) const {
-  auto iter = references_.find(surface_id);
-  if (iter == references_.end())
-    return empty_surface_id_set_;
-  return iter->second.parents;
+  base::flat_set<SurfaceId> parents;
+
+  for (auto& parent : references_) {
+    if (parent.second.find(surface_id) != parent.second.end())
+      parents.insert(parent.first);
+  }
+  return parents;
+}
+
+Surface* SurfaceManager::GetLatestInFlightSurfaceForFrameSinkId(
+    const SurfaceRange& surface_range,
+    const FrameSinkId& sink_id) {
+  std::vector<LocalSurfaceId> valid_local_surfaces;
+  // Get all valid temporary references.
+  auto temporary_it = temporary_reference_ranges_.find(sink_id);
+  if (temporary_it != temporary_reference_ranges_.end()) {
+    for (const LocalSurfaceId& local_id : temporary_it->second) {
+      if (surface_range.IsInRangeInclusive(SurfaceId(sink_id, local_id)))
+        valid_local_surfaces.push_back(local_id);
+    }
+  }
+
+  // Get all valid persistent references.
+  auto persistent_it = persistent_references_by_frame_sink_id_.find(sink_id);
+  if (persistent_it != persistent_references_by_frame_sink_id_.end()) {
+    for (const LocalSurfaceId& local_id : persistent_it->second) {
+      if (surface_range.IsInRangeInclusive(SurfaceId(sink_id, local_id)))
+        valid_local_surfaces.push_back(local_id);
+    }
+  }
+
+  // Sort all possible surfaces from newest to oldest, then return the first
+  // surface that has an active frame.
+  std::sort(valid_local_surfaces.begin(), valid_local_surfaces.end(),
+            [](const LocalSurfaceId& first, const LocalSurfaceId& second) {
+              return first > second;
+            });
+
+  for (const LocalSurfaceId& local_surface_id : valid_local_surfaces) {
+    Surface* surface = GetSurfaceForId(SurfaceId(sink_id, local_surface_id));
+    if (surface && surface->HasActiveFrame())
+      return surface;
+  }
+  return nullptr;
 }
 
 SurfaceManager::SurfaceIdSet SurfaceManager::GetLiveSurfacesForReferences() {
@@ -335,8 +385,11 @@ void SurfaceManager::AddSurfaceReferenceImpl(
     return;
   }
 
-  references_[parent_id].children.insert(child_id);
-  references_[child_id].parents.insert(parent_id);
+  references_[parent_id].insert(child_id);
+
+  // Add a real reference to child_id.
+  persistent_references_by_frame_sink_id_[child_id.frame_sink_id()].insert(
+      child_id.local_surface_id());
 
   for (auto& observer : observer_list_)
     observer.OnAddedSurfaceReference(parent_id, child_id);
@@ -351,36 +404,47 @@ void SurfaceManager::RemoveSurfaceReferenceImpl(
   const SurfaceId& child_id = reference.child_id();
 
   auto iter_parent = references_.find(parent_id);
-  auto iter_child = references_.find(child_id);
-  if (iter_parent == references_.end() || iter_child == references_.end())
+  if (iter_parent == references_.end())
+    return;
+
+  auto child_iter = iter_parent->second.find(child_id);
+  if (child_iter == iter_parent->second.end())
     return;
 
   for (auto& observer : observer_list_)
     observer.OnRemovedSurfaceReference(parent_id, child_id);
 
-  iter_parent->second.children.erase(child_id);
-  iter_child->second.parents.erase(parent_id);
-}
+  iter_parent->second.erase(child_iter);
+  if (iter_parent->second.empty())
+    references_.erase(iter_parent);
 
-void SurfaceManager::RemoveAllSurfaceReferences(const SurfaceId& surface_id) {
-  DCHECK(!HasTemporaryReference(surface_id));
+  // Remove the presistent reference.
+  const FrameSinkId& sink_id = child_id.frame_sink_id();
+  const LocalSurfaceId& local_id = child_id.local_surface_id();
 
-  auto iter = references_.find(surface_id);
-  if (iter != references_.end()) {
-    // Remove all references from |surface_id| to a child surface.
-    for (const SurfaceId& child_id : iter->second.children)
-      references_[child_id].parents.erase(surface_id);
+  auto sink_it = persistent_references_by_frame_sink_id_.find(sink_id);
+  if (sink_it == persistent_references_by_frame_sink_id_.end())
+    return;
 
-    // Remove all reference from parent surface to |surface_id|.
-    for (const SurfaceId& parent_id : iter->second.parents)
-      references_[parent_id].children.erase(surface_id);
+  auto local_surface_it = sink_it->second.find(local_id);
+  if (local_surface_it == sink_it->second.end())
+    return;
 
-    references_.erase(iter);
-  }
+  sink_it->second.erase(local_surface_it);
+  if (sink_it->second.empty())
+    persistent_references_by_frame_sink_id_.erase(sink_it);
 }
 
 bool SurfaceManager::HasTemporaryReference(const SurfaceId& surface_id) const {
   return temporary_references_.count(surface_id) != 0;
+}
+
+bool SurfaceManager::HasPersistentReference(const SurfaceId& surface_id) const {
+  auto it =
+      persistent_references_by_frame_sink_id_.find(surface_id.frame_sink_id());
+  if (it == persistent_references_by_frame_sink_id_.end())
+    return false;
+  return it->second.count(surface_id.local_surface_id()) != 0;
 }
 
 void SurfaceManager::AddTemporaryReference(const SurfaceId& surface_id) {
@@ -448,53 +512,30 @@ void SurfaceManager::RemoveTemporaryReference(const SurfaceId& surface_id,
 }
 
 Surface* SurfaceManager::GetLatestInFlightSurface(
-    const SurfaceId& primary_surface_id,
-    const SurfaceId& fallback_surface_id) {
-  // The fallback surface must exist before we begin looking for more recent
-  // surfaces. This guarantees that the |parent| is allowed to embed the
-  // |fallback_surface_id| and is not guessing surface IDs.
-  Surface* fallback_surface = GetSurfaceForId(fallback_surface_id);
-  if (!fallback_surface || !fallback_surface->HasActiveFrame())
-    return nullptr;
+    const SurfaceRange& surface_range) {
+  // If primary exists, we return it.
+  Surface* primary_surface = GetSurfaceForId(surface_range.end());
+  if (primary_surface && primary_surface->HasActiveFrame())
+    return primary_surface;
 
-  // If the FrameSinkId of the primary and the fallback surface IDs do not
-  // match then we should avoid presenting a fallback newer than intended by
-  // |parent|.
-  if (primary_surface_id.frame_sink_id() != fallback_surface_id.frame_sink_id())
-    return fallback_surface;
+  // If both end of the range exists, we try the primary's FrameSinkId first.
+  Surface* latest_surface = GetLatestInFlightSurfaceForFrameSinkId(
+      surface_range, surface_range.end().frame_sink_id());
 
-  auto it =
-      temporary_reference_ranges_.find(fallback_surface_id.frame_sink_id());
-  if (it == temporary_reference_ranges_.end())
-    return fallback_surface;
-
-  const std::vector<LocalSurfaceId>& temp_surfaces = it->second;
-  for (const LocalSurfaceId& local_surface_id : base::Reversed(temp_surfaces)) {
-    // The in-flight surface must be older than the primary surface ID.
-    if (local_surface_id == primary_surface_id.local_surface_id() ||
-        local_surface_id.parent_sequence_number() >
-            primary_surface_id.local_surface_id().parent_sequence_number() ||
-        local_surface_id.child_sequence_number() >
-            primary_surface_id.local_surface_id().child_sequence_number()) {
-      continue;
-    }
-
-    // If the embed_token doesn't match the primary or fallback's then the
-    // parent does not have permission to embed this surface.
-    if (local_surface_id.embed_token() !=
-            fallback_surface_id.local_surface_id().embed_token() &&
-        local_surface_id.embed_token() !=
-            primary_surface_id.local_surface_id().embed_token()) {
-      continue;
-    }
-
-    SurfaceId surface_id(fallback_surface_id.frame_sink_id(), local_surface_id);
-    Surface* surface = GetSurfaceForId(surface_id);
-    if (surface && surface->HasActiveFrame())
-      return surface;
+  // If the fallback has a different FrameSinkId, then try that also.
+  if (!latest_surface && surface_range.HasDifferentFrameSinkIds()) {
+    latest_surface = GetLatestInFlightSurfaceForFrameSinkId(
+        surface_range, surface_range.start()->frame_sink_id());
   }
 
-  return fallback_surface;
+  // Fallback might have neither temporary or presistent references, so we
+  // consider it separately.
+  if (!latest_surface && surface_range.start())
+    latest_surface = GetSurfaceForId(*surface_range.start());
+
+  if (latest_surface && latest_surface->HasActiveFrame())
+    return latest_surface;
+  return nullptr;
 }
 
 void SurfaceManager::ExpireOldTemporaryReferences() {
@@ -541,8 +582,33 @@ bool SurfaceManager::SurfaceModified(const SurfaceId& surface_id,
 void SurfaceManager::FirstSurfaceActivation(const SurfaceInfo& surface_info) {
   CHECK(thread_checker_.CalledOnValidThread());
 
+  // Notify every Surface interested in knowing about activation events in
+  // |surface_info.surface_id()|'s frame sink.
+  for (const SurfaceId& sink_observer :
+       activation_observers_[surface_info.id().frame_sink_id()]) {
+    Surface* observer_surface = GetSurfaceForId(sink_observer);
+    if (observer_surface)
+      observer_surface->OnChildActivated(surface_info.id());
+  }
+
   for (auto& observer : observer_list_)
     observer.OnFirstSurfaceActivation(surface_info);
+}
+
+void SurfaceManager::AddActivationObserver(const FrameSinkId& sink_id,
+                                           const SurfaceId& surface_id) {
+  activation_observers_[sink_id].insert(surface_id);
+}
+
+void SurfaceManager::RemoveActivationObserver(const FrameSinkId& sink_id,
+                                              const SurfaceId& surface_id) {
+  if (activation_observers_.count(sink_id) == 0)
+    return;
+
+  base::flat_set<SurfaceId>& observers = activation_observers_[sink_id];
+  observers.erase(surface_id);
+  if (observers.empty())
+    activation_observers_.erase(sink_id);
 }
 
 void SurfaceManager::SurfaceActivated(
@@ -593,7 +659,7 @@ void SurfaceManager::DestroySurfaceInternal(const SurfaceId& surface_id) {
   // and that's not desirable.
   std::unique_ptr<Surface> doomed = std::move(it->second);
   surface_map_.erase(it);
-  RemoveAllSurfaceReferences(surface_id);
+  references_.erase(surface_id);
 }
 
 #if DCHECK_IS_ON()

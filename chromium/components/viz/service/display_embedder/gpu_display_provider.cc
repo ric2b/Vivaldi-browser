@@ -141,7 +141,7 @@ std::unique_ptr<Display> GpuDisplayProvider::CreateDisplay(
       context_provider = base::MakeRefCounted<VizProcessContextProvider>(
           task_executor_, surface_handle, gpu_memory_buffer_manager_.get(),
           image_factory_, gpu_channel_manager_delegate_,
-          gpu::SharedMemoryLimits());
+          gpu::SharedMemoryLimits(), renderer_settings.requires_alpha_channel);
       context_result = context_provider->BindToCurrentThread();
 
       if (context_result == gpu::ContextResult::kFatalFailure) {
@@ -222,10 +222,9 @@ GpuDisplayProvider::CreateSoftwareOutputDeviceForPlatform(
                                                             child_hwnd);
     } else {
       // We are already in the browser process.
-      if (!gfx::RenderingWindowManager::GetInstance()->RegisterChild(
-              surface_handle, child_hwnd)) {
-        LOG(ERROR) << "Bad parenting request.";
-      }
+      gfx::RenderingWindowManager::GetInstance()->RegisterChild(
+          surface_handle, child_hwnd,
+          /*expected_child_process_id=*/::GetCurrentProcessId());
     }
   }
 

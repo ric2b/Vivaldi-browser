@@ -6,6 +6,12 @@
 #define CHROME_BROWSER_VR_PLATFORM_CONTROLLER_H_
 
 #include "base/time/time.h"
+#include "chrome/browser/vr/model/controller_model.h"
+#include "chrome/browser/vr/vr_export.h"
+
+namespace gfx {
+class PointF;
+}
 
 namespace vr {
 
@@ -15,34 +21,27 @@ namespace vr {
 // different platform's controller, but the functionality must exist. I.e., the
 // concept of "the button you press to exit fullscreen / presentation" is
 // universal.
-class PlatformController {
+class VR_EXPORT PlatformController {
  public:
   enum ButtonType {
     kButtonHome,
+    kButtonTypeFirst = kButtonHome,
     kButtonMenu,
     kButtonSelect,
-  };
-
-  enum SwipeDirection {
-    kSwipeDirectionNone,
-    kSwipeDirectionLeft,
-    kSwipeDirectionRight,
-    kSwipeDirectionUp,
-    kSwipeDirectionDown,
-  };
-
-  enum Handedness {
-    kRightHanded,
-    kLeftHanded,
+    kButtonTypeNumber,
   };
 
   virtual ~PlatformController() {}
 
   virtual bool IsButtonDown(ButtonType type) const = 0;
+  virtual bool ButtonUpHappened(ButtonType type) const = 0;
+  virtual bool ButtonDownHappened(ButtonType type) const = 0;
+  virtual bool IsTouchingTrackpad() const = 0;
+  virtual gfx::PointF GetPositionInTrackpad() const = 0;
   virtual base::TimeTicks GetLastOrientationTimestamp() const = 0;
   virtual base::TimeTicks GetLastTouchTimestamp() const = 0;
   virtual base::TimeTicks GetLastButtonTimestamp() const = 0;
-  virtual Handedness GetHandedness() const = 0;
+  virtual ControllerModel::Handedness GetHandedness() const = 0;
   virtual bool GetRecentered() const = 0;
   virtual int GetBatteryLevel() const = 0;
 };

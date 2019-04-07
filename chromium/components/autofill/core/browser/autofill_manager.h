@@ -35,6 +35,7 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/popup_types.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/signatures_util.h"
 
 #if defined(OS_ANDROID) || defined(OS_IOS)
 #include "components/autofill/core/browser/autofill_assistant.h"
@@ -42,10 +43,6 @@
 
 namespace gfx {
 class RectF;
-}
-
-namespace user_prefs {
-class PrefRegistrySyncable;
 }
 
 namespace autofill {
@@ -71,13 +68,9 @@ extern const int kCreditCardSigninPromoImpressionLimit;
 // forms. One per frame; owned by the AutofillDriver.
 class AutofillManager : public AutofillHandler,
                         public AutofillDownloadManager::Observer,
-                        public payments::PaymentsClientUnmaskDelegate,
                         public payments::FullCardRequest::ResultDelegate,
                         public payments::FullCardRequest::UIDelegate {
  public:
-  // Registers our Enable/Disable Autofill pref.
-  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
-
   AutofillManager(AutofillDriver* driver,
                   AutofillClient* client,
                   const std::string& app_locale,
@@ -87,7 +80,7 @@ class AutofillManager : public AutofillHandler,
   // Sets an external delegate.
   void SetExternalDelegate(AutofillExternalDelegate* delegate);
 
-  void ShowAutofillSettings();
+  void ShowAutofillSettings(bool show_credit_card_settings);
 
   // Whether the |field| should show an entry to scan a credit card.
   virtual bool ShouldShowScanCreditCard(const FormData& form,
@@ -140,6 +133,8 @@ class AutofillManager : public AutofillHandler,
   AutofillDownloadManager* download_manager() {
     return download_manager_.get();
   }
+
+  FormDataImporter* form_data_importer() { return form_data_importer_.get(); }
 
   payments::FullCardRequest* GetOrCreateFullCardRequest();
 
@@ -336,18 +331,14 @@ class AutofillManager : public AutofillHandler,
     SuppressReason suppress_reason = SuppressReason::kNotSuppressed;
   };
 
-  bool ParseFormInternal(const FormData& form,
-                         const FormStructure* cached_form,
-                         FormStructure** parsed_form_structure);
-
   // AutofillDownloadManager::Observer:
   void OnLoadedServerPredictions(
       std::string response,
       const std::vector<std::string>& form_signatures) override;
-
-  // payments::PaymentsClientUnmaskDelegate:
+  // Returns the real PAN retrieved from Payments. |real_pan| will be empty on
+  // failure.
   void OnDidGetRealPan(AutofillClient::PaymentsRpcResult result,
-                       const std::string& real_pan) override;
+                       const std::string& real_pan);
 
   // payments::FullCardRequest::ResultDelegate:
   void OnFullCardRequestSucceeded(
@@ -414,15 +405,6 @@ class AutofillManager : public AutofillHandler,
   // or personal data.
   std::unique_ptr<FormStructure> ValidateSubmittedForm(const FormData& form);
 
-  // Fills |form_structure| and |autofill_field| with the cached elements
-  // corresponding to |form| and |field|.  This might have the side-effect of
-  // updating the cache.  Returns false if the |form| is not autofillable, or if
-  // it is not already present in the cache and the cache is full.
-  bool GetCachedFormAndField(const FormData& form,
-                             const FormFieldData& field,
-                             FormStructure** form_structure,
-                             AutofillField** autofill_field) WARN_UNUSED_RESULT;
-
   // Returns the field corresponding to |form| and |field| that can be
   // autofilled. Returns NULL if the field cannot be autofilled.
   AutofillField* GetAutofillField(const FormData& form,
@@ -432,14 +414,6 @@ class AutofillManager : public AutofillHandler,
   // Returns true if any form in the field corresponds to an address
   // |FieldTypeGroup|.
   bool FormHasAddressField(const FormData& form) WARN_UNUSED_RESULT;
-
-  // Re-parses |live_form| and adds the result to |form_structures_|.
-  // |cached_form| should be a pointer to the existing version of the form, or
-  // NULL if no cached version exists.  The updated form is then written into
-  // |updated_form|.  Returns false if the cache could not be updated.
-  bool UpdateCachedForm(const FormData& live_form,
-                        const FormStructure* cached_form,
-                        FormStructure** updated_form) WARN_UNUSED_RESULT;
 
   // Returns a list of values from the stored profiles that match |type| and the
   // value of |field| and returns the labels of the matching profiles. |labels|
@@ -519,7 +493,7 @@ class AutofillManager : public AutofillHandler,
 
   // Attempts to refill the form that was changed dynamically. Should only be
   // called if ShouldTriggerRefill returns true.
-  void TriggerRefill(const FormData& form, FormStructure* form_structure);
+  void TriggerRefill(const FormData& form);
 
   // Replaces the contents of |suggestions| with available suggestions for
   // |field|. |context| will contain additional information about the
@@ -634,6 +608,7 @@ class AutofillManager : public AutofillHandler,
   friend class FormStructureBrowserTest;
   friend class GetMatchingTypesTest;
   friend class SaveCardBubbleViewsBrowserTestBase;
+  friend class SaveCardInfobarEGTestHelper;
   FRIEND_TEST_ALL_PREFIXES(ProfileMatchingTypesTest,
                            DeterminePossibleFieldTypesForUpload);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,

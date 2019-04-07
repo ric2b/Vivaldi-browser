@@ -118,4 +118,3 @@ class EmitNode(base.ContentNode):
   def GetEmitType(self):
     '''Returns the emit_type for this node. Default is 'append'.'''
     return self.attrs['emit_type']
-

@@ -11,6 +11,7 @@
 #include "chrome/browser/consent_auditor/consent_auditor_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/pref_names.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/consent_auditor/consent_auditor.h"
@@ -33,6 +34,14 @@ browser_sync::ProfileSyncService* GetSyncService(Profile* profile) {
 }
 
 }  // namespace
+
+// static
+void SyncConsentScreen::MaybeLaunchSyncConstentSettings(Profile* profile) {
+  if (profile->GetPrefs()->GetBoolean(prefs::kShowSyncSettingsOnSessionStart)) {
+    profile->GetPrefs()->ClearPref(prefs::kShowSyncSettingsOnSessionStart);
+    chrome::ShowSettingsSubPageForProfile(profile, "syncSetup");
+  }
+}
 
 SyncConsentScreen::SyncConsentScreen(BaseScreenDelegate* base_screen_delegate,
                                      SyncConsentScreenView* view)
@@ -176,11 +185,21 @@ void SyncConsentScreen::UpdateScreen() {
 void SyncConsentScreen::RecordConsent(
     const std::vector<int>& consent_description,
     const int consent_confirmation) {
-  ConsentAuditorFactory::GetForProfile(profile_)->RecordGaiaConsent(
+  consent_auditor::ConsentAuditor* consent_auditor =
+      ConsentAuditorFactory::GetForProfile(profile_);
+  const std::string& google_account_id =
       SigninManagerFactory::GetForProfile(profile_)
-          ->GetAuthenticatedAccountId(),
-      consent_auditor::Feature::CHROME_SYNC, consent_description,
-      consent_confirmation, consent_auditor::ConsentStatus::GIVEN);
+          ->GetAuthenticatedAccountId();
+  // TODO(alemate): Support unified_consent_enabled
+  sync_pb::UserConsentTypes::SyncConsent sync_consent;
+  sync_consent.set_confirmation_grd_id(consent_confirmation);
+  for (int id : consent_description) {
+    sync_consent.add_description_grd_ids(id);
+  }
+  sync_consent.set_status(sync_pb::UserConsentTypes::ConsentStatus::
+                              UserConsentTypes_ConsentStatus_GIVEN);
+  consent_auditor->RecordSyncConsent(google_account_id, sync_consent);
+
   if (test_delegate_) {
     test_delegate_->OnConsentRecordedIds(consent_description,
                                          consent_confirmation);

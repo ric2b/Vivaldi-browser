@@ -96,12 +96,14 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
             QuicPacketCount initial_tcp_congestion_window,
             QuicPacketCount max_tcp_congestion_window,
             QuicRandom* random);
+  BbrSender(const BbrSender&) = delete;
+  BbrSender& operator=(const BbrSender&) = delete;
   ~BbrSender() override;
 
   // Start implementation of SendAlgorithmInterface.
   bool InSlowStart() const override;
   bool InRecovery() const override;
-  bool IsProbingForMoreBandwidth() const override;
+  bool ShouldSendProbingPacket() const override;
 
   void SetFromConfig(const QuicConfig& config,
                      Perspective perspective) override;
@@ -364,6 +366,9 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   RecoveryState initial_conservation_in_startup_;
   // When true, add the most recent ack aggregation measurement during STARTUP.
   bool enable_ack_aggregation_during_startup_;
+  // When true, expire the windowed ack aggregation values in STARTUP when
+  // bandwidth increases more than 25%.
+  bool expire_ack_aggregation_in_startup_;
 
   // If true, will not exit low gain mode until bytes_in_flight drops below BDP
   // or it's time for high gain mode.
@@ -381,8 +386,6 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   bool probe_rtt_disabled_if_app_limited_;
   bool app_limited_since_last_probe_rtt_;
   QuicTime::Delta min_rtt_since_last_probe_rtt_;
-
-  DISALLOW_COPY_AND_ASSIGN(BbrSender);
 };
 
 QUIC_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,

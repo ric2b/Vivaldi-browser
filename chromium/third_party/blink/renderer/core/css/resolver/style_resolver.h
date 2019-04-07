@@ -75,7 +75,7 @@ class CORE_EXPORT StyleResolver final
       const ComputedStyle* layout_parent_style = nullptr,
       RuleMatchingBehavior = kMatchAllRules);
 
-  static scoped_refptr<AnimatableValue> CreateAnimatableValueSnapshot(
+  static AnimatableValue* CreateAnimatableValueSnapshot(
       Element&,
       const ComputedStyle& base_style,
       const ComputedStyle* parent_style,
@@ -179,6 +179,8 @@ class CORE_EXPORT StyleResolver final
 
   struct CacheSuccess {
     STACK_ALLOCATED();
+
+   public:
     bool is_inherited_cache_hit;
     bool is_non_inherited_cache_hit;
     unsigned cache_hash;

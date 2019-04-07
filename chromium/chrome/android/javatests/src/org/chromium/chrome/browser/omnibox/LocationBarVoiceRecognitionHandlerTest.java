@@ -219,7 +219,7 @@ public class LocationBarVoiceRecognitionHandlerTest {
         }
 
         @Override
-        public boolean shouldShowGoogleG(String urlBarText) {
+        public boolean isPreview() {
             return false;
         }
 

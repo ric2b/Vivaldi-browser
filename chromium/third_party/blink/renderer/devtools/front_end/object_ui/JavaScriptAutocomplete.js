@@ -559,7 +559,7 @@ ObjectUI.JavaScriptAutocomplete = class {
 
         allProperties.add(property);
         if (property.startsWith(query))
-          caseSensitivePrefix.push({text: property, priority: 4});
+          caseSensitivePrefix.push({text: property, priority: property === query ? 5 : 4});
         else if (lowerCaseProperty.startsWith(lowerCaseQuery))
           caseInsensitivePrefix.push({text: property, priority: 3});
         else if (property.indexOf(query) !== -1)
@@ -595,6 +595,23 @@ ObjectUI.JavaScriptAutocomplete = class {
     if (bStartsWithUnderscore && !aStartsWithUnderscore)
       return -1;
     return String.naturalOrderComparator(a, b);
+  }
+
+  /**
+   * @param {string} expression
+   * @return {!Promise<boolean>}
+   */
+  static async isExpressionComplete(expression) {
+    const currentExecutionContext = UI.context.flavor(SDK.ExecutionContext);
+    if (!currentExecutionContext)
+      return true;
+    const result =
+        await currentExecutionContext.runtimeModel.compileScript(expression, '', false, currentExecutionContext.id);
+    if (!result.exceptionDetails)
+      return true;
+    const description = result.exceptionDetails.exception.description;
+    return !description.startsWith('SyntaxError: Unexpected end of input') &&
+        !description.startsWith('SyntaxError: Unterminated template literal');
   }
 };
 

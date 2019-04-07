@@ -4,6 +4,7 @@
 
 #include "chromeos/services/multidevice_setup/public/cpp/fake_multidevice_setup.h"
 
+#include "base/containers/flat_map.h"
 #include "components/cryptauth/remote_device.h"
 
 namespace chromeos {
@@ -21,8 +22,8 @@ FakeMultiDeviceSetup::~FakeMultiDeviceSetup() {
   }
 
   for (auto& set_host_arg : set_host_args_) {
-    if (set_host_arg.second)
-      std::move(set_host_arg.second).Run(false /* success */);
+    if (std::get<2>(set_host_arg))
+      std::move(std::get<2>(set_host_arg)).Run(false /* success */);
   }
 
   for (auto& get_host_arg : get_host_args_) {
@@ -30,6 +31,18 @@ FakeMultiDeviceSetup::~FakeMultiDeviceSetup() {
       std::move(get_host_arg)
           .Run(mojom::HostStatus::kNoEligibleHosts,
                base::nullopt /* host_device */);
+    }
+  }
+
+  for (auto& set_feature_enabled_args : set_feature_enabled_args_) {
+    if (std::get<3>(set_feature_enabled_args))
+      std::move(std::get<3>(set_feature_enabled_args)).Run(false /* success */);
+  }
+
+  for (auto& get_feature_states_arg : get_feature_states_args_) {
+    if (get_feature_states_arg) {
+      std::move(get_feature_states_arg)
+          .Run(base::flat_map<mojom::Feature, mojom::FeatureState>());
     }
   }
 
@@ -49,6 +62,37 @@ void FakeMultiDeviceSetup::BindHandle(mojo::ScopedMessagePipeHandle handle) {
       std::move(handle)));
 }
 
+void FakeMultiDeviceSetup::FlushForTesting() {
+  host_status_observers_.FlushForTesting();
+  feature_state_observers_.FlushForTesting();
+}
+
+bool FakeMultiDeviceSetup::HasAtLeastOneHostStatusObserver() {
+  return !host_status_observers_.empty();
+}
+
+bool FakeMultiDeviceSetup::HasAtLeastOneFeatureStateObserver() {
+  return !feature_state_observers_.empty();
+}
+
+void FakeMultiDeviceSetup::NotifyHostStatusChanged(
+    mojom::HostStatus host_status,
+    const base::Optional<cryptauth::RemoteDevice>& host_device) {
+  host_status_observers_.ForAllPtrs(
+      [&host_status, &host_device](mojom::HostStatusObserver* observer) {
+        observer->OnHostStatusChanged(host_status, host_device);
+      });
+}
+
+void FakeMultiDeviceSetup::NotifyFeatureStateChanged(
+    const base::flat_map<mojom::Feature, mojom::FeatureState>&
+        feature_states_map) {
+  feature_state_observers_.ForAllPtrs(
+      [&feature_states_map](mojom::FeatureStateObserver* observer) {
+        observer->OnFeatureStatesChanged(feature_states_map);
+      });
+}
+
 void FakeMultiDeviceSetup::SetAccountStatusChangeDelegate(
     mojom::AccountStatusChangeDelegatePtr delegate) {
   delegate_ = std::move(delegate);
@@ -56,7 +100,12 @@ void FakeMultiDeviceSetup::SetAccountStatusChangeDelegate(
 
 void FakeMultiDeviceSetup::AddHostStatusObserver(
     mojom::HostStatusObserverPtr observer) {
-  observers_.push_back(std::move(observer));
+  host_status_observers_.AddPtr(std::move(observer));
+}
+
+void FakeMultiDeviceSetup::AddFeatureStateObserver(
+    mojom::FeatureStateObserverPtr observer) {
+  feature_state_observers_.AddPtr(std::move(observer));
 }
 
 void FakeMultiDeviceSetup::GetEligibleHostDevices(
@@ -64,9 +113,10 @@ void FakeMultiDeviceSetup::GetEligibleHostDevices(
   get_eligible_hosts_args_.push_back(std::move(callback));
 }
 
-void FakeMultiDeviceSetup::SetHostDevice(const std::string& host_public_key,
+void FakeMultiDeviceSetup::SetHostDevice(const std::string& host_device_id,
+                                         const std::string& auth_token,
                                          SetHostDeviceCallback callback) {
-  set_host_args_.emplace_back(host_public_key, std::move(callback));
+  set_host_args_.emplace_back(host_device_id, auth_token, std::move(callback));
 }
 
 void FakeMultiDeviceSetup::RemoveHostDevice() {
@@ -75,6 +125,19 @@ void FakeMultiDeviceSetup::RemoveHostDevice() {
 
 void FakeMultiDeviceSetup::GetHostStatus(GetHostStatusCallback callback) {
   get_host_args_.push_back(std::move(callback));
+}
+
+void FakeMultiDeviceSetup::SetFeatureEnabledState(
+    mojom::Feature feature,
+    bool enabled,
+    const base::Optional<std::string>& auth_token,
+    SetFeatureEnabledStateCallback callback) {
+  set_feature_enabled_args_.emplace_back(feature, enabled, auth_token,
+                                         std::move(callback));
+}
+
+void FakeMultiDeviceSetup::GetFeatureStates(GetFeatureStatesCallback callback) {
+  get_feature_states_args_.emplace_back(std::move(callback));
 }
 
 void FakeMultiDeviceSetup::RetrySetHostNow(RetrySetHostNowCallback callback) {

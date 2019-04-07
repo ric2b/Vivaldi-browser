@@ -96,8 +96,6 @@ class CONTENT_EXPORT CrossProcessFrameConnector
       const viz::SurfaceId& local_surface_id,
       gfx::PointF* transformed_point,
       viz::EventSource source = viz::EventSource::ANY) override;
-  void ForwardProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
-                                     InputEventAckState ack_result) override;
   void ForwardAckedTouchpadPinchGestureEvent(
       const blink::WebGestureEvent& event,
       InputEventAckState ack_result) override;
@@ -116,7 +114,7 @@ class CONTENT_EXPORT CrossProcessFrameConnector
   bool IsSubtreeThrottled() const override;
 #if defined(USE_AURA)
   void EmbedRendererWindowTreeClientInParent(
-      ui::mojom::WindowTreeClientPtr window_tree_client) override;
+      ws::mojom::WindowTreeClientPtr window_tree_client) override;
 #endif
   void DidUpdateVisualProperties(
       const cc::RenderFrameMetadata& metadata) override;
@@ -164,7 +162,8 @@ class CONTENT_EXPORT CrossProcessFrameConnector
       const viz::SurfaceId& surface_id,
       const FrameVisualProperties& visual_properties);
   void OnUpdateViewportIntersection(const gfx::Rect& viewport_intersection,
-                                    const gfx::Rect& compositor_visible_rect);
+                                    const gfx::Rect& compositor_visible_rect,
+                                    bool occluded_or_obscured);
   void OnVisibilityChanged(bool visible);
   void OnSetIsInert(bool);
   void OnSetInheritedEffectiveTouchAction(cc::TouchAction);

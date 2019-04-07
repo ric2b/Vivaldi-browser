@@ -6,59 +6,21 @@
 
 #include "base/logging.h"
 #include "base/strings/string16.h"
-#include "chrome/app/vector_icons/vector_icons.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/hover_button.h"
-#include "chrome/grit/generated_resources.h"
-#include "components/vector_icons/vector_icons.h"
-#include "ui/base/l10n/l10n_util.h"
+#include "chrome/browser/ui/webauthn/transport_utils.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/vector_icons.h"
 
 namespace {
-
-// Gets the message ID for the human readable name of |transport|.
-int GetHumanReadableTransportNameMessageId(AuthenticatorTransport transport) {
-  switch (transport) {
-    case AuthenticatorTransport::kBluetoothLowEnergy:
-      return IDS_WEBAUTHN_TRANSPORT_BLE;
-    case AuthenticatorTransport::kNearFieldCommunication:
-      return IDS_WEBAUTHN_TRANSPORT_NFC;
-    case AuthenticatorTransport::kUsb:
-      return IDS_WEBAUTHN_TRANSPORT_USB;
-    case AuthenticatorTransport::kInternal:
-      return IDS_WEBAUTHN_TRANSPORT_INTERNAL;
-    case AuthenticatorTransport::kCloudAssistedBluetoothLowEnergy:
-      return IDS_WEBAUTHN_TRANSPORT_CABLE;
-  }
-  NOTREACHED();
-  return 0;
-}
-
-// Gets the vector icon depicting the given |transport|.
-const gfx::VectorIcon& GetTransportVectorIcon(
-    AuthenticatorTransport transport) {
-  switch (transport) {
-    case AuthenticatorTransport::kBluetoothLowEnergy:
-      return kBluetoothIcon;
-    case AuthenticatorTransport::kNearFieldCommunication:
-      return kNfcIcon;
-    case AuthenticatorTransport::kUsb:
-      return vector_icons::kUsbIcon;
-    case AuthenticatorTransport::kInternal:
-      return kFingerprintIcon;
-    case AuthenticatorTransport::kCloudAssistedBluetoothLowEnergy:
-      return kSmartphoneIcon;
-  }
-  NOTREACHED();
-  return kFingerprintIcon;
-}
 
 // Creates, for a given transport, the corresponding row in the transport list,
 // containing an icon, a human-readable name, and a chevron at the right:
@@ -76,28 +38,43 @@ std::unique_ptr<HoverButton> CreateTransportListItemView(
   const SkColor icon_color = color_utils::DeriveDefaultIconColor(
       color_reference_label->enabled_color());
 
-  constexpr int kTransportIconSize = 24;
+  constexpr int kTransportIconSize = 20;
   auto transport_image = std::make_unique<views::ImageView>();
   transport_image->SetImage(gfx::CreateVectorIcon(
       GetTransportVectorIcon(transport), kTransportIconSize, icon_color));
 
-  base::string16 transport_name = l10n_util::GetStringUTF16(
-      GetHumanReadableTransportNameMessageId(transport));
+  const base::string16 transport_name = GetTransportHumanReadableName(
+      transport, TransportSelectionContext::kTransportSelectionSheet);
 
+  constexpr int kChevronSize = 8;
+  constexpr int kChevronPadding = (kTransportIconSize - kChevronSize) / 2;
   auto chevron_image = std::make_unique<views::ImageView>();
-  chevron_image->SetImage(
-      gfx::CreateVectorIcon(views::kSubmenuArrowIcon, icon_color));
+  chevron_image->SetImage(gfx::CreateVectorIcon(views::kSubmenuArrowIcon,
+                                                kChevronSize, icon_color));
+  chevron_image->SetBorder(
+      views::CreateEmptyBorder(gfx::Insets(kChevronPadding)));
 
   auto hover_button = std::make_unique<HoverButton>(
       listener, std::move(transport_image), transport_name,
       base::string16() /* subtitle */, std::move(chevron_image));
   hover_button->set_tag(static_cast<int>(transport));
+
+  // Because there is an icon on both sides, set a custom border that has only
+  // half of the normal padding horizontally.
+  constexpr int kExtraVerticalPadding = 2;
+  constexpr int kHorizontalPadding = 8;
+  gfx::Insets padding(views::LayoutProvider::Get()->GetDistanceMetric(
+                          DISTANCE_CONTROL_LIST_VERTICAL) +
+                          kExtraVerticalPadding,
+                      kHorizontalPadding);
+  hover_button->SetBorder(views::CreateEmptyBorder(padding));
+
   return hover_button;
 }
 
 void AddSeparatorAsChild(views::View* view) {
   auto separator = std::make_unique<views::Separator>();
-  separator->SetColor(gfx::kGoogleGrey900);
+  separator->SetColor(gfx::kGoogleGrey300);
   view->AddChildView(separator.release());
 }
 
@@ -132,8 +109,16 @@ void TransportListView::AddViewForListItem(size_t index,
                                            AuthenticatorTransport transport) {
   std::unique_ptr<HoverButton> list_item_view =
       CreateTransportListItemView(transport, this);
+  if (index == 0u)
+    first_list_item_view_ = list_item_view.get();
   AddChildView(list_item_view.release());
   AddSeparatorAsChild(this);
+}
+
+void TransportListView::RequestFocus() {
+  if (!first_list_item_view_)
+    return;
+  first_list_item_view_->RequestFocus();
 }
 
 void TransportListView::OnModelDestroyed() {

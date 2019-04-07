@@ -14,8 +14,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/about_flags.h"
@@ -23,7 +23,7 @@
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/mac/bluetooth_utility.h"
 #include "chrome/browser/shell_integration.h"
-#include "chrome/browser/vr/service/vr_device_manager.h"
+#include "chrome/browser/vr/service/xr_runtime_manager.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
@@ -525,7 +525,7 @@ void RecordIsPinnedToTaskbarHistogram(
 }
 
 void RecordVrStartupHistograms() {
-  vr::VRDeviceManager::RecordVrStartupHistograms();
+  vr::XRRuntimeManager::RecordVrStartupHistograms();
 }
 #endif  // defined(OS_WIN)
 
@@ -568,7 +568,7 @@ void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
 #endif
 
   constexpr base::TaskTraits background_task_traits = {
-      base::MayBlock(), base::TaskPriority::BACKGROUND,
+      base::MayBlock(), base::TaskPriority::BEST_EFFORT,
       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN};
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   base::PostTaskWithTraits(FROM_HERE, background_task_traits,

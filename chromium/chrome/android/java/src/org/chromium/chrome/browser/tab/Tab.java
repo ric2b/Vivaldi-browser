@@ -37,6 +37,7 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.UserDataHost;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.R;
@@ -46,10 +47,8 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ChromeVersionInfo;
-import org.chromium.chrome.browser.FrozenNativePage;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.IntentHandler.TabOpenType;
-import org.chromium.chrome.browser.NativePage;
 import org.chromium.chrome.browser.SwipeRefreshHandler;
 import org.chromium.chrome.browser.TabState;
 import org.chromium.chrome.browser.TabState.WebContentsState;
@@ -72,9 +71,11 @@ import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.media.ui.MediaSessionTabHelper;
+import org.chromium.chrome.browser.native_page.FrozenNativePage;
+import org.chromium.chrome.browser.native_page.NativePage;
+import org.chromium.chrome.browser.native_page.NativePageAssassin;
+import org.chromium.chrome.browser.native_page.NativePageFactory;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
-import org.chromium.chrome.browser.ntp.NativePageAssassin;
-import org.chromium.chrome.browser.ntp.NativePageFactory;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
 import org.chromium.chrome.browser.prerender.ExternalPrerenderHandler;
@@ -556,6 +557,16 @@ public class Tab
     /** Controls display cutout states on the tab. */
     private DisplayCutoutController mDisplayCutoutController;
 
+    private final UserDataHost mUserDataHost = new UserDataHost();
+
+    /**
+     * @return {@link UserDataHost} that manages {@link UserData} objects attached to
+     *         this Tab instance.
+     */
+    public UserDataHost getUserDataHost() {
+        return mUserDataHost;
+    }
+
     /**
      * Creates an instance of a {@link Tab}.
      *
@@ -618,7 +629,7 @@ public class Tab
         ContextualSearchTabHelper.createForTab(this);
         MediaSessionTabHelper.createForTab(this);
 
-        mControlsOffsetHelper = new TabBrowserControlsOffsetHelper(this);
+        mControlsOffsetHelper = TabBrowserControlsOffsetHelper.from(this);
 
         if (creationState != null) {
             mTabUma = new TabUma(creationState);
@@ -643,8 +654,7 @@ public class Tab
                 updateInteractableState();
             }
         };
-
-        mDisplayCutoutController = new DisplayCutoutController(this);
+        mDisplayCutoutController = DisplayCutoutController.from(this);
     }
 
     private int calculateDefaultThemeColor() {
@@ -1699,6 +1709,8 @@ public class Tab
         if (!(getActivity() instanceof ChromeTabbedActivity)) return;
 
         View anchorView = getActivity().getToolbarManager().getMenuButton();
+        if (anchorView == null) return;
+
         ViewRectProvider rectProvider = new ViewRectProvider(anchorView);
         TextBubble textBubble =
                 new TextBubble(getActivity(), anchorView, R.string.iph_data_saver_detail_text,
@@ -1757,8 +1769,8 @@ public class Tab
         ContentView cv = ContentView.createContentView(mThemedApplicationContext, webContents);
         cv.setContentDescription(mThemedApplicationContext.getResources().getString(
                 R.string.accessibility_content_view));
-        webContents.initialize(mThemedApplicationContext, PRODUCT_VERSION,
-                new TabViewAndroidDelegate(this, cv), cv, getWindowAndroid());
+        webContents.initialize(PRODUCT_VERSION, new TabViewAndroidDelegate(this, cv), cv,
+                getWindowAndroid(), WebContents.createDefaultInternalsHolder());
         SelectionPopupController.fromWebContents(webContents)
                 .setActionModeCallback(new ChromeActionModeCallback(this, webContents));
         initBrowserComponents(webContents);
@@ -2049,8 +2061,7 @@ public class Tab
             mInfoBarContainer.destroy();
             mInfoBarContainer = null;
         }
-
-        mControlsOffsetHelper.destroy();
+        mUserDataHost.destroy();
     }
 
     /**
@@ -3465,14 +3476,6 @@ public class Tab
     @CalledByNative
     private void setTrustedCdnPublisherUrl(@Nullable String url) {
         mTrustedCdnPublisherUrl = url;
-    }
-
-    /**
-     * Sets a custom {@link DisplayCutoutController} for testing.
-     */
-    @VisibleForTesting
-    public void setDisplayCutoutController(DisplayCutoutController controller) {
-        mDisplayCutoutController = controller;
     }
 
     private native void nativeInit();

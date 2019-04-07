@@ -20,6 +20,7 @@ class DictionaryValue;
 namespace content {
 
 class DevToolsAgentHostClient;
+class RenderFrameHost;
 class WebContents;
 
 class CONTENT_EXPORT DevToolsManagerDelegate {
@@ -36,8 +37,8 @@ class CONTENT_EXPORT DevToolsManagerDelegate {
   // Returns DevToolsAgentHost title to use for given |web_contents| target.
   virtual std::string GetTargetDescription(WebContents* web_contents);
 
-  // Returns whether embedder allows to inspect given |web_contents|.
-  virtual bool AllowInspectingWebContents(WebContents* web_contents);
+  // Returns whether embedder allows to inspect given |rfh|.
+  virtual bool AllowInspectingRenderFrameHost(RenderFrameHost* rfh);
 
   // Returns all targets embedder would like to report as debuggable
   // remotely.
@@ -46,16 +47,38 @@ class CONTENT_EXPORT DevToolsManagerDelegate {
   // Creates new inspectable target given the |url|.
   virtual scoped_refptr<DevToolsAgentHost> CreateNewTarget(const GURL& url);
 
+  // Get all live browser contexts created by CreateBrowserContext() method.
+  virtual std::vector<BrowserContext*> GetBrowserContexts();
+
+  // Get default browser context. May return null if not supported.
+  virtual BrowserContext* GetDefaultBrowserContext();
+
+  // Create new browser context. May return null if not supported or not
+  // possible. Delegate must take ownership of the created browser context, and
+  // may destroy it at will.
+  virtual BrowserContext* CreateBrowserContext();
+
+  // Dispose browser context that was created with |CreateBrowserContext|
+  // method.
+  using DisposeCallback = base::OnceCallback<void(bool, const std::string&)>;
+  virtual void DisposeBrowserContext(BrowserContext* context,
+                                     DisposeCallback callback);
+
   // Called when a new client is attached/detached.
   virtual void ClientAttached(DevToolsAgentHost* agent_host,
                               DevToolsAgentHostClient* client);
   virtual void ClientDetached(DevToolsAgentHost* agent_host,
                               DevToolsAgentHostClient* client);
 
-  // Returns true if the command has been handled, false otherwise.
-  virtual bool HandleCommand(DevToolsAgentHost* agent_host,
+  // Call callback if command was not handled.
+  using NotHandledCallback =
+      base::OnceCallback<void(std::unique_ptr<base::DictionaryValue>,
+                              const std::string&)>;
+  virtual void HandleCommand(DevToolsAgentHost* agent_host,
                              DevToolsAgentHostClient* client,
-                             base::DictionaryValue* command);
+                             std::unique_ptr<base::DictionaryValue> command,
+                             const std::string& message,
+                             NotHandledCallback callback);
 
   // Should return discovery page HTML that should list available tabs
   // and provide attach links.

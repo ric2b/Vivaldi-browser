@@ -67,13 +67,15 @@ class WorkerInspectorController final
   WorkerInspectorController(WorkerThread*, WorkerThreadDebugger*);
 
   // InspectorSession::Client implementation.
-  void SendProtocolResponse(int session_id,
-                            int call_id,
-                            const String& response,
-                            const String& state) override;
-  void SendProtocolNotification(int session_id,
-                                const String& message,
-                                const String& state) override;
+  void SendProtocolResponse(
+      int session_id,
+      int call_id,
+      const String& response,
+      mojom::blink::DevToolsSessionStatePtr updates) override;
+  void SendProtocolNotification(
+      int session_id,
+      const String& message,
+      mojom::blink::DevToolsSessionStatePtr updates) override;
 
   // WebThread::TaskObserver implementation.
   void WillProcessTask() override;

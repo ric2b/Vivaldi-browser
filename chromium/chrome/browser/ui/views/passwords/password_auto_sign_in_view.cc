@@ -8,7 +8,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/passwords/password_dialog_prompts.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/passwords/credentials_item_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
@@ -33,20 +33,14 @@ PasswordAutoSignInView::PasswordAutoSignInView(
     : PasswordBubbleViewBase(web_contents, anchor_view, anchor_point, reason) {
   SetLayoutManager(std::make_unique<views::FillLayout>());
   const autofill::PasswordForm& form = model()->pending_password();
-  base::string16 upper_text, lower_text = form.username_value;
 
   set_margins(
       ChromeLayoutProvider::Get()->GetInsetsMetric(views::INSETS_DIALOG));
 
-  if (ChromeLayoutProvider::Get()->IsHarmonyMode()) {
-    upper_text =
-        l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_AUTO_SIGNIN_TITLE_MD);
-  } else {
-    lower_text = l10n_util::GetStringFUTF16(
-        IDS_MANAGE_PASSWORDS_AUTO_SIGNIN_TITLE, lower_text);
-  }
   CredentialsItemView* credential = new CredentialsItemView(
-      this, upper_text, lower_text, kButtonHoverColor, &form,
+      this,
+      l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_AUTO_SIGNIN_TITLE_MD),
+      form.username_value, kButtonHoverColor, &form,
       content::BrowserContext::GetDefaultStoragePartition(model()->GetProfile())
           ->GetURLLoaderFactoryForBrowserProcess()
           .get());

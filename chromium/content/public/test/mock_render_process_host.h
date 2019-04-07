@@ -74,6 +74,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   void UpdateClientPriority(PriorityClient* client) override;
   int VisibleClientCount() const override;
   unsigned int GetFrameDepth() const override;
+  bool GetIntersectsViewport() const override;
   bool IsForGuestsOnly() const override;
   RendererAudioOutputStreamFactoryContext*
   GetRendererAudioOutputStreamFactoryContext() override;
@@ -146,6 +147,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   void LockToOrigin(const GURL& lock_url) override;
   void BindCacheStorage(blink::mojom::CacheStorageRequest request,
                         const url::Origin& origin) override;
+  void CleanupCorbExceptionForPluginUponDestruction() override;
 
   // IPC::Sender via RenderProcessHost.
   bool Send(IPC::Message* msg) override;
@@ -193,7 +195,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   int id_;
   bool has_connection_;
   BrowserContext* browser_context_;
-  base::ObserverList<RenderProcessHostObserver> observers_;
+  base::ObserverList<RenderProcessHostObserver>::Unchecked observers_;
 
   base::flat_set<PriorityClient*> priority_clients_;
   int prev_routing_id_;

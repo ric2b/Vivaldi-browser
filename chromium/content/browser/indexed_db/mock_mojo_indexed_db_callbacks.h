@@ -9,18 +9,23 @@
 #include <string>
 
 #include "base/macros.h"
-#include "content/common/indexed_db/indexed_db.mojom.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/blink/public/common/indexeddb/indexeddb_key.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
+
+namespace blink {
+struct IndexedDBDatabaseMetadata;
+}
 
 namespace content {
 
-class MockMojoIndexedDBCallbacks : public ::indexed_db::mojom::Callbacks {
+class MockMojoIndexedDBCallbacks : public blink::mojom::IDBCallbacks {
  public:
   explicit MockMojoIndexedDBCallbacks();
   ~MockMojoIndexedDBCallbacks() override;
 
-  ::indexed_db::mojom::CallbacksAssociatedPtrInfo CreateInterfacePtrAndBind();
+  blink::mojom::IDBCallbacksAssociatedPtrInfo CreateInterfacePtrAndBind();
 
   MOCK_METHOD2(Error, void(int32_t code, const base::string16& message));
 
@@ -29,89 +34,87 @@ class MockMojoIndexedDBCallbacks : public ::indexed_db::mojom::Callbacks {
 
   MOCK_METHOD1(Blocked, void(int64_t existing_version));
 
-  MOCK_METHOD5(
-      MockedUpgradeNeeded,
-      void(::indexed_db::mojom::DatabaseAssociatedPtrInfo* database_info,
-           int64_t old_version,
-           blink::WebIDBDataLoss data_loss,
-           const std::string& data_loss_message,
-           const content::IndexedDBDatabaseMetadata& metadata));
+  MOCK_METHOD5(MockedUpgradeNeeded,
+               void(blink::mojom::IDBDatabaseAssociatedPtrInfo* database_info,
+                    int64_t old_version,
+                    blink::WebIDBDataLoss data_loss,
+                    const std::string& data_loss_message,
+                    const blink::IndexedDBDatabaseMetadata& metadata));
 
   // Move-only types not supported by mock methods.
   void UpgradeNeeded(
-      ::indexed_db::mojom::DatabaseAssociatedPtrInfo database_info,
+      blink::mojom::IDBDatabaseAssociatedPtrInfo database_info,
       int64_t old_version,
       blink::WebIDBDataLoss data_loss,
       const std::string& data_loss_message,
-      const content::IndexedDBDatabaseMetadata& metadata) override {
+      const blink::IndexedDBDatabaseMetadata& metadata) override {
     MockedUpgradeNeeded(&database_info, old_version, data_loss,
                         data_loss_message, metadata);
   }
 
-  MOCK_METHOD2(
-      MockedSuccessDatabase,
-      void(::indexed_db::mojom::DatabaseAssociatedPtrInfo* database_info,
-           const content::IndexedDBDatabaseMetadata& metadata));
+  MOCK_METHOD2(MockedSuccessDatabase,
+               void(blink::mojom::IDBDatabaseAssociatedPtrInfo* database_info,
+                    const blink::IndexedDBDatabaseMetadata& metadata));
   void SuccessDatabase(
-      ::indexed_db::mojom::DatabaseAssociatedPtrInfo database_info,
-      const content::IndexedDBDatabaseMetadata& metadata) override {
+      blink::mojom::IDBDatabaseAssociatedPtrInfo database_info,
+      const blink::IndexedDBDatabaseMetadata& metadata) override {
     MockedSuccessDatabase(&database_info, metadata);
   }
 
   MOCK_METHOD4(MockedSuccessCursor,
-               void(::indexed_db::mojom::CursorAssociatedPtrInfo* cursor,
-                    const IndexedDBKey& key,
-                    const IndexedDBKey& primary_key,
-                    ::indexed_db::mojom::ValuePtr* value));
-  void SuccessCursor(::indexed_db::mojom::CursorAssociatedPtrInfo cursor,
-                     const IndexedDBKey& key,
-                     const IndexedDBKey& primary_key,
-                     ::indexed_db::mojom::ValuePtr value) override {
+               void(blink::mojom::IDBCursorAssociatedPtrInfo* cursor,
+                    const blink::IndexedDBKey& key,
+                    const blink::IndexedDBKey& primary_key,
+                    blink::mojom::IDBValuePtr* value));
+  void SuccessCursor(blink::mojom::IDBCursorAssociatedPtrInfo cursor,
+                     const blink::IndexedDBKey& key,
+                     const blink::IndexedDBKey& primary_key,
+                     blink::mojom::IDBValuePtr value) override {
     MockedSuccessCursor(&cursor, key, primary_key, &value);
   }
 
   MOCK_METHOD1(MockedSuccessValue,
-               void(::indexed_db::mojom::ReturnValuePtr* value));
-  void SuccessValue(::indexed_db::mojom::ReturnValuePtr value) override {
+               void(blink::mojom::IDBReturnValuePtr* value));
+  void SuccessValue(blink::mojom::IDBReturnValuePtr value) override {
     MockedSuccessValue(&value);
   }
 
   MOCK_METHOD3(MockedSuccessCursorContinue,
-               void(const IndexedDBKey& key,
-                    const IndexedDBKey& primary_key,
-                    ::indexed_db::mojom::ValuePtr* value));
+               void(const blink::IndexedDBKey& key,
+                    const blink::IndexedDBKey& primary_key,
+                    blink::mojom::IDBValuePtr* value));
 
-  void SuccessCursorContinue(const IndexedDBKey& key,
-                             const IndexedDBKey& primary_key,
-                             ::indexed_db::mojom::ValuePtr value) override {
+  void SuccessCursorContinue(const blink::IndexedDBKey& key,
+                             const blink::IndexedDBKey& primary_key,
+                             blink::mojom::IDBValuePtr value) override {
     MockedSuccessCursorContinue(key, primary_key, &value);
   }
 
   MOCK_METHOD3(MockedSuccessCursorPrefetch,
-               void(const std::vector<IndexedDBKey>& keys,
-                    const std::vector<IndexedDBKey>& primary_keys,
-                    std::vector<::indexed_db::mojom::ValuePtr>* values));
+               void(const std::vector<blink::IndexedDBKey>& keys,
+                    const std::vector<blink::IndexedDBKey>& primary_keys,
+                    std::vector<blink::mojom::IDBValuePtr>* values));
 
   void SuccessCursorPrefetch(
-      const std::vector<IndexedDBKey>& keys,
-      const std::vector<IndexedDBKey>& primary_keys,
-      std::vector<::indexed_db::mojom::ValuePtr> values) override {
+      const std::vector<blink::IndexedDBKey>& keys,
+      const std::vector<blink::IndexedDBKey>& primary_keys,
+      std::vector<blink::mojom::IDBValuePtr> values) override {
     MockedSuccessCursorPrefetch(keys, primary_keys, &values);
   }
 
   MOCK_METHOD1(MockedSuccessArray,
-               void(std::vector<::indexed_db::mojom::ReturnValuePtr>* values));
+               void(std::vector<blink::mojom::IDBReturnValuePtr>* values));
   void SuccessArray(
-      std::vector<::indexed_db::mojom::ReturnValuePtr> values) override {
+      std::vector<blink::mojom::IDBReturnValuePtr> values) override {
     MockedSuccessArray(&values);
   }
 
-  MOCK_METHOD1(SuccessKey, void(const IndexedDBKey& key));
+  MOCK_METHOD1(SuccessKey, void(const blink::IndexedDBKey& key));
   MOCK_METHOD1(SuccessInteger, void(int64_t value));
   MOCK_METHOD0(Success, void());
 
  private:
-  mojo::AssociatedBinding<::indexed_db::mojom::Callbacks> binding_;
+  mojo::AssociatedBinding<blink::mojom::IDBCallbacks> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(MockMojoIndexedDBCallbacks);
 };

@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/memory_details.h"
+// Windows headers must come first.
+#include <windows.h>
 
 #include <psapi.h>
 #include <stddef.h>
 #include <TlHelp32.h>
+
+#include "chrome/browser/memory_details.h"
 
 #include <memory>
 
@@ -16,7 +19,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/windows_version.h"
 #include "chrome/common/url_constants.h"
@@ -44,7 +47,7 @@ ProcessData* MemoryDetails::ChromeBrowser() {
 
 void MemoryDetails::CollectProcessData(
     const std::vector<ProcessMemoryInformation>& child_info) {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
 
   // Clear old data.
   process_data_[0].processes.clear();

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,10 +13,6 @@ class Profile;
 
 namespace policy {
 class AffiliatedInvalidationServiceProviderImplTest;
-}
-
-namespace user_prefs {
-class PrefRegistrySyncable;
 }
 
 namespace invalidation {
@@ -54,8 +50,6 @@ class ProfileInvalidationProviderFactory
   // BrowserContextKeyedServiceFactory:
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* context) const override;
-  void RegisterProfilePrefs(
-      user_prefs::PrefRegistrySyncable* registry) override;
 
   TestingFactoryFunction testing_factory_;
 

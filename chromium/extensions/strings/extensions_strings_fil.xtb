@@ -13,7 +13,6 @@
 <translation id="2350172092385603347">Ginamit ang localization , subalit hindi natukoy ang default_locale sa manipesto.</translation>
 <translation id="2576842806987913196">Mayroon nang isang CRX file na may ganitong pangalan.</translation>
 <translation id="2753617847762399167">Ilegal na daanan (ganap o may kaugnayan sa '..'): '<ph name="IMAGE_PATH" />'</translation>
-<translation id="27822970480436970">Nabigong bawiin ng extension na ito ang isang kahilingan ng network dahil sumalungat ang pagbabago sa isa pang extension.</translation>
 <translation id="2785530881066938471">Hindi ma-load ang file na '<ph name="RELATIVE_PATH" />' para sa script ng nilalaman. Hindi ito naka-encode bilang UTF-8.</translation>
 <translation id="2903070246402204397">Na-block ng administrator ang <ph name="EXTENSION_NAME" /> (extension ID "<ph name="EXTENSION_ID" />"). <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">Hindi ma-install ang package: '<ph name="ERROR_CODE" />'</translation>
@@ -57,19 +56,16 @@
 <translation id="7003844668372540529">Hindi kilalang produkto na <ph name="PRODUCT_ID" /> mula sa <ph name="VENDOR_NAME" /></translation>
 <translation id="7068383018033524534">Invalid ang manifest file</translation>
 <translation id="7217838517480956708">Kinakailangan ng administrator ng machine na ito na ma-install ang <ph name="EXTENSION_NAME" />. Hindi ito maaaring alisin o baguhin.</translation>
+<translation id="7612608473764576263">Dapat valid ang format ng value ng input para sa pribadong key (PKCS#8-format PEM-encoded RSA key).</translation>
 <translation id="7939686037314084444">Hindi na-load nang maayos ang extension. Maaaring hindi nito mapigilan ang mga kahilingan sa network.</translation>
 <translation id="7972881773422714442">Mga Opsyon: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Nakaharap sa user</translation>
 <translation id="8047248493720652249">Nabigong pangalanan ng extension na ito ang download na "<ph name="ATTEMPTED_FILENAME" />" dahil nakatukoy ang isa pang extension (<ph name="EXTENSION_NAME" />) ng ibang filename na "<ph name="ACTUAL_FILENAME" />".</translation>
 <translation id="8284835137979141223"><ph name="PRODUCT_NAME" /> mula sa <ph name="VENDOR_NAME" /></translation>
-<translation id="8341840687457896278">Nabigo ang extension na ito na magbigay ng mga kredensyal sa isang kahilingan sa network dahil may isa pang extension (<ph name="EXTENSION_NAME" />) na nagbigay ng ibang mga kredensyal.</translation>
 <translation id="8517576857589387417">Nawawala o hindi mabasa ang manifest file</translation>
 <translation id="8636666366616799973">Di-wasto ang package. Mga Detalye: '<ph name="ERROR_MESSAGE" />'.</translation>
-<translation id="8670869118777164560">Nabigo ang extension na ito na mag-redirect ng kahilingan sa network sa <ph name="ATTEMPTED_REDIRECT_DESTINATION" /> dahil may isa pang extension (<ph name="EXTENSION_NAME" />) na nag-redirect nito sa <ph name="ACTUAL_REDIRECT_DESTINATION" />.</translation>
 <translation id="8761756413268424715">Humihiling ang "<ph name="APP_NAME" />" ng access sa isa sa iyong mga device:</translation>
-<translation id="8825366169884721447">Nabigo ang extension na ito na baguhin ang header ng kahilingan na "<ph name="HEADER_NAME" />" ng isang kahilingan sa network dahil sumalungat ang pagbabago sa isa pang extension (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="8885905466771744233">Umiiral na ang pribadong key para sa tinukoy na extension. Gamiting muli ang key na iyon o tanggalin muna ito.</translation>
 <translation id="907841381057066561">Nabigo sa paglikha ng pansamantalang zip file sa oras ng packaging.</translation>
-<translation id="9111791539553342076">Nabigo ang extension na ito na baguhin ang header ng tugon na "<ph name="HEADER_NAME" />" ng isang kahilingan sa network dahil sumalungat ang pagbabago sa isa pang extension (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="941543339607623937">Di-wastong pribadong key.</translation>
 </translationbundle>

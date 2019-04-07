@@ -15,7 +15,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 #include "sql/init_status.h"
 #include "sql/meta_table.h"
 
@@ -47,7 +47,7 @@ class CalendarDatabase : public EventDatabase,
   // Call before Init() to set the error callback to be used for the
   // underlying database connection.
   void set_error_callback(
-      const sql::Connection::ErrorCallback& error_callback) {
+      const sql::Database::ErrorCallback& error_callback) {
     db_.set_error_callback(error_callback);
   }
 
@@ -100,9 +100,9 @@ class CalendarDatabase : public EventDatabase,
  private:
   // Overridden from URLDatabase, DownloadDatabase, VisitDatabase,
   // VisitSegmentDatabase and TypedURLSyncMetadataDatabase.
-  sql::Connection& GetDB() override;
+  sql::Database& GetDB() override;
 
-  sql::Connection db_;
+  sql::Database db_;
   sql::MetaTable meta_table_;
 
   base::Time cached_early_expiration_threshold_;

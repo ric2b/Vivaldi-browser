@@ -37,11 +37,10 @@ class InteractiveUITestSuite : public ChromeTestSuite {
  protected:
   // ChromeTestSuite overrides:
   void Initialize() override {
-    ChromeTestSuite::Initialize();
+    // Browser tests are expected not to tear-down various globals.
+    base::TestSuite::DisableCheckForLeakedGlobals();
 
-#if defined(OS_MACOSX)
-    gpu::ImageTransportSurface::SetAllowOSMesaForTesting(true);
-#endif
+    ChromeTestSuite::Initialize();
 
     // Only allow ui_controls to be used in interactive_ui_tests, since they
     // depend on focus and can't be sharded.

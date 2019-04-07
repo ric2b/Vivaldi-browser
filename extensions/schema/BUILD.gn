@@ -1,9 +1,8 @@
 import("//tools/json_schema_compiler/json_schema_api.gni")
 import("schemas.gni")
 
-json_schema_api("api") {
-  schemas = true
-  bundle = true
+generated_json_strings("generated_api_json_strings") {
+  sources = schema_sources
   configs = [ "//build/config:precompiled_headers" ]
   bundle_name = "Vivaldi"
   root = "//vivaldi/"
@@ -12,9 +11,9 @@ json_schema_api("api") {
   deps = schema_dependencies
 }
 
-json_schema_api("api_registration") {
+function_registration("generated_api_registration") {
+  sources = schema_sources
   impl_dir = "//vivaldi/extensions/api"
-  bundle_registration = true
   configs = [
     "//build/config:precompiled_headers",
     "//build/config/compiler:no_size_t_to_int_warning"
@@ -25,18 +24,31 @@ json_schema_api("api_registration") {
 
   deps = [
     # Different APIs include headers from these targets.
-    ":api",
+    ":generated_api_json_strings",
+    ":generated_api_types",
 
     "//content/public/browser",
-    #"//extensions/browser",
     "//skia",
   ]
   deps += schema_dependencies
 }
 
+generated_types("generated_api_types") {
+  sources = schema_sources
+  schema_include_rules = extensions_api_schema_include_rules
+  target_prefix = "vivaldi"
+  root = "//vivaldi/"
+
+  deps = [
+    "//extensions/common/api",
+  ]
+}
+
+
 group("schema") {
   public_deps = [
-    ":api",
-    ":api_registration",
+    ":generated_api_json_strings",
+    ":generated_api_registration",
+    ":generated_api_types",
   ]
 }

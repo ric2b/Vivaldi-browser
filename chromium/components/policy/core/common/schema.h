@@ -48,6 +48,10 @@ enum SchemaOnErrorStrategy {
   SCHEMA_ALLOW_INVALID,
 };
 
+// Schema validation options for Schema::ParseToDictAndValidate().
+constexpr int kSchemaOptionsNone = 0;
+constexpr int kSchemaOptionsIgnoreUnknownAttributes = 1 << 0;
+
 class Schema;
 
 typedef std::vector<Schema> SchemaList;
@@ -57,9 +61,17 @@ typedef std::vector<Schema> SchemaList;
 // Objects of this class refer to external, immutable data and are cheap to
 // copy.
 //
-// Schema validation is based on a subset of the JSON Schema standard.
-// TODO(crbug.com/856901): Document the supported subset of the JSON Schema
-// standard.
+// See components/policy/core/common/json_schema_constants.h for a list of
+// supported features and data types. Only these features and data-types are
+// supported and enforced. For the full schema proposal see
+// https://json-schema.org/understanding-json-schema/index.html.
+//
+// There are also these departures from the proposal:
+//  - "additionalProperties": false is not supported. The value of
+//    "additionalProperties" has to be a schema if present. Otherwise, the
+//    behavior for unknown attributes is controlled by |SchemaOnErrorStrategy|.
+//  - "sensitiveValue" (bool) marks a value to be sensitive. This is used to
+//    mask those values in the UI by calling |MaskSensitiveValues()|.
 class POLICY_EXPORT Schema {
  public:
   // Used internally to store shared data.
@@ -84,6 +96,22 @@ class POLICY_EXPORT Schema {
   // the internal representation. If |schema| is invalid then an invalid Schema
   // is returned and |error| contains a reason for the failure.
   static Schema Parse(const std::string& schema, std::string* error);
+
+  // Verifies if |schema| is a valid JSON v3 schema. When this validation passes
+  // then |schema| is valid JSON that can be parsed into a DictionaryValue,
+  // and that DictionaryValue can be used to build a |Schema|.
+  // Returns the parsed DictionaryValue when |schema| validated, otherwise
+  // returns nullptr. In that case, |error| contains an error description.
+  // For performance reasons, currently IsValidSchema() won't check the
+  // correctness of regular expressions used in "pattern" and
+  // "patternProperties" and in Validate() invalid regular expression don't
+  // accept any strings.
+  // |options| is a bitwise-OR combination of the options above (see
+  // |kSchemaOptions*| above).
+  static std::unique_ptr<base::DictionaryValue> ParseToDictAndValidate(
+      const std::string& schema,
+      int options,
+      std::string* error);
 
   // Returns true if this Schema is valid. Schemas returned by the methods below
   // may be invalid, and in those cases the other methods must not be used.

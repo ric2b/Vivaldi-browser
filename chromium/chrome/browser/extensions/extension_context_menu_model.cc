@@ -5,8 +5,10 @@
 #include "chrome/browser/extensions/extension_context_menu_model.h"
 
 #include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/extensions/chrome_extension_browser_constants.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
@@ -41,6 +43,7 @@
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/manifest_url_handlers.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/menu_separator_types.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image.h"
@@ -101,6 +104,38 @@ bool IsExtensionRequiredByPolicy(const Extension* extension,
   ManagementPolicy* policy = ExtensionSystem::Get(profile)->management_policy();
   return !policy->UserMayModifySettings(extension, nullptr) ||
          policy->MustRemainInstalled(extension, nullptr);
+}
+
+ExtensionContextMenuModel::ContextMenuAction CommandIdToContextMenuAction(
+    int command_id) {
+  using ContextMenuAction = ExtensionContextMenuModel::ContextMenuAction;
+
+  switch (command_id) {
+    case ExtensionContextMenuModel::HOME_PAGE:
+      return ContextMenuAction::kHomePage;
+    case ExtensionContextMenuModel::OPTIONS:
+      return ContextMenuAction::kOptions;
+    case ExtensionContextMenuModel::TOGGLE_VISIBILITY:
+      return ContextMenuAction::kToggleVisibility;
+    case ExtensionContextMenuModel::UNINSTALL:
+      return ContextMenuAction::kUninstall;
+    case ExtensionContextMenuModel::MANAGE_EXTENSIONS:
+      return ContextMenuAction::kManageExtensions;
+    case ExtensionContextMenuModel::INSPECT_POPUP:
+      return ContextMenuAction::kInspectPopup;
+    case ExtensionContextMenuModel::PAGE_ACCESS_RUN_ON_CLICK:
+      return ContextMenuAction::kPageAccessRunOnClick;
+    case ExtensionContextMenuModel::PAGE_ACCESS_RUN_ON_SITE:
+      return ContextMenuAction::kPageAccessRunOnSite;
+    case ExtensionContextMenuModel::PAGE_ACCESS_RUN_ON_ALL_SITES:
+      return ContextMenuAction::kPageAccessRunOnAllSites;
+    case ExtensionContextMenuModel::PAGE_ACCESS_LEARN_MORE:
+      return ContextMenuAction::kPageAccessLearnMore;
+    default:
+      break;
+  }
+  NOTREACHED();
+  return ContextMenuAction::kNoAction;
 }
 
 // A stub for the uninstall dialog.
@@ -197,14 +232,14 @@ bool ExtensionContextMenuModel::IsCommandIdEnabled(int command_id) const {
     return extension_items_->IsCommandIdEnabled(command_id);
 
   switch (command_id) {
-    case NAME:
-      // The NAME links to the Homepage URL. If the extension doesn't have a
-      // homepage, we just disable this menu item. We also disable for component
-      // extensions, because it doesn't make sense to link to a webstore page or
-      // chrome://extensions.
+    case HOME_PAGE:
+      // The HOME_PAGE links to the Homepage URL. If the extension doesn't have
+      // a homepage, we just disable this menu item. We also disable for
+      // component extensions, because it doesn't make sense to link to a
+      // webstore page or chrome://extensions.
       return ManifestURL::GetHomepageURL(extension).is_valid() &&
              !is_component_;
-    case CONFIGURE:
+    case OPTIONS:
       return OptionsPageInfo::HasOptionsPage(extension);
     case INSPECT_POPUP: {
       content::WebContents* web_contents = GetActiveWebContents();
@@ -216,11 +251,12 @@ bool ExtensionContextMenuModel::IsCommandIdEnabled(int command_id) const {
       return !IsExtensionRequiredByPolicy(extension, profile_);
     // The following, if they are present, are always enabled.
     case TOGGLE_VISIBILITY:
-    case MANAGE:
+    case MANAGE_EXTENSIONS:
     case PAGE_ACCESS_SUBMENU:
     case PAGE_ACCESS_RUN_ON_CLICK:
     case PAGE_ACCESS_RUN_ON_SITE:
     case PAGE_ACCESS_RUN_ON_ALL_SITES:
+    case PAGE_ACCESS_LEARN_MORE:
       return true;
     default:
       NOTREACHED() << "Unknown command" << command_id;
@@ -238,11 +274,14 @@ void ExtensionContextMenuModel::ExecuteCommand(int command_id,
     DCHECK(extension_items_);
     extension_items_->ExecuteCommand(command_id, GetActiveWebContents(),
                                      nullptr, content::ContextMenuParams());
+    action_taken_ = ContextMenuAction::kCustomCommand;
     return;
   }
 
+  action_taken_ = CommandIdToContextMenuAction(command_id);
+
   switch (command_id) {
-    case NAME: {
+    case HOME_PAGE: {
       content::OpenURLParams params(ManifestURL::GetHomepageURL(extension),
                                     content::Referrer(),
                                     WindowOpenDisposition::NEW_FOREGROUND_TAB,
@@ -250,7 +289,7 @@ void ExtensionContextMenuModel::ExecuteCommand(int command_id,
       browser_->OpenURL(params);
       break;
     }
-    case CONFIGURE:
+    case OPTIONS:
       DCHECK(OptionsPageInfo::HasOptionsPage(extension));
       ExtensionTabUtil::OpenOptionsPage(extension, browser_);
       break;
@@ -264,7 +303,7 @@ void ExtensionContextMenuModel::ExecuteCommand(int command_id,
       UninstallDialogHelper::UninstallExtension(browser_, extension);
       break;
     }
-    case MANAGE: {
+    case MANAGE_EXTENSIONS: {
       chrome::ShowExtensions(browser_, extension->id());
       break;
     }
@@ -275,11 +314,24 @@ void ExtensionContextMenuModel::ExecuteCommand(int command_id,
     case PAGE_ACCESS_RUN_ON_CLICK:
     case PAGE_ACCESS_RUN_ON_SITE:
     case PAGE_ACCESS_RUN_ON_ALL_SITES:
+    case PAGE_ACCESS_LEARN_MORE:
       HandlePageAccessCommand(command_id, extension);
       break;
     default:
      NOTREACHED() << "Unknown option";
      break;
+  }
+}
+
+void ExtensionContextMenuModel::OnMenuWillShow(ui::SimpleMenuModel* menu) {
+  action_taken_ = ContextMenuAction::kNoAction;
+}
+
+void ExtensionContextMenuModel::MenuClosed(ui::SimpleMenuModel* menu) {
+  if (action_taken_) {
+    ContextMenuAction action = *action_taken_;
+    UMA_HISTOGRAM_ENUMERATION("Extensions.ContextMenuAction", action);
+    action_taken_ = base::nullopt;
   }
 }
 
@@ -304,14 +356,14 @@ void ExtensionContextMenuModel::InitMenu(const Extension* extension,
   // Ampersands need to be escaped to avoid being treated like
   // mnemonics in the menu.
   base::ReplaceChars(extension_name, "&", "&&", &extension_name);
-  AddItem(NAME, base::UTF8ToUTF16(extension_name));
+  AddItem(HOME_PAGE, base::UTF8ToUTF16(extension_name));
   AppendExtensionItems();
   AddSeparator(ui::NORMAL_SEPARATOR);
 
   CreatePageAccessSubmenu(extension);
 
   if (!is_component_ || OptionsPageInfo::HasOptionsPage(extension))
-    AddItemWithStringId(CONFIGURE, IDS_EXTENSIONS_OPTIONS_MENU_ITEM);
+    AddItemWithStringId(OPTIONS, IDS_EXTENSIONS_OPTIONS_MENU_ITEM);
 
   if (!is_component_) {
     bool is_required_by_policy =
@@ -336,7 +388,7 @@ void ExtensionContextMenuModel::InitMenu(const Extension* extension,
 
   if (!is_component_) {
     AddSeparator(ui::NORMAL_SEPARATOR);
-    AddItemWithStringId(MANAGE, IDS_MANAGE_EXTENSION);
+    AddItemWithStringId(MANAGE_EXTENSIONS, IDS_MANAGE_EXTENSION);
   }
 
   const ActionInfo* action_info = ActionInfo::GetPageActionInfo(extension);
@@ -372,12 +424,14 @@ ExtensionContextMenuModel::MenuEntries
 ExtensionContextMenuModel::GetCurrentPageAccess(
     const Extension* extension,
     content::WebContents* web_contents) const {
+  DCHECK(web_contents);
   ScriptingPermissionsModifier modifier(profile_, extension);
   DCHECK(modifier.CanAffectExtension());
-  if (!modifier.HasWithheldHostPermissions())
+  ScriptingPermissionsModifier::SiteAccess site_access =
+      modifier.GetSiteAccess(web_contents->GetLastCommittedURL());
+  if (site_access.has_all_sites_access)
     return PAGE_ACCESS_RUN_ON_ALL_SITES;
-  if (modifier.HasGrantedHostPermission(
-          GetActiveWebContents()->GetLastCommittedURL()))
+  if (site_access.has_site_access)
     return PAGE_ACCESS_RUN_ON_SITE;
   return PAGE_ACCESS_RUN_ON_CLICK;
 }
@@ -385,28 +439,50 @@ ExtensionContextMenuModel::GetCurrentPageAccess(
 void ExtensionContextMenuModel::CreatePageAccessSubmenu(
     const Extension* extension) {
   content::WebContents* web_contents = GetActiveWebContents();
-  if (!web_contents ||
-      !ScriptingPermissionsModifier(profile_, extension).CanAffectExtension()) {
+  if (!web_contents)
     return;
-  }
+  ScriptingPermissionsModifier modifier(profile_, extension);
+  if (!modifier.CanAffectExtension())
+    return;
   page_access_submenu_.reset(new ui::SimpleMenuModel(this));
   const int kRadioGroup = 0;
-  page_access_submenu_->AddRadioItemWithStringId(
-      PAGE_ACCESS_RUN_ON_CLICK,
-      IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_CLICK, kRadioGroup);
-  // TODO(https://crbug.com/857235): We should update these options based on
-  // the withheld permissions for the extension.
-  page_access_submenu_->AddRadioItemWithStringId(
-      PAGE_ACCESS_RUN_ON_ALL_SITES,
-      IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_ALL_SITES, kRadioGroup);
-  page_access_submenu_->AddRadioItem(
-      PAGE_ACCESS_RUN_ON_SITE,
-      l10n_util::GetStringFUTF16(
-          IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_SITE,
-          url_formatter::StripWWW(base::UTF8ToUTF16(
-              url::Origin::Create(web_contents->GetLastCommittedURL())
-                  .host()))),
-      kRadioGroup);
+
+  const GURL& url = web_contents->GetLastCommittedURL();
+  ScriptingPermissionsModifier::SiteAccess site_access =
+      modifier.GetSiteAccess(url);
+
+  // Only show the access controls if the extension either has or wants access
+  // to the site.
+  if (site_access.has_site_access || site_access.withheld_site_access) {
+    // Always show at least "on click" and "on this site" options.
+    page_access_submenu_->AddRadioItemWithStringId(
+        PAGE_ACCESS_RUN_ON_CLICK,
+        IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_CLICK, kRadioGroup);
+    page_access_submenu_->AddRadioItem(
+        PAGE_ACCESS_RUN_ON_SITE,
+        l10n_util::GetStringFUTF16(
+            IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_SITE,
+            url_formatter::StripWWW(base::UTF8ToUTF16(
+                url::Origin::Create(web_contents->GetLastCommittedURL())
+                    .host()))),
+        kRadioGroup);
+
+    // Only show "on all sites" if the extension has or wants an all-sites-like
+    // permission.
+    if (site_access.has_all_sites_access ||
+        site_access.withheld_all_sites_access) {
+      page_access_submenu_->AddRadioItemWithStringId(
+          PAGE_ACCESS_RUN_ON_ALL_SITES,
+          IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_ALL_SITES,
+          kRadioGroup);
+    }
+
+    page_access_submenu_->AddSeparator(ui::NORMAL_SEPARATOR);
+  }
+
+  page_access_submenu_->AddItemWithStringId(
+      PAGE_ACCESS_LEARN_MORE,
+      IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_LEARN_MORE);
 
   AddSubMenuWithStringId(PAGE_ACCESS_SUBMENU,
                          IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS,
@@ -420,40 +496,38 @@ void ExtensionContextMenuModel::HandlePageAccessCommand(
   if (!web_contents)
     return;
 
+  if (command_id == PAGE_ACCESS_LEARN_MORE) {
+    content::OpenURLParams params(
+        GURL(chrome_extension_constants::kRuntimeHostPermissionsHelpURL),
+        content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+        ui::PAGE_TRANSITION_LINK, false);
+    browser_->OpenURL(params);
+    return;
+  }
+
   MenuEntries current_access = GetCurrentPageAccess(extension, web_contents);
   if (command_id == current_access)
     return;
 
-  const GURL& url = web_contents->GetLastCommittedURL();
-  ScriptingPermissionsModifier modifier(profile_, extension);
-  DCHECK(modifier.CanAffectExtension());
-  switch (command_id) {
-    case PAGE_ACCESS_RUN_ON_CLICK:
-      if (current_access == PAGE_ACCESS_RUN_ON_ALL_SITES)
-        modifier.SetWithholdHostPermissions(true);
-      if (modifier.HasGrantedHostPermission(url))
-        modifier.RemoveGrantedHostPermission(url);
-      break;
-    case PAGE_ACCESS_RUN_ON_SITE:
-      if (current_access == PAGE_ACCESS_RUN_ON_ALL_SITES)
-        modifier.SetWithholdHostPermissions(true);
-      if (!modifier.HasGrantedHostPermission(url))
-        modifier.GrantHostPermission(url);
-      break;
-    case PAGE_ACCESS_RUN_ON_ALL_SITES:
-      modifier.SetWithholdHostPermissions(false);
-      break;
-    default:
-      NOTREACHED();
-  }
+  auto convert_page_access = [](int command_id) {
+    switch (command_id) {
+      case PAGE_ACCESS_RUN_ON_CLICK:
+        return ExtensionActionRunner::PageAccess::RUN_ON_CLICK;
+      case PAGE_ACCESS_RUN_ON_SITE:
+        return ExtensionActionRunner::PageAccess::RUN_ON_SITE;
+      case PAGE_ACCESS_RUN_ON_ALL_SITES:
+        return ExtensionActionRunner::PageAccess::RUN_ON_ALL_SITES;
+    }
+    NOTREACHED();
+    return ExtensionActionRunner::PageAccess::RUN_ON_CLICK;
+  };
 
-  if (command_id == PAGE_ACCESS_RUN_ON_SITE ||
-      command_id == PAGE_ACCESS_RUN_ON_ALL_SITES) {
-    ExtensionActionRunner* runner =
-        ExtensionActionRunner::GetForWebContents(web_contents);
-    if (runner && runner->WantsToRun(extension))
-      runner->RunBlockedActions(extension);
-  }
+  ExtensionActionRunner* runner =
+      ExtensionActionRunner::GetForWebContents(web_contents);
+  if (runner)
+    runner->HandlePageAccessModified(extension,
+                                     convert_page_access(current_access),
+                                     convert_page_access(command_id));
 }
 
 content::WebContents* ExtensionContextMenuModel::GetActiveWebContents() const {

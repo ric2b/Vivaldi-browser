@@ -56,10 +56,9 @@ bool VivaldiDataSourcesAPI::LoadMappings() {
   path = profile->GetPath();
   path = path.AppendASCII(kDatasourceFilemappingFilename);
 
-  store_ = new JsonPrefStore(path,
-                            base::CreateSequencedTaskRunnerWithTraits(
-                              { base::MayBlock() }).get(),
-                             std::unique_ptr<PrefFilter>());
+  store_ = new JsonPrefStore(
+      path, std::unique_ptr<PrefFilter>(),
+      base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()}).get());
   store_->ReadPrefs();
 
   if (!GetMappings()) {

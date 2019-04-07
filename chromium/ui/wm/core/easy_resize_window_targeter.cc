@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "services/ws/public/mojom/window_manager.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/transient_window_client.h"
 #include "ui/aura/env.h"
@@ -19,13 +19,6 @@
 
 namespace wm {
 namespace {
-
-// Returns an insets whose values are all negative or 0. Any positive value is
-// forced to 0.
-gfx::Insets InsetsWithOnlyNegativeValues(const gfx::Insets& insets) {
-  return gfx::Insets(std::min(0, insets.top()), std::min(0, insets.left()),
-                     std::min(0, insets.bottom()), std::min(0, insets.right()));
-}
 
 gfx::Insets InsetsWithOnlyPositiveValues(const gfx::Insets& insets) {
   return gfx::Insets(std::max(0, insets.top()), std::max(0, insets.left()),
@@ -96,24 +89,8 @@ EasyResizeWindowTargeter::~EasyResizeWindowTargeter() {}
 void EasyResizeWindowTargeter::OnSetInsets(
     const gfx::Insets& last_mouse_extend,
     const gfx::Insets& last_touch_extend) {
-  if (aura::Env::GetInstance()->mode() != aura::Env::Mode::MUS)
+  if (container_->env()->mode() != aura::Env::Mode::MUS)
     return;
-
-  // Mus only accepts 0 or negative values, force all values to fit that.
-  const gfx::Insets effective_last_mouse_extend =
-      InsetsWithOnlyNegativeValues(last_mouse_extend);
-  const gfx::Insets effective_last_touch_extend =
-      InsetsWithOnlyNegativeValues(last_touch_extend);
-  const gfx::Insets effective_mouse_extend =
-      InsetsWithOnlyNegativeValues(mouse_extend());
-  const gfx::Insets effective_touch_extend =
-      InsetsWithOnlyNegativeValues(touch_extend());
-  if (effective_last_touch_extend != effective_touch_extend ||
-      effective_last_mouse_extend != effective_mouse_extend) {
-    aura::WindowPortMus::Get(container_)
-        ->SetExtendedHitRegionForChildren(effective_mouse_extend,
-                                          effective_touch_extend);
-  }
 
   // Positive values equate to a hit test mask.
   const gfx::Insets positive_mouse_insets =
@@ -142,7 +119,7 @@ bool EasyResizeWindowTargeter::ShouldUseExtendedBounds(
 
   // Only resizable windows benefit from the extended hit-test region.
   if ((window->GetProperty(aura::client::kResizeBehaviorKey) &
-       ui::mojom::kResizeBehaviorCanResize) == 0) {
+       ws::mojom::kResizeBehaviorCanResize) == 0) {
     return false;
   }
 

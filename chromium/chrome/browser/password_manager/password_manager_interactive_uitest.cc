@@ -12,25 +12,10 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
-#include "components/autofill/core/browser/autofill_experiments.h"
+#include "components/autofill/core/common/autofill_features.h"
+#include "components/password_manager/core/browser/new_password_form_manager.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "content/public/test/browser_test_utils.h"
-
-namespace {
-
-// Erases all characters that have been typed into |field_id|.
-void SimulateUserDeletingFieldContent(content::WebContents* web_contents,
-                                      const std::string& field_id) {
-  std::string focus("document.getElementById('" + field_id + "').focus();");
-  ASSERT_TRUE(content::ExecuteScript(web_contents, focus));
-  std::string select("document.getElementById('" + field_id + "').select();");
-  ASSERT_TRUE(content::ExecuteScript(web_contents, select));
-  content::SimulateKeyPress(web_contents, ui::DomKey::BACKSPACE,
-                            ui::DomCode::BACKSPACE, ui::VKEY_BACK, false, false,
-                            false, false);
-}
-
-}  // namespace
 
 namespace password_manager {
 
@@ -45,7 +30,13 @@ class PasswordManagerBrowserTestWithConditionalPopupViews
     : public PasswordManagerInteractiveTestBase,
       public ::testing::WithParamInterface<bool> {
  public:
-  PasswordManagerBrowserTestWithConditionalPopupViews() = default;
+  PasswordManagerBrowserTestWithConditionalPopupViews() {
+    // Turn off waiting for server predictions before filing. It makes filling
+    // behaviour more deterministic. Filling with server predictions is tested
+    // in NewPasswordFormManager unit tests.
+    password_manager::NewPasswordFormManager::
+        set_wait_for_server_predictions_for_filling(false);
+  }
   ~PasswordManagerBrowserTestWithConditionalPopupViews() override = default;
 
   void SetUp() override {
@@ -53,9 +44,11 @@ class PasswordManagerBrowserTestWithConditionalPopupViews
     std::vector<base::Feature> disabled_features;
     const bool popup_views_enabled = GetParam();
     if (popup_views_enabled) {
-      enabled_features.push_back(autofill::kAutofillExpandedPopupViews);
+      enabled_features.push_back(
+          autofill::features::kAutofillExpandedPopupViews);
     } else {
-      disabled_features.push_back(autofill::kAutofillExpandedPopupViews);
+      disabled_features.push_back(
+          autofill::features::kAutofillExpandedPopupViews);
     }
     scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
 
@@ -177,7 +170,7 @@ IN_PROC_BROWSER_TEST_P(PasswordManagerBrowserTestWithConditionalPopupViews,
   prompt_observer.WaitForFallbackForSaving();
 
   // Delete typed content and verify that inactive state is reached.
-  SimulateUserDeletingFieldContent(WebContents(), "password_field");
+  SimulateUserDeletingFieldContent("password_field");
   prompt_observer.WaitForInactiveState();
 }
 
@@ -203,7 +196,7 @@ IN_PROC_BROWSER_TEST_P(PasswordManagerBrowserTestWithConditionalPopupViews,
   prompt_observer.WaitForFallbackForSaving();
 
   // Delete typed content and verify that management state is reached.
-  SimulateUserDeletingFieldContent(WebContents(), "password_field");
+  SimulateUserDeletingFieldContent("password_field");
   prompt_observer.WaitForManagementState();
 }
 

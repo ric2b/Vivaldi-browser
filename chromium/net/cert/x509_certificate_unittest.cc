@@ -610,6 +610,16 @@ TEST(X509CertificateTest, HasCanSignHttpExchangesDraftExtension) {
       x509_util::CryptoBufferAsStringPiece(cert->cert_buffer())));
 }
 
+TEST(X509CertificateTest, HasCanSignHttpExchangesDraftExtensionInvalid) {
+  base::FilePath certs_dir = GetTestCertsDirectory();
+  scoped_refptr<X509Certificate> cert = ImportCertFromFile(
+      certs_dir, "can_sign_http_exchanges_draft_extension_invalid.pem");
+  ASSERT_NE(static_cast<X509Certificate*>(NULL), cert.get());
+
+  EXPECT_FALSE(asn1::HasCanSignHttpExchangesDraftExtension(
+      x509_util::CryptoBufferAsStringPiece(cert->cert_buffer())));
+}
+
 TEST(X509CertificateTest, DoesNotHaveCanSignHttpExchangesDraftExtension) {
   base::FilePath certs_dir = GetTestCertsDirectory();
   scoped_refptr<X509Certificate> cert =
@@ -618,6 +628,33 @@ TEST(X509CertificateTest, DoesNotHaveCanSignHttpExchangesDraftExtension) {
 
   EXPECT_FALSE(asn1::HasCanSignHttpExchangesDraftExtension(
       x509_util::CryptoBufferAsStringPiece(cert->cert_buffer())));
+}
+
+TEST(X509CertificateTest, ExtractExtension) {
+  base::FilePath certs_dir = GetTestCertsDirectory();
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(certs_dir, "ok_cert.pem");
+  ASSERT_NE(static_cast<X509Certificate*>(NULL), cert.get());
+
+  static constexpr uint8_t kBasicConstraintsOID[] = {0x55, 0x1d, 0x13};
+  bool present, critical;
+  base::StringPiece contents;
+  ASSERT_TRUE(asn1::ExtractExtensionFromDERCert(
+      x509_util::CryptoBufferAsStringPiece(cert->cert_buffer()),
+      base::StringPiece(reinterpret_cast<const char*>(kBasicConstraintsOID),
+                        sizeof(kBasicConstraintsOID)),
+      &present, &critical, &contents));
+  EXPECT_TRUE(present);
+  EXPECT_TRUE(critical);
+  ASSERT_EQ(base::StringPiece("\x30\x00", 2), contents);
+
+  static constexpr uint8_t kNonsenseOID[] = {0x56, 0x1d, 0x13};
+  ASSERT_TRUE(asn1::ExtractExtensionFromDERCert(
+      x509_util::CryptoBufferAsStringPiece(cert->cert_buffer()),
+      base::StringPiece(reinterpret_cast<const char*>(kNonsenseOID),
+                        sizeof(kNonsenseOID)),
+      &present, &critical, &contents));
+  ASSERT_FALSE(present);
 }
 
 // Tests CRYPTO_BUFFER deduping via X509Certificate::CreateFromBuffer.  We

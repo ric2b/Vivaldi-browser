@@ -11,6 +11,8 @@
 #include "base/macros.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/views/controls/button/button.h"
+#include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/window/dialog_delegate.h"
 
 namespace content {
@@ -32,7 +34,8 @@ class AuthenticatorRequestSheetView;
 class AuthenticatorRequestDialogView
     : public views::DialogDelegateView,
       public AuthenticatorRequestDialogModel::Observer,
-      public content::WebContentsObserver {
+      public content::WebContentsObserver,
+      public views::ButtonListener {
  public:
   AuthenticatorRequestDialogView(
       content::WebContents* web_contents,
@@ -41,11 +44,20 @@ class AuthenticatorRequestDialogView
 
  protected:
   // Replaces the |sheet_| currently being shown in the dialog with |new_sheet|,
-  // destroying the old sheet. Also triggers updating the state of the buttons
-  // on the dialog, the accessibility window title (using the data provided by
-  // the new sheet), and the dialog size and position.
+  // destroying the old sheet.
   void ReplaceCurrentSheetWith(
       std::unique_ptr<AuthenticatorRequestSheetView> new_sheet);
+
+  // Triggers updating the contents of the current sheet view, plus state of the
+  // buttons on the dialog, the accessibility window title (using the data
+  // provided by the new sheet), and the dialog size and position.
+  void UpdateUIForCurrentSheet();
+
+  // Shows or hides the "Choose another option" button based on whether the
+  // current sheet model defines a model for the other transports popup menu,
+  // and whether it has at least one element.
+  void ToggleOtherTransportsButtonVisibility();
+  bool ShouldOtherTransportsButtonBeVisible() const;
 
   AuthenticatorRequestSheetView* sheet() const {
     DCHECK(sheet_);
@@ -54,6 +66,7 @@ class AuthenticatorRequestDialogView
 
   // views::DialogDelegateView:
   gfx::Size CalculatePreferredSize() const override;
+  views::View* CreateExtraView() override;
   bool Accept() override;
   bool Cancel() override;
   bool Close() override;
@@ -61,6 +74,7 @@ class AuthenticatorRequestDialogView
   int GetDefaultDialogButton() const override;
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   bool IsDialogButtonEnabled(ui::DialogButton button) const override;
+  View* GetInitiallyFocusedView() override;
   ui::ModalType GetModalType() const override;
   base::string16 GetWindowTitle() const override;
   bool ShouldShowWindowTitle() const override;
@@ -69,12 +83,19 @@ class AuthenticatorRequestDialogView
   // AuthenticatorRequestDialogModel::Observer:
   void OnModelDestroyed() override;
   void OnStepTransition() override;
+  void OnSheetModelChanged() override;
+
+  // views::ButtonListener:
+  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
  private:
   friend class test::AuthenticatorRequestDialogViewTestApi;
 
   std::unique_ptr<AuthenticatorRequestDialogModel> model_;
+
   AuthenticatorRequestSheetView* sheet_ = nullptr;
+  views::Button* other_transports_button_ = nullptr;
+  std::unique_ptr<views::MenuRunner> other_transports_menu_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(AuthenticatorRequestDialogView);
 };

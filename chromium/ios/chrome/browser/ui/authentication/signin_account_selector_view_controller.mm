@@ -14,13 +14,13 @@
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_footer_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
+#import "ios/chrome/browser/ui/material_components/chrome_app_bar_view_controller.h"
 #import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
 #include "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
-#import "ios/third_party/material_components_ios/src/components/AppBar/src/MaterialAppBar.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -77,14 +77,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [super viewDidLoad];
 
   // Configure the header.
-  MDCFlexibleHeaderView* headerView =
-      self.appBar.headerViewController.headerView;
+  MDCFlexibleHeaderView* headerView = self.appBarViewController.headerView;
   headerView.canOverExtend = YES;
   headerView.maximumHeight = 200;
   headerView.backgroundColor = [UIColor whiteColor];
   headerView.shiftBehavior = MDCFlexibleHeaderShiftBehaviorEnabled;
   [headerView addSubview:[self contentViewWithFrame:headerView.bounds]];
-  self.appBar.navigationBar.hidesBackButton = YES;
+  self.appBarViewController.navigationBar.hidesBackButton = YES;
   self.collectionView.backgroundColor = [UIColor clearColor];
   [headerView changeContentInsets:^{
     UIEdgeInsets contentInset = self.collectionView.contentInset;
@@ -138,8 +137,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)viewWillLayoutSubviews {
   CGSize viewSize = self.view.bounds.size;
-  MDCFlexibleHeaderView* headerView =
-      self.appBar.headerViewController.headerView;
+  MDCFlexibleHeaderView* headerView = self.appBarViewController.headerView;
   headerView.maximumHeight =
       MAX(kHeaderViewMinHeight, kHeaderViewHeightMultiplier * viewSize.height);
 }

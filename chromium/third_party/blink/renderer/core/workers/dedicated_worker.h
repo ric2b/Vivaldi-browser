@@ -27,6 +27,7 @@ namespace blink {
 class DedicatedWorkerMessagingProxy;
 class ExceptionState;
 class ExecutionContext;
+class PostMessageOptions;
 class ScriptState;
 class WorkerClassicScriptLoader;
 class WorkerClients;
@@ -55,10 +56,13 @@ class CORE_EXPORT DedicatedWorker final
   ~DedicatedWorker() override;
 
   void postMessage(ScriptState*,
-                   scoped_refptr<SerializedScriptValue> message,
-                   const MessagePortArray&,
+                   const ScriptValue& message,
+                   Vector<ScriptValue>& transfer,
                    ExceptionState&);
-  static bool CanTransferArrayBuffersAndImageBitmaps() { return true; }
+  void postMessage(ScriptState*,
+                   const ScriptValue& message,
+                   const PostMessageOptions&,
+                   ExceptionState&);
   void terminate();
   BeginFrameProviderParams CreateBeginFrameProviderParams();
 
@@ -69,19 +73,23 @@ class CORE_EXPORT DedicatedWorker final
   // (via AbstractWorker -> EventTargetWithInlineData -> EventTarget).
   bool HasPendingActivity() const final;
 
+  // Returns the name specified by WorkerOptions.
+  const String Name() const;
+
   DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
 
   void Trace(blink::Visitor*) override;
 
  private:
   DedicatedWorker(ExecutionContext*,
-                  const KURL& script_url,
+                  const KURL& script_request_url,
                   const WorkerOptions&);
 
   // Starts the worker.
   void Start();
 
-  std::unique_ptr<GlobalScopeCreationParams> CreateGlobalScopeCreationParams();
+  std::unique_ptr<GlobalScopeCreationParams> CreateGlobalScopeCreationParams(
+      const KURL& script_url);
 
   WorkerClients* CreateWorkerClients();
 
@@ -92,7 +100,7 @@ class CORE_EXPORT DedicatedWorker final
   // Implements EventTarget (via AbstractWorker -> EventTargetWithInlineData).
   const AtomicString& InterfaceName() const final;
 
-  const KURL script_url_;
+  const KURL script_request_url_;
   const WorkerOptions options_;
   const Member<DedicatedWorkerMessagingProxy> context_proxy_;
 

@@ -8,10 +8,12 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/threading/thread_checker.h"
 #import "ios/net/cookies/ns_http_system_cookie_store.h"
 #import "ios/net/cookies/system_cookie_util.h"
 #include "net/cookies/cookie_monster.h"
+#include "net/log/net_log.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -19,18 +21,35 @@
 
 namespace net {
 
+namespace {
+// Add metrics reporting to GetCookieListWithOptionsAsync cookie monster
+// callback.
+void CookieListCallbackWithMetricsLogging(
+    CookieMonster::GetCookieListCallback callback,
+    const CookieList& cookies) {
+  net::ReportGetCookiesForURLResult(SystemCookieStoreType::kCookieMonster,
+                                    !cookies.empty());
+  if (!callback.is_null()) {
+    std::move(callback).Run(cookies);
+  }
+}
+}  // namespace
+
 #pragma mark -
 #pragma mark CookieStoreIOSPersistent
 
 CookieStoreIOSPersistent::CookieStoreIOSPersistent(
-    net::CookieMonster::PersistentCookieStore* persistent_store)
+    net::CookieMonster::PersistentCookieStore* persistent_store,
+    NetLog* net_log)
     : CookieStoreIOS(persistent_store,
-                     std::make_unique<net::NSHTTPSystemCookieStore>()) {}
+                     std::make_unique<net::NSHTTPSystemCookieStore>(),
+                     net_log) {}
 
 CookieStoreIOSPersistent::CookieStoreIOSPersistent(
     net::CookieMonster::PersistentCookieStore* persistent_store,
-    std::unique_ptr<SystemCookieStore> system_store)
-    : CookieStoreIOS(persistent_store, std::move(system_store)) {}
+    std::unique_ptr<SystemCookieStore> system_store,
+    NetLog* net_log)
+    : CookieStoreIOS(persistent_store, std::move(system_store), net_log) {}
 
 CookieStoreIOSPersistent::~CookieStoreIOSPersistent() {}
 
@@ -65,9 +84,11 @@ void CookieStoreIOSPersistent::GetCookieListWithOptionsAsync(
     const net::CookieOptions& options,
     GetCookieListCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-
-  cookie_monster()->GetCookieListWithOptionsAsync(url, options,
-                                                  std::move(callback));
+  ReportGetCookiesForURLCall(SystemCookieStoreType::kCookieMonster);
+  cookie_monster()->GetCookieListWithOptionsAsync(
+      url, options,
+      base::BindOnce(&CookieListCallbackWithMetricsLogging,
+                     base::Passed(&callback)));
 }
 
 void CookieStoreIOSPersistent::GetAllCookiesAsync(

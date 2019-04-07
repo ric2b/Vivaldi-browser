@@ -6,9 +6,9 @@
 
 #include <utility>
 
-#include "services/ui/public/interfaces/constants.mojom.h"
-#include "services/ui/public/interfaces/ime/ime.mojom.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/constants.mojom.h"
+#include "services/ws/public/mojom/ime/ime.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/mus/input_method_mus_delegate.h"
 #include "ui/aura/mus/text_input_client_impl.h"
 #include "ui/base/ime/text_input_client.h"
@@ -16,7 +16,7 @@
 #include "ui/platform_window/mojo/ime_type_converters.h"
 #include "ui/platform_window/mojo/text_input_state.mojom.h"
 
-using ui::mojom::EventResult;
+using ws::mojom::EventResult;
 
 namespace aura {
 
@@ -39,7 +39,7 @@ InputMethodMus::~InputMethodMus() {
 
 void InputMethodMus::Init(service_manager::Connector* connector) {
   if (connector)
-    connector->BindInterface(ui::mojom::kServiceName, &ime_driver_);
+    connector->BindInterface(ws::mojom::kServiceName, &ime_driver_);
 }
 
 ui::EventDispatchDetails InputMethodMus::DispatchKeyEvent(
@@ -114,12 +114,19 @@ void InputMethodMus::CancelComposition(const ui::TextInputClient* client) {
 void InputMethodMus::OnInputLocaleChanged() {
   // TODO(moshayedi): crbug.com/637418. Not supported in ChromeOS. Investigate
   // whether we want to support this or not.
+  NOTIMPLEMENTED_LOG_ONCE();
 }
 
 bool InputMethodMus::IsCandidatePopupOpen() const {
   // TODO(moshayedi): crbug.com/637416. Implement this properly when we have a
   // mean for displaying candidate list popup.
+  NOTIMPLEMENTED_LOG_ONCE();
   return false;
+}
+
+void InputMethodMus::ShowVirtualKeyboardIfEnabled() {
+  if (input_method_)
+    input_method_->ShowVirtualKeyboardIfEnabled();
 }
 
 ui::EventDispatchDetails InputMethodMus::SendKeyEventToInputMethod(
@@ -166,8 +173,8 @@ void InputMethodMus::OnDidChangeFocusedClient(
       std::make_unique<TextInputClientImpl>(focused, delegate());
 
   if (ime_driver_) {
-    ui::mojom::StartSessionDetailsPtr details =
-        ui::mojom::StartSessionDetails::New();
+    ws::mojom::StartSessionDetailsPtr details =
+        ws::mojom::StartSessionDetails::New();
     details->client =
         text_input_client_->CreateInterfacePtrAndBind().PassInterface();
     details->input_method_request = MakeRequest(&input_method_ptr_);

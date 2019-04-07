@@ -440,8 +440,9 @@ void SyncSchedulerImpl::ScheduleNudgeImpl(
   SDVLOG_LOC(nudge_location, 2) << "Scheduling a nudge with "
                                 << delay.InMilliseconds() << " ms delay";
   pending_wakeup_timer_.Start(
-      nudge_location, delay, base::Bind(&SyncSchedulerImpl::PerformDelayedNudge,
-                                        weak_ptr_factory_.GetWeakPtr()));
+      nudge_location, delay,
+      base::BindOnce(&SyncSchedulerImpl::PerformDelayedNudge,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 const char* SyncSchedulerImpl::GetModeString(SyncScheduler::Mode mode) {
@@ -652,14 +653,15 @@ void SyncSchedulerImpl::RestartWaiting() {
     SDVLOG(2) << "Starting WaitInterval timer of length "
               << wait_interval_->length.InMilliseconds() << "ms.";
     if (wait_interval_->mode == WaitInterval::THROTTLED) {
-      pending_wakeup_timer_.Start(FROM_HERE, wait_interval_->length,
-                                  base::Bind(&SyncSchedulerImpl::Unthrottle,
-                                             weak_ptr_factory_.GetWeakPtr()));
+      pending_wakeup_timer_.Start(
+          FROM_HERE, wait_interval_->length,
+          base::BindOnce(&SyncSchedulerImpl::Unthrottle,
+                         weak_ptr_factory_.GetWeakPtr()));
     } else {
       pending_wakeup_timer_.Start(
           FROM_HERE, wait_interval_->length,
-          base::Bind(&SyncSchedulerImpl::ExponentialBackoffRetry,
-                     weak_ptr_factory_.GetWeakPtr()));
+          base::BindOnce(&SyncSchedulerImpl::ExponentialBackoffRetry,
+                         weak_ptr_factory_.GetWeakPtr()));
     }
   } else if (nudge_tracker_.IsAnyTypeBlocked()) {
     // Per-datatype throttled or backed off.
@@ -669,9 +671,10 @@ void SyncSchedulerImpl::RestartWaiting() {
       return;
     }
     NotifyRetryTime(base::Time::Now() + time_until_next_unblock);
-    pending_wakeup_timer_.Start(FROM_HERE, time_until_next_unblock,
-                                base::Bind(&SyncSchedulerImpl::OnTypesUnblocked,
-                                           weak_ptr_factory_.GetWeakPtr()));
+    pending_wakeup_timer_.Start(
+        FROM_HERE, time_until_next_unblock,
+        base::BindOnce(&SyncSchedulerImpl::OnTypesUnblocked,
+                       weak_ptr_factory_.GetWeakPtr()));
   } else {
     NotifyRetryTime(base::Time());
   }
@@ -705,8 +708,8 @@ void SyncSchedulerImpl::TrySyncCycleJob() {
   // Post call to TrySyncCycleJobImpl on current sequence. Later request for
   // access token will be here.
   base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&SyncSchedulerImpl::TrySyncCycleJobImpl,
-                            weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&SyncSchedulerImpl::TrySyncCycleJobImpl,
+                                weak_ptr_factory_.GetWeakPtr()));
 }
 
 void SyncSchedulerImpl::TrySyncCycleJobImpl() {
@@ -817,15 +820,13 @@ void SyncSchedulerImpl::NotifyBlockedTypesChanged() {
   ModelTypeSet types = nudge_tracker_.GetBlockedTypes();
   ModelTypeSet throttled_types;
   ModelTypeSet backed_off_types;
-  for (ModelTypeSet::Iterator type_it = types.First(); type_it.Good();
-       type_it.Inc()) {
-    WaitInterval::BlockingMode mode =
-        nudge_tracker_.GetTypeBlockingMode(type_it.Get());
+  for (ModelType type : types) {
+    WaitInterval::BlockingMode mode = nudge_tracker_.GetTypeBlockingMode(type);
     if (mode == WaitInterval::THROTTLED) {
-      throttled_types.Put(type_it.Get());
+      throttled_types.Put(type);
     } else if (mode == WaitInterval::EXPONENTIAL_BACKOFF ||
                mode == WaitInterval::EXPONENTIAL_BACKOFF_RETRYING) {
-      backed_off_types.Put(type_it.Get());
+      backed_off_types.Put(type);
     }
   }
 
@@ -870,17 +871,17 @@ void SyncSchedulerImpl::OnTypesThrottled(ModelTypeSet types,
 
 void SyncSchedulerImpl::OnTypesBackedOff(ModelTypeSet types) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (ModelTypeSet::Iterator type = types.First(); type.Good(); type.Inc()) {
+  for (ModelType type : types) {
     TimeDelta last_backoff_time =
         TimeDelta::FromSeconds(kInitialBackoffRetrySeconds);
-    if (nudge_tracker_.GetTypeBlockingMode(type.Get()) ==
+    if (nudge_tracker_.GetTypeBlockingMode(type) ==
         WaitInterval::EXPONENTIAL_BACKOFF_RETRYING) {
-      last_backoff_time = nudge_tracker_.GetTypeLastBackoffInterval(type.Get());
+      last_backoff_time = nudge_tracker_.GetTypeLastBackoffInterval(type);
     }
 
     TimeDelta length = delay_provider_->GetDelay(last_backoff_time);
-    nudge_tracker_.SetTypeBackedOff(type.Get(), length, TimeTicks::Now());
-    SDVLOG(1) << "Backing off " << ModelTypeToString(type.Get()) << " for "
+    nudge_tracker_.SetTypeBackedOff(type, length, TimeTicks::Now());
+    SDVLOG(1) << "Backing off " << ModelTypeToString(type) << " for "
               << length.InSeconds() << " second.";
   }
   RestartWaiting();

@@ -45,7 +45,7 @@ struct CORE_EXPORT NGPhysicalFragmentTraits {
 // NGFragment wrapper classes which transforms information into the logical
 // coordinate system.
 class CORE_EXPORT NGPhysicalFragment
-    : public RefCounted<NGPhysicalFragment, NGPhysicalFragmentTraits> {
+    : public RefCounted<const NGPhysicalFragment, NGPhysicalFragmentTraits> {
  public:
   enum NGFragmentType {
     kFragmentBox = 0,
@@ -57,15 +57,19 @@ class CORE_EXPORT NGPhysicalFragment
   enum NGBoxType {
     kNormalBox,
     kInlineBox,
+    // A multi-column container creates column boxes as its children, which
+    // content is flowed into. https://www.w3.org/TR/css-multicol-1/#column-box
+    kColumnBox,
     kAtomicInline,
     kFloating,
     kOutOfFlowPositioned,
     // When adding new values, make sure the bit size of |sub_type_| is large
     // enough to store.
 
-    // Also, add after kMinimumBlockLayoutRoot if the box type is a block layout
-    // root, or before otherwise. See IsBlockLayoutRoot().
-    kMinimumBlockLayoutRoot = kAtomicInline
+    // Also, add after kMinimumBlockFormattingContextRoot if the box type is a
+    // block formatting context root, or before otherwise. See
+    // IsBlockFormattingContextRoot().
+    kMinimumBlockFormattingContextRoot = kAtomicInline
   };
 
   ~NGPhysicalFragment();
@@ -113,11 +117,9 @@ class CORE_EXPORT NGPhysicalFragment
   // Returns whether the fragment is old layout root.
   bool IsOldLayoutRoot() const { return is_old_layout_root_; }
 
-  // A block sub-layout starts on this fragment. Inline blocks, floats, out of
-  // flow positioned objects are such examples. This is also true on NG/legacy
-  // boundary.
-  bool IsBlockLayoutRoot() const {
-    return (IsBox() && BoxType() >= NGBoxType::kMinimumBlockLayoutRoot) ||
+  bool IsBlockFormattingContextRoot() const {
+    return (IsBox() &&
+            BoxType() >= NGBoxType::kMinimumBlockFormattingContextRoot) ||
            IsOldLayoutRoot();
   }
 
@@ -141,13 +143,6 @@ class CORE_EXPORT NGPhysicalFragment
   // Bitmask for border edges, see NGBorderEdges::Physical.
   unsigned BorderEdges() const { return border_edge_; }
   NGPixelSnappedPhysicalBoxStrut BorderWidths() const;
-
-  // Returns the offset relative to the parent fragment's content-box.
-  NGPhysicalOffset Offset() const {
-    DCHECK(is_placed_) << "this=" << this << " for layout object "
-                       << layout_object_;
-    return offset_;
-  }
 
   NGBreakToken* BreakToken() const { return break_token_.get(); }
   NGStyleVariant StyleVariant() const {
@@ -179,16 +174,8 @@ class CORE_EXPORT NGPhysicalFragment
   NGPhysicalOffsetRect ScrollableOverflow() const;
 
   // Unite visual rect to propagate to parent's ContentsVisualRect.
-  void PropagateContentsInkOverflow(NGPhysicalOffsetRect*) const;
-
-  // Should only be used by the parent fragment's layout.
-  void SetOffset(NGPhysicalOffset offset) {
-    DCHECK(!is_placed_);
-    offset_ = offset;
-    is_placed_ = true;
-  }
-
-  bool IsPlaced() const { return is_placed_; }
+  void PropagateContentsInkOverflow(NGPhysicalOffsetRect*,
+                                    NGPhysicalOffset) const;
 
   // Returns the bidi level of a text or atomic inline fragment.
   virtual UBiDiLevel BidiLevel() const;
@@ -196,8 +183,6 @@ class CORE_EXPORT NGPhysicalFragment
   // Returns the resolved direction of a text or atomic inline fragment. Not to
   // be confused with the CSS 'direction' property.
   virtual TextDirection ResolvedDirection() const;
-
-  scoped_refptr<NGPhysicalFragment> CloneWithoutOffset() const;
 
   String ToString() const;
 
@@ -216,7 +201,9 @@ class CORE_EXPORT NGPhysicalFragment
   };
   typedef int DumpFlags;
 
-  String DumpFragmentTree(DumpFlags, unsigned indent = 2) const;
+  String DumpFragmentTree(DumpFlags,
+                          base::Optional<NGPhysicalOffset> = base::nullopt,
+                          unsigned indent = 2) const;
 
 #ifndef NDEBUG
   void ShowFragmentTree() const;
@@ -233,19 +220,21 @@ class CORE_EXPORT NGPhysicalFragment
 
   const Vector<NGInlineItem>& InlineItemsOfContainingBlock() const;
 
-  LayoutObject* layout_object_;
+  LayoutObject* const layout_object_;
   scoped_refptr<const ComputedStyle> style_;
-  NGPhysicalSize size_;
-  NGPhysicalOffset offset_;
+  const NGPhysicalSize size_;
   scoped_refptr<NGBreakToken> break_token_;
 
-  unsigned type_ : 2;  // NGFragmentType
-  unsigned sub_type_ : 3;  // Union of NGBoxType and NGTextType
+  const unsigned type_ : 2;      // NGFragmentType
+  const unsigned sub_type_ : 3;  // Union of NGBoxType and NGTextType
   unsigned is_old_layout_root_ : 1;
-  unsigned is_placed_ : 1;
   unsigned border_edge_ : 4;  // NGBorderEdges::Physical
-  unsigned style_variant_ : 2;  // NGStyleVariant
+  const unsigned style_variant_ : 2;  // NGStyleVariant
   unsigned base_direction_ : 1;  // TextDirection, for NGPhysicalLineBoxFragment
+
+  // The following bitfield is only to be used by NGPhysicalBoxFragment (it's
+  // defined here to save memory, since that class has no bitfields).
+  unsigned children_inline_ : 1;
 
  private:
   friend struct NGPhysicalFragmentTraits;

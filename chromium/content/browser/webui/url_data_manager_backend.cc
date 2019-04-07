@@ -8,12 +8,9 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/command_line.h"
-#include "base/compiler_specific.h"
-#include "base/debug/alias.h"
-#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/single_thread_task_runner.h"
@@ -21,7 +18,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
@@ -267,12 +264,23 @@ std::unique_ptr<net::SourceStream> URLRequestChromeJob::SetUpSourceStream() {
 
 void URLRequestChromeJob::MimeTypeAvailable(const std::string& mime_type) {
   mime_type_ = mime_type;
-  NotifyHeadersComplete();
 }
 
 void URLRequestChromeJob::DataAvailable(base::RefCountedMemory* bytes) {
   TRACE_EVENT_ASYNC_END0("browser", "DataManager:Request", this);
   DCHECK(!data_);
+
+  if (bytes)
+    set_expected_content_size(bytes->size());
+
+  // We notify headers are complete unusually late for these jobs, because we
+  // need to have |bytes| first to report an accurate expected content size.
+  // Otherwise, we cannot support <video> streaming.
+  NotifyHeadersComplete();
+
+  // The job can be cancelled after sending the headers.
+  if (is_done())
+    return;
 
   // All further requests will be satisfied from the passed-in data.
   data_ = bytes;
@@ -416,9 +424,8 @@ class ChromeProtocolHandler
 URLDataManagerBackend::URLDataManagerBackend()
     : next_request_id_(0), weak_factory_(this) {
   URLDataSource* shared_source = new SharedResourcesDataSource();
-  URLDataSourceImpl* source_impl =
-      new URLDataSourceImpl(shared_source->GetSource(), shared_source);
-  AddDataSource(source_impl);
+  AddDataSource(new URLDataSourceImpl(shared_source->GetSource(),
+                                      base::WrapUnique(shared_source)));
 }
 
 URLDataManagerBackend::~URLDataManagerBackend() = default;
@@ -500,7 +507,6 @@ bool URLDataManagerBackend::StartRequest(const net::URLRequest* request,
   if (mime_type == "text/html")
     job->SetSource(source);
 
-  // Also notifies that the headers are complete.
   job->MimeTypeAvailable(mime_type);
 
   // Look up additional request info to pass down.
@@ -589,8 +595,8 @@ scoped_refptr<net::HttpResponseHeaders> URLDataManagerBackend::GetHeaders(
   // Set the headers so that requests serviced by ChromeURLDataManager return a
   // status code of 200. Without this they return a 0, which makes the status
   // indistiguishable from other error types. Instant relies on getting a 200.
-  scoped_refptr<net::HttpResponseHeaders> headers(
-      new net::HttpResponseHeaders("HTTP/1.1 200 OK"));
+  auto headers =
+      base::MakeRefCounted<net::HttpResponseHeaders>("HTTP/1.1 200 OK");
   if (!source_impl)
     return headers;
 

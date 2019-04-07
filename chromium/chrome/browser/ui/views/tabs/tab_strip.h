@@ -131,10 +131,6 @@ class TabStrip : public views::View,
   // Returns the bounds of the new tab button.
   gfx::Rect new_tab_button_bounds() const { return new_tab_button_bounds_; }
 
-  // Returns true if the new tab button should be sized to the top of the tab
-  // strip.
-  bool SizeTabButtonToTopOfTabStrip();
-
   // Starts highlighting the tab at the specified index.
   void StartHighlight(int model_index);
 
@@ -246,7 +242,7 @@ class TabStrip : public views::View,
   void ContinueDrag(views::View* view, const ui::LocatedEvent& event) override;
   bool EndDrag(EndDragReason reason) override;
   Tab* GetTabAt(const gfx::Point& point) override;
-  const Tab* GetSubsequentTab(const Tab* tab) override;
+  const Tab* GetAdjacentTab(const Tab* tab, int offset) override;
   void OnMouseEventInTab(views::View* source,
                          const ui::MouseEvent& event) override;
   bool ShouldPaintTab(
@@ -456,9 +452,6 @@ class TabStrip : public views::View,
   // indicating precisely where it is.
   FindClosingTabResult FindClosingTab(const Tab* tab);
 
-  // Paints all the tabs in |tabs_closing_map_[index]|.
-  void PaintClosingTabs(int index, const views::PaintInfo& paint_info);
-
   // Invoked when a mouse event occurs over |source|. Potentially switches the
   // |stacked_layout_|.
   void UpdateStackedLayoutFromMouseEvent(views::View* source,
@@ -591,7 +584,7 @@ class TabStrip : public views::View,
 
   // -- Member Variables ------------------------------------------------------
 
-  base::ObserverList<TabStripObserver> observers_;
+  base::ObserverList<TabStripObserver>::Unchecked observers_;
 
   // There is a one-to-one mapping between each of the tabs in the
   // TabStripController (TabStripModel) and |tabs_|. Because we animate tab

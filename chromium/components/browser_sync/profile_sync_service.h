@@ -20,6 +20,7 @@
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "components/invalidation/public/identity_provider.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "components/sync/base/experiments.h"
 #include "components/sync/base/model_type.h"
@@ -34,6 +35,7 @@
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_service_crypto.h"
 #include "components/sync/driver/sync_stopped_reporter.h"
+#include "components/sync/engine/configure_reason.h"
 #include "components/sync/engine/events/protocol_event_observer.h"
 #include "components/sync/engine/model_safe_worker.h"
 #include "components/sync/engine/net/network_time_update_callback.h"
@@ -45,10 +47,12 @@
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "url/gurl.h"
 
-class SigninManagerWrapper;
-
 namespace base {
 class MessageLoop;
+}
+
+namespace identity {
+class IdentityManager;
 }
 
 namespace network {
@@ -211,12 +215,12 @@ class ProfileSyncService : public syncer::SyncService,
     ~InitParams();
 
     std::unique_ptr<syncer::SyncClient> sync_client;
-    std::unique_ptr<SigninManagerWrapper> signin_wrapper;
+    identity::IdentityManager* identity_manager;
     SigninScopedDeviceIdCallback signin_scoped_device_id_callback;
     GaiaCookieManagerService* gaia_cookie_manager_service = nullptr;
+    invalidation::IdentityProvider* invalidations_identity_provider = nullptr;
     StartBehavior start_behavior = MANUAL_START;
     syncer::NetworkTimeUpdateCallback network_time_update_callback;
-    scoped_refptr<net::URLRequestContextGetter> url_request_context;
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory;
     std::string debug_identifier;
     version_info::Channel channel = version_info::Channel::UNKNOWN;
@@ -236,7 +240,7 @@ class ProfileSyncService : public syncer::SyncService,
 
   // syncer::SyncService implementation
   int GetDisableReasons() const override;
-  State GetState() const override;
+  TransportState GetTransportState() const override;
   bool IsFirstSetupComplete() const override;
   bool IsLocalSyncEnabled() const override;
   void TriggerRefresh(const syncer::ModelTypeSet& types) override;
@@ -252,12 +256,10 @@ class ProfileSyncService : public syncer::SyncService,
   void OnUserChoseDatatypes(bool sync_everything,
                             syncer::ModelTypeSet chosen_types) override;
   void SetFirstSetupComplete() override;
-  bool IsFirstSetupInProgress() const override;
   std::unique_ptr<syncer::SyncSetupInProgressHandle> GetSetupInProgressHandle()
       override;
   bool IsSetupInProgress() const override;
   const GoogleServiceAuthError& GetAuthError() const override;
-  bool IsEngineInitialized() const override;
   sync_sessions::OpenTabsUIDelegate* GetOpenTabsUIDelegate() override;
   bool IsPassphraseRequiredForDecryption() const override;
   base::Time GetExplicitPassphraseTime() const override;
@@ -275,7 +277,7 @@ class ProfileSyncService : public syncer::SyncService,
       const override;
   void ReenableDatatype(syncer::ModelType type) override;
   syncer::SyncTokenStatus GetSyncTokenStatus() const override;
-  bool QueryDetailedSyncStatus(syncer::SyncStatus* result) override;
+  bool QueryDetailedSyncStatus(syncer::SyncStatus* result) const override;
   base::Time GetLastSyncedTime() const override;
   syncer::SyncCycleSnapshot GetLastCycleSnapshot() const override;
   std::unique_ptr<base::Value> GetTypeStatusMap() override;
@@ -294,6 +296,7 @@ class ProfileSyncService : public syncer::SyncService,
   void GetAllNodes(const base::Callback<void(std::unique_ptr<base::ListValue>)>&
                        callback) override;
   AccountInfo GetAuthenticatedAccountInfo() const override;
+  bool IsAuthenticatedAccountPrimary() const override;
   syncer::GlobalIdMapper* GetGlobalIdMapper() const override;
 
   // Add a sync type preference provider. Each provider may only be added once.
@@ -309,13 +312,14 @@ class ProfileSyncService : public syncer::SyncService,
   // Returns the SyncableService or USS bridge for syncer::SESSIONS.
   syncer::SyncableService* GetSessionsSyncableService();
   base::WeakPtr<syncer::ModelTypeControllerDelegate>
-  GetSessionSyncControllerDelegateOnUIThread();
+  GetSessionSyncControllerDelegate();
 
   // Returns the ModelTypeControllerDelegate for syncer::DEVICE_INFO.
-  virtual base::WeakPtr<syncer::ModelTypeControllerDelegate>
-  GetDeviceInfoSyncControllerDelegateOnUIThread();
+  base::WeakPtr<syncer::ModelTypeControllerDelegate>
+  GetDeviceInfoSyncControllerDelegate();
 
   // Returns synced devices tracker.
+  // Virtual for testing.
   virtual syncer::DeviceInfoTracker* GetDeviceInfoTracker() const;
 
   // SyncEngineHost implementation.
@@ -373,7 +377,7 @@ class ProfileSyncService : public syncer::SyncService,
   // (i.e., only for reconfigurations). The reason we don't initialize the
   // engine is because if we had encountered an unrecoverable error we don't
   // want to startup once more.
-  virtual void ReconfigureDatatypeManager();
+  void ReconfigureDatatypeManager();
 
   syncer::PassphraseRequiredReason passphrase_required_reason_for_test() const {
     return crypto_->passphrase_required_reason();
@@ -392,6 +396,7 @@ class ProfileSyncService : public syncer::SyncService,
   // confirmation dialog hasn't been shown. Note that once the dialog is
   // showing (i.e. IsFirstSetupInProgress() is true), this will return false.
   // TODO(crbug.com/839834): This method is somewhat misnamed.
+  // Virtual for testing.
   virtual bool IsSyncConfirmationNeeded() const;
 
   // syncer::UnrecoverableErrorHandler implementation.
@@ -423,9 +428,11 @@ class ProfileSyncService : public syncer::SyncService,
   // should be advertised to the user).  These will typically only change
   // via a command-line option.  See class comment for more on what it means
   // for a datatype to be Registered.
+  // Virtual for testing.
   virtual syncer::ModelTypeSet GetRegisteredDataTypes() const;
 
   // See the SyncServiceCrypto header.
+  // Virtual for testing.
   virtual syncer::PassphraseType GetPassphraseType() const;
   virtual bool IsEncryptEverythingAllowed() const;
   virtual void SetEncryptEverythingAllowed(bool allowed);
@@ -434,6 +441,9 @@ class ProfileSyncService : public syncer::SyncService,
   bool encryption_pending() const;
 
   syncer::SyncErrorController* sync_error_controller() {
+    return sync_error_controller_.get();
+  }
+  const syncer::SyncErrorController* sync_error_controller() const {
     return sync_error_controller_.get();
   }
 
@@ -450,6 +460,7 @@ class ProfileSyncService : public syncer::SyncService,
   void OverrideNetworkResourcesForTest(
       std::unique_ptr<syncer::NetworkResources> network_resources);
 
+  // Virtual for testing.
   virtual bool IsDataTypeControllerRunning(syncer::ModelType type) const;
 
   // This triggers a Directory::SaveChanges() call on the sync thread.
@@ -476,9 +487,12 @@ class ProfileSyncService : public syncer::SyncService,
   void ClearServerDataForTest(const base::Closure& callback);
 
  private:
+  // Virtual for testing.
   virtual syncer::WeakHandle<syncer::JsEventHandler> GetJsEventHandler();
+
   syncer::SyncEngine::HttpPostProviderFactoryGetter
   MakeHttpPostProviderFactoryGetter();
+
   syncer::WeakHandle<syncer::UnrecoverableErrorHandler>
   GetUnrecoverableErrorHandler();
 
@@ -486,8 +500,10 @@ class ProfileSyncService : public syncer::SyncService,
   void AccountStateChanged();
   void CredentialsChanged();
 
+  bool IsEngineAllowedToStart() const;
+
   // Callback for StartupController.
-  bool ShouldSyncStart(bool bypass_first_setup_check);
+  bool ShouldStartEngine(bool bypass_first_setup_check) const;
 
   // Destroys the |crypto_| object and creates a new one with fresh state.
   void ResetCryptoState();
@@ -509,7 +525,7 @@ class ProfileSyncService : public syncer::SyncService,
   bool IsSyncAllowedByPlatform() const;
 
   // Helper to install and configure a data type manager.
-  void ConfigureDataTypeManager();
+  void ConfigureDataTypeManager(syncer::ConfigureReason reason);
 
  protected:
   // Shuts down the engine sync components.
@@ -521,9 +537,10 @@ class ProfileSyncService : public syncer::SyncService,
   // Helper method for managing encryption UI.
   bool IsEncryptedDatatypeEnabled() const;
 
-  // Helper for OnUnrecoverableError and OnInternalUnrecoverableError.
+  // Helper for OnUnrecoverableError.
   void OnUnrecoverableErrorImpl(const base::Location& from_here,
-                                const std::string& message);
+                                const std::string& message,
+                                UnrecoverableErrorReason reason);
 
   // Stops the sync engine. Does NOT set IsSyncRequested to false. Use
   // RequestStop for that. |data_fate| controls whether the local sync data is
@@ -549,6 +566,7 @@ class ProfileSyncService : public syncer::SyncService,
   void ClearUnrecoverableError();
 
   // Kicks off asynchronous initialization of the SyncEngine.
+  // Virtual for testing.
   virtual void StartUpSlowEngineComponents();
 
   // Collects preferred sync data types from |preference_providers_|.
@@ -559,12 +577,6 @@ class ProfileSyncService : public syncer::SyncService,
   void UpdateSelectedTypesHistogram(
       bool sync_everything,
       const syncer::ModelTypeSet chosen_types) const;
-
-  // Internal unrecoverable error handler. Used to track error reason via
-  // Sync.UnrecoverableErrors histogram.
-  void OnInternalUnrecoverableError(const base::Location& from_here,
-                                    const std::string& message,
-                                    UnrecoverableErrorReason reason);
 
   // Update UMA for syncing engine.
   void UpdateEngineInitUMA(bool success) const;
@@ -610,6 +622,9 @@ class ProfileSyncService : public syncer::SyncService,
   // Called when a SetupInProgressHandle issued by this instance is destroyed.
   virtual void OnSetupInProgressHandleDestroyed();
 
+  // Called by SyncServiceCrypto when a passphrase is required or accepted.
+  void ReconfigureDueToPassphrase(syncer::ConfigureReason reason);
+
   // This profile's SyncClient, which abstracts away non-Sync dependencies and
   // the Sync API component factory.
   const std::unique_ptr<syncer::SyncClient> sync_client_;
@@ -618,8 +633,8 @@ class ProfileSyncService : public syncer::SyncService,
   syncer::SyncPrefs sync_prefs_;
 
   // Encapsulates user signin - used to set/get the user's authenticated
-  // email address.
-  const std::unique_ptr<SigninManagerWrapper> signin_;
+  // email address and sign-out upon error.
+  identity::IdentityManager* const identity_manager_;
 
  protected:
   // Handles tracking of the authenticated account and acquiring access tokens.
@@ -670,14 +685,12 @@ class ProfileSyncService : public syncer::SyncService,
   // Callback to update the network time; used for initializing the engine.
   syncer::NetworkTimeUpdateCallback network_time_update_callback_;
 
-  // The request context in which sync should operate.
-  scoped_refptr<net::URLRequestContextGetter> url_request_context_;
-
   // The URL loader factory for the sync.
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
-  // Indicates if this is the first time sync is being configured.  This value
-  // is equal to !IsFirstSetupComplete() at the time of OnEngineInitialized().
+  // Indicates if this is the first time sync is being configured.
+  // This is set to true if last synced time is not set at the time of
+  // OnEngineInitialized().
   bool is_first_time_sync_configure_;
 
   // Number of UIs currently configuring the Sync service. When this number
@@ -703,9 +716,11 @@ class ProfileSyncService : public syncer::SyncService,
   // Manages the start and stop of the data types.
   std::unique_ptr<syncer::DataTypeManager> data_type_manager_;
 
-  base::ObserverList<syncer::SyncServiceObserver> observers_;
-  base::ObserverList<syncer::ProtocolEventObserver> protocol_event_observers_;
-  base::ObserverList<syncer::TypeDebugInfoObserver> type_debug_info_observers_;
+  base::ObserverList<syncer::SyncServiceObserver>::Unchecked observers_;
+  base::ObserverList<syncer::ProtocolEventObserver>::Unchecked
+      protocol_event_observers_;
+  base::ObserverList<syncer::TypeDebugInfoObserver>::Unchecked
+      type_debug_info_observers_;
 
   std::set<syncer::SyncTypePreferenceProvider*> preference_providers_;
 
@@ -735,6 +750,11 @@ class ProfileSyncService : public syncer::SyncService,
   // The gaia cookie manager. Used for monitoring cookie jar changes to detect
   // when the user signs out of the content area.
   GaiaCookieManagerService* const gaia_cookie_manager_service_;
+
+  // This provider tells the invalidations code which identity to register for.
+  // The account that it registers for should be the same as the currently
+  // syncing account, so we'll need to update this whenever the account changes.
+  invalidation::IdentityProvider* const invalidations_identity_provider_;
 
   std::unique_ptr<syncer::LocalDeviceInfoProvider> local_device_;
 

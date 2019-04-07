@@ -6,9 +6,9 @@
 #include <wrl.h>
 #include <vector>
 #include "base/trace_event/trace_event.h"
-#include "gpu/GLES2/gl2extchromium.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gl/gl_angle_util_win.h"
+#include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_image_dxgi.h"
 
 namespace gpu {
@@ -99,7 +99,7 @@ ImageFactory* GpuMemoryBufferFactoryDXGI::AsImageFactory() {
 
 scoped_refptr<gl::GLImage>
 GpuMemoryBufferFactoryDXGI::CreateImageForGpuMemoryBuffer(
-    const gfx::GpuMemoryBufferHandle& handle,
+    gfx::GpuMemoryBufferHandle handle,
     const gfx::Size& size,
     gfx::BufferFormat format,
     unsigned internalformat,

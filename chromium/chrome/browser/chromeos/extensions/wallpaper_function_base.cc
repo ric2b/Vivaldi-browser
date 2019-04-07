@@ -8,8 +8,8 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/synchronization/cancellation_flag.h"
-#include "base/task_scheduler/lazy_task_runner.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/lazy_task_runner.h"
+#include "base/task/task_traits.h"
 #include "chrome/browser/image_decoder.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/login/login_state.h"
@@ -75,7 +75,7 @@ class WallpaperFunctionBase::UnsafeWallpaperDecoder
   explicit UnsafeWallpaperDecoder(scoped_refptr<WallpaperFunctionBase> function)
       : function_(function) {}
 
-  void Start(const std::vector<char>& image_data) {
+  void Start(const std::vector<uint8_t>& image_data) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
     // This function can only be called after user login. It is fine to use
@@ -149,7 +149,7 @@ void WallpaperFunctionBase::AssertCalledOnWallpaperSequence(
 #endif
 }
 
-void WallpaperFunctionBase::StartDecode(const std::vector<char>& data) {
+void WallpaperFunctionBase::StartDecode(const std::vector<uint8_t>& data) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (unsafe_wallpaper_decoder_)
     unsafe_wallpaper_decoder_->Cancel();

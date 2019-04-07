@@ -18,7 +18,7 @@
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/history/core/common/thumbnail_score.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 #include "sql/recovery.h"
 #include "sql/statement.h"
 #include "third_party/sqlite/sqlite3.h"
@@ -67,7 +67,7 @@ namespace {
 static const int kVersionNumber = 3;
 static const int kDeprecatedVersionNumber = 2;  // and earlier.
 
-bool InitTables(sql::Connection* db) {
+bool InitTables(sql::Database* db) {
   static const char kThumbnailsSql[] =
       "CREATE TABLE IF NOT EXISTS thumbnails ("
       "url LONGVARCHAR PRIMARY KEY,"
@@ -153,7 +153,7 @@ void RecordRecoveryEvent(RecoveryEventType recovery_event) {
 // depending on the operation broken.  This table has large rows, which will use
 // overflow pages, so it is possible (though unlikely) that a chain could fit
 // together and yield a row with errors.
-void FixThumbnailsTable(sql::Connection* db) {
+void FixThumbnailsTable(sql::Database* db) {
   // Enforce invariant separating forced and non-forced thumbnails.
   static const char kFixRankSql[] =
       "DELETE FROM thumbnails "
@@ -205,7 +205,7 @@ void FixThumbnailsTable(sql::Connection* db) {
 
 // Recover the database to the extent possible, then fixup any broken
 // constraints.
-void RecoverAndFixup(sql::Connection* db, const base::FilePath& db_path) {
+void RecoverAndFixup(sql::Database* db, const base::FilePath& db_path) {
   // NOTE(shess): If the version changes, review this code.
   DCHECK_EQ(3, kVersionNumber);
 
@@ -259,7 +259,7 @@ void RecoverAndFixup(sql::Connection* db, const base::FilePath& db_path) {
   RecordRecoveryEvent(RECOVERY_EVENT_RECOVERED);
 }
 
-void DatabaseErrorCallback(sql::Connection* db,
+void DatabaseErrorCallback(sql::Database* db,
                            const base::FilePath& db_path,
                            int extended_error,
                            sql::Statement* stmt) {
@@ -280,7 +280,7 @@ void DatabaseErrorCallback(sql::Connection* db,
     // or hardware issues, not coding errors at the client level, so displaying
     // the error would probably lead to confusion.  The ignored call signals the
     // test-expectation framework that the error was handled.
-    ignore_result(sql::Connection::IsExpectedSqliteError(extended_error));
+    ignore_result(sql::Database::IsExpectedSqliteError(extended_error));
     return;
   }
 
@@ -299,7 +299,7 @@ void DatabaseErrorCallback(sql::Connection* db,
   // are seen.
 
   // The default handling is to assert on debug and to ignore on release.
-  if (!sql::Connection::IsExpectedSqliteError(extended_error))
+  if (!sql::Database::IsExpectedSqliteError(extended_error))
     DLOG(FATAL) << db->GetErrorMessage();
 }
 
@@ -687,8 +687,8 @@ bool TopSitesDatabase::RemoveURLNoTransaction(const MostVisitedURL& url) {
   return delete_statement.Run();
 }
 
-sql::Connection* TopSitesDatabase::CreateDB(const base::FilePath& db_name) {
-  std::unique_ptr<sql::Connection> db(new sql::Connection());
+sql::Database* TopSitesDatabase::CreateDB(const base::FilePath& db_name) {
+  std::unique_ptr<sql::Database> db(new sql::Database());
   // Settings copied from ThumbnailDatabase.
   db->set_histogram_tag("TopSites");
   db->set_error_callback(base::Bind(&DatabaseErrorCallback, db.get(), db_name));

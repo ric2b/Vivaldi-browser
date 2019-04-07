@@ -160,10 +160,14 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // Returns the bounds of the given range in coordinates relative to the
   // top-left corner of the overall web area. Only valid when the
   // role is WebAXRoleStaticText.
-  gfx::Rect GetPageBoundsForRange(int start, int len) const;
+  gfx::Rect GetPageBoundsForRange(int start,
+                                  int len,
+                                  bool clipped = false) const;
 
   // Same as |GetPageBoundsForRange| but in screen coordinates.
-  gfx::Rect GetScreenBoundsForRange(int start, int len) const;
+  gfx::Rect GetScreenBoundsForRange(int start,
+                                    int len,
+                                    bool clipped = false) const;
 
   // Convert a bounding rectangle from this node's coordinate system
   // (which is relative to its nearest scrollable ancestor) to
@@ -299,8 +303,8 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   bool HasState(ax::mojom::State state_enum) const;
   bool HasAction(ax::mojom::Action action_enum) const;
 
-  // Returns true if the caret is active on this object.
-  bool HasCaret() const;
+  // Returns true if the caret or selection is visible on this object.
+  bool HasVisibleCaretOrSelection() const;
 
   // True if this is a web area, and its grandparent is a presentational iframe.
   bool IsWebAreaForPresentationalIframe() const;
@@ -315,6 +319,9 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // If an object is focusable but has no accessible name, use this
   // to compute a name from its descendants.
   std::string ComputeAccessibleNameFromDescendants() const;
+
+  // Get text to announce for a live region change if AT does not implement.
+  std::string GetLiveRegionText() const;
 
   // Creates a text position rooted at this object.
   BrowserAccessibilityPosition::AXPositionInstance CreatePositionAt(

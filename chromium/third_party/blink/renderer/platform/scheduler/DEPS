@@ -39,12 +39,15 @@ include_rules = [
   "+base/task/sequence_manager/sequence_manager.h",
   "+base/task/sequence_manager/task_queue.h",
   "+base/task/sequence_manager/time_domain.h",
+  "+base/task/task_traits.h",
   "+base/threading/platform_thread.h",
   "+base/threading/sequenced_task_runner_handle.h",
   "+base/threading/thread.h",
   "+base/threading/thread_checker.h",
+  "+components/scheduling_metrics",
   "+services/metrics",
 
+  "+third_party/blink/renderer/platform/bindings/parkable_string.h",
   "+third_party/blink/renderer/platform/cross_thread_functional.h",
   "+third_party/blink/renderer/platform/histogram.h",
   "+third_party/blink/renderer/platform/instrumentation",
@@ -60,6 +63,7 @@ specific_include_rules = {
   ".*test\.cc": [
     "+base/metrics/field_trial_param_associator.h",
     "+base/task/sequence_manager/test",
+    "+components/ukm/test_ukm_recorder.h",
     "+testing",
   ],
  "sequence_manager_fuzzer.cc": [

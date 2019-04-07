@@ -29,7 +29,7 @@ namespace content {
 class VEAEncoder final : public VideoTrackRecorder::Encoder,
                          public media::VideoEncodeAccelerator::Client {
  public:
-  VEAEncoder(
+  static scoped_refptr<VEAEncoder> Create(
       const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_callback,
       const VideoTrackRecorder::OnErrorCB& on_error_callback,
       int32_t bits_per_second,
@@ -52,6 +52,14 @@ class VEAEncoder final : public VideoTrackRecorder::Encoder,
   using VideoParamsAndTimestamp =
       std::pair<media::WebmMuxer::VideoParameters, base::TimeTicks>;
 
+  VEAEncoder(
+      const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_callback,
+      const VideoTrackRecorder::OnErrorCB& on_error_callback,
+      int32_t bits_per_second,
+      media::VideoCodecProfile codec,
+      const gfx::Size& size,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+
   void UseOutputBitstreamBufferId(int32_t bitstream_buffer_id);
   void FrameFinished(std::unique_ptr<base::SharedMemory> shm);
 
@@ -62,7 +70,7 @@ class VEAEncoder final : public VideoTrackRecorder::Encoder,
 
   void ConfigureEncoderOnEncodingTaskRunner(const gfx::Size& size);
 
-  void DestroyOnEncodingTaskRunner(base::WaitableEvent* async_waiter);
+  void DestroyOnEncodingTaskRunner(base::WaitableEvent* async_waiter = nullptr);
 
   media::GpuVideoAcceleratorFactories* const gpu_factories_;
 

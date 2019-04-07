@@ -40,8 +40,12 @@ TEST(VideoFrameLayout, ConstructorNoStrideBufferSize) {
   EXPECT_EQ(layout.format(), PIXEL_FORMAT_I420);
   EXPECT_EQ(layout.coded_size(), coded_size);
   EXPECT_EQ(layout.GetTotalBufferSize(), 0u);
-  EXPECT_EQ(layout.num_strides(), 0u);
-  EXPECT_EQ(layout.num_buffers(), 0u);
+  EXPECT_EQ(layout.num_strides(), 4u);
+  EXPECT_EQ(layout.num_buffers(), 4u);
+  for (size_t i = 0; i < 4u; ++i) {
+    EXPECT_EQ(layout.strides()[i], 0);
+    EXPECT_EQ(layout.buffer_sizes()[i], 0u);
+  }
 }
 
 TEST(VideoFrameLayout, CopyConstructor) {
@@ -50,17 +54,62 @@ TEST(VideoFrameLayout, CopyConstructor) {
   std::vector<size_t> buffer_sizes = {73728, 18432, 18432};
   VideoFrameLayout layout(PIXEL_FORMAT_I420, coded_size, strides, buffer_sizes);
 
-  VideoFrameLayout layout_copy(layout);
+  VideoFrameLayout layout_clone(layout);
 
-  EXPECT_EQ(layout_copy.format(), PIXEL_FORMAT_I420);
-  EXPECT_EQ(layout_copy.coded_size(), coded_size);
-  EXPECT_EQ(layout_copy.num_strides(), 3u);
-  EXPECT_EQ(layout_copy.num_buffers(), 3u);
-  EXPECT_EQ(layout_copy.GetTotalBufferSize(), 110592u);
+  EXPECT_EQ(layout_clone.format(), PIXEL_FORMAT_I420);
+  EXPECT_EQ(layout_clone.coded_size(), coded_size);
+  EXPECT_EQ(layout_clone.num_strides(), 3u);
+  EXPECT_EQ(layout_clone.num_buffers(), 3u);
+  EXPECT_EQ(layout_clone.GetTotalBufferSize(), 110592u);
   for (size_t i = 0; i < 3; ++i) {
-    EXPECT_EQ(layout_copy.strides()[i], strides[i]);
-    EXPECT_EQ(layout_copy.buffer_sizes()[i], buffer_sizes[i]);
+    EXPECT_EQ(layout_clone.strides()[i], strides[i]);
+    EXPECT_EQ(layout_clone.buffer_sizes()[i], buffer_sizes[i]);
   }
+}
+
+TEST(VideoFrameLayout, AssignmentOperator) {
+  gfx::Size coded_size = gfx::Size(320, 180);
+  std::vector<int32_t> strides = {384, 192, 192};
+  std::vector<size_t> buffer_sizes = {73728, 18432, 18432};
+  VideoFrameLayout layout(PIXEL_FORMAT_I420, coded_size, strides, buffer_sizes);
+
+  VideoFrameLayout layout_clone = layout;
+
+  EXPECT_EQ(layout_clone.format(), PIXEL_FORMAT_I420);
+  EXPECT_EQ(layout_clone.coded_size(), coded_size);
+  EXPECT_EQ(layout_clone.num_strides(), 3u);
+  EXPECT_EQ(layout_clone.num_buffers(), 3u);
+  EXPECT_EQ(layout_clone.GetTotalBufferSize(), 110592u);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(layout_clone.strides()[i], strides[i]);
+    EXPECT_EQ(layout_clone.buffer_sizes()[i], buffer_sizes[i]);
+  }
+}
+
+TEST(VideoFrameLayout, MoveConstructor) {
+  gfx::Size coded_size = gfx::Size(320, 180);
+  std::vector<int32_t> strides = {384, 192, 192};
+  std::vector<size_t> buffer_sizes = {73728, 18432, 18432};
+  VideoFrameLayout layout(PIXEL_FORMAT_I420, coded_size, strides, buffer_sizes);
+
+  VideoFrameLayout layout_move(std::move(layout));
+
+  EXPECT_EQ(layout_move.format(), PIXEL_FORMAT_I420);
+  EXPECT_EQ(layout_move.coded_size(), coded_size);
+  EXPECT_EQ(layout_move.num_strides(), 3u);
+  EXPECT_EQ(layout_move.num_buffers(), 3u);
+  EXPECT_EQ(layout_move.GetTotalBufferSize(), 110592u);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(layout_move.strides()[i], strides[i]);
+    EXPECT_EQ(layout_move.buffer_sizes()[i], buffer_sizes[i]);
+  }
+
+  // Members in object being moved are cleared except const members.
+  EXPECT_EQ(layout.format(), PIXEL_FORMAT_I420);
+  EXPECT_EQ(layout.coded_size(), coded_size);
+  EXPECT_EQ(layout.num_strides(), 0u);
+  EXPECT_EQ(layout.num_buffers(), 0u);
+  EXPECT_EQ(layout.GetTotalBufferSize(), 0u);
 }
 
 TEST(VideoFrameLayout, ToString) {
@@ -92,21 +141,20 @@ TEST(VideoFrameLayout, ToStringNoBufferInfo) {
 
   EXPECT_EQ(layout.ToString(),
             "VideoFrameLayout format:PIXEL_FORMAT_NV12 coded_size:320x180 "
-            "num_buffers:0 buffer_sizes:[] num_strides:0 strides:[]");
+            "num_buffers:4 buffer_sizes:[0, 0, 0, 0] num_strides:4 "
+            "strides:[0, 0, 0, 0]");
 }
 
-TEST(VideoFrameLayout, SetStrideBufferSize) {
+TEST(VideoFrameLayout, SetStrideSize) {
   gfx::Size coded_size = gfx::Size(320, 180);
   VideoFrameLayout layout(PIXEL_FORMAT_NV12, coded_size);
 
   std::vector<int32_t> strides = {384, 192, 192};
   layout.set_strides(std::move(strides));
-  std::vector<size_t> buffer_sizes = {122880};
-  layout.set_buffer_sizes(std::move(buffer_sizes));
 
   EXPECT_EQ(layout.ToString(),
             "VideoFrameLayout format:PIXEL_FORMAT_NV12 coded_size:320x180 "
-            "num_buffers:1 buffer_sizes:[122880] num_strides:3 "
+            "num_buffers:4 buffer_sizes:[0, 0, 0, 0] num_strides:3 "
             "strides:[384, 192, 192]");
 }
 

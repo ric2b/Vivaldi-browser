@@ -123,8 +123,19 @@ base::string16 BrowserDistribution::GetPublisherName() {
   return L"Vivaldi";
 }
 
-base::string16 BrowserDistribution::GetAppDescription() {
-  return L"Browse the web";
+base::string16 BrowserDistribution::GetLongAppDescription() {
+  const base::string16& app_description =
+      installer::GetLocalizedString(IDS_PRODUCT_DESCRIPTION_BASE);
+  return app_description;
+}
+
+base::string16 BrowserDistribution::GetDistributionData(HKEY root_key) {
+  return L"";
+}
+
+void BrowserDistribution::UpdateInstallStatus(bool system_install,
+    installer::ArchiveType archive_type,
+    installer::InstallStatus install_status) {
 }
 
 // Vivaldi customization. For standalone installs,
@@ -141,23 +152,4 @@ base::string16 BrowserDistribution::GetArguments()
     arguments.assign(L"--user-data-dir=").append(install_path.value());
   }
   return arguments;
-}
-
-base::string16 BrowserDistribution::GetLongAppDescription() {
-  const base::string16& app_description =
-      installer::GetLocalizedString(IDS_PRODUCT_DESCRIPTION_BASE);
-  return app_description;
-}
-
-std::string BrowserDistribution::GetSafeBrowsingName() {
-  return "vivaldi";
-}
-
-base::string16 BrowserDistribution::GetDistributionData(HKEY root_key) {
-  return L"";
-}
-
-void BrowserDistribution::UpdateInstallStatus(bool system_install,
-    installer::ArchiveType archive_type,
-    installer::InstallStatus install_status) {
 }

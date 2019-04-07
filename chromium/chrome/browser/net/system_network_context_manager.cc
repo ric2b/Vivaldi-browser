@@ -4,9 +4,13 @@
 
 #include "chrome/browser/net/system_network_context_manager.h"
 
+#include <set>
 #include <string>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
+#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -16,28 +20,40 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/component_updater/crl_set_component_installer.h"
 #include "chrome/browser/io_thread.h"
-#include "chrome/browser/net/default_network_context_params.h"
+#include "chrome/browser/net/chrome_mojo_proxy_resolver_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ssl/ssl_config_service_manager.h"
+#include "chrome/common/channel_info.h"
+#include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#include "components/certificate_transparency/ct_known_logs.h"
 #include "components/network_session_configurator/common/network_features.h"
+#include "components/os_crypt/os_crypt.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/variations/variations_associated_data.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/service_names.mojom.h"
+#include "content/public/common/user_agent.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
+#include "net/dns/dns_util.h"
 #include "net/net_buildflags.h"
+#include "net/third_party/uri_template/uri_template.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/cross_thread_shared_url_loader_factory_info.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/proxy_resolver/public/mojom/proxy_resolver.mojom.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
@@ -90,14 +106,20 @@ void GetStubResolverConfig(
       continue;
     }
 
-    if (!dns_over_https_servers) {
+    if (!net::IsValidDoHTemplate(doh_server_list[i].GetString(),
+                                 doh_server_method_list[i].GetString())) {
+      continue;
+    }
+
+    if (!dns_over_https_servers->has_value()) {
       *dns_over_https_servers = base::make_optional<
           std::vector<network::mojom::DnsOverHttpsServerPtr>>();
     }
+
     network::mojom::DnsOverHttpsServerPtr dns_over_https_server =
         network::mojom::DnsOverHttpsServer::New();
-    dns_over_https_server->url = GURL(doh_server_list[i].GetString());
-    dns_over_https_server->use_posts =
+    dns_over_https_server->server_template = doh_server_list[i].GetString();
+    dns_over_https_server->use_post =
         (doh_server_method_list[i].GetString() == "POST");
     (*dns_over_https_servers)->emplace_back(std::move(dns_over_https_server));
   }
@@ -312,6 +334,8 @@ void SystemNetworkContextManager::SetUp(
 SystemNetworkContextManager::SystemNetworkContextManager()
     : ssl_config_service_manager_(SSLConfigServiceManager::CreateDefaultManager(
           g_browser_process->local_state())) {
+#if !defined(OS_ANDROID)
+  // QuicAllowed was not part of Android policy.
   const base::Value* value =
       g_browser_process->policy_service()
           ->GetPolicies(policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME,
@@ -319,9 +343,32 @@ SystemNetworkContextManager::SystemNetworkContextManager()
           .GetValue(policy::key::kQuicAllowed);
   if (value)
     value->GetAsBoolean(&is_quic_allowed_);
+#endif
   shared_url_loader_factory_ = new URLLoaderFactoryForSystem(this);
 
-  pref_change_registrar_.Init(g_browser_process->local_state());
+  PrefService* local_state = g_browser_process->local_state();
+  pref_change_registrar_.Init(local_state);
+
+  // Update the DnsClient and DoH default preferences based on the corresponding
+  // features before registering change callbacks for these preferences.
+  local_state->SetDefaultPrefValue(prefs::kBuiltInDnsClientEnabled,
+                                   base::Value(ShouldEnableAsyncDns()));
+  base::ListValue default_doh_servers;
+  base::ListValue default_doh_server_methods;
+  if (base::FeatureList::IsEnabled(features::kDnsOverHttps)) {
+    std::string server(variations::GetVariationParamValueByFeature(
+        features::kDnsOverHttps, "server"));
+    std::string method(variations::GetVariationParamValueByFeature(
+        features::kDnsOverHttps, "method"));
+    if (!server.empty()) {
+      default_doh_servers.AppendString(server);
+      default_doh_server_methods.AppendString(method);
+    }
+  }
+  local_state->SetDefaultPrefValue(prefs::kDnsOverHttpsServers,
+                                   std::move(default_doh_servers));
+  local_state->SetDefaultPrefValue(prefs::kDnsOverHttpsServerMethods,
+                                   std::move(default_doh_server_methods));
 
   PrefChangeRegistrar::NamedChangeCallback dns_pref_callback =
       base::BindRepeating(&OnStubResolverConfigChanged);
@@ -361,29 +408,15 @@ SystemNetworkContextManager::~SystemNetworkContextManager() {
 }
 
 void SystemNetworkContextManager::RegisterPrefs(PrefRegistrySimple* registry) {
-  // DnsClient prefs.
-  registry->RegisterBooleanPref(prefs::kBuiltInDnsClientEnabled,
-                                ShouldEnableAsyncDns());
-  // Set default DNS over HTTPS server list and server methods, based on whether
-  // or not the DNS over HTTPS feature is enabled.
-  std::unique_ptr<base::ListValue> default_doh_servers =
-      std::make_unique<base::ListValue>();
-  std::unique_ptr<base::ListValue> default_doh_server_methods =
-      std::make_unique<base::ListValue>();
-  if (base::FeatureList::IsEnabled(features::kDnsOverHttps)) {
-    base::Value server(variations::GetVariationParamValueByFeature(
-        features::kDnsOverHttps, "server"));
-    base::Value method(variations::GetVariationParamValueByFeature(
-        features::kDnsOverHttps, "method"));
-    if (!server.GetString().empty()) {
-      default_doh_servers->GetList().push_back(std::move(server));
-      default_doh_server_methods->GetList().push_back(std::move(method));
-    }
-  }
-  registry->RegisterListPref(prefs::kDnsOverHttpsServers,
-                             std::move(default_doh_servers));
-  registry->RegisterListPref(prefs::kDnsOverHttpsServerMethods,
-                             std::move(default_doh_server_methods));
+  // Register the DnsClient and DoH preferences. The feature list has not been
+  // initialized yet, so setting the preference defaults here to reflect the
+  // corresponding features will only cause the preference defaults to reflect
+  // the feature defaults (feature values set via the command line will not be
+  // captured). Thus, the preference defaults are updated in the constructor
+  // for SystemNetworkContextManager, at which point the feature list is ready.
+  registry->RegisterBooleanPref(prefs::kBuiltInDnsClientEnabled, false);
+  registry->RegisterListPref(prefs::kDnsOverHttpsServers);
+  registry->RegisterListPref(prefs::kDnsOverHttpsServerMethods);
 
   // Static auth params
   registry->RegisterStringPref(prefs::kAuthSchemes,
@@ -412,6 +445,9 @@ void SystemNetworkContextManager::RegisterPrefs(PrefRegistrySimple* registry) {
   // g_browser_process->local_state() is used for the system NetworkContext, and
   // the per-profile pref values are used for the profile NetworkContexts.
   registry->RegisterBooleanPref(prefs::kEnableReferrers, true);
+
+  registry->RegisterBooleanPref(prefs::kQuickCheckEnabled, true);
+  registry->RegisterBooleanPref(prefs::kPacHttpsUrlStrippingEnabled, true);
 }
 
 void SystemNetworkContextManager::OnNetworkServiceCreated(
@@ -454,6 +490,13 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
   chrome::GetDefaultUserDataDirectory(&config->user_data_path);
   content::GetNetworkService()->SetCryptConfig(std::move(config));
 #endif
+#if defined(OS_MACOSX)
+  content::GetNetworkService()->SetEncryptionKey(
+      OSCrypt::GetRawEncryptionKey());
+#endif
+
+  // Asynchronously reapply the most recently received CRLSet (if any).
+  component_updater::CRLSetPolicy::ReconfigureAfterNetworkRestart();
 }
 
 void SystemNetworkContextManager::DisableQuic() {
@@ -479,6 +522,86 @@ void SystemNetworkContextManager::AddSSLConfigToNetworkContextParams(
     network::mojom::NetworkContextParams* network_context_params) {
   ssl_config_service_manager_->AddToNetworkContextParams(
       network_context_params);
+}
+
+network::mojom::NetworkContextParamsPtr
+SystemNetworkContextManager::CreateDefaultNetworkContextParams() {
+  network::mojom::NetworkContextParamsPtr network_context_params =
+      network::mojom::NetworkContextParams::New();
+
+  network_context_params->enable_brotli =
+      base::FeatureList::IsEnabled(features::kBrotliEncoding);
+
+  network_context_params->user_agent = GetUserAgent();
+
+  // Disable referrers by default. Any consumer that enables referrers should
+  // respect prefs::kEnableReferrers from the appropriate pref store.
+  network_context_params->enable_referrers = false;
+
+  std::string quic_user_agent_id = chrome::GetChannelName();
+  if (!quic_user_agent_id.empty())
+    quic_user_agent_id.push_back(' ');
+  quic_user_agent_id.append(
+      version_info::GetProductNameAndVersionForUserAgent());
+  quic_user_agent_id.push_back(' ');
+  quic_user_agent_id.append(
+      content::BuildOSCpuInfo(false /* include_android_build_number */));
+  network_context_params->quic_user_agent_id = quic_user_agent_id;
+
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+
+  // TODO(eroman): Figure out why this doesn't work in single-process mode,
+  // or if it does work, now.
+  // Should be possible now that a private isolate is used.
+  // http://crbug.com/474654
+  if (!command_line.HasSwitch(switches::kWinHttpProxyResolver)) {
+    if (command_line.HasSwitch(switches::kSingleProcess)) {
+      LOG(ERROR) << "Cannot use V8 Proxy resolver in single process mode.";
+    } else {
+      network_context_params->proxy_resolver_factory =
+          ChromeMojoProxyResolverFactory::CreateWithStrongBinding()
+              .PassInterface();
+    }
+  }
+
+  PrefService* local_state = g_browser_process->local_state();
+  network_context_params->pac_quick_check_enabled =
+      local_state->GetBoolean(prefs::kQuickCheckEnabled);
+  network_context_params->dangerously_allow_pac_access_to_secure_urls =
+      !local_state->GetBoolean(prefs::kPacHttpsUrlStrippingEnabled);
+
+  // Use the SystemNetworkContextManager to populate and update SSL
+  // configuration. The SystemNetworkContextManager is owned by the
+  // BrowserProcess itself, so will only be destroyed on shutdown, at which
+  // point, all NetworkContexts will be destroyed as well.
+  AddSSLConfigToNetworkContextParams(network_context_params.get());
+
+  bool http_09_on_non_default_ports_enabled = false;
+#if !defined(OS_ANDROID)
+  // CT is only enabled on Desktop platforms for now.
+  network_context_params->enforce_chrome_ct_policy = true;
+  for (const auto& ct_log : certificate_transparency::GetKnownLogs()) {
+    // TODO(rsleevi): https://crbug.com/702062 - Remove this duplication.
+    network::mojom::CTLogInfoPtr log_info = network::mojom::CTLogInfo::New();
+    log_info->public_key = std::string(ct_log.log_key, ct_log.log_key_length);
+    log_info->name = ct_log.log_name;
+    log_info->dns_api_endpoint = ct_log.log_dns_domain;
+    network_context_params->ct_logs.push_back(std::move(log_info));
+  }
+
+  const base::Value* value =
+      g_browser_process->policy_service()
+          ->GetPolicies(policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME,
+                                                std::string()))
+          .GetValue(policy::key::kHttp09OnNonDefaultPortsEnabled);
+  if (value)
+    value->GetAsBoolean(&http_09_on_non_default_ports_enabled);
+#endif
+  network_context_params->http_09_on_non_default_ports_enabled =
+      http_09_on_non_default_ports_enabled;
+
+  return network_context_params;
 }
 
 void SystemNetworkContextManager::FlushSSLConfigManagerForTesting() {

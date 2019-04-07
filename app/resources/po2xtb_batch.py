@@ -14,6 +14,7 @@ options = argparser.parse_args()
 
 scriptdir = os.path.dirname(__file__)
 
+# keep in sync with FILE list in vivapp/bin/gettext/update-chromium.sh
 filemap = [
   {
     "name": "vivaldi_native_strings",
@@ -34,6 +35,10 @@ filemap = [
   {
     "name": "vivaldi_strings",
     "dir": os.path.join(scriptdir, "strings"),
+  },
+  {
+    "name": "vivaldi_ui_strings",
+    "dir": os.path.join(scriptdir, "ui_strings"),
   },
 ]
 

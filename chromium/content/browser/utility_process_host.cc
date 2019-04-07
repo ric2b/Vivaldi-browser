@@ -30,6 +30,7 @@
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
 #include "media/base/media_switches.h"
+#include "media/webrtc/webrtc_switches.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "services/service_manager/embedder/switches.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -88,6 +89,12 @@ class UtilitySandboxedProcessLauncherDelegate
   ~UtilitySandboxedProcessLauncherDelegate() override {}
 
 #if defined(OS_WIN)
+  bool DisableDefaultPolicy() override {
+    // Default policy is disabled for audio process to allow audio drivers
+    // to read device properties (https://crbug.com/883326).
+    return sandbox_type_ == service_manager::SANDBOX_TYPE_AUDIO;
+  }
+
   bool ShouldLaunchElevated() override {
     return sandbox_type_ ==
            service_manager::SANDBOX_TYPE_NO_SANDBOX_AND_ELEVATED_PRIVILEGES;
@@ -107,7 +114,8 @@ class UtilitySandboxedProcessLauncherDelegate
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
   service_manager::ZygoteHandle GetZygote() override {
     if (service_manager::IsUnsandboxedSandboxType(sandbox_type_) ||
-        sandbox_type_ == service_manager::SANDBOX_TYPE_NETWORK) {
+        sandbox_type_ == service_manager::SANDBOX_TYPE_NETWORK ||
+        sandbox_type_ == service_manager::SANDBOX_TYPE_AUDIO) {
       return nullptr;
     }
     return service_manager::GetGenericZygote();
@@ -326,6 +334,8 @@ bool UtilityProcessHost::StartProcess() {
       switches::kFailAudioStreamCreation,
       switches::kMuteAudio,
       switches::kUseFileForFakeAudioCapture,
+      switches::kAecRefinedAdaptiveFilter,
+      switches::kAgcStartupMinVolume,
 #if defined(OS_LINUX) || defined(OS_FREEBSD) || defined(OS_SOLARIS)
       switches::kAlsaInputDevice,
       switches::kAlsaOutputDevice,

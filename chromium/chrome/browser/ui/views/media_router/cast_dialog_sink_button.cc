@@ -14,7 +14,9 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/animation/ink_drop_impl.h"
+#include "ui/views/controls/styled_label.h"
 #include "ui/views/controls/throbber.h"
+#include "ui/views/layout/fill_layout.h"
 #include "ui/views/vector_icons.h"
 
 #if defined(GOOGLE_CHROME_BUILD)
@@ -25,7 +27,7 @@ namespace media_router {
 
 namespace {
 
-gfx::ImageSkia CreateSinkIcon(SinkIconType icon_type) {
+gfx::ImageSkia CreateSinkIcon(SinkIconType icon_type, bool enabled = true) {
   const gfx::VectorIcon* vector_icon;
   switch (icon_type) {
     case SinkIconType::CAST_AUDIO_GROUP:
@@ -56,41 +58,53 @@ gfx::ImageSkia CreateSinkIcon(SinkIconType icon_type) {
       vector_icon = &kTvIcon;
       break;
   }
-  return gfx::CreateVectorIcon(*vector_icon,
-                               CastDialogSinkButton::kPrimaryIconSize,
-                               gfx::kChromeIconGrey);
+  SkColor icon_color = enabled ? gfx::kChromeIconGrey : gfx::kGoogleGrey500;
+  return gfx::CreateVectorIcon(
+      *vector_icon, CastDialogSinkButton::kPrimaryIconSize, icon_color);
+}
+
+gfx::ImageSkia CreateDisabledSinkIcon(SinkIconType icon_type) {
+  return CreateSinkIcon(icon_type, false);
+}
+
+std::unique_ptr<views::View> CreateThrobber() {
+  views::Throbber* throbber = new views::Throbber();
+  auto throbber_container = std::make_unique<views::View>();
+  throbber_container->SetLayoutManager(std::make_unique<views::FillLayout>());
+  constexpr int kBorderWidth = 4;
+  throbber_container->SetBorder(
+      views::CreateEmptyBorder(gfx::Insets(kBorderWidth)));
+  throbber->Start();
+  throbber_container->AddChildView(throbber);
+  return throbber_container;
 }
 
 std::unique_ptr<views::View> CreatePrimaryIconForSink(const UIMediaSink& sink) {
+  if (sink.issue) {
+    auto icon_view = std::make_unique<views::ImageView>();
+    icon_view->SetImage(CreateVectorIcon(::vector_icons::kInfoOutlineIcon,
+                                         CastDialogSinkButton::kPrimaryIconSize,
+                                         gfx::kChromeIconGrey));
+    return icon_view;
+  } else if (sink.state == UIMediaSinkState::CONNECTED ||
+             sink.state == UIMediaSinkState::DISCONNECTING) {
+    auto icon_view = std::make_unique<views::ImageView>();
+    // TODO(takumif): Replace the vector icon to match the mocks.
+    icon_view->SetImage(CreateVectorIcon(kNavigateStopIcon,
+                                         CastDialogSinkButton::kPrimaryIconSize,
+                                         gfx::kGoogleBlue500));
+    return icon_view;
+  } else if (sink.state == UIMediaSinkState::CONNECTING) {
+    return CreateThrobber();
+  }
   auto icon_view = std::make_unique<views::ImageView>();
   icon_view->SetImage(CreateSinkIcon(sink.icon_type));
   return icon_view;
 }
 
-std::unique_ptr<views::View> CreateSecondaryIconForSink(
-    const UIMediaSink& sink) {
-  if (sink.issue) {
-    auto icon_view = std::make_unique<views::ImageView>();
-    icon_view->SetImage(CreateVectorIcon(
-        ::vector_icons::kInfoOutlineIcon,
-        CastDialogSinkButton::kSecondaryIconSize, gfx::kChromeIconGrey));
-    icon_view->SetTooltipText(base::UTF8ToUTF16(sink.issue->info().title));
-    return icon_view;
-  } else if (sink.state == UIMediaSinkState::CONNECTED) {
-    auto icon_view = std::make_unique<views::ImageView>();
-    icon_view->SetImage(CreateVectorIcon(
-        views::kMenuCheckIcon, CastDialogSinkButton::kSecondaryIconSize,
-        gfx::kChromeIconGrey));
-    return icon_view;
-  } else if (sink.state == UIMediaSinkState::CONNECTING) {
-    auto throbber_view = std::make_unique<views::Throbber>();
-    throbber_view->Start();
-    return throbber_view;
-  }
-  return nullptr;
-}
-
 base::string16 GetStatusTextForSink(const UIMediaSink& sink) {
+  if (sink.issue)
+    return base::UTF8ToUTF16(sink.issue->info().title);
   if (!sink.status_text.empty())
     return sink.status_text;
   switch (sink.state) {
@@ -116,18 +130,10 @@ CastDialogSinkButton::CastDialogSinkButton(
                   CreatePrimaryIconForSink(sink),
                   sink.friendly_name,
                   GetStatusTextForSink(sink),
-                  CreateSecondaryIconForSink(sink)),
+                  /** secondary_icon_view */ nullptr),
       sink_(sink) {}
 
-CastDialogSinkButton::~CastDialogSinkButton() {}
-
-void CastDialogSinkButton::SetSelected(bool is_selected) {
-  is_selected_ = is_selected;
-  if (!is_selected_) {
-    GetInkDrop()->SnapToHidden();
-    GetInkDrop()->SetHovered(false);
-  }
-}
+CastDialogSinkButton::~CastDialogSinkButton() = default;
 
 bool CastDialogSinkButton::OnMousePressed(const ui::MouseEvent& event) {
   if (event.IsRightMouseButton())
@@ -139,41 +145,26 @@ void CastDialogSinkButton::OnMouseReleased(const ui::MouseEvent& event) {
   if (event.IsRightMouseButton())
     return;
   HoverButton::OnMouseReleased(event);
-  if (state() != STATE_DISABLED && IsTriggerableEvent(event) &&
-      HitTestPoint(event.location()) && !InDrag()) {
-    // Show inkdrop to indicate that the button has been pressed.
-    AnimateInkDrop(views::InkDropState::ACTIVATED,
-                   ui::LocatedEvent::FromIfValid(&event));
+}
+
+void CastDialogSinkButton::OnEnabledChanged() {
+  HoverButton::OnEnabledChanged();
+  SkColor background_color = GetNativeTheme()->GetSystemColor(
+      ui::NativeTheme::kColorId_ProminentButtonColor);
+  if (enabled()) {
+    SetTitleTextStyle(views::style::STYLE_PRIMARY, background_color);
+    if (sink_.state == UIMediaSinkState::AVAILABLE) {
+      static_cast<views::ImageView*>(icon_view())
+          ->SetImage(CreateSinkIcon(sink_.icon_type));
+    }
+  } else {
+    SetTitleTextStyle(views::style::STYLE_DISABLED, background_color);
+    if (sink_.state == UIMediaSinkState::AVAILABLE) {
+      static_cast<views::ImageView*>(icon_view())
+          ->SetImage(CreateDisabledSinkIcon(sink_.icon_type));
+    }
   }
-}
-
-bool CastDialogSinkButton::OnKeyPressed(const ui::KeyEvent& event) {
-  bool handled_event = HoverButton::OnKeyPressed(event);
-  if (handled_event) {
-    // Show inkdrop to indicate that the button has been pressed.
-    AnimateInkDrop(views::InkDropState::ACTIVATED,
-                   ui::LocatedEvent::FromIfValid(&event));
-  }
-  return handled_event;
-}
-
-std::unique_ptr<views::InkDrop> CastDialogSinkButton::CreateInkDrop() {
-  auto ink_drop = HoverButton::CreateInkDrop();
-  // Without overriding this value, the ink drop would fade in (as opposed to
-  // snapping), which results in flickers when updating sinks.
-  static_cast<views::InkDropImpl*>(ink_drop.get())
-      ->SetAutoHighlightMode(views::InkDropImpl::AutoHighlightMode::NONE);
-  return ink_drop;
-}
-
-base::string16 CastDialogSinkButton::GetActionText() const {
-  return l10n_util::GetStringUTF16(sink_.state == UIMediaSinkState::CONNECTED
-                                       ? IDS_MEDIA_ROUTER_STOP_CASTING_BUTTON
-                                       : IDS_MEDIA_ROUTER_START_CASTING_BUTTON);
-}
-
-void CastDialogSinkButton::SnapInkDropToActivated() {
-  GetInkDrop()->SnapToActivated();
+  title()->Layout();
 }
 
 }  // namespace media_router

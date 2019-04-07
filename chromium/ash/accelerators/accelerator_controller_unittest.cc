@@ -32,7 +32,6 @@
 #include "ash/test_media_client.h"
 #include "ash/test_screenshot_delegate.h"
 #include "ash/wm/lock_state_controller.h"
-#include "ash/wm/panels/panel_layout_manager.h"
 #include "ash/wm/test_session_state_animator.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
@@ -42,7 +41,7 @@
 #include "base/run_loop.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/test/test_windows.h"
@@ -54,6 +53,7 @@
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_sink.h"
+#include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/message_center/message_center.h"
 #include "ui/views/widget/widget.h"
@@ -587,11 +587,12 @@ TEST_F(AcceleratorControllerTest, DontRepeatToggleFullscreen) {
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
   params.bounds = gfx::Rect(5, 5, 20, 20);
   views::Widget* widget = new views::Widget;
+  params.context = CurrentContext();
   widget->Init(params);
   widget->Show();
   widget->Activate();
   widget->GetNativeView()->SetProperty(aura::client::kResizeBehaviorKey,
-                                       ui::mojom::kResizeBehaviorCanMaximize);
+                                       ws::mojom::kResizeBehaviorCanMaximize);
 
   ui::test::EventGenerator* generator = GetEventGenerator();
   wm::WindowState* window_state = wm::GetWindowState(widget->GetNativeView());
@@ -625,7 +626,7 @@ TEST_F(AcceleratorControllerTest, ProcessOnce) {
   ui::EventDispatchDetails details = sink->OnEventFromSource(&key_event1);
   EXPECT_TRUE(key_event1.handled() || details.dispatcher_destroyed);
 
-  ui::KeyEvent key_event2('A', ui::VKEY_A, ui::EF_NONE);
+  ui::KeyEvent key_event2('A', ui::VKEY_A, ui::DomCode::NONE, ui::EF_NONE);
   details = sink->OnEventFromSource(&key_event2);
   EXPECT_FALSE(key_event2.handled() || details.dispatcher_destroyed);
 

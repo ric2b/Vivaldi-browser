@@ -21,6 +21,7 @@ void RenderViewImpl::ApplyVivaldiSpecificPreferences() {
       renderer_preferences_.should_enable_plugin_content);
     webview()->SetAllowTabCycleIntoUI(
         renderer_preferences_.allow_tab_cycle_from_webpage_into_ui);
+    webview()->SetAllowAccessKeys(renderer_preferences_.allow_access_keys);
   }
 }
 

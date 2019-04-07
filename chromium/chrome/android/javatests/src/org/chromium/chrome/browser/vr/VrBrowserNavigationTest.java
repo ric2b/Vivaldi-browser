@@ -9,7 +9,9 @@ import static org.chromium.chrome.browser.vr.XrTestFramework.PAGE_LOAD_TIMEOUT_S
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_LONG_MS;
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_SHORT_MS;
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM;
+import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE;
 
+import android.graphics.PointF;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 
@@ -26,15 +28,19 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.history.HistoryItemView;
 import org.chromium.chrome.browser.history.HistoryPage;
+import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.vr.rules.ChromeTabbedActivityVrTestRule;
+import org.chromium.chrome.browser.vr.util.NativeUiUtils;
 import org.chromium.chrome.browser.vr.util.VrBrowserTransitionUtils;
 import org.chromium.chrome.browser.vr.util.VrInfoBarUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeTabUtils;
+import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.content.browser.test.util.ClickUtils;
+import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.WebContents;
 
@@ -47,7 +53,7 @@ import java.util.concurrent.TimeoutException;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "enable-webvr"})
-@Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
+@Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
 public class VrBrowserNavigationTest {
     // We explicitly instantiate a rule here instead of using parameterization since this class
     // only ever runs in ChromeTabbedActivity.
@@ -100,32 +106,27 @@ public class VrBrowserNavigationTest {
      * navigation. This is desirable since we are testing navigation transitions end-to-end.
      */
     private void navigateTo(final Page to) throws InterruptedException {
-        ChromeTabUtils.waitForTabPageLoaded(
-                mTestRule.getActivity().getActivityTab(), new Runnable() {
-                    @Override
-                    public void run() {
-                        mVrBrowserTestFramework.runJavaScriptOrFail(
-                                "window.location.href = '" + getUrl(to) + "';",
-                                POLL_TIMEOUT_SHORT_MS);
-                    }
-                }, POLL_TIMEOUT_LONG_MS);
+        ChromeTabUtils.waitForTabPageLoaded(mTestRule.getActivity().getActivityTab(), () -> {
+            mVrBrowserTestFramework.runJavaScriptOrFail(
+                    "window.location.href = '" + getUrl(to) + "';", POLL_TIMEOUT_SHORT_MS);
+        }, POLL_TIMEOUT_LONG_MS);
     }
 
     private void enterFullscreenOrFail(WebContents webContents)
             throws InterruptedException, TimeoutException {
         DOMUtils.clickNode(webContents, "fullscreen", false /* goThroughRootAndroidView */);
         VrBrowserTestFramework.waitOnJavaScriptStep(webContents);
-        Assert.assertTrue(DOMUtils.isFullscreen(webContents));
+        Assert.assertTrue("Failed to enter fullscreen", DOMUtils.isFullscreen(webContents));
     }
 
     private void assertState(WebContents wc, Page page, PresentationMode presentationMode,
             FullscreenMode fullscreenMode) throws InterruptedException, TimeoutException {
-        Assert.assertTrue("Browser is in VR", VrShellDelegate.isInVr());
-        Assert.assertEquals("Browser is on correct web site", getUrl(page), wc.getVisibleUrl());
-        Assert.assertEquals("Browser is in VR Presentation Mode",
+        Assert.assertTrue("Browser is not in VR", VrShellDelegate.isInVr());
+        Assert.assertEquals("Browser is not on correct web site", getUrl(page), wc.getVisibleUrl());
+        Assert.assertEquals("Browser's presentation mode does not match expectation",
                 presentationMode == PresentationMode.PRESENTING,
                 TestVrShellDelegate.getVrShellForTesting().getWebVrModeEnabled());
-        Assert.assertEquals("Browser is in fullscreen",
+        Assert.assertEquals("Browser's fullscreen mode does not match expectation'",
                 fullscreenMode == FullscreenMode.FULLSCREENED, DOMUtils.isFullscreen(wc));
         // Feedback infobar should never show up during navigations.
         VrInfoBarUtils.expectInfoBarPresent(mTestRule, false);
@@ -153,13 +154,13 @@ public class VrBrowserNavigationTest {
         ArrayList<HistoryItemView> itemViews = historyPage.getHistoryManagerForTesting()
                                                        .getAdapterForTests()
                                                        .getItemViewsForTests();
-        Assert.assertEquals("Two navigations showed up in history", 2, itemViews.size());
+        Assert.assertEquals("Incorrect number of items in history", 2, itemViews.size());
         // History is in reverse chronological order, so the first navigation should actually be
         // after the second in the list
-        Assert.assertEquals("First navigation is correct", getUrl(Page.PAGE_2D),
-                itemViews.get(1).getItem().getUrl());
-        Assert.assertEquals("Second navigation is correct", getUrl(Page.PAGE_2D_2),
-                itemViews.get(0).getItem().getUrl());
+        Assert.assertEquals("First navigation did not show correctly in history",
+                getUrl(Page.PAGE_2D), itemViews.get(1).getItem().getUrl());
+        Assert.assertEquals("Second navigation did not show correctly in history",
+                getUrl(Page.PAGE_2D_2), itemViews.get(0).getItem().getUrl());
 
         // Test that clicking on history items in VR works
         ThreadUtils.runOnUiThreadBlocking(() -> itemViews.get(0).onClick());
@@ -447,22 +448,18 @@ public class VrBrowserNavigationTest {
     public void testBackDoesntBackgroundChrome()
             throws IllegalArgumentException, InterruptedException {
         Assert.assertFalse(
-                "Back button isn't disabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
+                "Back button is enabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
         mTestRule.loadUrlInNewTab(getUrl(Page.PAGE_2D), false, TabLaunchType.FROM_CHROME_UI);
         Assert.assertFalse(
-                "Back button isn't disabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
+                "Back button is enabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
         final Tab tab =
                 mTestRule.loadUrlInNewTab(getUrl(Page.PAGE_2D), false, TabLaunchType.FROM_LINK);
         Assert.assertTrue(
-                "Back button isn't enabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mTestRule.getActivity().getTabModelSelector().closeTab(tab);
-            }
-        });
+                "Back button is disabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> { mTestRule.getActivity().getTabModelSelector().closeTab(tab); });
         Assert.assertFalse(
-                "Back button isn't disabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
+                "Back button is enabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
     }
 
     /**
@@ -472,37 +469,37 @@ public class VrBrowserNavigationTest {
     @MediumTest
     public void testNavigationButtons() throws IllegalArgumentException, InterruptedException {
         Assert.assertFalse(
-                "Back button isn't disabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
-        Assert.assertFalse("Forward button isn't disabled.",
-                VrBrowserTransitionUtils.isForwardButtonEnabled());
+                "Back button is enabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
+        Assert.assertFalse(
+                "Forward button is enabled.", VrBrowserTransitionUtils.isForwardButtonEnabled());
         // Opening a new tab shouldn't enable the back button
         mTestRule.loadUrlInNewTab(getUrl(Page.PAGE_2D), false, TabLaunchType.FROM_CHROME_UI);
         Assert.assertFalse(
-                "Back button isn't disabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
-        Assert.assertFalse("Forward button isn't disabled.",
-                VrBrowserTransitionUtils.isForwardButtonEnabled());
+                "Back button is enabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
+        Assert.assertFalse(
+                "Forward button is enabled.", VrBrowserTransitionUtils.isForwardButtonEnabled());
         // Navigating to a new page should enable the back button
         mTestRule.loadUrl(getUrl(Page.PAGE_WEBVR));
         Assert.assertTrue(
-                "Back button isn't enabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
-        Assert.assertFalse("Forward button isn't disabled.",
-                VrBrowserTransitionUtils.isForwardButtonEnabled());
+                "Back button is disabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
+        Assert.assertFalse(
+                "Forward button is enabled.", VrBrowserTransitionUtils.isForwardButtonEnabled());
         // Navigating back should disable the back button and enable the forward button
         VrBrowserTransitionUtils.navigateBack();
         ChromeTabUtils.waitForTabPageLoaded(
                 mTestRule.getActivity().getActivityTab(), getUrl(Page.PAGE_2D));
         Assert.assertFalse(
-                "Back button isn't disabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
+                "Back button is enabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
         Assert.assertTrue(
-                "Forward button isn't enabled.", VrBrowserTransitionUtils.isForwardButtonEnabled());
+                "Forward button is disabled.", VrBrowserTransitionUtils.isForwardButtonEnabled());
         // Navigating forward should disable the forward button and enable the back button
         VrBrowserTransitionUtils.navigateForward();
         ChromeTabUtils.waitForTabPageLoaded(
                 mTestRule.getActivity().getActivityTab(), getUrl(Page.PAGE_WEBVR));
         Assert.assertTrue(
-                "Back button isn't enabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
-        Assert.assertFalse("Forward button isn't disabled.",
-                VrBrowserTransitionUtils.isForwardButtonEnabled());
+                "Back button is disabled.", VrBrowserTransitionUtils.isBackButtonEnabled());
+        Assert.assertFalse(
+                "Forward button is enabled.", VrBrowserTransitionUtils.isForwardButtonEnabled());
     }
 
     /**
@@ -544,5 +541,98 @@ public class VrBrowserNavigationTest {
 
         assertState(mVrBrowserTestFramework.getFirstTabWebContents(), Page.PAGE_2D,
                 PresentationMode.NON_PRESENTING, FullscreenMode.NON_FULLSCREENED);
+    }
+
+    /**
+     * Tests that Incognito and non-Incognito modes maintain separate history stacks. Automation of
+     * a manual test in https://crbug.com/861925.
+     */
+    @Test
+    @MediumTest
+    public void testIncognitoMaintainsSeparateHistoryStack()
+            throws InterruptedException, TimeoutException {
+        // Test non-Incognito's forward/back.
+        mTestRule.loadUrl(TEST_PAGE_2D_URL);
+        mTestRule.loadUrl(TEST_PAGE_2D_2_URL);
+        VrBrowserTransitionUtils.navigateBack();
+        ChromeTabUtils.waitForTabPageLoaded(
+                mTestRule.getActivity().getActivityTab(), TEST_PAGE_2D_URL);
+        VrBrowserTransitionUtils.navigateForward();
+        ChromeTabUtils.waitForTabPageLoaded(
+                mTestRule.getActivity().getActivityTab(), TEST_PAGE_2D_2_URL);
+
+        // Open up an Incognito tab.
+        NativeUiUtils.clickElementAndWaitForUiQuiescence(
+                UserFriendlyElementName.OVERFLOW_MENU, new PointF());
+        NativeUiUtils.clickElementAndWaitForUiQuiescence(
+                UserFriendlyElementName.NEW_INCOGNITO_TAB, new PointF());
+        NewTabPageTestUtils.waitForNtpLoaded(mTestRule.getActivity().getActivityTab());
+
+        // Test Incognito's forward/back.
+        // TODO(https://crbug.com/868506): Remove the waitForTabPageLoaded calls after the loadUrl
+        // calls once the issue with Incognito loadUrl reporting page load too quickly is fixed.
+        mTestRule.loadUrl(TEST_PAGE_WEBVR_URL);
+        ChromeTabUtils.waitForTabPageLoaded(
+                mTestRule.getActivity().getActivityTab(), TEST_PAGE_WEBVR_URL);
+        mTestRule.loadUrl(TEST_PAGE_WEBXR_URL);
+        ChromeTabUtils.waitForTabPageLoaded(
+                mTestRule.getActivity().getActivityTab(), TEST_PAGE_WEBXR_URL);
+        VrBrowserTransitionUtils.navigateBack();
+        ChromeTabUtils.waitForTabPageLoaded(
+                mTestRule.getActivity().getActivityTab(), TEST_PAGE_WEBVR_URL);
+        VrBrowserTransitionUtils.navigateForward();
+        ChromeTabUtils.waitForTabPageLoaded(
+                mTestRule.getActivity().getActivityTab(), TEST_PAGE_WEBXR_URL);
+
+        // Exit Incognito.
+        NativeUiUtils.clickElementAndWaitForUiQuiescence(
+                UserFriendlyElementName.OVERFLOW_MENU, new PointF());
+        NativeUiUtils.clickElementAndWaitForUiQuiescence(
+                UserFriendlyElementName.CLOSE_INCOGNITO_TABS, new PointF());
+        CriteriaHelper.pollUiThread(() -> {
+            return mTestRule.getWebContents().getVisibleUrl().equals(TEST_PAGE_2D_2_URL);
+        }, "Did not successfully exit Incognito mode");
+
+        // Ensure that non-Incognito's forward/back was unaffected by Incognito.
+        VrBrowserTransitionUtils.navigateBack();
+        ChromeTabUtils.waitForTabPageLoaded(
+                mTestRule.getActivity().getActivityTab(), TEST_PAGE_2D_URL);
+        VrBrowserTransitionUtils.navigateForward();
+        ChromeTabUtils.waitForTabPageLoaded(
+                mTestRule.getActivity().getActivityTab(), TEST_PAGE_2D_2_URL);
+    }
+
+    /**
+     * Tests that closing all Incognito tabs with no non-Incognito tabs open automatically opens
+     * a new non-Incognito tab. Automation of a manual test in https://crbug.com/861925.
+     */
+    @Test
+    @MediumTest
+    @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
+    public void testNewTabAutomaticallyOpenedWhenIncognitoClosed()
+            throws InterruptedException, TimeoutException {
+        VrBrowserTransitionUtils.forceExitVr();
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            // Close the tab that's automatically open at test start.
+            mTestRule.getActivity().getActivityTab().getTabModelSelector().closeAllTabs();
+            // Create an Incognito tab. Closing all tabs automatically goes to overview mode, but
+            // appears to take some amount of time to do so. Instead of waiting until then and
+            // creating through the menu item, just create an Incognito tab directly.
+            mTestRule.getActivity().getTabCreator(true /* incognito */).launchNTP();
+        });
+        VrBrowserTransitionUtils.forceEnterVrBrowserOrFail(POLL_TIMEOUT_LONG_MS);
+
+        // Close the Incognito tab and ensure a non-Incognito NTP is opened.
+        NativeUiUtils.clickElementAndWaitForUiQuiescence(
+                UserFriendlyElementName.OVERFLOW_MENU, new PointF());
+        NativeUiUtils.clickElementAndWaitForUiQuiescence(
+                UserFriendlyElementName.CLOSE_INCOGNITO_TABS, new PointF());
+        CriteriaHelper.pollUiThread(() -> {
+            return mTestRule.getActivity().getActivityTab().getNativePage() != null;
+        }, "Closing Incognito tab did not load a native page");
+        Assert.assertFalse("Created native page is in Incognito mode",
+                mTestRule.getActivity().getActivityTab().isIncognito());
+        Assert.assertTrue("Created native page is not a NTP",
+                mTestRule.getActivity().getActivityTab().getNativePage() instanceof NewTabPage);
     }
 }

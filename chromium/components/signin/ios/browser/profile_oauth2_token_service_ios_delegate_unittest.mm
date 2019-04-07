@@ -53,7 +53,7 @@ class ProfileOAuth2TokenServiceIOSDelegateTest
     prefs_.registry()->RegisterIntegerPref(
         prefs::kAccountIdMigrationState,
         AccountTrackerService::MIGRATION_NOT_STARTED);
-    account_tracker_.Initialize(&client_);
+    account_tracker_.Initialize(&prefs_, base::FilePath());
 
     prefs_.registry()->RegisterBooleanPref(
         prefs::kTokenServiceExcludeAllSecondaryAccounts, false);
@@ -77,8 +77,8 @@ class ProfileOAuth2TokenServiceIOSDelegateTest
   }
 
   // OAuth2AccessTokenConsumer implementation.
-  void OnGetTokenSuccess(const std::string& access_token,
-                         const base::Time& expiration_time) override {
+  void OnGetTokenSuccess(
+      const OAuth2AccessTokenConsumer::TokenResponse& token_response) override {
     ++access_token_success_;
   }
 

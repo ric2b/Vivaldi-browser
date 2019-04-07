@@ -64,6 +64,16 @@ enum ShelfBackgroundType {
 
   // The background when split view mode is active.
   SHELF_BACKGROUND_SPLIT_VIEW,
+
+  // The background when OOBE is active.
+  SHELF_BACKGROUND_OOBE,
+
+  // The background when login/lock/user-add is active.
+  SHELF_BACKGROUND_LOGIN,
+
+  // The background when login/lock/user-add is active and the wallpaper is not
+  // blurred.
+  SHELF_BACKGROUND_LOGIN_NONBLURRED_WALLPAPER,
 };
 
 // Source of the launch or activation request, for tracking.
@@ -98,9 +108,6 @@ enum ShelfAction {
 
 // The type of a shelf item.
 enum ShelfItemType {
-  // Represents a running app panel.
-  TYPE_APP_PANEL,
-
   // Represents a pinned shortcut to an app, the app may be running or not.
   TYPE_PINNED_APP,
 

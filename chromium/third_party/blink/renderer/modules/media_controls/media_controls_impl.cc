@@ -54,6 +54,7 @@
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_button_panel_element.h"
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_cast_button_element.h"
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_current_time_display_element.h"
+#include "third_party/blink/renderer/modules/media_controls/elements/media_control_display_cutout_fullscreen_button_element.h"
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_download_button_element.h"
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_elements_helper.h"
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_fullscreen_button_element.h"
@@ -369,6 +370,7 @@ MediaControlsImpl::MediaControlsImpl(HTMLMediaElement& media_element)
       picture_in_picture_button_(nullptr),
       cast_button_(nullptr),
       fullscreen_button_(nullptr),
+      display_cutout_fullscreen_button_(nullptr),
       download_button_(nullptr),
       media_event_listener_(new MediaControlsMediaEventListener(this)),
       orientation_lock_delegate_(nullptr),
@@ -513,6 +515,8 @@ MediaControlsImpl* MediaControlsImpl::Create(HTMLMediaElement& media_element,
 //  |    (-internal-media-controls-text-track-list-kind-captions)
 //  +-MediaControlTextTrackListItemSubtitles
 //       (-internal-media-controls-text-track-list-kind-subtitles)
+// +-MediaControlDisplayCutoutFullscreenElement
+//       (-internal-media-controls-display-cutout-fullscreen-button)
 void MediaControlsImpl::InitializeControls() {
   if (IsModern() && ShouldShowVideoControls()) {
     loading_panel_ = new MediaControlLoadingPanelElement(*this);
@@ -573,6 +577,12 @@ void MediaControlsImpl::InitializeControls() {
         ShouldShowPictureInPictureButton(MediaElement()));
   }
 
+  if (RuntimeEnabledFeatures::DisplayCutoutAPIEnabled() &&
+      MediaElement().IsHTMLVideoElement()) {
+    display_cutout_fullscreen_button_ =
+        new MediaControlDisplayCutoutFullscreenButtonElement(*this);
+  }
+
   fullscreen_button_ = new MediaControlFullscreenButtonElement(*this);
   download_button_ = new MediaControlDownloadButtonElement(*this);
   cast_button_ = new MediaControlCastButtonElement(*this, false);
@@ -627,6 +637,9 @@ void MediaControlsImpl::PopulatePanel() {
   Element* button_panel = panel_;
   if (IsModern() && ShouldShowVideoControls()) {
     MaybeParserAppendChild(panel_, scrubbing_message_);
+    if (display_cutout_fullscreen_button_)
+      panel_->ParserAppendChild(display_cutout_fullscreen_button_);
+
     panel_->ParserAppendChild(overlay_play_button_);
     panel_->ParserAppendChild(media_button_panel_);
     button_panel = media_button_panel_;
@@ -662,7 +675,7 @@ void MediaControlsImpl::PopulatePanel() {
 }
 
 Node::InsertionNotificationRequest MediaControlsImpl::InsertedInto(
-    ContainerNode* root) {
+    ContainerNode& root) {
   if (!MediaElement().isConnected())
     return HTMLDivElement::InsertedInto(root);
 
@@ -795,8 +808,10 @@ MediaControlsImpl::ControlsState MediaControlsImpl::State() const {
   return ControlsState::kStopped;
 }
 
-void MediaControlsImpl::RemovedFrom(ContainerNode*) {
+void MediaControlsImpl::RemovedFrom(ContainerNode& insertion_point) {
   DCHECK(!MediaElement().isConnected());
+
+  HTMLDivElement::RemovedFrom(insertion_point);
 
   // TODO(mlamouri): we hide show the controls instead of having
   // HTMLMediaElement do it.
@@ -1411,7 +1426,7 @@ void MediaControlsImpl::OnAccessibleFocus() {
   MaybeShow();
 }
 
-void MediaControlsImpl::DefaultEventHandler(Event* event) {
+void MediaControlsImpl::DefaultEventHandler(Event& event) {
   HTMLDivElement::DefaultEventHandler(event);
 
   // Do not handle events to not interfere with the rest of the page if no
@@ -1423,7 +1438,7 @@ void MediaControlsImpl::DefaultEventHandler(Event* event) {
   // event, to allow the hide-timer to do the right thing when it fires.
   // FIXME: Preferably we would only do this when we're actually handling the
   // event here ourselves.
-  bool is_touch_event = IsTouchEvent(event);
+  bool is_touch_event = IsTouchEvent(&event);
   hide_timer_behavior_flags_ |=
       is_touch_event ? kIgnoreControlsHover : kIgnoreNone;
 
@@ -1431,46 +1446,46 @@ void MediaControlsImpl::DefaultEventHandler(Event* event) {
   // random behavior. The expect behaviour for touch is that a tap will show the
   // controls and they will hide when the timer to hide fires.
   if (is_touch_event)
-    HandleTouchEvent(event);
+    HandleTouchEvent(&event);
 
-  if (event->type() == EventTypeNames::mouseover && !is_touch_event)
+  if (event.type() == EventTypeNames::mouseover && !is_touch_event)
     is_touch_interaction_ = false;
 
-  if ((event->type() == EventTypeNames::pointerover ||
-       event->type() == EventTypeNames::pointermove ||
-       event->type() == EventTypeNames::pointerout) &&
+  if ((event.type() == EventTypeNames::pointerover ||
+       event.type() == EventTypeNames::pointermove ||
+       event.type() == EventTypeNames::pointerout) &&
       !is_touch_interaction_) {
-    HandlePointerEvent(event);
+    HandlePointerEvent(&event);
   }
 
   // If the user is interacting with the controls via the keyboard, don't hide
   // the controls. This will fire when the user tabs between controls (focusin)
   // or when they seek either the timeline or volume sliders (input).
-  if (event->type() == EventTypeNames::focusin ||
-      event->type() == EventTypeNames::input) {
+  if (event.type() == EventTypeNames::focusin ||
+      event.type() == EventTypeNames::input) {
     ResetHideMediaControlsTimer();
   }
 
-  if (event->IsKeyboardEvent() &&
+  if (event.IsKeyboardEvent() &&
       !IsSpatialNavigationEnabled(GetDocument().GetFrame())) {
-    const String& key = ToKeyboardEvent(event)->key();
-    if (key == "Enter" || ToKeyboardEvent(event)->keyCode() == ' ') {
+    const String& key = ToKeyboardEvent(event).key();
+    if (key == "Enter" || ToKeyboardEvent(event).keyCode() == ' ') {
       if (IsModern()) {
-        overlay_play_button_->OnMediaKeyboardEvent(event);
+        overlay_play_button_->OnMediaKeyboardEvent(&event);
       } else {
-        play_button_->OnMediaKeyboardEvent(event);
+        play_button_->OnMediaKeyboardEvent(&event);
       }
       return;
     }
     if (key == "ArrowLeft" || key == "ArrowRight" || key == "Home" ||
         key == "End") {
-      timeline_->OnMediaKeyboardEvent(event);
+      timeline_->OnMediaKeyboardEvent(&event);
       return;
     }
     // We don't allow the user to change the volume on modern media controls.
     if (!IsModern() && (key == "ArrowDown" || key == "ArrowUp")) {
       for (int i = 0; i < 5; i++)
-        volume_slider_->OnMediaKeyboardEvent(event);
+        volume_slider_->OnMediaKeyboardEvent(&event);
       return;
     }
   }
@@ -1705,12 +1720,18 @@ void MediaControlsImpl::OnLoadedMetadata() {
 
 void MediaControlsImpl::OnEnteredFullscreen() {
   fullscreen_button_->SetIsFullscreen(true);
+  if (display_cutout_fullscreen_button_)
+    display_cutout_fullscreen_button_->SetIsWanted(true);
+
   StopHideMediaControlsTimer();
   StartHideMediaControlsTimer();
 }
 
 void MediaControlsImpl::OnExitedFullscreen() {
   fullscreen_button_->SetIsFullscreen(false);
+  if (display_cutout_fullscreen_button_)
+    display_cutout_fullscreen_button_->SetIsWanted(false);
+
   StopHideMediaControlsTimer();
   StartHideMediaControlsTimer();
 }
@@ -2065,6 +2086,7 @@ void MediaControlsImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(download_iph_manager_);
   visitor->Trace(media_button_panel_);
   visitor->Trace(loading_panel_);
+  visitor->Trace(display_cutout_fullscreen_button_);
   MediaControls::Trace(visitor);
   HTMLDivElement::Trace(visitor);
 }

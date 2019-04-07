@@ -25,25 +25,24 @@ namespace device {
 class OpenVRWrapper;
 struct OpenVRGamepadState;
 
-class OpenVRRenderLoop : public base::Thread, mojom::VRPresentationProvider {
+class OpenVRRenderLoop : public base::Thread,
+                         mojom::XRPresentationProvider,
+                         mojom::XRFrameDataProvider,
+                         mojom::IsolatedXRGamepadProvider {
  public:
   using RequestSessionCallback =
-      base::OnceCallback<void(bool result,
-                              mojom::VRSubmitFrameClientRequest,
-                              mojom::VRPresentationProviderPtrInfo,
-                              mojom::VRDisplayFrameTransportOptionsPtr)>;
+      base::OnceCallback<void(bool result, mojom::XRSessionPtr)>;
 
-  OpenVRRenderLoop(
-      base::RepeatingCallback<void(OpenVRGamepadState)> update_gamepad);
+  OpenVRRenderLoop();
   ~OpenVRRenderLoop() override;
 
   void RequestSession(base::OnceCallback<void()> on_presentation_ended,
-                      mojom::XRDeviceRuntimeSessionOptionsPtr options,
+                      mojom::XRRuntimeSessionOptionsPtr options,
                       RequestSessionCallback callback);
   void ExitPresent();
   base::WeakPtr<OpenVRRenderLoop> GetWeakPtr();
 
-  // VRPresentationProvider overrides:
+  // XRPresentationProvider overrides:
   void SubmitFrameMissing(int16_t frame_index, const gpu::SyncToken&) override;
   void SubmitFrame(int16_t frame_index,
                    const gpu::MailboxHolder& mailbox,
@@ -58,7 +57,9 @@ class OpenVRRenderLoop : public base::Thread, mojom::VRPresentationProvider {
                          const gfx::RectF& right_bounds,
                          const gfx::Size& source_size) override;
   void GetFrameData(
-      VRPresentationProvider::GetFrameDataCallback callback) override;
+      XRFrameDataProvider::GetFrameDataCallback callback) override;
+
+  void RequestGamepadProvider(mojom::IsolatedXRGamepadProviderRequest request);
 
  private:
   // base::Thread overrides:
@@ -67,6 +68,10 @@ class OpenVRRenderLoop : public base::Thread, mojom::VRPresentationProvider {
 
   void ClearPendingFrame();
   void UpdateControllerState();
+
+  // IsolatedXRGamepadProvider
+  void RequestUpdate(mojom::IsolatedXRGamepadProvider::RequestUpdateCallback
+                         callback) override;
 
   mojom::VRPosePtr GetPose();
   std::vector<mojom::XRInputSourceStatePtr> GetInputState(
@@ -94,11 +99,15 @@ class OpenVRRenderLoop : public base::Thread, mojom::VRPresentationProvider {
   gfx::RectF right_bounds_;
   gfx::Size source_size_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
-  mojom::VRSubmitFrameClientPtr submit_client_;
+  mojom::XRPresentationClientPtr submit_client_;
   base::RepeatingCallback<void(OpenVRGamepadState)> update_gamepad_;
   base::OnceCallback<void()> on_presentation_ended_;
+  mojom::IsolatedXRGamepadProvider::RequestUpdateCallback gamepad_callback_;
   std::unique_ptr<OpenVRWrapper> openvr_;
-  mojo::Binding<mojom::VRPresentationProvider> binding_;
+  mojo::Binding<mojom::XRPresentationProvider> presentation_binding_;
+  mojo::Binding<mojom::XRFrameDataProvider> frame_data_binding_;
+  mojo::Binding<mojom::IsolatedXRGamepadProvider> gamepad_provider_;
+
   base::WeakPtrFactory<OpenVRRenderLoop> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(OpenVRRenderLoop);

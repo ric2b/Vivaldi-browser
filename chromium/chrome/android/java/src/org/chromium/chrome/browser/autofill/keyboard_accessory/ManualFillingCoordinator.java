@@ -4,11 +4,12 @@
 
 package org.chromium.chrome.browser.autofill.keyboard_accessory;
 
+import android.support.annotation.Nullable;
 import android.view.ViewStub;
 
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryData.Provider;
+import org.chromium.ui.DropdownPopupWindow;
 import org.chromium.ui.base.WindowAndroid;
 
 /**
@@ -23,20 +24,19 @@ public class ManualFillingCoordinator {
     private final ManualFillingMediator mMediator = new ManualFillingMediator();
 
     /**
-     * Creates a the manual filling controller.
-     * @param windowAndroid The window needed to set up the sub components.
+     * Initializes the manual filling component. Calls to this class are NoOps until
+     * {@link #initialize(WindowAndroid, ViewStub, ViewStub)} is called.
+     * @param windowAndroid The window needed to listen to the keyboard and to connect to activity.
      * @param keyboardAccessoryStub The view stub for keyboard accessory bar.
      * @param accessorySheetStub The view stub for the keyboard accessory bottom sheet.
      */
-    public ManualFillingCoordinator(WindowAndroid windowAndroid, ViewStub keyboardAccessoryStub,
+    public void initialize(WindowAndroid windowAndroid, ViewStub keyboardAccessoryStub,
             ViewStub accessorySheetStub) {
-        assert windowAndroid.getActivity().get() != null;
         KeyboardAccessoryCoordinator keyboardAccessory =
-                new KeyboardAccessoryCoordinator(windowAndroid, keyboardAccessoryStub, mMediator);
+                new KeyboardAccessoryCoordinator(keyboardAccessoryStub, mMediator);
         AccessorySheetCoordinator accessorySheet = new AccessorySheetCoordinator(
                 accessorySheetStub, keyboardAccessory::getPageChangeListener);
-        mMediator.initialize(keyboardAccessory, accessorySheet,
-                (ChromeActivity) windowAndroid.getActivity().get());
+        mMediator.initialize(keyboardAccessory, accessorySheet, windowAndroid);
     }
 
     /**
@@ -55,26 +55,50 @@ public class ManualFillingCoordinator {
     }
 
     /**
+     * Ensures that keyboard accessory and keyboard are hidden and reset.
+     */
+    public void dismiss() {
+        mMediator.dismiss();
+    }
+
+    /**
+     * Notifies the component that a popup window exists so it can be dismissed if necessary.
+     * @param popup A {@link DropdownPopupWindow} that might be dismissed later.
+     */
+    public void notifyPopupAvailable(DropdownPopupWindow popup) {
+        mMediator.notifyPopupOpened(popup);
+    }
+
+    /**
      * Requests to close the active tab in the keyboard accessory. If there is no active tab, this
      * is a NoOp.
      */
     public void closeAccessorySheet() {
-        mMediator.getKeyboardAccessory().closeActiveTab();
+        mMediator.onCloseAccessorySheet();
     }
 
     /**
-     * Tries to reopen the keyboard which will implicitly show the keyboard accessory bar again.
+     * Opens the keyboard which implicitly dismisses the sheet. Without open sheet, this is a NoOp.
      */
-    public void openKeyboard() {
-        mMediator.onOpenKeyboard();
+    public void swapSheetWithKeyboard() {
+        mMediator.swapSheetWithKeyboard();
     }
 
-    void registerActionProvider(Provider<KeyboardAccessoryData.Action> actionProvider) {
+    void registerActionProvider(
+            KeyboardAccessoryData.PropertyProvider<KeyboardAccessoryData.Action> actionProvider) {
         mMediator.registerActionProvider(actionProvider);
     }
 
     void registerPasswordProvider(Provider<KeyboardAccessoryData.Item> itemProvider) {
         mMediator.registerPasswordProvider(itemProvider);
+    }
+
+    public void onResume() {
+        mMediator.resume();
+    }
+
+    public void onPause() {
+        mMediator.pause();
     }
 
     // TODO(fhorschig): Should be @VisibleForTesting.
@@ -83,7 +107,7 @@ public class ManualFillingCoordinator {
      * the keyboard accessory (e.g. by providing suggestions or actions).
      * @return The coordinator of the Keyboard accessory component.
      */
-    public KeyboardAccessoryCoordinator getKeyboardAccessory() {
+    public @Nullable KeyboardAccessoryCoordinator getKeyboardAccessory() {
         return mMediator.getKeyboardAccessory();
     }
 

@@ -49,6 +49,7 @@
 #include "third_party/blink/renderer/core/editing/commands/simplify_markup_command.h"
 #include "third_party/blink/renderer/core/editing/commands/typing_command.h"
 #include "third_party/blink/renderer/core/editing/commands/undo_stack.h"
+#include "third_party/blink/renderer/core/editing/editing_behavior.h"
 #include "third_party/blink/renderer/core/editing/editing_style_utilities.h"
 #include "third_party/blink/renderer/core/editing/editing_tri_state.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -237,9 +238,12 @@ bool Editor::CanCopy() const {
   FrameSelection& selection = GetFrameSelection();
   if (!selection.IsAvailable())
     return false;
-  return selection.ComputeVisibleSelectionInDOMTreeDeprecated().IsRange() &&
+  frame_->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
+  const VisibleSelectionInFlatTree& visible_selection =
+      selection.ComputeVisibleSelectionInFlatTree();
+  return visible_selection.IsRange() &&
          !IsInPasswordFieldWithUnrevealedPassword(
-             selection.ComputeVisibleSelectionInDOMTree().Start());
+             ToPositionInDOMTree(visible_selection.Start()));
 }
 
 bool Editor::CanPaste() const {
@@ -406,12 +410,9 @@ EphemeralRange Editor::SelectedRange() {
 }
 
 void Editor::RespondToChangedContents(const Position& position) {
-  if (GetFrame().GetSettings() &&
-      GetFrame().GetSettings()->GetAccessibilityEnabled()) {
-    Node* node = position.AnchorNode();
-    if (AXObjectCache* cache =
-            GetFrame().GetDocument()->ExistingAXObjectCache())
-      cache->HandleEditableTextContentChanged(node);
+  if (AXObjectCache* cache =
+          GetFrame().GetDocument()->ExistingAXObjectCache()) {
+    cache->HandleEditableTextContentChanged(position.AnchorNode());
   }
 
   GetSpellChecker().RespondToChangedContents();
@@ -552,12 +553,12 @@ bool Editor::InsertParagraphSeparator() {
 }
 
 static void CountEditingEvent(ExecutionContext* execution_context,
-                              const Event* event,
+                              const Event& event,
                               WebFeature feature_on_input,
                               WebFeature feature_on_text_area,
                               WebFeature feature_on_content_editable,
                               WebFeature feature_on_non_node) {
-  EventTarget* event_target = event->target();
+  EventTarget* event_target = event.target();
   Node* node = event_target->ToNode();
   if (!node) {
     UseCounter::Count(execution_context, feature_on_non_node);
@@ -589,11 +590,11 @@ static void CountEditingEvent(ExecutionContext* execution_context,
 }
 
 void Editor::CountEvent(ExecutionContext* execution_context,
-                        const Event* event) {
+                        const Event& event) {
   if (!execution_context)
     return;
 
-  if (event->type() == EventTypeNames::textInput) {
+  if (event.type() == EventTypeNames::textInput) {
     CountEditingEvent(execution_context, event,
                       WebFeature::kTextInputEventOnInput,
                       WebFeature::kTextInputEventOnTextArea,
@@ -602,7 +603,7 @@ void Editor::CountEvent(ExecutionContext* execution_context,
     return;
   }
 
-  if (event->type() == EventTypeNames::webkitBeforeTextInserted) {
+  if (event.type() == EventTypeNames::webkitBeforeTextInserted) {
     CountEditingEvent(execution_context, event,
                       WebFeature::kWebkitBeforeTextInsertedOnInput,
                       WebFeature::kWebkitBeforeTextInsertedOnTextArea,
@@ -611,7 +612,7 @@ void Editor::CountEvent(ExecutionContext* execution_context,
     return;
   }
 
-  if (event->type() == EventTypeNames::webkitEditableContentChanged) {
+  if (event.type() == EventTypeNames::webkitEditableContentChanged) {
     CountEditingEvent(
         execution_context, event,
         WebFeature::kWebkitEditableContentChangedOnInput,
@@ -896,7 +897,7 @@ void Editor::SetMarkedTextMatchesAreHighlighted(bool flag) {
 
   are_marked_text_matches_highlighted_ = flag;
   GetFrame().GetDocument()->Markers().RepaintMarkers(
-      DocumentMarker::kTextMatch);
+      DocumentMarker::MarkerTypes::TextMatch());
 }
 
 void Editor::RespondToChangedSelection() {
@@ -927,7 +928,7 @@ void Editor::ToggleOverwriteModeEnabled() {
 void Editor::ReplaceSelection(const String& text) {
   DCHECK(!GetFrame().GetDocument()->NeedsLayoutTreeUpdate());
   bool select_replacement = Behavior().ShouldSelectReplacement();
-  bool smart_replace = true;
+  bool smart_replace = false;
   ReplaceSelectionWithText(text, select_replacement, smart_replace,
                            InputEvent::InputType::kInsertReplacementText);
 }

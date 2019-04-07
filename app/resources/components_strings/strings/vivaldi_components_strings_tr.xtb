@@ -16,12 +16,10 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1640244768702815859"><ph name="BEGIN_LINK" />Sitenin ana sayfasını ziyaret etmeyi deneyin<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Desteklenmeyen protokol</translation>
-<translation id="1676269943528358898"><ph name="SITE" /> normal olarak, bilgilerinizi korumak için şifreleme kullanır. Vivaldi bu kez <ph name="SITE" /> web sitesine bağlanmaya çalıştığında, web sitesi olağandışı ve yanlış kimlik bilgileri gönderdi. Bu durum bir saldırgan <ph name="SITE" /> web sitesini taklit etmeye çalıştığında ya da Wi-Fi oturum açma ekranı bağlantıyı kestiğinde meydana gelir. Bilgileriniz hala güvende; çünkü Vivaldi herhangi bir veri alışverişi olmadan önce bağlantıyı kesti.</translation>
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">Bir web sayfasının kaynak kodunu görüntülüyorsunuz</translation>
 <translation id="1734878702283171397">Sistem yöneticisiyle iletişime geçmeyi deneyin.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windows Ağ Tanılama'yı çalıştırmayı deneyin<ph name="END_LINK" />.</translation>
-<translation id="1789575671122666129">Pop-up'lar</translation>
 <translation id="1834321415901700177">Bu site zararlı programlar içeriyor</translation>
 <translation id="1916770123977586577">Güncellenen ayarlarınızı bu siteye uygulamak için sayfayı yeniden yükleyin</translation>
 <translation id="1919345977826869612">Reklamlar</translation>
@@ -29,11 +27,11 @@
 <translation id="1974060860693918893">Gelişmiş</translation>
 <translation id="2030481566774242610">Demek istediğiniz şey <ph name="LINK" /> ifadesi mi?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proxy'yi ve güvenlik duvarını kontrol edin<ph name="END_LINK" /></translation>
-<translation id="2065985942032347596">Kimlik Doğrulaması Gerekli</translation>
 <translation id="2091887806945687916">Ses</translation>
 <translation id="2147827593068025794">Arka Plan Senkronizasyonu</translation>
 <translation id="2166378884831602661">Bu site güvenli bağlantı sağlayamıyor</translation>
 <translation id="2187317261103489799">Algıla (varsayılan)</translation>
+<translation id="2224337661447660594">İnternet bağlantısı yok</translation>
 <translation id="2230458221926704099"><ph name="BEGIN_LINK" />Tanılama uygulamasını<ph name="END_LINK" /> kullanarak bağlantınızı düzeltin</translation>
 <translation id="2292556288342944218">İnternet erişiminiz engellendi</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> için kullanıcı adı ve parola gerekiyor.</translation>
@@ -50,20 +48,14 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Dosyaya erişim reddedildi</translation>
 <translation id="2705137772291741111">Bu sitenin kaydedilen (önbelleğe alınan) kopyası okunamadı.</translation>
-<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Bağlantı Tanılayıcı Çalıştırılıyor<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Bağlantı sıfırlandı.</translation>
 <translation id="2826760142808435982">Bağlantı, anahtar değişim mekanizması olarak <ph name="KX" /> kullanılarak <ph name="CIPHER" /> ile şifrelenip kimliği doğrulanmıştır.</translation>
 <translation id="2856444702002559011">Saldırganlar <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> üzerinden bilgilerinizi çalmaya çalışıyor olabilir (örneğin, parolalar, iletiler veya kredi kartları). <ph name="BEGIN_LEARN_MORE_LINK" />Daha fazlasını öğrenin<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Bir ağ değişikliği algılandı.</translation>
-<translation id="2948083400971632585">Ayarlar sayfasında bir bağlantı için yapılandırılmış herhangi bir vekil sunucuyu devre dışı bırakabilirsiniz.</translation>
-<translation id="298138621710431427">Bunu Düzeltmeme Yardım Et</translation>
 <translation id="2991571918955627853"><ph name="SITE" /> web sitesi HSTS kullandığından şu anda siteyi ziyaret edemezsiniz. Ağ hataları ve saldırılar genellikle geçici olduğundan bu sayfa muhtemelen daha sonra çalışacaktır.</translation>
 <translation id="3005723025932146533">Kaydedilen kopyayı göster</translation>
 <translation id="301521992641321250">Otomatik olarak engellendi</translation>
-<translation id="3041612393474885105">Sertifika Bilgisi</translation>
-<translation id="3093245981617870298">Çevrimdışısınız.</translation>
 <translation id="3109728660330352905">Bu sayfayı görüntüleme yetkiniz yok.</translation>
-<translation id="31207688938192855"><ph name="BEGIN_LINK" />Bağlantı Tanılayıcı'yı çalıştırmayı deneyin<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Bu sayfada güvenli şekilde gönderilemeyecek bir form bulunmaktadır. Gönderdiğiniz veriler, aktarım sırasında başkaları tarafından görüntülenebilir veya bir saldırgan tarafından sunucunun alacağı verileri değiştirmek amacıyla kullanılabilir.</translation>
 <translation id="3176929007561373547">Proxy sunucunun çalışıyor olduğundan emin olmak için
     proxy ayarlarınızı kontrol edin veya ağ yöneticinize danışın. Proxy sunucu
@@ -87,6 +79,7 @@
 <translation id="3681007416295224113">Sertifika bilgisi</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Proxy, güvenlik duvarı ve DNS yapılandırmasını kontrol edin<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Proxy sunucu kullanıyorsanız...</translation>
+<translation id="3950820424414687140">Oturum açın</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> engellendi</translation>
 <translation id="3987940399970879459">1 MB'tan az</translation>
 <translation id="4075732493274867456">İstemci ve sunucu, ortak bir SSL protokolü sürümünü veya şifre setini desteklemiyor.</translation>
@@ -100,7 +93,6 @@
 <translation id="4235360514405112390">Geçerli</translation>
 <translation id="4250431568374086873">Bu siteye bağlantınız tam olarak güvenli değil</translation>
 <translation id="4265872034478892965">Yöneticiniz tarafından izin verildi</translation>
-<translation id="4304224509867189079">Giriş Yap</translation>
 <translation id="4312866146174492540">Engelle (varsayılan)</translation>
 <translation id="4356973930735388585">Bu sitedeki saldırganlar bilgilerinizi (örneğin fotoğraflar, şifreler, mesajlar ve kredi kartları) çalacak veya silecek tehlikeli programları bilgisayarınıza yüklemeyi deneyebilir.</translation>
 <translation id="4408413947728134509">Çerezler <ph name="NUM_COOKIES" /></translation>
@@ -110,24 +102,19 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Eklentilerinizi devre dışı bırakmayı deneyin.</translation>
 <translation id="4592951414987517459"><ph name="DOMAIN" /> ile olan bağlantınız modern bir şifre seti kullanılarak şifrelendi.</translation>
-<translation id="4611292653554630842">Giriş yap</translation>
 <translation id="4690462567478992370">Geçersiz bir sertifika kullanmayı bırak</translation>
-<translation id="4690954380545377795">Google Hesabı'nıza erişimi kaybedebilir veya kimlik hırsızlığına maruz kalabilirsiniz. Vivaldi şifrenizi hemen değiştirmenizi önerir.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Bağlantınız kesildi</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows Ağ Tanılama Çalıştırılıyor<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Çalıştırılabilir Yol</translation>
 <translation id="4750917950439032686">Bilgileriniz (örneğin, şifreler veya kredi kartı numaraları) bu siteye gönderilirken gizli olur.</translation>
 <translation id="4764776831041365478"><ph name="URL" /> adresindeki web sayfası, geçici olarak kullanılamıyor veya kalıcı olarak yeni bir web adresine taşınmış olabilir.</translation>
-<translation id="4807049035289105102"><ph name="SITE" /> web sitesini şu anda ziyaret edemezsiniz çünkü web sitesi Vivaldi'nin işleyemediği karışık kimlik bilgileri gönderdi. Ağ hataları ve saldırılar genelikle geçicidir, yani bu sayfa muhtemelen daha sonra çalışacaktır.</translation>
-<translation id="4913131542719409934">Kimlik doğrulaması gerekiyor</translation>
 <translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">Uyarıları yeniden etkinleştir</translation>
 <translation id="5023310440958281426">Yöneticinizin politikalarını inceleyin</translation>
 <translation id="5039804452771397117">İzin ver</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Proxy adresini kontrol edin<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bit)</translation>
-<translation id="522700295135997067">Bu site az önce şifrenizi çalmış olabilir</translation>
 <translation id="5287240709317226393">Çerezleri göster</translation>
 <translation id="5355557959165512791">Sertifikası iptal edildiği için <ph name="SITE" /> sitesini şu anda ziyaret edemezsiniz. Ağ hataları ve saldırılar genellikle geçici olduğundan, bu sayfa muhtemelen daha sonra çalışacaktır.</translation>
 <translation id="5386426401304769735">Bu sitenin sertifika zinciri, SHA-1 kullanılarak imzalanmış bir sertifika içeriyor.</translation>
@@ -154,7 +141,6 @@
 <translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 çerez kullanımda}other{# çerez kullanımda}}</translation>
 <translation id="5990559369517809815">Sunucuya gönderilen istekler bir eklenti tarafından engellendi.</translation>
 <translation id="6051221802930200923"><ph name="SITE" /> sitesi sertifika sabitleme yöntemi kullandığından siteyi şu anda ziyaret edemezsiniz. Ağ hataları ve saldırılar genellikle geçici olduğundan bu sayfa muhtemelen daha sonra çalışacaktır.</translation>
-<translation id="6080696365213338172">Yönetici tarafından sağlanmış bir sertifika kullanan içeriğe eriştiniz. <ph name="DOMAIN" /> alan adına sağladığınız verileri yöneticiniz görebilir ve bunlara müdahale edebilir.</translation>
 <translation id="6146055958333702838">Kabloları kontrol edin ve kullandığınız yönlendiricileri, modemleri
     veya diğer ağ cihazlarını yeniden başlatın.</translation>
 <translation id="614940544461990577">Aşağıdakileri deneyin:</translation>
@@ -171,7 +157,6 @@
 <translation id="6417515091412812850">Sertifikanın iptal edilip edilmediği kontrol edilemiyor.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> bağlanmayı reddetti.</translation>
 <translation id="6447842834002726250">Çerezler</translation>
-<translation id="6556239504065605927">Güvenli bağlantı</translation>
 <translation id="6569060085658103619">Bir eklenti sayfasını görüntülüyorsunuz</translation>
 <translation id="6657585470893396449">Parola</translation>
 <translation id="6685834062052613830">Çıkış yapın ve kurulumu tamamlayın</translation>
@@ -204,7 +189,7 @@
 <translation id="7800304661137206267">Bağlantı, ileti kimlik doğrulaması için <ph name="MAC" /> ve anahtar değişim mekanizması olarak <ph name="KX" /> kullanılarak <ph name="CIPHER" /> ile şifrelenmiştir.</translation>
 <translation id="7802523362929240268">Site yasaldır</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> normalde bilgilerinizi korumak için şifreleme kullanmaktadır. Vivaldi bu sefer <ph name="SITE" /> sitesine bağlanmayı denediğinde, web sitesi olağan dışı ve yanlış kimlik bilgileri gönderdi. Bir saldırgan <ph name="SITE" /> web sitesi gibi davranmaya çalışıyor olabilir ya da bir kablosuz ağ oturum açma ekranı bağlantıyı kesmiştir. Vivaldi herhangi bir veri alışverişinden önce bağlantıyı durdurduğu için bilgileriniz hâlâ güvendedir.</translation>
-<translation id="7878562273885520351">Parolanızın güvenliği ihlal edilmiş olabilir</translation>
+<translation id="7878562273885520351">Parolanızın güvenliği ihlal edilebilir</translation>
 <translation id="7951415247503192394">(32 bit)</translation>
 <translation id="8025119109950072390">Bu sitedeki saldırganlar sizi kandırarak yazılım yükleme veya kişisel bilgilerinizi (örneğin şifreler, telefon numaraları veya kredi kartları) ifşa etme gibi tehlikeli şeyler yaptırabilir.</translation>
 <translation id="8037357227543935929">Sor (varsayılan)</translation>
@@ -214,6 +199,7 @@
 <translation id="8150722005171944719"><ph name="URL" /> konumundaki dosya okunamıyor. Kaldırılmış ya da taşınmış olabilir veya dosya izinleri erişimi önlüyordur.</translation>
 <translation id="8184538546369750125">Genel varsayılanı kullan (İzin ver)</translation>
 <translation id="8205463626947051446">Site araya giren reklamlar gösterme eğiliminde</translation>
+<translation id="8211406090763984747">Bağlantı güvenli</translation>
 <translation id="8225771182978767009">Bu bilgisayarı kuran kişi bu siteyi engellemeyi seçmiş.</translation>
 <translation id="8241712895048303527">Bu sitede engelle</translation>
 <translation id="8288807391153049143">Sertifikayı göster</translation>
@@ -234,7 +220,6 @@
 <translation id="9169664750068251925">Bu sitede her zaman engelle</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> desteklenmeyen bir protokol kullanıyor.</translation>
 <translation id="9219103736887031265">Resimler</translation>
-<translation id="933612690413056017">İnternet bağlantısı yok</translation>
 <translation id="969892804517981540">Resmî Derleme</translation>
 <translation id="988159990683914416">Geliştirici Derlemesi</translation>
 </translationbundle>

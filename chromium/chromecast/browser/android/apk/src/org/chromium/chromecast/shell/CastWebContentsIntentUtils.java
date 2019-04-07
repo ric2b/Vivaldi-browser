@@ -89,10 +89,23 @@ public class CastWebContentsIntentUtils {
     static final String INTENT_EXTRA_WEB_CONTENTS =
             "com.google.android.apps.castshell.intent.extra.WEB_CONTENTS";
 
-    /** Key of extra value of the intent to start a web content, value is true is touch is enabled.
+    /** Key of extra value of the intent to start a web content, value is true if cast app supports
+     *  touch input.
      */
     static final String INTENT_EXTRA_TOUCH_INPUT_ENABLED =
             "com.google.android.apps.castshell.intent.extra.ENABLE_TOUCH";
+
+    /** Key of extra value of the intent to start a web content, value is true is if cast app is
+     *  a remote control app.
+     */
+    static final String INTENT_EXTRA_REMOTE_CONTROL_MODE =
+            "com.google.android.apps.castshell.intent.extra.REMOTE_CONTROL_MODE";
+
+    /** Key for extra value for intent to start web contents. true if the app should turn on the
+     * display. */
+    static final String INTENT_EXTRA_TURN_ON_SCREEN =
+            "com.google.android.apps.castshell.intent.extra.TURN_ON_SCREEN";
+
     /**
      * Key of extra value of the intent ACTION_REQUEST_VISIBILITY, value is visibility priority
      * (int).
@@ -270,13 +283,16 @@ public class CastWebContentsIntentUtils {
     }
 
     // CastWebContentsComponent.Receiver -> CastWebContentsActivity
-    public static Intent requestStartCastActivity(
-            Context context, WebContents webContents, boolean enableTouch, String instanceId) {
+    public static Intent requestStartCastActivity(Context context, WebContents webContents,
+            boolean enableTouch, boolean isRemoteControlMode, boolean turnOnScreen,
+            String instanceId) {
         Intent intent =
                 new Intent(Intent.ACTION_VIEW, null, context, CastWebContentsActivity.class);
         intent.putExtra(INTENT_EXTRA_URI, getInstanceUri(instanceId).toString());
         intent.putExtra(INTENT_EXTRA_WEB_CONTENTS, webContents);
         intent.putExtra(INTENT_EXTRA_TOUCH_INPUT_ENABLED, enableTouch);
+        intent.putExtra(INTENT_EXTRA_TURN_ON_SCREEN, turnOnScreen);
+        intent.putExtra(INTENT_EXTRA_REMOTE_CONTROL_MODE, isRemoteControlMode);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP
                 | Intent.FLAG_ACTIVITY_NO_ANIMATION);
         return intent;
@@ -284,14 +300,17 @@ public class CastWebContentsIntentUtils {
 
     // CastWebContentsComponent.Receiver -> Host activity of CastWebContentsFragment
     public static Intent requestStartCastFragment(WebContents webContents, String appId,
-            int visibilityPriority, boolean enableTouch, String instanceId) {
+            int visibilityPriority, boolean enableTouch, String instanceId,
+            boolean isRemoteControlMode, boolean turnOnScreen) {
         Intent intent = new Intent();
         intent.setAction(CastIntents.ACTION_SHOW_WEB_CONTENT);
         intent.putExtra(INTENT_EXTRA_URI, getInstanceUri(instanceId).toString());
         intent.putExtra(INTENT_EXTRA_APP_ID, appId);
         intent.putExtra(INTENT_EXTRA_VISIBILITY_PRIORITY, visibilityPriority);
         intent.putExtra(INTENT_EXTRA_TOUCH_INPUT_ENABLED, enableTouch);
+        intent.putExtra(INTENT_EXTRA_TURN_ON_SCREEN, turnOnScreen);
         intent.putExtra(INTENT_EXTRA_WEB_CONTENTS, webContents);
+        intent.putExtra(INTENT_EXTRA_REMOTE_CONTROL_MODE, isRemoteControlMode);
         return intent;
     }
 
@@ -349,6 +368,21 @@ public class CastWebContentsIntentUtils {
     // Used by ACTION_VIEW, ACTION_SHOW_WEB_CONTENT
     public static boolean isTouchable(Intent in) {
         return isTouchable(in.getExtras());
+    }
+
+    // Used by ACTION_SHOW_WEB_CONTENT
+    public static boolean isRemoteControlMode(Bundle bundle) {
+        return bundle.getBoolean(INTENT_EXTRA_REMOTE_CONTROL_MODE);
+    }
+
+    // Used by ACTION_SHOW_WEB_CONTENT
+    public static boolean isRemoteControlMode(Intent in) {
+        return isRemoteControlMode(in.getExtras());
+    }
+
+    // Used by ACTION_VIEW and ACTION_SHOW_WEB_CONTENT
+    public static boolean shouldTurnOnScreen(Intent intent) {
+        return intent.getBooleanExtra(INTENT_EXTRA_TURN_ON_SCREEN, true);
     }
 
     // CastWebContentsComponent -> CastWebContentsSurfaceHelper and host activity of

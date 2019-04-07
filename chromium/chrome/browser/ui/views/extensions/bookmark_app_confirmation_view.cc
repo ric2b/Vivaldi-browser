@@ -13,8 +13,8 @@
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_util.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/extensions/web_app_info_image_source.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -30,6 +30,12 @@
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/widget/widget.h"
+
+namespace {
+
+bool g_auto_accept_bookmark_app_for_testing = false;
+
+}  // namespace
 
 BookmarkAppConfirmationView::~BookmarkAppConfirmationView() {}
 
@@ -59,13 +65,12 @@ BookmarkAppConfirmationView::BookmarkAppConfirmationView(
                         views::GridLayout::kFixedSize, views::GridLayout::FIXED,
                         textfield_width, 0);
 
-  const int icon_size = layout_provider->IsHarmonyMode()
-                            ? extension_misc::EXTENSION_ICON_SMALL
-                            : extension_misc::EXTENSION_ICON_MEDIUM;
   views::ImageView* icon_image_view = new views::ImageView();
-  gfx::Size image_size(icon_size, icon_size);
+  gfx::Size image_size(extension_misc::EXTENSION_ICON_SMALL,
+                       extension_misc::EXTENSION_ICON_SMALL);
   gfx::ImageSkia image(
-      std::make_unique<WebAppInfoImageSource>(icon_size, web_app_info_.icons),
+      std::make_unique<WebAppInfoImageSource>(
+          extension_misc::EXTENSION_ICON_SMALL, web_app_info_.icons),
       image_size);
   icon_image_view->SetImageSize(image_size);
   icon_image_view->SetImage(image);
@@ -99,6 +104,9 @@ BookmarkAppConfirmationView::BookmarkAppConfirmationView(
   title_tf_->SelectAll(true);
   chrome::RecordDialogCreation(
       chrome::DialogIdentifier::BOOKMARK_APP_CONFIRMATION);
+
+  if (g_auto_accept_bookmark_app_for_testing)
+    Accept();
 }
 
 views::View* BookmarkAppConfirmationView::GetInitiallyFocusedView() {
@@ -163,6 +171,10 @@ void ShowBookmarkAppDialog(content::WebContents* web_contents,
   constrained_window::ShowWebModalDialogViews(
       new BookmarkAppConfirmationView(web_app_info, std::move(callback)),
       web_contents);
+}
+
+void SetAutoAcceptBookmarkAppDialogForTesting(bool auto_accept) {
+  g_auto_accept_bookmark_app_for_testing = auto_accept;
 }
 
 }  // namespace chrome

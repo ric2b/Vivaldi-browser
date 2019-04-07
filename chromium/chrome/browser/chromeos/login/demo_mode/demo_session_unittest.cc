@@ -13,8 +13,10 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_image_loader_client.h"
+#include "components/session_manager/core/session_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -22,10 +24,13 @@ namespace chromeos {
 
 namespace {
 
-constexpr char kOfflineResourcesComponent[] = "demo_mode_resources";
+// TODO(michaelpg): Clean up tests for offline resources and differentiate
+// between the CrOS component and the preinstalled resources image.
+constexpr char kOfflineResourcesComponent[] = "demo-mode-resources";
 constexpr char kTestDemoModeResourcesMountPoint[] =
     "/run/imageloader/demo_mode_resources";
 constexpr char kDemoAppsImageFile[] = "android_demo_apps.squash";
+constexpr char kExternalExtensionsPrefsFile[] = "demo_extensions.json";
 
 void SetBoolean(bool* value) {
   *value = true;
@@ -113,18 +118,17 @@ class DemoSessionTest : public testing::Test {
   ~DemoSessionTest() override = default;
 
   void SetUp() override {
-    DemoSession::SetDemoModeEnrollmentTypeForTesting(
-        DemoSession::EnrollmentType::kOnline);
+    DemoSession::SetDemoConfigForTesting(DemoSession::DemoModeConfig::kOnline);
     auto image_loader_client = std::make_unique<TestImageLoaderClient>();
     image_loader_client_ = image_loader_client.get();
     chromeos::DBusThreadManager::GetSetterForTesting()->SetImageLoaderClient(
         std::move(image_loader_client));
+    session_manager_ = std::make_unique<session_manager::SessionManager>();
   }
 
   void TearDown() override {
     DemoSession::ShutDownIfInitialized();
-    DemoSession::SetDemoModeEnrollmentTypeForTesting(
-        DemoSession::EnrollmentType::kNone);
+    DemoSession::ResetDemoConfigForTesting();
     image_loader_client_ = nullptr;
     chromeos::DBusThreadManager::Shutdown();
   }
@@ -133,6 +137,7 @@ class DemoSessionTest : public testing::Test {
   // Points to the image loader client passed to the test DBusTestManager.
   TestImageLoaderClient* image_loader_client_ = nullptr;
   content::TestBrowserThreadBundle thread_bundle_;
+  std::unique_ptr<session_manager::SessionManager> session_manager_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(DemoSessionTest);
@@ -163,11 +168,27 @@ TEST_F(DemoSessionTest, StartInitiatesOfflineResourcesLoad) {
   EXPECT_TRUE(demo_session->offline_resources_loaded());
   EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
             demo_session->GetDemoAppsPath());
+  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
+            demo_session->GetExternalExtensionsPrefsPath());
+  EXPECT_EQ(
+      component_mount_point.AppendASCII("foo.txt"),
+      demo_session->GetOfflineResourceAbsolutePath(base::FilePath("foo.txt")));
+  EXPECT_EQ(component_mount_point.AppendASCII("foo/bar.txt"),
+            demo_session->GetOfflineResourceAbsolutePath(
+                base::FilePath("foo/bar.txt")));
+  EXPECT_EQ(
+      component_mount_point.AppendASCII("foo/"),
+      demo_session->GetOfflineResourceAbsolutePath(base::FilePath("foo/")));
+  EXPECT_TRUE(
+      demo_session->GetOfflineResourceAbsolutePath(base::FilePath("../foo/"))
+          .empty());
+  EXPECT_TRUE(
+      demo_session->GetOfflineResourceAbsolutePath(base::FilePath("foo/../bar"))
+          .empty());
 }
 
 TEST_F(DemoSessionTest, StartForDemoDeviceNotInDemoMode) {
-  DemoSession::SetDemoModeEnrollmentTypeForTesting(
-      DemoSession::EnrollmentType::kNone);
+  DemoSession::SetDemoConfigForTesting(DemoSession::DemoModeConfig::kNone);
   EXPECT_FALSE(DemoSession::Get());
   EXPECT_FALSE(DemoSession::StartIfInDemoMode());
   EXPECT_FALSE(DemoSession::Get());
@@ -176,8 +197,7 @@ TEST_F(DemoSessionTest, StartForDemoDeviceNotInDemoMode) {
 }
 
 TEST_F(DemoSessionTest, StartIfInOfflineEnrolledDemoMode) {
-  DemoSession::SetDemoModeEnrollmentTypeForTesting(
-      DemoSession::EnrollmentType::kOffline);
+  DemoSession::SetDemoConfigForTesting(DemoSession::DemoModeConfig::kOffline);
 
   EXPECT_FALSE(DemoSession::Get());
   DemoSession* demo_session = DemoSession::StartIfInDemoMode();
@@ -212,19 +232,19 @@ TEST_F(DemoSessionTest, PreloadOfflineResourcesIfInDemoMode) {
   EXPECT_TRUE(demo_session->offline_resources_loaded());
   EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
             demo_session->GetDemoAppsPath());
+  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
+            demo_session->GetExternalExtensionsPrefsPath());
 }
 
 TEST_F(DemoSessionTest, PreloadOfflineResourcesIfNotInDemoMode) {
-  DemoSession::SetDemoModeEnrollmentTypeForTesting(
-      DemoSession::EnrollmentType::kNone);
+  DemoSession::SetDemoConfigForTesting(DemoSession::DemoModeConfig::kNone);
   DemoSession::PreloadOfflineResourcesIfInDemoMode();
   EXPECT_FALSE(DemoSession::Get());
   EXPECT_EQ(std::list<std::string>(), image_loader_client_->pending_loads());
 }
 
 TEST_F(DemoSessionTest, PreloadOfflineResourcesIfInOfflineDemoMode) {
-  DemoSession::SetDemoModeEnrollmentTypeForTesting(
-      DemoSession::EnrollmentType::kOffline);
+  DemoSession::SetDemoConfigForTesting(DemoSession::DemoModeConfig::kOffline);
   DemoSession::PreloadOfflineResourcesIfInDemoMode();
 
   DemoSession* demo_session = DemoSession::Get();
@@ -271,6 +291,8 @@ TEST_F(DemoSessionTest, StartDemoSessionWhilePreloadingResources) {
   EXPECT_TRUE(demo_session->offline_resources_loaded());
   EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
             demo_session->GetDemoAppsPath());
+  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
+            demo_session->GetExternalExtensionsPrefsPath());
 }
 
 TEST_F(DemoSessionTest, StartDemoSessionAfterPreloadingResources) {
@@ -289,6 +311,8 @@ TEST_F(DemoSessionTest, StartDemoSessionAfterPreloadingResources) {
   EXPECT_TRUE(demo_session->offline_resources_loaded());
   EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
             demo_session->GetDemoAppsPath());
+  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
+            demo_session->GetExternalExtensionsPrefsPath());
 
   EXPECT_EQ(std::list<std::string>(), image_loader_client_->pending_loads());
 }
@@ -316,6 +340,8 @@ TEST_F(DemoSessionTest, EnsureOfflineResourcesLoadedAfterStart) {
   EXPECT_TRUE(demo_session->offline_resources_loaded());
   EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
             demo_session->GetDemoAppsPath());
+  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
+            demo_session->GetExternalExtensionsPrefsPath());
 }
 
 TEST_F(DemoSessionTest, EnsureOfflineResourcesLoadedAfterOfflineResourceLoad) {
@@ -338,6 +364,8 @@ TEST_F(DemoSessionTest, EnsureOfflineResourcesLoadedAfterOfflineResourceLoad) {
   EXPECT_TRUE(demo_session->offline_resources_loaded());
   EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
             demo_session->GetDemoAppsPath());
+  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
+            demo_session->GetExternalExtensionsPrefsPath());
 }
 
 TEST_F(DemoSessionTest, EnsureOfflineResourcesLoadedAfterPreload) {
@@ -365,6 +393,8 @@ TEST_F(DemoSessionTest, EnsureOfflineResourcesLoadedAfterPreload) {
   EXPECT_TRUE(demo_session->offline_resources_loaded());
   EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
             demo_session->GetDemoAppsPath());
+  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
+            demo_session->GetExternalExtensionsPrefsPath());
 }
 
 TEST_F(DemoSessionTest, MultipleEnsureOfflineResourcesLoaded) {

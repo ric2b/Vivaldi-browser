@@ -72,6 +72,7 @@
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_table_cell.h"
 #include "third_party/blink/renderer/core/svg/svg_image_element.h"
+#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -457,7 +458,7 @@ ContainerNode* HighestEditableRoot(const PositionInFlatTree& position) {
 }
 
 bool IsEditablePosition(const Position& position) {
-  const Node* node = position.ParentAnchoredEquivalent().AnchorNode();
+  const Node* node = position.ComputeContainerNode();
   if (!node)
     return false;
   DCHECK(node->GetDocument().IsActive());
@@ -1608,7 +1609,7 @@ DispatchEventResult DispatchBeforeInputInsertText(
       input_type, data, InputTypeIsCancelable(input_type),
       InputEvent::EventIsComposing::kNotComposing,
       ranges ? ranges : TargetRangesForInputEvent(*target));
-  return target->DispatchEvent(before_input_event);
+  return target->DispatchEvent(*before_input_event);
 }
 
 DispatchEventResult DispatchBeforeInputEditorCommand(
@@ -1620,7 +1621,7 @@ DispatchEventResult DispatchBeforeInputEditorCommand(
   InputEvent* before_input_event = InputEvent::CreateBeforeInput(
       input_type, g_null_atom, InputTypeIsCancelable(input_type),
       InputEvent::EventIsComposing::kNotComposing, ranges);
-  return target->DispatchEvent(before_input_event);
+  return target->DispatchEvent(*before_input_event);
 }
 
 DispatchEventResult DispatchBeforeInputDataTransfer(
@@ -1652,7 +1653,7 @@ DispatchEventResult DispatchBeforeInputDataTransfer(
         InputEvent::EventIsComposing::kNotComposing,
         TargetRangesForInputEvent(*target));
   }
-  return target->DispatchEvent(before_input_event);
+  return target->DispatchEvent(*before_input_event);
 }
 
 // |IsEmptyNonEditableNodeInEditable()| is introduced for fixing
@@ -1701,7 +1702,7 @@ static scoped_refptr<Image> ImageFromNode(const Node& node) {
 
   if (layout_object->IsCanvas()) {
     return ToHTMLCanvasElement(const_cast<Node&>(node))
-        .CopiedImage(kFrontBuffer, kPreferNoAcceleration);
+        .Snapshot(kFrontBuffer, kPreferNoAcceleration);
   }
 
   if (!layout_object->IsImage())

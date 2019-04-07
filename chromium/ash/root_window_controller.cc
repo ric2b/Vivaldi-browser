@@ -34,26 +34,21 @@
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shelf/shelf_window_targeter.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/shell_state.h"
 #include "ash/system/status_area_layout_manager.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "ash/system/unified/unified_system_tray.h"
-#include "ash/touch/touch_hud_debug.h"
-#include "ash/touch/touch_hud_projection.h"
 #include "ash/touch/touch_observer_hud.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
+#include "ash/window_factory.h"
 #include "ash/wm/always_on_top_controller.h"
 #include "ash/wm/container_finder.h"
 #include "ash/wm/fullscreen_window_finder.h"
 #include "ash/wm/lock_action_handler_layout_manager.h"
 #include "ash/wm/lock_layout_manager.h"
 #include "ash/wm/overlay_layout_manager.h"
-#include "ash/wm/panels/attached_panel_window_targeter.h"
-#include "ash/wm/panels/panel_layout_manager.h"
-#include "ash/wm/panels/panel_window_event_handler.h"
 #include "ash/wm/root_window_layout_manager.h"
 #include "ash/wm/stacking_controller.h"
 #include "ash/wm/switchable_windows.h"
@@ -73,8 +68,6 @@
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/client/window_types.h"
-#include "ui/aura/mus/window_mus.h"
-#include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_observer.h"
@@ -206,7 +199,6 @@ void ReparentAllWindows(aura::Window* src, aura::Window* dst) {
   // Set of windows to move.
   const int kContainerIdsToMove[] = {
       kShellWindowId_DefaultContainer,
-      kShellWindowId_PanelContainer,
       kShellWindowId_AlwaysOnTopContainer,
       kShellWindowId_SystemModalContainer,
       kShellWindowId_LockSystemModalContainer,
@@ -254,12 +246,9 @@ aura::Window* CreateContainer(int window_id,
                               const char* name,
                               aura::Window* parent) {
   aura::Window* window =
-      new aura::Window(nullptr, aura::client::WINDOW_TYPE_UNKNOWN);
+      window_factory::NewWindow(nullptr, aura::client::WINDOW_TYPE_UNKNOWN)
+          .release();
   window->Init(ui::LAYER_NOT_DRAWN);
-  if (Shell::GetAshConfig() != Config::CLASSIC) {
-    window->SetEventTargetingPolicy(
-        ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
-  }
   window->set_id(window_id);
   window->SetName(name);
   parent->AddChild(window);
@@ -269,15 +258,7 @@ aura::Window* CreateContainer(int window_id,
 }
 
 bool ShouldDestroyWindowInCloseChildWindows(aura::Window* window) {
-  if (!window->owned_by_parent())
-    return false;
-
-  if (Shell::GetAshConfig() != Config::MASH_DEPRECATED)
-    return true;
-
-  aura::WindowMus* window_mus = aura::WindowMus::Get(window);
-  return Shell::window_tree_client()->WasCreatedByThisClient(window_mus) ||
-         Shell::window_tree_client()->IsRoot(window_mus);
+  return window->owned_by_parent();
 }
 
 }  // namespace
@@ -348,14 +329,6 @@ void RootWindowController::InitializeShelf() {
   if (shelf_initialized_)
     return;
   shelf_initialized_ = true;
-
-  // TODO(jamescook): Pass |shelf_| into the constructors for these layout
-  // managers.
-  panel_layout_manager_->SetShelf(shelf_.get());
-
-  // TODO(jamescook): Eliminate this. Refactor AttachedPanelWidgetTargeter's
-  // access to Shelf.
-  Shell::Get()->NotifyShelfCreatedForRootWindow(GetRootWindow());
 
   shelf_->shelf_widget()->PostCreateShelf();
 }
@@ -500,10 +473,6 @@ void RootWindowController::CloseChildWindows() {
   // down associated layout managers.
   DeactivateKeyboard(keyboard::KeyboardController::Get());
 
-  // |panel_layout_manager_| needs to be shut down before windows are destroyed.
-  panel_layout_manager_->Shutdown();
-  panel_layout_manager_ = nullptr;
-
   shelf_->ShutdownShelfWidget();
 
   workspace_controller_.reset();
@@ -558,13 +527,7 @@ void RootWindowController::InitTouchHuds() {
   // Enable touch debugging features when each display is initialized.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kAshTouchHud))
-    set_touch_hud_debug(new TouchHudDebug(GetRootWindow()));
-
-  // TouchHudProjection manages its own lifetime.
-  if (command_line->HasSwitch(switches::kShowTaps) &&
-      !base::FeatureList::IsEnabled(features::kTapVisualizerApp)) {
-    touch_hud_projection_ = new TouchHudProjection(GetRootWindow());
-  }
+    set_touch_observer_hud(new TouchObserverHUD(GetRootWindow()));
 }
 
 aura::Window* RootWindowController::GetWindowForFullscreenMode() {
@@ -667,7 +630,6 @@ RootWindowController::RootWindowController(
       window_tree_host_(ash_host ? ash_host->AsWindowTreeHost()
                                  : window_tree_host),
       shelf_(std::make_unique<Shelf>()),
-      sidebar_(std::make_unique<Sidebar>()),
       lock_screen_action_background_controller_(
           LockScreenActionBackgroundController::Create()) {
   DCHECK((ash_host && !window_tree_host) || (!ash_host && window_tree_host));
@@ -695,8 +657,6 @@ void RootWindowController::Init(RootWindowType root_window_type) {
   shell->InitRootWindow(root_window);
 
   CreateContainers();
-  ShellPort::Get()->OnCreatedRootWindowContainers(this);
-
   CreateSystemWallpaper(root_window_type);
 
   InitLayoutManagers();
@@ -736,7 +696,6 @@ void RootWindowController::InitLayoutManagers() {
   DCHECK(!shelf_->shelf_widget());
   aura::Window* root = GetRootWindow();
   shelf_->CreateShelfWidget(root);
-  sidebar_->SetShelf(shelf_.get());
 
   root_window_layout_manager_ = new wm::RootWindowLayoutManager(root);
   root->SetLayoutManager(root_window_layout_manager_);
@@ -779,11 +738,6 @@ void RootWindowController::InitLayoutManagers() {
   always_on_top_controller_ =
       std::make_unique<AlwaysOnTopController>(always_on_top_container);
 
-  // Create Panel layout manager
-  aura::Window* panel_container = GetContainer(kShellWindowId_PanelContainer);
-  panel_layout_manager_ = new PanelLayoutManager(panel_container);
-  panel_container->SetLayoutManager(panel_layout_manager_);
-
   wm::WmSnapToPixelLayoutManager::InstallOnContainers(root);
 
   // Make it easier to resize windows that partially overlap the shelf. Must
@@ -794,21 +748,6 @@ void RootWindowController::InitLayoutManagers() {
   aura::Window* status_container = GetContainer(kShellWindowId_StatusContainer);
   status_container->SetEventTargeter(
       std::make_unique<ShelfWindowTargeter>(status_container, shelf_.get()));
-
-  panel_container_handler_ = std::make_unique<PanelWindowEventHandler>();
-  GetContainer(kShellWindowId_PanelContainer)
-      ->AddPreTargetHandler(panel_container_handler_.get());
-
-  // Install an AttachedPanelWindowTargeter on the panel container to make it
-  // easier to correctly target shelf buttons with touch.
-  gfx::Insets mouse_extend(-kResizeOutsideBoundsSize, -kResizeOutsideBoundsSize,
-                           -kResizeOutsideBoundsSize,
-                           -kResizeOutsideBoundsSize);
-  gfx::Insets touch_extend =
-      mouse_extend.Scale(kResizeOutsideBoundsScaleForTouch);
-  panel_container->SetEventTargeter(std::unique_ptr<ui::EventTargeter>(
-      new AttachedPanelWindowTargeter(panel_container, mouse_extend,
-                                      touch_extend, panel_layout_manager())));
 }
 
 void RootWindowController::CreateContainers() {
@@ -904,12 +843,6 @@ void RootWindowController::CreateContainers() {
   wm::SetSnapsChildrenToPhysicalPixelBoundary(shelf_container);
   shelf_container->SetProperty(::wm::kUsesScreenCoordinatesKey, true);
   shelf_container->SetProperty(kLockedToRootKey, true);
-
-  aura::Window* panel_container =
-      CreateContainer(kShellWindowId_PanelContainer, "PanelContainer",
-                      non_lock_screen_containers);
-  wm::SetSnapsChildrenToPhysicalPixelBoundary(panel_container);
-  panel_container->SetProperty(::wm::kUsesScreenCoordinatesKey, true);
 
   aura::Window* shelf_bubble_container =
       CreateContainer(kShellWindowId_ShelfBubbleContainer,

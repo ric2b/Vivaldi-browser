@@ -35,10 +35,10 @@ namespace variations {
 // There are three cases:
 // 1. Subresources request in renderer, it is implemented
 // in URLLoaderThrottleProviderImpl::CreateThrottles() by adding a
-// VariationsHeaderURLLoaderThrottle to a content::URLLoaderThrottle vector.
+// GoogleURLLoaderThrottle to a content::URLLoaderThrottle vector.
 // 2. Navigations/Downloads request in browser, it is implemented in
 // ChromeContentBrowserClient::CreateURLLoaderThrottles() by also adding a
-// VariationsHeaderURLLoaderThrottle to a content::URLLoaderThrottle vector.
+// GoogleURLLoaderThrottle to a content::URLLoaderThrottle vector.
 // 3. SimpleURLLoader in browser, it is implemented in a SimpleURLLoader wrapper
 // function variations::CreateSimpleURLLoaderWithVariationsHeaders().
 
@@ -99,6 +99,14 @@ VariationsHttpHeaderProvider::ForceVariationIds(
       return ForceIdsResult::INVALID_SWITCH_ENTRY;
   }
   return ForceIdsResult::SUCCESS;
+}
+
+void VariationsHttpHeaderProvider::AddObserver(Observer* observer) {
+  observer_list_.AddObserver(observer);
+}
+
+void VariationsHttpHeaderProvider::RemoveObserver(Observer* observer) {
+  observer_list_.RemoveObserver(observer);
 }
 
 void VariationsHttpHeaderProvider::ResetForTesting() {
@@ -205,6 +213,11 @@ void VariationsHttpHeaderProvider::UpdateVariationIDsHeaderValue() {
   // with such discrepancies.
   cached_variation_ids_header_ = GenerateBase64EncodedProto(false);
   cached_variation_ids_header_signed_in_ = GenerateBase64EncodedProto(true);
+
+  for (auto& observer : observer_list_) {
+    observer.VariationIdsHeaderUpdated(cached_variation_ids_header_,
+                                       cached_variation_ids_header_signed_in_);
+  }
 }
 
 std::string VariationsHttpHeaderProvider::GenerateBase64EncodedProto(
@@ -241,10 +254,10 @@ std::string VariationsHttpHeaderProvider::GenerateBase64EncodedProto(
   // This is the bottleneck for the creation of the header, so validate the size
   // here. Force a hard maximum on the ID count in case the Variations server
   // returns too many IDs and DOSs receiving servers with large requests.
-  DCHECK_LE(total_id_count, 10U);
+  DCHECK_LE(total_id_count, 20U);
   UMA_HISTOGRAM_COUNTS_100("Variations.Headers.ExperimentCount",
                            total_id_count);
-  if (total_id_count > 20)
+  if (total_id_count > 30)
     return std::string();
 
   std::string serialized;

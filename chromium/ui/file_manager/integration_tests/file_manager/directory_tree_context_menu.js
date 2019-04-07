@@ -121,19 +121,23 @@ function navigateWithDirectoryTree(windowId, path, rootLabel) {
  * Clicks context menu item of id in directory tree.
  */
 function clickDirectoryTreeContextMenuItem(windowId, path, id) {
+  const contextMenu = '#directory-tree-context-menu:not([hidden])';
+
   return remoteCall.callRemoteTestUtil('focus', windowId,
-      [`[full-path-for-testing="${path}"]`]).then(function() {
+      [`[full-path-for-testing="${path}"]`]).then(function(result) {
+    chrome.test.assertTrue(!!result, 'focus failed');
     // Right click photos directory.
     return remoteCall.callRemoteTestUtil('fakeMouseRightClick', windowId,
         [`[full-path-for-testing="${path}"]`]);
-  }).then(function() {
-    // Wait for context menu.
+  }).then(function(result) {
+    chrome.test.assertTrue(!!result, 'fakeMouseRightClick failed');
+    // Check: context menu item |id| should be shown enabled.
     return remoteCall.waitForElement(windowId,
-        `#directory-tree-context-menu > [command="#${id}"]:not([disabled])`);
+        `${contextMenu} [command="#${id}"]:not([disabled])`);
   }).then(function() {
-    // Click menu item.
+    // Click the menu item specified by |id|.
     return remoteCall.callRemoteTestUtil('fakeMouseClick', windowId,
-        [`#directory-tree-context-menu > [command="#${id}"]`]);
+        [`${contextMenu} [command="#${id}"]`]);
   });
 }
 
@@ -435,6 +439,70 @@ testcase.dirPasteWithoutChangingCurrent = function() {
 testcase.dirRenameWithContextMenu = function() {
   testPromise(renameDirectoryFromDirectoryTreeSuccessCase(
       false /* do not use keyboard shortcut */));
+};
+
+/**
+ * Tests that a child folder breadcrumbs is updated when renaming its parent
+ * folder. crbug.com/885328.
+ */
+testcase.dirRenameUpdateChildrenBreadcrumbs = function() {
+  let appId;
+  testPromise(
+      setupAndWaitUntilReady(null, RootPath.DOWNLOADS)
+          .then(function(results) {
+            appId = results.windowId;
+
+            // Add child-folder inside /photos/
+            return new addEntries(['local'], [new TestEntryInfo({
+                                    type: EntryType.DIRECTORY,
+                                    targetPath: 'photos/child-folder',
+                                    lastModifiedTime: 'Jan 1, 1980, 11:59 PM',
+                                    nameText: 'child-folder',
+                                    sizeText: '--',
+                                    typeText: 'Folder'
+                                  })]);
+          })
+          .then(function() {
+            // Navigate to child folder.
+            return remoteCall.navigateWithDirectoryTree(
+                appId, '/photos/child-folder', 'Downloads');
+          })
+          .then(function() {
+            // Rename parent folder.
+            return clickDirectoryTreeContextMenuItem(appId, '/photos', 'rename')
+                .then(function() {
+                  return remoteCall.waitForElement(appId, '.tree-row > input');
+                })
+                .then(function() {
+                  return remoteCall.callRemoteTestUtil(
+                      'inputText', appId, ['.tree-row > input', 'photos-new']);
+                })
+                .then(function() {
+                  const enterKey = [
+                    '.tree-row > input', 'Enter', 'Enter', false, false, false
+                  ];
+                  return remoteCall.callRemoteTestUtil(
+                      'fakeKeyDown', appId, enterKey);
+                })
+                .then(function(result) {
+                  chrome.test.assertTrue(result, 'Enter key failed');
+                });
+          })
+          .then(function() {
+            // Confirm that current directory is now /Downloads, because it
+            // can't find the previously selected folder
+            // /Downloads/photos/child-folder, since its path/parent has been
+            // renamed.
+            return remoteCall.waitUntilCurrentDirectoryIsChanged(
+                appId, '/Downloads');
+          })
+          .then(function() {
+            // Navigate to child-folder using the new path.
+            // |navigateWithDirectoryTree| already checks for breadcrumbs to
+            // match the path.
+            return remoteCall.navigateWithDirectoryTree(
+                appId, '/photos-new/child-folder', 'Downloads');
+          }));
 };
 
 /**

@@ -25,7 +25,7 @@ class BrailleControllerImpl : public BrailleController {
  public:
   static BrailleControllerImpl* GetInstance();
   std::unique_ptr<DisplayState> GetDisplayState() override;
-  void WriteDots(const std::vector<char>& cells,
+  void WriteDots(const std::vector<uint8_t>& cells,
                  unsigned int cols,
                  unsigned int rows) override;
   void AddObserver(BrailleObserver* observer) override;
@@ -78,7 +78,7 @@ class BrailleControllerImpl : public BrailleController {
   scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner_;
 
   // Manipulated on the UI thread.
-  base::ObserverList<BrailleObserver> observers_;
+  base::ObserverList<BrailleObserver>::Unchecked observers_;
 
   // Manipulated by the SequencedTaskRunner.
   base::FilePathWatcher file_path_watcher_;

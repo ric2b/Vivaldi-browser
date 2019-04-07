@@ -50,8 +50,6 @@ namespace {
 const char kCapability_UserID[] = "service_manager:user_id";
 const char kCapability_ClientProcess[] = "service_manager:client_process";
 const char kCapability_InstanceName[] = "service_manager:instance_name";
-const char kCapability_Singleton[] = "service_manager:singleton";
-const char kCapability_AllUsers[] = "service_manager:all_users";
 const char kCapability_ServiceManager[] = "service_manager:service_manager";
 
 bool Succeeded(mojom::ConnectResult result) {
@@ -113,20 +111,6 @@ InterfaceSet GetInterfacesToExpose(const InterfaceProviderSpec& source_spec,
 
 Identity CreateCatalogIdentity() {
   return Identity(catalog::mojom::kServiceName, mojom::kRootUserID);
-}
-
-InterfaceProviderSpec CreatePermissiveInterfaceProviderSpec() {
-  InterfaceProviderSpec spec;
-  InterfaceSet interfaces;
-  interfaces.insert("*");
-  spec.requires["*"] = std::move(interfaces);
-  return spec;
-}
-
-const InterfaceProviderSpec& GetPermissiveInterfaceProviderSpec() {
-  CR_DEFINE_STATIC_LOCAL(InterfaceProviderSpec, spec,
-                         (CreatePermissiveInterfaceProviderSpec()));
-  return spec;
 }
 
 const InterfaceProviderSpec& GetEmptyInterfaceProviderSpec() {
@@ -210,11 +194,13 @@ class ServiceManager::Instance
  public:
   Instance(service_manager::ServiceManager* service_manager,
            const Identity& identity,
-           const InterfaceProviderSpecMap& interface_provider_specs)
+           const InterfaceProviderSpecMap& interface_provider_specs,
+           const catalog::ServiceOptions& options)
       : service_manager_(service_manager),
         id_(GenerateUniqueID()),
         identity_(identity),
         interface_provider_specs_(interface_provider_specs),
+        options_(options),
         allow_any_application_(GetConnectionSpec().requires.count("*") == 1),
         pid_receiver_binding_(this),
         control_binding_(this),
@@ -491,6 +477,7 @@ class ServiceManager::Instance
     Identity target = in_target;
     mojom::ConnectResult result =
         ValidateConnectParams(&target, nullptr, nullptr, nullptr);
+
     if (!Succeeded(result)) {
       std::move(callback).Run(result, Identity());
       return;
@@ -605,7 +592,7 @@ class ServiceManager::Instance
         return mojom::ConnectResult::INVALID_ARGUMENT;
       }
       if (service_manager_->GetExistingInstance(target)) {
-        LOG(ERROR) << "Cannot client process matching existing identity:"
+        LOG(ERROR) << "Cannot find a client process matching existing identity:"
                    << "Name: " << target.name() << " User: "
                    << target.user_id() << " Instance: " << target.instance();
         return mojom::ConnectResult::INVALID_ARGUMENT;
@@ -622,8 +609,11 @@ class ServiceManager::Instance
     // whether this instance is allowed to connect using:
     // - non-null client process info.
     bool skip_user_check =
-        HasCapability(connection_spec, kCapability_Singleton) ||
-        HasCapability(connection_spec, kCapability_AllUsers) ||
+        options_.instance_sharing ==
+            catalog::ServiceOptions::InstanceSharingType::SINGLETON ||
+        options_.instance_sharing ==
+            catalog::ServiceOptions::InstanceSharingType::
+                SHARED_INSTANCE_ACROSS_USERS ||
         HasCapability(connection_spec, kCapability_UserID);
 
     if (!skip_user_check && target.user_id() != identity_.user_id() &&
@@ -727,6 +717,7 @@ class ServiceManager::Instance
   const uint32_t id_;
   Identity identity_;
   const InterfaceProviderSpecMap interface_provider_specs_;
+  const catalog::ServiceOptions options_;
   const bool allow_any_application_;
 #if !defined(OS_IOS)
   std::unique_ptr<ServiceProcessLauncher> runner_;
@@ -881,9 +872,9 @@ ServiceManager::ServiceManager(std::unique_ptr<ServiceProcessLauncherFactory>
   InterfaceProviderSpecMap specs;
   specs[mojom::kServiceManager_ConnectorSpec] = std::move(spec);
 
-  service_manager_instance_ =
-      CreateInstance(Identity(), CreateServiceManagerIdentity(),
-                     InstanceType::kSingleton, std::move(specs));
+  service_manager_instance_ = CreateInstance(
+      Identity(), CreateServiceManagerIdentity(), InstanceType::kSingleton,
+      std::move(specs), catalog::ServiceOptions());
 
   mojom::ServicePtr service;
   service_context_.reset(new ServiceContext(std::make_unique<ServiceImpl>(this),
@@ -949,15 +940,14 @@ void ServiceManager::Connect(std::unique_ptr<ConnectParams> params) {
   const InterfaceProviderSpecMap& interface_provider_specs =
       entry->interface_provider_specs();
 
-  auto it = interface_provider_specs.find(mojom::kServiceManager_ConnectorSpec);
-  const InterfaceProviderSpec& connection_spec =
-      it != interface_provider_specs.end()
-          ? it->second
-          : GetPermissiveInterfaceProviderSpec();
+  const catalog::ServiceOptions& options = entry->options();
 
-  bool all_user_instance = HasCapability(connection_spec, kCapability_AllUsers);
+  bool all_user_instance = entry->options().instance_sharing ==
+                           catalog::ServiceOptions::InstanceSharingType::
+                               SHARED_INSTANCE_ACROSS_USERS;
   bool singleton_instance =
-      HasCapability(connection_spec, kCapability_Singleton);
+      entry->options().instance_sharing ==
+      catalog::ServiceOptions::InstanceSharingType::SINGLETON;
   const Identity original_target(params->target());
 
   // Services that request "all_users" class from the Service Manager are
@@ -993,8 +983,9 @@ void ServiceManager::Connect(std::unique_ptr<ConnectParams> params) {
   params->set_target(target);
 
   bool result_interface_provider_specs_empty = interface_provider_specs.empty();
-  Instance* instance = CreateInstance(source_identity_for_creation, target,
-                                      instance_type, interface_provider_specs);
+  Instance* instance =
+      CreateInstance(source_identity_for_creation, target, instance_type,
+                     interface_provider_specs, options);
 
   // Below are various paths through which a new Instance can be bound to a
   // Service proxy.
@@ -1113,9 +1104,9 @@ void ServiceManager::InitCatalog(mojom::ServicePtr catalog) {
   InterfaceProviderSpecMap specs;
   specs[mojom::kServiceManager_ConnectorSpec] = std::move(spec);
 
-  Instance* instance =
-      CreateInstance(CreateServiceManagerIdentity(), CreateCatalogIdentity(),
-                     InstanceType::kSingleton, std::move(specs));
+  Instance* instance = CreateInstance(
+      CreateServiceManagerIdentity(), CreateCatalogIdentity(),
+      InstanceType::kSingleton, std::move(specs), catalog::ServiceOptions());
   instance->StartWithService(std::move(catalog));
 }
 
@@ -1199,10 +1190,11 @@ ServiceManager::Instance* ServiceManager::CreateInstance(
     const Identity& source,
     const Identity& target,
     InstanceType instance_type,
-    const InterfaceProviderSpecMap& specs) {
+    const InterfaceProviderSpecMap& specs,
+    const catalog::ServiceOptions& options) {
   CHECK(target.user_id() != mojom::kInheritUserID);
 
-  auto instance = std::make_unique<Instance>(this, target, std::move(specs));
+  auto instance = std::make_unique<Instance>(this, target, specs, options);
   Instance* raw_instance = instance.get();
 
   instances_.insert(std::make_pair(raw_instance, std::move(instance)));

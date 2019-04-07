@@ -5,7 +5,7 @@
 #include "ui/aura/mus/text_input_client_impl.h"
 
 #include "base/strings/utf_string_conversions.h"
-#include "services/ui/public/interfaces/ime/ime.mojom.h"
+#include "services/ws/public/mojom/ime/ime.mojom.h"
 #include "ui/aura/mus/input_method_mus.h"
 #include "ui/base/ime/text_input_client.h"
 
@@ -20,8 +20,8 @@ TextInputClientImpl::TextInputClientImpl(
 
 TextInputClientImpl::~TextInputClientImpl() {}
 
-ui::mojom::TextInputClientPtr TextInputClientImpl::CreateInterfacePtrAndBind() {
-  ui::mojom::TextInputClientPtr ptr;
+ws::mojom::TextInputClientPtr TextInputClientImpl::CreateInterfacePtrAndBind() {
+  ws::mojom::TextInputClientPtr ptr;
   binding_.Bind(mojo::MakeRequest(&ptr));
   return ptr;
 }

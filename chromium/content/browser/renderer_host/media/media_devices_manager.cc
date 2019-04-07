@@ -666,7 +666,7 @@ void MediaDevicesManager::OnPermissionsCheckDone(
       internal_requested_types,
       base::BindOnce(&MediaDevicesManager::OnDevicesEnumerated,
                      weak_factory_.GetWeakPtr(), requested_types,
-                     request_video_input_capabilities, base::Passed(&callback),
+                     request_video_input_capabilities, std::move(callback),
                      std::move(salt_and_origin), has_permissions));
 }
 
@@ -693,7 +693,7 @@ void MediaDevicesManager::OnDevicesEnumerated(
     }
   }
 
-  std::move(callback).Run(std::move(result),
+  std::move(callback).Run(result,
                           video_input_capabilities_requested
                               ? ComputeVideoInputCapabilities(
                                     enumeration[MEDIA_DEVICE_TYPE_VIDEO_INPUT],
@@ -829,7 +829,10 @@ void MediaDevicesManager::UpdateSnapshot(
   if (old_snapshot.size() != new_snapshot.size() ||
       !std::equal(new_snapshot.begin(), new_snapshot.end(),
                   old_snapshot.begin(),
-                  ignore_group_id ? operator== : EqualDeviceAndGroupID)) {
+                  ignore_group_id
+                      ? [](const MediaDeviceInfo& lhs,
+                           const MediaDeviceInfo& rhs) { return lhs == rhs; }
+                      : EqualDeviceAndGroupID)) {
     // Prevent sending notifications until group IDs are updated using
     // a heuristic in ProcessRequests().
     // TODO(crbug.com/627793): Remove |is_video_with_group_ids| and the

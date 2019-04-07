@@ -12,7 +12,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #import "ios/net/cookies/cookie_store_ios_persistent.h"
 #import "ios/web/public/web_client.h"
 #include "ios/web/shell/shell_network_delegate.h"
@@ -81,10 +81,11 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
         new net::SQLitePersistentCookieStore(
             cookie_path, network_task_runner_,
             base::CreateSequencedTaskRunnerWithTraits(
-                {base::MayBlock(), base::TaskPriority::BACKGROUND}),
+                {base::MayBlock(), base::TaskPriority::BEST_EFFORT}),
             true, nullptr);
     std::unique_ptr<net::CookieStoreIOS> cookie_store(
-        new net::CookieStoreIOSPersistent(persistent_store.get()));
+        new net::CookieStoreIOSPersistent(persistent_store.get(),
+                                          net_log_.get()));
     storage_->set_cookie_store(std::move(cookie_store));
 
     std::string user_agent =
@@ -109,7 +110,7 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
         std::make_unique<net::TransportSecurityPersister>(
             url_request_context_->transport_security_state(), base_path_,
             base::CreateSequencedTaskRunnerWithTraits(
-                {base::MayBlock(), base::TaskPriority::BACKGROUND}));
+                {base::MayBlock(), base::TaskPriority::BEST_EFFORT}));
     storage_->set_channel_id_service(std::make_unique<net::ChannelIDService>(
         new net::DefaultChannelIDStore(nullptr)));
     storage_->set_http_server_properties(

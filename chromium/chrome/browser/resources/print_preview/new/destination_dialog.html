@@ -37,8 +37,8 @@
           height: 100%;
         };
         --cr-dialog-body: {
-          -webkit-padding-end: 16px;
-          -webkit-padding-start: 16px;
+          padding-inline-end: 16px;
+          padding-inline-start: 16px;
           padding-bottom: 0;
           padding-top: 0;
         };
@@ -47,25 +47,25 @@
         };
       }
 
-      :host .user-info {
+      .user-info {
         font-size: calc(13/15 * 1em);
         line-height: normal;
         margin-top: 14px;
       }
 
-      :host .user-info .account-select-label {
-        -webkit-padding-end: 18px;
+      .user-info .account-select-label {
+        padding-inline-end: 18px;
       }
 
-      :host .user-info .account-select {
+      .user-info .account-select {
         width: auto
       }
 
-      :host #dialog #promos {
+      #dialog #promos {
         padding: 0;
       }
 
-      :host #dialog .promo {
+      #dialog .promo {
         align-items: center;
         background-color: #f5f5f5;
         border-top: 1px solid #e7e7e7;
@@ -74,46 +74,64 @@
         padding: 14px 17px;
       }
 
-      :host #cloudprintPromo .promo-text {
+      #cloudprintPromo .promo-text {
         flex: 1;
       }
 
-      :host #cloudprintPromo .icon {
-        -webkit-margin-end: 12px;
+      #cloudprintPromo .icon {
         display: block;
         height: 24px;
+        margin-inline-end: 12px;
         width: 24px;
       }
 
-      :host #cloudprintPromo .close-button {
-        -webkit-margin-start: 12px;
+      #cloudprintPromo button {
+        background-color: #f5f5f5;
         background-image: -webkit-image-set(
           url(chrome://theme/IDR_CLOSE_DIALOG) 1x,
           url(chrome://theme/IDR_CLOSE_DIALOG@2x) 2x);
         background-repeat: no-repeat;
         background-size: 14px;
-        height: 14px;
-        width: 14px;
+        border: none;
+        box-shadow: none;
+        margin-inline-start: 12px;
+        min-height: 14px;
+        min-width: 14px;
+        outline: none;
+        padding: 0;
       }
 
-      :host #cloudprintPromo .close-button:hover {
-        background-image: -webkit-image-set(
-          url(chrome://theme/IDR_CLOSE_DIALOG_H) 1x,
-          url(chrome://theme/IDR_CLOSE_DIALOG_H@2x) 2x);
-      }
-
-      :host #cloudprintPromo .close-button:active {
+      #cloudprintPromo button:active {
         background-image: -webkit-image-set(
           url(chrome://theme/IDR_CLOSE_DIALOG_P) 1x,
           url(chrome://theme/IDR_CLOSE_DIALOG_P@2x) 2x);
       }
 
-      :host #invitationPromo {
+      #cloudprintPromo button:focus,
+      #cloudprintPromo button:hover {
+        background-image: -webkit-image-set(
+          url(chrome://theme/IDR_CLOSE_DIALOG_H) 1x,
+          url(chrome://theme/IDR_CLOSE_DIALOG_H@2x) 2x);
+      }
+
+      #invitationPromo {
         flex-direction: column;
       }
 
-      :host #invitationPromo .invitation-buttons {
+      #invitationPromo .invitation-buttons {
         padding: 12px 0;
+      }
+
+      /* Height = 3 * destination item (30px) + 9px padding + 1 line text */
+      #recentList {
+        height: calc(99px + 1rem);
+      }
+
+      /* Height = 100vh - recent (99px + 1 line) - padding (40px) - */
+      /* header (55px + 2 lines) - button (32px + 2 lines) */
+      #printList {
+        height: calc(100vh - 266px - 5rem);
+        min-height: calc(99px + 1rem);
       }
 
       print-preview-destination-list {
@@ -142,23 +160,24 @@
             <option value="">$i18n{addAccountTitle}</option>
           </select>
         </div>
-        <print-preview-search-box id="searchBox" on-keydown="onKeydown_"
+        <print-preview-search-box id="searchBox"
             label="$i18n{searchBoxPlaceholder}" search-query="{{searchQuery_}}"
             autofocus>
         </print-preview-search-box>
       </div>
       <div slot="body" scrollable>
         <div>
-          <print-preview-destination-list
+          <print-preview-destination-list id="recentList"
               destinations="[[recentDestinationList_]]"
               search-query="[[searchQuery_]]"
-              title="$i18n{recentDestinationsTitle}"
+              list-name="$i18n{recentDestinationsTitle}"
               on-destination-selected="onDestinationSelected_">
           </print-preview-destination-list>
-          <print-preview-destination-list destinations="[[destinations_]]"
+          <print-preview-destination-list id="printList"
+              destinations="[[destinations_]]"
               has-action-link loading-destinations="[[loadingDestinations_]]"
               search-query="[[searchQuery_]]"
-              title="$i18n{printDestinationsTitle}"
+              list-name="$i18n{printDestinationsTitle}"
               on-destination-selected="onDestinationSelected_">
           </print-preview-destination-list>
         </div>
@@ -176,7 +195,7 @@
             hidden$="[[!showCloudPrintPromo]]">
           <img src="../images/cloud.png" class="icon" alt="">
           <div class="promo-text"></div>
-          <div class="close-button"></div>
+          <button on-click="onCloudPrintPromoDismissed_"></button>
         </div>
         <div class="promo" id="invitationPromo" hidden="[[!invitation_]]">
           <div inner-h-t-m-l="[[getInvitationText_(invitation_)]]"></div>

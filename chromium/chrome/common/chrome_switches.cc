@@ -122,10 +122,6 @@ const char kCloudPrintServiceProcess[]      = "service";
 // service or register proxy for autostart.
 const char kCloudPrintSetupProxy[]          = "cloud-print-setup-proxy";
 
-// Enables committed error pages instead of transient navigation entries for
-// interstitial error pages (e.g. certificate errors).
-const char kCommittedInterstitials[] = "committed-interstitials";
-
 // Comma-separated list of BrowserThreads that cause browser process to crash if
 // the given browser thread is not responsive. UI/IO are the BrowserThreads that
 // are supported.
@@ -220,11 +216,6 @@ const char kDisableExtensionsExcept[] = "disable-extensions-except";
 const char kDisableExtensionsFileAccessCheck[] =
     "disable-extensions-file-access-check";
 
-// Disable the net::URLRequestThrottlerManager functionality for
-// requests originating from extensions.
-const char kDisableExtensionsHttpThrottling[] =
-    "disable-extensions-http-throttling";
-
 // Disable auto-reload of error pages if offline.
 const char kDisableOfflineAutoReload[]      = "disable-offline-auto-reload";
 
@@ -263,6 +254,9 @@ const char kDiskCacheDir[]                  = "disk-cache-dir";
 const char kDiskCacheSize[]                 = "disk-cache-size";
 
 const char kDnsLogDetails[]                 = "dns-log-details";
+
+// Enables new UI for net-error page.
+const char kNewNetErrorPageUI[] = "new-net-error-page-ui";
 
 // Requests that a running browser process dump its collected histograms to a
 // given file. The file is overwritten if it exists.
@@ -425,6 +419,17 @@ const char kKioskMode[]                     = "kiosk";
 
 // Enable automatically pressing the print button in print preview.
 const char kKioskModePrinting[]             = "kiosk-printing";
+
+// Launches an in-process instance of the simple_browser service on startup if
+// this Chrome build supports it. See |enable_simple_browser_service_in_process|
+// in chrome/common/features.gni.
+const char kLaunchInProcessSimpleBrowserSwitch[] =
+    "launch-in-process-simple-browser";
+
+// Launches a sandboxed out-of-process instance of the simple_browser service on
+// startup if this Chrome build supports it. See
+// |enable_simple_browser_service_out_of_process| in chrome/common/features.gni.
+const char kLaunchSimpleBrowserSwitch[] = "launch-simple-browser";
 
 // Loads the Media Router component extension on startup.
 const char kLoadMediaRouterComponentExtension[] =
@@ -665,7 +670,8 @@ const char kTaskManagerShowExtraRenderers[] =
 // Passes the name of the current running automated test to Chrome.
 const char kTestName[]                      = "test-name";
 
-// Specifies the enabled TLS 1.3 variant ("disabled", "draft23", "draft28").
+// Specifies the enabled TLS 1.3 variant ("disabled", "draft23", "draft28",
+// "final").
 const char kTLS13Variant[] = "tls13-variant";
 
 // This mode disables the TLS 1.3 for the |kTLS13Variant| switch.
@@ -676,6 +682,9 @@ const char kTLS13VariantDraft23[] = "draft23";
 
 // This mode enables TLS 1.3 draft-28 for the |kTLS13Variant| switch.
 const char kTLS13VariantDraft28[] = "draft28";
+
+// This mode enables TLS 1.3 final for the |kTLS13Variant| switch.
+const char kTLS13VariantFinal[] = "final";
 
 // Identifies a list of download sources as trusted, but only if proper group
 // policy is set.
@@ -715,10 +724,6 @@ const char kValidateCrx[]                   = "validate-crx";
 
 // Prints version information and quits.
 const char kVersion[]                       = "version";
-
-// Enables the work-in-progress modal dialog shown for pending WebAuthn
-// requests.
-const char kWebAuthenticationUI[] = "enable-web-authentication-ui";
 
 // Sets the delay (in seconds) between proactive prunings of remote-bound
 // WebRTC event logs which are pending upload.

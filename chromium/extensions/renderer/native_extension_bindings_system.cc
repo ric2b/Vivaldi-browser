@@ -39,6 +39,7 @@
 #include "gin/converter.h"
 #include "gin/handle.h"
 #include "gin/per_context_data.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 
@@ -697,7 +698,7 @@ void NativeExtensionBindingsSystem::GetInternalAPI(
     return;
   }
 
-  std::string api_name = gin::V8ToString(info[0]);
+  std::string api_name = gin::V8ToString(isolate, info[0]);
   const Feature* feature = FeatureProvider::GetAPIFeature(api_name);
   ScriptContext* script_context = GetScriptContextFromV8ContextChecked(context);
   if (!feature ||
@@ -750,7 +751,8 @@ void NativeExtensionBindingsSystem::SendRequest(
   params->user_gesture = request->has_user_gesture;
   // The IPC sender will update these members, if appropriate.
   params->worker_thread_id = -1;
-  params->service_worker_version_id = kInvalidServiceWorkerVersionId;
+  params->service_worker_version_id =
+      blink::mojom::kInvalidServiceWorkerVersionId;
 
   ipc_message_sender_->SendRequestIPC(script_context, std::move(params),
                                       request->thread);

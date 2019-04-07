@@ -6,7 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/screens/base_screen_delegate.h"
@@ -74,6 +74,9 @@ void StartTPMFirmwareUpdate(
       break;
     case tpm_firmware_update::Mode::kPreserveDeviceState:
       mode_string = "preserve_stateful";
+      break;
+    case tpm_firmware_update::Mode::kCleanup:
+      mode_string = "cleanup";
       break;
   }
 

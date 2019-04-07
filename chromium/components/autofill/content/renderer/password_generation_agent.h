@@ -18,8 +18,8 @@
 #include "components/autofill/content/common/autofill_driver.mojom.h"
 #include "components/autofill/content/renderer/renderer_save_password_progress_logger.h"
 #include "content/public/renderer/render_frame_observer.h"
-#include "mojo/public/cpp/bindings/binding.h"
-#include "services/service_manager/public/cpp/binder_registry.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/web/web_input_element.h"
 #include "url/gurl.h"
 
@@ -46,10 +46,10 @@ class PasswordGenerationAgent : public content::RenderFrameObserver,
 
   PasswordGenerationAgent(content::RenderFrame* render_frame,
                           PasswordAutofillAgent* password_agent,
-                          service_manager::BinderRegistry* registry);
+                          blink::AssociatedInterfaceRegistry* registry);
   ~PasswordGenerationAgent() override;
 
-  void BindRequest(mojom::PasswordGenerationAgentRequest request);
+  void BindRequest(mojom::PasswordGenerationAgentAssociatedRequest request);
 
   // mojom::PasswordGenerationAgent:
   void FormNotBlacklisted(const PasswordForm& form) override;
@@ -59,9 +59,6 @@ class PasswordGenerationAgent : public content::RenderFrameObserver,
   // Sets |generation_element_| to the focused password field and shows a
   // generation popup at this field.
   void UserTriggeredGeneratePassword() override;
-
-  // Enables the form classifier.
-  void AllowToRunFormClassifier() override;
 
   // Returns true if the field being changed is one where a generated password
   // is being offered. Updates the state of the popup if necessary.
@@ -221,9 +218,6 @@ class PasswordGenerationAgent : public content::RenderFrameObserver,
   // If this feature is enabled. Controlled by Finch.
   bool enabled_;
 
-  // If the form classifier should run.
-  bool form_classifier_enabled_;
-
   // True iff the generation element should be marked with special HTML
   // attribute (only for experimental purposes).
   bool mark_generation_element_;
@@ -234,7 +228,7 @@ class PasswordGenerationAgent : public content::RenderFrameObserver,
 
   mojom::PasswordManagerClientAssociatedPtr password_manager_client_;
 
-  mojo::Binding<mojom::PasswordGenerationAgent> binding_;
+  mojo::AssociatedBinding<mojom::PasswordGenerationAgent> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordGenerationAgent);
 };

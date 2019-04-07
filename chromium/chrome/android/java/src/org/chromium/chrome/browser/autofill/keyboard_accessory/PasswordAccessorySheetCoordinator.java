@@ -16,8 +16,8 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryData.Item;
 import org.chromium.chrome.browser.autofill.keyboard_accessory.PasswordAccessorySheetViewBinder.ItemViewHolder;
+import org.chromium.chrome.browser.modelutil.ListModel;
 import org.chromium.chrome.browser.modelutil.RecyclerViewAdapter;
-import org.chromium.chrome.browser.modelutil.SimpleListObservable;
 import org.chromium.chrome.browser.modelutil.SimpleRecyclerViewMcp;
 
 /**
@@ -26,8 +26,8 @@ import org.chromium.chrome.browser.modelutil.SimpleRecyclerViewMcp;
  */
 public class PasswordAccessorySheetCoordinator implements KeyboardAccessoryData.Tab.Listener {
     private final Context mContext;
-    private final SimpleListObservable<Item> mModel = new SimpleListObservable<>();
-    private final KeyboardAccessoryData.Observer<Item> mMediator = mModel::set;
+    private final ListModel<Item> mModel = new ListModel<>();
+    private final KeyboardAccessoryData.Observer<Item> mMediator = (t, items) -> mModel.set(items);
 
     private final KeyboardAccessoryData.Tab mTab;
 
@@ -70,7 +70,8 @@ public class PasswordAccessorySheetCoordinator implements KeyboardAccessoryData.
     public PasswordAccessorySheetCoordinator(Context context) {
         mContext = context;
         mTab = new KeyboardAccessoryData.Tab(IconProvider.getInstance().getIcon(mContext),
-                null, // TODO(fhorschig): Load from strings or native side.
+                context.getString(R.string.password_accessory_sheet_toggle),
+                context.getString(R.string.password_accessory_sheet_opened),
                 R.layout.password_accessory_sheet, AccessoryTabType.PASSWORDS, this);
     }
 
@@ -87,12 +88,11 @@ public class PasswordAccessorySheetCoordinator implements KeyboardAccessoryData.
 
     /**
      * Creates an adapter to an {@link PasswordAccessorySheetViewBinder} that is wired
-     * up to the model change processor which listens to the {@link SimpleListObservable<Item>}.
-     * @param model the {@link SimpleListObservable<Item>} the adapter gets its data from.
+     * up to the model change processor which listens to the {@link ListModel <Item>}.
+     * @param model the {@link ListModel <Item>} the adapter gets its data from.
      * @return Returns a fully initialized and wired adapter to a PasswordAccessorySheetViewBinder.
      */
-    static RecyclerViewAdapter<ItemViewHolder, Void> createAdapter(
-            SimpleListObservable<Item> model) {
+    static RecyclerViewAdapter<ItemViewHolder, Void> createAdapter(ListModel<Item> model) {
         return new RecyclerViewAdapter<>(
                 new SimpleRecyclerViewMcp<>(model, Item::getType, ItemViewHolder::bind),
                 ItemViewHolder::create);
@@ -117,7 +117,7 @@ public class PasswordAccessorySheetCoordinator implements KeyboardAccessoryData.
     }
 
     @VisibleForTesting
-    SimpleListObservable<Item> getModelForTesting() {
+    ListModel<Item> getModelForTesting() {
         return mModel;
     }
 }

@@ -6,36 +6,18 @@
 
 #include <utility>
 
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "content/browser/background_fetch/background_fetch_data_manager.h"
+#include "content/browser/background_fetch/background_fetch_data_manager_observer.h"
 #include "content/browser/background_fetch/storage/database_helpers.h"
+#include "content/browser/background_fetch/storage/image_helpers.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
-#include "ui/gfx/image/image.h"
 
 namespace content {
 
 namespace background_fetch {
-
-namespace {
-
-std::string ConvertAndSerializeIcon(const SkBitmap& icon) {
-  // Serialize the icon and copy the bytes over.
-  std::string serialized_icon;
-  auto icon_bytes = gfx::Image::CreateFrom1xBitmap(icon).As1xPNGBytes();
-  serialized_icon.assign(icon_bytes->front_as<char>(),
-                         icon_bytes->front_as<char>() + icon_bytes->size());
-  return serialized_icon;
-}
-
-}  // namespace
-
-// The max icon resolution, this is used as a threshold to decide
-// whether the icon should be persisted.
-constexpr int kMaxIconResolution = 256 * 256;
 
 CreateMetadataTask::CreateMetadataTask(
     DatabaseTaskHost* host,
@@ -55,6 +37,25 @@ CreateMetadataTask::CreateMetadataTask(
 CreateMetadataTask::~CreateMetadataTask() = default;
 
 void CreateMetadataTask::Start() {
+  // Check if there is enough quota to download the data first.
+  if (options_.download_total > 0) {
+    IsQuotaAvailable(registration_id_.origin(), options_.download_total,
+                     base::BindOnce(&CreateMetadataTask::DidGetIsQuotaAvailable,
+                                    weak_factory_.GetWeakPtr()));
+  } else {
+    // Proceed with the fetch.
+    GetRegistrationUniqueId();
+  }
+}
+
+void CreateMetadataTask::DidGetIsQuotaAvailable(bool is_available) {
+  if (!is_available)
+    FinishWithError(blink::mojom::BackgroundFetchError::QUOTA_EXCEEDED);
+  else
+    GetRegistrationUniqueId();
+}
+
+void CreateMetadataTask::GetRegistrationUniqueId() {
   service_worker_context()->GetRegistrationUserData(
       registration_id_.service_worker_registration_id(),
       {ActiveRegistrationUniqueIdKey(registration_id_.developer_id())},
@@ -66,8 +67,7 @@ void CreateMetadataTask::DidGetUniqueId(const std::vector<std::string>& data,
                                         blink::ServiceWorkerStatusCode status) {
   switch (ToDatabaseStatus(status)) {
     case DatabaseStatus::kNotFound:
-      InitializeMetadataProto();
-      return;
+      break;
     case DatabaseStatus::kOk:
       // Can't create a registration since there is already an active
       // registration with the same |developer_id|. It must be deactivated
@@ -76,8 +76,20 @@ void CreateMetadataTask::DidGetUniqueId(const std::vector<std::string>& data,
           blink::mojom::BackgroundFetchError::DUPLICATED_DEVELOPER_ID);
       return;
     case DatabaseStatus::kFailed:
-      FinishWithError(blink::mojom::BackgroundFetchError::STORAGE_ERROR);
+      SetStorageErrorAndFinish(
+          BackgroundFetchStorageError::kServiceWorkerStorageError);
       return;
+  }
+
+  InitializeMetadataProto();
+
+  if (ShouldPersistIcon(icon_)) {
+    // Serialize the icon, then store all the metadata.
+    SerializeIcon(icon_, base::BindOnce(&CreateMetadataTask::DidSerializeIcon,
+                                        weak_factory_.GetWeakPtr()));
+  } else {
+    // Directly store the metadata.
+    StoreMetadata();
   }
 }
 
@@ -89,6 +101,10 @@ void CreateMetadataTask::InitializeMetadataProto() {
   registration_proto->set_unique_id(registration_id_.unique_id());
   registration_proto->set_developer_id(registration_id_.developer_id());
   registration_proto->set_download_total(options_.download_total);
+  registration_proto->set_state(
+      proto::BackgroundFetchRegistration_BackgroundFetchState_PENDING);
+  registration_proto->set_failure_reason(
+      proto::BackgroundFetchRegistration_BackgroundFetchFailureReason_NONE);
 
   // Set Options fields.
   auto* options_proto = metadata_proto_->mutable_options();
@@ -126,40 +142,39 @@ void CreateMetadataTask::InitializeMetadataProto() {
   metadata_proto_->set_creation_microseconds_since_unix_epoch(
       (base::Time::Now() - base::Time::UnixEpoch()).InMicroseconds());
   metadata_proto_->set_num_fetches(requests_.size());
-
-  // Check if |icon_| should be persisted.
-  if (icon_.height() * icon_.width() > kMaxIconResolution) {
-    StoreMetadata();
-    return;
-  }
-
-  // Do the initialization on a seperate thread to avoid blocking on
-  // expensive operations (image conversions), then post back to IO thread
-  // and continue normally.
-  base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN,
-       base::TaskPriority::BACKGROUND},
-      base::BindOnce(&ConvertAndSerializeIcon, icon_),
-      base::BindOnce(&CreateMetadataTask::StoreIcon,
-                     weak_factory_.GetWeakPtr()));
 }
 
-void CreateMetadataTask::StoreIcon(std::string serialized_icon) {
-  DCHECK(metadata_proto_);
-  metadata_proto_->set_icon(std::move(serialized_icon));
+void CreateMetadataTask::DidSerializeIcon(std::string serialized_icon) {
+  serialized_icon_ = std::move(serialized_icon);
   StoreMetadata();
 }
 
 void CreateMetadataTask::StoreMetadata() {
   DCHECK(metadata_proto_);
   std::vector<std::pair<std::string, std::string>> entries;
-  entries.reserve(requests_.size() * 2 + 1);
+  // - One BackgroundFetchPendingRequest per request
+  // - DeveloperId -> UniqueID
+  // - BackgroundFetchMetadata
+  // - BackgroundFetchUIOptions
+  entries.reserve(requests_.size() + 3);
 
   std::string serialized_metadata_proto;
 
   if (!metadata_proto_->SerializeToString(&serialized_metadata_proto)) {
-    FinishWithError(blink::mojom::BackgroundFetchError::STORAGE_ERROR);
+    SetStorageErrorAndFinish(
+        BackgroundFetchStorageError::kServiceWorkerStorageError);
+    return;
+  }
+
+  std::string serialized_ui_options_proto;
+  proto::BackgroundFetchUIOptions ui_options;
+  ui_options.set_title(options_.title);
+  if (!serialized_icon_.empty())
+    ui_options.set_icon(std::move(serialized_icon_));
+
+  if (!ui_options.SerializeToString(&serialized_ui_options_proto)) {
+    SetStorageErrorAndFinish(
+        BackgroundFetchStorageError::kServiceWorkerStorageError);
     return;
   }
 
@@ -168,7 +183,8 @@ void CreateMetadataTask::StoreMetadata() {
       registration_id_.unique_id());
   entries.emplace_back(RegistrationKey(registration_id_.unique_id()),
                        std::move(serialized_metadata_proto));
-  entries.emplace_back(TitleKey(registration_id_.unique_id()), options_.title);
+  entries.emplace_back(UIOptionsKey(registration_id_.unique_id()),
+                       serialized_ui_options_proto);
 
   // Signed integers are used for request indexes to avoid unsigned gotchas.
   for (int i = 0; i < base::checked_cast<int>(requests_.size()); i++) {
@@ -194,7 +210,8 @@ void CreateMetadataTask::DidStoreMetadata(
       break;
     case DatabaseStatus::kFailed:
     case DatabaseStatus::kNotFound:
-      FinishWithError(blink::mojom::BackgroundFetchError::STORAGE_ERROR);
+      SetStorageErrorAndFinish(
+          BackgroundFetchStorageError::kServiceWorkerStorageError);
       return;
   }
 
@@ -203,10 +220,34 @@ void CreateMetadataTask::DidStoreMetadata(
 
 void CreateMetadataTask::FinishWithError(
     blink::mojom::BackgroundFetchError error) {
-  if (error != blink::mojom::BackgroundFetchError::NONE)
-    metadata_proto_.reset();
-  std::move(callback_).Run(error, std::move(metadata_proto_));
+  BackgroundFetchRegistration registration;
+
+  if (error == blink::mojom::BackgroundFetchError::NONE) {
+    DCHECK(metadata_proto_);
+
+    bool converted =
+        ToBackgroundFetchRegistration(*metadata_proto_, &registration);
+    if (!converted) {
+      // Database corrupted.
+      SetStorageErrorAndFinish(
+          BackgroundFetchStorageError::kServiceWorkerStorageError);
+      return;
+    }
+
+    for (auto& observer : data_manager()->observers()) {
+      observer.OnRegistrationCreated(registration_id_, registration, options_,
+                                     icon_, requests_.size());
+    }
+  }
+
+  ReportStorageError();
+
+  std::move(callback_).Run(error, registration);
   Finished();  // Destroys |this|.
+}
+
+std::string CreateMetadataTask::HistogramName() const {
+  return "CreateMetadataTask";
 }
 
 }  // namespace background_fetch

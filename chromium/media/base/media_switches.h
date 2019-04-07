@@ -31,6 +31,7 @@ MEDIA_EXPORT extern const char kFailAudioStreamCreation[];
 
 MEDIA_EXPORT extern const char kVideoThreads[];
 
+// TODO(crbug.com/867146): remove these switches.
 MEDIA_EXPORT extern const char kEnableMediaSuspend[];
 MEDIA_EXPORT extern const char kDisableMediaSuspend[];
 
@@ -54,9 +55,6 @@ MEDIA_EXPORT extern const char kUseCras[];
 
 MEDIA_EXPORT extern const char
     kUnsafelyAllowProtectedMediaIdentifierForDomain[];
-
-MEDIA_EXPORT extern const char kEnableAudioFocus[];
-MEDIA_EXPORT extern const char kEnableAudioFocusDuckFlash[];
 
 #if BUILDFLAG(ENABLE_RUNTIME_MEDIA_RENDERER_SELECTION)
 MEDIA_EXPORT extern const char kDisableMojoRenderer[];
@@ -84,10 +82,6 @@ MEDIA_EXPORT extern const char kClearKeyCdmPathForTesting[];
 MEDIA_EXPORT extern const char kOverrideEnabledCdmInterfaceVersion[];
 MEDIA_EXPORT extern const char kOverrideHardwareSecureCodecsForTesting[];
 
-#if !defined(OS_ANDROID)
-MEDIA_EXPORT extern const char kEnableInternalMediaSession[];
-#endif  // !defined(OS_ANDROID)
-
 namespace autoplay {
 
 MEDIA_EXPORT extern const char kDocumentUserActivationRequiredPolicy[];
@@ -105,6 +99,7 @@ namespace media {
 // alongside the definition of their values in the .cc file.
 
 MEDIA_EXPORT extern const base::Feature kAutoplayIgnoreWebAudio;
+MEDIA_EXPORT extern const base::Feature kAutoplaySoundSettings;
 MEDIA_EXPORT extern const base::Feature kAv1Decoder;
 MEDIA_EXPORT extern const base::Feature kBackgroundVideoPauseOptimization;
 MEDIA_EXPORT extern const base::Feature kBackgroundVideoTrackOptimization;
@@ -114,6 +109,7 @@ MEDIA_EXPORT extern const base::Feature kHardwareSecureDecryption;
 MEDIA_EXPORT extern const base::Feature kLowDelayVideoRenderingOnLiveStream;
 MEDIA_EXPORT extern const base::Feature kMediaCastOverlayButton;
 MEDIA_EXPORT extern const base::Feature kRecordMediaEngagementScores;
+MEDIA_EXPORT extern const base::Feature kRecordWebAudioEngagement;
 MEDIA_EXPORT extern const base::Feature kMediaEngagementBypassAutoplayPolicies;
 MEDIA_EXPORT extern const base::Feature kMemoryPressureBasedSourceBufferGC;
 MEDIA_EXPORT extern const base::Feature kMojoVideoDecoder;
@@ -136,6 +132,8 @@ MEDIA_EXPORT extern const base::Feature kVaapiVP8Encoder;
 MEDIA_EXPORT extern const base::Feature kVideoBlitColorAccuracy;
 MEDIA_EXPORT extern const base::Feature kUnifiedAutoplay;
 MEDIA_EXPORT extern const base::Feature kUseSurfaceLayerForVideo;
+MEDIA_EXPORT extern const base::Feature kUseSurfaceLayerForVideoMS;
+MEDIA_EXPORT extern const base::Feature kUseSurfaceLayerForVideoPIP;
 MEDIA_EXPORT extern const base::Feature kUseModernMediaControls;
 
 #if defined(OS_ANDROID)
@@ -161,10 +159,6 @@ MEDIA_EXPORT extern const base::Feature kDirectShowGetPhotoState;
 // switches::autoplay namespace.
 MEDIA_EXPORT std::string GetEffectiveAutoplayPolicy(
     const base::CommandLine& command_line);
-
-// Based on the command line of the current process, determine if
-// audio focus duck flash should be enabled.
-MEDIA_EXPORT bool IsAudioFocusDuckFlashEnabled();
 
 MEDIA_EXPORT bool IsVideoCaptureAcceleratedJpegDecodingEnabled();
 

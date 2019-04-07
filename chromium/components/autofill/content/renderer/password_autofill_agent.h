@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
@@ -15,9 +16,9 @@
 #include "components/autofill/content/common/autofill_agent.mojom.h"
 #include "components/autofill/content/common/autofill_driver.mojom.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
+#include "components/autofill/content/renderer/field_data_manager.h"
 #include "components/autofill/content/renderer/form_tracker.h"
 #include "components/autofill/content/renderer/html_based_username_detector.h"
-#include "components/autofill/content/renderer/password_form_conversion_utils.h"
 #include "components/autofill/content/renderer/provisionally_saved_password_form.h"
 #include "components/autofill/core/common/form_data_predictions.h"
 #include "components/autofill/core/common/password_form.h"
@@ -26,7 +27,7 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_view_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/service_manager/public/cpp/binder_registry.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/web/web_input_element.h"
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
@@ -63,6 +64,7 @@ enum class PrefilledUsernameFillOutcome {
 extern const char kDebugAttributeForFormSignature[];
 extern const char kDebugAttributeForFieldSignature[];
 
+class FieldDataManager;
 class RendererSavePasswordProgressLogger;
 class PasswordGenerationAgent;
 
@@ -72,10 +74,10 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
                               public mojom::PasswordAutofillAgent {
  public:
   PasswordAutofillAgent(content::RenderFrame* render_frame,
-                        service_manager::BinderRegistry* registry);
+                        blink::AssociatedInterfaceRegistry* registry);
   ~PasswordAutofillAgent() override;
 
-  void BindRequest(mojom::PasswordAutofillAgentRequest request);
+  void BindRequest(mojom::PasswordAutofillAgentAssociatedRequest request);
 
   void SetAutofillAgent(AutofillAgent* autofill_agent);
 
@@ -210,6 +212,25 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   using PasswordToLoginMap =
       std::map<blink::WebInputElement, blink::WebInputElement>;
 
+  // This class ensures that the driver will only receive relevant signals by
+  // caching the parameters of the last message sent to the driver.
+  class FocusStateNotifier {
+   public:
+    // Creates a new notifier that uses the agent which owns it to access the
+    // real driver implementation.
+    explicit FocusStateNotifier(PasswordAutofillAgent* agent);
+    ~FocusStateNotifier();
+
+    void FocusedInputChanged(bool is_fillable, bool is_password_field);
+
+   private:
+    bool was_fillable_;
+    bool was_password_field_;
+    PasswordAutofillAgent* agent_;
+
+    DISALLOW_COPY_AND_ASSIGN(FocusStateNotifier);
+  };
+
   // This class keeps track of autofilled password input elements and makes sure
   // the autofilled password value is not accessible to JavaScript code until
   // the user interacts with the page.
@@ -307,18 +328,17 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // This function attempts to fill |username_element| and |password_element|
   // with values from |fill_data|. The |username_element| and |password_element|
   // will only have the suggestedValue set. If a match is found, return true and
-  // |field_value_and_properties_map| will be modified with the autofilled
-  // credentials and |FieldPropertiesFlags::AUTOFILLED| flag.
+  // |field_data_manager| will be modified with the autofilled credentials and
+  // |FieldPropertiesFlags::AUTOFILLED| flag.
   // If |username_may_use_prefilled_placeholder| then this function may
   // overwrite the value of username field.
-  bool FillUserNameAndPassword(
-      blink::WebInputElement* username_element,
-      blink::WebInputElement* password_element,
-      const PasswordFormFillData& fill_data,
-      bool exact_username_match,
-      bool username_may_use_prefilled_placeholder,
-      FieldValueAndPropertiesMaskMap* field_value_and_properties_map,
-      RendererSavePasswordProgressLogger* logger);
+  bool FillUserNameAndPassword(blink::WebInputElement* username_element,
+                               blink::WebInputElement* password_element,
+                               const PasswordFormFillData& fill_data,
+                               bool exact_username_match,
+                               bool username_may_use_prefilled_placeholder,
+                               FieldDataManager* field_data_manager,
+                               RendererSavePasswordProgressLogger* logger);
 
   // Logs whether a username value that was prefilled by the website was
   // overridden when trying to fill with an existing credential. This logs
@@ -331,12 +351,11 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // attempts to fill the password matching the already filled username, if
   // such a password exists. The |password_element| will have the
   // |suggestedValue| set. Returns true if the password is filled.
-  bool FillFormOnPasswordReceived(
-      const PasswordFormFillData& fill_data,
-      blink::WebInputElement username_element,
-      blink::WebInputElement password_element,
-      FieldValueAndPropertiesMaskMap* field_value_and_properties_map,
-      RendererSavePasswordProgressLogger* logger);
+  bool FillFormOnPasswordReceived(const PasswordFormFillData& fill_data,
+                                  blink::WebInputElement username_element,
+                                  blink::WebInputElement password_element,
+                                  FieldDataManager* field_data_manager,
+                                  RendererSavePasswordProgressLogger* logger);
 
   // Helper function called when form submission is successful.
   void FireSubmissionIfFormDisappear(
@@ -388,7 +407,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // changes them.
   // 2) Field properties mask, i.e. whether the field was autofilled, modified
   // by user, etc. (see FieldPropertiesMask).
-  FieldValueAndPropertiesMaskMap field_value_and_properties_map_;
+  FieldDataManager field_data_manager_;
 
   PasswordValueGatekeeper gatekeeper_;
 
@@ -423,6 +442,10 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // username predictions.
   UsernameDetectorCache username_detector_cache_;
 
+  // This notifier is used to avoid sending redundant messages to the password
+  // manager driver mojo interface.
+  FocusStateNotifier focus_state_notifier_;
+
   base::WeakPtr<AutofillAgent> autofill_agent_;
 
   PasswordGenerationAgent* password_generation_agent_;  // Weak reference.
@@ -433,7 +456,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
 
   mojom::PasswordManagerDriverAssociatedPtr password_manager_driver_;
 
-  mojo::Binding<mojom::PasswordAutofillAgent> binding_;
+  mojo::AssociatedBinding<mojom::PasswordAutofillAgent> binding_;
 
   bool prefilled_username_metrics_logged_ = false;
   DISALLOW_COPY_AND_ASSIGN(PasswordAutofillAgent);

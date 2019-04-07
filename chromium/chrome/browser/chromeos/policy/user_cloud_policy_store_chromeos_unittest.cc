@@ -19,8 +19,11 @@
 #include "base/single_thread_task_runner.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/fake_cryptohome_client.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
+#include "chromeos/dbus/util/account_identifier_operators.h"
+#include "chromeos/network/onc/onc_test_utils.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_store.h"
 #include "components/policy/core/common/cloud/policy_builder.h"
@@ -39,6 +42,7 @@ using RetrievePolicyResponseType =
 using testing::_;
 using testing::AllOf;
 using testing::Eq;
+using testing::InvokeWithoutArgs;
 using testing::Mock;
 using testing::Property;
 using testing::Return;
@@ -53,7 +57,7 @@ const char kDefaultHomepage[] = "http://chromium.org";
 
 base::FilePath GetUserPolicyKeyFile(
     const base::FilePath& user_policy_dir,
-    const cryptohome::Identification& cryptohome_id) {
+    const cryptohome::AccountIdentifier& cryptohome_id) {
   const std::string sanitized_username =
       chromeos::CryptohomeClient::GetStubSanitizedUsername(cryptohome_id);
   return user_policy_dir.AppendASCII(sanitized_username)
@@ -61,7 +65,7 @@ base::FilePath GetUserPolicyKeyFile(
 }
 
 bool StoreUserPolicyKey(const base::FilePath& user_policy_dir,
-                        const cryptohome::Identification& cryptohome_id,
+                        const cryptohome::AccountIdentifier& cryptohome_id,
                         const std::string& public_key) {
   base::FilePath user_policy_key_file =
       GetUserPolicyKeyFile(user_policy_dir, cryptohome_id);
@@ -80,7 +84,7 @@ class FakeSessionManagerClient : public chromeos::FakeSessionManagerClient {
       : user_policy_dir_(user_policy_dir), weak_ptr_factory_(this) {}
 
   // SessionManagerClient override:
-  void StorePolicyForUser(const cryptohome::Identification& cryptohome_id,
+  void StorePolicyForUser(const cryptohome::AccountIdentifier& cryptohome_id,
                           const std::string& policy_blob,
                           chromeos::VoidDBusMethodCallback callback) override {
     chromeos::FakeSessionManagerClient::StorePolicyForUser(
@@ -90,13 +94,13 @@ class FakeSessionManagerClient : public chromeos::FakeSessionManagerClient {
                        std::move(callback)));
   }
 
-  void set_user_public_key(const cryptohome::Identification& cryptohome_id,
+  void set_user_public_key(const cryptohome::AccountIdentifier& cryptohome_id,
                            const std::string& public_key) {
     public_key_map_[cryptohome_id] = public_key;
   }
 
  private:
-  void OnStorePolicyForUser(const cryptohome::Identification& cryptohome_id,
+  void OnStorePolicyForUser(const cryptohome::AccountIdentifier& cryptohome_id,
                             chromeos::VoidDBusMethodCallback callback,
                             bool result) {
     if (result) {
@@ -108,7 +112,7 @@ class FakeSessionManagerClient : public chromeos::FakeSessionManagerClient {
   }
 
   const base::FilePath user_policy_dir_;
-  std::map<cryptohome::Identification, std::string> public_key_map_;
+  std::map<cryptohome::AccountIdentifier, std::string> public_key_map_;
 
   base::WeakPtrFactory<FakeSessionManagerClient> weak_ptr_factory_;
   DISALLOW_COPY_AND_ASSIGN(FakeSessionManagerClient);
@@ -144,15 +148,32 @@ class UserCloudPolicyStoreChromeOSTest : public testing::Test {
   void TearDown() override {
     store_->RemoveObserver(&observer_);
     store_.reset();
-    base::RunLoop().RunUntilIdle();
   }
 
   // Install an expectation on |observer_| for an error code.
-  void ExpectError(CloudPolicyStore::Status error) {
-    EXPECT_CALL(
-        observer_,
-        OnStoreError(AllOf(Eq(store_.get()),
-                           Property(&CloudPolicyStore::status, Eq(error)))));
+  // This method should be called after a store->Store()/Load() call has been
+  // initiated. The expected OnStoreError call will be initiated asynchronously
+  // from this run_loop's iteration.
+  void RunLoopAndExpectError(CloudPolicyStore::Status error) {
+    base::RunLoop run_loop;
+    EXPECT_CALL(observer_, OnStoreError(AllOf(
+                               Eq(store_.get()),
+                               Property(&CloudPolicyStore::status, Eq(error)))))
+        .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
+    run_loop.Run();
+    Mock::VerifyAndClearExpectations(&observer_);
+  }
+
+  // Install an expectation on |observer_| for a successful load operation.
+  // This method should be called after a store->Store()/Load() call has been
+  // initiated. The expected OnStoreLoaded call will be initiated asynchronously
+  // from this run_loop's iteration.
+  void RunLoopAndExpectLoaded() {
+    base::RunLoop run_loop;
+    EXPECT_CALL(observer_, OnStoreLoaded(store_.get()))
+        .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
+    run_loop.Run();
+    Mock::VerifyAndClearExpectations(&observer_);
   }
 
   // Triggers a store_->Load() operation, handles the expected call to
@@ -161,7 +182,6 @@ class UserCloudPolicyStoreChromeOSTest : public testing::Test {
     // Issue a load command.
     session_manager_client_->set_user_policy(cryptohome_id_, response);
     store_->Load();
-    base::RunLoop().RunUntilIdle();
   }
 
   // Verifies that store_->policy_map() has the HomepageLocation entry with
@@ -196,8 +216,7 @@ class UserCloudPolicyStoreChromeOSTest : public testing::Test {
     EXPECT_TRUE(previous_policy.Equals(store_->policy_map()));
     EXPECT_EQ(initial_status, store_->status());
 
-    EXPECT_CALL(observer_, OnStoreLoaded(store_.get()));
-    base::RunLoop().RunUntilIdle();
+    RunLoopAndExpectLoaded();
     ASSERT_TRUE(store_->policy());
     EXPECT_EQ(policy_.policy_data().SerializeAsString(),
               store_->policy()->SerializeAsString());
@@ -227,8 +246,8 @@ class UserCloudPolicyStoreChromeOSTest : public testing::Test {
   std::unique_ptr<UserCloudPolicyStoreChromeOS> store_;
   const AccountId account_id_ =
       AccountId::FromUserEmail(PolicyBuilder::kFakeUsername);
-  const cryptohome::Identification cryptohome_id_ =
-      cryptohome::Identification(account_id_);
+  const cryptohome::AccountIdentifier cryptohome_id_ =
+      cryptohome::CreateAccountIdentifierFromAccountId(account_id_);
 
  private:
   base::ScopedTempDir tmp_dir_;
@@ -260,7 +279,8 @@ TEST_F(UserCloudPolicyStoreChromeOSTest, InitialStoreValidationFail) {
       "garbage";
 
   store_->Store(policy_.policy());
-  base::RunLoop().RunUntilIdle();
+  RunLoopAndExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
+
   EXPECT_EQ(CloudPolicyStore::STATUS_VALIDATION_ERROR, store_->status());
   EXPECT_EQ(std::string(), store_->policy_signature_public_key());
 }
@@ -274,7 +294,8 @@ TEST_F(UserCloudPolicyStoreChromeOSTest, InitialStoreMissingSignatureFailure) {
   policy_.policy().clear_new_public_key_verification_signature_deprecated();
 
   store_->Store(policy_.policy());
-  base::RunLoop().RunUntilIdle();
+  RunLoopAndExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
+
   EXPECT_EQ(CloudPolicyStore::STATUS_VALIDATION_ERROR, store_->status());
   EXPECT_EQ(std::string(), store_->policy_signature_public_key());
 }
@@ -304,7 +325,8 @@ TEST_F(UserCloudPolicyStoreChromeOSTest,
   policy_.policy().clear_new_public_key_verification_signature_deprecated();
 
   store_->Store(policy_.policy());
-  base::RunLoop().RunUntilIdle();
+  RunLoopAndExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
+
   EXPECT_EQ(CloudPolicyStore::STATUS_VALIDATION_ERROR, store_->status());
   EXPECT_EQ(std::string(), store_->policy_signature_public_key());
 }
@@ -317,7 +339,8 @@ TEST_F(UserCloudPolicyStoreChromeOSTest, StoreWithRotationValidationError) {
       "garbage";
 
   store_->Store(policy_.policy());
-  base::RunLoop().RunUntilIdle();
+  RunLoopAndExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
+
   EXPECT_EQ(CloudPolicyStore::STATUS_VALIDATION_ERROR, store_->status());
   EXPECT_EQ(std::string(), store_->policy_signature_public_key());
 }
@@ -326,9 +349,8 @@ TEST_F(UserCloudPolicyStoreChromeOSTest, StoreFail) {
   // Let store policy fail.
   session_manager_client_->set_store_policy_success(false);
 
-  ExpectError(CloudPolicyStore::STATUS_STORE_ERROR);
   store_->Store(policy_.policy());
-  base::RunLoop().RunUntilIdle();
+  RunLoopAndExpectError(CloudPolicyStore::STATUS_STORE_ERROR);
 
   EXPECT_FALSE(store_->policy());
   EXPECT_TRUE(store_->policy_map().empty());
@@ -340,23 +362,41 @@ TEST_F(UserCloudPolicyStoreChromeOSTest, StoreValidationError) {
   policy_.policy_data().clear_policy_type();
   policy_.Build();
 
-  // Store policy.
-  ExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
-
   store_->Store(policy_.policy());
-  base::RunLoop().RunUntilIdle();
+  RunLoopAndExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
+
   EXPECT_EQ(CloudPolicyStore::STATUS_VALIDATION_ERROR, store_->status());
   EXPECT_EQ(std::string(), store_->policy_signature_public_key());
+}
+
+TEST_F(UserCloudPolicyStoreChromeOSTest, StoreValueValidationError) {
+  std::string onc_policy = chromeos::onc::test_utils::ReadTestData(
+      "toplevel_with_unknown_fields.onc");
+  policy_.payload().mutable_opennetworkconfiguration()->set_value(onc_policy);
+  policy_.Build();
+
+  store_->Store(policy_.policy());
+  RunLoopAndExpectLoaded();
+
+  const CloudPolicyValidatorBase::ValidationResult* validation_result =
+      store_->validation_result();
+  EXPECT_EQ(CloudPolicyStore::STATUS_OK, store_->status());
+  ASSERT_TRUE(validation_result);
+  EXPECT_EQ(CloudPolicyValidatorBase::VALIDATION_OK, validation_result->status);
+  EXPECT_EQ(3u, validation_result->value_validation_issues.size());
+  EXPECT_EQ(policy_.policy_data().policy_token(),
+            validation_result->policy_token);
+  EXPECT_EQ(policy_.policy().policy_data_signature(),
+            validation_result->policy_data_signature);
 }
 
 TEST_F(UserCloudPolicyStoreChromeOSTest, StoreWithoutPolicyKey) {
   // Make the dbus call to cryptohome fail.
   cryptohome_client_.SetServiceIsAvailable(false);
 
-  // Store policy.
-  ExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
   store_->Store(policy_.policy());
-  base::RunLoop().RunUntilIdle();
+  RunLoopAndExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
+
   EXPECT_EQ(CloudPolicyStore::STATUS_VALIDATION_ERROR, store_->status());
   EXPECT_EQ(std::string(), store_->policy_signature_public_key());
 }
@@ -365,10 +405,9 @@ TEST_F(UserCloudPolicyStoreChromeOSTest, StoreWithInvalidSignature) {
   // Break the signature.
   policy_.policy().mutable_policy_data_signature()->append("garbage");
 
-  // Store policy.
-  ExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
   store_->Store(policy_.policy());
-  base::RunLoop().RunUntilIdle();
+  RunLoopAndExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
+
   EXPECT_EQ(CloudPolicyStore::STATUS_VALIDATION_ERROR, store_->status());
   EXPECT_EQ(std::string(), store_->policy_signature_public_key());
 }
@@ -383,9 +422,11 @@ TEST_F(UserCloudPolicyStoreChromeOSTest, MultipleStoresWithRotation) {
   policy_.SetDefaultNewSigningKey();
   policy_.policy_data().clear_policy_type();
   policy_.Build();
-  ExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
+
+  // Store policy
   store_->Store(policy_.policy());
-  base::RunLoop().RunUntilIdle();
+  RunLoopAndExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
+
   // Still the initial public key is exposed.
   EXPECT_EQ(initial_public_key, store_->policy_signature_public_key());
 
@@ -402,9 +443,8 @@ TEST_F(UserCloudPolicyStoreChromeOSTest, MultipleStoresWithRotation) {
 }
 
 TEST_F(UserCloudPolicyStoreChromeOSTest, Load) {
-  EXPECT_CALL(observer_, OnStoreLoaded(store_.get()));
   ASSERT_NO_FATAL_FAILURE(PerformPolicyLoad(policy_.GetBlob()));
-  Mock::VerifyAndClearExpectations(&observer_);
+  RunLoopAndExpectLoaded();
 
   // Verify that the policy has been loaded.
   ASSERT_TRUE(store_->policy());
@@ -417,9 +457,8 @@ TEST_F(UserCloudPolicyStoreChromeOSTest, Load) {
 }
 
 TEST_F(UserCloudPolicyStoreChromeOSTest, LoadNoPolicy) {
-  EXPECT_CALL(observer_, OnStoreLoaded(store_.get()));
   ASSERT_NO_FATAL_FAILURE(PerformPolicyLoad(""));
-  Mock::VerifyAndClearExpectations(&observer_);
+  RunLoopAndExpectLoaded();
 
   // Verify no policy has been installed.
   EXPECT_FALSE(store_->policy());
@@ -429,8 +468,8 @@ TEST_F(UserCloudPolicyStoreChromeOSTest, LoadNoPolicy) {
 }
 
 TEST_F(UserCloudPolicyStoreChromeOSTest, LoadInvalidPolicy) {
-  ExpectError(CloudPolicyStore::STATUS_PARSE_ERROR);
   ASSERT_NO_FATAL_FAILURE(PerformPolicyLoad("invalid"));
+  RunLoopAndExpectError(CloudPolicyStore::STATUS_PARSE_ERROR);
 
   // Verify no policy has been installed.
   EXPECT_FALSE(store_->policy());
@@ -443,8 +482,8 @@ TEST_F(UserCloudPolicyStoreChromeOSTest, LoadValidationError) {
   policy_.policy_data().clear_policy_type();
   policy_.Build();
 
-  ExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
   ASSERT_NO_FATAL_FAILURE(PerformPolicyLoad(policy_.GetBlob()));
+  RunLoopAndExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
   VerifyStoreHasValidationError();
   EXPECT_EQ(std::string(), store_->policy_signature_public_key());
 }
@@ -452,8 +491,8 @@ TEST_F(UserCloudPolicyStoreChromeOSTest, LoadValidationError) {
 TEST_F(UserCloudPolicyStoreChromeOSTest, LoadNoKey) {
   // The loaded policy can't be verified without the public key.
   ASSERT_TRUE(base::DeleteFile(user_policy_key_file(), false));
-  ExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
   ASSERT_NO_FATAL_FAILURE(PerformPolicyLoad(policy_.GetBlob()));
+  RunLoopAndExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
   VerifyStoreHasValidationError();
   EXPECT_EQ(std::string(), store_->policy_signature_public_key());
 }
@@ -461,8 +500,8 @@ TEST_F(UserCloudPolicyStoreChromeOSTest, LoadNoKey) {
 TEST_F(UserCloudPolicyStoreChromeOSTest, LoadInvalidSignature) {
   // Break the signature.
   policy_.policy().mutable_policy_data_signature()->append("garbage");
-  ExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
   ASSERT_NO_FATAL_FAILURE(PerformPolicyLoad(policy_.GetBlob()));
+  RunLoopAndExpectError(CloudPolicyStore::STATUS_VALIDATION_ERROR);
   VerifyStoreHasValidationError();
   EXPECT_EQ(std::string(), store_->policy_signature_public_key());
 }

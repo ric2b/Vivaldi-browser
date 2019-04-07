@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -126,7 +126,7 @@ class MockHttpAgentFactory : public HttpAgentFactory {
   explicit MockHttpAgentFactory(MockHttpAgentConfig* config);
 
   // HttpAgentFactory:
-  std::unique_ptr<chrome_cleaner::HttpAgent> CreateHttpAgent() override;
+  std::unique_ptr<chrome_cleaner::HttpAgent> CreateHttpAgent() const override;
 
  private:
   MockHttpAgentConfig* config_{nullptr};

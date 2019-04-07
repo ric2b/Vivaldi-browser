@@ -29,7 +29,7 @@
 #include "chrome/browser/chromeos/policy/remote_commands/user_commands_factory_chromeos.h"
 #include "chrome/browser/chromeos/policy/user_policy_manager_factory_chromeos.h"
 #include "chrome/browser/chromeos/policy/wildcard_login_checker.h"
-#include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
+#include "chrome/browser/invalidation/deprecated_profile_invalidation_provider_factory.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/policy/cloud/remote_commands_invalidator_impl.h"
@@ -97,7 +97,8 @@ class UserCloudPolicyManagerChromeOSNotifierFactory
   UserCloudPolicyManagerChromeOSNotifierFactory()
       : BrowserContextKeyedServiceShutdownNotifierFactory(
             "UserRemoteCommandsInvalidator") {
-    DependsOn(invalidation::ProfileInvalidationProviderFactory::GetInstance());
+    DependsOn(invalidation::DeprecatedProfileInvalidationProviderFactory::
+                  GetInstance());
   }
 
   ~UserCloudPolicyManagerChromeOSNotifierFactory() override = default;
@@ -116,13 +117,11 @@ UserCloudPolicyManagerChromeOS::UserCloudPolicyManagerChromeOS(
     base::TimeDelta policy_refresh_timeout,
     base::OnceClosure fatal_error_callback,
     const AccountId& account_id,
-    const scoped_refptr<base::SequencedTaskRunner>& task_runner,
-    const scoped_refptr<base::SequencedTaskRunner>& io_task_runner)
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner)
     : CloudPolicyManager(dm_protocol::kChromeUserPolicyType,
                          std::string(),
                          store.get(),
-                         task_runner,
-                         io_task_runner),
+                         task_runner),
       profile_(profile),
       store_(std::move(store)),
       external_data_manager_(std::move(external_data_manager)),
@@ -187,7 +186,6 @@ UserCloudPolicyManagerChromeOS::~UserCloudPolicyManagerChromeOS() {}
 void UserCloudPolicyManagerChromeOS::Connect(
     PrefService* local_state,
     DeviceManagementService* device_management_service,
-    scoped_refptr<net::URLRequestContextGetter> system_request_context,
     scoped_refptr<network::SharedURLLoaderFactory> system_url_loader_factory) {
   DCHECK(device_management_service);
   DCHECK(local_state);
@@ -205,24 +203,23 @@ void UserCloudPolicyManagerChromeOS::Connect(
   CHECK(!core()->client());
 
   local_state_ = local_state;
-  // Note: |system_request_context| can be null for tests.
-  // Use the system request context here instead of a context derived
+  // Note: |system_url_loader_factory| can be null for tests.
+  // Use the system URL loader context here instead of a context derived
   // from the Profile because Connect() is called before the profile is
   // fully initialized (required so we can perform the initial policy load).
   std::unique_ptr<CloudPolicyClient> cloud_policy_client =
       std::make_unique<CloudPolicyClient>(
           std::string() /* machine_id */, std::string() /* machine_model */,
           std::string() /* brand_code */, device_management_service,
-          system_request_context, system_url_loader_factory,
-          nullptr /* signing_service */,
+          system_url_loader_factory, nullptr /* signing_service */,
           chromeos::GetDeviceDMTokenForUserPolicyGetter(account_id_));
   CreateComponentCloudPolicyService(
       dm_protocol::kChromeExtensionPolicyType, component_policy_cache_path_,
-      system_request_context, cloud_policy_client.get(), schema_registry());
+      cloud_policy_client.get(), schema_registry());
   core()->Connect(std::move(cloud_policy_client));
   client()->AddObserver(this);
 
-  external_data_manager_->Connect(system_request_context);
+  external_data_manager_->Connect(system_url_loader_factory);
 
   // Determine the next step after the CloudPolicyService initializes.
   if (service()->IsInitializationComplete()) {
@@ -681,7 +678,8 @@ void UserCloudPolicyManagerChromeOS::Observe(
                     content::Source<Profile>(profile_));
 
   invalidation::ProfileInvalidationProvider* const invalidation_provider =
-      invalidation::ProfileInvalidationProviderFactory::GetForProfile(profile_);
+      invalidation::DeprecatedProfileInvalidationProviderFactory::GetForProfile(
+          profile_);
 
   if (!invalidation_provider)
     return;

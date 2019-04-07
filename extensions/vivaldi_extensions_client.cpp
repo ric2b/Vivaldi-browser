@@ -7,8 +7,10 @@
 #include <vector>
 
 #include "extensions/common/alias.h"
+#include "extensions/common/extensions_api_provider.h"
 #include "extensions/common/features/json_feature_provider_source.h"
 #include "extensions/common/permissions/permissions_info.h"
+#include "extensions/permissions/vivaldi_api_permissions.h"
 #include "extensions/schema/generated_schemas.h"
 #include "vivaldi/grit/vivaldi_extension_resources.h"
 
@@ -21,61 +23,52 @@ std::vector<Alias> GetVivaldiPermissionAliases() {
   // real name. See also alias.h.
   return std::vector<Alias>();
 }
+
+class VivaldiExtensionsAPIProvider : public ExtensionsAPIProvider {
+ public:
+  VivaldiExtensionsAPIProvider() {}
+  ~VivaldiExtensionsAPIProvider() override {}
+
+  // ExtensionsAPIProvider:
+  void AddAPIFeatures(FeatureProvider* provider) override {}
+
+  void AddManifestFeatures(FeatureProvider* provider) override {}
+
+  void AddPermissionFeatures(FeatureProvider* provider) override {}
+
+  void AddBehaviorFeatures(FeatureProvider* provider) override {}
+
+  void AddAPIJSONSources(JSONFeatureProviderSource* json_source) override {
+    json_source->LoadJSON(IDR_VIVALDI_EXTENSION_API_FEATURES);
+  }
+
+  bool IsAPISchemaGenerated(const std::string& name) override {
+    return vivaldi::VivaldiGeneratedSchemas::IsGenerated(name);
+  }
+
+  base::StringPiece GetAPISchema(const std::string& name) override {
+    return vivaldi::VivaldiGeneratedSchemas::Get(name);
+  }
+
+  void AddPermissionsProviders(PermissionsInfo* permissions_info) override {
+    permissions_info->AddProvider(vivaldi_api_permissions_,
+                                  GetVivaldiPermissionAliases());
+  }
+
+  void RegisterManifestHandlers() override {}
+
+ private:
+  const VivaldiAPIPermissions vivaldi_api_permissions_;
+
+  DISALLOW_COPY_AND_ASSIGN(VivaldiExtensionsAPIProvider);
+};
+
+}  // namespace
+
+VivaldiExtensionsClient::VivaldiExtensionsClient() {
+  AddAPIProvider(std::make_unique<VivaldiExtensionsAPIProvider>());
 }
-
-static base::LazyInstance<VivaldiExtensionsClient>::DestructorAtExit g_client =
-    LAZY_INSTANCE_INITIALIZER;
-
-VivaldiExtensionsClient::VivaldiExtensionsClient()
-    : vivaldi_api_permissions_(VivaldiAPIPermissions()) {}
 
 VivaldiExtensionsClient::~VivaldiExtensionsClient() {}
-
-void VivaldiExtensionsClient::Initialize() {
-  ChromeExtensionsClient::Initialize();
-
-  // Set up permissions.
-  PermissionsInfo::GetInstance()->AddProvider(vivaldi_api_permissions_,
-                                              GetVivaldiPermissionAliases());
-}
-
-bool VivaldiExtensionsClient::IsAPISchemaGenerated(
-    const std::string& name) const {
-  return ChromeExtensionsClient::IsAPISchemaGenerated(name) ||
-         vivaldi::VivaldiGeneratedSchemas::IsGenerated(name);
-}
-
-base::StringPiece VivaldiExtensionsClient::GetAPISchema(
-    const std::string& name) const {
-  if (vivaldi::VivaldiGeneratedSchemas::IsGenerated(name))
-    return vivaldi::VivaldiGeneratedSchemas::Get(name);
-
-  return ChromeExtensionsClient::GetAPISchema(name);
-}
-
-std::unique_ptr<JSONFeatureProviderSource>
-VivaldiExtensionsClient::CreateAPIFeatureSource() const {
-  std::unique_ptr<JSONFeatureProviderSource> source(
-      ChromeExtensionsClient::CreateAPIFeatureSource());
-  DCHECK(source);
-
-  source->LoadJSON(IDR_VIVALDI_EXTENSION_API_FEATURES);
-  return source;
-}
-
-/*static*/
-ChromeExtensionsClient* VivaldiExtensionsClient::GetInstance() {
-  return g_client.Pointer();
-}
-
-// NOTE(yngve) Run this function **before**
-// ChromeExtensionsClient::GetInstance() is called
-// Hack to make sure ChromeExtensionsClient::GetInstance()
-// calls the VivaldiExtensionsClient::GetInstance() instead
-/*static*/
-void VivaldiExtensionsClient::RegisterVivaldiExtensionsClient() {
-  ChromeExtensionsClient::RegisterAlternativeGetInstance(
-      VivaldiExtensionsClient::GetInstance);
-}
 
 }  // namespace extensions

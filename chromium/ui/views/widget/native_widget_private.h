@@ -12,6 +12,7 @@
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/widget/native_widget.h"
+#include "ui/views/widget/widget.h"
 
 namespace gfx {
 class FontList;
@@ -21,6 +22,7 @@ class Rect;
 
 namespace ui {
 class InputMethod;
+class GestureRecognizer;
 class OSExchangeData;
 }
 
@@ -49,6 +51,7 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
   // Creates an appropriate default NativeWidgetPrivate implementation for the
   // current OS/circumstance.
   static NativeWidgetPrivate* CreateNativeWidget(
+      const Widget::InitParams& init_params,
       internal::NativeWidgetDelegate* delegate);
 
   static NativeWidgetPrivate* GetNativeWidgetForNativeView(
@@ -67,9 +70,6 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
                                  Widget::Widgets* owned);
   static void ReparentNativeView(gfx::NativeView native_view,
                                  gfx::NativeView new_parent);
-
-  // Returns true if any mouse button is currently down.
-  static bool IsMouseButtonDown();
 
   static gfx::FontList GetWindowTitleFontList();
 
@@ -184,12 +184,9 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
   virtual void SetShape(std::unique_ptr<Widget::ShapeRects> shape) = 0;
   virtual void Close() = 0;
   virtual void CloseNow() = 0;
-  virtual void Show() = 0;
+  virtual void Show(ui::WindowShowState show_state,
+                    const gfx::Rect& restore_bounds) = 0;
   virtual void Hide() = 0;
-  // Invoked if the initial show should maximize the window. |restored_bounds|
-  // is the bounds of the window when not maximized.
-  virtual void ShowMaximizedWithBounds(const gfx::Rect& restored_bounds) = 0;
-  virtual void ShowWithWindowState(ui::WindowShowState show_state) = 0;
   virtual bool IsVisible() const = 0;
   virtual void Activate() = 0;
   virtual void Deactivate() = 0;
@@ -216,6 +213,8 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
   virtual void SchedulePaintInRect(const gfx::Rect& rect) = 0;
   virtual void SetCursor(gfx::NativeCursor cursor) = 0;
   virtual bool IsMouseEventsEnabled() const = 0;
+  // Returns true if any mouse button is currently down.
+  virtual bool IsMouseButtonDown() const = 0;
   virtual void ClearNativeFocus() = 0;
   virtual gfx::Rect GetWorkAreaBoundsInScreen() const = 0;
   virtual Widget::MoveLoopResult RunMoveLoop(
@@ -229,6 +228,7 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
   virtual void SetVisibilityAnimationTransition(
       Widget::VisibilityTransition transition) = 0;
   virtual bool IsTranslucentWindowOpacitySupported() const = 0;
+  virtual ui::GestureRecognizer* GetGestureRecognizer() = 0;
   virtual void OnSizeConstraintsChanged() = 0;
 
   // Repost an unhandled event to the native widget for default OS processing.

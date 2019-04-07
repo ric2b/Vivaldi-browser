@@ -11,8 +11,9 @@
 #include "base/i18n/icu_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "build/build_config.h"
+#include "mojo/core/embedder/embedder.h"
 #include "remoting/base/auto_thread_task_runner.h"
 #include "remoting/base/breakpad.h"
 #include "remoting/host/chromoting_host_context.h"
@@ -98,6 +99,8 @@ int It2MeNativeMessagingHostMain(int argc, char** argv) {
   // Required to find the ICU data file, used by some file_util routines.
   base::i18n::InitializeICU();
 
+  mojo::core::Init();
+
   base::TaskScheduler::CreateAndStartWithDefaultParams("It2Me");
 
   remoting::LoadResources("");
@@ -109,7 +112,11 @@ int It2MeNativeMessagingHostMain(int argc, char** argv) {
   // Required for any calls into GTK functions, such as the Disconnect and
   // Continue windows. Calling with nullptr arguments because we don't have
   // any command line arguments for gtk to consume.
+#if GTK_CHECK_VERSION(3, 90, 0)
+  gtk_init();
+#else
   gtk_init(nullptr, nullptr);
+#endif
 
   // Need to prime the host OS version value for linux to prevent IO on the
   // network thread. base::GetLinuxDistro() caches the result.

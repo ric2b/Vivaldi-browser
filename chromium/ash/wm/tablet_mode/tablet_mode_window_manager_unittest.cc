@@ -22,6 +22,7 @@
 #include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/switchable_windows.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_resizer.h"
 #include "ash/wm/window_state.h"
@@ -32,7 +33,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/test/test_windows.h"
@@ -40,6 +41,7 @@
 #include "ui/base/hit_test.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/core/transient_window_manager.h"
 
 namespace ash {
 
@@ -107,9 +109,10 @@ class TabletModeWindowManagerTest : public AshTestBase {
 
   // Creates a window which also has a widget.
   aura::Window* CreateWindowWithWidget(const gfx::Rect& bounds) {
+    // Note: The widget will get deleted with the window.
     views::Widget* widget = new views::Widget();
     views::Widget::InitParams params;
-    // Note: The widget will get deleted with the window.
+    params.context = CurrentContext();
     widget->Init(params);
     widget->Show();
     aura::Window* window = widget->GetNativeWindow();
@@ -121,23 +124,16 @@ class TabletModeWindowManagerTest : public AshTestBase {
 
   // Create the tablet mode window manager.
   TabletModeWindowManager* CreateTabletModeWindowManager() {
-    EXPECT_FALSE(tablet_mode_window_manager());
+    EXPECT_FALSE(TabletModeControllerTestApi().tablet_mode_window_manager());
     Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
-    return tablet_mode_window_manager();
+    return TabletModeControllerTestApi().tablet_mode_window_manager();
   }
 
   // Destroy the tablet mode window manager.
   void DestroyTabletModeWindowManager() {
     Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(
         false);
-    EXPECT_FALSE(tablet_mode_window_manager());
-  }
-
-  // Get the tablet window manager.
-  TabletModeWindowManager* tablet_mode_window_manager() {
-    return Shell::Get()
-        ->tablet_mode_controller()
-        ->tablet_mode_window_manager_.get();
+    EXPECT_FALSE(TabletModeControllerTestApi().tablet_mode_window_manager());
   }
 
   // Resize our desktop.
@@ -162,9 +158,9 @@ class TabletModeWindowManagerTest : public AshTestBase {
     }
     aura::Window* window = aura::test::CreateTestWindowWithDelegateAndType(
         delegate, params.type, 0, params.bounds, NULL, params.show_on_creation);
-    int32_t behavior = ui::mojom::kResizeBehaviorNone;
-    behavior |= params.can_resize ? ui::mojom::kResizeBehaviorCanResize : 0;
-    behavior |= params.can_maximize ? ui::mojom::kResizeBehaviorCanMaximize : 0;
+    int32_t behavior = ws::mojom::kResizeBehaviorNone;
+    behavior |= params.can_resize ? ws::mojom::kResizeBehaviorCanResize : 0;
+    behavior |= params.can_maximize ? ws::mojom::kResizeBehaviorCanMaximize : 0;
     window->SetProperty(aura::client::kResizeBehaviorKey, behavior);
     aura::Window* container = Shell::GetContainer(
         Shell::GetPrimaryRootWindow(), wm::kSwitchableWindowContainerIds[0]);
@@ -986,11 +982,11 @@ TEST_F(TabletModeWindowManagerTest, KeepFullScreenModeOn) {
   EXPECT_EQ(SHELF_HIDDEN, shelf->GetVisibilityState());
 
   // When exiting fullscreen, tablet mode should still be enabled, and the shelf
-  // should be forced to visible for tablet mode.
+  // state should return to SHELF_AUTO_HIDE.
   window_state->OnWMEvent(&event);
   EXPECT_FALSE(window_state->IsFullscreen());
   EXPECT_TRUE(window_state->IsMaximized());
-  EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
+  EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
 
   // The shelf auto-hide preference should be restored when exiting tablet mode.
   DestroyTabletModeWindowManager();
@@ -1168,15 +1164,15 @@ TEST_F(TabletModeWindowManagerTest, MinimizePreservedAfterLeavingFullscreen) {
   EXPECT_TRUE(window_state->IsMinimized());
 }
 
-// Tests that the auto-hide behavior is set to never auto-hide on tablet mode
-// and gets reset based on pref after exiting tablet mode.
-TEST_F(TabletModeWindowManagerTest, DisableAutoHideBehaviorOnTabletMode) {
+// Tests that the auto-hide behavior is not affected when entering/exiting
+// tablet mode.
+TEST_F(TabletModeWindowManagerTest, DoNotDisableAutoHideBehaviorOnTabletMode) {
   Shelf* shelf = GetPrimaryShelf();
   SetShelfAutoHideBehaviorPref(GetPrimaryDisplay().id(),
                                SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
   CreateTabletModeWindowManager();
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
+  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
   DestroyTabletModeWindowManager();
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
 }
@@ -1201,10 +1197,10 @@ TEST_F(TabletModeWindowManagerTest, AllowFullScreenMode) {
 
   CreateTabletModeWindowManager();
 
-  // Fullscreen should stay off, but the shelf is made visible in tablet mode.
+  // Fullscreen should stay off, and the shelf behavior is unmodified.
   EXPECT_FALSE(window_state->IsFullscreen());
   EXPECT_TRUE(window_state->IsMaximized());
-  EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
+  EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
 
   // After going into fullscreen mode, the shelf should be hidden.
   wm::WMEvent event(wm::WM_EVENT_TOGGLE_FULLSCREEN);
@@ -1790,22 +1786,6 @@ TEST_F(TabletModeWindowManagerTest, SetPropertyOnUnmanagedWindow) {
   window->Show();
 }
 
-// Test that there is no window resizer in tablet mode.
-TEST_F(TabletModeWindowManagerTest, NoWindowResizerInTabletMode) {
-  gfx::Rect rect(10, 10, 200, 200);
-  std::unique_ptr<aura::Window> window(
-      CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
-  std::unique_ptr<WindowResizer> resizer(CreateWindowResizer(
-      window.get(), gfx::Point(), HTCAPTION, ::wm::WINDOW_MOVE_SOURCE_MOUSE));
-  EXPECT_TRUE(resizer.get());
-  resizer.reset();
-
-  CreateTabletModeWindowManager();
-  resizer = CreateWindowResizer(window.get(), gfx::Point(), HTCAPTION,
-                                ::wm::WINDOW_MOVE_SOURCE_MOUSE);
-  EXPECT_FALSE(resizer.get());
-}
-
 // Test that the minimized window bounds doesn't change until it's unminimized.
 TEST_F(TabletModeWindowManagerTest, DontChangeBoundsForMinimizedWindow) {
   gfx::Rect rect(10, 10, 200, 50);
@@ -1845,6 +1825,23 @@ TEST_F(TabletModeWindowManagerTest, DontChangeBoundsForTabDraggingWindow) {
   ASSERT_TRUE(manager);
   EXPECT_EQ(1, manager->GetNumberOfManagedWindows());
   EXPECT_EQ(window->bounds(), rect);
+}
+
+// Make sure that transient children should not be maximized.
+TEST_F(TabletModeWindowManagerTest, DontMaximizeTransientChild) {
+  gfx::Rect rect(0, 0, 200, 200);
+  std::unique_ptr<aura::Window> parent(
+      CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
+  std::unique_ptr<aura::Window> child(
+      CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
+  ::wm::TransientWindowManager::GetOrCreate(parent.get())
+      ->AddTransientChild(child.get());
+
+  ASSERT_TRUE(CreateTabletModeWindowManager());
+  EXPECT_TRUE(wm::GetWindowState(parent.get())->IsMaximized());
+  EXPECT_NE(rect.size(), parent->bounds().size());
+  EXPECT_FALSE(wm::GetWindowState(child.get())->IsMaximized());
+  EXPECT_EQ(rect.size(), child->bounds().size());
 }
 
 }  // namespace ash

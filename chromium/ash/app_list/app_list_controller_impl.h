@@ -18,6 +18,7 @@
 #include "ash/ash_export.h"
 #include "ash/public/cpp/app_list/app_list_constants.h"
 #include "ash/public/interfaces/app_list.mojom.h"
+#include "ash/public/interfaces/voice_interaction_controller.mojom.h"
 #include "ash/session/session_observer.h"
 #include "ash/shell_observer.h"
 #include "ash/wallpaper/wallpaper_controller_observer.h"
@@ -27,15 +28,21 @@
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
 #include "ui/keyboard/keyboard_controller_observer.h"
 
-namespace ui {
-class MouseWheelEvent;
-}  // namespace ui
-
 namespace app_list {
 class AnswerCardContentsRegistry;
 }  // namespace app_list
 
+namespace ui {
+class MouseWheelEvent;
+}  // namespace ui
+
+namespace ws {
+class WindowService;
+}  // namespace ws
+
 namespace ash {
+
+class HomeLauncherGestureHandler;
 
 // Ash's AppListController owns the AppListModel and implements interface
 // functions that allow Chrome to modify and observe the Shelf and AppListModel
@@ -48,11 +55,12 @@ class ASH_EXPORT AppListControllerImpl
       public ash::ShellObserver,
       public TabletModeObserver,
       public keyboard::KeyboardControllerObserver,
-      public WallpaperControllerObserver {
+      public WallpaperControllerObserver,
+      public mojom::VoiceInteractionObserver {
  public:
   using AppListItemMetadataPtr = mojom::AppListItemMetadataPtr;
   using SearchResultMetadataPtr = mojom::SearchResultMetadataPtr;
-  AppListControllerImpl();
+  explicit AppListControllerImpl(ws::WindowService* window_service);
   ~AppListControllerImpl() override;
 
   // Binds the mojom::AppListController interface request to this object.
@@ -117,7 +125,7 @@ class ASH_EXPORT AppListControllerImpl
   void OnAppListItemUpdated(app_list::AppListItem* item) override;
 
   // SessionObserver:
-  void OnSessionStateChanged(session_manager::SessionState state) override;
+  void OnActiveUserPrefServiceChanged(PrefService* pref_service) override;
 
   // Methods used in ash:
   bool GetTargetVisibility() const;
@@ -133,10 +141,14 @@ class ASH_EXPORT AppListControllerImpl
                      app_list::AppListShowSource show_source,
                      base::TimeTicks event_time_stamp);
   app_list::AppListViewState GetAppListViewState();
+  HomeLauncherGestureHandler* home_launcher_gesture_handler() {
+    return home_launcher_gesture_handler_.get();
+  }
 
   // app_list::AppListViewDelegate:
   app_list::AppListModel* GetModel() override;
   app_list::SearchModel* GetSearchModel() override;
+  void StartAssistant() override;
   void StartSearch(const base::string16& raw_query) override;
   void OpenSearchResult(const std::string& result_id, int event_flags) override;
   void InvokeSearchResultAction(const std::string& result_id,
@@ -162,6 +174,8 @@ class ASH_EXPORT AppListControllerImpl
                                int event_flags) override;
   void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
                                 ui::MenuSourceType source_type) override;
+  ws::WindowService* GetWindowService() override;
+
   void OnVisibilityChanged(bool visible);
   void OnTargetVisibilityChanged(bool visible);
   void StartVoiceInteractionSession();
@@ -172,6 +186,7 @@ class ASH_EXPORT AppListControllerImpl
   // ShellObserver:
   void OnOverviewModeStarting() override;
   void OnOverviewModeEnding() override;
+  void OnOverviewModeEndingAnimationComplete() override;
 
   // TabletModeObserver:
   void OnTabletModeStarted() override;
@@ -185,10 +200,24 @@ class ASH_EXPORT AppListControllerImpl
   void OnWallpaperPreviewStarted() override;
   void OnWallpaperPreviewEnded() override;
 
+  // mojom::VoiceInteractionObserver:
+  void OnVoiceInteractionStatusChanged(
+      mojom::VoiceInteractionState state) override {}
+  void OnVoiceInteractionSettingsEnabled(bool enabled) override;
+  void OnVoiceInteractionContextEnabled(bool enabled) override {}
+  void OnVoiceInteractionHotwordEnabled(bool enabled) override {}
+  void OnVoiceInteractionSetupCompleted(bool completed) override {}
+  void OnAssistantFeatureAllowedChanged(
+      mojom::AssistantAllowedState state) override;
+  void OnLocaleChanged(const std::string& locale) override {}
+
   bool onscreen_keyboard_shown() const { return onscreen_keyboard_shown_; }
 
   // Returns true if the home launcher is enabled in tablet mode.
   bool IsHomeLauncherEnabledInTabletMode() const;
+
+  // Performs the 'back' action for the active page.
+  void Back();
 
  private:
   syncer::StringOrdinal GetOemFolderPos();
@@ -199,6 +228,11 @@ class ASH_EXPORT AppListControllerImpl
   // Update the visibility of the home launcher based on e.g. if the device is
   // in overview mode.
   void UpdateHomeLauncherVisibility();
+
+  // Update the visibility of Assistant functionality.
+  void UpdateAssistantVisibility();
+
+  ws::WindowService* window_service_;
 
   base::string16 last_raw_query_;
 
@@ -218,6 +252,10 @@ class ASH_EXPORT AppListControllerImpl
   std::unique_ptr<app_list::AnswerCardContentsRegistry>
       answer_card_contents_registry_;
 
+  // Owned pointer to the object which handles gestures related to the home
+  // launcher.
+  std::unique_ptr<HomeLauncherGestureHandler> home_launcher_gesture_handler_;
+
   // Whether the on-screen keyboard is shown.
   bool onscreen_keyboard_shown_ = false;
 
@@ -228,9 +266,16 @@ class ASH_EXPORT AppListControllerImpl
   // should be hidden during overview mode.
   bool in_overview_mode_ = false;
 
+  // Each time overview mode is exited, set this variable based on whether
+  // overview mode is sliding out, so the home launcher knows what to do when
+  // overview mode exit animations are finished.
+  bool use_slide_to_exit_overview_mode_ = false;
+
   // Whether the wallpaper is being previewed. The home launcher (if enabled)
   // should be hidden during wallpaper preview.
   bool in_wallpaper_preview_ = false;
+
+  mojo::Binding<mojom::VoiceInteractionObserver> voice_interaction_binding_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListControllerImpl);
 };

@@ -50,8 +50,7 @@ SurfaceHitTestReadyNotifier::SurfaceHitTestReadyNotifier(
 
 void SurfaceHitTestReadyNotifier::WaitForSurfaceReady(
     RenderWidgetHostViewBase* root_view) {
-  viz::SurfaceId root_surface_id = root_view->GetCurrentSurfaceId();
-  while (!ContainsSurfaceId(root_surface_id)) {
+  while (!ContainsSurfaceId(root_view->GetCurrentSurfaceId())) {
     // TODO(kenrb): Need a better way to do this. Needs investigation on
     // whether we can add a callback through RenderWidgetHostViewBaseObserver
     // from OnSwapCompositorFrame and avoid this busy waiting. A callback on
@@ -185,6 +184,7 @@ void HitTestRegionObserver::WaitForHitTestData() {
 void HitTestRegionObserver::OnAggregatedHitTestRegionListUpdated(
     const viz::FrameSinkId& frame_sink_id,
     const std::vector<viz::AggregatedHitTestRegion>& hit_test_data) {
+
   if (!run_loop_)
     return;
 
@@ -194,6 +194,15 @@ void HitTestRegionObserver::OnAggregatedHitTestRegionListUpdated(
       return;
     }
   }
+}
+
+const std::vector<viz::AggregatedHitTestRegion>&
+HitTestRegionObserver::GetHitTestData() {
+  const auto& hit_test_query_map =
+      GetHostFrameSinkManager()->display_hit_test_query();
+  const auto iter = hit_test_query_map.find(frame_sink_id_);
+  DCHECK(iter != hit_test_query_map.end());
+  return iter->second.get()->hit_test_data_;
 }
 
 }  // namespace content

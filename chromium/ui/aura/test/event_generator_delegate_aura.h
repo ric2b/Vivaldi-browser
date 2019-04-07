@@ -8,9 +8,14 @@
 #include "base/macros.h"
 #include "ui/events/test/event_generator.h"
 
+#include <memory>
+
+namespace service_manager {
+class Connector;
+}
+
 namespace aura {
 class Window;
-class WindowTreeHost;
 
 namespace client {
 class ScreenPositionClient;
@@ -18,16 +23,20 @@ class ScreenPositionClient;
 
 namespace test {
 
-void InitializeAuraEventGeneratorDelegate();
-
 // Implementation of ui::test::EventGeneratorDelegate for Aura.
 class EventGeneratorDelegateAura : public ui::test::EventGeneratorDelegate {
  public:
   EventGeneratorDelegateAura();
   ~EventGeneratorDelegateAura() override;
 
-  // Returns the host for given point.
-  virtual WindowTreeHost* GetHostAt(const gfx::Point& point) const = 0;
+  // Creates a new EventGeneratorDelegateAura. |connector| is used when aura
+  // is backed by mus, and if supplied results in creating an
+  // EventGeneratorDelegateAura that sends event to the remote window service.
+  static std::unique_ptr<ui::test::EventGeneratorDelegate> Create(
+      service_manager::Connector* connector,
+      ui::test::EventGenerator* owner,
+      gfx::NativeWindow root_window,
+      gfx::NativeWindow window);
 
   // Returns the screen position client that determines the
   // coordinates used in EventGenerator. EventGenerator uses
@@ -36,7 +45,6 @@ class EventGeneratorDelegateAura : public ui::test::EventGeneratorDelegate {
       const aura::Window* window) const = 0;
 
   // Overridden from ui::test::EventGeneratorDelegate:
-  ui::EventTarget* GetTargetAt(const gfx::Point& location) override;
   ui::EventSource* GetEventSource(ui::EventTarget* target) override;
   gfx::Point CenterOfTarget(const ui::EventTarget* target) const override;
   gfx::Point CenterOfWindow(gfx::NativeWindow window) const override;

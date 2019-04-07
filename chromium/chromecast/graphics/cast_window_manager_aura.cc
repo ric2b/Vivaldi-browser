@@ -6,12 +6,14 @@
 
 #include "base/memory/ptr_util.h"
 #include "chromecast/graphics/cast_focus_client_aura.h"
-#include "chromecast/graphics/cast_system_gesture_event_handler.h"
+#include "chromecast/graphics/gestures/cast_system_gesture_event_handler.h"
+#include "chromecast/graphics/gestures/side_swipe_detector.h"
 #include "ui/aura/client/default_capture_client.h"
 #include "ui/aura/client/focus_change_observer.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
+#include "ui/aura/null_window_targeter.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host_platform.h"
 #include "ui/base/ime/input_method.h"
@@ -72,39 +74,12 @@ gfx::Rect GetPrimaryDisplayHostBounds() {
 
 }  // namespace
 
-// An ui::EventTarget that ignores events.
-class CastEventIgnorer : public ui::EventTargeter {
- public:
-  ~CastEventIgnorer() override;
-
-  // ui::EventTargeter implementation:
-  ui::EventTarget* FindTargetForEvent(ui::EventTarget* root,
-                                      ui::Event* event) override;
-  ui::EventTarget* FindNextBestTarget(ui::EventTarget* previous_target,
-                                      ui::Event* event) override;
-};
-
-CastEventIgnorer::~CastEventIgnorer() {}
-
-ui::EventTarget* CastEventIgnorer::FindTargetForEvent(ui::EventTarget* root,
-                                                      ui::Event* event) {
-  return nullptr;
-}
-
-ui::EventTarget* CastEventIgnorer::FindNextBestTarget(
-    ui::EventTarget* previous_target,
-    ui::Event* event) {
-  return nullptr;
-}
-
 CastWindowTreeHost::CastWindowTreeHost(bool enable_input,
                                        const gfx::Rect& bounds)
     : WindowTreeHostPlatform(ui::PlatformWindowInitProperties{bounds}),
       enable_input_(enable_input) {
-  if (!enable_input) {
-    window()->SetEventTargeter(
-        std::unique_ptr<ui::EventTargeter>(new CastEventIgnorer));
-  }
+  if (!enable_input)
+    window()->SetEventTargeter(std::make_unique<aura::NullWindowTargeter>());
 }
 
 CastWindowTreeHost::~CastWindowTreeHost() {}
@@ -245,8 +220,12 @@ void CastWindowManagerAura::Setup() {
                                         screen_position_client_.get());
 
   window_tree_host_->Show();
+  system_gesture_dispatcher_ = std::make_unique<CastSystemGestureDispatcher>();
   system_gesture_event_handler_ =
-      std::make_unique<CastSystemGestureEventHandler>(root_window);
+      std::make_unique<CastSystemGestureEventHandler>(
+          system_gesture_dispatcher_.get(), root_window);
+  side_swipe_detector_ = std::make_unique<SideSwipeDetector>(
+      system_gesture_dispatcher_.get(), root_window);
 }
 
 CastWindowTreeHost* CastWindowManagerAura::window_tree_host() const {
@@ -258,6 +237,7 @@ void CastWindowManagerAura::TearDown() {
   if (!window_tree_host_) {
     return;
   }
+  side_swipe_detector_.reset();
   capture_client_.reset();
   aura::client::SetWindowParentingClient(window_tree_host_->window(), nullptr);
   wm::SetActivationClient(window_tree_host_->window(), nullptr);
@@ -303,19 +283,23 @@ void CastWindowManagerAura::AddWindow(gfx::NativeView child) {
 
 void CastWindowManagerAura::AddGestureHandler(CastGestureHandler* handler) {
   DCHECK(system_gesture_event_handler_);
-  system_gesture_event_handler_->AddGestureHandler(handler);
+  system_gesture_dispatcher_->AddGestureHandler(handler);
 }
 
 void CastWindowManagerAura::CastWindowManagerAura::RemoveGestureHandler(
     CastGestureHandler* handler) {
   DCHECK(system_gesture_event_handler_);
-  system_gesture_event_handler_->RemoveGestureHandler(handler);
+  system_gesture_dispatcher_->RemoveGestureHandler(handler);
 }
 
 void CastWindowManagerAura::CastWindowManagerAura::SetColorInversion(
     bool enable) {
   DCHECK(window_tree_host_);
   window_tree_host_->window()->layer()->SetLayerInverted(enable);
+}
+
+CastGestureHandler* CastWindowManagerAura::GetGestureHandler() const {
+  return system_gesture_dispatcher_.get();
 }
 
 }  // namespace chromecast

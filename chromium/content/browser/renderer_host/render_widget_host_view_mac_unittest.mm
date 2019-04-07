@@ -22,6 +22,7 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/viz/common/surfaces/child_local_surface_id_allocator.h"
+#include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/frame_host/render_widget_host_view_guest.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
@@ -51,6 +52,8 @@
 #include "ui/base/cocoa/secure_password_input.h"
 #import "ui/base/test/cocoa_helper.h"
 #import "ui/base/test/scoped_fake_nswindow_focus.h"
+#include "ui/base/ui_base_features.h"
+#include "ui/compositor/recyclable_compositor_mac.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/blink/blink_features.h"
 #include "ui/events/blink/web_input_event_traits.h"
@@ -132,20 +135,30 @@ std::string GetMessageNames(
   for (auto& event : events)
     result.push_back(event->name());
   return base::JoinString(result, " ");
-    }
+}
 
-    blink::WebPointerProperties::PointerType GetPointerType(
-        const MockWidgetInputHandler::MessageVector& events) {
-      EXPECT_EQ(events.size(), 1U);
-      MockWidgetInputHandler::DispatchedEventMessage* event =
-          events[0]->ToEvent();
-      if (event && blink::WebInputEvent::IsMouseEventType(
-                       event->Event()->web_event->GetType())) {
-        return static_cast<const blink::WebMouseEvent*>(
-                   event->Event()->web_event.get())
-            ->pointer_type;
-      }
-      return blink::WebPointerProperties::PointerType::kUnknown;
+blink::WebPointerProperties::PointerType GetPointerType(
+    const MockWidgetInputHandler::MessageVector& events) {
+  EXPECT_EQ(events.size(), 1U);
+  MockWidgetInputHandler::DispatchedEventMessage* event = events[0]->ToEvent();
+  if (!event)
+    return blink::WebPointerProperties::PointerType::kUnknown;
+
+  if (blink::WebInputEvent::IsMouseEventType(
+          event->Event()->web_event->GetType())) {
+    return static_cast<const blink::WebMouseEvent*>(
+               event->Event()->web_event.get())
+        ->pointer_type;
+  }
+
+  if (blink::WebInputEvent::IsTouchEventType(
+          event->Event()->web_event->GetType())) {
+    return static_cast<const blink::WebTouchEvent*>(
+               event->Event()->web_event.get())
+        ->touches[0]
+        .pointer_type;
+  }
+  return blink::WebPointerProperties::PointerType::kUnknown;
 }
 
 NSEvent* MockTabletEventWithParams(CGEventType type,
@@ -166,12 +179,20 @@ NSEvent* MockMouseEventWithParams(CGEventType mouse_type,
                                   CGPoint location,
                                   CGMouseButton button,
                                   CGEventMouseSubtype subtype,
-                                  bool is_entering_proximity = false) {
+                                  bool is_entering_proximity = false,
+                                  bool is_pen_tip = false) {
   CGEventRef cg_event =
       CGEventCreateMouseEvent(NULL, mouse_type, location, button);
   CGEventSetIntegerValueField(cg_event, kCGMouseEventSubtype, subtype);
   CGEventSetIntegerValueField(cg_event, kCGTabletProximityEventEnterProximity,
                               is_entering_proximity);
+  CGEventSetIntegerValueField(cg_event, kCGTabletEventRotation, 300);
+  if (is_pen_tip)
+    CGEventSetIntegerValueField(cg_event, kCGTabletEventPointButtons, 1);
+  CGEventTimestamp timestamp =
+      (ui::EventTimeForNow() - base::TimeTicks()).InMicroseconds() *
+      base::Time::kNanosecondsPerMicrosecond;
+  CGEventSetTimestamp(cg_event, timestamp);
   NSEvent* event = [NSEvent eventWithCGEvent:cg_event];
   CFRelease(cg_event);
   return event;
@@ -358,7 +379,8 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
 
   void SetUp() override {
     RenderViewHostImplTestHarness::SetUp();
-    gpu::ImageTransportSurface::SetAllowOSMesaForTesting(true);
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndEnableFeature(features::kDirectManipulationStylus);
 
     browser_context_ = std::make_unique<TestBrowserContext>();
     process_host_ =
@@ -944,6 +966,77 @@ TEST_F(RenderWidgetHostViewMacTest, PointerEventWithMouseType) {
             GetPointerType(events));
 }
 
+TEST_F(RenderWidgetHostViewMacTest, PointerEventWithPenTypeSendAsTouch) {
+  // Send a NSEvent of NSTabletProximity type which has a device type of pen.
+  NSEvent* event = MockTabletEventWithParams(kCGEventTabletProximity, true,
+                                             NSPenPointingDevice);
+  [rwhv_mac_->cocoa_view() tabletEvent:event];
+  // Flush and clear other messages (e.g. begin frames) the RWHVMac also sends.
+  base::RunLoop().RunUntilIdle();
+  static_cast<RenderWidgetHostImpl*>(rwhv_mac_->GetRenderWidgetHost())
+      ->input_router()
+      ->ForceSetTouchActionAuto();
+
+  event = MockMouseEventWithParams(
+      kCGEventLeftMouseDown, {6, 9}, kCGMouseButtonLeft,
+      kCGEventMouseSubtypeTabletPoint, false, true);
+  [rwhv_mac_->cocoa_view() mouseEvent:event];
+  base::RunLoop().RunUntilIdle();
+  MockWidgetInputHandler::MessageVector events =
+      host_->GetAndResetDispatchedMessages();
+  ASSERT_EQ("TouchStart", GetMessageNames(events));
+  EXPECT_EQ(blink::WebPointerProperties::PointerType::kPen,
+            GetPointerType(events));
+  events.clear();
+  base::RunLoop().RunUntilIdle();
+  events = host_->GetAndResetDispatchedMessages();
+
+  event = MockMouseEventWithParams(
+      kCGEventLeftMouseDragged, {16, 29}, kCGMouseButtonLeft,
+      kCGEventMouseSubtypeTabletPoint, false, true);
+  [rwhv_mac_->cocoa_view() mouseEvent:event];
+  base::RunLoop().RunUntilIdle();
+  events = host_->GetAndResetDispatchedMessages();
+  ASSERT_EQ("TouchMove", GetMessageNames(events));
+  EXPECT_EQ(blink::WebPointerProperties::PointerType::kPen,
+            GetPointerType(events));
+
+  events.clear();
+  base::RunLoop().RunUntilIdle();
+  events = host_->GetAndResetDispatchedMessages();
+
+  event = MockMouseEventWithParams(kCGEventLeftMouseUp, {16, 29},
+                                   kCGMouseButtonLeft,
+                                   kCGEventMouseSubtypeTabletPoint, false);
+  [rwhv_mac_->cocoa_view() mouseEvent:event];
+  base::RunLoop().RunUntilIdle();
+  events = host_->GetAndResetDispatchedMessages();
+  ASSERT_EQ("TouchEnd GestureScrollEnd", GetMessageNames(events));
+  EXPECT_EQ(blink::WebPointerProperties::PointerType::kPen,
+            static_cast<const blink::WebTouchEvent*>(
+                events[0]->ToEvent()->Event()->web_event.get())
+                ->touches[0]
+                .pointer_type);
+
+  events.clear();
+  base::RunLoop().RunUntilIdle();
+  events = host_->GetAndResetDispatchedMessages();
+
+  event =
+      MockMouseEventWithParams(kCGEventLeftMouseDown, {6, 9},
+                               kCGMouseButtonLeft, kCGEventMouseSubtypeDefault);
+  [rwhv_mac_->cocoa_view() mouseEvent:event];
+  base::RunLoop().RunUntilIdle();
+  events = host_->GetAndResetDispatchedMessages();
+  ASSERT_EQ("MouseDown", GetMessageNames(events));
+  EXPECT_EQ(blink::WebPointerProperties::PointerType::kMouse,
+            GetPointerType(events));
+
+  events.clear();
+  base::RunLoop().RunUntilIdle();
+  events = host_->GetAndResetDispatchedMessages();
+}
+
 TEST_F(RenderWidgetHostViewMacTest, SendMouseMoveOnShowingContextMenu) {
   rwhv_mac_->SetShowingContextMenu(true);
   base::RunLoop().RunUntilIdle();
@@ -1308,9 +1401,19 @@ TEST_F(RenderWidgetHostViewMacTest,
   host->ShutdownAndDestroyWidget(true);
 }
 
-class RenderWidgetHostViewMacPinchTest : public RenderWidgetHostViewMacTest {
+class RenderWidgetHostViewMacPinchTest
+    : public RenderWidgetHostViewMacTest,
+      public testing::WithParamInterface<bool> {
  public:
-  RenderWidgetHostViewMacPinchTest() = default;
+  RenderWidgetHostViewMacPinchTest() : async_events_enabled_(GetParam()) {
+    if (async_events_enabled_) {
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kTouchpadAsyncPinchEvents);
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(
+          features::kTouchpadAsyncPinchEvents);
+    }
+  }
 
   bool ShouldSendGestureEvents() {
 #if defined(MAC_OS_X_VERSION_10_11) && \
@@ -1334,11 +1437,16 @@ class RenderWidgetHostViewMacPinchTest : public RenderWidgetHostViewMacTest {
       [rwhv_cocoa_ endGestureWithEvent:pinchEndEvent];
   }
 
+  const bool async_events_enabled_;
+
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewMacPinchTest);
 };
 
-TEST_F(RenderWidgetHostViewMacPinchTest, PinchThresholding) {
+INSTANTIATE_TEST_CASE_P(, RenderWidgetHostViewMacPinchTest, testing::Bool());
+
+TEST_P(RenderWidgetHostViewMacPinchTest, PinchThresholding) {
   // Do a gesture that crosses the threshold.
   {
     NSEvent* pinchUpdateEvents[3] = {
@@ -1372,28 +1480,38 @@ TEST_F(RenderWidgetHostViewMacPinchTest, PinchThresholding) {
     [rwhv_cocoa_ magnifyWithEvent:pinchUpdateEvents[1]];
     base::RunLoop().RunUntilIdle();
     events = host_->GetAndResetDispatchedMessages();
-    EXPECT_EQ("MouseWheel", GetMessageNames(events));
 
-    // Now acking the synthetic mouse wheel does produce GesturePinch events.
-    events[0]->ToEvent()->CallCallback(
-        INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
-    events = host_->GetAndResetDispatchedMessages();
-    EXPECT_EQ("GesturePinchBegin GesturePinchUpdate", GetMessageNames(events));
+    if (async_events_enabled_) {
+      EXPECT_EQ("MouseWheel GesturePinchBegin GesturePinchUpdate",
+                GetMessageNames(events));
+    } else {
+      EXPECT_EQ("MouseWheel", GetMessageNames(events));
+      // Now acking the synthetic mouse wheel does produce GesturePinch events.
+      events[0]->ToEvent()->CallCallback(
+          INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+      events = host_->GetAndResetDispatchedMessages();
+      EXPECT_EQ("GesturePinchBegin GesturePinchUpdate",
+                GetMessageNames(events));
+    }
 
     // The third update still has zoom enabled.
     [rwhv_cocoa_ magnifyWithEvent:pinchUpdateEvents[2]];
     base::RunLoop().RunUntilIdle();
     events = host_->GetAndResetDispatchedMessages();
-    EXPECT_EQ("MouseWheel", GetMessageNames(events));
-    events[0]->ToEvent()->CallCallback(
-        INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
-    events = host_->GetAndResetDispatchedMessages();
-    EXPECT_EQ("GesturePinchUpdate", GetMessageNames(events));
+    if (async_events_enabled_) {
+      EXPECT_EQ("MouseWheel GesturePinchUpdate", GetMessageNames(events));
+    } else {
+      EXPECT_EQ("MouseWheel", GetMessageNames(events));
+      events[0]->ToEvent()->CallCallback(
+          INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+      events = host_->GetAndResetDispatchedMessages();
+      EXPECT_EQ("GesturePinchUpdate", GetMessageNames(events));
+    }
 
     SendEndPinchEvent();
     base::RunLoop().RunUntilIdle();
     events = host_->GetAndResetDispatchedMessages();
-    EXPECT_EQ("GesturePinchEnd", GetMessageNames(events));
+    EXPECT_EQ("MouseWheel GesturePinchEnd", GetMessageNames(events));
   }
 
   // Do a gesture that doesn't cross the threshold, but happens when we're not
@@ -1422,7 +1540,7 @@ TEST_F(RenderWidgetHostViewMacPinchTest, PinchThresholding) {
     SendEndPinchEvent();
     base::RunLoop().RunUntilIdle();
     events = host_->GetAndResetDispatchedMessages();
-    EXPECT_EQ("GesturePinchEnd", GetMessageNames(events));
+    EXPECT_EQ("MouseWheel GesturePinchEnd", GetMessageNames(events));
   }
 
   // Do a gesture again, after the page scale is no longer at one, and ensure
@@ -1458,7 +1576,7 @@ TEST_F(RenderWidgetHostViewMacPinchTest, PinchThresholding) {
     SendEndPinchEvent();
     base::RunLoop().RunUntilIdle();
     events = host_->GetAndResetDispatchedMessages();
-    EXPECT_EQ(0U, events.size());
+    EXPECT_EQ("MouseWheel", GetMessageNames(events));
   }
 }
 
@@ -1837,11 +1955,11 @@ TEST_F(InputMethodMacTest, MonitorCompositionRangeForActiveWidget) {
 
 TEST_F(RenderWidgetHostViewMacTest, ClearCompositorFrame) {
   BrowserCompositorMac* browser_compositor = rwhv_mac_->BrowserCompositor();
-  ui::Compositor* ui_compositor = browser_compositor->GetCompositorForTesting();
+  ui::Compositor* ui_compositor = browser_compositor->GetCompositor();
   EXPECT_NE(ui_compositor, nullptr);
   EXPECT_TRUE(ui_compositor->IsLocked());
   rwhv_mac_->ClearCompositorFrame();
-  EXPECT_EQ(browser_compositor->GetCompositorForTesting(), ui_compositor);
+  EXPECT_EQ(browser_compositor->GetCompositor(), ui_compositor);
   EXPECT_FALSE(ui_compositor->IsLocked());
 }
 
@@ -1902,6 +2020,32 @@ TEST_F(RenderWidgetHostViewMacTest, ConflictingAllocationsResolve) {
       local_surface_id2.child_sequence_number(),
       local_surface_id2.embed_token());
   EXPECT_EQ(local_surface_id4, merged_local_surface_id);
+}
+
+TEST_F(RenderWidgetHostViewMacTest, TransformToRootNoParentLayer) {
+  gfx::PointF point(10, 20);
+  rwhv_mac_->TransformPointToRootSurface(&point);
+  EXPECT_EQ(point, gfx::PointF(10, 20));
+}
+
+TEST_F(RenderWidgetHostViewMacTest, TransformToRootWithParentLayer) {
+  std::unique_ptr<ui::RecyclableCompositorMac> compositor =
+      ui::RecyclableCompositorMacFactory::Get()->CreateCompositor(
+          ImageTransportFactory::GetInstance()->GetContextFactory(),
+          ImageTransportFactory::GetInstance()->GetContextFactoryPrivate());
+  std::unique_ptr<ui::Layer> root_surface_layer =
+      std::make_unique<ui::Layer>(ui::LAYER_SOLID_COLOR);
+  std::unique_ptr<ui::Layer> parent_layer =
+      std::make_unique<ui::Layer>(ui::LAYER_SOLID_COLOR);
+
+  compositor->compositor()->SetRootLayer(root_surface_layer.get());
+  root_surface_layer->SetBounds(gfx::Rect(-5, -10, 1000, 2000));
+  parent_layer->SetBounds(gfx::Rect(100, 300, 500, 400));
+  root_surface_layer->Add(parent_layer.get());
+  gfx::PointF point(10, 20);
+  rwhv_mac_->SetParentUiLayer(parent_layer.get());
+  rwhv_mac_->TransformPointToRootSurface(&point);
+  EXPECT_EQ(point, gfx::PointF(105, 310));
 }
 
 }  // namespace content

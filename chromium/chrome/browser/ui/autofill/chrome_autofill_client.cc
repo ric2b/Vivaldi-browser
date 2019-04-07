@@ -25,6 +25,8 @@
 #include "chrome/browser/ui/autofill/autofill_popup_controller_impl.h"
 #include "chrome/browser/ui/autofill/create_card_unmask_prompt_view.h"
 #include "chrome/browser/ui/autofill/credit_card_scanner_controller.h"
+#include "chrome/browser/ui/autofill/local_card_migration_dialog_factory.h"
+#include "chrome/browser/ui/autofill/local_card_migration_dialog_state.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
@@ -37,7 +39,7 @@
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_view.h"
 #include "components/autofill/core/common/autofill_features.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
@@ -67,6 +69,7 @@
 #include "ui/android/window_android.h"
 #else  // !OS_ANDROID
 #include "chrome/browser/ui/autofill/local_card_migration_bubble_controller_impl.h"
+#include "chrome/browser/ui/autofill/local_card_migration_dialog_controller_impl.h"
 #include "chrome/browser/ui/autofill/save_card_bubble_controller_impl.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -78,8 +81,6 @@
 #if defined(OS_MACOSX)
 #include "content/browser/web_contents/web_contents_impl.h"
 #endif
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(autofill::ChromeAutofillClient);
 
 namespace autofill {
 
@@ -172,13 +173,25 @@ ChromeAutofillClient::GetSecurityLevelForUmaHistograms() {
   return security_info.security_level;
 }
 
-void ChromeAutofillClient::ShowAutofillSettings() {
+void ChromeAutofillClient::ShowAutofillSettings(
+    bool show_credit_card_settings) {
 #if defined(OS_ANDROID)
-  chrome::android::PreferencesLauncher::ShowAutofillSettings(web_contents());
+  if (show_credit_card_settings) {
+    chrome::android::PreferencesLauncher::ShowAutofillCreditCardSettings(
+        web_contents());
+  } else {
+    chrome::android::PreferencesLauncher::ShowAutofillProfileSettings(
+        web_contents());
+  }
 #else
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
-  if (browser)
-    chrome::ShowSettingsSubPage(browser, chrome::kAutofillSubPage);
+  if (browser) {
+    if (show_credit_card_settings) {
+      chrome::ShowSettingsSubPage(browser, chrome::kPaymentsSubPage);
+    } else {
+      chrome::ShowSettingsSubPage(browser, chrome::kAutofillSubPage);
+    }
+  }
 #endif  // #if defined(OS_ANDROID)
 }
 
@@ -196,15 +209,34 @@ void ChromeAutofillClient::OnUnmaskVerificationResult(
   unmask_controller_.OnVerificationResult(result);
 }
 
-void ChromeAutofillClient::ShowLocalCardMigrationPrompt(
-    base::OnceClosure closure) {
+void ChromeAutofillClient::ShowLocalCardMigrationDialog(
+    base::OnceClosure show_migration_dialog_closure) {
 #if !defined(OS_ANDROID)
   autofill::LocalCardMigrationBubbleControllerImpl::CreateForWebContents(
       web_contents());
   autofill::LocalCardMigrationBubbleControllerImpl* controller =
       autofill::LocalCardMigrationBubbleControllerImpl::FromWebContents(
           web_contents());
-  controller->ShowBubble(std::move(closure));
+  controller->ShowBubble(std::move(show_migration_dialog_closure));
+#endif
+}
+
+void ChromeAutofillClient::ConfirmMigrateLocalCardToCloud(
+    std::unique_ptr<base::DictionaryValue> legal_message,
+    std::vector<MigratableCreditCard>& migratable_credit_cards,
+    base::OnceClosure start_migrating_cards_closure) {
+#if !defined(OS_ANDROID)
+  autofill::LocalCardMigrationDialogControllerImpl::CreateForWebContents(
+      web_contents());
+  autofill::LocalCardMigrationDialogControllerImpl* controller =
+      autofill::LocalCardMigrationDialogControllerImpl::FromWebContents(
+          web_contents());
+  controller->SetViewState(LocalCardMigrationDialogState::kOffered);
+  controller->SetCardList(migratable_credit_cards);
+  controller->ShowDialog(
+      std::move(legal_message),
+      CreateLocalCardMigrationDialogView(controller, web_contents()),
+      std::move(start_migrating_cards_closure));
 #endif
 }
 
@@ -368,8 +400,7 @@ void ChromeAutofillClient::HideAutofillPopup() {
 }
 
 bool ChromeAutofillClient::IsAutocompleteEnabled() {
-  // For browser, Autocomplete is always enabled as part of Autofill.
-  return GetPrefs()->GetBoolean(prefs::kAutofillEnabled);
+  return prefs::IsAutocompleteEnabled(GetPrefs());
 }
 
 bool ChromeAutofillClient::AreServerCardsSupported() {

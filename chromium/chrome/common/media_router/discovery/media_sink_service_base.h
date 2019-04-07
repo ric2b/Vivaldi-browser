@@ -63,6 +63,7 @@ class MediaSinkServiceBase {
   // Also invokes |StartTimer()|.
   void AddOrUpdateSink(const MediaSinkInternal& sink);
   void RemoveSink(const MediaSinkInternal& sink);
+  void RemoveSinkById(const MediaSink::Id& sink_id);
 
   const base::flat_map<MediaSink::Id, MediaSinkInternal>& GetSinks() const;
   const MediaSinkInternal* GetSinkById(const MediaSink::Id& sink_id) const;
@@ -94,7 +95,7 @@ class MediaSinkServiceBase {
   base::flat_map<MediaSink::Id, MediaSinkInternal> sinks_;
 
   // Observers to notify when a sink is added, updated, or removed.
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   // Timer for recording device counts after a sink list has changed. To ensure
   // the metrics are recorded accurately, a small delay is introduced after a

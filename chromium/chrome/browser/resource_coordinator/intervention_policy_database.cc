@@ -5,8 +5,8 @@
 #include "chrome/browser/resource_coordinator/intervention_policy_database.h"
 
 #include "base/files/file_util.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/values.h"
 #include "chrome/browser/resource_coordinator/utils.h"
 
@@ -45,7 +45,7 @@ void InterventionPolicyDatabase::InitializeDatabaseWithProtoFile(
   // TODO(sebmarchand): Validate the version and the manifest?
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
-      {base::TaskPriority::BACKGROUND,
+      {base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN, base::MayBlock()},
       base::BindOnce(
           &InterventionPolicyDatabase::ReadDatabaseFromProtoFileOnSequence,

@@ -65,6 +65,7 @@ void DebugInfoEventListener::OnConnectionStatusChange(ConnectionStatus status) {
 
 void DebugInfoEventListener::OnPassphraseRequired(
     PassphraseRequiredReason reason,
+    const KeyDerivationParams& key_derivation_params,
     const sync_pb::EncryptedData& pending_keys) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CreateAndAddEvent(sync_pb::SyncEnums::PASSPHRASE_REQUIRED);
@@ -214,20 +215,16 @@ void DebugInfoEventListener::OnDataTypeConfigureComplete(
         configuration_stats[i]
             .association_wait_time_for_high_priority.InMicroseconds());
 
-    for (ModelTypeSet::Iterator it =
-             configuration_stats[i]
-                 .high_priority_types_configured_before.First();
-         it.Good(); it.Inc()) {
+    for (ModelType type :
+         configuration_stats[i].high_priority_types_configured_before) {
       datatype_stats->add_high_priority_type_configured_before(
-          GetSpecificsFieldNumberFromModelType(it.Get()));
+          GetSpecificsFieldNumberFromModelType(type));
     }
 
-    for (ModelTypeSet::Iterator it =
-             configuration_stats[i]
-                 .same_priority_types_configured_before.First();
-         it.Good(); it.Inc()) {
+    for (ModelType type :
+         configuration_stats[i].same_priority_types_configured_before) {
       datatype_stats->add_same_priority_type_configured_before(
-          GetSpecificsFieldNumberFromModelType(it.Get()));
+          GetSpecificsFieldNumberFromModelType(type));
     }
 
     AddEventToQueue(association_event);

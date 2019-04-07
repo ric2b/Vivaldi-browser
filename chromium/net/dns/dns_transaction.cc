@@ -5,7 +5,9 @@
 #include "net/dns/dns_transaction.h"
 
 #include <memory>
+#include <set>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -19,6 +21,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
@@ -29,7 +32,7 @@
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/elements_upload_data_stream.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_address.h"
@@ -49,6 +52,7 @@
 #include "net/log/net_log_with_source.h"
 #include "net/socket/datagram_client_socket.h"
 #include "net/socket/stream_socket.h"
+#include "net/third_party/uri_template/uri_template.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
@@ -87,7 +91,7 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
             "Essential for Chrome's navigation."
         })");
 
-const char kDnsOverHttpResponseContentType[] = "application/dns-udpwireformat";
+const char kDnsOverHttpResponseContentType[] = "application/dns-message";
 
 // Count labels in the fully-qualified name in DNS format.
 int CountLabels(const std::string& name) {
@@ -112,26 +116,6 @@ std::unique_ptr<base::Value> NetLogStartCallback(
   return std::move(dict);
 }
 
-// Values are used in UMA histograms. Do not change existing values.
-enum MalformedResponseResult {
-  MALFORMED_OK = 0,
-  MALFORMED_MALFORMED = 1,
-  MALFORMED_FAILED = 2,
-  MALFORMED_MAX
-};
-
-void RecordMalformedResponseHistogram(int net_error) {
-  MalformedResponseResult error_type;
-  if (net_error == OK)
-    error_type = MALFORMED_OK;
-  else if (net_error == ERR_DNS_MALFORMED_RESPONSE)
-    error_type = MALFORMED_MALFORMED;
-  else
-    error_type = MALFORMED_FAILED;
-  UMA_HISTOGRAM_ENUMERATION("Net.DNS.ResultAfterMalformedResponse", error_type,
-                            MALFORMED_MAX);
-}
-
 // ----------------------------------------------------------------------------
 
 // A single asynchronous DNS exchange, which consists of sending out a
@@ -145,7 +129,7 @@ class DnsAttempt {
   virtual ~DnsAttempt() = default;
   // Starts the attempt. Returns ERR_IO_PENDING if cannot complete synchronously
   // and calls |callback| upon completion.
-  virtual int Start(const CompletionCallback& callback) = 0;
+  virtual int Start(CompletionOnceCallback callback) = 0;
 
   // Returns the query of this attempt.
   virtual const DnsQuery* GetQuery() const = 0;
@@ -199,19 +183,14 @@ class DnsUDPAttempt : public DnsAttempt {
                 std::unique_ptr<DnsQuery> query)
       : DnsAttempt(server_index),
         next_state_(STATE_NONE),
-        received_malformed_response_(false),
         socket_lease_(std::move(socket_lease)),
         query_(std::move(query)) {}
 
   // DnsAttempt methods.
 
-  // TODO(https://crbug.com/779589):  This method violates the usual convention
-  // that |callback| is only called once.  In particular, this method might
-  // return ERR_IO_PENDING, then |callback| might be called with
-  // ERR_DNS_MALFORMED_RESPONSE, then again with some other error code.
-  int Start(const CompletionCallback& callback) override {
+  int Start(CompletionOnceCallback callback) override {
     DCHECK_EQ(STATE_NONE, next_state_);
-    callback_ = callback;
+    callback_ = std::move(callback);
     start_time_ = base::TimeTicks::Now();
     next_state_ = STATE_SEND_QUERY;
     return DoLoop(OK);
@@ -265,20 +244,15 @@ class DnsUDPAttempt : public DnsAttempt {
     } while (rv != ERR_IO_PENDING && next_state_ != STATE_NONE);
 
     set_result(rv);
-    if (received_malformed_response_) {
-      // If we received a malformed response, and are now waiting for another
-      // one, indicate to the transaction that the server might be misbehaving.
-      if (rv == ERR_IO_PENDING)
-        return ERR_DNS_MALFORMED_RESPONSE;
 
-      // This is a new response after the original malformed one.
-      RecordMalformedResponseHistogram(rv);
-    }
+    if (rv == ERR_IO_PENDING)
+      return rv;
+
     if (rv == OK) {
       DCHECK_EQ(STATE_NONE, next_state_);
       UMA_HISTOGRAM_LONG_TIMES_100("AsyncDNS.UDPAttemptSuccess",
                                    base::TimeTicks::Now() - start_time_);
-    } else if (rv != ERR_IO_PENDING) {
+    } else {
       UMA_HISTOGRAM_LONG_TIMES_100("AsyncDNS.UDPAttemptFail",
                                    base::TimeTicks::Now() - start_time_);
     }
@@ -320,17 +294,8 @@ class DnsUDPAttempt : public DnsAttempt {
       return rv;
 
     DCHECK(rv);
-    if (!response_->InitParse(rv, *query_)) {
-      // Other implementations simply ignore mismatched responses. Since each
-      // DnsUDPAttempt binds to a different port, we might find that responses
-      // to previously timed out queries lead to failures in the future.
-      // Our solution is to make another attempt, in case the query truly
-      // failed, but keep this attempt alive, in case it was a false alarm.
-      received_malformed_response_ = true;
-      RecordMalformedResponseHistogram(ERR_DNS_MALFORMED_RESPONSE);
-      next_state_ = STATE_READ_RESPONSE;
-      return OK;
-    }
+    if (!response_->InitParse(rv, *query_))
+      return ERR_DNS_MALFORMED_RESPONSE;
     if (response_->flags() & dns_protocol::kFlagTC)
       return ERR_DNS_SERVER_REQUIRES_TCP;
     if (response_->rcode() == dns_protocol::kRcodeNXDOMAIN)
@@ -344,11 +309,10 @@ class DnsUDPAttempt : public DnsAttempt {
   void OnIOComplete(int rv) {
     rv = DoLoop(rv);
     if (rv != ERR_IO_PENDING)
-      callback_.Run(rv);
+      std::move(callback_).Run(rv);
   }
 
   State next_state_;
-  bool received_malformed_response_;
   base::TimeTicks start_time_;
 
   std::unique_ptr<DnsSession::SocketLease> socket_lease_;
@@ -356,7 +320,7 @@ class DnsUDPAttempt : public DnsAttempt {
 
   std::unique_ptr<DnsResponse> response_;
 
-  CompletionCallback callback_;
+  CompletionOnceCallback callback_;
 
   DISALLOW_COPY_AND_ASSIGN(DnsUDPAttempt);
 };
@@ -365,26 +329,30 @@ class DnsHTTPAttempt : public DnsAttempt, public URLRequest::Delegate {
  public:
   DnsHTTPAttempt(unsigned server_index,
                  std::unique_ptr<DnsQuery> query,
-                 const GURL& server,
+                 const string& server_template,
+                 const GURL& gurl_without_parameters,
                  bool use_post,
                  URLRequestContext* url_request_context,
                  RequestPriority request_priority_)
       : DnsAttempt(server_index),
         query_(std::move(query)),
         weak_factory_(this) {
-    GURL url(server);
-    if (!use_post) {
+    GURL url;
+    if (use_post) {
+      // Set url for a POST request
+      url = gurl_without_parameters;
+    } else {
+      // Set url for a GET request
+      std::string url_string;
+      std::unordered_map<string, string> parameters;
       std::string encoded_query;
       base::Base64UrlEncode(base::StringPiece(query_->io_buffer()->data(),
                                               query_->io_buffer()->size()),
                             base::Base64UrlEncodePolicy::INCLUDE_PADDING,
                             &encoded_query);
-      std::string query_str("content-type=application/dns-udpwireformat&body=" +
-                            encoded_query);
-      GURL::Replacements replacements;
-      replacements.SetQuery(query_str.c_str(),
-                            url::Component(0, query_str.length()));
-      url = server.ReplaceComponents(replacements);
+      parameters.emplace("dns", encoded_query);
+      uri_template::Expand(server_template, parameters, &url_string);
+      url = GURL(url_string);
     }
 
     HttpRequestHeaders extra_request_headers;
@@ -428,21 +396,20 @@ class DnsHTTPAttempt : public DnsAttempt, public URLRequest::Delegate {
 
     request_->SetExtraRequestHeaders(extra_request_headers);
     request_->SetLoadFlags(request_->load_flags() | LOAD_DISABLE_CACHE |
-                           LOAD_BYPASS_PROXY | LOAD_DO_NOT_SEND_COOKIES |
-                           LOAD_DO_NOT_SAVE_COOKIES |
-                           LOAD_DO_NOT_SEND_AUTH_DATA);
+                           LOAD_BYPASS_PROXY);
+    request_->set_allow_credentials(false);
   }
 
   // DnsAttempt overrides.
 
-  int Start(const CompletionCallback& callback) override {
+  int Start(CompletionOnceCallback callback) override {
     if (DNSDomainToString(query_->qname()).compare(request_->url().host()) ==
         0) {
       // Fast failing looking up a server with itself.
       return ERR_DNS_HTTP_FAILED;
     }
 
-    callback_ = callback;
+    callback_ = std::move(callback);
     request_->Start();
     return ERR_IO_PENDING;
   }
@@ -473,7 +440,7 @@ class DnsHTTPAttempt : public DnsAttempt, public URLRequest::Delegate {
       return;
     }
 
-    buffer_ = new GrowableIOBuffer();
+    buffer_ = base::MakeRefCounted<GrowableIOBuffer>();
 
     if (request->response_headers()->HasHeader(
             HttpRequestHeaders::kContentLength)) {
@@ -542,7 +509,7 @@ class DnsHTTPAttempt : public DnsAttempt, public URLRequest::Delegate {
  private:
   void ResponseCompleted(int net_error) {
     request_.reset();
-    callback_.Run(CompleteResponse(net_error));
+    std::move(callback_).Run(CompleteResponse(net_error));
   }
 
   int CompleteResponse(int net_error) {
@@ -569,7 +536,7 @@ class DnsHTTPAttempt : public DnsAttempt, public URLRequest::Delegate {
 
   scoped_refptr<GrowableIOBuffer> buffer_;
   std::unique_ptr<DnsQuery> query_;
-  CompletionCallback callback_;
+  CompletionOnceCallback callback_;
   std::unique_ptr<DnsResponse> response_;
   std::unique_ptr<URLRequest> request_;
   NetLogWithSource net_log_;
@@ -588,13 +555,14 @@ class DnsTCPAttempt : public DnsAttempt {
         next_state_(STATE_NONE),
         socket_(std::move(socket)),
         query_(std::move(query)),
-        length_buffer_(new IOBufferWithSize(sizeof(uint16_t))),
+        length_buffer_(
+            base::MakeRefCounted<IOBufferWithSize>(sizeof(uint16_t))),
         response_length_(0) {}
 
   // DnsAttempt:
-  int Start(const CompletionCallback& callback) override {
+  int Start(CompletionOnceCallback callback) override {
     DCHECK_EQ(STATE_NONE, next_state_);
-    callback_ = callback;
+    callback_ = std::move(callback);
     start_time_ = base::TimeTicks::Now();
     next_state_ = STATE_CONNECT_COMPLETE;
     int rv = socket_->Connect(
@@ -684,8 +652,8 @@ class DnsTCPAttempt : public DnsAttempt {
     if (static_cast<int>(query_size) != query_->io_buffer()->size())
       return ERR_FAILED;
     base::WriteBigEndian<uint16_t>(length_buffer_->data(), query_size);
-    buffer_ =
-        new DrainableIOBuffer(length_buffer_.get(), length_buffer_->size());
+    buffer_ = base::MakeRefCounted<DrainableIOBuffer>(length_buffer_,
+                                                      length_buffer_->size());
     next_state_ = STATE_SEND_LENGTH;
     return OK;
   }
@@ -703,8 +671,8 @@ class DnsTCPAttempt : public DnsAttempt {
           base::BindOnce(&DnsTCPAttempt::OnIOComplete, base::Unretained(this)),
           kTrafficAnnotation);
     }
-    buffer_ =
-        new DrainableIOBuffer(query_->io_buffer(), query_->io_buffer()->size());
+    buffer_ = base::MakeRefCounted<DrainableIOBuffer>(
+        query_->io_buffer(), query_->io_buffer()->size());
     next_state_ = STATE_SEND_QUERY;
     return OK;
   }
@@ -722,8 +690,8 @@ class DnsTCPAttempt : public DnsAttempt {
           base::BindOnce(&DnsTCPAttempt::OnIOComplete, base::Unretained(this)),
           kTrafficAnnotation);
     }
-    buffer_ =
-        new DrainableIOBuffer(length_buffer_.get(), length_buffer_->size());
+    buffer_ = base::MakeRefCounted<DrainableIOBuffer>(length_buffer_,
+                                                      length_buffer_->size());
     next_state_ = STATE_READ_LENGTH;
     return OK;
   }
@@ -754,7 +722,8 @@ class DnsTCPAttempt : public DnsAttempt {
       return ERR_DNS_MALFORMED_RESPONSE;
     // Allocate more space so that DnsResponse::InitParse sanity check passes.
     response_.reset(new DnsResponse(response_length_ + 1));
-    buffer_ = new DrainableIOBuffer(response_->io_buffer(), response_length_);
+    buffer_ = base::MakeRefCounted<DrainableIOBuffer>(response_->io_buffer(),
+                                                      response_length_);
     next_state_ = STATE_READ_RESPONSE;
     return OK;
   }
@@ -795,7 +764,7 @@ class DnsTCPAttempt : public DnsAttempt {
   void OnIOComplete(int rv) {
     rv = DoLoop(rv);
     if (rv != ERR_IO_PENDING)
-      callback_.Run(rv);
+      std::move(callback_).Run(rv);
   }
 
   int ReadIntoBuffer() {
@@ -815,7 +784,7 @@ class DnsTCPAttempt : public DnsAttempt {
   uint16_t response_length_;
   std::unique_ptr<DnsResponse> response_;
 
-  CompletionCallback callback_;
+  CompletionOnceCallback callback_;
 
   DISALLOW_COPY_AND_ASSIGN(DnsTCPAttempt);
 };
@@ -995,14 +964,6 @@ class DnsTransactionImpl : public DnsTransaction,
     std::move(callback_).Run(this, result.rv, response);
   }
 
-  bool IsHostInDnsOverHttpsServerList(const std::string& host) const {
-    for (const auto& server : session_->config().dns_over_https_servers) {
-      if (host == server.server.host_piece())
-        return true;
-    }
-    return false;
-  }
-
   AttemptResult MakeAttempt() {
     // Make an HTTP attempt unless we have already made more attempts
     // than we have configured servers. Otherwise make a UDP attempt
@@ -1085,15 +1046,20 @@ class DnsTransactionImpl : public DnsTransaction,
         (doh_attempts_ % session_->config().dns_over_https_servers.size()) +
         session_->config().nameservers.size());
 
+    std::string server_template =
+        servers[server_index - session_->config().nameservers.size()]
+            .server_template;
+    GURL gurl_without_parameters(
+        GetURLFromTemplateWithoutParameters(server_template));
     attempts_.push_back(std::make_unique<DnsHTTPAttempt>(
-        server_index, std::move(query),
-        servers[server_index - session_->config().nameservers.size()].server,
+        server_index, std::move(query), server_template,
+        gurl_without_parameters,
         servers[server_index - session_->config().nameservers.size()].use_post,
         url_request_context_, request_priority_));
     ++doh_attempts_;
     ++attempts_count_;
-    // Check that we're not looking one of the DNS over HTTPS servers.
-    if (IsHostInDnsOverHttpsServerList(DNSDomainToString(qnames_.front()))) {
+    // Check that we're not using the DoH server to resolve itself.
+    if (DNSDomainToString(qnames_.front()) == gurl_without_parameters.host()) {
       static_cast<DnsHTTPAttempt*>(attempts_.back().get())->Cancel();
       return AttemptResult(ERR_CONNECTION_REFUSED, attempts_.back().get());
     }
@@ -1215,6 +1181,9 @@ class DnsTransactionImpl : public DnsTransaction,
       net_log_.AddEvent(NetLogEventType::DNS_TRANSACTION_RESPONSE,
                         base::Bind(&DnsAttempt::NetLogResponseCallback,
                                    base::Unretained(attempt)));
+
+      base::UmaHistogramSparse("AsyncDNS.Rcode",
+                               attempt->GetResponse()->rcode());
     }
   }
 
@@ -1278,16 +1247,10 @@ class DnsTransactionImpl : public DnsTransaction,
             session_->RecordServerFailure(result.attempt->server_index());
             return AttemptResult(ERR_IO_PENDING, NULL);
           }
-          if (MoreAttemptsAllowed()) {
-            result = MakeAttempt();
-          } else if (result.rv == ERR_DNS_MALFORMED_RESPONSE &&
-                     !had_tcp_attempt_ && !doh_attempt_) {
-            // For UDP only, ignore the response and wait until the last
-            // attempt times out.
-            return AttemptResult(ERR_IO_PENDING, NULL);
-          } else {
-            return AttemptResult(result.rv, NULL);
+          if (!MoreAttemptsAllowed()) {
+            return result;
           }
+          result = MakeAttempt();
           break;
       }
     }

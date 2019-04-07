@@ -8,9 +8,9 @@
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/credit_card.h"
+#include "components/autofill/core/browser/payments/payments_util.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/autofill_clock.h"
 
@@ -68,9 +68,8 @@ void FullCardRequest::GetFullCard(const CreditCard& card,
                          card.ShouldUpdateExpiration(AutofillClock::Now()));
   if (should_unmask_card_) {
     payments_client_->Prepare();
-    request_->billing_customer_number =
-        static_cast<int64_t>(payments_client_->GetPrefService()->GetDouble(
-            prefs::kAutofillBillingCustomerNumber));
+    request_->billing_customer_number = GetBillingCustomerId(
+        personal_data_manager_, payments_client_->GetPrefService());
   }
 
   ui_delegate_->ShowUnmaskPrompt(request_->card, reason,
@@ -131,7 +130,9 @@ void FullCardRequest::OnDidGetUnmaskRiskData(const std::string& risk_data) {
 
 void FullCardRequest::SendUnmaskCardRequest() {
   real_pan_request_timestamp_ = AutofillClock::Now();
-  payments_client_->UnmaskCard(*request_);
+  payments_client_->UnmaskCard(*request_,
+                               base::BindOnce(&FullCardRequest::OnDidGetRealPan,
+                                              weak_ptr_factory_.GetWeakPtr()));
 }
 
 void FullCardRequest::OnDidGetRealPan(AutofillClient::PaymentsRpcResult result,

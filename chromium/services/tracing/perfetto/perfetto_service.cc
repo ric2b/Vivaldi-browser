@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "services/service_manager/public/cpp/bind_source_info.h"
 #include "services/tracing/perfetto/producer_host.h"
 #include "services/tracing/public/cpp/perfetto/shared_memory.h"
@@ -53,7 +53,7 @@ PerfettoService::PerfettoService(
               ? task_runner_for_testing
               : base::CreateSingleThreadTaskRunnerWithTraits(
                     {base::MayBlock(), base::WithBaseSyncPrimitives(),
-                     base::TaskPriority::BACKGROUND},
+                     base::TaskPriority::BEST_EFFORT},
                     base::SingleThreadTaskRunnerThreadMode::DEDICATED)) {
   DCHECK(!g_perfetto_service);
   g_perfetto_service = this;

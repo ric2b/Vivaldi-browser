@@ -8,18 +8,45 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "components/gcm_driver/gcm_client_factory.h"
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
-#include "ios/chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/web/public/web_thread.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/proxy_resolving_socket.mojom.h"
+
+namespace {
+
+// Requests a ProxyResolvingSocketFactoryPtr on the UI thread. Note that a
+// WeakPtr of GCMProfileService is needed to detect when the KeyedService shuts
+// down, and avoid calling into |profile| which might have also been destroyed.
+void RequestProxyResolvingSocketFactoryOnUIThread(
+    web::BrowserState* context,
+    base::WeakPtr<gcm::GCMProfileService> service,
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  if (!service)
+    return;
+  context->GetProxyResolvingSocketFactory(std::move(request));
+}
+
+// A thread-safe wrapper to request a ProxyResolvingSocketFactoryPtr.
+void RequestProxyResolvingSocketFactory(
+    web::BrowserState* context,
+    base::WeakPtr<gcm::GCMProfileService> service,
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  web::WebThread::GetTaskRunnerForThread(web::WebThread::UI)
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(&RequestProxyResolvingSocketFactoryOnUIThread, context,
+                         std::move(service), std::move(request)));
+}
+
+}  // namespace
 
 // static
 gcm::GCMProfileService* IOSChromeGCMProfileServiceFactory::GetForBrowserState(
@@ -48,8 +75,6 @@ IOSChromeGCMProfileServiceFactory::IOSChromeGCMProfileServiceFactory()
           "GCMProfileService",
           BrowserStateDependencyManager::GetInstance()) {
   DependsOn(IdentityManagerFactory::GetInstance());
-  DependsOn(ios::SigninManagerFactory::GetInstance());
-  DependsOn(ProfileOAuth2TokenServiceFactory::GetInstance());
 }
 
 IOSChromeGCMProfileServiceFactory::~IOSChromeGCMProfileServiceFactory() {}
@@ -61,18 +86,16 @@ IOSChromeGCMProfileServiceFactory::BuildServiceInstanceFor(
 
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromBrowserState(context);
   return std::make_unique<gcm::GCMProfileService>(
       browser_state->GetPrefs(), browser_state->GetStatePath(),
-      browser_state->GetRequestContext(),
+      base::BindRepeating(&RequestProxyResolvingSocketFactory, context),
       browser_state->GetSharedURLLoaderFactory(), ::GetChannel(),
       GetProductCategoryForSubtypes(),
       IdentityManagerFactory::GetForBrowserState(browser_state),
-      ios::SigninManagerFactory::GetForBrowserState(browser_state),
-      ProfileOAuth2TokenServiceFactory::GetForBrowserState(browser_state),
       base::WrapUnique(new gcm::GCMClientFactory),
       web::WebThread::GetTaskRunnerForThread(web::WebThread::UI),
       web::WebThread::GetTaskRunnerForThread(web::WebThread::IO),

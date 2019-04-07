@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/callback_list.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
@@ -161,13 +162,17 @@ class MostVisitedSites : public history::TopSitesObserver,
   // Initializes custom links, which "freezes" the current MV tiles and converts
   // them to custom links. Once custom links is initialized, MostVisitedSites
   // will return only custom links. If the Most Visited tiles have not been
-  // loaded yet, does nothing.
+  // loaded yet, does nothing. Custom links must be enabled.
   void InitializeCustomLinks();
   // Uninitializes custom links and reverts back to regular MV tiles. The
-  // current custom links will be deleted.
+  // current custom links will be deleted. Custom links must be enabled.
   void UninitializeCustomLinks();
-  // Returns true if custom links has been initialized, false otherwise.
+  // Returns true if custom links has been initialized and not disabled, false
+  // otherwise.
   bool IsCustomLinksInitialized();
+  // Enables or disables custom links, but does not (un)initialize them. Called
+  // when a third-party NTP is being used.
+  void EnableCustomLinks(bool enable);
   // Adds a custom link. If the number of current links is maxed, returns false
   // and does nothing. Custom links must be enabled.
   bool AddCustomLink(const GURL& url, const base::string16& title);
@@ -258,6 +263,9 @@ class MostVisitedSites : public history::TopSitesObserver,
       const std::set<std::string>& hosts_to_skip,
       size_t num_max_tiles);
 
+  // Callback for when an update is reported by CustomLinksManager.
+  void OnCustomLinksChanged();
+
   // Creates tiles for |links| up to |max_num_sites_|. |links| will never exceed
   // a certain maximum.
   void BuildCustomLinks(const std::vector<CustomLinksManager::Link>& links);
@@ -316,12 +324,19 @@ class MostVisitedSites : public history::TopSitesObserver,
   // The maximum number of most visited sites to return.
   size_t max_num_sites_;
 
+  // False if custom links is disabled and Most Visited sites should be returned
+  // instead.
+  bool custom_links_enabled_ = true;
+
   std::unique_ptr<
       suggestions::SuggestionsService::ResponseCallbackList::Subscription>
       suggestions_subscription_;
 
   ScopedObserver<history::TopSites, history::TopSitesObserver>
       top_sites_observer_;
+
+  std::unique_ptr<base::CallbackList<void()>::Subscription>
+      custom_links_subscription_;
 
   // The main source of personal tiles - either TOP_SITES or SUGGESTIONS_SEVICE.
   TileSource mv_source_;

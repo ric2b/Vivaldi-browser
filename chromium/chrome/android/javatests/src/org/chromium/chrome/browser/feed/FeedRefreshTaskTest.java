@@ -71,7 +71,15 @@ public class FeedRefreshTaskTest {
     public void setUp() throws InterruptedException {
         mTaskScheduler = new TestBackgroundTaskScheduler();
         BackgroundTaskSchedulerFactory.setSchedulerForTesting(mTaskScheduler);
+
+        // The FeedSchedulerHost might create a task during initialization. Clear out any tasks
+        // created before the test case starts.
         mActivityTestRule.startMainActivityOnBlankPage();
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            // Accessing the bridge will create if needed, and may run initialization logic.
+            FeedProcessScopeFactory.getFeedSchedulerBridge();
+            mTaskScheduler.getTaskInfoList().clear();
+        });
     }
 
     @Test
@@ -109,12 +117,7 @@ public class FeedRefreshTaskTest {
     @SmallTest
     public void testReschedule() {
         ThreadUtils.runOnUiThreadBlocking(() -> {
-            // The FeedSchedulerHost might create a task during its initialization, so clear
-            // out anything before reschedule() is called.
-            FeedProcessScopeFactory.getFeedSchedulerBridge();
-            mTaskScheduler.getTaskInfoList().clear();
             Assert.assertEquals(0, mTaskScheduler.getTaskInfoList().size());
-
             new FeedRefreshTask().reschedule(mActivityTestRule.getActivity());
             Assert.assertEquals(1, mTaskScheduler.getTaskInfoList().size());
         });

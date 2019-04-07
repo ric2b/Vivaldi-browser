@@ -115,8 +115,10 @@ bool MediaRouterUI::ConnectRoute(const MediaSink::Id& sink_id,
   GetIssueManager()->ClearNonBlockingIssues();
   GetMediaRouter()->ConnectRouteByRouteId(
       params->source_id, route_id, params->origin, initiator(),
-      std::move(params->route_response_callbacks), params->timeout,
-      params->incognito);
+      base::BindOnce(&MediaRouterUIBase::RunRouteResponseCallbacks,
+                     std::move(params->presentation_callback),
+                     std::move(params->route_result_callbacks)),
+      params->timeout, params->incognito);
   return true;
 }
 
@@ -322,11 +324,6 @@ void MediaRouterUI::OnRouteResponseReceived(
   handler_->OnCreateRouteResponseReceived(sink_id, result.route());
   if (result.result_code() == RouteRequestResult::TIMED_OUT)
     SendIssueForRouteTimeout(cast_mode, presentation_request_source_name);
-}
-
-void MediaRouterUI::HandleCreateSessionRequestRouteResponse(
-    const RouteRequestResult&) {
-  Close();
 }
 
 void MediaRouterUI::OnSearchSinkResponseReceived(

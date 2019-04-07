@@ -191,7 +191,8 @@ void IndexedDBFactoryImpl::ReleaseBackingStore(const Origin& origin,
   DCHECK(!backing_store_map_[origin]->close_timer()->IsRunning());
   backing_store_map_[origin]->close_timer()->Start(
       FROM_HERE, base::TimeDelta::FromSeconds(kBackingStoreGracePeriodSeconds),
-      base::Bind(&IndexedDBFactoryImpl::MaybeStartPreCloseTasks, this, origin));
+      base::BindOnce(&IndexedDBFactoryImpl::MaybeStartPreCloseTasks, this,
+                     origin));
 }
 
 void IndexedDBFactoryImpl::MaybeStartPreCloseTasks(const Origin& origin) {
@@ -335,6 +336,17 @@ void IndexedDBFactoryImpl::ForceClose(const Origin& origin) {
 
   if (backing_store_map_.find(origin) != backing_store_map_.end())
     ReleaseBackingStore(origin, true /* immediate */);
+}
+
+void IndexedDBFactoryImpl::ForceSchemaDowngrade(const Origin& origin) {
+  OriginDBs range = GetOpenDatabasesForOrigin(origin);
+
+  while (range.first != range.second) {
+    IndexedDBDatabase* db = range.first->second;
+    ++range.first;
+    leveldb::Status s = db->backing_store()->RevertSchemaToV2();
+    DLOG_IF(ERROR, !s.ok()) << "Unable to force downgrade: " << s.ToString();
+  }
 }
 
 void IndexedDBFactoryImpl::ContextDestroyed() {

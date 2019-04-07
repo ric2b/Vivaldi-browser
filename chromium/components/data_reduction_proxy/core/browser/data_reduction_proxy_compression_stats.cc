@@ -30,10 +30,6 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "net/base/mime_util.h"
 
-#if defined(OS_ANDROID)
-#include "base/android/application_status_listener.h"
-#endif
-
 namespace data_reduction_proxy {
 
 namespace {
@@ -247,10 +243,12 @@ void MoveAndClearDictionaryPrefs(PrefService* pref_service,
                                  const std::string& pref_dst,
                                  const std::string& pref_src) {
   DictionaryPrefUpdate pref_update_dst(pref_service, pref_dst);
+  base::DictionaryValue* pref_dict_dst = pref_update_dst.Get();
   DictionaryPrefUpdate pref_update_src(pref_service, pref_src);
-  pref_update_dst->Clear();
-  pref_update_dst->Swap(pref_update_src.Get());
-  DCHECK(pref_update_src->empty());
+  base::DictionaryValue* pref_dict_src = pref_update_src.Get();
+  pref_dict_dst->Clear();
+  pref_dict_dst->Swap(pref_dict_src);
+  DCHECK(pref_dict_src->empty());
 }
 
 void MaybeInitWeeklyAggregateDataUsePrefs(const base::Time& now,
@@ -1457,10 +1455,6 @@ void DataReductionProxyCompressionStats::RecordWeeklyAggregateDataUse(
                         content_type, data_used_kb);
   } else {
     bool is_app_foreground = true;
-#if defined(OS_ANDROID)
-    is_app_foreground = base::android::ApplicationStatusListener::GetState() ==
-                        base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES;
-#endif
     if (is_app_foreground) {
       AddToDictionaryPref(pref_service_,
                           prefs::kThisWeekServicesDownstreamForegroundKB,

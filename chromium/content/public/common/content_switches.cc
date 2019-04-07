@@ -13,21 +13,6 @@ namespace switches {
 // have an effect. 0 disables MSAA.
 const char kAcceleratedCanvas2dMSAASampleCount[] = "canvas-msaa-sample-count";
 
-// Enables a new tuning of the WebRTC Acoustic Echo Canceler (AEC). The new
-// tuning aims at resolving two issues with the AEC:
-// https://bugs.chromium.org/p/webrtc/issues/detail?id=5777
-// https://bugs.chromium.org/p/webrtc/issues/detail?id=5778
-// TODO(hlundin): Remove this switch when experimentation is over;
-// crbug.com/603821.
-const char kAecRefinedAdaptiveFilter[] = "aec-refined-adaptive-filter";
-
-// Override the default minimum starting volume of the Automatic Gain Control
-// algorithm in WebRTC used with audio tracks from getUserMedia.
-// The valid range is 12-255. Values outside that range will be clamped
-// to the lowest or highest valid value inside WebRTC.
-// TODO(tommi): Remove this switch when crbug.com/555577 is fixed.
-const char kAgcStartupMinVolume[] = "agc-startup-min-volume";
-
 // By default, file:// URIs cannot read other file:// URIs. This is an
 // override for developers who need the old behavior for testing.
 const char kAllowFileAccessFromFiles[]      = "allow-file-access-from-files";
@@ -429,9 +414,6 @@ const char kEnableTracing[]                 = "enable-tracing";
 // The filename to write the output of the test tracing to.
 const char kEnableTracingOutput[]           = "enable-tracing-output";
 
-// Enables unsafe WebGPU support.
-const char kEnableUnsafeWebGPU[] = "enable-unsafe-webgpu";
-
 // Enable screen capturing support for MediaStream API.
 const char kEnableUserMediaScreenCapturing[] =
     "enable-usermedia-screen-capturing";
@@ -515,13 +497,6 @@ const char kForcePresentationReceiverForTesting[] =
 // a screen reader is detected. The disable-renderer-accessibility switch
 // overrides this if present.
 const char kForceRendererAccessibility[]    = "force-renderer-accessibility";
-
-// Sets the timeout seconds of NetworkQuietTimers in
-// FirstMeaningfulPainterDectector. Used by embedders who want to change the
-// timeout time in order to run web contents on various embedded devices and
-// changeable network bandwidths in different regions. For example, it's useful
-// when using FMP signal to dismiss a splash screen.
-const char kFMPNetworkQuietTimeout[] = "fmp-network-quiet-timeout";
 
 // For development / testing only. When running content_browsertests,
 // saves output of failing accessibility tests to their expectations files in
@@ -618,11 +593,21 @@ const char kMHTMLSkipNostoreAll[]           = "skip-nostore-all";
 // Use a Mojo-based LocalStorage implementation.
 const char kMojoLocalStorage[]              = "mojo-local-storage";
 
+// Sets the timeout seconds of the network-quiet timers in IdlenessDetector.
+// Used by embedders who want to change the timeout time in order to run web
+// contents on various embedded devices and changeable network bandwidths in
+// different regions. For example, it's useful when using FirstMeaningfulPaint
+// signal to dismiss a splash screen.
+const char kNetworkQuietTimeout[] = "network-quiet-timeout";
+
 // Disables the use of a zygote process for forking child processes. Instead,
 // child processes will be forked and exec'd directly. Note that --no-sandbox
 // should also be used together with this flag because the sandbox needs the
 // zygote to work.
 const char kNoZygote[] = "no-zygote";
+
+// Disables V8 mitigations for executing untrusted code.
+const char kNoV8UntrustedCodeMitigations[] = "no-v8-untrusted-code-mitigations";
 
 // Number of worker threads used to rasterize content.
 const char kNumRasterThreads[]              = "num-raster-threads";

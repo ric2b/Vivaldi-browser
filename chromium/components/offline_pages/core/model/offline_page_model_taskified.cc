@@ -13,7 +13,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string16.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
@@ -358,7 +358,6 @@ void OfflinePageModelTaskified::GetPagesByClientIds(
 
 void OfflinePageModelTaskified::GetPagesByURL(
     const GURL& url,
-    URLSearchMode url_search_mode,
     MultipleOfflinePageItemCallback callback) {
   auto task = GetPagesTask::CreateTaskMatchingUrl(store_.get(),
                                                   std::move(callback), url);
@@ -748,7 +747,7 @@ void OfflinePageModelTaskified::OnPersistentPageConsistencyCheckDone(
     bool success,
     const std::vector<int64_t>& pages_deleted) {
   // If there's no persistent page expired, save some effort by exiting early.
-  // TODO(https://crbug.com/834909), use the temporary hidden bit in
+  // TODO(https://crbug.com/834909): Use the temporary hidden bit in
   // DownloadUIAdapter instead of calling remove directly.
   if (pages_deleted.size() > 0)
     download_manager_->Remove(pages_deleted);

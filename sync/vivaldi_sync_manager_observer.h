@@ -3,10 +3,12 @@
 #ifndef SYNC_VIVALDI_SYNC_MANAGER_OBSERVER_H_
 #define SYNC_VIVALDI_SYNC_MANAGER_OBSERVER_H_
 
+#include "base/observer_list_types.h"
+
 namespace vivaldi {
 
 // Observer for the SyncModel
-class VivaldiSyncManagerObserver {
+class VivaldiSyncManagerObserver : public base::CheckedObserver {
  public:
   virtual void OnAccessTokenRequested() {}
   virtual void OnEncryptionPasswordRequested() {}
@@ -19,7 +21,7 @@ class VivaldiSyncManagerObserver {
   virtual void OnDeletingSyncManager() = 0;
 
  protected:
-  virtual ~VivaldiSyncManagerObserver() {}
+  ~VivaldiSyncManagerObserver() override {}
 };
 
 }  // namespace vivaldi

@@ -11,7 +11,7 @@
 
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "components/drive/chromeos/file_system_interface.h"
@@ -220,8 +220,7 @@ void GetFileInfo(const base::FilePath& file_path,
                  FileSystemInterface* file_system) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   file_system->GetResourceEntry(
-      file_path,
-      base::Bind(&RunGetFileInfoCallback, callback));
+      file_path, base::BindOnce(&RunGetFileInfoCallback, callback));
 }
 
 void Copy(const base::FilePath& src_file_path,

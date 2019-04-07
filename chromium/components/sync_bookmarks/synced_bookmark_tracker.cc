@@ -4,12 +4,15 @@
 
 #include "components/sync_bookmarks/synced_bookmark_tracker.h"
 
+#include <set>
 #include <utility>
 
 #include "base/base64.h"
 #include "base/sha1.h"
+#include "base/stl_util.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/sync/base/time.h"
+#include "components/sync/base/unique_position.h"
 #include "components/sync/model/entity_data.h"
 
 namespace sync_bookmarks {
@@ -41,14 +44,15 @@ bool SyncedBookmarkTracker::Entity::IsUnsynced() const {
   return metadata_->sequence_number() > metadata_->acked_sequence_number();
 }
 
-bool SyncedBookmarkTracker::Entity::MatchesData(
+bool SyncedBookmarkTracker::Entity::MatchesDataIgnoringParent(
     const syncer::EntityData& data) const {
-  // TODO(crbug.com/516866): Check parent id and unique position.
-  // TODO(crbug.com/516866): Compare the actual specifics instead of the
-  // specifics hash.
   if (metadata_->is_deleted() || data.is_deleted()) {
     // In case of deletion, no need to check the specifics.
     return metadata_->is_deleted() == data.is_deleted();
+  }
+  if (!syncer::UniquePosition::FromProto(metadata_->unique_position())
+           .Equals(syncer::UniquePosition::FromProto(data.unique_position))) {
+    return false;
   }
   return MatchesSpecificsHash(data.specifics);
 }
@@ -129,9 +133,10 @@ void SyncedBookmarkTracker::Update(
     const sync_pb::EntitySpecifics& specifics) {
   DCHECK_GT(specifics.ByteSize(), 0);
   auto it = sync_id_to_entities_map_.find(sync_id);
+  DCHECK(it != sync_id_to_entities_map_.end());
   Entity* entity = it->second.get();
   DCHECK(entity);
-  entity->metadata()->set_server_id(sync_id);
+  DCHECK_EQ(entity->metadata()->server_id(), sync_id);
   entity->metadata()->set_server_version(server_version);
   entity->metadata()->set_modification_time(
       syncer::TimeToProtoTime(modification_time));
@@ -139,6 +144,15 @@ void SyncedBookmarkTracker::Update(
   HashSpecifics(specifics, entity->metadata()->mutable_specifics_hash());
   // TODO(crbug.com/516866): in case of conflict, the entity might exist in
   // |ordered_local_tombstones_| as well if it has been locally deleted.
+}
+
+void SyncedBookmarkTracker::UpdateServerVersion(const std::string& sync_id,
+                                                int64_t server_version) {
+  auto it = sync_id_to_entities_map_.find(sync_id);
+  DCHECK(it != sync_id_to_entities_map_.end());
+  Entity* entity = it->second.get();
+  DCHECK(entity);
+  entity->metadata()->set_server_version(server_version);
 }
 
 void SyncedBookmarkTracker::MarkDeleted(const std::string& sync_id) {
@@ -156,10 +170,7 @@ void SyncedBookmarkTracker::Remove(const std::string& sync_id) {
   const Entity* entity = GetEntityForSyncId(sync_id);
   DCHECK(entity);
   bookmark_node_to_entities_map_.erase(entity->bookmark_node());
-  ordered_local_tombstones_.erase(
-      std::remove(ordered_local_tombstones_.begin(),
-                  ordered_local_tombstones_.end(), entity),
-      ordered_local_tombstones_.end());
+  base::Erase(ordered_local_tombstones_, entity);
   sync_id_to_entities_map_.erase(sync_id);
 }
 
@@ -213,15 +224,14 @@ bool SyncedBookmarkTracker::HasLocalChanges() const {
 
 std::vector<const SyncedBookmarkTracker::Entity*>
 SyncedBookmarkTracker::GetEntitiesWithLocalChanges(size_t max_entries) const {
-  // TODO(crbug.com/516866): Reorder local changes to e.g. parent creation
-  // before child creation and the otherway around for deletions.
-  // TODO(crbug.com/516866): Return no more than |max_entries|.
   std::vector<const SyncedBookmarkTracker::Entity*> entities_with_local_changes;
+  // Entities with local non deletions should be sorted such that parent
+  // creation/update comes before child creation/update.
   for (const std::pair<const std::string, std::unique_ptr<Entity>>& pair :
        sync_id_to_entities_map_) {
     Entity* entity = pair.second.get();
     if (entity->metadata()->is_deleted()) {
-      // Deletion are stored sorted in |ordered_local_tombstones_| and will be
+      // Deletions are stored sorted in |ordered_local_tombstones_| and will be
       // added later.
       continue;
     }
@@ -229,10 +239,85 @@ SyncedBookmarkTracker::GetEntitiesWithLocalChanges(size_t max_entries) const {
       entities_with_local_changes.push_back(entity);
     }
   }
+  std::vector<const SyncedBookmarkTracker::Entity*> ordered_local_changes =
+      ReorderUnsyncedEntitiesExceptDeletions(entities_with_local_changes);
   for (const Entity* tombstone_entity : ordered_local_tombstones_) {
-    entities_with_local_changes.push_back(tombstone_entity);
+    ordered_local_changes.push_back(tombstone_entity);
   }
-  return entities_with_local_changes;
+  if (ordered_local_changes.size() > max_entries) {
+    // TODO(crbug.com/516866): Should be smart and stop building the vector
+    // when |max_entries| is reached.
+    return std::vector<const SyncedBookmarkTracker::Entity*>(
+        ordered_local_changes.begin(),
+        ordered_local_changes.begin() + max_entries);
+  }
+  return ordered_local_changes;
+}
+
+std::vector<const SyncedBookmarkTracker::Entity*>
+SyncedBookmarkTracker::ReorderUnsyncedEntitiesExceptDeletions(
+    const std::vector<const SyncedBookmarkTracker::Entity*>& entities) const {
+  // This method sorts the entities with local non deletions such that parent
+  // creation/update comes before child creation/update.
+
+  // The algorithm works by constructing a forest of all non-deletion updates
+  // and then traverses each tree in the forest recursively:
+  // 1. Iterate over all entities and collect all nodes in |nodes|.
+  // 2. Iterate over all entities again and node that is a child of another
+  //    node. What's left in |nodes| are the roots of the forest.
+  // 3. Start at each root in |nodes|, emit the update and recurse over its
+  //    children.
+  std::set<const bookmarks::BookmarkNode*> nodes;
+  // Collect nodes with updates
+  for (const SyncedBookmarkTracker::Entity* entity : entities) {
+    DCHECK(entity->IsUnsynced());
+    DCHECK(!entity->metadata()->is_deleted());
+    DCHECK(entity->bookmark_node());
+    nodes.insert(entity->bookmark_node());
+  }
+  // Remove those who are direct children of another node.
+  for (const SyncedBookmarkTracker::Entity* entity : entities) {
+    const bookmarks::BookmarkNode* node = entity->bookmark_node();
+    for (int i = 0; i < node->child_count(); ++i) {
+      nodes.erase(node->GetChild(i));
+    }
+  }
+  // |nodes| contains only roots of all trees in the forest all of which are
+  // ready to be processed because their parents have no pending updates.
+  std::vector<const SyncedBookmarkTracker::Entity*> ordered_entities;
+  for (const bookmarks::BookmarkNode* node : nodes) {
+    TraverseAndAppend(node, &ordered_entities);
+  }
+  return ordered_entities;
+}
+
+void SyncedBookmarkTracker::TraverseAndAppend(
+    const bookmarks::BookmarkNode* node,
+    std::vector<const SyncedBookmarkTracker::Entity*>* ordered_entities) const {
+  const SyncedBookmarkTracker::Entity* entity = GetEntityForBookmarkNode(node);
+  DCHECK(entity->IsUnsynced());
+  DCHECK(!entity->metadata()->is_deleted());
+  ordered_entities->push_back(entity);
+  // Recurse for all children.
+  for (int i = 0; i < node->child_count(); ++i) {
+    const bookmarks::BookmarkNode* child = node->GetChild(i);
+    const SyncedBookmarkTracker::Entity* child_entity =
+        GetEntityForBookmarkNode(child);
+    if (!child_entity->IsUnsynced()) {
+      // If the entity has no local change, no need to check it's children. If
+      // any of the children would have a pending commit, it would be a root for
+      // a separate tree in the forest built in
+      // ReorderEntitiesWithLocalNonDeletions() and will be handled by another
+      // call to TraverseAndAppend().
+      continue;
+    }
+    if (child_entity->metadata()->is_deleted()) {
+      // Deletion are stored sorted in |ordered_local_tombstones_| and will be
+      // added later.
+      continue;
+    }
+    TraverseAndAppend(child, ordered_entities);
+  }
 }
 
 void SyncedBookmarkTracker::UpdateUponCommitResponse(
@@ -263,6 +348,19 @@ void SyncedBookmarkTracker::UpdateUponCommitResponse(
     sync_id_to_entities_map_[new_id] = std::move(it->second);
     sync_id_to_entities_map_.erase(old_id);
   }
+}
+
+void SyncedBookmarkTracker::AckSequenceNumber(const std::string& sync_id) {
+  auto it = sync_id_to_entities_map_.find(sync_id);
+  Entity* entity =
+      it != sync_id_to_entities_map_.end() ? it->second.get() : nullptr;
+  DCHECK(entity);
+  entity->metadata()->set_acked_sequence_number(
+      entity->metadata()->sequence_number());
+}
+
+bool SyncedBookmarkTracker::IsEmpty() const {
+  return sync_id_to_entities_map_.empty();
 }
 
 std::size_t SyncedBookmarkTracker::TrackedEntitiesCountForTest() const {

@@ -43,6 +43,7 @@
 
 namespace blink {
 
+class PostMessageOptions;
 class ScriptState;
 
 class MODULES_EXPORT ServiceWorker final
@@ -63,10 +64,13 @@ class MODULES_EXPORT ServiceWorker final
   EAGERLY_FINALIZE();
 
   void postMessage(ScriptState*,
-                   scoped_refptr<SerializedScriptValue> message,
-                   const MessagePortArray&,
+                   const ScriptValue& message,
+                   Vector<ScriptValue>& transfer,
                    ExceptionState&);
-  static bool CanTransferArrayBuffersAndImageBitmaps() { return false; }
+  void postMessage(ScriptState*,
+                   const ScriptValue& message,
+                   const PostMessageOptions&,
+                   ExceptionState&);
 
   String scriptURL() const;
   String state() const;

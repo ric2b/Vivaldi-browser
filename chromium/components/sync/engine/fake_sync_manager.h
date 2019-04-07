@@ -88,6 +88,7 @@ class FakeSyncManager : public SyncManager {
   void StartConfiguration() override;
   void ConfigureSyncer(ConfigureReason reason,
                        ModelTypeSet to_download,
+                       SyncFeatureState sync_feature_state,
                        const base::Closure& ready_task,
                        const base::Closure& retry_task) override;
   void OnIncomingInvalidation(
@@ -123,7 +124,7 @@ class FakeSyncManager : public SyncManager {
  private:
   scoped_refptr<base::SequencedTaskRunner> sync_task_runner_;
 
-  base::ObserverList<SyncManager::Observer> observers_;
+  base::ObserverList<SyncManager::Observer>::Unchecked observers_;
 
   // Faked directory state.
   ModelTypeSet initial_sync_ended_types_;

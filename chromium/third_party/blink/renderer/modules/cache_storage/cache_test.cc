@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
 using blink::mojom::CacheStorageError;
+using blink::mojom::blink::CacheStorageVerboseError;
 
 namespace blink {
 
@@ -174,10 +175,11 @@ class ErrorCacheForTests : public mojom::blink::CacheStorageCache {
     std::move(callback).Run(std::move(result));
   }
   void Batch(Vector<mojom::blink::BatchOperationPtr> batch_operations,
+             bool fail_on_duplicates,
              BatchCallback callback) override {
     last_error_web_cache_method_called_ = "dispatchBatch";
     CheckBatchOperationsIfProvided(batch_operations);
-    std::move(callback).Run(error_);
+    std::move(callback).Run(CacheStorageVerboseError::New(error_, String()));
   }
 
  protected:
@@ -686,8 +688,10 @@ class MatchAllAndBatchTestCache : public NotImplementedErrorCache {
     std::move(callback).Run(std::move(result));
   }
   void Batch(Vector<mojom::blink::BatchOperationPtr> batch_operations,
+             bool fail_on_duplicates,
              BatchCallback callback) override {
-    std::move(callback).Run(mojom::blink::CacheStorageError::kSuccess);
+    std::move(callback).Run(CacheStorageVerboseError::New(
+        mojom::blink::CacheStorageError::kSuccess, String()));
   }
 
  private:

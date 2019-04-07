@@ -163,7 +163,13 @@ void MemEntryImpl::Close() {
   if (ref_count_ == 0 && !doomed_) {
     // At this point the user is clearly done writing, so make sure there isn't
     // wastage due to exponential growth of vector for main data stream.
-    data_[1].shrink_to_fit();
+    Compact();
+    if (children_) {
+      for (const auto& child_info : *children_) {
+        if (child_info.second != this)
+          child_info.second->Compact();
+      }
+    }
   }
   DCHECK_GE(ref_count_, 0);
   if (!ref_count_ && doomed_)
@@ -432,8 +438,8 @@ int MemEntryImpl::InternalReadSparseData(int64_t offset,
     return net::ERR_INVALID_ARGUMENT;
 
   // We will keep using this buffer and adjust the offset in this buffer.
-  scoped_refptr<net::DrainableIOBuffer> io_buf(
-      new net::DrainableIOBuffer(buf, buf_len));
+  scoped_refptr<net::DrainableIOBuffer> io_buf =
+      base::MakeRefCounted<net::DrainableIOBuffer>(buf, buf_len);
 
   // Iterate until we have read enough.
   while (io_buf->BytesRemaining()) {
@@ -494,8 +500,8 @@ int MemEntryImpl::InternalWriteSparseData(int64_t offset,
   if (offset < 0 || buf_len < 0)
     return net::ERR_INVALID_ARGUMENT;
 
-  scoped_refptr<net::DrainableIOBuffer> io_buf(
-      new net::DrainableIOBuffer(buf, buf_len));
+  scoped_refptr<net::DrainableIOBuffer> io_buf =
+      base::MakeRefCounted<net::DrainableIOBuffer>(buf, buf_len);
 
   // This loop walks through child entries continuously starting from |offset|
   // and writes blocks of data (of maximum size kMaxSparseEntrySize) into each
@@ -632,6 +638,12 @@ net::Interval<int64_t> MemEntryImpl::ChildInterval(
   return net::Interval<int64_t>(
       child_responsibility_start + child->child_first_pos_,
       child_responsibility_start + child->GetDataSize(kSparseData));
+}
+
+void MemEntryImpl::Compact() {
+  // Stream 0 should already be fine since it's written out in a single WriteData().
+  data_[1].shrink_to_fit();
+  data_[2].shrink_to_fit();
 }
 
 }  // namespace disk_cache

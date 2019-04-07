@@ -271,15 +271,18 @@ safe_browsing::SafeBrowsingBlockingPage* CreateSafeBrowsingBlockingPage(
   if (net::GetValueForKeyInQuery(web_contents->GetURL(),
                                  "type",
                                  &type_param)) {
-    // TODO(mattm): add param for SB_THREAT_TYPE_URL_UNWANTED.
     if (type_param == "malware") {
       threat_type = safe_browsing::SB_THREAT_TYPE_URL_MALWARE;
     } else if (type_param == "phishing") {
       threat_type = safe_browsing::SB_THREAT_TYPE_URL_PHISHING;
+    } else if (type_param == "unwanted") {
+      threat_type = safe_browsing::SB_THREAT_TYPE_URL_UNWANTED;
     } else if (type_param == "clientside_malware") {
       threat_type = safe_browsing::SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE;
     } else if (type_param == "clientside_phishing") {
       threat_type = safe_browsing::SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING;
+    } else if (type_param == "billing") {
+      threat_type = safe_browsing::SB_THREAT_TYPE_BILLING;
     }
   }
   safe_browsing::SafeBrowsingBlockingPage::UnsafeResource resource;
@@ -325,6 +328,8 @@ TestSafeBrowsingBlockingPageQuiet* CreateSafeBrowsingQuietBlockingPage(
       threat_type = safe_browsing::SB_THREAT_TYPE_URL_MALWARE;
     } else if (type_param == "phishing") {
       threat_type = safe_browsing::SB_THREAT_TYPE_URL_PHISHING;
+    } else if (type_param == "unwanted") {
+      threat_type = safe_browsing::SB_THREAT_TYPE_URL_UNWANTED;
     } else if (type_param == "giant") {
       threat_type = safe_browsing::SB_THREAT_TYPE_URL_MALWARE;
       is_giant_webview = true;
@@ -403,7 +408,8 @@ CaptivePortalBlockingPage* CreateCaptivePortalBlockingPage(
 InterstitialUI::InterstitialUI(content::WebUI* web_ui)
     : WebUIController(web_ui) {
   Profile* profile = Profile::FromWebUI(web_ui);
-  content::URLDataSource::Add(profile, new InterstitialHTMLSource());
+  content::URLDataSource::Add(profile,
+                              std::make_unique<InterstitialHTMLSource>());
 }
 
 InterstitialUI::~InterstitialUI() {

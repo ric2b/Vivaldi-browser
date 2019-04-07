@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/views/apps/chrome_native_app_window_views_aura.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/window.h"
@@ -62,9 +62,9 @@ class ShapedAppWindowTargeterTest : public aura::test::AuraTestBase {
   void SetWindowResizable(bool resizable) {
     widget_->GetNativeWindow()->SetProperty(
         aura::client::kResizeBehaviorKey,
-        ui::mojom::kResizeBehaviorCanMaximize |
-            ui::mojom::kResizeBehaviorCanMinimize |
-            (resizable ? ui::mojom::kResizeBehaviorCanResize : 0));
+        ws::mojom::kResizeBehaviorCanMaximize |
+            ws::mojom::kResizeBehaviorCanMinimize |
+            (resizable ? ws::mojom::kResizeBehaviorCanResize : 0));
   }
 
  private:
@@ -140,8 +140,9 @@ TEST_F(ShapedAppWindowTargeterTest, HitTestOnlyForShapedWindow) {
   // receive events outside of its bounds. Verify that this window-targeter is
   // active unless the window has a custom shape.
   gfx::Insets inset(-30);
-  root_window()->SetEventTargeter(std::unique_ptr<ui::EventTargeter>(
-      new wm::EasyResizeWindowTargeter(root_window(), inset, inset)));
+  root_window()->SetEventTargeter(
+      std::make_unique<wm::EasyResizeWindowTargeter>(root_window(), inset,
+                                                     inset));
 
   aura::Window* window = widget()->GetNativeWindow();
   {

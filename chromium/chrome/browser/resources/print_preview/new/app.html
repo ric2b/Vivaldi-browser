@@ -1,5 +1,7 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/html/cr.html">
+<link rel="import" href="chrome://resources/html/cr/ui/focus_outline_manager.html">
 <link rel="import" href="chrome://resources/html/event_tracker.html">
 <link rel="import" href="chrome://resources/html/util.html">
 <link rel="import" href="chrome://resources/html/webui_listener_tracker.html">
@@ -44,8 +46,8 @@
       }
 
       #sidebar {
-        -webkit-border-end: 1px solid #c8c8c8;
         background-color: white;
+        border-inline-end: 1px solid #c8c8c8;
         display: flex;
         flex-direction: column;
         max-width: 310px;
@@ -60,9 +62,9 @@
       }
 
       #preview-area-container {
-        -webkit-border-start: 1px solid #dcdcdc;
         align-items: center;
         background-color: #e6e6e6;
+        border-inline-start: 1px solid #dcdcdc;
         flex: 1;
       }
     </style>

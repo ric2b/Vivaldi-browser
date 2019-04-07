@@ -102,11 +102,11 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="3171922709365450819">Bu cihaz, üçüncü taraf kimlik doğrulaması gerektirdiği için bu istemci tarafından desteklenmiyor.</translation>
 <translation id="3194245623920924351">Chrome Uzaktan Masaüstü</translation>
 <translation id="3197730452537982411">Uzaktan Masaüstü</translation>
+<translation id="3212472844831225214">• Android 9.0 Pie için destek eklendi.</translation>
 <translation id="324272851072175193">Bu talimatları e-postayla gönder</translation>
 <translation id="3258789396564295715">Chrome Uzaktan Masaüstü uygulamasını kullanarak bu bilgisayara güvenli bir şekilde erişebilirsiniz.</translation>
 <translation id="3286521253923406898">Chromoting Ana Makine Denetleyicisi</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> değişiklik yapmak istiyor.</translation>
-<translation id="331779822864701136">• Android 8.0 Oreo desteği eklendi.</translation>
 <translation id="332624996707057614">Bilgisayarın adını düzenle</translation>
 <translation id="3339299787263251426">Bilgisayarınıza İnternet üzerinden güvenli bir şekilde erişin</translation>
 <translation id="3360306038446926262">Windows</translation>
@@ -122,8 +122,9 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="369442766917958684">Çevrimdışı.</translation>
 <translation id="3695446226812920698">Nasıl yapacağınızı öğrenin</translation>
 <translation id="3718805989288361841">Chrome Uzaktan Masaüstü politika ayarında bir hata oluştu. Yardım için sistem yöneticinizle görüşün.</translation>
-<translation id="3759645055923345178">Kurulum tamamlandıktan sonra PIN veya erişim kodunu girerek bilgisayara bu sayfadan erişebilirsiniz</translation>
 <translation id="3776024066357219166">Chrome Uzaktan Masaüstü oturumunuz sonlandı.</translation>
+<translation id="3846148461359626420">• iPhone X'de daha iyi kaydırma ve yakınlaştırma deneyimi.
+• Kararlılıkla ilgili iyileştirmeler ve hata düzeltmeleri.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Chrome Uzaktan Masaüstü tarafından erişime izin vermek için lütfen aşağıda hesabınızı ve PIN kodunuzu onaylayın.</translation>
 <translation id="3897092660631435901">Menü</translation>
@@ -137,6 +138,7 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="405887016757208221">Uzak bilgisayar, oturumu ilk kullanıma hazırlayamadı. Sorun devam ederse lütfen ana makineyi tekrar yapılandırmayı deneyin.</translation>
 <translation id="4068946408131579958">Tüm bağlantılar</translation>
 <translation id="409800995205263688">NOT: Politika ayarları, yalnızca ağınızdaki bilgisayarlar arasındaki bağlantılara izin veriyor.</translation>
+<translation id="4126409073460786861">Kurulum tamamlandıktan sonra bu sayfayı yenileyin. Ardından cihazınızı seçip PIN'i girerek bilgisayara erişebilirsiniz</translation>
 <translation id="4145029455188493639"><ph name="EMAIL_ADDRESS" /> olarak oturum açtınız.</translation>
 <translation id="4155497795971509630">Bazı gerekli bileşenler eksik. Lütfen yazılımın en son sürümünü yüklediğinizden emin olun ve tekrar deneyin.</translation>
 <translation id="4156740505453712750">Bu bilgisayara erişimi korumak için lütfen <ph name="BOLD_START" />en az altı basamaklı<ph name="BOLD_END" /> bir PIN seçin. Başka bir yerden bağlanırken bu PIN gerekecektir.</translation>
@@ -145,7 +147,6 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="4207623512727273241">Devam etmeden önce lütfen yükleyiciyi çalıştırın.</translation>
 <translation id="4227991223508142681">Ana Makine Temel Hazırlık Yardımcı Programı</translation>
 <translation id="4240294130679914010">Chromoting Ana Makine Yüklemesini Kaldırma Programı</translation>
-<translation id="4249741460382919890">Genel düzeltmeler ve kararlılıkla ilgili iyileştirmeler</translation>
 <translation id="4277463233460010382">Bu bilgisayar PIN girmeden bir veya daha fazla istemcinin bağlanmasına izin verecek şekilde yapılandırılmıştır.</translation>
 <translation id="4277736576214464567">Erişim kodu geçersiz. Lütfen tekrar deneyin.</translation>
 <translation id="4361728918881830843">Başka bir bilgisayara uzaktan bağlantıları etkinleştirmek için Chrome Uzaktan Masaüstü'nü o bilgisayara yükleyin ve “<ph name="BUTTON_NAME" />” düğmesini tıklayın.</translation>
@@ -271,6 +272,7 @@ PC</translation>
 <translation id="6998989275928107238">Nereye</translation>
 <translation id="7019153418965365059">Tanınmayan ana makine hatası: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Uzaktan Yardım</translation>
+<translation id="7026930240735156896">Bilgisayarınıza uzaktan erişimi kurmak için talimatları uygulayın</translation>
 <translation id="7038683108611689168">Kullanım istatistiklerini ve kilitlenme raporlarını toplamamıza izin vererek Chromoting'i daha iyi hale getirmemize yardımcı olun.</translation>
 <translation id="7067321367069083429">Ekran dokunmatik ekran gibi çalışır</translation>
 <translation id="7116737094673640201">Chrome Chrome Uzaktan Masaüstü'ne hoş geldiniz</translation>
@@ -296,7 +298,6 @@ PC</translation>
 <translation id="7782471917492991422">Lütfen bilgisayarınızın güç yönetimi ayarlarını kontrol edin ve boşta kaldığında uyku moduna geçecek şekilde ayarlanmadığından emin olun.</translation>
 <translation id="7810127880729796595">İstatistikleri göster (bağlantı: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Bazı gerekli bileşenler eksik. Lütfen Google Chrome'un son sürümünü çalıştırdığınızdan emin olun ve tekrar deneyin.</translation>
-<translation id="7850909060902317210">Chrome Uzaktan Masaüstü yazılımını yükleyin ve kurulumu tamamlamak için talimatları uygulayın</translation>
 <translation id="7868137160098754906">Lütfen uzak bilgisayara ilişkin PIN'inizi girin.</translation>
 <translation id="7869445566579231750">Bu uygulamayı çalıştırmak için izniniz yok.</translation>
 <translation id="7895403300744144251">Uzak bilgisayardaki güvenlik politikaları, hesabınızdan bağlantı yapılmasına izin vermiyor.</translation>

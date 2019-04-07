@@ -42,10 +42,6 @@ const char kMaxActiveWebGLContexts[] = "max-active-webgl-contexts";
 // devices.
 const char kShaderDiskCacheSizeKB[] = "shader-disk-cache-size-kb";
 
-// Use GpuFence objects to synchronize display of overlay planes.
-const char kUseGpuFencesForOverlayPlanes[] =
-    "use-gpu-fences-for-overlay-planes";
-
 // Set the antialiasing method used for webgl. (none, explicit, implicit, or
 // screenspace)
 const char kWebglAntialiasingMode[] = "webgl-antialiasing-mode";
@@ -56,5 +52,7 @@ const char kWebglMSAASampleCount[] = "webgl-msaa-sample-count";
 // Disables the non-sandboxed GPU process for DX12 and Vulkan info collection
 const char kDisableGpuProcessForDX12VulkanInfoCollection[] =
     "disable-gpu-process-for-dx12-vulkan-info-collection";
+
+const char kEnableUnsafeWebGPU[] = "enable-unsafe-webgpu";
 
 }  // namespace switches

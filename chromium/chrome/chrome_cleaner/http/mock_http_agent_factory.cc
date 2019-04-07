@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -208,7 +208,7 @@ MockHttpAgentFactory::MockHttpAgentFactory(MockHttpAgentConfig* config)
 }
 
 std::unique_ptr<chrome_cleaner::HttpAgent>
-MockHttpAgentFactory::CreateHttpAgent() {
+MockHttpAgentFactory::CreateHttpAgent() const {
   // Set the configuration index to the next one (one per HttpAgent).
   if (config_->current_index_ == MockHttpAgentConfig::kInvalidIndex)
     config_->current_index_ = 0;

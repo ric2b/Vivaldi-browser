@@ -2,13 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CONTENT_PUBLIC_BROWSER_URL_LOADER_INTERCEPTOR_H_
-#define CONTENT_PUBLIC_BROWSER_URL_LOADER_INTERCEPTOR_H_
+#ifndef CONTENT_PUBLIC_TEST_URL_LOADER_INTERCEPTOR_H_
+#define CONTENT_PUBLIC_TEST_URL_LOADER_INTERCEPTOR_H_
 
+#include <memory>
 #include <set>
+#include <string>
 
+#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "net/base/net_errors.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 
@@ -73,10 +77,12 @@ class URLLoaderInterceptor {
   ~URLLoaderInterceptor();
 
   // Helper methods for use when intercepting.
-  // Writes the given response body and header to |client|.
-  static void WriteResponse(const std::string& headers,
-                            const std::string& body,
-                            network::mojom::URLLoaderClient* client);
+  // Writes the given response body, header, and SSL Info to |client|.
+  static void WriteResponse(
+      const std::string& headers,
+      const std::string& body,
+      network::mojom::URLLoaderClient* client,
+      base::Optional<net::SSLInfo> ssl_info = base::nullopt);
 
   // Reads the given path, relative to the root source directory, and writes it
   // to |client|. For headers:
@@ -85,9 +91,25 @@ class URLLoaderInterceptor {
   //      found, its contents will be used
   //   3) otherwise a simple 200 response will be used, with a Content-Type
   //      guessed from the file extension
-  static void WriteResponse(const std::string& relative_path,
-                            network::mojom::URLLoaderClient* client,
-                            const std::string* headers = nullptr);
+  // For SSL info, if |ssl_info| is specified, then it is added to the response.
+  static void WriteResponse(
+      const std::string& relative_path,
+      network::mojom::URLLoaderClient* client,
+      const std::string* headers = nullptr,
+      base::Optional<net::SSLInfo> ssl_info = base::nullopt);
+
+  // Like above, but uses an absolute file path.
+  static void WriteResponse(
+      const base::FilePath& file_path,
+      network::mojom::URLLoaderClient* client,
+      const std::string* headers = nullptr,
+      base::Optional<net::SSLInfo> ssl_info = base::nullopt);
+
+  // Returns an interceptor that (as long as it says alive) will intercept
+  // requests to |url| and fail them using the provided |error|.
+  static std::unique_ptr<URLLoaderInterceptor> SetupRequestFailForURL(
+      const GURL& url,
+      net::Error error);
 
  private:
   class BrowserProcessWrapper;
@@ -156,4 +178,4 @@ class URLLoaderInterceptor {
 
 }  // namespace content
 
-#endif  // CONTENT_PUBLIC_BROWSER_URL_LOADER_INTERCEPTOR_H_
+#endif  // CONTENT_PUBLIC_TEST_URL_LOADER_INTERCEPTOR_H_

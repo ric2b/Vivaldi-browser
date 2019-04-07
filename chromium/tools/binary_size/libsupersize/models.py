@@ -48,6 +48,7 @@ METADATA_GN_ARGS = 'gn_args'
 METADATA_LINKER_NAME = 'linker_name'
 METADATA_TOOL_PREFIX = 'tool_prefix'  # Path relative to SRC_ROOT.
 
+# New sections should also be added to the SuperSize UI.
 SECTION_BSS = '.bss'
 SECTION_DATA = '.data'
 SECTION_DATA_REL_RO = '.data.rel.ro'
@@ -110,14 +111,37 @@ SECTION_TO_SECTION_NAME = collections.OrderedDict((
 ))
 
 
+# Relevant for native symbols. All anonymous:: namespaces are removed during
+# name normalization. This flag means that the name had one or more anonymous::
+# namespaces stripped from it.
 FLAG_ANONYMOUS = 1
+# Relevant for .text symbols. The actual symbol name had a "startup." prefix on
+# it, which was removed by name normalization.
 FLAG_STARTUP = 2
+# Relevant for .text symbols. The actual symbol name had a "unlikely." prefix on
+# it, which was removed by name normalization.
 FLAG_UNLIKELY = 4
+# Relevant to .data & .rodata symbols. The actual symbol name had a "rel."
+# prefix on it, which was removed by name normalization.
 FLAG_REL = 8
+# Relevant to .data & .rodata symbols. The actual symbol name had a "rel.local."
+# prefix on it, which was removed by name normalization.
 FLAG_REL_LOCAL = 16
+# The source path did not have the usual "../.." prefix, but instead had a
+# prefix of "gen", meaning that the symbol is from a source file that was
+# generated during the build (the "gen" prefix is removed during normalization).
 FLAG_GENERATED_SOURCE = 32
+# Relevant for .text symbols. The actual symbol name had a " [clone .####]"
+# suffix, which was removed by name normalization. Cloned symbols are created by
+# compiler optimizations (e.g. partial inlining).
 FLAG_CLONE = 64
+# Relevant for .text symbols. The actual symbol name had a "hot." prefix on it,
+# which was removed by name normalization. Occurs when an AFDO profile is
+# supplied to the linker.
 FLAG_HOT = 128
+# Relevant for .text symbols. If a method has this flag, then it was run
+# according to the code coverage.
+FLAG_COVERED = 256
 
 
 DIFF_STATUS_UNCHANGED = 0
@@ -234,8 +258,7 @@ class BaseSymbol(object):
   @property
   def section(self):
     """Returns the one-letter section."""
-    # Fallback to section_name if there is no short-form defined.
-    return SECTION_NAME_TO_SECTION.get(self.section_name, self.section_name)
+    return SECTION_NAME_TO_SECTION[self.section_name]
 
   @property
   def size_without_padding(self):
@@ -546,12 +569,13 @@ class SymbolGroup(BaseSymbol):
       'template_name',
       'name',
       'section_name',
-      'is_sorted',
+      'is_default_sorted',  # True for groups created by Sorted()
   )
 
   # template_name and full_name are useful when clustering symbol clones.
   def __init__(self, symbols, filtered_symbols=None, full_name=None,
-               template_name=None, name='', section_name=None, is_sorted=False):
+               template_name=None, name='', section_name=None,
+               is_default_sorted=False):
     self._padding = None
     self._size = None
     self._pss = None
@@ -561,7 +585,7 @@ class SymbolGroup(BaseSymbol):
     self.template_name = template_name if template_name is not None else name
     self.name = name or ''
     self.section_name = section_name or SECTION_MULTIPLE
-    self.is_sorted = is_sorted
+    self.is_default_sorted = is_default_sorted
 
   def __repr__(self):
     return 'Group(full_name=%s,count=%d,size=%d)' % (
@@ -601,7 +625,7 @@ class SymbolGroup(BaseSymbol):
   def __add__(self, other):
     self_ids = set(id(s) for s in self)
     after_symbols = self._symbols + [s for s in other if id(s) not in self_ids]
-    return self._CreateTransformed(after_symbols, is_sorted=False)
+    return self._CreateTransformed(after_symbols, is_default_sorted=False)
 
   def index(self, item):
     return self._symbols.index(item)
@@ -689,29 +713,28 @@ class SymbolGroup(BaseSymbol):
 
   def _CreateTransformed(self, symbols, filtered_symbols=None, full_name=None,
                          template_name=None, name=None, section_name=None,
-                         is_sorted=None):
-    if is_sorted is None:
-      is_sorted = self.is_sorted
+                         is_default_sorted=None):
+    if is_default_sorted is None:
+      is_default_sorted = self.is_default_sorted
     if section_name is None:
       section_name = self.section_name
     return self.__class__(symbols, filtered_symbols=filtered_symbols,
                           full_name=full_name, template_name=template_name,
                           name=name, section_name=section_name,
-                          is_sorted=is_sorted)
+                          is_default_sorted=is_default_sorted)
 
   def Sorted(self, cmp_func=None, key=None, reverse=False):
+    """Sorts by abs(PSS)."""
+    is_default_sorted = False
     if cmp_func is None and key is None:
-      if self.IsDelta():
-        key = lambda s: (s.diff_status == DIFF_STATUS_UNCHANGED, s.IsBss(),
-                         s.size_without_padding == 0, -abs(s.pss), s.name)
-      else:
-        key = lambda s: (
-            s.IsBss(), s.size_without_padding == 0, -abs(s.pss), s.name)
+      is_default_sorted = not reverse
+      # Sort by PSS, but ensure ties are broken in a consistent manner.
+      key = lambda s: (-abs(s.pss), s.full_name, s.object_path, s.section_name)
 
     after_symbols = sorted(self._symbols, cmp_func, key, reverse)
     return self._CreateTransformed(
         after_symbols, filtered_symbols=self._filtered_symbols,
-        is_sorted=True)
+        is_default_sorted=is_default_sorted)
 
   def SortedByName(self, reverse=False):
     return self.Sorted(key=(lambda s:s.name), reverse=reverse)
@@ -850,7 +873,7 @@ class SymbolGroup(BaseSymbol):
     """
     return self._CreateTransformed(
         self._filtered_symbols, filtered_symbols=self._symbols,
-        section_name=SECTION_MULTIPLE, is_sorted=False)
+        section_name=SECTION_MULTIPLE, is_default_sorted=False)
 
   def GroupedBy(self, func, min_count=0, group_factory=None):
     """Returns a SymbolGroup of SymbolGroups, indexed by |func|.

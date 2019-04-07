@@ -93,7 +93,6 @@ class CONTENT_EXPORT InputRouterImpl : public InputRouter,
                                  uint32_t unique_touch_event_id,
                                  InputEventAckState state) override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
-  void DidStopFlinging() override;
   void ImeCancelComposition() override;
   void DidStartScrollingViewport() override;
   void ImeCompositionRangeChanged(
@@ -109,6 +108,8 @@ class CONTENT_EXPORT InputRouterImpl : public InputRouter,
 
   // IPC::Listener
   bool OnMessageReceived(const IPC::Message& message) override;
+
+  void OnHasTouchEventHandlersForTest(bool has_handlers);
 
  private:
   friend class InputRouterImplTest;
@@ -127,7 +128,6 @@ class CONTENT_EXPORT InputRouterImpl : public InputRouter,
                        InputEventAckSource ack_source,
                        InputEventAckState ack_result) override;
   void OnFilteringTouchEvent(const blink::WebTouchEvent& touch_event) override;
-  bool TouchscreenFlingInProgress() override;
 
   // GestureEventFilterClient
   void SendGestureEventImmediately(
@@ -249,6 +249,19 @@ class CONTENT_EXPORT InputRouterImpl : public InputRouter,
   base::WeakPtrFactory<InputRouterImpl> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(InputRouterImpl);
+
+  // NOTE(igor@vivaldi.com): See comments in the implementation.
+  void MouseWheelEventHandledWithRedirect(
+    const MouseWheelEventWithLatencyInfo& event,
+    bool root_redirect,
+    base::WeakPtr<InputRouterImpl> child_router,
+    InputEventAckSource source,
+    const ui::LatencyInfo& latency,
+    InputEventAckState state,
+    const base::Optional<ui::DidOverscrollParams>& overscroll,
+    const base::Optional<cc::TouchAction>& touch_action);
+
+  friend class VivaldiInputRouterHelper;
 };
 
 }  // namespace content

@@ -112,7 +112,7 @@ std::string GetBackdropWallpaperSuffix() {
 // directory can not be found/created or failed to write file.
 bool SaveData(int key,
               const std::string& file_name,
-              const std::vector<char>& data) {
+              const std::vector<uint8_t>& data) {
   base::FilePath data_dir;
   CHECK(base::PathService::Get(key, &data_dir));
   if (!base::DirectoryExists(data_dir) &&
@@ -122,7 +122,8 @@ bool SaveData(int key,
   base::FilePath file_path = data_dir.Append(file_name);
 
   return base::PathExists(file_path) ||
-         base::WriteFile(file_path, data.data(), data.size()) != -1;
+         base::WriteFile(file_path, reinterpret_cast<const char*>(data.data()),
+                         data.size()) != -1;
 }
 
 // Gets |file_name| from directory with |key|. Return false if the directory can
@@ -312,7 +313,8 @@ void WallpaperPrivateGetSyncSettingFunction::CheckProfileSyncServiceStatus() {
     return;
   }
 
-  if (sync_service->GetState() == syncer::SyncService::State::ACTIVE) {
+  if (sync_service->GetTransportState() ==
+      syncer::SyncService::TransportState::ACTIVE) {
     dict->SetBoolean("syncThemes",
                      sync_service->GetActiveDataTypes().Has(syncer::THEMES));
     Respond(OneArgument(std::move(dict)));
@@ -624,8 +626,9 @@ void WallpaperPrivateSaveThumbnailFunction::Success() {
   Respond(NoArguments());
 }
 
-void WallpaperPrivateSaveThumbnailFunction::Save(const std::vector<char>& data,
-                                                 const std::string& file_name) {
+void WallpaperPrivateSaveThumbnailFunction::Save(
+    const std::vector<uint8_t>& data,
+    const std::string& file_name) {
   WallpaperFunctionBase::AssertCalledOnWallpaperSequence(
       WallpaperFunctionBase::GetNonBlockingTaskRunner());
   if (SaveData(chrome::DIR_CHROMEOS_WALLPAPER_THUMBNAILS, file_name, data)) {
@@ -793,7 +796,7 @@ void WallpaperPrivateGetLocalImageDataFunction::OnReadImageDataComplete(
   }
 
   Respond(ArgumentList(get_local_image_data::Results::Create(
-      std::vector<char>(image_data->begin(), image_data->end()))));
+      std::vector<uint8_t>(image_data->begin(), image_data->end()))));
 }
 
 WallpaperPrivateConfirmPreviewWallpaperFunction::

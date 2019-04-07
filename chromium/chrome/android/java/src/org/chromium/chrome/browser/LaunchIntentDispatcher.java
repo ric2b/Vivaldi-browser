@@ -17,9 +17,8 @@ import android.os.Bundle;
 import android.os.StrictMode;
 import android.support.annotation.IntDef;
 import android.support.customtabs.CustomTabsIntent;
-import android.support.customtabs.CustomTabsSessionToken;
-import android.support.customtabs.TrustedWebUtils;
 
+import org.chromium.base.ApplicationStatus;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -28,14 +27,15 @@ import org.chromium.base.metrics.CachedMetrics;
 import org.chromium.chrome.browser.browserservices.BrowserSessionContentUtils;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
-import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.customtabs.SeparateTaskCustomTabActivity;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
+import org.chromium.chrome.browser.incognito.IncognitoDisclosureActivity;
 import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.chrome.browser.metrics.MediaNotificationUma;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.notifications.NotificationPlatformBridge;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.searchwidget.SearchActivity;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.DocumentModeAssassin;
@@ -44,13 +44,12 @@ import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.chrome.browser.webapps.ActivityAssigner;
-import org.chromium.chrome.browser.webapps.WebappActivity;
-import org.chromium.chrome.browser.webapps.WebappInfo;
 import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
 import org.chromium.ui.widget.Toast;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.ref.WeakReference;
 import java.util.UUID;
 
 /**
@@ -208,11 +207,7 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
 
         // Check if we should launch a Custom Tab.
         if (mIsCustomTabIntent) {
-            if (!mIntent.getBooleanExtra(
-                        TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, false)
-                    || !launchTrustedWebActivity()) {
                 launchCustomTabActivity();
-            }
 
             return Action.FINISH_ACTIVITY;
         }
@@ -351,6 +346,16 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
 
         // Create and fire a launch intent.
         Intent launchIntent = createCustomTabActivityIntent(mActivity, mIntent);
+
+        boolean shouldShowIncognitoDisclosure =
+                CustomTabIntentDataProvider.isValidExternalIncognitoIntent(launchIntent)
+                && Profile.getLastUsedProfile().hasOffTheRecordProfile();
+
+        if (shouldShowIncognitoDisclosure) {
+            IncognitoDisclosureActivity.launch(mActivity, launchIntent);
+            return;
+        }
+
         // Allow disk writes during startActivity() to avoid strict mode violations on some
         // Samsung devices, see https://crbug.com/796548.
         try (StrictModeContext smc = StrictModeContext.allowDiskWrites()) {
@@ -358,32 +363,29 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
         }
     }
 
-    private boolean launchTrustedWebActivity() {
-        CustomTabsSessionToken session = CustomTabsSessionToken.getSessionTokenFromIntent(mIntent);
-        if (!CustomTabsConnection.getInstance().canSessionLaunchInTrustedWebActivity(
-                    session, Uri.parse(mIntent.getDataString()))) {
-            return false;
-        }
-
-        // TODO(yusufo): WebappInfo houses a lot of logic around preparing/easing out the initial
-        // launch via extras for icons, splashscreens, screen orientation etc. We need a way to
-        // plumb that information to Trusted Web Activities.
-        WebappInfo info = WebappInfo.create(mIntent, session);
-        if (info == null) return false;
-
-        WebappActivity.addWebappInfo(info.id(), info);
-        Intent launchIntent = WebappLauncherActivity.createWebappLaunchIntent(info, false);
-        launchIntent.putExtras(mIntent.getExtras());
-
-        mActivity.startActivity(launchIntent);
-        return true;
-    }
-
     /**
      * Handles launching a {@link ChromeTabbedActivity}.
      */
     @SuppressLint("InlinedApi")
     private @Action int dispatchToTabbedActivity() {
+        if (mIsVrIntent) {
+            for (WeakReference<Activity> weakActivity : ApplicationStatus.getRunningActivities()) {
+                final Activity activity = weakActivity.get();
+                if (activity == null) continue;
+                if (activity instanceof ChromeTabbedActivity) {
+                    if (VrModuleProvider.getDelegate().willChangeDensityInVr(
+                                (ChromeActivity) activity)) {
+                        // In the rare case that entering VR will trigger a density change (and
+                        // hence an Activity recreation), just return to Daydream home and kill the
+                        // process, as there's no good way to recreate without showing 2D UI
+                        // in-headset.
+                        mActivity.finish();
+                        System.exit(0);
+                    }
+                }
+            }
+        }
+
         maybePrefetchDnsInBackground();
 
         Intent newIntent = new Intent(mIntent);

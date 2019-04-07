@@ -24,6 +24,7 @@ import com.google.android.gms.cast.CastMediaControlIntent;
 
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.AsyncTask;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.RemovableInRelease;
 import org.chromium.base.annotations.UsedByReflection;
@@ -810,7 +811,11 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
             public void deliverResult(Uri uri, boolean playable) {
                 callback.onResult(playable, uri.toString(), frameUrl);
             }
-        }, userAgent).execute();
+
+            // Some webpages have >100 media files, which causes the THREAD_POOL_EXECUTOR to get
+            // flooded with requests and causes a crash. We use SERIAL_EXECUTOR instead, to allow
+            // for an unlimited number of tasks. See https://crbug.com/873941.
+        }, userAgent).executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
     }
 
     @Override

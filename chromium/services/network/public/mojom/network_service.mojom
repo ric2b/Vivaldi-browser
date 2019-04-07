@@ -6,6 +6,9 @@ module network.mojom;
 
 import "mojo/public/mojom/base/file.mojom";
 import "mojo/public/mojom/base/file_path.mojom";
+import "mojo/public/mojom/base/read_only_buffer.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/values.mojom";
 import "services/network/public/mojom/cookie_manager.mojom";
 import "services/network/public/mojom/network_change_manager.mojom";
 import "services/network/public/mojom/network_context.mojom";
@@ -37,6 +40,16 @@ interface SSLPrivateKey {
 // needs to be called.
 interface AuthChallengeResponder {
    OnAuthCredentials(AuthCredentials? credentials);
+};
+
+struct LoadInfo {
+  uint32 process_id;
+  uint32 routing_id;
+  string host;
+  uint32 load_state;  // net::LoadState enum
+  mojo_base.mojom.String16 state_param;
+  uint64 upload_position;
+  uint64 upload_size;
 };
 
 // Network service interface to the browser.
@@ -108,17 +121,33 @@ interface NetworkServiceClient {
       int32 process_id, int32 routing_id, url.mojom.Url url,
       url.mojom.Url frame_url, array<CanonicalCookie> cookie_list,
       bool blocked_by_policy);
+
+  // Called periodically to update the client about progress of the current
+  // loads. To avoid flooding the client, it has to ack the update before it can
+  // receive the next update.
+  OnLoadingStateUpdate(array<LoadInfo> infos) => ();
+
+  // Called when the Clear-Site-Data header has been received. The callback
+  // should be run after the data is deleted.
+  // https://www.w3.org/TR/clear-site-data/
+  // TODO(crbug.com/876931): We might want to move header parsing work to
+  // Network Service for security concerns (e.g. |header_value| => booleans).
+  OnClearSiteData(int32 process_id,
+                  int32 routing_id,
+                  url.mojom.Url url,
+                  string header_value,
+                  int32 load_flags) => ();
 };
 
 // An HTTPS server to send DNS queries to, per the DNS Queries over HTTPS spec.
-// spec:  https://tools.ietf.org/html/draft-ietf-doh-dns-over-https-07
+// spec:  https://tools.ietf.org/html/draft-ietf-doh-dns-over-https-12
  struct DnsOverHttpsServer {
-  // DNS over HTTPS server URL. Must be HTTPS.
-  url.mojom.Url url;
+  // DNS over HTTPS server URI template. Must be HTTPS.
+  string server_template;
 
-  // Whether to use POSTs to do DNS lookups. Otherwise, GETs are used. See spec
+  // Whether to use POST to do DNS lookups. Otherwise, GET is used. See spec
   // for more details.
-  bool use_posts = false;
+  bool use_post = false;
 };
 
 // Values for configuring HTTP authentication that can only be set once.
@@ -181,7 +210,19 @@ struct CryptConfig {
 
 // Browser interface to the network service.
 interface NetworkService {
+  // Sets client used by all |NetworkContext|s creating by |NetworkService|.
+  // Pending requests may hang if the |client| pipe is closed before they
+  // complete.
   SetClient(NetworkServiceClient client);
+
+  // Starts observing the NetLog event stream and writing entries to |file|.
+  // |constants| is a legend used for decoding constant values in the log; it
+  // will be merged with the |GetNetConstants()| dictionary before being passed
+  // through to the FileObserver. (See |FileNetLogObserver::CreateBounded()|
+  // for more details). Most clients will just be adding a dictionary under
+  // the key "clientInfo".
+  StartNetLog(mojo_base.mojom.File file,
+              mojo_base.mojom.DictionaryValue constants);
 
   // Creates a new network context with the given parameters.
   CreateNetworkContext(NetworkContext& context,
@@ -243,13 +284,36 @@ interface NetworkService {
   // Gets the accumulated network usage since the start/restart of the service.
   GetTotalNetworkUsages() => (array<NetworkUsage> total_network_usages);
 
-  // Update Signed Tree Heads (STH) used in the handling of Certificate
+  // Updates Signed Tree Heads (STH) used in the handling of Certificate
   // Transparency. Broadcast to each NetworkContext using the NetworkService.
   // NetworkContextes ignore STHs from unrecognized logs.
   UpdateSignedTreeHead(SignedTreeHead signed_tree_head);
+
+  // Updates the CRLSet used in the verification of certificates. CRLSets that
+  // cannot be parsed using net::CRLSet::Parse will be ignored, as will older
+  // CRLSets (where older is determined by the sequence number). All Network
+  // Contexts created by the Network Service, including those created after
+  // this call, will use the same CRLSet.
+  UpdateCRLSet(mojo_base.mojom.ReadOnlyBuffer crl_set);
 
   // Sets up OSCrypt for the network service process. Must be called before
   // encrypted cookies can be read or set.
   [EnableIf=needs_crypt_config]
   SetCryptConfig(CryptConfig crypt_config);
+
+  // Send the encryption key to the network service to use for AES encryption.
+  [EnableIf=is_mac]
+  SetEncryptionKey(string encryption_key);
+
+  // Notifies CORB (Cross-Origin Read Blocking) that |process_id| is proxying
+  // requests on behalf of a universal-access plugin and therefore CORB should
+  // stop blocking requests marked as RESOURCE_TYPE_PLUGIN_RESOURCE.
+  //
+  // TODO(lukasza, laforge): https://crbug.com/702995: Remove the ...ForPlugin
+  // methods once Flash support is removed from Chromium (probably around 2020
+  // - see https://www.chromium.org/flash-roadmap).
+  AddCorbExceptionForPlugin(uint32 process_id);
+
+  // Reverts AddCorbExceptionForPlugin.
+  RemoveCorbExceptionForPlugin(uint32 process_id);
 };

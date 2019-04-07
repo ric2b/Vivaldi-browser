@@ -15,6 +15,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "media/base/media_switches.h"
+#include "services/media_session/public/cpp/switches.h"
 
 namespace content {
 
@@ -36,7 +37,7 @@ class MediaSessionBrowserTest : public ContentBrowserTest {
   void EnableInternalMediaSesion() {
 #if !defined(OS_ANDROID)
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kEnableInternalMediaSession);
+        media_session::switches::kEnableInternalMediaSession);
 #endif  // !defined(OS_ANDROID)
   }
 
@@ -174,6 +175,27 @@ IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, MultiplePlayersPlayPause) {
   WaitForStart(shell());
   EXPECT_TRUE(IsPlaying(shell(), "long-video"));
   EXPECT_TRUE(IsPlaying(shell(), "long-audio"));
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionBrowserTest, WebContents_Muted) {
+  EnableInternalMediaSesion();
+
+  NavigateToURL(shell(), GetTestUrl("media/session", "media-session.html"));
+
+  shell()->web_contents()->SetAudioMuted(true);
+  MediaSession* media_session = MediaSession::Get(shell()->web_contents());
+  ASSERT_NE(nullptr, media_session);
+
+  StartPlaybackAndWait(shell(), "long-video");
+  EXPECT_FALSE(media_session->IsControllable());
+
+  // Unmute the web contents and the player should be created.
+  shell()->web_contents()->SetAudioMuted(false);
+  EXPECT_TRUE(media_session->IsControllable());
+
+  // Now mute it again and the player should be removed.
+  shell()->web_contents()->SetAudioMuted(true);
+  EXPECT_FALSE(media_session->IsControllable());
 }
 
 #if !defined(OS_ANDROID)

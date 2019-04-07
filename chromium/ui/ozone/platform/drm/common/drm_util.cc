@@ -204,7 +204,9 @@ bool HasPerPlaneColorCorrectionMatrix(const int fd, drmModeCrtc* crtc) {
     if (!FindDrmProperty(fd, plane_props.get(), "PLANE_CTM"))
       return false;
   }
-  return true;
+
+  // On legacy, if no planes are exposed then the property isn't available.
+  return plane_resources->count_planes > 0;
 }
 
 bool IsDrmModuleName(const int fd, const std::string& name) {
@@ -212,7 +214,9 @@ bool IsDrmModuleName(const int fd, const std::string& name) {
   // and tested.
   drmVersionPtr drm_version = drmGetVersion(fd);
   DCHECK(drm_version) << "Can't get version for drm device.";
-  return std::string(drm_version->name) == name;
+  bool result = std::string(drm_version->name) == name;
+  drmFreeVersion(drm_version);
+  return result;
 }
 
 bool AreDisplayModesEqual(const DisplayMode_Params& lhs,

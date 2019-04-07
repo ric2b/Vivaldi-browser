@@ -57,6 +57,7 @@
          via scrolling. -->
     <dimen name="menu_vertical_fade_distance">15dp</dimen>
     <dimen name="menu_badge_translation_y_distance">6dp</dimen>
+    <dimen name="menu_negative_vertical_offset_not_top_anchored">4dp</dimen>
 
     <!-- Menu button dragging related dimensions -->
     <dimen name="auto_scroll_full_velocity">500dp</dimen>
@@ -124,12 +125,12 @@
 
     <!-- Autofill keyboard accessory dimensions -->
     <dimen name="keyboard_accessory_action_height">36dp</dimen>
+    <dimen name="keyboard_accessory_action_padding">16dp</dimen>
     <dimen name="keyboard_accessory_half_padding">6dp</dimen>
     <dimen name="keyboard_accessory_height">48dp</dimen>
     <dimen name="keyboard_accessory_padding">6dp</dimen>
     <dimen name="keyboard_accessory_sheet_height">330dp</dimen>
-    <dimen name="keyboard_accessory_text_size">14sp</dimen>
-    <dimen name="keyboard_accessory_suggestion_margin">16dp</dimen>
+    <dimen name="keyboard_accessory_suggestion_padding">16dp</dimen>
     <dimen name="keyboard_accessory_suggestion_height">48dp</dimen>
     <dimen name="keyboard_accessory_suggestion_icon_size">20dp</dimen>
 
@@ -193,7 +194,6 @@
     <dimen name="signin_margin_end">16dp</dimen>
     <dimen name="signin_divider_margin_start">48dp</dimen>
     <dimen name="signin_drawable_padding">16dp</dimen>
-    <dimen name="signin_description_blocks_margin">16dp</dimen>
 
     <!-- Signin promo dimensions -->
     <dimen name="signin_promo_account_image_size">48dp</dimen>
@@ -267,15 +267,9 @@
     <dimen name="toolbar_button_width">48dp</dimen>
 
     <dimen name="toolbar_edge_padding">8dp</dimen>
-    <dimen name="location_bar_google_g_width">24dp</dimen>
-    <dimen name="location_bar_google_g_margin">8dp</dimen>
-    <!-- location_bar_google_g_width + 2 * location_bar_google_g_margin -->
-    <dimen name="location_bar_google_g_container_width">40dp</dimen>
     <dimen name="location_bar_vertical_margin">8dp</dimen>
     <dimen name="location_bar_url_text_size">16sp</dimen>
-    <dimen name="location_bar_incognito_badge_padding">7dp</dimen>
     <dimen name="location_bar_icon_width">32dp</dimen>
-    <dimen name="location_bar_corner_radius">1dp</dimen>
 
     <dimen name="tablet_toolbar_start_padding">4dp</dimen>
     <dimen name="tablet_toolbar_start_padding_no_buttons">6dp</dimen>
@@ -343,11 +337,11 @@
     <dimen name="tile_view_title_margin_top_condensed">62dp</dimen>
     <dimen name="tile_view_title_margin_top_modern">61dp</dimen>
     <dimen name="ntp_logo_height">100dp</dimen>
+    <dimen name="duet_ntp_logo_top_margin">-16dp</dimen>
     <dimen name="ntp_search_box_height">62dp</dimen>
     <dimen name="ntp_search_box_height_modern">48dp</dimen>
     <dimen name="ntp_search_box_shadow_width">4dp</dimen>
     <dimen name="ntp_search_box_transition_length">16dp</dimen>
-    <dimen name="ntp_search_box_logo_padding">8dp</dimen>
     <dimen name="ntp_search_box_voice_search_margin_end_modern">6dp</dimen>
     <dimen name="explore_sites_radius">8dp</dimen>
     <dimen name="explore_sites_padding">8dp</dimen>
@@ -439,8 +433,6 @@
     <!-- Account chooser dialog dimensions -->
     <dimen name="account_chooser_dialog_margin">24dp</dimen>
     <dimen name="account_chooser_dialog_item_margin">24dp</dimen>
-    <dimen name="account_chooser_dialog_title_main_text_size">18sp</dimen>
-    <dimen name="account_chooser_dialog_title_descriptive_text_size">16sp</dimen>
 
     <!-- Public Suffix List (PSL) info button and tooltip dimensions -->
     <dimen name="psl_info_tooltip_margin">8dp</dimen>
@@ -550,10 +542,6 @@
     <!-- Divider Dimensions -->
     <dimen name="divider_height">1dp</dimen>
 
-    <!-- Search widget dimensions -->
-    <dimen name="search_activity_location_bar_margin_start">16dp</dimen>
-    <dimen name="search_activity_location_bar_margin_end">8dp</dimen>
-
     <!-- Reader Mode dimensions -->
     <!-- Padding surrounding the message. -->
     <dimen name="reader_mode_infobar_text_padding">8dp</dimen>
@@ -583,4 +571,21 @@
     <dimen name="download_manager_prefetch_thumbnail_size">114dp</dimen>
     <dimen name="download_manager_prefetch_horizontal_margin">16dp</dimen>
     <dimen name="download_manager_prefetch_vertical_margin">12dp</dimen>
+    <dimen name="download_manager_section_title_padding_top">16dp</dimen>
+    <dimen name="download_manager_section_title_padding_top_condensed">0dp</dimen>
+    <dimen name="download_manager_section_title_padding_bottom">0dp</dimen>
+    <dimen name="download_manager_section_title_padding_image">8dp</dimen>
+    <!-- The corner radius is calculated by subtracting the hairline border width from the
+         background card corner radius. -->
+    <dimen name="download_manager_prefetch_thumbnail_corner_radius">7dp</dimen>
+
+    <!-- Navigation history popup dimensions -->
+    <dimen name="navigation_popup_width">312dp</dimen>
+    <dimen name="navigation_popup_item_height">56dp</dimen>
+    <dimen name="navigation_popup_default_padding">16dp</dimen>
+    <dimen name="navigation_popup_top_padding">8dp</dimen>
+    <dimen name="navigation_popup_favicon_bg_size">36dp</dimen>
+
+    <!-- Explicit Language Ask Prompt dimensions -->
+    <dimen name="explicit_ask_checkbox_end_padding">4dp</dimen>
 </resources>

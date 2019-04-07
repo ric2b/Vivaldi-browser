@@ -10,45 +10,12 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/default_tick_clock.h"
 #include "components/cast_channel/cast_socket_service.h"
-#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace cast_channel {
 
 namespace {
 
 constexpr base::TimeDelta kRequestTimeout = base::TimeDelta::FromSeconds(5);
-
-constexpr net::NetworkTrafficAnnotationTag kMessageTrafficAnnotation =
-    net::DefineNetworkTrafficAnnotation("cast_message_handler", R"(
-        semantics {
-          sender: "Cast Message Handler"
-          description:
-            "A Cast protocol or application-level message sent to a Cast "
-            "device."
-          trigger:
-            "Triggered by user gesture from using Cast functionality, or "
-            "a webpage using the Presentation API, or "
-            "Cast device discovery internal logic."
-          data:
-            "A serialized Cast protocol or application-level protobuf message. "
-            "A non-exhaustive list of Cast protocol messages:\n"
-            "- Virtual connection requests,\n"
-            "- App availability / media status / receiver status requests,\n"
-            "- Launch / stop Cast session requests,\n"
-            "- Media commands, such as play/pause.\n"
-            "Application-level messages may contain data specific to the Cast "
-            "application."
-          destination: OTHER
-          destination_other:
-            "Data will be sent to a Cast device in local network."
-        }
-        policy {
-          cookies_allowed: NO
-          setting:
-            "This request cannot be disabled, but it would not be sent if user "
-            "does not connect a Cast device to the local network."
-          policy_exception_justification: "Not implemented."
-        })");
 
 }  // namespace
 
@@ -237,14 +204,11 @@ void CastMessageHandler::OnMessage(const CastSocket& socket,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(2) << __func__ << ", channel_id: " << socket.id()
            << ", message: " << CastMessageToString(message);
-
-  // TODO(crbug.com/698940): Support Observers for both kinds of messages.
   if (IsCastInternalNamespace(message.namespace_())) {
     HandleCastInternalMessage(socket, message);
   } else {
     DVLOG(2) << "Got app message from cast channel with namespace: "
              << message.namespace_();
-
     for (auto& observer : observers_)
       observer.OnAppMessage(socket.id(), message);
   }
@@ -252,7 +216,7 @@ void CastMessageHandler::OnMessage(const CastSocket& socket,
 
 void CastMessageHandler::HandleCastInternalMessage(const CastSocket& socket,
                                                    const CastMessage& message) {
-  // TODO(crbug.com/698940): Handle other messages (VIRTUAL_CONNECT_CLOSE).
+  // TODO(https://crbug.com/809249): Parse message with data_decoder service.
   std::unique_ptr<base::DictionaryValue> payload =
       GetDictionaryFromCastMessage(message);
   if (!payload)
@@ -271,6 +235,13 @@ void CastMessageHandler::HandleCastInternalMessage(const CastSocket& socket,
     return;
   }
 
+  if (type == CastMessageType::kCloseConnection) {
+    // Source / destination is flipped.
+    virtual_connections_.erase(VirtualConnection(
+        socket.id(), message.destination_id(), message.source_id()));
+    return;
+  }
+
   InternalMessage internal_message(type, std::move(*payload));
   for (auto& observer : observers_)
     observer.OnInternalMessage(socket.id(), internal_message);
@@ -282,10 +253,8 @@ void CastMessageHandler::SendCastMessage(CastSocket* socket,
   // can be sent.
   DoEnsureConnection(socket, message.source_id(), message.destination_id());
   socket->transport()->SendMessage(
-      message,
-      base::Bind(&CastMessageHandler::OnMessageSent,
-                 weak_ptr_factory_.GetWeakPtr()),
-      kMessageTrafficAnnotation);
+      message, base::Bind(&CastMessageHandler::OnMessageSent,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 void CastMessageHandler::DoEnsureConnection(CastSocket* socket,
@@ -305,10 +274,8 @@ void CastMessageHandler::DoEnsureConnection(CastSocket* socket,
           : VirtualConnectionType::kInvisible,
       user_agent_, browser_version_);
   socket->transport()->SendMessage(
-      virtual_connection_request,
-      base::Bind(&CastMessageHandler::OnMessageSent,
-                 weak_ptr_factory_.GetWeakPtr()),
-      kMessageTrafficAnnotation);
+      virtual_connection_request, base::Bind(&CastMessageHandler::OnMessageSent,
+                                             weak_ptr_factory_.GetWeakPtr()));
 
   // We assume the virtual connection request will succeed; otherwise this
   // will eventually self-correct.
@@ -344,8 +311,9 @@ bool CastMessageHandler::PendingRequests::AddAppAvailabilityRequest(
   int request_id = request->request_id;
   request->timeout_timer.Start(
       FROM_HERE, kRequestTimeout,
-      base::Bind(&CastMessageHandler::PendingRequests::AppAvailabilityTimedOut,
-                 base::Unretained(this), request_id));
+      base::BindOnce(
+          &CastMessageHandler::PendingRequests::AppAvailabilityTimedOut,
+          base::Unretained(this), request_id));
   pending_app_availability_requests.emplace(app_id, std::move(request));
   return true;
 }
@@ -359,8 +327,9 @@ bool CastMessageHandler::PendingRequests::AddLaunchRequest(
   int request_id = request->request_id;
   request->timeout_timer.Start(
       FROM_HERE, timeout,
-      base::Bind(&CastMessageHandler::PendingRequests::LaunchSessionTimedOut,
-                 base::Unretained(this), request_id));
+      base::BindOnce(
+          &CastMessageHandler::PendingRequests::LaunchSessionTimedOut,
+          base::Unretained(this), request_id));
   pending_launch_session_request = std::move(request);
   return true;
 }

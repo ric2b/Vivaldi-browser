@@ -7,8 +7,9 @@ import("//mojo/public/tools/bindings/mojom.gni")
 mojom("mojom") {
   sources = [
     "application_media_capabilities.mojom",
+    "constants.mojom",
     "media_caps.mojom",
-    "media_load_deferrer.mojom",
+    "media_playback_options.mojom",
     "memory_pressure.mojom",
     "multiroom.mojom",
   ]

@@ -11,7 +11,6 @@
 #include "ash/login/ui/login_display_style.h"
 #include "ash/login/ui/login_user_view.h"
 #include "ash/public/interfaces/login_user_info.mojom.h"
-#include "ash/wallpaper/wallpaper_controller.h"
 #include "ash/wallpaper/wallpaper_controller_observer.h"
 #include "base/scoped_observer.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -24,7 +23,7 @@ class BoxLayout;
 
 namespace ash {
 
-class HoverNotifier;
+class WallpaperController;
 
 // Scrollable list of the users. Stores the list of login user views. Can be
 // styled with GradientParams that define gradient tinting at the top and at the
@@ -72,40 +71,35 @@ class ASH_EXPORT ScrollableUsersListView : public views::ScrollView,
 
   // WallpaperControllerObserver:
   void OnWallpaperColorsChanged() override;
+  void OnWallpaperBlurChanged() override;
 
  private:
-  class ScrollBar;
-
   struct GradientParams {
     static GradientParams BuildForStyle(LoginDisplayStyle style);
 
     // Start color for drawing linear gradient.
-    SkColor color_from;
+    SkColor color_from = SK_ColorTRANSPARENT;
     // End color for drawing linear gradient.
-    SkColor color_to;
+    SkColor color_to = SK_ColorTRANSPARENT;
     // Height of linear gradient.
-    SkScalar height;
+    SkScalar height = 0;
   };
 
-  // Updates visibility of scroll bar thumb. Called when hover state changes.
-  void OnHover(bool has_hover);
-
   // Display style to determine layout and sizing of users list.
-  LoginDisplayStyle display_style_;
+  const LoginDisplayStyle display_style_;
 
-  // Layout for |contents()|.
-  views::BoxLayout* contents_layout_ = nullptr;
+  // The view which contains all of the user views.
+  views::View* user_view_host_ = nullptr;
 
-  // Owned by ScrollView.
-  ScrollBar* scroll_bar_ = nullptr;
+  // Layout for |user_view_host_|.
+  views::BoxLayout* user_view_host_layout_ = nullptr;
 
   std::vector<LoginUserView*> user_views_;
 
-  std::unique_ptr<HoverNotifier> hover_notifier_;
-
   GradientParams gradient_params_;
 
-  ScopedObserver<WallpaperController, WallpaperControllerObserver> observer_;
+  ScopedObserver<WallpaperController, WallpaperControllerObserver> observer_{
+      this};
 
   DISALLOW_COPY_AND_ASSIGN(ScrollableUsersListView);
 };

@@ -13,7 +13,6 @@
 <translation id="2350172092385603347">Lokalizacja została użyta, ale nie określono języka default_locale w pliku manifestu.</translation>
 <translation id="2576842806987913196">Plik CRX o tej nazwie już istnieje.</translation>
 <translation id="2753617847762399167">Nieprawidłowa ścieżka (pełna lub względna z przedrostkiem „..”): „<ph name="IMAGE_PATH" />”</translation>
-<translation id="27822970480436970">To rozszerzenie nie mogło zmienić żądania sieciowego, ponieważ zmiana wchodziła w konflikt z innym rozszerzeniem.</translation>
 <translation id="2785530881066938471">Nie można wczytać pliku „<ph name="RELATIVE_PATH" />” dla skryptu dotyczącego treści. Plik nie ma kodowania UTF-8.</translation>
 <translation id="2903070246402204397">Rozszerzenie <ph name="EXTENSION_NAME" /> (identyfikator rozszerzenia „<ph name="EXTENSION_ID" />”) jest zablokowane przez administratora. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">Nie można zainstalować pakietu: „<ph name="ERROR_CODE" />”</translation>
@@ -57,19 +56,16 @@
 <translation id="7003844668372540529">Nieznany produkt <ph name="PRODUCT_ID" /> firmy <ph name="VENDOR_NAME" /></translation>
 <translation id="7068383018033524534">Plik manifestu jest nieprawidłowy</translation>
 <translation id="7217838517480956708">Administrator tego komputera wymaga zainstalowanego rozszerzenia <ph name="EXTENSION_NAME" />. Nie można go usunąć ani modyfikować.</translation>
+<translation id="7612608473764576263">Wartość wejściowa klucza prywatnego musi mieć prawidłowy format (klucz RSA z kodowaniem PEM w formacie PKCS#8).</translation>
 <translation id="7939686037314084444">Rozszerzenie nie załadowało się poprawnie. Być może nie działa przechwytywanie żądań sieciowych.</translation>
 <translation id="7972881773422714442">Opcje: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Przedni</translation>
 <translation id="8047248493720652249">Rozszerzenie nie może odczytać nazwy pobieranego pliku „<ph name="ATTEMPTED_FILENAME" />”, ponieważ inne rozszerzenie (<ph name="EXTENSION_NAME" />) odczytało odmienną jego nazwę „<ph name="ACTUAL_FILENAME" />”.</translation>
 <translation id="8284835137979141223"><ph name="PRODUCT_NAME" /> od <ph name="VENDOR_NAME" /></translation>
-<translation id="8341840687457896278">Rozszerzenie nie podało danych logowania do żądania sieciowego, bo inne rozszerzenie (<ph name="EXTENSION_NAME" />) podało inne dane.</translation>
 <translation id="8517576857589387417">Brak pliku manifestu lub nie można go odczytać</translation>
 <translation id="8636666366616799973">Pakiet jest nieprawidłowy. Szczegółowe informacje: „<ph name="ERROR_MESSAGE" />”.</translation>
-<translation id="8670869118777164560">Rozszerzenie nie przekierowało żądania sieciowego do <ph name="ATTEMPTED_REDIRECT_DESTINATION" />, bo inne rozszerzenie (<ph name="EXTENSION_NAME" />) przekierowało je do <ph name="ACTUAL_REDIRECT_DESTINATION" />.</translation>
 <translation id="8761756413268424715"><ph name="APP_NAME" /> żąda dostępu do jednego z Twoich urządzeń:</translation>
-<translation id="8825366169884721447">Rozszerzenie nie zmodyfikowało nagłówka żądania „<ph name="HEADER_NAME" />” żądania sieciowego, bo zmiana powodowałaby konflikt z innym rozszerzeniem (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="8885905466771744233">Klucz prywatny dla określonego rozszerzenia już istnieje. Użyj ponownie tego klucza lub najpierw go usuń.</translation>
 <translation id="907841381057066561">Nie można utworzyć tymczasowego pliku zip podczas pakowania.</translation>
-<translation id="9111791539553342076">Rozszerzenie nie zmodyfikowało nagłówka odpowiedzi „<ph name="HEADER_NAME" />” żądania sieciowego, bo zmiana powodowałaby konflikt z innym rozszerzeniem (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="941543339607623937">Nieprawidłowy klucz prywatny.</translation>
 </translationbundle>

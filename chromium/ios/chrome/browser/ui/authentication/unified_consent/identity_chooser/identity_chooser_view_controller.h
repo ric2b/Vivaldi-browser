@@ -7,6 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/ui/authentication/unified_consent/identity_chooser/identity_chooser_consumer.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_controller.h"
 
 @protocol IdentityChooserViewControllerPresentationDelegate;
@@ -14,20 +15,12 @@
 // View controller to display the list of identities, to let the user choose an
 // identity. IdentityChooserViewController also displays "Add Account…" cell
 // at the end.
-@interface IdentityChooserViewController : ChromeTableViewController
+@interface IdentityChooserViewController
+    : ChromeTableViewController<IdentityChooserConsumer>
 
 // Presentation delegate.
 @property(nonatomic, weak) id<IdentityChooserViewControllerPresentationDelegate>
     presentationDelegate;
-
-// Initialises IdentityChooserViewController.
-- (instancetype)init NS_DESIGNATED_INITIALIZER;
-
-// -[IdentityChooserViewController init] should be used.
-- (instancetype)initWithTableViewStyle:(UITableViewStyle)style
-                           appBarStyle:
-                               (ChromeTableViewControllerStyle)appBarStyle
-    NS_UNAVAILABLE;
 
 @end
 

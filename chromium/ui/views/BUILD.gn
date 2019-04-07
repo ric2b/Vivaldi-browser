@@ -27,6 +27,7 @@ aggregate_vector_icons("views_vector_icons") {
     "info.icon",
     "launch.icon",
     "menu_check.icon",
+    "menu_drop_arrow.icon",
     "menu_radio_empty.icon",
     "menu_radio_selected.icon",
     "new_incognito_window.icon",
@@ -78,23 +79,13 @@ jumbo_component("views") {
     "background.h",
     "border.h",
     "bubble/bubble_border.h",
-    "bubble/bubble_dialog_delegate.h",
+    "bubble/bubble_dialog_delegate_view.h",
     "bubble/bubble_frame_view.h",
     "bubble/info_bubble.h",
     "bubble/tooltip_icon.h",
     "button_drag_utils.h",
-    "cocoa/bridged_content_view.h",
     "cocoa/bridged_native_widget.h",
-    "cocoa/bridged_native_widget_owner.h",
-    "cocoa/cocoa_mouse_capture.h",
-    "cocoa/cocoa_mouse_capture_delegate.h",
-    "cocoa/cocoa_window_move_loop.h",
-    "cocoa/drag_drop_client_mac.h",
     "cocoa/native_widget_mac_nswindow.h",
-    "cocoa/tooltip_manager_mac.h",
-    "cocoa/views_nswindow_delegate.h",
-    "cocoa/views_scrollbar_bridge.h",
-    "cocoa/widget_owner_nswindow_adapter.h",
     "cocoa/window_touch_bar_delegate.h",
     "color_chooser/color_chooser_listener.h",
     "color_chooser/color_chooser_view.h",
@@ -121,6 +112,7 @@ jumbo_component("views") {
     "controls/link.h",
     "controls/link_listener.h",
     "controls/menu/menu_closure_animation_mac.h",
+    "controls/menu/menu_cocoa_watcher_mac.h",
     "controls/menu/menu_config.h",
     "controls/menu/menu_controller.h",
     "controls/menu/menu_controller_delegate.h",
@@ -253,12 +245,13 @@ jumbo_component("views") {
     "window/dialog_observer.h",
     "window/frame_background.h",
     "window/frame_buttons.h",
+    "window/hit_test_utils.h",
     "window/native_frame_view.h",
     "window/non_client_view.h",
     "window/window_button_order_provider.h",
+    "window/window_resize_utils.h",
     "window/window_resources.h",
     "window/window_shape.h",
-    "window/window_resize_utils.h",
     "word_lookup_client.h",
   ]
 
@@ -283,22 +276,13 @@ jumbo_component("views") {
     "background.cc",
     "border.cc",
     "bubble/bubble_border.cc",
-    "bubble/bubble_dialog_delegate.cc",
+    "bubble/bubble_dialog_delegate_view.cc",
     "bubble/bubble_frame_view.cc",
     "bubble/info_bubble.cc",
     "bubble/tooltip_icon.cc",
     "button_drag_utils.cc",
-    "cocoa/bridged_content_view.mm",
-    "cocoa/bridged_content_view_touch_bar.mm",
     "cocoa/bridged_native_widget.mm",
-    "cocoa/cocoa_mouse_capture.mm",
-    "cocoa/cocoa_window_move_loop.mm",
-    "cocoa/drag_drop_client_mac.mm",
     "cocoa/native_widget_mac_nswindow.mm",
-    "cocoa/tooltip_manager_mac.mm",
-    "cocoa/views_nswindow_delegate.mm",
-    "cocoa/views_scrollbar_bridge.mm",
-    "cocoa/widget_owner_nswindow_adapter.mm",
     "color_chooser/color_chooser_view.cc",
     "controls/animated_icon_view.cc",
     "controls/button/blue_button.cc",
@@ -320,6 +304,7 @@ jumbo_component("views") {
     "controls/link.cc",
     "controls/menu/display_change_listener_mac.cc",
     "controls/menu/menu_closure_animation_mac.mm",
+    "controls/menu/menu_cocoa_watcher_mac.mm",
     "controls/menu/menu_config.cc",
     "controls/menu/menu_config_chromeos.cc",
     "controls/menu/menu_config_linux.cc",
@@ -435,6 +420,7 @@ jumbo_component("views") {
     "window/dialog_client_view.cc",
     "window/dialog_delegate.cc",
     "window/frame_background.cc",
+    "window/hit_test_utils.cc",
     "window/native_frame_view.cc",
     "window/non_client_view.cc",
     "window/window_button_order_provider.cc",
@@ -442,14 +428,37 @@ jumbo_component("views") {
     "window/window_shape.cc",
   ]
 
-  # Internal sources. If a header in this list is used by another target under
-  # //ui/views:* the header can be listed again in that target's sources. See
-  # http://crbug/com/732993 for a possible build system feature to avoid the
-  # repetition. TODO(tapted): Move more headers from public into this list with
-  # the implementation file.
+  # Other targets in this file (e.g. tests) get access to the internal headers.
+  friend = [ ":*" ]
+
+  # Internal sources. TODO(https://crbug.com/871123): Move more headers from
+  # public into this list, along with the implementation file.
   sources += [
+    "cocoa/bridged_content_view.h",
+    "cocoa/bridged_content_view.mm",
+    "cocoa/bridged_content_view_touch_bar.mm",
+    "cocoa/bridged_native_widget_host.h",
+    "cocoa/bridged_native_widget_host_impl.h",
+    "cocoa/bridged_native_widget_host_impl.mm",
+    "cocoa/bridged_native_widget_owner.h",
+    "cocoa/cocoa_mouse_capture.h",
+    "cocoa/cocoa_mouse_capture.mm",
+    "cocoa/cocoa_mouse_capture_delegate.h",
+    "cocoa/cocoa_window_move_loop.h",
+    "cocoa/cocoa_window_move_loop.mm",
+    "cocoa/drag_drop_client_mac.h",
+    "cocoa/drag_drop_client_mac.mm",
+    "cocoa/tooltip_manager_mac.h",
+    "cocoa/tooltip_manager_mac.mm",
+    "cocoa/views_nswindow_delegate.h",
+    "cocoa/views_nswindow_delegate.mm",
+    "cocoa/views_scrollbar_bridge.h",
+    "cocoa/views_scrollbar_bridge.mm",
+    "cocoa/widget_owner_nswindow_adapter.h",
+    "cocoa/widget_owner_nswindow_adapter.mm",
     "controls/button/label_button_label.cc",
     "controls/button/label_button_label.h",
+    "controls/menu/menu_pre_target_handler.h",
   ]
 
   sources += get_target_outputs(":views_vector_icons")
@@ -468,7 +477,7 @@ jumbo_component("views") {
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
     "//cc/paint",
-    "//services/ui/public/interfaces",
+    "//services/ws/public/mojom",
     "//skia",
     "//third_party/icu",
     "//ui/accessibility",
@@ -497,6 +506,7 @@ jumbo_component("views") {
     "//ui/gfx/animation",
     "//ui/gfx/geometry",
     "//ui/views/resources",
+    "//ui/views_bridge_mac:mojo",
   ]
 
   if (use_x11) {
@@ -583,7 +593,6 @@ jumbo_component("views") {
       "accessibility/ax_widget_obj_wrapper.h",
       "accessibility/ax_window_obj_wrapper.h",
       "bubble/tray_bubble_view.h",
-      "controls/menu/menu_pre_target_handler.h",
       "controls/native/native_view_host_aura.h",
       "corewm/cursor_height_provider_win.h",
       "corewm/tooltip.h",
@@ -617,7 +626,8 @@ jumbo_component("views") {
       "accessibility/ax_window_obj_wrapper.cc",
       "bubble/tray_bubble_view.cc",
       "controls/menu/display_change_listener_aura.cc",
-      "controls/menu/menu_pre_target_handler.cc",
+      "controls/menu/menu_pre_target_handler_aura.cc",
+      "controls/menu/menu_pre_target_handler_aura.h",
       "controls/native/native_view_host_aura.cc",
       "corewm/cursor_height_provider_win.cc",
       "corewm/tooltip_aura.cc",
@@ -645,7 +655,7 @@ jumbo_component("views") {
       "widget/window_reorderer.cc",
     ]
     deps += [
-      "//services/ui/public/interfaces",
+      "//services/ws/public/mojom",
       "//ui/aura",
       "//ui/platform_window",
       "//ui/touch_selection",
@@ -705,18 +715,21 @@ jumbo_component("views") {
           "widget/desktop_aura/window_event_filter.cc",
           "widget/desktop_aura/window_event_filter.h",
         ]
-        if (!use_x11) {
-          public +=
-              [ "widget/desktop_aura/desktop_window_tree_host_platform.h" ]
-          sources +=
-              [ "widget/desktop_aura/desktop_window_tree_host_platform.cc" ]
-        }
+      }
+      if ((is_linux && !use_x11) || is_fuchsia) {
+        public += [ "widget/desktop_aura/desktop_window_tree_host_platform.h" ]
+        sources +=
+            [ "widget/desktop_aura/desktop_window_tree_host_platform.cc" ]
       }
     }
   }
 
   if (is_mac) {
     sources -= [ "controls/views_text_services_context_menu.cc" ]
+    sources += [
+      "controls/menu/menu_pre_target_handler_mac.h",
+      "controls/menu/menu_pre_target_handler_mac.mm",
+    ]
     deps += [
       "//components/crash/core/common",
       "//ui/accelerated_widget_mac",
@@ -917,16 +930,6 @@ jumbo_static_library("test_support") {
 source_set("views_unittests_sources") {
   testonly = true
 
-  # Headers used in tests that appear in :views private sources list. Permits
-  # this target to act as a "friend" of :views. The build system doesn't
-  # currently have a way to represent this. See http://crbug.com/732993.
-  public = [
-    "controls/button/label_button_label.h",
-  ]
-  if (has_native_accessibility) {
-    public += [ "accessibility/view_ax_platform_node_delegate.h" ]
-  }
-
   sources = [
     "accessible_pane_view_unittest.cc",
     "animation/bounds_animator_unittest.cc",
@@ -939,7 +942,7 @@ source_set("views_unittests_sources") {
     "animation/square_ink_drop_ripple_unittest.cc",
     "border_unittest.cc",
     "bubble/bubble_border_unittest.cc",
-    "bubble/bubble_dialog_delegate_unittest.cc",
+    "bubble/bubble_dialog_delegate_view_unittest.cc",
     "bubble/bubble_frame_view_unittest.cc",
     "cocoa/bridged_native_widget_unittest.mm",
     "cocoa/cocoa_mouse_capture_unittest.mm",
@@ -971,6 +974,7 @@ source_set("views_unittests_sources") {
     "controls/resize_area_unittest.cc",
     "controls/scroll_view_unittest.cc",
     "controls/scrollbar/scrollbar_unittest.cc",
+    "controls/separator_unittest.cc",
     "controls/slider_unittest.cc",
     "controls/styled_label_unittest.cc",
     "controls/tabbed_pane/tabbed_pane_accessibility_mac_unittest.mm",
@@ -989,6 +993,7 @@ source_set("views_unittests_sources") {
     "layout/grid_layout_unittest.cc",
     "paint_info_unittest.cc",
     "rect_based_targeting_utils_unittest.cc",
+    "selection_controller_unittest.cc",
     "test/widget_test_unittest.cc",
     "view_model_unittest.cc",
     "view_model_utils_unittest.cc",
@@ -1004,6 +1009,7 @@ source_set("views_unittests_sources") {
     "window/custom_frame_view_unittest.cc",
     "window/dialog_client_view_unittest.cc",
     "window/dialog_delegate_unittest.cc",
+    "window/hit_test_utils_unittest.cc",
     "window/non_client_view_unittest.cc",
     "window/window_resize_utils_unittest.cc",
   ]
@@ -1013,7 +1019,7 @@ source_set("views_unittests_sources") {
   # Make all deps in this target public so both views_unittests and
   # views_mus_unittests will get them.
   public_deps = [
-    ":test_support",
+    ":test_support_internal",
     ":views",
     "//base",
     "//base:i18n",
@@ -1021,7 +1027,7 @@ source_set("views_unittests_sources") {
     "//cc",
     "//cc/paint",
     "//components/vector_icons",
-    "//services/ui/public/interfaces",
+    "//services/ws/public/mojom",
     "//skia",
     "//testing/gtest",
     "//third_party/icu",
@@ -1049,8 +1055,6 @@ source_set("views_unittests_sources") {
   ]
 
   if (is_win) {
-    public += [ "accessibility/view_ax_platform_node_delegate_win.h" ]
-
     public_deps += [
       "//build/win:default_exe_manifest",
       "//third_party/iaccessible2",
@@ -1090,8 +1094,10 @@ source_set("views_unittests_sources") {
       "accessibility/ax_aura_obj_cache_unittest.cc",
       "accessibility/ax_tree_source_views_unittest.cc",
       "controls/native/native_view_host_aura_unittest.cc",
+      "corewm/tooltip_controller_unittest.cc",
       "touchui/touch_selection_menu_runner_views_unittest.cc",
       "view_unittest_aura.cc",
+      "widget/window_reorderer_unittest.cc",
     ]
     public_deps += [
       "//ui/aura",
@@ -1121,16 +1127,10 @@ test("views_unittests") {
 
   if (use_aura) {
     sources += [
-      # These tests currently use AuraTestBase, but then try to use views
-      # objects. Thus, when they are run in views_mus_unittests, they test the
-      # local aura path instead of the remote mus path, so pull them
-      # out. crbug.com/710939.
-      #
-      # Some of the tests need drag-drop support. crbug.com/614037
-      "corewm/tooltip_controller_unittest.cc",
+      # These tests are expecting a hierarchy as created by classic ash. They
+      # are only useful for views_unittests, and not in views_mus_unittests.
       "touchui/touch_selection_controller_impl_unittest.cc",
       "widget/native_widget_aura_unittest.cc",
-      "widget/window_reorderer_unittest.cc",
     ]
 
     if (is_mac) {
@@ -1153,11 +1153,17 @@ test("views_unittests") {
     }
   }
 
+  if (is_linux && !is_chromeos && !use_x11) {
+    sources +=
+        [ "widget/desktop_aura/desktop_window_tree_host_platform_unittest.cc" ]
+  }
+
   if (!is_chromeos) {
     sources += [ "widget/desktop_widget_unittest.cc" ]
   }
 
   deps = [
+    ":test_support",
     ":views_unittests_sources",
     "//mojo/core/embedder",
   ]

@@ -19,9 +19,9 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "base/win/scoped_handle.h"
-#include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/util_constants.h"
 
+class BrowserDistribution;
 class WorkItemList;
 
 namespace base {
@@ -46,14 +46,10 @@ class InstallUtil {
   // installed.
   static base::CommandLine GetChromeUninstallCmd(bool system_install);
 
-  // Find the version of Chrome installed on the system by checking the
-  // Google Update registry key. Fills |version| with the version or a
-  // default-constructed Version if no version is found.
-  // system_install: if true, looks for version number under the HKLM root,
-  //                 otherwise looks under the HKCU.
-  static void GetChromeVersion(BrowserDistribution* dist,
-                               bool system_install,
-                               base::Version* version);
+  // Returns the version of Chrome registered with Google Update, or an invalid
+  // Version in case no such value could be found. |system_install| indicates
+  // whether HKLM (true) or HKCU (false) should be checked.
+  static base::Version GetChromeVersion(bool system_install);
 
   // Find the last critical update (version) of Chrome. Fills |version| with the
   // version or a default-constructed Version if no version is found. A critical
@@ -183,16 +179,14 @@ class InstallUtil {
   // Returns the highest Chrome version that was installed prior to a downgrade,
   // or an invalid Version if Chrome was not previously downgraded from a newer
   // version.
-  static base::Version GetDowngradeVersion(bool system_install,
-                                           const BrowserDistribution* dist);
+  static base::Version GetDowngradeVersion();
 
   // Adds or removes downgrade version registry value. This function should only
   // be used for Chrome install.
   static void AddUpdateDowngradeVersionItem(
-      bool system_install,
+      HKEY root,
       const base::Version* current_version,
       const base::Version& new_version,
-      const BrowserDistribution* dist,
       WorkItemList* list);
 
   // Returns the registry key path and value name where the enrollment token is
@@ -211,6 +205,9 @@ class InstallUtil {
   // user cloud policies.  Returns an empty string if this machine should not
   // be enrolled.
   static std::wstring GetMachineLevelUserCloudPolicyEnrollmentToken();
+
+  // Returns the app description for shortcuts.
+  static base::string16 GetAppDescription();
 
   // A predicate that compares the program portion of a command line with a
   // given file path.  First, the file paths are compared directly.  If they do

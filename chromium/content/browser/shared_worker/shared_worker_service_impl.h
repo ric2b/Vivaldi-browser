@@ -27,6 +27,8 @@ class MessagePortChannel;
 }
 
 namespace content {
+
+class ChromeAppCacheService;
 class SharedWorkerInstance;
 class SharedWorkerHost;
 class StoragePartition;
@@ -36,7 +38,8 @@ class CONTENT_EXPORT SharedWorkerServiceImpl : public SharedWorkerService {
  public:
   SharedWorkerServiceImpl(
       StoragePartition* storage_partition,
-      scoped_refptr<ServiceWorkerContextWrapper> service_worker_context);
+      scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
+      scoped_refptr<ChromeAppCacheService> appcache_service);
   ~SharedWorkerServiceImpl() override;
 
   // SharedWorkerService implementation.
@@ -71,17 +74,18 @@ class CONTENT_EXPORT SharedWorkerServiceImpl : public SharedWorkerService {
       int frame_id,
       const blink::MessagePortChannel& message_port,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory);
-  void StartWorker(std::unique_ptr<SharedWorkerInstance> instance,
-                   base::WeakPtr<SharedWorkerHost> host,
-                   mojom::SharedWorkerClientPtr client,
-                   int process_id,
-                   int frame_id,
-                   const blink::MessagePortChannel& message_port,
-                   mojom::ServiceWorkerProviderInfoForSharedWorkerPtr
-                       service_worker_provider_info,
-                   network::mojom::URLLoaderFactoryAssociatedPtrInfo
-                       script_loader_factory_info,
-                   std::unique_ptr<URLLoaderFactoryBundleInfo> factory_bundle);
+  void StartWorker(
+      std::unique_ptr<SharedWorkerInstance> instance,
+      base::WeakPtr<SharedWorkerHost> host,
+      mojom::SharedWorkerClientPtr client,
+      int process_id,
+      int frame_id,
+      const blink::MessagePortChannel& message_port,
+      mojom::ServiceWorkerProviderInfoForSharedWorkerPtr
+          service_worker_provider_info,
+      network::mojom::URLLoaderFactoryAssociatedPtrInfo
+          main_script_loader_factory,
+      std::unique_ptr<URLLoaderFactoryBundleInfo> subresource_loader_factories);
 
   // Returns nullptr if there is no such host.
   SharedWorkerHost* FindSharedWorkerHost(int process_id, int route_id);
@@ -95,6 +99,7 @@ class CONTENT_EXPORT SharedWorkerServiceImpl : public SharedWorkerService {
   // |storage_partition_| owns |this|.
   StoragePartition* const storage_partition_;
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
+  scoped_refptr<ChromeAppCacheService> appcache_service_;
 
   base::WeakPtrFactory<SharedWorkerServiceImpl> weak_factory_;
 

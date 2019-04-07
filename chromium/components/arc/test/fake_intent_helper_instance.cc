@@ -67,7 +67,7 @@ void FakeIntentHelperInstance::HandleIntent(mojom::IntentInfoPtr intent,
 void FakeIntentHelperInstance::HandleUrl(const std::string& url,
                                          const std::string& package_name) {}
 
-void FakeIntentHelperInstance::HandleUrlList(
+void FakeIntentHelperInstance::HandleUrlListDeprecated(
     std::vector<mojom::UrlWithMimeTypePtr> urls,
     mojom::ActivityNamePtr activity,
     mojom::ActionType action) {}
@@ -123,10 +123,15 @@ void FakeIntentHelperInstance::SendBroadcast(const std::string& action,
   broadcasts_.emplace_back(action, package_name, cls, extras);
 }
 
-void FakeIntentHelperInstance::ClassifySelection(
+void FakeIntentHelperInstance::ClassifySelectionDeprecated(
     const std::string& text,
     ::arc::mojom::ScaleFactor scale_factor,
-    ClassifySelectionCallback callback) {}
+    ClassifySelectionDeprecatedCallback callback) {}
+
+void FakeIntentHelperInstance::RequestTextSelectionActions(
+    const std::string& text,
+    ::arc::mojom::ScaleFactor scale_factor,
+    RequestTextSelectionActionsCallback callback) {}
 
 std::vector<FakeIntentHelperInstance::Broadcast>
 FakeIntentHelperInstance::GetBroadcastsForAction(

@@ -116,6 +116,9 @@ struct OfflineItem {
   // Whether this item is going through accelerated download.
   bool is_accelerated;
 
+  // Whether there are new visuals available.
+  bool refresh_visuals;
+
   // TODO(dtrainor): Build out custom per-item icon support.
 
   // Content Metadata.
@@ -211,6 +214,24 @@ struct OfflineItemVisuals {
   // TODO(dtrainor): Suggest icon size based on the icon size supported by the
   // current OS.
   gfx::Image icon;
+};
+
+// This struct holds additional information related to sharing a particular
+// OfflineItem.  This information doesn't necessarily exist within OfflineItem
+// because it may be expensive/unnecessary to compute until the user attempts to
+// share the item.
+struct OfflineItemShareInfo {
+  OfflineItemShareInfo();
+  OfflineItemShareInfo(const OfflineItemShareInfo& other);
+
+  ~OfflineItemShareInfo();
+
+  // The local URI where the file can be accessed on disk.  This may be
+  // different from |OfflineItem::file_path| depending on whether or not the
+  // file can be accessed directly.
+  // If this path is invalid the request data from OfflineItem will be used
+  // to share the information instead (e.g. |OfflineItem::page_url|).
+  base::FilePath uri;
 };
 
 }  // namespace offline_items_collection

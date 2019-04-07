@@ -6,8 +6,8 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "components/previews/content/previews_hints.h"
 #include "components/previews/core/previews_user_data.h"
@@ -22,7 +22,7 @@ PreviewsOptimizationGuide::PreviewsOptimizationGuide(
     : optimization_guide_service_(optimization_guide_service),
       io_task_runner_(io_task_runner),
       background_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND})),
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT})),
       io_weak_ptr_factory_(this) {
   DCHECK(optimization_guide_service_);
   optimization_guide_service_->AddObserver(this);
@@ -50,14 +50,51 @@ bool PreviewsOptimizationGuide::IsWhitelisted(const net::URLRequest& request,
   return true;
 }
 
-bool PreviewsOptimizationGuide::IsHostWhitelistedAtNavigation(
-    const GURL& url,
-    previews::PreviewsType type) const {
+void PreviewsOptimizationGuide::OnLoadedHint(
+    ResourceLoadingHintsCallback callback,
+    const GURL& document_url,
+    const optimization_guide::proto::Hint& loaded_hint) const {
+  DCHECK(io_task_runner_->BelongsToCurrentThread());
+
+  const optimization_guide::proto::PageHint* matched_page_hint =
+      PreviewsHints::FindPageHint(document_url, loaded_hint);
+  if (!matched_page_hint)
+    return;
+
+  // Retrieve the resource patterns to be blocked from the page hint.
+  std::vector<std::string> resource_patterns_to_block;
+  for (const auto& optimization :
+       matched_page_hint->whitelisted_optimizations()) {
+    if (optimization.optimization_type() ==
+        optimization_guide::proto::RESOURCE_LOADING) {
+      for (const auto& resource_loading_hint :
+           optimization.resource_loading_hints()) {
+        if (!resource_loading_hint.resource_pattern().empty() &&
+            resource_loading_hint.loading_optimization_type() ==
+                optimization_guide::proto::LOADING_BLOCK_RESOURCE) {
+          resource_patterns_to_block.push_back(
+              resource_loading_hint.resource_pattern());
+        }
+      }
+    }
+  }
+  if (!resource_patterns_to_block.empty()) {
+    std::move(callback).Run(document_url, resource_patterns_to_block);
+  }
+}
+
+bool PreviewsOptimizationGuide::MaybeLoadOptimizationHints(
+    const net::URLRequest& request,
+    ResourceLoadingHintsCallback callback) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
 
   if (!hints_)
     return false;
-  return hints_->IsHostWhitelistedAtNavigation(url, type);
+
+  return hints_->MaybeLoadOptimizationHints(
+      request.url(), base::BindOnce(&PreviewsOptimizationGuide::OnLoadedHint,
+                                    io_weak_ptr_factory_.GetWeakPtr(),
+                                    std::move(callback), request.url()));
 }
 
 void PreviewsOptimizationGuide::OnHintsProcessed(
@@ -76,6 +113,8 @@ void PreviewsOptimizationGuide::UpdateHints(
     std::unique_ptr<PreviewsHints> hints) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   hints_ = std::move(hints);
+  if (hints_)
+    hints_->Initialize();
 }
 
 }  // namespace previews

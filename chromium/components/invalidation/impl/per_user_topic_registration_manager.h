@@ -13,13 +13,20 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/invalidation/impl/per_user_topic_registration_request.h"
+#include "components/invalidation/public/identity_provider.h"
 #include "components/invalidation/public/invalidation_export.h"
 #include "components/invalidation/public/invalidation_object_id.h"
 #include "components/invalidation/public/invalidation_util.h"
+#include "net/base/backoff_entry.h"
 #include "net/url_request/url_request_context_getter.h"
 
 class PrefRegistrySimple;
 class PrefService;
+
+namespace invalidation {
+class ActiveAccountAccessTokenFetcher;
+class IdentityProvider;
+}  // namespace invalidation
 
 namespace syncer {
 
@@ -35,8 +42,7 @@ namespace syncer {
 class INVALIDATION_EXPORT PerUserTopicRegistrationManager {
  public:
   PerUserTopicRegistrationManager(
-      const std::string& instance_id_token,
-      const std::string& access_token,
+      invalidation::IdentityProvider* identity_provider,
       PrefService* local_state,
       network::mojom::URLLoaderFactory* url_loader_factory,
       const ParseJSONCallback& parse_json);
@@ -45,32 +51,49 @@ class INVALIDATION_EXPORT PerUserTopicRegistrationManager {
 
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
-  virtual void UpdateRegisteredIds(const InvalidationObjectIdSet& ids,
-                                   const std::string& token);
+  virtual void UpdateRegisteredTopics(const TopicSet& ids,
+                                      const std::string& token);
 
-  InvalidationObjectIdSet GetRegisteredIds() const;
+  virtual void Init();
+  TopicSet GetRegisteredIds() const;
 
  private:
   struct RegistrationEntry;
 
+  void DoRegistrationUpdate();
+
   // Tries to register |id|. No retry in case of failure.
-  void TryToRegisterId(const invalidation::InvalidationObjectId& id);
+  void StartRegistrationRequest(const Topic& id);
 
-  // Unregisters the given object ID.
-  void UnregisterId(const invalidation::InvalidationObjectId& id);
+  void RegistrationFinishedForTopic(
+      Topic topic,
+      Status code,
+      std::string private_topic_name,
+      PerUserTopicRegistrationRequest::RequestType type);
 
-  std::map<invalidation::InvalidationObjectId,
-           std::unique_ptr<RegistrationEntry>,
-           InvalidationObjectIdLessThan>
-      registration_statuses_;
+  void RequestAccessToken();
 
-  PrefService* local_state_ = nullptr;
+  void OnAccessTokenRequestCompleted(GoogleServiceAuthError error,
+                                     std::string access_token);
+  void OnAccessTokenRequestSucceeded(std::string access_token);
+  void OnAccessTokenRequestFailed(GoogleServiceAuthError error);
 
-  // OAuth Header.
-  std::string access_token_;
+  std::map<Topic, std::unique_ptr<RegistrationEntry>> registration_statuses_;
+
+  // For registered ids it maps the id value to the topic value.
+  std::map<Topic, std::string> topic_to_private_topic_;
 
   // Token derrived from GCM IID.
   std::string token_;
+
+  PrefService* local_state_ = nullptr;
+
+  invalidation::IdentityProvider* const identity_provider_;
+  std::string access_token_;
+  std::unique_ptr<invalidation::ActiveAccountAccessTokenFetcher>
+      access_token_fetcher_;
+  base::OneShotTimer request_access_token_retry_timer_;
+  net::BackoffEntry request_access_token_backoff_;
 
   // The callback for Parsing JSON.
   ParseJSONCallback parse_json_;

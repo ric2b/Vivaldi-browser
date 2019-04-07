@@ -44,7 +44,7 @@
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/os_crypt/os_crypt_mocker.h"
@@ -112,7 +112,12 @@ void ExpectSameElements(const std::vector<T*>& expectations,
 
 class PersonalDataManagerTestBase {
  protected:
-  PersonalDataManagerTestBase() : profile_autofill_table_(nullptr) {}
+  PersonalDataManagerTestBase() : profile_autofill_table_(nullptr) {
+    // Enable account storage by default, some tests will override this to be
+    // false.
+    scoped_features_.InitAndEnableFeature(
+        features::kAutofillEnableAccountWalletStorage);
+  }
 
   void SetUpTest() {
     OSCryptMocker::SetUp();
@@ -174,9 +179,9 @@ class PersonalDataManagerTestBase {
             : nullptr,
         prefs_.get(), identity_test_env_.identity_manager(), is_incognito);
     personal_data_->AddObserver(&personal_data_observer_);
+    sync_service_.SetIsAuthenticatedAccountPrimary(!use_account_server_storage);
     personal_data_->OnSyncServiceInitialized(&sync_service_);
-    personal_data_->SetUseAccountStorageForServerCards(
-        use_account_server_storage);
+    personal_data_->OnStateChanged(&sync_service_);
 
     // Verify that the web database has been updated and the notification sent.
     EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
@@ -368,6 +373,7 @@ class PersonalDataManagerTestBase {
   AutofillTable* account_autofill_table_;  // weak ref
   PersonalDataLoadedObserverMock personal_data_observer_;
   std::unique_ptr<PersonalDataManager> personal_data_;
+  base::test::ScopedFeatureList scoped_features_;
 };
 
 class PersonalDataManagerTest : public PersonalDataManagerTestBase,
@@ -1576,17 +1582,16 @@ TEST_F(PersonalDataManagerTest, DefaultCountryCodeIsCached) {
   EXPECT_EQ(default_country,
             personal_data_->GetDefaultCountryCodeForNewAddress());
 
-  EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged()).Times(2);
-
   // Disabling Autofill blows away this cache and shouldn't account for Autofill
   // profiles.
-  prefs_->SetBoolean(prefs::kAutofillEnabled, false);
+  prefs::SetAutofillEnabled(prefs_.get(), false);
+  WaitForOnPersonalDataChanged();
   EXPECT_EQ(default_country,
             personal_data_->GetDefaultCountryCodeForNewAddress());
 
   // Enabling Autofill blows away the cached value and should reflect the new
   // value (accounting for profiles).
-  prefs_->SetBoolean(prefs::kAutofillEnabled, true);
+  prefs::SetAutofillEnabled(prefs_.get(), true);
   EXPECT_EQ(base::UTF16ToUTF8(moose.GetRawInfo(ADDRESS_HOME_COUNTRY)),
             personal_data_->GetDefaultCountryCodeForNewAddress());
 }
@@ -1874,7 +1879,8 @@ TEST_F(PersonalDataManagerTest,
   ResetPersonalDataManager(USER_MODE_NORMAL);
 
   base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitAndEnableFeature(kAutofillSuppressDisusedAddresses);
+  scoped_features.InitAndEnableFeature(
+      features::kAutofillSuppressDisusedAddresses);
 
   // Query with empty string only returns profile2.
   {
@@ -1917,7 +1923,8 @@ TEST_F(PersonalDataManagerTest,
   // When suppression is disabled, returns all suggestions.
   {
     base::test::ScopedFeatureList scoped_features;
-    scoped_features.InitAndDisableFeature(kAutofillSuppressDisusedAddresses);
+    scoped_features.InitAndDisableFeature(
+        features::kAutofillSuppressDisusedAddresses);
     std::vector<Suggestion> suggestions = personal_data_->GetProfileSuggestions(
         AutofillType(ADDRESS_HOME_STREET_ADDRESS), base::string16(), false,
         std::vector<ServerFieldType>());
@@ -1954,7 +1961,8 @@ TEST_F(PersonalDataManagerTest, GetProfileSuggestions_InvalidData) {
   {
     base::HistogramTester histogram_tester;
     base::test::ScopedFeatureList scoped_features;
-    scoped_features.InitAndDisableFeature(kAutofillSuggestInvalidProfileData);
+    scoped_features.InitAndDisableFeature(
+        features::kAutofillSuggestInvalidProfileData);
     std::vector<Suggestion> suggestions = personal_data_->GetProfileSuggestions(
         AutofillType(PHONE_HOME_WHOLE_NUMBER), base::string16(), false,
         std::vector<ServerFieldType>());
@@ -1967,7 +1975,8 @@ TEST_F(PersonalDataManagerTest, GetProfileSuggestions_InvalidData) {
   {
     base::HistogramTester histogram_tester;
     base::test::ScopedFeatureList scoped_features;
-    scoped_features.InitAndEnableFeature(kAutofillSuggestInvalidProfileData);
+    scoped_features.InitAndEnableFeature(
+        features::kAutofillSuggestInvalidProfileData);
     std::vector<Suggestion> suggestions = personal_data_->GetProfileSuggestions(
         AutofillType(PHONE_HOME_WHOLE_NUMBER), base::string16(), false,
         std::vector<ServerFieldType>());
@@ -2008,9 +2017,7 @@ TEST_F(PersonalDataManagerTest, GetProfileSuggestions_ProfileAutofillDisabled) {
   profile_autofill_table_->SetServerProfiles(GetServerProfiles);
 
   // Disable Profile autofill.
-  personal_data_->pref_service_->SetBoolean(prefs::kAutofillProfileEnabled,
-                                            false);
-  personal_data_->Refresh();
+  prefs::SetProfileAutofillEnabled(personal_data_->pref_service_, false);
   WaitForOnPersonalDataChanged();
   personal_data_->ConvertWalletAddressesAndUpdateWalletCards();
 
@@ -2062,9 +2069,8 @@ TEST_F(PersonalDataManagerTest,
   EXPECT_EQ(2U, personal_data_->GetProfiles().size());
   EXPECT_EQ(2U, personal_data_->GetProfilesToSuggest().size());
 
-  // Disable CProfile autofill.
-  personal_data_->pref_service_->SetBoolean(prefs::kAutofillProfileEnabled,
-                                            false);
+  // Disable Profile autofill.
+  prefs::SetProfileAutofillEnabled(personal_data_->pref_service_, false);
   // Reload the database.
   ResetPersonalDataManager(USER_MODE_NORMAL);
 
@@ -2082,8 +2088,7 @@ TEST_F(PersonalDataManagerTest,
 TEST_F(PersonalDataManagerTest,
        GetProfileSuggestions_NoProfilesAddedIfDisabled) {
   // Disable Profile autofill.
-  personal_data_->pref_service_->SetBoolean(prefs::kAutofillProfileEnabled,
-                                            false);
+  prefs::SetProfileAutofillEnabled(personal_data_->pref_service_, false);
 
   // Add a local profile.
   AutofillProfile local_profile(base::GenerateGUID(), test::kEmptyOrigin);
@@ -2191,6 +2196,102 @@ TEST_F(PersonalDataManagerTest, IsKnownCard_LastFourDoesNotMatch) {
   CreditCard cardToCompare;
   cardToCompare.SetNumber(base::ASCIIToUTF16("4234 5678 9012 0000") /* Visa */);
   ASSERT_FALSE(personal_data_->IsKnownCard(cardToCompare));
+}
+
+TEST_F(PersonalDataManagerTest, IsServerCard_DuplicateOfFullServerCard) {
+  // Add a full server card.
+  std::vector<CreditCard> server_cards;
+  server_cards.push_back(CreditCard(CreditCard::FULL_SERVER_CARD, "b459"));
+  test::SetCreditCardInfo(&server_cards.back(), "Emmet Dalton",
+                          "4234567890122110" /* Visa */, "12", "2999", "1");
+
+  SetServerCards(server_cards);
+
+  // Add a dupe local card of a full server card.
+  CreditCard local_card("287151C8-6AB1-487C-9095-28E80BE5DA15",
+                        test::kEmptyOrigin);
+  test::SetCreditCardInfo(&local_card, "Emmet Dalton",
+                          "4234 5678 9012 2110" /* Visa */, "12", "2999", "1");
+  personal_data_->AddCreditCard(local_card);
+
+  // Make sure everything is set up correctly.
+  personal_data_->Refresh();
+  WaitForOnPersonalDataChanged();
+  EXPECT_EQ(2U, personal_data_->GetCreditCards().size());
+
+  CreditCard cardToCompare;
+  cardToCompare.SetNumber(base::ASCIIToUTF16("4234 5678 9012 2110") /* Visa */);
+  ASSERT_TRUE(personal_data_->IsServerCard(&cardToCompare));
+  ASSERT_TRUE(personal_data_->IsServerCard(&local_card));
+}
+
+TEST_F(PersonalDataManagerTest, IsServerCard_DuplicateOfMaskedServerCard) {
+  // Add a masked server card.
+  std::vector<CreditCard> server_cards;
+  server_cards.push_back(CreditCard(CreditCard::MASKED_SERVER_CARD, "b459"));
+  test::SetCreditCardInfo(&server_cards.back(), "Emmet Dalton",
+                          "2110" /* last 4 digits */, "12", "2999", "1");
+  server_cards.back().SetNetworkForMaskedCard(kVisaCard);
+
+  SetServerCards(server_cards);
+
+  // Add a dupe local card of a full server card.
+  CreditCard local_card("287151C8-6AB1-487C-9095-28E80BE5DA15",
+                        test::kEmptyOrigin);
+  test::SetCreditCardInfo(&local_card, "Emmet Dalton",
+                          "4234 5678 9012 2110" /* Visa */, "12", "2999", "1");
+  personal_data_->AddCreditCard(local_card);
+
+  // Make sure everything is set up correctly.
+  personal_data_->Refresh();
+  WaitForOnPersonalDataChanged();
+  EXPECT_EQ(2U, personal_data_->GetCreditCards().size());
+
+  CreditCard cardToCompare;
+  cardToCompare.SetNumber(base::ASCIIToUTF16("4234 5678 9012 2110") /* Visa */);
+  ASSERT_TRUE(personal_data_->IsServerCard(&cardToCompare));
+  ASSERT_TRUE(personal_data_->IsServerCard(&local_card));
+}
+
+TEST_F(PersonalDataManagerTest, IsServerCard_AlreadyServerCard) {
+  std::vector<CreditCard> server_cards;
+  // Create a full server card.
+  CreditCard full_server_card(CreditCard::FULL_SERVER_CARD, "c789");
+  test::SetCreditCardInfo(&full_server_card, "Homer Simpson",
+                          "4234567890123456" /* Visa */, "01", "2999", "1");
+  server_cards.push_back(full_server_card);
+  // Create a masked server card.
+  CreditCard masked_card(CreditCard::MASKED_SERVER_CARD, "a123");
+  test::SetCreditCardInfo(&masked_card, "Homer Simpson", "2110" /* Visa */,
+                          "01", "2999", "1");
+  masked_card.SetNetworkForMaskedCard(kVisaCard);
+  server_cards.push_back(masked_card);
+
+  SetServerCards(server_cards);
+
+  // Make sure everything is set up correctly.
+  personal_data_->Refresh();
+  WaitForOnPersonalDataChanged();
+  EXPECT_EQ(2U, personal_data_->GetCreditCards().size());
+
+  ASSERT_TRUE(personal_data_->IsServerCard(&full_server_card));
+  ASSERT_TRUE(personal_data_->IsServerCard(&masked_card));
+}
+
+TEST_F(PersonalDataManagerTest, IsServerCard_UniqueLocalCard) {
+  // Add a unique local card.
+  CreditCard local_card("1141084B-72D7-4B73-90CF-3D6AC154673B",
+                        test::kEmptyOrigin);
+  test::SetCreditCardInfo(&local_card, "Homer Simpson",
+                          "4234567890123456" /* Visa */, "01", "2999", "1");
+  personal_data_->AddCreditCard(local_card);
+
+  // Make sure everything is set up correctly.
+  personal_data_->Refresh();
+  WaitForOnPersonalDataChanged();
+  EXPECT_EQ(1U, personal_data_->GetCreditCards().size());
+
+  ASSERT_FALSE(personal_data_->IsServerCard(&local_card));
 }
 
 // Test that a masked server card is not suggested if more that six numbers have
@@ -2317,11 +2418,11 @@ TEST_F(PersonalDataManagerTest,
                                    base::TimeDelta::FromDays(1));
 
   SetServerCards(server_cards);
+  personal_data_->Refresh();
+  WaitForOnPersonalDataChanged();
 
   // Disable Credit card autofill.
-  personal_data_->pref_service_->SetBoolean(prefs::kAutofillCreditCardEnabled,
-                                            false);
-  personal_data_->Refresh();
+  prefs::SetCreditCardAutofillEnabled(personal_data_->pref_service_, false);
   WaitForOnPersonalDataChanged();
 
   // Check that profiles were saved.
@@ -2372,8 +2473,7 @@ TEST_F(PersonalDataManagerTest,
   EXPECT_EQ(5U, personal_data_->GetCreditCards().size());
 
   // Disable Credit card autofill.
-  personal_data_->pref_service_->SetBoolean(prefs::kAutofillCreditCardEnabled,
-                                            false);
+  prefs::SetCreditCardAutofillEnabled(personal_data_->pref_service_, false);
   // Reload the database.
   ResetPersonalDataManager(USER_MODE_NORMAL);
 
@@ -2395,8 +2495,7 @@ TEST_F(PersonalDataManagerTest,
 TEST_F(PersonalDataManagerTest,
        GetCreditCardSuggestions_NoCreditCardsAddedIfDisabled) {
   // Disable Profile autofill.
-  personal_data_->pref_service_->SetBoolean(prefs::kAutofillCreditCardEnabled,
-                                            false);
+  prefs::SetCreditCardAutofillEnabled(personal_data_->pref_service_, false);
 
   // Add a local credit card.
   CreditCard credit_card("002149C1-EE28-4213-A3B9-DA243FFF021B",
@@ -2516,7 +2615,8 @@ TEST_F(PersonalDataManagerTest,
   // Verify no suppression if feature is disabled.
   {
     base::test::ScopedFeatureList scoped_features;
-    scoped_features.InitAndDisableFeature(kAutofillSuppressDisusedCreditCards);
+    scoped_features.InitAndDisableFeature(
+        features::kAutofillSuppressDisusedCreditCards);
 
     std::vector<Suggestion> suggestions =
         personal_data_->GetCreditCardSuggestions(
@@ -2530,7 +2630,8 @@ TEST_F(PersonalDataManagerTest,
   }
 
   base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitAndEnableFeature(kAutofillSuppressDisusedCreditCards);
+  scoped_features.InitAndEnableFeature(
+      features::kAutofillSuppressDisusedCreditCards);
 
   // Query with empty string only returns card0 and card1. Note expired
   // masked card2 is not suggested on empty fields.
@@ -4531,8 +4632,9 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_OncePerVersion) {
 
 // Tests that DeleteDisusedAddresses is not run if the feature is disabled.
 TEST_F(PersonalDataManagerTest, DeleteDisusedAddresses_DoNothingWhenDisabled) {
-  // Make sure feature is disabled by default.
-  EXPECT_FALSE(base::FeatureList::IsEnabled(kAutofillDeleteDisusedAddresses));
+  base::test::ScopedFeatureList scoped_features;
+  scoped_features.InitAndDisableFeature(
+      features::kAutofillDeleteDisusedAddresses);
 
   CreateDeletableDisusedProfile();
 
@@ -4549,7 +4651,8 @@ TEST_F(PersonalDataManagerTest, DeleteDisusedAddresses_DoNothingWhenDisabled) {
 TEST_F(PersonalDataManagerTest, DeleteDisusedAddresses_OncePerVersion) {
   // Enable the feature.
   base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitAndEnableFeature(kAutofillDeleteDisusedAddresses);
+  scoped_features.InitAndEnableFeature(
+      features::kAutofillDeleteDisusedAddresses);
 
   CreateDeletableDisusedProfile();
 
@@ -4575,7 +4678,8 @@ TEST_F(PersonalDataManagerTest,
        DeleteDisusedAddresses_DeleteDesiredAddressesOnly) {
   // Enable the feature.
   base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitAndEnableFeature(kAutofillDeleteDisusedAddresses);
+  scoped_features.InitAndEnableFeature(
+      features::kAutofillDeleteDisusedAddresses);
 
   auto now = AutofillClock::Now();
 
@@ -4658,8 +4762,9 @@ TEST_F(PersonalDataManagerTest,
 // Tests that DeleteDisusedCreditCards is not run if the feature is disabled.
 TEST_F(PersonalDataManagerTest,
        DeleteDisusedCreditCards_DoNothingWhenDisabled) {
-  // Make sure feature is disabled by default.
-  EXPECT_FALSE(base::FeatureList::IsEnabled(kAutofillDeleteDisusedCreditCards));
+  base::test::ScopedFeatureList scoped_features;
+  scoped_features.InitAndDisableFeature(
+      features::kAutofillDeleteDisusedCreditCards);
 
   CreateDeletableExpiredAndDisusedCreditCard();
 
@@ -4676,7 +4781,8 @@ TEST_F(PersonalDataManagerTest,
 TEST_F(PersonalDataManagerTest, DeleteDisusedCreditCards_OncePerVersion) {
   // Enable the feature.
   base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitAndEnableFeature(kAutofillDeleteDisusedCreditCards);
+  scoped_features.InitAndEnableFeature(
+      features::kAutofillDeleteDisusedCreditCards);
 
   CreateDeletableExpiredAndDisusedCreditCard();
 
@@ -4702,7 +4808,8 @@ TEST_F(PersonalDataManagerTest,
        DeleteDisusedCreditCards_OnlyDeleteExpiredDisusedLocalCards) {
   // Enable the feature.
   base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitAndEnableFeature(kAutofillDeleteDisusedCreditCards);
+  scoped_features.InitAndEnableFeature(
+      features::kAutofillDeleteDisusedCreditCards);
 
   const char kHistogramName[] = "Autofill.CreditCardsDeletedForDisuse";
   auto now = AutofillClock::Now();
@@ -5801,7 +5908,7 @@ TEST_F(PersonalDataManagerTest, CreateDataForTest) {
 
   // Turn on test data creation for the rest of this scope.
   base::test::ScopedFeatureList enabled;
-  enabled.InitAndEnableFeature(kAutofillCreateDataForTest);
+  enabled.InitAndEnableFeature(features::kAutofillCreateDataForTest);
 
   // Reloading the test profile should result in test data being created.
   ResetPersonalDataManager(USER_MODE_NORMAL);
@@ -6099,6 +6206,8 @@ TEST_F(PersonalDataManagerTest,
 
   // Call OnSyncServiceInitialized with a sync service in auth error.
   TestSyncService sync_service;
+  sync_service.SetIsAuthenticatedAccountPrimary(
+      /*is_authenticated_account_primary=*/false);
   sync_service.SetInAuthError(true);
   personal_data_->OnSyncServiceInitialized(&sync_service);
   WaitForOnPersonalDataChanged();
@@ -6271,6 +6380,105 @@ TEST_F(PersonalDataManagerTest, ClearCreditCardNonSettingsOrigins) {
             personal_data_->GetCreditCardsToSuggest(false)[3]->origin());
 }
 
+// Tests that all city fields in a Japan profile are moved to the street address
+// field.
+TEST_F(PersonalDataManagerTest, MoveJapanCityToStreetAddress) {
+  // A US profile with both street address and a city.
+  std::string guid0 = base::GenerateGUID();
+  {
+    AutofillProfile profile0(guid0, test::kEmptyOrigin);
+    test::SetProfileInfo(&profile0, "Homer", "J", "Simpson",
+                         "homer.simpson@abc.com", "", "742. Evergreen Terrace",
+                         "", "Springfield", "IL", "91601", "US", "");
+    personal_data_->AddProfile(profile0);
+  }
+
+  // A JP profile with both street address and a city.
+  std::string guid1 = base::GenerateGUID();
+  {
+    AutofillProfile profile1(guid1, test::kEmptyOrigin);
+    test::SetProfileInfo(&profile1, "Homer", "J", "Simpson",
+                         "homer.simpson@abc.com", "", "742. Evergreen Terrace",
+                         "", "Springfield", "IL", "91601", "JP", "");
+    personal_data_->AddProfile(profile1);
+  }
+
+  // A JP profile with only a city.
+  std::string guid2 = base::GenerateGUID();
+  {
+    AutofillProfile profile2(guid2, test::kEmptyOrigin);
+    test::SetProfileInfo(&profile2, "Homer", "J", "Simpson",
+                         "homer.simpson@abc.com", "", "", "", "Springfield",
+                         "IL", "91601", "JP", "");
+    personal_data_->AddProfile(profile2);
+  }
+
+  // A JP profile with only a street address.
+  std::string guid3 = base::GenerateGUID();
+  {
+    AutofillProfile profile3(guid3, test::kEmptyOrigin);
+    test::SetProfileInfo(&profile3, "Homer", "J", "Simpson",
+                         "homer.simpson@abc.com", "", "742. Evergreen Terrace",
+                         "", "", "IL", "91601", "JP", "");
+    personal_data_->AddProfile(profile3);
+  }
+
+  // A JP profile with neither a street address nor a city.
+  std::string guid4 = base::GenerateGUID();
+  {
+    AutofillProfile profile4(guid4, test::kEmptyOrigin);
+    test::SetProfileInfo(&profile4, "Homer", "J", "Simpson",
+                         "homer.simpson@abc.com", "", "", "", "", "IL", "91601",
+                         "JP", "");
+    personal_data_->AddProfile(profile4);
+  }
+
+  WaitForOnPersonalDataChanged();
+
+  personal_data_->MoveJapanCityToStreetAddress();
+
+  WaitForOnPersonalDataChanged();
+
+  {
+    AutofillProfile* profile0 = personal_data_->GetProfileByGUID(guid0);
+    EXPECT_EQ(base::ASCIIToUTF16("742. Evergreen Terrace"),
+              profile0->GetRawInfo(ADDRESS_HOME_STREET_ADDRESS));
+    EXPECT_EQ(base::ASCIIToUTF16("Springfield"),
+              profile0->GetRawInfo(ADDRESS_HOME_CITY));
+  }
+
+  {
+    AutofillProfile* profile1 = personal_data_->GetProfileByGUID(guid1);
+    EXPECT_EQ(base::ASCIIToUTF16("742. Evergreen Terrace\nSpringfield"),
+              profile1->GetRawInfo(ADDRESS_HOME_STREET_ADDRESS));
+    EXPECT_EQ(base::ASCIIToUTF16("742. Evergreen Terrace"),
+              profile1->GetRawInfo(ADDRESS_HOME_LINE1));
+    EXPECT_EQ(base::ASCIIToUTF16("Springfield"),
+              profile1->GetRawInfo(ADDRESS_HOME_LINE2));
+    EXPECT_TRUE(profile1->GetRawInfo(ADDRESS_HOME_CITY).empty());
+  }
+
+  {
+    AutofillProfile* profile2 = personal_data_->GetProfileByGUID(guid2);
+    EXPECT_EQ(base::ASCIIToUTF16("Springfield"),
+              profile2->GetRawInfo(ADDRESS_HOME_STREET_ADDRESS));
+    EXPECT_TRUE(profile2->GetRawInfo(ADDRESS_HOME_CITY).empty());
+  }
+
+  {
+    AutofillProfile* profile3 = personal_data_->GetProfileByGUID(guid3);
+    EXPECT_EQ(base::ASCIIToUTF16("742. Evergreen Terrace"),
+              profile3->GetRawInfo(ADDRESS_HOME_STREET_ADDRESS));
+    EXPECT_TRUE(profile3->GetRawInfo(ADDRESS_HOME_CITY).empty());
+  }
+
+  {
+    AutofillProfile* profile4 = personal_data_->GetProfileByGUID(guid4);
+    EXPECT_TRUE(profile4->GetRawInfo(ADDRESS_HOME_STREET_ADDRESS).empty());
+    EXPECT_TRUE(profile4->GetRawInfo(ADDRESS_HOME_CITY).empty());
+  }
+}
+
 // Tests that all the non settings origins of autofill profiles are cleared even
 // if sync is disabled.
 TEST_F(
@@ -6353,6 +6561,42 @@ TEST_F(PersonalDataManagerTest, UsePersistentServerStorage) {
   EXPECT_EQ(2U, personal_data_->GetServerCreditCards().size());
 }
 
+// Verify that PDM can switch at runtime between the different storages.
+TEST_F(PersonalDataManagerTest, SwitchServerStorages) {
+  // Start with account storage.
+  ResetPersonalDataManager(USER_MODE_NORMAL);
+  SetUpThreeCardTypes();
+
+  // Check that we do have 2 server cards, as expected.
+  ASSERT_EQ(2U, personal_data_->GetServerCreditCards().size());
+
+  // Switch to persistent storage.
+  sync_service_.SetIsAuthenticatedAccountPrimary(true);
+  personal_data_->OnStateChanged(&sync_service_);
+  WaitForOnPersonalDataChanged();
+
+  EXPECT_EQ(0U, personal_data_->GetServerCreditCards().size());
+
+  CreditCard server_card;
+  test::SetCreditCardInfo(&server_card, "Server Card",
+                          "4234567890123456",  // Visa
+                          "04", "2999", "1");
+  server_card.set_guid("00000000-0000-0000-0000-000000000007");
+  server_card.set_record_type(CreditCard::FULL_SERVER_CARD);
+  server_card.set_server_id("server_id");
+  personal_data_->AddFullServerCreditCard(server_card);
+  WaitForOnPersonalDataChanged();
+
+  EXPECT_EQ(1U, personal_data_->GetServerCreditCards().size());
+
+  // Switch back to the account storage.
+  sync_service_.SetIsAuthenticatedAccountPrimary(false);
+  personal_data_->OnStateChanged(&sync_service_);
+  WaitForOnPersonalDataChanged();
+
+  EXPECT_EQ(2U, personal_data_->GetServerCreditCards().size());
+}
+
 // Sanity check that the mode where we use the regular, persistent storage for
 // cards still works.
 TEST_F(PersonalDataManagerTest, UseCorrectStorageForDifferentCards) {
@@ -6411,6 +6655,134 @@ TEST_F(PersonalDataManagerTest, UseCorrectStorageForDifferentCards) {
   profile_autofill_table_->GetAutofillProfiles(&profiles);
   EXPECT_EQ(1U, profiles.size());
   EXPECT_EQ(profile, *profiles[0]);
+}
+
+// Requests profiles fields validities: empty profiles, non-existent profiles,
+// and normal ones.
+TEST_F(PersonalDataManagerTest, RequestProfileValidity) {
+  ResetPersonalDataManager(USER_MODE_NORMAL);
+
+  ProfileValidityMap profile_validity_map;
+  UserProfileValidityMap user_profile_validity_map;
+  std::string autofill_profile_validity;
+
+  // Empty validity map.
+  ASSERT_TRUE(
+      user_profile_validity_map.SerializeToString(&autofill_profile_validity));
+  personal_data_->pref_service_->SetString(prefs::kAutofillProfileValidity,
+                                           autofill_profile_validity);
+
+  std::string guid = "00000000-0000-0000-0000-0000000000001";
+  EXPECT_TRUE(personal_data_->GetProfileValidityByGUID(guid)
+                  .field_validity_states()
+                  .empty());
+
+  // Non-empty validity map.
+  std::vector<ServerFieldType> types = {
+      ADDRESS_HOME_LINE1, ADDRESS_HOME_STATE, ADDRESS_HOME_COUNTRY,
+      EMAIL_ADDRESS,      ADDRESS_HOME_ZIP,   NAME_FULL};
+  std::vector<AutofillProfile::ValidityState> states = {
+      AutofillProfile::UNSUPPORTED, AutofillProfile::EMPTY,
+      AutofillProfile::INVALID,     AutofillProfile::VALID,
+      AutofillProfile::UNVALIDATED, AutofillProfile::INVALID};
+  ASSERT_EQ(types.size(), states.size());
+  for (unsigned long i = 0; i < types.size(); ++i) {
+    (*profile_validity_map
+          .mutable_field_validity_states())[static_cast<int>(types[i])] =
+        static_cast<int>(states[i]);
+  }
+  (*user_profile_validity_map.mutable_profile_validity())[guid] =
+      profile_validity_map;
+  ASSERT_TRUE(
+      user_profile_validity_map.SerializeToString(&autofill_profile_validity));
+  personal_data_->pref_service_->SetString(prefs::kAutofillProfileValidity,
+                                           autofill_profile_validity);
+
+  // Add another non-empty valdity profile.
+  guid = "00000000-0000-0000-0000-0000000000002";
+  profile_validity_map.Clear();
+  autofill_profile_validity.clear();
+  (*profile_validity_map
+        .mutable_field_validity_states())[static_cast<int>(EMAIL_ADDRESS)] =
+      static_cast<int>(AutofillProfile::VALID);
+  (*user_profile_validity_map.mutable_profile_validity())[guid] =
+      profile_validity_map;
+  ASSERT_TRUE(
+      user_profile_validity_map.SerializeToString(&autofill_profile_validity));
+  personal_data_->pref_service_->SetString(prefs::kAutofillProfileValidity,
+                                           autofill_profile_validity);
+
+  // Profile not found.
+  guid = "00000000-0000-0000-0000-0000000000003";
+  EXPECT_TRUE(personal_data_->GetProfileValidityByGUID(guid)
+                  .field_validity_states()
+                  .empty());
+
+  // Existing Profiles.
+  guid = "00000000-0000-0000-0000-0000000000001";
+  auto validities =
+      personal_data_->GetProfileValidityByGUID(guid).field_validity_states();
+  ASSERT_EQ(validities.size(), types.size());
+  for (unsigned long i = 0; i < types.size(); ++i)
+    EXPECT_EQ(validities.at(types[i]), states[i]);
+
+  guid = "00000000-0000-0000-0000-0000000000002";
+  validities =
+      personal_data_->GetProfileValidityByGUID(guid).field_validity_states();
+  ASSERT_FALSE(validities.empty());
+  EXPECT_EQ(validities.at(EMAIL_ADDRESS), AutofillProfile::VALID);
+}
+
+TEST_F(PersonalDataManagerTest, GetAccountInfoForPaymentsServer) {
+  const std::string kIdentityManagerAccountEmail = "identity_account@email.com";
+  const std::string kSyncServiceAccountEmail = "active_sync_account@email.com";
+
+  // Make the IdentityManager return a non-empty AccountInfo when
+  // GetPrimaryAccountInfo() is called.
+  identity_test_env_.SetPrimaryAccount(kIdentityManagerAccountEmail);
+  ResetPersonalDataManager(USER_MODE_NORMAL);
+
+  // Make the sync service return a non-empty AccountInfo when
+  // GetAuthenticatedAccountInfo() is called.
+  AccountInfo active_info;
+  active_info.email = kSyncServiceAccountEmail;
+  sync_service_.SetAuthenticatedAccountInfo(active_info);
+
+  // The IdentityManager's AccountInfo should be returned by default.
+  {
+    base::test::ScopedFeatureList scoped_features;
+    scoped_features.InitWithFeatures(
+        /*enabled_features=*/{},
+        /*disabled_features=*/{features::kAutofillEnableAccountWalletStorage,
+                               features::kAutofillGetPaymentsIdentityFromSync});
+
+    EXPECT_EQ(kIdentityManagerAccountEmail,
+              personal_data_->GetAccountInfoForPaymentsServer().email);
+  }
+
+  // The Active Sync AccountInfo should be returned if
+  // kAutofillEnableAccountWalletStorage is enabled.
+  {
+    base::test::ScopedFeatureList scoped_features;
+    scoped_features.InitWithFeatures(
+        /*enabled_features=*/{features::kAutofillEnableAccountWalletStorage},
+        /*disabled_features=*/{features::kAutofillGetPaymentsIdentityFromSync});
+
+    EXPECT_EQ(kSyncServiceAccountEmail,
+              personal_data_->GetAccountInfoForPaymentsServer().email);
+  }
+
+  // The Active Sync AccountInfo should be returned if
+  // kAutofillGetPaymentsIdentityFromSync is enabled.
+  {
+    base::test::ScopedFeatureList scoped_features;
+    scoped_features.InitWithFeatures(
+        /*enabled_features=*/{features::kAutofillGetPaymentsIdentityFromSync},
+        /*disabled_features=*/{features::kAutofillEnableAccountWalletStorage});
+
+    EXPECT_EQ(kSyncServiceAccountEmail,
+              personal_data_->GetAccountInfoForPaymentsServer().email);
+  }
 }
 
 }  // namespace autofill

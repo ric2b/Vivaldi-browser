@@ -17,9 +17,10 @@
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/credit_card_save_manager.h"
+#include "components/autofill/core/browser/local_card_migration_manager.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
+#include "components/autofill/core/browser/test_personal_data_manager.h"
 #include "components/autofill/core/common/autofill_features.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
@@ -48,11 +49,10 @@ int kAllDetectableValues =
 
 }  // namespace
 
-class PaymentsClientTest : public testing::Test,
-                           public PaymentsClientUnmaskDelegate,
-                           public PaymentsClientSaveDelegate {
+class PaymentsClientTest : public testing::Test {
  public:
-  PaymentsClientTest() : result_(AutofillClient::NONE) {}
+  PaymentsClientTest()
+      : result_(AutofillClient::NONE), weak_ptr_factory_(this) {}
   ~PaymentsClientTest() override {}
 
   void SetUp() override {
@@ -74,15 +74,28 @@ class PaymentsClientTest : public testing::Test,
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             &test_url_loader_factory_);
     TestingPrefServiceSimple pref_service_;
-    client_.reset(
-        new PaymentsClient(test_shared_loader_factory_, &pref_service_,
-                           identity_test_env_.identity_manager(), this, this));
+    client_ = std::make_unique<PaymentsClient>(
+        test_shared_loader_factory_, &pref_service_,
+        identity_test_env_.identity_manager(), &test_personal_data_);
+    test_personal_data_.SetAccountInfoForPayments(
+        identity_test_env_.MakePrimaryAccountAvailable("example@gmail.com"));
   }
 
   void TearDown() override { client_.reset(); }
 
   void EnableAutofillUpstreamSendPanFirstSixExperiment() {
-    scoped_feature_list_.InitAndEnableFeature(kAutofillUpstreamSendPanFirstSix);
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kAutofillUpstreamSendPanFirstSix);
+  }
+
+  void EnableAutofillSendExperimentIdsInPaymentsRPCs() {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kAutofillSendExperimentIdsInPaymentsRPCs);
+  }
+
+  void EnableAutofillGetPaymentsIdentityFromSync() {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kAutofillGetPaymentsIdentityFromSync);
   }
 
   void DisableAutofillSendExperimentIdsInPaymentsRPCs() {
@@ -101,55 +114,65 @@ class PaymentsClientTest : public testing::Test,
     base::FieldTrialList::CreateFieldTrial(trial_name, group_name)->group();
   }
 
-  // PaymentsClientUnmaskDelegate:
   void OnDidGetRealPan(AutofillClient::PaymentsRpcResult result,
-                       const std::string& real_pan) override {
+                       const std::string& real_pan) {
     result_ = result;
     real_pan_ = real_pan;
   }
 
-  // PaymentsClientSaveDelegate:
   void OnDidGetUploadDetails(
       AutofillClient::PaymentsRpcResult result,
       const base::string16& context_token,
-      std::unique_ptr<base::DictionaryValue> legal_message) override {
+      std::unique_ptr<base::DictionaryValue> legal_message) {
     result_ = result;
     legal_message_ = std::move(legal_message);
   }
+
   void OnDidUploadCard(AutofillClient::PaymentsRpcResult result,
-                       const std::string& server_id) override {
+                       const std::string& server_id) {
     result_ = result;
     server_id_ = server_id;
+  }
+
+  void OnDidMigrateLocalCards(
+      AutofillClient::PaymentsRpcResult result,
+      std::unique_ptr<std::unordered_map<std::string, std::string>> save_result,
+      const std::string& display_text) {
+    result_ = result;
+    save_result_ = std::move(save_result);
+    display_text_ = display_text;
   }
 
  protected:
   base::test::ScopedFeatureList scoped_feature_list_;
 
+  // Issue an UnmaskCard request. This requires an OAuth token before starting
+  // the request.
   void StartUnmasking() {
-    if (!identity_test_env_.identity_manager()->HasPrimaryAccount())
-      identity_test_env_.MakePrimaryAccountAvailable("example@gmail.com");
-
     PaymentsClient::UnmaskRequestDetails request_details;
     request_details.billing_customer_number = 111222333444;
     request_details.card = test::GetMaskedServerCard();
     request_details.user_response.cvc = base::ASCIIToUTF16("123");
     request_details.risk_data = "some risk data";
-    client_->UnmaskCard(request_details);
+    client_->UnmaskCard(request_details,
+                        base::BindOnce(&PaymentsClientTest::OnDidGetRealPan,
+                                       weak_ptr_factory_.GetWeakPtr()));
   }
 
+  // Issue a GetUploadDetails request.
   void StartGettingUploadDetails() {
-    if (!identity_test_env_.identity_manager()->HasPrimaryAccount())
-      identity_test_env_.MakePrimaryAccountAvailable("example@gmail.com");
-
-    client_->GetUploadDetails(BuildTestProfiles(), kAllDetectableValues,
-                              /*pan_first_six=*/"411111",
-                              std::vector<const char*>(), "language-LOCALE");
+    client_->GetUploadDetails(
+        BuildTestProfiles(), kAllDetectableValues,
+        /*pan_first_six=*/"411111", std::vector<const char*>(),
+        "language-LOCALE",
+        base::BindOnce(&PaymentsClientTest::OnDidGetUploadDetails,
+                       weak_ptr_factory_.GetWeakPtr()),
+        /*billable_service_number=*/12345);
   }
 
+  // Issue an UploadCard request. This requires an OAuth token before starting
+  // the request.
   void StartUploading(bool include_cvc) {
-    if (!identity_test_env_.identity_manager()->HasPrimaryAccount())
-      identity_test_env_.MakePrimaryAccountAvailable("example@gmail.com");
-
     PaymentsClient::UploadRequestDetails request_details;
     request_details.billing_customer_number = 111222333444;
     request_details.card = test::GetCreditCard();
@@ -159,7 +182,32 @@ class PaymentsClientTest : public testing::Test,
     request_details.risk_data = "some risk data";
     request_details.app_locale = "language-LOCALE";
     request_details.profiles = BuildTestProfiles();
-    client_->UploadCard(request_details);
+    client_->UploadCard(request_details,
+                        base::BindOnce(&PaymentsClientTest::OnDidUploadCard,
+                                       weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  void StartMigrating(bool uncheck_last_card, bool has_cardholder_name) {
+    PaymentsClient::MigrationRequestDetails request_details;
+    request_details.context_token = base::ASCIIToUTF16("context token");
+    request_details.risk_data = "some risk data";
+    request_details.app_locale = "language-LOCALE";
+
+    migratable_credit_cards_.clear();
+    CreditCard card1 = test::GetCreditCard();
+    CreditCard card2 = test::GetCreditCard2();
+    if (!has_cardholder_name) {
+      card1.SetRawInfo(CREDIT_CARD_NAME_FULL, base::UTF8ToUTF16(""));
+      card2.SetRawInfo(CREDIT_CARD_NAME_FULL, base::UTF8ToUTF16(""));
+    }
+    migratable_credit_cards_.push_back(MigratableCreditCard(card1));
+    migratable_credit_cards_.push_back(MigratableCreditCard(card2));
+    if (uncheck_last_card)
+      migratable_credit_cards_.back().ToggleChosen();
+    client_->MigrateCards(
+        request_details, migratable_credit_cards_,
+        base::BindOnce(&PaymentsClientTest::OnDidMigrateLocalCards,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   network::TestURLLoaderFactory* factory() { return &test_url_loader_factory_; }
@@ -168,6 +216,8 @@ class PaymentsClientTest : public testing::Test,
 
   net::HttpRequestHeaders* GetRequestHeaders() { return &intercepted_headers_; }
 
+  // Issues access token in response to any access token request. This will
+  // start the Payments Request which requires the authentication.
   void IssueOAuthToken() {
     identity_test_env_.WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
         "totally_real_token",
@@ -190,15 +240,20 @@ class PaymentsClientTest : public testing::Test,
   std::string server_id_;
   std::string real_pan_;
   std::unique_ptr<base::DictionaryValue> legal_message_;
+  std::vector<MigratableCreditCard> migratable_credit_cards_;
+  std::unique_ptr<std::unordered_map<std::string, std::string>> save_result_;
+  std::string display_text_;
 
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   network::TestURLLoaderFactory test_url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
+  TestPersonalDataManager test_personal_data_;
   std::unique_ptr<PaymentsClient> client_;
   identity::IdentityTestEnvironment identity_test_env_;
 
   net::HttpRequestHeaders intercepted_headers_;
   std::string intercepted_body_;
+  base::WeakPtrFactory<PaymentsClientTest> weak_ptr_factory_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PaymentsClientTest);
@@ -261,6 +316,60 @@ TEST_F(PaymentsClientTest, UnmaskSuccess) {
   EXPECT_EQ("1234", real_pan_);
 }
 
+TEST_F(PaymentsClientTest, UnmaskSuccessAccountFromSyncTest) {
+  EnableAutofillGetPaymentsIdentityFromSync();
+  StartUnmasking();
+  IssueOAuthToken();
+  ReturnResponse(net::HTTP_OK, "{ \"pan\": \"1234\" }");
+  EXPECT_EQ(AutofillClient::SUCCESS, result_);
+  EXPECT_EQ("1234", real_pan_);
+}
+
+TEST_F(PaymentsClientTest, UnmaskIncludesChromeUserContext) {
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillGetPaymentsIdentityFromSync},  // Enabled
+      {features::kAutofillEnableAccountWalletStorage});  // Disabled
+
+  StartUnmasking();
+  IssueOAuthToken();
+  ReturnResponse(net::HTTP_OK, "{}");
+
+  // ChromeUserContext was set.
+  EXPECT_TRUE(GetUploadData().find("chrome_user_context") != std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("full_sync_enabled") != std::string::npos);
+}
+
+TEST_F(PaymentsClientTest,
+       UnmaskIncludesChromeUserContextIfWalletStorageFlagEnabled) {
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillEnableAccountWalletStorage},    // Enabled
+      {features::kAutofillGetPaymentsIdentityFromSync});  // Disabled
+
+  StartUnmasking();
+  IssueOAuthToken();
+  ReturnResponse(net::HTTP_OK, "{}");
+
+  // ChromeUserContext was set.
+  EXPECT_TRUE(GetUploadData().find("chrome_user_context") != std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("full_sync_enabled") != std::string::npos);
+}
+
+TEST_F(PaymentsClientTest, UnmaskExcludesChromeUserContextIfExperimentsOff) {
+  scoped_feature_list_.InitWithFeatures(
+      {},  // Enabled
+      {features::kAutofillEnableAccountWalletStorage,
+       features::kAutofillGetPaymentsIdentityFromSync});  // Disabled
+
+  StartUnmasking();
+  IssueOAuthToken();
+  ReturnResponse(net::HTTP_OK, "{}");
+
+  // ChromeUserContext was not set.
+  EXPECT_TRUE(!GetUploadData().empty());
+  EXPECT_TRUE(GetUploadData().find("chrome_user_context") == std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("full_sync_enabled") == std::string::npos);
+}
+
 TEST_F(PaymentsClientTest, GetDetailsSuccess) {
   StartGettingUploadDetails();
   ReturnResponse(
@@ -301,6 +410,69 @@ TEST_F(PaymentsClientTest, GetDetailsIncludesDetectedValuesInRequest) {
       "\"detected_values\":" + std::to_string(kAllDetectableValues);
   EXPECT_TRUE(GetUploadData().find(detected_values_string) !=
               std::string::npos);
+}
+
+TEST_F(PaymentsClientTest, GetDetailsIncludesChromeUserContext) {
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillGetPaymentsIdentityFromSync},  // Enabled
+      {features::kAutofillEnableAccountWalletStorage});  // Disabled
+
+  StartGettingUploadDetails();
+
+  // ChromeUserContext was set.
+  EXPECT_TRUE(GetUploadData().find("chrome_user_context") != std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("full_sync_enabled") != std::string::npos);
+}
+
+TEST_F(PaymentsClientTest,
+       GetDetailsIncludesChromeUserContextIfWalletStorageFlagEnabled) {
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillEnableAccountWalletStorage},    // Enabled
+      {features::kAutofillGetPaymentsIdentityFromSync});  // Disabled
+
+  StartGettingUploadDetails();
+
+  // ChromeUserContext was set.
+  EXPECT_TRUE(GetUploadData().find("chrome_user_context") != std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("full_sync_enabled") != std::string::npos);
+}
+
+TEST_F(PaymentsClientTest,
+       GetDetailsExcludesChromeUserContextIfExperimentsOff) {
+  scoped_feature_list_.InitWithFeatures(
+      {},  // Enabled
+      {features::kAutofillEnableAccountWalletStorage,
+       features::kAutofillGetPaymentsIdentityFromSync});  // Disabled
+
+  StartGettingUploadDetails();
+
+  // ChromeUserContext was not set.
+  EXPECT_TRUE(!GetUploadData().empty());
+  EXPECT_TRUE(GetUploadData().find("chrome_user_context") == std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("full_sync_enabled") == std::string::npos);
+}
+
+TEST_F(PaymentsClientTest, GetUploadAccountFromSyncTest) {
+  EnableAutofillGetPaymentsIdentityFromSync();
+  // Set up a different account.
+  const AccountInfo& secondary_account_info =
+      identity_test_env_.MakeAccountAvailable("secondary@gmail.com");
+  test_personal_data_.SetAccountInfoForPayments(secondary_account_info);
+
+  StartUploading(/*include_cvc=*/true);
+  ReturnResponse(net::HTTP_OK, "{}");
+
+  // Issue a token for the secondary account.
+  identity_test_env_.WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
+      secondary_account_info.account_id, "secondary_account_token",
+      base::Time::Now() + base::TimeDelta::FromDays(10));
+
+  // Verify the auth header.
+  std::string auth_header_value;
+  EXPECT_TRUE(intercepted_headers_.GetHeader(
+      net::HttpRequestHeaders::kAuthorization, &auth_header_value))
+      << intercepted_headers_.ToString();
+  EXPECT_EQ("Bearer secondary_account_token", auth_header_value);
 }
 
 TEST_F(PaymentsClientTest, GetUploadDetailsVariationsTest) {
@@ -410,6 +582,43 @@ TEST_F(PaymentsClientTest, UnmaskCardVariationsTestExperimentOff) {
   variations::VariationsHttpHeaderProvider::GetInstance()->ResetForTesting();
 }
 
+TEST_F(PaymentsClientTest, MigrateCardsVariationsTest) {
+  // Register a trial and variation id, so that there is data in variations
+  // headers. Also, the variations header provider may have been registered to
+  // observe some other field trial list, so reset it.
+  EnableAutofillSendExperimentIdsInPaymentsRPCs();
+  variations::VariationsHttpHeaderProvider::GetInstance()->ResetForTesting();
+  base::FieldTrialList field_trial_list_(nullptr);
+  CreateFieldTrialWithId("AutofillTest", "Group", 369);
+  StartMigrating(/*uncheck_last_card=*/false, /*has_cardholder_name=*/true);
+  IssueOAuthToken();
+
+  std::string value;
+  EXPECT_TRUE(GetRequestHeaders()->GetHeader("X-Client-Data", &value));
+  // Note that experiment information is stored in X-Client-Data.
+  EXPECT_FALSE(value.empty());
+
+  variations::VariationsHttpHeaderProvider::GetInstance()->ResetForTesting();
+}
+
+TEST_F(PaymentsClientTest, MigrateCardsVariationsTestExperimentFlagOff) {
+  // Register a trial and variation id, so that there is data in variations
+  // headers. Also, the variations header provider may have been registered to
+  // observe some other field trial list, so reset it.
+  DisableAutofillSendExperimentIdsInPaymentsRPCs();
+  variations::VariationsHttpHeaderProvider::GetInstance()->ResetForTesting();
+  base::FieldTrialList field_trial_list_(nullptr);
+  CreateFieldTrialWithId("AutofillTest", "Group", 369);
+  StartMigrating(/*uncheck_last_card=*/false, /*has_cardholder_name=*/true);
+
+  std::string value;
+  EXPECT_FALSE(GetRequestHeaders()->GetHeader("X-Client-Data", &value));
+  // Note that experiment information is stored in X-Client-Data.
+  EXPECT_TRUE(value.empty());
+
+  variations::VariationsHttpHeaderProvider::GetInstance()->ResetForTesting();
+}
+
 TEST_F(PaymentsClientTest,
        GetDetailsIncludesPanFirstSixInRequestIfExperimentOn) {
   EnableAutofillUpstreamSendPanFirstSixExperiment();
@@ -427,6 +636,14 @@ TEST_F(PaymentsClientTest,
 
   // Verify that the value of pan_first_six was left out of the request.
   EXPECT_TRUE(GetUploadData().find("\"pan_first6\":\"411111\"") ==
+              std::string::npos);
+}
+
+TEST_F(PaymentsClientTest, GetDetailsIncludeBillableServiceNumber) {
+  StartGettingUploadDetails();
+
+  // Verify that billable service number was included in the request.
+  EXPECT_TRUE(GetUploadData().find("\"billable_service\":12345") !=
               std::string::npos);
 }
 
@@ -492,14 +709,199 @@ TEST_F(PaymentsClientTest, UploadIncludesCvcInRequestIfProvided) {
   EXPECT_TRUE(GetUploadData().find("&s7e_13_cvc=") != std::string::npos);
 }
 
+TEST_F(PaymentsClientTest, UploadIncludesChromeUserContext) {
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillGetPaymentsIdentityFromSync},  // Enabled
+      {features::kAutofillEnableAccountWalletStorage});  // Disabled
+
+  StartUploading(/*include_cvc=*/true);
+  IssueOAuthToken();
+
+  // ChromeUserContext was set.
+  EXPECT_TRUE(GetUploadData().find("chrome_user_context") != std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("full_sync_enabled") != std::string::npos);
+}
+
+TEST_F(PaymentsClientTest,
+       UploadIncludesChromeUserContextIfWalletStorageFlagEnabled) {
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillEnableAccountWalletStorage},    // Enabled
+      {features::kAutofillGetPaymentsIdentityFromSync});  // Disabled
+
+  StartUploading(/*include_cvc=*/true);
+  IssueOAuthToken();
+
+  // ChromeUserContext was set.
+  EXPECT_TRUE(GetUploadData().find("chrome_user_context") != std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("full_sync_enabled") != std::string::npos);
+}
+
+TEST_F(PaymentsClientTest, UploadExcludesChromeUserContextIfExperimentsOff) {
+  scoped_feature_list_.InitWithFeatures(
+      {},  // Enabled
+      {features::kAutofillEnableAccountWalletStorage,
+       features::kAutofillGetPaymentsIdentityFromSync});  // Disabled
+
+  StartUploading(/*include_cvc=*/true);
+  IssueOAuthToken();
+
+  // ChromeUserContext was not set.
+  EXPECT_TRUE(!GetUploadData().empty());
+  EXPECT_TRUE(GetUploadData().find("chrome_user_context") == std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("full_sync_enabled") == std::string::npos);
+}
+
 TEST_F(PaymentsClientTest, UploadDoesNotIncludeCvcInRequestIfNotProvided) {
   StartUploading(/*include_cvc=*/false);
+  IssueOAuthToken();
 
+  EXPECT_TRUE(!GetUploadData().empty());
   // Verify that the encrypted_cvc and s7e_13_cvc parameters were not included
   // in the request.
   EXPECT_TRUE(GetUploadData().find("encrypted_cvc") == std::string::npos);
   EXPECT_TRUE(GetUploadData().find("__param:s7e_13_cvc") == std::string::npos);
   EXPECT_TRUE(GetUploadData().find("&s7e_13_cvc=") == std::string::npos);
+}
+
+TEST_F(PaymentsClientTest, MigrationRequestIncludesUniqueId) {
+  StartMigrating(/*uncheck_last_card=*/false, /*has_cardholder_name=*/true);
+  IssueOAuthToken();
+
+  // Verify that the unique id was included in the request.
+  EXPECT_TRUE(GetUploadData().find("unique_id") != std::string::npos);
+  EXPECT_TRUE(
+      GetUploadData().find(migratable_credit_cards_[0].credit_card().guid()) !=
+      std::string::npos);
+  EXPECT_TRUE(
+      GetUploadData().find(migratable_credit_cards_[1].credit_card().guid()) !=
+      std::string::npos);
+}
+
+TEST_F(PaymentsClientTest, MigrationRequestIncludesEncryptedPan) {
+  StartMigrating(/*uncheck_last_card=*/false, /*has_cardholder_name=*/true);
+  IssueOAuthToken();
+
+  // Verify that the encrypted_pan and s7e_1_pan parameters were included
+  // in the request.
+  EXPECT_TRUE(GetUploadData().find("encrypted_pan") != std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("__param:s7e_1_pan0") != std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("&s7e_1_pan0=4111111111111111") !=
+              std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("__param:s7e_1_pan1") != std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("&s7e_1_pan1=378282246310005") !=
+              std::string::npos);
+}
+
+TEST_F(PaymentsClientTest, MigrationRequestExcludesUncheckedCard) {
+  StartMigrating(/*uncheck_last_card=*/true, /*has_cardholder_name=*/true);
+  IssueOAuthToken();
+
+  // Verify that the encrypted_pan and s7e_1_pan parameters were included
+  // in the request.
+  EXPECT_TRUE(GetUploadData().find("encrypted_pan") != std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("__param:s7e_1_pan0") != std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("&s7e_1_pan0=4111111111111111") !=
+              std::string::npos);
+  EXPECT_FALSE(GetUploadData().find("__param:s7e_1_pan1") != std::string::npos);
+  EXPECT_FALSE(GetUploadData().find("&s7e_1_pan1=378282246310005") !=
+               std::string::npos);
+}
+
+TEST_F(PaymentsClientTest, MigrationRequestIncludesCardholderNameWhenItExists) {
+  StartMigrating(/*uncheck_last_card=*/false, /*has_cardholder_name=*/true);
+  IssueOAuthToken();
+
+  EXPECT_TRUE(!GetUploadData().empty());
+  // Verify that the cardholder name is sent if it exists.
+  EXPECT_TRUE(GetUploadData().find("cardholder_name") != std::string::npos);
+}
+
+TEST_F(PaymentsClientTest,
+       MigrationRequestExcludesCardholderNameWhenItDoesNotExist) {
+  StartMigrating(/*uncheck_last_card=*/false, /*has_cardholder_name=*/false);
+  IssueOAuthToken();
+
+  EXPECT_TRUE(!GetUploadData().empty());
+  // Verify that the cardholder name is not sent if it doesn't exist.
+  EXPECT_TRUE(GetUploadData().find("cardholder_name") == std::string::npos);
+}
+
+TEST_F(PaymentsClientTest, MigrationRequestIncludesChromeUserContext) {
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillGetPaymentsIdentityFromSync},  // Enabled
+      {features::kAutofillEnableAccountWalletStorage});  // Disabled
+
+  StartMigrating(/*uncheck_last_card=*/false, /*has_cardholder_name=*/true);
+  IssueOAuthToken();
+
+  // ChromeUserContext was set.
+  EXPECT_TRUE(GetUploadData().find("chrome_user_context") != std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("full_sync_enabled") != std::string::npos);
+}
+
+TEST_F(PaymentsClientTest,
+       MigrationRequestIncludesChromeUserContextIfWalletStorageFlagEnabled) {
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillEnableAccountWalletStorage},    // Enabled
+      {features::kAutofillGetPaymentsIdentityFromSync});  // Disabled
+
+  StartMigrating(/*uncheck_last_card=*/false, /*has_cardholder_name=*/true);
+  IssueOAuthToken();
+
+  // ChromeUserContext was set.
+  EXPECT_TRUE(GetUploadData().find("chrome_user_context") != std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("full_sync_enabled") != std::string::npos);
+}
+
+TEST_F(PaymentsClientTest,
+       MigrationRequestExcludesChromeUserContextIfExperimentsOff) {
+  scoped_feature_list_.InitWithFeatures(
+      {},  // Enabled
+      {features::kAutofillEnableAccountWalletStorage,
+       features::kAutofillGetPaymentsIdentityFromSync});  // Disabled
+
+  StartMigrating(/*uncheck_last_card=*/false, /*has_cardholder_name=*/true);
+  IssueOAuthToken();
+
+  // ChromeUserContext was not set.
+  EXPECT_TRUE(!GetUploadData().empty());
+  EXPECT_TRUE(GetUploadData().find("chrome_user_context") == std::string::npos);
+  EXPECT_TRUE(GetUploadData().find("full_sync_enabled") == std::string::npos);
+}
+
+TEST_F(PaymentsClientTest, MigrationSuccessWithSaveResult) {
+  StartMigrating(/*uncheck_last_card=*/false, /*has_cardholder_name=*/true);
+  IssueOAuthToken();
+  ReturnResponse(net::HTTP_OK,
+                 "{\"save_result\":[{\"unique_id\":\"0\",\"status\":"
+                 "\"SUCCESS\"},{\"unique_id\":\"1\",\"status\":\"TEMPORARY_"
+                 "FAILURE\"}],\"value_prop_display_text\":\"display text\"}");
+
+  EXPECT_EQ(AutofillClient::SUCCESS, result_);
+  EXPECT_TRUE(save_result_.get());
+  EXPECT_TRUE(save_result_->find("0") != save_result_->end());
+  EXPECT_TRUE(save_result_->at("0") == "SUCCESS");
+  EXPECT_TRUE(save_result_->find("1") != save_result_->end());
+  EXPECT_TRUE(save_result_->at("1") == "TEMPORARY_FAILURE");
+}
+
+TEST_F(PaymentsClientTest, MigrationMissingSaveResult) {
+  StartMigrating(/*uncheck_last_card=*/false, /*has_cardholder_name=*/true);
+  IssueOAuthToken();
+  ReturnResponse(net::HTTP_OK,
+                 "{\"value_prop_display_text\":\"display text\"}");
+  EXPECT_EQ(AutofillClient::PERMANENT_FAILURE, result_);
+  EXPECT_EQ(nullptr, save_result_.get());
+}
+
+TEST_F(PaymentsClientTest, MigrationSuccessWithDisplayText) {
+  StartMigrating(/*uncheck_last_card=*/false, /*has_cardholder_name=*/true);
+  IssueOAuthToken();
+  ReturnResponse(net::HTTP_OK,
+                 "{\"save_result\":[{\"unique_id\":\"0\",\"status\":"
+                 "\"SUCCESS\"}],\"value_prop_display_text\":\"display text\"}");
+  EXPECT_EQ(AutofillClient::SUCCESS, result_);
+  EXPECT_EQ("display text", display_text_);
 }
 
 TEST_F(PaymentsClientTest, GetDetailsFollowedByUploadSuccess) {
@@ -514,6 +916,23 @@ TEST_F(PaymentsClientTest, GetDetailsFollowedByUploadSuccess) {
   StartUploading(/*include_cvc=*/true);
   IssueOAuthToken();
   ReturnResponse(net::HTTP_OK, "{}");
+  EXPECT_EQ(AutofillClient::SUCCESS, result_);
+}
+
+TEST_F(PaymentsClientTest, GetDetailsFollowedByMigrationSuccess) {
+  StartGettingUploadDetails();
+  ReturnResponse(
+      net::HTTP_OK,
+      "{ \"context_token\": \"some_token\", \"legal_message\": {} }");
+  EXPECT_EQ(AutofillClient::SUCCESS, result_);
+
+  result_ = AutofillClient::NONE;
+
+  StartMigrating(/*uncheck_last_card=*/true, /*has_cardholder_name=*/true);
+  IssueOAuthToken();
+  ReturnResponse(
+      net::HTTP_OK,
+      "{\"save_result\":[],\"value_prop_display_text\":\"display text\"}");
   EXPECT_EQ(AutofillClient::SUCCESS, result_);
 }
 

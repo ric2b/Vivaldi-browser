@@ -35,7 +35,6 @@
 #include "third_party/blink/renderer/platform/graphics/test/fake_web_graphics_context_3d_provider.h"
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
-#include "third_party/blink/renderer/platform/testing/testing_platform_support_with_mock_scheduler.h"
 #include "third_party/skia/include/core/SkColorSpaceXform.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -120,16 +119,15 @@ class CanvasRenderingContext2DTest : public PageTestBase {
     return CanvasElement().GetGPUMemoryUsage();
   }
   void DrawSomething() {
-    Canvas2DLayerBridge* bridge = CanvasElement().GetCanvas2DLayerBridge();
-    bridge->DidDraw(FloatRect(0, 0, 1, 1));
-    bridge->FinalizeFrame();
+    CanvasElement().DidDraw();
+    CanvasElement().FinalizeFrame();
     // Grabbing an image forces a flush
-    bridge->NewImageSnapshot(kPreferAcceleration);
+    CanvasElement().Snapshot(kBackBuffer, kPreferAcceleration);
   }
 
-  void CreateContext(OpacityMode,
-                     String color_space = String(),
-                     LinearPixelMathState = kLinearPixelMathDisabled);
+  enum LatencyMode { kNormalLatency, kLowLatency };
+
+  void CreateContext(OpacityMode, LatencyMode = kNormalLatency);
   ScriptState* GetScriptState() {
     return ToScriptStateForMainWorld(canvas_element_->GetFrame());
   }
@@ -185,19 +183,12 @@ CanvasRenderingContext2DTest::CanvasRenderingContext2DTest()
       opaque_bitmap_(IntSize(10, 10), kOpaqueBitmap),
       alpha_bitmap_(IntSize(10, 10), kTransparentBitmap) {}
 
-void CanvasRenderingContext2DTest::CreateContext(
-    OpacityMode opacity_mode,
-    String color_space,
-    LinearPixelMathState LinearPixelMath_state) {
+void CanvasRenderingContext2DTest::CreateContext(OpacityMode opacity_mode,
+                                                 LatencyMode latency_mode) {
   String canvas_type("2d");
   CanvasContextCreationAttributesCore attributes;
   attributes.alpha = opacity_mode == kNonOpaque;
-  if (!color_space.IsEmpty()) {
-    attributes.color_space = color_space;
-    if (LinearPixelMath_state == kLinearPixelMathEnabled) {
-      attributes.pixel_format = "float16";
-    }
-  }
+  attributes.low_latency = latency_mode == kLowLatency;
   canvas_element_->GetCanvasRenderingContext(canvas_type, attributes);
 }
 
@@ -1116,25 +1107,17 @@ TEST_F(CanvasRenderingContext2DTest, ColorManagedPutImageDataOnP3Canvas) {
 class CanvasRenderingContext2DTestWithTestingPlatform
     : public CanvasRenderingContext2DTest {
  protected:
+  CanvasRenderingContext2DTestWithTestingPlatform() {
+    EnablePlatform();
+    platform()->AdvanceClockSeconds(1.);  // For non-zero DocumentParserTimings.
+  }
+
   void SetUp() override {
-    platform_ = std::make_unique<ScopedTestingPlatformSupport<
-        TestingPlatformSupportWithMockScheduler>>();
-    (*platform_)
-        ->AdvanceClockSeconds(1.);  // For non-zero DocumentParserTimings.
     CanvasRenderingContext2DTest::SetUp();
     GetDocument().View()->UpdateLayout();
   }
 
-  void TearDown() override {
-    platform_.reset();
-    CanvasRenderingContext2DTest::TearDown();
-  }
-
-  void RunUntilIdle() { (*platform_)->RunUntilIdle(); }
-
-  std::unique_ptr<
-      ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>>
-      platform_;
+  void RunUntilIdle() { platform()->RunUntilIdle(); }
 };
 
 // https://crbug.com/708445: When the Canvas2DLayerBridge hibernates or wakes up
@@ -1207,6 +1190,24 @@ TEST_F(CanvasRenderingContext2DTestWithTestingPlatform,
 
   // Never hibernate a canvas with no resource provider
   EXPECT_FALSE(layer->NeedsCompositingInputsUpdate());
+}
+
+TEST_F(CanvasRenderingContext2DTest, LowLatencyIsSingleBuffered) {
+  CreateContext(kNonOpaque, kLowLatency);
+  // No need to set-up the layer bridge when testing low latency mode.
+  DrawSomething();
+  auto frame1_resource =
+      CanvasElement()
+          .GetOrCreateCanvasResourceProvider(kPreferNoAcceleration)
+          ->ProduceFrame();
+  EXPECT_TRUE(!!frame1_resource);
+  DrawSomething();
+  auto frame2_resource =
+      CanvasElement()
+          .GetOrCreateCanvasResourceProvider(kPreferNoAcceleration)
+          ->ProduceFrame();
+  EXPECT_TRUE(!!frame2_resource);
+  EXPECT_EQ(frame1_resource.get(), frame2_resource.get());
 }
 
 }  // namespace blink

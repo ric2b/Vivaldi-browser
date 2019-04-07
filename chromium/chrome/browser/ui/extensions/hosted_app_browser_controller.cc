@@ -13,7 +13,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/api/url_handlers/url_handlers_parser.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
@@ -107,23 +107,10 @@ const char kPwaWindowEngagementTypeHistogram[] =
     "Webapp.Engagement.EngagementType";
 
 // static
-bool HostedAppBrowserController::IsForHostedApp(const Browser* browser) {
-  if (!browser)
-    return false;
-
-  const std::string extension_id =
-      web_app::GetExtensionIdFromApplicationName(browser->app_name());
-  const Extension* extension =
-      ExtensionRegistry::Get(browser->profile())->GetExtensionById(
-          extension_id, ExtensionRegistry::EVERYTHING);
-  return extension && extension->is_hosted_app();
-}
-
-// static
 bool HostedAppBrowserController::IsForExperimentalHostedAppBrowser(
     const Browser* browser) {
-  return base::FeatureList::IsEnabled(features::kDesktopPWAWindowing) &&
-         IsForHostedApp(browser);
+  return browser && browser->hosted_app_controller() &&
+         base::FeatureList::IsEnabled(::features::kDesktopPWAWindowing);
 }
 
 // static
@@ -138,6 +125,9 @@ void HostedAppBrowserController::SetAppPrefsForWebContents(
   // This function could be called for non Hosted Apps.
   if (!controller)
     return;
+
+  extensions::TabHelper::FromWebContents(web_contents)
+      ->SetExtensionApp(controller->GetExtension());
 
   web_contents->NotifyPreferencesChanged();
 }
@@ -156,13 +146,12 @@ base::string16 HostedAppBrowserController::FormatUrlOrigin(const GURL& url) {
 HostedAppBrowserController::HostedAppBrowserController(Browser* browser)
     : SiteEngagementObserver(SiteEngagementService::Get(browser->profile())),
       browser_(browser),
-      extension_id_(
-          web_app::GetExtensionIdFromApplicationName(browser->app_name())),
+      extension_id_(web_app::GetAppIdFromApplicationName(browser->app_name())),
       // If a bookmark app has a URL handler, then it is a PWA.
       // TODO(https://crbug.com/774918): Replace once there is a more explicit
       // indicator of a Bookmark App for an installable website.
       created_for_installed_pwa_(
-          base::FeatureList::IsEnabled(features::kDesktopPWAWindowing) &&
+          base::FeatureList::IsEnabled(::features::kDesktopPWAWindowing) &&
           UrlHandlers::GetUrlHandlers(GetExtension())) {
   browser_->tab_strip_model()->AddObserver(this);
 }
@@ -281,6 +270,13 @@ base::string16 HostedAppBrowserController::GetFormattedUrlOrigin() const {
   return FormatUrlOrigin(AppLaunchInfo::GetLaunchWebURL(GetExtension()));
 }
 
+void HostedAppBrowserController::Uninstall(UninstallReason reason,
+                                           UninstallSource source) {
+  uninstall_dialog_.reset(ExtensionUninstallDialog::Create(
+      browser_->profile(), browser_->window()->GetNativeWindow(), this));
+  uninstall_dialog_->ConfirmUninstall(GetExtension(), reason, source);
+}
+
 void HostedAppBrowserController::OnEngagementEvent(
     content::WebContents* web_contents,
     const GURL& /*url*/,
@@ -313,6 +309,8 @@ void HostedAppBrowserController::TabDetachedAt(content::WebContents* contents,
 
   contents->GetMutableRendererPrefs()->can_accept_load_drops = true;
   rvh->SyncRendererPrefs();
+
+  extensions::TabHelper::FromWebContents(contents)->SetExtensionApp(nullptr);
 
   contents->NotifyPreferencesChanged();
 }

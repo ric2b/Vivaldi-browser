@@ -17,8 +17,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/unguessable_token.h"
@@ -59,6 +59,7 @@
 #include "content/test/test_navigation_url_loader_delegate.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "net/base/chunked_upload_data_stream.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/elements_upload_data_stream.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
@@ -106,6 +107,7 @@ static network::ResourceRequest CreateResourceRequest(const char* method,
   request.resource_type = type;
   request.appcache_host_id = kAppCacheNoHostId;
   request.should_reset_appcache = false;
+  request.render_frame_id = 0;
   request.is_main_frame = true;
   request.transition_type = ui::PAGE_TRANSITION_LINK;
   request.allow_download = true;
@@ -311,7 +313,7 @@ class URLRequestBigJob : public net::URLRequestSimpleJob {
   int GetData(std::string* mime_type,
               std::string* charset,
               std::string* data,
-              const net::CompletionCallback& callback) const override {
+              net::CompletionOnceCallback callback) const override {
     *mime_type = "text/plain";
     *charset = "UTF-8";
 
@@ -897,7 +899,7 @@ void ResourceDispatcherHostTest::MakeTestRequestWithRenderFrame(
   request.render_frame_id = render_frame_id;
   filter_->CreateLoaderAndStart(
       std::move(loader_request), render_view_id, request_id,
-      network::mojom::kURLLoadOptionNone, request, std::move(client),
+      network::mojom::kURLLoadOptionSniffMimeType, request, std::move(client),
       net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
 }
 
@@ -912,7 +914,7 @@ void ResourceDispatcherHostTest::MakeTestRequestWithResourceType(
   network::ResourceRequest request = CreateResourceRequest("GET", type, url);
   filter->CreateLoaderAndStart(
       std::move(loader_request), render_view_id, request_id,
-      network::mojom::kURLLoadOptionNone, request, std::move(client),
+      network::mojom::kURLLoadOptionSniffMimeType, request, std::move(client),
       net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
 }
 
@@ -1551,9 +1553,9 @@ TEST_F(ResourceDispatcherHostTest, TestProcessCancelDetachedTimesOut) {
   // messages.
   base::RunLoop run_loop;
   base::OneShotTimer timer;
-  timer.Start(
-      FROM_HERE, base::TimeDelta::FromMilliseconds(210),
-      base::Bind(&base::RunLoop::QuitWhenIdle, base::Unretained(&run_loop)));
+  timer.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(210),
+              base::BindOnce(&base::RunLoop::QuitWhenIdle,
+                             base::Unretained(&run_loop)));
   run_loop.Run();
 
   // The prefetch should be cancelled by now.
@@ -2010,6 +2012,7 @@ TEST_F(ResourceDispatcherHostTest, MimeSniffed) {
 
   client.RunUntilResponseReceived();
   EXPECT_EQ("text/html", client.response_head().mime_type);
+  EXPECT_TRUE(client.response_head().did_mime_sniff);
 }
 
 // Tests that we don't sniff the mime type when the server provides one.
@@ -2031,6 +2034,7 @@ TEST_F(ResourceDispatcherHostTest, MimeNotSniffed) {
 
   client.RunUntilResponseReceived();
   EXPECT_EQ("image/jpeg", client.response_head().mime_type);
+  EXPECT_FALSE(client.response_head().did_mime_sniff);
 }
 
 // Tests that we don't sniff the mime type when there is no message body.

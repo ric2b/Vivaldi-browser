@@ -9,6 +9,7 @@
 <translation id="1293699935367580298">Esc</translation>
 <translation id="1306549533752902673">APPS RECOMENDADAS</translation>
 <translation id="1368832886055348810">De izquierda a derecha</translation>
+<translation id="1383876407941801731">Buscar</translation>
 <translation id="1398853756734560583">Maximizar</translation>
 <translation id="1413622004203049571">Inhabilitar notificaciones de <ph name="NOTIFIER_NAME" /></translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 minuto y }other{# minutos y }}</translation>
@@ -40,6 +41,7 @@
 <translation id="24452542372838207">Expandir notificación</translation>
 <translation id="2482878487686419369">Notificaciones</translation>
 <translation id="2497284189126895209">Todos los archivos</translation>
+<translation id="2515586267016047495">Alt</translation>
 <translation id="2522350507219695259">Se completó la calibración</translation>
 <translation id="252373100621549798">Pantalla desconocida</translation>
 <translation id="2583543531130364912">Calibrar la pantalla táctil</translation>
@@ -63,6 +65,7 @@
 <translation id="3660179305079774227">Flecha arriba</translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> GB/s</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
+<translation id="3842239759367498783">Sigue leyendo desde tu dispositivo móvil (<ph name="TITLE" />)</translation>
 <translation id="385051799172605136">Atrás</translation>
 <translation id="3889424535448813030">Flecha derecha</translation>
 <translation id="3892641579809465218">Pantalla interna</translation>
@@ -78,14 +81,12 @@
 <translation id="4724120544754982507">Centro de notificaciones, notificaciones sin leer: <ph name="UNREAD_NOTIFICATION_COUNT" /></translation>
 <translation id="4730374152663651037">USADAS CON FRECUENCIA</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{Queda 1 mes}other{Quedan # meses}}</translation>
-<translation id="4820616160060340806">Comando+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="4841881773802181781">Contenido agregado</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 segundo}other{# segundos}}</translation>
 <translation id="4971687151119236543">Pista multimedia anterior</translation>
-<translation id="4999762576397546063">Ctrl+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="5046499563572181734">Presiona aquí</translation>
 <translation id="5076340679995252485">&amp;Pegar</translation>
-<translation id="5120799197269191491">Buscar+<ph name="KEY_COMBO_NAME" /></translation>
+<translation id="5137751499640340777">Abrir el Asistente de Google</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">Triángulo desplegable</translation>
 <translation id="528468243742722775">Fin</translation>
@@ -100,7 +101,6 @@
 <translation id="5906667377645263094">{SECONDS,plural, =1{Falta 1 segundo.}other{Faltan # segundos.}}</translation>
 <translation id="5941711191222866238">Minimizar</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 hora}other{# horas}}</translation>
-<translation id="5948410903763073882">Alt+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="6012623610530968780">Página <ph name="SELECTED_PAGE" /> de <ph name="TOTAL_PAGE_NUM" /></translation>
 <translation id="6022924867608035986">Borrar el texto en el cuadro de búsqueda</translation>
 <translation id="6040143037577758943">Cerrar</translation>
@@ -149,6 +149,8 @@
 <translation id="7814458197256864873">&amp;Copiar</translation>
 <translation id="7879499977785298635">No bloquear</translation>
 <translation id="7907591526440419938">Abrir archivo</translation>
+<translation id="7969046989155602842">Comando</translation>
+<translation id="8087772101393322318"><ph name="KEY_MODIFIER_NAME" />+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{Hace 1 hora.}other{Hace # horas.}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{Falta 1 s.}other{Faltan # s.}}</translation>
 <translation id="815598010540052116">Desplazar hacia abajo</translation>
@@ -161,7 +163,6 @@
 <translation id="838869780401515933">marcar</translation>
 <translation id="8393700583063109961">Enviar mensaje</translation>
 <translation id="8394908167088220973">Reproducir o pausar contenido multimedia</translation>
-<translation id="8400147561352026160">Mayús+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8458811141851741261">{YEARS,plural, =1{1 a}other{# a}}</translation>
 <translation id="8602707065186045623"><ph name="SAVEAS_EXTENSION_TYPE" /> Archivo (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> KB/s</translation>

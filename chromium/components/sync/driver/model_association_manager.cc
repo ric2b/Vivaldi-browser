@@ -40,10 +40,11 @@ static const ModelType kStartOrder[] = {
     ARC_PACKAGE, READING_LIST, THEMES, SEARCH_ENGINES, SESSIONS,
     APP_NOTIFICATIONS, DICTIONARY, FAVICON_IMAGES, FAVICON_TRACKING, PRINTERS,
     USER_CONSENTS, USER_EVENTS, SUPERVISED_USER_SETTINGS,
-    SUPERVISED_USER_WHITELISTS, ARTICLES, WIFI_CREDENTIALS,
-    NOTES, 
-    DEPRECATED_SUPERVISED_USERS, MOUNTAIN_SHARES,
-    DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS};
+    SUPERVISED_USER_WHITELISTS, WIFI_CREDENTIALS,
+    NOTES,
+    DEPRECATED_SUPERVISED_USERS,
+    MOUNTAIN_SHARES, DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS,
+    DEPRECATED_ARTICLES};
 
 static_assert(arraysize(kStartOrder) ==
                   MODEL_TYPE_COUNT - FIRST_REAL_MODEL_TYPE,
@@ -96,18 +97,13 @@ ModelAssociationManager::ModelAssociationManager(
       delegate_(processor),
       configure_status_(DataTypeManager::UNKNOWN),
       notified_about_ready_for_configure_(false),
-      weak_ptr_factory_(this) {
-  // Ensure all data type controllers are stopped.
-  for (DataTypeController::TypeMap::const_iterator it = controllers_->begin();
-       it != controllers_->end(); ++it) {
-    DCHECK_EQ(DataTypeController::NOT_RUNNING, (*it).second->state());
-  }
-}
+      weak_ptr_factory_(this) {}
 
 ModelAssociationManager::~ModelAssociationManager() {}
 
 void ModelAssociationManager::Initialize(ModelTypeSet desired_types,
-                                         ModelTypeSet preferred_types) {
+                                         ModelTypeSet preferred_types,
+                                         const ConfigureContext& context) {
   // state_ can be INITIALIZED if types are reconfigured when
   // data is being downloaded, so StartAssociationAsync() is never called for
   // the first configuration.
@@ -116,11 +112,13 @@ void ModelAssociationManager::Initialize(ModelTypeSet desired_types,
   // |desired_types| must be a subset of |preferred_types|.
   DCHECK(preferred_types.HasAll(desired_types));
 
+  configure_context_ = context;
+
   // Only keep types that have controllers.
   desired_types_.Clear();
-  for (ModelTypeSet::Iterator it = desired_types.First(); it.Good(); it.Inc()) {
-    if (controllers_->find(it.Get()) != controllers_->end())
-      desired_types_.Put(it.Get());
+  for (ModelType type : desired_types) {
+    if (controllers_->find(type) != controllers_->end())
+      desired_types_.Put(type);
   }
 
   DVLOG(1) << "ModelAssociationManager: Initializing for "
@@ -131,9 +129,8 @@ void ModelAssociationManager::Initialize(ModelTypeSet desired_types,
 
   DVLOG(1) << "ModelAssociationManager: Stopping disabled types.";
   std::map<DataTypeController*, SyncStopMetadataFate> types_to_stop;
-  for (DataTypeController::TypeMap::const_iterator it = controllers_->begin();
-       it != controllers_->end(); ++it) {
-    DataTypeController* dtc = (*it).second.get();
+  for (const auto& type_and_dtc : *controllers_) {
+    DataTypeController* dtc = type_and_dtc.second.get();
     // We stop a datatype if it's not desired. Independently of being desired,
     // if the datatype is already STOPPING, we also wait for it to stop, to make
     // sure it's ready to start again (if appropriate).
@@ -179,8 +176,8 @@ void ModelAssociationManager::StopDatatype(
 }
 
 void ModelAssociationManager::LoadEnabledTypes() {
-  for (auto it = desired_types_.First(); it.Good(); it.Inc()) {
-    auto dtc_iter = controllers_->find(it.Get());
+  for (ModelType type : desired_types_) {
+    auto dtc_iter = controllers_->find(type);
     DCHECK(dtc_iter != controllers_->end());
     DataTypeController* dtc = dtc_iter->second.get();
     if (dtc->state() == DataTypeController::NOT_RUNNING) {
@@ -202,7 +199,8 @@ void ModelAssociationManager::LoadEnabledTypes() {
     if (dtc->state() == DataTypeController::NOT_RUNNING) {
       DCHECK(!loaded_types_.Has(dtc->type()));
       DCHECK(!associated_types_.Has(dtc->type()));
-      dtc->LoadModels(base::Bind(&ModelAssociationManager::ModelLoadCallback,
+      dtc->LoadModels(configure_context_,
+                      base::Bind(&ModelAssociationManager::ModelLoadCallback,
                                  weak_ptr_factory_.GetWeakPtr()));
     }
   }
@@ -235,8 +233,8 @@ void ModelAssociationManager::StartAssociationAsync(
 
   timer_.Start(FROM_HERE,
                base::TimeDelta::FromSeconds(kAssociationTimeOutInSeconds),
-               base::Bind(&ModelAssociationManager::ModelAssociationDone,
-                          weak_ptr_factory_.GetWeakPtr(), INITIALIZED));
+               base::BindOnce(&ModelAssociationManager::ModelAssociationDone,
+                              weak_ptr_factory_.GetWeakPtr(), INITIALIZED));
 
   // Start association of types that are loaded in specified order.
   for (size_t i = 0; i < arraysize(kStartOrder); i++) {
@@ -263,9 +261,8 @@ void ModelAssociationManager::Stop(SyncStopMetadataFate metadata_fate) {
   weak_ptr_factory_.InvalidateWeakPtrs();
 
   // Stop started data types.
-  for (DataTypeController::TypeMap::const_iterator it = controllers_->begin();
-       it != controllers_->end(); ++it) {
-    DataTypeController* dtc = (*it).second.get();
+  for (const auto& type_and_dtc : *controllers_) {
+    DataTypeController* dtc = type_and_dtc.second.get();
     if (dtc->state() != DataTypeController::NOT_RUNNING &&
         dtc->state() != DataTypeController::STOPPING) {
       // We don't really wait until all datatypes have been fully stopped, which
@@ -404,9 +401,8 @@ void ModelAssociationManager::ModelAssociationDone(State new_state) {
 
   // Treat any unfinished types as having errors.
   desired_types_.RemoveAll(associating_types_);
-  for (DataTypeController::TypeMap::const_iterator it = controllers_->begin();
-       it != controllers_->end(); ++it) {
-    DataTypeController* dtc = (*it).second.get();
+  for (const auto& type_and_dtc : *controllers_) {
+    DataTypeController* dtc = type_and_dtc.second.get();
     if (associating_types_.Has(dtc->type()) &&
         dtc->state() != DataTypeController::NOT_RUNNING &&
         dtc->state() != DataTypeController::STOPPING) {

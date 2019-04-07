@@ -15,6 +15,7 @@
 #include "content/common/content_switches_internal.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "gpu/config/gpu_switches.h"
 #include "media/base/media_switches.h"
 #include "services/device/public/cpp/device_features.h"
 #include "services/network/public/cpp/features.h"
@@ -23,6 +24,14 @@
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/native_theme/native_theme_features.h"
+
+#if defined(OS_ANDROID)
+#include "base/android/build_info.h"
+#endif
+
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
+#endif
 
 using blink::WebRuntimeFeatures;
 
@@ -46,7 +55,6 @@ static void SetRuntimeFeatureDefaultsForPlatform() {
   WebRuntimeFeatures::EnableNotificationConstructor(false);
   // Android does not yet support switching of audio output devices
   WebRuntimeFeatures::EnableAudioOutputDevices(false);
-  WebRuntimeFeatures::EnableAutoplayMutedVideos(true);
   // Android does not yet support SystemMonitor.
   WebRuntimeFeatures::EnableOnDeviceChange(false);
   WebRuntimeFeatures::EnableMediaSession(true);
@@ -69,10 +77,14 @@ static void SetRuntimeFeatureDefaultsForPlatform() {
   WebRuntimeFeatures::EnableNetInfoDownlinkMax(false);
 #endif
 
-// Web Bluetooth is shipped on Android, ChromeOS & MacOS, experimental
-// otherwise.
+// Web Bluetooth is shipped on Android, ChromeOS, MacOS and Windows 10,
+// experimental otherwise.
 #if defined(OS_CHROMEOS) || defined(OS_ANDROID) || defined(OS_MACOSX)
   WebRuntimeFeatures::EnableWebBluetooth(true);
+#endif
+#if defined(OS_WIN)
+  if (base::win::GetVersion() >= base::win::VERSION_WIN10)
+    WebRuntimeFeatures::EnableWebBluetooth(true);
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -261,9 +273,17 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnablePassiveDocumentEventListeners(
       base::FeatureList::IsEnabled(features::kPassiveDocumentEventListeners));
 
+  WebRuntimeFeatures::EnablePassiveDocumentWheelEventListeners(
+      base::FeatureList::IsEnabled(
+          features::kPassiveDocumentWheelEventListeners));
+
   WebRuntimeFeatures::EnableFeatureFromString(
       "FontCacheScaling",
       base::FeatureList::IsEnabled(features::kFontCacheScaling));
+
+  WebRuntimeFeatures::EnableFeatureFromString(
+      "FontSrcLocalMatching",
+      base::FeatureList::IsEnabled(features::kFontSrcLocalMatching));
 
   WebRuntimeFeatures::EnableFeatureFromString(
       "FramebustingNeedsSameOriginOrUserGesture",
@@ -336,9 +356,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(network::features::kOutOfBlinkCORS))
     WebRuntimeFeatures::EnableOutOfBlinkCORS(true);
 
-  if (base::FeatureList::IsEnabled(features::kOriginPolicy))
-    WebRuntimeFeatures::EnableOriginPolicy(true);
-
   WebRuntimeFeatures::EnableMediaCastOverlayButton(
       base::FeatureList::IsEnabled(media::kMediaCastOverlayButton));
 
@@ -359,11 +376,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(features::kWebNfc))
     WebRuntimeFeatures::EnableWebNfc(true);
 #endif
-
-  if (media::GetEffectiveAutoplayPolicy(command_line) !=
-      switches::autoplay::kNoUserGestureRequiredPolicy) {
-    WebRuntimeFeatures::EnableAutoplayMutedVideos(true);
-  }
 
   WebRuntimeFeatures::EnableWebAuth(
       base::FeatureList::IsEnabled(features::kWebAuth));
@@ -406,23 +418,20 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnableWorkStealingInScriptRunner(
       base::FeatureList::IsEnabled(features::kWorkStealingInScriptRunner));
 
-  WebRuntimeFeatures::EnableFeatureFromString(
-      "FeaturePolicyForPermissions",
-      base::FeatureList::IsEnabled(features::kUseFeaturePolicyForPermissions));
+  WebRuntimeFeatures::EnableScheduledScriptStreaming(
+      base::FeatureList::IsEnabled(features::kScheduledScriptStreaming));
 
   if (base::FeatureList::IsEnabled(features::kLazyFrameLoading))
     WebRuntimeFeatures::EnableLazyFrameLoading(true);
   if (base::FeatureList::IsEnabled(features::kLazyFrameVisibleLoadTimeMetrics))
     WebRuntimeFeatures::EnableLazyFrameVisibleLoadTimeMetrics(true);
+  if (base::FeatureList::IsEnabled(features::kLazyImageLoading))
+    WebRuntimeFeatures::EnableLazyImageLoading(true);
+  if (base::FeatureList::IsEnabled(features::kLazyImageVisibleLoadTimeMetrics))
+    WebRuntimeFeatures::EnableLazyImageVisibleLoadTimeMetrics(true);
 
   WebRuntimeFeatures::EnableV8ContextSnapshot(
       base::FeatureList::IsEnabled(features::kV8ContextSnapshot));
-
-  if (base::FeatureList::IsEnabled(features::kStopInBackground))
-    WebRuntimeFeatures::EnableStopInBackground(true);
-
-  if (base::FeatureList::IsEnabled(features::kStopNonTimersInBackground))
-    WebRuntimeFeatures::EnableStopNonTimersInBackground(true);
 
   WebRuntimeFeatures::EnablePWAFullCodeCache(
       base::FeatureList::IsEnabled(features::kPWAFullCodeCache));
@@ -436,12 +445,14 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnableCacheInlineScriptCode(
       base::FeatureList::IsEnabled(features::kCacheInlineScriptCode));
 
-  // Make srcset on link rel=preload work with SignedHTTPExchange flag too.
-  if (base::FeatureList::IsEnabled(features::kSignedHTTPExchange))
-    WebRuntimeFeatures::EnablePreloadImageSrcSetEnabled(true);
+  WebRuntimeFeatures::EnableIsolatedCodeCache(
+      base::FeatureList::IsEnabled(features::kIsolatedCodeCache));
 
-  WebRuntimeFeatures::EnableOffMainThreadWebSocket(
-      base::FeatureList::IsEnabled(features::kOffMainThreadWebSocket));
+  if (base::FeatureList::IsEnabled(features::kSignedHTTPExchange)) {
+    WebRuntimeFeatures::EnableSignedHTTPExchange(true);
+    // Make srcset on link rel=preload work with SignedHTTPExchange flag too.
+    WebRuntimeFeatures::EnablePreloadImageSrcSetEnabled(true);
+  }
 
   WebRuntimeFeatures::EnableNestedWorkers(
       base::FeatureList::IsEnabled(blink::features::kNestedWorkers));
@@ -455,8 +466,11 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
     WebRuntimeFeatures::EnablePageLifecycle(true);
 
 #if defined(OS_ANDROID)
-  if (base::FeatureList::IsEnabled(features::kDisplayCutoutAPI))
+  if (base::FeatureList::IsEnabled(features::kDisplayCutoutAPI) &&
+      base::android::BuildInfo::GetInstance()->is_at_least_p()) {
+    // Display Cutout is limited to Android P+.
     WebRuntimeFeatures::EnableDisplayCutoutAPI(true);
+  }
 #endif
 
   if (command_line.HasSwitch(switches::kEnableAccessibilityObjectModel))
@@ -478,6 +492,10 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
       base::FeatureList::IsEnabled(media::kMediaControlsExpandGesture));
 #endif
 
+  WebRuntimeFeatures::EnableFeatureFromString(
+      "WritableFiles",
+      base::FeatureList::IsEnabled(blink::features::kWritableFilesAPI));
+
   // Enable explicitly enabled features, and then disable explicitly disabled
   // ones.
   for (const std::string& feature :
@@ -488,6 +506,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
        FeaturesFromSwitch(command_line, switches::kDisableBlinkFeatures)) {
     WebRuntimeFeatures::EnableFeatureFromString(feature, false);
   }
+
+  WebRuntimeFeatures::EnablePortals(
+      base::FeatureList::IsEnabled(blink::features::kPortals));
 };
 
 }  // namespace content

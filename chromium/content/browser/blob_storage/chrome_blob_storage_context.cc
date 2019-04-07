@@ -16,8 +16,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/supports_user_data.h"
+#include "base/task/post_task.h"
 #include "base/task_runner.h"
-#include "base/task_scheduler/post_task.h"
 #include "content/browser/resource_context_impl.h"
 #include "content/public/browser/blob_handle.h"
 #include "content/public/browser/browser_context.h"
@@ -117,7 +117,7 @@ ChromeBlobStorageContext* ChromeBlobStorageContext::GetFor(
     // disk on the storage context.
     if (!context->IsOffTheRecord() && io_thread_valid) {
       file_task_runner = base::CreateTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
       // Removes our old blob directories if they exist.
       BrowserThread::PostAfterStartupTask(

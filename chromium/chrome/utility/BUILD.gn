@@ -6,6 +6,7 @@ import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/sysroot.gni")
 import("//chrome/common/features.gni")
+import("//device/vr/buildflags/buildflags.gni")
 import("//extensions/buildflags/buildflags.gni")
 import("//printing/buildflags/buildflags.gni")
 import("//services/service_manager/public/service_manifest.gni")
@@ -29,16 +30,18 @@ static_library("utility") {
     "//chrome:strings",
     "//chrome/common",
     "//chrome/common:mojo_bindings",
+    "//components/mirroring/mojom:constants",
+    "//components/mirroring/service:mirroring_service",
     "//components/search_engines",
     "//components/services/heap_profiling",
     "//components/services/heap_profiling/public/cpp",
-    "//components/services/patch:lib",
     "//components/services/unzip:lib",
     "//components/strings",
     "//components/url_formatter",
     "//content/public/child",
     "//content/public/common",
     "//content/public/utility",
+    "//device/vr/buildflags",
     "//extensions/buildflags",
     "//ipc",
     "//media",
@@ -92,6 +95,7 @@ static_library("utility") {
       "//chrome/common:mojo_bindings",
       "//chrome/common/importer:interfaces",
       "//components/autofill/core/common",
+      "//components/services/patch:lib",
       "//services/data_decoder:lib",
       "//services/proxy_resolver:lib",
     ]
@@ -145,7 +149,6 @@ static_library("utility") {
     ]
     deps += [
       "//ash",
-      "//ash/components/autoclick:lib",
       "//ash/components/quick_launch:lib",
       "//ash/components/quick_launch/public/mojom",
       "//ash/components/shortcut_viewer:lib",
@@ -153,8 +156,9 @@ static_library("utility") {
       "//ash/components/tap_visualizer:lib",
       "//ash/components/tap_visualizer/public/mojom",
       "//chrome/services/file_util:lib",
-      "//services/ui:lib",
-      "//services/ui/public/interfaces",
+      "//chromeos/services/ime:lib",
+      "//chromeos/services/ime/public/mojom",
+      "//services/ws/public/mojom",
     ]
   }
 
@@ -205,7 +209,14 @@ static_library("utility") {
     deps += [ "//chrome/services/media_gallery_util:lib" ]
   }
 
-  if (enable_simple_browser_service) {
+  if (enable_isolated_xr_service) {
+    deps += [
+      "//chrome/services/isolated_xr_device:lib",
+      "//device/vr/public/mojom",
+    ]
+  }
+
+  if (enable_simple_browser_service_out_of_process) {
     deps += [
       "//services/content/simple_browser",
       "//services/content/simple_browser/public/mojom",

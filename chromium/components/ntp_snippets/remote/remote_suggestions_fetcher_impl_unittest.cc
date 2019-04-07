@@ -157,8 +157,8 @@ void ParseJsonDelayed(const std::string& json,
                       const ErrorCallback& error_callback) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&ParseJson, json, std::move(success_callback),
-                 std::move(error_callback)),
+      base::BindOnce(&ParseJson, json, std::move(success_callback),
+                     std::move(error_callback)),
       base::TimeDelta::FromMilliseconds(kTestJsonParsingLatencyMs));
 }
 
@@ -196,8 +196,7 @@ class RemoteSuggestionsFetcherImplTest : public testing::Test {
     fetcher_ = std::make_unique<RemoteSuggestionsFetcherImpl>(
         identity_test_env_.identity_manager(),
         std::move(test_shared_loader_factory), utils_.pref_service(), nullptr,
-        base::BindRepeating(&ParseJsonDelayed),
-        GetFetchEndpoint(version_info::Channel::STABLE), api_key,
+        base::BindRepeating(&ParseJsonDelayed), GetFetchEndpoint(), api_key,
         user_classifier_.get());
 
     fetcher_->SetClockForTesting(mock_task_runner_->GetMockClock());

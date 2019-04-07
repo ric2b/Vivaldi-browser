@@ -5,6 +5,7 @@
 #include "gpu/command_buffer/service/gl_context_virtual.h"
 
 #include "base/callback.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/service/decoder_context.h"
 #include "gpu/command_buffer/service/gl_state_restorer_impl.h"
 #include "ui/gl/gl_gl_api_implementation.h"
@@ -29,7 +30,7 @@ bool GLContextVirtual::Initialize(gl::GLSurface* compatible_surface,
 
 void GLContextVirtual::Destroy() {
   shared_context_->OnReleaseVirtuallyCurrent(this);
-  shared_context_ = NULL;
+  shared_context_ = nullptr;
 }
 
 bool GLContextVirtual::MakeCurrent(gl::GLSurface* surface) {
@@ -54,7 +55,7 @@ bool GLContextVirtual::IsCurrent(gl::GLSurface* surface) {
     return shared_context_->IsCurrent(surface);
 
   // Otherwise, only insure the context itself is current.
-  return shared_context_->IsCurrent(NULL);
+  return shared_context_->IsCurrent(nullptr);
 }
 
 void* GLContextVirtual::GetHandle() {
@@ -102,6 +103,14 @@ void GLContextVirtual::ForceReleaseVirtuallyCurrent() {
 }
 
 #if defined(OS_MACOSX)
+uint64_t GLContextVirtual::BackpressureFenceCreate() {
+  return shared_context_->BackpressureFenceCreate();
+}
+
+void GLContextVirtual::BackpressureFenceWait(uint64_t fence) {
+  shared_context_->BackpressureFenceWait(fence);
+}
+
 void GLContextVirtual::FlushForDriverCrashWorkaround() {
   shared_context_->FlushForDriverCrashWorkaround();
 }

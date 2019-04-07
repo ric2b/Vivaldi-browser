@@ -49,6 +49,11 @@ LayerTreePixelTest::CreateLayerTreeFrameSink(
         /*enable_oop_rasterization=*/false, /*support_locking=*/false);
     worker_context_provider = new TestInProcessContextProvider(
         /*enable_oop_rasterization=*/false, /*support_locking=*/true);
+    // Bind worker context to main thread like it is in production. This is
+    // needed to fully initialize the context. Compositor context is bound to
+    // the impl thread in LayerTreeFrameSink::BindToCurrentThread().
+    gpu::ContextResult result = worker_context_provider->BindToCurrentThread();
+    DCHECK_EQ(result, gpu::ContextResult::kSuccess);
   }
   static constexpr bool disable_display_vsync = false;
   bool synchronous_composite =
@@ -79,7 +84,8 @@ LayerTreePixelTest::CreateDisplayOutputSurfaceOnThread(
     auto display_context_provider =
         base::MakeRefCounted<TestInProcessContextProvider>(
             /*enable_oop_rasterization=*/false, /*support_locking=*/false);
-    display_context_provider->BindToCurrentThread();
+    gpu::ContextResult result = display_context_provider->BindToCurrentThread();
+    DCHECK_EQ(result, gpu::ContextResult::kSuccess);
 
     bool flipped_output_surface = false;
     display_output_surface = std::make_unique<PixelTestOutputSurface>(
@@ -116,6 +122,14 @@ void LayerTreePixelTest::BeginTest() {
 }
 
 void LayerTreePixelTest::AfterTest() {
+  // Bitmap comparison.
+  if (ref_file_.empty()) {
+    EXPECT_TRUE(
+        MatchesBitmap(*result_bitmap_, expected_bitmap_, *pixel_comparator_));
+    return;
+  }
+
+  // File comparison.
   base::FilePath test_data_dir;
   EXPECT_TRUE(
       base::PathService::Get(viz::Paths::DIR_TEST_DATA, &test_data_dir));
@@ -198,6 +212,17 @@ void LayerTreePixelTest::RunPixelTest(
   content_root_ = content_root;
   readback_target_ = nullptr;
   ref_file_ = file_name;
+  RunTest(CompositorMode::THREADED);
+}
+
+void LayerTreePixelTest::RunPixelTest(PixelTestType test_type,
+                                      scoped_refptr<Layer> content_root,
+                                      const SkBitmap& expected_bitmap) {
+  test_type_ = test_type;
+  content_root_ = content_root;
+  readback_target_ = nullptr;
+  ref_file_ = base::FilePath();
+  expected_bitmap_ = expected_bitmap;
   RunTest(CompositorMode::THREADED);
 }
 

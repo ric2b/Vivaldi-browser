@@ -19,6 +19,7 @@
 #include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_restrictions.h"
@@ -52,6 +53,7 @@
 #include "extensions/browser/api/declarative_net_request/ruleset_manager.h"
 #include "extensions/browser/api/declarative_net_request/ruleset_matcher.h"
 #include "extensions/browser/api/declarative_net_request/test_utils.h"
+#include "extensions/browser/api/declarative_net_request/utils.h"
 #include "extensions/browser/api/web_request/web_request_info.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -338,17 +340,9 @@ class DeclarativeNetRequestBrowserTest
     }
 
     ASSERT_TRUE(extension);
-    EXPECT_TRUE(HasValidIndexedRuleset(*extension, profile()));
 
     // Ensure the ruleset is also loaded on the IO thread.
     content::RunAllTasksUntilIdle();
-
-    // Wait for the background page to load if needed.
-    if (has_background_script_)
-      WaitForBackgroundScriptToLoad(extension->id());
-
-    // Ensure no load errors were reported.
-    EXPECT_TRUE(LoadErrorReporter::GetInstance()->GetErrors()->empty());
 
     tester.ExpectTotalCount(kIndexRulesTimeHistogram, 1);
     tester.ExpectTotalCount(kIndexAndPersistRulesTimeHistogram, 1);
@@ -359,6 +353,15 @@ class DeclarativeNetRequestBrowserTest
     tester.ExpectUniqueSample(
         "Extensions.DeclarativeNetRequest.LoadRulesetResult",
         RulesetMatcher::kLoadSuccess /*sample*/, 1 /*count*/);
+
+    EXPECT_TRUE(HasValidIndexedRuleset(*extension, profile()));
+
+    // Wait for the background page to load if needed.
+    if (has_background_script_)
+      WaitForBackgroundScriptToLoad(extension->id());
+
+    // Ensure no load errors were reported.
+    EXPECT_TRUE(LoadErrorReporter::GetInstance()->GetErrors()->empty());
   }
 
   void LoadExtensionWithRules(const std::vector<TestRule>& rules) {
@@ -480,7 +483,10 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
       {"|http://*.us", 3},
       {"pages_with_script/page2.html|", 4},
       {"|http://msn*/pages_with_script/page.html|", 5},
-      {"%20", 6},  // Block any urls with space.
+      {"%20", 6},     // Block any urls with space.
+      {"%C3%A9", 7},  // Percent-encoded non-ascii character é.
+      // Internationalized domain "ⱴase.com" in punycode.
+      {"|http://xn--ase-7z0b.com", 8},
   };
 
   // Rule |i| is the rule with id |i|.
@@ -504,6 +510,12 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
       {"abc.com", "/pages_with_script/page.html?q=hi bye", false},    // Rule 6
       {"abc.com", "/pages_with_script/page.html?q=hi%20bye", false},  // Rule 6
       {"abc.com", "/pages_with_script/page.html?q=hibye", true},
+      {"abc.com",
+       "/pages_with_script/page.html?q=" + base::WideToUTF8(L"\u00E9"),
+       false},  // Rule 7
+      {base::WideToUTF8(L"\x2c74"
+                        L"ase.com"),
+       "/pages_with_script/page.html", false},  // Rule 8
   };
 
   // Load the extension.
@@ -653,7 +665,10 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
     size_t id;
     std::vector<std::string> domains;
     std::vector<std::string> excluded_domains;
-  } rules_data[] = {{"child_frame.html?frame=1", 1, {"x.com"}, {"a.x.com"}},
+  } rules_data[] = {{"child_frame.html?frame=1",
+                     1,
+                     {"x.com", "xn--36c-tfa.com" /* punycode for 36°c.com */},
+                     {"a.x.com"}},
                     {"child_frame.html?frame=2", 2, {}, {"a.y.com"}}};
 
   std::vector<TestRule> rules;
@@ -679,6 +694,9 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
     bool expect_frame_2_loaded;
   } test_cases[] = {
       {"x.com", false /* Rule 1 */, false /* Rule 2 */},
+      {base::WideToUTF8(L"36\x00b0"
+                        L"c.com" /* 36°c.com */),
+       false /*Rule 1*/, false /*Rule 2*/},
       {"b.x.com", false /* Rule 1 */, false /* Rule 2 */},
       {"a.x.com", true, false /* Rule 2 */},
       {"b.a.x.com", true, false /* Rule 2 */},
@@ -1307,7 +1325,7 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
   // affecting requests.
   PrefService* pref_service = browser()->profile()->GetPrefs();
   pref_service->Set(proxy_config::prefs::kProxy,
-                    *ProxyConfigDictionary::CreatePacScript(
+                    ProxyConfigDictionary::CreatePacScript(
                         embedded_test_server()->GetURL("/self.pac").spec(),
                         true /* pac_mandatory */));
   // Flush the proxy configuration change over the Mojo pipe to avoid any races.
@@ -1632,15 +1650,6 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
   request->resource_type = content::ResourceType::RESOURCE_TYPE_SCRIPT;
   request->render_frame_id = MSG_ROUTING_NONE;
 
-  // TODO(https://crbug.com/857577): remove this hack. When an unrelated
-  // browser issued request (typically from GaiaAuthFetcher) has run, it causes
-  // the StoragePartitionImpl to create and cache a URLLoaderFactory without the
-  // web request proxying. This resets it so one with the web request proxying
-  // is created the next time a request is made.
-  base::RunLoop().RunUntilIdle();
-  content::BrowserContext::GetDefaultStoragePartition(profile())
-      ->ResetURLLoaderFactoryForBrowserProcessForTesting();
-
   auto loader = network::SimpleURLLoader::Create(std::move(request),
                                                  TRAFFIC_ANNOTATION_FOR_TESTS);
   content::SimpleURLLoaderTestHelper loader_helper;
@@ -1816,10 +1825,11 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest_Packed,
     verify_page_load(false);
   }
 
-  // Overwrite the indexed ruleset file with arbitrary data to mimic corruption.
+  // Overwrite the indexed ruleset file with arbitrary data to mimic corruption,
+  // while maintaining the correct version header.
   {
     base::ScopedAllowBlockingForTesting scoped_allow_blocking;
-    std::string corrupted_data = "data";
+    std::string corrupted_data = GetVersionHeaderForTesting() + "data";
     ASSERT_EQ(static_cast<int>(corrupted_data.size()),
               base::WriteFile(file_util::GetIndexedRulesetPath(extension_path),
                               corrupted_data.c_str(), corrupted_data.size()));
@@ -1844,7 +1854,7 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest_Packed,
     EXPECT_EQ(1, tester.GetBucketCount(
                      "Extensions.DeclarativeNetRequest.LoadRulesetResult",
                      RulesetMatcher::LoadRulesetResult::
-                         kLoadErrorRulesetVerification /*sample*/));
+                         kLoadErrorChecksumMismatch /*sample*/));
     EXPECT_EQ(1,
               tester.GetBucketCount(
                   "Extensions.DeclarativeNetRequest.LoadRulesetResult",
@@ -1877,7 +1887,7 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
   // Mimic extension prefs corruption by overwriting the indexed ruleset
   // checksum.
   const int kInvalidRulesetChecksum = -1;
-  ExtensionPrefs::Get(profile())->SetDNRRulesetChecksumForTesting(
+  ExtensionPrefs::Get(profile())->SetDNRRulesetChecksum(
       extension_id, kInvalidRulesetChecksum);
 
   TestExtensionRegistryObserver registry_observer(
@@ -1904,12 +1914,66 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
   EXPECT_EQ(1, tester.GetBucketCount(
                    "Extensions.DeclarativeNetRequest.LoadRulesetResult",
                    RulesetMatcher::LoadRulesetResult::
-                       kLoadErrorRulesetVerification /*sample*/));
+                       kLoadErrorChecksumMismatch /*sample*/));
 
   // Verify that re-indexing the ruleset failed.
   tester.ExpectUniqueSample(
       "Extensions.DeclarativeNetRequest.RulesetReindexSuccessful",
       false /*sample*/, 1 /*count*/);
+}
+
+// Tests that we reindex the extension ruleset in case its ruleset format
+// version is not the same as one used by Chrome.
+IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest_Packed,
+                       ReindexOnRulesetVersionMismatch) {
+  // Set up an observer for RulesetMatcher to monitor the number of extension
+  // rulesets.
+  RulesetCountWaiter ruleset_count_waiter;
+  ScopedRulesetManagerTestObserver scoped_observer(
+      &ruleset_count_waiter,
+      base::WrapRefCounted(ExtensionSystem::Get(profile())->info_map()));
+
+  TestRule rule = CreateGenericRule();
+  rule.condition->url_filter = std::string("*");
+  ASSERT_NO_FATAL_FAILURE(LoadExtensionWithRules({rule}));
+  ruleset_count_waiter.WaitForRulesetCount(1);
+
+  const ExtensionId extension_id = last_loaded_extension_id();
+  const auto* rules_monitor_service = BrowserContextKeyedAPIFactory<
+      declarative_net_request::RulesMonitorService>::Get(profile());
+  EXPECT_TRUE(rules_monitor_service->HasRegisteredRuleset(extension_id));
+
+  DisableExtension(extension_id);
+  ruleset_count_waiter.WaitForRulesetCount(0);
+  EXPECT_FALSE(rules_monitor_service->HasRegisteredRuleset(extension_id));
+
+  // Now change the current indexed ruleset format version. This should cause a
+  // version mismatch when the extension is loaded again, but reindexing should
+  // still succeed.
+  const int kIndexedRulesetFormatVersion = 100;
+  std::string old_version_header = GetVersionHeaderForTesting();
+  SetIndexedRulesetFormatVersionForTesting(kIndexedRulesetFormatVersion);
+  ASSERT_NE(old_version_header, GetVersionHeaderForTesting());
+
+  base::HistogramTester tester;
+  EnableExtension(extension_id);
+  ruleset_count_waiter.WaitForRulesetCount(1);
+  EXPECT_TRUE(rules_monitor_service->HasRegisteredRuleset(extension_id));
+
+  // Verify that loading the ruleset would have failed initially due to
+  // version header mismatch and later succeeded.
+  EXPECT_EQ(1, tester.GetBucketCount(
+                   "Extensions.DeclarativeNetRequest.LoadRulesetResult",
+                   RulesetMatcher::LoadRulesetResult::
+                       kLoadErrorVersionMismatch /*sample*/));
+  EXPECT_EQ(1, tester.GetBucketCount(
+                   "Extensions.DeclarativeNetRequest.LoadRulesetResult",
+                   RulesetMatcher::LoadRulesetResult::kLoadSuccess /*sample*/));
+
+  // Verify that reindexing succeeded.
+  tester.ExpectUniqueSample(
+      "Extensions.DeclarativeNetRequest.RulesetReindexSuccessful",
+      true /*sample*/, 1 /*count*/);
 }
 
 // Test fixture to verify that host permissions for the request url and the

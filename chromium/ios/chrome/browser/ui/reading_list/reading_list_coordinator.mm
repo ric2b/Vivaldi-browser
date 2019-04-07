@@ -12,11 +12,13 @@
 #include "components/feature_engagement/public/tracker.h"
 #include "components/reading_list/core/reading_list_entry.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
+#include "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #include "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #include "ios/chrome/browser/reading_list/offline_url_utils.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/reading_list/context_menu/reading_list_context_menu_commands.h"
 #import "ios/chrome/browser/ui/reading_list/context_menu/reading_list_context_menu_coordinator.h"
 #import "ios/chrome/browser/ui/reading_list/context_menu/reading_list_context_menu_params.h"
@@ -104,12 +106,12 @@
   ReadingListModel* model =
       ReadingListModelFactory::GetInstance()->GetForBrowserState(
           self.browserState);
-  favicon::LargeIconService* largeIconService =
-      IOSChromeLargeIconServiceFactory::GetForBrowserState(self.browserState);
   ReadingListListItemFactory* itemFactory =
       [ReadingListListItemFactory tableViewItemFactory];
+  FaviconLoader* faviconLoader =
+      IOSChromeFaviconLoaderFactory::GetForBrowserState(self.browserState);
   self.mediator = [[ReadingListMediator alloc] initWithModel:model
-                                            largeIconService:largeIconService
+                                               faviconLoader:faviconLoader
                                              listItemFactory:itemFactory];
 
   // Create the table.
@@ -364,15 +366,16 @@ animationControllerForDismissedController:(UIViewController*)dismissed {
 
   // Use a referrer with a specific URL to signal that this entry should not be
   // taken into account for the Most Visited tiles.
-  web::Referrer referrer =
-      web::Referrer(GURL(kReadingListReferrerURL), web::ReferrerPolicyDefault);
   if (newTab) {
-    [self.loader webPageOrderedOpen:loadURL
-                           referrer:referrer
-                        inIncognito:incognito
-                       inBackground:NO
-                        originPoint:CGPointZero
-                           appendTo:kLastTab];
+    web::Referrer referrer = web::Referrer(GURL(kReadingListReferrerURL),
+                                           web::ReferrerPolicyDefault);
+    OpenNewTabCommand* command =
+        [[OpenNewTabCommand alloc] initWithURL:loadURL
+                                      referrer:referrer
+                                   inIncognito:incognito
+                                  inBackground:NO
+                                      appendTo:kLastTab];
+    [self.loader webPageOrderedOpen:command];
   } else {
     web::NavigationManager::WebLoadParams params(loadURL);
     params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;

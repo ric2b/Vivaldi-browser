@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "base/files/file_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "content/public/browser/browser_thread.h"
@@ -88,9 +88,8 @@ void CustomizationWallpaperDownloader::StartRequest() {
   auto resource_request = std::make_unique<network::ResourceRequest>();
   resource_request->url = wallpaper_url_;
   resource_request->load_flags =
-      net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE |
-      net::LOAD_DO_NOT_SAVE_COOKIES | net::LOAD_DO_NOT_SEND_COOKIES |
-      net::LOAD_DO_NOT_SEND_AUTH_DATA;
+      net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE;
+  resource_request->allow_credentials = false;
   // TODO(crbug.com/833390): Add a real traffic annotation here.
   simple_loader_ = network::SimpleURLLoader::Create(std::move(resource_request),
                                                     MISSING_TRAFFIC_ANNOTATION);
@@ -138,7 +137,7 @@ void CustomizationWallpaperDownloader::Start() {
       &CustomizationWallpaperDownloader::OnWallpaperDirectoryCreated,
       weak_factory_.GetWeakPtr(), base::Passed(std::move(success)));
   base::PostTaskWithTraitsAndReply(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       std::move(mkdir_closure), std::move(on_created_closure));
 }
 
@@ -174,7 +173,7 @@ void CustomizationWallpaperDownloader::OnSimpleLoaderComplete(
       &CustomizationWallpaperDownloader::OnTemporaryFileRenamed,
       weak_factory_.GetWeakPtr(), base::Passed(std::move(success)));
   base::PostTaskWithTraitsAndReply(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       std::move(rename_closure), std::move(on_rename_closure));
 }
 

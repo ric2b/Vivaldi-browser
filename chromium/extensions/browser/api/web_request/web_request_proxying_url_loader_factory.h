@@ -108,6 +108,7 @@ class WebRequestProxyingURLLoaderFactory
     void HandleResponseOrRedirectHeaders(
         const net::CompletionCallback& continuation);
     void OnRequestError(const network::URLLoaderCompletionStatus& status);
+    bool IsRedirectSafe(const GURL& from_url, const GURL& to_url);
 
     WebRequestProxyingURLLoaderFactory* const factory_;
     network::ResourceRequest request_;
@@ -135,15 +136,12 @@ class WebRequestProxyingURLLoaderFactory
     network::ResourceResponseHead current_response_;
     scoped_refptr<net::HttpResponseHeaders> override_headers_;
     GURL redirect_url_;
-    GURL allowed_unsafe_redirect_url_;
 
     // Holds any provided auth credentials through the extent of the request's
     // lifetime.
     base::Optional<net::AuthCredentials> auth_credentials_;
 
-    // Iff |true| we will ignore the next incoming |FollowRedirect()| call from
-    // our client.
-    bool ignore_next_follow_redirect_ = false;
+    bool request_completed_ = false;
 
     base::WeakPtrFactory<InProgressRequest> weak_factory_;
 
@@ -154,7 +152,6 @@ class WebRequestProxyingURLLoaderFactory
       void* browser_context,
       content::ResourceContext* resource_context,
       int render_process_id,
-      int render_frame_id,
       scoped_refptr<WebRequestAPI::RequestIDGenerator> request_id_generator,
       std::unique_ptr<ExtensionNavigationUIData> navigation_ui_data,
       InfoMap* info_map,
@@ -168,13 +165,11 @@ class WebRequestProxyingURLLoaderFactory
       void* browser_context,
       content::ResourceContext* resource_context,
       int render_process_id,
-      int render_frame_id,
       scoped_refptr<WebRequestAPI::RequestIDGenerator> request_id_generator,
       std::unique_ptr<ExtensionNavigationUIData> navigation_ui_data,
       InfoMap* info_map,
       network::mojom::URLLoaderFactoryRequest loader_request,
-      network::mojom::URLLoaderFactoryPtrInfo target_factory_info,
-      scoped_refptr<WebRequestAPI::ProxySet> proxies);
+      network::mojom::URLLoaderFactoryPtrInfo target_factory_info);
 
   // network::mojom::URLLoaderFactory:
   void CreateLoaderAndStart(network::mojom::URLLoaderRequest loader_request,
@@ -198,11 +193,11 @@ class WebRequestProxyingURLLoaderFactory
   void OnTargetFactoryError();
   void OnProxyBindingError();
   void RemoveRequest(int32_t network_service_request_id, uint64_t request_id);
+  void MaybeRemoveProxy();
 
   void* const browser_context_;
   content::ResourceContext* const resource_context_;
   const int render_process_id_;
-  const int render_frame_id_;
   scoped_refptr<WebRequestAPI::RequestIDGenerator> request_id_generator_;
   std::unique_ptr<ExtensionNavigationUIData> navigation_ui_data_;
   InfoMap* const info_map_;
@@ -218,6 +213,8 @@ class WebRequestProxyingURLLoaderFactory
   // A mapping from the network stack's notion of request ID to our own
   // internally generated request ID for the same request.
   std::map<int32_t, uint64_t> network_request_id_to_web_request_id_;
+
+  base::WeakPtrFactory<WebRequestProxyingURLLoaderFactory> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(WebRequestProxyingURLLoaderFactory);
 };

@@ -14,7 +14,7 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "net/quic/chromium/quic_chromium_connection_helper.h"
+#include "net/quic/quic_chromium_connection_helper.h"
 #include "net/third_party/quic/core/crypto/quic_crypto_server_config.h"
 #include "net/third_party/quic/core/quic_config.h"
 #include "net/third_party/quic/core/quic_framer.h"
@@ -42,6 +42,8 @@ class QuicServer : public net::EpollCallbackInterface {
              const QuicCryptoServerConfig::ConfigOptions& server_config_options,
              const ParsedQuicVersionVector& supported_versions,
              QuicSimpleServerBackend* quic_simple_server_backend);
+  QuicServer(const QuicServer&) = delete;
+  QuicServer& operator=(const QuicServer&) = delete;
 
   ~QuicServer() override;
 
@@ -148,8 +150,6 @@ class QuicServer : public net::EpollCallbackInterface {
   QuicSimpleServerBackend* quic_simple_server_backend_;  // unowned.
 
   base::WeakPtrFactory<QuicServer> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(QuicServer);
 };
 
 }  // namespace quic

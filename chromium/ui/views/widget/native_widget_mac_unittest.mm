@@ -27,7 +27,7 @@
 #import "ui/events/test/cocoa_test_event_utils.h"
 #include "ui/events/test/event_generator.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
-#include "ui/views/bubble/bubble_dialog_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #import "ui/views/cocoa/bridged_content_view.h"
 #import "ui/views/cocoa/bridged_native_widget.h"
 #import "ui/views/cocoa/native_widget_mac_nswindow.h"
@@ -103,15 +103,11 @@ class BridgedNativeWidgetTestApi {
   // Simulate a frame swap from the compositor.
   void SimulateFrameSwap(const gfx::Size& size) {
     const float kScaleFactor = 1.0f;
-    ui::CALayerFrameSink* ca_layer_frame_sink =
-        ui::CALayerFrameSink::FromAcceleratedWidget(
-            bridge_->compositor_->widget()->accelerated_widget());
     gfx::CALayerParams ca_layer_params;
     ca_layer_params.is_empty = false;
     ca_layer_params.pixel_size = size;
     ca_layer_params.scale_factor = kScaleFactor;
-    ca_layer_frame_sink->UpdateCALayerTree(ca_layer_params);
-    bridge_->AcceleratedWidgetCALayerParamsUpdated();
+    bridge_->SetCALayerParams(ca_layer_params);
   }
 
   NSAnimation* show_animation() {
@@ -1756,7 +1752,7 @@ class CustomTitleWidgetDelegate : public WidgetDelegate {
 };
 
 // Test that undocumented title-hiding API we're using does the job.
-TEST_F(NativeWidgetMacTest, DoesHideTitle) {
+TEST_F(NativeWidgetMacTest, DISABLED_DoesHideTitle) {
   // Same as CreateTopLevelPlatformWidget but with a custom delegate.
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
   Widget* widget = new Widget;
@@ -1922,10 +1918,13 @@ TEST_F(NativeWidgetMacTest, SchedulePaintInRect_Titled) {
   NSWindow* window = widget->GetNativeWindow();
   base::scoped_nsobject<MockBridgedView> mock_bridged_view(
       [[MockBridgedView alloc] init]);
+  // Reset drawRect count.
+  [mock_bridged_view setDrawRectCount:0];
   [window setContentView:mock_bridged_view];
 
   // Ensure the initial draw of the window is done.
-  base::RunLoop().RunUntilIdle();
+  while ([mock_bridged_view drawRectCount] == 0)
+    base::RunLoop().RunUntilIdle();
 
   // Add a dummy view to the widget. This will cause SchedulePaint to be called
   // on the dummy view.
@@ -1937,7 +1936,8 @@ TEST_F(NativeWidgetMacTest, SchedulePaintInRect_Titled) {
   widget->GetContentsView()->AddChildView(dummy_view);
 
   // SchedulePaint is asyncronous. Wait for drawRect: to be called.
-  base::RunLoop().RunUntilIdle();
+  while ([mock_bridged_view drawRectCount] == 0)
+    base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(1u, [mock_bridged_view drawRectCount]);
   int client_area_height = widget->GetClientAreaBoundsInScreen().height();
@@ -1964,10 +1964,13 @@ TEST_F(NativeWidgetMacTest, SchedulePaintInRect_Borderless) {
   NSWindow* window = widget->GetNativeWindow();
   base::scoped_nsobject<MockBridgedView> mock_bridged_view(
       [[MockBridgedView alloc] init]);
+  // Reset drawRect count.
+  [mock_bridged_view setDrawRectCount:0];
   [window setContentView:mock_bridged_view];
 
   // Ensure the initial draw of the window is done.
-  base::RunLoop().RunUntilIdle();
+  while ([mock_bridged_view drawRectCount] == 0)
+    base::RunLoop().RunUntilIdle();
 
   // Add a dummy view to the widget. This will cause SchedulePaint to be called
   // on the dummy view.
@@ -1979,7 +1982,8 @@ TEST_F(NativeWidgetMacTest, SchedulePaintInRect_Borderless) {
   widget->GetRootView()->AddChildView(dummy_view);
 
   // SchedulePaint is asyncronous. Wait for drawRect: to be called.
-  base::RunLoop().RunUntilIdle();
+  while ([mock_bridged_view drawRectCount] == 0)
+    base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(1u, [mock_bridged_view drawRectCount]);
   // These are expected dummy_view bounds in AppKit coordinate system. The y

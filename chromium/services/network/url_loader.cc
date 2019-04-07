@@ -12,7 +12,7 @@
 #include "base/files/file.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
@@ -66,6 +66,7 @@ void PopulateResourceResponse(net::URLRequest* request,
       response_info.alpn_negotiated_protocol;
   response->head.connection_info = response_info.connection_info;
   response->head.socket_address = response_info.socket_address;
+  response->head.was_fetched_via_cache = request->was_cached();
   response->head.was_fetched_via_proxy = request->was_fetched_via_proxy();
   response->head.network_accessed = response_info.network_accessed;
   response->head.async_revalidation_requested =
@@ -231,7 +232,8 @@ class SSLPrivateKeyInternal : public net::SSLPrivateKey {
       : algorithm_perferences_(algorithm_perferences),
         ssl_private_key_(std::move(ssl_private_key)) {
     ssl_private_key_.set_connection_error_handler(
-        base::BindOnce(&SSLPrivateKeyInternal::HandleSSLPrivateKeyError, this));
+        base::BindOnce(&SSLPrivateKeyInternal::HandleSSLPrivateKeyError,
+                       base::Unretained(this)));
   }
 
   // net::SSLPrivateKey:
@@ -243,7 +245,7 @@ class SSLPrivateKeyInternal : public net::SSLPrivateKey {
             base::span<const uint8_t> input,
             net::SSLPrivateKey::SignCallback callback) override {
     std::vector<uint8_t> input_vector(input.begin(), input.end());
-    if (ssl_private_key_.encountered_error()) {
+    if (!ssl_private_key_ || ssl_private_key_.encountered_error()) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE,
           base::BindOnce(std::move(callback),
@@ -351,7 +353,9 @@ URLLoader::URLLoader(
 
   is_nocors_corb_excluded_request_ =
       resource_type_ == factory_params_->corb_excluded_resource_type &&
-      request.fetch_request_mode == mojom::FetchRequestMode::kNoCORS;
+      request.fetch_request_mode == mojom::FetchRequestMode::kNoCORS &&
+      CrossOriginReadBlocking::ShouldAllowForPlugin(
+          factory_params_->process_id);
 
   throttling_token_ = network::ScopedThrottlingToken::MaybeCreate(
       url_request_->net_log().source().id, request.throttling_profile_id);
@@ -364,6 +368,16 @@ URLLoader::URLLoader(
   }
 
   url_request_->SetLoadFlags(request.load_flags);
+
+  // Use allow credentials unless credential load flags have been explicitly
+  // set.
+  if (!request.allow_credentials) {
+    DCHECK((request.load_flags &
+            (net::LOAD_DO_NOT_SAVE_COOKIES | net::LOAD_DO_NOT_SEND_COOKIES |
+             net::LOAD_DO_NOT_SEND_AUTH_DATA)) == 0);
+    url_request_->set_allow_credentials(false);
+  }
+
   if (report_raw_headers_) {
     url_request_->SetRequestHeadersCallback(
         base::Bind(&net::HttpRawRequestHeaders::Assign,
@@ -486,6 +500,13 @@ void URLLoader::FollowRedirect(
     return;
   }
 
+  if (!deferred_redirect_) {
+    NOTREACHED();
+    return;
+  }
+
+  deferred_redirect_ = false;
+
   if (to_be_removed_request_headers.has_value()) {
     for (const std::string& key : to_be_removed_request_headers.value())
       url_request_->RemoveRequestHeaderByName(key);
@@ -550,6 +571,9 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
                                    bool* defer_redirect) {
   DCHECK(url_request == url_request_.get());
   DCHECK(url_request->status().is_success());
+
+  DCHECK(!deferred_redirect_);
+  deferred_redirect_ = true;
 
   // Send the redirect response to the client, allowing them to inspect it and
   // optionally follow the redirect.
@@ -675,14 +699,16 @@ void URLLoader::OnResponseStarted(net::URLRequest* url_request, int net_error) {
                  base::Unretained(this)));
 
   // Figure out if we need to sniff (for MIME type detection or for CORB).
-  if (factory_params_->is_corb_enabled && !is_nocors_corb_excluded_request_) {
+  if (factory_params_->is_corb_enabled && !is_nocors_corb_excluded_request_ &&
+      (factory_params_->corb_excluded_initiator_scheme.empty() ||
+       factory_params_->corb_excluded_initiator_scheme !=
+           url_request->initiator().value_or(url::Origin()).scheme())) {
     CrossOriginReadBlocking::LogAction(
         CrossOriginReadBlocking::Action::kResponseStarted);
 
     corb_analyzer_ =
         std::make_unique<CrossOriginReadBlocking::ResponseAnalyzer>(
-            *url_request_, *response_,
-            factory_params_->corb_excluded_initiator_scheme);
+            *url_request_, *response_);
     is_more_corb_sniffing_needed_ = corb_analyzer_->needs_sniffing();
     if (corb_analyzer_->ShouldBlock()) {
       DCHECK(!is_more_corb_sniffing_needed_);
@@ -698,8 +724,14 @@ void URLLoader::OnResponseStarted(net::URLRequest* url_request, int net_error) {
       ShouldSniffContent(url_request_.get(), response_.get())) {
     is_more_mime_sniffing_needed_ = true;
   }
-  if (!is_more_mime_sniffing_needed_ && !is_more_corb_sniffing_needed_)
+  if (!is_more_mime_sniffing_needed_ && !is_more_corb_sniffing_needed_) {
+    // Treat feed types as text/plain.
+    if (response_->head.mime_type == "application/rss+xml" ||
+        response_->head.mime_type == "application/atom+xml") {
+      response_->head.mime_type.assign("text/plain");
+    }
     SendResponseToClient();
+  }
 
   // Start reading...
   ReadMore();
@@ -759,9 +791,9 @@ void URLLoader::DidRead(int num_bytes, bool completed_synchronously) {
   if (num_bytes > 0) {
     pending_write_buffer_offset_ += num_bytes;
 
-    // Only notify client of download progress in case DevTools are attached
-    // and we're done sniffing and started sending response.
-    if (report_raw_headers_ && !consumer_handle_.is_valid()) {
+    // Only notify client of download progress if we're done sniffing and
+    // started sending response.
+    if (!consumer_handle_.is_valid()) {
       int64_t total_encoded_bytes = url_request_->GetTotalReceivedBytes();
       int64_t delta = total_encoded_bytes - reported_total_encoded_bytes_;
       DCHECK_LE(0, delta);
@@ -793,6 +825,7 @@ void URLLoader::DidRead(int num_bytes, bool completed_synchronously) {
       // the mime type. However, even if it returns false, it returns a new type
       // that is probably better than the current one.
       response_->head.mime_type.assign(new_type);
+      response_->head.did_mime_sniff = true;
     }
 
     if (is_more_corb_sniffing_needed_) {
@@ -826,14 +859,23 @@ void URLLoader::DidRead(int num_bytes, bool completed_synchronously) {
   }
 
   if (!url_request_->status().is_success() || num_bytes == 0) {
-    CompletePendingWrite();
+    // There may be no |pending_write_| if a URLRequestJob cancelled itself in
+    // URLRequestJob::OnSuspend() after receiving headers, while there was no
+    // pending read.
+    // TODO(mmenke): That case is rather unfortunate - something should be done
+    // at the socket layer instead, both to make for a better API (Only complete
+    // reads when there's a pending read), and to cover all TCP socket uses,
+    // since the concern is the effect that entering suspend mode has on
+    // sockets. See https://crbug.com/651120.
+    if (pending_write_)
+      CompletePendingWrite(url_request_->status().is_success());
     NotifyCompleted(url_request_->status().ToNetError());
     // |this| will have been deleted.
     return;
   }
 
   if (complete_read) {
-    CompletePendingWrite();
+    CompletePendingWrite(true /* success */);
   }
   if (completed_synchronously) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -970,9 +1012,18 @@ void URLLoader::SendResponseToClient() {
   response_ = nullptr;
 }
 
-void URLLoader::CompletePendingWrite() {
-  response_body_stream_ =
-      pending_write_->Complete(pending_write_buffer_offset_);
+void URLLoader::CompletePendingWrite(bool success) {
+  if (success) {
+    // The write can only be completed immediately in case of a success, since
+    // doing so invalidates memory of any attached NetToMojoIOBuffer's; but in
+    // case of an abort, particularly one caused by a suspend, the failure may
+    // be delivered to URLLoader while the disk_cache layer is still hanging on
+    // to the now-invalid IOBuffer in some worker thread trying to commit it to
+    // disk.  In case of an error, this will have to wait till everything is
+    // destroyed.
+    response_body_stream_ =
+        pending_write_->Complete(pending_write_buffer_offset_);
+  }
   total_written_bytes_ += pending_write_buffer_offset_;
   pending_write_ = nullptr;
   pending_write_buffer_offset_ = 0;

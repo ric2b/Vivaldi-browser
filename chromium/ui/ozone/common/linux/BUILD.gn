@@ -5,16 +5,15 @@
 import("//build/config/ui.gni")
 import("//ui/ozone/ozone.gni")
 
-assert(ozone_platform_gbm)
+assert(ozone_platform_gbm || ozone_platform_wayland)
 
 source_set("linux") {
   sources = [
     "drm_util_linux.cc",
     "drm_util_linux.h",
-    "gbm_bo_wrapper.cc",
-    "gbm_bo_wrapper.h",
-    "gbm_device_linux.cc",
-    "gbm_device_linux.h",
+    "gbm_buffer.h",
+    "gbm_device.h",
+    "gbm_wrapper.cc",
   ]
 
   deps = [

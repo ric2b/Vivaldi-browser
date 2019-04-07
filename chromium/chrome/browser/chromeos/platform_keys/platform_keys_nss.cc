@@ -19,7 +19,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
@@ -476,7 +476,7 @@ void GenerateRSAKeyWithDB(std::unique_ptr<GenerateRSAKeyState> state,
   // This task interacts with the TPM, hence MayBlock().
   base::PostTaskWithTraits(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::Bind(&GenerateRSAKeyOnWorkerThread, base::Passed(&state)));
 }
@@ -570,7 +570,7 @@ void SignRSAWithDB(std::unique_ptr<SignRSAState> state,
   // This task interacts with the TPM, hence MayBlock().
   base::PostTaskWithTraits(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::Bind(&SignRSAOnWorkerThread, base::Passed(&state)));
 }
@@ -654,7 +654,7 @@ void DidGetCertificates(std::unique_ptr<GetCertificatesState> state,
   // This task interacts with the TPM, hence MayBlock().
   base::PostTaskWithTraits(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::Bind(&FilterCertificatesOnWorkerThread, base::Passed(&state)));
 }

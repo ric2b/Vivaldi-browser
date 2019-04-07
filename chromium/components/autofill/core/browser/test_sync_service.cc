@@ -30,16 +30,16 @@ syncer::ModelTypeSet TestSyncService::GetActiveDataTypes() const {
   return data_types_;
 }
 
-bool TestSyncService::IsEngineInitialized() const {
-  return is_engine_initialized_;
-}
-
 bool TestSyncService::IsFirstSetupComplete() const {
   return true;
 }
 
 bool TestSyncService::IsUsingSecondaryPassphrase() const {
   return is_using_secondary_passphrase_;
+}
+
+bool TestSyncService::IsAuthenticatedAccountPrimary() const {
+  return is_authenticated_account_primary_;
 }
 
 const GoogleServiceAuthError& TestSyncService::GetAuthError() const {
@@ -71,6 +71,10 @@ syncer::SyncTokenStatus TestSyncService::GetSyncTokenStatus() const {
   }
 
   return token;
+}
+
+AccountInfo TestSyncService::GetAuthenticatedAccountInfo() const {
+  return account_info_;
 }
 
 void TestSyncService::SetInAuthError(bool is_in_auth_error) {

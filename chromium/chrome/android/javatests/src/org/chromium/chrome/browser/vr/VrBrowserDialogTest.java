@@ -8,6 +8,7 @@ import static org.chromium.chrome.browser.vr.XrTestFramework.PAGE_LOAD_TIMEOUT_S
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_LONG_MS;
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_SHORT_MS;
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM;
+import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE;
 
 import android.graphics.PointF;
 import android.support.test.InstrumentationRegistry;
@@ -42,15 +43,13 @@ import java.util.concurrent.TimeoutException;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.
 Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "enable-features=VrBrowsingNativeAndroidUi"})
-@Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
+@Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
 public class VrBrowserDialogTest {
     // A long enough sleep after entering VR to ensure that the VR entry animations are complete.
     private static final int VR_ENTRY_SLEEP_MS = 1000;
     // A long enough sleep after triggering/interacting with a dialog to ensure that the interaction
     // has propagated through the render pipeline, i.e. the result of the interaction will actually
     // be visible on the screen.
-    // TODO(https://crbug.com/826841): Remove this in favor of notifications from the native code.
-    private static final int VR_DIALOG_RENDER_SLEEP_MS = 500;
     private static final String TEST_IMAGE_DIR = "chrome/test/data/vr/UiCapture";
     private static final File sBaseDirectory =
             new File(UrlUtils.getIsolatedTestFilePath(TEST_IMAGE_DIR));
@@ -69,7 +68,7 @@ public class VrBrowserDialogTest {
 
         // Create UiCapture image directory.
         if (!sBaseDirectory.exists() && !sBaseDirectory.isDirectory()) {
-            Assert.assertTrue(sBaseDirectory.mkdirs());
+            Assert.assertTrue("Failed to make image capture directory", sBaseDirectory.mkdirs());
         }
     }
 
@@ -80,21 +79,21 @@ public class VrBrowserDialogTest {
         }
     }
 
-    private boolean captureScreen(String filename) throws InterruptedException {
+    private void captureScreen(String filename) throws InterruptedException {
         // Ensure that any UI changes that have been rendered and submitted have actually propogated
         // to the screen.
         NativeUiUtils.waitNumFrames(2);
         // TODO(bsheedy): Make this work on Android P by drawing the view hierarchy to a bitmap.
         File screenshotFile = new File(sBaseDirectory, filename + ".png");
-        if (screenshotFile.exists() && !screenshotFile.delete()) return false;
+        Assert.assertFalse("Failed to delete existing screenshot",
+                screenshotFile.exists() && !screenshotFile.delete());
 
         final UiDevice uiDevice =
                 UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
-
-        return uiDevice.takeScreenshot(screenshotFile);
+        Assert.assertTrue("Failed to take screenshot", uiDevice.takeScreenshot(screenshotFile));
     }
 
-    private void displayPermissionPrompt(String initialPage, String navigationCommand)
+    private void navigateAndDisplayPermissionPrompt(String page, String promptCommand)
             throws InterruptedException, TimeoutException {
         // Trying to grant permissions on file:// URLs ends up hitting DCHECKS, so load from a local
         // server instead.
@@ -102,13 +101,12 @@ public class VrBrowserDialogTest {
             mServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         }
         mVrBrowserTestFramework.loadUrlAndAwaitInitialization(
-                mServer.getURL(
-                        VrBrowserTestFramework.getEmbeddedServerPathForHtmlTestFile(initialPage)),
+                mServer.getURL(VrBrowserTestFramework.getEmbeddedServerPathForHtmlTestFile(page)),
                 PAGE_LOAD_TIMEOUT_S);
 
         // Display the given permission prompt.
         VrBrowserTransitionUtils.forceEnterVrBrowserOrFail(POLL_TIMEOUT_LONG_MS);
-        mVrBrowserTestFramework.runJavaScriptOrFail(navigationCommand, POLL_TIMEOUT_SHORT_MS);
+        mVrBrowserTestFramework.runJavaScriptOrFail(promptCommand, POLL_TIMEOUT_LONG_MS);
         VrBrowserTransitionUtils.waitForNativeUiPrompt(POLL_TIMEOUT_LONG_MS);
 
         // There is currently no way to know whether a dialog has been drawn yet,
@@ -116,17 +114,17 @@ public class VrBrowserDialogTest {
         Thread.sleep(VR_ENTRY_SLEEP_MS);
     }
 
-    private void displayJavascriptDialog(String initialPage, String navigationCommand)
+    private void navigateAndDisplayJavaScriptDialog(String page, String dialogCommand)
             throws InterruptedException, TimeoutException {
         mVrBrowserTestFramework.loadUrlAndAwaitInitialization(
-                VrBrowserTestFramework.getFileUrlForHtmlTestFile(initialPage), PAGE_LOAD_TIMEOUT_S);
+                VrBrowserTestFramework.getFileUrlForHtmlTestFile(page), PAGE_LOAD_TIMEOUT_S);
 
         // Display the JavaScript dialog.
         VrBrowserTransitionUtils.forceEnterVrBrowserOrFail(POLL_TIMEOUT_LONG_MS);
         // We can't use runJavaScriptOrFail here because JavaScript execution is blocked while a
         // JS dialog is visible, so runJavaScriptOrFail will always time out.
         JavaScriptUtils.executeJavaScript(
-                mVrBrowserTestFramework.getFirstTabWebContents(), navigationCommand);
+                mVrBrowserTestFramework.getFirstTabWebContents(), dialogCommand);
         VrBrowserTransitionUtils.waitForNativeUiPrompt(POLL_TIMEOUT_LONG_MS);
 
         // There is currently no way to know whether a dialog has been drawn yet,
@@ -141,11 +139,6 @@ public class VrBrowserDialogTest {
         VrBrowserTransitionUtils.forceEnterVrBrowserOrFail(POLL_TIMEOUT_LONG_MS);
         Thread.sleep(VR_ENTRY_SLEEP_MS);
         NativeUiUtils.clickElementAndWaitForUiQuiescence(elementName, new PointF(0, 0));
-        // Technically not necessary, but clicking on native elements causes the laser to originate
-        // from the head, not the controller, which looks strange. Since the point of most of these
-        // tests is to verify that things look correct, better to have the laser in a normal
-        // position before taking screenshots.
-        NativeUiUtils.revertToRealControllerAndWaitForUiQuiescence();
     }
 
     /**
@@ -156,28 +149,32 @@ public class VrBrowserDialogTest {
     @HeadTrackingMode(HeadTrackingMode.SupportedMode.FROZEN)
     public void testMicrophonePermissionPrompt() throws InterruptedException, TimeoutException {
         // Display audio permissions prompt.
-        displayPermissionPrompt(
+        navigateAndDisplayPermissionPrompt(
                 "test_navigation_2d_page", "navigator.getUserMedia({audio: true}, ()=>{}, ()=>{})");
 
         // Capture image
-        Assert.assertTrue(captureScreen("MicrophonePermissionPrompt_Visible"));
+        captureScreen("MicrophonePermissionPrompt_Visible");
         NativeUiUtils.clickFallbackUiPositiveButton();
-        Assert.assertTrue(captureScreen("MicrophonePermissionPrompt_Granted"));
+        captureScreen("MicrophonePermissionPrompt_Granted");
+        mVrBrowserTestFramework.assertNoJavaScriptErrors();
     }
 
     /**
-     * Test navigate to 2D page and launch the Camera dialog.
+     * Test navigate to 2D page and launch the Camera dialog. Not valid on standalones because
+     * there is no camera permission.
      */
     @Test
     @LargeTest
     @HeadTrackingMode(HeadTrackingMode.SupportedMode.FROZEN)
+    @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
     public void testCameraPermissionPrompt() throws InterruptedException, TimeoutException {
         // Display Camera permissions prompt.
-        displayPermissionPrompt(
+        navigateAndDisplayPermissionPrompt(
                 "test_navigation_2d_page", "navigator.getUserMedia({video: true}, ()=>{}, ()=>{})");
 
         // Capture image
-        Assert.assertTrue(captureScreen("CameraPermissionPrompt_Visible"));
+        captureScreen("CameraPermissionPrompt_Visible");
+        mVrBrowserTestFramework.assertNoJavaScriptErrors();
     }
 
     /**
@@ -188,11 +185,12 @@ public class VrBrowserDialogTest {
     @HeadTrackingMode(HeadTrackingMode.SupportedMode.FROZEN)
     public void testLocationPermissionPrompt() throws InterruptedException, TimeoutException {
         // Display Location permissions prompt.
-        displayPermissionPrompt("test_navigation_2d_page",
+        navigateAndDisplayPermissionPrompt("test_navigation_2d_page",
                 "navigator.geolocation.getCurrentPosition(()=>{}, ()=>{})");
 
         // Capture image
-        Assert.assertTrue(captureScreen("LocationPermissionPrompt_Visible"));
+        captureScreen("LocationPermissionPrompt_Visible");
+        mVrBrowserTestFramework.assertNoJavaScriptErrors();
     }
 
     /**
@@ -203,11 +201,12 @@ public class VrBrowserDialogTest {
     @HeadTrackingMode(HeadTrackingMode.SupportedMode.FROZEN)
     public void testNotificationPermissionPrompt() throws InterruptedException, TimeoutException {
         // Display Notification permissions prompt.
-        displayPermissionPrompt(
+        navigateAndDisplayPermissionPrompt(
                 "test_navigation_2d_page", "Notification.requestPermission(()=>{})");
 
         // Capture image
-        Assert.assertTrue(captureScreen("NotificationPermissionPrompt_Visible"));
+        captureScreen("NotificationPermissionPrompt_Visible");
+        mVrBrowserTestFramework.assertNoJavaScriptErrors();
     }
 
     /**
@@ -218,11 +217,12 @@ public class VrBrowserDialogTest {
     @HeadTrackingMode(HeadTrackingMode.SupportedMode.FROZEN)
     public void testMidiPermisionPrompt() throws InterruptedException, TimeoutException {
         // Display MIDI permissions prompt.
-        displayPermissionPrompt(
+        navigateAndDisplayPermissionPrompt(
                 "test_navigation_2d_page", "navigator.requestMIDIAccess({sysex: true})");
 
         // Capture image
-        Assert.assertTrue(captureScreen("MidiPermissionPrompt_Visible"));
+        captureScreen("MidiPermissionPrompt_Visible");
+        mVrBrowserTestFramework.assertNoJavaScriptErrors();
     }
 
     /**
@@ -233,11 +233,13 @@ public class VrBrowserDialogTest {
     @HeadTrackingMode(HeadTrackingMode.SupportedMode.FROZEN)
     public void testJavaScriptAlert() throws InterruptedException, TimeoutException {
         // Display a JavaScript alert()
-        displayJavascriptDialog(
+        navigateAndDisplayJavaScriptDialog(
                 "test_navigation_2d_page", "alert('538 perf regressions detected')");
 
         // Capture image
-        Assert.assertTrue(captureScreen("JavaScriptAlert_Visible"));
+        captureScreen("JavaScriptAlert_Visible");
+        // No assertNoJavaScriptErrors since the alert is still visible, preventing further
+        // JavaScript execution.
     }
 
     /**
@@ -248,19 +250,19 @@ public class VrBrowserDialogTest {
     @HeadTrackingMode(HeadTrackingMode.SupportedMode.FROZEN)
     public void testJavaScriptConfirm() throws InterruptedException, TimeoutException {
         // Display a JavaScript confirm()
-        displayJavascriptDialog(
+        navigateAndDisplayJavaScriptDialog(
                 "test_navigation_2d_page", "var c = confirm('This is a confirmation dialog')");
 
         // Capture image
-        Assert.assertTrue(captureScreen("JavaScriptConfirm_Visible"));
+        captureScreen("JavaScriptConfirm_Visible");
 
         NativeUiUtils.clickFallbackUiNegativeButton();
-        NativeUiUtils.revertToRealControllerAndWaitForUiQuiescence();
         // Ensure the cancel button was clicked.
-        Assert.assertTrue("Negative button clicked",
+        Assert.assertTrue("JavaScript Confirm's cancel button was not clicked",
                 mVrBrowserTestFramework.runJavaScriptOrFail("c", POLL_TIMEOUT_SHORT_MS)
                         .equals("false"));
-        Assert.assertTrue(captureScreen("JavaScriptConfirm_Dismissed"));
+        captureScreen("JavaScriptConfirm_Dismissed");
+        mVrBrowserTestFramework.assertNoJavaScriptErrors();
     }
 
     /**
@@ -273,45 +275,73 @@ public class VrBrowserDialogTest {
     public void testJavaScriptPrompt() throws InterruptedException, TimeoutException {
         // Display a JavaScript prompt()
         String expectedString = "Probably most likely yes";
-        displayJavascriptDialog("test_navigation_2d_page",
+        navigateAndDisplayJavaScriptDialog("test_navigation_2d_page",
                 "var p = prompt('Are the Chrome controls broken?', '" + expectedString + "')");
 
         // Capture image
-        Assert.assertTrue(captureScreen("JavaScriptPrompt_Visible"));
+        captureScreen("JavaScriptPrompt_Visible");
         NativeUiUtils.clickFallbackUiPositiveButton();
-        NativeUiUtils.revertToRealControllerAndWaitForUiQuiescence();
         // This JavaScript will only run once the prompt has been dismissed, and the return value
         // will only be what we expect if the positive button was actually clicked (as opposed to
         // canceled).
-        Assert.assertTrue("Positive button clicked",
+        Assert.assertTrue("JavaScript Prompt's OK button was not clicked",
                 mVrBrowserTestFramework
                         .runJavaScriptOrFail("p == '" + expectedString + "'", POLL_TIMEOUT_SHORT_MS)
                         .equals("true"));
-        Assert.assertTrue(captureScreen("JavaScriptPrompt_Dismissed"));
+        captureScreen("JavaScriptPrompt_Dismissed");
+        mVrBrowserTestFramework.assertNoJavaScriptErrors();
     }
 
+    /**
+     * Tests that the keyboard appears when clicking on the URL bar.
+     * Also contains a regression test for https://crbug.com/874671 where inputting text into the
+     * URL bar would cause a browser crash.
+     */
     @Test
     @LargeTest
     @HeadTrackingMode(HeadTrackingMode.SupportedMode.FROZEN)
     public void testKeyboardAppearsOnUrlBarClick() throws InterruptedException, TimeoutException {
         clickElement("test_navigation_2d_page", UserFriendlyElementName.URL);
-        Assert.assertTrue(captureScreen("KeyboardAppearsOnUrlBarClick_Visible"));
+        captureScreen("KeyboardAppearsOnUrlBarClick_Visible");
+        // Regression test for https://crbug.com/874671
+        // We need to use the VrCore-side emulated controller because the keyboard isn't a UI
+        // element, meaning we can't specify it as a click target for the Chrome-side controller.
+        // We also can't use the MockBrowserKeyboardInterface like we do for web input testing, as
+        // that does not seem to work with the omnibox.
+        NativeUiUtils.revertToRealController();
+        // Point at the keyboard and click an arbitrary key
+        EmulatedVrController controller = new EmulatedVrController(mVrTestRule.getActivity());
+        controller.recenterView();
+        controller.moveControllerInstant(0.0f, -0.259f, -0.996f, -0.0f);
+        // Spam clicks to ensure we're getting one in.
+        for (int i = 0; i < 5; i++) {
+            controller.performControllerClick();
+        }
+        mVrBrowserTestFramework.assertNoJavaScriptErrors();
     }
 
+    /**
+     * Tests that the overflow menu appears when the overflow menu button is clicked.
+     */
     @Test
     @LargeTest
     @HeadTrackingMode(HeadTrackingMode.SupportedMode.FROZEN)
     public void testOverflowMenuAppears() throws InterruptedException, TimeoutException {
         clickElement("test_navigation_2d_page", UserFriendlyElementName.OVERFLOW_MENU);
-        Assert.assertTrue(captureScreen("OverflowMenuAppears_Visible"));
+        captureScreen("OverflowMenuAppears_Visible");
+        mVrBrowserTestFramework.assertNoJavaScriptErrors();
     }
 
+    /**
+     * Tests that the page info popup appears when the security token in the URL bar is clicked.
+     */
     @Test
     @LargeTest
     @HeadTrackingMode(HeadTrackingMode.SupportedMode.FROZEN)
     public void testPageInfoAppearsOnSecurityTokenClick()
             throws InterruptedException, TimeoutException {
         clickElement("test_navigation_2d_page", UserFriendlyElementName.PAGE_INFO_BUTTON);
-        Assert.assertTrue(captureScreen("PageInfoAppearsOnSecurityTokenClick_Visible"));
+        captureScreen("PageInfoAppearsOnSecurityTokenClick_Visible");
+        mVrBrowserTestFramework.assertNoJavaScriptErrors();
     }
 }

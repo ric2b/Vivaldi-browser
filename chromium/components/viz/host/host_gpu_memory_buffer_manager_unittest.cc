@@ -24,6 +24,13 @@ class TestGpuService : public mojom::GpuService {
   TestGpuService() {}
   ~TestGpuService() override {}
 
+  HostGpuMemoryBufferManager::GpuServiceProvider CreateProvider() {
+    return base::BindRepeating(
+        [](mojom::GpuService* gpu_service,
+           base::OnceClosure connection_error_handler) { return gpu_service; },
+        base::Unretained(this));
+  }
+
   bool HasAllocationRequest(gfx::GpuMemoryBufferId id, int client_id) const {
     for (const auto& req : allocation_requests_) {
       if (req.id == id && req.client_id == client_id)
@@ -58,6 +65,7 @@ class TestGpuService : public mojom::GpuService {
   void EstablishGpuChannel(int32_t client_id,
                            uint64_t client_tracing_id,
                            bool is_gpu_host,
+                           bool cache_shaders_on_disk,
                            EstablishGpuChannelCallback callback) override {}
 
   void CloseChannel(int32_t client_id) override {}
@@ -111,7 +119,9 @@ class TestGpuService : public mojom::GpuService {
 
   void RequestHDRStatus(RequestHDRStatusCallback callback) override {}
 
-  void LoadedShader(const std::string& key, const std::string& data) override {}
+  void LoadedShader(int32_t client_id,
+                    const std::string& key,
+                    const std::string& data) override {}
 
   void WakeUpGpu() override {}
 
@@ -246,9 +256,9 @@ TEST_F(HostGpuMemoryBufferManagerTest, AllocationRequestsForDestroyedClient) {
   // bound to a mojo pipe, which means those calls are all synchronous.
   TestGpuService gpu_service;
   auto gpu_memory_buffer_support = MakeGpuMemoryBufferSupport(true);
-  HostGpuMemoryBufferManager manager(1, std::move(gpu_memory_buffer_support),
+  HostGpuMemoryBufferManager manager(gpu_service.CreateProvider(), 1,
+                                     std::move(gpu_memory_buffer_support),
                                      base::ThreadTaskRunnerHandle::Get());
-  manager.SetGpuService(&gpu_service);
 
   const auto buffer_id = static_cast<gfx::GpuMemoryBufferId>(1);
   const int client_id = 2;
@@ -276,9 +286,9 @@ TEST_F(HostGpuMemoryBufferManagerTest, AllocationRequestsForDestroyedClient) {
 TEST_F(HostGpuMemoryBufferManagerTest, RequestsFromUntrustedClientsValidated) {
   TestGpuService gpu_service;
   auto gpu_memory_buffer_support = MakeGpuMemoryBufferSupport(false);
-  HostGpuMemoryBufferManager manager(1, std::move(gpu_memory_buffer_support),
+  HostGpuMemoryBufferManager manager(gpu_service.CreateProvider(), 1,
+                                     std::move(gpu_memory_buffer_support),
                                      base::ThreadTaskRunnerHandle::Get());
-  manager.SetGpuService(&gpu_service);
   const auto buffer_id = static_cast<gfx::GpuMemoryBufferId>(1);
   const int client_id = 2;
   // SCANOUT cannot be used if native gpu memory buffer is not supported.
@@ -323,9 +333,9 @@ TEST_F(HostGpuMemoryBufferManagerTest, RequestsFromUntrustedClientsValidated) {
 TEST_F(HostGpuMemoryBufferManagerTest, GpuMemoryBufferDestroyed) {
   TestGpuService gpu_service;
   auto gpu_memory_buffer_support = MakeGpuMemoryBufferSupport(false);
-  HostGpuMemoryBufferManager manager(1, std::move(gpu_memory_buffer_support),
+  HostGpuMemoryBufferManager manager(gpu_service.CreateProvider(), 1,
+                                     std::move(gpu_memory_buffer_support),
                                      base::ThreadTaskRunnerHandle::Get());
-  manager.SetGpuService(&gpu_service);
   auto buffer = AllocateGpuMemoryBufferSync(&manager);
   EXPECT_TRUE(buffer);
   buffer.reset();
@@ -335,9 +345,9 @@ TEST_F(HostGpuMemoryBufferManagerTest,
        GpuMemoryBufferDestroyedOnDifferentThread) {
   TestGpuService gpu_service;
   auto gpu_memory_buffer_support = MakeGpuMemoryBufferSupport(false);
-  HostGpuMemoryBufferManager manager(1, std::move(gpu_memory_buffer_support),
+  HostGpuMemoryBufferManager manager(gpu_service.CreateProvider(), 1,
+                                     std::move(gpu_memory_buffer_support),
                                      base::ThreadTaskRunnerHandle::Get());
-  manager.SetGpuService(&gpu_service);
   auto buffer = AllocateGpuMemoryBufferSync(&manager);
   EXPECT_TRUE(buffer);
   // Destroy the buffer in a different thread.

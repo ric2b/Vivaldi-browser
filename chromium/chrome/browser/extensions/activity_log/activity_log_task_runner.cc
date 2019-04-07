@@ -5,8 +5,8 @@
 #include "chrome/browser/extensions/activity_log/activity_log_task_runner.h"
 
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/lazy_task_runner.h"
-#include "base/task_scheduler/single_thread_task_runner_thread_mode.h"
+#include "base/task/lazy_task_runner.h"
+#include "base/task/single_thread_task_runner_thread_mode.h"
 
 namespace extensions {
 
@@ -16,7 +16,7 @@ base::SingleThreadTaskRunner* g_task_runner_for_testing = nullptr;
 
 base::LazySingleThreadTaskRunner g_task_runner =
     LAZY_SINGLE_THREAD_TASK_RUNNER_INITIALIZER(
-        base::TaskTraits({base::MayBlock(), base::TaskPriority::BACKGROUND}),
+        base::TaskTraits({base::MayBlock(), base::TaskPriority::BEST_EFFORT}),
         base::SingleThreadTaskRunnerThreadMode::SHARED);
 
 }  // namespace

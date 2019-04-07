@@ -161,6 +161,10 @@ int RenderWidgetHostViewBase::GetMouseWheelMinimumGranularity() const {
   return 0;
 }
 
+RenderWidgetHostViewBase* RenderWidgetHostViewBase::GetRootView() {
+  return this;
+}
+
 void RenderWidgetHostViewBase::SelectionChanged(const base::string16& text,
                                                 size_t offset,
                                                 const gfx::Range& range) {
@@ -231,6 +235,12 @@ gfx::Range RenderWidgetHostViewBase::GetSelectedRange() {
   if (!GetTextInputManager())
     return gfx::Range();
   return GetTextInputManager()->GetTextSelection(this)->range();
+}
+
+size_t RenderWidgetHostViewBase::GetOffsetForSurroundingText() {
+  if (!GetTextInputManager())
+    return 0;
+  return GetTextInputManager()->GetTextSelection(this)->offset();
 }
 
 void RenderWidgetHostViewBase::SetBackgroundColor(SkColor color) {
@@ -346,6 +356,11 @@ void RenderWidgetHostViewBase::ForwardTouchpadPinchIfNecessary(
   }
 }
 
+bool RenderWidgetHostViewBase::HasFallbackSurface() const {
+  NOTREACHED();
+  return false;
+}
+
 void RenderWidgetHostViewBase::SetPopupType(blink::WebPopupType popup_type) {
   popup_type_ = popup_type;
 }
@@ -383,6 +398,12 @@ gfx::NativeViewAccessible
 
 bool RenderWidgetHostViewBase::RequestRepaintForTesting() {
   return false;
+}
+
+void RenderWidgetHostViewBase::ProcessAckedTouchEvent(
+    const TouchEventWithLatencyInfo& touch,
+    InputEventAckState ack_result) {
+  NOTREACHED();
 }
 
 void RenderWidgetHostViewBase::UpdateScreenInfo(gfx::NativeView view) {
@@ -486,12 +507,6 @@ uint32_t RenderWidgetHostViewBase::RendererFrameNumber() {
 
 void RenderWidgetHostViewBase::DidReceiveRendererFrame() {
   ++renderer_frame_number_;
-}
-
-void RenderWidgetHostViewBase::ShowDisambiguationPopup(
-    const gfx::Rect& rect_pixels,
-    const SkBitmap& zoomed_bitmap) {
-  NOTIMPLEMENTED_LOG_ONCE();
 }
 
 void RenderWidgetHostViewBase::OnAutoscrollStart() {
@@ -719,7 +734,7 @@ RenderWidgetHostViewBase::GetTouchSelectionControllerClientManager() {
 void RenderWidgetHostViewBase::EmbedChildFrameRendererWindowTreeClient(
     RenderWidgetHostViewBase* root_view,
     int routing_id,
-    ui::mojom::WindowTreeClientPtr renderer_window_tree_client) {
+    ws::mojom::WindowTreeClientPtr renderer_window_tree_client) {
   RenderWidgetHost* render_widget_host = GetRenderWidgetHost();
   if (!render_widget_host)
     return;
@@ -761,19 +776,19 @@ void RenderWidgetHostViewBase::OnDidScheduleEmbed(
 }
 
 void RenderWidgetHostViewBase::ScheduleEmbed(
-    ui::mojom::WindowTreeClientPtr client,
+    ws::mojom::WindowTreeClientPtr client,
     base::OnceCallback<void(const base::UnguessableToken&)> callback) {
   NOTREACHED();
 }
 
-ui::mojom::WindowTreeClientPtr
+ws::mojom::WindowTreeClientPtr
 RenderWidgetHostViewBase::GetWindowTreeClientFromRenderer() {
   // NOTE: this function may be called multiple times.
   RenderWidgetHost* render_widget_host = GetRenderWidgetHost();
   mojom::RenderWidgetWindowTreeClientFactoryPtr factory;
   BindInterface(render_widget_host->GetProcess(), &factory);
 
-  ui::mojom::WindowTreeClientPtr window_tree_client;
+  ws::mojom::WindowTreeClientPtr window_tree_client;
   factory->CreateWindowTreeClientForRenderWidget(
       render_widget_host->GetRoutingID(),
       mojo::MakeRequest(&window_tree_client),

@@ -54,6 +54,12 @@ if (enable_java_templates) {
       "android_ndk_root=" + rebase_path(android_ndk_root, root_build_dir) + CR
   _data += "android_tool_prefix=" +
            rebase_path(android_tool_prefix, root_build_dir) + CR
+  if (defined(android_secondary_abi_cpu)) {
+    _secondary_label_info =
+        get_label_info(":foo($android_secondary_abi_toolchain)", "root_out_dir")
+    _data += "android_secondary_abi_toolchain=" +
+             rebase_path(_secondary_label_info, root_build_dir) + CR
+  }
   write_file(android_build_vars, _data)
 }
 
@@ -71,8 +77,8 @@ copy("cpplib_unstripped") {
 action("cpplib_stripped") {
   _strip_bin = "${android_tool_prefix}strip"
   _soname = "libc++_shared.so"
-  _input_so = "${root_shlib_dir}/lib.unstripped/${_soname}"
-  _output_so = "${root_shlib_dir}/${_soname}"
+  _input_so = "${root_out_dir}/lib.unstripped/${_soname}"
+  _output_so = "${root_out_dir}/${_soname}"
 
   deps = [
     ":cpplib_unstripped",
@@ -117,8 +123,14 @@ python_library("test_runner_py") {
     "${android_sdk_root}/platform-tools/adb",
     "//third_party/catapult/third_party/gsutil/",
     "//third_party/catapult/devil/devil/devil_dependencies.json",
-    "//third_party/proguard/lib/proguard.jar",
   ]
+
+  # Proguard is needed only when using apks (rather than native executables).
+  if (enable_java_templates) {
+    deps = [
+      "//third_party/proguard:proguard603_java",
+    ]
+  }
 }
 
 python_library("logdog_wrapper_py") {

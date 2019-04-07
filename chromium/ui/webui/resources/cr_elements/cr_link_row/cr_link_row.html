@@ -1,8 +1,8 @@
-<link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="../../html/polymer.html">
 
-<link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
-<link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
-<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
+<link rel="import" href="../cr_icons_css.html">
+<link rel="import" href="../hidden_style_css.html">
+<link rel="import" href="../shared_vars_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-behaviors/paper-ripple-behavior.html">
 
@@ -43,9 +43,9 @@
       }
 
       #startIcon {
-        -webkit-padding-end: var(--cr-icon-button-margin-start);
         display: flex;
         flex-shrink: 0;
+        padding-inline-end: var(--cr-icon-button-margin-start);
         width: var(--cr-link-row-icon-width, var(--cr-icon-size));
       }
 

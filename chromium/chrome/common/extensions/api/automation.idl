@@ -175,6 +175,7 @@
     imageMap,
     inlineTextBox,
     inputTime,
+    keyboard,
     labelText,
     layoutTable,
     layoutTableCell,
@@ -255,6 +256,7 @@
 
   // Describes characteristics of an $(ref:automation.AutomationNode).
   enum StateType {
+    autofillAvailable,
     collapsed,
     default,
     editable,
@@ -852,6 +854,9 @@
     // Tri-state describing checkbox or radio button:
     // 'false' | 'true' | 'mixed'
     DOMString? checked;
+
+    // The inner html of this element. Only populated for math content.
+    DOMString? innerHtml;
 
     // The RGBA foreground color of this subtree, as an integer.
     long? color;

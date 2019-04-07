@@ -139,7 +139,7 @@ class CORE_EXPORT ScrollingCoordinator final
   // blink uses a separate layer. To ensure the compositor scroll layer has the
   // updated scroll container bounds, this needs to be called when the scrolling
   // contents layer is resized.
-  bool ScrollableAreaScrollLayerDidChange(ScrollableArea*);
+  void ScrollableAreaScrollLayerDidChange(ScrollableArea*);
   void ScrollableAreaScrollbarLayerDidChange(ScrollableArea*,
                                              ScrollbarOrientation);
   void UpdateLayerPositionConstraint(PaintLayer*);
@@ -192,7 +192,7 @@ class CORE_EXPORT ScrollingCoordinator final
 
   void SetShouldHandleScrollGestureOnMainThreadRegion(const Region&,
                                                       LocalFrameView*);
-  void SetTouchEventTargetRects(LocalFrame*, LayerHitTestRects&);
+  void SetTouchEventTargetRects(LocalFrame*, const LayerHitTestRects&);
   void ComputeTouchEventTargetRects(LocalFrame*, LayerHitTestRects&);
 
   void AddScrollbarLayerGroup(ScrollableArea*,

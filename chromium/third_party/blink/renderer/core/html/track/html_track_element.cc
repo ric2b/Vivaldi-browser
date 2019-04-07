@@ -61,7 +61,7 @@ DEFINE_NODE_FACTORY(HTMLTrackElement)
 HTMLTrackElement::~HTMLTrackElement() = default;
 
 Node::InsertionNotificationRequest HTMLTrackElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   DVLOG(TRACK_LOG_LEVEL) << "insertedInto";
 
   // Since we've moved to a new parent, we may now be able to load.
@@ -69,14 +69,14 @@ Node::InsertionNotificationRequest HTMLTrackElement::InsertedInto(
 
   HTMLElement::InsertedInto(insertion_point);
   HTMLMediaElement* parent = MediaElement();
-  if (insertion_point == parent)
+  if (&insertion_point == parent)
     parent->DidAddTrackElement(this);
   return kInsertionDone;
 }
 
-void HTMLTrackElement::RemovedFrom(ContainerNode* insertion_point) {
-  if (!parentNode() && IsHTMLMediaElement(*insertion_point))
-    ToHTMLMediaElement(insertion_point)->DidRemoveTrackElement(this);
+void HTMLTrackElement::RemovedFrom(ContainerNode& insertion_point) {
+  if (!parentNode() && IsHTMLMediaElement(insertion_point))
+    ToHTMLMediaElement(insertion_point).DidRemoveTrackElement(this);
   HTMLElement::RemovedFrom(insertion_point);
 }
 
@@ -259,7 +259,7 @@ void HTMLTrackElement::DidCompleteLoad(LoadStatus status) {
   // simple event named error at the track element.
   if (status == kFailure) {
     SetReadyState(kError);
-    DispatchEvent(Event::Create(EventTypeNames::error));
+    DispatchEvent(*Event::Create(EventTypeNames::error));
     return;
   }
 
@@ -269,7 +269,7 @@ void HTMLTrackElement::DidCompleteLoad(LoadStatus status) {
   // readiness state to loaded, and fire a simple event named load at the track
   // element.
   SetReadyState(kLoaded);
-  DispatchEvent(Event::Create(EventTypeNames::load));
+  DispatchEvent(*Event::Create(EventTypeNames::load));
 }
 
 void HTMLTrackElement::NewCuesAvailable(TextTrackLoader* loader) {

@@ -22,8 +22,10 @@ NGPageLayoutAlgorithm::NGPageLayoutAlgorithm(NGBlockNode node,
     : NGLayoutAlgorithm(node, space, ToNGBlockBreakToken(break_token)) {}
 
 scoped_refptr<NGLayoutResult> NGPageLayoutAlgorithm::Layout() {
-  NGBoxStrut border_scrollbar_padding =
-      CalculateBorderScrollbarPadding(ConstraintSpace(), Node());
+  NGBoxStrut borders = ComputeBorders(ConstraintSpace(), Node());
+  NGBoxStrut scrollbars = Node().GetScrollbarSizes();
+  NGBoxStrut padding = ComputePadding(ConstraintSpace(), Node());
+  NGBoxStrut border_scrollbar_padding = borders + scrollbars + padding;
   NGLogicalSize border_box_size =
       CalculateBorderBoxSize(ConstraintSpace(), Node());
   NGLogicalSize content_box_size =
@@ -51,12 +53,13 @@ scoped_refptr<NGLayoutResult> NGPageLayoutAlgorithm::Layout() {
     NGBlockLayoutAlgorithm child_algorithm(Node(), *child_space.get(),
                                            break_token.get());
     scoped_refptr<NGLayoutResult> result = child_algorithm.Layout();
-    scoped_refptr<NGPhysicalBoxFragment> page(
+    scoped_refptr<const NGPhysicalBoxFragment> page(
         ToNGPhysicalBoxFragment(result->PhysicalFragment().get()));
 
     container_builder_.AddChild(result, page_offset);
 
-    NGBoxFragment logical_fragment(writing_mode, *page);
+    NGBoxFragment logical_fragment(writing_mode, ConstraintSpace().Direction(),
+                                   *page);
     intrinsic_block_size =
         std::max(intrinsic_block_size,
                  page_offset.block_offset + logical_fragment.BlockSize());
@@ -70,10 +73,11 @@ scoped_refptr<NGLayoutResult> NGPageLayoutAlgorithm::Layout() {
   border_box_size.block_size = ComputeBlockSizeForFragment(
       ConstraintSpace(), Style(), intrinsic_block_size);
   container_builder_.SetBlockSize(border_box_size.block_size);
+  container_builder_.SetBorders(ComputeBorders(ConstraintSpace(), Style()));
   container_builder_.SetPadding(ComputePadding(ConstraintSpace(), Style()));
 
   NGOutOfFlowLayoutPart(&container_builder_, Node().IsAbsoluteContainer(),
-                        Node().IsFixedContainer(), Node().GetScrollbarSizes(),
+                        Node().IsFixedContainer(), borders + scrollbars,
                         ConstraintSpace(), Style())
       .Run();
 

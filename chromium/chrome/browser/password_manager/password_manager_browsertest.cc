@@ -35,13 +35,14 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
 #include "components/password_manager/core/browser/login_model.h"
+#include "components/password_manager/core/browser/new_password_form_manager.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/version_info/version_info.h"
@@ -78,7 +79,13 @@ class PasswordManagerBrowserTestWithViewsFeature
     : public PasswordManagerBrowserTestBase,
       public ::testing::WithParamInterface<bool> {
  public:
-  PasswordManagerBrowserTestWithViewsFeature() = default;
+  PasswordManagerBrowserTestWithViewsFeature() {
+    // Turn off waiting for server predictions before filing. It makes filling
+    // behaviour more deterministic. Filling with server predictions is tested
+    // in NewPasswordFormManager unit tests.
+    password_manager::NewPasswordFormManager::
+        set_wait_for_server_predictions_for_filling(false);
+  }
   ~PasswordManagerBrowserTestWithViewsFeature() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -86,7 +93,7 @@ class PasswordManagerBrowserTestWithViewsFeature
 
     const bool popup_views_enabled = GetParam();
     scoped_feature_list_.InitWithFeatureState(
-        autofill::kAutofillExpandedPopupViews, popup_views_enabled);
+        autofill::features::kAutofillExpandedPopupViews, popup_views_enabled);
   }
 
  private:
@@ -118,22 +125,20 @@ std::unique_ptr<net::test_server::HttpResponse> HandleTestAuthRequest(
     const net::test_server::HttpRequest& request) {
   if (!base::StartsWith(request.relative_url, "/basic_auth",
                         base::CompareCase::SENSITIVE))
-    return std::unique_ptr<net::test_server::HttpResponse>();
-
+    return nullptr;
+  auto http_response = std::make_unique<net::test_server::BasicHttpResponse>();
   if (base::ContainsKey(request.headers, "Authorization")) {
-    std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
-        new net::test_server::BasicHttpResponse);
     http_response->set_code(net::HTTP_OK);
     http_response->set_content("Success!");
-    return std::move(http_response);
   } else {
-    std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
-        new net::test_server::BasicHttpResponse);
     http_response->set_code(net::HTTP_UNAUTHORIZED);
-    http_response->AddCustomHeader("WWW-Authenticate",
-                                   "Basic realm=\"test realm\"");
-    return std::move(http_response);
+    std::string realm = base::EndsWith(request.relative_url, "/empty_realm",
+                                       base::CompareCase::SENSITIVE)
+                            ? "\"\""
+                            : "\"test realm\"";
+    http_response->AddCustomHeader("WWW-Authenticate", "Basic realm=" + realm);
   }
+  return http_response;
 }
 
 class ObservingAutofillClient
@@ -228,8 +233,6 @@ void SubmitInjectedPasswordForm(content::WebContents* web_contents,
 }
 
 }  // namespace
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(ObservingAutofillClient);
 
 namespace password_manager {
 
@@ -811,8 +814,16 @@ IN_PROC_BROWSER_TEST_P(PasswordManagerBrowserTestWithViewsFeature,
   EXPECT_TRUE(prompt_observer->IsSavePromptShownAutomatically());
 }
 
+// Flaky on chromeos: http://crbug.com/870372
+#if defined(OS_CHROMEOS)
+#define MAYBE_PromptForFetchSubmitWithoutNavigation \
+  DISABLED_PromptForFetchSubmitWithoutNavigation
+#else
+#define MAYBE_PromptForFetchSubmitWithoutNavigation \
+  PromptForFetchSubmitWithoutNavigation
+#endif
 IN_PROC_BROWSER_TEST_P(PasswordManagerBrowserTestWithViewsFeature,
-                       PromptForFetchSubmitWithoutNavigation) {
+                       MAYBE_PromptForFetchSubmitWithoutNavigation) {
   NavigateToFile("/password/password_fetch_submit.html");
 
   // Need to pay attention for a message that XHR has finished since there
@@ -841,8 +852,16 @@ IN_PROC_BROWSER_TEST_P(PasswordManagerBrowserTestWithViewsFeature,
   EXPECT_TRUE(prompt_observer->IsSavePromptShownAutomatically());
 }
 
+// Flaky on chromeos: http://crbug.com/870372
+#if defined(OS_CHROMEOS)
+#define MAYBE_PromptForFetchSubmitWithoutNavigation_SignupForm \
+  DISABLED_PromptForFetchSubmitWithoutNavigation_SignupForm
+#else
+#define MAYBE_PromptForFetchSubmitWithoutNavigation_SignupForm \
+  PromptForFetchSubmitWithoutNavigation_SignupForm
+#endif
 IN_PROC_BROWSER_TEST_P(PasswordManagerBrowserTestWithViewsFeature,
-                       PromptForFetchSubmitWithoutNavigation_SignupForm) {
+                       MAYBE_PromptForFetchSubmitWithoutNavigation_SignupForm) {
   NavigateToFile("/password/password_fetch_submit.html");
 
   // Need to pay attention for a message that Fetch has finished since there
@@ -1748,7 +1767,7 @@ IN_PROC_BROWSER_TEST_P(PasswordManagerBrowserTestWithViewsFeature,
 }
 
 // Test that if the same dynamic form is created multiple times then all of them
-// are autofilled and no unnecessary PasswordStore requests are fired.
+// are autofilled.
 IN_PROC_BROWSER_TEST_P(PasswordManagerBrowserTestWithViewsFeature,
                        DuplicateFormsGetFilled) {
   // At first let us save a credential to the password store.
@@ -1771,9 +1790,14 @@ IN_PROC_BROWSER_TEST_P(PasswordManagerBrowserTestWithViewsFeature,
   WaitForJsElementValue("document.body.children[0].children[0]", "temp");
   WaitForJsElementValue("document.body.children[0].children[1]", "random");
 
-  // It's a trick. There should be no second request to the password store since
-  // the existing PasswordFormManager will manage the new form.
-  password_store->Clear();
+  if (!base::FeatureList::IsEnabled(
+          password_manager::features::kNewPasswordFormParsing)) {
+    // It's a trick. There should be no second request to the password store
+    // since the existing PasswordFormManager will manage the new form. On other
+    // hand NewPasswordFormManager uses renderer ids for matching forms so a new
+    // NewPasswordFormManager is created for each DOM form object.
+    password_store->Clear();
+  }
   // Add one more form.
   ASSERT_TRUE(content::ExecuteScript(WebContents(), "addForm();"));
   // Wait until the username is filled, to make sure autofill kicked in.
@@ -3352,20 +3376,13 @@ class PasswordManagerDialogBrowserTest
  public:
   PasswordManagerDialogBrowserTest() = default;
 
-  // SupportsTestUi:
-  void SetUp() override {
-    // Secondary UI needs to be enabled before ShowUi for the test to work.
-    UseMdOnly();
-    SupportsTestUi::SetUp();
-  }
-
   void SetUpCommandLine(base::CommandLine* command_line) override {
     SupportsTestDialog<PasswordManagerBrowserTestBase>::SetUpCommandLine(
         command_line);
 
     const bool popup_views_enabled = GetParam();
     scoped_feature_list_.InitWithFeatureState(
-        autofill::kAutofillExpandedPopupViews, popup_views_enabled);
+        autofill::features::kAutofillExpandedPopupViews, popup_views_enabled);
   }
 
   void ShowUi(const std::string& name) override {
@@ -3551,7 +3568,7 @@ class SitePerProcessPasswordManagerBrowserTest
 
     const bool popup_views_enabled = GetParam();
     scoped_feature_list_.InitWithFeatureState(
-        autofill::kAutofillExpandedPopupViews, popup_views_enabled);
+        autofill::features::kAutofillExpandedPopupViews, popup_views_enabled);
   }
 
  private:
@@ -3591,6 +3608,31 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessPasswordManagerBrowserTest,
   EXPECT_TRUE(frame->IsRenderFrameLive());
   EXPECT_EQ(submit_url, frame->GetLastCommittedURL());
   EXPECT_FALSE(prompt_observer->IsSavePromptAvailable());
+}
+
+// Verify that there is no renderer kill when filling out a password on a
+// blob: URL.
+IN_PROC_BROWSER_TEST_P(PasswordManagerBrowserTestWithViewsFeature,
+                       NoRendererKillWithBlobURLFrames) {
+  // Start from a page without a password form.
+  NavigateToFile("/password/other.html");
+
+  GURL submit_url(embedded_test_server()->GetURL("/password/done.html"));
+  std::string form_html = GeneratePasswordFormForAction(submit_url);
+  std::string navigate_to_blob_url =
+      "location.href = URL.createObjectURL(new Blob([\"" + form_html +
+      "\"], { type: 'text/html' }));";
+  NavigationObserver observer(WebContents());
+  ASSERT_TRUE(content::ExecuteScript(WebContents(), navigate_to_blob_url));
+  observer.Wait();
+
+  // Fill in the password and submit the form.  This shouldn't bring up a save
+  // password prompt and shouldn't result in a renderer kill.
+  std::string fill_and_submit =
+      "document.getElementById('password_field').value = 'random';"
+      "document.getElementById('testform').submit();";
+  ASSERT_TRUE(content::ExecuteScript(WebContents(), fill_and_submit));
+  EXPECT_FALSE(BubbleObserver(WebContents()).IsSavePromptAvailable());
 }
 
 // Test that for HTTP auth (i.e., credentials not put through web forms) the
@@ -3643,6 +3685,134 @@ IN_PROC_BROWSER_TEST_P(PasswordManagerBrowserTestWithViewsFeature,
   WaitForPasswordStore();
   BubbleObserver bubble_observer(WebContents());
   EXPECT_TRUE(bubble_observer.IsSavePromptShownAutomatically());
+}
+
+// Test that if HTTP auth login (i.e., credentials not put through web forms)
+// succeeds, and there is a blacklisted entry with the HTML PasswordForm::Scheme
+// for that origin, then
+// 1) The bubble is not shown if the auth realm is empty,
+// 2) The bubble is shown if the auth realm is not empty.
+// This inconsistency is a side-effect of only signon_realm, not
+// PasswordForm::Scheme, being used to match blacklisted entries to a form. It
+// is a bug, but so rare that it has not been worth fixing yet.
+// TODO(crbug.com/862930) If the inconsistency is fixed, please ensure that the
+// code for removing duplicates in password_manager_util.cc is updated and does
+// not remove blacklisted credentials which are no longer duplicates.
+IN_PROC_BROWSER_TEST_P(PasswordManagerBrowserTestWithViewsFeature,
+                       HTTPAuthEmptyRealmAfterHTMLBlacklisted) {
+  for (bool is_realm_empty : {false, true}) {
+    // The embedded_test_server() is already started at this point and adding
+    // the request handler to it would not be thread safe. Therefore, use a new
+    // server.
+    net::EmbeddedTestServer http_test_server;
+
+    // Teach the embedded server to handle requests by issuing the basic auth
+    // challenge.
+    http_test_server.RegisterRequestHandler(
+        base::BindRepeating(&HandleTestAuthRequest));
+    ASSERT_TRUE(http_test_server.Start());
+
+    LoginPromptBrowserTestObserver login_observer;
+    login_observer.Register(content::Source<content::NavigationController>(
+        &WebContents()->GetController()));
+
+    scoped_refptr<password_manager::TestPasswordStore> password_store =
+        static_cast<password_manager::TestPasswordStore*>(
+            PasswordStoreFactory::GetForProfile(
+                browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
+                .get());
+
+    autofill::PasswordForm blacklisted_form;
+    blacklisted_form.scheme = autofill::PasswordForm::SCHEME_HTML;
+    blacklisted_form.signon_realm = http_test_server.base_url().spec();
+    blacklisted_form.blacklisted_by_user = true;
+    password_store->AddLogin(blacklisted_form);
+    WaitForPasswordStore();
+    ASSERT_FALSE(password_store->IsEmpty());
+
+    std::string path("/basic_auth");
+    if (is_realm_empty)
+      path += "/empty_realm";
+    // Navigate to a page requiring HTTP auth. Wait for the tab to get the
+    // correct WebContents, but don't wait for navigation, which only finishes
+    // after authentication.
+    ui_test_utils::NavigateToURLWithDisposition(
+        browser(), http_test_server.GetURL(path),
+        WindowOpenDisposition::CURRENT_TAB, ui_test_utils::BROWSER_TEST_NONE);
+
+    content::NavigationController* nav_controller =
+        &WebContents()->GetController();
+    NavigationObserver nav_observer(WebContents());
+    WindowedAuthNeededObserver auth_needed_observer(nav_controller);
+    auth_needed_observer.Wait();
+
+    WindowedAuthSuppliedObserver auth_supplied_observer(nav_controller);
+
+    ASSERT_EQ(1u, login_observer.handlers().size());
+    LoginHandler* handler = *login_observer.handlers().begin();
+    ASSERT_TRUE(handler);
+    // Any username/password will work.
+    handler->SetAuth(base::UTF8ToUTF16("user"), base::UTF8ToUTF16("pwd"));
+    auth_supplied_observer.Wait();
+
+    nav_observer.Wait();
+    WaitForPasswordStore();
+    BubbleObserver bubble_observer(WebContents());
+    EXPECT_EQ(!is_realm_empty,
+              bubble_observer.IsSavePromptShownAutomatically());
+    if (bubble_observer.IsSavePromptShownAutomatically())
+      bubble_observer.AcceptSavePrompt();
+    WaitForPasswordStore();
+    password_store->Clear();
+  }
+}
+
+// Test that if HTML login succeeds, and there is a blacklisted entry
+// with the HTTP auth PasswordForm::Scheme (i.e., credentials not put
+// through web forms) for that origin, then
+// 1) The bubble is not shown if the auth realm is empty,
+// 2) The bubble is shown if the auth realm is not empty.
+// This inconsistency is a side-effect of only signon_realm, not
+// PasswordForm::Scheme, being used to match blacklisted entries to a form.
+// It is a bug, but so rare that it has not been worth fixing yet.
+// TODO(crbug.com/862930) If the inconsistency is fixed, please ensure that the
+// code for removing duplicates in password_manager_util.cc is updated and does
+// not remove blacklisted credentials which are no longer duplicates.
+IN_PROC_BROWSER_TEST_P(PasswordManagerBrowserTestWithViewsFeature,
+                       HTMLLoginAfterHTTPAuthIsBlacklisted) {
+  for (bool is_realm_empty : {false, true}) {
+    scoped_refptr<password_manager::TestPasswordStore> password_store =
+        static_cast<password_manager::TestPasswordStore*>(
+            PasswordStoreFactory::GetForProfile(
+                browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
+                .get());
+
+    autofill::PasswordForm blacklisted_form;
+    blacklisted_form.scheme = autofill::PasswordForm::SCHEME_BASIC;
+    blacklisted_form.signon_realm = embedded_test_server()->base_url().spec();
+    if (!is_realm_empty)
+      blacklisted_form.signon_realm += "test realm";
+    blacklisted_form.blacklisted_by_user = true;
+    password_store->AddLogin(blacklisted_form);
+    WaitForPasswordStore();
+    ASSERT_FALSE(password_store->IsEmpty());
+
+    NavigateToFile("/password/password_form.html");
+    NavigationObserver observer(WebContents());
+    BubbleObserver bubble_observer(WebContents());
+    std::string fill_and_submit =
+        "document.getElementById('username_field').value = 'temp';"
+        "document.getElementById('password_field').value = 'pw';"
+        "document.getElementById('input_submit_button').click()";
+    ASSERT_TRUE(content::ExecuteScript(WebContents(), fill_and_submit));
+    observer.Wait();
+    EXPECT_EQ(!is_realm_empty,
+              bubble_observer.IsSavePromptShownAutomatically());
+    if (bubble_observer.IsSavePromptShownAutomatically())
+      bubble_observer.AcceptSavePrompt();
+    WaitForPasswordStore();
+    password_store->Clear();
+  }
 }
 
 // This test emulates what was observed in https://crbug.com/856543: Imagine the

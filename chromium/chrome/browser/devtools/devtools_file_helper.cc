@@ -14,7 +14,7 @@
 #include "base/macros.h"
 #include "base/md5.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/value_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -296,8 +296,7 @@ void DevToolsFileHelper::SaveAsFileSelected(const std::string& url,
   DictionaryPrefUpdate update(profile_->GetPrefs(),
                               prefs::kDevToolsEditedFiles);
   base::DictionaryValue* files_map = update.Get();
-  files_map->SetWithoutPathExpansion(base::MD5String(url),
-                                     base::CreateFilePathValue(path));
+  files_map->SetKey(base::MD5String(url), base::CreateFilePathValue(path));
   std::string file_system_path = path.AsUTF8Unsafe();
   callback.Run(file_system_path);
   file_task_runner_->PostTask(FROM_HERE, BindOnce(&WriteToFile, path, content));

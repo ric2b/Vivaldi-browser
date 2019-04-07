@@ -49,7 +49,8 @@ class TargetHandler : public DevToolsDomainHandler,
   // Domain implementation.
   Response SetDiscoverTargets(bool discover) override;
   Response SetAutoAttach(bool auto_attach,
-                         bool wait_for_debugger_on_start) override;
+                         bool wait_for_debugger_on_start,
+                         Maybe<bool> flatten) override;
   Response SetRemoteLocations(
       std::unique_ptr<protocol::Array<Target::RemoteLocation>>) override;
   Response AttachToTarget(const std::string& target_id,
@@ -70,7 +71,9 @@ class TargetHandler : public DevToolsDomainHandler,
   Response ExposeDevToolsProtocol(const std::string& target_id,
                                   Maybe<std::string> binding_name) override;
   Response CreateBrowserContext(std::string* out_context_id) override;
-  Response DisposeBrowserContext(const std::string& context_id) override;
+  void DisposeBrowserContext(
+      const std::string& context_id,
+      std::unique_ptr<DisposeBrowserContextCallback> callback) override;
   Response GetBrowserContexts(
       std::unique_ptr<protocol::Array<String>>* browser_context_ids) override;
   Response CreateTarget(const std::string& url,
@@ -107,6 +110,7 @@ class TargetHandler : public DevToolsDomainHandler,
 
   std::unique_ptr<Target::Frontend> frontend_;
   TargetAutoAttacher auto_attacher_;
+  bool flatten_auto_attach_ = false;
   bool discover_;
   std::map<std::string, std::unique_ptr<Session>> attached_sessions_;
   std::map<DevToolsAgentHost*, Session*> auto_attached_sessions_;

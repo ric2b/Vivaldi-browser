@@ -40,17 +40,27 @@ Polymer({
   consentStringLoaded_: false,
 
   /**
+   * Whether the screen has been shown to the user.
+   * @type {boolean}
+   * @private
+   */
+  screenShown_: false,
+
+  /**
    * On-tap event handler for next button.
    *
    * @private
    */
   onNextTap_: function() {
-    var screenContext = (this.$$('#toggle0').getAttribute('checked') != null);
-    var emailOptedIn = (this.$$('#toggle1') != null) &&
-        (this.$$('#toggle1').getAttribute('checked') != null);
+    var hotword = this.$$('#toggle0').hasAttribute('checked');
+    var screenContext = this.$$('#toggle1').hasAttribute('checked');
+    var toggle2 = this.$$('#toggle2');
+    var emailOptedIn = toggle2 != null && toggle2.hasAttribute('checked');
 
+    // TODO(updowndota): Wrap chrome.send() calls with a proxy object.
+    chrome.send('assistantOptInFlow.hotwordResult', [hotword]);
     chrome.send(
-        'AssistantGetMoreScreen.userActed', [screenContext, emailOptedIn]);
+        'assistant.GetMoreScreen.userActed', [screenContext, emailOptedIn]);
   },
 
   /**
@@ -66,6 +76,7 @@ Polymer({
    */
   reloadContent: function(data) {
     this.$['title-text'].textContent = data['getMoreTitle'];
+    this.$['intro-text'].textContent = data['getMoreIntro'];
     this.$['next-button-text'].textContent = data['getMoreContinueButton'];
 
     this.consentStringLoaded_ = true;
@@ -78,7 +89,7 @@ Polymer({
    * Add a setting zippy with the provided data.
    */
   addSettingZippy: function(zippy_data) {
-    assert(zippy_data.length <= 2);
+    assert(zippy_data.length <= 3);
     for (var i in zippy_data) {
       var data = zippy_data[i];
       var zippy = document.createElement('setting-zippy');
@@ -86,7 +97,7 @@ Polymer({
           'icon-src',
           'data:text/html;charset=utf-8,' +
               encodeURIComponent(zippy.getWrappedIcon(data['iconUri'])));
-      zippy.setAttribute('no-zippy', true);
+      zippy.setAttribute('toggle-style', true);
       zippy.id = 'zippy' + i;
       var title = document.createElement('div');
       title.className = 'zippy-title';
@@ -104,6 +115,11 @@ Polymer({
       var description = document.createElement('div');
       description.className = 'zippy-description';
       description.textContent = data['description'];
+      if (data['legalText']) {
+        var legalText = document.createElement('p');
+        legalText.textContent = data['legalText'];
+        description.appendChild(legalText);
+      }
       zippy.appendChild(description);
 
       Polymer.dom(this.$['insertion-point']).appendChild(zippy);
@@ -122,6 +138,10 @@ Polymer({
     this.fire('loaded');
     this.buttonsDisabled = false;
     this.$['next-button'].focus();
+    if (!this.hidden && !this.screenShown_) {
+      chrome.send('assistant.GetMoreScreen.screenShown');
+      this.screenShown_ = true;
+    }
   },
 
   /**
@@ -132,6 +152,8 @@ Polymer({
       this.reloadPage();
     } else {
       this.$['next-button'].focus();
+      chrome.send('assistant.GetMoreScreen.screenShown');
+      this.screenShown_ = true;
     }
   },
 });

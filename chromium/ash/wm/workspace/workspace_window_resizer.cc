@@ -10,32 +10,34 @@
 #include <utility>
 #include <vector>
 
+#include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/wm/default_window_resizer.h"
-#include "ash/wm/panels/panel_window_resizer.h"
+#include "ash/wm/drag_window_resizer.h"
 #include "ash/wm/tablet_mode/tablet_mode_browser_window_drag_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/phantom_window_controller.h"
 #include "ash/wm/workspace/two_step_edge_cycler.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/user_metrics.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/window_types.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/base/class_property.h"
 #include "ui/base/hit_test.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/transform.h"
 #include "ui/wm/core/coordinate_conversion.h"
+#include "ui/wm/core/cursor_manager.h"
 
 namespace ash {
 
@@ -66,21 +68,27 @@ std::unique_ptr<WindowResizer> CreateWindowResizer(
 
   if (Shell::Get()
           ->tablet_mode_controller()
-          ->IsTabletModeWindowManagerEnabled()) {
+          ->IsTabletModeWindowManagerEnabled() &&
+      !window_state->IsPip()) {
     // We still don't allow any dragging or resizing happening on the area other
-    // then caption area. Only allow dragging that happends on the tab(s).
-    if (window_component != HTCAPTION || !wm::IsDraggingTabs(window))
+    // then caption or top area. Note: for a maxmized or fullscreen window, the
+    // window component here is always HTCAPTION, but for a snapped window, the
+    // window component here can either be HTCAPTION or HTTOP.
+    if ((window_component != HTCAPTION && window_component != HTTOP) ||
+        window->GetProperty(aura::client::kAppType) !=
+            static_cast<int>(AppType::BROWSER)) {
       return nullptr;
+    }
 
     window_state->CreateDragDetails(point_in_parent, window_component, source);
     window_resizer =
         std::make_unique<TabletModeBrowserWindowDragController>(window_state);
-    window_resizer = ShellPort::Get()->CreateDragWindowResizer(
+    window_resizer = std::make_unique<DragWindowResizer>(
         std::move(window_resizer), window_state);
     return window_resizer;
   }
 
-  if (!window_state->IsNormalOrSnapped())
+  if (!window_state->IsNormalOrSnapped() && !window_state->IsPip())
     return nullptr;
 
   int bounds_change =
@@ -93,18 +101,14 @@ std::unique_ptr<WindowResizer> CreateWindowResizer(
       window->parent() ? window->parent()->id() : -1;
   if (window->parent() &&
       (parent_shell_window_id == kShellWindowId_DefaultContainer ||
-       parent_shell_window_id == kShellWindowId_PanelContainer)) {
+       parent_shell_window_id == kShellWindowId_AlwaysOnTopContainer)) {
     window_resizer.reset(WorkspaceWindowResizer::Create(
         window_state, std::vector<aura::Window*>()));
   } else {
     window_resizer.reset(DefaultWindowResizer::Create(window_state));
   }
-  window_resizer = ShellPort::Get()->CreateDragWindowResizer(
+  window_resizer = std::make_unique<DragWindowResizer>(
       std::move(window_resizer), window_state);
-  if (window->type() == aura::client::WINDOW_TYPE_PANEL) {
-    window_resizer.reset(
-        PanelWindowResizer::Create(window_resizer.release(), window_state));
-  }
   return window_resizer;
 }
 
@@ -323,7 +327,7 @@ class WindowSize {
 
 WorkspaceWindowResizer::~WorkspaceWindowResizer() {
   if (did_lock_cursor_)
-    ShellPort::Get()->UnlockCursor();
+    Shell::Get()->cursor_manager()->UnlockCursor();
 
   if (instance == this)
     instance = NULL;
@@ -518,7 +522,7 @@ WorkspaceWindowResizer::WorkspaceWindowResizer(
   // cursor by itself, don't lock the cursor.
   if (details().source != ::wm::WINDOW_MOVE_SOURCE_TOUCH &&
       !window_state->allow_set_bounds_direct()) {
-    ShellPort::Get()->LockCursor();
+    Shell::Get()->cursor_manager()->LockCursor();
     did_lock_cursor_ = true;
   }
 

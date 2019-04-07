@@ -9,16 +9,32 @@ Polymer({
 
   properties: {
     disabled: Boolean,
+
+    /** @private {boolean} */
+    disabled_: {
+      type: Boolean,
+      computed: 'computeDisabled_(disabled, settings.color.setByPolicy)',
+    },
   },
 
   observers: ['onColorSettingChange_(settings.color.value)'],
 
   /**
-   * @param {*} value The new value of the color setting.
+   * @param {*} newValue The new value of the color setting.
    * @private
    */
-  onColorSettingChange_: function(value) {
-    this.$$('select').value = /** @type {boolean} */ (value) ? 'color' : 'bw';
+  onColorSettingChange_: function(newValue) {
+    this.selectedValue = /** @type {boolean} */ (newValue) ? 'color' : 'bw';
+  },
+
+  /**
+   * @param {boolean} disabled Whether color selection is disabled.
+   * @param {boolean} managed Whether color selection is managed.
+   * @return {boolean} Whether drop-down should be disabled.
+   * @private
+   */
+  computeDisabled_: function(disabled, managed) {
+    return !!(disabled || managed);
   },
 
   /** @param {string} value The new select value. */

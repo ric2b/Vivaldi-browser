@@ -16,9 +16,10 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
+#include "mojo/core/embedder/embedder.h"
 #include "net/url_request/url_fetcher.h"
 #include "remoting/base/auto_thread_task_runner.h"
 #include "remoting/base/breakpad.h"
@@ -33,6 +34,8 @@
 #include "remoting/host/setup/me2me_native_messaging_host.h"
 #include "remoting/host/switches.h"
 #include "remoting/host/usage_stats_consent.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/transitional_url_loader_factory_owner.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -86,6 +89,8 @@ int Me2MeNativeMessagingHostMain(int argc, char** argv) {
 #endif  // defined(REMOTING_ENABLE_BREAKPAD)
 
   base::TaskScheduler::CreateAndStartWithDefaultParams("Me2Me");
+
+  mojo::core::Init();
 
   // An IO thread is needed for the pairing registry and URL context getter.
   base::Thread io_thread("io_thread");
@@ -181,8 +186,10 @@ int Me2MeNativeMessagingHostMain(int argc, char** argv) {
   // OAuth client (for credential requests). IO thread is used for blocking
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter(
       new URLRequestContextGetter(io_thread.task_runner()));
+  network::TransitionalURLLoaderFactoryOwner url_loader_factory_owner(
+      url_request_context_getter);
   std::unique_ptr<OAuthClient> oauth_client(
-      new GaiaOAuthClient(url_request_context_getter));
+      new GaiaOAuthClient(url_loader_factory_owner.GetURLLoaderFactory()));
 
   net::URLFetcher::SetIgnoreCertificateRequests(true);
 

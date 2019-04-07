@@ -37,7 +37,6 @@ void CreateTestFieldDataPredictions(const std::string& signature,
 
 void CreateTestPasswordFormFillData(PasswordFormFillData* fill_data) {
   fill_data->form_renderer_id = 1234;
-  fill_data->name = base::ASCIIToUTF16("TestName");
   fill_data->origin = GURL("https://foo.com/");
   fill_data->action = GURL("https://foo.com/login");
   test::CreateTestSelectField("TestUsernameFieldLabel", "TestUsernameFieldName",
@@ -60,7 +59,6 @@ void CreateTestPasswordFormFillData(PasswordFormFillData* fill_data) {
   fill_data->additional_logins[name] = pr;
 
   fill_data->wait_for_username = true;
-  fill_data->is_possible_change_password_form = false;
 }
 
 void CreateTestPasswordForm(PasswordForm* form) {
@@ -84,10 +82,8 @@ void CreateTestPasswordForm(PasswordForm* form) {
   form->form_has_autofilled_value = true;
   form->password_element = base::ASCIIToUTF16("password");
   form->password_value = base::ASCIIToUTF16("test");
-  form->password_value_is_default = true;
   form->new_password_element = base::ASCIIToUTF16("new_password");
   form->new_password_value = base::ASCIIToUTF16("new_password_value");
-  form->new_password_value_is_default = false;
   form->new_password_marked_by_site = false;
   form->new_password_element = base::ASCIIToUTF16("confirmation_password");
   form->preferred = false;
@@ -157,7 +153,6 @@ void CreatePasswordGenerationUIData(
 void CheckEqualPasswordFormFillData(const PasswordFormFillData& expected,
                                     const PasswordFormFillData& actual) {
   EXPECT_EQ(expected.form_renderer_id, actual.form_renderer_id);
-  EXPECT_EQ(expected.name, actual.name);
   EXPECT_EQ(expected.origin, actual.origin);
   EXPECT_EQ(expected.action, actual.action);
   EXPECT_EQ(expected.username_field, actual.username_field);
@@ -181,8 +176,6 @@ void CheckEqualPasswordFormFillData(const PasswordFormFillData& expected,
   }
 
   EXPECT_EQ(expected.wait_for_username, actual.wait_for_username);
-  EXPECT_EQ(expected.is_possible_change_password_form,
-            actual.is_possible_change_password_form);
 }
 
 void CheckEqualPasswordFormGenerationData(

@@ -10,7 +10,7 @@
 #include "base/metrics/histogram.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/experiments.h"
 #include "components/sync/driver/sync_client.h"
@@ -36,7 +36,7 @@ AutofillProfileDataTypeController::AutofillProfileDataTypeController(
       currently_enabled_(IsEnabled()) {
   pref_registrar_.Init(sync_client_->GetPrefService());
   pref_registrar_.Add(
-      autofill::prefs::kAutofillEnabled,
+      autofill::prefs::kAutofillProfileEnabled,
       base::Bind(&AutofillProfileDataTypeController::OnUserPrefChanged,
                  base::AsWeakPtr(this)));
 }
@@ -134,8 +134,8 @@ bool AutofillProfileDataTypeController::IsEnabled() {
   DCHECK(CalledOnValidThread());
 
   // Require the user-visible pref to be enabled to sync Autofill Profile data.
-  PrefService* ps = sync_client_->GetPrefService();
-  return ps->GetBoolean(autofill::prefs::kAutofillEnabled);
+  return autofill::prefs::IsProfileAutofillEnabled(
+      sync_client_->GetPrefService());
 }
 
 void AutofillProfileDataTypeController::DisableForPolicy() {

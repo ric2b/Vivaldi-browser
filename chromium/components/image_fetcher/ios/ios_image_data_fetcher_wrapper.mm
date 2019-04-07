@@ -5,7 +5,7 @@
 #import "components/image_fetcher/ios/ios_image_data_fetcher_wrapper.h"
 
 #include "base/bind.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #import "components/image_fetcher/ios/webp_decoder.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
@@ -29,22 +29,24 @@ IOSImageDataFetcherWrapper::~IOSImageDataFetcherWrapper() {}
 
 void IOSImageDataFetcherWrapper::FetchImageDataWebpDecoded(
     const GURL& image_url,
-    ImageDataFetcherBlock callback) {
+    ImageDataFetcherBlock callback,
+    bool send_cookies) {
   image_data_fetcher_.FetchImageData(image_url,
                                      CallbackForImageDataFetcher(callback),
-                                     NO_TRAFFIC_ANNOTATION_YET);
+                                     NO_TRAFFIC_ANNOTATION_YET, send_cookies);
 }
 
 void IOSImageDataFetcherWrapper::FetchImageDataWebpDecoded(
     const GURL& image_url,
     ImageDataFetcherBlock callback,
     const std::string& referrer,
-    net::URLRequest::ReferrerPolicy referrer_policy) {
+    net::URLRequest::ReferrerPolicy referrer_policy,
+    bool send_cookies) {
   DCHECK(callback);
 
   image_data_fetcher_.FetchImageData(
       image_url, CallbackForImageDataFetcher(callback), referrer,
-      referrer_policy, NO_TRAFFIC_ANNOTATION_YET);
+      referrer_policy, NO_TRAFFIC_ANNOTATION_YET, send_cookies);
 }
 
 void IOSImageDataFetcherWrapper::SetDataUseServiceName(
@@ -72,7 +74,7 @@ IOSImageDataFetcherWrapper::CallbackForImageDataFetcher(
     base::PostTaskWithTraitsAndReplyWithResult(
         FROM_HERE,
         {
-            base::TaskPriority::BACKGROUND,
+            base::TaskPriority::BEST_EFFORT,
             base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN,
         },
         base::BindOnce(^NSData*() {

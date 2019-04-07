@@ -27,6 +27,7 @@
 #include "third_party/blink/public/platform/scheduler/renderer_process_type.h"
 #include "third_party/blink/public/platform/web_mouse_wheel_event.h"
 #include "third_party/blink/public/platform/web_touch_event.h"
+#include "third_party/blink/renderer/platform/bindings/parkable_string.h"
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/blink_resource_coordinator_base.h"
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/renderer_resource_coordinator.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -36,8 +37,8 @@
 #include "third_party/blink/renderer/platform/scheduler/main_thread/auto_advancing_virtual_time_domain.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_scheduler_impl.h"
+#include "third_party/blink/renderer/platform/scheduler/main_thread/task_type_names.h"
 #include "third_party/blink/renderer/platform/scheduler/renderer/webthread_impl_for_renderer_scheduler.h"
-#include "third_party/blink/renderer/platform/wtf/text/movable_string.h"
 
 namespace blink {
 namespace scheduler {
@@ -62,7 +63,6 @@ const double kShortIdlePeriodDurationPercentile = 50;
 const double kFastCompositingIdleTimeThreshold = .2;
 constexpr base::TimeDelta kQueueingTimeWindowDuration =
     base::TimeDelta::FromSeconds(1);
-const double kSamplingRateForTaskUkm = 0.0001;
 const int64_t kSecondsPerMinute = 60;
 
 // Wake-up throttling trial.
@@ -121,119 +121,12 @@ const char* RendererProcessTypeToString(RendererProcessType process_type) {
   return "";  // MSVC needs that.
 }
 
-const char* TaskTypeToString(TaskType task_type) {
-  switch (task_type) {
-    case TaskType::kDeprecatedNone:
-      return "None";
-    case TaskType::kDOMManipulation:
-      return "DOMManipultion";
-    case TaskType::kUserInteraction:
-      return "UserInteraction";
-    case TaskType::kNetworking:
-      return "Networking";
-    case TaskType::kNetworkingWithURLLoaderAnnotation:
-      return "NetworkingWithURLLoaderAnnotation";
-    case TaskType::kNetworkingControl:
-      return "NetworkingControl";
-    case TaskType::kHistoryTraversal:
-      return "HistoryTraversal";
-    case TaskType::kEmbed:
-      return "Embed";
-    case TaskType::kMediaElementEvent:
-      return "MediaElementEvent";
-    case TaskType::kCanvasBlobSerialization:
-      return "CanvasBlobSerialization";
-    case TaskType::kMicrotask:
-      return "Microtask";
-    case TaskType::kJavascriptTimer:
-      return "JavascriptTimer";
-    case TaskType::kRemoteEvent:
-      return "RemoteEvent";
-    case TaskType::kWebSocket:
-      return "WebSocket";
-    case TaskType::kPostedMessage:
-      return "PostedMessage";
-    case TaskType::kUnshippedPortMessage:
-      return "UnshipedPortMessage";
-    case TaskType::kFileReading:
-      return "FileReading";
-    case TaskType::kDatabaseAccess:
-      return "DatabaseAccess";
-    case TaskType::kPresentation:
-      return "Presentation";
-    case TaskType::kSensor:
-      return "Sensor";
-    case TaskType::kPerformanceTimeline:
-      return "PerformanceTimeline";
-    case TaskType::kWebGL:
-      return "WebGL";
-    case TaskType::kIdleTask:
-      return "IdleTask";
-    case TaskType::kMiscPlatformAPI:
-      return "MiscPlatformAPI";
-    case TaskType::kInternalDefault:
-      return "InternalDefault";
-    case TaskType::kInternalLoading:
-      return "InternalLoading";
-    case TaskType::kInternalTest:
-      return "InternalTest";
-    case TaskType::kInternalWebCrypto:
-      return "InternalWebCrypto";
-    case TaskType::kInternalIndexedDB:
-      return "InternalIndexedDB";
-    case TaskType::kInternalMedia:
-      return "InternalMedia";
-    case TaskType::kInternalMediaRealTime:
-      return "InternalMediaRealTime";
-    case TaskType::kInternalIPC:
-      return "InternalIPC";
-    case TaskType::kInternalUserInteraction:
-      return "InternalUserInteraction";
-    case TaskType::kInternalInspector:
-      return "InternalInspector";
-    case TaskType::kInternalWorker:
-      return "InternalWorker";
-    case TaskType::kMainThreadTaskQueueV8:
-      return "MainThreadTaskQueueV8";
-    case TaskType::kMainThreadTaskQueueCompositor:
-      return "MainThreadTaskQueueCompositor";
-    case TaskType::kMainThreadTaskQueueDefault:
-      return "MainThreadTaskQueueDefault";
-    case TaskType::kMainThreadTaskQueueInput:
-      return "MainThreadTaskQueueInput";
-    case TaskType::kMainThreadTaskQueueIdle:
-      return "MainThreadTaskQueueIdle";
-    case TaskType::kMainThreadTaskQueueIPC:
-      return "MainThreadTaskQueueIPC";
-    case TaskType::kMainThreadTaskQueueControl:
-      return "MainThreadTaskQueueControl";
-    case TaskType::kInternalIntersectionObserver:
-      return "InternalIntersectionObserver";
-    case TaskType::kCompositorThreadTaskQueueDefault:
-      return "CompositorThreadTaskQueueDefault";
-    case TaskType::kCompositorThreadTaskQueueInput:
-      return "CompositorThreadTaskQueueInput";
-    case TaskType::kWorkerThreadTaskQueueDefault:
-      return "WorkerThreadTaskQueueDefault";
-    case TaskType::kWorkerThreadTaskQueueV8:
-      return "WorkerThreadTaskQueueV8";
-    case TaskType::kWorkerThreadTaskQueueCompositor:
-      return "WorkerThreadTaskQueueCompositor";
-    case TaskType::kWorkerAnimation:
-      return "WorkerAnimation";
-    case TaskType::kCount:
-      return "Count";
-  }
-  NOTREACHED();
-  return "";
-}
-
 const char* OptionalTaskDescriptionToString(
     base::Optional<MainThreadSchedulerImpl::TaskDescriptionForTracing> desc) {
   if (!desc)
     return nullptr;
   if (desc->task_type != TaskType::kDeprecatedNone)
-    return TaskTypeToString(desc->task_type);
+    return TaskTypeNames::TaskTypeToString(desc->task_type);
   if (!desc->queue_type)
     return "detached_tq";
   return MainThreadTaskQueue::NameForQueueType(desc->queue_type.value());
@@ -321,8 +214,8 @@ MainThreadSchedulerImpl::MainThreadSchedulerImpl(
       delayed_update_policy_runner_(
           base::BindRepeating(&MainThreadSchedulerImpl::UpdatePolicy,
                               base::Unretained(this)),
-          TaskQueueWithTaskType::Create(helper_.ControlMainThreadTaskQueue(),
-                                        TaskType::kMainThreadTaskQueueControl)),
+          helper_.ControlMainThreadTaskQueue()->CreateTaskRunner(
+              TaskType::kMainThreadTaskQueueControl)),
       queueing_time_estimator_(this, kQueueingTimeWindowDuration, 20),
       main_thread_only_(this,
                         compositor_task_queue_,
@@ -345,18 +238,21 @@ MainThreadSchedulerImpl::MainThreadSchedulerImpl(
       MainThreadTaskQueue::QueueType::kV8));
   ipc_task_queue_ = NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
       MainThreadTaskQueue::QueueType::kIPC));
+  cleanup_task_queue_ = NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
+      MainThreadTaskQueue::QueueType::kCleanup));
 
-  v8_task_runner_ = TaskQueueWithTaskType::Create(
-      v8_task_queue_, TaskType::kMainThreadTaskQueueV8);
-  compositor_task_runner_ = TaskQueueWithTaskType::Create(
-      compositor_task_queue_, TaskType::kMainThreadTaskQueueCompositor);
-  control_task_runner_ =
-      TaskQueueWithTaskType::Create(helper_.ControlMainThreadTaskQueue(),
-                                    TaskType::kMainThreadTaskQueueControl);
-  input_task_runner_ = TaskQueueWithTaskType::Create(
-      input_task_queue_, TaskType::kMainThreadTaskQueueInput);
-  ipc_task_runner_ = TaskQueueWithTaskType::Create(
-      ipc_task_queue_, TaskType::kMainThreadTaskQueueIPC);
+  v8_task_runner_ =
+      v8_task_queue_->CreateTaskRunner(TaskType::kMainThreadTaskQueueV8);
+  compositor_task_runner_ = compositor_task_queue_->CreateTaskRunner(
+      TaskType::kMainThreadTaskQueueCompositor);
+  control_task_runner_ = helper_.ControlMainThreadTaskQueue()->CreateTaskRunner(
+      TaskType::kMainThreadTaskQueueControl);
+  input_task_runner_ =
+      input_task_queue_->CreateTaskRunner(TaskType::kMainThreadTaskQueueInput);
+  ipc_task_runner_ =
+      ipc_task_queue_->CreateTaskRunner(TaskType::kMainThreadTaskQueueIPC);
+  cleanup_task_runner_ = cleanup_task_queue_->CreateTaskRunner(
+      TaskType::kMainThreadTaskQueueCleanup);
 
   // TaskQueueThrottler requires some task runners, then initialize
   // TaskQueueThrottler after task queues/runners are initialized.
@@ -610,7 +506,6 @@ MainThreadSchedulerImpl::MainThreadOnly::MainThreadOnly(
       max_virtual_time_task_starvation_count(0),
       virtual_time_stopped(false),
       nested_runloop(false),
-      uniform_distribution(0.0f, 1.0f),
       compositing_experiment(main_thread_scheduler_impl),
       should_prioritize_compositing(false) {}
 
@@ -718,6 +613,9 @@ MainThreadSchedulerImpl::SchedulingSettings::SchedulingSettings() {
       }
     }
   }
+
+  FrameSchedulerImpl::InitializeTaskTypeQueueTraitsMap(
+      frame_task_types_to_queue_traits);
 }
 
 MainThreadSchedulerImpl::AnyThread::~AnyThread() = default;
@@ -780,6 +678,11 @@ MainThreadSchedulerImpl::IdleTaskRunner() {
 scoped_refptr<base::SingleThreadTaskRunner>
 MainThreadSchedulerImpl::IPCTaskRunner() {
   return ipc_task_runner_;
+}
+
+scoped_refptr<base::SingleThreadTaskRunner>
+MainThreadSchedulerImpl::CleanupTaskRunner() {
+  return cleanup_task_runner_;
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -1064,6 +967,13 @@ void MainThreadSchedulerImpl::SetRendererHidden(bool hidden) {
 
 void MainThreadSchedulerImpl::SetRendererBackgrounded(bool backgrounded) {
   helper_.CheckOnValidThread();
+
+  // Increasing timer slack helps the OS to coalesce timers efficiently.
+  base::TimerSlack timer_slack = base::TIMER_SLACK_NONE;
+  if (backgrounded)
+    timer_slack = base::TIMER_SLACK_MAXIMUM;
+  helper_.SetTimerSlack(timer_slack);
+
   if (helper_.IsShutdown() ||
       main_thread_only().renderer_backgrounded == backgrounded)
     return;
@@ -1091,12 +1001,13 @@ void MainThreadSchedulerImpl::SetRendererBackgrounded(bool backgrounded) {
     main_thread_only().metrics_helper.OnRendererForegrounded(now);
   }
 
-  auto& movable_string_table = MovableStringTable::Instance();
-  movable_string_table.SetRendererBackgrounded(backgrounded);
+  auto& parkable_string_table = ParkableStringTable::Instance();
+  parkable_string_table.SetRendererBackgrounded(backgrounded);
   if (backgrounded) {
     DefaultTaskRunner()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce([]() { MovableStringTable::Instance().MaybeParkAll(); }),
+        FROM_HERE, base::BindOnce([]() {
+          ParkableStringTable::Instance().MaybeParkAll();
+        }),
         base::TimeDelta::FromSeconds(10));
   }
 }
@@ -1849,6 +1760,10 @@ base::TimeDelta MainThreadSchedulerImpl::EstimateLongestJankFreeTaskDuration()
   }
 }
 
+SchedulerHelper* MainThreadSchedulerImpl::GetHelper() {
+  return &helper_;
+}
+
 bool MainThreadSchedulerImpl::CanEnterLongIdlePeriod(
     base::TimeTicks now,
     base::TimeDelta* next_long_idle_period_delay_out) {
@@ -2457,7 +2372,8 @@ void MainThreadSchedulerImpl::SetTopLevelBlameContext(
   ipc_task_queue_->SetBlameContext(blame_context);
 }
 
-void MainThreadSchedulerImpl::AddRAILModeObserver(RAILModeObserver* observer) {
+void MainThreadSchedulerImpl::AddRAILModeObserver(
+    WebRAILModeObserver* observer) {
   main_thread_only().rail_mode_observers.AddObserver(observer);
   observer->OnRAILModeChanged(main_thread_only().current_policy.rail_mode());
 }
@@ -2617,38 +2533,47 @@ void MainThreadSchedulerImpl::RecordTaskUkm(
     return;
 
   if (queue && queue->GetFrameScheduler()) {
-    RecordTaskUkmImpl(queue, task, task_timing,
-                      static_cast<PageSchedulerImpl*>(
-                          queue->GetFrameScheduler()->GetPageScheduler()),
-                      1);
+    auto status = RecordTaskUkmImpl(queue, task, task_timing,
+                                    queue->GetFrameScheduler(), true);
+    UMA_HISTOGRAM_ENUMERATION(
+        "Scheduler.Experimental.Renderer.UkmRecordingStatus", status,
+        UkmRecordingStatus::kCount);
     return;
   }
 
   for (PageSchedulerImpl* page_scheduler : main_thread_only().page_schedulers) {
-    RecordTaskUkmImpl(queue, task, task_timing, page_scheduler,
-                      main_thread_only().page_schedulers.size());
+    auto status = RecordTaskUkmImpl(
+        queue, task, task_timing,
+        page_scheduler->SelectFrameForUkmAttribution(), false);
+    UMA_HISTOGRAM_ENUMERATION(
+        "Scheduler.Experimental.Renderer.UkmRecordingStatus", status,
+        UkmRecordingStatus::kCount);
   }
 }
 
-void MainThreadSchedulerImpl::RecordTaskUkmImpl(
+UkmRecordingStatus MainThreadSchedulerImpl::RecordTaskUkmImpl(
     MainThreadTaskQueue* queue,
     const TaskQueue::Task& task,
     const TaskQueue::TaskTiming& task_timing,
-    PageSchedulerImpl* page_scheduler,
-    size_t page_schedulers_to_attribute) {
-  // Skip tasks which have deleted the page scheduler.
-  if (!page_scheduler)
-    return;
+    FrameSchedulerImpl* frame_scheduler,
+    bool precise_attribution) {
+  // Skip tasks which have deleted the frame or the page scheduler.
+  if (!frame_scheduler)
+    return UkmRecordingStatus::kErrorMissingFrame;
+  if (!frame_scheduler->GetPageScheduler())
+    return UkmRecordingStatus::kErrorDetachedFrame;
 
-  ukm::UkmRecorder* ukm_recorder = page_scheduler->GetUkmRecorder();
+  ukm::UkmRecorder* ukm_recorder = frame_scheduler->GetUkmRecorder();
   // OOPIFs are not supported.
   if (!ukm_recorder)
-    return;
+    return UkmRecordingStatus::kErrorMissingUkmRecorder;
 
   ukm::builders::RendererSchedulerTask builder(
-      page_scheduler->GetUkmSourceId());
+      frame_scheduler->GetUkmSourceId());
 
-  builder.SetPageSchedulers(page_schedulers_to_attribute);
+  builder.SetVersion(kUkmMetricVersion);
+  builder.SetPageSchedulers(main_thread_only().page_schedulers.size());
+
   builder.SetRendererBackgrounded(main_thread_only().renderer_backgrounded);
   builder.SetRendererHidden(main_thread_only().renderer_hidden);
   builder.SetRendererAudible(main_thread_only().is_audio_playing);
@@ -2660,6 +2585,7 @@ void MainThreadSchedulerImpl::RecordTaskUkmImpl(
   builder.SetFrameStatus(static_cast<int>(
       GetFrameStatus(queue ? queue->GetFrameScheduler() : nullptr)));
   builder.SetTaskDuration(task_timing.wall_duration().InMicroseconds());
+  builder.SetIsOOPIF(!frame_scheduler->GetPageScheduler()->IsMainFrameLocal());
 
   if (main_thread_only().renderer_backgrounded) {
     base::TimeDelta time_since_backgrounded =
@@ -2684,6 +2610,8 @@ void MainThreadSchedulerImpl::RecordTaskUkmImpl(
   }
 
   builder.Record(ukm_recorder);
+
+  return UkmRecordingStatus::kSuccess;
 }
 
 TaskQueue::QueuePriority MainThreadSchedulerImpl::ComputePriority(
@@ -2853,31 +2781,6 @@ base::WeakPtr<MainThreadSchedulerImpl> MainThreadSchedulerImpl::GetWeakPtr() {
 
 bool MainThreadSchedulerImpl::IsAudioPlaying() const {
   return main_thread_only().is_audio_playing;
-}
-
-bool MainThreadSchedulerImpl::ShouldIgnoreTaskForUkm(bool has_thread_time,
-                                                     double* sampling_rate) {
-  const double thread_time_sampling_rate =
-      helper_.GetSamplingRateForRecordingCPUTime();
-  if (thread_time_sampling_rate && *sampling_rate < thread_time_sampling_rate) {
-    if (!has_thread_time)
-      return true;
-    *sampling_rate /= thread_time_sampling_rate;
-  }
-  return false;
-}
-
-bool MainThreadSchedulerImpl::ShouldRecordTaskUkm(bool has_thread_time) {
-  double sampling_rate = kSamplingRateForTaskUkm;
-
-  // If thread_time is sampled as well, try to align UKM sampling with it so
-  // that we only record UKMs for tasks that also record thread_time.
-  if (ShouldIgnoreTaskForUkm(has_thread_time, &sampling_rate)) {
-    return false;
-  }
-
-  return main_thread_only().uniform_distribution(
-             main_thread_only().random_generator) < sampling_rate;
 }
 
 bool MainThreadSchedulerImpl::ShouldUpdateTaskQueuePriorities(

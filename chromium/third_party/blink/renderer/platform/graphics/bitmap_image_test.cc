@@ -50,6 +50,46 @@
 #include "third_party/skia/include/core/SkImage.h"
 
 namespace blink {
+namespace {
+
+class FrameSettingImageProvider : public cc::ImageProvider {
+ public:
+  FrameSettingImageProvider(size_t frame_index,
+                            cc::PaintImage::GeneratorClientId client_id)
+      : frame_index_(frame_index), client_id_(client_id) {}
+  ~FrameSettingImageProvider() override = default;
+
+  ScopedDecodedDrawImage GetDecodedDrawImage(
+      const cc::DrawImage& draw_image) override {
+    auto sk_image =
+        draw_image.paint_image().GetSkImageForFrame(frame_index_, client_id_);
+    return ScopedDecodedDrawImage(
+        cc::DecodedDrawImage(sk_image, SkSize::MakeEmpty(), SkSize::Make(1, 1),
+                             draw_image.filter_quality(), true));
+  }
+
+ private:
+  size_t frame_index_;
+  cc::PaintImage::GeneratorClientId client_id_;
+};
+
+void GenerateBitmapForPaintImage(cc::PaintImage paint_image,
+                                 size_t frame_index,
+                                 cc::PaintImage::GeneratorClientId client_id,
+                                 SkBitmap* bitmap) {
+  CHECK(paint_image);
+  CHECK_GE(paint_image.FrameCount(), frame_index);
+
+  SkImageInfo info =
+      SkImageInfo::MakeN32Premul(paint_image.width(), paint_image.height());
+  bitmap->allocPixels(info, paint_image.width() * 4);
+  bitmap->eraseColor(SK_AlphaTRANSPARENT);
+  FrameSettingImageProvider image_provider(frame_index, client_id);
+  cc::SkiaPaintCanvas canvas(*bitmap, &image_provider);
+  canvas.drawImage(paint_image, 0u, 0u, nullptr);
+}
+
+}  // namespace
 
 class BitmapImageTest : public testing::Test {
  public:
@@ -97,18 +137,10 @@ class BitmapImageTest : public testing::Test {
   }
 
   SkBitmap GenerateBitmap(size_t frame_index) {
-    CHECK_GE(image_->FrameCount(), frame_index);
-    auto paint_image = image_->PaintImageForTesting(frame_index);
-    CHECK(paint_image);
-    CHECK_EQ(paint_image.frame_index(), frame_index);
-
     SkBitmap bitmap;
-    SkImageInfo info = SkImageInfo::MakeN32Premul(image_->Size().Width(),
-                                                  image_->Size().Height());
-    bitmap.allocPixels(info, image_->Size().Width() * 4);
-    bitmap.eraseColor(SK_AlphaTRANSPARENT);
-    cc::SkiaPaintCanvas canvas(bitmap);
-    canvas.drawImage(paint_image, 0u, 0u, nullptr);
+    GenerateBitmapForPaintImage(image_->PaintImageForTesting(), frame_index,
+                                cc::PaintImage::kDefaultGeneratorClientId,
+                                &bitmap);
     return bitmap;
   }
 
@@ -122,7 +154,6 @@ class BitmapImageTest : public testing::Test {
     image->SetData(image_data, true);
     auto paint_image = image->PaintImageForCurrentFrame();
     CHECK(paint_image);
-    CHECK_EQ(paint_image.frame_index(), 0u);
 
     SkBitmap bitmap;
     SkImageInfo info = SkImageInfo::MakeN32Premul(image->Size().Width(),
@@ -313,10 +344,8 @@ TEST_F(BitmapImageTest, ConstantImageIdForPartiallyLoadedImages) {
   EXPECT_EQ(sk_image1->uniqueID(), sk_image2->uniqueID());
 
   // Frame keys should be the same for these PaintImages.
-  EXPECT_EQ(image1.GetKeyForFrame(image1.frame_index()),
-            image2.GetKeyForFrame(image2.frame_index()));
-  EXPECT_EQ(image1.frame_index(), 0u);
-  EXPECT_EQ(image2.frame_index(), 0u);
+  EXPECT_EQ(image1.GetKeyForFrame(PaintImage::kDefaultFrameIndex),
+            image2.GetKeyForFrame(PaintImage::kDefaultFrameIndex));
 
   // Destroy the decoded data. This generates a new id since we don't cache
   // image ids for partial decodes.
@@ -328,9 +357,8 @@ TEST_F(BitmapImageTest, ConstantImageIdForPartiallyLoadedImages) {
 
   // Since the cached generator is discarded on destroying the cached decode,
   // the new content id is generated resulting in an updated frame key.
-  EXPECT_NE(image1.GetKeyForFrame(image1.frame_index()),
-            image3.GetKeyForFrame(image3.frame_index()));
-  EXPECT_EQ(image3.frame_index(), 0u);
+  EXPECT_NE(image1.GetKeyForFrame(PaintImage::kDefaultFrameIndex),
+            image3.GetKeyForFrame(PaintImage::kDefaultFrameIndex));
 
   // Load complete. This should generate a new image id.
   image_->SetData(image_data, true);
@@ -338,9 +366,8 @@ TEST_F(BitmapImageTest, ConstantImageIdForPartiallyLoadedImages) {
   auto complete_sk_image = complete_image.GetSkImage();
   EXPECT_NE(sk_image3, complete_sk_image);
   EXPECT_NE(sk_image3->uniqueID(), complete_sk_image->uniqueID());
-  EXPECT_NE(complete_image.GetKeyForFrame(complete_image.frame_index()),
-            image3.GetKeyForFrame(image3.frame_index()));
-  EXPECT_EQ(complete_image.frame_index(), 0u);
+  EXPECT_NE(complete_image.GetKeyForFrame(PaintImage::kDefaultFrameIndex),
+            image3.GetKeyForFrame(PaintImage::kDefaultFrameIndex));
 
   // Destroy the decoded data and re-create the PaintImage. The frame key
   // remains constant but the SkImage id will change since we don't cache skia
@@ -349,9 +376,8 @@ TEST_F(BitmapImageTest, ConstantImageIdForPartiallyLoadedImages) {
   auto new_complete_image = image_->PaintImageForCurrentFrame();
   auto new_complete_sk_image = new_complete_image.GetSkImage();
   EXPECT_NE(new_complete_sk_image, complete_sk_image);
-  EXPECT_EQ(new_complete_image.GetKeyForFrame(new_complete_image.frame_index()),
-            complete_image.GetKeyForFrame(complete_image.frame_index()));
-  EXPECT_EQ(new_complete_image.frame_index(), 0u);
+  EXPECT_EQ(new_complete_image.GetKeyForFrame(PaintImage::kDefaultFrameIndex),
+            complete_image.GetKeyForFrame(PaintImage::kDefaultFrameIndex));
 }
 
 TEST_F(BitmapImageTest, ImageForDefaultFrame_MultiFrame) {
@@ -400,6 +426,37 @@ TEST_F(BitmapImageTest, GifDecoderFrame3) {
   LoadImage("/images/resources/green-red-blue-yellow-animated.gif");
   auto bitmap = GenerateBitmap(3u);
   VerifyBitmap(bitmap, SK_ColorYELLOW);
+}
+
+TEST_F(BitmapImageTest, GifDecoderMultiThreaded) {
+  LoadImage("/images/resources/green-red-blue-yellow-animated.gif");
+  auto paint_image = image_->PaintImageForTesting();
+  ASSERT_EQ(paint_image.FrameCount(), 4u);
+
+  struct Decode {
+    SkBitmap bitmap;
+    std::unique_ptr<base::Thread> thread;
+    cc::PaintImage::GeneratorClientId client_id;
+  };
+
+  Decode decodes[4];
+  SkColor expected_color[4] = {SkColorSetARGB(255, 0, 128, 0), SK_ColorRED,
+                               SK_ColorBLUE, SK_ColorYELLOW};
+  for (int i = 0; i < 4; ++i) {
+    decodes[i].thread =
+        std::make_unique<base::Thread>("Decode" + std::to_string(i));
+    decodes[i].client_id = cc::PaintImage::GetNextGeneratorClientId();
+
+    decodes[i].thread->StartAndWaitForTesting();
+    decodes[i].thread->task_runner()->PostTask(
+        FROM_HERE, base::BindOnce(&GenerateBitmapForPaintImage, paint_image, i,
+                                  decodes[i].client_id, &decodes[i].bitmap));
+  }
+
+  for (int i = 0; i < 4; ++i) {
+    decodes[i].thread->FlushForTesting();
+    VerifyBitmap(decodes[i].bitmap, expected_color[i]);
+  }
 }
 
 TEST_F(BitmapImageTest, APNGDecoder00) {
@@ -595,7 +652,65 @@ TEST_F(BitmapImageTestWithMockDecoder, ImageMetadataTracking) {
   }
 };
 
-TEST_F(BitmapImageTestWithMockDecoder, AnimationPolicyOverride) {
+TEST_F(BitmapImageTestWithMockDecoder,
+       AnimationPolicyOverrideOriginalRepetitionNone) {
+  repetition_count_ = kAnimationNone;
+  frame_count_ = 4u;
+  last_frame_complete_ = true;
+  image_->SetData(SharedBuffer::Create("data", sizeof("data")), false);
+
+  PaintImage image = image_->PaintImageForCurrentFrame();
+  EXPECT_EQ(image.repetition_count(), repetition_count_);
+
+  // In all cases, the image shouldn't animate.
+
+  // Only one loop allowed.
+  image_->SetAnimationPolicy(kImageAnimationPolicyAnimateOnce);
+  image = image_->PaintImageForCurrentFrame();
+  EXPECT_EQ(image.repetition_count(), kAnimationNone);
+
+  // No animation allowed.
+  image_->SetAnimationPolicy(kImageAnimationPolicyNoAnimation);
+  image = image_->PaintImageForCurrentFrame();
+  EXPECT_EQ(image.repetition_count(), kAnimationNone);
+
+  // Default policy.
+  image_->SetAnimationPolicy(kImageAnimationPolicyAllowed);
+  image = image_->PaintImageForCurrentFrame();
+  EXPECT_EQ(image.repetition_count(), kAnimationNone);
+}
+
+TEST_F(BitmapImageTestWithMockDecoder,
+       AnimationPolicyOverrideOriginalRepetitionOnce) {
+  repetition_count_ = kAnimationLoopOnce;
+  frame_count_ = 4u;
+  last_frame_complete_ = true;
+  image_->SetData(SharedBuffer::Create("data", sizeof("data")), false);
+
+  PaintImage image = image_->PaintImageForCurrentFrame();
+  EXPECT_EQ(image.repetition_count(), repetition_count_);
+
+  // If the policy is no animation, then the repetition count is none. In all
+  // other cases, it remains loop once.
+
+  // Only one loop allowed.
+  image_->SetAnimationPolicy(kImageAnimationPolicyAnimateOnce);
+  image = image_->PaintImageForCurrentFrame();
+  EXPECT_EQ(image.repetition_count(), kAnimationLoopOnce);
+
+  // No animation allowed.
+  image_->SetAnimationPolicy(kImageAnimationPolicyNoAnimation);
+  image = image_->PaintImageForCurrentFrame();
+  EXPECT_EQ(image.repetition_count(), kAnimationNone);
+
+  // Default policy.
+  image_->SetAnimationPolicy(kImageAnimationPolicyAllowed);
+  image = image_->PaintImageForCurrentFrame();
+  EXPECT_EQ(image.repetition_count(), kAnimationLoopOnce);
+}
+
+TEST_F(BitmapImageTestWithMockDecoder,
+       AnimationPolicyOverrideOriginalRepetitionInfinite) {
   repetition_count_ = kAnimationLoopInfinite;
   frame_count_ = 4u;
   last_frame_complete_ = true;
@@ -603,6 +718,8 @@ TEST_F(BitmapImageTestWithMockDecoder, AnimationPolicyOverride) {
 
   PaintImage image = image_->PaintImageForCurrentFrame();
   EXPECT_EQ(image.repetition_count(), repetition_count_);
+
+  // The repetition count is determined by the animation policy.
 
   // Only one loop allowed.
   image_->SetAnimationPolicy(kImageAnimationPolicyAnimateOnce);
@@ -715,5 +832,23 @@ INSTANTIATE_TEST_CASE_P(
     DecodedImageOrientationHistogramTest,
     DecodedImageOrientationHistogramTest,
     testing::ValuesIn(kDecodedImageOrientationHistogramTestParams));
+
+using DecodedImageDensityHistogramTest = BitmapHistogramTest<int>;
+
+TEST_P(DecodedImageDensityHistogramTest, ImageOrientation) {
+  RunTest("Blink.DecodedImage.JpegDensity");
+}
+
+const DecodedImageDensityHistogramTest::ParamType
+    kDecodedImageDensityHistogramTestParams[] = {
+        // 439x154, 23220 bytes --> 2.74 bpp
+        {"/images/resources/cropped_mandrill.jpg", 274},
+        // 320x320, 74017 bytes --> 5.78
+        {"/images/resources/blue-wheel-srgb-color-profile.jpg", 578}};
+
+INSTANTIATE_TEST_CASE_P(
+    DecodedImageDensityHistogramTest,
+    DecodedImageDensityHistogramTest,
+    testing::ValuesIn(kDecodedImageDensityHistogramTestParams));
 
 }  // namespace blink

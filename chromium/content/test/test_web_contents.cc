@@ -115,6 +115,13 @@ const GURL& TestWebContents::GetLastCommittedURL() const {
   return WebContentsImpl::GetLastCommittedURL();
 }
 
+const base::string16& TestWebContents::GetTitle() const {
+  if (title_)
+    return title_.value();
+
+  return WebContentsImpl::GetTitle();
+}
+
 void TestWebContents::TestDidNavigate(RenderFrameHost* render_frame_host,
                                       int nav_entry_id,
                                       bool did_create_new_entry,
@@ -214,6 +221,10 @@ void TestWebContents::SetLastCommittedURL(const GURL& url) {
   last_committed_url_ = url;
 }
 
+void TestWebContents::SetTitle(const base::string16& title) {
+  title_ = title;
+}
+
 void TestWebContents::SetMainFrameMimeType(const std::string& mime_type) {
   WebContentsImpl::SetMainFrameMimeType(mime_type);
 }
@@ -232,6 +243,11 @@ void TestWebContents::TestDidReceiveInputEvent(
                                                  ->current_frame_host()
                                                  ->GetRenderWidgetHost();
   DidReceiveInputEvent(render_widget_host, type);
+}
+
+void TestWebContents::TestDidFinishLoad(const GURL& url) {
+  FrameHostMsg_DidFinishLoad msg(0, url);
+  frame_tree_.root()->current_frame_host()->OnMessageReceived(msg);
 }
 
 void TestWebContents::TestDidFailLoadWithError(
@@ -352,7 +368,7 @@ void TestWebContents::SetOpener(WebContents* opener) {
 void TestWebContents::AddPendingContents(
     std::unique_ptr<WebContents> contents) {
   // This is normally only done in WebContentsImpl::CreateNewWindow.
-  ProcessRoutingIdPair key(
+  GlobalRoutingID key(
       contents->GetRenderViewHost()->GetProcess()->GetID(),
       contents->GetRenderViewHost()->GetWidget()->GetRoutingID());
   WebContentsImpl* raw_contents = static_cast<WebContentsImpl*>(contents.get());
@@ -375,11 +391,6 @@ void TestWebContents::SetHistoryOffsetAndLength(int history_offset,
             history_offset);
   EXPECT_EQ(expect_set_history_offset_and_length_history_length_,
             history_length);
-}
-
-void TestWebContents::TestDidFinishLoad(const GURL& url) {
-  FrameHostMsg_DidFinishLoad msg(0, url);
-  frame_tree_.root()->current_frame_host()->OnMessageReceived(msg);
 }
 
 void TestWebContents::SetNavigationData(

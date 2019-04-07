@@ -9,12 +9,10 @@
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/slot_assignment_engine.h"
-#include "third_party/blink/renderer/core/dom/v0_insertion_point.h"
 #include "third_party/blink/renderer/core/html/forms/html_opt_group_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/html_details_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
-#include "third_party/blink/renderer/core/html_names.h"
 
 namespace blink {
 
@@ -39,6 +37,10 @@ void SlotAssignment::DidAddSlot(HTMLSlotElement& slot) {
 
   ++slot_count_;
   needs_collect_slots_ = true;
+  if (owner_->IsManualSlotting()) {
+    DidAddSlotInternalInManualMode(slot);
+    return;
+  }
 
   DCHECK(!slot_map_->Contains(slot.GetName()) ||
          GetCachedFirstSlotWithoutAccessingNodeTree(slot.GetName()));
@@ -56,6 +58,15 @@ void SlotAssignment::DidRemoveSlot(HTMLSlotElement& slot) {
 
   DCHECK_GT(slot_count_, 0u);
   --slot_count_;
+  if (owner_->IsManualSlotting()) {
+    DCHECK(!needs_collect_slots_);
+    CallSlotChangeIfNeeded(slot);
+    needs_collect_slots_ = true;
+    // TODO(crbug.com/869308):Avoid calling Slots in order not to hit the
+    // DCHECK(!needs_collect_slots_)
+    Slots();
+    return;
+  }
   needs_collect_slots_ = true;
 
   DCHECK(GetCachedFirstSlotWithoutAccessingNodeTree(slot.GetName()));
@@ -85,7 +96,7 @@ void SlotAssignment::DidAddSlotInternal(HTMLSlotElement& slot) {
   DCHECK(!old_active || old_active != slot);
 
   // This might invalidate the slot_map's cache.
-  slot_map_->Add(slot_name, &slot);
+  slot_map_->Add(slot_name, slot);
 
   // This also ensures that TreeOrderedMap has a cache for the first element.
   HTMLSlotElement* new_active = FindSlotByName(slot_name);
@@ -113,6 +124,17 @@ void SlotAssignment::DidAddSlotInternal(HTMLSlotElement& slot) {
   }
 }
 
+void SlotAssignment::DidAddSlotInternalInManualMode(HTMLSlotElement& slot) {
+  for (Node& child : NodeTraversal::ChildrenOf(owner_->host())) {
+    auto* change_slot = FindSlotChange(slot, child);
+    if (change_slot) {
+      slot.SignalSlotChange();
+      if (change_slot != slot)
+        change_slot->SignalSlotChange();
+    }
+  }
+}
+
 void SlotAssignment::DidRemoveSlotInternal(
     HTMLSlotElement& slot,
     const AtomicString& slot_name,
@@ -132,7 +154,7 @@ void SlotAssignment::DidRemoveSlotInternal(
   HTMLSlotElement* old_active =
       GetCachedFirstSlotWithoutAccessingNodeTree(slot_name);
   DCHECK(old_active);
-  slot_map_->Remove(slot_name, &slot);
+  slot_map_->Remove(slot_name, slot);
   // This also ensures that TreeOrderedMap has a cache for the first element.
   HTMLSlotElement* new_active = FindSlotByName(slot_name);
   DCHECK(!new_active || new_active != slot);
@@ -243,7 +265,16 @@ void SlotAssignment::RecalcAssignment() {
 
     HTMLSlotElement* slot = nullptr;
     if (!is_user_agent) {
-      slot = FindSlotByName(child.SlotName());
+      if (owner_->IsManualSlotting()) {
+        for (auto a_slot : Slots()) {
+          if (a_slot->ContainsInAssignedNodesCandidates(child)) {
+            slot = a_slot;
+            break;
+          }
+        }
+      } else {
+        slot = FindSlotByName(child.SlotName());
+      }
     } else {
       if (user_agent_custom_assign_slot && ShouldAssignToCustomSlot(child)) {
         slot = user_agent_custom_assign_slot;
@@ -332,12 +363,14 @@ const HeapVector<Member<HTMLSlotElement>>& SlotAssignment::Slots() {
   return slots_;
 }
 
-HTMLSlotElement* SlotAssignment::FindSlot(const Node& node) const {
+HTMLSlotElement* SlotAssignment::FindSlot(const Node& node) {
   if (!node.IsSlotable())
     return nullptr;
   if (owner_->IsUserAgent())
     return FindSlotInUserAgentShadow(node);
-  return FindSlotByName(node.SlotName());
+  return owner_->IsManualSlotting()
+             ? FindFirstAssignedSlot(const_cast<Node&>(node))
+             : FindSlotByName(node.SlotName());
 }
 
 HTMLSlotElement* SlotAssignment::FindSlotByName(
@@ -354,6 +387,43 @@ HTMLSlotElement* SlotAssignment::FindSlotInUserAgentShadow(
   HTMLSlotElement* user_agent_default_slot =
       FindSlotByName(HTMLSlotElement::UserAgentDefaultSlotName());
   return user_agent_default_slot;
+}
+
+HTMLSlotElement* SlotAssignment::FindSlotChange(HTMLSlotElement& slot,
+                                                Node& child) {
+  HTMLSlotElement* found_this_slot = nullptr;
+  for (auto a_slot : Slots()) {
+    if (a_slot == slot) {
+      found_this_slot = &slot;
+      continue;
+    }
+    if (a_slot->ContainsInAssignedNodesCandidates(child)) {
+      if (found_this_slot) {
+        // case2 in DidRemoveSlotChange or DidAddSlotChange
+        return a_slot;
+      }
+      // case3 in DidRemoveSlotChange or DidAddSlotChange
+      return nullptr;
+    }
+  }
+  // case1 in DidRemoveSlotChange or DidAddSlotChange or no slot for the child
+  return found_this_slot;
+}
+
+void SlotAssignment::CallSlotChangeIfNeeded(HTMLSlotElement& slot) {
+  for (Node& child : NodeTraversal::ChildrenOf(owner_->host())) {
+    auto* change_slot = FindSlotChange(slot, child);
+    if (change_slot && change_slot != slot)
+      change_slot->SignalSlotChange();
+  }
+}
+
+HTMLSlotElement* SlotAssignment::FindFirstAssignedSlot(Node& node) {
+  for (auto slot : Slots()) {
+    if (slot->ContainsInAssignedNodesCandidates(node))
+      return slot;
+  }
+  return nullptr;
 }
 
 void SlotAssignment::CollectSlots() {

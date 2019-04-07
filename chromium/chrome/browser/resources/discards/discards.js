@@ -42,6 +42,17 @@ cr.define('discards', function() {
   }
 
   /**
+   * Determines if the provided state is related to discarding.
+   * @param {state} The discard state.
+   * @return {boolean} True if the state is related to discarding, false
+   *     otherwise.
+   */
+  function isDiscardRelatedState(state) {
+    return state == mojom.LifecycleUnitState.PENDING_DISCARD ||
+        state == mojom.LifecycleUnitState.DISCARDED;
+  }
+
+  /**
    * Compares two TabDiscardsInfos based on the data in the provided sort-key.
    * @param {string} sortKey The key of the sort. See the "data-sort-key"
    *     attribute of the table headers for valid sort-keys.
@@ -70,13 +81,23 @@ cr.define('discards', function() {
       return val1 ? 1 : -1;
     }
 
+    // Compare lifecycle state. This is actually a compound key.
+    if (sortKey == 'state') {
+      // If the keys are discarding state, then break ties using the discard
+      // reason.
+      if (val1 == val2 && isDiscardRelatedState(val1)) {
+        val1 = a['discardReason'];
+        val2 = b['discardReason'];
+      }
+      return val1 - val2;
+    }
+
     // Compares numeric fields.
     // NOTE: visibility, loadingState and state are represented as a numeric
     // value.
     if ([
           'visibility',
           'loadingState',
-          'state',
           'discardCount',
           'utilityRank',
           'reactivationScore',
@@ -196,14 +217,14 @@ cr.define('discards', function() {
    */
   function visibilityToString(visibility) {
     switch (visibility) {
-      case 0:
+      case mojom.LifecycleUnitVisibility.HIDDEN:
         return 'hidden';
-      case 1:
+      case mojom.LifecycleUnitVisibility.OCCLUDED:
         return 'occluded';
-      case 2:
+      case mojom.LifecycleUnitVisibility.VISIBLE:
         return 'visible';
     }
-    assertNotReached('Unsupported visibility: ' + visibility);
+    assertNotReached('Unknown visibility: ' + visibility);
   }
 
   /**
@@ -214,34 +235,74 @@ cr.define('discards', function() {
    */
   function loadingStateToString(loadingState) {
     switch (loadingState) {
-      case 0:
+      case mojom.LifecycleUnitLoadingState.UNLOADED:
         return 'unloaded';
-      case 1:
+      case mojom.LifecycleUnitLoadingState.LOADING:
         return 'loading';
-      case 2:
+      case mojom.LifecycleUnitLoadingState.LOADED:
         return 'loaded';
     }
-    assertNotReached('Unsupport loadingState: ' + loadingState);
+    assertNotReached('Unknown loadingState: ' + loadingState);
   }
 
-  function lifecycleStateToString(state) {
+  /**
+   * Returns a string representation of a discard reason.
+   * @param {mojom.LifecycleUnitDiscardReason} reason The discard reason.
+   * @return {string} A string representation of the discarding reason.
+   */
+  function discardReasonToString(reason) {
+    switch (reason) {
+      case mojom.LifecycleUnitDiscardReason.EXTERNAL:
+        return 'external';
+      case mojom.LifecycleUnitDiscardReason.PROACTIVE:
+        return 'proactive';
+      case mojom.LifecycleUnitDiscardReason.URGENT:
+        return 'urgent';
+    }
+    assertNotReached('Unknown discard reason: ' + reason);
+  }
+
+  /**
+   * Returns a string representation of a lifecycle state.
+   * @param {mojom.LifecycleUnitState} state The lifecycle state.
+   * @param {mojom.LifecycleUnitDiscardReason} reason The discard reason. This
+   *     is only used if the state is discard related.
+   * @param {int} visibility A value in LifecycleUnitVisibility.
+   * @param {boolean} hasFocus Whether or not the tab has input focus.
+   * @return {string} A string representation of the lifecycle state, augmented
+   *     with the discard reason if appropriate.
+   */
+  function lifecycleStateToString(state, reason, visibility, hasFocus) {
+    let pageLifecycleStateFromVisibilityAndFocus = function() {
+      switch (visibility) {
+        case mojom.LifecycleUnitVisibility.HIDDEN:
+        case mojom.LifecycleUnitVisibility.OCCLUDED:
+          // An occluded page is also considered hidden.
+          return 'hidden';
+        case mojom.LifecycleUnitVisibility.VISIBLE:
+          return hasFocus ? 'active' : 'passive';
+      }
+      assertNotReached('Unknown visibility: ' + visibility);
+    };
+
     switch (state) {
       case mojom.LifecycleUnitState.ACTIVE:
-        return 'active';
+        return pageLifecycleStateFromVisibilityAndFocus();
       case mojom.LifecycleUnitState.THROTTLED:
-        return 'throttled';
+        return pageLifecycleStateFromVisibilityAndFocus() + ' (throttled)';
       case mojom.LifecycleUnitState.PENDING_FREEZE:
-        return 'pending frozen';
+        return pageLifecycleStateFromVisibilityAndFocus() + ' (pending frozen)';
       case mojom.LifecycleUnitState.FROZEN:
         return 'frozen';
       case mojom.LifecycleUnitState.PENDING_DISCARD:
-        return 'pending discard';
+        return pageLifecycleStateFromVisibilityAndFocus() +
+            ' (pending discard (' + discardReasonToString(reason) + '))';
       case mojom.LifecycleUnitState.DISCARDED:
-        return 'discarded';
+        return 'discarded (' + discardReasonToString(reason) + ')';
       case mojom.LifecycleUnitState.PENDING_UNFREEZE:
-        return 'pending unfreeze';
+        return 'frozen (pending unfreeze)';
     }
-    assertNotReached('Unsupported lifecycle state: ' + state);
+    assertNotReached('Unknown lifecycle state: ' + state);
   }
 
   /**
@@ -351,10 +412,12 @@ cr.define('discards', function() {
         boolToString(info.canFreeze);
     row.querySelector('.can-discard-div').textContent =
         boolToString(info.canDiscard);
-    // The lifecycle state is meaningless for 'unloaded' tabs.
+    // The lifecycle state is meaningless for tabs that have never been loaded.
     row.querySelector('.state-cell').textContent =
-        (info.loadingState != mojom.LifecycleUnitLoadingState.UNLOADED) ?
-        lifecycleStateToString(info.state) :
+        (info.loadingState != mojom.LifecycleUnitLoadingState.UNLOADED ||
+         info.discardCount > 0) ?
+        lifecycleStateToString(
+            info.state, info.discardReason, info.visibility, info.hasFocus) :
         '';
     row.querySelector('.discard-count-cell').textContent =
         info.discardCount.toString();
@@ -371,9 +434,11 @@ cr.define('discards', function() {
 
     row.querySelector('.is-auto-discardable-link').removeAttribute('disabled');
     setActionLinkEnabled(
-        row.querySelector('.can-freeze-link'), !info.canFreeze);
+        row.querySelector('.can-freeze-link'),
+        (!info.canFreeze && info.cannotFreezeReasons.length > 0));
     setActionLinkEnabled(
-        row.querySelector('.can-discard-link'), !info.canDiscard);
+        row.querySelector('.can-discard-link'),
+        (!info.canDiscard && info.cannotDiscardReasons.length > 0));
     let loadLink = row.querySelector('.load-link');
     let freezeLink = row.querySelector('.freeze-link');
     let discardLink = row.querySelector('.discard-link');
@@ -388,7 +453,9 @@ cr.define('discards', function() {
     let discardUrgentEnabled = false;
     if (info.loadingState == mojom.LifecycleUnitLoadingState.UNLOADED) {
       loadEnabled = true;
-    } else if (info.visibility == 0) {
+    } else if (
+        info.visibility == mojom.LifecycleUnitVisibility.HIDDEN ||
+        info.visibility == mojom.LifecycleUnitVisibility.OCCLUDED) {
       // Only tabs that aren't visible can be frozen or discarded for now.
       freezeEnabled = true;
       discardEnabled = true;

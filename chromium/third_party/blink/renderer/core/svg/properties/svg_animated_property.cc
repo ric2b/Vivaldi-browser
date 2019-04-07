@@ -44,6 +44,7 @@ SVGAnimatedPropertyBase::SVGAnimatedPropertyBase(
       // property enum. CSS properties that don't fit in this bitfield are never
       // used here. See static_assert in header.
       css_property_id_(static_cast<unsigned>(css_property_id)),
+      base_value_needs_synchronization_(false),
       context_element_(context_element),
       attribute_name_(attribute_name) {
   DCHECK(context_element_);
@@ -54,17 +55,43 @@ SVGAnimatedPropertyBase::SVGAnimatedPropertyBase(
 
 SVGAnimatedPropertyBase::~SVGAnimatedPropertyBase() = default;
 
+void SVGAnimatedPropertyBase::Trace(Visitor* visitor) {
+  visitor->Trace(context_element_);
+}
+
 void SVGAnimatedPropertyBase::AnimationEnded() {
   SynchronizeAttribute();
+}
+
+bool SVGAnimatedPropertyBase::NeedsSynchronizeAttribute() const {
+  // DOM attribute synchronization is only needed if a change has been made
+  // through JavaScript (via a tear-off or primitive) or the property is being
+  // animated. This prevents unnecessary attribute creation on the target
+  // element.
+  return base_value_needs_synchronization_ || IsAnimating();
 }
 
 void SVGAnimatedPropertyBase::SynchronizeAttribute() {
   AtomicString value(CurrentValueBase()->ValueAsString());
   context_element_->SetSynchronizedLazyAttribute(attribute_name_, value);
+  base_value_needs_synchronization_ = false;
+}
+
+void SVGAnimatedPropertyBase::BaseValueChanged() {
+  DCHECK(context_element_);
+  DCHECK(attribute_name_ != QualifiedName::Null());
+  base_value_needs_synchronization_ = true;
+  context_element_->InvalidateSVGAttributes();
+  context_element_->SvgAttributeBaseValChanged(attribute_name_);
+}
+
+void SVGAnimatedPropertyBase::EnsureAnimValUpdated() {
+  DCHECK(context_element_);
+  context_element_->EnsureAttributeAnimValUpdated();
 }
 
 bool SVGAnimatedPropertyBase::IsSpecified() const {
-  return IsAnimating() || contextElement()->hasAttribute(AttributeName());
+  return IsAnimating() || ContextElement()->hasAttribute(AttributeName());
 }
 
 }  // namespace blink

@@ -94,6 +94,7 @@ FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, StaleUpdate_FreshWorker);
 FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, StaleUpdate_NonActiveWorker);
 FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, StaleUpdate_RunningWorker);
 FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, StaleUpdate_StartWorker);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, StartRequestWithNullContext);
 }  // namespace service_worker_version_unittest
 
 namespace service_worker_registration_unittest {
@@ -490,6 +491,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   }
 
   static bool IsInstalled(ServiceWorkerVersion::Status status);
+  static std::string VersionStatusToString(ServiceWorkerVersion::Status status);
 
   // For scheduling Soft Update after main resource requests. We schedule
   // a Soft Update to happen "soon" after each main resource request, attempting
@@ -550,6 +552,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   FRIEND_TEST_ALL_PREFIXES(
       service_worker_version_unittest::ServiceWorkerVersionTest,
       StaleUpdate_DoNotDeferTimer);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      StartRequestWithNullContext);
   FRIEND_TEST_ALL_PREFIXES(
       service_worker_version_unittest::ServiceWorkerRequestTimeoutTest,
       RequestTimeout);
@@ -840,7 +845,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   std::map<std::string, ServiceWorkerProviderHost*> controllee_map_;
   // Will be null while shutting down.
   base::WeakPtr<ServiceWorkerContextCore> context_;
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
   ServiceWorkerScriptCacheMap script_cache_map_;
   base::OneShotTimer update_timer_;
 

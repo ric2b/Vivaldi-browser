@@ -47,8 +47,8 @@ DomDistillerStore::DomDistillerStore(
       weak_ptr_factory_(this) {
   database_->Init(kDatabaseUMAClientName, database_dir,
                   leveldb_proto::CreateSimpleOptions(),
-                  base::Bind(&DomDistillerStore::OnDatabaseInit,
-                             weak_ptr_factory_.GetWeakPtr()));
+                  base::BindOnce(&DomDistillerStore::OnDatabaseInit,
+                                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 DomDistillerStore::DomDistillerStore(
@@ -61,16 +61,11 @@ DomDistillerStore::DomDistillerStore(
       weak_ptr_factory_(this) {
   database_->Init(kDatabaseUMAClientName, database_dir,
                   leveldb_proto::CreateSimpleOptions(),
-                  base::Bind(&DomDistillerStore::OnDatabaseInit,
-                             weak_ptr_factory_.GetWeakPtr()));
+                  base::BindOnce(&DomDistillerStore::OnDatabaseInit,
+                                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 DomDistillerStore::~DomDistillerStore() {}
-
-// DomDistillerStoreInterface implementation.
-syncer::SyncableService* DomDistillerStore::GetSyncableService() {
-  return this;
-}
 
 bool DomDistillerStore::GetEntryById(const std::string& entry_id,
                                      ArticleEntry* entry) {
@@ -127,7 +122,6 @@ bool DomDistillerStore::ChangeEntry(const ArticleEntry& entry,
   DCHECK_EQ(size_t(0), changes_missing.size());
   DCHECK_EQ(size_t(1), changes_applied.size());
 
-  ApplyChangesToSync(FROM_HERE, changes_applied);
   ApplyChangesToDatabase(changes_applied);
 
   return true;
@@ -143,49 +137,6 @@ void DomDistillerStore::RemoveObserver(DomDistillerObserver* observer) {
 
 std::vector<ArticleEntry> DomDistillerStore::GetEntries() const {
   return model_.GetEntries();
-}
-
-// syncer::SyncableService implementation.
-SyncMergeResult DomDistillerStore::MergeDataAndStartSyncing(
-    ModelType type,
-    const SyncDataList& initial_sync_data,
-    std::unique_ptr<syncer::SyncChangeProcessor> sync_processor,
-    std::unique_ptr<syncer::SyncErrorFactory> error_handler) {
-  DCHECK_EQ(syncer::ARTICLES, type);
-  DCHECK(!sync_processor_);
-  DCHECK(!error_factory_);
-  sync_processor_ = std::move(sync_processor);
-  error_factory_ = std::move(error_handler);
-
-  SyncChangeList database_changes;
-  SyncChangeList sync_changes;
-  SyncMergeResult result =
-      MergeDataWithModel(initial_sync_data, &database_changes, &sync_changes);
-  ApplyChangesToDatabase(database_changes);
-  ApplyChangesToSync(FROM_HERE, sync_changes);
-
-  return result;
-}
-
-void DomDistillerStore::StopSyncing(ModelType type) {
-  sync_processor_.reset();
-  error_factory_.reset();
-}
-
-SyncDataList DomDistillerStore::GetAllSyncData(ModelType type) const {
-  return model_.GetAllSyncData();
-}
-
-SyncError DomDistillerStore::ProcessSyncChanges(
-    const base::Location& from_here,
-    const SyncChangeList& change_list) {
-  DCHECK(database_loaded_);
-  SyncChangeList database_changes;
-  SyncChangeList sync_changes;
-  ApplyChangesToModel(change_list, &database_changes, &sync_changes);
-  ApplyChangesToDatabase(database_changes);
-  DCHECK_EQ(size_t(0), sync_changes.size());
-  return SyncError();
 }
 
 void DomDistillerStore::NotifyObservers(const syncer::SyncChangeList& changes) {
@@ -232,8 +183,8 @@ void DomDistillerStore::OnDatabaseInit(bool success) {
     database_.reset();
     return;
   }
-  database_->LoadEntries(base::Bind(&DomDistillerStore::OnDatabaseLoad,
-                                    weak_ptr_factory_.GetWeakPtr()));
+  database_->LoadEntries(base::BindOnce(&DomDistillerStore::OnDatabaseLoad,
+                                        weak_ptr_factory_.GetWeakPtr()));
 }
 
 void DomDistillerStore::OnDatabaseLoad(bool success,
@@ -254,7 +205,6 @@ void DomDistillerStore::OnDatabaseLoad(bool success,
   SyncChangeList database_changes_needed;
   MergeDataWithModel(data, &changes_applied, &database_changes_needed);
   ApplyChangesToDatabase(database_changes_needed);
-  ApplyChangesToSync(FROM_HERE, changes_applied);
 }
 
 void DomDistillerStore::OnDatabaseSave(bool success) {
@@ -263,25 +213,7 @@ void DomDistillerStore::OnDatabaseSave(bool success) {
              << " Disabling modifications and sync.";
     database_.reset();
     database_loaded_ = false;
-    StopSyncing(syncer::ARTICLES);
   }
-}
-
-bool DomDistillerStore::ApplyChangesToSync(const base::Location& from_here,
-                                           const SyncChangeList& change_list) {
-  if (!sync_processor_) {
-    return false;
-  }
-  if (change_list.empty()) {
-    return true;
-  }
-
-  SyncError error = sync_processor_->ProcessSyncChanges(from_here, change_list);
-  if (error.IsSet()) {
-    StopSyncing(syncer::ARTICLES);
-    return false;
-  }
-  return true;
 }
 
 bool DomDistillerStore::ApplyChangesToDatabase(
@@ -309,8 +241,8 @@ bool DomDistillerStore::ApplyChangesToDatabase(
   }
   database_->UpdateEntries(std::move(entries_to_save),
                            std::move(keys_to_remove),
-                           base::Bind(&DomDistillerStore::OnDatabaseSave,
-                                      weak_ptr_factory_.GetWeakPtr()));
+                           base::BindOnce(&DomDistillerStore::OnDatabaseSave,
+                                          weak_ptr_factory_.GetWeakPtr()));
   return true;
 }
 
@@ -322,7 +254,7 @@ SyncMergeResult DomDistillerStore::MergeDataWithModel(
   DCHECK(changes_applied);
   DCHECK(changes_missing);
 
-  SyncMergeResult result(syncer::ARTICLES);
+  SyncMergeResult result(syncer::DEPRECATED_ARTICLES);
   result.set_num_items_before_association(model_.GetNumEntries());
 
   SyncChangeList changes_to_apply;

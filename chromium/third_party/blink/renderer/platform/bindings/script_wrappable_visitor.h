@@ -15,7 +15,8 @@ namespace blink {
 // references related to wrappers.
 class PLATFORM_EXPORT ScriptWrappableVisitor : public Visitor {
  public:
-  ScriptWrappableVisitor() : Visitor(ThreadState::Current()) {}
+  explicit ScriptWrappableVisitor(ThreadState* thread_state)
+      : Visitor(thread_state) {}
 
   // Unused blink::Visitor overrides. Derived visitors should still override
   // the cross-component visitation methods. See Visitor documentation.
@@ -30,7 +31,8 @@ class PLATFORM_EXPORT ScriptWrappableVisitor : public Visitor {
                                WeakCallback,
                                void*) final {}
   void VisitBackingStoreOnly(void*, void**) final {}
-  void RegisterBackingStoreCallback(void*, MovingObjectCallback, void*) final {}
+  void RegisterBackingStoreCallback(void**, MovingObjectCallback, void*) final {
+  }
   void RegisterWeakCallback(void*, WeakCallback) final {}
 
  protected:

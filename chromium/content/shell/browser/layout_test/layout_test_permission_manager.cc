@@ -156,10 +156,18 @@ LayoutTestPermissionManager::GetPermissionStatusForFrame(
 
 int LayoutTestPermissionManager::SubscribePermissionStatusChange(
     PermissionType permission,
+    RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
-    const GURL& embedding_origin,
     const base::Callback<void(blink::mojom::PermissionStatus)>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  // If the request is from a worker, it won't have a RFH.
+  GURL embedding_origin = requesting_origin;
+  if (render_frame_host) {
+    WebContents* web_contents =
+        WebContents::FromRenderFrameHost(render_frame_host);
+    embedding_origin = web_contents->GetLastCommittedURL().GetOrigin();
+  }
 
   auto subscription = std::make_unique<Subscription>();
   subscription->permission =
@@ -191,15 +199,17 @@ void LayoutTestPermissionManager::SetPermission(
   PermissionDescription description(permission, url.GetOrigin(),
                                     embedding_url.GetOrigin());
 
-  base::AutoLock lock(permissions_lock_);
+  {
+    base::AutoLock lock(permissions_lock_);
 
-  auto it = permissions_.find(description);
-  if (it == permissions_.end()) {
-    permissions_.insert(
-        std::pair<PermissionDescription, blink::mojom::PermissionStatus>(
-            description, status));
-  } else {
-    it->second = status;
+    auto it = permissions_.find(description);
+    if (it == permissions_.end()) {
+      permissions_.insert(
+          std::pair<PermissionDescription, blink::mojom::PermissionStatus>(
+              description, status));
+    } else {
+      it->second = status;
+    }
   }
 
   OnPermissionChanged(description, status);

@@ -22,7 +22,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -218,7 +218,7 @@ bool BootTimesRecorder::Stats::UptimeDouble(double* result) const {
 
 void BootTimesRecorder::Stats::RecordStats(const std::string& name) const {
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&BootTimesRecorder::Stats::RecordStatsAsync,
                  base::Owned(new Stats(*this)), name));
 }
@@ -227,7 +227,7 @@ void BootTimesRecorder::Stats::RecordStatsWithCallback(
     const std::string& name,
     const base::Closure& callback) const {
   base::PostTaskWithTraitsAndReply(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&BootTimesRecorder::Stats::RecordStatsAsync,
                  base::Owned(new Stats(*this)), name),
       callback);
@@ -346,7 +346,7 @@ void BootTimesRecorder::LoginDone(bool is_user_new) {
   }
   // Don't swamp the background thread right away.
   base::PostDelayedTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&WriteTimes, kLoginTimes,
                      (is_user_new ? kUmaLoginNewUser : kUmaLogin),
                      kUmaLoginPrefix, login_time_markers_),

@@ -115,7 +115,7 @@ void CreateNestedWorkerThenTerminateParent(
       .Times(1);
 
   nested_worker_helper->worker_thread = std::make_unique<WorkerThreadForTest>(
-      nullptr, *nested_worker_helper->reporting_proxy);
+      *nested_worker_helper->reporting_proxy);
   nested_worker_helper->worker_thread->StartWithSourceCode(
       SecurityOrigin::Create(KURL("http://fake.url/")).get(),
       "//fake source code", ParentExecutionContextTaskRunners::Create());
@@ -147,8 +147,6 @@ void VerifyParentAndChildAreTerminated(WorkerThread* parent_thread,
   EXPECT_TRUE(parent_thread->IsCurrentThread());
   EXPECT_EQ(ExitCode::kGracefullyTerminated,
             parent_thread->GetExitCodeForTesting());
-  EXPECT_EQ(ExitCode::kGracefullyTerminated,
-            nested_worker_helper->worker_thread->GetExitCodeForTesting());
   EXPECT_NE(nullptr, parent_thread->GlobalScope());
 
   parent_thread->ChildThreadTerminatedOnWorkerThread(
@@ -169,10 +167,7 @@ class WorkerThreadTest : public testing::Test {
   void SetUp() override {
     reporting_proxy_ = std::make_unique<MockWorkerReportingProxy>();
     security_origin_ = SecurityOrigin::Create(KURL("http://fake.url/"));
-    worker_thread_ =
-        std::make_unique<WorkerThreadForTest>(nullptr, *reporting_proxy_);
-    lifecycle_observer_ = new MockWorkerThreadLifecycleObserver(
-        worker_thread_->GetWorkerThreadLifecycleContext());
+    worker_thread_ = std::make_unique<WorkerThreadForTest>(*reporting_proxy_);
   }
 
   void TearDown() override {}
@@ -208,7 +203,6 @@ class WorkerThreadTest : public testing::Test {
     EXPECT_CALL(*reporting_proxy_, DidEvaluateClassicScript(true)).Times(1);
     EXPECT_CALL(*reporting_proxy_, WillDestroyWorkerGlobalScope()).Times(1);
     EXPECT_CALL(*reporting_proxy_, DidTerminateWorkerThread()).Times(1);
-    EXPECT_CALL(*lifecycle_observer_, ContextDestroyed(_)).Times(1);
   }
 
   void ExpectReportingCallsForWorkerPossiblyTerminatedBeforeInitialization() {
@@ -222,7 +216,6 @@ class WorkerThreadTest : public testing::Test {
     EXPECT_CALL(*reporting_proxy_, WillDestroyWorkerGlobalScope())
         .Times(AtMost(1));
     EXPECT_CALL(*reporting_proxy_, DidTerminateWorkerThread()).Times(1);
-    EXPECT_CALL(*lifecycle_observer_, ContextDestroyed(_)).Times(1);
   }
 
   void ExpectReportingCallsForWorkerForciblyTerminated() {
@@ -233,7 +226,6 @@ class WorkerThreadTest : public testing::Test {
     EXPECT_CALL(*reporting_proxy_, DidEvaluateClassicScript(false)).Times(1);
     EXPECT_CALL(*reporting_proxy_, WillDestroyWorkerGlobalScope()).Times(1);
     EXPECT_CALL(*reporting_proxy_, DidTerminateWorkerThread()).Times(1);
-    EXPECT_CALL(*lifecycle_observer_, ContextDestroyed(_)).Times(1);
   }
 
   ExitCode GetExitCode() { return worker_thread_->GetExitCodeForTesting(); }
@@ -241,7 +233,6 @@ class WorkerThreadTest : public testing::Test {
   scoped_refptr<const SecurityOrigin> security_origin_;
   std::unique_ptr<MockWorkerReportingProxy> reporting_proxy_;
   std::unique_ptr<WorkerThreadForTest> worker_thread_;
-  Persistent<MockWorkerThreadLifecycleObserver> lifecycle_observer_;
 };
 
 TEST_F(WorkerThreadTest, ShouldTerminateScriptExecution) {
@@ -389,7 +380,6 @@ TEST_F(WorkerThreadTest, Terminate_WhileDebuggerTaskIsRunningOnInitialization) {
   EXPECT_CALL(*reporting_proxy_, DidInitializeWorkerContext()).Times(1);
   EXPECT_CALL(*reporting_proxy_, WillDestroyWorkerGlobalScope()).Times(1);
   EXPECT_CALL(*reporting_proxy_, DidTerminateWorkerThread()).Times(1);
-  EXPECT_CALL(*lifecycle_observer_, ContextDestroyed(_)).Times(1);
 
   Vector<CSPHeaderAndType> headers{
       {"contentSecurityPolicy", kContentSecurityPolicyHeaderTypeReport}};
@@ -398,9 +388,10 @@ TEST_F(WorkerThreadTest, Terminate_WhileDebuggerTaskIsRunningOnInitialization) {
       std::make_unique<GlobalScopeCreationParams>(
           KURL("http://fake.url/"), ScriptType::kClassic, "fake user agent",
           headers, kReferrerPolicyDefault, security_origin_.get(),
-          false /* starter_secure_context */, nullptr /* workerClients */,
-          mojom::IPAddressSpace::kLocal, nullptr /* originTrialToken */,
-          base::UnguessableToken::Create(),
+          false /* starter_secure_context */,
+          CalculateHttpsState(security_origin_.get()),
+          nullptr /* workerClients */, mojom::IPAddressSpace::kLocal,
+          nullptr /* originTrialToken */, base::UnguessableToken::Create(),
           std::make_unique<WorkerSettings>(Settings::Create().get()),
           kV8CacheOptionsDefault, nullptr /* worklet_module_responses_map */);
 

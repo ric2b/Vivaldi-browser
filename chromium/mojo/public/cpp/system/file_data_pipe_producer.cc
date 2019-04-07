@@ -16,7 +16,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/sequenced_task_runner.h"
 #include "base/synchronization/lock.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
 
@@ -267,7 +267,7 @@ void FileDataPipeProducer::WriteFromPath(const base::FilePath& path,
 void FileDataPipeProducer::InitializeNewRequest(CompletionCallback callback) {
   DCHECK(!file_sequence_state_);
   auto file_task_runner = base::CreateSequencedTaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::BACKGROUND});
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
   file_sequence_state_ = new FileSequenceState(
       std::move(producer_), file_task_runner,
       base::BindOnce(&FileDataPipeProducer::OnWriteComplete,

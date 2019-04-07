@@ -21,7 +21,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
 #include "storage/browser/storage_browser_export.h"
 #include "storage/common/database/database_connections.h"
 
@@ -31,7 +31,7 @@ class MockDatabaseTracker;
 }
 
 namespace sql {
-class Connection;
+class Database;
 class MetaTable;
 }
 
@@ -145,7 +145,7 @@ class STORAGE_EXPORT DatabaseTracker
   // if non-null.
   int DeleteDatabase(const std::string& origin_identifier,
                      const base::string16& database_name,
-                     const net::CompletionCallback& callback);
+                     net::CompletionOnceCallback callback);
 
   // Delete any databases that have been touched since the cutoff date that's
   // supplied, omitting any that match IDs within |protected_origins|.
@@ -154,14 +154,14 @@ class STORAGE_EXPORT DatabaseTracker
   // if non-null. Protected origins, according the the SpecialStoragePolicy,
   // are not deleted by this method.
   int DeleteDataModifiedSince(const base::Time& cutoff,
-                              const net::CompletionCallback& callback);
+                              net::CompletionOnceCallback callback);
 
   // Delete all databases that belong to the given origin. Returns net::OK on
   // success, net::FAILED if not all databases could be deleted, and
   // net::ERR_IO_PENDING and |callback| is invoked upon completion, if non-null.
   // virtual for unit testing only
   virtual int DeleteDataForOrigin(const std::string& origin_identifier,
-                                  const net::CompletionCallback& callback);
+                                  net::CompletionOnceCallback callback);
 
   bool IsIncognitoProfile() const { return is_incognito_; }
 
@@ -179,13 +179,19 @@ class STORAGE_EXPORT DatabaseTracker
 
   base::SequencedTaskRunner* task_runner() const { return task_runner_.get(); }
 
+  // TODO(jsbell): Remove this; tests should use the normal task runner.
+  void set_task_runner_for_testing(
+      scoped_refptr<base::SequencedTaskRunner> task_runner) {
+    task_runner_ = std::move(task_runner);
+  }
+
  private:
   friend class base::RefCountedThreadSafe<DatabaseTracker>;
   friend class content::DatabaseTracker_TestHelper_Test;
   friend class content::MockDatabaseTracker; // for testing
 
   typedef std::map<std::string, std::set<base::string16> > DatabaseSet;
-  typedef std::vector<std::pair<net::CompletionCallback, DatabaseSet> >
+  typedef std::vector<std::pair<net::CompletionOnceCallback, DatabaseSet>>
       PendingDeletionCallbacks;
   typedef std::map<base::string16, base::File*> FileHandlesMap;
   typedef std::map<std::string, base::string16> OriginDirectoriesMap;
@@ -267,16 +273,10 @@ class STORAGE_EXPORT DatabaseTracker
   // Schedule a set of open databases for deletion. If non-null, callback is
   // invoked upon completion.
   void ScheduleDatabasesForDeletion(const DatabaseSet& databases,
-                                    const net::CompletionCallback& callback);
+                                    net::CompletionOnceCallback callback);
 
   // Returns the directory where all DB files for the given origin are stored.
   base::string16 GetOriginDirectory(const std::string& origin_identifier);
-
-  // TODO(jsbell): Remove this; tests should use the normal task runner.
-  void set_task_runner_for_testing(
-      scoped_refptr<base::SequencedTaskRunner> task_runner) {
-    task_runner_ = std::move(task_runner);
-  }
 
   bool is_initialized_ = false;
   const bool is_incognito_;
@@ -289,10 +289,10 @@ class STORAGE_EXPORT DatabaseTracker
   // Thread-safety argument: The member is immutable.
   const base::FilePath db_dir_;
 
-  std::unique_ptr<sql::Connection> db_;
+  std::unique_ptr<sql::Database> db_;
   std::unique_ptr<DatabasesTable> databases_table_;
   std::unique_ptr<sql::MetaTable> meta_table_;
-  base::ObserverList<Observer, true> observers_;
+  base::ObserverList<Observer, true>::Unchecked observers_;
   std::map<std::string, CachedOriginInfo> origins_info_map_;
   DatabaseConnections database_connections_;
 

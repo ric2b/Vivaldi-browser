@@ -69,7 +69,7 @@ command_bash("build_dmg") {
     "--eula", rebase_path(eula, root_build_dir),
     "--background", rebase_path(background, root_build_dir),
     "--window-pos", "100", "100",
-    "--window-size", "577", "368",
+    "--window-size", "577", "366",
     "--text-size", "13",
     "--icon-size", "128",
     "--icon", "Vivaldi", "158", "152",

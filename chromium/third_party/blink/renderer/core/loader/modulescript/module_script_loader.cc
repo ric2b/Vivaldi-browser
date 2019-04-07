@@ -92,7 +92,7 @@ void ModuleScriptLoader::Fetch(
                         custom_fetch_type);
 }
 
-// https://html.spec.whatwg.org/#fetch-a-single-module-script
+// https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-single-module-script
 void ModuleScriptLoader::FetchInternal(
     const ModuleScriptFetchRequest& module_request,
     FetchClientSettingsObjectSnapshot* fetch_client_settings_object,
@@ -122,13 +122,13 @@ void ModuleScriptLoader::FetchInternal(
   options.parser_disposition = options_.ParserState();
 
   // As initiator for module script fetch is not specified in HTML spec,
-  // we specity "" as initiator per:
+  // we specify "" as initiator per:
   // https://fetch.spec.whatwg.org/#concept-request-initiator
   options.initiator_info.name = g_empty_atom;
 
   if (level == ModuleGraphLevel::kDependentModuleFetch) {
     options.initiator_info.imported_module_referrer =
-        module_request.GetReferrer().referrer;
+        module_request.ReferrerString();
     options.initiator_info.position = module_request.GetReferrerPosition();
   }
 
@@ -145,6 +145,12 @@ void ModuleScriptLoader::FetchInternal(
   // cryptographic nonce, ..." [spec text]
   fetch_params.SetContentSecurityPolicyNonce(options_.Nonce());
 
+  // [SMSR] "... its referrer policy to options's referrer policy." [spec text]
+  // Note: For now this is done below with SetHTTPReferrer()
+  ReferrerPolicy referrer_policy = module_request.Options().GetReferrerPolicy();
+  if (referrer_policy == kReferrerPolicyDefault)
+    referrer_policy = fetch_client_settings_object->GetReferrerPolicy();
+
   // Step 5. "... mode is "cors", ..."
   // [SMSR] "... and its credentials mode to options's credentials mode."
   // [spec text]
@@ -153,14 +159,23 @@ void ModuleScriptLoader::FetchInternal(
       options_.CredentialsMode());
 
   // Step 5. "... referrer is referrer, ..." [spec text]
+  // Note: For now this is done below with SetHTTPReferrer()
+  String referrer_string = module_request.ReferrerString();
+  if (referrer_string == Referrer::ClientReferrerString())
+    referrer_string = fetch_client_settings_object->GetOutgoingReferrer();
+
+  // TODO(domfarolino): Stop storing ResourceRequest's referrer as a
+  // blink::Referrer (https://crbug.com/850813).
   fetch_params.MutableResourceRequest().SetHTTPReferrer(
-      module_request.GetReferrer());
+      SecurityPolicy::GenerateReferrer(referrer_policy,
+                                       fetch_params.GetResourceRequest().Url(),
+                                       referrer_string));
 
   // Step 5. "... and client is fetch client settings object." [spec text]
   // -> set by ResourceFetcher
 
   // Note: The fetch request's "origin" isn't specified in
-  // https://html.spec.whatwg.org/#fetch-a-single-module-script
+  // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-single-module-script
   // Thus, the "origin" is "client" per
   // https://fetch.spec.whatwg.org/#concept-request-origin
 

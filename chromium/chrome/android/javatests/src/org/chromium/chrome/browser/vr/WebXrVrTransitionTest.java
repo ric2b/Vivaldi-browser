@@ -9,8 +9,11 @@ import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_CHECK_INTERVAL
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_CHECK_INTERVAL_SHORT_MS;
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_LONG_MS;
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_SHORT_MS;
-import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_DON_ENABLED;
+import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_DEVICE_DAYDREAM;
+import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_SVR;
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM;
+import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE;
+import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VR_SETTINGS_SERVICE;
 
 import android.annotation.TargetApi;
 import android.graphics.Bitmap;
@@ -36,16 +39,16 @@ import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.vr.rules.VrSettingsFile;
 import org.chromium.chrome.browser.vr.rules.XrActivityRestriction;
 import org.chromium.chrome.browser.vr.util.NfcSimUtils;
+import org.chromium.chrome.browser.vr.util.VrSettingsServiceUtils;
 import org.chromium.chrome.browser.vr.util.VrTestRuleUtils;
 import org.chromium.chrome.browser.vr.util.VrTransitionUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
-import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 
 import java.util.List;
@@ -76,7 +79,7 @@ public class WebXrVrTransitionTest {
 
     public WebXrVrTransitionTest(Callable<ChromeActivityTestRule> callable) throws Exception {
         mTestRule = callable.call();
-        mRuleChain = VrTestRuleUtils.wrapRuleInXrActivityRestrictionRule(mTestRule);
+        mRuleChain = VrTestRuleUtils.wrapRuleInActivityRestrictionRule(mTestRule);
     }
 
     @Before
@@ -116,35 +119,41 @@ public class WebXrVrTransitionTest {
             throws InterruptedException {
         framework.loadUrlAndAwaitInitialization(url, PAGE_LOAD_TIMEOUT_S);
         framework.enterSessionWithUserGestureOrFail();
-        Assert.assertTrue("VrShellDelegate is in VR", VrShellDelegate.isInVr());
+        Assert.assertTrue("Browser did not enter VR", VrShellDelegate.isInVr());
 
         // Initial Pixel Test - Verify that the Canvas is blue.
         // The Canvas is set to blue while presenting.
         final UiDevice uiDevice =
                 UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
 
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                Bitmap screenshot = InstrumentationRegistry.getInstrumentation()
-                                            .getUiAutomation()
-                                            .takeScreenshot();
+        // Screenshots are just black on standalones, so skip this part in that case.
+        if (!TestVrShellDelegate.isOnStandalone()) {
+            CriteriaHelper.pollInstrumentationThread(
+                    ()
+                            -> {
+                        Bitmap screenshot = InstrumentationRegistry.getInstrumentation()
+                                                    .getUiAutomation()
+                                                    .takeScreenshot();
 
-                if (screenshot != null) {
-                    // Calculate center of eye coordinates.
-                    int height = uiDevice.getDisplayHeight() / 2;
-                    int width = uiDevice.getDisplayWidth() / 4;
+                        if (screenshot != null) {
+                            // Calculate center of eye coordinates.
+                            int height = uiDevice.getDisplayHeight() / 2;
+                            int width = uiDevice.getDisplayWidth() / 4;
 
-                    // Verify screen is blue.
-                    int pixel = screenshot.getPixel(width, height);
-                    // Workaround for the immersive mode popup sometimes being rendered over the
-                    // screen on K, which causes the pure blue to be darkened to (0, 0, 127).
-                    // TODO(https://crbug.com/819021): Only check pure blue.
-                    return pixel == Color.BLUE || pixel == Color.rgb(0, 0, 127);
-                }
-                return false;
-            }
-        }, POLL_TIMEOUT_LONG_MS, POLL_CHECK_INTERVAL_LONG_MS);
+                            // Verify screen is blue.
+                            int pixel = screenshot.getPixel(width, height);
+                            // Workaround for the immersive mode popup sometimes being rendered over
+                            // the screen on K, which causes the pure blue to be darkened to (0, 0,
+                            // 127).
+                            // TODO(https://crbug.com/819021): Only check pure blue.
+                            return pixel == Color.BLUE || pixel == Color.rgb(0, 0, 127);
+                        }
+                        return false;
+                    },
+                    "Immersive session started, but browser not visibly in VR",
+                    POLL_TIMEOUT_LONG_MS, POLL_CHECK_INTERVAL_LONG_MS);
+        }
+        framework.assertNoJavaScriptErrors();
     }
 
     /**
@@ -215,7 +224,8 @@ public class WebXrVrTransitionTest {
      */
     @Test
     @MediumTest
-    @Restriction({RESTRICTION_TYPE_VIEWER_DAYDREAM, RESTRICTION_TYPE_DON_ENABLED})
+    @Restriction({RESTRICTION_TYPE_DEVICE_DAYDREAM, RESTRICTION_TYPE_VR_SETTINGS_SERVICE})
+    @VrSettingsFile(VrSettingsServiceUtils.FILE_DDVIEW_DONENABLED)
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
     public void testPresentationPromiseUnresolvedDuringDon() throws InterruptedException {
         presentationPromiseUnresolvedDuringDonImpl(
@@ -230,7 +240,8 @@ public class WebXrVrTransitionTest {
      */
     @Test
     @MediumTest
-    @Restriction({RESTRICTION_TYPE_VIEWER_DAYDREAM, RESTRICTION_TYPE_DON_ENABLED})
+    @Restriction({RESTRICTION_TYPE_DEVICE_DAYDREAM, RESTRICTION_TYPE_VR_SETTINGS_SERVICE})
+    @VrSettingsFile(VrSettingsServiceUtils.FILE_DDVIEW_DONENABLED)
     @CommandLineFlags
             .Remove({"enable-webvr"})
             @CommandLineFlags.Add({"enable-features=WebXR"})
@@ -255,7 +266,8 @@ public class WebXrVrTransitionTest {
      */
     @Test
     @MediumTest
-    @Restriction({RESTRICTION_TYPE_VIEWER_DAYDREAM, RESTRICTION_TYPE_DON_ENABLED})
+    @Restriction({RESTRICTION_TYPE_DEVICE_DAYDREAM, RESTRICTION_TYPE_VR_SETTINGS_SERVICE})
+    @VrSettingsFile(VrSettingsServiceUtils.FILE_DDVIEW_DONENABLED)
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
     public void testPresentationPromiseRejectedIfDonCanceled() throws InterruptedException {
         presentationPromiseRejectedIfDonCanceledImpl(
@@ -269,7 +281,8 @@ public class WebXrVrTransitionTest {
      */
     @Test
     @MediumTest
-    @Restriction({RESTRICTION_TYPE_VIEWER_DAYDREAM, RESTRICTION_TYPE_DON_ENABLED})
+    @Restriction({RESTRICTION_TYPE_DEVICE_DAYDREAM, RESTRICTION_TYPE_VR_SETTINGS_SERVICE})
+    @VrSettingsFile(VrSettingsServiceUtils.FILE_DDVIEW_DONENABLED)
     @CommandLineFlags
             .Remove({"enable-webvr"})
             @CommandLineFlags.Add({"enable-features=WebXR"})
@@ -291,12 +304,9 @@ public class WebXrVrTransitionTest {
         // Wait until the DON flow appears to be triggered
         // TODO(bsheedy): Make this less hacky if there's ever an explicit way to check if the
         // DON flow is currently active https://crbug.com/758296
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return uiDevice.getCurrentPackageName().equals("com.google.vr.vrcore");
-            }
-        }, POLL_TIMEOUT_LONG_MS, POLL_CHECK_INTERVAL_SHORT_MS);
+        CriteriaHelper.pollUiThread(() -> {
+            return uiDevice.getCurrentPackageName().equals("com.google.vr.vrcore");
+        }, "DON flow did not start", POLL_TIMEOUT_LONG_MS, POLL_CHECK_INTERVAL_SHORT_MS);
         uiDevice.pressBack();
         framework.waitOnJavaScriptStep();
         framework.endTest();
@@ -307,6 +317,7 @@ public class WebXrVrTransitionTest {
      */
     @Test
     @MediumTest
+    @Restriction(RESTRICTION_TYPE_SVR)
     public void testControlsVisibleAfterExitingVr() throws InterruptedException {
         controlsVisibleAfterExitingVrImpl(
                 WebVrTestFramework.getFileUrlForHtmlTestFile("generic_webvr_page"),
@@ -321,6 +332,7 @@ public class WebXrVrTransitionTest {
     @CommandLineFlags
             .Remove({"enable-webvr"})
             @CommandLineFlags.Add({"enable-features=WebXR"})
+            @Restriction(RESTRICTION_TYPE_SVR)
             public void testControlsVisibleAfterExitingVr_WebXr() throws InterruptedException {
         controlsVisibleAfterExitingVrImpl(
                 WebXrVrTestFramework.getFileUrlForHtmlTestFile("generic_webxr_page"),
@@ -336,13 +348,15 @@ public class WebXrVrTransitionTest {
         // to propagate. In the worst case this test will erroneously pass, but should never
         // erroneously fail, and should only be flaky if omnibox showing is broken.
         Thread.sleep(100);
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                ChromeActivity activity = framework.getRule().getActivity();
-                return activity.getFullscreenManager().getBrowserControlHiddenRatio() == 0.0;
-            }
-        }, POLL_TIMEOUT_SHORT_MS, POLL_CHECK_INTERVAL_SHORT_MS);
+        CriteriaHelper.pollUiThread(
+                ()
+                        -> {
+                    ChromeActivity activity = framework.getRule().getActivity();
+                    return activity.getFullscreenManager().getBrowserControlHiddenRatio() == 0.0;
+                },
+                "Browser controls did not unhide after exiting VR", POLL_TIMEOUT_SHORT_MS,
+                POLL_CHECK_INTERVAL_SHORT_MS);
+        framework.assertNoJavaScriptErrors();
     }
 
     /**
@@ -352,7 +366,6 @@ public class WebXrVrTransitionTest {
     @Test
     @MediumTest
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-    @RetryOnFailure
     public void testWindowRafStopsFiringWhilePresenting() throws InterruptedException {
         windowRafStopsFiringWhilePresentingImpl(
                 WebVrTestFramework.getFileUrlForHtmlTestFile(
@@ -399,7 +412,7 @@ public class WebXrVrTransitionTest {
      */
     @Test
     @MediumTest
-    @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
+    @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
     public void testRendererKilledInWebVrStaysInVr()
             throws IllegalArgumentException, InterruptedException, TimeoutException {
         rendererKilledInVrStaysInVrImpl(
@@ -412,7 +425,7 @@ public class WebXrVrTransitionTest {
      */
     @Test
     @MediumTest
-    @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
+    @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
     @CommandLineFlags
             .Remove({"enable-webvr"})
             @CommandLineFlags.Add({"enable-features=WebXR"})
@@ -428,7 +441,8 @@ public class WebXrVrTransitionTest {
         framework.loadUrlAndAwaitInitialization(url, PAGE_LOAD_TIMEOUT_S);
         framework.enterSessionWithUserGestureOrFail();
         framework.simulateRendererKilled();
-        Assert.assertTrue("Browser is in VR", VrShellDelegate.isInVr());
+        Assert.assertTrue("Browser did not enter VR", VrShellDelegate.isInVr());
+        framework.assertNoJavaScriptErrors();
     }
 
     /**

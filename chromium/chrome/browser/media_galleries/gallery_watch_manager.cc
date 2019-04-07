@@ -13,8 +13,8 @@
 #include "base/macros.h"
 #include "base/sequence_checker.h"
 #include "base/stl_util.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
@@ -192,7 +192,7 @@ GalleryWatchManager::NotificationInfo::~NotificationInfo() {
 GalleryWatchManager::GalleryWatchManager()
     : storage_monitor_observed_(false),
       watch_manager_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND})),
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT})),
       weak_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   watch_manager_.reset(new FileWatchManager(base::Bind(

@@ -37,7 +37,7 @@
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/platform/scroll/scrollbar_theme.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 
 namespace blink {
 
@@ -69,31 +69,31 @@ void SpinButtonElement::DetachLayoutTree(const AttachContext& context) {
   HTMLDivElement::DetachLayoutTree(context);
 }
 
-void SpinButtonElement::DefaultEventHandler(Event* event) {
-  if (!event->IsMouseEvent()) {
-    if (!event->DefaultHandled())
+void SpinButtonElement::DefaultEventHandler(Event& event) {
+  if (!event.IsMouseEvent()) {
+    if (!event.DefaultHandled())
       HTMLDivElement::DefaultEventHandler(event);
     return;
   }
 
   LayoutBox* box = GetLayoutBox();
   if (!box) {
-    if (!event->DefaultHandled())
+    if (!event.DefaultHandled())
       HTMLDivElement::DefaultEventHandler(event);
     return;
   }
 
   if (!ShouldRespondToMouseEvents()) {
-    if (!event->DefaultHandled())
+    if (!event.DefaultHandled())
       HTMLDivElement::DefaultEventHandler(event);
     return;
   }
 
-  MouseEvent* mouse_event = ToMouseEvent(event);
+  auto& mouse_event = ToMouseEvent(event);
   IntPoint local = RoundedIntPoint(box->AbsoluteToLocal(
-      FloatPoint(mouse_event->AbsoluteLocation()), kUseTransforms));
-  if (mouse_event->type() == EventTypeNames::mousedown &&
-      mouse_event->button() ==
+      FloatPoint(mouse_event.AbsoluteLocation()), kUseTransforms));
+  if (mouse_event.type() == EventTypeNames::mousedown &&
+      mouse_event.button() ==
           static_cast<short>(WebPointerProperties::Button::kLeft)) {
     if (box->PixelSnappedBorderBoxRect().Contains(local)) {
       if (spin_button_owner_)
@@ -109,13 +109,13 @@ void SpinButtonElement::DefaultEventHandler(Event* event) {
           DoStepAction(up_down_state_ == kUp ? 1 : -1);
         }
       }
-      event->SetDefaultHandled();
+      event.SetDefaultHandled();
     }
-  } else if (mouse_event->type() == EventTypeNames::mouseup &&
-             mouse_event->button() ==
+  } else if (mouse_event.type() == EventTypeNames::mouseup &&
+             mouse_event.button() ==
                  static_cast<short>(WebPointerProperties::Button::kLeft)) {
     ReleaseCapture();
-  } else if (event->type() == EventTypeNames::mousemove) {
+  } else if (event.type() == EventTypeNames::mousemove) {
     if (box->PixelSnappedBorderBoxRect().Contains(local)) {
       if (!capturing_) {
         if (LocalFrame* frame = GetDocument().GetFrame()) {
@@ -135,7 +135,7 @@ void SpinButtonElement::DefaultEventHandler(Event* event) {
     }
   }
 
-  if (!event->DefaultHandled())
+  if (!event.DefaultHandled())
     HTMLDivElement::DefaultEventHandler(event);
 }
 
@@ -144,11 +144,11 @@ void SpinButtonElement::WillOpenPopup() {
   up_down_state_ = kIndeterminate;
 }
 
-void SpinButtonElement::ForwardEvent(Event* event) {
+void SpinButtonElement::ForwardEvent(Event& event) {
   if (!GetLayoutBox())
     return;
 
-  if (!event->HasInterface(EventNames::WheelEvent))
+  if (!event.HasInterface(EventNames::WheelEvent))
     return;
 
   if (!spin_button_owner_)
@@ -157,8 +157,8 @@ void SpinButtonElement::ForwardEvent(Event* event) {
   if (!spin_button_owner_->ShouldSpinButtonRespondToWheelEvents())
     return;
 
-  DoStepAction(ToWheelEvent(event)->wheelDeltaY());
-  event->SetDefaultHandled();
+  DoStepAction(ToWheelEvent(event).wheelDeltaY());
+  event.SetDefaultHandled();
 }
 
 bool SpinButtonElement::WillRespondToMouseMoveEvents() {

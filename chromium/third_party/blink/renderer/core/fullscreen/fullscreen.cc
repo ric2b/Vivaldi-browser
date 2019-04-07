@@ -43,16 +43,18 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
+#include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen_options.h"
+#include "third_party/blink/renderer/core/fullscreen/scoped_allow_fullscreen.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/html_element_type_helpers.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
+#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/feature_policy/feature_policy.h"
-#include "third_party/blink/renderer/platform/scoped_orientation_change_indicator.h"
 
 namespace blink {
 
@@ -110,6 +112,11 @@ void FullscreenElementChanged(Document& document,
     // https://crbug.com/668758
     frame->GetEventHandler().ScheduleHoverStateUpdate();
     frame->GetChromeClient().FullscreenElementChanged(old_element, new_element);
+
+    // Update paint properties on the visual viewport since
+    // user-input-scrollable bits will change based on fullscreen state.
+    if (Page* page = frame->GetPage())
+      page->GetVisualViewport().SetNeedsPaintPropertiesUpdate();
   }
 }
 
@@ -142,10 +149,15 @@ void GoFullscreen(Element& element, Fullscreen::RequestType request_type) {
   Document& document = element.GetDocument();
   Element* old_element = Fullscreen::FullscreenElementFrom(document);
 
+  // If |element| is already in top layer remove it so it will
+  // be appended to the end.
+  if (element.IsInTopLayer())
+    document.RemoveFromTopLayer(&element);
+  else
+    DCHECK(!HasFullscreenFlag(element));
+
   // To fullscreen an |element| within a |document|, set the |element|'s
   // fullscreen flag and add it to |document|'s top layer.
-  DCHECK(!HasFullscreenFlag(element));
-  DCHECK(!element.IsInTopLayer());
   SetFullscreenFlag(element, request_type);
   document.AddToTopLayer(&element);
 
@@ -192,7 +204,8 @@ void Unfullscreen(Document& document) {
 }
 
 // https://html.spec.whatwg.org/multipage/embedded-content.html#allowed-to-use
-bool AllowedToUseFullscreen(const Frame* frame) {
+bool AllowedToUseFullscreen(const Frame* frame,
+                            ReportOptions report_on_failure) {
   // To determine whether a Document object |document| is allowed to use the
   // feature indicated by attribute name |allowattribute|, run these steps:
 
@@ -202,7 +215,8 @@ bool AllowedToUseFullscreen(const Frame* frame) {
 
   // 2. If Feature Policy is enabled, return the policy for "fullscreen"
   // feature.
-  return frame->IsFeatureEnabled(mojom::FeaturePolicyFeature::kFullscreen);
+  return frame->IsFeatureEnabled(mojom::FeaturePolicyFeature::kFullscreen,
+                                 report_on_failure);
 }
 
 bool AllowedToRequestFullscreen(Document& document) {
@@ -214,7 +228,8 @@ bool AllowedToRequestFullscreen(Document& document) {
     return true;
 
   //  The algorithm is triggered by a user generated orientation change.
-  if (ScopedOrientationChangeIndicator::ProcessingOrientationChange()) {
+  if (ScopedAllowFullscreen::FullscreenAllowedReason() ==
+      ScopedAllowFullscreen::kOrientationChange) {
     UseCounter::Count(document,
                       WebFeature::kFullscreenAllowedByOrientationChange);
     return true;
@@ -242,7 +257,8 @@ bool FullscreenIsSupported(const Document& document) {
 }
 
 // https://fullscreen.spec.whatwg.org/#fullscreen-element-ready-check
-bool FullscreenElementReady(const Element& element) {
+bool FullscreenElementReady(const Element& element,
+                            ReportOptions report_on_failure) {
   // A fullscreen element ready check for an element |element| returns true if
   // all of the following are true, and false otherwise:
 
@@ -252,30 +268,9 @@ bool FullscreenElementReady(const Element& element) {
 
   // |element|'s node document is allowed to use the feature indicated by
   // attribute name allowfullscreen.
-  if (!AllowedToUseFullscreen(element.GetDocument().GetFrame()))
+  if (!AllowedToUseFullscreen(element.GetDocument().GetFrame(),
+                              report_on_failure))
     return false;
-
-  // |element|'s node document's fullscreen element stack is either empty or its
-  // top element is an inclusive ancestor of |element|.
-  if (const Element* top_element =
-          Fullscreen::FullscreenElementFrom(element.GetDocument())) {
-    if (!top_element->contains(&element))
-      return false;
-  }
-
-  // |element| has no ancestor element whose local name is iframe and namespace
-  // is the HTML namespace.
-  if (Traversal<HTMLIFrameElement>::FirstAncestor(element))
-    return false;
-
-  // |element|'s node document's browsing context either has a browsing context
-  // container and the fullscreen element ready check returns true for
-  // |element|'s node document's browsing context's browsing context container,
-  // or it has no browsing context container.
-  if (const Element* owner = element.GetDocument().LocalOwner()) {
-    if (!FullscreenElementReady(*owner))
-      return false;
-  }
 
   return true;
 }
@@ -292,7 +287,7 @@ bool RequestFullscreenConditionsMet(Element& pending, Document& document) {
     return false;
 
   // The fullscreen element ready check for |pending| returns false.
-  if (!FullscreenElementReady(pending))
+  if (!FullscreenElementReady(pending, ReportOptions::kReportOnFailure))
     return false;
 
   // Fullscreen is supported.
@@ -440,7 +435,7 @@ void FireEvent(const AtomicString& type, Element* element, Document* document) {
   // set to true, at |target|.
   Event* event = Event::CreateBubble(type);
   event->SetComposed(true);
-  target->DispatchEvent(event);
+  target->DispatchEvent(*event);
 }
 
 const AtomicString& AdjustEventType(const AtomicString& type,
@@ -668,7 +663,8 @@ void Fullscreen::ContinueRequestFullscreen(Document& document,
   // 9. If any of the following conditions are false, then set |error| to true:
   //     * |pending|'s node document is |pendingDoc|.
   //     * The fullscreen element ready check for |pending| returns true.
-  if (pending.GetDocument() != document || !FullscreenElementReady(pending))
+  if (pending.GetDocument() != document ||
+      !FullscreenElementReady(pending, ReportOptions::kDoNotReport))
     error = true;
 
   // 10. If |error| is true:
@@ -959,7 +955,8 @@ bool Fullscreen::FullscreenEnabled(Document& document) {
   // The fullscreenEnabled attribute's getter must return true if the context
   // object is allowed to use the feature indicated by attribute name
   // allowfullscreen and fullscreen is supported, and false otherwise.
-  return AllowedToUseFullscreen(document.GetFrame()) &&
+  return AllowedToUseFullscreen(document.GetFrame(),
+                                ReportOptions::kDoNotReport) &&
          FullscreenIsSupported(document);
 }
 

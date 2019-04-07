@@ -10,6 +10,7 @@
 #include "ash/shell.h"
 #include "ash/wm/tablet_mode/tablet_mode_app_window_drag_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/window_state.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/window.h"
@@ -65,16 +66,23 @@ bool ImmersiveGestureHandlerClassic::CanDrag(ui::GestureEvent* event) {
   if (!base::FeatureList::IsEnabled(ash::features::kDragAppsInTabletMode))
     return false;
 
-  aura::Window* window(static_cast<aura::Window*>(event->target()));
-  // Only process the event if its target is the native window of
+  views::Widget* widget = views::Widget::GetTopLevelWidgetForNativeView(
+      static_cast<aura::Window*>(event->target()));
+  if (!widget)
+    return false;
+
+  aura::Window* window = widget->GetNativeWindow();
+  // Only process the event if its target has the same native window as
   // |immersive_fullscreen_controller_->widget()|.
   if (window != immersive_fullscreen_controller_->widget()->GetNativeWindow())
     return false;
 
-  // TODO(minch): Also allow windows in fullscreen mode can be dragged.
-  // Only maximized none browser window in tablet mode allowed to be dragged.
-  const views::Widget* widget = views::Widget::GetWidgetForNativeWindow(window);
-  if (!widget || !widget->IsMaximized() ||
+  // Maximized, fullscreened and snapped none BROWSER windows in tablet mode are
+  // allowed to be dragged.
+  wm::WindowState* window_state = wm::GetWindowState(window);
+  if (!window_state ||
+      (!window_state->IsMaximized() && !window_state->IsFullscreen() &&
+       !window_state->IsSnapped()) ||
       !Shell::Get()
            ->tablet_mode_controller()
            ->IsTabletModeWindowManagerEnabled() ||
@@ -113,6 +121,8 @@ ImmersiveGestureHandlerClassic::~ImmersiveGestureHandlerClassic() {
 }
 
 void ImmersiveGestureHandlerClassic::OnGestureEvent(ui::GestureEvent* event) {
+  // TODO(minch): Make window can be dragged from top if docked magnifier is
+  // enabled. http://crbug.com/866680.
   if (CanDrag(event)) {
     DCHECK(tablet_mode_app_window_drag_controller_);
     if (tablet_mode_app_window_drag_controller_->DragWindowFromTop(event))

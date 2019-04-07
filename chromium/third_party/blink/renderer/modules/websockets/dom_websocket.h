@@ -43,6 +43,7 @@
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/websockets/websocket_channel.h"
 #include "third_party/blink/renderer/modules/websockets/websocket_channel_client.h"
+#include "third_party/blink/renderer/modules/websockets/websocket_channel_impl.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/timer.h"
@@ -68,7 +69,6 @@ class MODULES_EXPORT DOMWebSocket : public EventTargetWithInlineData,
   USING_GARBAGE_COLLECTED_MIXIN(DOMWebSocket);
 
  public:
-  static const char* SubprotocolSeperator();
   // DOMWebSocket instances must be used with a wrapper since this class's
   // lifetime management is designed assuming the V8 holds a ref on it while
   // hasPendingActivity() returns true.
@@ -168,12 +168,15 @@ class MODULES_EXPORT DOMWebSocket : public EventTargetWithInlineData,
     void Unpause();
     void ContextDestroyed();
 
+    bool IsPaused();
+
     void Trace(blink::Visitor*);
 
    private:
     enum State {
       kActive,
       kPaused,
+      kUnpausePosted,
       kStopped,
     };
 
@@ -182,12 +185,11 @@ class MODULES_EXPORT DOMWebSocket : public EventTargetWithInlineData,
     // Dispatches queued events if this queue is active.
     // Does nothing otherwise.
     void DispatchQueuedEvents();
-    void ResumeTimerFired(TimerBase*);
+    void UnpauseTask();
 
     State state_;
     Member<EventTarget> target_;
     HeapDeque<Member<Event>> events_;
-    TaskRunnerTimer<EventQueue> resume_timer_;
   };
 
   enum WebSocketSendType {
@@ -208,10 +210,10 @@ class MODULES_EXPORT DOMWebSocket : public EventTargetWithInlineData,
   enum BinaryType { kBinaryTypeBlob, kBinaryTypeArrayBuffer };
 
   // This function is virtual for unittests.
-  // FIXME: Move WebSocketChannel::create here.
   virtual WebSocketChannel* CreateChannel(ExecutionContext* context,
                                           WebSocketChannelClient* client) {
-    return WebSocketChannel::Create(context, client);
+    return WebSocketChannelImpl::Create(context, client,
+                                        SourceLocation::Capture(context));
   }
 
   // Adds a console message with JSMessageSource and ErrorMessageLevel.
@@ -225,7 +227,18 @@ class MODULES_EXPORT DOMWebSocket : public EventTargetWithInlineData,
   // Updates |buffered_amount_after_close_| given the amount of data passed to
   // send() method after the state changed to CLOSING or CLOSED.
   void UpdateBufferedAmountAfterClose(uint64_t);
-  void ReflectBufferedAmountConsumption(TimerBase*);
+
+  // Causes |buffered_amount_| to be updated asynchronously after returning to
+  // the event loop. Uses |buffered_amount_update_task_pending_| to avoid
+  // posting multiple tasks simultaneously.
+  void PostBufferedAmountUpdateTask();
+
+  // Updates |buffered_amount_| and resets
+  // |buffered_amount_update_task_pending_|.
+  void BufferedAmountUpdateTask();
+
+  // Updates |buffered_amount_| provided the object is not currently paused.
+  void ReflectBufferedAmountConsumption();
 
   void ReleaseChannel();
   void RecordSendTypeHistogram(WebSocketSendType);
@@ -251,7 +264,8 @@ class MODULES_EXPORT DOMWebSocket : public EventTargetWithInlineData,
   String extensions_;
 
   Member<EventQueue> event_queue_;
-  TaskRunnerTimer<DOMWebSocket> buffered_amount_consume_timer_;
+
+  bool buffered_amount_update_task_pending_;
 };
 
 }  // namespace blink

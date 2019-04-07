@@ -83,20 +83,18 @@ Polymer({
   },
 
   onBeforeShow: function() {
-    if (document.documentElement.getAttribute('full-screen-dialog'))
-      this.fullScreenDialog = true;
-
-    if (this.fullScreenDialog) {
-      this.$.welcomeScreen.fullScreenDialog = true;
-      this.$.networkSelectionScreen.fullScreenDialog = true;
-    }
-
     this.behaviors.forEach((behavior) => {
       if (behavior.onBeforeShow)
         behavior.onBeforeShow.call(this);
     });
 
-    this.$.networkSelectionScreen.onBeforeShow();
+    if (this.fullScreenDialog)
+      this.$.welcomeScreen.fullScreenDialog = true;
+
+    this.$.welcomeScreen.onBeforeShow();
+    let dialogs = Polymer.dom(this.root).querySelectorAll('oobe-dialog');
+    for (let dialog of dialogs)
+      dialog.onBeforeShow();
 
     let activeScreen = this.getActiveScreen_();
     if (activeScreen.show)
@@ -112,7 +110,6 @@ Polymer({
     this.timezones = loadTimeData.getValue('timezoneList');
     this.highlightStrength = loadTimeData.getValue('highlightStrength');
 
-    this.$.networkSelectionScreen.i18nUpdateLocale();
     this.$.welcomeScreen.i18nUpdateLocale();
     this.i18nUpdateLocale();
   },
@@ -138,7 +135,6 @@ Polymer({
    */
   hideAllScreens_: function() {
     this.$.welcomeScreen.hidden = true;
-    this.$.networkSelectionScreen.hidden = true;
 
     var screens = Polymer.dom(this.root).querySelectorAll('oobe-dialog');
     for (var i = 0; i < screens.length; ++i) {
@@ -199,7 +195,7 @@ Polymer({
    * @private
    */
   onWelcomeNextButtonClicked_: function() {
-    this.showScreen_('networkSelectionScreen');
+    chrome.send('login.WelcomeScreen.userActed', ['continue']);
   },
 
   /**
@@ -236,20 +232,6 @@ Polymer({
    */
   onWelcomeTimezoneButtonClicked_: function() {
     this.showScreen_('timezoneScreen');
-  },
-
-  /** @private */
-  onNetworkSelectionNextButtonClicked_: function() {
-    chrome.send('login.WelcomeScreen.userActed', ['continue']);
-  },
-
-  /**
-   * Handle "<- Back" button on network selection screen.
-   *
-   * @private
-   */
-  onNetworkSelectionBackButtonClicked_: function() {
-    this.showScreen_('welcomeScreen');
   },
 
   /**

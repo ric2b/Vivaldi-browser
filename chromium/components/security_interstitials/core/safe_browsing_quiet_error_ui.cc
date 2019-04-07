@@ -7,8 +7,7 @@
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
-#include "base/strings/utf_string_conversions.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/grit/components_resources.h"
 #include "components/security_interstitials/core/common_string_util.h"
 #include "components/security_interstitials/core/metrics_helper.h"
@@ -61,29 +60,24 @@ void SafeBrowsingQuietErrorUI::PopulateStringsForHtml(
       l10n_util::GetStringUTF16(IDS_SAFEBROWSING_V3_OPEN_DETAILS_BUTTON));
   load_time_data->SetBoolean("is_giant", is_giant_webview_);
 
-  bool phishing =
-      interstitial_reason() == BaseSafeBrowsingErrorUI::SB_REASON_PHISHING;
-  load_time_data->SetBoolean("phishing", phishing);
-  load_time_data->SetString(
-      "heading", phishing
-                     ? l10n_util::GetStringUTF16(IDS_PHISHING_WEBVIEW_HEADING)
-                     : l10n_util::GetStringUTF16(IDS_MALWARE_WEBVIEW_HEADING));
-
-  int explanation_ids = -1;
-  if (phishing)
-    explanation_ids = IDS_PHISHING_WEBVIEW_EXPLANATION_PARAGRAPH;
-  else if (interstitial_reason() == BaseSafeBrowsingErrorUI::SB_REASON_MALWARE)
-    explanation_ids = IDS_MALWARE_WEBVIEW_EXPLANATION_PARAGRAPH;
-
-  if (explanation_ids > -1) {
-    load_time_data->SetString("explanationParagraph",
-                              l10n_util::GetStringUTF16(explanation_ids));
-  } else {
-    NOTREACHED();
+  switch (interstitial_reason()) {
+    case BaseSafeBrowsingErrorUI::SB_REASON_MALWARE:
+      PopulateMalwareLoadTimeData(load_time_data);
+      break;
+    case BaseSafeBrowsingErrorUI::SB_REASON_HARMFUL:
+      PopulateHarmfulLoadTimeData(load_time_data);
+      break;
+    case BaseSafeBrowsingErrorUI::SB_REASON_PHISHING:
+      PopulatePhishingLoadTimeData(load_time_data);
+      break;
+    case BaseSafeBrowsingErrorUI::SB_REASON_BILLING:
+      // This is not currently handled in WebView.
+      NOTREACHED();
+      break;
   }
 
   // Not used by this interstitial.
-  load_time_data->SetString("recurrentErrorParagraph", base::string16());
+  load_time_data->SetString("recurrentErrorParagraph", "");
   load_time_data->SetBoolean("show_recurrent_error_paragraph", false);
 }
 
@@ -124,8 +118,38 @@ void SafeBrowsingQuietErrorUI::HandleCommand(
   }
 }
 
+void SafeBrowsingQuietErrorUI::PopulateMalwareLoadTimeData(
+    base::DictionaryValue* load_time_data) {
+  load_time_data->SetBoolean("phishing", false);
+  load_time_data->SetString(
+      "heading", l10n_util::GetStringUTF16(IDS_MALWARE_WEBVIEW_HEADING));
+  load_time_data->SetString(
+      "explanationParagraph",
+      l10n_util::GetStringUTF16(IDS_MALWARE_WEBVIEW_EXPLANATION_PARAGRAPH));
+}
+
+void SafeBrowsingQuietErrorUI::PopulateHarmfulLoadTimeData(
+    base::DictionaryValue* load_time_data) {
+  load_time_data->SetBoolean("phishing", false);
+  load_time_data->SetString(
+      "heading", l10n_util::GetStringUTF16(IDS_HARMFUL_WEBVIEW_HEADING));
+  load_time_data->SetString(
+      "explanationParagraph",
+      l10n_util::GetStringUTF16(IDS_HARMFUL_WEBVIEW_EXPLANATION_PARAGRAPH));
+}
+
+void SafeBrowsingQuietErrorUI::PopulatePhishingLoadTimeData(
+    base::DictionaryValue* load_time_data) {
+  load_time_data->SetBoolean("phishing", true);
+  load_time_data->SetString(
+      "heading", l10n_util::GetStringUTF16(IDS_PHISHING_WEBVIEW_HEADING));
+  load_time_data->SetString(
+      "explanationParagraph",
+      l10n_util::GetStringUTF16(IDS_PHISHING_WEBVIEW_EXPLANATION_PARAGRAPH));
+}
+
 int SafeBrowsingQuietErrorUI::GetHTMLTemplateId() const {
   return IDR_SECURITY_INTERSTITIAL_QUIET_HTML;
-};
+}
 
-}  // security_interstitials
+}  // namespace security_interstitials

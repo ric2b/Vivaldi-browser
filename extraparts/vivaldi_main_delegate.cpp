@@ -12,10 +12,6 @@ VivaldiMainDelegate::VivaldiMainDelegate()
     : VivaldiMainDelegate(base::TimeTicks()) {}
 
 VivaldiMainDelegate::VivaldiMainDelegate(base::TimeTicks exe_entry_point_ticks)
-    : ChromeMainDelegate(exe_entry_point_ticks) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::VivaldiExtensionsClient::RegisterVivaldiExtensionsClient();
-#endif
-}
+    : ChromeMainDelegate(exe_entry_point_ticks) {}
 
 VivaldiMainDelegate::~VivaldiMainDelegate() {}

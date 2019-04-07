@@ -30,7 +30,6 @@
 #include "build/build_config.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/bad_message.h"
-#include "content/browser/loader/global_routing_id.h"
 #include "content/browser/renderer_host/media/old_render_frame_audio_input_stream_factory.h"
 #include "content/browser/renderer_host/media/old_render_frame_audio_output_stream_factory.h"
 #include "content/browser/renderer_host/media/render_frame_audio_input_stream_factory.h"
@@ -50,6 +49,7 @@
 #include "content/common/navigation_params.mojom.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/previews_state.h"
@@ -65,10 +65,10 @@
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/frame/user_activation_update_type.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
+#include "third_party/blink/public/mojom/presentation/presentation.mojom.h"
 #include "third_party/blink/public/platform/dedicated_worker_factory.mojom.h"
 #include "third_party/blink/public/platform/modules/bluetooth/web_bluetooth.mojom.h"
-#include "third_party/blink/public/platform/modules/presentation/presentation.mojom.h"
-#include "third_party/blink/public/platform/modules/webauth/authenticator.mojom.h"
+#include "third_party/blink/public/platform/modules/webauthn/authenticator.mojom.h"
 #include "third_party/blink/public/platform/web_focus_type.h"
 #include "third_party/blink/public/platform/web_insecure_request_policy.h"
 #include "third_party/blink/public/platform/web_scroll_types.h"
@@ -105,10 +105,16 @@ class ListValue;
 }
 
 namespace blink {
+class AssociatedInterfaceProvider;
+class AssociatedInterfaceRegistry;
 struct FramePolicy;
 struct WebFullscreenOptions;
 struct WebScrollIntoViewParams;
+
+namespace mojom {
+class WebUsbService;
 }
+}  // namespace blink
 
 namespace gfx {
 class Range;
@@ -120,8 +126,6 @@ struct ResourceResponse;
 }  // namespace network
 
 namespace content {
-class AssociatedInterfaceProviderImpl;
-class AssociatedInterfaceRegistryImpl;
 class AuthenticatorImpl;
 class FrameTree;
 class FrameTreeNode;
@@ -249,7 +253,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void ExecuteMediaPlayerActionAtLocation(
       const gfx::Point&,
       const blink::WebMediaPlayerAction& action) override;
-  void CreateNetworkServiceDefaultFactory(
+  bool CreateNetworkServiceDefaultFactory(
       network::mojom::URLLoaderFactoryRequest default_factory_request) override;
 
   // IPC::Sender
@@ -778,6 +782,15 @@ class CONTENT_EXPORT RenderFrameHostImpl
       service_manager::mojom::InterfaceProviderRequest
           interface_provider_request);
 
+  service_manager::BinderRegistry& BinderRegistryForTesting() {
+    return *registry_;
+  }
+
+  // Called when the WebAudio AudioContext given by |audio_context_id| has
+  // started (or stopped) playing audible audio.
+  void AudioContextPlaybackStarted(int audio_context_id);
+  void AudioContextPlaybackStopped(int audio_context_id);
+
  protected:
   friend class RenderFrameHostFactory;
 
@@ -821,6 +834,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest,
                            WebUIJavascriptDisallowedAfterSwapOut);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest, LastCommittedOrigin);
+  FRIEND_TEST_ALL_PREFIXES(
+      RenderFrameHostManagerUnloadBrowserTest,
+      PendingDeleteRFHProcessShutdownDoesNotRemoveSubframes);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest, CrashSubframe);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest, FindImmediateLocalRoots);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
@@ -841,6 +857,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
                            SwapOutACKArrivesPriorToProcessShutdownRequest);
   FRIEND_TEST_ALL_PREFIXES(SecurityExploitBrowserTest,
                            AttemptDuplicateRenderViewHost);
+  FRIEND_TEST_ALL_PREFIXES(WebContentsImplBrowserTest,
+                           FullscreenAfterFrameSwap);
 
   class DroppedInterfaceRequestLogger;
 
@@ -1041,8 +1059,19 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Creates a Network Service-backed factory from appropriate |NetworkContext|
   // and sets a connection error handler to trigger
-  // |OnNetworkServiceConnectionError()| if the factory is out-of-process.
-  void CreateNetworkServiceDefaultFactoryAndObserve(
+  // |OnNetworkServiceConnectionError()| if the factory is out-of-process.  If
+  // this returns true, any redirect safety checks should be bypassed in
+  // downstream loaders.
+  // |url| is the URL that the RenderFrame is either committing (in the case of
+  // navigation) or has last committed (when handling network process crashes).
+  bool CreateNetworkServiceDefaultFactoryAndObserve(
+      const GURL& url,
+      network::mojom::URLLoaderFactoryRequest default_factory_request);
+
+  // |url| is the URL that the RenderFrame is either committing (in the case of
+  // navigation) or has last committed (when handling network process crashes).
+  bool CreateNetworkServiceDefaultFactoryInternal(
+      const GURL& url,
       network::mojom::URLLoaderFactoryRequest default_factory_request);
 
   // Returns true if the ExecuteJavaScript() API can be used on this host.
@@ -1088,8 +1117,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
       WebBluetoothServiceImpl* web_bluetooth_service);
 
   // Creates connections to WebUSB interfaces bound to this frame.
-  void CreateUsbDeviceManager(device::mojom::UsbDeviceManagerRequest request);
-  void CreateUsbChooserService(device::mojom::UsbChooserServiceRequest request);
+  void CreateWebUsbService(
+      mojo::InterfaceRequest<blink::mojom::WebUsbService> request);
 
   void CreateAudioInputStreamFactory(
       mojom::RendererAudioInputStreamFactoryRequest request);
@@ -1266,6 +1295,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
       std::unique_ptr<URLLoaderFactoryBundleInfo> bundle_info);
   std::unique_ptr<URLLoaderFactoryBundleInfo> CloneSubresourceFactories();
 
+  // Creates a TracedValue object containing the details of a committed
+  // navigation, so it can be logged with the tracing system.
+  std::unique_ptr<base::trace_event::TracedValue> CommitAsTracedValue(
+      FrameHostMsg_DidCommitProvisionalLoad_Params* validated_params) const;
+
   // For now, RenderFrameHosts indirectly keep RenderViewHosts alive via a
   // refcount that calls Shutdown when it reaches zero.  This allows each
   // RenderFrameHostManager to just care about RenderFrameHosts, while ensuring
@@ -1416,7 +1450,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // SensorProvider proxy which acts as a gatekeeper to the real SensorProvider.
   std::unique_ptr<SensorProviderProxyImpl> sensor_provider_proxy_;
 
-  std::unique_ptr<AssociatedInterfaceRegistryImpl> associated_registry_;
+  std::unique_ptr<blink::AssociatedInterfaceRegistry> associated_registry_;
 
   std::unique_ptr<service_manager::BinderRegistry> registry_;
   std::unique_ptr<service_manager::InterfaceProvider> remote_interfaces_;
@@ -1588,7 +1622,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   std::unique_ptr<AuthenticatorImpl> authenticator_impl_;
 #endif
 
-  std::unique_ptr<AssociatedInterfaceProviderImpl>
+  std::unique_ptr<blink::AssociatedInterfaceProvider>
       remote_associated_interfaces_;
 
   // A bitwise OR of bindings types that have been enabled for this RenderFrame.
@@ -1677,6 +1711,18 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // |RenderFrame|.
   network::mojom::URLLoaderFactoryPtr
       network_service_connection_error_handler_holder_;
+
+  // Holds the renderer generated ID and global request ID for the main frame
+  // request.
+  std::pair<int, GlobalRequestID> main_frame_request_ids_;
+
+  // If |ResourceLoadComplete()| is called for the main resource before
+  // |DidCommitProvisionalLoad()|, the load info is saved here to call
+  // |ResourceLoadComplete()| when |DidCommitProvisionalLoad()| is called. This
+  // is necessary so the renderer ID can be mapped to the global ID in
+  // |DidCommitProvisionalLoad()|. This situation should only happen when an
+  // empty document is loaded.
+  mojom::ResourceLoadInfoPtr deferred_main_frame_load_info_;
 
   // NOTE: This must be the last member.
   base::WeakPtrFactory<RenderFrameHostImpl> weak_ptr_factory_;

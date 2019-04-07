@@ -6,8 +6,6 @@
 #include "content/public/browser/browser_context.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(extensions::VivaldiAppHelper);
-
 namespace extensions {
 
 VivaldiAppHelper::VivaldiAppHelper(content::WebContents* contents) {}

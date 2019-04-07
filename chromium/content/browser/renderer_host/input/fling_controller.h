@@ -46,6 +46,8 @@ class CONTENT_EXPORT FlingControllerSchedulerClient {
 
   virtual void DidStopFlingingOnBrowser(
       base::WeakPtr<FlingController> fling_controller) = 0;
+
+  virtual bool NeedsBeginFrameForFlingProgress() = 0;
 };
 
 class CONTENT_EXPORT FlingController {
@@ -98,8 +100,6 @@ class CONTENT_EXPORT FlingController {
   bool fling_in_progress() const { return fling_in_progress_; }
 
   bool FlingCancellationIsDeferred() const;
-
-  bool TouchscreenFlingInProgress() const;
 
   gfx::Vector2dF CurrentFlingVelocity() const;
 

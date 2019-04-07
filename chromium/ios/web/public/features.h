@@ -10,17 +10,11 @@
 namespace web {
 namespace features {
 
-// Used to enable asynchronous DOM element fetching for context menu.
-extern const base::Feature kContextMenuElementPostMessage;
-
 // Used to enable API to send messages directly to frames of a webpage.
 extern const base::Feature kWebFrameMessaging;
 
 // Used to enable the WKBackForwardList based navigation manager.
 extern const base::Feature kSlimNavigationManager;
-
-// Used to enable new Download Manager UI and backend.
-extern const base::Feature kNewFileDownload;
 
 // Used to enable displaying error pages in WebState by loading HTML string.
 extern const base::Feature kWebErrorPages;
@@ -40,6 +34,9 @@ extern const base::Feature kCrashOnUnexpectedURLChange;
 
 // Used to make BrowserContainerViewController fullscreen.
 extern const base::Feature kBrowserContainerFullscreen;
+
+// Used to use the fullscreen implementation out of web.
+extern const base::Feature kOutOfWebFullscreen;
 
 }  // namespace features
 }  // namespace web

@@ -26,7 +26,7 @@ namespace {
 void GetUtilityProcessPidsOnIOThread(std::vector<pid_t>* pids) {
   for (BrowserChildProcessHostIterator it(content::PROCESS_TYPE_UTILITY);
        !it.Done(); ++it) {
-    pid_t pid = it.GetData().handle;
+    pid_t pid = it.GetData().GetHandle();
     pids->push_back(pid);
   }
 }
@@ -53,7 +53,8 @@ using ChromeContentBrowserClientMashTest = InProcessBrowserTest;
 // Verifies that mash service child processes use in-process breakpad crash
 // dumping.
 IN_PROC_BROWSER_TEST_F(ChromeContentBrowserClientMashTest, CrashReporter) {
-  if (features::IsAshInBrowserProcess())
+  // Test only applies to out-of-process.
+  if (!features::IsMultiProcessMash())
     return;
 
   // Child process management lives on the IO thread.

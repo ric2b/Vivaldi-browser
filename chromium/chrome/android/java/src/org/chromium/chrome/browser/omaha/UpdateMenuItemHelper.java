@@ -112,9 +112,9 @@ public class UpdateMenuItemHelper {
 
         mAlreadyCheckedForUpdates = true;
 
-        new AsyncTask<Void, Void, Void>() {
+        new AsyncTask<Void>() {
             @Override
-            protected Void doInBackground(Void... params) {
+            protected Void doInBackground() {
                 if (VersionNumberGetter.isNewerVersionAvailable(activity)) {
                     mUpdateUrl = MarketURLGetter.getMarketUrl(activity);
                     mLatestVersion =
@@ -132,7 +132,8 @@ public class UpdateMenuItemHelper {
                 activity.onCheckForUpdate(mUpdateAvailable);
                 recordUpdateHistogram();
             }
-        }.execute();
+        }
+                .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     /**

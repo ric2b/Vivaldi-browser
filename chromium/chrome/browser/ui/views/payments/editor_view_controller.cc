@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
 #include "chrome/browser/ui/views/payments/payment_request_views_util.h"
@@ -59,7 +59,7 @@ std::unique_ptr<views::View> CreateErrorLabelView(
   view->SetLayoutManager(std::move(layout));
 
   std::unique_ptr<views::Label> error_label =
-      std::make_unique<views::Label>(error, CONTEXT_DEPRECATED_SMALL);
+      std::make_unique<views::Label>(error, CONTEXT_BODY_TEXT_SMALL);
   error_label->set_id(static_cast<int>(DialogViewID::ERROR_LABEL_OFFSET) +
                       type);
   error_label->SetEnabledColor(error_label->GetNativeTheme()->GetSystemColor(

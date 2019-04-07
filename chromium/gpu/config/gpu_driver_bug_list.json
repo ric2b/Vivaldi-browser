@@ -368,17 +368,6 @@
       ]
     },
     {
-      "id": 51,
-      "description": "TexSubImage is faster for full uploads on ANGLE",
-      "os": {
-        "type": "win"
-      },
-      "gl_renderer": "ANGLE.*",
-      "features": [
-        "texsubimage_faster_than_teximage"
-      ]
-    },
-    {
       "id": 54,
       "cr_bugs": [124764, 349137],
       "description": "Clear uniforms before first program use on all platforms",
@@ -469,17 +458,6 @@
       ]
     },
     {
-      "id": 69,
-      "description": "Some shaders in Skia need more than the min available vertex and fragment shader uniform vectors in case of OSMesa",
-      "cr_bugs": [174845],
-      "driver_vendor": "osmesa",
-      "features": [
-       "max_fragment_uniform_vectors_32",
-       "max_varying_vectors_16",
-       "max_vertex_uniform_vectors_256"
-      ]
-    },
-    {
       "id": 70,
       "description": "Disable D3D11 on older nVidia drivers",
       "cr_bugs": [349929],
@@ -489,7 +467,7 @@
       "vendor_id": "0x10de",
       "driver_version": {
         "op": "<=",
-        "value": "8.17.12.6973"
+        "value": "269.73"
       },
       "features": [
         "disable_d3d11"
@@ -1634,21 +1612,6 @@
       ]
     },
     {
-      "id": 169,
-      "description": "Mac Drivers store texture level parameters on int16_t that overflow",
-      "cr_bugs": [610153],
-      "os": {
-        "type": "macosx",
-        "version": {
-          "op": "<",
-          "value": "10.12.2"
-        }
-      },
-      "features": [
-        "use_shadowed_tex_level_params"
-      ]
-    },
-    {
       "id": 170,
       "description": "Zero copy DXGI video hangs on shutdown on Win < 8.1",
       "cr_bugs": [621190],
@@ -1850,7 +1813,7 @@
       },
       "driver_version": {
         "op": "<",
-        "value": "21.21.13.7576"
+        "value": "375.76"
       },
       "vendor_id": "0x10de",
       "features": [
@@ -2738,8 +2701,11 @@
     },
     {
       "id": 256,
-      "description": "Don't expose disjoint_timer_query extensions to WebGL",
+      "description": "Don't expose disjoint_timer_query extensions to WebGL unless site isolation is enabled",
       "cr_bugs": [808744],
+      "os": {
+        "type": "android"
+      },
       "disabled_webgl_extensions": [
         "EXT_disjoint_timer_query",
         "EXT_disjoint_timer_query_webgl2"
@@ -2872,6 +2838,7 @@
       ],
       "disabled_extensions": [
         "GL_ARB_timer_query",
+        "GL_EXT_timer_query",
         "GL_EXT_disjoint_timer_query",
         "GL_EXT_disjoint_timer_query_webgl2"
       ]
@@ -2891,22 +2858,6 @@
       "disabled_extensions": [
         "GL_EXT_disjoint_timer_query",
         "GL_EXT_disjoint_timer_query_webgl2"
-      ]
-    },
-    {
-      "id": 267,
-      "cr_bugs": [831781],
-      "description": "WebGL with multisampling produces errors on Mali",
-      "os": {
-        "type": "linux"
-      },
-      "gl_vendor": "ARM",
-      "gl_renderer": "Mali-TDVX",
-      "disabled_extensions": [
-        "GL_EXT_multisampled_render_to_texture"
-      ],
-      "features": [
-        "disable_chromium_framebuffer_multisample"
       ]
     },
     {
@@ -2989,6 +2940,76 @@
       "gl_renderer": "Adreno.*",
       "features": [
         "use_es2_for_oopr"
+      ]
+    },
+    {
+      "id": 274,
+      "description": "glTexStorage* are buggy when base mipmap level is not 0",
+      "cr_bugs": [877874],
+      "os": {
+        "type": "linux"
+      },
+      "vendor_id": "0x10de",
+      "gl_vendor": "NVIDIA.*",
+      "features": [
+        "reset_base_mipmap_level_before_texstorage"
+      ]
+    },
+    {
+      "id":275,
+      "cr_bugs": [838725],
+      "description": "Disable AImageReader on ARM GPUs for Android O+ because of gpu hang",
+      "os": {
+        "type": "android",
+        "version": {
+          "op": ">=",
+          "value": "8.0"
+        }
+      },
+      "gl_vendor": "ARM.*",
+      "features": [
+        "disable_aimagereader"
+      ]
+    },
+    {
+      "id":276,
+      "cr_bugs": [835353],
+      "description": "Adreno 3xx requires a high-priority WebGL context to avoid MSAA and performance issues",
+      "os": {
+        "type": "android"
+      },
+      "gl_renderer": "Adreno \\(TM\\) 3.*",
+      "features": [
+        "use_high_priority_for_webgl"
+      ]
+    },
+    {
+      "id": 277,
+      "description": "Direct composition path is buggy on certain AMD devices/drivers",
+      "cr_bugs": [800950],
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "driver_version": {
+        "op": "=",
+        "value": "8.970.100.9001"
+      },
+      "features": [
+        "disable_direct_composition"
+      ]
+    },
+    {
+      "id": 278,
+      "description": "Direct composition path is buggy on certain AMD devices/drivers",
+      "cr_bugs": [800950],
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "device_id": ["0x6900"],
+      "features": [
+        "disable_direct_composition"
       ]
     }
   ]

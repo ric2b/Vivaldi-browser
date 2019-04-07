@@ -114,7 +114,7 @@ enum ModelType {
   DEPRECATED_SUPERVISED_USERS,
   DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS,
   // Distilled articles.
-  ARTICLES,
+  DEPRECATED_ARTICLES,
   // App List items
   APP_LIST,
   // WiFi credentials. Each item contains the information for connecting to one
@@ -208,19 +208,19 @@ constexpr const char* kUserSelectableDataTypeNames[] = {
 // representations. This distinguishes them from Proxy types, which have no
 // protocol representation and are never sent to the server.
 constexpr ModelTypeSet ProtocolTypes() {
-  return ModelTypeSet(BOOKMARKS, PREFERENCES, PASSWORDS, AUTOFILL_PROFILE,
-                      AUTOFILL, AUTOFILL_WALLET_DATA, AUTOFILL_WALLET_METADATA,
-                      THEMES, TYPED_URLS, EXTENSIONS, SEARCH_ENGINES, SESSIONS,
-                      APPS, APP_SETTINGS, EXTENSION_SETTINGS, APP_NOTIFICATIONS,
-                      HISTORY_DELETE_DIRECTIVES, SYNCED_NOTIFICATIONS,
-                      SYNCED_NOTIFICATION_APP_INFO, DICTIONARY, FAVICON_IMAGES,
-                      FAVICON_TRACKING, DEVICE_INFO, PRIORITY_PREFERENCES,
-                      SUPERVISED_USER_SETTINGS, DEPRECATED_SUPERVISED_USERS,
-                      DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS, ARTICLES,
-                      APP_LIST, WIFI_CREDENTIALS, SUPERVISED_USER_WHITELISTS,
-                      ARC_PACKAGE, PRINTERS, READING_LIST, USER_EVENTS, NIGORI,
-                      NOTES,
-                      EXPERIMENTS, MOUNTAIN_SHARES, USER_CONSENTS);
+  return ModelTypeSet(
+      BOOKMARKS, PREFERENCES, PASSWORDS, AUTOFILL_PROFILE, AUTOFILL,
+      AUTOFILL_WALLET_DATA, AUTOFILL_WALLET_METADATA, THEMES, TYPED_URLS,
+      EXTENSIONS, SEARCH_ENGINES, SESSIONS, APPS, APP_SETTINGS,
+      EXTENSION_SETTINGS, APP_NOTIFICATIONS, HISTORY_DELETE_DIRECTIVES,
+      SYNCED_NOTIFICATIONS, SYNCED_NOTIFICATION_APP_INFO, DICTIONARY,
+      FAVICON_IMAGES, FAVICON_TRACKING, DEVICE_INFO, PRIORITY_PREFERENCES,
+      SUPERVISED_USER_SETTINGS, DEPRECATED_SUPERVISED_USERS,
+      DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS, DEPRECATED_ARTICLES, APP_LIST,
+      WIFI_CREDENTIALS, SUPERVISED_USER_WHITELISTS, ARC_PACKAGE, PRINTERS,
+      READING_LIST, USER_EVENTS, NIGORI, EXPERIMENTS, MOUNTAIN_SHARES,
+      NOTES,
+      USER_CONSENTS);
 }
 
 // These are the normal user-controlled types. This is to distinguish from
@@ -340,9 +340,13 @@ FullModelTypeSet ToFullModelTypeSet(ModelTypeSet in);
 
 // TODO(sync): The functions below badly need some cleanup.
 
-// Returns a pointer to a string with application lifetime that represents
-// the name of |model_type|.
+// Returns a string with application lifetime that represents the name of
+// |model_type|.
 const char* ModelTypeToString(ModelType model_type);
+
+// Returns a string with application lifetime that is used as the histogram
+// suffix for |model_type|.
+const char* ModelTypeToHistogramSuffix(ModelType model_type);
 
 // Some histograms take an integer parameter that represents a model type.
 // The mapping from ModelType to integer is defined here. It should match the

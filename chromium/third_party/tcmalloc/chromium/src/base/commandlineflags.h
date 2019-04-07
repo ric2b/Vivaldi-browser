@@ -97,16 +97,15 @@
 #define DEFINE_double(name, value, meaning) \
   DEFINE_VARIABLE(double, name, value, meaning)
 
-// Special case for string, because we have to specify the namespace
-// std::string, which doesn't play nicely with our FLAG__namespace hackery.
+// Special case for string, because of the pointer type.
 #define DECLARE_string(name)                                          \
   namespace FLAG__namespace_do_not_use_directly_use_DECLARE_string_instead {  \
-  extern std::string FLAGS_##name;                                                   \
+  extern const char* FLAGS_##name;                                            \
   }                                                                           \
   using FLAG__namespace_do_not_use_directly_use_DECLARE_string_instead::FLAGS_##name
 #define DEFINE_string(name, value, meaning) \
   namespace FLAG__namespace_do_not_use_directly_use_DECLARE_string_instead {  \
-  std::string FLAGS_##name(value);                                                   \
+  const char* FLAGS_##name = value;                                           \
   char FLAGS_no##name;                                                        \
   }                                                                           \
   using FLAG__namespace_do_not_use_directly_use_DECLARE_string_instead::FLAGS_##name
@@ -157,6 +156,8 @@ namespace tcmalloc {
 // These macros (could be functions, but I don't want to bother with a .cc
 // file), make it easier to initialize flags from the environment.
 
+#if defined(ENABLE_PROFILING)
+
 #define EnvToString(envname, dflt)   \
   (!getenv(envname) ? (dflt) : getenv(envname))
 
@@ -171,5 +172,15 @@ namespace tcmalloc {
 
 #define EnvToDouble(envname, dflt)  \
   tcmalloc::commandlineflags::StringToDouble(getenv(envname), dflt)
+
+#else  // defined(ENABLE_PROFILING)
+
+#define EnvToString(envname, dflt) (dflt)
+#define EnvToBool(envname, dflt) (dflt)
+#define EnvToInt(envname, dflt) (dflt)
+#define EnvToInt64(envname, dflt) (dflt)
+#define EnvToDouble(envname, dflt) (dflt)
+
+#endif  // defined(ENABLE_PROFILING)
 
 #endif  // BASE_COMMANDLINEFLAGS_H_

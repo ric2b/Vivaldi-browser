@@ -41,17 +41,15 @@ class ZeroCopyGpuBacking : public ResourcePool::GpuBacking {
       gl->DestroyImageCHROMIUM(image_id);
   }
 
-  base::trace_event::MemoryAllocatorDumpGuid MemoryDumpGuid(
-      uint64_t tracing_process_id) override {
+  void OnMemoryDump(
+      base::trace_event::ProcessMemoryDump* pmd,
+      const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
+      uint64_t tracing_process_id,
+      int importance) const override {
     if (!gpu_memory_buffer)
-      return {};
-    return gpu_memory_buffer->GetGUIDForTracing(tracing_process_id);
-  }
-
-  base::UnguessableToken SharedMemoryGuid() override {
-    if (!gpu_memory_buffer)
-      return {};
-    return gpu_memory_buffer->GetHandle().handle.GetGUID();
+      return;
+    gpu_memory_buffer->OnMemoryDump(pmd, buffer_dump_guid, tracing_process_id,
+                                    importance);
   }
 
   // The ContextProvider used to clean up the texture and image ids.
@@ -130,7 +128,9 @@ class ZeroCopyRasterBufferImpl : public RasterBuffer {
       // If GpuMemoryBuffer allocation failed (https://crbug.com/554541), then
       // we don't have anything to give to the display compositor, but also no
       // way to report an error, so we just make a texture but don't bind
-      // anything to it..
+      // anything to it. Many blink layout tests on macOS fail to have no
+      // |gpu_memory_buffer_| here, so any error reporting will spam console
+      // logs (https://crbug.com/871031).
       if (gpu_memory_buffer_) {
         backing_->image_id = gl->CreateImageCHROMIUM(
             gpu_memory_buffer_->AsClientBuffer(), resource_size_.width(),
@@ -143,7 +143,7 @@ class ZeroCopyRasterBufferImpl : public RasterBuffer {
                                     backing_->image_id);
       gl->BindTexImage2DCHROMIUM(backing_->texture_target, backing_->image_id);
     }
-    if (resource_color_space_.IsValid()) {
+    if (backing_->image_id && resource_color_space_.IsValid()) {
       gl->SetColorSpaceMetadataCHROMIUM(
           backing_->texture_id,
           reinterpret_cast<GLColorSpace>(&resource_color_space_));
@@ -156,13 +156,13 @@ class ZeroCopyRasterBufferImpl : public RasterBuffer {
   }
 
   // Overridden from RasterBuffer:
-  void Playback(
-      const RasterSource* raster_source,
-      const gfx::Rect& raster_full_rect,
-      const gfx::Rect& raster_dirty_rect,
-      uint64_t new_content_id,
-      const gfx::AxisTransform2d& transform,
-      const RasterSource::PlaybackSettings& playback_settings) override {
+  void Playback(const RasterSource* raster_source,
+                const gfx::Rect& raster_full_rect,
+                const gfx::Rect& raster_dirty_rect,
+                uint64_t new_content_id,
+                const gfx::AxisTransform2d& transform,
+                const RasterSource::PlaybackSettings& playback_settings,
+                const GURL& url) override {
     TRACE_EVENT0("cc", "ZeroCopyRasterBuffer::Playback");
 
     if (!gpu_memory_buffer_) {

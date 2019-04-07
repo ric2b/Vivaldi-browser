@@ -22,7 +22,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/rand_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/unguessable_token.h"
@@ -43,7 +43,6 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_instance.h"
-#include "content/public/browser/webrtc_event_logger.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
@@ -396,12 +395,12 @@ void BrowserContext::DeliverPushMessage(
     BrowserContext* browser_context,
     const GURL& origin,
     int64_t service_worker_registration_id,
-    const PushEventPayload& payload,
+    base::Optional<std::string> payload,
     const base::Callback<void(mojom::PushDeliveryStatus)>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   PushMessagingRouter::DeliverMessage(browser_context, origin,
-                                      service_worker_registration_id, payload,
-                                      callback);
+                                      service_worker_registration_id,
+                                      std::move(payload), callback);
 }
 
 // static
@@ -588,13 +587,6 @@ void BrowserContext::Initialize(
     RegisterCommonBrowserInterfaces(connection);
     connection->Start();
   }
-
-  if (!browser_context->IsOffTheRecord()) {
-    WebRtcEventLogger* const logger = WebRtcEventLogger::Get();
-    if (logger) {
-      logger->EnableForBrowserContext(browser_context, base::OnceClosure());
-    }
-  }
 }
 
 // static
@@ -647,11 +639,6 @@ BrowserContext::~BrowserContext() {
 
   DCHECK(was_notify_will_be_destroyed_called_);
 
-  WebRtcEventLogger* const logger = WebRtcEventLogger::Get();
-  if (logger) {
-    logger->DisableForBrowserContext(this, base::OnceClosure());
-  }
-
   RemoveBrowserContextFromUserIdMap(this);
 
   if (GetUserData(kDownloadManagerKeyName))
@@ -692,6 +679,11 @@ media::VideoDecodePerfHistory* BrowserContext::GetVideoDecodePerfHistory() {
   }
 
   return decode_history;
+}
+
+download::InProgressDownloadManager*
+BrowserContext::RetriveInProgressDownloadManager() {
+  return nullptr;
 }
 
 }  // namespace content

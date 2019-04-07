@@ -41,9 +41,9 @@ class Rect;
 namespace ui {
 
 class DrmDeviceManager;
+class DrmFramebuffer;
 class DrmGpuDisplayManager;
 class GbmBuffer;
-class ScanoutBufferGenerator;
 class ScreenManager;
 
 struct DrmOverlayPlane;
@@ -71,13 +71,15 @@ class DrmThread : public base::Thread,
                     gfx::BufferFormat format,
                     gfx::BufferUsage usage,
                     uint32_t flags,
-                    scoped_refptr<GbmBuffer>* buffer);
+                    std::unique_ptr<GbmBuffer>* buffer,
+                    scoped_refptr<DrmFramebuffer>* framebuffer);
   void CreateBufferFromFds(gfx::AcceleratedWidget widget,
                            const gfx::Size& size,
                            gfx::BufferFormat format,
                            std::vector<base::ScopedFD> fds,
                            const std::vector<gfx::NativePixmapPlane>& planes,
-                           scoped_refptr<GbmBuffer>* buffer);
+                           std::unique_ptr<GbmBuffer>* buffer,
+                           scoped_refptr<DrmFramebuffer>* framebuffer);
   void GetScanoutFormats(gfx::AcceleratedWidget widget,
                          std::vector<gfx::BufferFormat>* scanout_formats);
   void AddBindingCursorDevice(ozone::mojom::DeviceCursorRequest request);
@@ -91,6 +93,8 @@ class DrmThread : public base::Thread,
   void GetVSyncParameters(
       gfx::AcceleratedWidget widget,
       const gfx::VSyncProvider::UpdateVSyncCallback& callback);
+
+  void IsDeviceAtomic(gfx::AcceleratedWidget widget, bool* is_atomic);
 
   // ozone::mojom::DrmDevice
   void StartDrmDevice(StartDrmDeviceCallback callback) override;
@@ -150,7 +154,6 @@ class DrmThread : public base::Thread,
                                 std::vector<DrmOverlayPlane> planes);
 
   std::unique_ptr<DrmDeviceManager> device_manager_;
-  std::unique_ptr<ScanoutBufferGenerator> buffer_generator_;
   std::unique_ptr<ScreenManager> screen_manager_;
   std::unique_ptr<DrmGpuDisplayManager> display_manager_;
 

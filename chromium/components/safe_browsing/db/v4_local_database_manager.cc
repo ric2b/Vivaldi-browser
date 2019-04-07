@@ -17,7 +17,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/timer/elapsed_timer.h"
 #include "components/safe_browsing/db/v4_feature_list.h"
 #include "components/safe_browsing/db/v4_protocol_manager_util.h"
@@ -80,6 +80,8 @@ ListInfos GetListInfos() {
       ListInfo(kSyncOnlyOnChromeBuilds, "ChromeUrlClientIncident.store",
                GetChromeUrlClientIncidentId(),
                SB_THREAT_TYPE_BLACKLISTED_RESOURCE),
+      ListInfo(kSyncAlways, "UrlBilling.store", GetUrlBillingId(),
+               SB_THREAT_TYPE_BILLING),
       ListInfo(kSyncOnlyOnChromeBuilds, "UrlCsdDownloadWhitelist.store",
                GetUrlCsdDownloadWhitelistId(), SB_THREAT_TYPE_UNUSED),
       ListInfo(kSyncOnlyOnChromeBuilds, "UrlCsdWhitelist.store",
@@ -113,6 +115,8 @@ ThreatSeverity GetThreatSeverity(const ListIdentifier& list_id) {
       return 3;
     case SUSPICIOUS:
       return 4;
+    case BILLING:
+      return 15;
     default:
       NOTREACHED() << "Unexpected ThreatType encountered: "
                    << list_id.threat_type();
@@ -134,6 +138,9 @@ ListIdentifier GetUrlIdFromSBThreatType(SBThreatType sb_threat_type) {
 
     case SB_THREAT_TYPE_SUSPICIOUS_SITE:
       return GetUrlSuspiciousSiteId();
+
+    case SB_THREAT_TYPE_BILLING:
+      return GetUrlBillingId();
 
     default:
       NOTREACHED();
@@ -524,6 +531,7 @@ void V4LocalDatabaseManager::DatabaseReadyForChecks(
   // The following check is needed because it is possible that by the time the
   // database is ready, StopOnIOThread has been called.
   if (enabled_) {
+    V4Database::Destroy(std::move(v4_database_));
     v4_database_ = std::move(v4_database);
 
     v4_database_->RecordFileSizeHistograms();
@@ -564,13 +572,8 @@ void V4LocalDatabaseManager::DatabaseUpdated() {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
         base::BindOnce(
-            &V4LocalDatabaseManager::PostUpdateNotificationOnUIThread, this));
+            &SafeBrowsingDatabaseManager::NotifyDatabaseUpdateFinished, this));
   }
-}
-
-void V4LocalDatabaseManager::PostUpdateNotificationOnUIThread() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  update_complete_callback_list_.Notify();
 }
 
 void V4LocalDatabaseManager::DeletePVer3StoreFiles() {
@@ -588,9 +591,9 @@ void V4LocalDatabaseManager::DeletePVer3StoreFiles() {
     if (!path_exists) {
       continue;
     }
-    task_runner_->PostTask(
-        FROM_HERE, base::Bind(base::IgnoreResult(&base::DeleteFile), store_path,
-                              false /* recursive */));
+    task_runner_->PostTask(FROM_HERE,
+                           base::BindOnce(base::IgnoreResult(&base::DeleteFile),
+                                          store_path, false /* recursive */));
   }
 }
 
@@ -611,9 +614,9 @@ void V4LocalDatabaseManager::DeleteUnusedStoreFiles() {
       if (!path_exists) {
         continue;
       }
-      task_runner_->PostTask(FROM_HERE,
-                             base::Bind(base::IgnoreResult(&base::DeleteFile),
-                                        store_path, false /* recursive */));
+      task_runner_->PostTask(
+          FROM_HERE, base::BindOnce(base::IgnoreResult(&base::DeleteFile),
+                                    store_path, false /* recursive */));
     } else {
       NOTREACHED() << "Trying to delete a store file that's in use: "
                    << store_filename_to_delete;

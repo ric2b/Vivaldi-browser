@@ -12,7 +12,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "components/reading_list/core/offline_url_utils.h"
 #include "ios/chrome/browser/chrome_paths.h"
@@ -61,7 +61,7 @@ URLDownloader::URLDownloader(
       mime_type_(),
       url_request_context_getter_(url_request_context_getter),
       task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       task_tracker_() {}
 

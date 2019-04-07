@@ -4,6 +4,7 @@
 
 import("//build/config/python.gni")
 import("//build/config/ui.gni")
+import("//build/util/lastchange.gni")
 import("//testing/test.gni")
 
 action("embed_js_in_cpp") {
@@ -149,6 +150,14 @@ source_set("automation_client_lib") {
     "chrome/web_view.h",
     "chrome/web_view_impl.cc",
     "chrome/web_view_impl.h",
+    "log_replay/chrome_replay_impl.cc",
+    "log_replay/chrome_replay_impl.h",
+    "log_replay/devtools_log_reader.cc",
+    "log_replay/devtools_log_reader.h",
+    "log_replay/log_replay_socket.cc",
+    "log_replay/log_replay_socket.h",
+    "log_replay/replay_http_client.cc",
+    "log_replay/replay_http_client.h",
     "net/adb_client_socket.cc",
     "net/adb_client_socket.h",
     "net/net_util.cc",
@@ -202,7 +211,7 @@ action("embed_version_in_cpp") {
     # We don't actually use LASTCHANGE as an input file. It is updated
     # whenever a different Git revision is checked out, at which point
     # version.cc needs to be updated with the new revision info.
-    "//build/util/LASTCHANGE",
+    lastchange_file,
   ]
   outputs = [
     "$target_gen_dir/version.cc",
@@ -355,6 +364,15 @@ python_library("chromedriver_py_tests") {
   }
 }
 
+python_library("chromedriver_replay_unittests") {
+  testonly = true
+  deps = [
+    ":chromedriver",
+  ]
+
+  pydeps_file = "log_replay/client_replay_unittest.pydeps"
+}
+
 test("chromedriver_unittests") {
   sources = [
     "capabilities_unittest.cc",
@@ -385,6 +403,7 @@ test("chromedriver_unittests") {
     "chrome_launcher_unittest.cc",
     "command_listener_proxy_unittest.cc",
     "commands_unittest.cc",
+    "log_replay/devtools_log_reader_unittest.cc",
     "logging_unittest.cc",
     "net/adb_client_socket_unittest.cc",
     "net/timeout_unittest.cc",
@@ -401,6 +420,7 @@ test("chromedriver_unittests") {
 
   data = [
     "//chrome/test/data/chromedriver/",
+    "//chrome/test/chromedriver/log_replay/test_data",
   ]
 
   deps = [

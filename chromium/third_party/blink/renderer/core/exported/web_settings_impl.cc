@@ -47,7 +47,6 @@ WebSettingsImpl::WebSettingsImpl(Settings* settings,
       render_v_sync_notification_enabled_(false),
       auto_zoom_focused_node_to_legible_scale_(false),
       support_deprecated_target_density_dpi_(false),
-      shrinks_viewport_content_to_fit_(false),
       viewport_meta_layout_size_quirk_(false),
       viewport_meta_non_user_scalable_quirk_(false),
       clobber_user_agent_initial_scale_quirk_(false) {
@@ -71,8 +70,8 @@ void WebSettingsImpl::SetFixedFontFamily(const WebString& font,
     settings_->NotifyGenericFontFamilyChange();
 }
 
-void WebSettingsImpl::SetFMPNetworkQuietTimeout(double timeout) {
-  settings_->SetFMPNetworkQuietTimeout(timeout);
+void WebSettingsImpl::SetNetworkQuietTimeout(double timeout) {
+  settings_->SetNetworkQuietTimeout(timeout);
 }
 
 void WebSettingsImpl::SetForceMainWorldInitialization(bool enabled) {
@@ -158,10 +157,6 @@ void WebSettingsImpl::SetTextAutosizingEnabled(bool enabled) {
 
 void WebSettingsImpl::SetAccessibilityFontScaleFactor(float font_scale_factor) {
   settings_->SetAccessibilityFontScaleFactor(font_scale_factor);
-}
-
-void WebSettingsImpl::SetAccessibilityEnabled(bool enabled) {
-  settings_->SetAccessibilityEnabled(enabled);
 }
 
 void WebSettingsImpl::SetAccessibilityPasswordValuesEnabled(bool enabled) {
@@ -305,7 +300,7 @@ void WebSettingsImpl::SetDOMPasteAllowed(bool enabled) {
 
 void WebSettingsImpl::SetShrinksViewportContentToFit(
     bool shrink_viewport_content) {
-  shrinks_viewport_content_to_fit_ = shrink_viewport_content;
+  settings_->SetShrinksViewportContentToFit(shrink_viewport_content);
 }
 
 void WebSettingsImpl::SetSpatialNavigationEnabled(bool enabled) {
@@ -593,14 +588,6 @@ void WebSettingsImpl::SetEnableTouchAdjustment(bool enabled) {
   settings_->SetTouchAdjustmentEnabled(enabled);
 }
 
-bool WebSettingsImpl::MultiTargetTapNotificationEnabled() {
-  return settings_->GetMultiTargetTapNotificationEnabled();
-}
-
-void WebSettingsImpl::SetMultiTargetTapNotificationEnabled(bool enabled) {
-  settings_->SetMultiTargetTapNotificationEnabled(enabled);
-}
-
 bool WebSettingsImpl::ViewportEnabled() const {
   return settings_->GetViewportEnabled();
 }
@@ -618,7 +605,7 @@ bool WebSettingsImpl::MockGestureTapHighlightsEnabled() const {
 }
 
 bool WebSettingsImpl::ShrinksViewportContentToFit() const {
-  return shrinks_viewport_content_to_fit_;
+  return settings_->GetShrinksViewportContentToFit();
 }
 
 void WebSettingsImpl::SetShouldRespectImageOrientation(bool enabled) {
@@ -757,5 +744,42 @@ void WebSettingsImpl::SetLazyFrameLoadingDistanceThresholdPx4G(
     int distance_px) {
   settings_->SetLazyFrameLoadingDistanceThresholdPx4G(distance_px);
 }
+
+void WebSettingsImpl::SetLazyImageLoadingDistanceThresholdPxUnknown(
+    int distance_px) {
+  settings_->SetLazyImageLoadingDistanceThresholdPxUnknown(distance_px);
+}
+
+void WebSettingsImpl::SetLazyImageLoadingDistanceThresholdPxOffline(
+    int distance_px) {
+  settings_->SetLazyImageLoadingDistanceThresholdPxOffline(distance_px);
+}
+
+void WebSettingsImpl::SetLazyImageLoadingDistanceThresholdPxSlow2G(
+    int distance_px) {
+  settings_->SetLazyImageLoadingDistanceThresholdPxSlow2G(distance_px);
+}
+
+void WebSettingsImpl::SetLazyImageLoadingDistanceThresholdPx2G(
+    int distance_px) {
+  settings_->SetLazyImageLoadingDistanceThresholdPx2G(distance_px);
+}
+
+void WebSettingsImpl::SetLazyImageLoadingDistanceThresholdPx3G(
+    int distance_px) {
+  settings_->SetLazyImageLoadingDistanceThresholdPx3G(distance_px);
+}
+
+void WebSettingsImpl::SetLazyImageLoadingDistanceThresholdPx4G(
+    int distance_px) {
+  settings_->SetLazyImageLoadingDistanceThresholdPx4G(distance_px);
+}
+
+STATIC_ASSERT_ENUM(WebSettings::kImageAnimationPolicyAllowed,
+                   kImageAnimationPolicyAllowed);
+STATIC_ASSERT_ENUM(WebSettings::kImageAnimationPolicyAnimateOnce,
+                   kImageAnimationPolicyAnimateOnce);
+STATIC_ASSERT_ENUM(WebSettings::kImageAnimationPolicyNoAnimation,
+                   kImageAnimationPolicyNoAnimation);
 
 }  // namespace blink

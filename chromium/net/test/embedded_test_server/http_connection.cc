@@ -17,7 +17,7 @@ HttpConnection::HttpConnection(std::unique_ptr<StreamSocket> socket,
                                const HandleRequestCallback& callback)
     : socket_(std::move(socket)),
       callback_(callback),
-      read_buf_(new IOBufferWithSize(4096)),
+      read_buf_(base::MakeRefCounted<IOBufferWithSize>(4096)),
       weak_factory_(this) {}
 
 HttpConnection::~HttpConnection() {
@@ -27,8 +27,10 @@ HttpConnection::~HttpConnection() {
 void HttpConnection::SendResponseBytes(const std::string& response_string,
                                        const SendCompleteCallback& callback) {
   if (response_string.length() > 0) {
-    scoped_refptr<DrainableIOBuffer> write_buf(new DrainableIOBuffer(
-        new StringIOBuffer(response_string), response_string.length()));
+    scoped_refptr<DrainableIOBuffer> write_buf =
+        base::MakeRefCounted<DrainableIOBuffer>(
+            base::MakeRefCounted<StringIOBuffer>(response_string),
+            response_string.length());
 
     SendInternal(callback, write_buf);
   } else {
@@ -36,8 +38,8 @@ void HttpConnection::SendResponseBytes(const std::string& response_string,
   }
 }
 
-int HttpConnection::ReadData(const CompletionCallback& callback) {
-  return socket_->Read(read_buf_.get(), read_buf_->size(), callback);
+int HttpConnection::ReadData(CompletionOnceCallback callback) {
+  return socket_->Read(read_buf_.get(), read_buf_->size(), std::move(callback));
 }
 
 bool HttpConnection::ConsumeData(int size) {

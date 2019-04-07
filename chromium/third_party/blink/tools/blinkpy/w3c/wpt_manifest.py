@@ -88,6 +88,17 @@ class WPTManifest(object):
     def _get_extras_from_item(item):
         return item[-1]
 
+    @staticmethod
+    def _is_not_jsshell(item):
+        """Returns True if the manifest item isn't a jsshell test.
+
+        "jsshell" is one of the scopes automatically generated from .any.js
+        tests. It is intended to run in a thin JavaScript shell instead of a
+        full browser, so we simply ignore it in web tests. (crbug.com/871950)
+        """
+        extras = WPTManifest._get_extras_from_item(item)
+        return not extras.get('jsshell', False)
+
     @memoized
     def all_url_items(self):
         """Returns a dict mapping every URL in the manifest to its item."""
@@ -96,7 +107,7 @@ class WPTManifest(object):
             return url_items
         for test_type in self.test_types:
             for records in self.raw_dict['items'][test_type].itervalues():
-                for item in records:
+                for item in filter(self._is_not_jsshell, records):
                     url_items[self._get_url_from_item(item)] = item
         return url_items
 
@@ -121,7 +132,8 @@ class WPTManifest(object):
         manifest_items = self._items_for_file_path(path_in_wpt)
         assert manifest_items is not None
         # Remove the leading slashes when returning.
-        return [self._get_url_from_item(item)[1:] for item in manifest_items]
+        return [self._get_url_from_item(item)[1:]
+                for item in manifest_items if self._is_not_jsshell(item)]
 
     def is_slow_test(self, url):
         """Checks if a WPT is slow (long timeout) according to the manifest.
@@ -160,7 +172,7 @@ class WPTManifest(object):
 
     @staticmethod
     def ensure_manifest(host):
-        """Generates the MANIFEST.json file if it does not exist."""
+        """Updates the MANIFEST.json file, or generates if it does not exist."""
         finder = PathFinder(host.filesystem)
         manifest_path = finder.path_from_layout_tests('external', 'wpt', 'MANIFEST.json')
         base_manifest_path = finder.path_from_layout_tests('external', 'WPT_BASE_MANIFEST.json')
@@ -169,11 +181,15 @@ class WPTManifest(object):
             _log.error('Manifest base not found at "%s".', base_manifest_path)
             host.filesystem.write_text_file(base_manifest_path, '{}')
 
-        if not host.filesystem.exists(manifest_path):
-            _log.debug('Manifest not found, copying from base "%s".', base_manifest_path)
-            host.filesystem.copyfile(base_manifest_path, manifest_path)
+        # Unconditionally replace MANIFEST.json with WPT_BASE_MANIFEST.json even
+        # if the former exists, to avoid regenerating the manifest from scratch
+        # when the manifest version changes. Remove the destination first as
+        # copyfile will fail if the two files are hardlinked or symlinked.
+        if host.filesystem.exists(manifest_path):
+            host.filesystem.remove(manifest_path)
+        host.filesystem.copyfile(base_manifest_path, manifest_path)
 
-        wpt_path = manifest_path = finder.path_from_layout_tests('external', 'wpt')
+        wpt_path = finder.path_from_layout_tests('external', 'wpt')
         WPTManifest.generate_manifest(host, wpt_path)
 
         _log.debug('Manifest generation completed.')

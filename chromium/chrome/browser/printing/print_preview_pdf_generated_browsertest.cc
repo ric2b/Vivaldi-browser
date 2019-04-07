@@ -16,6 +16,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/containers/span.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -140,8 +141,7 @@ class PrintPreviewObserver : public WebContentsObserver {
 
   bool OnMessageReceived(const IPC::Message& message) override {
     IPC_BEGIN_MESSAGE_MAP(PrintPreviewObserver, message)
-      IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetPreviewPageCount,
-                          OnDidGetPreviewPageCount)
+      IPC_MESSAGE_HANDLER(PrintHostMsg_DidStartPreview, OnDidStartPreview)
     IPC_END_MESSAGE_MAP()
     return false;
   }
@@ -267,11 +267,10 @@ class PrintPreviewObserver : public WebContentsObserver {
     DISALLOW_COPY_AND_ASSIGN(UIDoneLoadingMessageHandler);
   };
 
-  // Called when the observer gets the IPC message stating that the page count
-  // is ready.
-  void OnDidGetPreviewPageCount(
-      const PrintHostMsg_DidGetPreviewPageCount_Params& params,
-      const PrintHostMsg_PreviewIds& ids) {
+  // Called when the observer gets the IPC message with the preview document's
+  // properties.
+  void OnDidStartPreview(const PrintHostMsg_DidStartPreview_Params& params,
+                         const PrintHostMsg_PreviewIds& ids) {
     WebContents* web_contents = GetDialog();
     ASSERT_TRUE(web_contents);
     Observe(web_contents);
@@ -341,8 +340,10 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
     std::string pdf_data;
 
     ASSERT_TRUE(base::ReadFileToString(pdf_file_save_path_, &pdf_data));
-    ASSERT_TRUE(chrome_pdf::GetPDFDocInfo(pdf_data.data(), pdf_data.size(),
-                                          &num_pages, &max_width_in_points));
+
+    auto pdf_span = base::as_bytes(base::make_span(pdf_data));
+    ASSERT_TRUE(
+        chrome_pdf::GetPDFDocInfo(pdf_span, &num_pages, &max_width_in_points));
 
     ASSERT_GT(num_pages, 0);
     double max_width_in_pixels =
@@ -351,8 +352,7 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
     for (int i = 0; i < num_pages; ++i) {
       double width_in_points, height_in_points;
       ASSERT_TRUE(chrome_pdf::GetPDFPageSizeByIndex(
-          pdf_data.data(), pdf_data.size(), i, &width_in_points,
-          &height_in_points));
+          pdf_span, i, &width_in_points, &height_in_points));
 
       double width_in_pixels = ConvertUnitDouble(
           width_in_points, kPointsPerInch, kDpi);
@@ -386,10 +386,9 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
                                             settings.area.size().GetArea());
 
       ASSERT_TRUE(chrome_pdf::RenderPDFPageToBitmap(
-          pdf_data.data(), pdf_data.size(), i, page_bitmap_data.data(),
-          settings.area.size().width(), settings.area.size().height(),
-          settings.dpi.width(), settings.dpi.height(), settings.autorotate,
-          settings.use_color));
+          pdf_span, i, page_bitmap_data.data(), settings.area.size().width(),
+          settings.area.size().height(), settings.dpi.width(),
+          settings.dpi.height(), settings.autorotate, settings.use_color));
       FillPng(&page_bitmap_data, width_in_pixels, max_width_in_pixels,
               settings.area.size().height());
       bitmap_data.insert(bitmap_data.end(),

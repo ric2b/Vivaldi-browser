@@ -50,15 +50,16 @@ class CORE_EXPORT EffectModel : public GarbageCollectedFinalized<EffectModel> {
     kCompositeReplace,
     kCompositeAdd,
   };
-  static CompositeOperation StringToCompositeOperation(const String&);
-  static String CompositeOperationToString(CompositeOperation);
+  static base::Optional<CompositeOperation> StringToCompositeOperation(
+      const String&);
+  static String CompositeOperationToString(base::Optional<CompositeOperation>);
 
   EffectModel() = default;
   virtual ~EffectModel() = default;
   virtual bool Sample(int iteration,
                       double fraction,
                       double iteration_duration,
-                      Vector<scoped_refptr<Interpolation>>&) const = 0;
+                      HeapVector<Member<Interpolation>>&) const = 0;
 
   virtual bool Affects(const PropertyHandle&) const { return false; }
   virtual bool AffectedByUnderlyingAnimations() const = 0;

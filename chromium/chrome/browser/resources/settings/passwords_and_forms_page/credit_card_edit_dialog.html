@@ -19,7 +19,7 @@
       }
 
       .md-select + .md-select {
-        -webkit-margin-start: 8px;
+        margin-inline-start: 8px;
       }
 
       /* Prevent focus-outline from being chopped by the bottom of dialog body.
@@ -54,7 +54,7 @@
       <div slot="title">[[title_]]</div>
       <div slot="body">
         <cr-input id="nameInput" label="$i18n{creditCardName}"
-            value="{{creditCard.name}}" autofocus
+            value="{{creditCard.name}}" autofocus spellcheck="false"
             on-input="onCreditCardNameOrNumberChanged_">
         </cr-input>
         <cr-input id="numberInput" label="$i18n{creditCardNumber}"

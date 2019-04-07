@@ -11,7 +11,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/views/apps/app_window_easy_resize_window_targeter.h"
 #include "chrome/browser/ui/views/apps/shaped_app_window_targeter.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
@@ -19,7 +19,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/widget/widget.h"
 
-#if defined(OS_LINUX)
+#if defined(USE_X11)
 #include "chrome/browser/shell_integration_linux.h"
 #endif
 
@@ -57,11 +57,12 @@ void ChromeNativeAppWindowViewsAura::OnBeforeWidgetInit(
     views::Widget::InitParams* init_params,
     views::Widget* widget) {
 #if defined(USE_X11)
-  std::string app_name = web_app::GenerateApplicationNameFromExtensionId(
-      app_window()->extension_id());
+  std::string app_name =
+      web_app::GenerateApplicationNameFromAppId(app_window()->extension_id());
   // Set up a custom WM_CLASS for app windows. This allows task switchers in
   // X11 environments to distinguish them from main browser windows.
-  init_params->wm_class_name = web_app::GetWMClassFromAppName(app_name);
+  init_params->wm_class_name =
+      shell_integration_linux::GetWMClassFromAppName(app_name);
   init_params->wm_class_class = shell_integration_linux::GetProgramClassClass();
   const char kX11WindowRoleApp[] = "app";
   init_params->wm_role_name = std::string(kX11WindowRoleApp);
@@ -84,9 +85,8 @@ ChromeNativeAppWindowViewsAura::CreateNonStandardAppFrame() {
   // Add the AppWindowEasyResizeWindowTargeter on the window, not its root
   // window. The root window does not have a delegate, which is needed to
   // handle the event in Linux.
-  window->SetEventTargeter(
-      std::unique_ptr<ui::EventTargeter>(new AppWindowEasyResizeWindowTargeter(
-          window, gfx::Insets(frame->resize_inside_bounds_size()), this)));
+  window->SetEventTargeter(std::make_unique<AppWindowEasyResizeWindowTargeter>(
+      window, gfx::Insets(frame->resize_inside_bounds_size()), this));
 
   return frame;
 }
@@ -118,8 +118,8 @@ void ChromeNativeAppWindowViewsAura::UpdateShape(
   aura::Window* native_window = widget()->GetNativeWindow();
   if (shape() && !had_shape) {
     native_window->SetEventTargeter(
-        std::unique_ptr<ui::EventTargeter>(new ShapedAppWindowTargeter(this)));
+        std::make_unique<ShapedAppWindowTargeter>(this));
   } else if (!shape() && had_shape) {
-    native_window->SetEventTargeter(std::unique_ptr<ui::EventTargeter>());
+    native_window->SetEventTargeter(nullptr);
   }
 }

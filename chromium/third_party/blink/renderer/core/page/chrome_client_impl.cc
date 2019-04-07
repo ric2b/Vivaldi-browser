@@ -57,12 +57,12 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
-#include "third_party/blink/renderer/core/exported/web_file_chooser_completion_impl.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/exported/web_remote_frame_impl.h"
 #include "third_party/blink/renderer/core/exported/web_settings_impl.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/browser_controls.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
@@ -90,7 +90,6 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/popup_opening_observer.h"
-#include "third_party/blink/renderer/core/paint/compositing/composited_selection.h"
 #include "third_party/blink/renderer/platform/animation/compositor_animation_host.h"
 #include "third_party/blink/renderer/platform/cursor.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_request.h"
@@ -153,7 +152,9 @@ ChromeClientImpl::ChromeClientImpl(WebViewImpl* web_view)
       cursor_overridden_(false),
       did_request_non_empty_tool_tip_(false) {}
 
-ChromeClientImpl::~ChromeClientImpl() = default;
+ChromeClientImpl::~ChromeClientImpl() {
+  DCHECK(file_chooser_queue_.IsEmpty());
+}
 
 ChromeClientImpl* ChromeClientImpl::Create(WebViewImpl* web_view) {
   return new ChromeClientImpl(web_view);
@@ -478,8 +479,8 @@ void ChromeClientImpl::ResizeAfterLayout() const {
   web_view_->ResizeAfterLayout();
 }
 
-void ChromeClientImpl::LayoutUpdated() const {
-  web_view_->LayoutUpdated();
+void ChromeClientImpl::MainFrameLayoutUpdated() const {
+  web_view_->MainFrameLayoutUpdated();
 }
 
 void ChromeClientImpl::ShowMouseOverURL(const HitTestResult& result) {
@@ -583,20 +584,48 @@ void ChromeClientImpl::OpenFileChooser(
     LocalFrame* frame,
     scoped_refptr<FileChooser> file_chooser) {
   NotifyPopupOpeningObservers();
-  WebLocalFrameClient* client = WebLocalFrameImpl::FromFrame(frame)->Client();
-  if (!client)
-    return;
 
   Document* doc = frame->GetDocument();
   if (doc)
     doc->MaybeQueueSendDidEditFieldInInsecureContext();
-  const WebFileChooserParams& params = file_chooser->Params();
-  WebFileChooserCompletionImpl* chooser_completion =
-      new WebFileChooserCompletionImpl(std::move(file_chooser));
-  if (client->RunFileChooser(params, chooser_completion))
+
+  static const wtf_size_t kMaximumPendingFileChooseRequests = 4;
+  if (file_chooser_queue_.size() > kMaximumPendingFileChooseRequests) {
+    // This sanity check prevents too many file choose requests from getting
+    // queued which could DoS the user. Getting these is most likely a
+    // programming error (there are many ways to DoS the user so it's not
+    // considered a "real" security check), either in JS requesting many file
+    // choosers to pop up, or in a plugin.
+    //
+    // TODO(brettw): We might possibly want to require a user gesture to open
+    // a file picker, which will address this issue in a better way.
     return;
-  // Choosing failed, so do callback with an empty list.
-  chooser_completion->DidChooseFile(WebVector<WebString>());
+  }
+  file_chooser_queue_.push_back(file_chooser.get());
+  if (file_chooser_queue_.size() == 1) {
+    // Actually show the browse dialog when this is the first request.
+    if (file_chooser->OpenFileChooser(*this))
+      return;
+    // Choosing failed, so try the next chooser.
+    DidCompleteFileChooser(*file_chooser);
+  }
+}
+
+void ChromeClientImpl::DidCompleteFileChooser(FileChooser& chooser) {
+  if (!file_chooser_queue_.IsEmpty() &&
+      file_chooser_queue_.front().get() != &chooser) {
+    // This function is called even if |chooser| wasn't stored in
+    // file_chooser_queue_.
+    return;
+  }
+  file_chooser_queue_.EraseAt(0);
+  if (file_chooser_queue_.IsEmpty())
+    return;
+  FileChooser* next_chooser = file_chooser_queue_.front().get();
+  if (next_chooser->OpenFileChooser(*this))
+    return;
+  // Choosing failed, so try the next chooser.
+  DidCompleteFileChooser(*next_chooser);
 }
 
 void ChromeClientImpl::EnumerateChosenDirectory(FileChooser* file_chooser) {
@@ -604,16 +633,11 @@ void ChromeClientImpl::EnumerateChosenDirectory(FileChooser* file_chooser) {
   if (!client)
     return;
 
-  WebFileChooserCompletionImpl* chooser_completion =
-      new WebFileChooserCompletionImpl(file_chooser);
-
   DCHECK(file_chooser);
   DCHECK(file_chooser->Params().selected_files.size());
-
-  // If the enumeration can't happen, call the callback with an empty list.
-  if (!client->EnumerateChosenDirectory(
-          file_chooser->Params().selected_files[0], chooser_completion))
-    chooser_completion->DidChooseFile(WebVector<WebString>());
+  if (client->EnumerateChosenDirectory(file_chooser->Params().selected_files[0],
+                                       file_chooser))
+    file_chooser->AddRef();
 }
 
 Cursor ChromeClientImpl::LastSetCursorForTesting() const {
@@ -748,7 +772,7 @@ void ChromeClientImpl::FullscreenElementChanged(Element* old_element,
   web_view_->FullscreenElementChanged(old_element, new_element);
 }
 
-void ChromeClientImpl::ClearCompositedSelection(LocalFrame* frame) {
+void ChromeClientImpl::ClearLayerSelection(LocalFrame* frame) {
   WebFrameWidgetBase* widget =
       WebLocalFrameImpl::FromFrame(frame)->LocalRootFrameWidget();
   WebWidgetClient* client = widget->Client();
@@ -760,9 +784,9 @@ void ChromeClientImpl::ClearCompositedSelection(LocalFrame* frame) {
     layer_tree_view->ClearSelection();
 }
 
-void ChromeClientImpl::UpdateCompositedSelection(
+void ChromeClientImpl::UpdateLayerSelection(
     LocalFrame* frame,
-    const CompositedSelection& selection) {
+    const cc::LayerSelection& selection) {
   WebFrameWidgetBase* widget =
       WebLocalFrameImpl::FromFrame(frame)->LocalRootFrameWidget();
   WebWidgetClient* client = widget->Client();
@@ -770,36 +794,8 @@ void ChromeClientImpl::UpdateCompositedSelection(
   if (!client)
     return;
 
-  if (WebLayerTreeView* layer_tree_view = widget->GetLayerTreeView()) {
-    DCHECK_NE(selection.type, kNoSelection);
-
-    cc::LayerSelection cc_selection;
-    if (selection.type == kRangeSelection) {
-      cc_selection.start.type = selection.start.is_text_direction_rtl
-                                    ? gfx::SelectionBound::Type::RIGHT
-                                    : gfx::SelectionBound::Type::LEFT;
-      cc_selection.end.type = selection.end.is_text_direction_rtl
-                                  ? gfx::SelectionBound::Type::LEFT
-                                  : gfx::SelectionBound::Type::RIGHT;
-    } else {
-      cc_selection.start.type = gfx::SelectionBound::Type::CENTER;
-      cc_selection.end.type = gfx::SelectionBound::Type::CENTER;
-    }
-    cc_selection.start.edge_top =
-        gfx::Point(RoundedIntPoint(selection.start.edge_top_in_layer));
-    cc_selection.start.edge_bottom =
-        gfx::Point(RoundedIntPoint(selection.start.edge_bottom_in_layer));
-    cc_selection.start.layer_id = selection.start.layer->CcLayer()->id();
-    cc_selection.start.hidden = selection.start.hidden;
-    cc_selection.end.edge_top =
-        gfx::Point(RoundedIntPoint(selection.end.edge_top_in_layer));
-    cc_selection.end.edge_bottom =
-        gfx::Point(RoundedIntPoint(selection.end.edge_bottom_in_layer));
-    cc_selection.end.layer_id = selection.end.layer->CcLayer()->id();
-    cc_selection.end.hidden = selection.end.hidden;
-
-    layer_tree_view->RegisterSelection(cc_selection);
-  }
+  if (WebLayerTreeView* layer_tree_view = widget->GetLayerTreeView())
+    layer_tree_view->RegisterSelection(selection);
 }
 
 bool ChromeClientImpl::HasOpenedPopup() const {
@@ -921,6 +917,9 @@ void ChromeClientImpl::SetEventListenerProperties(
           tree_view->EventListenerProperties(
               cc::EventListenerClass::kTouchStartOrMove) !=
               cc::EventListenerProperties::kNone);
+    } else if (event_class == cc::EventListenerClass::kPointerRawMove) {
+      client->HasPointerRawMoveEventHandlers(
+          properties != cc::EventListenerProperties::kNone);
     }
   } else {
     client->HasTouchEventHandlers(true);

@@ -73,9 +73,11 @@ class Component {
 
   std::string id() const { return id_; }
 
-  const CrxComponent* crx_component() const { return crx_component_.get(); }
-  void set_crx_component(std::unique_ptr<CrxComponent> crx_component) {
-    crx_component_ = std::move(crx_component);
+  const base::Optional<CrxComponent>& crx_component() const {
+    return crx_component_;
+  }
+  void set_crx_component(const CrxComponent& crx_component) {
+    crx_component_ = crx_component;
   }
 
   const base::Version& previous_version() const { return previous_version_; }
@@ -240,11 +242,10 @@ class Component {
     // State overrides.
     void DoHandle() override;
 
-    // Called when progress is being made downloading a CRX. The progress may
-    // not monotonically increase due to how the CRX downloader switches between
+    // Called when progress is being made downloading a CRX. Can be called
+    // multiple times due to how the CRX downloader switches between
     // different downloaders and fallback urls.
-    void DownloadProgress(const std::string& id,
-                          const CrxDownloader::Result& download_result);
+    void DownloadProgress(const std::string& id);
 
     void DownloadComplete(const std::string& id,
                           const CrxDownloader::Result& download_result);
@@ -264,11 +265,10 @@ class Component {
     // State overrides.
     void DoHandle() override;
 
-    // Called when progress is being made downloading a CRX. The progress may
-    // not monotonically increase due to how the CRX downloader switches between
+    // Called when progress is being made downloading a CRX. Can be called
+    // multiple times due to how the CRX downloader switches between
     // different downloaders and fallback urls.
-    void DownloadProgress(const std::string& id,
-                          const CrxDownloader::Result& download_result);
+    void DownloadProgress(const std::string& id);
 
     void DownloadComplete(const std::string& id,
                           const CrxDownloader::Result& download_result);
@@ -371,7 +371,7 @@ class Component {
   base::ThreadChecker thread_checker_;
 
   const std::string id_;
-  std::unique_ptr<CrxComponent> crx_component_;
+  base::Optional<CrxComponent> crx_component_;
 
   // The status of the updatecheck response.
   std::string status_;

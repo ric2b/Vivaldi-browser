@@ -25,9 +25,18 @@ namespace device {
 
 class BluetoothAdapterWinrt;
 class BluetoothGattDiscovererWinrt;
+class BluetoothPairingWinrt;
 
 class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceWinrt : public BluetoothDevice {
  public:
+  // Constants required to extract the tx power level and service data from the
+  // raw advertisementment data. Reference:
+  // https://www.bluetooth.com/specifications/assigned-numbers/generic-access-profile
+  static constexpr uint8_t kTxPowerLevelDataSection = 0x0A;
+  static constexpr uint8_t k16BitServiceDataSection = 0x16;
+  static constexpr uint8_t k32BitServiceDataSection = 0x20;
+  static constexpr uint8_t k128BitServiceDataSection = 0x21;
+
   BluetoothDeviceWinrt(BluetoothAdapterWinrt* adapter,
                        uint64_t raw_address,
                        base::Optional<std::string> local_name);
@@ -57,6 +66,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceWinrt : public BluetoothDevice {
   void Connect(PairingDelegate* pairing_delegate,
                const base::Closure& callback,
                const ConnectErrorCallback& error_callback) override;
+  void Pair(PairingDelegate* pairing_delegate,
+            const base::Closure& callback,
+            const ConnectErrorCallback& error_callback) override;
   void SetPinCode(const std::string& pincode) override;
   void SetPasskey(uint32_t passkey) override;
   void ConfirmPairing() override;
@@ -107,9 +119,13 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceWinrt : public BluetoothDevice {
 
   void OnGattDiscoveryComplete(bool success);
 
+  void ClearGattServices();
+
   uint64_t raw_address_;
   std::string address_;
   base::Optional<std::string> local_name_;
+
+  std::unique_ptr<BluetoothPairingWinrt> pairing_;
 
   std::unique_ptr<BluetoothGattDiscovererWinrt> gatt_discoverer_;
 

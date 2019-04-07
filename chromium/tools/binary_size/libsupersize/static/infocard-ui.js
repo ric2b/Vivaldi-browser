@@ -14,6 +14,18 @@
 const displayInfocard = (() => {
   const _CANVAS_RADIUS = 40;
 
+  const _FLAG_LABELS = new Map([
+    [_FLAGS.ANONYMOUS, 'anon'],
+    [_FLAGS.STARTUP, 'startup'],
+    [_FLAGS.UNLIKELY, 'unlikely'],
+    [_FLAGS.REL, 'rel'],
+    [_FLAGS.REL_LOCAL, 'rel.loc'],
+    [_FLAGS.GENERATED_SOURCE, 'gen'],
+    [_FLAGS.CLONE, 'clone'],
+    [_FLAGS.HOT, 'hot'],
+    [_FLAGS.COVERAGE, 'covered'],
+  ]);
+
   class Infocard {
     /**
      * @param {string} id
@@ -26,8 +38,10 @@ const displayInfocard = (() => {
       this._pathInfo = this._infocard.querySelector('.path-info');
       /** @type {HTMLDivElement} */
       this._iconInfo = this._infocard.querySelector('.icon-info');
-      /** @type {HTMLParagraphElement} */
+      /** @type {HTMLSpanElement} */
       this._typeInfo = this._infocard.querySelector('.type-info');
+      /** @type {HTMLSpanElement} */
+      this._flagsInfo = this._infocard.querySelector('.flags-info');
 
       /**
        * Last symbol type displayed.
@@ -94,6 +108,22 @@ const displayInfocard = (() => {
     }
 
     /**
+     * Returns a string representing the flags in the node.
+     * @param {TreeNode} node
+     */
+    _flagsString(node) {
+      if (!node.flags) {
+        return '';
+      }
+
+      const flagsString = Array.from(_FLAG_LABELS)
+        .filter(([flag]) => hasFlag(flag, node))
+        .map(([, part]) => part)
+        .join(',');
+      return `{${flagsString}}`;
+    }
+
+    /**
      * Toggle wheter or not the card is visible.
      * @param {boolean} isHidden
      */
@@ -121,6 +151,7 @@ const displayInfocard = (() => {
         this._setTypeContent(icon);
         this._lastType = type;
       }
+      this._flagsInfo.textContent = this._flagsString(node);
     }
 
     /**
@@ -161,8 +192,7 @@ const displayInfocard = (() => {
         d: this._tableBody.querySelector('.data-info'),
         r: this._tableBody.querySelector('.rodata-info'),
         t: this._tableBody.querySelector('.text-info'),
-        v: this._tableBody.querySelector('.vtable-info'),
-        '*': this._tableBody.querySelector('.gen-info'),
+        R: this._tableBody.querySelector('.relro-info'),
         x: this._tableBody.querySelector('.dexnon-info'),
         m: this._tableBody.querySelector('.dex-info'),
         p: this._tableBody.querySelector('.pak-info'),
@@ -191,19 +221,33 @@ const displayInfocard = (() => {
       icon.classList.add('canvas-overlay');
     }
 
+    _flagsString(containerNode) {
+      const flags = super._flagsString(containerNode);
+      return flags ? `- contains ${flags}` : '';
+    }
+
+    /**
+     * Draw a border around part of a pie chart.
+     * @param {number} angleStart Starting angle, in radians.
+     * @param {number} angleEnd Ending angle, in radians.
+     * @param {string} strokeColor Color of the pie slice border.
+     * @param {number} lineWidth Width of the border.
+     */
+    _drawBorder(angleStart, angleEnd, strokeColor, lineWidth) {
+      this._ctx.strokeStyle = strokeColor;
+      this._ctx.lineWidth = lineWidth;
+      this._ctx.beginPath();
+      this._ctx.arc(40, 40, _CANVAS_RADIUS, angleStart, angleEnd);
+      this._ctx.stroke();
+    }
+
     /**
      * Draw a slice of a pie chart.
      * @param {number} angleStart Starting angle, in radians.
-     * @param {number} percentage Percentage of circle to draw.
+     * @param {number} angleEnd Ending angle, in radians.
      * @param {string} fillColor Color of the pie slice.
-     * @param {string} strokeColor Color of the pie slice border.
-     * @returns {number} Ending angle, in radians.
      */
-    _drawSlice(angleStart, percentage, fillColor, strokeColor) {
-      const arcLength = Math.abs(percentage) * 2 * Math.PI;
-      const angleEnd = angleStart + arcLength;
-      if (arcLength === 0) return angleEnd;
-
+    _drawSlice(angleStart, angleEnd, fillColor) {
       // Update DOM
       this._ctx.fillStyle = fillColor;
       // Move cursor to center, where line will start
@@ -214,16 +258,6 @@ const displayInfocard = (() => {
       // Move cursor back to center
       this._ctx.closePath();
       this._ctx.fill();
-
-      if (strokeColor) {
-        this._ctx.strokeStyle = strokeColor;
-        this._ctx.lineWidth = 16;
-        this._ctx.beginPath();
-        this._ctx.arc(40, 40, _CANVAS_RADIUS, angleStart, angleEnd);
-        this._ctx.stroke();
-      }
-
-      return angleEnd;
     }
 
     /**
@@ -272,11 +306,12 @@ const displayInfocard = (() => {
      * @param {TreeNode} containerNode
      */
     _updateInfocard(containerNode) {
-      const extraRows = {...this._infoRows};
+      const extraRows = Object.assign({}, this._infoRows);
       const statsEntries = Object.entries(containerNode.childStats).sort(
         (a, b) => b[1].size - a[1].size
       );
       const diffMode = state.has('diff_mode');
+      const highlightMode = state.has('highlight');
       let totalSize = 0;
       for (const [, stats] of statsEntries) {
         totalSize += Math.abs(stats.size);
@@ -289,13 +324,26 @@ const displayInfocard = (() => {
         delete extraRows[type];
         const {color} = getIconStyle(type);
         const percentage = stats.size / totalSize;
-        let stroke = '';
-        if (diffMode) {
-          stroke = stats.size > 0 ? '#ea4335' : '#34a853';
-        }
-
-        angleStart = this._drawSlice(angleStart, percentage, color, stroke);
         this._updateBreakdownRow(this._infoRows[type], stats, percentage);
+
+        const arcLength = Math.abs(percentage) * 2 * Math.PI;
+        if (arcLength > 0) {
+          const angleEnd = angleStart + arcLength;
+
+          this._drawSlice(angleStart, angleEnd, color);
+          if (highlightMode) {
+            const highlightPercent = stats.highlight / totalSize;
+            const highlightArcLength = Math.abs(highlightPercent) * 2 * Math.PI;
+            const highlightEnd = (angleStart + highlightArcLength);
+
+            this._drawBorder(angleStart, highlightEnd, '#feefc3', 32);
+          }
+          if (diffMode) {
+            const strokeColor = stats.size > 0 ? '#ea4335' : '#34a853';
+            this._drawBorder(angleStart, angleEnd, strokeColor, 16);
+          }
+          angleStart = angleEnd;
+        }
       }
 
       // Hide unused types

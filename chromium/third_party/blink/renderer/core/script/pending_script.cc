@@ -138,18 +138,21 @@ void PendingScript::ExecuteScriptBlock(const KURL& document_url) {
     return;
   }
 
-  // Do not execute module scripts if they are moved between documents.
-  // TODO(hiroshige): Also do not execute classic scripts. crbug.com/721914
-  if (OriginalContextDocument() != context_document &&
-      GetScriptType() == ScriptType::kModule) {
-    Dispose();
-    return;
+  if (OriginalContextDocument() != context_document) {
+    if (GetScriptType() == ScriptType::kModule) {
+      // Do not execute module scripts if they are moved between documents.
+      Dispose();
+      return;
+    }
+
+    // TODO(hiroshige): Also do not execute classic scripts.
+    // https://crbug.com/721914
+    UseCounter::Count(frame, WebFeature::kEvaluateScriptMovedBetweenDocuments);
   }
 
-  bool error_occurred = false;
-  Script* script = GetSource(document_url, error_occurred);
+  Script* script = GetSource(document_url);
 
-  if (!error_occurred && !IsExternal()) {
+  if (script && !IsExternal()) {
     bool should_bypass_main_world_csp =
         frame->GetScriptController().ShouldBypassMainWorldCSP();
 
@@ -160,7 +163,7 @@ void PendingScript::ExecuteScriptBlock(const KURL& document_url) {
             ContentSecurityPolicy::InlineType::kBlock)) {
       // Consider as if "the script's script is null" retrospectively,
       // if the CSP check fails, which is considered as load failure.
-      error_occurred = true;
+      script = nullptr;
     }
   }
 
@@ -175,15 +178,13 @@ void PendingScript::ExecuteScriptBlock(const KURL& document_url) {
 
   // ExecuteScriptBlockInternal() is split just in order to prevent accidential
   // access to |this| after Dispose().
-  ExecuteScriptBlockInternal(script, error_occurred, element, was_canceled,
-                             is_external, created_during_document_write,
-                             parser_blocking_load_start_time,
-                             is_controlled_by_script_runner);
+  ExecuteScriptBlockInternal(
+      script, element, was_canceled, is_external, created_during_document_write,
+      parser_blocking_load_start_time, is_controlled_by_script_runner);
 }
 
 void PendingScript::ExecuteScriptBlockInternal(
     Script* script,
-    bool error_occurred,
     ScriptElementBase* element,
     bool was_canceled,
     bool is_external,
@@ -195,7 +196,7 @@ void PendingScript::ExecuteScriptBlockInternal(
 
   // <spec step="2">If the script's script is null, fire an event named error at
   // the element, and return.</spec>
-  if (error_occurred) {
+  if (!script) {
     element->DispatchErrorEvent();
     return;
   }

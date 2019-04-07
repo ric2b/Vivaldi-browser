@@ -35,14 +35,14 @@
 
 namespace media {
 
-// Always try to use three threads for video decoding.  There is little reason
-// not to since current day CPUs tend to be multi-core and we measured
-// performance benefits on older machines such as P4s with hyperthreading.
-static const int kDecodeThreads = 2;
-static const int kMaxDecodeThreads = 32;
-
 // Returns the number of threads.
-static int GetThreadCount(const VideoDecoderConfig& config) {
+static int GetVpxVideoDecoderThreadCount(const VideoDecoderConfig& config) {
+  // Always try to use at least two threads for video decoding.  There is little
+  // reason not to since current day CPUs tend to be multi-core and we measured
+  // performance benefits on older machines such as P4s with hyperthreading.
+  constexpr int kDecodeThreads = 2;
+  constexpr int kMaxDecodeThreads = 32;
+
   // Refer to http://crbug.com/93932 for tsan suppressions on decoding.
   int decode_threads = kDecodeThreads;
 
@@ -80,7 +80,7 @@ static std::unique_ptr<vpx_codec_ctx> InitializeVpxContext(
   vpx_codec_dec_cfg_t vpx_config = {0};
   vpx_config.w = config.coded_size().width();
   vpx_config.h = config.coded_size().height();
-  vpx_config.threads = GetThreadCount(config);
+  vpx_config.threads = GetVpxVideoDecoderThreadCount(config);
 
   vpx_codec_err_t status = vpx_codec_dec_init(
       context.get(),
@@ -597,26 +597,18 @@ bool VpxVideoDecoder::CopyVpxImageToVideoFrame(
     return true;
   }
 
-  DCHECK(codec_format == PIXEL_FORMAT_I420 ||
-         codec_format == PIXEL_FORMAT_I420A);
-
   *video_frame = frame_pool_.CreateFrame(codec_format, visible_size,
                                          gfx::Rect(visible_size),
                                          config_.natural_size(), kNoTimestamp);
   if (!(*video_frame))
     return false;
 
-  libyuv::I420Copy(
-      vpx_image->planes[VPX_PLANE_Y], vpx_image->stride[VPX_PLANE_Y],
-      vpx_image->planes[VPX_PLANE_U], vpx_image->stride[VPX_PLANE_U],
-      vpx_image->planes[VPX_PLANE_V], vpx_image->stride[VPX_PLANE_V],
-      (*video_frame)->visible_data(VideoFrame::kYPlane),
-      (*video_frame)->stride(VideoFrame::kYPlane),
-      (*video_frame)->visible_data(VideoFrame::kUPlane),
-      (*video_frame)->stride(VideoFrame::kUPlane),
-      (*video_frame)->visible_data(VideoFrame::kVPlane),
-      (*video_frame)->stride(VideoFrame::kVPlane), coded_size.width(),
-      coded_size.height());
+  for (int plane = 0; plane < 3; plane++) {
+    libyuv::CopyPlane(
+        vpx_image->planes[plane], vpx_image->stride[plane],
+        (*video_frame)->visible_data(plane), (*video_frame)->stride(plane),
+        (*video_frame)->row_bytes(plane), (*video_frame)->rows(plane));
+  }
 
   return true;
 }

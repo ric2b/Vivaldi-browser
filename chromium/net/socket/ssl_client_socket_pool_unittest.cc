@@ -228,9 +228,10 @@ TEST_F(SSLClientSocketPoolTest, TCPFail) {
   scoped_refptr<SSLSocketParams> params = SSLParams(ProxyServer::SCHEME_DIRECT);
 
   ClientSocketHandle handle;
-  int rv = handle.Init(kGroupName, params, MEDIUM, SocketTag(),
-                       ClientSocketPool::RespectLimits::ENABLED,
-                       CompletionCallback(), pool_.get(), NetLogWithSource());
+  int rv =
+      handle.Init(kGroupName, params, MEDIUM, SocketTag(),
+                  ClientSocketPool::RespectLimits::ENABLED,
+                  CompletionOnceCallback(), pool_.get(), NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_CONNECTION_FAILED));
   EXPECT_FALSE(handle.is_initialized());
   EXPECT_FALSE(handle.socket());
@@ -757,8 +758,8 @@ TEST_F(SSLClientSocketPoolTest, IPPooling) {
     HostResolver::RequestInfo info(HostPortPair(test_hosts[i].name, kTestPort));
     std::unique_ptr<HostResolver::Request> request;
     int rv = host_resolver_.Resolve(
-        info, DEFAULT_PRIORITY, &test_hosts[i].addresses, CompletionCallback(),
-        &request, NetLogWithSource());
+        info, DEFAULT_PRIORITY, &test_hosts[i].addresses,
+        CompletionOnceCallback(), &request, NetLogWithSource());
     EXPECT_THAT(rv, IsOk());
 
     // Setup a SpdySessionKey
@@ -816,8 +817,8 @@ void SSLClientSocketPoolTest::TestIPPoolingDisabled(
     HostResolver::RequestInfo info(HostPortPair(test_hosts[i].name, kTestPort));
     std::unique_ptr<HostResolver::Request> request;
     int rv = host_resolver_.Resolve(
-        info, DEFAULT_PRIORITY, &test_hosts[i].addresses, CompletionCallback(),
-        &request, NetLogWithSource());
+        info, DEFAULT_PRIORITY, &test_hosts[i].addresses,
+        CompletionOnceCallback(), &request, NetLogWithSource());
     EXPECT_THAT(rv, IsOk());
 
     // Setup a SpdySessionKey
@@ -924,12 +925,14 @@ TEST_F(SSLClientSocketPoolTest, Tag) {
   EXPECT_TRUE(handle.socket()->IsConnected());
   EXPECT_EQ(handle.socket(), socket);
   const char kRequest[] = "GET / HTTP/1.1\r\n\r\n";
-  scoped_refptr<IOBuffer> write_buffer(new StringIOBuffer(kRequest));
+  scoped_refptr<IOBuffer> write_buffer =
+      base::MakeRefCounted<StringIOBuffer>(kRequest);
   rv =
       handle.socket()->Write(write_buffer.get(), strlen(kRequest),
                              callback.callback(), TRAFFIC_ANNOTATION_FOR_TESTS);
   EXPECT_EQ(static_cast<int>(strlen(kRequest)), callback.GetResult(rv));
-  scoped_refptr<IOBufferWithSize> read_buffer(new IOBufferWithSize(1));
+  scoped_refptr<IOBufferWithSize> read_buffer =
+      base::MakeRefCounted<IOBufferWithSize>(1);
   rv = handle.socket()->Read(read_buffer.get(), read_buffer->size(),
                              callback.callback());
   EXPECT_EQ(read_buffer->size(), callback.GetResult(rv));
@@ -988,12 +991,14 @@ TEST_F(SSLClientSocketPoolTest, TagTwoSockets) {
   // Verify socket has |tag2| applied.
   uint64_t old_traffic = GetTaggedBytes(tag_val2);
   const char kRequest[] = "GET / HTTP/1.1\r\n\r\n";
-  scoped_refptr<IOBuffer> write_buffer(new StringIOBuffer(kRequest));
+  scoped_refptr<IOBuffer> write_buffer =
+      base::MakeRefCounted<StringIOBuffer>(kRequest);
   rv = handle.socket()->Write(write_buffer.get(), strlen(kRequest),
                               callback2.callback(),
                               TRAFFIC_ANNOTATION_FOR_TESTS);
   EXPECT_EQ(static_cast<int>(strlen(kRequest)), callback2.GetResult(rv));
-  scoped_refptr<IOBufferWithSize> read_buffer(new IOBufferWithSize(1));
+  scoped_refptr<IOBufferWithSize> read_buffer =
+      base::MakeRefCounted<IOBufferWithSize>(1);
   rv = handle.socket()->Read(read_buffer.get(), read_buffer->size(),
                              callback2.callback());
   EXPECT_EQ(read_buffer->size(), callback2.GetResult(rv));
@@ -1065,12 +1070,14 @@ TEST_F(SSLClientSocketPoolTest, TagTwoSocketsFullPool) {
   EXPECT_TRUE(handle.socket()->IsConnected());
   uint64_t old_traffic = GetTaggedBytes(tag_val2);
   const char kRequest[] = "GET / HTTP/1.1\r\n\r\n";
-  scoped_refptr<IOBuffer> write_buffer(new StringIOBuffer(kRequest));
+  scoped_refptr<IOBuffer> write_buffer =
+      base::MakeRefCounted<StringIOBuffer>(kRequest);
   rv =
       handle.socket()->Write(write_buffer.get(), strlen(kRequest),
                              callback.callback(), TRAFFIC_ANNOTATION_FOR_TESTS);
   EXPECT_EQ(static_cast<int>(strlen(kRequest)), callback.GetResult(rv));
-  scoped_refptr<IOBufferWithSize> read_buffer(new IOBufferWithSize(1));
+  scoped_refptr<IOBufferWithSize> read_buffer =
+      base::MakeRefCounted<IOBufferWithSize>(1);
   EXPECT_EQ(handle.socket()->Read(read_buffer.get(), read_buffer->size(),
                                   callback.callback()),
             ERR_IO_PENDING);

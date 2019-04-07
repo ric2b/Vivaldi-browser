@@ -29,7 +29,7 @@ class StyleInheritedVariables;
 class StyleNonInheritedVariables;
 class StyleResolverState;
 
-class CSSVariableResolver {
+class CORE_EXPORT CSSVariableResolver {
   STACK_ALLOCATED();
 
  public:
@@ -52,6 +52,7 @@ class CSSVariableResolver {
   struct Options {
     STACK_ALLOCATED();
 
+   public:
     // Treat any references to animation-tainted custom properties as invalid.
     //
     // Custom properties used in @keyframe rules become 'animation-tainted'
@@ -83,6 +84,7 @@ class CSSVariableResolver {
   struct Result {
     STACK_ALLOCATED();
 
+   public:
     Vector<CSSParserToken> tokens;
     Vector<String> backing_strings;
     bool is_animation_tainted = false;

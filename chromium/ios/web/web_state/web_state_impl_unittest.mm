@@ -17,6 +17,7 @@
 #import "base/test/ios/wait_util.h"
 #include "base/test/scoped_feature_list.h"
 #import "ios/web/interstitials/html_web_interstitial_impl.h"
+#import "ios/web/navigation/navigation_item_impl.h"
 #import "ios/web/navigation/wk_navigation_util.h"
 #import "ios/web/public/crw_navigation_item_storage.h"
 #import "ios/web/public/crw_session_storage.h"
@@ -464,6 +465,8 @@ TEST_P(WebStateImplTest, ObserverTest) {
   // Test that NavigationItemCommitted() is called.
   ASSERT_FALSE(observer->commit_navigation_info());
   LoadCommittedDetails details;
+  auto item = std::make_unique<NavigationItemImpl>();
+  details.item = item.get();
   web_state_->OnNavigationItemCommitted(details);
   ASSERT_TRUE(observer->commit_navigation_info());
   EXPECT_EQ(web_state_.get(), observer->commit_navigation_info()->web_state);
@@ -636,12 +639,6 @@ TEST_P(WebStateImplTest, DelegateTest) {
   web_state_->CommitPreviewingViewController(previewing_view_controller);
   EXPECT_EQ(previewing_view_controller,
             delegate.last_previewing_view_controller());
-
-  // Test that ShouldAllowAppLaunching() is delegated correctly.
-  delegate.SetShouldAllowAppLaunching(true);
-  EXPECT_TRUE(web_state_->ShouldAllowAppLaunching());
-  delegate.SetShouldAllowAppLaunching(false);
-  EXPECT_FALSE(web_state_->ShouldAllowAppLaunching());
 }
 
 // Verifies that GlobalWebStateObservers are called when expected.
@@ -662,6 +659,8 @@ TEST_P(WebStateImplTest, GlobalObserverTest) {
   // Test that NavigationItemCommitted() is called.
   EXPECT_FALSE(observer->navigation_item_committed_called());
   LoadCommittedDetails details;
+  auto item = std::make_unique<NavigationItemImpl>();
+  details.item = item.get();
   web_state_->OnNavigationItemCommitted(details);
   EXPECT_TRUE(observer->navigation_item_committed_called());
 
@@ -969,11 +968,13 @@ TEST_P(WebStateImplTest, UncommittedRestoreSession) {
   scoped_feature_list.InitAndEnableFeature(
       web::features::kSlimNavigationManager);
 
+  GURL url("http://test.com");
   CRWSessionStorage* session_storage = [[CRWSessionStorage alloc] init];
   session_storage.lastCommittedItemIndex = 0;
   CRWNavigationItemStorage* item_storage =
       [[CRWNavigationItemStorage alloc] init];
   item_storage.title = base::SysNSStringToUTF16(@"Title");
+  item_storage.virtualURL = url;
   session_storage.itemStorages = @[ item_storage ];
 
   web::WebState::CreateParams params(GetBrowserState());
@@ -984,6 +985,7 @@ TEST_P(WebStateImplTest, UncommittedRestoreSession) {
   EXPECT_EQ(0, extracted_session_storage.lastCommittedItemIndex);
   EXPECT_EQ(1U, extracted_session_storage.itemStorages.count);
   EXPECT_NSEQ(@"Title", base::SysUTF16ToNSString(web_state.GetTitle()));
+  EXPECT_EQ(url, web_state.GetVisibleURL());
 }
 
 TEST_P(WebStateImplTest, NoUncommittedRestoreSession) {
@@ -995,6 +997,7 @@ TEST_P(WebStateImplTest, NoUncommittedRestoreSession) {
   EXPECT_EQ(-1, session_storage.lastCommittedItemIndex);
   EXPECT_NSEQ(@[], session_storage.itemStorages);
   EXPECT_TRUE(web_state_->GetTitle().empty());
+  EXPECT_EQ(GURL::EmptyGURL(), web_state_->GetVisibleURL());
 }
 
 // Tests showing and clearing interstitial when NavigationManager is

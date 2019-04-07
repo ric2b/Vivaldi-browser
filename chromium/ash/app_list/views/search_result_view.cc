@@ -62,16 +62,13 @@ SearchResultView::SearchResultView(SearchResultListView* list_view,
     : list_view_(list_view),
       view_delegate_(view_delegate),
       icon_(new views::ImageView),
-      badge_icon_(new views::ImageView),
       actions_view_(new SearchResultActionsView(this)),
       progress_bar_(new views::ProgressBar),
       weak_ptr_factory_(this) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
   icon_->set_can_process_events_within_subtree(false);
-  badge_icon_->set_can_process_events_within_subtree(false);
 
   AddChildView(icon_);
-  AddChildView(badge_icon_);
   AddChildView(actions_view_);
   AddChildView(progress_bar_);
   set_context_menu_controller(this);
@@ -146,7 +143,8 @@ void SearchResultView::CreateTitleRenderText() {
   render_text->SetText(result_->title());
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   render_text->SetFontList(
-      rb.GetFontList(ui::ResourceBundle::BaseFont).DeriveWithSizeDelta(2));
+      rb.GetFontList(kSearchResultTitleFontStyle)
+          .DeriveWithSizeDelta(kSearchResultTitleTextSizeDelta));
   // When result is an omnibox non-url search, the matched tag indicates
   // proposed query. For all other cases, the matched tag indicates typed search
   // query.
@@ -206,17 +204,6 @@ void SearchResultView::Layout() {
                     kIconLeftRightPadding, top_bottom_padding);
   icon_bounds.Intersect(rect);
   icon_->SetBoundsRect(icon_bounds);
-
-  gfx::Rect badge_icon_bounds;
-
-  const int badge_icon_dimension =
-      AppListConfig::instance().search_list_badge_icon_dimension();
-  badge_icon_bounds = gfx::Rect(icon_bounds.right() - badge_icon_dimension / 2,
-                                icon_bounds.bottom() - badge_icon_dimension / 2,
-                                badge_icon_dimension, badge_icon_dimension);
-
-  badge_icon_bounds.Intersect(rect);
-  badge_icon_->SetBoundsRect(badge_icon_bounds);
 
   const int max_actions_width =
       (rect.right() - kActionButtonRightMargin - icon_bounds.right()) / 2;
@@ -350,17 +337,6 @@ void SearchResultView::OnMetadataChanged() {
   if (!icon.isNull())
     SetIconImage(icon, icon_,
                  AppListConfig::instance().search_list_icon_dimension());
-
-  // Updates |badge_icon_|.
-  const gfx::ImageSkia badge_icon(result_ ? result_->badge_icon()
-                                          : gfx::ImageSkia());
-  if (badge_icon.isNull()) {
-    badge_icon_->SetVisible(false);
-  } else {
-    SetIconImage(badge_icon, badge_icon_,
-                 AppListConfig::instance().search_list_badge_icon_dimension());
-    badge_icon_->SetVisible(true);
-  }
 
   // Updates |actions_view_|.
   actions_view_->SetActions(result_ ? result_->actions()

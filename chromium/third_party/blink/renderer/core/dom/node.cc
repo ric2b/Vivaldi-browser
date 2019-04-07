@@ -876,10 +876,7 @@ static ContainerNode* GetReattachParent(Node& node) {
   if (node.IsPseudoElement())
     return node.ParentOrShadowHostNode();
   if (node.IsChildOfV1ShadowHost()) {
-    HTMLSlotElement* slot = RuntimeEnabledFeatures::SlotInFlatTreeEnabled()
-                                ? node.AssignedSlot()
-                                : node.FinalDestinationSlot();
-    if (slot)
+    if (HTMLSlotElement* slot = node.AssignedSlot())
       return slot;
   }
   if (node.IsInV0ShadowTree() || node.IsChildOfV0ShadowHost()) {
@@ -910,6 +907,8 @@ void Node::SetNeedsStyleRecalc(StyleChangeType change_type,
                                const StyleChangeReasonForTracing& reason) {
   DCHECK(change_type != kNoStyleChange);
   if (!InActiveDocument())
+    return;
+  if (!IsContainerNode() && !IsTextNode())
     return;
 
   TRACE_EVENT_INSTANT1(
@@ -1120,7 +1119,7 @@ void Node::AttachLayoutTree(AttachContext& context) {
   ClearNeedsStyleRecalc();
   ClearNeedsReattachLayoutTree();
 
-  if (AXObjectCache* cache = GetDocument().GetOrCreateAXObjectCache())
+  if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
     cache->UpdateCacheAfterNodeIsAttached(this);
 }
 
@@ -1181,10 +1180,7 @@ bool Node::IsStyledElement() const {
 
 bool Node::CanParticipateInFlatTree() const {
   // TODO(hayato): Return false for pseudo elements.
-  if (RuntimeEnabledFeatures::SlotInFlatTreeEnabled()) {
     return !IsShadowRoot() && !IsActiveV0InsertionPoint(*this);
-  }
-  return !IsShadowRoot() && !IsActiveSlotOrActiveV0InsertionPoint();
 }
 
 bool Node::IsActiveSlotOrActiveV0InsertionPoint() const {
@@ -2261,15 +2257,15 @@ void Node::HandleLocalEvents(Event& event) {
     return;
   }
 
-  FireEventListeners(&event);
+  FireEventListeners(event);
 }
 
-void Node::DispatchScopedEvent(Event* event) {
-  event->SetTrusted(true);
+void Node::DispatchScopedEvent(Event& event) {
+  event.SetTrusted(true);
   EventDispatcher::DispatchScopedEvent(*this, event);
 }
 
-DispatchEventResult Node::DispatchEventInternal(Event* event) {
+DispatchEventResult Node::DispatchEventInternal(Event& event) {
   return EventDispatcher::DispatchEvent(*this, event);
 }
 
@@ -2284,8 +2280,8 @@ void Node::DispatchSubtreeModifiedEvent() {
   if (!GetDocument().HasListenerType(Document::kDOMSubtreeModifiedListener))
     return;
 
-  DispatchScopedEvent(MutationEvent::Create(EventTypeNames::DOMSubtreeModified,
-                                            Event::Bubbles::kYes));
+  DispatchScopedEvent(*MutationEvent::Create(EventTypeNames::DOMSubtreeModified,
+                                             Event::Bubbles::kYes));
 }
 
 DispatchEventResult Node::DispatchDOMActivateEvent(int detail,
@@ -2293,16 +2289,16 @@ DispatchEventResult Node::DispatchDOMActivateEvent(int detail,
 #if DCHECK_IS_ON()
   DCHECK(!EventDispatchForbiddenScope::IsEventDispatchForbidden());
 #endif
-  UIEvent* event = UIEvent::Create();
-  event->initUIEvent(EventTypeNames::DOMActivate, true, true,
-                     GetDocument().domWindow(), detail);
-  event->SetUnderlyingEvent(&underlying_event);
-  event->SetComposed(underlying_event.composed());
+  UIEvent& event = *UIEvent::Create();
+  event.initUIEvent(EventTypeNames::DOMActivate, true, true,
+                    GetDocument().domWindow(), detail);
+  event.SetUnderlyingEvent(&underlying_event);
+  event.SetComposed(underlying_event.composed());
   DispatchScopedEvent(event);
 
   // TODO(dtapuska): Dispatching scoped events shouldn't check the return
   // type because the scoped event could get put off in the delayed queue.
-  return EventTarget::GetDispatchEventResult(*event);
+  return EventTarget::GetDispatchEventResult(event);
 }
 
 void Node::CreateAndDispatchPointerEvent(const AtomicString& mouse_event_name,
@@ -2347,7 +2343,7 @@ void Node::CreateAndDispatchPointerEvent(const AtomicString& mouse_event_name,
       static_cast<WebInputEvent::Modifiers>(mouse_event.GetModifiers()));
   pointer_event_init.setView(view);
 
-  DispatchEvent(PointerEvent::Create(pointer_event_name, pointer_event_init));
+  DispatchEvent(*PointerEvent::Create(pointer_event_name, pointer_event_init));
 }
 
 // TODO(crbug.com/665924): This function bypasses all Blink event path.
@@ -2385,7 +2381,7 @@ void Node::DispatchMouseEvent(const WebMouseEvent& event,
                                       ->FiresTouchEvents(event.FromTouch())
                                 : nullptr);
 
-  DispatchEvent(MouseEvent::Create(
+  DispatchEvent(*MouseEvent::Create(
       mouse_event_type, initializer, event.TimeStamp(),
       event.FromTouch() ? MouseEvent::kFromTouch
                         : MouseEvent::kRealOrIndistinguishable,
@@ -2401,42 +2397,43 @@ void Node::DispatchSimulatedClick(Event* underlying_event,
 
 void Node::DispatchInputEvent() {
   // Legacy 'input' event for forms set value and checked.
-  DispatchScopedEvent(Event::CreateBubble(EventTypeNames::input));
+  DispatchScopedEvent(*Event::CreateBubble(EventTypeNames::input));
 }
 
-void Node::DefaultEventHandler(Event* event) {
-  if (event->target() != this)
+void Node::DefaultEventHandler(Event& event) {
+  if (event.target() != this)
     return;
-  const AtomicString& event_type = event->type();
+  const AtomicString& event_type = event.type();
   if (event_type == EventTypeNames::keydown ||
       event_type == EventTypeNames::keypress) {
-    if (event->IsKeyboardEvent()) {
-      if (LocalFrame* frame = GetDocument().GetFrame())
+    if (event.IsKeyboardEvent()) {
+      if (LocalFrame* frame = GetDocument().GetFrame()) {
         frame->GetEventHandler().DefaultKeyboardEventHandler(
-            ToKeyboardEvent(event));
+            ToKeyboardEvent(&event));
+      }
     }
   } else if (event_type == EventTypeNames::click) {
-    int detail =
-        event->IsUIEvent() ? static_cast<UIEvent*>(event)->detail() : 0;
-    if (DispatchDOMActivateEvent(detail, *event) !=
+    int detail = event.IsUIEvent() ? ToUIEvent(event).detail() : 0;
+    if (DispatchDOMActivateEvent(detail, event) !=
         DispatchEventResult::kNotCanceled)
-      event->SetDefaultHandled();
+      event.SetDefaultHandled();
   } else if (event_type == EventTypeNames::contextmenu &&
-             event->IsMouseEvent()) {
+             event.IsMouseEvent()) {
     if (Page* page = GetDocument().GetPage()) {
       page->GetContextMenuController().HandleContextMenuEvent(
-          ToMouseEvent(event));
+          ToMouseEvent(&event));
     }
   } else if (event_type == EventTypeNames::textInput) {
-    if (event->HasInterface(EventNames::TextEvent)) {
-      if (LocalFrame* frame = GetDocument().GetFrame())
+    if (event.HasInterface(EventNames::TextEvent)) {
+      if (LocalFrame* frame = GetDocument().GetFrame()) {
         frame->GetEventHandler().DefaultTextInputEventHandler(
-            ToTextEvent(event));
+            ToTextEvent(&event));
+      }
     }
   } else if (RuntimeEnabledFeatures::MiddleClickAutoscrollEnabled() &&
-             event_type == EventTypeNames::mousedown && event->IsMouseEvent()) {
-    MouseEvent* mouse_event = ToMouseEvent(event);
-    if (mouse_event->button() ==
+             event_type == EventTypeNames::mousedown && event.IsMouseEvent()) {
+    auto& mouse_event = ToMouseEvent(event);
+    if (mouse_event.button() ==
         static_cast<short>(WebPointerProperties::Button::kMiddle)) {
       if (EnclosingLinkEventParentOrSelf())
         return;
@@ -2465,19 +2462,19 @@ void Node::DefaultEventHandler(Event* event) {
           frame->GetEventHandler().StartMiddleClickAutoscroll(layout_object);
       }
     }
-  } else if (event_type == EventTypeNames::mouseup && event->IsMouseEvent()) {
-    MouseEvent* mouse_event = ToMouseEvent(event);
-    if (mouse_event->button() ==
+  } else if (event_type == EventTypeNames::mouseup && event.IsMouseEvent()) {
+    auto& mouse_event = ToMouseEvent(event);
+    if (mouse_event.button() ==
         static_cast<short>(WebPointerProperties::Button::kBack)) {
       if (LocalFrame* frame = GetDocument().GetFrame()) {
         if (frame->Client()->NavigateBackForward(-1))
-          event->SetDefaultHandled();
+          event.SetDefaultHandled();
       }
-    } else if (mouse_event->button() ==
+    } else if (mouse_event.button() ==
                static_cast<short>(WebPointerProperties::Button::kForward)) {
       if (LocalFrame* frame = GetDocument().GetFrame()) {
         if (frame->Client()->NavigateBackForward(1))
-          event->SetDefaultHandled();
+          event.SetDefaultHandled();
       }
     }
   }

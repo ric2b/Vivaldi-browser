@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <stylus-tools-unstable-v1-server-protocol.h>
 #include <stylus-unstable-v2-server-protocol.h>
+#include <text-input-unstable-v1-server-protocol.h>
 #include <viewporter-server-protocol.h>
 #include <vsync-feedback-unstable-v1-server-protocol.h>
 #include <wayland-server-core.h>
@@ -85,6 +86,7 @@
 #include "components/exo/shell_surface.h"
 #include "components/exo/sub_surface.h"
 #include "components/exo/surface.h"
+#include "components/exo/text_input.h"
 #include "components/exo/touch.h"
 #include "components/exo/touch_delegate.h"
 #include "components/exo/touch_stylus_delegate.h"
@@ -230,7 +232,7 @@ class WaylandInputDelegate {
   }
 
  private:
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   DISALLOW_COPY_AND_ASSIGN(WaylandInputDelegate);
 };
@@ -1214,7 +1216,7 @@ void shell_get_shell_surface(wl_client* client,
       base::Bind(&HandleShellSurfaceConfigureCallback,
                  base::Unretained(shell_surface_resource)));
 
-  shell_surface->set_surface_destroyed_callback(base::Bind(
+  shell_surface->set_surface_destroyed_callback(base::BindOnce(
       &wl_resource_destroy, base::Unretained(shell_surface_resource)));
 
   SetImplementation(shell_surface_resource, &shell_surface_implementation,
@@ -1799,7 +1801,7 @@ void xdg_toplevel_v6_set_title(wl_client* client,
 void xdg_toplevel_v6_set_app_id(wl_client* client,
                                 wl_resource* resource,
                                 const char* app_id) {
-  NOTIMPLEMENTED();
+  GetUserDataAs<WaylandToplevel>(resource)->SetApplicationId(app_id);
 }
 
 void xdg_toplevel_v6_show_window_menu(wl_client* client,
@@ -2294,7 +2296,7 @@ void remote_surface_unset_always_on_top(wl_client* client,
 void remote_surface_ack_configure(wl_client* client,
                                   wl_resource* resource,
                                   uint32_t serial) {
-  GetUserDataAs<ShellSurfaceBase>(resource)->AcknowledgeConfigure(serial);
+  // DEPRECATED
 }
 
 void remote_surface_move(wl_client* client, wl_resource* resource) {
@@ -2436,6 +2438,19 @@ void remote_surface_pip(wl_client* client, wl_resource* resource) {
   GetUserDataAs<ClientControlledShellSurface>(resource)->SetPip();
 }
 
+void remote_surface_set_bounds(wl_client* client,
+                               wl_resource* resource,
+                               uint32_t display_id_hi,
+                               uint32_t display_id_lo,
+                               int32_t x,
+                               int32_t y,
+                               int32_t width,
+                               int32_t height) {
+  GetUserDataAs<ClientControlledShellSurface>(resource)->SetBounds(
+      static_cast<int64_t>(display_id_hi) << 32 | display_id_lo,
+      gfx::Rect(x, y, width, height));
+}
+
 const struct zcr_remote_surface_v1_interface remote_surface_implementation = {
     remote_surface_destroy,
     remote_surface_set_app_id,
@@ -2477,7 +2492,8 @@ const struct zcr_remote_surface_v1_interface remote_surface_implementation = {
     remote_surface_set_frame_buttons,
     remote_surface_set_extra_title,
     remote_surface_set_orientation_lock,
-    remote_surface_pip};
+    remote_surface_pip,
+    remote_surface_set_bounds};
 
 ////////////////////////////////////////////////////////////////////////////////
 // notification_surface_interface:
@@ -2548,10 +2564,6 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
     display::Screen::GetScreen()->RemoveObserver(this);
   }
 
-  bool HasRelativeSurfaceHierarchy() const {
-    return wl_resource_get_version(remote_shell_resource_) >= 9;
-  }
-
   std::unique_ptr<ClientControlledShellSurface> CreateShellSurface(
       Surface* surface,
       int container,
@@ -2616,8 +2628,9 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
   void ScheduleSendDisplayMetrics(int delay_ms) {
     needs_send_display_metrics_ = true;
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, base::Bind(&WaylandRemoteShell::SendDisplayMetrics,
-                              weak_ptr_factory_.GetWeakPtr()),
+        FROM_HERE,
+        base::BindOnce(&WaylandRemoteShell::SendDisplayMetrics,
+                       weak_ptr_factory_.GetWeakPtr()),
         base::TimeDelta::FromMilliseconds(delay_ms));
   }
 
@@ -2819,26 +2832,6 @@ void HandleRemoteSurfaceDragFinishedCallback(wl_resource* resource,
   wl_client_flush(wl_resource_get_client(resource));
 }
 
-uint32_t HandleRemoteSurfaceConfigureCallback(
-    wl_resource* resource,
-    const gfx::Size& size,
-    ash::mojom::WindowStateType state_type,
-    bool resizing,
-    bool activated,
-    const gfx::Vector2d& origin_offset) {
-  wl_array states;
-  wl_array_init(&states);
-  uint32_t serial = wl_display_next_serial(
-      wl_client_get_display(wl_resource_get_client(resource)));
-  zcr_remote_surface_v1_send_configure(resource,
-                                       origin_offset.x(),
-                                       origin_offset.y(),
-                                       &states, serial);
-  wl_client_flush(wl_resource_get_client(resource));
-  wl_array_release(&states);
-  return serial;
-}
-
 void HandleRemoteSurfaceGeometryChangedCallback(wl_resource* resource,
                                                 const gfx::Rect& geometry) {
   zcr_remote_surface_v1_send_window_geometry_changed(
@@ -2877,14 +2870,9 @@ void remote_shell_get_remote_surface(wl_client* client,
   shell_surface->set_state_changed_callback(
       base::Bind(&HandleRemoteSurfaceStateChangedCallback,
                  base::Unretained(remote_surface_resource)));
-  shell_surface->set_configure_callback(
-      base::Bind(&HandleRemoteSurfaceConfigureCallback,
-                 base::Unretained(remote_surface_resource)));
-  if (shell->HasRelativeSurfaceHierarchy()) {
-    shell_surface->set_geometry_changed_callback(
-        base::BindRepeating(&HandleRemoteSurfaceGeometryChangedCallback,
-                            base::Unretained(remote_surface_resource)));
-  }
+  shell_surface->set_geometry_changed_callback(
+      base::BindRepeating(&HandleRemoteSurfaceGeometryChangedCallback,
+                          base::Unretained(remote_surface_resource)));
 
   if (wl_resource_get_version(remote_surface_resource) >= 10) {
     shell_surface->set_client_controlled_move_resize(false);
@@ -2964,7 +2952,7 @@ const struct zcr_remote_shell_v1_interface remote_shell_implementation = {
     remote_shell_get_notification_surface,
     remote_shell_get_input_method_surface};
 
-const uint32_t remote_shell_version = 17;
+const uint32_t remote_shell_version = 18;
 
 void bind_remote_shell(wl_client* client,
                        void* data,
@@ -3103,53 +3091,26 @@ class AuraOutput : public WaylandDisplayObserver::ScaleObserver {
 
     if (wl_resource_get_version(resource_) >=
         ZAURA_OUTPUT_SCALE_SINCE_VERSION) {
-      if (features::IsDisplayZoomSettingEnabled()) {
-        display::ManagedDisplayMode active_mode;
-        bool rv = display_manager->GetActiveModeForDisplayId(display.id(),
-                                                             &active_mode);
-        DCHECK(rv);
-        const int32_t current_output_scale =
-            std::round(display_info.zoom_factor() * 1000.f);
-        for (double zoom_factor : display::GetDisplayZoomFactors(active_mode)) {
-          int32_t output_scale = std::round(zoom_factor * 1000.0);
-          uint32_t flags = 0;
-          if (output_scale == 1000)
-            flags |= ZAURA_OUTPUT_SCALE_PROPERTY_PREFERRED;
-          if (current_output_scale == output_scale)
-            flags |= ZAURA_OUTPUT_SCALE_PROPERTY_CURRENT;
+      display::ManagedDisplayMode active_mode;
+      bool rv = display_manager->GetActiveModeForDisplayId(display.id(),
+                                                           &active_mode);
+      DCHECK(rv);
+      const int32_t current_output_scale =
+          std::round(display_info.zoom_factor() * 1000.f);
+      for (double zoom_factor : display::GetDisplayZoomFactors(active_mode)) {
+        int32_t output_scale = std::round(zoom_factor * 1000.0);
+        uint32_t flags = 0;
+        if (output_scale == 1000)
+          flags |= ZAURA_OUTPUT_SCALE_PROPERTY_PREFERRED;
+        if (current_output_scale == output_scale)
+          flags |= ZAURA_OUTPUT_SCALE_PROPERTY_CURRENT;
 
-          // TODO(malaykeshav): This can be removed in the future when client
-          // has been updated.
-          if (wl_resource_get_version(resource_) < 6)
-            output_scale = std::round(1000.0 / zoom_factor);
+        // TODO(malaykeshav): This can be removed in the future when client
+        // has been updated.
+        if (wl_resource_get_version(resource_) < 6)
+          output_scale = std::round(1000.0 / zoom_factor);
 
-          zaura_output_send_scale(resource_, flags, output_scale);
-        }
-      } else if (display_manager->GetDisplayIdForUIScaling() == display.id()) {
-        display::ManagedDisplayMode active_mode;
-        bool rv = display_manager->GetActiveModeForDisplayId(display.id(),
-                                                             &active_mode);
-        DCHECK(rv);
-        for (auto& mode : display_info.display_modes()) {
-          uint32_t flags = 0;
-          if (mode.is_default())
-            flags |= ZAURA_OUTPUT_SCALE_PROPERTY_PREFERRED;
-          if (active_mode.IsEquivalent(mode))
-            flags |= ZAURA_OUTPUT_SCALE_PROPERTY_CURRENT;
-
-          int32_t output_scale = std::round(mode.ui_scale() * 1000.f);
-          // TODO(malaykeshav): This can be removed in the future when client
-          // has been updated.
-          if (wl_resource_get_version(resource_) >= 6)
-            output_scale = std::round(1000.f / mode.ui_scale());
-
-          zaura_output_send_scale(resource_, flags, output_scale);
-        }
-      } else {
-        zaura_output_send_scale(resource_,
-                                ZAURA_OUTPUT_SCALE_PROPERTY_CURRENT |
-                                    ZAURA_OUTPUT_SCALE_PROPERTY_PREFERRED,
-                                ZAURA_OUTPUT_SCALE_FACTOR_1000);
+        zaura_output_send_scale(resource_, flags, output_scale);
       }
     }
 
@@ -5322,6 +5283,350 @@ void bind_input_timestamps_manager(wl_client* client,
       resource, &input_timestamps_manager_implementation, nullptr, nullptr);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// text_input_v1 interface:
+
+size_t OffsetFromUTF8Offset(const base::StringPiece& text, uint32_t offset) {
+  return base::UTF8ToUTF16(text.substr(0, offset)).size();
+}
+
+size_t OffsetFromUTF16Offset(const base::StringPiece16& text, uint32_t offset) {
+  return base::UTF16ToUTF8(text.substr(0, offset)).size();
+}
+
+class WaylandTextInputDelegate : public TextInput::Delegate {
+ public:
+  WaylandTextInputDelegate(wl_resource* text_input) : text_input_(text_input) {}
+  ~WaylandTextInputDelegate() override = default;
+
+  void set_surface(wl_resource* surface) { surface_ = surface; }
+
+ private:
+  wl_client* client() { return wl_resource_get_client(text_input_); }
+
+  uint32_t next_serial() {
+    return wl_display_next_serial(wl_client_get_display(client()));
+  }
+
+  // TextInput::Delegate:
+  void Activated() override {
+    zwp_text_input_v1_send_enter(text_input_, surface_);
+    wl_client_flush(client());
+  }
+
+  void Deactivated() override {
+    zwp_text_input_v1_send_leave(text_input_);
+    wl_client_flush(client());
+  }
+
+  void OnVirtualKeyboardVisibilityChanged(bool is_visible) override {
+    zwp_text_input_v1_send_input_panel_state(text_input_, is_visible);
+    wl_client_flush(client());
+  }
+
+  void SetCompositionText(const ui::CompositionText& composition) override {
+    for (const auto& span : composition.ime_text_spans) {
+      uint32_t style = ZWP_TEXT_INPUT_V1_PREEDIT_STYLE_DEFAULT;
+      switch (span.type) {
+        case ui::ImeTextSpan::Type::kComposition:
+          if (span.thickness == ui::ImeTextSpan::Thickness::kThick) {
+            style = ZWP_TEXT_INPUT_V1_PREEDIT_STYLE_HIGHLIGHT;
+          } else {
+            style = ZWP_TEXT_INPUT_V1_PREEDIT_STYLE_UNDERLINE;
+          }
+          break;
+        case ui::ImeTextSpan::Type::kSuggestion:
+          style = ZWP_TEXT_INPUT_V1_PREEDIT_STYLE_SELECTION;
+          break;
+        case ui::ImeTextSpan::Type::kMisspellingSuggestion:
+          style = ZWP_TEXT_INPUT_V1_PREEDIT_STYLE_INCORRECT;
+          break;
+      }
+      const size_t start =
+          OffsetFromUTF16Offset(composition.text, span.start_offset);
+      const size_t end =
+          OffsetFromUTF16Offset(composition.text, span.end_offset);
+      zwp_text_input_v1_send_preedit_styling(text_input_, start, end - start,
+                                             style);
+    }
+
+    const size_t pos =
+        OffsetFromUTF16Offset(composition.text, composition.selection.start());
+    zwp_text_input_v1_send_preedit_cursor(text_input_, pos);
+
+    const std::string utf8 = base::UTF16ToUTF8(composition.text);
+    zwp_text_input_v1_send_preedit_string(text_input_, next_serial(),
+                                          utf8.c_str(), utf8.c_str());
+
+    wl_client_flush(client());
+  }
+
+  void Commit(const base::string16& text) override {
+    zwp_text_input_v1_send_commit_string(text_input_, next_serial(),
+                                         base::UTF16ToUTF8(text).c_str());
+    wl_client_flush(client());
+  }
+
+  void SetCursor(const gfx::Range& selection) override {
+    // TODO(mukai): compute the utf8 offset for |selection| and call
+    // zwp_text_input_v1_send_cursor_position.
+    NOTIMPLEMENTED();
+  }
+
+  void DeleteSurroundingText(const gfx::Range& range) override {
+    // TODO(mukai): compute the utf8 offset for |range| and call
+    // zwp_text_input_send_delete_surrounding_text.
+    NOTIMPLEMENTED();
+  }
+
+  void SendKey(const ui::KeyEvent& event) override {
+    uint32_t code = ui::KeycodeConverter::DomCodeToNativeKeycode(event.code());
+    bool pressed = event.flags() | ui::ET_KEY_PRESSED;
+    // TODO(mukai): consolidate the definition of this modifiers_mask with other
+    // similar ones in components/exo/keyboard.cc or arc_ime_service.cc.
+    constexpr uint32_t modifiers_mask =
+        ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
+        ui::EF_COMMAND_DOWN | ui::EF_ALTGR_DOWN | ui::EF_MOD3_DOWN;
+    // 1-bit shifts to adjust the bitpattern for the modifiers; see also
+    // WaylandTextInputDelegate::SendModifiers().
+    uint32_t modifiers = (event.flags() & modifiers_mask) >> 1;
+    zwp_text_input_v1_send_keysym(text_input_,
+                                  TimeTicksToMilliseconds(event.time_stamp()),
+                                  next_serial(), code,
+                                  pressed ? WL_KEYBOARD_KEY_STATE_PRESSED
+                                          : WL_KEYBOARD_KEY_STATE_RELEASED,
+                                  modifiers);
+    wl_client_flush(client());
+  }
+
+  void OnTextDirectionChanged(base::i18n::TextDirection direction) override {
+    uint32_t wayland_direction = ZWP_TEXT_INPUT_V1_TEXT_DIRECTION_AUTO;
+    switch (direction) {
+      case base::i18n::RIGHT_TO_LEFT:
+        wayland_direction = ZWP_TEXT_INPUT_V1_TEXT_DIRECTION_LTR;
+        break;
+      case base::i18n::LEFT_TO_RIGHT:
+        wayland_direction = ZWP_TEXT_INPUT_V1_TEXT_DIRECTION_RTL;
+        break;
+      case base::i18n::UNKNOWN_DIRECTION:
+        LOG(ERROR) << "Unrecognized direction: " << direction;
+    }
+    zwp_text_input_v1_send_text_direction(text_input_, next_serial(),
+                                          wayland_direction);
+  }
+
+  wl_resource* text_input_;
+  wl_resource* surface_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(WaylandTextInputDelegate);
+};
+
+void text_input_activate(wl_client* client,
+                         wl_resource* resource,
+                         wl_resource* seat,
+                         wl_resource* surface_resource) {
+  TextInput* text_input = GetUserDataAs<TextInput>(resource);
+  Surface* surface = GetUserDataAs<Surface>(surface_resource);
+  static_cast<WaylandTextInputDelegate*>(text_input->delegate())
+      ->set_surface(surface_resource);
+  text_input->Activate(surface);
+
+  // Sending modifiers.
+  constexpr const char* kModifierNames[] = {
+      XKB_MOD_NAME_SHIFT,
+      XKB_MOD_NAME_CTRL,
+      XKB_MOD_NAME_ALT,
+      XKB_MOD_NAME_LOGO,
+      "Mod5",
+      "Mod3",
+  };
+  wl_array modifiers;
+  wl_array_init(&modifiers);
+  for (const char* modifier : kModifierNames) {
+    char* p =
+        static_cast<char*>(wl_array_add(&modifiers, ::strlen(modifier) + 1));
+    ::strcpy(p, modifier);
+  }
+  zwp_text_input_v1_send_modifiers_map(resource, &modifiers);
+  wl_array_release(&modifiers);
+}
+
+void text_input_deactivate(wl_client* client,
+                           wl_resource* resource,
+                           wl_resource* seat) {
+  TextInput* text_input = GetUserDataAs<TextInput>(resource);
+  text_input->Deactivate();
+}
+
+void text_input_show_input_panel(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<TextInput>(resource)->ShowVirtualKeyboardIfEnabled();
+}
+
+void text_input_hide_input_panel(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<TextInput>(resource)->HideVirtualKeyboard();
+}
+
+void text_input_reset(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<TextInput>(resource)->Resync();
+}
+
+void text_input_set_surrounding_text(wl_client* client,
+                                     wl_resource* resource,
+                                     const char* text,
+                                     uint32_t cursor,
+                                     uint32_t anchor) {
+  TextInput* text_input = GetUserDataAs<TextInput>(resource);
+  text_input->SetSurroundingText(base::UTF8ToUTF16(text),
+                                 OffsetFromUTF8Offset(text, cursor));
+}
+
+void text_input_set_content_type(wl_client* client,
+                                 wl_resource* resource,
+                                 uint32_t hint,
+                                 uint32_t purpose) {
+  TextInput* text_input = GetUserDataAs<TextInput>(resource);
+  ui::TextInputType type = ui::TEXT_INPUT_TYPE_TEXT;
+  ui::TextInputMode mode = ui::TEXT_INPUT_MODE_DEFAULT;
+  int flags = ui::TEXT_INPUT_FLAG_NONE;
+  bool should_do_learning = true;
+  if (hint & ZWP_TEXT_INPUT_V1_CONTENT_HINT_AUTO_COMPLETION)
+    flags |= ui::TEXT_INPUT_FLAG_AUTOCOMPLETE_ON;
+  if (hint & ZWP_TEXT_INPUT_V1_CONTENT_HINT_AUTO_CORRECTION)
+    flags |= ui::TEXT_INPUT_FLAG_AUTOCORRECT_ON;
+  if (hint & ZWP_TEXT_INPUT_V1_CONTENT_HINT_AUTO_CAPITALIZATION)
+    flags |= ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_SENTENCES;
+  if (hint & ZWP_TEXT_INPUT_V1_CONTENT_HINT_LOWERCASE)
+    flags |= ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_NONE;
+  if (hint & ZWP_TEXT_INPUT_V1_CONTENT_HINT_UPPERCASE)
+    flags |= ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_CHARACTERS;
+  if (hint & ZWP_TEXT_INPUT_V1_CONTENT_HINT_TITLECASE)
+    flags |= ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_WORDS;
+  if (hint & ZWP_TEXT_INPUT_V1_CONTENT_HINT_HIDDEN_TEXT) {
+    flags |= ui::TEXT_INPUT_FLAG_AUTOCOMPLETE_OFF |
+             ui::TEXT_INPUT_FLAG_AUTOCORRECT_OFF;
+  }
+  if (hint & ZWP_TEXT_INPUT_V1_CONTENT_HINT_SENSITIVE_DATA)
+    should_do_learning = false;
+  // Unused hints: LATIN, MULTILINE.
+
+  switch (purpose) {
+    case ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_DIGITS:
+      mode = ui::TEXT_INPUT_MODE_DECIMAL;
+      type = ui::TEXT_INPUT_TYPE_NUMBER;
+      break;
+    case ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_NUMBER:
+      mode = ui::TEXT_INPUT_MODE_NUMERIC;
+      type = ui::TEXT_INPUT_TYPE_NUMBER;
+      break;
+    case ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_PHONE:
+      mode = ui::TEXT_INPUT_MODE_TEL;
+      type = ui::TEXT_INPUT_TYPE_TELEPHONE;
+      break;
+    case ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_URL:
+      mode = ui::TEXT_INPUT_MODE_URL;
+      type = ui::TEXT_INPUT_TYPE_URL;
+      break;
+    case ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_EMAIL:
+      mode = ui::TEXT_INPUT_MODE_EMAIL;
+      type = ui::TEXT_INPUT_TYPE_EMAIL;
+      break;
+    case ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_PASSWORD:
+      DCHECK(!should_do_learning);
+      type = ui::TEXT_INPUT_TYPE_PASSWORD;
+      break;
+    case ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_DATE:
+      type = ui::TEXT_INPUT_TYPE_DATE;
+      break;
+    case ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_TIME:
+      type = ui::TEXT_INPUT_TYPE_TIME;
+      break;
+    case ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_DATETIME:
+      type = ui::TEXT_INPUT_TYPE_DATE_TIME;
+      break;
+    case ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_NORMAL:
+    case ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_ALPHA:
+    case ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_NAME:
+    case ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_TERMINAL:
+      // No special type / mode are set.
+      break;
+  }
+
+  text_input->SetTypeModeFlags(type, mode, flags, should_do_learning);
+}
+
+void text_input_set_cursor_rectangle(wl_client* client,
+                                     wl_resource* resource,
+                                     int32_t x,
+                                     int32_t y,
+                                     int32_t width,
+                                     int32_t height) {
+  GetUserDataAs<TextInput>(resource)->SetCaretBounds(
+      gfx::Rect(x, y, width, height));
+}
+
+void text_input_set_preferred_language(wl_client* client,
+                                       wl_resource* resource,
+                                       const char* language) {
+  // Nothing needs to be done.
+}
+
+void text_input_commit_state(wl_client* client,
+                             wl_resource* resource,
+                             uint32_t serial) {
+  // Nothing needs to be done.
+}
+
+void text_input_invoke_action(wl_client* client,
+                              wl_resource* resource,
+                              uint32_t button,
+                              uint32_t index) {
+  GetUserDataAs<TextInput>(resource)->Resync();
+}
+
+const struct zwp_text_input_v1_interface text_input_v1_implementation = {
+    text_input_activate,
+    text_input_deactivate,
+    text_input_show_input_panel,
+    text_input_hide_input_panel,
+    text_input_reset,
+    text_input_set_surrounding_text,
+    text_input_set_content_type,
+    text_input_set_cursor_rectangle,
+    text_input_set_preferred_language,
+    text_input_commit_state,
+    text_input_invoke_action,
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// text_input_manager_v1 interface:
+
+void text_input_manager_create_text_input(wl_client* client,
+                                          wl_resource* resource,
+                                          uint32_t id) {
+  wl_resource* text_input_resource =
+      wl_resource_create(client, &zwp_text_input_v1_interface, 1, id);
+
+  SetImplementation(
+      text_input_resource, &text_input_v1_implementation,
+      std::make_unique<TextInput>(
+          std::make_unique<WaylandTextInputDelegate>(text_input_resource)));
+}
+
+const struct zwp_text_input_manager_v1_interface
+    text_input_manager_implementation = {
+        text_input_manager_create_text_input,
+};
+
+void bind_text_input_manager(wl_client* client,
+                             void* data,
+                             uint32_t version,
+                             uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &zwp_text_input_manager_v1_interface, 1, id);
+  wl_resource_set_implementation(resource, &text_input_manager_implementation,
+                                 data, nullptr);
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5392,6 +5697,8 @@ Server::Server(Display* display)
   wl_global_create(wl_display_.get(),
                    &zwp_input_timestamps_manager_v1_interface, 1, display_,
                    bind_input_timestamps_manager);
+  wl_global_create(wl_display_.get(), &zwp_text_input_manager_v1_interface, 1,
+                   display_, bind_text_input_manager);
 }
 
 Server::~Server() {

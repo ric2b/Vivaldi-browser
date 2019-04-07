@@ -106,6 +106,12 @@ class LoginShelfButton : public views::LabelButton {
     set_has_ink_drop_action_on_click(true);
     set_ink_drop_base_color(kShelfInkDropBaseColor);
     set_ink_drop_visible_opacity(kShelfInkDropVisibleOpacity);
+
+    // Layer rendering is required when the shelf background is visible, which
+    // happens when the wallpaper is not blurred.
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
+
     SetTextSubpixelRenderingEnabled(false);
 
     SetImageLabelSpacing(kImageLabelSpacingDp);
@@ -165,6 +171,12 @@ class KioskAppsButton : public views::MenuButton,
     set_has_ink_drop_action_on_click(true);
     set_ink_drop_base_color(kShelfInkDropBaseColor);
     set_ink_drop_visible_opacity(kShelfInkDropVisibleOpacity);
+
+    // Layer rendering is required when the shelf background is visible, which
+    // happens when the wallpaper is not blurred.
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
+
     SetTextSubpixelRenderingEnabled(false);
 
     SetImage(views::Button::STATE_NORMAL, image);
@@ -274,7 +286,8 @@ LoginShelfView::LoginShelfView(
     : lock_screen_action_background_(lock_screen_action_background),
       tray_action_observer_(this),
       lock_screen_action_background_observer_(this),
-      shutdown_controller_observer_(this) {
+      shutdown_controller_observer_(this),
+      login_screen_controller_observer_(this) {
   // We reuse the focusable state on this view as a signal that focus should
   // switch to the lock screen or status area. This view should otherwise not
   // be focusable.
@@ -304,13 +317,13 @@ LoginShelfView::LoginShelfView(
   add_button(kBrowseAsGuest, IDS_ASH_BROWSE_AS_GUEST_BUTTON,
              kShelfBrowseAsGuestButtonIcon);
   add_button(kAddUser, IDS_ASH_ADD_USER_BUTTON, kShelfAddPersonButtonIcon);
-  add_button(kShowWebUiLogin, IDS_ASH_SHOW_WEBUI_LOGIN_BUTTON,
-             kShelfSignOutButtonIcon);
 
   // Adds observers for states that affect the visiblity of different buttons.
   tray_action_observer_.Add(Shell::Get()->tray_action());
   shutdown_controller_observer_.Add(Shell::Get()->shutdown_controller());
   lock_screen_action_background_observer_.Add(lock_screen_action_background);
+  login_screen_controller_observer_.Add(
+      Shell::Get()->login_screen_controller());
   UpdateUi();
 }
 
@@ -365,9 +378,6 @@ void LoginShelfView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
 void LoginShelfView::ButtonPressed(views::Button* sender,
                                    const ui::Event& event) {
-  // Intentional crash. session_manager will add --show-webui-login.
-  CHECK(sender->id() != kShowWebUiLogin);
-
   UserMetricsRecorder::RecordUserClickOnShelfButton(
       GetUserClickTarget(sender->id()));
   switch (sender->id()) {
@@ -410,13 +420,18 @@ void LoginShelfView::SetKioskApps(
   UpdateUi();
 }
 
-void LoginShelfView::SetLoginDialogVisible(bool visible) {
-  dialog_visible_ = visible;
+void LoginShelfView::SetLoginDialogState(mojom::OobeDialogState state) {
+  dialog_state_ = state;
   UpdateUi();
 }
 
 void LoginShelfView::SetAllowLoginAsGuest(bool allow_guest) {
   allow_guest_ = allow_guest;
+  UpdateUi();
+}
+
+void LoginShelfView::SetShowGuestButtonForGaiaScreen(bool can_show) {
+  allow_guest_during_gaia_ = can_show;
   UpdateUi();
 }
 
@@ -436,6 +451,10 @@ void LoginShelfView::OnLockScreenActionBackgroundStateChanged(
 
 void LoginShelfView::OnShutdownPolicyChanged(bool reboot_on_shutdown) {
   UpdateUi();
+}
+
+void LoginShelfView::OnOobeDialogStateChanged(mojom::OobeDialogState state) {
+  SetLoginDialogState(state);
 }
 
 bool LoginShelfView::LockScreenActionBackgroundAnimating() const {
@@ -478,12 +497,37 @@ void LoginShelfView::UpdateUi() {
   // TODO(agawronska): Implement full list of conditions for buttons visibility,
   // when views based shelf if enabled during OOBE. https://crbug.com/798869
   bool is_login_primary = (session_state == SessionState::LOGIN_PRIMARY);
-  GetViewByID(kBrowseAsGuest)
-      ->SetVisible(allow_guest_ && !dialog_visible_ && is_login_primary);
-  GetViewByID(kAddUser)->SetVisible(!dialog_visible_ && is_login_primary);
-  kiosk_apps_button_->SetVisible(
-      !dialog_visible_ && kiosk_apps_button_->HasApps() && is_login_primary);
+  bool dialog_visible = dialog_state_ != mojom::OobeDialogState::HIDDEN;
 
+  // Show guest button if:
+  // 1. It's in login screen.
+  // 2. Guest login is allowed.
+  // 3. OOBE UI dialog is not currently showing wrong HWID warning screen or
+  // SAML password confirmation screen.
+  // 4. OOBE UI dialog is not currently showing gaia signin screen or guest
+  // login is allowed during gaia.
+  GetViewByID(kBrowseAsGuest)
+      ->SetVisible(
+          allow_guest_ &&
+          dialog_state_ != mojom::OobeDialogState::WRONG_HWID_WARNING &&
+          dialog_state_ != mojom::OobeDialogState::SAML_PASSWORD_CONFIRM &&
+          (dialog_state_ != mojom::OobeDialogState::GAIA_SIGNIN ||
+           allow_guest_during_gaia_) &&
+          is_login_primary);
+
+  // Show add user button when it's in login screen and Oobe UI dialog is not
+  // visible.
+  GetViewByID(kAddUser)->SetVisible(!dialog_visible && is_login_primary);
+
+  // Show kiosk apps button if:
+  // 1. It's in login screen.
+  // 2. There are Kiosk apps available.
+  // 3. Oobe UI dialog is not visible or is currently showing gaia signin
+  // screen.
+  kiosk_apps_button_->SetVisible(
+      (!dialog_visible ||
+       dialog_state_ == mojom::OobeDialogState::GAIA_SIGNIN) &&
+      kiosk_apps_button_->HasApps() && is_login_primary);
   Layout();
 }
 

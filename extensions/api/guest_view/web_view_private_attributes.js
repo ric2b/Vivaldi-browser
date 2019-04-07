@@ -43,16 +43,10 @@ WasTypedAttribute.prototype.handleMutation = function (oldValue, newValue) {
   }
 };
 
-function addPrivateAttributes(athis /* WebViewImpl */) {
-  athis.attributes[WebViewConstants.ATTRIBUTE_INSPECT_TAB_ID] =
-      new InspectTabIdAttribute(athis);
-
-  athis.attributes[WebViewConstants.ATTRIBUTE_TAB_ID] =
-      new TabIdAttribute(athis);
-
-  athis.attributes[WebViewConstants.ATTRIBUTE_WASTYPED] =
-      new WasTypedAttribute(athis);
+function addVivaldiWebViewAttributes(athis) {
+  athis.InspectTabIdAttribute = InspectTabIdAttribute;
+  athis.TabIdAttribute = TabIdAttribute;
+  athis.WasTypedAttribute = WasTypedAttribute;
 }
-
 // Exports.
-exports.$set('addPrivateAttributes', addPrivateAttributes);
+exports.$set('addVivaldiWebViewAttributes', addVivaldiWebViewAttributes);

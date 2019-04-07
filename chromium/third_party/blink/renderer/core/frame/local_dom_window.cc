@@ -39,6 +39,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/usv_string_or_trusted_url.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy.h"
+#include "third_party/blink/renderer/core/accessibility/ax_context.h"
 #include "third_party/blink/renderer/core/aom/computed_accessible_node.h"
 #include "third_party/blink/renderer/core/css/css_computed_style_declaration.h"
 #include "third_party/blink/renderer/core/css/css_rule_list.h"
@@ -96,13 +97,14 @@
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/script/modulator.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
+#include "third_party/blink/renderer/core/trustedtypes/trusted_type_policy_factory.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_url.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/scroll/scroll_types.h"
-#include "third_party/blink/renderer/platform/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
 namespace blink {
@@ -278,7 +280,13 @@ void LocalDOMWindow::AcceptLanguagesChanged() {
   if (navigator_)
     navigator_->SetLanguagesChanged();
 
-  DispatchEvent(Event::Create(EventTypeNames::languagechange));
+  DispatchEvent(*Event::Create(EventTypeNames::languagechange));
+}
+
+TrustedTypePolicyFactory* LocalDOMWindow::trustedTypes() const {
+  if (!trusted_types_)
+    trusted_types_ = TrustedTypePolicyFactory::Create(GetFrame());
+  return trusted_types_.Get();
 }
 
 Document* LocalDOMWindow::CreateDocument(const String& mime_type,
@@ -331,11 +339,11 @@ Document* LocalDOMWindow::InstallNewDocument(const String& mime_type,
   return document_;
 }
 
-void LocalDOMWindow::EnqueueWindowEvent(Event* event, TaskType task_type) {
+void LocalDOMWindow::EnqueueWindowEvent(Event& event, TaskType task_type) {
   EnqueueEvent(event, task_type);
 }
 
-void LocalDOMWindow::EnqueueDocumentEvent(Event* event, TaskType task_type) {
+void LocalDOMWindow::EnqueueDocumentEvent(Event& event, TaskType task_type) {
   if (document_)
     document_->EnqueueEvent(event, task_type);
 }
@@ -372,19 +380,19 @@ void LocalDOMWindow::EnqueuePageshowEvent(PageshowEventPersistence persisted) {
     // The task source should be kDOMManipulation, but the spec doesn't say
     // anything about this.
     EnqueueWindowEvent(
-        PageTransitionEvent::Create(EventTypeNames::pageshow, persisted),
+        *PageTransitionEvent::Create(EventTypeNames::pageshow, persisted),
         TaskType::kMiscPlatformAPI);
     return;
   }
   DispatchEvent(
-      PageTransitionEvent::Create(EventTypeNames::pageshow, persisted),
+      *PageTransitionEvent::Create(EventTypeNames::pageshow, persisted),
       document_.Get());
 }
 
 void LocalDOMWindow::EnqueueHashchangeEvent(const String& old_url,
                                             const String& new_url) {
   // https://html.spec.whatwg.org/#history-traversal
-  EnqueueWindowEvent(HashChangeEvent::Create(old_url, new_url),
+  EnqueueWindowEvent(*HashChangeEvent::Create(old_url, new_url),
                      TaskType::kDOMManipulation);
 }
 
@@ -392,7 +400,7 @@ void LocalDOMWindow::EnqueuePopstateEvent(
     scoped_refptr<SerializedScriptValue> state_object) {
   // FIXME: https://bugs.webkit.org/show_bug.cgi?id=36202 Popstate event needs
   // to fire asynchronously
-  DispatchEvent(PopStateEvent::Create(std::move(state_object), history()));
+  DispatchEvent(*PopStateEvent::Create(std::move(state_object), history()));
 }
 
 void LocalDOMWindow::StatePopped(
@@ -469,6 +477,7 @@ void LocalDOMWindow::Reset() {
   media_ = nullptr;
   custom_elements_ = nullptr;
   application_cache_ = nullptr;
+  trusted_types_ = nullptr;
 }
 
 void LocalDOMWindow::SendOrientationChangeEvent() {
@@ -490,7 +499,7 @@ void LocalDOMWindow::SendOrientationChangeEvent() {
 
   for (LocalFrame* frame : frames) {
     frame->DomWindow()->DispatchEvent(
-        Event::Create(EventTypeNames::orientationchange));
+        *Event::Create(EventTypeNames::orientationchange));
   }
 }
 
@@ -659,7 +668,7 @@ void LocalDOMWindow::DispatchMessageEventWithOriginCheck(
         GetFrame(), WebFeature::kPostMessageIncomingWouldBeBlockedByConnectSrc);
   }
 
-  DispatchEvent(event);
+  DispatchEvent(*event);
 }
 
 DOMSelection* LocalDOMWindow::getSelection() {
@@ -883,7 +892,7 @@ bool LocalDOMWindow::find(const String& string,
   // FIXME (13016): Support searchInFrames and showDialog
   FindOptions options =
       (backwards ? kBackwards : 0) | (case_sensitive ? 0 : kCaseInsensitive) |
-      (wrap ? kWrapAround : 0) | (whole_word ? kWholeWord | kAtWordStarts : 0);
+      (wrap ? kWrapAround : 0) | (whole_word ? kWholeWord : 0);
   return Editor::FindString(*GetFrame(), string, options);
 }
 
@@ -1081,8 +1090,6 @@ ScriptPromise LocalDOMWindow::getComputedAccessibleNode(
     ScriptState* script_state,
     Element* element) {
   DCHECK(element);
-  // TODO(meredithl): Create finer grain method for enabling accessibility.
-  element->GetDocument().GetPage()->GetSettings().SetAccessibilityEnabled(true);
   ComputedAccessibleNodePromiseResolver* resolver =
       ComputedAccessibleNodePromiseResolver::Create(script_state, *element);
   ScriptPromise promise = resolver->Promise();
@@ -1439,7 +1446,7 @@ void LocalDOMWindow::WarnUnusedPreloads(TimerBase* base) {
 }
 
 void LocalDOMWindow::DispatchLoadEvent() {
-  Event* load_event(Event::Create(EventTypeNames::load));
+  Event& load_event = *Event::Create(EventTypeNames::load);
   DocumentLoader* document_loader =
       GetFrame() ? GetFrame()->Loader().GetDocumentLoader() : nullptr;
   if (document_loader &&
@@ -1479,19 +1486,19 @@ void LocalDOMWindow::DispatchLoadEvent() {
   probe::loadEventFired(GetFrame());
 }
 
-DispatchEventResult LocalDOMWindow::DispatchEvent(Event* event,
+DispatchEventResult LocalDOMWindow::DispatchEvent(Event& event,
                                                   EventTarget* target) {
 #if DCHECK_IS_ON()
   DCHECK(!EventDispatchForbiddenScope::IsEventDispatchForbidden());
 #endif
 
-  event->SetTrusted(true);
-  event->SetTarget(target ? target : this);
-  event->SetCurrentTarget(this);
-  event->SetEventPhase(Event::kAtTarget);
+  event.SetTrusted(true);
+  event.SetTarget(target ? target : this);
+  event.SetCurrentTarget(this);
+  event.SetEventPhase(Event::kAtTarget);
 
   TRACE_EVENT1("devtools.timeline", "EventDispatch", "data",
-               InspectorEventDispatchEvent::Data(*event));
+               InspectorEventDispatchEvent::Data(event));
   return FireEventListeners(event);
 }
 
@@ -1550,21 +1557,12 @@ DOMWindow* LocalDOMWindow::open(ExecutionContext* executionContext,
                                 const AtomicString& target,
                                 const String& features,
                                 ExceptionState& exception_state) {
-  DCHECK(stringOrUrl.IsUSVString() ||
-         RuntimeEnabledFeatures::TrustedDOMTypesEnabled());
-
-  if (!stringOrUrl.IsTrustedURL() && document_->RequireTrustedTypes()) {
-    exception_state.ThrowTypeError(
-        "This document requires `TrustedURL` assignment.");
-    return nullptr;
+  String url = TrustedURL::GetString(stringOrUrl, document_, exception_state);
+  if (!exception_state.HadException()) {
+    return openFromString(executionContext, current_window, entered_window, url,
+                          target, features, exception_state);
   }
-
-  String url = stringOrUrl.IsUSVString()
-                   ? stringOrUrl.GetAsUSVString()
-                   : stringOrUrl.GetAsTrustedURL()->toString();
-
-  return openFromString(executionContext, current_window, entered_window, url,
-                        target, features, exception_state);
+  return nullptr;
 }
 
 DOMWindow* LocalDOMWindow::openFromString(ExecutionContext* executionContext,
@@ -1609,21 +1607,12 @@ DOMWindow* LocalDOMWindow::open(const USVStringOrTrustedURL& stringOrUrl,
                                 LocalDOMWindow* calling_window,
                                 LocalDOMWindow* entered_window,
                                 ExceptionState& exception_state) {
-  DCHECK(stringOrUrl.IsUSVString() ||
-         RuntimeEnabledFeatures::TrustedDOMTypesEnabled());
-
-  if (!stringOrUrl.IsTrustedURL() && document_->RequireTrustedTypes()) {
-    exception_state.ThrowTypeError(
-        "This document requires `TrustedURL` assignment.");
-    return nullptr;
+  String url = TrustedURL::GetString(stringOrUrl, document_, exception_state);
+  if (!exception_state.HadException()) {
+    return openFromString(url, frame_name, window_features_string,
+                          calling_window, entered_window, exception_state);
   }
-
-  String url = stringOrUrl.IsUSVString()
-                   ? stringOrUrl.GetAsUSVString()
-                   : stringOrUrl.GetAsTrustedURL()->toString();
-
-  return openFromString(url, frame_name, window_features_string, calling_window,
-                        entered_window, exception_state);
+  return nullptr;
 }
 
 DOMWindow* LocalDOMWindow::openFromString(const String& url_string,
@@ -1704,6 +1693,7 @@ void LocalDOMWindow::Trace(blink::Visitor* visitor) {
   visitor->Trace(post_message_timers_);
   visitor->Trace(visualViewport_);
   visitor->Trace(event_listener_observers_);
+  visitor->Trace(trusted_types_);
   DOMWindow::Trace(visitor);
   Supplementable<LocalDOMWindow>::Trace(visitor);
 }

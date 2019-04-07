@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/editing/selection_controller.h"
 #include "third_party/blink/renderer/core/events/gesture_event.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -20,7 +21,7 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_animator_base.h"
+#include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
 
 #if BUILDFLAG(ENABLE_UNHANDLED_TAP)
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -103,7 +104,7 @@ WebInputEventResult GestureManager::HandleGestureEventInFrame(
         event_target->GetDocument().domWindow(), gesture_event);
     if (gesture_dom_event) {
       DispatchEventResult gesture_dom_event_result =
-          event_target->DispatchEvent(gesture_dom_event);
+          event_target->DispatchEvent(*gesture_dom_event);
       if (gesture_dom_event_result != DispatchEventResult::kNotCanceled) {
         DCHECK(gesture_dom_event_result !=
                DispatchEventResult::kCanceledByEventHandler);

@@ -81,15 +81,6 @@ const char kUseCras[] = "use-cras";
 const char kUnsafelyAllowProtectedMediaIdentifierForDomain[] =
     "unsafely-allow-protected-media-identifier-for-domain";
 
-// Enable a internal audio focus management between tabs in such a way that two
-// tabs can't  play on top of each other.
-// The allowed values are: "" (empty) or |kEnableAudioFocusDuckFlash|.
-const char kEnableAudioFocus[] = "enable-audio-focus";
-
-// This value is used as an option for |kEnableAudioFocus|. Flash will
-// be ducked when losing audio focus.
-const char kEnableAudioFocusDuckFlash[] = "duck-flash";
-
 #if BUILDFLAG(ENABLE_RUNTIME_MEDIA_RENDERER_SELECTION)
 // Rather than use the renderer hosted remotely in the media service, fall back
 // to the default renderer within content_renderer. Does not change the behavior
@@ -181,12 +172,6 @@ const char kOverrideEnabledCdmInterfaceVersion[] =
 const char kOverrideHardwareSecureCodecsForTesting[] =
     "override-hardware-secure-codecs-for-testing";
 
-#if !defined(OS_ANDROID)
-// Turns on the internal media session backend. This should be used by embedders
-// that want to control the media playback with the media session interfaces.
-const char kEnableInternalMediaSession[] = "enable-internal-media-session";
-#endif  // !defined(OS_ANDROID)
-
 namespace autoplay {
 
 // Autoplay policy that requires a document user activation.
@@ -224,7 +209,7 @@ const base::Feature kPictureInPicture {
 #if defined(OS_ANDROID)
       base::FEATURE_DISABLED_BY_DEFAULT
 #else
-      base::FEATURE_ENABLED_BY_DEFAULT
+      base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
 
@@ -321,9 +306,20 @@ const base::Feature kUseR16Texture{"use-r16-texture",
 const base::Feature kUnifiedAutoplay{"UnifiedAutoplay",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Use SurfaceLayer instead of VideoLayer.
+// If enabled, use SurfaceLayer instead of VideoLayer for all playbacks that
+// aren't MediaStream.
 const base::Feature kUseSurfaceLayerForVideo{"UseSurfaceLayerForVideo",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Use SurfaceLayer instead of VideoLayer for MediaStream.
+const base::Feature kUseSurfaceLayerForVideoMS{
+    "UseSurfaceLayerForVideoMS", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Use SurfaceLayer instead of VideoLayer when entering Picture-in-Picture mode.
+// Does nothing if UseSurfaceLayerForVideo is enabled.  Does not affect
+// MediaStream playbacks.
+const base::Feature kUseSurfaceLayerForVideoPIP{
+    "UseSurfaceLayerForVideoPIP", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable VA-API hardware encode acceleration for VP8.
 const base::Feature kVaapiVP8Encoder{"VaapiVP8Encoder",
@@ -356,6 +352,10 @@ const base::Feature kLowDelayVideoRenderingOnLiveStream{
 // platform
 const base::Feature kAutoplayIgnoreWebAudio{"AutoplayIgnoreWebAudio",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Whether we should show the new unified sound and autoplay settings UI.
+const base::Feature kAutoplaySoundSettings{"AutoplaySoundSettings",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
 // Enable a gesture to make the media controls expaned into the display cutout.
@@ -423,12 +423,6 @@ std::string GetEffectiveAutoplayPolicy(const base::CommandLine& command_line) {
 #endif
 }
 
-MEDIA_EXPORT bool IsAudioFocusDuckFlashEnabled() {
-  return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-             switches::kEnableAudioFocus) ==
-         switches::kEnableAudioFocusDuckFlash;
-}
-
 // Adds icons to the overflow menu on the native media controls.
 const base::Feature kOverflowIconsForMediaControls{
     "OverflowIconsForMediaControls", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -441,6 +435,10 @@ const base::Feature kUseModernMediaControls{"UseModernMediaControls",
 // when to bypass autoplay policies. This is recorded on all platforms.
 const base::Feature kRecordMediaEngagementScores{
     "RecordMediaEngagementScores", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables Media Engagement Index recording for Web Audio playbacks.
+const base::Feature kRecordWebAudioEngagement{"RecordWebAudioEngagement",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 // The following Media Engagement flags are not enabled on mobile platforms:
 // - MediaEngagementBypassAutoplayPolicies: enables the Media Engagement Index

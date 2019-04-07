@@ -7,6 +7,7 @@
 #include "base/android/jni_android.h"
 #include "content/browser/media/session/media_session_impl.h"
 #include "jni/AudioFocusDelegate_jni.h"
+#include "services/media_session/public/mojom/audio_focus.mojom.h"
 
 using base::android::JavaParamRef;
 
@@ -30,19 +31,29 @@ void AudioFocusDelegateAndroid::Initialize() {
 }
 
 bool AudioFocusDelegateAndroid::RequestAudioFocus(
-    AudioFocusManager::AudioFocusType audio_focus_type) {
+    media_session::mojom::AudioFocusType audio_focus_type) {
   JNIEnv* env = base::android::AttachCurrentThread();
   DCHECK(env);
   return Java_AudioFocusDelegate_requestAudioFocus(
       env, j_media_session_delegate_,
       audio_focus_type ==
-          AudioFocusManager::AudioFocusType::GainTransientMayDuck);
+          media_session::mojom::AudioFocusType::kGainTransientMayDuck);
 }
 
 void AudioFocusDelegateAndroid::AbandonAudioFocus() {
   JNIEnv* env = base::android::AttachCurrentThread();
   DCHECK(env);
   Java_AudioFocusDelegate_abandonAudioFocus(env, j_media_session_delegate_);
+}
+
+media_session::mojom::AudioFocusType
+AudioFocusDelegateAndroid::GetCurrentFocusType() const {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  DCHECK(env);
+  return Java_AudioFocusDelegate_isFocusTransient(env,
+                                                  j_media_session_delegate_)
+             ? media_session::mojom::AudioFocusType::kGainTransientMayDuck
+             : media_session::mojom::AudioFocusType::kGain;
 }
 
 void AudioFocusDelegateAndroid::OnSuspend(JNIEnv*,

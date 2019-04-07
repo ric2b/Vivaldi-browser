@@ -326,7 +326,7 @@ void VivaldiNativeAppWindowViews::UpdateEventTargeterWithInset() {
   // root window does not have a delegate, which is needed to handle the event
   // in Linux.
   std::unique_ptr<ui::EventTargeter> old_eventtarget =
-    window->SetEventTargeter(std::unique_ptr<ui::EventTargeter>(
+    window->SetEventTargeter(std::unique_ptr<aura::WindowTargeter>(
       new wm::EasyResizeWindowTargeter(window, inset, inset)));
   delete old_eventtarget.release();
 #endif
@@ -606,7 +606,7 @@ bool VivaldiAppWindowClientView::CanClose() {
 }
 
 void VivaldiNativeAppWindowViews::OnWidgetMove() {
-  window_->OnNativeWindowChanged();
+  window_->OnNativeWindowChanged(true);
 }
 
 views::View* VivaldiNativeAppWindowViews::GetInitiallyFocusedView() {

@@ -4,6 +4,7 @@
 
 #include "ash/message_center/message_center_scroll_bar.h"
 
+#include "ash/public/cpp/ash_features.h"
 #include "base/metrics/histogram_macros.h"
 
 namespace {
@@ -25,8 +26,12 @@ void CollectScrollActionReason(ScrollActionReason reason) {
 
 namespace ash {
 
-MessageCenterScrollBar::MessageCenterScrollBar()
-    : views::OverlayScrollBar(false) {}
+MessageCenterScrollBar::MessageCenterScrollBar(
+    MessageCenterScrollBar::Observer* observer)
+    : views::OverlayScrollBar(false), observer_(observer) {
+  GetThumb()->layer()->SetVisible(!features::IsSystemTrayUnifiedEnabled() ||
+                                  features::IsNotificationScrollBarEnabled());
+}
 
 bool MessageCenterScrollBar::OnKeyPressed(const ui::KeyEvent& event) {
   if (!stats_recorded_ &&
@@ -42,7 +47,13 @@ bool MessageCenterScrollBar::OnMouseWheel(const ui::MouseWheelEvent& event) {
     CollectScrollActionReason(ScrollActionReason::kByMouseWheel);
     stats_recorded_ = true;
   }
-  return views::OverlayScrollBar::OnMouseWheel(event);
+
+  bool result = views::OverlayScrollBar::OnMouseWheel(event);
+
+  if (observer_)
+    observer_->OnMessageCenterScrolled();
+
+  return result;
 }
 
 void MessageCenterScrollBar::OnGestureEvent(ui::GestureEvent* event) {
@@ -50,7 +61,18 @@ void MessageCenterScrollBar::OnGestureEvent(ui::GestureEvent* event) {
     CollectScrollActionReason(ScrollActionReason::kByTouch);
     stats_recorded_ = true;
   }
-  return views::OverlayScrollBar::OnGestureEvent(event);
+
+  views::OverlayScrollBar::OnGestureEvent(event);
+
+  if (observer_)
+    observer_->OnMessageCenterScrolled();
+}
+
+bool MessageCenterScrollBar::OnScroll(float dx, float dy) {
+  bool result = views::OverlayScrollBar::OnScroll(dx, dy);
+  if (observer_)
+    observer_->OnMessageCenterScrolled();
+  return result;
 }
 
 }  // namespace ash

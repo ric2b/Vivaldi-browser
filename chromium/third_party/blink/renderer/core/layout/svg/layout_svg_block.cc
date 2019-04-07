@@ -59,6 +59,11 @@ void LayoutSVGBlock::UpdateFromStyle() {
 
 void LayoutSVGBlock::StyleDidChange(StyleDifference diff,
                                     const ComputedStyle* old_style) {
+  // Since layout depends on the bounds of the filter, we need to force layout
+  // when the filter changes.
+  if (diff.FilterChanged())
+    SetNeedsLayout(LayoutInvalidationReason::kStyleChange);
+
   if (diff.NeedsFullLayout()) {
     SetNeedsBoundariesUpdate();
     if (diff.TransformChanged())
@@ -67,11 +72,12 @@ void LayoutSVGBlock::StyleDidChange(StyleDifference diff,
 
   if (IsBlendingAllowed()) {
     bool has_blend_mode_changed =
-        (old_style && old_style->HasBlendMode()) == !Style()->HasBlendMode();
-    if (Parent() && has_blend_mode_changed)
+        (old_style && old_style->HasBlendMode()) == !StyleRef().HasBlendMode();
+    if (Parent() && has_blend_mode_changed) {
       Parent()->DescendantIsolationRequirementsChanged(
-          Style()->HasBlendMode() ? kDescendantIsolationRequired
-                                  : kDescendantIsolationNeedsUpdate);
+          StyleRef().HasBlendMode() ? kDescendantIsolationRequired
+                                    : kDescendantIsolationNeedsUpdate);
+    }
   }
 
   LayoutBlock::StyleDidChange(diff, old_style);

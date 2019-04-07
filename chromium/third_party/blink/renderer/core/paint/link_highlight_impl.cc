@@ -88,12 +88,10 @@ LinkHighlightImpl::LinkHighlightImpl(Node* node)
   DCHECK(compositor_animation_);
   compositor_animation_->SetAnimationDelegate(this);
 
-  CompositorElementId element_id =
-      CompositorElementIdFromUniqueObjectId(unique_id_);
-  compositor_animation_->AttachElement(element_id);
+  compositor_animation_->AttachElement(element_id());
   content_layer_->SetIsDrawable(true);
   content_layer_->SetOpacity(1);
-  content_layer_->SetElementId(element_id);
+  content_layer_->SetElementId(element_id());
   geometry_needs_update_ = true;
 }
 
@@ -108,6 +106,11 @@ LinkHighlightImpl::~LinkHighlightImpl() {
 }
 
 void LinkHighlightImpl::ReleaseResources() {
+  if (!node_)
+    return;
+
+  if (auto* layout_object = node_->GetLayoutObject())
+    layout_object->SetNeedsPaintPropertyUpdate();
   node_.Clear();
 }
 
@@ -267,7 +270,8 @@ LinkHighlightImpl::PaintContentsToDisplayList(
   PaintFlags flags;
   flags.setStyle(PaintFlags::kFill_Style);
   flags.setAntiAlias(true);
-  flags.setColor(node_->GetLayoutObject()->Style()->TapHighlightColor().Rgb());
+  flags.setColor(
+      node_->GetLayoutObject()->StyleRef().TapHighlightColor().Rgb());
   canvas->drawPath(path_.GetSkPath(), flags);
 
   display_list->StartPaint();
@@ -393,6 +397,22 @@ cc::Layer* LinkHighlightImpl::Layer() {
 
 CompositorAnimation* LinkHighlightImpl::GetCompositorAnimation() const {
   return compositor_animation_.get();
+}
+
+CompositorElementId LinkHighlightImpl::element_id() {
+  return CompositorElementIdFromUniqueObjectId(unique_id_);
+}
+
+const EffectPaintPropertyNode* LinkHighlightImpl::effect() {
+  if (!node_)
+    return nullptr;
+
+  if (auto* layout_object = node_->GetLayoutObject()) {
+    if (auto* properties = layout_object->FirstFragment().PaintProperties())
+      return properties->LinkHighlightEffect();
+  }
+
+  return nullptr;
 }
 
 }  // namespace blink

@@ -14,7 +14,7 @@
 #include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/supports_user_data.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
@@ -252,8 +252,7 @@ void DownloadHandler::CheckForFileExistence(
     content::CheckForFileExistenceCallback callback) {
   file_system_->GetResourceEntry(
       util::ExtractDrivePath(GetTargetPath(download)),
-      base::Bind(&ContinueCheckingForFileExistence,
-                 base::Passed(std::move(callback))));
+      base::BindOnce(&ContinueCheckingForFileExistence, std::move(callback)));
 }
 
 void DownloadHandler::SetFreeDiskSpaceDelayForTesting(

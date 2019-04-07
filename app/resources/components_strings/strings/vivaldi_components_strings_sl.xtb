@@ -16,12 +16,10 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1640244768702815859">Poskusite <ph name="BEGIN_LINK" />obiskati domačo stran spletnega mesta<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Nepodprt protokol</translation>
-<translation id="1676269943528358898"><ph name="SITE" /> običajno uporablja šifriranje za zaščito vaših podatkov. Ko se je Google Chrome poskusil povezati <ph name="SITE" /> tokrat je spletno mesto poslalo nazaj nenavadne in nepravilne poverilnice. To se lahko zgodi, ko se napadalec skuša pretvarjati, da je <ph name="SITE" />, ali zaslon za prijavo Wi-Fi prekinil povezavo. Vaši podatki so še vedno varni, ker je Google Chrome prekinil povezavo, preden so si izmenjali podatke.</translation>
 <translation id="1710259589646384581">Operacijski sistem</translation>
 <translation id="1728677426644403582">Ogledujete si izvorno kodo spletne strani</translation>
 <translation id="1734878702283171397">Poskusite se obrniti na skrbnika sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Poskusite zagnati Windows diagnostiko omrežja<ph name="END_LINK" />.</translation>
-<translation id="1789575671122666129">Pojavna okna</translation>
 <translation id="1834321415901700177">Na tem spletnem mestu so škodljivi programi</translation>
 <translation id="1916770123977586577">Če želite uporabiti posodobljene nastavitve za to spletno mesto, znova naložite to stran</translation>
 <translation id="1919345977826869612">Oglasi</translation>
@@ -29,11 +27,11 @@
 <translation id="1974060860693918893">Napredno</translation>
 <translation id="2030481566774242610">Ali ste mislili <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />preverite strežnik proxy in požarni zid<ph name="END_LINK" /></translation>
-<translation id="2065985942032347596">Zahtevano je preverjanje pristnosti</translation>
 <translation id="2091887806945687916">Zvok</translation>
 <translation id="2147827593068025794">Sinhronizacija v ozadju</translation>
 <translation id="2166378884831602661">To spletno mesto ne more zagotoviti varne povezave</translation>
 <translation id="2187317261103489799">Zaznava (privzeto)</translation>
+<translation id="2224337661447660594">Brez internetne povezave</translation>
 <translation id="2230458221926704099">Odpravite težave s povezavo z <ph name="BEGIN_LINK" />aplikacijo za diagnostiko<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Internetni dostop je blokiran</translation>
 <translation id="2317259163369394535">Domena <ph name="DOMAIN" /> zahteva uporabniško ime in geslo.</translation>
@@ -50,20 +48,14 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Dostop do datoteke je bil zavrnjen</translation>
 <translation id="2705137772291741111">Shranjena (predpomnjena) kopija tega spletnega mesta je bila neberljiva.</translation>
-<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Zagon Diagnostike povezav<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Povezava je bila obnovljena.</translation>
 <translation id="2826760142808435982">Za šifriranje in preverjanje pristnosti povezave se uporablja <ph name="CIPHER" />, kot mehanizem za izmenjavo ključev pa <ph name="KX" />.</translation>
 <translation id="2856444702002559011">Morda poskušajo napadalci ukrasti vaše podatke s spletnega mesta <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (na primer gesla, sporočila ali podatke kreditnih kartic). <ph name="BEGIN_LEARN_MORE_LINK" />Več o tem<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Zaznana je bila sprememba omrežja.</translation>
-<translation id="2948083400971632585">Na strani nastavitev lahko onemogočite vse strežnike, konfigurirane za povezavo.</translation>
-<translation id="298138621710431427">Pomagaj mi popraviti to</translation>
 <translation id="2991571918955627853">Spletnega mesta <ph name="SITE" /> trenutno ni mogoče obiskati, saj uporablja protokol HSTS. Napake omrežja in napadi na omrežje so običajno začasni, zato bo ta stran verjetno delovala pozneje.</translation>
 <translation id="3005723025932146533">Pokaži shranjeno kopijo</translation>
 <translation id="301521992641321250">Samodejno blokirano</translation>
-<translation id="3041612393474885105">Informacije o certifikatu</translation>
-<translation id="3093245981617870298">Brez povezave.</translation>
 <translation id="3109728660330352905">Nimate dovoljenja za ogled te strani.</translation>
-<translation id="31207688938192855"><ph name="BEGIN_LINK" />Poskusite zagnati Diagnostiko povezav<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Na tej strani je tudi obrazec, ki morda ne bo poslan varno. Podatke, ki jih pošljete, si lahko med prenosom ogledujejo drugi, ali pa jih lahko spremeni morebitni napadalec, tako da strežnik prejme spremenjene podatke.</translation>
 <translation id="3176929007561373547">Preverite nastavitve strežnika proxy ali se obrnite na skrbnika omrežja in
       poskrbite za delovanje strežnika proxy. Če menite, da vam strežnika proxy
@@ -87,6 +79,7 @@
 <translation id="3681007416295224113">Informacije o certifikatu</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />preveriti strežnik proxy, požarni zid in konfiguracijo DNS-ja<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Če uporabite namestniški strežnik ...</translation>
+<translation id="3950820424414687140">Prijava</translation>
 <translation id="3973234410852337861">Spletno mesto <ph name="HOST_NAME" /> je blokirano</translation>
 <translation id="3987940399970879459">Manj kot 1 MB</translation>
 <translation id="4075732493274867456">Odjemalec in strežnik ne podpirata skupne različice protokola SSL ali šifrirne zbirke.</translation>
@@ -100,7 +93,6 @@
 <translation id="4235360514405112390">Veljavno</translation>
 <translation id="4250431568374086873">Povezava s tem mestom ni povsem varna</translation>
 <translation id="4265872034478892965">Dovolil skrbnik</translation>
-<translation id="4304224509867189079">Prijava</translation>
 <translation id="4312866146174492540">Blokiraj (privzeto)</translation>
 <translation id="4356973930735388585">Napadalci na tem spletnem mestu lahko poskusijo v vašem računalniku namestiti nevarne programe, ki kradejo ali brišejo podatke (na primer fotografije, gesla, sporočila in podatke kreditnih kartic).</translation>
 <translation id="4408413947728134509">Piškotki <ph name="NUM_COOKIES" /></translation>
@@ -110,24 +102,19 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Poskusite onemogočiti razširitve.</translation>
 <translation id="4592951414987517459">Povezava z domeno <ph name="DOMAIN" /> je šifrirana s sodobno šifrirno zbirko.</translation>
-<translation id="4611292653554630842">Prijava</translation>
 <translation id="4690462567478992370">Nehajte uporabljati neveljavnega potrdila</translation>
-<translation id="4690954380545377795">Lahko izgubite dostop do svojega Google Računa ali izkusite krajo identitete. Chrome priporoča, da zdaj spremenite svoje geslo.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Povezava je bila prekinjena</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Zaženit  Windows diagnostiko omrežja<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Pot do izvedljive datoteke</translation>
 <translation id="4750917950439032686">Vaši podatki (npr. gesla ali številke kreditnih kartic) so zasebni, kadar so poslani temu spletnemu mestu.</translation>
 <translation id="4764776831041365478">Spletna stran na naslovu <ph name="URL" /> morda začasno ne deluje ali pa je trajno premaknjena na novi spletni naslov.</translation>
-<translation id="4807049035289105102">Ne morete obiskati <ph name="SITE" /> zdaj, ker je spletno mesto poslalo umeščene poverilnice, ki jih Google Chrome ne more obdelati. Mrežne napake in napadi so običajno začasne, zato bo ta stran verjetno delovala pozneje.</translation>
-<translation id="4913131542719409934">Zahtevano je preverjanje pristnosti</translation>
 <translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">Vnovično omogočanje opozoril</translation>
 <translation id="5023310440958281426">Preverite skrbnikove pravilnike</translation>
 <translation id="5039804452771397117">Dovoli</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />preverite naslov strežnika proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bitno)</translation>
-<translation id="522700295135997067">To spletno mesto vam je morda pravkar ukradlo geslo</translation>
 <translation id="5287240709317226393">Pokaži piškotke</translation>
 <translation id="5355557959165512791">Spletnega mesta <ph name="SITE" /> trenutno ni mogoče obiskati, saj je ta certifikat preklican. Napake omrežja in napadi na omrežje so običajno začasni, zato bo ta stran verjetno delovala pozneje.</translation>
 <translation id="5386426401304769735">Veriga potrdil za to spletno mesto vsebuje potrdilo, podpisano z algoritmom SHA-1.</translation>
@@ -154,7 +141,6 @@
 <translation id="5920262536204764679">{NUM_COOKIES,plural, =1 {1 v uporabi} one {# v uporabi} two {# v uporabi} few {# v uporabi} other {# v uporabi}}</translation>
 <translation id="5990559369517809815">Zahteve za strežnik je blokirala razširitev.</translation>
 <translation id="6051221802930200923">Spletnega mesta <ph name="SITE" /> trenutno ni mogoče obiskati, ker uporablja pripenjanje certifikata. Napake omrežja in napadi na omrežje so običajno začasni, zato bo ta stran verjetno delovala pozneje.</translation>
-<translation id="6080696365213338172">Do vsebine ste dostopali z geslom, ki ga je zagotovil skrbnik. Podatke, ki jih pošljete v <ph name="DOMAIN" />, lahko prestreže skrbnik.</translation>
 <translation id="6146055958333702838">Preverite kable in znova zaženite usmerjevalnike, modeme ali druge omrežne 
     naprave, ki jih uporabljate.</translation>
 <translation id="614940544461990577">Poskusite:</translation>
@@ -171,7 +157,6 @@
 <translation id="6417515091412812850">Ni mogoče preveriti, ali je bilo potrdilo preklicano.</translation>
 <translation id="6433595998831338502">Spletno mesto <ph name="HOST_NAME" /> ni dovolilo povezave.</translation>
 <translation id="6447842834002726250">Piškotki</translation>
-<translation id="6556239504065605927">Varna povezava</translation>
 <translation id="6569060085658103619">Ogledujete si stran razširitve</translation>
 <translation id="6657585470893396449">Geslo</translation>
 <translation id="6685834062052613830">Odjavite se in dokončajte nastavitev</translation>
@@ -204,7 +189,7 @@
 <translation id="7800304661137206267">Povezava je šifrirana s <ph name="CIPHER" /> in uporablja <ph name="MAC" /> za preverjanje pristnosti sporočil ter <ph name="KX" /> kot mehanizem za izmenjavo ključev.</translation>
 <translation id="7802523362929240268">Spletno mesto je legitimno</translation>
 <translation id="7834399512844817676">Spletno mesto <ph name="SITE" /> za zaščito vaših podatkov običajno uporablja šifriranje. Ko se je Vivaldi tokrat poskusil povezati s spletnim mestom <ph name="SITE" />, je to vrnilo nenavadne in nepravilne poverilnice. Do tega lahko pride, če se napadalec lažno predstavlja za spletno mesto <ph name="SITE" /> ali če je povezavo prekinil zaslon za prijavo v omrežje Wi-Fi. Vaši podatki so še vedno varni, saj je Vivaldi pred izmenjavo podatkov prekinil povezavo.</translation>
-<translation id="7878562273885520351">Geslo je morda ogroženo</translation>
+<translation id="7878562273885520351">Vaše geslo je morda ogroženo</translation>
 <translation id="7951415247503192394">(32-bitno)</translation>
 <translation id="8025119109950072390">Napadalci na tem spletnem mestu vas lahko z zavajanjem morda pripravijo do tega, da storite kaj nevarnega – denimo, da namestite programsko opremo ali razkrijete osebne podatke (na primer gesla, telefonske številke ali podatke kreditnih kartic).</translation>
 <translation id="8037357227543935929">Vprašaj (privzeto)</translation>
@@ -214,6 +199,7 @@
 <translation id="8150722005171944719">Datoteke na <ph name="URL" /> ni mogoče prebrati. Morda je odstranjena, premaknjena ali pa dostop preprečujejo dovoljenja za datoteke.</translation>
 <translation id="8184538546369750125">Uporabi globalno privzeto (Dovoli)</translation>
 <translation id="8205463626947051446">Spletno mesto prikazuje vsiljive oglase</translation>
+<translation id="8211406090763984747">Povezava je varna</translation>
 <translation id="8225771182978767009">Oseba, ki je nastavila ta računalnik, je blokirala to spletno mesto.</translation>
 <translation id="8241712895048303527">Blokiraj na tem spletnem mestu</translation>
 <translation id="8288807391153049143">Prikaži certifikat</translation>
@@ -234,7 +220,6 @@
 <translation id="9169664750068251925">Vedno blokiraj na tem spletnem mestu</translation>
 <translation id="9183425211371246419">Spletno mesto <ph name="HOST_NAME" /> uporablja nepodprt protokol.</translation>
 <translation id="9219103736887031265">Slike</translation>
-<translation id="933612690413056017">Ni internetne povezave</translation>
 <translation id="969892804517981540">Uradna različica</translation>
 <translation id="988159990683914416">Različica za razvijalce</translation>
 </translationbundle>

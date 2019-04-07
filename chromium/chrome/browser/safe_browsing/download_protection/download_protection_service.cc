@@ -7,8 +7,8 @@
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sha1.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
@@ -21,7 +21,7 @@
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/common/safe_browsing/binary_feature_extractor.h"
 #include "chrome/common/url_constants.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/safe_browsing/common/safebrowsing_switches.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/browser_context.h"
@@ -90,7 +90,7 @@ DownloadProtectionService::DownloadProtectionService(
       feedback_service_(new DownloadFeedbackService(
           url_loader_factory_,
           base::CreateSequencedTaskRunnerWithTraits(
-              {base::MayBlock(), base::TaskPriority::BACKGROUND})
+              {base::MayBlock(), base::TaskPriority::BEST_EFFORT})
               .get())),
       whitelist_sample_rate_(kWhitelistDownloadSampleRate) {
   if (sb_service) {

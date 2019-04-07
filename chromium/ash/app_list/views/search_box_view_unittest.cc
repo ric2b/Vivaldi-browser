@@ -8,13 +8,16 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "ash/app_list/test/app_list_test_view_delegate.h"
 #include "ash/app_list/views/app_list_view.h"
+#include "ash/app_list/views/contents_view.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/vector_icons/vector_icons.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "ui/chromeos/search_box/search_box_constants.h"
 #include "ui/chromeos/search_box/search_box_view_delegate.h"
 #include "ui/gfx/image/image_skia.h"
@@ -27,9 +30,10 @@
 namespace app_list {
 namespace test {
 
-class KeyPressCounterView : public views::View {
+class KeyPressCounterView : public ContentsView {
  public:
-  KeyPressCounterView() : count_(0) {}
+  explicit KeyPressCounterView(AppListView* app_list_view)
+      : ContentsView(app_list_view), count_(0) {}
   ~KeyPressCounterView() override {}
 
   int GetCountAndReset() {
@@ -65,13 +69,14 @@ class SearchBoxViewTest : public views::test::WidgetTest,
     app_list_view_ = new AppListView(&view_delegate_);
     AppListView::InitParams params;
     params.parent = GetContext();
-    app_list_view()->Initialize(params);
+    app_list_view_->Initialize(params);
 
     widget_ = CreateTopLevelPlatformWidget();
-    view_.reset(new SearchBoxView(this, &view_delegate_, app_list_view()));
+    view_ =
+        std::make_unique<SearchBoxView>(this, &view_delegate_, app_list_view());
     view_->Init();
     widget_->SetBounds(gfx::Rect(0, 0, 300, 200));
-    counter_view_ = new KeyPressCounterView();
+    counter_view_ = new KeyPressCounterView(app_list_view_);
     widget_->GetContentsView()->AddChildView(view());
     widget_->GetContentsView()->AddChildView(counter_view_);
     view()->set_contents_view(counter_view_);
@@ -88,6 +93,7 @@ class SearchBoxViewTest : public views::test::WidgetTest,
   views::Widget* widget() { return widget_; }
   SearchBoxView* view() { return view_.get(); }
   AppListView* app_list_view() { return app_list_view_; }
+  AppListTestViewDelegate* view_delegate() { return &view_delegate_; }
 
   void SetSearchEngineIsGoogle(bool is_google) {
     view_delegate_.SetSearchEngineIsGoogle(is_google);
@@ -111,6 +117,18 @@ class SearchBoxViewTest : public views::test::WidgetTest,
     }
   }
 
+  void CreateSearchResult(ash::SearchResultDisplayType display_type,
+                          double display_score,
+                          const base::string16& title,
+                          const base::string16& details) {
+    auto search_result = std::make_unique<SearchResult>();
+    search_result->set_display_type(display_type);
+    search_result->set_display_score(display_score);
+    search_result->set_title(title);
+    search_result->set_details(details);
+    results()->Add(std::move(search_result));
+  }
+
   std::string GetLastQueryAndReset() {
     base::string16 query = last_query_;
     last_query_.clear();
@@ -123,6 +141,10 @@ class SearchBoxViewTest : public views::test::WidgetTest,
     return result;
   }
 
+  SearchModel::SearchResults* results() {
+    return view_delegate_.GetSearchModel()->results();
+  }
+
  private:
   // Overridden from SearchBoxViewDelegate:
   void QueryChanged(search_box::SearchBoxViewBase* sender) override {
@@ -130,6 +152,7 @@ class SearchBoxViewTest : public views::test::WidgetTest,
     last_query_ = sender->search_box()->text();
   }
 
+  void AssistantButtonPressed() override {}
   void BackButtonPressed() override {}
   void ActiveChanged(search_box::SearchBoxViewBase* sender) override {}
 
@@ -184,7 +207,7 @@ TEST_F(SearchBoxViewTest, SearchBoxEmptyAfterCloseButtonClicked) {
   EXPECT_TRUE(view()->search_box()->text().empty());
 }
 
-// Tests that the search box is still active after close button is clicked.
+// Tests that the search box is no longer active after close button is clicked.
 TEST_F(SearchBoxViewTest, SearchBoxActiveAfterCloseButtonClicked) {
   KeyPress(ui::VKEY_A);
   view()->ButtonPressed(
@@ -192,7 +215,7 @@ TEST_F(SearchBoxViewTest, SearchBoxActiveAfterCloseButtonClicked) {
       ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                      base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON,
                      ui::EF_LEFT_MOUSE_BUTTON));
-  EXPECT_TRUE(view()->is_search_box_active());
+  EXPECT_FALSE(view()->is_search_box_active());
 }
 
 // Tests that the search box is inactive by default.
@@ -262,6 +285,216 @@ TEST_F(SearchBoxViewTest, SearchBoxActiveSearchEngineNotGoogle) {
 
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(*expected_icon.bitmap(),
                                          *actual_icon.bitmap()));
+}
+
+class SearchBoxViewAutocompleteTest
+    : public SearchBoxViewTest,
+      public ::testing::WithParamInterface<ui::KeyboardCode> {
+ public:
+  SearchBoxViewAutocompleteTest() = default;
+  ~SearchBoxViewAutocompleteTest() override = default;
+
+  // Overridden from testing::Test
+  void SetUp() override {
+    scoped_feature_list_.InitWithFeatures(
+        {features::kEnableAppListSearchAutocomplete}, {});
+    SearchBoxViewTest::SetUp();
+  }
+
+  ui::KeyboardCode key_code() const { return GetParam(); }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(SearchBoxViewAutocompleteTest);
+};
+
+INSTANTIATE_TEST_CASE_P(,
+                        SearchBoxViewAutocompleteTest,
+                        ::testing::Values(ui::VKEY_LEFT,
+                                          ui::VKEY_RIGHT,
+                                          ui::VKEY_UP,
+                                          ui::VKEY_DOWN,
+                                          ui::VKEY_BACK));
+
+// Tests that autocomplete suggestions are consistent with top SearchResult list
+// titles.
+TEST_F(SearchBoxViewAutocompleteTest,
+       SearchBoxAutocompletesTopListResultTitle) {
+  // Add two SearchResults, one with higher ranking. Initialize their title
+  // field to a non-empty string.
+  CreateSearchResult(ash::SearchResultDisplayType::kList, 1.0,
+                     base::ASCIIToUTF16("hello list"), base::string16());
+  CreateSearchResult(ash::SearchResultDisplayType::kTile, 0.5,
+                     base::ASCIIToUTF16("hello tile"), base::string16());
+
+  // Send H, E to the SearchBoxView textfield, then trigger an autocomplete.
+  KeyPress(ui::VKEY_H);
+  KeyPress(ui::VKEY_E);
+  view()->ProcessAutocomplete();
+  EXPECT_EQ(view()->search_box()->text(), base::ASCIIToUTF16("hello list"));
+  EXPECT_EQ(view()->search_box()->GetSelectedText(),
+            base::ASCIIToUTF16("llo list"));
+}
+
+// Tests that autocomplete suggestions are consistent with top SearchResult tile
+// titles.
+TEST_F(SearchBoxViewAutocompleteTest,
+       SearchBoxAutocompletesTopTileResultTitle) {
+  // Add two SearchResults, one with higher ranking. Initialize their title
+  // field to a non-empty string.
+  CreateSearchResult(ash::SearchResultDisplayType::kTile, 1.0,
+                     base::ASCIIToUTF16("hello tile"), base::string16());
+  CreateSearchResult(ash::SearchResultDisplayType::kList, 0.5,
+                     base::ASCIIToUTF16("hello list"), base::string16());
+
+  // Send H, E to the SearchBoxView textfield, then trigger an autocomplete.
+  KeyPress(ui::VKEY_H);
+  KeyPress(ui::VKEY_E);
+  view()->ProcessAutocomplete();
+  EXPECT_EQ(view()->search_box()->text(), base::ASCIIToUTF16("hello tile"));
+  EXPECT_EQ(view()->search_box()->GetSelectedText(),
+            base::ASCIIToUTF16("llo tile"));
+}
+
+// Tests that autocomplete suggestions are consistent with top SearchResult list
+// details.
+TEST_F(SearchBoxViewAutocompleteTest,
+       SearchBoxAutocompletesTopListResultDetails) {
+  // Add two SearchResults, one with higher ranking. Initialize their details
+  // field to a non-empty string.
+  CreateSearchResult(ash::SearchResultDisplayType::kList, 1.0, base::string16(),
+                     base::ASCIIToUTF16("hello list"));
+  CreateSearchResult(ash::SearchResultDisplayType::kTile, 0.5, base::string16(),
+                     base::ASCIIToUTF16("hello tile"));
+
+  // Send H, E to the SearchBoxView textfield, then trigger an autocomplete.
+  KeyPress(ui::VKEY_H);
+  KeyPress(ui::VKEY_E);
+  view()->ProcessAutocomplete();
+  EXPECT_EQ(view()->search_box()->text(), base::ASCIIToUTF16("hello list"));
+  EXPECT_EQ(view()->search_box()->GetSelectedText(),
+            base::ASCIIToUTF16("llo list"));
+}
+
+// Tests that autocomplete suggestions are consistent with top SearchResult tile
+// details.
+TEST_F(SearchBoxViewAutocompleteTest,
+       SearchBoxAutocompletesTopTileResultDetails) {
+  // Add two SearchResults, one with higher ranking. Initialize their details
+  // field to a non-empty string.
+  CreateSearchResult(ash::SearchResultDisplayType::kTile, 1.0, base::string16(),
+                     base::ASCIIToUTF16("hello tile"));
+  CreateSearchResult(ash::SearchResultDisplayType::kList, 0.5, base::string16(),
+                     base::ASCIIToUTF16("hello list"));
+
+  // Send H, E to the SearchBoxView textfield, then trigger an autocomplete.
+  KeyPress(ui::VKEY_H);
+  KeyPress(ui::VKEY_E);
+  view()->ProcessAutocomplete();
+  EXPECT_EQ(view()->search_box()->text(), base::ASCIIToUTF16("hello tile"));
+  EXPECT_EQ(view()->search_box()->GetSelectedText(),
+            base::ASCIIToUTF16("llo tile"));
+}
+
+// Tests that SearchBoxView's textfield text does not autocomplete if the top
+// result title or details do not have a matching prefix.
+TEST_F(SearchBoxViewAutocompleteTest,
+       SearchBoxDoesNotAutocompleteWrongCharacter) {
+  // Add a search result with non-empty details and title fields.
+  CreateSearchResult(ash::SearchResultDisplayType::kList, 1.0,
+                     base::ASCIIToUTF16("title"),
+                     base::ASCIIToUTF16("details"));
+
+  // Send Z to the SearchBoxView textfield, then trigger an autocomplete.
+  KeyPress(ui::VKEY_Z);
+  view()->ProcessAutocomplete();
+  // The text should not be autocompleted.
+  EXPECT_EQ(view()->search_box()->text(), base::ASCIIToUTF16("z"));
+}
+
+// Tests that autocomplete suggestion will remain if next key in the suggestion
+// is typed.
+TEST_F(SearchBoxViewAutocompleteTest, SearchBoxAutocompletesAcceptsNextChar) {
+  // Add a search result with a non-empty title field.
+  CreateSearchResult(ash::SearchResultDisplayType::kList, 1.0,
+                     base::ASCIIToUTF16("hello world!"), base::string16());
+
+  // Send H, E to the SearchBoxView textfield, then trigger an autocomplete.
+  KeyPress(ui::VKEY_H);
+  KeyPress(ui::VKEY_E);
+  view()->ProcessAutocomplete();
+  // Forward the next key in the autocomplete suggestion to HandleKeyEvent(). We
+  // use HandleKeyEvent() because KeyPress() will replace the existing
+  // highlighted text and add a repeat character.
+  ui::KeyEvent event(ui::ET_KEY_PRESSED, ui::VKEY_L, ui::EF_NONE);
+  static_cast<views::TextfieldController*>(view())->HandleKeyEvent(
+      view()->search_box(), event);
+  base::string16 selected_text = view()->search_box()->GetSelectedText();
+  // The autocomplete text should be preserved after hitting the next key in the
+  // suggestion.
+  EXPECT_EQ(view()->search_box()->text(), base::ASCIIToUTF16("hello world!"));
+  EXPECT_EQ(base::ASCIIToUTF16("lo world!"), selected_text);
+}
+
+// Tests that autocomplete suggestion is accepted and displayed in SearchModel
+// after hitting certain control keys.
+TEST_F(SearchBoxViewAutocompleteTest, SearchBoxAcceptsAutocompleteForTab) {
+  // Add a search result with a non-empty title field.
+  CreateSearchResult(ash::SearchResultDisplayType::kList, 1.0,
+                     base::ASCIIToUTF16("hello world!"), base::string16());
+
+  // Send H, E to the SearchBoxView textfield, then trigger an autocomplete.
+  KeyPress(ui::VKEY_H);
+  KeyPress(ui::VKEY_E);
+  view()->ProcessAutocomplete();
+  // Forward the tab key to HandleKeyEvent(). We use HandleKeyEvent()
+  // because KeyPress() will replace the existing highlighted text and add
+  // a repeat character.
+  ui::KeyEvent event(ui::ET_KEY_PRESSED, ui::VKEY_TAB, ui::EF_NONE);
+  static_cast<views::TextfieldController*>(view())->HandleKeyEvent(
+      view()->search_box(), event);
+  // Search box autocomplete suggestion is accepted and is reflected in
+  // SearchModel.
+  EXPECT_EQ(view()->search_box()->text(),
+            view_delegate()->GetSearchModel()->search_box()->text());
+  EXPECT_EQ(view()->search_box()->text(), base::ASCIIToUTF16("hello world!"));
+}
+
+// Tests that only the autocomplete suggestion text is deleted after hitting up,
+// down, left, right, or backspace.
+TEST_P(SearchBoxViewAutocompleteTest,
+       SearchBoxDeletesAutocompleteTextOnlyAfterUpDownLeftRightBackspace) {
+  // Add a search result with a non-empty title field.
+  CreateSearchResult(ash::SearchResultDisplayType::kList, 1.0,
+                     base::ASCIIToUTF16("hello world!"), base::string16());
+
+  // Send H, E to the SearchBoxView textfield, then trigger an autocomplete.
+  KeyPress(ui::VKEY_H);
+  KeyPress(ui::VKEY_E);
+  view()->ProcessAutocomplete();
+  // TODO(crbug.com/878984): Change KeyPress() to use EventGenerator::PressKey
+  // instead.
+  if (key_code() == ui::VKEY_BACK) {
+    // Use KeyPress() to mimic backspace. HandleKeyEvent() will not delete the
+    // text.
+    KeyPress(key_code());
+  } else {
+    // Forward the next parameter to HandleKeyEvent(). We use HandleKeyEvent()
+    // because KeyPress() will replace the existing highlighted text.
+    ui::KeyEvent event(ui::ET_KEY_PRESSED, key_code(), ui::EF_NONE);
+    static_cast<views::TextfieldController*>(view())->HandleKeyEvent(
+        view()->search_box(), event);
+  }
+  // Search box autocomplete suggestion is removed and is reflected in
+  // SearchModel.
+  EXPECT_EQ(view()->search_box()->text(),
+            view_delegate()->GetSearchModel()->search_box()->text());
+  EXPECT_EQ(view()->search_box()->text(), base::ASCIIToUTF16("he"));
+  // ProcessAutocomplete should be a no-op.
+  view()->ProcessAutocomplete();
+  // The autocomplete suggestion should still not be present.
+  EXPECT_EQ(view()->search_box()->text(), base::ASCIIToUTF16("he"));
 }
 
 }  // namespace test

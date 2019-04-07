@@ -54,7 +54,6 @@ class SERVICE_MANAGER_SANDBOX_EXPORT SandboxMac {
   // TODO(kerrnel): this is only for the legacy sandbox.
   static const char* kSandboxElCapOrLater;
   static const char* kSandboxMacOS1013;
-  static const char* kSandboxHighSierraOrLater;
 
   static const char* kSandboxBundleVersionPath;
 

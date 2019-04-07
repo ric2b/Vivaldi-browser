@@ -44,7 +44,7 @@
 #include "third_party/blink/renderer/core/inspector/console_message_storage.h"
 #include "third_party/blink/renderer/core/inspector/worker_inspector_controller.h"
 #include "third_party/blink/renderer/core/inspector/worker_thread_debugger.h"
-#include "third_party/blink/renderer/core/loader/worker_threadable_loader.h"
+#include "third_party/blink/renderer/core/loader/threadable_loader.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
@@ -344,7 +344,10 @@ WorkerGlobalScope::WorkerGlobalScope(
       font_selector_(OffscreenFontSelector::Create(this)),
       animation_frame_provider_(WorkerAnimationFrameProvider::Create(
           this,
-          creation_params->begin_frame_provider_params)) {
+          creation_params->begin_frame_provider_params)),
+      agent_cluster_id_(creation_params->agent_cluster_id.is_empty()
+                            ? base::UnguessableToken::Create()
+                            : creation_params->agent_cluster_id) {
   InstanceCounters::IncrementCounter(
       InstanceCounters::kWorkerGlobalScopeCounter);
   scoped_refptr<SecurityOrigin> security_origin = SecurityOrigin::Create(url_);
@@ -353,6 +356,13 @@ WorkerGlobalScope::WorkerGlobalScope(
         creation_params->starter_origin->CreatePrivilegeData());
   }
   SetSecurityOrigin(std::move(security_origin));
+
+  // https://html.spec.whatwg.org/#run-a-worker
+  // 4. Set worker global scope's HTTPS state to response's HTTPS state. [spec
+  // text]
+  https_state_ = CalculateHttpsState(GetSecurityOrigin(),
+                                     creation_params->starter_https_state);
+
   InitContentSecurityPolicyFromVector(
       creation_params->content_security_policy_parsed_headers);
   BindContentSecurityPolicyToExecutionContext();
@@ -405,12 +415,21 @@ void WorkerGlobalScope::RemoveURLFromMemoryCache(const KURL& url) {
                       CrossThreadBind(&RemoveURLFromMemoryCacheInternal, url));
 }
 
-int WorkerGlobalScope::requestAnimationFrame(V8FrameRequestCallback* callback) {
+int WorkerGlobalScope::requestAnimationFrame(V8FrameRequestCallback* callback,
+                                             ExceptionState& exception_state) {
   FrameRequestCallbackCollection::V8FrameCallback* frame_callback =
       FrameRequestCallbackCollection::V8FrameCallback::Create(callback);
   frame_callback->SetUseLegacyTimeBase(true);
 
-  return animation_frame_provider_->RegisterCallback(frame_callback);
+  int ret = animation_frame_provider_->RegisterCallback(frame_callback);
+
+  if (ret == WorkerAnimationFrameProvider::kInvalidCallbackId) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotSupportedError,
+        "requestAnimationFrame not supported in this Worker.");
+  }
+
+  return ret;
 }
 
 void WorkerGlobalScope::cancelAnimationFrame(int id) {

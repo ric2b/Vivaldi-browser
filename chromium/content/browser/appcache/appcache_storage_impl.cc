@@ -35,7 +35,7 @@
 #include "content/public/common/content_switches.h"
 #include "net/base/cache_type.h"
 #include "net/base/net_errors.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 #include "sql/transaction.h"
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_manager.h"
@@ -44,17 +44,20 @@
 
 namespace content {
 
-const int kMB = 1024 * 1024;
+namespace {
+
+constexpr const int kMB = 1024 * 1024;
 
 // Hard coded default when not using quota management.
-static const int kDefaultQuota = 5 * kMB;
+constexpr const int kDefaultQuota = 5 * kMB;
 
-static const int kMaxAppCacheDiskCacheSize = 250 * kMB;
-static const int kMaxAppCacheMemDiskCacheSize = 10 * kMB;
-static const base::FilePath::CharType kDiskCacheDirectoryName[] =
+constexpr const int kMaxAppCacheDiskCacheSize = 250 * kMB;
+constexpr const int kMaxAppCacheMemDiskCacheSize = 10 * kMB;
+
+constexpr base::FilePath::CharType kDiskCacheDirectoryName[] =
     FILE_PATH_LITERAL("Cache");
-
-namespace {
+constexpr base::FilePath::CharType kAppCacheDatabaseName[] =
+    FILE_PATH_LITERAL("Index");
 
 // Helpers for clearing data from the AppCacheDatabase.
 bool DeleteGroupAndRelatedRecords(
@@ -107,7 +110,7 @@ void AppCacheStorageImpl::ClearSessionOnlyOrigins(
   if (origins.empty())
     return;  // nothing to delete
 
-  sql::Connection* connection = database->db_connection();
+  sql::Database* connection = database->db_connection();
   if (!connection) {
     NOTREACHED() << "Missing database connection.";
     return;
@@ -701,7 +704,7 @@ void AppCacheStorageImpl::StoreGroupAndCacheTask::OnQuotaCallback(
 
 void AppCacheStorageImpl::StoreGroupAndCacheTask::Run() {
   DCHECK(!success_);
-  sql::Connection* connection = database_->db_connection();
+  sql::Database* connection = database_->db_connection();
   if (!connection)
     return;
 
@@ -872,7 +875,7 @@ class NetworkNamespaceHelper {
 
   bool IsInNetworkNamespace(const GURL& url, int64_t cache_id) {
     std::pair<WhiteListMap::iterator, bool> result = namespaces_map_.insert(
-        WhiteListMap::value_type(cache_id, AppCacheNamespaceVector()));
+        WhiteListMap::value_type(cache_id, std::vector<AppCacheNamespace>()));
     if (result.second)
       GetOnlineWhiteListForCache(cache_id, &result.first->second);
     return AppCache::FindNamespace(result.first->second, url) != nullptr;
@@ -880,7 +883,7 @@ class NetworkNamespaceHelper {
 
  private:
   void GetOnlineWhiteListForCache(int64_t cache_id,
-                                  AppCacheNamespaceVector* namespaces) {
+                                  std::vector<AppCacheNamespace>* namespaces) {
     DCHECK(namespaces && namespaces->empty());
     using WhiteListVector =
         std::vector<AppCacheDatabase::OnlineWhiteListRecord>;
@@ -896,7 +899,7 @@ class NetworkNamespaceHelper {
   }
 
   // Key is cache id
-  using WhiteListMap = std::map<int64_t, AppCacheNamespaceVector>;
+  using WhiteListMap = std::map<int64_t, std::vector<AppCacheNamespace>>;
   WhiteListMap namespaces_map_;
   AppCacheDatabase* database_;
 };
@@ -1185,7 +1188,7 @@ AppCacheStorageImpl::MakeGroupObsoleteTask::MakeGroupObsoleteTask(
 
 void AppCacheStorageImpl::MakeGroupObsoleteTask::Run() {
   DCHECK(!success_);
-  sql::Connection* connection = database_->db_connection();
+  sql::Database* connection = database_->db_connection();
   if (!connection)
     return;
 
@@ -1975,8 +1978,8 @@ void AppCacheStorageImpl::LazilyCommitLastAccessTimes() {
   const base::TimeDelta kDelay = base::TimeDelta::FromMinutes(5);
   lazy_commit_timer_.Start(
       FROM_HERE, kDelay,
-      base::Bind(&AppCacheStorageImpl::OnLazyCommitTimer,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&AppCacheStorageImpl::OnLazyCommitTimer,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void AppCacheStorageImpl::OnLazyCommitTimer() {

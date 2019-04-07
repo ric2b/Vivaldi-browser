@@ -49,12 +49,14 @@ bool NeedMinMaxSizeForContentContribution(WritingMode mode,
          style.MaxHeight().IsIntrinsic();
 }
 
-LayoutUnit ResolveInlineLength(const NGConstraintSpace& constraint_space,
-                               const ComputedStyle& style,
-                               const base::Optional<MinMaxSize>& min_and_max,
-                               const Length& length,
-                               LengthResolveType type,
-                               LengthResolvePhase phase) {
+LayoutUnit ResolveInlineLength(
+    const NGConstraintSpace& constraint_space,
+    const ComputedStyle& style,
+    const base::Optional<MinMaxSize>& min_and_max,
+    const Length& length,
+    LengthResolveType type,
+    LengthResolvePhase phase,
+    const base::Optional<NGBoxStrut>& opt_border_padding) {
   DCHECK_GE(constraint_space.AvailableSize().inline_size, LayoutUnit());
   DCHECK_GE(constraint_space.PercentageResolutionSize().inline_size,
             LayoutUnit());
@@ -68,8 +70,10 @@ LayoutUnit ResolveInlineLength(const NGConstraintSpace& constraint_space,
     return LayoutUnit::Max();
   }
 
-  NGBoxStrut border_and_padding = ComputeBorders(constraint_space, style) +
-                                  ComputePadding(constraint_space, style);
+  NGBoxStrut border_and_padding =
+      opt_border_padding ? *opt_border_padding
+                         : ComputeBorders(constraint_space, style) +
+                               ComputePadding(constraint_space, style);
 
   if (type == LengthResolveType::kMinSize && length.IsAuto())
     return border_and_padding.InlineSum();
@@ -139,12 +143,14 @@ LayoutUnit ResolveInlineLength(const NGConstraintSpace& constraint_space,
   }
 }
 
-LayoutUnit ResolveBlockLength(const NGConstraintSpace& constraint_space,
-                              const ComputedStyle& style,
-                              const Length& length,
-                              LayoutUnit content_size,
-                              LengthResolveType type,
-                              LengthResolvePhase phase) {
+LayoutUnit ResolveBlockLength(
+    const NGConstraintSpace& constraint_space,
+    const ComputedStyle& style,
+    const Length& length,
+    LayoutUnit content_size,
+    LengthResolveType type,
+    LengthResolvePhase phase,
+    const base::Optional<NGBoxStrut>& opt_border_padding) {
   DCHECK_EQ(constraint_space.GetWritingMode(), style.GetWritingMode());
 
   if (constraint_space.IsAnonymous())
@@ -155,8 +161,10 @@ LayoutUnit ResolveBlockLength(const NGConstraintSpace& constraint_space,
     return LayoutUnit::Max();
   }
 
-  NGBoxStrut border_and_padding = ComputeBorders(constraint_space, style) +
-                                  ComputePadding(constraint_space, style);
+  NGBoxStrut border_and_padding =
+      opt_border_padding ? *opt_border_padding
+                         : ComputeBorders(constraint_space, style) +
+                               ComputePadding(constraint_space, style);
 
   if (type == LengthResolveType::kMinSize && length.IsAuto())
     return border_and_padding.BlockSum();
@@ -340,6 +348,16 @@ MinMaxSize ComputeMinAndMaxContentContribution(
     const MinMaxSizeInput& input,
     const NGConstraintSpace* constraint_space) {
   LayoutBox* box = node.GetLayoutBox();
+
+  if (box->NeedsPreferredWidthsRecalculation()) {
+    // Some objects (when there's an intrinsic ratio) have their min/max inline
+    // size affected by the block size of their container. We don't really know
+    // whether the containing block of this child did change or is going to
+    // change size. However, this is our only opportunity to make sure that it
+    // gets its min/max widths calculated.
+    box->SetPreferredLogicalWidthsDirty();
+  }
+
   if (IsParallelWritingMode(writing_mode, node.Style().GetWritingMode())) {
     if (!box->PreferredLogicalWidthsDirty()) {
       return {box->MinPreferredLogicalWidth(), box->MaxPreferredLogicalWidth()};
@@ -359,14 +377,14 @@ MinMaxSize ComputeMinAndMaxContentContribution(
     if (constraint_space) {
       // TODO(layout-ng): Check if our constraint space produces spec-compliant
       // outputs.
-      // It is important to set a floats bfc offset so that we don't get a
+      // It is important to set a floats bfc block offset so that we don't get a
       // partial layout. It is also important that we shrink to fit, by
       // definition.
       NGConstraintSpaceBuilder builder(*constraint_space);
       builder.SetAvailableSize(constraint_space->AvailableSize())
           .SetPercentageResolutionSize(
               constraint_space->PercentageResolutionSize())
-          .SetFloatsBfcOffset(NGBfcOffset())
+          .SetFloatsBfcBlockOffset(LayoutUnit())
           .SetIsNewFormattingContext(node.CreatesNewFormattingContext())
           .SetIsShrinkToFit(true);
       adjusted_constraint_space =
@@ -383,9 +401,11 @@ MinMaxSize ComputeMinAndMaxContentContribution(
   return sizes;
 }
 
-LayoutUnit ComputeInlineSizeForFragment(const NGConstraintSpace& space,
-                                        NGLayoutInputNode node,
-                                        const MinMaxSize* override_minmax) {
+LayoutUnit ComputeInlineSizeForFragment(
+    const NGConstraintSpace& space,
+    NGLayoutInputNode node,
+    const base::Optional<NGBoxStrut>& border_padding,
+    const MinMaxSize* override_minmax) {
   if (space.IsFixedSizeInline())
     return space.AvailableSize().inline_size;
 
@@ -420,26 +440,31 @@ LayoutUnit ComputeInlineSizeForFragment(const NGConstraintSpace& space,
     } else {
       min_and_max = node.ComputeMinMaxSize(space.GetWritingMode(),
                                            MinMaxSizeInput(), &space);
+      // Cache these computed values
+      MinMaxSize contribution = ComputeMinAndMaxContentContribution(
+          style.GetWritingMode(), style, min_and_max);
+      box->SetPreferredLogicalWidthsFromNG(contribution);
     }
   }
 
   LayoutUnit extent = ResolveInlineLength(
       space, style, min_and_max, logical_width, LengthResolveType::kContentSize,
-      LengthResolvePhase::kLayout);
+      LengthResolvePhase::kLayout, border_padding);
 
   LayoutUnit max = ResolveInlineLength(
       space, style, min_and_max, style.LogicalMaxWidth(),
-      LengthResolveType::kMaxSize, LengthResolvePhase::kLayout);
+      LengthResolveType::kMaxSize, LengthResolvePhase::kLayout, border_padding);
   LayoutUnit min = ResolveInlineLength(
       space, style, min_and_max, style.LogicalMinWidth(),
-      LengthResolveType::kMinSize, LengthResolvePhase::kLayout);
+      LengthResolveType::kMinSize, LengthResolvePhase::kLayout, border_padding);
   return ConstrainByMinMax(extent, min, max);
 }
 
 LayoutUnit ComputeBlockSizeForFragment(
     const NGConstraintSpace& constraint_space,
     const ComputedStyle& style,
-    LayoutUnit content_size) {
+    LayoutUnit content_size,
+    const base::Optional<NGBoxStrut>& border_padding) {
   if (constraint_space.IsFixedSizeBlock())
     return constraint_space.AvailableSize().block_size;
 
@@ -447,9 +472,11 @@ LayoutUnit ComputeBlockSizeForFragment(
     // All handled by the table layout code or not applicable.
     return content_size;
   }
-  LayoutUnit extent = ResolveBlockLength(
-      constraint_space, style, style.LogicalHeight(), content_size,
-      LengthResolveType::kContentSize, LengthResolvePhase::kLayout);
+
+  LayoutUnit extent =
+      ResolveBlockLength(constraint_space, style, style.LogicalHeight(),
+                         content_size, LengthResolveType::kContentSize,
+                         LengthResolvePhase::kLayout, border_padding);
   if (extent == NGSizeIndefinite) {
     DCHECK_EQ(content_size, NGSizeIndefinite);
     return extent;
@@ -457,10 +484,10 @@ LayoutUnit ComputeBlockSizeForFragment(
 
   LayoutUnit max = ResolveBlockLength(
       constraint_space, style, style.LogicalMaxHeight(), content_size,
-      LengthResolveType::kMaxSize, LengthResolvePhase::kLayout);
+      LengthResolveType::kMaxSize, LengthResolvePhase::kLayout, border_padding);
   LayoutUnit min = ResolveBlockLength(
       constraint_space, style, style.LogicalMinHeight(), content_size,
-      LengthResolveType::kMinSize, LengthResolvePhase::kLayout);
+      LengthResolveType::kMinSize, LengthResolvePhase::kLayout, border_padding);
 
   return ConstrainByMinMax(extent, min, max);
 }
@@ -603,8 +630,14 @@ LayoutUnit ResolveUsedColumnGap(LayoutUnit available_size,
 NGPhysicalBoxStrut ComputePhysicalMargins(
     const NGConstraintSpace& constraint_space,
     const ComputedStyle& style) {
+  if (style.MarginLeft().IsZero() && style.MarginRight().IsZero() &&
+      style.MarginTop().IsZero() && style.MarginBottom().IsZero()) {
+    return NGPhysicalBoxStrut();
+  }
+
   if (constraint_space.IsAnonymous())
     return NGPhysicalBoxStrut();
+
   NGPhysicalBoxStrut physical_dim;
   physical_dim.left =
       ResolveMarginPaddingLength(constraint_space, style.MarginLeft());
@@ -624,24 +657,25 @@ NGBoxStrut ComputeMarginsFor(const NGConstraintSpace& constraint_space,
       .ConvertToLogical(compute_for.GetWritingMode(), compute_for.Direction());
 }
 
-NGBoxStrut ComputeMarginsForContainer(const NGConstraintSpace& constraint_space,
-                                      const ComputedStyle& style) {
-  return ComputePhysicalMargins(constraint_space, style)
-      .ConvertToLogical(constraint_space.GetWritingMode(),
-                        constraint_space.Direction());
-}
-
-NGBoxStrut ComputeMarginsForVisualContainer(
+NGLineBoxStrut ComputeLineMarginsForVisualContainer(
     const NGConstraintSpace& constraint_space,
     const ComputedStyle& style) {
   return ComputePhysicalMargins(constraint_space, style)
-      .ConvertToLogical(constraint_space.GetWritingMode(), TextDirection::kLtr);
+      .ConvertToLineLogical(constraint_space.GetWritingMode(),
+                            TextDirection::kLtr);
 }
 
 NGBoxStrut ComputeMarginsForSelf(const NGConstraintSpace& constraint_space,
                                  const ComputedStyle& style) {
   return ComputePhysicalMargins(constraint_space, style)
       .ConvertToLogical(style.GetWritingMode(), style.Direction());
+}
+
+NGLineBoxStrut ComputeLineMarginsForSelf(
+    const NGConstraintSpace& constraint_space,
+    const ComputedStyle& style) {
+  return ComputePhysicalMargins(constraint_space, style)
+      .ConvertToLineLogical(style.GetWritingMode(), style.Direction());
 }
 
 NGBoxStrut ComputeMinMaxMargins(const ComputedStyle& parent_style,
@@ -681,6 +715,28 @@ NGBoxStrut ComputeBorders(const NGConstraintSpace& constraint_space,
   return borders;
 }
 
+NGBoxStrut ComputeBorders(const NGConstraintSpace& constraint_space,
+                          const NGLayoutInputNode node) {
+  // If we are producing an anonymous fragment (e.g. a column), it has no
+  // borders, padding or scrollbars. Using the ones from the container can only
+  // cause trouble.
+  if (constraint_space.IsAnonymous())
+    return NGBoxStrut();
+
+  if (node.GetLayoutBox()->IsTableCell()) {
+    LayoutBox* box = node.GetLayoutBox();
+    return NGBoxStrut(box->BorderStart(), box->BorderEnd(), box->BorderBefore(),
+                      box->BorderAfter());
+  }
+  return ComputeBorders(constraint_space, node.Style());
+}
+
+NGLineBoxStrut ComputeLineBorders(const NGConstraintSpace& constraint_space,
+                                  const ComputedStyle& style) {
+  return NGLineBoxStrut(ComputeBorders(constraint_space, style),
+                        style.IsFlippedLinesWritingMode());
+}
+
 NGBoxStrut ComputePadding(const NGConstraintSpace& constraint_space,
                           const ComputedStyle& style) {
   // If we are producing an anonymous fragment (e.g. a column) we shouldn't
@@ -698,6 +754,33 @@ NGBoxStrut ComputePadding(const NGConstraintSpace& constraint_space,
   padding.block_end =
       ResolveMarginPaddingLength(constraint_space, style.PaddingAfter());
   return padding;
+}
+
+NGBoxStrut ComputePadding(const NGConstraintSpace& constraint_space,
+                          const NGLayoutInputNode node) {
+  // If we are producing an anonymous fragment (e.g. a column), it has no
+  // borders, padding or scrollbars. Using the ones from the container can only
+  // cause trouble.
+  if (constraint_space.IsAnonymous())
+    return NGBoxStrut();
+
+  NGBoxStrut padding = ComputePadding(constraint_space, node.Style());
+  if (node.GetLayoutBox()->IsTableCell()) {
+    // Use values calculated by the table layout code
+    const LayoutTableCell* cell = ToLayoutTableCell(node.GetLayoutBox());
+    // TODO(karlo): intrinsic padding can sometimes be negative; that
+    // seems insane, but works in the old code; in NG it trips
+    // DCHECKs.
+    padding.block_start += LayoutUnit(cell->IntrinsicPaddingBefore());
+    padding.block_end += LayoutUnit(cell->IntrinsicPaddingAfter());
+  }
+  return padding;
+}
+
+NGLineBoxStrut ComputeLinePadding(const NGConstraintSpace& constraint_space,
+                                  const ComputedStyle& style) {
+  return NGLineBoxStrut(ComputePadding(constraint_space, style),
+                        style.IsFlippedLinesWritingMode());
 }
 
 void ResolveInlineMargins(const ComputedStyle& style,
@@ -810,37 +893,37 @@ LayoutUnit ConstrainByMinMax(LayoutUnit length,
 NGBoxStrut CalculateBorderScrollbarPadding(
     const NGConstraintSpace& constraint_space,
     const NGBlockNode node) {
-  const ComputedStyle& style = node.Style();
-
   // If we are producing an anonymous fragment (e.g. a column), it has no
   // borders, padding or scrollbars. Using the ones from the container can only
   // cause trouble.
   if (constraint_space.IsAnonymous())
     return NGBoxStrut();
-  NGBoxStrut border_intrinsic_padding;
-  if (node.GetLayoutBox()->IsTableCell()) {
-    // Use values calculated by the table layout code
-    const LayoutTableCell* cell = ToLayoutTableCell(node.GetLayoutBox());
-    // TODO(karlo): intrinsic padding can sometimes be negative; that
-    // seems insane, but works in the old code; in NG it trips
-    // DCHECKs.
-    border_intrinsic_padding = NGBoxStrut(
-        cell->BorderStart(), cell->BorderEnd(),
-        cell->BorderBefore() + LayoutUnit(cell->IntrinsicPaddingBefore()),
-        cell->BorderAfter() + LayoutUnit(cell->IntrinsicPaddingAfter()));
-  } else {
-    border_intrinsic_padding = ComputeBorders(constraint_space, style);
-  }
-  return border_intrinsic_padding + ComputePadding(constraint_space, style) +
-         node.GetScrollbarSizes();
+  return ComputeBorders(constraint_space, node) +
+         ComputePadding(constraint_space, node) + node.GetScrollbarSizes();
 }
 
-NGLogicalSize CalculateBorderBoxSize(const NGConstraintSpace& constraint_space,
-                                     const NGBlockNode& node,
-                                     LayoutUnit block_content_size) {
-  return NGLogicalSize(ComputeInlineSizeForFragment(constraint_space, node),
-                       ComputeBlockSizeForFragment(
-                           constraint_space, node.Style(), block_content_size));
+NGLogicalSize CalculateBorderBoxSize(
+    const NGConstraintSpace& constraint_space,
+    const NGBlockNode& node,
+    LayoutUnit block_content_size,
+    const base::Optional<NGBoxStrut>& border_padding) {
+  // If we have a percentage size, we need to set the
+  // HasPercentHeightDescendants flag correctly so that flexboz knows it may
+  // need to redo layout and can also do some performance optimizations.
+  if (node.Style().LogicalHeight().IsPercentOrCalc() ||
+      node.Style().LogicalMinHeight().IsPercentOrCalc() ||
+      node.Style().LogicalMaxHeight().IsPercentOrCalc() ||
+      (node.GetLayoutBox()->IsFlexItem() &&
+       node.Style().FlexBasis().IsPercentOrCalc())) {
+    // This call has the side-effect of setting HasPercentHeightDescendants
+    // correctly.
+    node.GetLayoutBox()->ComputePercentageLogicalHeight(Length(0, kPercent));
+  }
+
+  return NGLogicalSize(
+      ComputeInlineSizeForFragment(constraint_space, node, border_padding),
+      ComputeBlockSizeForFragment(constraint_space, node.Style(),
+                                  block_content_size, border_padding));
 }
 
 NGLogicalSize CalculateContentBoxSize(

@@ -62,7 +62,10 @@ class SupportLibWebViewChromiumFactory implements WebViewProviderFactoryBoundary
                     Features.POST_WEB_MESSAGE,
                     Features.WEB_MESSAGE_CALLBACK_ON_MESSAGE,
                     Features.GET_WEB_VIEW_CLIENT,
-                    Features.GET_WEB_CHROME_CLIENT
+                    Features.GET_WEB_CHROME_CLIENT,
+                    Features.PROXY_OVERRIDE,
+                    Features.GET_WEB_VIEW_RENDERER,
+                    Features.WEB_VIEW_RENDERER_TERMINATE,
             };
     // clang-format on
 
@@ -109,6 +112,16 @@ class SupportLibWebViewChromiumFactory implements WebViewProviderFactoryBoundary
         @Override
         public Uri getSafeBrowsingPrivacyPolicyUrl() {
             return mSharedStatics.getSafeBrowsingPrivacyPolicyUrl();
+        }
+
+        @Override
+        public void setProxyOverride(String host, int port, String[] exclusionList) {
+            mSharedStatics.setProxyOverride(host, port, exclusionList);
+        }
+
+        @Override
+        public void clearProxyOverride() {
+            mSharedStatics.clearProxyOverride();
         }
     }
 

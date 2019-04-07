@@ -20,18 +20,19 @@
 #include "chrome/common/media_router/discovery/media_sink_internal.h"
 #include "url/gurl.h"
 
-namespace service_manager {
-class Connector;
-}
-
 namespace media_router {
 
+class DataDecoder;
+
 // Represents DIAL app status on receiver device.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
 enum class DialAppInfoResultCode {
   kOk = 0,
-  kNotFound,
-  kNetworkError,
-  kParsingError
+  kNotFound = 1,
+  kNetworkError = 2,
+  kParsingError = 3,
+  kCount
 };
 
 struct DialAppInfoResult {
@@ -63,7 +64,7 @@ class DialAppDiscoveryService {
                               const std::string& app_name,
                               DialAppInfoResult result)>;
 
-  explicit DialAppDiscoveryService(service_manager::Connector* connector);
+  explicit DialAppDiscoveryService(DataDecoder* data_decoder);
 
   virtual ~DialAppDiscoveryService();
 

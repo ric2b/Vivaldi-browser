@@ -57,16 +57,14 @@
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
 #endif
 
-#include "content/browser/frame_host/navigation_controller_impl.h"
-#include "content/browser/frame_host/navigation_entry_impl.h"
-#include "content/browser/web_contents/web_contents_impl.h"
 #include "app/vivaldi_apptools.h"
+#include "browser/ui/vivaldi_browser_navigator.h"
 
 using content::GlobalRequestID;
 using content::NavigationController;
@@ -151,7 +149,7 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
         profile, params.url, extensions::LAUNCH_CONTAINER_WINDOW);
     if (app) {
       std::string app_name =
-          web_app::GenerateApplicationNameFromExtensionId(app->id());
+          web_app::GenerateApplicationNameFromAppId(app->id());
       return {
           new Browser(Browser::CreateParams::CreateForApp(
               app_name,
@@ -206,15 +204,15 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
       std::string app_name;
 #if BUILDFLAG(ENABLE_EXTENSIONS)
       if (!params.extension_app_id.empty()) {
-        app_name = web_app::GenerateApplicationNameFromExtensionId(
-            params.extension_app_id);
+        app_name =
+            web_app::GenerateApplicationNameFromAppId(params.extension_app_id);
       } else if (params.browser && !params.browser->app_name().empty()) {
         app_name = params.browser->app_name();
       } else if (params.source_contents) {
         extensions::TabHelper* extensions_tab_helper =
             extensions::TabHelper::FromWebContents(params.source_contents);
         if (extensions_tab_helper && extensions_tab_helper->is_app()) {
-          app_name = web_app::GenerateApplicationNameFromExtensionId(
+          app_name = web_app::GenerateApplicationNameFromAppId(
               extensions_tab_helper->extension_app()->id());
         }
       }
@@ -345,27 +343,6 @@ void LoadURLInContents(WebContents* target_contents,
   }
 
   target_contents->GetController().LoadURLWithParams(load_url_params);
-}
-
-void LoadURLAsPendingEntry(WebContents* target_contents,
-                       const GURL& url,
-                       NavigateParams* params) {
-
-  content::WebContentsImpl* contentsimpl =
-    static_cast<content::WebContentsImpl*>(target_contents);
-  content::NavigationControllerImpl* controller =
-      &contentsimpl->GetController();
-
-  std::unique_ptr<content::NavigationEntryImpl> entry =
-    content::NavigationEntryImpl::FromNavigationEntry(
-      controller->CreateNavigationEntry(
-        url, params->referrer, params->transition,
-        params->is_renderer_initiated, params->extra_headers,
-        controller->GetBrowserContext(),
-        nullptr /* blob_url_loader_factory */));
-
-  controller->SetPendingEntry(std::move(entry));
-  controller->SetNeedsReload();
 }
 
 // This class makes sure the Browser object held in |params| is made visible
@@ -649,11 +626,10 @@ void Navigate(NavigateParams* params) {
           // a navigation occurs before the delegate is set, we can run into
           // issues such as VB-39613
           if (!params->url.SchemeIs(url::kJavaScriptScheme))
-            LoadURLAsPendingEntry(contents_to_navigate_or_insert, params->url,
-                                params);
+            vivaldi::LoadURLAsPendingEntry(contents_to_navigate_or_insert,
+                                           params->url, params);
         } else
-          LoadURLInContents(contents_to_navigate_or_insert, params->url,
-                          params);
+        LoadURLInContents(contents_to_navigate_or_insert, params->url, params);
       }
     }
   } else {

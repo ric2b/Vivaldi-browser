@@ -109,10 +109,9 @@ def main():
       only_if_changed=True)
 
   if options.depfile:
-    build_utils.WriteDepfile(options.depfile, options.output, libraries)
+    build_utils.WriteDepfile(options.depfile, options.output, libraries,
+                             add_pydeps=False)
 
 
 if __name__ == '__main__':
   sys.exit(main())
-
-

@@ -7,6 +7,7 @@
 #include "third_party/blink/public/web/web_script_source.h"
 #include "third_party/blink/renderer/bindings/core/v8/scroll_into_view_options_or_boolean.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/scroll_into_view_options.h"
 #include "third_party/blink/renderer/core/frame/scroll_to_options.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
@@ -488,6 +489,7 @@ TEST_F(ScrollIntoViewTest, FindDoesNotScrollOverflowHidden) {
   ASSERT_EQ(container->scrollTop(), 0);
   const int kFindIdentifier = 12345;
   WebFindOptions options;
+  options.run_synchronously_for_testing = true;
   MainFrame().Find(kFindIdentifier, WebString::FromUTF8("hello"), options,
                    false);
   ASSERT_EQ(container->scrollTop(), 0);

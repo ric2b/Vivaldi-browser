@@ -200,16 +200,21 @@ var testSocketListening = function() {
     socket.read(acceptedSocketId, function(readInfo) {
       arrayBuffer2String(readInfo.data, function (s) {
         assertDataMatch(request, s);
-        succeeded = true;
-        // Test whether socket.getInfo correctly reflects the connection status
-        // if the peer has closed the connection.
-        setTimeout(function() {
+        // Rather than using a timeout, use another read to detect the peer
+        // termination.
+        socket.read(acceptedSocketId, function(readInfo2) {
+          chrome.test.assertEq(0, readInfo2.resultCode);
           socket.getInfo(acceptedSocketId, function(info) {
             chrome.test.assertFalse(info.connected);
-            socket.destroy(socketId);
-            chrome.test.succeed();
+            // Use a third read to make sure net::ERR_SOCKET_NOT_CONNECTED (-15)
+            // is received for subsequent reads.
+            socket.read(acceptedSocketId, function(readInfo3) {
+              chrome.test.assertEq(-15, readInfo3.resultCode);
+              socket.destroy(socketId);
+              chrome.test.succeed();
+            });
           });
-        }, 500);
+        });
       });
     });
   }

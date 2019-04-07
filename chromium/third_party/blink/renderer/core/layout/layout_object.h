@@ -72,8 +72,8 @@ class LayoutGeometryMap;
 class LayoutMultiColumnSpannerPlaceholder;
 class LayoutView;
 class LocalFrameView;
+class NGPaintFragment;
 class NGPhysicalBoxFragment;
-class ObjectPaintProperties;
 class PaintLayer;
 class PseudoStyleRequest;
 
@@ -235,13 +235,17 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   // DisplayItemClient methods.
 
+ protected:
+  void EnsureIdForTesting() { fragment_.EnsureIdForTesting(); };
+
   // Do not call VisualRect directly outside of the DisplayItemClient
   // interface, use a per-fragment one on FragmentData instead.
  private:
-  // Hide DisplayItemClient methods whose names are too generic for
-  // LayoutObject. Use LayoutObject methods instead, or explicitly cast.
+  // Hide DisplayItemClient's methods whose names are too generic for
+  // LayoutObjects. Should use LayoutObject's methods instead.
   using DisplayItemClient::Invalidate;
   using DisplayItemClient::IsValid;
+  using DisplayItemClient::GetPaintInvalidationReason;
 
   LayoutRect VisualRect() const final;
 
@@ -620,6 +624,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   virtual bool IsLayoutFlowThread() const { return false; }
   virtual bool IsLayoutInline() const { return false; }
   virtual bool IsLayoutEmbeddedContent() const { return false; }
+  virtual bool IsLayoutNGObject() const { return false; }
 
   bool IsDocumentElement() const {
     return GetDocument().documentElement() == node_;
@@ -726,9 +731,16 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   virtual void SetNeedsTransformUpdate() {}
   virtual void SetNeedsBoundariesUpdate();
 
+  // Per the spec, mix-blend-mode applies to all non-SVG elements, and SVG
+  // elements that are container elements, graphics elements or graphics
+  // referencing elements.
+  // https://www.w3.org/TR/compositing-1/#propdef-mix-blend-mode
   bool IsBlendingAllowed() const {
-    return !IsSVG() || (IsSVGContainer() && !IsSVGHiddenContainer()) ||
-           IsSVGShape() || IsSVGImage() || IsSVGText();
+    return !IsSVG() || IsSVGShape() || IsSVGImage() || IsSVGText() ||
+           IsSVGInline() || IsSVGRoot() || IsSVGForeignObject() ||
+           // TODO(pdr): According to the current spec, blending should apply to
+           // hidden containers (e.g. pattern).
+           (IsSVGContainer() && !IsSVGHiddenContainer());
   }
   virtual bool HasNonIsolatedBlendingDescendants() const {
     // This is only implemented for layout objects that containt SVG flow.
@@ -835,6 +847,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool IsText() const { return bitfields_.IsText(); }
   bool IsBox() const { return bitfields_.IsBox(); }
   bool IsInline() const { return bitfields_.IsInline(); }  // inline object
+  bool IsInLayoutNGInlineFormattingContext() const {
+    return bitfields_.IsInLayoutNGInlineFormattingContext();
+  }
   bool IsAtomicInlineLevel() const { return bitfields_.IsAtomicInlineLevel(); }
   bool IsHorizontalWritingMode() const {
     return bitfields_.HorizontalWritingMode();
@@ -891,10 +906,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return bitfields_.ChildNeedsOverflowRecalcAfterStyleChange();
   }
 
-  bool IsSelectionBorder() const;
-
   // CSS clip only applies when position is absolute or fixed. Prefer this check
-  // over !Style()->HasAutoClip().
+  // over !StyleRef().HasAutoClip().
   bool HasClip() const {
     return IsOutOfFlowPositioned() && !StyleRef().HasAutoClip();
   }
@@ -922,6 +935,16 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
 
   bool HasShapeOutside() const { return StyleRef().ShapeOutside(); }
+
+  // Return true if the given object is the effective root scroller in its
+  // Document. See |effective root scroller| in page/scrolling/README.md.
+  // Note: a root scroller always establishes a PaintLayer.
+  // This bit is updated in
+  // RootScrollerController::RecomputeEffectiveRootScroller in the LayoutClean
+  // document lifecycle phase.
+  bool IsEffectiveRootScroller() const {
+    return bitfields_.IsEffectiveRootScroller();
+  }
 
   // The pseudo element style can be cached or uncached.  Use the cached method
   // if the pseudo element doesn't respect any pseudo classes (and therefore
@@ -1107,6 +1130,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   void SetFloating(bool is_floating) { bitfields_.SetFloating(is_floating); }
   void SetInline(bool is_inline) { bitfields_.SetIsInline(is_inline); }
 
+  void SetIsInLayoutNGInlineFormattingContext(bool);
+  virtual NGPaintFragment* FirstInlineFragment() const { return nullptr; }
+  virtual void SetFirstInlineFragment(NGPaintFragment*) {}
+
   void SetHasBoxDecorationBackground(bool);
 
   enum BackgroundObscurationState {
@@ -1140,6 +1167,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   void SetCanContainFixedPositionObjects(bool can_contain_fixed_position) {
     bitfields_.SetCanContainFixedPositionObjects(can_contain_fixed_position);
+  }
+  void SetIsEffectiveRootScroller(bool is_effective_root_scroller) {
+    bitfields_.SetIsEffectiveRootScroller(is_effective_root_scroller);
   }
 
   virtual void Paint(const PaintInfo&) const;
@@ -1360,13 +1390,13 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // and multicol).
   LayoutSize OffsetFromContainer(const LayoutObject*,
                                  bool ignore_scroll_offset = false) const;
-  // Return the offset from an object up the container() chain. Asserts that
-  // none of the intermediate objects have transforms.
-  LayoutSize OffsetFromAncestorContainer(const LayoutObject*) const;
+  // Return the offset from an object from the ancestor. The ancestor need
+  // not be on the containing block chain of |this|.
+  LayoutSize OffsetFromAncestor(const LayoutObject*) const;
 
   virtual void AbsoluteRects(Vector<IntRect>&, const LayoutPoint&) const {}
 
-  FloatRect AbsoluteBoundingBoxFloatRect() const;
+  FloatRect AbsoluteBoundingBoxFloatRect(MapCoordinatesFlags = 0) const;
   // This returns an IntRect enclosing this object. If this object has an
   // integral size and the position has fractional values, the resultant
   // IntRect can be larger than the integral size.
@@ -1460,17 +1490,15 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // a small region of a canvas changes.
   void InvalidatePaintRectangle(const LayoutRect&);
 
-  void SetShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
-
   // Returns the rect that should have paint invalidated whenever this object
   // changes. The rect is in the view's coordinate space. This method deals with
   // outlines and overflow.
   virtual LayoutRect AbsoluteVisualRect() const;
 
-  // Returns the rect that should have paint invalidated whenever this object
+  // Returns the rect that should have raster invalidated whenever this object
   // changes. The rect is in the object's local coordinate space. This is for
   // non-SVG objects and LayoutSVGRoot only. SVG objects (except LayoutSVGRoot)
-  // should use visualRectInLocalSVGCoordinates() and map with SVG transforms
+  // should use VisualRectInLocalSVGCoordinates() and map with SVG transforms
   // instead.
   LayoutRect LocalVisualRect() const {
     if (StyleRef().Visibility() != EVisibility::kVisible &&
@@ -1728,32 +1756,34 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   virtual void ClearPreviousVisualRects();
 
   PaintInvalidationReason FullPaintInvalidationReason() const {
-    return bitfields_.FullPaintInvalidationReason();
+    return full_paint_invalidation_reason_;
   }
   bool ShouldDoFullPaintInvalidation() const {
-    return bitfields_.FullPaintInvalidationReason() !=
-           PaintInvalidationReason::kNone;
+    if (!ShouldDelayFullPaintInvalidation() &&
+        full_paint_invalidation_reason_ != PaintInvalidationReason::kNone) {
+      DCHECK(IsFullPaintInvalidationReason(full_paint_invalidation_reason_));
+      DCHECK(ShouldCheckForPaintInvalidation());
+      return true;
+    }
+    return false;
   }
   void SetShouldDoFullPaintInvalidation(
       PaintInvalidationReason = PaintInvalidationReason::kFull);
   void SetShouldDoFullPaintInvalidationWithoutGeometryChange(
       PaintInvalidationReason = PaintInvalidationReason::kFull);
-  void ClearShouldDoFullPaintInvalidation() {
-    bitfields_.SetFullPaintInvalidationReason(PaintInvalidationReason::kNone);
-  }
 
   void ClearPaintInvalidationFlags();
 
-  bool MayNeedPaintInvalidation() const {
-    return bitfields_.MayNeedPaintInvalidation();
+  bool ShouldCheckForPaintInvalidation() const {
+    return bitfields_.ShouldCheckForPaintInvalidation();
   }
-  void SetMayNeedPaintInvalidation();
-  void SetMayNeedPaintInvalidationWithoutGeometryChange();
+  void SetShouldCheckForPaintInvalidation();
+  void SetShouldCheckForPaintInvalidationWithoutGeometryChange();
 
-  bool MayNeedPaintInvalidationSubtree() const {
-    return bitfields_.MayNeedPaintInvalidationSubtree();
+  bool SubtreeShouldCheckForPaintInvalidation() const {
+    return bitfields_.SubtreeShouldCheckForPaintInvalidation();
   }
-  void SetMayNeedPaintInvalidationSubtree();
+  void SetSubtreeShouldCheckForPaintInvalidation();
 
   bool NeedsPaintOffsetAndVisualRectUpdate() const {
     return bitfields_.NeedsPaintOffsetAndVisualRectUpdate();
@@ -1764,20 +1794,33 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   void SetMayNeedPaintInvalidationAnimatedBackgroundImage();
 
+  void SetSubtreeShouldDoFullPaintInvalidation(
+      PaintInvalidationReason reason = PaintInvalidationReason::kSubtree);
+  bool SubtreeShouldDoFullPaintInvalidation() const {
+    DCHECK(!bitfields_.SubtreeShouldDoFullPaintInvalidation() ||
+           ShouldDoFullPaintInvalidation());
+    return bitfields_.SubtreeShouldDoFullPaintInvalidation();
+  }
+
+  // If true, it means that invalidation and repainting of the object can be
+  // delayed until a future frame. This can be the case for an object whose
+  // content is not visible to the user.
+  bool ShouldDelayFullPaintInvalidation() const {
+    return bitfields_.ShouldDelayFullPaintInvalidation();
+  }
+  void SetShouldDelayFullPaintInvalidation();
+
   bool ShouldInvalidateSelection() const {
     return bitfields_.ShouldInvalidateSelection();
   }
   void SetShouldInvalidateSelection();
 
-  bool ShouldCheckForPaintInvalidation() const {
-    return MayNeedPaintInvalidation() || ShouldDoFullPaintInvalidation();
-  }
-
   virtual LayoutRect ViewRect() const;
 
-  // New version to replace the above old version.
-  virtual PaintInvalidationReason InvalidatePaint(
-      const PaintInvalidatorContext&) const;
+  // Called by PaintInvalidator during PrePaint. Checks paint invalidation flags
+  // and other changes that will cause different painting, and invalidate
+  // display item clients for painting if needed.
+  virtual void InvalidatePaint(const PaintInvalidatorContext&) const;
 
   // When this object is invalidated for paint, this method is called to
   // invalidate any DisplayItemClients owned by this object, including the
@@ -1860,8 +1903,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       layout_object_.bitfields_
           .SetDescendantEffectiveWhitelistedTouchActionChanged(false);
     }
-    void SetMayNeedPaintInvalidation() {
-      layout_object_.SetMayNeedPaintInvalidation();
+    void SetShouldCheckForPaintInvalidation() {
+      layout_object_.SetShouldCheckForPaintInvalidation();
     }
     void SetShouldDoFullPaintInvalidation(PaintInvalidationReason reason) {
       layout_object_.SetShouldDoFullPaintInvalidation(reason);
@@ -1873,6 +1916,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     }
     void SetBackgroundChangedSinceLastPaintInvalidation() {
       layout_object_.SetBackgroundChangedSinceLastPaintInvalidation();
+    }
+    void SetShouldDelayFullPaintInvalidation() {
+      layout_object_.SetShouldDelayFullPaintInvalidation();
     }
     void EnsureIsReadyForPaintInvalidation() {
       layout_object_.EnsureIsReadyForPaintInvalidation();
@@ -2133,6 +2179,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // changes at all).
   virtual bool AnonymousHasStylePropagationOverride() { return false; }
 
+  virtual void InLayoutNGInlineFormattingContextWillChange(bool) {}
+
   // A fast path for MapToVisualRectInAncestorSpace for when GeometryMapper
   // can be used. |intersects| is set to whether the input rect intersected
   // (see documentation of return value of MapToVisualRectInAncestorSpace).
@@ -2191,12 +2239,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
                                        const LayoutPoint& layer_offset) const {}
 
 #if DCHECK_IS_ON()
-  virtual bool PaintInvalidationStateIsDirty() const {
-    return BackgroundChangedSinceLastPaintInvalidation() ||
-           ShouldCheckForPaintInvalidation() || ShouldInvalidateSelection() ||
-           NeedsPaintOffsetAndVisualRectUpdate() ||
-           !fragment_.PartialInvalidationLocalRect().IsEmpty();
-  }
+  virtual bool PaintInvalidationStateIsDirty() const;
 #endif
 
   // Called before paint invalidation.
@@ -2311,6 +2354,14 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   void ApplyPseudoStyleChanges(const ComputedStyle& old_style);
   void ApplyFirstLineChanges(const ComputedStyle& old_style);
 
+  // This is set by Set[Subtree]ShouldDoFullPaintInvalidation, and cleared
+  // during PrePaint in this object's InvalidatePaint(). It's different from
+  // DisplayItemClient::GetPaintInvalidationReason() which is set during
+  // PrePaint and cleared in PaintController::FinishCycle().
+  // It's defined as the first field so that it can use the memory gap between
+  // DisplayItemClient and LayoutObject's other fields.
+  PaintInvalidationReason full_paint_invalidation_reason_;
+
   scoped_refptr<ComputedStyle> style_;
 
   // Oilpan: This untraced pointer to the owning Node is considered safe.
@@ -2370,16 +2421,19 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
           child_needs_overflow_recalc_after_style_change_(false),
           preferred_logical_widths_dirty_(false),
           needs_collect_inlines_(false),
-          may_need_paint_invalidation_(false),
-          may_need_paint_invalidation_subtree_(false),
+          should_check_for_paint_invalidation_(true),
+          subtree_should_check_for_paint_invalidation_(false),
+          should_delay_full_paint_invalidation_(false),
+          subtree_should_do_full_paint_invalidation_(false),
           may_need_paint_invalidation_animated_background_image_(false),
-          needs_paint_offset_and_visual_rect_update_(false),
+          needs_paint_offset_and_visual_rect_update_(true),
           should_invalidate_selection_(false),
           floating_(false),
           is_anonymous_(!node),
           is_text_(false),
           is_box_(false),
           is_inline_(true),
+          is_in_layout_ng_inline_formatting_context_(false),
           is_atomic_inline_level_(false),
           horizontal_writing_mode_(true),
           has_layer_(false),
@@ -2413,11 +2467,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
           inside_blocking_touch_event_handler_(false),
           effective_whitelisted_touch_action_changed_(true),
           descendant_effective_whitelisted_touch_action_changed_(false),
+          is_effective_root_scroller_(false),
           positioned_state_(kIsStaticallyPositioned),
           selection_state_(static_cast<unsigned>(SelectionState::kNone)),
-          background_obscuration_state_(kBackgroundObscurationStatusInvalid),
-          full_paint_invalidation_reason_(
-              static_cast<unsigned>(PaintInvalidationReason::kNone)) {}
+          background_obscuration_state_(kBackgroundObscurationStatusInvalid) {}
 
     // Self needs layout means that this layout object is marked for a full
     // layout. This is the default layout but it is expensive as it recomputes
@@ -2481,10 +2534,14 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     // Also maybe set to inline boxes to optimize the propagation.
     ADD_BOOLEAN_BITFIELD(needs_collect_inlines_, NeedsCollectInlines);
 
-    ADD_BOOLEAN_BITFIELD(may_need_paint_invalidation_,
-                         MayNeedPaintInvalidation);
-    ADD_BOOLEAN_BITFIELD(may_need_paint_invalidation_subtree_,
-                         MayNeedPaintInvalidationSubtree);
+    ADD_BOOLEAN_BITFIELD(should_check_for_paint_invalidation_,
+                         ShouldCheckForPaintInvalidation);
+    ADD_BOOLEAN_BITFIELD(subtree_should_check_for_paint_invalidation_,
+                         SubtreeShouldCheckForPaintInvalidation);
+    ADD_BOOLEAN_BITFIELD(should_delay_full_paint_invalidation_,
+                         ShouldDelayFullPaintInvalidation);
+    ADD_BOOLEAN_BITFIELD(subtree_should_do_full_paint_invalidation_,
+                         SubtreeShouldDoFullPaintInvalidation);
     ADD_BOOLEAN_BITFIELD(may_need_paint_invalidation_animated_background_image_,
                          MayNeedPaintInvalidationAnimatedBackgroundImage);
     ADD_BOOLEAN_BITFIELD(needs_paint_offset_and_visual_rect_update_,
@@ -2505,6 +2562,12 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     // unset, the box is 'block-level' and thus stack on top of its
     // siblings (think of paragraphs).
     ADD_BOOLEAN_BITFIELD(is_inline_, IsInline);
+
+    // This boolean is set when this LayoutObject is in LayoutNG inline
+    // formatting context. Note, this LayoutObject itself may be laid out by
+    // legacy.
+    ADD_BOOLEAN_BITFIELD(is_in_layout_ng_inline_formatting_context_,
+                         IsInLayoutNGInlineFormattingContext);
 
     // This boolean is set if the element is an atomic inline-level box.
     //
@@ -2637,10 +2700,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     ADD_BOOLEAN_BITFIELD(descendant_effective_whitelisted_touch_action_changed_,
                          DescendantEffectiveWhitelistedTouchActionChanged);
 
-   protected:
-    // Use protected to avoid warning about unused variable.
-    // Increment this to 63 if a new bit is added.
-    // unsigned unused_bits_ : 0;
+    ADD_BOOLEAN_BITFIELD(is_effective_root_scroller_, IsEffectiveRootScroller);
 
    private:
     // This is the cached 'position' value of this object
@@ -2649,12 +2709,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     unsigned selection_state_ : 3;   // SelectionState
     // Mutable for getter which lazily update this field.
     mutable unsigned
-        background_obscuration_state_ : 2;         // BackgroundObscurationState
-
-    unsigned full_paint_invalidation_reason_ : 5;  // PaintInvalidationReason
-    static_assert(static_cast<unsigned>(PaintInvalidationReason::kMax) <
-                      (1u << 5),
-                  "PaintInvalidationReason should fit in the bit field");
+        background_obscuration_state_ : 2;  // BackgroundObscurationState
 
    public:
     bool IsOutOfFlowPositioned() const {
@@ -2715,14 +2770,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     ALWAYS_INLINE void SetBackgroundObscurationState(
         BackgroundObscurationState s) const {
       background_obscuration_state_ = s;
-    }
-
-    PaintInvalidationReason FullPaintInvalidationReason() const {
-      return static_cast<PaintInvalidationReason>(
-          full_paint_invalidation_reason_);
-    }
-    void SetFullPaintInvalidationReason(PaintInvalidationReason reason) {
-      full_paint_invalidation_reason_ = static_cast<unsigned>(reason);
     }
   };
 
@@ -2825,7 +2872,7 @@ inline void LayoutObject::SetNeedsLayoutAndFullPaintInvalidation(
 inline void LayoutObject::ClearNeedsLayout() {
   // Set flags for later stages/cycles.
   SetEverHadLayout();
-  SetMayNeedPaintInvalidation();
+  SetShouldCheckForPaintInvalidation();
 
   // Clear needsLayout flags.
   SetSelfNeedsLayout(false);
@@ -2865,6 +2912,14 @@ inline void LayoutObject::SetNeedsPositionedMovementLayout() {
 #endif
   if (!already_needed_layout)
     MarkContainerChainForLayout();
+}
+
+inline void LayoutObject::SetIsInLayoutNGInlineFormattingContext(
+    bool new_value) {
+  if (IsInLayoutNGInlineFormattingContext() == new_value)
+    return;
+  InLayoutNGInlineFormattingContextWillChange(new_value);
+  bitfields_.SetIsInLayoutNGInlineFormattingContext(new_value);
 }
 
 inline void LayoutObject::SetHasBoxDecorationBackground(bool b) {

@@ -7,7 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "gin/v8_initializer.h"
 #include "mojo/core/embedder/embedder.h"
@@ -19,22 +19,11 @@
 
 namespace {
 
-class SnapshotThread : public blink::WebThread {
- public:
-  bool IsCurrentThread() const override { return true; }
-  blink::ThreadScheduler* Scheduler() const override { return nullptr; }
-  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() const override {
-    return base::ThreadTaskRunnerHandle::Get();
-  }
-};
+constexpr char kPredictableFlag[] = "--predictable";
 
 class SnapshotPlatform final : public blink::Platform {
  public:
   bool IsTakingV8ContextSnapshot() override { return true; }
-  blink::WebThread* CurrentThread() override {
-    static SnapshotThread dummy_thread;
-    return &dummy_thread;
-  }
 };
 
 }  // namespace
@@ -57,17 +46,26 @@ int main(int argc, char** argv) {
   base::TaskScheduler::CreateAndStartWithDefaultParams("TakeSnapshot");
   mojo::core::Init();
 
+  // Set predictable flag in V8 to generate identical snapshot file.
+  v8::V8::SetFlagsFromString(kPredictableFlag, sizeof(kPredictableFlag) - 1);
+
   // Take a snapshot.
   SnapshotPlatform platform;
   service_manager::BinderRegistry empty_registry;
-  blink::Initialize(&platform, &empty_registry);
+  blink::CreateMainThreadAndInitialize(&platform, &empty_registry);
   v8::StartupData blob = blink::WebV8ContextSnapshot::TakeSnapshot();
 
   // Save the snapshot as a file. Filename is given in a command line option.
   base::FilePath file_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValuePath("output_file");
   CHECK(!file_path.empty());
-  CHECK_LT(0, base::WriteFile(file_path, blob.data, blob.raw_size));
+  int written = base::WriteFile(file_path, blob.data, blob.raw_size);
+  int error_code = 0;
+  if (written != blob.raw_size) {
+    fprintf(stderr, "Error: WriteFile of %d snapshot bytes returned %d.\n",
+            blob.raw_size, written);
+    error_code = 1;
+  }
 
   delete[] blob.data;
 
@@ -75,5 +73,5 @@ int main(int argc, char** argv) {
   // manage lifetime of v8::Isolate, gin::IsolateHolder, and
   // blink::V8PerIsolateData. Now we complete all works at this point, and can
   // exit without releasing all those instances correctly.
-  _exit(0);
+  _exit(error_code);
 }

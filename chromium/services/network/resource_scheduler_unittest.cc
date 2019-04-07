@@ -146,8 +146,8 @@ class CancelingTestRequest : public TestRequest {
   }
 
  private:
-  void Resume(bool open_when_done, bool ask_for_target) override {
-    TestRequest::Resume(open_when_done, ask_for_target);
+  void Resume() override {
+    TestRequest::Resume();
     request_to_cancel_.reset();
   }
 

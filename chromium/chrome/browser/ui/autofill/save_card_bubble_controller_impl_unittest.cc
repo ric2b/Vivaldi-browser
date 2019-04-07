@@ -5,21 +5,25 @@
 #include "chrome/browser/ui/autofill/save_card_bubble_controller_impl.h"
 
 #include <stddef.h>
+#include <string>
 #include <utility>
 
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "chrome/browser/ui/autofill/save_card_bubble_view.h"
+#include "chrome/browser/ui/autofill/save_card_ui.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/credit_card.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/navigation_handle.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -37,6 +41,10 @@ class TestSaveCardBubbleControllerImpl : public SaveCardBubbleControllerImpl {
         UserDataKey(),
         std::make_unique<TestSaveCardBubbleControllerImpl>(web_contents));
   }
+
+  // Overriding because parent function requires a browser window to redirect
+  // properly, which is not available in unit tests.
+  void ShowPaymentsSettingsPage() override{};
 
   explicit TestSaveCardBubbleControllerImpl(content::WebContents* web_contents)
       : SaveCardBubbleControllerImpl(web_contents) {}
@@ -124,12 +132,20 @@ class SaveCardBubbleControllerImplTest : public BrowserWithTestWindowTest {
     controller()->ReshowBubble();
   }
 
+  void ClickSaveButton() {
+    controller()->OnSaveButton();
+    if (controller()->CanAnimate())
+      controller()->OnAnimationEnded();
+  }
+
  protected:
   TestSaveCardBubbleControllerImpl* controller() {
     return static_cast<TestSaveCardBubbleControllerImpl*>(
         TestSaveCardBubbleControllerImpl::FromWebContents(
             browser()->tab_strip_model()->GetActiveWebContents()));
   }
+
+  base::test::ScopedFeatureList scoped_feature_list_;
 
  private:
   class TestSaveCardBubbleView final : public SaveCardBubbleView {
@@ -256,7 +272,7 @@ TEST_F(SaveCardBubbleControllerImplTest, Metrics_Local_FirstShow_SaveButton) {
   ShowLocalBubble();
 
   base::HistogramTester histogram_tester;
-  controller()->OnSaveButton();
+  ClickSaveButton();
   controller()->OnBubbleClosed();
 
   histogram_tester.ExpectUniqueSample(
@@ -269,7 +285,7 @@ TEST_F(SaveCardBubbleControllerImplTest, Metrics_Local_Reshows_SaveButton) {
   CloseAndReshowBubble();
 
   base::HistogramTester histogram_tester;
-  controller()->OnSaveButton();
+  ClickSaveButton();
   controller()->OnBubbleClosed();
 
   histogram_tester.ExpectUniqueSample(
@@ -282,7 +298,7 @@ TEST_F(SaveCardBubbleControllerImplTest,
   ShowUploadBubble(/*should_request_name_from_user=*/true);
 
   base::HistogramTester histogram_tester;
-  controller()->OnSaveButton();
+  ClickSaveButton();
   controller()->OnBubbleClosed();
 
   histogram_tester.ExpectUniqueSample(
@@ -296,7 +312,7 @@ TEST_F(SaveCardBubbleControllerImplTest,
   CloseAndReshowBubble();
 
   base::HistogramTester histogram_tester;
-  controller()->OnSaveButton();
+  ClickSaveButton();
   controller()->OnBubbleClosed();
 
   histogram_tester.ExpectUniqueSample(
@@ -368,7 +384,7 @@ TEST_F(SaveCardBubbleControllerImplTest,
   controller()->OnBubbleClosed();
 
   ShowLocalBubble();
-  controller()->OnSaveButton();
+  ClickSaveButton();
   controller()->OnBubbleClosed();
 
   ShowLocalBubble();
@@ -407,7 +423,7 @@ TEST_F(SaveCardBubbleControllerImplTest,
   controller()->OnBubbleClosed();
 
   ShowUploadBubble();
-  controller()->OnSaveButton();
+  ClickSaveButton();
   controller()->OnBubbleClosed();
 
   ShowUploadBubble();
@@ -905,6 +921,238 @@ TEST_F(SaveCardBubbleControllerImplTest,
       histogram_tester
           .GetAllSamples("Autofill.SaveCreditCardPrompt.Local.EV_SECURE")
           .empty());
+}
+
+// Tests for Sign-In after Local Save.
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Local_FirstShow_SaveButton_SigninPromo) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+
+  ShowLocalBubble();
+  ClickSaveButton();
+
+  // Sign-in promo should be shown after accepting local save.
+  EXPECT_EQ(BubbleType::SIGN_IN_PROMO, controller()->GetBubbleType());
+  EXPECT_NE(nullptr, controller()->save_card_bubble_view());
+}
+
+TEST_F(SaveCardBubbleControllerImplTest, Local_FirstShow_SaveButton_NoBubble) {
+  scoped_feature_list_.InitAndDisableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+
+  ShowLocalBubble();
+  ClickSaveButton();
+
+  // When this flag is disabled, no promo should appear and
+  // the icon should go away.
+  EXPECT_FALSE(controller()->IsIconVisible());
+  EXPECT_EQ(nullptr, controller()->save_card_bubble_view());
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Local_FirstShow_SaveButton_NoBubble) {
+  scoped_feature_list_.InitAndDisableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+  base::HistogramTester histogram_tester;
+
+  ShowLocalBubble();
+  controller()->OnSaveButton();
+
+  // No other bubbles should have popped up.
+  histogram_tester.ExpectTotalCount("Autofill.SignInPromo", 0);
+  histogram_tester.ExpectTotalCount("Autofill.ManageCardsPrompt.Local", 0);
+  histogram_tester.ExpectTotalCount("Autofill.ManageCardsPrompt.Upload", 0);
+}
+
+// Tests for Manage Cards.
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Local_FirstShow_SaveButton_SigninPromo_Close_Reshow_ManageCards) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+
+  ShowLocalBubble();
+  ClickSaveButton();
+  CloseAndReshowBubble();
+
+  // After closing the sign-in promo, clicking the icon should bring
+  // up the Manage cards bubble.
+  EXPECT_EQ(BubbleType::MANAGE_CARDS, controller()->GetBubbleType());
+  EXPECT_NE(nullptr, controller()->save_card_bubble_view());
+}
+
+TEST_F(
+    SaveCardBubbleControllerImplTest,
+    Metrics_Local_FirstShow_SaveButton_SigninPromo_Close_Reshow_ManageCards) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+  base::HistogramTester histogram_tester;
+
+  ShowLocalBubble();
+  controller()->OnSaveButton();
+  CloseAndReshowBubble();
+
+  // After closing the sign-in promo, clicking the icon should bring
+  // up the Manage cards bubble.
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples("Autofill.ManageCardsPrompt.Local"),
+      ElementsAre(Bucket(AutofillMetrics::MANAGE_CARDS_SHOWN, 1)));
+}
+
+TEST_F(
+    SaveCardBubbleControllerImplTest,
+    Metrics_Local_FirstShow_SaveButton_Close_Reshow_Close_Reshow_ManageCards) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+  base::HistogramTester histogram_tester;
+
+  ShowLocalBubble();
+  controller()->OnSaveButton();
+  CloseAndReshowBubble();
+  CloseAndReshowBubble();
+
+  // After closing the sign-in promo, clicking the icon should bring
+  // up the Manage cards bubble.
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples("Autofill.ManageCardsPrompt.Local"),
+      ElementsAre(Bucket(AutofillMetrics::MANAGE_CARDS_SHOWN, 2)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Local_FirstShow_SaveButton_SigninPromo_Close_Reshow_Close_Navigate) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+
+  ShowLocalBubble();
+  ClickSaveButton();
+  CloseAndReshowBubble();
+  controller()->OnBubbleClosed();
+
+  controller()->set_elapsed(base::TimeDelta::FromSeconds(6));
+  controller()->SimulateNavigation();
+
+  // Icon should disappear after navigating away.
+  EXPECT_FALSE(controller()->IsIconVisible());
+  EXPECT_EQ(nullptr, controller()->save_card_bubble_view());
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Local_FirstShow_SaveButton_SigninPromo_Close_Reshow_Navigate) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+  base::HistogramTester histogram_tester;
+
+  ShowLocalBubble();
+  controller()->OnSaveButton();
+  CloseAndReshowBubble();
+
+  controller()->set_elapsed(base::TimeDelta::FromSeconds(6));
+  controller()->SimulateNavigation();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples("Autofill.ManageCardsPrompt.Local"),
+      ElementsAre(Bucket(AutofillMetrics::MANAGE_CARDS_SHOWN, 1)));
+}
+
+TEST_F(
+    SaveCardBubbleControllerImplTest,
+    Metrics_Local_FirstShow_SaveButton_SigninPromo_Close_Reshow_Close_Navigate) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+  base::HistogramTester histogram_tester;
+
+  ShowLocalBubble();
+  controller()->OnSaveButton();
+  CloseAndReshowBubble();
+  controller()->OnBubbleClosed();
+
+  controller()->set_elapsed(base::TimeDelta::FromSeconds(6));
+  controller()->SimulateNavigation();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples("Autofill.ManageCardsPrompt.Local"),
+      ElementsAre(Bucket(AutofillMetrics::MANAGE_CARDS_SHOWN, 1)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Local_ClickManageCardsDoneButton) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+  base::HistogramTester histogram_tester;
+
+  ShowLocalBubble();
+  controller()->OnSaveButton();
+  CloseAndReshowBubble();
+  controller()->OnSaveButton();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples("Autofill.ManageCardsPrompt.Local"),
+      ElementsAre(Bucket(AutofillMetrics::MANAGE_CARDS_SHOWN, 1),
+                  Bucket(AutofillMetrics::MANAGE_CARDS_DONE, 1)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Local_ClickManageCardsManageCardsButton) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+  base::HistogramTester histogram_tester;
+
+  ShowLocalBubble();
+  controller()->OnSaveButton();
+  CloseAndReshowBubble();
+  controller()->OnManageCardsClicked();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples("Autofill.ManageCardsPrompt.Local"),
+      ElementsAre(Bucket(AutofillMetrics::MANAGE_CARDS_SHOWN, 1),
+                  Bucket(AutofillMetrics::MANAGE_CARDS_MANAGE_CARDS, 1)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Upload_FirstShow_SaveButton_NoSigninPromo) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+
+  ShowUploadBubble();
+  ClickSaveButton();
+
+  // Icon should disappear after an upload save,
+  // even when this flag is enabled.
+  EXPECT_FALSE(controller()->IsIconVisible());
+  EXPECT_EQ(nullptr, controller()->save_card_bubble_view());
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Upload_FirstShow_SaveButton_NoSigninPromo) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+  base::HistogramTester histogram_tester;
+
+  ShowUploadBubble();
+  controller()->OnSaveButton();
+
+  // No other bubbles should have popped up.
+  histogram_tester.ExpectTotalCount("Autofill.SignInPromo", 0);
+  histogram_tester.ExpectTotalCount("Autofill.ManageCardsPrompt.Local", 0);
+  histogram_tester.ExpectTotalCount("Autofill.ManageCardsPrompt.Upload", 0);
+}
+
+TEST_F(SaveCardBubbleControllerImplTest, Metrics_Upload_FirstShow_ManageCards) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillSaveCardSignInAfterLocalSave);
+  base::HistogramTester histogram_tester;
+
+  ShowUploadBubble();
+  controller()->OnSaveButton();
+  controller()->ShowBubbleForManageCardsForTesting(
+      autofill::test::GetCreditCard());
+
+  // Icon should disappear after an upload save,
+  // even when this flag is enabled.
+  histogram_tester.ExpectTotalCount("Autofill.ManageCardsPrompt.Local", 0);
+  histogram_tester.ExpectTotalCount("Autofill.ManageCardsPrompt.Upload", 1);
 }
 
 }  // namespace autofill

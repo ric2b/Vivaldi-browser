@@ -48,7 +48,8 @@ class VIZ_SERVICE_EXPORT VizProcessContextProvider
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       gpu::ImageFactory* image_factory,
       gpu::GpuChannelManagerDelegate* gpu_channel_manager_delegate,
-      const gpu::SharedMemoryLimits& limits);
+      const gpu::SharedMemoryLimits& limits,
+      bool requires_alpha_channel);
 
   // ContextProvider implementation.
   void AddRef() const override;
@@ -83,7 +84,7 @@ class VIZ_SERVICE_EXPORT VizProcessContextProvider
   std::unique_ptr<skia_bindings::GrContextForGLES2Interface> gr_context_;
   std::unique_ptr<ContextCacheController> cache_controller_;
 
-  base::ObserverList<ContextLostObserver> observers_;
+  base::ObserverList<ContextLostObserver>::Unchecked observers_;
 };
 
 }  // namespace viz

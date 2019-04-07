@@ -20,7 +20,7 @@
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -129,34 +129,6 @@ void NoOpUploader::TryToUploadCrashDump(const base::FilePath& crash_dump_path) {
                                 base::Unretained(test_harness_)));
 }
 
-TEST_F(CrashDumpManagerTest, NoDumpCreated) {
-  base::HistogramTester histogram_tester;
-  CrashDumpManager* manager = CrashDumpManager::GetInstance();
-
-  CrashMetricsReporterObserver observer;
-  crash_reporter::CrashMetricsReporter::GetInstance()->AddObserver(&observer);
-
-  crash_reporter::ChildExitObserver::TerminationInfo termination_info;
-  termination_info.process_host_id = 1;
-  termination_info.pid = base::kNullProcessHandle;
-  termination_info.process_type = content::PROCESS_TYPE_RENDERER;
-  termination_info.app_state =
-      base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES;
-  termination_info.normal_termination = false;
-  termination_info.binding_state = base::android::ChildBindingState::STRONG;
-  termination_info.was_killed_intentionally_by_browser = false;
-  termination_info.was_oom_protected_status = true;
-  base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-      base::BindOnce(&CrashDumpManager::ProcessMinidumpFileFromChild,
-                     base::Unretained(manager), base::FilePath(),
-                     termination_info));
-  observer.WaitForProcessed();
-
-  histogram_tester.ExpectTotalCount("Tab.RendererDetailedExitStatus", 0);
-  EXPECT_EQ(0, dumps_uploaded_);
-}
-
 TEST_F(CrashDumpManagerTest, NonOomCrash) {
   base::HistogramTester histogram_tester;
 
@@ -174,7 +146,7 @@ TEST_F(CrashDumpManagerTest, NonOomCrash) {
   termination_info.was_killed_intentionally_by_browser = false;
   termination_info.was_oom_protected_status = true;
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&CrashDumpManagerTest::CreateAndProcessCrashDump,
                      termination_info, "Some non-empty crash data"));
   observer.WaitForProcessed();

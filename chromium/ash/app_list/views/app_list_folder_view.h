@@ -75,6 +75,10 @@ class APP_LIST_EXPORT AppListFolderView : public views::View,
   // icon's bounds.
   void UpdatePreferredBounds();
 
+  // Returns the Y-offset that would move a folder out from under a visible
+  // Virtual keyboard
+  int GetYOffsetForFolder();
+
   // Returns true if this view's child views are in animation for opening or
   // closing the folder.
   bool IsAnimationRunning() const;
@@ -101,6 +105,9 @@ class APP_LIST_EXPORT AppListFolderView : public views::View,
   // BackgroundAnimation, FolderItemTitleAnimation, TopIconAnimation, and
   // ContentsContainerAnimation.
   void RecordAnimationSmoothness();
+
+  // Sets the layer mask's corner radius and insets in background.
+  void UpdateBackgroundMask(int corner_radius, const gfx::Insets& insets);
 
  private:
   void CalculateIdealBounds();
@@ -172,6 +179,9 @@ class APP_LIST_EXPORT AppListFolderView : public views::View,
   std::unique_ptr<gfx::SlideAnimation> folder_item_title_animation_;
   std::unique_ptr<Animation> top_icon_animation_;
   std::unique_ptr<Animation> contents_container_animation_;
+
+  // The layer mask to create rounded corner.
+  std::unique_ptr<ui::LayerOwner> background_mask_ = nullptr;
 
   // The compositor frame number when animation starts.
   int animation_start_frame_number_;

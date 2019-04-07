@@ -22,7 +22,8 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_simple_task_runner.h"
@@ -1775,15 +1776,45 @@ TEST_P(MessageLoopTypedTest, MAYBE_MetricsOnlyFromUILoops) {
 
   HistogramTester histogram_tester;
 
+  // A delay which is expected to give enough time for the MessageLoop to go
+  // idle after triaging it.
+  TimeDelta delay_that_leads_to_idle = TimeDelta::FromMilliseconds(1);
+
+  // On some platforms testing under emulation, 1 ms is not enough. See how long
+  // it takes to resolve a 1ms delayed task and use 10X that for the real test.
+  {
+    TimeTicks begin_run_loop = TimeTicks::Now();
+
+    RunLoop run_loop;
+    loop.task_runner()->PostDelayedTask(FROM_HERE, run_loop.QuitClosure(),
+                                        delay_that_leads_to_idle);
+    run_loop.Run();
+
+    delay_that_leads_to_idle = 10 * (TimeTicks::Now() - begin_run_loop);
+  }
+
+  SCOPED_TRACE(delay_that_leads_to_idle);
+
   // Loop that goes idle with one pending task.
   RunLoop run_loop;
   loop.task_runner()->PostDelayedTask(FROM_HERE, run_loop.QuitClosure(),
-                                      TimeDelta::FromMilliseconds(1));
+                                      delay_that_leads_to_idle);
   run_loop.Run();
 
-  histogram_tester.ExpectTotalCount(
-      "MessageLoop.DelayedTaskQueueForUI.PendingTasksCountOnIdle",
-      histograms_expected ? 1 : 0);
+  const std::vector<Bucket> buckets = histogram_tester.GetAllSamples(
+      "MessageLoop.DelayedTaskQueueForUI.PendingTasksCountOnIdle");
+  if (histograms_expected) {
+    // DoIdleWork() should have triggered at least once in the second RunLoop.
+    // It may also have triggered in the first one if the test environment is
+    // fast enough. It can sometimes also trigger additional times when a system
+    // message (e.g. system ping) interrupts the sleep. All cases should
+    // nonetheless report in the "1" bucket.
+    EXPECT_EQ(buckets.size(), 1U);
+    EXPECT_EQ(buckets[0].min, 1);
+    EXPECT_GE(buckets[0].count, 1);
+  } else {
+    EXPECT_TRUE(buckets.empty());
+  }
 }
 
 INSTANTIATE_TEST_CASE_P(
@@ -2008,8 +2039,8 @@ TEST_P(MessageLoopTest, DestructionObserverTest) {
   loop->task_runner()->PostDelayedTask(
       FROM_HERE,
       BindOnce(&DestructionObserverProbe::Run,
-               new DestructionObserverProbe(&task_destroyed,
-                                            &destruction_observer_called)),
+               base::MakeRefCounted<DestructionObserverProbe>(
+                   &task_destroyed, &destruction_observer_called)),
       kDelay);
   delete loop;
   EXPECT_TRUE(observer.task_destroyed_before_message_loop());

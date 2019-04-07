@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "base/mac/foundation_util.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/translate_pref_names.h"
@@ -49,7 +49,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 };
 
 const char kTranslateLearnMoreUrl[] =
-    "https://support.google.com/chrome/answer/3214105?p=mobile_translate";
+    "https://support.google.com/chrome/answer/3214105?p=mobile_translate&ios=1";
 NSString* const kTranslateSettingsCategory = @"ChromeTranslateSettings";
 
 }  // namespace
@@ -87,10 +87,6 @@ NSString* const kTranslateSettingsCategory = @"ChromeTranslateSettings";
     [self loadModel];
   }
   return self;
-}
-
-- (void)dealloc {
-  [_translationEnabled setObserver:nil];
 }
 
 #pragma mark - SettingsRootCollectionViewController

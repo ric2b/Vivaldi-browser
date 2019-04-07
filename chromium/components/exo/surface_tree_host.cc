@@ -13,7 +13,7 @@
 #include "components/exo/wm_helper.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -80,23 +80,25 @@ class CustomWindowTargeter : public aura::WindowTargeter {
 // SurfaceTreeHost, public:
 
 SurfaceTreeHost::SurfaceTreeHost(const std::string& window_name)
-    : host_window_(std::make_unique<aura::Window>(nullptr)) {
-  host_window_->SetType(aura::client::WINDOW_TYPE_CONTROL);
+    : host_window_(
+          std::make_unique<aura::Window>(nullptr,
+                                         aura::client::WINDOW_TYPE_CONTROL,
+                                         WMHelper::GetInstance()->env())) {
   host_window_->SetName(window_name);
   host_window_->Init(ui::LAYER_SOLID_COLOR);
   host_window_->set_owned_by_parent(false);
   // The host window is a container of surface tree. It doesn't handle pointer
   // events.
   host_window_->SetEventTargetingPolicy(
-      ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
+      ws::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
   host_window_->SetEventTargeter(std::make_unique<CustomWindowTargeter>(this));
   layer_tree_frame_sink_holder_ = std::make_unique<LayerTreeFrameSinkHolder>(
       this, host_window_->CreateLayerTreeFrameSink());
-  aura::Env::GetInstance()->context_factory()->AddObserver(this);
+  WMHelper::GetInstance()->env()->context_factory()->AddObserver(this);
 }
 
 SurfaceTreeHost::~SurfaceTreeHost() {
-  aura::Env::GetInstance()->context_factory()->RemoveObserver(this);
+  WMHelper::GetInstance()->env()->context_factory()->RemoveObserver(this);
   SetRootSurface(nullptr);
   LayerTreeFrameSinkHolder::DeleteWhenLastResourceHasBeenReclaimed(
       std::move(layer_tree_frame_sink_holder_));
@@ -248,16 +250,14 @@ void SurfaceTreeHost::SubmitCompositorFrame() {
       root_surface_origin_, device_scale_factor,
       layer_tree_frame_sink_holder_.get(), &frame);
 
-  if (WMHelper::GetInstance()->AreVerifiedSyncTokensNeeded()) {
-    std::vector<GLbyte*> sync_tokens;
-    for (auto& resource : frame.resource_list)
-      sync_tokens.push_back(resource.mailbox_holder.sync_token.GetData());
-    ui::ContextFactory* context_factory =
-        aura::Env::GetInstance()->context_factory();
-    gpu::gles2::GLES2Interface* gles2 =
-        context_factory->SharedMainThreadContextProvider()->ContextGL();
-    gles2->VerifySyncTokensCHROMIUM(sync_tokens.data(), sync_tokens.size());
-  }
+  std::vector<GLbyte*> sync_tokens;
+  for (auto& resource : frame.resource_list)
+    sync_tokens.push_back(resource.mailbox_holder.sync_token.GetData());
+  ui::ContextFactory* context_factory =
+      WMHelper::GetInstance()->env()->context_factory();
+  gpu::gles2::GLES2Interface* gles2 =
+      context_factory->SharedMainThreadContextProvider()->ContextGL();
+  gles2->VerifySyncTokensCHROMIUM(sync_tokens.data(), sync_tokens.size());
 
   layer_tree_frame_sink_holder_->SubmitCompositorFrame(std::move(frame));
 }

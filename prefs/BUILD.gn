@@ -82,7 +82,7 @@ jumbo_static_library("browser_prefs") {
   ]
   if (!is_android) {
     deps += [
-      "//vivaldi/extensions/schema:api",
+      "//vivaldi/extensions/schema",
     ]
   }
 }

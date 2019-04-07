@@ -13,11 +13,17 @@
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
+namespace network {
+class SharedURLLoaderFactory;
+}
+
 namespace policy {
 
 class MockCloudPolicyClient : public CloudPolicyClient {
  public:
   MockCloudPolicyClient();
+  explicit MockCloudPolicyClient(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
   ~MockCloudPolicyClient() override;
 
   MOCK_METHOD3(SetupRegistration,
@@ -51,6 +57,11 @@ class MockCloudPolicyClient : public CloudPolicyClient {
                     const StatusCallback& callback));
   MOCK_METHOD0(CancelAppInstallReportUpload, void(void));
   MOCK_METHOD2(UpdateGcmId, void(const std::string&, const StatusCallback&));
+  MOCK_METHOD4(UploadPolicyValidationReport,
+               void(CloudPolicyValidatorBase::Status,
+                    const std::vector<ValueValidationIssue>&,
+                    const std::string&,
+                    const std::string&));
 
   // Sets the DMToken.
   void SetDMToken(const std::string& token);

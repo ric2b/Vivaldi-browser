@@ -4,6 +4,8 @@
 
 #include "net/url_request/view_cache_helper.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/strings/stringprintf.h"
@@ -61,15 +63,16 @@ ViewCacheHelper::~ViewCacheHelper() {
 int ViewCacheHelper::GetEntryInfoHTML(const std::string& key,
                                       const URLRequestContext* context,
                                       std::string* out,
-                                      const CompletionCallback& callback) {
-  return GetInfoHTML(key, context, std::string(), out, callback);
+                                      CompletionOnceCallback callback) {
+  return GetInfoHTML(key, context, std::string(), out, std::move(callback));
 }
 
 int ViewCacheHelper::GetContentsHTML(const URLRequestContext* context,
                                      const std::string& url_prefix,
                                      std::string* out,
-                                     const CompletionCallback& callback) {
-  return GetInfoHTML(std::string(), context, url_prefix, out, callback);
+                                     CompletionOnceCallback callback) {
+  return GetInfoHTML(std::string(), context, url_prefix, out,
+                     std::move(callback));
 }
 
 // static
@@ -118,7 +121,7 @@ int ViewCacheHelper::GetInfoHTML(const std::string& key,
                                  const URLRequestContext* context,
                                  const std::string& url_prefix,
                                  std::string* out,
-                                 const CompletionCallback& callback) {
+                                 CompletionOnceCallback callback) {
   DCHECK(callback_.is_null());
   DCHECK(context);
   key_ = key;
@@ -129,7 +132,7 @@ int ViewCacheHelper::GetInfoHTML(const std::string& key,
   int rv = DoLoop(OK);
 
   if (rv == ERR_IO_PENDING)
-    callback_ = callback;
+    callback_ = std::move(callback);
 
   return rv;
 }
@@ -138,8 +141,7 @@ void ViewCacheHelper::DoCallback(int rv) {
   DCHECK_NE(ERR_IO_PENDING, rv);
   DCHECK(!callback_.is_null());
 
-  callback_.Run(rv);
-  callback_.Reset();
+  std::move(callback_).Run(rv);
 }
 
 void ViewCacheHelper::HandleResult(int rv) {
@@ -289,7 +291,7 @@ int ViewCacheHelper::DoReadResponse() {
   if (!buf_len_)
     return buf_len_;
 
-  buf_ = new IOBuffer(buf_len_);
+  buf_ = base::MakeRefCounted<IOBuffer>(buf_len_);
   return entry_->ReadData(
       0,
       0,
@@ -337,7 +339,7 @@ int ViewCacheHelper::DoReadData() {
   if (!buf_len_)
     return buf_len_;
 
-  buf_ = new IOBuffer(buf_len_);
+  buf_ = base::MakeRefCounted<IOBuffer>(buf_len_);
   return entry_->ReadData(
       index_,
       0,

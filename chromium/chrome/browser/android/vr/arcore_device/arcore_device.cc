@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "base/numerics/math_constants.h"
 #include "base/optional.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/android/vr/arcore_device/arcore_gl.h"
@@ -34,9 +34,9 @@ namespace device {
 
 namespace {
 
-mojom::VRDisplayInfoPtr CreateVRDisplayInfo(uint32_t device_id) {
+mojom::VRDisplayInfoPtr CreateVRDisplayInfo(mojom::XRDeviceId device_id) {
   mojom::VRDisplayInfoPtr device = mojom::VRDisplayInfo::New();
-  device->index = device_id;
+  device->id = device_id;
   device->displayName = "ARCore VR Device";
   device->capabilities = mojom::VRDisplayCapabilities::New();
   device->capabilities->hasPosition = true;
@@ -68,7 +68,7 @@ mojom::VRDisplayInfoPtr CreateVRDisplayInfo(uint32_t device_id) {
 }  // namespace
 
 ARCoreDevice::ARCoreDevice()
-    : VRDeviceBase(VRDeviceId::ARCORE_DEVICE_ID),
+    : VRDeviceBase(mojom::XRDeviceId::ARCORE_DEVICE_ID),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       mailbox_bridge_(std::make_unique<vr::MailboxToSurfaceBridge>()),
       weak_ptr_factory_(this) {
@@ -143,7 +143,7 @@ void ARCoreDevice::OnARCoreGlThreadInitialized() {
 }
 
 void ARCoreDevice::RequestSession(
-    mojom::XRDeviceRuntimeSessionOptionsPtr options,
+    mojom::XRRuntimeSessionOptionsPtr options,
     mojom::XRRuntime::RequestSessionCallback callback) {
   DCHECK(IsOnMainThread());
 
@@ -277,7 +277,7 @@ bool ARCoreDevice::ShouldPauseTrackingWhenFrameDataRestricted() {
 }
 
 void ARCoreDevice::OnMagicWindowFrameDataRequest(
-    mojom::VRMagicWindowProvider::GetFrameDataCallback callback) {
+    mojom::XRFrameDataProvider::GetFrameDataCallback callback) {
   TRACE_EVENT0("gpu", __FUNCTION__);
   DCHECK(IsOnMainThread());
   // We should not be able to reach this point if we are not initialized.
@@ -312,7 +312,7 @@ void ARCoreDevice::OnMagicWindowFrameDataRequest(
 
 void ARCoreDevice::RequestHitTest(
     mojom::XRRayPtr ray,
-    mojom::VRMagicWindowProvider::RequestHitTestCallback callback) {
+    mojom::XREnvironmentIntegrationProvider::RequestHitTestCallback callback) {
   DCHECK(IsOnMainThread());
 
   PostTaskToGlThread(base::BindOnce(
@@ -441,16 +441,20 @@ void ARCoreDevice::OnARCoreGlInitializationComplete(
         &ARCoreGl::Resume, arcore_gl_thread_->GetARCoreGl()->GetWeakPtr()));
   }
 
-  // TODO(offenwanger) When the XRMagicWindowProvider or equivalent is returned
-  // here, clean out this dummy code.
-  auto connection = mojom::XRPresentationConnection::New();
-  mojom::VRSubmitFrameClientPtr submit_client;
-  connection->client_request = mojo::MakeRequest(&submit_client);
-  mojom::VRPresentationProviderPtr provider;
-  mojo::MakeRequest(&provider);
-  connection->provider = provider.PassInterface();
-  connection->transport_options = mojom::VRDisplayFrameTransportOptions::New();
-  std::move(callback).Run(std::move(connection), nullptr);
+  mojom::XRFrameDataProviderPtr data_provider;
+  mojom::XREnvironmentIntegrationProviderPtr environment_provider;
+  mojom::XRSessionControllerPtr controller;
+  magic_window_sessions_.push_back(
+      std::make_unique<VRDisplayImpl>(this, mojo::MakeRequest(&data_provider),
+                                      mojo::MakeRequest(&environment_provider),
+                                      mojo::MakeRequest(&controller)));
+
+  auto session = mojom::XRSession::New();
+  session->data_provider = data_provider.PassInterface();
+  session->environment_provider = environment_provider.PassInterface();
+  session->display_info = display_info_.Clone();
+
+  std::move(callback).Run(std::move(session), std::move(controller));
 }
 
 void ARCoreDevice::OnRequestAndroidCameraPermissionResult(

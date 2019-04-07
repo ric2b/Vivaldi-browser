@@ -29,6 +29,7 @@
 #include "chromecast/browser/cast_browser_context.h"
 #include "chromecast/browser/cast_browser_main_parts.h"
 #include "chromecast/browser/cast_browser_process.h"
+#include "chromecast/browser/cast_http_user_agent_settings.h"
 #include "chromecast/browser/cast_navigation_ui_data.h"
 #include "chromecast/browser/cast_network_delegate.h"
 #include "chromecast/browser/cast_quota_permission_context.h"
@@ -36,7 +37,6 @@
 #include "chromecast/browser/devtools/cast_devtools_manager_delegate.h"
 #include "chromecast/browser/grit/cast_browser_resources.h"
 #include "chromecast/browser/media/media_caps_impl.h"
-#include "chromecast/browser/renderer_config.h"
 #include "chromecast/browser/service/cast_service_simple.h"
 #include "chromecast/browser/tts/tts_controller.h"
 #include "chromecast/browser/url_request_context_factory.h"
@@ -58,6 +58,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_descriptors.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
@@ -85,17 +86,17 @@
 #if defined(OS_ANDROID)
 #include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/crash/content/browser/child_exit_observer_android.h"
-#if !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+#if !BUILDFLAG(USE_CHROMECAST_CDMS)
 #include "components/cdm/browser/media_drm_storage_impl.h"
 #include "url/origin.h"
-#endif  // !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+#endif  // !BUILDFLAG(USE_CHROMECAST_CDMS)
 #else
 #include "chromecast/browser/memory_pressure_controller_impl.h"
 #endif  // defined(OS_ANDROID)
 
-#if BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+#if BUILDFLAG(USE_CHROMECAST_CDMS)
 #include "chromecast/media/cdm/cast_cdm_factory.h"
-#endif  // BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+#endif  // BUILDFLAG(USE_CHROMECAST_CDMS)
 
 #if defined(USE_ALSA)
 #include "chromecast/media/audio/cast_audio_manager_alsa.h"  // nogncheck
@@ -130,7 +131,7 @@ static std::unique_ptr<service_manager::Service> CreateMediaService(
 }
 #endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
 
-#if defined(OS_ANDROID) && !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+#if defined(OS_ANDROID) && !BUILDFLAG(USE_CHROMECAST_CDMS)
 void CreateMediaDrmStorage(content::RenderFrameHost* render_frame_host,
                            ::media::mojom::MediaDrmStorageRequest request) {
   DVLOG(1) << __func__;
@@ -147,14 +148,13 @@ void CreateMediaDrmStorage(content::RenderFrameHost* render_frame_host,
   new cdm::MediaDrmStorageImpl(render_frame_host, pref_service,
                                std::move(request));
 }
-#endif  // defined(OS_ANDROID) && !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+#endif  // defined(OS_ANDROID) && !BUILDFLAG(USE_CHROMECAST_CDMS)
 
 }  // namespace
 
 CastContentBrowserClient::CastContentBrowserClient()
     : cast_browser_main_parts_(nullptr),
-      url_request_context_factory_(new URLRequestContextFactory()),
-      renderer_config_manager_(std::make_unique<RendererConfigManager>()) {}
+      url_request_context_factory_(new URLRequestContextFactory()) {}
 
 CastContentBrowserClient::~CastContentBrowserClient() {
   content::BrowserThread::DeleteSoon(content::BrowserThread::IO, FROM_HERE,
@@ -224,13 +224,21 @@ CastContentBrowserClient::CreateAudioManager(
       std::make_unique<::media::AudioThreadImpl>(), audio_log_factory,
       base::BindRepeating(&CastContentBrowserClient::GetCmaBackendFactory,
                           base::Unretained(this)),
-      GetMediaTaskRunner(), use_mixer);
+      content::BrowserThread::GetTaskRunnerForThread(
+          content::BrowserThread::UI),
+      GetMediaTaskRunner(),
+      content::ServiceManagerConnection::GetForProcess()->GetConnector(),
+      use_mixer);
 #else
   return std::make_unique<media::CastAudioManager>(
       std::make_unique<::media::AudioThreadImpl>(), audio_log_factory,
       base::BindRepeating(&CastContentBrowserClient::GetCmaBackendFactory,
                           base::Unretained(this)),
-      GetMediaTaskRunner(), use_mixer);
+      content::BrowserThread::GetTaskRunnerForThread(
+          content::BrowserThread::UI),
+      GetMediaTaskRunner(),
+      content::ServiceManagerConnection::GetForProcess()->GetConnector(),
+      use_mixer);
 #endif  // defined(USE_ALSA)
 }
 
@@ -238,7 +246,9 @@ bool CastContentBrowserClient::OverridesAudioManager() {
   // See CreateAudioManager().
   return true;
 }
+#endif  // BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
 
+#if BUILDFLAG(USE_CHROMECAST_CDMS)
 std::unique_ptr<::media::CdmFactory>
 CastContentBrowserClient::CreateCdmFactory() {
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
@@ -247,7 +257,7 @@ CastContentBrowserClient::CreateCdmFactory() {
 #endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   return nullptr;
 }
-#endif  // BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+#endif  // BUILDFLAG(USE_CHROMECAST_CDMS)
 
 media::MediaCapsImpl* CastContentBrowserClient::media_caps() {
   DCHECK(cast_browser_main_parts_);
@@ -464,12 +474,11 @@ void CastContentBrowserClient::AppendExtraCommandLineSwitches(
     }
 #endif  // defined(USE_AURA)
   }
+}
 
-  auto renderer_config =
-      renderer_config_manager_->GetRendererConfig(child_process_id);
-  if (renderer_config) {
-    renderer_config->AppendSwitchesTo(command_line);
-  }
+std::string CastContentBrowserClient::GetAcceptLangs(
+    content::BrowserContext* context) {
+  return CastHttpUserAgentSettings::AcceptLanguage();
 }
 
 void CastContentBrowserClient::OverrideWebkitPrefs(
@@ -645,7 +654,7 @@ void CastContentBrowserClient::ExposeInterfacesToRenderer(
 void CastContentBrowserClient::ExposeInterfacesToMediaService(
     service_manager::BinderRegistry* registry,
     content::RenderFrameHost* render_frame_host) {
-#if defined(OS_ANDROID) && !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+#if defined(OS_ANDROID) && !BUILDFLAG(USE_CHROMECAST_CDMS)
   registry->AddInterface(
       base::BindRepeating(&CreateMediaDrmStorage, render_frame_host));
 #endif
@@ -729,6 +738,10 @@ CastContentBrowserClient::GetNavigationUIData(
   std::string session_id =
       CastNavigationUIData::GetSessionIdForWebContents(web_contents);
   return std::make_unique<CastNavigationUIData>(session_id);
+}
+
+bool CastContentBrowserClient::ShouldEnableStrictSiteIsolation() {
+  return false;
 }
 
 scoped_refptr<net::X509Certificate> CastContentBrowserClient::DeviceCert() {

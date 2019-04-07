@@ -20,6 +20,7 @@
 namespace base {
 class DictionaryValue;
 class ListValue;
+class Value;
 }
 
 namespace chromeos {
@@ -87,6 +88,12 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandler {
   virtual void SetProperties(
       const std::string& service_path,
       const base::DictionaryValue& user_settings,
+      const base::Closure& callback,
+      const network_handler::ErrorCallback& error_callback) = 0;
+
+  virtual void SetManagerProperty(
+      const std::string& property_name,
+      const base::Value& value,
       const base::Closure& callback,
       const network_handler::ErrorCallback& error_callback) = 0;
 
@@ -158,15 +165,18 @@ class CHROMEOS_EXPORT ManagedNetworkConfigurationHandler {
       const std::string& profile_path,
       ::onc::ONCSource* onc_source) const = 0;
 
-  // Returns true if the provided network is blocked by policy. This can occur,
-  // by either 'BlacklistedHexSSIDs' or 'AllowOnlyPolicyNetworksToConnect',
-  // which are both specified in ONC's global configuration. Both policies only
-  // apply to WiFi networks and can be bypassed by providing a network
-  // configuration with an ONC policy.
-  virtual bool IsNetworkBlockedByPolicy(const std::string& type,
-                                        const std::string& guid,
-                                        const std::string& profile_path,
-                                        const std::string& hex_ssid) const = 0;
+  // Return true if the AllowOnlyPolicyNetworksToConnect policy is enabled.
+  virtual bool AllowOnlyPolicyNetworksToConnect() const = 0;
+
+  // Return true if the AllowOnlyPolicyNetworksToConnectIfAvailable policy is
+  // enabled.
+  virtual bool AllowOnlyPolicyNetworksToConnectIfAvailable() const = 0;
+
+  // Return true if the AllowOnlyPolicyNetworksToAutoconnect policy is enabled.
+  virtual bool AllowOnlyPolicyNetworksToAutoconnect() const = 0;
+
+  // Return the list of blacklisted WiFi networks (identified by HexSSIDs).
+  virtual std::vector<std::string> GetBlacklistedHexSSIDs() const = 0;
 
  private:
   DISALLOW_ASSIGN(ManagedNetworkConfigurationHandler);

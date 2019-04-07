@@ -6,8 +6,8 @@
 
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/script/layered_api.h"
+#include "third_party/blink/renderer/platform/bindings/parkable_string.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/wtf/text/movable_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -44,8 +44,7 @@ void DocumentModuleScriptFetcher::NotifyFinished(Resource* resource) {
   ModuleScriptCreationParams params(
       script_resource->GetResponse().Url(), script_resource->SourceText(),
       script_resource->GetResourceRequest().GetFetchCredentialsMode(),
-      script_resource->CalculateAccessControlStatus(
-          fetcher_->Context().GetSecurityOrigin()));
+      script_resource->CalculateAccessControlStatus());
   client_->NotifyFetchFinished(params, error_messages);
 }
 
@@ -77,7 +76,7 @@ bool DocumentModuleScriptFetcher::FetchIfLayeredAPI(
   }
 
   ModuleScriptCreationParams params(
-      layered_api_url, MovableString(source_text.ReleaseImpl()),
+      layered_api_url, ParkableString(source_text.ReleaseImpl()),
       fetch_params.GetResourceRequest().GetFetchCredentialsMode(),
       kSharableCrossOrigin);
   client_->NotifyFetchFinished(params, HeapVector<Member<ConsoleMessage>>());

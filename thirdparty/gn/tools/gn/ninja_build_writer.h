@@ -28,6 +28,7 @@ class NinjaBuildWriter {
   NinjaBuildWriter(const BuildSettings* settings,
                    const std::unordered_map<const Settings*, const Toolchain*>&
                        used_toolchains,
+                   const std::vector<const Target*>& all_targets,
                    const Toolchain* default_toolchain,
                    const std::vector<const Target*>& default_toolchain_targets,
                    std::ostream& out,
@@ -56,6 +57,7 @@ class NinjaBuildWriter {
   const BuildSettings* build_settings_;
 
   const std::unordered_map<const Settings*, const Toolchain*>& used_toolchains_;
+  const std::vector<const Target*>& all_targets_;
   const Toolchain* default_toolchain_;
   const std::vector<const Target*>& default_toolchain_targets_;
 

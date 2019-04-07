@@ -6,6 +6,8 @@
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_CONTROLLEE_REQUEST_HANDLER_H_
 
 #include <stdint.h>
+#include <memory>
+#include <string>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -37,8 +39,9 @@ namespace content {
 class ServiceWorkerRegistration;
 class ServiceWorkerVersion;
 
-// A request handler derivative used to handle requests from
-// controlled documents.
+// A request handler derivative used to handle requests for,
+// and requests from, controlled documents and shared workers.
+//
 // Note that in IsServicificationEnabled cases this is used only for
 // main resource fetch during navigation or shared worker creation.
 class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
@@ -77,52 +80,65 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
   // cases. (In fallback-to-network cases we basically forward the request
   // to the request to the next request handler)
   // NavigationLoaderInterceptor overrides:
-  void MaybeCreateLoader(const network::ResourceRequest& request,
+  void MaybeCreateLoader(const network::ResourceRequest& tentative_request,
                          ResourceContext* resource_context,
-                         LoaderCallback callback) override;
+                         LoaderCallback callback,
+                         FallbackCallback fallback_callback) override;
   // Returns params with the ControllerServiceWorkerPtr if we have found
   // a matching controller service worker for the |request| that is given
   // to MaybeCreateLoader(). Otherwise this returns base::nullopt.
   base::Optional<SubresourceLoaderParams> MaybeCreateSubresourceLoaderParams()
       override;
 
+  // Exposed for testing.
+  ServiceWorkerURLJobWrapper* url_job() const { return url_job_.get(); }
+
  private:
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTest,
                            ActivateWaitingVersion);
-  typedef ServiceWorkerControlleeRequestHandler self;
+  class ScopedDisallowSetControllerRegistration;
+  class MainResourceRequestTracker;
 
   // For main resource case.
   void PrepareForMainResource(const GURL& url, const GURL& site_for_cookies);
   void DidLookupRegistrationForMainResource(
+      std::unique_ptr<ScopedDisallowSetControllerRegistration>
+          disallow_controller,
       blink::ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
-  void OnVersionStatusChanged(
+  void ContinueWithInScopeMainResourceRequest(
       scoped_refptr<ServiceWorkerRegistration> registration,
-      scoped_refptr<ServiceWorkerVersion> version);
+      scoped_refptr<ServiceWorkerVersion> version,
+      std::unique_ptr<ScopedDisallowSetControllerRegistration>
+          disallow_controller);
 
+  // For forced update.
   void DidUpdateRegistration(
-      const scoped_refptr<ServiceWorkerRegistration>& original_registration,
+      scoped_refptr<ServiceWorkerRegistration> original_registration,
+      std::unique_ptr<ScopedDisallowSetControllerRegistration>
+          disallow_controller,
       blink::ServiceWorkerStatusCode status,
       const std::string& status_message,
       int64_t registration_id);
   void OnUpdatedVersionStatusChanged(
-      const scoped_refptr<ServiceWorkerRegistration>& registration,
-      const scoped_refptr<ServiceWorkerVersion>& version);
+      scoped_refptr<ServiceWorkerRegistration> registration,
+      scoped_refptr<ServiceWorkerVersion> version,
+      std::unique_ptr<ScopedDisallowSetControllerRegistration>
+          disallow_controller);
 
   // For sub resource case.
   void PrepareForSubResource();
 
   // ServiceWorkerURLJobWrapper::Delegate implementation:
-
-  // Called just before the request is restarted. Makes sure the next request
-  // goes over the network.
   void OnPrepareToRestart() override;
-
   ServiceWorkerVersion* GetServiceWorkerVersion(
       ServiceWorkerMetrics::URLRequestJobResult* result) override;
   bool RequestStillValid(
       ServiceWorkerMetrics::URLRequestJobResult* result) override;
   void MainResourceLoadFailed() override;
+  void ReportDestination(ServiceWorkerMetrics::MainResourceRequestDestination
+                             destination) override;
+  void WillDispatchFetchEventForMainResource() override;
 
   // Sets |job_| to nullptr, and clears all extra response info associated with
   // that job, except for timing information.
@@ -136,7 +152,6 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
 
   const ResourceType resource_type_;
   const bool is_main_resource_load_;
-  const bool is_main_frame_load_;
   std::unique_ptr<ServiceWorkerURLJobWrapper> url_job_;
   network::mojom::FetchRequestMode request_mode_;
   network::mojom::FetchCredentialsMode credentials_mode_;
@@ -154,6 +169,8 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
   // delivered from the network, bypassing the ServiceWorker. Cleared after the
   // next intercept opportunity, for main frame requests.
   bool use_network_;
+
+  std::unique_ptr<MainResourceRequestTracker> tracker_;
 
   base::WeakPtrFactory<ServiceWorkerControlleeRequestHandler> weak_factory_;
 

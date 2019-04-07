@@ -39,7 +39,7 @@ class ARCoreDevice : public VRDeviceBase {
   void PauseTracking() override;
   void ResumeTracking() override;
   void RequestSession(
-      mojom::XRDeviceRuntimeSessionOptionsPtr options,
+      mojom::XRRuntimeSessionOptionsPtr options,
       mojom::XRRuntime::RequestSessionCallback callback) override;
 
   base::WeakPtr<ARCoreDevice> GetWeakPtr() {
@@ -52,10 +52,11 @@ class ARCoreDevice : public VRDeviceBase {
   // VRDeviceBase implementation
   bool ShouldPauseTrackingWhenFrameDataRestricted() override;
   void OnMagicWindowFrameDataRequest(
-      mojom::VRMagicWindowProvider::GetFrameDataCallback callback) override;
+      mojom::XRFrameDataProvider::GetFrameDataCallback callback) override;
   void RequestHitTest(
       mojom::XRRayPtr ray,
-      mojom::VRMagicWindowProvider::RequestHitTestCallback callback) override;
+      mojom::XREnvironmentIntegrationProvider::RequestHitTestCallback callback)
+      override;
 
   void OnMailboxBridgeReady();
   void OnARCoreGlThreadInitialized();

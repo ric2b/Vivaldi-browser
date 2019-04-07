@@ -5,6 +5,7 @@
 #include "ash/keyboard/test_keyboard_ui.h"
 
 #include "ash/shell.h"
+#include "ash/window_factory.h"
 #include "ash/wm/window_util.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -19,13 +20,9 @@ bool TestKeyboardUI::HasKeyboardWindow() const {
   return !!keyboard_window_;
 }
 
-bool TestKeyboardUI::ShouldWindowOverscroll(aura::Window* window) const {
-  return true;
-}
-
 aura::Window* TestKeyboardUI::GetKeyboardWindow() {
   if (!keyboard_window_) {
-    keyboard_window_.reset(new aura::Window(&delegate_));
+    keyboard_window_ = window_factory::NewWindow(&delegate_);
     keyboard_window_->Init(ui::LAYER_NOT_DRAWN);
   }
   return keyboard_window_.get();

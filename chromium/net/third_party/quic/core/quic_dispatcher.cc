@@ -10,7 +10,6 @@
 #include "net/third_party/quic/core/chlo_extractor.h"
 #include "net/third_party/quic/core/crypto/crypto_protocol.h"
 #include "net/third_party/quic/core/crypto/quic_random.h"
-#include "net/third_party/quic/core/quic_per_connection_packet_writer.h"
 #include "net/third_party/quic/core/quic_time_wait_list_manager.h"
 #include "net/third_party/quic/core/quic_utils.h"
 #include "net/third_party/quic/core/stateless_rejector.h"
@@ -36,14 +35,14 @@ class DeleteSessionsAlarm : public QuicAlarm::Delegate {
  public:
   explicit DeleteSessionsAlarm(QuicDispatcher* dispatcher)
       : dispatcher_(dispatcher) {}
+  DeleteSessionsAlarm(const DeleteSessionsAlarm&) = delete;
+  DeleteSessionsAlarm& operator=(const DeleteSessionsAlarm&) = delete;
 
   void OnAlarm() override { dispatcher_->DeleteSessions(); }
 
  private:
   // Not owned.
   QuicDispatcher* dispatcher_;
-
-  DISALLOW_COPY_AND_ASSIGN(DeleteSessionsAlarm);
 };
 
 // Collects packets serialized by a QuicPacketCreator in order
@@ -163,10 +162,10 @@ class StatelessConnectionTerminator {
         QUIC_BUG << "Unable to consume data into an empty packet.";
         return;
       }
-      offset += frame.stream_frame->data_length;
+      offset += frame.stream_frame.data_length;
       if (offset < reject.length()) {
-        DCHECK(!creator_.HasRoomForStreamFrame(
-            kCryptoStreamId, offset, frame.stream_frame->data_length));
+        DCHECK(!creator_.HasRoomForStreamFrame(kCryptoStreamId, offset,
+                                               frame.stream_frame.data_length));
       }
       creator_.Flush();
     }
@@ -948,10 +947,6 @@ const QuicSocketAddress QuicDispatcher::GetClientAddress() const {
 
 bool QuicDispatcher::ShouldDestroySessionAsynchronously() {
   return true;
-}
-
-QuicPacketWriter* QuicDispatcher::CreatePerConnectionWriter() {
-  return new QuicPerConnectionPacketWriter(writer_.get());
 }
 
 void QuicDispatcher::SetLastError(QuicErrorCode error) {

@@ -8,12 +8,10 @@
 
 #include "base/command_line.h"
 #include "build/build_config.h"
-#include "content/child/blink_platform_impl.h"
 #include "content/child/child_process.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/simple_connection_filter.h"
 #include "content/public/utility/content_utility_client.h"
-#include "content/utility/utility_blink_platform_impl.h"
 #include "content/utility/utility_blink_platform_with_sandbox_support_impl.h"
 #include "content/utility/utility_service_factory.h"
 #include "ipc/ipc_sync_channel.h"
@@ -120,8 +118,8 @@ void UtilityThreadImpl::EnsureBlinkInitializedInternal(bool sandbox_support) {
       sandbox_support
           ? std::make_unique<UtilityBlinkPlatformWithSandboxSupportImpl>(
                 GetConnector())
-          : std::make_unique<UtilityBlinkPlatformImpl>();
-  blink::Platform::Initialize(blink_platform_impl_.get());
+          : std::make_unique<blink::Platform>();
+  blink::Platform::CreateMainThreadAndInitialize(blink_platform_impl_.get());
 }
 
 void UtilityThreadImpl::Init() {
@@ -150,8 +148,10 @@ void UtilityThreadImpl::Init() {
 
   service_factory_.reset(new UtilityServiceFactory);
 
-  if (connection)
+  if (connection) {
     connection->Start();
+    GetContentClient()->OnServiceManagerConnected(connection);
+  }
 }
 
 bool UtilityThreadImpl::OnControlMessageReceived(const IPC::Message& msg) {

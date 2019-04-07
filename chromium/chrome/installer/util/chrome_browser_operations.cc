@@ -45,9 +45,10 @@ void ChromeBrowserOperations::AddDefaultShortcutProperties(
   }
 
   if (!properties->has_description())
-    properties->set_description(dist->GetAppDescription());
+    properties->set_description(InstallUtil::GetAppDescription());
 
-  // Vivaldi customization. Add command line arguments to the commandline for the shortcut, if needed.
+  // Vivaldi customization. Add command line arguments to the commandline for
+  // the shortcut, if needed.
   if (!properties->has_arguments()) {
     const base::string16& arguments = dist->GetArguments();
     if (!arguments.empty())

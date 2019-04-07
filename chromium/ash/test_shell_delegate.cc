@@ -17,22 +17,12 @@ TestShellDelegate::TestShellDelegate() = default;
 
 TestShellDelegate::~TestShellDelegate() = default;
 
-::service_manager::Connector* TestShellDelegate::GetShellConnector() const {
-  return nullptr;
-}
-
 bool TestShellDelegate::CanShowWindowForUser(aura::Window* window) const {
   return true;
 }
 
-void TestShellDelegate::PreInit() {}
-
 std::unique_ptr<keyboard::KeyboardUI> TestShellDelegate::CreateKeyboardUI() {
   return std::make_unique<TestKeyboardUI>();
-}
-
-NetworkingConfigDelegate* TestShellDelegate::GetNetworkingConfigDelegate() {
-  return nullptr;
 }
 
 std::unique_ptr<ScreenshotDelegate>
@@ -44,7 +34,7 @@ AccessibilityDelegate* TestShellDelegate::CreateAccessibilityDelegate() {
   return new DefaultAccessibilityDelegate;
 }
 
-ui::InputDeviceControllerClient*
+ws::InputDeviceControllerClient*
 TestShellDelegate::GetInputDeviceControllerClient() {
   return nullptr;
 }

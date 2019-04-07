@@ -39,6 +39,7 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 #include <memory>
 
@@ -517,7 +518,7 @@ const char* IDBTransaction::InactiveErrorMessage() const {
   return nullptr;
 }
 
-DispatchEventResult IDBTransaction::DispatchEventInternal(Event* event) {
+DispatchEventResult IDBTransaction::DispatchEventInternal(Event& event) {
   IDB_TRACE1("IDBTransaction::dispatchEvent", "txn.id", id_);
   if (!GetExecutionContext()) {
     state_ = kFinished;
@@ -526,7 +527,7 @@ DispatchEventResult IDBTransaction::DispatchEventInternal(Event* event) {
   DCHECK_NE(state_, kFinished);
   DCHECK(has_pending_activity_);
   DCHECK(GetExecutionContext());
-  DCHECK_EQ(event->target(), this);
+  DCHECK_EQ(event.target(), this);
   state_ = kFinished;
 
   HeapVector<Member<EventTarget>> targets;
@@ -535,8 +536,8 @@ DispatchEventResult IDBTransaction::DispatchEventInternal(Event* event) {
 
   // FIXME: When we allow custom event dispatching, this will probably need to
   // change.
-  DCHECK(event->type() == EventTypeNames::complete ||
-         event->type() == EventTypeNames::abort);
+  DCHECK(event.type() == EventTypeNames::complete ||
+         event.type() == EventTypeNames::abort);
   DispatchEventResult dispatch_result =
       IDBEventDispatcher::Dispatch(event, targets);
   // FIXME: Try to construct a test where |this| outlives openDBRequest and we
@@ -557,7 +558,7 @@ void IDBTransaction::EnqueueEvent(Event* event) {
     return;
 
   event->SetTarget(this);
-  event_queue_->EnqueueEvent(FROM_HERE, event);
+  event_queue_->EnqueueEvent(FROM_HERE, *event);
 }
 
 void IDBTransaction::AbortOutstandingRequests() {

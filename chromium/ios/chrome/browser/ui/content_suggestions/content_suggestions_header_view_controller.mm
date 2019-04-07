@@ -66,6 +66,7 @@ const UIEdgeInsets kSearchBoxStretchInsets = {3, 3, 3, 3};
 
 @property(nonatomic, strong) UIView<NTPHeaderViewAdapter>* headerView;
 @property(nonatomic, strong) UIButton* fakeOmnibox;
+@property(nonatomic, strong) UIButton* accessibilityButton;
 @property(nonatomic, strong) UILabel* searchHintLabel;
 @property(nonatomic, strong) NSLayoutConstraint* hintLabelLeadingConstraint;
 @property(nonatomic, strong) NSLayoutConstraint* voiceTapTrailingConstraint;
@@ -97,6 +98,7 @@ const UIEdgeInsets kSearchBoxStretchInsets = {3, 3, 3, 3};
 
 @synthesize headerView = _headerView;
 @synthesize fakeOmnibox = _fakeOmnibox;
+@synthesize accessibilityButton = _accessibilityButton;
 @synthesize hintLabelLeadingConstraint = _hintLabelLeadingConstraint;
 @synthesize voiceTapTrailingConstraint = _voiceTapTrailingConstraint;
 @synthesize doodleHeightConstraint = _doodleHeightConstraint;
@@ -142,6 +144,10 @@ const UIEdgeInsets kSearchBoxStretchInsets = {3, 3, 3, 3};
   [coordinator animateAlongsideTransition:transition completion:nil];
 }
 
+- (void)dealloc {
+  [self.accessibilityButton removeObserver:self forKeyPath:@"highlighted"];
+}
+
 #pragma mark - Property
 
 - (void)setIsShowing:(BOOL)isShowing {
@@ -157,9 +163,10 @@ const UIEdgeInsets kSearchBoxStretchInsets = {3, 3, 3, 3};
                     safeAreaInsets:(UIEdgeInsets)safeAreaInsets {
   if (self.isShowing && IsUIRefreshPhase1Enabled()) {
     CGFloat progress =
-        self.logoIsShowing
+        self.logoIsShowing || !content_suggestions::IsRegularXRegularSizeClass()
             ? [self.headerView searchFieldProgressForOffset:offset
                                              safeAreaInsets:safeAreaInsets]
+            // RxR with no logo hides the fakebox, so always show the omnibox.
             : 1;
     if (!IsSplitToolbarMode()) {
       [self.toolbarDelegate setScrollProgressForTabletOmnibox:progress];
@@ -211,7 +218,7 @@ const UIEdgeInsets kSearchBoxStretchInsets = {3, 3, 3, 3};
 
   CGFloat offsetY =
       headerHeight - ntp_header::kScrolledToTopOmniboxBottomMargin;
-  if (!content_suggestions::IsRegularXRegularSizeClass(self.view)) {
+  if (!content_suggestions::IsRegularXRegularSizeClass(self)) {
     CGFloat top = 0;
     if (@available(iOS 11, *)) {
       top = self.parentViewController.view.safeAreaInsets.top;
@@ -324,16 +331,23 @@ const UIEdgeInsets kSearchBoxStretchInsets = {3, 3, 3, 3};
   // is taking the full width, there are few points that are not accessible and
   // allow to select the content below it.
   self.searchHintLabel.isAccessibilityElement = NO;
-  UIButton* accessibilityButton = [[UIButton alloc] init];
-  [accessibilityButton addTarget:self
-                          action:@selector(fakeOmniboxTapped:)
-                forControlEvents:UIControlEventTouchUpInside];
-  accessibilityButton.isAccessibilityElement = YES;
-  accessibilityButton.accessibilityLabel =
+  self.accessibilityButton = [[UIButton alloc] init];
+  [self.accessibilityButton addTarget:self
+                               action:@selector(focusFakebox)
+                     forControlEvents:UIControlEventTouchUpInside];
+  // Because the visual fakebox background is implemented within
+  // ContentSuggestionsHeaderView, KVO the highlight events of
+  // |accessibilityButton| and pass them along.
+  [self.accessibilityButton addObserver:self
+                             forKeyPath:@"highlighted"
+                                options:NSKeyValueObservingOptionNew
+                                context:NULL];
+  self.accessibilityButton.isAccessibilityElement = YES;
+  self.accessibilityButton.accessibilityLabel =
       l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT);
-  [self.fakeOmnibox addSubview:accessibilityButton];
-  accessibilityButton.translatesAutoresizingMaskIntoConstraints = NO;
-  AddSameConstraints(self.fakeOmnibox, accessibilityButton);
+  [self.fakeOmnibox addSubview:self.accessibilityButton];
+  self.accessibilityButton.translatesAutoresizingMaskIntoConstraints = NO;
+  AddSameConstraints(self.fakeOmnibox, self.accessibilityButton);
 
   // Add a voice search button.
   UIButton* voiceTapTarget = [[UIButton alloc] init];
@@ -367,7 +381,7 @@ const UIEdgeInsets kSearchBoxStretchInsets = {3, 3, 3, 3};
       l10n_util::GetNSString(IDS_ACCNAME_LOCATION);
   [self.headerView addToolbarView:fakeTapButton];
   [fakeTapButton addTarget:self
-                    action:@selector(fakeOmniboxTapped:)
+                    action:@selector(focusFakebox)
           forControlEvents:UIControlEventTouchUpInside];
 }
 
@@ -402,12 +416,24 @@ const UIEdgeInsets kSearchBoxStretchInsets = {3, 3, 3, 3};
   [self.dispatcher preloadVoiceSearch];
 }
 
-- (void)fakeOmniboxTapped:(id)sender {
+- (void)focusFakebox {
   if (IsUIRefreshPhase1Enabled()) {
     [self shiftTilesUp];
   } else {
-    [self.dispatcher focusFakebox];
+    [self.dispatcher fakeboxFocused];
   }
+}
+
+// TODO(crbug.com/807330) The fakebox is currently a collection of views spread
+// between ContentSuggestionsHeaderViewController and inside
+// ContentSuggestionsHeaderView.  Post refresh this can be coalesced into one
+// control, and the KVO highlight logic below can be removed.
+- (void)observeValueForKeyPath:(NSString*)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary*)change
+                       context:(void*)context {
+  if ([@"highlighted" isEqualToString:keyPath])
+    [self.headerView setFakeboxHighlighted:[object isHighlighted]];
 }
 
 // If Google is not the default search engine, hide the logo, doodle and
@@ -417,7 +443,7 @@ const UIEdgeInsets kSearchBoxStretchInsets = {3, 3, 3, 3};
     self.logoVendor.showingLogo = self.logoIsShowing;
     [self.doodleHeightConstraint
         setConstant:content_suggestions::doodleHeight(self.logoIsShowing)];
-    if (content_suggestions::IsRegularXRegularSizeClass(self.view))
+    if (content_suggestions::IsRegularXRegularSizeClass(self))
       [self.fakeOmnibox setHidden:!self.logoIsShowing];
     [self.collectionSynchronizer invalidateLayout];
   }
@@ -455,11 +481,9 @@ const UIEdgeInsets kSearchBoxStretchInsets = {3, 3, 3, 3};
 - (void)shiftTilesDown {
   if ((IsUIRefreshPhase1Enabled() && IsSplitToolbarMode()) ||
       (!IsUIRefreshPhase1Enabled() &&
-       !content_suggestions::IsRegularXRegularSizeClass(self.view))) {
+       !content_suggestions::IsRegularXRegularSizeClass(self))) {
     [self.dispatcher onFakeboxBlur];
   }
-  self.fakeOmnibox.hidden = NO;
-
   [self.collectionSynchronizer shiftTilesDown];
 
   [self.commandHandler dismissModals];
@@ -468,14 +492,13 @@ const UIEdgeInsets kSearchBoxStretchInsets = {3, 3, 3, 3};
 - (void)shiftTilesUp {
   void (^completionBlock)() = ^{
     if (IsUIRefreshPhase1Enabled()) {
-      [self.dispatcher focusFakebox];
+      [self.dispatcher fakeboxFocused];
     }
     if ((IsUIRefreshPhase1Enabled() && IsSplitToolbarMode()) ||
         (!IsUIRefreshPhase1Enabled() &&
-         !content_suggestions::IsRegularXRegularSizeClass(self.view))) {
+         !content_suggestions::IsRegularXRegularSizeClass(self))) {
       [self.dispatcher onFakeboxAnimationComplete];
       [self.headerView fadeOutShadow];
-      [self.fakeOmnibox setHidden:YES];
     }
   };
   [self.collectionSynchronizer shiftTilesUpWithCompletionBlock:completionBlock];
@@ -494,7 +517,16 @@ const UIEdgeInsets kSearchBoxStretchInsets = {3, 3, 3, 3};
 #pragma mark - LogoAnimationControllerOwnerOwner
 
 - (id<LogoAnimationControllerOwner>)logoAnimationControllerOwner {
-  return [self.logoVendor logoAnimationControllerOwner];
+  // Only return the logo vendor's animation controller owner if the logo view
+  // is fully visible.  This prevents the logo from being used in transition
+  // animations if the logo has been scrolled off screen.
+  UIView* logoView = self.logoVendor.view;
+  UIView* parentView = self.parentViewController.view;
+  CGRect logoFrame = [parentView convertRect:logoView.bounds fromView:logoView];
+  BOOL isLogoFullyVisible = CGRectEqualToRect(
+      CGRectIntersection(logoFrame, parentView.bounds), logoFrame);
+  return isLogoFullyVisible ? [self.logoVendor logoAnimationControllerOwner]
+                            : nil;
 }
 
 #pragma mark - NTPHomeConsumer

@@ -313,7 +313,6 @@ class _BuildHelper(object):
 
   def _GenGnCmd(self):
     gn_args = 'is_official_build=true'
-    gn_args += ' symbol_level=0'
     # Variables often become unused when experimenting with macros to reduce
     # size, so don't fail on warnings.
     gn_args += ' treat_warnings_as_errors=false'
@@ -585,7 +584,7 @@ def _RunCmd(cmd, verbose=False, exit_on_failure=True):
   cmd_str = ' '.join(c for c in cmd)
   logging.debug('Running: %s', cmd_str)
   proc_stdout = proc_stderr = subprocess.PIPE
-  if verbose and logging.getLogger().getEffectiveLevel() < logging.INFO:
+  if verbose:
     proc_stdout, proc_stderr = sys.stdout, subprocess.STDOUT
 
   proc = subprocess.Popen(cmd, stdout=proc_stdout, stderr=proc_stderr)

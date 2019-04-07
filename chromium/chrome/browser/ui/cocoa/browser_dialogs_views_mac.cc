@@ -26,7 +26,6 @@
 #include "chrome/browser/ui/views/update_recommended_message_box.h"
 #include "chrome/common/chrome_features.h"
 #include "components/constrained_window/constrained_window_views.h"
-#include "ui/base/material_design/material_design_controller.h"
 
 // This file provides definitions of desktop browser dialog-creation methods for
 // Mac where a Cocoa browser is using Views dialogs. I.e. it is included in the
@@ -36,14 +35,9 @@
 
 namespace chrome {
 
-bool ShowPilotDialogsWithViewsToolkit() {
-  return ui::MaterialDesignController::IsSecondaryUiMaterial();
-}
-
 bool ShowAllDialogsWithViewsToolkit() {
-  return ShowPilotDialogsWithViewsToolkit() &&
-         base::FeatureList::IsEnabled(
-             features::kShowAllDialogsWithViewsToolkit);
+  return base::FeatureList::IsEnabled(
+      features::kShowAllDialogsWithViewsToolkit);
 }
 
 void ShowPageInfoBubbleViews(Browser* browser,
@@ -63,17 +57,19 @@ void ShowPageInfoBubbleViews(Browser* browser,
     return;
   }
 
-  views::View* anchor_view =
-      bubble_anchor_util::GetPageInfoAnchorView(browser, anchor);
+  bubble_anchor_util::AnchorConfiguration configuration =
+      bubble_anchor_util::GetPageInfoAnchorConfiguration(browser, anchor);
   gfx::Rect anchor_rect =
-      anchor_view ? gfx::Rect()
-                  : bubble_anchor_util::GetPageInfoAnchorRect(browser);
+      configuration.anchor_view
+          ? gfx::Rect()
+          : bubble_anchor_util::GetPageInfoAnchorRect(browser);
   gfx::NativeWindow parent_window = browser->window()->GetNativeWindow();
   views::BubbleDialogDelegateView* bubble =
       PageInfoBubbleView::CreatePageInfoBubble(
-          anchor_view, anchor_rect, parent_window, browser->profile(),
-          web_contents, virtual_url, security_info);
+          configuration.anchor_view, anchor_rect, parent_window,
+          browser->profile(), web_contents, virtual_url, security_info);
   bubble->GetWidget()->Show();
+  bubble->set_arrow(configuration.bubble_arrow);
   KeepBubbleAnchored(bubble, GetPageInfoDecoration(parent_window));
 }
 
@@ -152,19 +148,6 @@ void ShowImportLockDialogViews(gfx::NativeWindow parent,
                                const base::Callback<void(bool)>& callback,
                                base::string16 importer_locktext) {
   return ImportLockDialogView::Show(parent, callback, importer_locktext);
-}
-
-void ShowPasswordReuseWarningDialog(
-    content::WebContents* web_contents,
-    safe_browsing::ChromePasswordProtectionService* service,
-    safe_browsing::ReusedPasswordType password_type,
-    safe_browsing::OnWarningDone done_callback) {
-  safe_browsing::PasswordReuseModalWarningDialog* dialog =
-      new safe_browsing::PasswordReuseModalWarningDialog(
-          web_contents, service, password_type, std::move(done_callback));
-  constrained_window::CreateBrowserModalDialogViews(
-      dialog, web_contents->GetTopLevelNativeWindow())
-      ->Show();
 }
 
 }  // namespace chrome

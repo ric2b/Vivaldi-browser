@@ -26,6 +26,7 @@ class FakeAssistantManagerServiceImpl : public AssistantManagerService {
   // assistant::AssistantManagerService overrides
   void Start(const std::string& access_token,
              base::OnceClosure callback) override;
+  void Stop() override;
   void SetAccessToken(const std::string& access_token) override;
   void EnableListening(bool enable) override;
   State GetState() const override;
@@ -38,6 +39,8 @@ class FakeAssistantManagerServiceImpl : public AssistantManagerService {
       UpdateSettingsUiResponseCallback callback) override;
 
   // mojom::Assistant overrides:
+  void StartCachedScreenContextInteraction() override;
+  void StartMetalayerInteraction(const gfx::Rect& region) override;
   void StartVoiceInteraction() override;
   void StopActiveInteraction() override;
   void SendTextQuery(const std::string& query) override;
@@ -49,8 +52,7 @@ class FakeAssistantManagerServiceImpl : public AssistantManagerService {
                             int action_index) override;
   void DismissNotification(
       mojom::AssistantNotificationPtr notification) override;
-  void RequestScreenContext(const gfx::Rect& region,
-                            RequestScreenContextCallback callback) override;
+  void CacheScreenContext(CacheScreenContextCallback callback) override;
 
  private:
   State state_ = State::STOPPED;

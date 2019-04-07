@@ -52,8 +52,13 @@ void ReceiverMediaToMojoAdapter::OnBufferRetired(int32_t buffer_id) {
   receiver_->OnBufferRetired(buffer_id);
 }
 
-void ReceiverMediaToMojoAdapter::OnError() {
-  receiver_->OnError();
+void ReceiverMediaToMojoAdapter::OnError(media::VideoCaptureError error) {
+  receiver_->OnError(error);
+}
+
+void ReceiverMediaToMojoAdapter::OnFrameDropped(
+    media::VideoCaptureFrameDropReason reason) {
+  receiver_->OnFrameDropped(reason);
 }
 
 void ReceiverMediaToMojoAdapter::OnLog(const std::string& message) {

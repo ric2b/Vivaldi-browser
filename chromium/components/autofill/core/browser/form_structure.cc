@@ -25,7 +25,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "components/autofill/core/browser/autofill_experiments.h"
+#include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/field_candidates.h"
@@ -44,7 +44,6 @@
 #include "components/autofill/core/common/form_field_data_predictions.h"
 #include "components/autofill/core/common/signatures_util.h"
 #include "components/security_state/core/security_state.h"
-#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "url/origin.h"
 
 namespace autofill {
@@ -287,14 +286,6 @@ std::ostream& operator<<(
   return out;
 }
 
-bool IsCreditCardExpirationType(ServerFieldType type) {
-  return type == CREDIT_CARD_EXP_MONTH ||
-         type == CREDIT_CARD_EXP_2_DIGIT_YEAR ||
-         type == CREDIT_CARD_EXP_4_DIGIT_YEAR ||
-         type == CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR ||
-         type == CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR;
-}
-
 // Returns true iff all form fields autofill types are in |contained_types|.
 bool AllTypesCaptured(const FormStructure& form,
                       const ServerFieldTypeSet& contained_types) {
@@ -338,6 +329,7 @@ void EncodePasswordAttributesVote(
 
 FormStructure::FormStructure(const FormData& form)
     : form_name_(form.name),
+      submission_event_(PasswordForm::SubmissionIndicatorEvent::NONE),
       source_url_(form.origin),
       target_url_(form.action),
       main_frame_origin_(form.main_frame_origin),
@@ -353,7 +345,9 @@ FormStructure::FormStructure(const FormData& form)
       is_formless_checkout_(form.is_formless_checkout),
       all_fields_are_passwords_(!form.fields.empty()),
       is_signin_upload_(false),
-      passwords_were_revealed_(false) {
+      form_parsed_timestamp_(base::TimeTicks::Now()),
+      passwords_were_revealed_(false),
+      developer_engagement_metrics_(0) {
   // Copy the form fields.
   std::map<base::string16, size_t> unique_names;
   for (const FormFieldData& field : form.fields) {
@@ -381,8 +375,7 @@ FormStructure::FormStructure(const FormData& form)
 
 FormStructure::~FormStructure() {}
 
-void FormStructure::DetermineHeuristicTypes(ukm::UkmRecorder* ukm_recorder,
-                                            ukm::SourceId source_id) {
+void FormStructure::DetermineHeuristicTypes() {
   const auto determine_heuristic_types_start_time = base::TimeTicks::Now();
 
   // First, try to detect field types based on each field's |autocomplete|
@@ -407,31 +400,25 @@ void FormStructure::DetermineHeuristicTypes(ukm::UkmRecorder* ukm_recorder,
   UpdateAutofillCount();
   IdentifySections(has_author_specified_sections_);
 
-  int developer_engagement_metrics = 0;
+  developer_engagement_metrics_ = 0;
   if (IsAutofillable()) {
     AutofillMetrics::DeveloperEngagementMetric metric =
         has_author_specified_types_
             ? AutofillMetrics::FILLABLE_FORM_PARSED_WITH_TYPE_HINTS
             : AutofillMetrics::FILLABLE_FORM_PARSED_WITHOUT_TYPE_HINTS;
-    developer_engagement_metrics |= 1 << metric;
+    developer_engagement_metrics_ |= 1 << metric;
     AutofillMetrics::LogDeveloperEngagementMetric(metric);
   }
 
   if (has_author_specified_upi_vpa_hint_) {
     AutofillMetrics::LogDeveloperEngagementMetric(
         AutofillMetrics::FORM_CONTAINS_UPI_VPA_HINT);
-    developer_engagement_metrics |=
+    developer_engagement_metrics_ |=
         1 << AutofillMetrics::FORM_CONTAINS_UPI_VPA_HINT;
   }
 
-  if (developer_engagement_metrics) {
-    AutofillMetrics::LogDeveloperEngagementUkm(
-        ukm_recorder, source_id, main_frame_origin().GetURL(),
-        IsCompleteCreditCardForm(), GetFormTypes(),
-        developer_engagement_metrics, form_signature());
-  }
-
-  if (base::FeatureList::IsEnabled(kAutofillRationalizeFieldTypePredictions))
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillRationalizeFieldTypePredictions))
     RationalizeFieldTypePredictions();
 
   AutofillMetrics::LogDetermineHeuristicTypesTiming(
@@ -444,7 +431,6 @@ bool FormStructure::EncodeUploadRequest(
     const std::string& login_form_signature,
     bool observed_submission,
     AutofillUploadContents* upload) const {
-  DCHECK(ShouldBeUploaded());
   DCHECK(AllTypesCaptured(*this, available_field_types));
 
   upload->set_submission(observed_submission);
@@ -453,6 +439,13 @@ bool FormStructure::EncodeUploadRequest(
   upload->set_autofill_used(form_was_autofilled);
   upload->set_data_present(EncodeFieldTypes(available_field_types));
   upload->set_passwords_revealed(passwords_were_revealed_);
+  if (submission_event_ != PasswordForm::SubmissionIndicatorEvent::NONE) {
+    DCHECK(submission_event_ != PasswordForm::SubmissionIndicatorEvent::
+                                    SUBMISSION_INDICATOR_EVENT_COUNT);
+    upload->set_submission_event(
+        static_cast<AutofillUploadContents_SubmissionIndicatorEvent>(
+            submission_event_));
+  }
   if (password_attributes_vote_) {
     EncodePasswordAttributesVote(*password_attributes_vote_,
                                  password_length_vote_, upload);
@@ -523,6 +516,14 @@ void FormStructure::ParseQueryResponse(
 
   VLOG(1) << "Autofill query response was successfully parsed:\n" << response;
 
+  ProcessQueryResponse(response, forms, form_interactions_ukm_logger);
+}
+
+// static
+void FormStructure::ProcessQueryResponse(
+    const AutofillQueryResponseContents& response,
+    const std::vector<FormStructure*>& forms,
+    AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger) {
   AutofillMetrics::LogServerQueryMetric(AutofillMetrics::QUERY_RESPONSE_PARSED);
 
   bool heuristics_detected_fillable_field = false;
@@ -582,7 +583,8 @@ void FormStructure::ParseQueryResponse(
             features::kAutofillRationalizeRepeatedServerPredictions))
       form->RationalizeRepeatedFields(form_interactions_ukm_logger);
 
-    if (base::FeatureList::IsEnabled(kAutofillRationalizeFieldTypePredictions))
+    if (base::FeatureList::IsEnabled(
+            features::kAutofillRationalizeFieldTypePredictions))
       form->RationalizeFieldTypePredictions();
 
     form->IdentifySections(false);
@@ -663,7 +665,7 @@ bool FormStructure::IsCompleteCreditCardForm() const {
   bool found_cc_expiration = false;
   for (const auto& field : fields_) {
     ServerFieldType type = field->Type().GetStorableType();
-    if (!found_cc_expiration && IsCreditCardExpirationType(type)) {
+    if (!found_cc_expiration && data_util::IsCreditCardExpirationType(type)) {
       found_cc_expiration = true;
     } else if (!found_cc_number && type == CREDIT_CARD_NUMBER) {
       found_cc_number = true;
@@ -723,8 +725,7 @@ bool FormStructure::ShouldBeQueried() const {
 }
 
 bool FormStructure::ShouldBeUploaded() const {
-  return (has_password_field_ ||
-          active_field_count() >= MinRequiredFieldsForUpload()) &&
+  return active_field_count() >= MinRequiredFieldsForUpload() &&
          ShouldBeParsed();
 }
 
@@ -769,7 +770,7 @@ void FormStructure::RetrieveFromCache(
   UpdateAutofillCount();
 
   // Update form parsed timestamp
-  set_form_parsed_timestamp(cached_form.form_parsed_timestamp());
+  form_parsed_timestamp_ = cached_form.form_parsed_timestamp_;
 
   // The form signature should match between query and upload requests to the
   // server. On many websites, form elements are dynamically added, removed, or
@@ -1580,49 +1581,45 @@ void FormStructure::EncodeFormForUpload(AutofillUploadContents* upload) const {
     if (IsCheckable(field->check_status))
       continue;
 
-    const ServerFieldTypeSet& types = field->possible_types();
-    for (const auto& field_type : types) {
-      // Add the same field elements as the query and a few more below.
-      if (ShouldSkipField(*field))
-        continue;
+    // Add the same field elements as the query and a few more below.
+    if (ShouldSkipField(*field))
+      continue;
 
-      AutofillUploadContents::Field* added_field = upload->add_field();
-      added_field->set_autofill_type(field_type);
-      if (field->generation_type()) {
-        added_field->set_generation_type(field->generation_type());
-        added_field->set_generated_password_changed(
-            field->generated_password_changed());
-      }
+    auto* added_field = upload->add_field();
 
-      if (field->form_classifier_outcome()) {
-        added_field->set_form_classifier_outcome(
-            field->form_classifier_outcome());
-      }
+    for (const auto& field_type : field->possible_types()) {
+      added_field->add_autofill_type(field_type);
+    }
 
-      if (field->vote_type()) {
-        added_field->set_vote_type(field->vote_type());
-      }
+    if (field->generation_type()) {
+      added_field->set_generation_type(field->generation_type());
+      added_field->set_generated_password_changed(
+          field->generated_password_changed());
+    }
 
-      added_field->set_signature(field->GetFieldSignature());
+    if (field->vote_type()) {
+      added_field->set_vote_type(field->vote_type());
+    }
 
-      if (field->properties_mask)
-        added_field->set_properties_mask(field->properties_mask);
+    added_field->set_signature(field->GetFieldSignature());
 
-      if (IsAutofillFieldMetadataEnabled()) {
-        added_field->set_type(field->form_control_type);
+    if (field->properties_mask)
+      added_field->set_properties_mask(field->properties_mask);
 
-        if (!field->name.empty())
-          added_field->set_name(base::UTF16ToUTF8(field->name));
+    if (IsAutofillFieldMetadataEnabled()) {
+      added_field->set_type(field->form_control_type);
 
-        if (!field->id.empty())
-          added_field->set_id(base::UTF16ToUTF8(field->id));
+      if (!field->name.empty())
+        added_field->set_name(base::UTF16ToUTF8(field->name));
 
-        if (!field->autocomplete_attribute.empty())
-          added_field->set_autocomplete(field->autocomplete_attribute);
+      if (!field->id.empty())
+        added_field->set_id(base::UTF16ToUTF8(field->id));
 
-        if (!field->css_classes.empty())
-          added_field->set_css_classes(base::UTF16ToUTF8(field->css_classes));
-      }
+      if (!field->autocomplete_attribute.empty())
+        added_field->set_autocomplete(field->autocomplete_attribute);
+
+      if (!field->css_classes.empty())
+        added_field->set_css_classes(base::UTF16ToUTF8(field->css_classes));
     }
   }
 }

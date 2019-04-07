@@ -17,13 +17,9 @@
 <translation id="255002559098805027"><ph name="HOST_NAME" /> enviou uma resposta inválida.</translation>
 <translation id="2609632851001447353">Variações</translation>
 <translation id="2650446666397867134">O acesso ao arquivo foi negado</translation>
-<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Executar o diagnóstico de conectividade<ph name="END_LINK" /></translation>
 <translation id="2856444702002559011">Invasores podem estar tentando roubar suas informações do site <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (por exemplo, senhas, mensagens ou cartões de crédito). <ph name="BEGIN_LEARN_MORE_LINK" />Saiba mais<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Foi detectada uma alteração na rede.</translation>
-<translation id="2948083400971632585">Você pode desabilitar qualquer proxy configurado pela categoria "Rede" nas configurações do Vivaldi.</translation>
-<translation id="3093245981617870298">Você está offline</translation>
 <translation id="3109728660330352905">Você não tem autorização para ver esta página.</translation>
-<translation id="31207688938192855"><ph name="BEGIN_LINK" />Tente executar o diagnóstico de conectividade<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Essa página inclui um formulário que pode não ser enviado de forma segura. Os dados que você envia podem ser vistos por outras pessoas enquanto elas navegam ou ser interceptado e modificado por um invasor para alterar o que o servidor recebe ou para roubar essas informações.</translation>
 <translation id="3176929007561373547">Verifique suas configurações de proxy ou entre em contato com o administrador de rede para verificar se o servidor proxy está funcionando. Se você acredita que não deveria estar usando um servidor proxy: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Atualize a página para reenviar os dados necessários para carregar a página.</translation>
@@ -91,7 +87,6 @@
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> demorou muito para responder.</translation>
 <translation id="8740359287975076522">Não foi possível encontrar um &lt;abbr id="dnsDefinition"&gt;endereço DNS&lt;/abbr&gt; para <ph name="HOST_NAME" />. Diagnosticando o problema...</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> usa um protocolo incompatível.</translation>
-<translation id="933612690413056017">Não há conexão com a Internet</translation>
 <translation id="969892804517981540">Versão Oficial</translation>
 <translation id="988159990683914416">Versão de Desenvolvimento</translation>
 </translationbundle>

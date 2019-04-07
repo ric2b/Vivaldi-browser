@@ -38,7 +38,7 @@ Example
     configs = [ "//tools/mything:settings" ]
   }
 
-  static_library("mylib")
+  static_library("mylib") {
     # The configs will be auto-populated as above. You can remove it if
     # you don't want the default for a particular default:
     configs -= [ "//tools/mything:settings" ]

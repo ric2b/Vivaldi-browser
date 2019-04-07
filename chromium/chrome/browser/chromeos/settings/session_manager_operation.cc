@@ -11,9 +11,9 @@
 #include "base/files/file_path.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
 #include "chrome/browser/net/nss_context.h"
 #include "components/ownership/owner_key_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -92,7 +92,7 @@ void SessionManagerOperation::EnsurePublicKey(const base::Closure& callback) {
   if (force_key_load_ || !public_key_ || !public_key_->is_loaded()) {
     scoped_refptr<base::TaskRunner> task_runner =
         base::CreateTaskRunnerWithTraits(
-            {base::MayBlock(), base::TaskPriority::BACKGROUND,
+            {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
              base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
     base::PostTaskAndReplyWithResult(
         task_runner.get(), FROM_HERE,

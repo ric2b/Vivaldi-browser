@@ -25,7 +25,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/about_flags.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -57,6 +57,7 @@
 #include "chrome/browser/chromeos/login/quick_unlock/pin_backend.h"
 #include "chrome/browser/chromeos/login/saml/saml_offline_signin_limiter.h"
 #include "chrome/browser/chromeos/login/saml/saml_offline_signin_limiter_factory.h"
+#include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_login_manager.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_login_manager_factory.h"
 #include "chrome/browser/chromeos/login/signin/token_handle_fetcher.h"
@@ -72,6 +73,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/tether/tether_service.h"
+#include "chrome/browser/chromeos/tpm_firmware_update_notification.h"
 #include "chrome/browser/component_updater/crl_set_component_installer.h"
 #include "chrome/browser/component_updater/sth_set_component_installer.h"
 #include "chrome/browser/first_run/first_run.h"
@@ -90,12 +92,12 @@
 #include "chrome/browser/supervised_user/child_accounts/child_account_service.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service_factory.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
-#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/logging_chrome.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/assistant/buildflags.h"
 #include "chromeos/cert_loader.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
@@ -144,6 +146,10 @@
 #if BUILDFLAG(ENABLE_RLZ)
 #include "chrome/browser/rlz/chrome_rlz_tracker_delegate.h"
 #include "components/rlz/rlz_tracker.h"
+#endif
+
+#if BUILDFLAG(ENABLE_CROS_ASSISTANT)
+#include "chrome/browser/ui/ash/assistant/assistant_client.h"
 #endif
 
 namespace chromeos {
@@ -368,6 +374,11 @@ UserSessionManager::RlzInitParams CollectRlzParams() {
 }
 #endif
 
+bool IsOnlineSignin(const UserContext& user_context) {
+  return user_context.GetAuthFlow() == UserContext::AUTH_FLOW_GAIA_WITH_SAML ||
+         user_context.GetAuthFlow() == UserContext::AUTH_FLOW_GAIA_WITHOUT_SAML;
+}
+
 }  // namespace
 
 UserSessionManagerDelegate::~UserSessionManagerDelegate() {}
@@ -535,7 +546,8 @@ void UserSessionManager::CompleteGuestSessionLogin(const GURL& start_url) {
   if (!about_flags::AreSwitchesIdenticalToCurrentCommandLine(
           user_flags, *base::CommandLine::ForCurrentProcess(), NULL)) {
     DBusThreadManager::Get()->GetSessionManagerClient()->SetFlagsForUser(
-        cryptohome::Identification(user_manager::GuestAccountId()),
+        cryptohome::CreateAccountIdentifierFromAccountId(
+            user_manager::GuestAccountId()),
         base::CommandLine::StringVector());
   }
 
@@ -676,7 +688,7 @@ void UserSessionManager::InitRlz(Profile* profile) {
   }
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::Bind(&CollectRlzParams),
       base::Bind(&UserSessionManager::InitRlzImpl, AsWeakPtr(), profile));
@@ -959,10 +971,8 @@ void UserSessionManager::OnSessionRestoreStateChanged(
   // Otherwise, auth token dependent code would be in an invalid state.
   // Important piece such as policy code might be broken because of this and
   // subject to an exploit. See http://crbug.com/677312.
-  const bool is_online_signin =
-      user_context_.GetAuthFlow() == UserContext::AUTH_FLOW_GAIA_WITH_SAML ||
-      user_context_.GetAuthFlow() == UserContext::AUTH_FLOW_GAIA_WITHOUT_SAML;
-  if (is_online_signin && state == OAuth2LoginManager::SESSION_RESTORE_FAILED) {
+  if (IsOnlineSignin(user_context_) &&
+      state == OAuth2LoginManager::SESSION_RESTORE_FAILED) {
     LOG(ERROR)
         << "Session restore failed for online sign-in, terminating session.";
     chrome::AttemptUserExit();
@@ -1069,8 +1079,7 @@ void UserSessionManager::CreateUserSession(const UserContext& user_context,
 
 void UserSessionManager::PreStartSession() {
   // Switch log file as soon as possible.
-  if (base::SysInfo::IsRunningOnChromeOS())
-    logging::RedirectChromeLogging(*base::CommandLine::ForCurrentProcess());
+  logging::RedirectChromeLogging(*base::CommandLine::ForCurrentProcess());
 }
 
 void UserSessionManager::StoreUserContextDataBeforeProfileIsCreated() {
@@ -1081,7 +1090,8 @@ void UserSessionManager::StartCrosSession() {
   BootTimesRecorder* btl = BootTimesRecorder::Get();
   btl->AddLoginTimeMarker("StartSession-Start", false);
   DBusThreadManager::Get()->GetSessionManagerClient()->StartSession(
-      cryptohome::Identification(user_context_.GetAccountId()));
+      cryptohome::CreateAccountIdentifierFromAccountId(
+          user_context_.GetAccountId()));
   btl->AddLoginTimeMarker("StartSession-End", false);
 }
 
@@ -1105,7 +1115,7 @@ void UserSessionManager::InitDemoSessionIfNeeded(base::OnceClosure callback) {
     std::move(callback).Run();
     return;
   }
-
+  should_launch_browser_ = false;
   demo_session->EnsureOfflineResourcesLoaded(std::move(callback));
 }
 
@@ -1126,7 +1136,7 @@ void UserSessionManager::PrepareProfile() {
       ProfileHelper::GetProfilePathByUserIdHash(user_context_.GetUserIDHash()),
       base::Bind(&UserSessionManager::OnProfileCreated, AsWeakPtr(),
                  user_context_, is_demo_session),
-      base::string16(), std::string(), std::string());
+      base::string16(), std::string());
 }
 
 void UserSessionManager::OnProfileCreated(const UserContext& user_context,
@@ -1228,11 +1238,17 @@ void UserSessionManager::InitProfilePreferences(
     bool is_child = user->GetType() == user_manager::USER_TYPE_CHILD;
     DCHECK(is_child ==
            (user_context.GetUserType() == user_manager::USER_TYPE_CHILD));
-    AccountTrackerServiceFactory::GetForProfile(profile)->SetIsChildAccount(
-        account_id, is_child);
+    AccountTrackerService* account_tracker =
+        AccountTrackerServiceFactory::GetForProfile(profile);
+    account_tracker->SetIsChildAccount(account_id, is_child);
     VLOG(1) << "Seed IdentityManager and SigninManagerBase with the "
             << "authenticated account info, success="
             << SigninManagerFactory::GetForProfile(profile)->IsAuthenticated();
+
+    if (IsOnlineSignin(user_context)) {
+      account_tracker->SetIsAdvancedProtectionAccount(
+          account_id, user_context.IsUnderAdvancedProtection());
+    }
 
     // Backfill GAIA ID in user prefs stored in Local State.
     std::string tmp_gaia_id;
@@ -1425,6 +1441,10 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
       ScreenTimeControllerFactory::GetForBrowserContext(profile);
       ConsumerStatusReportingServiceFactory::GetForBrowserContext(profile);
     }
+
+    // PrefService is ready, check whether we need to force a VPN connection.
+    always_on_vpn_manager_ =
+        std::make_unique<arc::AlwaysOnVpnManager>(profile->GetPrefs());
   }
 
   UpdateEasyUnlockKeys(user_context_);
@@ -1530,6 +1550,13 @@ bool UserSessionManager::InitializeUserSession(Profile* profile) {
   ProfileHelper::Get()->ProfileStartup(profile);
 
   if (start_session_type_ == PRIMARY_USER_SESSION) {
+#if BUILDFLAG(ENABLE_CROS_ASSISTANT)
+    // Initialize Assistant early to be used in post login Oobe steps.
+    if (chromeos::switches::IsAssistantEnabled()) {
+      AssistantClient::Get()->MaybeInit(
+          content::BrowserContext::GetConnectorFor(profile));
+    }
+#endif
     UserFlow* user_flow = ChromeUserManager::Get()->GetCurrentUserFlow();
     WizardController* oobe_controller = WizardController::default_controller();
     base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
@@ -1720,9 +1747,11 @@ void UserSessionManager::OnRestoreActiveSessions(
       user_manager->GetActiveUser()->GetAccountId());
 
   for (auto& item : sessions.value()) {
-    if (active_cryptohome_id == item.first)
+    cryptohome::Identification id =
+        cryptohome::Identification::FromString(item.first);
+    if (active_cryptohome_id == id)
       continue;
-    pending_user_sessions_[item.first.GetAccountId()] = std::move(item.second);
+    pending_user_sessions_[id.GetAccountId()] = std::move(item.second);
   }
   RestorePendingUserSessions();
 }
@@ -2017,15 +2046,16 @@ void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
   // the message accordingly.
   CheckEolStatus(profile);
 
+  // Check to see if this profile should show TPM Firmware Update Notification
+  // and show the message accordingly.
+  tpm_firmware_update::ShowNotificationIfNeeded(profile);
+
   // Show the one-time notification and update the relevant pref about the
   // completion of the file system migration necessary for ARC, when needed.
   arc::ShowArcMigrationSuccessNotificationIfNeeded(profile);
 
-  if (should_launch_browser_ &&
-      profile->GetPrefs()->GetBoolean(prefs::kShowSyncSettingsOnSessionStart)) {
-    profile->GetPrefs()->ClearPref(prefs::kShowSyncSettingsOnSessionStart);
-    chrome::ShowSettingsSubPageForProfile(profile, "syncSetup");
-  }
+  if (should_launch_browser_)
+    SyncConsentScreen::MaybeLaunchSyncConstentSettings(profile);
 
   // Associates AppListClient with the current active profile.
   AppListClientImpl::GetInstance()->UpdateProfile();
@@ -2128,6 +2158,7 @@ void UserSessionManager::Shutdown() {
   token_handle_fetcher_.reset();
   token_handle_util_.reset();
   first_run::GoodiesDisplayer::Delete();
+  always_on_vpn_manager_.reset();
 }
 
 void UserSessionManager::SetSwitchesForUser(
@@ -2148,7 +2179,8 @@ void UserSessionManager::SetSwitchesForUser(
   SessionManagerClient* session_manager_client =
       DBusThreadManager::Get()->GetSessionManagerClient();
   session_manager_client->SetFlagsForUser(
-      cryptohome::Identification(account_id), all_switches);
+      cryptohome::CreateAccountIdentifierFromAccountId(account_id),
+      all_switches);
 }
 
 void UserSessionManager::CreateTokenUtilIfMissing() {

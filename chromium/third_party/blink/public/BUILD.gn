@@ -118,6 +118,7 @@ source_set("test_headers") {
 source_set("blink_headers") {
   sources = [
     "platform/blame_context.h",
+    "platform/code_cache_loader.h",
     "platform/cors_status.h",
     "platform/file_path_conversion.h",
     "platform/interface_provider.h",
@@ -126,9 +127,7 @@ source_set("blink_headers") {
     "platform/linux/web_sandbox_support.h",
     "platform/mac/web_sandbox_support.h",
     "platform/mac/web_scrollbar_theme.h",
-    "platform/modules/background_fetch/web_background_fetch_settled_fetch.h",
-    "platform/modules/device_orientation/web_device_motion_listener.h",
-    "platform/modules/device_orientation/web_device_orientation_listener.h",
+    "platform/modules/background_fetch/web_background_fetch_registration.h",
     "platform/modules/indexeddb/web_idb_callbacks.h",
     "platform/modules/indexeddb/web_idb_cursor.h",
     "platform/modules/indexeddb/web_idb_database.h",
@@ -141,7 +140,6 @@ source_set("blink_headers") {
     "platform/modules/indexeddb/web_idb_key_range.h",
     "platform/modules/indexeddb/web_idb_metadata.h",
     "platform/modules/indexeddb/web_idb_observation.h",
-    "platform/modules/indexeddb/web_idb_types.h",
     "platform/modules/indexeddb/web_idb_value.h",
     "platform/modules/installedapp/web_related_application.h",
     "platform/modules/installedapp/web_related_apps_fetcher.h",
@@ -152,7 +150,6 @@ source_set("blink_headers") {
     "platform/modules/notifications/web_notification_action.h",
     "platform/modules/notifications/web_notification_constants.h",
     "platform/modules/notifications/web_notification_data.h",
-    "platform/modules/notifications/web_notification_resources.h",
     "platform/modules/payments/web_payment_currency_amount.h",
     "platform/modules/payments/web_payment_details_modifier.h",
     "platform/modules/payments/web_payment_handler_response.h",
@@ -192,7 +189,7 @@ source_set("blink_headers") {
     "platform/scheduler/child/webthread_base.h",
     "platform/scheduler/renderer_process_type.h",
     "platform/scheduler/single_thread_idle_task_runner.h",
-    "platform/scheduler/web_main_thread_scheduler.h",
+    "platform/scheduler/web_rail_mode_observer.h",
     "platform/scheduler/web_render_widget_scheduling_state.h",
     "platform/scheduler/web_resource_loading_task_runner_handle.h",
     "platform/scheduler/web_thread_scheduler.h",
@@ -319,7 +316,6 @@ source_set("blink_headers") {
     "platform/web_native_scroll_behavior.h",
     "platform/web_network_state_notifier.h",
     "platform/web_platform_event_listener.h",
-    "platform/web_platform_event_type.h",
     "platform/web_point.h",
     "platform/web_pointer_event.h",
     "platform/web_pointer_properties.h",
@@ -332,9 +328,7 @@ source_set("blink_headers") {
     "platform/web_resource_timing_info.h",
     "platform/web_rtc_answer_options.h",
     "platform/web_rtc_api_name.h",
-    "platform/web_rtc_certificate.h",
     "platform/web_rtc_certificate_generator.h",
-    "platform/web_rtc_configuration.h",
     "platform/web_rtc_data_channel_handler.h",
     "platform/web_rtc_data_channel_handler_client.h",
     "platform/web_rtc_data_channel_init.h",
@@ -421,6 +415,7 @@ source_set("blink_headers") {
     "web/web_associated_url_loader_options.h",
     "web/web_autofill_client.h",
     "web/web_autofill_state.h",
+    "web/web_ax_context.h",
     "web/web_ax_enums.h",
     "web/web_ax_object.h",
     "web/web_blob.h",
@@ -569,7 +564,7 @@ source_set("blink_headers") {
   public_deps = [
     "//net",
     "//services/service_manager/public/cpp",
-    "//services/ui/public/interfaces/ime",
+    "//services/ws/public/mojom/ime",
     "//skia",
     "//third_party/blink/public/common",
     "//third_party/webrtc/api:libjingle_peerconnection_api",
@@ -682,7 +677,7 @@ repack("scaled_resources_200_percent") {
   ]
 }
 
-# TODO: Move these into WebKit/public/mojom.
+# TODO: Move these into blink/public/mojom.
 mojom("mojo_bindings") {
   visibility = [
     "//content/*",
@@ -700,11 +695,9 @@ mojom("mojo_bindings") {
     "platform/modules/background_fetch/background_fetch.mojom",
     "platform/modules/background_sync/background_sync.mojom",
     "platform/modules/bluetooth/web_bluetooth.mojom",
-    "platform/modules/budget_service/budget_service.mojom",
     "platform/modules/cache_storage/cache_storage.mojom",
     "platform/modules/credentialmanager/credential_manager.mojom",
     "platform/modules/fetch/fetch_api_request.mojom",
-    "platform/modules/fetch/fetch_api_response.mojom",
     "platform/modules/geolocation/geolocation_service.mojom",
     "platform/modules/hyphenation/hyphenation.mojom",
     "platform/modules/insecure_input/insecure_input_service.mojom",
@@ -712,11 +705,9 @@ mojom("mojo_bindings") {
     "platform/modules/locks/lock_manager.mojom",
     "platform/modules/notifications/notification.mojom",
     "platform/modules/notifications/notification_service.mojom",
-    "platform/modules/payments/payment_app.mojom",
     "platform/modules/permissions/permission.mojom",
     "platform/modules/permissions/permission_status.mojom",
-    "platform/modules/presentation/presentation.mojom",
-    "platform/modules/webauth/virtual_authenticator.mojom",
+    "platform/modules/webauthn/virtual_authenticator.mojom",
     "platform/modules/webdatabase/web_database.mojom",
     "platform/oom_intervention.mojom",
     "platform/referrer.mojom",
@@ -735,7 +726,6 @@ mojom("mojo_bindings") {
     ":android_mojo_bindings",
     ":web_client_hints_types_mojo_bindings",
     ":web_feature_mojo_bindings",
-    "//components/payments/mojom",
     "//components/services/font/public/interfaces",
     "//device/bluetooth/public/mojom",
     "//mojo/public/mojom/base",
@@ -775,17 +765,16 @@ mojom("android_mojo_bindings") {
     "platform/input_host.mojom",
     "platform/input_messages.mojom",
     "platform/modules/document_metadata/copyless_paste.mojom",
+    "platform/modules/font_unique_name_lookup/font_unique_name_lookup.mojom",
     "platform/modules/installation/installation.mojom",
     "platform/modules/installedapp/installed_app_provider.mojom",
     "platform/modules/installedapp/related_application.mojom",
     "platform/modules/mediasession/media_session.mojom",
-    "platform/modules/payments/payment_request.mojom",
-    "platform/modules/webauth/authenticator.mojom",
+    "platform/modules/webauthn/authenticator.mojom",
     "platform/modules/webshare/webshare.mojom",
     "web/remote_objects.mojom",
   ]
   public_deps = [
-    "//components/payments/mojom",
     "//mojo/public/mojom/base",
     "//ui/gfx/geometry/mojo",
     "//url/mojom:url_mojom_gurl",
@@ -886,13 +875,13 @@ group("generate_mojo_bindings") {
     # Blink public API exposes a number of Mojo interfaces; omitting it will
     # cause non-deterministic compile failures for code that uses the regular
     # variant of the generated files.
-    ":core_mojo_bindings__generator",
-    ":core_mojo_bindings_blink__generator",
-    ":embedded_frame_sink_mojo_bindings_blink__generator",
-    ":media_devices_mojo_bindings__generator",
-    ":media_devices_mojo_bindings_blink__generator",
-    ":mojo_bindings__generator",
-    ":mojo_bindings_blink__generator",
+    ":core_mojo_bindings_blink_headers",
+    ":core_mojo_bindings_headers",
+    ":embedded_frame_sink_mojo_bindings_blink_headers",
+    ":media_devices_mojo_bindings_blink_headers",
+    ":media_devices_mojo_bindings_headers",
+    ":mojo_bindings_blink_headers",
+    ":mojo_bindings_headers",
   ]
 }
 
@@ -925,7 +914,7 @@ source_set("shared_typemap_traits") {
   ]
   deps = [
     ":blink_headers",
-    ":mojo_bindings_shared__generator",
+    ":mojo_bindings_headers",
     "//mojo/public/cpp/bindings:struct_traits",
   ]
 }

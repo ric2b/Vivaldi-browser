@@ -16,6 +16,7 @@
 #include "ash/assistant/ui/dialog_plate/dialog_plate.h"
 #include "ash/highlighter/highlighter_controller.h"
 #include "base/macros.h"
+#include "base/timer/timer.h"
 #include "ui/views/widget/widget_observer.h"
 
 namespace chromeos {
@@ -94,11 +95,16 @@ class ASH_EXPORT AssistantUiController
   void OnUrlOpened(const GURL& url) override;
 
   // AssistantUiModelObserver:
-  void OnUiVisibilityChanged(bool visible, AssistantSource source) override;
+  void OnUiVisibilityChanged(AssistantVisibility new_visibility,
+                             AssistantVisibility old_visibility,
+                             AssistantSource source) override;
 
   void ShowUi(AssistantSource source);
   void HideUi(AssistantSource source);
+  void CloseUi(AssistantSource source);
   void ToggleUi(AssistantSource source);
+
+  AssistantContainerView* GetViewForTest();
 
  private:
   // Updates UI mode to |ui_mode| if specified. Otherwise UI mode is updated on
@@ -114,6 +120,12 @@ class ASH_EXPORT AssistantUiController
 
   AssistantContainerView* container_view_ =
       nullptr;  // Owned by view hierarchy.
+
+  // When hidden, Assistant automatically closes itself to finish the previous
+  // session. We delay this behavior to allow the user an opportunity to resume.
+  base::OneShotTimer auto_close_timer_;
+
+  base::WeakPtrFactory<AssistantUiController> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantUiController);
 };

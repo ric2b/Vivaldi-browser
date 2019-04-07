@@ -19,6 +19,7 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.View.MeasureSpec;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.view.inputmethod.InputMethodSubtype;
@@ -294,7 +295,16 @@ public class UiUtils {
         }
 
         View rootView = view.getRootView();
-        if (rootView == null) return false;
+        return rootView != null && calculateKeyboardHeight(context, rootView) > 0;
+    }
+
+    /**
+     * Calculates the keyboard height based on the bottom margin it causes for the given rootView.
+     * @param context A {@link Context} instance.
+     * @param rootView A {@link View}.
+     * @return The size of the bottom margin which most likely is exactly the keyboard size.
+     */
+    public static int calculateKeyboardHeight(Context context, View rootView) {
         Rect appRect = new Rect();
         rootView.getWindowVisibleDisplayFrame(appRect);
 
@@ -304,7 +314,7 @@ public class UiUtils {
         int bottomMargin = rootView.getHeight() - (appRect.height() + statusBarHeight);
 
         // If there is no bottom margin, the keyboard is not showing.
-        if (bottomMargin <= 0) return false;
+        if (bottomMargin <= 0) return 0;
 
         // If the display frame width is < root view width, controls are on the side of the screen.
         // The inverse is not necessarily true; i.e. if navControlsOnSide is false, it doesn't mean
@@ -317,7 +327,10 @@ public class UiUtils {
         if (!navControlsOnSide) {
             // When available, get the root view insets.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                bottomMargin -= rootView.getRootWindowInsets().getStableInsetBottom();
+                WindowInsets insets = rootView.getRootWindowInsets();
+                if (insets != null) { // Either not supported or the rootView isn't attached.
+                    bottomMargin -= insets.getStableInsetBottom();
+                }
             } else {
                 // In the event we couldn't get the bottom nav height, use a best guess of the
                 // keyboard height. In certain cases this also means including the height of the
@@ -326,9 +339,8 @@ public class UiUtils {
                 bottomMargin = (int) (bottomMargin - KEYBOARD_DETECT_BOTTOM_THRESHOLD_DP * density);
             }
         }
-
         // After subtracting the bottom navigation, the remaining margin represents the keyboard.
-        return bottomMargin > 0;
+        return bottomMargin;
     }
 
     /**

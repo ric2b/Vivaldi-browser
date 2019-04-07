@@ -28,6 +28,7 @@
 
 #include "base/macros.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
+#include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 
 namespace WTF {
 
@@ -78,7 +79,7 @@ class DoublyLinkedList {
   DoublyLinkedList();
 
   bool IsEmpty() const;
-  size_t size() const;  // This is O(n).
+  wtf_size_t size() const;  // This is O(n).
   void Clear();
 
   T* Head() const;
@@ -89,6 +90,29 @@ class DoublyLinkedList {
   void Push(T*);
   void Append(T*);
   void Remove(T*);
+
+  struct AddResult {
+    T* node;
+    bool is_new_entry;
+
+    explicit operator bool() const { return is_new_entry; }
+  };
+
+  // This function should return -1 if the first argument is strictly
+  // less than the second, 0 if they are equal or 1 otherwise.
+  using CompareFunc = std::function<int(T*, T*)>;
+
+  // The following two functions can be used to implement a sorted
+  // version of the doubly linked list. It's guaranteed that the list
+  // will be sorted by only using Insert(). However the caller is the
+  // responsible of inserting the nodes in the right order if
+  // InsertAfter() is used. The main use case of the latter is to
+  // cheaply insert several consecutive items without having to
+  // traverse the whole list.
+  AddResult Insert(std::unique_ptr<T>, const CompareFunc&);
+  AddResult InsertAfter(std::unique_ptr<T> node, T* insertion_point);
+  AddResult Insert(T*, const CompareFunc&);
+  AddResult InsertAfter(T* node, T* insertion_point);
 
  protected:
   PointerType head_;
@@ -113,8 +137,8 @@ inline bool DoublyLinkedList<T, PointerType>::IsEmpty() const {
 }
 
 template <typename T, typename PointerType>
-inline size_t DoublyLinkedList<T, PointerType>::size() const {
-  size_t size = 0;
+inline wtf_size_t DoublyLinkedList<T, PointerType>::size() const {
+  wtf_size_t size = 0;
   for (T* node = head_; node; node = node->Next())
     ++size;
   return size;
@@ -197,6 +221,65 @@ inline T* DoublyLinkedList<T, PointerType>::RemoveHead() {
   if (node)
     Remove(node);
   return node;
+}
+
+template <typename T, typename PointerType>
+inline typename DoublyLinkedList<T, PointerType>::AddResult
+DoublyLinkedList<T, PointerType>::Insert(std::unique_ptr<T> node,
+                                         const CompareFunc& compare_func) {
+  DCHECK(node);
+  auto result = Insert(node.get(), compare_func);
+  if (result.is_new_entry)
+    node.release();
+  return result;
+}
+
+template <typename T, typename PointerType>
+inline typename DoublyLinkedList<T, PointerType>::AddResult
+DoublyLinkedList<T, PointerType>::Insert(T* node,
+                                         const CompareFunc& compare_func) {
+  DCHECK(node);
+  T* iter = head_;
+  while (iter && compare_func(iter, node) < 0)
+    iter = iter->Next();
+
+  if (iter && !compare_func(iter, node))
+    return {iter, false};
+
+  return InsertAfter(node, iter ? iter->Prev() : tail_);
+}
+
+template <typename T, typename PointerType>
+inline typename DoublyLinkedList<T, PointerType>::AddResult
+DoublyLinkedList<T, PointerType>::InsertAfter(std::unique_ptr<T> node,
+                                              T* insertion_point) {
+  DCHECK(node);
+  auto result = InsertAfter(node.get(), insertion_point);
+  if (result.is_new_entry)
+    node.release();
+  return result;
+}
+
+template <typename T, typename PointerType>
+inline typename DoublyLinkedList<T, PointerType>::AddResult
+DoublyLinkedList<T, PointerType>::InsertAfter(T* node, T* insertion_point) {
+  DCHECK(node);
+
+  if (!insertion_point) {
+    Push(node);
+    return {head_, true};
+  }
+
+  node->SetNext(insertion_point->Next());
+  if (insertion_point->Next())
+    insertion_point->Next()->SetPrev(node);
+  node->SetPrev(insertion_point);
+  insertion_point->SetNext(node);
+
+  if (insertion_point == tail_)
+    tail_ = node;
+
+  return {node, true};
 }
 
 }  // namespace WTF

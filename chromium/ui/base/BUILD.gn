@@ -55,6 +55,7 @@ buildflag_header("ui_features") {
     "ENABLE_HIDPI=$enable_hidpi",
     "ENABLE_MESSAGE_CENTER=$enable_message_center",
     "ENABLE_MUS=$enable_mus",
+    "USE_ATK=$use_atk",
     "USE_XKBCOMMON=$use_xkbcommon",
     "MAC_VIEWS_BROWSER=$mac_views_browser",
     "HAS_NATIVE_ACCESSIBILITY=$has_native_accessibility",
@@ -67,6 +68,8 @@ component("base") {
   sources = [
     "accelerators/media_keys_listener.cc",
     "accelerators/media_keys_listener.h",
+    "accelerators/menu_label_accelerator_util.cc",
+    "accelerators/menu_label_accelerator_util.h",
     "accelerators/menu_label_accelerator_util_linux.cc",
     "accelerators/menu_label_accelerator_util_linux.h",
     "accelerators/platform_accelerator_cocoa.h",
@@ -264,6 +267,7 @@ component("base") {
     "resource/resource_bundle_win.h",
     "resource/resource_data_dll_win.cc",
     "resource/resource_data_dll_win.h",
+    "resource/whitelist.h",
     "template_expressions.cc",
     "template_expressions.h",
     "theme_provider.cc",
@@ -301,6 +305,8 @@ component("base") {
     "win/foreground_helper.h",
     "win/hidden_window.cc",
     "win/hidden_window.h",
+    "win/hwnd_metrics.cc",
+    "win/hwnd_metrics.h",
     "win/hwnd_subclass.cc",
     "win/hwnd_subclass.h",
     "win/internal_constants.cc",
@@ -818,6 +824,7 @@ test("ui_base_unittests") {
     "l10n/time_format_unittest.cc",
     "layout_unittest.cc",
     "material_design/material_design_controller_unittest.cc",
+    "models/simple_menu_model_unittest.cc",
     "models/tree_node_iterator_unittest.cc",
     "resource/data_pack_literal.cc",
     "resource/data_pack_literal.h",
@@ -859,6 +866,8 @@ test("ui_base_unittests") {
       "accelerators/accelerator_manager_unittest.cc",
       "accelerators/accelerator_unittest.cc",
       "accelerators/menu_label_accelerator_util_linux_unittest.cc",
+      "accelerators/menu_label_accelerator_util_unittest.cc",
+      "accelerators/platform_accelerator_cocoa_unittest.mm",
       "clipboard/custom_data_helper_unittest.cc",
       "cocoa/base_view_unittest.mm",
       "cocoa/bubble_closer_unittest.mm",
@@ -1037,7 +1046,7 @@ test("ui_base_unittests") {
     ]
     data_deps += [
       "//ui/resources:ui_test_pak",  # TODO(brettw): this does nothing.
-      "//third_party/mesa:osmesa",
+      "//third_party/mesa_headers",
     ]
   }
   if (is_linux || is_win || is_fuchsia) {

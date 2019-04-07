@@ -5,6 +5,7 @@
 package org.chromium.chrome.test;
 
 import android.content.Context;
+import android.os.Build;
 import android.support.test.InstrumentationRegistry;
 import android.text.TextUtils;
 
@@ -22,7 +23,6 @@ import org.chromium.base.test.util.SkipCheck;
 import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.chrome.test.util.ChromeRestriction;
-import org.chromium.chrome.test.util.browser.ChromeModernDesign;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.content.browser.test.ContentJUnit4ClassRunner;
 import org.chromium.policy.test.annotations.Policies;
@@ -57,8 +57,7 @@ public class ChromeJUnit4ClassRunner extends ContentJUnit4ClassRunner {
 
     @Override
     protected List<TestRule> getDefaultTestRules() {
-        return addToList(super.getDefaultTestRules(), new Features.InstrumentationProcessor(),
-                new ChromeModernDesign.Processor());
+        return addToList(super.getDefaultTestRules(), new Features.InstrumentationProcessor());
     }
 
     private static class ChromeRestrictionSkipCheck extends RestrictionSkipCheck {
@@ -85,11 +84,14 @@ public class ChromeJUnit4ClassRunner extends ContentJUnit4ClassRunner {
             }
         }
 
-        private boolean isDonEnabled() {
-            // We can't directly check whether the VR DON flow is enabled since
-            // we don't have permission to read the VrCore settings file. Instead,
-            // pass a flag.
-            return CommandLine.getInstance().hasSwitch("don-enabled");
+        private boolean isOnStandaloneVrDevice() {
+            return Build.DEVICE.equals("vega");
+        }
+
+        private boolean isVrSettingsServiceEnabled() {
+            // We can't directly check whether the VR settings service is enabled since we don't
+            // have permission to read the VrCore settings file. Instead, pass a flag.
+            return CommandLine.getInstance().hasSwitch("vr-settings-service-enabled");
         }
 
         @Override
@@ -125,7 +127,7 @@ public class ChromeJUnit4ClassRunner extends ContentJUnit4ClassRunner {
                 boolean daydreamViewPaired = isDaydreamViewPaired();
                 if (TextUtils.equals(
                             restriction, ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM)
-                        && !daydreamViewPaired) {
+                        && (!daydreamViewPaired || isOnStandaloneVrDevice())) {
                     return true;
                 } else if (TextUtils.equals(restriction,
                                    ChromeRestriction.RESTRICTION_TYPE_VIEWER_NON_DAYDREAM)
@@ -133,8 +135,20 @@ public class ChromeJUnit4ClassRunner extends ContentJUnit4ClassRunner {
                     return true;
                 }
             }
-            if (TextUtils.equals(restriction, ChromeRestriction.RESTRICTION_TYPE_DON_ENABLED)) {
-                return !isDonEnabled();
+            if (TextUtils.equals(restriction, ChromeRestriction.RESTRICTION_TYPE_STANDALONE)) {
+                return !isOnStandaloneVrDevice();
+            }
+            if (TextUtils.equals(restriction,
+                        ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)) {
+                // Standalone devices are considered to have Daydream View paired.
+                return !isDaydreamViewPaired();
+            }
+            if (TextUtils.equals(restriction, ChromeRestriction.RESTRICTION_TYPE_SVR)) {
+                return isOnStandaloneVrDevice();
+            }
+            if (TextUtils.equals(
+                        restriction, ChromeRestriction.RESTRICTION_TYPE_VR_SETTINGS_SERVICE)) {
+                return !isVrSettingsServiceEnabled();
             }
             return false;
         }

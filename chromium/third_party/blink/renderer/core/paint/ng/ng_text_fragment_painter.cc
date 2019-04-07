@@ -73,7 +73,7 @@ DocumentMarkerVector ComputeMarkersToPaint(
     const NGPaintFragment& paint_fragment) {
   // TODO(yoichio): Handle first-letter
   Node* const node = paint_fragment.GetNode();
-  if (!node)
+  if (!node || !node->IsTextNode())
     return DocumentMarkerVector();
   // We don't paint any marker on ellipsis.
   if (paint_fragment.PhysicalFragment().StyleVariant() ==
@@ -82,11 +82,12 @@ DocumentMarkerVector ComputeMarkersToPaint(
 
   DocumentMarkerController& document_marker_controller =
       node->GetDocument().Markers();
-  return document_marker_controller.ComputeMarkersToPaint(*node);
+  return document_marker_controller.ComputeMarkersToPaint(ToText(*node));
 }
 
 unsigned GetTextContentOffset(const Text& text, unsigned offset) {
-  const Position position(text, offset);
+  // TODO(yoichio): Sanitize DocumentMarker around text length.
+  const Position position(text, std::min(offset, text.length()));
   const NGOffsetMapping* const offset_mapping =
       NGOffsetMapping::GetFor(position);
   DCHECK(offset_mapping);
@@ -273,9 +274,6 @@ void NGTextFragmentPainter::Paint(const PaintInfo& paint_info,
 
   if (!ShouldPaintTextFragment(text_fragment, style))
     return;
-
-  NGPhysicalSize size_;
-  NGPhysicalOffset offset_;
 
   // We round the y-axis to ensure consistent line heights.
   LayoutPoint adjusted_paint_offset =

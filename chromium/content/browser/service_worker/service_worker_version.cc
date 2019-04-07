@@ -31,7 +31,6 @@
 #include "content/browser/service_worker/service_worker_installed_scripts_sender.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/common/service_worker/embedded_worker.mojom.h"
-#include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -111,25 +110,6 @@ void RunCallbackAfterStartWorker(base::WeakPtr<ServiceWorkerVersion> version,
 
 void ClearTick(base::TimeTicks* time) {
   *time = base::TimeTicks();
-}
-
-std::string VersionStatusToString(ServiceWorkerVersion::Status status) {
-  switch (status) {
-    case ServiceWorkerVersion::NEW:
-      return "new";
-    case ServiceWorkerVersion::INSTALLING:
-      return "installing";
-    case ServiceWorkerVersion::INSTALLED:
-      return "installed";
-    case ServiceWorkerVersion::ACTIVATING:
-      return "activating";
-    case ServiceWorkerVersion::ACTIVATED:
-      return "activated";
-    case ServiceWorkerVersion::REDUNDANT:
-      return "redundant";
-  }
-  NOTREACHED() << status;
-  return std::string();
 }
 
 const int kInvalidTraceId = -1;
@@ -499,8 +479,8 @@ void ServiceWorkerVersion::ScheduleUpdate() {
   // and soon no one might hold a reference to us.
   context_->ProtectVersion(base::WrapRefCounted(this));
   update_timer_.Start(FROM_HERE, kUpdateDelay,
-                      base::Bind(&ServiceWorkerVersion::StartUpdate,
-                                 weak_factory_.GetWeakPtr()));
+                      base::BindOnce(&ServiceWorkerVersion::StartUpdate,
+                                     weak_factory_.GetWeakPtr()));
 }
 
 void ServiceWorkerVersion::StartUpdate() {
@@ -535,9 +515,35 @@ int ServiceWorkerVersion::StartRequestWithCustomTimeout(
          event_type == ServiceWorkerMetrics::EventType::ACTIVATE ||
          event_type == ServiceWorkerMetrics::EventType::MESSAGE ||
          event_type == ServiceWorkerMetrics::EventType::EXTERNAL_REQUEST ||
+         event_type == ServiceWorkerMetrics::EventType::LONG_RUNNING_MESSAGE ||
          status() == ACTIVATED)
       << "Event of type " << static_cast<int>(event_type)
       << " can only be dispatched to an active worker: " << status();
+
+  // |context_| is needed for some bookkeeping. If there's no context, the
+  // request will be aborted soon, so don't bother aborting the request directly
+  // here, and just skip this bookkeeping.
+  if (context_) {
+    if (event_type == ServiceWorkerMetrics::EventType::LONG_RUNNING_MESSAGE) {
+      context_->embedded_worker_registry()->AbortLifetimeTracking(
+          embedded_worker_->embedded_worker_id());
+    }
+
+    if (event_type != ServiceWorkerMetrics::EventType::INSTALL &&
+        event_type != ServiceWorkerMetrics::EventType::ACTIVATE &&
+        event_type != ServiceWorkerMetrics::EventType::MESSAGE) {
+      // Reset the self-update delay iff this is not an event that can triggered
+      // by a service worker itself. Otherwise, service workers can use update()
+      // to keep running forever via install and activate events, or
+      // postMessage() between themselves to reset the delay via message event.
+      // postMessage() resets the delay in ServiceWorkerObjectHost, iff it
+      // didn't come from a service worker.
+      ServiceWorkerRegistration* registration =
+          context_->GetLiveRegistration(registration_id_);
+      DCHECK(registration) << "running workers should have a live registration";
+      registration->set_self_update_delay(base::TimeDelta());
+    }
+  }
 
   auto request = std::make_unique<InflightRequest>(
       std::move(error_callback), clock_->Now(), tick_clock_->NowTicks(),
@@ -670,6 +676,12 @@ void ServiceWorkerVersion::AddControllee(
   RestartTick(&idle_time_);
   ClearTick(&no_controllees_time_);
 
+  ServiceWorkerRegistration* registration =
+      context_->GetLiveRegistration(registration_id_);
+  if (registration) {
+    registration->set_self_update_delay(base::TimeDelta());
+  }
+
   // Notify observers asynchronously for consistency with RemoveControllee.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
@@ -735,6 +747,10 @@ void ServiceWorkerVersion::SetStartWorkerStatusCode(
 }
 
 void ServiceWorkerVersion::Doom() {
+  // Protect |this| because NotifyControllerLost() and Stop() callees
+  // may drop references to |this|.
+  scoped_refptr<ServiceWorkerVersion> protect(this);
+
   // Tell controllees that this version is dead. Each controllee will call
   // ServiceWorkerVersion::RemoveControllee(), so be careful with iterators.
   auto iter = controllee_map_.begin();
@@ -1211,7 +1227,7 @@ void ServiceWorkerVersion::NavigateClient(const std::string& client_uuid,
     binding_.Close();
     return;
   }
-  if (provider_host->active_version() != this) {
+  if (provider_host->controller() != this) {
     std::move(callback).Run(
         false /* success */, nullptr /* client */,
         std::string(
@@ -1345,6 +1361,7 @@ void ServiceWorkerVersion::CountFeature(blink::mojom::WebFeature feature) {
     provider_host_by_uuid.second->CountFeature(feature);
 }
 
+// static
 bool ServiceWorkerVersion::IsInstalled(ServiceWorkerVersion::Status status) {
   switch (status) {
     case ServiceWorkerVersion::NEW:
@@ -1358,6 +1375,27 @@ bool ServiceWorkerVersion::IsInstalled(ServiceWorkerVersion::Status status) {
   }
   NOTREACHED() << "Unexpected status: " << status;
   return false;
+}
+
+// static
+std::string ServiceWorkerVersion::VersionStatusToString(
+    ServiceWorkerVersion::Status status) {
+  switch (status) {
+    case ServiceWorkerVersion::NEW:
+      return "new";
+    case ServiceWorkerVersion::INSTALLING:
+      return "installing";
+    case ServiceWorkerVersion::INSTALLED:
+      return "installed";
+    case ServiceWorkerVersion::ACTIVATING:
+      return "activating";
+    case ServiceWorkerVersion::ACTIVATED:
+      return "activated";
+    case ServiceWorkerVersion::REDUNDANT:
+      return "redundant";
+  }
+  NOTREACHED() << status;
+  return std::string();
 }
 
 void ServiceWorkerVersion::IncrementPendingUpdateHintCount() {

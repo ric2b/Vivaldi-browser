@@ -23,6 +23,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.UrlConstants;
@@ -220,6 +221,22 @@ public class AppMenuPropertiesDelegate {
             }
         }
 
+        // We have to iterate all menu items since same menu item ID may be associated with more
+        // than one menu items.
+        boolean useAlternativeIncognitoStrings =
+                ChromeFeatureList.isEnabled(ChromeFeatureList.INCOGNITO_STRINGS);
+        for (int i = 0; i < menu.size(); ++i) {
+            MenuItem item = menu.getItem(i);
+            if (item.getItemId() == R.id.new_incognito_tab_menu_id) {
+                item.setTitle(useAlternativeIncognitoStrings ? R.string.menu_new_private_tab
+                                                             : R.string.menu_new_incognito_tab);
+            } else if (item.getItemId() == R.id.close_all_incognito_tabs_menu_id) {
+                item.setTitle(useAlternativeIncognitoStrings
+                                ? R.string.menu_close_all_private_tabs
+                                : R.string.menu_close_all_incognito_tabs);
+            }
+        }
+
         // Disable new incognito tab when it is blocked (e.g. by a policy).
         // findItem(...).setEnabled(...)" is not enough here, because of the inflated
         // main_menu.xml contains multiple items with the same id in different groups
@@ -246,7 +263,7 @@ public class AppMenuPropertiesDelegate {
             Context context = ContextUtils.getApplicationContext();
             long addToHomeScreenStart = SystemClock.elapsedRealtime();
             ResolveInfo resolveInfo =
-                    WebApkValidator.queryResolveInfo(context, currentTab.getUrl());
+                    WebApkValidator.queryWebApkResolveInfo(context, currentTab.getUrl());
             RecordHistogram.recordTimesHistogram("Android.PrepareMenu.OpenWebApkVisibilityCheck",
                     SystemClock.elapsedRealtime() - addToHomeScreenStart, TimeUnit.MILLISECONDS);
 
@@ -407,12 +424,13 @@ public class AppMenuPropertiesDelegate {
         requestMenuRow.setVisible(itemVisible);
         if (!itemVisible) return;
 
+        boolean isRds = currentTab.getUseDesktopUserAgent();
         // Mark the checkbox if RDS is activated on this page.
-        requestMenuCheck.setChecked(currentTab.getUseDesktopUserAgent());
+        requestMenuCheck.setChecked(isRds);
 
         // This title doesn't seem to be displayed by Android, but it is used to set up
         // accessibility text in {@link AppMenuAdapter#setupMenuButton}.
-        requestMenuLabel.setTitleCondensed(requestMenuLabel.isChecked()
+        requestMenuLabel.setTitleCondensed(isRds
                         ? mActivity.getString(R.string.menu_request_desktop_site_on)
                         : mActivity.getString(R.string.menu_request_desktop_site_off));
     }

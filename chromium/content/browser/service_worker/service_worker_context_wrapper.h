@@ -19,6 +19,7 @@
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_core_observer.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/service_worker_context.h"
 
 namespace base {
@@ -101,6 +102,10 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   // ServiceWorkerContextCoreObserver implementation:
   void OnRegistrationCompleted(int64_t registration_id,
                                const GURL& pattern) override;
+  void OnNoControllees(int64_t version_id, const GURL& scope) override;
+  void OnVersionStateChanged(int64_t version_id,
+                             const GURL& scope,
+                             ServiceWorkerVersion::Status status) override;
 
   // ServiceWorkerContext implementation:
   void AddObserver(ServiceWorkerContextObserver* observer) override;
@@ -127,6 +132,10 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   void StartWorkerForPattern(const GURL& pattern,
                              StartWorkerCallback info_callback,
                              base::OnceClosure failure_callback) override;
+  void StartServiceWorkerAndDispatchLongRunningMessage(
+      const GURL& pattern,
+      blink::TransferableMessage message,
+      ResultCallback result_callback) override;
   void StartServiceWorkerForNavigationHint(
       const GURL& document_url,
       StartServiceWorkerForNavigationHintCallback callback) override;
@@ -143,10 +152,9 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   void HasMainFrameProviderHost(const GURL& origin,
                                 BoolCallback callback) const;
 
-  // Returns all render process ids and frame ids for the given |origin|.
-  std::unique_ptr<
-      std::vector<std::pair<int /* render process id */, int /* frame id */>>>
-  GetProviderHostIds(const GURL& origin) const;
+  // Returns all frame ids for the given |origin|.
+  std::unique_ptr<std::vector<GlobalFrameRoutingId>> GetProviderHostIds(
+      const GURL& origin) const;
 
   // Returns the registration whose scope longest matches |document_url|. It is
   // guaranteed that the returned registration has the activated worker.
@@ -354,6 +362,27 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       base::OnceClosure callback,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_callback);
 
+  void DidFindRegistrationForLongRunningMessage(
+      blink::TransferableMessage message,
+      const GURL& source_origin,
+      ResultCallback result_callback,
+      blink::ServiceWorkerStatusCode service_worker_status,
+      scoped_refptr<ServiceWorkerRegistration> registration);
+
+  void DidStartServiceWorkerForLongRunningMessage(
+      blink::TransferableMessage message,
+      const GURL& source_origin,
+      scoped_refptr<ServiceWorkerRegistration> registration,
+      ServiceWorkerContext::ResultCallback result_callback,
+      blink::ServiceWorkerStatusCode service_worker_status);
+
+  void SendActiveWorkerMessage(
+      blink::TransferableMessage message,
+      const GURL& source_origin,
+      ServiceWorkerContext::ResultCallback result_callback,
+      blink::ServiceWorkerStatusCode status,
+      scoped_refptr<ServiceWorkerRegistration> registration);
+
   // The core context is only for use on the IO thread.
   // Can be null before/during init, during/after shutdown, and after
   // DeleteAndStartOver fails.
@@ -367,7 +396,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
 
   // Observers which live outside content's implementation boundary. Observer
   // methods will always be dispatched on the UI thread.
-  base::ObserverList<ServiceWorkerContextObserver> observer_list_;
+  base::ObserverList<ServiceWorkerContextObserver>::Unchecked observer_list_;
 
   const std::unique_ptr<ServiceWorkerProcessManager> process_manager_;
   // Cleared in ShutdownOnIO():

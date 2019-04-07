@@ -55,8 +55,6 @@ cast_source_set("base") {
     "cast_paths.h",
     "cast_resource.cc",
     "cast_resource.h",
-    "chromecast_config_android.cc",
-    "chromecast_config_android.h",
     "device_capabilities.h",
     "device_capabilities_impl.cc",
     "device_capabilities_impl.h",
@@ -103,6 +101,18 @@ cast_source_set("base") {
     sources += [ "cast_features_internal.cc" ]
   } else {
     deps += [ "//chromecast/internal/base:cast_internal_features" ]
+  }
+
+  if (is_android) {
+    sources += [ "chromecast_config_android.h" ]
+    if (chromecast_branding == "public") {
+      sources += [ "chromecast_config_android_dummy.cc" ]
+    } else {
+      sources +=
+          [ "//chromecast/internal/base/chromecast_config_android_internal.cc" ]
+      deps +=
+          [ "//chromecast/internal/base:chromecast_config_android_jni_headers" ]
+    }
   }
 }
 
@@ -289,7 +299,6 @@ process_version("cast_version") {
 if (is_android) {
   generate_jni("jni_headers") {
     sources = [
-      "java/src/org/chromium/chromecast/base/ChromecastConfigAndroid.java",
       "java/src/org/chromium/chromecast/base/DumpstateWriter.java",
       "java/src/org/chromium/chromecast/base/SystemTimeChangeNotifierAndroid.java",
     ]
@@ -310,18 +319,17 @@ if (is_android) {
       "$java_src_dir/org/chromium/chromecast/base/Function.java",
       "$java_src_dir/org/chromium/chromecast/base/Itertools.java",
       "$java_src_dir/org/chromium/chromecast/base/Observable.java",
+      "$java_src_dir/org/chromium/chromecast/base/Observer.java",
+      "$java_src_dir/org/chromium/chromecast/base/Observers.java",
       "$java_src_dir/org/chromium/chromecast/base/Scope.java",
       "$java_src_dir/org/chromium/chromecast/base/Predicate.java",
-      "$java_src_dir/org/chromium/chromecast/base/ScopeFactories.java",
-      "$java_src_dir/org/chromium/chromecast/base/ScopeFactory.java",
+      "$java_src_dir/org/chromium/chromecast/base/Subscription.java",
       "$java_src_dir/org/chromium/chromecast/base/Supplier.java",
       "$java_src_dir/org/chromium/chromecast/base/Unit.java",
-      "$java_src_dir/org/chromium/chromecast/base/VoidScopeFactory.java",
 
       # TODO(sanfin): Move these files to another target.
       "$java_src_dir/org/chromium/chromecast/base/CastSettingsManager.java",
       "$java_src_dir/org/chromium/chromecast/base/CastSwitches.java",
-      "$java_src_dir/org/chromium/chromecast/base/ChromecastConfigAndroid.java",
       "$java_src_dir/org/chromium/chromecast/base/DumpstateWriter.java",
       "$java_src_dir/org/chromium/chromecast/base/SystemTimeChangeNotifierAndroid.java",
     ]
@@ -349,11 +357,17 @@ if (is_android) {
     java_test_dir = "//chromecast/base/java/test"
     java_files = [
       "$java_test_dir/org/chromium/chromecast/base/BothTest.java",
+      "$java_test_dir/org/chromium/chromecast/base/ControllerTest.java",
       "$java_test_dir/org/chromium/chromecast/base/CircularBufferTest.java",
       "$java_test_dir/org/chromium/chromecast/base/ItertoolsTest.java",
-      "$java_test_dir/org/chromium/chromecast/base/ObservableAndControllerTest.java",
+      "$java_test_dir/org/chromium/chromecast/base/ObservableAndTest.java",
+      "$java_test_dir/org/chromium/chromecast/base/ObservableAndThenTest.java",
+      "$java_test_dir/org/chromium/chromecast/base/ObservableFilterTest.java",
+      "$java_test_dir/org/chromium/chromecast/base/ObservableMapTest.java",
+      "$java_test_dir/org/chromium/chromecast/base/ObservableMiscellaneousTest.java",
+      "$java_test_dir/org/chromium/chromecast/base/ObservableNotTest.java",
       "$java_test_dir/org/chromium/chromecast/base/ReactiveRecorderTest.java",
-      "$java_test_dir/org/chromium/chromecast/base/ScopeFactoriesTest.java",
+      "$java_test_dir/org/chromium/chromecast/base/ObserversTest.java",
       "$java_test_dir/org/chromium/chromecast/base/UnitTest.java",
     ]
     deps = [

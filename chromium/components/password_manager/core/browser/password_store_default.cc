@@ -196,6 +196,13 @@ bool PasswordStoreDefault::FillBlacklistLogins(
   return login_db_ && login_db_->GetBlacklistLogins(forms);
 }
 
+DatabaseCleanupResult PasswordStoreDefault::DeleteUndecryptableLogins() {
+  DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
+  if (!login_db_)
+    return DatabaseCleanupResult::kDatabaseUnavailable;
+  return login_db_->DeleteUndecryptableLogins();
+}
+
 void PasswordStoreDefault::AddSiteStatsImpl(const InteractionsStats& stats) {
   DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
   if (login_db_)
@@ -225,5 +232,12 @@ void PasswordStoreDefault::ResetLoginDB() {
   DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
   login_db_.reset();
 }
+
+#if defined(USE_X11)
+void PasswordStoreDefault::SetLoginDB(std::unique_ptr<LoginDatabase> login_db) {
+  DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
+  login_db_ = std::move(login_db);
+}
+#endif  // defined(USE_X11)
 
 }  // namespace password_manager

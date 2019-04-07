@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "device/fido/authenticator_get_assertion_response.h"
 #include "device/fido/ctap_get_assertion_request.h"
+#include "device/fido/mac/keychain.h"
 #include "device/fido/mac/operation_base.h"
 
 namespace device {

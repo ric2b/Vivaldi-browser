@@ -11,11 +11,14 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/version_info/version_info.h"
 
 namespace syncer {
+class ModelTypeController;
+class ModelTypeControllerDelegate;
 class SyncClient;
 }
 
@@ -25,6 +28,10 @@ class AutofillWebDataService;
 
 namespace password_manager {
 class PasswordStore;
+}
+
+namespace sync_bookmarks {
+class BookmarkSyncService;
 }
 
 namespace browser_sync {
@@ -40,8 +47,12 @@ class ProfileSyncComponentsFactoryImpl
       const char* history_disabled_pref,
       const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
       const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
-      const scoped_refptr<autofill::AutofillWebDataService>& web_data_service,
-      const scoped_refptr<password_manager::PasswordStore>& password_store);
+      const scoped_refptr<autofill::AutofillWebDataService>&
+          web_data_service_on_disk,
+      const scoped_refptr<autofill::AutofillWebDataService>&
+          web_data_service_in_memory,
+      const scoped_refptr<password_manager::PasswordStore>& password_store,
+      sync_bookmarks::BookmarkSyncService* bookmark_sync_service);
   ~ProfileSyncComponentsFactoryImpl() override;
 
   // SyncApiComponentFactory implementation:
@@ -71,6 +82,29 @@ class ProfileSyncComponentsFactoryImpl
   static void OverridePrefsForUssTest(bool use_uss);
 
  private:
+  // Factory function for ModelTypeController instances for models living on
+  // |ui_thread_|.
+  std::unique_ptr<syncer::ModelTypeController>
+  CreateModelTypeControllerForModelRunningOnUIThread(syncer::ModelType type);
+
+  // Factory function for ModelTypeController instnaces for autofill-related
+  // datatypes, which live in |db_thread_| and have a delegate accesible via
+  // AutofillWebDataService.
+  std::unique_ptr<syncer::ModelTypeController> CreateWebDataModelTypeController(
+      syncer::ModelType type,
+      const base::RepeatingCallback<
+          base::WeakPtr<syncer::ModelTypeControllerDelegate>(
+              autofill::AutofillWebDataService*)>& delegate_from_web_data);
+  // Same as above, but for datatypes supporting STORAGE_IN_MEMORY implemented
+  // as an independent AutofillWebDataService,
+  // namely |web_data_service_in_memory_|.
+  std::unique_ptr<syncer::ModelTypeController>
+  CreateWebDataModelTypeControllerWithInMemorySupport(
+      syncer::ModelType type,
+      const base::RepeatingCallback<
+          base::WeakPtr<syncer::ModelTypeControllerDelegate>(
+              autofill::AutofillWebDataService*)>& delegate_from_web_data);
+
   // Client/platform specific members.
   syncer::SyncClient* const sync_client_;
   const version_info::Channel channel_;
@@ -79,8 +113,12 @@ class ProfileSyncComponentsFactoryImpl
   const char* history_disabled_pref_;
   const scoped_refptr<base::SingleThreadTaskRunner> ui_thread_;
   const scoped_refptr<base::SingleThreadTaskRunner> db_thread_;
-  const scoped_refptr<autofill::AutofillWebDataService> web_data_service_;
+  const scoped_refptr<autofill::AutofillWebDataService>
+      web_data_service_on_disk_;
+  const scoped_refptr<autofill::AutofillWebDataService>
+      web_data_service_in_memory_;
   const scoped_refptr<password_manager::PasswordStore> password_store_;
+  sync_bookmarks::BookmarkSyncService* const bookmark_sync_service_;
 
   // Whether to override PREFERENCES to use USS.
   static bool override_prefs_controller_to_uss_for_test_;

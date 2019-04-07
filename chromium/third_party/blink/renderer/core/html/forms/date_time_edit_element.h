@@ -66,6 +66,8 @@ class DateTimeEditElement final : public HTMLDivElement,
 
   struct LayoutParameters {
     STACK_ALLOCATED();
+
+   public:
     String date_time_format;
     String fallback_date_time_format;
     Locale& locale;
@@ -88,7 +90,7 @@ class DateTimeEditElement final : public HTMLDivElement,
   void AddField(DateTimeFieldElement*);
   bool AnyEditableFieldsHaveValues() const;
   void BlurByOwner();
-  void DefaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event&) override;
   void DisabledStateChanged();
   Element* FieldsWrapperElement() const;
   void FocusIfNoFocus();

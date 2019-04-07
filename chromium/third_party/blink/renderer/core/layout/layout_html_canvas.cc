@@ -30,7 +30,6 @@
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/core/paint/html_canvas_paint_invalidator.h"
 #include "third_party/blink/renderer/core/paint/html_canvas_painter.h"
 
 namespace blink {
@@ -53,8 +52,8 @@ void LayoutHTMLCanvas::PaintReplaced(const PaintInfo& paint_info,
 
 void LayoutHTMLCanvas::CanvasSizeChanged() {
   IntSize canvas_size = ToHTMLCanvasElement(GetNode())->Size();
-  LayoutSize zoomed_size(canvas_size.Width() * Style()->EffectiveZoom(),
-                         canvas_size.Height() * Style()->EffectiveZoom());
+  LayoutSize zoomed_size(canvas_size.Width() * StyleRef().EffectiveZoom(),
+                         canvas_size.Height() * StyleRef().EffectiveZoom());
 
   if (zoomed_size == IntrinsicSize())
     return;
@@ -83,9 +82,13 @@ void LayoutHTMLCanvas::CanvasSizeChanged() {
     SetNeedsLayout(LayoutInvalidationReason::kSizeChanged);
 }
 
-PaintInvalidationReason LayoutHTMLCanvas::InvalidatePaint(
+void LayoutHTMLCanvas::InvalidatePaint(
     const PaintInvalidatorContext& context) const {
-  return HTMLCanvasPaintInvalidator(*this, context).InvalidatePaint();
+  auto* element = ToHTMLCanvasElement(GetNode());
+  if (element->IsDirty())
+    element->DoDeferredPaintInvalidation();
+
+  LayoutReplaced::InvalidatePaint(context);
 }
 
 CompositingReasons LayoutHTMLCanvas::AdditionalCompositingReasons() const {

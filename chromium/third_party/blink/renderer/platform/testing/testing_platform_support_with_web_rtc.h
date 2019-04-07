@@ -8,6 +8,7 @@
 #include "base/single_thread_task_runner.h"
 #include "third_party/blink/public/platform/web_rtc_peer_connection_handler.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
+#include "third_party/webrtc/api/peerconnectioninterface.h"
 
 namespace blink {
 
@@ -16,9 +17,8 @@ class MockWebRTCPeerConnectionHandler : public WebRTCPeerConnectionHandler {
   MockWebRTCPeerConnectionHandler();
   ~MockWebRTCPeerConnectionHandler() override;
 
-  bool Initialize(const WebRTCConfiguration&,
-                  const WebMediaConstraints&,
-                  WebRTCSdpSemantics original_sdp_semantics_value) override;
+  bool Initialize(const webrtc::PeerConnectionInterface::RTCConfiguration&,
+                  const WebMediaConstraints&) override;
 
   void CreateOffer(const WebRTCSessionDescriptionRequest&,
                    const WebMediaConstraints&) override;
@@ -34,7 +34,14 @@ class MockWebRTCPeerConnectionHandler : public WebRTCPeerConnectionHandler {
                             const WebRTCSessionDescription&) override;
   WebRTCSessionDescription LocalDescription() override;
   WebRTCSessionDescription RemoteDescription() override;
-  webrtc::RTCErrorType SetConfiguration(const WebRTCConfiguration&) override;
+  WebRTCSessionDescription CurrentLocalDescription() override;
+  WebRTCSessionDescription CurrentRemoteDescription() override;
+  WebRTCSessionDescription PendingLocalDescription() override;
+  WebRTCSessionDescription PendingRemoteDescription() override;
+  const webrtc::PeerConnectionInterface::RTCConfiguration& GetConfiguration()
+      const override;
+  webrtc::RTCErrorType SetConfiguration(
+      const webrtc::PeerConnectionInterface::RTCConfiguration&) override;
   void GetStats(const WebRTCStatsRequest&) override;
   void GetStats(std::unique_ptr<WebRTCStatsReportCallback>) override;
   webrtc::RTCErrorOr<std::unique_ptr<WebRTCRtpTransceiver>>

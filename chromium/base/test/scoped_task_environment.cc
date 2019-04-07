@@ -11,9 +11,9 @@
 #include "base/run_loop.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_scheduler.h"
-#include "base/task_scheduler/task_scheduler_impl.h"
+#include "base/task/post_task.h"
+#include "base/task/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler_impl.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/sequence_local_storage_map.h"
 #include "base/threading/thread_restrictions.h"
@@ -119,7 +119,12 @@ ScopedTaskEnvironment::ScopedTaskEnvironment(
               : nullptr),
 #endif  // defined(OS_POSIX)
       task_tracker_(new TestTaskTracker()) {
-  CHECK(!TaskScheduler::GetInstance());
+  CHECK(!TaskScheduler::GetInstance())
+      << "Someone has already initialized TaskScheduler. If nothing in your "
+         "test does so, then a test that ran earlier may have initialized one, "
+         "and leaked it. base::TestSuite will trap leaked globals, unless "
+         "someone has explicitly disabled it with "
+         "DisableCheckForLeakedGlobals().";
 
   // Instantiate a TaskScheduler with 2 threads in each of its 4 pools. Threads
   // stay alive even when they don't have work.
@@ -190,8 +195,8 @@ void ScopedTaskEnvironment::RunUntilIdle() {
   //       if (task_tracker_->HasIncompleteTasks())
   //         PlatformThread::Sleep(TimeDelta::FromMilliSeconds(1));
   //     }
-  // Challenge: HasMainThreadTasks() requires support for proper
-  // IncomingTaskQueue::IsIdleForTesting() (check all queues).
+  // Update: This can likely be done now that MessageLoop::IsIdleForTesting()
+  // checks all queues.
   //
   // Other than that it works because once |task_tracker_->HasIncompleteTasks()|
   // is false we know for sure that the only thing that can make it true is a

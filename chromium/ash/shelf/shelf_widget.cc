@@ -28,7 +28,9 @@
 #include "ash/system/tray/system_tray.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
+#include "chromeos/chromeos_switches.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_owner.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/skbitmap_operations.h"
 #include "ui/views/accessible_pane_view.h"
@@ -40,6 +42,9 @@
 
 namespace ash {
 namespace {
+
+constexpr int kShelfRoundedCornerRadius = 28;
+constexpr int kShelfBlurRadius = 10;
 
 // Return the first or last focusable child of |root|.
 views::View* FindFirstOrLastFocusableChild(views::View* root,
@@ -75,8 +80,6 @@ class ShelfWidget::DelegateView : public views::WidgetDelegate,
 
   FocusCycler* focus_cycler() { return focus_cycler_; }
 
-  ui::Layer* opaque_background() { return &opaque_background_; }
-
   void SetParentLayer(ui::Layer* layer);
 
   void set_default_last_focusable_child(bool default_last_focusable_child) {
@@ -90,6 +93,8 @@ class ShelfWidget::DelegateView : public views::WidgetDelegate,
 
   bool CanActivate() const override;
   void ReorderChildLayers(ui::Layer* parent_layer) override;
+  void UpdateBackgroundBlur();
+  void UpdateOpaqueBackground();
   // This will be called when the parent local bounds change.
   void OnBoundsChanged(const gfx::Rect& old_bounds) override;
 
@@ -106,8 +111,15 @@ class ShelfWidget::DelegateView : public views::WidgetDelegate,
   // ShelfBackgroundAnimator.
   ui::Layer opaque_background_;
 
+  // A mask to show rounded corners when appropriate.
+  std::unique_ptr<ui::LayerOwner> mask_ = nullptr;
+
   // When true, the default focus of the shelf is the last focusable child.
   bool default_last_focusable_child_ = false;
+
+  // Cache the state of the background blur so that it can be updated only
+  // when necessary.
+  bool background_is_currently_blurred_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(DelegateView);
 };
@@ -121,7 +133,8 @@ ShelfWidget::DelegateView::DelegateView(ShelfWidget* shelf_widget)
 
   SetLayoutManager(std::make_unique<views::FillLayout>());
   set_allow_deactivate_on_esc(true);
-  opaque_background_.SetBounds(GetLocalBounds());
+
+  UpdateOpaqueBackground();
 }
 
 ShelfWidget::DelegateView::~DelegateView() = default;
@@ -175,8 +188,61 @@ void ShelfWidget::DelegateView::ReorderChildLayers(ui::Layer* parent_layer) {
   parent_layer->StackAtBottom(&opaque_background_);
 }
 
+void ShelfWidget::DelegateView::UpdateBackgroundBlur() {
+  const bool should_blur_background =
+      shelf_widget_->shelf_layout_manager()->ShouldBlurShelfBackground();
+  if (should_blur_background == background_is_currently_blurred_)
+    return;
+
+  opaque_background_.SetBackgroundBlur(should_blur_background ? kShelfBlurRadius
+                                                              : 0);
+
+  background_is_currently_blurred_ = should_blur_background;
+}
+
+void ShelfWidget::DelegateView::UpdateOpaqueBackground() {
+  const gfx::Rect local_bounds = GetLocalBounds();
+  gfx::Rect opaque_background_bounds = local_bounds;
+
+  if (chromeos::switches::ShouldUseShelfNewUi()) {
+    const Shelf* shelf = shelf_widget_->shelf();
+    const ShelfBackgroundType background_type =
+        shelf_widget_->GetBackgroundType();
+
+    // Show rounded corners except in maximized and split modes.
+    if (background_type == SHELF_BACKGROUND_MAXIMIZED ||
+        background_type == SHELF_BACKGROUND_SPLIT_VIEW) {
+      mask_ = nullptr;
+      opaque_background_.SetMaskLayer(nullptr);
+    } else {
+      const int radius = kShelfRoundedCornerRadius;
+      // Extend the opaque layer a little bit so that only two rounded
+      // corners are visible.
+      // TODO(manucornet): Add functionality to skia to draw a rounded
+      // rectangle with four different radiuses.
+      opaque_background_bounds = gfx::Rect(
+          local_bounds.x() - shelf->SelectValueForShelfAlignment(0, radius, 0),
+          local_bounds.y(),
+          local_bounds.width() +
+              shelf->SelectValueForShelfAlignment(0, radius, radius),
+          local_bounds.height() +
+              shelf->SelectValueForShelfAlignment(radius, 0, 0));
+      // Only re-create the mask if the bounds have changed.
+      if (!mask_ || mask_->layer()->bounds() != opaque_background_bounds) {
+        mask_ = views::Painter::CreatePaintedLayer(
+            views::Painter::CreateSolidRoundRectPainter(SK_ColorBLACK, radius));
+        mask_->layer()->SetBounds(opaque_background_bounds);
+        opaque_background_.SetMaskLayer(mask_->layer());
+      }
+    }
+  }
+  opaque_background_.SetBounds(opaque_background_bounds);
+  UpdateBackgroundBlur();
+  SchedulePaint();
+}
+
 void ShelfWidget::DelegateView::OnBoundsChanged(const gfx::Rect& old_bounds) {
-  opaque_background_.SetBounds(GetLocalBounds());
+  UpdateOpaqueBackground();
 }
 
 views::View* ShelfWidget::DelegateView::GetDefaultFocusableChild() {
@@ -190,18 +256,20 @@ views::View* ShelfWidget::DelegateView::GetDefaultFocusableChild() {
 
 void ShelfWidget::DelegateView::UpdateShelfBackground(SkColor color) {
   opaque_background_.SetColor(color);
+  UpdateOpaqueBackground();
 }
 
 ShelfWidget::ShelfWidget(aura::Window* shelf_container, Shelf* shelf)
     : shelf_(shelf),
+      background_animator_(SHELF_BACKGROUND_DEFAULT,
+                           shelf_,
+                           Shell::Get()->wallpaper_controller()),
+      shelf_layout_manager_(new ShelfLayoutManager(this, shelf)),
       delegate_view_(new DelegateView(this)),
       shelf_view_(new ShelfView(Shell::Get()->shelf_model(), shelf_, this)),
       login_shelf_view_(
           new LoginShelfView(RootWindowController::ForWindow(shelf_container)
                                  ->lock_screen_action_background_controller())),
-      background_animator_(SHELF_BACKGROUND_DEFAULT,
-                           shelf_,
-                           Shell::Get()->wallpaper_controller()),
       scoped_session_observer_(this) {
   DCHECK(shelf_container);
   DCHECK(shelf_);
@@ -226,7 +294,6 @@ ShelfWidget::ShelfWidget(aura::Window* shelf_container, Shelf* shelf)
   GetContentsView()->AddChildView(shelf_view_);
   GetContentsView()->AddChildView(login_shelf_view_);
 
-  shelf_layout_manager_ = new ShelfLayoutManager(this, shelf_);
   shelf_layout_manager_->AddObserver(this);
   shelf_container->SetLayoutManager(shelf_layout_manager_);
   background_animator_.PaintBackground(
@@ -238,6 +305,7 @@ ShelfWidget::ShelfWidget(aura::Window* shelf_container, Shelf* shelf)
   // Calls back into |this| and depends on |shelf_view_|.
   background_animator_.AddObserver(this);
   background_animator_.AddObserver(delegate_view_);
+  shelf_->AddObserver(this);
 }
 
 ShelfWidget::~ShelfWidget() {
@@ -264,6 +332,7 @@ void ShelfWidget::Shutdown() {
   // Don't need to update the shelf background during shutdown.
   background_animator_.RemoveObserver(delegate_view_);
   background_animator_.RemoveObserver(this);
+  shelf_->RemoveObserver(this);
 
   // Don't need to observe focus/activation during shutdown.
   Shell::Get()->focus_cycler()->RemoveWidget(this);
@@ -301,7 +370,8 @@ void ShelfWidget::OnShelfAlignmentChanged() {
   CHECK(status_area_widget_);
   shelf_view_->OnShelfAlignmentChanged();
   status_area_widget_->UpdateAfterShelfAlignmentChange();
-  delegate_view_->SchedulePaint();
+  // This call will in turn trigger a call to delegate_view_->SchedulePaint().
+  delegate_view_->UpdateOpaqueBackground();
 }
 
 void ShelfWidget::OnTabletModeChanged() {
@@ -339,17 +409,6 @@ void ShelfWidget::SetFocusCycler(FocusCycler* focus_cycler) {
 
 FocusCycler* ShelfWidget::GetFocusCycler() {
   return delegate_view_->focus_cycler();
-}
-
-void ShelfWidget::UpdateIconPositionForPanel(aura::Window* panel) {
-  ShelfID id = ShelfID::Deserialize(panel->GetProperty(kShelfIDKey));
-  if (id.IsNull())
-    return;
-
-  aura::Window* shelf_window = this->GetNativeWindow();
-  gfx::Rect bounds = panel->GetBoundsInScreen();
-  ::wm::ConvertRectFromScreen(shelf_window, &bounds);
-  shelf_view_->UpdatePanelIconPosition(id, bounds.CenterPoint());
 }
 
 gfx::Rect ShelfWidget::GetScreenBoundsOfItemIconForWindow(
@@ -409,6 +468,11 @@ void ShelfWidget::UpdateShelfItemBackground(SkColor color) {
 void ShelfWidget::WillDeleteShelfLayoutManager() {
   shelf_layout_manager_->RemoveObserver(this);
   shelf_layout_manager_ = nullptr;
+}
+
+void ShelfWidget::OnBackgroundTypeChanged(ShelfBackgroundType background_type,
+                                          AnimationChangeType change_type) {
+  delegate_view_->UpdateOpaqueBackground();
 }
 
 void ShelfWidget::OnSessionStateChanged(session_manager::SessionState state) {

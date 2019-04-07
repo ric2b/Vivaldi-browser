@@ -38,11 +38,10 @@ void CaptivePortalDetector::DetectCaptivePortal(
   auto resource_request = std::make_unique<network::ResourceRequest>();
   resource_request->url = url;
 
-  // Can't safely use net::LOAD_DISABLE_CERT_REVOCATION_CHECKING here,
+  // Can't safely use net::LOAD_DISABLE_CERT_NETWORK_FETCHES here,
   // since then the connection may be reused without checking the cert.
-  resource_request->load_flags =
-      net::LOAD_BYPASS_CACHE | net::LOAD_DO_NOT_SAVE_COOKIES |
-      net::LOAD_DO_NOT_SEND_COOKIES | net::LOAD_DO_NOT_SEND_AUTH_DATA;
+  resource_request->load_flags = net::LOAD_BYPASS_CACHE;
+  resource_request->allow_credentials = false;
 
   // TODO(jam): switch to using ServiceURLLoader to track data measurement once
   // https://crbug.com/808498 is fixed.

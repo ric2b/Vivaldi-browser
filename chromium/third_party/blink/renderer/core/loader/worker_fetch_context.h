@@ -37,10 +37,12 @@ class WorkerFetchContext final : public BaseFetchContext {
   ~WorkerFetchContext() override;
 
   // BaseFetchContext implementation:
-  const FetchClientSettingsObject* GetFetchClientSettingsObject()
+  const FetchClientSettingsObjectImpl* GetFetchClientSettingsObject()
       const override;
   KURL GetSiteForCookies() const override;
   SubresourceFilter* GetSubresourceFilter() const override;
+  PreviewsResourceLoadingHints* GetPreviewsResourceLoadingHints()
+      const override;
   bool AllowScriptFromSource(const KURL&) const override;
   bool ShouldBlockRequestByInspector(const KURL&) const override;
   void DispatchDidBlockRequest(const ResourceRequest&,
@@ -74,6 +76,7 @@ class WorkerFetchContext final : public BaseFetchContext {
   std::unique_ptr<WebURLLoader> CreateURLLoader(
       const ResourceRequest&,
       const ResourceLoaderOptions&) override;
+  std::unique_ptr<CodeCacheLoader> CreateCodeCacheLoader() override;
   void PrepareRequest(ResourceRequest&, RedirectType) override;
   blink::mojom::ControllerServiceWorkerMode IsControlledByServiceWorker()
       const override;

@@ -60,6 +60,9 @@ class CORE_EXPORT InlineTextBox : public InlineBox {
   InlineTextBox* NextForSameLayoutObject() const { return next_text_box_; }
   void SetNextForSameLayoutObject(InlineTextBox* n) { next_text_box_ = n; }
   void SetPreviousForSameLayoutObject(InlineTextBox* p) { prev_text_box_ = p; }
+  void ManuallySetStartLenAndLogicalWidth(unsigned start,
+                                          unsigned len,
+                                          LayoutUnit logical_width);
 
   // FIXME: These accessors should DCHECK(!isDirty()). See
   // https://bugs.webkit.org/show_bug.cgi?id=97264
@@ -130,7 +133,6 @@ class CORE_EXPORT InlineTextBox : public InlineBox {
       int start_pos,
       int end_pos,
       bool include_newline_space_width = true) const;
-  bool IsSelected(int start_pos, int end_pos) const;
   void SelectionStartEnd(int& s_pos, int& e_pos) const;
 
   virtual void PaintDocumentMarker(GraphicsContext&,
@@ -169,11 +171,12 @@ class CORE_EXPORT InlineTextBox : public InlineBox {
   void AttachLine() final;
 
  public:
-  SelectionState GetSelectionState() const final;
+  bool IsSelected() const final;
   bool HasWrappedSelectionNewline() const;
   float NewlineSpaceWidth() const;
 
  private:
+  bool IsBoxEndIncludedInSelection() const;
   void SetTruncation(unsigned);
 
   void ClearTruncation() final;

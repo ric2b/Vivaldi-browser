@@ -141,6 +141,10 @@ class AURA_EXPORT WindowOcclusionTracker : public ui::LayerAnimationObserver,
                                   bool assume_parent_opaque = false,
                                   bool assume_window_opaque = false) const;
 
+  // Returns true if changing the opacity or alpha state of |window| could
+  // affect the occlusion state of a tracked window.
+  bool WindowOpacityChangeMayAffectOcclusionStates(Window* window) const;
+
   // Returns true if changing the transform, bounds or stacking order of
   // |window| could affect the occlusion state of a tracked window.
   bool WindowMoveMayAffectOcclusionStates(Window* window) const;
@@ -174,6 +178,7 @@ class AURA_EXPORT WindowOcclusionTracker : public ui::LayerAnimationObserver,
                              ui::PropertyChangeReason reason) override;
   void OnWindowOpacitySet(Window* window,
                           ui::PropertyChangeReason reason) override;
+  void OnWindowAlphaShapeSet(Window* window) override;
   void OnWindowTransformed(Window* window,
                            ui::PropertyChangeReason reason) override;
   void OnWindowStackingChanged(Window* window) override;
@@ -205,11 +210,6 @@ class AURA_EXPORT WindowOcclusionTracker : public ui::LayerAnimationObserver,
   // Number of times that the current call to MaybeComputeOcclusion() has
   // recomputed occlusion states. Always 0 when not in MaybeComputeOcclusion().
   int num_times_occlusion_recomputed_in_current_step_ = 0;
-
-  // Set to true when occlusion is recomputed too many times before it becomes
-  // stable. Reset in
-  // WindowOcclusionTrackerTestApi::WasOcclusionRecomputedTooManyTimes().
-  bool was_occlusion_recomputed_too_many_times_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(WindowOcclusionTracker);
 };

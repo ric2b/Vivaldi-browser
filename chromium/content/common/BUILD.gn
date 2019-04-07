@@ -49,10 +49,6 @@ source_set("common") {
     "android/use_zoom_for_dsf_policy_android.cc",
     "appcache_interfaces.cc",
     "appcache_interfaces.h",
-    "associated_interface_provider_impl.cc",
-    "associated_interface_provider_impl.h",
-    "associated_interface_registry_impl.cc",
-    "associated_interface_registry_impl.h",
     "ax_content_node_data.cc",
     "ax_content_node_data.h",
     "background_fetch/background_fetch_struct_traits.cc",
@@ -113,7 +109,6 @@ source_set("common") {
     "drag_messages.h",
     "drag_traits.h",
     "edit_command.h",
-    "fileapi/file_system_messages.h",
     "fileapi/webblob_messages.h",
     "font_cache_dispatcher_win.cc",
     "font_list.cc",
@@ -138,17 +133,6 @@ source_set("common") {
     "gin_java_bridge_messages.h",
     "in_process_child_thread_params.cc",
     "in_process_child_thread_params.h",
-    "indexed_db/indexed_db_constants.h",
-    "indexed_db/indexed_db_key.cc",
-    "indexed_db/indexed_db_key.h",
-    "indexed_db/indexed_db_key_path.cc",
-    "indexed_db/indexed_db_key_path.h",
-    "indexed_db/indexed_db_key_range.cc",
-    "indexed_db/indexed_db_key_range.h",
-    "indexed_db/indexed_db_metadata.cc",
-    "indexed_db/indexed_db_metadata.h",
-    "indexed_db/indexed_db_struct_traits.cc",
-    "indexed_db/indexed_db_struct_traits.h",
     "input/event_with_latency_info.h",
     "input/gesture_event_stream_validator.cc",
     "input/gesture_event_stream_validator.h",
@@ -210,6 +194,10 @@ source_set("common") {
     "media/midi_messages.h",
     "media/peer_connection_tracker_messages.h",
     "media/video_capture.h",
+    "mime_sniffing_throttle.cc",
+    "mime_sniffing_throttle.h",
+    "mime_sniffing_url_loader.cc",
+    "mime_sniffing_url_loader.h",
     "navigation_gesture.h",
     "navigation_params.cc",
     "navigation_params.h",
@@ -224,8 +212,6 @@ source_set("common") {
     "notifications/notification_struct_traits.cc",
     "notifications/notification_struct_traits.h",
     "origin_util.cc",
-    "p2p_messages.h",
-    "p2p_socket_type.h",
     "page_messages.h",
     "page_state_serialization.cc",
     "page_state_serialization.h",
@@ -236,14 +222,11 @@ source_set("common") {
     "pepper_plugin_list.h",
     "pepper_renderer_instance_data.cc",
     "pepper_renderer_instance_data.h",
-    "platform_notification_param_traits.h",
     "plugin_list.cc",
     "plugin_list.h",
     "possibly_associated_interface_ptr.h",
     "possibly_associated_interface_ptr_info.h",
     "possibly_associated_wrapper_shared_url_loader_factory.h",
-    "presentation/presentation_struct_traits.cc",
-    "presentation/presentation_struct_traits.h",
     "process_type.cc",
     "render_widget_surface_properties.cc",
     "render_widget_surface_properties.h",
@@ -258,7 +241,6 @@ source_set("common") {
     "service_manager/service_manager_connection_impl.h",
     "service_worker/service_worker_loader_helpers.cc",
     "service_worker/service_worker_loader_helpers.h",
-    "service_worker/service_worker_messages.h",
     "service_worker/service_worker_types.cc",
     "service_worker/service_worker_types.h",
     "service_worker/service_worker_utils.cc",
@@ -357,16 +339,14 @@ source_set("common") {
     "//services/service_manager/public/mojom",
     "//services/service_manager/runner/common",
     "//services/service_manager/zygote:zygote_buildflags",
-    "//services/ui/public/interfaces",
     "//services/video_capture/public/mojom",
     "//services/viz/public/interfaces",
+    "//services/ws/public/mojom",
     "//skia",
     "//storage/common",
     "//third_party/angle:angle_gpu_info_util",
     "//third_party/boringssl",
     "//third_party/icu",
-    "//third_party/webrtc/rtc_base:rtc_base",
-    "//third_party/webrtc_overrides",
     "//ui/base",
     "//ui/base/ime",
     "//ui/display",
@@ -490,6 +470,7 @@ source_set("common") {
     deps += [
       "//third_party/fuchsia-sdk:fdio",
       "//third_party/fuchsia-sdk:fonts",
+      "//third_party/fuchsia-sdk:scenic",
     ]
   }
 }
@@ -508,7 +489,9 @@ mojom("mojo_bindings") {
   # This interface is internal to content.
   visibility = [ "//content/*" ]
 
-  # indexed_db.mojom uses a native typemap that is not available in Java.
+  # indexed_db.mojom used a native typemap that was not available in Java.
+  # indexed_db.mojom was removed in an earlier commit.  This should be removed
+  # at some point.
   cpp_only = true
 
   # imports vs deps check is disabled for this target to work around
@@ -530,7 +513,6 @@ mojom("mojo_bindings") {
     "histogram_fetcher.mojom",
     "host_zoom.mojom",
     "image_downloader/image_downloader.mojom",
-    "indexed_db/indexed_db.mojom",
     "input/input_handler.mojom",
     "input/input_injector.mojom",
     "input/synchronous_compositor.mojom",
@@ -555,7 +537,6 @@ mojom("mojo_bindings") {
     "service_worker/embedded_worker.mojom",
     "service_worker/service_worker.mojom",
     "service_worker/service_worker_container.mojom",
-    "service_worker/service_worker_fetch_response_callback.mojom",
     "service_worker/service_worker_provider.mojom",
     "shared_worker/shared_worker.mojom",
     "shared_worker/shared_worker_client.mojom",
@@ -589,18 +570,23 @@ mojom("mojo_bindings") {
   import_dirs = [ "//mojo/services" ]
 
   public_deps = [
+    # Due to component_deps below, we're depending on blink_common, but
+    # blink_common does not export generated types of components/payments/mojom,
+    # so we need to specifically add this dependency here.
+    "//components/payments/mojom",
     "//components/services/leveldb/public/interfaces",
     "//content/public/common:interfaces",
     "//content/public/common:resource_type_bindings",
     "//ipc:mojom_constants",
     "//media/mojo/interfaces",
     "//mojo/public/mojom/base",
+    "//services/audio/public/mojom",
     "//services/network/public/mojom",
     "//services/service_manager/public/mojom",
-    "//services/ui/public/interfaces",
-    "//services/ui/public/interfaces/ime",
     "//services/video_capture/public/mojom",
     "//services/viz/public/interfaces",
+    "//services/ws/public/mojom",
+    "//services/ws/public/mojom/ime",
     "//skia/public/interfaces",
     "//third_party/blink/public:mojo_bindings",
     "//third_party/blink/public:web_feature_mojo_bindings",

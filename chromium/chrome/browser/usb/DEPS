@@ -1,6 +1,0 @@
-include_rules = [
-  "+chrome/browser/ui",
-  "+components/bubble",
-  "+device/base",
-  "+device/usb",
-]

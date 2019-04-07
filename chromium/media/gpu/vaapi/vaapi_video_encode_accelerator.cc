@@ -54,8 +54,6 @@ constexpr size_t kMinNumFramesInFlight = 4;
 // Need 2 surfaces for each frame: one for input data and one for
 // reconstructed picture, which is later used for reference.
 constexpr size_t kNumSurfacesPerFrame = 2;
-// TODO(owenlin): Adjust the value after b/71367113 is fixed
-constexpr size_t kExtraOutputBufferSizeInBytes = 32768;
 
 constexpr int kDefaultFramerate = 30;
 
@@ -206,60 +204,61 @@ VaapiVideoEncodeAccelerator::~VaapiVideoEncodeAccelerator() {
   DCHECK(!encoder_thread_.IsRunning());
 }
 
-bool VaapiVideoEncodeAccelerator::Initialize(
-    VideoPixelFormat format,
-    const gfx::Size& input_visible_size,
-    VideoCodecProfile output_profile,
-    uint32_t initial_bitrate,
-    Client* client) {
+bool VaapiVideoEncodeAccelerator::Initialize(const Config& config,
+                                             Client* client) {
   DCHECK(child_task_runner_->BelongsToCurrentThread());
   DCHECK(!encoder_thread_.IsRunning());
   DCHECK_EQ(state_, kUninitialized);
 
-  VLOGF(2) << "Initializing VAVEA, input_format: "
-           << VideoPixelFormatToString(format)
-           << ", input_visible_size: " << input_visible_size.ToString()
-           << ", output_profile: " << GetProfileName(output_profile)
-           << ", initial_bitrate: " << initial_bitrate;
+  VLOGF(2) << "Initializing VAVEA, " << config.AsHumanReadableString();
 
   client_ptr_factory_.reset(new base::WeakPtrFactory<Client>(client));
   client_ = client_ptr_factory_->GetWeakPtr();
 
-  codec_ = VideoCodecProfileToVideoCodec(output_profile);
+  codec_ = VideoCodecProfileToVideoCodec(config.output_profile);
   if (codec_ != kCodecH264 && codec_ != kCodecVP8) {
-    DVLOGF(1) << "Unsupported profile: " << GetProfileName(output_profile);
+    VLOGF(1) << "Unsupported profile: "
+             << GetProfileName(config.output_profile);
     return false;
   }
 
-  if (format != PIXEL_FORMAT_I420) {
-    DVLOGF(1) << "Unsupported input format: "
-              << VideoPixelFormatToString(format);
+  if (codec_ == kCodecVP8 &&
+      config.content_type == Config::ContentType::kDisplay) {
+    VLOGF(1) << "Vaapi VP8 encoder does not currently support screen content.";
+    return false;
+  }
+
+  if (config.input_format != PIXEL_FORMAT_I420) {
+    VLOGF(1) << "Unsupported input format: "
+             << VideoPixelFormatToString(config.input_format);
     return false;
   }
 
   const SupportedProfiles& profiles = GetSupportedProfiles();
   auto profile = find_if(profiles.begin(), profiles.end(),
-                         [output_profile](const SupportedProfile& profile) {
+                         [output_profile = config.output_profile](
+                             const SupportedProfile& profile) {
                            return profile.profile == output_profile;
                          });
   if (profile == profiles.end()) {
-    VLOGF(1) << "Unsupported output profile " << GetProfileName(output_profile);
+    VLOGF(1) << "Unsupported output profile "
+             << GetProfileName(config.output_profile);
     return false;
   }
 
-  if (input_visible_size.width() > profile->max_resolution.width() ||
-      input_visible_size.height() > profile->max_resolution.height()) {
-    VLOGF(1) << "Input size too big: " << input_visible_size.ToString()
+  if (config.input_visible_size.width() > profile->max_resolution.width() ||
+      config.input_visible_size.height() > profile->max_resolution.height()) {
+    VLOGF(1) << "Input size too big: " << config.input_visible_size.ToString()
              << ", max supported size: " << profile->max_resolution.ToString();
     return false;
   }
 
-  vaapi_wrapper_ =
-      VaapiWrapper::CreateForVideoCodec(VaapiWrapper::kEncode, output_profile,
-                                        base::Bind(&ReportToUMA, VAAPI_ERROR));
+  vaapi_wrapper_ = VaapiWrapper::CreateForVideoCodec(
+      VaapiWrapper::kEncode, config.output_profile,
+      base::Bind(&ReportToUMA, VAAPI_ERROR));
   if (!vaapi_wrapper_) {
     VLOGF(1) << "Failed initializing VAAPI for profile "
-             << GetProfileName(output_profile);
+             << GetProfileName(config.output_profile);
     return false;
   }
 
@@ -273,14 +272,11 @@ bool VaapiVideoEncodeAccelerator::Initialize(
   // Finish remaining initialization on the encoder thread.
   encoder_thread_task_runner_->PostTask(
       FROM_HERE, base::Bind(&VaapiVideoEncodeAccelerator::InitializeTask,
-                            base::Unretained(this), input_visible_size,
-                            output_profile, initial_bitrate));
+                            base::Unretained(this), config));
   return true;
 }
 
-void VaapiVideoEncodeAccelerator::InitializeTask(const gfx::Size& visible_size,
-                                                 VideoCodecProfile profile,
-                                                 uint32_t bitrate) {
+void VaapiVideoEncodeAccelerator::InitializeTask(const Config& config) {
   DCHECK(encoder_thread_task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(state_, kUninitialized);
   VLOGF(2);
@@ -303,15 +299,18 @@ void VaapiVideoEncodeAccelerator::InitializeTask(const gfx::Size& visible_size,
       return;
   }
 
-  if (!encoder_->Initialize(visible_size, profile, bitrate,
-                            kDefaultFramerate)) {
+  // TODO(johnylin): pass |config.h264_output_level| to H264Encoder.
+  //                 https://crbug.com/863327
+  if (!encoder_->Initialize(
+          config.input_visible_size, config.output_profile,
+          config.initial_bitrate,
+          config.initial_framerate.value_or(kDefaultFramerate))) {
     NOTIFY_ERROR(kInvalidArgumentError, "Failed initializing encoder");
     return;
   }
 
   coded_size_ = encoder_->GetCodedSize();
-  output_buffer_byte_size_ =
-      encoder_->GetBitstreamBufferSize() + kExtraOutputBufferSizeInBytes;
+  output_buffer_byte_size_ = encoder_->GetBitstreamBufferSize();
   const size_t max_ref_frames = encoder_->GetMaxNumOfRefFrames();
   // Use at least kMinNumFramesInFlight if encoder requested less for
   // pipeline depth.
@@ -420,7 +419,7 @@ void VaapiVideoEncodeAccelerator::ReturnBitstreamBuffer(
     std::unique_ptr<BitstreamBufferRef> buffer) {
   DCHECK(encoder_thread_task_runner_->BelongsToCurrentThread());
 
-  uint8_t* target_data = reinterpret_cast<uint8_t*>(buffer->shm->memory());
+  uint8_t* target_data = static_cast<uint8_t*>(buffer->shm->memory());
   size_t data_size = 0;
 
   if (!vaapi_wrapper_->DownloadAndDestroyCodedBuffer(

@@ -52,7 +52,13 @@ class GpuImageDecodeCachePerfTest
                UseTransferCache(),
                kRGBA_8888_SkColorType,
                kCacheSize,
-               MaxTextureSize()) {}
+               MaxTextureSize(),
+               PaintImage::kDefaultGeneratorClientId) {
+    // Initializing context here is ok because image decode cache does not use
+    // context provider in its constructor.
+    gpu::ContextResult result = context_provider_->BindToCurrentThread();
+    DCHECK_EQ(result, gpu::ContextResult::kSuccess);
+  }
 
  protected:
   size_t MaxTextureSize() const {

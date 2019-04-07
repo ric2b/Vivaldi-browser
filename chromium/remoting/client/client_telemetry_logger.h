@@ -28,7 +28,8 @@ class ClientTelemetryLogger {
  public:
   // |log_writer| must outlive ClientTelemetryLogger.
   ClientTelemetryLogger(ChromotingEventLogWriter* log_writer,
-                        ChromotingEvent::Mode mode);
+                        ChromotingEvent::Mode mode,
+                        ChromotingEvent::SessionEntryPoint entry_point);
   ~ClientTelemetryLogger();
 
   void SetAuthMethod(ChromotingEvent::AuthMethod auth_method);
@@ -53,8 +54,6 @@ class ClientTelemetryLogger {
   const ChromotingEvent& current_session_state_event() const {
     return current_session_state_event_;
   }
-
-  base::WeakPtr<ClientTelemetryLogger> GetWeakPtr();
 
   static ChromotingEvent::SessionState TranslateState(
       protocol::ConnectionToHost::State current_state,
@@ -105,6 +104,8 @@ class ClientTelemetryLogger {
 
   ChromotingEvent::Mode mode_;
 
+  ChromotingEvent::SessionEntryPoint entry_point_;
+
   std::unique_ptr<HostInfo> host_info_;
   std::unique_ptr<protocol::TransportRoute> transport_route_;
 
@@ -113,7 +114,6 @@ class ClientTelemetryLogger {
 
   base::ThreadChecker thread_checker_;
 
-  base::WeakPtrFactory<ClientTelemetryLogger> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(ClientTelemetryLogger);
 };
 

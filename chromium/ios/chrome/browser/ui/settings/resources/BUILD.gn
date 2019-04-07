@@ -67,15 +67,6 @@ imageset("settings_article_suggestions") {
   ]
 }
 
-imageset("settings_autofill_forms") {
-  sources = [
-    "settings_autofill_forms.imageset/Contents.json",
-    "settings_autofill_forms.imageset/settings_autofill_forms.png",
-    "settings_autofill_forms.imageset/settings_autofill_forms@2x.png",
-    "settings_autofill_forms.imageset/settings_autofill_forms@3x.png",
-  ]
-}
-
 imageset("settings_bandwidth") {
   sources = [
     "settings_bandwidth.imageset/Contents.json",
@@ -112,6 +103,24 @@ imageset("settings_passwords") {
   ]
 }
 
+imageset("settings_payment_methods") {
+  sources = [
+    "settings_payment_methods.imageset/Contents.json",
+    "settings_payment_methods.imageset/payment_methods.png",
+    "settings_payment_methods.imageset/payment_methods@2x.png",
+    "settings_payment_methods.imageset/payment_methods@3x.png",
+  ]
+}
+
+imageset("settings_addresses") {
+  sources = [
+    "settings_addresses.imageset/Contents.json",
+    "settings_addresses.imageset/addresses.png",
+    "settings_addresses.imageset/addresses@2x.png",
+    "settings_addresses.imageset/addresses@3x.png",
+  ]
+}
+
 imageset("settings_privacy") {
   sources = [
     "settings_privacy.imageset/Contents.json",
@@ -136,5 +145,14 @@ imageset("settings_voice_search") {
     "settings_voice_search.imageset/settings_voice_search.png",
     "settings_voice_search.imageset/settings_voice_search@2x.png",
     "settings_voice_search.imageset/settings_voice_search@3x.png",
+  ]
+}
+
+imageset("sync_and_google_services") {
+  sources = [
+    "sync_and_google_services.imageset/Contents.json",
+    "sync_and_google_services.imageset/sync_and_google_services.png",
+    "sync_and_google_services.imageset/sync_and_google_services@2x.png",
+    "sync_and_google_services.imageset/sync_and_google_services@3x.png",
   ]
 }

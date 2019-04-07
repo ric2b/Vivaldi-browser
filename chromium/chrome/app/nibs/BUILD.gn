@@ -9,14 +9,9 @@ assert(is_mac)
 
 translated_xibs = [
   "AppMenu.xib",
-  "BookmarkAllTabs.xib",
-  "BookmarkNameFolder.xib",
-  "CookieDetailsView.xib",
   "DownloadItem.xib",
   "DownloadShelf.xib",
   "HungRendererDialog.xib",
-  "MainMenu.xib",
-  "OneClickSigninBubble.xib",
   "OneClickSigninDialog.xib",
   "SaveAccessoryView.xib",
   "TaskManager.xib",
@@ -24,31 +19,12 @@ translated_xibs = [
 ]
 
 if (!mac_views_browser) {
-  translated_xibs += [
-    "BookmarkBubble.xib",
-    "BookmarkEditor.xib",
-    "CollectedCookies.xib",
-    "ContentBlockedCookies.xib",
-    "ContentBlockedDownloads.xib",
-    "ContentBlockedGeolocation.xib",
-    "ContentBlockedMIDISysEx.xib",
-    "ContentBlockedMedia.xib",
-    "ContentBlockedMixedScript.xib",
-    "ContentBlockedPopups.xib",
-    "ContentBlockedSimple.xib",
-    "ContentProtocolHandlers.xib",
-    "ExtensionInstallPrompt.xib",
-    "ExtensionInstallPromptNoWarnings.xib",
-    "ExtensionInstallPromptWebstoreData.xib",
-    "ExtensionInstalledBubble.xib",
-    "HttpAuthLoginSheet.xib",
-  ]
+  translated_xibs += [ "HttpAuthLoginSheet.xib" ]
 }
 
 untranslated_xibs = [
   "BookmarkBarFolderWindow.xib",
   "FindBar.xib",
-  "GlobalErrorBubble.xib",
   "InfoBar.xib",
 ]
 

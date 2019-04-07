@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/editing/commands/insert_line_break_command.h"
 #include "third_party/blink/renderer/core/editing/commands/insert_paragraph_separator_command.h"
 #include "third_party/blink/renderer/core/editing/commands/insert_text_command.h"
+#include "third_party/blink/renderer/core/editing/editing_behavior.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
@@ -49,6 +50,7 @@
 #include "third_party/blink/renderer/core/editing/visible_units.h"
 #include "third_party/blink/renderer/core/events/before_text_inserted_event.h"
 #include "third_party/blink/renderer/core/events/text_event.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/html_br_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
@@ -73,7 +75,7 @@ String DispatchBeforeTextInsertedEvent(const String& text,
   // necessary.
   const Document& document = start_node->GetDocument();
   BeforeTextInsertedEvent* evt = BeforeTextInsertedEvent::Create(text);
-  RootEditableElement(*start_node)->DispatchEvent(evt);
+  RootEditableElement(*start_node)->DispatchEvent(*evt);
   if (IsValidDocument(document) && selection.IsValidFor(document))
     return evt->GetText();
   // editing/inserting/webkitBeforeTextInserted-removes-frame.html
@@ -97,7 +99,7 @@ DispatchEventResult DispatchTextInputEvent(LocalFrame* frame,
   TextEvent* event = TextEvent::Create(frame->DomWindow(), text,
                                        kTextEventInputIncrementalInsertion);
   event->SetUnderlyingEvent(nullptr);
-  DispatchEventResult result = target->DispatchEvent(event);
+  DispatchEventResult result = target->DispatchEvent(*event);
   if (IsValidDocument(document))
     return result;
   // editing/inserting/insert-text-remove-iframe-on-textInput-event.html
@@ -146,7 +148,7 @@ bool CanAppendNewLineFeedToSelection(const VisibleSelection& selection,
   const Document& document = element->GetDocument();
   BeforeTextInsertedEvent* event =
       BeforeTextInsertedEvent::Create(String("\n"));
-  element->DispatchEvent(event);
+  element->DispatchEvent(*event);
   // event may invalidate frame or selection
   if (IsValidDocument(document) && selection.IsValidFor(document))
     return event->GetText().length();

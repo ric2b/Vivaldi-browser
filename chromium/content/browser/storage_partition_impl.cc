@@ -25,6 +25,7 @@
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/browsing_data/storage_partition_http_cache_data_remover.h"
 #include "content/browser/child_process_security_policy_impl.h"
+#include "content/browser/code_cache/generated_code_cache_context.h"
 #include "content/browser/cookie_store/cookie_store_context.h"
 #include "content/browser/fileapi/browser_file_system_helper.h"
 #include "content/browser/gpu/shader_cache_factory.h"
@@ -40,6 +41,7 @@
 #include "content/public/browser/indexed_db_context.h"
 #include "content/public/browser/local_storage_usage_info.h"
 #include "content/public/browser/network_service_instance.h"
+#include "content/public/browser/permission_controller.h"
 #include "content/public/browser/session_storage_usage_info.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
@@ -69,6 +71,8 @@
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/browser/plugin_private_storage_helper.h"
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
+
+#include "app/vivaldi_apptools.h"
 
 using CookieDeletionFilter = network::mojom::CookieDeletionFilter;
 using CookieDeletionFilterPtr = network::mojom::CookieDeletionFilterPtr;
@@ -493,8 +497,10 @@ StoragePartitionImpl::StoragePartitionImpl(
     storage::SpecialStoragePolicy* special_storage_policy)
     : partition_path_(partition_path),
       special_storage_policy_(special_storage_policy),
+      network_context_client_binding_(this),
       browser_context_(browser_context),
       deletion_helpers_running_(0),
+      is_vivaldi_(false),
       weak_factory_(this) {}
 
 StoragePartitionImpl::~StoragePartitionImpl() {
@@ -551,7 +557,8 @@ StoragePartitionImpl::~StoragePartitionImpl() {
 std::unique_ptr<StoragePartitionImpl> StoragePartitionImpl::Create(
     BrowserContext* context,
     bool in_memory,
-    const base::FilePath& relative_partition_path) {
+    const base::FilePath& relative_partition_path,
+    const std::string& partition_domain) {
   // Ensure that these methods are called on the UI thread, except for
   // unittests where a UI thread might not have been created.
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI) ||
@@ -606,11 +613,12 @@ std::unique_ptr<StoragePartitionImpl> StoragePartitionImpl::Create(
   partition->service_worker_context_ = new ServiceWorkerContextWrapper(context);
   partition->service_worker_context_->set_storage_partition(partition.get());
 
-  partition->shared_worker_service_ = std::make_unique<SharedWorkerServiceImpl>(
-      partition.get(), partition->service_worker_context_);
-
   partition->appcache_service_ =
-      new ChromeAppCacheService(quota_manager_proxy.get());
+      base::MakeRefCounted<ChromeAppCacheService>(quota_manager_proxy.get());
+
+  partition->shared_worker_service_ = std::make_unique<SharedWorkerServiceImpl>(
+      partition.get(), partition->service_worker_context_,
+      partition->appcache_service_);
 
   partition->push_messaging_context_ =
       new PushMessagingContext(context, partition->service_worker_context_);
@@ -630,7 +638,7 @@ std::unique_ptr<StoragePartitionImpl> StoragePartitionImpl::Create(
   partition->background_fetch_context_ =
       base::MakeRefCounted<BackgroundFetchContext>(
           context, partition->service_worker_context_,
-          partition->cache_storage_context_);
+          partition->cache_storage_context_, quota_manager_proxy);
 
   partition->background_sync_context_ =
       base::MakeRefCounted<BackgroundSyncContext>();
@@ -670,6 +678,38 @@ std::unique_ptr<StoragePartitionImpl> StoragePartitionImpl::Create(
   partition->cookie_store_context_->Initialize(
       partition->service_worker_context_, base::DoNothing());
 
+  partition->is_vivaldi_ = vivaldi::IsVivaldiApp(partition_domain);
+
+  if (base::FeatureList::IsEnabled(features::kIsolatedCodeCache)) {
+    // TODO(crbug.com/867552): Currently we misuse GetCachePath to check if
+    // code caching is enabled. Fix this by having a better API.
+
+    // For Incognito mode, we should not persist anything on the disk so
+    // we do not create a code cache. Caching the generated code in memory
+    // is not useful, since V8 already maintains one copy in memory.
+    if (!in_memory && !context->GetCachePath().empty()) {
+      partition->generated_code_cache_context_ =
+          base::MakeRefCounted<GeneratedCodeCacheContext>();
+
+      base::FilePath code_cache_path;
+      if (partition_domain.empty()) {
+        code_cache_path = context->GetCachePath().AppendASCII("Code Cache");
+      } else {
+        // For site isolated partitions use the config directory.
+        code_cache_path = context->GetPath()
+                              .Append(relative_partition_path)
+                              .AppendASCII("Code Cache");
+      }
+
+      // TODO(crbug.com/867552): Currently we set it to 0 and let the disk_cache
+      // backend selects the size based on some heuristics. Add support to let
+      // the embedder override the default value.
+      constexpr int kSizeInBytes = 0;
+      partition->GetGeneratedCodeCacheContext()->Initialize(code_cache_path,
+                                                            kSizeInBytes);
+    }
+  }
+
   return partition;
 }
 
@@ -678,6 +718,10 @@ base::FilePath StoragePartitionImpl::GetPath() {
 }
 
 net::URLRequestContextGetter* StoragePartitionImpl::GetURLRequestContext() {
+  // NOTE(julien@vivaldi.com): See comment in GetNetworkContext()
+  if (is_vivaldi_)
+    return BrowserContext::GetDefaultStoragePartition(browser_context())
+        ->GetURLRequestContext();
   return url_request_context_.get();
 }
 
@@ -687,23 +731,23 @@ StoragePartitionImpl::GetMediaURLRequestContext() {
 }
 
 network::mojom::NetworkContext* StoragePartitionImpl::GetNetworkContext() {
-  if (!network_context_.is_bound() || network_context_.encountered_error()) {
-    network_context_ = GetContentClient()->browser()->CreateNetworkContext(
-        browser_context_, is_in_memory_, relative_partition_path_);
-    if (!network_context_) {
-      // TODO(mmenke): Remove once https://crbug.com/827928 is fixed.
-      CHECK(url_request_context_);
+  // NOTE(julien@vivaldi.com): Let Vivaldi (the app) use the same network
+  // context as Vivaldi (the browser). The direct purpose is to make it simple
+  // to share the http authentication cache for features implemented in the UI
+  // (the app) and for actual webpages loaded and features implemented in the
+  // browser. That way, we avoid having to prompt twice for proxy authentication
+  // credentials. In general, from a user point of view, it makes sense to share
+  // this context to minimize confusion. The downside is that we have less
+  // isolation between our UI code and the rest of the browser code. On the
+  // other hand, Chrome doesn't have a separate browser context for its UI at
+  // all, so this should be safe.
 
-      DCHECK(!base::FeatureList::IsEnabled(network::features::kNetworkService));
-      DCHECK(!network_context_owner_);
-      network_context_owner_ = std::make_unique<NetworkContextOwner>();
-      BrowserThread::PostTask(
-          BrowserThread::IO, FROM_HERE,
-          base::BindOnce(&NetworkContextOwner::Initialize,
-                         base::Unretained(network_context_owner_.get()),
-                         MakeRequest(&network_context_), url_request_context_));
-    }
-  }
+  if (is_vivaldi_)
+    return BrowserContext::GetDefaultStoragePartition(browser_context())
+        ->GetNetworkContext();
+
+  if (!network_context_.is_bound())
+    InitNetworkContext();
   return network_context_.get();
 }
 
@@ -830,6 +874,11 @@ CookieStoreContext* StoragePartitionImpl::GetCookieStoreContext() {
   return cookie_store_context_.get();
 }
 
+GeneratedCodeCacheContext*
+StoragePartitionImpl::GetGeneratedCodeCacheContext() {
+  return generated_code_cache_context_.get();
+}
+
 void StoragePartitionImpl::OpenLocalStorage(
     const url::Origin& origin,
     blink::mojom::StorageAreaRequest request) {
@@ -848,7 +897,28 @@ void StoragePartitionImpl::OpenSessionStorage(
     blink::mojom::SessionStorageNamespaceRequest request) {
   int process_id = bindings_.dispatch_context();
   dom_storage_context_->OpenSessionStorage(process_id, namespace_id,
+                                           bindings_.GetBadMessageCallback(),
                                            std::move(request));
+}
+
+void StoragePartitionImpl::OnCanSendReportingReports(
+    const std::vector<url::Origin>& origins,
+    OnCanSendReportingReportsCallback callback) {
+  PermissionController* permission_controller =
+      BrowserContext::GetPermissionController(browser_context_);
+  DCHECK(permission_controller);
+
+  std::vector<url::Origin> origins_out;
+  for (auto& origin : origins) {
+    GURL origin_url = origin.GetURL();
+    bool allowed = permission_controller->GetPermissionStatus(
+                       PermissionType::BACKGROUND_SYNC, origin_url,
+                       origin_url) == blink::mojom::PermissionStatus::GRANTED;
+    if (allowed)
+      origins_out.push_back(origin);
+  }
+
+  std::move(callback).Run(origins_out);
 }
 
 void StoragePartitionImpl::ClearDataImpl(
@@ -1178,6 +1248,12 @@ void StoragePartitionImpl::Flush() {
     GetDOMStorageContext()->Flush();
 }
 
+void StoragePartitionImpl::ResetURLLoaderFactories() {
+  GetNetworkContext()->ResetURLLoaderFactories();
+  url_loader_factory_for_browser_process_.reset();
+  url_loader_factory_getter_->Initialize(this);
+}
+
 void StoragePartitionImpl::ClearBluetoothAllowedDevicesMapForTesting() {
   bluetooth_allowed_devices_map_->Clear();
 }
@@ -1187,6 +1263,8 @@ void StoragePartitionImpl::FlushNetworkInterfaceForTesting() {
   network_context_.FlushForTesting();
   if (url_loader_factory_for_browser_process_)
     url_loader_factory_for_browser_process_.FlushForTesting();
+  if (cookie_manager_for_browser_process_)
+    cookie_manager_for_browser_process_.FlushForTesting();
 }
 
 void StoragePartitionImpl::WaitForDeletionTasksForTesting() {
@@ -1195,10 +1273,6 @@ void StoragePartitionImpl::WaitForDeletionTasksForTesting() {
     on_deletion_helpers_done_callback_ = loop.QuitClosure();
     loop.Run();
   }
-}
-
-void StoragePartitionImpl::ResetURLLoaderFactoryForBrowserProcessForTesting() {
-  url_loader_factory_for_browser_process_.reset();
 }
 
 BrowserContext* StoragePartitionImpl::browser_context() const {
@@ -1237,6 +1311,30 @@ void StoragePartitionImpl::GetQuotaSettings(
                                                   std::move(callback));
 }
 
+void StoragePartitionImpl::InitNetworkContext() {
+  network_context_ = GetContentClient()->browser()->CreateNetworkContext(
+      browser_context_, is_in_memory_, relative_partition_path_);
+  if (!network_context_) {
+    // TODO(mmenke): Remove once https://crbug.com/827928 is fixed.
+    CHECK(url_request_context_);
+
+    DCHECK(!base::FeatureList::IsEnabled(network::features::kNetworkService));
+    DCHECK(!network_context_owner_);
+    network_context_owner_ = std::make_unique<NetworkContextOwner>();
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&NetworkContextOwner::Initialize,
+                       base::Unretained(network_context_owner_.get()),
+                       MakeRequest(&network_context_), url_request_context_));
+  }
+  network::mojom::NetworkContextClientPtr client_ptr;
+  network_context_client_binding_.Close();
+  network_context_client_binding_.Bind(mojo::MakeRequest(&client_ptr));
+  network_context_->SetClient(std::move(client_ptr));
+  network_context_.set_connection_error_handler(base::BindOnce(
+      &StoragePartitionImpl::InitNetworkContext, weak_factory_.GetWeakPtr()));
+}
+
 network::mojom::URLLoaderFactory*
 StoragePartitionImpl::GetURLLoaderFactoryForBrowserProcessInternal() {
   // Create the URLLoaderFactory as needed, but make sure not to reuse a
@@ -1257,8 +1355,12 @@ StoragePartitionImpl::GetURLLoaderFactoryForBrowserProcessInternal() {
           switches::kDisableWebSecurity);
   if (g_url_loader_factory_callback_for_test.Get().is_null()) {
     auto request = mojo::MakeRequest(&url_loader_factory_for_browser_process_);
-    GetContentClient()->browser()->WillCreateURLLoaderFactory(
-        browser_context(), nullptr, false /* is_navigation */, &request);
+
+    if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+      GetContentClient()->browser()->WillCreateURLLoaderFactory(
+          browser_context(), nullptr, false /* is_navigation */, GURL(),
+          &request);
+    }
     GetNetworkContext()->CreateURLLoaderFactory(std::move(request),
                                                 std::move(params));
     is_test_url_loader_factory_for_browser_process_ = false;

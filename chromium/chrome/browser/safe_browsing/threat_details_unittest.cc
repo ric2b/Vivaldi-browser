@@ -126,24 +126,27 @@ class ThreatDetailsWrap : public ThreatDetails {
         run_loop_(nullptr),
         done_callback_count_(0) {}
 
+  ~ThreatDetailsWrap() override {}
+
   void ThreatDetailsDone(content::WebContents* web_contents) {
     ++done_callback_count_;
     run_loop_->Quit();
-    run_loop_ = NULL;
+    run_loop_ = nullptr;
   }
 
   // Used to synchronize ThreatDetailsDone() with WaitForThreatDetailsDone().
   // RunLoop::RunUntilIdle() is not sufficient because the MessageLoop task
   // queue completely drains at some point between the send and the wait.
   void SetRunLoopToQuit(base::RunLoop* run_loop) {
-    DCHECK(run_loop_ == NULL);
+    DCHECK(run_loop_ == nullptr);
     run_loop_ = run_loop;
   }
 
   size_t done_callback_count() { return done_callback_count_; }
 
+  void StartCollection() { ThreatDetails::StartCollection(); }
+
  private:
-  ~ThreatDetailsWrap() override {}
 
   base::RunLoop* run_loop_;
   size_t done_callback_count_;
@@ -153,7 +156,7 @@ class MockSafeBrowsingUIManager : public SafeBrowsingUIManager {
  public:
   // The safe browsing UI manager does not need a service for this test.
   MockSafeBrowsingUIManager()
-      : SafeBrowsingUIManager(NULL), report_sent_(false) {}
+      : SafeBrowsingUIManager(nullptr), report_sent_(false) {}
 
   // When the serialized report is sent, this is called.
   void SendSerializedThreatDetails(const std::string& serialized) override {
@@ -174,9 +177,14 @@ class MockSafeBrowsingUIManager : public SafeBrowsingUIManager {
 
 class MockReferrerChainProvider : public ReferrerChainProvider {
  public:
-  virtual ~MockReferrerChainProvider(){};
+  virtual ~MockReferrerChainProvider() {}
   MOCK_METHOD3(IdentifyReferrerChainByWebContents,
                AttributionResult(content::WebContents* web_contents,
+                                 int user_gesture_count_limit,
+                                 ReferrerChain* out_referrer_chain));
+  MOCK_METHOD4(IdentifyReferrerChainByEventURL,
+               AttributionResult(const GURL& event_url,
+                                 SessionID event_tab_id,
                                  int user_gesture_count_limit,
                                  ReferrerChain* out_referrer_chain));
 };
@@ -399,9 +407,10 @@ TEST_F(ThreatDetailsTest, ThreatSubResource) {
   InitResource(SB_THREAT_TYPE_URL_MALWARE, ThreatSource::CLIENT_SIDE_DETECTION,
                true /* is_subresource */, GURL(kThreatURL), &resource);
 
-  scoped_refptr<ThreatDetailsWrap> report =
-      new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource, NULL,
-                            history_service(), referrer_chain_provider_.get());
+  auto report = std::make_unique<ThreatDetailsWrap>(
+      ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
+      referrer_chain_provider_.get());
+  report->StartCollection();
 
   std::string serialized = WaitForThreatDetailsDone(
       report.get(), true /* did_proceed*/, 1 /* num_visit */);
@@ -454,9 +463,10 @@ TEST_F(ThreatDetailsTest, SuspiciousSiteWithReferrerChain) {
       .WillOnce(DoAll(SetArgPointee<2>(returned_referrer_chain),
                       Return(ReferrerChainProvider::SUCCESS)));
 
-  scoped_refptr<ThreatDetailsWrap> report =
-      new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource, NULL,
-                            history_service(), referrer_chain_provider_.get());
+  auto report = std::make_unique<ThreatDetailsWrap>(
+      ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
+      referrer_chain_provider_.get());
+  report->StartCollection();
 
   std::string serialized = WaitForThreatDetailsDone(
       report.get(), true /* did_proceed*/, 1 /* num_visit */);
@@ -504,9 +514,10 @@ TEST_F(ThreatDetailsTest, ThreatSubResourceWithOriginalUrl) {
                true /* is_subresource */, GURL(kThreatURL), &resource);
   resource.original_url = GURL(kOriginalLandingURL);
 
-  scoped_refptr<ThreatDetailsWrap> report =
-      new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource, NULL,
-                            history_service(), referrer_chain_provider_.get());
+  auto report = std::make_unique<ThreatDetailsWrap>(
+      ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
+      referrer_chain_provider_.get());
+  report->StartCollection();
 
   std::string serialized = WaitForThreatDetailsDone(
       report.get(), false /* did_proceed*/, 1 /* num_visit */);
@@ -552,9 +563,10 @@ TEST_F(ThreatDetailsTest, ThreatDOMDetails) {
   InitResource(SB_THREAT_TYPE_URL_UNWANTED, ThreatSource::LOCAL_PVER3,
                true /* is_subresource */, GURL(kThreatURL), &resource);
 
-  scoped_refptr<ThreatDetailsWrap> report =
-      new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource, NULL,
-                            history_service(), referrer_chain_provider_.get());
+  auto report = std::make_unique<ThreatDetailsWrap>(
+      ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
+      referrer_chain_provider_.get());
+  report->StartCollection();
 
   // Send a message from the DOM, with 2 nodes, a parent and a child.
   std::vector<mojom::ThreatDOMDetailsNodePtr> params;
@@ -774,9 +786,10 @@ TEST_F(ThreatDetailsTest, ThreatDOMDetails_MultipleFrames) {
 
   // Send both sets of nodes, from different render frames.
   {
-    scoped_refptr<ThreatDetailsWrap> report = new ThreatDetailsWrap(
-        ui_manager_.get(), web_contents(), resource, NULL, history_service(),
+    auto report = std::make_unique<ThreatDetailsWrap>(
+        ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
         referrer_chain_provider_.get());
+    report->StartCollection();
 
     std::vector<mojom::ThreatDOMDetailsNodePtr> outer_params_copy;
     for (auto& node : outer_params) {
@@ -830,9 +843,10 @@ TEST_F(ThreatDetailsTest, ThreatDOMDetails_MultipleFrames) {
     elem_dom_outer_iframe->add_child_ids(0);
     elem_dom_outer_iframe->add_child_ids(1);
 
-    scoped_refptr<ThreatDetailsWrap> report = new ThreatDetailsWrap(
-        ui_manager_.get(), web_contents(), resource, NULL, history_service(),
+    auto report = std::make_unique<ThreatDetailsWrap>(
+        ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
         referrer_chain_provider_.get());
+    report->StartCollection();
 
     // Send both sets of nodes from different render frames.
     report->OnReceivedThreatDOMDetails(nullptr, child_rfh,
@@ -956,9 +970,11 @@ TEST_F(ThreatDetailsTest, ThreatDOMDetails_AmbiguousDOM) {
   InitResource(SB_THREAT_TYPE_URL_UNWANTED,
                ThreatSource::PASSWORD_PROTECTION_SERVICE,
                true /* is_subresource */, GURL(kThreatURL), &resource);
-  scoped_refptr<ThreatDetailsWrap> report =
-      new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource, NULL,
-                            history_service(), referrer_chain_provider_.get());
+  auto report = std::make_unique<ThreatDetailsWrap>(
+      ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
+      referrer_chain_provider_.get());
+  report->StartCollection();
+
   base::HistogramTester histograms;
 
   // Send both sets of nodes from different render frames.
@@ -1210,10 +1226,11 @@ TEST_F(ThreatDetailsTest, ThreatDOMDetails_TrimToAdTags) {
                true /* is_subresource */, GURL(kThreatURL), &resource);
 
   // Send both sets of nodes, from different render frames.
-  scoped_refptr<ThreatDetailsWrap> trimmed_report =
-      new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource, NULL,
-                            history_service(), referrer_chain_provider_.get(),
-                            /*trim_to_ad_tags=*/true);
+  auto trimmed_report = std::make_unique<ThreatDetailsWrap>(
+      ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
+      referrer_chain_provider_.get(),
+      /*trim_to_ad_tags=*/true);
+  trimmed_report->StartCollection();
 
   // Send both sets of nodes from different render frames.
   trimmed_report->OnReceivedThreatDOMDetails(nullptr, child_rfh,
@@ -1283,10 +1300,11 @@ TEST_F(ThreatDetailsTest, ThreatDOMDetails_EmptyReportNotSent) {
                true /* is_subresource */, GURL(kThreatURL), &resource);
 
   // Send both sets of nodes, from different render frames.
-  scoped_refptr<ThreatDetailsWrap> trimmed_report =
-      new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource, NULL,
-                            history_service(), referrer_chain_provider_.get(),
-                            /*trim_to_ad_tags=*/true);
+  auto trimmed_report = std::make_unique<ThreatDetailsWrap>(
+      ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
+      referrer_chain_provider_.get(),
+      /*trim_to_ad_tags=*/true);
+  trimmed_report->StartCollection();
 
   // Send both sets of nodes from different render frames.
   trimmed_report->OnReceivedThreatDOMDetails(nullptr, child_rfh,
@@ -1315,9 +1333,10 @@ TEST_F(ThreatDetailsTest, ThreatWithRedirectUrl) {
   resource.redirect_urls.push_back(GURL(kSecondRedirectURL));
   resource.redirect_urls.push_back(GURL(kThreatURL));
 
-  scoped_refptr<ThreatDetailsWrap> report =
-      new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource, NULL,
-                            history_service(), referrer_chain_provider_.get());
+  auto report = std::make_unique<ThreatDetailsWrap>(
+      ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
+      referrer_chain_provider_.get());
+  report->StartCollection();
 
   std::string serialized = WaitForThreatDetailsDone(
       report.get(), true /* did_proceed*/, 0 /* num_visit */);
@@ -1387,9 +1406,10 @@ TEST_F(ThreatDetailsTest, ThreatOnMainPageLoadBlocked) {
                false /* is_subresource */, GURL(kLandingURL), &resource);
 
   // Start ThreatDetails collection.
-  scoped_refptr<ThreatDetailsWrap> report =
-      new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource, NULL,
-                            history_service(), referrer_chain_provider_.get());
+  auto report = std::make_unique<ThreatDetailsWrap>(
+      ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
+      referrer_chain_provider_.get());
+  report->StartCollection();
 
   // Simulate clicking don't proceed.
   controller().DiscardNonCommittedEntries();
@@ -1447,9 +1467,11 @@ TEST_F(ThreatDetailsTest, ThreatWithPendingLoad) {
                        ui::PAGE_TRANSITION_TYPED, std::string());
 
   // Do ThreatDetails collection.
-  scoped_refptr<ThreatDetailsWrap> report =
-      new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource, NULL,
-                            history_service(), referrer_chain_provider_.get());
+  auto report = std::make_unique<ThreatDetailsWrap>(
+      ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
+      referrer_chain_provider_.get());
+  report->StartCollection();
+
   std::string serialized = WaitForThreatDetailsDone(
       report.get(), true /* did_proceed*/, 1 /* num_visit */);
 
@@ -1495,9 +1517,11 @@ TEST_F(ThreatDetailsTest, ThreatOnFreshTab) {
                true /* is_subresource */, GURL(kThreatURL), &resource);
 
   // Do ThreatDetails collection.
-  scoped_refptr<ThreatDetailsWrap> report =
-      new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource, NULL,
-                            history_service(), referrer_chain_provider_.get());
+  auto report = std::make_unique<ThreatDetailsWrap>(
+      ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
+      referrer_chain_provider_.get());
+  report->StartCollection();
+
   std::string serialized = WaitForThreatDetailsDone(
       report.get(), true /* did_proceed*/, 1 /* num_visit */);
 
@@ -1528,9 +1552,10 @@ TEST_F(ThreatDetailsTest, HTTPCache) {
                ThreatSource::CLIENT_SIDE_DETECTION, true /* is_subresource */,
                GURL(kThreatURL), &resource);
 
-  scoped_refptr<ThreatDetailsWrap> report = new ThreatDetailsWrap(
+  auto report = std::make_unique<ThreatDetailsWrap>(
       ui_manager_.get(), web_contents(), resource, test_shared_loader_factory_,
       history_service(), referrer_chain_provider_.get());
+  report->StartCollection();
 
   SimulateFillCache(kThreatURL);
 
@@ -1606,9 +1631,10 @@ TEST_F(ThreatDetailsTest, HttpsResourceSanitization) {
                ThreatSource::CLIENT_SIDE_DETECTION, true /* is_subresource */,
                GURL(kThreatURLHttps), &resource);
 
-  scoped_refptr<ThreatDetailsWrap> report = new ThreatDetailsWrap(
+  auto report = std::make_unique<ThreatDetailsWrap>(
       ui_manager_.get(), web_contents(), resource, test_shared_loader_factory_,
       history_service(), referrer_chain_provider_.get());
+  report->StartCollection();
 
   SimulateFillCache(kThreatURLHttps);
 
@@ -1681,9 +1707,10 @@ TEST_F(ThreatDetailsTest, HTTPCacheNoEntries) {
                ThreatSource::LOCAL_PVER3, true /* is_subresource */,
                GURL(kThreatURL), &resource);
 
-  scoped_refptr<ThreatDetailsWrap> report = new ThreatDetailsWrap(
+  auto report = std::make_unique<ThreatDetailsWrap>(
       ui_manager_.get(), web_contents(), resource, test_shared_loader_factory_,
       history_service(), referrer_chain_provider_.get());
+  report->StartCollection();
 
   // Simulate no cache entry found.
   test_url_loader_factory_.AddResponse(
@@ -1746,9 +1773,10 @@ TEST_F(ThreatDetailsTest, HistoryServiceUrls) {
   UnsafeResource resource;
   InitResource(SB_THREAT_TYPE_URL_MALWARE, ThreatSource::LOCAL_PVER3,
                true /* is_subresource */, GURL(kThreatURL), &resource);
-  scoped_refptr<ThreatDetailsWrap> report =
-      new ThreatDetailsWrap(ui_manager_.get(), web_contents(), resource, NULL,
-                            history_service(), referrer_chain_provider_.get());
+  auto report = std::make_unique<ThreatDetailsWrap>(
+      ui_manager_.get(), web_contents(), resource, nullptr, history_service(),
+      referrer_chain_provider_.get());
+  report->StartCollection();
 
   // The redirects collection starts after the IPC from the DOM is fired.
   std::vector<mojom::ThreatDOMDetailsNodePtr> params;

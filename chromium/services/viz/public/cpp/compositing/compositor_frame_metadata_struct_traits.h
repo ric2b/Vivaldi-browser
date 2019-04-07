@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "build/build_config.h"
 #include "components/viz/common/quads/compositor_frame_metadata.h"
 #include "services/viz/public/cpp/compositing/begin_frame_args_struct_traits.h"
 #include "services/viz/public/cpp/compositing/frame_deadline_struct_traits.h"
@@ -37,26 +38,6 @@ struct StructTraits<viz::mojom::CompositorFrameMetadataDataView,
     return metadata.scrollable_viewport_size;
   }
 
-  static gfx::SizeF root_layer_size(
-      const viz::CompositorFrameMetadata& metadata) {
-    return metadata.root_layer_size;
-  }
-
-  static float min_page_scale_factor(
-      const viz::CompositorFrameMetadata& metadata) {
-    return metadata.min_page_scale_factor;
-  }
-
-  static float max_page_scale_factor(
-      const viz::CompositorFrameMetadata& metadata) {
-    return metadata.max_page_scale_factor;
-  }
-
-  static bool root_overflow_y_hidden(
-      const viz::CompositorFrameMetadata& metadata) {
-    return metadata.root_overflow_y_hidden;
-  }
-
   static bool may_contain_video(const viz::CompositorFrameMetadata& metadata) {
     return metadata.may_contain_video;
   }
@@ -66,34 +47,9 @@ struct StructTraits<viz::mojom::CompositorFrameMetadataDataView,
     return metadata.is_resourceless_software_draw_with_scroll_or_animation;
   }
 
-  static float top_controls_height(
-      const viz::CompositorFrameMetadata& metadata) {
-    return metadata.top_controls_height;
-  }
-
-  static float top_controls_shown_ratio(
-      const viz::CompositorFrameMetadata& metadata) {
-    return metadata.top_controls_shown_ratio;
-  }
-
-  static float bottom_controls_height(
-      const viz::CompositorFrameMetadata& metadata) {
-    return metadata.bottom_controls_height;
-  }
-
-  static float bottom_controls_shown_ratio(
-      const viz::CompositorFrameMetadata& metadata) {
-    return metadata.bottom_controls_shown_ratio;
-  }
-
   static uint32_t root_background_color(
       const viz::CompositorFrameMetadata& metadata) {
     return metadata.root_background_color;
-  }
-
-  static const viz::Selection<gfx::SelectionBound>& selection(
-      const viz::CompositorFrameMetadata& metadata) {
-    return metadata.selection;
   }
 
   static const std::vector<ui::LatencyInfo>& latency_info(
@@ -139,6 +95,53 @@ struct StructTraits<viz::mojom::CompositorFrameMetadataDataView,
       const viz::CompositorFrameMetadata& metadata) {
     return metadata.request_presentation_feedback;
   }
+
+  static float min_page_scale_factor(
+      const viz::CompositorFrameMetadata& metadata) {
+    return metadata.min_page_scale_factor;
+  }
+
+#if defined(OS_ANDROID)
+  static float max_page_scale_factor(
+      const viz::CompositorFrameMetadata& metadata) {
+    return metadata.max_page_scale_factor;
+  }
+
+  static const gfx::SizeF& root_layer_size(
+      const viz::CompositorFrameMetadata& metadata) {
+    return metadata.root_layer_size;
+  }
+
+  static bool root_overflow_y_hidden(
+      const viz::CompositorFrameMetadata& metadata) {
+    return metadata.root_overflow_y_hidden;
+  }
+
+  static float top_controls_height(
+      const viz::CompositorFrameMetadata& metadata) {
+    return metadata.top_controls_height;
+  }
+
+  static float top_controls_shown_ratio(
+      const viz::CompositorFrameMetadata& metadata) {
+    return metadata.top_controls_shown_ratio;
+  }
+
+  static float bottom_controls_height(
+      const viz::CompositorFrameMetadata& metadata) {
+    return metadata.bottom_controls_height;
+  }
+
+  static float bottom_controls_shown_ratio(
+      const viz::CompositorFrameMetadata& metadata) {
+    return metadata.bottom_controls_shown_ratio;
+  }
+
+  static const viz::Selection<gfx::SelectionBound>& selection(
+      const viz::CompositorFrameMetadata& metadata) {
+    return metadata.selection;
+  }
+#endif  // defined(OS_ANDROID)
 
   static bool Read(viz::mojom::CompositorFrameMetadataDataView data,
                    viz::CompositorFrameMetadata* out);

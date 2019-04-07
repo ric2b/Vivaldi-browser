@@ -15,10 +15,12 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "chromeos/chromeos_paths.h"
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/util/tpm_util.h"
@@ -30,11 +32,18 @@ namespace chromeos {
 
 namespace {
 
+InstallAttributes* g_install_attributes = nullptr;
+
+// Calling SetForTesting sets this flag. This flag means that the production
+// code which calls Initialize and Shutdown will have no effect - the test
+// install attributes will remain in place until ShutdownForTesting is called.
+bool g_using_install_attributes_for_testing = false;
+
 // Number of TPM lock state query retries during consistency check.
-int kDbusRetryCount = 12;
+const int kDbusRetryCount = 12;
 
 // Interval of TPM lock state query retries during consistency check.
-int kDbusRetryIntervalInSeconds = 5;
+const int kDbusRetryIntervalInSeconds = 5;
 
 std::string ReadMapKey(const std::map<std::string, std::string>& map,
                        const std::string& key) {
@@ -60,6 +69,59 @@ void ReportExistingLockUma(bool is_existing_lock) {
 }
 
 }  // namespace
+
+// static
+void InstallAttributes::Initialize() {
+  // Don't reinitialize if a specific instance has already been set for test.
+  if (g_using_install_attributes_for_testing)
+    return;
+
+  DCHECK(!g_install_attributes);
+  DCHECK(DBusThreadManager::IsInitialized());
+  g_install_attributes =
+      new InstallAttributes(DBusThreadManager::Get()->GetCryptohomeClient());
+  base::FilePath install_attrs_file;
+  CHECK(base::PathService::Get(chromeos::FILE_INSTALL_ATTRIBUTES,
+                               &install_attrs_file));
+  g_install_attributes->Init(install_attrs_file);
+}
+
+// static
+bool InstallAttributes::IsInitialized() {
+  return g_install_attributes;
+}
+
+// static
+void InstallAttributes::Shutdown() {
+  if (g_using_install_attributes_for_testing)
+    return;
+
+  DCHECK(g_install_attributes);
+  delete g_install_attributes;
+  g_install_attributes = nullptr;
+}
+
+// static
+InstallAttributes* InstallAttributes::Get() {
+  DCHECK(g_install_attributes);
+  return g_install_attributes;
+}
+
+// static
+void InstallAttributes::SetForTesting(InstallAttributes* test_instance) {
+  DCHECK(!g_install_attributes);
+  DCHECK(!g_using_install_attributes_for_testing);
+  g_install_attributes = test_instance;
+  g_using_install_attributes_for_testing = true;
+}
+
+// static
+void InstallAttributes::ShutdownForTesting() {
+  DCHECK(g_using_install_attributes_for_testing);
+  // Don't delete the test instance, we are not the owner.
+  g_install_attributes = nullptr;
+  g_using_install_attributes_for_testing = false;
+}
 
 // static
 std::string
@@ -198,10 +260,12 @@ void InstallAttributes::LockDevice(policy::DeviceMode device_mode,
                                    const std::string& realm,
                                    const std::string& device_id,
                                    const LockResultCallback& callback) {
-  CHECK((device_mode == policy::DEVICE_MODE_ENTERPRISE &&
-         !domain.empty() && realm.empty() && !device_id.empty()) ||
-        (device_mode == policy::DEVICE_MODE_ENTERPRISE_AD &&
-         domain.empty() && !realm.empty() && !device_id.empty()) ||
+  CHECK((device_mode == policy::DEVICE_MODE_ENTERPRISE && !domain.empty() &&
+         realm.empty() && !device_id.empty()) ||
+        (device_mode == policy::DEVICE_MODE_ENTERPRISE_AD && domain.empty() &&
+         !realm.empty() && !device_id.empty()) ||
+        (device_mode == policy::DEVICE_MODE_DEMO && !domain.empty() &&
+         realm.empty() && !device_id.empty()) ||
         (device_mode == policy::DEVICE_MODE_CONSUMER_KIOSK_AUTOLAUNCH &&
          domain.empty() && realm.empty() && device_id.empty()));
   DCHECK(!callback.is_null());
@@ -352,7 +416,8 @@ bool InstallAttributes::IsEnterpriseManaged() const {
     return false;
   }
   return registration_mode_ == policy::DEVICE_MODE_ENTERPRISE ||
-      registration_mode_ == policy::DEVICE_MODE_ENTERPRISE_AD;
+         registration_mode_ == policy::DEVICE_MODE_ENTERPRISE_AD ||
+         registration_mode_ == policy::DEVICE_MODE_DEMO;
 }
 
 bool InstallAttributes::IsActiveDirectoryManaged() const {
@@ -366,7 +431,8 @@ bool InstallAttributes::IsCloudManaged() const {
   if (!device_locked_) {
     return false;
   }
-  return registration_mode_ == policy::DEVICE_MODE_ENTERPRISE;
+  return registration_mode_ == policy::DEVICE_MODE_ENTERPRISE ||
+         registration_mode_ == policy::DEVICE_MODE_DEMO;
 }
 
 bool InstallAttributes::IsConsumerKioskDeviceWithAutoLaunch() {
@@ -398,8 +464,10 @@ void InstallAttributes::OnTpmGetPasswordCompleted(
   // if the TPM is locked, meaning the TPM password is deleted so
   // the value from result is empty.
   if (result.has_value()) {
-    state = (device_locked_ ? 1 : 0) |
-            (registration_mode_ == policy::DEVICE_MODE_ENTERPRISE ? 2 : 0) |
+    const bool is_cloud_managed =
+        registration_mode_ == policy::DEVICE_MODE_ENTERPRISE ||
+        registration_mode_ == policy::DEVICE_MODE_DEMO;
+    state = (device_locked_ ? 1 : 0) | (is_cloud_managed ? 2 : 0) |
             (result->empty() ? 4 : 0);
   } else {
     state = 8;
@@ -424,6 +492,7 @@ const char InstallAttributes::kEnterpriseDeviceMode[] = "enterprise";
 const char InstallAttributes::kEnterpriseADDeviceMode[] = "enterprise_ad";
 const char InstallAttributes::kLegacyRetailDeviceMode[] = "kiosk";
 const char InstallAttributes::kConsumerKioskDeviceMode[] = "consumer_kiosk";
+const char InstallAttributes::kDemoDeviceMode[] = "demo_mode";
 
 const char InstallAttributes::kAttrEnterpriseDeviceId[] =
     "enterprise.device_id";
@@ -457,6 +526,8 @@ std::string InstallAttributes::GetDeviceModeString(policy::DeviceMode mode) {
       return InstallAttributes::kLegacyRetailDeviceMode;
     case policy::DEVICE_MODE_CONSUMER_KIOSK_AUTOLAUNCH:
       return InstallAttributes::kConsumerKioskDeviceMode;
+    case policy::DEVICE_MODE_DEMO:
+      return InstallAttributes::kDemoDeviceMode;
     case policy::DEVICE_MODE_PENDING:
     case policy::DEVICE_MODE_NOT_SET:
       break;
@@ -469,14 +540,16 @@ policy::DeviceMode InstallAttributes::GetDeviceModeFromString(
     const std::string& mode) {
   if (mode == InstallAttributes::kConsumerDeviceMode)
     return policy::DEVICE_MODE_CONSUMER;
-  else if (mode == InstallAttributes::kEnterpriseDeviceMode)
+  if (mode == InstallAttributes::kEnterpriseDeviceMode)
     return policy::DEVICE_MODE_ENTERPRISE;
-  else if (mode == InstallAttributes::kEnterpriseADDeviceMode)
+  if (mode == InstallAttributes::kEnterpriseADDeviceMode)
     return policy::DEVICE_MODE_ENTERPRISE_AD;
-  else if (mode == InstallAttributes::kLegacyRetailDeviceMode)
+  if (mode == InstallAttributes::kLegacyRetailDeviceMode)
     return policy::DEVICE_MODE_LEGACY_RETAIL_MODE;
-  else if (mode == InstallAttributes::kConsumerKioskDeviceMode)
+  if (mode == InstallAttributes::kConsumerKioskDeviceMode)
     return policy::DEVICE_MODE_CONSUMER_KIOSK_AUTOLAUNCH;
+  if (mode == InstallAttributes::kDemoDeviceMode)
+    return policy::DEVICE_MODE_DEMO;
   return policy::DEVICE_MODE_NOT_SET;
 }
 
@@ -505,14 +578,16 @@ void InstallAttributes::DecodeInstallAttributes(
     // Set registration_mode_.
     registration_mode_ = GetDeviceModeFromString(mode);
     if (registration_mode_ != policy::DEVICE_MODE_ENTERPRISE &&
-        registration_mode_ != policy::DEVICE_MODE_ENTERPRISE_AD) {
+        registration_mode_ != policy::DEVICE_MODE_ENTERPRISE_AD &&
+        registration_mode_ != policy::DEVICE_MODE_DEMO) {
       if (!mode.empty()) {
         LOG(WARNING) << "Bad " << kAttrEnterpriseMode << ": " << mode;
       }
       registration_mode_ = policy::DEVICE_MODE_ENTERPRISE;
     }
 
-    if (registration_mode_ == policy::DEVICE_MODE_ENTERPRISE) {
+    if (registration_mode_ == policy::DEVICE_MODE_ENTERPRISE ||
+        registration_mode_ == policy::DEVICE_MODE_DEMO) {
       // Either set registration_domain_ ...
       WarnIfNonempty(attr_map, kAttrEnterpriseRealm);
       if (!domain.empty()) {

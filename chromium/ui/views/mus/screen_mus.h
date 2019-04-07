@@ -5,36 +5,29 @@
 #ifndef UI_VIEWS_MUS_SCREEN_MUS_H_
 #define UI_VIEWS_MUS_SCREEN_MUS_H_
 
-#include "mojo/public/cpp/bindings/binding.h"
-#include "services/ui/public/interfaces/screen_provider.mojom.h"
+#include "services/ws/public/mojom/screen_provider_observer.mojom.h"
 #include "ui/display/screen_base.h"
 #include "ui/views/mus/mus_export.h"
-
-namespace service_manager {
-class Connector;
-}
 
 namespace views {
 
 class ScreenMusDelegate;
 
-// Screen implementation backed by ui::mojom::ScreenProvider.
+// Screen implementation that gets information from
+// ws::mojom::ScreenProviderObserver.
+//
+// NOTE: this is not necessarily installed as the Screen implementation.
 class VIEWS_MUS_EXPORT ScreenMus : public display::ScreenBase,
-                                   public ui::mojom::ScreenProviderObserver {
+                                   public ws::mojom::ScreenProviderObserver {
  public:
   explicit ScreenMus(ScreenMusDelegate* delegate);
   ~ScreenMus() override;
 
-  // TODO(sky): not used with ws2. Remove. https://crbug.com/842365.
-  void InitDeprecated(service_manager::Connector* connector);
-
-  // ui::mojom::ScreenProviderObserver:
-  void OnDisplaysChanged(std::vector<ui::mojom::WsDisplayPtr> ws_displays,
+  // ws::mojom::ScreenProviderObserver:
+  void OnDisplaysChanged(std::vector<ws::mojom::WsDisplayPtr> ws_displays,
                          int64_t primary_display_id,
-                         int64_t internal_display_id) override;
-
- private:
-  friend class ScreenMusTestApi;
+                         int64_t internal_display_id,
+                         int64_t display_id_for_new_windows) override;
 
   // display::Screen:
   display::Display GetDisplayNearestWindow(
@@ -43,10 +36,8 @@ class VIEWS_MUS_EXPORT ScreenMus : public display::ScreenBase,
   bool IsWindowUnderCursor(gfx::NativeWindow window) override;
   aura::Window* GetWindowAtScreenPoint(const gfx::Point& point) override;
 
+ private:
   ScreenMusDelegate* delegate_;
-  ui::mojom::ScreenProviderPtr screen_provider_;
-  mojo::Binding<ui::mojom::ScreenProviderObserver>
-      screen_provider_observer_binding_;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenMus);
 };

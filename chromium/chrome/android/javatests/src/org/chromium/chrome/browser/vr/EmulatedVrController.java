@@ -24,14 +24,35 @@ import java.util.concurrent.TimeUnit;
  */
 public class EmulatedVrController {
     public enum ScrollDirection { UP, DOWN, LEFT, RIGHT }
+    private static final int FIRST_INPUT_DELAY_MS = 500;
     private final ControllerTestApi mApi;
+    private boolean mHaveSentInputSinceEnteringVr;
 
     public EmulatedVrController(Context context) {
         mApi = new ControllerTestApi(context);
     }
 
     public ControllerTestApi getApi() {
+        // We flakily disconnect and reconnect the controller immediately after VR entry, which can
+        // cause controller input to get eaten. Sleeping a bit after VR entry fixes this, so instead
+        // of adding a bunch of sleeps everywhere, sleep for a bit before sending the first input
+        // after VR entry.
+        // TODO(https://crbug.com/870031): Remove this sleep if/when the controller disconnect/
+        // reconnect issue caused by DON flow skipping that flakily eats controller input is
+        // resolved.
+        if (!mHaveSentInputSinceEnteringVr) {
+            SystemClock.sleep(FIRST_INPUT_DELAY_MS);
+            mHaveSentInputSinceEnteringVr = true;
+        }
         return mApi;
+    }
+
+    /**
+     * Resets the flag used to keep track of whether we have sent input since entering VR. Should
+     * be called anytime the emulated controller is used and a test re-enters VR.
+     */
+    public void resetFirstInputFlag() {
+        mHaveSentInputSinceEnteringVr = false;
     }
 
     /**
@@ -45,8 +66,12 @@ public class EmulatedVrController {
         sendClickButtonToggleEvent();
     }
 
+    /**
+     * Either presses or releases the Daydream controller's touchpad button depending on wheter
+     * the button is currently pressed or not.
+     */
     public void sendClickButtonToggleEvent() {
-        mApi.buttonEvent.sendClickButtonToggleEvent();
+        getApi().buttonEvent.sendClickButtonToggleEvent();
     }
 
     /**
@@ -54,7 +79,7 @@ public class EmulatedVrController {
      * Or, if the button is already pressed, releases and quickly presses again.
      */
     public void pressReleaseTouchpadButton() {
-        mApi.buttonEvent.sendClickButtonEvent();
+        getApi().buttonEvent.sendClickButtonEvent();
     }
 
     /**
@@ -62,7 +87,7 @@ public class EmulatedVrController {
      * Or, if the button is already pressed, releases and quickly presses again.
      */
     public void pressReleaseAppButton() {
-        mApi.buttonEvent.sendAppButtonEvent();
+        getApi().buttonEvent.sendAppButtonEvent();
     }
 
     /**
@@ -70,22 +95,18 @@ public class EmulatedVrController {
      * orientation quaternion.
      */
     public void recenterView() {
-        mApi.buttonEvent.sendHomeButtonToggleEvent();
-        // A valid position must be sent a short time after the home button
-        // is pressed in order for recentering to actually complete, and no
-        // way to be signalled that we should send the event, so sleep
+        getApi().buttonEvent.sendHomeButtonToggleEvent();
+        // Need to "hold" the button long enough to trigger a view recenter instead of just a button
+        // press - half a second is sufficient and non-flaky.
         SystemClock.sleep(500);
-        // We don't care where the controller is pointing when recentering occurs as long
-        // as it results in a successful recenter, so send an arbitrary, valid orientation
-        mApi.moveEvent.sendMoveEvent(0.0f, 0.0f, 0.0f, 1.0f);
-        mApi.buttonEvent.sendHomeButtonToggleEvent();
+        getApi().buttonEvent.sendHomeButtonToggleEvent();
     }
 
     /**
      * Performs a short home button press/release, which launches the Daydream Home app.
      */
     public void goToDaydreamHome() {
-        mApi.buttonEvent.sendShortHomeButtonEvent();
+        getApi().buttonEvent.sendShortHomeButtonEvent();
     }
 
     /**
@@ -95,10 +116,10 @@ public class EmulatedVrController {
      * scrolling up at the same speed won't necessarily scroll back to the exact
      * starting position on the page.
      *
-     * @param direction the ScrollDirection to scroll with
-     * @param steps the number of intermediate steps to send while scrolling
+     * @param direction the ScrollDirection to scroll with.
+     * @param steps the number of intermediate steps to send while scrolling.
      * @param speed how long to wait between steps in the scroll, with higher
-     * numbers resulting in a faster scroll
+     *        numbers resulting in a faster scroll.
      */
     public void scroll(ScrollDirection direction, int steps, int speed) {
         float startX, startY, endX, endY;
@@ -136,20 +157,20 @@ public class EmulatedVrController {
         int delay = 500;
         long simulatedDelay = TimeUnit.MILLISECONDS.toNanos(delay);
         long timestamp = mApi.touchEvent.startTouchSequence(0.5f, 0.5f, simulatedDelay, delay);
-        mApi.touchEvent.endTouchSequence(0.5f, 0.5f, timestamp, simulatedDelay, delay);
+        getApi().touchEvent.endTouchSequence(0.5f, 0.5f, timestamp, simulatedDelay, delay);
     }
 
     /**
      * Simulates a touch down-drag-touch up sequence on the touchpad between two points.
      *
-     * @param xStart the x coordinate to start the touch sequence at, in range [0.0f, 1.0f]
-     * @param yStart the y coordinate to start the touch sequence at, in range [0.0f, 1.0f]
-     * @param xEnd the x coordinate to end the touch sequence at, in range [0.0f, 1.0f]
-     * @param yEnd the y coordinate to end the touch sequence at, in range [0.0f, 1.0f]
-     * @param steps the number of steps the drag will have
+     * @param xStart the x coordinate to start the touch sequence at, in range [0.0f, 1.0f].
+     * @param yStart the y coordinate to start the touch sequence at, in range [0.0f, 1.0f].
+     * @param xEnd the x coordinate to end the touch sequence at, in range [0.0f, 1.0f].
+     * @param yEnd the y coordinate to end the touch sequence at, in range [0.0f, 1.0f].
+     * @param steps the number of steps the drag will have.
      * @param speed how long to wait between steps in the sequence. Generally, higher numbers
-     * result in faster movement, e.g. when used for scrolling, a higher number results in faster
-     * scrolling.
+     *        result in faster movement, e.g. when used for scrolling, a higher number results in
+     *        faster scrolling.
      */
     public void performLinearTouchpadMovement(
             float xStart, float yStart, float xEnd, float yEnd, int steps, int speed) {
@@ -160,35 +181,35 @@ public class EmulatedVrController {
         long timestamp = mApi.touchEvent.startTouchSequence(xStart, yStart, simulatedDelay, speed);
         timestamp = mApi.touchEvent.dragFromTo(
                 xStart, yStart, xEnd, yEnd, steps, timestamp, simulatedDelay, speed);
-        mApi.touchEvent.endTouchSequence(xEnd, yEnd, timestamp, simulatedDelay, speed);
+        getApi().touchEvent.endTouchSequence(xEnd, yEnd, timestamp, simulatedDelay, speed);
     }
 
     /**
      * Instantly moves the controller to the specified quaternion coordinates.
      *
-     * @param x the x component of the quaternion
-     * @param y the y component of the quaternion
-     * @param z the z component of the quaternion
-     * @param w the w component of the quaternion
+     * @param x the x component of the quaternion.
+     * @param y the y component of the quaternion.
+     * @param z the z component of the quaternion.
+     * @param w the w component of the quaternion.
      */
     public void moveControllerInstant(float x, float y, float z, float w) {
-        mApi.moveEvent.sendMoveEvent(x, y, z, w, 0);
+        getApi().moveEvent.sendMoveEvent(x, y, z, w, 0);
     }
 
     /**
      * Moves the controller from one position to another over a period of time.
      *
-     * @param startAngles the x/y/z angles to start the controller at, in radians
-     * @param endAngles the x/y/z angles to end the controller at, in radians
-     * @param steps the number of steps the controller will take moving between the positions
-     * @param delayBetweenSteps how long to sleep between positions
+     * @param startAngles the x/y/z angles to start the controller at, in radians.
+     * @param endAngles the x/y/z angles to end the controller at, in radians.
+     * @param steps the number of steps the controller will take moving between the positions.
+     * @param delayBetweenSteps how long to sleep between positions.
      */
     public void moveControllerInterpolated(
             float[] startAngles, float[] endAngles, int steps, int delayBetweenSteps) {
         if (startAngles.length != 3 || endAngles.length != 3) {
             throw new IllegalArgumentException("Angle arrays must be length 3");
         }
-        mApi.moveEvent.sendMoveEvent(new float[] {startAngles[0], endAngles[0]},
+        getApi().moveEvent.sendMoveEvent(new float[] {startAngles[0], endAngles[0]},
                 new float[] {startAngles[1], endAngles[1]},
                 new float[] {startAngles[2], endAngles[2]}, steps, delayBetweenSteps);
     }

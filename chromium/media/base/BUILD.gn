@@ -5,6 +5,7 @@
 import("//build/config/android/config.gni")
 import("//build/config/arm.gni")
 import("//build/config/features.gni")
+import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//build/config/linux/pkg_config.gni")
 import("//media/media_options.gni")
@@ -14,7 +15,7 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
-source_set("base") {
+jumbo_source_set("base") {
   # Do not expand the visibility here without double-checking with OWNERS, this
   # is a roll-up target which is part of the //media component. Most other DEPs
   # should be using //media and not directly DEP this roll-up target.
@@ -144,6 +145,7 @@ source_set("base") {
     "fallback_video_decoder.cc",
     "fallback_video_decoder.h",
     "feedback_signal_accumulator.h",
+    "flinging_controller.h",
     "hdr_metadata.cc",
     "hdr_metadata.h",
     "key_system_names.cc",
@@ -292,13 +294,13 @@ source_set("base") {
     ":video_facing",
     "//media:media_buildflags",
     "//media:shared_memory_support",
+    "//third_party/libaom:av1_buildflags",
     "//ui/gfx:color_space",
   ]
   deps = [
     "//base/allocator:buildflags",
     "//gpu/command_buffer/common",
     "//skia",
-    "//third_party/libaom:av1_buildflags",
     "//third_party/libyuv",
     "//third_party/widevine/cdm:headers",
     "//ui/display:display",

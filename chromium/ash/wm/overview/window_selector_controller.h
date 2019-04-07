@@ -5,7 +5,6 @@
 #ifndef ASH_WM_OVERVIEW_WINDOW_SELECTOR_CONTROLLER_H_
 #define ASH_WM_OVERVIEW_WINDOW_SELECTOR_CONTROLLER_H_
 
-#include <list>
 #include <memory>
 #include <vector>
 
@@ -28,15 +27,19 @@ class ASH_EXPORT WindowSelectorController : public WindowSelectorDelegate {
 
   // Amount of blur to apply on the wallpaper when we enter or exit overview
   // mode.
-  static constexpr double kWallpaperBlurSigma = 10.f;
+  static constexpr float kWallpaperBlurSigma = 10.f;
+  static constexpr float kWallpaperClearBlurSigma = 0.f;
 
   // Returns true if selecting windows in an overview is enabled. This is false
   // at certain times, such as when the lock screen is visible.
   static bool CanSelect();
 
   // Attempts to toggle overview mode and returns true if successful (showing
-  // overview would be unsuccessful if there are no windows to show).
-  bool ToggleOverview();
+  // overview would be unsuccessful if there are no windows to show). If
+  // |toggled_from_home_launcher| is true, enter/exit overview with a different
+  // animation to accommodate the home launcher. |toggled_from_home_launcher|
+  // should only be true if the home launcher button is pressed.
+  bool ToggleOverview(bool toggled_from_home_launcher = false);
 
   // Returns true if window selection mode is active.
   bool IsSelecting() const;
@@ -48,10 +51,6 @@ class ASH_EXPORT WindowSelectorController : public WindowSelectorDelegate {
   // Accepts current selection if any. Returns true if a selection was made,
   // false otherwise.
   bool AcceptSelection();
-
-  // Returns true if overview mode is restoring minimized windows so that they
-  // are visible during overview mode.
-  bool IsRestoringMinimizedWindows() const;
 
   // Called when the overview button tray has been long pressed. Enters
   // splitview mode if the active window is snappable. Also enters overview mode

@@ -4,6 +4,9 @@
 
 #include "ash/system/unified/unified_system_tray.h"
 
+#include "ash/accessibility/accessibility_controller.h"
+#include "ash/message_center/message_center_ui_controller.h"
+#include "ash/message_center/message_center_ui_delegate.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/date/date_view.h"
@@ -16,8 +19,10 @@
 #include "ash/system/power/tray_power.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/tray/system_tray.h"
+#include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
 #include "ash/system/unified/ime_mode_view.h"
+#include "ash/system/unified/managed_device_view.h"
 #include "ash/system/unified/notification_counter_view.h"
 #include "ash/system/unified/unified_slider_bubble_controller.h"
 #include "ash/system/unified/unified_system_tray_bubble.h"
@@ -27,33 +32,30 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/ui_controller.h"
-#include "ui/message_center/ui_delegate.h"
 #include "ui/message_center/views/message_popup_collection.h"
 
 namespace ash {
 
-class UnifiedSystemTray::UiDelegate : public message_center::UiDelegate {
+class UnifiedSystemTray::UiDelegate : public MessageCenterUiDelegate {
  public:
   UiDelegate(UnifiedSystemTray* owner);
   ~UiDelegate() override;
 
-  // message_center::UiDelegate:
+  // MessageCenterUiDelegate:
   void OnMessageCenterContentsChanged() override;
   bool ShowPopups() override;
-  void HidePopups() override;
+  void HidePopups(bool animate) override;
   bool ShowMessageCenter(bool show_by_click) override;
   void HideMessageCenter() override;
-  bool ShowNotifierSettings() override;
 
-  message_center::UiController* ui_controller() { return ui_controller_.get(); }
+  MessageCenterUiController* ui_controller() { return ui_controller_.get(); }
 
   void SetTrayBubbleHeight(int height) {
     popup_alignment_delegate_->SetTrayBubbleHeight(height);
   }
 
  private:
-  std::unique_ptr<message_center::UiController> ui_controller_;
+  std::unique_ptr<MessageCenterUiController> ui_controller_;
   std::unique_ptr<AshPopupAlignmentDelegate> popup_alignment_delegate_;
   std::unique_ptr<message_center::MessagePopupCollection>
       message_popup_collection_;
@@ -65,13 +67,12 @@ class UnifiedSystemTray::UiDelegate : public message_center::UiDelegate {
 
 UnifiedSystemTray::UiDelegate::UiDelegate(UnifiedSystemTray* owner)
     : owner_(owner) {
-  ui_controller_ = std::make_unique<message_center::UiController>(this);
+  ui_controller_ = std::make_unique<MessageCenterUiController>(this);
   ui_controller_->set_hide_on_last_notification(false);
   popup_alignment_delegate_ =
       std::make_unique<AshPopupAlignmentDelegate>(owner->shelf());
   message_popup_collection_ =
       std::make_unique<message_center::MessagePopupCollection>(
-          message_center::MessageCenter::Get(),
           popup_alignment_delegate_.get());
   display::Screen* screen = display::Screen::GetScreen();
   popup_alignment_delegate_->StartObserving(
@@ -88,12 +89,12 @@ void UnifiedSystemTray::UiDelegate::OnMessageCenterContentsChanged() {
 bool UnifiedSystemTray::UiDelegate::ShowPopups() {
   if (owner_->IsBubbleShown())
     return false;
-  message_popup_collection_->DoUpdate();
+  message_popup_collection_->Update();
   return true;
 }
 
-void UnifiedSystemTray::UiDelegate::HidePopups() {
-  message_popup_collection_->MarkAllPopupsShown();
+void UnifiedSystemTray::UiDelegate::HidePopups(bool animate) {
+  message_popup_collection_->MarkAllPopupsShown(animate);
   popup_alignment_delegate_->SetTrayBubbleHeight(0);
 }
 
@@ -107,10 +108,6 @@ bool UnifiedSystemTray::UiDelegate::ShowMessageCenter(bool show_by_click) {
 
 void UnifiedSystemTray::UiDelegate::HideMessageCenter() {
   owner_->HideBubbleInternal();
-}
-
-bool UnifiedSystemTray::UiDelegate::ShowNotifierSettings() {
-  return false;
 }
 
 class UnifiedSystemTray::NetworkStateDelegate
@@ -150,10 +147,13 @@ UnifiedSystemTray::UnifiedSystemTray(Shelf* shelf)
       slider_bubble_controller_(
           std::make_unique<UnifiedSliderBubbleController>(this)),
       ime_mode_view_(new ImeModeView()),
+      managed_device_view_(new ManagedDeviceView()),
       notification_counter_item_(new NotificationCounterView()),
       quiet_mode_view_(new QuietModeView()),
       time_view_(new tray::TimeTrayItemView(nullptr, shelf)) {
+  tray_container()->SetMargin(kUnifiedTrayContentPadding, 0);
   tray_container()->AddChildView(ime_mode_view_);
+  tray_container()->AddChildView(managed_device_view_);
   tray_container()->AddChildView(notification_counter_item_);
   tray_container()->AddChildView(quiet_mode_view_);
 
@@ -206,6 +206,11 @@ void UnifiedSystemTray::ShowVolumeSliderBubble() {
       UnifiedSliderBubbleController::SLIDER_TYPE_VOLUME);
 }
 
+void UnifiedSystemTray::ShowAudioDetailedViewBubble() {
+  ShowBubble(false /* show_by_click */);
+  bubble_->ShowAudioDetailedView();
+}
+
 void UnifiedSystemTray::SetTrayBubbleHeight(int height) {
   ui_delegate_->SetTrayBubbleHeight(height);
 }
@@ -217,6 +222,32 @@ gfx::Rect UnifiedSystemTray::GetBubbleBoundsInScreen() const {
 void UnifiedSystemTray::UpdateAfterLoginStatusChange() {
   SetVisible(true);
   PreferredSizeChanged();
+}
+
+bool UnifiedSystemTray::ShouldEnableExtraKeyboardAccessibility() {
+  return Shell::Get()->accessibility_controller()->IsSpokenFeedbackEnabled();
+}
+
+void UnifiedSystemTray::AddInkDropLayer(ui::Layer* ink_drop_layer) {
+  TrayBackgroundView::AddInkDropLayer(ink_drop_layer);
+  ink_drop_layer_ = ink_drop_layer;
+}
+
+void UnifiedSystemTray::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
+  DCHECK_EQ(ink_drop_layer, ink_drop_layer_);
+  TrayBackgroundView::RemoveInkDropLayer(ink_drop_layer);
+  ink_drop_layer_ = nullptr;
+}
+
+void UnifiedSystemTray::OnBoundsChanged(const gfx::Rect& previous_bounds) {
+  TrayBackgroundView::OnBoundsChanged(previous_bounds);
+  // Workarounding an ui::Layer bug that layer mask is not properly updated.
+  // https://crbug.com/860367
+  // TODO(tetsui): Remove after the bug is fixed on ui::Layer side.
+  if (ink_drop_layer_) {
+    ResetInkDropMask();
+    InstallInkDropMask(ink_drop_layer_);
+  }
 }
 
 void UnifiedSystemTray::SetTrayEnabled(bool enabled) {
@@ -277,6 +308,10 @@ void UnifiedSystemTray::UpdateAfterShelfAlignmentChange() {
 }
 
 void UnifiedSystemTray::ShowBubbleInternal(bool show_by_click) {
+  // Never show System Tray bubble in kiosk app mode.
+  if (Shell::Get()->session_controller()->IsRunningInAppMode())
+    return;
+
   // Hide volume/brightness slider popup.
   slider_bubble_controller_->CloseBubble();
 

@@ -27,7 +27,7 @@ import zipfile
 # Do NOT CHANGE this if you don't know what you're doing -- see
 # https://chromium.googlesource.com/chromium/src/+/master/docs/updating_clang.md
 # Reverting problematic clang rolls is safe, though.
-CLANG_REVISION = '337439'
+CLANG_REVISION = '340925'
 
 use_head_revision = bool(os.environ.get('LLVM_FORCE_HEAD_REVISION', '0')
                          in ('1', 'YES'))
@@ -68,7 +68,7 @@ LLVM_BUILD_TOOLS_DIR = os.path.abspath(
     os.path.join(LLVM_DIR, '..', 'llvm-build-tools'))
 STAMP_FILE = os.path.normpath(
     os.path.join(LLVM_DIR, '..', 'llvm-build', 'cr_build_revision'))
-VERSION = '7.0.0'
+VERSION = '8.0.0'
 ANDROID_NDK_DIR = os.path.join(
     CHROMIUM_DIR, 'third_party', 'android_ndk')
 
@@ -307,18 +307,6 @@ def CreateChromeToolsShim():
     f.write('endif (CHROMIUM_TOOLS_SRC)\n')
 
 
-def DownloadHostGcc(args):
-  """Downloads gcc 4.8.5 and makes sure args.gcc_toolchain is set."""
-  if not sys.platform.startswith('linux') or args.gcc_toolchain:
-    return
-  gcc_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'gcc485precise')
-  if not os.path.exists(gcc_dir):
-    print 'Downloading pre-built GCC 4.8.5...'
-    DownloadAndUnpack(
-        CDS_URL + '/tools/gcc485precise.tgz', LLVM_BUILD_TOOLS_DIR)
-  args.gcc_toolchain = gcc_dir
-
-
 def AddSvnToPathOnWin():
   """Download svn.exe and add it to PATH."""
   if sys.platform != 'win32':
@@ -334,14 +322,18 @@ def AddCMakeToPath(args):
   """Download CMake and add it to PATH."""
   if args.use_system_cmake:
     return
+
   if sys.platform == 'win32':
-    zip_name = 'cmake-3.4.3-win32-x86.zip'
-    cmake_dir = os.path.join(LLVM_BUILD_TOOLS_DIR,
-                             'cmake-3.4.3-win32-x86', 'bin')
+    zip_name = 'cmake-3.12.1-win32-x86.zip'
+    dir_name = ['cmake-3.12.1-win32-x86', 'bin']
+  elif sys.platform == 'darwin':
+    zip_name = 'cmake-3.12.1-Darwin-x86_64.tar.gz'
+    dir_name = ['cmake-3.12.1-Darwin-x86_64', 'CMake.app', 'Contents', 'bin']
   else:
-    suffix = 'Darwin' if sys.platform == 'darwin' else 'Linux'
-    zip_name = 'cmake343_%s.tgz' % suffix
-    cmake_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'cmake343', 'bin')
+    zip_name = 'cmake-3.12.1-Linux-x86_64.tar.gz'
+    dir_name = ['cmake-3.12.1-Linux-x86_64', 'bin']
+
+  cmake_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, *dir_name)
   if not os.path.exists(cmake_dir):
     DownloadAndUnpack(CDS_URL + '/tools/' + zip_name, LLVM_BUILD_TOOLS_DIR)
   os.environ['PATH'] = cmake_dir + os.pathsep + os.environ.get('PATH', '')
@@ -353,7 +345,7 @@ def AddGnuWinToPath():
     return
 
   gnuwin_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'gnuwin')
-  GNUWIN_VERSION = '7'
+  GNUWIN_VERSION = '8'
   GNUWIN_STAMP = os.path.join(gnuwin_dir, 'stamp')
   if ReadStampFile(GNUWIN_STAMP) == GNUWIN_VERSION:
     print 'GNU Win tools already up to date.'
@@ -392,7 +384,10 @@ def GetWinSDKDir():
   if bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1'))):
     dia_path = os.path.join(win_sdk_dir, '..', 'DIA SDK', 'bin', 'amd64')
   else:
-    vs_path = vs_toolchain.DetectVisualStudioPath()
+    if 'GYP_MSVS_OVERRIDE_PATH' not in os.environ:
+      vs_path = vs_toolchain.DetectVisualStudioPath()
+    else:
+      vs_path = os.environ['GYP_MSVS_OVERRIDE_PATH']
     dia_path = os.path.join(vs_path, 'DIA SDK', 'bin', 'amd64')
 
   dia_dll = os.path.join(dia_path, DIA_DLL[msvs_version])
@@ -490,7 +485,6 @@ def UpdateClang(args):
 
   print 'Locally building Clang %s...' % PACKAGE_VERSION
 
-  DownloadHostGcc(args)
   AddCMakeToPath(args)
   AddGnuWinToPath()
 
@@ -503,21 +497,6 @@ def UpdateClang(args):
 
   cc, cxx = None, None
   libstdcpp = None
-  if args.gcc_toolchain:  # This option is only used on Linux.
-    # Use the specified gcc installation for building.
-    cc = os.path.join(args.gcc_toolchain, 'bin', 'gcc')
-    cxx = os.path.join(args.gcc_toolchain, 'bin', 'g++')
-
-    if not os.access(cc, os.X_OK):
-      print 'Invalid --gcc-toolchain: "%s"' % args.gcc_toolchain
-      print '"%s" does not appear to be valid.' % cc
-      return 1
-
-    # Set LD_LIBRARY_PATH to make auxiliary targets (tablegen, bootstrap
-    # compiler, etc.) find the .so.
-    libstdcpp = subprocess.check_output(
-        [cxx, '-print-file-name=libstdc++.so.6']).rstrip()
-    os.environ['LD_LIBRARY_PATH'] = os.path.dirname(libstdcpp)
 
   cflags = []
   cxxflags = []
@@ -567,11 +546,6 @@ def UpdateClang(args):
       cc = os.path.join(LLVM_BOOTSTRAP_INSTALL_DIR, 'bin', 'clang')
       cxx = os.path.join(LLVM_BOOTSTRAP_INSTALL_DIR, 'bin', 'clang++')
 
-    if args.gcc_toolchain:
-      # Tell the bootstrap compiler to use a specific gcc prefix to search
-      # for standard library headers and shared object files.
-      cflags = ['--gcc-toolchain=' + args.gcc_toolchain]
-      cxxflags = ['--gcc-toolchain=' + args.gcc_toolchain]
     print 'Building final compiler'
 
   # LLVM uses C++11 starting in llvm 3.5. On Linux, this means libstdc++4.7+ is
@@ -747,26 +721,26 @@ def UpdateClang(args):
   else:
     assert sys.platform.startswith('linux')
     platform = 'linux'
-  asan_rt_lib_src_dir = os.path.join(COMPILER_RT_BUILD_DIR, 'lib', platform)
+  rt_lib_src_dir = os.path.join(COMPILER_RT_BUILD_DIR, 'lib', platform)
   if sys.platform == 'win32':
     # TODO(thakis): This too is due to compiler-rt being part of the checkout
     # on Windows, see TODO above COMPILER_RT_DIR.
-    asan_rt_lib_src_dir = os.path.join(COMPILER_RT_BUILD_DIR, 'lib', 'clang',
-                                       VERSION, 'lib', platform)
-  asan_rt_lib_dst_dir = os.path.join(LLVM_BUILD_DIR, 'lib', 'clang',
-                                     VERSION, 'lib', platform)
+    rt_lib_src_dir = os.path.join(COMPILER_RT_BUILD_DIR, 'lib', 'clang',
+                                  VERSION, 'lib', platform)
+  rt_lib_dst_dir = os.path.join(LLVM_BUILD_DIR, 'lib', 'clang', VERSION, 'lib',
+                                platform)
   # Blacklists:
-  CopyDirectoryContents(os.path.join(asan_rt_lib_src_dir, '..', '..', 'share'),
-                        os.path.join(asan_rt_lib_dst_dir, '..', '..', 'share'))
+  CopyDirectoryContents(os.path.join(rt_lib_src_dir, '..', '..', 'share'),
+                        os.path.join(rt_lib_dst_dir, '..', '..', 'share'))
   # Headers:
   if sys.platform != 'win32':
     CopyDirectoryContents(
         os.path.join(COMPILER_RT_BUILD_DIR, 'include/sanitizer'),
         os.path.join(LLVM_BUILD_DIR, 'lib/clang', VERSION, 'include/sanitizer'))
   # Static and dynamic libraries:
-  CopyDirectoryContents(asan_rt_lib_src_dir, asan_rt_lib_dst_dir)
+  CopyDirectoryContents(rt_lib_src_dir, rt_lib_dst_dir)
   if sys.platform == 'darwin':
-    for dylib in glob.glob(os.path.join(asan_rt_lib_dst_dir, '*.dylib')):
+    for dylib in glob.glob(os.path.join(rt_lib_dst_dir, '*.dylib')):
       # Fix LC_ID_DYLIB for the ASan dynamic libraries to be relative to
       # @executable_path.
       # TODO(glider): this is transitional. We'll need to fix the dylib
@@ -795,7 +769,7 @@ def UpdateClang(args):
               'i686': 'x86',
           }[target_arch]])
 
-      # Build sanitizer runtimes for Android in a separate build tree.
+      # Build compiler-rt runtimes needed for Android in a separate build tree.
       build_dir = os.path.join(LLVM_BUILD_DIR, 'android-' + target_arch)
       if not os.path.exists(build_dir):
         os.mkdir(os.path.join(build_dir))
@@ -822,11 +796,25 @@ def UpdateClang(args):
         '-DANDROID=1']
       RmCmakeCache('.')
       RunCommand(['cmake'] + android_args + [COMPILER_RT_DIR])
-      RunCommand(['ninja', 'asan', 'ubsan'])
+      RunCommand(['ninja', 'asan', 'ubsan', 'profile'])
 
       # And copy them into the main build tree.
-      for f in glob.glob(os.path.join(build_dir, 'lib/linux/*.so')):
-        shutil.copy(f, asan_rt_lib_dst_dir)
+      asan_lib_path_format = 'lib/linux/libclang_rt.asan-{0}-android.so'
+      libs_want = [
+          asan_lib_path_format,
+          'lib/linux/libclang_rt.ubsan_standalone-{0}-android.so',
+          'lib/linux/libclang_rt.profile-{0}-android.a',
+      ]
+      for arch in ['aarch64', 'arm']:
+        for p in libs_want:
+          lib_path = os.path.join(build_dir, p.format(arch))
+          if os.path.exists(lib_path):
+            shutil.copy(lib_path, rt_lib_dst_dir)
+
+      # We also use ASan i686 build for fuzzing.
+      lib_path = os.path.join(build_dir, asan_lib_path_format.format('i686'))
+      if os.path.exists(lib_path):
+        shutil.copy(lib_path, rt_lib_dst_dir)
 
   # Run tests.
   if args.run_tests or use_head_revision:
@@ -894,6 +882,11 @@ def main():
   if (use_head_revision or args.llvm_force_head_revision or
       args.force_local_build):
     AddSvnToPathOnWin()
+
+  if use_head_revision:
+    # TODO(hans): Trunk version was updated; remove after the next roll.
+    global VERSION
+    VERSION = '8.0.0'
 
   if args.verify_version and args.verify_version != VERSION:
     print 'VERSION is %s but --verify-version argument was %s, exiting.' % (

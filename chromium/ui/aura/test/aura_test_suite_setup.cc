@@ -11,7 +11,7 @@
 #include "ui/base/ui_base_features.h"
 
 #if defined(USE_OZONE)
-#include "services/ui/public/cpp/input_devices/input_device_client.h"
+#include "services/ws/public/cpp/input_devices/input_device_client.h"
 #endif
 
 #if BUILDFLAG(ENABLE_MUS)
@@ -23,7 +23,7 @@ namespace aura {
 namespace {
 
 #if defined(USE_OZONE)
-class TestInputDeviceClient : public ui::InputDeviceClient {
+class TestInputDeviceClient : public ws::InputDeviceClient {
  public:
   TestInputDeviceClient() = default;
   ~TestInputDeviceClient() override = default;
@@ -38,10 +38,10 @@ class TestInputDeviceClient : public ui::InputDeviceClient {
 }  // namespace
 
 AuraTestSuiteSetup::AuraTestSuiteSetup() {
-  DCHECK(!Env::GetInstanceDontCreate());
+  DCHECK(!Env::HasInstance());
 #if BUILDFLAG(ENABLE_MUS)
   const Env::Mode env_mode =
-      features::IsAshInBrowserProcess() ? Env::Mode::LOCAL : Env::Mode::MUS;
+      features::IsUsingWindowService() ? Env::Mode::MUS : Env::Mode::LOCAL;
   env_ = Env::CreateInstance(env_mode);
   if (env_mode == Env::Mode::MUS)
     ConfigureMus();

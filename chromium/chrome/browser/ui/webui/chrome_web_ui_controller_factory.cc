@@ -15,6 +15,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/about_flags.h"
+#include "chrome/browser/accessibility/accessibility_ui.h"
 #include "chrome/browser/devtools/devtools_ui_bindings.h"
 #include "chrome/browser/dom_distiller/dom_distiller_service_factory.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
@@ -59,6 +60,7 @@
 #include "chrome/browser/ui/webui/sync_internals_ui.h"
 #include "chrome/browser/ui/webui/task_scheduler_internals/task_scheduler_internals_ui.h"
 #include "chrome/browser/ui/webui/translate_internals/translate_internals_ui.h"
+#include "chrome/browser/ui/webui/ukm/ukm_internals_ui.h"
 #include "chrome/browser/ui/webui/usb_internals/usb_internals_ui.h"
 #include "chrome/browser/ui/webui/user_actions/user_actions_ui.h"
 #include "chrome/browser/ui/webui/version_ui.h"
@@ -349,6 +351,8 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   // All platform builds of Chrome will need to have a cloud printing
   // dialog as backup.  It's just that on Chrome OS, it's the only
   // print dialog.
+  if (url.host_piece() == chrome::kChromeUIAccessibilityHost)
+    return &NewWebUI<AccessibilityUI>;
   if (url.host_piece() == chrome::kChromeUIBluetoothInternalsHost)
     return &NewWebUI<BluetoothInternalsUI>;
   if (url.host_piece() == chrome::kChromeUIComponentsHost)
@@ -409,6 +413,8 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<TaskSchedulerInternalsUI>;
   if (url.host_piece() == chrome::kChromeUITranslateInternalsHost)
     return &NewWebUI<TranslateInternalsUI>;
+  if (url.host_piece() == chrome::kChromeUIUkmHost)
+    return &NewWebUI<UkmInternalsUI>;
   if (url.host_piece() == chrome::kChromeUIUsbInternalsHost)
     return &NewWebUI<UsbInternalsUI>;
   if (url.host_piece() == chrome::kChromeUIUserActionsHost)
@@ -482,7 +488,7 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   if (url.host_piece() == chrome::kChromeUIKeyboardOverlayHost)
     return &NewWebUI<KeyboardOverlayUI>;
   if (url.host_piece() == chrome::kChromeUIMobileSetupHost)
-    return &NewWebUI<MobileSetupUI>;
+    return &NewWebUI<chromeos::MobileSetupUI>;
   if (url.host_piece() == chrome::kChromeUIMultiDeviceSetupHost)
     return &NewWebUI<chromeos::multidevice_setup::MultiDeviceSetupDialogUI>;
   if (url.host_piece() == chrome::kChromeUINetworkHost)

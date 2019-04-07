@@ -16,7 +16,7 @@
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/browser/usb/web_usb_histograms.h"
-#include "chrome/browser/usb/web_usb_permission_provider.h"
+#include "chrome/browser/usb/web_usb_service_impl.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/render_frame_host.h"
@@ -25,7 +25,6 @@
 #include "device/usb/mojo/type_converters.h"
 #include "device/usb/public/cpp/filter_utils.h"
 #include "device/usb/usb_device.h"
-#include "device/usb/usb_ids.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -69,7 +68,7 @@ base::string16 FormatUsbDeviceName(scoped_refptr<device::UsbDevice> device) {
 UsbChooserController::UsbChooserController(
     RenderFrameHost* render_frame_host,
     std::vector<device::mojom::UsbDeviceFilterPtr> device_filters,
-    device::mojom::UsbChooserService::GetPermissionCallback callback)
+    blink::mojom::WebUsbService::GetPermissionCallback callback)
     : ChooserController(render_frame_host,
                         IDS_USB_DEVICE_CHOOSER_PROMPT_ORIGIN,
                         IDS_USB_DEVICE_CHOOSER_PROMPT_EXTENSION_NAME),
@@ -125,13 +124,15 @@ base::string16 UsbChooserController::GetOption(size_t index) const {
 }
 
 bool UsbChooserController::IsPaired(size_t index) const {
-  scoped_refptr<UsbDevice> device = devices_[index].first;
-
   if (!chooser_context_)
     return false;
 
-  return WebUSBPermissionProvider::HasDevicePermission(
-      chooser_context_.get(), requesting_origin_, embedding_origin_, device);
+  auto device_info = device::mojom::UsbDeviceInfo::From(*devices_[index].first);
+  DCHECK(device_info);
+
+  return WebUsbServiceImpl::HasDevicePermission(
+      chooser_context_.get(), requesting_origin_, embedding_origin_,
+      *device_info);
 }
 
 void UsbChooserController::Select(const std::vector<size_t>& indices) {

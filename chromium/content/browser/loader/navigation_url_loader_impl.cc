@@ -10,11 +10,13 @@
 #include "base/bind_helpers.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/optional.h"
 #include "base/stl_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "components/download/public/common/download_stats.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
+#include "content/browser/appcache/appcache_navigation_handle_core.h"
 #include "content/browser/appcache/appcache_request_handler.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
@@ -39,6 +41,7 @@
 #include "content/browser/web_package/signed_exchange_utils.h"
 #include "content/browser/webui/url_data_manager_backend.h"
 #include "content/browser/webui/web_ui_url_loader_factory_internal.h"
+#include "content/common/mime_sniffing_throttle.h"
 #include "content/common/navigation_subresource_loader_params.h"
 #include "content/common/net/record_load_histograms.h"
 #include "content/common/throttling_url_loader.h"
@@ -59,8 +62,11 @@
 #include "content/public/common/url_utils.h"
 #include "content/public/common/webplugininfo.h"
 #include "net/base/load_flags.h"
+#include "net/cert/sct_status_flags.h"
+#include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/http/http_content_disposition.h"
 #include "net/http/http_request_headers.h"
+#include "net/ssl/ssl_info.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/redirect_util.h"
 #include "net/url_request/url_request.h"
@@ -90,11 +96,13 @@ class NavigationLoaderInterceptorBrowserContainer
 
   ~NavigationLoaderInterceptorBrowserContainer() override = default;
 
-  void MaybeCreateLoader(const network::ResourceRequest& resource_request,
-                         ResourceContext* resource_context,
-                         LoaderCallback callback) override {
-    browser_interceptor_->MaybeCreateLoader(resource_request, resource_context,
-                                            std::move(callback));
+  void MaybeCreateLoader(
+      const network::ResourceRequest& tentative_resource_request,
+      ResourceContext* resource_context,
+      LoaderCallback callback,
+      FallbackCallback fallback_callback) override {
+    browser_interceptor_->MaybeCreateLoader(
+        tentative_resource_request, resource_context, std::move(callback));
   }
 
  private:
@@ -290,12 +298,61 @@ std::unique_ptr<NavigationRequestInfo> CreateNavigationRequestInfoForRedirect(
 }
 
 // Called for requests that we don't have a URLLoaderFactory for.
-void UnknownSchemeCallback(bool handled_externally,
-                           network::mojom::URLLoaderRequest request,
-                           network::mojom::URLLoaderClientPtr client) {
+void UnknownSchemeCallback(
+    bool handled_externally,
+    const network::ResourceRequest& /* resource_request */,
+    network::mojom::URLLoaderRequest request,
+    network::mojom::URLLoaderClientPtr client) {
   client->OnComplete(network::URLLoaderCompletionStatus(
       handled_externally ? net::ERR_ABORTED : net::ERR_UNKNOWN_URL_SCHEME));
 }
+
+// Returns whether this URL can be handled by the default network service
+// URLLoader.
+bool IsURLHandledByDefaultLoader(const GURL& url) {
+  // Data URLs are only handled by the network service if
+  // |enable_data_url_support| is set in NetworkContextParams. This is set to
+  // true for the context used by NavigationURLLoaderImpl, so in addition to
+  // checking whether the URL is handled by the network service, we also need to
+  // check for the data scheme.
+  return IsURLHandledByNetworkService(url) || url.SchemeIs(url::kDataScheme);
+}
+
+// Determines whether it is safe to redirect from |from_url| to |to_url|.
+bool IsRedirectSafe(const GURL& from_url,
+                    const GURL& to_url,
+                    ResourceContext* resource_context) {
+  return IsSafeRedirectTarget(from_url, to_url) &&
+         GetContentClient()->browser()->IsSafeRedirectTarget(to_url,
+                                                             resource_context);
+}
+
+// URLLoaderFactory for handling about: URLs. This treats everything as
+// about:blank since no other about: features should be available to web
+// content.
+class AboutURLLoaderFactory : public network::mojom::URLLoaderFactory {
+ private:
+  // network::mojom::URLLoaderFactory:
+  void CreateLoaderAndStart(network::mojom::URLLoaderRequest loader,
+                            int32_t routing_id,
+                            int32_t request_id,
+                            uint32_t options,
+                            const network::ResourceRequest& request,
+                            network::mojom::URLLoaderClientPtr client,
+                            const net::MutableNetworkTrafficAnnotationTag&
+                                traffic_annotation) override {
+    network::ResourceResponseHead response;
+    response.mime_type = "text/html";
+    client->OnReceiveResponse(response);
+    client->OnComplete(network::URLLoaderCompletionStatus(net::OK));
+  }
+
+  void Clone(network::mojom::URLLoaderFactoryRequest loader) override {
+    bindings_.AddBinding(this, std::move(loader));
+  }
+
+  mojo::BindingSet<network::mojom::URLLoaderFactory> bindings_;
+};
 
 }  // namespace
 
@@ -315,19 +372,23 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
       std::unique_ptr<network::ResourceRequest> resource_request,
       ResourceContext* resource_context,
       const GURL& url,
+      bool is_main_frame,
       network::mojom::URLLoaderFactoryRequest proxied_factory_request,
       network::mojom::URLLoaderFactoryPtrInfo proxied_factory_info,
       std::set<std::string> known_schemes,
+      bool bypass_redirect_checks,
       const base::WeakPtr<NavigationURLLoaderImpl>& owner)
       : interceptors_(std::move(initial_interceptors)),
         resource_request_(std::move(resource_request)),
         resource_context_(resource_context),
         url_(url),
+        is_main_frame_(is_main_frame),
         owner_(owner),
         response_loader_binding_(this),
         proxied_factory_request_(std::move(proxied_factory_request)),
         proxied_factory_info_(std::move(proxied_factory_info)),
         known_schemes_(std::move(known_schemes)),
+        bypass_redirect_checks_(bypass_redirect_checks),
         weak_factory_(this) {}
 
   ~URLLoaderRequestController() override {
@@ -347,13 +408,19 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
   }
 
   static uint32_t GetURLLoaderOptions(bool is_main_frame) {
-    uint32_t options = network::mojom::kURLLoadOptionSendSSLInfoWithResponse;
-    if (is_main_frame)
-      options |= network::mojom::kURLLoadOptionSendSSLInfoForCertificateError;
+    uint32_t options = network::mojom::kURLLoadOptionNone;
 
-    if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
-      options |= network::mojom::kURLLoadOptionSniffMimeType;
-    } else {
+    // Ensure that Mime sniffing works.
+    options |= network::mojom::kURLLoadOptionSniffMimeType;
+
+    if (is_main_frame) {
+      // SSLInfo is not needed on subframe responses because users can inspect
+      // only the certificate for the main frame when using the info bubble.
+      options |= network::mojom::kURLLoadOptionSendSSLInfoWithResponse;
+      options |= network::mojom::kURLLoadOptionSendSSLInfoForCertificateError;
+    }
+
+    if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
       // TODO(arthursonzogni): This is a temporary option. Remove this as soon
       // as the InterceptingResourceHandler is removed.
       // See https://crbug.com/791049.
@@ -400,14 +467,22 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
       std::unique_ptr<NavigationRequestInfo> request_info,
       ServiceWorkerNavigationHandleCore* service_worker_navigation_handle_core,
       AppCacheNavigationHandleCore* appcache_handle_core,
+      const network::ResourceRequest& /* resource_request */,
       network::mojom::URLLoaderRequest url_loader,
       network::mojom::URLLoaderClientPtr url_loader_client) {
+    // |resource_request| is unused here. Its info may not be the same as
+    // |request_info|, because URLLoaderThrottles may have rewritten it. We
+    // don't propagate the fields to |request_info| here because the request
+    // will usually go to ResourceDispatcherHost which does its own request
+    // modification independent of URLLoaderThrottles.
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     DCHECK(!base::FeatureList::IsEnabled(network::features::kNetworkService));
     DCHECK(started_);
 
     default_loader_used_ = true;
     if (signed_exchange_utils::IsSignedExchangeHandlingEnabled()) {
+      // TODO(falken): Understand and add a comment about why
+      // SignedExchangeRequestHandler is the only interceptor being added here.
       DCHECK(!network_loader_factory_);
       // It is safe to pass the callback of CreateURLLoaderThrottles with the
       // unretained |this|, because the passed callback will be used by a
@@ -426,8 +501,7 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
               resource_context_, url_request_context_getter),
           base::BindRepeating(
               &URLLoaderRequestController::CreateURLLoaderThrottles,
-              base::Unretained(this)),
-          url_request_context_getter));
+              base::Unretained(this))));
     }
 
     uint32_t options = GetURLLoaderOptions(request_info->is_main_frame);
@@ -549,7 +623,6 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
   }
 
   void Start(
-      net::URLRequestContextGetter* url_request_context_getter,
       std::unique_ptr<network::SharedURLLoaderFactoryInfo>
           network_loader_factory_info,
       ServiceWorkerNavigationHandleCore* service_worker_navigation_handle_core,
@@ -615,8 +688,8 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
 
     if (appcache_handle_core) {
       std::unique_ptr<NavigationLoaderInterceptor> appcache_interceptor =
-          AppCacheRequestHandler::InitializeForNavigationNetworkService(
-              *resource_request_, appcache_handle_core,
+          AppCacheRequestHandler::InitializeForMainResourceNetworkService(
+              *resource_request_, appcache_handle_core->host()->GetWeakPtr(),
               network_loader_factory_);
       if (appcache_interceptor)
         interceptors_.push_back(std::move(appcache_interceptor));
@@ -642,8 +715,7 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
           request_info->begin_params->load_flags, network_loader_factory_,
           base::BindRepeating(
               &URLLoaderRequestController::CreateURLLoaderThrottles,
-              base::Unretained(this)),
-          url_request_context_getter));
+              base::Unretained(this))));
     }
 
     std::vector<std::unique_ptr<URLLoaderRequestInterceptor>>
@@ -670,9 +742,15 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
     // the restarted request to use a new loader, instead of, e.g., reusing the
     // AppCache or service worker loader. For an optimization, we keep and reuse
     // the default url loader if the all |interceptors_| doesn't handle the
-    // redirected request.
-    if (!default_loader_used_)
+    // redirected request. If the network service is enabled, only certain
+    // schemes are handled by the default URL loader. We need to make sure the
+    // redirected URL is a handled scheme, otherwise reset the loader so the
+    // correct non-network service loader can be used.
+    if (!default_loader_used_ ||
+        (base::FeatureList::IsEnabled(network::features::kNetworkService) &&
+         !IsURLHandledByDefaultLoader(resource_request_->url))) {
       url_loader_.reset();
+    }
     interceptor_index_ = 0;
     received_response_ = false;
     MaybeStartLoader(nullptr /* interceptor */,
@@ -694,11 +772,19 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
       // |interceptor| wants to handle the request with
       // |single_request_handler|.
       DCHECK(interceptor);
+
+      std::vector<std::unique_ptr<URLLoaderThrottle>> throttles =
+          CreateURLLoaderThrottles();
+      // Intercepted requests need MimeSniffingThrottle to do mime sniffing.
+      // Non-intercepted requests usually go through the regular network
+      // URLLoader, which does mime sniffing.
+      throttles.push_back(std::make_unique<MimeSniffingThrottle>());
+
       default_loader_used_ = false;
       url_loader_ = ThrottlingURLLoader::CreateLoaderAndStart(
           base::MakeRefCounted<SingleRequestURLLoaderFactory>(
               std::move(single_request_handler)),
-          CreateURLLoaderThrottles(), frame_tree_node_id_,
+          std::move(throttles), frame_tree_node_id_,
           global_request_id_.request_id, network::mojom::kURLLoadOptionNone,
           resource_request_.get(), this, kNavigationUrlLoaderTrafficAnnotation,
           base::ThreadTaskRunnerHandle::Get());
@@ -714,9 +800,9 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
     // that case we will just fall back to the default loader (i.e. won't go on
     // to the next interceptors) but send the subresource_loader_params to the
     // child process. This is necessary for correctness in the cases where, e.g.
-    // there's a controlling ServiceWorker that doesn't handle main resource
-    // loading, but may still want to control the page and/or handle subresource
-    // loading. In that case we want to skip AppCache.
+    // there's a controlling service worker that doesn't have a fetch event
+    // handler so it doesn't intercept requests. In that case we still want to
+    // skip AppCache.
     if (interceptor) {
       subresource_loader_params_ =
           interceptor->MaybeCreateSubresourceLoaderParams();
@@ -733,13 +819,16 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
       next_interceptor->MaybeCreateLoader(
           *resource_request_, resource_context_,
           base::BindOnce(&URLLoaderRequestController::MaybeStartLoader,
-                         base::Unretained(this), next_interceptor));
+                         base::Unretained(this), next_interceptor),
+          base::BindOnce(
+              &URLLoaderRequestController::FallbackToNonInterceptedRequest,
+              base::Unretained(this)));
       return;
     }
 
-    // If we already have the default |url_loader_| we must come here after
-    // a redirect. No interceptors wanted to intercept the redirected request,
-    // so let it just follow the redirect.
+    // If we already have the default |url_loader_| we must come here after a
+    // redirect. No interceptors wanted to intercept the redirected request, so
+    // let the loader just follow the redirect.
     if (url_loader_) {
       DCHECK(!redirect_info_.new_url.is_empty());
       url_loader_->FollowRedirect(
@@ -747,48 +836,87 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
       return;
     }
 
-    // TODO(https://crbug.com/796425): We temporarily wrap raw
-    // mojom::URLLoaderFactory pointers into SharedURLLoaderFactory. Need to
-    // further refactor the factory getters to avoid this.
-    scoped_refptr<network::SharedURLLoaderFactory> factory;
-    DCHECK_EQ(interceptors_.size(), interceptor_index_);
+    // No interceptors wanted to handle this request.
+    uint32_t options = network::mojom::kURLLoadOptionNone;
+    scoped_refptr<network::SharedURLLoaderFactory> factory =
+        PrepareForNonInterceptedRequest(&options);
+    url_loader_ = ThrottlingURLLoader::CreateLoaderAndStart(
+        std::move(factory), CreateURLLoaderThrottles(), frame_tree_node_id_,
+        global_request_id_.request_id, options, resource_request_.get(),
+        this /* client */, kNavigationUrlLoaderTrafficAnnotation,
+        base::ThreadTaskRunnerHandle::Get());
+  }
 
+  // This is the |fallback_callback| passed to
+  // NavigationLoaderInterceptor::MaybeCreateLoader. It allows an interceptor
+  // to initially elect to handle a request, and later decide to fallback to
+  // the default behavior. This is needed for service worker network fallback.
+  void FallbackToNonInterceptedRequest(bool reset_subresource_loader_params) {
+    if (reset_subresource_loader_params)
+      subresource_loader_params_.reset();
+
+    // Non-NetworkService:
+    // Cancel state on ResourceDispatcherHostImpl so it doesn't complain about
+    // reusing the request_id after redirects. Otherwise the following sequence
+    // can happen:
+    // RDHI Start(request_id) -> Redirect -> SW interception -> SW fallback to
+    // network -> RDHI Start(request_id).
+    if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+      DCHECK(ResourceDispatcherHostImpl::Get());
+      ResourceDispatcherHostImpl::Get()->CancelRequest(
+          global_request_id_.child_id, global_request_id_.request_id);
+    }
+
+    // |url_loader_| is using the factory for the interceptor that decided to
+    // fallback, so restart it with the non-interceptor factory.
+    DCHECK(url_loader_);
+    uint32_t options = network::mojom::kURLLoadOptionNone;
+    scoped_refptr<network::SharedURLLoaderFactory> factory =
+        PrepareForNonInterceptedRequest(&options);
+    url_loader_->RestartWithFactory(std::move(factory), options);
+  }
+
+  scoped_refptr<network::SharedURLLoaderFactory>
+  PrepareForNonInterceptedRequest(uint32_t* out_options) {
     // If NetworkService is not enabled (which means we come here because one of
     // the loader interceptors is enabled), use the default request handler
     // instead of going through the NetworkService path.
     if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
       DCHECK(!interceptors_.empty());
       DCHECK(default_request_handler_factory_);
-      // The only way to come here is to enable ServiceWorkerServicification
-      // without NetworkService. We know that the service worker's request
-      // interceptor has already intercepted and decided not to handle the
+      // The only way to come here is to enable ServiceWorkerServicification or
+      // SignedExchange without NetworkService. We know that their request
+      // interceptors have already intercepted and decided not to handle the
       // request.
-      DCHECK(blink::ServiceWorkerUtils::IsServicificationEnabled());
+      DCHECK(blink::ServiceWorkerUtils::IsServicificationEnabled() ||
+             signed_exchange_utils::IsSignedExchangeHandlingEnabled());
       default_loader_used_ = true;
       // Update |request_info_| when following a redirect.
       if (url_chain_.size() > 0) {
         request_info_ = CreateNavigationRequestInfoForRedirect(
             *request_info_, *resource_request_);
       }
+
       // When |subresource_loader_params_| has its value, the request should not
       // be intercepted by any other interceptors since it means that a request
       // interceptor already intercepted the request and it attached its info to
       // the request.
-      url_loader_ = ThrottlingURLLoader::CreateLoaderAndStart(
-          base::MakeRefCounted<SingleRequestURLLoaderFactory>(
-              default_request_handler_factory_.Run(
-                  subresource_loader_params_.has_value()
-                  /* was_request_intercepted */)),
-          CreateURLLoaderThrottles(), frame_tree_node_id_,
-          global_request_id_.request_id, network::mojom::kURLLoadOptionNone,
-          resource_request_.get(), this /* client */,
-          kNavigationUrlLoaderTrafficAnnotation,
-          base::ThreadTaskRunnerHandle::Get());
-      return;
+      bool was_request_intercepted = subresource_loader_params_.has_value();
+
+      // TODO(falken): Determine whether GetURLLoaderOptions() can be called
+      // here like below. It looks like |default_request_handler_factory_| just
+      // calls that.
+      *out_options = network::mojom::kURLLoadOptionNone;
+      return base::MakeRefCounted<SingleRequestURLLoaderFactory>(
+          default_request_handler_factory_.Run(was_request_intercepted));
     }
 
-    if (!IsURLHandledByNetworkService(resource_request_->url) &&
-        !resource_request_->url.SchemeIs(url::kDataScheme)) {
+    // TODO(https://crbug.com/796425): We temporarily wrap raw
+    // mojom::URLLoaderFactory pointers into SharedURLLoaderFactory. Need to
+    // further refactor the factory getters to avoid this.
+    scoped_refptr<network::SharedURLLoaderFactory> factory;
+
+    if (!IsURLHandledByDefaultLoader(resource_request_->url)) {
       if (known_schemes_.find(resource_request_->url.scheme()) ==
           known_schemes_.end()) {
         bool handled = GetContentClient()->browser()->HandleExternalProtocol(
@@ -836,13 +964,9 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
       }
     }
     url_chain_.push_back(resource_request_->url);
-    uint32_t options = GetURLLoaderOptions(resource_request_->resource_type ==
-                                           RESOURCE_TYPE_MAIN_FRAME);
-    url_loader_ = ThrottlingURLLoader::CreateLoaderAndStart(
-        factory, CreateURLLoaderThrottles(), frame_tree_node_id_,
-        global_request_id_.request_id, options, resource_request_.get(), this,
-        kNavigationUrlLoaderTrafficAnnotation,
-        base::ThreadTaskRunnerHandle::Get());
+    *out_options = GetURLLoaderOptions(resource_request_->resource_type ==
+                                       RESOURCE_TYPE_MAIN_FRAME);
+    return factory;
   }
 
   void FollowRedirect(
@@ -897,6 +1021,11 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
  private:
   // network::mojom::URLLoaderClient implementation:
   void OnReceiveResponse(const network::ResourceResponseHead& head) override {
+    // Record the SCT histogram before checking if anything wants to intercept
+    // the response, so interceptors like AppCache and extensions can't hide
+    // values from the histograms.
+    RecordSCTHistogramIfNeeded(head.ssl_info);
+
     received_response_ = true;
 
     // If the default loader (network) was used to handle the URL load request
@@ -922,86 +1051,105 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
 
     bool is_download;
     bool is_stream;
+    // If there is not an explicit PreviewsState set on the request, turn
+    // Previews off.
+    PreviewsState previews_state = PREVIEWS_OFF;
     std::unique_ptr<NavigationData> cloned_navigation_data;
+
     if (IsLoaderInterceptionEnabled()) {
       bool must_download = download_utils::MustDownload(
           url_, head.headers.get(), head.mime_type);
       bool known_mime_type = blink::IsSupportedMimeType(head.mime_type);
 
+      bool is_download_if_not_handled_by_plugin =
+          !response_intercepted && (must_download || !known_mime_type);
+
 #if BUILDFLAG(ENABLE_PLUGINS)
       if (!response_intercepted && !must_download && !known_mime_type) {
         CheckPluginAndContinueOnReceiveResponse(
             head, std::move(url_loader_client_endpoints),
-            std::vector<WebPluginInfo>());
+            is_download_if_not_handled_by_plugin, std::vector<WebPluginInfo>());
         return;
       }
 #endif
 
-      is_download =
-          !response_intercepted && (must_download || !known_mime_type);
+      is_download = is_download_if_not_handled_by_plugin;
       is_stream = false;
-    } else {
-      ResourceDispatcherHostImpl* rdh = ResourceDispatcherHostImpl::Get();
-      net::URLRequest* url_request = rdh->GetURLRequest(global_request_id_);
 
-      // The |url_request| maybe have been removed from the resource dispatcher
-      // host during the time it took for OnReceiveResponse() to be received.
-      if (url_request) {
-        ResourceRequestInfoImpl* info =
-            ResourceRequestInfoImpl::ForRequest(url_request);
-        is_download = !response_intercepted && info->IsDownload();
-        is_stream = info->is_stream();
-        if (rdh->delegate()) {
-          NavigationData* navigation_data =
-              rdh->delegate()->GetNavigationData(url_request);
-
-          // Clone the embedder's NavigationData before moving it to the UI
-          // thread.
-          if (navigation_data)
-            cloned_navigation_data = navigation_data->Clone();
-        }
-
-        // This is similar to what is done in
-        // ServiceWorkerControlleeHandler::MaybeCreateSubresourceLoaderParams().
-        // It takes the matching ControllerServiceWorkerInfo (if any) associated
-        // with the request. It will be sent to the renderer process and used to
-        // intercept requests.
-        // TODO(arthursonzogni): This is needed only for the
-        // non-S13nServiceWorker case. The S13nServiceWorker case is still not
-        // supported without the NetworkService. This block needs to be updated
-        // once support for it will be added.
-        ServiceWorkerProviderHost* sw_provider_host =
-            ServiceWorkerRequestHandler::GetProviderHost(url_request);
-        if (sw_provider_host && sw_provider_host->controller()) {
-          subresource_loader_params_ = SubresourceLoaderParams();
-          subresource_loader_params_->controller_service_worker_info =
-              mojom::ControllerServiceWorkerInfo::New();
-          subresource_loader_params_->controller_service_worker_info->mode =
-              sw_provider_host->GetControllerMode();
-          base::WeakPtr<ServiceWorkerObjectHost> sw_object_host =
-              sw_provider_host->GetOrCreateServiceWorkerObjectHost(
-                  sw_provider_host->controller());
-          if (sw_object_host) {
-            subresource_loader_params_->controller_service_worker_object_host =
-                sw_object_host;
-            subresource_loader_params_->controller_service_worker_info
-                ->object_info = sw_object_host->CreateIncompleteObjectInfo();
-          }
-        }
-      } else {
-        is_download = is_stream = false;
+      // If NetworkService is on, or an interceptor handled the request, the
+      // request doesn't use ResourceDispatcherHost so
+      // CallOnReceivedResponse and return here.
+      if (base::FeatureList::IsEnabled(network::features::kNetworkService) ||
+          !default_loader_used_) {
+        CallOnReceivedResponse(head, std::move(url_loader_client_endpoints),
+                               std::move(cloned_navigation_data), is_download,
+                               is_stream, previews_state);
+        return;
       }
+    }
+
+    // NetworkService is off and an interceptor didn't handle the request,
+    // so it went to ResourceDispatcherHost.
+    ResourceDispatcherHostImpl* rdh = ResourceDispatcherHostImpl::Get();
+    net::URLRequest* url_request = rdh->GetURLRequest(global_request_id_);
+
+    // The |url_request| maybe have been removed from the resource dispatcher
+    // host during the time it took for OnReceiveResponse() to be received.
+    if (url_request) {
+      ResourceRequestInfoImpl* info =
+          ResourceRequestInfoImpl::ForRequest(url_request);
+      is_download = !response_intercepted && info->IsDownload();
+      is_stream = info->is_stream();
+      previews_state = info->GetPreviewsState();
+      if (rdh->delegate()) {
+        NavigationData* navigation_data =
+            rdh->delegate()->GetNavigationData(url_request);
+
+        // Clone the embedder's NavigationData before moving it to the UI
+        // thread.
+        if (navigation_data)
+          cloned_navigation_data = navigation_data->Clone();
+      }
+
+      // non-S13nServiceWorker:
+      // This is similar to what is done in
+      // ServiceWorkerControlleeHandler::MaybeCreateSubresourceLoaderParams()
+      // (which is used when S13nServiceWorker is on). It takes the matching
+      // ControllerServiceWorkerInfo (if any) associated with the request. It
+      // will be sent to the renderer process and used to intercept requests.
+      ServiceWorkerProviderHost* sw_provider_host =
+          ServiceWorkerRequestHandler::GetProviderHost(url_request);
+      if (sw_provider_host && sw_provider_host->controller()) {
+        DCHECK(!blink::ServiceWorkerUtils::IsServicificationEnabled());
+        subresource_loader_params_ = SubresourceLoaderParams();
+        subresource_loader_params_->controller_service_worker_info =
+            mojom::ControllerServiceWorkerInfo::New();
+        subresource_loader_params_->controller_service_worker_info->mode =
+            sw_provider_host->GetControllerMode();
+        base::WeakPtr<ServiceWorkerObjectHost> sw_object_host =
+            sw_provider_host->GetOrCreateServiceWorkerObjectHost(
+                sw_provider_host->controller());
+        if (sw_object_host) {
+          subresource_loader_params_->controller_service_worker_object_host =
+              sw_object_host;
+          subresource_loader_params_->controller_service_worker_info
+              ->object_info = sw_object_host->CreateIncompleteObjectInfo();
+        }
+      }
+    } else {
+      is_download = is_stream = false;
     }
 
     CallOnReceivedResponse(head, std::move(url_loader_client_endpoints),
                            std::move(cloned_navigation_data), is_download,
-                           is_stream);
+                           is_stream, previews_state);
   }
 
 #if BUILDFLAG(ENABLE_PLUGINS)
   void CheckPluginAndContinueOnReceiveResponse(
       const network::ResourceResponseHead& head,
       network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
+      bool is_download_if_not_handled_by_plugin,
       const std::vector<WebPluginInfo>& plugins) {
     bool stale;
     WebPluginInfo plugin;
@@ -1020,16 +1168,16 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
       PluginService::GetInstance()->GetPlugins(base::BindOnce(
           &URLLoaderRequestController::CheckPluginAndContinueOnReceiveResponse,
           weak_factory_.GetWeakPtr(), head,
-          std::move(url_loader_client_endpoints)));
+          std::move(url_loader_client_endpoints),
+          is_download_if_not_handled_by_plugin));
       return;
     }
 
-    bool is_download =
-        !has_plugin &&
-        (!head.headers || head.headers->response_code() / 100 == 2);
+    bool is_download = !has_plugin && is_download_if_not_handled_by_plugin;
 
     CallOnReceivedResponse(head, std::move(url_loader_client_endpoints),
-                           nullptr, is_download, false /* is_stream */);
+                           nullptr, is_download, false /* is_stream */,
+                           PREVIEWS_OFF /* previews_state */);
   }
 #endif
 
@@ -1038,7 +1186,8 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
       network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
       std::unique_ptr<NavigationData> cloned_navigation_data,
       bool is_download,
-      bool is_stream) {
+      bool is_stream,
+      PreviewsState previews_state) {
     scoped_refptr<network::ResourceResponse> response(
         new network::ResourceResponse());
     response->head = head;
@@ -1055,11 +1204,18 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
                        response->DeepCopy(),
                        std::move(url_loader_client_endpoints),
                        std::move(cloned_navigation_data), global_request_id_,
-                       is_download, is_stream));
+                       is_download, is_stream, previews_state));
   }
 
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          const network::ResourceResponseHead& head) override {
+    if (base::FeatureList::IsEnabled(network::features::kNetworkService) &&
+        !bypass_redirect_checks_ &&
+        !IsRedirectSafe(url_, redirect_info.new_url, resource_context_)) {
+      OnComplete(network::URLLoaderCompletionStatus(net::ERR_UNSAFE_REDIRECT));
+      return;
+    }
+
     if (--redirect_limit_ == 0) {
       OnComplete(
           network::URLLoaderCompletionStatus(net::ERR_TOO_MANY_REDIRECTS));
@@ -1100,6 +1256,8 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
   }
 
   void OnComplete(const network::URLLoaderCompletionStatus& status) override {
+    RecordSCTHistogramIfNeeded(status.ssl_info);
+
     UMA_HISTOGRAM_BOOLEAN(
         "Navigation.URLLoaderNetworkService.OnCompleteHasSSLInfo",
         status.ssl_info.has_value());
@@ -1138,6 +1296,8 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
       if (interceptor->MaybeCreateLoaderForResponse(
               response, &response_url_loader_, &response_client_request,
               url_loader_.get())) {
+        if (response_loader_binding_.is_bound())
+          response_loader_binding_.Close();
         response_loader_binding_.Bind(std::move(response_client_request));
         default_loader_used_ = false;
         url_loader_.reset();
@@ -1147,8 +1307,7 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
     return false;
   }
 
-  std::vector<std::unique_ptr<content::URLLoaderThrottle>>
-  CreateURLLoaderThrottles() {
+  std::vector<std::unique_ptr<URLLoaderThrottle>> CreateURLLoaderThrottles() {
     return GetContentClient()->browser()->CreateURLLoaderThrottles(
         *resource_request_, resource_context_, web_contents_getter_,
         navigation_ui_data_.get(), frame_tree_node_id_);
@@ -1168,12 +1327,27 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
     storage::BlobStorageContext* blob_storage_context = GetBlobStorageContext(
         GetChromeBlobStorageContextForResourceContext(resource_context_));
     return ServiceWorkerRequestHandler::InitializeForNavigationNetworkService(
-        *resource_request_, resource_context_,
+        resource_request_->url, resource_context_,
         service_worker_navigation_handle_core, blob_storage_context,
         request_info.begin_params->skip_service_worker, resource_type,
         request_info.begin_params->request_context_type, frame_type,
         request_info.are_ancestors_secure, request_info.common_params.post_data,
         web_contents_getter_);
+  }
+
+  void RecordSCTHistogramIfNeeded(
+      const base::Optional<net::SSLInfo>& ssl_info) {
+    if (is_main_frame_ && url_.SchemeIsCryptographic() &&
+        ssl_info.has_value()) {
+      int num_valid_scts = 0;
+      for (const auto& signed_certificate_timestamps :
+           ssl_info->signed_certificate_timestamps) {
+        if (signed_certificate_timestamps.status == net::ct::SCT_STATUS_OK)
+          ++num_valid_scts;
+      }
+      UMA_HISTOGRAM_COUNTS_100(
+          "Net.CertificateTransparency.MainFrameValidSCTCount", num_valid_scts);
+    }
   }
 
   std::vector<std::unique_ptr<NavigationLoaderInterceptor>> interceptors_;
@@ -1203,6 +1377,8 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
 
   // Current URL that is being navigated, updated after redirection.
   GURL url_;
+
+  const bool is_main_frame_;
 
   // Currently used by the AppCache loader to pass its factory to the
   // renderer which enables it to handle subresources.
@@ -1266,6 +1442,9 @@ class NavigationURLLoaderImpl::URLLoaderRequestController
   // protocol handlers.
   std::set<std::string> known_schemes_;
 
+  // If true, redirect checks will be handled in a proxy, and not here.
+  bool bypass_redirect_checks_;
+
   mutable base::WeakPtrFactory<URLLoaderRequestController> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(URLLoaderRequestController);
@@ -1312,10 +1491,10 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
         /* initial_interceptors = */
         std::vector<std::unique_ptr<NavigationLoaderInterceptor>>(),
         std::move(new_request), resource_context,
-        request_info->common_params.url,
+        request_info->common_params.url, request_info->is_main_frame,
         /* proxied_url_loader_factory_request */ nullptr,
         /* proxied_url_loader_factory_info */ nullptr, std::set<std::string>(),
-        weak_factory_.GetWeakPtr());
+        /* bypass_redirect_checks */ false, weak_factory_.GetWeakPtr());
 
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
@@ -1344,6 +1523,7 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
 
   network::mojom::URLLoaderFactoryPtrInfo proxied_factory_info;
   network::mojom::URLLoaderFactoryRequest proxied_factory_request;
+  bool bypass_redirect_checks = false;
   auto* partition = static_cast<StoragePartitionImpl*>(storage_partition);
   if (frame_tree_node) {
     // |frame_tree_node| may be null in some unit test environments.
@@ -1360,7 +1540,8 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
     auto factory_request = mojo::MakeRequest(&factory_info);
     bool use_proxy = GetContentClient()->browser()->WillCreateURLLoaderFactory(
         partition->browser_context(), frame_tree_node->current_frame_host(),
-        true /* is_navigation */, &factory_request);
+        true /* is_navigation */, new_request->url, &factory_request);
+    bypass_redirect_checks = use_proxy;
     if (RenderFrameDevToolsAgentHost::WillCreateURLLoaderFactory(
             frame_tree_node->current_frame_host(), true, false,
             &factory_request)) {
@@ -1379,11 +1560,14 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
                                          storage_domain);
   }
 
+  non_network_url_loader_factories_[url::kAboutScheme] =
+      std::make_unique<AboutURLLoaderFactory>();
+
   non_network_url_loader_factories_[url::kFileScheme] =
       std::make_unique<FileURLLoaderFactory>(
           partition->browser_context()->GetPath(),
           base::CreateSequencedTaskRunnerWithTraits(
-              {base::MayBlock(), base::TaskPriority::BACKGROUND,
+              {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
   std::set<std::string> known_schemes;
   for (auto& iter : non_network_url_loader_factories_)
@@ -1392,15 +1576,15 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
   DCHECK(!request_controller_);
   request_controller_ = std::make_unique<URLLoaderRequestController>(
       std::move(initial_interceptors), std::move(new_request), resource_context,
-      request_info->common_params.url, std::move(proxied_factory_request),
-      std::move(proxied_factory_info), std::move(known_schemes),
+      request_info->common_params.url, request_info->is_main_frame,
+      std::move(proxied_factory_request), std::move(proxied_factory_info),
+      std::move(known_schemes), bypass_redirect_checks,
       weak_factory_.GetWeakPtr());
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(
           &URLLoaderRequestController::Start,
           base::Unretained(request_controller_.get()),
-          base::RetainedRef(storage_partition->GetURLRequestContext()),
           partition->url_loader_factory_getter()->GetNetworkFactoryInfo(),
           service_worker_navigation_handle_core, appcache_handle_core,
           std::move(request_info), std::move(navigation_ui_data),
@@ -1432,7 +1616,8 @@ void NavigationURLLoaderImpl::OnReceiveResponse(
     std::unique_ptr<NavigationData> navigation_data,
     const GlobalRequestID& global_request_id,
     bool is_download,
-    bool is_stream) {
+    bool is_stream,
+    PreviewsState previews_state) {
   TRACE_EVENT_ASYNC_END2("navigation", "Navigation timeToResponseStarted", this,
                          "&NavigationURLLoaderImpl", this, "success", true);
 
@@ -1442,7 +1627,7 @@ void NavigationURLLoaderImpl::OnReceiveResponse(
   delegate_->OnResponseStarted(
       std::move(response), std::move(url_loader_client_endpoints),
       std::move(navigation_data), global_request_id,
-      allow_download_ && is_download, is_stream,
+      allow_download_ && is_download, is_stream, previews_state,
       request_controller_->TakeSubresourceLoaderParams());
 }
 
@@ -1491,7 +1676,7 @@ void NavigationURLLoaderImpl::BindNonNetworkURLLoaderFactoryRequest(
   auto* frame = frame_tree_node->current_frame_host();
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
       frame->GetSiteInstance()->GetBrowserContext(), frame,
-      true /* is_navigation */, &factory);
+      true /* is_navigation */, url, &factory);
   it->second->Clone(std::move(factory));
 }
 

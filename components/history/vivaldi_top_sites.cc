@@ -8,7 +8,6 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "prefs/vivaldi_pref_names.h"
-#include "sql/connection.h"
 #include "sql/statement.h"
 
 namespace history {

@@ -7,6 +7,8 @@
 #include <stdint.h>
 #include <utility>
 
+#include "base/hash.h"
+#include "base/metrics/histogram_functions.h"
 #include "content/public/browser/browser_context.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
@@ -111,6 +113,19 @@ bool IsValidPsm(int psm) {
     return false;
 
   return true;
+}
+
+// Generates a hash from a UUID suitable for
+// base::UmaHistogramSparse(positive int).
+//
+// Hash values can be produced manually using tool: bluetooth_metrics_hash.
+int HashUUID(const device::BluetoothUUID& uuid) {
+  // TODO(520284): Other than verifying that |uuid| contains a value, this logic
+  // should be migrated to a dedicated histogram macro for hashed strings.
+  uint32_t data = base::PersistentHash(uuid.canonical_value());
+
+  // Strip off the sign bit to make the hash look nicer.
+  return static_cast<int>(data & 0x7fffffff);
 }
 
 }  // namespace
@@ -246,7 +261,7 @@ bool BluetoothSocketListenFunction::PreRunValidation(std::string* error) {
 
 ExtensionFunction::ResponseAction BluetoothSocketListenFunction::Run() {
   DCHECK_CURRENTLY_ON(work_thread_id());
-  device::BluetoothAdapterFactory::GetAdapter(
+  device::BluetoothAdapterFactory::GetClassicAdapter(
       base::Bind(&BluetoothSocketListenFunction::OnGetAdapter, this));
   return did_respond() ? AlreadyResponded() : RespondLater();
 }
@@ -342,6 +357,9 @@ void BluetoothSocketListenUsingRfcommFunction::CreateService(
       service_options.channel.reset(new int(*(options->channel)));
   }
 
+  base::UmaHistogramSparse("Extensions.BluetoothSocket.ListenRFCOMM.Service",
+                           HashUUID(uuid));
+
   adapter->CreateRfcommService(uuid, service_options, callback, error_callback);
 }
 
@@ -392,6 +410,9 @@ void BluetoothSocketListenUsingL2capFunction::CreateService(
     }
   }
 
+  base::UmaHistogramSparse("Extensions.BluetoothSocket.ListenL2CAP.Service",
+                           HashUUID(uuid));
+
   adapter->CreateL2capService(uuid, service_options, callback, error_callback);
 }
 
@@ -422,7 +443,7 @@ bool BluetoothSocketAbstractConnectFunction::PreRunValidation(
 ExtensionFunction::ResponseAction
 BluetoothSocketAbstractConnectFunction::Run() {
   DCHECK_CURRENTLY_ON(work_thread_id());
-  device::BluetoothAdapterFactory::GetAdapter(
+  device::BluetoothAdapterFactory::GetClassicAdapter(
       base::Bind(&BluetoothSocketAbstractConnectFunction::OnGetAdapter, this));
   return did_respond() ? AlreadyResponded() : RespondLater();
 }
@@ -492,6 +513,9 @@ BluetoothSocketConnectFunction::~BluetoothSocketConnectFunction() {}
 void BluetoothSocketConnectFunction::ConnectToService(
     device::BluetoothDevice* device,
     const device::BluetoothUUID& uuid) {
+  base::UmaHistogramSparse("Extensions.BluetoothSocket.Connect.Service",
+                           HashUUID(uuid));
+
   device->ConnectToService(
       uuid,
       base::Bind(&BluetoothSocketConnectFunction::OnConnect, this),
@@ -549,7 +573,8 @@ ExtensionFunction::ResponseAction BluetoothSocketSendFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params_.get());
 
   io_buffer_size_ = params_->data.size();
-  io_buffer_ = new net::WrappedIOBuffer(params_->data.data());
+  io_buffer_ = new net::WrappedIOBuffer(
+      reinterpret_cast<const char*>(params_->data.data()));
 
   BluetoothApiSocket* socket = GetSocket(params_->socket_id);
   if (!socket)

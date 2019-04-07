@@ -9,6 +9,14 @@
 
 #include "base/strings/string16.h"
 
+namespace gfx {
+class ImageSkia;
+}
+
+namespace ui {
+class MenuModel;
+}
+
 // The basic interface of models backing a given UI sheet shown in the WebAuthn
 // request dialog; where each sheet, in turn, corresponds to one of `steps`
 // defined by AuthenticatorRequestDialogModel.
@@ -32,6 +40,7 @@ class AuthenticatorRequestSheetModel {
  public:
   virtual ~AuthenticatorRequestSheetModel() {}
 
+  virtual bool IsActivityIndicatorVisible() const = 0;
   virtual bool IsBackButtonVisible() const = 0;
 
   virtual bool IsCancelButtonVisible() const = 0;
@@ -41,8 +50,11 @@ class AuthenticatorRequestSheetModel {
   virtual bool IsAcceptButtonEnabled() const = 0;
   virtual base::string16 GetAcceptButtonLabel() const = 0;
 
+  virtual gfx::ImageSkia* GetStepIllustration() const = 0;
   virtual base::string16 GetStepTitle() const = 0;
   virtual base::string16 GetStepDescription() const = 0;
+
+  virtual ui::MenuModel* GetOtherTransportsMenuModel() = 0;
 
   virtual void OnBack() = 0;
   virtual void OnAccept() = 0;

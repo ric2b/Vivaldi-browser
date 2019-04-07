@@ -18,10 +18,8 @@ using assistant_client::AudioOutputProvider;
 using assistant_client::AuthProvider;
 using assistant_client::FileProvider;
 using assistant_client::NetworkProvider;
-using assistant_client::ResourceProvider;
 using assistant_client::SystemProvider;
 using assistant_client::PlatformApi;
-using assistant_client::ResourceProvider;
 
 namespace chromeos {
 namespace assistant {
@@ -76,9 +74,10 @@ void PlatformApiImpl::DummyAuthProvider::Reset() {}
 PlatformApiImpl::PlatformApiImpl(
     service_manager::Connector* connector,
     device::mojom::BatteryMonitorPtr battery_monitor,
-    bool enable_hotword)
+    bool enable_hotword,
+    scoped_refptr<base::SingleThreadTaskRunner> background_task_runner)
     : audio_input_provider_(connector, enable_hotword),
-      audio_output_provider_(CreateLibAssistantConfig(!enable_hotword), this),
+      audio_output_provider_(connector, background_task_runner),
       system_provider_(std::move(battery_monitor)) {}
 
 PlatformApiImpl::~PlatformApiImpl() = default;
@@ -103,16 +102,16 @@ NetworkProvider& PlatformApiImpl::GetNetworkProvider() {
   return network_provider_;
 }
 
-ResourceProvider& PlatformApiImpl::GetResourceProvider() {
-  return resource_provider_;
-}
-
 SystemProvider& PlatformApiImpl::GetSystemProvider() {
   return system_provider_;
 }
 
 void PlatformApiImpl::SetMicState(bool mic_open) {
   audio_input_provider_.SetMicState(mic_open);
+}
+
+void PlatformApiImpl::OnHotwordEnabled(bool enable) {
+  audio_input_provider_.OnHotwordEnabled(enable);
 }
 
 }  // namespace assistant

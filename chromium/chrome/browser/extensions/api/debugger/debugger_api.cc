@@ -44,6 +44,7 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_host.h"
@@ -90,6 +91,9 @@ bool ExtensionCanAttachToURL(const Extension& extension,
                              const GURL& url,
                              Profile* profile,
                              std::string* error) {
+  if (url == content::kUnreachableWebDataURL)
+    return true;
+
   // NOTE: The `debugger` permission implies all URLs access (and indicates
   // such to the user), so we don't check explicit page access. However, we
   // still need to check if it's an otherwise-restricted URL.
@@ -361,9 +365,8 @@ bool ExtensionDevToolsClientHost::MayAttachToRenderer(
   const GURL& site_instance_url =
       render_frame_host->GetSiteInstance()->GetSiteURL();
 
-  if (site_instance_url.is_empty()) {
-    // |site_instance_url| is empty for about:blank. Allow the extension to
-    // attach.
+  if (site_instance_url.is_empty() || site_instance_url == "about:") {
+    // Allow the extension to attach to about:blank.
     return true;
   }
 

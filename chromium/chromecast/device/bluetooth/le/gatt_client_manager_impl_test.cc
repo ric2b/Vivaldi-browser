@@ -8,11 +8,12 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/test/mock_callback.h"
+#include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromecast/device/bluetooth/bluetooth_util.h"
 #include "chromecast/device/bluetooth/le/remote_characteristic.h"
 #include "chromecast/device/bluetooth/le/remote_descriptor.h"
-#include "chromecast/device/bluetooth/le/remote_device.h"
+#include "chromecast/device/bluetooth/le/remote_device_impl.h"
 #include "chromecast/device/bluetooth/le/remote_service.h"
 #include "chromecast/device/bluetooth/shlib/mock_gatt_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -29,6 +30,12 @@ namespace {
 
 const bluetooth_v2_shlib::Addr kTestAddr1 = {
     {0x00, 0x01, 0x02, 0x03, 0x04, 0x05}};
+const bluetooth_v2_shlib::Addr kTestAddr2 = {
+    {0x10, 0x11, 0x12, 0x13, 0x14, 0x15}};
+const bluetooth_v2_shlib::Addr kTestAddr3 = {
+    {0x20, 0x21, 0x22, 0x23, 0x24, 0x25}};
+const bluetooth_v2_shlib::Addr kTestAddr4 = {
+    {0x30, 0x31, 0x32, 0x33, 0x34, 0x35}};
 
 class MockGattClientManagerObserver : public GattClientManager::Observer {
  public:
@@ -103,8 +110,10 @@ std::vector<bluetooth_v2_shlib::Gatt::Service> GenerateServices() {
 class GattClientManagerTest : public ::testing::Test {
  public:
   void SetUp() override {
+    fake_task_runner_ = new base::TestMockTimeTaskRunner();
     message_loop_ =
         std::make_unique<base::MessageLoop>(base::MessageLoop::TYPE_DEFAULT);
+    message_loop_->SetTaskRunner(fake_task_runner_);
     gatt_client_ = std::make_unique<bluetooth_v2_shlib::MockGattClient>();
     gatt_client_manager_ =
         std::make_unique<GattClientManagerImpl>(gatt_client_.get());
@@ -112,7 +121,7 @@ class GattClientManagerTest : public ::testing::Test {
 
     // Normally bluetooth_manager does this.
     gatt_client_->SetDelegate(gatt_client_manager_.get());
-    gatt_client_manager_->Initialize(base::ThreadTaskRunnerHandle::Get());
+    gatt_client_manager_->Initialize(fake_task_runner_);
     gatt_client_manager_->AddObserver(observer_.get());
   }
 
@@ -120,6 +129,7 @@ class GattClientManagerTest : public ::testing::Test {
     gatt_client_->SetDelegate(nullptr);
     gatt_client_manager_->RemoveObserver(observer_.get());
     gatt_client_manager_->Finalize();
+    fake_task_runner_ = nullptr;
   }
 
   scoped_refptr<RemoteDevice> GetDevice(const bluetooth_v2_shlib::Addr& addr) {
@@ -171,6 +181,7 @@ class GattClientManagerTest : public ::testing::Test {
     ASSERT_TRUE(device->IsConnected());
   }
 
+  scoped_refptr<base::TestMockTimeTaskRunner> fake_task_runner_;
   base::MockCallback<RemoteDevice::StatusCallback> cb_;
   std::unique_ptr<base::MessageLoop> message_loop_;
   std::unique_ptr<GattClientManagerImpl> gatt_client_manager_;
@@ -214,10 +225,12 @@ TEST_F(GattClientManagerTest, RemoteDeviceConnect) {
 
   EXPECT_TRUE(device->IsConnected());
 
-  base::MockCallback<base::OnceCallback<void(size_t)>>
-      get_num_connected_callback;
-  EXPECT_CALL(get_num_connected_callback, Run(1));
-  gatt_client_manager_->GetNumConnected(get_num_connected_callback.Get());
+  base::MockCallback<
+      base::OnceCallback<void(std::vector<scoped_refptr<RemoteDevice>>)>>
+      get_connected_callback;
+  const std::vector<scoped_refptr<RemoteDevice>> kExpectedDevices({device});
+  EXPECT_CALL(get_connected_callback, Run(kExpectedDevices));
+  gatt_client_manager_->GetConnectedDevices(get_connected_callback.Get());
 
   base::RunLoop().RunUntilIdle();
 
@@ -229,7 +242,111 @@ TEST_F(GattClientManagerTest, RemoteDeviceConnect) {
   delegate->OnConnectChanged(kTestAddr1, true /* status */,
                              false /* connected */);
   EXPECT_FALSE(device->IsConnected());
+  fake_task_runner_->RunUntilIdle();
+}
+
+TEST_F(GattClientManagerTest, RemoteDeviceConnectConcurrent) {
+  bluetooth_v2_shlib::Gatt::Client::Delegate* delegate =
+      gatt_client_->delegate();
+  scoped_refptr<RemoteDevice> device1 = GetDevice(kTestAddr1);
+  scoped_refptr<RemoteDevice> device2 = GetDevice(kTestAddr2);
+  scoped_refptr<RemoteDevice> device3 = GetDevice(kTestAddr3);
+  scoped_refptr<RemoteDevice> device4 = GetDevice(kTestAddr4);
+
+  base::MockCallback<RemoteDevice::StatusCallback> cb1;
+  base::MockCallback<RemoteDevice::StatusCallback> cb2;
+  base::MockCallback<RemoteDevice::StatusCallback> cb3;
+  base::MockCallback<RemoteDevice::StatusCallback> cb4;
+
+  // Only the 1st Connect request will be executed immediately. The rest will be
+  // queued.
+  EXPECT_CALL(*gatt_client_, Connect(kTestAddr1)).WillOnce(Return(true));
+  device1->Connect(cb1.Get());
+  device2->Connect(cb2.Get());
+  device3->Connect(cb3.Get());
+  device4->Connect(cb4.Get());
+
+  EXPECT_CALL(*gatt_client_, GetServices(kTestAddr1)).WillOnce(Return(true));
+  delegate->OnConnectChanged(kTestAddr1, true /* status */,
+                             true /* connected */);
+
+  // Queued Connect requests will not be called until we receive OnGetServices
+  // of the current Connect request if it is successful.
+  EXPECT_CALL(cb1, Run(true));
+  EXPECT_CALL(*gatt_client_, Connect(kTestAddr2)).WillOnce(Return(false));
+  EXPECT_CALL(cb2, Run(false));
+  // If the Connect request fails in the initial request (not in the callback),
+  // the next queued request will be executed immediately.
+  EXPECT_CALL(*gatt_client_, Connect(kTestAddr3)).WillOnce(Return(true));
+  delegate->OnGetServices(kTestAddr1, {});
+
+  EXPECT_CALL(cb3, Run(false));
+  EXPECT_CALL(*gatt_client_, Connect(kTestAddr4)).WillOnce(Return(true));
+  delegate->OnConnectChanged(kTestAddr3, true /* status */,
+                             false /* connected */);
+
+  EXPECT_CALL(*gatt_client_, GetServices(kTestAddr4)).WillOnce(Return(true));
+  delegate->OnConnectChanged(kTestAddr4, true /* status */,
+                             true /* connected */);
+
+  EXPECT_CALL(cb4, Run(true));
+  delegate->OnGetServices(kTestAddr4, {});
+
+  EXPECT_TRUE(device1->IsConnected());
+  EXPECT_FALSE(device2->IsConnected());
+  EXPECT_FALSE(device3->IsConnected());
+  EXPECT_TRUE(device4->IsConnected());
+
+  base::MockCallback<base::OnceCallback<void(size_t)>>
+      get_num_connected_callback;
+  EXPECT_CALL(get_num_connected_callback, Run(2));
+  gatt_client_manager_->GetNumConnected(get_num_connected_callback.Get());
+
   base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(GattClientManagerTest, ConnectTimeout) {
+  scoped_refptr<RemoteDevice> device = GetDevice(kTestAddr1);
+
+  // Issue a Connect request
+  EXPECT_CALL(*gatt_client_, Connect(kTestAddr1)).WillOnce(Return(true));
+  device->Connect(cb_.Get());
+
+  // Let Connect request timeout
+  base::TestMockTimeTaskRunner::ScopedContext context(fake_task_runner_);
+  // We should expect to receive Connect failure message
+  EXPECT_CALL(cb_, Run(false));
+  fake_task_runner_->FastForwardBy(GattClientManagerImpl::kConnectTimeout);
+  EXPECT_FALSE(device->IsConnected());
+}
+
+TEST_F(GattClientManagerTest, GetServicesTimeout) {
+  bluetooth_v2_shlib::Gatt::Client::Delegate* delegate =
+      gatt_client_->delegate();
+
+  scoped_refptr<RemoteDevice> device = GetDevice(kTestAddr1);
+
+  // Issue a Connect request and let Connect succeed
+  EXPECT_CALL(*gatt_client_, Connect(kTestAddr1)).WillOnce(Return(true));
+  device->Connect(cb_.Get());
+  EXPECT_CALL(*gatt_client_, GetServices(kTestAddr1)).WillOnce(Return(true));
+  delegate->OnConnectChanged(kTestAddr1, true /* status */,
+                             true /* connected */);
+
+  // Let GetServices request timeout
+  base::TestMockTimeTaskRunner::ScopedContext context(fake_task_runner_);
+  // We should request a disconnect.
+  EXPECT_CALL(*gatt_client_, Disconnect(kTestAddr1)).WillOnce(Return(true));
+  fake_task_runner_->FastForwardBy(GattClientManagerImpl::kConnectTimeout);
+
+  // Make sure we issued a disconnect.
+  testing::Mock::VerifyAndClearExpectations(gatt_client_.get());
+
+  EXPECT_CALL(cb_, Run(false));
+  delegate->OnConnectChanged(kTestAddr1, true /* status */,
+                             false /* connected */);
+
+  EXPECT_FALSE(device->IsConnected());
 }
 
 TEST_F(GattClientManagerTest, RemoteDeviceReadRssi) {
@@ -243,10 +360,74 @@ TEST_F(GattClientManagerTest, RemoteDeviceReadRssi) {
 
   base::MockCallback<RemoteDevice::RssiCallback> rssi_cb;
   EXPECT_CALL(*gatt_client_, ReadRemoteRssi(kTestAddr1)).WillOnce(Return(true));
-  EXPECT_CALL(rssi_cb, Run(true, kRssi));
   device->ReadRemoteRssi(rssi_cb.Get());
 
+  EXPECT_CALL(rssi_cb, Run(true, kRssi));
   delegate->OnReadRemoteRssi(kTestAddr1, true /* status */, kRssi);
+}
+
+TEST_F(GattClientManagerTest, ReadRemoteRssiTimeout) {
+  static const int kRssi = -34;
+
+  bluetooth_v2_shlib::Gatt::Client::Delegate* delegate =
+      gatt_client_->delegate();
+  scoped_refptr<RemoteDevice> device = GetDevice(kTestAddr1);
+
+  Connect(kTestAddr1);
+
+  // Issue a ReadRemoteRssi request.
+  base::MockCallback<RemoteDevice::RssiCallback> rssi_cb;
+  EXPECT_CALL(*gatt_client_, ReadRemoteRssi(kTestAddr1)).WillOnce(Return(true));
+  device->ReadRemoteRssi(rssi_cb.Get());
+
+  // Let ReadRemoteRssi request timeout.
+  base::TestMockTimeTaskRunner::ScopedContext context(fake_task_runner_);
+  // We should expect to receive ReadRemoteRssi failure message.
+  EXPECT_CALL(rssi_cb, Run(false, 0));
+  fake_task_runner_->FastForwardBy(
+      GattClientManagerImpl::kReadRemoteRssiTimeout);
+
+  // The following callback should be ignored.
+  delegate->OnReadRemoteRssi(kTestAddr1, true /* status */, kRssi);
+
+  // Device should remain connected.
+  EXPECT_TRUE(device->IsConnected());
+}
+
+TEST_F(GattClientManagerTest, RemoteDeviceReadRssiConcurrent) {
+  static const int kRssi1 = -34;
+  static const int kRssi3 = -68;
+
+  bluetooth_v2_shlib::Gatt::Client::Delegate* delegate =
+      gatt_client_->delegate();
+  scoped_refptr<RemoteDevice> device1 = GetDevice(kTestAddr1);
+  scoped_refptr<RemoteDevice> device2 = GetDevice(kTestAddr2);
+  scoped_refptr<RemoteDevice> device3 = GetDevice(kTestAddr3);
+
+  base::MockCallback<RemoteDevice::RssiCallback> rssi_cb1;
+  base::MockCallback<RemoteDevice::RssiCallback> rssi_cb2;
+  base::MockCallback<RemoteDevice::RssiCallback> rssi_cb3;
+
+  // Only the 1st ReadRemoteRssi request will be executed immediately. The rest
+  // will be queued.
+  EXPECT_CALL(*gatt_client_, ReadRemoteRssi(kTestAddr1)).WillOnce(Return(true));
+  device1->ReadRemoteRssi(rssi_cb1.Get());
+  device2->ReadRemoteRssi(rssi_cb2.Get());
+  device3->ReadRemoteRssi(rssi_cb3.Get());
+
+  // Queued ReadRemoteRssi requests will not be called until we receive
+  // OnGetServices of the current Connect request if it is successful.
+  EXPECT_CALL(rssi_cb1, Run(true, kRssi1));
+  EXPECT_CALL(*gatt_client_, ReadRemoteRssi(kTestAddr2))
+      .WillOnce(Return(false));
+  EXPECT_CALL(rssi_cb2, Run(false, _));
+  // If the ReadRemoteRssi request fails in the initial request (not in the
+  // callback), the next queued request will be executed immediately.
+  EXPECT_CALL(*gatt_client_, ReadRemoteRssi(kTestAddr3)).WillOnce(Return(true));
+  delegate->OnReadRemoteRssi(kTestAddr1, true, kRssi1);
+
+  EXPECT_CALL(rssi_cb3, Run(true, kRssi3));
+  delegate->OnReadRemoteRssi(kTestAddr3, true, kRssi3);
 }
 
 TEST_F(GattClientManagerTest, RemoteDeviceRequestMtu) {
@@ -264,7 +445,7 @@ TEST_F(GattClientManagerTest, RemoteDeviceRequestMtu) {
   EXPECT_CALL(*observer_, OnMtuChanged(device, kMtu));
   delegate->OnMtuChanged(kTestAddr1, true, kMtu);
   EXPECT_EQ(kMtu, device->GetMtu());
-  base::RunLoop().RunUntilIdle();
+  fake_task_runner_->RunUntilIdle();
 }
 
 TEST_F(GattClientManagerTest, RemoteDeviceConnectionParameterUpdate) {
@@ -388,7 +569,7 @@ TEST_F(GattClientManagerTest, RemoteDeviceCharacteristic) {
   EXPECT_CALL(*observer_,
               OnCharacteristicNotification(device, characteristic, kTestData3));
   delegate->OnNotification(kTestAddr1, characteristic->handle(), kTestData3);
-  base::RunLoop().RunUntilIdle();
+  fake_task_runner_->RunUntilIdle();
 }
 
 TEST_F(GattClientManagerTest,
@@ -432,7 +613,7 @@ TEST_F(GattClientManagerTest,
   EXPECT_CALL(*observer_,
               OnCharacteristicNotification(device, characteristic, kTestData1));
   delegate->OnNotification(kTestAddr1, characteristic->handle(), kTestData1);
-  base::RunLoop().RunUntilIdle();
+  fake_task_runner_->RunUntilIdle();
 }
 
 TEST_F(GattClientManagerTest, RemoteDeviceDescriptor) {
@@ -715,6 +896,50 @@ TEST_F(GattClientManagerTest, Queuing) {
   delegate->OnCharacteristicReadResponse(kTestAddr1, true,
                                          characteristic2->handle(), kTestData2);
   base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(GattClientManagerTest, CommandTimeout) {
+  const std::vector<uint8_t> kTestData = {0x7, 0x8, 0x9};
+  const auto kServices = GenerateServices();
+  const auto kAuthReq = bluetooth_v2_shlib::Gatt::Client::AUTH_REQ_MITM;
+  const auto kWriteType = bluetooth_v2_shlib::Gatt::WRITE_TYPE_DEFAULT;
+
+  // Connect a device and get services.
+  Connect(kTestAddr1);
+  scoped_refptr<RemoteDevice> device = GetDevice(kTestAddr1);
+  bluetooth_v2_shlib::Gatt::Client::Delegate* delegate =
+      gatt_client_->delegate();
+  delegate->OnServicesAdded(kTestAddr1, kServices);
+  std::vector<scoped_refptr<RemoteService>> services =
+      GetServices(device.get());
+  ASSERT_EQ(kServices.size(), services.size());
+
+  auto service = services[0];
+  std::vector<scoped_refptr<RemoteCharacteristic>> characteristics =
+      service->GetCharacteristics();
+  ASSERT_GE(characteristics.size(), 1ul);
+  auto characteristic1 = characteristics[0];
+
+  // Issue a write to one characteristic.
+  EXPECT_CALL(*gatt_client_,
+              WriteCharacteristic(kTestAddr1, characteristic1->characteristic(),
+                                  kAuthReq, kWriteType, kTestData))
+      .WillOnce(Return(true));
+  characteristic1->WriteAuth(kAuthReq, kWriteType, kTestData, cb_.Get());
+
+  // Let the command timeout
+  base::TestMockTimeTaskRunner::ScopedContext context(fake_task_runner_);
+  // We should request a disconnect.
+  EXPECT_CALL(*gatt_client_, Disconnect(kTestAddr1)).WillOnce(Return(true));
+  fake_task_runner_->FastForwardBy(RemoteDeviceImpl::kCommandTimeout);
+
+  // Make sure we issued a disconnect.
+  testing::Mock::VerifyAndClearExpectations(gatt_client_.get());
+
+  // The operation should fail.
+  EXPECT_CALL(cb_, Run(false));
+  delegate->OnConnectChanged(kTestAddr1, true /* status */,
+                             false /* connected */);
 }
 
 }  // namespace bluetooth

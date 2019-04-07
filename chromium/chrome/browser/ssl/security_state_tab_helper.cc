@@ -79,8 +79,6 @@ bool IsOriginSecureWithWhitelist(
 
 }  // namespace
 
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(SecurityStateTabHelper);
-
 using safe_browsing::SafeBrowsingUIManager;
 
 SecurityStateTabHelper::SecurityStateTabHelper(
@@ -286,7 +284,6 @@ SecurityStateTabHelper::GetMaliciousContentStatus() const {
     switch (threat_type) {
       case safe_browsing::SB_THREAT_TYPE_UNUSED:
       case safe_browsing::SB_THREAT_TYPE_SAFE:
-        break;
       case safe_browsing::SB_THREAT_TYPE_URL_PHISHING:
       case safe_browsing::SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING:
         return security_state::MALICIOUS_CONTENT_STATUS_SOCIAL_ENGINEERING;
@@ -323,6 +320,10 @@ SecurityStateTabHelper::GetMaliciousContentStatus() const {
         // social engineering content status.
         return security_state::MALICIOUS_CONTENT_STATUS_SOCIAL_ENGINEERING;
 #endif
+      case safe_browsing::SB_THREAT_TYPE_BILLING:
+        return base::FeatureList::IsEnabled(safe_browsing::kBillingInterstitial)
+                   ? security_state::MALICIOUS_CONTENT_STATUS_BILLING
+                   : security_state::MALICIOUS_CONTENT_STATUS_NONE;
       case safe_browsing::
           DEPRECATED_SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING:
       case safe_browsing::SB_THREAT_TYPE_URL_BINARY_MALWARE:

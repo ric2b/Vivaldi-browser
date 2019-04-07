@@ -29,7 +29,8 @@ VivaldiAppWindowDesktopWindowTreeHostWin::
     ~VivaldiAppWindowDesktopWindowTreeHostWin() {}
 
 bool VivaldiAppWindowDesktopWindowTreeHostWin::GetClientAreaInsets(
-    gfx::Insets* insets) const {
+    gfx::Insets* insets,
+    HMONITOR monitor) const {
   // The inset added below is only necessary for the native glass frame, i.e.
   // not for colored frames drawn by Chrome, or when DWM is disabled.
   // In fullscreen the frame is not visible.
@@ -37,7 +38,7 @@ bool VivaldiAppWindowDesktopWindowTreeHostWin::GetClientAreaInsets(
     return false;
   }
 
-  *insets = app_window_->glass_frame_view()->GetClientAreaInsets();
+  *insets = app_window_->glass_frame_view()->GetClientAreaInsets(monitor);
 
   return true;
 }

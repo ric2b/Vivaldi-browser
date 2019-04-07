@@ -20,6 +20,7 @@ using OfflineItem = offline_items_collection::OfflineItem;
 using OfflineContentProvider = offline_items_collection::OfflineContentProvider;
 using OfflineContentAggregator =
     offline_items_collection::OfflineContentAggregator;
+using LaunchLocation = offline_items_collection::LaunchLocation;
 
 class SkBitmap;
 
@@ -33,7 +34,7 @@ class DownloadOfflineContentProvider
   ~DownloadOfflineContentProvider() override;
 
   // OfflineContentProvider implmentation.
-  void OpenItem(const ContentId& id) override;
+  void OpenItem(LaunchLocation location, const ContentId& id) override;
   void RemoveItem(const ContentId& id) override;
   void CancelDownload(const ContentId& id) override;
   void PauseDownload(const ContentId& id) override;
@@ -45,7 +46,9 @@ class DownloadOfflineContentProvider
       OfflineContentProvider::MultipleItemCallback callback) override;
   void GetVisualsForItem(
       const ContentId& id,
-      const OfflineContentProvider::VisualsCallback& callback) override;
+      OfflineContentProvider::VisualsCallback callback) override;
+  void GetShareInfoForItem(const ContentId& id,
+                           ShareCallback callback) override;
   void AddObserver(OfflineContentProvider::Observer* observer) override;
   void RemoveObserver(OfflineContentProvider::Observer* observer) override;
 
@@ -55,12 +58,12 @@ class DownloadOfflineContentProvider
   void OnDownloadRemoved(DownloadManager* manager, DownloadItem* item) override;
 
   void OnThumbnailRetrieved(const ContentId& id,
-                            const VisualsCallback& callback,
+                            VisualsCallback callback,
                             const SkBitmap& bitmap);
 
   DownloadManager* manager_;
   download::AllDownloadItemNotifier download_notifier_;
-  base::ObserverList<OfflineContentProvider::Observer> observers_;
+  base::ObserverList<OfflineContentProvider::Observer>::Unchecked observers_;
   OfflineContentAggregator* aggregator_;
 
   base::WeakPtrFactory<DownloadOfflineContentProvider> weak_ptr_factory_;

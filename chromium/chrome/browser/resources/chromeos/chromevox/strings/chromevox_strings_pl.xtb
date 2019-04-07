@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
 <translation id="100812568230599391">Zmień styl wyświetlania na Przeplatany.</translation>
+<translation id="1011903154582639569">Znajdź klawisz, a potem unieś palec, by wpisać znak</translation>
 <translation id="1012173283529841972">Element listy</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1022586497894531524">Korzystasz z czytnika ChromeVox po raz pierwszy? Pomoże Ci ten krótki samouczek.</translation>
@@ -15,6 +16,7 @@
 <translation id="1065552602950927991">Nieprawidłowe informacje wejściowe</translation>
 <translation id="1080471004309605942">Koniec kursywy</translation>
 <translation id="1082209053475788238">Brak poprzedniego nagłówka poziomu 6.</translation>
+<translation id="1087788677726983142">Ukryj filtry strumienia wydarzenia</translation>
 <translation id="1088219014394087294">Bez nagłówków.</translation>
 <translation id="1106741348836243114">Włącz lub wyłącz powiadamianie dźwiękiem (ikony akustyczne).</translation>
 <translation id="1108651818222110612">podtytuł</translation>
@@ -77,6 +79,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="1618597272655350600">Przedstawia pełny opis aktualnej pozycji</translation>
 <translation id="1639634871799530612">{COUNT,plural, =1{większy niż}few{# znaki większości}many{# znaków większości}other{# greater than signs}}</translation>
 <translation id="1653266918374749391">Poprzedni nagłówek poziomu 3</translation>
+<translation id="1657616855184033958">Pokaż filtry strumienia wydarzenia</translation>
 <translation id="1659072772017912254">Niezaznaczone</translation>
 <translation id="1669290819662866522">tydzień</translation>
 <translation id="1674262202423278359">Nawigacja ChromeVox</translation>
@@ -136,6 +139,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="2267945578749931355">Następny znak</translation>
 <translation id="2281234842553884450">Poprzedni suwak</translation>
 <translation id="2294136146931447363">Początek kursywy</translation>
+<translation id="2311237334957139798">Przejdź do poprzedniego elementu na tym poziomie szczegółowości</translation>
 <translation id="2318372665160196757">Główny</translation>
 <translation id="2329324941084714723">Panel karty</translation>
 <translation id="2344193891939537199">Element wyboru daty i godziny</translation>
@@ -156,12 +160,14 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="2462626033734746142">Grupa przycisków radiowych</translation>
 <translation id="2471138580042810658">Nagłówek 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{gwiazdka}few{# znaki gwiazdki}many{# znaków gwiazdki}other{# asterisks}}</translation>
+<translation id="249330843868392562">Otwórz ustawienia zamiany tekstu na mowę</translation>
 <translation id="2523609930580546572">Samouczek ChromeVox</translation>
 <translation id="2525706221823668172">Skróty klawiszowe na Chromebooku</translation>
 <translation id="2549392850788122959">Klawisz <ph name="KEY" /> został zresetowany.</translation>
 <translation id="2553108862507765288">błąd gramatyczny</translation>
 <translation id="257674075312929031">Grupa</translation>
 <translation id="2582407057977008361">Z boku</translation>
+<translation id="2592212930811759050">Kliknij dwukrotnie, by rozpocząć edycję</translation>
 <translation id="2606210917827248971">z {COUNT,plural, =1{# elementem}few{# elementami}many{# elementami}other{# elementu}}</translation>
 <translation id="2614981083756825552">Układ MathML</translation>
 <translation id="2624431853467395961">Otwórz tryb informacyjny</translation>
@@ -409,6 +415,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="4255943572433203166">Użyj poniższych opcji, aby dostosować ChromeVox. Zmiany są wprowadzane natychmiast.</translation>
 <translation id="4271220233568730077">Następne wyrażenie matematyczne</translation>
 <translation id="4271521365602459209">Brak innych wyników.</translation>
+<translation id="4275397969489577657">Włącz rejestrowanie strumienia wydarzenia</translation>
 <translation id="4287520460805643128">Nie ma następnego artykułu.</translation>
 <translation id="4289540628985791613">Przegląd</translation>
 <translation id="4300318234632215983">Przeczytaj URL linku</translation>
@@ -487,6 +494,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="4973762002207131920">Zmiana na <ph name="KEY" />.</translation>
 <translation id="4975416682604111799">milisekundy</translation>
 <translation id="49787999531187221">ChromeVox jest obecnie nieaktywny.</translation>
+<translation id="4979263087381759787">Opcje programisty</translation>
 <translation id="4979404613699303341">Poprzedni przycisk</translation>
 <translation id="4982773647088557172"><ph name="VALUE" />, <ph name="NAME" />, pole listy</translation>
 <translation id="4983588134362688868">Przejdź do góry strony</translation>
@@ -498,6 +506,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="5000760171916499057">Brak formularzy.</translation>
 <translation id="5005670136041063723">Nie ma więcej podobnych elementów.</translation>
 <translation id="501473567976723023">styczeń</translation>
+<translation id="5020651427400641814">Włącz rejestrowanie mowy</translation>
 <translation id="5041394372352067729">Przenieś wyświetlacz brajlowski na górę strony</translation>
 <translation id="5042770794184672516">Zwiększ głośność mowy</translation>
 <translation id="5050015258024679800">Poprzedni nagłówek poziomu 4</translation>
@@ -512,6 +521,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="5106547198195128110">W tej wersji wprowadziliśmy wiele zmian. Poznaj nowe funkcje:</translation>
 <translation id="5110983769041734144">Brak poprzedniego pola formularza.</translation>
 <translation id="5111640677200759579">Nagłówek kolumny</translation>
+<translation id="5115892389597951922">Dziennik ChromeVoxa</translation>
 <translation id="5136967254288895616">Brak poprzedniego linku.</translation>
 <translation id="513774504516943387">lnk</translation>
 <translation id="5158275234811857234">Okładka</translation>
@@ -545,6 +555,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="5407530583102765689">{COUNT,plural, =1{średnik}few{# średniki}many{# średników}other{# semicolons}}</translation>
 <translation id="5411891038905756502">Brak poprzedniego punktu przejścia.</translation>
 <translation id="5417034931411865818">Kliknij element pod klawiszem sterującym $1</translation>
+<translation id="5435274640623994081">Włącz rejestrowanie ikony audio</translation>
 <translation id="5436105723448703439">{COUNT,plural, =1{mniejszy niż}few{# znaki mniejszości}many{# znaków mniejszości}other{# less than signs}}</translation>
 <translation id="5444587279251314700">(aktywna)</translation>
 <translation id="5446809554778706307">Brak zaznaczenia. Naciśnij Ctrl + T, aby otworzyć nową kartę.</translation>
@@ -678,6 +689,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="6540201937398578274">W czytniku ChromeVox klawisz wyszukiwania jest klawiszem modyfikującym. Większość skrótów klawiszowych ChromeVoxa zaczyna się właśnie od niego. Do nawigacji używa się klawiszy strzałek.</translation>
 <translation id="6550720799683018100">Zmień bieżący układ klawiatury, wybierając opcję z listy poniżej.</translation>
 <translation id="6561818612645211875">Przejdź na początek bieżącego wiersza</translation>
+<translation id="6583174818554398774">Przejdź do następnego elementu na tym poziomie szczegółowości</translation>
 <translation id="6587021927234520429">Brak następnego nagłówka poziomu 4.</translation>
 <translation id="6601344353291556895">Włącz szczegółowe opisy.</translation>
 <translation id="6615602925644411249">Znajdź na stronie.</translation>
@@ -753,6 +765,7 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="7241683698754534149">Otwórz długi opis na nowej karcie</translation>
 <translation id="7248671827512403053">Aplikacja</translation>
 <translation id="725969808843520477">Następny przycisk opcji</translation>
+<translation id="7261612856573623172">Systemowy głos zamiany tekstu na mowę</translation>
 <translation id="7269119382257320590">Bez interpunkcji</translation>
 <translation id="7273174640290488576">Pusty</translation>
 <translation id="7274770952766771364">Odsyłacz</translation>
@@ -893,6 +906,7 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="8650576015643545550">Brak poprzedniej listy.</translation>
 <translation id="8651481478098336970">wycisz</translation>
 <translation id="8653646212587894517">Pokaż listę linków</translation>
+<translation id="8656888282555543604">Włącz rejestrowanie brajla</translation>
 <translation id="8664519043722036194">sek.</translation>
 <translation id="867187640362843212">Nagłówek 5</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{kreska pionowa}few{# kreski pionowe}many{# kresek pionowych}other{# vertical pipes}}</translation>

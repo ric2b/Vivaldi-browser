@@ -129,6 +129,7 @@ BbrSender::BbrSender(const RttStats* rtt_stats,
       rate_based_startup_(false),
       initial_conservation_in_startup_(CONSERVATION),
       enable_ack_aggregation_during_startup_(false),
+      expire_ack_aggregation_in_startup_(false),
       drain_to_target_(false),
       probe_rtt_based_on_bdp_(false),
       probe_rtt_skipped_if_similar_rtt_(false),
@@ -207,7 +208,8 @@ bool BbrSender::InRecovery() const {
   return recovery_state_ != NOT_IN_RECOVERY;
 }
 
-bool BbrSender::IsProbingForMoreBandwidth() const {
+bool BbrSender::ShouldSendProbingPacket() const {
+  // TODO(ianswett): Determine if we have sent enough before returning true.
   return (mode_ == PROBE_BW && pacing_gain_ > 1) || mode_ == STARTUP;
 }
 
@@ -279,6 +281,11 @@ void BbrSender::SetFromConfig(const QuicConfig& config,
       config.HasClientRequestedIndependentOption(kBBQ4, perspective)) {
     QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_bbr_slower_startup3, 4, 4);
     set_drain_gain(kModerateProbeRttMultiplier);
+  }
+  if (GetQuicReloadableFlag(quic_bbr_slower_startup4) &&
+      config.HasClientRequestedIndependentOption(kBBQ5, perspective)) {
+    QUIC_FLAG_COUNT(quic_reloadable_flag_quic_bbr_slower_startup4);
+    expire_ack_aggregation_in_startup_ = true;
   }
   if (config.HasClientRequestedIndependentOption(kMIN1, perspective)) {
     min_congestion_window_ = kMaxSegmentSize;
@@ -458,7 +465,7 @@ bool BbrSender::UpdateBandwidthAndMinRtt(
                   << ", new value: " << sample_min_rtt
                   << ", current time: " << now.ToDebuggingValue();
 
-    if (ShouldExtendMinRttExpiry()) {
+    if (min_rtt_expired && ShouldExtendMinRttExpiry()) {
       min_rtt_expired = false;
     } else {
       min_rtt_ = sample_min_rtt;
@@ -468,6 +475,8 @@ bool BbrSender::UpdateBandwidthAndMinRtt(
     min_rtt_since_last_probe_rtt_ = QuicTime::Delta::Infinite();
     app_limited_since_last_probe_rtt_ = false;
   }
+  DCHECK(!min_rtt_.IsZero());
+  DCHECK_GE(min_rtt_, rtt_stats_->min_rtt());
 
   return min_rtt_expired;
 }
@@ -537,6 +546,10 @@ void BbrSender::CheckIfFullBandwidthReached() {
   if (BandwidthEstimate() >= target) {
     bandwidth_at_last_round_ = BandwidthEstimate();
     rounds_without_bandwidth_gain_ = 0;
+    if (expire_ack_aggregation_in_startup_) {
+      // Expire old excess delivery measurements now that bandwidth increased.
+      max_ack_height_.Reset(0, round_trip_count_);
+    }
     return;
   }
 

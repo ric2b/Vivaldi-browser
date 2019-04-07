@@ -34,7 +34,7 @@
 #include "components/autofill/core/browser/webdata/autofill_profile_syncable_service.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/browser_sync/abstract_profile_sync_service_test.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/browser_sync/test_profile_sync_service.h"
@@ -96,15 +96,23 @@ void RegisterAutofillPrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(autofill::prefs::kAutofillCreditCardEnabled,
                                 true);
   registry->RegisterBooleanPref(autofill::prefs::kAutofillProfileEnabled, true);
-  registry->RegisterBooleanPref(autofill::prefs::kAutofillEnabled, true);
   registry->RegisterBooleanPref(autofill::prefs::kAutofillWalletImportEnabled,
                                 true);
   registry->RegisterIntegerPref(autofill::prefs::kAutofillLastVersionDeduped,
                                 atoi(version_info::GetVersionNumber().c_str()));
   registry->RegisterDoublePref(autofill::prefs::kAutofillBillingCustomerNumber,
                                0.0);
+  registry->RegisterBooleanPref(
+      autofill::prefs::kAutofillJapanCityFieldMigrated, true);
   registry->RegisterBooleanPref(autofill::prefs::kAutofillOrphanRowsRemoved,
                                 true);
+  registry->RegisterIntegerPref(
+      autofill::prefs::kAutofillLastVersionDisusedAddressesDeleted, 0);
+  registry->RegisterIntegerPref(
+      autofill::prefs::kAutofillLastVersionDisusedCreditCardsDeleted, 0);
+  registry->RegisterStringPref(
+      autofill::prefs::kAutofillProfileValidity, "",
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
 }
 
 void RunAndSignal(base::OnceClosure cb, WaitableEvent* event) {
@@ -127,9 +135,9 @@ class AutofillTableMock : public AutofillTable {
                     Time* date_last_used));
   MOCK_METHOD1(GetAutofillProfiles,
                bool(std::vector<std::unique_ptr<AutofillProfile>>*));  // NOLINT
-  MOCK_METHOD1(UpdateAutofillProfile, bool(const AutofillProfile&));  // NOLINT
-  MOCK_METHOD1(AddAutofillProfile, bool(const AutofillProfile&));     // NOLINT
-  MOCK_METHOD1(RemoveAutofillProfile, bool(const std::string&));      // NOLINT
+  MOCK_METHOD1(UpdateAutofillProfile, bool(const AutofillProfile&));   // NOLINT
+  MOCK_METHOD1(AddAutofillProfile, bool(const AutofillProfile&));      // NOLINT
+  MOCK_METHOD1(RemoveAutofillProfile, bool(const std::string&));       // NOLINT
 };
 
 MATCHER_P(MatchProfiles, profile, "") {
@@ -326,6 +334,7 @@ class MockPersonalDataManager : public PersonalDataManager {
   MOCK_CONST_METHOD0(IsDataLoaded, bool());
   MOCK_METHOD0(LoadProfiles, void());
   MOCK_METHOD0(LoadCreditCards, void());
+  MOCK_METHOD0(LoadPaymentsCustomerData, void());
   MOCK_METHOD0(Refresh, void());
 };
 
@@ -367,6 +376,7 @@ class ProfileSyncServiceAutofillTest
 
     EXPECT_CALL(personal_data_manager(), LoadProfiles());
     EXPECT_CALL(personal_data_manager(), LoadCreditCards());
+    EXPECT_CALL(personal_data_manager(), LoadPaymentsCustomerData());
 
     personal_data_manager_->Init(web_data_service_,
                                  /*account_database=*/nullptr,
@@ -922,7 +932,6 @@ TEST_F(ProfileSyncServiceAutofillTest, MergeProfileWithDifferentGuid) {
   // Check that the sync profile use date was kept.
   EXPECT_EQ(base::Time::FromTimeT(1234), new_sync_profiles[0].use_date());
 }
-
 
 TEST_F(ProfileSyncServiceAutofillTest, ProcessUserChangeAddProfile) {
   EXPECT_CALL(autofill_table(), GetAutofillProfiles(_)).WillOnce(Return(true));

@@ -8,11 +8,13 @@
 
 #import "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/browser_sync/profile_sync_service_mock.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/sync_preferences/pref_service_mock_factory.h"
 #include "components/sync_preferences/pref_service_syncable.h"
+#include "components/unified_consent/feature.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
@@ -187,8 +189,8 @@ class SyncSettingsCollectionViewControllerTest
         static_cast<browser_sync::ProfileSyncServiceMock*>(
             ProfileSyncServiceFactory::GetForBrowserState(
                 chrome_browser_state_.get()));
-    ON_CALL(*mock_profile_sync_service_, IsEngineInitialized())
-        .WillByDefault(Return(true));
+    ON_CALL(*mock_profile_sync_service_, GetTransportState())
+        .WillByDefault(Return(syncer::SyncService::TransportState::ACTIVE));
     ON_CALL(*mock_profile_sync_service_, GetRegisteredDataTypes())
         .WillByDefault(Return(syncer::ModelTypeSet()));
     mock_profile_sync_service_->Initialize();
@@ -240,9 +242,11 @@ TEST_F(SyncSettingsCollectionViewControllerTest, TestModel) {
   EXPECT_EQ(3, NumberOfSections());
 
   EXPECT_EQ(1, NumberOfItemsInSection(0));
-  // One extra item for "Sync Everything" and one for Autofill wallet import.
-  int expected_number_of_items =
-      SyncSetupService::kNumberOfSyncableDatatypes + 2;
+  // There is one item per data type, except for unified consent that is
+  // unsupported by the old UI. In addition, there are two extra items, one
+  // for "Sync Everything" and another for Autofill wallet import.
+  constexpr int expected_number_of_items =
+      SyncSetupService::kNumberOfSyncableDatatypes - 1 + 2;
   EXPECT_EQ(expected_number_of_items, NumberOfItemsInSection(1));
   EXPECT_EQ(2, NumberOfItemsInSection(2));
 
@@ -263,6 +267,10 @@ TEST_F(SyncSettingsCollectionViewControllerTest, TestModel) {
   for (int i = 0; i < SyncSetupService::kNumberOfSyncableDatatypes; i++) {
     SyncSetupService::SyncableDatatype dataType =
         static_cast<SyncSetupService::SyncableDatatype>(i);
+    if (dataType == SyncSetupService::kSyncUserEvent) {
+      // Old UI without unified consent doesn't support user event data type.
+      continue;
+    }
     SyncSwitchItem* syncDataTypeItem = GetCollectionViewItem(1, item++);
     EXPECT_NSEQ(syncDataTypeItem.text,
                 l10n_util::GetNSString(
@@ -270,8 +278,9 @@ TEST_F(SyncSettingsCollectionViewControllerTest, TestModel) {
   }
 
   SyncSwitchItem* autofillWalletImportItem = GetCollectionViewItem(1, item);
-  EXPECT_NSEQ(autofillWalletImportItem.text,
-              l10n_util::GetNSString(IDS_IOS_AUTOFILL_USE_WALLET_DATA));
+  NSString* title = l10n_util::GetNSString(
+      IDS_AUTOFILL_ENABLE_PAYMENTS_INTEGRATION_CHECKBOX_LABEL);
+  EXPECT_NSEQ(autofillWalletImportItem.text, title);
 
   TextAndErrorItem* encryptionItem = GetCollectionViewItem(2, 0);
   EXPECT_NSEQ(encryptionItem.text,
@@ -314,8 +323,8 @@ TEST_F(SyncSettingsCollectionViewControllerTest,
 }
 
 TEST_F(SyncSettingsCollectionViewControllerTest, TestAutofillWalletImportOff) {
-  chrome_browser_state_->GetPrefs()->SetBoolean(
-      autofill::prefs::kAutofillWalletImportEnabled, false);
+  autofill::prefs::SetPaymentsIntegrationEnabled(
+      chrome_browser_state_->GetPrefs(), false);
 
   TurnSyncOn();
   TurnSyncEverythingOn();
@@ -327,8 +336,8 @@ TEST_F(SyncSettingsCollectionViewControllerTest, TestAutofillWalletImportOff) {
 }
 
 TEST_F(SyncSettingsCollectionViewControllerTest, TestAutofillWalletImportOn) {
-  chrome_browser_state_->GetPrefs()->SetBoolean(
-      autofill::prefs::kAutofillWalletImportEnabled, true);
+  autofill::prefs::SetPaymentsIntegrationEnabled(
+      chrome_browser_state_->GetPrefs(), true);
 
   TurnSyncOn();
   TurnSyncEverythingOn();

@@ -17,7 +17,7 @@
 #include "chrome/browser/vr/model/omnibox_suggestions.h"
 #include "chrome/browser/vr/model/toolbar_state.h"
 #include "chrome/browser/vr/sounds_manager_audio_delegate.h"
-#include "chrome/browser/vr/ui.h"
+#include "chrome/browser/vr/ui_factory.h"
 #include "chrome/browser/vr/ui_test_input.h"
 #include "chrome/common/chrome_features.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -27,32 +27,34 @@ namespace vr {
 VrGLThread::VrGLThread(
     const base::WeakPtr<VrShell>& weak_vr_shell,
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
-    base::WaitableEvent* gl_surface_created_event,
     gvr_context* gvr_api,
     const UiInitialState& ui_initial_state,
     bool reprojected_rendering,
     bool daydream_support,
     bool pause_content,
     bool low_density,
+    base::WaitableEvent* gl_surface_created_event,
     base::OnceCallback<gfx::AcceleratedWidget()> surface_callback)
     : base::android::JavaHandlerThread("VrShellGL"),
       weak_vr_shell_(weak_vr_shell),
       main_thread_task_runner_(std::move(main_thread_task_runner)),
-      gl_surface_created_event_(gl_surface_created_event),
-      gvr_api_(gvr_api),
-      ui_initial_state_(ui_initial_state),
-      reprojected_rendering_(reprojected_rendering),
-      daydream_support_(daydream_support),
-      pause_content_(pause_content),
-      low_density_(low_density),
-      surface_callback_(std::move(surface_callback)) {}
+      gvr_api_(gvr::GvrApi::WrapNonOwned(gvr_api)),
+      factory_params_(std::make_unique<RenderLoopFactory::Params>(
+          gvr_api_.get(),
+          ui_initial_state,
+          reprojected_rendering,
+          daydream_support,
+          pause_content,
+          low_density,
+          gl_surface_created_event,
+          std::move(surface_callback))) {}
 
 VrGLThread::~VrGLThread() {
   Stop();
 }
 
-base::WeakPtr<VrShellGl> VrGLThread::GetVrShellGl() {
-  return vr_shell_gl_->GetWeakPtr();
+base::WeakPtr<RenderLoop> VrGLThread::GetRenderLoop() {
+  return render_loop_->GetWeakPtr();
 }
 
 void VrGLThread::SetInputConnection(VrInputConnection* input_connection) {
@@ -61,42 +63,14 @@ void VrGLThread::SetInputConnection(VrInputConnection* input_connection) {
 }
 
 void VrGLThread::Init() {
-  keyboard_delegate_ = GvrKeyboardDelegate::Create();
-  text_input_delegate_ = std::make_unique<TextInputDelegate>();
-  if (!keyboard_delegate_.get())
-    ui_initial_state_.needs_keyboard_update = true;
-
-  audio_delegate_ = std::make_unique<SoundsManagerAudioDelegate>();
-
-  auto ui = std::make_unique<Ui>(this, this, keyboard_delegate_.get(),
-                                 text_input_delegate_.get(),
-                                 audio_delegate_.get(), ui_initial_state_);
-  text_input_delegate_->SetRequestFocusCallback(base::BindRepeating(
-      &UiInterface::RequestFocus, base::Unretained(ui.get())));
-  text_input_delegate_->SetRequestUnfocusCallback(base::BindRepeating(
-      &UiInterface::RequestUnfocus, base::Unretained(ui.get())));
-  if (keyboard_delegate_.get()) {
-    keyboard_delegate_->SetUiInterface(ui.get());
-    text_input_delegate_->SetUpdateInputCallback(
-        base::BindRepeating(&GvrKeyboardDelegate::UpdateInput,
-                            base::Unretained(keyboard_delegate_.get())));
-  }
-
-  vr_shell_gl_ = std::make_unique<VrShellGl>(
-      this, std::move(ui), gvr_api_, reprojected_rendering_, daydream_support_,
-      ui_initial_state_.in_web_vr, pause_content_, low_density_);
-
-  weak_browser_ui_ = vr_shell_gl_->GetBrowserUiWeakPtr();
-  task_runner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&VrShellGl::Initialize, vr_shell_gl_->GetWeakPtr(),
-                     base::Unretained(gl_surface_created_event_),
-                     base::Passed(std::move(surface_callback_))));
+  ui_factory_ = std::make_unique<UiFactory>();
+  render_loop_ = RenderLoopFactory::Create(this, ui_factory_.get(),
+                                           std::move(factory_params_));
+  weak_browser_ui_ = render_loop_->GetBrowserUiWeakPtr();
 }
 
 void VrGLThread::CleanUp() {
-  audio_delegate_.reset();
-  vr_shell_gl_.reset();
+  render_loop_.reset();
 }
 
 void VrGLThread::ContentSurfaceCreated(jobject surface,
@@ -131,17 +105,11 @@ void VrGLThread::GvrDelegateReady(gvr::ViewerType viewer_type) {
       base::BindOnce(&VrShell::GvrDelegateReady, weak_vr_shell_, viewer_type));
 }
 
-void VrGLThread::SendRequestPresentReply(
-    bool success,
-    device::mojom::VRSubmitFrameClientRequest request,
-    device::mojom::VRPresentationProviderPtr provider,
-    device::mojom::VRDisplayFrameTransportOptionsPtr transport_options) {
+void VrGLThread::SendRequestPresentReply(device::mojom::XRSessionPtr session) {
   DCHECK(OnGlThread());
   main_thread_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&VrShell::SendRequestPresentReply, weak_vr_shell_, success,
-                     std::move(request), provider.PassInterface(),
-                     std::move(transport_options)));
+      FROM_HERE, base::BindOnce(&VrShell::SendRequestPresentReply,
+                                weak_vr_shell_, std::move(session)));
 }
 
 void VrGLThread::UpdateGamepadData(device::GvrGamepadData pad) {
@@ -200,9 +168,7 @@ void VrGLThread::ExitPresent() {
   DCHECK(OnGlThread());
   main_thread_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&VrShell::ExitPresent, weak_vr_shell_));
-  // TODO(vollick): Ui should hang onto the appropriate pointer rather than
-  // bouncing through VrGLThread.
-  vr_shell_gl_->OnExitPresent();
+  render_loop_->OnExitPresent();
 }
 
 void VrGLThread::ExitFullscreen() {
@@ -423,11 +389,15 @@ void VrGLThread::SetWebVrMode(bool enabled) {
                                          weak_browser_ui_, enabled));
 }
 
-void VrGLThread::SetCapturingState(const CapturingStateModel& state) {
+void VrGLThread::SetCapturingState(
+    const CapturingStateModel& active_capturing,
+    const CapturingStateModel& background_capturing,
+    const CapturingStateModel& potential_capturing) {
   DCHECK(OnMainThread());
-  task_runner()->PostTask(FROM_HERE,
-                          base::BindOnce(&BrowserUiInterface::SetCapturingState,
-                                         weak_browser_ui_, state));
+  task_runner()->PostTask(
+      FROM_HERE, base::BindOnce(&BrowserUiInterface::SetCapturingState,
+                                weak_browser_ui_, active_capturing,
+                                background_capturing, potential_capturing));
 }
 
 void VrGLThread::SetIsExiting() {

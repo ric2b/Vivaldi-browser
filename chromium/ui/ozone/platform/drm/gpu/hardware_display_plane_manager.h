@@ -46,19 +46,6 @@ struct HardwareDisplayPlaneList {
     uint32_t crtc_id;
     uint32_t framebuffer;
     CrtcController* crtc;
-
-    struct Plane {
-      Plane(int plane,
-            int framebuffer,
-            const gfx::Rect& bounds,
-            const gfx::Rect& src_rect);
-      ~Plane();
-      int plane;
-      int framebuffer;
-      gfx::Rect bounds;
-      gfx::Rect src_rect;
-    };
-    std::vector<Plane> planes;
   };
   // In the case of non-atomic operation, this info will be used for
   // pageflipping.
@@ -156,7 +143,25 @@ class HardwareDisplayPlaneManager {
     DrmDevice::Property out_fence_ptr;
   };
 
-  bool InitializeCrtcProperties(DrmDevice* drm);
+  struct CrtcState {
+    CrtcState();
+    ~CrtcState();
+    CrtcState(CrtcState&&);
+
+    CrtcProperties properties = {};
+
+    // Cached blobs for the properties since the CRTC properties are applied on
+    // the next page flip and we need to keep the properties valid until then.
+    ScopedDrmPropertyBlob ctm_blob;
+    ScopedDrmPropertyBlob gamma_lut_blob;
+    ScopedDrmPropertyBlob degamma_lut_blob;
+
+    DISALLOW_COPY_AND_ASSIGN(CrtcState);
+  };
+
+  bool InitializeCrtcState(DrmDevice* drm);
+
+  virtual bool InitializePlanes(DrmDevice* drm) = 0;
 
   virtual bool SetPlaneData(HardwareDisplayPlaneList* plane_list,
                             HardwareDisplayPlane* hw_plane,
@@ -196,8 +201,10 @@ class HardwareDisplayPlaneManager {
   // calls to control it. Not owned.
   DrmDevice* drm_;
 
+  bool has_universal_planes_ = false;
+
   std::vector<std::unique_ptr<HardwareDisplayPlane>> planes_;
-  std::vector<CrtcProperties> crtc_properties_;
+  std::vector<CrtcState> crtc_state_;
   std::vector<uint32_t> supported_formats_;
 
   DISALLOW_COPY_AND_ASSIGN(HardwareDisplayPlaneManager);

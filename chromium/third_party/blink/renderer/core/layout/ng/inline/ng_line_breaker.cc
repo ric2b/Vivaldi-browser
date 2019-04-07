@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_text_fragment_builder.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_block_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_floats_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragment.h"
@@ -40,17 +41,16 @@ inline bool ShouldCreateLineBox(const NGInlineItemResults& item_results) {
 
 }  // namespace
 
-NGLineBreaker::NGLineBreaker(
-    NGInlineNode node,
-    NGLineBreakerMode mode,
-    const NGConstraintSpace& space,
-    Vector<NGPositionedFloat>* positioned_floats,
-    Vector<scoped_refptr<NGUnpositionedFloat>>* unpositioned_floats,
-    NGContainerFragmentBuilder* container_builder,
-    NGExclusionSpace* exclusion_space,
-    unsigned handled_float_index,
-    const NGLineLayoutOpportunity& line_opportunity,
-    const NGInlineBreakToken* break_token)
+NGLineBreaker::NGLineBreaker(NGInlineNode node,
+                             NGLineBreakerMode mode,
+                             const NGConstraintSpace& space,
+                             Vector<NGPositionedFloat>* positioned_floats,
+                             NGUnpositionedFloatVector* unpositioned_floats,
+                             NGContainerFragmentBuilder* container_builder,
+                             NGExclusionSpace* exclusion_space,
+                             unsigned handled_float_index,
+                             const NGLineLayoutOpportunity& line_opportunity,
+                             const NGInlineBreakToken* break_token)
     : line_opportunity_(line_opportunity),
       node_(node),
       is_first_formatted_line_((!break_token || (!break_token->ItemIndex() &&
@@ -80,6 +80,7 @@ NGLineBreaker::NGLineBreaker(
     current_style_ = break_token->Style();
     item_index_ = break_token->ItemIndex();
     offset_ = break_token->TextOffset();
+    break_iterator_.SetStartOffset(offset_);
     previous_line_had_forced_break_ = break_token->IsForcedBreak();
     items_data_.AssertOffset(item_index_, offset_);
     ignore_floats_ = break_token->IgnoreFloats();
@@ -93,10 +94,8 @@ NGLineBreaker::~NGLineBreaker() = default;
 inline NGInlineItemResult* NGLineBreaker::AddItem(const NGInlineItem& item,
                                                   unsigned end_offset) {
   DCHECK_LE(end_offset, item.EndOffset());
-  item_results_->push_back(
-      NGInlineItemResult(&item, item_index_, offset_, end_offset,
-                         ShouldCreateLineBox(*item_results_)));
-  return &item_results_->back();
+  return &item_results_->emplace_back(&item, item_index_, offset_, end_offset,
+                                      ShouldCreateLineBox(*item_results_));
 }
 
 inline NGInlineItemResult* NGLineBreaker::AddItem(const NGInlineItem& item) {
@@ -104,7 +103,7 @@ inline NGInlineItemResult* NGLineBreaker::AddItem(const NGInlineItem& item) {
 }
 
 void NGLineBreaker::SetLineEndFragment(
-    scoped_refptr<NGPhysicalTextFragment> fragment) {
+    scoped_refptr<const NGPhysicalTextFragment> fragment) {
   bool is_horizontal =
       IsHorizontalWritingMode(constraint_space_.GetWritingMode());
   if (line_info_->LineEndFragment()) {
@@ -187,12 +186,15 @@ void NGLineBreaker::NextLine(NGLineInfo* line_info) {
   //
   // TODO(kojii): There are cases where we need to PlaceItems() without creating
   // line boxes. These cases need to be reviewed.
-  if (ShouldCreateLineBox(*item_results_) ||
+  bool should_create_line_box =
+      ShouldCreateLineBox(*item_results_) ||
       (has_list_marker_ && line_info_->IsLastLine()) ||
-      mode_ != NGLineBreakerMode::kContent)
-    ComputeLineLocation();
-  else
+      mode_ != NGLineBreakerMode::kContent;
+
+  if (!should_create_line_box)
     line_info_->SetIsEmptyLine();
+
+  ComputeLineLocation();
 
   line_info_ = nullptr;
   item_results_ = nullptr;
@@ -258,7 +260,6 @@ void NGLineBreaker::BreakLine() {
     } else if (item.Type() == NGInlineItem::kOpenTag) {
       HandleOpenTag(item);
     } else if (item.Type() == NGInlineItem::kOutOfFlowPositioned) {
-      DCHECK_EQ(item.Length(), 0u);
       AddItem(item);
       MoveToNextOf(item);
     } else if (item.Length()) {
@@ -289,15 +290,14 @@ void NGLineBreaker::UpdatePosition() {
 }
 
 void NGLineBreaker::ComputeLineLocation() const {
-  LayoutUnit bfc_line_offset = line_opportunity_.line_left_offset;
+  // Negative margins can make the position negative, but the inline size is
+  // always positive or 0.
   LayoutUnit available_width = AvailableWidth();
   DCHECK_EQ(position_, line_info_->ComputeWidth());
 
-  // Negative margins can make the position negative, but the inline size is
-  // always positive or 0.
-  line_info_->SetLineBfcOffset(
-      {bfc_line_offset, line_opportunity_.bfc_block_offset}, available_width,
-      position_.ClampNegativeToZero());
+  line_info_->SetWidth(available_width, position_);
+  line_info_->SetBfcOffset(
+      {line_opportunity_.line_left_offset, line_opportunity_.bfc_block_offset});
 }
 
 void NGLineBreaker::HandleText(const NGInlineItem& item) {
@@ -406,7 +406,7 @@ void NGLineBreaker::BreakText(NGInlineItemResult* item_result,
 
   // Use kStartShouldBeSafe if at the beginning of a line.
   unsigned options = ShapingLineBreaker::kDefaultOptions;
-  if (offset_ != line_info_->StartOffset())
+  if (item_result->start_offset != line_info_->StartOffset())
     options |= ShapingLineBreaker::kDontReshapeStart;
 
   // Use kNoResultIfOverflow if 'break-word' and we're trying to break normally
@@ -780,14 +780,12 @@ void NGLineBreaker::HandleAtomicInline(const NGInlineItem& item) {
                                    : sizes.max_size;
   }
 
+  // For the inline layout purpose, only inline-margins are needed, computed for
+  // the line's writing-mode.
   DCHECK(item.Style());
   const ComputedStyle& style = *item.Style();
-  bool is_flipped_lines = style.IsFlippedLinesWritingMode();
   item_result->margins =
-      NGLineBoxStrut(ComputeMarginsForVisualContainer(constraint_space_, style),
-                     is_flipped_lines);
-  item_result->padding = NGLineBoxStrut(
-      ComputePadding(constraint_space_, style), is_flipped_lines);
+      ComputeLineMarginsForVisualContainer(constraint_space_, style);
   item_result->inline_size += item_result->margins.InlineSum();
 
   if (state_ == LineBreakState::kLeading)
@@ -800,8 +798,8 @@ void NGLineBreaker::HandleAtomicInline(const NGInlineItem& item) {
 // Performs layout and positions a float.
 //
 // If there is a known available_width (e.g. something has resolved the
-// container BFC offset) it will attempt to position the float on the current
-// line.
+// container BFC block offset) it will attempt to position the float on the
+// current line.
 // Additionally updates the available_width for the line as the float has
 // (probably) consumed space.
 //
@@ -830,24 +828,22 @@ void NGLineBreaker::HandleFloat(const NGInlineItem& item) {
   NGBlockNode node(ToLayoutBox(item.GetLayoutObject()));
 
   const ComputedStyle& float_style = node.Style();
-  NGBoxStrut margins =
-      ComputeMarginsForContainer(constraint_space_, float_style);
 
   // TODO(ikilpatrick): Add support for float break tokens inside an inline
   // layout context.
-  scoped_refptr<NGUnpositionedFloat> unpositioned_float =
-      NGUnpositionedFloat::Create(constraint_space_.AvailableSize(),
-                                  constraint_space_.PercentageResolutionSize(),
-                                  constraint_space_.BfcOffset().line_offset,
-                                  constraint_space_.BfcOffset().line_offset,
-                                  margins, node,
-                                  /* break_token */ nullptr);
+  NGUnpositionedFloat unpositioned_float(node, /* break_token */ nullptr);
+
+  // If we are currently computing our min/max-content size simply append
+  // to the unpositioned floats list and abort.
+  if (mode_ != NGLineBreakerMode::kContent) {
+    AddUnpositionedFloat(unpositioned_floats_, container_builder_,
+                         std::move(unpositioned_float));
+    return;
+  }
 
   LayoutUnit inline_margin_size =
-      (ComputeInlineSizeForUnpositionedFloat(constraint_space_,
-                                             unpositioned_float.get()) +
-       margins.InlineSum())
-          .ClampNegativeToZero();
+      ComputeMarginBoxInlineSizeForUnpositionedFloat(constraint_space_,
+                                                     &unpositioned_float);
 
   LayoutUnit bfc_block_offset = line_opportunity_.bfc_block_offset;
 
@@ -870,15 +866,10 @@ void NGLineBreaker::HandleFloat(const NGInlineItem& item) {
   //    also is strictly within the non-shape area).
   //  - It will be moved down due to block-start edge alignment.
   //  - It will be moved down due to clearance.
-  //  - We are currently computing our min/max-content size. (We use the
-  //    unpositioned_floats to manually adjust the min/max-content size after
-  //    the line breaker has run).
   bool float_after_line =
       !can_fit_float ||
       exclusion_space_->LastFloatBlockStart() > bfc_block_offset ||
-      exclusion_space_->ClearanceOffset(float_style.Clear()) >
-          bfc_block_offset ||
-      mode_ != NGLineBreakerMode::kContent;
+      exclusion_space_->ClearanceOffset(float_style.Clear()) > bfc_block_offset;
 
   // Check if we already have a pending float. That's because a float cannot be
   // higher than any block or floated box generated before.
@@ -887,12 +878,12 @@ void NGLineBreaker::HandleFloat(const NGInlineItem& item) {
                          std::move(unpositioned_float));
   } else {
     NGPositionedFloat positioned_float = PositionFloat(
-        bfc_block_offset, constraint_space_.BfcOffset().block_offset,
-        unpositioned_float.get(), constraint_space_, exclusion_space_);
+        constraint_space_.AvailableSize(),
+        constraint_space_.PercentageResolutionSize(),
+        {constraint_space_.BfcOffset().line_offset, bfc_block_offset},
+        constraint_space_.BfcOffset().block_offset, &unpositioned_float,
+        constraint_space_, exclusion_space_);
     positioned_floats_->push_back(positioned_float);
-
-    DCHECK_EQ(positioned_float.bfc_offset.block_offset,
-              bfc_block_offset + margins.block_start);
 
     NGLayoutOpportunity opportunity = exclusion_space_->FindLayoutOpportunity(
         {constraint_space_.BfcOffset().line_offset, bfc_block_offset},
@@ -918,20 +909,12 @@ bool NGLineBreaker::ComputeOpenTagResult(
   if (item.ShouldCreateBoxFragment() &&
       (style.HasBorder() || style.HasPadding() ||
        (style.HasMargin() && item_result->has_edge))) {
-    bool is_flipped_lines = style.IsFlippedLinesWritingMode();
-    NGLineBoxStrut borders = NGLineBoxStrut(
-        ComputeBorders(constraint_space, style), is_flipped_lines);
-    item_result->padding = NGLineBoxStrut(
-        ComputePadding(constraint_space, style), is_flipped_lines);
-    item_result->borders_paddings_line_over =
-        borders.line_over + item_result->padding.line_over;
-    item_result->borders_paddings_line_under =
-        borders.line_under + item_result->padding.line_under;
+    item_result->borders = ComputeLineBorders(constraint_space, style);
+    item_result->padding = ComputeLinePadding(constraint_space, style);
     if (item_result->has_edge) {
-      item_result->margins = NGLineBoxStrut(
-          ComputeMarginsForSelf(constraint_space, style), is_flipped_lines);
+      item_result->margins = ComputeLineMarginsForSelf(constraint_space, style);
       item_result->inline_size = item_result->margins.inline_start +
-                                 borders.inline_start +
+                                 item_result->borders.inline_start +
                                  item_result->padding.inline_start;
       return true;
     }
@@ -968,18 +951,16 @@ void NGLineBreaker::HandleCloseTag(const NGInlineItem& item) {
   if (item_result->has_edge) {
     DCHECK(item.Style());
     const ComputedStyle& style = *item.Style();
-    bool is_flipped_lines = style.IsFlippedLinesWritingMode();
-    item_result->margins = NGLineBoxStrut(
-        ComputeMarginsForSelf(constraint_space_, style), is_flipped_lines);
+    NGBoxStrut margins = ComputeMarginsForSelf(constraint_space_, style);
     NGBoxStrut borders = ComputeBorders(constraint_space_, style);
     NGBoxStrut paddings = ComputePadding(constraint_space_, style);
-    item_result->inline_size = item_result->margins.inline_end +
-                               borders.inline_end + paddings.inline_end;
+    item_result->inline_size =
+        margins.inline_end + borders.inline_end + paddings.inline_end;
     position_ += item_result->inline_size;
 
     if (!item_result->should_create_line_box &&
         (item_result->inline_size ||
-         (item_result->margins.inline_end && !in_line_height_quirks_mode_)))
+         (margins.inline_end && !in_line_height_quirks_mode_)))
       item_result->should_create_line_box = true;
   }
   DCHECK(item.GetLayoutObject() && item.GetLayoutObject()->Parent());

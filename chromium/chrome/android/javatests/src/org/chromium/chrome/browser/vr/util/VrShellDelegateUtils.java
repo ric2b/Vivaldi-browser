@@ -9,7 +9,7 @@ import org.junit.Assert;
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.vr.TestVrShellDelegate;
 import org.chromium.chrome.browser.vr.VrCoreInfo;
-import org.chromium.chrome.browser.vr.mock.MockVrCoreVersionCheckerImpl;
+import org.chromium.chrome.browser.vr.mock.MockVrCoreVersionChecker;
 
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -19,41 +19,38 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class VrShellDelegateUtils {
     /**
-     * Retrieves the current VrShellDelegate instance from the UI thread.
-     * This is necessary in case acquiring the instance causes the delegate
-     * to be constructed, which must happen on the UI thread.
+     * Retrieves the current VrShellDelegate instance from the UI thread. This is necessary in case
+     * acquiring the instance causes the delegate to be constructed, which must happen on the UI
+     * thread.
+     *
+     * @return The TestVrShellDelegate instance currently in use.
      */
     public static TestVrShellDelegate getDelegateInstance() {
         final AtomicReference<TestVrShellDelegate> delegate =
                 new AtomicReference<TestVrShellDelegate>();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                delegate.set(TestVrShellDelegate.getInstance());
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> { delegate.set(TestVrShellDelegate.getInstance()); });
         return delegate.get();
     }
 
     /**
-     * Creates and sets a MockVrCoreVersionCheckerImpl as the VrShellDelegate's
-     * VrCoreVersionChecker instance.
+     * Creates and sets a MockVrCoreVersionCheckerImpl as the VrShellDelegate's VrCoreVersionChecker
+     * instance.
+     *
      * @param compatibility An int corresponding to a VrCoreCompatibility value that the mock
-     *     version checker will return.
+     *        version checker will return.
      * @return The MockVrCoreVersionCheckerImpl that was set as VrShellDelegate's
-     *     VrCoreVersionChecker instance.
+     *        VrCoreVersionChecker instance.
      */
-    public static MockVrCoreVersionCheckerImpl setVrCoreCompatibility(int compatibility) {
-        final MockVrCoreVersionCheckerImpl mockChecker = new MockVrCoreVersionCheckerImpl();
+    public static MockVrCoreVersionChecker setVrCoreCompatibility(int compatibility) {
+        final MockVrCoreVersionChecker mockChecker = new MockVrCoreVersionChecker();
         mockChecker.setMockReturnValue(new VrCoreInfo(null, compatibility));
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                VrShellDelegateUtils.getDelegateInstance().overrideVrCoreVersionCheckerForTesting(
-                        mockChecker);
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            VrShellDelegateUtils.getDelegateInstance().overrideVrCoreVersionCheckerForTesting(
+                    mockChecker);
         });
-        Assert.assertEquals(compatibility, mockChecker.getLastReturnValue().compatibility);
+        Assert.assertEquals("Overriding VrCoreVersionChecker failed", compatibility,
+                mockChecker.getLastReturnValue().compatibility);
         return mockChecker;
     }
 }

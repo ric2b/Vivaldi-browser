@@ -32,22 +32,18 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/web/web_text_direction.h"
 #include "third_party/blink/renderer/core/dom/element.h"
-#include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
-#include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/validation_message_overlay_delegate.h"
 #include "third_party/blink/renderer/platform/layout_test_support.h"
-#include "third_party/blink/renderer/platform/platform_chrome_client.h"
 
 namespace blink {
 
-ValidationMessageClientImpl::ValidationMessageClientImpl(WebViewImpl& web_view)
-    : web_view_(web_view), current_anchor_(nullptr) {}
+ValidationMessageClientImpl::ValidationMessageClientImpl(Page& page)
+    : page_(&page), current_anchor_(nullptr) {}
 
-ValidationMessageClientImpl* ValidationMessageClientImpl::Create(
-    WebViewImpl& web_view) {
-  return new ValidationMessageClientImpl(web_view);
+ValidationMessageClientImpl* ValidationMessageClientImpl::Create(Page& page) {
+  return new ValidationMessageClientImpl(page);
 }
 
 ValidationMessageClientImpl::~ValidationMessageClientImpl() = default;
@@ -72,7 +68,7 @@ void ValidationMessageClientImpl::ShowValidationMessage(
     HideValidationMessageImmediately(*current_anchor_);
   current_anchor_ = &anchor;
   message_ = message;
-  web_view_.GetChromeClient().RegisterPopupOpeningObserver(this);
+  page_->GetChromeClient().RegisterPopupOpeningObserver(this);
   constexpr auto kMinimumTimeToShowValidationMessage =
       TimeDelta::FromSeconds(5);
   constexpr auto kTimePerCharacter = TimeDelta::FromMilliseconds(50);
@@ -81,17 +77,15 @@ void ValidationMessageClientImpl::ShowValidationMessage(
       std::max(kMinimumTimeToShowValidationMessage,
                (message.length() + sub_message.length()) * kTimePerCharacter);
 
-  auto* target_frame =
-      web_view_.MainFrameImpl()
-          ? web_view_.MainFrameImpl()
-          : WebLocalFrameImpl::FromFrame(anchor.GetDocument().GetFrame());
+  auto* target_frame = page_->MainFrame() && page_->MainFrame()->IsLocalFrame()
+                           ? ToLocalFrame(page_->MainFrame())
+                           : anchor.GetDocument().GetFrame();
   auto delegate = ValidationMessageOverlayDelegate::Create(
-      *web_view_.GetPage(), anchor, message_, message_dir, sub_message,
-      sub_message_dir);
+      *page_, anchor, message_, message_dir, sub_message, sub_message_dir);
   overlay_delegate_ = delegate.get();
   overlay_ = PageOverlay::Create(target_frame, std::move(delegate));
-  bool success = target_frame->GetFrameView()
-                     ->UpdateLifecycleToCompositingCleanPlusScrolling();
+  bool success =
+      target_frame->View()->UpdateLifecycleToCompositingCleanPlusScrolling();
   // The lifecycle update should always succeed, because this is not inside
   // of a throttling scope.
   DCHECK(success);
@@ -130,7 +124,7 @@ void ValidationMessageClientImpl::Reset(TimerBase*) {
   finish_time_ = TimeTicks();
   overlay_ = nullptr;
   overlay_delegate_ = nullptr;
-  web_view_.GetChromeClient().UnregisterPopupOpeningObserver(this);
+  page_->GetChromeClient().UnregisterPopupOpeningObserver(this);
 }
 
 bool ValidationMessageClientImpl::IsValidationMessageVisible(
@@ -184,6 +178,7 @@ void ValidationMessageClientImpl::PaintOverlay() {
 }
 
 void ValidationMessageClientImpl::Trace(blink::Visitor* visitor) {
+  visitor->Trace(page_);
   visitor->Trace(current_anchor_);
   ValidationMessageClient::Trace(visitor);
 }

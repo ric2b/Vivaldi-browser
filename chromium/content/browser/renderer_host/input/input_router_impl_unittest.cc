@@ -134,8 +134,6 @@ class MockInputRouterImplClient : public InputRouterImplClient {
     input_router_client_.DidOverscroll(params);
   }
 
-  void DidStopFlinging() override { input_router_client_.DidStopFlinging(); }
-
   void DidStartScrollingViewport() override {
     input_router_client_.DidStartScrollingViewport();
   }
@@ -292,8 +290,13 @@ class InputRouterImplTest : public testing::Test {
                !gesture.data.fling_start.velocity_x &&
                !gesture.data.fling_start.velocity_y) {
       // Ensure non-zero touchscreen fling velocities, as the router will
-      // validate against such.
-      gesture.data.fling_start.velocity_x = 5.f;
+      // validate against such. The velocity should be large enough to make
+      // sure that the fling is still active while sending the GFC.
+      gesture.data.fling_start.velocity_x = 500.f;
+    } else if (gesture.GetType() == WebInputEvent::kGestureFlingCancel) {
+      // Set prevent boosting to make sure that the GFC cancels the active
+      // fling.
+      gesture.data.fling_cancel.prevent_boosting = true;
     }
 
     input_router_->SendGestureEvent(GestureEventWithLatencyInfo(gesture));
@@ -762,7 +765,13 @@ TEST_F(InputRouterImplTest, TouchTypesIgnoringAck) {
   EXPECT_FALSE(HasPendingEvents());
 }
 
-TEST_F(InputRouterImplTest, GestureTypesIgnoringAck) {
+// TODO(https://crbug.com/866946): Test is flaky on Fuchsia.
+#if defined(OS_FUCHSIA)
+#define MAYBE_GestureTypesIgnoringAck DISABLED_GestureTypesIgnoringAck
+#else
+#define MAYBE_GestureTypesIgnoringAck GestureTypesIgnoringAck
+#endif
+TEST_F(InputRouterImplTest, MAYBE_GestureTypesIgnoringAck) {
   // We test every gesture type, ensuring that the stream of gestures is valid.
   const WebInputEvent::Type eventTypes[] = {
       WebInputEvent::kGestureTapDown,     WebInputEvent::kGestureShowPress,
@@ -1233,6 +1242,9 @@ TEST_F(InputRouterImplTest, TouchActionResetBeforeEventReachesRenderer) {
 
   // Ensure touch action is still none, as the next touch start hasn't been
   // acked yet. ScrollBegin and ScrollEnd don't require acks.
+  SimulateGestureEvent(WebInputEvent::kGestureTapDown,
+                       blink::kWebGestureDeviceTouchscreen);
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
   EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
@@ -1308,6 +1320,9 @@ TEST_F(InputRouterImplTest, TouchActionResetWhenTouchHasNoConsumer) {
 
   // Ensure we have touch-action:none. ScrollBegin and ScrollEnd don't require
   // acks.
+  SimulateGestureEvent(WebInputEvent::kGestureTapDown,
+                       blink::kWebGestureDeviceTouchscreen);
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
   EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
@@ -1361,6 +1376,9 @@ TEST_F(InputRouterImplTest, TouchActionResetWhenTouchHandlerRemoved) {
   dispatched_messages[1]->ToEvent()->CallCallback(
       INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
+  SimulateGestureEvent(WebInputEvent::kGestureTapDown,
+                       blink::kWebGestureDeviceTouchscreen);
+  EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
   EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
@@ -1505,8 +1523,32 @@ TEST_F(InputRouterImplTest, DoubleTapGestureDependsOnFirstTap) {
   EXPECT_EQ(0, client_->in_flight_event_count());
 }
 
+class TouchpadPinchInputRouterImplTest
+    : public InputRouterImplTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  TouchpadPinchInputRouterImplTest() : async_events_enabled_(GetParam()) {
+    if (async_events_enabled_) {
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kTouchpadAsyncPinchEvents);
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(
+          features::kTouchpadAsyncPinchEvents);
+    }
+  }
+  ~TouchpadPinchInputRouterImplTest() = default;
+
+  const bool async_events_enabled_;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+  DISALLOW_COPY_AND_ASSIGN(TouchpadPinchInputRouterImplTest);
+};
+
+INSTANTIATE_TEST_CASE_P(, TouchpadPinchInputRouterImplTest, ::testing::Bool());
+
 // Test that GesturePinchUpdate is handled specially for trackpad
-TEST_F(InputRouterImplTest, TouchpadPinchUpdate) {
+TEST_P(TouchpadPinchInputRouterImplTest, TouchpadPinchUpdate) {
   // GesturePinchUpdate for trackpad sends synthetic wheel events.
   // Note that the Touchscreen case is verified as NOT doing this as
   // part of the ShowPressIsInOrder test.
@@ -1535,6 +1577,8 @@ TEST_F(InputRouterImplTest, TouchpadPinchUpdate) {
   EXPECT_EQ(25, synthetic_wheel->PositionInScreen().y);
   EXPECT_TRUE(synthetic_wheel->GetModifiers() &
               blink::WebInputEvent::kControlKey);
+  EXPECT_EQ(blink::WebMouseWheelEvent::kPhaseBegan, synthetic_wheel->phase);
+  EXPECT_EQ(blink::WebInputEvent::kBlocking, synthetic_wheel->dispatch_type);
 
   dispatched_messages[0]->ToEvent()->CallCallback(
       INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
@@ -1559,6 +1603,102 @@ TEST_F(InputRouterImplTest, TouchpadPinchUpdate) {
   input_event = dispatched_messages[0]->ToEvent()->Event()->web_event.get();
   ASSERT_EQ(WebInputEvent::kMouseWheel, input_event->GetType());
   synthetic_wheel = static_cast<const WebMouseWheelEvent*>(input_event);
+  EXPECT_EQ(blink::WebMouseWheelEvent::kPhaseChanged, synthetic_wheel->phase);
+  if (async_events_enabled_) {
+    EXPECT_EQ(blink::WebInputEvent::kEventNonBlocking,
+              synthetic_wheel->dispatch_type);
+  } else {
+    EXPECT_EQ(blink::WebInputEvent::kBlocking, synthetic_wheel->dispatch_type);
+  }
+
+  if (async_events_enabled_) {
+    dispatched_messages[0]->ToEvent()->CallCallback(
+        INPUT_EVENT_ACK_STATE_IGNORED);
+  } else {
+    dispatched_messages[0]->ToEvent()->CallCallback(
+        INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  }
+
+  // Check that the correct HANDLED pinch event was received.
+  EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
+  EXPECT_EQ(WebInputEvent::kGesturePinchUpdate,
+            disposition_handler_->ack_event_type());
+  if (async_events_enabled_) {
+    EXPECT_EQ(INPUT_EVENT_ACK_STATE_IGNORED, disposition_handler_->ack_state());
+  } else {
+    EXPECT_EQ(INPUT_EVENT_ACK_STATE_NOT_CONSUMED,
+              disposition_handler_->ack_state());
+  }
+  EXPECT_FLOAT_EQ(
+      0.3f,
+      disposition_handler_->acked_gesture_event().data.pinch_update.scale);
+
+  SimulateGestureEvent(WebInputEvent::kGesturePinchEnd,
+                       blink::kWebGestureDeviceTouchpad);
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  input_event = dispatched_messages[0]->ToEvent()->Event()->web_event.get();
+  ASSERT_EQ(WebInputEvent::kMouseWheel, input_event->GetType());
+  synthetic_wheel = static_cast<const WebMouseWheelEvent*>(input_event);
+  EXPECT_EQ(blink::WebMouseWheelEvent::kPhaseEnded, synthetic_wheel->phase);
+  EXPECT_EQ(blink::WebInputEvent::kEventNonBlocking,
+            synthetic_wheel->dispatch_type);
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_IGNORED);
+
+  EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
+  EXPECT_EQ(WebInputEvent::kGesturePinchEnd,
+            disposition_handler_->ack_event_type());
+  EXPECT_EQ(INPUT_EVENT_ACK_STATE_IGNORED, disposition_handler_->ack_state());
+
+  // The first event is blocked. We should send following wheel events as
+  // blocking events.
+  SimulateGestureEvent(WebInputEvent::kGesturePinchBegin,
+                       blink::kWebGestureDeviceTouchpad);
+  EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
+  ASSERT_EQ(WebInputEvent::kGesturePinchBegin,
+            disposition_handler_->ack_event_type());
+
+  SimulateGesturePinchUpdateEvent(1.5f, 20, 25, 0,
+                                  blink::kWebGestureDeviceTouchpad);
+
+  // Verify we actually sent a special wheel event to the renderer.
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  input_event = dispatched_messages[0]->ToEvent()->Event()->web_event.get();
+  ASSERT_EQ(WebInputEvent::kMouseWheel, input_event->GetType());
+  synthetic_wheel = static_cast<const WebMouseWheelEvent*>(input_event);
+  EXPECT_TRUE(synthetic_wheel->GetModifiers() &
+              blink::WebInputEvent::kControlKey);
+  EXPECT_EQ(blink::WebMouseWheelEvent::kPhaseBegan, synthetic_wheel->phase);
+  EXPECT_EQ(blink::WebInputEvent::kBlocking, synthetic_wheel->dispatch_type);
+
+  dispatched_messages[0]->ToEvent()->CallCallback(
+      INPUT_EVENT_ACK_STATE_CONSUMED);
+
+  // Check that the correct handled pinch event was received.
+  EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
+  ASSERT_EQ(WebInputEvent::kGesturePinchUpdate,
+            disposition_handler_->ack_event_type());
+  EXPECT_EQ(INPUT_EVENT_ACK_STATE_CONSUMED, disposition_handler_->ack_state());
+  EXPECT_EQ(
+      1.5f,
+      disposition_handler_->acked_gesture_event().data.pinch_update.scale);
+  EXPECT_EQ(0, client_->in_flight_event_count());
+
+  // Second a second pinch event.
+  SimulateGesturePinchUpdateEvent(0.3f, 20, 25, 0,
+                                  blink::kWebGestureDeviceTouchpad);
+  dispatched_messages = GetAndResetDispatchedMessages();
+  ASSERT_EQ(1U, dispatched_messages.size());
+  ASSERT_TRUE(dispatched_messages[0]->ToEvent());
+  input_event = dispatched_messages[0]->ToEvent()->Event()->web_event.get();
+  ASSERT_EQ(WebInputEvent::kMouseWheel, input_event->GetType());
+  synthetic_wheel = static_cast<const WebMouseWheelEvent*>(input_event);
+  EXPECT_EQ(blink::WebMouseWheelEvent::kPhaseChanged, synthetic_wheel->phase);
+  EXPECT_EQ(blink::WebInputEvent::kBlocking, synthetic_wheel->dispatch_type);
 
   dispatched_messages[0]->ToEvent()->CallCallback(
       INPUT_EVENT_ACK_STATE_CONSUMED);
@@ -1571,12 +1711,6 @@ TEST_F(InputRouterImplTest, TouchpadPinchUpdate) {
   EXPECT_FLOAT_EQ(
       0.3f,
       disposition_handler_->acked_gesture_event().data.pinch_update.scale);
-
-  SimulateGestureEvent(WebInputEvent::kGesturePinchEnd,
-                       blink::kWebGestureDeviceTouchpad);
-  EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
-  ASSERT_EQ(WebInputEvent::kGesturePinchEnd,
-            disposition_handler_->ack_event_type());
 }
 
 // Test proper handling of touchpad Gesture{Pinch,Scroll}Update sequences.

@@ -13,7 +13,6 @@
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
-#include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
 
 namespace blink {
@@ -29,8 +28,8 @@ bool HeapCompact::force_compaction_gc_ = false;
 // heap compaction-enhanced GC.
 class HeapCompact::MovableObjectFixups final {
  public:
-  static std::unique_ptr<MovableObjectFixups> Create() {
-    return base::WrapUnique(new MovableObjectFixups);
+  static std::unique_ptr<MovableObjectFixups> Create(ThreadHeap* heap) {
+    return base::WrapUnique(new MovableObjectFixups(heap));
   }
 
   ~MovableObjectFixups() = default;
@@ -61,14 +60,23 @@ class HeapCompact::MovableObjectFixups final {
   }
 
   void Add(MovableReference* slot) {
+    DCHECK(*slot);
     MovableReference reference = *slot;
-    BasePage* ref_page = PageFromObject(reference);
+    BasePage* ref_page =
+        heap_->LookupPageForAddress(reinterpret_cast<Address>(reference));
+
+    // ref_page is null if *slot is pointing to an off-heap region. This may
+    // happy if *slot is pointing to an inline buffer of HeapVector with inline
+    // capacity.
+    if (!ref_page)
+      return;
     // Nothing to compact on a large object's page.
     if (ref_page->IsLargeObjectPage())
       return;
 
+    if (!HeapCompact::IsCompactableArena(ref_page->Arena()->ArenaIndex()))
+      return;
 #if DCHECK_IS_ON()
-    DCHECK(HeapCompact::IsCompactableArena(ref_page->Arena()->ArenaIndex()));
     auto it = fixups_.find(reference);
     DCHECK(it == fixups_.end() || it->value == slot);
 #endif
@@ -107,12 +115,18 @@ class HeapCompact::MovableObjectFixups final {
     AddInteriorFixup(slot);
   }
 
-  void AddFixupCallback(MovableReference reference,
+  void AddFixupCallback(MovableReference* slot,
                         MovingObjectCallback callback,
                         void* callback_data) {
-    DCHECK(!fixup_callbacks_.Contains(reference));
-    fixup_callbacks_.insert(reference, std::pair<void*, MovingObjectCallback>(
-                                           callback_data, callback));
+    DCHECK(!fixup_callbacks_.Contains(slot));
+    fixup_callbacks_.insert(
+        slot, std::pair<void*, MovingObjectCallback>(callback_data, callback));
+  }
+
+  void RemoveFixupCallback(MovableReference* slot) {
+    auto it = fixup_callbacks_.find(slot);
+    if (it != fixup_callbacks_.end())
+      fixup_callbacks_.erase(it);
   }
 
   void RelocateInteriorFixups(Address from, Address to, size_t size) {
@@ -124,25 +138,22 @@ class HeapCompact::MovableObjectFixups final {
     // to adjust. If the backing store of such an interior slot hasn't
     // been moved already, update the slot -> real location mapping.
     // When the backing store is eventually moved, it'll use that location.
-    //
     for (size_t offset = 0; offset < size; offset += sizeof(void*)) {
-      if (!range->IsSet(from + offset))
-        continue;
       MovableReference* slot =
           reinterpret_cast<MovableReference*>(from + offset);
+
+      // Early bailout.
+      if (!range->IsSet(reinterpret_cast<Address>(slot)))
+        continue;
+
       auto it = interior_fixups_.find(slot);
       if (it == interior_fixups_.end())
         continue;
 
-      // TODO: with the right sparse bitmap representation, it could be possible
-      // to quickly determine if we've now stepped past the last address
-      // that needed fixup in [address, address + size). Breaking out of this
-      // loop might be worth doing for hash table backing stores with a very
-      // low load factor. But interior fixups are rare.
-
       // If |slot|'s mapping is set, then the slot has been adjusted already.
       if (it->value)
         continue;
+
       Address fixup = to + offset;
       LOG_HEAP_COMPACTION() << "Range interior fixup: " << (from + offset)
                             << " " << it->value << " " << fixup;
@@ -151,16 +162,37 @@ class HeapCompact::MovableObjectFixups final {
       // moved/compacted, it'll update |to + offset| with a pointer to the
       // moved backing store.
       interior_fixups_.Set(slot, fixup);
+
+      // If the |slot|'s content is pointing into the region [from, from + size)
+      // we are dealing with an interior pointer that does not point to a valid
+      // HeapObjectHeader. Such references need to be fixed up immediately.
+      Address fixup_contents = *reinterpret_cast<Address*>(fixup);
+      if (fixup_contents > from && fixup_contents < (from + size)) {
+        *reinterpret_cast<Address*>(fixup) = fixup_contents - from + to;
+        continue;
+      }
     }
   }
 
   void Relocate(Address from, Address to) {
     auto it = fixups_.find(from);
-    DCHECK(it != fixups_.end());
+    // This means that there is no corresponding slot for a live backing store.
+    // This may happen because a mutator may change the slot to point to a
+    // different backing store because e.g.:
+    // - Incremental marking marked a backing store as live that was later on
+    //   replaced.
+    // - Backings were changed when being processed in
+    //   EagerSweep/PreFinalizer/WeakProcessing.
+    if (it == fixups_.end())
+      return;
+
 #if DCHECK_IS_ON()
     BasePage* from_page = PageFromObject(from);
     DCHECK(relocatable_pages_.Contains(from_page));
 #endif
+
+    // If the object is referenced by a slot that is contained on a compacted
+    // area itself, check whether it can be updated already.
     MovableReference* slot = reinterpret_cast<MovableReference*>(it->value);
     auto interior = interior_fixups_.find(slot);
     if (interior != interior_fixups_.end()) {
@@ -174,6 +206,7 @@ class HeapCompact::MovableObjectFixups final {
         slot = slot_location;
       }
     }
+
     // If the slot has subsequently been updated, a prefinalizer or
     // a destructor having mutated and expanded/shrunk the collection,
     // do not update and relocate the slot -- |from| is no longer valid
@@ -185,27 +218,19 @@ class HeapCompact::MovableObjectFixups final {
       LOG_HEAP_COMPACTION()
           << "No relocation: slot = " << slot << ", *slot = " << *slot
           << ", from = " << from << ", to = " << to;
-#if DCHECK_IS_ON()
-      // Verify that the already updated slot is valid, meaning:
-      //  - has been cleared.
-      //  - has been updated & expanded with a large object backing store.
-      //  - has been updated with a larger, freshly allocated backing store.
-      //    (on a fresh page in a compactable arena that is not being
-      //    compacted.)
-      if (!*slot)
-        return;
-      BasePage* slot_page = PageFromObject(*slot);
-      DCHECK(
-          slot_page->IsLargeObjectPage() ||
-          (HeapCompact::IsCompactableArena(slot_page->Arena()->ArenaIndex()) &&
-           !relocatable_pages_.Contains(slot_page)));
-#endif
+      VerifyUpdatedSlot(slot);
       return;
     }
+
+    // Update the slots new value.
     *slot = to;
 
     size_t size = 0;
-    auto callback = fixup_callbacks_.find(from);
+
+    // Execute potential fixup callbacks.
+    MovableReference* callback_slot =
+        reinterpret_cast<MovableReference*>(it->value);
+    auto callback = fixup_callbacks_.find(callback_slot);
     if (UNLIKELY(callback != fixup_callbacks_.end())) {
       size = HeapObjectHeader::FromPayload(to)->PayloadSize();
       callback->value.second(callback->value.first, from, to, size);
@@ -231,7 +256,11 @@ class HeapCompact::MovableObjectFixups final {
 #endif
 
  private:
-  MovableObjectFixups() = default;
+  MovableObjectFixups(ThreadHeap* heap) : heap_(heap) {}
+
+  void VerifyUpdatedSlot(MovableReference* slot);
+
+  ThreadHeap* heap_;
 
   // Tracking movable and updatable references. For now, we keep a
   // map which for each movable object, recording the slot that
@@ -243,7 +272,7 @@ class HeapCompact::MovableObjectFixups final {
 
   // Map from movable reference to callbacks that need to be invoked
   // when the object moves.
-  HashMap<MovableReference, std::pair<void*, MovingObjectCallback>>
+  HashMap<MovableReference*, std::pair<void*, MovingObjectCallback>>
       fixup_callbacks_;
 
   // Slot => relocated slot/final location.
@@ -256,6 +285,30 @@ class HeapCompact::MovableObjectFixups final {
 
   std::unique_ptr<SparseHeapBitmap> interiors_;
 };
+
+void HeapCompact::MovableObjectFixups::VerifyUpdatedSlot(
+    MovableReference* slot) {
+// Verify that the already updated slot is valid, meaning:
+//  - has been cleared.
+//  - has been updated & expanded with a large object backing store.
+//  - has been updated with a larger, freshly allocated backing store.
+//    (on a fresh page in a compactable arena that is not being
+//    compacted.)
+#if DCHECK_IS_ON()
+  if (!*slot)
+    return;
+  BasePage* slot_page =
+      heap_->LookupPageForAddress(reinterpret_cast<Address>(*slot));
+  // ref_page is null if *slot is pointing to an off-heap region. This may
+  // happy if *slot is pointing to an inline buffer of HeapVector with
+  // inline capacity.
+  if (!slot_page)
+    return;
+  DCHECK(slot_page->IsLargeObjectPage() ||
+         (HeapCompact::IsCompactableArena(slot_page->Arena()->ArenaIndex()) &&
+          !relocatable_pages_.Contains(slot_page)));
+#endif  // DCHECK_IS_ON()
+}
 
 HeapCompact::HeapCompact(ThreadHeap* heap)
     : heap_(heap),
@@ -283,7 +336,7 @@ HeapCompact::~HeapCompact() = default;
 
 HeapCompact::MovableObjectFixups& HeapCompact::Fixups() {
   if (!fixups_)
-    fixups_ = MovableObjectFixups::Create();
+    fixups_ = MovableObjectFixups::Create(heap_);
   return *fixups_;
 }
 
@@ -301,12 +354,6 @@ bool HeapCompact::ShouldCompact(ThreadHeap* heap,
                         << " count=" << gc_count_since_last_compaction_
                         << " free=" << free_list_size_;
   gc_count_since_last_compaction_++;
-  // It is only safe to compact during non-conservative GCs.
-  // TODO: for the main thread, limit this further to only idle GCs.
-  if (reason != BlinkGC::GCReason::kIdleGC &&
-      reason != BlinkGC::GCReason::kPreciseGC &&
-      reason != BlinkGC::GCReason::kForcedGC)
-    return false;
 
   // If the GCing thread requires a stack scan, do not compact.
   // Why? Should the stack contain an iterator pointing into its
@@ -315,8 +362,20 @@ bool HeapCompact::ShouldCompact(ThreadHeap* heap,
   if (stack_state == BlinkGC::kHeapPointersOnStack)
     return false;
 
+  if (reason == BlinkGC::GCReason::kTesting) {
+    UpdateHeapResidency();
+    return force_compaction_gc_;
+  }
+
   // TODO(keishi): Should be enable after fixing the crashes.
   if (marking_type == BlinkGC::kIncrementalMarking)
+    return false;
+
+  // TODO(harukamt): Add kIncrementalIdleGC and kIncrementalV8FollowupGC when we
+  // enable heap compaction for incremental marking.
+  if (reason != BlinkGC::GCReason::kIdleGC &&
+      reason != BlinkGC::GCReason::kPreciseGC &&
+      reason != BlinkGC::GCReason::kForcedGC)
     return false;
 
   // Compaction enable rules:
@@ -353,20 +412,27 @@ void HeapCompact::Initialize(ThreadState* state) {
   force_compaction_gc_ = false;
 }
 
+void HeapCompact::RemoveSlot(MovableReference* slot) {
+  auto it = traced_slots_.find(slot);
+  if (it != traced_slots_.end())
+    traced_slots_.erase(it);
+  Fixups().RemoveFixupCallback(slot);
+}
+
 void HeapCompact::RegisterMovingObjectReference(MovableReference* slot) {
   if (!do_compact_)
     return;
 
-  Fixups().Add(slot);
+  traced_slots_.insert(slot);
 }
 
-void HeapCompact::RegisterMovingObjectCallback(MovableReference reference,
+void HeapCompact::RegisterMovingObjectCallback(MovableReference* slot,
                                                MovingObjectCallback callback,
                                                void* callback_data) {
   if (!do_compact_)
     return;
 
-  Fixups().AddFixupCallback(reference, callback, callback_data);
+  Fixups().AddFixupCallback(slot, callback, callback_data);
 }
 
 void HeapCompact::UpdateHeapResidency() {
@@ -415,13 +481,19 @@ void HeapCompact::FinishedArenaCompaction(NormalPageArena* arena,
 }
 
 void HeapCompact::Relocate(Address from, Address to) {
-  DCHECK(fixups_);
-  fixups_->Relocate(from, to);
+  Fixups().Relocate(from, to);
 }
 
 void HeapCompact::StartThreadCompaction() {
   if (!do_compact_)
     return;
+
+  // The mapping between the slots and the backing stores are created
+  for (auto** slot : traced_slots_) {
+    if (*slot)
+      Fixups().Add(slot);
+  }
+  traced_slots_.clear();
 }
 
 void HeapCompact::FinishThreadCompaction() {

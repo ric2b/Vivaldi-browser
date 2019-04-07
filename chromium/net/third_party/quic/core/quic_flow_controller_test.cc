@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "net/third_party/quic/platform/api/quic_expect_bug.h"
 #include "net/third_party/quic/platform/api/quic_ptr_util.h"
 #include "net/third_party/quic/platform/api/quic_str_cat.h"
 #include "net/third_party/quic/platform/api/quic_test.h"
@@ -25,12 +26,11 @@ const int64_t kRtt = 100;
 class MockFlowController : public QuicFlowControllerInterface {
  public:
   MockFlowController() {}
+  MockFlowController(const MockFlowController&) = delete;
+  MockFlowController& operator=(const MockFlowController&) = delete;
   ~MockFlowController() override {}
 
   MOCK_METHOD1(EnsureWindowAtLeast, void(QuicByteCount));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockFlowController);
 };
 
 class QuicFlowControllerTest : public QuicTest {

@@ -75,10 +75,9 @@ int BrowserMainRunnerImpl::Initialize(const MainFunctionParams& parameters) {
 
     const base::TimeTicks start_time_step1 = base::TimeTicks::Now();
 
-    base::SamplingHeapProfiler::InitTLSSlot();
+    base::SamplingHeapProfiler::Init();
     if (parameters.command_line.HasSwitch(switches::kSamplingHeapProfiler)) {
-      base::SamplingHeapProfiler* profiler =
-          base::SamplingHeapProfiler::GetInstance();
+      base::SamplingHeapProfiler* profiler = base::SamplingHeapProfiler::Get();
       unsigned sampling_interval = 0;
       bool parsed =
           base::StringToUint(parameters.command_line.GetSwitchValueASCII(
@@ -183,7 +182,7 @@ void BrowserMainRunnerImpl::Shutdown() {
   // startup tracing becomes a version of shutdown tracing).
   // There are two cases:
   // 1. Startup duration is not reached.
-  // 2. Or startup duration is not specified for --trace-config-file flag.
+  // 2. Or if the trace should be saved to file for --trace-config-file flag.
   std::unique_ptr<BrowserShutdownProfileDumper> startup_profiler;
   if (tracing::TraceStartupConfig::GetInstance()
           ->IsTracingStartupForDuration()) {
@@ -193,7 +192,8 @@ void BrowserMainRunnerImpl::Shutdown() {
       startup_profiler.reset(
           new BrowserShutdownProfileDumper(main_loop_->startup_trace_file()));
     }
-  } else if (tracing::TraceStartupConfig::GetInstance()->IsEnabled()) {
+  } else if (tracing::TraceStartupConfig::GetInstance()
+                 ->ShouldTraceToResultFile()) {
     base::FilePath result_file = main_loop_->GetStartupTraceFileName();
     startup_profiler.reset(new BrowserShutdownProfileDumper(result_file));
   }

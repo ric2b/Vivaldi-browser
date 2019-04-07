@@ -65,11 +65,11 @@ Commands.prototype = {
     return {
       'next': {
         'defaultKeyCode': 49, /* '1' key */
-        'binding': this.switchAccess_.moveToNode.bind(this.switchAccess_, true)
+        'binding': this.switchAccess_.moveForward.bind(this.switchAccess_)
       },
       'previous': {
         'defaultKeyCode': 50, /* '2' key */
-        'binding': this.switchAccess_.moveToNode.bind(this.switchAccess_, false)
+        'binding': this.switchAccess_.moveBackward.bind(this.switchAccess_)
       },
       'select': {
         'defaultKeyCode': 51, /* '3' key */
@@ -78,24 +78,6 @@ Commands.prototype = {
       'options': {
         'defaultKeyCode': 52, /* '4' key */
         'binding': this.switchAccess_.showOptionsPage.bind(this.switchAccess_)
-      },
-      'debugNext': {
-        'defaultKeyCode': -1, /* unused key */
-        'binding': this.switchAccess_.debugMoveToNext.bind(this.switchAccess_)
-      },
-      'debugPrevious': {
-        'defaultKeyCode': -1, /* unused key */
-        'binding':
-            this.switchAccess_.debugMoveToPrevious.bind(this.switchAccess_)
-      },
-      'debugChild': {
-        'defaultKeyCode': -1, /* unused key */
-        'binding':
-            this.switchAccess_.debugMoveToFirstChild.bind(this.switchAccess_)
-      },
-      'debugParent': {
-        'defaultKeyCode': -1, /* unused key */
-        'binding': this.switchAccess_.debugMoveToParent.bind(this.switchAccess_)
       }
     };
   }

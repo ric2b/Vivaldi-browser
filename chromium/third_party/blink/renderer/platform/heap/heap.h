@@ -203,11 +203,6 @@ class PLATFORM_EXPORT ThreadHeap {
     return weak_callback_worklist_.get();
   }
 
-  void VisitPersistentRoots(Visitor*);
-  void VisitStackRoots(MarkingVisitor*);
-  void EnterSafePoint(ThreadState*);
-  void LeaveSafePoint();
-
   // Is the finalizable GC object still alive, but slated for lazy sweeping?
   // If a lazy sweep is in progress, returns true if the object was found
   // to be not reachable during the marking phase, but it has yet to be swept
@@ -262,7 +257,7 @@ class PLATFORM_EXPORT ThreadHeap {
   //
   // For Blink, |HeapLinkedHashSet<>| is currently the only abstraction which
   // relies on this feature.
-  void RegisterMovingObjectCallback(MovableReference,
+  void RegisterMovingObjectCallback(MovableReference*,
                                     MovingObjectCallback,
                                     void* callback_data);
 
@@ -280,17 +275,19 @@ class PLATFORM_EXPORT ThreadHeap {
   Address AllocateOnArenaIndex(ThreadState*,
                                size_t,
                                int arena_index,
-                               size_t gc_info_index,
+                               uint32_t gc_info_index,
                                const char* type_name);
   template <typename T>
   static Address Allocate(size_t, bool eagerly_sweep = false);
   template <typename T>
   static Address Reallocate(void* previous, size_t);
 
-  void ProcessMarkingStack(Visitor*);
   void WeakProcessing(Visitor*);
-  void MarkNotFullyConstructedObjects(Visitor*);
-  bool AdvanceMarkingStackProcessing(Visitor*, TimeTicks deadline);
+
+  // Marks not fully constructed objects.
+  void MarkNotFullyConstructedObjects(MarkingVisitor*);
+  // Marks the transitive closure including ephemerons.
+  bool AdvanceMarking(MarkingVisitor*, TimeTicks deadline);
   void VerifyMarking();
 
   // Conservatively checks whether an address is a pointer in any of the
@@ -304,7 +301,7 @@ class PLATFORM_EXPORT ThreadHeap {
 
   size_t ObjectPayloadSizeForTesting();
 
-  AddressCache* address_cache() { return address_cache_.get(); }
+  AddressCache* address_cache() const { return address_cache_.get(); }
 
   PagePool* GetFreePagePool() { return free_page_pool_.get(); }
 
@@ -350,9 +347,9 @@ class PLATFORM_EXPORT ThreadHeap {
   //   (*) More than 33% of the same type of vectors have been promptly
   //       freed since the last GC.
   //
-  BaseArena* VectorBackingArena(size_t gc_info_index) {
+  BaseArena* VectorBackingArena(uint32_t gc_info_index) {
     DCHECK(thread_state_->CheckThread());
-    size_t entry_index = gc_info_index & kLikelyToBePromptlyFreedArrayMask;
+    uint32_t entry_index = gc_info_index & kLikelyToBePromptlyFreedArrayMask;
     --likely_to_be_promptly_freed_[entry_index];
     int arena_index = vector_backing_arena_index_;
     // If likely_to_be_promptly_freed_[entryIndex] > 0, that means that
@@ -367,14 +364,14 @@ class PLATFORM_EXPORT ThreadHeap {
     DCHECK(IsVectorArenaIndex(arena_index));
     return arenas_[arena_index];
   }
-  BaseArena* ExpandedVectorBackingArena(size_t gc_info_index);
+  BaseArena* ExpandedVectorBackingArena(uint32_t gc_info_index);
   static bool IsVectorArenaIndex(int arena_index) {
     return BlinkGC::kVector1ArenaIndex <= arena_index &&
            arena_index <= BlinkGC::kVector4ArenaIndex;
   }
   static bool IsNormalArenaIndex(int);
   void AllocationPointAdjusted(int arena_index);
-  void PromptlyFreed(size_t gc_info_index);
+  void PromptlyFreed(uint32_t gc_info_index);
   void ClearArenaAges();
   int ArenaIndexOfVectorArenaLeastRecentlyExpanded(int begin_arena_index,
                                                    int end_arena_index);
@@ -602,7 +599,7 @@ class VerifyEagerFinalization {
 inline Address ThreadHeap::AllocateOnArenaIndex(ThreadState* state,
                                                 size_t size,
                                                 int arena_index,
-                                                size_t gc_info_index,
+                                                uint32_t gc_info_index,
                                                 const char* type_name) {
   DCHECK(state->IsAllocationAllowed());
   DCHECK_NE(arena_index, BlinkGC::kLargeObjectArenaIndex);
@@ -651,7 +648,7 @@ Address ThreadHeap::Reallocate(void* previous, size_t size) {
       arena_index = ArenaIndexForObjectSize(size);
   }
 
-  size_t gc_info_index = GCInfoTrait<T>::Index();
+  uint32_t gc_info_index = GCInfoTrait<T>::Index();
   // TODO(haraken): We don't support reallocate() for finalizable objects.
   DCHECK(!GCInfoTable::Get()
               .GCInfoFromIndex(previous_header->GcInfoIndex())
@@ -677,11 +674,17 @@ Address ThreadHeap::Reallocate(void* previous, size_t size) {
 template <typename T>
 void Visitor::HandleWeakCell(Visitor* self, void* object) {
   T** cell = reinterpret_cast<T**>(object);
-  // '-1' means deleted value. This can happen when weak fields are deleted
-  // while incremental marking is running.
-  if (*cell && (*cell == reinterpret_cast<T*>(-1) ||
-                !ObjectAliveTrait<T>::IsHeapObjectAlive(*cell)))
-    *cell = nullptr;
+  T* contents = *cell;
+  if (contents) {
+    if (contents == reinterpret_cast<T*>(-1)) {
+      // '-1' means deleted value. This can happen when weak fields are deleted
+      // while incremental marking is running. Deleted values need to be
+      // preserved to avoid reviving objects in containers.
+      return;
+    }
+    if (!ObjectAliveTrait<T>::IsHeapObjectAlive(contents))
+      *cell = nullptr;
+  }
 }
 
 }  // namespace blink

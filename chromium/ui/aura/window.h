@@ -50,6 +50,9 @@ class Transform;
 namespace ui {
 enum class DomCode;
 class Layer;
+}  // namespace ui
+
+namespace ws {
 namespace mojom {
 enum class EventTargetingPolicy;
 }
@@ -57,11 +60,13 @@ enum class EventTargetingPolicy;
 
 namespace aura {
 
+class Env;
 class LayoutManager;
 class ScopedKeyboardHook;
 class WindowDelegate;
 class WindowObserver;
 class WindowPortForShutdown;
+class WindowTargeter;
 class WindowTreeHost;
 
 // Defined in class_property.h (which we do not include)
@@ -118,10 +123,12 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   typedef std::vector<Window*> Windows;
 
   explicit Window(WindowDelegate* delegate,
-                  client::WindowType type = client::WINDOW_TYPE_UNKNOWN);
+                  client::WindowType type = client::WINDOW_TYPE_UNKNOWN,
+                  Env* env = nullptr);
   Window(WindowDelegate* delegate,
          std::unique_ptr<WindowPort> port,
-         client::WindowType type = client::WINDOW_TYPE_UNKNOWN);
+         client::WindowType type = client::WINDOW_TYPE_UNKNOWN,
+         Env* env = nullptr);
   ~Window() override;
 
   // Initializes the window. This creates the window's layer.
@@ -211,8 +218,9 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
 
   // Sets a new event-targeter for the window, and returns the previous
   // event-targeter.
-  std::unique_ptr<ui::EventTargeter> SetEventTargeter(
-      std::unique_ptr<ui::EventTargeter> targeter);
+  std::unique_ptr<WindowTargeter> SetEventTargeter(
+      std::unique_ptr<WindowTargeter> targeter);
+  WindowTargeter* targeter() { return targeter_.get(); }
 
   // Changes the bounds of the window. If present, the window's parent's
   // LayoutManager may adjust the bounds.
@@ -296,8 +304,8 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   void RemoveObserver(WindowObserver* observer);
   bool HasObserver(const WindowObserver* observer) const;
 
-  void SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy policy);
-  ui::mojom::EventTargetingPolicy event_targeting_policy() const {
+  void SetEventTargetingPolicy(ws::mojom::EventTargetingPolicy policy);
+  ws::mojom::EventTargetingPolicy event_targeting_policy() const {
     return event_targeting_policy_;
   }
 
@@ -422,6 +430,16 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // Returns whether this window is embedding another client.
   bool IsEmbeddingClient() const;
 
+  Env* env() { return env_; }
+  const Env* env() const { return env_; }
+
+#if DCHECK_IS_ON()
+  // If passed a non-null value then a non-null aura::Env must be supplied to
+  // the constructor. |error_string| is the string supplied to the DCHECK
+  // calls.
+  static void SetEnvArgRequired(const char* error_string);
+#endif
+
   // ui::GestureConsumer:
   bool RequiresDoubleTapGestureEvents() const override;
 
@@ -468,15 +486,6 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
 
   // Asks the delegate to paint the window.
   void Paint(const ui::PaintContext& context);
-
-  // Gets a Window (either this one or a subwindow) containing |local_point|.
-  // If |return_tightest| is true, returns the tightest-containing (i.e.
-  // furthest down the hierarchy) Window containing the point; otherwise,
-  // returns the loosest.  If |for_event_handling| is true, then hit-test masks
-  // are honored; otherwise, only bounds checks are performed.
-  Window* GetWindowForPoint(const gfx::Point& local_point,
-                            bool return_tightest,
-                            bool for_event_handling);
 
   // Implementation of RemoveChild(). If |child| is being removed as the result
   // of an add, |new_parent| is the new parent |child| is going to be parented
@@ -540,6 +549,7 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   void OnLayerTransformed(const gfx::Transform& old_transform,
                           ui::PropertyChangeReason reason) override;
   void OnLayerOpacityChanged(ui::PropertyChangeReason reason) override;
+  void OnLayerAlphaShapeChanged() override;
 
   // Overridden from ui::EventTarget:
   bool CanAcceptEvent(const ui::Event& event) override;
@@ -554,6 +564,11 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
 
   void RegisterFrameSinkId();
   void UnregisterFrameSinkId();
+
+  // Env this window was created with. Env::GetInstance() if a null Env was
+  // supplied.
+  Env* const env_;
+
   bool registered_frame_sink_id_ = false;
   bool disable_frame_sink_id_registration_ = false;
 
@@ -611,12 +626,12 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   bool transparent_;
 
   std::unique_ptr<LayoutManager> layout_manager_;
-  std::unique_ptr<ui::EventTargeter> targeter_;
+  std::unique_ptr<WindowTargeter> targeter_;
 
   // Makes the window pass all events through to any windows behind it.
-  ui::mojom::EventTargetingPolicy event_targeting_policy_;
+  ws::mojom::EventTargetingPolicy event_targeting_policy_;
 
-  base::ObserverList<WindowObserver, true> observers_;
+  base::ObserverList<WindowObserver, true>::Unchecked observers_;
 
   DISALLOW_COPY_AND_ASSIGN(Window);
 };

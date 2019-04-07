@@ -103,6 +103,10 @@ cast_test_group("cast_tests") {
     ]
   }
 
+  if (is_android && is_cast_using_cma_backend) {
+    tests += [ "//chromecast/media/cma/backend/android:cast_android_cma_backend_unittests" ]
+  }
+
   if (!is_android) {
     tests += [
       ":cast_shell_browsertests",
@@ -579,6 +583,9 @@ buildflag_header("chromecast_buildflags") {
     "ENABLE_CHROMECAST_EXTENSIONS=$enable_chromecast_extensions",
     "ENABLE_CAST_FRAGMENT=$enable_cast_fragment",
     "IS_ANDROID_THINGS_NON_PUBLIC=$is_android_things_non_public",
+    "IS_SINGLE_VOLUME=$is_single_volume",
+    "USE_ANDROID_USER_AGENT=$use_android_user_agent",
+    "USE_CHROMECAST_CDMS=$use_chromecast_cdms",
   ]
 }
 

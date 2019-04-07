@@ -13,9 +13,9 @@ html:not([subframe]) #sub-frame-error {
 }
 
 #diagnose-button {
-  -webkit-margin-start: 0;
   float: none;
   margin-bottom: 10px;
+  margin-inline-start: 0;
   margin-top: 20px;
 }
 
@@ -95,7 +95,7 @@ a {
 }
 
 #suggestions-list p {
-  -webkit-margin-after: 0;
+  margin-block-end: 0;
 }
 
 #suggestions-list ul {
@@ -109,6 +109,76 @@ a {
 
 #short-suggestion {
   margin-top: 5px;
+}
+
+#error-information-button {
+  content: -webkit-image-set(
+          url(../../resources/default_100_percent/neterror/help_outline.png) 1x,
+          url(../../resources/default_200_percent/neterror/help_outline.png) 2x);
+  height: 24px;
+  vertical-align: -.15em;
+  width: 24px;
+}
+
+.use-popup-container#error-information-popup-container
+  #error-information-popup {
+  align-items: center;
+  background-color: rgba(0,0,0,.65);
+  display: flex;
+  height: 100%;
+  left: 0;
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 100;
+}
+
+.use-popup-container#error-information-popup-container
+  #error-information-popup-content > p {
+  margin-bottom: 11px;
+  margin-inline-start: 20px;
+}
+
+.use-popup-container#error-information-popup-container #suggestions-list ul {
+  margin-inline-start: 15px;
+}
+
+.use-popup-container#error-information-popup-container
+  #error-information-popup-box {
+  background-color: white;
+  left: 5%;
+  padding-bottom: 15px;
+  padding-top: 15px;
+  position: fixed;
+  width: 90%;
+  z-index: 101;
+}
+
+.use-popup-container#error-information-popup-container div.error-code {
+  margin-inline-start: 20px;
+}
+
+.use-popup-container#error-information-popup-container #suggestions-list p {
+  margin-inline-start: 20px;
+}
+
+:not(.use-popup-container)#error-information-popup-container
+  #error-information-popup-close {
+  display: none;
+}
+
+#error-information-popup-close {
+  margin-bottom: 0px;
+  margin-inline-end: 35px;
+  margin-top: 15px;
+  text-align: end;
+}
+
+.link-button {
+  color: rgb(66, 133, 244);
+  display: inline-block;
+  font-weight: bold;
+  text-transform: uppercase;
 }
 
 #sub-frame-error-details {
@@ -168,9 +238,9 @@ a {
 }
 
 .secondary-button {
-  -webkit-margin-end: 16px;
   background: #d9d9d9;
   color: #696969;
+  margin-inline-end: 16px;
 }
 
 .snackbar {
@@ -254,6 +324,119 @@ a {
   }
 }
 
+#download-link, #download-link-clicked {
+  margin-bottom: 15px;
+}
+
+#download-link-clicked {
+  color: #BBB;
+}
+
+#download-link:before, #download-link-clicked:before {
+  content: url(offline_content/download-blue.svg);
+  display: inline-block;
+  margin-inline-end: 4px;
+  vertical-align: -webkit-baseline-middle;
+}
+
+#download-link-clicked:before {
+  width: 0px;
+  opacity: 0;
+}
+
+.offline-content-suggestion-image {
+  height: 35vw;
+  line-height: 0;
+  width: 35vw;
+  flex-basis: 35vw;
+  flex-grow: 0;
+  flex-shrink: 0;
+}
+
+.offline-content-suggestion-image > img {
+  border-bottom-left-radius: 15px;
+  border-top-left-radius: 15px;
+  height: 35vw;
+  line-height: 0;
+  width: 35vw;
+}
+
+.offline-content-suggestion-title {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  display: -webkit-box;
+  margin: 5%;
+  max-height: 65px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.offline-content-suggestion-freshness, .offline-content-suggestion-attribution {
+  color: #646464;
+  display: inline-block;
+  font-size: small;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.offline-content-suggestion-attribution {
+  margin-left: 5%;
+  max-width: 35%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+div.offline-content-suggestion {
+  background-color: rgb(241, 243, 244);
+  border-radius: 15px;
+  display: flex;
+  margin-bottom: 5%;
+  margin-left: 0;
+  margin-right: 0;
+  margin-top: 5%;
+}
+
+#offline-content-summary {
+  border-color: rgb(241, 243, 244);
+  border-radius: 12px;
+  border-style: solid;
+  border-width: 1px;
+  padding: 12px;
+  text-align: center;
+}
+
+.offline-content-summary-image-truncate {
+  width: 45px;
+}
+
+.offline-content-summary-images {
+  direction: ltr;
+  display: flex;
+  margin-top: 10px;
+  justify-content: center;
+  padding-bottom: 12px;
+}
+
+.offline-content-summary-images img {
+  background: rgb(241, 243, 244);
+  border-radius: 50%;
+  box-shadow:
+    0px 1px 2px 0px rgb(155, 155, 155),
+    0px 1px 3px 0px rgb(155, 155, 155);
+  padding: 12px;
+  width: 32px;
+}
+
+.offline-content-summary-description {
+  border-top: 1px solid rgb(241, 243, 244);
+  padding-top: 12px;
+}
+
+.offline-content-summary-action {
+  padding-top: 12px;
+}
+
 /* Don't allow overflow when in a subframe. */
 html[subframe] body {
   overflow: hidden;
@@ -331,8 +514,8 @@ html[subframe] body {
 }
 
 .suggested-left .secondary-button {
-  -webkit-margin-end: 0px;
-  -webkit-margin-start: 16px;
+  margin-inline-end: 0px;
+  margin-inline-start: 16px;
 }
 
 #details-button.singular {
@@ -344,13 +527,12 @@ html[subframe] body {
   height: 48px;
 }
 
-.download-button {
+#download-button {
   box-shadow: none;
   position: relative;
 }
 
-.download-button:before {
-  -webkit-margin-end: 4px;
+#download-button:before {
   background: -webkit-image-set(
       url(../../resources/default_100_percent/neterror/download.png) 1x,
       url(../../resources/default_200_percent/neterror/download.png) 2x)
@@ -359,12 +541,21 @@ html[subframe] body {
   display: inline-block;
   width: 24px;
   height: 24px;
+  margin-inline-end: 4px;
   vertical-align: middle;
 }
 
-.download-button:disabled {
+#download-button:disabled {
   background: rgb(180, 206, 249);
   color: rgb(255, 255, 255);
+}
+
+/*
+TODO(https://crbug.com/852872): UI for offline suggested content is incomplete.
+*/
+.suggested-thumbnail {
+  width: 25vw;
+  height: 25vw;
 }
 
 /* Alternate dino page button styles */
@@ -373,45 +564,6 @@ html[subframe] body {
   color: #fff;
   font-size: 14px;
   height: 48px;
-}
-
-/* Overriding default control button styles */
-#control-buttons .download-button-alternate,
-#control-buttons .download-button-alternate-disabled {
-  background: none;
-  box-shadow: none;
-}
-
-#control-buttons .download-button-alternate:active {
-  background: rgba(66, 133, 244, 0.12);
-}
-
-.download-button-alternate {
-  color: rgb(66, 133, 244);
-}
-
-.download-button-alternate:before {
-  -webkit-margin-end: 4px;
-  background: -webkit-image-set(
-      url(../../resources/default_100_percent/neterror/download_blue.png) 1x,
-      url(../../resources/default_200_percent/neterror/download_blue.png) 2x)
-    no-repeat;
-  content: '';
-  display: inline-block;
-  width: 24px;
-  height: 24px;
-  vertical-align: middle;
-}
-
-.download-button-alternate-disabled {
-  color: rgba(0, 0, 0, 0.38);
-}
-
-.download-button-alternate-disabled:before {
-  background: -webkit-image-set(
-      url(../../resources/default_100_percent/neterror/download_grey.png) 1x,
-      url(../../resources/default_200_percent/neterror/download_grey.png) 2x)
-    no-repeat;
 }
 
 #buttons::after {
@@ -464,7 +616,7 @@ html[subframe] body {
   overflow: hidden;
   position: absolute;
   top: 0;
-  z-index: 2;
+  z-index: 10;
 }
 
 .offline .controller {
@@ -474,7 +626,7 @@ html[subframe] body {
   position: absolute;
   top: 0;
   width: 100vw;
-  z-index: 1;
+  z-index: 9;
 }
 
 #offline-resources {

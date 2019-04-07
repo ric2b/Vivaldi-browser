@@ -104,18 +104,19 @@ base::Optional<network::CORSErrorStatus> CheckPreflightAccess(
       !privilege->block_local_access_from_local_origin_);
 }
 
-base::Optional<network::mojom::CORSError> CheckRedirectLocation(
-    const KURL& url) {
-  static const bool run_blink_side_scheme_check =
-      !RuntimeEnabledFeatures::OutOfBlinkCORSEnabled();
-  // TODO(toyoshim): Deprecate Blink side scheme check when we enable
-  // out-of-renderer CORS support. This will need to deprecate Blink APIs that
-  // are currently used by an embedder. See https://crbug.com/800669.
-  if (run_blink_side_scheme_check &&
-      !SchemeRegistry::ShouldTreatURLSchemeAsCORSEnabled(url.Protocol())) {
-    return network::mojom::CORSError::kRedirectDisallowedScheme;
-  }
-  return network::cors::CheckRedirectLocation(url, run_blink_side_scheme_check);
+base::Optional<network::CORSErrorStatus> CheckRedirectLocation(
+    const KURL& url,
+    network::mojom::FetchRequestMode request_mode,
+    const SecurityOrigin* origin,
+    CORSFlag cors_flag) {
+  base::Optional<url::Origin> origin_to_pass;
+  if (origin)
+    origin_to_pass = origin->ToUrlOrigin();
+
+  // Blink-side implementations rewrite the origin instead of setting the
+  // tainted flag.
+  return network::cors::CheckRedirectLocation(
+      url, request_mode, origin_to_pass, cors_flag == CORSFlag::Set, false);
 }
 
 base::Optional<network::mojom::CORSError> CheckPreflight(
@@ -133,17 +134,15 @@ bool IsCORSEnabledRequestMode(network::mojom::FetchRequestMode request_mode) {
   return network::cors::IsCORSEnabledRequestMode(request_mode);
 }
 
-bool EnsurePreflightResultAndCacheOnSuccess(
+base::Optional<network::CORSErrorStatus> EnsurePreflightResultAndCacheOnSuccess(
     const HTTPHeaderMap& response_header_map,
     const String& origin,
     const KURL& request_url,
     const String& request_method,
     const HTTPHeaderMap& request_header_map,
-    network::mojom::FetchCredentialsMode request_credentials_mode,
-    String* error_description) {
+    network::mojom::FetchCredentialsMode request_credentials_mode) {
   DCHECK(!origin.IsNull());
   DCHECK(!request_method.IsNull());
-  DCHECK(error_description);
 
   base::Optional<network::mojom::CORSError> error;
 
@@ -157,38 +156,23 @@ bool EnsurePreflightResultAndCacheOnSuccess(
           GetOptionalHeaderValue(response_header_map,
                                  HTTPNames::Access_Control_Max_Age),
           &error);
-  if (error) {
-    *error_description = CORS::GetErrorString(
-        CORS::ErrorParameter::CreateForPreflightResponseCheck(*error,
-                                                              String()));
-    return false;
-  }
+  if (error)
+    return network::CORSErrorStatus(*error);
 
-  error = result->EnsureAllowedCrossOriginMethod(
+  base::Optional<network::CORSErrorStatus> status;
+  status = result->EnsureAllowedCrossOriginMethod(
       std::string(request_method.Ascii().data()));
-  if (error) {
-    *error_description = CORS::GetErrorString(
-        CORS::ErrorParameter::CreateForPreflightResponseCheck(*error,
-                                                              request_method));
-    return false;
-  }
+  if (status)
+    return status;
 
-  std::string detected_error_header;
-  error = result->EnsureAllowedCrossOriginHeaders(
-      *CreateNetHttpRequestHeaders(request_header_map), &detected_error_header);
-  if (error) {
-    *error_description = CORS::GetErrorString(
-        CORS::ErrorParameter::CreateForPreflightResponseCheck(
-            *error, String(detected_error_header.data(),
-                           detected_error_header.length())));
-    return false;
-  }
-
-  DCHECK(!error);
+  status = result->EnsureAllowedCrossOriginHeaders(
+      *CreateNetHttpRequestHeaders(request_header_map));
+  if (status)
+    return status;
 
   GetPerThreadPreflightCache().AppendEntry(std::string(origin.Ascii().data()),
                                            request_url, std::move(result));
-  return true;
+  return base::nullopt;
 }
 
 bool CheckIfRequestCanSkipPreflight(

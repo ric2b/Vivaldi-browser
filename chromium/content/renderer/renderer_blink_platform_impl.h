@@ -34,10 +34,6 @@
 #include "third_party/skia/include/core/SkRefCnt.h"           // nogncheck
 #endif
 
-namespace IPC {
-class SyncMessageFilter;
-}
-
 namespace blink {
 namespace scheduler {
 class WebThreadScheduler;
@@ -68,6 +64,10 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       blink::scheduler::WebThreadScheduler* main_thread_scheduler);
   ~RendererBlinkPlatformImpl() override;
 
+  blink::scheduler::WebThreadScheduler* main_thread_scheduler() {
+    return main_thread_scheduler_;
+  }
+
   // Shutdown must be called just prior to shutting down blink.
   void Shutdown();
 
@@ -87,6 +87,11 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
                      base::Time,
                      const char*,
                      size_t) override;
+  void FetchCachedCode(
+      const GURL&,
+      base::OnceCallback<void(base::Time, const std::vector<uint8_t>&)>)
+      override;
+  void ClearCodeCacheEntry(const GURL&) override;
   void CacheMetadataInCacheStorage(
       const blink::WebURL&,
       base::Time,
@@ -120,7 +125,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   viz::FrameSinkId GenerateFrameSinkId() override;
   bool IsLockedToSite() const override;
 
-  blink::WebIDBFactory* IdbFactory() override;
+  std::unique_ptr<blink::WebIDBFactory> CreateIdbFactory() override;
   blink::WebFileSystem* FileSystem() override;
   blink::WebString FileSystemCreateOriginIdentifier(
       const blink::WebSecurityOrigin& origin) override;
@@ -147,7 +152,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       blink::WebMIDIAccessorClient* client) override;
 
   blink::WebBlobRegistry* GetBlobRegistry() override;
-  void SampleGamepads(device::Gamepads&) override;
   std::unique_ptr<blink::WebRTCPeerConnectionHandler>
   CreateRTCPeerConnectionHandler(
       blink::WebRTCPeerConnectionHandlerClient* client,
@@ -158,6 +162,10 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
   std::unique_ptr<blink::WebMediaStreamCenter> CreateMediaStreamCenter()
       override;
+  scoped_refptr<base::SingleThreadTaskRunner> GetWebRtcWorkerThread() override;
+  rtc::Thread* GetWebRtcWorkerThreadRtcThread() override;
+  std::unique_ptr<cricket::PortAllocator> CreateWebRtcPortAllocator(
+      blink::WebLocalFrame* frame) override;
   std::unique_ptr<blink::WebCanvasCaptureHandler> CreateCanvasCaptureHandler(
       const blink::WebSize& size,
       double frame_rate,
@@ -176,8 +184,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   std::unique_ptr<webrtc::RtpCapabilities> GetRtpReceiverCapabilities(
       const blink::WebString& kind) override;
   void UpdateWebRTCAPICount(blink::WebRTCAPIName api_name) override;
-  std::unique_ptr<blink::WebSocketHandshakeThrottle>
-  CreateWebSocketHandshakeThrottle() override;
   std::unique_ptr<blink::WebGraphicsContext3DProvider>
   CreateOffscreenGraphicsContext3DProvider(
       const blink::Platform::ContextAttributes& attributes,
@@ -185,13 +191,14 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       blink::Platform::GraphicsInfo* gl_info) override;
   std::unique_ptr<blink::WebGraphicsContext3DProvider>
   CreateSharedOffscreenGraphicsContext3DProvider() override;
+  std::unique_ptr<blink::WebGraphicsContext3DProvider>
+  CreateWebGPUGraphicsContext3DProvider(
+      const blink::WebURL& top_document_web_url,
+      blink::Platform::GraphicsInfo* gl_info) override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   blink::WebString ConvertIDNToUnicode(const blink::WebString& host) override;
   service_manager::Connector* GetConnector() override;
   blink::InterfaceProvider* GetInterfaceProvider() override;
-  void StartListening(blink::WebPlatformEventType,
-                      blink::WebPlatformEventListener*) override;
-  void StopListening(blink::WebPlatformEventType) override;
   blink::WebThread* CurrentThread() override;
   blink::BlameContext* GetTopLevelBlameContext() override;
   void RecordRappor(const char* metric,
@@ -217,6 +224,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   std::unique_ptr<blink::WebURLLoaderFactory> CreateDefaultURLLoaderFactory()
       override;
+  std::unique_ptr<blink::CodeCacheLoader> CreateCodeCacheLoader() override;
   std::unique_ptr<blink::WebURLLoaderFactory> WrapURLLoaderFactory(
       mojo::ScopedMessagePipeHandle url_loader_factory_handle) override;
   std::unique_ptr<blink::WebURLLoaderFactory> WrapSharedURLLoaderFactory(
@@ -250,10 +258,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
  private:
   bool CheckPreparsedJsCachingEnabled() const;
 
-  // TODO(crbug.com/850997): Remove when Device*EventPump classes are
-  // moved to blink
-  void StopDeviceSensorEventPump(blink::WebPlatformEventType type);
-
   // Ensure that the WebDatabaseHost has been initialized.
   void InitializeWebDatabaseHostIfNeeded();
 
@@ -264,6 +268,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   std::unique_ptr<blink::WebThread> main_thread_;
   std::unique_ptr<service_manager::Connector> connector_;
+  scoped_refptr<base::SingleThreadTaskRunner> io_runner_;
 
 #if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_FUCHSIA)
   class SandboxSupport;
@@ -279,12 +284,9 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   // If true, the renderer process is locked to a site.
   bool is_locked_to_site_;
 
-  std::unique_ptr<blink::WebIDBFactory> web_idb_factory_;
-
   std::unique_ptr<blink::WebBlobRegistry> blob_registry_;
 
   scoped_refptr<base::SingleThreadTaskRunner> default_task_runner_;
-  scoped_refptr<IPC::SyncMessageFilter> sync_message_filter_;
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
 
   std::unique_ptr<WebDatabaseObserverImpl> web_database_observer_impl_;

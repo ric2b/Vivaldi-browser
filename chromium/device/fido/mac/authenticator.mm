@@ -4,13 +4,18 @@
 
 #include "device/fido/mac/authenticator.h"
 
+#include <algorithm>
+
 #import <LocalAuthentication/LocalAuthentication.h>
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
+#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "device/base/features.h"
 #include "device/fido/authenticator_supported_options.h"
 #include "device/fido/ctap_get_assertion_request.h"
@@ -28,10 +33,7 @@ namespace mac {
 bool TouchIdAuthenticator::IsAvailable() {
   if (base::FeatureList::IsEnabled(device::kWebAuthTouchId)) {
     if (__builtin_available(macOS 10.12.2, *)) {
-      base::scoped_nsobject<LAContext> context([[LAContext alloc] init]);
-      return [context
-          canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
-                      error:nil];
+      return TouchIdContext::TouchIdAvailable();
     }
   }
   return false;
@@ -57,6 +59,40 @@ std::unique_ptr<TouchIdAuthenticator> TouchIdAuthenticator::CreateForTesting(
 }
 
 TouchIdAuthenticator::~TouchIdAuthenticator() = default;
+
+bool TouchIdAuthenticator::HasCredentialForGetAssertionRequest(
+    const CtapGetAssertionRequest& request) {
+  if (__builtin_available(macOS 10.12.2, *)) {
+    std::set<std::vector<uint8_t>> allow_list_credential_ids;
+    // Extract applicable credential IDs from the allowList, if the request has
+    // one. If not, any credential matching the RP works.
+    if (request.allow_list()) {
+      for (const auto& credential_descriptor : *request.allow_list()) {
+        if (credential_descriptor.credential_type() !=
+            CredentialType::kPublicKey)
+          continue;
+
+        if (!credential_descriptor.transports().empty() &&
+            !base::ContainsKey(credential_descriptor.transports(),
+                               FidoTransportProtocol::kInternal))
+          continue;
+
+        allow_list_credential_ids.insert(credential_descriptor.id());
+      }
+    }
+
+    return FindCredentialInKeychain(keychain_access_group_, metadata_secret_,
+                                    request.rp_id(), allow_list_credential_ids,
+                                    nullptr /* LAContext */) != base::nullopt;
+  }
+  NOTREACHED();
+  return false;
+}
+
+void TouchIdAuthenticator::InitializeAuthenticator(base::OnceClosure callback) {
+  base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                   std::move(callback));
+}
 
 void TouchIdAuthenticator::MakeCredential(CtapMakeCredentialRequest request,
                                           MakeCredentialCallback callback) {
@@ -96,6 +132,10 @@ std::string TouchIdAuthenticator::GetId() const {
   return "TouchIdAuthenticator";
 }
 
+FidoTransportProtocol TouchIdAuthenticator::AuthenticatorTransport() const {
+  return FidoTransportProtocol::kInternal;
+}
+
 namespace {
 
 AuthenticatorSupportedOptions TouchIdAuthenticatorOptions() {
@@ -117,10 +157,15 @@ const AuthenticatorSupportedOptions& TouchIdAuthenticator::Options() const {
   return options;
 }
 
+base::WeakPtr<FidoAuthenticator> TouchIdAuthenticator::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
 TouchIdAuthenticator::TouchIdAuthenticator(std::string keychain_access_group,
                                            std::string metadata_secret)
     : keychain_access_group_(std::move(keychain_access_group)),
-      metadata_secret_(std::move(metadata_secret)) {}
+      metadata_secret_(std::move(metadata_secret)),
+      weak_factory_(this) {}
 
 }  // namespace mac
 }  // namespace fido

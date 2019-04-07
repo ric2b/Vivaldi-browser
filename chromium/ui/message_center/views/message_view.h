@@ -19,6 +19,7 @@
 #include "ui/message_center/public/cpp/notification_delegate.h"
 #include "ui/message_center/views/slide_out_controller.h"
 #include "ui/views/animation/ink_drop_host_view.h"
+#include "ui/views/focus/focus_manager.h"
 #include "ui/views/view.h"
 
 namespace views {
@@ -38,9 +39,15 @@ class NotificationControlButtonsView;
 // An base class for a notification entry. Contains background and other
 // elements shared by derived notification views.
 class MESSAGE_CENTER_EXPORT MessageView : public views::InkDropHostView,
-                                          public SlideOutController::Delegate {
+                                          public SlideOutController::Delegate,
+                                          public views::FocusChangeListener {
  public:
   static const char kViewClassName[];
+
+  class SlideObserver {
+   public:
+    virtual void OnSlideChanged(const std::string& notification_id) = 0;
+  };
 
   enum class Mode {
     // Normal mode.
@@ -73,13 +80,13 @@ class MESSAGE_CENTER_EXPORT MessageView : public views::InkDropHostView,
   void RequestFocusOnCloseButton();
 
   virtual NotificationControlButtonsView* GetControlButtonsView() const = 0;
-  virtual void UpdateControlButtonsVisibility() = 0;
 
   virtual void SetExpanded(bool expanded);
   virtual bool IsExpanded() const;
   virtual bool IsAutoExpandingAllowed() const;
   virtual bool IsManuallyExpandedOrCollapsed() const;
   virtual void SetManuallyExpandedOrCollapsed(bool value);
+  virtual void CloseSwipeControl();
 
   // Update corner radii of the notification. Subclasses will override this to
   // implement rounded corners if they don't use MessageView's default
@@ -109,6 +116,8 @@ class MESSAGE_CENTER_EXPORT MessageView : public views::InkDropHostView,
   void OnBlur() override;
   void Layout() override;
   void OnGestureEvent(ui::GestureEvent* event) override;
+  void RemovedFromWidget() override;
+  void AddedToWidget() override;
   const char* GetClassName() const final;
 
   // message_center::SlideOutController::Delegate
@@ -116,11 +125,24 @@ class MESSAGE_CENTER_EXPORT MessageView : public views::InkDropHostView,
   void OnSlideChanged() override;
   void OnSlideOut() override;
 
+  // views::FocusChangeListener:
+  void OnWillChangeFocus(views::View* before, views::View* now) override;
+  void OnDidChangeFocus(views::View* before, views::View* now) override;
+
+  void AddSlideObserver(SlideObserver* observer);
+
   Mode GetMode() const;
+
+  // Gets the current horizontal scroll offset of the view by slide gesture.
+  float GetSlideAmount() const;
 
   // Set "setting" mode. This overrides "pinned" mode. See the comment of
   // MessageView::Mode enum for detail.
   void SetSettingMode(bool setting_mode);
+
+  // Disables slide by vertical swipe regardless of the current notification
+  // mode.
+  void DisableSlideForcibly(bool disable);
 
   void set_scroller(views::ScrollView* scroller) { scroller_ = scroller; }
   std::string notification_id() const { return notification_id_; }
@@ -130,6 +152,8 @@ class MESSAGE_CENTER_EXPORT MessageView : public views::InkDropHostView,
   // classes should call this after its view hierarchy is populated to ensure
   // it is on top of other views.
   void CreateOrUpdateCloseButtonView(const Notification& notification);
+
+  virtual void UpdateControlButtonsVisibility() = 0;
 
   // Changes the background color being used by |background_view_| and schedules
   // a paint.
@@ -162,10 +186,16 @@ class MESSAGE_CENTER_EXPORT MessageView : public views::InkDropHostView,
   std::unique_ptr<views::Painter> focus_painter_;
 
   SlideOutController slide_out_controller_;
+  std::vector<SlideObserver*> slide_observers_;
 
   // True if |this| is embedded in another view. Equivalent to |!top_level| in
   // MessageViewFactory parlance.
   bool is_nested_ = false;
+
+  // True if the slide is disabled forcibly.
+  bool disable_slide_ = false;
+
+  views::FocusManager* focus_manager_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(MessageView);
 };

@@ -17,8 +17,8 @@
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_runner.h"
-#include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "services/ws/public/cpp/property_type_converters.h"
+#include "services/ws/public/mojom/window_manager.mojom.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/compositor/layer.h"
@@ -71,7 +71,7 @@ class WindowDelegateView : public views::WidgetDelegateView {
         (traits & PANEL) != 0 ? views::Widget::InitParams::TYPE_PANEL
                               : views::Widget::InitParams::TYPE_WINDOW);
     if ((traits & PANEL) != 0) {
-      params.mus_properties[ui::mojom::WindowManager::kBounds_InitProperty] =
+      params.mus_properties[ws::mojom::WindowManager::kBounds_InitProperty] =
           mojo::TypeConverter<std::vector<uint8_t>, gfx::Rect>::Convert(
               gfx::Rect(100, 100, 300, 300));
     }
@@ -456,7 +456,6 @@ void WindowTypeLauncher::OnStart() {
   views::AuraInit::InitParams params;
   params.connector = context()->connector();
   params.identity = context()->identity();
-  params.mode = views::AuraInit::Mode::AURA_MUS;
   aura_init_ = views::AuraInit::Create(params);
   if (!aura_init_)
     context()->QuitNow();

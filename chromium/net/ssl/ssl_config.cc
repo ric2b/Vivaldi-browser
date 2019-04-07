@@ -6,8 +6,6 @@
 
 #include "net/cert/cert_verifier.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace net {
 
 const uint16_t kDefaultSSLVersionMin = SSL_PROTOCOL_VERSION_TLS1;
@@ -24,11 +22,7 @@ SSLConfig::CertAndStatus::CertAndStatus(const CertAndStatus& other) = default;
 SSLConfig::CertAndStatus::~CertAndStatus() = default;
 
 SSLConfig::SSLConfig()
-    : rev_checking_enabled(vivaldi::IsVivaldiRunning()), // false when testing
-      rev_checking_required_local_anchors(false),
-      sha1_local_anchors_enabled(false),
-      symantec_enforcement_disabled(false),
-      version_min(kDefaultSSLVersionMin),
+    : version_min(kDefaultSSLVersionMin),
       version_max(kDefaultSSLVersionMax),
       tls13_variant(kDefaultTLS13Variant),
       early_data_enabled(false),
@@ -36,6 +30,7 @@ SSLConfig::SSLConfig()
       channel_id_enabled(false),
       false_start_enabled(true),
       require_ecdhe(false),
+      disable_cert_verification_network_fetches(false),
       send_client_cert(false),
       renego_allowed_default(false) {}
 
@@ -57,14 +52,8 @@ bool SSLConfig::IsAllowedBadCert(X509Certificate* cert,
 
 int SSLConfig::GetCertVerifyFlags() const {
   int flags = 0;
-  if (rev_checking_enabled)
-    flags |= CertVerifier::VERIFY_REV_CHECKING_ENABLED;
-  if (rev_checking_required_local_anchors)
-    flags |= CertVerifier::VERIFY_REV_CHECKING_REQUIRED_LOCAL_ANCHORS;
-  if (sha1_local_anchors_enabled)
-    flags |= CertVerifier::VERIFY_ENABLE_SHA1_LOCAL_ANCHORS;
-  if (symantec_enforcement_disabled)
-    flags |= CertVerifier::VERIFY_DISABLE_SYMANTEC_ENFORCEMENT;
+  if (disable_cert_verification_network_fetches)
+    flags |= CertVerifier::VERIFY_DISABLE_NETWORK_FETCHES;
 
   return flags;
 }

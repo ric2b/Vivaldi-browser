@@ -14,7 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/task/cancelable_task_tracker.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "components/favicon_base/favicon_types.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -100,7 +100,7 @@ class BookmarkFaviconFetcher: public content::NotificationObserver {
 
   scoped_refptr<base::SequencedTaskRunner> background_io_task_runner_ =
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND});
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkFaviconFetcher);
 };

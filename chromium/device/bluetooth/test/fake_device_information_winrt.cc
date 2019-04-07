@@ -12,6 +12,7 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/win/async_operation.h"
 #include "base/win/scoped_hstring.h"
+#include "device/bluetooth/test/fake_device_watcher_winrt.h"
 
 namespace device {
 
@@ -20,8 +21,10 @@ namespace {
 using ABI::Windows::Devices::Enumeration::DeviceClass;
 using ABI::Windows::Devices::Enumeration::DeviceInformation;
 using ABI::Windows::Devices::Enumeration::DeviceInformationCollection;
+using ABI::Windows::Devices::Enumeration::DeviceInformationKind;
 using ABI::Windows::Devices::Enumeration::DeviceThumbnail;
 using ABI::Windows::Devices::Enumeration::IDeviceInformation;
+using ABI::Windows::Devices::Enumeration::IDeviceInformationPairing;
 using ABI::Windows::Devices::Enumeration::IDeviceInformationUpdate;
 using ABI::Windows::Devices::Enumeration::IDeviceWatcher;
 using ABI::Windows::Devices::Enumeration::IEnclosureLocation;
@@ -33,8 +36,17 @@ using Microsoft::WRL::Make;
 
 }  // namespace
 
+FakeDeviceInformationWinrt::FakeDeviceInformationWinrt() = default;
+
+FakeDeviceInformationWinrt::FakeDeviceInformationWinrt(const char* name)
+    : name_(name) {}
+
 FakeDeviceInformationWinrt::FakeDeviceInformationWinrt(std::string name)
     : name_(std::move(name)) {}
+
+FakeDeviceInformationWinrt::FakeDeviceInformationWinrt(
+    ComPtr<IDeviceInformationPairing> pairing)
+    : pairing_(std::move(pairing)) {}
 
 FakeDeviceInformationWinrt::~FakeDeviceInformationWinrt() = default;
 
@@ -78,6 +90,15 @@ HRESULT FakeDeviceInformationWinrt::GetThumbnailAsync(
 HRESULT FakeDeviceInformationWinrt::GetGlyphThumbnailAsync(
     IAsyncOperation<DeviceThumbnail*>** async_op) {
   return E_NOTIMPL;
+}
+
+HRESULT FakeDeviceInformationWinrt::get_Kind(DeviceInformationKind* value) {
+  return E_NOTIMPL;
+}
+
+HRESULT FakeDeviceInformationWinrt::get_Pairing(
+    IDeviceInformationPairing** value) {
+  return pairing_.CopyTo(value);
 }
 
 FakeDeviceInformationStaticsWinrt::FakeDeviceInformationStaticsWinrt(
@@ -144,7 +165,7 @@ HRESULT FakeDeviceInformationStaticsWinrt::CreateWatcherDeviceClass(
 HRESULT FakeDeviceInformationStaticsWinrt::CreateWatcherAqsFilter(
     HSTRING aqs_filter,
     IDeviceWatcher** watcher) {
-  return E_NOTIMPL;
+  return Make<FakeDeviceWatcherWinrt>().CopyTo(watcher);
 }
 
 HRESULT FakeDeviceInformationStaticsWinrt::

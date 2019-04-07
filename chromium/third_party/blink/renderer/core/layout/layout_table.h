@@ -145,7 +145,7 @@ class CORE_EXPORT LayoutTable final : public LayoutBlock {
   int VBorderSpacing() const { return v_spacing_; }
 
   bool ShouldCollapseBorders() const {
-    return Style()->BorderCollapse() == EBorderCollapse::kCollapse;
+    return StyleRef().BorderCollapse() == EBorderCollapse::kCollapse;
   }
 
   LayoutUnit BorderLeft() const override;
@@ -428,8 +428,7 @@ class CORE_EXPORT LayoutTable final : public LayoutBlock {
   void SimplifiedNormalFlowLayout() override;
   bool RecalcOverflowAfterStyleChange() override;
   void EnsureIsReadyForPaintInvalidation() override;
-  PaintInvalidationReason InvalidatePaint(
-      const PaintInvalidatorContext&) const override;
+  void InvalidatePaint(const PaintInvalidatorContext&) const override;
   bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const override;
 
  private:

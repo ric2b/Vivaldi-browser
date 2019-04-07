@@ -20,7 +20,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
@@ -273,7 +273,7 @@ void MobileActivator::InitiateActivation(const std::string& service_path) {
   ChangeState(network, PLAN_ACTIVATION_PAGE_LOADING, "");
 
   base::PostTaskWithTraitsAndReply(
-      FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
+      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
       base::BindOnce(&CellularConfigDocument::LoadCellularConfigFile,
                      cellular_config_.get()),
       base::BindOnce(&MobileActivator::ContinueActivation, AsWeakPtr()));

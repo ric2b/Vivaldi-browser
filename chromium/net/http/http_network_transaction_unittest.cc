@@ -30,7 +30,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/auth.h"
 #include "net/base/chunked_upload_data_stream.h"
-#include "net/base/completion_callback.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/elements_upload_data_stream.h"
 #include "net/base/load_timing_info.h"
@@ -277,6 +276,11 @@ class TestSSLConfigService : public SSLConfigService {
   ~TestSSLConfigService() override = default;
 
   void GetSSLConfig(SSLConfig* config) override { *config = config_; }
+
+  bool CanShareConnectionWithClientCerts(
+      const std::string& hostname) const override {
+    return false;
+  }
 
  private:
   SSLConfig config_;
@@ -1861,7 +1865,8 @@ TEST_F(HttpNetworkTransactionTest, KeepAliveEarlyClose) {
   rv = callback.WaitForResult();
   EXPECT_THAT(rv, IsOk());
 
-  scoped_refptr<IOBufferWithSize> io_buf(new IOBufferWithSize(100));
+  scoped_refptr<IOBufferWithSize> io_buf =
+      base::MakeRefCounted<IOBufferWithSize>(100);
   rv = trans->Read(io_buf.get(), io_buf->size(), callback.callback());
   if (rv == ERR_IO_PENDING)
     rv = callback.WaitForResult();
@@ -1902,7 +1907,8 @@ TEST_F(HttpNetworkTransactionTest, KeepAliveEarlyClose2) {
   rv = callback.WaitForResult();
   EXPECT_THAT(rv, IsOk());
 
-  scoped_refptr<IOBufferWithSize> io_buf(new IOBufferWithSize(100));
+  scoped_refptr<IOBufferWithSize> io_buf(
+      base::MakeRefCounted<IOBufferWithSize>(100));
   rv = trans->Read(io_buf.get(), io_buf->size(), callback.callback());
   if (rv == ERR_IO_PENDING)
     rv = callback.WaitForResult();
@@ -5556,7 +5562,7 @@ TEST_F(HttpNetworkTransactionTest,
   EXPECT_EQ("HTTP/1.1 200 OK", response->headers->GetStatusLine());
 
   std::string response_data;
-  scoped_refptr<IOBuffer> buf(new IOBuffer(256));
+  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(256);
   rv = trans.Read(buf.get(), 256, callback.callback());
   EXPECT_EQ(1, callback.GetResult(rv));
 
@@ -5683,7 +5689,7 @@ TEST_F(HttpNetworkTransactionTest,
   EXPECT_EQ("HTTP/1.1 200 OK", response->headers->GetStatusLine());
 
   std::string response_data;
-  scoped_refptr<IOBuffer> buf(new IOBuffer(256));
+  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(256);
   EXPECT_EQ(1, trans->Read(buf.get(), 256, callback.callback()));
   trans.reset();
 
@@ -5788,7 +5794,7 @@ TEST_F(HttpNetworkTransactionTest, HttpsProxySpdyLoadTimingTwoHttpRequests) {
   EXPECT_EQ("HTTP/1.1 200", response->headers->GetStatusLine());
 
   std::string response_data;
-  scoped_refptr<IOBuffer> buf(new IOBuffer(256));
+  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(256);
   rv = trans->Read(buf.get(), 256, callback.callback());
   EXPECT_EQ(1, callback.GetResult(rv));
   // Delete the first request, so the second one can reuse the socket.
@@ -8424,7 +8430,7 @@ TEST_F(HttpNetworkTransactionTest, ResetStateForRestart) {
   HttpNetworkTransaction trans(DEFAULT_PRIORITY, session.get());
 
   // Setup some state (which we expect ResetStateForRestart() will clear).
-  trans.read_buf_ = new IOBuffer(15);
+  trans.read_buf_ = base::MakeRefCounted<IOBuffer>(15);
   trans.read_buf_len_ = 15;
   trans.request_headers_.SetHeader("Authorization", "NTLM");
 
@@ -13559,7 +13565,8 @@ TEST_F(HttpNetworkTransactionTest, MultiRoundAuth) {
 
   // Read the body since the fourth round was successful. This will also
   // release the socket back to the pool.
-  scoped_refptr<IOBufferWithSize> io_buf(new IOBufferWithSize(50));
+  scoped_refptr<IOBufferWithSize> io_buf =
+      base::MakeRefCounted<IOBufferWithSize>(50);
   rv = trans.Read(io_buf.get(), io_buf->size(), callback.callback());
   if (rv == ERR_IO_PENDING)
     rv = callback.WaitForResult();
@@ -13687,11 +13694,11 @@ class UrlRecordingHttpAuthHandlerMock : public HttpAuthHandlerMock {
  protected:
   int GenerateAuthTokenImpl(const AuthCredentials* credentials,
                             const HttpRequestInfo* request,
-                            const CompletionCallback& callback,
+                            CompletionOnceCallback callback,
                             std::string* auth_token) override {
     *url_ = request->url;
     return HttpAuthHandlerMock::GenerateAuthTokenImpl(
-        credentials, request, callback, auth_token);
+        credentials, request, std::move(callback), auth_token);
   }
 
  private:

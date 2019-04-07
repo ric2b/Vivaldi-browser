@@ -158,7 +158,7 @@
   "vr_perf_tests": {
     "label": "//tools/perf/contrib/vr_benchmarks:vr_perf_tests",
     "type": "script",
-    "script": "//testing/scripts/run_telemetry_benchmark_as_googletest.py",
+    "script": "//testing/scripts/run_performance_tests.py",
     "args": [
       "../../tools/perf/run_benchmark",
     ],
@@ -169,10 +169,6 @@
   },
   "base_unittests": {
     "label": "//base:base_unittests",
-    "type": "console_test_launcher",
-  },
-  "battor_agent_unittests": {
-    "label": "//tools/battor_agent:battor_agent_unittests",
     "type": "console_test_launcher",
   },
   "blink_common_unittests": {
@@ -342,6 +338,11 @@
       "--log-path=${ISOLATED_OUTDIR}/chromedriver.log",
     ],
   },
+  "chromedriver_replay_unittests": {
+    "label": "//chrome/test/chromedriver:chromedriver_replay_unittests",
+    "type": "script",
+    "script": "//chrome/test/chromedriver/log_replay/client_replay_unittest.py"
+  },
   "chromedriver_unittests": {
     "label": "//chrome/test/chromedriver:chromedriver_unittests",
     "type": "windowed_test_launcher",
@@ -452,6 +453,10 @@
     "label": "//components/cronet/android:cronet_package",
     "type": "additional_compile_target",
   },
+  "cronet_perf_test_apk": {
+    "label": "//components/cronet/android:cronet_perf_test_apk",
+    "type": "additional_compile_target",
+  },
   "cronet_sample_test_apk": {
     "label": "//components/cronet/android:cronet_sample_test_apk",
     "type": "console_test_launcher",
@@ -470,6 +475,10 @@
   },
   "cronet_tests": {
     "label": "//components/cronet:cronet_tests",
+    "type": "console_test_launcher",
+  },
+  "cronet_tests_android": {
+    "label": "//components/cronet/android:cronet_tests_android",
     "type": "console_test_launcher",
   },
   "cronet_unittests": {
@@ -867,6 +876,10 @@
       "apks/MonochromePublic.apk",
     ],
   },
+  "monochrome_public_test_ar_apk": {
+    "label": "//chrome/android:monochrome_public_test_ar_apk",
+    "type": "console_test_launcher",
+  },
   "monochrome_static_initializers": {
     "label": "//chrome/android:monochrome_static_initializers",
     "type": "additional_compile_target",
@@ -882,10 +895,6 @@
     "args": [
       "../../tools/metrics/metrics_python_tests.py"
     ]
-  },
-  "mash_unittests": {
-    "label": "//mash:mash_unittests",
-    "type": "windowed_test_launcher",
   },
   "nacl_helper_nonsfi_unittests": {
     "label": "//components/nacl/loader:nacl_helper_nonsfi_unittests",
@@ -944,10 +953,6 @@
   "pdf_unittests": {
     "label": "//pdf:pdf_unittests",
     "type": "console_test_launcher",
-  },
-  "pdfium_all": {
-    "label": "//third_party/pdfium:pdfium_all",
-    "type": "additional_compile_target",
   },
   "pdfium_test": {
     "label": "//third_party/pdfium/samples:pdfium_test",
@@ -1065,6 +1070,10 @@
     "args": [
       "../../content/test/gpu/run_gpu_integration_test.py",
     ],
+  },
+  "telemetry_gpu_integration_test_scripts_only": {
+    "label": "//chrome/test:telemetry_gpu_integration_test_scripts_only",
+    "type": "additional_compile_target",
   },
   "telemetry_gpu_unittests": {
     "label": "//chrome/test:telemetry_gpu_unittests",
@@ -1203,9 +1212,10 @@
   "vr_common_perftests": {
     "label": "//chrome/browser/vr:vr_common_perftests",
     "type": "script",
-    "script": "//testing/scripts/run_performance_tests_wrapper.py",
+    "script": "//testing/scripts/run_performance_tests.py",
     "args": [
       "vr_common_perftests",
+      "--non-telemetry=1",
       "--adb-path",
       "src/third_party/android_tools/sdk/platform-tools/adb",
     ]
@@ -1257,10 +1267,6 @@
   "url_unittests": {
     "label": "//url:url_unittests",
     "type": "console_test_launcher",
-  },
-  "v8:gn_all": {
-    "label": "//v8:gn_all",
-    "type": "additional_compile_target",
   },
   "video_decode_accelerator_unittest": {
     "label": "//media/gpu:video_decode_accelerator_unittest",
@@ -1353,6 +1359,14 @@
     "args": [
       "../../third_party/blink/tools/run_blinkpy_tests.py"
     ]
+  },
+  "webrunner_browsertests": {
+    "label": "//webrunner:webrunner_browsertests",
+    "type": "console_test_launcher",
+  },
+  "webrunner_unittests": {
+    "label": "//webrunner:webrunner_unittests",
+    "type": "console_test_launcher",
   },
   "webkit_unit_tests": {
     "label": "//third_party/blink/renderer/controller:webkit_unit_tests",

@@ -34,9 +34,6 @@
 #if defined(IsMinimized)
 #undef IsMinimized
 #endif
-#if defined(CreateWindow)
-#undef CreateWindow
-#endif
 #endif
 
 namespace base {
@@ -52,6 +49,7 @@ namespace ui {
 class Accelerator;
 class Compositor;
 class DefaultThemeProvider;
+class GestureRecognizer;
 class InputMethod;
 class Layer;
 class NativeTheme;
@@ -778,6 +776,10 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // Whether the widget supports translucency.
   bool IsTranslucentWindowOpacitySupported() const;
 
+  // Returns the gesture recognizer which can handle touch/gesture events on
+  // this.
+  ui::GestureRecognizer* GetGestureRecognizer();
+
   // Called when the delegate's CanResize or CanMaximize changes.
   void OnSizeConstraintsChanged();
 
@@ -897,7 +899,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
   base::ObserverList<WidgetObserver> observers_;
 
-  base::ObserverList<WidgetRemovalsObserver> removals_observers_;
+  base::ObserverList<WidgetRemovalsObserver>::Unchecked removals_observers_;
 
   // Non-owned pointer to the Widget's delegate. If a NULL delegate is supplied
   // to Init() a default WidgetDelegate is created.

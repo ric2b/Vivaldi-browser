@@ -23,7 +23,7 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "base/auto_reset.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/window.h"
@@ -226,7 +226,7 @@ bool WindowState::HasMaximumWidthOrHeight() const {
 bool WindowState::CanMaximize() const {
   // Window must allow maximization and have no maximum width or height.
   if ((window_->GetProperty(aura::client::kResizeBehaviorKey) &
-       ui::mojom::kResizeBehaviorCanMaximize) == 0) {
+       ws::mojom::kResizeBehaviorCanMaximize) == 0) {
     return false;
   }
 
@@ -235,12 +235,12 @@ bool WindowState::CanMaximize() const {
 
 bool WindowState::CanMinimize() const {
   return (window_->GetProperty(aura::client::kResizeBehaviorKey) &
-          ui::mojom::kResizeBehaviorCanMinimize) != 0;
+          ws::mojom::kResizeBehaviorCanMinimize) != 0;
 }
 
 bool WindowState::CanResize() const {
   return (window_->GetProperty(aura::client::kResizeBehaviorKey) &
-          ui::mojom::kResizeBehaviorCanResize) != 0;
+          ws::mojom::kResizeBehaviorCanResize) != 0;
 }
 
 bool WindowState::CanActivate() const {
@@ -314,8 +314,6 @@ void WindowState::DisableAlwaysOnTop(aura::Window* window_on_top) {
 }
 
 void WindowState::RestoreAlwaysOnTop() {
-  if (delegate() && delegate()->RestoreAlwaysOnTop(this))
-    return;
   if (cached_always_on_top_) {
     cached_always_on_top_ = false;
     window_->SetProperty(aura::client::kAlwaysOnTopKey, true);

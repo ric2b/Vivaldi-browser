@@ -61,7 +61,9 @@ void PageWidgetDelegate::UpdateLifecycle(
     Page& page,
     LocalFrame& root,
     WebWidget::LifecycleUpdate requested_update) {
-  if (requested_update == WebWidget::LifecycleUpdate::kPrePaint) {
+  if (requested_update == WebWidget::LifecycleUpdate::kLayout) {
+    page.Animator().UpdateLifecycleToLayoutClean(root);
+  } else if (requested_update == WebWidget::LifecycleUpdate::kPrePaint) {
     page.Animator().UpdateAllLifecyclePhasesExceptPaint(root);
   } else {
     page.Animator().UpdateAllLifecyclePhases(root);
@@ -137,6 +139,9 @@ WebInputEventResult PageWidgetDelegate::HandleInputEvent(
     // TODO(crbug.com/808089): report across OOPIFs.
     if (interactive_detector)
       interactive_detector->HandleForInputDelay(event);
+
+    if (LocalFrameView* view = document->View())
+      view->GetJankTracker().NotifyInput(event);
   }
 
   if (event.GetModifiers() & WebInputEvent::kIsTouchAccessibility &&
@@ -223,6 +228,7 @@ WebInputEventResult PageWidgetDelegate::HandleInputEvent(
     case WebInputEvent::kPointerDown:
     case WebInputEvent::kPointerUp:
     case WebInputEvent::kPointerMove:
+    case WebInputEvent::kPointerRawMove:
     case WebInputEvent::kPointerCancel:
     case WebInputEvent::kPointerCausedUaAction:
       if (!root || !root->View())

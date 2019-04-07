@@ -16,6 +16,7 @@
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/webdata/autofill_table.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "third_party/icu/source/common/unicode/uscript.h"
@@ -239,6 +240,21 @@ bool SplitCJKName(const std::vector<base::StringPiece16>& name_tokens,
 }
 
 }  // namespace
+
+std::string TruncateUTF8(const std::string& data) {
+  std::string trimmed_value;
+  base::TruncateUTF8ToByteSize(data, AutofillTable::kMaxDataLength,
+                               &trimmed_value);
+  return trimmed_value;
+}
+
+bool IsCreditCardExpirationType(ServerFieldType type) {
+  return type == CREDIT_CARD_EXP_MONTH ||
+         type == CREDIT_CARD_EXP_2_DIGIT_YEAR ||
+         type == CREDIT_CARD_EXP_4_DIGIT_YEAR ||
+         type == CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR ||
+         type == CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR;
+}
 
 bool IsCJKName(base::StringPiece16 name) {
   // The name is considered to be a CJK name if it is only CJK characters,

@@ -26,6 +26,7 @@
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/credit_card.h"
+#include "components/autofill/core/browser/payments/payments_customer_data.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_change.h"
 #include "components/autofill/core/browser/webdata/autofill_entry.h"
@@ -194,7 +195,7 @@ std::unique_ptr<CreditCard> CreditCardFromStatement(
   return credit_card;
 }
 
-bool AddAutofillProfileNamesToProfile(sql::Connection* db,
+bool AddAutofillProfileNamesToProfile(sql::Database* db,
                                       AutofillProfile* profile) {
   // TODO(estade): update schema so that multiple names are not associated per
   // unique profile guid. Please refer https://crbug.com/497934.
@@ -218,7 +219,7 @@ bool AddAutofillProfileNamesToProfile(sql::Connection* db,
   return s.Succeeded();
 }
 
-bool AddAutofillProfileEmailsToProfile(sql::Connection* db,
+bool AddAutofillProfileEmailsToProfile(sql::Database* db,
                                        AutofillProfile* profile) {
   // TODO(estade): update schema so that multiple emails are not associated per
   // unique profile guid. Please refer https://crbug.com/497934.
@@ -236,7 +237,7 @@ bool AddAutofillProfileEmailsToProfile(sql::Connection* db,
   return s.Succeeded();
 }
 
-bool AddAutofillProfilePhonesToProfile(sql::Connection* db,
+bool AddAutofillProfilePhonesToProfile(sql::Database* db,
                                        AutofillProfile* profile) {
   // TODO(estade): update schema so that multiple phone numbers are not
   // associated per unique profile guid. Please refer https://crbug.com/497934.
@@ -255,7 +256,7 @@ bool AddAutofillProfilePhonesToProfile(sql::Connection* db,
 }
 
 bool AddAutofillProfileNames(const AutofillProfile& profile,
-                             sql::Connection* db) {
+                             sql::Database* db) {
   // Add the new name.
   sql::Statement s(db->GetUniqueStatement(
       "INSERT INTO autofill_profile_names"
@@ -271,7 +272,7 @@ bool AddAutofillProfileNames(const AutofillProfile& profile,
 }
 
 bool AddAutofillProfileEmails(const AutofillProfile& profile,
-                              sql::Connection* db) {
+                              sql::Database* db) {
   // Add the new email.
   sql::Statement s(db->GetUniqueStatement(
       "INSERT INTO autofill_profile_emails (guid, email) VALUES (?,?)"));
@@ -282,7 +283,7 @@ bool AddAutofillProfileEmails(const AutofillProfile& profile,
 }
 
 bool AddAutofillProfilePhones(const AutofillProfile& profile,
-                              sql::Connection* db) {
+                              sql::Database* db) {
   // Add the new number.
   sql::Statement s(db->GetUniqueStatement(
       "INSERT INTO autofill_profile_phones (guid, number) VALUES (?,?)"));
@@ -293,7 +294,7 @@ bool AddAutofillProfilePhones(const AutofillProfile& profile,
 }
 
 bool AddAutofillProfilePieces(const AutofillProfile& profile,
-                              sql::Connection* db) {
+                              sql::Database* db) {
   if (!AddAutofillProfileNames(profile, db))
     return false;
 
@@ -306,7 +307,7 @@ bool AddAutofillProfilePieces(const AutofillProfile& profile,
   return true;
 }
 
-bool RemoveAutofillProfilePieces(const std::string& guid, sql::Connection* db) {
+bool RemoveAutofillProfilePieces(const std::string& guid, sql::Database* db) {
   sql::Statement s1(db->GetUniqueStatement(
       "DELETE FROM autofill_profile_names WHERE guid = ?"));
   s1.BindString(0, guid);
@@ -413,7 +414,7 @@ bool AutofillTable::CreateTablesIfNecessary() {
           InitMaskedCreditCardsTable() && InitUnmaskedCreditCardsTable() &&
           InitServerCardMetadataTable() && InitServerAddressesTable() &&
           InitServerAddressMetadataTable() && InitAutofillSyncMetadataTable() &&
-          InitModelTypeStateTable());
+          InitModelTypeStateTable() && InitPaymentsCustomerDataTable());
 }
 
 bool AutofillTable::IsSyncable() {
@@ -1343,6 +1344,39 @@ bool AutofillTable::UpdateServerAddressMetadata(
   transaction.Commit();
 
   return db_->GetLastChangeCount() > 0;
+}
+
+void AutofillTable::SetPaymentsCustomerData(
+    const PaymentsCustomerData* customer_data) {
+  sql::Transaction transaction(db_);
+  if (!transaction.Begin())
+    return;
+
+  // Delete all old values.
+  sql::Statement customer_data_delete(
+      db_->GetUniqueStatement("DELETE FROM payments_customer_data"));
+  customer_data_delete.Run();
+
+  if (customer_data) {
+    sql::Statement insert_customer_data(db_->GetUniqueStatement(
+        "INSERT INTO payments_customer_data (customer_id) VALUES (?)"));
+    insert_customer_data.BindString(0, customer_data->customer_id);
+    insert_customer_data.Run();
+  }
+
+  transaction.Commit();
+}
+
+bool AutofillTable::GetPaymentsCustomerData(
+    std::unique_ptr<PaymentsCustomerData>* customer_data) const {
+  sql::Statement s(db_->GetUniqueStatement(
+      "SELECT customer_id FROM payments_customer_data"));
+  if (s.Step()) {
+    customer_data->reset(
+        new PaymentsCustomerData(/*customer_id=*/s.ColumnString(0)));
+  }
+
+  return s.Succeeded();
 }
 
 bool AutofillTable::ClearAllServerData() {
@@ -2393,7 +2427,9 @@ bool AutofillTable::AddFormFieldValueTime(const FormFieldData& element,
 bool AutofillTable::SupportsMetadataForModelType(
     syncer::ModelType model_type) const {
   return (model_type == syncer::AUTOFILL ||
-          model_type == syncer::AUTOFILL_PROFILE);
+          model_type == syncer::AUTOFILL_PROFILE ||
+          model_type == syncer::AUTOFILL_WALLET_DATA ||
+          model_type == syncer::AUTOFILL_WALLET_METADATA);
 }
 
 int AutofillTable::GetKeyValueForModelType(syncer::ModelType model_type) const {
@@ -2770,6 +2806,17 @@ bool AutofillTable::InitModelTypeStateTable() {
   if (!db_->DoesTableExist("autofill_model_type_state")) {
     if (!db_->Execute("CREATE TABLE autofill_model_type_state ("
                       "model_type INTEGER NOT NULL PRIMARY KEY, value BLOB)")) {
+      NOTREACHED();
+      return false;
+    }
+  }
+  return true;
+}
+
+bool AutofillTable::InitPaymentsCustomerDataTable() {
+  if (!db_->DoesTableExist("payments_customer_data")) {
+    if (!db_->Execute("CREATE TABLE payments_customer_data "
+                      "(customer_id VARCHAR)")) {
       NOTREACHED();
       return false;
     }

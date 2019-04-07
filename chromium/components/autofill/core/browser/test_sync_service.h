@@ -19,23 +19,24 @@ class TestSyncService : public syncer::FakeSyncService {
   int GetDisableReasons() const override;
   syncer::ModelTypeSet GetPreferredDataTypes() const override;
   syncer::ModelTypeSet GetActiveDataTypes() const override;
-  bool IsEngineInitialized() const override;
   bool IsFirstSetupComplete() const override;
   bool IsUsingSecondaryPassphrase() const override;
   syncer::SyncCycleSnapshot GetLastCycleSnapshot() const override;
   const GoogleServiceAuthError& GetAuthError() const override;
   syncer::SyncTokenStatus GetSyncTokenStatus() const override;
+  bool IsAuthenticatedAccountPrimary() const override;
+  AccountInfo GetAuthenticatedAccountInfo() const override;
 
   void SetDisableReasons(int disable_reasons) {
     disable_reasons_ = disable_reasons;
   }
 
-  void SetDataTypes(syncer::ModelTypeSet data_types) {
-    data_types_ = data_types;
+  void SetIsAuthenticatedAccountPrimary(bool is_authenticated_account_primary) {
+    is_authenticated_account_primary_ = is_authenticated_account_primary;
   }
 
-  void SetIsEngineInitialized(bool is_engine_initialized) {
-    is_engine_initialized_ = is_engine_initialized;
+  void SetDataTypes(syncer::ModelTypeSet data_types) {
+    data_types_ = data_types;
   }
 
   void SetIsUsingSecondaryPassphrase(bool is_using_secondary_passphrase) {
@@ -46,15 +47,20 @@ class TestSyncService : public syncer::FakeSyncService {
 
   void SetInAuthError(bool is_in_auth_error);
 
+  void SetAuthenticatedAccountInfo(const AccountInfo& account_info) {
+    account_info_ = account_info;
+  }
+
  private:
   int disable_reasons_ = DISABLE_REASON_NONE;
   // Used as both "preferred" and "active" data types.
   syncer::ModelTypeSet data_types_;
-  bool is_engine_initialized_ = true;
   bool is_using_secondary_passphrase_ = false;
   bool sync_cycle_complete_ = true;
   GoogleServiceAuthError auth_error_;
   bool is_in_auth_error_ = false;
+  bool is_authenticated_account_primary_ = true;
+  AccountInfo account_info_;
 
   DISALLOW_COPY_AND_ASSIGN(TestSyncService);
 };

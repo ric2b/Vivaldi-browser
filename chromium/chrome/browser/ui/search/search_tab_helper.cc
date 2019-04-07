@@ -27,7 +27,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browser_sync/profile_sync_service.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
@@ -45,8 +45,6 @@
 #include "services/identity/public/cpp/identity_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(SearchTabHelper);
 
 namespace {
 
@@ -241,8 +239,9 @@ void SearchTabHelper::ThemeInfoChanged(const ThemeBackgroundInfo& theme_info) {
 }
 
 void SearchTabHelper::MostVisitedItemsChanged(
-    const std::vector<InstantMostVisitedItem>& items) {
-  ipc_router_.SendMostVisitedItems(items);
+    const std::vector<InstantMostVisitedItem>& items,
+    bool is_custom_links) {
+  ipc_router_.SendMostVisitedItems(items, is_custom_links);
 }
 
 void SearchTabHelper::FocusOmnibox(OmniboxFocusState state) {
@@ -271,7 +270,9 @@ void SearchTabHelper::FocusOmnibox(OmniboxFocusState state) {
       // visual cue to users who really understand selection state about what
       // will happen if they start typing.
       omnibox_view->SelectAll(false);
+#if !defined(OS_WIN)
       omnibox_view->ShowVirtualKeyboardIfEnabled();
+#endif
       break;
     case OMNIBOX_FOCUS_NONE:
       // Remove focus only if the popup is closed. This will prevent someone
@@ -407,8 +408,10 @@ void SearchTabHelper::OnSetCustomBackgroundURLWithAttributions(
 void SearchTabHelper::FileSelected(const base::FilePath& path,
                                    int index,
                                    void* params) {
-  if (instant_service_)
+  if (instant_service_) {
+    profile()->set_last_selected_directory(path.DirName());
     instant_service_->SelectLocalBackgroundImage(path);
+  }
 
   select_file_dialog_ = nullptr;
   // File selection can happen at any time after NTP load, and is not logged
@@ -440,10 +443,12 @@ void SearchTabHelper::OnSelectLocalBackgroundImage() {
 
   ui::SelectFileDialog::FileTypeInfo file_types;
   file_types.allowed_paths = ui::SelectFileDialog::FileTypeInfo::NATIVE_PATH;
-  file_types.extensions.resize(2);
+  file_types.extensions.resize(1);
   file_types.extensions[0].push_back(FILE_PATH_LITERAL("jpg"));
   file_types.extensions[0].push_back(FILE_PATH_LITERAL("jpeg"));
-  file_types.extensions[1].push_back(FILE_PATH_LITERAL("png"));
+  file_types.extensions[0].push_back(FILE_PATH_LITERAL("png"));
+  file_types.extension_description_overrides.push_back(
+      l10n_util::GetStringUTF16(IDS_UPLOAD_IMAGE_FORMAT));
 
   select_file_dialog_->SelectFile(
       ui::SelectFileDialog::SELECT_OPEN_FILE, base::string16(), directory,

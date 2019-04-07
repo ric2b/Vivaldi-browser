@@ -25,9 +25,7 @@ struct WebFloatRect;
 
 class CORE_EXPORT FindInPage final
     : public GarbageCollectedFinalized<FindInPage>,
-      public ContextLifecycleObserver,
       public mojom::blink::FindInPage {
-  USING_PRE_FINALIZER(FindInPage, Dispose);
 
  public:
   static FindInPage* Create(WebLocalFrameImpl& frame,
@@ -35,15 +33,11 @@ class CORE_EXPORT FindInPage final
     return new FindInPage(frame, interface_registry);
   }
 
-  void RequestFind(int identifier,
-                   const WebString& search_text,
-                   const WebFindOptions&);
-
-  bool Find(int identifier,
-            const WebString& search_text,
-            const WebFindOptions&,
-            bool wrap_within_frame,
-            bool* active_now = nullptr);
+  bool FindInternal(int identifier,
+                    const WebString& search_text,
+                    const WebFindOptions&,
+                    bool wrap_within_frame,
+                    bool* active_now = nullptr);
 
   void SetTickmarks(const WebVector<WebRect>&);
 
@@ -54,10 +48,21 @@ class CORE_EXPORT FindInPage final
   // coordinates.
   WebFloatRect ActiveFindMatchRect();
 
-  // mojom::blink::FindInPage overrides
+  void ReportFindInPageMatchCount(int request_id, int count, bool final_update);
 
-  void ActivateNearestFindResult(const WebFloatPoint&,
-                                 ActivateNearestFindResultCallback) final;
+  void ReportFindInPageSelection(int request_id,
+                                 int active_match_ordinal,
+                                 const blink::WebRect& selection_rect,
+                                 bool final_update);
+
+  // mojom::blink::FindInPage overrides
+  void Find(int request_id,
+            const String& search_text,
+            mojom::blink::FindOptionsPtr) final;
+
+  void SetClient(mojom::blink::FindInPageClientPtr) final;
+
+  void ActivateNearestFindResult(int request_id, const WebFloatPoint&) final;
 
   // Stops the current find-in-page, following the given |action|
   void StopFinding(mojom::StopFindAction action) final;
@@ -90,12 +95,9 @@ class CORE_EXPORT FindInPage final
 
   void Dispose();
 
-  void ContextDestroyed(ExecutionContext*) override;
-
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(text_finder_);
     visitor->Trace(frame_);
-    ContextLifecycleObserver::Trace(visitor);
   }
 
  private:
@@ -107,6 +109,8 @@ class CORE_EXPORT FindInPage final
   WebPluginContainer* plugin_find_handler_;
 
   const Member<WebLocalFrameImpl> frame_;
+
+  mojom::blink::FindInPageClientPtr client_;
 
   mojo::AssociatedBinding<mojom::blink::FindInPage> binding_;
 

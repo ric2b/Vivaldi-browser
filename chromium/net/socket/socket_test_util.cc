@@ -252,8 +252,20 @@ StaticSocketDataProvider::StaticSocketDataProvider(
 
 StaticSocketDataProvider::~StaticSocketDataProvider() = default;
 
+void StaticSocketDataProvider::Pause() {
+  paused_ = true;
+}
+
+void StaticSocketDataProvider::Resume() {
+  paused_ = false;
+}
+
 MockRead StaticSocketDataProvider::OnRead() {
-  CHECK(!helper_.AllReadDataConsumed());
+  if (AllReadDataConsumed()) {
+    const net::MockRead pending_read(net::SYNCHRONOUS, net::ERR_IO_PENDING);
+    return pending_read;
+  }
+
   return helper_.AdvanceRead();
 }
 
@@ -283,7 +295,7 @@ MockWriteResult StaticSocketDataProvider::OnWrite(const std::string& data) {
 }
 
 bool StaticSocketDataProvider::AllReadDataConsumed() const {
-  return helper_.AllReadDataConsumed();
+  return paused_ || helper_.AllReadDataConsumed();
 }
 
 bool StaticSocketDataProvider::AllWriteDataConsumed() const {
@@ -1174,7 +1186,13 @@ int MockTCPClientSocket::ReadIfReadyImpl(IOBuffer* buf,
   if (read_data_.mode == ASYNC) {
     DCHECK(!callback.is_null());
     read_data_.mode = SYNCHRONOUS;
-    RunCallbackAsync(std::move(callback), result);
+    pending_read_if_ready_callback_ = std::move(callback);
+    // base::Unretained() is safe here because RunCallbackAsync will wrap it
+    // with a callback associated with a weak ptr.
+    RunCallbackAsync(
+        base::BindOnce(&MockTCPClientSocket::RunReadIfReadyCallback,
+                       base::Unretained(this)),
+        result);
     return ERR_IO_PENDING;
   }
 
@@ -1193,6 +1211,13 @@ int MockTCPClientSocket::ReadIfReadyImpl(IOBuffer* buf,
     }
   }
   return result;
+}
+
+void MockTCPClientSocket::RunReadIfReadyCallback(int result) {
+  // If ReadIfReady is already canceled, do nothing.
+  if (!pending_read_if_ready_callback_)
+    return;
+  std::move(pending_read_if_ready_callback_).Run(result);
 }
 
 MockProxyClientSocket::MockProxyClientSocket(

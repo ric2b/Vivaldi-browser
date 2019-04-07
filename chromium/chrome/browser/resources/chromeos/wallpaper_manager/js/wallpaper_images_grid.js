@@ -324,9 +324,14 @@ cr.define('wallpapers', function() {
     __proto__: Grid.prototype,
 
     /**
-     * The checkbox element.
+     * The checkbox element shown with the currently set wallpaper.
+     * @type {Object}
      */
     checkmark_: undefined,
+
+    get checkmark() {
+      return this.checkmark_;
+    },
 
     /**
      * ID of spinner delay timer.
@@ -354,6 +359,7 @@ cr.define('wallpapers', function() {
      *     wallpaperInfo The information of the wallpaper to be set active.
      */
     activeItem_: undefined,
+
     set activeItem(activeItem) {
       if (this.activeItem_ != activeItem) {
         this.activeItem_ = activeItem;
@@ -603,6 +609,7 @@ cr.define('wallpapers', function() {
       this.checkmark_.classList.add('check');
       this.checkmark_.setAttribute(
           'aria-label', loadTimeData.getString('setSuccessfullyMessage'));
+      this.checkmark_.tabIndex = 0;
       this.dataModel = new ArrayDataModel([]);
       this.thumbnailList_ = new ArrayDataModel([]);
       this.useNewWallpaperPicker_ =
@@ -639,6 +646,14 @@ cr.define('wallpapers', function() {
       this.inProgramSelection_ = true;
       this.selectionModel.selectedIndex = index;
       this.inProgramSelection_ = false;
+    },
+
+    /**
+     * The opacity that the slideshow images should have.
+     * @type {number} opacity The desired opacity.
+     */
+    get slideShowImageOpacity() {
+      return this.classList.contains('image-picker-offline') ? 0.5 : 1;
     },
 
     /**
@@ -724,7 +739,7 @@ cr.define('wallpapers', function() {
       }
 
       slideShowImage.style.opacity =
-          this.dailyRefreshImages.length == 0 ? 1 : 0;
+          this.dailyRefreshImages.length == 0 ? this.slideShowImageOpacity : 0;
       slideShowImage.classList.add('slide-show');
       this.dailyRefreshItem.insertBefore(
           slideShowImage, this.dailyRefreshItem.firstChild);
@@ -741,7 +756,7 @@ cr.define('wallpapers', function() {
       if (images.length <= index)
         return;
       for (var i = 0; i < images.length; ++i) {
-        images[i].style.opacity = i === index ? 1 : 0;
+        images[i].style.opacity = i === index ? this.slideShowImageOpacity : 0;
       }
       var nextIndex = (index + 1) % images.length;
       this.dailyRefreshTimer_ =

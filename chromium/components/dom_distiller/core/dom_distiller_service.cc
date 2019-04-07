@@ -55,13 +55,6 @@ DomDistillerService::DomDistillerService(
 DomDistillerService::~DomDistillerService() {
 }
 
-syncer::SyncableService* DomDistillerService::GetSyncableService() const {
-  if (!store_) {
-    return nullptr;
-  }
-  return store_->GetSyncableService();
-}
-
 std::unique_ptr<DistillerPage> DomDistillerService::CreateDefaultDistillerPage(
     const gfx::Size& render_view_size) {
   return distiller_page_factory_->CreateDistillerPage(render_view_size);
@@ -92,7 +85,7 @@ const std::string DomDistillerService::AddToList(
       // An article may not be available for a variety of reasons, e.g.
       // distillation failure or blobs not available locally.
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(article_cb, true));
+          FROM_HERE, base::BindOnce(article_cb, true));
       return entry.entry_id();
     }
   } else {

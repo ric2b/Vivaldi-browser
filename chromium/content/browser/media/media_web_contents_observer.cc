@@ -123,6 +123,10 @@ MediaWebContentsObserver::GetPictureInPictureVideoMediaPlayerId() const {
   return pip_player_;
 }
 
+void MediaWebContentsObserver::ResetPictureInPictureVideoMediaPlayerId() {
+  pip_player_.reset();
+}
+
 bool MediaWebContentsObserver::OnMessageReceived(
     const IPC::Message& msg,
     RenderFrameHost* render_frame_host) {
@@ -147,6 +151,9 @@ bool MediaWebContentsObserver::OnMessageReceived(
     IPC_MESSAGE_HANDLER(MediaPlayerDelegateHostMsg_OnPictureInPictureModeEnded,
                         OnPictureInPictureModeEnded)
     IPC_MESSAGE_HANDLER(
+        MediaPlayerDelegateHostMsg_OnSetPictureInPictureCustomControls,
+        OnSetPictureInPictureCustomControls)
+    IPC_MESSAGE_HANDLER(
         MediaPlayerDelegateHostMsg_OnPictureInPictureSurfaceChanged,
         OnPictureInPictureSurfaceChanged)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -157,6 +164,10 @@ bool MediaWebContentsObserver::OnMessageReceived(
 void MediaWebContentsObserver::OnVisibilityChanged(
     content::Visibility visibility) {
   UpdateVideoLock();
+}
+
+void MediaWebContentsObserver::DidUpdateAudioMutingState(bool muted) {
+  session_controllers_manager_.WebContentsMutedStateChanged(muted);
 }
 
 void MediaWebContentsObserver::RequestPersistentVideo(bool value) {
@@ -206,9 +217,7 @@ void MediaWebContentsObserver::OnMediaPaused(RenderFrameHost* render_frame_host,
 
   UpdateVideoLock();
 
-  // TODO(872066): check for |pip_player_| fully matching paused player.
-  if (!web_contents()->IsBeingDestroyed() && pip_player_.has_value() &&
-      pip_player_->render_frame_host == render_frame_host) {
+  if (!web_contents()->IsBeingDestroyed() && pip_player_ == player_id) {
     PictureInPictureWindowControllerImpl* pip_controller =
         PictureInPictureWindowControllerImpl::FromWebContents(
             web_contents_impl());
@@ -262,9 +271,7 @@ void MediaWebContentsObserver::OnMediaPlaying(
     return;
   }
 
-  // TODO(872066): check for |pip_player_| fully matching paused player.
-  if (!web_contents()->IsBeingDestroyed() && pip_player_.has_value() &&
-      pip_player_->render_frame_host == render_frame_host) {
+  if (!web_contents()->IsBeingDestroyed() && pip_player_ == id) {
     PictureInPictureWindowControllerImpl* pip_controller =
         PictureInPictureWindowControllerImpl::FromWebContents(
             web_contents_impl());
@@ -349,13 +356,23 @@ void MediaWebContentsObserver::OnPictureInPictureModeEnded(
           render_frame_host->GetRoutingID(), delegate_id, request_id));
 }
 
+void MediaWebContentsObserver::OnSetPictureInPictureCustomControls(
+    RenderFrameHost* render_frame_host,
+    int delegate_id,
+    const std::vector<blink::PictureInPictureControlInfo>& controls) {
+  PictureInPictureWindowControllerImpl* pip_controller =
+      PictureInPictureWindowControllerImpl::FromWebContents(
+          web_contents_impl());
+  if (pip_controller)
+    pip_controller->SetPictureInPictureCustomControls(controls);
+}
+
 void MediaWebContentsObserver::OnPictureInPictureSurfaceChanged(
     RenderFrameHost* render_frame_host,
     int delegate_id,
     const viz::SurfaceId& surface_id,
     const gfx::Size& natural_size) {
   DCHECK(surface_id.is_valid());
-  DCHECK(pip_player_);
 
   pip_player_ = MediaPlayerId(render_frame_host, delegate_id);
 
@@ -515,7 +532,7 @@ void MediaWebContentsObserver::ExitPictureInPictureInternal() {
 
   // Reset must happen after notifying the WebContents because it may interact
   // with it.
-  pip_player_.reset();
+  ResetPictureInPictureVideoMediaPlayerId();
 
   UpdateVideoLock();
 }

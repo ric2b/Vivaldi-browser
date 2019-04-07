@@ -15,7 +15,7 @@
 #include "ui/gfx/geometry/rect.h"
 
 #if defined(USE_AURA)
-#include "services/ui/public/interfaces/window_tree.mojom.h"
+#include "services/ws/public/mojom/window_tree.mojom.h"
 #endif
 
 namespace blink {
@@ -144,11 +144,6 @@ class CONTENT_EXPORT FrameConnectorDelegate {
       gfx::PointF* transformed_point,
       viz::EventSource source = viz::EventSource::ANY);
 
-  // Pass acked touch events to the root view for gesture processing.
-  virtual void ForwardProcessAckedTouchEvent(
-      const TouchEventWithLatencyInfo& touch,
-      InputEventAckState ack_result) {}
-
   // Pass acked touchpad pinch gesture events to the root view for processing.
   virtual void ForwardAckedTouchpadPinchGestureEvent(
       const blink::WebGestureEvent& event,
@@ -182,6 +177,10 @@ class CONTENT_EXPORT FrameConnectorDelegate {
   const gfx::Rect& compositor_visible_rect() const {
     return compositor_visible_rect_;
   }
+
+  // Returns whether the current view may be occluded or distorted (e.g, with
+  // CSS opacity or transform) in the parent view.
+  bool occluded_or_obscured() const { return occluded_or_obscured_; }
 
   // Returns the viz::LocalSurfaceId propagated from the parent to be used by
   // this child frame.
@@ -242,7 +241,7 @@ class CONTENT_EXPORT FrameConnectorDelegate {
   // Embeds a WindowTreeClient in the parent. This results in the parent
   // creating a window in the ui server so that this can render to the screen.
   virtual void EmbedRendererWindowTreeClientInParent(
-      ui::mojom::WindowTreeClientPtr window_tree_client) {}
+      ws::mojom::WindowTreeClientPtr window_tree_client) {}
 #endif
 
   // Called by RenderWidgetHostViewChildFrame when the child frame has updated
@@ -265,6 +264,8 @@ class CONTENT_EXPORT FrameConnectorDelegate {
   gfx::Rect viewport_intersection_rect_;
 
   gfx::Rect compositor_visible_rect_;
+
+  bool occluded_or_obscured_ = false;
 
   ScreenInfo screen_info_;
   gfx::Size local_frame_size_in_dip_;

@@ -21,6 +21,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "components/exo/layer_tree_frame_sink_holder.h"
+#include "components/exo/wm_helper.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/resource_format_utils.h"
@@ -334,8 +335,8 @@ void Buffer::Texture::ReleaseWhenQueryResultIsAvailable(
   TRACE_EVENT_ASYNC_STEP_INTO0("exo", "BufferInUse", gpu_memory_buffer_,
                                "pending_query");
   context_provider_->ContextSupport()->SignalQuery(
-      query_id_,
-      base::Bind(&Buffer::Texture::Released, weak_ptr_factory_.GetWeakPtr()));
+      query_id_, base::BindOnce(&Buffer::Texture::Released,
+                                weak_ptr_factory_.GetWeakPtr()));
 }
 
 void Buffer::Texture::Released() {
@@ -349,8 +350,9 @@ void Buffer::Texture::ScheduleWaitForRelease(base::TimeDelta delay) {
 
   wait_for_release_pending_ = true;
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&Buffer::Texture::WaitForRelease,
-                            weak_ptr_factory_.GetWeakPtr()),
+      FROM_HERE,
+      base::BindOnce(&Buffer::Texture::WaitForRelease,
+                     weak_ptr_factory_.GetWeakPtr()),
       delay);
 }
 
@@ -422,7 +424,7 @@ bool Buffer::ProduceTransferableResource(
     texture_.reset();
 
   ui::ContextFactory* context_factory =
-      aura::Env::GetInstance()->context_factory();
+      WMHelper::GetInstance()->env()->context_factory();
   // Note: This can fail if GPU acceleration has been disabled.
   scoped_refptr<viz::ContextProvider> context_provider =
       context_factory->SharedMainThreadContextProvider();
@@ -468,11 +470,11 @@ bool Buffer::ProduceTransferableResource(
     // compositor.
     layer_tree_frame_sink_holder->SetResourceReleaseCallback(
         resource->id,
-        base::Bind(&Buffer::Texture::ReleaseTexImage,
-                   base::Unretained(contents_texture),
-                   base::Bind(&Buffer::ReleaseContentsTexture, AsWeakPtr(),
-                              base::Passed(&contents_texture_),
-                              release_contents_callback_.callback())));
+        base::BindOnce(&Buffer::Texture::ReleaseTexImage,
+                       base::Unretained(contents_texture),
+                       base::Bind(&Buffer::ReleaseContentsTexture, AsWeakPtr(),
+                                  base::Passed(&contents_texture_),
+                                  release_contents_callback_.callback())));
     return true;
   }
 
@@ -498,9 +500,9 @@ bool Buffer::ProduceTransferableResource(
   // compositor.
   layer_tree_frame_sink_holder->SetResourceReleaseCallback(
       resource->id,
-      base::Bind(&Buffer::Texture::Release, base::Unretained(texture),
-                 base::Bind(&Buffer::ReleaseTexture, AsWeakPtr(),
-                            base::Passed(&texture_))));
+      base::BindOnce(&Buffer::Texture::Release, base::Unretained(texture),
+                     base::Bind(&Buffer::ReleaseTexture, AsWeakPtr(),
+                                base::Passed(&texture_))));
   return true;
 }
 

@@ -32,9 +32,11 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_BINDINGS_V8_DOM_WRAPPER_H_
 
 #include "base/stl_util.h"
+#include "third_party/blink/renderer/platform/bindings/custom_wrappable.h"
 #include "third_party/blink/renderer/platform/bindings/dom_data_store.h"
 #include "third_party/blink/renderer/platform/bindings/runtime_call_stats.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
+#include "third_party/blink/renderer/platform/bindings/script_wrappable_marking_visitor.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/bindings/wrapper_creation_security_check.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
@@ -67,10 +69,24 @@ class V8DOMWrapper {
                              ScriptWrappable*,
                              const WrapperTypeInfo*,
                              v8::Local<v8::Object> wrapper);
-  static void SetNativeInfo(v8::Isolate*,
-                            v8::Local<v8::Object>,
-                            const WrapperTypeInfo*,
-                            ScriptWrappable*);
+  static void AssociateObjectWithWrapper(v8::Isolate*,
+                                         CustomWrappable*,
+                                         const WrapperTypeInfo*,
+                                         v8::Local<v8::Object> wrapper);
+  static void SetNativeInfo(v8::Isolate* isolate,
+                            v8::Local<v8::Object> wrapper,
+                            const WrapperTypeInfo* wrapper_type_info,
+                            ScriptWrappable* script_wrappable) {
+    SetNativeInfoInternal(isolate, wrapper, wrapper_type_info,
+                          script_wrappable);
+  }
+  static void SetNativeInfo(v8::Isolate* isolate,
+                            v8::Local<v8::Object> wrapper,
+                            const WrapperTypeInfo* wrapper_type_info,
+                            CustomWrappable* custom_wrappable) {
+    SetNativeInfoInternal(isolate, wrapper, wrapper_type_info,
+                          custom_wrappable);
+  }
   static void ClearNativeInfo(v8::Isolate*, v8::Local<v8::Object>);
 
   // hasInternalFieldsSet only checks if the value has the internal fields for
@@ -78,29 +94,31 @@ class V8DOMWrapper {
   // value may not be a Blink's wrapper object.  In order to make sure of it,
   // Use isWrapper function instead.
   PLATFORM_EXPORT static bool HasInternalFieldsSet(v8::Local<v8::Value>);
+
+ private:
+  static void SetNativeInfoInternal(v8::Isolate*,
+                                    v8::Local<v8::Object>,
+                                    const WrapperTypeInfo*,
+                                    void*);
 };
 
-inline void V8DOMWrapper::SetNativeInfo(
+inline void V8DOMWrapper::SetNativeInfoInternal(
     v8::Isolate* isolate,
     v8::Local<v8::Object> wrapper,
     const WrapperTypeInfo* wrapper_type_info,
-    ScriptWrappable* script_wrappable) {
+    void* wrappable) {
   DCHECK_GE(wrapper->InternalFieldCount(), 2);
-  DCHECK(script_wrappable);
+  DCHECK(wrappable);
   DCHECK(wrapper_type_info);
   int indices[] = {kV8DOMWrapperObjectIndex, kV8DOMWrapperTypeIndex};
-  void* values[] = {script_wrappable,
-                    const_cast<WrapperTypeInfo*>(wrapper_type_info)};
+  void* values[] = {wrappable, const_cast<WrapperTypeInfo*>(wrapper_type_info)};
   wrapper->SetAlignedPointerInInternalFields(base::size(indices), indices,
                                              values);
-  auto* per_isolate_data = V8PerIsolateData::From(isolate);
-  // We notify ScriptWrappableVisitor about the new wrapper association,
-  // so the visitor can make sure to trace the association (in case it is
-  // currently tracing).  Because of some optimizations, V8 will not
-  // necessarily detect wrappers created during its incremental marking.
-  per_isolate_data->GetScriptWrappableMarkingVisitor()->RegisterV8Reference(
-      std::make_pair(const_cast<WrapperTypeInfo*>(wrapper_type_info),
-                     script_wrappable));
+  // The following write barrier is necessary as V8 might not see the newly
+  // created object during garbage collection, e.g., when the object is black
+  // allocated.
+  ScriptWrappableMarkingVisitor::WriteBarrier(isolate, wrapper_type_info,
+                                              wrappable);
 }
 
 inline void V8DOMWrapper::ClearNativeInfo(v8::Isolate* isolate,
@@ -125,6 +143,19 @@ inline v8::Local<v8::Object> V8DOMWrapper::AssociateObjectWithWrapper(
   }
   SECURITY_CHECK(ToScriptWrappable(wrapper) == impl);
   return wrapper;
+}
+
+inline void V8DOMWrapper::AssociateObjectWithWrapper(
+    v8::Isolate* isolate,
+    CustomWrappable* impl,
+    const WrapperTypeInfo* wrapper_type_info,
+    v8::Local<v8::Object> wrapper) {
+  RUNTIME_CALL_TIMER_SCOPE(
+      isolate, RuntimeCallStats::CounterId::kAssociateObjectWithWrapper);
+  WrapperTypeInfo::WrapperCreated();
+  SetNativeInfo(isolate, wrapper, wrapper_type_info, impl);
+  DCHECK(HasInternalFieldsSet(wrapper));
+  SECURITY_CHECK(ToCustomWrappable(wrapper) == impl);
 }
 
 class V8WrapperInstantiationScope {

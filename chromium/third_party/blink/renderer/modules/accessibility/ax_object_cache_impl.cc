@@ -162,9 +162,6 @@ AXObject* AXObjectCacheImpl::FocusedImageMapUIElement(
 }
 
 AXObject* AXObjectCacheImpl::FocusedObject() {
-  if (!AccessibilityEnabled())
-    return nullptr;
-
   Node* focused_node = document_->FocusedElement();
   if (!focused_node)
     focused_node = document_;
@@ -964,7 +961,8 @@ void AXObjectCacheImpl::HandlePossibleRoleChange(Node* node) {
 
 void AXObjectCacheImpl::HandleAttributeChanged(const QualifiedName& attr_name,
                                                Element* element) {
-  if (attr_name == roleAttr || attr_name == typeAttr || attr_name == sizeAttr)
+  if (attr_name == roleAttr || attr_name == typeAttr || attr_name == sizeAttr ||
+      attr_name == aria_haspopupAttr)
     HandlePossibleRoleChange(element);
   else if (attr_name == altAttr || attr_name == titleAttr)
     TextChanged(element);
@@ -1002,6 +1000,12 @@ void AXObjectCacheImpl::HandleAttributeChanged(const QualifiedName& attr_name,
     PostNotification(element, AXObjectCacheImpl::kAXAriaAttributeChanged);
 }
 
+void AXObjectCacheImpl::HandleAutofillStateChanged(Element* elem,
+                                                   bool is_available) {
+  if (AXObject* obj = Get(elem))
+    obj->HandleAutofillStateChanged(is_available);
+}
+
 void AXObjectCacheImpl::LabelChanged(Element* element) {
   TextChanged(ToHTMLLabelElement(element)->control());
 }
@@ -1026,13 +1030,6 @@ void AXObjectCacheImpl::InlineTextBoxesUpdated(
 
 Settings* AXObjectCacheImpl::GetSettings() {
   return document_->GetSettings();
-}
-
-bool AXObjectCacheImpl::AccessibilityEnabled() {
-  Settings* settings = this->GetSettings();
-  if (!settings)
-    return false;
-  return settings->GetAccessibilityEnabled();
 }
 
 bool AXObjectCacheImpl::InlineTextBoxAccessibilityEnabled() {

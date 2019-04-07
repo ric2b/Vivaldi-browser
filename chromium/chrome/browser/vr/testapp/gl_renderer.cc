@@ -4,9 +4,13 @@
 
 #include "chrome/browser/vr/testapp/gl_renderer.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "chrome/browser/vr/graphics_delegate.h"
+#include "chrome/browser/vr/base_compositor_delegate.h"
+#include "chrome/browser/vr/render_info.h"
 #include "chrome/browser/vr/testapp/vr_test_context.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
@@ -17,10 +21,6 @@ namespace vr {
 
 namespace {
 
-void OnPresentedFrame(const gfx::PresentationFeedback& feedback) {
-  // Do nothing for now.
-}
-
 bool ClearGlErrors() {
   bool errors = false;
   while (glGetError() != GL_NO_ERROR)
@@ -30,23 +30,57 @@ bool ClearGlErrors() {
 
 }  // namespace
 
-GlRenderer::GlRenderer(const scoped_refptr<gl::GLSurface>& surface,
-                       vr::VrTestContext* vr)
-    : surface_(surface), vr_(vr), weak_ptr_factory_(this) {}
+GlRenderer::GlRenderer() : weak_ptr_factory_(this) {}
 
 GlRenderer::~GlRenderer() {}
 
-bool GlRenderer::Initialize() {
-  auto graphics_delegate = std::make_unique<GraphicsDelegate>(surface_);
-  if (!graphics_delegate->Initialize()) {
+bool GlRenderer::Initialize(const scoped_refptr<gl::GLSurface>& surface) {
+  if (!BaseCompositorDelegate::Initialize(surface))
     return false;
-  }
-
-  vr_->OnGlInitialized(std::move(graphics_delegate));
-
-  PostRenderFrameTask(gfx::SwapResult::SWAP_ACK);
+  PostRenderFrameTask();
   return true;
 }
+
+// TODO(acondor): Provide actual implementation for the methods.
+FovRectangles GlRenderer::GetRecommendedFovs() {
+  return {{}, {}};
+}
+float GlRenderer::GetZNear() {
+  return 0;
+}
+RenderInfo GlRenderer::GetRenderInfo(FrameType frame_type) {
+  return {};
+}
+RenderInfo GlRenderer::GetOptimizedRenderInfoForFovs(
+    const FovRectangles& fovs) {
+  return {};
+}
+void GlRenderer::InitializeBuffers() {}
+void GlRenderer::PrepareBufferForWebXr() {}
+void GlRenderer::PrepareBufferForWebXrOverlayElements() {}
+void GlRenderer::PrepareBufferForContentQuadLayer(
+    const gfx::Transform& quad_transform) {}
+void GlRenderer::PrepareBufferForBrowserUi() {}
+void GlRenderer::OnFinishedDrawingBuffer() {}
+void GlRenderer::GetWebXrDrawParams(int* texture_id, Transform* uv_transform) {}
+bool GlRenderer::IsContentQuadReady() {
+  return true;
+}
+void GlRenderer::ResumeContentRendering() {}
+void GlRenderer::BufferBoundsChanged(const gfx::Size& content_buffer_size,
+                                     const gfx::Size& overlay_buffer_size) {}
+void GlRenderer::GetContentQuadDrawParams(Transform* uv_transform,
+                                          float* border_x,
+                                          float* border_y) {}
+void GlRenderer::SubmitFrame(FrameType frame_type) {}
+void GlRenderer::SetUiInterface(CompositorUiInterface* ui) {}
+void GlRenderer::SetShowingVrDialog(bool showing) {}
+int GlRenderer::GetContentBufferWidth() {
+  return 0;
+}
+void GlRenderer::ConnectPresentingService(
+    device::mojom::VRDisplayInfoPtr display_info,
+    device::mojom::XRRuntimeSessionOptionsPtr options) {}
 
 void GlRenderer::RenderFrame() {
   // Checking and clearing GL errors can be expensive, but we can afford to do
@@ -57,15 +91,15 @@ void GlRenderer::RenderFrame() {
   glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
-  vr_->DrawFrame();
+  vr_context_->DrawFrame();
 
   DCHECK(!ClearGlErrors());
 
-  PostRenderFrameTask(
-      surface_->SwapBuffers(base::BindRepeating(&OnPresentedFrame)));
+  SwapSurfaceBuffers();
+  PostRenderFrameTask();
 }
 
-void GlRenderer::PostRenderFrameTask(gfx::SwapResult result) {
+void GlRenderer::PostRenderFrameTask() {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&GlRenderer::RenderFrame, weak_ptr_factory_.GetWeakPtr()),

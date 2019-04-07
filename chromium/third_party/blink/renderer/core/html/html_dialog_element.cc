@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
@@ -180,7 +181,7 @@ void HTMLDialogElement::showModal(ExceptionState& exception_state) {
   SetFocusForDialog(this);
 }
 
-void HTMLDialogElement::RemovedFrom(ContainerNode* insertion_point) {
+void HTMLDialogElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLElement::RemovedFrom(insertion_point);
   SetNotCentered();
   InertSubtreesChanged(GetDocument());
@@ -207,10 +208,10 @@ bool HTMLDialogElement::IsPresentationAttribute(
   return HTMLElement::IsPresentationAttribute(name);
 }
 
-void HTMLDialogElement::DefaultEventHandler(Event* event) {
-  if (event->type() == EventTypeNames::cancel) {
+void HTMLDialogElement::DefaultEventHandler(Event& event) {
+  if (event.type() == EventTypeNames::cancel) {
     close();
-    event->SetDefaultHandled();
+    event.SetDefaultHandled();
     return;
   }
   HTMLElement::DefaultEventHandler(event);

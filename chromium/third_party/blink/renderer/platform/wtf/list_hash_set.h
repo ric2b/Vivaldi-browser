@@ -129,6 +129,8 @@ class ListHashSet {
 
   struct AddResult final {
     STACK_ALLOCATED();
+
+   public:
     friend class ListHashSet<ValueArg, inlineCapacity, HashArg, AllocatorArg>;
     AddResult(Node* node, bool is_new_entry)
         : stored_value(&node->value_),
@@ -231,6 +233,11 @@ class ListHashSet {
 
   template <typename VisitorDispatcher>
   void Trace(VisitorDispatcher);
+
+ protected:
+  typename ImplType::ValueType** GetBufferSlot() {
+    return impl_.GetBufferSlot();
+  }
 
  private:
   void Unlink(Node*);

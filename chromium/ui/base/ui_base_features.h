@@ -21,7 +21,6 @@ UI_BASE_EXPORT extern const base::Feature kEnableStylusVirtualKeyboard;
 UI_BASE_EXPORT extern const base::Feature kEnableVirtualKeyboardMdUi;
 UI_BASE_EXPORT extern const base::Feature kEnableVirtualKeyboardUkm;
 UI_BASE_EXPORT extern const base::Feature kExperimentalUi;
-UI_BASE_EXPORT extern const base::Feature kSecondaryUiMd;
 UI_BASE_EXPORT extern const base::Feature kSystemKeyboardLock;
 UI_BASE_EXPORT extern const base::Feature kTouchableAppContextMenu;
 UI_BASE_EXPORT extern const base::Feature kNotificationIndicator;
@@ -51,12 +50,22 @@ UI_BASE_EXPORT extern const base::Feature kDirectManipulationStylus;
 // TODO(jamescook): Make flag only available in Chrome OS.
 UI_BASE_EXPORT extern const base::Feature kMash;
 
-// Deprecated. Use |kMash|.
-UI_BASE_EXPORT extern const base::Feature kMashDeprecated;
+UI_BASE_EXPORT extern const base::Feature kSingleProcessMash;
 
-// Returns true if ash is in process (the default). A value of false means ash
-// is running in a separate process (and is hosting the UI Service and Viz).
-UI_BASE_EXPORT bool IsAshInBrowserProcess();
+// Returns true if Chrome's aura usage is backed by the WindowService.
+UI_BASE_EXPORT bool IsUsingWindowService();
+
+// Returns true if ash in running in a separate process (and is hosting the UI
+// service and Viz graphics). See //ash/README.md.
+UI_BASE_EXPORT bool IsMultiProcessMash();
+
+// Returns true if code outside of ash is using the WindowService. In this mode
+// there are two aura::Envs. Ash uses one with Env::Mode::LOCAL. Non-ash code
+// uses an aura::Env with a mode of MUS. The non-ash code using mus targets the
+// WindowService that ash is running. This exercises the WindowService mojo APIs
+// similar to kMash, but leaves ash and browser running in the same process.
+// See //ash/README.md.
+UI_BASE_EXPORT bool IsSingleProcessMash();
 
 #if defined(OS_MACOSX)
 // Returns true if the NSWindows for apps will be created in the app's process,
@@ -71,6 +80,13 @@ UI_BASE_EXPORT extern const base::Feature kViewsBrowserWindows;
 UI_BASE_EXPORT bool IsViewsBrowserCocoa();
 #endif  //  BUILDFLAG(MAC_VIEWS_BROWSER)
 #endif  //  defined(OS_MACOSX)
+
+// Use mojo communication in the drm platform instead of paramtraits. Remove
+// this switch (and associated code) when the drm platform always uses mojo
+// communication.
+// TODO(rjkroege): Remove in http://crbug.com/806092.
+UI_BASE_EXPORT extern const base::Feature kEnableOzoneDrmMojo;
+UI_BASE_EXPORT bool IsOzoneDrmMojo();
 
 }  // namespace features
 

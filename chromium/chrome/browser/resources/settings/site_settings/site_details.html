@@ -22,15 +22,15 @@
       }
 
       #storage {
-        -webkit-padding-end: 0;
+        padding-inline-end: 0;
       }
 
       /* When 'Usage' is omitted, subheadings are removed. Reduce the start
        * padding allowed for lists without headings and add back vertical space
        * that would normally be provided by the subheading. */
       .list-frame.without-heading {
-        -webkit-padding-start: var(--settings-box-row-padding);
         margin-top: 12px;
+        padding-inline-start: var(--settings-box-row-padding);
       }
 
       div#resetSettingsButton {
@@ -148,7 +148,8 @@
       </site-details-permission>
       <site-details-permission category="{{ContentSettingsTypes.SOUND}}"
           icon="settings:volume-up" id="sound"
-          label="$i18n{siteSettingsSound}">
+          label="$i18n{siteSettingsSound}"
+          use-automatic-label="[[blockAutoplayEnabled]]">
       </site-details-permission>
       <site-details-permission
           category="{{ContentSettingsTypes.AUTOMATIC_DOWNLOADS}}"

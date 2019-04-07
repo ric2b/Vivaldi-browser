@@ -155,6 +155,18 @@ DISABLE(PrerenderTest, LinkManagerCancelThenAddAgain)
 DISABLE(MetricsWebContentsObserverTest, LongestInputInSubframe)
 DISABLE(DeclarativeNetRequestBrowserTest, RedirectRequests_MultipleExtensions/1)
 DISABLE(AutoplayMetricsBrowserTest, RecordAutoplayAttemptUkm)
+DISABLE(MetricsServiceBrowserTest,HeapCorruptionInRenderer)
+DISABLE_MULTI(FormStructureBrowserTest, DataDrivenHeuristics)
+DISABLE(ProfileSyncServiceWithStandaloneTransportTest, ClearDataOnSignOut)
+DISABLE(RenderWidgetHostLatencyTrackerTest, TouchpadPinchEvents)
+DISABLE(ProcessMetricsTest, GetDiskUsageBytesPerSecond)
+DISABLE(NavigationControllerBrowserTest,UtilizationOfSpareRenderProcessHost)
+DISABLE(RenderFrameHostManagerTest, ForegroundNavigationIsNeverBackgroundedWithSpareProcess)
+DISABLE(WebContentsImplBrowserTest, RenderWidgetDeletedWhileMouseLockPending)
+DISABLE(AdvancedProtectionStatusManagerTest, StayInAdvancedProtection)
+DISABLE(DesktopCaptureDeviceTest, Capture)
+DISABLE(CastMirroringServiceHostBrowserTest, CaptureTabAudio)
+DISABLE(AndroidUsbCountTest, TestNoMultipleCallsRemoveInCallback)
 
 
 // Seem to not work in VS2013 at least, even in Chrome

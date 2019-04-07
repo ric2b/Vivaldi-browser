@@ -10,9 +10,12 @@
 #include <iterator>
 
 #include "base/callback.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
+#include "content/browser/appcache/appcache_navigation_handle.h"
+#include "content/browser/appcache/appcache_navigation_handle_core.h"
 #include "content/browser/file_url_loader_factory.h"
 #include "content/browser/shared_worker/shared_worker_host.h"
 #include "content/browser/shared_worker/shared_worker_instance.h"
@@ -30,6 +33,7 @@
 #include "content/public/common/bind_interface_helpers.h"
 #include "mojo/public/cpp/bindings/strong_associated_binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
+#include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/message_port/message_port_channel.h"
 #include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 #include "url/origin.h"
@@ -71,7 +75,7 @@ std::unique_ptr<URLLoaderFactoryBundleInfo> CreateFactoryBundle(
     auto file_factory = std::make_unique<FileURLLoaderFactory>(
         storage_partition->browser_context()->GetPath(),
         base::CreateSequencedTaskRunnerWithTraits(
-            {base::MayBlock(), base::TaskPriority::BACKGROUND,
+            {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
              base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
     network::mojom::URLLoaderFactoryPtr file_factory_ptr;
     mojo::MakeStrongBinding(std::move(file_factory),
@@ -79,15 +83,16 @@ std::unique_ptr<URLLoaderFactoryBundleInfo> CreateFactoryBundle(
     factory_bundle->factories_info().emplace(url::kFileScheme,
                                              file_factory_ptr.PassInterface());
   }
+
   return factory_bundle;
 }
 
 void CreateScriptLoaderOnIO(
     scoped_refptr<URLLoaderFactoryGetter> loader_factory_getter,
     std::unique_ptr<URLLoaderFactoryBundleInfo> factory_bundle_for_browser_info,
-    std::unique_ptr<URLLoaderFactoryBundleInfo>
-        factory_bundle_for_renderer_info,
+    std::unique_ptr<URLLoaderFactoryBundleInfo> subresource_loader_factories,
     scoped_refptr<ServiceWorkerContextWrapper> context,
+    AppCacheNavigationHandleCore* appcache_handle_core,
     std::unique_ptr<network::SharedURLLoaderFactoryInfo>
         blob_url_loader_factory_info,
     int process_id,
@@ -111,48 +116,67 @@ void CreateScriptLoaderOnIO(
     url_loader_factory = network::SharedURLLoaderFactory::Create(
         std::move(blob_url_loader_factory_info));
   } else {
+    // Add the default factory to the bundle for browser.
+    DCHECK(!factory_bundle_for_browser_info->default_factory_info());
+
     // Create a factory bundle to use.
     scoped_refptr<URLLoaderFactoryBundle> factory_bundle =
         base::MakeRefCounted<URLLoaderFactoryBundle>(
             std::move(factory_bundle_for_browser_info));
-    url_loader_factory = factory_bundle;
 
-    // Add the network factory to the bundle. The factory from
-    // CloneNetworkFactory() doesn't support reconnection to the network service
-    // after a crash, but it's OK since it's used for a single shared worker
-    // startup.
+    // Get the direct network factory from |loader_factory_getter|. When
+    // NetworkService is enabled, it returns a factory that doesn't support
+    // reconnection to the network service after a crash, but it's OK since it's
+    // used for a single shared worker startup.
     network::mojom::URLLoaderFactoryPtr network_factory_ptr;
     loader_factory_getter->CloneNetworkFactory(
         mojo::MakeRequest(&network_factory_ptr));
     factory_bundle->SetDefaultFactory(std::move(network_factory_ptr));
+
+    url_loader_factory = factory_bundle;
   }
 
+  // It's safe for |appcache_handle_core| to be a raw pointer. The core is owned
+  // by AppCacheNavigationHandle on the UI thread, which posts a task to delete
+  // the core on the IO thread on destruction, which must happen after this
+  // task.
+  base::WeakPtr<AppCacheHost> appcache_host =
+      appcache_handle_core ? appcache_handle_core->host()->GetWeakPtr()
+                           : nullptr;
+
   // Create the SharedWorkerScriptLoaderFactory.
-  network::mojom::URLLoaderFactoryAssociatedPtrInfo script_loader_factory;
+  network::mojom::URLLoaderFactoryAssociatedPtrInfo main_script_loader_factory;
   mojo::MakeStrongAssociatedBinding(
       std::make_unique<SharedWorkerScriptLoaderFactory>(
-          context.get(), host->AsWeakPtr(), context->resource_context(),
+          process_id, context.get(), host->AsWeakPtr(),
+          std::move(appcache_host), context->resource_context(),
           std::move(url_loader_factory)),
-      mojo::MakeRequest(&script_loader_factory));
+      mojo::MakeRequest(&main_script_loader_factory));
 
   // We continue in StartWorker.
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::BindOnce(std::move(callback), std::move(provider_info),
-                     std::move(script_loader_factory),
-                     std::move(factory_bundle_for_renderer_info)));
+                     std::move(main_script_loader_factory),
+                     std::move(subresource_loader_factories)));
 }
 
 }  // namespace
 
 SharedWorkerServiceImpl::SharedWorkerServiceImpl(
     StoragePartition* storage_partition,
-    scoped_refptr<ServiceWorkerContextWrapper> service_worker_context)
+    scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
+    scoped_refptr<ChromeAppCacheService> appcache_service)
     : storage_partition_(storage_partition),
       service_worker_context_(std::move(service_worker_context)),
-      weak_factory_(this) {}
+      appcache_service_(std::move(appcache_service)),
+      weak_factory_(this) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+}
 
-SharedWorkerServiceImpl::~SharedWorkerServiceImpl() {}
+SharedWorkerServiceImpl::~SharedWorkerServiceImpl() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+}
 
 bool SharedWorkerServiceImpl::TerminateWorker(
     const GURL& url,
@@ -285,11 +309,11 @@ void SharedWorkerServiceImpl::CreateWorker(
   auto weak_host = host->AsWeakPtr();
   worker_hosts_.insert(std::move(host));
 
-  StoragePartitionImpl* storage_partition =
-      service_worker_context_->storage_partition();
-  // Bounce to the IO thread to setup service worker support in case the request
-  // for the worker script will need to be intercepted by service workers.
+  // Bounce to the IO thread to setup service worker and appcache support in
+  // case the request for the worker script will need to be intercepted by them.
   if (blink::ServiceWorkerUtils::IsServicificationEnabled()) {
+    StoragePartitionImpl* storage_partition =
+        service_worker_context_->storage_partition();
     if (!storage_partition) {
       // The context is shutting down. Just drop the request.
       return;
@@ -297,13 +321,24 @@ void SharedWorkerServiceImpl::CreateWorker(
 
     // Set up the factory bundle for non-NetworkService URLs, e.g.,
     // chrome-extension:// URLs. One factory bundle is consumed by the browser
-    // for SharedWorkerScriptLoaderFactory, and one is sent to the renderer.
+    // for SharedWorkerScriptLoaderFactory, and one is sent to the renderer for
+    // subresource loading.
     std::unique_ptr<URLLoaderFactoryBundleInfo> factory_bundle_for_browser =
         CreateFactoryBundle(process_id, storage_partition,
                             constructor_uses_file_url);
-    std::unique_ptr<URLLoaderFactoryBundleInfo> factory_bundle_for_renderer =
+    std::unique_ptr<URLLoaderFactoryBundleInfo> subresource_loader_factories =
         CreateFactoryBundle(process_id, storage_partition,
                             constructor_uses_file_url);
+
+    // An appcache interceptor is available only when the network service is
+    // enabled.
+    AppCacheNavigationHandleCore* appcache_handle_core = nullptr;
+    if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+      auto appcache_handle =
+          std::make_unique<AppCacheNavigationHandle>(appcache_service_.get());
+      appcache_handle_core = appcache_handle->core();
+      weak_host->SetAppCacheHandle(std::move(appcache_handle));
+    }
 
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
@@ -312,7 +347,8 @@ void SharedWorkerServiceImpl::CreateWorker(
             service_worker_context_->storage_partition()
                 ->url_loader_factory_getter(),
             std::move(factory_bundle_for_browser),
-            std::move(factory_bundle_for_renderer), service_worker_context_,
+            std::move(subresource_loader_factories), service_worker_context_,
+            appcache_handle_core,
             blob_url_loader_factory ? blob_url_loader_factory->Clone()
                                     : nullptr,
             process_id,
@@ -337,8 +373,8 @@ void SharedWorkerServiceImpl::StartWorker(
     mojom::ServiceWorkerProviderInfoForSharedWorkerPtr
         service_worker_provider_info,
     network::mojom::URLLoaderFactoryAssociatedPtrInfo
-        script_loader_factory_info,
-    std::unique_ptr<URLLoaderFactoryBundleInfo> factory_bundle) {
+        main_script_loader_factory,
+    std::unique_ptr<URLLoaderFactoryBundleInfo> subresource_loader_factories) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // The host may already be gone if something forcibly terminated the worker
@@ -365,7 +401,8 @@ void SharedWorkerServiceImpl::StartWorker(
   BindInterface(process_host, &factory);
 
   host->Start(std::move(factory), std::move(service_worker_provider_info),
-              std::move(script_loader_factory_info), std::move(factory_bundle));
+              std::move(main_script_loader_factory),
+              std::move(subresource_loader_factories));
   host->AddClient(std::move(client), process_id, frame_id, message_port);
 }
 

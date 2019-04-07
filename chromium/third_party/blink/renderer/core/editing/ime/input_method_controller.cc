@@ -28,6 +28,7 @@
 
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/dom/events/event_dispatcher.h"
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
 #include "third_party/blink/renderer/core/dom/range.h"
 #include "third_party/blink/renderer/core/dom/text.h"
@@ -46,6 +47,7 @@
 #include "third_party/blink/renderer/core/editing/state_machines/backward_code_point_state_machine.h"
 #include "third_party/blink/renderer/core/editing/state_machines/forward_code_point_state_machine.h"
 #include "third_party/blink/renderer/core/events/composition_event.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
@@ -68,7 +70,7 @@ void DispatchCompositionUpdateEvent(LocalFrame& frame, const String& text) {
 
   CompositionEvent* event = CompositionEvent::Create(
       EventTypeNames::compositionupdate, frame.DomWindow(), text);
-  target->DispatchEvent(event);
+  target->DispatchEvent(*event);
 }
 
 void DispatchCompositionEndEvent(LocalFrame& frame, const String& text) {
@@ -83,7 +85,7 @@ void DispatchCompositionEndEvent(LocalFrame& frame, const String& text) {
 
   CompositionEvent* event = CompositionEvent::Create(
       EventTypeNames::compositionend, frame.DomWindow(), text);
-  EventDispatcher::DispatchScopedEvent(*target, event);
+  EventDispatcher::DispatchScopedEvent(*target, *event);
 }
 
 bool NeedsIncrementalInsertion(const LocalFrame& frame,
@@ -110,7 +112,7 @@ void DispatchBeforeInputFromComposition(EventTarget* target,
   InputEvent* before_input_event = InputEvent::CreateBeforeInput(
       input_type, data, InputEvent::kNotCancelable,
       InputEvent::EventIsComposing::kIsComposing, nullptr);
-  target->DispatchEvent(before_input_event);
+  target->DispatchEvent(*before_input_event);
 }
 
 // Used to insert/replace text during composition update and confirm
@@ -396,7 +398,8 @@ void InputMethodController::Clear() {
     composition_range_->setStart(&GetDocument(), 0);
     composition_range_->collapse(true);
   }
-  GetDocument().Markers().RemoveMarkersOfTypes(DocumentMarker::kComposition);
+  GetDocument().Markers().RemoveMarkersOfTypes(
+      DocumentMarker::MarkerTypes::Composition());
 }
 
 void InputMethodController::ContextDestroyed(Document*) {
@@ -734,7 +737,7 @@ bool InputMethodController::DispatchCompositionStartEvent(const String& text) {
 
   CompositionEvent* event = CompositionEvent::Create(
       EventTypeNames::compositionstart, GetFrame().DomWindow(), text);
-  target->DispatchEvent(event);
+  target->DispatchEvent(*event);
 
   return IsAvailable();
 }
@@ -905,7 +908,7 @@ void InputMethodController::SetComposition(
   if (ime_text_spans.IsEmpty()) {
     GetDocument().Markers().AddCompositionMarker(
         CompositionEphemeralRange(), Color::kTransparent,
-        ui::mojom::ImeTextSpanThickness::kThin,
+        ws::mojom::ImeTextSpanThickness::kThin,
         LayoutTheme::GetTheme().PlatformDefaultCompositionBackgroundColor());
     return;
   }

@@ -22,6 +22,7 @@
 #include "components/sync/test/engine/mock_model_type_worker.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+using sync_pb::AutofillWalletSpecifics;
 using sync_pb::EntityMetadata;
 using sync_pb::EntitySpecifics;
 using sync_pb::ModelTypeState;
@@ -71,16 +72,22 @@ void CaptureStatusCounters(StatusCounters* dst,
 
 class TestModelTypeSyncBridge : public FakeModelTypeSyncBridge {
  public:
-  explicit TestModelTypeSyncBridge(bool commit_only)
+  explicit TestModelTypeSyncBridge(bool commit_only,
+                                   ModelType model_type,
+                                   bool supports_incremental_updates)
       : FakeModelTypeSyncBridge(
             std::make_unique<ClientTagBasedModelTypeProcessor>(
-                PREFERENCES,
+                model_type,
                 /*dump_stack=*/base::RepeatingClosure(),
-                commit_only)) {}
+                commit_only)) {
+    supports_incremental_updates_ = supports_incremental_updates;
+  }
 
   TestModelTypeSyncBridge(std::unique_ptr<TestModelTypeSyncBridge> other,
-                          bool commit_only)
-      : TestModelTypeSyncBridge(commit_only) {
+                          bool commit_only,
+                          ModelType model_type,
+                          bool supports_clear_all)
+      : TestModelTypeSyncBridge(commit_only, model_type, supports_clear_all) {
     std::swap(db_, other->db_);
   }
 
@@ -116,10 +123,19 @@ class TestModelTypeSyncBridge : public FakeModelTypeSyncBridge {
 
   // FakeModelTypeSyncBridge overrides.
 
+  bool SupportsIncrementalUpdates() const override {
+    return supports_incremental_updates_;
+  }
+
   base::Optional<ModelError> MergeSyncData(
       std::unique_ptr<MetadataChangeList> metadata_change_list,
       EntityChangeList entity_data) override {
     merge_call_count_++;
+    if (!SupportsIncrementalUpdates()) {
+      // If the bridge does not support incremental updates, it should clear
+      // local data in MergeSyncData.
+      db_->ClearAllData();
+    }
     return FakeModelTypeSyncBridge::MergeSyncData(
         std::move(metadata_change_list), entity_data);
   }
@@ -148,6 +164,8 @@ class TestModelTypeSyncBridge : public FakeModelTypeSyncBridge {
     EXPECT_FALSE(data_callback_);
     data_callback_ = base::BindOnce(std::move(callback), std::move(data));
   }
+
+  bool supports_incremental_updates_;
 
   // The number of times MergeSyncData has been called.
   int merge_call_count_ = 0;
@@ -185,7 +203,8 @@ class ClientTagBasedModelTypeProcessorTest : public ::testing::Test {
   ~ClientTagBasedModelTypeProcessorTest() override { CheckPostConditions(); }
 
   void SetUp() override {
-    bridge_ = std::make_unique<TestModelTypeSyncBridge>(IsCommitOnly());
+    bridge_ = std::make_unique<TestModelTypeSyncBridge>(
+        IsCommitOnly(), GetModelType(), SupportsIncrementalUpdates());
   }
 
   void InitializeToMetadataLoaded() {
@@ -214,8 +233,8 @@ class ClientTagBasedModelTypeProcessorTest : public ::testing::Test {
     request.authenticated_account_id = "SomeAccountId";
     type_processor()->OnSyncStarting(
         request,
-        base::Bind(&ClientTagBasedModelTypeProcessorTest::OnReadyToConnect,
-                   base::Unretained(this)));
+        base::BindOnce(&ClientTagBasedModelTypeProcessorTest::OnReadyToConnect,
+                       base::Unretained(this)));
   }
 
   void DisconnectSync() {
@@ -251,15 +270,21 @@ class ClientTagBasedModelTypeProcessorTest : public ::testing::Test {
   }
 
   void ResetState(bool keep_db) {
-    bridge_ = keep_db
-                  ? std::make_unique<TestModelTypeSyncBridge>(
-                        std::move(bridge_), IsCommitOnly())
-                  : std::make_unique<TestModelTypeSyncBridge>(IsCommitOnly());
+    bridge_ = keep_db ? std::make_unique<TestModelTypeSyncBridge>(
+                            std::move(bridge_), IsCommitOnly(), GetModelType(),
+                            SupportsIncrementalUpdates())
+                      : std::make_unique<TestModelTypeSyncBridge>(
+                            IsCommitOnly(), GetModelType(),
+                            SupportsIncrementalUpdates());
     worker_ = nullptr;
     CheckPostConditions();
   }
 
   virtual bool IsCommitOnly() { return false; }
+
+  virtual ModelType GetModelType() { return PREFERENCES; }
+
+  virtual bool SupportsIncrementalUpdates() { return true; }
 
   // Wipes existing DB and simulates a pending update of a server-known item.
   EntitySpecifics ResetStateWriteItem(const std::string& name,
@@ -1039,14 +1064,14 @@ TEST_F(ClientTagBasedModelTypeProcessorTest, CommitFailedOnServer) {
   // Entity is sent to server. Processor shouldn't include it in local changes.
   CommitRequestDataList commit_request;
   type_processor()->GetLocalChanges(
-      INT_MAX, base::Bind(&CaptureCommitRequest, &commit_request));
+      INT_MAX, base::BindOnce(&CaptureCommitRequest, &commit_request));
   EXPECT_TRUE(commit_request.empty());
 
   // Fail commit from worker side indicating this entity was not committed.
   // Processor should include it in consecutive GetLocalChanges responses.
   worker()->FailOneCommit();
   type_processor()->GetLocalChanges(
-      INT_MAX, base::Bind(&CaptureCommitRequest, &commit_request));
+      INT_MAX, base::BindOnce(&CaptureCommitRequest, &commit_request));
   EXPECT_EQ(1U, commit_request.size());
   EXPECT_EQ(kHash1, commit_request[0].entity->client_tag_hash);
 }
@@ -1060,7 +1085,7 @@ TEST_F(ClientTagBasedModelTypeProcessorTest, LocalChangesPagination) {
   // Reqeust at most one intity per batch, ensure that only one was returned.
   CommitRequestDataList commit_request;
   type_processor()->GetLocalChanges(
-      1, base::Bind(&CaptureCommitRequest, &commit_request));
+      1, base::BindOnce(&CaptureCommitRequest, &commit_request));
   EXPECT_EQ(1U, commit_request.size());
 }
 
@@ -1431,6 +1456,46 @@ TEST_F(ClientTagBasedModelTypeProcessorTest, IgnoreLocalEncryption) {
   EXPECT_EQ(1U, worker()->GetNumPendingCommits());
 }
 
+// Tests that updates without client tags get dropped.
+TEST_F(ClientTagBasedModelTypeProcessorTest, DropsClientTags) {
+  InitializeToReadyState();
+  UpdateResponseDataList updates;
+  updates.push_back(worker()->GenerateUpdateData(
+      /*tag_hash=*/"", GenerateSpecifics(kKey1, kValue1), 1, "k1"));
+
+  worker()->UpdateFromServer(updates);
+
+  // Verify that the data wasn't actually stored.
+  EXPECT_EQ(0U, db().metadata_count());
+  EXPECT_EQ(0U, db().data_count());
+}
+
+class WalletDataClientTagBasedModelTypeProcessorTest
+    : public ClientTagBasedModelTypeProcessorTest {
+ protected:
+  ModelType GetModelType() override { return AUTOFILL_WALLET_DATA; }
+};
+
+// Tests that updates for Wallet data without client tags get client tags
+// assigned, and not dropped.
+// TODO(crbug.com/874001): Remove this feature-specific logic when the right
+// solution for Wallet data has been decided.
+TEST_F(WalletDataClientTagBasedModelTypeProcessorTest,
+       CreatesClientTagsForWallet) {
+  InitializeToReadyState();
+
+  // Commit an item.
+  UpdateResponseDataList updates;
+  updates.push_back(worker()->GenerateUpdateData(
+      /*tag_hash=*/"", GenerateSpecifics(kKey1, kValue1), 1, "k1"));
+  worker()->UpdateFromServer(updates);
+
+  // Verify that the data was stored.
+  EXPECT_EQ(1U, db().metadata_count());
+  EXPECT_EQ(1U, db().data_count());
+  EXPECT_FALSE(db().GetMetadata(kKey1).client_tag_hash().empty());
+}
+
 // Tests that a real local change wins over a remote encryption-only change.
 TEST_F(ClientTagBasedModelTypeProcessorTest, IgnoreRemoteEncryption) {
   InitializeToReadyState();
@@ -1598,35 +1663,96 @@ TEST_F(ClientTagBasedModelTypeProcessorTest,
   EXPECT_EQ(nullptr, GetEntityForStorageKey(kKey1));
 }
 
+class FullUpdateClientTagBasedModelTypeProcessorTest
+    : public ClientTagBasedModelTypeProcessorTest {
+ protected:
+  bool SupportsIncrementalUpdates() override { return false; }
+};
+
 // Tests that ClientTagBasedModelTypeProcessor can do garbage collection by
-// version. Create 2 entries, one is version 1, another is version 3. Check if
-// sync will delete version 1 entry when server set expired version is 2.
-TEST_F(ClientTagBasedModelTypeProcessorTest, GarbageCollectionByVersion) {
+// version.
+// Garbage collection by version is used by the server to replace all data on
+// the client, and is implemented by calling MergeSyncData on the bridge.
+TEST_F(FullUpdateClientTagBasedModelTypeProcessorTest,
+       GarbageCollectionByVersionFullUpdate) {
   InitializeToReadyState();
+  UpdateResponseDataList updates;
+  updates.push_back(worker()->GenerateUpdateData(
+      /*tag_hash=*/"", GenerateSpecifics(kKey1, kValue1), 1, "k1"));
+  updates.push_back(worker()->GenerateUpdateData(
+      /*tag_hash=*/"", GenerateSpecifics(kKey2, kValue2), 2, "k2"));
 
   // Create 2 entries, one is version 3, another is version 1.
+  sync_pb::GarbageCollectionDirective garbage_collection_directive;
+  garbage_collection_directive.set_version_watermark(1);
+  worker()->UpdateWithGarbageCollection(updates, garbage_collection_directive);
   WriteItemAndAck(kKey1, kValue1);
-  worker()->UpdateFromServer(kHash1, GenerateSpecifics(kKey1, kValue2));
-  worker()->UpdateFromServer(kHash1, GenerateSpecifics(kKey1, kValue3));
   WriteItemAndAck(kKey2, kValue2);
 
   // Verify entries are created correctly.
-  EXPECT_EQ(3, db().GetMetadata(kKey1).server_version());
-  EXPECT_EQ(1, db().GetMetadata(kKey2).server_version());
-  EXPECT_EQ(2U, ProcessorEntityCount());
-  EXPECT_EQ(2U, db().metadata_count());
-  EXPECT_EQ(2U, db().data_count());
-  EXPECT_EQ(0U, worker()->GetNumPendingCommits());
+  ASSERT_EQ(2U, ProcessorEntityCount());
+  ASSERT_EQ(2U, db().metadata_count());
+  ASSERT_EQ(2U, db().data_count());
+  ASSERT_EQ(0U, worker()->GetNumPendingCommits());
+  ASSERT_EQ(1, bridge()->merge_call_count());
 
-  // Expired the entries which are older than version 2.
+  // Tell the client to delete all data.
+  sync_pb::GarbageCollectionDirective new_directive;
+  new_directive.set_version_watermark(2);
+  worker()->UpdateWithGarbageCollection(new_directive);
+
+  // Verify that merge is called on the bridge to replace the current sync data.
+  EXPECT_EQ(2, bridge()->merge_call_count());
+  // Verify that the processor cleared all metadata.
+  EXPECT_EQ(0U, db().metadata_count());
+  EXPECT_EQ(0U, worker()->GetNumPendingCommits());
+}
+
+// Tests that the processor reports an error for updates without a version GC
+// directive that are received for types that don't support incremental updates.
+TEST_F(FullUpdateClientTagBasedModelTypeProcessorTest,
+       UpdateWithoutVersionForFullUpdateBridge) {
+  InitializeToReadyState();
+
+  ExpectError();
+  worker()->UpdateFromServer(kHash1, GenerateSpecifics(kKey1, kValue1));
+}
+
+// Tests that empty updates without a version GC are ignored for types that
+// don't support incremental updates.
+TEST_F(FullUpdateClientTagBasedModelTypeProcessorTest,
+       EmptyUpdateForFullUpdateBridge) {
+  InitializeToReadyState();
+
+  worker()->UpdateFromServer(UpdateResponseDataList());
+
+  // Verify that the empty update was ignored in the processor.
+  EXPECT_EQ(0, bridge()->merge_call_count());
+  EXPECT_EQ(0, bridge()->apply_call_count());
+}
+
+// Tests that the processor correctly handles an initial (non-empty) update
+// without any gc directives (as it happens in the migration to USS).
+TEST_F(FullUpdateClientTagBasedModelTypeProcessorTest,
+       InitialUpdateForFullUpdateBridge) {
+  // Do not set any model type state to emulate that initial sync has not been
+  // done yet.
+  ModelReadyToSync();
+  OnSyncStarting();
+
+  worker()->UpdateFromServer(kHash1, GenerateSpecifics(kKey1, kValue1));
+}
+
+// Tests that the processor reports an error for updates with a version GC
+// directive that are received for types that support incremental updates.
+TEST_F(ClientTagBasedModelTypeProcessorTest,
+       GarbageCollectionByVersionForIncrementalUpdateBridge) {
+  InitializeToReadyState();
+
+  ExpectError();
   sync_pb::GarbageCollectionDirective garbage_collection_directive;
   garbage_collection_directive.set_version_watermark(2);
-  worker()->UpdateWithGarbageConllection(garbage_collection_directive);
-
-  EXPECT_EQ(1U, ProcessorEntityCount());
-  EXPECT_EQ(1U, db().metadata_count());
-  EXPECT_EQ(2U, db().data_count());
-  EXPECT_EQ(0U, worker()->GetNumPendingCommits());
+  worker()->UpdateWithGarbageCollection(garbage_collection_directive);
 }
 
 // Tests that ClientTagBasedModelTypeProcessor can do garbage collection by age.
@@ -1655,7 +1781,7 @@ TEST_F(ClientTagBasedModelTypeProcessorTest, GarbageCollectionByAge) {
   // Expired the entries which are older than 10 days.
   sync_pb::GarbageCollectionDirective garbage_collection_directive;
   garbage_collection_directive.set_age_watermark_in_days(10);
-  worker()->UpdateWithGarbageConllection(garbage_collection_directive);
+  worker()->UpdateWithGarbageCollection(garbage_collection_directive);
 
   EXPECT_EQ(1U, ProcessorEntityCount());
   EXPECT_EQ(1U, db().metadata_count());
@@ -1695,7 +1821,7 @@ TEST_F(ClientTagBasedModelTypeProcessorTest, GarbageCollectionByItemLimit) {
   // Expired the entries which are older than 10 days.
   sync_pb::GarbageCollectionDirective garbage_collection_directive;
   garbage_collection_directive.set_max_number_of_items(2);
-  worker()->UpdateWithGarbageConllection(garbage_collection_directive);
+  worker()->UpdateWithGarbageCollection(garbage_collection_directive);
 
   EXPECT_EQ(2U, ProcessorEntityCount());
   EXPECT_EQ(2U, db().metadata_count());

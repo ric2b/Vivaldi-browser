@@ -19,16 +19,14 @@ class DEVICE_VR_EXPORT FakeVRServiceClient : public mojom::VRServiceClient {
   FakeVRServiceClient(mojom::VRServiceClientRequest request);
   ~FakeVRServiceClient() override;
 
-  void OnDisplayConnected(mojom::VRDisplayHostPtr display,
-                          mojom::VRDisplayClientRequest request,
-                          mojom::VRDisplayInfoPtr displayInfo) override;
-  void SetLastDeviceId(unsigned int id);
-  bool CheckDeviceId(unsigned int id);
+  void OnDeviceChanged() override{};
+  void SetLastDeviceId(mojom::XRDeviceId id);
+  bool CheckDeviceId(mojom::XRDeviceId id);
 
  private:
   std::vector<mojom::VRDisplayInfoPtr> displays_;
   std::vector<std::unique_ptr<FakeVRDisplayImplClient>> display_clients_;
-  unsigned int last_device_id_ = 0;
+  mojom::XRDeviceId last_device_id_ = static_cast<mojom::XRDeviceId>(0);
   mojo::Binding<mojom::VRServiceClient> m_binding_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeVRServiceClient);

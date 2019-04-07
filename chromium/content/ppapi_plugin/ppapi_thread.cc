@@ -51,7 +51,7 @@
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/proxy/resource_reply_thread_registrar.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/interfaces/constants.mojom.h"
+#include "services/ws/public/mojom/constants.mojom.h"
 #include "third_party/blink/public/web/blink.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
@@ -105,7 +105,8 @@ PpapiThread::PpapiThread(const base::CommandLine& command_line, bool is_broker)
       command_line.GetSwitchValueASCII(switches::kPpapiFlashArgs));
 
   blink_platform_impl_.reset(new PpapiBlinkPlatformImpl);
-  blink::Platform::Initialize(blink_platform_impl_.get());
+  blink::Platform::Initialize(blink_platform_impl_.get(),
+                              blink_platform_impl_->CurrentThread());
 
   if (!is_broker_) {
     scoped_refptr<ppapi::proxy::PluginMessageFilter> plugin_filter(
@@ -119,10 +120,10 @@ PpapiThread::PpapiThread(const base::CommandLine& command_line, bool is_broker)
   // allocator.
   if (!command_line.HasSwitch(switches::kSingleProcess)) {
     discardable_memory::mojom::DiscardableSharedMemoryManagerPtr manager_ptr;
-    if (!features::IsAshInBrowserProcess()) {
+    if (features::IsUsingWindowService()) {
 #if defined(USE_AURA)
       GetServiceManagerConnection()->GetConnector()->BindInterface(
-          ui::mojom::kServiceName, &manager_ptr);
+          ws::mojom::kServiceName, &manager_ptr);
 #else
       NOTREACHED();
 #endif
@@ -296,16 +297,17 @@ void PpapiThread::OnLoadPlugin(const base::FilePath& path,
   // client) then fetch the entry points from the embedder, rather than a DLL.
   std::vector<PepperPluginInfo> plugins;
   GetContentClient()->AddPepperPlugins(&plugins);
-  for (size_t i = 0; i < plugins.size(); ++i) {
-    if (plugins[i].is_internal && plugins[i].path == path) {
+  for (const auto& plugin : plugins) {
+    if (plugin.is_internal && plugin.path == path) {
       // An internal plugin is being loaded, so fetch the entry points.
-      plugin_entry_points_ = plugins[i].internal_entry_points;
+      plugin_entry_points_ = plugin.internal_entry_points;
+      break;
     }
   }
 
   // If the plugin isn't internal then load it from |path|.
   base::ScopedNativeLibrary library;
-  if (plugin_entry_points_.initialize_module == nullptr) {
+  if (!plugin_entry_points_.initialize_module) {
     // Load the plugin from the specified library.
     base::NativeLibraryLoadError error;
     base::TimeDelta load_time;

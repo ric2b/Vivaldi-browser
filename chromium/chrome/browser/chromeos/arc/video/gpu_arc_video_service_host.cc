@@ -23,8 +23,8 @@
 #include "mojo/public/cpp/system/invitation.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/interfaces/arc.mojom.h"
-#include "services/ui/public/interfaces/constants.mojom.h"
+#include "services/ws/public/mojom/arc.mojom.h"
+#include "services/ws/public/mojom/constants.mojom.h"
 #include "ui/base/ui_base_features.h"
 
 namespace arc {
@@ -52,9 +52,7 @@ class GpuArcVideoServiceHostFactory
 
 class VideoAcceleratorFactoryService : public mojom::VideoAcceleratorFactory {
  public:
-  VideoAcceleratorFactoryService() {
-    DCHECK(features::IsAshInBrowserProcess());
-  }
+  VideoAcceleratorFactoryService() { DCHECK(!features::IsMultiProcessMash()); }
 
   ~VideoAcceleratorFactoryService() override = default;
 
@@ -93,11 +91,11 @@ class VideoAcceleratorFactoryServiceViz
     : public mojom::VideoAcceleratorFactory {
  public:
   VideoAcceleratorFactoryServiceViz() {
-    DCHECK(!features::IsAshInBrowserProcess());
+    DCHECK(features::IsMultiProcessMash());
     DETACH_FROM_THREAD(thread_checker_);
     auto* connector =
         content::ServiceManagerConnection::GetForProcess()->GetConnector();
-    connector->BindInterface(ui::mojom::kServiceName, &arc_);
+    connector->BindInterface(ws::mojom::kServiceName, &arc_);
   }
 
   ~VideoAcceleratorFactoryServiceViz() override {
@@ -125,14 +123,14 @@ class VideoAcceleratorFactoryServiceViz
  private:
   THREAD_CHECKER(thread_checker_);
 
-  ui::mojom::ArcPtr arc_;
+  ws::mojom::ArcPtr arc_;
 
   DISALLOW_COPY_AND_ASSIGN(VideoAcceleratorFactoryServiceViz);
 };
 
 std::unique_ptr<mojom::VideoAcceleratorFactory>
 CreateVideoAcceleratorFactory() {
-  if (!features::IsAshInBrowserProcess())
+  if (features::IsMultiProcessMash())
     return std::make_unique<VideoAcceleratorFactoryServiceViz>();
   return std::make_unique<VideoAcceleratorFactoryService>();
 }

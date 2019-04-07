@@ -25,6 +25,7 @@ void SyntheticTouchDriver::DispatchEvent(SyntheticGestureTarget* target,
   if (touch_event_.GetType() != blink::WebInputEvent::kUndefined)
     target->DispatchInputEventToPlatform(touch_event_);
   touch_event_.ResetPoints();
+  ResetIndexMap();
 }
 
 void SyntheticTouchDriver::Press(float x,
@@ -50,6 +51,10 @@ void SyntheticTouchDriver::Release(
   DCHECK_LT(index, blink::WebTouchEvent::kTouchesLengthCap);
   touch_event_.ReleasePoint(index_map_[index]);
   index_map_[index] = -1;
+}
+
+void SyntheticTouchDriver::Leave(int index) {
+  NOTIMPLEMENTED();
 }
 
 bool SyntheticTouchDriver::UserInputCheck(
@@ -82,6 +87,28 @@ bool SyntheticTouchDriver::UserInputCheck(
   }
 
   return true;
+}
+
+void SyntheticTouchDriver::ResetIndexMap() {
+  unsigned free_index = 0;
+  for (unsigned int i = 0; i < blink::WebTouchEvent::kTouchesLengthCap; ++i) {
+    if (free_index >= touch_event_.touches_length)
+      break;
+    if (touch_event_.touches[i].state !=
+        blink::WebTouchPoint::kStateUndefined) {
+      touch_event_.touches[free_index] = touch_event_.touches[i];
+      int index = GetIndexFromMap(i);
+      index_map_[index] = free_index;
+      free_index++;
+    }
+  }
+}
+
+int SyntheticTouchDriver::GetIndexFromMap(int value) const {
+  int index = std::find(index_map_.begin(), index_map_.end(), value) -
+              index_map_.begin();
+  DCHECK(index >= 0 && index < blink::WebTouchEvent::kTouchesLengthCap);
+  return index;
 }
 
 }  // namespace content

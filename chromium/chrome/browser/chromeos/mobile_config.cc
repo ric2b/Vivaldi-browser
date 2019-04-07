@@ -14,7 +14,7 @@
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -333,7 +333,7 @@ MobileConfig::~MobileConfig() {
 
 void MobileConfig::LoadConfig() {
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
+      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
       base::BindOnce(&ReadConfigInBackground,
                      base::FilePath(kGlobalCarrierConfigPath),
                      base::FilePath(kLocalCarrierConfigPath)),

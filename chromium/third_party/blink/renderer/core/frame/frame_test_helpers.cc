@@ -44,7 +44,7 @@
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/platform/web_url_response.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
-#include "third_party/blink/public/web/web_navigation_timings.h"
+#include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/public/web/web_tree_scope_type.h"
 #include "third_party/blink/public/web/web_view_client.h"
@@ -78,13 +78,13 @@ namespace {
 //    progress, it exits the run loop.
 // 7. At this point, all parsing, resource loads, and layout should be finished.
 
-void RunServeAsyncRequestsTask() {
+void RunServeAsyncRequestsTask(scoped_refptr<base::TaskRunner> task_runner) {
   // TODO(kinuko,toyoshim): Create a mock factory and use it instead of
   // getting the platform's one. (crbug.com/751425)
   Platform::Current()->GetURLLoaderMockFactory()->ServeAsynchronousRequests();
   if (TestWebFrameClient::IsLoading()) {
-    Platform::Current()->CurrentThread()->GetTaskRunner()->PostTask(
-        FROM_HERE, WTF::Bind(&RunServeAsyncRequestsTask));
+    task_runner->PostTask(FROM_HERE,
+                          WTF::Bind(&RunServeAsyncRequestsTask, task_runner));
   } else {
     test::ExitRunLoop();
   }
@@ -101,11 +101,13 @@ std::unique_ptr<T> CreateDefaultClientIfNeeded(T*& client) {
   return owned_client;
 }
 
-WebNavigationTimings BuildDummyWebNavigationTimings() {
-  WebNavigationTimings web_navigation_timings;
-  web_navigation_timings.navigation_start = base::TimeTicks::Now();
-  web_navigation_timings.fetch_start = base::TimeTicks::Now();
-  return web_navigation_timings;
+std::unique_ptr<WebNavigationParams> BuildDummyNavigationParams() {
+  std::unique_ptr<WebNavigationParams> navigation_params =
+      std::make_unique<WebNavigationParams>();
+  navigation_params->navigation_timings.navigation_start =
+      base::TimeTicks::Now();
+  navigation_params->navigation_timings.fetch_start = base::TimeTicks::Now();
+  return navigation_params;
 }
 
 }  // namespace
@@ -118,16 +120,16 @@ void LoadFrame(WebLocalFrame* frame, const std::string& url) {
     frame->CommitNavigation(
         WebURLRequest(web_url), blink::WebFrameLoadType::kStandard,
         blink::WebHistoryItem(), false, base::UnguessableToken::Create(),
-        nullptr, BuildDummyWebNavigationTimings());
+        BuildDummyNavigationParams(), nullptr /* extra_data */);
   }
-  PumpPendingRequestsForFrameToLoad();
+  PumpPendingRequestsForFrameToLoad(frame);
 }
 
 void LoadHTMLString(WebLocalFrame* frame,
                     const std::string& html,
                     const WebURL& base_url) {
   frame->LoadHTMLString(WebData(html.data(), html.size()), base_url);
-  PumpPendingRequestsForFrameToLoad();
+  PumpPendingRequestsForFrameToLoad(frame);
 }
 
 void LoadHistoryItem(WebLocalFrame* frame,
@@ -136,25 +138,27 @@ void LoadHistoryItem(WebLocalFrame* frame,
   HistoryItem* history_item = item;
   frame->CommitNavigation(
       WrappedResourceRequest(history_item->GenerateResourceRequest(cache_mode)),
-      WebFrameLoadType::kBackForward, item,
-      /*is_client_redirect=*/false, base::UnguessableToken::Create(), nullptr,
-      BuildDummyWebNavigationTimings());
-  PumpPendingRequestsForFrameToLoad();
+      WebFrameLoadType::kBackForward, item, false /* is_client_redirect */,
+      base::UnguessableToken::Create(), BuildDummyNavigationParams(),
+      nullptr /* extra_data */);
+  PumpPendingRequestsForFrameToLoad(frame);
 }
 
 void ReloadFrame(WebLocalFrame* frame) {
   frame->StartReload(WebFrameLoadType::kReload);
-  PumpPendingRequestsForFrameToLoad();
+  PumpPendingRequestsForFrameToLoad(frame);
 }
 
 void ReloadFrameBypassingCache(WebLocalFrame* frame) {
   frame->StartReload(WebFrameLoadType::kReloadBypassingCache);
-  PumpPendingRequestsForFrameToLoad();
+  PumpPendingRequestsForFrameToLoad(frame);
 }
 
-void PumpPendingRequestsForFrameToLoad() {
-  Platform::Current()->CurrentThread()->GetTaskRunner()->PostTask(
-      FROM_HERE, WTF::Bind(&RunServeAsyncRequestsTask));
+void PumpPendingRequestsForFrameToLoad(WebLocalFrame* frame) {
+  scoped_refptr<base::TaskRunner> task_runner =
+      frame->GetTaskRunner(blink::TaskType::kInternalTest);
+  task_runner->PostTask(FROM_HERE,
+                        WTF::Bind(&RunServeAsyncRequestsTask, task_runner));
   test::EnterRunLoop();
 }
 

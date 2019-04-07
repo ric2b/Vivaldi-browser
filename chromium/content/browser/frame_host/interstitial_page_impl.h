@@ -142,6 +142,10 @@ class CONTENT_EXPORT InterstitialPageImpl : public InterstitialPage,
                          bool user_gesture) override;
   void SetFocusedFrame(FrameTreeNode* node, SiteInstance* source) override;
   Visibility GetVisibility() const override;
+  void AudioContextPlaybackStarted(RenderFrameHost* host,
+                                   int context_id) override;
+  void AudioContextPlaybackStopped(RenderFrameHost* host,
+                                   int context_id) override;
 
   // RenderViewHostDelegate implementation:
   RenderViewHostDelegateView* GetDelegateView() override;
@@ -174,6 +178,7 @@ class CONTENT_EXPORT InterstitialPageImpl : public InterstitialPage,
   void RenderWidgetDeleted(RenderWidgetHostImpl* render_widget_host) override;
   KeyboardEventProcessingResult PreHandleKeyboardEvent(
       const NativeWebKeyboardEvent& event) override;
+  bool PreHandleMouseEvent(const blink::WebMouseEvent& event) override;
   void HandleKeyboardEvent(const NativeWebKeyboardEvent& event) override;
   TextInputManager* GetTextInputManager() override;
   RenderWidgetHostInputEventRouter* GetInputEventRouter() override;

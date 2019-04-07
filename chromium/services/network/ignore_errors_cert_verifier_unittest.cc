@@ -27,7 +27,6 @@
 
 using net::CertVerifier;
 using net::MockCertVerifier;
-using net::CompletionCallback;
 using net::HashValue;
 using net::SHA256HashValue;
 using net::X509Certificate;
@@ -95,8 +94,7 @@ static void GetNonWhitelistedTestCert(scoped_refptr<X509Certificate>* out) {
 
 static CertVerifier::RequestParams MakeRequestParams(
     const scoped_refptr<X509Certificate>& cert) {
-  return CertVerifier::RequestParams(cert, "example.com", 0, "",
-                                     net::CertificateList());
+  return CertVerifier::RequestParams(cert, "example.com", 0, "");
 }
 
 static void GetWhitelistedTestCert(scoped_refptr<X509Certificate>* out) {
@@ -117,7 +115,7 @@ TEST_F(IgnoreErrorsCertVerifierTest, TestNoMatchCertOk) {
   std::unique_ptr<CertVerifier::Request> request;
 
   EXPECT_THAT(callback.GetResult(verifier_.Verify(
-                  MakeRequestParams(test_cert), nullptr, &verify_result,
+                  MakeRequestParams(test_cert), &verify_result,
                   callback.callback(), &request, NetLogWithSource())),
               IsOk());
 }
@@ -130,7 +128,7 @@ TEST_F(IgnoreErrorsCertVerifierTest, TestNoMatchCertError) {
   std::unique_ptr<CertVerifier::Request> request;
 
   EXPECT_THAT(callback.GetResult(verifier_.Verify(
-                  MakeRequestParams(test_cert), nullptr, &verify_result,
+                  MakeRequestParams(test_cert), &verify_result,
                   callback.callback(), &request, NetLogWithSource())),
               IsError(ERR_CERT_INVALID));
 }
@@ -143,7 +141,7 @@ TEST_F(IgnoreErrorsCertVerifierTest, TestMatch) {
   std::unique_ptr<CertVerifier::Request> request;
 
   EXPECT_THAT(callback.GetResult(verifier_.Verify(
-                  MakeRequestParams(test_cert), nullptr, &verify_result,
+                  MakeRequestParams(test_cert), &verify_result,
                   callback.callback(), &request, NetLogWithSource())),
               IsOk());
 }
@@ -181,12 +179,12 @@ TEST_P(IgnoreCertificateErrorsSPKIListFlagTest, TestUserDataDirSwitchRequired) {
 
   if (GetParam()) {
     EXPECT_THAT(callback.GetResult(verifier_->Verify(
-                    MakeRequestParams(test_cert), nullptr, &verify_result,
+                    MakeRequestParams(test_cert), &verify_result,
                     callback.callback(), &request, NetLogWithSource())),
                 IsOk());
   } else {
     EXPECT_THAT(callback.GetResult(verifier_->Verify(
-                    MakeRequestParams(test_cert), nullptr, &verify_result,
+                    MakeRequestParams(test_cert), &verify_result,
                     callback.callback(), &request, NetLogWithSource())),
                 IsError(ERR_CERT_INVALID));
   }

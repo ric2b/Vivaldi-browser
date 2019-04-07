@@ -12,7 +12,7 @@
 #include "base/process/process.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "mojo/public/cpp/bindings/message.h"
 
 namespace {
@@ -22,7 +22,7 @@ base::FilePath& DumpDirectory() {
   return *dump_directory;
 }
 
-void WriteMessage(uint32_t identifier,
+void WriteMessage(uint64_t identifier,
                   const mojo::MessageDumper::MessageEntry& entry) {
   static uint64_t num = 0;
 

@@ -28,6 +28,11 @@
 #include "chrome/browser/browsing_data/counters/hosted_apps_counter.h"
 #endif
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/sync_ui_util.h"
+#endif
+
 // A helper function to display the size of cache in units of MB or higher.
 // We need this, as 1 MB is the lowest nonzero cache size displayed by the
 // counter.
@@ -45,16 +50,14 @@ bool ShouldShowCookieException(Profile* profile) {
     auto* signin_manager = SigninManagerFactory::GetForProfile(profile);
     return signin_manager->IsAuthenticated();
   }
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   if (AccountConsistencyModeManager::IsDiceEnabledForProfile(profile)) {
-    auto* token_service =
-        ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
-    std::vector<std::string> accounts = token_service->GetAccounts();
-    bool has_valid_token = std::any_of(
-        accounts.begin(), accounts.end(), [&](std::string account_id) {
-          return !token_service->RefreshTokenHasError(account_id);
-        });
-    return has_valid_token;
+    sync_ui_util::MessageType sync_status = sync_ui_util::GetStatus(
+        profile, ProfileSyncServiceFactory::GetForProfile(profile),
+        *SigninManagerFactory::GetForProfile(profile));
+    return sync_status == sync_ui_util::SYNCED;
   }
+#endif
   return false;
 }
 
@@ -97,8 +100,30 @@ base::string16 GetChromeCounterTextFromResult(
                      : IDS_DEL_CACHE_COUNTER_ALMOST_EMPTY);
   }
   if (pref_name == browsing_data::prefs::kDeleteCookiesBasic) {
-    // The basic tab doesn't show cookie counter results.
+#if defined(OS_ANDROID)
+    // On Android the basic tab includes Media Licenses. |result| is the
+    // BrowsingDataCounter returned after counting the number of Media Licenses.
+    // It includes the name of one origin that contains Media Licenses, so if
+    // there are Media Licenses, include that origin as part of the message
+    // displayed to the user. The message is also different depending on
+    // whether the user is signed in or not.
+    const auto* media_license_result =
+        static_cast<const MediaLicensesCounter::MediaLicenseResult*>(result);
+    const bool signed_in = ShouldShowCookieException(profile);
+    if (media_license_result->Value() > 0) {
+      return l10n_util::GetStringFUTF16(
+          signed_in
+              ? IDS_DEL_CLEAR_COOKIES_SUMMARY_BASIC_WITH_EXCEPTION_AND_MEDIA_LICENSES
+              : IDS_DEL_CLEAR_COOKIES_SUMMARY_BASIC_WITH_MEDIA_LICENSES,
+          base::UTF8ToUTF16(media_license_result->GetOneOrigin()));
+    }
+    return l10n_util::GetStringUTF16(
+        signed_in ? IDS_DEL_CLEAR_COOKIES_SUMMARY_BASIC_WITH_EXCEPTION
+                  : IDS_DEL_CLEAR_COOKIES_SUMMARY_BASIC);
+#else
+    // On other platforms, the basic tab doesn't show cookie counter results.
     NOTREACHED();
+#endif
   }
   if (pref_name == browsing_data::prefs::kDeleteCookies) {
     // Site data counter.

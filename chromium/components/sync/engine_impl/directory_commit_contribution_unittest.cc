@@ -29,7 +29,6 @@ class DirectoryCommitContributionTest : public ::testing::Test {
     syncable::WriteTransaction trans(FROM_HERE, syncable::UNITTEST, dir());
     CreateTypeRoot(&trans, dir(), PREFERENCES);
     CreateTypeRoot(&trans, dir(), EXTENSIONS);
-    CreateTypeRoot(&trans, dir(), ARTICLES);
     CreateTypeRoot(&trans, dir(), BOOKMARKS);
   }
 
@@ -90,7 +89,7 @@ class DirectoryCommitContributionTest : public ::testing::Test {
   TestIdFactory id_factory_;
 
   // Used in construction of DirectoryTypeDebugInfoEmitters.
-  base::ObserverList<TypeDebugInfoObserver> type_observers_;
+  base::ObserverList<TypeDebugInfoObserver>::Unchecked type_observers_;
 
  private:
   base::MessageLoop loop_;  // Neeed to initialize the directory.

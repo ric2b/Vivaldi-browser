@@ -68,6 +68,7 @@ class PropertyTreePrinterTraits<TransformPaintPropertyNode> {
   static void AddVisualViewportProperties(
       const VisualViewport& visual_viewport,
       PropertyTreePrinter<TransformPaintPropertyNode>& printer) {
+    printer.AddNode(visual_viewport.GetOverscrollElasticityTransformNode());
     printer.AddNode(visual_viewport.GetPageScaleNode());
     printer.AddNode(visual_viewport.GetScrollTranslationNode());
   }
@@ -78,7 +79,7 @@ class PropertyTreePrinterTraits<TransformPaintPropertyNode> {
     printer.AddNode(properties.PaintOffsetTranslation());
     printer.AddNode(properties.Transform());
     printer.AddNode(properties.Perspective());
-    printer.AddNode(properties.SvgLocalToBorderBoxTransform());
+    printer.AddNode(properties.ReplacedContentTransform());
     printer.AddNode(properties.ScrollTranslation());
   }
 };
@@ -170,8 +171,8 @@ void UpdateDebugNames(const LayoutObject& object,
                object);
   SetDebugName(properties.Transform(), "Transform", object);
   SetDebugName(properties.Perspective(), "Perspective", object);
-  SetDebugName(properties.SvgLocalToBorderBoxTransform(),
-               "SvgLocalToBorderBoxTransform", object);
+  SetDebugName(properties.ReplacedContentTransform(),
+               "ReplacedContentTransform", object);
   SetDebugName(properties.ScrollTranslation(), "ScrollTranslation", object);
 
   SetDebugName(properties.FragmentClip(), "FragmentClip", object);

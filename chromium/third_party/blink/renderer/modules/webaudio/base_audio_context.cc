@@ -69,12 +69,13 @@
 #include "third_party/blink/renderer/modules/webaudio/script_processor_node.h"
 #include "third_party/blink/renderer/modules/webaudio/stereo_panner_node.h"
 #include "third_party/blink/renderer/modules/webaudio/wave_shaper_node.h"
-#include "third_party/blink/renderer/platform/uuid.h"
 #include "third_party/blink/renderer/platform/audio/iir_filter.h"
+#include "third_party/blink/renderer/platform/audio/vector_math.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/histogram.h"
+#include "third_party/blink/renderer/platform/uuid.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
@@ -104,6 +105,13 @@ BaseAudioContext::BaseAudioContext(Document* document,
       output_position_() {}
 
 BaseAudioContext::~BaseAudioContext() {
+  {
+    // We may need to destroy summing junctions, which must happen while this
+    // object is still valid and with the graph lock held.
+    GraphAutoLocker locker(this);
+    destination_handler_ = nullptr;
+  }
+
   GetDeferredTaskHandler().ContextWillBeDestroyed();
   DCHECK(!active_source_nodes_.size());
   DCHECK(!is_resolving_resume_promises_);
@@ -619,6 +627,16 @@ void BaseAudioContext::SetContextState(AudioContextState new_state) {
 
   context_state_ = new_state;
 
+  // Audibility checks only happen when the context is running so manual
+  // notification is required when the context gets suspended or closed.
+  if (was_audible_ && context_state_ != kRunning) {
+    was_audible_ = false;
+    PostCrossThreadTask(
+        *Platform::Current()->MainThread()->GetTaskRunner(), FROM_HERE,
+        CrossThreadBind(&BaseAudioContext::NotifyAudibleAudioStopped,
+                        WrapCrossThreadPersistent(this)));
+  }
+
   // Notify context that state changed
   if (GetExecutionContext()) {
     GetExecutionContext()
@@ -629,7 +647,7 @@ void BaseAudioContext::SetContextState(AudioContextState new_state) {
 }
 
 void BaseAudioContext::NotifyStateChange() {
-  DispatchEvent(Event::Create(EventTypeNames::statechange));
+  DispatchEvent(*Event::Create(EventTypeNames::statechange));
 }
 
 void BaseAudioContext::NotifySourceNodeFinishedProcessing(
@@ -663,7 +681,7 @@ void BaseAudioContext::ReleaseActiveSourceNodes() {
 
 void BaseAudioContext::HandleStoppableSourceNodes() {
   DCHECK(IsAudioThread());
-  DCHECK(IsGraphOwner());
+  AssertGraphOwner();
 
   if (finished_source_handlers_.size())
     ScheduleMainThreadCleanup();
@@ -695,7 +713,24 @@ void BaseAudioContext::HandlePreRenderTasks(
   }
 }
 
-void BaseAudioContext::HandlePostRenderTasks() {
+// Determine if the rendered data is audible.
+static bool IsAudible(const AudioBus* rendered_data) {
+  // Compute the energy in each channel and sum up the energy in each channel
+  // for the total energy.
+  float energy = 0;
+
+  unsigned data_size = rendered_data->length();
+  for (unsigned k = 0; k < rendered_data->NumberOfChannels(); ++k) {
+    const float* data = rendered_data->Channel(k)->Data();
+    float channel_energy;
+    VectorMath::Vsvesq(data, 1, &channel_energy, data_size);
+    energy += channel_energy;
+  }
+
+  return energy > 0;
+}
+
+void BaseAudioContext::HandlePostRenderTasks(const AudioBus* destination_bus) {
   DCHECK(IsAudioThread());
 
   // Must use a tryLock() here too.  Don't worry, the lock will very rarely be
@@ -711,6 +746,32 @@ void BaseAudioContext::HandlePostRenderTasks() {
     GetDeferredTaskHandler().RequestToDeleteHandlersOnMainThread();
 
     unlock();
+  }
+
+  // Notify browser if audible audio has started or stopped.
+  if (HasRealtimeConstraint()) {
+    // Detect silence (or not) for MEI
+    bool is_audible = IsAudible(destination_bus);
+
+    if (is_audible) {
+      ++total_audible_renders_;
+    }
+
+    if (was_audible_ != is_audible) {
+      // Audibility changed in this render, so report the change.
+      was_audible_ = is_audible;
+      if (is_audible) {
+        PostCrossThreadTask(
+            *Platform::Current()->MainThread()->GetTaskRunner(), FROM_HERE,
+            CrossThreadBind(&BaseAudioContext::NotifyAudibleAudioStarted,
+                            WrapCrossThreadPersistent(this)));
+      } else {
+        PostCrossThreadTask(
+            *Platform::Current()->MainThread()->GetTaskRunner(), FROM_HERE,
+            CrossThreadBind(&BaseAudioContext::NotifyAudibleAudioStopped,
+                            WrapCrossThreadPersistent(this)));
+      }
+    }
   }
 }
 
@@ -798,7 +859,7 @@ void BaseAudioContext::ResolvePromisesForUnpause() {
   // This runs inside the BaseAudioContext's lock when handling pre-render
   // tasks.
   DCHECK(IsAudioThread());
-  DCHECK(IsGraphOwner());
+  AssertGraphOwner();
 
   // Resolve any pending promises created by resume(). Only do this if we
   // haven't already started resolving these promises. This gets called very

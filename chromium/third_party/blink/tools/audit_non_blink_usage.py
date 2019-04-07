@@ -28,11 +28,12 @@ _CONFIG = [
             'gfx::CubicBezier',
             'gfx::ICCProfile',
             'gfx::RadToDeg',
-            'gfx::ScrollOffset',
 
             # //base constructs that are allowed everywhere
             'base::AdoptRef',
             'base::AutoReset',
+            'base::File',
+            'base::FilePath',
             'base::GetUniqueIdForProcess',
             'base::Location',
             'base::MakeRefCounted',
@@ -77,6 +78,12 @@ _CONFIG = [
             # //base/memory/ptr_util.h.
             'base::WrapUnique',
 
+            # //base/metrics/field_trial_params.h.
+            'base::GetFieldTrialParamValueByFeature',
+            'base::GetFieldTrialParamByFeatureAsBool',
+            'base::GetFieldTrialParamByFeatureAsDouble',
+            'base::GetFieldTrialParamByFeatureAsInt',
+
             # //base/numerics/safe_conversions.h.
             'base::as_signed',
             'base::as_unsigned',
@@ -117,6 +124,13 @@ _CONFIG = [
 
             # Base atomic utilities
             'base::AtomicSequenceNumber',
+
+            # Task traits
+            'base::TaskTraits',
+            'base::MayBlock',
+            'base::TaskPriority',
+            'base::TaskShutdownBehavior',
+            'base::WithBaseSyncPrimitives',
 
             # Byte order
             'base::ByteSwap',
@@ -184,6 +198,12 @@ _CONFIG = [
             'cc::EventListenerClass',
             'cc::EventListenerProperties',
 
+            # Scrolling
+            'cc::ScrollOffsetAnimationCurve',
+            'cc::ScrollStateData',
+            'gfx::RectToSkRect',
+            'gfx::ScrollOffset',
+
             # Standalone utility libraries that only depend on //base
             'skia::.+',
             'url::.+',
@@ -240,9 +260,6 @@ _CONFIG = [
 
             # Blink uses UKM for logging e.g. always-on leak detection (crbug/757374)
             'ukm::.+',
-
-            # WebRTC classes
-            'webrtc::.+',
         ],
         'disallowed': ['.+'],
     },
@@ -269,6 +286,13 @@ _CONFIG = [
         ],
     },
     {
+        'paths': ['third_party/blink/renderer/core/fetch/data_consumer_handle_test_util.cc'],
+        'allowed': [
+            # The existing code already contains gin::IsolateHolder.
+            'gin::IsolateHolder',
+        ],
+    },
+    {
         'paths': ['third_party/blink/renderer/core/paint'],
         'allowed': [
             # cc painting types.
@@ -289,6 +313,8 @@ _CONFIG = [
     {
         'paths': ['third_party/blink/renderer/core/inspector/inspector_memory_agent.cc'],
         'allowed': [
+            'base::ModuleCache',
+            'base::PoissonAllocationSampler',
             'base::SamplingHeapProfiler',
         ],
     },
@@ -322,6 +348,16 @@ _CONFIG = [
             'gpu::gles2::GLES2Interface',
             'gpu::MailboxHolder',
             'display::Display',
+        ],
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/modules/webgpu/',
+        ],
+        # The WebGPU Blink module needs access to the WebGPU control
+        # command buffer interface.
+        'allowed': [
+            'gpu::webgpu::WebGPUInterface',
         ],
     },
     {
@@ -374,6 +410,31 @@ _CONFIG = [
         ],
         'allowed': ['crypto::.+'],
     },
+    {
+        'paths': [
+            'third_party/blink/renderer/modules/peerconnection',
+            'third_party/blink/renderer/bindings/modules/v8/serialization',
+        ],
+        'allowed': [
+            'cricket::.*',
+            'rtc::.+',
+            'webrtc::.+',
+        ]
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/modules/peerconnection/adapters/',
+        ],
+        # The code in adapters/ wraps WebRTC APIs using STL/WebRTC types only.
+        # Thus, the restriction that objects should only be created and
+        # destroyed on the same thread can be relaxed since no Blink types (like
+        # AtomicString or HeapVector) are used cross thread. These Blink types
+        # are converted to the STL/WebRTC counterparts in the parent directory.
+        'allowed': [
+            'base::OnTaskRunnerDeleter',
+            'sigslot::.+',
+        ],
+    }
 ]
 
 

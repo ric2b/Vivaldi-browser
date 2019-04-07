@@ -350,10 +350,11 @@ Polymer({
       plugin.setViewportChangedCallback(
           this.onPreviewVisualStateChange_.bind(this));
     }
+
     this.pluginLoaded_ = false;
     this.pluginProxy_.resetPrintPreviewMode(
         previewUid, index, !this.getSettingValue('color'),
-        /** @type {!Array<number>} */ (this.getSetting('pages').value),
+        /** @type {!Array<number>} */ (this.getSettingValue('pages')),
         this.documentInfo.isModifiable);
   },
 
@@ -421,10 +422,15 @@ Polymer({
    * Called when the plugin loads. This is a consequence of calling
    * plugin.reload(). Certain plugin state can only be set after the plugin
    * has loaded.
+   * @param {boolean} success Whether the plugin load succeeded or not.
    * @private
    */
-  onPluginLoad_: function() {
-    this.pluginLoaded_ = true;
+  onPluginLoad_: function(success) {
+    if (success) {
+      this.pluginLoaded_ = true;
+    } else {
+      this.previewState = print_preview_new.PreviewAreaState.PREVIEW_FAILED;
+    }
   },
 
   /**
@@ -460,7 +466,13 @@ Polymer({
     if (this.inFlightRequestId_ != previewResponseId)
       return;
     const pageNumber = pageIndex + 1;
-    const index = this.getSettingValue('pages').indexOf(pageNumber);
+    let index = this.getSettingValue('pages').indexOf(pageNumber);
+    // When pagesPerSheet > 1, the backend will always return page indices 0 to
+    // N-1, where N is the total page count of the N-upped document.
+    const pagesPerSheet =
+        /** @type {number} */ (this.getSettingValue('pagesPerSheet'));
+    if (pagesPerSheet > 1)
+      index = pageIndex;
     if (index == 0)
       this.onPreviewStart_(previewUid, pageIndex);
     if (index != -1)
@@ -477,18 +489,15 @@ Polymer({
     // We only care about: PageUp, PageDown, Left, Up, Right, Down.
     // If the user is holding a modifier key, ignore.
     if (!this.pluginProxy_.pluginReady() ||
-        !arrayContains(
-            [
-              'PageUp', 'PageDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp',
-              'ArrowDown'
-            ],
-            e.code) ||
+        !['PageUp', 'PageDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp',
+          'ArrowDown']
+             .includes(e.code) ||
         hasKeyModifiers(e)) {
       return;
     }
 
     // Don't handle the key event for these elements.
-    const tagName = e.path[0].tagName;
+    const tagName = e.composedPath()[0].tagName;
     if (['INPUT', 'SELECT', 'EMBED'].includes(tagName))
       return;
 
@@ -497,13 +506,13 @@ Polymer({
     // element, and work up the DOM tree to see if any element has a
     // scrollbar. If there exists a scrollbar, do not handle the key event
     // here.
-    let element = e.target;
-    while (element) {
-      if (element.scrollHeight > element.clientHeight ||
-          element.scrollWidth > element.clientWidth) {
+    const isEventHorizontal = ['ArrowLeft', 'ArrowRight'].includes(e.code);
+    for (let i = 0; i < e.composedPath().length; i++) {
+      const element = e.composedPath()[i];
+      if (element.scrollHeight > element.clientHeight && !isEventHorizontal ||
+          element.scrollWidth > element.clientWidth && isEventHorizontal) {
         return;
       }
-      element = element.parentElement;
     }
 
     // No scroll bar anywhere, or the active element is something else, like a
@@ -551,12 +560,28 @@ Polymer({
   onMarginsChanged_: function() {
     if (this.getSettingValue('margins') !=
         print_preview.ticket_items.MarginsTypeValue.CUSTOM) {
-      this.lastCustomMargins_ = null;
       this.onSettingsChanged_();
     } else {
-      this.lastCustomMargins_ =
+      const customMargins =
           /** @type {!print_preview.MarginsSetting} */ (
               this.getSettingValue('customMargins'));
+
+      for (let side of Object.values(
+               print_preview.ticket_items.CustomMarginsOrientation)) {
+        const key = print_preview_new.MARGIN_KEY_MAP.get(side);
+        // If custom margins are undefined, return and wait for them to be set.
+        if (customMargins[key] === undefined || !this.documentInfo ||
+            !this.documentInfo.margins) {
+          return;
+        }
+
+        // Start a preview request if the margins actually changed.
+        if (this.documentInfo.margins.get(side) != customMargins[key]) {
+          this.onSettingsChanged_();
+          break;
+        }
+      }
+      this.lastCustomMargins_ = customMargins;
     }
   },
 
@@ -566,6 +591,7 @@ Polymer({
         /** @type {!print_preview.MarginsSetting} */ (
             this.getSettingValue('customMargins'));
     if (!!this.lastCustomMargins_ &&
+        this.lastCustomMargins_.marginTop !== undefined &&
         this.getSettingValue('margins') ==
             print_preview.ticket_items.MarginsTypeValue.CUSTOM &&
         (this.lastCustomMargins_.marginTop != newValue.marginTop ||

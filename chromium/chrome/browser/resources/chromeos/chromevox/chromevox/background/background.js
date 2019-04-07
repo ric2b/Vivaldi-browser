@@ -9,6 +9,8 @@
 goog.provide('cvox.ChromeVoxBackground');
 
 goog.require('ChromeVoxState');
+goog.require('EventStreamLogger');
+goog.require('LogStore');
 goog.require('Msgs');
 goog.require('constants');
 goog.require('cvox.AbstractEarcons');
@@ -130,7 +132,9 @@ cvox.ChromeVoxBackground.prototype.init = function() {
   cvox.ChromeVoxBackground.readPrefs();
 
   var consoleTts = cvox.ConsoleTts.getInstance();
-  consoleTts.setEnabled(true);
+  consoleTts.setEnabled(this.prefs.getPrefs()['enableSpeechLogging'] == 'true');
+
+  LogStore.getInstance();
 
   /**
    * Chrome's actual TTS which knows and cares about pitch, volume, etc.
@@ -192,7 +196,7 @@ cvox.ChromeVoxBackground.prototype.init = function() {
   if (localStorage['active'] == 'false') {
     // Warn the user when the browser first starts if ChromeVox is inactive.
     this.tts.speak(Msgs.getMsg('chromevox_inactive'), cvox.QueueMode.QUEUE);
-  } else if (cvox.PlatformUtil.matchesPlatform(cvox.PlatformFilter.WML)) {
+  } else if (!cvox.ChromeVox.isChromeOS) {
     // Introductory message.
     this.tts.speak(Msgs.getMsg('chromevox_intro'), cvox.QueueMode.QUEUE);
     cvox.ChromeVox.braille.write(
@@ -384,16 +388,6 @@ cvox.ChromeVoxBackground.prototype.addBridgeListener = function() {
           var pref = /** @type {string} */ (msg['pref']);
           var announce = !!msg['announce'];
           cvox.ChromeVoxBackground.setPref(pref, msg['value'], announce);
-        }
-        break;
-      case 'Math':
-        // TODO (sorge): Put the change of styles etc. here!
-        if (msg['action'] == 'getDomains') {
-          port.postMessage({
-            'message': 'DOMAINS_STYLES',
-            'domains': this.backgroundTts_.mathmap.allDomains,
-            'styles': this.backgroundTts_.mathmap.allStyles
-          });
         }
         break;
       case 'TTS':

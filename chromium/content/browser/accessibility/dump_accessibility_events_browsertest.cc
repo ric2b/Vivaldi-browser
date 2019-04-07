@@ -83,10 +83,9 @@ std::vector<std::string> DumpAccessibilityEventsTest::Dump() {
   WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(
       shell()->web_contents());
   base::ProcessId pid = base::GetCurrentProcId();
-  std::unique_ptr<AccessibilityEventRecorder> event_recorder(
-      AccessibilityEventRecorder::Create(
-          web_contents->GetRootBrowserAccessibilityManager(), pid));
-  event_recorder->set_only_web_events(true);
+  auto& event_recorder = AccessibilityEventRecorder::GetInstance(
+      web_contents->GetRootBrowserAccessibilityManager(), pid);
+  event_recorder.set_only_web_events(true);
 
   // Save a copy of the accessibility tree (as a text dump); we'll
   // log this for the user later if the test fails.
@@ -124,7 +123,7 @@ std::vector<std::string> DumpAccessibilityEventsTest::Dump() {
 
   // Dump the event logs, running them through any filters specified
   // in the HTML file.
-  std::vector<std::string> event_logs = event_recorder->event_logs();
+  std::vector<std::string> event_logs = event_recorder.event_logs();
   std::vector<std::string> result;
   for (size_t i = 0; i < event_logs.size(); ++i) {
     if (AccessibilityTreeFormatter::MatchesFilters(
@@ -156,7 +155,7 @@ void DumpAccessibilityEventsTest::RunEventTest(
   base::FilePath test_path = GetTestFilePath("accessibility", "event");
 
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_test_verification;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(base::PathExists(test_path)) << test_path.LossyDisplayName();
   }
 
@@ -340,6 +339,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,
+                       AccessibilityEventsLiveRegionElemReparent) {
+  RunEventTest(FILE_PATH_LITERAL("live-region-elem-reparent.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,
                        AccessibilityEventsLiveRegionIgnoresClick) {
   RunEventTest(FILE_PATH_LITERAL("live-region-ignores-click.html"));
 }
@@ -353,6 +357,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,
                        AccessibilityEventsMenuListCollapse) {
   RunEventTest(FILE_PATH_LITERAL("menulist-collapse.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityEventsTest,
+                       AccessibilityEventsMenuListCollapseNext) {
+  RunEventTest(FILE_PATH_LITERAL("menulist-collapse-next.html"));
 }
 
 // https://crbug.com/719030

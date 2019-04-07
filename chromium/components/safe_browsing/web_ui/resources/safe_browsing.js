@@ -78,6 +78,16 @@ cr.define('safe_browsing', function() {
     cr.addWebUIListener('pg-responses-update', function(result) {
       addPGResponse(result);
     });
+
+    cr.sendWithPromise('getLogMessages', [])
+        .then((logMessages) => { logMessages.forEach(function (message) {
+          addLogMessage(message);
+        })});
+    cr.addWebUIListener('log-messages-update', function(message) {
+      addLogMessage(message);
+    });
+
+    $('get-referrer-chain-form').addEventListener('submit', addReferrerChain);
   }
 
   function addExperiments(result) {
@@ -188,12 +198,29 @@ cr.define('safe_browsing', function() {
     appendChildWithInnerText(cell, response);
   }
 
+  function addLogMessage(result) {
+    var logDiv = $('log-messages');
+    var eventFormatted = "[" + (new Date(result["time"])).toLocaleString() +
+        "] " + result['message'];
+    appendChildWithInnerText(logDiv, eventFormatted);
+  }
+
   function appendChildWithInnerText(logDiv, text) {
     if (!logDiv)
       return;
     var textDiv = document.createElement('div');
     textDiv.innerText = text;
     logDiv.appendChild(textDiv);
+  }
+
+  function addReferrerChain(ev) {
+    // Don't navigate
+    ev.preventDefault();
+
+    cr.sendWithPromise('getReferrerChain', $('referrer-chain-url').value)
+        .then((response) => {
+          $('referrer-chain').innerHTML = response;
+        });
   }
 
   return {

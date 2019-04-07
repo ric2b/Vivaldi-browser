@@ -8,6 +8,7 @@
 #include "base/guid.h"
 #include "content/browser/background_fetch/background_fetch_cross_origin_filter.h"
 #include "content/browser/background_fetch/background_fetch_data_manager.h"
+#include "content/browser/background_fetch/background_fetch_data_manager_observer.h"
 #include "content/browser/background_fetch/storage/database_helpers.h"
 #include "content/browser/background_fetch/storage/get_metadata_task.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
@@ -39,11 +40,11 @@ MarkRequestCompleteTask::MarkRequestCompleteTask(
     DatabaseTaskHost* host,
     BackgroundFetchRegistrationId registration_id,
     scoped_refptr<BackgroundFetchRequestInfo> request_info,
-    MarkedCompleteCallback callback)
+    base::OnceClosure closure)
     : DatabaseTask(host),
       registration_id_(registration_id),
       request_info_(std::move(request_info)),
-      callback_(std::move(callback)),
+      closure_(std::move(closure)),
       weak_factory_(this) {}
 
 MarkRequestCompleteTask::~MarkRequestCompleteTask() = default;
@@ -59,7 +60,7 @@ void MarkRequestCompleteTask::Start() {
 }
 
 void MarkRequestCompleteTask::StoreResponse(base::OnceClosure done_closure) {
-  auto response = std::make_unique<ServiceWorkerResponse>();
+  auto response = blink::mojom::FetchAPIResponse::New();
   response->url_list = request_info_->GetURLChain();
   // TODO(crbug.com/838837): fill error and cors_exposed_header_names in
   // response.
@@ -82,6 +83,42 @@ void MarkRequestCompleteTask::StoreResponse(base::OnceClosure done_closure) {
     return;
   }
 
+  int64_t response_size = 0;
+  if (service_worker_context()->is_incognito()) {
+    // The blob contains the size.
+    if (request_info_->GetBlobDataHandle())
+      response_size = request_info_->GetBlobDataHandle()->size();
+  } else {
+    // The file contains the size.
+    response_size = request_info_->GetFileSize();
+  }
+
+  // We need to check if there is enough quota before writing the response to
+  // the cache.
+  if (response_size > 0) {
+    IsQuotaAvailable(
+        registration_id_.origin(), response_size,
+        base::BindOnce(&MarkRequestCompleteTask::DidGetIsQuotaAvailable,
+                       weak_factory_.GetWeakPtr(), std::move(response),
+                       std::move(done_closure)));
+  } else {
+    // Assume there is enough quota.
+    DidGetIsQuotaAvailable(std::move(response), std::move(done_closure),
+                           true /* is_available */);
+  }
+}
+
+void MarkRequestCompleteTask::DidGetIsQuotaAvailable(
+    blink::mojom::FetchAPIResponsePtr response,
+    base::OnceClosure done_closure,
+    bool is_available) {
+  if (!is_available) {
+    for (auto& observer : data_manager()->observers())
+      observer.OnQuotaExceeded(registration_id_);
+    FinishWithError(blink::mojom::BackgroundFetchError::QUOTA_EXCEEDED);
+    return;
+  }
+
   cache_manager()->OpenCache(
       registration_id_.origin(), CacheStorageOwner::kBackgroundFetch,
       registration_id_.unique_id() /* cache_name */,
@@ -91,7 +128,7 @@ void MarkRequestCompleteTask::StoreResponse(base::OnceClosure done_closure) {
 }
 
 void MarkRequestCompleteTask::PopulateResponseBody(
-    ServiceWorkerResponse* response) {
+    blink::mojom::FetchAPIResponse* response) {
   // Include the status code, status text and the response's body as a blob
   // when this is allowed by the CORS protocol.
   response->status_code = request_info_->GetResponseCode();
@@ -126,27 +163,25 @@ void MarkRequestCompleteTask::PopulateResponseBody(
   if (!blob_data_handle)
     return;
 
-  response->blob_uuid = blob_data_handle->uuid();
-  response->blob_size = blob_data_handle->size();
-  blink::mojom::BlobPtr blob_ptr;
+  response->blob = blink::mojom::SerializedBlob::New();
+  response->blob->uuid = blob_data_handle->uuid();
+  response->blob->size = blob_data_handle->size();
   storage::BlobImpl::Create(
       std::make_unique<storage::BlobDataHandle>(*blob_data_handle),
-      MakeRequest(&blob_ptr));
-
-  response->blob =
-      base::MakeRefCounted<storage::BlobHandle>(std::move(blob_ptr));
+      MakeRequest(&response->blob->blob));
 }
 
 void MarkRequestCompleteTask::DidOpenCache(
-    std::unique_ptr<ServiceWorkerResponse> response,
+    blink::mojom::FetchAPIResponsePtr response,
     base::OnceClosure done_closure,
     CacheStorageCacheHandle handle,
     blink::mojom::CacheStorageError error) {
   if (error != blink::mojom::CacheStorageError::kSuccess) {
-    // TODO(crbug.com/780025): Log failures to UMA.
+    SetStorageError(BackgroundFetchStorageError::kCacheStorageError);
     CreateAndStoreCompletedRequest(std::move(done_closure));
     return;
   }
+
   DCHECK(handle.value());
 
   auto request = std::make_unique<ServiceWorkerFetchRequest>(
@@ -165,7 +200,8 @@ void MarkRequestCompleteTask::DidWriteToCache(
     CacheStorageCacheHandle handle,
     base::OnceClosure done_closure,
     blink::mojom::CacheStorageError error) {
-  // TODO(crbug.com/780025): Log failures to UMA.
+  if (error != blink::mojom::CacheStorageError::kSuccess)
+    SetStorageError(BackgroundFetchStorageError::kCacheStorageError);
   CreateAndStoreCompletedRequest(std::move(done_closure));
 }
 
@@ -196,7 +232,7 @@ void MarkRequestCompleteTask::DidStoreCompletedRequest(
       break;
     case DatabaseStatus::kFailed:
     case DatabaseStatus::kNotFound:
-      // TODO(crbug.com/780025): Log failures to UMA.
+      SetStorageError(BackgroundFetchStorageError::kServiceWorkerStorageError);
       std::move(done_closure).Run();
       return;
   }
@@ -213,7 +249,8 @@ void MarkRequestCompleteTask::DidStoreCompletedRequest(
 void MarkRequestCompleteTask::DidDeleteActiveRequest(
     base::OnceClosure done_closure,
     blink::ServiceWorkerStatusCode status) {
-  // TODO(crbug.com/780025): Log failures to UMA.
+  if (ToDatabaseStatus(status) != DatabaseStatus::kOk)
+    SetStorageError(BackgroundFetchStorageError::kServiceWorkerStorageError);
   std::move(done_closure).Run();
 }
 
@@ -235,7 +272,7 @@ void MarkRequestCompleteTask::DidGetMetadata(
     blink::mojom::BackgroundFetchError error,
     std::unique_ptr<proto::BackgroundFetchMetadata> metadata) {
   if (!metadata || error != blink::mojom::BackgroundFetchError::NONE) {
-    // TODO(crbug.com/780025): Log failures to UMA.
+    SetStorageError(BackgroundFetchStorageError::kServiceWorkerStorageError);
     std::move(done_closure).Run();
     return;
   }
@@ -255,14 +292,20 @@ void MarkRequestCompleteTask::DidGetMetadata(
 void MarkRequestCompleteTask::DidStoreMetadata(
     base::OnceClosure done_closure,
     blink::ServiceWorkerStatusCode status) {
-  // TODO(crbug.com/780025): Log failures to UMA.
+  SetStorageError(BackgroundFetchStorageError::kServiceWorkerStorageError);
   std::move(done_closure).Run();
 }
 
 void MarkRequestCompleteTask::FinishWithError(
     blink::mojom::BackgroundFetchError error) {
-  std::move(callback_).Run();
+  ReportStorageError();
+
+  std::move(closure_).Run();
   Finished();
+}
+
+std::string MarkRequestCompleteTask::HistogramName() const {
+  return "MarkRequestCompleteTask";
 }
 
 }  // namespace background_fetch

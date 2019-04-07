@@ -7,7 +7,6 @@
 var GuestViewAttributes = require('guestViewAttributes').GuestViewAttributes;
 var GuestViewInternalNatives = requireNative('guest_view_internal');
 var WebViewConstants = require('webViewConstants').WebViewConstants;
-var WebViewImpl = require('webView').WebViewImpl;
 var WebViewInternal = getInternalApi ?
     getInternalApi('webViewInternal') :
     require('webViewInternal').WebViewInternal;
@@ -269,32 +268,18 @@ SrcAttribute.prototype.parse = function() {
                            wasTyped);
 };
 
-// -----------------------------------------------------------------------------
-
-// Sets up all of the webview attributes.
-WebViewImpl.prototype.setupAttributes = function() {
-  this.attributes[WebViewConstants.ATTRIBUTE_ALLOWSCALING] =
-      new AllowScalingAttribute(this);
-  this.attributes[WebViewConstants.ATTRIBUTE_ALLOWTRANSPARENCY] =
-      new AllowTransparencyAttribute(this);
-  this.attributes[WebViewConstants.ATTRIBUTE_AUTOSIZE] =
-      new AutosizeAttribute(this);
-  this.attributes[WebViewConstants.ATTRIBUTE_NAME] =
-      new NameAttribute(this);
-  this.attributes[WebViewConstants.ATTRIBUTE_PARTITION] =
-      new PartitionAttribute(this);
-  this.attributes[WebViewConstants.ATTRIBUTE_SRC] =
-      new SrcAttribute(this);
-
-  var autosizeAttributes = [WebViewConstants.ATTRIBUTE_MAXHEIGHT,
-                            WebViewConstants.ATTRIBUTE_MAXWIDTH,
-                            WebViewConstants.ATTRIBUTE_MINHEIGHT,
-                            WebViewConstants.ATTRIBUTE_MINWIDTH];
-  for (var i = 0; autosizeAttributes[i]; ++i) {
-    this.attributes[autosizeAttributes[i]] =
-        new AutosizeDimensionAttribute(autosizeAttributes[i], this);
-  }
-
-  // Vivaldi specific.
-  WebViewAttributesPrivate.addPrivateAttributes(this);
+var WebViewAttributes = {
+  AllowScalingAttribute: AllowScalingAttribute,
+  AllowTransparencyAttribute: AllowTransparencyAttribute,
+  AutosizeDimensionAttribute: AutosizeDimensionAttribute,
+  AutosizeAttribute: AutosizeAttribute,
+  NameAttribute: NameAttribute,
+  PartitionAttribute: PartitionAttribute,
+  SrcAttribute: SrcAttribute
 };
+
+// Vivaldi specific.
+WebViewAttributesPrivate.addVivaldiWebViewAttributes(WebViewAttributes);
+
+// Exports.
+exports.$set('WebViewAttributes', WebViewAttributes);

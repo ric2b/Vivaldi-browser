@@ -143,7 +143,8 @@ void PrerenderURLLoaderThrottle::WillRedirectRequest(
     const net::RedirectInfo& redirect_info,
     const network::ResourceResponseHead& response_head,
     bool* defer,
-    std::vector<std::string>* to_be_removed_headers) {
+    std::vector<std::string>* /* to_be_removed_headers */,
+    net::HttpRequestHeaders* /* modified_headers */) {
   redirect_count_++;
   if (mode_ == PREFETCH_ONLY) {
     RecordPrefetchResponseReceived(
@@ -182,7 +183,7 @@ void PrerenderURLLoaderThrottle::WillRedirectRequest(
 
 void PrerenderURLLoaderThrottle::WillProcessResponse(
     const GURL& response_url,
-    const network::ResourceResponseHead& response_head,
+    network::ResourceResponseHead* response_head,
     bool* defer) {
   if (mode_ != PREFETCH_ONLY)
     return;
@@ -190,7 +191,7 @@ void PrerenderURLLoaderThrottle::WillProcessResponse(
   bool is_main_resource = content::IsResourceTypeFrame(resource_type_);
   RecordPrefetchResponseReceived(histogram_prefix_, is_main_resource,
                                  true /* is_redirect */,
-                                 IsNoStoreResponse(response_head));
+                                 IsNoStoreResponse(*response_head));
   RecordPrefetchRedirectCount(histogram_prefix_, is_main_resource,
                               redirect_count_);
 }

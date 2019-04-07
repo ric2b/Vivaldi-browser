@@ -21,6 +21,7 @@
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/common/net.mojom.h"
 #include "components/arc/connection_holder.h"
+#include "components/arc/metrics/arc_metrics_constants.h"
 #include "components/onc/onc_constants.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -186,16 +187,16 @@ void InternetHandler::ConfigureThirdPartyVpn(const base::ListValue* args) {
     return;
   }
 
-  if (network->vpn_provider_type() == shill::kProviderThirdPartyVpn) {
+  if (network->GetVpnProviderType() == shill::kProviderThirdPartyVpn) {
     // Request that the third-party VPN provider used by the |network| show a
     // configuration dialog for it.
     VpnServiceFactory::GetForBrowserContext(profile_)
-        ->SendShowConfigureDialogToExtension(network->vpn_provider_id(),
+        ->SendShowConfigureDialogToExtension(network->vpn_provider()->id,
                                              network->name());
     return;
   }
 
-  if (network->vpn_provider_type() == shill::kProviderArcVpn) {
+  if (network->GetVpnProviderType() == shill::kProviderArcVpn) {
     auto* net_instance = ARC_GET_INSTANCE_FOR_METHOD(
         arc::ArcServiceManager::Get()->arc_bridge_service()->net(),
         ConfigureAndroidVpn);
@@ -208,7 +209,7 @@ void InternetHandler::ConfigureThirdPartyVpn(const base::ListValue* args) {
   }
 
   NET_LOG(ERROR) << "ConfigureThirdPartyVpn: Unsupported VPN type: "
-                 << network->vpn_provider_type() << " For: " << guid;
+                 << network->GetVpnProviderType() << " For: " << guid;
 }
 
 void InternetHandler::RequestArcVpnProviders(const base::ListValue* args) {

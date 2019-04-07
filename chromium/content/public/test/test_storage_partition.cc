@@ -77,6 +77,11 @@ CacheStorageContext* TestStoragePartition::GetCacheStorageContext() {
   return cache_storage_context_;
 }
 
+GeneratedCodeCacheContext*
+TestStoragePartition::GetGeneratedCodeCacheContext() {
+  return generated_code_cache_context_;
+}
+
 PlatformNotificationContext*
 TestStoragePartition::GetPlatformNotificationContext() {
   return nullptr;
@@ -130,6 +135,8 @@ void TestStoragePartition::ClearHttpAndMediaCaches(
     base::OnceClosure callback) {}
 
 void TestStoragePartition::Flush() {}
+
+void TestStoragePartition::ResetURLLoaderFactories() {}
 
 void TestStoragePartition::ClearBluetoothAllowedDevicesMapForTesting() {}
 

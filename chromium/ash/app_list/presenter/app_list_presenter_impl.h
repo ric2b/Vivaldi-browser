@@ -13,6 +13,7 @@
 #include "ash/app_list/pagination_model_observer.h"
 #include "ash/app_list/presenter/app_list_presenter_delegate.h"
 #include "ash/app_list/presenter/app_list_presenter_export.h"
+#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "ui/aura/client/focus_change_observer.h"
@@ -38,6 +39,12 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
       public views::WidgetObserver,
       public PaginationModelObserver {
  public:
+  // Callback which fills out the passed settings object. Used by
+  // UpdateYPositionAndOpacityForHomeLauncher so different callers can do
+  // similar animations with different settings.
+  using UpdateHomeLauncherAnimationSettingsCallback =
+      base::RepeatingCallback<void(ui::ScopedLayerAnimationSettings* settings)>;
+
   explicit AppListPresenterImpl(
       std::unique_ptr<AppListPresenterDelegate> delegate);
   ~AppListPresenterImpl() override;
@@ -58,9 +65,9 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
   // one AppListShowSource or focusing out side of the launcher.
   void Dismiss(base::TimeTicks event_time_stamp);
 
-  // Performs the 'back' action for the active page. Returns whether the action
-  // was handled.
-  bool Back();
+  // Closes opened folder or search result page if they are opened. Returns
+  // whether the action was handled.
+  bool CloseOpenedPage();
 
   // Show the app list if it is visible, hide it if it is hidden. If
   // |event_time_stamp| is not 0, it means |ToggleAppList()| was triggered by
@@ -83,6 +90,17 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
 
   // Passes a MouseWheelEvent from the shelf to the AppListView.
   void ProcessMouseWheelOffset(int y_scroll_offset);
+
+  // Updates the y position and opacity of the full screen app list. The changes
+  // are slightly different than UpdateYPositionAndOpacity. If |callback| is non
+  // null the this will animate using the animation settings in |callback|.
+  void UpdateYPositionAndOpacityForHomeLauncher(
+      int y_position_in_screen,
+      float opacity,
+      UpdateHomeLauncherAnimationSettingsCallback callback);
+
+  // Schedules animation for app list when overview mode starts or ends.
+  void ScheduleOverviewModeAnimation(bool start, bool animate);
 
  private:
   // Sets the app list view and attempts to show it.

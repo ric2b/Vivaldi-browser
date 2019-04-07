@@ -22,6 +22,7 @@
 #include "chromeos/dbus/attestation/attestation.pb.h"
 #include "chromeos/dbus/cryptohome/key.pb.h"
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
+#include "chromeos/dbus/util/account_identifier_operators.h"
 #include "components/policy/proto/install_attributes.pb.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -96,21 +97,21 @@ void FakeCryptohomeClient::MigrateKeyEx(
   ReturnProtobufMethodCallback(cryptohome::BaseReply(), std::move(callback));
 }
 
-void FakeCryptohomeClient::AsyncRemove(
-    const cryptohome::Identification& cryptohome_id,
-    AsyncMethodCallback callback) {
-  ReturnAsyncMethodResult(std::move(callback));
+void FakeCryptohomeClient::RemoveEx(
+    const cryptohome::AccountIdentifier& account,
+    DBusMethodCallback<cryptohome::BaseReply> callback) {
+  ReturnProtobufMethodCallback(cryptohome::BaseReply(), std::move(callback));
 }
 
 void FakeCryptohomeClient::RenameCryptohome(
-    const cryptohome::Identification& cryptohome_id_from,
-    const cryptohome::Identification& cryptohome_id_to,
+    const cryptohome::AccountIdentifier& cryptohome_id_from,
+    const cryptohome::AccountIdentifier& cryptohome_id_to,
     DBusMethodCallback<cryptohome::BaseReply> callback) {
   ReturnProtobufMethodCallback(cryptohome::BaseReply(), std::move(callback));
 }
 
 void FakeCryptohomeClient::GetAccountDiskUsage(
-    const cryptohome::Identification& account_id,
+    const cryptohome::AccountIdentifier& account_id,
     DBusMethodCallback<cryptohome::BaseReply> callback) {
   cryptohome::BaseReply reply;
   cryptohome::GetAccountDiskUsageReply* get_account_disk_usage_reply =
@@ -127,7 +128,7 @@ void FakeCryptohomeClient::GetSystemSalt(
 }
 
 void FakeCryptohomeClient::GetSanitizedUsername(
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     DBusMethodCallback<std::string> callback) {
   // Even for stub implementation we have to return different values so that
   // multi-profiles would work.
@@ -139,7 +140,7 @@ void FakeCryptohomeClient::GetSanitizedUsername(
 }
 
 std::string FakeCryptohomeClient::BlockingGetSanitizedUsername(
-    const cryptohome::Identification& cryptohome_id) {
+    const cryptohome::AccountIdentifier& cryptohome_id) {
   return service_is_available_ ? GetStubSanitizedUsername(cryptohome_id)
                                : std::string();
 }
@@ -227,7 +228,7 @@ void FakeCryptohomeClient::Pkcs11GetTpmTokenInfo(
 }
 
 void FakeCryptohomeClient::Pkcs11GetTpmTokenInfoForUser(
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     DBusMethodCallback<TpmTokenInfo> callback) {
   Pkcs11GetTpmTokenInfo(std::move(callback));
 }
@@ -316,13 +317,14 @@ void FakeCryptohomeClient::TpmAttestationIsPrepared(
 void FakeCryptohomeClient::TpmAttestationGetEnrollmentId(
     bool ignore_cache,
     DBusMethodCallback<TpmAttestationDataResult> callback) {
+  auto result =
+      service_is_available_
+          ? base::make_optional(TpmAttestationDataResult{
+                true, ignore_cache ? tpm_attestation_enrollment_id_ignore_cache_
+                                   : tpm_attestation_enrollment_id_})
+          : base::nullopt;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          std::move(callback),
-          TpmAttestationDataResult{
-              true, ignore_cache ? tpm_attestation_enrollment_id_ignore_cache_
-                                 : tpm_attestation_enrollment_id_}));
+      FROM_HERE, base::BindOnce(std::move(callback), result));
 }
 
 void FakeCryptohomeClient::TpmAttestationIsEnrolled(
@@ -350,7 +352,7 @@ void FakeCryptohomeClient::AsyncTpmAttestationEnroll(
 void FakeCryptohomeClient::AsyncTpmAttestationCreateCertRequest(
     chromeos::attestation::PrivacyCAType pca_type,
     attestation::AttestationCertificateProfile certificate_profile,
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const std::string& request_origin,
     AsyncMethodCallback callback) {
   ReturnAsyncMethodData(std::move(callback), std::string());
@@ -359,7 +361,7 @@ void FakeCryptohomeClient::AsyncTpmAttestationCreateCertRequest(
 void FakeCryptohomeClient::AsyncTpmAttestationFinishCertRequest(
     const std::string& pca_response,
     attestation::AttestationKeyType key_type,
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const std::string& key_name,
     AsyncMethodCallback callback) {
   ReturnAsyncMethodData(std::move(callback), std::string());
@@ -367,7 +369,7 @@ void FakeCryptohomeClient::AsyncTpmAttestationFinishCertRequest(
 
 void FakeCryptohomeClient::TpmAttestationDoesKeyExist(
     attestation::AttestationKeyType key_type,
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const std::string& key_name,
     DBusMethodCallback<bool> callback) {
   if (!service_is_available_ ||
@@ -394,7 +396,7 @@ void FakeCryptohomeClient::TpmAttestationDoesKeyExist(
 
 void FakeCryptohomeClient::TpmAttestationGetCertificate(
     attestation::AttestationKeyType key_type,
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const std::string& key_name,
     DBusMethodCallback<TpmAttestationDataResult> callback) {
   TpmAttestationDataResult result;
@@ -423,7 +425,7 @@ void FakeCryptohomeClient::TpmAttestationGetCertificate(
 
 void FakeCryptohomeClient::TpmAttestationGetPublicKey(
     attestation::AttestationKeyType key_type,
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const std::string& key_name,
     DBusMethodCallback<TpmAttestationDataResult> callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -433,7 +435,7 @@ void FakeCryptohomeClient::TpmAttestationGetPublicKey(
 
 void FakeCryptohomeClient::TpmAttestationRegisterKey(
     attestation::AttestationKeyType key_type,
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const std::string& key_name,
     AsyncMethodCallback callback) {
   ReturnAsyncMethodData(std::move(callback), std::string());
@@ -441,7 +443,7 @@ void FakeCryptohomeClient::TpmAttestationRegisterKey(
 
 void FakeCryptohomeClient::TpmAttestationSignEnterpriseChallenge(
     attestation::AttestationKeyType key_type,
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const std::string& key_name,
     const std::string& domain,
     const std::string& device_id,
@@ -453,7 +455,7 @@ void FakeCryptohomeClient::TpmAttestationSignEnterpriseChallenge(
 
 void FakeCryptohomeClient::TpmAttestationSignSimpleChallenge(
     attestation::AttestationKeyType key_type,
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const std::string& key_name,
     const std::string& challenge,
     AsyncMethodCallback callback) {
@@ -465,7 +467,7 @@ void FakeCryptohomeClient::TpmAttestationSignSimpleChallenge(
 
 void FakeCryptohomeClient::TpmAttestationGetKeyPayload(
     attestation::AttestationKeyType key_type,
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const std::string& key_name,
     DBusMethodCallback<TpmAttestationDataResult> callback) {
   TpmAttestationDataResult result;
@@ -483,7 +485,7 @@ void FakeCryptohomeClient::TpmAttestationGetKeyPayload(
 
 void FakeCryptohomeClient::TpmAttestationSetKeyPayload(
     attestation::AttestationKeyType key_type,
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const std::string& key_name,
     const std::string& payload,
     DBusMethodCallback<bool> callback) {
@@ -500,7 +502,7 @@ void FakeCryptohomeClient::TpmAttestationSetKeyPayload(
 
 void FakeCryptohomeClient::TpmAttestationDeleteKeys(
     attestation::AttestationKeyType key_type,
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const std::string& key_prefix,
     DBusMethodCallback<bool> callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -514,7 +516,7 @@ void FakeCryptohomeClient::TpmGetVersion(
 }
 
 void FakeCryptohomeClient::GetKeyDataEx(
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const cryptohome::AuthorizationRequest& auth,
     const cryptohome::GetKeyDataRequest& request,
     DBusMethodCallback<cryptohome::BaseReply> callback) {
@@ -538,7 +540,7 @@ void FakeCryptohomeClient::GetKeyDataEx(
 }
 
 void FakeCryptohomeClient::CheckKeyEx(
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const cryptohome::AuthorizationRequest& auth,
     const cryptohome::CheckKeyRequest& request,
     DBusMethodCallback<cryptohome::BaseReply> callback) {
@@ -564,7 +566,7 @@ void FakeCryptohomeClient::CheckKeyEx(
 }
 
 void FakeCryptohomeClient::MountEx(
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const cryptohome::AuthorizationRequest& auth,
     const cryptohome::MountRequest& request,
     DBusMethodCallback<cryptohome::BaseReply> callback) {
@@ -584,7 +586,7 @@ void FakeCryptohomeClient::MountEx(
 }
 
 void FakeCryptohomeClient::AddKeyEx(
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const cryptohome::AuthorizationRequest& auth,
     const cryptohome::AddKeyRequest& request,
     DBusMethodCallback<cryptohome::BaseReply> callback) {
@@ -593,7 +595,7 @@ void FakeCryptohomeClient::AddKeyEx(
 }
 
 void FakeCryptohomeClient::RemoveKeyEx(
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const cryptohome::AuthorizationRequest& auth,
     const cryptohome::RemoveKeyRequest& request,
     DBusMethodCallback<cryptohome::BaseReply> callback) {
@@ -607,7 +609,7 @@ void FakeCryptohomeClient::RemoveKeyEx(
 }
 
 void FakeCryptohomeClient::UpdateKeyEx(
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const cryptohome::AuthorizationRequest& auth,
     const cryptohome::UpdateKeyRequest& request,
     DBusMethodCallback<cryptohome::BaseReply> callback) {
@@ -637,7 +639,7 @@ void FakeCryptohomeClient::FlushAndSignBootAttributes(
 }
 
 void FakeCryptohomeClient::MigrateToDircrypto(
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const cryptohome::MigrateToDircryptoRequest& request,
     VoidDBusMethodCallback callback) {
   id_for_disk_migrated_to_dircrypto_ = cryptohome_id;
@@ -664,7 +666,7 @@ void FakeCryptohomeClient::SetFirmwareManagementParametersInTpm(
 }
 
 void FakeCryptohomeClient::NeedsDircryptoMigration(
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     DBusMethodCallback<bool> callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
@@ -704,7 +706,7 @@ void FakeCryptohomeClient::SetServiceIsAvailable(bool is_available) {
 }
 
 void FakeCryptohomeClient::SetTpmAttestationUserCertificate(
-    const cryptohome::Identification& cryptohome_id,
+    const cryptohome::AccountIdentifier& cryptohome_id,
     const std::string& key_name,
     const std::string& certificate) {
   user_certificate_map_[std::make_pair(cryptohome_id, key_name)] = certificate;
@@ -728,6 +730,11 @@ FakeCryptohomeClient::GetTpmAttestationDeviceKeyPayload(
   const auto it = device_key_payload_map_.find(key_name);
   return it == device_key_payload_map_.end() ? base::nullopt
                                              : base::make_optional(it->second);
+}
+
+void FakeCryptohomeClient::NotifyLowDiskSpace(uint64_t disk_free_bytes) {
+  for (auto& observer : observer_list_)
+    observer.LowDiskSpace(disk_free_bytes);
 }
 
 // static
@@ -811,11 +818,6 @@ void FakeCryptohomeClient::NotifyAsyncCallStatusWithData(
     const std::string& data) {
   for (auto& observer : observer_list_)
     observer.AsyncCallStatusWithData(async_id, return_status, data);
-}
-
-void FakeCryptohomeClient::NotifyLowDiskSpace(uint64_t disk_free_bytes) {
-  for (auto& observer : observer_list_)
-    observer.LowDiskSpace(disk_free_bytes);
 }
 
 void FakeCryptohomeClient::NotifyDircryptoMigrationProgress(

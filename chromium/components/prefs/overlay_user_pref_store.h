@@ -57,7 +57,8 @@ class COMPONENTS_PREFS_EXPORT OverlayUserPrefStore
   PrefReadError GetReadError() const override;
   PrefReadError ReadPrefs() override;
   void ReadPrefsAsync(ReadErrorDelegate* delegate) override;
-  void CommitPendingWrite(base::OnceClosure done_callback) override;
+  void CommitPendingWrite(base::OnceClosure reply_callback,
+                          base::OnceClosure synchronous_done_callback) override;
   void SchedulePendingLossyWrites() override;
   void ReportValueChanged(const std::string& key, uint32_t flags) override;
 
@@ -82,7 +83,7 @@ class COMPONENTS_PREFS_EXPORT OverlayUserPrefStore
   // persistent PrefStore.
   bool ShallBeStoredInPersistent(const std::string& key) const;
 
-  base::ObserverList<PrefStore::Observer, true> observers_;
+  base::ObserverList<PrefStore::Observer, true>::Unchecked observers_;
   std::unique_ptr<ObserverAdapter> ephemeral_pref_store_observer_;
   std::unique_ptr<ObserverAdapter> persistent_pref_store_observer_;
   scoped_refptr<PersistentPrefStore> ephemeral_user_pref_store_;

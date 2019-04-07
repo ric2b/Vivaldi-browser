@@ -35,10 +35,6 @@ namespace base {
 class SequencedTaskRunner;
 }
 
-namespace net {
-class URLRequestContextGetter;
-}
-
 namespace network {
 class SharedURLLoaderFactory;
 }
@@ -97,8 +93,6 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
   //
   // |account_id| is the AccountId associated with the user's session.
   // |task_runner| is the runner for policy refresh tasks.
-  // |io_task_runner| is used for network IO. Currently this must be the IO
-  // BrowserThread.
   UserCloudPolicyManagerChromeOS(
       Profile* profile,
       std::unique_ptr<CloudPolicyStore> store,
@@ -108,8 +102,7 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
       base::TimeDelta policy_refresh_timeout,
       base::OnceClosure fatal_error_callback,
       const AccountId& account_id,
-      const scoped_refptr<base::SequencedTaskRunner>& task_runner,
-      const scoped_refptr<base::SequencedTaskRunner>& io_task_runner);
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner);
   ~UserCloudPolicyManagerChromeOS() override;
 
   // Initializes the cloud connection. |local_state| and
@@ -117,7 +110,6 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
   void Connect(
       PrefService* local_state,
       DeviceManagementService* device_management_service,
-      scoped_refptr<net::URLRequestContextGetter> system_request_context,
       scoped_refptr<network::SharedURLLoaderFactory> system_url_loader_factory);
 
   // This class is one of the policy providers, and must be ready for the

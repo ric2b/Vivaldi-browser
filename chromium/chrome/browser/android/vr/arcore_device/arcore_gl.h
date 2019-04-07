@@ -15,7 +15,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "chrome/browser/vr/fps_meter.h"
-#include "chrome/browser/vr/renderers/web_vr_renderer.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "ui/display/display.h"
@@ -50,7 +49,7 @@ class ARCoreGl {
 
   void ProduceFrame(const gfx::Size& frame_size,
                     display::Display::Rotation display_rotation,
-                    mojom::VRMagicWindowProvider::GetFrameDataCallback);
+                    mojom::XRFrameDataProvider::GetFrameDataCallback);
   void Pause();
   void Resume();
 
@@ -58,17 +57,17 @@ class ARCoreGl {
     return gl_thread_task_runner_;
   }
 
-  void RequestHitTest(mojom::XRRayPtr,
-                      mojom::VRMagicWindowProvider::RequestHitTestCallback);
+  void RequestHitTest(
+      mojom::XRRayPtr,
+      mojom::XREnvironmentIntegrationProvider::RequestHitTestCallback);
 
   base::WeakPtr<ARCoreGl> GetWeakPtr();
 
  private:
   // TODO(https://crbug/835948): remove frame_size.
-  void ProcessFrame(
-      mojom::XRFrameDataPtr frame_data,
-      const gfx::Size& frame_size,
-      mojom::VRMagicWindowProvider::GetFrameDataCallback callback);
+  void ProcessFrame(mojom::XRFrameDataPtr frame_data,
+                    const gfx::Size& frame_size,
+                    mojom::XRFrameDataProvider::GetFrameDataCallback callback);
 
   bool InitializeGl();
   bool IsOnGlThread() const;

@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_CHROMEOS_CROSTINI_CROSTINI_REGISTRY_SERVICE_H_
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -19,13 +20,11 @@
 #include "ui/base/resource/scale_factor.h"
 
 class Profile;
-class PrefRegistrySimple;
 class PrefService;
 
 namespace base {
 class Clock;
 class Time;
-class Value;
 }  // namespace base
 
 namespace vm_tools {
@@ -175,8 +174,6 @@ class CrostiniRegistryService : public KeyedService {
 
   void SetClockForTesting(base::Clock* clock) { clock_ = clock; }
 
-  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
-
  private:
   // Run start up tasks for the registry (e.g. recording metrics).
   void RecordStartupMetrics();
@@ -189,7 +186,7 @@ class CrostiniRegistryService : public KeyedService {
   void OnContainerAppIcon(const std::string& app_id,
                           ui::ScaleFactor scale_factor,
                           ConciergeClientResult result,
-                          std::vector<Icon>& icons);
+                          const std::vector<Icon>& icons);
   // Callback for our internal call for saving out icon data.
   void OnIconInstalled(const std::string& app_id,
                        ui::ScaleFactor scale_factor,
@@ -205,7 +202,7 @@ class CrostiniRegistryService : public KeyedService {
   // stored.
   base::FilePath base_icon_path_;
 
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   const base::Clock* clock_;
 

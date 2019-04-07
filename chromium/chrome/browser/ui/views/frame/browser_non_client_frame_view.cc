@@ -101,6 +101,14 @@ bool BrowserNonClientFrameView::ShouldHideTopUIForFullscreen() const {
   return frame_->IsFullscreen();
 }
 
+bool BrowserNonClientFrameView::CanUserExitFullscreen() const {
+  return true;
+}
+
+bool BrowserNonClientFrameView::IsFrameCondensed() const {
+  return frame_ && (frame_->IsMaximized() || frame_->IsFullscreen());
+}
+
 bool BrowserNonClientFrameView::HasClientEdge() const {
   return !MD::IsRefreshUi();
 }
@@ -162,11 +170,6 @@ gfx::ImageSkia BrowserNonClientFrameView::GetIncognitoAvatarIcon() const {
 
 SkColor BrowserNonClientFrameView::GetFrameColor(
     ActiveState active_state) const {
-  extensions::HostedAppBrowserController* hosted_app_controller =
-      browser_view_->browser()->hosted_app_controller();
-  if (hosted_app_controller && hosted_app_controller->GetThemeColor())
-    return *hosted_app_controller->GetThemeColor();
-
   ThemeProperties::OverwritableByUserThemeProperty color_id;
   if (ShouldPaintAsSingleTabMode()) {
     color_id = ThemeProperties::COLOR_TOOLBAR;
@@ -175,10 +178,26 @@ SkColor BrowserNonClientFrameView::GetFrameColor(
                    ? ThemeProperties::COLOR_FRAME
                    : ThemeProperties::COLOR_FRAME_INACTIVE;
   }
-  return ShouldPaintAsThemed()
-             ? GetThemeProviderForProfile()->GetColor(color_id)
-             : ThemeProperties::GetDefaultColor(color_id,
-                                                browser_view_->IsIncognito());
+
+  // For hosted app windows, if "painting as themed" (which is only true when on
+  // Linux and using the system theme), prefer the system theme color over the
+  // hosted app theme color. The title bar will be painted in the system theme
+  // color (regardless of what we do here), so by returning the system title bar
+  // background color here, we ensure that:
+  // a) The side and bottom borders are painted in the same color as the title
+  // bar background, and
+  // b) The title text is painted in a color that contrasts with the title bar
+  // background.
+  if (ShouldPaintAsThemed())
+    return GetThemeProviderForProfile()->GetColor(color_id);
+
+  extensions::HostedAppBrowserController* hosted_app_controller =
+      browser_view_->browser()->hosted_app_controller();
+  if (hosted_app_controller && hosted_app_controller->GetThemeColor())
+    return *hosted_app_controller->GetThemeColor();
+
+  return ThemeProperties::GetDefaultColor(color_id,
+                                          browser_view_->IsIncognito());
 }
 
 SkColor BrowserNonClientFrameView::GetToolbarTopSeparatorColor() const {
@@ -318,6 +337,11 @@ bool BrowserNonClientFrameView::ShouldDrawStrokes() const {
   if (!MD::IsRefreshUi())
     return true;
 
+  // In single-tab mode, the whole point is to have the active tab blend with
+  // the frame.
+  if (ShouldPaintAsSingleTabMode())
+    return false;
+
   // Refresh normally avoids strokes and relies on the active tab contrasting
   // sufficiently with the frame background.  When there isn't enough contrast,
   // fall back to a stroke.  Always compute the contrast ratio against the
@@ -434,27 +458,6 @@ void BrowserNonClientFrameView::LayoutIncognitoButton() {
   profile_indicator_icon()->SetVisible(true);
 }
 
-void BrowserNonClientFrameView::PaintToolbarTopStroke(
-    gfx::Canvas* canvas) const {
-  if (ShouldDrawStrokes()) {
-    gfx::Rect toolbar_bounds(browser_view_->GetToolbarBounds());
-    gfx::Point toolbar_origin(toolbar_bounds.origin());
-    ConvertPointToTarget(browser_view_, this, &toolbar_origin);
-    toolbar_bounds.set_origin(toolbar_origin);
-
-    gfx::Rect tabstrip_bounds =
-        GetMirroredRect(GetBoundsForTabStrip(browser_view_->tabstrip()));
-
-    gfx::ScopedCanvas scoped_canvas(canvas);
-    canvas->ClipRect(tabstrip_bounds, SkClipOp::kDifference);
-
-    const gfx::Rect separator_rect(toolbar_bounds.x(), tabstrip_bounds.bottom(),
-                                   toolbar_bounds.width(), 0);
-    BrowserView::PaintToolbarTopSeparator(canvas, GetToolbarTopSeparatorColor(),
-                                          separator_rect);
-  }
-}
-
 void BrowserNonClientFrameView::ViewHierarchyChanged(
     const ViewHierarchyChangedDetails& details) {
   if (details.is_add && details.child == this)
@@ -521,18 +524,22 @@ bool BrowserNonClientFrameView::DoesIntersectRect(const views::View* target,
   // Otherwise, claim |rect| only if it is above the bottom of the tabstrip in
   // a non-tab portion.
   TabStrip* tabstrip = browser_view_->tabstrip();
-  gfx::RectF rect_in_tabstrip_coords_f(rect);
-  View::ConvertRectToTarget(this, tabstrip, &rect_in_tabstrip_coords_f);
-  gfx::Rect rect_in_tabstrip_coords =
-      gfx::ToEnclosingRect(rect_in_tabstrip_coords_f);
-  if (rect_in_tabstrip_coords.y() >= tabstrip->GetLocalBounds().bottom()) {
-    // |rect| is below the tabstrip.
-    return false;
-  }
+  // The tabstrip may not be in a Widget (e.g. when switching into immersive
+  // reveal).
+  if (tabstrip->GetWidget()) {
+    gfx::RectF rect_in_tabstrip_coords_f(rect);
+    View::ConvertRectToTarget(this, tabstrip, &rect_in_tabstrip_coords_f);
+    gfx::Rect rect_in_tabstrip_coords =
+        gfx::ToEnclosingRect(rect_in_tabstrip_coords_f);
+    if (rect_in_tabstrip_coords.y() >= tabstrip->GetLocalBounds().bottom()) {
+      // |rect| is below the tabstrip.
+      return false;
+    }
 
-  if (tabstrip->HitTestRect(rect_in_tabstrip_coords)) {
-    // Claim |rect| if it is in a non-tab portion of the tabstrip.
-    return tabstrip->IsRectInWindowCaption(rect_in_tabstrip_coords);
+    if (tabstrip->HitTestRect(rect_in_tabstrip_coords)) {
+      // Claim |rect| if it is in a non-tab portion of the tabstrip.
+      return tabstrip->IsRectInWindowCaption(rect_in_tabstrip_coords);
+    }
   }
 
   // We claim |rect| because it is above the bottom of the tabstrip, but

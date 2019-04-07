@@ -25,9 +25,10 @@
 #if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "components/nux/constants.h"
+#include "components/nux/email/email_handler.h"
+#include "components/nux/google_apps/google_apps_handler.h"
 #include "components/nux/show_promo_delegate.h"
-#include "components/nux_google_apps/constants.h"
-#include "components/nux_google_apps/google_apps_handler.h"
 #include "content/public/browser/web_contents.h"
 #endif  // defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
 
@@ -63,7 +64,6 @@ WelcomeUI::WelcomeUI(content::WebUI* web_ui, const GURL& url)
 
   // There are multiple possible configurations that affects the layout, but
   // first add resources that are shared across all layouts.
-  html_source->AddLocalizedString("acceptText", IDS_WELCOME_ACCEPT_BUTTON);
   html_source->AddResourcePath("logo.png", IDR_PRODUCT_LOGO_128);
   html_source->AddResourcePath("logo2x.png", IDR_PRODUCT_LOGO_256);
 
@@ -71,6 +71,8 @@ WelcomeUI::WelcomeUI(content::WebUI* web_ui, const GURL& url)
   // Otherwise use the default layout.
   if (kIsBranded && is_dice) {
     html_source->AddLocalizedString("headerText", IDS_WELCOME_HEADER);
+    html_source->AddLocalizedString("acceptText",
+                                    IDS_PROFILES_DICE_SIGNIN_BUTTON);
     html_source->AddLocalizedString("secondHeaderText",
                                     IDS_DICE_WELCOME_SECOND_HEADER);
     html_source->AddLocalizedString("descriptionText",
@@ -103,6 +105,7 @@ WelcomeUI::WelcomeUI(content::WebUI* web_ui, const GURL& url)
     int header_id = is_everywhere_variant ? IDS_WELCOME_HEADER_AFTER_FIRST_RUN
                                           : IDS_WELCOME_HEADER;
     html_source->AddString("headerText", l10n_util::GetStringUTF16(header_id));
+    html_source->AddLocalizedString("acceptText", IDS_WELCOME_ACCEPT_BUTTON);
     html_source->AddLocalizedString("descriptionText", IDS_WELCOME_DESCRIPTION);
     html_source->AddLocalizedString("declineText", IDS_WELCOME_DECLINE_BUTTON);
     html_source->AddResourcePath("welcome.js", IDR_WELCOME_JS);
@@ -111,17 +114,33 @@ WelcomeUI::WelcomeUI(content::WebUI* web_ui, const GURL& url)
   }
 
 #if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
-  if (base::FeatureList::IsEnabled(nux_google_apps::kNuxGoogleAppsFeature)) {
+  // To avoid diluting data collection, existing users should not be assigned
+  // an NUX group. So, the kOnboardDuringNUX flag is used to short-circuit the
+  // feature checks below.
+  PrefService* prefs = profile->GetPrefs();
+  bool onboard_during_nux =
+      prefs && prefs->GetBoolean(prefs::kOnboardDuringNUX);
+
+  if (onboard_during_nux &&
+      base::FeatureList::IsEnabled(nux::kNuxEmailFeature)) {
+    web_ui->AddMessageHandler(std::make_unique<nux::EmailHandler>(
+        profile->GetPrefs(), FaviconServiceFactory::GetForProfile(
+                                 profile, ServiceAccessType::EXPLICIT_ACCESS)));
+
+    nux::EmailHandler::AddSources(html_source, profile->GetPrefs());
+  }
+
+  if (onboard_during_nux &&
+      base::FeatureList::IsEnabled(nux::kNuxGoogleAppsFeature)) {
     content::BrowserContext* browser_context =
         web_ui->GetWebContents()->GetBrowserContext();
-    web_ui->AddMessageHandler(
-        std::make_unique<nux_google_apps::GoogleAppsHandler>(
-            profile->GetPrefs(),
-            FaviconServiceFactory::GetForProfile(
-                profile, ServiceAccessType::EXPLICIT_ACCESS),
-            BookmarkModelFactory::GetForBrowserContext(browser_context)));
+    web_ui->AddMessageHandler(std::make_unique<nux::GoogleAppsHandler>(
+        profile->GetPrefs(),
+        FaviconServiceFactory::GetForProfile(
+            profile, ServiceAccessType::EXPLICIT_ACCESS),
+        BookmarkModelFactory::GetForBrowserContext(browser_context)));
 
-    nux_google_apps::GoogleAppsHandler::AddSources(html_source);
+    nux::GoogleAppsHandler::AddSources(html_source);
   }
 #endif  // defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD
 
@@ -132,15 +151,23 @@ WelcomeUI::~WelcomeUI() {}
 
 void WelcomeUI::StorePageSeen(Profile* profile, const GURL& url) {
 #if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
-  if (url.EqualsIgnoringRef(GURL(nux_google_apps::kNuxGoogleAppsUrl))) {
+  if (url.EqualsIgnoringRef(GURL(nux::kNuxGoogleAppsUrl))) {
     // Record that the new user experience page was visited.
     profile->GetPrefs()->SetBoolean(prefs::kHasSeenGoogleAppsPromoPage, true);
 
     // Record UMA.
-    UMA_HISTOGRAM_ENUMERATION(
-        nux_google_apps::kGoogleAppsInteractionHistogram,
-        nux_google_apps::GoogleAppsInteraction::kPromptShown,
-        nux_google_apps::GoogleAppsInteraction::kCount);
+    UMA_HISTOGRAM_ENUMERATION(nux::kGoogleAppsInteractionHistogram,
+                              nux::GoogleAppsInteraction::kPromptShown,
+                              nux::GoogleAppsInteraction::kCount);
+    return;
+  }
+
+  if (url.EqualsIgnoringRef(GURL(nux::kNuxEmailUrl))) {
+    // Record that the new user experience page was visited.
+    profile->GetPrefs()->SetBoolean(prefs::kHasSeenEmailPromoPage, true);
+
+    // TODO(scottchen): Record UMA.
+
     return;
   }
 #endif  // defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)

@@ -13,6 +13,8 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/time/time.h"
+#include "build/build_config.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/base/net_errors.h"
@@ -39,6 +41,17 @@ class SharedURLLoaderFactory;
 
 class GaiaAuthFetcher {
  public:
+  struct MultiloginTokenIDPair {
+    std::string token_;
+    std::string gaia_id_;
+
+    MultiloginTokenIDPair(const std::string& gaia_id,
+                          const std::string& token) {
+      gaia_id_ = gaia_id;
+      token_ = token;
+    }
+  };
+
   // Magic string indicating that, while a second factor is still
   // needed to complete authentication, the user provided the right password.
   static const char kSecondFactor[];
@@ -166,6 +179,9 @@ class GaiaAuthFetcher {
   void StartOAuthLogin(const std::string& access_token,
                        const std::string& service);
 
+  // Starts a request to get the cookie for list of accounts.
+  void StartOAuthMultilogin(const std::vector<MultiloginTokenIDPair>& accounts);
+
   // Starts a request to list the accounts in the GAIA cookie.
   void StartListAccounts();
 
@@ -268,6 +284,7 @@ class GaiaAuthFetcher {
   static const char kOAuthHeaderFormat[];
   static const char kOAuth2BearerHeaderFormat[];
   static const char kDeviceIdHeaderFormat[];
+  static const char kOAuthMultiBearerHeaderFormat[];
   static const char kClientLoginToOAuth2CookiePartSecure[];
   static const char kClientLoginToOAuth2CookiePartHttpOnly[];
   static const char kClientLoginToOAuth2CookiePartCodePrefix[];
@@ -307,6 +324,10 @@ class GaiaAuthFetcher {
   void OnUberAuthTokenFetch(const std::string& data,
                             net::Error net_error,
                             int response_code);
+
+  void OnOAuthMultiloginFetched(const std::string& data,
+                                net::Error net_error,
+                                int response_code);
 
   void OnOAuthLoginFetched(const std::string& data,
                            net::Error net_error,
@@ -385,6 +406,7 @@ class GaiaAuthFetcher {
   const GURL merge_session_gurl_;
   const GURL uberauth_token_gurl_;
   const GURL oauth_login_gurl_;
+  const GURL oauth_multilogin_gurl_;
   const GURL list_accounts_gurl_;
   const GURL logout_gurl_;
   const GURL get_check_connection_info_url_;
@@ -398,6 +420,13 @@ class GaiaAuthFetcher {
   std::string requested_service_;  // Currently tracked for IssueAuthToken only.
   bool fetch_pending_ = false;
   bool fetch_token_from_auth_code_ = false;
+
+  // For investigation of https://crbug.com/876306.
+  base::TimeDelta list_accounts_system_uptime_;
+#if !defined(OS_IOS)
+  // There is no easy way to get the process uptime on iOS.
+  base::TimeDelta list_accounts_process_uptime_;
+#endif
 
   friend class GaiaAuthFetcherTest;
   FRIEND_TEST_ALL_PREFIXES(GaiaAuthFetcherTest, CaptchaParse);

@@ -11,8 +11,8 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
-#include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "services/ws/public/cpp/property_type_converters.h"
+#include "services/ws/public/mojom/window_manager.mojom.h"
 #include "ui/chromeos/ime/candidate_view.h"
 #include "ui/chromeos/ime/candidate_window_constants.h"
 #include "ui/display/display.h"
@@ -43,7 +43,6 @@ class CandidateWindowBorder : public views::BubbleBorder {
                             gfx::kPlaceholderColor),
         parent_(parent),
         offset_(0) {
-    set_paint_arrow(views::BubbleBorder::PAINT_NONE);
     set_use_theme_background_color(true);
   }
   ~CandidateWindowBorder() override {}
@@ -411,7 +410,7 @@ int CandidateWindowView::GetDialogButtons() const {
 void CandidateWindowView::OnBeforeBubbleWidgetInit(
     views::Widget::InitParams* params,
     views::Widget* widget) const {
-  using ui::mojom::WindowManager;
+  using ws::mojom::WindowManager;
   params->mus_properties[WindowManager::kContainerId_InitProperty] =
       mojo::ConvertTo<std::vector<uint8_t>>(
           static_cast<int32_t>(window_shell_id_));

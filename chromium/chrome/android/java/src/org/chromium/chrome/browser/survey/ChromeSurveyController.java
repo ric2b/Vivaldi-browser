@@ -20,6 +20,7 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.infobar.InfoBarContainerLayout.Item;
 import org.chromium.chrome.browser.infobar.InfoBarIdentifier;
@@ -32,7 +33,6 @@ import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.components.variations.VariationsAssociatedData;
 
 import java.lang.annotation.Retention;
@@ -63,12 +63,14 @@ public class ChromeSurveyController implements InfoBarContainer.InfoBarAnimation
 
     /**
      * Reasons that the user was rejected from being selected for a survey
-     *  Note: these values must match the SurveyFilteringResult enum in enums.xml.
+     * Note: these values cannot change and must match the SurveyFilteringResult enum in enums.xml
+     * because they're written to logs.
      */
     @IntDef({FilteringResult.SURVEY_INFOBAR_ALREADY_DISPLAYED,
             FilteringResult.FORCE_SURVEY_ON_COMMAND_PRESENT,
             FilteringResult.USER_ALREADY_SAMPLED_TODAY, FilteringResult.MAX_NUMBER_MISSING,
-            FilteringResult.ROLLED_NON_ZERO_NUMBER, FilteringResult.USER_SELECTED_FOR_SURVEY})
+            FilteringResult.ROLLED_NON_ZERO_NUMBER, FilteringResult.USER_SELECTED_FOR_SURVEY,
+            FilteringResult.SURVEY_ALREADY_EXISTS})
     @Retention(RetentionPolicy.SOURCE)
     public @interface FilteringResult {
         int SURVEY_INFOBAR_ALREADY_DISPLAYED = 0;
@@ -77,8 +79,9 @@ public class ChromeSurveyController implements InfoBarContainer.InfoBarAnimation
         int MAX_NUMBER_MISSING = 4;
         int ROLLED_NON_ZERO_NUMBER = 5;
         int USER_SELECTED_FOR_SURVEY = 6;
+        int SURVEY_ALREADY_EXISTS = 7;
         // Number of entries
-        int NUM_ENTRIES = 7;
+        int NUM_ENTRIES = 8;
     }
 
     /**
@@ -140,10 +143,10 @@ public class ChromeSurveyController implements InfoBarContainer.InfoBarAnimation
             }
         };
 
-        String siteContext =
-                ChromeFeatureList.isEnabled(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID)
-                ? "HorizontalTabSwitcher"
-                : "NotHorizontalTabSwitcher";
+        String siteContext = ChromeVersionInfo.getProductVersion() + ","
+                + (ChromeFeatureList.isEnabled(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID)
+                                  ? "HorizontalTabSwitcher"
+                                  : "NotHorizontalTabSwitcher");
         surveyController.downloadSurvey(context, siteId, onSuccessRunnable, siteContext);
     }
 
@@ -321,10 +324,6 @@ public class ChromeSurveyController implements InfoBarContainer.InfoBarAnimation
         }
 
         int maxNumber = getMaxNumber();
-        if (FeatureUtilities.isChromeModernDesignEnabled()) {
-            maxNumber = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
-                    ChromeFeatureList.CHROME_MODERN_DESIGN, MAX_NUMBER, maxNumber);
-        }
 
         int maxForHorizontalTabSwitcher = -1;
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID)) {
@@ -469,7 +468,7 @@ public class ChromeSurveyController implements InfoBarContainer.InfoBarAnimation
                 "Android.Survey.InfoBarClosingState", value, InfoBarClosingState.NUM_ENTRIES);
     }
 
-    static class StartDownloadIfEligibleTask extends AsyncTask<Void, Void, Boolean> {
+    static class StartDownloadIfEligibleTask extends AsyncTask<Boolean> {
         ChromeSurveyController mController;
         final TabModelSelector mSelector;
 
@@ -480,11 +479,12 @@ public class ChromeSurveyController implements InfoBarContainer.InfoBarAnimation
         }
 
         @Override
-        protected Boolean doInBackground(Void... params) {
+        protected Boolean doInBackground() {
             if (!mController.doesUserQualifyForSurvey()) return false;
 
             if (SurveyController.getInstance().doesSurveyExist(
                         mController.getSiteId(), ContextUtils.getApplicationContext())) {
+                mController.recordSurveyFilteringResult(FilteringResult.SURVEY_ALREADY_EXISTS);
                 return true;
             } else {
                 boolean forceSurveyOn = false;

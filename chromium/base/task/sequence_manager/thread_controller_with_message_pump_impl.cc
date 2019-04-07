@@ -5,7 +5,6 @@
 #include "base/task/sequence_manager/thread_controller_with_message_pump_impl.h"
 
 #include "base/auto_reset.h"
-#include "base/message_loop/message_pump_default.h"
 #include "base/time/tick_clock.h"
 #include "base/trace_event/trace_event.h"
 
@@ -14,16 +13,22 @@ namespace sequence_manager {
 namespace internal {
 
 ThreadControllerWithMessagePumpImpl::ThreadControllerWithMessagePumpImpl(
-    TickClock* time_source)
-    : main_thread_id_(PlatformThread::CurrentId()),
-      pump_(new MessagePumpDefault()),
+    std::unique_ptr<MessagePump> message_pump,
+    const TickClock* time_source)
+    : associated_thread_(AssociatedThreadId::CreateUnbound()),
+      pump_(std::move(message_pump)),
       time_source_(time_source) {
+  scoped_set_sequence_local_storage_map_for_current_thread_ = std::make_unique<
+      base::internal::ScopedSetSequenceLocalStorageMapForCurrentThread>(
+      &sequence_local_storage_map_);
   RunLoop::RegisterDelegateForCurrentThread(this);
 }
 
 ThreadControllerWithMessagePumpImpl::~ThreadControllerWithMessagePumpImpl() {
   // Destructors of RunLoop::Delegate and ThreadTaskRunnerHandle
   // will do all the clean-up.
+  // ScopedSetSequenceLocalStorageMapForCurrentThread destructor will
+  // de-register the current thread as a sequence.
 }
 
 ThreadControllerWithMessagePumpImpl::MainThreadOnly::MainThreadOnly() = default;
@@ -44,34 +49,28 @@ void ThreadControllerWithMessagePumpImpl::SetWorkBatchSize(
   main_thread_only().batch_size = work_batch_size;
 }
 
+void ThreadControllerWithMessagePumpImpl::SetTimerSlack(
+    TimerSlack timer_slack) {
+  pump_->SetTimerSlack(timer_slack);
+}
+
 void ThreadControllerWithMessagePumpImpl::WillQueueTask(
     PendingTask* pending_task) {
   task_annotator_.WillQueueTask("ThreadController::Task", pending_task);
 }
 
 void ThreadControllerWithMessagePumpImpl::ScheduleWork() {
-  // Continuation will be posted if necessary.
-  if (RunsTasksInCurrentSequence() && is_doing_work())
-    return;
-
   pump_->ScheduleWork();
 }
 
 void ThreadControllerWithMessagePumpImpl::SetNextDelayedDoWork(
     LazyNow* lazy_now,
     TimeTicks run_time) {
-  if (main_thread_only().next_delayed_work == run_time)
-    return;
-  main_thread_only().next_delayed_work = run_time;
-
-  if (run_time == TimeTicks::Max())
-    return;
-
-  // Continuation will be posted if necessary.
+  // Since this method must be called on the main thread, we're probably
+  // inside of DoWork() except some initialization code.
+  // DoWork() will schedule next wake-up if necessary.
   if (is_doing_work())
     return;
-
-  // |lazy_now| will be removed in this method soon.
   DCHECK_LT(time_source_->NowTicks(), run_time);
   pump_->ScheduleDelayedWork(run_time);
 }
@@ -81,7 +80,7 @@ const TickClock* ThreadControllerWithMessagePumpImpl::GetClock() {
 }
 
 bool ThreadControllerWithMessagePumpImpl::RunsTasksInCurrentSequence() {
-  return main_thread_id_ == PlatformThread::CurrentId();
+  return associated_thread_->thread_id == PlatformThread::CurrentId();
 }
 
 void ThreadControllerWithMessagePumpImpl::SetDefaultTaskRunner(
@@ -107,6 +106,11 @@ void ThreadControllerWithMessagePumpImpl::RemoveNestingObserver(
     RunLoop::NestingObserver* observer) {
   DCHECK_EQ(main_thread_only().nesting_observer, observer);
   main_thread_only().nesting_observer = nullptr;
+}
+
+const scoped_refptr<AssociatedThreadId>&
+ThreadControllerWithMessagePumpImpl::GetAssociatedThread() const {
+  return associated_thread_;
 }
 
 bool ThreadControllerWithMessagePumpImpl::DoWork() {
@@ -146,9 +150,8 @@ bool ThreadControllerWithMessagePumpImpl::DoWork() {
     // Need to run new work immediately.
     pump_->ScheduleWork();
   } else if (do_work_delay != TimeDelta::Max()) {
-    SetNextDelayedDoWork(&lazy_now, lazy_now.Now() + do_work_delay);
-  } else {
-    SetNextDelayedDoWork(&lazy_now, TimeTicks::Max());
+    // Cancels any previously scheduled delayed wake-ups.
+    pump_->ScheduleDelayedWork(lazy_now.Now() + do_work_delay);
   }
 
   return task_ran;

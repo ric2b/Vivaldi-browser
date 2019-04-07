@@ -18,6 +18,7 @@
 #include "chromeos/network/certificate_pattern.h"
 #include "chromeos/network/client_cert_resolver.h"
 #include "chromeos/network/client_cert_util.h"
+#include "chromeos/network/device_state.h"
 #include "chromeos/network/managed_network_configuration_handler.h"
 #include "chromeos/network/network_configuration_handler.h"
 #include "chromeos/network/network_event_log.h"
@@ -300,9 +301,7 @@ void NetworkConnectionHandlerImpl::ConnectToNetwork(
   // Connect immediately to 'connectable' networks.
   // TODO(stevenjb): Shill needs to properly set Connectable for VPN.
   if (network && network->connectable() && network->type() != shill::kTypeVPN) {
-    if (logged_in_ && managed_configuration_handler_->IsNetworkBlockedByPolicy(
-                          network->type(), network->guid(),
-                          network->profile_path(), network->GetHexSsid())) {
+    if (network->blocked_by_policy()) {
       InvokeConnectErrorCallback(service_path, error_callback,
                                  kErrorBlockedByPolicy);
       return;
@@ -461,18 +460,24 @@ void NetworkConnectionHandlerImpl::VerifyConfiguredAndConnect(
   service_properties.GetStringWithoutPathExpansion(shill::kProfileProperty,
                                                    &profile);
   ::onc::ONCSource onc_source = onc::ONC_SOURCE_NONE;
-  const base::DictionaryValue* policy = nullptr;
-  if (!profile.empty()) {
-    policy = managed_configuration_handler_->FindPolicyByGuidAndProfile(
-        guid, profile, &onc_source);
-  }
+  const base::DictionaryValue* policy =
+      managed_configuration_handler_->FindPolicyByGuidAndProfile(guid, profile,
+                                                                 &onc_source);
 
-  if (type == shill::kTypeWifi) {
+  // Check if network is blocked by policy.
+  if (type == shill::kTypeWifi &&
+      onc_source != ::onc::ONCSource::ONC_SOURCE_DEVICE_POLICY &&
+      onc_source != ::onc::ONCSource::ONC_SOURCE_USER_POLICY) {
     const base::Value* hex_ssid_value = service_properties.FindKeyOfType(
         shill::kWifiHexSsid, base::Value::Type::STRING);
-    if (hex_ssid_value && logged_in_ &&
-        managed_configuration_handler_->IsNetworkBlockedByPolicy(
-            type, guid, profile, hex_ssid_value->GetString())) {
+    if (!hex_ssid_value) {
+      ErrorCallbackForPendingRequest(service_path, kErrorHexSsidRequired);
+      return;
+    }
+    if (network_state_handler_->OnlyManagedWifiNetworksAllowed() ||
+        base::ContainsValue(
+            managed_configuration_handler_->GetBlacklistedHexSSIDs(),
+            hex_ssid_value->GetString())) {
       ErrorCallbackForPendingRequest(service_path, kErrorBlockedByPolicy);
       return;
     }

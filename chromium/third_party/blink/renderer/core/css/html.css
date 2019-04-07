@@ -390,7 +390,7 @@ fieldset {
     -webkit-padding-end: 0.75em;
     -webkit-padding-after: 0.625em;
     border: 2px groove ThreeDFace;
-    min-width: -webkit-min-content;
+    min-inline-size: min-content;
 }
 
 button {
@@ -553,12 +553,6 @@ input[type="file" i] {
 
 input[type="image" i] {
     cursor: pointer;
-}
-
-input:-webkit-autofill, textarea:-webkit-autofill, select:-webkit-autofill {
-    background-color: #FAFFBD !important;
-    background-image:none !important;
-    color: #000000 !important;
 }
 
 input[type="radio" i], input[type="checkbox" i] {

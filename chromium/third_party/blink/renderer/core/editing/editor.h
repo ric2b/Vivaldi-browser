@@ -30,7 +30,6 @@
 
 #include "base/macros.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/editing/editing_behavior.h"
 #include "third_party/blink/renderer/core/editing/editing_style.h"
 #include "third_party/blink/renderer/core/editing/finder/find_options.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
@@ -43,6 +42,7 @@ namespace blink {
 
 class CompositeEditCommand;
 class DragData;
+class EditingBehavior;
 class EditorCommand;
 class FrameSelection;
 class LocalFrame;
@@ -82,7 +82,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   bool CanPaste() const;
   bool CanDelete() const;
 
-  static void CountEvent(ExecutionContext*, const Event*);
+  static void CountEvent(ExecutionContext*, const Event&);
   void CopyImage(const HitTestResult&);
 
   void RespondToChangedContents(const Position&);
@@ -129,7 +129,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   bool CanRedo();
   void Redo();
 
-  // Exposed for IdleSpellCheckCallback only.
+  // Exposed for IdleSpellCheckController only.
   // Supposed to be used as |const UndoStack&|.
   UndoStack& GetUndoStack() const { return *undo_stack_; }
 
@@ -193,7 +193,8 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
                                 bool smart_replace,
                                 InputEvent::InputType);
 
-  // Implementation of WebLocalFrameImpl::replaceSelection.
+  // Implementation of WebLocalFrameImpl::ReplaceSelection. Does not use smart
+  // replacement.
   void ReplaceSelection(const String&);
 
   void ReplaceSelectionAfterDragging(DocumentFragment*,

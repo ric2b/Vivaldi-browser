@@ -34,19 +34,6 @@ const int kWaveHeaderSizeBytes = 44;
 const base::FilePath::CharType kBaseFilename[] =
     FILE_PATH_LITERAL("audio_debug");
 
-// Get the ID for the render process host when there should only be one.
-bool GetRenderProcessHostId(base::ProcessId* id) {
-  content::RenderProcessHost::iterator it(
-      content::RenderProcessHost::AllHostsIterator());
-  *id = it.GetCurrentValue()->GetProcess().Pid();
-  EXPECT_NE(base::kNullProcessId, *id);
-  if (*id == base::kNullProcessId)
-    return false;
-  it.Advance();
-  EXPECT_TRUE(it.IsAtEnd());
-  return it.IsAtEnd();
-}
-
 // Get the expected AEC dump file name. The name will be
 // <temporary path>.<render process id>.aec_dump.<consumer id>, for example
 // "/tmp/.com.google.Chrome.Z6UC3P.12345.aec_dump.1".
@@ -104,10 +91,11 @@ class WebRtcAudioDebugRecordingsBrowserTest
   ~WebRtcAudioDebugRecordingsBrowserTest() override {}
 };
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_LINUX)
 // Renderer crashes under Android ASAN: https://crbug.com/408496.
 // Renderer crashes under Android: https://crbug.com/820934.
 // Failures on Android M. https://crbug.com/535728.
+// Flaky on Linux: https://crbug.com/871182
 #define MAYBE_CallWithAudioDebugRecordings DISABLED_CallWithAudioDebugRecordings
 #else
 #define MAYBE_CallWithAudioDebugRecordings CallWithAudioDebugRecordings
@@ -182,8 +170,8 @@ IN_PROC_BROWSER_TEST_F(WebRtcAudioDebugRecordingsBrowserTest,
   }
 
   // Verify that the expected AEC dump file exists and contains some data.
-  base::ProcessId render_process_id = base::kNullProcessId;
-  EXPECT_TRUE(GetRenderProcessHostId(&render_process_id));
+  base::ProcessId render_process_id =
+      shell()->web_contents()->GetMainFrame()->GetProcess()->GetProcess().Pid();
   base::FilePath file_path =
       GetExpectedAecDumpFileName(base_file_path, render_process_id);
   EXPECT_TRUE(base::PathExists(file_path));
@@ -252,19 +240,15 @@ IN_PROC_BROWSER_TEST_F(WebRtcAudioDebugRecordingsBrowserTest,
   base::ThreadRestrictions::SetIOAllowed(prev_io_allowed);
 }
 
-#if defined(OS_ANDROID)
+// Same test as CallWithAudioDebugRecordings, but does two parallel calls.
+// TODO(crbug.com/874378): Fix an re-enable test.
+// List of issues filed before this test was disabled for all platforms:
 // Renderer crashes under Android ASAN: https://crbug.com/408496.
 // Renderer crashes under Android: https://crbug.com/820934.
 // Failures on Android M. https://crbug.com/535728.
-#define MAYBE_TwoCallsWithAudioDebugRecordings \
-  DISABLED_TwoCallsWithAudioDebugRecordings
-#else
-#define MAYBE_TwoCallsWithAudioDebugRecordings TwoCallsWithAudioDebugRecordings
-#endif
-
-// Same test as CallWithAudioDebugRecordings, but does two parallel calls.
+// Flaky on Linux: https://crbug.com/871182
 IN_PROC_BROWSER_TEST_F(WebRtcAudioDebugRecordingsBrowserTest,
-                       MAYBE_TwoCallsWithAudioDebugRecordings) {
+                       DISABLED_TwoCallsWithAudioDebugRecordings) {
   if (!HasAudioOutputDevices()) {
     LOG(INFO) << "Missing output devices: skipping test...";
     return;

@@ -2,8 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/jumbo.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
-import("//third_party/protobuf/proto_library.gni")
+import("//third_party/libprotobuf-mutator/fuzzable_proto_library.gni")
 
 if (is_android) {
   import("//build/config/android/config.gni")
@@ -12,7 +13,7 @@ if (is_android) {
 # TODO(crbug.com/706392): Fix password reuse detection for Android.
 password_reuse_detection_support = !is_android && !is_ios
 
-static_library("browser") {
+jumbo_static_library("browser") {
   sources = [
     "android_affiliation/affiliated_match_helper.cc",
     "android_affiliation/affiliated_match_helper.h",
@@ -33,6 +34,8 @@ static_library("browser") {
     "android_affiliation/facet_manager.cc",
     "android_affiliation/facet_manager.h",
     "android_affiliation/facet_manager_host.h",
+    "android_affiliation/lookup_affiliation_response_parser.cc",
+    "android_affiliation/lookup_affiliation_response_parser.h",
     "android_affiliation/test_affiliation_fetcher_factory.h",
     "browser_save_password_progress_logger.cc",
     "browser_save_password_progress_logger.h",
@@ -185,6 +188,7 @@ static_library("browser") {
     ":proto",
     "//base:i18n",
     "//components/autofill/core/browser",
+    "//components/autofill/core/browser:password_generator",
     "//components/autofill/core/browser/proto",
     "//components/autofill/core/common",
     "//components/favicon/core",
@@ -225,17 +229,24 @@ static_library("browser") {
     sources += [ "login_database_posix.cc" ]
   }
 
+  if (is_mac && !is_ios) {
+    sources += [
+      "password_recovery_util_mac.cc",
+      "password_recovery_util_mac.h",
+    ]
+  }
+
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 }
 
-proto_library("proto") {
+fuzzable_proto_library("proto") {
   sources = [
     "android_affiliation/affiliation_api.proto",
   ]
 }
 
-static_library("password_hash_data") {
+jumbo_static_library("password_hash_data") {
   sources = [
     "password_hash_data.cc",
     "password_hash_data.h",
@@ -261,7 +272,7 @@ static_library("hash_password_manager") {
   ]
 }
 
-static_library("test_support") {
+jumbo_static_library("test_support") {
   testonly = true
   sources = [
     "android_affiliation/fake_affiliation_api.cc",
@@ -443,11 +454,13 @@ source_set("unit_tests") {
     "//google_apis:google_apis",
     "//net:test_support",
     "//services/metrics/public/cpp:ukm_builders",
+    "//services/network:network_service",
     "//services/network:test_support",
     "//services/network/public/cpp",
     "//sql:test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/sqlite",
     "//ui/base",
     "//ui/gfx:test_support",
     "//url",
@@ -477,4 +490,18 @@ fuzzer_test("csv_reader_fuzzer") {
   ]
   seed_corpus = "import/password_csv_reader_corpus"
   dict = "import/password_csv_reader_fuzzer.dict"
+}
+
+if (use_libfuzzer) {
+  fuzzer_test("lookup_affiliation_response_parser_fuzzer") {
+    sources = [
+      "android_affiliation/lookup_affiliation_response_parser_fuzzer.cc",
+    ]
+    deps = [
+      ":browser",
+      ":proto",
+      "//base:base",
+      "//third_party/libprotobuf-mutator",
+    ]
+  }
 }

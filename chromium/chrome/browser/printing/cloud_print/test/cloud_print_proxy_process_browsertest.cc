@@ -22,7 +22,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/test/multiprocess_test.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
@@ -435,7 +435,7 @@ void CloudPrintProxyPolicyStartupTest::WaitForConnect(
 
   mojo::MessagePipe pipe;
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&ConnectAsync, std::move(pipe.handle1),
                      GetServiceProcessServerName(), mojo_connection));
   ServiceProcessControl::GetInstance()->SetMojoHandle(

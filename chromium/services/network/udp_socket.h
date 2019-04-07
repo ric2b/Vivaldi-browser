@@ -14,7 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "net/base/address_family.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/ip_endpoint.h"
 #include "net/interfaces/address_family.mojom.h"
 #include "net/interfaces/ip_endpoint.mojom.h"
@@ -53,20 +53,22 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) UDPSocket : public mojom::UDPSocket {
         net::IOBuffer* buf,
         int buf_len,
         const net::IPEndPoint& dest_addr,
-        const net::CompletionCallback& callback,
+        net::CompletionOnceCallback callback,
         const net::NetworkTrafficAnnotationTag& traffic_annotation) = 0;
     virtual int Write(
         net::IOBuffer* buf,
         int buf_len,
-        const net::CompletionCallback& callback,
+        net::CompletionOnceCallback callback,
         const net::NetworkTrafficAnnotationTag& traffic_annotation) = 0;
     virtual int SetBroadcast(bool broadcast) = 0;
+    virtual int SetSendBufferSize(int send_buffer_size) = 0;
+    virtual int SetReceiveBufferSize(int receive_buffer_size) = 0;
     virtual int JoinGroup(const net::IPAddress& group_address) = 0;
     virtual int LeaveGroup(const net::IPAddress& group_address) = 0;
     virtual int RecvFrom(net::IOBuffer* buf,
                          int buf_len,
                          net::IPEndPoint* address,
-                         const net::CompletionCallback& callback) = 0;
+                         net::CompletionOnceCallback callback) = 0;
   };
 
   UDPSocket(mojom::UDPSocketReceiverPtr receiver, net::NetLog* net_log);
@@ -80,6 +82,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) UDPSocket : public mojom::UDPSocket {
             mojom::UDPSocketOptionsPtr options,
             BindCallback callback) override;
   void SetBroadcast(bool broadcast, SetBroadcastCallback callback) override;
+  void SetSendBufferSize(int32_t send_buffer_size,
+                         SetSendBufferSizeCallback callback) override;
+  void SetReceiveBufferSize(int32_t receive_buffer_size,
+                            SetSendBufferSizeCallback callback) override;
   void JoinGroup(const net::IPAddress& group_address,
                  JoinGroupCallback callback) override;
   void LeaveGroup(const net::IPAddress& group_address,

@@ -9,25 +9,29 @@ import org.chromium.content_public.browser.ChildProcessImportance;
 
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Iterator;
 
 /**
  * Ranking of ChildProcessConnections for a particular ChildConnectionAllocator.
  */
-public class ChildProcessRanking {
+public class ChildProcessRanking implements Iterable<ChildProcessConnection> {
     private static class ConnectionWithRank {
         public final ChildProcessConnection connection;
 
         // Info for ranking a connection.
         public boolean visible;
         public long frameDepth;
+        public boolean intersectsViewport;
         @ChildProcessImportance
         public int importance;
 
         public ConnectionWithRank(ChildProcessConnection connection, boolean visible,
-                long frameDepth, @ChildProcessImportance int importance) {
+                long frameDepth, boolean intersectsViewport,
+                @ChildProcessImportance int importance) {
             this.connection = connection;
             this.visible = visible;
             this.frameDepth = frameDepth;
+            this.intersectsViewport = intersectsViewport;
             this.importance = importance;
         }
     }
@@ -50,6 +54,7 @@ public class ChildProcessRanking {
             // Ranking order:
             // * visible or ChildProcessImportance.IMPORTANT
             // * ChildProcessImportance.MODERATE
+            // * intersectsViewport
             // * frameDepth (lower value is higher rank)
             // Note boostForPendingViews is not used for ranking.
 
@@ -72,7 +77,39 @@ public class ChildProcessRanking {
                 return 1;
             }
 
+            if (o1.intersectsViewport && !o2.intersectsViewport) {
+                return -1;
+            } else if (!o1.intersectsViewport && o2.intersectsViewport) {
+                return 1;
+            }
+
             return (int) (o1.frameDepth - o2.frameDepth);
+        }
+    }
+
+    private class ReverseRankIterator implements Iterator<ChildProcessConnection> {
+        private final int mSizeOnConstruction;
+        private int mNextIndex;
+
+        public ReverseRankIterator() {
+            mSizeOnConstruction = ChildProcessRanking.this.mSize;
+            mNextIndex = mSizeOnConstruction - 1;
+        }
+
+        @Override
+        public boolean hasNext() {
+            modificationCheck();
+            return mNextIndex >= 0;
+        }
+
+        @Override
+        public ChildProcessConnection next() {
+            modificationCheck();
+            return ChildProcessRanking.this.mRankings[mNextIndex--].connection;
+        }
+
+        private void modificationCheck() {
+            assert mSizeOnConstruction == ChildProcessRanking.this.mSize;
         }
     }
 
@@ -87,12 +124,22 @@ public class ChildProcessRanking {
         mRankings = new ConnectionWithRank[maxSize];
     }
 
+    /**
+     * Iterate from lowest to highest rank. Ranking should not be modified during iteration,
+     * including using Iterator.delete.
+     */
+    @Override
+    public Iterator<ChildProcessConnection> iterator() {
+        return new ReverseRankIterator();
+    }
+
     public void addConnection(ChildProcessConnection connection, boolean visible, long frameDepth,
-            @ChildProcessImportance int importance) {
+            boolean intersectsViewport, @ChildProcessImportance int importance) {
         assert connection != null;
         assert indexOf(connection) == -1;
         assert mSize < mRankings.length;
-        mRankings[mSize] = new ConnectionWithRank(connection, visible, frameDepth, importance);
+        mRankings[mSize] = new ConnectionWithRank(
+                connection, visible, frameDepth, intersectsViewport, importance);
         mSize++;
         sort();
     }
@@ -110,7 +157,7 @@ public class ChildProcessRanking {
     }
 
     public void updateConnection(ChildProcessConnection connection, boolean visible,
-            long frameDepth, @ChildProcessImportance int importance) {
+            long frameDepth, boolean intersectsViewport, @ChildProcessImportance int importance) {
         assert connection != null;
         assert mSize > 0;
         int i = indexOf(connection);
@@ -118,6 +165,7 @@ public class ChildProcessRanking {
 
         mRankings[i].visible = visible;
         mRankings[i].frameDepth = frameDepth;
+        mRankings[i].intersectsViewport = intersectsViewport;
         mRankings[i].importance = importance;
         sort();
     }

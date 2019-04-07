@@ -25,7 +25,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/browser/component_updater/component_installer_errors.h"
@@ -208,13 +208,11 @@ void RegisterPepperFlashWithChrome(const base::FilePath& path,
 
   std::vector<content::WebPluginInfo> plugins;
   PluginService::GetInstance()->GetInternalPlugins(&plugins);
-  base::FilePath placeholder_path =
-      base::FilePath::FromUTF8Unsafe(ChromeContentClient::kNotPresent);
   for (const auto& plugin : plugins) {
     if (!plugin.is_pepper_plugin() || plugin.name != web_plugin.name)
       continue;
 
-    if (plugin.path == placeholder_path) {
+    if (plugin.path.value() == ChromeContentClient::kNotPresent) {
       // This is the Flash placeholder; replace it regardless of version or
       // other considerations.
       PluginService::GetInstance()->UnregisterInternalPlugin(plugin.path);
@@ -322,7 +320,7 @@ void FlashComponentInstallerPolicy::ComponentReady(
   RegisterPepperFlashWithChrome(path.Append(chrome::kPepperFlashPluginFilename),
                                 version);
   base::PostTaskWithTraits(FROM_HERE,
-                           {base::TaskPriority::BACKGROUND, base::MayBlock()},
+                           {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
                            base::BindOnce(&UpdatePathService, path));
 #endif  // !defined(OS_LINUX)
 }

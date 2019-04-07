@@ -3,21 +3,13 @@
 #include "extensions/api/zoom/zoom_api.h"
 #include "extensions/schema/zoom.h"
 
-#include <memory>
-#include <string>
-#include <utility>
-
 #include "base/lazy_instance.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "content/public/browser/render_view_host.h"
+#include "chrome/browser/ui/browser_list.h"
+#include "components/zoom/zoom_controller.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/browser/web_contents.h"
-#include "extensions/browser/extension_function_dispatcher.h"
+#include "content/public/common/page_zoom.h"
 #include "extensions/browser/extension_zoom_request_client.h"
-#include "extensions/browser/guest_view/web_view/web_view_guest.h"
-#include "extensions/common/extension_messages.h"
 #include "ui/vivaldi_browser_window.h"
 
 class Browser;
@@ -26,9 +18,11 @@ namespace extensions {
 
 using content::WebContents;
 
+namespace {
 // Helper
-void SetUIZoomByWebContent(double zoom_level, WebContents* web_contents,
-    const Extension* extension) {
+void SetUIZoomByWebContent(double zoom_level,
+                           WebContents* web_contents,
+                           const Extension* extension) {
   zoom::ZoomController* zoom_controller =
       zoom::ZoomController::FromWebContents(web_contents);
   DCHECK(zoom_controller);
@@ -36,36 +30,7 @@ void SetUIZoomByWebContent(double zoom_level, WebContents* web_contents,
       new ExtensionZoomRequestClient(extension));
   zoom_controller->SetZoomLevelByClient(zoom_level, client);
 }
-
-ZoomAPI::ZoomAPI(content::BrowserContext* context) : browser_context_(context) {
-  EventRouter* event_router = EventRouter::Get(browser_context_);
-  if (event_router)
-    event_router->RegisterObserver(
-        this, vivaldi::zoom::OnDefaultZoomChanged::kEventName);
-}
-
-ZoomAPI::~ZoomAPI() {}
-
-static base::LazyInstance<BrowserContextKeyedAPIFactory<ZoomAPI> >::
-    DestructorAtExit g_factory_zoom = LAZY_INSTANCE_INITIALIZER;
-
-// static
-BrowserContextKeyedAPIFactory<ZoomAPI>* ZoomAPI::GetFactoryInstance() {
-  return g_factory_zoom.Pointer();
-}
-
-void ZoomAPI::OnListenerAdded(const EventListenerInfo& details) {
-  zoom_event_router_.reset(new ZoomEventRouter(browser_context_));
-  EventRouter* event_router = EventRouter::Get(browser_context_);
-  if (event_router)
-    event_router->UnregisterObserver(this);
-}
-
-void ZoomAPI::Shutdown() {
-  EventRouter* event_router = EventRouter::Get(browser_context_);
-  if (event_router)
-    event_router->UnregisterObserver(this);
-}
+}  // namespace
 
 ZoomEventRouter::ZoomEventRouter(content::BrowserContext* context)
     : profile_(Profile::FromBrowserContext(context)) {
@@ -82,7 +47,6 @@ ZoomEventRouter::~ZoomEventRouter() {}
 void ZoomEventRouter::DefaultZoomChanged() {
   double zoom_level = profile_->GetZoomLevelPrefs()->GetDefaultZoomLevelPref();
   double zoom_factor = content::ZoomLevelToZoomFactor(zoom_level);
-
   std::unique_ptr<base::ListValue> args =
       vivaldi::zoom::OnDefaultZoomChanged::Create(zoom_factor);
   DispatchEvent(vivaldi::zoom::OnDefaultZoomChanged::kEventName,
@@ -101,42 +65,85 @@ void ZoomEventRouter::DispatchEvent(
   }
 }
 
-void ZoomEventRouter::Observe(int type,
-                              const content::NotificationSource& source,
-                              const content::NotificationDetails& details) {}
+static base::LazyInstance<
+    BrowserContextKeyedAPIFactory<ZoomAPI> >::DestructorAtExit g_factory_zoom =
+    LAZY_INSTANCE_INITIALIZER;
 
-ZoomSetVivaldiUIZoomFunction::ZoomSetVivaldiUIZoomFunction() {}
+// static
+BrowserContextKeyedAPIFactory<ZoomAPI>* ZoomAPI::GetFactoryInstance() {
+  return g_factory_zoom.Pointer();
+}
 
-ZoomSetVivaldiUIZoomFunction::~ZoomSetVivaldiUIZoomFunction() {}
+ZoomAPI::ZoomAPI(content::BrowserContext* context) : browser_context_(context) {
+  EventRouter* event_router = EventRouter::Get(browser_context_);
+  if (event_router)
+    event_router->RegisterObserver(
+        this, vivaldi::zoom::OnDefaultZoomChanged::kEventName);
+}
+
+ZoomAPI::~ZoomAPI() {}
+
+void ZoomAPI::OnListenerAdded(const EventListenerInfo& details) {
+  zoom_event_router_.reset(new ZoomEventRouter(browser_context_));
+  EventRouter* event_router = EventRouter::Get(browser_context_);
+  if (event_router)
+    event_router->UnregisterObserver(this);
+}
+
+void ZoomAPI::Shutdown() {
+  EventRouter* event_router = EventRouter::Get(browser_context_);
+  if (event_router)
+    event_router->UnregisterObserver(this);
+}
+
+void ZoomAPI::AddZoomObserver(Browser* browser) {
+  WebContents* web_contents =
+      static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents();
+  if (web_contents) {
+    auto* zoom_controller = zoom::ZoomController::FromWebContents(web_contents);
+    if (zoom_controller) {
+      zoom_controller->AddObserver(this);
+    }
+  }
+}
+
+void ZoomAPI::RemoveZoomObserver(Browser* browser) {
+  WebContents* web_contents =
+      static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents();
+  if (web_contents) {
+    auto* zoom_controller = zoom::ZoomController::FromWebContents(web_contents);
+    if (zoom_controller) {
+      zoom_controller->RemoveObserver(this);
+    }
+  }
+}
+
+void ZoomAPI::OnZoomChanged(
+    const zoom::ZoomController::ZoomChangedEventData& data) {
+  double zoom_factor = content::ZoomLevelToZoomFactor(data.new_zoom_level);
+  std::unique_ptr<base::ListValue> args =
+      vivaldi::zoom::OnUIZoomChanged::Create(zoom_factor);
+  if (zoom_event_router_) {
+    zoom_event_router_->DispatchEvent(
+        vivaldi::zoom::OnUIZoomChanged::kEventName, std::move(args));
+  }
+}
 
 bool ZoomSetVivaldiUIZoomFunction::RunAsync() {
   std::unique_ptr<vivaldi::zoom::SetVivaldiUIZoom::Params> params(
       vivaldi::zoom::SetVivaldiUIZoom::Params::Create(*args_));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
-
   double zoom_level = content::ZoomFactorToZoomLevel(params->zoom_factor);
-
-  // Set for windows using regular profile
-  SetUIZoomByWebContent(
-      zoom_level, dispatcher()->GetAssociatedWebContents(), extension());
-
-  // Set for windows using off the record profile, if any.
-  Profile* profile = GetProfile()->GetOriginalProfile();
-  if (profile->HasOffTheRecordProfile()) {
-    VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::GetBrowserWindowForBrowser(
-          chrome::FindBrowserWithProfile(profile->GetOffTheRecordProfile()));
-    SetUIZoomByWebContent(zoom_level, window->web_contents(), extension());
+  for (auto* browser : *BrowserList::GetInstance()) {
+    WebContents* web_contents =
+        static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents();
+    SetUIZoomByWebContent(zoom_level, web_contents, extension());
   }
 
   SendResponse(true);
   return true;
 }
-
-ZoomGetVivaldiUIZoomFunction::ZoomGetVivaldiUIZoomFunction() {}
-
-ZoomGetVivaldiUIZoomFunction::~ZoomGetVivaldiUIZoomFunction() {}
 
 bool ZoomGetVivaldiUIZoomFunction::RunAsync() {
   WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
@@ -160,10 +167,6 @@ bool ZoomGetVivaldiUIZoomFunction::RunAsync() {
   return true;
 }
 
-ZoomSetDefaultZoomFunction::ZoomSetDefaultZoomFunction() {}
-
-ZoomSetDefaultZoomFunction::~ZoomSetDefaultZoomFunction() {}
-
 bool ZoomSetDefaultZoomFunction::RunAsync() {
   std::unique_ptr<vivaldi::zoom::SetDefaultZoom::Params> params(
       vivaldi::zoom::SetDefaultZoom::Params::Create(*args_));
@@ -179,16 +182,12 @@ bool ZoomSetDefaultZoomFunction::RunAsync() {
       profile->GetDefaultStoragePartition(profile);
 
   ChromeZoomLevelPrefs* zoom_prefs =
-    static_cast<ChromeZoomLevelPrefs*>(partition->GetZoomLevelDelegate());
+      static_cast<ChromeZoomLevelPrefs*>(partition->GetZoomLevelDelegate());
   zoom_prefs->SetDefaultZoomLevelPref(zoom_factor);
 
   SendResponse(true);
   return true;
 }
-
-ZoomGetDefaultZoomFunction::ZoomGetDefaultZoomFunction() {}
-
-ZoomGetDefaultZoomFunction::~ZoomGetDefaultZoomFunction() {}
 
 bool ZoomGetDefaultZoomFunction::RunAsync() {
   Profile* profile = GetProfile();

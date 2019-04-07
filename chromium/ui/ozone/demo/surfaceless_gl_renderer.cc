@@ -184,14 +184,10 @@ bool SurfacelessGlRenderer::Initialize() {
 
   disable_primary_plane_ = command_line->HasSwitch("disable-primary-plane");
 
-  use_gpu_fences_ = command_line->HasSwitch("use-gpu-fences");
-  // The GLSurface needs to be prepared to accept plane fences,
-  // otherwise any fences sent to it will be ignored.
-  if (use_gpu_fences_)
-    surface_->SetUsePlaneGpuFences();
+  use_gpu_fences_ = surface_->SupportsPlaneGpuFences();
 
   // Schedule the initial render.
-  PostRenderFrameTask(gfx::SwapResult::SWAP_ACK);
+  PostRenderFrameTask(gfx::SwapResult::SWAP_ACK, nullptr);
   return true;
 }
 
@@ -271,7 +267,12 @@ void SurfacelessGlRenderer::RenderFrame() {
       base::Bind([](const gfx::PresentationFeedback&) {}));
 }
 
-void SurfacelessGlRenderer::PostRenderFrameTask(gfx::SwapResult result) {
+void SurfacelessGlRenderer::PostRenderFrameTask(
+    gfx::SwapResult result,
+    std::unique_ptr<gfx::GpuFence> gpu_fence) {
+  if (gpu_fence)
+    gpu_fence->Wait();
+
   switch (result) {
     case gfx::SwapResult::SWAP_NAK_RECREATE_BUFFERS:
       for (size_t i = 0; i < base::size(buffers_); ++i) {

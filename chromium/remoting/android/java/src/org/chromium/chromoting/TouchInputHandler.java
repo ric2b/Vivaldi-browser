@@ -384,9 +384,13 @@ public class TouchInputHandler {
         mRenderData.screenWidth = width;
         mRenderData.screenHeight = height;
 
+        mDesktopCanvas.setSafeInsets(mDesktop.getSafeInsets());
+
         mPanGestureBounds = new Rect(
                 mEdgeSlopInPx, mEdgeSlopInPx, width - mEdgeSlopInPx, height - mEdgeSlopInPx);
         resizeImageToFitScreen();
+
+        mDesktop.sendPreferredHostResolution();
     }
 
     private void handleHostSizeChanged(int width, int height) {

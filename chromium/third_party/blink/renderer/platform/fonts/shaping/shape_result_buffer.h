@@ -37,14 +37,19 @@ class PLATFORM_EXPORT ShapeResultBuffer {
                         float target_x,
                         IncludePartialGlyphsOption,
                         BreakGlyphsOption) const;
-  CharacterRange GetCharacterRange(float total_width,
+  CharacterRange GetCharacterRange(const StringView& text,
                                    TextDirection,
+                                   float total_width,
                                    unsigned from,
                                    unsigned to) const;
   Vector<CharacterRange> IndividualCharacterRanges(TextDirection,
                                                    float total_width) const;
+  Vector<double> IndividualCharacterAdvances(const StringView&,
+                                             TextDirection,
+                                             float total_width) const;
 
   static CharacterRange GetCharacterRange(scoped_refptr<const ShapeResult>,
+                                          const StringView& text,
                                           TextDirection,
                                           float total_width,
                                           unsigned from,
@@ -60,11 +65,15 @@ class PLATFORM_EXPORT ShapeResultBuffer {
   friend class ShapeResultBloberizer;
   static CharacterRange GetCharacterRangeInternal(
       const Vector<scoped_refptr<const ShapeResult>, 64>&,
+      const StringView& text,
       TextDirection,
       float total_width,
       unsigned from,
       unsigned to);
 
+  static void AddRunInfoAdvances(const ShapeResult::RunInfo& run_info,
+                                 float offset,
+                                 Vector<double>& advances);
   static void AddRunInfoRanges(const ShapeResult::RunInfo&,
                                float offset,
                                Vector<CharacterRange>&);

@@ -18,7 +18,7 @@ namespace vr {
 VR_EXPORT gfx::Vector3dF GetForwardVector(const gfx::Transform& head_pose);
 
 // Returns a vector heading upward from the viewer's head.
-gfx::Vector3dF GetUpVector(const gfx::Transform& head_pose);
+VR_EXPORT gfx::Vector3dF GetUpVector(const gfx::Transform& head_pose);
 
 }  // namespace vr
 

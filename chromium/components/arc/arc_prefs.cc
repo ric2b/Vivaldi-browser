@@ -12,6 +12,12 @@
 namespace arc {
 namespace prefs {
 
+// A bool preference indicating whether traffic other than the VPN connection
+// set via kAlwaysOnVpnPackage should be blackholed.
+const char kAlwaysOnVpnLockdown[] = "arc.vpn.always_on.lockdown";
+// A string preference indicating the Android app that will be used for
+// "Always On VPN". Should be empty if "Always On VPN" is not enabled.
+const char kAlwaysOnVpnPackage[] = "arc.vpn.always_on.vpn_package";
 // Stores the user id received from DM Server when enrolling a Play user on an
 // Active Directory managed device. Used to report to DM Server that the account
 // is still used.
@@ -83,9 +89,6 @@ const char kArcVoiceInteractionValuePropAccepted[] =
 // Integer pref indicating the ecryptfs to ext4 migration strategy. One of
 // options: forbidden = 0, migrate = 1, wipe = 2 or ask the user = 3.
 const char kEcryptfsMigrationStrategy[] = "ecryptfs_migration_strategy";
-// A preference that indicates whether the SMS Connect feature is enabled.
-const char kSmsConnectEnabled[] = "multidevice.sms_connect_enabled";
-
 // A preference that indicates the user has accepted voice interaction activity
 // control settings.
 const char kVoiceInteractionActivityControlAccepted[] =
@@ -101,6 +104,10 @@ const char kVoiceInteractionContextEnabled[] =
 // to use hotword listening.
 const char kVoiceInteractionHotwordEnabled[] =
     "settings.voice_interaction.hotword.enabled";
+// A preference that indicates the user has allowed voice interaction services
+// to send notification.
+const char kVoiceInteractionNotificationEnabled[] =
+    "settings.voice_interaction.notification.enabled";
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   // TODO(dspaid): Implement a mechanism to allow this to sync on first boot
@@ -127,6 +134,8 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   // Sorted in lexicographical order.
   registry->RegisterBooleanPref(kVoiceInteractionActivityControlAccepted,
                                 false);
+  registry->RegisterBooleanPref(kAlwaysOnVpnLockdown, false);
+  registry->RegisterStringPref(kAlwaysOnVpnPackage, std::string());
   registry->RegisterBooleanPref(kArcDataRemoveRequested, false);
   registry->RegisterBooleanPref(kArcEnabled, false);
   registry->RegisterBooleanPref(kArcInitialSettingsPending, false);
@@ -139,10 +148,10 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(kArcTermsAccepted, false);
   registry->RegisterBooleanPref(kArcTermsShownInOobe, false);
   registry->RegisterBooleanPref(kArcVoiceInteractionValuePropAccepted, false);
-  registry->RegisterBooleanPref(kSmsConnectEnabled, true);
   registry->RegisterBooleanPref(kVoiceInteractionContextEnabled, false);
   registry->RegisterBooleanPref(kVoiceInteractionEnabled, false);
   registry->RegisterBooleanPref(kVoiceInteractionHotwordEnabled, false);
+  registry->RegisterBooleanPref(kVoiceInteractionNotificationEnabled, true);
 }
 
 }  // namespace prefs

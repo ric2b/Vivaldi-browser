@@ -16,8 +16,17 @@ enum TextDecoration {
   DECORATION_YELLOW
 };
 
+enum HtmlEscaping {
+  NO_ESCAPING,
+
+  // Convert < and > to &lt; and &gt; when writing markdown output in non-code
+  // sections.
+  DEFAULT_ESCAPING,
+};
+
 void OutputString(const std::string& output,
-                  TextDecoration dec = DECORATION_NONE);
+                  TextDecoration dec = DECORATION_NONE,
+                  HtmlEscaping = DEFAULT_ESCAPING);
 
 // If printing markdown, this generates table-of-contents entries with
 // links to the actual help; otherwise, prints a one-line description.

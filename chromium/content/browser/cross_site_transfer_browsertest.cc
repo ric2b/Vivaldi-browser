@@ -288,7 +288,7 @@ IN_PROC_BROWSER_TEST_F(CrossSiteTransferTest, PostWithFileData) {
   EXPECT_TRUE(NavigateToURL(shell(), form_url));
 
   // Prepare a file to upload.
-  base::ThreadRestrictions::ScopedAllowIO allow_io_for_temp_dir;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir temp_dir;
   base::FilePath file_path;
   std::string file_content("test-file-content");
@@ -381,7 +381,7 @@ IN_PROC_BROWSER_TEST_F(CrossSiteTransferTest, MaliciousPostWithFileData) {
             form_contents->GetMainFrame()->GetProcess()->GetID());
 
   // Prepare a file to upload.
-  base::ThreadRestrictions::ScopedAllowIO allow_io_for_temp_dir;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir temp_dir;
   base::FilePath file_path;
   std::string file_content("test-file-content");
@@ -470,26 +470,6 @@ IN_PROC_BROWSER_TEST_F(CrossSiteTransferTest, NoDeliveryToDetachedFrame) {
   // This should cancel the navigation.
   EXPECT_FALSE(target_navigation.WaitForResponse())
       << "Request should have been cancelled before reaching the renderer.";
-}
-
-// Ensure that we don't send a referrer if a site tries to trigger the forking
-// heuristic, even if we would have forked anyways.
-IN_PROC_BROWSER_TEST_F(CrossSiteTransferTest, NoReferrerOnFork) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kContentShellAlwaysFork);
-
-  GURL start_url(embedded_test_server()->GetURL("a.com", "/fork-popup.html"));
-  EXPECT_TRUE(NavigateToURL(shell(), start_url));
-  EXPECT_EQ(2u, shell()->windows().size());
-  Shell* popup = shell()->windows().back();
-  EXPECT_NE(popup, shell());
-
-  base::string16 expected_title = base::ASCIIToUTF16("Referrer = ''");
-  base::string16 failed_title = base::ASCIIToUTF16(
-      base::StringPrintf("Referrer = '%s'", start_url.spec().c_str()));
-  TitleWatcher watcher(popup->web_contents(), expected_title);
-  watcher.AlsoWaitForTitle(failed_title);
-  EXPECT_EQ(expected_title, watcher.WaitAndGetTitle());
 }
 
 }  // namespace content

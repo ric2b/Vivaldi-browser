@@ -42,10 +42,10 @@
 #include "net/log/net_log_with_source.h"
 #include "net/proxy_resolution/proxy_info.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
-#include "net/quic/chromium/mock_crypto_client_stream_factory.h"
-#include "net/quic/chromium/quic_http_utils.h"
-#include "net/quic/chromium/quic_stream_factory_peer.h"
-#include "net/quic/chromium/quic_test_packet_maker.h"
+#include "net/quic/mock_crypto_client_stream_factory.h"
+#include "net/quic/quic_http_utils.h"
+#include "net/quic/quic_stream_factory_peer.h"
+#include "net/quic/quic_test_packet_maker.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/mock_client_socket_pool_manager.h"
 #include "net/socket/next_proto.h"
@@ -2381,7 +2381,7 @@ class HttpStreamFactoryBidirectionalQuicTest
     verify_details_.cert_verify_result.is_issued_by_known_root = true;
     crypto_client_stream_factory_.AddProofVerifyDetails(&verify_details_);
     crypto_client_stream_factory_.set_handshake_mode(
-        quic::MockCryptoClientStream::CONFIRM_HANDSHAKE);
+        MockCryptoClientStream::CONFIRM_HANDSHAKE);
     session_context.cert_verifier = &cert_verifier_;
     session_context.quic_crypto_client_stream_factory =
         &crypto_client_stream_factory_;
@@ -2521,7 +2521,7 @@ TEST_P(HttpStreamFactoryBidirectionalQuicTest,
                      nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
   delegate.WaitUntilDone();
 
-  scoped_refptr<IOBuffer> buffer = new net::IOBuffer(1);
+  scoped_refptr<IOBuffer> buffer = base::MakeRefCounted<net::IOBuffer>(1);
   EXPECT_THAT(stream_impl->ReadData(buffer.get(), 1), IsOk());
   EXPECT_EQ(kProtoQUIC, stream_impl->GetProtocol());
   EXPECT_EQ("200", delegate.response_headers().find(":status")->second);
@@ -2653,7 +2653,7 @@ TEST_P(HttpStreamFactoryBidirectionalQuicTest,
   delegate.WaitUntilDone();
 
   // Make sure the BidirectionalStream negotiated goes through QUIC.
-  scoped_refptr<IOBuffer> buffer = new net::IOBuffer(1);
+  scoped_refptr<IOBuffer> buffer = base::MakeRefCounted<net::IOBuffer>(1);
   EXPECT_THAT(stream_impl->ReadData(buffer.get(), 1), IsOk());
   EXPECT_EQ(kProtoQUIC, stream_impl->GetProtocol());
   EXPECT_EQ("200", delegate.response_headers().find(":status")->second);

@@ -25,7 +25,11 @@ class RunLoopUntilNonEmptyPaint : public content::WebContentsObserver {
 
   // Runs a RunLoop on the main thread until the first non-empty frame is
   // painted for the WebContents provided to the constructor.
-  void RunUntilIdle() { run_loop_.Run(); }
+  void RunUntilNonEmptyPaint() {
+    if (web_contents()->CompletedFirstVisuallyNonEmptyPaint())
+      return;
+    run_loop_.Run();
+  }
 
  private:
   // content::WebContentsObserver:
@@ -57,7 +61,9 @@ class NoBackgroundTasksTest : public InProcessBrowserTest {
 // TODO(fdoray): Enable on ChromeOS once all dependencies on background tasks to
 // produce the first non-empty paint have been removed. https://crbug.com/831835
 // This test is flaky on Mac: https://crbug.com/833989
-#if defined(OS_CHROMEOS) || defined(OS_MACOSX)
+// TODO(http://crbug.com/876184 Command line is too long for win-asan.
+#if defined(OS_CHROMEOS) || defined(OS_MACOSX) || \
+    (defined(OS_WIN) && defined(ADDRESS_SANITIZER))
 #define MAYBE_FirstNonEmptyPaintWithoutBackgroundTasks \
   DISABLED_FirstNonEmptyPaintWithoutBackgroundTasks
 #else
@@ -68,5 +74,5 @@ IN_PROC_BROWSER_TEST_F(NoBackgroundTasksTest,
                        MAYBE_FirstNonEmptyPaintWithoutBackgroundTasks) {
   RunLoopUntilNonEmptyPaint run_loop_until_non_empty_paint(
       browser()->tab_strip_model()->GetActiveWebContents());
-  run_loop_until_non_empty_paint.RunUntilIdle();
+  run_loop_until_non_empty_paint.RunUntilNonEmptyPaint();
 }

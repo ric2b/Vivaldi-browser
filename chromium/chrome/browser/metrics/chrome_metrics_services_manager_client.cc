@@ -8,7 +8,7 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
@@ -68,7 +68,7 @@ const char kRateParamName[] = "sampling_rate_per_mille";
 // because it needs access to IO and cannot work from UI thread.
 void PostStoreMetricsClientInfo(const metrics::ClientInfo& client_info) {
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&GoogleUpdateSettings::StoreMetricsClientInfo,
                      client_info));
 }

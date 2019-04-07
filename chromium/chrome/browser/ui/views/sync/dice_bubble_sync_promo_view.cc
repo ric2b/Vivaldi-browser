@@ -12,8 +12,8 @@
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/signin_ui_util.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/sync/dice_signin_button_view.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -27,15 +27,15 @@ DiceBubbleSyncPromoView::DiceBubbleSyncPromoView(
     signin_metrics::AccessPoint access_point,
     int no_accounts_promo_message_resource_id,
     int accounts_promo_message_resource_id,
-    bool signin_button_prominent)
+    bool signin_button_prominent,
+    int text_style)
     : views::View(), delegate_(delegate) {
   DCHECK(AccountConsistencyModeManager::IsDiceEnabledForProfile(profile));
 
   std::vector<AccountInfo> accounts =
       signin_ui_util::GetAccountsForDicePromos(profile);
-  int title_resource_id = accounts.empty()
-                              ? no_accounts_promo_message_resource_id
-                              : accounts_promo_message_resource_id;
+  // Always show the accounts promo message for now.
+  const int title_resource_id = accounts_promo_message_resource_id;
 
   std::unique_ptr<views::BoxLayout> layout = std::make_unique<views::BoxLayout>(
       views::BoxLayout::kVertical, gfx::Insets(),
@@ -44,11 +44,14 @@ DiceBubbleSyncPromoView::DiceBubbleSyncPromoView(
           .bottom());
   SetLayoutManager(std::move(layout));
 
-  base::string16 title_text = l10n_util::GetStringUTF16(title_resource_id);
-  views::Label* title = new views::Label(title_text, CONTEXT_BODY_TEXT_LARGE);
-  title->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
-  title->SetMultiLine(true);
-  AddChildView(title);
+  if (title_resource_id) {
+    base::string16 title_text = l10n_util::GetStringUTF16(title_resource_id);
+    views::Label* title =
+        new views::Label(title_text, CONTEXT_BODY_TEXT_LARGE, text_style);
+    title->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+    title->SetMultiLine(true);
+    AddChildView(title);
+  }
 
   if (accounts.empty()) {
     signin_button_view_ =
@@ -62,7 +65,8 @@ DiceBubbleSyncPromoView::DiceBubbleSyncPromoView(
           profiles::GetPlaceholderAvatarIconResourceID());
     }
     signin_button_view_ = new DiceSigninButtonView(
-        accounts[0], account_icon, this, true /* show_drop_down_arrow */);
+        accounts[0], account_icon, this, /*show_drop_down_arrow=*/false,
+        /*use_account_name_as_title=*/true);
 
     // Store account information for submenu.
     accounts_for_submenu_.assign(accounts.begin() + 1, accounts.end());

@@ -31,6 +31,7 @@
 #include "media/cdm/supported_cdm_versions.h"
 #include "media/media_buildflags.h"
 #include "testing/gtest/include/gtest/gtest-spi.h"
+#include "third_party/widevine/cdm/widevine_cdm_common.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -454,16 +455,6 @@ class EncryptedMediaTest
   }
 
   void TestPolicyCheck() {
-// TODO(crbug.com/847591): ChromeOS Widevine CDM does not support policy check
-// API yet. Remove this condition when the CDM is updated.
-// TODO(crbug.com/851027): Reenable this test on Windows after bug is fixed.
-#if 0 && defined(WIDEVINE_CDM_AVAILABLE) && (defined(OS_CHROMEOS) || defined(OS_WIN))
-    if (IsWidevine(CurrentKeySystem())) {
-      DVLOG(0) << "Skipping test due to HDCP policy check related bugs.";
-      return;
-    }
-#endif
-
     base::StringPairs query_params;
     // We do not care about playback so choose an arbitrary media file.
     query_params.emplace_back("mediaFile", "bear-a_enc-a.webm");
@@ -740,7 +731,6 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, InitializeCDMFail) {
 // be closed.
 // Flaky: crbug.com/832800
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, DISABLED_CDMCrashDuringDecode) {
-  IgnorePluginCrash();
   TestNonPlaybackCases(kExternalClearKeyCrashKeySystem,
                        kEmeSessionClosedAndError);
 }

@@ -38,9 +38,7 @@ class ASH_EXPORT VirtualKeyboardController
       chromeos::input_method::mojom::ImeKeyset keyset);
 
   // TabletModeObserver:
-  // TODO(rsadam@): Remove when autovirtual keyboard flag is on by default.
-  void OnTabletModeStarted() override;
-  void OnTabletModeEnded() override;
+  void OnTabletModeEventsBlockingChanged() override;
 
   // ui::InputDeviceObserver:
   void OnTouchscreenDeviceConfigurationChanged() override;
@@ -50,7 +48,7 @@ class ASH_EXPORT VirtualKeyboardController
   // when determining whether or not to show the on-screen keyboard.
   void ToggleIgnoreExternalKeyboard();
 
-  // keyboard::KeyboardLayoutDelegate
+  // keyboard::KeyboardLayoutDelegate:
   void MoveKeyboardToDisplay(const display::Display& display) override;
   void MoveKeyboardToTouchableDisplay() override;
 
@@ -82,11 +80,6 @@ class ASH_EXPORT VirtualKeyboardController
   bool has_touchscreen_;
   // True if the presence of an external keyboard should be ignored.
   bool ignore_external_keyboard_;
-
-  // Whether the keyboard was forced to be enabled using accessibility prefs.
-  // Used to determine whether we need to disable the accessibility keyboard
-  // when the keyboard closes.
-  bool keyboard_enabled_using_accessibility_prefs_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(VirtualKeyboardController);
 };

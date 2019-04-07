@@ -15,16 +15,18 @@ import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
-import org.chromium.content.browser.test.util.Criteria;
+import org.chromium.content.browser.test.RenderFrameHostTestExt;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
+import org.chromium.content.browser.test.util.WebContentsUtils;
 import org.chromium.content_public.browser.WebContents;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Class containing the core framework for all XR (VR and AR) testing, which requires
@@ -64,19 +66,21 @@ public abstract class XrTestFramework {
     static final String TEST_DIR = "chrome/test/data/xr/e2e_test_files";
 
     // Test status enum
-    private static final int STATUS_RUNNING = 0;
-    private static final int STATUS_PASSED = 1;
-    private static final int STATUS_FAILED = 2;
+    @IntDef({TestStatus.RUNNING, TestStatus.PASSED, TestStatus.FAILED})
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({STATUS_RUNNING, STATUS_PASSED, STATUS_FAILED})
-    private @interface TestStatus {}
+    private @interface TestStatus {
+        int RUNNING = 0;
+        int PASSED = 1;
+        int FAILED = 2;
+    }
 
     private ChromeActivityTestRule mRule;
     protected WebContents mFirstTabWebContents;
     private View mFirstTabContentView;
 
     /**
-     * Gets the file:// URL to the test file
+     * Gets the file:// URL to the test file.
+     *
      * @param testName The name of the test whose file will be retrieved.
      * @return The file:// URL to the specified test file.
      */
@@ -87,6 +91,7 @@ public abstract class XrTestFramework {
 
     /**
      * Gets the path to pass to an EmbeddedTestServer.getURL to load the given HTML test file.
+     *
      * @param testName The name of the test whose file will be retrieved.
      * @param A path that can be passed to EmbeddedTestServer.getURL to load the test file.
      */
@@ -95,9 +100,25 @@ public abstract class XrTestFramework {
     }
 
     /**
-     * Helper function to run the given JavaScript, return the return value,
-     * and fail if a timeout/interrupt occurs so we don't have to catch or
-     * declare exceptions all the time.
+     * Checks whether a request for the given permission would trigger a permission prompt.
+     *
+     * @param permission The name of the permission to check.
+     * @param webContents The WebContents to run the JavaScript in.
+     * @return True if the permission request would trigger a prompt, false otherwise.
+     */
+    public static boolean permissionRequestWouldTriggerPrompt(
+            String permission, WebContents webContents) {
+        runJavaScriptOrFail("checkPermissionRequestWouldTriggerPrompt('" + permission + "')",
+                POLL_TIMEOUT_SHORT_MS, webContents);
+        pollJavaScriptBooleanOrFail("wouldPrompt !== null", POLL_TIMEOUT_SHORT_MS, webContents);
+        return Boolean.valueOf(
+                runJavaScriptOrFail("wouldPrompt", POLL_TIMEOUT_SHORT_MS, webContents));
+    }
+
+    /**
+     * Helper function to run the given JavaScript, return the return value, and fail if a
+     * timeout/interrupt occurs so we don't have to catch or declare exceptions all the time.
+     *
      * @param js The JavaScript to run.
      * @param timeout The timeout in milliseconds before a failure.
      * @param webContents The WebContents object to run the JavaScript in.
@@ -114,38 +135,103 @@ public abstract class XrTestFramework {
     }
 
     /**
-     * Polls the provided JavaScript boolean until the timeout is reached or
-     * the boolean is true.
-     * @param boolName The name of the JavaScript boolean or expression to poll.
+     * Runs the given JavaScript in the focused frame, failing if a timeout/interrupt occurs.
+     *
+     * @param js The JavaScript to run.
+     * @param timeout The timeout in milliseconds before failure.
+     * @param webContents The WebContents object to get the focused frame from.
+     * @return The return value of the JavaScript.
+     */
+    public static String runJavaScriptInFrameOrFail(
+            String js, int timeout, final WebContents webContents) {
+        return runJavaScriptInFrameInternal(js, timeout, webContents, true /* failOnTimeout */);
+    }
+
+    /**
+     * Polls the provided JavaScript boolean expression until the timeout is reached or the boolean
+     * is true.
+     *
+     * @param boolExpression The JavaScript boolean expression to poll.
      * @param timeoutMs The polling timeout in milliseconds.
      * @param webContents The WebContents to run the JavaScript through.
      * @return True if the boolean evaluated to true, false if timed out.
      */
     public static boolean pollJavaScriptBoolean(
-            final String boolName, int timeoutMs, final WebContents webContents) {
+            final String boolExpression, int timeoutMs, final WebContents webContents) {
         try {
-            CriteriaHelper.pollInstrumentationThread(Criteria.equals(true, new Callable<Boolean>() {
-                @Override
-                public Boolean call() {
-                    String result = "false";
-                    try {
-                        result = JavaScriptUtils.executeJavaScriptAndWaitForResult(webContents,
-                                boolName, POLL_CHECK_INTERVAL_SHORT_MS, TimeUnit.MILLISECONDS);
-                    } catch (InterruptedException | TimeoutException e) {
-                        // Expected to happen regularly, do nothing
-                    }
-                    return Boolean.parseBoolean(result);
+            CriteriaHelper.pollInstrumentationThread(() -> {
+                String result = "false";
+                try {
+                    result = JavaScriptUtils.executeJavaScriptAndWaitForResult(webContents,
+                            boolExpression, POLL_CHECK_INTERVAL_SHORT_MS, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException | TimeoutException e) {
+                    // Expected to happen regularly, do nothing
                 }
-            }), timeoutMs, POLL_CHECK_INTERVAL_LONG_MS);
+                return Boolean.parseBoolean(result);
+            }, "Polling timed out", timeoutMs, POLL_CHECK_INTERVAL_LONG_MS);
         } catch (AssertionError e) {
-            Log.d(TAG, "pollJavaScriptBoolean() timed out");
+            Log.d(TAG, "pollJavaScriptBoolean() timed out: " + e.toString());
             return false;
         }
         return true;
     }
 
     /**
+     * Polls the provided JavaScript boolean expression in the focused frame until the timeout is
+     * reached or the boolean is true.
+     *
+     * @param boolExpression The JavaScript boolean expression to poll.
+     * @param timeoutMs The polling timeout in milliseconds.
+     * @param webContents The WebContents to get the focused frame from.
+     * @return True if the boolean evaluated to true, false if timed out.
+     */
+    public static boolean pollJavaScriptBooleanInFrame(
+            final String boolExpression, int timeoutMs, final WebContents webContents) {
+        try {
+            CriteriaHelper.pollInstrumentationThread(() -> {
+                String result = "false";
+                result = runJavaScriptInFrameInternal(boolExpression, POLL_CHECK_INTERVAL_SHORT_MS,
+                        webContents, false /* failOnTimeout */);
+                return Boolean.parseBoolean(result);
+            }, "Polling timed out", timeoutMs, POLL_CHECK_INTERVAL_LONG_MS);
+        } catch (AssertionError e) {
+            Log.d(TAG, "pollJavaScriptBooleanInFrame() timed out: " + e.toString());
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Polls the provided JavaScript boolean expression, failing the test if it does not evaluate
+     * to true within the provided timeout.
+     *
+     * @param boolExpression The JavaScript boolean expression to poll.
+     * @param timeoutMs The polling timeout in milliseconds.
+     * @param webContents The Webcontents to run the JavaScript through.
+     */
+    public static void pollJavaScriptBooleanOrFail(
+            String boolExpression, int timeoutMs, WebContents webContents) {
+        Assert.assertTrue("Timed out polling boolean expression: " + boolExpression,
+                pollJavaScriptBoolean(boolExpression, timeoutMs, webContents));
+    }
+
+    /**
+     * Polls the provided JavaScript boolean expression in the focused frame, failing the test if
+     * it does not evaluate to true within the provided timeout.
+     *
+     * @param boolExpression The JavaScript boolean expression to poll.
+     * @param timeoutMs The polling timeout in milliseconds.
+     * @param webContents The WebContents to get the focused frame from.
+     */
+    public static void pollJavaScriptBooleanInFrameOrFail(
+            String boolExpression, int timeoutMs, WebContents webContents) {
+        Assert.assertTrue("Timed out polling boolean expression in frame: " + boolExpression,
+                pollJavaScriptBooleanInFrame(boolExpression, timeoutMs, webContents));
+    }
+
+    /**
      * Executes a JavaScript step function using the given WebContents.
+     *
      * @param stepFunction The JavaScript step function to call.
      * @param webContents The WebContents for the tab the JavaScript is in.
      */
@@ -156,8 +242,9 @@ public abstract class XrTestFramework {
     }
 
     /**
-     * Waits for a JavaScript step to finish, asserting that the step finished
-     * instead of timing out.
+     * Waits for a JavaScript step to finish, asserting that the step finished instead of timing
+     * out.
+     *
      * @param webContents The WebContents for the tab the JavaScript step is in.
      */
     public static void waitOnJavaScriptStep(WebContents webContents) {
@@ -174,8 +261,9 @@ public abstract class XrTestFramework {
 
         // Check what state we're in to make sure javascriptDone wasn't called because the test
         // failed.
+        @TestStatus
         int testStatus = checkTestStatus(webContents);
-        if (!success || testStatus == STATUS_FAILED) {
+        if (!success || testStatus == TestStatus.FAILED) {
             // Failure states: Either polling failed or polling succeeded, but because the test
             // failed.
             String reason;
@@ -200,8 +288,9 @@ public abstract class XrTestFramework {
 
     /**
      * Retrieves the current status of the JavaScript test and returns an enum corresponding to it.
+     *
      * @param webContents The WebContents for the tab to check the status in.
-     * @return A TestStatus integer corresponding to the current state of the JavaScript test
+     * @return A TestStatus integer corresponding to the current state of the JavaScript test.
      */
     @TestStatus
     public static int checkTestStatus(WebContents webContents) {
@@ -210,30 +299,31 @@ public abstract class XrTestFramework {
         boolean testPassed = Boolean.parseBoolean(
                 runJavaScriptOrFail("testPassed", POLL_TIMEOUT_SHORT_MS, webContents));
         if (testPassed) {
-            return STATUS_PASSED;
+            return TestStatus.PASSED;
         } else if (!testPassed && resultString.equals("\"\"")) {
-            return STATUS_RUNNING;
+            return TestStatus.RUNNING;
         } else {
             // !testPassed && !resultString.equals("\"\"")
-            return STATUS_FAILED;
+            return TestStatus.FAILED;
         }
     }
 
     /**
-     * Helper function to end the test harness test and assert that it passed,
-     * setting the failure reason as the description if it didn't.
+     * Helper function to end the test harness test and assert that it passed, setting the failure
+     * reason as the description if it didn't.
+     *
      * @param webContents The WebContents for the tab to check test results in.
      */
     public static void endTest(WebContents webContents) {
         switch (checkTestStatus(webContents)) {
-            case STATUS_PASSED:
+            case TestStatus.PASSED:
                 break;
-            case STATUS_FAILED:
+            case TestStatus.FAILED:
                 String resultString =
                         runJavaScriptOrFail("resultString", POLL_TIMEOUT_SHORT_MS, webContents);
                 Assert.fail("JavaScript testharness failed with result: " + resultString);
                 break;
-            case STATUS_RUNNING:
+            case TestStatus.RUNNING:
                 Assert.fail("Attempted to end test in Java without finishing in JavaScript.");
                 break;
             default:
@@ -247,15 +337,37 @@ public abstract class XrTestFramework {
      * useful because not all tests make use of the test harness' test/assert features (particularly
      * simple enter/exit tests), but may still want to ensure that no unexpected JavaScript errors
      * were encountered.
+     *
      * @param webContents The Webcontents for the tab to check for failures in.
      */
     public static void assertNoJavaScriptErrors(WebContents webContents) {
-        Assert.assertNotEquals(checkTestStatus(webContents), STATUS_FAILED);
+        Assert.assertNotEquals(checkTestStatus(webContents), TestStatus.FAILED);
+    }
+
+    private static String runJavaScriptInFrameInternal(
+            String js, int timeout, final WebContents webContents, boolean failOnTimeout) {
+        RenderFrameHostTestExt rfh = ThreadUtils.runOnUiThreadBlockingNoException(
+                () -> new RenderFrameHostTestExt(WebContentsUtils.getFocusedFrame(webContents)));
+        Assert.assertTrue("Did not get a focused frame", rfh != null);
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicReference<String> result = new AtomicReference<String>();
+        rfh.executeJavaScript(js, (String r) -> {
+            result.set(r);
+            latch.countDown();
+        });
+        try {
+            if (!latch.await(timeout, TimeUnit.MILLISECONDS) && failOnTimeout) {
+                Assert.fail("Timed out running JavaScript in focused frame: " + js);
+            }
+        } catch (InterruptedException e) {
+            Assert.fail("Waiting for latch was interrupted: " + e.toString());
+        }
+        return result.get();
     }
 
     /**
      * Must be constructed after the rule has been applied (e.g. in whatever method is
-     * tagged with @Before)
+     * tagged with @Before).
      */
     public XrTestFramework(ChromeActivityTestRule rule) {
         mRule = rule;
@@ -266,9 +378,10 @@ public abstract class XrTestFramework {
     /**
      * Loads the given URL with the given timeout then waits for JavaScript to
      * signal that it's ready for testing.
+     *
      * @param url The URL of the page to load.
      * @param timeoutSec The timeout of the page load in seconds.
-     * @return The return value of ChromeActivityTestRule.loadUrl()
+     * @return The return value of ChromeActivityTestRule.loadUrl().
      */
     public int loadUrlAndAwaitInitialization(String url, int timeoutSec)
             throws InterruptedException {
@@ -280,7 +393,18 @@ public abstract class XrTestFramework {
     }
 
     /**
+     * Helper method to run permissionRequestWouldTriggerPrompt with the first tab's WebContents.
+     *
+     * @param permission The name of the permission to check.
+     * @return True if the permission request would trigger a prompt, false otherwise.
+     */
+    public boolean permissionRequestWouldTriggerPrompt(String permission) {
+        return permissionRequestWouldTriggerPrompt(permission, mFirstTabWebContents);
+    }
+
+    /**
      * Helper method to run runJavaScriptOrFail with the first tab's WebContents.
+     *
      * @param js The JavaScript to run.
      * @param timeout The timeout in milliseconds before a failure.
      * @return The return value of the JavaScript.
@@ -290,17 +414,61 @@ public abstract class XrTestFramework {
     }
 
     /**
+     * Helper method to run runJavaScriptInFrameOrFail with the first tab's WebContents.
+     *
+     * @param js The JavaScript to run.
+     * @param timeout The timeout in milliseconds before a failure.
+     * @return The return value of the JavaScript.
+     */
+    public String runJavaScriptInFrameOrFail(String js, int timeout) {
+        return runJavaScriptInFrameOrFail(js, timeout, mFirstTabWebContents);
+    }
+
+    /**
      * Helper function to run pollJavaScriptBoolean with the first tab's WebContents.
-     * @param boolName The name of the JavaScript boolean or expression to poll.
+     *
+     * @param boolExpression The JavaScript boolean expression to poll.
      * @param timeoutMs The polling timeout in milliseconds.
      * @return True if the boolean evaluated to true, false if timed out.
      */
-    public boolean pollJavaScriptBoolean(String boolName, int timeoutMs) {
-        return pollJavaScriptBoolean(boolName, timeoutMs, mFirstTabWebContents);
+    public boolean pollJavaScriptBoolean(String boolExpression, int timeoutMs) {
+        return pollJavaScriptBoolean(boolExpression, timeoutMs, mFirstTabWebContents);
+    }
+
+    /**
+     * Helper function to run pollJavaScriptBooleanInFrame with the first tab's WebContents.
+     *
+     * @param boolExpression The JavaScript boolean expression to poll.
+     * @param timeoutMs The polling timeout in milliseconds.
+     * @return True if the boolean evaluated to true, false if timed out.
+     */
+    public boolean pollJavaScriptInFrameBoolean(String boolExpression, int timeoutMs) {
+        return pollJavaScriptBooleanInFrame(boolExpression, timeoutMs, mFirstTabWebContents);
+    }
+
+    /**
+     * Helper function to run pollJavaScriptBooleanOrFail with the first tab's WebContents.
+     *
+     * @param boolExpression The JavaScript boolean expression to poll.
+     * @param timeoutMs The polling timeout in milliseconds.
+     */
+    public void pollJavaScriptBooleanOrFail(String boolExpression, int timeoutMs) {
+        pollJavaScriptBooleanOrFail(boolExpression, timeoutMs, mFirstTabWebContents);
+    }
+
+    /**
+     * Helper function to run pollJavaScriptBooleanInFrameOrFail with the first tab's WebContents.
+     *
+     * @param boolExpression The JavaScript boolean expression to poll.
+     * @param timeoutMs The polling timeout in milliseconds.
+     */
+    public void pollJavaScriptBooleanInFrameOrFail(String boolExpression, int timeoutMs) {
+        pollJavaScriptBooleanInFrameOrFail(boolExpression, timeoutMs, mFirstTabWebContents);
     }
 
     /**
      * Helper function to run executeStepAndWait using the first tab's WebContents.
+     *
      * @param stepFunction The JavaScript step function to call.
      */
     public void executeStepAndWait(String stepFunction) {
@@ -316,7 +484,8 @@ public abstract class XrTestFramework {
 
     /**
      * Helper method to run checkTestSTatus with the first tab's WebContents.
-     * @return A TestStatus integer corresponding to the current state of the JavaScript test
+     *
+     * @return A TestStatus integer corresponding to the current state of the JavaScript test.
      */
     @TestStatus
     public int checkTestStatus() {
@@ -353,11 +522,7 @@ public abstract class XrTestFramework {
         final Tab tab = getRule().getActivity().getActivityTab();
         ThreadUtils.runOnUiThreadBlocking(() -> tab.simulateRendererKilledForTesting(true));
 
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return tab.isShowingSadTab();
-            }
-        });
+        CriteriaHelper.pollUiThread(
+                () -> { return tab.isShowingSadTab(); }, "Renderer killed, but sad tab not shown");
     }
 }

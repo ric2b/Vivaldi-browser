@@ -18,7 +18,6 @@
 namespace content {
 
 class BackgroundFetchRegistrationId;
-struct BackgroundFetchSettledFetch;
 class ServiceWorkerContextWrapper;
 class ServiceWorkerRegistration;
 class ServiceWorkerVersion;
@@ -45,29 +44,28 @@ class CONTENT_EXPORT BackgroundFetchEventDispatcher {
   // background fetch was aborted by the user or another external event.
   void DispatchBackgroundFetchAbortEvent(
       const BackgroundFetchRegistrationId& registration_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
+      std::unique_ptr<BackgroundFetchRegistration> registration,
       base::OnceClosure finished_closure);
 
   // Dispatches the `backgroundfetchclick` event, which indicates that the user
   // interface displayed for an active background fetch was activated.
   void DispatchBackgroundFetchClickEvent(
       const BackgroundFetchRegistrationId& registration_id,
-      mojom::BackgroundFetchState state,
+      std::unique_ptr<BackgroundFetchRegistration> registration,
       base::OnceClosure finished_closure);
 
   // Dispatches the `backgroundfetchfail` event, which indicates that a
-  // background fetch has finished with one or more failed fetches. The request-
-  // response pairs are included.
+  // background fetch has finished with one or more failed fetches.
   void DispatchBackgroundFetchFailEvent(
       const BackgroundFetchRegistrationId& registration_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
+      std::unique_ptr<BackgroundFetchRegistration> registration,
       base::OnceClosure finished_closure);
 
-  // Dispatches the `backgroundfetched` event, which indicates that a background
-  // fetch has successfully completed. The request-response pairs are included.
-  void DispatchBackgroundFetchedEvent(
+  // Dispatches the `backgroundfetchsuccess` event, which indicates that a
+  // background fetch has successfully completed.
+  void DispatchBackgroundFetchSuccessEvent(
       const BackgroundFetchRegistrationId& registration_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
+      std::unique_ptr<BackgroundFetchRegistration> registration,
       base::OnceClosure finished_closure);
 
  private:
@@ -114,26 +112,19 @@ class CONTENT_EXPORT BackgroundFetchEventDispatcher {
 
   // Methods that actually invoke the event on an activated Service Worker.
   static void DoDispatchBackgroundFetchAbortEvent(
-      const std::string& developer_id,
-      const std::string& unique_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
+      std::unique_ptr<BackgroundFetchRegistration> registration,
       scoped_refptr<ServiceWorkerVersion> service_worker_version,
       int request_id);
   static void DoDispatchBackgroundFetchClickEvent(
-      const std::string& developer_id,
-      mojom::BackgroundFetchState state,
+      std::unique_ptr<BackgroundFetchRegistration> registration,
       scoped_refptr<ServiceWorkerVersion> service_worker_version,
       int request_id);
   static void DoDispatchBackgroundFetchFailEvent(
-      const std::string& developer_id,
-      const std::string& unique_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
+      std::unique_ptr<BackgroundFetchRegistration> registration,
       scoped_refptr<ServiceWorkerVersion> service_worker_version,
       int request_id);
-  static void DoDispatchBackgroundFetchedEvent(
-      const std::string& developer_id,
-      const std::string& unique_id,
-      const std::vector<BackgroundFetchSettledFetch>& fetches,
+  static void DoDispatchBackgroundFetchSuccessEvent(
+      std::unique_ptr<BackgroundFetchRegistration> registration,
       scoped_refptr<ServiceWorkerVersion> service_worker_version,
       int request_id);
 

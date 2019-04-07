@@ -41,6 +41,7 @@ class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
  public:
   class Client {
    public:
+    virtual ~Client() {}
     virtual void SetBeginFrameSource(
         viz::BeginFrameSource* begin_frame_source) = 0;
     virtual void DidPresentCompositorFrame(
@@ -51,7 +52,6 @@ class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
     virtual void ReclaimResources(
         const std::vector<viz::ReturnedResource>& resources) = 0;
     virtual void OnFrameTokenChanged(uint32_t frame_token) = 0;
-    virtual void DidReceiveFirstFrameAfterNavigation() = 0;
   };
 
   DelegatedFrameHostAndroid(ViewAndroid* view,
@@ -91,6 +91,11 @@ class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
   // FrameEvictorClient implementation.
   void EvictDelegatedFrame() override;
 
+  // Advances the fallback surface to the first surface after navigation. This
+  // ensures that stale surfaces are not presented to the user for an indefinite
+  // period of time.
+  void ResetFallbackToFirstNavigationSurface();
+
   bool HasDelegatedContent() const;
 
   cc::SurfaceLayer* content_layer_for_testing() { return content_layer_.get(); }
@@ -128,7 +133,8 @@ class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
 
   // Returns the ID for the current Surface. Returns an invalid ID if no
   // surface exists (!HasDelegatedContent()).
-  const viz::SurfaceId& SurfaceId() const;
+  viz::SurfaceId SurfaceId() const;
+  bool HasFallbackSurface() const;
 
   void TakeFallbackContentFrom(DelegatedFrameHostAndroid* other);
 
@@ -156,7 +162,10 @@ class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
   // ui::CompositorLockClient implementation.
   void CompositorLockTimedOut() override;
 
-  void CreateNewCompositorFrameSinkSupport();
+  void CreateCompositorFrameSinkSupport();
+
+  void ProcessCopyOutputRequest(
+      std::unique_ptr<viz::CopyOutputRequest> request);
 
   const viz::FrameSinkId frame_sink_id_;
 
@@ -191,8 +200,17 @@ class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
 
   // Whether we've received a frame from the renderer since navigating.
   // Only used when surface synchronization is on.
-  uint32_t first_parent_sequence_number_after_navigation_ = 0;
+  viz::LocalSurfaceId first_local_surface_id_after_navigation_;
   bool received_frame_after_navigation_ = false;
+
+  std::vector<std::unique_ptr<viz::CopyOutputRequest>>
+      pending_first_frame_requests_;
+
+  // The surface id that was most recently activated by
+  // OnFirstSurfaceActivation.
+  viz::LocalSurfaceId active_local_surface_id_;
+  // The scale factor of the above surface.
+  float active_device_scale_factor_ = 0.f;
 
   // The local surface id as of the most recent call to
   // EmbedSurface. This is the surface that we expect future frames to

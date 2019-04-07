@@ -2362,6 +2362,53 @@ void BindVertexArrayOES(GLuint array) {
   }
 }
 
+void FramebufferParameteri(GLenum target, GLenum pname, GLint param) {
+  gles2::cmds::FramebufferParameteri* c =
+      GetCmdSpace<gles2::cmds::FramebufferParameteri>();
+  if (c) {
+    c->Init(target, pname, param);
+  }
+}
+
+void BindImageTexture(GLuint unit,
+                      GLuint texture,
+                      GLint level,
+                      GLboolean layered,
+                      GLint layer,
+                      GLenum access,
+                      GLenum format) {
+  gles2::cmds::BindImageTexture* c =
+      GetCmdSpace<gles2::cmds::BindImageTexture>();
+  if (c) {
+    c->Init(unit, texture, level, layered, layer, access, format);
+  }
+}
+
+void DispatchCompute(GLuint num_groups_x,
+                     GLuint num_groups_y,
+                     GLuint num_groups_z) {
+  gles2::cmds::DispatchCompute* c = GetCmdSpace<gles2::cmds::DispatchCompute>();
+  if (c) {
+    c->Init(num_groups_x, num_groups_y, num_groups_z);
+  }
+}
+
+void MemoryBarrierEXT(GLbitfield barriers) {
+  gles2::cmds::MemoryBarrierEXT* c =
+      GetCmdSpace<gles2::cmds::MemoryBarrierEXT>();
+  if (c) {
+    c->Init(barriers);
+  }
+}
+
+void MemoryBarrierByRegion(GLbitfield barriers) {
+  gles2::cmds::MemoryBarrierByRegion* c =
+      GetCmdSpace<gles2::cmds::MemoryBarrierByRegion>();
+  if (c) {
+    c->Init(barriers);
+  }
+}
+
 void SwapBuffers(GLuint64 swap_id, GLbitfield flags) {
   gles2::cmds::SwapBuffers* c = GetCmdSpace<gles2::cmds::SwapBuffers>();
   if (c) {
@@ -3325,6 +3372,19 @@ void SetReadbackBufferShadowAllocationINTERNAL(GLuint buffer_id,
       GetCmdSpace<gles2::cmds::SetReadbackBufferShadowAllocationINTERNAL>();
   if (c) {
     c->Init(buffer_id, shm_id, shm_offset, size);
+  }
+}
+
+void FramebufferTextureMultiviewLayeredANGLE(GLenum target,
+                                             GLenum attachment,
+                                             GLuint texture,
+                                             GLint level,
+                                             GLint baseViewIndex,
+                                             GLsizei numViews) {
+  gles2::cmds::FramebufferTextureMultiviewLayeredANGLE* c =
+      GetCmdSpace<gles2::cmds::FramebufferTextureMultiviewLayeredANGLE>();
+  if (c) {
+    c->Init(target, attachment, texture, level, baseViewIndex, numViews);
   }
 }
 

@@ -33,7 +33,8 @@ class CAPTURE_EXPORT VideoFrameReceiverOnTaskRunner
           buffer_read_permission,
       mojom::VideoFrameInfoPtr frame_info) override;
   void OnBufferRetired(int buffer_id) override;
-  void OnError() override;
+  void OnError(VideoCaptureError error) override;
+  void OnFrameDropped(VideoCaptureFrameDropReason reason) override;
   void OnLog(const std::string& message) override;
   void OnStarted() override;
   void OnStartedUsingGpuDecode() override;

@@ -11,41 +11,11 @@
 #include "components/invalidation/impl/per_user_topic_invalidation_client.h"
 #include "components/invalidation/public/invalidation_util.h"
 #include "components/invalidation/public/object_id_invalidation_map.h"
+#include "components/invalidation/public/topic_invalidation_map.h"
 #include "components/prefs/pref_service.h"
 #include "google/cacheinvalidation/include/types.h"
 
 namespace syncer {
-
-namespace {
-
-invalidation::ObjectId ConvertToObjectId(
-    const invalidation::InvalidationObjectId& invalidation_object_id) {
-  return invalidation::ObjectId(invalidation_object_id.source(),
-                                invalidation_object_id.name());
-}
-
-invalidation::InvalidationObjectId ConvertToInvalidationObjectId(
-    const invalidation::ObjectId& object_id) {
-  return invalidation::InvalidationObjectId(object_id.source(),
-                                            object_id.name());
-}
-
-ObjectIdSet ConvertToObjectIdSet(const InvalidationObjectIdSet& ids) {
-  ObjectIdSet object_ids;
-  for (const auto& id : ids)
-    object_ids.insert(ConvertToObjectId(id));
-  return object_ids;
-}
-
-InvalidationObjectIdSet ConvertToInvalidationObjectIdSet(
-    const ObjectIdSet& ids) {
-  InvalidationObjectIdSet invalidation_object_ids;
-  for (const auto& id : ids)
-    invalidation_object_ids.insert(ConvertToInvalidationObjectId(id));
-  return invalidation_object_ids;
-}
-
-}  // namespace
 
 FCMSyncInvalidationListener::Delegate::~Delegate() {}
 
@@ -75,17 +45,19 @@ void FCMSyncInvalidationListener::Start(
   delegate_ = delegate;
   per_user_topic_registration_manager_ =
       std::move(per_user_topic_registration_manager);
-
+  per_user_topic_registration_manager_->Init();
   invalidation_client_ = std::move(create_invalidation_client_callback)
                              .Run(network_channel_.get(), &logger_, this);
   invalidation_client_->Start();
 }
 
-void FCMSyncInvalidationListener::UpdateRegisteredIds(const ObjectIdSet& ids) {
-  registered_ids_ = ConvertToInvalidationObjectIdSet(ids);
+void FCMSyncInvalidationListener::UpdateRegisteredTopics(
+    const TopicSet& topics) {
+  registered_topics_ = topics;
   if (ticl_state_ == INVALIDATIONS_ENABLED &&
-      per_user_topic_registration_manager_)
+      per_user_topic_registration_manager_ && !token_.empty()) {
     DoRegistrationUpdate();
+  }
 }
 
 void FCMSyncInvalidationListener::Ready(InvalidationClient* client) {
@@ -97,72 +69,36 @@ void FCMSyncInvalidationListener::Ready(InvalidationClient* client) {
 
 void FCMSyncInvalidationListener::Invalidate(
     InvalidationClient* client,
-    const invalidation::Invalidation& invalidation) {
+    const std::string& payload,
+    const std::string& private_topic_name,
+    const std::string& public_topic_name,
+    int64_t version) {
   DCHECK_EQ(client, invalidation_client_.get());
 
-  const invalidation::ObjectId& id = invalidation.object_id();
-
-  std::string payload;
-  // payload() CHECK()'s has_payload(), so we must check it ourselves first.
-  if (invalidation.has_payload())
-    payload = invalidation.payload();
-
-  DVLOG(2) << "Received invalidation with version " << invalidation.version()
-           << " for " << ObjectIdToString(id);
-
-  ObjectIdInvalidationMap invalidations;
-  Invalidation inv = Invalidation::Init(id, invalidation.version(), payload);
+  TopicInvalidationMap invalidations;
+  Invalidation inv =
+      Invalidation::Init(ConvertTopicToId(public_topic_name), version, payload);
   inv.SetAckHandler(AsWeakPtr(), base::ThreadTaskRunnerHandle::Get());
+  DVLOG(1) << "Received invalidation with version " << inv.version() << " for "
+           << public_topic_name;
+
   invalidations.Insert(inv);
-
-  DispatchInvalidations(invalidations);
-}
-
-void FCMSyncInvalidationListener::InvalidateUnknownVersion(
-    InvalidationClient* client,
-    const invalidation::ObjectId& object_id) {
-  DCHECK_EQ(client, invalidation_client_.get());
-  DVLOG(1) << "InvalidateUnknownVersion";
-
-  ObjectIdInvalidationMap invalidations;
-  Invalidation unknown_version = Invalidation::InitUnknownVersion(object_id);
-  unknown_version.SetAckHandler(AsWeakPtr(),
-                                base::ThreadTaskRunnerHandle::Get());
-  invalidations.Insert(unknown_version);
-
-  DispatchInvalidations(invalidations);
-}
-
-// This should behave as if we got an invalidation with version
-// UNKNOWN_OBJECT_VERSION for all known data types.
-void FCMSyncInvalidationListener::InvalidateAll(InvalidationClient* client) {
-  DCHECK_EQ(client, invalidation_client_.get());
-  DVLOG(1) << "InvalidateAll";
-
-  ObjectIdInvalidationMap invalidations;
-  for (const auto& registered_id : registered_ids_) {
-    Invalidation unknown_version =
-        Invalidation::InitUnknownVersion(ConvertToObjectId(registered_id));
-    unknown_version.SetAckHandler(AsWeakPtr(),
-                                  base::ThreadTaskRunnerHandle::Get());
-    invalidations.Insert(unknown_version);
-  }
   DispatchInvalidations(invalidations);
 }
 
 void FCMSyncInvalidationListener::DispatchInvalidations(
-    const ObjectIdInvalidationMap& invalidations) {
-  ObjectIdInvalidationMap to_save = invalidations;
-  ObjectIdInvalidationMap to_emit = invalidations.GetSubsetWithObjectIds(
-      ConvertToObjectIdSet(registered_ids_));
+    const TopicInvalidationMap& invalidations) {
+  TopicInvalidationMap to_save = invalidations;
+  TopicInvalidationMap to_emit =
+      invalidations.GetSubsetWithTopics(registered_topics_);
 
   SaveInvalidations(to_save);
   EmitSavedInvalidations(to_emit);
 }
 
 void FCMSyncInvalidationListener::SaveInvalidations(
-    const ObjectIdInvalidationMap& to_save) {
-  ObjectIdSet objects_to_save = to_save.GetObjectIds();
+    const TopicInvalidationMap& to_save) {
+  ObjectIdSet objects_to_save = ConvertTopicsToIds(to_save.GetTopics());
   for (ObjectIdSet::const_iterator it = objects_to_save.begin();
        it != objects_to_save.end(); ++it) {
     UnackedInvalidationsMap::iterator lookup =
@@ -172,25 +108,21 @@ void FCMSyncInvalidationListener::SaveInvalidations(
                    .insert(std::make_pair(*it, UnackedInvalidationSet(*it)))
                    .first;
     }
-    lookup->second.AddSet(to_save.ForObject(*it));
+    lookup->second.AddSet(to_save.ForTopic((*it).name()));
   }
 }
 
 void FCMSyncInvalidationListener::EmitSavedInvalidations(
-    const ObjectIdInvalidationMap& to_emit) {
-  DVLOG(2) << "Emitting invalidations: " << to_emit.ToString();
+    const TopicInvalidationMap& to_emit) {
   delegate_->OnInvalidate(to_emit);
 }
-
-void FCMSyncInvalidationListener::InformError(
-    InvalidationClient* client,
-    const invalidation::ErrorInfo& error_info) {}
 
 void FCMSyncInvalidationListener::InformTokenRecieved(
     InvalidationClient* client,
     const std::string& token) {
   DCHECK_EQ(client, invalidation_client_.get());
   token_ = token;
+  DoRegistrationUpdate();
 }
 
 void FCMSyncInvalidationListener::Acknowledge(const invalidation::ObjectId& id,
@@ -216,16 +148,17 @@ void FCMSyncInvalidationListener::Drop(const invalidation::ObjectId& id,
 }
 
 void FCMSyncInvalidationListener::DoRegistrationUpdate() {
-  per_user_topic_registration_manager_->UpdateRegisteredIds(registered_ids_,
-                                                            token_);
+  per_user_topic_registration_manager_->UpdateRegisteredTopics(
+      registered_topics_, token_);
 
   // TODO(melandory): remove unacked invalidations for unregistered objects.
   ObjectIdInvalidationMap object_id_invalidation_map;
   for (auto& unacked : unacked_invalidations_map_) {
-    if (registered_ids_.find(ConvertToInvalidationObjectId(unacked.first)) ==
-        registered_ids_.end()) {
+    if (registered_topics_.find(unacked.first.name()) ==
+        registered_topics_.end()) {
       continue;
     }
+
     unacked.second.ExportInvalidations(AsWeakPtr(),
                                        base::ThreadTaskRunnerHandle::Get(),
                                        &object_id_invalidation_map);
@@ -234,15 +167,16 @@ void FCMSyncInvalidationListener::DoRegistrationUpdate() {
   // There's no need to run these through DispatchInvalidations(); they've
   // already been saved to storage (that's where we found them) so all we need
   // to do now is emit them.
-  EmitSavedInvalidations(object_id_invalidation_map);
+  EmitSavedInvalidations(ConvertObjectIdInvalidationMapToTopicInvalidationMap(
+      object_id_invalidation_map));
 }
 
 void FCMSyncInvalidationListener::StopForTest() {
   Stop();
 }
 
-ObjectIdSet FCMSyncInvalidationListener::GetRegisteredIdsForTest() const {
-  return ConvertToObjectIdSet(registered_ids_);
+TopicSet FCMSyncInvalidationListener::GetRegisteredIdsForTest() const {
+  return registered_topics_;
 }
 
 base::WeakPtr<FCMSyncInvalidationListener>

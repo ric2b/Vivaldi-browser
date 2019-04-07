@@ -12,8 +12,6 @@ blink_modules_sources("device_orientation") {
     "device_motion_controller.h",
     "device_motion_data.cc",
     "device_motion_data.h",
-    "device_motion_dispatcher.cc",
-    "device_motion_dispatcher.h",
     "device_motion_event.cc",
     "device_motion_event.h",
     "device_motion_event_pump.cc",
@@ -24,8 +22,6 @@ blink_modules_sources("device_orientation") {
     "device_orientation_controller.h",
     "device_orientation_data.cc",
     "device_orientation_data.h",
-    "device_orientation_dispatcher.cc",
-    "device_orientation_dispatcher.h",
     "device_orientation_event.cc",
     "device_orientation_event.h",
     "device_orientation_event_pump.cc",
@@ -37,9 +33,5 @@ blink_modules_sources("device_orientation") {
     "device_sensor_event_pump.h",
     "dom_window_device_motion.h",
     "dom_window_device_orientation.h",
-  ]
-
-  deps = [
-    "//services/device/public/cpp/generic_sensor:shared_with_blink",
   ]
 }

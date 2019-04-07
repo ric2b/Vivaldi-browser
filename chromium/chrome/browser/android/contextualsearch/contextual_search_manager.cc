@@ -16,7 +16,7 @@
 #include "chrome/browser/android/contextualsearch/resolved_search_term.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "components/contextual_search/browser/contextual_search_js_api_service_impl.h"
+#include "components/contextual_search/content/browser/contextual_search_js_api_service_impl.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/render_frame_host.h"
@@ -230,13 +230,20 @@ void ContextualSearchManager::ShouldEnableJsApi(
   std::move(callback).Run(should_enable);
 }
 
-void ContextualSearchManager::SetCaption(std::string caption,
+void ContextualSearchManager::SetCaption(const std::string& caption,
                                          bool does_answer) {
   JNIEnv* env = base::android::AttachCurrentThread();
   base::android::ScopedJavaLocalRef<jstring> j_caption =
       base::android::ConvertUTF8ToJavaString(env, caption.c_str());
   Java_ContextualSearchManager_onSetCaption(env, java_manager_, j_caption,
                                             does_answer);
+}
+
+void ContextualSearchManager::ChangeOverlayPosition(
+    contextual_search::mojom::OverlayPosition desired_position) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_ContextualSearchManager_onChangeOverlayPosition(
+      env, java_manager_, static_cast<int>(desired_position));
 }
 
 jlong JNI_ContextualSearchManager_Init(JNIEnv* env,

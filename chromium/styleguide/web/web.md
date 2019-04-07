@@ -186,7 +186,7 @@ compatibility issues are less relevant for Chrome-only code).
 .raw-button:hover,
 .raw-button:active {
   --sky-color: blue;
-  -webkit-margin-start: 0;
+  -webkit-margin-collapse: discard;
   background-color: rgb(253, 123, 42);
   background-repeat: no-repeat;
   border: none;
@@ -241,10 +241,6 @@ compatibility issues are less relevant for Chrome-only code).
 * Use scalable `font-size` units like `%` or `em` to respect users' default font
   size
 
-* Use `*-top/bottom` instead of `-webkit-*-before/after`
-    * `-top/bottom` are easier to understand (`before/after` is confusingly
-      similar to `start/end`)
-    * `-webkit-*-before/after` has far less advantage than `-webkit-*-start/end`
 
 ### Color
 
@@ -277,7 +273,7 @@ if `flattenhtml="true"` is specified in your .grd file.
 
 ```css
 .suboption {
-  -webkit-margin-start: 16px;
+  margin-inline-start: 16px;
 }
 
 #save-button {
@@ -292,8 +288,8 @@ html[dir='rtl'] #save-button {
 
 Use RTL-friendly versions of things like `margin` or `padding` where possible:
 
-* `margin-left` -> `-webkit-margin-start`
-* `padding-right` -> `-webkit-padding-end`
+* `margin-left` -> `margin-inline-start`
+* `padding-right` -> `padding-inline-end`
 * `text-align: left` -> `text-align: start`
 * `text-align: right` -> `text-align: end`
 * set both `left` for `[dir='ltr']` and `right` for `[dir='rtl']`
@@ -415,6 +411,13 @@ https://www.polymer-project.org/2.0/docs/devguide/templates#dom-if):
     For trivial DOM subtrees using the HTML [`hidden` attribute](
     https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/hidden)
     yields better performance, than adding a custom `dom-if` element.
+
+* Do not add iron-icons dependency to third_party/polymer/.
+  * Polymer provides icons via the `iron-icons` library, but importing each of the iconsets means importing hundreds of SVGs, which is unnecessary because Chrome uses only a small subset.
+  * Alternatives:
+    * Include the SVG in a WebUI page-specific icon file. e.g. `chrome/browser/resources/settings/icons.html`.
+    * If reused across multiple WebUI pages, include the SVG in `ui/webui/resources/cr_elements/icons.html` .
+  * You may copy the SVG code from [iron-icons files](https://github.com/PolymerElements/iron-icons/blob/master/iron-icons.html).
 
 ## Grit processing
 

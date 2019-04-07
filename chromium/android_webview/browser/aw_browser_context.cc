@@ -22,14 +22,15 @@
 #include "base/bind.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "base/task/post_task.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/metrics/metrics_service.h"
 #include "components/policy/core/browser/browser_policy_connector_base.h"
 #include "components/policy/core/browser/configuration_policy_pref_store.h"
 #include "components/policy/core/browser/url_blacklist_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/in_memory_pref_store.h"
+#include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_service_factory.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
@@ -43,6 +44,7 @@
 #include "content/public/browser/web_contents.h"
 #include "net/proxy_resolution/proxy_config_service_android.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
+#include "services/preferences/tracked/segregated_pref_store.h"
 
 using base::FilePath;
 using content::BrowserThread;
@@ -73,19 +75,25 @@ const void* const kDownloadManagerDelegateKey = &kDownloadManagerDelegateKey;
 void HandleReadError(PersistentPrefStore::PrefReadError error) {
 }
 
+base::FilePath GetPrefStorePath() {
+  base::FilePath path;
+  base::PathService::Get(base::DIR_ANDROID_APP_DATA, &path);
+  path = path.Append(FILE_PATH_LITERAL("pref_store"));
+  return path;
+}
+
 AwBrowserContext* g_browser_context = NULL;
 
-std::unique_ptr<net::ProxyConfigService> CreateProxyConfigService() {
-  std::unique_ptr<net::ProxyConfigService> config_service =
-      net::ProxyResolutionService::CreateSystemProxyConfigService(
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+std::unique_ptr<net::ProxyConfigServiceAndroid> CreateProxyConfigService() {
+  std::unique_ptr<net::ProxyConfigServiceAndroid> config_service_android =
+      std::make_unique<net::ProxyConfigServiceAndroid>(
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+          base::ThreadTaskRunnerHandle::Get());
 
   // TODO(csharrison) Architect the wrapper better so we don't need a cast for
   // android ProxyConfigServices.
-  net::ProxyConfigServiceAndroid* android_config_service =
-      static_cast<net::ProxyConfigServiceAndroid*>(config_service.get());
-  android_config_service->set_exclude_pac_url(true);
-  return config_service;
+  config_service_android->set_exclude_pac_url(true);
+  return config_service_android;
 }
 
 std::unique_ptr<AwSafeBrowsingWhitelistManager>
@@ -93,11 +101,19 @@ CreateSafeBrowsingWhitelistManager() {
   // Should not be called until the end of PreMainMessageLoopRun,
   scoped_refptr<base::SequencedTaskRunner> background_task_runner =
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND});
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   return std::make_unique<AwSafeBrowsingWhitelistManager>(
       background_task_runner, io_task_runner);
+}
+
+base::FilePath GetCacheDirForAw() {
+  FilePath cache_path;
+  base::PathService::Get(base::DIR_CACHE, &cache_path);
+  cache_path =
+      cache_path.Append(FILE_PATH_LITERAL("org.chromium.android_webview"));
+  return cache_path;
 }
 
 }  // namespace
@@ -133,10 +149,7 @@ AwBrowserContext* AwBrowserContext::FromWebContents(
 }
 
 void AwBrowserContext::PreMainMessageLoopRun(net::NetLog* net_log) {
-  FilePath cache_path;
-  base::PathService::Get(base::DIR_CACHE, &cache_path);
-  cache_path =
-      cache_path.Append(FILE_PATH_LITERAL("org.chromium.android_webview"));
+  FilePath cache_path = GetCacheDirForAw();
 
   browser_policy_connector_.reset(new AwBrowserPolicyConnector());
 
@@ -148,7 +161,7 @@ void AwBrowserContext::PreMainMessageLoopRun(net::NetLog* net_log) {
 
   scoped_refptr<base::SequencedTaskRunner> db_task_runner =
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
   visitedlink_master_.reset(
       new visitedlink::VisitedLinkMaster(this, this, false));
@@ -215,24 +228,42 @@ AwURLRequestContextGetter* AwBrowserContext::GetAwURLRequestContext() {
 
 // Create user pref service
 void AwBrowserContext::InitUserPrefService() {
-  user_prefs::PrefRegistrySyncable* pref_registry =
-      new user_prefs::PrefRegistrySyncable();
+  auto pref_registry = base::MakeRefCounted<user_prefs::PrefRegistrySyncable>();
   // We only use the autocomplete feature of Autofill, which is controlled via
   // the manager_delegate. We don't use the rest of Autofill, which is why it is
   // hardcoded as disabled here.
-  pref_registry->RegisterBooleanPref(autofill::prefs::kAutofillEnabled, false);
-  policy::URLBlacklistManager::RegisterProfilePrefs(pref_registry);
+  // TODO(crbug.com/873740): The following also disables autocomplete.
+  // Investigate what the intended behavior is.
+  pref_registry->RegisterBooleanPref(autofill::prefs::kAutofillProfileEnabled,
+                                     false);
+  pref_registry->RegisterBooleanPref(
+      autofill::prefs::kAutofillCreditCardEnabled, false);
+  policy::URLBlacklistManager::RegisterProfilePrefs(pref_registry.get());
 
   pref_registry->RegisterStringPref(prefs::kWebRestrictionsAuthority,
                                     std::string());
 
-  AwURLRequestContextGetter::RegisterPrefs(pref_registry);
-  metrics::MetricsService::RegisterPrefs(pref_registry);
-  safe_browsing::RegisterProfilePrefs(pref_registry);
+  android_webview::AwURLRequestContextGetter::RegisterPrefs(
+      pref_registry.get());
+  metrics::MetricsService::RegisterPrefs(pref_registry.get());
+  safe_browsing::RegisterProfilePrefs(pref_registry.get());
 
   PrefServiceFactory pref_service_factory;
+
+  // These prefs go in the JsonPrefStore, and will persist across runs. Other
+  // prefs go in the InMemoryPrefStore, and will be lost when the process ends.
+  std::set<std::string> persistent_prefs;
+  // TODO(crbug/866722): Add kMetricsLowEntropySource to persistent_prefs to
+  // support persistent variations experiments.
+
+  // SegregatedPrefStore may be validated with a MAC (message authentication
+  // code). On Android, the store is protected by app sandboxing, so validation
+  // is unnnecessary. Thus validation_delegate is null.
   pref_service_factory.set_user_prefs(
-      base::MakeRefCounted<InMemoryPrefStore>());
+      base::MakeRefCounted<SegregatedPrefStore>(
+          base::MakeRefCounted<InMemoryPrefStore>(),
+          base::MakeRefCounted<JsonPrefStore>(GetPrefStorePath()),
+          persistent_prefs, /*validation_delegate=*/nullptr));
   pref_service_factory.set_managed_prefs(
       base::MakeRefCounted<policy::ConfigurationPolicyPrefStore>(
           browser_policy_connector_.get(),
@@ -249,6 +280,10 @@ void AwBrowserContext::InitUserPrefService() {
 
 base::FilePath AwBrowserContext::GetPath() const {
   return context_storage_path_;
+}
+
+base::FilePath AwBrowserContext::GetCachePath() const {
+  return GetCacheDirForAw();
 }
 
 bool AwBrowserContext::IsOffTheRecord() const {

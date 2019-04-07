@@ -40,6 +40,13 @@ Polymer({
   consentStringLoaded_: false,
 
   /**
+   * Whether the screen has been shown to the user.
+   * @type {boolean}
+   * @private
+   */
+  screenShown_: false,
+
+  /**
    * Sanitizer used to sanitize html snippets.
    * @type {HtmlSanitizer}
    * @private
@@ -52,7 +59,7 @@ Polymer({
    * @private
    */
   onNextTap_: function() {
-    chrome.send('AssistantThirdPartyScreen.userActed', ['next-pressed']);
+    chrome.send('assistant.ThirdPartyScreen.userActed', ['next-pressed']);
   },
 
   /**
@@ -89,6 +96,8 @@ Polymer({
           'icon-src',
           'data:text/html;charset=utf-8,' +
               encodeURIComponent(zippy.getWrappedIcon(data['iconUri'])));
+      zippy.setAttribute('expand-style', true);
+
       var title = document.createElement('div');
       title.className = 'zippy-title';
       title.innerHTML = this.sanitizer_.sanitizeHtml(data['title']);
@@ -121,6 +130,10 @@ Polymer({
     this.fire('loaded');
     this.buttonsDisabled = false;
     this.$['next-button'].focus();
+    if (!this.hidden && !this.screenShown_) {
+      chrome.send('assistant.ThirdPartyScreen.screenShown');
+      this.screenShown_ = true;
+    }
   },
 
   /**
@@ -131,6 +144,8 @@ Polymer({
       this.reloadPage();
     } else {
       this.$['next-button'].focus();
+      chrome.send('assistant.ThirdPartyScreen.screenShown');
+      this.screenShown_ = true;
     }
   },
 });

@@ -42,11 +42,12 @@ import org.chromium.content.browser.WindowEventObserver;
 import org.chromium.content.browser.WindowEventObserverManager;
 import org.chromium.content.browser.picker.InputDialogContainer;
 import org.chromium.content.browser.webcontents.WebContentsImpl;
+import org.chromium.content.browser.webcontents.WebContentsImpl.UserDataFactory;
+import org.chromium.content.browser.webcontents.WebContentsUserData;
 import org.chromium.content_public.browser.ImeAdapter;
 import org.chromium.content_public.browser.ImeEventObserver;
 import org.chromium.content_public.browser.InputMethodManagerWrapper;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.WebContents.UserDataFactory;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.base.ime.TextInputType;
@@ -166,33 +167,14 @@ public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver {
     }
 
     /**
-     * Create {@link ImeAdapterImpl} instance.
-     * @param webContents WebContents instance with which this ImeAdapter is associated.
-     * @param wrapper InputMethodManagerWrapper that should receive all the call directed to
-     *                InputMethodManager.
-     */
-    public static ImeAdapterImpl create(
-            WebContents webContents, InputMethodManagerWrapper wrapper) {
-        ImeAdapterImpl imeAdapter = webContents.getOrSetUserData(
-                ImeAdapterImpl.class, UserDataFactoryLazyHolder.INSTANCE);
-        assert imeAdapter != null && !imeAdapter.initialized();
-        imeAdapter.init(wrapper);
-        return imeAdapter;
-    }
-
-    private boolean initialized() {
-        return mNativeImeAdapterAndroid != 0;
-    }
-
-    /**
      * Get {@link ImeAdapter} object used for the give WebContents.
      * {@link #create()} should precede any calls to this.
      * @param webContents {@link WebContents} object.
-     * @return {@link ImeAdapter} object. {@code null} if not available because
-     *         {@link #create()} is not called yet.
+     * @return {@link ImeAdapter} object.
      */
     public static ImeAdapterImpl fromWebContents(WebContents webContents) {
-        return webContents.getOrSetUserData(ImeAdapterImpl.class, null);
+        return WebContentsUserData.fromWebContents(
+                webContents, ImeAdapterImpl.class, UserDataFactoryLazyHolder.INSTANCE);
     }
 
     /**
@@ -211,14 +193,8 @@ public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver {
         mWebContents = (WebContentsImpl) webContents;
         mViewDelegate = mWebContents.getViewAndroidDelegate();
         assert mViewDelegate != null;
-    }
-
-    /**
-     * @param wrapper InputMethodManagerWrapper that should receive all the call directed to
-     *                InputMethodManager.
-     */
-    private void init(InputMethodManagerWrapper wrapper) {
-        mInputMethodManagerWrapper = wrapper;
+        InputMethodManagerWrapper wrapper =
+                createDefaultInputMethodManagerWrapper(mWebContents.getContext());
 
         // Deep copy newConfig so that we can notice the difference.
         mCurrentConfig = new Configuration(getContainerView().getResources().getConfiguration());
@@ -251,6 +227,7 @@ public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver {
         } else {
             mCursorAnchorInfoController = null;
         }
+        mInputMethodManagerWrapper = wrapper;
         mNativeImeAdapterAndroid = nativeInit(mWebContents);
         WindowEventObserverManager.from(mWebContents).addObserver(this);
     }
@@ -593,8 +570,8 @@ public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver {
         if (DEBUG_LOGS) Log.i(TAG, "hideKeyboard");
         View view = mViewDelegate.getContainerView();
         if (mInputMethodManagerWrapper.isActive(view)) {
-            // NOTE: we should not set ResultReceiver here. Otherwise, IMM will own ContentViewCore
-            // and ImeAdapter even after input method goes away and result gets received.
+            // NOTE: we should not set ResultReceiver here. Otherwise, IMM will own
+            // ImeAdapter even after input method goes away and result gets received.
             mInputMethodManagerWrapper.hideSoftInputFromWindow(view.getWindowToken(), 0, null);
         }
         // Detach input connection by returning null from onCreateInputConnection().

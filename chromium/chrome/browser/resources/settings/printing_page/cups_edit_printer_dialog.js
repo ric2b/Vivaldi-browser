@@ -11,6 +11,7 @@ Polymer({
   is: 'settings-cups-edit-printer-dialog',
 
   behaviors: [
+    CrScrollableBehavior,
     SetManufacturerModelBehavior,
   ],
 
@@ -134,5 +135,18 @@ Polymer({
    */
   isNetworkProtocol_: function(protocol) {
     return ['ipp', 'ipps', 'http', 'https', 'socket', 'lpd'].includes(protocol);
+  },
+
+  /**
+   * @return {boolean} Whether the Save button is enabled.
+   * @private
+   */
+  canSavePrinter_: function() {
+    return settings.printing.isNameAndAddressValid(
+               this.activePrinter.printerName,
+               this.activePrinter.printerAddress) &&
+        settings.printing.isPPDInfoValid(
+            this.activePrinter.ppdManufacturer, this.activePrinter.ppdModel,
+            this.activePrinter.printerPPDPath);
   },
 });

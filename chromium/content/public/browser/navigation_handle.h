@@ -106,7 +106,11 @@ class CONTENT_EXPORT NavigationHandle {
 
   // The time the navigation started, recorded either in the renderer or in the
   // browser process. Corresponds to Navigation Timing API.
-  virtual const base::TimeTicks& NavigationStart() = 0;
+  virtual base::TimeTicks NavigationStart() = 0;
+
+  // The time the input leading to the navigation started. Will not be
+  // set if unknown.
+  virtual base::TimeTicks NavigationInputStart() = 0;
 
   // Whether or not the navigation was started within a context menu.
   virtual bool WasStartedFromContextMenu() const = 0;
@@ -318,6 +322,9 @@ class CONTENT_EXPORT NavigationHandle {
   // Simulates the navigation resuming. Most callers should just let the
   // deferring NavigationThrottle do the resuming.
   virtual void CallResumeForTesting() = 0;
+
+  // Returns whether this navigation is currently deferred.
+  virtual bool IsDeferredForTesting() = 0;
 
   // The NavigationData that the embedder returned from
   // ResourceDispatcherHostDelegate::GetNavigationData during commit. This will

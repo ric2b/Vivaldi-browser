@@ -33,11 +33,6 @@
 #include "third_party/blink/renderer/platform/animation/timing_function.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
 
-namespace AnimationAgentState {
-static const char animationAgentEnabled[] = "animationAgentEnabled";
-static const char animationAgentPlaybackRate[] = "animationAgentPlaybackRate";
-}  // namespace AnimationAgentState
-
 namespace blink {
 
 using protocol::Response;
@@ -49,30 +44,26 @@ InspectorAnimationAgent::InspectorAnimationAgent(
     : inspected_frames_(inspected_frames),
       css_agent_(css_agent),
       v8_session_(v8_session),
-      is_cloning_(false) {}
+      is_cloning_(false),
+      enabled_(&agent_state_, /*default_value=*/false),
+      playback_rate_(&agent_state_, /*default_value=*/1.0) {}
 
 void InspectorAnimationAgent::Restore() {
-  if (state_->booleanProperty(AnimationAgentState::animationAgentEnabled,
-                              false)) {
-    enable();
-    double playback_rate = 1;
-    state_->getDouble(AnimationAgentState::animationAgentPlaybackRate,
-                      &playback_rate);
-    setPlaybackRate(playback_rate);
-  }
+  if (enabled_.Get())
+    setPlaybackRate(playback_rate_.Get());
 }
 
 Response InspectorAnimationAgent::enable() {
-  state_->setBoolean(AnimationAgentState::animationAgentEnabled, true);
+  enabled_.Set(true);
   instrumenting_agents_->addInspectorAnimationAgent(this);
   return Response::OK();
 }
 
 Response InspectorAnimationAgent::disable() {
-  setPlaybackRate(1);
+  setPlaybackRate(1.0);
   for (const auto& clone : id_to_animation_clone_.Values())
     clone->cancel();
-  state_->setBoolean(AnimationAgentState::animationAgentEnabled, false);
+  enabled_.Clear();
   instrumenting_agents_->removeInspectorAnimationAgent(this);
   id_to_animation_.clear();
   id_to_animation_type_.clear();
@@ -88,10 +79,7 @@ void InspectorAnimationAgent::DidCommitLoadForLocalFrame(LocalFrame* frame) {
     id_to_animation_clone_.clear();
     cleared_animations_.clear();
   }
-  double playback_rate = 1;
-  state_->getDouble(AnimationAgentState::animationAgentPlaybackRate,
-                    &playback_rate);
-  setPlaybackRate(playback_rate);
+  setPlaybackRate(playback_rate_.Get());
 }
 
 static std::unique_ptr<protocol::Animation::AnimationEffect>
@@ -155,7 +143,7 @@ BuildObjectForAnimationKeyframes(const KeyframeEffect* effect) {
       keyframes = protocol::Array<protocol::Animation::KeyframeStyle>::create();
 
   for (size_t i = 0; i < model->GetFrames().size(); i++) {
-    const Keyframe* keyframe = model->GetFrames().at(i).get();
+    const Keyframe* keyframe = model->GetFrames().at(i);
     // Ignore CSS Transitions
     if (!keyframe->IsStringKeyframe())
       continue;
@@ -234,8 +222,7 @@ Response InspectorAnimationAgent::getPlaybackRate(double* playback_rate) {
 Response InspectorAnimationAgent::setPlaybackRate(double playback_rate) {
   for (LocalFrame* frame : *inspected_frames_)
     frame->GetDocument()->Timeline().SetPlaybackRate(playback_rate);
-  state_->setDouble(AnimationAgentState::animationAgentPlaybackRate,
-                    playback_rate);
+  playback_rate_.Set(playback_rate);
   return Response::OK();
 }
 
@@ -299,7 +286,7 @@ blink::Animation* InspectorAnimationAgent::AnimationClone(
       KeyframeVector old_keyframes = old_string_keyframe_model->GetFrames();
       StringKeyframeVector new_keyframes;
       for (auto& old_keyframe : old_keyframes)
-        new_keyframes.push_back(ToStringKeyframe(old_keyframe.get()));
+        new_keyframes.push_back(ToStringKeyframe(old_keyframe));
       new_model = StringKeyframeEffectModel::Create(new_keyframes);
     } else if (old_model->IsTransitionKeyframeEffectModel()) {
       TransitionKeyframeEffectModel* old_transition_keyframe_model =
@@ -307,7 +294,7 @@ blink::Animation* InspectorAnimationAgent::AnimationClone(
       KeyframeVector old_keyframes = old_transition_keyframe_model->GetFrames();
       TransitionKeyframeVector new_keyframes;
       for (auto& old_keyframe : old_keyframes)
-        new_keyframes.push_back(ToTransitionKeyframe(old_keyframe.get()));
+        new_keyframes.push_back(ToTransitionKeyframe(old_keyframe));
       new_model = TransitionKeyframeEffectModel::Create(new_keyframes);
     }
 
@@ -386,7 +373,7 @@ Response InspectorAnimationAgent::setTiming(const String& animation_id,
     DCHECK(frames.size() == 3);
     KeyframeVector new_frames;
     for (int i = 0; i < 3; i++)
-      new_frames.push_back(ToTransitionKeyframe(frames[i]->Clone().get()));
+      new_frames.push_back(ToTransitionKeyframe(frames[i]->Clone()));
     // Update delay, represented by the distance between the first two
     // keyframes.
     new_frames[1]->SetOffset(delay / (delay + duration));
@@ -525,8 +512,7 @@ void InspectorAnimationAgent::AnimationPlayStateChanged(
 
 void InspectorAnimationAgent::DidClearDocumentOfWindowObject(
     LocalFrame* frame) {
-  if (!state_->booleanProperty(AnimationAgentState::animationAgentEnabled,
-                               false))
+  if (!enabled_.Get())
     return;
   DCHECK(frame->GetDocument());
   frame->GetDocument()->Timeline().SetPlaybackRate(

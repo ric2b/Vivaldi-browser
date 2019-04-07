@@ -15,7 +15,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/chromeos/power/power_data_collector.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -458,7 +458,7 @@ void CpuDataCollector::PostSampleCpuState() {
       new std::vector<StateOccupancySample>;
 
   base::PostTaskWithTraitsAndReply(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&SampleCpuStateAsync, base::Unretained(cpu_count),
                  base::Unretained(cpu_idle_state_names),
                  base::Unretained(idle_samples),

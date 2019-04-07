@@ -4,7 +4,6 @@
 
 #include "ash/wm/wm_toplevel_window_event_handler.h"
 
-#include "ash/public/cpp/config.h"
 #include "ash/shell.h"
 #include "ash/wm/resize_shadow_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -60,11 +59,6 @@ bool CanStartOneFingerDrag(int window_component) {
 }
 
 void ShowResizeShadow(aura::Window* window, int component) {
-  if (Shell::GetAshConfig() == Config::MASH_DEPRECATED) {
-    // TODO: http://crbug.com/640773.
-    return;
-  }
-
   // Window resize in tablet mode is disabled (except in splitscreen).
   if (Shell::Get()
           ->tablet_mode_controller()
@@ -79,11 +73,6 @@ void ShowResizeShadow(aura::Window* window, int component) {
 }
 
 void HideResizeShadow(aura::Window* window) {
-  if (Shell::GetAshConfig() == Config::MASH_DEPRECATED) {
-    // TODO: http://crbug.com/640773.
-    return;
-  }
-
   ResizeShadowController* resize_shadow_controller =
       Shell::Get()->resize_shadow_controller();
   if (resize_shadow_controller)
@@ -343,6 +332,13 @@ void WmToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event,
       return;
     case ui::ET_SCROLL_FLING_START:
       CompleteDrag(DragResult::SUCCESS);
+
+      // TODO(xdai): We'll do special handling in tablet mode later.
+      if (Shell::Get()
+              ->tablet_mode_controller()
+              ->IsTabletModeWindowManagerEnabled()) {
+        return;
+      }
 
       // TODO(pkotwicz): Fix tests which inadvertently start flings and check
       // window_resizer_->IsMove() instead of the hittest component at |event|'s

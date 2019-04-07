@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "content/browser/background_fetch/background_fetch.pb.h"
 #include "content/browser/background_fetch/background_fetch_registration_id.h"
 #include "content/browser/background_fetch/background_fetch_scheduler.h"
@@ -30,12 +31,14 @@
 
 namespace storage {
 class BlobDataHandle;
+class QuotaManagerProxy;
 }
 
 namespace content {
 
 class BackgroundFetchDataManagerObserver;
 class BackgroundFetchRequestInfo;
+class BackgroundFetchRequestMatchParams;
 struct BackgroundFetchSettledFetch;
 class BrowserContext;
 class CacheStorageManager;
@@ -65,20 +68,17 @@ class CONTENT_EXPORT BackgroundFetchDataManager
       bool /* background_fetch_succeeded */,
       std::vector<BackgroundFetchSettledFetch>,
       std::vector<std::unique_ptr<storage::BlobDataHandle>>)>;
-  using GetMetadataCallback =
-      base::OnceCallback<void(blink::mojom::BackgroundFetchError,
-                              std::unique_ptr<proto::BackgroundFetchMetadata>)>;
   using GetRegistrationCallback =
       base::OnceCallback<void(blink::mojom::BackgroundFetchError,
-                              std::unique_ptr<BackgroundFetchRegistration>)>;
+                              const BackgroundFetchRegistration&)>;
   using NextRequestCallback =
       base::OnceCallback<void(scoped_refptr<BackgroundFetchRequestInfo>)>;
-  using NumRequestsCallback = base::OnceCallback<void(size_t)>;
 
   BackgroundFetchDataManager(
       BrowserContext* browser_context,
       scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
-      scoped_refptr<CacheStorageContextImpl> cache_storage_context);
+      scoped_refptr<CacheStorageContextImpl> cache_storage_context,
+      scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy);
 
   ~BackgroundFetchDataManager() override;
 
@@ -104,12 +104,6 @@ class CONTENT_EXPORT BackgroundFetchDataManager
       const SkBitmap& icon,
       GetRegistrationCallback callback);
 
-  // Get the BackgroundFetchMetadata.
-  void GetMetadata(int64_t service_worker_registration_id,
-                   const url::Origin& origin,
-                   const std::string& developer_id,
-                   GetMetadataCallback callback);
-
   // Get the BackgroundFetchRegistration.
   void GetRegistration(int64_t service_worker_registration_id,
                        const url::Origin& origin,
@@ -119,26 +113,30 @@ class CONTENT_EXPORT BackgroundFetchDataManager
   // Updates the UI values for a Background Fetch registration.
   void UpdateRegistrationUI(
       const BackgroundFetchRegistrationId& registration_id,
-      const std::string& title,
+      const base::Optional<std::string>& title,
+      const base::Optional<SkBitmap>& icon,
       blink::mojom::BackgroundFetchService::UpdateUICallback callback);
 
-  // Reads all settled fetches for the given |registration_id|. Both the Request
-  // and Response objects will be initialised based on the stored data. Will
-  // invoke the |callback| when the list of fetches has been compiled.
+  // Reads the settled fetches for the given |registration_id| based on
+  // |match_params|. Both the Request and Response objects will be initialised
+  // based on the stored data. Will invoke the |callback| when the list of
+  // fetches has been compiled.
   void GetSettledFetchesForRegistration(
       const BackgroundFetchRegistrationId& registration_id,
+      std::unique_ptr<BackgroundFetchRequestMatchParams> match_params,
       SettledFetchesCallback callback);
 
-  // Marks that the backgroundfetched/backgroundfetchfail/backgroundfetchabort
-  // event is being dispatched. It's not possible to call DeleteRegistration at
-  // this point as JavaScript may hold a reference to a
-  // BackgroundFetchRegistration object and we need to keep the corresponding
-  // data around until the last such reference is released (or until shutdown).
-  // We can't just move the Background Fetch registration's data to RAM as it
-  // might consume too much memory. So instead this step disassociates the
-  // |developer_id| from the |unique_id|, so that existing JS objects with a
-  // reference to |unique_id| can still access the data, but it can no longer be
-  // reached using GetIds or GetRegistration.
+  // Marks that the
+  // backgroundfetchsuccess/backgroundfetchfail/backgroundfetchabort event is
+  // being dispatched. It's not possible to call DeleteRegistration at this
+  // point as JavaScript may hold a reference to a BackgroundFetchRegistration
+  // object and we need to keep the corresponding data around until the last
+  // such reference is released (or until shutdown). We can't just move the
+  // Background Fetch registration's data to RAM as it might consume too much
+  // memory. So instead this step disassociates the |developer_id| from the
+  // |unique_id|, so that existing JS objects with a reference to |unique_id|
+  // can still access the data, but it can no longer be reached using GetIds or
+  // GetRegistration.
   void MarkRegistrationForDeletion(
       const BackgroundFetchRegistrationId& registration_id,
       HandleBackgroundFetchErrorCallback callback);
@@ -157,18 +155,18 @@ class CONTENT_EXPORT BackgroundFetchDataManager
       const url::Origin& origin,
       blink::mojom::BackgroundFetchService::GetDeveloperIdsCallback callback);
 
-  const base::ObserverList<BackgroundFetchDataManagerObserver>& observers() {
+  const base::ObserverList<BackgroundFetchDataManagerObserver>::Unchecked&
+  observers() {
     return observers_;
   }
 
   // BackgroundFetchScheduler::RequestProvider implementation:
   void PopNextRequest(const BackgroundFetchRegistrationId& registration_id,
                       NextRequestCallback callback) override;
-
   void MarkRequestAsComplete(
       const BackgroundFetchRegistrationId& registration_id,
-      BackgroundFetchRequestInfo* request,
-      BackgroundFetchScheduler::MarkedCompleteCallback callback) override;
+      scoped_refptr<BackgroundFetchRequestInfo> request_info,
+      base::OnceClosure closure) override;
 
   void ShutdownOnIO();
 
@@ -191,12 +189,15 @@ class CONTENT_EXPORT BackgroundFetchDataManager
   ChromeBlobStorageContext* blob_storage_context() const {
     return blob_storage_context_.get();
   }
+  storage::QuotaManagerProxy* quota_manager_proxy() const {
+    return quota_manager_proxy_.get();
+  }
 
   void AddStartNextPendingRequestTask(
-      int64_t service_worker_registration_id,
+      const BackgroundFetchRegistrationId& registration_id,
       NextRequestCallback callback,
       blink::mojom::BackgroundFetchError error,
-      std::unique_ptr<proto::BackgroundFetchMetadata> metadata);
+      const BackgroundFetchRegistration& registration);
 
   void AddDatabaseTask(std::unique_ptr<background_fetch::DatabaseTask> task);
 
@@ -213,6 +214,8 @@ class CONTENT_EXPORT BackgroundFetchDataManager
 
   scoped_refptr<CacheStorageContextImpl> cache_storage_context_;
 
+  scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy_;
+
   // The BackgroundFetch stores its own reference to CacheStorageManager
   // in case StoragePartitionImpl is destoyed, which releases the reference.
   scoped_refptr<CacheStorageManager> cache_manager_;
@@ -224,7 +227,7 @@ class CONTENT_EXPORT BackgroundFetchDataManager
   // Invariant: the frontmost task, if any, has already been started.
   base::queue<std::unique_ptr<background_fetch::DatabaseTask>> database_tasks_;
 
-  base::ObserverList<BackgroundFetchDataManagerObserver> observers_;
+  base::ObserverList<BackgroundFetchDataManagerObserver>::Unchecked observers_;
 
   // The |unique_id|s of registrations that have been deactivated since the
   // browser was last started. They will be automatically deleted when the

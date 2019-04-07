@@ -78,6 +78,7 @@ class SyncManagerImpl
   void StartConfiguration() override;
   void ConfigureSyncer(ConfigureReason reason,
                        ModelTypeSet to_download,
+                       SyncFeatureState sync_feature_state,
                        const base::Closure& ready_task,
                        const base::Closure& retry_task) override;
   void SetInvalidatorEnabled(bool invalidator_enabled) override;
@@ -112,6 +113,7 @@ class SyncManagerImpl
   // SyncEncryptionHandler::Observer implementation.
   void OnPassphraseRequired(
       PassphraseRequiredReason reason,
+      const KeyDerivationParams& key_derivation_params,
       const sync_pb::EncryptedData& pending_keys) override;
   void OnPassphraseAccepted() override;
   void OnBootstrapTokenUpdated(const std::string& bootstrap_token,
@@ -259,7 +261,7 @@ class SyncManagerImpl
   // OpenDirectory() and ShutdownOnSyncThread().
   WeakHandle<SyncManager::ChangeObserver> change_observer_;
 
-  base::ObserverList<SyncManager::Observer> observers_;
+  base::ObserverList<SyncManager::Observer>::Unchecked observers_;
 
   // The ServerConnectionManager used to abstract communication between the
   // client (the Syncer) and the sync server.

@@ -143,7 +143,7 @@ class NET_EXPORT StringIOBuffer : public IOBuffer {
 // than char*. DrainableIOBuffer can be used as follows:
 //
 // // payload is the IOBuffer containing the data to be written.
-// buf = new DrainableIOBuffer(payload, payload_size);
+// buf = base::MakeRefCounted<DrainableIOBuffer>(payload, payload_size);
 //
 // while (buf->BytesRemaining() > 0) {
 //   // Write() takes an IOBuffer. If it takes char*, we could
@@ -155,8 +155,8 @@ class NET_EXPORT StringIOBuffer : public IOBuffer {
 class NET_EXPORT DrainableIOBuffer : public IOBuffer {
  public:
   // TODO(eroman): Deprecated. Use the size_t flavor instead. crbug.com/488553
-  DrainableIOBuffer(IOBuffer* base, int size);
-  DrainableIOBuffer(IOBuffer* base, size_t size);
+  DrainableIOBuffer(scoped_refptr<IOBuffer> base, int size);
+  DrainableIOBuffer(scoped_refptr<IOBuffer> base, size_t size);
 
   // DidConsume() changes the |data_| pointer so that |data_| always points
   // to the first unconsumed byte.
@@ -188,7 +188,7 @@ class NET_EXPORT DrainableIOBuffer : public IOBuffer {
 // knowing the total size in advance. GrowableIOBuffer can be used as
 // follows:
 //
-// buf = new GrowableIOBuffer;
+// buf = base::MakeRefCounted<GrowableIOBuffer>();
 // buf->SetCapacity(1024);  // Initial capacity.
 //
 // while (!some_stream->IsEOF()) {

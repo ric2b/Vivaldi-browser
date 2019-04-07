@@ -20,7 +20,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_scheduler/lazy_task_runner.h"
+#include "base/task/lazy_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
@@ -59,7 +59,7 @@ namespace {
 base::LazySequencedTaskRunner g_get_network_id_task_runner =
     LAZY_SEQUENCED_TASK_RUNNER_INITIALIZER(
         base::TaskTraits(base::MayBlock(),
-                         base::TaskPriority::BACKGROUND,
+                         base::TaskPriority::BEST_EFFORT,
                          base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN));
 #endif
 
@@ -216,6 +216,7 @@ NetworkQualityEstimator::NetworkQualityEstimator(
     std::unique_ptr<NetworkQualityEstimatorParams> params,
     NetLog* net_log)
     : params_(std::move(params)),
+      end_to_end_rtt_observation_count_at_last_ect_computation_(0),
       use_localhost_requests_(false),
       disable_offline_check_(false),
       tick_clock_(base::DefaultTickClock::GetInstance()),
@@ -236,7 +237,6 @@ NetworkQualityEstimator::NetworkQualityEstimator(
       rtt_observations_size_at_last_ect_computation_(0),
       throughput_observations_size_at_last_ect_computation_(0),
       transport_rtt_observation_count_last_ect_computation_(0),
-      end_to_end_rtt_observation_count_at_last_ect_computation_(0),
       new_rtt_observations_since_last_ect_computation_(0),
       new_throughput_observations_since_last_ect_computation_(0),
       increase_in_transport_rtt_updater_posted_(false),
@@ -259,14 +259,28 @@ NetworkQualityEstimator::NetworkQualityEstimator(
   throughput_analyzer_.reset(new nqe::internal::ThroughputAnalyzer(
       this, params_.get(), base::ThreadTaskRunnerHandle::Get(),
       base::Bind(&NetworkQualityEstimator::OnNewThroughputObservationAvailable,
+                 // It is safe to use base::Unretained here since
+                 // |throughput_analyzer_| is owned by |this|. This ensures that
+                 // |throughput_analyzer_| will be destroyed before |this|.
                  base::Unretained(this)),
       tick_clock_, net_log_));
 
   watcher_factory_.reset(new nqe::internal::SocketWatcherFactory(
       base::ThreadTaskRunnerHandle::Get(),
       params_->min_socket_watcher_notification_interval(),
+      // OnUpdatedTransportRTTAvailable() may be called via PostTask() by
+      // socket watchers that live on a different thread than the current thread
+      // (i.e., base::ThreadTaskRunnerHandle::Get()).
+      // Use WeakPtr() to avoid crashes where the socket watcher is destroyed
+      // after |this| is destroyed.
       base::Bind(&NetworkQualityEstimator::OnUpdatedTransportRTTAvailable,
-                 base::Unretained(this)),
+                 weak_ptr_factory_.GetWeakPtr()),
+      // ShouldSocketWatcherNotifyRTT() below is called by only the socket
+      // watchers that live on the same thread as the current thread
+      // (i.e., base::ThreadTaskRunnerHandle::Get()). Also, network quality
+      // estimator is destroyed after network contexts and URLRequestContexts.
+      // It's safe to use base::Unretained() below since the socket watcher
+      // (owned by sockets) would be destroyed before |this|.
       base::Bind(&NetworkQualityEstimator::ShouldSocketWatcherNotifyRTT,
                  base::Unretained(this)),
       tick_clock_));
@@ -370,6 +384,23 @@ void NetworkQualityEstimator::NotifyStartTransaction(
 bool NetworkQualityEstimator::IsHangingRequest(
     base::TimeDelta observed_http_rtt) const {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  // If there are sufficient number of end to end RTT samples available, use
+  // the end to end RTT estimate to determine if the request is hanging.
+  // If |observed_http_rtt| is within a fixed multiplier of |end_to_end_rtt_|,
+  // then |observed_http_rtt| is determined to be not a hanging-request RTT.
+  if (params_->use_end_to_end_rtt() && end_to_end_rtt_.has_value() &&
+      end_to_end_rtt_observation_count_at_last_ect_computation_ >=
+          params_->http_rtt_transport_rtt_min_count() &&
+      params_->hanging_request_http_rtt_upper_bound_transport_rtt_multiplier() >
+          0 &&
+      observed_http_rtt <
+          params_->hanging_request_http_rtt_upper_bound_transport_rtt_multiplier() *
+              end_to_end_rtt_.value()) {
+    UMA_HISTOGRAM_TIMES("NQE.RTT.NotAHangingRequest.EndToEndRTT",
+                        observed_http_rtt);
+    return false;
+  }
 
   if (transport_rtt_observation_count_last_ect_computation_ >=
           params_->http_rtt_transport_rtt_min_count() &&
@@ -787,6 +818,8 @@ void NetworkQualityEstimator::UpdateSignalStrength() {
   if (new_signal_strength == INT32_MIN)
     return;
 
+  DCHECK(new_signal_strength >= 0 && new_signal_strength <= 4);
+
   // Record the network quality we experienced for the previous signal strength
   // (for when we return to that signal strength).
   network_quality_store_->Add(current_network_id_,
@@ -1189,6 +1222,18 @@ NetworkQualityEstimator::GetRecentEffectiveConnectionTypeUsingMetrics(
                 params_->lower_bound_http_rtt_transport_rtt_multiplier());
       }
     }
+  }
+
+  // Put lower bound on |http_rtt| using |end_to_end_rtt|.
+  if (params_->use_end_to_end_rtt() &&
+      *end_to_end_rtt != nqe::internal::InvalidRTT() &&
+      end_to_end_rtt_observation_count_at_last_ect_computation_ >=
+          params_->http_rtt_transport_rtt_min_count() &&
+      params_->lower_bound_http_rtt_transport_rtt_multiplier() > 0) {
+    *http_rtt =
+        std::max(*http_rtt,
+                 *end_to_end_rtt *
+                     params_->lower_bound_http_rtt_transport_rtt_multiplier());
   }
 
   if (!GetRecentDownlinkThroughputKbps(start_time, downstream_throughput_kbps))

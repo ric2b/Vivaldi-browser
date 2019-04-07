@@ -295,4 +295,10 @@ TEST_F(PowerPrefsTest, DisabledLockScreen) {
             GetCurrentPowerPolicyActions());
 }
 
+TEST_F(PowerPrefsTest, SmartDimEnabled) {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetActivePrefService();
+  EXPECT_TRUE(prefs->GetBoolean(prefs::kPowerSmartDimEnabled));
+}
+
 }  // namespace ash

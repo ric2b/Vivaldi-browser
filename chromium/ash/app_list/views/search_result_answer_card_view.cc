@@ -10,50 +10,91 @@
 
 #include "ash/app_list/app_list_metrics.h"
 #include "ash/app_list/app_list_view_delegate.h"
+#include "ash/app_list/views/app_list_view.h"
 #include "ash/app_list/views/search_result_base_view.h"
 #include "ash/public/cpp/app_list/answer_card_contents_registry.h"
 #include "ash/public/cpp/app_list/app_list_constants.h"
 #include "base/bind.h"
 #include "base/feature_list.h"
-#include "services/ui/public/interfaces/window_tree.mojom.h"
+#include "services/ws/public/mojom/window_tree.mojom.h"
+#include "services/ws/remote_view_host/server_remote_view_host.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/aura/window.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/background.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
-#include "ui/views/mus/remote_view/remote_view_host.h"
 
 namespace app_list {
 
 namespace {
 
-// Helper to get/create answer card view by token.
-views::View* GetViewByToken(
+// Holds answer card data. |view| is the view to be added to app list view
+// hierarchy. |native_view| is the root of the card contents view. For classic
+// ash, it is the NativeView of the answer card WebContents. For mash, it is
+// the embedding root for answer card contents.
+struct CardData {
+  views::View* view = nullptr;
+  gfx::NativeView native_view = nullptr;
+};
+
+// Get answer card data by token.
+CardData GetCardDataByToken(
+    ws::WindowService* window_service,
     const base::Optional<base::UnguessableToken>& token) {
   // Bail for invalid token.
   if (!token.has_value() || token->is_empty())
-    return nullptr;
+    return {};
 
   // Use AnswerCardContentsRegistry for an in-process token-to-view map. See
   // answer_card_contents_registry.h. Null check because it could be missing in
   // Mash and for tests.
-  if (AnswerCardContentsRegistry::Get())
-    return AnswerCardContentsRegistry::Get()->GetView(token.value());
-
-  // Use RemoteViewHost to embed the answer card contents provided in the
-  // browser process in Mash.
-  if (base::FeatureList::IsEnabled(features::kMashDeprecated)) {
-    views::RemoteViewHost* view = new views::RemoteViewHost();
-    view->EmbedUsingToken(token.value(),
-                          ui::mojom::kEmbedFlagEmbedderInterceptsEvents |
-                              ui::mojom::kEmbedFlagEmbedderControlsVisibility,
-                          base::DoNothing());
-    return view;
+  auto* card_registry = AnswerCardContentsRegistry::Get();
+  if (card_registry) {
+    return {card_registry->GetView(token.value()),
+            card_registry->GetNativeView(token.value())};
   }
 
-  return nullptr;
+  // Use ServerRemoteViewHost to embed the answer card contents provided in the
+  // browser process in Mash.
+  if (features::IsUsingWindowService()) {
+    ws::ServerRemoteViewHost* view =
+        new ws::ServerRemoteViewHost(window_service);
+    view->EmbedUsingToken(token.value(),
+                          ws::mojom::kEmbedFlagEmbedderControlsVisibility,
+                          base::DoNothing());
+    return {view, view->embedding_root()};
+  }
+
+  return {};
+}
+
+// Exclude the card native view from event handling.
+void ExcludeCardFromEventHandling(gfx::NativeView card_native_view) {
+  // |card_native_view| could be null in tests.
+  if (!card_native_view)
+    return;
+
+  if (!card_native_view->parent()) {
+    LOG(ERROR) << "Card is not attached to the app list view.";
+    return;
+  }
+
+  // |card_native_view| is brought into View's hierarchy via a NativeViewHost.
+  // The window hierarchy looks like this:
+  //   widget window -> clipping window -> content_native_view
+  // Events should be targeted to the widget window and by-passing the sub tree
+  // started at clipping window. Walking up the window hierarchy to find the
+  // clipping window and make the cut there.
+  aura::Window* top_level = card_native_view->GetToplevelWindow();
+  DCHECK(top_level);
+  aura::Window* window = card_native_view;
+  while (window->parent() != top_level)
+    window = window->parent();
+
+  AppListView::ExcludeWindowFromEventHandling(window);
 }
 
 }  // namespace
@@ -91,9 +132,14 @@ class SearchResultAnswerCardView::SearchAnswerContainerView
     if (old_token != new_token) {
       RemoveAllChildViews(true /* delete_children */);
 
-      result_view = GetViewByToken(new_token);
-      if (result_view)
+      const CardData card_data =
+          GetCardDataByToken(view_delegate_->GetWindowService(), new_token);
+
+      result_view = card_data.view;
+      if (result_view) {
         AddChildView(result_view);
+        ExcludeCardFromEventHandling(card_data.native_view);
+      }
     }
 
     base::string16 old_title;

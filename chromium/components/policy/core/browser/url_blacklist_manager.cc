@@ -23,10 +23,11 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
+#include "components/policy/core/browser/url_blacklist_policy_handler.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -436,7 +437,7 @@ URLBlacklistManager::URLBlacklistManager(PrefService* pref_service)
   // |pref_service_| lives on.
   ui_task_runner_ = base::SequencedTaskRunnerHandle::Get();
   background_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
-      {base::TaskPriority::BACKGROUND});
+      {base::TaskPriority::BEST_EFFORT});
 
   pref_change_registrar_.Init(pref_service_);
   base::Closure callback = base::Bind(&URLBlacklistManager::ScheduleUpdate,
@@ -466,10 +467,9 @@ void URLBlacklistManager::ScheduleUpdate() {
   // change the blacklist are updated in one message loop cycle. In those cases,
   // only rebuild the blacklist after all the preference updates are processed.
   ui_weak_ptr_factory_.InvalidateWeakPtrs();
-  ui_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&URLBlacklistManager::Update,
-                 ui_weak_ptr_factory_.GetWeakPtr()));
+  ui_task_runner_->PostTask(FROM_HERE,
+                            base::BindOnce(&URLBlacklistManager::Update,
+                                           ui_weak_ptr_factory_.GetWeakPtr()));
 }
 
 void URLBlacklistManager::Update() {
@@ -514,6 +514,9 @@ void URLBlacklistManager::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterListPref(policy_prefs::kUrlBlacklist);
   registry->RegisterListPref(policy_prefs::kUrlWhitelist);
+  registry->RegisterIntegerPref(
+      policy_prefs::kSafeSitesFilterBehavior,
+      static_cast<int>(SafeSitesFilterBehavior::kSafeSitesFilterDisabled));
 }
 
 }  // namespace policy

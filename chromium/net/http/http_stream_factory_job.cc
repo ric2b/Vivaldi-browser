@@ -40,8 +40,8 @@
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source.h"
 #include "net/log/net_log_source_type.h"
-#include "net/quic/chromium/bidirectional_stream_quic_impl.h"
-#include "net/quic/chromium/quic_http_stream.h"
+#include "net/quic/bidirectional_stream_quic_impl.h"
+#include "net/quic/quic_http_stream.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/client_socket_pool.h"
 #include "net/socket/client_socket_pool_manager.h"
@@ -863,9 +863,9 @@ int HttpStreamFactory::Job::DoInitConnectionImpl() {
 
   if (proxy_info_.is_https() || proxy_info_.is_quic()) {
     InitSSLConfig(&proxy_ssl_config_, /*is_proxy=*/true);
-    // Disable revocation checking for HTTPS proxies since the revocation
-    // requests are probably going to need to go through the proxy too.
-    proxy_ssl_config_.rev_checking_enabled = false;
+    // Disable network fetches for HTTPS proxies, since the network requests
+    // are probably going to need to go through the proxy too.
+    proxy_ssl_config_.disable_cert_verification_network_fetches = true;
   }
   if (using_ssl_) {
     InitSSLConfig(&server_ssl_config_, /*is_proxy=*/false);

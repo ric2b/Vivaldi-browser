@@ -6,14 +6,14 @@
 
 #include <vector>
 
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/webrtc_logging/browser/log_cleanup.h"
-#include "components/webrtc_logging/browser/log_list.h"
+#include "components/webrtc_logging/browser/text_log_list.h"
 #include "content/public/browser/browser_thread.h"
 
 // static
@@ -25,10 +25,10 @@ void WebRtcLogUtil::DeleteOldWebRtcLogFilesForAllProfiles() {
           GetAllProfilesAttributes();
   for (ProfileAttributesEntry* entry : entries) {
     base::PostTaskWithTraits(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
         base::BindOnce(
             &webrtc_logging::DeleteOldWebRtcLogFiles,
-            webrtc_logging::LogList::GetWebRtcLogDirectoryForBrowserContextPath(
-                entry->GetPath())));
+            webrtc_logging::TextLogList::
+                GetWebRtcLogDirectoryForBrowserContextPath(entry->GetPath())));
   }
 }

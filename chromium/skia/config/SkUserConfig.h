@@ -36,7 +36,7 @@
 
     Below are optional defines that add, subtract, or change default behavior
     in Skia. Your port can locally edit this file to enable/disable flags as
-    you choose, or these can be delared on your command line (i.e. -Dfoo).
+    you choose, or these can be declared on your command line (i.e. -Dfoo).
 
     By default, this include file will always default to having all of the flags
     commented out, so including it will have no effect.
@@ -151,12 +151,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
 #endif
 
-// Skia is enabling this feature soon. Chrome probably does
-// not want it for M64
-#ifndef SK_DISABLE_RENDER_TARGET_SORTING
-#define SK_DISABLE_RENDER_TARGET_SORTING
-#endif
-
 #ifndef SK_SUPPORT_LEGACY_TILED_BITMAPS
 #define SK_SUPPORT_LEGACY_TILED_BITMAPS
 #endif
@@ -173,9 +167,8 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_IGNORE_MATRIX_IMAGE_FILTER_FIX
 #endif
 
-// convert from text blob to glyph run
-#ifndef SK_SUPPORT_LEGACY_TEXT_BLOB
-#define SK_SUPPORT_LEGACY_TEXT_BLOB
+#ifndef SK_DISABLE_MASKFILTERED_MASK_CACHING
+#define SK_DISABLE_MASKFILTERED_MASK_CACHING
 #endif
 
 // remove after rebaselining svg layout tests
@@ -186,16 +179,12 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 // Max. verb count for paths rendered by the edge-AA tessellating path renderer.
 #define GR_AA_TESSELLATOR_MAX_VERB_COUNT 100
 
-// Remove this and rebaseline affected layout tests.
-#define SK_DONT_DROP_UNNECESSARY_AA_IN_TEXTURE_OP
-
 #ifndef SK_SUPPORT_LEGACY_THREADED_DAA_BUGS
 #define SK_SUPPORT_LEGACY_THREADED_DAA_BUGS
 #endif
 
-// Here while the skia's public vulkan interface is getting updated
-#ifndef SK_SUPPORT_LEGACY_VULKAN_INTERFACE
-#define SK_SUPPORT_LEGACY_VULKAN_INTERFACE
+#ifndef SK_SUPPORT_LEGACY_AAA_CHOICE
+#define SK_SUPPORT_LEGACY_AAA_CHOICE
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
@@ -213,7 +202,5 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 
 #define SK_ATTR_DEPRECATED          SK_NOTHING_ARG1
 #define GR_GL_CUSTOM_SETUP_HEADER   "GrGLConfig_chrome.h"
-
-// ===== End Chrome-specific definitions =====
 
 #endif

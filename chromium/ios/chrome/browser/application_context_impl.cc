@@ -14,7 +14,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "components/component_updater/component_updater_service.h"
@@ -56,6 +56,30 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+
+namespace {
+
+// Requests a network::mojom::ProxyResolvingSocketFactory on the UI thread.
+// Note that this cannot be called on a thread that is not the UI thread.
+void RequestProxyResolvingSocketFactoryOnUIThread(
+    ApplicationContextImpl* app_context,
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  network::mojom::NetworkContext* network_context =
+      app_context->GetSystemNetworkContext();
+  network_context->CreateProxyResolvingSocketFactory(std::move(request));
+}
+
+// Wrapper on top of the method above. This does a PostTask to the UI thread.
+void RequestProxyResolvingSocketFactory(
+    ApplicationContextImpl* app_context,
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  web::WebThread::GetTaskRunnerForThread(web::WebThread::UI)
+      ->PostTask(FROM_HERE,
+                 base::BindOnce(&RequestProxyResolvingSocketFactoryOnUIThread,
+                                app_context, std::move(request)));
+}
+
+}  // namespace
 
 ApplicationContextImpl::ApplicationContextImpl(
     base::SequencedTaskRunner* local_state_task_runner,
@@ -367,12 +391,16 @@ void ApplicationContextImpl::CreateGCMDriver() {
 
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
 
   gcm_driver_ = gcm::CreateGCMDriverDesktop(
       base::WrapUnique(new gcm::GCMClientFactory), GetLocalState(), store_path,
-      GetSystemURLRequestContext(), GetSharedURLLoaderFactory(), ::GetChannel(),
+      // Because ApplicationContextImpl is destroyed after all WebThreads have
+      // been shut down, base::Unretained() is safe here.
+      base::BindRepeating(&RequestProxyResolvingSocketFactory,
+                          base::Unretained(this)),
+      GetSharedURLLoaderFactory(), ::GetChannel(),
       IOSChromeGCMProfileServiceFactory::GetProductCategoryForSubtypes(),
       web::WebThread::GetTaskRunnerForThread(web::WebThread::UI),
       web::WebThread::GetTaskRunnerForThread(web::WebThread::IO),

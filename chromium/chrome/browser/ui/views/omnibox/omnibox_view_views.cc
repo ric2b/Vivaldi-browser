@@ -20,7 +20,7 @@
 #include "chrome/browser/ui/omnibox/clipboard_utils.h"
 #include "chrome/browser/ui/omnibox/omnibox_theme.h"
 #include "chrome/browser/ui/view_ids.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
 #include "chrome/grit/generated_resources.h"
@@ -239,6 +239,11 @@ void OmniboxViewViews::InstallPlaceholderText() {
   }
 }
 
+bool OmniboxViewViews::SelectionAtEnd() {
+  const gfx::Range sel = GetSelectedRange();
+  return sel.GetMax() == text().size();
+}
+
 void OmniboxViewViews::EmphasizeURLComponents() {
   if (!location_bar_view_)
     return;
@@ -317,6 +322,11 @@ void OmniboxViewViews::SetFocus() {
   // OmniboxEditModel::OnSetFocus(), which handles restoring visibility when the
   // omnibox regains focus after losing focus.
   model()->SetCaretVisibility(true);
+  // If the user attempts to focus the omnibox, and the ctrl key is pressed, we
+  // want to prevent ctrl-enter behavior until the ctrl key is released and
+  // re-pressed. This occurs even if the omnibox is already focused and we
+  // re-request focus (e.g. pressing ctrl-l twice).
+  model()->ConsumeCtrlKey();
 }
 
 int OmniboxViewViews::GetTextWidth() const {
@@ -482,6 +492,8 @@ bool OmniboxViewViews::HandleEarlyTabActions(const ui::KeyEvent& event) {
           OmniboxPopupModel::NORMAL &&
       !event.IsShiftDown()) {
     model()->popup_model()->SetSelectedLineState(OmniboxPopupModel::TAB_SWITCH);
+    popup_view_->ProvideButtonFocusHint(
+        model()->popup_model()->selected_line());
     return true;
   }
 
@@ -506,6 +518,8 @@ bool OmniboxViewViews::HandleEarlyTabActions(const ui::KeyEvent& event) {
   if (event.IsShiftDown() &&
       model()->popup_model()->SelectedLineHasTabMatch()) {
     model()->popup_model()->SetSelectedLineState(OmniboxPopupModel::TAB_SWITCH);
+    popup_view_->ProvideButtonFocusHint(
+        model()->popup_model()->selected_line());
   }
 
   return true;
@@ -541,7 +555,7 @@ bool OmniboxViewViews::IsSelectAll() const {
 void OmniboxViewViews::UpdatePopup() {
   // Prevent inline autocomplete when the caret isn't at the end of the text.
   const gfx::Range sel = GetSelectedRange();
-  model()->UpdateInput(!sel.is_empty(), sel.GetMax() < text().length());
+  model()->UpdateInput(!sel.is_empty(), !SelectionAtEnd());
 }
 
 void OmniboxViewViews::ApplyCaretVisibility() {
@@ -772,6 +786,16 @@ void OmniboxViewViews::UpdateSchemeStyle(const gfx::Range& range) {
   ApplyColor(location_bar_view_->GetSecurityChipColor(security_level_), range);
   if (security_level_ == security_state::DANGEROUS)
     ApplyStyle(gfx::STRIKE, true, range);
+}
+
+void OmniboxViewViews::OnMouseMoved(const ui::MouseEvent& event) {
+  if (location_bar_view_)
+    location_bar_view_->OnOmniboxHovered(true);
+}
+
+void OmniboxViewViews::OnMouseExited(const ui::MouseEvent& event) {
+  if (location_bar_view_)
+    location_bar_view_->OnOmniboxHovered(false);
 }
 
 bool OmniboxViewViews::IsItemForCommandIdDynamic(int command_id) const {
@@ -1216,7 +1240,7 @@ bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
               OmniboxPopupModel::TAB_SWITCH) {
         popup_view_->OpenMatch(WindowOpenDisposition::SWITCH_TO_TAB);
       } else {
-        if (alt) {
+        if (alt || (shift && command)) {
           model()->AcceptInput(WindowOpenDisposition::NEW_FOREGROUND_TAB,
                                false);
         } else if (command) {
@@ -1257,16 +1281,49 @@ bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
       break;
 
     case ui::VKEY_PRIOR:
-      if (control || alt || shift)
+      if (control || alt || shift || read_only())
         return false;
       model()->OnUpOrDownKeyPressed(-1 * model()->result().size());
       return true;
 
     case ui::VKEY_NEXT:
-      if (control || alt || shift)
+      if (control || alt || shift || read_only())
         return false;
       model()->OnUpOrDownKeyPressed(model()->result().size());
       return true;
+
+    case ui::VKEY_RIGHT:
+      if (!(control || alt || shift)) {
+        if (SelectionAtEnd() &&
+            // Can be null in tests.
+            model()->popup_model() &&
+            model()->popup_model()->SelectedLineHasTabMatch()) {
+          if (model()->popup_model()->selected_line_state() ==
+              OmniboxPopupModel::NORMAL) {
+            model()->popup_model()->SetSelectedLineState(
+                OmniboxPopupModel::TAB_SWITCH);
+            popup_view_->ProvideButtonFocusHint(
+                model()->popup_model()->selected_line());
+          }
+          return true;
+        }
+      }
+      break;
+
+    case ui::VKEY_LEFT:
+      if (!(control || alt || shift)) {
+        if (SelectionAtEnd() &&
+            // Can be null in tests.
+            model()->popup_model() &&
+            model()->popup_model()->SelectedLineHasTabMatch() &&
+            model()->popup_model()->selected_line_state() ==
+                OmniboxPopupModel::TAB_SWITCH) {
+          model()->popup_model()->SetSelectedLineState(
+              OmniboxPopupModel::NORMAL);
+          return true;
+        }
+      }
+      break;
 
     case ui::VKEY_V:
       if (control && !alt &&
@@ -1311,6 +1368,18 @@ bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
 
         TextChanged();
         return true;
+      }
+      break;
+
+    case ui::VKEY_SPACE:
+      if (!(control || alt || shift)) {
+        if (SelectionAtEnd() &&
+            model()->popup_model()->SelectedLineHasTabMatch() &&
+            model()->popup_model()->selected_line_state() ==
+                OmniboxPopupModel::TAB_SWITCH) {
+          popup_view_->OpenMatch(WindowOpenDisposition::SWITCH_TO_TAB);
+          return true;
+        }
       }
       break;
 
@@ -1386,8 +1455,8 @@ int OmniboxViewViews::OnDrop(const ui::OSExchangeData& data) {
   if (data.HasURL(ui::OSExchangeData::CONVERT_FILENAMES)) {
     GURL url;
     base::string16 title;
-    if (data.GetURLAndTitle(
-            ui::OSExchangeData::CONVERT_FILENAMES, &url, &title)) {
+    if (data.GetURLAndTitle(ui::OSExchangeData::CONVERT_FILENAMES, &url,
+                            &title)) {
       text = StripJavascriptSchemas(base::UTF8ToUTF16(url.spec()));
     }
   } else if (data.HasString() && data.GetString(&text)) {
@@ -1416,7 +1485,7 @@ void OmniboxViewViews::UpdateContextMenu(ui::SimpleMenuModel* menu_contents) {
   // is using IDS_ for all its command ids. This is because views cannot depend
   // on IDC_ for now.
   menu_contents->AddItemWithStringId(IDC_EDIT_SEARCH_ENGINES,
-      IDS_EDIT_SEARCH_ENGINES);
+                                     IDS_EDIT_SEARCH_ENGINES);
 }
 
 void OmniboxViewViews::OnCompositingDidCommit(ui::Compositor* compositor) {
@@ -1450,9 +1519,6 @@ void OmniboxViewViews::OnCompositingEnded(ui::Compositor* compositor) {
     latency_histogram_state_ = NOT_ACTIVE;
   }
 }
-
-void OmniboxViewViews::OnCompositingLockStateChanged(
-    ui::Compositor* compositor) {}
 
 void OmniboxViewViews::OnCompositingChildResizing(ui::Compositor* compositor) {}
 

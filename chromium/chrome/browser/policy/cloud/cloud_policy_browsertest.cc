@@ -18,16 +18,18 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
+#include "chrome/browser/invalidation/deprecated_profile_invalidation_provider_factory.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/cloud/cloud_policy_test_utils.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/policy/test/local_policy_test_server.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/invalidation/impl/fake_invalidation_service.h"
+#include "components/invalidation/impl/profile_identity_provider.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/invalidation/public/invalidation.h"
 #include "components/invalidation/public/invalidation_service.h"
@@ -90,9 +92,11 @@ namespace {
 
 std::unique_ptr<KeyedService> BuildFakeProfileInvalidationProvider(
     content::BrowserContext* context) {
+  Profile* profile = static_cast<Profile*>(context);
   return std::make_unique<invalidation::ProfileInvalidationProvider>(
-      std::unique_ptr<invalidation::InvalidationService>(
-          new invalidation::FakeInvalidationService));
+      std::make_unique<invalidation::FakeInvalidationService>(),
+      std::make_unique<invalidation::ProfileIdentityProvider>(
+          IdentityManagerFactory::GetForProfile(profile)));
 }
 
 #if !defined(OS_CHROMEOS)
@@ -196,8 +200,8 @@ class CloudPolicyTest : public InProcessBrowserTest,
     base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
     command_line->AppendSwitchASCII(switches::kDeviceManagementUrl, url);
 
-    invalidation::ProfileInvalidationProviderFactory::GetInstance()->
-        RegisterTestingFactory(BuildFakeProfileInvalidationProvider);
+    invalidation::DeprecatedProfileInvalidationProviderFactory::GetInstance()
+        ->RegisterTestingFactory(BuildFakeProfileInvalidationProvider);
   }
 
   void SetUpOnMainThread() override {
@@ -227,12 +231,9 @@ class CloudPolicyTest : public InProcessBrowserTest,
     ASSERT_TRUE(policy_manager);
     policy_manager->Connect(
         g_browser_process->local_state(),
-        g_browser_process->system_request_context(),
         UserCloudPolicyManager::CreateCloudPolicyClient(
             connector->device_management_service(),
-            g_browser_process->system_request_context(),
-            g_browser_process->system_network_context_manager()
-                ->GetSharedURLLoaderFactory()));
+            g_browser_process->shared_url_loader_factory()));
 #endif  // defined(OS_CHROMEOS)
 
     ASSERT_TRUE(policy_manager->core()->client());
@@ -286,7 +287,7 @@ class CloudPolicyTest : public InProcessBrowserTest,
                                        &user_policy_key_dir));
     std::string sanitized_username =
         chromeos::CryptohomeClient::GetStubSanitizedUsername(
-            cryptohome::Identification(
+            cryptohome::CreateAccountIdentifierFromAccountId(
                 AccountId::FromUserEmail(GetTestUser())));
     user_policy_key_file_ = user_policy_key_dir.AppendASCII(sanitized_username)
                                                .AppendASCII("policy.pub");
@@ -303,8 +304,10 @@ class CloudPolicyTest : public InProcessBrowserTest,
   invalidation::FakeInvalidationService* GetInvalidationService() {
     return static_cast<invalidation::FakeInvalidationService*>(
         static_cast<invalidation::ProfileInvalidationProvider*>(
-            invalidation::ProfileInvalidationProviderFactory::GetInstance()->
-                GetForProfile(browser()->profile()))->GetInvalidationService());
+            invalidation::DeprecatedProfileInvalidationProviderFactory::
+                GetInstance()
+                    ->GetForProfile(browser()->profile()))
+            ->GetInvalidationService());
   }
 
   void SetServerPolicy(const std::string& policy) {

@@ -1,4 +1,4 @@
-# Copyright 2016 The Chromium Authors. All rights reserved.
+# Copyright 2018 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -6,11 +6,29 @@ assert(is_chromeos, "Non-ChromeOS builds cannot depend on //chromeos")
 
 static_library("nearby") {
   sources = [
+    "atomic_boolean_impl.cc",
+    "atomic_boolean_impl.h",
+    "atomic_reference_impl.h",
+    "condition_variable_impl.cc",
+    "condition_variable_impl.h",
     "count_down_latch_impl.cc",
     "count_down_latch_impl.h",
     "hash_utils_impl.cc",
     "hash_utils_impl.h",
+    "lock_base.h",
+    "lock_impl.cc",
+    "lock_impl.h",
+    "multi_thread_executor_impl.cc",
+    "multi_thread_executor_impl.h",
+    "scheduled_executor_impl.cc",
+    "scheduled_executor_impl.h",
     "settable_future_impl.h",
+    "single_thread_executor_impl.cc",
+    "single_thread_executor_impl.h",
+    "submittable_executor_base.cc",
+    "submittable_executor_base.h",
+    "system_clock_impl.cc",
+    "system_clock_impl.h",
     "thread_utils_impl.cc",
     "thread_utils_impl.h",
   ]
@@ -26,9 +44,15 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
-    "count_down_latch_impl_unittests.cc",
-    "hash_utils_impl_unittests.cc",
-    "settable_future_impl_unittests.cc",
+    "atomic_boolean_impl_unittest.cc",
+    "atomic_reference_impl_unittest.cc",
+    "condition_variable_impl_unittest.cc",
+    "count_down_latch_impl_unittest.cc",
+    "hash_utils_impl_unittest.cc",
+    "lock_impl_unittest.cc",
+    "scheduled_executor_impl_unittest.cc",
+    "settable_future_impl_unittest.cc",
+    "submittable_executor_base_unittest.cc",
   ]
 
   deps = [

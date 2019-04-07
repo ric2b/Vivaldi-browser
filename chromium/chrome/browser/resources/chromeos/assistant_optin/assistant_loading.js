@@ -55,6 +55,15 @@ Polymer({
   },
 
   /**
+   * On-tap event handler for skip button.
+   *
+   * @private
+   */
+  onSkipTap_: function() {
+    chrome.send('assistantOptInFlow.flowFinished');
+  },
+
+  /**
    * Add class to the list of classes of root elements.
    * @param {string} className class to add
    *
@@ -90,7 +99,7 @@ Polymer({
     }.bind(this), 500);
     this.loadingTimeout_ = window.setTimeout(function() {
       this.onErrorOccurred();
-    }.bind(this), 3000);
+    }.bind(this), 10000);
   },
 
   /**

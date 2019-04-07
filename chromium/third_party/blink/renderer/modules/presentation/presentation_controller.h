@@ -7,7 +7,7 @@
 
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/blink/public/platform/modules/presentation/presentation.mojom-blink.h"
+#include "third_party/blink/public/mojom/presentation/presentation.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
@@ -94,7 +94,8 @@ class MODULES_EXPORT PresentationController
   void OnConnectionClosed(mojom::blink::PresentationInfoPtr,
                           mojom::blink::PresentationConnectionCloseReason,
                           const String& message) override;
-  void OnDefaultPresentationStarted(mojom::blink::PresentationInfoPtr) override;
+  void OnDefaultPresentationStarted(
+      mojom::blink::PresentationConnectionResultPtr result) override;
 
   // Return the connection associated with the given |presentation_info| or
   // null if it doesn't exist.

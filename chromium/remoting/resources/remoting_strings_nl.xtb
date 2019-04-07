@@ -102,11 +102,11 @@ Voor meer informatie over privacy bekijk je het Privacybeleid van Google (http:/
 <translation id="3171922709365450819">Dit apparaat wordt niet ondersteund door deze klant, omdat hiervoor verificatie van derden is vereist.</translation>
 <translation id="3194245623920924351">Chrome Remote Desktop</translation>
 <translation id="3197730452537982411">Remote Desktop</translation>
+<translation id="3212472844831225214">• Ondersteuning toegevoegd voor Android 9.0 Pie.</translation>
 <translation id="324272851072175193">Deze instructies e-mailen</translation>
 <translation id="3258789396564295715">Je kunt beveiligd toegang krijgen tot deze computer via Chrome Remote Desktop.</translation>
 <translation id="3286521253923406898">Controller voor Chromoting-host</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> wil wijzigingen aanbrengen.</translation>
-<translation id="331779822864701136">• Ondersteuning toegevoegd voor Android 8.0 Oreo.</translation>
 <translation id="332624996707057614">Computernaam bewerken</translation>
 <translation id="3339299787263251426">Krijg beveiligd toegang tot je computer via internet</translation>
 <translation id="3360306038446926262">Vensters</translation>
@@ -122,8 +122,9 @@ Voor meer informatie over privacy bekijk je het Privacybeleid van Google (http:/
 <translation id="369442766917958684">Offline.</translation>
 <translation id="3695446226812920698">Meer informatie</translation>
 <translation id="3718805989288361841">Er is een probleem met de beleidsinstellingen voor Chrome Remote Desktop. Neem contact op met je systeembeheerder voor hulp.</translation>
-<translation id="3759645055923345178">Nadat het instellen is voltooid, kun je vanaf deze pagina toegang krijgen tot de computer door de pincode of toegangscode op te geven</translation>
 <translation id="3776024066357219166">Je Chrome Remote Desktop-sessie is beëindigd.</translation>
+<translation id="3846148461359626420">• Schuiven en zoomen is verbeterd op de iPhone X.
+• Stabiliteitsverbeteringen en bugfixes.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Bevestig je account en pincode hieronder om toegang door Chrome Remote Desktop toe te staan.</translation>
 <translation id="3897092660631435901">Menu</translation>
@@ -137,6 +138,7 @@ Voor meer informatie over privacy bekijk je het Privacybeleid van Google (http:/
 <translation id="405887016757208221">De externe computer kan de sessie niet initialiseren. Als het probleem blijft optreden, configureer je de host opnieuw.</translation>
 <translation id="4068946408131579958">Alle verbindingen</translation>
 <translation id="409800995205263688">OPMERKING: beleidsinstellingen staan alleen verbindingen tussen computers binnen je netwerk toe.</translation>
+<translation id="4126409073460786861">Nadat het instellen is voltooid, vernieuw je deze pagina. Vervolgens kun je toegang tot de computer krijgen door je apparaat te kiezen en de pincode op te geven.</translation>
 <translation id="4145029455188493639">Ingelogd als <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Er ontbreken enkele vereiste componenten. Controleer of de nieuwste versie van de software is geïnstalleerd en probeer het opnieuw.</translation>
 <translation id="4156740505453712750">Om de toegang tot deze computer te beschermen, kies je een pincode van <ph name="BOLD_START" />ten minste zes cijfers<ph name="BOLD_END" />. Je moet deze pincode opgeven wanneer je verbinding maakt vanaf een andere locatie.</translation>
@@ -145,7 +147,6 @@ Voor meer informatie over privacy bekijk je het Privacybeleid van Google (http:/
 <translation id="4207623512727273241">Voer het installatieprogramma uit voordat je doorgaat.</translation>
 <translation id="4227991223508142681">Hulpprogramma voor hostprovisioning</translation>
 <translation id="4240294130679914010">Verwijderprogramma voor Chromoting-host</translation>
-<translation id="4249741460382919890">Algemene bugfixes en stabiliteitsverbeteringen.</translation>
 <translation id="4277463233460010382">Deze computer is geconfigureerd om een of meer clients toestemming te geven verbinding te maken zonder een pincode op te geven.</translation>
 <translation id="4277736576214464567">De toegangscode is ongeldig. Probeer het opnieuw.</translation>
 <translation id="4361728918881830843">Als je externe verbindingen met een andere computer mogelijk wilt maken, installeer je Chrome Remote Desktop op die computer en klik je op '<ph name="BUTTON_NAME" />'.</translation>
@@ -271,6 +272,7 @@ Pc</translation>
 <translation id="6998989275928107238">Aan</translation>
 <translation id="7019153418965365059">Onbekende hostfout: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Externe ondersteuning</translation>
+<translation id="7026930240735156896">Volg de instructies om je computer in te stellen voor externe toegang</translation>
 <translation id="7038683108611689168">Help ons Chromoting te verbeteren door ons toestemming te geven gebruiksstatistieken en crashrapporten te verzamelen.</translation>
 <translation id="7067321367069083429">Scherm werkt als een touchscreen</translation>
 <translation id="7116737094673640201">Welkom bij Chrome Remote Desktop</translation>
@@ -296,7 +298,6 @@ Pc</translation>
 <translation id="7782471917492991422">Controleer de instellingen voor energiebeheer van je computer en zorg ervoor dat de slaapstand niet wordt geactiveerd wanneer de computer inactief is.</translation>
 <translation id="7810127880729796595">Statistieken weergeven (verbinding: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Er ontbreken enkele vereiste componenten. Controleer of je de nieuwste versie van Chrome gebruikt en probeer het opnieuw.</translation>
-<translation id="7850909060902317210">Installeer de Chrome Remote Desktop-software en volg de instructies om het instellen te voltooien</translation>
 <translation id="7868137160098754906">Voer je pincode voor de externe computer in.</translation>
 <translation id="7869445566579231750">Je hebt geen toestemming om deze app uit te voeren.</translation>
 <translation id="7895403300744144251">Beveiligingsbeleid op de externe computer staat verbindingen vanuit je account niet toe.</translation>

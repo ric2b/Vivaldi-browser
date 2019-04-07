@@ -15,7 +15,6 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
-#include "net/base/completion_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
@@ -2929,7 +2928,8 @@ TEST_F(SpdySessionTest, ReadDataWithoutYielding) {
   ASSERT_EQ(32 * 1024, kYieldAfterBytesRead);
   const int kPayloadSize = kYieldAfterBytesRead / 4 - spdy::kFrameHeaderSize;
   TestDataStream test_stream;
-  scoped_refptr<IOBuffer> payload(new IOBuffer(kPayloadSize));
+  scoped_refptr<IOBuffer> payload =
+      base::MakeRefCounted<IOBuffer>(kPayloadSize);
   char* payload_data = payload->data();
   test_stream.GetBytes(payload_data, kPayloadSize);
 
@@ -3143,7 +3143,8 @@ TEST_F(SpdySessionTest, TestYieldingDuringReadData) {
   ASSERT_EQ(32 * 1024, kYieldAfterBytesRead);
   const int kPayloadSize = kYieldAfterBytesRead / 4 - spdy::kFrameHeaderSize;
   TestDataStream test_stream;
-  scoped_refptr<IOBuffer> payload(new IOBuffer(kPayloadSize));
+  scoped_refptr<IOBuffer> payload =
+      base::MakeRefCounted<IOBuffer>(kPayloadSize);
   char* payload_data = payload->data();
   test_stream.GetBytes(payload_data, kPayloadSize);
 
@@ -3237,14 +3238,16 @@ TEST_F(SpdySessionTest, TestYieldingDuringAsyncReadData) {
   TestDataStream test_stream;
   const int kEightKPayloadSize =
       kYieldAfterBytesRead / 4 - spdy::kFrameHeaderSize;
-  scoped_refptr<IOBuffer> eightk_payload(new IOBuffer(kEightKPayloadSize));
+  scoped_refptr<IOBuffer> eightk_payload =
+      base::MakeRefCounted<IOBuffer>(kEightKPayloadSize);
   char* eightk_payload_data = eightk_payload->data();
   test_stream.GetBytes(eightk_payload_data, kEightKPayloadSize);
 
   // Build buffer of 2k size.
   TestDataStream test_stream2;
   const int kTwoKPayloadSize = kEightKPayloadSize - 6 * 1024;
-  scoped_refptr<IOBuffer> twok_payload(new IOBuffer(kTwoKPayloadSize));
+  scoped_refptr<IOBuffer> twok_payload =
+      base::MakeRefCounted<IOBuffer>(kTwoKPayloadSize);
   char* twok_payload_data = twok_payload->data();
   test_stream2.GetBytes(twok_payload_data, kTwoKPayloadSize);
 
@@ -3494,7 +3497,7 @@ TEST_F(SpdySessionTest, CloseOneIdleConnectionWithAlias) {
   // Pre-populate the DNS cache, since a cached entry is required in order to
   // create the alias.
   int rv = session_deps_.host_resolver->Resolve(
-      info, DEFAULT_PRIORITY, &addresses, CompletionCallback(), &request,
+      info, DEFAULT_PRIORITY, &addresses, CompletionOnceCallback(), &request,
       NetLogWithSource());
   EXPECT_THAT(rv, IsOk());
 
@@ -6434,6 +6437,38 @@ TEST(MapNetErrorToGoAwayStatus, MapsValue) {
            MapNetErrorToGoAwayStatus(ERR_UNEXPECTED));
 }
 
+namespace {
+
+class TestSSLConfigService : public SSLConfigService {
+ public:
+  TestSSLConfigService() {}
+  ~TestSSLConfigService() override = default;
+
+  void GetSSLConfig(SSLConfig* config) override { *config = config_; }
+
+  // Returns true if |hostname| is in domains_for_pooling_. This is a simpler
+  // implementation than the production implementation in SSLConfigServiceMojo.
+  bool CanShareConnectionWithClientCerts(
+      const std::string& hostname) const override {
+    for (const std::string& domain : domains_for_pooling_) {
+      if (domain == hostname) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void SetDomainsForPooling(const std::vector<std::string>& domains) {
+    domains_for_pooling_ = domains;
+  }
+
+ private:
+  SSLConfig config_;
+  std::vector<std::string> domains_for_pooling_;
+};
+
+}  // namespace
+
 TEST(CanPoolTest, CanPool) {
   // Load a cert that is valid for:
   //   www.example.org
@@ -6441,18 +6476,19 @@ TEST(CanPoolTest, CanPool) {
   //   mail.example.com
 
   TransportSecurityState tss;
+  TestSSLConfigService ssl_config_service;
   SSLInfo ssl_info;
   ssl_info.cert = ImportCertFromFile(GetTestCertsDirectory(),
                                      "spdy_pooling.pem");
 
-  EXPECT_TRUE(SpdySession::CanPool(
-      &tss, ssl_info, "www.example.org", "www.example.org"));
-  EXPECT_TRUE(SpdySession::CanPool(
-      &tss, ssl_info, "www.example.org", "mail.example.org"));
-  EXPECT_TRUE(SpdySession::CanPool(
-      &tss, ssl_info, "www.example.org", "mail.example.com"));
-  EXPECT_FALSE(SpdySession::CanPool(
-      &tss, ssl_info, "www.example.org", "mail.google.com"));
+  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                   "www.example.org", "www.example.org"));
+  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                   "www.example.org", "mail.example.org"));
+  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                   "www.example.org", "mail.example.com"));
+  EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                    "www.example.org", "mail.google.com"));
 }
 
 TEST(CanPoolTest, CanPoolExpectCT) {
@@ -6465,6 +6501,7 @@ TEST(CanPoolTest, CanPoolExpectCT) {
   //   mail.example.com
 
   TransportSecurityState tss;
+  TestSSLConfigService ssl_config_service;
   SSLInfo ssl_info;
   ssl_info.cert =
       ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
@@ -6473,8 +6510,8 @@ TEST(CanPoolTest, CanPoolExpectCT) {
       ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS;
   ssl_info.is_issued_by_known_root = true;
 
-  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, "www.example.org",
-                                   "www.example.org"));
+  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                   "www.example.org", "www.example.org"));
 
   const base::Time current_time(base::Time::Now());
   const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
@@ -6483,19 +6520,19 @@ TEST(CanPoolTest, CanPoolExpectCT) {
 
   // A different Expect-CT enabled host should not be allowed to pool.
   tss.AddExpectCT("mail.example.org", expiry, true, GURL());
-  EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, "www.example.org",
-                                    "mail.example.org"));
+  EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                    "www.example.org", "mail.example.org"));
   // A report-only Expect-CT configuration should not prevent pooling.
   tss.AddExpectCT("mail.example.org", expiry, false,
                   GURL("https://report.test"));
-  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, "www.example.org",
-                                   "mail.example.org"));
+  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                   "www.example.org", "mail.example.org"));
   // If Expect-CT becomes enabled for the same host for which the connection was
   // already made, subsequent connections to that host should not be allowed to
   // pool.
   tss.AddExpectCT("www.example.org", expiry, true, GURL());
-  EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, "www.example.org",
-                                    "www.example.org"));
+  EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                    "www.example.org", "www.example.org"));
 }
 
 TEST(CanPoolTest, CanNotPoolWithCertErrors) {
@@ -6505,13 +6542,14 @@ TEST(CanPoolTest, CanNotPoolWithCertErrors) {
   //   mail.example.com
 
   TransportSecurityState tss;
+  TestSSLConfigService ssl_config_service;
   SSLInfo ssl_info;
   ssl_info.cert = ImportCertFromFile(GetTestCertsDirectory(),
                                      "spdy_pooling.pem");
   ssl_info.cert_status = CERT_STATUS_REVOKED;
 
-  EXPECT_FALSE(SpdySession::CanPool(
-      &tss, ssl_info, "www.example.org", "mail.example.org"));
+  EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                    "www.example.org", "mail.example.org"));
 }
 
 TEST(CanPoolTest, CanNotPoolWithClientCerts) {
@@ -6521,13 +6559,14 @@ TEST(CanPoolTest, CanNotPoolWithClientCerts) {
   //   mail.example.com
 
   TransportSecurityState tss;
+  TestSSLConfigService ssl_config_service;
   SSLInfo ssl_info;
   ssl_info.cert = ImportCertFromFile(GetTestCertsDirectory(),
                                      "spdy_pooling.pem");
   ssl_info.client_cert_sent = true;
 
-  EXPECT_FALSE(SpdySession::CanPool(
-      &tss, ssl_info, "www.example.org", "mail.example.org"));
+  EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                    "www.example.org", "mail.example.org"));
 }
 
 TEST(CanPoolTest, CanNotPoolAcrossETLDsWithChannelID) {
@@ -6537,15 +6576,16 @@ TEST(CanPoolTest, CanNotPoolAcrossETLDsWithChannelID) {
   //   mail.example.com
 
   TransportSecurityState tss;
+  TestSSLConfigService ssl_config_service;
   SSLInfo ssl_info;
   ssl_info.cert = ImportCertFromFile(GetTestCertsDirectory(),
                                      "spdy_pooling.pem");
   ssl_info.channel_id_sent = true;
 
-  EXPECT_TRUE(SpdySession::CanPool(
-      &tss, ssl_info, "www.example.org", "mail.example.org"));
-  EXPECT_FALSE(SpdySession::CanPool(
-      &tss, ssl_info, "www.example.org", "www.example.com"));
+  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                   "www.example.org", "mail.example.org"));
+  EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                    "www.example.org", "www.example.com"));
 }
 
 TEST(CanPoolTest, CanNotPoolWithBadPins) {
@@ -6555,14 +6595,15 @@ TEST(CanPoolTest, CanNotPoolWithBadPins) {
   TransportSecurityState tss;
   test::AddPin(&tss, "mail.example.org", primary_pin, backup_pin);
 
+  TestSSLConfigService ssl_config_service;
   SSLInfo ssl_info;
   ssl_info.cert = ImportCertFromFile(GetTestCertsDirectory(),
                                      "spdy_pooling.pem");
   ssl_info.is_issued_by_known_root = true;
   ssl_info.public_key_hashes.push_back(test::GetTestHashValue(bad_pin));
 
-  EXPECT_FALSE(SpdySession::CanPool(
-      &tss, ssl_info, "www.example.org", "mail.example.org"));
+  EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                    "www.example.org", "mail.example.org"));
 }
 
 TEST(CanPoolTest, CanNotPoolWithBadCTWhenCTRequired) {
@@ -6570,6 +6611,7 @@ TEST(CanPoolTest, CanNotPoolWithBadCTWhenCTRequired) {
   using CTRequirementLevel =
       TransportSecurityState::RequireCTDelegate::CTRequirementLevel;
 
+  TestSSLConfigService ssl_config_service;
   SSLInfo ssl_info;
   ssl_info.cert =
       ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
@@ -6588,8 +6630,8 @@ TEST(CanPoolTest, CanNotPoolWithBadCTWhenCTRequired) {
   TransportSecurityState tss;
   tss.SetRequireCTDelegate(&require_ct_delegate);
 
-  EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, "www.example.org",
-                                    "mail.example.org"));
+  EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                    "www.example.org", "mail.example.org"));
 }
 
 TEST(CanPoolTest, CanPoolWithBadCTWhenCTNotRequired) {
@@ -6597,6 +6639,7 @@ TEST(CanPoolTest, CanPoolWithBadCTWhenCTNotRequired) {
   using CTRequirementLevel =
       TransportSecurityState::RequireCTDelegate::CTRequirementLevel;
 
+  TestSSLConfigService ssl_config_service;
   SSLInfo ssl_info;
   ssl_info.cert =
       ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
@@ -6615,8 +6658,8 @@ TEST(CanPoolTest, CanPoolWithBadCTWhenCTNotRequired) {
   TransportSecurityState tss;
   tss.SetRequireCTDelegate(&require_ct_delegate);
 
-  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, "www.example.org",
-                                   "mail.example.org"));
+  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                   "www.example.org", "mail.example.org"));
 }
 
 TEST(CanPoolTest, CanPoolWithGoodCTWhenCTRequired) {
@@ -6624,6 +6667,7 @@ TEST(CanPoolTest, CanPoolWithGoodCTWhenCTRequired) {
   using CTRequirementLevel =
       TransportSecurityState::RequireCTDelegate::CTRequirementLevel;
 
+  TestSSLConfigService ssl_config_service;
   SSLInfo ssl_info;
   ssl_info.cert =
       ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
@@ -6642,8 +6686,8 @@ TEST(CanPoolTest, CanPoolWithGoodCTWhenCTRequired) {
   TransportSecurityState tss;
   tss.SetRequireCTDelegate(&require_ct_delegate);
 
-  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, "www.example.org",
-                                   "mail.example.org"));
+  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                   "www.example.org", "mail.example.org"));
 }
 
 TEST(CanPoolTest, CanPoolWithAcceptablePins) {
@@ -6652,14 +6696,39 @@ TEST(CanPoolTest, CanPoolWithAcceptablePins) {
   TransportSecurityState tss;
   test::AddPin(&tss, "mail.example.org", primary_pin, backup_pin);
 
+  TestSSLConfigService ssl_config_service;
   SSLInfo ssl_info;
   ssl_info.cert = ImportCertFromFile(GetTestCertsDirectory(),
                                      "spdy_pooling.pem");
   ssl_info.is_issued_by_known_root = true;
   ssl_info.public_key_hashes.push_back(test::GetTestHashValue(primary_pin));
 
-  EXPECT_TRUE(SpdySession::CanPool(
-      &tss, ssl_info, "www.example.org", "mail.example.org"));
+  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                   "www.example.org", "mail.example.org"));
+}
+
+TEST(CanPoolTest, CanPoolWithClientCertsAndPolicy) {
+  TransportSecurityState tss;
+  SSLInfo ssl_info;
+  ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
+  ssl_info.client_cert_sent = true;
+
+  // Configure ssl_config_service so that CanShareConnectionWithClientCerts
+  // returns true for www.example.org and mail.example.org.
+  TestSSLConfigService ssl_config_service;
+  ssl_config_service.SetDomainsForPooling(
+      {"www.example.org", "mail.example.org"});
+
+  // Test that CanPool returns true when client certs are enabled and
+  // CanShareConnectionWithClientCerts returns true for both hostnames, but not
+  // just one hostname.
+  EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                   "www.example.org", "mail.example.org"));
+  EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                    "www.example.org", "mail.example.com"));
+  EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
+                                    "mail.example.com", "www.example.org"));
 }
 
 TEST(RecordPushedStreamHistogramTest, VaryResponseHeader) {

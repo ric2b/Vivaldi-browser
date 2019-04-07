@@ -17,11 +17,13 @@
 #include "base/task/sequence_manager/test/fake_task.h"
 #include "base/task/sequence_manager/test/sequence_manager_for_test.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/renderer/platform/scheduler/child/task_queue_with_task_type.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.h"
+#include "third_party/blink/renderer/platform/scheduler/main_thread/frame_task_queue_controller.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_visibility_state.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
@@ -48,7 +50,15 @@ using testing::UnorderedElementsAreArray;
 
 class PageSchedulerImplTest : public testing::Test {
  public:
-  PageSchedulerImplTest() = default;
+  PageSchedulerImplTest() {
+    feature_list_.InitAndEnableFeature(blink::features::kStopInBackground);
+  }
+
+  PageSchedulerImplTest(std::vector<base::Feature> enabled_features,
+                        std::vector<base::Feature> disabled_features) {
+    feature_list_.InitWithFeatures(enabled_features, disabled_features);
+  }
+
   ~PageSchedulerImplTest() override = default;
 
  protected:
@@ -63,8 +73,9 @@ class PageSchedulerImplTest : public testing::Test {
             nullptr, test_task_runner_, test_task_runner_->GetMockTickClock()),
         base::nullopt));
     page_scheduler_.reset(new PageSchedulerImpl(nullptr, scheduler_.get()));
-    frame_scheduler_ = FrameSchedulerImpl::Create(
-        page_scheduler_.get(), nullptr, FrameScheduler::FrameType::kSubframe);
+    frame_scheduler_ =
+        FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr, nullptr,
+                                   FrameScheduler::FrameType::kSubframe);
   }
 
   void TearDown() override {
@@ -82,7 +93,10 @@ class PageSchedulerImplTest : public testing::Test {
 
   static scoped_refptr<TaskQueue> ThrottleableTaskQueueForScheduler(
       FrameSchedulerImpl* scheduler) {
-    return scheduler->ThrottleableTaskQueue();
+    auto* frame_task_queue_controller =
+        scheduler->FrameTaskQueueControllerForTest();
+    auto queue_traits = FrameSchedulerImpl::ThrottleableTaskQueueTraits();
+    return frame_task_queue_controller->NonLoadingTaskQueue(queue_traits);
   }
 
   base::TimeDelta delay_for_background_tab_freezing() const {
@@ -94,33 +108,39 @@ class PageSchedulerImplTest : public testing::Test {
   }
 
   scoped_refptr<base::SingleThreadTaskRunner> ThrottleableTaskRunner() {
-    return TaskQueueWithTaskType::Create(ThrottleableTaskQueue(),
-                                         TaskType::kInternalTest);
+    return ThrottleableTaskQueue()->CreateTaskRunner(TaskType::kInternalTest);
   }
 
   scoped_refptr<base::SingleThreadTaskRunner> LoadingTaskRunner() {
-    return TaskQueueWithTaskType::Create(LoadingTaskQueue(),
-                                         TaskType::kInternalTest);
+    return LoadingTaskQueue()->CreateTaskRunner(TaskType::kInternalTest);
   }
 
-  scoped_refptr<TaskQueue> ThrottleableTaskQueue() {
-    return frame_scheduler_->ThrottleableTaskQueue();
+  scoped_refptr<MainThreadTaskQueue> NonLoadingTaskQueue(
+      MainThreadTaskQueue::QueueTraits queue_traits) {
+    return frame_scheduler_->FrameTaskQueueControllerForTest()
+        ->NonLoadingTaskQueue(queue_traits);
   }
 
-  scoped_refptr<TaskQueue> LoadingTaskQueue() {
-    return frame_scheduler_->LoadingTaskQueue();
+  scoped_refptr<MainThreadTaskQueue> ThrottleableTaskQueue() {
+    return NonLoadingTaskQueue(
+        FrameSchedulerImpl::ThrottleableTaskQueueTraits());
   }
 
-  scoped_refptr<TaskQueue> DeferrableTaskQueue() {
-    return frame_scheduler_->DeferrableTaskQueue();
+  scoped_refptr<MainThreadTaskQueue> LoadingTaskQueue() {
+    return frame_scheduler_->FrameTaskQueueControllerForTest()
+        ->LoadingTaskQueue();
   }
 
-  scoped_refptr<TaskQueue> PausableTaskQueue() {
-    return frame_scheduler_->PausableTaskQueue();
+  scoped_refptr<MainThreadTaskQueue> DeferrableTaskQueue() {
+    return NonLoadingTaskQueue(FrameSchedulerImpl::DeferrableTaskQueueTraits());
   }
 
-  scoped_refptr<TaskQueue> UnpausableTaskQueue() {
-    return frame_scheduler_->UnpausableTaskQueue();
+  scoped_refptr<MainThreadTaskQueue> PausableTaskQueue() {
+    return NonLoadingTaskQueue(FrameSchedulerImpl::PausableTaskQueueTraits());
+  }
+
+  scoped_refptr<MainThreadTaskQueue> UnpausableTaskQueue() {
+    return NonLoadingTaskQueue(FrameSchedulerImpl::UnpausableTaskQueueTraits());
   }
 
   bool ShouldFreezePage() { return page_scheduler_->ShouldFreezePage(); }
@@ -129,8 +149,6 @@ class PageSchedulerImplTest : public testing::Test {
   // set the page as visible or unfreezes it while still hidden (depending on
   // the argument), and verifies that tasks can run.
   void TestFreeze(bool make_page_visible) {
-    ScopedStopNonTimersInBackgroundForTest stop_non_timers_enabler(true);
-
     int counter = 0;
     LoadingTaskQueue()->PostTask(
         FROM_HERE,
@@ -195,24 +213,38 @@ class PageSchedulerImplTest : public testing::Test {
   std::unique_ptr<MainThreadSchedulerImpl> scheduler_;
   std::unique_ptr<PageSchedulerImpl> page_scheduler_;
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler_;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class PageSchedulerImplStopNonTimersInBackgroundEnabledTest
+    : public PageSchedulerImplTest {
+ public:
+  PageSchedulerImplStopNonTimersInBackgroundEnabledTest()
+      : PageSchedulerImplTest({blink::features::kStopInBackground,
+                               blink::features::kStopNonTimersInBackground},
+                              {}) {}
+
+  ~PageSchedulerImplStopNonTimersInBackgroundEnabledTest() override = default;
 };
 
 TEST_F(PageSchedulerImplTest, TestDestructionOfFrameSchedulersBefore) {
   std::unique_ptr<blink::FrameScheduler> frame1(
       page_scheduler_->CreateFrameScheduler(
-          nullptr, FrameScheduler::FrameType::kSubframe));
+          nullptr, nullptr, FrameScheduler::FrameType::kSubframe));
   std::unique_ptr<blink::FrameScheduler> frame2(
       page_scheduler_->CreateFrameScheduler(
-          nullptr, FrameScheduler::FrameType::kSubframe));
+          nullptr, nullptr, FrameScheduler::FrameType::kSubframe));
 }
 
 TEST_F(PageSchedulerImplTest, TestDestructionOfFrameSchedulersAfter) {
   std::unique_ptr<blink::FrameScheduler> frame1(
       page_scheduler_->CreateFrameScheduler(
-          nullptr, FrameScheduler::FrameType::kSubframe));
+          nullptr, nullptr, FrameScheduler::FrameType::kSubframe));
   std::unique_ptr<blink::FrameScheduler> frame2(
       page_scheduler_->CreateFrameScheduler(
-          nullptr, FrameScheduler::FrameType::kSubframe));
+          nullptr, nullptr, FrameScheduler::FrameType::kSubframe));
   page_scheduler_.reset();
 }
 
@@ -298,7 +330,7 @@ TEST_F(PageSchedulerImplTest, RepeatingTimers_OneBackgroundOneForeground) {
   std::unique_ptr<PageSchedulerImpl> page_scheduler2(
       new PageSchedulerImpl(nullptr, scheduler_.get()));
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler2 =
-      FrameSchedulerImpl::Create(page_scheduler2.get(), nullptr,
+      FrameSchedulerImpl::Create(page_scheduler2.get(), nullptr, nullptr,
                                  FrameScheduler::FrameType::kSubframe);
 
   page_scheduler_->SetPageVisible(true);
@@ -550,7 +582,7 @@ TEST_F(PageSchedulerImplTest, VirtualTimeSettings_NewFrameScheduler) {
   page_scheduler_->EnableVirtualTime();
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr,
+      FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr, nullptr,
                                  FrameScheduler::FrameType::kSubframe);
 
   ThrottleableTaskQueueForScheduler(frame_scheduler.get())
@@ -580,7 +612,7 @@ base::OnceClosure MakeDeletionTask(T* obj) {
 TEST_F(PageSchedulerImplTest, DeleteFrameSchedulers_InTask) {
   for (int i = 0; i < 10; i++) {
     FrameSchedulerImpl* frame_scheduler =
-        FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr,
+        FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr, nullptr,
                                    FrameScheduler::FrameType::kSubframe)
             .release();
     ThrottleableTaskQueueForScheduler(frame_scheduler)
@@ -600,7 +632,7 @@ TEST_F(PageSchedulerImplTest, DeleteThrottledQueue_InTask) {
   page_scheduler_->SetPageVisible(false);
 
   FrameSchedulerImpl* frame_scheduler =
-      FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr,
+      FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr, nullptr,
                                  FrameScheduler::FrameType::kSubframe)
           .release();
   scoped_refptr<TaskQueue> timer_task_queue =
@@ -653,7 +685,7 @@ TEST_F(PageSchedulerImplTest,
       VirtualTimePolicy::kDeterministicLoading);
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr,
+      FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr, nullptr,
                                  FrameScheduler::FrameType::kSubframe);
 
   {
@@ -720,7 +752,7 @@ TEST_F(PageSchedulerImplTest,
   base::TimeTicks time_second_task;
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr,
+      FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr, nullptr,
                                  FrameScheduler::FrameType::kSubframe);
 
   // Pauses and unpauses virtual time, thereby advancing virtual time by an
@@ -756,7 +788,7 @@ TEST_F(PageSchedulerImplTest,
       VirtualTimePolicy::kDeterministicLoading);
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr,
+      FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr, nullptr,
                                  FrameScheduler::FrameType::kSubframe);
 
   WebScopedVirtualTimePauser virtual_time_pauser1 =
@@ -801,7 +833,7 @@ TEST_F(PageSchedulerImplTest, PauseTimersWhileVirtualTimeIsPaused) {
   std::vector<int> run_order;
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler =
-      FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr,
+      FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr, nullptr,
                                  FrameScheduler::FrameType::kSubframe);
   page_scheduler_->SetVirtualTimePolicy(VirtualTimePolicy::kPause);
   page_scheduler_->EnableVirtualTime();
@@ -1087,8 +1119,9 @@ TEST_F(PageSchedulerImplTest, BackgroundTimerThrottling) {
   EXPECT_FALSE(page_scheduler_->IsThrottled());
 
   std::vector<base::TimeTicks> run_times;
-  frame_scheduler_ = FrameSchedulerImpl::Create(
-      page_scheduler_.get(), nullptr, FrameScheduler::FrameType::kSubframe);
+  frame_scheduler_ =
+      FrameSchedulerImpl::Create(page_scheduler_.get(), nullptr, nullptr,
+                                 FrameScheduler::FrameType::kSubframe);
   page_scheduler_->SetPageVisible(true);
   EXPECT_FALSE(page_scheduler_->IsThrottled());
 
@@ -1153,10 +1186,10 @@ TEST_F(PageSchedulerImplTest, OpenWebSocketExemptsFromBudgetThrottling) {
   std::vector<base::TimeTicks> run_times;
 
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler1 =
-      FrameSchedulerImpl::Create(page_scheduler.get(), nullptr,
+      FrameSchedulerImpl::Create(page_scheduler.get(), nullptr, nullptr,
                                  FrameScheduler::FrameType::kSubframe);
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler2 =
-      FrameSchedulerImpl::Create(page_scheduler.get(), nullptr,
+      FrameSchedulerImpl::Create(page_scheduler.get(), nullptr, nullptr,
                                  FrameScheduler::FrameType::kSubframe);
 
   page_scheduler->SetPageVisible(false);
@@ -1252,13 +1285,15 @@ TEST_F(PageSchedulerImplTest, OpenWebSocketExemptsFromBudgetThrottling) {
 // Verify that freezing a page prevents tasks in its task queues from running.
 // Then, verify that making the page visible unfreezes it and allows tasks in
 // its task queues to run.
-TEST_F(PageSchedulerImplTest, PageFreezeAndSetVisible) {
+TEST_F(PageSchedulerImplStopNonTimersInBackgroundEnabledTest,
+       PageFreezeAndSetVisible) {
   TestFreeze(true);
 }
 
 // Same as before, but unfreeze the page explicitly instead of making it
 // visible.
-TEST_F(PageSchedulerImplTest, PageFreezeAndUnfreeze) {
+TEST_F(PageSchedulerImplStopNonTimersInBackgroundEnabledTest,
+       PageFreezeAndUnfreeze) {
   TestFreeze(false);
 }
 

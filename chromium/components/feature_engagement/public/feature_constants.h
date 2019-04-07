@@ -26,6 +26,7 @@ extern const base::Feature kIPHDataSaverPreviewFeature;
 extern const base::Feature kIPHDownloadHomeFeature;
 extern const base::Feature kIPHDownloadPageFeature;
 extern const base::Feature kIPHDownloadPageScreenshotFeature;
+extern const base::Feature kIPHChromeDuetFeature;
 extern const base::Feature kIPHChromeHomeExpandFeature;
 extern const base::Feature kIPHChromeHomePullToRefreshFeature;
 extern const base::Feature kIPHMediaDownloadFeature;
@@ -38,6 +39,7 @@ extern const base::Feature kIPHDownloadSettingsFeature;
 extern const base::Feature kIPHDownloadInfoBarDownloadContinuingFeature;
 extern const base::Feature kIPHDownloadInfoBarDownloadsAreFasterFeature;
 extern const base::Feature kIPHHomePageButtonFeature;
+extern const base::Feature kIPHHomepageTileFeature;
 extern const base::Feature kIPHNewTabPageButtonFeature;
 #endif  // defined(OS_ANDROID)
 

@@ -10,11 +10,10 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/drive/drive_notification_manager_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -50,6 +49,7 @@
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/service_manager_connection.h"
 #include "extensions/browser/extension_system.h"
@@ -202,11 +202,11 @@ std::unique_ptr<SyncEngine> SyncEngine::CreateForBrowserContext(
       base::ThreadTaskRunnerHandle::Get();
   scoped_refptr<base::SequencedTaskRunner> worker_task_runner =
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
   scoped_refptr<base::SequencedTaskRunner> drive_task_runner =
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 
   Profile* profile = Profile::FromBrowserContext(context);
@@ -249,8 +249,7 @@ void SyncEngine::AppendDependsOnFactories(
 SyncEngine::~SyncEngine() {
   Reset();
 
-  g_browser_process->network_connection_tracker()
-      ->RemoveNetworkConnectionObserver(this);
+  content::GetNetworkConnectionTracker()->RemoveNetworkConnectionObserver(this);
   if (signin_manager_)
     signin_manager_->RemoveObserver(this);
   if (notification_manager_)
@@ -370,7 +369,7 @@ void SyncEngine::InitializeInternal(
 
   service_state_ = REMOTE_SERVICE_TEMPORARY_UNAVAILABLE;
   auto connection_type = network::mojom::ConnectionType::CONNECTION_NONE;
-  g_browser_process->network_connection_tracker()->GetConnectionType(
+  content::GetNetworkConnectionTracker()->GetConnectionType(
       &connection_type, base::BindOnce(&SyncEngine::OnConnectionChanged,
                                        weak_ptr_factory_.GetWeakPtr()));
   OnConnectionChanged(connection_type);
@@ -652,7 +651,11 @@ void SyncEngine::ApplyLocalChange(const FileChange& local_change,
                      local_path, local_metadata, url, relayed_callback));
 }
 
-void SyncEngine::OnNotificationReceived() {
+void SyncEngine::OnNotificationReceived(const std::set<std::string>& ids) {
+  OnNotificationTimerFired();
+}
+
+void SyncEngine::OnNotificationTimerFired() {
   if (!sync_worker_)
     return;
 
@@ -764,8 +767,7 @@ SyncEngine::SyncEngine(
     notification_manager_->AddObserver(this);
   if (signin_manager_)
     signin_manager_->AddObserver(this);
-  g_browser_process->network_connection_tracker()->AddNetworkConnectionObserver(
-      this);
+  content::GetNetworkConnectionTracker()->AddNetworkConnectionObserver(this);
 }
 
 void SyncEngine::OnPendingFileListUpdated(int item_count) {

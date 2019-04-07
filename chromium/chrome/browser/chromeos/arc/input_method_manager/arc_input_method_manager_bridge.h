@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_CHROMEOS_ARC_INPUT_METHOD_MANAGER_ARC_INPUT_METHOD_MANAGER_BRIDGE_H_
 #define CHROME_BROWSER_CHROMEOS_ARC_INPUT_METHOD_MANAGER_ARC_INPUT_METHOD_MANAGER_BRIDGE_H_
 
+#include <string>
+#include <vector>
+
 #include "components/arc/common/input_method_manager.mojom.h"
 
 namespace arc {
@@ -15,14 +18,20 @@ class ArcInputMethodManagerBridge {
  public:
   virtual ~ArcInputMethodManagerBridge() = default;
 
-  // Received mojo calls are passed to this delegate.
+  // Received mojo calls and connection state changes are passed to this
+  // delegate.
   class Delegate {
    public:
     virtual ~Delegate() = default;
 
+    // Mojo calls:
     virtual void OnActiveImeChanged(const std::string& ime_id) = 0;
+    virtual void OnImeDisabled(const std::string& ime_id) = 0;
     virtual void OnImeInfoChanged(
         const std::vector<mojom::ImeInfoPtr> ime_info_array) = 0;
+
+    // Mojo connection state changes:
+    virtual void OnConnectionClosed() = 0;
   };
 
   // Sends mojo calls.

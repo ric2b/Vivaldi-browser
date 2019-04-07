@@ -5,7 +5,7 @@
 #include "services/device/serial/serial_device_enumerator_impl.h"
 
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace device {
@@ -27,7 +27,7 @@ void SerialDeviceEnumeratorImpl::Create(
   // blocking IO.
   scoped_refptr<base::SequencedTaskRunner> blockable_sequence_runner =
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND});
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
   blockable_sequence_runner->PostTask(
       FROM_HERE,
       base::BindOnce(&CreateAndBindOnBlockableRunner, std::move(request)));

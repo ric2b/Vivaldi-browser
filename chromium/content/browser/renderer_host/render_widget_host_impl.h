@@ -199,7 +199,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   RenderWidgetHostViewBase* GetView() const override;
   bool IsLoading() const override;
   bool IsCurrentlyUnresponsive() const override;
-  void SetIgnoreInputEvents(bool ignore_input_events) override;
   bool SynchronizeVisualProperties() override;
   void AddKeyPressEventCallback(const KeyPressEventCallback& callback) override;
   void RemoveKeyPressEventCallback(
@@ -288,6 +287,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   }
 
   void SetFrameDepth(unsigned int depth);
+  void SetIntersectsViewport(bool intersects);
   void UpdatePriority();
 
   // Tells the renderer to die and optionally delete |this|.
@@ -479,12 +479,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Cancels an ongoing composition.
   void ImeCancelComposition();
 
-  bool ignore_input_events() const {
-    return ignore_input_events_;
-  }
-
-  // Whether forwarded WebInputEvents should be dropped.
-  bool ShouldDropInputEvents() const;
+  // Whether forwarded WebInputEvents are being ignored.
+  bool IsIgnoringInputEvents() const;
 
   bool has_touch_handler() const { return has_touch_handler_; }
 
@@ -683,8 +679,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   bool FlingCancellationIsDeferred() const;
   void SetNeedsBeginFrameForFlingProgress();
 
-  void DidReceiveFirstFrameAfterNavigation();
-
   // The RenderWidgetHostImpl will keep showing the old page (for a while) after
   // navigation until the first frame of the new page arrives. This reduces
   // flicker. However, if for some reason it is known that the frames won't be
@@ -712,9 +706,20 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Returns the keyboard layout mapping.
   base::flat_map<std::string, std::string> GetKeyboardLayoutMap();
 
-  void DidStopFlinging() override;
+  void DidStopFlinging();
 
   void GetContentRenderingTimeoutFrom(RenderWidgetHostImpl* other);
+
+  // Called on delayed response from the renderer by either
+  // 1) |hang_monitor_timeout_| (slow to ack input events) or
+  // 2) NavigationHandle::OnCommitTimeout (slow to commit).
+  void RendererIsUnresponsive(
+      base::RepeatingClosure restart_hang_monitor_timeout);
+
+  // Called if we know the renderer is responsive. When we currently think the
+  // renderer is unresponsive, this will clear that state and call
+  // NotifyRendererResponsive.
+  void RendererIsResponsive();
 
  protected:
   // ---------------------------------------------------------------------------
@@ -793,17 +798,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // destructor is called as well.
   void Destroy(bool also_delete);
 
-  // Called by |input_event_ack_timeout_| on delayed response from the renderer.
-  void RendererIsUnresponsive();
-
   // Called by |new_content_rendering_timeout_| if a renderer has loaded new
   // content but failed to produce a compositor frame in a defined time.
   void ClearDisplayedGraphics();
-
-  // Called if we know the renderer is responsive. When we currently think the
-  // renderer is unresponsive, this will clear that state and call
-  // NotifyRendererResponsive.
-  void RendererIsResponsive();
 
   // IPC message handlers
   void OnRenderProcessGone(int status, int error_code);
@@ -821,9 +818,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void OnLockMouse(bool user_gesture,
                    bool privileged);
   void OnUnlockMouse();
-  void OnShowDisambiguationPopup(const gfx::Rect& rect_pixels,
-                                 const gfx::Size& size,
-                                 base::SharedMemoryHandle handle);
   void OnSelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params);
   void OnSetNeedsBeginFrames(bool needs_begin_frames);
@@ -890,6 +884,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // was noticed because of input event ack timeout.
   void RestartInputEventAckTimeoutIfNecessary();
 
+  // Called by |input_event_ack_timeout_| when an input event timed out without
+  // getting an ack from the renderer.
+  void OnInputEventAckTimeout();
+
   void SetupInputRouter();
 
   // Start intercepting system keyboard events.
@@ -951,6 +949,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // is depth 1, ie just below the root widget.
   unsigned int frame_depth_ = 1u;
 
+  // Indicates that widget has a frame that intersects with the viewport. Note
+  // this is independent of |is_hidden_|. For widgets not associated with
+  // RenderFrame/View, assume false.
+  bool intersects_viewport_ = false;
+
 #if defined(OS_ANDROID)
   // Tracks the current importance of widget.
   ChildProcessImportance importance_ = ChildProcessImportance::NORMAL;
@@ -983,11 +986,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   std::vector<MouseEventCallback> mouse_event_callbacks_;
 
   // Input event callbacks.
-  base::ObserverList<RenderWidgetHost::InputEventObserver>
+  base::ObserverList<RenderWidgetHost::InputEventObserver>::Unchecked
       input_event_observers_;
 
   // The observers watching us.
-  base::ObserverList<RenderWidgetHostObserver> observers_;
+  base::ObserverList<RenderWidgetHostObserver>::Unchecked observers_;
 
   // If true, then we should repaint when restoring even if we have a
   // backingstore.  This flag is set to true if we receive a paint message
@@ -1008,9 +1011,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Used for UMA histogram logging to measure the time for a repaint view
   // operation to finish.
   base::TimeTicks repaint_start_time_;
-
-  // Set to true if we shouldn't send input events from the render widget.
-  bool ignore_input_events_;
 
   // Set when we update the text direction of the selected input element.
   bool text_direction_updated_;

@@ -74,8 +74,7 @@ class CORE_EXPORT WebDevToolsAgentImpl final
 
   void WillBeDestroyed();
   void FlushProtocolNotifications();
-  void PaintOverlay();
-  void LayoutOverlay();
+  void UpdateOverlays();
   bool HandleInputEvent(const WebInputEvent&);
   void DispatchBufferedTouchEvents();
   void BindRequest(mojom::blink::DevToolsAgentAssociatedRequest);
@@ -100,7 +99,7 @@ class CORE_EXPORT WebDevToolsAgentImpl final
       mojom::blink::DevToolsSessionHostAssociatedPtrInfo,
       mojom::blink::DevToolsSessionAssociatedRequest main_session,
       mojom::blink::DevToolsSessionRequest io_session,
-      const String& reattach_state) override;
+      mojom::blink::DevToolsSessionStatePtr reattach_session_state) override;
   void InspectElement(const WebPoint& point_in_local_root) override;
 
   // InspectorPageAgent::Client implementation.

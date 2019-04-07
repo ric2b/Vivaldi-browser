@@ -10,6 +10,8 @@
 #include "base/callback_helpers.h"
 #include "base/callback_internal.h"
 #include "base/memory/ref_counted.h"
+#include "base/test/test_timeouts.h"
+#include "base/threading/thread.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -29,8 +31,15 @@ struct FakeBindState : internal::BindStateBase {
   static void Destroy(const internal::BindStateBase* self) {
     delete static_cast<const FakeBindState*>(self);
   }
-  static bool IsCancelled(const internal::BindStateBase*) {
-    return false;
+  static bool IsCancelled(const internal::BindStateBase*,
+                          internal::BindStateBase::CancellationQueryMode mode) {
+    switch (mode) {
+      case internal::BindStateBase::IS_CANCELLED:
+        return false;
+      case internal::BindStateBase::MAYBE_VALID:
+        return true;
+    }
+    NOTREACHED();
   }
 };
 
@@ -152,10 +161,69 @@ TEST_F(CallbackTest, NullAfterMoveRun) {
   ASSERT_FALSE(cb3);
 }
 
+TEST_F(CallbackTest, MaybeValidReturnsTrue) {
+  Callback<void()> cb(BindRepeating([]() {}));
+  // By default, MaybeValid() just returns true all the time.
+  EXPECT_TRUE(cb.MaybeValid());
+  cb.Run();
+  EXPECT_TRUE(cb.MaybeValid());
+}
+
+// WeakPtr detection in BindRepeating() requires a method, not just any
+// function.
+class ClassWithAMethod {
+ public:
+  void TheMethod() {}
+};
+
+TEST_F(CallbackTest, MaybeValidInvalidateWeakPtrsOnSameSequence) {
+  ClassWithAMethod obj;
+  WeakPtrFactory<ClassWithAMethod> factory(&obj);
+  WeakPtr<ClassWithAMethod> ptr = factory.GetWeakPtr();
+
+  Callback<void()> cb(BindRepeating(&ClassWithAMethod::TheMethod, ptr));
+  EXPECT_TRUE(cb.MaybeValid());
+
+  factory.InvalidateWeakPtrs();
+  // MaybeValid() should be false because InvalidateWeakPtrs() was called on
+  // the same thread.
+  EXPECT_FALSE(cb.MaybeValid());
+}
+
+TEST_F(CallbackTest, MaybeValidInvalidateWeakPtrsOnOtherSequence) {
+  ClassWithAMethod obj;
+  WeakPtrFactory<ClassWithAMethod> factory(&obj);
+  WeakPtr<ClassWithAMethod> ptr = factory.GetWeakPtr();
+
+  Callback<void()> cb(BindRepeating(&ClassWithAMethod::TheMethod, ptr));
+  EXPECT_TRUE(cb.MaybeValid());
+
+  Thread other_thread("other_thread");
+  other_thread.StartAndWaitForTesting();
+  other_thread.task_runner()->PostTask(
+      FROM_HERE,
+      BindOnce(
+          [](Callback<void()> cb) {
+            // Check that MaybeValid() _eventually_ returns false.
+            const TimeDelta timeout = TestTimeouts::tiny_timeout();
+            const TimeTicks begin = TimeTicks::Now();
+            while (cb.MaybeValid() && (TimeTicks::Now() - begin) < timeout)
+              PlatformThread::YieldCurrentThread();
+            EXPECT_FALSE(cb.MaybeValid());
+          },
+          cb));
+  factory.InvalidateWeakPtrs();
+  // |other_thread|'s destructor will join, ensuring we wait for the task to be
+  // run.
+}
+
 class CallbackOwner : public base::RefCounted<CallbackOwner> {
  public:
   explicit CallbackOwner(bool* deleted) {
-    callback_ = Bind(&CallbackOwner::Unused, this);
+    // WrapRefCounted() here is needed to avoid the check failure in the Bind
+    // implementation, that refuses to create the first reference to ref-counted
+    // objects.
+    callback_ = Bind(&CallbackOwner::Unused, WrapRefCounted(this));
     deleted_ = deleted;
   }
   void Reset() {

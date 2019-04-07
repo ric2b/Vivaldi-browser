@@ -15,6 +15,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.preference.Preference;
+import android.support.graphics.drawable.VectorDrawableCompat;
 import android.support.v7.app.AlertDialog;
 import android.text.format.DateUtils;
 import android.util.AttributeSet;
@@ -23,6 +24,7 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import org.chromium.base.Callback;
@@ -31,10 +33,13 @@ import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
+import org.chromium.chrome.browser.util.ConversionUtils;
 import org.chromium.chrome.browser.util.FileSizeUtil;
 import org.chromium.third_party.android.datausagechart.ChartDataUsageView;
 import org.chromium.third_party.android.datausagechart.NetworkStats;
 import org.chromium.third_party.android.datausagechart.NetworkStatsHistory;
+import org.chromium.ui.widget.RectProvider;
+import org.chromium.ui.widget.ViewRectProvider;
 
 import java.util.List;
 import java.util.TimeZone;
@@ -51,11 +56,19 @@ public class DataReductionStatsPreference extends Preference {
      */
     private static final String PREF_DATA_REDUCTION_SITE_BREAKDOWN_ALLOWED_DATE =
             "data_reduction_site_breakdown_allowed_date";
+    /**
+     * The threshold at which to start showing real data usage and savings, in
+     * kilobytes.
+     */
+    private static final long SHOW_REAL_DATA_USED_KB_THRESHOLD = 100;
 
     private NetworkStatsHistory mOriginalNetworkStatsHistory;
     private NetworkStatsHistory mReceivedNetworkStatsHistory;
     private List<DataReductionDataUseItem> mSiteBreakdownItems;
 
+    private ViewRectProvider mDataReductionStatsPreferenceViewRectProvider;
+    private LinearLayout mDataReductionStatsContainer;
+    private TextView mInitialDataSavingsTextView;
     private TextView mDataSavingsTextView;
     private TextView mDataUsageTextView;
     private TextView mStartDateTextView;
@@ -63,6 +76,7 @@ public class DataReductionStatsPreference extends Preference {
     private Button mResetStatisticsButton;
     private ChartDataUsageView mChartDataUsageView;
     private DataReductionSiteBreakdownView mDataReductionBreakdownView;
+    private boolean mShouldShowRealData;
     private boolean mIsFirstDayChart;
     /** Number of days that the chart will present. */
     private int mNumDaysInChart;
@@ -155,6 +169,10 @@ public class DataReductionStatsPreference extends Preference {
         mOriginalNetworkStatsHistory = getNetworkStatsHistory(original, mNumDaysInChart);
         mReceivedNetworkStatsHistory = getNetworkStatsHistory(received, mNumDaysInChart);
 
+        mShouldShowRealData =
+                ConversionUtils.bytesToKilobytes(mReceivedNetworkStatsHistory.getTotalBytes())
+                >= SHOW_REAL_DATA_USED_KB_THRESHOLD;
+
         // Determine the visible start and end points based on the available data and when it was
         // last updated.
         mVisibleStartTimeMillis = mOriginalNetworkStatsHistory.getStart()
@@ -163,7 +181,7 @@ public class DataReductionStatsPreference extends Preference {
         mVisibleEndTimeMillis = mOriginalNetworkStatsHistory.getEnd()
                 + numDaysSinceStatsUpdated.intValue() * DateUtils.DAY_IN_MILLIS;
 
-        if (mDataReductionBreakdownView != null
+        if (mShouldShowRealData && mDataReductionBreakdownView != null
                 && currentTimeMillis > ContextUtils.getAppSharedPreferences().getLong(
                                                PREF_DATA_REDUCTION_SITE_BREAKDOWN_ALLOWED_DATE,
                                                Long.MAX_VALUE)) {
@@ -172,6 +190,7 @@ public class DataReductionStatsPreference extends Preference {
                         @Override
                         public void onResult(List<DataReductionDataUseItem> result) {
                             mSiteBreakdownItems = result;
+
                             mDataReductionBreakdownView.setAndDisplayDataUseItems(
                                     mSiteBreakdownItems);
                         }
@@ -186,6 +205,11 @@ public class DataReductionStatsPreference extends Preference {
     @VisibleForTesting
     int getNumDaysInChart() {
         return mNumDaysInChart;
+    }
+
+    @VisibleForTesting
+    boolean shouldShowRealData() {
+        return mShouldShowRealData;
     }
 
     private static NetworkStatsHistory getNetworkStatsHistory(long[] history, int days) {
@@ -205,17 +229,30 @@ public class DataReductionStatsPreference extends Preference {
         return networkStatsHistory;
     }
 
-    private void setDetailText() {
+    private void updateDetailView() {
         final Context context = getContext();
-        updateDetailData();
-        mStartDateTextView.setText(mStartDatePhrase);
-        mStartDateTextView.setContentDescription(context.getString(
-                R.string.data_reduction_start_date_content_description, mStartDatePhrase));
-        mEndDateTextView.setText(mEndDatePhrase);
-        mEndDateTextView.setContentDescription(context.getString(
-                R.string.data_reduction_end_date_content_description, mEndDatePhrase));
-        if (mDataUsageTextView != null) mDataUsageTextView.setText(mReceivedTotalPhrase);
-        if (mDataSavingsTextView != null) mDataSavingsTextView.setText(mSavingsTotalPhrase);
+
+        // updateDetailData also updates some UMA based on the actual data shown, so only update it
+        // if we are actually showing the chart.
+        if (mShouldShowRealData) updateDetailData();
+
+        mInitialDataSavingsTextView.setVisibility(mShouldShowRealData ? View.GONE : View.VISIBLE);
+        mDataReductionStatsContainer.setVisibility(mShouldShowRealData ? View.VISIBLE : View.GONE);
+
+        mStartDateTextView.setText(mShouldShowRealData ? mStartDatePhrase : "");
+        mStartDateTextView.setContentDescription(mShouldShowRealData
+                        ? context.getString(R.string.data_reduction_start_date_content_description,
+                                  mStartDatePhrase)
+                        : "");
+        mEndDateTextView.setText(mShouldShowRealData ? mEndDatePhrase : "");
+        mEndDateTextView.setContentDescription(mShouldShowRealData
+                        ? context.getString(R.string.data_reduction_end_date_content_description,
+                                  mEndDatePhrase)
+                        : "");
+        if (mDataUsageTextView != null)
+            mDataUsageTextView.setText(mShouldShowRealData ? mReceivedTotalPhrase : "");
+        if (mDataSavingsTextView != null)
+            mDataSavingsTextView.setText(mShouldShowRealData ? mSavingsTotalPhrase : "");
     }
 
     /**
@@ -228,12 +265,47 @@ public class DataReductionStatsPreference extends Preference {
     }
 
     /**
+     * Initializes a view rect observer to listen for when the bounds of the view has changed, so we
+     * can update the minimum height of the view accordingly.
+     *
+     * @param view The view to listen for bounds changes on.
+     */
+    private void initializeViewBounds(final View view) {
+        if (mDataReductionStatsPreferenceViewRectProvider != null) {
+            mDataReductionStatsPreferenceViewRectProvider.stopObserving();
+        }
+        mDataReductionStatsPreferenceViewRectProvider = new ViewRectProvider(view);
+        mDataReductionStatsPreferenceViewRectProvider.startObserving(new RectProvider.Observer() {
+            @Override
+            public void onRectChanged() {
+                int screenHeight = getContext().getResources().getDisplayMetrics().heightPixels;
+                int offset = mDataReductionStatsPreferenceViewRectProvider.getRect().top;
+                view.setMinimumHeight(screenHeight - offset);
+            }
+
+            @Override
+            public void onRectHidden() {}
+        });
+    }
+
+    /**
      * Sets up a data usage chart and text views containing data reduction statistics.
      * @param view The current view.
      */
     @Override
     protected void onBindView(View view) {
         super.onBindView(view);
+
+        initializeViewBounds(view);
+
+        mInitialDataSavingsTextView = (TextView) view.findViewById(R.id.initial_data_savings);
+        mInitialDataSavingsTextView.setCompoundDrawablesWithIntrinsicBounds(null,
+                VectorDrawableCompat.create(getContext().getResources(),
+                        R.drawable.data_reduction_big, getContext().getTheme()),
+                null, null);
+
+        mDataReductionStatsContainer =
+                (LinearLayout) view.findViewById(R.id.data_reduction_stats_container);
         mDataUsageTextView = (TextView) view.findViewById(R.id.data_reduction_usage);
         mDataSavingsTextView = (TextView) view.findViewById(R.id.data_reduction_savings);
         mStartDateTextView = (TextView) view.findViewById(R.id.data_reduction_start_date);
@@ -245,10 +317,9 @@ public class DataReductionStatsPreference extends Preference {
             // This will query data usage. Only set mSiteBreakdownItems if the statistics are not
             // being queried.
             updateReductionStatistics(System.currentTimeMillis());
-        } else if (mSiteBreakdownItems != null) {
+        } else if (mSiteBreakdownItems != null && mShouldShowRealData) {
             mDataReductionBreakdownView.setAndDisplayDataUseItems(mSiteBreakdownItems);
         }
-        setDetailText();
 
         mChartDataUsageView = (ChartDataUsageView) view.findViewById(R.id.chart);
         mChartDataUsageView.bindNetworkStats(
@@ -264,6 +335,8 @@ public class DataReductionStatsPreference extends Preference {
         if (mResetStatisticsButton != null) {
             setUpResetStatisticsButton();
         }
+
+        updateDetailView();
     }
 
     private void setUpResetStatisticsButton() {
@@ -292,7 +365,7 @@ public class DataReductionStatsPreference extends Preference {
                                     DataReductionProxySavingsClearedReason
                                             .USER_ACTION_SETTINGS_MENU);
                             updateReductionStatistics(now);
-                            setDetailText();
+                            updateDetailView();
                             notifyChanged();
                             DataReductionProxyUma.dataReductionProxyUIAction(
                                     DataReductionProxyUma.ACTION_STATS_RESET);

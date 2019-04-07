@@ -39,28 +39,27 @@ int FakeSyncService::GetDisableReasons() const {
   return DISABLE_REASON_PLATFORM_OVERRIDE;
 }
 
-syncer::SyncService::State FakeSyncService::GetState() const {
+syncer::SyncService::TransportState FakeSyncService::GetTransportState() const {
   // This is a temporary partial copy of the real implementation in
   // ProfileSyncService, containing only the things that exist in the
   // FakeSyncService. If subclasses override some of the individual getters,
   // this should still return a reasonable result.
   if (GetDisableReasons() != DISABLE_REASON_NONE) {
-    return State::DISABLED;
+    return TransportState::DISABLED;
   }
   // From this point on, Sync can start in principle.
   DCHECK(CanSyncStart());
-  // Note: We don't distinguish here if the engine doesn't exist at all, or
-  // exists but hasn't finished initializing.
-  if (!IsEngineInitialized()) {
-    return State::INITIALIZING;
-  }
   if (!IsFirstSetupComplete()) {
-    return State::PENDING_DESIRED_CONFIGURATION;
+    return TransportState::PENDING_DESIRED_CONFIGURATION;
   }
   if (!configuration_done_) {
-    return State::CONFIGURING;
+    return TransportState::CONFIGURING;
   }
-  return State::ACTIVE;
+  return TransportState::ACTIVE;
+}
+
+bool FakeSyncService::IsAuthenticatedAccountPrimary() const {
+  return true;
 }
 
 bool FakeSyncService::IsFirstSetupComplete() const {
@@ -104,10 +103,6 @@ void FakeSyncService::OnUserChoseDatatypes(bool sync_everything,
 
 void FakeSyncService::SetFirstSetupComplete() {}
 
-bool FakeSyncService::IsFirstSetupInProgress() const {
-  return false;
-}
-
 std::unique_ptr<SyncSetupInProgressHandle>
 FakeSyncService::GetSetupInProgressHandle() {
   return nullptr;
@@ -119,10 +114,6 @@ bool FakeSyncService::IsSetupInProgress() const {
 
 const GoogleServiceAuthError& FakeSyncService::GetAuthError() const {
   return error_;
-}
-
-bool FakeSyncService::IsEngineInitialized() const {
-  return false;
 }
 
 sync_sessions::OpenTabsUIDelegate* FakeSyncService::GetOpenTabsUIDelegate() {
@@ -173,7 +164,7 @@ syncer::SyncTokenStatus FakeSyncService::GetSyncTokenStatus() const {
   return syncer::SyncTokenStatus();
 }
 
-bool FakeSyncService::QueryDetailedSyncStatus(SyncStatus* result) {
+bool FakeSyncService::QueryDetailedSyncStatus(SyncStatus* result) const {
   return false;
 }
 

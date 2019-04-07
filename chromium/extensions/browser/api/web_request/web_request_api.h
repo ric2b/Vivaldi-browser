@@ -73,7 +73,8 @@ class WebRequestRulesRegistry;
 // extensions::EventRouter to deal with event listeners. There is one instance
 // per BrowserContext which is shared with incognito.
 class WebRequestAPI : public BrowserContextKeyedAPI,
-                      public EventRouter::Observer {
+                      public EventRouter::Observer,
+                      public ExtensionRegistryObserver {
  public:
   // A callback used to asynchronously respond to an intercepted authentication
   // request when the Network Service is enabled. If |should_cancel| is true
@@ -100,26 +101,21 @@ class WebRequestAPI : public BrowserContextKeyedAPI,
   };
 
   // A ProxySet is a set of proxies used by WebRequestAPI: It holds Proxy
-  // instances, and removes all proxies when the WebRequestAPI instance is
-  // gone, on the IO thread.
-  // This proxy set is created on the UI thread but anything else other than
-  // AddRef() and Release() including destruction will be done in the IO thread.
-  class ProxySet : public base::RefCountedThreadSafe<
-                       ProxySet,
-                       content::BrowserThread::DeleteOnIOThread> {
+  // instances, and removes all proxies when the ResourceContext it is bound to
+  // is destroyed.
+  class ProxySet : public base::SupportsUserData::Data {
    public:
     ProxySet();
+    ~ProxySet() override;
 
-    // Add a Proxy. This can be called only when |is_shutdown()| is false.
+    // Gets or creates a ProxySet from the given ResourceContext.
+    static ProxySet* GetFromResourceContext(
+        content::ResourceContext* resource_context);
+
+    // Add a Proxy.
     void AddProxy(std::unique_ptr<Proxy> proxy);
     // Remove a Proxy. The removed proxy is deleted upon this call.
     void RemoveProxy(Proxy* proxy);
-    // Set is_shutdown_ and deletes app proxies.
-    void Shutdown();
-    bool is_shutdown() const {
-      DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-      return is_shutdown_;
-    }
 
     // Associates |proxy| with |id|. |proxy| must already be registered within
     // this ProxySet.
@@ -128,6 +124,11 @@ class WebRequestAPI : public BrowserContextKeyedAPI,
     // request identified by |id| must be associated with only a single proxy.
     void AssociateProxyWithRequestId(Proxy* proxy,
                                      const content::GlobalRequestID& id);
+
+    // Disassociates |proxy| with |id|. |proxy| must already be registered
+    // within this ProxySet.
+    void DisassociateProxyWithRequestId(Proxy* proxy,
+                                        const content::GlobalRequestID& id);
 
     Proxy* GetProxyFromRequestId(const content::GlobalRequestID& id);
 
@@ -138,17 +139,10 @@ class WebRequestAPI : public BrowserContextKeyedAPI,
         AuthRequestCallback callback);
 
    private:
-    friend struct content::BrowserThread::DeleteOnThread<
-        content::BrowserThread::IO>;
-    friend class base::DeleteHelper<ProxySet>;
-
-    ~ProxySet();
-
     // Although these members are initialized on the UI thread, we expect at
     // least one memory barrier before actually calling Generate in the IO
     // thread, so we don't protect them with a lock.
     std::set<std::unique_ptr<Proxy>, base::UniquePtrComparator> proxies_;
-    bool is_shutdown_ = false;
 
     // Bi-directional mapping between request ID and Proxy for faster lookup.
     std::map<content::GlobalRequestID, Proxy*> request_id_to_proxy_map_;
@@ -186,7 +180,6 @@ class WebRequestAPI : public BrowserContextKeyedAPI,
   void Shutdown() override;
 
   // EventRouter::Observer overrides:
-  void OnListenerAdded(const EventListenerInfo& details) override;
   void OnListenerRemoved(const EventListenerInfo& details) override;
 
   // If any WebRequest event listeners are currently active for this
@@ -224,6 +217,8 @@ class WebRequestAPI : public BrowserContextKeyedAPI,
       network::mojom::WebSocketRequest* request,
       network::mojom::AuthenticationHandlerPtr* auth_handler);
 
+  void ForceProxyForTesting();
+
  private:
   friend class BrowserContextKeyedAPIFactory<WebRequestAPI>;
 
@@ -236,17 +231,29 @@ class WebRequestAPI : public BrowserContextKeyedAPI,
   // installed to support the API with Network Service enabled.
   bool MayHaveProxies() const;
 
-  // A count of active event listeners registered in this BrowserContext. This
-  // is eventually consistent with the state of
-  int listener_count_ = 0;
+  // Checks if |MayHaveProxies()| has changed from false to true, and resets
+  // URLLoaderFactories if so.
+  void UpdateMayHaveProxies();
+
+  // ExtensionRegistryObserver implementation.
+  void OnExtensionLoaded(content::BrowserContext* browser_context,
+                         const Extension* extension) override;
+  void OnExtensionUnloaded(content::BrowserContext* browser_context,
+                           const Extension* extension,
+                           UnloadedExtensionReason reason) override;
+
+  // A count of active extensions for this BrowserContext that use web request
+  // permissions.
+  int web_request_extension_count_ = 0;
 
   content::BrowserContext* const browser_context_;
   InfoMap* const info_map_;
 
-  // Active proxies. Only used when the Network Service is enabled.
-  scoped_refptr<ProxySet> proxies_;
-
   scoped_refptr<RequestIDGenerator> request_id_generator_;
+
+  // Stores the last result of |MayHaveProxies()|, so it can be used in
+  // |UpdateMayHaveProxies()|.
+  bool may_have_proxies_;
 
   DISALLOW_COPY_AND_ASSIGN(WebRequestAPI);
 };
@@ -258,6 +265,7 @@ class ExtensionWebRequestEventRouter {
  public:
   struct BlockedRequest;
 
+  // The events denoting the lifecycle of a given network request.
   enum EventTypes {
     kInvalidEvent = 0,
     kOnBeforeRequest = 1 << 0,

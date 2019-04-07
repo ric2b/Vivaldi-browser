@@ -5,22 +5,24 @@
 #ifndef CHROME_BROWSER_PRINTING_PRINT_PREVIEW_MESSAGE_HANDLER_H_
 #define CHROME_BROWSER_PRINTING_PRINT_PREVIEW_MESSAGE_HANDLER_H_
 
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/read_only_shared_memory_region.h"
-#include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "components/services/pdf_compositor/public/interfaces/pdf_compositor.mojom.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
 class PrintPreviewUI;
-struct PrintHostMsg_DidGetPreviewPageCount_Params;
 struct PrintHostMsg_DidPreviewDocument_Params;
 struct PrintHostMsg_DidPreviewPage_Params;
+struct PrintHostMsg_DidStartPreview_Params;
 struct PrintHostMsg_PreviewIds;
 struct PrintHostMsg_RequestPrintPreview_Params;
 struct PrintHostMsg_SetOptionsFromDocument_Params;
+
+namespace base {
+class RefCountedMemory;
+}
 
 namespace content {
 class RenderFrameHost;
@@ -47,8 +49,9 @@ class PrintPreviewMessageHandler
                          content::RenderFrameHost* render_frame_host) override;
 
  private:
-  explicit PrintPreviewMessageHandler(content::WebContents* web_contents);
   friend class content::WebContentsUserData<PrintPreviewMessageHandler>;
+
+  explicit PrintPreviewMessageHandler(content::WebContents* web_contents);
 
   // Gets the print preview dialog associated with the WebContents being
   // observed.
@@ -66,9 +69,8 @@ class PrintPreviewMessageHandler
                                  const gfx::Rect& printable_area_in_points,
                                  bool has_custom_page_size_style,
                                  const PrintHostMsg_PreviewIds& ids);
-  void OnDidGetPreviewPageCount(
-      const PrintHostMsg_DidGetPreviewPageCount_Params& params,
-      const PrintHostMsg_PreviewIds& ids);
+  void OnDidStartPreview(const PrintHostMsg_DidStartPreview_Params& params,
+                         const PrintHostMsg_PreviewIds& ids);
   void OnDidPreviewPage(content::RenderFrameHost* render_frame_host,
                         const PrintHostMsg_DidPreviewPage_Params& params,
                         const PrintHostMsg_PreviewIds& ids);

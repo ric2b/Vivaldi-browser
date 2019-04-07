@@ -9,8 +9,8 @@
 
 #include "base/bind_helpers.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/clock.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
@@ -223,15 +223,15 @@ void LogoTracker::OnCachedLogoAvailable(
 
 void LogoTracker::SetCachedLogo(std::unique_ptr<EncodedLogo> logo) {
   cache_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&LogoCache::SetCachedLogo, base::Unretained(logo_cache_.get()),
-                 base::Owned(logo.release())));
+      FROM_HERE, base::BindOnce(&LogoCache::SetCachedLogo,
+                                base::Unretained(logo_cache_.get()),
+                                base::Owned(logo.release())));
 }
 
 void LogoTracker::SetCachedMetadata(const LogoMetadata& metadata) {
   cache_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&LogoCache::UpdateCachedLogoMetadata,
-                            base::Unretained(logo_cache_.get()), metadata));
+      FROM_HERE, base::BindOnce(&LogoCache::UpdateCachedLogoMetadata,
+                                base::Unretained(logo_cache_.get()), metadata));
 }
 
 void LogoTracker::FetchLogo() {

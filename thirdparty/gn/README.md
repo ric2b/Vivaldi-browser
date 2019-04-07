@@ -23,18 +23,20 @@ and `AR`.
 GN uses [Gerrit](https://www.gerritcodereview.com/) for code review. The short
 version of how to patch is:
 
+    Register at https://gn-review.googlesource.com.
+
     ... edit code ...
     ninja -C out && out/gn_unittests
 
 Then, to upload a change for review:
 
     git commit
-    git push origin HEAD:refs/for/master  # This uploads for review.
+    git cl upload --gerrit
 
 When revising a change, use:
 
     git commit --amend
-    git push origin HEAD:refs/for/master
+    git cl upload --gerrit
 
 which will add the new changes to the existing code review, rather than creating
 a new one.

@@ -22,6 +22,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/attestation/attestation_policy_observer.h"
 #include "chrome/browser/chromeos/attestation/enrollment_policy_observer.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_setup_controller.h"
 #include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_store_chromeos.h"
@@ -45,12 +46,9 @@
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/browser_thread.h"
 #include "crypto/sha2.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "url/gurl.h"
-
-using content::BrowserThread;
 
 namespace em = enterprise_management;
 
@@ -112,12 +110,10 @@ DeviceCloudPolicyManagerChromeOS::DeviceCloudPolicyManagerChromeOS(
     std::unique_ptr<DeviceCloudPolicyStoreChromeOS> store,
     const scoped_refptr<base::SequencedTaskRunner>& task_runner,
     ServerBackedStateKeysBroker* state_keys_broker)
-    : CloudPolicyManager(
-          dm_protocol::kChromeDevicePolicyType,
-          std::string(),
-          store.get(),
-          task_runner,
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)),
+    : CloudPolicyManager(dm_protocol::kChromeDevicePolicyType,
+                         std::string(),
+                         store.get(),
+                         task_runner),
       device_store_(std::move(store)),
       state_keys_broker_(state_keys_broker),
       task_runner_(task_runner),
@@ -259,8 +255,7 @@ void DeviceCloudPolicyManagerChromeOS::StartConnection(
     CHECK(signin_profile_forwarding_schema_registry_);
     CreateComponentCloudPolicyService(
         dm_protocol::kChromeSigninExtensionPolicyType,
-        component_policy_cache_dir, g_browser_process->system_request_context(),
-        client_to_connect.get(),
+        component_policy_cache_dir, client_to_connect.get(),
         signin_profile_forwarding_schema_registry_.get());
   }
 
@@ -338,6 +333,9 @@ void DeviceCloudPolicyManagerChromeOS::InitializeRequisition() {
   if (chromeos::StartupUtils::IsOobeCompleted())
     return;
 
+  // Demo requisition may have been set in a prior enrollment attempt that was
+  // interrupted.
+  chromeos::DemoSetupController::ClearDemoRequisition(this);
   const PrefService::Preference* pref = local_state_->FindPreference(
       prefs::kDeviceEnrollmentRequisition);
   if (pref->IsDefaultValue()) {

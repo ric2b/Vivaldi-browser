@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
@@ -17,7 +19,7 @@
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/appcache/appcache_storage.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "storage/common/storage_histograms.h"
@@ -29,20 +31,19 @@ namespace {
 // Disk cache entry data indices.
 enum { kResponseInfoIndex, kResponseContentIndex, kResponseMetadataIndex };
 
-// An IOBuffer that wraps a pickle's data. Ownership of the
-// pickle is transfered to the WrappedPickleIOBuffer object.
+// An IOBuffer that wraps a pickle's data.
 class WrappedPickleIOBuffer : public net::WrappedIOBuffer {
  public:
-  explicit WrappedPickleIOBuffer(const base::Pickle* pickle)
+  explicit WrappedPickleIOBuffer(std::unique_ptr<const base::Pickle> pickle)
       : net::WrappedIOBuffer(reinterpret_cast<const char*>(pickle->data())),
-        pickle_(pickle) {
-    DCHECK(pickle->data());
+        pickle_(std::move(pickle)) {
+    DCHECK(pickle_->data());
   }
 
  private:
-  ~WrappedPickleIOBuffer() override {}
+  ~WrappedPickleIOBuffer() override = default;
 
-  std::unique_ptr<const base::Pickle> pickle_;
+  const std::unique_ptr<const base::Pickle> pickle_;
 };
 
 }  // anon namespace
@@ -50,17 +51,18 @@ class WrappedPickleIOBuffer : public net::WrappedIOBuffer {
 
 // AppCacheResponseInfo ----------------------------------------------
 
-AppCacheResponseInfo::AppCacheResponseInfo(AppCacheStorage* storage,
-                                           const GURL& manifest_url,
-                                           int64_t response_id,
-                                           net::HttpResponseInfo* http_info,
-                                           int64_t response_data_size)
+AppCacheResponseInfo::AppCacheResponseInfo(
+    AppCacheStorage* storage,
+    const GURL& manifest_url,
+    int64_t response_id,
+    std::unique_ptr<net::HttpResponseInfo> http_info,
+    int64_t response_data_size)
     : manifest_url_(manifest_url),
       response_id_(response_id),
-      http_response_info_(http_info),
+      http_response_info_(std::move(http_info)),
       response_data_size_(response_data_size),
       storage_(storage) {
-  DCHECK(http_info);
+  DCHECK(http_response_info_);
   DCHECK(response_id != kAppCacheNoResponseId);
   storage_->working_set()->AddResponseInfo(this);
 }
@@ -74,10 +76,11 @@ AppCacheResponseInfo::~AppCacheResponseInfo() {
 HttpResponseInfoIOBuffer::HttpResponseInfoIOBuffer()
     : response_data_size(kUnkownResponseDataSize) {}
 
-HttpResponseInfoIOBuffer::HttpResponseInfoIOBuffer(net::HttpResponseInfo* info)
-    : http_info(info), response_data_size(kUnkownResponseDataSize) {}
+HttpResponseInfoIOBuffer::HttpResponseInfoIOBuffer(
+    std::unique_ptr<net::HttpResponseInfo> info)
+    : http_info(std::move(info)), response_data_size(kUnkownResponseDataSize) {}
 
-HttpResponseInfoIOBuffer::~HttpResponseInfoIOBuffer() {}
+HttpResponseInfoIOBuffer::~HttpResponseInfoIOBuffer() = default;
 
 // AppCacheDiskCacheInterface ----------------------------------------
 
@@ -95,12 +98,11 @@ AppCacheDiskCacheInterface::~AppCacheDiskCacheInterface() {}
 
 AppCacheResponseIO::AppCacheResponseIO(
     int64_t response_id,
-    const base::WeakPtr<AppCacheDiskCacheInterface>& disk_cache)
+    base::WeakPtr<AppCacheDiskCacheInterface> disk_cache)
     : response_id_(response_id),
-      disk_cache_(disk_cache),
+      disk_cache_(std::move(disk_cache)),
       entry_(nullptr),
-      buffer_len_(0),
-      weak_factory_(this) {}
+      buffer_len_(0) {}
 
 AppCacheResponseIO::~AppCacheResponseIO() {
   if (entry_)
@@ -109,8 +111,8 @@ AppCacheResponseIO::~AppCacheResponseIO() {
 
 void AppCacheResponseIO::ScheduleIOCompletionCallback(int result) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(&AppCacheResponseIO::OnIOComplete,
-                                weak_factory_.GetWeakPtr(), result));
+      FROM_HERE,
+      base::BindOnce(&AppCacheResponseIO::OnIOComplete, GetWeakPtr(), result));
 }
 
 void AppCacheResponseIO::InvokeUserCompletionCallback(int result) {
@@ -128,8 +130,7 @@ void AppCacheResponseIO::ReadRaw(int index, int offset,
   DCHECK(entry_);
   int rv = entry_->Read(
       index, offset, buf, buf_len,
-      base::Bind(&AppCacheResponseIO::OnRawIOComplete,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&AppCacheResponseIO::OnRawIOComplete, GetWeakPtr()));
   if (rv != net::ERR_IO_PENDING)
     ScheduleIOCompletionCallback(rv);
 }
@@ -139,8 +140,7 @@ void AppCacheResponseIO::WriteRaw(int index, int offset,
   DCHECK(entry_);
   int rv = entry_->Write(
       index, offset, buf, buf_len,
-      base::Bind(&AppCacheResponseIO::OnRawIOComplete,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&AppCacheResponseIO::OnRawIOComplete, GetWeakPtr()));
   if (rv != net::ERR_IO_PENDING)
     ScheduleIOCompletionCallback(rv);
 }
@@ -159,28 +159,34 @@ void AppCacheResponseIO::OpenEntryIfNeeded() {
     rv = net::ERR_FAILED;
   } else {
     entry_ptr = new AppCacheDiskCacheInterface::Entry*;
-    open_callback_ =
-        base::Bind(&AppCacheResponseIO::OpenEntryCallback,
-                   weak_factory_.GetWeakPtr(), base::Owned(entry_ptr));
-    rv = disk_cache_->OpenEntry(response_id_, entry_ptr, open_callback_);
+    rv = disk_cache_->OpenEntry(
+        response_id_, entry_ptr,
+        base::BindOnce(&AppCacheResponseIO::OpenEntryCallback, GetWeakPtr(),
+                       entry_ptr));
   }
 
   if (rv != net::ERR_IO_PENDING)
-    OpenEntryCallback(entry_ptr, rv);
+    OpenEntryCallback(GetWeakPtr(), entry_ptr, rv);
 }
 
+// static
 void AppCacheResponseIO::OpenEntryCallback(
-    AppCacheDiskCacheInterface::Entry** entry, int rv) {
-  DCHECK(info_buffer_.get() || buffer_.get());
-
-  if (!open_callback_.is_null()) {
-    if (rv == net::OK) {
-      DCHECK(entry);
-      entry_ = *entry;
-    }
-    open_callback_.Reset();
+    base::WeakPtr<AppCacheResponseIO> response,
+    AppCacheDiskCacheInterface::Entry** entry,
+    int rv) {
+  if (!response) {
+    delete entry;
+    return;
   }
-  OnOpenEntryComplete();
+
+  DCHECK(response->info_buffer_.get() || response->buffer_.get());
+
+  if (!response->entry_ && rv == net::OK) {
+    DCHECK(entry);
+    response->entry_ = *entry;
+  }
+  delete entry;
+  response->OnOpenEntryComplete();
 }
 
 
@@ -188,16 +194,15 @@ void AppCacheResponseIO::OpenEntryCallback(
 
 AppCacheResponseReader::AppCacheResponseReader(
     int64_t response_id,
-    const base::WeakPtr<AppCacheDiskCacheInterface>& disk_cache)
-    : AppCacheResponseIO(response_id, disk_cache),
+    base::WeakPtr<AppCacheDiskCacheInterface> disk_cache)
+    : AppCacheResponseIO(response_id, std::move(disk_cache)),
       range_offset_(0),
       range_length_(std::numeric_limits<int32_t>::max()),
       read_position_(0),
       reading_metadata_size_(0),
       weak_factory_(this) {}
 
-AppCacheResponseReader::~AppCacheResponseReader() {
-}
+AppCacheResponseReader::~AppCacheResponseReader() = default;
 
 void AppCacheResponseReader::ReadInfo(HttpResponseInfoIOBuffer* info_buf,
                                       OnceCompletionCallback callback) {
@@ -312,20 +317,23 @@ void AppCacheResponseReader::OnOpenEntryComplete() {
     ContinueReadData();
 }
 
+base::WeakPtr<AppCacheResponseIO> AppCacheResponseReader::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
 // AppCacheResponseWriter ----------------------------------------------
 
 AppCacheResponseWriter::AppCacheResponseWriter(
     int64_t response_id,
-    const base::WeakPtr<AppCacheDiskCacheInterface>& disk_cache)
-    : AppCacheResponseIO(response_id, disk_cache),
+    base::WeakPtr<AppCacheDiskCacheInterface> disk_cache)
+    : AppCacheResponseIO(response_id, std::move(disk_cache)),
       info_size_(0),
       write_position_(0),
       write_amount_(0),
       creation_phase_(INITIAL_ATTEMPT),
       weak_factory_(this) {}
 
-AppCacheResponseWriter::~AppCacheResponseWriter() {
-}
+AppCacheResponseWriter::~AppCacheResponseWriter() = default;
 
 void AppCacheResponseWriter::WriteInfo(HttpResponseInfoIOBuffer* info_buf,
                                        OnceCompletionCallback callback) {
@@ -350,10 +358,11 @@ void AppCacheResponseWriter::ContinueWriteInfo() {
 
   const bool kSkipTransientHeaders = true;
   const bool kTruncated = false;
-  base::Pickle* pickle = new base::Pickle;
-  info_buffer_->http_info->Persist(pickle, kSkipTransientHeaders, kTruncated);
+  std::unique_ptr<base::Pickle> pickle = std::make_unique<base::Pickle>();
+  info_buffer_->http_info->Persist(pickle.get(), kSkipTransientHeaders,
+                                   kTruncated);
   write_amount_ = static_cast<int>(pickle->size());
-  buffer_ = new WrappedPickleIOBuffer(pickle);  // takes ownership of pickle
+  buffer_ = base::MakeRefCounted<WrappedPickleIOBuffer>(std::move(pickle));
   WriteRaw(kResponseInfoIndex, 0, buffer_.get(), write_amount_);
 }
 
@@ -408,73 +417,94 @@ void AppCacheResponseWriter::CreateEntryIfNeededAndContinue() {
   } else {
     creation_phase_ = INITIAL_ATTEMPT;
     entry_ptr = new AppCacheDiskCacheInterface::Entry*;
-    create_callback_ =
-        base::Bind(&AppCacheResponseWriter::OnCreateEntryComplete,
-                   weak_factory_.GetWeakPtr(), base::Owned(entry_ptr));
-    rv = disk_cache_->CreateEntry(response_id_, entry_ptr, create_callback_);
+    rv = disk_cache_->CreateEntry(
+        response_id_, entry_ptr,
+        base::BindOnce(&AppCacheResponseWriter::OnCreateEntryComplete,
+                       weak_factory_.GetWeakPtr(), entry_ptr));
   }
   if (rv != net::ERR_IO_PENDING)
-    OnCreateEntryComplete(entry_ptr, rv);
+    OnCreateEntryComplete(weak_factory_.GetWeakPtr(), entry_ptr, rv);
 }
 
+// static
 void AppCacheResponseWriter::OnCreateEntryComplete(
-    AppCacheDiskCacheInterface::Entry** entry, int rv) {
-  DCHECK(info_buffer_.get() || buffer_.get());
-
-  if (!disk_cache_) {
-    ScheduleIOCompletionCallback(net::ERR_FAILED);
+    base::WeakPtr<AppCacheResponseWriter> writer,
+    AppCacheDiskCacheInterface::Entry** entry,
+    int rv) {
+  if (!writer) {
+    if (entry) {
+      delete entry;
+    }
     return;
-  } else if (creation_phase_ == INITIAL_ATTEMPT) {
+  }
+
+  DCHECK(writer->info_buffer_.get() || writer->buffer_.get());
+
+  if (!writer->disk_cache_) {
+    if (entry) {
+      delete entry;
+    }
+    writer->ScheduleIOCompletionCallback(net::ERR_FAILED);
+    return;
+  } else if (writer->creation_phase_ == INITIAL_ATTEMPT) {
     if (rv != net::OK) {
       // We may try to overwrite existing entries.
-      creation_phase_ = DOOM_EXISTING;
-      rv = disk_cache_->DoomEntry(response_id_, create_callback_);
+      delete entry;
+      writer->creation_phase_ = DOOM_EXISTING;
+      rv = writer->disk_cache_->DoomEntry(
+          writer->response_id_,
+          base::BindOnce(&AppCacheResponseWriter::OnCreateEntryComplete, writer,
+                         nullptr));
       if (rv != net::ERR_IO_PENDING)
-        OnCreateEntryComplete(nullptr, rv);
+        OnCreateEntryComplete(writer, nullptr, rv);
       return;
     }
-  } else if (creation_phase_ == DOOM_EXISTING) {
-    creation_phase_ = SECOND_ATTEMPT;
+  } else if (writer->creation_phase_ == DOOM_EXISTING) {
+    DCHECK_EQ(nullptr, entry);
+    writer->creation_phase_ = SECOND_ATTEMPT;
     AppCacheDiskCacheInterface::Entry** entry_ptr =
         new AppCacheDiskCacheInterface::Entry*;
-    create_callback_ =
-        base::Bind(&AppCacheResponseWriter::OnCreateEntryComplete,
-                   weak_factory_.GetWeakPtr(), base::Owned(entry_ptr));
-    rv = disk_cache_->CreateEntry(response_id_, entry_ptr, create_callback_);
+    rv = writer->disk_cache_->CreateEntry(
+        writer->response_id_, entry_ptr,
+        base::BindOnce(&AppCacheResponseWriter::OnCreateEntryComplete, writer,
+                       entry_ptr));
     if (rv != net::ERR_IO_PENDING)
-      OnCreateEntryComplete(entry_ptr, rv);
+      OnCreateEntryComplete(writer, entry_ptr, rv);
     return;
   }
 
-  if (!create_callback_.is_null()) {
-    if (rv == net::OK)
-      entry_ = *entry;
-
-    create_callback_.Reset();
+  if (!writer->entry_ && rv == net::OK) {
+    DCHECK(entry);
+    writer->entry_ = *entry;
   }
 
-  if (info_buffer_.get())
-    ContinueWriteInfo();
+  delete entry;
+
+  if (writer->info_buffer_.get())
+    writer->ContinueWriteInfo();
   else
-    ContinueWriteData();
+    writer->ContinueWriteData();
+}
+
+base::WeakPtr<AppCacheResponseIO> AppCacheResponseWriter::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 // AppCacheResponseMetadataWriter ----------------------------------------------
 
 AppCacheResponseMetadataWriter::AppCacheResponseMetadataWriter(
     int64_t response_id,
-    const base::WeakPtr<AppCacheDiskCacheInterface>& disk_cache)
-    : AppCacheResponseIO(response_id, disk_cache),
+    base::WeakPtr<AppCacheDiskCacheInterface> disk_cache)
+    : AppCacheResponseIO(response_id, std::move(disk_cache)),
       write_amount_(0),
       weak_factory_(this) {}
 
-AppCacheResponseMetadataWriter::~AppCacheResponseMetadataWriter() {
-}
+AppCacheResponseMetadataWriter::~AppCacheResponseMetadataWriter() = default;
 
 void AppCacheResponseMetadataWriter::WriteMetadata(
     net::IOBuffer* buf,
     int buf_len,
-    const net::CompletionCallback& callback) {
+    net::CompletionOnceCallback callback) {
   DCHECK(!callback.is_null());
   DCHECK(!IsIOPending());
   DCHECK(buf);
@@ -483,7 +513,7 @@ void AppCacheResponseMetadataWriter::WriteMetadata(
 
   buffer_ = buf;
   write_amount_ = buf_len;
-  callback_ = callback;  // cleared on completion
+  callback_ = std::move(callback);  // cleared on completion
   OpenEntryIfNeeded();
 }
 
@@ -501,6 +531,10 @@ void AppCacheResponseMetadataWriter::OnIOComplete(int result) {
     storage::RecordBytesWritten(disk_cache_->uma_name(), result);
   InvokeUserCompletionCallback(result);
   // Note: |this| may have been deleted by the completion callback.
+}
+
+base::WeakPtr<AppCacheResponseIO> AppCacheResponseMetadataWriter::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 }  // namespace content

@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_CRONET_STALE_HOST_RESOLVER_H_
 #define COMPONENTS_CRONET_STALE_HOST_RESOLVER_H_
 
+#include <memory>
 #include <unordered_set>
 
 #include "base/time/default_tick_clock.h"
@@ -49,6 +50,10 @@ class StaleHostResolver : public net::HostResolver {
     // If positive, the maximum number of times a stale entry can be used. If
     // zero, there is no limit.
     int max_stale_uses;
+
+    // If network resolution returns ERR_NAME_NOT_RESOLVED, use stale result if
+    // available.
+    bool use_stale_on_name_not_resolved;
   };
 
   // Creates a StaleHostResolver that uses |inner_resolver| for actual
@@ -60,6 +65,12 @@ class StaleHostResolver : public net::HostResolver {
   ~StaleHostResolver() override;
 
   // HostResolver implementation:
+
+  std::unique_ptr<ResolveHostRequest> CreateRequest(
+      const net::HostPortPair& host,
+      const net::NetLogWithSource& net_log,
+      const base::Optional<ResolveHostParameters>& optional_parameters)
+      override;
 
   // Resolves as a regular HostResolver, but if stale data is available and
   // usable (according to the options passed to the constructor), and fresh data

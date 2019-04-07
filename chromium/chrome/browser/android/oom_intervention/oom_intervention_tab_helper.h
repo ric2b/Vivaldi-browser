@@ -38,11 +38,12 @@ class OomInterventionTabHelper
   ~OomInterventionTabHelper() override;
 
   // blink::mojom::OomInterventionHost:
-  void OnHighMemoryUsage(bool intervention_triggered) override;
+  void OnHighMemoryUsage() override;
 
   // InterventionDelegate:
   void AcceptIntervention() override;
   void DeclineIntervention() override;
+  void DeclineInterventionWithReload() override;
   void DeclineInterventionSticky() override;
 
  private:

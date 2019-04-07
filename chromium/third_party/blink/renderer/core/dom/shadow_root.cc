@@ -74,6 +74,7 @@ ShadowRoot::ShadowRoot(Document& document, ShadowRootType type)
       type_(static_cast<unsigned short>(type)),
       registered_with_parent_shadow_root_(false),
       delegates_focus_(false),
+      slotting_(static_cast<unsigned short>(ShadowRootSlotting::kAuto)),
       needs_distribution_recalc_(false),
       unused_(0) {
   if (IsV0())
@@ -111,6 +112,10 @@ Node* ShadowRoot::Clone(Document&, CloneChildrenFlag) const {
   return nullptr;
 }
 
+void ShadowRoot::SetSlotting(ShadowRootSlotting slotting) {
+  slotting_ = static_cast<unsigned short>(slotting);
+}
+
 String ShadowRoot::InnerHTMLAsString() const {
   return CreateMarkup(this, kChildrenOnly);
 }
@@ -129,20 +134,11 @@ void ShadowRoot::SetInnerHTMLFromString(const String& markup,
 
 void ShadowRoot::setInnerHTML(const StringOrTrustedHTML& stringOrHtml,
                               ExceptionState& exception_state) {
-  DCHECK(stringOrHtml.IsString() ||
-         RuntimeEnabledFeatures::TrustedDOMTypesEnabled());
-
-  if (stringOrHtml.IsString() && GetDocument().RequireTrustedTypes()) {
-    exception_state.ThrowTypeError(
-        "This document requires `TrustedHTML` assignment.");
-    return;
+  String html =
+      TrustedHTML::GetString(stringOrHtml, &GetDocument(), exception_state);
+  if (!exception_state.HadException()) {
+    SetInnerHTMLFromString(html, exception_state);
   }
-
-  String html = stringOrHtml.IsString()
-                    ? stringOrHtml.GetAsString()
-                    : stringOrHtml.GetAsTrustedHTML()->toString();
-
-  SetInnerHTMLFromString(html, exception_state);
 }
 
 void ShadowRoot::RecalcStyle(StyleRecalcChange change) {
@@ -186,10 +182,10 @@ void ShadowRoot::DetachLayoutTree(const AttachContext& context) {
 }
 
 Node::InsertionNotificationRequest ShadowRoot::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   DocumentFragment::InsertedInto(insertion_point);
 
-  if (!insertion_point->isConnected())
+  if (!insertion_point.isConnected())
     return kInsertionDone;
 
   if (RuntimeEnabledFeatures::IncrementalShadowDOMEnabled())
@@ -211,15 +207,15 @@ Node::InsertionNotificationRequest ShadowRoot::InsertedInto(
   return kInsertionDone;
 }
 
-void ShadowRoot::RemovedFrom(ContainerNode* insertion_point) {
-  if (insertion_point->isConnected()) {
+void ShadowRoot::RemovedFrom(ContainerNode& insertion_point) {
+  if (insertion_point.isConnected()) {
     if (NeedsSlotAssignmentRecalc())
       GetDocument().GetSlotAssignmentEngine().Disconnected(*this);
     GetDocument().GetStyleEngine().ShadowRootRemovedFromDocument(this);
     if (registered_with_parent_shadow_root_) {
       ShadowRoot* root = host().ContainingShadowRoot();
       if (!root)
-        root = insertion_point->ContainingShadowRoot();
+        root = insertion_point.ContainingShadowRoot();
       if (root)
         root->RemoveChildShadowRoot();
       registered_with_parent_shadow_root_ = false;

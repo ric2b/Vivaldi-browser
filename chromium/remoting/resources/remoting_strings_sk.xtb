@@ -102,11 +102,11 @@ Informácie o ochrane osobných údajov nájdete v Pravidlách ochrany osobných
 <translation id="3171922709365450819">Klient toto zariadenie nepodporuje, pretože vyžaduje overenie prostredníctvom tretej strany.</translation>
 <translation id="3194245623920924351">Vzdialená plocha Chrome</translation>
 <translation id="3197730452537982411">Vzdialená plocha</translation>
+<translation id="3212472844831225214">• Bola pridaná podpora platformy Android 9.0 Pie.</translation>
 <translation id="324272851072175193">Odoslať tieto pokyny e-mailom</translation>
 <translation id="3258789396564295715">K tomuto počítaču môžete bezpečne pristupovať pomocou Vzdialenej plochy Chrome.</translation>
 <translation id="3286521253923406898">Ovládač hostiteľa funkcie Chromoting</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> chce vykonať zmeny.</translation>
-<translation id="331779822864701136">• Bola pridaná podpora platformy Android 8.0 Oreo.</translation>
 <translation id="332624996707057614">Upraviť názov počítača</translation>
 <translation id="3339299787263251426">Pristupujte k svojmu počítaču bezpečne cez internet</translation>
 <translation id="3360306038446926262">Windows</translation>
@@ -122,8 +122,9 @@ Informácie o ochrane osobných údajov nájdete v Pravidlách ochrany osobných
 <translation id="369442766917958684">Offline.</translation>
 <translation id="3695446226812920698">Ako na to</translation>
 <translation id="3718805989288361841">V súvislosti s nastaveniami pravidiel pre Vzdialenú plochu Chrome sa vyskytla chyba. Požiadajte o pomoc správcu systému.</translation>
-<translation id="3759645055923345178">Po dokončení nastavenia budete môcť používať daný počítač prostredníctvom tejto stránky po zadaní kódu PIN alebo prístupového kódu</translation>
 <translation id="3776024066357219166">Vaša relácia Vzdialenej plochy Chrome bola ukončená.</translation>
+<translation id="3846148461359626420">• Lepšie posúvanie zobrazenia a priblíženie/oddialenie v iPhone X.
+• Vylepšenia stability a opravy chýb.</translation>
 <translation id="3870154837782082782">Spoločnosť Google Inc.</translation>
 <translation id="3884839335308961732">Ak chcete povoliť prístup k Vzdialenej ploche Chrome, potvrďte svoj účet a kód PIN nižšie.</translation>
 <translation id="3897092660631435901">Ponuka</translation>
@@ -137,6 +138,7 @@ Informácie o ochrane osobných údajov nájdete v Pravidlách ochrany osobných
 <translation id="405887016757208221">Inicializácia relácie vzdialeným počítačom sa nepodarila. Ak problém pretrváva, skúste opätovne nakonfigurovať hostiteľa.</translation>
 <translation id="4068946408131579958">Všetky pripojenia</translation>
 <translation id="409800995205263688">Poznámka: Nastavenia pravidiel umožňujú pripojenie len medzi počítačmi v rámci vašej siete.</translation>
+<translation id="4126409073460786861">Po dokončení nastavenia túto stránku obnovte a budete môcť používať daný počítač výberom zariadenia alebo zadaním kódu PIN</translation>
 <translation id="4145029455188493639">Prihlásený/-á ako <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Niektoré potrebné komponenty chýbajú. Uistite sa, že máte nainštalovanú najnovšiu verziu príslušného softvéru a skúste to znova.</translation>
 <translation id="4156740505453712750">Ak chcete ochrániť tento počítač pred neautorizovaným prístupom, nastavte si kód PIN obsahujúci <ph name="BOLD_START" />najmenej šesť číslic<ph name="BOLD_END" />. Tento kód PIN budete musieť zadať pri pokuse o pripojenie z iného miesta.</translation>
@@ -145,7 +147,6 @@ Informácie o ochrane osobných údajov nájdete v Pravidlách ochrany osobných
 <translation id="4207623512727273241">Pred pokračovaním spustite inštalátor.</translation>
 <translation id="4227991223508142681">Pomôcka na poskytovanie hostiteľských služieb</translation>
 <translation id="4240294130679914010">Nástroj na odinštalovanie hostiteľa funkcie Chromoting</translation>
-<translation id="4249741460382919890">Všeobecné opravy a vylepšenia stability.</translation>
 <translation id="4277463233460010382">Tento počítač je nakonfigurovaný tak, aby povolil pripojenie jedného alebo viacerých klientov bez zadania kódu PIN.</translation>
 <translation id="4277736576214464567">Prístupový kód je neplatný. Skúste to znova.</translation>
 <translation id="4361728918881830843">Ak chcete povoliť vzdialené pripojenie k inému počítaču, nainštalujte na ňom Vzdialenú plochu Chrome a potom kliknite na tlačidlo <ph name="BUTTON_NAME" />.</translation>
@@ -271,6 +272,7 @@ PC</translation>
 <translation id="6998989275928107238">Komu</translation>
 <translation id="7019153418965365059">Nerozpoznaná chyba hostiteľa: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Pomoc na diaľku</translation>
+<translation id="7026930240735156896">Postupujte podľa pokynov a nastavte v počítači vzdialený prístup</translation>
 <translation id="7038683108611689168">Pomôžte nám zlepšiť aplikáciu Chromoting tým, že nám umožníte zhromažďovať štatistiky používania a správy o zlyhaní.</translation>
 <translation id="7067321367069083429">Obrazovka funguje ako dotyková obrazovka</translation>
 <translation id="7116737094673640201">Predstavujeme Vzdialenú plochu Chrome</translation>
@@ -296,7 +298,6 @@ PC</translation>
 <translation id="7782471917492991422">Skontrolujte nastavenia správy napájania svojho počítača a uistite sa, že nie je nakonfigurovaný prechod do režimu spánku pri nečinnosti.</translation>
 <translation id="7810127880729796595">Zobraziť štatistiky (pripojenie: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Niektoré potrebné komponenty chýbajú. Uistite sa, že používate najnovšiu verziu prehliadača Chrome a skúste to znova.</translation>
-<translation id="7850909060902317210">Nainštalujte si softvér Vzdialená plocha Chrome a dokončite nastavenie podľa uvedených pokynov</translation>
 <translation id="7868137160098754906">Zadajte číslo PIN pre vzdialený počítač.</translation>
 <translation id="7869445566579231750">Nemáte povolenie spustiť túto aplikáciu.</translation>
 <translation id="7895403300744144251">Pravidlá zabezpečenia vzdialeného počítača nepovoľujú pripojenia z vášho účtu.</translation>

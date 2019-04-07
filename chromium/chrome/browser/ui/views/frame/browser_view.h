@@ -99,7 +99,8 @@ class BrowserView : public BrowserWindow,
                     public LoadCompleteListener::Delegate,
                     public ExclusiveAccessContext,
                     public ExclusiveAccessBubbleViewsContext,
-                    public extensions::ExtensionKeybindingRegistry::Delegate {
+                    public extensions::ExtensionKeybindingRegistry::Delegate,
+                    public ImmersiveModeController::Observer {
  public:
   // The browser view's class name.
   static const char kViewClassName[];
@@ -131,13 +132,6 @@ class BrowserView : public BrowserWindow,
                                      SkColor color,
                                      const gfx::Rect& bounds,
                                      bool at_bottom);
-
-  // Paints a horizontal line TABSTRIP_TOOLBAR_OVERLAP points above the bottom
-  // of |bounds|.  The thickness of the line is 1pt on refresh and 1px
-  // otherwise.
-  static void PaintToolbarTopSeparator(gfx::Canvas* canvas,
-                                       SkColor color,
-                                       const gfx::Rect& bounds);
 
   // After calling RevealTabStripIfNeeded(), there is normally a delay before
   // the tabstrip is hidden. Tests can use this function to disable that delay
@@ -209,6 +203,8 @@ class BrowserView : public BrowserWindow,
 
   // Returns true if various window components are visible.
   bool IsTabStripVisible() const;
+
+  bool IsInfoBarVisible() const;
 
   // Returns true if the profile associated with this Browser window is
   // incognito.
@@ -443,6 +439,7 @@ class BrowserView : public BrowserWindow,
                                ui::WindowShowState* show_state) const override;
   views::View* GetContentsView() override;
   views::ClientView* CreateClientView(views::Widget* widget) override;
+  views::View* CreateOverlayView() override;
   void OnWindowBeginUserBoundsChange() override;
   void OnWindowEndUserBoundsChange() override;
   void OnWidgetMove() override;
@@ -484,6 +481,7 @@ class BrowserView : public BrowserWindow,
   void HideDownloadShelf() override;
   void UnhideDownloadShelf() override;
   ExclusiveAccessBubbleViews* GetExclusiveAccessBubble() override;
+  bool CanUserExitFullscreen() const override;
 
   // ExclusiveAccessBubbleViewsContext:
   ExclusiveAccessManager* GetExclusiveAccessManager() override;
@@ -501,6 +499,12 @@ class BrowserView : public BrowserWindow,
   extensions::ActiveTabPermissionGranter* GetActiveTabPermissionGranter()
       override;
 
+  // ImmersiveModeController::Observer:
+  void OnImmersiveRevealStarted() override;
+  void OnImmersiveRevealEnded() override;
+  void OnImmersiveFullscreenExited() override;
+  void OnImmersiveModeControllerDestroyed() override;
+
   // Creates an accessible tab label for screen readers that includes the tab
   // status for the given tab index. This takes the form of
   // "Page title - Tab state".
@@ -516,6 +520,11 @@ class BrowserView : public BrowserWindow,
   // Gets the FullscreenControlHost for this BrowserView, creating it if it does
   // not yet exist.
   FullscreenControlHost* GetFullscreenControlHost();
+
+  // Gets the amount to vertically shift the placement of the icons on the
+  // bookmark bar so the icons appear centered relative to the views above and
+  // below them.
+  int GetBookmarkBarContentVerticalOffset() const;
 
  private:
   // Do not friend BrowserViewLayout. Use the BrowserViewLayoutDelegate
@@ -631,6 +640,15 @@ class BrowserView : public BrowserWindow,
       version_info::Channel,
       Profile* profile) const;
 
+  // Returns the amount of space between the bottom of the location bar to the
+  // bottom of the toolbar. This does not include the part of the toolbar that
+  // overlaps with the bookmark bar.
+  int GetBottomInsetOfLocationBarWithinToolbar() const;
+
+  // Reparents |top_container_| to be a child of |this| instead of
+  // |overlay_view_|.
+  void ReparentTopContainerForEndOfImmersive();
+
   // The BrowserFrame that hosts this view.
   BrowserFrame* frame_ = nullptr;
 
@@ -677,6 +695,11 @@ class BrowserView : public BrowserWindow,
 
   // The Toolbar containing the navigation buttons, menus and the address bar.
   ToolbarView* toolbar_ = nullptr;
+
+  // The OverlayView for the widget, which is used to host |top_container_|
+  // during immersive reveal.
+  std::unique_ptr<views::ViewTargeterDelegate> overlay_view_targeter_;
+  views::View* overlay_view_ = nullptr;
 
   // The Bookmark Bar View for this window. Lazily created. May be null for
   // non-tabbed browsers like popups. May not be visible.

@@ -209,7 +209,7 @@ void ServiceWorkerSubresourceLoader::StartRequest(
 }
 
 void ServiceWorkerSubresourceLoader::DispatchFetchEvent() {
-  mojom::ServiceWorkerFetchResponseCallbackPtr response_callback_ptr;
+  blink::mojom::ServiceWorkerFetchResponseCallbackPtr response_callback_ptr;
   response_callback_binding_.Bind(mojo::MakeRequest(&response_callback_ptr));
   mojom::ControllerServiceWorker* controller =
       controller_connector_->GetControllerServiceWorker(
@@ -339,38 +339,24 @@ void ServiceWorkerSubresourceLoader::SettleFetchEventDispatch(
 }
 
 void ServiceWorkerSubresourceLoader::OnResponse(
-    const ServiceWorkerResponse& response,
+    blink::mojom::FetchAPIResponsePtr response,
     base::Time dispatch_event_time) {
   TRACE_EVENT_WITH_FLOW0("ServiceWorker",
                          "ServiceWorkerSubresourceLoader::OnResponse", this,
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   SettleFetchEventDispatch(blink::ServiceWorkerStatusCode::kOk);
-  StartResponse(response, nullptr /* body_as_blob */,
-                nullptr /* body_as_stream */);
-}
-
-void ServiceWorkerSubresourceLoader::OnResponseBlob(
-    const ServiceWorkerResponse& response,
-    blink::mojom::BlobPtr body_as_blob,
-    base::Time dispatch_event_time) {
-  TRACE_EVENT_WITH_FLOW0("ServiceWorker",
-                         "ServiceWorkerSubresourceLoader::OnResponseBlob", this,
-                         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
-  SettleFetchEventDispatch(blink::ServiceWorkerStatusCode::kOk);
-  StartResponse(response, std::move(body_as_blob),
-                nullptr /* body_as_stream */);
+  StartResponse(std::move(response), nullptr /* body_as_stream */);
 }
 
 void ServiceWorkerSubresourceLoader::OnResponseStream(
-    const ServiceWorkerResponse& response,
+    blink::mojom::FetchAPIResponsePtr response,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
     base::Time dispatch_event_time) {
   TRACE_EVENT_WITH_FLOW0(
       "ServiceWorker", "ServiceWorkerSubresourceLoader::OnResponseStream", this,
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   SettleFetchEventDispatch(blink::ServiceWorkerStatusCode::kOk);
-  StartResponse(response, nullptr /* body_as_blob */,
-                std::move(body_as_stream));
+  StartResponse(std::move(response), std::move(body_as_stream));
 }
 
 void ServiceWorkerSubresourceLoader::OnFallback(
@@ -425,19 +411,18 @@ void ServiceWorkerSubresourceLoader::OnFallback(
 }
 
 void ServiceWorkerSubresourceLoader::StartResponse(
-    const ServiceWorkerResponse& response,
-    blink::mojom::BlobPtr body_as_blob,
+    blink::mojom::FetchAPIResponsePtr response,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream) {
   // A response with status code 0 is Blink telling us to respond with network
   // error.
-  if (response.status_code == 0) {
+  if (response->status_code == 0) {
     CommitCompleted(net::ERR_FAILED);
     return;
   }
 
-  ServiceWorkerLoaderHelpers::SaveResponseInfo(response, &response_head_);
+  ServiceWorkerLoaderHelpers::SaveResponseInfo(*response, &response_head_);
   ServiceWorkerLoaderHelpers::SaveResponseHeaders(
-      response.status_code, response.status_text, response.headers,
+      response->status_code, response->status_text, response->headers,
       &response_head_);
   response_head_.response_start = base::TimeTicks::Now();
   response_head_.load_timing.receive_headers_end = base::TimeTicks::Now();
@@ -463,7 +448,7 @@ void ServiceWorkerSubresourceLoader::StartResponse(
 
   // Handle a stream response body.
   if (!body_as_stream.is_null() && body_as_stream->stream.is_valid()) {
-    DCHECK(!body_as_blob);
+    DCHECK(!response->blob);
     DCHECK(url_loader_client_.is_bound());
     stream_waiter_ = std::make_unique<StreamWaiter>(
         this, std::move(body_as_stream->callback_request));
@@ -473,9 +458,10 @@ void ServiceWorkerSubresourceLoader::StartResponse(
   }
 
   // Handle a blob response body.
-  if (body_as_blob) {
+  if (response->blob) {
     DCHECK(!body_as_stream);
-    body_as_blob_ = std::move(body_as_blob);
+    DCHECK(response->blob->blob.is_valid());
+    body_as_blob_.Bind(std::move(response->blob->blob));
     body_as_blob_->ReadSideData(base::BindOnce(
         &ServiceWorkerSubresourceLoader::OnBlobSideDataReadingComplete,
         base::Unretained(this)));

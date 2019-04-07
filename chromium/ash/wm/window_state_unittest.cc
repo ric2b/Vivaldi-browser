@@ -7,12 +7,13 @@
 #include <utility>
 
 #include "ash/public/cpp/window_properties.h"
+#include "ash/shelf/shelf_constants.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_state_util.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
@@ -147,7 +148,7 @@ TEST_F(WindowStateTest, SnapWindowMinimumSize) {
   EXPECT_FALSE(window_state->CanSnap());
   delegate.set_maximum_size(gfx::Size());
   window->SetProperty(aura::client::kResizeBehaviorKey,
-                      ui::mojom::kResizeBehaviorCanResize);
+                      ws::mojom::kResizeBehaviorCanResize);
   // It should be possible to snap a window with a maximum size, if it
   // can be maximized.
   EXPECT_TRUE(window_state->CanSnap());
@@ -188,8 +189,8 @@ TEST_F(WindowStateTest, SnapModalWindowWithoutMaximumSizeLimit) {
   EXPECT_TRUE(window_state->CanSnap());
 
   window->SetProperty(aura::client::kResizeBehaviorKey,
-                      ui::mojom::kResizeBehaviorCanResize |
-                          ui::mojom::kResizeBehaviorCanMaximize);
+                      ws::mojom::kResizeBehaviorCanResize |
+                          ws::mojom::kResizeBehaviorCanMaximize);
   delegate.set_maximum_size(gfx::Size());
   EXPECT_TRUE(window_state->CanSnap());
 
@@ -200,7 +201,7 @@ TEST_F(WindowStateTest, SnapModalWindowWithoutMaximumSizeLimit) {
   EXPECT_TRUE(window_state->CanSnap());
 
   window->SetProperty(aura::client::kResizeBehaviorKey,
-                      ui::mojom::kResizeBehaviorCanResize);
+                      ws::mojom::kResizeBehaviorCanResize);
   EXPECT_TRUE(window_state->CanSnap());
 
   // It should be possible to snap a modal window without maximum size.
@@ -426,12 +427,14 @@ TEST_F(WindowStateTest, RestoredWindowBoundsShrink) {
 }
 
 TEST_F(WindowStateTest, DoNotResizeMaximizedWindowInFullscreen) {
+  const int shelf_inset_first = 600 - ShelfConstants::shelf_size();
+  const int shelf_inset_second = 700 - ShelfConstants::shelf_size();
   std::unique_ptr<aura::Window> maximized(CreateTestWindowInShellWithId(0));
   std::unique_ptr<aura::Window> fullscreen(CreateTestWindowInShellWithId(1));
   WindowState* maximized_state = GetWindowState(maximized.get());
   maximized_state->Maximize();
   ASSERT_TRUE(maximized_state->IsMaximized());
-  EXPECT_EQ(gfx::Rect(0, 0, 800, 552).ToString(),
+  EXPECT_EQ(gfx::Rect(0, 0, 800, shelf_inset_first).ToString(),
             maximized->GetBoundsInScreen().ToString());
 
   // Entering fullscreen mode will not update the maximized window's size
@@ -441,7 +444,7 @@ TEST_F(WindowStateTest, DoNotResizeMaximizedWindowInFullscreen) {
   fullscreen_state->OnWMEvent(&fullscreen_event);
   ASSERT_TRUE(fullscreen_state->IsFullscreen());
   ASSERT_TRUE(maximized_state->IsMaximized());
-  EXPECT_EQ(gfx::Rect(0, 0, 800, 552).ToString(),
+  EXPECT_EQ(gfx::Rect(0, 0, 800, shelf_inset_first).ToString(),
             maximized->GetBoundsInScreen().ToString());
 
   // Updating display size will update the maximum window size.
@@ -450,7 +453,7 @@ TEST_F(WindowStateTest, DoNotResizeMaximizedWindowInFullscreen) {
   fullscreen.reset();
 
   // Exiting fullscreen will update the maximized window to the work area.
-  EXPECT_EQ(gfx::Rect(0, 0, 900, 652).ToString(),
+  EXPECT_EQ(gfx::Rect(0, 0, 900, shelf_inset_second).ToString(),
             maximized->GetBoundsInScreen().ToString());
 }
 

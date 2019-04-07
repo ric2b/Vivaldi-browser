@@ -35,7 +35,12 @@ enum ProfileType {
 };
 
 // Used to access the web data service within a particular sync profile.
-scoped_refptr<autofill::AutofillWebDataService> GetWebDataService(
+scoped_refptr<autofill::AutofillWebDataService> GetProfileWebDataService(
+    int index) WARN_UNUSED_RESULT;
+
+// Used to access the account-scoped web data service within a particular sync
+// profile.
+scoped_refptr<autofill::AutofillWebDataService> GetAccountWebDataService(
     int index) WARN_UNUSED_RESULT;
 
 // Used to access the personal data manager within a particular sync profile.
@@ -70,6 +75,13 @@ void SetProfiles(int profile,
 void SetCreditCards(int profile,
                     std::vector<autofill::CreditCard>* credit_cards);
 
+void SetServerCreditCards(
+    int profile,
+    const std::vector<autofill::CreditCard>& credit_cards);
+
+void SetServerProfiles(int profile,
+                       const std::vector<autofill::AutofillProfile>& profiles);
+
 // Adds the autofill profile |autofill_profile| to sync profile |profile|.
 void AddProfile(int profile, const autofill::AutofillProfile& autofill_profile);
 
@@ -91,10 +103,10 @@ std::vector<autofill::AutofillProfile*> GetAllAutoFillProfiles(int profile)
 
 // Returns the number of autofill profiles contained by sync profile
 // |profile|.
-int GetProfileCount(int profile);
+size_t GetProfileCount(int profile);
 
 // Returns the number of autofill keys contained by sync profile |profile|.
-int GetKeyCount(int profile);
+size_t GetKeyCount(int profile);
 
 // Compares the Autofill profiles in the PersonalDataManagers of sync profiles
 // |profile_a| and |profile_b|. Returns true if they match.

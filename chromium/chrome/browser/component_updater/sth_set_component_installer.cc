@@ -16,7 +16,7 @@
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
@@ -179,7 +179,7 @@ void STHSetComponentInstallerPolicy::ComponentReady(
   // parsed results.
   auto background_runner = base::MakeRefCounted<AfterStartupTaskUtils::Runner>(
       base::CreateTaskRunnerWithTraits(
-          {base::TaskPriority::BACKGROUND, base::MayBlock()}));
+          {base::TaskPriority::BEST_EFFORT, base::MayBlock()}));
   background_runner->PostTask(
       FROM_HERE,
       base::BindOnce(

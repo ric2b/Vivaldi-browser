@@ -48,6 +48,9 @@
 namespace drive {
 namespace {
 
+// Desired QPS for team drive background operations (update checking etc)
+constexpr int kTeamDriveBackgroundOperationQPS = 10;
+
 // Gets a ResourceEntry from the metadata, and overwrites its file info when the
 // cached file is dirty.
 FileError GetLocallyStoredResourceEntry(
@@ -95,14 +98,14 @@ FileError GetLocallyStoredResourceEntry(
 }
 
 // Runs the callback with parameters.
-void RunGetResourceEntryCallback(const GetResourceEntryCallback& callback,
+void RunGetResourceEntryCallback(GetResourceEntryCallback callback,
                                  std::unique_ptr<ResourceEntry> entry,
                                  FileError error) {
   DCHECK(callback);
 
   if (error != FILE_ERROR_OK)
     entry.reset();
-  callback.Run(error, std::move(entry));
+  std::move(callback).Run(error, std::move(entry));
 }
 
 // Used to implement Pin().
@@ -261,12 +264,12 @@ bool CheckHashes(const std::set<std::string>& hashes,
 // Runs |callback| with |error| and the list of HashAndFilePath obtained from
 // |original_result|.
 void RunSearchByHashesCallback(
-    const SearchByHashesCallback& callback,
+    SearchByHashesCallback callback,
     FileError error,
     std::unique_ptr<MetadataSearchResultVector> original_result) {
   std::vector<HashAndFilePath> result;
   if (error != FILE_ERROR_OK) {
-    callback.Run(error, result);
+    std::move(callback).Run(error, result);
     return;
   }
   for (const auto& search_result : *original_result) {
@@ -275,7 +278,7 @@ void RunSearchByHashesCallback(
     hash_and_path.path = search_result.path;
     result.push_back(hash_and_path);
   }
-  callback.Run(FILE_ERROR_OK, result);
+  std::move(callback).Run(FILE_ERROR_OK, result);
 }
 
 }  // namespace
@@ -292,13 +295,15 @@ FileSystem::FileSystem(EventLogger* logger,
                        JobScheduler* scheduler,
                        internal::ResourceMetadata* resource_metadata,
                        base::SequencedTaskRunner* blocking_task_runner,
-                       const base::FilePath& temporary_file_directory)
+                       const base::FilePath& temporary_file_directory,
+                       const base::Clock* clock)
     : logger_(logger),
       cache_(cache),
       scheduler_(scheduler),
       resource_metadata_(resource_metadata),
       blocking_task_runner_(blocking_task_runner),
       temporary_file_directory_(temporary_file_directory),
+      clock_(clock),
       weak_ptr_factory_(this) {
   ResetComponents();
 }
@@ -335,7 +340,7 @@ void FileSystem::ResetComponents() {
   default_corpus_change_list_loader_ =
       std::make_unique<internal::DefaultCorpusChangeListLoader>(
           logger_, blocking_task_runner_.get(), resource_metadata_, scheduler_,
-          about_resource_loader_.get(), loader_controller_.get());
+          about_resource_loader_.get(), loader_controller_.get(), clock_);
 
   default_corpus_change_list_loader_->AddChangeListLoaderObserver(this);
   default_corpus_change_list_loader_->AddTeamDriveListObserver(this);
@@ -343,6 +348,11 @@ void FileSystem::ResetComponents() {
   sync_client_ = std::make_unique<internal::SyncClient>(
       blocking_task_runner_.get(), delegate, scheduler_, resource_metadata_,
       cache_, loader_controller_.get(), temporary_file_directory_);
+
+  team_drive_operation_queue_ =
+      std::make_unique<internal::DriveBackgroundOperationQueue<
+          internal::TeamDriveChangeListLoader>>(
+          kTeamDriveBackgroundOperationQPS);
 
   copy_operation_ = std::make_unique<file_system::CopyOperation>(
       blocking_task_runner_.get(), delegate, scheduler_, resource_metadata_,
@@ -379,8 +389,6 @@ void FileSystem::ResetComponents() {
       blocking_task_runner_.get(), delegate, resource_metadata_);
 }
 
-// TODO(slangley): Support checking a specific team drive or default corpus,
-// rather than just polling all of them.
 void FileSystem::CheckForUpdates() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DVLOG(1) << "CheckForUpdates";
@@ -392,14 +400,67 @@ void FileSystem::CheckForUpdates() {
                                     weak_ptr_factory_.GetWeakPtr()));
 
   for (auto& team_drive : team_drive_change_list_loaders_) {
-    team_drive.second->CheckForUpdates(
+    auto update_checked_closure =
         base::Bind(&FileSystem::OnUpdateChecked, weak_ptr_factory_.GetWeakPtr(),
-                   team_drive.first, closure));
+                   team_drive.first, closure);
+    if (!team_drive.second->IsRefreshing()) {
+      team_drive_operation_queue_->AddOperation(
+          team_drive.second->GetWeakPtr(),
+          base::BindOnce(&internal::TeamDriveChangeListLoader::CheckForUpdates,
+                         team_drive.second->GetWeakPtr()),
+          update_checked_closure);
+    } else {
+      // If the change list loader is refreshing, then calling CheckForUpdates
+      // will just add the callback to a queue to be called when the refresh
+      // is complete.
+      team_drive.second->CheckForUpdates(update_checked_closure);
+    }
   }
 
   default_corpus_change_list_loader_->CheckForUpdates(
       base::Bind(&FileSystem::OnUpdateChecked, weak_ptr_factory_.GetWeakPtr(),
                  std::string(), closure));
+}
+
+void FileSystem::CheckForUpdates(const std::set<std::string>& ids) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  base::RepeatingClosure closure = base::BarrierClosure(
+      ids.size(), base::BindOnce(&FileSystem::OnUpdateCompleted,
+                                 weak_ptr_factory_.GetWeakPtr()));
+
+  for (const auto& id : ids) {
+    if (id.empty()) {
+      default_corpus_change_list_loader_->CheckForUpdates(
+          base::Bind(&FileSystem::OnUpdateChecked,
+                     weak_ptr_factory_.GetWeakPtr(), std::string(), closure));
+    } else {
+      auto it = team_drive_change_list_loaders_.find(id);
+
+      // It is possible for the team drive to have been deleted by the time we
+      // receive the push notification.
+      if (it != team_drive_change_list_loaders_.end()) {
+        auto update_checked_closure =
+            base::Bind(&FileSystem::OnUpdateChecked,
+                       weak_ptr_factory_.GetWeakPtr(), it->first, closure);
+        if (!it->second->IsRefreshing()) {
+          team_drive_operation_queue_->AddOperation(
+              it->second->GetWeakPtr(),
+              base::BindOnce(
+                  &internal::TeamDriveChangeListLoader::CheckForUpdates,
+                  it->second->GetWeakPtr()),
+              update_checked_closure);
+        } else {
+          // If the change list loader is refreshing, then calling
+          // CheckForUpdates will just add the callback to a queue to be called
+          // when the refresh is complete.
+          it->second->CheckForUpdates(update_checked_closure);
+        }
+      } else {
+        closure.Run();
+      }
+    }
+  }
 }
 
 void FileSystem::OnUpdateChecked(const std::string& team_drive_id,
@@ -583,29 +644,28 @@ void FileSystem::FinishUnpin(const FileOperationCallback& callback,
 }
 
 void FileSystem::GetFile(const base::FilePath& file_path,
-                         const GetFileCallback& callback) {
+                         GetFileCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(callback);
 
   download_operation_->EnsureFileDownloadedByPath(
-      file_path,
-      ClientContext(USER_INITIATED),
-      GetFileContentInitializedCallback(),
-      google_apis::GetContentCallback(),
-      callback);
+      file_path, ClientContext(USER_INITIATED),
+      GetFileContentInitializedCallback(), google_apis::GetContentCallback(),
+      std::move(callback));
 }
 
 void FileSystem::GetFileForSaving(const base::FilePath& file_path,
-                                  const GetFileCallback& callback) {
+                                  GetFileCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(callback);
 
-  get_file_for_saving_operation_->GetFileForSaving(file_path, callback);
+  get_file_for_saving_operation_->GetFileForSaving(file_path,
+                                                   std::move(callback));
 }
 
 base::Closure FileSystem::GetFileContent(
     const base::FilePath& file_path,
-    const GetFileContentInitializedCallback& initialized_callback,
+    GetFileContentInitializedCallback initialized_callback,
     const google_apis::GetContentCallback& get_content_callback,
     const FileOperationCallback& completion_callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -614,32 +674,26 @@ base::Closure FileSystem::GetFileContent(
   DCHECK(completion_callback);
 
   return download_operation_->EnsureFileDownloadedByPath(
-      file_path,
-      ClientContext(USER_INITIATED),
-      initialized_callback,
+      file_path, ClientContext(USER_INITIATED), std::move(initialized_callback),
       get_content_callback,
       base::Bind(&GetFileCallbackToFileOperationCallbackAdapter,
                  completion_callback));
 }
 
-void FileSystem::GetResourceEntry(
-    const base::FilePath& file_path,
-    const GetResourceEntryCallback& callback) {
+void FileSystem::GetResourceEntry(const base::FilePath& file_path,
+                                  GetResourceEntryCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(callback);
 
-  ReadDirectory(file_path.DirName(),
-                ReadDirectoryEntriesCallback(),
+  ReadDirectory(file_path.DirName(), ReadDirectoryEntriesCallback(),
                 base::Bind(&FileSystem::GetResourceEntryAfterRead,
-                           weak_ptr_factory_.GetWeakPtr(),
-                           file_path,
-                           callback));
+                           weak_ptr_factory_.GetWeakPtr(), file_path,
+                           base::Passed(std::move(callback))));
 }
 
-void FileSystem::GetResourceEntryAfterRead(
-    const base::FilePath& file_path,
-    const GetResourceEntryCallback& callback,
-    FileError error) {
+void FileSystem::GetResourceEntryAfterRead(const base::FilePath& file_path,
+                                           GetResourceEntryCallback callback,
+                                           FileError error) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(callback);
 
@@ -652,12 +706,13 @@ void FileSystem::GetResourceEntryAfterRead(
       blocking_task_runner_.get(), FROM_HERE,
       base::BindOnce(&GetLocallyStoredResourceEntry, resource_metadata_, cache_,
                      file_path, entry_ptr),
-      base::BindOnce(&RunGetResourceEntryCallback, callback, std::move(entry)));
+      base::BindOnce(&RunGetResourceEntryCallback, std::move(callback),
+                     std::move(entry)));
 }
 
 void FileSystem::ReadDirectory(
     const base::FilePath& directory_path,
-    const ReadDirectoryEntriesCallback& entries_callback,
+    ReadDirectoryEntriesCallback entries_callback,
     const FileOperationCallback& completion_callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(completion_callback);
@@ -671,7 +726,7 @@ void FileSystem::ReadDirectory(
       if (team_drive_path == directory_path ||
           team_drive_path.IsParent(directory_path)) {
         team_drive_loader.second->ReadDirectory(
-            directory_path, entries_callback, completion_callback);
+            directory_path, std::move(entries_callback), completion_callback);
         return;
       }
     }
@@ -680,7 +735,7 @@ void FileSystem::ReadDirectory(
   // We do not refresh the list of team drives from the server until the first
   // ReadDirectory is called on the default corpus change list loader.
   default_corpus_change_list_loader_->ReadDirectory(
-      directory_path, entries_callback, completion_callback);
+      directory_path, std::move(entries_callback), completion_callback);
 }
 
 void FileSystem::GetAvailableSpace(
@@ -786,34 +841,34 @@ void FileSystem::OnGetResourceEntryForGetShareUrl(
 
 void FileSystem::Search(const std::string& search_query,
                         const GURL& next_link,
-                        const SearchCallback& callback) {
+                        SearchCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(callback);
-  search_operation_->Search(search_query, next_link, callback);
+  search_operation_->Search(search_query, next_link, std::move(callback));
 }
 
 void FileSystem::SearchMetadata(const std::string& query,
                                 int options,
                                 int at_most_num_matches,
                                 MetadataSearchOrder order,
-                                const SearchMetadataCallback& callback) {
+                                SearchMetadataCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   drive::internal::SearchMetadata(
       blocking_task_runner_, resource_metadata_, query,
       base::Bind(&drive::internal::MatchesType, options), at_most_num_matches,
-      order, callback);
+      order, std::move(callback));
 }
 
 void FileSystem::SearchByHashes(const std::set<std::string>& hashes,
-                                const SearchByHashesCallback& callback) {
+                                SearchByHashesCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   drive::internal::SearchMetadata(
       blocking_task_runner_, resource_metadata_,
       /* any file name */ "", base::Bind(&CheckHashes, hashes),
       std::numeric_limits<size_t>::max(),
       drive::MetadataSearchOrder::LAST_ACCESSED,
-      base::Bind(&RunSearchByHashesCallback, callback));
+      base::BindOnce(&RunSearchByHashesCallback, std::move(callback)));
 }
 
 void FileSystem::OnFileChangedByOperation(const FileChange& changed_files) {
@@ -875,17 +930,18 @@ void FileSystem::OnFileChanged(const FileChange& changed_files) {
 
 void FileSystem::OnTeamDrivesChanged(const FileChange& changed_team_drives) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  std::set<std::string> added_team_drives;
+  std::set<std::string> removed_team_drives;
 
   for (const auto& entry : changed_team_drives.map()) {
     for (const auto& change : entry.second.list()) {
       DCHECK(!change.team_drive_id().empty());
       if (change.IsDelete()) {
-        const auto it =
-            team_drive_change_list_loaders_.find(change.team_drive_id());
-        DCHECK(it != team_drive_change_list_loaders_.end());
-        team_drive_change_list_loaders_.erase(it);
-        // If we were tracking the update status we can remove that as well.
-        last_update_metadata_.erase(change.team_drive_id());
+        if (team_drive_change_list_loaders_.erase(change.team_drive_id()) > 0) {
+          // If we were tracking the update status we can remove that as well.
+          last_update_metadata_.erase(change.team_drive_id());
+          removed_team_drives.insert(change.team_drive_id());
+        }
       } else if (change.IsAddOrUpdate()) {
         // If this is an update (e.g. a renamed team drive), then just erase the
         // existing entry so we can re-add it with the new path.
@@ -896,11 +952,19 @@ void FileSystem::OnTeamDrivesChanged(const FileChange& changed_team_drives) {
             blocking_task_runner_.get(), resource_metadata_, scheduler_,
             loader_controller_.get());
         loader->AddChangeListLoaderObserver(this);
-        loader->LoadIfNeeded(base::DoNothing());
+        team_drive_operation_queue_->AddOperation(
+            loader->GetWeakPtr(),
+            base::BindOnce(&internal::TeamDriveChangeListLoader::LoadIfNeeded,
+                           loader->GetWeakPtr()),
+            base::DoNothing());
         team_drive_change_list_loaders_.emplace(change.team_drive_id(),
                                                 std::move(loader));
+        added_team_drives.insert(change.team_drive_id());
       }
     }
+  }
+  for (auto& observer : observers_) {
+    observer.OnTeamDrivesUpdated(added_team_drives, removed_team_drives);
   }
 }
 
@@ -911,10 +975,9 @@ void FileSystem::OnLoadFromServerComplete() {
 
 void FileSystem::OnInitialLoadComplete() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  blocking_task_runner_->PostTask(FROM_HERE,
-                                  base::Bind(&internal::RemoveStaleCacheFiles,
-                                             cache_,
-                                             resource_metadata_));
+  blocking_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&internal::RemoveStaleCacheFiles, cache_,
+                                resource_metadata_));
   sync_client_->StartProcessingBacklog();
 }
 
@@ -929,20 +992,28 @@ void FileSystem::OnTeamDriveListLoaded(
   }
   team_drive_change_list_loaders_.clear();
 
+  std::set<std::string> added_team_drives_ids;
   for (const auto& team_drive : team_drives_list) {
     auto loader = std::make_unique<internal::TeamDriveChangeListLoader>(
         team_drive.team_drive_id(), team_drive.team_drive_path(), logger_,
         blocking_task_runner_.get(), resource_metadata_, scheduler_,
         loader_controller_.get());
     loader->AddChangeListLoaderObserver(this);
-    loader->LoadIfNeeded(base::DoNothing());
+    team_drive_operation_queue_->AddOperation(
+        loader->GetWeakPtr(),
+        base::BindOnce(&internal::TeamDriveChangeListLoader::LoadIfNeeded,
+                       loader->GetWeakPtr()),
+        base::DoNothing());
     team_drive_change_list_loaders_.emplace(team_drive.team_drive_id(),
                                             std::move(loader));
+    added_team_drives_ids.insert(team_drive.team_drive_id());
+  }
+  for (auto& observer : observers_) {
+    observer.OnTeamDrivesUpdated(added_team_drives_ids, {});
   }
 }
 
-void FileSystem::GetMetadata(
-    const GetFilesystemMetadataCallback& callback) {
+void FileSystem::GetMetadata(GetFilesystemMetadataCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(callback);
 
@@ -955,7 +1026,7 @@ void FileSystem::GetMetadata(
   base::RepeatingClosure closure = base::BarrierClosure(
       num_callbacks,
       base::BindOnce(&FileSystem::OnGetMetadata, weak_ptr_factory_.GetWeakPtr(),
-                     callback, base::Owned(metadata),
+                     base::Passed(std::move(callback)), base::Owned(metadata),
                      base::Owned(team_drive_metadata)));
 
   metadata->refreshing = default_corpus_change_list_loader_->IsRefreshing();
@@ -995,14 +1066,14 @@ void FileSystem::GetMetadata(
 }
 
 void FileSystem::OnGetMetadata(
-    const GetFilesystemMetadataCallback& callback,
+    GetFilesystemMetadataCallback callback,
     drive::FileSystemMetadata* default_corpus_metadata,
     std::map<std::string, drive::FileSystemMetadata>* team_drive_metadata) {
   DCHECK(callback);
   DCHECK(default_corpus_metadata);
   DCHECK(team_drive_metadata);
 
-  callback.Run(*default_corpus_metadata, *team_drive_metadata);
+  std::move(callback).Run(*default_corpus_metadata, *team_drive_metadata);
 }
 
 void FileSystem::MarkCacheFileAsMounted(
@@ -1118,11 +1189,12 @@ void FileSystem::SetProperty(
 void FileSystem::OpenFile(const base::FilePath& file_path,
                           OpenMode open_mode,
                           const std::string& mime_type,
-                          const OpenFileCallback& callback) {
+                          OpenFileCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(callback);
 
-  open_file_operation_->OpenFile(file_path, open_mode, mime_type, callback);
+  open_file_operation_->OpenFile(file_path, open_mode, mime_type,
+                                 std::move(callback));
 }
 
 void FileSystem::GetPathFromResourceId(const std::string& resource_id,

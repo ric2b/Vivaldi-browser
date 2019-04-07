@@ -8,7 +8,7 @@ import "content/common/input/synchronous_compositor.mojom";
 import "content/common/native_types.mojom";
 import "mojo/public/mojom/base/string16.mojom";
 import "mojo/public/mojom/base/time.mojom";
-import "services/ui/public/interfaces/ime/ime.mojom";
+import "services/ws/public/mojom/ime/ime.mojom";
 import "third_party/blink/public/web/selection_menu_behavior.mojom";
 import "ui/events/mojo/event.mojom";
 import "ui/events/mojo/event_constants.mojom";
@@ -174,9 +174,6 @@ interface WidgetInputHandlerHost {
   // restrictions on the root scroll offset.
   DidOverscroll(DidOverscrollParams params);
 
-  // Sent by the compositor when a fling animation is stopped.
-  DidStopFlinging();
-
   // Sent by the compositor when a GSB has started scrolling the viewport.
   DidStartScrollingViewport();
 
@@ -225,14 +222,14 @@ interface WidgetInputHandler {
 
   // This message sends a string being composed with an input method.
   ImeSetComposition(mojo_base.mojom.String16 text,
-                    array<ui.mojom.ImeTextSpan> ime_text_spans,
+                    array<ws.mojom.ImeTextSpan> ime_text_spans,
                     gfx.mojom.Range range, int32 start, int32 end);
 
   // This message deletes the current composition, inserts specified text, and
   // moves the cursor.
   ImeCommitText(mojo_base.mojom.String16 text,
-                array<ui.mojom.ImeTextSpan> ime_text_spans,
-                gfx.mojom.Range range, int32 relative_cursor_position);
+                array<ws.mojom.ImeTextSpan> ime_text_spans,
+                gfx.mojom.Range range, int32 relative_cursor_position) => ();
 
   // This message inserts the ongoing composition.
   ImeFinishComposingText(bool keep_selection);
@@ -280,7 +277,7 @@ interface FrameInputHandler {
   // Sets the text composition to be between the given start and end offsets in
   // the currently focused editable field.
   SetCompositionFromExistingText(
-      int32 start, int32 end, array<ui.mojom.ImeTextSpan> ime_text_spans);
+      int32 start, int32 end, array<ws.mojom.ImeTextSpan> ime_text_spans);
 
   // Deletes the current selection plus the specified number of characters
   // before and after the selection or caret.

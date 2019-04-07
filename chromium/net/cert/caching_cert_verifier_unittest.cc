@@ -52,19 +52,17 @@ TEST_F(CachingCertVerifierTest, CacheHit) {
 
   error = callback.GetResult(verifier_.Verify(
       CertVerifier::RequestParams(test_cert, "www.example.com", 0,
-                                  std::string(), CertificateList()),
-      nullptr, &verify_result, callback.callback(), &request,
-      NetLogWithSource()));
+                                  std::string()),
+      &verify_result, callback.callback(), &request, NetLogWithSource()));
   ASSERT_TRUE(IsCertificateError(error));
   ASSERT_EQ(1u, verifier_.requests());
   ASSERT_EQ(0u, verifier_.cache_hits());
   ASSERT_EQ(1u, verifier_.GetCacheSize());
 
-  error = verifier_.Verify(
-      CertVerifier::RequestParams(test_cert, "www.example.com", 0,
-                                  std::string(), CertificateList()),
-      nullptr, &verify_result, callback.callback(), &request,
-      NetLogWithSource());
+  error = verifier_.Verify(CertVerifier::RequestParams(
+                               test_cert, "www.example.com", 0, std::string()),
+                           &verify_result, callback.callback(), &request,
+                           NetLogWithSource());
   // Synchronous completion.
   ASSERT_NE(ERR_IO_PENDING, error);
   ASSERT_TRUE(IsCertificateError(error));
@@ -113,9 +111,8 @@ TEST_F(CachingCertVerifierTest, DifferentCACerts) {
 
   error = callback.GetResult(verifier_.Verify(
       CertVerifier::RequestParams(cert_chain1, "www.example.com", 0,
-                                  std::string(), CertificateList()),
-      nullptr, &verify_result, callback.callback(), &request,
-      NetLogWithSource()));
+                                  std::string()),
+      &verify_result, callback.callback(), &request, NetLogWithSource()));
   ASSERT_TRUE(IsCertificateError(error));
   ASSERT_EQ(1u, verifier_.requests());
   ASSERT_EQ(0u, verifier_.cache_hits());
@@ -123,9 +120,8 @@ TEST_F(CachingCertVerifierTest, DifferentCACerts) {
 
   error = callback.GetResult(verifier_.Verify(
       CertVerifier::RequestParams(cert_chain2, "www.example.com", 0,
-                                  std::string(), CertificateList()),
-      nullptr, &verify_result, callback.callback(), &request,
-      NetLogWithSource()));
+                                  std::string()),
+      &verify_result, callback.callback(), &request, NetLogWithSource()));
   ASSERT_TRUE(IsCertificateError(error));
   ASSERT_EQ(2u, verifier_.requests());
   ASSERT_EQ(0u, verifier_.cache_hits());

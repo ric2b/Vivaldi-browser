@@ -46,14 +46,11 @@ class CHROMEOS_EXPORT FakeCrosDisksClient : public CrosDisksClient {
   // Deletes the directory created in Mount().
   void Unmount(const std::string& device_path,
                UnmountOptions options,
-               VoidDBusMethodCallback callback) override;
-  void EnumerateAutoMountableDevices(
-      const EnumerateDevicesCallback& callback,
-      const base::Closure& error_callback) override;
-  void EnumerateDevices(const EnumerateDevicesCallback& callback,
-                        const base::Closure& error_callback) override;
-  void EnumerateMountEntries(const EnumerateMountEntriesCallback& callback,
-                             const base::Closure& error_callback) override;
+               UnmountCallback callback) override;
+  void EnumerateDevices(EnumerateDevicesCallback callback,
+                        base::OnceClosure error_callback) override;
+  void EnumerateMountEntries(EnumerateMountEntriesCallback callback,
+                             base::OnceClosure error_callback) override;
   void Format(const std::string& device_path,
               const std::string& filesystem,
               VoidDBusMethodCallback callback) override;
@@ -61,8 +58,8 @@ class CHROMEOS_EXPORT FakeCrosDisksClient : public CrosDisksClient {
               const std::string& volume_name,
               VoidDBusMethodCallback callback) override;
   void GetDeviceProperties(const std::string& device_path,
-                           const GetDevicePropertiesCallback& callback,
-                           const base::Closure& error_callback) override;
+                           GetDevicePropertiesCallback callback,
+                           base::OnceClosure error_callback) override;
 
   // Used in tests to simulate signals sent by cros disks layer.
   // Calls corresponding methods of the registered observers.
@@ -97,13 +94,11 @@ class CHROMEOS_EXPORT FakeCrosDisksClient : public CrosDisksClient {
   }
 
   // Makes the subsequent Unmount() calls fail. Unmount() succeeds by default.
-  void MakeUnmountFail() {
-    unmount_success_ = false;
-  }
+  void MakeUnmountFail(MountError error_code) { unmount_error_ = error_code; }
 
   // Sets a listener callbackif the following Unmount() call is success or not.
   // Unmount() calls the corresponding callback given as a parameter.
-  void set_unmount_listener(base::Closure listener) {
+  void set_unmount_listener(base::RepeatingClosure listener) {
     unmount_listener_ = listener;
   }
 
@@ -151,12 +146,12 @@ class CHROMEOS_EXPORT FakeCrosDisksClient : public CrosDisksClient {
                 VoidDBusMethodCallback callback,
                 MountError mount_error);
 
-  base::ObserverList<Observer> observer_list_;
+  base::ObserverList<Observer>::Unchecked observer_list_;
   int unmount_call_count_;
   std::string last_unmount_device_path_;
   UnmountOptions last_unmount_options_;
-  bool unmount_success_;
-  base::Closure unmount_listener_;
+  MountError unmount_error_;
+  base::RepeatingClosure unmount_listener_;
   int format_call_count_;
   std::string last_format_device_path_;
   std::string last_format_filesystem_;

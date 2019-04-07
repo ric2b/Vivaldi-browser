@@ -23,6 +23,8 @@ namespace quic {
 class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
  public:
   QuicUnackedPacketMap();
+  QuicUnackedPacketMap(const QuicUnackedPacketMap&) = delete;
+  QuicUnackedPacketMap& operator=(const QuicUnackedPacketMap&) = delete;
   ~QuicUnackedPacketMap();
 
   // Adds |serialized_packet| to the map and marks it as sent at |sent_time|.
@@ -38,15 +40,6 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
                      TransmissionType transmission_type,
                      QuicTime sent_time,
                      bool set_in_flight);
-
-  // Returns true iff |packet_number| is in the map.
-  bool Contains(QuicPacketNumber packet_number) const {
-    return packet_number >= least_unacked_ &&
-           packet_number < least_unacked_ + unacked_packets_.size();
-  }
-
-  // Returns the number of packets in the map.
-  size_t Size() const { return unacked_packets_.size(); }
 
   // Returns true if the packet |packet_number| is unacked.
   bool IsUnacked(QuicPacketNumber packet_number) const;
@@ -172,6 +165,17 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
   // RTT measurement purposes.
   void RemoveObsoletePackets();
 
+  // Try to aggregate acked contiguous stream frames. For noncontiguous stream
+  // frames or control frames, notify the session notifier they get acked
+  // immediately.
+  void MaybeAggregateAckedStreamFrame(const QuicTransmissionInfo& info,
+                                      QuicTime::Delta ack_delay);
+
+  // Notify the session notifier of any stream data aggregated in
+  // aggregated_stream_frame_.  No effect if the stream frame has an invalid
+  // stream id.
+  void NotifyAggregatedStreamFrameAcked(QuicTime::Delta ack_delay);
+
   // Called to start/stop letting session decide what to write.
   void SetSessionDecideWhatToWrite(bool session_decides_what_to_write);
 
@@ -179,6 +183,10 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
 
   bool session_decides_what_to_write() const {
     return session_decides_what_to_write_;
+  }
+
+  bool fix_is_useful_for_retransmission() const {
+    return fix_is_useful_for_retransmission_;
   }
 
  private:
@@ -235,13 +243,18 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
   // Time that the last unacked crypto packet was sent.
   QuicTime last_crypto_packet_sent_time_;
 
+  // Aggregates acked stream data across multiple acked sent packets to save CPU
+  // by reducing the number of calls to the session notifier.
+  QuicStreamFrame aggregated_stream_frame_;
+
   // Receives notifications of frames being retransmitted or acknowledged.
   SessionNotifierInterface* session_notifier_;
 
   // If true, let session decides what to write.
   bool session_decides_what_to_write_;
 
-  DISALLOW_COPY_AND_ASSIGN(QuicUnackedPacketMap);
+  // Latched value of quic_reloadable_flag_quic_fix_is_useful_for_retrans.
+  const bool fix_is_useful_for_retransmission_;
 };
 
 }  // namespace quic

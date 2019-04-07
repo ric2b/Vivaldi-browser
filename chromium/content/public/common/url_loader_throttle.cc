@@ -9,6 +9,8 @@
 namespace content {
 
 void URLLoaderThrottle::Delegate::SetPriority(net::RequestPriority priority) {}
+void URLLoaderThrottle::Delegate::UpdateDeferredResponseHead(
+    const network::ResourceResponseHead& new_response_head) {}
 void URLLoaderThrottle::Delegate::PauseReadingBodyFromNet() {}
 void URLLoaderThrottle::Delegate::ResumeReadingBodyFromNet() {}
 
@@ -35,11 +37,12 @@ void URLLoaderThrottle::WillRedirectRequest(
     const net::RedirectInfo& redirect_info,
     const network::ResourceResponseHead& response_head,
     bool* defer,
-    std::vector<std::string>* to_be_removed_request_headers) {}
+    std::vector<std::string>* to_be_removed_request_headers,
+    net::HttpRequestHeaders* modified_request_headers) {}
 
 void URLLoaderThrottle::WillProcessResponse(
     const GURL& response_url,
-    const network::ResourceResponseHead& response_head,
+    network::ResourceResponseHead* response_head,
     bool* defer) {}
 
 URLLoaderThrottle::URLLoaderThrottle() {}

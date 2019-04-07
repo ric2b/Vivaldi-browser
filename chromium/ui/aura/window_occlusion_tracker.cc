@@ -6,7 +6,6 @@
 
 #include "base/auto_reset.h"
 #include "base/containers/adapters.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/stl_util.h"
 #include "third_party/skia/include/core/SkRect.h"
 #include "third_party/skia/include/core/SkRegion.h"
@@ -37,13 +36,23 @@ WindowOcclusionTracker* g_tracker = nullptr;
 
 int g_num_pause_occlusion_tracking = 0;
 
+bool WindowOrParentHasShape(Window* window) {
+  if (window->layer()->alpha_shape())
+    return true;
+  if (window->parent())
+    return WindowOrParentHasShape(window->parent());
+  return false;
+}
+
 // Returns true if |window| opaquely fills its bounds. |window| must be visible.
 bool VisibleWindowIsOpaque(Window* window) {
   DCHECK(window->IsVisible());
   DCHECK(window->layer());
   return !window->transparent() &&
          window->layer()->type() != ui::LAYER_NOT_DRAWN &&
-         window->layer()->GetCombinedOpacity() == 1.0f;
+         window->layer()->GetCombinedOpacity() == 1.0f &&
+         // For simplicity, a shaped window is not considered opaque.
+         !WindowOrParentHasShape(window);
 }
 
 // Returns the transform of |window| relative to its root.
@@ -356,23 +365,13 @@ void WindowOcclusionTracker::MarkRootWindowAsDirtyAndMaybeComputeOcclusionIf(
 
 void WindowOcclusionTracker::MarkRootWindowAsDirty(
     RootWindowState* root_window_state) {
-  root_window_state->dirty = true;
+  // If a root window is marked as dirty and occlusion states have already been
+  // recomputed |kMaxRecomputeOcclusion| times, it means that they are not
+  // stabilizing.
+  DCHECK_LT(num_times_occlusion_recomputed_in_current_step_,
+            kMaxRecomputeOcclusion);
 
-  // Generate a crash report when a root window is marked as dirty and occlusion
-  // states have been recomputed |kMaxRecomputeOcclusion| times, because it
-  // indicates that they are not stabilizing. Don't report it when
-  // |num_times_occlusion_recomputed_in_current_step_| is greater than
-  // |kMaxRecomputeOcclusion| to avoid generating multiple reports from the same
-  // client.
-  //
-  // TODO(fdoray): Remove this once we are confident that occlusion states are
-  // stable after |kMaxRecomputeOcclusion| iterations in production.
-  // https://crbug.com/813076
-  if (num_times_occlusion_recomputed_in_current_step_ ==
-      kMaxRecomputeOcclusion) {
-    was_occlusion_recomputed_too_many_times_ = true;
-    base::debug::DumpWithoutCrashing();
-  }
+  root_window_state->dirty = true;
 }
 
 bool WindowOcclusionTracker::WindowOrParentIsAnimated(Window* window) const {
@@ -416,6 +415,15 @@ bool WindowOcclusionTracker::WindowOrDescendantIsOpaque(
       return true;
   }
   return false;
+}
+
+bool WindowOcclusionTracker::WindowOpacityChangeMayAffectOcclusionStates(
+    Window* window) const {
+  // Changing the opacity of a window has no effect on the occlusion state of
+  // the window or its children. It can however affect the occlusion state of
+  // other windows in the tree if it is visible and not animated (animated
+  // windows aren't considered in occlusion computations).
+  return window->IsVisible() && !WindowOrParentIsAnimated(window);
 }
 
 bool WindowOcclusionTracker::WindowMoveMayAffectOcclusionStates(
@@ -542,7 +550,14 @@ void WindowOcclusionTracker::OnWindowOpacitySet(
       (reason == ui::PropertyChangeReason::FROM_ANIMATION) &&
       MaybeObserveAnimatedWindow(window);
   MarkRootWindowAsDirtyAndMaybeComputeOcclusionIf(window, [=]() {
-    return animation_started || !WindowOrParentIsAnimated(window);
+    return animation_started ||
+           WindowOpacityChangeMayAffectOcclusionStates(window);
+  });
+}
+
+void WindowOcclusionTracker::OnWindowAlphaShapeSet(Window* window) {
+  MarkRootWindowAsDirtyAndMaybeComputeOcclusionIf(window, [=]() {
+    return WindowOpacityChangeMayAffectOcclusionStates(window);
   });
 }
 

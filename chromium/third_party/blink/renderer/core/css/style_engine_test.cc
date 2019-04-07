@@ -91,7 +91,7 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
     <style>
      @font-face {
       font-family: 'Cool Font';
-      src: local(monospace);
+      src: url(dummy);
       font-weight: bold;
      }
      :root {
@@ -249,11 +249,10 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   font_face_parsed_sheet->ParseString(
       "@font-face {"
       " font-family: 'Cool Font';"
-      " src: local(monospace);"
+      " src: url(dummy);"
       " font-weight: bold;"
       " font-style: italic;"
-      "}"
-    );
+      "}");
   StyleSheetKey font_face_key("font_face");
   GetStyleEngine().InjectSheet(font_face_key, font_face_parsed_sheet,
                                WebDocument::kUserOrigin);
@@ -278,11 +277,10 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   style_element->SetInnerHTMLFromString(
       "@font-face {"
       " font-family: 'Cool Font';"
-      " src: local(monospace);"
+      " src: url(dummy);"
       " font-weight: normal;"
       " font-style: italic;"
-      "}"
-    );
+      "}");
   GetDocument().body()->AppendChild(style_element);
   GetDocument().View()->UpdateAllLifecyclePhases();
 
@@ -1453,6 +1451,97 @@ TEST_F(StyleEngineTest, ShadowRootStyleRecalcCrash) {
   shadow_root.getElementById("span")->remove();
   host->SetInlineStyleProperty(CSSPropertyDisplay, "inline");
   GetDocument().View()->UpdateAllLifecyclePhases();
+}
+
+TEST_F(StyleEngineTest, GetComputedStyleOutsideFlatTreeCrash) {
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <style>
+      body, div { display: contents }
+      div::before { display: contents; content: "" }
+    </style>
+    <div id=inner></div>
+  )HTML");
+
+  GetDocument().documentElement()->CreateV0ShadowRootForTesting();
+  GetDocument().View()->UpdateAllLifecyclePhases();
+  GetDocument().body()->EnsureComputedStyle();
+  GetDocument().getElementById("inner")->SetInlineStyleProperty(
+      CSSPropertyColor, "blue");
+  GetDocument().View()->UpdateAllLifecyclePhases();
+}
+
+TEST_F(StyleEngineTest, RejectSelectorForPseudoElement) {
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <style>
+      div::before { content: "" }
+      .not-in-filter div::before { color: red }
+    </style>
+    <div class='not-in-filter'></div>
+  )HTML");
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  StyleEngine& engine = GetDocument().GetStyleEngine();
+  engine.SetStatsEnabled(true);
+
+  StyleResolverStats* stats = engine.Stats();
+  ASSERT_TRUE(stats);
+
+  Element* div = GetDocument().QuerySelector("div");
+  ASSERT_TRUE(div);
+  div->SetInlineStyleProperty(CSSPropertyColor, "green");
+
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
+  GetDocument().documentElement()->RecalcStyle(kNoChange);
+
+  // Should fast reject ".not-in-filter div::before {}" for both the div and its
+  // ::before pseudo element.
+  EXPECT_EQ(2u, stats->rules_fast_rejected);
+}
+
+TEST_F(StyleEngineTest, MarkForWhitespaceReattachment) {
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <div id=d1><span></span></div>
+    <div id=d2><span></span><span></span></div>
+    <div id=d3><span></span><span></span></div>
+  )HTML");
+
+  Element* d1 = GetDocument().getElementById("d1");
+  Element* d2 = GetDocument().getElementById("d2");
+  Element* d3 = GetDocument().getElementById("d3");
+
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  d1->firstChild()->remove();
+  EXPECT_TRUE(GetDocument().GetStyleEngine().NeedsWhitespaceReattachment(d1));
+  EXPECT_FALSE(GetDocument().ChildNeedsStyleInvalidation());
+  EXPECT_FALSE(GetDocument().ChildNeedsStyleRecalc());
+  EXPECT_FALSE(GetDocument().ChildNeedsReattachLayoutTree());
+
+  GetDocument().GetStyleEngine().MarkForWhitespaceReattachment();
+  EXPECT_FALSE(GetDocument().ChildNeedsReattachLayoutTree());
+
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  d2->firstChild()->remove();
+  d2->firstChild()->remove();
+  EXPECT_TRUE(GetDocument().GetStyleEngine().NeedsWhitespaceReattachment(d2));
+  EXPECT_FALSE(GetDocument().ChildNeedsStyleInvalidation());
+  EXPECT_FALSE(GetDocument().ChildNeedsStyleRecalc());
+  EXPECT_FALSE(GetDocument().ChildNeedsReattachLayoutTree());
+
+  GetDocument().GetStyleEngine().MarkForWhitespaceReattachment();
+  EXPECT_FALSE(GetDocument().ChildNeedsReattachLayoutTree());
+
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  d3->firstChild()->remove();
+  EXPECT_TRUE(GetDocument().GetStyleEngine().NeedsWhitespaceReattachment(d3));
+  EXPECT_FALSE(GetDocument().ChildNeedsStyleInvalidation());
+  EXPECT_FALSE(GetDocument().ChildNeedsStyleRecalc());
+  EXPECT_FALSE(GetDocument().ChildNeedsReattachLayoutTree());
+
+  GetDocument().GetStyleEngine().MarkForWhitespaceReattachment();
+  EXPECT_TRUE(GetDocument().ChildNeedsReattachLayoutTree());
 }
 
 }  // namespace blink

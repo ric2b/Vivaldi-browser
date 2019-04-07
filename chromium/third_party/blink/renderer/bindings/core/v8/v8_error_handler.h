@@ -32,21 +32,22 @@
 #define THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_V8_ERROR_HANDLER_H_
 
 #include "base/memory/scoped_refptr.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_event_listener.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_event_listener_or_event_handler.h"
 #include "v8/include/v8.h"
 
 namespace blink {
 
 class ErrorEvent;
 
-class V8ErrorHandler final : public V8EventListener {
+class V8ErrorHandler final : public V8EventListenerOrEventHandler {
  public:
   static V8ErrorHandler* Create(v8::Local<v8::Object> listener,
                                 bool is_inline,
-                                ScriptState* script_state) {
+                                ScriptState* script_state,
+                                const V8PrivateProperty::Symbol& property) {
     V8ErrorHandler* event_listener =
         new V8ErrorHandler(is_inline, script_state);
-    event_listener->SetListenerObject(listener);
+    event_listener->SetListenerObject(script_state, listener, property);
     return event_listener;
   }
   static void StoreExceptionOnErrorEventWrapper(
@@ -64,7 +65,7 @@ class V8ErrorHandler final : public V8EventListener {
   v8::Local<v8::Value> CallListenerFunction(ScriptState*,
                                             v8::Local<v8::Value>,
                                             Event*) override;
-  bool ShouldPreventDefault(v8::Local<v8::Value> return_value) override;
+  bool ShouldPreventDefault(v8::Local<v8::Value> return_value, Event*) override;
 };
 
 }  // namespace blink

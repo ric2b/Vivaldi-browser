@@ -6,8 +6,6 @@ static_library("client") {
   sources = [
     "chromoting_client.cc",
     "chromoting_client.h",
-    "chromoting_session.cc",
-    "chromoting_session.h",
     "client_context.cc",
     "client_context.h",
     "client_telemetry_logger.cc",
@@ -55,18 +53,30 @@ static_library("client") {
     sources += [
       "chromoting_client_runtime.cc",
       "chromoting_client_runtime.h",
+      "chromoting_session.cc",
+      "chromoting_session.h",
       "dual_buffer_frame_consumer.cc",
       "dual_buffer_frame_consumer.h",
-      "gesture_interpreter.cc",
-      "gesture_interpreter.h",
       "oauth_token_getter_proxy.cc",
       "oauth_token_getter_proxy.h",
     ]
     deps += [
-      "//remoting/client/display",
+      "//mojo/core/embedder",
       "//remoting/client/input",
       "//remoting/client/ui",
+      "//services/network/public/mojom",
     ]
+
+    if (!is_chromeos) {
+      # GestureInterpreter depends on //remoting/client/display, which currently
+      # doesn't build on CrOS. crbug.com/869578
+      sources += [
+        "gesture_interpreter.cc",
+        "gesture_interpreter.h",
+      ]
+
+      deps += [ "//remoting/client/display" ]
+    }
   }
   if (is_android) {
     libs += [ "android" ]

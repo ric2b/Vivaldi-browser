@@ -35,6 +35,7 @@ class AnimationMetricsReporter;
 namespace app_list {
 class AppsContainerView;
 class ApplicationDragAndDropHost;
+class AppListBackgroundShieldView;
 class AppListMainView;
 class AppListModel;
 class AppsGridView;
@@ -125,6 +126,13 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
   // Dismisses the UI, cleans up and sets the state to CLOSED.
   void Dismiss();
 
+  // Closes opened folder or search result page if they are opened. Returns
+  // whether the action was handled.
+  bool CloseOpenedPage();
+
+  // Performs the 'back' action for the active page.
+  void Back();
+
   // Enables/disables a semi-transparent overlay over the app list (good for
   // hiding the app list when a modal dialog is being shown).
   void SetAppListOverlayVisible(bool visible);
@@ -165,11 +173,15 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
 
   // Changes the app list state depending on the current |app_list_state_| and
   // whether the search box is empty.
-  void SetStateFromSearchBoxView(bool search_box_is_empty);
+  void SetStateFromSearchBoxView(bool search_box_is_empty,
+                                 bool triggered_by_contents_change);
 
   // Updates y position and opacity of app list.
   void UpdateYPositionAndOpacity(int y_position_in_screen,
                                  float background_opacity);
+
+  // Offsets the y position of the app list (above the screen)
+  void OffsetYPositionOfAppList(int offset);
 
   // Layouts the app list during dragging.
   void DraggingLayout();
@@ -182,6 +194,10 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
   // Called when on-screen keyboard's visibility is changed.
   void OnScreenKeyboardShown(bool shown);
 
+  // If the on-screen keyboard is shown, hide it. Return whether keyboard was
+  // hidden
+  bool CloseKeyboardIfVisible();
+
   // Sets |is_in_drag_| and updates the visibility of app list items.
   void SetIsInDrag(bool is_in_drag);
 
@@ -193,10 +209,15 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
   gfx::Rect GetAppInfoDialogBounds() const;
 
   // Gets current screen bottom.
-  int GetScreenBottom();
+  int GetScreenBottom() const;
 
   // Returns current app list height above display bottom.
   int GetCurrentAppListHeight() const;
+
+  // The progress of app list height transitioning from closed to fullscreen
+  // state. [0.0, 1.0] means the progress between closed and peeking state,
+  // while [1.0, 2.0] means the progress between peeking and fullscreen state.
+  float GetAppListTransitionProgress() const;
 
   views::Widget* get_fullscreen_widget_for_test() const {
     return fullscreen_widget_;
@@ -235,9 +256,7 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
   // Returns true if the home_launcher feature is enabled.
   bool is_home_launcher_enabled() const { return is_home_launcher_enabled_; }
 
-  views::View* app_list_background_shield_for_test() {
-    return app_list_background_shield_;
-  }
+  views::View* GetAppListBackgroundShieldForTest();
 
  private:
   // A widget observer that is responsible for keeping the AppListView state up
@@ -324,9 +343,6 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
   // Returns true if scroll events should be ignored.
   bool ShouldIgnoreScrollEvents();
 
-  // Updates corner radius of the app list background.
-  void UpdateBackgroundRadius();
-
   AppListViewDelegate* delegate_;    // Weak. Owned by AppListService.
   AppListModel* const model_;        // Not Owned.
   SearchModel* const search_model_;  // Not Owned.
@@ -342,10 +358,7 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
   SearchBoxView* search_box_view_ = nullptr;  // Owned by |search_box_widget_|.
   // Owned by the app list's widget. Null if the fullscreen app list is not
   // enabled.
-  views::View* app_list_background_shield_ = nullptr;
-
-  // The mask layer to create rounded corner of the app list background.
-  std::unique_ptr<ui::LayerOwner> app_list_background_mask_ = nullptr;
+  AppListBackgroundShieldView* app_list_background_shield_ = nullptr;
 
   // Whether tablet mode is active.
   bool is_tablet_mode_ = false;
@@ -388,6 +401,9 @@ class APP_LIST_EXPORT AppListView : public views::WidgetDelegateView,
   std::unique_ptr<HideViewAnimationObserver> hide_view_animation_observer_;
 
   std::unique_ptr<TransitionAnimationObserver> transition_animation_observer_;
+
+  // The mask used to clip the |app_list_background_shield_|.
+  std::unique_ptr<ui::LayerOwner> app_list_background_shield_mask_;
 
   // For UMA and testing. If non-null, triggered when the app list is painted.
   base::Closure next_paint_callback_;

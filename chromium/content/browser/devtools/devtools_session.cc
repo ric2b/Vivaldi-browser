@@ -42,7 +42,6 @@ DevToolsSession::DevToolsSession(DevToolsAgentHostImpl* agent_host,
       host_(nullptr),
       dispatcher_(new protocol::UberDispatcher(this)),
       weak_factory_(this) {
-  dispatcher_->setFallThroughForNotFound(true);
 }
 
 DevToolsSession::~DevToolsSession() {
@@ -76,7 +75,6 @@ void DevToolsSession::SetRenderer(int process_host_id,
 
 void DevToolsSession::SetBrowserOnly(bool browser_only) {
   browser_only_ = browser_only;
-  dispatcher_->setFallThroughForNotFound(!browser_only);
 }
 
 void DevToolsSession::AttachToAgent(
@@ -85,7 +83,7 @@ void DevToolsSession::AttachToAgent(
   binding_.Bind(mojo::MakeRequest(&host_ptr_info));
   agent->AttachDevToolsSession(
       std::move(host_ptr_info), mojo::MakeRequest(&session_ptr_),
-      mojo::MakeRequest(&io_session_ptr_), state_cookie_);
+      mojo::MakeRequest(&io_session_ptr_), session_state_cookie_.Clone());
   session_ptr_.set_connection_error_handler(base::BindOnce(
       &DevToolsSession::MojoConnectionDestroyed, base::Unretained(this)));
 
@@ -104,9 +102,9 @@ void DevToolsSession::AttachToAgent(
     waiting_for_response_messages_.clear();
   }
 
-  // Set cookie to an empty string to reattach next time instead of attaching.
-  if (!state_cookie_.has_value())
-    state_cookie_ = std::string();
+  // Set cookie to an empty struct to reattach next time instead of attaching.
+  if (!session_state_cookie_)
+    session_state_cookie_ = blink::mojom::DevToolsSessionState::New();
 }
 
 void DevToolsSession::SendResponse(
@@ -125,22 +123,39 @@ void DevToolsSession::MojoConnectionDestroyed() {
 
 void DevToolsSession::DispatchProtocolMessage(
     const std::string& message,
-    base::DictionaryValue* parsed_message) {
+    std::unique_ptr<base::DictionaryValue> parsed_message) {
   DevToolsManagerDelegate* delegate =
       DevToolsManager::GetInstance()->delegate();
-  if (delegate && parsed_message &&
-      delegate->HandleCommand(agent_host_, client_, parsed_message)) {
-    return;
+  if (delegate && parsed_message) {
+    delegate->HandleCommand(agent_host_, client_, std::move(parsed_message),
+                            message,
+                            base::BindOnce(&DevToolsSession::HandleCommand,
+                                           weak_factory_.GetWeakPtr()));
+  } else {
+    HandleCommand(std::move(parsed_message), message);
   }
+}
 
+void DevToolsSession::HandleCommand(
+    std::unique_ptr<base::DictionaryValue> parsed_message,
+    const std::string& message) {
+  std::unique_ptr<protocol::Value> protocol_command =
+      protocol::toProtocolValue(parsed_message.get(), 1000);
   int call_id;
   std::string method;
-  if (dispatcher_->dispatch(protocol::toProtocolValue(parsed_message, 1000),
-                            &call_id,
-                            &method) != protocol::Response::kFallThrough) {
+  if (!dispatcher_->parseCommand(protocol_command.get(), &call_id, &method))
     return;
+  if (browser_only_ || dispatcher_->canDispatch(method)) {
+    dispatcher_->dispatch(call_id, method, std::move(protocol_command),
+                          message);
+  } else {
+    fallThrough(call_id, method, message);
   }
+}
 
+void DevToolsSession::fallThrough(int call_id,
+                                  const std::string& method,
+                                  const std::string& message) {
   // In browser-only mode, we should've handled everything in dispatcher.
   DCHECK(!browser_only_);
 
@@ -203,9 +218,8 @@ void DevToolsSession::flushProtocolNotifications() {
 void DevToolsSession::DispatchProtocolResponse(
     const std::string& message,
     int call_id,
-    const base::Optional<std::string>& state) {
-  if (state.has_value())
-    state_cookie_ = state.value();
+    blink::mojom::DevToolsSessionStatePtr updates) {
+  ApplySessionStateUpdates(std::move(updates));
   waiting_for_response_messages_.erase(call_id);
   client_->DispatchProtocolMessage(agent_host_, message);
   // |this| may be deleted at this point.
@@ -213,11 +227,23 @@ void DevToolsSession::DispatchProtocolResponse(
 
 void DevToolsSession::DispatchProtocolNotification(
     const std::string& message,
-    const base::Optional<std::string>& state) {
-  if (state.has_value())
-    state_cookie_ = state.value();
+    blink::mojom::DevToolsSessionStatePtr updates) {
+  ApplySessionStateUpdates(std::move(updates));
   client_->DispatchProtocolMessage(agent_host_, message);
   // |this| may be deleted at this point.
 }
 
+void DevToolsSession::ApplySessionStateUpdates(
+    blink::mojom::DevToolsSessionStatePtr updates) {
+  if (!updates)
+    return;
+  if (!session_state_cookie_)
+    session_state_cookie_ = blink::mojom::DevToolsSessionState::New();
+  for (auto& entry : updates->entries) {
+    if (entry.second.has_value())
+      session_state_cookie_->entries[entry.first] = std::move(entry.second);
+    else
+      session_state_cookie_->entries.erase(entry.first);
+  }
+}
 }  // namespace content

@@ -73,12 +73,11 @@ class FakeDiskMountManager : public chromeos::disks::DiskMountManager {
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
   const DiskMap& disks() const override;
-  const Disk* FindDiskBySourcePath(
+  const chromeos::disks::Disk* FindDiskBySourcePath(
       const std::string& source_path) const override;
   const MountPointMap& mount_points() const override;
-  void EnsureMountInfoRefreshed(
-      const EnsureMountInfoRefreshedCallback& callback,
-      bool force) override;
+  void EnsureMountInfoRefreshed(EnsureMountInfoRefreshedCallback callback,
+                                bool force) override;
   void MountPath(const std::string& source_path,
                  const std::string& source_format,
                  const std::string& mount_label,
@@ -90,7 +89,7 @@ class FakeDiskMountManager : public chromeos::disks::DiskMountManager {
   // |FinishAllUnmountRequest()| is called.
   void UnmountPath(const std::string& mount_path,
                    chromeos::UnmountOptions options,
-                   const UnmountPathCallback& callback) override;
+                   UnmountPathCallback callback) override;
   void RemountAllRemovableDrives(
       chromeos::MountAccessMode access_mode) override;
   void FormatMountedDevice(const std::string& mount_path) override;
@@ -98,14 +97,15 @@ class FakeDiskMountManager : public chromeos::disks::DiskMountManager {
                            const std::string& volume_name) override;
   void UnmountDeviceRecursively(
       const std::string& device_path,
-      const UnmountDeviceRecursivelyCallbackType& callback) override;
+      UnmountDeviceRecursivelyCallbackType callback) override;
 
-  bool AddDiskForTest(std::unique_ptr<Disk> disk) override;
+  bool AddDiskForTest(std::unique_ptr<chromeos::disks::Disk> disk) override;
   bool AddMountPointForTest(const MountPointInfo& mount_point) override;
-  void InvokeDiskEventForTest(DiskEvent event, const Disk* disk);
+  void InvokeDiskEventForTest(DiskEvent event,
+                              const chromeos::disks::Disk* disk);
 
  private:
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
   base::queue<UnmountPathCallback> pending_unmount_callbacks_;
 
   DiskMap disks_;

@@ -45,6 +45,7 @@
 #include "third_party/blink/renderer/core/editing/spellcheck/spell_checker.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
@@ -334,6 +335,8 @@ AttributeTriggers* HTMLElement::TriggersForAttributeName(
        &HTMLElement::OnXMLLangAttrChanged},
 
       {onabortAttr, kNoWebFeature, EventTypeNames::abort, nullptr},
+      {onactivateinvisibleAttr, kNoWebFeature,
+       EventTypeNames::activateinvisible, nullptr},
       {onanimationendAttr, kNoWebFeature, EventTypeNames::animationend,
        nullptr},
       {onanimationiterationAttr, kNoWebFeature,
@@ -409,6 +412,8 @@ AttributeTriggers* HTMLElement::TriggersForAttributeName(
       {onpointermoveAttr, kNoWebFeature, EventTypeNames::pointermove, nullptr},
       {onpointeroutAttr, kNoWebFeature, EventTypeNames::pointerout, nullptr},
       {onpointeroverAttr, kNoWebFeature, EventTypeNames::pointerover, nullptr},
+      {onpointerrawmoveAttr, kNoWebFeature, EventTypeNames::pointerrawmove,
+       nullptr},
       {onpointerupAttr, kNoWebFeature, EventTypeNames::pointerup, nullptr},
       {onprogressAttr, kNoWebFeature, EventTypeNames::progress, nullptr},
       {onratechangeAttr, kNoWebFeature, EventTypeNames::ratechange, nullptr},
@@ -1058,7 +1063,7 @@ void HTMLElement::AdjustDirectionalityIfNeededAfterChildrenChanged(
 }
 
 Node::InsertionNotificationRequest HTMLElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   // Process the superclass first to ensure that `InActiveDocument()` is
   // updated.
   Element::InsertedInto(insertion_point);
@@ -1207,10 +1212,10 @@ bool HTMLElement::IsInteractiveContent() const {
   return false;
 }
 
-void HTMLElement::DefaultEventHandler(Event* event) {
-  if (event->type() == EventTypeNames::keypress && event->IsKeyboardEvent()) {
+void HTMLElement::DefaultEventHandler(Event& event) {
+  if (event.type() == EventTypeNames::keypress && event.IsKeyboardEvent()) {
     HandleKeypressEvent(ToKeyboardEvent(event));
-    if (event->DefaultHandled())
+    if (event.DefaultHandled())
       return;
   }
 
@@ -1236,7 +1241,7 @@ bool HTMLElement::MatchesReadWritePseudoClass() const {
   return parentElement() && HasEditableStyle(*parentElement());
 }
 
-void HTMLElement::HandleKeypressEvent(KeyboardEvent* event) {
+void HTMLElement::HandleKeypressEvent(KeyboardEvent& event) {
   if (!IsSpatialNavigationEnabled(GetDocument().GetFrame()) || !SupportsFocus())
     return;
   GetDocument().UpdateStyleAndLayoutTree();
@@ -1246,10 +1251,10 @@ void HTMLElement::HandleKeypressEvent(KeyboardEvent* event) {
   // action.
   if (IsTextControl() || HasEditableStyle(*this))
     return;
-  int char_code = event->charCode();
+  int char_code = event.charCode();
   if (char_code == '\r' || char_code == ' ') {
-    DispatchSimulatedClick(event);
-    event->SetDefaultHandled();
+    DispatchSimulatedClick(&event);
+    event.SetDefaultHandled();
   }
 }
 

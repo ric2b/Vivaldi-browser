@@ -35,7 +35,7 @@
 #include "media/video/picture.h"
 #include "media/video/video_decode_accelerator.h"
 #include "ppapi/c/pp_errors.h"
-#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
+#include "services/ws/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/skia/include/gpu/GrTypes.h"
 
 namespace content {
@@ -60,7 +60,7 @@ bool IsCodecSupported(media::VideoCodec codec) {
 // YUV->RGB converter class using a shader and FBO.
 class VideoDecoderShim::YUVConverter {
  public:
-  YUVConverter(scoped_refptr<ui::ContextProviderCommandBuffer>);
+  YUVConverter(scoped_refptr<ws::ContextProviderCommandBuffer>);
   ~YUVConverter();
   bool Initialize();
   void Convert(const scoped_refptr<media::VideoFrame>& frame, GLuint tex_out);
@@ -71,7 +71,7 @@ class VideoDecoderShim::YUVConverter {
   GLuint CreateProgram(const char* name, GLuint vshader, GLuint fshader);
   GLuint CreateTexture();
 
-  scoped_refptr<ui::ContextProviderCommandBuffer> context_provider_;
+  scoped_refptr<ws::ContextProviderCommandBuffer> context_provider_;
   gpu::gles2::GLES2Interface* gl_;
   GLuint frame_buffer_;
   GLuint vertex_buffer_;
@@ -101,7 +101,7 @@ class VideoDecoderShim::YUVConverter {
 };
 
 VideoDecoderShim::YUVConverter::YUVConverter(
-    scoped_refptr<ui::ContextProviderCommandBuffer> context_provider)
+    scoped_refptr<ws::ContextProviderCommandBuffer> context_provider)
     : context_provider_(std::move(context_provider)),
       gl_(context_provider_->ContextGL()),
       frame_buffer_(0),
@@ -390,16 +390,22 @@ void VideoDecoderShim::YUVConverter::Convert(
     };
 
     yuv_adjust = yuv_adjust_constrained;
+    // TODO(hubbe): Should default to 709
     yuv_matrix = yuv_to_rgb_rec601;
 
-    int result;
-    if (frame->metadata()->GetInteger(media::VideoFrameMetadata::COLOR_SPACE,
-                                      &result)) {
-      if (result == media::COLOR_SPACE_JPEG) {
-        yuv_matrix = yuv_to_rgb_jpeg;
-        yuv_adjust = yuv_adjust_full;
-      } else if (result == media::COLOR_SPACE_HD_REC709) {
-        yuv_matrix = yuv_to_rgb_rec709;
+    SkYUVColorSpace sk_yuv_color_space;
+    if (frame->ColorSpace().ToSkYUVColorSpace(&sk_yuv_color_space)) {
+      switch (sk_yuv_color_space) {
+        case kJPEG_SkYUVColorSpace:
+          yuv_matrix = yuv_to_rgb_jpeg;
+          yuv_adjust = yuv_adjust_full;
+          break;
+        case kRec709_SkYUVColorSpace:
+          yuv_matrix = yuv_to_rgb_rec709;
+          break;
+        case kRec601_SkYUVColorSpace:
+          // Current default.
+          break;
       }
     }
 

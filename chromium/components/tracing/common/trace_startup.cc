@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_log.h"
+#include "build/build_config.h"
 #include "components/tracing/common/trace_startup_config.h"
 #include "components/tracing/common/trace_to_console.h"
 #include "components/tracing/common/tracing_switches.h"
@@ -28,7 +29,6 @@ void EnableStartupTracingIfNeeded() {
     uint8_t modes = base::trace_event::TraceLog::RECORDING_MODE;
     if (!trace_config.event_filters().empty())
       modes |= base::trace_event::TraceLog::FILTERING_MODE;
-    // This checks kTraceConfigFile switch.
     base::trace_event::TraceLog::GetInstance()->SetEnabled(
         TraceStartupConfig::GetInstance()->GetTraceConfig(), modes);
   } else if (command_line.HasSwitch(switches::kTraceToConsole)) {

@@ -980,7 +980,7 @@ const std::vector<KeyboardShortcutItem>& GetKeyboardShortcutItemList() {
        // |accelerator_ids|
        {},
        // |shortcut_key_codes|
-       {ui::VKEY_LMENU, ui::VKEY_UNKNOWN, ui::VKEY_BACK}},
+       {ui::VKEY_COMMAND, ui::VKEY_UNKNOWN, ui::VKEY_BACK}},
 
       {// |categories|
        {ShortcutCategory::kTextEditing},
@@ -1227,13 +1227,6 @@ const std::vector<KeyboardShortcutItem>& GetKeyboardShortcutItemList() {
        IDS_KSV_SHORTCUT_TWO_MODIFIERS_ONE_KEY,
        // |accelerator_ids|
        {{ui::VKEY_T, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN}}},
-
-      {// |categories|
-       {ShortcutCategory::kAccessibility},
-       IDS_KSV_DESCRIPTION_TOGGLE_DICTATION,
-       IDS_KSV_SHORTCUT_ONE_MODIFIER_ONE_KEY,
-       // |accelerator_ids|
-       {{ui::VKEY_D, ui::EF_COMMAND_DOWN}}},
 
       {// |categories|
        {ShortcutCategory::kSystemAndDisplay},

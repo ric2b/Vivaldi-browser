@@ -203,7 +203,8 @@ public class CardUnmaskPrompt implements TextWatcher, OnClickListener, ModalDial
         mShouldRequestExpirationDate = shouldRequestExpirationDate;
         mThisYear = -1;
         mThisMonth = -1;
-        if (mShouldRequestExpirationDate) new CalendarTask().execute();
+        if (mShouldRequestExpirationDate)
+            new CalendarTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
 
         // Set the max length of the CVC field.
         mCardUnmaskInput.setFilters(
@@ -250,9 +251,9 @@ public class CardUnmaskPrompt implements TextWatcher, OnClickListener, ModalDial
     /**
      * Avoids disk reads for timezone when getting the default instance of Calendar.
      */
-    private class CalendarTask extends AsyncTask<Void, Void, Calendar> {
+    private class CalendarTask extends AsyncTask<Calendar> {
         @Override
-        protected Calendar doInBackground(Void... unused) {
+        protected Calendar doInBackground() {
             return Calendar.getInstance();
         }
 
@@ -273,7 +274,7 @@ public class CardUnmaskPrompt implements TextWatcher, OnClickListener, ModalDial
         mContext = activity;
         mModalDialogManager = activity.getModalDialogManager();
 
-        mModalDialogManager.showDialog(mDialog, ModalDialogManager.APP_MODAL);
+        mModalDialogManager.showDialog(mDialog, ModalDialogManager.ModalDialogType.APP);
 
         showExpirationDateInputsInputs();
 
@@ -290,7 +291,7 @@ public class CardUnmaskPrompt implements TextWatcher, OnClickListener, ModalDial
         mInstructions.setText(instructions);
         mShouldRequestExpirationDate = shouldRequestExpirationDate;
         if (mShouldRequestExpirationDate && (mThisYear == -1 || mThisMonth == -1)) {
-            new CalendarTask().execute();
+            new CalendarTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
         }
         showExpirationDateInputsInputs();
     }

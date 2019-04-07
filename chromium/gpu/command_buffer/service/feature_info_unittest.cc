@@ -159,7 +159,7 @@ class FeatureInfoTest
   }
 
   void TearDown() override {
-    info_ = NULL;
+    info_ = nullptr;
     GpuServiceTest::TearDown();
   }
 
@@ -1764,6 +1764,11 @@ TEST_P(FeatureInfoTest, InitializeCHROMIUM_unpremultiply_and_dither_copy) {
           info_->extensions(), "GL_CHROMIUM_unpremultiply_and_dither_copy"));
       break;
   }
+}
+
+TEST_P(FeatureInfoTest, InitializeMESAFramebufferFlipYExtensionTrue) {
+  SetupInitExpectations("GL_MESA_framebuffer_flip_y");
+  EXPECT_TRUE(info_->feature_flags().mesa_framebuffer_flip_y);
 }
 
 }  // namespace gles2

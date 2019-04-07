@@ -16,15 +16,11 @@ const char kBluetoothAdapterOffHelpURL[] =
     "https://support.google.com/chrome?p=bluetooth";
 #endif
 
-// TODO(https://crbug.com/852139): Replace this numbered link with a P-link once
-// we have one.
 const char kCastCloudServicesHelpURL[] =
-    "https://support.google.com/chromecast/answer/6320939";
+    "https://support.google.com/chromecast/?p=casting_cloud_services";
 
-// TODO(https://crbug.com/852139): Replace this numbered link with a P-link once
-// we have one.
 const char kCastNoDestinationFoundURL[] =
-    "https://support.google.com/chromecast/answer/3249268";
+    "https://support.google.com/chromecast/?p=no_cast_destination";
 
 const char kChooserBluetoothOverviewURL[] =
     "https://support.google.com/chrome?p=bluetooth";
@@ -41,7 +37,7 @@ const char kChromeHelpViaKeyboardURL[] =
     "chrome-extension://honijodknafkokifofgiaalefdiedpko/main.html";
 #else
     "https://support.google.com/chromebook/?p=help&ctx=keyboard";
-#endif  // defined(GOOGLE_CHROME_BUILD
+#endif  // defined(GOOGLE_CHROME_BUILD)
 #else
     "https://support.google.com/chrome/?p=help&ctx=keyboard";
 #endif  // defined(OS_CHROMEOS)
@@ -52,7 +48,7 @@ const char kChromeHelpViaMenuURL[] =
     "chrome-extension://honijodknafkokifofgiaalefdiedpko/main.html";
 #else
     "https://support.google.com/chromebook/?p=help&ctx=menu";
-#endif  // defined(GOOGLE_CHROME_BUILD
+#endif  // defined(GOOGLE_CHROME_BUILD)
 #else
     "https://support.google.com/chrome/?p=help&ctx=menu";
 #endif  // defined(OS_CHROMEOS)
@@ -63,7 +59,7 @@ const char kChromeHelpViaWebUIURL[] =
     "chrome-extension://honijodknafkokifofgiaalefdiedpko/main.html";
 #else
     "https://support.google.com/chromebook/?p=help&ctx=settings";
-#endif  // defined(GOOGLE_CHROME_BUILD
+#endif  // defined(GOOGLE_CHROME_BUILD)
 #else
     "https://support.google.com/chrome/?p=help&ctx=settings";
 #endif  // defined(OS_CHROMEOS)
@@ -193,9 +189,6 @@ const char kRemoveNonCWSExtensionURL[] =
 const char kResetProfileSettingsLearnMoreURL[] =
     "https://support.google.com/chrome/?p=ui_reset_settings";
 
-const char kSafeSearchSafeParameter[] = "safe=active";
-const char kSafeSearchSsuiParameter[] = "ssui=on";
-
 const char kSettingsSearchHelpURL[] =
 #if defined(OS_CHROMEOS)
     "https://support.google.com/chromebook/?p=settings_search_help";
@@ -278,7 +271,10 @@ const char kInstantTetheringLearnMoreURL[] =
     "https://support.google.com/chromebook?p=instant_tethering";
 
 const char kMultiDeviceLearnMoreURL[] =
-    "https://support.google.com/chromebook?p=multidevice-placeholder";
+    "https://support.google.com/pixelbook/?p=better_together";
+
+const char kAndroidMessagesLearnMoreURL[] =
+    "https://support.google.com/pixelbook/?p=bettertogether_android_messages";
 
 const char kLanguageSettingsLearnMoreUrl[] =
     "https://support.google.com/chromebook/answer/1059490";
@@ -305,6 +301,9 @@ const char kTPMFirmwareUpdateLearnMoreURL[] =
 
 const char kTimeZoneSettingsLearnMoreURL[] =
     "https://support.google.com/chromebook?p=chromebook_timezone&hl=%s";
+
+const char kSmbSharesLearnMoreURL[] =
+    "https://support.google.com/chromebook?p=network_file_shares";
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_MACOSX)

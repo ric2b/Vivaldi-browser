@@ -362,6 +362,7 @@ def WriteGNNinja(path, platform, host, options, linux_sysroot):
         '-pipe',
         '-fno-exceptions',
         '-fno-rtti',
+        '-fdiagnostics-color',
     ])
     cflags_cc.extend(['-std=c++14', '-Wno-c++11-narrowing'])
 

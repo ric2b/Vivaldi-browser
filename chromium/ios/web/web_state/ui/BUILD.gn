@@ -31,6 +31,7 @@ source_set("ui") {
     "//ios/web/web_state/js",
     "//ios/web/web_state/ui:wk_web_view_configuration_provider",
     "//ios/web/webui:webui",
+    "//services/metrics/public/cpp:ukm_builders",
     "//ui/base",
     "//url",
   ]
@@ -111,6 +112,7 @@ source_set("wk_web_view_configuration_provider") {
     "//base",
     "//ios/web/public",
     "//ios/web/web_state/js",
+    "//ios/web/web_state/js:script_util",
   ]
 
   sources = [

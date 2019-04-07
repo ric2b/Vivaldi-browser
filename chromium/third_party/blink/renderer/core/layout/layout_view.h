@@ -28,9 +28,9 @@
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/layout_state.h"
+#include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/pod_free_list_arena.h"
-#include "third_party/blink/renderer/platform/scroll/scrollable_area.h"
 
 namespace blink {
 
@@ -146,7 +146,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
       const PaintInfo&,
       const LayoutPoint& paint_offset) const override;
 
-  void ClearSelection();
   void CommitPendingSelection();
 
   void AbsoluteRects(Vector<IntRect>&,
@@ -241,13 +240,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   void SetShouldDoFullPaintInvalidationOnResizeIfNeeded(bool width_changed,
                                                         bool height_changed);
 
-  // The document scrollbar is always on the right, even in RTL. This is to
-  // prevent it from moving around on navigations.
-  // TODO(skobes): This is not quite the ideal behavior, see
-  // http://crbug.com/250514 and http://crbug.com/249860.
-  bool ShouldPlaceBlockDirectionScrollbarOnLogicalLeft() const override {
-    return false;
-  }
+  bool ShouldPlaceBlockDirectionScrollbarOnLogicalLeft() const override;
 
   LayoutRect DebugRect() const override;
 

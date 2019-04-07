@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_mediator.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_model.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_web_view_proxy_observer.h"
 #import "ios/chrome/browser/ui/fullscreen/scoped_fullscreen_disabler.h"
@@ -21,6 +22,8 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+using fullscreen::features::ViewportAdjustmentExperiment;
 
 namespace {
 // Returns whether fullscreen should be disabled for |web_state|'s SSL status.
@@ -51,6 +54,7 @@ FullscreenWebStateObserver::FullscreenWebStateObserver(
     FullscreenMediator* mediator)
     : controller_(controller),
       model_(model),
+      mediator_(mediator),
       web_view_proxy_observer_([[FullscreenWebViewProxyObserver alloc]
           initWithModel:model_
                mediator:mediator]) {
@@ -71,6 +75,7 @@ void FullscreenWebStateObserver::SetWebState(web::WebState* web_state) {
     // The toolbar should be visible whenever the current tab changes.
     model_->ResetForNavigation();
   }
+  mediator_->SetWebState(web_state);
   // Update the model according to the new WebState.
   SetIsLoading(web_state_ ? web_state->IsLoading() : false);
   SetDisableFullscreenForSSL(ShouldDisableFullscreenForWebStateSSL(web_state_));
@@ -93,9 +98,11 @@ void FullscreenWebStateObserver::DidFinishNavigation(
   // - For normal pages, using |contentInset| breaks the layout of fixed-
   //   position DOM elements, so top padding must be accomplished by updating
   //   the WKWebView's frame.
+  ViewportAdjustmentExperiment viewport_experiment =
+      fullscreen::features::GetActiveViewportExperiment();
   bool force_content_inset =
-      fullscreen::features::GetActiveViewportExperiment() ==
-      fullscreen::features::ViewportAdjustmentExperiment::CONTENT_INSET;
+      viewport_experiment == ViewportAdjustmentExperiment::CONTENT_INSET ||
+      viewport_experiment == ViewportAdjustmentExperiment::SMOOTH_SCROLLING;
   web_state->GetWebViewProxy().shouldUseViewContentInset =
       force_content_inset ||
       web_state->GetContentsMimeType() == "application/pdf";

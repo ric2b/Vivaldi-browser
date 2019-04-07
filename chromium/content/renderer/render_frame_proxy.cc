@@ -55,8 +55,8 @@
 #if BUILDFLAG(ENABLE_PRINTING)
 // nogncheck because dependency on //printing is conditional upon
 // enable_basic_printing flags.
+#include "printing/metafile_skia.h"          // nogncheck
 #include "printing/metafile_skia_wrapper.h"  // nogncheck
-#include "printing/pdf_metafile_skia.h"      // nogncheck
 #endif
 
 namespace content {
@@ -92,17 +92,21 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
   blink::WebRemoteFrame* web_frame =
       blink::WebRemoteFrame::Create(scope, proxy.get());
 
+  bool parent_is_local =
+      !frame_to_replace->GetWebFrame()->Parent() ||
+      frame_to_replace->GetWebFrame()->Parent()->IsWebLocalFrame();
+
   // If frame_to_replace has a RenderFrameProxy parent, then its
   // RenderWidget will be destroyed along with it, so the new
   // RenderFrameProxy uses its parent's RenderWidget.
   RenderWidget* widget =
-      (!frame_to_replace->GetWebFrame()->Parent() ||
-       frame_to_replace->GetWebFrame()->Parent()->IsWebLocalFrame())
+      parent_is_local
           ? frame_to_replace->GetRenderWidget()
           : RenderFrameProxy::FromWebFrame(
                 frame_to_replace->GetWebFrame()->Parent()->ToWebRemoteFrame())
                 ->render_widget();
-  proxy->Init(web_frame, frame_to_replace->render_view(), widget);
+  proxy->Init(web_frame, frame_to_replace->render_view(), widget,
+              parent_is_local);
   return proxy.release();
 }
 
@@ -158,7 +162,7 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
     render_widget = parent->render_widget();
   }
 
-  proxy->Init(web_frame, render_view, render_widget);
+  proxy->Init(web_frame, render_view, render_widget, false);
 
   // Initialize proxy's WebRemoteFrame with the security origin and other
   // replicated information.
@@ -220,7 +224,8 @@ RenderFrameProxy::~RenderFrameProxy() {
 
 void RenderFrameProxy::Init(blink::WebRemoteFrame* web_frame,
                             RenderViewImpl* render_view,
-                            RenderWidget* render_widget) {
+                            RenderWidget* render_widget,
+                            bool parent_is_local) {
   CHECK(web_frame);
   CHECK(render_view);
   CHECK(render_widget);
@@ -237,13 +242,14 @@ void RenderFrameProxy::Init(blink::WebRemoteFrame* web_frame,
 
   enable_surface_synchronization_ = features::IsSurfaceSynchronizationEnabled();
 
-  compositing_helper_ = std::make_unique<ChildFrameCompositingHelper>(this);
+  if (parent_is_local)
+    compositing_helper_ = std::make_unique<ChildFrameCompositingHelper>(this);
 
   pending_visual_properties_.screen_info =
       render_widget_->GetOriginalScreenInfo();
 
 #if defined(USE_AURA)
-  if (!features::IsAshInBrowserProcess()) {
+  if (features::IsUsingWindowService()) {
     RendererWindowTreeClient* renderer_window_tree_client =
         RendererWindowTreeClient::Get(render_widget_->routing_id());
     // It's possible a MusEmbeddedFrame has already been scheduled for creation
@@ -264,13 +270,13 @@ void RenderFrameProxy::ResendVisualProperties() {
 }
 
 void RenderFrameProxy::WillBeginCompositorFrame() {
-  if (compositing_helper_->primary_surface_id().is_valid()) {
+  if (compositing_helper_ &&
+      compositing_helper_->primary_surface_id().is_valid()) {
     FrameHostMsg_HittestData_Params params;
     params.surface_id = compositing_helper_->primary_surface_id();
     params.ignored_for_hittest = web_frame_->IsIgnoredForHitTest();
     render_widget_->QueueMessage(
-        new FrameHostMsg_HittestData(render_widget_->routing_id(), params),
-        MESSAGE_DELIVERY_POLICY_WITH_VISUAL_STATE);
+        new FrameHostMsg_HittestData(render_widget_->routing_id(), params));
   }
 }
 
@@ -485,7 +491,7 @@ void RenderFrameProxy::OnViewChanged(
     const FrameMsg_ViewChanged_Params& params) {
   crashed_ = false;
   // In mash the FrameSinkId comes from RendererWindowTreeClient.
-  if (features::IsAshInBrowserProcess())
+  if (!features::IsUsingWindowService())
     frame_sink_id_ = *params.frame_sink_id;
 
   // Resend the FrameRects and allocate a new viz::LocalSurfaceId when the view
@@ -687,7 +693,8 @@ void RenderFrameProxy::SynchronizeVisualProperties() {
   // the intersection rects.
   gfx::Rect new_compositor_visible_rect = web_frame_->GetCompositingRect();
   if (new_compositor_visible_rect != last_compositor_visible_rect_)
-    UpdateRemoteViewportIntersection(last_intersection_rect_);
+    UpdateRemoteViewportIntersection(last_intersection_rect_,
+                                     last_occluded_or_obscured_);
 }
 
 void RenderFrameProxy::OnSetHasReceivedUserGestureBeforeNavigation(bool value) {
@@ -775,6 +782,8 @@ void RenderFrameProxy::Navigate(const blink::WebURLRequest& request,
   params.uses_post = request.HttpMethod().Utf8() == "POST";
   params.resource_request_body = GetRequestBodyForWebURLRequest(request);
   params.extra_headers = GetWebURLRequestHeadersAsString(request);
+  // TODO(domfarolino): Retrieve the referrer in the form of a referrer member
+  // instead of the header field. See https://crbug.com/850813.
   params.referrer = Referrer(blink::WebStringToGURL(request.HttpHeaderField(
                                  blink::WebString::FromUTF8("Referer"))),
                              request.GetReferrerPolicy());
@@ -805,12 +814,14 @@ void RenderFrameProxy::FrameRectsChanged(
 }
 
 void RenderFrameProxy::UpdateRemoteViewportIntersection(
-    const blink::WebRect& viewport_intersection) {
+    const blink::WebRect& viewport_intersection,
+    bool occluded_or_obscured) {
   last_intersection_rect_ = viewport_intersection;
   last_compositor_visible_rect_ = web_frame_->GetCompositingRect();
+  last_occluded_or_obscured_ = occluded_or_obscured;
   Send(new FrameHostMsg_UpdateViewportIntersection(
       routing_id_, gfx::Rect(viewport_intersection),
-      last_compositor_visible_rect_));
+      last_compositor_visible_rect_, last_occluded_or_obscured_));
 }
 
 void RenderFrameProxy::VisibilityChanged(bool visible) {
@@ -872,7 +883,7 @@ void RenderFrameProxy::OnMusEmbeddedFrameSurfaceChanged(
 void RenderFrameProxy::OnMusEmbeddedFrameSinkIdAllocated(
     const viz::FrameSinkId& frame_sink_id) {
   // RendererWindowTreeClient should only call this when mus is hosting viz.
-  DCHECK(!features::IsAshInBrowserProcess());
+  DCHECK(features::IsUsingWindowService());
   frame_sink_id_ = frame_sink_id;
   // Resend the FrameRects and allocate a new viz::LocalSurfaceId when the view
   // changes.
@@ -898,7 +909,7 @@ SkBitmap* RenderFrameProxy::GetSadPageBitmap() {
 uint32_t RenderFrameProxy::Print(const blink::WebRect& rect,
                                  cc::PaintCanvas* canvas) {
 #if BUILDFLAG(ENABLE_PRINTING)
-  printing::PdfMetafileSkia* metafile =
+  printing::MetafileSkia* metafile =
       printing::MetafileSkiaWrapper::GetMetafileFromCanvas(canvas);
   DCHECK(metafile);
 

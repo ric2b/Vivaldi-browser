@@ -109,6 +109,11 @@ struct CORE_EXPORT FrameLoadRequest {
     should_set_opener_ = should_set_opener;
   }
 
+  const AtomicString& HrefTranslate() { return href_translate_; }
+  void SetHrefTranslate(const AtomicString& translate) {
+    href_translate_ = translate;
+  }
+
   ContentSecurityPolicyDisposition ShouldCheckMainWorldContentSecurityPolicy()
       const {
     return should_check_main_world_content_security_policy_;
@@ -143,6 +148,12 @@ struct CORE_EXPORT FrameLoadRequest {
     return result;
   }
 
+  void SetInputStartTime(base::TimeTicks input_start_time) {
+    input_start_time_ = input_start_time;
+  }
+
+  base::TimeTicks GetInputStartTime() const { return input_start_time_; }
+
  private:
   FrameLoadRequest(Document* origin_document,
                    const ResourceRequest&,
@@ -154,6 +165,7 @@ struct CORE_EXPORT FrameLoadRequest {
   Member<Document> origin_document_;
   ResourceRequest resource_request_;
   AtomicString frame_name_;
+  AtomicString href_translate_;
   SubstituteData substitute_data_;
   bool replaces_current_item_;
   ClientRedirectPolicy client_redirect_;
@@ -167,6 +179,7 @@ struct CORE_EXPORT FrameLoadRequest {
   base::UnguessableToken devtools_navigation_token_;
   scoped_refptr<base::RefCountedData<mojom::blink::BlobURLTokenPtr>>
       blob_url_token_;
+  base::TimeTicks input_start_time_;
 };
 
 }  // namespace blink

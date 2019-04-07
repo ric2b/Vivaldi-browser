@@ -11,7 +11,9 @@ namespace vivaldi {
 namespace {
 
 const char *vivaldi_extra_locales_array[] = {
+  "af",
   "be",
+  "de-CH",
   "en-AU",
   "en-IN",
   "eo",

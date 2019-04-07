@@ -14,7 +14,6 @@
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/ios/browser/wait_for_network_callback_helper.h"
 #include "net/cookies/cookie_change_dispatcher.h"
-#include "net/url_request/url_request_context_getter.h"
 
 namespace ios {
 class ChromeBrowserState;
@@ -28,8 +27,7 @@ class IOSChromeSigninClient : public SigninClient,
       ios::ChromeBrowserState* browser_state,
       SigninErrorController* signin_error_controller,
       scoped_refptr<content_settings::CookieSettings> cookie_settings,
-      scoped_refptr<HostContentSettingsMap> host_content_settings_map,
-      scoped_refptr<TokenWebData> token_web_data);
+      scoped_refptr<HostContentSettingsMap> host_content_settings_map);
   ~IOSChromeSigninClient() override;
 
   // KeyedService implementation.
@@ -48,31 +46,23 @@ class IOSChromeSigninClient : public SigninClient,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
       override;
   void PreGaiaLogout(base::OnceClosure callback) override;
-  scoped_refptr<TokenWebData> GetDatabase() override;
   PrefService* GetPrefs() override;
-  net::URLRequestContextGetter* GetURLRequestContext() override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
+  network::mojom::CookieManager* GetCookieManager() override;
   void DoFinalInit() override;
-  bool CanRevokeCredentials() override;
-  std::string GetSigninScopedDeviceId() override;
   bool IsFirstRun() const override;
   bool AreSigninCookiesAllowed() override;
   void AddContentSettingsObserver(
       content_settings::Observer* observer) override;
   void RemoveContentSettingsObserver(
       content_settings::Observer* observer) override;
-  std::unique_ptr<CookieChangeSubscription> AddCookieChangeCallback(
-      const GURL& url,
-      const std::string& name,
-      net::CookieChangeCallback callback) override;
   void DelayNetworkCall(const base::Closure& callback) override;
+  void OnSignedOut() override;
 
   // SigninErrorController::Observer implementation.
   void OnErrorChanged() override;
 
  private:
-  // SigninClient private implementation.
-  void OnSignedOut() override;
 
   // Helper to delay callbacks until connection becomes online again.
   std::unique_ptr<WaitForNetworkCallbackHelper> network_callback_helper_;
@@ -84,8 +74,6 @@ class IOSChromeSigninClient : public SigninClient,
   scoped_refptr<content_settings::CookieSettings> cookie_settings_;
   // Used to add and remove content settings observers.
   scoped_refptr<HostContentSettingsMap> host_content_settings_map_;
-  // The TokenWebData associated with this service.
-  scoped_refptr<TokenWebData> token_web_data_;
 
   DISALLOW_COPY_AND_ASSIGN(IOSChromeSigninClient);
 };

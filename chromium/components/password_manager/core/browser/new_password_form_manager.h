@@ -18,6 +18,9 @@
 #include "components/password_manager/core/browser/form_fetcher.h"
 #include "components/password_manager/core/browser/form_parsing/password_field_prediction.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
+#include "components/password_manager/core/browser/password_form_metrics_recorder.h"
+#include "components/password_manager/core/browser/password_form_user_action.h"
+#include "components/password_manager/core/browser/votes_uploader.h"
 
 namespace autofill {
 class FormStructure;
@@ -33,7 +36,7 @@ class PasswordManagerDriver;
 // stored information about it. It is aimed to replace PasswordFormManager and
 // to be renamed in new Password Manager design. Details
 // go/new-cpm-design-refactoring.
-class NewPasswordFormManager : public PasswordFormManagerForUI,
+class NewPasswordFormManager : public PasswordFormManagerInterface,
                                public FormFetcher::Consumer {
  public:
   // TODO(crbug.com/621355): So far, |form_fetcher| can be null. In that case
@@ -55,6 +58,11 @@ class NewPasswordFormManager : public PasswordFormManagerForUI,
   // same and if |driver| is the same as |driver_|.
   bool DoesManage(const autofill::FormData& form,
                   const PasswordManagerDriver* driver) const;
+
+  // Check that |submitted_form_| is equal to |form| from the user point of
+  // view. It is used for detecting that a form is reappeared after navigation
+  // for success detection.
+  bool IsEqualToSubmittedForm(const autofill::FormData& form) const;
 
   // If |submitted_form| is managed by *this (i.e. DoesManage returns true for
   // |submitted_form| and |driver|) then saves |submitted_form| to
@@ -103,6 +111,25 @@ class NewPasswordFormManager : public PasswordFormManagerForUI,
   void PermanentlyBlacklist() override;
   void OnPasswordsRevealed() override;
 
+  // PasswordFormManagerInterface:
+  bool IsNewLogin() const override;
+  bool IsPendingCredentialsPublicSuffixMatch() const override;
+  bool HasGeneratedPassword() const override;
+  bool IsPossibleChangePasswordFormWithoutUsername() const override;
+  bool RetryPasswordFormPasswordUpdate() const override;
+
+#if defined(UNIT_TEST)
+  static void set_wait_for_server_predictions_for_filling(bool value) {
+    wait_for_server_predictions_for_filling_ = value;
+  }
+#endif
+
+  // TODO(https://crbug.com/831123): Remove it when the old form parsing is
+  // removed.
+  scoped_refptr<PasswordFormMetricsRecorder> metrics_recorder() {
+    return metrics_recorder_;
+  }
+
  protected:
   // FormFetcher::Consumer:
   void ProcessMatches(
@@ -120,6 +147,37 @@ class NewPasswordFormManager : public PasswordFormManagerForUI,
   // the autofill server responding to the lookup request.
   void ReportTimeBetweenStoreAndServerUMA();
 
+  // Create pending credentials from |submitted_form_| and forms received from
+  // the password store.
+  void CreatePendingCredentials();
+
+  // Create pending credentials from provisionally saved form when this form
+  // represents credentials that were not previosly saved.
+  void CreatePendingCredentialsForNewCredentials(
+      const autofill::PasswordForm& submitted_password_form,
+      const base::string16& password_element);
+
+  // If |best_matches_| contains only one entry, then return this entry.
+  // Otherwise for empty |password| return nullptr and for non-empty |password|
+  // returns the any entry in |best_matches_| with the same password, if it
+  // exists, and nullptr otherwise.
+  const autofill::PasswordForm* FindBestMatchForUpdatePassword(
+      const base::string16& password) const;
+
+  // Try to return a member of |best_matches_| which is most likely to represent
+  // the same credential as |form|. Return null if there is none. This is used
+  // to tell whether the user submitted a credential filled by Chrome.
+  const autofill::PasswordForm* FindBestSavedMatch(
+      const autofill::PasswordForm* form) const;
+
+  // Sets |user_action_| and records some metrics.
+  void SetUserAction(UserAction user_action);
+
+  void SetPasswordOverridden(bool password_overridden) {
+    password_overridden_ = password_overridden;
+    votes_uploader_.set_password_overridden(password_overridden);
+  }
+
   // The client which implements embedder-specific PasswordManager operations.
   PasswordManagerClient* client_;
 
@@ -132,6 +190,13 @@ class NewPasswordFormManager : public PasswordFormManagerForUI,
   // by |form_fetcher_|.
   std::map<base::string16, const autofill::PasswordForm*> best_matches_;
 
+  // Set of forms from PasswordStore that correspond to the current site and
+  // that are not in |best_matches_|. They are owned by |form_fetcher_|.
+  // It is leftover from the old PasswordFormManager.
+  // TODO(https://crbug.com/831123): update all places where it is used with
+  // saved credentials from |form_fetcher_|.
+  std::vector<const autofill::PasswordForm*> not_best_matches_;
+
   // Set of blacklisted forms from the PasswordStore that best match the current
   // form. They are owned by |form_fetcher_|.
   std::vector<const autofill::PasswordForm*> blacklisted_matches_;
@@ -140,7 +205,7 @@ class NewPasswordFormManager : public PasswordFormManagerForUI,
   // as preferred. This is only allowed to be null if there are no best matches
   // at all, since there will always be one preferred login when there are
   // multiple matches (when first saved, a login is marked preferred).
-  const autofill::PasswordForm* preferred_match_;
+  const autofill::PasswordForm* preferred_match_ = nullptr;
 
   // Takes care of recording metrics and events for |*this|.
   scoped_refptr<PasswordFormMetricsRecorder> metrics_recorder_;
@@ -151,10 +216,39 @@ class NewPasswordFormManager : public PasswordFormManagerForUI,
   // FormFetcher instance which owns the login data from PasswordStore.
   FormFetcher* form_fetcher_;
 
+  VotesUploader votes_uploader_;
+
   // |is_submitted_| = true means that a submission of the managed form was seen
   // and then |submitted_form_| contains the submitted form.
   bool is_submitted_ = false;
   autofill::FormData submitted_form_;
+
+  // Stores updated credentials when the form was submitted but success is still
+  // unknown. This variable contains credentials that are ready to be written
+  // (saved or updated) to a password store. It is calculated based on
+  // |submitted_form_| and |best_matches_|.
+  autofill::PasswordForm pending_credentials_;
+
+  // Whether |pending_credentials_| stores a new login or is an update to an
+  // existing one.
+  bool is_new_login_ = true;
+
+  // Whether this form has an auto generated password.
+  bool has_generated_password_ = false;
+
+  // Whether the saved password was overridden.
+  bool password_overridden_ = false;
+
+  // A form is considered to be "retry" password if it has only one field which
+  // is a current password field.
+  // This variable is true if the password passed through ProvisionallySave() is
+  // a password that is not part of any password form stored for this origin
+  // and it was entered on a retry password form.
+  bool retry_password_form_password_update_ = false;
+
+  // Records the action the user has taken while interacting with the password
+  // form.
+  UserAction user_action_ = UserAction::kNone;
 
   base::Optional<FormPredictions> predictions_;
 
@@ -163,6 +257,9 @@ class NewPasswordFormManager : public PasswordFormManagerForUI,
   // of times that Chrome will autofill to avoid being stuck in an infinite
   // loop.
   int autofills_left_ = kMaxTimesAutofill;
+
+  // Controls whether to wait or not server before filling. It is used in tests.
+  static bool wait_for_server_predictions_for_filling_;
 
   // Used for comparison metrics.
   // TODO(https://crbug.com/831123): Remove it when the old form parsing is

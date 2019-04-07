@@ -17,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/chromeos/arc/icon_decode_request.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_test.h"
@@ -31,6 +32,7 @@
 #include "chrome/browser/ui/ash/launcher/internal_app_shelf_context_menu.h"
 #include "chrome/browser/ui/ash/tablet_mode_client.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/arc/metrics/arc_metrics_constants.h"
 #include "components/arc/test/fake_app_instance.h"
 #include "components/exo/shell_surface.h"
 #include "components/prefs/pref_service.h"
@@ -77,6 +79,10 @@ class LauncherContextMenuTest : public ash::AshTestBase {
     tablet_mode_client_ = std::make_unique<TabletModeClient>();
     tablet_mode_client_->InitForTesting(
         fake_tablet_mode_controller_.CreateInterfacePtr());
+
+    // Disable safe icon decoding to ensure ArcAppShortcutRequests returns in
+    // the test environment.
+    arc::IconDecodeRequest::DisableSafeDecodingForTesting();
   }
 
   std::unique_ptr<LauncherContextMenu> CreateLauncherContextMenu(
@@ -92,6 +98,7 @@ class LauncherContextMenuTest : public ash::AshTestBase {
   views::Widget* CreateArcWindow(std::string& window_app_id) {
     views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
     views::Widget* widget = new views::Widget();
+    params.context = CurrentContext();
     widget->Init(params);
     widget->Show();
     widget->Activate();
@@ -344,7 +351,7 @@ TEST_F(LauncherContextMenuTest, ArcLauncherMenusCheck) {
   }
 }
 
-TEST_F(LauncherContextMenuTest, ArcLauncherSuspenedAppMenu) {
+TEST_F(LauncherContextMenuTest, ArcLauncherSuspendAppMenu) {
   arc::mojom::AppInfo app = arc_test().fake_apps()[0];
   app.suspended = true;
   arc_test().app_instance()->RefreshAppList();
@@ -434,7 +441,7 @@ TEST_F(LauncherContextMenuTest, CommandIdsMatchEnumsForHistograms) {
 }
 
 TEST_F(LauncherContextMenuTest, ArcContextMenuOptions) {
-  // Tests that there are 4 ARC app context menu options. If you're
+  // Tests that there are 8 ARC app context menu options. If you're
   // adding a context menu option ensure that you have added the enum to
   // tools/metrics/enums.xml and that you haven't modified the order of the
   // existing enums.
@@ -455,14 +462,13 @@ TEST_F(LauncherContextMenuTest, ArcContextMenuOptions) {
   std::unique_ptr<ui::MenuModel> menu =
       GetContextMenu(item_delegate, primary_id);
 
-  // Test that there are 4 items in an ARC app context menu.
-  EXPECT_EQ(4, menu->GetItemCount());
+  // Test that there are 8 items in an ARC app context menu.
+  EXPECT_EQ(8, menu->GetItemCount());
 }
 
 // Tests that the context menu of internal app  is correct.
 TEST_F(LauncherContextMenuTest, InternalAppShelfContextMenu) {
-  for (const auto& internal_app :
-       app_list::GetInternalAppList(profile()->IsGuestSession())) {
+  for (const auto& internal_app : app_list::GetInternalAppList(profile())) {
     if (!internal_app.show_in_launcher)
       continue;
 
@@ -492,8 +498,7 @@ TEST_F(LauncherContextMenuTest, InternalAppShelfContextMenu) {
 
 // Tests that the number of context menu options of internal app is correct.
 TEST_F(LauncherContextMenuTest, InternalAppShelfContextMenuOptionsNumber) {
-  for (const auto& internal_app :
-       app_list::GetInternalAppList(profile()->IsGuestSession())) {
+  for (const auto& internal_app : app_list::GetInternalAppList(profile())) {
     const std::string app_id = internal_app.app_id;
     const ash::ShelfID shelf_id(app_id);
     // Pin internal app.
@@ -508,7 +513,7 @@ TEST_F(LauncherContextMenuTest, InternalAppShelfContextMenuOptionsNumber) {
     std::unique_ptr<ui::MenuModel> menu =
         GetContextMenu(item_delegate, primary_id);
 
-    const int expected_options_num = internal_app.show_in_launcher ? 4 : 2;
+    const int expected_options_num = internal_app.show_in_launcher ? 2 : 1;
     EXPECT_EQ(expected_options_num, menu->GetItemCount());
   }
 }

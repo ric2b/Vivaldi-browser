@@ -27,11 +27,11 @@ const char kTestCrosGaiaIdMigration[] = "test-cros-gaia-id-migration";
 // all stored user keys will be converted to GaiaId)
 const char kTestCrosGaiaIdMigrationStarted[] = "started";
 
-// Controls whether enable assistant for locale.
+// Controls whether to enable assistant for locale.
 const base::Feature kAssistantFeatureForLocale{
     "ChromeOSAssistantForLocale", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Controls whether enable voice interaction feature.
+// Controls whether to enable voice interaction feature.
 const base::Feature kVoiceInteractionFeature{"ChromeOSVoiceInteraction",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -43,11 +43,15 @@ const base::Feature kInstantTetheringBackgroundAdvertisementSupport{
 
 }  // namespace
 
+// Enables the redesigned shelf UI.
+const base::Feature kEnableShelfNewUi{"ShelfNewUi",
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Controls whether to enable Chrome OS Account Manager.
 const base::Feature kAccountManager{"ChromeOSAccountManager",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Controls whether enable Google Assistant feature.
+// Controls whether to enable Google Assistant feature.
 const base::Feature kAssistantFeature{"ChromeOSAssistant",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -120,11 +124,6 @@ const char kArcTransitionMigrationRequired[] =
 
 // Screenshot testing: specifies the directoru where artifacts will be stored.
 const char kArtifactsDir[] = "artifacts-dir";
-
-// When wallpaper boot animation is not disabled this switch
-// is used to override OOBE/sign in WebUI init type.
-// Possible values: parallel|postpone. Default: parallel.
-const char kAshWebUIInit[] = "ash-webui-init";
 
 // If this flag is set, it indicates that this device is a "Cellular First"
 // device. Cellular First devices use cellular telephone data networks as
@@ -307,14 +306,15 @@ const char kEnableCaptivePortalRandomUrl[] = "enable-captive-portal-random-url";
 // Enables the Cast Receiver.
 const char kEnableCastReceiver[] = "enable-cast-receiver";
 
+// Enables the experimental chromevox developer option.
+const char kEnableChromevoxDeveloperOption[] =
+    "enable-chromevox-developer-option";
+
 // Enables consumer kiosk mode for Chrome OS.
 const char kEnableConsumerKiosk[] = "enable-consumer-kiosk";
 
 // Enables Data Saver prompt on cellular networks.
 const char kEnableDataSaverPrompt[] = "enable-datasaver-prompt";
-
-// Enables demo mode feature.
-const char kEnableDemoMode[] = "enable-demo-mode";
 
 // Enables encryption migration for user's cryptohome to run latest Arc.
 const char kEnableEncryptionMigration[] = "enable-encryption-migration";
@@ -333,17 +333,15 @@ const char kEnableFileManagerTouchMode[] = "enable-file-manager-touch-mode";
 // Enables animated transitions during first-run tutorial.
 const char kEnableFirstRunUITransitions[] = "enable-first-run-ui-transitions";
 
+// Enables the marketing opt-in screen in OOBE.
+const char kEnableMarketingOptInScreen[] = "enable-market-opt-in";
+
 // Enables notifications about captive portals in session.
 const char kEnableNetworkPortalNotification[] =
     "enable-network-portal-notification";
 
-// Enables offline demo mode. Offline demo mode is a part of demo mode feature
-// and it requires |kEnableDemoMode| flag to be enabled to take effect.
+// Enables offline demo mode. Demo mode still requires ARC++.
 const char kEnableOfflineDemoMode[] = "enable-offline-demo-mode";
-
-// Enables Recommend Apps screen in OOBE.
-const char kEnableOobeRecommendAppsScreen[] =
-    "enable-oobe-recommend-apps-screen";
 
 // Enables suggestions while typing on a physical keyboard.
 const char kEnablePhysicalKeyboardAutocorrect[] =
@@ -518,9 +516,6 @@ const char kNoteTakingAppIds[] = "note-taking-app-ids";
 // Indicates that if we should start bootstrapping Master OOBE.
 const char kOobeBootstrappingMaster[] = "oobe-bootstrapping-master";
 
-// Path to a OOBE configuration JSON file.
-const char kOobeConfiguration[] = "oobe-configuration-file";
-
 // Forces OOBE/login to force show a comma-separated list of screens from
 // chromeos::kScreenNames in oobe_screen.cc. Supported screens are:
 //   user-image
@@ -547,9 +542,6 @@ const char kRlzPingDelay[] = "rlz-ping-delay";
 
 // App window previews when hovering over the shelf.
 const char kShelfHoverPreviews[] = "shelf-hover-previews";
-
-// Resdesigned shelf UI.
-const char kShelfNewUi[] = "shelf-new-ui";
 
 // If true, files in Android internal storage will be shown in Files app.
 const char kShowAndroidFilesInFilesApp[] = "show-android-files-in-files-app";
@@ -737,7 +729,7 @@ bool ShouldShowShelfHoverPreviews() {
 }
 
 bool ShouldUseShelfNewUi() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(kShelfNewUi);
+  return base::FeatureList::IsEnabled(kEnableShelfNewUi);
 }
 
 bool IsInstantTetheringBackgroundAdvertisingSupported() {

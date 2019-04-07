@@ -100,6 +100,7 @@ template("google_apis_tmpl") {
       "gaia/gaia_urls.h",
       "gaia/google_service_auth_error.cc",
       "gaia/google_service_auth_error.h",
+      "gaia/oauth2_access_token_consumer.cc",
       "gaia/oauth2_access_token_consumer.h",
       "gaia/oauth2_access_token_fetcher.cc",
       "gaia/oauth2_access_token_fetcher.h",
@@ -119,6 +120,8 @@ template("google_apis_tmpl") {
       "gaia/oauth2_token_service_delegate.h",
       "gaia/oauth2_token_service_request.cc",
       "gaia/oauth2_token_service_request.h",
+      "gaia/oauth_multilogin_result.cc",
+      "gaia/oauth_multilogin_result.h",
       "gaia/oauth_request_signer.cc",
       "gaia/oauth_request_signer.h",
       "gaia/ubertoken_fetcher.cc",
@@ -229,6 +232,18 @@ static_library("test_support") {
   }
 }
 
+source_set("run_all_unittests") {
+  testonly = true
+  sources = [
+    "run_all_unittests.cc",
+  ]
+
+  deps = [
+    "//base/test:test_support",
+    "//mojo/core/embedder",
+  ]
+}
+
 test("google_apis_unittests") {
   sources = [
     "gaia/gaia_auth_fetcher_unittest.cc",
@@ -241,6 +256,7 @@ test("google_apis_unittests") {
     "gaia/oauth2_mint_token_flow_unittest.cc",
     "gaia/oauth2_token_service_request_unittest.cc",
     "gaia/oauth2_token_service_unittest.cc",
+    "gaia/oauth_multilogin_result_unittest.cc",
     "gaia/oauth_request_signer_unittest.cc",
     "gaia/ubertoken_fetcher_unittest.cc",
     "google_api_keys_unittest.cc",
@@ -255,10 +271,10 @@ test("google_apis_unittests") {
 
   deps = [
     ":google_apis",
+    ":run_all_unittests",
     ":test_support",
     "//base",
-    "//base/test:run_all_unittests",
-    "//mojo/core/embedder",
+    "//base/test:test_support",
     "//testing/gmock",
     "//testing/gtest",
   ]

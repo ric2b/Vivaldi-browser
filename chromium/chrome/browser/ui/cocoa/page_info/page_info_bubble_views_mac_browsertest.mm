@@ -21,7 +21,7 @@
 #import "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
-#include "ui/views/bubble/bubble_dialog_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/widget/widget.h"
 #include "url/url_constants.h"
 
@@ -66,19 +66,13 @@ IN_PROC_BROWSER_TEST_P(PageInfoBubbleViewsMacTest, NoCrashOnFullScreenToggle) {
       access_manager->fullscreen_controller();
 
   fullscreen_controller->ToggleBrowserFullscreenMode();
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
-    views::BubbleDialogDelegateView* page_info =
-        PageInfoBubbleView::GetPageInfoBubble();
-    EXPECT_TRUE(page_info);
-    views::Widget* page_info_bubble = page_info->GetWidget();
-    EXPECT_TRUE(page_info_bubble);
-    EXPECT_EQ(GetParam().bubble_type, PageInfoBubbleView::GetShownBubbleType());
-    EXPECT_TRUE(page_info_bubble->IsVisible());
-  } else {
-    EXPECT_TRUE([PageInfoBubbleController getPageInfoBubbleForTest]);
-    // In Cocoa, the crash occurs when the bubble tries to re-layout.
-    [[PageInfoBubbleController getPageInfoBubbleForTest] performLayout];
-  }
+  views::BubbleDialogDelegateView* page_info =
+      PageInfoBubbleView::GetPageInfoBubble();
+  EXPECT_TRUE(page_info);
+  views::Widget* page_info_bubble = page_info->GetWidget();
+  EXPECT_TRUE(page_info_bubble);
+  EXPECT_EQ(GetParam().bubble_type, PageInfoBubbleView::GetShownBubbleType());
+  EXPECT_TRUE(page_info_bubble->IsVisible());
 
   // There should be no crash here from re-anchoring the Page Info bubble while
   // transitioning into full screen.
@@ -89,12 +83,6 @@ IN_PROC_BROWSER_TEST_P(PageInfoBubbleViewsMacTest, NoCrashOnFullScreenToggle) {
 // switches via keyboard shortcuts.
 IN_PROC_BROWSER_TEST_P(PageInfoBubbleViewsMacTest,
                        BubbleClosesOnKeyboardTabSwitch) {
-  // Always use PageInfoBubbleView for this test rather than Cocoa UI.
-  base::test::ScopedFeatureList enable_md;
-  enable_md.InitWithFeatures(
-      {features::kSecondaryUiMd, features::kShowAllDialogsWithViewsToolkit},
-      {});
-
   ui_test_utils::NavigateToURL(browser(), GURL(GetParam().url));
   // Add a second tab, but make sure the first is selected.
   AddTabAtIndex(1, GURL("https://test_url.com"),

@@ -13,9 +13,14 @@ import "net/interfaces/address_list.mojom";
 import "net/interfaces/ip_endpoint.mojom";
 import "services/network/public/mojom/cookie_manager.mojom";
 import "services/network/public/mojom/ct_log_info.mojom";
+import "services/network/public/mojom/host_resolver.mojom";
 import "services/network/public/mojom/mutable_network_traffic_annotation_tag.mojom";
+import "services/network/public/mojom/network_param.mojom";
+import "services/network/public/mojom/p2p.mojom";
+import "services/network/public/mojom/p2p_trusted.mojom";
 import "services/network/public/mojom/proxy_config.mojom";
 import "services/network/public/mojom/proxy_config_with_annotation.mojom";
+import "services/network/public/mojom/proxy_lookup_client.mojom";
 import "services/network/public/mojom/proxy_resolving_socket.mojom";
 import "services/network/public/mojom/restricted_cookie_manager.mojom";
 import "services/network/public/mojom/ssl_config.mojom";
@@ -74,7 +79,7 @@ struct NetworkContextParams {
   bool persist_session_cookies = false;
 
   // Points to the channel ID file. If a cookie file is specified, this must be
-  // specifed as well. Otherwise an in-memory store is used.
+  // specified as well. Otherwise an in-memory store is used.
   mojo_base.mojom.FilePath? channel_id_path;
 
   // True if an HTTP cache should be used.
@@ -119,13 +124,13 @@ struct NetworkContextParams {
   // Enables HTTP/0.9 on ports other than 80 for HTTP and 443 for HTTPS.
   bool http_09_on_non_default_ports_enabled = false;
 
-  // SSL configuration. |intial_proxy_config| is the initial SSL configuration
+  // SSL configuration. |initial_proxy_config| is the initial SSL configuration
   // to use. If nullptr, uses the default configuration. Updated SSL
   // configurations can be passed in via |ssl_config_client_request|.
   SSLConfig? initial_ssl_config;
   SSLConfigClient&? ssl_config_client_request;
 
-  // Proxy configuration. If |intial_proxy_config| is set, it's the initial
+  // Proxy configuration. If |initial_proxy_config| is set, it's the initial
   // proxy configuration. Updated proxy configuration can be passed in via
   // |proxy_config_client_request|. If |initial_proxy_config| is not set,
   // proxy lookups will be deferred until a configuration is received via
@@ -291,7 +296,7 @@ const uint32 kInvalidProcessId = 0xffffffff;
 
 struct URLLoaderFactoryParams {
   // Process requesting the URLLoaderFactory.
-  // Set to kBrowserProcessId to indicate the brower process.
+  // Set to kBrowserProcessId to indicate the browser process.
   uint32 process_id = kInvalidProcessId;
 
   // Cross-origin read blocking (CORB) configuration.
@@ -321,9 +326,22 @@ struct URLLoaderFactoryParams {
   bool disable_web_security = false;
 };
 
+// Callback interface for NetworkContext when routing identifiers aren't
+// available. Otherwise generally callbacks from the network service go on
+// NetworkServiceClient.
+interface NetworkContextClient {
+  // Checks if network error reports could be sent for the given origins.
+  // Replies with the origins that are allowed.
+  OnCanSendReportingReports(array<url.mojom.Origin> origins) =>
+      (array<url.mojom.Origin> origins);
+};
+
 // Represents a distinct context for making network requests, with its own
 // storage (e.g. cookies and cache).
 interface NetworkContext {
+  // Sets a client for this network context.
+  SetClient(NetworkContextClient client);
+
   // Creates a new URLLoaderFactory with the given |params|.
   CreateURLLoaderFactory(URLLoaderFactory& url_loader_factory,
                          URLLoaderFactoryParams params);
@@ -353,6 +371,8 @@ interface NetworkContext {
   // Clears content from the HTTP cache. A specific range of time can be
   // specified with |start_time| and |end_time|. This supports unbounded deletes
   // in either direction by using null Time values for either argument.
+  // If a non-null |filter| is specified, will clear only entries matching the
+  // filter.
   ClearHttpCache(mojo_base.mojom.Time start_time,
                  mojo_base.mojom.Time end_time,
                  ClearDataFilter? filter) => ();
@@ -417,8 +437,11 @@ interface NetworkContext {
   // filter.
   ClearNetworkErrorLogging(ClearDataFilter? filter) => ();
 
+  // Closes all open connections within this context.
+  CloseAllConnections() => ();
+
   // Configures network conditions for the specified throttling profile.
-  // The throttling will be applied only to requests that have maching
+  // The throttling will be applied only to requests that have matching
   // throttling_profile_id.
   // Passing null NetworkConditions disables the throttling.
   SetNetworkConditions(mojo_base.mojom.UnguessableToken throttling_profile_id,
@@ -474,6 +497,9 @@ interface NetworkContext {
   // to receive data over the connection. On failure, |result| is a network
   // error code.
   //
+  // If the client closes |socket| before this completes, the callback will be
+  // invoked with net::ERR_ABORTED.
+  //
   // Any sockets that are created but are yet to be destroyed will be destroyed
   // when NetworkContext goes away.
   CreateTCPConnectedSocket(
@@ -502,6 +528,10 @@ interface NetworkContext {
                   url.mojom.Origin origin,
                   AuthenticationHandler? auth_handler);
 
+  // Looks up what proxy to use for a particular URL.
+  LookUpProxyForURL(url.mojom.Url url,
+                    ProxyLookupClient proxy_lookup_client);
+
   // Create a NetLogExporter, which helps export NetLog to an existing file.
   // Note that the log is generally global, including all NetworkContexts
   // managed by the same NetworkService. The particular NetworkContext this is
@@ -520,6 +550,61 @@ interface NetworkContext {
                     url.mojom.Url url,
                     int32 load_flags,
                     bool privacy_mode_enabled);
+
+  // Creates a P2PSocketManager instance, used for WebRTC.
+  CreateP2PSocketManager(P2PTrustedSocketManagerClient client,
+                         P2PTrustedSocketManager& trusted_socket_manager,
+                         P2PSocketManager& socket_manager);
+
+  // Destroys all URLLoaderFactory bindings, which should then be regenerated.
+  // This should be called if there is a change to the proxies which should be
+  // used on URLLoaders.
+  ResetURLLoaderFactories();
+
+  // Resolves the given hostname (or IP address literal). See documentation at
+  // HostResolver::ResolveHost.
+  //
+  // All outstanding requests are cancelled if the NetworkContext is destroyed.
+  // Such requests will receive ERR_FAILED via |response_client|.
+  //
+  // TODO(crbug.com/821021): Consider deleting this if most/all usage goes
+  // through CreateHostResolver, but most likely most usage except proxy
+  // resolver will directly use this method.
+  ResolveHost(HostPortPair host,
+              ResolveHostParameters? optional_parameters,
+              ResolveHostClient response_client);
+
+  // Creates a HostResolver interface that can be passed to code/processes
+  // without direct access to NetworkContext to make ResolveHost requests.
+  //
+  // If this NetworkContext is destroyed, all outstanding requests from child
+  // HostResolvers will be cancelled. Such requests will receive ERR_FAILED via
+  // |response_client|.
+  //
+  // TODO(crbug.com/821021): If necessary as usage and functionality is added to
+  // the contained ResolveHost method, consider adding the ability for this to
+  // be a restricted resolver with some functionality disabled (eg maybe MDNS).
+  CreateHostResolver(HostResolver& host_resolver);
+
+  // Caches |data| associated with |url| and |expected_response_time| in the
+  // HttpCache related to this NetworkContext.
+  WriteCacheMetadata(url.mojom.Url url,
+                     RequestPriority priority,
+                     mojo_base.mojom.Time expected_response_time,
+                     array<uint8> data);
+
+  // Checks the given certificate against the CertVerifier and CTVerifier. This
+  // implementation is currently specific for use by Signed Exchange.
+  VerifyCertForSignedExchange(X509Certificate certificate,
+                              url.mojom.Url url,
+                              string ocsp_response,
+                              string sct_list) => (int32 error_code,
+                                                   CertVerifyResult cv_result,
+                                                   CTVerifyResult ct_result);
+
+  // Returns true if it is known that |host| has requested to always be
+  // accessed via HTTPS.
+  IsHSTSActiveForHost(string host) => (bool result);
 
   [Sync]
   // Adds explicitly-specified data as if it was processed from an

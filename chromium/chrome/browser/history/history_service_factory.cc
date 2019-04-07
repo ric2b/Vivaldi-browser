@@ -83,11 +83,13 @@ KeyedService* HistoryServiceFactory::BuildServiceInstanceFor(
           std::make_unique<ChromeHistoryClient>(
               BookmarkModelFactory::GetForBrowserContext(context)),
           std::make_unique<history::ContentVisitDelegate>(context)));
-
+#if !defined(OS_ANDROID)
   Profile *profile = Profile::FromBrowserContext(context);
   int number_of_days_to_keep_visits = profile->GetPrefs()->GetInteger(
       vivaldiprefs::kHistoryDaysToKeepVisits);
-
+#else
+  int number_of_days_to_keep_visits = 90;
+#endif
   history::HistoryDatabaseParams param =
       history::HistoryDatabaseParamsForPath(context->GetPath());
   param.number_of_days_to_keep_visits = number_of_days_to_keep_visits;

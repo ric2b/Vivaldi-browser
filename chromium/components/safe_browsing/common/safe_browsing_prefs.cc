@@ -178,6 +178,8 @@ const char kSafeBrowsingTriggerEventTimestamps[] =
     "safebrowsing.trigger_event_timestamps";
 const char kSafeBrowsingUnhandledSyncPasswordReuses[] =
     "safebrowsing.unhandled_sync_password_reuses";
+const char kSafeBrowsingNextPasswordCaptureEventLogTime[] =
+    "safebrowsing.next_password_capture_event_log_time";
 const char kSafeBrowsingWhitelistDomains[] =
     "safebrowsing.safe_browsing_whitelist_domains";
 const char kPasswordProtectionChangePasswordURL[] =
@@ -186,6 +188,8 @@ const char kPasswordProtectionLoginURLs[] =
     "safebrowsing.password_protection_login_urls";
 const char kPasswordProtectionWarningTrigger[] =
     "safebrowsing.password_protection_warning_trigger";
+const char kAdvancedProtectionLastRefreshInUs[] =
+    "safebrowsing.advanced_protection_last_refresh";
 }  // namespace prefs
 
 namespace safe_browsing {
@@ -295,11 +299,15 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kSafeBrowsingIncidentsSent);
   registry->RegisterDictionaryPref(
       prefs::kSafeBrowsingUnhandledSyncPasswordReuses);
+  registry->RegisterStringPref(
+      prefs::kSafeBrowsingNextPasswordCaptureEventLogTime,
+      "0");  // int64 as string
   registry->RegisterListPref(prefs::kSafeBrowsingWhitelistDomains);
   registry->RegisterStringPref(prefs::kPasswordProtectionChangePasswordURL, "");
   registry->RegisterListPref(prefs::kPasswordProtectionLoginURLs);
   registry->RegisterIntegerPref(prefs::kPasswordProtectionWarningTrigger,
                                 PASSWORD_PROTECTION_OFF);
+  registry->RegisterInt64Pref(prefs::kAdvancedProtectionLastRefreshInUs, 0);
 }
 
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {

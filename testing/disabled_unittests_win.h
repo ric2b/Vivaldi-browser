@@ -162,3 +162,7 @@ DISABLE(RenderProcessHostUnitTest, DoNotReuseError)
 
 // Broke in v69
 DISABLE(WebViewInteractiveTest, LongPressSelection)
+
+// Flaky in v70
+DISABLE(PlatformMediaPipelineIntegrationTest, BasicPlayback_M4A)
+DISABLE(AndroidUsbCountTest, TestNoMultipleCallsRemoveAddWhileQueued)

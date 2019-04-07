@@ -37,7 +37,8 @@
 ] interface Worker : EventTarget {
     void terminate();
 
-    [PostMessage, RaisesException] void postMessage(any message, optional sequence<object> transfer);
+    [CallWith=ScriptState, RaisesException] void postMessage(any message, optional sequence<object> transfer=[]);
+    [RuntimeEnabled=PostMessageOptions, CallWith=ScriptState, RaisesException] void postMessage(any message, PostMessageOptions options);
     attribute EventHandler onmessage;
 };
 

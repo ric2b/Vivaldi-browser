@@ -13,7 +13,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/nacl/common/nacl_process_type.h"
@@ -197,9 +197,9 @@ void MemoryDetails::CollectChildInfoOnIOThread() {
   // the process is being launched, so we skip it.
   for (BrowserChildProcessHostIterator iter; !iter.Done(); ++iter) {
     ProcessMemoryInformation info;
-    if (!iter.GetData().handle)
+    if (!iter.GetData().GetHandle())
       continue;
-    info.pid = base::GetProcId(iter.GetData().handle);
+    info.pid = base::GetProcId(iter.GetData().GetHandle());
     if (!info.pid)
       continue;
 
@@ -212,7 +212,7 @@ void MemoryDetails::CollectChildInfoOnIOThread() {
   // Now go do expensive memory lookups in a thread pool.
   base::PostTaskWithTraits(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&MemoryDetails::CollectProcessData, this, child_info));
 }
@@ -299,10 +299,6 @@ void MemoryDetails::CollectChildInfoOnUIThread() {
 
       // The rest of this block will happen only once per WebContents.
       GURL page_url = contents->GetLastCommittedURL();
-      SiteData& site_data =
-          chrome_browser->site_data[contents->GetBrowserContext()];
-      SiteDetails::CollectSiteInfo(contents, &site_data);
-
       bool is_webui = rvh->GetMainFrame()->GetEnabledBindings() &
                       content::BINDINGS_POLICY_WEB_UI;
 

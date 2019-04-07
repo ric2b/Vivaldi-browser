@@ -152,6 +152,7 @@ class CONTENT_EXPORT ServiceWorkerContextCore
                          const ServiceWorkerClientInfo& client_info) override;
   void OnControlleeRemoved(ServiceWorkerVersion* version,
                            const std::string& client_uuid) override;
+  void OnNoControllees(ServiceWorkerVersion* version) override;
 
   ServiceWorkerContextWrapper* wrapper() const { return wrapper_; }
   ServiceWorkerStorage* storage() { return storage_.get(); }
@@ -317,6 +318,10 @@ class CONTENT_EXPORT ServiceWorkerContextCore
                               UnregistrationCallback callback,
                               int64_t registration_id,
                               blink::ServiceWorkerStatusCode status);
+
+  bool IsValidRegisterRequest(const GURL& script_url,
+                              const GURL& scope_url,
+                              std::string* out_error) const;
 
   void DidGetRegistrationsForDeleteForOrigin(
       base::OnceCallback<void(blink::ServiceWorkerStatusCode)> callback,

@@ -49,14 +49,15 @@ gfx::PointF GetScreenLocationFromEvent(const ui::LocatedEvent& event) {
 const ui::KeyboardCode kSpeakSelectionKey = ui::VKEY_S;
 
 SelectToSpeakEventHandler::SelectToSpeakEventHandler() {
-  if (aura::Env::GetInstanceDontCreate())
-    aura::Env::GetInstanceDontCreate()->AddPreTargetHandler(
+  if (aura::Env::HasInstance()) {
+    aura::Env::GetInstance()->AddPreTargetHandler(
         this, ui::EventTarget::Priority::kAccessibility);
+  }
 }
 
 SelectToSpeakEventHandler::~SelectToSpeakEventHandler() {
-  if (aura::Env::GetInstanceDontCreate())
-    aura::Env::GetInstanceDontCreate()->RemovePreTargetHandler(this);
+  if (aura::Env::HasInstance())
+    aura::Env::GetInstance()->RemovePreTargetHandler(this);
 }
 
 void SelectToSpeakEventHandler::SetSelectToSpeakStateSelecting(
@@ -90,9 +91,7 @@ bool SelectToSpeakEventHandler::IsSelectToSpeakEnabled() {
 }
 
 void SelectToSpeakEventHandler::OnKeyEvent(ui::KeyEvent* event) {
-  if (!IsSelectToSpeakEnabled())
-    return;
-
+  DCHECK(IsSelectToSpeakEnabled());
   DCHECK(event);
 
   // We can only call TtsController on the UI thread, make sure we
@@ -161,9 +160,7 @@ void SelectToSpeakEventHandler::OnKeyEvent(ui::KeyEvent* event) {
 }
 
 void SelectToSpeakEventHandler::OnMouseEvent(ui::MouseEvent* event) {
-  if (!IsSelectToSpeakEnabled())
-    return;
-
+  DCHECK(IsSelectToSpeakEnabled());
   DCHECK(event);
   if (state_ == INACTIVE)
     return;
@@ -202,9 +199,7 @@ void SelectToSpeakEventHandler::OnMouseEvent(ui::MouseEvent* event) {
 }
 
 void SelectToSpeakEventHandler::OnTouchEvent(ui::TouchEvent* event) {
-  if (!IsSelectToSpeakEnabled())
-    return;
-
+  DCHECK(IsSelectToSpeakEnabled());
   DCHECK(event);
   // Only capture touch events if selection was requested or we are capturing
   // touch events already.

@@ -6,13 +6,27 @@
 #define ASH_SHELF_SHELF_CONSTANTS_H_
 
 #include "ash/ash_export.h"
+#include "chromeos/chromeos_switches.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace ash {
 
+// TODO: Once the new shelf UI is on everywhere, clean-up duplicate constants.
+
 // Size of the shelf when visible (height when the shelf is horizontal and
 // width when the shelf is vertical).
-ASH_EXPORT constexpr int kShelfSize = 48;
+constexpr int kShelfSize = 48;
+constexpr int kShelfSizeNewUi = 56;
+
+// Size of the icons within shelf buttons.
+constexpr int kShelfButtonIconSize = 32;
+constexpr int kShelfButtonIconSizeNewUi = 44;
+
+// Size for controls like the app list button, back button, etc.
+constexpr int kShelfControlSizeNewUi = 40;
+
+ASH_EXPORT constexpr SkColor kShelfControlPermanentHighlightBackground =
+    SkColorSetA(SK_ColorWHITE, 26);  // 10%
 
 // We reserve a small area on the edge of the workspace area to ensure that
 // the resize handle at the edge of the window can be hit.
@@ -34,6 +48,7 @@ ASH_EXPORT constexpr SkColor kShelfDefaultBaseColor = SK_ColorBLACK;
 
 // Size allocated for each app button on the shelf.
 ASH_EXPORT constexpr int kShelfButtonSize = 48;
+ASH_EXPORT constexpr int kShelfButtonSizeNewUi = 56;
 
 // Size of the space between buttons on the shelf.
 ASH_EXPORT constexpr int kShelfButtonSpacing = 16;
@@ -55,9 +70,10 @@ constexpr float kShelfInkDropVisibleOpacity = 0.2f;
 // notifications, etc).
 ASH_EXPORT constexpr SkColor kShelfIconColor = SK_ColorWHITE;
 
-// The alpha value for the shelf background when a window is overlapping.
-ASH_EXPORT constexpr int kShelfTranslucentAlpha = 153;
-ASH_EXPORT constexpr int kShelfTranslucentWithOverlapAlphaNewUi = 190;
+// The alpha value for the shelf background.
+ASH_EXPORT constexpr int kShelfTranslucentOverAppList = 77;            // 30%
+ASH_EXPORT constexpr int kShelfTranslucentAlpha = 153;                 // 60%
+ASH_EXPORT constexpr int kShelfTranslucentMaximizedWindowNewUi = 230;  // 90%
 
 // The alpha value used to darken a colorized shelf when the shelf is
 // translucent.
@@ -70,13 +86,66 @@ constexpr int kShelfOpaqueColorDarkenAlpha = 178;
 constexpr int kOverflowButtonSize = 32;
 
 // The radius of the rounded corners of the overflow button.
-constexpr int kOverflowButtonCornerRadius = 2;
+constexpr int kOverflowButtonCornerRadiusOldUi = 2;
 
-// The radius of the circular material design app list button.
-constexpr int kAppListButtonRadius = kOverflowButtonSize / 2;
+// The distance between the edge of the shelf and the status indicators.
+constexpr int kStatusIndicatorOffsetFromShelfEdge = 3;
+constexpr int kStatusIndicatorOffsetFromShelfEdgeNewUi = 2;
 
 // The direction of the focus cycling.
 enum CycleDirection { CYCLE_FORWARD, CYCLE_BACKWARD };
+
+class ShelfConstants {
+ public:
+  // Size of the shelf when visible (height when the shelf is horizontal and
+  // width when the shelf is vertical).
+  static int shelf_size() { return UseNewUi() ? kShelfSizeNewUi : kShelfSize; }
+
+  // Size allocated for each app button on the shelf.
+  static int button_size() {
+    return UseNewUi() ? kShelfButtonSizeNewUi : kShelfButtonSize;
+  }
+
+  // Size of the space between buttons on the shelf.
+  static int button_spacing() {
+    return UseNewUi() ? kShelfButtonSpacingNewUi : kShelfButtonSpacing;
+  }
+
+  // Size of the icons within shelf buttons.
+  static int button_icon_size() {
+    return UseNewUi() ? kShelfButtonIconSizeNewUi : kShelfButtonIconSize;
+  }
+
+  // The width and height of the material design overflow button.
+  static int overflow_button_size() {
+    return UseNewUi() ? kShelfControlSizeNewUi : kOverflowButtonSize;
+  }
+
+  // The radius of the rounded corners of the overflow button.
+  static int overflow_button_corner_radius() {
+    return UseNewUi() ? overflow_button_size() / 2
+                      : kOverflowButtonCornerRadiusOldUi;
+  }
+
+  // The radius of the circular material design app list button.
+  static int app_list_button_radius() { return control_border_radius(); }
+
+  // The radius of shelf control buttons.
+  static int control_border_radius() { return kShelfControlSizeNewUi / 2; }
+
+  // The distance between the edge of the shelf and the status indicators.
+  static int status_indicator_offset_from_edge() {
+    return UseNewUi() ? kStatusIndicatorOffsetFromShelfEdgeNewUi
+                      : kStatusIndicatorOffsetFromShelfEdge;
+  }
+
+ private:
+  static bool UseNewUi() {
+    static bool use_new_ui = chromeos::switches::ShouldUseShelfNewUi();
+    return use_new_ui;
+  }
+  DISALLOW_IMPLICIT_CONSTRUCTORS(ShelfConstants);
+};
 
 }  // namespace ash
 

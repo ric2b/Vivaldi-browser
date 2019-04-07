@@ -210,10 +210,6 @@ PrivetNotificationService::PrivetNotificationService(
 
 PrivetNotificationService::~PrivetNotificationService() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-#if BUILDFLAG(ENABLE_MDNS)
-  if (traffic_detector_)
-    traffic_detector_->Stop();
-#endif
 }
 
 void PrivetNotificationService::DeviceChanged(
@@ -329,19 +325,15 @@ void PrivetNotificationService::Start() {
 
 void PrivetNotificationService::OnNotificationsEnabledChanged() {
 #if BUILDFLAG(ENABLE_MDNS)
-  if (traffic_detector_)
-    traffic_detector_->Stop();
-  traffic_detector_ = nullptr;
+  traffic_detector_.reset();
 
   if (IsForced()) {
     StartLister();
   } else if (*enable_privet_notification_member_) {
     ReportPrivetUmaEvent(PRIVET_SERVICE_STARTED);
-    traffic_detector_ =
-        new PrivetTrafficDetector(
-            net::ADDRESS_FAMILY_IPV4,
-            base::Bind(&PrivetNotificationService::StartLister, AsWeakPtr()));
-    traffic_detector_->Start();
+    traffic_detector_ = std::make_unique<PrivetTrafficDetector>(
+        profile_, base::BindRepeating(&PrivetNotificationService::StartLister,
+                                      AsWeakPtr()));
   } else {
     device_lister_.reset();
     service_discovery_client_ = nullptr;
@@ -369,8 +361,8 @@ void PrivetNotificationService::StartLister() {
 
   std::unique_ptr<PrivetHTTPAsynchronousFactory> http_factory(
       PrivetHTTPAsynchronousFactory::CreateInstance(
-          content::BrowserContext::GetDefaultStoragePartition(profile_)->
-              GetURLRequestContext()));
+          content::BrowserContext::GetDefaultStoragePartition(profile_)
+              ->GetURLLoaderFactoryForBrowserProcess()));
 
   privet_notifications_listener_.reset(
       new PrivetNotificationsListener(std::move(http_factory), this));

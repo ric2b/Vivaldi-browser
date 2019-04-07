@@ -12,7 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/process/kill.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/messaging/native_messaging_host_manifest.h"
 #include "chrome/browser/extensions/api/messaging/native_process_launcher.h"
@@ -71,7 +71,7 @@ NativeMessageProcessHost::~NativeMessageProcessHost() {
 // block, so we have to post a task on the blocking pool.
 #if defined(OS_MACOSX)
     base::PostTaskWithTraits(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
         base::BindOnce(&base::EnsureProcessTerminated, Passed(&process_)));
 #else
     base::EnsureProcessTerminated(std::move(process_));
@@ -298,8 +298,11 @@ void NativeMessageProcessHost::DoWrite() {
         !current_write_buffer_->BytesRemaining()) {
       if (write_queue_.empty())
         return;
-      current_write_buffer_ = new net::DrainableIOBuffer(
-          write_queue_.front().get(), write_queue_.front()->size());
+      scoped_refptr<net::IOBufferWithSize> buffer =
+          std::move(write_queue_.front());
+      int buffer_size = buffer->size();
+      current_write_buffer_ = base::MakeRefCounted<net::DrainableIOBuffer>(
+          std::move(buffer), buffer_size);
       write_queue_.pop();
     }
 

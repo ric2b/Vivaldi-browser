@@ -17,9 +17,6 @@
 #include "content/public/browser/navigation_handle.h"
 #include "ui/base/l10n/l10n_util.h"
 
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(
-    autofill::LocalCardMigrationBubbleControllerImpl);
-
 namespace autofill {
 
 // TODO(crbug.com/862405): Build a base class for this
@@ -79,8 +76,8 @@ LocalCardMigrationBubbleControllerImpl::local_card_migration_bubble_view()
   return local_card_migration_bubble_;
 }
 
-base::string16 LocalCardMigrationBubbleControllerImpl::GetWindowTitle() const {
-  // TODO(crbug.com/859254): Update string once mock is finalized.
+base::string16 LocalCardMigrationBubbleControllerImpl::GetBubbleMessage()
+    const {
   return l10n_util::GetStringUTF16(
       IDS_AUTOFILL_LOCAL_CARD_MIGRATION_BUBBLE_TITLE);
 }

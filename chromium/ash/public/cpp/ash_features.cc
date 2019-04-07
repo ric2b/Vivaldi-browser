@@ -14,42 +14,45 @@ const base::Feature kDockedMagnifier{"DockedMagnifier",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kDragAppsInTabletMode{"DragAppsInTabletMode",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kDragTabsInTabletMode{"DragTabsInTabletMode",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kKeyboardShortcutViewer{"KeyboardShortcutViewer",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kKeyboardShortcutViewerApp{
-    "KeyboardShortcutViewerApp", base::FEATURE_DISABLED_BY_DEFAULT};
+    "KeyboardShortcutViewerApp", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kLockScreenNotifications{"LockScreenNotifications",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kNewOverviewAnimations{"NewOverviewAnimations",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kLockScreenInlineReply{"LockScreenInlineReply",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kLockScreenHideSensitiveNotificationsSupport{
+    "LockScreenHideSensitiveNotificationsSupport",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kNewWallpaperPicker{"NewWallpaperPicker",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kNightLight{"NightLight", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kNotificationScrollBar{"NotificationScrollBar",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kOverviewSwipeToClose{"OverviewSwipeToClose",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSystemTrayUnified{"SystemTrayUnified",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kTapVisualizerApp{"TapVisualizerApp",
-                                      base::FEATURE_ENABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kTrilinearFiltering{"TrilinearFiltering",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kViewsLogin{"ViewsLogin",
-                                base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kViewsLogin{"ViewsLogin", base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool IsDockedMagnifierEnabled() {
   return base::FeatureList::IsEnabled(kDockedMagnifier);
@@ -67,6 +70,15 @@ bool IsLockScreenNotificationsEnabled() {
   return base::FeatureList::IsEnabled(kLockScreenNotifications);
 }
 
+bool IsLockScreenInlineReplyEnabled() {
+  return base::FeatureList::IsEnabled(kLockScreenInlineReply);
+}
+
+bool IsLockScreenHideSensitiveNotificationsSupported() {
+  return base::FeatureList::IsEnabled(
+      kLockScreenHideSensitiveNotificationsSupport);
+}
+
 bool IsNewWallpaperPickerEnabled() {
   static bool use_new_wallpaper_picker =
       base::FeatureList::IsEnabled(kNewWallpaperPicker);
@@ -75,6 +87,10 @@ bool IsNewWallpaperPickerEnabled() {
 
 bool IsNightLightEnabled() {
   return base::FeatureList::IsEnabled(kNightLight);
+}
+
+bool IsNotificationScrollBarEnabled() {
+  return base::FeatureList::IsEnabled(kNotificationScrollBar);
 }
 
 bool IsSystemTrayUnifiedEnabled() {
@@ -89,8 +105,8 @@ bool IsTrilinearFilteringEnabled() {
 
 bool IsViewsLoginEnabled() {
   // Always show webui login if --show-webui-login is present, which is passed
-  // by session manager for automatic recovery. Otherwise, only show views login
-  // if the feature is enabled.
+  // by session manager for automatic recovery. Otherwise, only show views
+  // login if the feature is enabled.
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(
              ash::switches::kShowWebUiLogin) &&
          base::FeatureList::IsEnabled(kViewsLogin);

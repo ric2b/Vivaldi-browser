@@ -157,9 +157,16 @@ void AXWindowObjWrapper::OnWindowPropertyChanged(aura::Window* window,
 
 void AXWindowObjWrapper::OnWindowVisibilityChanged(aura::Window* window,
                                                    bool visible) {
-  AXAuraObjCache::GetInstance()->FireEvent(
-      AXAuraObjCache::GetInstance()->GetOrCreate(window_),
-      ax::mojom::Event::kStateChanged);
+  AXAuraObjCache::GetInstance()->FireEvent(this,
+                                           ax::mojom::Event::kStateChanged);
+}
+
+void AXWindowObjWrapper::OnWindowTransformed(aura::Window* window,
+                                             ui::PropertyChangeReason reason) {
+  if (window != window_)
+    return;
+
+  FireLocationChanges(window_);
 }
 
 }  // namespace views

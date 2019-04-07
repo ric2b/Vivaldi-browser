@@ -16,6 +16,8 @@ var ClientRenderer = (function() {
       this.logTable = logElement.querySelector('tbody');
     this.graphElement = document.getElementById('graphs');
     this.audioPropertyName = document.getElementById('audio-property-name');
+    this.audioFocusSessionListElement_ =
+        document.getElementById('audio-focus-session-list');
 
     this.players = null;
     this.selectedPlayer = null;
@@ -136,6 +138,19 @@ var ClientRenderer = (function() {
             componentType, this.selectedAudioComponentId,
             components[this.selectedAudioComponentId]);
       }
+    },
+
+    /**
+     * Called when the list of audio focus sessions has changed.
+     * @param sessions A list of media sessions that contain the current state.
+     */
+    audioFocusSessionUpdated: function(sessions) {
+      removeChildren(this.audioFocusSessionListElement_);
+
+      sessions.forEach(session => {
+        this.audioFocusSessionListElement_.appendChild(
+            this.createAudioFocusSessionRow_(session));
+      });
     },
 
     /**
@@ -358,7 +373,7 @@ var ClientRenderer = (function() {
         var label = document.createElement('label');
 
         var name_text = p.url || 'Player ' + player.id;
-        var name_node = document.createElement('span');
+        var name_node = document.createElement('div');
         name_node.appendChild(document.createTextNode(name_text));
         name_node.className = 'player-name';
         label.appendChild(name_node);
@@ -370,8 +385,7 @@ var ClientRenderer = (function() {
           frame.push(p.frame_url);
         var frame_text = frame.join(' - ');
         if (frame_text) {
-          label.appendChild(document.createElement('br'));
-          var frame_node = document.createElement('span');
+          var frame_node = document.createElement('div');
           frame_node.className = 'player-frame';
           frame_node.appendChild(document.createTextNode(frame_text));
           label.appendChild(frame_node);
@@ -390,8 +404,7 @@ var ClientRenderer = (function() {
           desc.push('(' + p.event + ')');
         var desc_text = desc.join(' ');
         if (desc_text) {
-          label.appendChild(document.createElement('br'));
-          var desc_node = document.createElement('span');
+          var desc_node = document.createElement('div');
           desc_node.className = 'player-desc';
           desc_node.appendChild(document.createTextNode(desc_text));
           label.appendChild(desc_node);
@@ -527,6 +540,15 @@ var ClientRenderer = (function() {
         this.selectedPlayerLogIndex = 0;
         this.drawLog_();
       }
+    },
+
+    createAudioFocusSessionRow_: function(session) {
+      const template = $('audio-focus-session-row');
+      const span = template.content.querySelectorAll('span');
+      span[0].textContent = session.name;
+      span[1].textContent = session.owner;
+      span[2].textContent = session.state;
+      return document.importNode(template.content, true);
     },
   };
 

@@ -78,6 +78,7 @@
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/repost_form_warning_controller.h"
+#include "chrome/browser/resource_coordinator/tab_load_tracker.h"
 #include "chrome/browser/resource_coordinator/tab_manager_web_contents_data.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/sessions/session_restore.h"
@@ -147,8 +148,8 @@
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
-#include "chrome/browser/upgrade_detector.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/custom_handlers/protocol_handler.h"
@@ -242,6 +243,9 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
+#if !defined(OS_ANDROID)
+#include "sync/vivaldi_browser_synced_window_delegate.h"
+#endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
@@ -294,6 +298,21 @@ const extensions::Extension* GetExtensionForOrigin(
 #else
   return nullptr;
 #endif
+}
+
+std::unique_ptr<extensions::HostedAppBrowserController>
+MaybeCreateHostedAppController(Browser* browser) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  const std::string extension_id =
+      web_app::GetAppIdFromApplicationName(browser->app_name());
+  const Extension* extension =
+      extensions::ExtensionRegistry::Get(browser->profile())
+          ->GetExtensionById(extension_id,
+                             extensions::ExtensionRegistry::EVERYTHING);
+  if (extension && extension->is_hosted_app())
+    return std::make_unique<extensions::HostedAppBrowserController>(browser);
+#endif
+  return nullptr;
 }
 
 }  // namespace
@@ -401,7 +420,14 @@ Browser::Browser(const CreateParams& params)
           new BrowserContentSettingBubbleModelDelegate(this)),
       toolbar_model_delegate_(new BrowserToolbarModelDelegate(this)),
       live_tab_context_(new BrowserLiveTabContext(this)),
+#if defined(OS_ANDROID)
       synced_window_delegate_(new BrowserSyncedWindowDelegate(this)),
+#else
+      synced_window_delegate_(vivaldi::IsVivaldiRunning()
+                                  ? new VivaldiBrowserSyncedWindowDelegate(this)
+                                  : new BrowserSyncedWindowDelegate(this)),
+#endif
+      hosted_app_controller_(MaybeCreateHostedAppController(this)),
       bookmark_bar_state_(BookmarkBar::HIDDEN),
       command_controller_(new chrome::BrowserCommandController(this)),
       window_has_shown_(false),
@@ -413,12 +439,8 @@ Browser::Browser(const CreateParams& params)
   CHECK(IncognitoModePrefs::CanOpenBrowser(profile_));
   CHECK(!profile_->IsGuestSession() || profile_->IsOffTheRecord())
       << "Only off the record browser may be opened in guest mode";
-  DCHECK(!profile_->IsSystemProfile())
+  CHECK(!profile_->IsSystemProfile())
       << "The system profile should never have a real browser.";
-  // TODO(mlerman): After this hits stable channel, see if there are counts
-  // for this metric. If not, change the DCHECK above to a CHECK.
-  if (profile_->IsSystemProfile())
-    base::RecordAction(base::UserMetricsAction("BrowserForSystemProfile"));
 
   // TODO(jeremy): Move to initializer list once flag is removed.
   if (IsFastTabUnloadEnabled())
@@ -456,11 +478,6 @@ Browser::Browser(const CreateParams& params)
 
   if (search::IsInstantExtendedAPIEnabled() && is_type_tabbed())
     instant_controller_.reset(new BrowserInstantController(this));
-
-  if (extensions::HostedAppBrowserController::IsForHostedApp(this)) {
-    hosted_app_controller_.reset(
-        new extensions::HostedAppBrowserController(this));
-  }
 
   UpdateBookmarkBarState(BOOKMARK_BAR_STATE_CHANGE_INIT);
 
@@ -1143,12 +1160,10 @@ void Browser::ActiveTabChanged(WebContents* old_contents,
   // If we have any update pending, do it now.
   if (chrome_updater_factory_.HasWeakPtrs() && old_contents)
     ProcessPendingUIUpdates();
+  }
 
-  if (!vivaldi::IsVivaldiRunning()) {
   // Propagate the profile to the location bar.
   UpdateToolbar((reason & CHANGE_REASON_REPLACED) == 0);
-  }
-  }
   // Update reload/stop state.
   command_controller_->LoadingStateChanged(new_contents->IsLoading(), true);
 
@@ -2075,6 +2090,11 @@ std::unique_ptr<content::WebContents> Browser::SwapTabContents(
       new_view->TakeFallbackContentFrom(old_view);
   }
 
+  // TODO(crbug.com/836409): TabLoadTracker should not rely on being notified
+  // directly about tab contents swaps.
+  resource_coordinator::TabLoadTracker::Get()->SwapTabContents(
+      old_contents, new_contents.get());
+
   int index = tab_strip_model_->GetIndexOfWebContents(old_contents);
   DCHECK_NE(TabStripModel::kNoTab, index);
   return tab_strip_model_->ReplaceWebContentsAt(index, std::move(new_contents));
@@ -2100,6 +2120,23 @@ void Browser::SetWebContentsBlocked(content::WebContents* web_contents,
     // TabStripModel.
     return;
   }
+
+  // For security, if the WebContents is in fullscreen, have it drop fullscreen.
+  // This gives the user the context they need in order to make informed
+  // decisions.
+  if (web_contents->IsFullscreenForCurrentTab()) {
+    // FullscreenWithinTab mode exception: In this case, the browser window is
+    // in its normal layout and not fullscreen (tab content rendering is in a
+    // "simulated fullscreen" state for the benefit of screen capture). Thus,
+    // the user has the same context as they would in any non-fullscreen
+    // scenario. See "FullscreenWithinTab note" in FullscreenController's
+    // class-level comments for further details.
+    if (!exclusive_access_manager_->fullscreen_controller()
+             ->IsFullscreenWithinTab(web_contents)) {
+      web_contents->ExitFullscreen(true);
+    }
+  }
+
   tab_strip_model_->SetTabBlocked(index, blocked);
 
   bool browser_active = BrowserList::GetInstance()->GetLastActive() == this;

@@ -47,3 +47,10 @@ group("closure_compile") {
     "video_player/js/cast:closure_compile",
   ]
 }
+
+group("unit_test_data") {
+  deps = [
+    "gallery/js:unit_tests",
+    "gallery/js/image_editor:unit_tests",
+  ]
+}

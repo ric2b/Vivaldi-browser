@@ -14,6 +14,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "content/browser/background_fetch/background_fetch_request_info.h"
 #include "content/public/browser/background_fetch_delegate.h"
 #include "content/public/browser/background_fetch_description.h"
@@ -65,6 +66,12 @@ class CONTENT_EXPORT BackgroundFetchDelegateProxy {
   void GetIconDisplaySize(
       BackgroundFetchDelegate::GetIconDisplaySizeCallback callback);
 
+  // Checks if the provided origin has permission to start a Background Fetch.
+  void GetPermissionForOrigin(
+      const url::Origin& origin,
+      const ResourceRequestInfo::WebContentsGetter& wc_getter,
+      BackgroundFetchDelegate::GetPermissionForOriginCallback callback);
+
   // Creates a new download grouping described by |fetch_description|. Further
   // downloads started by StartRequest will also use
   // |fetch_description.job_unique_id| so that a notification can be updated
@@ -73,11 +80,15 @@ class CONTENT_EXPORT BackgroundFetchDelegateProxy {
   // GUIDs of in progress downloads, while completed downloads are recorded in
   // |fetch_description.completed_parts|. The size of the completed parts is
   // recorded in |fetch_description.completed_parts_size| and total download
-  // size is stored in |fetch_description.total_parts_size|. Should only be
-  // called from the Controller (on the IO thread).
+  // size is stored in |fetch_description.total_parts_size|.
+  // |active_fetch_requests| contains the BackgroundFetchRequestInfos
+  // needed to correctly resume an ongoing fetch.
+  // Should only be called from the Controller (on the IO thread).
   void CreateDownloadJob(
       base::WeakPtr<Controller> controller,
-      std::unique_ptr<BackgroundFetchDescription> fetch_description);
+      std::unique_ptr<BackgroundFetchDescription> fetch_description,
+      std::vector<scoped_refptr<BackgroundFetchRequestInfo>>
+          active_fetch_requests);
 
   // Requests that the download manager start fetching |request|.
   // Should only be called from the Controller (on the IO
@@ -87,8 +98,11 @@ class CONTENT_EXPORT BackgroundFetchDelegateProxy {
                     scoped_refptr<BackgroundFetchRequestInfo> request);
 
   // Updates the representation of this registration in the user interface to
-  // match the given |title|. Called from the Controller (on the IO thread).
-  void UpdateUI(const std::string& job_unique_id, const std::string& title);
+  // match the given |title| or |icon|.
+  // Called from the Controller (on the IO thread).
+  void UpdateUI(const std::string& job_unique_id,
+                const base::Optional<std::string>& title,
+                const base::Optional<SkBitmap>& icon);
 
   // Aborts in progress downloads for the given registration. Called from the
   // Controller (on the IO thread) after it is aborted. May occur even if all
@@ -127,7 +141,9 @@ class CONTENT_EXPORT BackgroundFetchDelegateProxy {
   base::WeakPtr<Core> ui_core_ptr_;
 
   struct JobDetails {
-    explicit JobDetails(base::WeakPtr<Controller> controller);
+    JobDetails(base::WeakPtr<Controller> controller,
+               std::vector<scoped_refptr<BackgroundFetchRequestInfo>>
+                   active_fetch_requests);
     JobDetails(JobDetails&& details);
     ~JobDetails();
 

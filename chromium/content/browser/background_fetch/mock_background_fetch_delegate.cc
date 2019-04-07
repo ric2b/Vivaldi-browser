@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "base/files/file_util.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/background_fetch/mock_background_fetch_delegate.h"
 #include "content/public/browser/background_fetch_description.h"
@@ -55,6 +56,15 @@ MockBackgroundFetchDelegate::TestResponseBuilder::Build() {
 MockBackgroundFetchDelegate::MockBackgroundFetchDelegate() {}
 
 MockBackgroundFetchDelegate::~MockBackgroundFetchDelegate() {}
+
+void MockBackgroundFetchDelegate::GetPermissionForOrigin(
+    const url::Origin& origin,
+    const ResourceRequestInfo::WebContentsGetter& wc_getter,
+    GetPermissionForOriginCallback callback) {
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), true /* has_permission */));
+}
 
 void MockBackgroundFetchDelegate::GetIconDisplaySize(
     GetIconDisplaySizeCallback callback) {}
@@ -149,8 +159,10 @@ void MockBackgroundFetchDelegate::Abort(const std::string& job_unique_id) {
   aborted_jobs_.insert(job_unique_id);
 }
 
-void MockBackgroundFetchDelegate::UpdateUI(const std::string& job_unique_id,
-                                           const std::string& title) {}
+void MockBackgroundFetchDelegate::UpdateUI(
+    const std::string& job_unique_id,
+    const base::Optional<std::string>& title,
+    const base::Optional<SkBitmap>& icon) {}
 
 void MockBackgroundFetchDelegate::RegisterResponse(
     const GURL& url,

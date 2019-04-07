@@ -55,6 +55,7 @@
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/autofill_manager_test_delegate.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
@@ -300,7 +301,7 @@ DevToolsWindowBeforeUnloadObserver::DevToolsWindowBeforeUnloadObserver(
 void DevToolsWindowBeforeUnloadObserver::Wait() {
   if (m_fired)
     return;
-  message_loop_runner_ = new content::MessageLoopRunner;
+  message_loop_runner_ = base::MakeRefCounted<content::MessageLoopRunner>();
   message_loop_runner_->Run();
 }
 
@@ -339,8 +340,7 @@ class DevToolsBeforeUnloadTest: public DevToolsSanityTest {
                                  base::Callback<void(void)> close_method,
                                  bool wait_for_browser_close = true) {
     OpenDevToolsWindow(kDebuggerTestPage, is_docked);
-    scoped_refptr<content::MessageLoopRunner> runner =
-        new content::MessageLoopRunner;
+    auto runner = base::MakeRefCounted<content::MessageLoopRunner>();
     DevToolsWindowTesting::Get(window_)->
         SetCloseCallback(runner->QuitClosure());
     InjectBeforeUnloadListener(main_web_contents());
@@ -728,8 +728,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsBeforeUnloadTest,
   DevToolsWindow* devtools_window = OpenDevToolWindowOnWebContents(
       GetInspectedTab(), false);
 
-  scoped_refptr<content::MessageLoopRunner> runner =
-      new content::MessageLoopRunner;
+  auto runner = base::MakeRefCounted<content::MessageLoopRunner>();
   DevToolsWindowTesting::Get(devtools_window)->SetCloseCallback(
       runner->QuitClosure());
 
@@ -762,19 +761,19 @@ IN_PROC_BROWSER_TEST_F(DevToolsBeforeUnloadTest,
   LoadTestPage(kDebuggerTestPage);
 
   std::vector<DevToolsWindow*> windows;
-  std::vector<content::WindowedNotificationObserver*> close_observers;
+  std::vector<std::unique_ptr<content::WindowedNotificationObserver>>
+      close_observers;
   content::WebContents* inspected_web_contents = GetInspectedTab();
   for (int i = 0; i < 3; ++i) {
     DevToolsWindow* devtools_window = OpenDevToolWindowOnWebContents(
       inspected_web_contents, i == 0);
     windows.push_back(devtools_window);
-    content::WindowedNotificationObserver* close_observer =
-        new content::WindowedNotificationObserver(
-                content::NOTIFICATION_WEB_CONTENTS_DESTROYED,
-                content::Source<content::WebContents>(
-                    DevToolsWindowTesting::Get(devtools_window)->
-                        main_web_contents()));
-    close_observers.push_back(close_observer);
+    close_observers.push_back(
+        std::make_unique<content::WindowedNotificationObserver>(
+            content::NOTIFICATION_WEB_CONTENTS_DESTROYED,
+            content::Source<content::WebContents>(
+                DevToolsWindowTesting::Get(devtools_window)
+                    ->main_web_contents())));
     inspected_web_contents =
         DevToolsWindowTesting::Get(devtools_window)->main_web_contents();
   }
@@ -812,10 +811,8 @@ IN_PROC_BROWSER_TEST_F(DevToolsBeforeUnloadTest,
     AcceptModalDialog();
     close_observer.Wait();
   }
-  for (size_t i = 0; i < close_observers.size(); ++i) {
-    close_observers[i]->Wait();
-    delete close_observers[i];
-  }
+  for (auto& close_observer : close_observers)
+    close_observer->Wait();
 }
 
 // Tests scripts panel showing.
@@ -1362,8 +1359,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
                        DevToolsExtensionSecurityPolicyGrants) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
-  std::unique_ptr<extensions::TestExtensionDir> dir(
-      new extensions::TestExtensionDir());
+  auto dir = std::make_unique<extensions::TestExtensionDir>();
 
   extensions::DictionaryBuilder manifest;
   dir->WriteManifest(extensions::DictionaryBuilder()
@@ -1648,7 +1644,7 @@ class AutofillDevToolsSanityTest : public DevToolsSanityTest,
   void SetUpOnMainThread() override {
     const bool popup_views_enabled = GetParam();
     scoped_feature_list_.InitWithFeatureState(
-        autofill::kAutofillExpandedPopupViews, popup_views_enabled);
+        autofill::features::kAutofillExpandedPopupViews, popup_views_enabled);
   }
 
  private:
@@ -1752,7 +1748,7 @@ class DevToolsAutoOpenerTest : public DevToolsSanityTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kAutoOpenDevToolsForTabs);
-    observer_.reset(new DevToolsWindowCreationObserver());
+    observer_ = std::make_unique<DevToolsWindowCreationObserver>();
   }
  protected:
   std::unique_ptr<DevToolsWindowCreationObserver> observer_;
@@ -1930,9 +1926,8 @@ class DevToolsSanityExtensionTest : public extensions::ExtensionBrowserTest {
   // Installs an extensions, emulating that it has been force-installed by
   // policy.
   // Contains assertions - callers should wrap calls of this method in
-  // |ASSERT_NO_FATAL_FAILURE|. Fills |*out_web_contents| with a |WebContents|
-  // that belongs to the force-installed extension.
-  void ForceInstallExtension(content::WebContents** out_web_contents) {
+  // |ASSERT_NO_FATAL_FAILURE|.
+  void ForceInstallExtension(std::string* extension_id) {
     base::FilePath crx_path;
     base::PathService::Get(chrome::DIR_TEST_DATA, &crx_path);
     crx_path = crx_path.AppendASCII("devtools")
@@ -1941,8 +1936,15 @@ class DevToolsSanityExtensionTest : public extensions::ExtensionBrowserTest {
     const Extension* extension = InstallExtension(
         crx_path, 1, extensions::Manifest::EXTERNAL_POLICY_DOWNLOAD);
     ASSERT_TRUE(extension);
+    *extension_id = extension->id();
+  }
 
-    GURL url("chrome-extension://" + extension->id() + "/options.html");
+  // Same as above, but also fills |*out_web_contents| with a |WebContents|
+  // that has been navigated to the force-installed extension.
+  void ForceInstallExtensionAndOpen(content::WebContents** out_web_contents) {
+    std::string extension_id;
+    ForceInstallExtension(&extension_id);
+    GURL url("chrome-extension://" + extension_id + "/options.html");
     ui_test_utils::NavigateToURL(browser(), url);
     content::WebContents* web_contents =
         browser()->tab_strip_model()->GetWebContentsAt(0);
@@ -1958,10 +1960,35 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityExtensionTest,
                            kDisallowedForForceInstalledExtensions));
 
   content::WebContents* web_contents = nullptr;
-  ASSERT_NO_FATAL_FAILURE(ForceInstallExtension(&web_contents));
+  ASSERT_NO_FATAL_FAILURE(ForceInstallExtensionAndOpen(&web_contents));
 
   DevToolsWindow::OpenDevToolsWindow(web_contents);
   auto agent_host = content::DevToolsAgentHost::GetOrCreateFor(web_contents);
+  ASSERT_FALSE(DevToolsWindow::FindDevToolsWindow(agent_host.get()));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    DevToolsSanityExtensionTest,
+    PolicyDisallowedForForceInstalledExtensionsAfterNavigation) {
+  browser()->profile()->GetPrefs()->SetInteger(
+      prefs::kDevToolsAvailability,
+      static_cast<int>(policy::DeveloperToolsPolicyHandler::Availability::
+                           kDisallowedForForceInstalledExtensions));
+
+  std::string extension_id;
+  ASSERT_NO_FATAL_FAILURE(ForceInstallExtension(&extension_id));
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetWebContentsAt(0);
+
+  // It's possible to open DevTools for about:blank.
+  ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
+  DevToolsWindow::OpenDevToolsWindow(web_contents);
+  auto agent_host = content::DevToolsAgentHost::GetOrCreateFor(web_contents);
+  ASSERT_TRUE(DevToolsWindow::FindDevToolsWindow(agent_host.get()));
+
+  // Navigating to extension page should close DevTools.
+  ui_test_utils::NavigateToURL(
+      browser(), GURL("chrome-extension://" + extension_id + "/options.html"));
   ASSERT_FALSE(DevToolsWindow::FindDevToolsWindow(agent_host.get()));
 }
 
@@ -1989,7 +2016,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsAllowedByCommandLineSwitch,
                            kDisallowedForForceInstalledExtensions));
 
   content::WebContents* web_contents = nullptr;
-  ASSERT_NO_FATAL_FAILURE(ForceInstallExtension(&web_contents));
+  ASSERT_NO_FATAL_FAILURE(ForceInstallExtensionAndOpen(&web_contents));
 
   DevToolsWindow::OpenDevToolsWindow(web_contents);
   auto agent_host = content::DevToolsAgentHost::GetOrCreateFor(web_contents);
@@ -2097,12 +2124,13 @@ class MockWebUIProvider
  public:
   MockWebUIProvider(const std::string& source, const std::string& content)
       : source_(source), content_(content) {}
+  ~MockWebUIProvider() override = default;
 
-  content::WebUIController* NewWebUI(content::WebUI* web_ui,
-                                     const GURL& url) override {
+  std::unique_ptr<content::WebUIController> NewWebUI(content::WebUI* web_ui,
+                                                     const GURL& url) override {
     content::URLDataSource::Add(Profile::FromWebUI(web_ui),
                                 new StaticURLDataSource(source_, content_));
-    return new content::WebUIController(web_ui);
+    return std::make_unique<content::WebUIController>(web_ui);
   }
 
  private:

@@ -11,7 +11,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/modules/payments/payment_request.mojom.h"
+#include "third_party/blink/public/mojom/payments/payment_request.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace payments {
@@ -450,6 +450,54 @@ TEST_F(PaymentRequestSpecTest, MultipleCurrenciesWithTwoDisplayItem) {
   // At least one of the display items has a different currency, this is a mixed
   // currency case.
   EXPECT_TRUE(spec()->IsMixedCurrency());
+}
+
+TEST_F(PaymentRequestSpecTest, ShippingAddressErrors) {
+  mojom::PaymentOptionsPtr options = mojom::PaymentOptions::New();
+  options->request_shipping = true;
+  RecreateSpecWithOptionsAndDetails(std::move(options),
+                                    mojom::PaymentDetails::New());
+
+  EXPECT_FALSE(spec()->has_shipping_address_error());
+
+  mojom::AddressErrorsPtr shipping_address_errors = mojom::AddressErrors::New();
+  shipping_address_errors->address_line = "Invalid address line";
+  shipping_address_errors->city = "Invalid city";
+  spec()->UpdateShippingAddressErrors(std::move(shipping_address_errors));
+
+  EXPECT_EQ(base::UTF8ToUTF16("Invalid city"),
+            spec()->GetShippingAddressError(autofill::ADDRESS_HOME_CITY));
+  EXPECT_EQ(
+      base::UTF8ToUTF16("Invalid address line"),
+      spec()->GetShippingAddressError(autofill::ADDRESS_HOME_STREET_ADDRESS));
+
+  EXPECT_TRUE(spec()->has_shipping_address_error());
+}
+
+TEST_F(PaymentRequestSpecTest, PayerErrors) {
+  mojom::PaymentOptionsPtr options = mojom::PaymentOptions::New();
+  options->request_payer_email = true;
+  options->request_payer_name = true;
+  options->request_payer_phone = true;
+  RecreateSpecWithOptionsAndDetails(std::move(options),
+                                    mojom::PaymentDetails::New());
+
+  EXPECT_FALSE(spec()->has_payer_error());
+
+  mojom::PayerErrorFieldsPtr payer_errors = mojom::PayerErrorFields::New();
+  payer_errors->email = "Invalid email";
+  payer_errors->name = "Invalid name";
+  payer_errors->phone = "Invalid phone";
+  spec()->UpdatePayerErrors(std::move(payer_errors));
+
+  EXPECT_EQ(base::UTF8ToUTF16("Invalid email"),
+            spec()->GetPayerError(autofill::EMAIL_ADDRESS));
+  EXPECT_EQ(base::UTF8ToUTF16("Invalid name"),
+            spec()->GetPayerError(autofill::NAME_FULL));
+  EXPECT_EQ(base::UTF8ToUTF16("Invalid phone"),
+            spec()->GetPayerError(autofill::PHONE_HOME_WHOLE_NUMBER));
+
+  EXPECT_TRUE(spec()->has_payer_error());
 }
 
 }  // namespace payments

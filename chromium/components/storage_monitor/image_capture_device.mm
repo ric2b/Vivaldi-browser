@@ -5,8 +5,8 @@
 #import "components/storage_monitor/image_capture_device.h"
 
 #include "base/files/file_util.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread_restrictions.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -224,7 +224,7 @@ base::FilePath PathForCameraItem(ICCameraItem* item) {
   // downloaded will be incorrectly named.
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
       base::Bind(&storage_monitor::RenameFile, savedPath, saveAsPath),
       base::Bind(&storage_monitor::ReturnRenameResultToListener, listener_,

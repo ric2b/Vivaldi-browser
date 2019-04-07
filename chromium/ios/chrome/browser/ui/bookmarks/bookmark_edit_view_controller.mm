@@ -476,6 +476,10 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
                  selectedFolder:self.folder];
   folderViewController.delegate = self;
   self.folderViewController = folderViewController;
+  if (@available(iOS 11, *)) {
+    self.folderViewController.navigationItem.largeTitleDisplayMode =
+        UINavigationItemLargeTitleDisplayModeNever;
+  }
 
   [self.navigationController pushViewController:self.folderViewController
                                        animated:YES];
@@ -509,6 +513,14 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
     footer.textLabel.text = footerText;
     [self.tableView endUpdates];
   }
+}
+
+- (void)textFieldDidBeginEditing:(UITextField*)textField {
+  textField.textColor = [BookmarkTextFieldCell textColorForEditing:YES];
+}
+
+- (void)textFieldDidEndEditing:(UITextField*)textField {
+  textField.textColor = [BookmarkTextFieldCell textColorForEditing:NO];
 }
 
 - (BOOL)textFieldShouldReturn:(UITextField*)textField {

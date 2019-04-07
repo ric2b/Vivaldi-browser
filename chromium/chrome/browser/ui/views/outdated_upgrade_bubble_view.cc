@@ -6,13 +6,12 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/browser_dialogs.h"
-#include "chrome/browser/ui/layout_constants.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/upgrade_detector.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -122,7 +121,7 @@ bool OutdatedUpgradeBubbleView::Accept() {
     // Re-enable updates by shelling out to setup.exe asynchronously.
     base::PostTaskWithTraits(
         FROM_HERE,
-        {base::MayBlock(), base::TaskPriority::BACKGROUND,
+        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
          base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
         base::Bind(&google_update::ElevateIfNeededToReenableUpdates));
 #endif  // defined(OS_WIN)
@@ -170,8 +169,5 @@ OutdatedUpgradeBubbleView::OutdatedUpgradeBubbleView(
     : BubbleDialogDelegateView(anchor_view, views::BubbleBorder::TOP_RIGHT),
       auto_update_enabled_(auto_update_enabled),
       navigator_(navigator) {
-  // Compensate for built-in vertical padding in the anchor view's image.
-  set_anchor_view_insets(gfx::Insets(
-      GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
   chrome::RecordDialogCreation(chrome::DialogIdentifier::OUTDATED_UPGRADE);
 }

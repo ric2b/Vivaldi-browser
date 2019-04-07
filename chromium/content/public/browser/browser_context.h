@@ -15,6 +15,7 @@
 
 #include "base/callback_forward.h"
 #include "base/containers/hash_tables.h"
+#include "base/optional.h"
 #include "base/supports_user_data.h"
 #include "content/common/content_export.h"
 #include "net/url_request/url_request_interceptor.h"
@@ -30,6 +31,10 @@ class GURL;
 
 namespace base {
 class FilePath;
+}
+
+namespace download {
+class InProgressDownloadManager;
 }
 
 namespace service_manager {
@@ -69,7 +74,6 @@ class DownloadManager;
 class DownloadManagerDelegate;
 class PermissionController;
 class PermissionControllerDelegate;
-struct PushEventPayload;
 class PushMessagingService;
 class ResourceContext;
 class ServiceManagerConnection;
@@ -167,7 +171,7 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
       BrowserContext* browser_context,
       const GURL& origin,
       int64_t service_worker_registration_id,
-      const PushEventPayload& payload,
+      base::Optional<std::string> payload,
       const base::Callback<void(mojom::PushDeliveryStatus)>& callback);
 
   static void NotifyWillBeDestroyed(BrowserContext* browser_context);
@@ -231,6 +235,9 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
 
   // Returns the path of the directory where this context's data is stored.
   virtual base::FilePath GetPath() const = 0;
+
+  // Returns the path of the directory where the code is cached.
+  virtual base::FilePath GetCachePath() const = 0;
 
   // Return whether this context is incognito. Default is false.
   virtual bool IsOffTheRecord() const = 0;
@@ -328,6 +335,11 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // have similar decode performance and stats are not exposed to the web
   // directly, so privacy is not compromised.
   virtual media::VideoDecodePerfHistory* GetVideoDecodePerfHistory();
+
+  // Retrieves the InProgressDownloadManager associated with this object if
+  // available
+  virtual download::InProgressDownloadManager*
+  RetriveInProgressDownloadManager();
 
  private:
   const std::string unique_id_;

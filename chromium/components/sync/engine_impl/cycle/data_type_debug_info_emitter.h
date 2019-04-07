@@ -13,6 +13,10 @@
 #include "components/sync/engine/cycle/commit_counters.h"
 #include "components/sync/engine/cycle/update_counters.h"
 
+namespace base {
+class HistogramBase;
+}
+
 namespace syncer {
 
 class TypeDebugInfoObserver;
@@ -29,11 +33,11 @@ class TypeDebugInfoObserver;
 // information on demand.
 class DataTypeDebugInfoEmitter {
  public:
+  using ObserverListType = base::ObserverList<TypeDebugInfoObserver>::Unchecked;
+
   // The |observers| is not owned.  |observers| may be modified outside of this
   // object and is expected to outlive this object.
-  DataTypeDebugInfoEmitter(
-      ModelType type,
-      base::ObserverList<TypeDebugInfoObserver>* observers);
+  DataTypeDebugInfoEmitter(ModelType type, ObserverListType* observers);
 
   virtual ~DataTypeDebugInfoEmitter();
 
@@ -55,8 +59,10 @@ class DataTypeDebugInfoEmitter {
   // Triggers an update counters update to registered observers.
   void EmitUpdateCountersUpdate();
 
-  // Triggers a status counters update to registered observers.
-  virtual void EmitStatusCountersUpdate() = 0;
+  // Triggers a status counters update to registered observers. The default
+  // implementation does nothing and is present only to make this class
+  // non-abstract and thus unit-testable.
+  virtual void EmitStatusCountersUpdate();
 
  protected:
   const ModelType type_;
@@ -65,11 +71,22 @@ class DataTypeDebugInfoEmitter {
   // doesn't make sense to have them manage their own observer list.  They all
   // share one observer list that is provided by their owner and which is
   // guaranteed to outlive them.
-  base::ObserverList<TypeDebugInfoObserver>* type_debug_info_observers_;
+  ObserverListType* type_debug_info_observers_;
 
  private:
+  // The actual up-to-date counters.
   CommitCounters commit_counters_;
   UpdateCounters update_counters_;
+
+  // The last state of the counters emitted to UMA. In the next round of
+  // emitting to UMA, we only need to upload the diff between the actual
+  // counters and the counts here.
+  CommitCounters emitted_commit_counters_;
+  UpdateCounters emitted_update_counters_;
+
+  // The histogram to record to; cached for efficiency because many histogram
+  // entries are recorded in this object during run-time.
+  base::HistogramBase* const histogram_;
 
   DISALLOW_COPY_AND_ASSIGN(DataTypeDebugInfoEmitter);
 };

@@ -25,18 +25,31 @@ class PageResourceDataUse {
   void DidStartResponse(int resource_id,
                         const network::ResourceResponseHead& response_head);
 
-  // Updates any additional bytes of data use to |delta_data_use|.
-  void DidReceiveTransferSizeUpdate(int received_data_length,
-                                    mojom::PageLoadDataUse* delta_data_use);
+  // Updates received bytes.
+  void DidReceiveTransferSizeUpdate(int received_data_length);
 
-  // Updates additional bytes to |delta_data_use| and returns whether it was
-  // updated.
-  bool DidCompleteResponse(const network::URLLoaderCompletionStatus& status,
-                           mojom::PageLoadDataUse* delta_data_use);
+  // Updates received bytes from encoded length, returns whether it was updated.
+  bool DidCompleteResponse(const network::URLLoaderCompletionStatus& status);
+
+  // Flags the resource as canceled.
+  void DidCancelResponse();
+
+  // Checks if the resource has completed loading or if the response was
+  // cancelled.
+  bool IsFinishedLoading();
 
   int resource_id() const { return resource_id_; }
 
+  // Creates a ResourceDataUpdate mojo for this resource. This page resource
+  // contains information since the last time update. Should be called at most
+  // once once per timing update.
+  mojom::ResourceDataUpdatePtr GetResourceDataUpdate();
+
  private:
+  // Calculates the difference between |total_received_bytes_| and
+  // |last_update_bytes_|, returns it, and updates |last_update_bytes_|.
+  int CalculateNewlyReceivedBytes();
+
   int resource_id_;
 
   // Compression ratio estimated from the response headers if data saver was
@@ -44,6 +57,10 @@ class PageResourceDataUse {
   double data_reduction_proxy_compression_ratio_estimate_;
 
   uint64_t total_received_bytes_;
+  uint64_t last_update_bytes_;
+
+  bool is_complete_;
+  bool is_canceled_;
 
   DISALLOW_ASSIGN(PageResourceDataUse);
 };

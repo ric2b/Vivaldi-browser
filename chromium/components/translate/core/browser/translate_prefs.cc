@@ -33,7 +33,7 @@
 namespace translate {
 
 const char kForceTriggerTranslateCount[] =
-    "translate_force_trigger_on_english_count";
+    "translate_force_trigger_on_english_count_for_backoff";
 const char TranslatePrefs::kPrefTranslateSiteBlacklist[] =
     "translate_site_blacklist";
 const char TranslatePrefs::kPrefTranslateWhitelists[] = "translate_whitelists";
@@ -57,6 +57,8 @@ const char TranslatePrefs::kPrefTranslateAutoAlwaysCount[] =
     "translate_auto_always_count";
 const char TranslatePrefs::kPrefTranslateAutoNeverCount[] =
     "translate_auto_never_count";
+const char TranslatePrefs::kPrefExplicitLanguageAskShown[] =
+    "translate_explicit_language_ask_shown";
 #endif
 
 // The below properties used to be used but now are deprecated. Don't use them
@@ -677,6 +679,14 @@ void TranslatePrefs::ResetTranslationAutoNeverCount(
   DictionaryPrefUpdate update(prefs_, kPrefTranslateAutoNeverCount);
   update.Get()->SetInteger(language, 0);
 }
+
+bool TranslatePrefs::GetExplicitLanguageAskPromptShown() const {
+  return prefs_->GetBoolean(kPrefExplicitLanguageAskShown);
+}
+
+void TranslatePrefs::SetExplicitLanguageAskPromptShown(bool shown) {
+  prefs_->SetBoolean(kPrefExplicitLanguageAskShown, shown);
+}
 #endif  // defined(OS_ANDROID)
 
 void TranslatePrefs::UpdateLastDeniedTime(const std::string& language) {
@@ -788,13 +798,14 @@ int TranslatePrefs::GetForceTriggerOnEnglishPagesCount() const {
 
 void TranslatePrefs::ReportForceTriggerOnEnglishPages() {
   int current_count = GetForceTriggerOnEnglishPagesCount();
-  prefs_->SetInteger(kForceTriggerTranslateCount, current_count + 1);
+  if (current_count != -1)
+    prefs_->SetInteger(kForceTriggerTranslateCount, current_count + 1);
 }
 
 void TranslatePrefs::ReportAcceptedAfterForceTriggerOnEnglishPages() {
   int current_count = GetForceTriggerOnEnglishPagesCount();
-  if (current_count > 0)
-    prefs_->SetInteger(kForceTriggerTranslateCount, current_count - 1);
+  if (current_count != -1)
+    prefs_->SetInteger(kForceTriggerTranslateCount, -1);
 }
 
 // static
@@ -832,6 +843,9 @@ void TranslatePrefs::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterDictionaryPref(
       kPrefTranslateAutoNeverCount,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(
+      kPrefExplicitLanguageAskShown, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 #endif
 }

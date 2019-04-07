@@ -8,7 +8,7 @@
 GN generates Xcode projects that build one configuration only. However, typical
 iOS development involves using the Xcode IDE to toggle the platform and
 configuration. This script replaces the 'gn' configuration with 'Debug',
-'Release' and 'Profile', and changes the ninja invokation to honor these
+'Release' and 'Profile', and changes the ninja invocation to honor these
 configurations.
 """
 
@@ -25,9 +25,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-
-
-XCTEST_PRODUCT_TYPE = 'com.apple.product-type.bundle.unit-test'
 
 
 class XcodeProject(object):
@@ -91,36 +88,11 @@ def UpdateProductsProject(file_input, file_output, configurations):
   for value in project.objects.values():
     isa = value['isa']
 
-    # TODO(crbug.com/619072): gn does not write the min deployment target in the
-    # generated Xcode project, so add it while doing the conversion, only if it
-    # is not present. Remove this code and comment once the bug is fixed and gn
-    # has rolled past it.
-    if isa == 'XCBuildConfiguration':
-      build_settings = value['buildSettings']
-      if 'IPHONEOS_DEPLOYMENT_TARGET' not in build_settings:
-        build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '9.0'
-
     # Teach build shell script to look for the configuration and platform.
     if isa == 'PBXShellScriptBuildPhase':
       value['shellScript'] = value['shellScript'].replace(
           'ninja -C .',
           'ninja -C "../${CONFIGURATION}${EFFECTIVE_PLATFORM_NAME}"')
-
-    # Configure BUNDLE_LOADER and TEST_HOST for xctest targets (if not yet
-    # configured by gn). Old convention was to name the test dynamic module
-    # "foo" and the host "foo_host" while the new convention is to name the
-    # test "foo_module" and the host "foo". Decide which convention to use
-    # by inspecting the target name.
-    if isa == 'PBXNativeTarget' and value['productType'] == XCTEST_PRODUCT_TYPE:
-      configuration_list = project.objects[value['buildConfigurationList']]
-      for config_name in configuration_list['buildConfigurations']:
-        config = project.objects[config_name]
-        if not config['buildSettings'].get('BUNDLE_LOADER'):
-          assert value['name'].endswith('_module')
-          host_name = value['name'][:-len('_module')]
-          config['buildSettings']['BUNDLE_LOADER'] = '$(TEST_HOST)'
-          config['buildSettings']['TEST_HOST'] = \
-              '${BUILT_PRODUCTS_DIR}/%s.app/%s' % (host_name, host_name)
 
     # Add new configuration, using the first one as default.
     if isa == 'XCConfigurationList':
@@ -143,6 +115,18 @@ def UpdateProductsProject(file_input, file_output, configurations):
 
   objects = collections.OrderedDict(sorted(project.objects.iteritems()))
   WriteXcodeProject(file_output, json.dumps(json_data))
+
+
+def DisableNewBuildSystem(output_dir):
+  """Disables the new build system due to crbug.com/852522 """
+  xcwspacesharedsettings = os.path.join(output_dir, 'all.xcworkspace',
+      'xcshareddata', 'WorkspaceSettings.xcsettings')
+  if os.path.isfile(xcwspacesharedsettings):
+    json_data = json.loads(LoadXcodeProjectAsJSON(xcwspacesharedsettings))
+  else:
+    json_data = {}
+  json_data['BuildSystemType'] = 'Original'
+  WriteXcodeProject(xcwspacesharedsettings, json.dumps(json_data))
 
 
 def ConvertGnXcodeProject(input_dir, output_dir, configurations):
@@ -171,6 +155,11 @@ def ConvertGnXcodeProject(input_dir, output_dir, configurations):
   xcwspace = os.path.join('all.xcworkspace', 'contents.xcworkspacedata')
   CopyFileIfChanged(os.path.join(input_dir, xcwspace),
                     os.path.join(output_dir, xcwspace))
+
+
+  # TODO(crbug.com/852522): Disable new BuildSystemType.
+  DisableNewBuildSystem(output_dir)
+
   # TODO(crbug.com/679110): gn has been modified to remove 'sources.xcodeproj'
   # and keep 'all.xcworkspace' and 'products.xcodeproj'. The following code is
   # here to support both old and new projects setup and will be removed once gn

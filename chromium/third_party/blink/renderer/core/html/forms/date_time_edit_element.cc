@@ -747,8 +747,8 @@ void DateTimeEditElement::GetLayout(const LayoutParameters& layout_parameters,
         break;
       }
     }
-    if (DateTimeFieldElement* field =
-            FieldAt(std::min(focused_field_index, fields_.size() - 1)))
+    if (DateTimeFieldElement* field = FieldAt(std::min(
+            focused_field_index, static_cast<size_t>(fields_.size()) - 1)))
       field->focus();
   }
 
@@ -785,12 +785,12 @@ void DateTimeEditElement::ResetFields() {
   fields_.Shrink(0);
 }
 
-void DateTimeEditElement::DefaultEventHandler(Event* event) {
+void DateTimeEditElement::DefaultEventHandler(Event& event) {
   // In case of control owner forward event to control, e.g. DOM
   // dispatchEvent method.
   if (DateTimeFieldElement* field = FocusedField()) {
     field->DefaultEventHandler(event);
-    if (event->DefaultHandled())
+    if (event.DefaultHandled())
       return;
   }
 

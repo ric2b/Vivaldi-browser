@@ -50,8 +50,8 @@
   <message name="IDS_WALLPAPER_MANAGER_ACCESS_FAIL" desc="The string displayed to user when access wallpaper server failed.">
     Chrome cannot access wallpapers. Please connect to a network.
   </message>
-  <message name="IDS_WALLPAPER_MANAGER_NETWORK_ERROR" desc="The string displayed to user when access wallpaper server failed on the new wallpaper picker.">
-    The images are currently not available. Please reconnect to view the collections.
+  <message name="IDS_WALLPAPER_MANAGER_NETWORK_ERROR" desc="The string displayed when user can't use wallpaper picker because they're not connected to the internet.">
+    The images are currently not available. Please reconnect to the internet to see wallpaper collections.
   </message>
   <message name="IDS_WALLPAPER_MANAGER_DOWNLOAD_FAIL" desc="The string displayed to user when downloading the wallpaper failed.">
     Chrome cannot download this wallpaper.
@@ -144,6 +144,15 @@
   <message name="IDS_MULTIDEVICE_SETUP_TRY_AGAIN_LABEL" desc="Label for button to retry setup upon failure.">
     Try again
   </message>
+  <message name="IDS_MULTIDEVICE_SETUP_PASSWORD_PAGE_HEADER" desc="Header for the first page in the multi-device setup flow; the page displays a field in which the user must enter their password to continue.">
+    Set up Better Together
+  </message>
+  <message name="IDS_MULTIDEVICE_SETUP_PASSWORD_PAGE_ENTER_PASSWORD_LABEL" desc="Message displayed in the multi-device setup flow which asks the user to enter their password.">
+    Enter password
+  </message>
+  <message name="IDS_MULTIDEVICE_SETUP_PASSWORD_PAGE_WRONG_PASSWORD_LABEL" desc="Message displayed in the multi-device setup flow when the user has entered an incorrect password.">
+    Wrong password
+  </message>
   <message name="IDS_MULTIDEVICE_SETUP_SETUP_FAILED_PAGE_HEADER" desc="Header for failed setup page.">
     Better Together setup couldn't complete
   </message>
@@ -159,11 +168,11 @@
   <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_HEADER" desc="Header for welcome page.">
     Better Together
   </message>
-  <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_MESSAGE_PART_1" desc="Concise summary to tell user that they can share their Android's capabilities with their Chromebook.">
-    Share the best of Android with your Chromebook automatically.
+  <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_MESSAGE" desc="Summary to tell user that they can share their Android's capabilities with their Chromebook; includes details on specific features that can be used and a link to an information page">
+    Share the best of Android with your Chromebook automatically. Connect your phone so you can text from your computer, share your phone's internet connection, and unlock your Chromebook screen.<ph name="FOOTNOTE_POINTER">$1<ex>*</ex></ph> <ph name="LINK_BEGIN">&lt;a id="learn-more-link" href="$2<ex>https://support.google.com/chromebook/?p=multidevice</ex>"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
   </message>
-  <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_MESSAGE_PART_2" desc="More details on specific multidevice features and a link to an information page.">
-    Connect your phone so you can text from your computer, share your phone's internet connection, and unlock your Chromebook screen.<ph name="FOOTNOTE_POINTER">$1<ex>*</ex></ph> <ph name="LINK_BEGIN">&lt;a id="learn-more-link" href="$2<ex>https://support.google.com/chromebook/?p=multidevice</ex>"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
+  <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_FOOTNOTE" desc="Footnote for multi-device feature setup page, which indicates that the exact set of features available to users differs according to the device model used.">
+    <ph name="FOOTNOTE_POINTER">$1<ex>*</ex></ph>Features vary by device
   </message>
   <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_SINGLE_DEVICE_HEADER" desc="Label appearing over the name of an Android phone which this Chromebook can connect to.">
     Device detected
@@ -178,21 +187,13 @@
     Better Together may:
   </message>
   <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_AWM_DESCRIPTION" desc="Description of a feature that shows text messages received by the user's phone as notification on their Chromebook.">
-    Send you notifications from Android Web Messages
+    Send you notifications and default to remembering this computer for Messages
   </message>
   <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_INSTALL_APPS_DESCRIPTION" desc="Tell the user that Better Together can install apps on their Chromebook">
     Install apps on your Chromebook
   </message>
-  <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_ADD_FEATURES" desc="Tell the user that Better Together can add new features to that use their phone's connection to their Chromebook">
-    Add new features that use your phone's connection to your Chromebook
-  </message>
-
-  <!-- MultiDevice 'Forget device' dialog -->
-  <message name="IDS_MULTIDEVICE_FORGET_DEVICE_DIALOG_HEADING" desc="Heading for a dialog that lets the user choose if their Chromebook should forget their phone. This means they will no longer have access to multidevice features.">
-    Forget device
-  </message>
-  <message name="IDS_MULTIDEVICE_FORGET_DEVICE_DIALOG_MESSAGE" desc="Text of a dialog that lets the user choose if their Chromebook should forget their phone. This means they will no longer have access to multidevice features.">
-    Remove your phone and disable Better Together
+  <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_ADD_FEATURES" desc="Tell the user that Better Together can offer to add new features to that use their phone's connection to their Chromebook">
+    Offer new features that use your phone's connection to your Chromebook
   </message>
 
   <!-- File Manager -->
@@ -373,8 +374,8 @@
   <message name="IDS_FILE_BROWSER_ERROR_EXTERNAL_DRIVE_LONG_NAME" desc="Error message displayed when user tries to enter too long name for an external drive.">
     Use a name that's <ph name="MAX_LENGTH">$1<ex>11</ex></ph> characters or less
   </message>
-  <message name="IDS_FILE_BROWSER_ERROR_LINUX_FILES_CONNECTION" desc="Text to show user when there is an error starting or mounting crostini container to show Linux Files.">
-    Unable to view Linux Files
+  <message name="IDS_FILE_BROWSER_ERROR_LINUX_FILES_CONNECTION" desc="Text to show user when there is an error starting or mounting crostini container to show Linux files.">
+    Unable to view Linux files
   </message>
 
   <message name="IDS_FILE_BROWSER_EMPTY_FOLDER" desc="Label shown in an empty folder.">
@@ -434,10 +435,10 @@
     Close
   </message>
   <message name="IDS_FILE_BROWSER_ADD_NEW_SERVICES_BUTTON_LABEL" desc="Title of the button in the left nav to add new services (file systems) to the Files app.">
-    Add new services
+    Add new service
   </message>
   <message name="IDS_FILE_BROWSER_INSTALL_NEW_EXTENSION_LABEL" desc="Title of the menu item for installing new extensions from the web store.">
-    Install new from the webstore
+    Install new service
   </message>
   <message name="IDS_FILE_BROWSER_TASK_VIEW" desc="Title of the action to view (no edit) a file.">
     View
@@ -974,8 +975,8 @@
   <message name="IDS_FILE_BROWSER_DROP_TARGET_FOLDER_NO_MOVE_PERMISSION" desc="Tooltip label displayed besides mouse pointer while dragging files or folders over a Team Drive or folder in Drive that does not have write access.">
     You don't have permission to move files into '<ph name="FOLDER_NAME">$1<ex>Trip Photos</ex></ph>'.
   </message>
-  <message name="IDS_FILE_BROWSER_DROP_TARGET_OPENING_LINUX_FILES" desc="Tooltip label displayed besides mouse pointer when dragging files or folders over Linux Files root before the container has been started and mounted.">
-    Opening Linux Files...
+  <message name="IDS_FILE_BROWSER_DROP_TARGET_OPENING_LINUX_FILES" desc="Tooltip label displayed besides mouse pointer when dragging files or folders over Linux files root before the container has been started and mounted.">
+    Opening Linux files...
   </message>
 
   <message name="IDS_FILE_BROWSER_SELECT_FOLDER_TITLE" desc="Select folder title.">
@@ -1231,7 +1232,7 @@
     Unable to open with $1
   </message>
   <message name="IDS_FILE_BROWSER_UNABLE_TO_OPEN_CROSTINI" desc="Message shown when a user tries to use a crostini app to open a file outside the crostini container (e.g. in Downloads).  This message will be removed once we support this action.">
-    To open files with $1, first copy to Linux Files folder.
+    To open files with $1, first copy to Linux files folder.
   </message>
 
   <message name="IDS_FILE_BROWSER_FOLDER" desc="Folder entry type">
@@ -1604,11 +1605,14 @@
   <message name="IDS_EULA_SCREEN_TITLE" desc="Title of the OOBE EULA screen">
     The small print
   </message>
-  <message name="IDS_PROXY_SETTINGS_MENU_NAME" desc="OOBE 'Available Networks' list menu entry that opens proxy settings dialog">
+  <message name="IDS_NETWORK_PROXY_SETTINGS_LIST_ITEM_NAME" desc="OOBE network screen list entry that opens proxy settings dialog">
     Proxy settings
   </message>
-  <message name="IDS_ADD_WI_FI_NETWORK_MENU_NAME" desc="OOBE 'Available Networks' list menu entry that opens 'Add New WiFi Network' dialog">
+  <message name="IDS_NETWORK_ADD_WI_FI_LIST_ITEM_NAME" desc="OOBE network screen list entry that opens 'Add New WiFi Network' dialog">
     Add other WiFi network
+  </message>
+  <message name="IDS_NETWORK_OFFLINE_DEMO_SETUP_LIST_ITEM_NAME" desc="OOBE network screen list entry that starts offline demo mode setup">
+    Offline demo mode
   </message>
   <message name="IDS_AUTOSTART_WARNING_TITLE" desc="Title of the kiosk autostart screen">
     Auto-launch permission requested
@@ -1661,9 +1665,6 @@
   <message name="IDS_ENTERPRISE_ENROLLMENT_WORKING_MESSAGE" desc="Message to show while enrollment is in progress">
     Enrolling device...
   </message>
-  <message name="IDS_NETWORK_SELECTION_TITLE" desc="Welcome title shown on network selection screen">
-    Let's get started
-  </message>
   <message name="IDS_OOBE_ASSET_ID_LABEL" desc="Chrome OS OOBE: label for asset identifier.">
     Asset ID: <ph name="ASSET_ID">$1<ex>None specified</ex></ph>
   </message>
@@ -1712,10 +1713,10 @@
   <message name="IDS_HID_DETECTION_CONTINUE_BUTTON" desc="Text shown on continue button" meaning="Continue button label of HID detection screen.">
     Continue
   </message>
-  <message name="IDS_NETWORK_SELECTION_CONTINUE_BUTTON" desc="Text shown on continue button" meaning="Continue button label of welcome screen.">
+  <message name="IDS_WELCOME_SELECTION_CONTINUE_BUTTON" desc="Text shown on continue button" meaning="Continue button label of welcome screen.">
     Continue
   </message>
-  <message name="IDS_NETWORK_ENABLE_DEV_FEATURES_LINK" desc="Text shown on continue button" meaning="Link shown on OOBE screens that opens enable debugging features dialog">
+  <message name="IDS_WELCOME_ENABLE_DEV_FEATURES_LINK" desc="Link shown on welcome screen" meaning="Link shown on OOBE screens that opens enable debugging features dialog">
     Enable debugging features
   </message>
   <message name="IDS_LANGUAGE_DROPDOWN_TITLE" desc="Title of language selection dropdown menu" meaning="Small title near language dropdown menu suggesting that this is a language selector.">
@@ -1742,10 +1743,10 @@
   <message name="IDS_ACCESSIBILITY_SECTION_HINT" desc="Under-title line on the accessibility options screen" meaning="A hint to the user what these settings do and how to update them later.">
     You can customize this device to fit your needs. These accessibility features can be changed later in Settings.
   </message>
-  <message name="IDS_NETWORK_SECTION_TITLE" desc="Title of network selection screen" meaning="A title of the dialog where user should select network to connect to Internet">
+  <message name="IDS_NETWORK_SELECTION_TITLE" desc="Title of network selection screen" meaning="A title of the dialog where user should select network to connect to Internet">
     Connect to network
   </message>
-  <message name="IDS_NETWORK_SECTION_HINT" desc="Under-title line on the network selection screen" meaning="A hint to the user why device should be connected to the network">
+  <message name="IDS_NETWORK_SELECTION_HINT" desc="Under-title line on the network selection screen" meaning="A hint to the user why device should be connected to the network">
     To restore your data, you need an Internet connection.
   </message>
   <message name="IDS_NETWORK_SELECTION_ERROR" desc="Error shown when connection to network failed or timed out.">
@@ -1761,6 +1762,15 @@
     Off
   </message>
   <message name="IDS_SPOKEN_FEEDBACK_OPTION_ON" desc="A value for Spoken Feedback accessibility option when it is on.">
+    On
+  </message>
+  <message name="IDS_OOBE_SELECT_TO_SPEAK_OPTION" desc="Select to Speak option shown on OOBE screens accessibility menu.">
+    Select to speak
+  </message>
+  <message name="IDS_SELECT_TO_SPEAK_OPTION_OFF" desc="A value for Select to Speak accessibility option when it is off.">
+    Off
+  </message>
+  <message name="IDS_SELECT_TO_SPEAK_OPTION_ON" desc="A value for Select to Speak accessibility option when it is on.">
     On
   </message>
   <message name="IDS_OOBE_LARGE_CURSOR_OPTION" desc="Large mouse cursor option shown on OOBE screens accessibility menu.">
@@ -1784,10 +1794,13 @@
   <message name="IDS_OOBE_SCREEN_MAGNIFIER_OPTION" desc="Screen magnifier option shown on OOBE screens accessibility menu.">
     Screen magnifier
   </message>
-  <message name="IDS_SCREEN_MAGNIFIER_OPTION_OFF" desc="A value for Screen Magnifier Option accessibility option when it is off.">
+  <message name="IDS_OOBE_DOCKED_MAGNIFIER_OPTION" desc="Docked magnifier option shown on OOBE screens accessibility menu.">
+    Docked magnifier
+  </message>
+  <message name="IDS_SCREEN_MAGNIFIER_OPTION_OFF" desc="A value for Screen or Docked Magnifier Option accessibility option when it is off.">
     Off
   </message>
-  <message name="IDS_SCREEN_MAGNIFIER_OPTION_ON" desc="A value for Screen Magnifier Option accessibility option when it is on.">
+  <message name="IDS_SCREEN_MAGNIFIER_OPTION_ON" desc="A value for Screen or Docked Magnifier Option accessibility option when it is on.">
     On
   </message>
   <message name="IDS_OOBE_VIRTUAL_KEYBOARD_OPTION" desc="Virtual keyboard option shown on the OOBE screens accessibility menu.">
@@ -1926,7 +1939,7 @@
     Install apps from your other devices
   </message>
   <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_DESCRIPTION" desc="The description of the 'Recommend Apps' section">
-    We found <ph name="NUMBER_OF_APPS">$1<ex>10</ex></ph> apps connected to your account that are optimized for this device.
+    We found <ph name="NUMBER_OF_APPS">$1<ex>10</ex></ph> apps from your account that can be used on this device.
   </message>
   <message name="IDS_LOGIN_RECOMMEND_APPS_SKIP" desc="The label on the button that skips installing any recommended apps">
     Skip
@@ -1943,14 +1956,32 @@
   <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_ERROR" desc="Load error message of the Recommend Apps OOBE dialog.">
     The list of apps cannot be loaded. Please retry.
   </message>
-  <message name="IDS_LOGIN_APP_DOWNLOADING_SCREEN_TITLE" desc="The title of the dialog that tells the user the selected Android Apps are downloading.">
-    Apps downloading
+  <message name="IDS_LOGIN_APP_DOWNLOADING_SCREEN_TITLE_SINGULAR" desc="The title of the dialog that tells the user the selected Android App is downloading.">
+    We'll install that app for you
+  </message>
+  <message name="IDS_LOGIN_APP_DOWNLOADING_SCREEN_TITLE_PLURAL" desc="The title of the dialog that tells the user the selected Android Apps are downloading.">
+    We'll install those <ph name="NUMBER_OF_APPS">$1<ex>10</ex></ph> apps for you
   </message>
   <message name="IDS_LOGIN_APP_DOWNLOADING_SCREEN_DESCRIPTION" desc="The description of the 'App Downloading' section">
-    We’ll install those apps for you. You can find more apps for your device in the Play Store.
+    You can find more apps for your device in the Play Store.
   </message>
   <message name="IDS_LOGIN_APP_DOWNLOADING_CONTINUE_SETUP" desc="The label on the button that continues the setup flow.">
     Continue setup
+  </message>
+  <message name="IDS_LOGIN_MARKETING_OPT_IN_SCREEN_TITLE" desc="The title of the last dialog in the set of screens that are always displayed to the user on the first login to the Chrome OS device.">
+    One last thing
+  </message>
+  <message name="IDS_LOGIN_MARKETING_OPT_IN_SCREEN_SUBTITLE" desc="The sub-title of the dialog that allows user to opt-in into several Google marketing options.">
+    Get <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> tips and updates on Google products and share feedback. Unsubscribe anytime.
+  </message>
+  <message name="IDS_LOGIN_MARKETING_OPT_IN_SCREEN_GET_PLAY_UPDATES" desc="A label next to the checkbox that controls user subscription to marketing updates from Google about Google Play Store.">
+    Get the lastest updates and recommendations on Play Store apps
+  </message>
+  <message name="IDS_LOGIN_MARKETING_OPT_IN_SCREEN_GET_CHROMEBOOK_UPDATES" desc="A lablel next to the checkbox that controls user subscription to marketing updates and useful information about the user's Chrome device.">
+    Tips and updates on <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
+  </message>
+  <message name="IDS_LOGIN_MARKETING_OPT_IN_SCREEN_ALL_SET" desc="A label on the button that closes the initial setup dialog, which suggests to the user that initial device setup is complete.">
+    All set
   </message>
   <message name="IDS_DISABLED_ADD_USER_TOOLTIP" desc="Tooltip over disabled Add user button">
     The owner of this device has disabled new users from being added
@@ -1958,17 +1989,20 @@
   <message name="IDS_DISABLED_ADD_USER_TOOLTIP_ENTERPRISE" desc="Tooltip over disabled Add user button">
     The administrator of this device has disabled new users from being added
   </message>
-  <message name="IDS_DISCOVER_WELCOME_GET_STARTED" desc="Label on a button that starts a long device setup process.">
-    Get started
-  </message>
-  <message name="IDS_DISCOVER_WELCOME_LATER" desc="Label on a button that closes a device setup dialog, suggesting that user can get back to it later.">
-    Later
-  </message>
   <message name="IDS_DISCOVER_WELCOME_TITLE" desc="A title of the dialog that starts initial device setup process.">
-    Let's get your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> ready for you
+    Welcome to your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>!
   </message>
-  <message name="IDS_DISCOVER_WELCOME_SUBTITLE" desc="A subtitle title of the dialog that starts initial device setup process, explaining the benefits of going throug this process.">
+  <message name="IDS_DISCOVER_WELCOME_SUBTITLE" desc="A subtitle title of the dialog that starts initial device setup process, explaining the benefits of going through this process.">
     Set up your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> just as you want it and discover all the amazing capabilities at your fingertips.
+  </message>
+  <message name="IDS_DISCOVER_REDEEM_YOUR_OFFERS" desc="A label on the button that leads to the new web page where happy owner of the new device can redeem exclusive Google offers.">
+    Redeem your offers
+  </message>
+  <message name="IDS_DISCOVER_SYNC_MY_FILES" desc="A label on the button that leads to the new web page where owner of the new device can sync their data with other devices.">
+    Sync my files
+  </message>
+  <message name="IDS_DISCOVER_GET_HELP" desc="A label on the button that opens Help App.">
+    Get Help
   </message>
   <message name="IDS_APP_START_NETWORK_WAIT_MESSAGE" desc="Message displayed while installing and/or launching web application in kiosk mode.">
     Waiting for network connection...
@@ -2452,10 +2486,10 @@
     Connection to <ph name="name">$1<ex>Google VPN</ex></ph> has been lost
   </message>
   <message name="IDS_NETWORK_OUT_OF_CREDITS_TITLE" desc="Title for network out of data error notification">
-    Network connection error
+    Couldn't connect
   </message>
   <message name="IDS_NETWORK_OUT_OF_CREDITS_BODY" desc="Message body for network out of data error notification">
-    You may have used up your mobile data allowance. Visit the <ph name="name">$1<ex>GoogleGuest</ex></ph> activation portal to buy more data.
+    You may have used up your mobile data allowance. Visit the <ph name="name">$1<ex>GoogleGuest</ex></ph> activation portal to buy more data
   </message>
   <message name="IDS_NETWORK_UNRECOGNIZED_ERROR" desc="Unrecognized Network error text">
     Unrecognized error: <ph name="desc">$1<ex>ShillErrorString</ex></ph>
@@ -2464,13 +2498,13 @@
     Mobile data activated
   </message>
   <message name="IDS_NETWORK_CELLULAR_ACTIVATED" desc="Text of the cellular activated notification">
-    Congratulations! Your '<ph name="name">$1<ex>Generic Wireless</ex></ph>' data service has been activated and is ready to go.
+    Your '<ph name="name">$1<ex>Generic Wireless</ex></ph>' data service is ready to use
   </message>
   <message name="IDS_NETWORK_ACTIVATION_ERROR_TITLE" desc="Title for network activation error notification">
-    Network activation error
+    Couldn't connect
   </message>
   <message name="IDS_NETWORK_ACTIVATION_NEEDS_CONNECTION" desc="Message when attempting to activate a mobile network that requires a connection">
-    Activation of '<ph name="name">$1<ex>Generic Wireless</ex></ph>' requires a network connection.
+    To activate '<ph name="name">$1<ex>Generic Wireless</ex></ph>' data, first connect to a Wi-Fi network
   </message>
 
   <!-- Strings shown within Tether notifications -->
@@ -2769,6 +2803,9 @@
   </message>
   <message name="IDS_CONTROLLED_SETTING_SHARED" desc="Text displayed in the controlled settings bubble when a setting's value belongs to the primary user but can be edited.">
     This setting belongs to <ph name="OWNER_EMAIL">$1<ex>john@google.com</ex></ph>.
+  </message>
+  <message name="IDS_CONTROLLED_SETTING_DEMO_SESSION" desc="Text displayed in the controlled settings bubble when a setting's value is enforced by demo session.">
+    This setting can't be changed in a demo session.
   </message>
 
   <message name="IDS_STATUSBAR_DISABLE_SPOKEN_FEEDBACK" desc="The menu option to disable spoken feedback accessibility feature.">
@@ -3766,6 +3803,14 @@
     Don't remind me again
   </message>
 
+  <!-- TPM Firmware Update Notification Strings -->
+  <message name="IDS_TPM_FIRMWARE_UPDATE_NOTIFICATION_TITLE" desc="Notification title shown to inform the user that there is a pending TPM firmware update for the device.">
+    Security upgrade available
+  </message>
+  <message name="IDS_TPM_FIRMWARE_UPDATE_NOTIFICATION_MESSAGE" desc="Notification shown to inform the user that there is a pending TPM firmware update for the device.">
+    Reset your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> to upgrade your security.
+  </message>
+
   <!-- Obsolete versions Notification strings-->
   <message name="IDS_UPDATE_REQUIRED_LOGIN_SCREEN_MESSAGE" desc="The message on login screen to inform the user that policy prevents user sign in before OS version is is updated.">
     Your device is no longer compliant with the minimum client version specified by your admin. Please update to login.
@@ -4206,6 +4251,9 @@
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_DOMAIN_MISMATCH_ERROR" desc="Error message shown when the device doesn't belong to the domain the user tried to enroll it to.">
     This device cannot be enrolled to the domain your account belongs to because the device is marked for management by a different domain.
+  </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE" desc="Error message to show when the user tries to enroll a device with a packaged license using a consumer account.">
+    Your device includes a Chrome license, but your username is not associated with an Admin console. Please create an Admin console account to proceed with enrollment. Note: If you choose to use your own domain to create a new Admin console account, you must also complete domain verification after signup. https://g.co/ChromeEnterpriseAccount
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_ATTRIBUTE_ERROR" desc="Error message shown when successfully enrolled, but the device attribute update has failed.">
     Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> has successfully been enrolled for enterprise management, but failed to send its asset and location information. Please manually enter this information from your Admin console for this device.
@@ -4808,9 +4856,6 @@
   <message name="IDS_VOICE_INTERACTION_VALUE_PROP_NEXT_BUTTION" desc="Button label for accepting voice interaction value proposition.">
     Next
   </message>
-  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_MORE_BUTTION" desc="Button label for more information in voice interaction value proposition.">
-    More
-  </message>
   <message name="IDS_WAIT_FOR_CONTAINER_READY_TITLE" desc="Title of the wait for container ready OOBE screen.">
     Just a sec
   </message>
@@ -4819,6 +4864,12 @@
   </message>
   <message name="IDS_VOICE_INTERACTION_LOGO" desc="Logo label for voice interaction.">
     Google assistant logo
+  </message>
+  <message name="IDS_ASSISTANT_HOTWORD_TITLE" desc="Title for assistant hotword optin.">
+    Ok Google
+  </message>
+  <message name="IDS_ASSISTANT_HOTWORD_DESC" desc="Description for assistant hotword optin.">
+    Access your Assistant anytime you say "Ok Google" when your device is awake and unlocked.
   </message>
   <message name="IDS_ASSISTANT_SCREEN_CONTEXT_TITLE" desc="Title for assistant screen context optin.">
     Get info for what's on screen
@@ -4829,38 +4880,32 @@
   <message name="IDS_ASSISTANT_GET_MORE_SCREEN_TITLE" desc="Title for assistant get more screen.">
     Get the most out of your Assistant
   </message>
+  <message name="IDS_ASSISTANT_GET_MORE_SCREEN_INTRO" desc="Introduction message for assistant get more screen.">
+    Your Assistant can offer more relevant suggestions and specific actions related to what's on your screen. You can change this in Assistant settings
+  </message>
   <message name="IDS_ASSISTANT_READY_SCREEN_TITLE" desc="Title for assistant ready screen.">
     Your Assistant is ready
   </message>
   <message name="IDS_ASSISTANT_READY_SCREEN_MESSAGE" desc="Message for assistant ready screen.">
-    When your Chromebook is set up, press the Assistant button or say "OK Google" to get help from your Assistant anytime.
-  </message>
-  <message name="IDS_ASSISTANT_THIRD_PARTY_SCREEN_TITLE" desc="Title for assitant third party screen.">
-    Google Partners work with your Assistant to help you
-  </message>
-  <message name="IDS_ASSISTANT_CONFIRM_SCREEN_TITLE" desc="Title for assistant confirm screen.">
-    Get the full Assistant experience with these settings
-  </message>
-  <message name="IDS_ASSISTANT_CONFIRM_SCREEN_ACCEPT_TITLE" desc="Title for accept assistant confirm screen.">
-    Yes I'm In
-  </message>
-  <message name="IDS_ASSISTANT_CONFIRM_SCREEN_ACCEPT_MESSAGE" desc="Message for accept assistant confirm screen.">
-    To help you with your calendar, reminders, flights and more, your Assistant needs the Web &amp; App Activity, Device Information, Voice &amp; Audio Activity settings.
-  </message>
-  <message name="IDS_ASSISTANT_CONFIRM_SCREEN_ACCEPT_MESSAGE_EXPANDED" desc="Extra message for accept assistant confirm screen.">
-    Note: The data these settings control may be saved and used in any Google service where you are signed in to give you personalized experiences and useful ads. You can see your data, delete it and change your settings at account.google.com.
-  </message>
-  <message name="IDS_ASSISTANT_CONFIRM_SCREEN_REJECT_TITLE" desc="Title for reject assistant confirm screen.">
-    No Thanks
-  </message>
-  <message name="IDS_ASSISTANT_CONFIRM_SCREEN_REJECT_MESSAGE" desc="Message for reject assistant confirm screen.">
-    Depending on your account settings, your Assistant experience may be limited to things like web results, jokes, and local info.
+    When your Chromebook is set up, press the Assistant button or say "Ok Google" to get help from your Assistant anytime.
   </message>
   <message name="IDS_ASSISTANT_CONTINUE_BUTTON" desc="Continue button for asssitant optin flow.">
     Continue
   </message>
   <message name="IDS_ASSISTANT_DONE_BUTTON" desc="Done button for asssitant optin flow.">
     Done
+  </message>
+  <message name="IDS_ASSISTANT_HOTWORD_NOTIFICATION_TITLE" desc="Title for assistant hotword enable notification.">
+    Turn on 'Ok Google'
+  </message>
+  <message name="IDS_ASSISTANT_ACTIVITY_CONTROL_POPUP_LINK" desc="Link text for activity control details popup.">
+    Learn more
+  </message>
+  <message name="IDS_ASSISTANT_TIMER_NOTIFICATION_TITLE" desc="Title for assistant timer notification.">
+    Timer done
+  </message>
+  <message name="IDS_ASSISTANT_STOP_TIMER_QUERY" desc="Query for stopping assistant timer.">
+    stop timer
   </message>
 
   <!-- Print Job Notification -->
@@ -5027,12 +5072,18 @@
   <message name="IDS_INTERNAL_APP_CAMERA" desc="The name of the Camera app in the app list.">
     Camera
   </message>
+  <message name="IDS_INTERNAL_APP_DISCOVER" desc="Name for the Discover app in the app list.">
+    Discover
+  </message>
 
   <!-- Launcher Settings shortcuts -->
   <message name="IDS_LAUNCHER_SHORTCUTS_BLUETOOTH" desc="The name of bluetooth shortcut.">
     Bluetooth
   </message>
 
+  <message name="IDS_CROSTINI_TERMINAL_APP_NAME" desc="Name of the Terminal app, which provides access to a Linux virtual machine.">
+    Terminal
+  </message>
   <message name="IDS_CROSTINI_INSTALLER_TITLE" desc="Title of the Crostini installer, a dialog for installing Linux.">
     Set up Linux (Beta) on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
   </message>
@@ -5066,6 +5117,12 @@
   <message name="IDS_CROSTINI_INSTALLER_START_CONTAINER_MESSAGE" desc="Text shown in the Crostini installer dialog when the container inside the VM is starting">
     This process may take a few minutes. Starting the Linux container.
   </message>
+  <message name="IDS_CROSTINI_INSTALLER_FETCH_SSH_KEYS_MESSAGE" desc="Text shown in the Crostini installer dialog when fetching ssh keys">
+    This process may take a few minutes. Starting the Linux container.
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_MOUNT_CONTAINER_MESSAGE" desc="Text shown in the Crostini installer dialog when doing sshfs mount of container">
+    This process may take a few minutes. Starting the Linux container.
+  </message>
   <message name="IDS_CROSTINI_INSTALLER_RETRY_BUTTON" desc="Retry button of the Crostini installer dialog that starts the install steps again.">
     Retry
   </message>
@@ -5087,11 +5144,17 @@
   <message name="IDS_CROSTINI_INSTALLER_START_CONTAINER_ERROR" desc="Text shown in the Crostini installer dialog when the container fails to start inside the VM">
     The Linux container didn't start. Please try again.
   </message>
+  <message name="IDS_CROSTINI_INSTALLER_FETCH_SSH_KEYS_ERROR" desc="Text shown in the Crostini installer dialog when there is an error fetching ssh keys">
+    Error configuring Linux files. Please try again.
+  </message>
+  <message name="IDS_CROSTINI_INSTALLER_MOUNT_CONTAINER_ERROR" desc="Text shown in the Crostini installer dialog when the container ssh mount fails">
+    Error mounting Linux files. Please try again.
+  </message>
   <message name="IDS_CROSTINI_UNINSTALLER_TITLE" desc="Title of the Crostini uninstaller, a dialog for uninstalling Linux, the associated VM and Linux files.">
     Delete Linux (Beta)
   </message>
   <message name="IDS_CROSTINI_UNINSTALLER_BODY" desc="Description for the Crostini uninstaller, a dialog for uninstalling Linux, the associated VM and Linux files.">
-    Delete all Linux applications and data in your Linux Files folder from this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>?
+    Delete all Linux applications and data in your Linux files folder from this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>?
   </message>
   <message name="IDS_CROSTINI_UNINSTALLER_UNINSTALL_BUTTON" desc="Label for the button in the Crostini uninstaller dialog to uninstall Linux">
     Delete
@@ -5382,5 +5445,61 @@
   </message>
   <message name="IDS_INTENT_PICKER_BUBBLE_VIEW_STAY_IN_CHROME" desc="Message contained in a button to continue the navigation within Chrome.">
     Stay in Chrome
+  </message>
+
+  <!-- Strings for Oobe fingerprint enrollment screen -->
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_TITLE" desc="The title of the dialog that allow users to register their fingerprint.">
+    Set up your fingerprint
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_LOCATION_TITLE" desc="The title of the dialog that shows where the fingerprint sensor is.">
+    Place your finger
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_DESCRIPTION" desc="The label that explains the location of the fingerprint sensor on the device.">
+    Touch the sensor with your index finger. It's on the top left of your Chromebook.
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_ENROLLMENT_PROGRESS_TITLE" desc="The title of the dialog that shows where the fingerprint sensor is.">
+    Lift, then touch again
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_ENROLLMENT_SUCCESS_TITLE" desc="The title of the dialog that shows when fingerprint enrollment is successful.">
+    Fingerprint added
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_ENROLLMENT_SUCCESS_DESCRIPTION" desc="The label that shows when fingerprint enrollment is successful.">
+    When you see this icon, use your fingerprint for identification or to approve purchases.
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_SKIP" desc="In fingerprint setup screen, button label to skip the fingerrint setup.">
+    Skip
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_LATER" desc="In fingerprint setup screen, button label to skip the fingerrint setup.">
+    Do it later
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_NEXT" desc="In fingerprint setup screen, button label to proceed to the next step.">
+    Next
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_DONE" desc="Fingerprint setup is done, button label to exit the setup.">
+    Done
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_ADD_ANOTHER" desc="In fingerprint setup screen, button label to add another fingerprint.">
+    Add another
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_ADD_FINGERPRINT" desc="In fingerprint setup screen, button label to add fingerprint.">
+    Add fingerprint
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_NEW_FINGERPRINT_DEFAULT_NAME_1" desc="The default name for first newly added fingerprint.">
+    Finger 1
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_NEW_FINGERPRINT_DEFAULT_NAME_2" desc="The default name for second newly added fingerprint.">
+    Finger 2
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_NEW_FINGERPRINT_DEFAULT_NAME_3" desc="The default name for third newly added fingerprint.">
+    Finger 3
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_INSTRUCTION_MOVE_FINGER" desc="Text in the fingerprint setup screen telling users what to move finger to capture the different parts of fingerprint.">
+    Move your index finger slightly to add the different parts of your fingerprint.
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_INSTRUCTION_TRY_AGAIN" desc="Text in the fingerprint setup screen telling users what to scan their finger again.">
+    Try again.
+  </message>
+  <message name="IDS_SMB_SHARES_ADD_SERVICE_MENU_OPTION" desc="The text displayed in the files app Add New Services menu for the option that allows users to mount a new SMB file share.">
+    SMB file share
   </message>
 </grit-part>

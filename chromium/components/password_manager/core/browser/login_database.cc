@@ -27,6 +27,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/password_form.h"
+#include "components/os_crypt/os_crypt.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
@@ -35,7 +36,7 @@
 #include "components/password_manager/core/browser/sql_table_builder.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
 #include "third_party/re2/src/re2/re2.h"
@@ -80,7 +81,7 @@ autofill::ValueElementVector DeserializeValueElementPairs(
 namespace {
 
 // Convenience enum for interacting with SQL queries that use all the columns.
-enum LoginTableColumns {
+enum LoginDatabaseTableColumns {
   COLUMN_ORIGIN_URL = 0,
   COLUMN_ACTION_URL,
   COLUMN_USERNAME_ELEMENT,
@@ -447,14 +448,15 @@ void InitializeBuilder(SQLTableBuilder* builder) {
   DCHECK_EQ(19u, version);
 
   DCHECK_EQ(static_cast<size_t>(COLUMN_NUM), builder->NumberOfColumns())
-      << "Adjust LoginTableColumns if you change column definitions here.";
+      << "Adjust LoginDatabaseTableColumns if you change column definitions "
+         "here.";
 }
 
 // Call this after having called InitializeBuilder, to migrate the database from
 // the current version to kCurrentVersionNumber.
 bool MigrateLogins(unsigned current_version,
                    SQLTableBuilder* builder,
-                   sql::Connection* db) {
+                   sql::Database* db) {
   if (!builder->MigrateFrom(current_version, db))
     return false;
 
@@ -483,7 +485,7 @@ bool MigrateLogins(unsigned current_version,
 
 // Because of https://crbug.com/295851, some early version numbers might be
 // wrong. This function detects that and fixes the version.
-bool FixVersionIfNeeded(sql::Connection* db, int* current_version) {
+bool FixVersionIfNeeded(sql::Database* db, int* current_version) {
   if (*current_version == 1) {
     int extra_columns = 0;
     if (db->DoesColumnExist("logins", "password_type"))
@@ -533,7 +535,6 @@ bool LoginDatabase::Init() {
   db_.set_page_size(2048);
   db_.set_cache_size(32);
   db_.set_exclusive_locking();
-  db_.set_restrict_to_user();
   db_.set_histogram_tag("Passwords");
 
   if (!db_.Open(db_path_)) {
@@ -629,6 +630,13 @@ bool LoginDatabase::Init() {
   LogDatabaseInitError(INIT_OK);
   return true;
 }
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+void LoginDatabase::InitPasswordRecoveryUtil(
+    std::unique_ptr<PasswordRecoveryUtilMac> password_recovery_util) {
+  password_recovery_util_ = std::move(password_recovery_util);
+}
+#endif
 
 void LoginDatabase::ReportMetrics(const std::string& sync_username,
                                   bool custom_passphrase_sync_enabled) {
@@ -834,6 +842,22 @@ void LoginDatabase::ReportMetrics(const std::string& sync_username,
 
 PasswordStoreChangeList LoginDatabase::AddLogin(const PasswordForm& form) {
   PasswordStoreChangeList list;
+  if (form.blacklisted_by_user) {
+    sql::Statement blacklist_statement(db_.GetUniqueStatement(
+        "SELECT EXISTS(SELECT 1 FROM logins WHERE signon_realm == ? AND "
+        "blacklisted_by_user == 1)"));
+    blacklist_statement.BindString(0, form.signon_realm);
+    const bool is_already_blacklisted =
+        blacklist_statement.Step() && blacklist_statement.ColumnBool(0);
+    UMA_HISTOGRAM_BOOLEAN(
+        "PasswordManager.BlacklistedSites.PreventedAddingDuplicates",
+        is_already_blacklisted);
+    if (is_already_blacklisted) {
+      // The site is already blacklisted, so we need to ignore the request to
+      // avoid duplicates.
+      return list;
+    }
+  }
   if (!DoesMatchConstraints(form))
     return list;
   std::string encrypted_password;
@@ -861,6 +885,25 @@ PasswordStoreChangeList LoginDatabase::AddLogin(const PasswordForm& form) {
     list.push_back(PasswordStoreChange(PasswordStoreChange::REMOVE, form));
     list.push_back(PasswordStoreChange(PasswordStoreChange::ADD, form));
   }
+  return list;
+}
+
+PasswordStoreChangeList LoginDatabase::AddBlacklistedLoginForTesting(
+    const PasswordForm& form) {
+  DCHECK(form.blacklisted_by_user);
+  PasswordStoreChangeList list;
+
+  std::string encrypted_password;
+  if (EncryptedString(form.password_value, &encrypted_password) !=
+      ENCRYPTION_RESULT_SUCCESS)
+    return list;
+
+  DCHECK(!add_statement_.empty());
+  sql::Statement s(
+      db_.GetCachedStatement(SQL_FROM_HERE, add_statement_.c_str()));
+  BindAddStatement(form, encrypted_password, &s);
+  if (s.Run())
+    list.push_back(PasswordStoreChange(PasswordStoreChange::ADD, form));
   return list;
 }
 
@@ -1258,8 +1301,73 @@ bool LoginDatabase::DeleteAndRecreateDatabaseFile() {
   DCHECK(db_.is_open());
   meta_table_.Reset();
   db_.Close();
-  sql::Connection::Delete(db_path_);
+  sql::Database::Delete(db_path_);
   return Init();
+}
+
+DatabaseCleanupResult LoginDatabase::DeleteUndecryptableLogins() {
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  // If the Keychain is unavailable, don't delete any logins.
+  if (!OSCrypt::IsEncryptionAvailable()) {
+    metrics_util::LogDeleteUndecryptableLoginsReturnValue(
+        metrics_util::DeleteUndecryptableLoginsReturnValue::
+            kEncryptionUnavailable);
+    return DatabaseCleanupResult::kEncryptionUnavailable;
+  }
+
+  DCHECK(db_.is_open());
+
+  // Get all autofillable (not blacklisted) logins.
+  sql::Statement s(
+      db_.GetCachedStatement(SQL_FROM_HERE, blacklisted_statement_.c_str()));
+  s.BindInt(0, 0);  // blacklisted = false
+
+  std::vector<PasswordForm> forms_to_be_deleted;
+
+  while (s.Step()) {
+    std::string encrypted_password;
+    s.ColumnBlobAsString(COLUMN_PASSWORD_VALUE, &encrypted_password);
+    base::string16 decrypted_password;
+    if (DecryptedString(encrypted_password, &decrypted_password) ==
+        ENCRYPTION_RESULT_SUCCESS)
+      continue;
+
+    // If it was not possible to decrypt the password, remove it from the
+    // database. Fill |form| with necessary data required to be removed from
+    // the database.
+    PasswordForm form;
+    form.origin = GURL(s.ColumnString(COLUMN_ORIGIN_URL));
+    form.username_element = s.ColumnString16(COLUMN_USERNAME_ELEMENT);
+    form.username_value = s.ColumnString16(COLUMN_USERNAME_VALUE);
+    form.password_element = s.ColumnString16(COLUMN_PASSWORD_ELEMENT);
+    form.signon_realm = s.ColumnString(COLUMN_SIGNON_REALM);
+    forms_to_be_deleted.push_back(std::move(form));
+  }
+
+  for (const auto& form : forms_to_be_deleted) {
+    if (!RemoveLogin(form)) {
+      metrics_util::LogDeleteUndecryptableLoginsReturnValue(
+          metrics_util::DeleteUndecryptableLoginsReturnValue::kItemFailure);
+      return DatabaseCleanupResult::kItemFailure;
+    }
+  }
+
+  if (forms_to_be_deleted.empty()) {
+    metrics_util::LogDeleteUndecryptableLoginsReturnValue(
+        metrics_util::DeleteUndecryptableLoginsReturnValue::
+            kSuccessNoDeletions);
+  } else {
+    DCHECK(password_recovery_util_);
+    password_recovery_util_->RecordPasswordRecovery();
+    metrics_util::LogDeleteUndecryptableLoginsReturnValue(
+        metrics_util::DeleteUndecryptableLoginsReturnValue::
+            kSuccessLoginsDeleted);
+    UMA_HISTOGRAM_COUNTS_100("PasswordManager.CleanedUpPasswords",
+                             forms_to_be_deleted.size());
+  }
+#endif
+
+  return DatabaseCleanupResult::kSuccess;
 }
 
 std::string LoginDatabase::GetEncryptedPassword(

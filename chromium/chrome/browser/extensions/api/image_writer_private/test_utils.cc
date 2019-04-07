@@ -9,7 +9,7 @@
 
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/image_writer_private/error_messages.h"
@@ -18,6 +18,7 @@
 #if defined(OS_CHROMEOS)
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_image_burner_client.h"
+#include "chromeos/disks/disk.h"
 #endif
 
 namespace extensions {
@@ -73,9 +74,10 @@ FakeDiskMountManager::~FakeDiskMountManager() {}
 
 void FakeDiskMountManager::UnmountDeviceRecursively(
     const std::string& device_path,
-    const UnmountDeviceRecursivelyCallbackType& callback) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                base::BindOnce(callback, true));
+    UnmountDeviceRecursivelyCallbackType callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), chromeos::MOUNT_ERROR_NONE));
 }
 #endif
 

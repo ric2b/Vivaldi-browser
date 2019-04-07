@@ -15,14 +15,14 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_fence.h"
+#include "ui/ozone/common/linux/gbm_buffer.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/crtc_controller.h"
 #include "ui/ozone/platform/drm/gpu/drm_console_buffer.h"
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
+#include "ui/ozone/platform/drm/gpu/drm_framebuffer.h"
 #include "ui/ozone/platform/drm/gpu/drm_window.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_controller.h"
-#include "ui/ozone/platform/drm/gpu/scanout_buffer.h"
-#include "ui/ozone/platform/drm/gpu/scanout_buffer_generator.h"
 
 namespace ui {
 
@@ -32,10 +32,10 @@ namespace {
 // to the new modeset buffer |buffer|.
 void FillModesetBuffer(const scoped_refptr<DrmDevice>& drm,
                        HardwareDisplayController* controller,
-                       ScanoutBuffer* buffer) {
-  DrmConsoleBuffer modeset_buffer(drm, buffer->GetOpaqueFramebufferId());
+                       DrmFramebuffer* buffer) {
+  DrmConsoleBuffer modeset_buffer(drm, buffer->opaque_framebuffer_id());
   if (!modeset_buffer.Initialize()) {
-    VLOG(2) << "Failed to grab framebuffer " << buffer->GetOpaqueFramebufferId();
+    VLOG(2) << "Failed to grab framebuffer " << buffer->opaque_framebuffer_id();
     return;
   }
 
@@ -47,7 +47,7 @@ void FillModesetBuffer(const scoped_refptr<DrmDevice>& drm,
     return;
   }
 
-  uint32_t fourcc_format = buffer->GetFramebufferPixelFormat();
+  uint32_t fourcc_format = buffer->framebuffer_pixel_format();
   const auto& modifiers = controller->GetFormatModifiers(fourcc_format);
   for (const uint64_t modifier : modifiers) {
     // A value of 0 means DRM_FORMAT_MOD_NONE. If the CRTC has any other
@@ -96,9 +96,7 @@ CrtcController* GetCrtcController(HardwareDisplayController* controller,
 
 }  // namespace
 
-ScreenManager::ScreenManager(ScanoutBufferGenerator* buffer_generator)
-    : buffer_generator_(buffer_generator) {
-}
+ScreenManager::ScreenManager() {}
 
 ScreenManager::~ScreenManager() {
   DCHECK(window_map_.empty());
@@ -372,8 +370,8 @@ DrmOverlayPlane ScreenManager::GetModesetBuffer(
   if (window) {
     const DrmOverlayPlane* primary = window->GetLastModesetBuffer();
     const DrmDevice* drm = controller->GetDrmDevice().get();
-    if (primary && primary->buffer->GetSize() == bounds.size() &&
-        primary->buffer->GetGbmDeviceLinux() == drm->AsGbmDeviceLinux()) {
+    if (primary && primary->buffer->size() == bounds.size() &&
+        primary->buffer->drm_device() == drm) {
       // If the controller doesn't advertise modifiers, wont have a
       // modifier either and we can reuse the buffer. Otherwise, check
       // to see if the controller supports the buffers format
@@ -381,24 +379,29 @@ DrmOverlayPlane ScreenManager::GetModesetBuffer(
       if (modifiers.empty())
         return primary->Clone();
       for (const uint64_t modifier : modifiers) {
-        if (modifier == primary->buffer->GetFormatModifier())
+        if (modifier == primary->buffer->format_modifier())
           return primary->Clone();
       }
     }
   }
 
   scoped_refptr<DrmDevice> drm = controller->GetDrmDevice();
-  scoped_refptr<ScanoutBuffer> buffer =
-      buffer_generator_->Create(drm, fourcc_format, modifiers, bounds.size());
+  std::unique_ptr<GbmBuffer> buffer =
+      drm->gbm_device()->CreateBufferWithModifiers(
+          fourcc_format, bounds.size(), GBM_BO_USE_SCANOUT, modifiers);
   if (!buffer) {
     LOG(ERROR) << "Failed to create scanout buffer";
-    return DrmOverlayPlane(nullptr, 0, gfx::OVERLAY_TRANSFORM_INVALID,
-                           gfx::Rect(), gfx::RectF(), /* enable_blend */ true,
-                           /* gpu_fence */ nullptr);
+    return DrmOverlayPlane::Error();
   }
 
-  FillModesetBuffer(drm, controller, buffer.get());
-  return DrmOverlayPlane(buffer, nullptr);
+  scoped_refptr<DrmFramebuffer> framebuffer =
+      DrmFramebuffer::AddFramebuffer(drm, buffer.get());
+  if (!framebuffer) {
+    LOG(ERROR) << "Failed to add framebuffer for scanout buffer";
+    return DrmOverlayPlane::Error();
+  }
+  FillModesetBuffer(drm, controller, framebuffer.get());
+  return DrmOverlayPlane(framebuffer, nullptr);
 }
 
 bool ScreenManager::EnableController(HardwareDisplayController* controller) {

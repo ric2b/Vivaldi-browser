@@ -42,8 +42,7 @@
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "google/cacheinvalidation/include/types.h"
 #include "google_apis/gaia/gaia_constants.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -142,6 +141,7 @@ class NullEncryptionObserver : public SyncEncryptionHandler::Observer {
  public:
   void OnPassphraseRequired(
       PassphraseRequiredReason reason,
+      const KeyDerivationParams& key_derivation_params,
       const sync_pb::EncryptedData& pending_keys) override {}
   void OnPassphraseAccepted() override {}
   void OnBootstrapTokenUpdated(const std::string& bootstrap_token,

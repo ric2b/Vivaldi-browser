@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/callback_helpers.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/numerics/math_constants.h"
 #include "base/strings/string_number_conversions.h"
@@ -41,6 +42,7 @@ namespace {
 
 const int kMaxEmptySampleLogs = 20;
 const int kMaxInvalidConversionLogs = 20;
+const int kMaxVideoKeyframeMismatchLogs = 10;
 
 // Caller should be prepared to handle return of Unencrypted() in case of
 // unsupported scheme.
@@ -90,8 +92,8 @@ MP4StreamParser::MP4StreamParser(const std::set<int>& audio_object_types,
       has_sbr_(has_sbr),
       has_flac_(has_flac),
       num_empty_samples_skipped_(0),
-      num_invalid_conversions_(0) {
-}
+      num_invalid_conversions_(0),
+      num_video_keyframe_mismatches_(0) {}
 
 MP4StreamParser::~MP4StreamParser() = default;
 
@@ -361,7 +363,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
                                 ? entry.sinf.format.format
                                 : entry.format;
 
-      if (audio_format != FOURCC_FLAC &&
+      if (audio_format != FOURCC_OPUS && audio_format != FOURCC_FLAC &&
 #if BUILDFLAG(ENABLE_AC3_EAC3_AUDIO_DEMUXING)
           audio_format != FOURCC_AC3 && audio_format != FOURCC_EAC3 &&
 #endif
@@ -369,18 +371,26 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
           audio_format != FOURCC_MHM1 &&
 #endif
           audio_format != FOURCC_MP4A) {
-        MEDIA_LOG(ERROR, media_log_) << "Unsupported audio format 0x"
-                                     << std::hex << entry.format
-                                     << " in stsd box.";
+        MEDIA_LOG(ERROR, media_log_)
+            << "Unsupported audio format 0x" << std::hex << entry.format
+            << " in stsd box.";
         return false;
       }
 
       AudioCodec codec = kUnknownAudioCodec;
       ChannelLayout channel_layout = CHANNEL_LAYOUT_NONE;
       int sample_per_second = 0;
+      int codec_delay_in_frames = 0;
+      base::TimeDelta seek_preroll;
       std::vector<uint8_t> extra_data;
-
-      if (audio_format == FOURCC_FLAC) {
+      if (audio_format == FOURCC_OPUS) {
+        codec = kCodecOpus;
+        channel_layout = GuessChannelLayout(entry.dops.channel_count);
+        sample_per_second = entry.dops.sample_rate;
+        codec_delay_in_frames = entry.dops.codec_delay_in_frames;
+        seek_preroll = entry.dops.seek_preroll;
+        extra_data = entry.dops.extradata;
+      } else if (audio_format == FOURCC_FLAC) {
         // FLAC-in-ISOBMFF does not use object type indication. |audio_format|
         // is sufficient for identifying FLAC codec.
         if (!has_flac_) {
@@ -483,7 +493,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
       }
       audio_config.Initialize(codec, sample_format, channel_layout,
                               sample_per_second, extra_data, scheme,
-                              base::TimeDelta(), 0);
+                              seek_preroll, codec_delay_in_frames);
       if (codec == kCodecAAC)
         audio_config.disable_discard_decoder_delay();
 
@@ -793,23 +803,61 @@ ParseResult MP4StreamParser::EnqueueSample(BufferQueueMap* buffers) {
     subsamples = decrypt_config->subsamples();
   }
 
+  // This may change if analysis results indicate runs_->is_keyframe() is
+  // opposite of what the coded frame contains.
+  bool is_keyframe = runs_->is_keyframe();
+
   std::vector<uint8_t> frame_buf(buf, buf + sample_size);
   if (video) {
     if (runs_->video_description().video_codec == kCodecH264 ||
         runs_->video_description().video_codec == kCodecHEVC ||
         runs_->video_description().video_codec == kCodecDolbyVision) {
       DCHECK(runs_->video_description().frame_bitstream_converter);
-      if (!runs_->video_description().frame_bitstream_converter->ConvertFrame(
-              &frame_buf, runs_->is_keyframe(), &subsamples)) {
+      BitstreamConverter::AnalysisResult analysis;
+      if (!runs_->video_description()
+               .frame_bitstream_converter->ConvertAndAnalyzeFrame(
+                   &frame_buf, is_keyframe, &subsamples, &analysis)) {
         MEDIA_LOG(ERROR, media_log_)
             << "Failed to prepare video sample for decode";
         return ParseResult::kError;
       }
-      if (!runs_->video_description().frame_bitstream_converter->IsValid(
-              &frame_buf, &subsamples)) {
+
+      // If conformance analysis was not actually performed, assume the frame is
+      // conformant.  If it was performed and found to be non-conformant, log
+      // it.
+      if (!analysis.is_conformant.value_or(true)) {
         LIMITED_MEDIA_LOG(DEBUG, media_log_, num_invalid_conversions_,
                           kMaxInvalidConversionLogs)
             << "Prepared video sample is not conformant";
+      }
+
+      // Use |analysis.is_keyframe|, if it was actually determined, for logging
+      // if the analysis mismatches the container's keyframe metadata for
+      // |frame_buf|.
+      if (analysis.is_keyframe.has_value() &&
+          is_keyframe != analysis.is_keyframe.value()) {
+        LIMITED_MEDIA_LOG(DEBUG, media_log_, num_video_keyframe_mismatches_,
+                          kMaxVideoKeyframeMismatchLogs)
+            << "ISO-BMFF container metadata for video frame indicates that the "
+               "frame is "
+            << (is_keyframe ? "" : "not ")
+            << "a keyframe, but the video frame contents indicate the "
+               "opposite.";
+        // As of September 2018, it appears that all of Edge, Firefox, Safari
+        // work with content that marks non-avc-keyframes as a keyframe in the
+        // container. Encoders/muxers/old streams still exist that produce
+        // all-keyframe mp4 video tracks, though many of the coded frames are
+        // not keyframes (likely workaround due to the impact on low-latency
+        // live streams until https://crbug.com/229412 was fixed).  We'll trust
+        // the AVC frame's keyframe-ness over the mp4 container's metadata if
+        // they mismatch. If other out-of-order codecs in mp4 (e.g. HEVC, DV)
+        // implement keyframe analysis in their frame_bitstream_converter, we'll
+        // similarly trust that analysis instead of the mp4.
+        // We'll only use the analysis to override the MP4 keyframeness if
+        // |media::kMseBufferByPts| is enabled.
+        if (base::FeatureList::IsEnabled(kMseBufferByPts)) {
+          is_keyframe = analysis.is_keyframe.value();
+        }
       }
     }
   }
@@ -843,9 +891,9 @@ ParseResult MP4StreamParser::EnqueueSample(BufferQueueMap* buffers) {
   StreamParserBuffer::Type buffer_type = audio ? DemuxerStream::AUDIO :
       DemuxerStream::VIDEO;
 
-  scoped_refptr<StreamParserBuffer> stream_buf = StreamParserBuffer::CopyFrom(
-      &frame_buf[0], frame_buf.size(), runs_->is_keyframe(), buffer_type,
-      runs_->track_id());
+  scoped_refptr<StreamParserBuffer> stream_buf =
+      StreamParserBuffer::CopyFrom(&frame_buf[0], frame_buf.size(), is_keyframe,
+                                   buffer_type, runs_->track_id());
 
   if (decrypt_config)
     stream_buf->set_decrypt_config(std::move(decrypt_config));
@@ -873,8 +921,7 @@ ParseResult MP4StreamParser::EnqueueSample(BufferQueueMap* buffers) {
   }
 
   DVLOG(3) << "Emit " << (audio ? "audio" : "video") << " frame: "
-           << " track_id=" << runs_->track_id()
-           << ", key=" << runs_->is_keyframe()
+           << " track_id=" << runs_->track_id() << ", key=" << is_keyframe
            << ", dur=" << runs_->duration().InMilliseconds()
            << ", dts=" << runs_->dts().InMilliseconds()
            << ", cts=" << runs_->cts().InMilliseconds()

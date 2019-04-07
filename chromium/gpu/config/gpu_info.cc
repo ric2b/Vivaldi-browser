@@ -19,6 +19,8 @@ void EnumerateGPUDevice(const gpu::GPUInfo::GPUDevice& device,
   enumerator->AddString("driverVendor", device.driver_vendor);
   enumerator->AddString("driverVersion", device.driver_version);
   enumerator->AddString("driverDate", device.driver_date);
+  enumerator->AddInt("cudaComputeCapabilityMajor",
+                     device.cuda_compute_capability_major);
   enumerator->EndGPUDevice();
 }
 
@@ -64,17 +66,13 @@ namespace gpu {
 
 const char* OverlayFormatToString(OverlayFormat format) {
   switch (format) {
-    case OverlayFormat::UNKNOWN:
-      return "UNKNOWN";
-    case OverlayFormat::BGRA:
+    case OverlayFormat::kBGRA:
       return "BGRA";
-    case OverlayFormat::YUY2:
+    case OverlayFormat::kYUY2:
       return "YUY2";
-    case OverlayFormat::NV12:
+    case OverlayFormat::kNV12:
       return "NV12";
   }
-  NOTREACHED() << "Unknown overlay format: " << static_cast<int>(format);
-  return "UNKNOWN";
 }
 
 bool OverlayCapability::operator==(const OverlayCapability& other) const {
@@ -94,8 +92,8 @@ VideoDecodeAcceleratorCapabilities::~VideoDecodeAcceleratorCapabilities() =
 GPUInfo::GPUDevice::GPUDevice()
     : vendor_id(0),
       device_id(0),
-      active(false) {
-}
+      active(false),
+      cuda_compute_capability_major(0) {}
 
 GPUInfo::GPUDevice::GPUDevice(const GPUInfo::GPUDevice& other) = default;
 

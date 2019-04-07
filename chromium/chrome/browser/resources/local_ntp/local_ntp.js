@@ -24,11 +24,29 @@ var onDdllogResponse = null;
 
 
 /**
+ * Whether the Most Visited and edit custom link iframes should be created while
+ * running tests. Currently the SimpleJavascriptTests are flaky due to some
+ * raciness in the creation/destruction of the iframe. crbug.com/786313.
+ * @type {boolean}
+ */
+let iframesDisabledForTesting = false;
+
+
+/**
  * Controls rendering the new tab page for InstantExtended.
  * @return {Object} A limited interface for testing the local NTP.
  */
 function LocalNTP() {
 'use strict';
+
+
+/**
+ * Called by tests to disable the creation of Most Visited and edit custom link
+ * iframes.
+ */
+function disableIframesForTesting() {
+  iframesDisabledForTesting = true;
+}
 
 
 /**
@@ -83,11 +101,14 @@ var CLASSES = {
   // Applies ripple animation to the element on click
   RIPPLE: 'ripple',
   RIPPLE_CONTAINER: 'ripple-container',
+  RIPPLE_EFFECT_MASK: 'ripple-effect-mask',
   RIPPLE_EFFECT: 'ripple-effect',
   // Applies drag focus style to the fakebox
   FAKEBOX_DRAG_FOCUS: 'fakebox-drag-focused',
+  // Applies a different style to the error notification if a link is present.
+  HAS_LINK: 'has-link',
   HIDE_FAKEBOX: 'hide-fakebox',
-  HIDE_NOTIFICATION: 'mv-notice-hide',
+  HIDE_NOTIFICATION: 'notice-hide',
   INITED: 'inited',  // Reveals the <body> once init() is done.
   LEFT_ALIGN_ATTRIBUTION: 'left-align-attribution',
   MATERIAL_DESIGN: 'md',  // Applies Material Design styles to the page
@@ -111,6 +132,10 @@ var IDS = {
   ATTRIBUTION_TEXT: 'attribution-text',
   CUSTOM_LINKS_EDIT_IFRAME: 'custom-links-edit',
   CUSTOM_LINKS_EDIT_IFRAME_DIALOG: 'custom-links-edit-dialog',
+  ERROR_NOTIFICATION: 'error-notice',
+  ERROR_NOTIFICATION_CONTAINER: 'error-notice-container',
+  ERROR_NOTIFICATION_LINK: 'error-notice-link',
+  ERROR_NOTIFICATION_MSG: 'error-notice-msg',
   FAKEBOX: 'fakebox',
   FAKEBOX_INPUT: 'fakebox-input',
   FAKEBOX_TEXT: 'fakebox-text',
@@ -245,11 +270,11 @@ var lastBlacklistedTile = null;
 
 
 /**
- * The timeout id for automatically hiding the Most Visited notification.
- * Invalid ids will silently do nothing.
- * @type {number}
+ * The timeout function for automatically hiding the pop-up notification. Only
+ * set if a notification is visible.
+ * @type {?Object}
  */
-let delayedHideNotification = -1;
+let delayedHideNotification;
 
 
 /**
@@ -257,6 +282,26 @@ let delayedHideNotification = -1;
  * @type {Object}
  */
 var ntpApiHandle;
+
+
+/**
+ * Returns a timeout that can be executed early.
+ * @param {!Function} timeout The timeout function.
+ * @param {number} delay The timeout delay.
+ * @return {Object}
+ */
+function createExecutableTimeout(timeout, delay) {
+  let timeoutId = window.setTimeout(timeout, delay);
+  return {
+    clear: () => {
+      window.clearTimeout(timeoutId);
+    },
+    trigger: () => {
+      window.clearTimeout(timeoutId);
+      return timeout();
+    }
+  };
+}
 
 
 /**
@@ -353,6 +398,7 @@ function renderTheme() {
     window.setTimeout(function() {
       $('custom-bg').style.backgroundImage = '';
     }, 1000);
+    customBackgrounds.clearAttribution();
   }
 
   $(customBackgrounds.IDS.RESTORE_DEFAULT)
@@ -550,7 +596,10 @@ function reloadTiles() {
  * @param {string} success True if the link was successfully added.
  */
 function onAddCustomLinkDone(success) {
-  showNotification(configData.translatedStrings.linkAddedMsg);
+  if (success)
+    showNotification(configData.translatedStrings.linkAddedMsg);
+  else
+    showErrorNotification(configData.translatedStrings.linkCantCreate);
   ntpApiHandle.logEvent(LOG_TYPE.NTP_CUSTOMIZE_SHORTCUT_DONE);
 }
 
@@ -562,7 +611,10 @@ function onAddCustomLinkDone(success) {
  * @param {string} success True if the link was successfully updated.
  */
 function onUpdateCustomLinkDone(success) {
-  showNotification(configData.translatedStrings.linkEditedMsg);
+  if (success)
+    showNotification(configData.translatedStrings.linkEditedMsg);
+  else
+    showErrorNotification(configData.translatedStrings.linkCantEdit);
 }
 
 
@@ -573,30 +625,23 @@ function onUpdateCustomLinkDone(success) {
  * @param {string} success True if the link was successfully deleted.
  */
 function onDeleteCustomLinkDone(success) {
-  showNotification(configData.translatedStrings.linkRemovedMsg);
+  if (success)
+    showNotification(configData.translatedStrings.linkRemovedMsg);
+  else
+    showErrorNotification(configData.translatedStrings.linkCantRemove);
 }
 
 
 /**
- * Shows the pop-up notification and triggers a delay to hide it. The message
- * will be set to |msg|.
+ * Shows the Most Visited pop-up notification and triggers a delay to hide it.
+ * The message will be set to |msg|.
  * @param {string} msg The notification message.
  */
 function showNotification(msg) {
   $(IDS.NOTIFICATION_MESSAGE).textContent = msg;
 
-  if (configData.isMDIconsEnabled || configData.isMDUIEnabled) {
-    $(IDS.NOTIFICATION).classList.remove(CLASSES.HIDE_NOTIFICATION);
-    // Timeout is required for the "float up" transition to work. Modifying the
-    // "display" property prevents transitions from activating.
-    window.setTimeout(() => {
-      $(IDS.NOTIFICATION_CONTAINER).classList.add(CLASSES.FLOAT_UP);
-    }, 20);
-
-    // Automatically hide the notification after a period of time.
-    delayedHideNotification = window.setTimeout(() => {
-      hideNotification();
-    }, NOTIFICATION_TIMEOUT);
+  if (configData.isMDIconsEnabled && configData.isGooglePage) {
+    floatUpNotification($(IDS.NOTIFICATION), $(IDS.NOTIFICATION_CONTAINER));
   } else {
     var notification = $(IDS.NOTIFICATION);
     notification.classList.remove(CLASSES.HIDE_NOTIFICATION);
@@ -608,29 +653,97 @@ function showNotification(msg) {
 
 
 /**
- * Hides the pop-up notification.
+ * Hides the Most Visited pop-up notification.
  */
 function hideNotification() {
-  if (configData.isMDIconsEnabled || configData.isMDUIEnabled) {
-    let notification = $(IDS.NOTIFICATION_CONTAINER);
-    if (!notification.classList.contains(CLASSES.FLOAT_UP)) {
-      return;
-    }
-    window.clearTimeout(delayedHideNotification);
-    notification.classList.remove(CLASSES.FLOAT_UP);
-
-    let afterHide = (event) => {
-      if (event.propertyName == 'bottom') {
-        $(IDS.NOTIFICATION).classList.add(CLASSES.HIDE_NOTIFICATION);
-        notification.removeEventListener('transitionend', afterHide);
-      }
-    };
-    notification.addEventListener('transitionend', afterHide);
+  if (configData.isMDIconsEnabled && configData.isGooglePage) {
+    floatDownNotification($(IDS.NOTIFICATION), $(IDS.NOTIFICATION_CONTAINER));
   } else {
     var notification = $(IDS.NOTIFICATION);
     notification.classList.add(CLASSES.HIDE_NOTIFICATION);
     notification.classList.remove(CLASSES.DELAYED_HIDE_NOTIFICATION);
   }
+}
+
+
+/**
+ * Shows the error pop-up notification and triggers a delay to hide it. The
+ * message will be set to |msg|. If |linkName| and |linkOnClick| are present,
+ * shows an error link with text set to |linkName| and onclick handled by
+ * |linkOnClick|.
+ * @param {string} msg The notification message.
+ * @param {?string} linkName The error link text.
+ * @param {?Function} linkOnClick The error link onclick handler.
+ */
+function showErrorNotification(msg, linkName, linkOnClick) {
+  let notification = $(IDS.ERROR_NOTIFICATION);
+  $(IDS.ERROR_NOTIFICATION_MSG).textContent = msg;
+  if (linkName && linkOnClick) {
+    let notificationLink = $(IDS.ERROR_NOTIFICATION_LINK);
+    notificationLink.textContent = linkName;
+    notificationLink.onclick = linkOnClick;
+    notification.classList.add(CLASSES.HAS_LINK);
+  } else {
+    notification.classList.remove(CLASSES.HAS_LINK);
+  }
+  floatUpNotification(notification, $(IDS.ERROR_NOTIFICATION_CONTAINER));
+}
+
+
+/**
+ * Animates the specified notification to float up. Automatically hides any
+ * pre-existing notification and sets a delayed timer to hide the new
+ * notification.
+ * @param {!Element} notification The notification element.
+ * @param {!Element} notificationContainer The notification container element.
+ */
+function floatUpNotification(notification, notificationContainer) {
+  // Hide any pre-existing notification.
+  if (delayedHideNotification) {
+    delayedHideNotification.trigger();
+    delayedHideNotification = null;
+  }
+
+  notification.classList.remove(CLASSES.HIDE_NOTIFICATION);
+  // Timeout is required for the "float up" transition to work. Modifying the
+  // "display" property prevents transitions from activating.
+  window.setTimeout(() => {
+    notificationContainer.classList.add(CLASSES.FLOAT_UP);
+  }, 20);
+
+  // Automatically hide the notification after a period of time.
+  delayedHideNotification = createExecutableTimeout(() => {
+    floatDownNotification(notification, notificationContainer);
+  }, NOTIFICATION_TIMEOUT);
+}
+
+
+/**
+ * Animates the pop-up notification to float down, and clears the timeout to
+ * hide the notification.
+ * @param {!Element} notification The notification element.
+ * @param {!Element} notificationContainer The notification container element.
+ */
+function floatDownNotification(notification, notificationContainer) {
+  if (!notificationContainer.classList.contains(CLASSES.FLOAT_UP))
+    return;
+
+  // Clear the timeout to hide the notification.
+  if (delayedHideNotification) {
+    delayedHideNotification.clear();
+    delayedHideNotification = null;
+  }
+
+  // Reset notification visibility once the animation is complete.
+  notificationContainer.classList.remove(CLASSES.FLOAT_UP);
+  let afterHide = (event) => {
+    if (event.propertyName == 'bottom') {
+      notification.classList.add(CLASSES.HIDE_NOTIFICATION);
+      notification.classList.remove(CLASSES.HAS_LINK);
+      notificationContainer.removeEventListener('transitionend', afterHide);
+    }
+  };
+  notificationContainer.addEventListener('transitionend', afterHide);
 }
 
 
@@ -769,7 +882,12 @@ function handlePostMessage(event) {
           (args.showRestoreDefault ? 0 : -1);
     }
   } else if (cmd === 'tileBlacklisted') {
-    showNotification(configData.translatedStrings.linkRemovedMsg);
+    if (configData.isCustomLinksEnabled) {
+      showNotification(configData.translatedStrings.linkRemovedMsg);
+    } else {
+      showNotification(
+          configData.translatedStrings.thumbnailRemovedNotification);
+    }
     lastBlacklistedTile = args.tid;
 
     ntpApiHandle.deleteMostVisitedItem(args.tid);
@@ -795,26 +913,28 @@ function handlePostMessage(event) {
 
 
 /**
- * Enables Material Design styles for all of NTP.
- */
-function enableMD() {
-  document.body.classList.add(CLASSES.MATERIAL_DESIGN);
-  enableMDIcons();
-}
-
-
-/**
- * Enables Material Design styles for the Most Visited section.
+ * Enables Material Design styles for the Most Visited section. Implicitly
+ * enables Material Design for the rest of NTP.
  */
 function enableMDIcons() {
   $(IDS.MOST_VISITED).classList.add(CLASSES.MATERIAL_DESIGN_ICONS);
   $(IDS.TILES).classList.add(CLASSES.MATERIAL_DESIGN_ICONS);
+  enableMD();
   addRippleAnimations();
 }
 
 
 /**
- * Enables ripple animations for elements with CLASSES.RIPPLE.
+ * Enables Material Design styles for all NTP components except Most Visited.
+ */
+function enableMD() {
+  document.body.classList.add(CLASSES.MATERIAL_DESIGN);
+}
+
+
+/**
+ * Enables ripple animations for elements with CLASSES.RIPPLE. The target
+ * element must have position relative or absolute.
  * TODO(kristipark): Remove after migrating to WebUI.
  */
 function addRippleAnimations() {
@@ -843,22 +963,22 @@ function addRippleAnimations() {
         Math.min(RIPPLE_MAX_RADIUS_PX, Math.max.apply(Math, cornerDistances));
 
     let ripple = document.createElement('div');
+    let rippleMask = document.createElement('div');
     let rippleContainer = document.createElement('div');
     ripple.classList.add(CLASSES.RIPPLE_EFFECT);
+    rippleMask.classList.add(CLASSES.RIPPLE_EFFECT_MASK);
     rippleContainer.classList.add(CLASSES.RIPPLE_CONTAINER);
-    rippleContainer.appendChild(ripple);
+    rippleMask.appendChild(ripple);
+    rippleContainer.appendChild(rippleMask);
     target.appendChild(rippleContainer);
     // Ripple start location
     ripple.style.marginLeft = x + 'px';
     ripple.style.marginTop = y + 'px';
 
-    rippleContainer.style.left = rect.left + 'px';
-    rippleContainer.style.top = rect.top + 'px';
-    rippleContainer.style.width = target.offsetWidth + 'px';
-    rippleContainer.style.height = target.offsetHeight + 'px';
-    rippleContainer.style.borderRadius =
+    rippleMask.style.width = target.offsetWidth + 'px';
+    rippleMask.style.height = target.offsetHeight + 'px';
+    rippleMask.style.borderRadius =
         window.getComputedStyle(target).borderRadius;
-    rippleContainer.style.position = 'fixed';
 
     // Start transition/ripple
     ripple.style.width = radius * 2 + 'px';
@@ -869,6 +989,7 @@ function addRippleAnimations() {
 
     window.setTimeout(function() {
       ripple.remove();
+      rippleMask.remove();
       rippleContainer.remove();
     }, RIPPLE_DURATION_MS);
   };
@@ -948,10 +1069,10 @@ function init() {
   var searchboxApiHandle = embeddedSearchApiHandle.searchBox;
 
   if (configData.isGooglePage) {
-    if (configData.isMDUIEnabled) {
-      enableMD();
-    } else if (configData.isMDIconsEnabled) {
+    if (configData.isMDIconsEnabled || configData.isCustomLinksEnabled) {
       enableMDIcons();
+    } else if (configData.isMDUIEnabled) {
+      enableMD();
     }
 
     if (configData.isCustomLinksEnabled) {
@@ -962,7 +1083,7 @@ function init() {
 
     if (configData.isCustomBackgroundsEnabled ||
         configData.isCustomLinksEnabled) {
-      customBackgrounds.init();
+      customBackgrounds.init(showErrorNotification);
     }
 
 
@@ -1080,8 +1201,22 @@ function init() {
     document.documentElement.classList.add(CLASSES.RTL);
   }
 
+  if (!iframesDisabledForTesting) {
+    createIframes();
+  }
+
+  document.body.classList.add(CLASSES.INITED);
+}
+
+
+/**
+ * Create the Most Visited and edit custom links iframes.
+ */
+function createIframes() {
   // Collect arguments for the most visited iframe.
   var args = [];
+
+  var searchboxApiHandle = window.chrome.embeddedSearch.searchBox;
 
   if (searchboxApiHandle.rtl)
     args.push('rtl=1');
@@ -1169,17 +1304,6 @@ function init() {
   }
 
   window.addEventListener('message', handlePostMessage);
-
-  document.body.classList.add(CLASSES.INITED);
-}
-
-
-function loadConfig() {
-  var configScript = document.createElement('script');
-  configScript.type = 'text/javascript';
-  configScript.src = 'chrome-search://local-ntp/config.js';
-  configScript.onload = init;
-  document.head.appendChild(configScript);
 }
 
 
@@ -1187,7 +1311,7 @@ function loadConfig() {
  * Binds event listeners.
  */
 function listen() {
-  document.addEventListener('DOMContentLoaded', loadConfig);
+  document.addEventListener('DOMContentLoaded', init);
 }
 
 
@@ -1551,7 +1675,8 @@ var applyDoodleMetadata = function() {
 
 return {
   init: init,  // Exposed for testing.
-  listen: listen
+  listen: listen,
+  disableIframesForTesting: disableIframesForTesting
 };
 
 }

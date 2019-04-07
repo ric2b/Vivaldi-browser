@@ -35,8 +35,8 @@ typedef std::map<std::string, DevToolsAgentHostImpl*> DevToolsMap;
 base::LazyInstance<DevToolsMap>::Leaky g_devtools_instances =
     LAZY_INSTANCE_INITIALIZER;
 
-base::LazyInstance<base::ObserverList<DevToolsAgentHostObserver>>::Leaky
-    g_devtools_observers = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<base::ObserverList<DevToolsAgentHostObserver>::Unchecked>::
+    Leaky g_devtools_observers = LAZY_INSTANCE_INITIALIZER;
 
 // Returns a list of all active hosts on browser targets.
 DevToolsAgentHost::List GetBrowserAgentHosts() {
@@ -231,20 +231,18 @@ bool DevToolsAgentHostImpl::DispatchProtocolMessage(
     DevToolsAgentHostClient* client,
     const std::string& message) {
   std::unique_ptr<base::Value> value = base::JSONReader::Read(message);
-  if (value && !value->is_dict())
-    value.reset();
-  return DispatchProtocolMessage(
-      client, message, static_cast<base::DictionaryValue*>(value.get()));
+  return DispatchProtocolMessage(client, message,
+                                 base::DictionaryValue::From(std::move(value)));
 }
 
 bool DevToolsAgentHostImpl::DispatchProtocolMessage(
     DevToolsAgentHostClient* client,
     const std::string& message,
-    base::DictionaryValue* parsed_message) {
+    std::unique_ptr<base::DictionaryValue> parsed_message) {
   DevToolsSession* session = SessionByClient(client);
   if (!session)
     return false;
-  session->DispatchProtocolMessage(message, parsed_message);
+  session->DispatchProtocolMessage(message, std::move(parsed_message));
   return true;
 }
 

@@ -12,12 +12,14 @@ public final class FeatureConstants {
     public static final String DOWNLOAD_PAGE_FEATURE = "IPH_DownloadPage";
     public static final String DOWNLOAD_PAGE_SCREENSHOT_FEATURE = "IPH_DownloadPageScreenshot";
     public static final String DOWNLOAD_HOME_FEATURE = "IPH_DownloadHome";
+    public static final String CHROME_DUET_FEATURE = "IPH_ChromeDuet";
     public static final String CHROME_HOME_EXPAND_FEATURE = "IPH_ChromeHomeExpand";
     public static final String CHROME_HOME_PULL_TO_REFRESH_FEATURE = "IPH_ChromeHomePullToRefresh";
     public static final String CONTEXTUAL_SUGGESTIONS_FEATURE = "IPH_ContextualSuggestions";
     public static final String DATA_SAVER_PREVIEW_FEATURE = "IPH_DataSaverPreview";
     public static final String DATA_SAVER_DETAIL_FEATURE = "IPH_DataSaverDetail";
     public static final String NTP_BUTTON_FEATURE = "IPH_NewTabPageButton";
+    public static final String HOMEPAGE_TILE_FEATURE = "IPH_HomepageTile";
 
     public static final String MEDIA_DOWNLOAD_FEATURE = "IPH_MediaDownload";
 

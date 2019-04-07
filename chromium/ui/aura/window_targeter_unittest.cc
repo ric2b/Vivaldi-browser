@@ -11,6 +11,8 @@
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/test_event_handler.h"
 
@@ -56,7 +58,7 @@ TEST_P(WindowTargeterTest, Basic) {
   Window* one = CreateNormalWindow(2, window.get(), &delegate);
   Window* two = CreateNormalWindow(3, window.get(), &delegate);
 
-  window->SetBounds(gfx::Rect(0, 0, 100, 100));
+  window->SetBounds(gfx::Rect(0, 0, 1000, 1000));
   one->SetBounds(gfx::Rect(0, 0, 500, 100));
   two->SetBounds(gfx::Rect(501, 0, 500, 1000));
 
@@ -76,6 +78,36 @@ TEST_P(WindowTargeterTest, Basic) {
   EXPECT_EQ(1, handler.num_mouse_events());
 
   one->RemovePreTargetHandler(&handler);
+}
+
+TEST_P(WindowTargeterTest, FindTargetInRootWindow) {
+  WindowTargeter targeter;
+
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(root_window());
+  EXPECT_EQ(display.bounds(), root_window()->GetBoundsInScreen());
+  EXPECT_EQ(display.bounds(), gfx::Rect(0, 0, 800, 600));
+
+  // Mouse and touch presses inside the display yield null targets.
+  gfx::Point inside = display.bounds().CenterPoint();
+  ui::MouseEvent mouse1(ui::ET_MOUSE_PRESSED, inside, inside,
+                        ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
+  ui::TouchEvent touch1(ui::ET_TOUCH_PRESSED, inside, ui::EventTimeForNow(),
+                        ui::PointerDetails());
+  touch1.set_root_location(inside);
+  EXPECT_EQ(nullptr, targeter.FindTargetInRootWindow(root_window(), mouse1));
+  EXPECT_EQ(nullptr, targeter.FindTargetInRootWindow(root_window(), touch1));
+
+  // Touch presses outside the display yields the root window as a target.
+  gfx::Point outside(display.bounds().right() + 10, inside.y());
+  ui::MouseEvent mouse2(ui::ET_MOUSE_PRESSED, outside, outside,
+                        ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
+  ui::TouchEvent touch2(ui::ET_TOUCH_PRESSED, outside, ui::EventTimeForNow(),
+                        ui::PointerDetails());
+  touch2.set_root_location(outside);
+  EXPECT_EQ(nullptr, targeter.FindTargetInRootWindow(root_window(), mouse2));
+  EXPECT_EQ(root_window(),
+            targeter.FindTargetInRootWindow(root_window(), touch2));
 }
 
 TEST_P(WindowTargeterTest, ScopedWindowTargeter) {
@@ -101,7 +133,7 @@ TEST_P(WindowTargeterTest, ScopedWindowTargeter) {
   // Install a targeter on |window| so that the events never reach the child.
   std::unique_ptr<ScopedWindowTargeter> scoped_targeter(
       new ScopedWindowTargeter(window.get(),
-                               std::unique_ptr<ui::EventTargeter>(
+                               std::unique_ptr<WindowTargeter>(
                                    new StaticWindowTargeter(window.get()))));
   {
     ui::MouseEvent mouse(ui::ET_MOUSE_MOVED, event_location, event_location,
@@ -124,7 +156,7 @@ TEST_P(WindowTargeterTest, ScopedWindowTargeterWindowDestroyed) {
       CreateNormalWindow(1, root_window(), &delegate));
   std::unique_ptr<ScopedWindowTargeter> scoped_targeter(
       new ScopedWindowTargeter(window.get(),
-                               std::unique_ptr<ui::EventTargeter>(
+                               std::unique_ptr<aura::WindowTargeter>(
                                    new StaticWindowTargeter(window.get()))));
 
   window.reset();
@@ -180,7 +212,7 @@ TEST_P(WindowTargeterTest, TargetTransformedWindow) {
 
 class IdCheckingEventTargeter : public WindowTargeter {
  public:
-  IdCheckingEventTargeter(int id) : id_(id) {}
+  explicit IdCheckingEventTargeter(int id) : id_(id) {}
   ~IdCheckingEventTargeter() override {}
 
  protected:
@@ -231,9 +263,8 @@ TEST_P(WindowTargeterTest, Bounds) {
   // by |parent|.
   ui::MouseEvent mouse2(ui::ET_MOUSE_MOVED, gfx::Point(8, 8), gfx::Point(8, 8),
                         ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
-  std::unique_ptr<ui::EventTargeter> original_targeter =
-      child_r->SetEventTargeter(
-          std::unique_ptr<ui::EventTargeter>(new IdCheckingEventTargeter(2)));
+  std::unique_ptr<aura::WindowTargeter> original_targeter =
+      child_r->SetEventTargeter(std::make_unique<IdCheckingEventTargeter>(2));
   EXPECT_EQ(parent_r, targeter->FindTargetForEvent(root_target, &mouse2));
 
   // Now install a targeter on the |child| that looks at the window id as well
@@ -241,8 +272,7 @@ TEST_P(WindowTargeterTest, Bounds) {
   // the window is equal to 1 (correct).
   ui::MouseEvent mouse3(ui::ET_MOUSE_MOVED, gfx::Point(8, 8), gfx::Point(8, 8),
                         ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
-  child_r->SetEventTargeter(
-      std::unique_ptr<ui::EventTargeter>(new IdCheckingEventTargeter(1)));
+  child_r->SetEventTargeter(std::make_unique<IdCheckingEventTargeter>(1));
   EXPECT_EQ(child_r, targeter->FindTargetForEvent(root_target, &mouse3));
 
   // restore original WindowTargeter for |child|.
@@ -290,8 +320,7 @@ TEST_P(WindowTargeterTest, TargeterChecksOwningEventTarget) {
 
   // Install an event targeter on |child| which always prevents the target from
   // receiving event.
-  child->SetEventTargeter(
-      std::unique_ptr<ui::EventTargeter>(new IgnoreWindowTargeter()));
+  child->SetEventTargeter(std::make_unique<IgnoreWindowTargeter>());
 
   ui::MouseEvent mouse2(ui::ET_MOUSE_MOVED, gfx::Point(10, 10),
                         gfx::Point(10, 10), ui::EventTimeForNow(), ui::EF_NONE,
@@ -301,8 +330,6 @@ TEST_P(WindowTargeterTest, TargeterChecksOwningEventTarget) {
 
 INSTANTIATE_TEST_CASE_P(/* no prefix */,
                         WindowTargeterTest,
-                        ::testing::Values(test::BackendType::CLASSIC,
-                                          test::BackendType::MUS,
-                                          test::BackendType::MUS2));
+                        ::testing::Values(Env::Mode::LOCAL, Env::Mode::MUS));
 
 }  // namespace aura

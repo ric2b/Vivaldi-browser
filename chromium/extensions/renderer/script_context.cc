@@ -24,6 +24,7 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/renderer/renderer_extension_registry.h"
 #include "extensions/renderer/v8_helpers.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -87,7 +88,8 @@ ScriptContext::ScriptContext(const v8::Local<v8::Context>& v8_context,
       effective_context_type_(effective_context_type),
       context_id_(base::UnguessableToken::Create()),
       safe_builtins_(this),
-      isolate_(v8_context->GetIsolate()) {
+      isolate_(v8_context->GetIsolate()),
+      service_worker_version_id_(blink::mojom::kInvalidServiceWorkerVersionId) {
   VLOG(1) << "Created context:\n" << GetDebugString();
   v8_context_.AnnotateStrongRetainer("extensions::ScriptContext::v8_context_");
   if (web_frame_)
@@ -428,7 +430,7 @@ std::string ScriptContext::GetStackTraceAsString() const {
   }
   std::string result;
   for (int i = 0; i < stack_trace->GetFrameCount(); ++i) {
-    v8::Local<v8::StackFrame> frame = stack_trace->GetFrame(i);
+    v8::Local<v8::StackFrame> frame = stack_trace->GetFrame(isolate(), i);
     CHECK(!frame.IsEmpty());
     result += base::StringPrintf(
         "\n    at %s (%s:%d:%d)",

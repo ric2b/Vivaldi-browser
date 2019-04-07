@@ -86,36 +86,40 @@ std::unique_ptr<TransformationMatrix> getPoseMatrix(
 }  // namespace
 
 XRFrameProvider::XRFrameProvider(XRDevice* device)
-    : device_(device), last_has_focus_(device->HasDeviceAndFrameFocus()) {
+    : device_(device), last_has_focus_(device->HasFrameFocus()) {
   frame_transport_ = new XRFrameTransport();
 }
 
 void XRFrameProvider::BeginImmersiveSession(
     XRSession* session,
-    device::mojom::blink::XRPresentationConnectionPtr connection) {
+    device::mojom::blink::XRSessionPtr session_ptr) {
   // Make sure the session is indeed an immersive one.
   DCHECK(session && session->immersive());
 
   // Ensure we can only have one immersive session at a time.
   DCHECK(!immersive_session_);
-  DCHECK(connection);
+  DCHECK(session_ptr->data_provider);
+  DCHECK(session_ptr->submit_frame_sink);
 
   immersive_session_ = session;
 
-  presentation_provider_.Bind(std::move(connection->provider));
+  immersive_data_provider_.Bind(std::move(session_ptr->data_provider));
+
+  presentation_provider_.Bind(
+      std::move(session_ptr->submit_frame_sink->provider));
   presentation_provider_.set_connection_error_handler(
       WTF::Bind(&XRFrameProvider::OnPresentationProviderConnectionError,
                 WrapWeakPersistent(this)));
 
   frame_transport_->BindSubmitFrameClient(
-      std::move(connection->client_request));
+      std::move(session_ptr->submit_frame_sink->client_request));
   frame_transport_->SetTransportOptions(
-      std::move(connection->transport_options));
+      std::move(session_ptr->submit_frame_sink->transport_options));
   frame_transport_->PresentChange();
 }
 
 void XRFrameProvider::OnFocusChanged() {
-  bool focus = device_->HasDeviceAndFrameFocus();
+  bool focus = device_->HasFrameFocus();
 
   // If we are gaining focus, schedule a frame for magic window.  This accounts
   // for skipping RAFs in ProcessScheduledFrame.  Only do this when there are
@@ -131,6 +135,7 @@ void XRFrameProvider::OnFocusChanged() {
 
 void XRFrameProvider::OnPresentationProviderConnectionError() {
   presentation_provider_.reset();
+  immersive_data_provider_.reset();
   if (vsync_connection_failed_)
     return;
   immersive_session_->ForceEnd();
@@ -142,15 +147,13 @@ void XRFrameProvider::OnImmersiveSessionEnded() {
   if (!immersive_session_)
     return;
 
-  device_->xrDisplayHostPtr()->ExitPresent();
+  device_->xrDevicePtr()->ExitPresent();
 
   immersive_session_ = nullptr;
   pending_immersive_vsync_ = false;
   frame_id_ = -1;
-
-  if (presentation_provider_.is_bound()) {
-    presentation_provider_.reset();
-  }
+  presentation_provider_.reset();
+  immersive_data_provider_.reset();
 
   frame_transport_ = new XRFrameTransport();
 
@@ -200,7 +203,7 @@ void XRFrameProvider::ScheduleImmersiveFrame() {
 
   pending_immersive_vsync_ = true;
 
-  presentation_provider_->GetFrameData(WTF::Bind(
+  immersive_data_provider_->GetFrameData(WTF::Bind(
       &XRFrameProvider::OnImmersiveFrameData, WrapWeakPersistent(this)));
 }
 
@@ -352,7 +355,7 @@ void XRFrameProvider::ProcessScheduledFrame(
   TRACE_EVENT2("gpu", "XRFrameProvider::ProcessScheduledFrame", "frame",
                frame_id_, "timestamp", high_res_now_ms);
 
-  if (!device_->HasDeviceAndFrameFocus() && !immersive_session_) {
+  if (!device_->HasFrameFocus() && !immersive_session_) {
     return;  // Not currently focused, so we won't expose poses (except to
              // immersive sessions).
   }
@@ -380,10 +383,15 @@ void XRFrameProvider::ProcessScheduledFrame(
     // If there's an immersive session active only process its frame.
     std::unique_ptr<TransformationMatrix> pose_matrix =
         getPoseMatrix(frame_pose_);
+#if DCHECK_IS_ON()
     // Sanity check: if drawing into a shared buffer, the optional mailbox
-    // holder must be present.
-    DCHECK(!frame_transport_->DrawingIntoSharedBuffer() ||
-           buffer_mailbox_holder_);
+    // holder must be present. Exception is the first immersive frame after a
+    // transition where the frame ID wasn't set yet. In that case, drawing can
+    // proceed, but the result will be discarded in SubmitWebGLLayer().
+    if (frame_transport_->DrawingIntoSharedBuffer() && frame_id_ >= 0) {
+      DCHECK(buffer_mailbox_holder_);
+    }
+#endif
     immersive_session_->OnFrame(high_res_now_ms, std::move(pose_matrix),
                                 buffer_mailbox_holder_, base::nullopt,
                                 base::nullopt);
@@ -391,12 +399,12 @@ void XRFrameProvider::ProcessScheduledFrame(
     // In the process of fulfilling the frame requests for each session they are
     // extremely likely to request another frame. Work off of a separate list
     // from the requests to prevent infinite loops.
-    HeapVector<Member<XRSession>> processing_sessions;
-    swap(requesting_sessions_, processing_sessions);
+    DCHECK(processing_sessions_.IsEmpty());
+    swap(requesting_sessions_, processing_sessions_);
 
     // Inform sessions with a pending request of the new frame
-    for (unsigned i = 0; i < processing_sessions.size(); ++i) {
-      XRSession* session = processing_sessions.at(i).Get();
+    for (unsigned i = 0; i < processing_sessions_.size(); ++i) {
+      XRSession* session = processing_sessions_.at(i).Get();
 
       if (frame_pose_ && frame_pose_->input_state.has_value()) {
         session->OnInputStateChange(frame_id_,
@@ -424,6 +432,8 @@ void XRFrameProvider::ProcessScheduledFrame(
                          base::nullopt, base::nullopt);
       }
     }
+
+    processing_sessions_.clear();
   }
 }
 
@@ -487,7 +497,7 @@ void XRFrameProvider::SubmitWebGLLayer(XRWebGLLayer* layer, bool was_changed) {
 
   // TODO(bajones): Remove this when the Windows path has been updated to no
   // longer require a texture copy.
-  bool needs_copy = device_->external();
+  bool needs_copy = immersive_session_->External();
 
   frame_transport_->FrameSubmit(
       presentation_provider_.get(), webgl_context->ContextGL(), webgl_context,
@@ -527,6 +537,7 @@ void XRFrameProvider::UpdateWebGLLayerViewports(XRWebGLLayer* layer) {
 
 void XRFrameProvider::Dispose() {
   presentation_provider_.reset();
+  immersive_data_provider_.reset();
   // TODO(bajones): Do something for outstanding frame requests?
 }
 
@@ -535,6 +546,7 @@ void XRFrameProvider::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_transport_);
   visitor->Trace(immersive_session_);
   visitor->Trace(requesting_sessions_);
+  visitor->Trace(processing_sessions_);
 }
 
 }  // namespace blink

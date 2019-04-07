@@ -40,16 +40,16 @@ HTMLFormControlElementWithState::HTMLFormControlElementWithState(
 HTMLFormControlElementWithState::~HTMLFormControlElementWithState() = default;
 
 Node::InsertionNotificationRequest
-HTMLFormControlElementWithState::InsertedInto(ContainerNode* insertion_point) {
-  if (insertion_point->isConnected() && !ContainingShadowRoot())
+HTMLFormControlElementWithState::InsertedInto(ContainerNode& insertion_point) {
+  if (insertion_point.isConnected() && !ContainingShadowRoot())
     GetDocument().GetFormController().RegisterStatefulFormControl(*this);
   return HTMLFormControlElement::InsertedInto(insertion_point);
 }
 
 void HTMLFormControlElementWithState::RemovedFrom(
-    ContainerNode* insertion_point) {
-  if (insertion_point->isConnected() && !ContainingShadowRoot() &&
-      !insertion_point->ContainingShadowRoot())
+    ContainerNode& insertion_point) {
+  if (insertion_point.isConnected() && !ContainingShadowRoot() &&
+      !insertion_point.ContainingShadowRoot())
     GetDocument().GetFormController().UnregisterStatefulFormControl(*this);
   HTMLFormControlElement::RemovedFrom(insertion_point);
 }

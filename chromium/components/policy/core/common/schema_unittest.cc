@@ -28,7 +28,6 @@ const char kTestSchema[] = R"({
   "properties": {
     "Boolean": { "type": "boolean" },
     "Integer": { "type": "integer" },
-    "Null": { "type": "null" },
     "Number": { "type": "number" },
     "String": { "type": "string" },
     "Array": {
@@ -320,10 +319,6 @@ TEST(SchemaTest, ValidSchema) {
   ASSERT_TRUE(sub.valid());
   EXPECT_EQ(base::Value::Type::INTEGER, sub.type());
 
-  sub = schema.GetProperty("Null");
-  ASSERT_TRUE(sub.valid());
-  EXPECT_EQ(base::Value::Type::NONE, sub.type());
-
   sub = schema.GetProperty("Number");
   ASSERT_TRUE(sub.valid());
   EXPECT_EQ(base::Value::Type::DOUBLE, sub.type());
@@ -418,7 +413,6 @@ TEST(SchemaTest, ValidSchema) {
     { "IntegerWithEnums",             base::Value::Type::INTEGER },
     { "IntegerWithEnumsGaps",         base::Value::Type::INTEGER },
     { "IntegerWithRange",             base::Value::Type::INTEGER },
-    { "Null",                         base::Value::Type::NONE },
     { "Number",                       base::Value::Type::DOUBLE },
     { "Object",                       base::Value::Type::DICTIONARY },
     { "ObjectOfArray",                base::Value::Type::DICTIONARY },
@@ -469,7 +463,6 @@ TEST(SchemaTest, Lookups) {
   schema = Schema::Parse(R"({
     "type": "object",
     "properties": {
-      "bb" : { "type": "null" },
       "aa" : { "type": "boolean" },
       "abab" : { "type": "string" },
       "ab" : { "type": "number" },
@@ -491,7 +484,6 @@ TEST(SchemaTest, Lookups) {
     { "ab",     base::Value::Type::DOUBLE },
     { "aba",    base::Value::Type::INTEGER },
     { "abab",   base::Value::Type::STRING },
-    { "bb",     base::Value::Type::NONE },
   };
   for (size_t i = 0; i < arraysize(kExpectedKeys); ++i) {
     Schema sub = schema.GetKnownProperty(kExpectedKeys[i].expected_key);
@@ -702,7 +694,6 @@ TEST(SchemaTest, Validate) {
   bundle.Clear();
   bundle.SetBoolean("Boolean", true);
   bundle.SetInteger("Integer", 123);
-  bundle.Set("Null", std::make_unique<base::Value>());
   bundle.SetDouble("Number", 3.14);
   bundle.SetString("String", "omg");
 
@@ -1355,6 +1346,171 @@ TEST(SchemaTest, RangedRestriction) {
     "minimum": 10,
     "maximum": 20
   })")));
+}
+
+TEST(SchemaTest, ParseToDictAndValidate) {
+  std::string error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate("", kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate("\0", kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(
+      Schema::ParseToDictAndValidate("string", kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(
+      Schema::ParseToDictAndValidate(R"("string")", kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate("[]", kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate("{}", kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate(R"({ "type": 123 })",
+                                              kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate(R"({ "type": "invalid" })",
+                                              kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate(
+      R"({
+        "type": "object",
+        "properties": []
+      })",  // Invalid properties type.
+      kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate(
+      R"({
+        "type": "string",
+        "enum": [ {} ]
+      })",  // "enum" dict values must contain "name".
+      kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate(
+      R"({
+        "type": "string",
+        "enum": [ { "name": {} } ]
+      })",  // "enum" name must be a simple value.
+      kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate(
+      R"({
+        "type": "array",
+        "items": [ 123 ],
+      })",  // "items" must contain a schema or schemas.
+      kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_TRUE(Schema::ParseToDictAndValidate(
+      R"({ "type": "object" })", kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate(
+      R"({ "type": ["object", "array"] })", kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate(
+      R"({
+        "type": "array",
+        "items": [
+          { "type": "string" },
+          { "type": "integer" }
+        ]
+      })",
+      kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_TRUE(Schema::ParseToDictAndValidate(
+      R"({
+        "type": "object",
+          "properties": {
+            "string-property": {
+              "type": "string",
+              "title": "The String Policy",
+              "description": "This policy controls the String widget."
+            },
+            "integer-property": {
+              "type": "number"
+            },
+            "enum-property": {
+              "type": "integer",
+              "enum": [0, 1, 10, 100]
+            },
+            "items-property": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+        },
+        "additionalProperties": {
+          "type": "boolean"
+        }
+      })",
+      kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_TRUE(Schema::ParseToDictAndValidate(
+      R"#({
+        "type": "object",
+        "patternProperties": {
+          ".": { "type": "boolean" },
+          "foo": { "type": "boolean" },
+          "^foo$": { "type": "boolean" },
+          "foo+": { "type": "boolean" },
+          "foo?": { "type": "boolean" },
+          "fo{2,4}": { "type": "boolean" },
+          "(left)|(right)": { "type": "boolean" }
+        }
+      })#",
+      kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_TRUE(Schema::ParseToDictAndValidate(
+      R"({
+        "type": "object",
+        "unknown attribute": "that should just be ignored"
+      })",
+      kSchemaOptionsIgnoreUnknownAttributes, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate(
+      R"({
+        "type": "object",
+        "unknown attribute": "that will cause a failure"
+      })",
+      kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate(
+      R"({
+        "type": "object",
+        "properties": {"foo": {"type": "number"}},
+        "required": 123
+      })",
+      kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate(
+      R"({
+        "type": "object",
+        "properties": {"foo": {"type": "number"}},
+        "required": [ 123 ]
+      })",
+      kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate(
+      R"({
+        "type": "object",
+        "properties": {"foo": {"type": "number"}},
+        "required": ["bar"]
+      })",
+      kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_FALSE(Schema::ParseToDictAndValidate(
+      R"({
+        "type": "object",
+        "required": ["bar"]
+      })",
+      kSchemaOptionsNone, &error))
+      << error;
+  EXPECT_TRUE(Schema::ParseToDictAndValidate(
+      R"({
+        "type": "object",
+        "properties": {"foo": {"type": "number"}},
+        "required": ["foo"]
+      })",
+      kSchemaOptionsNone, &error))
+      << error;
 }
 
 }  // namespace policy

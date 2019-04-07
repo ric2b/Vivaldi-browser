@@ -16,9 +16,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/windows_version.h"
+#include "base/win/wmi.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "chrome/installer/util/l10n_string_util.h"
-#include "chrome/installer/util/wmi.h"
 
 using base::PathService;
 
@@ -92,7 +92,7 @@ void NavigateToUrlWithIExplore(const base::string16& url) {
   // process runs inside a Job object controlled by the shell. As long as there
   // are processes running, the shell will not close the uninstall applet. WMI
   // allows us to escape from the Job object so the applet will close.
-  installer::WMIProcess::Launch(command, &pid);
+  base::win::WmiLaunchProcess(command, &pid);
 }
 
 void DoPostUninstallOperations(const base::Version& version) {

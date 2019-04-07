@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -49,6 +50,10 @@ void FakeFileSystem::CheckForUpdates() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
+void FakeFileSystem::CheckForUpdates(const std::set<std::string>& ids) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+}
+
 void FakeFileSystem::TransferFileFromLocalToRemote(
     const base::FilePath& local_src_file_path,
     const base::FilePath& remote_dest_file_path,
@@ -59,7 +64,7 @@ void FakeFileSystem::TransferFileFromLocalToRemote(
 void FakeFileSystem::OpenFile(const base::FilePath& file_path,
                               OpenMode open_mode,
                               const std::string& mime_type,
-                              const OpenFileCallback& callback) {
+                              OpenFileCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
@@ -121,12 +126,12 @@ void FakeFileSystem::Unpin(const base::FilePath& file_path,
 }
 
 void FakeFileSystem::GetFile(const base::FilePath& file_path,
-                             const GetFileCallback& callback) {
+                             GetFileCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
 void FakeFileSystem::GetFileForSaving(const base::FilePath& file_path,
-                                      const GetFileCallback& callback) {
+                                      GetFileCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
@@ -138,7 +143,7 @@ void FakeFileSystem::IsCacheFileMarkedAsMounted(
 
 base::Closure FakeFileSystem::GetFileContent(
     const base::FilePath& file_path,
-    const GetFileContentInitializedCallback& initialized_callback,
+    GetFileContentInitializedCallback initialized_callback,
     const google_apis::GetContentCallback& get_content_callback,
     const FileOperationCallback& completion_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -147,22 +152,20 @@ base::Closure FakeFileSystem::GetFileContent(
       file_path,
       base::Bind(&FakeFileSystem::GetFileContentAfterGetResourceEntry,
                  weak_ptr_factory_.GetWeakPtr(),
-                 initialized_callback, get_content_callback,
-                 completion_callback));
+                 base::Passed(std::move(initialized_callback)),
+                 get_content_callback, completion_callback));
   return base::DoNothing();
 }
 
-void FakeFileSystem::GetResourceEntry(
-    const base::FilePath& file_path,
-    const GetResourceEntryCallback& callback) {
+void FakeFileSystem::GetResourceEntry(const base::FilePath& file_path,
+                                      GetResourceEntryCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (file_path == util::GetDriveMyDriveRootPath()) {
     // Specialized for the root entry.
-    drive_service_->GetAboutResource(
-        base::Bind(
-            &FakeFileSystem::GetResourceEntryAfterGetAboutResource,
-            weak_ptr_factory_.GetWeakPtr(), callback));
+    drive_service_->GetAboutResource(base::Bind(
+        &FakeFileSystem::GetResourceEntryAfterGetAboutResource,
+        weak_ptr_factory_.GetWeakPtr(), base::Passed(std::move(callback))));
     return;
   }
 
@@ -170,21 +173,21 @@ void FakeFileSystem::GetResourceEntry(
   DCHECK(util::GetDriveMyDriveRootPath().IsParent(file_path));
   GetResourceEntry(
       file_path.DirName(),
-      base::Bind(
-          &FakeFileSystem::GetResourceEntryAfterGetParentEntryInfo,
-          weak_ptr_factory_.GetWeakPtr(), file_path.BaseName(), callback));
+      base::BindOnce(&FakeFileSystem::GetResourceEntryAfterGetParentEntryInfo,
+                     weak_ptr_factory_.GetWeakPtr(), file_path.BaseName(),
+                     std::move(callback)));
 }
 
 void FakeFileSystem::ReadDirectory(
     const base::FilePath& file_path,
-    const ReadDirectoryEntriesCallback& entries_callback,
+    ReadDirectoryEntriesCallback entries_callback,
     const FileOperationCallback& completion_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
 void FakeFileSystem::Search(const std::string& search_query,
                             const GURL& next_link,
-                            const SearchCallback& callback) {
+                            SearchCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
@@ -192,12 +195,12 @@ void FakeFileSystem::SearchMetadata(const std::string& query,
                                     int options,
                                     int at_most_num_matches,
                                     MetadataSearchOrder order,
-                                    const SearchMetadataCallback& callback) {
+                                    SearchMetadataCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
 void FakeFileSystem::SearchByHashes(const std::set<std::string>& hashes,
-                                    const SearchByHashesCallback& callback) {
+                                    SearchByHashesCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
@@ -213,8 +216,7 @@ void FakeFileSystem::GetShareUrl(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
-void FakeFileSystem::GetMetadata(
-    const GetFilesystemMetadataCallback& callback) {
+void FakeFileSystem::GetMetadata(GetFilesystemMetadataCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
@@ -272,7 +274,7 @@ void FakeFileSystem::CalculateEvictableCacheSize(
 
 // Implementation of GetFileContent.
 void FakeFileSystem::GetFileContentAfterGetResourceEntry(
-    const GetFileContentInitializedCallback& initialized_callback,
+    GetFileContentInitializedCallback initialized_callback,
     const google_apis::GetContentCallback& get_content_callback,
     const FileOperationCallback& completion_callback,
     FileError error,
@@ -294,16 +296,14 @@ void FakeFileSystem::GetFileContentAfterGetResourceEntry(
   // Fetch google_apis::FileResource for its |download_url|.
   drive_service_->GetFileResource(
       entry->resource_id(),
-      base::Bind(
-          &FakeFileSystem::GetFileContentAfterGetFileResource,
-          weak_ptr_factory_.GetWeakPtr(),
-          initialized_callback,
-          get_content_callback,
-          completion_callback));
+      base::Bind(&FakeFileSystem::GetFileContentAfterGetFileResource,
+                 weak_ptr_factory_.GetWeakPtr(),
+                 base::Passed(std::move(initialized_callback)),
+                 get_content_callback, completion_callback));
 }
 
 void FakeFileSystem::GetFileContentAfterGetFileResource(
-    const GetFileContentInitializedCallback& initialized_callback,
+    GetFileContentInitializedCallback initialized_callback,
     const google_apis::GetContentCallback& get_content_callback,
     const FileOperationCallback& completion_callback,
     google_apis::DriveApiErrorCode gdata_error,
@@ -333,12 +333,14 @@ void FakeFileSystem::GetFileContentAfterGetFileResource(
   }
   if (base::PathExists(cache_path)) {
     // Cache file is found.
-    initialized_callback.Run(FILE_ERROR_OK, cache_path, std::move(entry));
+    std::move(initialized_callback)
+        .Run(FILE_ERROR_OK, cache_path, std::move(entry));
     completion_callback.Run(FILE_ERROR_OK);
     return;
   }
 
-  initialized_callback.Run(FILE_ERROR_OK, base::FilePath(), std::move(entry));
+  std::move(initialized_callback)
+      .Run(FILE_ERROR_OK, base::FilePath(), std::move(entry));
   drive_service_->DownloadFile(
       cache_path,
       gdata_entry->file_id(),
@@ -359,14 +361,14 @@ void FakeFileSystem::GetFileContentAfterDownloadFile(
 
 // Implementation of GetResourceEntry.
 void FakeFileSystem::GetResourceEntryAfterGetAboutResource(
-    const GetResourceEntryCallback& callback,
+    GetResourceEntryCallback callback,
     google_apis::DriveApiErrorCode gdata_error,
     std::unique_ptr<google_apis::AboutResource> about_resource) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   FileError error = GDataToFileError(gdata_error);
   if (error != FILE_ERROR_OK) {
-    callback.Run(error, std::unique_ptr<ResourceEntry>());
+    std::move(callback).Run(error, std::unique_ptr<ResourceEntry>());
     return;
   }
 
@@ -375,39 +377,39 @@ void FakeFileSystem::GetResourceEntryAfterGetAboutResource(
   root->mutable_file_info()->set_is_directory(true);
   root->set_resource_id(about_resource->root_folder_id());
   root->set_title(util::kDriveMyDriveRootDirName);
-  callback.Run(error, std::move(root));
+  std::move(callback).Run(error, std::move(root));
 }
 
 void FakeFileSystem::GetResourceEntryAfterGetParentEntryInfo(
     const base::FilePath& base_name,
-    const GetResourceEntryCallback& callback,
+    GetResourceEntryCallback callback,
     FileError error,
     std::unique_ptr<ResourceEntry> parent_entry) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (error != FILE_ERROR_OK) {
-    callback.Run(error, std::unique_ptr<ResourceEntry>());
+    std::move(callback).Run(error, std::unique_ptr<ResourceEntry>());
     return;
   }
 
   DCHECK(parent_entry);
   drive_service_->GetFileListInDirectory(
       parent_entry->resource_id(),
-      base::Bind(
-          &FakeFileSystem::GetResourceEntryAfterGetFileList,
-          weak_ptr_factory_.GetWeakPtr(), base_name, callback));
+      base::Bind(&FakeFileSystem::GetResourceEntryAfterGetFileList,
+                 weak_ptr_factory_.GetWeakPtr(), base_name,
+                 base::Passed(std::move(callback))));
 }
 
 void FakeFileSystem::GetResourceEntryAfterGetFileList(
     const base::FilePath& base_name,
-    const GetResourceEntryCallback& callback,
+    GetResourceEntryCallback callback,
     google_apis::DriveApiErrorCode gdata_error,
     std::unique_ptr<google_apis::FileList> file_list) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   FileError error = GDataToFileError(gdata_error);
   if (error != FILE_ERROR_OK) {
-    callback.Run(error, std::unique_ptr<ResourceEntry>());
+    std::move(callback).Run(error, std::unique_ptr<ResourceEntry>());
     return;
   }
 
@@ -424,12 +426,13 @@ void FakeFileSystem::GetResourceEntryAfterGetFileList(
 
     if (entry->base_name() == base_name.AsUTF8Unsafe()) {
       // Found the target entry.
-      callback.Run(FILE_ERROR_OK, std::move(entry));
+      std::move(callback).Run(FILE_ERROR_OK, std::move(entry));
       return;
     }
   }
 
-  callback.Run(FILE_ERROR_NOT_FOUND, std::unique_ptr<ResourceEntry>());
+  std::move(callback).Run(FILE_ERROR_NOT_FOUND,
+                          std::unique_ptr<ResourceEntry>());
 }
 
 }  // namespace test_util

@@ -12,9 +12,9 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/time/time.h"
-#include "components/webrtc_logging/browser/log_list.h"
+#include "components/webrtc_logging/browser/text_log_list.h"
 
 namespace webrtc_logging {
 
@@ -50,7 +50,7 @@ void DeleteOldWebRtcLogFiles(const base::FilePath& log_dir) {
 
 void DeleteOldAndRecentWebRtcLogFiles(const base::FilePath& log_dir,
                                       const base::Time& delete_begin_time) {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
 
   if (!base::PathExists(log_dir)) {
     // This will happen if no logs have been stored or uploaded.
@@ -63,7 +63,7 @@ void DeleteOldAndRecentWebRtcLogFiles(const base::FilePath& log_dir,
       base::TimeDelta::FromDays(kDaysToKeepLogs);
 
   base::FilePath log_list_path =
-      LogList::GetWebRtcLogListFileForDirectory(log_dir);
+      TextLogList::GetWebRtcLogListFileForDirectory(log_dir);
   std::string log_list;
   const bool update_log_list = base::PathExists(log_list_path);
   if (update_log_list) {

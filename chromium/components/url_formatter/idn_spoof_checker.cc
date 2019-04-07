@@ -56,9 +56,15 @@ class TopDomainPreloadDecoder : public net::extras::PreloadDecoder {
     if (current_search_offset == 0) {
       *out_found = true;
       DCHECK(!top_domain.empty());
+      result_ = top_domain;
     }
     return true;
   }
+
+  std::string matching_top_domain() const { return result_; }
+
+ private:
+  std::string result_;
 };
 
 void OnThreadTermination(void* regex_matcher) {
@@ -80,14 +86,13 @@ IDNSpoofChecker::HuffmanTrieParams g_trie_params{
     kTopDomainsHuffmanTree, sizeof(kTopDomainsHuffmanTree), kTopDomainsTrie,
     kTopDomainsTrieBits, kTopDomainsRootPosition};
 
-bool LookupMatchInTopDomains(const icu::UnicodeString& ustr_skeleton) {
+std::string LookupMatchInTopDomains(const std::string& skeleton) {
+  DCHECK(!skeleton.empty());
+  DCHECK_NE(skeleton.back(), '.');
   TopDomainPreloadDecoder preload_decoder(
       g_trie_params.huffman_tree, g_trie_params.huffman_tree_size,
       g_trie_params.trie, g_trie_params.trie_bits,
       g_trie_params.trie_root_position);
-  std::string skeleton;
-  ustr_skeleton.toUTF8String(skeleton);
-  DCHECK_NE(skeleton.back(), '.');
   auto labels = base::SplitStringPiece(skeleton, ".", base::KEEP_WHITESPACE,
                                        base::SPLIT_WANT_ALL);
 
@@ -102,14 +107,14 @@ bool LookupMatchInTopDomains(const icu::UnicodeString& ustr_skeleton) {
     bool decoded = preload_decoder.Decode(partial_skeleton, &match);
     DCHECK(decoded);
     if (!decoded)
-      return false;
+      return std::string();
 
     if (match)
-      return true;
+      return preload_decoder.matching_top_domain();
 
     labels.erase(labels.begin());
   }
-  return false;
+  return std::string();
 }
 
 }  // namespace
@@ -212,7 +217,7 @@ IDNSpoofChecker::IDNSpoofChecker() {
   //      U+04C8 (ӈ), U+04CA (ӊ), U+050B (ԋ), U+0527 (ԧ), U+0529 (ԩ)} => h
   //   - {U+0138 (ĸ), U+03BA (κ), U+043A (к), U+049B (қ), U+049D (ҝ),
   //      U+049F (ҟ), U+04A1(ҡ), U+04C4 (ӄ), U+051F (ԟ)} => k
-  //   - {U+014B (ŋ), U+043F (п), U+0525 (ԥ)} => n
+  //   - {U+014B (ŋ), U+043F (п), U+0525 (ԥ), U+0E01 (ก)} => n
   //   - U+0153 (œ) => "ce"
   //     TODO: see https://crbug.com/843352 for further work on
   //     U+0525 and U+0153.
@@ -237,7 +242,7 @@ IDNSpoofChecker::IDNSpoofChecker() {
       UNICODE_STRING_SIMPLE("ExtraConf"),
       icu::UnicodeString::fromUTF8(
           "[æӕ] > ae; [þϼҏ] > p; [ħнћңҥӈӊԋԧԩ] > h;"
-          "[ĸκкқҝҟҡӄԟ] > k; [ŋпԥ] > n; œ > ce;"
+          "[ĸκкқҝҟҡӄԟ] > k; [ŋпԥก] > n; œ > ce;"
           "[ŧтҭԏ] > t; [ƅьҍв] > b;  [ωшщพฟພຟ] > w;"
           "[мӎ] > m; [єҽҿၔ] > e; ґ > r; [ғӻ] > f;"
           "[ҫင] > c; ұ > y; [χҳӽӿ] > x;"
@@ -359,7 +364,18 @@ bool IDNSpoofChecker::SafeToDisplayAsUnicode(base::StringPiece16 label,
   return !dangerous_pattern->find();
 }
 
-bool IDNSpoofChecker::SimilarToTopDomains(base::StringPiece16 hostname) {
+std::string IDNSpoofChecker::GetSimilarTopDomain(base::StringPiece16 hostname) {
+  for (const std::string& skeleton : GetSkeletons(hostname)) {
+    DCHECK(!skeleton.empty());
+    std::string matching_top_domain = LookupMatchInTopDomains(skeleton);
+    if (!matching_top_domain.empty())
+      return matching_top_domain;
+  }
+  return std::string();
+}
+
+Skeletons IDNSpoofChecker::GetSkeletons(base::StringPiece16 hostname) {
+  Skeletons skeletons;
   size_t hostname_length = hostname.length() - (hostname.back() == '.' ? 1 : 0);
   icu::UnicodeString host(FALSE, hostname.data(), hostname_length);
   // If input has any characters outside Latin-Greek-Cyrillic and [0-9._-],
@@ -370,7 +386,7 @@ bool IDNSpoofChecker::SimilarToTopDomains(base::StringPiece16 hostname) {
   extra_confusable_mapper_->transliterate(host);
 
   UErrorCode status = U_ZERO_ERROR;
-  icu::UnicodeString skeleton;
+  icu::UnicodeString ustr_skeleton;
 
   // Map U+04CF (ӏ) to lowercase L in addition to what uspoof_getSkeleton does
   // (mapping it to lowercase I).
@@ -379,18 +395,27 @@ bool IDNSpoofChecker::SimilarToTopDomains(base::StringPiece16 hostname) {
     icu::UnicodeString host_alt(host);
     size_t length = host_alt.length();
     char16_t* buffer = host_alt.getBuffer(-1);
-    for (char16_t* uc = buffer + u04cf_pos ; uc < buffer + length; ++uc) {
+    for (char16_t* uc = buffer + u04cf_pos; uc < buffer + length; ++uc) {
       if (*uc == 0x4CF)
         *uc = 0x6C;  // Lowercase L
     }
     host_alt.releaseBuffer(length);
-    uspoof_getSkeletonUnicodeString(checker_, 0, host_alt, skeleton, &status);
-    if (U_SUCCESS(status) && LookupMatchInTopDomains(skeleton))
-      return true;
+    uspoof_getSkeletonUnicodeString(checker_, 0, host_alt, ustr_skeleton,
+                                    &status);
+    if (U_SUCCESS(status)) {
+      std::string skeleton;
+      ustr_skeleton.toUTF8String(skeleton);
+      skeletons.insert(skeleton);
+    }
   }
 
-  uspoof_getSkeletonUnicodeString(checker_, 0, host, skeleton, &status);
-  return U_SUCCESS(status) && LookupMatchInTopDomains(skeleton);
+  uspoof_getSkeletonUnicodeString(checker_, 0, host, ustr_skeleton, &status);
+  if (U_SUCCESS(status)) {
+    std::string skeleton;
+    ustr_skeleton.toUTF8String(skeleton);
+    skeletons.insert(skeleton);
+  }
+  return skeletons;
 }
 
 bool IDNSpoofChecker::IsMadeOfLatinAlikeCyrillic(

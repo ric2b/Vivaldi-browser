@@ -15,7 +15,7 @@
 #include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/srt_client_info_win.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/srt_field_trial_win.h"
 #include "chrome/installer/util/install_util.h"
@@ -67,7 +67,7 @@ void ChromeCleanerRunner::RunChromeCleanerAndReplyWithExitCode(
       // LaunchAndWaitForExitOnBackgroundThread creates (MayBlock()) and joins
       // (WithBaseSyncPrimitives()) a process.
       {base::MayBlock(), base::WithBaseSyncPrimitives(),
-       base::TaskPriority::BACKGROUND,
+       base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       std::move(launch_and_wait), std::move(process_done));
 }
@@ -146,10 +146,17 @@ ChromeCleanerRunner::ChromeCleanerRunner(
   std::string reboot_prompt_type = base::IntToString(GetRebootPromptType());
   cleaner_command_line_.AppendSwitchASCII(
       chrome_cleaner::kRebootPromptMethodSwitch, reboot_prompt_type);
+
+  if (base::FeatureList::IsEnabled(kChromeCleanupQuarantineFeature)) {
+    cleaner_command_line_.AppendSwitch(chrome_cleaner::kQuarantineSwitch);
+  }
 }
 
 ChromeCleanerRunner::ProcessStatus
 ChromeCleanerRunner::LaunchAndWaitForExitOnBackgroundThread() {
+  TRACE_EVENT0("safe_browsing",
+               "ChromeCleanerRunner::LaunchAndWaitForExitOnBackgroundThread");
+
   mojo::OutgoingInvitation invitation;
   std::string pipe_name = base::NumberToString(base::RandUint64());
   mojo::ScopedMessagePipeHandle request_pipe =

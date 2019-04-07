@@ -122,7 +122,8 @@ class LocalFrameClientImpl final : public LocalFrameClient {
       WebTriggeringEventInfo,
       HTMLFormElement*,
       ContentSecurityPolicyDisposition should_bypass_main_world_csp,
-      mojom::blink::BlobURLTokenPtr) override;
+      mojom::blink::BlobURLTokenPtr,
+      base::TimeTicks input_start_time) override;
   void DispatchWillSendSubmitEvent(HTMLFormElement*) override;
   void DispatchWillSubmitForm(HTMLFormElement*) override;
   void DidStartLoading(LoadStartType) override;
@@ -161,8 +162,8 @@ class LocalFrameClientImpl final : public LocalFrameClient {
       const SubstituteData&,
       ClientRedirectPolicy,
       const base::UnguessableToken& devtools_navigation_token,
-      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data,
-      const WebNavigationTimings& navigation_timings) override;
+      std::unique_ptr<WebNavigationParams> navigation_params,
+      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) override;
   WTF::String UserAgent() override;
   WTF::String DoNotTrackValue() override;
   void TransitionToCommittedForNewPage() override;
@@ -277,11 +278,17 @@ class LocalFrameClientImpl final : public LocalFrameClient {
 
   void FrameRectsChanged(const IntRect&) override;
 
+  bool IsPluginHandledExternally(HTMLPlugInElement&,
+                                 const KURL&,
+                                 const String&) override;
+
   std::unique_ptr<WebWorkerFetchContext> CreateWorkerFetchContext() override;
   std::unique_ptr<WebContentSettingsClient> CreateWorkerContentSettingsClient()
       override;
 
   void SetMouseCapture(bool capture) override;
+
+  bool UsePrintingLayout() const override;
 
   // VB-6063:
   void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) override;

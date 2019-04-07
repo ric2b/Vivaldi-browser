@@ -9,6 +9,7 @@
 <translation id="1293699935367580298">Atsolis</translation>
 <translation id="1306549533752902673">IETEIKTĀS LIETOTNES</translation>
 <translation id="1368832886055348810">No kreisās uz labo pusi</translation>
+<translation id="1383876407941801731">Meklēt</translation>
 <translation id="1398853756734560583">Maksimizēt</translation>
 <translation id="1413622004203049571">Atspējot paziņojumu saņemšanu no: <ph name="NOTIFIER_NAME" /></translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 minūte un }zero{# minūtes un }one{# minūte un }other{# minūtes un }}</translation>
@@ -40,6 +41,7 @@
 <translation id="24452542372838207">Izvērst paziņojumu</translation>
 <translation id="2482878487686419369">Paziņojumi</translation>
 <translation id="2497284189126895209">Visi faili</translation>
+<translation id="2515586267016047495">Alt</translation>
 <translation id="2522350507219695259">Kalibrēšana ir pabeigta.</translation>
 <translation id="252373100621549798">Nezināms displejs</translation>
 <translation id="2583543531130364912">Skārienekrāna kalibrēšana</translation>
@@ -63,6 +65,7 @@
 <translation id="3660179305079774227">Bulta augšup</translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> GB/s</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
+<translation id="3842239759367498783">Turpiniet lasīt no savas mobilās ierīces <ph name="TITLE" /></translation>
 <translation id="385051799172605136">Atpakaļ</translation>
 <translation id="3889424535448813030">Labā bulta</translation>
 <translation id="3892641579809465218">Iekšējais displejs</translation>
@@ -78,14 +81,12 @@
 <translation id="4724120544754982507">Paziņojumu centrs, <ph name="UNREAD_NOTIFICATION_COUNT" /> nelasīts(-i) paziņojums(-i)</translation>
 <translation id="4730374152663651037">BIEŽI IZMANTOTĀS</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{Atlicis 1 mēnesis}zero{Atlikuši # mēneši}one{Atlicis # mēnesis}other{Atlikuši # mēneši}}</translation>
-<translation id="4820616160060340806">Command+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="4841881773802181781">Ievietošana</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 sekunde}zero{# sekundes}one{# sekunde}other{# sekundes}}</translation>
 <translation id="4971687151119236543">Multivide — iepriekšējā dziesma</translation>
-<translation id="4999762576397546063">Ctrl+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="5046499563572181734">Pieskarieties šeit</translation>
 <translation id="5076340679995252485">&amp;Ielīmēt</translation>
-<translation id="5120799197269191491">Meklēšanas taustiņš + <ph name="KEY_COMBO_NAME" /></translation>
+<translation id="5137751499640340777">Palaist Google asistentu</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">Atklāšanas trijstūris</translation>
 <translation id="528468243742722775">Beigas</translation>
@@ -100,7 +101,6 @@
 <translation id="5906667377645263094">{SECONDS,plural, =1{Atlikusi 1 sekunde}zero{Atlikušas # sekundes}one{Atlikusi # sekunde}other{Atlikušas # sekundes}}</translation>
 <translation id="5941711191222866238">Minimizēt</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 stunda}zero{# stundas}one{# stunda}other{# stundas}}</translation>
-<translation id="5948410903763073882">Alt +<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="6012623610530968780"><ph name="SELECTED_PAGE" />. lapa no <ph name="TOTAL_PAGE_NUM" /></translation>
 <translation id="6022924867608035986">Notīrīt meklēšanas lodziņa tekstu</translation>
 <translation id="6040143037577758943">Aizvērt</translation>
@@ -149,6 +149,8 @@
 <translation id="7814458197256864873">Ko&amp;pēt</translation>
 <translation id="7879499977785298635">Nebloķēt</translation>
 <translation id="7907591526440419938">Atvērt failu</translation>
+<translation id="7969046989155602842">Komandtaustiņš</translation>
+<translation id="8087772101393322318"><ph name="KEY_MODIFIER_NAME" />+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{Pirms 1 stundas}zero{Pirms # stundām}one{Pirms # stundas}other{Pirms # stundām}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{Atlikusi 1 s}zero{Atlikušas # s}one{Atlikusi # s}other{Atlikušas # s}}</translation>
 <translation id="815598010540052116">Ritināt lejup</translation>
@@ -161,7 +163,6 @@
 <translation id="838869780401515933">prbaudt</translation>
 <translation id="8393700583063109961">Sūtīt ziņojumu</translation>
 <translation id="8394908167088220973">Multivide — atskaņot/apturēt</translation>
-<translation id="8400147561352026160">Shift+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8458811141851741261">{YEARS,plural, =1{1 g.}zero{# g.}one{# g.}other{# g.}}</translation>
 <translation id="8602707065186045623">Fails <ph name="SAVEAS_EXTENSION_TYPE" /> (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> KB/s</translation>

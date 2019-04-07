@@ -18,13 +18,14 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/appcache/appcache_interceptor.h"
 #include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/background_fetch/background_fetch_context.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
+#include "content/browser/code_cache/generated_code_cache_context.h"
 #include "content/browser/cookie_store/cookie_store_context.h"
 #include "content/browser/devtools/devtools_url_request_interceptor.h"
 #include "content/browser/fileapi/browser_file_system_helper.h"
@@ -44,6 +45,7 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_constants.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "crypto/sha2.h"
@@ -369,7 +371,7 @@ StoragePartitionImplMap::StoragePartitionImplMap(
     BrowserContext* browser_context)
     : browser_context_(browser_context),
       file_access_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND})),
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT})),
       resource_context_initialized_(false) {}
 
 StoragePartitionImplMap::~StoragePartitionImplMap() {
@@ -396,7 +398,7 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
 
   std::unique_ptr<StoragePartitionImpl> partition_ptr(
       StoragePartitionImpl::Create(browser_context_, in_memory,
-                                   relative_partition_path));
+                                   relative_partition_path, partition_domain));
   StoragePartitionImpl* partition = partition_ptr.get();
   partitions_[partition_config] = std::move(partition_ptr);
 
@@ -500,7 +502,7 @@ void StoragePartitionImplMap::AsyncObliterate(
       GetStoragePartitionDomainPath(partition_domain));
 
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&BlockingObliteratePath, browser_context_->GetPath(),
                      domain_root, paths_to_keep,
                      base::ThreadTaskRunnerHandle::Get(), on_gc_required));

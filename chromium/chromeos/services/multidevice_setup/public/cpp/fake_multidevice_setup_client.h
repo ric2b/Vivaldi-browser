@@ -8,6 +8,7 @@
 #include <memory>
 #include <queue>
 #include <string>
+#include <tuple>
 
 #include "base/callback.h"
 #include "base/macros.h"
@@ -26,14 +27,23 @@ class FakeMultiDeviceSetupClient : public MultiDeviceSetupClient {
   FakeMultiDeviceSetupClient();
   ~FakeMultiDeviceSetupClient() override;
 
+  void SetHostStatusWithDevice(
+      const HostStatusWithDevice& host_status_with_device);
+  void SetFeatureStates(const FeatureStatesMap& feature_states_map);
+  void SetFeatureState(mojom::Feature feature,
+                       mojom::FeatureState feature_state);
+
   void InvokePendingGetEligibleHostDevicesCallback(
       const cryptauth::RemoteDeviceRefList& eligible_devices);
   void InvokePendingSetHostDeviceCallback(
-      const std::string& expected_public_key,
+      const std::string& expected_device_id,
+      const std::string& expected_auth_token,
       bool success);
-  void InvokePendingGetHostStatusCallback(
-      mojom::HostStatus host_status,
-      const base::Optional<cryptauth::RemoteDeviceRef>& host_device);
+  void InvokePendingSetFeatureEnabledStateCallback(
+      mojom::Feature expected_feature,
+      bool expected_enabled,
+      const base::Optional<std::string>& expected_auth_token,
+      bool success);
   void InvokePendingRetrySetHostNowCallback(bool success);
   void InvokePendingTriggerEventForDebuggingCallback(
       mojom::EventTypeForDebugging expected_type,
@@ -43,15 +53,24 @@ class FakeMultiDeviceSetupClient : public MultiDeviceSetupClient {
     return num_remove_host_device_called_;
   }
 
-  using MultiDeviceSetupClient::NotifyHostStatusChanged;
+  // MultiDeviceSetupClient:
+  const HostStatusWithDevice& GetHostStatus() const override;
+  const FeatureStatesMap& GetFeatureStates() const override;
 
  private:
+  // MultiDeviceSetupClient:
   void GetEligibleHostDevices(GetEligibleHostDevicesCallback callback) override;
   void SetHostDevice(
-      const std::string& public_key,
+      const std::string& host_device_id,
+      const std::string& auth_token,
       mojom::MultiDeviceSetup::SetHostDeviceCallback callback) override;
   void RemoveHostDevice() override;
-  void GetHostStatus(GetHostStatusCallback callback) override;
+  void SetFeatureEnabledState(
+      mojom::Feature feature,
+      bool enabled,
+      const base::Optional<std::string>& auth_token,
+      mojom::MultiDeviceSetup::SetFeatureEnabledStateCallback callback)
+      override;
   void RetrySetHostNow(
       mojom::MultiDeviceSetup::RetrySetHostNowCallback callback) override;
   void TriggerEventForDebugging(
@@ -63,16 +82,25 @@ class FakeMultiDeviceSetupClient : public MultiDeviceSetupClient {
 
   std::queue<GetEligibleHostDevicesCallback>
       get_eligible_host_devices_callback_queue_;
+  std::queue<std::tuple<std::string,
+                        std::string,
+                        mojom::MultiDeviceSetup::SetHostDeviceCallback>>
+      set_host_args_queue_;
   std::queue<
-      std::pair<std::string, mojom::MultiDeviceSetup::SetHostDeviceCallback>>
-      set_host_device_public_key_and_callback_queue_;
-  std::queue<GetHostStatusCallback> get_host_status_callback_queue_;
+      std::tuple<mojom::Feature,
+                 bool,
+                 base::Optional<std::string>,
+                 mojom::MultiDeviceSetup::SetFeatureEnabledStateCallback>>
+      set_feature_enabled_state_args_queue_;
   std::queue<mojom::MultiDeviceSetup::RetrySetHostNowCallback>
       retry_set_host_now_callback_queue_;
   std::queue<
       std::pair<mojom::EventTypeForDebugging,
                 mojom::MultiDeviceSetup::TriggerEventForDebuggingCallback>>
       trigger_event_for_debugging_type_and_callback_queue_;
+
+  HostStatusWithDevice host_status_with_device_;
+  FeatureStatesMap feature_states_map_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeMultiDeviceSetupClient);
 };

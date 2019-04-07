@@ -2,13 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import boot_data
+import common
 import logging
-import os
 import remote_cmd
-import subprocess
 import sys
-import tempfile
 import time
+
 
 _SHUTDOWN_CMD = ['dm', 'poweroff']
 _ATTACH_MAX_RETRIES = 10
@@ -134,10 +134,8 @@ class Target(object):
 
   def _GetTargetSdkArch(self):
     """Returns the Fuchsia SDK architecture name for the target CPU."""
-    if self._target_cpu == 'arm64':
-      return 'aarch64'
-    elif self._target_cpu == 'x64':
-      return 'x86_64'
+    if self._target_cpu == 'arm64' or self._target_cpu == 'x64':
+      return self._target_cpu
     raise FuchsiaTargetException('Unknown target_cpu:' + self._target_cpu)
 
   def _AssertIsStarted(self):
@@ -145,7 +143,8 @@ class Target(object):
 
   def _WaitUntilReady(self, retries=_ATTACH_MAX_RETRIES):
     logging.info('Connecting to Fuchsia using SSH.')
-    for _ in xrange(retries+1):
+
+    for retry in xrange(retries + 1):
       host, port = self._GetEndpoint()
       if remote_cmd.RunSsh(self._GetSshConfigPath(), host, port, ['true'],
                            True) == 0:
@@ -153,13 +152,17 @@ class Target(object):
         self._started = True
         return True
       time.sleep(_ATTACH_RETRY_INTERVAL)
+
     logging.error('Timeout limit reached.')
+
     raise FuchsiaTargetException('Couldn\'t connect using SSH.')
 
   def _GetSshConfigPath(self, path):
     raise NotImplementedError
 
-  def _GetTargetSdkArch(self):
+  # TODO: remove this once all instances of architecture names have been
+  # converted to the new naming pattern.
+  def _GetTargetSdkLegacyArch(self):
     """Returns the Fuchsia SDK architecture name for the target CPU."""
     if self._target_cpu == 'arm64':
       return 'aarch64'

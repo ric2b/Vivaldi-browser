@@ -8,7 +8,7 @@
 #include "base/files/file_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chromeos/dbus/auth_policy_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/upstart_client.h"
@@ -88,7 +88,7 @@ std::string DoDecrypt(const std::string& encrypted_data,
   const size_t kHmacKeySize = 32;
   const size_t kKeySize = kAesKeySize + kAesIvSize + kHmacKeySize;
   std::unique_ptr<crypto::SymmetricKey> key =
-      crypto::SymmetricKey::DeriveKeyFromPassword(
+      crypto::SymmetricKey::DeriveKeyFromPasswordUsingPbkdf2(
           crypto::SymmetricKey::HMAC_SHA1, password, salt, 10000, kKeySize * 8);
   if (!key) {
     LOG(ERROR) << error_msg;

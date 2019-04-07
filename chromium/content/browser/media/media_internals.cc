@@ -16,6 +16,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
+#include "content/browser/media/session/audio_focus_manager.h"
+#include "content/browser/media/session/media_session_impl.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -136,6 +138,7 @@ class MediaInternals::AudioLogImpl : public media::mojom::AudioLog,
   void OnError() override;
   void OnSetVolume(double volume) override;
   void OnLogMessage(const std::string& message) override;
+  void OnProcessingStateChanged(const std::string& message) override;
 
  private:
   // If possible, i.e. a WebContents exists for the given RenderFrameHostID,
@@ -234,6 +237,11 @@ void MediaInternals::AudioLogImpl::OnSetVolume(double volume) {
   media_internals_->UpdateAudioLog(MediaInternals::UPDATE_IF_EXISTS,
                                    FormatCacheKey(), kAudioLogUpdateFunction,
                                    &dict);
+}
+
+void MediaInternals::AudioLogImpl::OnProcessingStateChanged(
+    const std::string& message) {
+  SendSingleStringUpdate("processing state", message);
 }
 
 void MediaInternals::AudioLogImpl::OnLogMessage(const std::string& message) {
@@ -645,6 +653,8 @@ void MediaInternals::AddUpdateCallback(const UpdateCallback& callback) {
 
   base::AutoLock auto_lock(lock_);
   can_update_ = true;
+
+  RegisterAudioFocusObserver();
 }
 
 void MediaInternals::RemoveUpdateCallback(const UpdateCallback& callback) {
@@ -658,6 +668,9 @@ void MediaInternals::RemoveUpdateCallback(const UpdateCallback& callback) {
 
   base::AutoLock auto_lock(lock_);
   can_update_ = !update_callbacks_.empty();
+
+  if (!can_update_)
+    UnregisterAudioFocusObserver();
 }
 
 bool MediaInternals::CanUpdate() {
@@ -696,6 +709,35 @@ void MediaInternals::SendVideoCaptureDeviceCapabilities() {
 
   SendUpdate(SerializeUpdate("media.onReceiveVideoCaptureCapabilities",
                              &video_capture_capabilities_cached_data_));
+}
+
+void MediaInternals::SendAudioFocusState() {
+#if !defined(OS_ANDROID)
+  if (!CanUpdate())
+    return;
+
+  base::DictionaryValue audio_focus_data;
+  const std::list<AudioFocusManager::StackRow>& stack =
+      AudioFocusManager::GetInstance()->audio_focus_stack_;
+
+  // We should go backwards through the stack so the top of the stack is always
+  // shown first in the list.
+  base::ListValue stack_data;
+  for (auto iter = stack.rbegin(); iter != stack.rend(); ++iter) {
+    MediaSessionImpl::DebugInfo debug_info =
+        (*iter).media_session->GetDebugInfo();
+    base::DictionaryValue media_session_data;
+    media_session_data.SetKey("name", base::Value(debug_info.name));
+    media_session_data.SetKey("owner", base::Value(debug_info.owner));
+    media_session_data.SetKey("state", base::Value(debug_info.state));
+    stack_data.GetList().push_back(std::move(media_session_data));
+  }
+
+  audio_focus_data.SetKey("sessions", std::move(stack_data));
+
+  SendUpdate(
+      SerializeUpdate("media.onReceiveAudioFocusState", &audio_focus_data));
+#endif  // !defined(OS_ANDROID)
 }
 
 void MediaInternals::UpdateVideoCaptureDeviceCapabilities(
@@ -776,6 +818,25 @@ MediaInternals::CreateAudioLogImpl(
 
 void MediaInternals::OnProcessTerminatedForTesting(int process_id) {
   uma_handler_->OnProcessTerminated(process_id);
+}
+
+void MediaInternals::OnFocusGained(
+    media_session::mojom::MediaSessionPtr media_session,
+    media_session::mojom::AudioFocusType type) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::BindOnce(&MediaInternals::SendAudioFocusState,
+                                         base::Unretained(this)));
+}
+
+void MediaInternals::OnFocusLost(
+    media_session::mojom::MediaSessionPtr media_session) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::BindOnce(&MediaInternals::SendAudioFocusState,
+                                         base::Unretained(this)));
 }
 
 void MediaInternals::SendUpdate(const base::string16& update) {

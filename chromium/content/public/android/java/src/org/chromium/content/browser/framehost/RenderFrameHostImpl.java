@@ -60,6 +60,10 @@ public class RenderFrameHostImpl implements RenderFrameHost {
         return mDelegate;
     }
 
+    public long getNativePtr() {
+        return mNativeRenderFrameHostAndroid;
+    }
+
     @Override
     public String getLastCommittedURL() {
         if (mNativeRenderFrameHostAndroid == 0) return null;

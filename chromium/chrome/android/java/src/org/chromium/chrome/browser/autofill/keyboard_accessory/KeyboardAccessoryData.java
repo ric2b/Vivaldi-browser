@@ -44,13 +44,16 @@ public class KeyboardAccessoryData {
      * @param <T> An {@link Action}, {@link Tab} or {@link Item} that this instance observes.
      */
     public interface Observer<T> {
+        int DEFAULT_TYPE = Integer.MIN_VALUE;
+
         /**
          * A provider calls this function with a list of items that should be available in the
          * keyboard accessory.
-         * @param actions The actions to be displayed in the Accessory. It's a native array as the
+         * @param typeId Specifies which type of item this update affects.
+         * @param items The items to be displayed in the Accessory. It's a native array as the
          *                provider is typically a bridge called via JNI which prefers native types.
          */
-        void onItemsAvailable(T[] actions);
+        void onItemsAvailable(int typeId, T[] items);
     }
 
     /**
@@ -59,6 +62,7 @@ public class KeyboardAccessoryData {
      */
     public final static class Tab {
         private final Drawable mIcon;
+        private final @Nullable String mOpeningAnnouncement;
         private final String mContentDescription;
         private final int mTabLayout;
         private final @AccessoryTabType int mRecordingType;
@@ -82,8 +86,15 @@ public class KeyboardAccessoryData {
 
         public Tab(Drawable icon, String contentDescription, @LayoutRes int tabLayout,
                 @AccessoryTabType int recordingType, @Nullable Listener listener) {
+            this(icon, contentDescription, null, tabLayout, recordingType, listener);
+        }
+
+        public Tab(Drawable icon, String contentDescription, @Nullable String openingAnnouncement,
+                @LayoutRes int tabLayout, @AccessoryTabType int recordingType,
+                @Nullable Listener listener) {
             mIcon = icon;
             mContentDescription = contentDescription;
+            mOpeningAnnouncement = openingAnnouncement;
             mTabLayout = tabLayout;
             mListener = listener;
             mRecordingType = recordingType;
@@ -99,15 +110,23 @@ public class KeyboardAccessoryData {
 
         /**
          * The description for this tab. It will become the content description of the icon.
-         * @return A short string describing the task of this tab.
+         * @return A short string describing the name of this tab.
          */
         public String getContentDescription() {
             return mContentDescription;
         }
 
         /**
-         * The description for this tab. It will become the content description of the icon.
-         * @return A short string describing the task of this tab.
+         * An optional announcement triggered when the Tab is opened.
+         * @return A string describing the contents of this tab.
+         */
+        public String getOpeningAnnouncement() {
+            return mOpeningAnnouncement;
+        }
+
+        /**
+         * Recording type of this tab. Used to sort it into the correct UMA bucket.
+         * @return A {@link AccessoryTabType}.
          */
         public @AccessoryTabType int getRecordingType() {
             return mRecordingType;
@@ -306,6 +325,15 @@ public class KeyboardAccessoryData {
      */
     public static class PropertyProvider<T> implements Provider<T> {
         private final List<Observer<T>> mObservers = new ArrayList<>();
+        protected int mType;
+
+        public PropertyProvider() {
+            this(Observer.DEFAULT_TYPE);
+        }
+
+        public PropertyProvider(int type) {
+            mType = type;
+        }
 
         @Override
         public void addObserver(Observer<T> observer) {
@@ -315,7 +343,7 @@ public class KeyboardAccessoryData {
         @Override
         public void notifyObservers(T[] items) {
             for (Observer<T> observer : mObservers) {
-                observer.onItemsAvailable(items);
+                observer.onItemsAvailable(mType, items);
             }
         }
     }

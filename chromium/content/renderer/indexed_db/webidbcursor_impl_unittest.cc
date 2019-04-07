@@ -16,7 +16,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "content/child/thread_safe_sender.h"
-#include "content/common/indexed_db/indexed_db_key.h"
 #include "content/renderer/indexed_db/indexed_db_key_builders.h"
 #include "content/renderer/indexed_db/mock_webidbcallbacks.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
@@ -24,6 +23,7 @@
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/platform/web_data.h"
 
+using blink::IndexedDBKey;
 using blink::WebBlobInfo;
 using blink::WebData;
 using blink::WebIDBCallbacks;
@@ -32,16 +32,16 @@ using blink::kWebIDBKeyTypeNumber;
 using blink::WebIDBValue;
 using blink::WebString;
 using blink::WebVector;
-using indexed_db::mojom::Cursor;
+using blink::mojom::IDBCursor;
 using testing::StrictMock;
 
 namespace content {
 
 namespace {
 
-class MockCursorImpl : public Cursor {
+class MockCursorImpl : public IDBCursor {
  public:
-  explicit MockCursorImpl(indexed_db::mojom::CursorAssociatedRequest request)
+  explicit MockCursorImpl(blink::mojom::IDBCursorAssociatedRequest request)
       : binding_(this, std::move(request)) {
     binding_.set_connection_error_handler(base::BindOnce(
         &MockCursorImpl::CursorDestroyed, base::Unretained(this)));
@@ -49,7 +49,7 @@ class MockCursorImpl : public Cursor {
 
   void Prefetch(
       int32_t count,
-      ::indexed_db::mojom::CallbacksAssociatedPtrInfo callbacks) override {
+      blink::mojom::IDBCallbacksAssociatedPtrInfo callbacks) override {
     ++prefetch_calls_;
     last_prefetch_count_ = count;
   }
@@ -60,16 +60,15 @@ class MockCursorImpl : public Cursor {
     last_used_count_ = used_prefetches;
   }
 
-  void Advance(
-      uint32_t count,
-      ::indexed_db::mojom::CallbacksAssociatedPtrInfo callbacks) override {
+  void Advance(uint32_t count,
+               blink::mojom::IDBCallbacksAssociatedPtrInfo callbacks) override {
     ++advance_calls_;
   }
 
-  void Continue(
+  void CursorContinue(
       const IndexedDBKey& key,
       const IndexedDBKey& primary_key,
-      ::indexed_db::mojom::CallbacksAssociatedPtrInfo callbacks) override {
+      blink::mojom::IDBCallbacksAssociatedPtrInfo callbacks) override {
     ++continue_calls_;
   }
 
@@ -92,7 +91,7 @@ class MockCursorImpl : public Cursor {
   int continue_calls_ = 0;
   bool destroyed_ = false;
 
-  mojo::AssociatedBinding<Cursor> binding_;
+  mojo::AssociatedBinding<IDBCursor> binding_;
 };
 
 class MockContinueCallbacks : public StrictMock<MockWebIDBCallbacks> {
@@ -120,13 +119,10 @@ class MockContinueCallbacks : public StrictMock<MockWebIDBCallbacks> {
 class WebIDBCursorImplTest : public testing::Test {
  public:
   WebIDBCursorImplTest() : null_key_(WebIDBKey::CreateNull()) {
-    indexed_db::mojom::CursorAssociatedPtr ptr;
+    blink::mojom::IDBCursorAssociatedPtr ptr;
     mock_cursor_ = std::make_unique<MockCursorImpl>(
         mojo::MakeRequestAssociatedWithDedicatedPipe(&ptr));
-    cursor_ = std::make_unique<WebIDBCursorImpl>(
-        ptr.PassInterface(), 1,
-        blink::scheduler::GetSingleThreadTaskRunnerForTesting(),
-        blink::scheduler::GetSingleThreadTaskRunnerForTesting());
+    cursor_ = std::make_unique<WebIDBCursorImpl>(ptr.PassInterface(), 1);
   }
 
  protected:
@@ -144,8 +140,8 @@ TEST_F(WebIDBCursorImplTest, PrefetchTest) {
   int continue_calls = 0;
   EXPECT_EQ(mock_cursor_->continue_calls(), 0);
   for (int i = 0; i < WebIDBCursorImpl::kPrefetchContinueThreshold; ++i) {
-    cursor_->Continue(null_key_.View(), null_key_.View(),
-                      new MockContinueCallbacks());
+    cursor_->CursorContinue(null_key_.View(), null_key_.View(),
+                            new MockContinueCallbacks());
     base::RunLoop().RunUntilIdle();
     EXPECT_EQ(++continue_calls, mock_cursor_->continue_calls());
     EXPECT_EQ(0, mock_cursor_->prefetch_calls());
@@ -159,8 +155,8 @@ TEST_F(WebIDBCursorImplTest, PrefetchTest) {
   int last_prefetch_count = 0;
   for (int repetitions = 0; repetitions < kPrefetchRepetitions; ++repetitions) {
     // Initiate the prefetch
-    cursor_->Continue(null_key_.View(), null_key_.View(),
-                      new MockContinueCallbacks());
+    cursor_->CursorContinue(null_key_.View(), null_key_.View(),
+                            new MockContinueCallbacks());
     base::RunLoop().RunUntilIdle();
     EXPECT_EQ(continue_calls, mock_cursor_->continue_calls());
     EXPECT_EQ(repetitions + 1, mock_cursor_->prefetch_calls());
@@ -196,8 +192,8 @@ TEST_F(WebIDBCursorImplTest, PrefetchTest) {
     for (int i = 0; i < prefetch_count; ++i) {
       IndexedDBKey key;
       WebVector<WebBlobInfo> blobs;
-      cursor_->Continue(null_key_.View(), null_key_.View(),
-                        new MockContinueCallbacks(&key, &blobs));
+      cursor_->CursorContinue(null_key_.View(), null_key_.View(),
+                              new MockContinueCallbacks(&key, &blobs));
       base::RunLoop().RunUntilIdle();
       EXPECT_EQ(continue_calls, mock_cursor_->continue_calls());
       EXPECT_EQ(repetitions + 1, mock_cursor_->prefetch_calls());
@@ -217,15 +213,15 @@ TEST_F(WebIDBCursorImplTest, AdvancePrefetchTest) {
   // Call continue() until prefetching should kick in.
   EXPECT_EQ(0, mock_cursor_->continue_calls());
   for (int i = 0; i < WebIDBCursorImpl::kPrefetchContinueThreshold; ++i) {
-    cursor_->Continue(null_key_.View(), null_key_.View(),
-                      new MockContinueCallbacks());
+    cursor_->CursorContinue(null_key_.View(), null_key_.View(),
+                            new MockContinueCallbacks());
   }
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0, mock_cursor_->prefetch_calls());
 
   // Initiate the prefetch
-  cursor_->Continue(null_key_.View(), null_key_.View(),
-                    new MockContinueCallbacks());
+  cursor_->CursorContinue(null_key_.View(), null_key_.View(),
+                          new MockContinueCallbacks());
 
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, mock_cursor_->prefetch_calls());
@@ -263,8 +259,8 @@ TEST_F(WebIDBCursorImplTest, AdvancePrefetchTest) {
 
   // IDBCursor.continue()
   IndexedDBKey key;
-  cursor_->Continue(null_key_.View(), null_key_.View(),
-                    new MockContinueCallbacks(&key));
+  cursor_->CursorContinue(null_key_.View(), null_key_.View(),
+                          new MockContinueCallbacks(&key));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0, key.number());
 
@@ -274,8 +270,8 @@ TEST_F(WebIDBCursorImplTest, AdvancePrefetchTest) {
   EXPECT_EQ(1, key.number());
 
   // IDBCursor.continue()
-  cursor_->Continue(null_key_.View(), null_key_.View(),
-                    new MockContinueCallbacks(&key));
+  cursor_->CursorContinue(null_key_.View(), null_key_.View(),
+                          new MockContinueCallbacks(&key));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(2, key.number());
 
@@ -305,16 +301,16 @@ TEST_F(WebIDBCursorImplTest, PrefetchReset) {
   int continue_calls = 0;
   EXPECT_EQ(mock_cursor_->continue_calls(), 0);
   for (int i = 0; i < WebIDBCursorImpl::kPrefetchContinueThreshold; ++i) {
-    cursor_->Continue(null_key_.View(), null_key_.View(),
-                      new MockContinueCallbacks());
+    cursor_->CursorContinue(null_key_.View(), null_key_.View(),
+                            new MockContinueCallbacks());
     base::RunLoop().RunUntilIdle();
     EXPECT_EQ(++continue_calls, mock_cursor_->continue_calls());
     EXPECT_EQ(0, mock_cursor_->prefetch_calls());
   }
 
   // Initiate the prefetch
-  cursor_->Continue(null_key_.View(), null_key_.View(),
-                    new MockContinueCallbacks());
+  cursor_->CursorContinue(null_key_.View(), null_key_.View(),
+                          new MockContinueCallbacks());
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(continue_calls, mock_cursor_->continue_calls());
   EXPECT_EQ(1, mock_cursor_->prefetch_calls());

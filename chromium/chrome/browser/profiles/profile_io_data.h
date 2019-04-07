@@ -28,7 +28,6 @@
 #include "components/signin/core/browser/profile_management_switches.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/resource_context.h"
-#include "extensions/buildflags/buildflags.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_network_session.h"
 #include "net/net_buildflags.h"
@@ -61,7 +60,6 @@ class DomainReliabilityMonitor;
 }
 
 namespace extensions {
-class ExtensionThrottleManager;
 class InfoMap;
 }
 
@@ -141,12 +139,15 @@ class ProfileIOData {
   net::URLRequestContext* GetMediaRequestContext() const;
   net::URLRequestContext* GetExtensionsRequestContext() const;
   net::URLRequestContext* GetIsolatedAppRequestContext(
+      IOThread* io_thread,
       net::URLRequestContext* main_context,
       const StoragePartitionDescriptor& partition_descriptor,
       std::unique_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>
           protocol_handler_interceptor,
       content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors) const;
+      content::URLRequestInterceptorScopedVector request_interceptors,
+      network::mojom::NetworkContextRequest network_context_request,
+      network::mojom::NetworkContextParamsPtr network_context_params) const;
   net::URLRequestContext* GetIsolatedMediaRequestContext(
       net::URLRequestContext* app_context,
       const StoragePartitionDescriptor& partition_descriptor) const;
@@ -155,7 +156,6 @@ class ProfileIOData {
   // with a content::ResourceContext, and they want access to Chrome data for
   // that profile.
   extensions::InfoMap* GetExtensionInfoMap() const;
-  extensions::ExtensionThrottleManager* GetExtensionThrottleManager() const;
   content_settings::CookieSettings* GetCookieSettings() const;
   HostContentSettingsMap* GetHostContentSettingsMap() const;
 
@@ -202,6 +202,18 @@ class ProfileIOData {
   }
 
   bool IsOffTheRecord() const;
+
+  BooleanPrefMember* force_google_safesearch() const {
+    return &force_google_safesearch_;
+  }
+
+  IntegerPrefMember* force_youtube_restrict() const {
+    return &force_youtube_restrict_;
+  }
+
+  StringPrefMember* allowed_domains_for_apps() const {
+    return &allowed_domains_for_apps_;
+  }
 
   IntegerPrefMember* incognito_availibility() const {
     return &incognito_availibility_pref_;
@@ -431,16 +443,15 @@ class ProfileIOData {
   // URLRequests may be accessing.
   void DestroyResourceContext();
 
-  // Creates main network transaction factory.
-  std::unique_ptr<net::HttpCache> CreateMainHttpFactory(
-      net::HttpNetworkSession* session,
-      std::unique_ptr<net::HttpCache::BackendFactory> main_backend) const;
-
   // Creates network transaction factory. The created factory will share
   // HttpNetworkSession with |main_http_factory|.
   std::unique_ptr<net::HttpCache> CreateHttpFactory(
       net::HttpTransactionFactory* main_http_factory,
       std::unique_ptr<net::HttpCache::BackendFactory> backend) const;
+
+  // Deletes the media cache at the specified path if the media cache is
+  // disabled.
+  static void MaybeDeleteMediaCache(const base::FilePath& media_cache_path);
 
  private:
   class ResourceContext : public content::ResourceContext {
@@ -493,16 +504,6 @@ class ProfileIOData {
   // Initializes the RequestContext for extensions.
   virtual void InitializeExtensionsRequestContext(
       ProfileParams* profile_params) const = 0;
-  // Does an on-demand initialization of a RequestContext for the given
-  // isolated app.
-  virtual net::URLRequestContext* InitializeAppRequestContext(
-      net::URLRequestContext* main_context,
-      const StoragePartitionDescriptor& details,
-      std::unique_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>
-          protocol_handler_interceptor,
-      content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors)
-      const = 0;
 
   // Does an on-demand initialization of a media RequestContext for the given
   // isolated app.
@@ -515,14 +516,6 @@ class ProfileIOData {
   // context from ProfileIOData to the URLRequestContextGetter.
   virtual net::URLRequestContext*
       AcquireMediaRequestContext() const = 0;
-  virtual net::URLRequestContext* AcquireIsolatedAppRequestContext(
-      net::URLRequestContext* main_context,
-      const StoragePartitionDescriptor& partition_descriptor,
-      std::unique_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>
-          protocol_handler_interceptor,
-      content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors)
-      const = 0;
   virtual net::URLRequestContext*
       AcquireIsolatedMediaRequestContext(
           net::URLRequestContext* app_context,
@@ -595,9 +588,13 @@ class ProfileIOData {
   mutable std::unique_ptr<chromeos::CertificateProvider> certificate_provider_;
 #endif
 
-  // When the network service is enabled, this holds on to a
+  // When the network service is disabled, this holds on to a
   // content::NetworkContext class that owns |main_request_context_|.
   mutable std::unique_ptr<network::mojom::NetworkContext> main_network_context_;
+  // When the network service is disabled, this holds onto all the
+  // NetworkContexts pointed at by the |app_request_context_map_|.
+  mutable std::list<std::unique_ptr<network::mojom::NetworkContext>>
+      app_network_contexts_;
   // When the network service is disabled, this owns |system_request_context|.
   mutable network::URLRequestContextOwner main_request_context_owner_;
   mutable net::URLRequestContext* main_request_context_;
@@ -613,15 +610,10 @@ class ProfileIOData {
 
   mutable scoped_refptr<HostContentSettingsMap> host_content_settings_map_;
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  // Is NULL if switches::kDisableExtensionsHttpThrottling is on.
-  mutable std::unique_ptr<extensions::ExtensionThrottleManager>
-      extension_throttle_manager_;
-#endif
-
-  // Owned by the ChromeNetworkDelegate, which is owned (possibly with one or
-  // more layers of LayeredNetworkDelegate) by the URLRequestContext, which is
-  // owned by main_network_context_.
+  // Owned (possibly with one or more layers of LayeredNetworkDelegate) by the
+  // URLRequestContext, which is owned by the |main_network_context_|.
+  mutable ChromeNetworkDelegate* chrome_network_delegate_unowned_;
+  // Owned by |chrome_network_delegate_unowned_|.
   mutable domain_reliability::DomainReliabilityMonitor*
       domain_reliability_monitor_unowned_;
 

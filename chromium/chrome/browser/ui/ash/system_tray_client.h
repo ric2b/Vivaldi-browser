@@ -8,7 +8,7 @@
 #include "ash/public/interfaces/system_tray.mojom.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/system/system_clock_observer.h"
-#include "chrome/browser/upgrade_observer.h"
+#include "chrome/browser/upgrade_detector/upgrade_observer.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
@@ -47,6 +47,12 @@ class SystemTrayClient : public ash::mojom::SystemTrayClient,
   // Shows an update icon for an Adobe Flash update and forces a device reboot
   // when the update is applied.
   void SetFlashUpdateAvailable();
+
+  // Specifies if notification is recommended or required by administrator and
+  // triggers the notification to be shown with the given body and title.
+  void SetUpdateNotificationState(ash::mojom::NotificationStyle style,
+                                  const base::string16& notification_title,
+                                  const base::string16& notification_body);
 
   // Wrappers around ash::mojom::SystemTray interface:
   void SetPrimaryTrayEnabled(bool enabled);
@@ -112,6 +118,16 @@ class SystemTrayClient : public ash::mojom::SystemTrayClient,
 
   // Whether an Adobe Flash component update is available.
   bool flash_update_available_ = false;
+
+  // Tells update notification style, for example required by administrator.
+  ash::mojom::NotificationStyle update_notification_style_ =
+      ash::mojom::NotificationStyle::DEFAULT;
+
+  // Update notification title to be overwritten.
+  base::string16 update_notification_title_;
+
+  // Update notification body to be overwritten.
+  base::string16 update_notification_body_;
 
   // Avoid sending ash an empty enterprise display domain at startup and
   // suppress duplicate IPCs during the session.

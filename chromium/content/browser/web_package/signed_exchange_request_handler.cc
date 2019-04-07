@@ -15,7 +15,6 @@
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/http/http_response_headers.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
@@ -39,8 +38,7 @@ SignedExchangeRequestHandler::SignedExchangeRequestHandler(
     bool report_raw_headers,
     int load_flags,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-    URLLoaderThrottlesGetter url_loader_throttles_getter,
-    scoped_refptr<net::URLRequestContextGetter> request_context_getter)
+    URLLoaderThrottlesGetter url_loader_throttles_getter)
     : request_initiator_(std::move(request_initiator)),
       url_(url),
       url_loader_options_(url_loader_options),
@@ -51,7 +49,6 @@ SignedExchangeRequestHandler::SignedExchangeRequestHandler(
       load_flags_(load_flags),
       url_loader_factory_(url_loader_factory),
       url_loader_throttles_getter_(std::move(url_loader_throttles_getter)),
-      request_context_getter_(std::move(request_context_getter)),
       weak_factory_(this) {
   DCHECK(signed_exchange_utils::IsSignedExchangeHandlingEnabled());
 }
@@ -59,14 +56,16 @@ SignedExchangeRequestHandler::SignedExchangeRequestHandler(
 SignedExchangeRequestHandler::~SignedExchangeRequestHandler() = default;
 
 void SignedExchangeRequestHandler::MaybeCreateLoader(
-    const network::ResourceRequest& resource_request,
+    const network::ResourceRequest& /* tentative_resource_request */,
     ResourceContext* resource_context,
-    LoaderCallback callback) {
-  // TODO(https://crbug.com/803774): Ask WebPackageFetchManager to get the
-  // ongoing matching SignedExchangeHandler which was created by a
-  // WebPackagePrefetcher.
-
+    LoaderCallback callback,
+    FallbackCallback fallback_callback) {
   if (!signed_exchange_loader_) {
+    std::move(callback).Run({});
+    return;
+  }
+  if (signed_exchange_loader_->HasRedirectedToFallbackURL()) {
+    signed_exchange_loader_ = nullptr;
     std::move(callback).Run({});
     return;
   }
@@ -81,6 +80,7 @@ bool SignedExchangeRequestHandler::MaybeCreateLoaderForResponse(
     network::mojom::URLLoaderPtr* loader,
     network::mojom::URLLoaderClientRequest* client_request,
     ThrottlingURLLoader* url_loader) {
+  DCHECK(!signed_exchange_loader_);
   if (!signed_exchange_utils::ShouldHandleAsSignedHTTPExchange(
           request_initiator_.GetURL(), response)) {
     return false;
@@ -89,23 +89,26 @@ bool SignedExchangeRequestHandler::MaybeCreateLoaderForResponse(
   network::mojom::URLLoaderClientPtr client;
   *client_request = mojo::MakeRequest(&client);
 
-  // TODO(https://crbug.com/803774): Consider creating a new ThrottlingURLLoader
-  // or reusing the existing ThrottlingURLLoader by reattaching URLLoaderClient,
-  // to support SafeBrowsing checking of the content of the WebPackage.
+  // This lets the SignedExchangeLoader directly returns an artificial redirect
+  // to the downstream client without going through ThrottlingURLLoader, which
+  // means some checks like SafeBrowsing may not see the redirect. Given that
+  // the redirected request will be checked when it's restarted we suppose
+  // this is fine.
   signed_exchange_loader_ = std::make_unique<SignedExchangeLoader>(
       url_, response, std::move(client), url_loader->Unbind(),
-      std::move(request_initiator_), url_loader_options_, load_flags_,
-      throttling_profile_id_,
+      request_initiator_, url_loader_options_, load_flags_,
+      true /* should_redirect_to_fallback */, throttling_profile_id_,
       std::make_unique<SignedExchangeDevToolsProxy>(
           url_, response,
           base::BindRepeating([](int id) { return id; }, frame_tree_node_id_),
-          std::move(devtools_navigation_token_), report_raw_headers_),
-      std::move(url_loader_factory_), std::move(url_loader_throttles_getter_),
-      std::move(request_context_getter_));
+          devtools_navigation_token_, report_raw_headers_),
+      url_loader_factory_, url_loader_throttles_getter_,
+      base::BindRepeating([](int id) { return id; }, frame_tree_node_id_));
   return true;
 }
 
 void SignedExchangeRequestHandler::StartResponse(
+    const network::ResourceRequest& resource_request,
     network::mojom::URLLoaderRequest request,
     network::mojom::URLLoaderClientPtr client) {
   signed_exchange_loader_->ConnectToClient(std::move(client));

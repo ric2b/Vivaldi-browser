@@ -37,14 +37,14 @@ jumbo_source_set("extraparts") {
     "//chrome/common:constants",
     "//skia",
     "//third_party/blink/public:blink_headers",
-    "//vivaldi/extensions/schema:api",
     "//vivaldi/calendar",
     "//vivaldi/contact",
+    "//vivaldi/prefs",
     "//vivaldi/notes:browser",
   ]
   if (!is_android) {
     deps += [
-      "//vivaldi/extensions/schema:api",
+      "//vivaldi/extensions/schema",
     ]
   }
 

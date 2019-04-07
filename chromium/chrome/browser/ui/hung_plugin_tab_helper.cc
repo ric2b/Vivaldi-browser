@@ -38,9 +38,9 @@ void KillPluginOnIOThread(int child_id) {
   while (!iter.Done()) {
     const content::ChildProcessData& data = iter.GetData();
     if (data.id == child_id) {
-      CrashDumpHungChildProcess(data.handle);
+      CrashDumpHungChildProcess(data.GetHandle());
       base::Process process =
-          base::Process::DeprecatedGetProcessFromHandle(data.handle);
+          base::Process::DeprecatedGetProcessFromHandle(data.GetHandle());
       process.Terminate(content::RESULT_CODE_HUNG, false);
       break;
     }
@@ -101,8 +101,6 @@ HungPluginTabHelper::PluginState::~PluginState() {
 
 
 // HungPluginTabHelper --------------------------------------------------------
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(HungPluginTabHelper);
 
 HungPluginTabHelper::HungPluginTabHelper(content::WebContents* contents)
     : content::WebContentsObserver(contents), infobar_observer_(this) {}

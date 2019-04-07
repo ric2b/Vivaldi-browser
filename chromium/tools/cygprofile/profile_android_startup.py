@@ -215,6 +215,18 @@ class AndroidProfileTool(object):
     self._urls = urls
     self._simulate_user = simulate_user
     self._SetUpDevice()
+    self._pregenerated_profiles = None
+
+  def SetPregeneratedProfiles(self, files):
+    """Set pregenerated profiles.
+
+    The pregenerated files will be returned as profile data instead of running
+    an actual profiling step.
+
+    Args:
+      files: ([str]) List of pregenerated files.
+    """
+    self._pregenerated_profiles = files
 
   def RunCygprofileTests(self):
     """Run the cygprofile unit tests suite on the device.
@@ -248,6 +260,10 @@ class AndroidProfileTool(object):
     Raises:
       NoProfileDataError: No data was found on the device.
     """
+    if self._pregenerated_profiles:
+      logging.info('Using pregenerated profiles instead of running profile')
+      logging.info('Profile files: %s', '\n'.join(self._pregenerated_profiles))
+      return self._pregenerated_profiles
     self._Install(apk)
     try:
       changer = self._SetChromeFlags(package_info)
@@ -264,6 +280,44 @@ class AndroidProfileTool(object):
     data = self._PullProfileData()
     self._DeleteDeviceData()
     return data
+
+  def CollectSystemHealthProfile(self, apk):
+    """Run the orderfile system health benchmarks and collect log files.
+
+    Args:
+      apk: The location of the chrome apk file to profile.
+
+    Returns:
+      A list of cygprofile data files.
+
+    Raises:
+      NoProfileDataError: No data was found on the device.
+    """
+    self._SetUpDeviceFolders()
+    self._RunCommand(['tools/perf/run_benchmark',
+                      '--device={}'.format(self._device.serial),
+                      '--browser=exact',
+                      '--browser-executable={}'.format(apk),
+                      'orderfile_generation.training'])
+    data = self._PullProfileData()
+    self._DeleteDeviceData()
+    return data
+
+  @classmethod
+  def _RunCommand(cls, command):
+    """Run a command from current build directory root.
+
+    Args:
+      command: A list of command strings.
+
+    Returns:
+      The process's return code.
+    """
+    root = constants.DIR_SOURCE_ROOT
+    print 'Executing {} in {}'.format(' '.join(command), root)
+    process = subprocess.Popen(command, cwd=root, env=os.environ)
+    process.wait()
+    return process.returncode
 
   def _RunProfileCollection(self, package_info, simulate_user):
     """Runs the profile collection tasks.

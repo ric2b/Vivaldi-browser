@@ -37,7 +37,9 @@ class CONTENT_EXPORT URLLoaderClientImpl final
  public:
   URLLoaderClientImpl(int request_id,
                       ResourceDispatcher* resource_dispatcher,
-                      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+                      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+                      bool bypass_redirect_checks,
+                      const GURL& request_url);
   ~URLLoaderClientImpl() override;
 
   // Sets |is_deferred_|. From now, the received messages are not dispatched
@@ -103,6 +105,8 @@ class CONTENT_EXPORT URLLoaderClientImpl final
   int32_t accumulated_transfer_size_diff_during_deferred_ = 0;
   ResourceDispatcher* const resource_dispatcher_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  bool bypass_redirect_checks_ = false;
+  GURL last_loaded_url_;
 
   network::mojom::URLLoaderPtr url_loader_;
   mojo::Binding<network::mojom::URLLoaderClient> url_loader_client_binding_;

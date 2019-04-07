@@ -12,7 +12,7 @@
 
 #include "base/files/file_path.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/grit/chromium_strings.h"
@@ -35,8 +35,11 @@
 
 ChromeBrowserMainPartsLinux::ChromeBrowserMainPartsLinux(
     const content::MainFunctionParams& parameters,
-    std::unique_ptr<ui::DataPack> data_pack)
-    : ChromeBrowserMainPartsPosix(parameters, std::move(data_pack)) {}
+    std::unique_ptr<ui::DataPack> data_pack,
+    ChromeFeatureListCreator* chrome_feature_list_creator)
+    : ChromeBrowserMainPartsPosix(parameters,
+                                  std::move(data_pack),
+                                  chrome_feature_list_creator) {}
 
 ChromeBrowserMainPartsLinux::~ChromeBrowserMainPartsLinux() {
 }
@@ -56,7 +59,7 @@ void ChromeBrowserMainPartsLinux::PreProfileInit() {
   // g_browser_process.  This happens in PreCreateThreads.
   // base::GetLinuxDistro() will initialize its value if needed.
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(base::IgnoreResult(&base::GetLinuxDistro)));
 #endif
 

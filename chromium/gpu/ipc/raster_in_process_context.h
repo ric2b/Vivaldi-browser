@@ -21,6 +21,7 @@ namespace gpu {
 class CommandBufferHelper;
 class ContextSupport;
 class ServiceTransferCache;
+class SharedImageInterface;
 class TransferBuffer;
 struct GpuFeatureInfo;
 struct SharedMemoryLimits;
@@ -46,7 +47,9 @@ class RasterInProcessContext {
       const SharedMemoryLimits& memory_limits,
       GpuMemoryBufferManager* gpu_memory_buffer_manager,
       ImageFactory* image_factory,
-      GpuChannelManagerDelegate* gpu_channel_manager_delegate);
+      GpuChannelManagerDelegate* gpu_channel_manager_delegate,
+      gpu::raster::GrShaderCache* gr_shader_cache,
+      GpuProcessActivityFlags* activity_flags);
 
   const Capabilities& GetCapabilities() const;
   const GpuFeatureInfo& GetGpuFeatureInfo() const;
@@ -56,6 +59,8 @@ class RasterInProcessContext {
   gpu::raster::RasterInterface* GetImplementation();
 
   ContextSupport* GetContextSupport();
+
+  SharedImageInterface* GetSharedImageInterface();
 
   // Test only functions.
   ServiceTransferCache* GetTransferCacheForTest() const;

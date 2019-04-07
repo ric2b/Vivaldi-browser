@@ -44,8 +44,8 @@
 #include "chrome/browser/ui/sync/sync_promo_ui.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/views/accessibility/non_accessible_image_view.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/hover_button.h"
 #include "chrome/browser/ui/views/profiles/badged_profile_photo.h"
 #include "chrome/browser/ui/views/profiles/signin_view_controller_delegate_views.h"
@@ -123,10 +123,8 @@ constexpr int kIconSize = 16;
 constexpr int kMenuEdgeMargin = 16;
 
 // If the bubble is too large to fit on the screen, it still needs to be at
-// least this tall to show the default items. The default items is what a signed
-// in user with 1 profile sees: account name, autofill home and 3 profile
-// actions.
-constexpr int kMinimumScrollableContentHeight = 340;
+// least this tall to show one row.
+constexpr int kMinimumScrollableContentHeight = 40;
 
 constexpr int kVerticalSpacing = 16;
 
@@ -346,8 +344,6 @@ void ProfileChooserView::ShowBubble(
 
   views::Widget* widget =
       views::BubbleDialogDelegateView::CreateBubble(profile_bubble_);
-  profile_bubble_->SetAlignment(views::BubbleBorder::ALIGN_EDGE_TO_ANCHOR_EDGE);
-  profile_bubble_->SetArrowPaintType(views::BubbleBorder::PAINT_NONE);
   widget->Show();
   base::RecordAction(base::UserMetricsAction("ProfileChooser_Show"));
   if (is_source_keyboard)
@@ -425,6 +421,7 @@ void ProfileChooserView::ResetView() {
   passwords_button_ = nullptr;
   credit_cards_button_ = nullptr;
   addresses_button_ = nullptr;
+  signout_button_ = nullptr;
 }
 
 void ProfileChooserView::Init() {
@@ -633,7 +630,7 @@ void ProfileChooserView::ButtonPressed(views::Button* sender,
   } else if (sender == credit_cards_button_) {
     base::RecordAction(
         base::UserMetricsAction("ProfileChooser_PaymentsClicked"));
-    chrome::ShowSettingsSubPage(browser_, chrome::kAutofillSubPage);
+    chrome::ShowSettingsSubPage(browser_, chrome::kPaymentsSubPage);
   } else if (sender == addresses_button_) {
     base::RecordAction(
         base::UserMetricsAction("ProfileChooser_AddressesClicked"));
@@ -758,6 +755,9 @@ void ProfileChooserView::ButtonPressed(views::Button* sender,
     dice_accounts_menu_->SetSignOutButtonCallback(base::BindOnce(
         &ProfileChooserView::SignOutAllWebAccounts, base::Unretained(this)));
     dice_accounts_menu_->Show(sender, sync_to_another_account_button_);
+  } else if (sender == signout_button_) {
+    SignOutAllWebAccounts();
+    base::RecordAction(base::UserMetricsAction("Signin_Signout_FromUserMenu"));
   } else {
     // Either one of the "other profiles", or one of the profile accounts
     // buttons was pressed.
@@ -1179,37 +1179,39 @@ views::View* ProfileChooserView::CreateDiceSigninView() {
       views::BoxLayout::kVertical,
       gfx::Insets(0, 0, additional_bottom_spacing, 0)));
 
-  if (GetDiceSigninPromoShowCount() <=
-      kDiceSigninPromoIllustrationShowCountMax) {
-    // Add the illustration.
-    ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-    views::ImageView* illustration = new NonAccessibleImageView();
-    illustration->SetImage(
-        *rb.GetNativeImageNamed(IDR_PROFILES_DICE_TURN_ON_SYNC).ToImageSkia());
-    view->AddChildView(illustration);
-    // Adjust the spacing between illustration and promo text.
-    promotext_top_spacing = 24;
-  }
-  // Add the promo text.
-  bool show_personalized_promo = !dice_sync_promo_accounts_.empty();
-  views::Label* promo = new views::Label(l10n_util::GetStringUTF16(
-      show_personalized_promo ? IDS_PROFILES_DICE_SYNC_PROMO
-                              : IDS_PROFILES_DICE_SIGNIN_PROMO));
-  promo->SetMultiLine(true);
-  promo->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  promo->SetMaximumWidth(menu_width_ - 2 * kMenuEdgeMargin);
-  promo->SetBorder(views::CreateEmptyBorder(
-      promotext_top_spacing, kMenuEdgeMargin, 0, kMenuEdgeMargin));
-  view->AddChildView(promo);
+  const bool promo_account_available = !dice_sync_promo_accounts_.empty();
 
   // Log sign-in impressions user metrics.
   signin_metrics::RecordSigninImpressionUserActionForAccessPoint(
       signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN);
   signin_metrics::RecordSigninImpressionWithAccountUserActionForAccessPoint(
       signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN,
-      show_personalized_promo);
+      promo_account_available);
 
-  if (!show_personalized_promo) {
+  if (!promo_account_available) {
+    // Show promo illustration+text when there is no promo account.
+    if (GetDiceSigninPromoShowCount() <=
+        kDiceSigninPromoIllustrationShowCountMax) {
+      // Add the illustration.
+      ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+      views::ImageView* illustration = new NonAccessibleImageView();
+      illustration->SetImage(
+          *rb.GetNativeImageNamed(IDR_PROFILES_DICE_TURN_ON_SYNC)
+               .ToImageSkia());
+      view->AddChildView(illustration);
+      // Adjust the spacing between illustration and promo text.
+      promotext_top_spacing = 24;
+    }
+    // Add the promo text.
+    views::Label* promo = new views::Label(
+        l10n_util::GetStringUTF16(IDS_PROFILES_DICE_SYNC_PROMO));
+    promo->SetMultiLine(true);
+    promo->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    promo->SetMaximumWidth(menu_width_ - 2 * kMenuEdgeMargin);
+    promo->SetBorder(views::CreateEmptyBorder(
+        promotext_top_spacing, kMenuEdgeMargin, 0, kMenuEdgeMargin));
+    view->AddChildView(promo);
+
     // Create a sign-in button without account information.
     dice_signin_button_view_ = new DiceSigninButtonView(this);
     dice_signin_button_view_->SetBorder(
@@ -1230,19 +1232,29 @@ views::View* ProfileChooserView::CreateDiceSigninView() {
   }
   dice_signin_button_view_ =
       new DiceSigninButtonView(dice_promo_default_account, account_icon, this,
-                               true /* show_drop_down_arrow */);
-  views::View* signin_button_container = new views::View();
-  // Create a container for the signin button, so the special highlighting of
-  // the button won't go over the border. (DiceSigninButtonView sets a custom
-  // highlighting view with |HoverButton::SetHighlightingView|.)
-  signin_button_container->SetLayoutManager(
-      std::make_unique<views::FillLayout>());
-  signin_button_container->SetBorder(
-      views::CreateEmptyBorder(gfx::Insets(kMenuEdgeMargin)));
-  signin_button_container->AddChildView(dice_signin_button_view_);
-  view->AddChildView(signin_button_container);
+                               /*show_drop_down_arrow=*/false);
   signin_with_gaia_account_button_ = dice_signin_button_view_->signin_button();
-  sync_to_another_account_button_ = dice_signin_button_view_->drop_down_arrow();
+
+  views::View* promo_button_container = new views::View();
+  const int content_list_vert_spacing =
+      ChromeLayoutProvider::Get()->GetDistanceMetric(
+          DISTANCE_CONTENT_LIST_VERTICAL_MULTI);
+  const int bottom_spacing = kMenuEdgeMargin - content_list_vert_spacing;
+  promo_button_container->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::kVertical,
+      gfx::Insets(kMenuEdgeMargin, kMenuEdgeMargin, bottom_spacing,
+                  kMenuEdgeMargin),
+      content_list_vert_spacing));
+  promo_button_container->AddChildView(dice_signin_button_view_);
+
+  // Add sign out button.
+  signout_button_ = views::MdTextButton::Create(
+      this, l10n_util::GetStringUTF16(IDS_SCREEN_LOCK_SIGN_OUT),
+      views::style::CONTEXT_BUTTON);
+  promo_button_container->AddChildView(signout_button_);
+
+  view->AddChildView(promo_button_container);
+
   return view;
 }
 
@@ -1363,7 +1375,7 @@ views::View* ProfileChooserView::CreateSupervisedUserDisclaimerView() {
                                            kMenuEdgeMargin, horizontal_margin));
 
   views::Label* disclaimer = new views::Label(
-      avatar_menu_->GetSupervisedUserInformation(), CONTEXT_DEPRECATED_SMALL);
+      avatar_menu_->GetSupervisedUserInformation(), CONTEXT_BODY_TEXT_SMALL);
   disclaimer->SetMultiLine(true);
   disclaimer->SetAllowCharacterBreak(true);
   disclaimer->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -1557,12 +1569,12 @@ views::View* ProfileChooserView::CreateAccountRemovalView() {
     primary_account_removal_label->AddStyleRange(
         gfx::Range(offsets[1], offsets[1] + settings_text.size()),
         views::StyledLabel::RangeStyleInfo::CreateForLink());
-    primary_account_removal_label->SetTextContext(CONTEXT_DEPRECATED_SMALL);
+    primary_account_removal_label->SetTextContext(CONTEXT_BODY_TEXT_SMALL);
     layout->AddView(primary_account_removal_label);
   } else {
     views::Label* content_label = new views::Label(
         l10n_util::GetStringUTF16(IDS_PROFILES_ACCOUNT_REMOVAL_TEXT),
-        CONTEXT_DEPRECATED_SMALL);
+        CONTEXT_BODY_TEXT_SMALL);
     content_label->SetMultiLine(true);
     content_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     layout->AddView(content_label);

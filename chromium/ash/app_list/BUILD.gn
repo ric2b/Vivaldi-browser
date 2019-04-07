@@ -99,7 +99,9 @@ component("app_list") {
   deps = [
     "//ash/app_list/resources",
     "//ash/app_menu",
+    "//ash/assistant/ui:constants",
     "//ash/public/cpp/app_list/vector_icons",
+    "//ash/public/cpp/vector_icons",
     "//base",
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
@@ -108,8 +110,9 @@ component("app_list") {
     "//components/keyed_service/core",
     "//components/sync",
     "//mojo/public/cpp/bindings",
-    "//services/ui/public/cpp",
-    "//services/ui/public/interfaces",
+    "//services/ws/public/cpp",
+    "//services/ws/public/mojom",
+    "//services/ws/remote_view_host",
     "//skia",
     "//third_party/icu",
     "//ui/accessibility",
@@ -228,7 +231,7 @@ test("app_list_unittests") {
   ]
 
   data_deps = [
-    "//third_party/mesa:osmesa",
+    "//third_party/mesa_headers",
     "//ui/resources:ui_test_pak_data",
   ]
 }

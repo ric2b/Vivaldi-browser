@@ -24,7 +24,7 @@
 
       setting-box.middle {
         /* Per spec, middle text is indented 20px in this section. */
-        -webkit-margin-start: 20px;
+        margin-inline-start: 20px;
       }
 
       .account-icon {
@@ -44,7 +44,7 @@
       }
 
       #menu .dropdown-item span {
-        -webkit-margin-start: 8px;
+        margin-inline-start: 8px;
       }
 
       .flex {
@@ -54,6 +54,7 @@
       }
 
       #avatar-container {
+        height: var(--shown-avatar-size);
         position: relative;
       }
 
@@ -192,8 +193,7 @@
         <paper-button id="sync-button" class="action-button"
             hidden="[[syncStatus.signedIn]]" on-click="onSyncButtonTap_"
             disabled="[[syncStatus.setupInProgress]]">
-          [[getSubstituteLabel_(
-              '$i18nPolymer{syncAsName}', shownAccount_.givenName)]]
+          $i18n{peopleSignIn}
         </paper-button>
         <paper-button id="turn-off" class="secondary-button"
             hidden="[[!shouldShowTurnOffButton_(syncStatus.signedIn)]]"

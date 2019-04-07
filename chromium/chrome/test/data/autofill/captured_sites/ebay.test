@@ -5,121 +5,158 @@
     {
       "selectorType": "xpath",
       "selector": "//*[@id=\"binBtn_btn\"]",
-      "context": [],
+      "context": {
+        "isIframe": false
+      },
       "type": "click"
     },
     {
       "selectorType": "xpath",
       "selector": "//*[@id=\"gtChk\"]",
-      "context": [],
+      "context": {
+        "isIframe": false
+      },
       "type": "click"
     },
     {
       "selectorType": "xpath",
       "selector": "//*[@id=\"af-first-name\"]",
-      "context": [],
-      "type": "autofill",
-      "fields" : [
-        {
-          "selector": "//*[@id=\"af-first-name\"]",
-          "context": [],
-          "expectedAutofillType": "HTML_TYPE_GIVEN_NAME",
-          "expectedValue": "Milton"
-        },
-        {
-          "selector": "//*[@id=\"af-last-name\"]",
-          "context": [],
-          "expectedAutofillType": "HTML_TYPE_FAMILY_NAME",
-          "expectedValue": "Waddams"
-        },
-        {
-          "selector": "//*[@id=\"af-address1\"]",
-          "context": [],
-          "expectedAutofillType": "ADDRESS_HOME_LINE1",
-          "expectedValue": "4120 Freidrich Lane"
-        },
-        {
-          "selector": "//*[@id=\"af-address2\"]",
-          "context": [],
-          "expectedAutofillType": "HTML_TYPE_ADDRESS_LINE2",
-          "expectedValue": "Apt 8"
-        },
-        {
-          "selector": "//*[@id=\"af-city\"]",
-          "context": [],
-          "expectedAutofillType": "HTML_TYPE_ADDRESS_LEVEL2",
-          "expectedValue": "Austin"
-        },
-        {
-          "selector": "//*[@id=\"af-state\"]",
-          "context": [],
-          "expectedAutofillType": "HTML_TYPE_ADDRESS_LEVEL1",
-          "expectedValue": "TX"
-        },
-        {
-          "selector": "//*[@id=\"af-zip\"]",
-          "context": [],
-          "expectedAutofillType": "HTML_TYPE_POSTAL_CODE",
-          "expectedValue": "78744"
-        },
-        {
-          "selector": "//*[@id=\"af-email\"]",
-          "context": [],
-          "expectedAutofillType": "HTML_TYPE_EMAIL",
-          "expectedValue": "red.swingline@initech.com"
-        },
-        {
-          "selector": "//*[@id=\"af-email-confirm\"]",
-          "context": [],
-          "expectedAutofillType": "HTML_TYPE_EMAIL",
-          "expectedValue": "red.swingline@initech.com"
-        },
-        {
-          "selector": "//span[contains(., 'Phone number')]/input[@type='tel']",
-          "context": [],
-          "expectedAutofillType": "HTML_TYPE_TEL",
-          "expectedValue": "(512) 555-1234"
-        }
-      ]
+      "context": {
+        "isIframe": false
+      },
+      "type": "autofill"
+    },
+    {
+      "selector": "//*[@id=\"af-first-name\"]",
+      "context": {
+        "isIframe": false
+      },
+      "expectedAutofillType": "HTML_TYPE_GIVEN_NAME",
+      "expectedValue": "Milton",
+      "type": "validateField"
+    },
+    {
+      "selector": "//*[@id=\"af-last-name\"]",
+      "context": {
+        "isIframe": false
+      },
+      "expectedAutofillType": "HTML_TYPE_FAMILY_NAME",
+      "expectedValue": "Waddams",
+      "type": "validateField"
+    },
+    {
+      "selector": "//*[@id=\"af-address1\"]",
+      "context": {
+        "isIframe": false
+      },
+      "expectedAutofillType": "ADDRESS_HOME_LINE1",
+      "expectedValue": "4120 Freidrich Lane",
+      "type": "validateField"
+    },
+    {
+      "selector": "//*[@id=\"af-address2\"]",
+      "context": {
+        "isIframe": false
+      },
+      "expectedAutofillType": "HTML_TYPE_ADDRESS_LINE2",
+      "expectedValue": "Apt 8",
+      "type": "validateField"
+    },
+    {
+      "selector": "//*[@id=\"af-city\"]",
+      "context": {
+        "isIframe": false
+      },
+      "expectedAutofillType": "HTML_TYPE_ADDRESS_LEVEL2",
+      "expectedValue": "Austin",
+      "type": "validateField"
+    },
+    {
+      "selector": "//*[@id=\"af-state\"]",
+      "context": {
+        "isIframe": false
+      },
+      "expectedAutofillType": "HTML_TYPE_ADDRESS_LEVEL1",
+      "expectedValue": "TX",
+      "type": "validateField"
+    },
+    {
+      "selector": "//*[@id=\"af-zip\"]",
+      "context": {
+        "isIframe": false
+      },
+      "expectedAutofillType": "HTML_TYPE_POSTAL_CODE",
+      "expectedValue": "78744",
+      "type": "validateField"
+    },
+    {
+      "selector": "//*[@id=\"af-email\"]",
+      "context": {
+        "isIframe": false
+      },
+      "expectedAutofillType": "HTML_TYPE_EMAIL",
+      "expectedValue": "red.swingline@initech.com",
+      "type": "validateField"
+    },
+    {
+      "selector": "//*[@id=\"af-email-confirm\"]",
+      "context": {
+        "isIframe": false
+      },
+      "expectedAutofillType": "HTML_TYPE_EMAIL",
+      "expectedValue": "red.swingline@initech.com",
+      "type": "validateField"
+    },
+    {
+      "selector": "//span[contains(., 'Phone number')]/input[@type='tel']",
+      "context": {
+        "isIframe": false
+      },
+      "expectedAutofillType": "HTML_TYPE_TEL",
+      "expectedValue": "(512) 555-1234",
+      "type": "validateField"
     },
     {
       "selectorType": "xpath",
       "selector": "//*[@id=\"address-fields-ctr\"]/div[2]/div/button[contains(., 'Done')]",
-      "context": [],
+      "context": {
+        "isIframe": false
+      },
       "type": "click"
-    },
-    {
-      "context": [],
-      "type": "waitFor",
-      "assertions": [
-        "return automation_helper.isElementWithXpathReady(`//*[@id=\"sa-change-link\"]`);"
-      ]
     },
     {
       "selectorType": "xpath",
       "selector": "//*[@id=\"CC\"]",
-      "context": [],
+      "context": {
+        "isIframe": false
+      },
       "type": "click"
     },
     {
       "selectorType": "xpath",
       "selector": "//*[@id=\"cardNumber\"]",
-      "context": [],
-      "type": "autofill",
-      "fields" : [
-        {
-          "selector": "//*[@id=\"cardNumber\"]",
-          "context": [],
-          "expectedAutofillType": "HTML_TYPE_CREDIT_CARD_NUMBER",
-          "expectedValue": "9621327911759602"
-        },
-        {
-          "selector": "//*[@id=\"cardExp\"]",
-          "context": [],
-          "expectedAutofillType": "HTML_TYPE_CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR",
-          "expectedValue": "05 / 27"
-        }
-      ]
+      "context": {
+        "isIframe": false
+      },
+      "type": "autofill"
+    },
+    {
+      "selector": "//*[@id=\"cardNumber\"]",
+      "context": {
+        "isIframe": false
+      },
+      "expectedAutofillType": "HTML_TYPE_CREDIT_CARD_NUMBER",
+      "expectedValue": "9621327911759602",
+      "type": "validateField"
+    },
+    {
+      "selector": "//*[@id=\"cardExp\"]",
+      "context": {
+        "isIframe": false
+      },
+      "expectedAutofillType": "HTML_TYPE_CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR",
+      "expectedValue": "05 / 27",
+      "type": "validateField"
     }
   ]
 }

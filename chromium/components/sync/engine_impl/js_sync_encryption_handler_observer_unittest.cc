@@ -14,7 +14,7 @@
 #include "components/sync/base/cryptographer.h"
 #include "components/sync/base/fake_encryptor.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/base/passphrase_type.h"
+#include "components/sync/base/passphrase_enums.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/sync_string_conversions.h"
 #include "components/sync/js/js_event_details.h"
@@ -84,11 +84,17 @@ TEST_F(JsSyncEncryptionHandlerObserverTest, OnPassphraseRequired) {
                             HasDetailsAsDictionary(reason_decryption_details)));
 
   js_sync_encryption_handler_observer_.OnPassphraseRequired(
-      REASON_PASSPHRASE_NOT_REQUIRED, sync_pb::EncryptedData());
+      REASON_PASSPHRASE_NOT_REQUIRED,
+      KeyDerivationParams::CreateForPbkdf2("localhost", "dummy"),
+      sync_pb::EncryptedData());
   js_sync_encryption_handler_observer_.OnPassphraseRequired(
-      REASON_ENCRYPTION, sync_pb::EncryptedData());
+      REASON_ENCRYPTION,
+      KeyDerivationParams::CreateForPbkdf2("localhost", "dummy"),
+      sync_pb::EncryptedData());
   js_sync_encryption_handler_observer_.OnPassphraseRequired(
-      REASON_DECRYPTION, sync_pb::EncryptedData());
+      REASON_DECRYPTION,
+      KeyDerivationParams::CreateForPbkdf2("localhost", "dummy"),
+      sync_pb::EncryptedData());
   PumpLoop();
 }
 

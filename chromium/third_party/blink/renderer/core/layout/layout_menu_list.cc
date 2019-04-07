@@ -35,6 +35,7 @@
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/layout_text.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
+#include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 
 namespace blink {
@@ -77,6 +78,8 @@ void LayoutMenuList::UpdateInnerStyle() {
   inner_block_->SetStyleInternal(std::move(inner_style));
   // LayoutMenuList::ControlClipRect() depends on inner_block_->ContentsSize().
   SetNeedsPaintPropertyUpdate();
+  if (Layer())
+    Layer()->SetNeedsCompositingInputsUpdate();
 }
 
 void LayoutMenuList::CreateInnerBlock() {
@@ -91,16 +94,18 @@ void LayoutMenuList::CreateInnerBlock() {
   inner_block_ =
       LayoutBlockFlow::CreateAnonymous(&GetDocument(), CreateInnerStyle());
 
-  button_text_ = LayoutText::CreateEmptyAnonymous(GetDocument());
+  button_text_ =
+      LayoutText::CreateEmptyAnonymous(GetDocument(), MutableStyle());
   // We need to set the text explicitly though it was specified in the
   // constructor because LayoutText doesn't refer to the text
   // specified in the constructor in a case of re-transforming.
-  button_text_->SetStyle(MutableStyle());
   inner_block_->AddChild(button_text_);
   LayoutFlexibleBox::AddChild(inner_block_);
 
   // LayoutMenuList::ControlClipRect() depends on inner_block_->ContentsSize().
   SetNeedsPaintPropertyUpdate();
+  if (Layer())
+    Layer()->SetNeedsCompositingInputsUpdate();
 }
 
 bool LayoutMenuList::HasOptionStyleChanged(
@@ -120,7 +125,7 @@ void LayoutMenuList::AdjustInnerStyle(ComputedStyle& inner_style) const {
   // when the content overflows, treat it the same as align-items: flex-start.
   // But we only do that for the cases where html.css would otherwise use
   // center.
-  if (Style()->AlignItemsPosition() == ItemPosition::kCenter) {
+  if (StyleRef().AlignItemsPosition() == ItemPosition::kCenter) {
     inner_style.SetMarginTop(Length());
     inner_style.SetMarginBottom(Length());
     inner_style.SetAlignSelfPosition(ItemPosition::kFlexStart);
@@ -168,6 +173,8 @@ void LayoutMenuList::AddChild(LayoutObject* new_child,
 
   // LayoutMenuList::ControlClipRect() depends on inner_block_->ContentsSize().
   SetNeedsPaintPropertyUpdate();
+  if (Layer())
+    Layer()->SetNeedsCompositingInputsUpdate();
 }
 
 void LayoutMenuList::RemoveChild(LayoutObject* old_child) {
@@ -192,7 +199,7 @@ void LayoutMenuList::StyleDidChange(StyleDifference diff,
 }
 
 void LayoutMenuList::UpdateInnerBlockHeight() {
-  const SimpleFontData* font_data = Style()->GetFont().PrimaryFont();
+  const SimpleFontData* font_data = StyleRef().GetFont().PrimaryFont();
   DCHECK(font_data);
   inner_block_height_ = (font_data ? font_data->GetFontMetrics().Height() : 0) +
                         inner_block_->BorderAndPaddingHeight();
@@ -208,9 +215,9 @@ void LayoutMenuList::UpdateOptionsWidth() const {
     item_style->ApplyTextTransform(&text);
     // We apply SELECT's style, not OPTION's style because m_optionsWidth is
     // used to determine intrinsic width of the menulist box.
-    TextRun text_run = ConstructTextRun(Style()->GetFont(), text, *Style());
+    TextRun text_run = ConstructTextRun(StyleRef().GetFont(), text, *Style());
     max_option_width =
-        std::max(max_option_width, Style()->GetFont().Width(text_run));
+        std::max(max_option_width, StyleRef().GetFont().Width(text_run));
   }
   options_width_ = static_cast<int>(ceilf(max_option_width));
 }
@@ -275,6 +282,8 @@ void LayoutMenuList::SetText(const String& s) {
   }
   // LayoutMenuList::ControlClipRect() depends on inner_block_->ContentsSize().
   SetNeedsPaintPropertyUpdate();
+  if (Layer())
+    Layer()->SetNeedsCompositingInputsUpdate();
 }
 
 String LayoutMenuList::GetText() const {
@@ -287,7 +296,7 @@ LayoutRect LayoutMenuList::ControlClipRect(
   // inner box. This will leave room for the arrows which sit in the inner box
   // padding, and if the inner box ever spills out of the outer box, that will
   // get clipped too.
-  LayoutRect outer_box = ContentBoxRect();
+  LayoutRect outer_box = PhysicalContentBoxRect();
   outer_box.MoveBy(additional_offset);
 
   LayoutRect inner_box(
@@ -307,7 +316,7 @@ void LayoutMenuList::ComputeIntrinsicLogicalWidths(
       std::max(options_width_,
                LayoutTheme::GetTheme().MinimumMenuListSize(StyleRef())) +
       inner_block_->PaddingLeft() + inner_block_->PaddingRight();
-  if (!Style()->Width().IsPercentOrCalc())
+  if (!StyleRef().Width().IsPercentOrCalc())
     min_logical_width = max_logical_width;
   else
     min_logical_width = LayoutUnit();
@@ -317,7 +326,7 @@ void LayoutMenuList::ComputeLogicalHeight(
     LayoutUnit logical_height,
     LayoutUnit logical_top,
     LogicalExtentComputedValues& computed_values) const {
-  if (Style()->HasAppearance())
+  if (StyleRef().HasAppearance())
     logical_height = inner_block_height_ + BorderAndPaddingHeight();
   LayoutBox::ComputeLogicalHeight(logical_height, logical_top, computed_values);
 }

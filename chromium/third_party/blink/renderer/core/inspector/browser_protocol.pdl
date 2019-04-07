@@ -480,6 +480,39 @@ domain Browser
       # The window state. Default to normal.
       optional WindowState windowState
 
+  experimental type PermissionType extends string
+    enum
+      accessibilityEvents
+      audioCapture
+      backgroundSync
+      clipboardRead
+      clipboardWrite
+      durableStorage
+      flash
+      geolocation
+      midi
+      midiSysex
+      notifications
+      paymentHandler
+      protectedMediaIdentifier
+      sensors
+      videoCapture
+
+  # Grant specific permissions to the given origin and reject all others.
+  experimental command grantPermissions
+    parameters
+      string origin
+      array of PermissionType permissions
+      # BrowserContext to override permissions. When omitted, default browser context is used.
+      optional Target.BrowserContextID browserContextId
+
+  # Reset all permission management for all origins.
+  experimental command resetPermissions
+    parameters
+      # BrowserContext to reset permissions. When omitted, default browser context is used.
+      optional Target.BrowserContextID browserContextId
+
+
   # Close browser gracefully.
   command close
 
@@ -2076,6 +2109,8 @@ experimental domain DOMSnapshot
       # that are painted together will have the same index. Only provided if includePaintOrder in
       # getSnapshot was true.
       optional integer paintOrder
+      # Set to true to indicate the element begins a new stacking context.
+      optional boolean isStackingContext
 
   # A subset of the full ComputedStyle as defined by the request whitelist.
   type ComputedStyle extends object
@@ -2185,6 +2220,8 @@ experimental domain DOMSnapshot
       array of Rectangle bounds
       # Contents of the LayoutText, if any.
       array of StringIndex text
+      # Stacking context information.
+      RareBooleanData stackingContexts
 
   # Details of post layout rendered text positions. The exact layout should not be regarded as
   # stable and may change between versions.
@@ -2909,6 +2946,13 @@ domain Input
       # 0).
       optional integer location
 
+  # This method emulates inserting text that doesn't come from a key press,
+  # for example an emoji keyboard or an IME.
+  experimental command insertText
+    parameters
+      # The text to insert.
+      string text
+
   # Dispatches a mouse event to the page.
   command dispatchMouseEvent
     parameters
@@ -3407,6 +3451,20 @@ experimental domain Memory
   type SamplingProfile extends object
     properties
       array of SamplingProfileNode samples
+      array of Module modules
+
+  # Executable module information
+  type Module extends object
+    properties
+      # Name of the module.
+      string name
+      # UUID of the module.
+      string uuid
+      # Base address where the module is loaded into memory. Encoded as a decimal
+      # or hexadecimal (0x prefixed) string.
+      string baseAddress
+      # Size of the module in bytes.
+      number size
 
 # Network domain allows tracking network activities of the page. It exposes information about http,
 # file, data and other requests and responses, their headers, bodies, timing, etc.
@@ -5218,6 +5276,14 @@ domain Page
   # Clears seeded compilation cache.
   experimental command clearCompilationCache
 
+  # Generates a report for testing.
+  experimental command generateTestReport
+    parameters
+      # Message to be displayed in the report.
+      string message
+      # Specifies the endpoint group to deliver the report to.
+      optional string group
+
   event domContentEventFired
     parameters
       Network.MonotonicTime timestamp
@@ -5925,6 +5991,8 @@ domain Target
       # Whether to pause new targets when attaching to them. Use `Runtime.runIfWaitingForDebugger`
       # to run paused targets.
       boolean waitForDebuggerOnStart
+      # Enables "flat" access to the session via specifying sessionId attribute in the commands.
+      experimental optional boolean flatten
 
   # Controls whether to discover available targets and notify via
   # `targetCreated/targetInfoChanged/targetDestroyed` events.
@@ -6117,3 +6185,16 @@ experimental domain Tracing
       optional IO.StreamHandle stream
       # Compression format of returned stream.
       optional StreamCompression streamCompression
+
+# Testing domain is a dumping ground for the capabilities requires for browser or app testing that do not fit other
+# domains.
+experimental domain Testing
+  depends on Page
+
+  # Generates a report for testing.
+  command generateTestReport
+    parameters
+      # Message to be displayed in the report.
+      string message
+      # Specifies the endpoint group to deliver the report to.
+      optional string group

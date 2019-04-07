@@ -14,7 +14,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "gin/array_buffer.h"
 #include "gin/modules/console.h"
@@ -84,7 +84,9 @@ int main(int argc, char** argv) {
     gin::IsolateHolder::Initialize(gin::IsolateHolder::kStrictMode,
                                    gin::IsolateHolder::kStableV8Extras,
                                    gin::ArrayBufferAllocator::SharedInstance());
-    gin::IsolateHolder instance(base::ThreadTaskRunnerHandle::Get());
+    gin::IsolateHolder instance(
+        base::ThreadTaskRunnerHandle::Get(),
+        gin::IsolateHolder::IsolateType::kBlinkMainThread);
 
     gin::GinShellRunnerDelegate delegate;
     gin::ShellRunner runner(&delegate, instance.isolate());

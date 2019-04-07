@@ -8,10 +8,11 @@
 #include "base/optional.h"
 #include "base/task/sequence_manager/task_queue.h"
 #include "base/time/time.h"
+#include "components/scheduling_metrics/task_duration_metric_reporter.h"
+#include "components/scheduling_metrics/thread_metrics.h"
+#include "components/scheduling_metrics/total_duration_metric_reporter.h"
 #include "third_party/blink/public/platform/web_thread_type.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
-#include "third_party/blink/renderer/platform/scheduler/common/total_duration_metric_reporter.h"
-#include "third_party/blink/renderer/platform/scheduler/util/task_duration_metric_reporter.h"
 
 namespace base {
 namespace sequence_manager {
@@ -21,6 +22,8 @@ class TaskQueue;
 
 namespace blink {
 namespace scheduler {
+
+constexpr int kUkmMetricVersion = 2;
 
 // Helper class to take care of task metrics shared between main thread
 // and worker threads of the renderer process, including per-thread
@@ -50,23 +53,22 @@ class PLATFORM_EXPORT MetricsHelper {
 
  protected:
   const WebThreadType thread_type_;
-  const bool has_cpu_timing_for_each_task_;
 
  private:
-  base::ThreadTicks last_known_time_;
+  scheduling_metrics::ThreadMetrics thread_metrics_;
 
-  TaskDurationMetricReporter<WebThreadType> thread_task_duration_reporter_;
-  TaskDurationMetricReporter<WebThreadType> thread_task_cpu_duration_reporter_;
-  TaskDurationMetricReporter<WebThreadType>
+  scheduling_metrics::TaskDurationMetricReporter<WebThreadType>
+      thread_task_duration_reporter_;
+  scheduling_metrics::TaskDurationMetricReporter<WebThreadType>
+      thread_task_cpu_duration_reporter_;
+  scheduling_metrics::TaskDurationMetricReporter<WebThreadType>
       foreground_thread_task_duration_reporter_;
-  TaskDurationMetricReporter<WebThreadType>
+  scheduling_metrics::TaskDurationMetricReporter<WebThreadType>
       foreground_thread_task_cpu_duration_reporter_;
-  TaskDurationMetricReporter<WebThreadType>
+  scheduling_metrics::TaskDurationMetricReporter<WebThreadType>
       background_thread_task_duration_reporter_;
-  TaskDurationMetricReporter<WebThreadType>
+  scheduling_metrics::TaskDurationMetricReporter<WebThreadType>
       background_thread_task_cpu_duration_reporter_;
-  TaskDurationMetricReporter<WebThreadType> tracked_cpu_duration_reporter_;
-  TaskDurationMetricReporter<WebThreadType> non_tracked_cpu_duration_reporter_;
 
   DISALLOW_COPY_AND_ASSIGN(MetricsHelper);
 };

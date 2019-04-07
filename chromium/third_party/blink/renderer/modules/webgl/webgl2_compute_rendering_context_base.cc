@@ -32,8 +32,7 @@ void WebGL2ComputeRenderingContextBase::InitializeNewContext() {
 void WebGL2ComputeRenderingContextBase::dispatchCompute(GLuint numGroupsX,
                                                         GLuint numGroupsY,
                                                         GLuint numGroupsZ) {
-  SynthesizeGLError(GL_INVALID_OPERATION, "dispatchCompute", "UNIMPLEMENTED");
-  return;
+  ContextGL()->DispatchCompute(numGroupsX, numGroupsY, numGroupsZ);
 }
 
 void WebGL2ComputeRenderingContextBase::bindImageTexture(GLuint unit,
@@ -43,17 +42,17 @@ void WebGL2ComputeRenderingContextBase::bindImageTexture(GLuint unit,
                                                          GLint layer,
                                                          GLenum access,
                                                          GLenum format) {
-  SynthesizeGLError(GL_INVALID_OPERATION, "bindImageTexture", "UNIMPLEMENTED");
+  ContextGL()->BindImageTexture(unit, ObjectOrZero(texture), level, layered,
+                                layer, access, format);
 }
 
 void WebGL2ComputeRenderingContextBase::memoryBarrier(GLbitfield barriers) {
-  SynthesizeGLError(GL_INVALID_OPERATION, "memoryBarrier", "UNIMPLEMENTED");
+  ContextGL()->MemoryBarrierEXT(barriers);
 }
 
 void WebGL2ComputeRenderingContextBase::memoryBarrierByRegion(
     GLbitfield barriers) {
-  SynthesizeGLError(GL_INVALID_OPERATION, "memoryBarrierByRegion",
-                    "UNIMPLEMENTED");
+  ContextGL()->MemoryBarrierByRegion(barriers);
 }
 
 void WebGL2ComputeRenderingContextBase::Trace(blink::Visitor* visitor) {

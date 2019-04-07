@@ -31,6 +31,7 @@
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/view_prop.h"
+#include "ui/base/win/hwnd_metrics.h"
 #include "ui/base/win/internal_constants.h"
 #include "ui/base/win/lock_state.h"
 #include "ui/base/win/mouse_wheel_util.h"
@@ -615,52 +616,57 @@ void HWNDMessageHandler::StackAtTop() {
                SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 }
 
-void HWNDMessageHandler::Show() {
-  if (IsWindow(hwnd())) {
-    if (!(GetWindowLong(hwnd(), GWL_EXSTYLE) & WS_EX_TRANSPARENT) &&
-        !(GetWindowLong(hwnd(), GWL_EXSTYLE) & WS_EX_NOACTIVATE)) {
-      ShowWindowWithState(ui::SHOW_STATE_NORMAL);
-    } else {
-      ShowWindowWithState(ui::SHOW_STATE_INACTIVE);
-    }
-  }
-}
-
-void HWNDMessageHandler::ShowWindowWithState(ui::WindowShowState show_state) {
-  TRACE_EVENT0("views", "HWNDMessageHandler::ShowWindowWithState");
+void HWNDMessageHandler::Show(ui::WindowShowState show_state,
+                              const gfx::Rect& pixel_restore_bounds) {
+  TRACE_EVENT0("views", "HWNDMessageHandler::Show");
   DWORD native_show_state;
-  switch (show_state) {
-    case ui::SHOW_STATE_INACTIVE:
-      native_show_state = SW_SHOWNOACTIVATE;
-      break;
-    case ui::SHOW_STATE_MAXIMIZED:
-      native_show_state = SW_SHOWMAXIMIZED;
-      break;
-    case ui::SHOW_STATE_MINIMIZED:
-      native_show_state = SW_SHOWMINIMIZED;
-      break;
-    case ui::SHOW_STATE_NORMAL:
-      native_show_state = SW_SHOWNORMAL;
-      break;
-    case ui::SHOW_STATE_FULLSCREEN:
-      native_show_state = SW_SHOWNORMAL;
-      SetFullscreen(true);
-      break;
-    default:
-      native_show_state = delegate_->GetInitialShowState();
-      break;
-  }
+  if (show_state == ui::SHOW_STATE_MAXIMIZED &&
+      !pixel_restore_bounds.IsEmpty()) {
+    WINDOWPLACEMENT placement = {0};
+    placement.length = sizeof(WINDOWPLACEMENT);
+    placement.showCmd = SW_SHOWMAXIMIZED;
+    placement.rcNormalPosition = pixel_restore_bounds.ToRECT();
+    SetWindowPlacement(hwnd(), &placement);
+    native_show_state = SW_SHOWMAXIMIZED;
+  } else {
+    switch (show_state) {
+      case ui::SHOW_STATE_INACTIVE:
+        native_show_state = SW_SHOWNOACTIVATE;
+        break;
+      case ui::SHOW_STATE_MAXIMIZED:
+        native_show_state = SW_SHOWMAXIMIZED;
+        break;
+      case ui::SHOW_STATE_MINIMIZED:
+        native_show_state = SW_SHOWMINIMIZED;
+        break;
+      case ui::SHOW_STATE_NORMAL:
+        if ((GetWindowLong(hwnd(), GWL_EXSTYLE) & WS_EX_TRANSPARENT) ||
+            (GetWindowLong(hwnd(), GWL_EXSTYLE) & WS_EX_NOACTIVATE)) {
+          native_show_state = SW_SHOWNOACTIVATE;
+        } else {
+          native_show_state = SW_SHOWNORMAL;
+        }
+        break;
+      case ui::SHOW_STATE_FULLSCREEN:
+        native_show_state = SW_SHOWNORMAL;
+        SetFullscreen(true);
+        break;
+      default:
+        native_show_state = delegate_->GetInitialShowState();
+        break;
+    }
 
-  ShowWindow(hwnd(), native_show_state);
-  // When launched from certain programs like bash and Windows Live Messenger,
-  // show_state is set to SW_HIDE, so we need to correct that condition. We
-  // don't just change show_state to SW_SHOWNORMAL because MSDN says we must
-  // always first call ShowWindow with the specified value from STARTUPINFO,
-  // otherwise all future ShowWindow calls will be ignored (!!#@@#!). Instead,
-  // we call ShowWindow again in this case.
-  if (native_show_state == SW_HIDE) {
-    native_show_state = SW_SHOWNORMAL;
     ShowWindow(hwnd(), native_show_state);
+    // When launched from certain programs like bash and Windows Live
+    // Messenger, show_state is set to SW_HIDE, so we need to correct that
+    // condition. We don't just change show_state to SW_SHOWNORMAL because
+    // MSDN says we must always first call ShowWindow with the specified
+    // value from STARTUPINFO, otherwise all future ShowWindow calls will be
+    // ignored (!!#@@#!). Instead, we call ShowWindow again in this case.
+    if (native_show_state == SW_HIDE) {
+      native_show_state = SW_SHOWNORMAL;
+      ShowWindow(hwnd(), native_show_state);
+    }
   }
 
   // We need to explicitly activate the window if we've been shown with a state
@@ -673,19 +679,6 @@ void HWNDMessageHandler::ShowWindowWithState(ui::WindowShowState show_state) {
 
   if (!delegate_->HandleInitialFocus(show_state))
     SetInitialFocus();
-}
-
-void HWNDMessageHandler::ShowMaximizedWithBounds(const gfx::Rect& bounds) {
-  WINDOWPLACEMENT placement = { 0 };
-  placement.length = sizeof(WINDOWPLACEMENT);
-  placement.showCmd = SW_SHOWMAXIMIZED;
-  placement.rcNormalPosition = bounds.ToRECT();
-  SetWindowPlacement(hwnd(), &placement);
-
-  // We need to explicitly activate the window, because if we're opened from a
-  // desktop shortcut while an existing window is already running it doesn't
-  // seem to be enough to use SW_SHOWMAXIMIZED to activate the window.
-  Activate();
 }
 
 void HWNDMessageHandler::Hide() {
@@ -1359,8 +1352,9 @@ void HWNDMessageHandler::ClientAreaSizeChanged() {
   sent_window_size_changing_ = false;
 }
 
-bool HWNDMessageHandler::GetClientAreaInsets(gfx::Insets* insets) const {
-  if (delegate_->GetClientAreaInsets(insets))
+bool HWNDMessageHandler::GetClientAreaInsets(gfx::Insets* insets,
+                                             HMONITOR monitor) const {
+  if (delegate_->GetClientAreaInsets(insets, monitor))
     return true;
   DCHECK(insets->IsEmpty());
 
@@ -1372,15 +1366,15 @@ bool HWNDMessageHandler::GetClientAreaInsets(gfx::Insets* insets) const {
   if (IsMaximized()) {
     // Windows automatically adds a standard width border to all sides when a
     // window is maximized.
-    int border_thickness = GetSystemMetrics(SM_CXSIZEFRAME);
+    int frame_thickness = ui::GetFrameThickness(monitor);
 // NOTE(jarle@vivaldi.com): The adjustment of the border by 1 pixel causes
 // VB-17434, VB-22957 (and many, many duplicates). Ref. Chromium bug 157728.
 #if !defined(VIVALDI_BUILD)
     if (!delegate_->HasFrame())
-      border_thickness -= 1;
+      frame_thickness -= 1;
 #endif
-    *insets = gfx::Insets(
-        border_thickness, border_thickness, border_thickness, border_thickness);
+    *insets = gfx::Insets(frame_thickness, frame_thickness, frame_thickness,
+                          frame_thickness);
     return true;
   }
 
@@ -1652,7 +1646,7 @@ LRESULT HWNDMessageHandler::OnDpiChanged(UINT msg,
     dpi = display::win::GetDPIFromScalingFactor(scaling_factor);
   } else {
     dpi = LOWORD(w_param);
-    scaling_factor = display::win::GetScalingFactorFromDPI(dpi_);
+    scaling_factor = display::win::GetScalingFactorFromDPI(dpi);
   }
 
   // The first WM_DPICHANGED originates from EnableChildWindowDpiMessage during
@@ -2001,16 +1995,36 @@ LRESULT HWNDMessageHandler::OnNCCalcSize(BOOL mode, LPARAM l_param) {
     }
   }
 
+  RECT* client_rect =
+      mode ? &(reinterpret_cast<NCCALCSIZE_PARAMS*>(l_param)->rgrc[0])
+           : reinterpret_cast<RECT*>(l_param);
+
+  HMONITOR monitor = MonitorFromWindow(hwnd(), MONITOR_DEFAULTTONULL);
+  if (!monitor) {
+    // We might end up here if the window was previously minimized and the
+    // user clicks on the taskbar button to restore it in the previous
+    // position. In that case WM_NCCALCSIZE is sent before the window
+    // coordinates are restored to their previous values, so our (left,top)
+    // would probably be (-32000,-32000) like all minimized windows. So the
+    // above MonitorFromWindow call fails, but if we check the window rect
+    // given with WM_NCCALCSIZE (which is our previous restored window
+    // position) we will get the correct monitor handle.
+    monitor = MonitorFromRect(client_rect, MONITOR_DEFAULTTONULL);
+    if (!monitor) {
+      // This is probably an extreme case that we won't hit, but if we don't
+      // intersect any monitor, let us not adjust the client rect since our
+      // window will not be visible anyway.
+      return 0;
+    }
+  }
+
   gfx::Insets insets;
-  bool got_insets = GetClientAreaInsets(&insets);
+  bool got_insets = GetClientAreaInsets(&insets, monitor);
   if (!got_insets && !IsFullscreen() && !(mode && !delegate_->HasFrame())) {
     SetMsgHandled(FALSE);
     return 0;
   }
 
-  RECT* client_rect = mode ?
-      &(reinterpret_cast<NCCALCSIZE_PARAMS*>(l_param)->rgrc[0]) :
-      reinterpret_cast<RECT*>(l_param);
   client_rect->left += insets.left();
   client_rect->top += insets.top();
   client_rect->bottom -= insets.bottom();
@@ -2020,24 +2034,6 @@ LRESULT HWNDMessageHandler::OnNCCalcSize(BOOL mode, LPARAM l_param) {
     // thickness of the auto-hide taskbar on each such edge, so the window isn't
     // treated as a "fullscreen app", which would cause the taskbars to
     // disappear.
-    HMONITOR monitor = MonitorFromWindow(hwnd(), MONITOR_DEFAULTTONULL);
-    if (!monitor) {
-      // We might end up here if the window was previously minimized and the
-      // user clicks on the taskbar button to restore it in the previously
-      // maximized position. In that case WM_NCCALCSIZE is sent before the
-      // window coordinates are restored to their previous values, so our
-      // (left,top) would probably be (-32000,-32000) like all minimized
-      // windows. So the above MonitorFromWindow call fails, but if we check
-      // the window rect given with WM_NCCALCSIZE (which is our previous
-      // restored window position) we will get the correct monitor handle.
-      monitor = MonitorFromRect(client_rect, MONITOR_DEFAULTTONULL);
-      if (!monitor) {
-        // This is probably an extreme case that we won't hit, but if we don't
-        // intersect any monitor, let us not adjust the client rect since our
-        // window will not be visible anyway.
-        return 0;
-      }
-    }
     const int autohide_edges = GetAppbarAutohideEdges(monitor);
     if (autohide_edges & ViewsDelegate::EDGE_LEFT)
       client_rect->left += kAutoHideTaskbarThicknessPx;
@@ -2615,7 +2611,7 @@ void HWNDMessageHandler::OnWindowPosChanging(WINDOWPOS* window_pos) {
         // Windows automatically adds a standard width border to all sides when
         // window is maximized. We should take this into account.
         gfx::Insets client_area_insets;
-        if (GetClientAreaInsets(&client_area_insets))
+        if (GetClientAreaInsets(&client_area_insets, monitor))
           expected_maximized_bounds.Inset(client_area_insets.Scale(-1));
       }
       // Sometimes Windows incorrectly changes bounds of maximized windows after

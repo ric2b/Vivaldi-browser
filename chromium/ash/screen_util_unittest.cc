@@ -4,6 +4,7 @@
 
 #include "ash/screen_util.h"
 
+#include "ash/shelf/shelf_constants.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_util.h"
@@ -29,13 +30,15 @@ TEST_F(ScreenUtilTest, Bounds) {
       NULL, CurrentContext(), gfx::Rect(610, 10, 100, 100));
   secondary->Show();
 
-  // Maximized bounds. By default the shelf is 47px tall (ash::kShelfSize).
+  // Maximized bounds.
+  const int bottom_inset_first = 600 - ShelfConstants::shelf_size();
+  const int bottom_inset_second = 500 - ShelfConstants::shelf_size();
   EXPECT_EQ(
-      gfx::Rect(0, 0, 600, 552).ToString(),
+      gfx::Rect(0, 0, 600, bottom_inset_first).ToString(),
       screen_util::GetMaximizedWindowBoundsInParent(primary->GetNativeView())
           .ToString());
   EXPECT_EQ(
-      gfx::Rect(0, 0, 500, 452).ToString(),
+      gfx::Rect(0, 0, 500, bottom_inset_second).ToString(),
       screen_util::GetMaximizedWindowBoundsInParent(secondary->GetNativeView())
           .ToString());
 
@@ -49,11 +52,11 @@ TEST_F(ScreenUtilTest, Bounds) {
 
   // Work area bounds
   EXPECT_EQ(
-      gfx::Rect(0, 0, 600, 552).ToString(),
+      gfx::Rect(0, 0, 600, bottom_inset_first).ToString(),
       screen_util::GetDisplayWorkAreaBoundsInParent(primary->GetNativeView())
           .ToString());
   EXPECT_EQ(
-      gfx::Rect(0, 0, 500, 452).ToString(),
+      gfx::Rect(0, 0, 500, bottom_inset_second).ToString(),
       screen_util::GetDisplayWorkAreaBoundsInParent(secondary->GetNativeView())
           .ToString());
 }
@@ -164,6 +167,29 @@ TEST_F(ScreenUtilTest, ShelfDisplayBoundsInUnifiedDesktopGrid) {
   widget->SetBounds(gfx::Rect(620, 940, 100, 100));
   EXPECT_EQ(gfx::Rect(0, 0, 499, 400),
             screen_util::GetDisplayBoundsWithShelf(window));
+}
+
+TEST_F(ScreenUtilTest, SnapBoundsToDisplayEdge) {
+  UpdateDisplay("2400x1600*1.5");
+
+  gfx::Rect bounds(1555, 0, 45, 1066);
+  views::Widget* widget = views::Widget::CreateWindowWithContextAndBounds(
+      NULL, CurrentContext(), bounds);
+  aura::Window* window = widget->GetNativeWindow();
+
+  gfx::Rect snapped_bounds =
+      screen_util::SnapBoundsToDisplayEdge(bounds, window);
+
+  EXPECT_EQ(snapped_bounds, gfx::Rect(1555, 0, 45, 1067));
+
+  bounds = gfx::Rect(5, 1000, 1595, 66);
+  snapped_bounds = screen_util::SnapBoundsToDisplayEdge(bounds, window);
+  EXPECT_EQ(snapped_bounds, gfx::Rect(5, 1000, 1595, 67));
+
+  UpdateDisplay("800x600");
+  bounds = gfx::Rect(0, 552, 800, 48);
+  snapped_bounds = screen_util::SnapBoundsToDisplayEdge(bounds, window);
+  EXPECT_EQ(snapped_bounds, gfx::Rect(0, 552, 800, 48));
 }
 
 }  // namespace ash

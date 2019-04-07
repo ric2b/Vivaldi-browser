@@ -4,204 +4,236 @@
 
 package org.chromium.chrome.browser.media.router.caf;
 
-import android.os.Handler;
-import android.support.annotation.NonNull;
+import static org.chromium.chrome.browser.media.router.caf.CastUtils.isSameOrigin;
+
 import android.support.annotation.Nullable;
-import android.support.v7.media.MediaRouteSelector;
 import android.support.v7.media.MediaRouter;
-import android.support.v7.media.MediaRouter.RouteInfo;
+
+import com.google.android.gms.cast.framework.CastSession;
 
 import org.chromium.base.Log;
 import org.chromium.chrome.browser.media.router.ChromeMediaRouter;
-import org.chromium.chrome.browser.media.router.DiscoveryCallback;
-import org.chromium.chrome.browser.media.router.DiscoveryDelegate;
-import org.chromium.chrome.browser.media.router.MediaController;
+import org.chromium.chrome.browser.media.router.ClientRecord;
+import org.chromium.chrome.browser.media.router.MediaRoute;
 import org.chromium.chrome.browser.media.router.MediaRouteManager;
 import org.chromium.chrome.browser.media.router.MediaRouteProvider;
 import org.chromium.chrome.browser.media.router.MediaSink;
 import org.chromium.chrome.browser.media.router.MediaSource;
 import org.chromium.chrome.browser.media.router.cast.CastMediaSource;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
  * A {@link MediaRouteProvider} implementation for Cast devices and applications, using Cast v3 API.
  */
-public class CafMediaRouteProvider implements MediaRouteProvider, DiscoveryDelegate {
-    private static final String TAG = "cr_CafMRP";
+public class CafMediaRouteProvider extends CafBaseMediaRouteProvider {
+    private static final String TAG = "CafMRP";
 
-    protected static final List<MediaSink> NO_SINKS = Collections.emptyList();
+    private static final String AUTO_JOIN_PRESENTATION_ID = "auto-join";
+    private static final String PRESENTATION_ID_SESSION_ID_PREFIX = "cast-session_";
 
-    protected final MediaRouter mAndroidMediaRouter;
-    protected final MediaRouteManager mManager;
-    protected final Map<String, DiscoveryCallback> mDiscoveryCallbacks =
-            new HashMap<String, DiscoveryCallback>();
-    protected Handler mHandler = new Handler();
+    private CreateRouteRequestInfo mPendingCreateRouteRequestInfo;
 
-    private CafMediaRouteProvider(MediaRouter androidMediaRouter, MediaRouteManager manager) {
-        mAndroidMediaRouter = androidMediaRouter;
-        mManager = manager;
-    }
+    private ClientRecord mLastRemovedRouteRecord;
+    // The records for clients, which must match mRoutes. This is used for the saving last record
+    // for autojoin.
+    private final Map<String, ClientRecord> mClientIdToRecords =
+            new HashMap<String, ClientRecord>();
+    private CafMessageHandler mMessageHandler;
 
     public static CafMediaRouteProvider create(MediaRouteManager manager) {
         return new CafMediaRouteProvider(ChromeMediaRouter.getAndroidMediaRouter(), manager);
     }
 
-    @Override
-    public boolean supportsSource(String sourceId) {
-        return getSourceFromId(sourceId) != null;
-    }
-
-    @Override
-    public void startObservingMediaSinks(String sourceId) {
-        Log.d(TAG, "startObservingMediaSinks: " + sourceId);
-
-        if (mAndroidMediaRouter == null) {
-            // If the MediaRouter API is not available, report no devices so the page doesn't even
-            // try to cast.
-            onSinksReceived(sourceId, NO_SINKS);
-            return;
-        }
-
-        MediaSource source = getSourceFromId(sourceId);
-        if (source == null) {
-            // If the source is invalid or not supported by this provider, report no devices
-            // available.
-            onSinksReceived(sourceId, NO_SINKS);
-            return;
-        }
-
-        MediaRouteSelector routeSelector = source.buildRouteSelector();
-        if (routeSelector == null) {
-            // If the application invalid, report no devices available.
-            onSinksReceived(sourceId, NO_SINKS);
-            return;
-        }
-
-        // No-op, if already monitoring the application for this source.
-        String applicationId = source.getApplicationId();
-        DiscoveryCallback callback = mDiscoveryCallbacks.get(applicationId);
-        if (callback != null) {
-            callback.addSourceUrn(sourceId);
-            return;
-        }
-
-        List<MediaSink> knownSinks = new ArrayList<MediaSink>();
-        for (RouteInfo route : mAndroidMediaRouter.getRoutes()) {
-            if (route.matchesSelector(routeSelector)) {
-                knownSinks.add(MediaSink.fromRoute(route));
-            }
-        }
-
-        callback = new DiscoveryCallback(sourceId, knownSinks, this, routeSelector);
-        mAndroidMediaRouter.addCallback(
-                routeSelector, callback, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY);
-        mDiscoveryCallbacks.put(applicationId, callback);
-    }
-
-    @Override
-    public void stopObservingMediaSinks(String sourceId) {
-        Log.d(TAG, "startObservingMediaSinks: " + sourceId);
-
-        if (mAndroidMediaRouter == null) {
-            // If the MediaRouter API is not available, report no devices so the page doesn't even
-            // try to cast.
-            onSinksReceived(sourceId, NO_SINKS);
-            return;
-        }
-
-        MediaSource source = getSourceFromId(sourceId);
-        if (source == null) {
-            // If the source is invalid or not supported by this provider, report no devices
-            // available.
-            onSinksReceived(sourceId, NO_SINKS);
-            return;
-        }
-
-        MediaRouteSelector routeSelector = source.buildRouteSelector();
-        if (routeSelector == null) {
-            // If the application invalid, report no devices available.
-            onSinksReceived(sourceId, NO_SINKS);
-            return;
-        }
-
-        // No-op, if already monitoring the application for this source.
-        String applicationId = source.getApplicationId();
-        DiscoveryCallback callback = mDiscoveryCallbacks.get(applicationId);
-        if (callback != null) {
-            callback.addSourceUrn(sourceId);
-            return;
-        }
-
-        List<MediaSink> knownSinks = new ArrayList<MediaSink>();
-        for (RouteInfo route : mAndroidMediaRouter.getRoutes()) {
-            if (route.matchesSelector(routeSelector)) {
-                knownSinks.add(MediaSink.fromRoute(route));
-            }
-        }
-
-        callback = new DiscoveryCallback(sourceId, knownSinks, this, routeSelector);
-        mAndroidMediaRouter.addCallback(
-                routeSelector, callback, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY);
-        mDiscoveryCallbacks.put(applicationId, callback);
-    }
-
-    /**
-     * Forward the sinks back to the native counterpart.
-     */
-    protected void onSinksReceivedInternal(String sourceId, @NonNull List<MediaSink> sinks) {
-        Log.d(TAG, "Reporting %d sinks for source: %s", sinks.size(), sourceId);
-        mManager.onSinksReceived(sourceId, this, sinks);
-    }
-
-    /**
-     * {@link DiscoveryDelegate} implementation.
-     */
-    @Override
-    public void onSinksReceived(String sourceId, @NonNull List<MediaSink> sinks) {
-        Log.d(TAG, "Received %d sinks for sourceId: %s", sinks.size(), sourceId);
-        mHandler.post(() -> { onSinksReceivedInternal(sourceId, sinks); });
-    }
-
-    @Override
-    public void createRoute(String sourceId, String sinkId, String presentationId, String origin,
-            int tabId, boolean isIncognito, int nativeRequestId) {
-        // Not implemented.
+    public Map<String, ClientRecord> getClientIdToRecords() {
+        return mClientIdToRecords;
     }
 
     @Override
     public void joinRoute(
             String sourceId, String presentationId, String origin, int tabId, int nativeRequestId) {
-        // Not implemented.
+        CastMediaSource source = CastMediaSource.from(sourceId);
+        if (source == null || source.getClientId() == null) {
+            mManager.onRouteRequestError("Unsupported presentation URL", nativeRequestId);
+            return;
+        }
+
+        if (!hasSession()) {
+            mManager.onRouteRequestError("No presentation", nativeRequestId);
+            return;
+        }
+
+        if (!canJoinExistingSession(presentationId, origin, tabId, source)) {
+            mManager.onRouteRequestError("No matching route", nativeRequestId);
+            return;
+        }
+
+        MediaRoute route =
+                new MediaRoute(sessionController().getSink().getId(), sourceId, presentationId);
+        addRoute(route, origin, tabId, nativeRequestId, /* wasLaunched= */ false);
     }
 
+    // TODO(zqzhang): the clientRecord/route management is not clean and the logic seems to be
+    // problematic.
     @Override
     public void closeRoute(String routeId) {
-        // Not implemented.
+        boolean isRouteInRecord = mRoutes.containsKey(routeId);
+
+        super.closeRoute(routeId);
+
+        if (!isRouteInRecord) return;
+
+        ClientRecord client = getClientRecordByRouteId(routeId);
+        if (client != null) {
+            MediaSink sink = MediaSink.fromSinkId(
+                    sessionController().getSink().getId(), getAndroidMediaRouter());
+            if (sink != null) {
+                mMessageHandler.sendReceiverActionToClient(routeId, sink, client.clientId, "stop");
+            }
+        }
     }
 
     @Override
     public void detachRoute(String routeId) {
-        // Not implemented.
+        removeRoute(routeId, /* error= */ null);
     }
 
     @Override
     public void sendStringMessage(String routeId, String message, int nativeCallbackId) {
-        // Not implemented.
+        Log.d(TAG, "Received message from client: %s", message);
+
+        if (!mRoutes.containsKey(routeId)) {
+            mManager.onMessageSentResult(false, nativeCallbackId);
+            return;
+        }
+
+        mManager.onMessageSentResult(
+                mMessageHandler.handleMessageFromClient(message), nativeCallbackId);
     }
 
     @Override
+    protected MediaSource getSourceFromId(String sourceId) {
+        return CastMediaSource.from(sourceId);
+    }
+
+    public void sendMessageToClient(String clientId, String message) {
+        ClientRecord clientRecord = mClientIdToRecords.get(clientId);
+        if (clientRecord == null) return;
+
+        if (!clientRecord.isConnected) {
+            Log.d(TAG, "Queueing message to client %s: %s", clientId, message);
+            clientRecord.pendingMessages.add(message);
+            return;
+        }
+
+        Log.d(TAG, "Sending message to client %s: %s", clientId, message);
+        mManager.onMessage(clientRecord.routeId, message);
+    }
+
+    /** Flushes all pending messages in record to a client. */
+    public void flushPendingMessagesToClient(ClientRecord clientRecord) {
+        for (String message : clientRecord.pendingMessages) {
+            Log.d(TAG, "Deqeueing message for client %s: %s", clientRecord.clientId, message);
+            mManager.onMessage(clientRecord.routeId, message);
+        }
+        clientRecord.pendingMessages.clear();
+    }
+
+    @Override
+    public CafMessageHandler getMessageHandler() {
+        return mMessageHandler;
+    }
+
+    @Override
+    public void onSessionStarted(CastSession session, String sessionId) {
+        super.onSessionStarted(session, sessionId);
+
+        for (ClientRecord clientRecord : mClientIdToRecords.values()) {
+            // Should be exactly one instance of MediaRoute/ClientRecord at this moment.
+            MediaRoute route = mRoutes.get(clientRecord.routeId);
+            MediaSink sink = MediaSink.fromSinkId(route.sinkId, getAndroidMediaRouter());
+            mMessageHandler.sendReceiverActionToClient(
+                    clientRecord.routeId, sink, clientRecord.clientId, "cast");
+        }
+
+        mMessageHandler.onSessionStarted(sessionController());
+        sessionController().getSession().getRemoteMediaClient().requestStatus();
+    }
+
+    @Override
+    protected void addRoute(
+            MediaRoute route, String origin, int tabId, int nativeRequestId, boolean wasLaunched) {
+        super.addRoute(route, origin, tabId, nativeRequestId, wasLaunched);
+        CastMediaSource source = CastMediaSource.from(route.sourceId);
+        final String clientId = source.getClientId();
+
+        if (clientId == null || mClientIdToRecords.containsKey(clientId)) return;
+
+        mClientIdToRecords.put(clientId,
+                new ClientRecord(route.id, clientId, source.getApplicationId(),
+                        source.getAutoJoinPolicy(), origin, tabId));
+    }
+
+    @Override
+    protected void removeRoute(String routeId, @Nullable String error) {
+        ClientRecord record = getClientRecordByRouteId(routeId);
+        if (record != null) {
+            mLastRemovedRouteRecord = mClientIdToRecords.remove(record.clientId);
+        }
+        super.removeRoute(routeId, error);
+    }
+
     @Nullable
-    public MediaController getMediaController(String routeId) {
-        // Not implemented.
+    private ClientRecord getClientRecordByRouteId(String routeId) {
+        for (ClientRecord record : mClientIdToRecords.values()) {
+            if (record.routeId.equals(routeId)) return record;
+        }
         return null;
     }
 
-    private MediaSource getSourceFromId(String sourceId) {
-        return CastMediaSource.from(sourceId);
+    private CafMediaRouteProvider(MediaRouter androidMediaRouter, MediaRouteManager manager) {
+        super(androidMediaRouter, manager);
+        mMessageHandler = new CafMessageHandler(this);
+    }
+
+    private boolean canJoinExistingSession(
+            String presentationId, String origin, int tabId, CastMediaSource source) {
+        if (AUTO_JOIN_PRESENTATION_ID.equals(presentationId)) {
+            return canAutoJoin(source, origin, tabId);
+        }
+        if (presentationId.startsWith(PRESENTATION_ID_SESSION_ID_PREFIX)) {
+            String sessionId = presentationId.substring(PRESENTATION_ID_SESSION_ID_PREFIX.length());
+            return sessionController().getSession().getSessionId().equals(sessionId);
+        }
+        for (MediaRoute route : mRoutes.values()) {
+            if (route.presentationId.equals(presentationId)) return true;
+        }
+        return false;
+    }
+
+    private boolean canAutoJoin(CastMediaSource source, String origin, int tabId) {
+        if (source.getAutoJoinPolicy().equals(CastMediaSource.AUTOJOIN_PAGE_SCOPED)) return false;
+
+        CastMediaSource currentSource = (CastMediaSource) sessionController().getSource();
+        if (!currentSource.getApplicationId().equals(source.getApplicationId())) return false;
+
+        if (mClientIdToRecords.isEmpty() && mLastRemovedRouteRecord != null) {
+            return isSameOrigin(origin, mLastRemovedRouteRecord.origin)
+                    && tabId == mLastRemovedRouteRecord.tabId;
+        }
+
+        if (mClientIdToRecords.isEmpty()) return false;
+
+        ClientRecord client = mClientIdToRecords.values().iterator().next();
+
+        if (source.getAutoJoinPolicy().equals(CastMediaSource.AUTOJOIN_ORIGIN_SCOPED)) {
+            return isSameOrigin(origin, client.origin);
+        }
+        if (source.getAutoJoinPolicy().equals(CastMediaSource.AUTOJOIN_TAB_AND_ORIGIN_SCOPED)) {
+            return isSameOrigin(origin, client.origin) && tabId == client.tabId;
+        }
+
+        return false;
     }
 }

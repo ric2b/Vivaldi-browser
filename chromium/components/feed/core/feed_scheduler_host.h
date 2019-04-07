@@ -9,9 +9,11 @@
 #include <set>
 
 #include "base/callback.h"
+#include "base/containers/flat_map.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "components/feed/core/refresh_throttler.h"
 #include "components/feed/core/user_classifier.h"
 #include "components/web_resource/eula_accepted_notifier.h"
 
@@ -102,9 +104,13 @@ class FeedSchedulerHost : web_resource::EulaAcceptedNotifier::Observer {
   // upgrades that change the way tasks are stored.
   void OnTaskReschedule();
 
-  // Called when a suggestion is consumed to update what kind of user the
-  // scheduler should be optimizing for.
+  // Should be called when a suggestion is consumed. This is a signal the
+  // scheduler users to track the kind of user, and optimize refresh frequency.
   void OnSuggestionConsumed();
+
+  // Should be called when suggestions are shown. This is a signal the scheduler
+  // users to track the kind of user, and optimize refresh frequency.
+  void OnSuggestionsShown();
 
   // When the user clears history, the scheduler will clear out some stored data
   // and stop requesting refreshes for a period of time.
@@ -180,6 +186,11 @@ class FeedSchedulerHost : web_resource::EulaAcceptedNotifier::Observer {
   // occurs after a refresh.
   bool time_until_first_shown_trigger_reported_ = false;
   bool time_until_first_foregrounded_trigger_reported_ = false;
+
+  // In the case the user transitions between user classes, hold onto a
+  // throttler for any situation.
+  base::flat_map<UserClassifier::UserClass, std::unique_ptr<RefreshThrottler>>
+      throttlers_;
 
   DISALLOW_COPY_AND_ASSIGN(FeedSchedulerHost);
 };

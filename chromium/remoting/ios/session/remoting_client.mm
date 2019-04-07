@@ -11,7 +11,7 @@
 #include <memory>
 
 #import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
-#import "remoting/ios/audio/audio_player_ios.h"
+#import "remoting/ios/audio/audio_playback_sink_ios.h"
 #import "remoting/ios/display/gl_display_handler.h"
 #import "remoting/ios/domain/client_session_details.h"
 #import "remoting/ios/domain/host_info.h"
@@ -19,10 +19,10 @@
 #import "remoting/ios/persistence/remoting_preferences.h"
 
 #include "base/strings/sys_string_conversions.h"
+#include "remoting/client/audio/audio_playback_stream.h"
 #include "remoting/client/chromoting_client_runtime.h"
 #include "remoting/client/chromoting_session.h"
 #include "remoting/client/connect_to_host_info.h"
-#include "remoting/client/display/renderer_proxy.h"
 #include "remoting/client/gesture_interpreter.h"
 #include "remoting/client/input/keyboard_interpreter.h"
 #import "remoting/ios/facade/remoting_authentication.h"
@@ -66,8 +66,6 @@ static void ResolveFeedbackDataCallback(
   remoting::protocol::SecretFetchedCallback _secretFetchedCallback;
   remoting::GestureInterpreter _gestureInterpreter;
   remoting::KeyboardInterpreter _keyboardInterpreter;
-  std::unique_ptr<remoting::RendererProxy> _renderer;
-  std::unique_ptr<remoting::AudioPlayerIos> _audioPlayer;
 
   // _session is valid only when the session is connected.
   std::unique_ptr<remoting::ChromotingSession> _session;
@@ -100,7 +98,8 @@ static void ResolveFeedbackDataCallback(
 
 - (void)connectToHost:(HostInfo*)hostInfo
              username:(NSString*)username
-          accessToken:(NSString*)accessToken {
+          accessToken:(NSString*)accessToken
+           entryPoint:(remoting::ChromotingEvent::SessionEntryPoint)entryPoint {
   DCHECK(_runtime->ui_task_runner()->BelongsToCurrentThread());
   DCHECK(hostInfo);
   DCHECK(hostInfo.jabberId);
@@ -124,6 +123,8 @@ static void ResolveFeedbackDataCallback(
   info.pairing_id = pairing.pairing_id();
   info.pairing_secret = pairing.pairing_secret();
 
+  info.session_entry_point = entryPoint;
+
   info.capabilities = "";
   if ([RemotingPreferences.instance boolForFlag:RemotingFlagUseWebRTC]) {
     info.flags = "useWebrtc";
@@ -131,41 +132,24 @@ static void ResolveFeedbackDataCallback(
         showMessage:[MDCSnackbarMessage messageWithText:@"Using WebRTC"]];
   }
 
-  _audioPlayer = remoting::AudioPlayerIos::CreateAudioPlayer(
+  auto audioStream = std::make_unique<remoting::AudioPlaybackStream>(
+      std::make_unique<remoting::AudioPlaybackSinkIos>(),
       _runtime->audio_task_runner());
 
   _displayHandler = [[GlDisplayHandler alloc] init];
   _displayHandler.delegate = self;
 
   _session.reset(new remoting::ChromotingSession(
-      _sessonDelegate->GetWeakPtr(), [_displayHandler CreateCursorShapeStub],
-      [_displayHandler CreateVideoRenderer],
-      _audioPlayer->GetAudioStreamConsumer(), info));
-  _renderer = [_displayHandler CreateRendererProxy];
-  _gestureInterpreter.SetContext(_renderer.get(), _session.get());
+      _sessonDelegate->GetWeakPtr(), [_displayHandler createCursorShapeStub],
+      [_displayHandler createVideoRenderer], std::move(audioStream), info));
+  _gestureInterpreter.SetContext(_displayHandler.rendererProxy, _session.get());
   _keyboardInterpreter.SetContext(_session.get());
-
-  _session->Connect();
-  _audioPlayer->Start();
 }
 
 - (void)disconnectFromHost {
   _session.reset();
 
   _displayHandler = nil;
-
-  if (_audioPlayer) {
-    _audioPlayer->Invalidate();
-    _runtime->audio_task_runner()->DeleteSoon(FROM_HERE,
-                                              _audioPlayer.release());
-  }
-  // This needs to be deleted on the display thread since GlDisplayHandler binds
-  // its WeakPtrFactory to the display thread.
-  // TODO(yuweih): Ideally this constraint can be removed once we allow
-  // GlRenderer to be created on the UI thread before being used.
-  if (_renderer) {
-    _runtime->display_task_runner()->DeleteSoon(FROM_HERE, _renderer.release());
-  }
 
   _gestureInterpreter.SetContext(nullptr, nullptr);
   _keyboardInterpreter.SetContext(nullptr);

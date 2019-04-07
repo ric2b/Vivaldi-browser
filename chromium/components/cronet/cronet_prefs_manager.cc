@@ -168,7 +168,7 @@ class NetworkQualitiesPrefDelegateImpl
 
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &NetworkQualitiesPrefDelegateImpl::SchedulePendingLossyWrites,
             weak_ptr_factory_.GetWeakPtr()),
         base::TimeDelta::FromSeconds(kUpdatePrefsDelaySeconds));
@@ -232,8 +232,8 @@ CronetPrefsManager::CronetPrefsManager(
   base::FilePath filepath =
       storage_file_path.Append(kPrefsDirectoryName).Append(kPrefsFileName);
 
-  json_pref_store_ = new JsonPrefStore(filepath, file_task_runner,
-                                       std::unique_ptr<PrefFilter>());
+  json_pref_store_ = new JsonPrefStore(filepath, std::unique_ptr<PrefFilter>(),
+                                       file_task_runner);
 
   // Register prefs and set up the PrefService.
   PrefServiceFactory factory;

@@ -27,6 +27,29 @@ component("fido") {
     "authenticator_selection_criteria.h",
     "authenticator_supported_options.cc",
     "authenticator_supported_options.h",
+    "ble/fido_ble_connection.cc",
+    "ble/fido_ble_connection.h",
+    "ble/fido_ble_device.cc",
+    "ble/fido_ble_device.h",
+    "ble/fido_ble_discovery.cc",
+    "ble/fido_ble_discovery.h",
+    "ble/fido_ble_discovery_base.cc",
+    "ble/fido_ble_discovery_base.h",
+    "ble/fido_ble_frames.cc",
+    "ble/fido_ble_frames.h",
+    "ble/fido_ble_transaction.cc",
+    "ble/fido_ble_transaction.h",
+    "ble/fido_ble_uuids.cc",
+    "ble/fido_ble_uuids.h",
+    "ble_adapter_power_manager.cc",
+    "ble_adapter_power_manager.h",
+    "cable/cable_discovery_data.h",
+    "cable/fido_cable_device.cc",
+    "cable/fido_cable_device.h",
+    "cable/fido_cable_discovery.cc",
+    "cable/fido_cable_discovery.h",
+    "cable/fido_cable_handshake_handler.cc",
+    "cable/fido_cable_handshake_handler.h",
     "ctap2_device_operation.h",
     "ctap_empty_authenticator_request.cc",
     "ctap_empty_authenticator_request.h",
@@ -40,26 +63,6 @@ component("fido") {
     "ec_public_key.cc",
     "ec_public_key.h",
     "fido_authenticator.h",
-    "fido_ble_connection.cc",
-    "fido_ble_connection.h",
-    "fido_ble_device.cc",
-    "fido_ble_device.h",
-    "fido_ble_discovery.cc",
-    "fido_ble_discovery.h",
-    "fido_ble_discovery_base.cc",
-    "fido_ble_discovery_base.h",
-    "fido_ble_frames.cc",
-    "fido_ble_frames.h",
-    "fido_ble_transaction.cc",
-    "fido_ble_transaction.h",
-    "fido_ble_uuids.cc",
-    "fido_ble_uuids.h",
-    "fido_cable_device.cc",
-    "fido_cable_device.h",
-    "fido_cable_discovery.cc",
-    "fido_cable_discovery.h",
-    "fido_cable_handshake_handler.cc",
-    "fido_cable_handshake_handler.h",
     "fido_constants.cc",
     "fido_constants.h",
     "fido_device.cc",
@@ -68,10 +71,6 @@ component("fido") {
     "fido_device_authenticator.h",
     "fido_discovery.cc",
     "fido_discovery.h",
-    "fido_hid_message.cc",
-    "fido_hid_message.h",
-    "fido_hid_packet.cc",
-    "fido_hid_packet.h",
     "fido_parsing_utils.cc",
     "fido_parsing_utils.h",
     "fido_request_handler.h",
@@ -79,11 +78,16 @@ component("fido") {
     "fido_request_handler_base.h",
     "fido_task.cc",
     "fido_task.h",
+    "fido_transport_protocol.cc",
     "fido_transport_protocol.h",
     "get_assertion_request_handler.cc",
     "get_assertion_request_handler.h",
     "get_assertion_task.cc",
     "get_assertion_task.h",
+    "hid/fido_hid_message.cc",
+    "hid/fido_hid_message.h",
+    "hid/fido_hid_packet.cc",
+    "hid/fido_hid_packet.h",
     "make_credential_request_handler.cc",
     "make_credential_request_handler.h",
     "make_credential_task.cc",
@@ -125,9 +129,11 @@ component("fido") {
     "//components/cbor",
     "//crypto",
     "//device/base",
+    "//device/fido/strings",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/mojom",
     "//third_party/boringssl",
+    "//ui/base",
   ]
 
   public_deps = [
@@ -141,10 +147,10 @@ component("fido") {
   # HID is not supported on Android.
   if (!is_android) {
     sources += [
-      "fido_hid_device.cc",
-      "fido_hid_device.h",
-      "fido_hid_discovery.cc",
-      "fido_hid_discovery.h",
+      "hid/fido_hid_device.cc",
+      "hid/fido_hid_device.h",
+      "hid/fido_hid_discovery.cc",
+      "hid/fido_hid_discovery.h",
     ]
 
     deps += [
@@ -187,8 +193,8 @@ source_set("mocks") {
   testonly = true
 
   sources = [
-    "mock_fido_ble_connection.cc",
-    "mock_fido_ble_connection.h",
+    "ble/mock_fido_ble_connection.cc",
+    "ble/mock_fido_ble_connection.h",
     "mock_fido_device.cc",
     "mock_fido_device.h",
     "mock_fido_discovery_observer.cc",
@@ -205,7 +211,7 @@ source_set("mocks") {
 
 fuzzer_test("fido_hid_message_fuzzer") {
   sources = [
-    "fido_hid_message_fuzzer.cc",
+    "hid/fido_hid_message_fuzzer.cc",
   ]
   deps = [
     ":fido",
@@ -216,7 +222,7 @@ fuzzer_test("fido_hid_message_fuzzer") {
 
 fuzzer_test("fido_ble_frames_fuzzer") {
   sources = [
-    "fido_ble_frames_fuzzer.cc",
+    "ble/fido_ble_frames_fuzzer.cc",
   ]
   deps = [
     ":fido",
@@ -239,11 +245,14 @@ fuzzer_test("ctap_response_fuzzer") {
 
 fuzzer_test("fido_cable_handshake_handler_fuzzer") {
   sources = [
-    "fido_cable_handshake_handler_fuzzer.cc",
+    "cable/fido_cable_handshake_handler_fuzzer.cc",
   ]
   deps = [
     ":fido",
     "//base",
+    "//device/bluetooth:mocks",
+    "//testing/gmock",
+    "//testing/gtest",
   ]
   libfuzzer_options = [ "max_len=2048" ]
 }
@@ -272,8 +281,19 @@ source_set("test_support") {
   # Android doesn't compile. Linux requires udev.
   if (!is_linux_without_udev && !is_android) {
     sources += [
-      "fake_hid_impl_for_testing.cc",
-      "fake_hid_impl_for_testing.h",
+      "hid/fake_hid_impl_for_testing.cc",
+      "hid/fake_hid_impl_for_testing.h",
+    ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "mac/fake_keychain.h",
+      "mac/fake_keychain.mm",
+      "mac/fake_touch_id_context.h",
+      "mac/fake_touch_id_context.mm",
+      "mac/scoped_touch_id_test_environment.h",
+      "mac/scoped_touch_id_test_environment.mm",
     ]
   }
 }

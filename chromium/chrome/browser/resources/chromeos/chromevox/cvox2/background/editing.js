@@ -312,8 +312,7 @@ AutomationRichEditableText.prototype = {
     // Also, skip speech based on the predicate.
     if (ChromeVoxState.isReadingContinuously ||
         AutomationPredicate.shouldOnlyOutputSelectionChangeInBraille(
-            this.node_) ||
-        (!DesktopAutomationHandler.announceActions && eventFrom == 'action')) {
+            this.node_)) {
       this.brailleCurrentRichLine_();
       this.updateIntraLineState_(cur);
       return;
@@ -605,7 +604,9 @@ AutomationRichEditableText.prototype = {
         return;
       var start = value.getSpanStart(span);
       var end = value.getSpanEnd(span);
-      value.setSpan(new cvox.BrailleTextStyleSpan(formType), start, end);
+      value.setSpan(new cvox.BrailleTextStyleSpan(
+          /** @type {cvox.LibLouis.FormType<number>} */(formType)),
+                    start, end);
     });
 
     // Provide context for the current selection.

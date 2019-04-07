@@ -4,46 +4,80 @@
 
 package org.chromium.chrome.browser.browserservices;
 
-import android.content.Context;
+import android.content.res.Resources;
 
-import org.chromium.base.CommandLine;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
-import org.chromium.ui.widget.Toast;
-
-import java.util.Date;
-import java.util.concurrent.TimeUnit;
+import org.chromium.chrome.browser.snackbar.Snackbar;
+import org.chromium.chrome.browser.snackbar.SnackbarManager;
 
 /**
- * Since Trusted Web Activities are part of Chrome they have access to the cookie jar and have the
- * same reporting and metrics as other parts of Chrome. However, they have no UI making the fact
- * they are part of Chrome obvious to the user. Therefore we show a disclosure Toast whenever an
- * app opens a Trusted Web Activity, at most once per week per app.
+ * Shows the Trusted Web Activity disclosure when appropriate and records its acceptance.
+ *
+ * Lifecycle: There should be a 1-1 relationship between this class and
+ * {@link TrustedWebActivityUi}.
+ * Thread safety: All methods on this class should be called on the UI thread.
  */
-public class TrustedWebActivityDisclosure {
-    private static final int DISCLOSURE_PERIOD_DAYS = 7;
+/* package */ class TrustedWebActivityDisclosure {
+    private final Resources mResources;
+
+    private boolean mSnackbarShowing;
 
     /**
-     * Show the "Running in Chrome" disclosure (Toast) if one hasn't been shown recently.
+     * A {@link SnackbarManager.SnackbarController} that records the users acceptance of the
+     * "Running in Chrome" disclosure.
+     *
+     * It is also used as a key to for our snackbar so we can dismiss it when the user navigates
+     * to a page where they don't need to show the disclosure.
      */
-    public static void showIfNeeded(Context context, String packageName) {
-        ChromePreferenceManager prefs = ChromePreferenceManager.getInstance();
+    private final SnackbarManager.SnackbarController mSnackbarController =
+            new SnackbarManager.SnackbarController() {
+                /**
+                 * To be called when the user accepts the Running in Chrome disclosure.
+                 * @param actionData The package name of the client, as a String.
+                 */
+                @Override
+                public void onAction(Object actionData) {
+                    ChromePreferenceManager.getInstance()
+                            .setUserAcceptedTwaDisclosureForPackage((String) actionData);
+                }
+            };
 
-        Date now = new Date();
-        Date lastShown = prefs.getTrustedWebActivityLastDisclosureTime(packageName);
-        long millisSince = now.getTime() - lastShown.getTime();
-        long daysSince = TimeUnit.DAYS.convert(millisSince, TimeUnit.MILLISECONDS);
-
-        boolean force = CommandLine.getInstance().hasSwitch(
-                ChromeSwitches.FORCE_TRUSTED_WEB_ACTIVITY_DISCLOSURE);
-        if (!force && daysSince <= DISCLOSURE_PERIOD_DAYS) return;
-
-        prefs.setTrustedWebActivityLastDisclosureTime(packageName, now);
-
-        String disclosure = context.getResources().getString(R.string.twa_running_in_chrome);
-        Toast.makeText(context, disclosure, Toast.LENGTH_LONG).show();
+    /* package */ TrustedWebActivityDisclosure(Resources resources) {
+        mResources = resources;
     }
 
-    private TrustedWebActivityDisclosure() {}
+    /** Dismisses the Snackbar if it is showing. */
+    /* package */ void dismissSnackbarIfNeeded(SnackbarManager snackbarManager) {
+        if (!mSnackbarShowing) return;
+
+        snackbarManager.dismissSnackbars(mSnackbarController);
+        mSnackbarShowing = false;
+    }
+
+    /** Shows the Snackbar if it is not already showing and hasn't been accepted. */
+    /* package */ void showSnackbarIfNeeded(SnackbarManager snackbarManager, String packageName) {
+        if (mSnackbarShowing) return;
+        if (wasSnackbarDismissed(packageName)) return;
+
+        snackbarManager.showSnackbar(makeRunningInChromeInfobar(packageName));
+        mSnackbarShowing = true;
+    }
+
+    /** Has a Snackbar been dismissed for this client package before? */
+    private static boolean wasSnackbarDismissed(String packageName) {
+        return ChromePreferenceManager.getInstance()
+                .hasUserAcceptedTwaDisclosureForPackage(packageName);
+    }
+
+    private Snackbar makeRunningInChromeInfobar(String packageName) {
+        String title = mResources.getString(R.string.twa_running_in_chrome);
+        int type = Snackbar.TYPE_PERSISTENT;
+        int code = Snackbar.UMA_TWA_PRIVACY_DISCLOSURE;
+
+        String action = mResources.getString(R.string.ok_got_it);
+        return Snackbar.make(title, mSnackbarController, type, code)
+                .setAction(action, packageName)
+                .setSingleLine(false);
+    }
 }

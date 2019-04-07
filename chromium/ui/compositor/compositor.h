@@ -18,6 +18,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "cc/trees/element_id.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_single_thread_client.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
@@ -226,8 +227,8 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
     return context_factory_private_;
   }
 
-  void AddFrameSink(const viz::FrameSinkId& frame_sink_id);
-  void RemoveFrameSink(const viz::FrameSinkId& frame_sink_id);
+  void AddChildFrameSink(const viz::FrameSinkId& frame_sink_id);
+  void RemoveChildFrameSink(const viz::FrameSinkId& frame_sink_id);
 
   void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id);
 
@@ -305,8 +306,9 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
 
   // Gets or sets the scroll offset for the given layer in step with the
   // cc::InputHandler. Returns true if the layer is active on the impl side.
-  bool GetScrollOffsetForLayer(int layer_id, gfx::ScrollOffset* offset) const;
-  bool ScrollLayerTo(int layer_id, const gfx::ScrollOffset& offset);
+  bool GetScrollOffsetForLayer(cc::ElementId element_id,
+                               gfx::ScrollOffset* offset) const;
+  bool ScrollLayerTo(cc::ElementId element_id, const gfx::ScrollOffset& offset);
 
   // The "authoritative" vsync interval, if provided, will override interval
   // reported from 3D context. This is typically the value reported by a more
@@ -464,8 +466,9 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
   // The root of the Layer tree drawn by this compositor.
   Layer* root_layer_ = nullptr;
 
-  base::ObserverList<CompositorObserver, true> observer_list_;
-  base::ObserverList<CompositorAnimationObserver> animation_observer_list_;
+  base::ObserverList<CompositorObserver, true>::Unchecked observer_list_;
+  base::ObserverList<CompositorAnimationObserver>::Unchecked
+      animation_observer_list_;
 
   gfx::AcceleratedWidget widget_ = gfx::kNullAcceleratedWidget;
   // A sequence number of a current compositor frame for use with metrics.
@@ -489,6 +492,10 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
 
   // The manager of vsync parameters for this compositor.
   scoped_refptr<CompositorVSyncManager> vsync_manager_;
+
+  // Snapshot of last set vsync parameters, to avoid redundant IPCs.
+  base::TimeTicks vsync_timebase_;
+  base::TimeDelta vsync_interval_;
 
   bool external_begin_frames_enabled_;
   ExternalBeginFrameClient* external_begin_frame_client_ = nullptr;

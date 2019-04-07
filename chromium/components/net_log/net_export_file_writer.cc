@@ -14,8 +14,8 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/sequenced_task_runner.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -276,7 +276,7 @@ void NetExportFileWriter::GetFilePathToCompletedLog(
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!(log_exists_ && state_ == STATE_NOT_LOGGING)) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(path_callback, base::FilePath()));
+        FROM_HERE, base::BindOnce(path_callback, base::FilePath()));
     return;
   }
 
@@ -328,8 +328,8 @@ void NetExportFileWriter::NotifyStateObservers() {
 void NetExportFileWriter::NotifyStateObserversAsync() {
   DCHECK(thread_checker_.CalledOnValidThread());
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&NetExportFileWriter::NotifyStateObservers,
-                            weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&NetExportFileWriter::NotifyStateObservers,
+                                weak_ptr_factory_.GetWeakPtr()));
 }
 
 void NetExportFileWriter::SetStateAfterSetUpDefaultLogPath(

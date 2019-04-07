@@ -14,7 +14,6 @@
 #include "ash/public/cpp/app_list/app_list_constants.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/session/session_observer.h"
-#include "ash/wm/cursor_manager_chromeos.h"
 #include "ash/wm/system_modal_container_event_filter_delegate.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -22,6 +21,7 @@
 #include "base/observer_list.h"
 #include "chromeos/chromeos_switches.h"
 #include "ui/aura/window.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_target.h"
 #include "ui/wm/core/cursor_manager.h"
@@ -31,11 +31,9 @@ class PrefRegistrySimple;
 class PrefService;
 
 namespace aura {
+class Env;
 class RootWindow;
-class UserActivityForwarder;
 class Window;
-class WindowManagerClient;
-class WindowTreeClient;
 }  // namespace aura
 
 namespace display {
@@ -50,6 +48,7 @@ class FileHelper;
 
 namespace gfx {
 class Insets;
+class Point;
 }
 
 namespace keyboard {
@@ -65,13 +64,12 @@ class ContextFactory;
 class ContextFactoryPrivate;
 class UserActivityDetector;
 class UserActivityPowerManagerNotifier;
-namespace ws2 {
-class GpuInterfaceProvider;
-}
 }  // namespace ui
 
 namespace views {
 class NonClientFrameView;
+class PointerWatcher;
+enum class PointerWatcherEventTypes;
 class Widget;
 namespace corewm {
 class TooltipController;
@@ -87,6 +85,10 @@ class ShadowController;
 class VisibilityController;
 class WindowModalityController;
 }  // namespace wm
+
+namespace ws {
+class GpuInterfaceProvider;
+}
 
 namespace ash {
 
@@ -107,6 +109,7 @@ class BluetoothPowerController;
 class BrightnessControlDelegate;
 class CastConfigController;
 class ClientImageRegistry;
+class DisplayOutputProtection;
 class CrosDisplayConfig;
 class DetachableBaseHandler;
 class DetachableBaseNotificationController;
@@ -132,7 +135,6 @@ class ImmersiveContextAsh;
 class ImmersiveHandlerFactoryAsh;
 class KeyAccessibilityEnabler;
 class KeyboardBrightnessControlDelegate;
-class KeyboardUI;
 class LaserPointerController;
 class LocaleNotificationController;
 class LockStateController;
@@ -153,6 +155,7 @@ class OverlayEventFilter;
 class PartialMagnificationController;
 class PeripheralBatteryNotifier;
 class PersistentWindowController;
+class PointerWatcherAdapter;
 class PolicyRecommendationRestorer;
 class PowerButtonController;
 class PowerEventObserver;
@@ -161,7 +164,6 @@ class ProjectingObserver;
 class ResizeShadowController;
 class ResolutionNotificationController;
 class RootWindowController;
-class ShellPort;
 class ScreenLayoutObserver;
 class ScreenOrientationController;
 class ScreenshotController;
@@ -274,25 +276,11 @@ class ASH_EXPORT Shell : public SessionObserver,
   // Returns true if a system-modal dialog window is currently open.
   static bool IsSystemModalWindowOpen();
 
-  // TODO(sky): move this and WindowManagerClient into ShellMash that is owned
-  // by Shell. Doing the move is gated on having mash create Shell.
-  static void set_window_tree_client(aura::WindowTreeClient* client) {
-    window_tree_client_ = client;
-  }
-
-  static aura::WindowTreeClient* window_tree_client() {
-    return window_tree_client_;
-  }
-
-  static void set_window_manager_client(aura::WindowManagerClient* client) {
-    window_manager_client_ = client;
-  }
-  static aura::WindowManagerClient* window_manager_client() {
-    return window_manager_client_;
-  }
+  // Whether |window| hosts a remote client (e.g. the keyboard shortcut viewer
+  // app under classic ash, or a browser window under mash).
+  static bool HasRemoteClient(aura::Window* window);
 
   static Config GetAshConfig();
-  static bool ShouldUseIMEService();
 
   // Registers all ash related local state prefs to the given |registry|.
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry,
@@ -388,10 +376,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   CrosDisplayConfig* cros_display_config() {
     return cros_display_config_.get();
   }
-
-  // Returns nullptr in mash which has no global cursor manager.
   ::wm::CursorManager* cursor_manager() { return cursor_manager_.get(); }
-
   DetachableBaseHandler* detachable_base_handler() {
     return detachable_base_handler_.get();
   }
@@ -412,8 +397,12 @@ class ASH_EXPORT Shell : public SessionObserver,
   DisplayErrorObserver* display_error_observer() {
     return display_error_observer_.get();
   }
+  DisplayOutputProtection* display_output_protection() {
+    return display_output_protection_.get();
+  }
 
   DockedMagnifierController* docked_magnifier_controller();
+  aura::Env* aura_env() { return aura_env_; }
   ::wm::CompoundEventFilter* env_filter() { return env_filter_.get(); }
   EventRewriterController* event_rewriter_controller() {
     return event_rewriter_controller_.get();
@@ -438,7 +427,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   KeyboardBrightnessControlDelegate* keyboard_brightness_control_delegate() {
     return keyboard_brightness_control_delegate_.get();
   }
-  KeyboardUI* keyboard_ui() { return keyboard_ui_.get(); }
   LaserPointerController* laser_pointer_controller() {
     return laser_pointer_controller_.get();
   }
@@ -608,6 +596,20 @@ class ASH_EXPORT Shell : public SessionObserver,
   // Returns true if split view mode is active.
   bool IsSplitViewModeActive() const;
 
+  // Shows the context menu for the wallpaper or shelf at |location_in_screen|.
+  void ShowContextMenu(const gfx::Point& location_in_screen,
+                       ui::MenuSourceType source_type);
+
+  // If |events| is PointerWatcherEventTypes::MOVES,
+  // PointerWatcher::OnPointerEventObserved() is called for pointer move events.
+  // If |events| is PointerWatcherEventTypes::DRAGS,
+  // PointerWatcher::OnPointerEventObserved() is called for pointer drag events.
+  // Requesting pointer moves or drags may incur a performance hit and should be
+  // avoided if possible.
+  void AddPointerWatcher(views::PointerWatcher* watcher,
+                         views::PointerWatcherEventTypes events);
+  void RemovePointerWatcher(views::PointerWatcher* watcher);
+
   void AddShellObserver(ShellObserver* observer);
   void RemoveShellObserver(ShellObserver* observer);
 
@@ -626,6 +628,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   // Notifies observers that overview mode has ended.
   void NotifyOverviewModeEnded();
 
+  // Notifies observers that the end overivew mode animation has completed.
+  void NotifyOverviewModeEndingAnimationComplete();
+
   // Notifies observers that split view mode is about to be started (before the
   // window gets snapped and activated).
   void NotifySplitViewModeStarting();
@@ -642,10 +647,6 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   // Notifies observers that |pinned_window| changed its pinned window state.
   void NotifyPinnedStateChanged(aura::Window* pinned_window);
-
-  // Notifies observers that the shelf was created for |root_window|.
-  // TODO(jamescook): Move to Shelf.
-  void NotifyShelfCreatedForRootWindow(aura::Window* root_window);
 
   // Notifies observers that |root_window|'s shelf changed alignment.
   // TODO(jamescook): Move to Shelf.
@@ -672,15 +673,13 @@ class ASH_EXPORT Shell : public SessionObserver,
   friend class SmsObserverTest;
 
   Shell(std::unique_ptr<ShellDelegate> shell_delegate,
-        std::unique_ptr<ShellPort> shell_port);
+        service_manager::Connector* connector);
   ~Shell() override;
 
-  void Init(
-      ui::ContextFactory* context_factory,
-      ui::ContextFactoryPrivate* context_factory_private,
-      std::unique_ptr<base::Value> initial_display_prefs,
-      std::unique_ptr<ui::ws2::GpuInterfaceProvider> gpu_interface_provider,
-      service_manager::Connector* connector);
+  void Init(ui::ContextFactory* context_factory,
+            ui::ContextFactoryPrivate* context_factory_private,
+            std::unique_ptr<base::Value> initial_display_prefs,
+            std::unique_ptr<ws::GpuInterfaceProvider> gpu_interface_provider);
 
   // Initializes the display manager and related components.
   void InitializeDisplayManager();
@@ -717,11 +716,12 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   static Shell* instance_;
 
-  // Only valid in mash, for classic ash this is null.
-  static aura::WindowTreeClient* window_tree_client_;
-  static aura::WindowManagerClient* window_manager_client_;
+  // |owned_aura_env_| is non-null if Shell created aura::Env. Shell creates
+  // aura::Env only in single-process-mash mode.
+  std::unique_ptr<aura::Env> owned_aura_env_;
 
-  std::unique_ptr<ShellPort> shell_port_;
+  // This is either |owned_aura_env_|, or Env::GetInstance().
+  aura::Env* aura_env_;
 
   // The CompoundEventFilter owned by aura::Env object.
   std::unique_ptr<::wm::CompoundEventFilter> env_filter_;
@@ -745,7 +745,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<CastConfigController> cast_config_;
   std::unique_ptr<ClientImageRegistry> client_image_registry_;
   std::unique_ptr<CrosDisplayConfig> cros_display_config_;
-  service_manager::Connector* connector_ = nullptr;
+  service_manager::Connector* const connector_;
   std::unique_ptr<DetachableBaseHandler> detachable_base_handler_;
   std::unique_ptr<DetachableBaseNotificationController>
       detachable_base_notification_controller_;
@@ -758,7 +758,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<ImmersiveContextAsh> immersive_context_;
   std::unique_ptr<KeyboardBrightnessControlDelegate>
       keyboard_brightness_control_delegate_;
-  std::unique_ptr<KeyboardUI> keyboard_ui_;
   std::unique_ptr<keyboard::KeyboardController> keyboard_controller_;
   std::unique_ptr<LocaleNotificationController> locale_notification_controller_;
   std::unique_ptr<LoginScreenController> login_screen_controller_;
@@ -769,6 +768,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<MultiDeviceNotificationPresenter>
       multidevice_notification_presenter_;
   std::unique_ptr<NewWindowController> new_window_controller_;
+  std::unique_ptr<PointerWatcherAdapter> pointer_watcher_adapter_;
   std::unique_ptr<ResizeShadowController> resize_shadow_controller_;
   std::unique_ptr<SessionController> session_controller_;
   std::unique_ptr<NightLightController> night_light_controller_;
@@ -839,10 +839,6 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   std::unique_ptr<ScreenPinningController> screen_pinning_controller_;
 
-  // Forwards user activity ui::mojom::UserActivityMonitor to
-  // |user_activity_detector_|. Only initialized for mash.
-  std::unique_ptr<aura::UserActivityForwarder> user_activity_forwarder_;
-
   std::unique_ptr<PeripheralBatteryNotifier> peripheral_battery_notifier_;
   std::unique_ptr<PowerEventObserver> power_event_observer_;
   std::unique_ptr<PowerPrefs> power_prefs_;
@@ -858,6 +854,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<VirtualKeyboardController> virtual_keyboard_controller_;
   // Controls video output device state.
   std::unique_ptr<display::DisplayConfigurator> display_configurator_;
+  std::unique_ptr<DisplayOutputProtection> display_output_protection_;
   std::unique_ptr<DisplayColorManager> display_color_manager_;
   std::unique_ptr<DisplayErrorObserver> display_error_observer_;
   std::unique_ptr<ProjectingObserver> projecting_observer_;
@@ -908,7 +905,7 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   std::unique_ptr<MessageCenterController> message_center_controller_;
 
-  base::ObserverList<ShellObserver> shell_observers_;
+  base::ObserverList<ShellObserver>::Unchecked shell_observers_;
 
   base::WeakPtrFactory<Shell> weak_factory_;
 

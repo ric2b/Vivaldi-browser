@@ -18,7 +18,6 @@
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_types.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/signatures_util.h"
 #include "components/security_state/core/security_state.h"
@@ -243,6 +242,20 @@ class AutofillMetrics {
     NUM_SAVE_CARD_PROMPT_METRICS,
   };
 
+  // Metrics to measure user interaction with the Manage Cards view
+  // shown when user clicks on the save card icon after accepting
+  // to save a card.
+  enum ManageCardsPromptMetric {
+    // The manage cards promo was shown.
+    MANAGE_CARDS_SHOWN,
+    // The user clicked on [Done].
+    MANAGE_CARDS_DONE,
+    // The user clicked on [Manage cards].
+    MANAGE_CARDS_MANAGE_CARDS,
+
+    NUM_MANAGE_CARDS_PROMPT_METRICS
+  };
+
   // Metrics measuring how well we predict field types.  These metric values are
   // logged for each field in a submitted form for:
   //     - the heuristic prediction
@@ -421,6 +434,30 @@ class AutofillMetrics {
     // while the bubble was hidden.
     LOCAL_CARD_MIGRATION_BUBBLE_CLOSED_NAVIGATED_WHILE_HIDDEN = 3,
     NUM_LOCAL_CARD_MIGRATION_BUBBLE_USER_INTERACTION_METRICS,
+  };
+
+  // These metrics are logged for each local card migration origin. These are
+  // used to derive the conversion rate for each triggering source.
+  enum LocalCardMigrationPromptMetric {
+    // The intermediate bubble is shown to the user.
+    INTERMEDIATE_BUBBLE_SHOWN = 0,
+    // The intermediate bubble is accepted by the user.
+    INTERMEDIATE_BUBBLE_ACCEPTED = 1,
+    // The main dialog is shown to the user.
+    MAIN_DIALOG_SHOWN = 2,
+    // The main dialog is accepted by the user.
+    MAIN_DIALOG_ACCEPTED = 3,
+    NUM_LOCAL_CARD_MIGRATION_PROMPT_METRICS,
+  };
+
+  // Local card migration origin denotes from where the migration is triggered.
+  enum LocalCardMigrationOrigin {
+    // Trigger when user submitted a form using local card.
+    UseOfLocalCard,
+    // Trigger when user submitted a form using server card.
+    UseOfServerCard,
+    // Trigger from settings page.
+    SettingsPage,
   };
 
   // Each of these metrics is logged only for potentially autofillable forms,
@@ -812,6 +849,10 @@ class AutofillMetrics {
   // from its prefilled value or not.
   static void LogSaveCardCardholderNameWasEdited(bool edited);
 
+  // Logs whether the PaymentsCustomerData's billing ID was valid at the time of
+  // use.
+  static void LogPaymentsCustomerDataBillingIdIsValid(bool valid);
+
   // |upload_decision_metrics| is a bitmask of |CardUploadDecisionMetric|.
   static void LogCardUploadDecisionMetrics(int upload_decision_metrics);
   static void LogCreditCardInfoBarMetric(
@@ -830,6 +871,8 @@ class AutofillMetrics {
       SaveCardPromptMetric metric,
       bool is_uploading,
       security_state::SecurityLevel security_level);
+  static void LogManageCardsPromptMetric(ManageCardsPromptMetric metric,
+                                         bool is_uploading);
   static void LogScanCreditCardPromptMetric(ScanCreditCardPromptMetric metric);
   static void LogLocalCardMigrationBubbleOfferMetric(
       LocalCardMigrationBubbleOfferMetric metric,
@@ -837,6 +880,9 @@ class AutofillMetrics {
   static void LogLocalCardMigrationBubbleUserInteractionMetric(
       LocalCardMigrationBubbleUserInteractionMetric metric,
       bool is_reshow);
+  static void LogLocalCardMigrationPromptMetric(
+      LocalCardMigrationOrigin local_card_migration_origin,
+      LocalCardMigrationPromptMetric metric);
 
   // Should be called when credit card scan is finished. |duration| should be
   // the time elapsed between launching the credit card scanner and getting back

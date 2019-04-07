@@ -122,6 +122,23 @@ class CORE_EXPORT InspectorEmulationAgent final
   base::Optional<PendingVirtualTimePolicy> pending_virtual_time_policy_;
   bool enabled_ = false;
 
+  InspectorAgentState::String default_background_color_override_rgba_;
+  InspectorAgentState::Boolean script_execution_disabled_;
+  InspectorAgentState::Boolean scrollbars_hidden_;
+  InspectorAgentState::Boolean document_cookie_disabled_;
+  InspectorAgentState::Boolean touch_event_emulation_enabled_;
+  InspectorAgentState::Integer max_touch_points_;
+  InspectorAgentState::String emulated_media_;
+  InspectorAgentState::String navigator_platform_override_;
+  InspectorAgentState::String user_agent_override_;
+  InspectorAgentState::String accept_language_override_;
+  InspectorAgentState::Double virtual_time_budget_;
+  InspectorAgentState::Double virtual_time_budget_initial_offset_;
+  InspectorAgentState::Double initial_virtual_time_;
+  InspectorAgentState::Double virtual_time_offset_;
+  InspectorAgentState::String virtual_time_policy_;
+  InspectorAgentState::Integer virtual_time_task_starvation_count_;
+  InspectorAgentState::Boolean wait_for_navigation_;
   DISALLOW_COPY_AND_ASSIGN(InspectorEmulationAgent);
 };
 

@@ -10,11 +10,13 @@
 #include "ash/public/interfaces/event_rewriter_controller.mojom.h"
 #include "ash/shell.h"
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_setup_controller.h"
 #include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
@@ -92,15 +94,11 @@ CoreOobeHandler::CoreOobeHandler(OobeUI* oobe_ui,
       weak_ptr_factory_(this) {
   DCHECK(js_calls_container);
   set_call_js_prefix(kJsScreenPath);
-  if (features::IsAshInBrowserProcess()) {
-    AccessibilityManager* accessibility_manager = AccessibilityManager::Get();
-    CHECK(accessibility_manager);
-    accessibility_subscription_ = accessibility_manager->RegisterCallback(
-        base::Bind(&CoreOobeHandler::OnAccessibilityStatusChanged,
-                   base::Unretained(this)));
-  } else {
-    NOTIMPLEMENTED();
-  }
+  AccessibilityManager* accessibility_manager = AccessibilityManager::Get();
+  CHECK(accessibility_manager);
+  accessibility_subscription_ = accessibility_manager->RegisterCallback(
+      base::Bind(&CoreOobeHandler::OnAccessibilityStatusChanged,
+                 base::Unretained(this)));
 
   TabletModeClient* tablet_mode_client = TabletModeClient::Get();
   tablet_mode_client->AddObserver(this);
@@ -129,9 +127,11 @@ void CoreOobeHandler::DeclareLocalizedValues(
   // OOBE accessibility options menu strings shown on each screen.
   builder->Add("accessibilityLink", IDS_OOBE_ACCESSIBILITY_LINK);
   builder->Add("spokenFeedbackOption", IDS_OOBE_SPOKEN_FEEDBACK_OPTION);
+  builder->Add("selectToSpeakOption", IDS_OOBE_SELECT_TO_SPEAK_OPTION);
   builder->Add("largeCursorOption", IDS_OOBE_LARGE_CURSOR_OPTION);
   builder->Add("highContrastOption", IDS_OOBE_HIGH_CONTRAST_MODE_OPTION);
   builder->Add("screenMagnifierOption", IDS_OOBE_SCREEN_MAGNIFIER_OPTION);
+  builder->Add("dockedMagnifierOption", IDS_OOBE_DOCKED_MAGNIFIER_OPTION);
   builder->Add("virtualKeyboardOption", IDS_OOBE_VIRTUAL_KEYBOARD_OPTION);
   builder->Add("closeAccessibilityMenu", IDS_OOBE_CLOSE_ACCESSIBILITY_MENU);
 
@@ -183,6 +183,8 @@ void CoreOobeHandler::Initialize() {
 void CoreOobeHandler::GetAdditionalParameters(base::DictionaryValue* dict) {
   dict->SetKey("isInTabletMode",
                base::Value(TabletModeClient::Get()->tablet_mode_enabled()));
+  dict->SetKey("isDemoModeEnabled",
+               base::Value(DemoSetupController::IsDemoModeAllowed()));
 }
 
 void CoreOobeHandler::RegisterMessages() {
@@ -199,6 +201,10 @@ void CoreOobeHandler::RegisterMessages() {
               &CoreOobeHandler::HandleEnableScreenMagnifier);
   AddCallback("enableSpokenFeedback",
               &CoreOobeHandler::HandleEnableSpokenFeedback);
+  AddCallback("enableSelectToSpeak",
+              &CoreOobeHandler::HandleEnableSelectToSpeak);
+  AddCallback("enableDockedMagnifier",
+              &CoreOobeHandler::HandleEnableDockedMagnifier);
   AddCallback("setDeviceRequisition",
               &CoreOobeHandler::HandleSetDeviceRequisition);
   AddCallback("screenAssetsLoaded", &CoreOobeHandler::HandleScreenAssetsLoaded);
@@ -348,7 +354,6 @@ void CoreOobeHandler::HandleEnableVirtualKeyboard(bool enabled) {
 }
 
 void CoreOobeHandler::HandleEnableScreenMagnifier(bool enabled) {
-  // TODO(nkostylev): Add support for partial screen magnifier.
   DCHECK(MagnificationManager::Get());
   MagnificationManager::Get()->SetMagnifierEnabled(enabled);
 }
@@ -356,8 +361,22 @@ void CoreOobeHandler::HandleEnableScreenMagnifier(bool enabled) {
 void CoreOobeHandler::HandleEnableSpokenFeedback(bool /* enabled */) {
   // Checkbox is initialized on page init and updates when spoken feedback
   // setting is changed so just toggle spoken feedback here.
-  AccessibilityManager* manager = AccessibilityManager::Get();
-  manager->EnableSpokenFeedback(!manager->IsSpokenFeedbackEnabled());
+  AccessibilityManager::Get()->EnableSpokenFeedback(
+      !AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
+}
+
+void CoreOobeHandler::HandleEnableSelectToSpeak(bool /* enabled */) {
+  // Checkbox is initialized on page init and updates when Select to Speak
+  // setting is changed so just toggle Select to Speak here.
+  AccessibilityManager::Get()->SetSelectToSpeakEnabled(
+      !AccessibilityManager::Get()->IsSelectToSpeakEnabled());
+}
+
+void CoreOobeHandler::HandleEnableDockedMagnifier(bool enabled) {
+  // Checkbox is initialized on page init and updates when the docked magnifier
+  // setting is changed so just toggle Select to Speak here.
+  DCHECK(MagnificationManager::Get());
+  MagnificationManager::Get()->SetDockedMagnifierEnabled(enabled);
 }
 
 void CoreOobeHandler::HandleSetDeviceRequisition(
@@ -417,12 +436,17 @@ void CoreOobeHandler::HandleToggleResetScreen() {
     // purpose of installing a TPM firmware update.
     tpm_firmware_update::GetAvailableUpdateModes(
         base::BindOnce([](const std::set<tpm_firmware_update::Mode>& modes) {
-          if (modes.count(tpm_firmware_update::Mode::kPowerwash) > 0) {
+          using tpm_firmware_update::Mode;
+          for (Mode mode : {Mode::kPowerwash, Mode::kCleanup}) {
+            if (modes.count(mode) == 0)
+              continue;
+
             // Force the TPM firmware update option to be enabled.
             g_browser_process->local_state()->SetInteger(
                 prefs::kFactoryResetTPMFirmwareUpdateMode,
-                static_cast<int>(tpm_firmware_update::Mode::kPowerwash));
+                static_cast<int>(mode));
             LaunchResetScreen();
+            return;
           }
         }),
         base::TimeDelta());
@@ -469,12 +493,6 @@ void CoreOobeHandler::ForwardAccelerator(std::string accelerator_name) {
 }
 
 void CoreOobeHandler::UpdateA11yState() {
-  if (!features::IsAshInBrowserProcess()) {
-    NOTIMPLEMENTED();
-    return;
-  }
-  // TODO(dpolukhin): crbug.com/412891
-  DCHECK(MagnificationManager::Get());
   base::DictionaryValue a11y_info;
   a11y_info.SetBoolean("highContrastEnabled",
                        AccessibilityManager::Get()->IsHighContrastEnabled());
@@ -482,8 +500,24 @@ void CoreOobeHandler::UpdateA11yState() {
                        AccessibilityManager::Get()->IsLargeCursorEnabled());
   a11y_info.SetBoolean("spokenFeedbackEnabled",
                        AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
-  a11y_info.SetBoolean("screenMagnifierEnabled",
-                       MagnificationManager::Get()->IsMagnifierEnabled());
+  a11y_info.SetBoolean("selectToSpeakEnabled",
+                       AccessibilityManager::Get()->IsSelectToSpeakEnabled());
+  a11y_info.SetBoolean(
+      "enableExperimentalA11yFeatures",
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kEnableExperimentalAccessibilityFeatures));
+  if (!features::IsMultiProcessMash()) {
+    DCHECK(MagnificationManager::Get());
+    a11y_info.SetBoolean("screenMagnifierEnabled",
+                         MagnificationManager::Get()->IsMagnifierEnabled());
+    a11y_info.SetBoolean(
+        "dockedMagnifierEnabled",
+        MagnificationManager::Get()->IsDockedMagnifierEnabled());
+  } else {
+    // TODO: get MagnificationManager working with mash.
+    // https://crbug.com/817157
+    NOTIMPLEMENTED_LOG_ONCE();
+  }
   a11y_info.SetBoolean("virtualKeyboardEnabled",
                        AccessibilityManager::Get()->IsVirtualKeyboardEnabled());
   CallJSOrDefer("refreshA11yInfo", a11y_info);
@@ -545,9 +579,9 @@ void CoreOobeHandler::UpdateDeviceRequisition() {
 }
 
 void CoreOobeHandler::UpdateKeyboardState() {
-  // TODO(mash): Support virtual keyboard under MASH. There is no
+  // TODO(crbug.com/646565): Support virtual keyboard under MASH. There is no
   // KeyboardController in the browser process under MASH.
-  if (features::IsAshInBrowserProcess()) {
+  if (!features::IsUsingWindowService()) {
     auto* keyboard_controller = keyboard::KeyboardController::Get();
     if (keyboard_controller->enabled()) {
       const bool is_keyboard_shown = keyboard_controller->IsKeyboardVisible();

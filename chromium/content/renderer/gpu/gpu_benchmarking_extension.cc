@@ -287,7 +287,10 @@ bool BeginSmoothScroll(GpuBenchmarkingContext* context,
                        float speed_in_pixels_s,
                        bool prevent_fling,
                        float start_x,
-                       float start_y) {
+                       float start_y,
+                       float fling_velocity,
+                       bool precise_scrolling_deltas,
+                       bool scroll_by_page) {
   gfx::Rect rect = context->render_view_impl()->GetWidget()->ViewRect();
   rect -= rect.OffsetFromOrigin();
   if (!rect.Contains(start_x, start_y)) {
@@ -324,31 +327,47 @@ bool BeginSmoothScroll(GpuBenchmarkingContext* context,
 
   gesture_params.speed_in_pixels_s = speed_in_pixels_s;
   gesture_params.prevent_fling = prevent_fling;
+  gesture_params.precise_scrolling_deltas = precise_scrolling_deltas;
+  gesture_params.scroll_by_page = scroll_by_page;
 
   gesture_params.anchor.SetPoint(start_x, start_y);
 
+  DCHECK(gesture_source_type != SyntheticGestureParams::TOUCH_INPUT ||
+         fling_velocity == 0);
   float distance_length = pixels_to_scroll;
   gfx::Vector2dF distance;
-  if (direction == "down")
+  if (direction == "down") {
     distance.set_y(-distance_length);
-  else if (direction == "up")
+    gesture_params.fling_velocity_y = fling_velocity;
+  } else if (direction == "up") {
     distance.set_y(distance_length);
-  else if (direction == "right")
+    gesture_params.fling_velocity_y = -fling_velocity;
+  } else if (direction == "right") {
     distance.set_x(-distance_length);
-  else if (direction == "left")
+    gesture_params.fling_velocity_x = fling_velocity;
+  } else if (direction == "left") {
     distance.set_x(distance_length);
-  else if (direction == "upleft") {
+    gesture_params.fling_velocity_x = -fling_velocity;
+  } else if (direction == "upleft") {
     distance.set_y(distance_length);
     distance.set_x(distance_length);
+    gesture_params.fling_velocity_x = -fling_velocity;
+    gesture_params.fling_velocity_y = -fling_velocity;
   } else if (direction == "upright") {
     distance.set_y(distance_length);
     distance.set_x(-distance_length);
+    gesture_params.fling_velocity_x = fling_velocity;
+    gesture_params.fling_velocity_y = -fling_velocity;
   } else if (direction == "downleft") {
     distance.set_y(-distance_length);
     distance.set_x(distance_length);
+    gesture_params.fling_velocity_x = -fling_velocity;
+    gesture_params.fling_velocity_y = fling_velocity;
   } else if (direction == "downright") {
     distance.set_y(-distance_length);
     distance.set_x(-distance_length);
+    gesture_params.fling_velocity_x = fling_velocity;
+    gesture_params.fling_velocity_y = fling_velocity;
   } else {
     return false;
   }
@@ -547,6 +566,7 @@ gin::ObjectTemplateBuilder GpuBenchmarking::GetObjectTemplateBuilder(
                  &GpuBenchmarking::SendMessageToMicroBenchmark)
       .SetMethod("hasGpuChannel", &GpuBenchmarking::HasGpuChannel)
       .SetMethod("hasGpuProcess", &GpuBenchmarking::HasGpuProcess)
+      .SetMethod("crashGpuProcess", &GpuBenchmarking::CrashGpuProcess)
       .SetMethod("getGpuDriverBugWorkarounds",
                  &GpuBenchmarking::GetGpuDriverBugWorkarounds)
       .SetMethod("startProfiling", &GpuBenchmarking::StartProfiling)
@@ -640,21 +660,32 @@ bool GpuBenchmarking::SmoothScrollBy(gin::Arguments* args) {
   int gesture_source_type = SyntheticGestureParams::DEFAULT_INPUT;
   std::string direction = "down";
   float speed_in_pixels_s = 800;
+  bool precise_scrolling_deltas = true;
+  bool scroll_by_page = false;
 
   if (!GetOptionalArg(args, &pixels_to_scroll) ||
-      !GetOptionalArg(args, &callback) ||
-      !GetOptionalArg(args, &start_x) ||
+      !GetOptionalArg(args, &callback) || !GetOptionalArg(args, &start_x) ||
       !GetOptionalArg(args, &start_y) ||
       !GetOptionalArg(args, &gesture_source_type) ||
       !GetOptionalArg(args, &direction) ||
-      !GetOptionalArg(args, &speed_in_pixels_s)) {
+      !GetOptionalArg(args, &speed_in_pixels_s) ||
+      !GetOptionalArg(args, &precise_scrolling_deltas) ||
+      !GetOptionalArg(args, &scroll_by_page)) {
     return false;
   }
+
+  // For all touch inputs, always scroll by precise deltas.
+  DCHECK(gesture_source_type != SyntheticGestureParams::TOUCH_INPUT ||
+         precise_scrolling_deltas);
+  // Scroll by page only for mouse inputs.
+  DCHECK(!scroll_by_page ||
+         gesture_source_type == SyntheticGestureParams::MOUSE_INPUT);
 
   EnsureRemoteInterface();
   return BeginSmoothScroll(&context, args, input_injector_, pixels_to_scroll,
                            callback, gesture_source_type, direction,
-                           speed_in_pixels_s, true, start_x, start_y);
+                           speed_in_pixels_s, true, start_x, start_y, 0,
+                           precise_scrolling_deltas, scroll_by_page);
 }
 
 bool GpuBenchmarking::SmoothDrag(gin::Arguments* args) {
@@ -699,21 +730,32 @@ bool GpuBenchmarking::Swipe(gin::Arguments* args) {
   float start_x = rect.width / 2;
   float start_y = rect.height / 2;
   float speed_in_pixels_s = 800;
+  float fling_velocity = 0;
+  int gesture_source_type = SyntheticGestureParams::TOUCH_INPUT;
 
   if (!GetOptionalArg(args, &direction) ||
       !GetOptionalArg(args, &pixels_to_scroll) ||
-      !GetOptionalArg(args, &callback) ||
-      !GetOptionalArg(args, &start_x) ||
+      !GetOptionalArg(args, &callback) || !GetOptionalArg(args, &start_x) ||
       !GetOptionalArg(args, &start_y) ||
-      !GetOptionalArg(args, &speed_in_pixels_s)) {
+      !GetOptionalArg(args, &speed_in_pixels_s) ||
+      !GetOptionalArg(args, &fling_velocity) ||
+      !GetOptionalArg(args, &gesture_source_type)) {
     return false;
   }
 
+  // For touchpad swipe, we should be given a fling velocity, but it is not
+  // needed for touchscreen swipe, because we will calculate the velocity in
+  // our code.
+  if (gesture_source_type == SyntheticGestureParams::TOUCHPAD_INPUT &&
+      fling_velocity == 0)
+    fling_velocity = 1000;
+
   EnsureRemoteInterface();
-  return BeginSmoothScroll(
-      &context, args, input_injector_, -pixels_to_scroll, callback,
-      1,  // TOUCH_INPUT
-      direction, speed_in_pixels_s, false, start_x, start_y);
+  return BeginSmoothScroll(&context, args, input_injector_, -pixels_to_scroll,
+                           callback, gesture_source_type, direction,
+                           speed_in_pixels_s, false, start_x, start_y,
+                           fling_velocity, true /* precise_scrolling_deltas */,
+                           false /* scroll_by_page */);
 }
 
 bool GpuBenchmarking::ScrollBounce(gin::Arguments* args) {
@@ -1079,18 +1121,43 @@ bool GpuBenchmarking::HasGpuProcess() {
   return has_gpu_process;
 }
 
+void GpuBenchmarking::CrashGpuProcess() {
+  gpu::GpuChannelHost* gpu_channel =
+      RenderThreadImpl::current()->GetGpuChannel();
+  if (!gpu_channel)
+    return;
+  gpu_channel->CrashGpuProcessForTesting();
+}
+
 void GpuBenchmarking::GetGpuDriverBugWorkarounds(gin::Arguments* args) {
   std::vector<std::string> gpu_driver_bug_workarounds;
   gpu::GpuChannelHost* gpu_channel =
       RenderThreadImpl::current()->GetGpuChannel();
   if (!gpu_channel)
     return;
+  const gpu::GpuFeatureInfo& gpu_feature_info =
+      gpu_channel->gpu_feature_info();
   const std::vector<int32_t>& workarounds =
-      gpu_channel->gpu_feature_info().enabled_gpu_driver_bug_workarounds;
+      gpu_feature_info.enabled_gpu_driver_bug_workarounds;
   for (int32_t workaround : workarounds) {
     gpu_driver_bug_workarounds.push_back(
         gpu::GpuDriverBugWorkaroundTypeToString(
             static_cast<gpu::GpuDriverBugWorkaroundType>(workaround)));
+  }
+
+  // This code must be kept in sync with compositor_util's
+  // GetDriverBugWorkaroundsImpl.
+  for (auto ext : base::SplitString(gpu_feature_info.disabled_extensions,
+                                    " ",
+                                    base::TRIM_WHITESPACE,
+                                    base::SPLIT_WANT_NONEMPTY)) {
+    gpu_driver_bug_workarounds.push_back("disabled_extension_" + ext);
+  }
+  for (auto ext : base::SplitString(gpu_feature_info.disabled_webgl_extensions,
+                                    " ",
+                                    base::TRIM_WHITESPACE,
+                                    base::SPLIT_WANT_NONEMPTY)) {
+    gpu_driver_bug_workarounds.push_back("disabled_webgl_extension_" + ext);
   }
 
   v8::Local<v8::Value> result;

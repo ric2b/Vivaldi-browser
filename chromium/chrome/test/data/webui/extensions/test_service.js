@@ -7,12 +7,15 @@ cr.define('extensions', function() {
   class TestService extends TestBrowserProxy {
     constructor() {
       super([
+        'addRuntimeHostPermission',
         'getExtensionsInfo',
         'getExtensionSize',
         'getProfileConfiguration',
         'loadUnpacked',
         'retryLoadUnpacked',
         'reloadItem',
+        'removeRuntimeHostPermission',
+        'setItemHostAccess',
         'setProfileInDevMode',
         'setShortcutHandlingSuspended',
         'shouldIgnoreUpdate',
@@ -23,6 +26,9 @@ cr.define('extensions', function() {
 
       this.itemStateChangedTarget = new FakeChromeEvent();
       this.profileStateChangedTarget = new FakeChromeEvent();
+
+      /** @type {boolean} */
+      this.acceptRuntimeHostPermission = true;
 
       /** @private {!chrome.developerPrivate.LoadError} */
       this.retryLoadUnpackedError_;
@@ -43,6 +49,13 @@ cr.define('extensions', function() {
      */
     setForceReloadItemError(force) {
       this.forceReloadItemError_ = force;
+    }
+
+    /** @override */
+    addRuntimeHostPermission(id, site) {
+      this.methodCalled('addRuntimeHostPermission', [id, site]);
+      return this.acceptRuntimeHostPermission ? Promise.resolve() :
+                                                Promise.reject();
     }
 
     /** @override */
@@ -71,6 +84,17 @@ cr.define('extensions', function() {
     getExtensionSize() {
       this.methodCalled('getExtensionSize');
       return Promise.resolve('20 MB');
+    }
+
+    /** @override */
+    removeRuntimeHostPermission(id, site) {
+      this.methodCalled('removeRuntimeHostPermission', [id, site]);
+      return Promise.resolve();
+    }
+
+    /** @override */
+    setItemHostAccess(id, access) {
+      this.methodCalled('setItemHostAccess', [id, access]);
     }
 
     /** @override */

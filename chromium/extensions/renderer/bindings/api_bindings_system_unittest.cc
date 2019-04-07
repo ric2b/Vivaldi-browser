@@ -112,7 +112,9 @@ void APIBindingsSystemTest::SetUp() {
 
   binding::AddConsoleError add_console_error(base::Bind(
       &APIBindingsSystemTest::AddConsoleError, base::Unretained(this)));
-  auto get_context_owner = [](v8::Local<v8::Context>) { return std::string(); };
+  auto get_context_owner = [](v8::Local<v8::Context>) {
+    return std::string("context");
+  };
   bindings_system_ = std::make_unique<APIBindingsSystem>(
       base::Bind(&APIBindingsSystemTest::GetAPISchema, base::Unretained(this)),
       base::Bind(&AllowAllAPIs),
@@ -322,7 +324,7 @@ TEST_F(APIBindingsSystemTest, TestCustomHooks) {
       return result;
     }
     std::string argument;
-    EXPECT_EQ("foo", gin::V8ToString(arguments->at(0)));
+    EXPECT_EQ("foo", gin::V8ToString(context->GetIsolate(), arguments->at(0)));
     if (!arguments->at(1)->IsFunction()) {
       EXPECT_TRUE(arguments->at(1)->IsFunction());
       return result;

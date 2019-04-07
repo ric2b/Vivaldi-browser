@@ -13,7 +13,6 @@
 #include "base/single_thread_task_runner.h"
 #include "components/prefs/pref_member.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/content_browser_client.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_job_factory.h"
 
@@ -27,6 +26,7 @@ class HttpAuthHandlerFactory;
 class HttpAuthPreferences;
 class HttpUserAgentSettings;
 class NetLog;
+class ProxyConfigServiceAndroid;
 class ProxyConfigService;
 class URLRequestContext;
 class URLRequestJobFactory;
@@ -39,7 +39,7 @@ class AwURLRequestContextGetter : public net::URLRequestContextGetter {
   AwURLRequestContextGetter(
       const base::FilePath& cache_path,
       const base::FilePath& channel_id_path,
-      std::unique_ptr<net::ProxyConfigService> config_service,
+      std::unique_ptr<net::ProxyConfigServiceAndroid> config_service,
       PrefService* pref_service,
       net::NetLog* net_log);
 
@@ -50,6 +50,12 @@ class AwURLRequestContextGetter : public net::URLRequestContextGetter {
   net::URLRequestContext* GetURLRequestContext() override;
   scoped_refptr<base::SingleThreadTaskRunner> GetNetworkTaskRunner()
       const override;
+
+  // Methods to set and clear proxy override
+  void SetProxyOverride(const std::string& host,
+                        int port,
+                        const std::vector<std::string>& exclusion_list);
+  void ClearProxyOverride();
 
  private:
   friend class AwBrowserContext;
@@ -81,7 +87,8 @@ class AwURLRequestContextGetter : public net::URLRequestContextGetter {
   const base::FilePath channel_id_path_;
 
   net::NetLog* net_log_;
-  std::unique_ptr<net::ProxyConfigService> proxy_config_service_;
+  std::unique_ptr<net::ProxyConfigServiceAndroid> proxy_config_service_;
+  net::ProxyConfigServiceAndroid* proxy_config_service_android_;
   std::unique_ptr<net::URLRequestJobFactory> job_factory_;
   std::unique_ptr<net::HttpUserAgentSettings> http_user_agent_settings_;
   std::unique_ptr<net::FileNetLogObserver> file_net_log_observer_;

@@ -62,17 +62,17 @@ void SVGMPathElement::ClearResourceReferences() {
 }
 
 Node::InsertionNotificationRequest SVGMPathElement::InsertedInto(
-    ContainerNode* root_parent) {
+    ContainerNode& root_parent) {
   SVGElement::InsertedInto(root_parent);
-  if (root_parent->isConnected())
+  if (root_parent.isConnected())
     BuildPendingResource();
   return kInsertionDone;
 }
 
-void SVGMPathElement::RemovedFrom(ContainerNode* root_parent) {
+void SVGMPathElement::RemovedFrom(ContainerNode& root_parent) {
   SVGElement::RemovedFrom(root_parent);
-  NotifyParentOfPathChange(root_parent);
-  if (root_parent->isConnected())
+  NotifyParentOfPathChange(&root_parent);
+  if (root_parent.isConnected())
     ClearResourceReferences();
 }
 

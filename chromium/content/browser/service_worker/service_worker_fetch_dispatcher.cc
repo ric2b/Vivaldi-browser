@@ -25,7 +25,6 @@
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/common/service_worker/service_worker.mojom.h"
-#include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/browser_side_navigation_policy.h"
@@ -45,61 +44,6 @@
 namespace content {
 
 namespace {
-
-// This class wraps a mojo::AssociatedInterfacePtr<URLLoader>. It also is a
-// URLLoader implementation and delegates URLLoader calls to the wrapped loader.
-class DelegatingURLLoader final : public network::mojom::URLLoader {
- public:
-  explicit DelegatingURLLoader(network::mojom::URLLoaderPtr loader)
-      : binding_(this), loader_(std::move(loader)) {}
-  ~DelegatingURLLoader() override {}
-
-  void FollowRedirect(const base::Optional<std::vector<std::string>>&
-                          to_be_removed_request_headers,
-                      const base::Optional<net::HttpRequestHeaders>&
-                          modified_request_headers) override {
-    DCHECK(!modified_request_headers.has_value())
-        << "Redirect with modified headers was not supported yet. "
-           "crbug.com/845683";
-    loader_->FollowRedirect(base::nullopt, base::nullopt);
-  }
-  void ProceedWithResponse() override { NOTREACHED(); }
-
-  void SetPriority(net::RequestPriority priority,
-                   int intra_priority_value) override {
-    loader_->SetPriority(priority, intra_priority_value);
-  }
-
-  void PauseReadingBodyFromNet() override {
-    loader_->PauseReadingBodyFromNet();
-  }
-  void ResumeReadingBodyFromNet() override {
-    loader_->ResumeReadingBodyFromNet();
-  }
-
-  network::mojom::URLLoaderPtr CreateInterfacePtrAndBind() {
-    network::mojom::URLLoaderPtr loader;
-    binding_.Bind(mojo::MakeRequest(&loader));
-    // This unretained pointer is safe, because |binding_| is owned by |this|
-    // and the callback will never be called after |this| is destroyed.
-    binding_.set_connection_error_handler(
-        base::BindOnce(&DelegatingURLLoader::Cancel, base::Unretained(this)));
-    return loader;
-  }
-
- private:
-  // Called when the network::mojom::URLLoaderPtr in the service worker is
-  // deleted.
-  void Cancel() {
-    // Cancel loading as stated in url_loader.mojom.
-    loader_ = nullptr;
-  }
-
-  mojo::Binding<network::mojom::URLLoader> binding_;
-  network::mojom::URLLoaderPtr loader_;
-
-  DISALLOW_COPY_AND_ASSIGN(DelegatingURLLoader);
-};
 
 void NotifyNavigationPreloadRequestSentOnUI(
     const network::ResourceRequest& request,
@@ -361,11 +305,12 @@ const net::NetworkTrafficAnnotationTag kNavigationPreloadTrafficAnnotation =
 // ServiceWorkerVersion::StartRequest*(), and held in pending_requests_
 // until FinishRequest() is called.
 class ServiceWorkerFetchDispatcher::ResponseCallback
-    : public mojom::ServiceWorkerFetchResponseCallback {
+    : public blink::mojom::ServiceWorkerFetchResponseCallback {
  public:
-  ResponseCallback(mojom::ServiceWorkerFetchResponseCallbackRequest request,
-                   base::WeakPtr<ServiceWorkerFetchDispatcher> fetch_dispatcher,
-                   ServiceWorkerVersion* version)
+  ResponseCallback(
+      blink::mojom::ServiceWorkerFetchResponseCallbackRequest request,
+      base::WeakPtr<ServiceWorkerFetchDispatcher> fetch_dispatcher,
+      ServiceWorkerVersion* version)
       : binding_(this, std::move(request)),
         fetch_dispatcher_(fetch_dispatcher),
         version_(version) {}
@@ -377,32 +322,25 @@ class ServiceWorkerFetchDispatcher::ResponseCallback
     fetch_event_id_ = id;
   }
 
-  // Implements mojom::ServiceWorkerFetchResponseCallback.
-  void OnResponse(const ServiceWorkerResponse& response,
+  // Implements blink::mojom::ServiceWorkerFetchResponseCallback.
+  void OnResponse(blink::mojom::FetchAPIResponsePtr response,
                   base::Time dispatch_event_time) override {
-    HandleResponse(fetch_dispatcher_, version_, fetch_event_id_, response,
-                   nullptr /* body_as_stream */, nullptr /* body_as_blob */,
-                   FetchEventResult::kGotResponse, dispatch_event_time);
-  }
-  void OnResponseBlob(const ServiceWorkerResponse& response,
-                      blink::mojom::BlobPtr body_as_blob,
-                      base::Time dispatch_event_time) override {
-    HandleResponse(fetch_dispatcher_, version_, fetch_event_id_, response,
-                   nullptr /* body_as_stream */, std::move(body_as_blob),
+    HandleResponse(fetch_dispatcher_, version_, fetch_event_id_,
+                   std::move(response), nullptr /* body_as_stream */,
                    FetchEventResult::kGotResponse, dispatch_event_time);
   }
   void OnResponseStream(
-      const ServiceWorkerResponse& response,
+      blink::mojom::FetchAPIResponsePtr response,
       blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
       base::Time dispatch_event_time) override {
-    HandleResponse(fetch_dispatcher_, version_, fetch_event_id_, response,
-                   std::move(body_as_stream), nullptr /* body_as_blob */,
+    HandleResponse(fetch_dispatcher_, version_, fetch_event_id_,
+                   std::move(response), std::move(body_as_stream),
                    FetchEventResult::kGotResponse, dispatch_event_time);
   }
   void OnFallback(base::Time dispatch_event_time) override {
     HandleResponse(fetch_dispatcher_, version_, fetch_event_id_,
-                   ServiceWorkerResponse(), nullptr /* body_as_stream */,
-                   nullptr /* body_as_blob */,
+                   blink::mojom::FetchAPIResponse::New(),
+                   nullptr /* body_as_stream */,
                    FetchEventResult::kShouldFallback, dispatch_event_time);
   }
 
@@ -413,9 +351,8 @@ class ServiceWorkerFetchDispatcher::ResponseCallback
       base::WeakPtr<ServiceWorkerFetchDispatcher> fetch_dispatcher,
       ServiceWorkerVersion* version,
       base::Optional<int> fetch_event_id,
-      const ServiceWorkerResponse& response,
+      blink::mojom::FetchAPIResponsePtr response,
       blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
-      blink::mojom::BlobPtr body_as_blob,
       FetchEventResult fetch_result,
       base::Time dispatch_event_time) {
     if (!version->FinishRequest(fetch_event_id.value(),
@@ -425,12 +362,11 @@ class ServiceWorkerFetchDispatcher::ResponseCallback
     // |fetch_dispatcher| is null if the URLRequest was killed.
     if (!fetch_dispatcher)
       return;
-    fetch_dispatcher->DidFinish(fetch_event_id.value(), fetch_result, response,
-                                std::move(body_as_stream),
-                                std::move(body_as_blob));
+    fetch_dispatcher->DidFinish(fetch_event_id.value(), fetch_result,
+                                std::move(response), std::move(body_as_stream));
   }
 
-  mojo::Binding<mojom::ServiceWorkerFetchResponseCallback> binding_;
+  mojo::Binding<blink::mojom::ServiceWorkerFetchResponseCallback> binding_;
   base::WeakPtr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
   // Owns |this| via pending_requests_.
   ServiceWorkerVersion* version_;
@@ -449,10 +385,8 @@ class ServiceWorkerFetchDispatcher::URLLoaderAssets
  public:
   URLLoaderAssets(
       std::unique_ptr<network::mojom::URLLoaderFactory> url_loader_factory,
-      std::unique_ptr<network::mojom::URLLoader> url_loader,
       std::unique_ptr<DelegatingURLLoaderClient> url_loader_client)
       : url_loader_factory_(std::move(url_loader_factory)),
-        url_loader_(std::move(url_loader)),
         url_loader_client_(std::move(url_loader_client)) {}
 
   void MaybeReportToDevTools(std::pair<int, int> worker_id,
@@ -465,7 +399,6 @@ class ServiceWorkerFetchDispatcher::URLLoaderAssets
   virtual ~URLLoaderAssets() {}
 
   std::unique_ptr<network::mojom::URLLoaderFactory> url_loader_factory_;
-  std::unique_ptr<network::mojom::URLLoader> url_loader_;
   std::unique_ptr<DelegatingURLLoaderClient> url_loader_client_;
 
   DISALLOW_COPY_AND_ASSIGN(URLLoaderAssets);
@@ -575,7 +508,7 @@ void ServiceWorkerFetchDispatcher::DispatchFetchEvent() {
   net_log_.BeginEvent(net::NetLogEventType::SERVICE_WORKER_FETCH_EVENT);
 
   // Set up for receiving the response.
-  mojom::ServiceWorkerFetchResponseCallbackPtr response_callback_ptr;
+  blink::mojom::ServiceWorkerFetchResponseCallbackPtr response_callback_ptr;
   auto response_callback = std::make_unique<ResponseCallback>(
       mojo::MakeRequest(&response_callback_ptr), weak_factory_.GetWeakPtr(),
       version_.get());
@@ -629,27 +562,25 @@ void ServiceWorkerFetchDispatcher::DidFailToDispatch(
 void ServiceWorkerFetchDispatcher::DidFail(
     blink::ServiceWorkerStatusCode status) {
   DCHECK_NE(blink::ServiceWorkerStatusCode::kOk, status);
-  Complete(status, FetchEventResult::kShouldFallback, ServiceWorkerResponse(),
-           nullptr /* body_as_stream */, nullptr /* body_as_blob */);
+  Complete(status, FetchEventResult::kShouldFallback,
+           blink::mojom::FetchAPIResponse::New(), nullptr /* body_as_stream */);
 }
 
 void ServiceWorkerFetchDispatcher::DidFinish(
     int request_id,
     FetchEventResult fetch_result,
-    const ServiceWorkerResponse& response,
-    blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
-    blink::mojom::BlobPtr body_as_blob) {
+    blink::mojom::FetchAPIResponsePtr response,
+    blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream) {
   net_log_.EndEvent(net::NetLogEventType::SERVICE_WORKER_FETCH_EVENT);
-  Complete(blink::ServiceWorkerStatusCode::kOk, fetch_result, response,
-           std::move(body_as_stream), std::move(body_as_blob));
+  Complete(blink::ServiceWorkerStatusCode::kOk, fetch_result,
+           std::move(response), std::move(body_as_stream));
 }
 
 void ServiceWorkerFetchDispatcher::Complete(
     blink::ServiceWorkerStatusCode status,
     FetchEventResult fetch_result,
-    const ServiceWorkerResponse& response,
-    blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
-    blink::mojom::BlobPtr body_as_blob) {
+    blink::mojom::FetchAPIResponsePtr response,
+    blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream) {
   DCHECK(fetch_callback_);
 
   did_complete_ = true;
@@ -658,8 +589,8 @@ void ServiceWorkerFetchDispatcher::Complete(
       base::Bind(&NetLogFetchEventCallback, status, fetch_result));
 
   std::move(fetch_callback_)
-      .Run(status, fetch_result, response, std::move(body_as_stream),
-           std::move(body_as_blob), version_);
+      .Run(status, fetch_result, std::move(response), std::move(body_as_stream),
+           version_);
 }
 
 // Non-S13nServiceWorker
@@ -679,16 +610,7 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
   ResourceRequestInfoImpl* original_info =
       ResourceRequestInfoImpl::ForRequest(original_request);
   ResourceRequesterInfo* requester_info = original_info->requester_info();
-  if (IsBrowserSideNavigationEnabled()) {
-    DCHECK(requester_info->IsBrowserSideNavigation());
-  } else {
-    DCHECK(requester_info->IsRenderer());
-    if (!requester_info->filter())
-      return false;
-  }
-
-  DCHECK(!url_loader_assets_);
-
+  DCHECK(requester_info->IsBrowserSideNavigation());
   auto url_loader_factory = std::make_unique<URLLoaderFactoryImpl>(
       ResourceRequesterInfo::CreateForNavigationPreload(requester_info));
 
@@ -731,30 +653,27 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
   DCHECK_LT(request_id, -1);
 
   preload_handle_ = blink::mojom::FetchEventPreloadHandle::New();
-  network::mojom::URLLoaderClientPtr url_loader_client_ptr;
+  network::mojom::URLLoaderClientPtr inner_url_loader_client;
   preload_handle_->url_loader_client_request =
-      mojo::MakeRequest(&url_loader_client_ptr);
+      mojo::MakeRequest(&inner_url_loader_client);
   auto url_loader_client = std::make_unique<DelegatingURLLoaderClient>(
-      std::move(url_loader_client_ptr), std::move(on_response), request);
-  network::mojom::URLLoaderClientPtr url_loader_client_ptr_to_pass;
-  url_loader_client->Bind(&url_loader_client_ptr_to_pass);
-  network::mojom::URLLoaderPtr url_loader_associated_ptr;
+      std::move(inner_url_loader_client), std::move(on_response), request);
+  network::mojom::URLLoaderClientPtr url_loader_client_to_pass;
+  url_loader_client->Bind(&url_loader_client_to_pass);
+  network::mojom::URLLoaderPtr url_loader;
 
   url_loader_factory->CreateLoaderAndStart(
-      mojo::MakeRequest(&url_loader_associated_ptr),
-      original_info->GetRouteID(), request_id,
+      mojo::MakeRequest(&url_loader), original_info->GetRouteID(), request_id,
       network::mojom::kURLLoadOptionNone, request,
-      std::move(url_loader_client_ptr_to_pass),
+      std::move(url_loader_client_to_pass),
       net::MutableNetworkTrafficAnnotationTag(
           original_request->traffic_annotation()));
 
-  auto url_loader = std::make_unique<DelegatingURLLoader>(
-      std::move(url_loader_associated_ptr));
-  preload_handle_->url_loader =
-      url_loader->CreateInterfacePtrAndBind().PassInterface();
+  preload_handle_->url_loader = url_loader.PassInterface();
+
+  DCHECK(!url_loader_assets_);
   url_loader_assets_ = base::MakeRefCounted<URLLoaderAssets>(
-      std::move(url_loader_factory), std::move(url_loader),
-      std::move(url_loader_client));
+      std::move(url_loader_factory), std::move(url_loader_client));
   return true;
 }
 
@@ -779,13 +698,11 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreloadWithURLLoader(
   resource_request.resource_type = RESOURCE_TYPE_SUB_RESOURCE;
   resource_request.skip_service_worker = true;
   resource_request.do_not_prompt_for_login = true;
+
   DCHECK(net::HttpUtil::IsValidHeaderValue(
       version_->navigation_preload_state().header));
-  // TODO(crbug/762357): Record header size UMA, but not until *all* the
-  // navigation preload metrics are recorded on the S13N path; otherwise the
-  // metrics will get unbalanced.
-  // ServiceWorkerMetrics::RecordNavigationPreloadRequestHeaderSize(
-  //     version_->navigation_preload_state().header.length());
+  ServiceWorkerMetrics::RecordNavigationPreloadRequestHeaderSize(
+      version_->navigation_preload_state().header.length());
   resource_request.headers.SetHeader(
       "Service-Worker-Navigation-Preload",
       version_->navigation_preload_state().header);
@@ -794,40 +711,33 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreloadWithURLLoader(
 
   // Create the DelegatingURLLoaderClient, which becomes the
   // URLLoaderClient for the navigation preload network request.
-  network::mojom::URLLoaderClientPtr url_loader_client_ptr;
+  network::mojom::URLLoaderClientPtr inner_url_loader_client;
   preload_handle_->url_loader_client_request =
-      mojo::MakeRequest(&url_loader_client_ptr);
+      mojo::MakeRequest(&inner_url_loader_client);
   auto url_loader_client = std::make_unique<DelegatingURLLoaderClient>(
-      std::move(url_loader_client_ptr), std::move(on_response),
+      std::move(inner_url_loader_client), std::move(on_response),
       resource_request);
 
   // Start the network request for the URL using the network loader.
   // TODO(falken): What to do about routing_id, request_id?
-  network::mojom::URLLoaderClientPtr url_loader_client_ptr_to_pass;
-  url_loader_client->Bind(&url_loader_client_ptr_to_pass);
-  network::mojom::URLLoaderPtr url_loader_associated_ptr;
+  network::mojom::URLLoaderClientPtr url_loader_client_to_pass;
+  url_loader_client->Bind(&url_loader_client_to_pass);
+  network::mojom::URLLoaderPtr url_loader;
   url_loader_factory_getter->GetNetworkFactory()->CreateLoaderAndStart(
-      mojo::MakeRequest(&url_loader_associated_ptr), -1 /* routing_id? */,
+      mojo::MakeRequest(&url_loader), -1 /* routing_id? */,
       -1 /* request_id? */, network::mojom::kURLLoadOptionNone,
-      resource_request, std::move(url_loader_client_ptr_to_pass),
+      resource_request, std::move(url_loader_client_to_pass),
       net::MutableNetworkTrafficAnnotationTag(
           kNavigationPreloadTrafficAnnotation));
 
-  // Hook the load up to DelegatingURLLoader, which will call our
-  // DelegatingURLLoaderClient.
-  auto url_loader = std::make_unique<DelegatingURLLoader>(
-      std::move(url_loader_associated_ptr));
-  preload_handle_->url_loader =
-      url_loader->CreateInterfacePtrAndBind().PassInterface();
+  preload_handle_->url_loader = url_loader.PassInterface();
 
   DCHECK(!url_loader_assets_);
   // Unlike the non-S13N code path, we don't own the URLLoaderFactory being used
   // (it's the generic network factory), so we don't need to pass it to
   // URLLoaderAssets to keep it alive.
-  std::unique_ptr<network::mojom::URLLoaderFactory> null_factory;
   url_loader_assets_ = base::MakeRefCounted<URLLoaderAssets>(
-      std::move(null_factory), std::move(url_loader),
-      std::move(url_loader_client));
+      nullptr /* url_loader_factory */, std::move(url_loader_client));
   return true;
 }
 

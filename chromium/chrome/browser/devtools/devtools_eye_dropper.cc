@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/shared_memory_mapping.h"
 #include "build/build_config.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "components/viz/common/features.h"
@@ -18,6 +19,7 @@
 #include "content/public/common/cursor_info.h"
 #include "content/public/common/screen_info.h"
 #include "media/base/limits.h"
+#include "media/base/video_frame.h"
 #include "third_party/blink/public/platform/web_input_event.h"
 #include "third_party/blink/public/platform/web_mouse_event.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -33,18 +35,12 @@ DevToolsEyeDropper::DevToolsEyeDropper(content::WebContents* web_contents,
       last_cursor_x_(-1),
       last_cursor_y_(-1),
       host_(nullptr),
-      use_video_capture_api_(
-          base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
-          base::FeatureList::IsEnabled(
-              features::kUseVideoCaptureApiForDevToolsSnapshots)),
       weak_factory_(this) {
   mouse_event_callback_ =
       base::Bind(&DevToolsEyeDropper::HandleMouseEvent, base::Unretained(this));
   content::RenderViewHost* rvh = web_contents->GetRenderViewHost();
-  if (rvh) {
+  if (rvh)
     AttachToHost(rvh->GetWidget());
-    UpdateFrame();
-  }
 }
 
 DevToolsEyeDropper::~DevToolsEyeDropper() {
@@ -54,9 +50,6 @@ DevToolsEyeDropper::~DevToolsEyeDropper() {
 void DevToolsEyeDropper::AttachToHost(content::RenderWidgetHost* host) {
   host_ = host;
   host_->AddMouseEventCallback(mouse_event_callback_);
-
-  if (!use_video_capture_api_)
-    return;
 
   // The view can be null if the renderer process has crashed.
   // (https://crbug.com/847363)
@@ -94,10 +87,8 @@ void DevToolsEyeDropper::DetachFromHost() {
 }
 
 void DevToolsEyeDropper::RenderViewCreated(content::RenderViewHost* host) {
-  if (!host_) {
+  if (!host_)
     AttachToHost(host->GetWidget());
-    UpdateFrame();
-  }
 }
 
 void DevToolsEyeDropper::RenderViewDeleted(content::RenderViewHost* host) {
@@ -113,41 +104,13 @@ void DevToolsEyeDropper::RenderViewHostChanged(
   if ((old_host && old_host->GetWidget() == host_) || (!old_host && !host_)) {
     DetachFromHost();
     AttachToHost(new_host->GetWidget());
-    UpdateFrame();
   }
-}
-
-void DevToolsEyeDropper::DidReceiveCompositorFrame() {
-  UpdateFrame();
-}
-
-void DevToolsEyeDropper::UpdateFrame() {
-  if (use_video_capture_api_ || !host_ || !host_->GetView())
-    return;
-
-  // TODO(miu): This is the wrong size. It's the size of the view on-screen, and
-  // not the rendering size of the view. The latter is what is wanted here, so
-  // that the resulting bitmap's pixel coordinates line-up with the
-  // blink::WebMouseEvent coordinates. http://crbug.com/73362
-  gfx::Size should_be_rendering_size = host_->GetView()->GetViewBounds().size();
-  host_->GetView()->CopyFromSurface(
-      gfx::Rect(), should_be_rendering_size,
-      base::BindOnce(&DevToolsEyeDropper::FrameUpdated,
-                     weak_factory_.GetWeakPtr()));
 }
 
 void DevToolsEyeDropper::ResetFrame() {
   frame_.reset();
   last_cursor_x_ = -1;
   last_cursor_y_ = -1;
-}
-
-void DevToolsEyeDropper::FrameUpdated(const SkBitmap& bitmap) {
-  DCHECK(!use_video_capture_api_);
-  if (bitmap.drawsNothing())
-    return;
-  frame_ = bitmap;
-  UpdateCursor();
 }
 
 bool DevToolsEyeDropper::HandleMouseEvent(const blink::WebMouseEvent& event) {
@@ -311,8 +274,7 @@ void DevToolsEyeDropper::UpdateCursor() {
 }
 
 void DevToolsEyeDropper::OnFrameCaptured(
-    mojo::ScopedSharedBufferHandle buffer,
-    uint32_t buffer_size,
+    base::ReadOnlySharedMemoryRegion data,
     ::media::mojom::VideoFrameInfoPtr info,
     const gfx::Rect& update_rect,
     const gfx::Rect& content_rect,
@@ -324,25 +286,46 @@ void DevToolsEyeDropper::OnFrameCaptured(
     return;
   }
 
-  if (!buffer.is_valid()) {
+  if (!data.IsValid()) {
     callbacks->Done();
     return;
   }
-  mojo::ScopedSharedBufferMapping mapping = buffer->Map(buffer_size);
-  if (!mapping) {
+  base::ReadOnlySharedMemoryMapping mapping = data.Map();
+  if (!mapping.IsValid()) {
     DLOG(ERROR) << "Shared memory mapping failed.";
     return;
   }
+  if (mapping.size() <
+      media::VideoFrame::AllocationSize(info->pixel_format, info->coded_size)) {
+    DLOG(ERROR) << "Shared memory size was less than expected.";
+    return;
+  }
 
-  SkImageInfo image_info = SkImageInfo::MakeN32(
-      content_rect.width(), content_rect.height(), kPremul_SkAlphaType);
-  SkPixmap pixmap(image_info, mapping.get(),
-                  media::VideoFrame::RowBytes(media::VideoFrame::kARGBPlane,
-                                              info->pixel_format,
-                                              info->coded_size.width()));
-  frame_.installPixels(pixmap);
-  shared_memory_mapping_ = std::move(mapping);
-  shared_memory_releaser_ = std::move(callbacks);
+  // The SkBitmap's pixels will be marked as immutable, but the installPixels()
+  // API requires a non-const pointer. So, cast away the const.
+  void* const pixels = const_cast<void*>(mapping.memory());
+
+  // Call installPixels() with a |releaseProc| that: 1) notifies the capturer
+  // that this consumer has finished with the frame, and 2) releases the shared
+  // memory mapping.
+  struct FramePinner {
+    // Keeps the shared memory that backs |frame_| mapped.
+    base::ReadOnlySharedMemoryMapping mapping;
+    // Prevents FrameSinkVideoCapturer from recycling the shared memory that
+    // backs |frame_|.
+    viz::mojom::FrameSinkVideoConsumerFrameCallbacksPtr releaser;
+  };
+  frame_.installPixels(
+      SkImageInfo::MakeN32(content_rect.width(), content_rect.height(),
+                           kPremul_SkAlphaType),
+      pixels,
+      media::VideoFrame::RowBytes(media::VideoFrame::kARGBPlane,
+                                  info->pixel_format, info->coded_size.width()),
+      [](void* addr, void* context) {
+        delete static_cast<FramePinner*>(context);
+      },
+      new FramePinner{std::move(mapping), std::move(callbacks)});
+  frame_.setImmutable();
 
   UpdateCursor();
 }

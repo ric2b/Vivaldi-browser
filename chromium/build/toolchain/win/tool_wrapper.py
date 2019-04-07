@@ -122,31 +122,6 @@ class WinTool(object):
       if not os.path.exists(dest):
         raise Exception("Copying of %s to %s failed" % (source, dest))
 
-  def SignTarget(self, return_code, args):
-    if (os.environ.get("VIVALDI_SIGN_EXECUTABLE", None) and
-      os.environ.get("VIVALDI_SIGNING_KEY", None)):
-      for target in set([x.partition(":")[-1]
-                         for x in args if x.startswith("/OUT:")
-                         ]) if isinstance(args, (list, tuple)) else [args]:
-        if target.rpartition(".")[-1].lower() not in ["dll", "exe"]:
-          continue
-        print "Starting Signing of", target
-        signcommand = ([os.environ.get("VIVALDI_SIGN_EXECUTABLE"),
-            "sign",
-            "/v",
-          ] +
-          os.environ.get("VIVALDI_SIGNING_KEY").split()+
-          [
-            target # target file
-          ])
-
-        ret = subprocess.call(signcommand)
-        if ret != 0:
-          return ret
-      print "Completed Signing"
-      return 0
-    return return_code
-
   def ExecLinkWrapper(self, arch, use_separate_mspdbsrv, *args):
     """Filter diagnostic output from link that looks like:
     '   Creating library ui.dll.lib and object ui.dll.exp'
@@ -188,9 +163,6 @@ class WinTool(object):
                                       0, None, win32file.OPEN_EXISTING, 0, 0)
       win32file.FlushFileBuffers(output_handle)
       output_handle.Close()
-    if result == 0:
-      result = self.SignTarget(result, args)
-
     return result
 
   def ExecAsmWrapper(self, arch, *args):
@@ -266,21 +238,6 @@ class WinTool(object):
         # Strip "/fo" prefix.
         #assert filecmp.cmp(rc_res_output[3:], rcpy_res_output[3:])
     return rc_exe_exit_code
-
-  def ExecMsRcWrapper(self, arch, *args):
-    """Filter logo banner from invocations of rc.exe. Older versions of RC
-    don't support the /nologo flag."""
-    env = self._GetEnv(arch)
-    popen = subprocess.Popen(args, shell=True, env=env,
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    out, _ = popen.communicate()
-    for line in out.splitlines():
-      if (not line.startswith('Microsoft (R) Windows (R) Resource Compiler') and
-          not line.startswith('Copy' + 'right (C' +
-                              ') Microsoft Corporation') and
-          line):
-        print line
-    return popen.returncode
 
   def ExecActionWrapper(self, arch, rspfile, *dirname):
     """Runs an action command line from a response file using the environment

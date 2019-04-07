@@ -13,8 +13,8 @@
 #include "base/lazy_instance.h"
 #include "base/memory/shared_memory.h"
 #include "base/run_loop.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/crash/core/common/crash_key.h"
@@ -28,6 +28,7 @@
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/config/gpu_util.h"
+#include "gpu/ipc/common/gpu_client_ids.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "gpu/ipc/common/memory_stats.h"
 #include "gpu/ipc/in_process_command_buffer.h"
@@ -53,13 +54,14 @@
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
+#include "ui/gl/gl_utils.h"
 #include "ui/gl/gpu_switching_manager.h"
 #include "ui/gl/init/create_gr_gl_interface.h"
 #include "ui/gl/init/gl_factory.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
-#include "base/android/throw_uncaught_exception.h"
+#include "components/viz/service/gl/throw_uncaught_exception.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -185,7 +187,7 @@ GpuServiceImpl::~GpuServiceImpl() {
       base::Callback<void(int, size_t, const std::string&)>();
   base::WaitableEvent wait;
   if (io_runner_->PostTask(
-          FROM_HERE, base::Bind(&DestroyBinding, bindings_.get(), &wait))) {
+          FROM_HERE, base::BindOnce(&DestroyBinding, bindings_.get(), &wait))) {
     wait.Wait();
   }
 
@@ -201,7 +203,7 @@ GpuServiceImpl::~GpuServiceImpl() {
       continue;
     if (!data.gl_context ||
         !data.gl_context->MakeCurrent(
-            gpu_channel_manager_->GetDefaultOffscreenSurface())) {
+            gpu_channel_manager_->default_offscreen_surface())) {
       LOG(ERROR) << "Failed to make current.";
       data.gr_context->abandonContext();
     }
@@ -248,6 +250,7 @@ void GpuServiceImpl::UpdateGPUInfo() {
 void GpuServiceImpl::InitializeWithHost(
     mojom::GpuHostPtr gpu_host,
     gpu::GpuProcessActivityFlags activity_flags,
+    scoped_refptr<gl::GLSurface> default_offscreen_surface,
     gpu::SyncPointManager* sync_point_manager,
     base::WaitableEvent* shutdown_event) {
   DCHECK(main_runner_->BelongsToCurrentThread());
@@ -279,8 +282,8 @@ void GpuServiceImpl::InitializeWithHost(
     shutdown_event_ = owned_shutdown_event_.get();
   }
 
-  scheduler_ = std::make_unique<gpu::Scheduler>(
-      base::ThreadTaskRunnerHandle::Get(), sync_point_manager_);
+  scheduler_ =
+      std::make_unique<gpu::Scheduler>(main_runner_, sync_point_manager_);
 
   skia_output_surface_sequence_id_ =
       scheduler_->CreateSequence(gpu::SchedulingPriority::kHigh);
@@ -291,7 +294,8 @@ void GpuServiceImpl::InitializeWithHost(
   gpu_channel_manager_.reset(new gpu::GpuChannelManager(
       gpu_preferences_, this, watchdog_thread_.get(), main_runner_, io_runner_,
       scheduler_.get(), sync_point_manager_, gpu_memory_buffer_factory_.get(),
-      gpu_feature_info_, std::move(activity_flags)));
+      gpu_feature_info_, std::move(activity_flags),
+      std::move(default_offscreen_surface)));
 
   media_gpu_channel_manager_.reset(
       new media::MediaGpuChannelManager(gpu_channel_manager_.get()));
@@ -507,9 +511,9 @@ void GpuServiceImpl::DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                                             int client_id,
                                             const gpu::SyncToken& sync_token) {
   if (io_runner_->BelongsToCurrentThread()) {
-    main_runner_->PostTask(FROM_HERE,
-                           base::Bind(&GpuServiceImpl::DestroyGpuMemoryBuffer,
-                                      weak_ptr_, id, client_id, sync_token));
+    main_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&GpuServiceImpl::DestroyGpuMemoryBuffer,
+                                  weak_ptr_, id, client_id, sync_token));
     return;
   }
   gpu_channel_manager_->DestroyGpuMemoryBuffer(id, client_id, sync_token);
@@ -724,8 +728,9 @@ void GpuServiceImpl::SetActiveURL(const GURL& url) {
 void GpuServiceImpl::EstablishGpuChannel(int32_t client_id,
                                          uint64_t client_tracing_id,
                                          bool is_gpu_host,
+                                         bool cache_shaders_on_disk,
                                          EstablishGpuChannelCallback callback) {
-  if (oopd_enabled_ && client_id == gpu::InProcessCommandBuffer::kGpuClientId) {
+  if (gpu::IsReservedClientId(client_id)) {
     std::move(callback).Run(mojo::ScopedMessagePipeHandle());
     return;
   }
@@ -739,14 +744,15 @@ void GpuServiceImpl::EstablishGpuChannel(int32_t client_id,
         },
         io_runner_, std::move(callback));
     main_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&GpuServiceImpl::EstablishGpuChannel,
-                                  weak_ptr_, client_id, client_tracing_id,
-                                  is_gpu_host, std::move(wrap_callback)));
+        FROM_HERE,
+        base::BindOnce(&GpuServiceImpl::EstablishGpuChannel, weak_ptr_,
+                       client_id, client_tracing_id, is_gpu_host,
+                       cache_shaders_on_disk, std::move(wrap_callback)));
     return;
   }
 
   gpu::GpuChannel* gpu_channel = gpu_channel_manager_->EstablishChannel(
-      client_id, client_tracing_id, is_gpu_host);
+      client_id, client_tracing_id, is_gpu_host, cache_shaders_on_disk);
 
   mojo::MessagePipe pipe;
   gpu_channel->Init(std::make_unique<gpu::SyncChannelFilteredSender>(
@@ -763,27 +769,30 @@ void GpuServiceImpl::EstablishGpuChannel(int32_t client_id,
 
 void GpuServiceImpl::CloseChannel(int32_t client_id) {
   if (io_runner_->BelongsToCurrentThread()) {
-    main_runner_->PostTask(FROM_HERE, base::Bind(&GpuServiceImpl::CloseChannel,
-                                                 weak_ptr_, client_id));
+    main_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&GpuServiceImpl::CloseChannel, weak_ptr_, client_id));
     return;
   }
   gpu_channel_manager_->RemoveChannel(client_id);
 }
 
-void GpuServiceImpl::LoadedShader(const std::string& key,
+void GpuServiceImpl::LoadedShader(int32_t client_id,
+                                  const std::string& key,
                                   const std::string& data) {
   if (io_runner_->BelongsToCurrentThread()) {
-    main_runner_->PostTask(FROM_HERE, base::Bind(&GpuServiceImpl::LoadedShader,
-                                                 weak_ptr_, key, data));
+    main_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&GpuServiceImpl::LoadedShader, weak_ptr_,
+                                  client_id, key, data));
     return;
   }
-  gpu_channel_manager_->PopulateShaderCache(key, data);
+  gpu_channel_manager_->PopulateShaderCache(client_id, key, data);
 }
 
 void GpuServiceImpl::WakeUpGpu() {
   if (io_runner_->BelongsToCurrentThread()) {
-    main_runner_->PostTask(FROM_HERE,
-                           base::Bind(&GpuServiceImpl::WakeUpGpu, weak_ptr_));
+    main_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&GpuServiceImpl::WakeUpGpu, weak_ptr_));
     return;
   }
 #if defined(OS_ANDROID)
@@ -802,7 +811,8 @@ void GpuServiceImpl::GpuSwitched() {
 void GpuServiceImpl::DestroyAllChannels() {
   if (io_runner_->BelongsToCurrentThread()) {
     main_runner_->PostTask(
-        FROM_HERE, base::Bind(&GpuServiceImpl::DestroyAllChannels, weak_ptr_));
+        FROM_HERE,
+        base::BindOnce(&GpuServiceImpl::DestroyAllChannels, weak_ptr_));
     return;
   }
   DVLOG(1) << "GPU: Removing all contexts";
@@ -858,16 +868,13 @@ void GpuServiceImpl::CommitCATransaction(CommitCATransactionCallback callback) {
 
 void GpuServiceImpl::Crash() {
   DCHECK(io_runner_->BelongsToCurrentThread());
-  DVLOG(1) << "GPU: Simulating GPU crash";
-  // Good bye, cruel world.
-  volatile int* it_s_the_end_of_the_world_as_we_know_it = nullptr;
-  *it_s_the_end_of_the_world_as_we_know_it = 0xdead;
+  gl::Crash();
 }
 
 void GpuServiceImpl::Hang() {
   DCHECK(io_runner_->BelongsToCurrentThread());
 
-  main_runner_->PostTask(FROM_HERE, base::Bind([] {
+  main_runner_->PostTask(FROM_HERE, base::BindOnce([] {
                            DVLOG(1) << "GPU: Simulating GPU hang";
                            for (;;) {
                              // Do not sleep here. The GPU watchdog timer tracks
@@ -880,8 +887,7 @@ void GpuServiceImpl::Hang() {
 void GpuServiceImpl::ThrowJavaException() {
   DCHECK(io_runner_->BelongsToCurrentThread());
 #if defined(OS_ANDROID)
-  main_runner_->PostTask(
-      FROM_HERE, base::Bind([] { base::android::ThrowUncaughtException(); }));
+  ThrowUncaughtException();
 #else
   NOTREACHED() << "Java exception not supported on this platform.";
 #endif

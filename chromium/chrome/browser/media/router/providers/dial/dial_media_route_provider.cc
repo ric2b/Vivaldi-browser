@@ -9,7 +9,10 @@
 #include "base/containers/flat_map.h"
 #include "base/no_destructor.h"
 #include "base/stl_util.h"
+#include "chrome/browser/media/router/data_decoder_util.h"
+#include "chrome/browser/media/router/providers/dial/dial_media_route_provider_metrics.h"
 #include "chrome/common/media_router/media_source_helper.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "url/origin.h"
 
 namespace media_router {
@@ -20,6 +23,13 @@ url::Origin CreateOrigin(const std::string& url) {
   return url::Origin::Create(GURL(url));
 }
 
+void ReportParseError(DialParseMessageResult result,
+                      const std::string& error_message) {
+  DCHECK_NE(result, DialParseMessageResult::kSuccess);
+  DVLOG(2) << "Failed to parse DIAL internal message: " << error_message;
+  DialMediaRouteProviderMetrics::RecordParseMessageResult(result);
+}
+
 static constexpr int kMaxPendingDialLaunches = 10;
 
 }  // namespace
@@ -28,9 +38,13 @@ DialMediaRouteProvider::DialMediaRouteProvider(
     mojom::MediaRouteProviderRequest request,
     mojom::MediaRouterPtrInfo media_router,
     DialMediaSinkServiceImpl* media_sink_service,
+    service_manager::Connector* connector,
+    const std::string& hash_token,
     const scoped_refptr<base::SequencedTaskRunner>& task_runner)
     : binding_(this),
       media_sink_service_(media_sink_service),
+      data_decoder_(std::make_unique<DataDecoder>(connector)),
+      internal_message_util_(hash_token),
       weak_ptr_factory_(this) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
   DCHECK(media_sink_service_);
@@ -80,29 +94,36 @@ void DialMediaRouteProvider::CreateRoute(const std::string& media_source,
 
   const MediaSinkInternal* sink = media_sink_service_->GetSinkById(sink_id);
   if (!sink) {
-    std::move(callback).Run(base::nullopt, "Unknown sink " + sink_id,
+    std::move(callback).Run(base::nullopt, nullptr, "Unknown sink " + sink_id,
                             RouteRequestResult::SINK_NOT_FOUND);
+    DialMediaRouteProviderMetrics::RecordCreateRouteResult(
+        DialCreateRouteResult::kSinkNotFound);
     return;
   }
 
   auto activity =
       DialActivity::From(presentation_id, *sink, media_source, incognito);
   if (!activity) {
-    std::move(callback).Run(base::nullopt, "Unsupported source " + media_source,
+    std::move(callback).Run(base::nullopt, nullptr,
+                            "Unsupported source " + media_source,
                             RouteRequestResult::NO_SUPPORTED_PROVIDER);
+    DialMediaRouteProviderMetrics::RecordCreateRouteResult(
+        DialCreateRouteResult::kUnsupportedSource);
     return;
   }
 
   const MediaRoute::Id& route_id = activity->route.media_route_id();
   if (activity_manager_->GetActivity(route_id) ||
       activity_manager_->GetActivityBySinkId(sink_id)) {
-    std::move(callback).Run(base::nullopt, "Activity already exists",
+    std::move(callback).Run(base::nullopt, nullptr, "Activity already exists",
                             RouteRequestResult::ROUTE_ALREADY_EXISTS);
+    DialMediaRouteProviderMetrics::RecordCreateRouteResult(
+        DialCreateRouteResult::kRouteAlreadyExists);
     return;
   }
 
   activity_manager_->AddActivity(*activity);
-  std::move(callback).Run(activity->route, base::nullopt,
+  std::move(callback).Run(activity->route, nullptr, base::nullopt,
                           RouteRequestResult::OK);
 
   // When a custom DIAL launch request is received, DialMediaRouteProvider will
@@ -110,10 +131,9 @@ void DialMediaRouteProvider::CreateRoute(const std::string& media_source,
   // the Cast SDK to complete the launch sequence. The first messages that the
   // MRP needs to send are the RECEIVER_ACTION and NEW_SESSION.
   std::vector<mojom::RouteMessagePtr> messages;
-  messages.emplace_back(
-      DialInternalMessageUtil::CreateReceiverActionCastMessage(
-          activity->launch_info, *sink));
-  messages.emplace_back(DialInternalMessageUtil::CreateNewSessionMessage(
+  messages.emplace_back(internal_message_util_.CreateReceiverActionCastMessage(
+      activity->launch_info, *sink));
+  messages.emplace_back(internal_message_util_.CreateNewSessionMessage(
       activity->launch_info, *sink));
   DVLOG(2) << "Sending RECEIVER_ACTION and NEW_SESSION for route " << route_id;
   message_sender_->SendMessages(route_id, std::move(messages));
@@ -128,7 +148,7 @@ void DialMediaRouteProvider::JoinRoute(const std::string& media_source,
                                        JoinRouteCallback callback) {
   NOTIMPLEMENTED();
   std::move(callback).Run(
-      base::nullopt, std::string("Not implemented"),
+      base::nullopt, nullptr, std::string("Not implemented"),
       RouteRequestResult::ResultCode::NO_SUPPORTED_PROVIDER);
 }
 
@@ -143,7 +163,7 @@ void DialMediaRouteProvider::ConnectRouteByRouteId(
     ConnectRouteByRouteIdCallback callback) {
   NOTIMPLEMENTED();
   std::move(callback).Run(
-      base::nullopt, std::string("Not implemented"),
+      base::nullopt, nullptr, std::string("Not implemented"),
       RouteRequestResult::ResultCode::NO_SUPPORTED_PROVIDER);
 }
 
@@ -157,6 +177,8 @@ void DialMediaRouteProvider::TerminateRoute(const std::string& route_id,
     DVLOG(2) << "No activity record found with route_id " << route_id;
     std::move(callback).Run("Activity not found",
                             RouteRequestResult::ROUTE_NOT_FOUND);
+    DialMediaRouteProviderMetrics::RecordTerminateRouteResult(
+        DialTerminateRouteResult::kRouteNotFound);
     return;
   }
 
@@ -167,6 +189,8 @@ void DialMediaRouteProvider::TerminateRoute(const std::string& route_id,
     DVLOG(2) << __func__ << ": Sink not found: " << route.media_sink_id();
     std::move(callback).Run("Sink not found",
                             RouteRequestResult::SINK_NOT_FOUND);
+    DialMediaRouteProviderMetrics::RecordTerminateRouteResult(
+        DialTerminateRouteResult::kSinkNotFound);
     return;
   }
 
@@ -178,18 +202,34 @@ void DialMediaRouteProvider::SendRouteMessage(
     const std::string& message,
     SendRouteMessageCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  data_decoder_->ParseJson(
+      message,
+      base::BindRepeating(&DialMediaRouteProvider::HandleParsedRouteMessage,
+                          weak_ptr_factory_.GetWeakPtr(), media_route_id),
+      base::BindRepeating(&ReportParseError,
+                          DialParseMessageResult::kParseError));
+  // TODO(https://crbug.com/866551): SendRouteMessageCallback is no longer used.
+  // Always invoke it with true until it is removed.
+  std::move(callback).Run(true);
+}
 
-  auto internal_message = DialInternalMessage::From(message);
+void DialMediaRouteProvider::HandleParsedRouteMessage(
+    const MediaRoute::Id& route_id,
+    std::unique_ptr<base::Value> message) {
+  std::string error;
+  std::unique_ptr<DialInternalMessage> internal_message =
+      DialInternalMessage::From(std::move(*message), &error);
   if (!internal_message) {
-    DVLOG(2) << "Fail to parse message";
-    std::move(callback).Run(true);
+    ReportParseError(DialParseMessageResult::kInvalidMessage, error);
     return;
   }
 
-  const DialActivity* activity = activity_manager_->GetActivity(media_route_id);
+  DialMediaRouteProviderMetrics::RecordParseMessageResult(
+      DialParseMessageResult::kSuccess);
+
+  const DialActivity* activity = activity_manager_->GetActivity(route_id);
   if (!activity) {
-    DVLOG(2) << "No activity record found with route_id " << media_route_id;
-    std::move(callback).Run(true);
+    DVLOG(2) << "No activity record found with route_id " << route_id;
     return;
   }
 
@@ -198,11 +238,10 @@ void DialMediaRouteProvider::SendRouteMessage(
       media_sink_service_->GetSinkById(route.media_sink_id());
   if (!sink) {
     DVLOG(2) << __func__ << ": Sink not found: " << route.media_sink_id();
-    std::move(callback).Run(true);
     return;
   }
 
-  DVLOG(2) << __func__ << ": Recieved message from:" << media_route_id;
+  DVLOG(2) << __func__ << ": Recieved message from:" << route_id;
   // TODO(https://crbug.com/816628): Investigate whether the direct use of
   // PresentationConnection in this class to communicate with the SDK client can
   // result in eliminating the need for CLIENT_CONNECT messages.
@@ -211,11 +250,9 @@ void DialMediaRouteProvider::SendRouteMessage(
   } else if (internal_message->type ==
              DialInternalMessageType::kCustomDialLaunch) {
     HandleCustomDialLaunchResponse(*activity, *internal_message);
-  } else if (DialInternalMessageUtil::IsStopSessionMessage(*internal_message)) {
+  } else if (internal_message_util_.IsStopSessionMessage(*internal_message)) {
     DoTerminateRoute(*activity, *sink, base::DoNothing());
   }
-
-  std::move(callback).Run(true);
 }
 
 void DialMediaRouteProvider::HandleClientConnect(
@@ -242,6 +279,8 @@ void DialMediaRouteProvider::SendCustomDialLaunchMessage(
     // Note: this leaves the route in a stuck state; the client must terminate
     // the route. Maybe we should clean up the route here.
     DVLOG(2) << __func__ << ": unable to get app info for " << route_id;
+    DialMediaRouteProviderMetrics::RecordCreateRouteResult(
+        DialCreateRouteResult::kAppInfoNotFound);
     return;
   }
 
@@ -260,7 +299,7 @@ void DialMediaRouteProvider::SendCustomDialLaunchMessage(
   }
 
   auto message_and_seq_number =
-      DialInternalMessageUtil::CreateCustomDialLaunchMessage(
+      internal_message_util_.CreateCustomDialLaunchMessage(
           activity->launch_info, *sink, *result.app_info);
   pending_dial_launches_.insert(message_and_seq_number.second);
   if (pending_dial_launches_.size() > kMaxPendingDialLaunches) {
@@ -296,6 +335,9 @@ void DialMediaRouteProvider::HandleAppLaunchResult(
     const MediaRoute::Id& route_id,
     bool success) {
   DVLOG(2) << "Launch result for: " << route_id << ": " << success;
+  DialMediaRouteProviderMetrics::RecordCreateRouteResult(
+      success ? DialCreateRouteResult::kSuccess
+              : DialCreateRouteResult::kAppLaunchFailed);
   NotifyAllOnRoutesUpdated();
 }
 
@@ -305,9 +347,8 @@ void DialMediaRouteProvider::DoTerminateRoute(const DialActivity& activity,
   const MediaRoute::Id& route_id = activity.route.media_route_id();
   DVLOG(2) << "Terminating route " << route_id;
   std::vector<mojom::RouteMessagePtr> messages;
-  messages.emplace_back(
-      DialInternalMessageUtil::CreateReceiverActionStopMessage(
-          activity.launch_info, sink));
+  messages.emplace_back(internal_message_util_.CreateReceiverActionStopMessage(
+      activity.launch_info, sink));
   message_sender_->SendMessages(route_id, std::move(messages));
   activity_manager_->StopApp(
       route_id,
@@ -326,6 +367,11 @@ void DialMediaRouteProvider::HandleStopAppResult(
     media_router_->OnPresentationConnectionStateChanged(
         route_id, mojom::MediaRouter::PresentationConnectionState::TERMINATED);
     NotifyAllOnRoutesUpdated();
+    DialMediaRouteProviderMetrics::RecordTerminateRouteResult(
+        DialTerminateRouteResult::kSuccess);
+  } else {
+    DialMediaRouteProviderMetrics::RecordTerminateRouteResult(
+        DialTerminateRouteResult::kStopAppFailed);
   }
   std::move(callback).Run(message, result_code);
 }

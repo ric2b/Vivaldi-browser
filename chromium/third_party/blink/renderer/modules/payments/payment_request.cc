@@ -25,6 +25,8 @@
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/frame_owner.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
@@ -32,11 +34,13 @@
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/console_types.h"
 #include "third_party/blink/renderer/modules/event_target_modules_names.h"
+#include "third_party/blink/renderer/modules/payments/address_errors.h"
 #include "third_party/blink/renderer/modules/payments/android_pay_method_data.h"
 #include "third_party/blink/renderer/modules/payments/android_pay_tokenization.h"
 #include "third_party/blink/renderer/modules/payments/basic_card_helper.h"
 #include "third_party/blink/renderer/modules/payments/basic_card_request.h"
 #include "third_party/blink/renderer/modules/payments/html_iframe_element_payments.h"
+#include "third_party/blink/renderer/modules/payments/payer_error_fields.h"
 #include "third_party/blink/renderer/modules/payments/payment_address.h"
 #include "third_party/blink/renderer/modules/payments/payment_details_init.h"
 #include "third_party/blink/renderer/modules/payments/payment_details_update.h"
@@ -44,12 +48,12 @@
 #include "third_party/blink/renderer/modules/payments/payment_request_update_event.h"
 #include "third_party/blink/renderer/modules/payments/payment_response.h"
 #include "third_party/blink/renderer/modules/payments/payment_shipping_option.h"
+#include "third_party/blink/renderer/modules/payments/payment_validation_errors.h"
 #include "third_party/blink/renderer/modules/payments/payments_validators.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/feature_policy/feature_policy.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/uuid.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
@@ -57,7 +61,11 @@
 
 namespace {
 
+using ::payments::mojom::blink::AddressErrors;
+using ::payments::mojom::blink::AddressErrorsPtr;
 using ::payments::mojom::blink::CanMakePaymentQueryResult;
+using ::payments::mojom::blink::PayerErrorFields;
+using ::payments::mojom::blink::PayerErrorFieldsPtr;
 using ::payments::mojom::blink::PaymentAddress;
 using ::payments::mojom::blink::PaymentAddressPtr;
 using ::payments::mojom::blink::PaymentCurrencyAmount;
@@ -71,6 +79,8 @@ using ::payments::mojom::blink::PaymentOptionsPtr;
 using ::payments::mojom::blink::PaymentResponsePtr;
 using ::payments::mojom::blink::PaymentShippingOptionPtr;
 using ::payments::mojom::blink::PaymentShippingType;
+using ::payments::mojom::blink::PaymentValidationErrors;
+using ::payments::mojom::blink::PaymentValidationErrorsPtr;
 
 }  // namespace
 
@@ -128,6 +138,65 @@ struct TypeConverter<PaymentOptionsPtr, blink::PaymentOptions> {
     else
       output->shipping_type = PaymentShippingType::SHIPPING;
 
+    return output;
+  }
+};
+
+template <>
+struct TypeConverter<PaymentValidationErrorsPtr,
+                     blink::PaymentValidationErrors> {
+  static PaymentValidationErrorsPtr Convert(
+      const blink::PaymentValidationErrors& input) {
+    PaymentValidationErrorsPtr output =
+        payments::mojom::blink::PaymentValidationErrors::New();
+    output->payer = input.hasPayer()
+                        ? PayerErrorFields::From(input.payer())
+                        : PayerErrorFields::From(blink::PayerErrorFields());
+    output->shipping_address =
+        input.hasShippingAddress()
+            ? AddressErrors::From(input.shippingAddress())
+            : AddressErrors::From(blink::AddressErrors());
+    return output;
+  }
+};
+
+template <>
+struct TypeConverter<PayerErrorFieldsPtr, blink::PayerErrorFields> {
+  static PayerErrorFieldsPtr Convert(const blink::PayerErrorFields& input) {
+    PayerErrorFieldsPtr output =
+        payments::mojom::blink::PayerErrorFields::New();
+    output->email = input.hasEmail() ? input.email() : g_empty_string;
+    output->name = input.hasName() ? input.name() : g_empty_string;
+    output->phone = input.hasPhone() ? input.phone() : g_empty_string;
+    return output;
+  }
+};
+
+template <>
+struct TypeConverter<AddressErrorsPtr, blink::AddressErrors> {
+  static AddressErrorsPtr Convert(const blink::AddressErrors& input) {
+    AddressErrorsPtr output = payments::mojom::blink::AddressErrors::New();
+    output->address_line =
+        input.hasAddressLine() ? input.addressLine() : g_empty_string;
+    output->city = input.hasCity() ? input.city() : g_empty_string;
+    output->country = input.hasCountry() ? input.country() : g_empty_string;
+    output->dependent_locality = input.hasDependentLocality()
+                                     ? input.dependentLocality()
+                                     : g_empty_string;
+    output->language_code =
+        input.hasLanguageCode() ? input.languageCode() : g_empty_string;
+    output->organization =
+        input.hasOrganization() ? input.organization() : g_empty_string;
+    output->phone = input.hasPhone() ? input.phone() : g_empty_string;
+    output->postal_code =
+        input.hasPostalCode() ? input.postalCode() : g_empty_string;
+    output->recipient =
+        input.hasRecipient() ? input.recipient() : g_empty_string;
+    output->region = input.hasRegion() ? input.region() : g_empty_string;
+    output->region_code =
+        input.hasRegionCode() ? input.regionCode() : g_empty_string;
+    output->sorting_code =
+        input.hasSortingCode() ? input.sortingCode() : g_empty_string;
     return output;
   }
 };
@@ -450,8 +519,7 @@ void StringifyAndParseMethodSpecificData(const String& supported_method,
     if (exception_state.HadException())
       exception_state.ClearException();
   }
-  if (RuntimeEnabledFeatures::PaymentRequestBasicCardEnabled() &&
-      supported_method == "basic-card") {
+  if (supported_method == "basic-card") {
     SetBasicCardMethodData(input, output, exception_state);
     if (exception_state.HadException())
       exception_state.ClearException();
@@ -672,7 +740,8 @@ bool AllowedToUsePaymentRequest(const Frame* frame) {
     return false;
 
   // 2. If Feature Policy is enabled, return the policy for "payment" feature.
-  return frame->IsFeatureEnabled(mojom::FeaturePolicyFeature::kPayment);
+  return frame->IsFeatureEnabled(mojom::FeaturePolicyFeature::kPayment,
+                                 ReportOptions::kReportOnFailure);
 }
 
 void WarnIgnoringQueryQuotaForCanMakePayment(
@@ -708,7 +777,7 @@ PaymentRequest* PaymentRequest::Create(
 PaymentRequest::~PaymentRequest() = default;
 
 ScriptPromise PaymentRequest::show(ScriptState* script_state) {
-  if (!payment_provider_.is_bound() || show_resolver_) {
+  if (!payment_provider_.is_bound() || accept_resolver_) {
     return ScriptPromise::RejectWithDOMException(
         script_state, DOMException::Create(DOMExceptionCode::kInvalidStateError,
                                            "Already called show() once"));
@@ -739,8 +808,8 @@ ScriptPromise PaymentRequest::show(ScriptState* script_state) {
 
   payment_provider_->Show(is_user_gesture);
 
-  show_resolver_ = ScriptPromiseResolver::Create(script_state);
-  return show_resolver_->Promise();
+  accept_resolver_ = ScriptPromiseResolver::Create(script_state);
+  return accept_resolver_->Promise();
 }
 
 ScriptPromise PaymentRequest::abort(ScriptState* script_state) {
@@ -758,11 +827,12 @@ ScriptPromise PaymentRequest::abort(ScriptState* script_state) {
                              "has resolved or rejected"));
   }
 
-  if (!show_resolver_) {
+  if (!GetPendingAcceptPromiseResolver()) {
     return ScriptPromise::RejectWithDOMException(
         script_state,
-        DOMException::Create(DOMExceptionCode::kInvalidStateError,
-                             "Never called show(), so nothing to abort"));
+        DOMException::Create(
+            DOMExceptionCode::kInvalidStateError,
+            "No show() or retry() in progress, so nothing to abort"));
   }
 
   abort_resolver_ = ScriptPromiseResolver::Create(script_state);
@@ -771,7 +841,7 @@ ScriptPromise PaymentRequest::abort(ScriptState* script_state) {
 }
 
 ScriptPromise PaymentRequest::canMakePayment(ScriptState* script_state) {
-  if (!payment_provider_.is_bound() || show_resolver_ ||
+  if (!payment_provider_.is_bound() || GetPendingAcceptPromiseResolver() ||
       can_make_payment_resolver_ || !script_state->ContextIsValid()) {
     return ScriptPromise::RejectWithDOMException(
         script_state, DOMException::Create(DOMExceptionCode::kInvalidStateError,
@@ -785,7 +855,7 @@ ScriptPromise PaymentRequest::canMakePayment(ScriptState* script_state) {
 }
 
 bool PaymentRequest::HasPendingActivity() const {
-  return show_resolver_ || complete_resolver_;
+  return GetPendingAcceptPromiseResolver() || complete_resolver_;
 }
 
 const AtomicString& PaymentRequest::InterfaceName() const {
@@ -796,12 +866,53 @@ ExecutionContext* PaymentRequest::GetExecutionContext() const {
   return ContextLifecycleObserver::GetExecutionContext();
 }
 
-ScriptPromise PaymentRequest::Retry(ScriptState*,
-                                    const PaymentValidationErrors&) {
-  // TODO(zino): Should implement this method. Please see
-  // https://crbug.com/861704
-  NOTIMPLEMENTED();
-  return ScriptPromise();
+ScriptPromise PaymentRequest::Retry(ScriptState* script_state,
+                                    const PaymentValidationErrors& errors) {
+  if (!script_state->ContextIsValid() || !LocalDOMWindow::From(script_state) ||
+      !LocalDOMWindow::From(script_state)->GetFrame()) {
+    return ScriptPromise::RejectWithDOMException(
+        script_state, DOMException::Create(DOMExceptionCode::kAbortError,
+                                           "Cannot retry the payment request"));
+  }
+
+  if (complete_resolver_) {
+    return ScriptPromise::RejectWithDOMException(
+        script_state,
+        DOMException::Create(
+            DOMExceptionCode::kInvalidStateError,
+            "Cannot call retry() because already called complete()"));
+  }
+
+  if (retry_resolver_) {
+    return ScriptPromise::RejectWithDOMException(
+        script_state, DOMException::Create(DOMExceptionCode::kInvalidStateError,
+                                           "Cannot call retry() again until "
+                                           "the previous retry() is finished"));
+  }
+
+  if (!payment_provider_) {
+    return ScriptPromise::RejectWithDOMException(
+        script_state, DOMException::Create(DOMExceptionCode::kInvalidStateError,
+                                           "Payment request terminated"));
+  }
+
+  String error_message;
+  if (!PaymentsValidators::IsValidPaymentValidationErrorsFormat(
+          errors, &error_message)) {
+    return ScriptPromise::Reject(
+        script_state, V8ThrowException::CreateTypeError(
+                          script_state->GetIsolate(), error_message));
+  }
+
+  complete_timer_.Stop();
+
+  // The payment provider should respond in PaymentRequest::OnPaymentResponse().
+  payment_provider_->Retry(
+      payments::mojom::blink::PaymentValidationErrors::From(errors));
+
+  retry_resolver_ = ScriptPromiseResolver::Create(script_state);
+
+  return retry_resolver_->Promise();
 }
 
 ScriptPromise PaymentRequest::Complete(ScriptState* script_state,
@@ -816,6 +927,13 @@ ScriptPromise PaymentRequest::Complete(ScriptState* script_state,
     return ScriptPromise::RejectWithDOMException(
         script_state, DOMException::Create(DOMExceptionCode::kInvalidStateError,
                                            "Already called complete() once"));
+  }
+
+  if (retry_resolver_) {
+    return ScriptPromise::RejectWithDOMException(
+        script_state, DOMException::Create(
+                          DOMExceptionCode::kInvalidStateError,
+                          "Cannot call complete() before retry() is finished"));
   }
 
   if (!complete_timer_.IsActive()) {
@@ -844,7 +962,7 @@ ScriptPromise PaymentRequest::Complete(ScriptState* script_state,
 
 void PaymentRequest::OnUpdatePaymentDetails(
     const ScriptValue& details_script_value) {
-  if (!show_resolver_ || !payment_provider_)
+  if (!GetPendingAcceptPromiseResolver() || !payment_provider_)
     return;
 
   PaymentDetailsUpdate details;
@@ -854,14 +972,15 @@ void PaymentRequest::OnUpdatePaymentDetails(
   V8PaymentDetailsUpdate::ToImpl(details_script_value.GetIsolate(),
                                  details_script_value.V8Value(), details,
                                  exception_state);
+  ScriptPromiseResolver* resolver = GetPendingAcceptPromiseResolver();
   if (exception_state.HadException()) {
-    show_resolver_->Reject(exception_state.GetException());
+    resolver->Reject(exception_state.GetException());
     ClearResolversAndCloseMojoConnection();
     return;
   }
 
   if (!details.hasTotal()) {
-    show_resolver_->Reject(
+    resolver->Reject(
         DOMException::Create(DOMExceptionCode::kSyntaxError, "Total required"));
     ClearResolversAndCloseMojoConnection();
     return;
@@ -873,7 +992,7 @@ void PaymentRequest::OnUpdatePaymentDetails(
       details, options_, validated_details, shipping_option_,
       *GetExecutionContext(), exception_state);
   if (exception_state.HadException()) {
-    show_resolver_->Reject(exception_state.GetException());
+    resolver->Reject(exception_state.GetException());
     ClearResolversAndCloseMojoConnection();
     return;
   }
@@ -885,8 +1004,9 @@ void PaymentRequest::OnUpdatePaymentDetails(
 }
 
 void PaymentRequest::OnUpdatePaymentDetailsFailure(const String& error) {
-  if (show_resolver_) {
-    show_resolver_->Reject(
+  ScriptPromiseResolver* resolver = GetPendingAcceptPromiseResolver();
+  if (resolver) {
+    resolver->Reject(
         DOMException::Create(DOMExceptionCode::kAbortError, error));
   }
   if (complete_resolver_) {
@@ -899,7 +1019,9 @@ void PaymentRequest::OnUpdatePaymentDetailsFailure(const String& error) {
 void PaymentRequest::Trace(blink::Visitor* visitor) {
   visitor->Trace(options_);
   visitor->Trace(shipping_address_);
-  visitor->Trace(show_resolver_);
+  visitor->Trace(payment_response_);
+  visitor->Trace(accept_resolver_);
+  visitor->Trace(retry_resolver_);
   visitor->Trace(complete_resolver_);
   visitor->Trace(abort_resolver_);
   visitor->Trace(can_make_payment_resolver_);
@@ -984,12 +1106,12 @@ void PaymentRequest::ContextDestroyed(ExecutionContext*) {
 }
 
 void PaymentRequest::OnShippingAddressChange(PaymentAddressPtr address) {
-  DCHECK(show_resolver_);
+  DCHECK(GetPendingAcceptPromiseResolver());
   DCHECK(!complete_resolver_);
 
   String error_message;
   if (!PaymentsValidators::IsValidShippingAddress(address, &error_message)) {
-    show_resolver_->Reject(
+    GetPendingAcceptPromiseResolver()->Reject(
         DOMException::Create(DOMExceptionCode::kSyntaxError, error_message));
     ClearResolversAndCloseMojoConnection();
     return;
@@ -1001,7 +1123,7 @@ void PaymentRequest::OnShippingAddressChange(PaymentAddressPtr address) {
       GetExecutionContext(), EventTypeNames::shippingaddresschange);
   event->SetTarget(this);
   event->SetPaymentDetailsUpdater(this);
-  DispatchEvent(event);
+  DispatchEvent(*event);
   if (!event->is_waiting_for_update()) {
     GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
         kJSMessageSource, kWarningMessageLevel,
@@ -1012,7 +1134,7 @@ void PaymentRequest::OnShippingAddressChange(PaymentAddressPtr address) {
 }
 
 void PaymentRequest::OnShippingOptionChange(const String& shipping_option_id) {
-  DCHECK(show_resolver_);
+  DCHECK(GetPendingAcceptPromiseResolver());
   DCHECK(!complete_resolver_);
   shipping_option_ = shipping_option_id;
 
@@ -1020,7 +1142,7 @@ void PaymentRequest::OnShippingOptionChange(const String& shipping_option_id) {
       GetExecutionContext(), EventTypeNames::shippingoptionchange);
   event->SetTarget(this);
   event->SetPaymentDetailsUpdater(this);
-  DispatchEvent(event);
+  DispatchEvent(*event);
   if (!event->is_waiting_for_update()) {
     GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
         kJSMessageSource, kWarningMessageLevel,
@@ -1031,14 +1153,13 @@ void PaymentRequest::OnShippingOptionChange(const String& shipping_option_id) {
 }
 
 void PaymentRequest::OnPaymentResponse(PaymentResponsePtr response) {
-  DCHECK(show_resolver_);
+  DCHECK(GetPendingAcceptPromiseResolver());
   DCHECK(!complete_resolver_);
-  DCHECK(!complete_timer_.IsActive());
 
+  ScriptPromiseResolver* resolver = GetPendingAcceptPromiseResolver();
   if (options_.requestShipping()) {
     if (!response->shipping_address || response->shipping_option.IsEmpty()) {
-      show_resolver_->Reject(
-          DOMException::Create(DOMExceptionCode::kSyntaxError));
+      resolver->Reject(DOMException::Create(DOMExceptionCode::kSyntaxError));
       ClearResolversAndCloseMojoConnection();
       return;
     }
@@ -1046,7 +1167,7 @@ void PaymentRequest::OnPaymentResponse(PaymentResponsePtr response) {
     String error_message;
     if (!PaymentsValidators::IsValidShippingAddress(response->shipping_address,
                                                     &error_message)) {
-      show_resolver_->Reject(
+      resolver->Reject(
           DOMException::Create(DOMExceptionCode::kSyntaxError, error_message));
       ClearResolversAndCloseMojoConnection();
       return;
@@ -1057,8 +1178,7 @@ void PaymentRequest::OnPaymentResponse(PaymentResponsePtr response) {
     shipping_option_ = response->shipping_option;
   } else {
     if (response->shipping_address || !response->shipping_option.IsNull()) {
-      show_resolver_->Reject(
-          DOMException::Create(DOMExceptionCode::kSyntaxError));
+      resolver->Reject(DOMException::Create(DOMExceptionCode::kSyntaxError));
       ClearResolversAndCloseMojoConnection();
       return;
     }
@@ -1070,21 +1190,32 @@ void PaymentRequest::OnPaymentResponse(PaymentResponsePtr response) {
       (!options_.requestPayerName() && !response->payer_name.IsNull()) ||
       (!options_.requestPayerEmail() && !response->payer_email.IsNull()) ||
       (!options_.requestPayerPhone() && !response->payer_phone.IsNull())) {
-    show_resolver_->Reject(
-        DOMException::Create(DOMExceptionCode::kSyntaxError));
+    resolver->Reject(DOMException::Create(DOMExceptionCode::kSyntaxError));
     ClearResolversAndCloseMojoConnection();
     return;
   }
 
   complete_timer_.StartOneShot(kCompleteTimeout, FROM_HERE);
 
-  show_resolver_->Resolve(new PaymentResponse(
-      std::move(response), shipping_address_.Get(), this, id_));
+  if (retry_resolver_) {
+    DCHECK(payment_response_);
+    payment_response_->Update(std::move(response), shipping_address_.Get());
+    retry_resolver_->Resolve();
 
-  // Do not close the mojo connection here. The merchant website should call
-  // PaymentResponse::complete(String), which will be forwarded over the mojo
-  // connection to display a success or failure message to the user.
-  show_resolver_.Clear();
+    // Do not close the mojo connection here. The merchant website should call
+    // PaymentResponse::complete(String), which will be forwarded over the mojo
+    // connection to display a success or failure message to the user.
+    retry_resolver_.Clear();
+  } else if (accept_resolver_) {
+    payment_response_ = new PaymentResponse(std::move(response),
+                                            shipping_address_.Get(), this, id_);
+    accept_resolver_->Resolve(payment_response_);
+
+    // Do not close the mojo connection here. The merchant website should call
+    // PaymentResponse::complete(String), which will be forwarded over the mojo
+    // connection to display a success or failure message to the user.
+    accept_resolver_.Clear();
+  }
 }
 
 void PaymentRequest::OnError(PaymentErrorReason error) {
@@ -1120,6 +1251,14 @@ void PaymentRequest::OnError(PaymentErrorReason error) {
       break;
     }
 
+    case PaymentErrorReason::ALREADY_SHOWING: {
+      exception_code = DOMExceptionCode::kAbortError;
+      message =
+          "Another PaymentRequest UI is already showing in a different tab or "
+          "window";
+      break;
+    }
+
     case PaymentErrorReason::UNKNOWN: {
       exception_code = DOMExceptionCode::kUnknownError;
       message = "Request failed";
@@ -1138,8 +1277,9 @@ void PaymentRequest::OnError(PaymentErrorReason error) {
     complete_resolver_->Resolve();
   }
 
-  if (show_resolver_)
-    show_resolver_->Reject(DOMException::Create(exception_code, message));
+  ScriptPromiseResolver* resolver = GetPendingAcceptPromiseResolver();
+  if (resolver)
+    resolver->Reject(DOMException::Create(exception_code, message));
 
   if (abort_resolver_)
     abort_resolver_->Reject(DOMException::Create(exception_code, message));
@@ -1160,7 +1300,7 @@ void PaymentRequest::OnComplete() {
 
 void PaymentRequest::OnAbort(bool aborted_successfully) {
   DCHECK(abort_resolver_);
-  DCHECK(show_resolver_);
+  DCHECK(GetPendingAcceptPromiseResolver());
 
   if (!aborted_successfully) {
     abort_resolver_->Reject(DOMException::Create(
@@ -1169,14 +1309,18 @@ void PaymentRequest::OnAbort(bool aborted_successfully) {
     return;
   }
 
-  show_resolver_->Reject(DOMException::Create(
-      DOMExceptionCode::kAbortError, "The website has aborted the payment"));
+  ScriptPromiseResolver* resolver = GetPendingAcceptPromiseResolver();
+  resolver->Reject(DOMException::Create(DOMExceptionCode::kAbortError,
+                                        "The website has aborted the payment"));
   abort_resolver_->Resolve();
   ClearResolversAndCloseMojoConnection();
 }
 
 void PaymentRequest::OnCanMakePayment(CanMakePaymentQueryResult result) {
-  DCHECK(can_make_payment_resolver_);
+  // TODO(https://crbug.com/891371): Understand how the resolver could be null
+  // here and prevent it.
+  if (!can_make_payment_resolver_)
+    return;
 
   switch (result) {
     case CanMakePaymentQueryResult::WARNING_CAN_MAKE_PAYMENT:
@@ -1219,12 +1363,17 @@ void PaymentRequest::OnCompleteTimeout(TimerBase*) {
 void PaymentRequest::ClearResolversAndCloseMojoConnection() {
   complete_timer_.Stop();
   complete_resolver_.Clear();
-  show_resolver_.Clear();
+  accept_resolver_.Clear();
+  retry_resolver_.Clear();
   abort_resolver_.Clear();
   can_make_payment_resolver_.Clear();
   if (client_binding_.is_bound())
     client_binding_.Close();
   payment_provider_.reset();
+}
+
+ScriptPromiseResolver* PaymentRequest::GetPendingAcceptPromiseResolver() const {
+  return retry_resolver_ ? retry_resolver_.Get() : accept_resolver_.Get();
 }
 
 }  // namespace blink

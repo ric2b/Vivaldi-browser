@@ -28,6 +28,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
+#include "chromeos/chromeos_switches.h"
+#include "ui/aura/window.h"
 #include "ui/chromeos/search_box/search_box_view_base.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/border.h"
@@ -36,6 +38,7 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/public/activation_client.h"
 
 namespace app_list {
 
@@ -87,7 +90,16 @@ void AppListMainView::AddContentsViews() {
 }
 
 void AppListMainView::ShowAppListWhenReady() {
-  GetWidget()->Show();
+  // After switching to tablet mode, other app windows may be active. Show the
+  // app list without activating it to avoid breaking other windows' state.
+  const aura::Window* active_window =
+      wm::GetActivationClient(
+          app_list_view_->GetWidget()->GetNativeView()->GetRootWindow())
+          ->GetActiveWindow();
+  if (app_list_view_->IsHomeLauncherEnabledInTabletMode() && active_window)
+    GetWidget()->ShowInactive();
+  else
+    GetWidget()->Show();
 }
 
 void AppListMainView::ResetForShow() {
@@ -168,10 +180,36 @@ void AppListMainView::QueryChanged(search_box::SearchBoxViewBase* sender) {
   base::string16 raw_query = search_model_->search_box()->text();
   base::string16 query;
   base::TrimWhitespace(raw_query, base::TRIM_ALL, &query);
-  bool should_show_search = !query.empty();
+  bool should_show_search =
+      features::IsZeroStateSuggestionsEnabled()
+          ? search_box_view_->is_search_box_active() || !query.empty()
+          : !query.empty();
   contents_view_->ShowSearchResults(should_show_search);
 
   delegate_->StartSearch(raw_query);
+}
+
+void AppListMainView::ActiveChanged(search_box::SearchBoxViewBase* sender) {
+  if (!features::IsZeroStateSuggestionsEnabled())
+    return;
+
+  if (search_box_view_->is_search_box_active()) {
+    // Show zero state suggestions when search box is activated with an empty
+    // query.
+    base::string16 raw_query = search_model_->search_box()->text();
+    base::string16 query;
+    base::TrimWhitespace(raw_query, base::TRIM_ALL, &query);
+    if (query.empty())
+      search_box_view_->ShowZeroStateSuggestions();
+  } else {
+    // Close the search results page if the search box is inactive.
+    contents_view_->ShowSearchResults(false);
+  }
+}
+
+void AppListMainView::AssistantButtonPressed() {
+  DCHECK(chromeos::switches::IsAssistantEnabled());
+  delegate_->StartAssistant();
 }
 
 void AppListMainView::BackButtonPressed() {

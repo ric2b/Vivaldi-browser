@@ -117,7 +117,7 @@ void PictureInPictureInterstitial::Hide() {
 }
 
 Node::InsertionNotificationRequest PictureInPictureInterstitial::InsertedInto(
-    ContainerNode* root) {
+    ContainerNode& root) {
   if (GetVideoElement().isConnected() && !resize_observer_) {
     resize_observer_ =
         ResizeObserver::Create(GetVideoElement().GetDocument(),
@@ -128,7 +128,7 @@ Node::InsertionNotificationRequest PictureInPictureInterstitial::InsertedInto(
   return HTMLDivElement::InsertedInto(root);
 }
 
-void PictureInPictureInterstitial::RemovedFrom(ContainerNode*) {
+void PictureInPictureInterstitial::RemovedFrom(ContainerNode&) {
   DCHECK(!GetVideoElement().isConnected());
 
   if (resize_observer_) {

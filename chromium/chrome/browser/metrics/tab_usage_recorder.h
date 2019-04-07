@@ -20,9 +20,6 @@ namespace metrics {
 class TabUsageRecorder : public TabReactivationTracker::Delegate,
                          public TabStripModelObserver {
  public:
-  // Needs to be public for DEFINE_WEB_CONTENTS_USER_DATA_KEY.
-  class WebContentsData;
-
   // Starts recording tab usage for all browsers.
   static void InitializeIfNeeded();
 
@@ -31,15 +28,17 @@ class TabUsageRecorder : public TabReactivationTracker::Delegate,
   void OnTabReactivated(content::WebContents* contents) override;
 
   // TabStripModelObserver:
-  void TabInsertedAt(TabStripModel* tab_strip_model,
-                     content::WebContents* contents,
-                     int index,
-                     bool foreground) override;
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override;
   void TabPinnedStateChanged(TabStripModel* tab_strip_model,
                              content::WebContents* contents,
                              int index) override;
 
  private:
+  class WebContentsData;
+
   TabUsageRecorder();
   ~TabUsageRecorder() override;
 

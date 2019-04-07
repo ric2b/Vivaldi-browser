@@ -4,6 +4,8 @@
 
 package org.chromium.android_webview.test;
 
+import static org.chromium.android_webview.test.OnlyRunIn.ProcessMode.SINGLE_PROCESS;
+
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
@@ -23,9 +25,7 @@ import org.chromium.android_webview.test.services.MockVariationsSeedServer;
 import org.chromium.android_webview.test.util.VariationsTestUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.base.test.util.parameter.SkipCommandLineParameterization;
 
 import java.io.File;
 import java.io.IOException;
@@ -35,8 +35,8 @@ import java.util.concurrent.TimeoutException;
 /**
  * Test VariationsSeedLoader.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
-@SkipCommandLineParameterization
+@RunWith(AwJUnit4ClassRunner.class)
+@OnlyRunIn(SINGLE_PROCESS)
 public class VariationsSeedLoaderTest {
     private static final long TIMEOUT_MILLIS = 10000;
 
@@ -60,11 +60,6 @@ public class VariationsSeedLoaderTest {
 
         public TestLoader(TestLoaderResult result) {
             mResult = result;
-        }
-
-        @Override
-        protected boolean isEnabledByCmd() {
-            return true;
         }
 
         // Bind to the MockVariationsSeedServer built in to the instrumentation test app, rather

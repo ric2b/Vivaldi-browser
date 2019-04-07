@@ -29,19 +29,37 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['win', 'mac', 'linux'])
     self.Skip('WebglExtension_WEBGL_compressed_texture_s3tc_srgb',
         ['win', 'mac', 'linux'])
-    self.Skip('WebglExtension_EXT_disjoint_timer_query_webgl2', bug=808744)
+    self.Skip('WebglExtension_WEBGL_multiview',
+        ['mac', 'linux', 'android'], bug=864524)
+    # The multiview extension is only expected to be supported through ANGLE.
+    self.Skip('WebglExtension_WEBGL_multiview',
+        ['win', 'no_passthrough'], bug=864524)
+    # # ANGLE's OpenGL backend supports multiview only on NVIDIA.
+    self.Skip('WebglExtension_WEBGL_multiview',
+        ['win', 'passthrough', 'opengl', 'intel'], bug=864524)
+    self.Skip('WebglExtension_EXT_disjoint_timer_query_webgl2',
+        ['android'], bug=808744)
+    self.Fail('WebglExtension_EXT_disjoint_timer_query_webgl2',
+        ['linux', 'intel'], bug=867675)
 
     # ========================
     # Conformance expectations
     # ========================
 
-    # Failing new test added in https://github.com/KhronosGroup/WebGL/pull/2654
-    self.Fail('conformance2/context/incorrect-context-object-behaviour.html',
-        bug=857303)
+    # Failing new test
+    self.Fail(
+        'conformance2/glsl3/const-struct-from-array-as-function-parameter.html',
+        bug=874620)
 
-    # Need to fix test, which uses a bad interpretation of the spec
-    self.Fail('conformance/offscreencanvas/offscreencanvas-resize.html',
-        bug=754733)
+    # Failing new test added in https://github.com/KhronosGroup/WebGL/pull/2665
+    self.Fail('conformance2/textures/misc/tex-subimage3d-canvas-bug.html',
+              ['linux'], bug=859400)
+    self.Fail('conformance2/textures/misc/tex-subimage3d-canvas-bug.html',
+              ['win', 'opengl', 'passthrough'], bug=859400)
+
+    # Failing new test added in https://github.com/KhronosGroup/WebGL/pull/2658
+    self.Fail('conformance2/transform_feedback/' +
+              'same-buffer-two-binding-points.html', bug=866089)
 
     # Too slow (take about one hour to run)
     self.Skip('deqp/functional/gles3/builtinprecision/*.html', bug=619403)
@@ -209,10 +227,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['win', ('nvidia', 0x1cb3), 'opengl'], bug=715001)
     self.Fail('conformance/textures/misc/texture-size.html',
         ['win', ('nvidia', 0x1cb3), 'opengl'], bug=703779)
-    self.Fail('conformance2/rendering/attrib-type-match.html',
-        ['win', 'nvidia', 'opengl'], bug=782254)
-    self.Fail('deqp/functional/gles3/shaderpackingfunction.html',
-        ['win', 'nvidia', 'opengl'], bug=795030)
     self.Skip('conformance2/rendering/blitframebuffer-size-overflow.html',
         ['win', 'nvidia', 'opengl', 'passthrough'], bug=830046)
     self.Flaky('conformance2/transform_feedback/switching-objects.html',
@@ -264,15 +278,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Flaky('conformance2/textures/misc/' +
         'copy-texture-image-webgl-specific.html',
         ['win', 'amd', 'd3d11'], bug=828984)
-    self.Flaky('conformance2/textures/webgl_canvas/' +
-        'tex-3d-rgb5_a1-rgba-unsigned_short_5_5_5_1.html',
-        ['win', 'amd', 'd3d11'], bug=828984)
-    self.Flaky('conformance2/textures/webgl_canvas/' +
-        'tex-3d-rg16f-rg-half_float.html',
-        ['win', 'amd', 'd3d11'], bug=828984)
-    self.Flaky('conformance2/textures/webgl_canvas/' +
-        'tex-3d-rgba8ui-rgba_integer-unsigned_byte.html',
-        ['win', 'amd', 'd3d11'], bug=828984)
+    self.Flaky('conformance2/textures/webgl_canvas/*', ['win', 'amd'],
+        bug=878780)
 
     # Recent AMD drivers seem to have a regression with 3D textures.
     self.Fail('conformance2/textures/canvas_sub_rectangle/tex-3d-*',
@@ -355,6 +362,12 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance/textures/canvas/' +
         'tex-2d-luminance_alpha-luminance_alpha-unsigned_byte.html',
         ['passthrough', 'opengl'], bug=602688)
+    self.Fail('deqp/functional/gles3/shadercommonfunction.html',
+        ['passthrough', 'opengl'], bug=795030)
+    self.Fail('deqp/functional/gles3/shaderpackingfunction.html',
+        ['passthrough', 'opengl'], bug=794341)
+    self.Fail('conformance2/rendering/attrib-type-match.html',
+        ['passthrough', 'opengl'], bug=814905)
 
     # Passthrough command decoder / OpenGL / Windows
     self.Fail('deqp/functional/gles3/fbocompleteness.html',
@@ -386,6 +399,29 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance/renderbuffers/framebuffer-state-restoration.html',
         ['passthrough', 'opengl', 'intel'], bug=602688)
 
+    # Passthrough command decoder / Windows / OpenGL / Intel
+    self.Flaky('conformance/glsl/variables/gl-pointcoord.html',
+        ['win', 'passthrough', 'opengl', 'intel'], bug=854100)
+    self.Fail('conformance2/textures/misc/copy-texture-image-same-texture.html',
+        ['win', 'passthrough', 'opengl', 'intel'], bug=809594)
+    self.Fail('conformance2/renderbuffers/' +
+        'multisampled-depth-renderbuffer-initialization.html',
+        ['win', 'passthrough', 'opengl', 'intel'], bug=2760) # ANGLE bug
+    self.Fail('conformance/uniforms/' +
+        'no-over-optimization-on-uniform-array-16.html',
+        ['win', 'passthrough', 'opengl', 'intel'], bug=602688)
+    self.Fail('conformance/glsl/constructors/glsl-construct-mat2.html',
+        ['win', 'passthrough', 'opengl', 'intel'], bug=602688)
+    self.Fail('conformance2/textures/misc/texture-npot.html',
+        ['win', 'passthrough', 'opengl', 'intel'], bug=602688)
+    self.Fail('conformance2/textures/misc/npot-video-sizing.html',
+        ['win', 'passthrough', 'opengl', 'intel'], bug=602688)
+    self.Fail('conformance2/glsl3/' +
+        'vector-dynamic-indexing-swizzled-lvalue.html',
+        ['win', 'passthrough', 'opengl', 'intel'], bug=602688)
+    self.Fail('conformance2/glsl3/vector-dynamic-indexing.html',
+        ['win', 'passthrough', 'opengl', 'intel'], bug=602688)
+
     # Passthrough command decoder / Linux / OpenGL / NVIDIA
     self.Fail('conformance/textures/image_bitmap_from_video/' +
         'tex-2d-luminance_alpha-luminance_alpha-unsigned_byte.html',
@@ -399,22 +435,30 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance/textures/image_bitmap_from_video/' +
         'tex-2d-rgb-rgb-unsigned_short_5_6_5.html',
         ['linux', 'passthrough', 'opengl', 'nvidia'], bug=766918)
-    self.Flaky('conformance2/rendering/attrib-type-match.html',
-        ['linux', 'passthrough', 'opengl', 'nvidia'], bug=814905)
     self.Fail('deqp/functional/gles3/shaderoperator/common_functions.html',
         ['linux', 'passthrough', 'opengl', 'nvidia'], bug=793055)
-    self.Fail('deqp/functional/gles3/shadercommonfunction.html',
-        ['linux', 'passthrough', 'opengl', 'nvidia'], bug=793055)
-    self.Fail('deqp/functional/gles3/shadercommonfunction.html',
-        ['win', 'nvidia', 'opengl'], bug=795030)
-    self.Fail('deqp/functional/gles3/shaderpackingfunction.html',
-        ['linux', 'passthrough', 'opengl', 'nvidia'], bug=794341)
+
+    # Passthrough command decoder / Linux / OpenGL / Intel
+    self.Flaky('conformance/extensions/webgl-compressed-texture-s3tc.html',
+        ['linux', 'passthrough', 'opengl', 'intel'], bug=872302)
+    self.Fail('conformance2/renderbuffers/' +
+        'multisampled-depth-renderbuffer-initialization.html',
+        ['linux', 'passthrough', 'opengl', 'intel'], bug=2760) # ANGLE bug
+    self.Fail('conformance2/renderbuffers/' +
+        'multisampled-stencil-renderbuffer-initialization.html',
+        ['linux', 'passthrough', 'opengl', 'intel'], bug=2760) # ANGLE bug
+    self.Fail('conformance2/textures/misc/tex-mipmap-levels.html',
+        ['linux', 'passthrough', 'opengl', 'intel'], bug=2761) # ANGLE bug
 
     # Regressions in 10.12.4.
     self.Fail('conformance2/textures/misc/tex-base-level-bug.html',
-        ['sierra'], bug=705865)
+        ['sierra', 'intel'], bug=705865)
     self.Fail('conformance2/textures/misc/tex-mipmap-levels.html',
-        ['sierra'], bug=705865)
+        ['sierra', 'intel'], bug=705865)
+    self.Fail('conformance2/textures/misc/tex-base-level-bug.html',
+        ['sierra', 'amd'], bug=870856)
+    self.Fail('conformance2/textures/misc/tex-mipmap-levels.html',
+        ['sierra', 'amd'], bug=870856)
 
     # Regressions in 10.13
     self.Fail('deqp/functional/gles3/fbocolorbuffer/tex2d_00.html',
@@ -626,8 +670,17 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     #     ['mac', 'amd'], bug=735483)
     # self.Fail('conformance2/rendering/texture-switch-performance.html',
     #     ['mac', 'amd'], bug=735483)
+
+    # The following two failures are a regression in the Mac AMD
+    # OpenGL driver on 10.13.6 specifically. Unfortunately when the
+    # tests fail, they fail three times in a row, so we must mark them
+    # failing rather than flaky.
+    self.Fail('conformance2/textures/misc/tex-mipmap-levels.html',
+        ['highsierra', 'amd'], bug=870856)
+    self.Fail('conformance2/textures/misc/tex-base-level-bug.html',
+        ['highsierra', 'amd'], bug=870856)
     self.Fail('deqp/functional/gles3/shaderoperator/common_functions.html',
-        ['sierra', 'amd'], bug=820225)
+        ['mac', 'amd'], bug=820225)
     self.Fail('deqp/functional/gles3/transformfeedback/' +
         'array_interleaved_lines.html',
         ['sierra', 'amd'], bug=483282)
@@ -936,9 +989,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux', ('nvidia', 0x1cb3), 'opengl'], bug=703779)
 
     # Linux Intel
-    self.Fail('conformance2/extensions/ext-color-buffer-float.html',
-        ['linux', 'intel'], bug=640389)
-
     # See https://bugs.freedesktop.org/show_bug.cgi?id=94477
     self.Skip('conformance/glsl/bugs/temp-expressions-should-not-crash.html',
         ['linux', 'intel'], bug=540543)  # GPU timeout

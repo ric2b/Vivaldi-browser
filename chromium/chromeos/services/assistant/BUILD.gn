@@ -49,12 +49,16 @@ source_set("lib") {
       "assistant_settings_manager_impl.h",
       "platform/audio_input_provider_impl.cc",
       "platform/audio_input_provider_impl.h",
+      "platform/audio_media_data_source.cc",
+      "platform/audio_media_data_source.h",
+      "platform/audio_output_provider_impl.cc",
+      "platform/audio_output_provider_impl.h",
+      "platform/audio_stream_handler.cc",
+      "platform/audio_stream_handler.h",
       "platform/file_provider_impl.cc",
       "platform/file_provider_impl.h",
       "platform/network_provider_impl.cc",
       "platform/network_provider_impl.h",
-      "platform/resource_provider_impl.cc",
-      "platform/resource_provider_impl.h",
       "platform/system_provider_impl.cc",
       "platform/system_provider_impl.h",
       "platform_api_impl.cc",
@@ -69,7 +73,7 @@ source_set("lib") {
       "//chromeos/assistant/internal/proto/google3",
       "//libassistant/contrib/core",
       "//libassistant/contrib/platform/audio",
-      "//libassistant/shared/internal_api/c:api_wrappers_for_caller_no_chromium",
+      "//libassistant/shared/internal_api/c:api_wrappers_entrypoint",
       "//libassistant/shared/public",
       "//libassistant/shared/public:export",
       "//ui/base",
@@ -108,7 +112,10 @@ source_set("tests") {
   ]
 
   if (enable_cros_libassistant) {
-    sources += [ "platform/system_provider_impl_unittest.cc" ]
+    sources += [
+      "platform/audio_output_provider_impl_unittest.cc",
+      "platform/system_provider_impl_unittest.cc",
+    ]
   }
 }
 

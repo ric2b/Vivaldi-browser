@@ -38,15 +38,6 @@
 #include "services/tracing/public/mojom/constants.mojom.h"
 #include "v8/include/v8-version-string.h"
 
-#if (defined(OS_POSIX) && defined(USE_UDEV)) || defined(OS_WIN) || \
-    defined(OS_MACOSX)
-#define ENABLE_POWER_TRACING
-#endif
-
-#if defined(ENABLE_POWER_TRACING)
-#include "content/browser/tracing/power_tracing_agent.h"
-#endif
-
 #if defined(OS_CHROMEOS)
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon_client.h"
@@ -140,11 +131,6 @@ void TracingControllerImpl::AddAgents() {
       content::ServiceManagerConnection::GetForProcess()->GetConnector();
   connector->BindInterface(tracing::mojom::kServiceName, &coordinator_);
 
-// Register tracing agents.
-#if defined(ENABLE_POWER_TRACING)
-  agents_.push_back(std::make_unique<PowerTracingAgent>(connector));
-#endif
-
 #if defined(OS_CHROMEOS)
   agents_.push_back(std::make_unique<CrOSTracingAgent>(connector));
 #elif defined(CAST_TRACING_AGENT)
@@ -175,6 +161,7 @@ tracing::TraceEventAgent* TracingControllerImpl::GetTraceEventAgent() const {
 
 std::unique_ptr<base::DictionaryValue>
 TracingControllerImpl::GenerateMetadataDict() const {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto metadata_dict = std::make_unique<base::DictionaryValue>();
 
   // trace_config_ can be null if the tracing controller finishes flushing

@@ -27,8 +27,6 @@
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/features.h"
 #include "services/service_manager/public/mojom/service.mojom.h"
-#include "services/shape_detection/public/mojom/constants.mojom.h"
-#include "services/shape_detection/shape_detection_service.h"
 #include "services/video_capture/public/mojom/constants.mojom.h"
 #include "services/video_capture/service_impl.h"
 #include "services/viz/public/interfaces/constants.mojom.h"
@@ -45,10 +43,23 @@
 #endif  // BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 #endif
 
+#if defined(OS_MACOSX)
+#include "sandbox/mac/system_services.h"
+#include "services/service_manager/sandbox/features.h"
+#endif
+
 #if defined(OS_WIN)
 #include "sandbox/win/src/sandbox.h"
 
 extern sandbox::TargetServices* g_utility_target_services;
+#endif
+
+#if defined(OS_CHROMEOS)
+#include "chromeos/assistant/buildflags.h"  // nogncheck
+#if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
+#include "chromeos/services/assistant/audio_decoder/assistant_audio_decoder_service.h"  // nogncheck
+#include "chromeos/services/assistant/public/mojom/constants.mojom.h"  // nogncheck
+#endif  // BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
 #endif
 
 namespace content {
@@ -145,11 +156,17 @@ void UtilityServiceFactory::RegisterServices(ServiceMap* services) {
   services->emplace(media::mojom::kCdmServiceName, info);
 #endif
 
-  service_manager::EmbeddedServiceInfo shape_detection_info;
-  shape_detection_info.factory =
-      base::Bind(&shape_detection::ShapeDetectionService::Create);
-  services->insert(std::make_pair(shape_detection::mojom::kServiceName,
-                                  shape_detection_info));
+#if defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
+  {
+    service_manager::EmbeddedServiceInfo assistant_audio_decoder_info;
+    assistant_audio_decoder_info.factory = base::BindRepeating(
+        &chromeos::assistant::AssistantAudioDecoderService::CreateService);
+    services->emplace(chromeos::assistant::mojom::kAudioDecoderServiceName,
+                      assistant_audio_decoder_info);
+  }
+#endif  // BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
+#endif
 
   service_manager::EmbeddedServiceInfo data_decoder_info;
   data_decoder_info.factory = base::Bind(&CreateDataDecoderService);
@@ -191,6 +208,15 @@ UtilityServiceFactory::CreateNetworkService() {
 
 std::unique_ptr<service_manager::Service>
 UtilityServiceFactory::CreateAudioService() {
+#if defined(OS_MACOSX)
+  // Don't connect to launch services when running sandboxed
+  // (https://crbug.com/874785).
+  if (base::FeatureList::IsEnabled(
+          service_manager::features::kAudioServiceSandbox)) {
+    sandbox::DisableLaunchServices();
+  }
+#endif
+
   return audio::CreateStandaloneService(std::move(audio_registry_));
 }
 

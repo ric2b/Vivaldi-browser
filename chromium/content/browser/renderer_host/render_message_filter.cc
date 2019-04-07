@@ -18,7 +18,7 @@
 #include "base/numerics/safe_math.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "components/download/public/common/download_stats.h"
@@ -29,6 +29,9 @@
 #include "content/browser/cache_storage/cache_storage_cache_handle.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/cache_storage/cache_storage_manager.h"
+#include "content/browser/child_process_security_policy_impl.h"
+#include "content/browser/code_cache/generated_code_cache.h"
+#include "content/browser/code_cache/generated_code_cache_context.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
@@ -45,6 +48,8 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/resource_context.h"
+#include "content/public/browser/storage_partition.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/context_menu_params.h"
 #include "content/public/common/url_constants.h"
@@ -59,6 +64,7 @@
 #include "net/http/http_cache.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -88,6 +94,26 @@ const uint32_t kRenderFilteredMessageClasses[] = {ViewMsgStart};
 void NoOpCacheStorageErrorCallback(CacheStorageCacheHandle cache_handle,
                                    CacheStorageError error) {}
 
+base::Optional<url::Origin> GetRendererOrigin(const GURL& url,
+                                              int render_process_id) {
+  GURL requesting_url =
+      ChildProcessSecurityPolicyImpl::GetInstance()->GetOriginLock(
+          render_process_id);
+
+  if (!requesting_url.is_valid() || !url.is_valid())
+    return base::nullopt;
+
+  url::Origin origin = url::Origin::Create(requesting_url);
+
+  // Don't cache the code corresponding to unique origins. The same-origin
+  // checks should always fail for unique origins but the serialized value of
+  // unique origins does not ensure this.
+  if (origin.unique())
+    return base::nullopt;
+
+  return origin;
+}
+
 }  // namespace
 
 RenderMessageFilter::RenderMessageFilter(
@@ -96,7 +122,8 @@ RenderMessageFilter::RenderMessageFilter(
     net::URLRequestContextGetter* request_context,
     RenderWidgetHelper* render_widget_helper,
     MediaInternals* media_internals,
-    CacheStorageContextImpl* cache_storage_context)
+    CacheStorageContextImpl* cache_storage_context,
+    GeneratedCodeCacheContext* generated_code_cache_context)
     : BrowserMessageFilter(kRenderFilteredMessageClasses,
                            arraysize(kRenderFilteredMessageClasses)),
       BrowserAssociatedInterface<mojom::RenderMessageFilter>(this, this),
@@ -107,6 +134,7 @@ RenderMessageFilter::RenderMessageFilter(
       render_process_id_(render_process_id),
       media_internals_(media_internals),
       cache_storage_context_(cache_storage_context),
+      generated_code_cache_context_(generated_code_cache_context),
       weak_ptr_factory_(this) {
   DCHECK(request_context_.get());
 
@@ -209,22 +237,69 @@ void RenderMessageFilter::DidGenerateCacheableMetadata(
     return;
   }
 
-  net::HttpCache* cache = request_context_->GetURLRequestContext()->
-      http_transaction_factory()->GetCache();
-  if (!cache)
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  if (!base::FeatureList::IsEnabled(features::kIsolatedCodeCache)) {
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&RenderMessageFilter::DidGenerateCacheableMetadataOnUI,
+                       this, url, expected_response_time, data));
+  } else {
+    if (!generated_code_cache_context_->generated_code_cache())
+      return;
+
+    base::Optional<url::Origin> requesting_origin =
+        GetRendererOrigin(url, render_process_id_);
+    if (!requesting_origin)
+      return;
+
+    generated_code_cache_context_->generated_code_cache()->WriteData(
+        url, *requesting_origin, expected_response_time, data);
+  }
+}
+
+void RenderMessageFilter::FetchCachedCode(const GURL& url,
+                                          FetchCachedCodeCallback callback) {
+  if (!generated_code_cache_context_->generated_code_cache()) {
+    std::move(callback).Run(base::Time(), std::vector<uint8_t>());
+    return;
+  }
+
+  base::Optional<url::Origin> requesting_origin =
+      GetRendererOrigin(url, render_process_id_);
+  if (!requesting_origin) {
+    std::move(callback).Run(base::Time(), std::vector<uint8_t>());
+    return;
+  }
+
+  base::RepeatingCallback<void(const base::Time&, const std::vector<uint8_t>&)>
+      read_callback = base::BindRepeating(
+          &RenderMessageFilter::OnReceiveCachedCode,
+          weak_ptr_factory_.GetWeakPtr(), base::Passed(&callback));
+  generated_code_cache_context_->generated_code_cache()->FetchEntry(
+      url, *requesting_origin, read_callback);
+}
+
+void RenderMessageFilter::OnReceiveCachedCode(
+    FetchCachedCodeCallback callback,
+    const base::Time& response_time,
+    const std::vector<uint8_t>& data) {
+  // TODO(crbug.com/867848): Pass the data as a mojo data pipe instead
+  // of vector<uint8>
+  std::move(callback).Run(response_time, data);
+}
+
+void RenderMessageFilter::ClearCodeCacheEntry(const GURL& url) {
+  if (!generated_code_cache_context_->generated_code_cache())
     return;
 
-  // Use the same priority for the metadata write as for script
-  // resources (see defaultPriorityForResourceType() in WebKit's
-  // CachedResource.cpp). Note that WebURLRequest::PriorityMedium
-  // corresponds to net::LOW (see ConvertWebKitPriorityToNetPriority()
-  // in weburlloader_impl.cc).
-  const net::RequestPriority kPriority = net::LOW;
-  scoped_refptr<net::IOBuffer> buf(new net::IOBuffer(data.size()));
-  if (!data.empty())
-    memcpy(buf->data(), &data.front(), data.size());
-  cache->WriteMetadata(url, kPriority, expected_response_time, buf.get(),
-                       data.size());
+  base::Optional<url::Origin> requesting_origin =
+      GetRendererOrigin(url, render_process_id_);
+  if (!requesting_origin)
+    return;
+
+  generated_code_cache_context_->generated_code_cache()->DeleteEntry(
+      url, *requesting_origin);
 }
 
 void RenderMessageFilter::DidGenerateCacheableMetadataInCacheStorage(
@@ -271,6 +346,25 @@ void RenderMessageFilter::OnMediaLogEvents(
 
 void RenderMessageFilter::HasGpuProcess(HasGpuProcessCallback callback) {
   GpuProcessHost::GetHasGpuProcess(std::move(callback));
+}
+
+void RenderMessageFilter::DidGenerateCacheableMetadataOnUI(
+    const GURL& url,
+    base::Time expected_response_time,
+    const std::vector<uint8_t>& data) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  RenderProcessHost* host = RenderProcessHost::FromID(render_process_id_);
+  if (!host)
+    return;
+
+  // Use the same priority for the metadata write as for script
+  // resources (see defaultPriorityForResourceType() in WebKit's
+  // CachedResource.cpp). Note that WebURLRequest::PriorityMedium
+  // corresponds to net::LOW (see ConvertWebKitPriorityToNetPriority()
+  // in weburlloader_impl.cc).
+  const net::RequestPriority kPriority = net::LOW;
+  host->GetStoragePartition()->GetNetworkContext()->WriteCacheMetadata(
+      url, kPriority, expected_response_time, data);
 }
 
 }  // namespace content

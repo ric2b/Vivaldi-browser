@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja">
 <translation id="100812568230599391">表示スタイルを交互に変更する。</translation>
+<translation id="1011903154582639569">キーを探し、見つかったら指を離して入力します</translation>
 <translation id="1012173283529841972">リスト項目</translation>
 <translation id="1013742170491673792">検索用語を編集</translation>
 <translation id="1022586497894531524">ChromeVox の音声フィードバックを初めてご利用になる場合は、このクイック チュートリアルで、ChromeVox の利用を開始するための基本事項をご確認ください。</translation>
@@ -15,6 +16,7 @@
 <translation id="1065552602950927991">無効な入力値</translation>
 <translation id="1080471004309605942">斜体の末尾</translation>
 <translation id="1082209053475788238">前のレベル 6 見出しはありません。</translation>
+<translation id="1087788677726983142">イベント ストリーム フィルタを非表示にする</translation>
 <translation id="1088219014394087294">見出しがありません。</translation>
 <translation id="1106741348836243114">音声フィードバック（イアコン）をオンまたはオフにします。</translation>
 <translation id="1108651818222110612">副題</translation>
@@ -77,6 +79,7 @@
 <translation id="1618597272655350600">現在位置の詳細な説明を読み上げます</translation>
 <translation id="1639634871799530612">{COUNT,plural, =1{大なり}other{# 個の大なり記号}}</translation>
 <translation id="1653266918374749391">前のレベル 3 見出し</translation>
+<translation id="1657616855184033958">イベント ストリーム フィルタを表示する</translation>
 <translation id="1659072772017912254">オフ</translation>
 <translation id="1669290819662866522">週間</translation>
 <translation id="1674262202423278359">ChromeVox ナビゲーション</translation>
@@ -136,6 +139,7 @@
 <translation id="2267945578749931355">次の文字</translation>
 <translation id="2281234842553884450">前のスライダ</translation>
 <translation id="2294136146931447363">斜体の先頭</translation>
+<translation id="2311237334957139798">前の詳細レベルに移動します</translation>
 <translation id="2318372665160196757">本文</translation>
 <translation id="2329324941084714723">タブ パネル</translation>
 <translation id="2344193891939537199">日時の設定</translation>
@@ -156,12 +160,14 @@
 <translation id="2462626033734746142">ラジオボタン グループ</translation>
 <translation id="2471138580042810658">見出し 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{アスタリスク}other{# 個のアスタリスク}}</translation>
+<translation id="249330843868392562">テキスト読み上げの設定を開く</translation>
 <translation id="2523609930580546572">ChromeVox チュートリアル</translation>
 <translation id="2525706221823668172">Chromebook のキーボード ショートカット</translation>
 <translation id="2549392850788122959"><ph name="KEY" /> がリセットされました。</translation>
 <translation id="2553108862507765288">文法上の誤り</translation>
 <translation id="257674075312929031">グループ</translation>
 <translation id="2582407057977008361">補足</translation>
+<translation id="2592212930811759050">編集を開始するにはダブルタップします</translation>
 <translation id="2606210917827248971">に {COUNT,plural, =1{# 件の項目}other{# 件の項目}}</translation>
 <translation id="2614981083756825552">MathML レイアウト</translation>
 <translation id="2624431853467395961">学習モードを開く</translation>
@@ -409,6 +415,7 @@
 <translation id="4255943572433203166">以下のオプションを使用して ChromeVox をカスタマイズします。変更は直ちに有効になります。</translation>
 <translation id="4271220233568730077">次の数式</translation>
 <translation id="4271521365602459209">他に検索結果はありません。</translation>
+<translation id="4275397969489577657">イベント ストリームのログを有効にする</translation>
 <translation id="4287520460805643128">次の記事はありません。</translation>
 <translation id="4289540628985791613">概要</translation>
 <translation id="4300318234632215983">リンクの URL を読み上げる</translation>
@@ -487,6 +494,7 @@
 <translation id="4973762002207131920"><ph name="KEY" /> に切り替えました。</translation>
 <translation id="4975416682604111799">ミリ秒</translation>
 <translation id="49787999531187221">ChromeVox は現在無効です。</translation>
+<translation id="4979263087381759787">デベロッパー オプション</translation>
 <translation id="4979404613699303341">前のボタン</translation>
 <translation id="4982773647088557172"><ph name="VALUE" />、<ph name="NAME" />、リスト ボックス</translation>
 <translation id="4983588134362688868">ページの先頭に移動します</translation>
@@ -498,6 +506,7 @@
 <translation id="5000760171916499057">フォームがありません。</translation>
 <translation id="5005670136041063723">この他に類似の要素はありません。</translation>
 <translation id="501473567976723023">1 月</translation>
+<translation id="5020651427400641814">読み上げのログを有効にする</translation>
 <translation id="5041394372352067729">ブライユ点字表示をページ上部に移動</translation>
 <translation id="5042770794184672516">読み上げの音量を上げる</translation>
 <translation id="5050015258024679800">前のレベル 4 見出し</translation>
@@ -512,6 +521,7 @@
 <translation id="5106547198195128110">この新しいリリースでの変更内容は以下のとおりです。</translation>
 <translation id="5110983769041734144">前のフォーム フィールドはありません。</translation>
 <translation id="5111640677200759579">列見出し</translation>
+<translation id="5115892389597951922">ChromeVox ログ</translation>
 <translation id="5136967254288895616">前のリンクはありません。</translation>
 <translation id="513774504516943387">リンク</translation>
 <translation id="5158275234811857234">表紙</translation>
@@ -545,6 +555,7 @@
 <translation id="5407530583102765689">{COUNT,plural, =1{セミコロン}other{# 個のセミコロン}}</translation>
 <translation id="5411891038905756502">前のジャンプ ポイントはありません。</translation>
 <translation id="5417034931411865818">ルーティング キー $1 の下のアイテムをクリックします</translation>
+<translation id="5435274640623994081">イアコンのログを有効にする</translation>
 <translation id="5436105723448703439">{COUNT,plural, =1{小なり}other{# 個の小なり記号}}</translation>
 <translation id="5444587279251314700">（有効）</translation>
 <translation id="5446809554778706307">対象がありません。Ctrl+T キーで新しいタブを開きます。</translation>
@@ -678,6 +689,7 @@
 <translation id="6540201937398578274">ChromeVox では、検索キーは修飾キーとなります。ChromeVox のショートカットのほとんどは検索キーで始まります。また、移動には矢印キーを使用します。</translation>
 <translation id="6550720799683018100">下のリストからオプションを選択して、現在のキーマップを変更できます。</translation>
 <translation id="6561818612645211875">現在の行の先頭に移動</translation>
+<translation id="6583174818554398774">次の詳細レベルに移動します</translation>
 <translation id="6587021927234520429">次のレベル 4 見出しはありません。</translation>
 <translation id="6601344353291556895">詳細な説明を有効にする。</translation>
 <translation id="6615602925644411249">ページ内検索です。</translation>
@@ -753,6 +765,7 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="7241683698754534149">長い説明を新しいタブで開きます</translation>
 <translation id="7248671827512403053">アプリケーション</translation>
 <translation id="725969808843520477">次のラジオボタン</translation>
+<translation id="7261612856573623172">システムのテキスト読み上げの音声</translation>
 <translation id="7269119382257320590">句読点を読み上げません</translation>
 <translation id="7273174640290488576">空白</translation>
 <translation id="7274770952766771364">備考</translation>
@@ -893,6 +906,7 @@ Chrome ブラウザのメニューを開くには、Alt+F キーを押します�
 <translation id="8650576015643545550">前のリストはありません。</translation>
 <translation id="8651481478098336970">音量をミュート</translation>
 <translation id="8653646212587894517">リンク リストを表示</translation>
+<translation id="8656888282555543604">点字のログを有効にする</translation>
 <translation id="8664519043722036194">秒</translation>
 <translation id="867187640362843212">見出し 5</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{パイプ}other{# 個のパイプ}}</translation>

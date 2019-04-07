@@ -50,7 +50,7 @@
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/test/test_app_window_icon_observer.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -109,7 +109,7 @@ class TestEvent : public ui::Event {
 Browser* FindBrowserForApp(const std::string& app_name) {
   for (auto* browser : *BrowserList::GetInstance()) {
     std::string browser_app_name =
-        web_app::GetExtensionIdFromApplicationName(browser->app_name());
+        web_app::GetAppIdFromApplicationName(browser->app_name());
     if (browser_app_name == app_name)
       return browser;
   }
@@ -1165,15 +1165,17 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTestNoDefaultBrowser,
   EXPECT_EQ(0u, items);
   EXPECT_EQ(0u, running_browser);
 
-  LoadAndLaunchExtension("app1", extensions::LAUNCH_CONTAINER_WINDOW,
-                         WindowOpenDisposition::NEW_WINDOW);
+  const Extension* extension =
+      LoadAndLaunchExtension("app1", extensions::LAUNCH_CONTAINER_WINDOW,
+                             WindowOpenDisposition::NEW_WINDOW);
 
   // No new browser should get detected, even though one more is running.
   EXPECT_EQ(0u, NumberOfDetectedLauncherBrowsers(false));
   EXPECT_EQ(++running_browser, chrome::GetTotalBrowserCount());
 
-  LoadAndLaunchExtension("app1", extensions::LAUNCH_CONTAINER_TAB,
-                         WindowOpenDisposition::NEW_WINDOW);
+  OpenApplication(AppLaunchParams(
+      profile(), extension, extensions::LAUNCH_CONTAINER_TAB,
+      WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_TEST));
 
   // A new browser should get detected and one more should be running.
   EXPECT_EQ(NumberOfDetectedLauncherBrowsers(false), 1u);

@@ -11,7 +11,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/path_service.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/chromeos/file_manager/filesystem_api_util.h"
@@ -69,7 +69,7 @@ bool IsPepperPluginEnabled(Profile* profile,
                            const base::FilePath& plugin_path) {
   DCHECK(profile);
 
-  content::PepperPluginInfo* pepper_info =
+  const content::PepperPluginInfo* pepper_info =
       PluginService::GetInstance()->GetRegisteredPpapiPluginInfo(plugin_path);
   if (!pepper_info)
     return false;
@@ -84,8 +84,7 @@ bool IsPepperPluginEnabled(Profile* profile,
 bool IsPdfPluginEnabled(Profile* profile) {
   DCHECK(profile);
 
-  base::FilePath plugin_path = base::FilePath::FromUTF8Unsafe(
-      ChromeContentClient::kPDFPluginPath);
+  static const base::FilePath plugin_path(ChromeContentClient::kPDFPluginPath);
   return IsPepperPluginEnabled(profile, plugin_path);
 }
 

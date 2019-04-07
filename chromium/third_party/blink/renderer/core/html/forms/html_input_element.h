@@ -306,7 +306,7 @@ class CORE_EXPORT HTMLInputElement
  protected:
   HTMLInputElement(Document&, const CreateElementFlags);
 
-  void DefaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event&) override;
   void CreateShadowSubtree();
 
  private:
@@ -314,8 +314,8 @@ class CORE_EXPORT HTMLInputElement
 
   void WillChangeForm() final;
   void DidChangeForm() final;
-  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
-  void RemovedFrom(ContainerNode*) final;
+  InsertionNotificationRequest InsertedInto(ContainerNode&) override;
+  void RemovedFrom(ContainerNode&) final;
   void DidMoveToNewDocument(Document& old_document) final;
   bool HasActivationBehavior() const override;
 
@@ -361,8 +361,8 @@ class CORE_EXPORT HTMLInputElement
   void ResetImpl() final;
   bool SupportsAutofocus() const final;
 
-  EventDispatchHandlingState* PreDispatchEventHandler(Event*) final;
-  void PostDispatchEventHandler(Event*, EventDispatchHandlingState*) final;
+  EventDispatchHandlingState* PreDispatchEventHandler(Event&) final;
+  void PostDispatchEventHandler(Event&, EventDispatchHandlingState*) final;
 
   bool IsURLAttribute(const Attribute&) const final;
   bool HasLegalLinkAttribute(const QualifiedName&) const final;

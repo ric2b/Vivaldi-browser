@@ -25,6 +25,7 @@
 #include "base/mac/mach_logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/sampling_heap_profiler/module_cache.h"
 #include "base/strings/string_number_conversions.h"
 
 extern "C" {
@@ -34,93 +35,9 @@ void _sigtramp(int, int, struct sigset*);
 namespace base {
 
 using Frame = StackSamplingProfiler::Frame;
-using InternalFrame = StackSamplingProfiler::InternalFrame;
-using Module = StackSamplingProfiler::Module;
-using InternalModule = StackSamplingProfiler::InternalModule;
 using ProfileBuilder = StackSamplingProfiler::ProfileBuilder;
 
 namespace {
-
-// ModuleCacheEntry records a module's address range (half-open) in memory and
-// the module itself.
-struct ModuleCacheEntry {
-  ModuleCacheEntry(uintptr_t start,
-                   uintptr_t end,
-                   InternalModule internal_module)
-      : base_address(start),
-        end_address(end),
-        internal_module(std::move(internal_module)){};
-
-  // Base address of the represented module.
-  uintptr_t base_address;
-
-  // First address off the end of the represented module.
-  uintptr_t end_address;
-
-  // Module information.
-  InternalModule internal_module;
-};
-
-// Module identifiers ---------------------------------------------------------
-
-// Returns the unique build ID for a module loaded at |module_addr|. Returns the
-// empty string if the function fails to get the build ID.
-//
-// Build IDs are created by the concatenation of the module's GUID (Windows) /
-// UUID (Mac) and an "age" field that indicates how many times that GUID/UUID
-// has been reused. In Windows binaries, the "age" field is present in the
-// module header, but on the Mac, UUIDs are never reused and so the "age" value
-// appended to the UUID is always 0.
-std::string GetUniqueId(const void* module_addr) {
-  const mach_header_64* mach_header =
-      reinterpret_cast<const mach_header_64*>(module_addr);
-  DCHECK_EQ(MH_MAGIC_64, mach_header->magic);
-
-  size_t offset = sizeof(mach_header_64);
-  size_t offset_limit = sizeof(mach_header_64) + mach_header->sizeofcmds;
-
-  for (uint32_t i = 0; i < mach_header->ncmds; ++i) {
-    if (offset + sizeof(load_command) >= offset_limit)
-      return std::string();
-
-    const load_command* current_cmd = reinterpret_cast<const load_command*>(
-        reinterpret_cast<const uint8_t*>(mach_header) + offset);
-
-    if (offset + current_cmd->cmdsize > offset_limit) {
-      // This command runs off the end of the command list. This is malformed.
-      return std::string();
-    }
-
-    if (current_cmd->cmd == LC_UUID) {
-      if (current_cmd->cmdsize < sizeof(uuid_command)) {
-        // This "UUID command" is too small. This is malformed.
-        return std::string();
-      }
-
-      const uuid_command* uuid_cmd =
-          reinterpret_cast<const uuid_command*>(current_cmd);
-      static_assert(sizeof(uuid_cmd->uuid) == sizeof(uuid_t),
-                    "UUID field of UUID command should be 16 bytes.");
-      // The ID is comprised of the UUID concatenated with the Mac's "age" value
-      // which is always 0.
-      return HexEncode(&uuid_cmd->uuid, sizeof(uuid_cmd->uuid)) + "0";
-    }
-    offset += current_cmd->cmdsize;
-  }
-  return std::string();
-}
-
-// Returns the size of the _TEXT segment of the module loaded at |module_addr|.
-size_t GetModuleTextSize(const void* module_addr) {
-  const mach_header_64* mach_header =
-      reinterpret_cast<const mach_header_64*>(module_addr);
-  DCHECK_EQ(MH_MAGIC_64, mach_header->magic);
-
-  unsigned long module_size;
-  getsegmentdata(mach_header, SEG_TEXT, &module_size);
-
-  return module_size;
-}
 
 // Stack walking --------------------------------------------------------------
 
@@ -210,6 +127,8 @@ uint32_t GetFrameOffset(int compact_unwind_info) {
       (((1 << __builtin_popcount(UNWIND_X86_64_RBP_FRAME_OFFSET))) - 1));
 }
 
+}  // namespace
+
 // True if the unwind from |leaf_frame_rip| may trigger a crash bug in
 // unw_init_local. If so, the stack walk should be aborted at the leaf frame.
 bool MayTriggerUnwInitLocalCrash(uint64_t leaf_frame_rip) {
@@ -238,10 +157,12 @@ bool MayTriggerUnwInitLocalCrash(uint64_t leaf_frame_rip) {
   vm_size_t size = sizeof(unused);
   return vm_read_overwrite(current_task(),
                            reinterpret_cast<vm_address_t>(info.dli_fbase) +
-                               GetModuleTextSize(info.dli_fbase),
+                               ModuleCache::GetModuleTextSize(info.dli_fbase),
                            sizeof(unused),
                            reinterpret_cast<vm_address_t>(&unused), &size) != 0;
 }
+
+namespace {
 
 // Check if the cursor contains a valid-looking frame pointer for frame pointer
 // unwinds. If the stack frame has a frame pointer, stepping the cursor will
@@ -336,6 +257,8 @@ class ScopedSuspendThread {
   DISALLOW_COPY_AND_ASSIGN(ScopedSuspendThread);
 };
 
+}  // namespace
+
 // NativeStackSamplerMac ------------------------------------------------------
 
 class NativeStackSamplerMac : public NativeStackSampler {
@@ -346,15 +269,11 @@ class NativeStackSamplerMac : public NativeStackSampler {
 
   // StackSamplingProfiler::NativeStackSampler:
   void ProfileRecordingStarting() override;
-  std::vector<InternalFrame> RecordStackFrames(
+  std::vector<Frame> RecordStackFrames(
       StackBuffer* stack_buffer,
       ProfileBuilder* profile_builder) override;
 
  private:
-  // Returns the InternalModule containing |instruction_pointer|, adding it to
-  // module_cache_entry_ if it's not already present.
-  InternalModule GetInternalModule(uintptr_t instruction_pointer);
-
   // Walks the stack represented by |unwind_context|, calling back to the
   // provided lambda for each frame. Returns false if an error occurred,
   // otherwise returns true.
@@ -380,7 +299,7 @@ class NativeStackSamplerMac : public NativeStackSampler {
   const void* const thread_stack_base_address_;
 
   // Maps a module's address range to the module.
-  std::vector<ModuleCacheEntry> module_cache_entry_;
+  ModuleCache module_cache_;
 
   // The address range of |_sigtramp|, the signal trampoline function.
   uintptr_t sigtramp_start_;
@@ -408,15 +327,15 @@ NativeStackSamplerMac::NativeStackSamplerMac(
 NativeStackSamplerMac::~NativeStackSamplerMac() {}
 
 void NativeStackSamplerMac::ProfileRecordingStarting() {
-  module_cache_entry_.clear();
+  module_cache_.Clear();
 }
 
-std::vector<InternalFrame> NativeStackSamplerMac::RecordStackFrames(
+std::vector<Frame> NativeStackSamplerMac::RecordStackFrames(
     StackBuffer* stack_buffer,
     ProfileBuilder* profile_builder) {
   x86_thread_state64_t thread_state;
 
-  const std::vector<InternalFrame> empty_internal_frames;
+  const std::vector<Frame> empty_frames;
 
   // Copy the stack.
 
@@ -428,19 +347,19 @@ std::vector<InternalFrame> NativeStackSamplerMac::RecordStackFrames(
     // default heap acquired by the target thread before it was suspended.
     ScopedSuspendThread suspend_thread(thread_port_);
     if (!suspend_thread.was_successful())
-      return empty_internal_frames;
+      return empty_frames;
 
     if (!GetThreadState(thread_port_, &thread_state))
-      return empty_internal_frames;
+      return empty_frames;
 
     auto stack_top = reinterpret_cast<uintptr_t>(thread_stack_base_address_);
     uintptr_t stack_bottom = thread_state.__rsp;
     if (stack_bottom >= stack_top)
-      return empty_internal_frames;
+      return empty_frames;
 
     uintptr_t stack_size = stack_top - stack_bottom;
     if (stack_size > stack_buffer->size())
-      return empty_internal_frames;
+      return empty_frames;
 
     profile_builder->RecordAnnotations();
 
@@ -460,16 +379,16 @@ std::vector<InternalFrame> NativeStackSamplerMac::RecordStackFrames(
 
   // Reserve enough memory for most stacks, to avoid repeated allocations.
   // Approximately 99.9% of recorded stacks are 128 frames or fewer.
-  std::vector<InternalFrame> internal_frames;
-  internal_frames.reserve(128);
+  std::vector<Frame> frames;
+  frames.reserve(128);
 
   // Avoid an out-of-bounds read bug in libunwind that can crash us in some
   // circumstances. If we're subject to that case, just record the first frame
   // and bail. See MayTriggerUnwInitLocalCrash for details.
   uintptr_t rip = thread_state.__rip;
   if (MayTriggerUnwInitLocalCrash(rip)) {
-    internal_frames.emplace_back(rip, GetInternalModule(rip));
-    return internal_frames;
+    frames.emplace_back(rip, module_cache_.GetModuleForAddress(rip));
+    return frames;
   }
 
   const auto continue_predicate = [this,
@@ -488,43 +407,13 @@ std::vector<InternalFrame> NativeStackSamplerMac::RecordStackFrames(
     return HasValidRbp(unwind_cursor, new_stack_top);
   };
 
-  WalkStack(
-      thread_state,
-      [&internal_frames](uintptr_t frame_ip, InternalModule internal_module) {
-        internal_frames.emplace_back(frame_ip, std::move(internal_module));
-      },
-      continue_predicate);
+  WalkStack(thread_state,
+            [&frames](uintptr_t frame_ip, ModuleCache::Module module) {
+              frames.emplace_back(frame_ip, std::move(module));
+            },
+            continue_predicate);
 
-  return internal_frames;
-}
-
-InternalModule NativeStackSamplerMac::GetInternalModule(
-    uintptr_t instruction_pointer) {
-  // Check if |instruction_pointer| is in the address range of a module we've
-  // already seen.
-  auto loc =
-      std::find_if(module_cache_entry_.begin(), module_cache_entry_.end(),
-                   [instruction_pointer](const ModuleCacheEntry& entry) {
-                     return instruction_pointer >= entry.base_address &&
-                            instruction_pointer < entry.end_address;
-                   });
-  if (loc != module_cache_entry_.end())
-    return loc->internal_module;
-
-  Dl_info inf;
-  if (!dladdr(reinterpret_cast<const void*>(instruction_pointer), &inf))
-    return InternalModule();
-
-  auto base_module_address = reinterpret_cast<uintptr_t>(inf.dli_fbase);
-
-  InternalModule internal_module(
-      base_module_address, GetUniqueId(inf.dli_fbase), FilePath(inf.dli_fname));
-
-  module_cache_entry_.emplace_back(
-      base_module_address,
-      base_module_address + GetModuleTextSize(inf.dli_fbase), internal_module);
-
-  return internal_module;
+  return frames;
 }
 
 template <typename StackFrameCallback, typename ContinueUnwindPredicate>
@@ -553,11 +442,11 @@ bool NativeStackSamplerMac::WalkStackFromContext(
     // libunwind adds the expected stack size, it will look for the return
     // address in the wrong place. This check should ensure that we bail before
     // trying to deref a bad IP obtained this way in the previous frame.
-    InternalModule internal_module = GetInternalModule(rip);
-    if (!internal_module.is_valid)
+    const ModuleCache::Module& module = module_cache_.GetModuleForAddress(rip);
+    if (!module.is_valid)
       return false;
 
-    callback(static_cast<uintptr_t>(rip), internal_module);
+    callback(static_cast<uintptr_t>(rip), module);
 
     if (!continue_unwind(&unwind_cursor))
       return false;
@@ -618,14 +507,16 @@ void NativeStackSamplerMac::WalkStack(
   }
 }
 
-}  // namespace
+// NativeStackSampler ---------------------------------------------------------
 
+// static
 std::unique_ptr<NativeStackSampler> NativeStackSampler::Create(
     PlatformThreadId thread_id,
     NativeStackSamplerTestDelegate* test_delegate) {
   return std::make_unique<NativeStackSamplerMac>(thread_id, test_delegate);
 }
 
+// static
 size_t NativeStackSampler::GetStackBufferSize() {
   // In platform_thread_mac's GetDefaultThreadStackSize(), RLIMIT_STACK is used
   // for all stacks, not just the main thread's, so it is good for use here.

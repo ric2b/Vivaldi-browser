@@ -11,8 +11,8 @@
 #include "base/auto_reset.h"
 #include "base/run_loop.h"
 #include "mojo/public/cpp/bindings/map.h"
-#include "services/ui/public/interfaces/window_tree.mojom.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/drag_drop_client_observer.h"
 #include "ui/aura/client/drag_drop_delegate.h"
 #include "ui/aura/env.h"
@@ -25,20 +25,20 @@
 #include "ui/base/dragdrop/drop_target_event.h"
 
 // Interaction with DragDropDelegate assumes constants are the same.
-static_assert(ui::DragDropTypes::DRAG_NONE == ui::mojom::kDropEffectNone,
+static_assert(ui::DragDropTypes::DRAG_NONE == ws::mojom::kDropEffectNone,
               "Drag constants must be the same");
-static_assert(ui::DragDropTypes::DRAG_MOVE == ui::mojom::kDropEffectMove,
+static_assert(ui::DragDropTypes::DRAG_MOVE == ws::mojom::kDropEffectMove,
               "Drag constants must be the same");
-static_assert(ui::DragDropTypes::DRAG_COPY == ui::mojom::kDropEffectCopy,
+static_assert(ui::DragDropTypes::DRAG_COPY == ws::mojom::kDropEffectCopy,
               "Drag constants must be the same");
-static_assert(ui::DragDropTypes::DRAG_LINK == ui::mojom::kDropEffectLink,
+static_assert(ui::DragDropTypes::DRAG_LINK == ws::mojom::kDropEffectLink,
               "Drag constants must be the same");
 
 namespace aura {
 
 // State related to a drag initiated by this client.
 struct DragDropControllerMus::CurrentDragState {
-  ui::Id window_id;
+  ws::Id window_id;
 
   // The change id of the drag. Used to identify the drag on the server.
   uint32_t change_id;
@@ -57,7 +57,7 @@ struct DragDropControllerMus::CurrentDragState {
 
 DragDropControllerMus::DragDropControllerMus(
     DragDropControllerHost* drag_drop_controller_host,
-    ui::mojom::WindowTree* window_tree)
+    ws::mojom::WindowTree* window_tree)
     : drag_drop_controller_host_(drag_drop_controller_host),
       window_tree_(window_tree) {}
 
@@ -104,7 +104,7 @@ uint32_t DragDropControllerMus::OnCompleteDrop(
     const gfx::Point& screen_location,
     uint32_t effect_bitmask) {
   if (drop_target_window_tracker_.windows().empty())
-    return ui::mojom::kDropEffectNone;
+    return ws::mojom::kDropEffectNone;
 
   DCHECK(window);
   Window* current_target = drop_target_window_tracker_.Pop();
@@ -141,7 +141,7 @@ int DragDropControllerMus::StartDragAndDrop(
   const uint32_t change_id =
       drag_drop_controller_host_->CreateChangeIdForDrag(root_window_mus);
   CurrentDragState current_drag_state = {root_window_mus->server_id(),
-                                         change_id, ui::mojom::kDropEffectNone,
+                                         change_id, ws::mojom::kDropEffectNone,
                                          data, run_loop.QuitClosure()};
 
   // current_drag_state_ will be reset in |OnPerformDragDropCompleted| before
@@ -203,7 +203,7 @@ uint32_t DragDropControllerMus::HandleDragEnterOrOver(
   if ((!is_enter && drop_target_window_tracker_.windows().empty()) ||
       !drag_drop_delegate || !window_tree_host) {
     drop_target_window_tracker_.RemoveAll();
-    return ui::mojom::kDropEffectNone;
+    return ws::mojom::kDropEffectNone;
   }
   drop_target_window_tracker_.Add(window->GetWindow());
 
@@ -222,13 +222,13 @@ DragDropControllerMus::CreateDropTargetEvent(Window* window,
   DCHECK(window->GetHost());
   gfx::Point root_location = screen_location;
   window->GetHost()->ConvertScreenInPixelsToDIP(&root_location);
-  gfx::Point location = root_location;
+  gfx::PointF location(root_location);
   Window::ConvertPointToTarget(window->GetRootWindow(), window, &location);
   std::unique_ptr<ui::DropTargetEvent> event =
       std::make_unique<ui::DropTargetEvent>(
           current_drag_state_ ? current_drag_state_->drag_data
                               : *(os_exchange_data_.get()),
-          location, root_location, effect_bitmask);
+          location, gfx::PointF(root_location), effect_bitmask);
   event->set_flags(event_flags);
   ui::Event::DispatcherApi(event.get()).set_target(window);
   return event;

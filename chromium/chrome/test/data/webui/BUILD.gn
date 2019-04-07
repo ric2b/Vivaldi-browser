@@ -77,6 +77,8 @@ js2gtest("browser_tests_js_webui") {
     "settings/a11y/edit_dictionary_a11y_test.js",
     "settings/a11y/manage_accessibility_a11y_test.js",
     "settings/a11y/manage_profile_a11y_test.js",
+    "settings/a11y/multidevice_a11y_test.js",
+    "settings/a11y/multidevice_features_a11y_test.js",
     "settings/a11y/passwords_a11y_test.js",
     "settings/a11y/settings_accessibility_test.js",
     "settings/a11y/sign_out_a11y_test.js",
@@ -88,7 +90,6 @@ js2gtest("browser_tests_js_webui") {
     "settings/help_page_browsertest.js",
     "settings/passwords_and_autofill_fake_data.js",
     "settings/passwords_and_forms_browsertest.js",
-    "settings/settings_autofill_section_browsertest.js",
     "settings/settings_idle_load_browsertest.js",
     "settings/settings_page_browsertest.js",
     "settings/settings_passwords_section_browsertest.js",
@@ -105,7 +106,6 @@ js2gtest("browser_tests_js_webui") {
   if (is_chromeos) {
     sources += [
       "certificate_viewer_dialog_test.js",
-      "multidevice_setup/multidevice_setup_browsertest.js",
       "settings/easy_unlock_browsertest_chromeos.js",
       "sys_internals/sys_internals_browsertest.js",
     ]
@@ -152,6 +152,10 @@ js2gtest("browser_tests_js_mojo_webui") {
 
   if (is_win || is_mac || is_desktop_linux || is_chromeos) {
     sources += [ "discards/discards_browsertest.js" ]
+  }
+
+  if (is_chromeos) {
+    sources += [ "multidevice_setup/multidevice_setup_browsertest.js" ]
   }
 
   deps = [

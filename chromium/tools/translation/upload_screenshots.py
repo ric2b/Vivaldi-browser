@@ -131,7 +131,7 @@ def find_screenshots(repo_root, translation_expectations):
     if not os.path.exists(screenshots_dir):
       continue
     for f in os.listdir(screenshots_dir):
-      if f.endswith('.sha1'):
+      if f in ('OWNERS', 'README.md') or f.endswith('.sha1'):
         continue
       if not f.endswith('.png'):
         print 'File with unexpected extension: %s in %s' % (f, screenshots_dir)
@@ -176,10 +176,11 @@ def main():
         gsutil=gsutil,
         force=False,
         use_md5=False,
-        num_threads=1,
+        num_threads=10,
         skip_hashing=False,
         gzip=None) != 0:
-      print 'Error uploading screenshots, exiting.'
+      print ('Error uploading screenshots. Try running '
+             '`download_from_google_storage --config`.')
       exit(1)
 
   print

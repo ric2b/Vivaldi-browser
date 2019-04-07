@@ -7,7 +7,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/metrics/metrics_service.h"
 #include "components/signin/core/browser/cookie_settings_util.h"
-#include "components/signin/core/browser/signin_cookie_change_subscription.h"
+#include "components/signin/core/browser/device_id_helper.h"
 #include "components/signin/ios/browser/account_consistency_service.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/browser_state_info_cache.h"
@@ -27,15 +27,13 @@ IOSChromeSigninClient::IOSChromeSigninClient(
     ios::ChromeBrowserState* browser_state,
     SigninErrorController* signin_error_controller,
     scoped_refptr<content_settings::CookieSettings> cookie_settings,
-    scoped_refptr<HostContentSettingsMap> host_content_settings_map,
-    scoped_refptr<TokenWebData> token_web_data)
+    scoped_refptr<HostContentSettingsMap> host_content_settings_map)
     : network_callback_helper_(
           std::make_unique<WaitForNetworkCallbackHelper>()),
       browser_state_(browser_state),
       signin_error_controller_(signin_error_controller),
       cookie_settings_(cookie_settings),
-      host_content_settings_map_(host_content_settings_map),
-      token_web_data_(token_web_data) {
+      host_content_settings_map_(host_content_settings_map) {
   signin_error_controller_->AddObserver(this);
 }
 
@@ -91,16 +89,8 @@ void IOSChromeSigninClient::OnSignedOut() {
                                           base::string16());
 }
 
-scoped_refptr<TokenWebData> IOSChromeSigninClient::GetDatabase() {
-  return token_web_data_;
-}
-
 PrefService* IOSChromeSigninClient::GetPrefs() {
   return browser_state_->GetPrefs();
-}
-
-net::URLRequestContextGetter* IOSChromeSigninClient::GetURLRequestContext() {
-  return browser_state_->GetRequestContext();
 }
 
 scoped_refptr<network::SharedURLLoaderFactory>
@@ -108,15 +98,11 @@ IOSChromeSigninClient::GetURLLoaderFactory() {
   return browser_state_->GetSharedURLLoaderFactory();
 }
 
+network::mojom::CookieManager* IOSChromeSigninClient::GetCookieManager() {
+  return browser_state_->GetCookieManager();
+}
+
 void IOSChromeSigninClient::DoFinalInit() {}
-
-bool IOSChromeSigninClient::CanRevokeCredentials() {
-  return true;
-}
-
-std::string IOSChromeSigninClient::GetSigninScopedDeviceId() {
-  return GetOrCreateScopedDeviceIdPref(GetPrefs());
-}
 
 bool IOSChromeSigninClient::IsFirstRun() const {
   return false;
@@ -134,18 +120,6 @@ void IOSChromeSigninClient::AddContentSettingsObserver(
 void IOSChromeSigninClient::RemoveContentSettingsObserver(
     content_settings::Observer* observer) {
   host_content_settings_map_->RemoveObserver(observer);
-}
-
-std::unique_ptr<SigninClient::CookieChangeSubscription>
-IOSChromeSigninClient::AddCookieChangeCallback(
-    const GURL& url,
-    const std::string& name,
-    net::CookieChangeCallback callback) {
-  scoped_refptr<net::URLRequestContextGetter> context_getter =
-      GetURLRequestContext();
-  DCHECK(context_getter.get());
-  return std::make_unique<SigninCookieChangeSubscription>(
-      context_getter, url, name, std::move(callback));
 }
 
 void IOSChromeSigninClient::DelayNetworkCall(const base::Closure& callback) {

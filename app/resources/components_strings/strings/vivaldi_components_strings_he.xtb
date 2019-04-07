@@ -80,7 +80,6 @@
 <translation id="8498891568109133222">ל-<ph name="HOST_NAME" /> נדרש זמן רב מדי להגיב.</translation>
 <translation id="8740359287975076522">‏לא ניתן היה למצוא את &lt;abbr id="dnsDefinition"&gt;כתובת ה-DNS&lt;/abbr&gt; של <ph name="HOST_NAME" />. מאבחן את הבעיה.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> משתמש בפרוטוקול שאינו נתמך.</translation>
-<translation id="933612690413056017">אין חיבור לאינטרנט</translation>
 <translation id="969892804517981540">גירסה רשמית</translation>
 <translation id="988159990683914416">גירסת מפתחים</translation>
 </translationbundle>

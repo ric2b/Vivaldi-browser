@@ -13,7 +13,7 @@
 #include "base/single_thread_task_runner.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
-#include "services/ui/public/interfaces/gpu.mojom.h"
+#include "services/ws/public/mojom/gpu.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace viz {
@@ -33,8 +33,8 @@ class GpuServiceTest : public testing::Test {
 
   void BlockIOThread() {
     wait_.Reset();
-    io_runner()->PostTask(FROM_HERE, base::Bind(&base::WaitableEvent::Wait,
-                                                base::Unretained(&wait_)));
+    io_runner()->PostTask(FROM_HERE, base::BindOnce(&base::WaitableEvent::Wait,
+                                                    base::Unretained(&wait_)));
   }
 
   void UnblockIOThread() {
@@ -90,8 +90,8 @@ TEST_F(GpuServiceTest, ServiceDestroyedAfterBind) {
   gpu_service()->Bind(mojo::MakeRequest(&ptr));
   base::WaitableEvent wait(base::WaitableEvent::ResetPolicy::MANUAL,
                            base::WaitableEvent::InitialState::NOT_SIGNALED);
-  io_runner()->PostTask(FROM_HERE, base::Bind(&base::WaitableEvent::Signal,
-                                              base::Unretained(&wait)));
+  io_runner()->PostTask(FROM_HERE, base::BindOnce(&base::WaitableEvent::Signal,
+                                                  base::Unretained(&wait)));
   wait.Wait();
   DestroyService();
 }

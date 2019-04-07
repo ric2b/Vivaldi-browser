@@ -108,8 +108,8 @@ class SocketPump {
         new net::IOBuffer(kSocketPumpBufferSize);
     int result =
         from->Read(buffer.get(), kSocketPumpBufferSize,
-                   base::Bind(&SocketPump::OnRead, base::Unretained(this), from,
-                              to, buffer));
+                   base::BindOnce(&SocketPump::OnRead, base::Unretained(this),
+                                  from, to, buffer));
     if (result != net::ERR_IO_PENDING)
       OnRead(from, to, buffer, result);
   }
@@ -125,13 +125,14 @@ class SocketPump {
 
     int total = result;
     scoped_refptr<net::DrainableIOBuffer> drainable =
-        new net::DrainableIOBuffer(buffer.get(), total);
+        base::MakeRefCounted<net::DrainableIOBuffer>(std::move(buffer), total);
 
     ++pending_writes_;
-    result = to->Write(drainable.get(), total,
-                       base::Bind(&SocketPump::OnWritten,
-                                  base::Unretained(this), drainable, from, to),
-                       kTrafficAnnotation);
+    result =
+        to->Write(drainable.get(), total,
+                  base::BindOnce(&SocketPump::OnWritten, base::Unretained(this),
+                                 drainable, from, to),
+                  kTrafficAnnotation);
     if (result != net::ERR_IO_PENDING)
       OnWritten(drainable, from, to, result);
   }
@@ -151,8 +152,8 @@ class SocketPump {
       ++pending_writes_;
       result =
           to->Write(drainable.get(), drainable->BytesRemaining(),
-                    base::Bind(&SocketPump::OnWritten, base::Unretained(this),
-                               drainable, from, to),
+                    base::BindOnce(&SocketPump::OnWritten,
+                                   base::Unretained(this), drainable, from, to),
                     kTrafficAnnotation);
       if (result != net::ERR_IO_PENDING)
         OnWritten(drainable, from, to, result);

@@ -10,12 +10,13 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/unguessable_token.h"
+#include "content/browser/media/capture/lame_capture_overlay_chromeos.h"
 #include "media/base/video_frame.h"
-#include "mojo/public/cpp/system/buffer.h"
 #include "services/viz/privileged/interfaces/compositing/frame_sink_video_capture.mojom.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
@@ -47,6 +48,7 @@ namespace content {
 //
 // TODO(crbug/806366): The goal is to remove this code by 2019.
 class LameWindowCapturerChromeOS : public viz::mojom::FrameSinkVideoCapturer,
+                                   public LameCaptureOverlayChromeOS::Owner,
                                    public aura::WindowObserver {
  public:
   explicit LameWindowCapturerChromeOS(aura::Window* target);
@@ -66,12 +68,18 @@ class LameWindowCapturerChromeOS : public viz::mojom::FrameSinkVideoCapturer,
   void Start(viz::mojom::FrameSinkVideoConsumerPtr consumer) final;
   void Stop() final;
   void RequestRefreshFrame() final;
+  void CreateOverlay(
+      int32_t stacking_index,
+      viz::mojom::FrameSinkVideoCaptureOverlayRequest request) final;
 
  private:
   // Represents an in-flight frame, being populated by this capturer and then
   // delivered to the consumer. When the consumer is done with the frame, this
   // returns the buffer back to the pool.
   class InFlightFrame;
+
+  // LameWindowCapturerChromeOS::Owner implementation.
+  void OnOverlayConnectionLost(LameCaptureOverlayChromeOS* overlay) final;
 
   // Initiates capture of the next frame. This is called periodically by the
   // |timer_|.
@@ -106,8 +114,7 @@ class LameWindowCapturerChromeOS : public viz::mojom::FrameSinkVideoCapturer,
   base::RepeatingTimer timer_;
 
   // A pool of shared memory buffers for re-use.
-  using BufferAndSize = std::pair<mojo::ScopedSharedBufferHandle, size_t>;
-  std::vector<BufferAndSize> buffer_pool_;
+  std::vector<base::MappedReadOnlyRegion> buffer_pool_;
 
   // The current number of frames in-flight. If incrementing this would be
   // exceed kMaxInFlightFrames, frame capture is not attempted.
@@ -120,6 +127,9 @@ class LameWindowCapturerChromeOS : public viz::mojom::FrameSinkVideoCapturer,
   // A value provided in the copy requests to enable VIZ to optimize around
   // video capture.
   const base::UnguessableToken copy_request_source_;
+
+  // An optional overlay to be rendered over each captured video frame.
+  std::unique_ptr<LameCaptureOverlayChromeOS> overlay_;
 
   // Used for cancelling any outstanding activities' results, once Stop() is
   // called and there is no longer a consumer to receive another frame.

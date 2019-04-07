@@ -8,11 +8,9 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Image Properties...</translation>
 <translation id="1920297417712412573">Copy to Note</translation>
-<translation id="1921101374471252440">&amp;Reload Image</translation>
 <translation id="2444387452209867610">Insert Note</translation>
 <translation id="2556876185419854533">&amp;Undo Edit</translation>
 <translation id="2873951654529031587">Deleted</translation>
-<translation id="2923448633003185837">Paste and Go</translation>
 <translation id="2972581237482394796">&amp;Redo</translation>
 <translation id="2977472760057091832">Open Link in Private Window</translation>
 <translation id="3027988479108856431">Sadly, your Yandex settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Yandex windows. Then click Continue.</translation>
@@ -31,7 +29,6 @@
 <translation id="4512900838580567989">Open Link in New Background Tab</translation>
 <translation id="4515472507709384008">Opera version 15+</translation>
 <translation id="4548358047305717967">Open Image in New Background Tab</translation>
-<translation id="4582480609585453144">Open Link in Background Tab</translation>
 <translation id="4594403342090139922">&amp;Undo Delete</translation>
 <translation id="4636708767492582204">Send by Mail</translation>
 <translation id="5014281392052865061">Imported Speed Dial</translation>

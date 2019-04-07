@@ -11,7 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chromecast/base/cast_features.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/browser/cast_browser_process.h"
@@ -276,7 +276,7 @@ void URLRequestContextFactory::InitializeMainContextDependencies(
         url::kFileScheme,
         std::make_unique<net::FileProtocolHandler>(
             base::CreateTaskRunnerWithTraits(
-                {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                  base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})));
     DCHECK(set_protocol);
   }
@@ -338,7 +338,7 @@ net::URLRequestContext* URLRequestContextFactory::CreateSystemRequestContext() {
   PopulateNetworkSessionParams(IgnoreCertificateErrors(), &session_params);
   system_job_factory_.reset(new net::URLRequestJobFactoryImpl());
   system_cookie_store_ =
-      content::CreateCookieStore(content::CookieStoreConfig());
+      content::CreateCookieStore(content::CookieStoreConfig(), net_log_);
 
   net::URLRequestContext* system_context = new net::URLRequestContext();
   system_context->set_host_resolver(host_resolver_.get());
@@ -405,7 +405,7 @@ net::URLRequestContext* URLRequestContextFactory::CreateMainRequestContext(
       protocol_handlers, std::move(request_interceptors));
 
   content::CookieStoreConfig cookie_config(cookie_path, false, true, nullptr);
-  main_cookie_store_ = content::CreateCookieStore(cookie_config);
+  main_cookie_store_ = content::CreateCookieStore(cookie_config, net_log_);
 
   net::URLRequestContext* main_context = new net::URLRequestContext();
   main_context->set_host_resolver(host_resolver_.get());

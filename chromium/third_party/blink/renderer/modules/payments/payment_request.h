@@ -8,7 +8,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "components/payments/mojom/payment_request_data.mojom-blink.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "third_party/blink/public/platform/modules/payments/payment_request.mojom-blink.h"
+#include "third_party/blink/public/mojom/payments/payment_request.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
@@ -33,6 +33,7 @@ class ExceptionState;
 class ExecutionContext;
 class PaymentAddress;
 class PaymentDetailsInit;
+class PaymentResponse;
 class ScriptPromiseResolver;
 class ScriptState;
 
@@ -128,14 +129,22 @@ class MODULES_EXPORT PaymentRequest final
   // Clears the promise resolvers and closes the Mojo connection.
   void ClearResolversAndCloseMojoConnection();
 
+  // Returns the resolver for the current pending accept promise that should
+  // be resolved if the user accepts or aborts the payment request.
+  // The pending promise can be [[acceptPromise]] or [[retryPromise]] in the
+  // spec.
+  ScriptPromiseResolver* GetPendingAcceptPromiseResolver() const;
+
   PaymentOptions options_;
   Member<PaymentAddress> shipping_address_;
+  Member<PaymentResponse> payment_response_;
   String id_;
   String shipping_option_;
   String shipping_type_;
   HashSet<String> method_names_;
-  Member<ScriptPromiseResolver> show_resolver_;
+  Member<ScriptPromiseResolver> accept_resolver_;
   Member<ScriptPromiseResolver> complete_resolver_;
+  Member<ScriptPromiseResolver> retry_resolver_;
   Member<ScriptPromiseResolver> abort_resolver_;
   Member<ScriptPromiseResolver> can_make_payment_resolver_;
   payments::mojom::blink::PaymentRequestPtr payment_provider_;

@@ -21,6 +21,7 @@
 
 class BrowserProcessImpl;
 class ChromeBrowserMainExtraParts;
+class ChromeFeatureListCreator;
 class FieldTrialSynchronizer;
 class PrefService;
 class Profile;
@@ -28,10 +29,6 @@ class StartupBrowserCreator;
 class StartupTimeBomb;
 class ShutdownWatcherHelper;
 class WebUsbDetector;
-
-namespace base {
-class SequencedTaskRunner;
-}
 
 namespace chrome_browser {
 // For use by ShowMissingLocaleMessageBox.
@@ -59,8 +56,9 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
 #endif
 
  protected:
-  explicit ChromeBrowserMainParts(const content::MainFunctionParams& parameters,
-                                  std::unique_ptr<ui::DataPack> data_pack);
+  ChromeBrowserMainParts(const content::MainFunctionParams& parameters,
+                         std::unique_ptr<ui::DataPack> data_pack,
+                         ChromeFeatureListCreator* chrome_feature_list_creator);
 
   // content::BrowserMainParts overrides.
   bool ShouldContentCreateFeatureList() override;
@@ -130,8 +128,7 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
   // If the return value is RESULT_CODE_MISSING_DATA, then
   // |failed_to_load_resource_bundle| indicates if the ResourceBundle couldn't
   // be loaded.
-  int LoadLocalState(base::SequencedTaskRunner* local_state_task_runner,
-                     bool* failed_to_load_resource_bundle);
+  int LoadLocalState(bool* failed_to_load_resource_bundle);
 
   // Applies any preferences (to local state) needed for first run. This is
   // always called and early outs if not first-run. Return value is an exit
@@ -210,6 +207,8 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
   // This is used to store the ui data pack. The data pack is moved when
   // resource bundle gets created.
   std::unique_ptr<ui::DataPack> service_manifest_data_pack_;
+
+  ChromeFeatureListCreator* chrome_feature_list_creator_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainParts);
 };

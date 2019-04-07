@@ -4,43 +4,54 @@
 
 #include "ash/assistant/assistant_controller.h"
 
+#include <algorithm>
+#include <utility>
+
+#include "ash/assistant/assistant_cache_controller.h"
 #include "ash/assistant/assistant_controller_observer.h"
 #include "ash/assistant/assistant_interaction_controller.h"
 #include "ash/assistant/assistant_notification_controller.h"
 #include "ash/assistant/assistant_screen_context_controller.h"
+#include "ash/assistant/assistant_setup_controller.h"
 #include "ash/assistant/assistant_ui_controller.h"
 #include "ash/assistant/util/deep_link_util.h"
 #include "ash/new_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
+#include "ash/utility/screenshot_controller.h"
+#include "ash/voice_interaction/voice_interaction_controller.h"
 #include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/unguessable_token.h"
 
 namespace ash {
 
-namespace {
-
-// See more details in go/cros-assistant-deeplink.
-constexpr char kRelaunchParamKey[] = "relaunch";
-constexpr char kTrue[] = "true";
-
-}  // namespace
-
 AssistantController::AssistantController()
-    : assistant_interaction_controller_(
+    : assistant_volume_control_binding_(this),
+      assistant_cache_controller_(
+          std::make_unique<AssistantCacheController>(this)),
+      assistant_interaction_controller_(
           std::make_unique<AssistantInteractionController>(this)),
       assistant_notification_controller_(
           std::make_unique<AssistantNotificationController>(this)),
       assistant_screen_context_controller_(
           std::make_unique<AssistantScreenContextController>(this)),
+      assistant_setup_controller_(
+          std::make_unique<AssistantSetupController>(this)),
       assistant_ui_controller_(std::make_unique<AssistantUiController>(this)),
+      voice_interaction_binding_(this),
       weak_factory_(this) {
+  mojom::VoiceInteractionObserverPtr ptr;
+  voice_interaction_binding_.Bind(mojo::MakeRequest(&ptr));
+  Shell::Get()->voice_interaction_controller()->AddObserver(std::move(ptr));
+
   AddObserver(this);
   NotifyConstructed();
+  chromeos::CrasAudioHandler::Get()->AddAudioObserver(this);
 }
 
 AssistantController::~AssistantController() {
+  chromeos::CrasAudioHandler::Get()->RemoveAudioObserver(this);
   NotifyDestroying();
   RemoveObserver(this);
 }
@@ -48,6 +59,11 @@ AssistantController::~AssistantController() {
 void AssistantController::BindRequest(
     mojom::AssistantControllerRequest request) {
   assistant_controller_bindings_.AddBinding(this, std::move(request));
+}
+
+void AssistantController::BindRequest(
+    mojom::AssistantVolumeControlRequest request) {
+  assistant_volume_control_binding_.Bind(std::move(request));
 }
 
 void AssistantController::AddObserver(AssistantControllerObserver* observer) {
@@ -75,9 +91,12 @@ void AssistantController::SetAssistantImageDownloader(
   assistant_image_downloader_ = std::move(assistant_image_downloader);
 }
 
+// TODO(dmblack): Call SetAssistantSetup directly on AssistantSetupController
+// instead of going through AssistantController.
 void AssistantController::SetAssistantSetup(
     mojom::AssistantSetupPtr assistant_setup) {
   assistant_setup_ = std::move(assistant_setup);
+  assistant_setup_controller_->SetAssistantSetup(assistant_setup_.get());
 }
 
 void AssistantController::SetWebContentsManager(
@@ -92,6 +111,11 @@ void AssistantController::RequestScreenshot(
     RequestScreenshotCallback callback) {
   assistant_screen_context_controller_->RequestScreenshot(rect,
                                                           std::move(callback));
+}
+
+void AssistantController::OpenAssistantSettings() {
+  // Launch Assistant settings via deeplink.
+  OpenUrl(assistant::util::CreateAssistantSettingsDeepLink());
 }
 
 void AssistantController::ManageWebContents(
@@ -132,6 +156,12 @@ void AssistantController::ReleaseWebContents(
   web_contents_manager_->ReleaseAllWebContents(id_tokens);
 }
 
+void AssistantController::NavigateWebContentsBack(
+    const base::UnguessableToken& id_token,
+    mojom::WebContentsManager::NavigateWebContentsBackCallback callback) {
+  web_contents_manager_->NavigateWebContentsBack(id_token, std::move(callback));
+}
+
 void AssistantController::DownloadImage(
     const GURL& url,
     mojom::AssistantImageDownloader::DownloadCallback callback) {
@@ -153,42 +183,91 @@ void AssistantController::DownloadImage(
 void AssistantController::OnDeepLinkReceived(
     assistant::util::DeepLinkType type,
     const std::map<std::string, std::string>& params) {
+  using assistant::util::DeepLinkType;
+
   switch (type) {
-    case assistant::util::DeepLinkType::kFeedback:
+    case DeepLinkType::kFeedback:
       // TODO(dmblack): Possibly use a new FeedbackSource (this method defaults
       // to kFeedbackSourceAsh). This may be useful for differentiating feedback
       // UI and behavior for Assistant.
       Shell::Get()->new_window_controller()->OpenFeedbackPage();
       break;
-    case assistant::util::DeepLinkType::kOnboarding: {
-      auto iter = params.find(kRelaunchParamKey);
-      bool relaunch = iter != params.end() && iter->second == kTrue;
-      if (relaunch) {
-        assistant_setup_->StartAssistantOptInFlow(base::BindOnce(
-            [](AssistantUiController* ui_controller, bool completed) {
-              if (completed)
-                ui_controller->ShowUi(AssistantSource::kSetup);
-            },
-            // |assistant_setup_| and |assistant_ui_controller_| are both owned
-            // by this class, so a raw pointer is safe here.
-            assistant_ui_controller_.get()));
-      } else {
-        assistant_setup_->StartAssistantOptInFlow(base::DoNothing());
-      }
-      assistant_ui_controller_->HideUi(AssistantSource::kSetup);
+    case DeepLinkType::kScreenshot:
+      // TODO(dmblack): The user probably doesn't want their screenshot to
+      // include Assistant so we may want to hide it before calling this API.
+      // Unfortunately, hiding our UI immediately beforehand doesn't resolve the
+      // issue, so we may need to introduce a delay or visibility change
+      // callback to remedy this. For now, keeping Assistant UI open since it
+      // will be included in the screenshot anyway.
+      Shell::Get()->screenshot_controller()->TakeScreenshotForAllRootWindows();
       break;
-    }
-    case assistant::util::DeepLinkType::kUnsupported:
-    case assistant::util::DeepLinkType::kExplore:
-    case assistant::util::DeepLinkType::kReminders:
-    case assistant::util::DeepLinkType::kSettings:
+    case DeepLinkType::kUnsupported:
+    case DeepLinkType::kOnboarding:
+    case DeepLinkType::kQuery:
+    case DeepLinkType::kReminders:
+    case DeepLinkType::kSettings:
+    case DeepLinkType::kWhatsOnMyScreen:
       // No action needed.
       break;
   }
 }
 
-void AssistantController::OnOpenUrlFromTab(const GURL& url) {
-  OpenUrl(url);
+void AssistantController::ShouldOpenUrlFromTab(
+    const GURL& url,
+    ash::mojom::ManagedWebContentsOpenUrlDelegate::ShouldOpenUrlFromTabCallback
+        callback) {
+  // We always handle deep links ourselves.
+  if (assistant::util::IsDeepLinkUrl(url)) {
+    std::move(callback).Run(/*should_open=*/false);
+    NotifyDeepLinkReceived(url);
+    return;
+  }
+
+  // When in main UI mode, WebContents should not navigate as they are hosting
+  // Assistant cards. Instead, we route navigation attempts to the browser.
+  if (assistant_ui_controller_->model()->ui_mode() ==
+      AssistantUiMode::kMainUi) {
+    std::move(callback).Run(/*should_open=*/false);
+    OpenUrl(url);
+    return;
+  }
+
+  // In all other cases WebContents should be able to navigate freely.
+  std::move(callback).Run(/*should_open=*/true);
+}
+
+void AssistantController::SetVolume(int volume, bool user_initiated) {
+  volume = std::min(100, volume);
+  volume = std::max(volume, 0);
+  chromeos::CrasAudioHandler::Get()->SetOutputVolumePercent(volume);
+}
+
+void AssistantController::SetMuted(bool muted) {
+  chromeos::CrasAudioHandler::Get()->SetOutputMute(muted);
+}
+
+void AssistantController::AddVolumeObserver(mojom::VolumeObserverPtr observer) {
+  volume_observer_.AddPtr(std::move(observer));
+
+  int output_volume =
+      chromeos::CrasAudioHandler::Get()->GetOutputVolumePercent();
+  bool mute = chromeos::CrasAudioHandler::Get()->IsOutputMuted();
+  OnOutputMuteChanged(mute, false /* system_adjust */);
+  OnOutputNodeVolumeChanged(0 /* node */, output_volume);
+}
+
+void AssistantController::OnOutputMuteChanged(bool mute_on,
+                                              bool system_adjust) {
+  volume_observer_.ForAllPtrs([mute_on](mojom::VolumeObserver* observer) {
+    observer->OnMuteStateChanged(mute_on);
+  });
+}
+
+void AssistantController::OnOutputNodeVolumeChanged(uint64_t node, int volume) {
+  // |node| refers to the active volume device, which we don't care here.
+  volume_observer_.ForAllPtrs([volume](mojom::VolumeObserver* observer) {
+    observer->OnVolumeChanged(volume);
+  });
 }
 
 void AssistantController::OpenUrl(const GURL& url) {
@@ -212,12 +291,12 @@ void AssistantController::NotifyDestroying() {
 }
 
 void AssistantController::NotifyDeepLinkReceived(const GURL& deep_link) {
-  using namespace assistant::util;
+  using assistant::util::DeepLinkType;
 
   // Retrieve deep link type and parsed parameters.
-  DeepLinkType type = GetDeepLinkType(deep_link);
+  DeepLinkType type = assistant::util::GetDeepLinkType(deep_link);
   const std::map<std::string, std::string> params =
-      GetDeepLinkParams(deep_link);
+      assistant::util::GetDeepLinkParams(deep_link);
 
   for (AssistantControllerObserver& observer : observers_)
     observer.OnDeepLinkReceived(type, params);
@@ -226,6 +305,12 @@ void AssistantController::NotifyDeepLinkReceived(const GURL& deep_link) {
 void AssistantController::NotifyUrlOpened(const GURL& url) {
   for (AssistantControllerObserver& observer : observers_)
     observer.OnUrlOpened(url);
+}
+
+void AssistantController::OnVoiceInteractionStatusChanged(
+    mojom::VoiceInteractionState state) {
+  if (state == mojom::VoiceInteractionState::NOT_READY)
+    assistant_ui_controller_->HideUi(AssistantSource::kUnspecified);
 }
 
 base::WeakPtr<AssistantController> AssistantController::GetWeakPtr() {

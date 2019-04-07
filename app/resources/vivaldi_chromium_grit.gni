@@ -194,7 +194,7 @@ template("chromium_merge_grit_action") {
     }
   }
 
-  if (have_strings && (generate_untranslated)) {
+  if (have_strings && generate_untranslated) {
     name = "Extract_strings_$target_name"
     deps_list += [ ":" + name ]
     vivaldi_extract_untranslated(name) {

@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "ui/ozone/platform/drm/gpu/drm_thread_message_proxy.h"
 #include "ui/ozone/platform/drm/gpu/drm_window_proxy.h"
-#include "ui/ozone/platform/drm/gpu/gbm_buffer.h"
+#include "ui/ozone/platform/drm/gpu/gbm_pixmap.h"
 #include "ui/ozone/platform/drm/gpu/proxy_helpers.h"
 
 namespace ui {
@@ -32,36 +32,34 @@ std::unique_ptr<DrmWindowProxy> DrmThreadProxy::CreateDrmWindowProxy(
   return std::make_unique<DrmWindowProxy>(widget, &drm_thread_);
 }
 
-scoped_refptr<GbmBuffer> DrmThreadProxy::CreateBuffer(
-    gfx::AcceleratedWidget widget,
-    const gfx::Size& size,
-    gfx::BufferFormat format,
-    gfx::BufferUsage usage,
-    uint32_t flags) {
+void DrmThreadProxy::CreateBuffer(gfx::AcceleratedWidget widget,
+                                  const gfx::Size& size,
+                                  gfx::BufferFormat format,
+                                  gfx::BufferUsage usage,
+                                  uint32_t flags,
+                                  std::unique_ptr<GbmBuffer>* buffer,
+                                  scoped_refptr<DrmFramebuffer>* framebuffer) {
   DCHECK(drm_thread_.task_runner())
       << "no task runner! in DrmThreadProxy::CreateBuffer";
-  scoped_refptr<GbmBuffer> buffer;
-
   PostSyncTask(
       drm_thread_.task_runner(),
       base::BindOnce(&DrmThread::CreateBuffer, base::Unretained(&drm_thread_),
-                     widget, size, format, usage, flags, &buffer));
-  return buffer;
+                     widget, size, format, usage, flags, buffer, framebuffer));
 }
 
-scoped_refptr<GbmBuffer> DrmThreadProxy::CreateBufferFromFds(
+void DrmThreadProxy::CreateBufferFromFds(
     gfx::AcceleratedWidget widget,
     const gfx::Size& size,
     gfx::BufferFormat format,
     std::vector<base::ScopedFD> fds,
-    const std::vector<gfx::NativePixmapPlane>& planes) {
-  scoped_refptr<GbmBuffer> buffer;
-  PostSyncTask(
-      drm_thread_.task_runner(),
-      base::BindOnce(&DrmThread::CreateBufferFromFds,
-                     base::Unretained(&drm_thread_), widget, size, format,
-                     base::Passed(std::move(fds)), planes, &buffer));
-  return buffer;
+    const std::vector<gfx::NativePixmapPlane>& planes,
+    std::unique_ptr<GbmBuffer>* buffer,
+    scoped_refptr<DrmFramebuffer>* framebuffer) {
+  PostSyncTask(drm_thread_.task_runner(),
+               base::BindOnce(&DrmThread::CreateBufferFromFds,
+                              base::Unretained(&drm_thread_), widget, size,
+                              format, base::Passed(std::move(fds)), planes,
+                              buffer, framebuffer));
 }
 
 void DrmThreadProxy::GetScanoutFormats(

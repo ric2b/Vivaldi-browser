@@ -19,6 +19,7 @@
 class AppDistributionProvider;
 class BrandedImageProvider;
 class ExternalSearchProvider;
+class FullscreenProvider;
 class MailtoHandlerProvider;
 class OmahaServiceProvider;
 class SpotlightProvider;
@@ -161,6 +162,9 @@ class ChromeBrowserProvider {
   // Returns an instance of the External Search provider.
   virtual ExternalSearchProvider* GetExternalSearchProvider() const;
 
+  // Returns an instance of the fullscreen provider.
+  virtual FullscreenProvider* GetFullscreenProvider() const;
+
   // Checks for native iOS apps that are installed.
   virtual void CheckForFirstPartyApps() const;
 
@@ -173,7 +177,7 @@ class ChromeBrowserProvider {
   void FireChromeIdentityServiceDidChange(ChromeIdentityService* new_service);
 
  private:
-  base::ObserverList<Observer, true> observer_list_;
+  base::ObserverList<Observer, true>::Unchecked observer_list_;
   std::unique_ptr<MailtoHandlerProvider> mailto_handler_provider_;
 };
 

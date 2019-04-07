@@ -117,12 +117,12 @@ SVGLengthMode SVGLengthTearOff::UnitMode() {
 }
 
 float SVGLengthTearOff::value(ExceptionState& exception_state) {
-  if (Target()->IsRelative() && !CanResolveRelativeUnits(contextElement())) {
+  if (Target()->IsRelative() && !CanResolveRelativeUnits(ContextElement())) {
     exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
                                       "Could not resolve relative length.");
     return 0;
   }
-  SVGLengthContext length_context(contextElement());
+  SVGLengthContext length_context(ContextElement());
   return Target()->Value(length_context);
 }
 
@@ -131,12 +131,12 @@ void SVGLengthTearOff::setValue(float value, ExceptionState& exception_state) {
     ThrowReadOnly(exception_state);
     return;
   }
-  if (Target()->IsRelative() && !CanResolveRelativeUnits(contextElement())) {
+  if (Target()->IsRelative() && !CanResolveRelativeUnits(ContextElement())) {
     exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
                                       "Could not resolve relative length.");
     return;
   }
-  SVGLengthContext length_context(contextElement());
+  SVGLengthContext length_context(ContextElement());
   if (Target()->IsCalculated())
     Target()->SetValueAsNumber(value);
   else
@@ -227,28 +227,23 @@ void SVGLengthTearOff::convertToSpecifiedUnits(
   }
   if ((Target()->IsRelative() ||
        CSSPrimitiveValue::IsRelativeUnit(ToCSSUnitType(unit_type))) &&
-      !CanResolveRelativeUnits(contextElement())) {
+      !CanResolveRelativeUnits(ContextElement())) {
     exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
                                       "Could not resolve relative length.");
     return;
   }
-  SVGLengthContext length_context(contextElement());
+  SVGLengthContext length_context(ContextElement());
   Target()->ConvertToSpecifiedUnits(ToCSSUnitType(unit_type), length_context);
   CommitChange();
 }
 
 SVGLengthTearOff::SVGLengthTearOff(SVGLength* target,
-                                   SVGElement* context_element,
-                                   PropertyIsAnimValType property_is_anim_val,
-                                   const QualifiedName& attribute_name)
-    : SVGPropertyTearOff<SVGLength>(target,
-                                    context_element,
-                                    property_is_anim_val,
-                                    attribute_name) {}
+                                   SVGAnimatedPropertyBase* binding,
+                                   PropertyIsAnimValType property_is_anim_val)
+    : SVGPropertyTearOff<SVGLength>(target, binding, property_is_anim_val) {}
 
 SVGLengthTearOff* SVGLengthTearOff::CreateDetached() {
-  return Create(SVGLength::Create(), nullptr, kPropertyIsNotAnimVal,
-                QualifiedName::Null());
+  return Create(SVGLength::Create(), nullptr, kPropertyIsNotAnimVal);
 }
 
 }  // namespace blink

@@ -18,6 +18,13 @@ error::Error DoBindBufferRange(GLenum target,
                                GLintptr offset,
                                GLsizeiptr size);
 error::Error DoBindFramebuffer(GLenum target, GLuint framebuffer);
+error::Error DoBindImageTexture(GLuint unit,
+                                GLuint texture,
+                                GLint level,
+                                GLboolean layered,
+                                GLint layer,
+                                GLenum access,
+                                GLenum format);
 error::Error DoBindRenderbuffer(GLenum target, GLuint renderbuffer);
 error::Error DoBindSampler(GLuint unit, GLuint sampler);
 error::Error DoBindTexture(GLenum target, GLuint texture);
@@ -162,6 +169,9 @@ error::Error DoDepthRangef(GLclampf zNear, GLclampf zFar);
 error::Error DoDetachShader(GLuint program, GLuint shader);
 error::Error DoDisable(GLenum cap);
 error::Error DoDisableVertexAttribArray(GLuint index);
+error::Error DoDispatchCompute(GLuint num_groups_x,
+                               GLuint num_groups_y,
+                               GLuint num_groups_z);
 error::Error DoDrawArrays(GLenum mode, GLint first, GLsizei count);
 error::Error DoDrawElements(GLenum mode,
                             GLsizei count,
@@ -175,6 +185,7 @@ error::Error DoFlush();
 error::Error DoFlushMappedBufferRange(GLenum target,
                                       GLintptr offset,
                                       GLsizeiptr size);
+error::Error DoFramebufferParameteri(GLenum target, GLenum pname, GLint param);
 error::Error DoFramebufferRenderbuffer(GLenum target,
                                        GLenum attachment,
                                        GLenum renderbuffertarget,
@@ -189,6 +200,12 @@ error::Error DoFramebufferTextureLayer(GLenum target,
                                        GLuint texture,
                                        GLint level,
                                        GLint layer);
+error::Error DoFramebufferTextureMultiviewLayeredANGLE(GLenum target,
+                                                       GLenum attachment,
+                                                       GLuint texture,
+                                                       GLint level,
+                                                       GLint base_view_index,
+                                                       GLsizei num_views);
 error::Error DoFrontFace(GLenum mode);
 error::Error DoGenBuffers(GLsizei n, volatile GLuint* buffers);
 error::Error DoGenerateMipmap(GLenum target);
@@ -411,6 +428,8 @@ error::Error DoIsTexture(GLuint texture, uint32_t* result);
 error::Error DoIsTransformFeedback(GLuint transformfeedback, uint32_t* result);
 error::Error DoLineWidth(GLfloat width);
 error::Error DoLinkProgram(GLuint program);
+error::Error DoMemoryBarrierEXT(GLbitfield barriers);
+error::Error DoMemoryBarrierByRegion(GLbitfield barriers);
 error::Error DoPauseTransformFeedback();
 error::Error DoPixelStorei(GLenum pname, GLint param);
 error::Error DoPolygonOffset(GLfloat factor, GLfloat units);

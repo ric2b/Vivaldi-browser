@@ -48,7 +48,6 @@
 #include "third_party/blink/renderer/core/workers/worker_reporting_proxy.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
-#include "third_party/blink/renderer/platform/heap/safe_point.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -87,6 +86,28 @@ static int GetNextWorkerThreadId() {
   return next_worker_thread_id;
 }
 
+// RefCountedWaitableEvent makes WaitableEvent thread-safe refcounted.
+// WorkerThread retains references to the event from both the parent context
+// thread and the worker thread with this wrapper. See
+// WorkerThread::PerformShutdownOnWorkerThread() for details.
+class WorkerThread::RefCountedWaitableEvent
+    : public WTF::ThreadSafeRefCounted<RefCountedWaitableEvent> {
+ public:
+  static scoped_refptr<RefCountedWaitableEvent> Create() {
+    return base::AdoptRef<RefCountedWaitableEvent>(new RefCountedWaitableEvent);
+  }
+
+  void Wait() { event_.Wait(); }
+  void Signal() { event_.Signal(); }
+
+ private:
+  RefCountedWaitableEvent() = default;
+
+  base::WaitableEvent event_;
+
+  DISALLOW_COPY_AND_ASSIGN(RefCountedWaitableEvent);
+};
+
 WorkerThread::~WorkerThread() {
   MutexLocker lock(ThreadSetMutex());
   DCHECK(WorkerThreads().Contains(this));
@@ -112,7 +133,7 @@ void WorkerThread::Start(
 
   // Synchronously initialize the per-global-scope scheduler to prevent someone
   // from posting a task to the thread before the scheduler is ready.
-  WaitableEvent waitable_event;
+  base::WaitableEvent waitable_event;
   GetWorkerBackingThread().BackingThread().PostTask(
       FROM_HERE,
       CrossThreadBind(&WorkerThread::InitializeSchedulerOnWorkerThread,
@@ -171,7 +192,6 @@ void WorkerThread::Terminate() {
   // period.
   ScheduleToTerminateScriptExecution();
 
-  worker_thread_lifecycle_context_->NotifyContextDestroyed();
   inspector_task_runner_->Dispose();
 
   GetWorkerBackingThread().BackingThread().PostTask(
@@ -202,7 +222,7 @@ void WorkerThread::TerminateAllWorkersForTesting() {
   }
 
   for (WorkerThread* thread : threads)
-    thread->shutdown_event_->Wait();
+    thread->WaitForShutdownForTesting();
 
   // Destruct base::Thread and join the underlying system threads.
   for (WorkerThread* thread : threads)
@@ -239,13 +259,6 @@ v8::Isolate* WorkerThread::GetIsolate() {
 
 bool WorkerThread::IsCurrentThread() {
   return GetWorkerBackingThread().BackingThread().IsCurrentThread();
-}
-
-ThreadableLoadingContext* WorkerThread::GetLoadingContext() {
-  DCHECK(IsCurrentThread());
-  // This should be never called after the termination sequence starts.
-  DCHECK(loading_context_);
-  return loading_context_;
 }
 
 void WorkerThread::AppendDebuggerTask(CrossThreadClosure task) {
@@ -311,6 +324,11 @@ bool WorkerThread::IsForciblyTerminated() {
   return false;
 }
 
+void WorkerThread::WaitForShutdownForTesting() {
+  DCHECK_CALLED_ON_VALID_THREAD(parent_thread_checker_);
+  shutdown_event_->Wait();
+}
+
 ExitCode WorkerThread::GetExitCodeForTesting() {
   MutexLocker lock(mutex_);
   return exit_code_;
@@ -339,18 +357,13 @@ void WorkerThread::ChildThreadTerminatedOnWorkerThread(WorkerThread* child) {
     PerformShutdownOnWorkerThread();
 }
 
-WorkerThread::WorkerThread(ThreadableLoadingContext* loading_context,
-                           WorkerReportingProxy& worker_reporting_proxy)
+WorkerThread::WorkerThread(WorkerReportingProxy& worker_reporting_proxy)
     : time_origin_(CurrentTimeTicks()),
       worker_thread_id_(GetNextWorkerThreadId()),
       forcible_termination_delay_(kForcibleTerminationDelay),
       devtools_worker_token_(base::UnguessableToken::Create()),
-      loading_context_(loading_context),
       worker_reporting_proxy_(worker_reporting_proxy),
-      shutdown_event_(std::make_unique<WaitableEvent>(
-          WaitableEvent::ResetPolicy::kManual,
-          WaitableEvent::InitialState::kNonSignaled)),
-      worker_thread_lifecycle_context_(new WorkerThreadLifecycleContext) {
+      shutdown_event_(RefCountedWaitableEvent::Create()) {
   MutexLocker lock(ThreadSetMutex());
   WorkerThreads().insert(this);
 }
@@ -401,7 +414,7 @@ void WorkerThread::EnsureScriptExecutionTerminates(ExitCode exit_code) {
 }
 
 void WorkerThread::InitializeSchedulerOnWorkerThread(
-    WaitableEvent* waitable_event) {
+    base::WaitableEvent* waitable_event) {
   DCHECK(IsCurrentThread());
   DCHECK(!worker_scheduler_);
   scheduler::WebThreadImplForWorkerScheduler& web_thread_for_worker =
@@ -431,6 +444,8 @@ void WorkerThread::InitializeOnWorkerThread(
     }
     GetWorkerBackingThread().BackingThread().AddTaskObserver(this);
 
+    const KURL url_for_debugger = global_scope_creation_params->script_url;
+
     console_message_storage_ = new ConsoleMessageStorage();
     global_scope_ =
         CreateWorkerGlobalScope(std::move(global_scope_creation_params));
@@ -447,7 +462,7 @@ void WorkerThread::InitializeOnWorkerThread(
     // TODO(nhiroki): Handle a case where the script controller fails to
     // initialize the context.
     if (GlobalScope()->ScriptController()->InitializeContextIfNeeded(
-            String())) {
+            String(), url_for_debugger)) {
       worker_reporting_proxy_.DidInitializeWorkerContext();
       v8::HandleScope handle_scope(GetIsolate());
       Platform::Current()->WorkerContextCreated(
@@ -557,18 +572,25 @@ void WorkerThread::PerformShutdownOnWorkerThread() {
     debugger->WorkerThreadDestroyed(this);
 
   console_message_storage_.Clear();
-  loading_context_.Clear();
 
   if (IsOwningBackingThread())
     GetWorkerBackingThread().ShutdownOnBackingThread();
-  // We must not touch workerBackingThread() from now on.
+  // We must not touch GetWorkerBackingThread() from now on.
+
+  // Keep the reference to the shutdown event in a local variable so that the
+  // worker thread can signal it even after calling DidTerminateWorkerThread(),
+  // which may destroy |this|.
+  scoped_refptr<RefCountedWaitableEvent> shutdown_event = shutdown_event_;
 
   // Notify the proxy that the WorkerOrWorkletGlobalScope has been disposed
   // of. This can free this thread object, hence it must not be touched
   // afterwards.
   GetWorkerReportingProxy().DidTerminateWorkerThread();
 
-  shutdown_event_->Signal();
+  // This should be signaled at the end because this may induce the main thread
+  // to clear the worker backing thread and stop thread execution in the system
+  // level.
+  shutdown_event->Signal();
 }
 
 void WorkerThread::SetThreadState(ThreadState next_thread_state) {

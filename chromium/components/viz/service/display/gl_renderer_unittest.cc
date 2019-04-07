@@ -275,12 +275,6 @@ class GLRendererShaderPixelTest : public cc::GLRendererPixelTest {
 
   void TestShadersWithPrecisionAndSampler(TexCoordPrecision precision,
                                           SamplerType sampler) {
-    if (!context_provider()->ContextCapabilities().egl_image_external &&
-        sampler == SAMPLER_TYPE_EXTERNAL_OES) {
-      // This will likely be hit in tests due to usage of osmesa.
-      return;
-    }
-
     TestShader(ProgramKey::Texture(precision, sampler, PREMULTIPLIED_ALPHA,
                                    false, true, false));
     TestShader(ProgramKey::Texture(precision, sampler, PREMULTIPLIED_ALPHA,
@@ -355,12 +349,6 @@ class GLRendererShaderPixelTest : public cc::GLRendererPixelTest {
                             SamplerType sampler,
                             BlendMode blend_mode,
                             bool mask_for_background) {
-    if (!context_provider()->ContextCapabilities().egl_image_external &&
-        sampler == SAMPLER_TYPE_EXTERNAL_OES) {
-      // This will likely be hit in tests due to usage of osmesa.
-      return;
-    }
-
     TestShader(ProgramKey::RenderPass(precision, sampler, blend_mode, NO_AA,
                                       HAS_MASK, mask_for_background, false,
                                       false));
@@ -2160,8 +2148,10 @@ class TestOverlayProcessor : public OverlayProcessor {
     Strategy() = default;
     ~Strategy() override = default;
 
-    MOCK_METHOD5(Attempt,
+    MOCK_METHOD6(Attempt,
                  bool(const SkMatrix44& output_color_matrix,
+                      const OverlayProcessor::FilterOperationsMap&
+                          render_pass_background_filters,
                       DisplayResourceProvider* resource_provider,
                       RenderPass* render_pass,
                       OverlayCandidateList* candidates,
@@ -2223,13 +2213,13 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
       gfx::Size(256, 256), true);
   auto release_callback =
-      SingleReleaseCallback::Create(base::Bind(&MailboxReleased));
+      SingleReleaseCallback::Create(base::BindOnce(&MailboxReleased));
   ResourceId resource_id = child_resource_provider->ImportResource(
       transfer_resource, std::move(release_callback));
 
   std::vector<ReturnedResource> returned_to_child;
   int child_id = parent_resource_provider->CreateChild(
-      base::Bind(&CollectResources, &returned_to_child));
+      base::BindRepeating(&CollectResources, &returned_to_child), true);
 
   // Transfer resource to the parent.
   std::vector<ResourceId> resource_ids_to_transfer;
@@ -2285,7 +2275,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   // added a fake strategy, so checking for Attempt calls checks if there was
   // any attempt to overlay, which there shouldn't be. We can't use the quad
   // list because the render pass is cleaned up by DrawFrame.
-  EXPECT_CALL(processor->strategy(), Attempt(_, _, _, _, _)).Times(0);
+  EXPECT_CALL(processor->strategy(), Attempt(_, _, _, _, _, _)).Times(0);
   EXPECT_CALL(*validator, AllowCALayerOverlays()).Times(0);
   EXPECT_CALL(*validator, AllowDCLayerOverlays()).Times(0);
   DrawFrame(&renderer, viewport_size);
@@ -2310,7 +2300,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   EXPECT_CALL(*validator, AllowDCLayerOverlays())
       .Times(1)
       .WillOnce(::testing::Return(false));
-  EXPECT_CALL(processor->strategy(), Attempt(_, _, _, _, _)).Times(1);
+  EXPECT_CALL(processor->strategy(), Attempt(_, _, _, _, _, _)).Times(1);
   DrawFrame(&renderer, viewport_size);
 
   // If the CALayerOverlay path is taken, then the ordinary overlay path should
@@ -2329,7 +2319,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   EXPECT_CALL(*validator, AllowCALayerOverlays())
       .Times(1)
       .WillOnce(::testing::Return(true));
-  EXPECT_CALL(processor->strategy(), Attempt(_, _, _, _, _)).Times(0);
+  EXPECT_CALL(processor->strategy(), Attempt(_, _, _, _, _, _)).Times(0);
   DrawFrame(&renderer, viewport_size);
 
   // Transfer resources back from the parent to the child. Set no resources as
@@ -2432,13 +2422,13 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, sync_token,
       gfx::Size(256, 256), true);
   auto release_callback =
-      SingleReleaseCallback::Create(base::Bind(&MailboxReleased));
+      SingleReleaseCallback::Create(base::BindOnce(&MailboxReleased));
   ResourceId resource_id = child_resource_provider->ImportResource(
       transfer_resource, std::move(release_callback));
 
   std::vector<ReturnedResource> returned_to_child;
   int child_id = parent_resource_provider->CreateChild(
-      base::Bind(&CollectResources, &returned_to_child));
+      base::BindRepeating(&CollectResources, &returned_to_child), true);
 
   // Transfer resource to the parent.
   std::vector<ResourceId> resource_ids_to_transfer;
@@ -2817,13 +2807,13 @@ TEST_F(GLRendererTest, DCLayerOverlaySwitch) {
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
       gfx::Size(256, 256), true);
   auto release_callback =
-      SingleReleaseCallback::Create(base::Bind(&MailboxReleased));
+      SingleReleaseCallback::Create(base::BindOnce(&MailboxReleased));
   ResourceId resource_id = child_resource_provider->ImportResource(
       transfer_resource, std::move(release_callback));
 
   std::vector<ReturnedResource> returned_to_child;
   int child_id = parent_resource_provider->CreateChild(
-      base::Bind(&CollectResources, &returned_to_child));
+      base::BindRepeating(&CollectResources, &returned_to_child), true);
 
   // Transfer resource to the parent.
   std::vector<ResourceId> resource_ids_to_transfer;
@@ -2964,6 +2954,8 @@ class ContentBoundsOverlayProcessor : public OverlayProcessor {
     ~Strategy() override = default;
 
     bool Attempt(const SkMatrix44& output_color_matrix,
+                 const OverlayProcessor::FilterOperationsMap&
+                     render_pass_background_filters,
                  DisplayResourceProvider* resource_provider,
                  RenderPass* render_pass,
                  OverlayCandidateList* candidates,

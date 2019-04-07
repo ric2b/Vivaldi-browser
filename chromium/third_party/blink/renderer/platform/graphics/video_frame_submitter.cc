@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "base/task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/paint/filter_operations.h"
@@ -14,8 +13,8 @@
 #include "components/viz/common/resources/resource_id.h"
 #include "components/viz/common/resources/returned_resource.h"
 #include "media/base/video_frame.h"
-#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom-blink.h"
+#include "services/ws/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/blink/public/platform/interface_provider.h"
 #include "third_party/blink/public/platform/modules/frame_sinks/embedded_frame_sink.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -26,7 +25,8 @@ namespace blink {
 namespace {
 
 // Delay to retry getting the context_provider.
-constexpr int kGetContextProviderRetryMS = 150;
+constexpr base::TimeDelta kGetContextProviderRetryTimeout =
+    base::TimeDelta::FromMilliseconds(150);
 
 }  // namespace
 
@@ -163,33 +163,45 @@ void VideoFrameSubmitter::Initialize(cc::VideoFrameProvider* provider) {
     DCHECK(!provider_);
     provider_ = provider;
     context_provider_callback_.Run(
-        base::BindOnce(&VideoFrameSubmitter::OnReceivedContextProvider,
-                       weak_ptr_factory_.GetWeakPtr()));
+        nullptr, base::BindOnce(&VideoFrameSubmitter::OnReceivedContextProvider,
+                                weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
 void VideoFrameSubmitter::OnReceivedContextProvider(
     bool use_gpu_compositing,
-    scoped_refptr<ui::ContextProviderCommandBuffer> context_provider) {
-  // We could get a null |context_provider| back if the context is still lost.
-  if (!context_provider && use_gpu_compositing) {
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(
-            context_provider_callback_,
-            base::BindOnce(&VideoFrameSubmitter::OnReceivedContextProvider,
-                           weak_ptr_factory_.GetWeakPtr())),
-        base::TimeDelta::FromMilliseconds(kGetContextProviderRetryMS));
+    scoped_refptr<viz::ContextProvider> context_provider) {
+  if (!use_gpu_compositing) {
+    resource_provider_->Initialize(nullptr, this);
     return;
   }
 
-  context_provider_ = std::move(context_provider);
-  if (use_gpu_compositing) {
-    context_provider_->AddObserver(this);
-    resource_provider_->Initialize(context_provider_.get(), nullptr);
-  } else {
-    resource_provider_->Initialize(nullptr, this);
+  bool has_good_context = false;
+  while (!has_good_context) {
+    if (!context_provider) {
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(
+              context_provider_callback_, context_provider_,
+              base::BindOnce(&VideoFrameSubmitter::OnReceivedContextProvider,
+                             weak_ptr_factory_.GetWeakPtr())),
+          kGetContextProviderRetryTimeout);
+      return;
+    }
+
+    // Note that |context_provider| is now null after the move, such that if we
+    // end up having !|has_good_context|, we will retry to obtain the
+    // context_provider.
+    context_provider_ = std::move(context_provider);
+    auto result = context_provider_->BindToCurrentThread();
+
+    has_good_context =
+        result == gpu::ContextResult::kSuccess &&
+        context_provider_->ContextGL()->GetGraphicsResetStatusKHR() ==
+            GL_NO_ERROR;
   }
+  context_provider_->AddObserver(this);
+  resource_provider_->Initialize(context_provider_.get(), nullptr);
 
   if (frame_sink_id_.is_valid())
     StartSubmitting();
@@ -340,7 +352,6 @@ void VideoFrameSubmitter::OnContextLost() {
 
   if (context_provider_) {
     context_provider_->RemoveObserver(this);
-    context_provider_ = nullptr;
   }
   waiting_for_compositor_ack_ = false;
 
@@ -350,6 +361,7 @@ void VideoFrameSubmitter::OnContextLost() {
   compositor_frame_sink_.reset();
 
   context_provider_callback_.Run(
+      context_provider_,
       base::BindOnce(&VideoFrameSubmitter::OnReceivedContextProvider,
                      weak_ptr_factory_.GetWeakPtr()));
 

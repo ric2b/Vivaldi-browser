@@ -5,8 +5,8 @@
 #include "ash/shell_init_params.h"
 
 #include "ash/shell_delegate.h"
-#include "ash/shell_port.h"
-#include "services/ui/ws2/gpu_interface_provider.h"
+#include "base/values.h"
+#include "services/ws/gpu_interface_provider.h"
 
 namespace ash {
 

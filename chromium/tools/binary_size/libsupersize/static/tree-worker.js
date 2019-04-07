@@ -24,6 +24,7 @@
  * @prop {string} t Single character string to indicate the symbol type.
  * @prop {number} [u] Count value indicating how many symbols this entry
  * represents. Negative value when removed in a diff.
+ * @prop {number} [f] Bit flags, defaults to 0.
  */
 /**
  * @typedef {object} FileEntry JSON object representing a single file and its
@@ -36,6 +37,12 @@
 importScripts('./shared.js');
 
 const _PATH_SEP = '/';
+const _DEMO_DATA_URL = 'demo.ndjson';
+const _NAMES_TO_FLAGS = Object.freeze({
+  hot: _FLAGS.HOT,
+  generated: _FLAGS.GENERATED_SOURCE,
+  coverage: _FLAGS.COVERAGE,
+});
 
 /** @param {FileEntry} fileEntry */
 function getSourcePath(fileEntry) {
@@ -82,7 +89,14 @@ function _compareFunc(a, b) {
  * @returns {TreeNode}
  */
 function createNode(options) {
-  const {idPath, type, shortNameIndex, size = 0, childStats = {}} = options;
+  const {
+    idPath,
+    type,
+    shortNameIndex,
+    size = 0,
+    flags = 0,
+    childStats = {},
+  } = options;
   return {
     children: [],
     parent: null,
@@ -91,6 +105,7 @@ function createNode(options) {
     shortNameIndex,
     size,
     type,
+    flags,
   };
 }
 
@@ -108,11 +123,14 @@ class TreeBuilder {
    * @param {(symbolNode: TreeNode) => boolean} options.filterTest Called to see
    * if a symbol should be included. If a symbol fails the test, it will not be
    * attached to the tree.
+   * @param {(symbolNode: TreeNode) => boolean} options.highlightTest Called to
+   * see if a symbol should be highlighted.
    * @param {string} options.sep Path seperator used to find parent names.
    */
   constructor(options) {
     this._getPath = options.getPath;
     this._filterTest = options.filterTest;
+    this._highlightTest = options.highlightTest;
     this._sep = options.sep || _PATH_SEP;
 
     this.rootNode = createNode({
@@ -136,35 +154,48 @@ class TreeBuilder {
    * @param {TreeNode} node Child node.
    * @param {TreeNode} directParent New parent node.
    */
-  static _attachToParent(node, directParent) {
+  _attachToParent(node, directParent) {
     // Link the nodes together
     directParent.children.push(node);
     node.parent = directParent;
 
     const additionalSize = node.size;
     const additionalStats = Object.entries(node.childStats);
+    const additionalFlags = node.flags;
 
     // Update the size and childStats of all ancestors
     while (node.parent != null) {
       const {parent} = node;
-      const [containerType, lastBiggestType] = parent.type;
-      let {size: lastBiggestSize = 0} =
-        parent.childStats[lastBiggestType] || {};
+
+      // Track the size of `lastBiggestType` for comparisons.
+      let [containerType, lastBiggestType] = parent.type;
+      let lastBiggestSize = 0;
+      const lastBiggestStats = parent.childStats[lastBiggestType];
+      if (lastBiggestStats) {
+        lastBiggestSize = lastBiggestStats.size;
+      }
+
       for (const [type, stat] of additionalStats) {
-        const parentStat = parent.childStats[type] || {size: 0, count: 0};
+        let parentStat = parent.childStats[type];
+        if (parentStat == null) {
+          parentStat = {size: 0, count: 0, highlight: 0};
+          parent.childStats[type] = parentStat;
+        }
 
         parentStat.size += stat.size;
         parentStat.count += stat.count;
-        parent.childStats[type] = parentStat;
+        parentStat.highlight += stat.highlight;
 
         const absSize = Math.abs(parentStat.size);
         if (absSize > lastBiggestSize) {
-          parent.type = `${containerType}${type}`;
+          lastBiggestType = type;
           lastBiggestSize = absSize;
         }
       }
 
+      parent.type = `${containerType}${lastBiggestType}`;
       parent.size += additionalSize;
+      parent.flags |= additionalFlags;
       node = parent;
     }
   }
@@ -174,7 +205,7 @@ class TreeBuilder {
    * into containers, based on the class of the dex methods.
    * @param {TreeNode} node
    */
-  static _joinDexMethodClasses(node) {
+  _joinDexMethodClasses(node) {
     const hasDexMethods = node.childStats[_DEX_METHOD_SYMBOL_TYPE] != null;
     if (!hasDexMethods || node.children == null) return node;
 
@@ -190,8 +221,8 @@ class TreeBuilder {
         const splitIndex = childNode.idPath.lastIndexOf('#');
 
         const isDexMethodWithClass =
-            childNode.type === _DEX_METHOD_SYMBOL_TYPE &&
-            splitIndex > childNode.shortNameIndex;
+          childNode.type === _DEX_METHOD_SYMBOL_TYPE &&
+          splitIndex > childNode.shortNameIndex;
 
         if (isDexMethodWithClass) {
           // Get the idPath of the class
@@ -209,7 +240,7 @@ class TreeBuilder {
 
           // Adjust the dex method's short name so it starts after the "#"
           childNode.shortNameIndex = splitIndex + 1;
-          TreeBuilder._attachToParent(childNode, classNode);
+          this._attachToParent(childNode, classNode);
         } else {
           otherSymbols.push(childNode);
         }
@@ -223,7 +254,9 @@ class TreeBuilder {
         node.children.push(containerNode);
       }
     } else {
-      node.children.forEach(TreeBuilder._joinDexMethodClasses);
+      for (const child of node.children) {
+        this._joinDexMethodClasses(child);
+      }
     }
     return node;
   }
@@ -246,7 +279,7 @@ class TreeBuilder {
    * @param {number} depth How many levels of children to keep.
    * @returns {TreeNode}
    */
-  static formatNode(node, depth = 1) {
+  formatNode(node, depth = 1) {
     const childDepth = depth - 1;
     // `null` represents that the children have not been loaded yet
     let children = null;
@@ -257,15 +290,16 @@ class TreeBuilder {
       // If there is 1 child, include it so the UI doesn't need to make a
       // roundtrip in order to expand the chain.
       children = node.children
-          .map(n => TreeBuilder.formatNode(n, childDepth))
-          .sort(_compareFunc);
+        .map(n => this.formatNode(n, childDepth))
+        .sort(_compareFunc);
     }
 
-    return TreeBuilder._joinDexMethodClasses({
-      ...node,
-      children,
-      parent: null,
-    });
+    return this._joinDexMethodClasses(
+      Object.assign({}, node, {
+        children,
+        parent: null,
+      })
+    );
   }
 
   /**
@@ -315,7 +349,7 @@ class TreeBuilder {
     }
 
     // attach node to the newly found parent
-    TreeBuilder._attachToParent(childNode, parentNode);
+    this._attachToParent(childNode, parentNode);
     return parentNode;
   }
 
@@ -339,17 +373,29 @@ class TreeBuilder {
       const size = symbol[_KEYS.SIZE];
       const type = symbol[_KEYS.TYPE];
       const count = symbol[_KEYS.COUNT] || 1;
+      const flags = symbol[_KEYS.FLAGS] || 0;
+
       const symbolNode = createNode({
         // Join file path to symbol name with a ":"
         idPath: `${idPath}:${symbol[_KEYS.SYMBOL_NAME]}`,
         shortNameIndex: idPath.length + 1,
         size,
-        type: symbol[_KEYS.TYPE],
-        childStats: {[type]: {size, count}},
+        type,
+        flags,
+        childStats: {
+          [type]: {
+            size,
+            count,
+            highlight: 0,
+          },
+        },
       });
 
+      if (this._highlightTest(symbolNode)) {
+        symbolNode.childStats[type].highlight = size;
+      }
       if (this._filterTest(symbolNode)) {
-        TreeBuilder._attachToParent(symbolNode, fileNode);
+        this._attachToParent(symbolNode, fileNode);
       }
     }
     // unless we filtered out every symbol belonging to this file,
@@ -546,8 +592,11 @@ class DataFetcher {
 function parseOptions(options) {
   const params = new URLSearchParams(options);
 
+  const url = params.get('data_url');
   const groupBy = params.get('group_by') || 'source_path';
   const methodCountMode = params.has('method_count');
+  const filterGeneratedFiles = params.has('generated_filter');
+  const flagToHighlight = _NAMES_TO_FLAGS[params.get('highlight')];
 
   let minSymbolSize = Number(params.get('min_size'));
   if (Number.isNaN(minSymbolSize)) {
@@ -569,26 +618,43 @@ function parseOptions(options) {
     }
   }
 
-  /** @type {Array<(symbolNode: TreeNode) => boolean>} */
+  /**
+   * @type {Array<(symbolNode: TreeNode) => boolean>} List of functions that
+   * check each symbol. If any returns false, the symbol will not be used.
+   */
   const filters = [];
 
-  /** Ensure symbol size is past the minimum */
+  // Ensure symbol size is past the minimum
   if (minSymbolSize > 0) {
     filters.push(s => Math.abs(s.size) >= minSymbolSize);
   }
 
-  /** Ensure the symbol size wasn't filtered out */
+  // Ensure the symbol size wasn't filtered out
   if (typeFilter.size < _SYMBOL_TYPE_SET.size) {
     filters.push(s => typeFilter.has(s.type));
   }
 
+  // Only show generated files
+  if (filterGeneratedFiles) {
+    filters.push(s => hasFlag(_FLAGS.GENERATED_SOURCE, s));
+  }
+
+  // Search symbol names using regex
   if (includeRegex) {
-    const regex = new RegExp(includeRegex);
-    filters.push(s => regex.test(s.idPath));
+    try {
+      const regex = new RegExp(includeRegex);
+      filters.push(s => regex.test(s.idPath));
+    } catch (err) {
+      if (err.name !== 'SyntaxError') throw err;
+    }
   }
   if (excludeRegex) {
-    const regex = new RegExp(excludeRegex);
-    filters.push(s => !regex.test(s.idPath));
+    try {
+      const regex = new RegExp(excludeRegex);
+      filters.push(s => !regex.test(s.idPath));
+    } catch (err) {
+      if (err.name !== 'SyntaxError') throw err;
+    }
   }
 
   /**
@@ -599,7 +665,15 @@ function parseOptions(options) {
     return filters.every(fn => fn(symbolNode));
   }
 
-  return {groupBy, filterTest};
+  /** @type {(symbolNode: TreeNode) => boolean} */
+  let highlightTest;
+  if (flagToHighlight) {
+    highlightTest = symbolNode => hasFlag(flagToHighlight, symbolNode);
+  } else {
+    highlightTest = () => false;
+  }
+
+  return {groupBy, filterTest, highlightTest, url};
 }
 
 /** @type {TreeBuilder | null} */
@@ -608,13 +682,15 @@ const fetcher = new DataFetcher('data.ndjson');
 
 /**
  * Assemble a tree when this worker receives a message.
- * @param {string} options Query string containing options for the builder.
+ * @param {string} groupBy Sets how the tree is grouped.
+ * @param {(symbolNode: TreeNode) => boolean} filterTest Filter function that
+ * each symbol is tested against
+ * @param {(symbolNode: TreeNode) => boolean} highlightTest Filter function that
+ * each symbol's flags are tested against
  * @param {(msg: TreeProgress) => void} onProgress
  * @returns {Promise<TreeProgress>}
  */
-async function buildTree(options, onProgress) {
-  const {groupBy, filterTest} = parseOptions(options);
-
+async function buildTree(groupBy, filterTest, highlightTest, onProgress) {
   /** @type {Meta | null} Object from the first line of the data file */
   let meta = null;
 
@@ -632,6 +708,7 @@ async function buildTree(options, onProgress) {
     sep: groupBy === 'component' ? '>' : _PATH_SEP,
     getPath: getPathMap[groupBy],
     filterTest,
+    highlightTest,
   });
 
   /**
@@ -651,7 +728,7 @@ async function buildTree(options, onProgress) {
     }
 
     const message = {
-      root: TreeBuilder.formatNode(data.root || builder.rootNode),
+      root: builder.formatNode(data.root || builder.rootNode),
       percent,
       diffMode: meta && meta.diff_mode,
     };
@@ -684,7 +761,7 @@ async function buildTree(options, onProgress) {
         const currentTime = Date.now();
         if (currentTime - lastBatchSent > 500) {
           postToUi();
-          await Promise.resolve();  // Pause loop to check for worker messages
+          await Promise.resolve(); // Pause loop to check for worker messages
           lastBatchSent = currentTime;
         }
       }
@@ -705,10 +782,28 @@ async function buildTree(options, onProgress) {
 }
 
 const actions = {
-  /** @param {{input:string,options:string}} data */
-  load(data) {
-    if (data.input) fetcher.setInput(data.input);
-    return buildTree(data.options, progress => {
+  /** @param {{input:string|null,options:string}} param0 */
+  load({input, options}) {
+    const {groupBy, filterTest, highlightTest, url} = parseOptions(options);
+    if (input === 'from-url://') {
+      if (url) {
+        // Display the data from the `data_url` query parameter
+        console.info('Displaying data from', url);
+        fetcher.setInput(url);
+      } else {
+        // Display starter content if nothing was specified.
+        console.info('Displaying demo data');
+        // The demo file only exists in the GCS bucket where the UI is hosted.
+        // When using `start_server`, no data is shown until the user uploads
+        // something.
+        fetcher.setInput(_DEMO_DATA_URL);
+      }
+    } else if (input != null) {
+      console.info('Displaying uploaded data');
+      fetcher.setInput(input);
+    }
+
+    return buildTree(groupBy, filterTest, highlightTest, progress => {
       // @ts-ignore
       self.postMessage(progress);
     });
@@ -717,7 +812,7 @@ const actions = {
   async open(path) {
     if (!builder) throw new Error('Called open before load');
     const node = builder.find(path);
-    return TreeBuilder.formatNode(node);
+    return builder.formatNode(node);
   },
 };
 

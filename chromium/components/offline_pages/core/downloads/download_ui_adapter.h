@@ -21,10 +21,12 @@
 #include "url/gurl.h"
 
 using ContentId = offline_items_collection::ContentId;
-using OfflineItem = offline_items_collection::OfflineItem;
+using LaunchLocation = offline_items_collection::LaunchLocation;
 using OfflineContentProvider = offline_items_collection::OfflineContentProvider;
 using OfflineContentAggregator =
     offline_items_collection::OfflineContentAggregator;
+using OfflineItem = offline_items_collection::OfflineItem;
+using OfflineItemShareInfo = offline_items_collection::OfflineItemShareInfo;
 
 namespace offline_pages {
 class ThumbnailDecoder;
@@ -57,12 +59,18 @@ class DownloadUIAdapter : public OfflineContentProvider,
     virtual void SetUIAdapter(DownloadUIAdapter* ui_adapter) = 0;
 
     // Opens an offline item.
-    virtual void OpenItem(const OfflineItem& item, int64_t offline_id) = 0;
+    virtual void OpenItem(const OfflineItem& item,
+                          int64_t offline_id,
+                          LaunchLocation launch_location) = 0;
 
     // Suppresses the download complete notification
     // depending on flags and origin.
     virtual bool MaybeSuppressNotification(const std::string& origin,
                                            const ClientId& id) = 0;
+
+    // Share item to other apps.
+    virtual void GetShareInfoForItem(const ContentId& id,
+                                     ShareCallback share_callback) = 0;
   };
 
   // Create the adapter. thumbnail_decoder may be null, in which case,
@@ -80,7 +88,7 @@ class DownloadUIAdapter : public OfflineContentProvider,
       OfflinePageModel* model);
 
   // OfflineContentProvider implementation.
-  void OpenItem(const ContentId& id) override;
+  void OpenItem(LaunchLocation location, const ContentId& id) override;
   void RemoveItem(const ContentId& id) override;
   void CancelDownload(const ContentId& id) override;
   void PauseDownload(const ContentId& id) override;
@@ -91,7 +99,9 @@ class DownloadUIAdapter : public OfflineContentProvider,
   void GetAllItems(
       OfflineContentProvider::MultipleItemCallback callback) override;
   void GetVisualsForItem(const ContentId& id,
-                         const VisualsCallback& callback) override;
+                         VisualsCallback callback) override;
+  void GetShareInfoForItem(const ContentId& id,
+                           ShareCallback share_callback) override;
   void AddObserver(OfflineContentProvider::Observer* observer) override;
   void RemoveObserver(OfflineContentProvider::Observer* observer) override;
 
@@ -139,7 +149,7 @@ class DownloadUIAdapter : public OfflineContentProvider,
       std::unique_ptr<OfflineContentProvider::OfflineItemList> offline_items,
       std::vector<std::unique_ptr<SavePageRequest>> requests);
   void OnPageGetForVisuals(const ContentId& id,
-                           const VisualsCallback& visuals_callback,
+                           VisualsCallback visuals_callback,
                            const OfflinePageItem* page);
   void OnPageGetForGetItem(const ContentId& id,
                            OfflineContentProvider::SingleItemCallback callback,
@@ -149,7 +159,8 @@ class DownloadUIAdapter : public OfflineContentProvider,
       OfflineContentProvider::SingleItemCallback callback,
       std::vector<std::unique_ptr<SavePageRequest>> requests);
 
-  void OnPageGetForOpenItem(const OfflinePageItem* page);
+  void OnPageGetForOpenItem(LaunchLocation location,
+                            const OfflinePageItem* page);
   void OnPageGetForThumbnailAdded(const OfflinePageItem* page);
 
   void OnDeletePagesDone(DeletePageResult result);
@@ -172,7 +183,7 @@ class DownloadUIAdapter : public OfflineContentProvider,
   std::unique_ptr<Delegate> delegate_;
 
   // The observers.
-  base::ObserverList<OfflineContentProvider::Observer> observers_;
+  base::ObserverList<OfflineContentProvider::Observer>::Unchecked observers_;
 
   base::WeakPtrFactory<DownloadUIAdapter> weak_ptr_factory_;
 

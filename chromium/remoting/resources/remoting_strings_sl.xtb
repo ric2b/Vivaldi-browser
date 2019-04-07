@@ -100,11 +100,11 @@ Za več informacij o zasebnosti si oglejte Googlov pravilnik o zasebnosti (http:
 <translation id="3171922709365450819">Te naprave ne podpira odjemalec, ker zahteva preverjanje pristnosti tretje osebe.</translation>
 <translation id="3194245623920924351">Oddaljeno namizje za Chrome</translation>
 <translation id="3197730452537982411">Oddaljeno namizje</translation>
+<translation id="3212472844831225214">• Dodana podpora za Android 9.0 Pie.</translation>
 <translation id="324272851072175193">Pošlji ta navodila po e-pošti</translation>
 <translation id="3258789396564295715">Oddaljeno namizje za Chrome omogoča varen dostop do tega računalnika.</translation>
 <translation id="3286521253923406898">Krmilnik gostitelja za Oddaljeno povezovanje s Chromom</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> želi narediti spremembe.</translation>
-<translation id="331779822864701136">• Dodana podpora za Android 8.0 Oreo.</translation>
 <translation id="332624996707057614">Urejanje imena računalnika</translation>
 <translation id="3339299787263251426">Varen dostop do računalnika prek interneta</translation>
 <translation id="3360306038446926262">Windows</translation>
@@ -120,8 +120,9 @@ Za več informacij o zasebnosti si oglejte Googlov pravilnik o zasebnosti (http:
 <translation id="369442766917958684">Brez povezave.</translation>
 <translation id="3695446226812920698">Oglejte si navodila</translation>
 <translation id="3718805989288361841">Napaka z nastavitvami pravilnika za Oddaljeno namizje Chrome. Če želite pomoč, se obrnite na sistemskega skrbnika.</translation>
-<translation id="3759645055923345178">Po končani nastavitvi boste lahko dostopali do računalnika na tej strani tako, da boste vnesli PIN ali kodo za dostop</translation>
 <translation id="3776024066357219166">Seja Oddaljenega namizja za Chrome je končana.</translation>
+<translation id="3846148461359626420">• Boljša izkušnja premikanja in povečave/pomanjšave v iPhonu X.
+• Izboljšave stabilnosti delovanja in popravki napak.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Če želite dovoliti dostop prek Oddaljenega namizja za Chrome, spodaj potrdite račun in PIN.</translation>
 <translation id="3897092660631435901">Meni</translation>
@@ -135,6 +136,7 @@ Za več informacij o zasebnosti si oglejte Googlov pravilnik o zasebnosti (http:
 <translation id="405887016757208221">Oddaljeni računalnik ni inicializiral seje. Če se težava ponovi, poskusite znova konfigurirati gostitelja.</translation>
 <translation id="4068946408131579958">Vse povezave</translation>
 <translation id="409800995205263688">OPOMBA: Nastavitve na podlagi pravilnika dovoljujejo povezave samo med računalniki v vašem omrežju.</translation>
+<translation id="4126409073460786861">Po končani nastavitvi osvežite to stran in lahko boste dostopali do računalnika tako, da boste izbrali napravo in vnesli kodo PIN</translation>
 <translation id="4145029455188493639">Prijavljen kot <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Ni nekaterih zahtevanih delov. Preverite, ali imate najnovejšo različico programske opreme in poskusite znova.</translation>
 <translation id="4156740505453712750">Če želite zaščititi dostop do tega računalnika, izberite vsaj <ph name="BOLD_START" />šestmestni<ph name="BOLD_END" /> PIN. Ta bo zahtevan pri povezovanju z drugega mesta.</translation>
@@ -143,7 +145,6 @@ Za več informacij o zasebnosti si oglejte Googlov pravilnik o zasebnosti (http:
 <translation id="4207623512727273241">Zaženite namestitveni program, preden nadaljujete.</translation>
 <translation id="4227991223508142681">Orodje za pripravljanje gostitelja</translation>
 <translation id="4240294130679914010">Odstranitveni program gostitelja za Oddaljeno povezovanje s Chromom</translation>
-<translation id="4249741460382919890">Splošni popravki in izboljšave stabilnosti</translation>
 <translation id="4277463233460010382">Ta računalnik je nastavljen tako, da enemu ali več odjemalcem dovoli povezovanje brez vnosa kode PIN.</translation>
 <translation id="4277736576214464567">Koda za dostop je neveljavna. Poskusite znova.</translation>
 <translation id="4361728918881830843">Če želite omogočiti oddaljene povezave z drugim računalnikom, vanj namestite Oddaljeno namizje za Chrome in kliknite »<ph name="BUTTON_NAME" />«.</translation>
@@ -259,6 +260,7 @@ PC</translation>
 <translation id="6998989275928107238">Za</translation>
 <translation id="7019153418965365059">Neprepoznana napaka gostitelja: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Oddaljena pomoč</translation>
+<translation id="7026930240735156896">Upoštevajte navodila za nastavitev računalnika za oddaljeni dostop</translation>
 <translation id="7038683108611689168">Pomagajte nam izboljšati Oddaljeno povezovanje s Chromom, tako da nam dovolite zbiranje statističnih podatkov o uporabi in poročil o zrušitvah.</translation>
 <translation id="7067321367069083429">Zaslon deluje kot zaslon na dotik</translation>
 <translation id="7116737094673640201">Pozdravljeni v Oddaljenem namizju za Chrome</translation>
@@ -283,7 +285,6 @@ PC</translation>
 <translation id="7782471917492991422">Preverite nastavitve računalnika za upravljanje porabe in zagotovite, da za čas nedejavnosti ni določeno stanje pripravljenosti.</translation>
 <translation id="7810127880729796595">Prikaži statistične podatke (povezava: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Ni nekaterih zahtevanih delov. Preverite, ali imate najnovejšo različico Chroma in poskusite znova.</translation>
-<translation id="7850909060902317210">Namestite programsko opremo za Oddaljeno namizje za Chrome in upoštevajte navodila za dokončanje nastavitve</translation>
 <translation id="7868137160098754906">Vnesite PIN za oddaljeni računalnik.</translation>
 <translation id="7869445566579231750">Nimate dovoljenja za izvajanje te aplikacije.</translation>
 <translation id="7895403300744144251">Varnostni pravilniki na oddaljenem računalniku ne dovoljujejo povezav iz vašega računa.</translation>

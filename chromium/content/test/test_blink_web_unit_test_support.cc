@@ -50,7 +50,6 @@
 #include "gin/v8_initializer.h"  // nogncheck
 #endif
 
-#include "content/renderer/media/webrtc/rtc_certificate.h"
 #include "third_party/webrtc/rtc_base/rtccertificate.h"  // nogncheck
 
 using blink::WebString;
@@ -145,7 +144,6 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport()
   gin::V8Initializer::LoadV8Natives();
 #endif
 
-
   scoped_refptr<base::SingleThreadTaskRunner> dummy_task_runner;
   std::unique_ptr<base::ThreadTaskRunnerHandle> dummy_task_runner_handle;
   if (!base::ThreadTaskRunnerHandle::IsSet()) {
@@ -180,7 +178,7 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport()
                           weak_factory_.GetWeakPtr()));
 
   service_manager::BinderRegistry empty_registry;
-  blink::Initialize(this, &empty_registry);
+  blink::Initialize(this, &empty_registry, CurrentThread());
   g_test_platform = this;
   blink::SetLayoutTestMode(true);
   blink::WebRuntimeFeatures::EnableDatabase(true);
@@ -218,7 +216,8 @@ blink::WebBlobRegistry* TestBlinkWebUnitTestSupport::GetBlobRegistry() {
   return &blob_registry_;
 }
 
-blink::WebIDBFactory* TestBlinkWebUnitTestSupport::IdbFactory() {
+std::unique_ptr<blink::WebIDBFactory>
+TestBlinkWebUnitTestSupport::CreateIdbFactory() {
   NOTREACHED() <<
       "IndexedDB cannot be tested with in-process harnesses.";
   return nullptr;
@@ -244,6 +243,8 @@ blink::WebString TestBlinkWebUnitTestSupport::QueryLocalizedString(
     blink::WebLocalizedString::Name name) {
   // Returns placeholder strings to check if they are correctly localized.
   switch (name) {
+    case blink::WebLocalizedString::kFileButtonNoFileSelectedLabel:
+      return WebString::FromASCII("<<NoFileChosenLabel>>");
     case blink::WebLocalizedString::kOtherDateLabel:
       return WebString::FromASCII("<<OtherDateLabel>>");
     case blink::WebLocalizedString::kOtherMonthLabel:
@@ -331,15 +332,13 @@ class TestWebRTCCertificateGenerator
   bool IsSupportedKeyParams(const blink::WebRTCKeyParams& key_params) override {
     return false;
   }
-  std::unique_ptr<blink::WebRTCCertificate> FromPEM(
+  rtc::scoped_refptr<rtc::RTCCertificate> FromPEM(
       blink::WebString pem_private_key,
       blink::WebString pem_certificate) override {
     rtc::scoped_refptr<rtc::RTCCertificate> certificate =
         rtc::RTCCertificate::FromPEM(rtc::RTCCertificatePEM(
             pem_private_key.Utf8(), pem_certificate.Utf8()));
-    if (!certificate)
-      return nullptr;
-    return std::make_unique<RTCCertificate>(certificate);
+    return certificate;
   }
 };
 

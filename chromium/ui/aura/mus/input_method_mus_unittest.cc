@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "services/ui/public/interfaces/ime/ime.mojom.h"
+#include "services/ws/public/mojom/ime/ime.mojom.h"
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/test/mus/input_method_mus_test_api.h"
 #include "ui/base/ime/dummy_text_input_client.h"
@@ -32,11 +32,11 @@ class TestInputMethodDelegate : public ui::internal::InputMethodDelegate {
 
 using ProcessKeyEventCallback = base::OnceCallback<void(bool)>;
 using ProcessKeyEventCallbacks = std::vector<ProcessKeyEventCallback>;
-using EventResultCallback = base::OnceCallback<void(ui::mojom::EventResult)>;
+using EventResultCallback = base::OnceCallback<void(ws::mojom::EventResult)>;
 
 // InputMethod implementation that queues up the callbacks supplied to
 // ProcessKeyEvent().
-class TestInputMethod : public ui::mojom::InputMethod {
+class TestInputMethod : public ws::mojom::InputMethod {
  public:
   TestInputMethod() {}
   ~TestInputMethod() override {}
@@ -57,6 +57,9 @@ class TestInputMethod : public ui::mojom::InputMethod {
     process_key_event_callbacks_.push_back(std::move(callback));
   }
   void CancelComposition() override { was_cancel_composition_called_ = true; }
+  void ShowVirtualKeyboardIfEnabled() override {
+    was_show_virtual_keyboard_if_enabled_called_ = true;
+  }
 
   bool was_on_text_input_type_changed_called() {
     return was_on_text_input_type_changed_called_;
@@ -70,10 +73,15 @@ class TestInputMethod : public ui::mojom::InputMethod {
     return was_cancel_composition_called_;
   }
 
+  bool was_show_virtual_keyboard_if_enabled_called() {
+    return was_show_virtual_keyboard_if_enabled_called_;
+  }
+
  private:
   bool was_on_text_input_type_changed_called_ = false;
   bool was_on_caret_bounds_changed_called_ = false;
   bool was_cancel_composition_called_ = false;
+  bool was_show_virtual_keyboard_if_enabled_called_ = false;
   ProcessKeyEventCallbacks process_key_event_callbacks_;
 
   DISALLOW_COPY_AND_ASSIGN(TestInputMethod);
@@ -86,7 +94,7 @@ using InputMethodMusTest = test::AuraTestBaseMus;
 namespace {
 
 // Used in closure supplied to processing the event.
-void RunFunctionWithEventResult(bool* was_run, ui::mojom::EventResult result) {
+void RunFunctionWithEventResult(bool* was_run, ws::mojom::EventResult result) {
   *was_run = true;
 }
 
@@ -296,6 +304,17 @@ TEST_F(InputMethodMusTest, CancelCompositionFromUnfocusedClient) {
                                                &unfocused_input_client);
 
   EXPECT_FALSE(test_input_method.was_cancel_composition_called());
+}
+
+// Calling ShowVirtualKeyboardIfEnabled should notify the mus side.
+TEST_F(InputMethodMusTest, ShowVirtualKeyboardIfEnabled) {
+  TestInputMethodDelegate input_method_delegate;
+  InputMethodMus input_method_mus(&input_method_delegate, nullptr);
+  TestInputMethod test_input_method;
+  InputMethodMusTestApi::SetInputMethod(&input_method_mus, &test_input_method);
+  EXPECT_FALSE(test_input_method.was_show_virtual_keyboard_if_enabled_called());
+  input_method_mus.ShowVirtualKeyboardIfEnabled();
+  EXPECT_TRUE(test_input_method.was_show_virtual_keyboard_if_enabled_called());
 }
 
 }  // namespace aura

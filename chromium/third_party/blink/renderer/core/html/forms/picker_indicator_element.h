@@ -76,10 +76,10 @@ class PickerIndicatorElement final : public HTMLDivElement,
  private:
   PickerIndicatorElement(Document&, PickerIndicatorOwner&);
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
-  void DefaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event&) override;
   void DetachLayoutTree(const AttachContext& = AttachContext()) override;
   bool IsPickerIndicatorElement() const override;
-  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
+  InsertionNotificationRequest InsertedInto(ContainerNode&) override;
   void DidNotifySubtreeInsertionsToDocument() override;
 
   HTMLInputElement* HostInput();

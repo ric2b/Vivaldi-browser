@@ -4,6 +4,8 @@
 
 #include "ash/wm/tablet_mode/tablet_mode_window_drag_delegate.h"
 
+#include "ash/root_window_controller.h"
+#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
 #include "ash/wm/overview/window_grid.h"
 #include "ash/wm/overview/window_selector.h"
@@ -12,6 +14,10 @@
 #include "ash/wm/root_window_finder.h"
 #include "ash/wm/splitview/split_view_constants.h"
 #include "ash/wm/splitview/split_view_drag_indicators.h"
+#include "ash/wm/window_transient_descendant_iterator.h"
+#include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/gfx/transform_util.h"
+#include "ui/wm/core/coordinate_conversion.h"
 
 namespace ash {
 
@@ -26,6 +32,11 @@ constexpr float kIndicatorsThresholdRatio = 0.1;
 // and maximize the dragged window after the drag ends.
 constexpr float kMaximizeThresholdRatio = 0.4;
 
+// The duration of the animation that occurs on restoring the dragged window
+// back to its original state.
+constexpr base::TimeDelta kRestoreDraggedWindowAnimationDurationMs =
+    base::TimeDelta::FromMilliseconds(250);
+
 // Returns the window selector if overview mode is active, otherwise returns
 // nullptr.
 WindowSelector* GetWindowSelector() {
@@ -34,12 +45,64 @@ WindowSelector* GetWindowSelector() {
              : nullptr;
 }
 
+// Returns the new selector item in overview during drag.
+WindowSelectorItem* GetNewSelectorItem(aura::Window* dragged_window) {
+  if (!GetWindowSelector())
+    return nullptr;
+
+  WindowGrid* window_grid = GetWindowSelector()->GetGridWithRootWindow(
+      dragged_window->GetRootWindow());
+  if (!window_grid || window_grid->empty())
+    return nullptr;
+
+  return window_grid->GetNewSelectorItem();
+}
+
+// Gets the bounds of selected new selector item in overview grid that is
+// displaying in the same root window as |dragged_window|. Note that the
+// returned bounds is scaled-up.
+gfx::Rect GetBoundsOfSelectedNewSelectorItem(aura::Window* dragged_window) {
+  WindowSelectorItem* new_selector_item = GetNewSelectorItem(dragged_window);
+  if (!new_selector_item)
+    return gfx::Rect();
+
+  return new_selector_item->GetBoundsOfSelectedItem();
+}
+
+// Set |transform| to |window| and its transient child windows, animate the
+// process if |animate| is true. |transform| is the transform that applies to
+// |window| and needes to be adjusted for the transient child windows.
+void SetTransform(aura::Window* window,
+                  const gfx::Transform& transform,
+                  bool animate) {
+  gfx::Point target_origin(window->GetTargetBounds().origin());
+  for (auto* window_iter : wm::GetTransientTreeIterator(window)) {
+    aura::Window* parent_window = window_iter->parent();
+    gfx::Rect original_bounds(window_iter->GetTargetBounds());
+    ::wm::ConvertRectToScreen(parent_window, &original_bounds);
+    gfx::Transform new_transform =
+        TransformAboutPivot(gfx::Point(target_origin.x() - original_bounds.x(),
+                                       target_origin.y() - original_bounds.y()),
+                            transform);
+
+    if (animate && window_iter->layer()) {
+      ui::ScopedLayerAnimationSettings settings(
+          window_iter->layer()->GetAnimator());
+      settings.SetTransitionDuration(kRestoreDraggedWindowAnimationDurationMs);
+      settings.SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN);
+      window_iter->SetTransform(new_transform);
+    } else {
+      window_iter->SetTransform(new_transform);
+    }
+  }
+}
+
 }  // namespace
 
 TabletModeWindowDragDelegate::TabletModeWindowDragDelegate()
     : split_view_controller_(Shell::Get()->split_view_controller()),
-      split_view_drag_indicators_(std::make_unique<SplitViewDragIndicators>()) {
-}
+      split_view_drag_indicators_(std::make_unique<SplitViewDragIndicators>()),
+      weak_ptr_factory_(this) {}
 
 TabletModeWindowDragDelegate::~TabletModeWindowDragDelegate() = default;
 
@@ -47,28 +110,81 @@ void TabletModeWindowDragDelegate::StartWindowDrag(
     aura::Window* dragged_window,
     const gfx::Point& location_in_screen) {
   dragged_window_ = dragged_window;
+  initial_location_in_screen_ = location_in_screen;
 
   PrepareForDraggedWindow(location_in_screen);
+
+  // Update the shelf's visibility.
+  RootWindowController::ForWindow(dragged_window_)
+      ->GetShelfLayoutManager()
+      ->UpdateVisibilityState();
 
   // Disable the backdrop on the dragged window.
   original_backdrop_mode_ = dragged_window_->GetProperty(kBackdropWindowMode);
   dragged_window_->SetProperty(kBackdropWindowMode,
                                BackdropWindowMode::kDisabled);
+
+  WindowSelectorController* controller =
+      Shell::Get()->window_selector_controller();
+  bool was_overview_open = controller->IsSelecting();
+
+  // If the dragged window is one of the snapped windows, SplitViewController
+  // might open overview in the dragged window side of the screen.
   split_view_controller_->OnWindowDragStarted(dragged_window_);
 
-  if (ShouldOpenOverviewWhenDragStarts()) {
-    WindowSelectorController* controller =
-        Shell::Get()->window_selector_controller();
-    if (!controller->IsSelecting())
-      controller->ToggleOverview();
+  if (ShouldOpenOverviewWhenDragStarts() && !controller->IsSelecting())
+    controller->ToggleOverview();
+
+  if (controller->IsSelecting()) {
+    // Only do animation if overview was open before the drag started. If the
+    // overview is opened because of the window drag, do not do animation.
+    GetWindowSelector()->OnWindowDragStarted(dragged_window_,
+                                             /*animate=*/was_overview_open);
   }
 
-  if (GetWindowSelector())
-    GetWindowSelector()->OnWindowDragStarted(dragged_window_);
+  bounds_of_selected_new_selector_item_ =
+      GetBoundsOfSelectedNewSelectorItem(dragged_window_);
+
+  // Update the dragged window's shadow. It should have the active window
+  // shadow during dragging.
+  original_shadow_elevation_ =
+      ::wm::GetShadowElevationConvertDefault(dragged_window_);
+  ::wm::SetShadowElevation(dragged_window_, ::wm::kShadowElevationActiveWindow);
 }
 
 void TabletModeWindowDragDelegate::ContinueWindowDrag(
-    const gfx::Point& location_in_screen) {
+    const gfx::Point& location_in_screen,
+    UpdateDraggedWindowType type,
+    const gfx::Rect& target_bounds) {
+  if (!did_move_) {
+    const gfx::Rect work_area_bounds =
+        display::Screen::GetScreen()
+            ->GetDisplayNearestWindow(dragged_window_)
+            .work_area();
+    if (location_in_screen.y() >=
+        GetIndicatorsVerticalThreshold(work_area_bounds)) {
+      did_move_ = true;
+    }
+  }
+
+  if (type == UpdateDraggedWindowType::UPDATE_BOUNDS) {
+    // UPDATE_BOUNDS is used when dragging tab(s) out of a browser window.
+    // Changing bounds might delete ourselves as the dragged (browser) window
+    // tab(s) might merge into another browser window.
+    base::WeakPtr<TabletModeWindowDragDelegate> delegate(
+        weak_ptr_factory_.GetWeakPtr());
+    if (target_bounds != dragged_window_->bounds()) {
+      dragged_window_->SetBounds(target_bounds);
+      if (!delegate)
+        return;
+    }
+  } else {  // type == UpdateDraggedWindowType::UPDATE_TRANSFORM
+    // UPDATE_TRANSFORM is used when dragging an entire window around, either
+    // it's a browser window or an app window.
+    UpdateDraggedWindowTransform(location_in_screen);
+  }
+
+  // For child classes to do their special handling if any.
   UpdateForDraggedWindow(location_in_screen);
 
   // Update drag indicators and preview window if necessary.
@@ -80,6 +196,24 @@ void TabletModeWindowDragDelegate::ContinueWindowDrag(
     GetWindowSelector()->OnWindowDragContinued(
         dragged_window_, location_in_screen, indicator_state);
   }
+}
+
+bool TabletModeWindowDragDelegate::ShouldDropWindowIntoOverviewOnDragPosition(
+    SplitViewController::SnapPosition snap_position,
+    int end_y_position_in_screen) const {
+  // |snap_position| is not NONE, which means the preview area is shown or
+  // splitview is active.
+  if (snap_position != SplitViewController::NONE)
+    return false;
+
+  WindowSelectorItem* new_selector_item = GetNewSelectorItem(dragged_window_);
+  if (!new_selector_item)
+    return false;
+
+  const gfx::Rect new_selector_item_bounds =
+      new_selector_item->GetTransformedBounds();
+  return end_y_position_in_screen >
+         kDragPositionToOverviewRatio * new_selector_item_bounds.y();
 }
 
 void TabletModeWindowDragDelegate::EndWindowDrag(
@@ -96,13 +230,79 @@ void TabletModeWindowDragDelegate::EndWindowDrag(
 
   // The window might merge into an overview window or become a new window item
   // in overview mode.
-  if (GetWindowSelector())
-    GetWindowSelector()->OnWindowDragEnded(dragged_window_, location_in_screen);
+  if (GetWindowSelector()) {
+    GetWindowSelector()->OnWindowDragEnded(
+        dragged_window_, location_in_screen,
+        ShouldDropWindowIntoOverviewOnDragPosition(snap_position,
+                                                   location_in_screen.y()));
+  }
   split_view_controller_->OnWindowDragEnded(dragged_window_, snap_position,
                                             location_in_screen);
   split_view_drag_indicators_->SetIndicatorState(IndicatorState::kNone,
                                                  location_in_screen);
+
+  const bool snapped_or_into_overview =
+      snap_position != SplitViewController::NONE ||
+      (GetWindowSelector() &&
+       GetWindowSelector()->IsWindowInOverview(dragged_window_));
+  // If |dragged_window_|'s transform has changed during dragging, and it was
+  // not snapped into splitscreen or dropped into overview. Then restore its
+  // transform to identity.
+  if (!dragged_window_->layer()->GetTargetTransform().IsIdentity() &&
+      !snapped_or_into_overview) {
+    SetTransform(dragged_window_, gfx::Transform(), /*animate=*/true);
+  }
+
+  // Reset the dragged window's window shadow elevation.
+  ::wm::SetShadowElevation(dragged_window_, original_shadow_elevation_);
+
   dragged_window_ = nullptr;
+  did_move_ = false;
+}
+
+IndicatorState TabletModeWindowDragDelegate::GetIndicatorState(
+    const gfx::Point& location_in_screen) const {
+  SplitViewController::SnapPosition snap_position =
+      GetSnapPosition(location_in_screen);
+  const bool can_snap = split_view_controller_->CanSnap(dragged_window_);
+  if (snap_position != SplitViewController::NONE &&
+      !split_view_controller_->IsSplitViewModeActive() && can_snap) {
+    return snap_position == SplitViewController::LEFT
+               ? IndicatorState::kPreviewAreaLeft
+               : IndicatorState::kPreviewAreaRight;
+  }
+
+  // Do not show the drag indicators if split view mode is active.
+  if (split_view_controller_->IsSplitViewModeActive())
+    return IndicatorState::kNone;
+
+  // If the event location hasn't passed the indicator vertical threshold, do
+  // not show the drag indicators.
+  const gfx::Rect work_area_bounds =
+      display::Screen::GetScreen()
+          ->GetDisplayNearestWindow(dragged_window_)
+          .work_area();
+  if (!did_move_ && location_in_screen.y() <
+                        GetIndicatorsVerticalThreshold(work_area_bounds)) {
+    return IndicatorState::kNone;
+  }
+
+  // If the event location has passed the maximize vertical threshold, and the
+  // event location is not in snap indicator area, and overview mode is not
+  // active at the moment, do not show the drag indicators.
+  if (location_in_screen.y() >=
+          GetMaximizeVerticalThreshold(work_area_bounds) &&
+      snap_position == SplitViewController::NONE &&
+      !Shell::Get()->window_selector_controller()->IsSelecting()) {
+    return IndicatorState::kNone;
+  }
+
+  // No top drag indicator if in portrait screen orientation.
+  if (split_view_controller_->IsCurrentScreenOrientationLandscape())
+    return can_snap ? IndicatorState::kDragArea : IndicatorState::kCannotSnap;
+
+  return can_snap ? IndicatorState::kDragAreaRight
+                  : IndicatorState::kCannotSnapRight;
 }
 
 bool TabletModeWindowDragDelegate::ShouldOpenOverviewWhenDragStarts() {
@@ -130,8 +330,10 @@ SplitViewController::SnapPosition TabletModeWindowDragDelegate::GetSnapPosition(
 
   // The user has to drag pass the indicator vertical threshold to snap the
   // window.
-  if (location_in_screen.y() < GetIndicatorsVerticalThreshold(work_area_bounds))
+  if (!did_move_ && location_in_screen.y() <
+                        GetIndicatorsVerticalThreshold(work_area_bounds)) {
     return SplitViewController::NONE;
+  }
 
   const bool is_landscape =
       split_view_controller_->IsCurrentScreenOrientationLandscape();
@@ -184,41 +386,33 @@ SplitViewController::SnapPosition TabletModeWindowDragDelegate::GetSnapPosition(
   return SplitViewController::NONE;
 }
 
-IndicatorState TabletModeWindowDragDelegate::GetIndicatorState(
-    const gfx::Point& location_in_screen) const {
-  SplitViewController::SnapPosition snap_position =
-      GetSnapPosition(location_in_screen);
-  const bool can_snap = split_view_controller_->CanSnap(dragged_window_);
-  if (snap_position != SplitViewController::NONE &&
-      !split_view_controller_->IsSplitViewModeActive() && can_snap) {
-    return snap_position == SplitViewController::LEFT
-               ? IndicatorState::kPreviewAreaLeft
-               : IndicatorState::kPreviewAreaRight;
-  }
+void TabletModeWindowDragDelegate::UpdateDraggedWindowTransform(
+    const gfx::Point& location_in_screen) {
+  DCHECK(Shell::Get()->window_selector_controller()->IsSelecting());
 
-  // Do not show the drag indicators if split view mode is active.
-  if (split_view_controller_->IsSplitViewModeActive())
-    return IndicatorState::kNone;
+  // Calculate the desired scale along the y-axis. The scale of the window
+  // during drag is based on the distance from |y_location_in_screen| to the y
+  // position of |bounds_of_selected_new_selector_item_|. The dragged window
+  // will become smaller when it becomes nearer to the new selector item. And
+  // then keep the minimum scale if it has been dragged further than the new
+  // selector item.
+  float scale =
+      static_cast<float>(bounds_of_selected_new_selector_item_.height()) /
+      static_cast<float>(dragged_window_->bounds().height());
+  int y_full = bounds_of_selected_new_selector_item_.y();
+  int y_diff = y_full - location_in_screen.y();
+  if (y_diff >= 0)
+    scale = (1.0f - scale) * y_diff / y_full + scale;
 
-  // If the event location hasn't passed the indicator vertical threshold, do
-  // not show the drag indicators.
-  gfx::Rect work_area_bounds = display::Screen::GetScreen()
-                                   ->GetDisplayNearestWindow(dragged_window_)
-                                   .work_area();
-  if (location_in_screen.y() < GetIndicatorsVerticalThreshold(work_area_bounds))
-    return IndicatorState::kNone;
-
-  // If the event location has passed the maximize vertical threshold, and the
-  // event location is not in snap indicator area, and overview mode is not
-  // active at the moment, do not show the drag indicators.
-  if (location_in_screen.y() >=
-          GetMaximizeVerticalThreshold(work_area_bounds) &&
-      snap_position == SplitViewController::NONE &&
-      !Shell::Get()->window_selector_controller()->IsSelecting()) {
-    return IndicatorState::kNone;
-  }
-
-  return can_snap ? IndicatorState::kDragArea : IndicatorState::kCannotSnap;
+  gfx::Transform transform;
+  const gfx::Rect window_bounds = dragged_window_->bounds();
+  transform.Translate(
+      (location_in_screen.x() - window_bounds.x()) -
+          (initial_location_in_screen_.x() - window_bounds.x()) * scale,
+      (location_in_screen.y() - window_bounds.y()) -
+          (initial_location_in_screen_.y() - window_bounds.y()) * scale);
+  transform.Scale(scale, scale);
+  SetTransform(dragged_window_, transform, /*animate=*/false);
 }
 
 }  // namespace ash

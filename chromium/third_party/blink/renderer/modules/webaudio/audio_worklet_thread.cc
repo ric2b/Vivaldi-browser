@@ -23,32 +23,29 @@ namespace blink {
 
 template class WorkletThreadHolder<AudioWorkletThread>;
 
-WebThread* AudioWorkletThread::s_backing_thread_ = nullptr;
-
 unsigned AudioWorkletThread::s_ref_count_ = 0;
 
 std::unique_ptr<AudioWorkletThread> AudioWorkletThread::Create(
-    ThreadableLoadingContext* loading_context,
     WorkerReportingProxy& worker_reporting_proxy) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("audio-worklet"),
                "AudioWorkletThread::create");
-  return base::WrapUnique(
-      new AudioWorkletThread(loading_context, worker_reporting_proxy));
+  return base::WrapUnique(new AudioWorkletThread(worker_reporting_proxy));
 }
 
 AudioWorkletThread::AudioWorkletThread(
-    ThreadableLoadingContext* loading_context,
     WorkerReportingProxy& worker_reporting_proxy)
-    : WorkerThread(loading_context, worker_reporting_proxy) {
+    : WorkerThread(worker_reporting_proxy) {
   DCHECK(IsMainThread());
-  if (++s_ref_count_ == 1)
+  if (++s_ref_count_ == 1) {
     EnsureSharedBackingThread();
+  }
 }
 
 AudioWorkletThread::~AudioWorkletThread() {
   DCHECK(IsMainThread());
-  if (--s_ref_count_ == 0)
+  if (--s_ref_count_ == 0) {
     ClearSharedBackingThread();
+  }
 }
 
 WorkerBackingThread& AudioWorkletThread::GetWorkerBackingThread() {
@@ -75,18 +72,14 @@ void AudioWorkletThread::CollectAllGarbage() {
 
 void AudioWorkletThread::EnsureSharedBackingThread() {
   DCHECK(IsMainThread());
-  if (!s_backing_thread_)
-    s_backing_thread_ = Platform::Current()->CreateWebAudioThread().release();
-  WorkletThreadHolder<AudioWorkletThread>::EnsureInstance(s_backing_thread_);
+  WorkletThreadHolder<AudioWorkletThread>::EnsureInstance(
+      WebThreadCreationParams(blink::WebThreadType::kWebAudioThread));
 }
 
 void AudioWorkletThread::ClearSharedBackingThread() {
   DCHECK(IsMainThread());
-  DCHECK(s_backing_thread_);
   DCHECK_EQ(s_ref_count_, 0u);
   WorkletThreadHolder<AudioWorkletThread>::ClearInstance();
-  delete s_backing_thread_;
-  s_backing_thread_ = nullptr;
 }
 
 WebThread* AudioWorkletThread::GetSharedBackingThread() {
@@ -97,9 +90,8 @@ WebThread* AudioWorkletThread::GetSharedBackingThread() {
 }
 
 void AudioWorkletThread::CreateSharedBackingThreadForTest() {
-  if (!s_backing_thread_)
-    s_backing_thread_ = Platform::Current()->CreateWebAudioThread().release();
-  WorkletThreadHolder<AudioWorkletThread>::CreateForTest(s_backing_thread_);
+  WorkletThreadHolder<AudioWorkletThread>::CreateForTest(
+      WebThreadCreationParams(blink::WebThreadType::kWebAudioThread));
 }
 
 WorkerOrWorkletGlobalScope* AudioWorkletThread::CreateWorkerGlobalScope(

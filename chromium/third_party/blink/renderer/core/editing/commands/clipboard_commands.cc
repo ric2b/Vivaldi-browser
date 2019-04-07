@@ -32,8 +32,10 @@
 #include "third_party/blink/renderer/core/editing/commands/clipboard_commands.h"
 
 #include "third_party/blink/renderer/core/clipboard/data_transfer_access_policy.h"
+#include "third_party/blink/renderer/core/clipboard/paste_mode.h"
 #include "third_party/blink/renderer/core/clipboard/system_clipboard.h"
 #include "third_party/blink/renderer/core/editing/commands/editing_commands_utilities.h"
+#include "third_party/blink/renderer/core/editing/editing_behavior.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
@@ -42,11 +44,12 @@
 #include "third_party/blink/renderer/core/events/clipboard_event.h"
 #include "third_party/blink/renderer/core/events/text_event.h"
 #include "third_party/blink/renderer/core/frame/content_settings_client.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
-#include "third_party/blink/renderer/platform/paste_mode.h"
 
 namespace blink {
 
@@ -114,7 +117,7 @@ bool ClipboardCommands::DispatchClipboardEvent(LocalFrame& frame,
                                : DataObject::CreateFromClipboard(paste_mode));
 
   Event* const evt = ClipboardEvent::Create(event_type, data_transfer);
-  target->DispatchEvent(evt);
+  target->DispatchEvent(*evt);
   const bool no_default_processing = evt->defaultPrevented();
   if (no_default_processing && policy == DataTransferAccessPolicy::kWritable) {
     SystemClipboard::GetInstance().WriteDataObject(
@@ -327,7 +330,7 @@ void ClipboardCommands::PasteAsFragment(LocalFrame& frame,
   Element* const target = FindEventTargetForClipboardEvent(frame, source);
   if (!target)
     return;
-  target->DispatchEvent(TextEvent::CreateForFragmentPaste(
+  target->DispatchEvent(*TextEvent::CreateForFragmentPaste(
       frame.DomWindow(), pasting_fragment, smart_replace, match_style));
 }
 
@@ -337,7 +340,7 @@ void ClipboardCommands::PasteAsPlainTextFromClipboard(
   Element* const target = FindEventTargetForClipboardEvent(frame, source);
   if (!target)
     return;
-  target->DispatchEvent(TextEvent::CreateForPlainTextPaste(
+  target->DispatchEvent(*TextEvent::CreateForPlainTextPaste(
       frame.DomWindow(), SystemClipboard::GetInstance().ReadPlainText(),
       CanSmartReplaceInClipboard(frame)));
 }

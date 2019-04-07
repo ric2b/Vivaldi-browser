@@ -65,58 +65,34 @@ void WebSecurityPolicy::RegisterURLSchemeAsFirstPartyWhenTopLevel(
   SchemeRegistry::RegisterURLSchemeAsFirstPartyWhenTopLevel(scheme);
 }
 
-void WebSecurityPolicy::AddOriginAccessWhitelistEntry(
+void WebSecurityPolicy::AddOriginAccessAllowListEntry(
     const WebURL& source_origin,
     const WebString& destination_protocol,
     const WebString& destination_host,
     bool allow_destination_subdomains) {
-  SecurityPolicy::AddOriginAccessWhitelistEntry(
+  SecurityPolicy::AddOriginAccessAllowListEntry(
       *SecurityOrigin::Create(source_origin), destination_protocol,
       destination_host, allow_destination_subdomains);
 }
 
-void WebSecurityPolicy::RemoveOriginAccessWhitelistEntry(
-    const WebURL& source_origin,
-    const WebString& destination_protocol,
-    const WebString& destination_host,
-    bool allow_destination_subdomains) {
-  SecurityPolicy::RemoveOriginAccessWhitelistEntry(
-      *SecurityOrigin::Create(source_origin), destination_protocol,
-      destination_host, allow_destination_subdomains);
-}
-
-void WebSecurityPolicy::RemoveAllOriginAccessWhitelistEntriesForOrigin(
+void WebSecurityPolicy::ClearOriginAccessAllowListForOrigin(
     const WebURL& source_origin) {
-  SecurityPolicy::RemoveAllOriginAccessWhitelistEntriesForOrigin(
+  SecurityPolicy::ClearOriginAccessAllowListForOrigin(
       *SecurityOrigin::Create(source_origin));
 }
 
-void WebSecurityPolicy::ResetOriginAccessWhitelists() {
-  SecurityPolicy::ResetOriginAccessWhitelists();
+void WebSecurityPolicy::ClearOriginAccessAllowList() {
+  SecurityPolicy::ClearOriginAccessAllowList();
 }
 
-void WebSecurityPolicy::AddOriginAccessBlacklistEntry(
+void WebSecurityPolicy::AddOriginAccessBlockListEntry(
     const WebURL& source_origin,
     const WebString& destination_protocol,
     const WebString& destination_host,
     bool allow_destination_subdomains) {
-  SecurityPolicy::AddOriginAccessBlacklistEntry(
+  SecurityPolicy::AddOriginAccessBlockListEntry(
       *SecurityOrigin::Create(source_origin), destination_protocol,
       destination_host, allow_destination_subdomains);
-}
-
-void WebSecurityPolicy::RemoveOriginAccessBlacklistEntry(
-    const WebURL& source_origin,
-    const WebString& destination_protocol,
-    const WebString& destination_host,
-    bool allow_destination_subdomains) {
-  SecurityPolicy::RemoveOriginAccessBlacklistEntry(
-      *SecurityOrigin::Create(source_origin), destination_protocol,
-      destination_host, allow_destination_subdomains);
-}
-
-void WebSecurityPolicy::ResetOriginAccessBlacklists() {
-  SecurityPolicy::ResetOriginAccessBlacklists();
 }
 
 void WebSecurityPolicy::AddOriginTrustworthyWhiteList(const WebString& origin) {

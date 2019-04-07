@@ -17,8 +17,8 @@
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source.h"
 #include "net/log/net_log_source_type.h"
-#include "net/quic/chromium/quic_http_utils.h"
-#include "net/quic/chromium/quic_proxy_client_socket.h"
+#include "net/quic/quic_http_utils.h"
+#include "net/quic/quic_proxy_client_socket.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/socket_tag.h"
@@ -303,6 +303,20 @@ int HttpProxyClientSocketWrapper::Read(IOBuffer* buf,
   if (transport_socket_)
     return transport_socket_->Read(buf, buf_len, std::move(callback));
   return ERR_SOCKET_NOT_CONNECTED;
+}
+
+int HttpProxyClientSocketWrapper::ReadIfReady(IOBuffer* buf,
+                                              int buf_len,
+                                              CompletionOnceCallback callback) {
+  if (transport_socket_)
+    return transport_socket_->ReadIfReady(buf, buf_len, std::move(callback));
+  return ERR_SOCKET_NOT_CONNECTED;
+}
+
+int HttpProxyClientSocketWrapper::CancelReadIfReady() {
+  if (transport_socket_)
+    return transport_socket_->CancelReadIfReady();
+  return OK;
 }
 
 int HttpProxyClientSocketWrapper::Write(

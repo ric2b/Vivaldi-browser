@@ -13,7 +13,6 @@ import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.TextView;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordHistogram;
@@ -56,7 +55,6 @@ class DownloadManagerCoordinatorImpl
     private boolean mMuteFilterChanges;
     private boolean mIsSeparateActivity;
     private int mSearchMenuId;
-    private TextView mEmptyView;
 
     private SelectionDelegate<ListItem> mSelectionDelegate;
 
@@ -89,7 +87,10 @@ class DownloadManagerCoordinatorImpl
                 (ViewGroup) LayoutInflater.from(mActivity).inflate(R.layout.download_main, null);
         mSelectableListLayout =
                 (SelectableListLayout<ListItem>) mMainView.findViewById(R.id.selectable_list);
-        mEmptyView = mSelectableListLayout.initializeEmptyView(
+
+        // TODO(shaktisahu): Maybe refactor SelectableListLayout to work without supplying empty
+        // view.
+        mSelectableListLayout.initializeEmptyView(
                 VectorDrawableCompat.create(
                         mActivity.getResources(), R.drawable.downloads_big, mActivity.getTheme()),
                 R.string.download_manager_ui_empty, R.string.download_manager_no_results);
@@ -170,15 +171,15 @@ class DownloadManagerCoordinatorImpl
         if ((item.getItemId() == R.id.close_menu_id
                     || item.getItemId() == R.id.with_settings_close_menu_id)
                 && mIsSeparateActivity) {
-            DownloadManagerUi.recordMenuActionHistogram(DownloadManagerUi.MENU_ACTION_CLOSE);
+            DownloadManagerUi.recordMenuActionHistogram(DownloadManagerUi.MenuAction.CLOSE);
             mActivity.finish();
             return true;
         } else if (item.getItemId() == R.id.selection_mode_delete_menu_id) {
-            DownloadManagerUi.recordMenuActionHistogram(DownloadManagerUi.MENU_ACTION_MULTI_DELETE);
+            DownloadManagerUi.recordMenuActionHistogram(DownloadManagerUi.MenuAction.MULTI_DELETE);
             RecordHistogram.recordCount100Histogram(
                     "Android.DownloadManager.Menu.Delete.SelectedCount",
                     mSelectionDelegate.getSelectedItems().size());
-            mListCoordinator.onDeletionRequested(mSelectionDelegate.getSelectedItems());
+            mListCoordinator.onDeletionRequested(mSelectionDelegate.getSelectedItemsAsList());
             mSelectionDelegate.clearSelection();
             return true;
         } else if (item.getItemId() == R.id.selection_mode_share_menu_id) {
@@ -186,7 +187,7 @@ class DownloadManagerCoordinatorImpl
             //                    startActivityForResult() and the selection would only be cleared
             //                    after receiving an OK response. See https://crbug.com/638916.
 
-            DownloadManagerUi.recordMenuActionHistogram(DownloadManagerUi.MENU_ACTION_MULTI_SHARE);
+            DownloadManagerUi.recordMenuActionHistogram(DownloadManagerUi.MenuAction.MULTI_SHARE);
             RecordHistogram.recordCount100Histogram(
                     "Android.DownloadManager.Menu.Share.SelectedCount",
                     mSelectionDelegate.getSelectedItems().size());
@@ -200,7 +201,7 @@ class DownloadManagerCoordinatorImpl
             // TODO(shaktisahu): Check with UX and remove header.
             mSelectableListLayout.onStartSearch();
             mToolbar.showSearchView();
-            DownloadManagerUi.recordMenuActionHistogram(DownloadManagerUi.MENU_ACTION_SEARCH);
+            DownloadManagerUi.recordMenuActionHistogram(DownloadManagerUi.MenuAction.SEARCH);
             RecordUserAction.record("Android.DownloadManager.Search");
             return true;
         } else if (item.getItemId() == R.id.settings_menu_id) {

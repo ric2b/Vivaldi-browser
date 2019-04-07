@@ -8,9 +8,9 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
@@ -54,7 +54,7 @@ FileDownloader::FileDownloader(
   } else {
     base::PostTaskAndReplyWithResult(
         base::CreateTaskRunnerWithTraits(
-            {base::MayBlock(), base::TaskPriority::BACKGROUND,
+            {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
              base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
             .get(),
         FROM_HERE, base::Bind(&base::PathExists, local_path_),
@@ -81,7 +81,7 @@ void FileDownloader::OnSimpleDownloadComplete(base::FilePath response_path) {
 
   base::PostTaskAndReplyWithResult(
       base::CreateTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
           .get(),
       FROM_HERE, base::Bind(&base::Move, response_path, local_path_),

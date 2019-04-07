@@ -18,9 +18,12 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/app_modal/javascript_dialog_manager.h"
 #include "components/navigation_metrics/navigation_metrics.h"
+#include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "ui/gfx/text_elider.h"
 
 #if defined(OS_ANDROID)
@@ -31,8 +34,6 @@
 #else
 #include "chrome/browser/ui/javascript_dialogs/javascript_dialog_views.h"
 #endif
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(JavaScriptDialogTabHelper);
 
 namespace {
 
@@ -144,7 +145,8 @@ base::WeakPtr<JavaScriptDialog> CreateNewDialog(
     content::JavaScriptDialogType dialog_type,
     const base::string16& message_text,
     const base::string16& default_prompt_text,
-    content::JavaScriptDialogManager::DialogClosedCallback dialog_callback) {
+    content::JavaScriptDialogManager::DialogClosedCallback dialog_callback,
+    base::OnceClosure dialog_closed_callback) {
 #if defined(OS_ANDROID)
   return JavaScriptDialogAndroid::Create(
       parent_web_contents, alerting_web_contents, title, dialog_type,
@@ -152,26 +154,12 @@ base::WeakPtr<JavaScriptDialog> CreateNewDialog(
 #else
   return JavaScriptDialogViews::Create(
       parent_web_contents, alerting_web_contents, title, dialog_type,
-      message_text, default_prompt_text, std::move(dialog_callback));
+      message_text, default_prompt_text, std::move(dialog_callback),
+      std::move(dialog_closed_callback));
 #endif
 }
 
 }  // namespace
-
-enum class JavaScriptDialogTabHelper::DismissalCause {
-  // This is used for a UMA histogram. Please never alter existing values, only
-  // append new ones.
-  TAB_HELPER_DESTROYED = 0,
-  SUBSEQUENT_DIALOG_SHOWN = 1,
-  HANDLE_DIALOG_CALLED = 2,
-  CANCEL_DIALOGS_CALLED = 3,
-  TAB_HIDDEN = 4,
-  BROWSER_SWITCHED = 5,
-  DIALOG_BUTTON_CLICKED = 6,
-  TAB_NAVIGATED = 7,
-  TAB_SWITCHED_OUT = 8,
-  COUNT,
-};
 
 JavaScriptDialogTabHelper::JavaScriptDialogTabHelper(
     content::WebContents* web_contents)
@@ -182,7 +170,7 @@ JavaScriptDialogTabHelper::~JavaScriptDialogTabHelper() {
 #if !defined(OS_ANDROID)
   DCHECK(!tab_strip_model_being_observed_);
 #endif
-  CloseDialog(DismissalCause::TAB_HELPER_DESTROYED, false, base::string16());
+  CloseDialog(DismissalCause::kTabHelperDestroyed, false, base::string16());
 }
 
 void JavaScriptDialogTabHelper::SetDialogShownCallbackForTesting(
@@ -192,6 +180,13 @@ void JavaScriptDialogTabHelper::SetDialogShownCallbackForTesting(
 
 bool JavaScriptDialogTabHelper::IsShowingDialogForTesting() const {
   return !!dialog_;
+}
+
+void JavaScriptDialogTabHelper::ClickDialogButtonForTesting(
+    bool accept,
+    const base::string16& user_input) {
+  DCHECK(!!dialog_);
+  CloseDialog(DismissalCause::kDialogButtonClicked, accept, user_input);
 }
 
 void JavaScriptDialogTabHelper::RunJavaScriptDialog(
@@ -242,7 +237,7 @@ void JavaScriptDialogTabHelper::RunJavaScriptDialog(
   }
 
   // Close any dialog already showing.
-  CloseDialog(DismissalCause::SUBSEQUENT_DIALOG_SHOWN, false, base::string16());
+  CloseDialog(DismissalCause::kSubsequentDialogShown, false, base::string16());
 
   bool make_pending = false;
   if (!IsWebContentsForemost(parent_web_contents) &&
@@ -310,7 +305,10 @@ void JavaScriptDialogTabHelper::RunJavaScriptDialog(
         dialog_type, truncated_message_text, truncated_default_prompt_text,
         base::BindOnce(&JavaScriptDialogTabHelper::CloseDialog,
                        base::Unretained(this),
-                       DismissalCause::DIALOG_BUTTON_CLICKED));
+                       DismissalCause::kDialogButtonClicked),
+        base::BindOnce(&JavaScriptDialogTabHelper::CloseDialog,
+                       base::Unretained(this), DismissalCause::kDialogClosed,
+                       false, base::string16()));
   } else {
     DCHECK(!pending_dialog_);
     dialog_ = CreateNewDialog(
@@ -318,7 +316,10 @@ void JavaScriptDialogTabHelper::RunJavaScriptDialog(
         truncated_message_text, truncated_default_prompt_text,
         base::BindOnce(&JavaScriptDialogTabHelper::CloseDialog,
                        base::Unretained(this),
-                       DismissalCause::DIALOG_BUTTON_CLICKED));
+                       DismissalCause::kDialogButtonClicked),
+        base::BindOnce(&JavaScriptDialogTabHelper::CloseDialog,
+                       base::Unretained(this), DismissalCause::kDialogClosed,
+                       false, base::string16()));
   }
 
 #if !defined(OS_ANDROID)
@@ -380,7 +381,7 @@ bool JavaScriptDialogTabHelper::HandleJavaScriptDialog(
     bool accept,
     const base::string16* prompt_override) {
   if (dialog_ || pending_dialog_) {
-    CloseDialog(DismissalCause::HANDLE_DIALOG_CALLED, accept,
+    CloseDialog(DismissalCause::kHandleDialogCalled, accept,
                 prompt_override ? *prompt_override : dialog_->GetUserInput());
     return true;
   }
@@ -393,7 +394,7 @@ bool JavaScriptDialogTabHelper::HandleJavaScriptDialog(
 void JavaScriptDialogTabHelper::CancelDialogs(
     content::WebContents* web_contents,
     bool reset_state) {
-  CloseDialog(DismissalCause::CANCEL_DIALOGS_CALLED, false, base::string16());
+  CloseDialog(DismissalCause::kCancelDialogsCalled, false, base::string16());
 
   // Cancel any app-modal dialogs being run by the app-modal dialog system.
   return AppModalDialogManager()->CancelDialogs(web_contents, reset_state);
@@ -402,7 +403,7 @@ void JavaScriptDialogTabHelper::CancelDialogs(
 void JavaScriptDialogTabHelper::OnVisibilityChanged(
     content::Visibility visibility) {
   if (visibility == content::Visibility::HIDDEN) {
-    HandleTabSwitchAway(DismissalCause::TAB_HIDDEN);
+    HandleTabSwitchAway(DismissalCause::kTabHidden);
   } else if (pending_dialog_) {
     dialog_ = std::move(pending_dialog_).Run();
     pending_dialog_.Reset();
@@ -418,7 +419,7 @@ void JavaScriptDialogTabHelper::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   // Close the dialog if the user started a new navigation. This allows reloads
   // and history navigations to proceed.
-  CloseDialog(DismissalCause::TAB_NAVIGATED, false, base::string16());
+  CloseDialog(DismissalCause::kTabNavigated, false, base::string16());
 }
 
 // This function handles the case where browser-side navigation (PlzNavigate) is
@@ -430,7 +431,7 @@ void JavaScriptDialogTabHelper::DidStartNavigationToPendingEntry(
     content::ReloadType reload_type) {
   // Close the dialog if the user started a new navigation. This allows reloads
   // and history navigations to proceed.
-  CloseDialog(DismissalCause::TAB_NAVIGATED, false, base::string16());
+  CloseDialog(DismissalCause::kTabNavigated, false, base::string16());
 }
 
 #if !defined(OS_ANDROID)
@@ -438,7 +439,7 @@ void JavaScriptDialogTabHelper::OnBrowserSetLastActive(Browser* browser) {
   if (IsWebContentsForemost(web_contents())) {
     OnVisibilityChanged(content::Visibility::VISIBLE);
   } else {
-    HandleTabSwitchAway(DismissalCause::BROWSER_SWITCHED);
+    HandleTabSwitchAway(DismissalCause::kBrowserSwitched);
   }
 }
 
@@ -453,7 +454,7 @@ void JavaScriptDialogTabHelper::TabReplacedAt(
     // must be done here.
     SetTabNeedsAttentionImpl(false, tab_strip_model, index);
 
-    CloseDialog(DismissalCause::TAB_SWITCHED_OUT, false, base::string16());
+    CloseDialog(DismissalCause::kTabSwitchedOut, false, base::string16());
   }
 }
 
@@ -471,30 +472,38 @@ void JavaScriptDialogTabHelper::TabDetachedAt(content::WebContents* contents,
     DCHECK(tab_strip_model_being_observed_);
     tab_strip_model_being_observed_->RemoveObserver(this);
     tab_strip_model_being_observed_ = nullptr;
-    CloseDialog(DismissalCause::TAB_HELPER_DESTROYED, false, base::string16());
+    CloseDialog(DismissalCause::kTabHelperDestroyed, false, base::string16());
   }
 }
 
 #endif
 
-void JavaScriptDialogTabHelper::LogDialogDismissalCause(
-    JavaScriptDialogTabHelper::DismissalCause cause) {
+void JavaScriptDialogTabHelper::LogDialogDismissalCause(DismissalCause cause) {
+  // Log to UMA.
   switch (dialog_type_) {
     case content::JAVASCRIPT_DIALOG_TYPE_ALERT:
-      UMA_HISTOGRAM_ENUMERATION("JSDialogs.DismissalCause.Alert",
-                                static_cast<int>(cause),
-                                static_cast<int>(DismissalCause::COUNT));
+      UMA_HISTOGRAM_ENUMERATION("JSDialogs.DismissalCause.Alert", cause);
       break;
     case content::JAVASCRIPT_DIALOG_TYPE_CONFIRM:
-      UMA_HISTOGRAM_ENUMERATION("JSDialogs.DismissalCause.Confirm",
-                                static_cast<int>(cause),
-                                static_cast<int>(DismissalCause::COUNT));
+      UMA_HISTOGRAM_ENUMERATION("JSDialogs.DismissalCause.Confirm", cause);
       break;
     case content::JAVASCRIPT_DIALOG_TYPE_PROMPT:
-      UMA_HISTOGRAM_ENUMERATION("JSDialogs.DismissalCause.Prompt",
-                                static_cast<int>(cause),
-                                static_cast<int>(DismissalCause::COUNT));
+      UMA_HISTOGRAM_ENUMERATION("JSDialogs.DismissalCause.Prompt", cause);
       break;
+  }
+
+  // Log to UKM.
+  //
+  // Note that this will return the outermost WebContents, not necessarily the
+  // WebContents that had the alert call in it. For 99.9999% of cases they're
+  // the same, but for instances like the <webview> tag in extensions and PDF
+  // files that alert they may differ.
+  ukm::SourceId source_id = ukm::GetSourceIdForWebContentsDocument(
+      WebContentsObserver::web_contents());
+  if (source_id != ukm::kInvalidSourceId) {
+    ukm::builders::AbusiveExperienceHeuristic_JavaScriptDialog(source_id)
+        .SetDismissalCause(static_cast<int64_t>(cause))
+        .Record(ukm::UkmRecorder::Get());
   }
 }
 
@@ -532,7 +541,8 @@ void JavaScriptDialogTabHelper::CloseDialog(DismissalCause cause,
   //
   // Using the |cause| to distinguish a call from JavaScriptDialog vs from
   // within JavaScriptDialogTabHelper is a bit hacky, but is the simplest way.
-  if (dialog_ && cause != DismissalCause::DIALOG_BUTTON_CLICKED)
+  if (dialog_ && cause != DismissalCause::kDialogButtonClicked &&
+      cause != DismissalCause::kDialogClosed)
     dialog_->CloseDialogWithoutCallback();
 
   // If there is a callback, call it. There might not be one, if a tab-modal
@@ -544,8 +554,8 @@ void JavaScriptDialogTabHelper::CloseDialog(DismissalCause cause,
   // state; clear it out. However, if the tab was switched out, the turning off
   // of the "needs attention" state was done in TabReplacedAt() or
   // TabDetachedAt() because SetTabNeedsAttention won't work, so don't call it.
-  if (pending_dialog_ && cause != DismissalCause::TAB_SWITCHED_OUT &&
-      cause != DismissalCause::TAB_HELPER_DESTROYED) {
+  if (pending_dialog_ && cause != DismissalCause::kTabSwitchedOut &&
+      cause != DismissalCause::kTabHelperDestroyed) {
     SetTabNeedsAttention(false);
   }
 

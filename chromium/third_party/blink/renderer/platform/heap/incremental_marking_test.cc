@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/heap_allocator.h"
 #include "third_party/blink/renderer/platform/heap/heap_buildflags.h"
+#include "third_party/blink/renderer/platform/heap/heap_compact.h"
 #include "third_party/blink/renderer/platform/heap/heap_terminated_array.h"
 #include "third_party/blink/renderer/platform/heap/heap_terminated_array_builder.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
@@ -65,7 +66,7 @@ class BackingVisitor : public Visitor {
                                WeakCallback,
                                void*) final {}
   void VisitBackingStoreOnly(void*, void**) final {}
-  void RegisterBackingStoreCallback(void* backing_store,
+  void RegisterBackingStoreCallback(void** slot,
                                     MovingObjectCallback,
                                     void* callback_data) final {}
   void RegisterWeakCallback(void* closure, WeakCallback) final {}
@@ -1630,6 +1631,11 @@ class IncrementalMarkingTestDriver {
     thread_state_->CompleteSweep();
   }
 
+  HashSet<MovableReference*>& GetTracedSlot() {
+    HeapCompact* compaction = ThreadState::Current()->Heap().Compaction();
+    return compaction->traced_slots_;
+  }
+
  private:
   ThreadState* const thread_state_;
 };
@@ -1645,7 +1651,7 @@ TEST(IncrementalMarkingTest, TestDriver) {
 }
 
 TEST(IncrementalMarkingTest, DropBackingStore) {
-  // Regression test: crbug.com/828537
+  // Regression test: https://crbug.com/828537
   using WeakStore = HeapHashCountedSet<WeakMember<Object>>;
 
   Persistent<WeakStore> persistent(new WeakStore);
@@ -1657,6 +1663,140 @@ TEST(IncrementalMarkingTest, DropBackingStore) {
   // Marking verifier should not crash on a black backing store with all
   // black->white edges.
   driver.FinishGC();
+}
+
+TEST(IncrementalMarkingTest, WeakCallbackDoesNotReviveDeletedValue) {
+  // Regression test: https://crbug.com/870196
+
+  // std::pair avoids treating the hashset backing as weak backing.
+  using WeakStore = HeapHashCountedSet<std::pair<WeakMember<Object>, size_t>>;
+
+  Persistent<WeakStore> persistent(new WeakStore);
+  // Create at least two entries to avoid completely emptying out the data
+  // structure. The values for .second are chosen to be non-null as they
+  // would otherwise count as empty and be skipped during iteration after the
+  // first part died.
+  persistent->insert({Object::Create(), 1});
+  persistent->insert({Object::Create(), 2});
+  IncrementalMarkingTestDriver driver(ThreadState::Current());
+  driver.Start();
+  // The backing is not treated as weak backing and thus eagerly processed,
+  // effectively registering the slots of WeakMembers.
+  driver.FinishSteps();
+  // The following deletes the first found entry. The second entry is left
+  // untouched.
+  for (auto& entries : *persistent) {
+    persistent->erase(entries.key);
+    break;
+  }
+  driver.FinishGC();
+
+  size_t count = 0;
+  for (const auto& entry : *persistent) {
+    count++;
+    // Use the entry to keep compilers happy.
+    if (entry.key.second > 0) {
+    }
+  }
+  CHECK_EQ(1u, count);
+}
+
+TEST(IncrementalMarkingTest, NoBackingFreeDuringIncrementalMarking) {
+  // Regression test: https://crbug.com/870306
+  // Only reproduces in ASAN configurations.
+  using WeakStore = HeapHashCountedSet<std::pair<WeakMember<Object>, size_t>>;
+
+  Persistent<WeakStore> persistent(new WeakStore);
+  // Prefill the collection to grow backing store. A new backing store allocaton
+  // would trigger the write barrier, mitigating the bug where a backing store
+  // is promptly freed.
+  for (size_t i = 0; i < 8; i++) {
+    persistent->insert({Object::Create(), i});
+  }
+  IncrementalMarkingTestDriver driver(ThreadState::Current());
+  driver.Start();
+  persistent->insert({Object::Create(), 8});
+  // Is not allowed to free the backing store as the previous insert may have
+  // registered a slot.
+  persistent->clear();
+  driver.FinishSteps();
+  driver.FinishGC();
+}
+
+TEST(IncrementalMarkingTest, DropReferenceWithHeapCompaction) {
+  using Store = HeapHashCountedSet<Member<Object>>;
+
+  Persistent<Store> persistent(new Store);
+  persistent->insert(Object::Create());
+  IncrementalMarkingTestDriver driver(ThreadState::Current());
+  HeapCompact::ScheduleCompactionGCForTesting(true);
+  driver.Start();
+  driver.FinishSteps();
+  persistent->clear();
+  // Registration of movable and updatable references should not crash because
+  // if a slot have nullptr reference, it doesn't call registeration method.
+  driver.FinishGC();
+}
+
+TEST(IncrementalMarkingTest, HasInlineCapacityCollectionWithHeapCompaction) {
+  using Store = HeapVector<Member<Object>, 2>;
+
+  Persistent<Store> persistent(new Store);
+  Persistent<Store> persistent2(new Store);
+
+  IncrementalMarkingTestDriver driver(ThreadState::Current());
+  HeapCompact::ScheduleCompactionGCForTesting(true);
+  persistent->push_back(Object::Create());
+  driver.Start();
+  driver.FinishSteps();
+
+  // Should collect also slots that has only inline buffer and nullptr
+  // references.
+  EXPECT_EQ(driver.GetTracedSlot().size(), 2u);
+  driver.FinishGC();
+}
+
+TEST(IncrementalMarkingTest, SlotDestruction) {
+  IncrementalMarkingTestDriver driver(ThreadState::Current());
+  HeapCompact::ScheduleCompactionGCForTesting(true);
+  Vector<MovableReference*> ref(7);
+
+  {
+    Object* obj = Object::Create();
+    PersistentHeapHashSet<Member<Object>> p_hashset;
+    PersistentHeapHashMap<Member<Object>, Member<Object>> p_hashmap;
+    PersistentHeapLinkedHashSet<Member<Object>> p_linkedhashset;
+    PersistentHeapListHashSet<Member<Object>> p_listhashset;
+    PersistentHeapHashCountedSet<Member<Object>> p_hashcountedset;
+    PersistentHeapVector<Member<Object>> p_vector;
+    PersistentHeapDeque<Member<Object>> p_deque;
+
+    p_hashset.insert(obj);
+    p_hashmap.insert(obj, obj);
+    p_linkedhashset.insert(obj);
+    p_listhashset.insert(obj);
+    p_hashcountedset.insert(obj);
+    p_vector.push_back(obj);
+    p_deque.push_back(obj);
+
+    ref[0] = reinterpret_cast<MovableReference*>(&p_hashset);
+    ref[1] = reinterpret_cast<MovableReference*>(&p_hashmap);
+    ref[2] = reinterpret_cast<MovableReference*>(&p_linkedhashset);
+    ref[3] = reinterpret_cast<MovableReference*>(&p_listhashset);
+    ref[4] = reinterpret_cast<MovableReference*>(&p_hashcountedset);
+    ref[5] = reinterpret_cast<MovableReference*>(&p_vector);
+    ref[6] = reinterpret_cast<MovableReference*>(&p_deque);
+
+    driver.Start();
+    driver.FinishSteps();
+
+    for (size_t i = 0; i < ref.size(); ++i) {
+      EXPECT_TRUE(driver.GetTracedSlot().Contains(ref[i]));
+    }
+  }
+  for (size_t i = 0; i < ref.size(); ++i) {
+    EXPECT_FALSE(driver.GetTracedSlot().Contains(ref[i]));
+  }
 }
 
 }  // namespace incremental_marking_test

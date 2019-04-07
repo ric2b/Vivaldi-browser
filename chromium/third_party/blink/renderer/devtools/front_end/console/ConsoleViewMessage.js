@@ -93,7 +93,7 @@ Console.ConsoleViewMessage = class {
    */
   willHide() {
     this._isVisible = false;
-    this._cachedHeight = this.contentElement().offsetHeight;
+    this._cachedHeight = this.element().offsetHeight;
   }
 
   /**
@@ -125,9 +125,9 @@ Console.ConsoleViewMessage = class {
    */
   _buildTableMessage() {
     const formattedMessage = createElementWithClass('span', 'source-code');
-    const anchorElement = this._buildMessageAnchor();
-    if (anchorElement)
-      formattedMessage.appendChild(anchorElement);
+    this._anchorElement = this._buildMessageAnchor();
+    if (this._anchorElement)
+      formattedMessage.appendChild(this._anchorElement);
     const badgeElement = this._buildMessageBadge();
     if (badgeElement)
       formattedMessage.appendChild(badgeElement);
@@ -279,9 +279,9 @@ Console.ConsoleViewMessage = class {
     messageElement.classList.add('console-message-text');
 
     const formattedMessage = createElementWithClass('span', 'source-code');
-    const anchorElement = this._buildMessageAnchor();
-    if (anchorElement)
-      formattedMessage.appendChild(anchorElement);
+    this._anchorElement = this._buildMessageAnchor();
+    if (this._anchorElement)
+      formattedMessage.appendChild(this._anchorElement);
     const badgeElement = this._buildMessageBadge();
     if (badgeElement)
       formattedMessage.appendChild(badgeElement);
@@ -796,6 +796,8 @@ Console.ConsoleViewMessage = class {
     }
 
     function integerFormatter(obj) {
+      if (obj.type === 'bigint')
+        return obj.description;
       if (typeof obj.value !== 'number')
         return 'NaN';
       return Math.floor(obj.value);
@@ -921,8 +923,10 @@ Console.ConsoleViewMessage = class {
    */
   matchesFilterRegex(regexObject) {
     regexObject.lastIndex = 0;
-    const text = this.contentElement().deepTextContent();
-    return regexObject.test(text);
+    const contentElement = this.contentElement();
+    const anchorText = this._anchorElement ? this._anchorElement.deepTextContent() : '';
+    return (anchorText && regexObject.test(anchorText.trim())) ||
+        regexObject.test(contentElement.deepTextContent().slice(anchorText.length));
   }
 
   /**

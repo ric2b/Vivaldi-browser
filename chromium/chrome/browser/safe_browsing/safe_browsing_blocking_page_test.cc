@@ -25,7 +25,6 @@
 #include "chrome/browser/interstitials/security_interstitial_page_test_utils.h"
 #include "chrome/browser/net/url_request_mock_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/safe_browsing/local_database_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
@@ -39,7 +38,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/browser/threat_details.h"
 #include "components/safe_browsing/common/safe_browsing.mojom.h"
@@ -126,19 +125,8 @@ class FakeSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
   }
 
   void OnCheckBrowseURLDone(const GURL& gurl, Client* client) {
-    SBThreatTypeSet expected_threats = CreateSBThreatTypeSet(
-        {SB_THREAT_TYPE_URL_MALWARE, SB_THREAT_TYPE_URL_PHISHING,
-         SB_THREAT_TYPE_URL_UNWANTED});
-    // TODO(nparker): Remove ref to LocalSafeBrowsingDatabase by calling
-    // client->OnCheckBrowseUrlResult(..) directly.
-    LocalSafeBrowsingDatabaseManager::SafeBrowsingCheck sb_check(
-        std::vector<GURL>(1, gurl),
-        std::vector<SBFullHash>(),
-        client,
-        MALWARE,
-        expected_threats);
-    sb_check.url_results[0] = badurls.at(gurl.spec());
-    sb_check.OnSafeBrowsingResult();
+    client->OnCheckBrowseUrlResult(gurl, badurls.at(gurl.spec()),
+                                   ThreatMetadata());
   }
 
   void SetURLThreatType(const GURL& url, SBThreatType threat_type) {
@@ -247,7 +235,7 @@ class TestThreatDetailsFactory : public ThreatDetailsFactory {
   TestThreatDetailsFactory() : details_() {}
   ~TestThreatDetailsFactory() override {}
 
-  ThreatDetails* CreateThreatDetails(
+  std::unique_ptr<ThreatDetails> CreateThreatDetails(
       BaseUIManager* delegate,
       WebContents* web_contents,
       const security_interstitials::UnsafeResource& unsafe_resource,
@@ -256,11 +244,13 @@ class TestThreatDetailsFactory : public ThreatDetailsFactory {
       ReferrerChainProvider* referrer_chain_provider,
       bool trim_to_ad_tags,
       ThreatDetailsDoneCallback done_callback) override {
-    details_ = new ThreatDetails(delegate, web_contents, unsafe_resource,
-                                 url_loader_factory, history_service,
-                                 referrer_chain_provider, trim_to_ad_tags,
-                                 done_callback);
-    return details_;
+    auto details = base::WrapUnique(new ThreatDetails(
+        delegate, web_contents, unsafe_resource, url_loader_factory,
+        history_service, referrer_chain_provider, trim_to_ad_tags,
+        done_callback));
+    details_ = details.get();
+    details->StartCollection();
+    return details;
   }
 
   ThreatDetails* get_details() { return details_; }

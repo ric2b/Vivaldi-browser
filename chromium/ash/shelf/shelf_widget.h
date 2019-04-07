@@ -13,6 +13,7 @@
 #include "ash/shelf/shelf_background_animator.h"
 #include "ash/shelf/shelf_background_animator_observer.h"
 #include "ash/shelf/shelf_layout_manager_observer.h"
+#include "ash/shelf/shelf_observer.h"
 #include "base/macros.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
@@ -39,6 +40,7 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
                                public views::WidgetObserver,
                                public ShelfBackgroundAnimatorObserver,
                                public ShelfLayoutManagerObserver,
+                               public ShelfObserver,
                                public SessionObserver {
  public:
   ShelfWidget(aura::Window* shelf_container, Shelf* shelf);
@@ -70,6 +72,7 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
   // Gets the alpha value of |background_type|.
   int GetBackgroundAlphaValue(ShelfBackgroundType background_type) const;
 
+  const Shelf* shelf() const { return shelf_; }
   ShelfLayoutManager* shelf_layout_manager() { return shelf_layout_manager_; }
   StatusAreaWidget* status_area_widget() const {
     return status_area_widget_.get();
@@ -84,9 +87,6 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
   // Sets the focus cycler.  Also adds the shelf to the cycle.
   void SetFocusCycler(FocusCycler* focus_cycler);
   FocusCycler* GetFocusCycler();
-
-  // See Shelf::UpdateIconPositionForPanel().
-  void UpdateIconPositionForPanel(aura::Window* panel);
 
   // See Shelf::GetScreenBoundsOfItemIconForWindow().
   gfx::Rect GetScreenBoundsOfItemIconForWindow(aura::Window* window);
@@ -114,11 +114,18 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
   // ShelfLayoutManagerObserver overrides:
   void WillDeleteShelfLayoutManager() override;
 
+  // ShelfObserver:
+  void OnBackgroundTypeChanged(ShelfBackgroundType background_type,
+                               AnimationChangeType change_type) override;
+
   // SessionObserver overrides:
   void OnSessionStateChanged(session_manager::SessionState state) override;
 
   // Internal implementation detail. Do not expose outside of tests.
   ShelfView* shelf_view_for_testing() const { return shelf_view_; }
+  ShelfBackgroundAnimator* background_animator_for_testing() {
+    return &background_animator_;
+  }
 
   void set_activated_from_overflow_bubble(bool val) {
     activated_from_overflow_bubble_ = val;
@@ -135,6 +142,8 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
   void ShowIfHidden();
 
   Shelf* shelf_;
+
+  ShelfBackgroundAnimator background_animator_;
 
   // Owned by the shelf container's window.
   ShelfLayoutManager* shelf_layout_manager_;
@@ -157,8 +166,6 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
   // Do not focus the default element in this case. This should be set when
   // cycling focus from the overflow bubble to the main shelf.
   bool activated_from_overflow_bubble_ = false;
-
-  ShelfBackgroundAnimator background_animator_;
 
   ScopedSessionObserver scoped_session_observer_;
 

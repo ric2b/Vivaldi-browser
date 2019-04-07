@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread_checker.h"
 #include "chrome/browser/conflicts/module_info_win.h"
 
@@ -68,7 +68,7 @@ class ModuleInspector {
   base::queue<ModuleInfoKey> queue_;
 
   // The task runner where module inspections takes place. It originally starts
-  // at BACKGROUND priority, but is changed to USER_VISIBLE when
+  // at BEST_EFFORT priority, but is changed to USER_VISIBLE when
   // IncreaseInspectionPriority() is called.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 

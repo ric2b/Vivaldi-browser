@@ -13,6 +13,7 @@
 #include "base/debug/profiler.h"
 #include "base/macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/stl_util.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
@@ -86,6 +87,10 @@
 #include "chrome/browser/feature_engagement/bookmark/bookmark_tracker_factory.h"
 #include "chrome/browser/feature_engagement/new_tab/new_tab_tracker.h"
 #include "chrome/browser/feature_engagement/new_tab/new_tab_tracker_factory.h"
+#endif
+
+#if defined(USE_OZONE)
+#include "ui/ozone/public/ozone_platform.h"
 #endif
 
 #include "app/vivaldi_command_controller.h"
@@ -566,8 +571,13 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_OPEN_FILE:
       browser_->OpenFile();
       break;
-    case IDC_CREATE_HOSTED_APP:
-      CreateBookmarkAppFromCurrentWebContents(browser_);
+    case IDC_CREATE_SHORTCUT:
+      CreateBookmarkAppFromCurrentWebContents(browser_,
+                                              true /* force_shortcut_app */);
+      break;
+    case IDC_INSTALL_PWA:
+      CreateBookmarkAppFromCurrentWebContents(browser_,
+                                              false /* force_shortcut_app */);
       break;
     case IDC_DEV_TOOLS:
       ToggleDevToolsWindow(browser_, DevToolsToggleAction::Show());
@@ -689,11 +699,6 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       ShowPageInfoDialog(browser_->tab_strip_model()->GetActiveWebContents(),
                          bubble_anchor_util::kAppMenuButton);
       break;
-#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
-    case IDC_TOGGLE_CONFIRM_TO_QUIT_OPTION:
-      ToggleConfirmToQuitOption(browser_);
-      break;
-#endif
 
     default:
       if (!vivaldi::ExecuteVivaldiCommands(browser_, id)) {
@@ -848,7 +853,14 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_MINIMIZE_WINDOW, true);
   command_updater_.UpdateCommandEnabled(IDC_MAXIMIZE_WINDOW, true);
   command_updater_.UpdateCommandEnabled(IDC_RESTORE_WINDOW, true);
-  command_updater_.UpdateCommandEnabled(IDC_USE_SYSTEM_TITLE_BAR, true);
+  bool use_system_title_bar = true;
+#if defined(USE_OZONE)
+  use_system_title_bar = ui::OzonePlatform::GetInstance()
+                             ->GetPlatformProperties()
+                             .use_system_title_bar;
+#endif
+  command_updater_.UpdateCommandEnabled(IDC_USE_SYSTEM_TITLE_BAR,
+                                        use_system_title_bar);
 #endif
   command_updater_.UpdateCommandEnabled(IDC_OPEN_IN_PWA_WINDOW, true);
 
@@ -883,8 +895,6 @@ void BrowserCommandController::InitCommandState() {
                                         !profile()->IsOffTheRecord());
   command_updater_.UpdateCommandEnabled(IDC_CLEAR_BROWSING_DATA,
                                         !guest_session);
-  command_updater_.UpdateCommandEnabled(IDC_TOGGLE_CONFIRM_TO_QUIT_OPTION,
-                                        true);
 #if defined(OS_CHROMEOS)
   command_updater_.UpdateCommandEnabled(IDC_TAKE_SCREENSHOT, true);
 #else
@@ -1037,10 +1047,13 @@ void BrowserCommandController::UpdateCommandsForTabState() {
   if (browser_->is_devtools())
     command_updater_.UpdateCommandEnabled(IDC_OPEN_FILE, false);
 
-  command_updater_.UpdateCommandEnabled(IDC_CREATE_HOSTED_APP,
-                                        CanCreateBookmarkApp(browser_));
+  bool can_create_bookmark_app = CanCreateBookmarkApp(browser_);
+  command_updater_.UpdateCommandEnabled(IDC_INSTALL_PWA,
+                                        can_create_bookmark_app);
+  command_updater_.UpdateCommandEnabled(IDC_CREATE_SHORTCUT,
+                                        can_create_bookmark_app);
   command_updater_.UpdateCommandEnabled(IDC_OPEN_IN_PWA_WINDOW,
-                                        CanCreateBookmarkApp(browser_));
+                                        can_create_bookmark_app);
 
   command_updater_.UpdateCommandEnabled(
       IDC_TOGGLE_REQUEST_TABLET_SITE,
@@ -1227,8 +1240,7 @@ void NonWhitelistedCommandsAreDisabled(CommandUpdaterImpl* command_updater) {
 
   // Go through all the command ids, skip the whitelisted ones.
   for (int id : command_updater->GetAllIds()) {
-    if (std::find(std::begin(kWhitelistedIds), std::end(kWhitelistedIds), id)
-            != std::end(kWhitelistedIds)) {
+    if (base::ContainsValue(kWhitelistedIds, id)) {
       continue;
     }
     DCHECK(!command_updater->IsCommandEnabled(id));

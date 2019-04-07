@@ -100,11 +100,6 @@ public class LocationBarLayoutTest {
             String editingText = mEditingText == null ? urlBarData.editingText : mEditingText;
             return UrlBarData.forUrlAndText(getCurrentUrl(), displayText.toString(), editingText);
         }
-
-        @Override
-        public boolean shouldShowGoogleG(String urlBarText) {
-            return false;
-        }
     }
 
     @Before
@@ -341,6 +336,8 @@ public class LocationBarLayoutTest {
         final UrlBar urlBar = getUrlBar();
         final LocationBarLayout locationBar = getLocationBar();
 
+        mTestToolbarModel.setCurrentUrl(VERBOSE_URL);
+        mTestToolbarModel.setSecurityLevel(ConnectionSecurityLevel.SECURE);
         mTestToolbarModel.mDisplayText = TRIMMED_URL;
         mTestToolbarModel.mEditingText = VERBOSE_URL;
         setUrlToPageUrl(locationBar);

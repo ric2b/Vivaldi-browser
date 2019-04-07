@@ -64,7 +64,7 @@ void NotifyApiFunctionCalled(const std::string& extension_id,
 bool IsRequestFromServiceWorker(
     const ExtensionHostMsg_Request_Params& request_params) {
   return request_params.service_worker_version_id !=
-         extensions::kInvalidServiceWorkerVersionId;
+         blink::mojom::kInvalidServiceWorkerVersionId;
 }
 
 // Separate copy of ExtensionAPI used for IO thread extension functions. We need
@@ -511,7 +511,8 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
     // now, largely for simplicity's sake. This is OK because currently, only
     // the webRequest API uses IOThreadExtensionFunction, and that API is not
     // compatible with lazy background pages.
-    process_manager->IncrementLazyKeepaliveCount(function->extension());
+    process_manager->IncrementLazyKeepaliveCount(
+        function->extension(), Activity::API_FUNCTION, function->name());
   }
 }
 
@@ -531,13 +532,14 @@ void ExtensionFunctionDispatcher::RemoveWorkerCallbacksForProcess(
 
 void ExtensionFunctionDispatcher::OnExtensionFunctionCompleted(
     const Extension* extension,
-    bool is_from_service_worker) {
+    bool is_from_service_worker,
+    const char* name) {
   if (extension && !is_from_service_worker) {
     // Decrement ref count for non-service worker extension API. Service
     // worker extension API ref counts are handled separately on IO thread
     // directly via IPC.
     ProcessManager::Get(browser_context_)
-        ->DecrementLazyKeepaliveCount(extension);
+        ->DecrementLazyKeepaliveCount(extension, Activity::API_FUNCTION, name);
   }
 }
 

@@ -31,19 +31,16 @@ QuerySyncManager::Bucket::Bucket(QuerySync* sync_mem,
 QuerySyncManager::Bucket::~Bucket() = default;
 
 void QuerySyncManager::Bucket::FreePendingSyncs() {
-  auto it =
-      std::remove_if(pending_syncs.begin(), pending_syncs.end(),
-                     [this](const PendingSync& pending) {
-                       QuerySync* sync = this->syncs + pending.index;
-                       if (base::subtle::Acquire_Load(&sync->process_count) ==
-                           pending.submit_count) {
-                         this->in_use_query_syncs[pending.index] = false;
-                         return true;
-                       } else {
-                         return false;
-                       }
-                     });
-  pending_syncs.erase(it, pending_syncs.end());
+  base::EraseIf(pending_syncs, [this](const PendingSync& pending) {
+    QuerySync* sync = this->syncs + pending.index;
+    if (base::subtle::Acquire_Load(&sync->process_count) ==
+        pending.submit_count) {
+      this->in_use_query_syncs[pending.index] = false;
+      return true;
+    } else {
+      return false;
+    }
+  });
 }
 
 QuerySyncManager::QuerySyncManager(MappedMemoryManager* manager)
@@ -149,6 +146,8 @@ QueryTracker::Query::Query(GLuint id,
       client_begin_time_us_(0),
       result_(0) {}
 
+QueryTracker::Query::~Query() {}
+
 void QueryTracker::Query::Begin(QueryTrackerClient* client) {
   // init memory, inc count
   MarkAsActive();
@@ -232,6 +231,9 @@ bool QueryTracker::Query::CheckResultsAvailable(
           result_ = info_.sync->result;
           break;
       }
+      if (on_completed_callback_) {
+        std::move(on_completed_callback_.value()).Run();
+      }
       state_ = kComplete;
     } else {
       if ((helper->flush_generation() - flush_count_ - 1) >= 0x80000000) {
@@ -248,6 +250,12 @@ bool QueryTracker::Query::CheckResultsAvailable(
 uint64_t QueryTracker::Query::GetResult() const {
   DCHECK(state_ == kComplete || state_ == kUninitialized);
   return result_;
+}
+
+void QueryTracker::Query::SetCompletedCallback(base::OnceClosure callback) {
+  DCHECK(!on_completed_callback_);
+  DCHECK(state_ == kPending);
+  on_completed_callback_ = std::move(callback);
 }
 
 QueryTracker::QueryTracker(MappedMemoryManager* manager)

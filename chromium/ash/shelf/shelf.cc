@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/animation/animation_change_type.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
@@ -178,6 +179,14 @@ void Shelf::UpdateVisibilityState() {
     shelf_layout_manager_->UpdateVisibilityState();
 }
 
+void Shelf::MaybeUpdateShelfBackground() {
+  if (!shelf_layout_manager_)
+    return;
+
+  shelf_layout_manager_->MaybeUpdateShelfBackground(
+      AnimationChangeType::ANIMATE);
+}
+
 ShelfVisibilityState Shelf::GetVisibilityState() const {
   return shelf_layout_manager_ ? shelf_layout_manager_->visibility_state()
                                : SHELF_HIDDEN;
@@ -207,10 +216,6 @@ gfx::Rect Shelf::GetIdealBounds() {
 gfx::Rect Shelf::GetUserWorkAreaBounds() const {
   return shelf_layout_manager_ ? shelf_layout_manager_->user_work_area_bounds()
                                : gfx::Rect();
-}
-
-void Shelf::UpdateIconPositionForPanel(aura::Window* panel) {
-  shelf_widget_->UpdateIconPositionForPanel(panel);
 }
 
 gfx::Rect Shelf::GetScreenBoundsOfItemIconForWindow(aura::Window* window) {
@@ -303,7 +308,6 @@ bool Shelf::ShouldHideOnSecondaryDisplay(session_manager::SessionState state) {
 void Shelf::SetVirtualKeyboardBoundsForTesting(const gfx::Rect& bounds) {
   keyboard::KeyboardStateDescriptor state;
   state.is_visible = !bounds.IsEmpty();
-  state.is_locked = false;
   state.visual_bounds = bounds;
   state.occluded_bounds = bounds;
   state.displaced_bounds = gfx::Rect();

@@ -175,6 +175,7 @@ bool ChildProcessLauncherPriority::operator==(
   return visible == other.visible &&
          has_media_stream == other.has_media_stream &&
          frame_depth == other.frame_depth &&
+         intersects_viewport == other.intersects_viewport &&
          boost_for_pending_views == other.boost_for_pending_views
 #if defined(OS_ANDROID)
          && importance == other.importance

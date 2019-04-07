@@ -17,7 +17,7 @@ jumbo_static_library("browser") {
     public_deps += [
       "//vivaldi/components/datasource",
       "//vivaldi/extensions",
-      "//vivaldi/extensions/schema:api",
+      "//vivaldi/extensions/schema",
     ]
   }
   deps = [

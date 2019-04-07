@@ -120,13 +120,15 @@ function DialogActionController(
   fileSelectionHandler.addEventListener(
       FileSelectionHandler.EventType.CHANGE_THROTTLED,
       this.onFileSelectionChanged_.bind(this));
+  volumeManager.addEventListener(
+      'drive-connection-changed', this.updateOkButton_.bind(this));
 
   dialogFooter.initFileTypeFilter(
       this.fileTypes_, launchParam.includeAllFiles);
   this.onFileTypeFilterChanged_();
 
   this.newFolderCommand_ =
-      /** @type {cr.ui.Command} */ (document.getElementById('new-folder'));
+      /** @type {cr.ui.Command} */ ($('new-folder'));
   this.newFolderCommand_.addEventListener(
       'disabledChange', this.updateNewFolderButton_.bind(this));
 }
@@ -174,6 +176,9 @@ DialogActionController.prototype.processOKActionForSaveDialog_ = function() {
  * @private
  */
 DialogActionController.prototype.processOKAction_ = function() {
+  if (this.dialogFooter_.okButton.disabled) {
+    throw new Error('Disabled!');
+  }
   if (this.dialogType_ === DialogType.SELECT_SAVEAS_FILE) {
     this.processOKActionForSaveDialog_();
     return;

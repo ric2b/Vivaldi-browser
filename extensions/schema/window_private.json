@@ -214,6 +214,17 @@
         ]
       },
       {
+        "name": "onPositionChanged",
+        "type": "function",
+        "description": "Fired when the window changes position.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          }
+        ]
+      },
+      {
         "name": "onActivated",
         "type": "function",
         "description": "Fired when the window changes activation.",
@@ -242,6 +253,22 @@
             "type": "boolean",
             "name": "enabled",
             "description": "Changed fullscreen state."
+          }
+        ]
+      },
+      {
+        "name": "onFullscreenMenubarChanged",
+        "type": "function",
+        "description": "Fired when the main menu bar is show/hidden in fullscreen.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          },
+          {
+            "type": "boolean",
+            "name": "shown",
+            "description": "Main menubar is shown (true) or hidden (false)."
           }
         ]
       },

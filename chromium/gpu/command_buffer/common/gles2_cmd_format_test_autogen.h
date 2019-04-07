@@ -3938,6 +3938,73 @@ TEST_F(GLES2FormatTest, BindVertexArrayOES) {
   CheckBytesWrittenMatchesExpectedSize(next_cmd, sizeof(cmd));
 }
 
+TEST_F(GLES2FormatTest, FramebufferParameteri) {
+  cmds::FramebufferParameteri& cmd =
+      *GetBufferAs<cmds::FramebufferParameteri>();
+  void* next_cmd = cmd.Set(&cmd, static_cast<GLenum>(11),
+                           static_cast<GLenum>(12), static_cast<GLint>(13));
+  EXPECT_EQ(static_cast<uint32_t>(cmds::FramebufferParameteri::kCmdId),
+            cmd.header.command);
+  EXPECT_EQ(sizeof(cmd), cmd.header.size * 4u);
+  EXPECT_EQ(static_cast<GLenum>(11), cmd.target);
+  EXPECT_EQ(static_cast<GLenum>(12), cmd.pname);
+  EXPECT_EQ(static_cast<GLint>(13), cmd.param);
+  CheckBytesWrittenMatchesExpectedSize(next_cmd, sizeof(cmd));
+}
+
+TEST_F(GLES2FormatTest, BindImageTexture) {
+  cmds::BindImageTexture& cmd = *GetBufferAs<cmds::BindImageTexture>();
+  void* next_cmd = cmd.Set(&cmd, static_cast<GLuint>(11),
+                           static_cast<GLuint>(12), static_cast<GLint>(13),
+                           static_cast<GLboolean>(14), static_cast<GLint>(15),
+                           static_cast<GLenum>(16), static_cast<GLenum>(17));
+  EXPECT_EQ(static_cast<uint32_t>(cmds::BindImageTexture::kCmdId),
+            cmd.header.command);
+  EXPECT_EQ(sizeof(cmd), cmd.header.size * 4u);
+  EXPECT_EQ(static_cast<GLuint>(11), cmd.unit);
+  EXPECT_EQ(static_cast<GLuint>(12), cmd.texture);
+  EXPECT_EQ(static_cast<GLint>(13), cmd.level);
+  EXPECT_EQ(static_cast<GLboolean>(14), cmd.layered);
+  EXPECT_EQ(static_cast<GLint>(15), cmd.layer);
+  EXPECT_EQ(static_cast<GLenum>(16), cmd.access);
+  EXPECT_EQ(static_cast<GLenum>(17), cmd.format);
+  CheckBytesWrittenMatchesExpectedSize(next_cmd, sizeof(cmd));
+}
+
+TEST_F(GLES2FormatTest, DispatchCompute) {
+  cmds::DispatchCompute& cmd = *GetBufferAs<cmds::DispatchCompute>();
+  void* next_cmd = cmd.Set(&cmd, static_cast<GLuint>(11),
+                           static_cast<GLuint>(12), static_cast<GLuint>(13));
+  EXPECT_EQ(static_cast<uint32_t>(cmds::DispatchCompute::kCmdId),
+            cmd.header.command);
+  EXPECT_EQ(sizeof(cmd), cmd.header.size * 4u);
+  EXPECT_EQ(static_cast<GLuint>(11), cmd.num_groups_x);
+  EXPECT_EQ(static_cast<GLuint>(12), cmd.num_groups_y);
+  EXPECT_EQ(static_cast<GLuint>(13), cmd.num_groups_z);
+  CheckBytesWrittenMatchesExpectedSize(next_cmd, sizeof(cmd));
+}
+
+TEST_F(GLES2FormatTest, MemoryBarrierEXT) {
+  cmds::MemoryBarrierEXT& cmd = *GetBufferAs<cmds::MemoryBarrierEXT>();
+  void* next_cmd = cmd.Set(&cmd, static_cast<GLbitfield>(11));
+  EXPECT_EQ(static_cast<uint32_t>(cmds::MemoryBarrierEXT::kCmdId),
+            cmd.header.command);
+  EXPECT_EQ(sizeof(cmd), cmd.header.size * 4u);
+  EXPECT_EQ(static_cast<GLbitfield>(11), cmd.barriers);
+  CheckBytesWrittenMatchesExpectedSize(next_cmd, sizeof(cmd));
+}
+
+TEST_F(GLES2FormatTest, MemoryBarrierByRegion) {
+  cmds::MemoryBarrierByRegion& cmd =
+      *GetBufferAs<cmds::MemoryBarrierByRegion>();
+  void* next_cmd = cmd.Set(&cmd, static_cast<GLbitfield>(11));
+  EXPECT_EQ(static_cast<uint32_t>(cmds::MemoryBarrierByRegion::kCmdId),
+            cmd.header.command);
+  EXPECT_EQ(sizeof(cmd), cmd.header.size * 4u);
+  EXPECT_EQ(static_cast<GLbitfield>(11), cmd.barriers);
+  CheckBytesWrittenMatchesExpectedSize(next_cmd, sizeof(cmd));
+}
+
 TEST_F(GLES2FormatTest, SwapBuffers) {
   cmds::SwapBuffers& cmd = *GetBufferAs<cmds::SwapBuffers>();
   void* next_cmd =
@@ -5432,6 +5499,26 @@ TEST_F(GLES2FormatTest, SetReadbackBufferShadowAllocationINTERNAL) {
   EXPECT_EQ(static_cast<GLint>(12), cmd.shm_id);
   EXPECT_EQ(static_cast<GLuint>(13), cmd.shm_offset);
   EXPECT_EQ(static_cast<GLuint>(14), cmd.size);
+  CheckBytesWrittenMatchesExpectedSize(next_cmd, sizeof(cmd));
+}
+
+TEST_F(GLES2FormatTest, FramebufferTextureMultiviewLayeredANGLE) {
+  cmds::FramebufferTextureMultiviewLayeredANGLE& cmd =
+      *GetBufferAs<cmds::FramebufferTextureMultiviewLayeredANGLE>();
+  void* next_cmd =
+      cmd.Set(&cmd, static_cast<GLenum>(11), static_cast<GLenum>(12),
+              static_cast<GLuint>(13), static_cast<GLint>(14),
+              static_cast<GLint>(15), static_cast<GLsizei>(16));
+  EXPECT_EQ(static_cast<uint32_t>(
+                cmds::FramebufferTextureMultiviewLayeredANGLE::kCmdId),
+            cmd.header.command);
+  EXPECT_EQ(sizeof(cmd), cmd.header.size * 4u);
+  EXPECT_EQ(static_cast<GLenum>(11), cmd.target);
+  EXPECT_EQ(static_cast<GLenum>(12), cmd.attachment);
+  EXPECT_EQ(static_cast<GLuint>(13), cmd.texture);
+  EXPECT_EQ(static_cast<GLint>(14), cmd.level);
+  EXPECT_EQ(static_cast<GLint>(15), cmd.baseViewIndex);
+  EXPECT_EQ(static_cast<GLsizei>(16), cmd.numViews);
   CheckBytesWrittenMatchesExpectedSize(next_cmd, sizeof(cmd));
 }
 

@@ -504,24 +504,24 @@ Status ExecuteGetElementRect(Session* session,
     return Status(kUnknownError, "could not convert to DictionaryValue");
 
   // grab values
-  int x, y, width, height;
-  if (!location_dict->GetInteger("x", &x))
-    return Status(kUnknownError, "getting size failed to return x");
+  double x, y, width, height;
+  if (!location_dict->GetDouble("x", &x))
+    return Status(kUnknownError, "x coordinate is missing in element location");
 
-  if (!location_dict->GetInteger("y", &y))
-    return Status(kUnknownError, "getting size failed to return y");
+  if (!location_dict->GetDouble("y", &y))
+    return Status(kUnknownError, "y coordinate is missing in element location");
 
-  if (!size_dict->GetInteger("height", &height))
-    return Status(kUnknownError, "getting location failed to return height");
+  if (!size_dict->GetDouble("height", &height))
+    return Status(kUnknownError, "height is missing in element size");
 
-  if (!size_dict->GetInteger("width", &width))
-    return Status(kUnknownError, "getting location failed to return width");
+  if (!size_dict->GetDouble("width", &width))
+    return Status(kUnknownError, "width is missing in element size");
 
   base::DictionaryValue ret;
-  ret.SetInteger("x", x);
-  ret.SetInteger("y", y);
-  ret.SetInteger("width", width);
-  ret.SetInteger("height", height);
+  ret.SetDouble("x", x);
+  ret.SetDouble("y", y);
+  ret.SetDouble("width", width);
+  ret.SetDouble("height", height);
   value->reset(ret.DeepCopy());
   return Status(kOk);
 }
@@ -594,5 +594,45 @@ Status ExecuteElementEquals(Session* session,
   if (!params.GetString("other", &other_element_id))
     return Status(kUnknownError, "'other' must be a string");
   value->reset(new base::Value(element_id == other_element_id));
+  return Status(kOk);
+}
+
+Status ExecuteElementScreenshot(Session* session,
+                                WebView* web_view,
+                                const std::string& element_id,
+                                const base::DictionaryValue& params,
+                                std::unique_ptr<base::Value>* value) {
+  bool scroll = true;
+  params.GetBoolean("scroll", &scroll);
+
+  Status status = session->chrome->ActivateWebView(web_view->GetId());
+  if (status.IsError())
+    return status;
+
+  if (scroll) {
+    WebPoint offset(0, 0);
+    WebPoint location;
+    status = ScrollElementIntoView(session, web_view, element_id, &offset,
+                                   &location);
+    if (status.IsError())
+      return status;
+  }
+
+  std::string screenshot;
+  std::unique_ptr<base::Value> clip;
+  ExecuteGetElementRect(session, web_view, element_id, params, &clip);
+
+  std::unique_ptr<base::DictionaryValue> clip_dict = base::DictionaryValue::From(std::move(clip));
+  if (!clip_dict)
+    return Status(kUnknownError, "Element Rect is not a dictionary");
+  clip_dict->SetDouble("scale", 1.0);
+  base::DictionaryValue screenshot_params;
+  screenshot_params.SetDictionary("clip", std::move(clip_dict));
+
+  status = web_view->CaptureScreenshot(&screenshot, screenshot_params);
+  if (status.IsError())
+    return status;
+
+  value->reset(new base::Value(screenshot));
   return Status(kOk);
 }

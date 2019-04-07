@@ -28,8 +28,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
@@ -91,7 +91,6 @@
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/upload_data_stream.h"
 #include "net/base/url_util.h"
-#include "net/cert/cert_status_flags.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
@@ -167,11 +166,6 @@ void AbortRequestBeforeItStarts(
   status.encoded_data_length = 0;
   status.encoded_body_length = 0;
   url_loader_client->OnComplete(status);
-}
-
-bool IsValidatedSCT(
-    const net::SignedCertificateTimestampAndStatus& sct_status) {
-  return sct_status.status == net::ct::SCT_STATUS_OK;
 }
 
 // Returns the PreviewsState for enabled previews after requesting it from
@@ -604,18 +598,6 @@ void ResourceDispatcherHostImpl::DidReceiveResponse(
 
 void ResourceDispatcherHostImpl::DidFinishLoading(ResourceLoader* loader) {
   ResourceRequestInfoImpl* info = loader->GetRequestInfo();
-
-  // Record final result of all resource loads.
-  if (info->GetResourceType() == RESOURCE_TYPE_MAIN_FRAME) {
-    if (loader->request()->url().SchemeIsCryptographic()) {
-      int num_valid_scts = std::count_if(
-          loader->request()->ssl_info().signed_certificate_timestamps.begin(),
-          loader->request()->ssl_info().signed_certificate_timestamps.end(),
-          IsValidatedSCT);
-      UMA_HISTOGRAM_COUNTS_100(
-          "Net.CertificateTransparency.MainFrameValidSCTCount", num_valid_scts);
-    }
-  }
 
   if (delegate_)
     delegate_->RequestComplete(loader->request());
@@ -1078,11 +1060,11 @@ ResourceDispatcherHostImpl::CreateResourceHandler(
          requester_info->IsNavigationPreload() ||
          requester_info->IsCertificateFetcherForSignedExchange());
   // Construct the IPC resource handler.
-  std::unique_ptr<ResourceHandler> handler;
-  handler = CreateBaseResourceHandler(
-      request, url_loader_options, std::move(mojo_request),
-      std::move(url_loader_client),
-      static_cast<ResourceType>(request_data.resource_type));
+  std::unique_ptr<ResourceHandler> handler =
+      std::make_unique<MojoAsyncResourceHandler>(
+          request, this, std::move(mojo_request), std::move(url_loader_client),
+          static_cast<ResourceType>(request_data.resource_type),
+          url_loader_options);
 
   // Prefetches outlive their child process.
   if (request_data.resource_type == RESOURCE_TYPE_PREFETCH) {
@@ -1097,22 +1079,8 @@ ResourceDispatcherHostImpl::CreateResourceHandler(
       request, static_cast<ResourceType>(request_data.resource_type),
       resource_context, request_data.fetch_request_mode,
       static_cast<RequestContextType>(request_data.fetch_request_context_type),
-      requester_info->appcache_service(), child_id, route_id,
-      std::move(handler));
-}
-
-std::unique_ptr<ResourceHandler>
-ResourceDispatcherHostImpl::CreateBaseResourceHandler(
-    net::URLRequest* request,
-    uint32_t url_loader_options,
-    network::mojom::URLLoaderRequest mojo_request,
-    network::mojom::URLLoaderClientPtr url_loader_client,
-    ResourceType resource_type) {
-  std::unique_ptr<ResourceHandler> handler;
-  handler.reset(new MojoAsyncResourceHandler(
-      request, this, std::move(mojo_request), std::move(url_loader_client),
-      resource_type, url_loader_options));
-  return handler;
+      url_loader_options, requester_info->appcache_service(), child_id,
+      route_id, std::move(handler));
 }
 
 std::unique_ptr<ResourceHandler>
@@ -1122,6 +1090,7 @@ ResourceDispatcherHostImpl::AddStandardHandlers(
     ResourceContext* resource_context,
     network::mojom::FetchRequestMode fetch_request_mode,
     RequestContextType fetch_request_context_type,
+    uint32_t url_loader_options,
     AppCacheService* appcache_service,
     int child_id,
     int route_id,
@@ -1190,9 +1159,11 @@ ResourceDispatcherHostImpl::AddStandardHandlers(
   // Note: all ResourceHandler following the MimeSniffingResourceHandler
   // should expect OnWillRead to be called *before* OnResponseStarted as
   // part of the mime sniffing process.
-  handler.reset(new MimeSniffingResourceHandler(
-      std::move(handler), this, plugin_service, intercepting_handler, request,
-      fetch_request_context_type));
+  if (url_loader_options & network::mojom::kURLLoadOptionSniffMimeType) {
+    handler.reset(new MimeSniffingResourceHandler(
+        std::move(handler), this, plugin_service, intercepting_handler, request,
+        fetch_request_context_type));
+  }
 
   // Add the pre mime sniffing throttles.
   handler.reset(new ThrottlingResourceHandler(
@@ -1644,7 +1615,7 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
   handler = AddStandardHandlers(
       new_request.get(), resource_type, resource_context,
       network::mojom::FetchRequestMode::kNoCORS,
-      info.begin_params->request_context_type,
+      info.begin_params->request_context_type, url_loader_options,
       appcache_handle_core ? appcache_handle_core->GetAppCacheService()
                            : nullptr,
       -1,  // child_id
@@ -1927,6 +1898,7 @@ net::URLRequest* ResourceDispatcherHostImpl::GetURLRequest(
 }
 
 // static
+// This is duplicated in services/network/network_service.cc.
 bool ResourceDispatcherHostImpl::LoadInfoIsMoreInteresting(const LoadInfo& a,
                                                            const LoadInfo& b) {
   // Set |*_uploading_size| to be the size of the corresponding upload body if

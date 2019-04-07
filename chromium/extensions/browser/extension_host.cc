@@ -186,7 +186,7 @@ void ExtensionHost::RemoveObserver(ExtensionHostObserver* observer) {
 void ExtensionHost::OnBackgroundEventDispatched(const std::string& event_name,
                                                 int event_id) {
   CHECK(IsBackgroundPage());
-  unacked_messages_.insert(event_id);
+  unacked_messages_[event_id] = event_name;
   for (auto& observer : observer_list_)
     observer.OnBackgroundEventDispatched(this, event_name, event_id);
 }
@@ -328,45 +328,53 @@ bool ExtensionHost::OnMessageReceived(const IPC::Message& message,
 }
 
 void ExtensionHost::OnEventAck(int event_id) {
-  EventRouter* router = EventRouter::Get(browser_context_);
-  if (router)
-    router->OnEventAck(browser_context_, extension_id());
-
-  // This should always be false since event acks are only sent by extensions
+  // This should always be true since event acks are only sent by extensions
   // with lazy background pages but it doesn't hurt to be extra careful.
-  if (!IsBackgroundPage()) {
-    NOTREACHED() << "Received EventAck from extension " << extension_id()
-                 << ", which does not have a lazy background page.";
-    return;
-  }
-
+  const bool is_background_page = IsBackgroundPage();
   // A compromised renderer could start sending out arbitrary event ids, which
   // may affect other renderers by causing downstream methods to think that
   // events for other extensions have been acked.  Make sure that the event id
   // sent by the renderer is one that this ExtensionHost expects to receive.
   // This way if a renderer _is_ compromised, it can really only affect itself.
-  if (unacked_messages_.erase(event_id) > 0) {
-    for (auto& observer : observer_list_)
-      observer.OnBackgroundEventAcked(this, event_id);
-  } else {
-    // We have received an unexpected event id from the renderer.  It might be
-    // compromised or it might have some other issue.  Kill it just to be safe.
+  const auto it = unacked_messages_.find(event_id);
+  if (!is_background_page || it == unacked_messages_.end()) {
+    // Kill this renderer.
     DCHECK(render_process_host());
-    LOG(ERROR) << "Killing renderer for extension " << extension_id() << " for "
-               << "sending an EventAck message with a bad event id.";
+    if (!is_background_page) {
+      LOG(ERROR) << "Killing renderer for extension " << extension_id()
+                 << " for sending an EventAck without a lazy background page.";
+    } else {
+      // We have received an unexpected event id from the renderer.  It might
+      // be compromised or it might have some other issue.
+      LOG(ERROR) << "Killing renderer for extension " << extension_id()
+                 << " for sending an EventAck message with a bad event id.";
+    }
     bad_message::ReceivedBadMessage(render_process_host(),
                                     bad_message::EH_BAD_EVENT_ID);
+    return;
   }
+
+  EventRouter* router = EventRouter::Get(browser_context_);
+  if (router)
+    router->OnEventAck(browser_context_, extension_id(), it->second);
+
+  for (auto& observer : observer_list_)
+    observer.OnBackgroundEventAcked(this, event_id);
+
+  // Remove it.
+  unacked_messages_.erase(it);
 }
 
 void ExtensionHost::OnIncrementLazyKeepaliveCount() {
   ProcessManager::Get(browser_context_)
-      ->IncrementLazyKeepaliveCount(extension());
+      ->IncrementLazyKeepaliveCount(extension(), Activity::LIFECYCLE_MANAGEMENT,
+                                    Activity::kIPC);
 }
 
 void ExtensionHost::OnDecrementLazyKeepaliveCount() {
   ProcessManager::Get(browser_context_)
-      ->DecrementLazyKeepaliveCount(extension());
+      ->DecrementLazyKeepaliveCount(extension(), Activity::LIFECYCLE_MANAGEMENT,
+                                    Activity::kIPC);
 }
 
 // content::WebContentsObserver
@@ -447,6 +455,16 @@ bool ExtensionHost::CheckMediaAccessPermission(
 bool ExtensionHost::IsNeverVisible(content::WebContents* web_contents) {
   ViewType view_type = extensions::GetViewType(web_contents);
   return view_type == extensions::VIEW_TYPE_EXTENSION_BACKGROUND_PAGE;
+}
+
+gfx::Size ExtensionHost::EnterPictureInPicture(const viz::SurfaceId& surface_id,
+                                               const gfx::Size& natural_size) {
+  return delegate_->EnterPictureInPicture(web_contents(), surface_id,
+                                          natural_size);
+}
+
+void ExtensionHost::ExitPictureInPicture() {
+  delegate_->ExitPictureInPicture();
 }
 
 void ExtensionHost::RecordStopLoadingUMA() {

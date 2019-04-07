@@ -53,6 +53,8 @@ enum Milestone {
   kM69,
   kM70,
   kM71,
+  kM72,
+  kM73,
 };
 
 // Returns estimated milestone dates as human-readable strings.
@@ -87,6 +89,10 @@ const char* MilestoneString(Milestone milestone) {
       return "M70, around October 2018";
     case kM71:
       return "M71, around December 2018";
+    case kM72:
+      return "M72, around January 2019";
+    case kM73:
+      return "M73, around March 2019";
   }
 
   NOTREACHED();
@@ -97,7 +103,8 @@ const char* MilestoneString(Milestone milestone) {
 double MilestoneDate(Milestone milestone) {
   // These are the Estimated Stable Dates:
   // https://www.chromium.org/developers/calendar
-
+  // All are at 04:00:00 GMT.
+  // TODO(yoichio): We should have something like "Time(March, 6, 2018)".
   switch (milestone) {
     case kUnknown:
       return 0;
@@ -125,6 +132,10 @@ double MilestoneDate(Milestone milestone) {
       return 1539662400000;  // October 16, 2018.
     case kM71:
       return 1543899600000;  // December 4, 2018.
+    case kM72:
+      return 1548734400000;  // January 29, 2019.
+    case kM73:
+      return 1552363200000;  // March 12, 2019.
   }
 
   NOTREACHED();
@@ -341,15 +352,11 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
 
     case WebFeature::kApplicationCacheManifestSelectInsecureOrigin:
     case WebFeature::kApplicationCacheAPIInsecureOrigin:
-      return {
-          "ApplicationCacheAPIInsecureOrigin", kM69,
-          String::Format(
-              "Application Cache is deprecated in non-secure contexts, and "
-              "will be restricted to secure contexts in %s. Please consider "
-              "migrating your application to HTTPS, and eventually shifting "
-              "over to Service Workers. See https://goo.gl/rStTGz for more "
-              "details.",
-              MilestoneString(kM69))};
+      return {"ApplicationCacheAPIInsecureOrigin", kM70,
+              "Application Cache is restricted to secure contexts. Please "
+              "consider migrating your application to HTTPS, and eventually "
+              "shifting over to Service Workers. See https://goo.gl/rStTGz for "
+              "more details."};
 
     case WebFeature::kNotificationInsecureOrigin:
     case WebFeature::kNotificationAPIInsecureOriginIframe:
@@ -449,12 +456,22 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
           WillBeRemoved("The step timing function with step position 'middle'",
                         kM62, "5189363944128512")};
 
-    case WebFeature::kHTMLImportsHasStyleSheets:
-      return {"HTMLImportsHasStyleSheets", kUnknown,
-              "Styling master document from stylesheets defined in "
-              "HTML Imports is deprecated. "
-              "Please refer to "
-              "https://goo.gl/EGXzpw for possible migration paths."};
+    case WebFeature::kHTMLImports:
+      return {"DeprecatedHTMLImports", kM73,
+              ReplacedWillBeRemoved("HTML Imports", "ES modules", kM73,
+                                    "5144752345317376")};
+
+    case WebFeature::kElementCreateShadowRoot:
+      return {"ElementCreateShadowRoot", kM73,
+              ReplacedWillBeRemoved("Element.createShadowRoot",
+                                    "Element.attachShadow", kM73,
+                                    "4507242028072960")};
+
+    case WebFeature::kDocumentRegisterElement:
+      return {"DocumentRegisterElement", kM73,
+              ReplacedWillBeRemoved("document.registerElement",
+                                    "window.customElements.define", kM73,
+                                    "4642138092470272")};
 
     case WebFeature::
         kEncryptedMediaDisallowedByFeaturePolicyInCrossOriginIframe:
@@ -544,29 +561,24 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
                                     "self.origin (window.origin)", kM70,
                                     "5701042356355072")};
 
-    case WebFeature::kHTMLFrameSetElementAnonymousNamedGetter:
-      return {"HTMLFrameSetElementAnonymousNamedGetter", kM70,
-              WillBeRemoved("Anonymous named getter of HTMLFrameSetElement",
-                            kM70, "5235521668251648")};
-
     case WebFeature::kMediaElementSourceOnOfflineContext:
-      return {"MediaElementAudioSourceNode", kM70,
+      return {"MediaElementAudioSourceNode", kM71,
               WillBeRemoved("Creating a MediaElementAudioSourceNode on an "
                             "OfflineAudioContext",
-                            kM70, "5258622686724096")};
+                            kM71, "5258622686724096")};
 
     case WebFeature::kMediaStreamDestinationOnOfflineContext:
-      return {"MediaStreamAudioDestinationNode", kM70,
+      return {"MediaStreamAudioDestinationNode", kM71,
               WillBeRemoved("Creating a MediaStreamAudioDestinationNode on an "
                             "OfflineAudioContext",
-                            kM70, "5258622686724096")};
+                            kM71, "5258622686724096")};
 
     case WebFeature::kMediaStreamSourceOnOfflineContext:
       return {
-          "MediaStreamAudioSourceNode", kM70,
+          "MediaStreamAudioSourceNode", kM71,
           WillBeRemoved(
               "Creating a MediaStreamAudioSourceNode on an OfflineAudioContext",
-              kM70, "5258622686724096")};
+              kM71, "5258622686724096")};
 
     case WebFeature::kRTCDataChannelInitMaxRetransmitTime:
       return {"RTCDataChannelInitMaxRetransmitTime", kM70,
@@ -583,6 +595,22 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
                              "https://www.chromestatus.com/feature/"
                              "6708326821789696 for more details.",
                              MilestoneString(kM70))};
+    case WebFeature::kTextToSpeech_SpeakDisallowedByAutoplay:
+      return {"TextToSpeech_DisallowedByAutoplay", kM71,
+              WillBeRemoved("speechSynthesis.speak() without user activation",
+                            kM71, "5687444770914304")};
+
+    case WebFeature::kPPAPIWebSocket:
+      // TODO(ricea): Update once we have an expected release date for M74.
+      return {"PPAPIWebSocket", kUnknown,
+              "The Native Client Pepper WebSocket API is deprecated and will "
+              "be disabled in M74, mid-2019"};
+
+    case WebFeature::kServiceWorkerImportScriptNotInstalled:
+      return {"ServiceWorkerImportScriptNotInstalled", kM71,
+              WillBeRemoved("importScripts() of new scripts after service "
+                            "worker installation",
+                            kM71, "5748516353736704")};
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

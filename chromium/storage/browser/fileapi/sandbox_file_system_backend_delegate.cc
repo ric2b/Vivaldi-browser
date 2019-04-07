@@ -90,13 +90,13 @@ std::set<std::string> GetKnownTypeStrings() {
   return known_type_strings;
 }
 
-class ObfuscatedOriginEnumerator
+class SandboxObfuscatedOriginEnumerator
     : public SandboxFileSystemBackendDelegate::OriginEnumerator {
  public:
-  explicit ObfuscatedOriginEnumerator(ObfuscatedFileUtil* file_util) {
+  explicit SandboxObfuscatedOriginEnumerator(ObfuscatedFileUtil* file_util) {
     enum_.reset(file_util->CreateOriginEnumerator());
   }
-  ~ObfuscatedOriginEnumerator() override = default;
+  ~SandboxObfuscatedOriginEnumerator() override = default;
 
   GURL Next() override { return enum_->Next(); }
 
@@ -109,12 +109,11 @@ class ObfuscatedOriginEnumerator
   std::unique_ptr<ObfuscatedFileUtil::AbstractOriginEnumerator> enum_;
 };
 
-void OpenFileSystemOnFileTaskRunner(
-    ObfuscatedFileUtil* file_util,
-    const GURL& origin_url,
-    FileSystemType type,
-    OpenFileSystemMode mode,
-    base::File::Error* error_ptr) {
+void OpenSandboxFileSystemOnFileTaskRunner(ObfuscatedFileUtil* file_util,
+                                           const GURL& origin_url,
+                                           FileSystemType type,
+                                           OpenFileSystemMode mode,
+                                           base::File::Error* error_ptr) {
   DCHECK(error_ptr);
   const bool create = (mode == OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT);
   file_util->GetDirectoryForOriginAndType(
@@ -233,7 +232,7 @@ SandboxFileSystemBackendDelegate::~SandboxFileSystemBackendDelegate() {
 
 SandboxFileSystemBackendDelegate::OriginEnumerator*
 SandboxFileSystemBackendDelegate::CreateOriginEnumerator() {
-  return new ObfuscatedOriginEnumerator(obfuscated_file_util());
+  return new SandboxObfuscatedOriginEnumerator(obfuscated_file_util());
 }
 
 base::FilePath
@@ -276,8 +275,9 @@ void SandboxFileSystemBackendDelegate::OpenFileSystem(
   base::File::Error* error_ptr = new base::File::Error;
   file_task_runner_->PostTaskAndReply(
       FROM_HERE,
-      base::BindOnce(&OpenFileSystemOnFileTaskRunner, obfuscated_file_util(),
-                     origin_url, type, mode, base::Unretained(error_ptr)),
+      base::BindOnce(&OpenSandboxFileSystemOnFileTaskRunner,
+                     obfuscated_file_util(), origin_url, type, mode,
+                     base::Unretained(error_ptr)),
       base::BindOnce(&DidOpenFileSystem, weak_factory_.GetWeakPtr(),
                      std::move(quota_callback),
                      base::BindOnce(std::move(callback), root_url, name),
@@ -479,7 +479,7 @@ const UpdateObserverList* SandboxFileSystemBackendDelegate::GetUpdateObservers(
   std::map<FileSystemType, UpdateObserverList>::const_iterator iter =
       update_observers_.find(type);
   if (iter == update_observers_.end())
-    return NULL;
+    return nullptr;
   return &iter->second;
 }
 
@@ -488,7 +488,7 @@ const ChangeObserverList* SandboxFileSystemBackendDelegate::GetChangeObservers(
   std::map<FileSystemType, ChangeObserverList>::const_iterator iter =
       change_observers_.find(type);
   if (iter == change_observers_.end())
-    return NULL;
+    return nullptr;
   return &iter->second;
 }
 
@@ -497,7 +497,7 @@ const AccessObserverList* SandboxFileSystemBackendDelegate::GetAccessObservers(
   std::map<FileSystemType, AccessObserverList>::const_iterator iter =
       access_observers_.find(type);
   if (iter == access_observers_.end())
-    return NULL;
+    return nullptr;
   return &iter->second;
 }
 
@@ -704,12 +704,9 @@ ObfuscatedFileUtil* ObfuscatedFileUtil::CreateForTesting(
     storage::SpecialStoragePolicy* special_storage_policy,
     const base::FilePath& file_system_directory,
     leveldb::Env* env_override) {
-  return new ObfuscatedFileUtil(special_storage_policy,
-                                file_system_directory,
-                                env_override,
-                                base::Bind(&GetTypeStringForURL),
-                                GetKnownTypeStrings(),
-                                NULL);
+  return new ObfuscatedFileUtil(special_storage_policy, file_system_directory,
+                                env_override, base::Bind(&GetTypeStringForURL),
+                                GetKnownTypeStrings(), nullptr);
 }
 
 }  // namespace storage

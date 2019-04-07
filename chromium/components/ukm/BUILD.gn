@@ -21,8 +21,6 @@ static_library("ukm") {
     "ukm_rotation_scheduler.h",
     "ukm_service.cc",
     "ukm_service.h",
-    "ukm_source.cc",
-    "ukm_source.h",
   ]
 
   public_deps = [
@@ -100,6 +98,7 @@ source_set("unit_tests") {
     "//components/sync",
     "//components/sync:test_support_driver",
     "//components/sync_preferences:test_support",
+    "//components/unified_consent:test_support",
     "//components/variations",
     "//net:test_support",
     "//services/metrics/public/cpp:ukm_builders",

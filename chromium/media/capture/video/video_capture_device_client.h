@@ -86,8 +86,10 @@ class CAPTURE_EXPORT VideoCaptureDeviceClient
   Buffer ResurrectLastOutputBuffer(const gfx::Size& dimensions,
                                    VideoPixelFormat format,
                                    int new_frame_feedback_id) override;
-  void OnError(const base::Location& from_here,
+  void OnError(VideoCaptureError error,
+               const base::Location& from_here,
                const std::string& reason) override;
+  void OnFrameDropped(VideoCaptureFrameDropReason reason) override;
   void OnLog(const std::string& message) override;
   void OnStarted() override;
   double GetBufferPoolUtilization() const override;
@@ -113,14 +115,6 @@ class CAPTURE_EXPORT VideoCaptureDeviceClient
 
   // The pool of shared-memory buffers used for capturing.
   const scoped_refptr<VideoCaptureBufferPool> buffer_pool_;
-
-#if DCHECK_IS_ON()
-  // Counter used to track the number of times consecutive capture buffers are
-  // dropped.
-  int dropped_frame_counter_ = 0;
-
-  static const int kMaxDroppedFrames = 150;
-#endif  // DCHECK_IS_ON()
 
   VideoPixelFormat last_captured_pixel_format_;
 

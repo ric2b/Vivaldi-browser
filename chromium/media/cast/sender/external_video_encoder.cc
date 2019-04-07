@@ -49,7 +49,7 @@ namespace media {
 namespace cast {
 
 // Container for the associated data of a video frame being processed.
-struct InProgressFrameEncode {
+struct InProgressExternalVideoFrameEncode {
   // The source content to encode.
   const scoped_refptr<VideoFrame> video_frame;
 
@@ -67,10 +67,11 @@ struct InProgressFrameEncode {
   // of the CastEnvironment clock, the latter of which might be simulated.
   const base::TimeTicks start_time;
 
-  InProgressFrameEncode(const scoped_refptr<VideoFrame>& v_frame,
-                        base::TimeTicks r_time,
-                        VideoEncoder::FrameEncodedCallback callback,
-                        int bit_rate)
+  InProgressExternalVideoFrameEncode(
+      const scoped_refptr<VideoFrame>& v_frame,
+      base::TimeTicks r_time,
+      VideoEncoder::FrameEncodedCallback callback,
+      int bit_rate)
       : video_frame(v_frame),
         reference_time(r_time),
         frame_encoded_callback(callback),
@@ -119,9 +120,9 @@ class ExternalVideoEncoder::VEAClientImpl
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
     requested_bit_rate_ = start_bit_rate;
-    encoder_active_ = video_encode_accelerator_->Initialize(
-        media::PIXEL_FORMAT_I420, frame_size, codec_profile, start_bit_rate,
-        this);
+    const media::VideoEncodeAccelerator::Config config(
+        media::PIXEL_FORMAT_I420, frame_size, codec_profile, start_bit_rate);
+    encoder_active_ = video_encode_accelerator_->Initialize(config, this);
     next_frame_id_ = first_frame_id;
     codec_profile_ = codec_profile;
 
@@ -162,56 +163,62 @@ class ExternalVideoEncoder::VEAClientImpl
       const VideoEncoder::FrameEncodedCallback& frame_encoded_callback) {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
-    in_progress_frame_encodes_.push_back(InProgressFrameEncode(
+    in_progress_frame_encodes_.push_back(InProgressExternalVideoFrameEncode(
         video_frame, reference_time, frame_encoded_callback,
         requested_bit_rate_));
 
     if (!encoder_active_) {
-      ExitEncodingWithErrors();
+      AbortLatestEncodeAttemptDueToErrors();
       return;
     }
 
-    scoped_refptr<media::VideoFrame> frame = video_frame;
-    if (video_frame->coded_size() != frame_coded_size_) {
-      DCHECK_GE(frame_coded_size_.width(), video_frame->visible_rect().width());
-      DCHECK_GE(frame_coded_size_.height(),
-                video_frame->visible_rect().height());
-
-      if (free_input_buffer_index_.empty()) {
-        if (!allocate_input_buffer_in_progress_ &&
-            input_buffers_.size() < max_allowed_input_buffers_) {
-          allocate_input_buffer_in_progress_ = true;
-          create_video_encode_memory_cb_.Run(
-              media::VideoFrame::AllocationSize(media::PIXEL_FORMAT_I420,
-                                                frame_coded_size_),
-              base::Bind(&VEAClientImpl::OnCreateInputSharedMemory, this));
-        }
-        ExitEncodingWithErrors();
-        return;
+    // If there are no free input buffers in the pool, request allocation of
+    // another one. Since that's an asynchronous process, simply abort encoding
+    // this frame and hope that the input buffer is ready for the next frame(s).
+    if (free_input_buffer_index_.empty()) {
+      if (!allocate_input_buffer_in_progress_ &&
+          input_buffers_.size() < max_allowed_input_buffers_) {
+        allocate_input_buffer_in_progress_ = true;
+        create_video_encode_memory_cb_.Run(
+            media::VideoFrame::AllocationSize(media::PIXEL_FORMAT_I420,
+                                              frame_coded_size_),
+            base::Bind(&VEAClientImpl::OnCreateInputSharedMemory, this));
       }
-
-      int index = free_input_buffer_index_.back();
-      base::SharedMemory* input_buffer = input_buffers_[index].get();
-      frame = VideoFrame::WrapExternalSharedMemory(
-          video_frame->format(), frame_coded_size_, video_frame->visible_rect(),
-          video_frame->visible_rect().size(),
-          static_cast<uint8_t*>(input_buffer->memory()),
-          input_buffer->mapped_size(), input_buffer->handle(), 0,
-          video_frame->timestamp());
-      if (!frame || !media::I420CopyWithPadding(*video_frame, frame.get())) {
-        LOG(DFATAL) << "Error: ExternalVideoEncoder: copy failed.";
-        ExitEncodingWithErrors();
-        return;
-      }
-
-      frame->AddDestructionObserver(media::BindToCurrentLoop(base::Bind(
-          &ExternalVideoEncoder::VEAClientImpl::ReturnInputBufferToPool, this,
-          index)));
-      free_input_buffer_index_.pop_back();
+      AbortLatestEncodeAttemptDueToErrors();
+      return;
     }
 
+    // Copy the |video_frame| into the input buffer provided by the VEA
+    // implementation, and with the exact row stride required. Note that, even
+    // if |video_frame|'s stride matches VEA's requirement, |video_frame|'s
+    // memory backing (heap, base::ReadOnlySharedMemoryRegion, etc.) could be
+    // something VEA can't handle (as of this writing, it uses the legacy shmem
+    // API). http://crbug.com/888153
+    //
+    // TODO(crbug.com/888829): Revisit whether we can remove this memcpy, if VEA
+    // can accept other "memory backing" methods.
+    const int index = free_input_buffer_index_.back();
+    base::SharedMemory* const input_buffer = input_buffers_[index].get();
+    scoped_refptr<media::VideoFrame> frame =
+        VideoFrame::WrapExternalSharedMemory(
+            video_frame->format(), frame_coded_size_,
+            video_frame->visible_rect(), video_frame->visible_rect().size(),
+            static_cast<uint8_t*>(input_buffer->memory()),
+            input_buffer->mapped_size(), input_buffer->handle(), 0,
+            video_frame->timestamp());
+    if (!frame || !media::I420CopyWithPadding(*video_frame, frame.get())) {
+      LOG(DFATAL) << "Error: ExternalVideoEncoder: copy failed.";
+      AbortLatestEncodeAttemptDueToErrors();
+      return;
+    }
+
+    frame->AddDestructionObserver(media::BindToCurrentLoop(base::Bind(
+        &ExternalVideoEncoder::VEAClientImpl::ReturnInputBufferToPool, this,
+        index)));
+    free_input_buffer_index_.pop_back();
+
     // BitstreamBufferReady will be called once the encoder is done.
-    video_encode_accelerator_->Encode(frame, key_frame_requested);
+    video_encode_accelerator_->Encode(std::move(frame), key_frame_requested);
   }
 
  protected:
@@ -284,7 +291,8 @@ class ExternalVideoEncoder::VEAClientImpl
       stream_header_.append(static_cast<const char*>(output_buffer->memory()),
                             metadata.payload_size_bytes);
     } else if (!in_progress_frame_encodes_.empty()) {
-      const InProgressFrameEncode& request = in_progress_frame_encodes_.front();
+      const InProgressExternalVideoFrameEncode& request =
+          in_progress_frame_encodes_.front();
 
       std::unique_ptr<SenderEncodedFrame> encoded_frame(
           new SenderEncodedFrame());
@@ -412,7 +420,7 @@ class ExternalVideoEncoder::VEAClientImpl
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
     while (!in_progress_frame_encodes_.empty())
-      ExitEncodingWithErrors();
+      AbortLatestEncodeAttemptDueToErrors();
 
     // According to the media::VideoEncodeAccelerator interface, Destroy()
     // should be called instead of invoking its private destructor.
@@ -462,9 +470,9 @@ class ExternalVideoEncoder::VEAClientImpl
     allocate_input_buffer_in_progress_ = false;
   }
 
-  // This is called when copy errors occur in encoding process when there is
-  // need to copy the VideoFrames to match the required coded size for encoder.
-  void ExitEncodingWithErrors() {
+  // This is called when an error occurs while preparing a VideoFrame for
+  // encode, or to abort a frame encode when shutting down.
+  void AbortLatestEncodeAttemptDueToErrors() {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
     std::unique_ptr<SenderEncodedFrame> no_result(nullptr);
@@ -563,7 +571,7 @@ class ExternalVideoEncoder::VEAClientImpl
   std::vector<int> free_input_buffer_index_;
 
   // FIFO list.
-  std::list<InProgressFrameEncode> in_progress_frame_encodes_;
+  std::list<InProgressExternalVideoFrameEncode> in_progress_frame_encodes_;
 
   // The requested encode bit rate for the next frame.
   int requested_bit_rate_;
@@ -631,7 +639,11 @@ ExternalVideoEncoder::ExternalVideoEncoder(
 
 ExternalVideoEncoder::~ExternalVideoEncoder() {
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
+  DestroyClientSoon();
+}
 
+void ExternalVideoEncoder::DestroyClientSoon() {
+  DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
   // Ensure |client_| is destroyed from the encoder task runner by dropping the
   // reference to it within an encoder task.
   if (client_) {
@@ -716,10 +728,39 @@ void ExternalVideoEncoder::OnCreateVideoEncodeAccelerator(
       return;
   }
 
+  // Create a callback that wraps the StatusChangeCallback. It monitors when a
+  // fatal error occurs and schedules destruction of the VEAClientImpl.
+  StatusChangeCallback wrapped_status_change_cb = base::Bind(
+      [](base::WeakPtr<ExternalVideoEncoder> self,
+         const StatusChangeCallback& status_change_cb,
+         OperationalStatus status) {
+        if (self.get()) {
+          switch (status) {
+            case STATUS_UNINITIALIZED:
+            case STATUS_INITIALIZED:
+            case STATUS_CODEC_REINIT_PENDING:
+              break;
+
+            case STATUS_INVALID_CONFIGURATION:
+            case STATUS_UNSUPPORTED_CODEC:
+            case STATUS_CODEC_INIT_FAILED:
+            case STATUS_CODEC_RUNTIME_ERROR:
+              // Something bad happened. Destroy the client to: 1) fail-out any
+              // currently in-progress frame encodes; and 2) prevent future
+              // EncodeVideoFrame() calls from queuing frames indefinitely.
+              self->DestroyClientSoon();
+              break;
+          }
+        }
+        status_change_cb.Run(status);
+      },
+      weak_factory_.GetWeakPtr(), status_change_cb);
+
   DCHECK(!client_);
   client_ = new VEAClientImpl(cast_environment_, encoder_task_runner,
                               std::move(vea), video_config.max_frame_rate,
-                              status_change_cb, create_video_encode_memory_cb_);
+                              std::move(wrapped_status_change_cb),
+                              create_video_encode_memory_cb_);
   client_->task_runner()->PostTask(FROM_HERE,
                                    base::Bind(&VEAClientImpl::Initialize,
                                               client_,

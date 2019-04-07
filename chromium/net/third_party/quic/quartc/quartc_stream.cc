@@ -50,39 +50,27 @@ void QuartcStream::OnDataBuffered(
   delegate_->OnBufferChanged(this);
 }
 
-uint32_t QuartcStream::stream_id() {
-  return id();
+void QuartcStream::OnCanWrite() {
+  if (cancel_on_loss_ && HasPendingRetransmission()) {
+    Reset(QUIC_STREAM_CANCELLED);
+    return;
+  }
+  QuicStream::OnCanWrite();
 }
 
-uint64_t QuartcStream::bytes_buffered() {
-  return BufferedDataBytes();
+bool QuartcStream::cancel_on_loss() {
+  return cancel_on_loss_;
 }
 
-bool QuartcStream::fin_sent() {
-  return QuicStream::fin_sent();
-}
-
-int QuartcStream::stream_error() {
-  return QuicStream::stream_error();
-}
-
-void QuartcStream::Write(QuicMemSliceSpan data, const WriteParameters& param) {
-  WriteMemSlices(data, param.fin);
+void QuartcStream::set_cancel_on_loss(bool cancel_on_loss) {
+  cancel_on_loss_ = cancel_on_loss;
 }
 
 void QuartcStream::FinishWriting() {
   WriteOrBufferData(QuicStringPiece(nullptr, 0), true, nullptr);
 }
 
-void QuartcStream::FinishReading() {
-  QuicStream::StopReading();
-}
-
-void QuartcStream::Close() {
-  QuicStream::session()->CloseStream(id());
-}
-
-void QuartcStream::SetDelegate(QuartcStreamInterface::Delegate* delegate) {
+void QuartcStream::SetDelegate(Delegate* delegate) {
   if (delegate_) {
     LOG(WARNING) << "The delegate for Stream " << id()
                  << " has already been set.";

@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "ash/app_list/app_list_controller_impl.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
@@ -22,8 +23,11 @@
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
+#include "base/containers/unique_ptr_adapters.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/stl_util.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/wm/core/window_util.h"
@@ -36,7 +40,6 @@ namespace {
 // when this is true.
 bool g_disable_wallpaper_blur_for_tests = false;
 
-constexpr double kWallpaperClearBlurSigma = 0.f;
 constexpr int kBlurSlideDurationMs = 250;
 
 // Returns true if |window| should be hidden when entering overview.
@@ -73,9 +76,31 @@ bool ShouldExcludeWindowFromOverview(const aura::Window* window) {
   return false;
 }
 
-bool IsBlurEnabled() {
+bool IsBlurAllowed() {
   return !g_disable_wallpaper_blur_for_tests &&
-         Shell::Get()->wallpaper_controller()->IsBlurEnabled();
+         Shell::Get()->wallpaper_controller()->IsBlurAllowed();
+}
+
+// Returns whether overview mode items should be slid in or out from the top of
+// the screen.
+bool ShouldSlideInOutOverview(const std::vector<aura::Window*>& windows) {
+  // No sliding if home launcher is not available.
+  if (!Shell::Get()
+           ->app_list_controller()
+           ->IsHomeLauncherEnabledInTabletMode()) {
+    return false;
+  }
+
+  if (windows.empty())
+    return false;
+
+  // Only slide in if all windows are minimized.
+  for (const aura::Window* window : windows) {
+    if (!wm::GetWindowState(window)->IsMinimized())
+      return false;
+  }
+
+  return true;
 }
 
 }  // namespace
@@ -120,17 +145,17 @@ class WindowSelectorController::OverviewBlurController
     if (state_ == WallpaperAnimationState::kNormal)
       return;
 
-    double value = state_ == WallpaperAnimationState::kAddingBlur
-                       ? kWallpaperBlurSigma
-                       : kWallpaperClearBlurSigma;
+    float value = state_ == WallpaperAnimationState::kAddingBlur
+                      ? kWallpaperBlurSigma
+                      : kWallpaperClearBlurSigma;
     for (aura::Window* root : roots_to_animate_)
       ApplyBlur(root, value);
     state_ = WallpaperAnimationState::kNormal;
   }
 
   void AnimationProgressed(const gfx::Animation* animation) override {
-    double value = animation_.CurrentValueBetween(kWallpaperClearBlurSigma,
-                                                  kWallpaperBlurSigma);
+    float value = animation_.CurrentValueBetween(kWallpaperClearBlurSigma,
+                                                 kWallpaperBlurSigma);
     for (aura::Window* root : roots_to_animate_)
       ApplyBlur(root, value);
   }
@@ -153,7 +178,7 @@ class WindowSelectorController::OverviewBlurController
   void ApplyBlur(aura::Window* root, float blur_sigma) {
     RootWindowController::ForWindow(root)
         ->wallpaper_widget_controller()
-        ->SetWallpaperBlur(static_cast<float>(blur_sigma));
+        ->SetWallpaperBlur(blur_sigma);
   }
 
   // Called when the wallpaper is to be changed. Checks to see which root
@@ -162,7 +187,7 @@ class WindowSelectorController::OverviewBlurController
   // the wallpaper does not need blur animation.
   void OnBlurChange() {
     const bool should_blur = state_ == WallpaperAnimationState::kAddingBlur;
-    const double value =
+    const float value =
         should_blur ? kWallpaperBlurSigma : kWallpaperClearBlurSigma;
     for (aura::Window* root : roots_to_animate_)
       root->RemoveObserver(this);
@@ -170,16 +195,20 @@ class WindowSelectorController::OverviewBlurController
 
     WindowSelector* window_selector =
         Shell::Get()->window_selector_controller()->window_selector();
-    DCHECK(window_selector);
-
     for (aura::Window* root : Shell::Get()->GetAllRootWindows()) {
-      if (!should_blur || window_selector->ShouldAnimateWallpaper(root)) {
-        root->AddObserver(this);
-        roots_to_animate_.push_back(root);
-      } else {
-        animation_.Reset(should_blur ? 1.0 : 0.0);
-        ApplyBlur(root, value);
+      // No need to animate the blur on exiting as this should only be called
+      // after overview animations are finished.
+      if (should_blur) {
+        DCHECK(window_selector);
+        if (window_selector->ShouldAnimateWallpaper(root)) {
+          root->AddObserver(this);
+          roots_to_animate_.push_back(root);
+          continue;
+        }
       }
+
+      animation_.Reset(should_blur ? 1.0 : 0.0);
+      ApplyBlur(root, value);
     }
 
     // Run the animation if one of the roots needs to be animated.
@@ -233,7 +262,11 @@ bool WindowSelectorController::CanSelect() {
          !session_controller->IsRunningInAppMode();
 }
 
-bool WindowSelectorController::ToggleOverview() {
+bool WindowSelectorController::ToggleOverview(bool toggled_from_home_launcher) {
+  // |toggled_from_home_launcher| should only be true if we are exiting
+  // overview.
+  DCHECK(!(toggled_from_home_launcher && !IsSelecting()));
+
   auto windows = Shell::Get()->mru_window_tracker()->BuildMruWindowList();
 
   // Hidden windows will be removed by ShouldExcludeWindowFromOverview so we
@@ -247,20 +280,43 @@ bool WindowSelectorController::ToggleOverview() {
                        ShouldExcludeWindowFromOverview);
   windows.resize(end - windows.begin());
 
+  // We may want to slide the overview grid in or out in some cases.
+  bool should_slide_overview =
+      toggled_from_home_launcher || ShouldSlideInOutOverview(windows);
+
   if (IsSelecting()) {
     // Do not allow ending overview if we're in single split mode.
     if (windows.empty() && Shell::Get()->IsSplitViewModeActive())
       return true;
+
+    if (toggled_from_home_launcher) {
+      // Minimize the windows without animations. Minimized widgets will get
+      // created in their place, and those widgets will be slid out of
+      // overview when the home launcher button is pressed.
+      for (aura::Window* window : windows) {
+        window->SetProperty(aura::client::kAnimationsDisabledKey, true);
+        wm::GetWindowState(window)->Minimize();
+        window->ClearProperty(aura::client::kAnimationsDisabledKey);
+      }
+    }
+
+    window_selector_->set_use_slide_animation(should_slide_overview);
     OnSelectionEnded();
   } else {
     // Don't start overview if window selection is not allowed.
     if (!CanSelect())
       return false;
 
-    window_selector_.reset(new WindowSelector(this));
+    // Clear any animations that may be running from last overview end.
+    for (const auto& animation : delayed_animations_)
+      animation->Shutdown();
+    delayed_animations_.clear();
+
+    window_selector_ = std::make_unique<WindowSelector>(this);
+    window_selector_->set_use_slide_animation(should_slide_overview);
     Shell::Get()->NotifyOverviewModeStarting();
     window_selector_->Init(windows, hide_windows);
-    if (IsBlurEnabled())
+    if (IsBlurAllowed())
       overview_blur_controller_->Blur();
     OnSelectionStarted();
   }
@@ -279,11 +335,6 @@ void WindowSelectorController::IncrementSelection(int increment) {
 bool WindowSelectorController::AcceptSelection() {
   DCHECK(IsSelecting());
   return window_selector_->AcceptSelection();
-}
-
-bool WindowSelectorController::IsRestoringMinimizedWindows() const {
-  return window_selector_.get() != NULL &&
-         window_selector_->restoring_minimized_windows();
 }
 
 void WindowSelectorController::OnOverviewButtonTrayLongPressed(
@@ -405,13 +456,13 @@ WindowSelectorController::GetWindowsListInOverviewGridsForTesting() {
 void WindowSelectorController::OnSelectionEnded() {
   if (is_shutting_down_)
     return;
-
-  if (IsBlurEnabled())
-    overview_blur_controller_->Unblur();
   is_shutting_down_ = true;
   Shell::Get()->NotifyOverviewModeEnding();
   auto* window_selector = window_selector_.release();
   window_selector->Shutdown();
+  // There may be no delayed animations in tests, so unblur right away.
+  if (delayed_animations_.empty() && IsBlurAllowed())
+    overview_blur_controller_->Unblur();
   // Don't delete |window_selector_| yet since the stack is still using it.
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, window_selector);
   last_selection_time_ = base::Time::Now();
@@ -427,21 +478,19 @@ void WindowSelectorController::AddDelayedAnimationObserver(
 
 void WindowSelectorController::RemoveAndDestroyAnimationObserver(
     DelayedAnimationObserver* animation_observer) {
-  class IsEqual {
-   public:
-    explicit IsEqual(DelayedAnimationObserver* animation_observer)
-        : animation_observer_(animation_observer) {}
-    bool operator()(const std::unique_ptr<DelayedAnimationObserver>& other) {
-      return (other.get() == animation_observer_);
-    }
+  const bool previous_empty = delayed_animations_.empty();
+  base::EraseIf(delayed_animations_,
+                base::MatchesUniquePtr(animation_observer));
 
-   private:
-    const DelayedAnimationObserver* animation_observer_;
-  };
-  delayed_animations_.erase(
-      std::remove_if(delayed_animations_.begin(), delayed_animations_.end(),
-                     IsEqual(animation_observer)),
-      delayed_animations_.end());
+  // If something has been removed and its the last observer, unblur the
+  // wallpaper and let observers know. This function may be called while still
+  // in overview (ie. splitview restores one window but leaves overview active)
+  // so check that |window_selector_| is null before notifying.
+  if (!window_selector_ && !previous_empty && delayed_animations_.empty()) {
+    if (IsBlurAllowed())
+      overview_blur_controller_->Unblur();
+    Shell::Get()->NotifyOverviewModeEndingAnimationComplete();
+  }
 }
 
 // static

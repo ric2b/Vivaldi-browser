@@ -21,12 +21,13 @@
 <translation id="1591562245178063882">या महिन्यात</translation>
 <translation id="1637811476055996098">फायली निवडा</translation>
 <translation id="1650423536718072820">पुलकोट</translation>
-<translation id="1729654308190250600">कृपया एक रिक्त-नसलेला ईमेल अॅड्रेस एंटर करा.</translation>
+<translation id="1729654308190250600">कृपया एक रिक्त नसलेला ईमेल अॅड्रेस एंटर करा.</translation>
 <translation id="1758486001363313524">अन्य...</translation>
 <translation id="1806710327868736751">सूचना_संवाद</translation>
 <translation id="1821985195704844674">ट्री ग्रीड</translation>
 <translation id="1822429046913737220">AM/PM</translation>
 <translation id="1832974991323546415">दूरस्थ डिव्हाइसवर प्ले करा</translation>
+<translation id="1838818994221231429">डिस्प्ले कटआउट भागामध्ये फुलस्क्रीन टॉगल करा</translation>
 <translation id="190587075670221089">हटवणे</translation>
 <translation id="1907737156431278478">उदाहरण</translation>
 <translation id="1921819250265091946">dd</translation>
@@ -64,7 +65,7 @@
 <translation id="2942448076852699108">हायलाइट केलेली सामग्री</translation>
 <translation id="3040011195152428237">दुवा</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
-<translation id="3075154866155599887">कृपया एक वैध मूल्य एंटर करा. फील्ड अपूर्ण आहे किंवा अवैध तारीख आहे.</translation>
+<translation id="3075154866155599887">कृपया एक वैध मूल्य एंटर करा. भाग अपूर्ण आहे किंवा चुकीची तारीख आहे.</translation>
 <translation id="3078740164268491126">सारणी</translation>
 <translation id="3086746722712840547">टीप</translation>
 <translation id="310520048233152454">कृपया एखादी URL एंटर करा.</translation>
@@ -103,6 +104,7 @@
 <translation id="4664250907885839816">'<ph name="ATSIGN" />' चे फॉलो करणार्‍या भागामध्ये '<ph name="INVALIDCHARACTER" />' चिन्ह नसावे.</translation>
 <translation id="4668956016107839909">परिशिष्ट</translation>
 <translation id="4742539557769756338">कव्हर</translation>
+<translation id="4748357248530471599">डिस्प्ले कटआउट फुलस्क्रीन टॉगल करा</translation>
 <translation id="4757246831282535685">टॅब पॅनेल</translation>
 <translation id="4763480195061959176">व्हिडिओ</translation>
 <translation id="479989351350248267">search</translation>
@@ -152,7 +154,7 @@
 <translation id="6453774872122745852">श्रेयनिर्देश</translation>
 <translation id="648732519525291180">वेळ निवडक</translation>
 <translation id="6550675742724504774">पर्याय</translation>
-<translation id="658823671542763450">पूर्ण स्क्रीन एंटर करा</translation>
+<translation id="658823671542763450">फुल स्क्रीन एंटर करा</translation>
 <translation id="663493177488814956">फीड</translation>
 <translation id="6637586476836377253">लॉग</translation>
 <translation id="6643016212128521049">साफ करा</translation>
@@ -202,10 +204,10 @@
 <translation id="8105797009065549151">टीप संदर्भ</translation>
 <translation id="8115662671911883373">बंद मथळा प्रदर्शित करणे प्रारंभ करा</translation>
 <translation id="8117451130807776954">या आठवड्यात</translation>
-<translation id="819205353528511139">पूर्ण स्क्रीन मोडमध्ये चित्रपट प्ले करा</translation>
+<translation id="819205353528511139">फुल स्क्रीन मोडमध्ये चित्रपट प्ले करा</translation>
 <translation id="8199524924445686405">yyyy</translation>
 <translation id="8284326494547611709">मथळे</translation>
-<translation id="835897206747267392">अवैध मूल्य.</translation>
+<translation id="835897206747267392">चुकीचे मूल्य.</translation>
 <translation id="8415319359811155763">भाग</translation>
 <translation id="8433900881053900389">टूलबार</translation>
 <translation id="8444882422881193423"><ph name="NUMBER_OF_FILES" /> फायली</translation>

@@ -7,44 +7,31 @@
 #include <memory>
 
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/net/nqe/ui_network_quality_estimator_service.h"
-#include "chrome/browser/net/nqe/ui_network_quality_estimator_service_factory.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/metrics/net/network_metrics_provider.h"
-#include "content/public/browser/web_contents.h"
+#include "net/http/http_response_headers.h"
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/network/public/cpp/network_quality_tracker.h"
 #include "third_party/metrics_proto/system_profile.pb.h"
-
-namespace {
-
-UINetworkQualityEstimatorService* GetNQEService(
-    content::WebContents* web_contents) {
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents->GetBrowserContext());
-  if (!profile)
-    return nullptr;
-  return UINetworkQualityEstimatorServiceFactory::GetForProfile(profile);
-}
-
-}  // namespace
 
 // static
 std::unique_ptr<page_load_metrics::PageLoadMetricsObserver>
-UkmPageLoadMetricsObserver::CreateIfNeeded(content::WebContents* web_contents) {
+UkmPageLoadMetricsObserver::CreateIfNeeded() {
   if (!ukm::UkmRecorder::Get()) {
     return nullptr;
   }
   return std::make_unique<UkmPageLoadMetricsObserver>(
-      GetNQEService(web_contents));
+      g_browser_process->network_quality_tracker());
 }
 
 UkmPageLoadMetricsObserver::UkmPageLoadMetricsObserver(
-    net::NetworkQualityEstimator::NetworkQualityProvider*
-        network_quality_provider)
-    : network_quality_provider_(network_quality_provider) {}
+    network::NetworkQualityTracker* network_quality_tracker)
+    : network_quality_tracker_(network_quality_tracker) {
+  DCHECK(network_quality_tracker_);
+}
 
 UkmPageLoadMetricsObserver::~UkmPageLoadMetricsObserver() = default;
 
@@ -62,14 +49,12 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnStart(
   // record UKM metrics for that data once we've confirmed that we're observing
   // a web page load.
 
-  if (network_quality_provider_) {
-    effective_connection_type_ =
-        network_quality_provider_->GetEffectiveConnectionType();
-    http_rtt_estimate_ = network_quality_provider_->GetHttpRTT();
-    transport_rtt_estimate_ = network_quality_provider_->GetTransportRTT();
-    downstream_kbps_estimate_ =
-        network_quality_provider_->GetDownstreamThroughputKbps();
-  }
+  effective_connection_type_ =
+      network_quality_tracker_->GetEffectiveConnectionType();
+  http_rtt_estimate_ = network_quality_tracker_->GetHttpRTT();
+  transport_rtt_estimate_ = network_quality_tracker_->GetTransportRTT();
+  downstream_kbps_estimate_ =
+      network_quality_tracker_->GetDownstreamThroughputKbps();
   page_transition_ = navigation_handle->GetPageTransition();
   return CONTINUE_OBSERVING;
 }
@@ -77,6 +62,10 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnStart(
 UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnCommit(
     content::NavigationHandle* navigation_handle,
     ukm::SourceId source_id) {
+  const net::HttpResponseHeaders* response_headers =
+      navigation_handle->GetResponseHeaders();
+  if (response_headers)
+    http_response_code_ = response_headers->response_code();
   // The PageTransition for the navigation may be updated on commit.
   page_transition_ = navigation_handle->GetPageTransition();
   return CONTINUE_OBSERVING;
@@ -232,6 +221,10 @@ void UkmPageLoadMetricsObserver::RecordPageLoadExtraInfoMetrics(
         static_cast<int64_t>(proto_effective_connection_type));
   }
 
+  if (http_response_code_) {
+    builder.SetNet_HttpResponseCode(
+        static_cast<int64_t>(http_response_code_.value()));
+  }
   if (http_rtt_estimate_) {
     builder.SetNet_HttpRttEstimate_OnNavigationStart(
         static_cast<int64_t>(http_rtt_estimate_.value().InMilliseconds()));

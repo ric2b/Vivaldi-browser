@@ -15,7 +15,7 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/metrics/user_metrics.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/android/feed/feed_host_service_factory.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
@@ -74,7 +74,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/domain_reliability/service.h"
-#include "components/feed/core/feed_host_service.h"
+#include "components/feed/content/feed_host_service.h"
 #include "components/feed/core/feed_scheduler_host.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/language/core/browser/url_language_histogram.h"
@@ -91,7 +91,7 @@
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "components/webrtc_logging/browser/log_cleanup.h"
-#include "components/webrtc_logging/browser/log_list.h"
+#include "components/webrtc_logging/browser/text_log_list.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/plugin_data_remover.h"
@@ -111,7 +111,7 @@
 #include "components/feed/buildflags.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/offline_pages/core/offline_page_model.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 #endif  // defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -225,7 +225,7 @@ void ClearPrecacheInBackground(content::BrowserContext* browser_context) {
   // still here.
   base::FilePath db_path(browser_context->GetPath().Append(
       base::FilePath(FILE_PATH_LITERAL("PrecacheDatabase"))));
-  sql::Connection::Delete(db_path);
+  sql::Database::Delete(db_path);
 }
 #endif
 
@@ -548,8 +548,8 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
         FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
         base::BindOnce(
             &webrtc_logging::DeleteOldAndRecentWebRtcLogFiles,
-            webrtc_logging::LogList::GetWebRtcLogDirectoryForBrowserContextPath(
-                profile_->GetPath()),
+            webrtc_logging::TextLogList::
+                GetWebRtcLogDirectoryForBrowserContextPath(profile_->GetPath()),
             delete_begin_),
         CreatePendingTaskCompletionClosure());
 
@@ -1030,7 +1030,8 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
           ->GetCryptohomeClient()
           ->TpmAttestationDeleteKeys(
               chromeos::attestation::KEY_USER,
-              cryptohome::Identification(user->GetAccountId()),
+              cryptohome::CreateAccountIdentifierFromAccountId(
+                  user->GetAccountId()),
               chromeos::attestation::kContentProtectionKeyPrefix,
               base::BindOnce(
                   &ChromeBrowsingDataRemoverDelegate::OnClearPlatformKeys,

@@ -2,9 +2,10 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="te">
 <translation id="100812568230599391">ప్రదర్శన శైలిని ఇంటర్‌లీవ్‌కి మార్చండి.</translation>
+<translation id="1011903154582639569">కీని కనుగొని, టైప్ చేయడానికి ఎత్తండి</translation>
 <translation id="1012173283529841972">జాబితా అంశం</translation>
 <translation id="1013742170491673792">srched</translation>
-<translation id="1022586497894531524">మీరు ChromeVox ప్రసంగ రూప అభిప్రాయాన్ని మొదటిసారిగా ఉపయోగిస్తున్నారా? ఈ శీఘ్ర ట్యుటోరియల్ ChromeVoxను ప్రారంభించడం కోసం అవసరమైన ముఖ్యమైన వాటి గురించి వివరిస్తుంది.</translation>
+<translation id="1022586497894531524">మీరు ChromeVox ప్రసంగ రూప ప్రతిస్పందనను మొదటిసారిగా ఉపయోగిస్తున్నారా? ఈ త్వరిత ట్యుటోరియల్ ChromeVoxను ప్రారంభించడం కోసం అవసరమైన వాటిని వివరిస్తుంది.</translation>
 <translation id="1023866615269196768">వ్యాపించింది.</translation>
 <translation id="1025074108959230262">స్టిక్కీ మోడ్ నిలిపివేయబడింది</translation>
 <translation id="1031961866430398710">తర్వాత</translation>
@@ -15,6 +16,7 @@
 <translation id="1065552602950927991">ఇన్‌పుట్ చెల్లదు</translation>
 <translation id="1080471004309605942">ఇటాలిక్ ముగింపు</translation>
 <translation id="1082209053475788238">మునుపటి స్థాయి 6 శీర్షిక లేదు.</translation>
+<translation id="1087788677726983142">ఈవెంట్ ప్రసార ఫిల్టర్‌లను దాచు</translation>
 <translation id="1088219014394087294">శీర్షికలు లేవు.</translation>
 <translation id="1106741348836243114">ధ్వని అభిప్రాయాన్ని (శబ్ద హెచ్చరికలు) ప్రారంభించండి లేదా ఆపివేయండి.</translation>
 <translation id="1108651818222110612">ఉపశీర్షిక</translation>
@@ -32,7 +34,7 @@
 <translation id="1201402288615127009">తదుపరి</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1213216066620407844">ChromeVox - Chromeకు వాయిస్‌ను ఇస్తోంది</translation>
-<translation id="1225437811932752266">అభినందనలు! మీరు ChromeVoxను ఉపయోగించడం కోసం ముఖ్యమైన వాటి గురించి తెలుసుకున్నారు. మీరు శోధన+పూర్ణ విరామం నొక్కడం ద్వారా ఎప్పుడైనా ChromeVox ఆదేశం మెనుని తెరవవచ్చని గుర్తుంచుకోండి. ChromeVox మరియు Chrome OS గురించి మరింత తెలుసుకోవాలంటే, కింది కథనాలను సందర్శించండి.
+<translation id="1225437811932752266">అభినందనలు! మీరు ChromeVoxను ఉపయోగించడం కోసం ముఖ్యమైన వాటి గురించి తెలుసుకున్నారు. మీరు శోధన+ఫుల్ స్టాప్ బటన్‌లను ఒకేసారి నొక్కడం ద్వారా ఎప్పుడైనా ChromeVox ఆదేశాల మెనూని తెరవవచ్చని గుర్తుంచుకోండి. ChromeVox మరియు Chrome OSల గురించి మరింత తెలుసుకోవడానికి, కింది కథనాలను సందర్శించండి.
 మీరు ట్యుటోరియల్‌ను ముగించి ఉంటే, ChromeVoxను ఉపయోగించి మూసివేయి బటన్‌కి నావిగేట్ చేసి, దాన్ని క్లిక్ చేయండి.</translation>
 <translation id="1229276918471378188">మునుపటి జంప్</translation>
 <translation id="1236794971743289975">ఎండ్‌నోట్</translation>
@@ -77,6 +79,7 @@
 <translation id="1618597272655350600">ప్రస్తుత స్థానం యొక్క పూర్తి వివరణను తెలియజేస్తుంది</translation>
 <translation id="1639634871799530612">{COUNT,plural, =1{గురుతర గుర్తు}other{# గురుతర గుర్తులు}}</translation>
 <translation id="1653266918374749391">మునుపటి స్థాయి 3 శీర్షిక</translation>
+<translation id="1657616855184033958">ఈవెంట్ ప్రసార ఫిల్టర్‌లను చూపించు</translation>
 <translation id="1659072772017912254">ఎంచుకోబడలేదు</translation>
 <translation id="1669290819662866522">వారం</translation>
 <translation id="1674262202423278359">ChromeVox నావిగేషన్</translation>
@@ -136,6 +139,7 @@
 <translation id="2267945578749931355">తదుపరి అక్షరం</translation>
 <translation id="2281234842553884450">మునుపటి స్లయిడర్</translation>
 <translation id="2294136146931447363">ఇటాలిక్ ప్రారంభం</translation>
+<translation id="2311237334957139798">వివరాల స్థాయి వద్ద మునుపటి దానికి తరలించండి</translation>
 <translation id="2318372665160196757">ప్రధానం</translation>
 <translation id="2329324941084714723">ట్యాబ్ ప్యానెల్</translation>
 <translation id="2344193891939537199">తేదీ సమయ నియంత్రణ</translation>
@@ -156,12 +160,14 @@
 <translation id="2462626033734746142">రేడియో బటన్ సమూహం</translation>
 <translation id="2471138580042810658">శీర్షిక 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{నక్షత్రం గుర్తు}other{# నక్షత్రం గుర్తులు}}</translation>
+<translation id="249330843868392562">వచనం నుండి ప్రసంగం సెట్టింగ్‌లను తెరువు</translation>
 <translation id="2523609930580546572">ChromeVox ట్యుటోరియల్</translation>
 <translation id="2525706221823668172">Chromebook కీబోర్డ్ సత్వరమార్గాలు</translation>
 <translation id="2549392850788122959"><ph name="KEY" /> రీసెట్ చేయబడింది.</translation>
 <translation id="2553108862507765288">grammatical mistake</translation>
 <translation id="257674075312929031">సమూహం</translation>
 <translation id="2582407057977008361">ప్రక్కన</translation>
+<translation id="2592212930811759050">సవరణను ప్రారంభించడానికి రెండుసార్లు నొక్కండి</translation>
 <translation id="2606210917827248971">{COUNT,plural, =1{# అంశంతో}other{# అంశాలతో}}</translation>
 <translation id="2614981083756825552">గణిత ML లేఅవుట్</translation>
 <translation id="2624431853467395961">తెలుసుకునే మోడ్‌ను తెరవండి</translation>
@@ -207,7 +213,7 @@
 <translation id="2894654529758326923">సమాచారం</translation>
 <translation id="2899328121302785497">{COUNT,plural, =1{ఎడమ ధనుర్బంధ గుర్తు}other{# ఎడమ ధనుర్బంధ గుర్తులు}}</translation>
 <translation id="2909478709401302630">సూపర్‌స్క్రిప్ట్ ప్రారంభం</translation>
-<translation id="2911433807131383493">ChromeVox ట్యుటోరియల్‌ను తెరవండి</translation>
+<translation id="2911433807131383493">ChromeVox ట్యుటోరియల్‌ను తెరుస్తుంది</translation>
 <translation id="2932083475399492303">ఆకృతీకరణ లేదా లేఅవుట్ మధ్య పంక్తి రకాన్ని టోగుల్ చేయండి</translation>
 <translation id="2944762337049891859">పేజీ పూర్తిగా లోడ్ అయిన తర్వాత స్వయంచాలకంగా చదువుతుంది.</translation>
 <translation id="2964026537669811554">శీర్షిక సమూహం</translation>
@@ -409,6 +415,7 @@
 <translation id="4255943572433203166">ChromeVoxను అనుకూలీకరించడానికి దిగువ ఎంపికలను ఉపయోగించండి. మార్పులు వెంటనే ప్రభావవంతమవుతాయి.</translation>
 <translation id="4271220233568730077">తదుపరి గణితం</translation>
 <translation id="4271521365602459209">ఇక ఫలితాలు లేవు.</translation>
+<translation id="4275397969489577657">ఈవెంట్ ప్రసార లాగింగ్‌ను ప్రారంభించు</translation>
 <translation id="4287520460805643128">తదుపరి కథనం లేదు.</translation>
 <translation id="4289540628985791613">స్థూలదృష్టి</translation>
 <translation id="4300318234632215983">లింక్ వెనుక URLను తెలియజేయండి</translation>
@@ -487,6 +494,7 @@
 <translation id="4973762002207131920"><ph name="KEY" />కి మారింది.</translation>
 <translation id="4975416682604111799">మిల్లీసెకన్లు</translation>
 <translation id="49787999531187221">ChromeVox ఇప్పుడు క్రియారహితం చేయబడింది.</translation>
+<translation id="4979263087381759787">డెవలపర్ ఎంపికలు</translation>
 <translation id="4979404613699303341">మునుపటి బటన్</translation>
 <translation id="4982773647088557172"><ph name="VALUE" />, <ph name="NAME" />, జాబితా పెట్టె</translation>
 <translation id="4983588134362688868">పేజీ ఎగువకు వెళ్లండి</translation>
@@ -498,6 +506,7 @@
 <translation id="5000760171916499057">ఫారమ్‌లు లేవు.</translation>
 <translation id="5005670136041063723">మరిన్ని సారూప్య మూలకాలు లేవు.</translation>
 <translation id="501473567976723023">జనవరి</translation>
+<translation id="5020651427400641814">ప్రసంగ లాగింగ్‌ని ప్రారంభించండి</translation>
 <translation id="5041394372352067729">బ్రెయిలీ డిస్‌ప్లేను పేజీ పైకి తరలించండి</translation>
 <translation id="5042770794184672516">ప్రసంగ వాల్యూమ్‌ను పెంచండి</translation>
 <translation id="5050015258024679800">మునుపటి స్థాయి 4 శీర్షిక</translation>
@@ -512,6 +521,7 @@
 <translation id="5106547198195128110">మీకు ఈ సరికొత్త విడుదలలో అద్భుతమైన మార్పులను అందిస్తున్నాము; ఇవి కొత్తవి:</translation>
 <translation id="5110983769041734144">మునుపటి ఫారమ్ ఫీల్డ్ లేదు.</translation>
 <translation id="5111640677200759579">నిలువు వరుస ముఖ్య శీర్షిక</translation>
+<translation id="5115892389597951922">ChromeVox లాగ్</translation>
 <translation id="5136967254288895616">మునుపటి లింక్ లేదు.</translation>
 <translation id="513774504516943387">lnk</translation>
 <translation id="5158275234811857234">ముఖచిత్రం</translation>
@@ -545,6 +555,7 @@
 <translation id="5407530583102765689">{COUNT,plural, =1{సెమీకోలన్ గుర్తు}other{# సెమీకోలన్ గుర్తులు}}</translation>
 <translation id="5411891038905756502">మునుపటి జంప్ పాయింట్ లేదు.</translation>
 <translation id="5417034931411865818">రూటింగ్ కీ $1 క్రింద ఉన్న అంశాన్ని క్లిక్ చేయండి</translation>
+<translation id="5435274640623994081">ఇయర్‌కాన్ లాగింగ్‌ను ప్రారంభించు</translation>
 <translation id="5436105723448703439">{COUNT,plural, =1{న్యూన గుర్తు}other{# న్యూన గుర్తులు}}</translation>
 <translation id="5444587279251314700">(సక్రియంగా ఉంది)</translation>
 <translation id="5446809554778706307">దృష్టి కేంద్రీకరించలేదు. కొత్త ట్యాబ్‌ని తెరవడం కోసం Ctrl+T నొక్కండి.</translation>
@@ -607,7 +618,7 @@
 <translation id="5851548754964597211">ట్యాబ్ జాబితా</translation>
 <translation id="5859752971144398932">పేజీలో కనుగొనడం నుండి నిష్క్రమించారు.</translation>
 <translation id="5866042630553435010">పాక్షికంగా తనిఖీ చేయబడింది</translation>
-<translation id="5867591286054666064">ఈ ట్యుటోరియల్ జరుగుతున్నప్పుడు, ఏదైనా కీ పేరును వినడానికి దానిపై నొక్కండి.</translation>
+<translation id="5867591286054666064">ఈ ట్యుటోరియల్ జరుగుతున్నప్పుడు, ఏదైనా కీ పేరును వినడానికి దానిని నొక్కండి.</translation>
 <translation id="5869546221129391014">గ్రిడ్</translation>
 <translation id="5876817486144482042">ప్రసంగ వాల్యూమ్‌ను తగ్గించండి</translation>
 <translation id="5887397643266327462">బ్రెయిలీ శీర్షికలు ప్రారంభించబడ్డాయి.</translation>
@@ -678,6 +689,7 @@
 <translation id="6540201937398578274">ChromeVoxలో, శోధన కీ అనేది మాడిఫైయర్ కీ. చాలా వరకు ChromeVox సత్వరమార్గాలు శోధన కీతో ప్రారంభమవుతాయి. అలాగే మీరు నావిగేషన్ కోసం ఎక్కువగా బాణం కీలను ఉపయోగిస్తారు.</translation>
 <translation id="6550720799683018100">దిగువ జాబితా నుండి ఎంపికను ఎంచుకోవడం ద్వారా ప్రస్తుత కీమ్యాప్‌ను మార్చండి.</translation>
 <translation id="6561818612645211875">ప్రస్తుత అడ్డు వరుస ప్రారంభానికి వెళ్లండి</translation>
+<translation id="6583174818554398774">వివరాల స్థాయి వద్ద తర్వాతి దానికి తరలించండి</translation>
 <translation id="6587021927234520429">తదుపరి స్థాయి 4 శీర్షిక లేదు.</translation>
 <translation id="6601344353291556895">విశదీకృత వివరణలను ప్రారంభించండి.</translation>
 <translation id="6615602925644411249">పేజీలో కనుగొనండి.</translation>
@@ -753,6 +765,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="7241683698754534149">పెద్ద వివరణను కొత్త ట్యాబ్‌లో తెరవండి</translation>
 <translation id="7248671827512403053">అప్లికేషన్‌</translation>
 <translation id="725969808843520477">తదుపరి రేడియో బటన్</translation>
+<translation id="7261612856573623172">వచనం నుండి ప్రసంగం సిస్టమ్ వాయిస్</translation>
 <translation id="7269119382257320590">విరామచిహ్నాలు లేవు</translation>
 <translation id="7273174640290488576">ఖాళీ</translation>
 <translation id="7274770952766771364">గమనిక సూచన</translation>
@@ -893,6 +906,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="8650576015643545550">మునుపటి జాబితా లేదు.</translation>
 <translation id="8651481478098336970">వాల్యూమ్‌ను మ్యూట్ చేస్తుంది</translation>
 <translation id="8653646212587894517">లింక్‌ల జాబితాను చూపండి</translation>
+<translation id="8656888282555543604">బ్రెయిలీ లాగింగ్‌ను ప్రారంభించు</translation>
 <translation id="8664519043722036194">సెకన్లు</translation>
 <translation id="867187640362843212">శీర్షిక 5</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{పైప్ గుర్తు}other{# నిలువు పైప్ గుర్తులు}}</translation>

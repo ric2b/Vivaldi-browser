@@ -10,13 +10,13 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.blink_public.web.WebReferrerPolicy;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.NativePageHost;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.download.DownloadMetrics;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
+import org.chromium.chrome.browser.native_page.NativePageHost;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
@@ -30,6 +30,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
+import org.chromium.components.offline_items_collection.LaunchLocation;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.ui.base.PageTransition;
@@ -40,8 +41,6 @@ import org.chromium.ui.widget.Toast;
  * {@link SuggestionsUiDelegate} implementation.
  */
 public class SuggestionsNavigationDelegateImpl implements SuggestionsNavigationDelegate {
-    private static final String CHROME_CONTENT_SUGGESTIONS_REFERRER =
-            "https://www.googleapis.com/auth/chrome-content-suggestions";
     private static final String CHROME_CONTEXTUAL_SUGGESTIONS_REFERRER =
             "https://goto.google.com/explore-on-content-viewer";
     private static final String NEW_TAB_URL_HELP =
@@ -130,8 +129,9 @@ public class SuggestionsNavigationDelegateImpl implements SuggestionsNavigationD
             assert windowOpenDisposition == WindowOpenDisposition.CURRENT_TAB
                     || windowOpenDisposition == WindowOpenDisposition.NEW_WINDOW
                     || windowOpenDisposition == WindowOpenDisposition.NEW_BACKGROUND_TAB;
-            OfflinePageUtils.getLoadUrlParamsForOpeningOfflineVersion(
-                    article.mUrl, article.getOfflinePageOfflineId(), (loadUrlParams) -> {
+            OfflinePageUtils.getLoadUrlParamsForOpeningOfflineVersion(article.mUrl,
+                    article.getOfflinePageOfflineId(), LaunchLocation.SUGGESTION,
+                    (loadUrlParams) -> {
                         // Extra headers are not read in loadUrl, but verbatim headers are.
                         loadUrlParams.setVerbatimHeaders(loadUrlParams.getExtraHeadersString());
                         openDownloadSuggestion(windowOpenDisposition, article, loadUrlParams);
@@ -147,8 +147,8 @@ public class SuggestionsNavigationDelegateImpl implements SuggestionsNavigationD
         // to filter out these history entries for NTP tiles.
         // TODO(mastiz): Extend this with support for other categories.
         if (article.mCategory == KnownCategories.ARTICLES) {
-            loadUrlParams.setReferrer(new Referrer(CHROME_CONTENT_SUGGESTIONS_REFERRER,
-                    WebReferrerPolicy.ALWAYS));
+            loadUrlParams.setReferrer(
+                    new Referrer(SuggestionsConfig.getReferrerUrl(), WebReferrerPolicy.ALWAYS));
         }
 
         // Set appropriate referrer for contextual suggestions to distinguish them from navigation

@@ -15,6 +15,7 @@
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "google_apis/gaia/gaia_constants.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace {
 const int kMaxRetries = 3;
@@ -95,10 +96,9 @@ void TokenHandleFetcher::RequestAccessToken(const std::string& user_email) {
 
 void TokenHandleFetcher::OnGetTokenSuccess(
     const OAuth2TokenService::Request* request,
-    const std::string& access_token,
-    const base::Time& expiration_time) {
+    const OAuth2AccessTokenConsumer::TokenResponse& token_response) {
   oauth2_access_token_request_.reset();
-  FillForAccessToken(access_token);
+  FillForAccessToken(token_response.access_token);
 }
 
 void TokenHandleFetcher::OnGetTokenFailure(
@@ -120,7 +120,7 @@ void TokenHandleFetcher::FillForNewUser(const std::string& access_token,
 void TokenHandleFetcher::FillForAccessToken(const std::string& access_token) {
   if (!gaia_client_.get())
     gaia_client_.reset(
-        new gaia::GaiaOAuthClient(profile_->GetRequestContext()));
+        new gaia::GaiaOAuthClient(profile_->GetURLLoaderFactory()));
   tokeninfo_response_start_time_ = base::TimeTicks::Now();
   gaia_client_->GetTokenInfo(access_token, kMaxRetries, this);
 }

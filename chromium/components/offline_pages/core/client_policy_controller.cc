@@ -69,7 +69,7 @@ ClientPolicyController::ClientPolicyController() {
           .SetIsRemovedOnCacheReset(true)
           .SetIsDisabledWhenPrefetchDisabled(true)
           .SetExpirePeriod(base::TimeDelta::FromDays(30))
-          .SetIsSupportedByDownload(IsOfflinePagesPrefetchingUIEnabled())
+          .SetIsSupportedByDownload(IsPrefetchingOfflinePagesEnabled())
           .SetIsSuggested(true)
           .Build()));
   policies_.insert(std::make_pair(
@@ -82,6 +82,15 @@ ClientPolicyController::ClientPolicyController() {
           .SetIsUserRequestedDownload(true)
           .SetShouldAllowDownload(true)
           .Build()));
+  policies_.insert(
+      std::make_pair(kLivePageSharingNamespace,
+                     OfflinePageClientPolicyBuilder(kLivePageSharingNamespace,
+                                                    LifetimeType::TEMPORARY,
+                                                    kUnlimitedPages, 1)
+                         .SetIsRemovedOnCacheReset(true)
+                         .SetExpirePeriod(base::TimeDelta::FromHours(1))
+                         .SetIsOnlyShownInOriginalTab(true)
+                         .Build()));
 
   // Fallback policy.
   policies_.insert(std::make_pair(

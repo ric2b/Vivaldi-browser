@@ -846,7 +846,7 @@ public class AwContents implements SmartClipProvider {
             mIoThreadClient = new IoThreadClientImpl();
             mInterceptNavigationDelegate = new InterceptNavigationDelegateImpl();
             mDisplayObserver = new AwDisplayAndroidObserver();
-            mUpdateVisibilityRunnable = () -> updateContentViewCoreVisibility();
+            mUpdateVisibilityRunnable = () -> updateWebContentsVisibility();
 
             AwSettings.ZoomSupportChangeListener zoomListener =
                     (supportsDoubleTapZoom, supportsMultiTouchZoom) -> {
@@ -876,9 +876,9 @@ public class AwContents implements SmartClipProvider {
 
     private void initWebContents(ViewAndroidDelegate viewDelegate,
             InternalAccessDelegate internalDispatcher, WebContents webContents,
-            WindowAndroid windowAndroid) {
+            WindowAndroid windowAndroid, WebContentsInternalsHolder internalsHolder) {
         webContents.initialize(
-                mContext, PRODUCT_VERSION, viewDelegate, internalDispatcher, windowAndroid);
+                PRODUCT_VERSION, viewDelegate, internalDispatcher, windowAndroid, internalsHolder);
         mViewEventSink = ViewEventSink.from(mWebContents);
         mViewEventSink.setHideKeyboardOnBlur(false);
         SelectionPopupController controller = SelectionPopupController.fromWebContents(webContents);
@@ -1162,12 +1162,11 @@ public class AwContents implements SmartClipProvider {
         mWindowAndroid = getWindowAndroid(mContext);
         mViewAndroidDelegate =
                 new AwViewAndroidDelegate(mContainerView, mContentsClient, mScrollOffsetManager);
+        mWebContentsInternalsHolder = new WebContentsInternalsHolder(this);
         initWebContents(mViewAndroidDelegate, mInternalAccessAdapter, mWebContents,
-                mWindowAndroid.getWindowAndroid());
+                mWindowAndroid.getWindowAndroid(), mWebContentsInternalsHolder);
         nativeSetJavaPeers(mNativeAwContents, this, mWebContentsDelegate, mContentsClientBridge,
                 mIoThreadClient, mInterceptNavigationDelegate, mAutofillProvider);
-        mWebContentsInternalsHolder = new WebContentsInternalsHolder(this);
-        mWebContents.setInternalsHolder(mWebContentsInternalsHolder);
         GestureListenerManager.fromWebContents(mWebContents)
                 .addListener(new AwGestureStateListener());
 
@@ -1178,7 +1177,7 @@ public class AwContents implements SmartClipProvider {
 
         mDisplayObserver.onDIPScaleChanged(getDeviceScaleFactor());
 
-        updateContentViewCoreVisibility();
+        updateWebContentsVisibility();
 
         // The native side object has been bound to this java instance, so now is the time to
         // bind all the native->java relationships.
@@ -2075,7 +2074,7 @@ public class AwContents implements SmartClipProvider {
         nativeSetIsPaused(mNativeAwContents, mIsPaused);
 
         // Geolocation is paused/resumed via the page visibility mechanism.
-        updateContentViewCoreVisibility();
+        updateWebContentsVisibility();
     }
 
     /**
@@ -2086,7 +2085,7 @@ public class AwContents implements SmartClipProvider {
         if (!mIsPaused || isDestroyedOrNoOperation(NO_WARN)) return;
         mIsPaused = false;
         nativeSetIsPaused(mNativeAwContents, mIsPaused);
-        updateContentViewCoreVisibility();
+        updateWebContentsVisibility();
     }
 
     /**
@@ -2158,9 +2157,9 @@ public class AwContents implements SmartClipProvider {
         }
         // If auto-generating the file name, handle the name generation on a background thread
         // as it will require I/O access for checking whether previous files existed.
-        new AsyncTask<Void, Void, String>() {
+        new AsyncTask<String>() {
             @Override
-            protected String doInBackground(Void... params) {
+            protected String doInBackground() {
                 return generateArchiveAutoNamePath(getOriginalUrl(), basename);
             }
 
@@ -2168,7 +2167,8 @@ public class AwContents implements SmartClipProvider {
             protected void onPostExecute(String result) {
                 saveWebArchiveInternal(result, callback);
             }
-        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        }
+                .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     public String getOriginalUrl() {
@@ -2621,7 +2621,7 @@ public class AwContents implements SmartClipProvider {
         if (!isDestroyedOrNoOperation(NO_WARN)) {
             nativeSetViewVisibility(mNativeAwContents, mIsViewVisible);
         }
-        postUpdateContentViewCoreVisibility();
+        postUpdateWebContentsVisibility();
     }
 
     private void setWindowVisibilityInternal(boolean visible) {
@@ -2631,10 +2631,10 @@ public class AwContents implements SmartClipProvider {
         if (!isDestroyedOrNoOperation(NO_WARN)) {
             nativeSetWindowVisibility(mNativeAwContents, mIsWindowVisible);
         }
-        postUpdateContentViewCoreVisibility();
+        postUpdateWebContentsVisibility();
     }
 
-    private void postUpdateContentViewCoreVisibility() {
+    private void postUpdateWebContentsVisibility() {
         if (mIsUpdateVisibilityTaskPending) return;
         // When WebView is attached to a visible window, WebView will be
         // attached to a window whose visibility is initially invisible, then
@@ -2650,7 +2650,7 @@ public class AwContents implements SmartClipProvider {
         mHandler.post(mUpdateVisibilityRunnable);
     }
 
-    private void updateContentViewCoreVisibility() {
+    private void updateWebContentsVisibility() {
         mIsUpdateVisibilityTaskPending = false;
         if (isDestroyedOrNoOperation(NO_WARN)) return;
         boolean contentVisible = nativeIsVisible(mNativeAwContents);
@@ -2864,6 +2864,13 @@ public class AwContents implements SmartClipProvider {
     public TextClassifier getTextClassifier() {
         assert mWebContents != null;
         return SelectionPopupController.fromWebContents(mWebContents).getTextClassifier();
+    }
+
+    public AwRenderProcess getRenderProcess() {
+        if (isDestroyedOrNoOperation(WARN)) {
+            return null;
+        }
+        return nativeGetRenderProcess(mNativeAwContents);
     }
 
     //--------------------------------------------------------------------------------------------
@@ -3475,7 +3482,7 @@ public class AwContents implements SmartClipProvider {
             nativeOnAttachedToWindow(mNativeAwContents, mContainerView.getWidth(),
                     mContainerView.getHeight());
             updateHardwareAcceleratedFeaturesToggle();
-            postUpdateContentViewCoreVisibility();
+            postUpdateWebContentsVisibility();
             mCurrentFunctor.onAttachedToWindow();
 
             updateDefaultLocale();
@@ -3499,7 +3506,7 @@ public class AwContents implements SmartClipProvider {
 
             mViewEventSink.onDetachedFromWindow();
             updateHardwareAcceleratedFeaturesToggle();
-            postUpdateContentViewCoreVisibility();
+            postUpdateWebContentsVisibility();
             mCurrentFunctor.onDetachedFromWindow();
 
             if (mComponentCallbacks != null) {
@@ -3733,4 +3740,6 @@ public class AwContents implements SmartClipProvider {
 
     private native void nativeGrantFileSchemeAccesstoChildProcess(long nativeAwContents);
     private native void nativeResumeLoadingCreatedPopupWebContents(long nativeAwContents);
+
+    private native AwRenderProcess nativeGetRenderProcess(long nativeAwContents);
 }

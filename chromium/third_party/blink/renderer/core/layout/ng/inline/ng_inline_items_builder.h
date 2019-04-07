@@ -17,6 +17,7 @@
 namespace blink {
 
 class ComputedStyle;
+class LayoutNGText;
 class LayoutObject;
 class LayoutText;
 
@@ -57,7 +58,7 @@ class NGInlineItemsBuilderTemplate {
   // Returns whether the existing items could be reused.
   // NOTE: The state of the builder remains unchanged if the append operation
   // fails (i.e. if it returns false).
-  bool Append(const String&, LayoutObject*, const Vector<NGInlineItem*>&);
+  bool Append(const String&, LayoutNGText*, const Vector<NGInlineItem*>&);
 
   // Append a string.
   // When appending, spaces are collapsed according to CSS Text, The white space
@@ -153,17 +154,16 @@ class NGInlineItemsBuilderTemplate {
   void RemoveTrailingCollapsibleSpaceIfExists();
   void RemoveTrailingCollapsibleSpace(NGInlineItem*);
 
+  void RestoreTrailingCollapsibleSpaceIfRemoved();
+  void RestoreTrailingCollapsibleSpace(NGInlineItem*);
+
   void Exit(LayoutObject*);
 };
 
 template <>
-CORE_EXPORT String
-NGInlineItemsBuilderTemplate<NGOffsetMappingBuilder>::ToString();
-
-template <>
 CORE_EXPORT bool NGInlineItemsBuilderTemplate<NGOffsetMappingBuilder>::Append(
     const String&,
-    LayoutObject*,
+    LayoutNGText*,
     const Vector<NGInlineItem*>&);
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT

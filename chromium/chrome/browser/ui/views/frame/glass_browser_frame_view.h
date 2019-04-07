@@ -29,6 +29,8 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
 
   static constexpr char kClassName[] = "GlassBrowserFrameView";
 
+  static SkColor GetReadableFeatureColor(SkColor background_color);
+
   // Constructs a non-client view for an BrowserFrame.
   GlassBrowserFrameView(BrowserFrame* frame, BrowserView* browser_view);
   ~GlassBrowserFrameView() override;
@@ -74,7 +76,11 @@ class GlassBrowserFrameView : public BrowserNonClientFrameView,
 
   SkColor GetTitlebarColor() const;
 
-  HostedAppButtonContainer* GetHostedAppButtonContainerForTesting() const;
+  HostedAppButtonContainer* hosted_app_button_container_for_testing() {
+    return hosted_app_button_container_;
+  }
+
+  views::Label* window_title_for_testing() { return window_title_; }
 
  protected:
   // views::View:

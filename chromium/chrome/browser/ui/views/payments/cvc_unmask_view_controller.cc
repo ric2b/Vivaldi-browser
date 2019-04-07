@@ -19,6 +19,7 @@
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/payments/full_card_request.h"
+#include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/grit/components_scaled_resources.h"
@@ -66,8 +67,7 @@ CvcUnmaskViewController::CvcUnmaskViewController(
           IdentityManagerFactory::GetForProfile(
               Profile::FromBrowserContext(web_contents_->GetBrowserContext())
                   ->GetOriginalProfile()),
-          /*unmask_delegate=*/this,
-          /*save_delegate=*/nullptr,
+          state->GetPersonalDataManager(),
           Profile::FromBrowserContext(web_contents_->GetBrowserContext())
               ->IsOffTheRecord()),
       full_card_request_(this,
@@ -81,12 +81,6 @@ CvcUnmaskViewController::CvcUnmaskViewController(
 }
 
 CvcUnmaskViewController::~CvcUnmaskViewController() {}
-
-void CvcUnmaskViewController::OnDidGetRealPan(
-    autofill::AutofillClient::PaymentsRpcResult result,
-    const std::string& real_pan) {
-  full_card_request_.OnDidGetRealPan(result, real_pan);
-}
 
 void CvcUnmaskViewController::LoadRiskData(
     const base::Callback<void(const std::string&)>& callback) {

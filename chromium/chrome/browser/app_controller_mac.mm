@@ -25,7 +25,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_shim/extension_app_shim_handler_mac.h"
@@ -81,8 +81,8 @@
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/user_manager.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
-#include "chrome/browser/web_applications/web_app_mac.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_shortcut_mac.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
@@ -257,6 +257,10 @@ bool IsProfileSignedOut(Profile* profile) {
 // Given |webContents|, extracts a GURL to be used for Handoff. This may return
 // the empty GURL.
 - (GURL)handoffURLFromWebContents:(content::WebContents*)webContents;
+
+// Return false if Chrome startup is paused by dialog and AppController is
+// called without any initialized Profile.
+- (BOOL)isProfileReady;
 @end
 
 class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
@@ -340,7 +344,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 // This method is called very early in application startup (ie, before
 // the profile is loaded or any preferences have been registered). Defer any
 // user-data initialization until -applicationDidFinishLaunching:.
-- (void)awakeFromNib {
+- (void)mainMenuCreated {
   MacStartupProfiler::GetInstance()->Profile(
       MacStartupProfiler::AWAKE_FROM_NIB);
   // We need to register the handlers early to catch events fired on launch.
@@ -430,12 +434,8 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
       [viewMenu removeItem:customizeItem];
   }
 
-  // In |applicationWillFinishLaunching| because FeatureList isn't
-  // available at init time.
-  if (!vivaldi::IsVivaldiRunning() &&
-      base::FeatureList::IsEnabled(features::kMacSystemShareMenu)) {
-    // Initialize the share menu.
-    [self initShareMenu];
+  if (!vivaldi::IsVivaldiRunning()) {
+  [self initShareMenu];
   }
 
   // Remove "Enable Javascript in Apple Events" if the feature is disabled.
@@ -452,6 +452,8 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 }
 
 - (void)applicationWillHide:(NSNotification*)notification {
+  if (![self isProfileReady])
+    return;
   apps::ExtensionAppShimHandler::OnChromeWillHide();
 }
 
@@ -636,7 +638,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 }
 
 - (void)windowDidResignMain:(NSNotification*)notify {
-  if (chrome::GetTotalBrowserCount() == 0) {
+  if (chrome::GetTotalBrowserCount() == 0 && [self isProfileReady]) {
     [self windowChangedToProfile:
         g_browser_process->profile_manager()->GetLastUsedProfile()];
   }
@@ -790,16 +792,11 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   // notified when a profile is deleted.
   profileAttributesStorageObserver_.reset(new AppControllerProfileObserver(
       g_browser_process->profile_manager(), self));
-  if (!vivaldi::IsVivaldiRunning()) {
-  // Since Chrome is localized to more languages than the OS, tell Cocoa which
-  // menu is the Help so it can add the search item to it.
-  [NSApp setHelpMenu:helpMenu_];
-  }
 
   // Record the path to the (browser) app bundle; this is used by the app mode
   // shim.
   base::PostTaskWithTraits(FROM_HERE,
-                           {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                           {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                             base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
                            base::Bind(&RecordLastRunAppBundlePath));
 
@@ -970,6 +967,14 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     NSInteger tag = [item tag];
     if (menuState_ &&  // NULL in tests.
         menuState_->SupportsCommand(tag)) {
+
+      if (vivaldi::IsVivaldiRunning()) {
+        if (vivaldi::NeedsDisabledMacMenuItem(tag)) {
+          enable = !![NSApp keyWindow];
+          return enable;
+        }
+      }
+
       switch (tag) {
         // The File Menu commands are not automatically disabled by Cocoa when a
         // dialog sheet obscures the browser window, so we disable several of
@@ -1065,7 +1070,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   // Ignore commands during session restore's browser creation.  It uses a
   // nested run loop and commands dispatched during this operation cause
   // havoc.
-  if (SessionRestore::IsRestoring(lastProfile) &&
+  if (lastProfile && SessionRestore::IsRestoring(lastProfile) &&
       base::RunLoop::IsNestedOnCurrentThread()) {
     return;
   }
@@ -1338,7 +1343,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
         extensions::ExtensionRegistry* registry =
             extensions::ExtensionRegistry::Get(browser->profile());
         const extensions::Extension* extension = registry->GetExtensionById(
-            web_app::GetExtensionIdFromApplicationName(browser->app_name()),
+            web_app::GetAppIdFromApplicationName(browser->app_name()),
             extensions::ExtensionRegistry::ENABLED);
         if (extension && extension->is_hosted_app())
           continue;
@@ -1536,21 +1541,11 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   NSMenu* mainMenu = [NSApp mainMenu];
   NSMenu* fileMenu = [[mainMenu itemWithTag:IDC_FILE_MENU] submenu];
   NSString* shareMenuTitle = l10n_util::GetNSString(IDS_SHARE_MAC);
-  base::scoped_nsobject<NSMenuItem> shareMenuItem([[NSMenuItem alloc]
-      initWithTitle:shareMenuTitle
-             action:NULL
-      keyEquivalent:@""]);
+  NSMenuItem* shareMenuItem = [fileMenu itemWithTitle:shareMenuTitle];
   base::scoped_nsobject<NSMenu> shareSubmenu(
       [[NSMenu alloc] initWithTitle:shareMenuTitle]);
   [shareSubmenu setDelegate:shareMenuController_];
   [shareMenuItem setSubmenu:shareSubmenu];
-  // Replace "Email Page Location" with Share.
-  // TODO(crbug.com/770804): Remove this code and update the XIB when
-  // the share menu launches.
-  NSInteger index = [fileMenu indexOfItemWithTag:IDC_EMAIL_PAGE_LOCATION];
-  DCHECK(index != -1);
-  [fileMenu removeItemAtIndex:index];
-  [fileMenu insertItem:shareMenuItem atIndex:index];
 }
 
 // The Confirm to Quit preference is atypical in that the preference lives in
@@ -1575,16 +1570,20 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   [app registerServicesMenuSendTypes:types returnTypes:types];
 }
 
+// Return null if Chrome is not ready or there is no ProfileManager.
 - (Profile*)lastProfile {
   // Return the profile of the last-used Browser, if available.
   if (lastProfile_)
     return lastProfile_;
 
+  if (![self isProfileReady])
+    return nullptr;
+
   // On first launch, use the logic that ChromeBrowserMain uses to determine
   // the initial profile.
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   if (!profile_manager)
-    return NULL;
+    return nullptr;
 
   return profile_manager->GetProfile(
       GetStartupProfilePath(profile_manager->user_data_dir(),
@@ -1593,6 +1592,9 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
 - (Profile*)safeLastProfileForNewWindows {
   Profile* profile = [self lastProfile];
+
+  if (!profile)
+    return nullptr;
 
   // Guest sessions must always be OffTheRecord. Use that when opening windows.
   if (profile->IsGuestSession())
@@ -1983,6 +1985,12 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   return webContents->GetVisibleURL();
 }
 
+- (BOOL)isProfileReady {
+  return !g_browser_process->browser_policy_connector()
+              ->machine_level_user_cloud_policy_controller()
+              ->IsEnterpriseStartupDialogShowing();
+}
+
 #pragma mark - HandoffActiveURLObserverBridgeDelegate
 
 - (void)handoffActiveURLChanged:(content::WebContents*)webContents {
@@ -2014,7 +2022,7 @@ bool IsOpeningNewWindow() {
 void CreateGuestProfileIfNeeded() {
   g_browser_process->profile_manager()->CreateProfileAsync(
       ProfileManager::GetGuestProfilePath(),
-      base::BindRepeating(&UpdateProfileInUse), base::string16(), std::string(),
+      base::BindRepeating(&UpdateProfileInUse), base::string16(),
       std::string());
 }
 

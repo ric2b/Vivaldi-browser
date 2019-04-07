@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/loader/document_load_timing.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
+#include "third_party/blink/renderer/core/performance_entry_names.h"
 #include "third_party/blink/renderer/core/timing/performance.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_timing_info.h"
 
@@ -22,7 +23,8 @@ PerformanceNavigationTiming::PerformanceNavigationTiming(
     TimeTicks time_origin,
     const WebVector<WebServerTimingInfo>& server_timing)
     : PerformanceResourceTiming(
-          info ? info->FinalResponse().Url().GetString() : "",
+          info ? AtomicString(info->FinalResponse().Url().GetString())
+               : g_empty_atom,
           time_origin,
           server_timing),
       ContextClient(frame),
@@ -34,7 +36,7 @@ PerformanceNavigationTiming::PerformanceNavigationTiming(
 PerformanceNavigationTiming::~PerformanceNavigationTiming() = default;
 
 AtomicString PerformanceNavigationTiming::entryType() const {
-  return PerformanceEntry::NavigationKeyword();
+  return PerformanceEntryNames::navigation;
 }
 
 PerformanceEntryType PerformanceNavigationTiming::EntryTypeEnum() const {
@@ -117,7 +119,7 @@ AtomicString PerformanceNavigationTiming::GetNavigationType(
 }
 
 AtomicString PerformanceNavigationTiming::initiatorType() const {
-  return PerformanceEntry::NavigationKeyword();
+  return PerformanceEntryNames::navigation;
 }
 
 bool PerformanceNavigationTiming::GetAllowRedirectDetails() const {

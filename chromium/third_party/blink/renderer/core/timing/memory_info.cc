@@ -81,7 +81,8 @@ class HeapSizeCache {
     TimeDelta delta_allowed = precision == MemoryInfo::Precision::Bucketized
                                   ? kTwentyMinutes
                                   : kFiftyMs;
-    if (now - last_update_time_ >= delta_allowed) {
+    if (!last_update_time_.has_value() ||
+        now - last_update_time_.value() >= delta_allowed) {
       Update(precision);
       last_update_time_ = now;
     }
@@ -97,7 +98,7 @@ class HeapSizeCache {
     info_.js_heap_size_limit = QuantizeMemorySize(info_.js_heap_size_limit);
   }
 
-  TimeTicks last_update_time_;
+  base::Optional<TimeTicks> last_update_time_;
 
   HeapInfo info_;
   DISALLOW_COPY_AND_ASSIGN(HeapSizeCache);
@@ -157,10 +158,16 @@ size_t QuantizeMemorySize(size_t size) {
 
 MemoryInfo::MemoryInfo(Precision precision) {
   // With the experimental PreciseMemoryInfoEnabled flag on, we will not
-  // bucketize or cache values.
+  // bucketize or cache values, regardless of the value of |precision|. When the
+  // flag is off then our cache is used and |precision| determines the
+  // granularity of the values and the timer of the cache we use.
   if (RuntimeEnabledFeatures::PreciseMemoryInfoEnabled())
     GetHeapSize(info_);
-  HeapSizeCache::ForCurrentThread().GetCachedHeapSize(info_, precision);
+  else
+    HeapSizeCache::ForCurrentThread().GetCachedHeapSize(info_, precision);
+  // The values must have been computed, so totalJSHeapSize must be greater than
+  // 0.
+  DCHECK_GT(totalJSHeapSize(), 0u);
 }
 
 }  // namespace blink

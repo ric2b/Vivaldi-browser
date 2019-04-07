@@ -35,7 +35,7 @@ using MockEventChangeHandler = ::testing::StrictMock<
     base::MockCallback<APIEventListeners::ListenersUpdated>>;
 
 std::string GetContextOwner(v8::Local<v8::Context> context) {
-  return std::string();
+  return "context";
 }
 
 // TODO(devlin): Use these handy functions more places.
@@ -885,6 +885,55 @@ TEST_F(APIEventHandlerTest, TestArgumentMassagersNeverDispatch) {
   // Nothing should blow up. (We tested in the previous test that the event
   // isn't notified without calling dispatch, so all there is to test here is
   // that we don't crash.)
+}
+
+// Test that event results of dispatch are passed to the calling argument
+// massager. Regression test for https://crbug.com/867310.
+TEST_F(APIEventHandlerTest, TestArgumentMassagersDispatchResult) {
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = MainContext();
+
+  const char kEventName[] = "alpha";
+  v8::Local<v8::Object> event = handler()->CreateEventInstance(
+      kEventName, false, true, binding::kNoListenerMax, true, context);
+  ASSERT_FALSE(event.IsEmpty());
+
+  const char kArgumentMassager[] =
+      R"((function(originalArgs, dispatch) {
+           this.dispatchResult = dispatch(['primary']);
+         });)";
+  v8::Local<v8::Function> massager =
+      FunctionFromString(context, kArgumentMassager);
+  handler()->RegisterArgumentMassager(context, kEventName, massager);
+
+  const char kListenerFunction[] =
+      R"((function(arg) {
+           let res = arg == 'primary' ? 'listenerSuccess' : 'listenerFailure';
+           this.listenerResult = res;
+           return res;
+         });)";
+  v8::Local<v8::Function> listener_function =
+      FunctionFromString(context, kListenerFunction);
+  ASSERT_FALSE(listener_function.IsEmpty());
+
+  {
+    v8::Local<v8::Function> add_listener_function =
+        FunctionFromString(context, kAddListenerFunction);
+    v8::Local<v8::Value> argv[] = {event, listener_function};
+    RunFunction(add_listener_function, context, base::size(argv), argv);
+  }
+
+  handler()->FireEventInContext(kEventName, context, base::ListValue(),
+                                nullptr);
+
+  EXPECT_EQ(
+      R"({"results":["listenerSuccess"]})",
+      GetStringPropertyFromObject(context->Global(), context,
+                                  "dispatchResult"));
+  EXPECT_EQ(
+      R"("listenerSuccess")",
+      GetStringPropertyFromObject(context->Global(), context,
+                                  "listenerResult"));
 }
 
 // Test creating a custom event, as is done by a few of our custom bindings.

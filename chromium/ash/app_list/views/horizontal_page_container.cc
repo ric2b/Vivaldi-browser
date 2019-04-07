@@ -23,8 +23,8 @@ HorizontalPageContainer::HorizontalPageContainer(ContentsView* contents_view,
   pagination_model_.SetTransitionDurations(kPageTransitionDurationInMs,
                                            kOverscrollPageTransitionDurationMs);
   pagination_model_.AddObserver(this);
-  pagination_controller_.reset(new PaginationController(
-      &pagination_model_, PaginationController::SCROLL_AXIS_HORIZONTAL));
+  pagination_controller_ = std::make_unique<PaginationController>(
+      &pagination_model_, PaginationController::SCROLL_AXIS_HORIZONTAL);
 
   // Add horizontal pages.
   apps_container_view_ = new AppsContainerView(contents_view_, model);
@@ -43,7 +43,7 @@ gfx::Size HorizontalPageContainer::CalculatePreferredSize() const {
   if (!GetWidget())
     return gfx::Size();
 
-  return contents_view_->GetWorkAreaSize();
+  return contents_view_->GetPreferredSize();
 }
 
 void HorizontalPageContainer::Layout() {

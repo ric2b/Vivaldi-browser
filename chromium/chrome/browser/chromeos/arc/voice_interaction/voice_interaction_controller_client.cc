@@ -16,6 +16,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
+#include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
@@ -45,6 +46,10 @@ VoiceInteractionControllerClient::VoiceInteractionControllerClient() {
                               content::NotificationService::AllSources());
 
   g_voice_interaction_controller_client_instance = this;
+
+  if (chromeos::switches::IsAssistantEnabled()) {
+    voice_interaction_state_ = ash::mojom::VoiceInteractionState::NOT_READY;
+  }
 }
 
 VoiceInteractionControllerClient::~VoiceInteractionControllerClient() {
@@ -122,6 +127,24 @@ void VoiceInteractionControllerClient::NotifyFeatureAllowed() {
   voice_interaction_controller_->NotifyFeatureAllowed(state);
 }
 
+void VoiceInteractionControllerClient::NotifyNotificationEnabled() {
+  DCHECK(profile_);
+  PrefService* prefs = profile_->GetPrefs();
+  bool enabled = prefs->GetBoolean(prefs::kVoiceInteractionNotificationEnabled);
+  voice_interaction_controller_->NotifyNotificationEnabled(enabled);
+}
+
+void VoiceInteractionControllerClient::NotifyLocaleChanged() {
+  DCHECK(profile_);
+
+  NotifyFeatureAllowed();
+
+  std::string out_locale =
+      profile_->GetPrefs()->GetString(language::prefs::kApplicationLocale);
+
+  voice_interaction_controller_->NotifyLocaleChanged(out_locale);
+}
+
 void VoiceInteractionControllerClient::ActiveUserChanged(
     const user_manager::User* active_user) {
   if (active_user && active_user->is_profile_created())
@@ -163,6 +186,12 @@ void VoiceInteractionControllerClient::SetProfile(Profile* profile) {
             &VoiceInteractionControllerClient::NotifySetupCompleted,
             base::Unretained(this)));
   }
+
+  pref_change_registrar_->Add(
+      language::prefs::kApplicationLocale,
+      base::BindRepeating(
+          &VoiceInteractionControllerClient::NotifyLocaleChanged,
+          base::Unretained(this)));
   pref_change_registrar_->Add(
       prefs::kVoiceInteractionEnabled,
       base::BindRepeating(
@@ -178,13 +207,19 @@ void VoiceInteractionControllerClient::SetProfile(Profile* profile) {
       base::BindRepeating(
           &VoiceInteractionControllerClient::NotifyHotwordEnabled,
           base::Unretained(this)));
+  pref_change_registrar_->Add(
+      prefs::kVoiceInteractionNotificationEnabled,
+      base::BindRepeating(
+          &VoiceInteractionControllerClient::NotifyNotificationEnabled,
+          base::Unretained(this)));
 
   NotifySetupCompleted();
   NotifySettingsEnabled();
   NotifyContextEnabled();
+  NotifyLocaleChanged();
+  NotifyNotificationEnabled();
   if (prefs->GetBoolean(prefs::kVoiceInteractionEnabled))
     NotifyHotwordEnabled();
-  NotifyFeatureAllowed();
 }
 
 void VoiceInteractionControllerClient::Observe(

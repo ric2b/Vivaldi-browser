@@ -11,7 +11,6 @@
 
 #include "ash/ash_export.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/sidebar/sidebar.h"
 #include "ash/wm/workspace/workspace_types.h"
 #include "base/macros.h"
 #include "ui/aura/window.h"
@@ -30,7 +29,6 @@ class KeyboardController;
 }
 
 namespace ui {
-class EventHandler;
 class SimpleMenuModel;
 class WindowTreeHost;
 }
@@ -48,18 +46,15 @@ class AlwaysOnTopController;
 class AshWindowTreeHost;
 class LockScreenActionBackgroundController;
 enum class LoginStatus;
-class PanelLayoutManager;
 class Shelf;
 class ShelfLayoutManager;
-class Sidebar;
 class StackingController;
 class StatusAreaWidget;
 class SystemModalContainerLayoutManager;
 class SystemTray;
 class SystemWallpaperController;
 class TouchExplorationManager;
-class TouchHudDebug;
-class TouchHudProjection;
+class TouchObserverHUD;
 class WallpaperWidgetController;
 class WindowManager;
 class WorkspaceController;
@@ -119,25 +114,10 @@ class ASH_EXPORT RootWindowController {
 
   Shelf* shelf() const { return shelf_.get(); }
 
-  // Returns the instance of the sidebar.
-  Sidebar* sidebar() { return sidebar_.get(); }
-
-  // Get touch HUDs associated with this root window controller.
-  TouchHudDebug* touch_hud_debug() const { return touch_hud_debug_; }
-  TouchHudProjection* touch_hud_projection() const {
-    return touch_hud_projection_;
+  TouchObserverHUD* touch_observer_hud() const { return touch_observer_hud_; }
+  void set_touch_observer_hud(TouchObserverHUD* hud) {
+    touch_observer_hud_ = hud;
   }
-
-  // Set touch HUDs for this root window controller. The root window controller
-  // will not own the HUDs; their lifetimes are managed by themselves. Whenever
-  // the widget showing a HUD is being destroyed (e.g. because of detaching a
-  // display), the HUD deletes itself.
-  void set_touch_hud_debug(TouchHudDebug* hud) { touch_hud_debug_ = hud; }
-  void set_touch_hud_projection(TouchHudProjection* hud) {
-    touch_hud_projection_ = hud;
-  }
-
-  PanelLayoutManager* panel_layout_manager() { return panel_layout_manager_; }
 
   wm::RootWindowLayoutManager* root_window_layout_manager() {
     return root_window_layout_manager_;
@@ -288,7 +268,6 @@ class ASH_EXPORT RootWindowController {
   aura::WindowTreeHost* window_tree_host_;
 
   // LayoutManagers are owned by the window they are installed on.
-  PanelLayoutManager* panel_layout_manager_ = nullptr;
   wm::RootWindowLayoutManager* root_window_layout_manager_ = nullptr;
 
   std::unique_ptr<WallpaperWidgetController> wallpaper_widget_controller_;
@@ -306,7 +285,6 @@ class ASH_EXPORT RootWindowController {
   // of the RootWindowController so that it is safe for observers to be added
   // to it during construction of the shelf widget and status tray.
   std::unique_ptr<Shelf> shelf_;
-  std::unique_ptr<Sidebar> sidebar_;
 
   // TODO(jamescook): Eliminate this. It is left over from legacy shelf code and
   // doesn't mean anything in particular.
@@ -318,13 +296,10 @@ class ASH_EXPORT RootWindowController {
   // feedback is on.
   std::unique_ptr<TouchExplorationManager> touch_exploration_manager_;
 
-  // Heads-up displays for touch events. These HUDs are not owned by the root
-  // window controller and manage their own lifetimes.
-  TouchHudDebug* touch_hud_debug_ = nullptr;
-  TouchHudProjection* touch_hud_projection_ = nullptr;
-
-  // Handles double clicks on the panel window header.
-  std::unique_ptr<ui::EventHandler> panel_container_handler_;
+  // Heads-up displays for touch events for this root. Not owned. Manages its
+  // own lifetime. Whenever the widget showing a HUD is being destroyed (e.g.
+  // because of detaching a display), the HUD deletes itself.
+  TouchObserverHUD* touch_observer_hud_ = nullptr;
 
   std::unique_ptr<::wm::ScopedCaptureClient> capture_client_;
 

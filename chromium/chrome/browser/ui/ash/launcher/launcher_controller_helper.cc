@@ -27,9 +27,10 @@
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "components/arc/arc_util.h"
+#include "components/arc/metrics/arc_metrics_constants.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_registry.h"
@@ -60,7 +61,7 @@ const extensions::Extension* GetExtensionForTab(Profile* profile,
   // use the tab's url for app tabs.
   if (browser && browser->is_app()) {
     return registry->GetExtensionById(
-        web_app::GetExtensionIdFromApplicationName(browser->app_name()),
+        web_app::GetAppIdFromApplicationName(browser->app_name()),
         extensions::ExtensionRegistry::EVERYTHING);
   }
 
@@ -172,8 +173,10 @@ bool LauncherControllerHelper::IsValidIDForCurrentUser(
 
   crostini::CrostiniRegistryService* registry_service =
       crostini::CrostiniRegistryServiceFactory::GetForProfile(profile_);
-  if (registry_service && registry_service->IsCrostiniShelfAppId(id))
-    return registry_service->GetRegistration(id).has_value();
+  if (registry_service && registry_service->IsCrostiniShelfAppId(id)) {
+    return IsCrostiniUIAllowedForProfile(profile_) &&
+           registry_service->GetRegistration(id).has_value();
+  }
 
   if (app_list::IsInternalApp(id))
     return true;

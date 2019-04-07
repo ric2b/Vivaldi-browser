@@ -31,10 +31,11 @@ class PaymentRequestDisplayManager : public KeyedService {
  public:
   class DisplayHandle {
    public:
-    explicit DisplayHandle(PaymentRequestDisplayManager* display_manager,
-                           ContentPaymentRequestDelegate* delegate);
+    DisplayHandle(PaymentRequestDisplayManager* display_manager,
+                  ContentPaymentRequestDelegate* delegate);
     ~DisplayHandle();
     void Show(PaymentRequest* request);
+    void Retry();
     // Attempt to display |url| inside the Payment Request dialog and run
     // |callback| after navigation is completed, passing true/false to indicate
     // success/failure.

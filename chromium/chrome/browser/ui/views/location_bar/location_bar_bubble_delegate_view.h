@@ -9,7 +9,7 @@
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "ui/views/bubble/bubble_dialog_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/event_monitor.h"
 
 namespace content {
@@ -58,6 +58,8 @@ class LocationBarBubbleDelegateView : public views::BubbleDialogDelegateView,
   // content::WebContentsObserver:
   void OnVisibilityChanged(content::Visibility visibility) override;
   void WebContentsDestroyed() override;
+
+  gfx::Rect GetAnchorBoundsInScreen() const override;
 
   // If the bubble is not anchored to a view, places the bubble in the top right
   // (left in RTL) of the |screen_bounds| that contain web contents's browser

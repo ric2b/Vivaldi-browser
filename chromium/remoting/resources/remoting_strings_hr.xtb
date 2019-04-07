@@ -102,11 +102,11 @@ Informacije o privatnosti potražite u Googleovim pravilima o privatnosti (http:
 <translation id="3171922709365450819">Klijent ne podržava taj uređaj jer je potrebna autentifikacija treće strane.</translation>
 <translation id="3194245623920924351">Udaljena radna površina Chrome</translation>
 <translation id="3197730452537982411">Udaljena radna površina</translation>
+<translation id="3212472844831225214">• Dodana je podrška za Android 9.0 Pie.</translation>
 <translation id="324272851072175193">Pošalji te upute e-poštom</translation>
 <translation id="3258789396564295715">Ovom računalu možete sigurno pristupiti pomoću Udaljene radne površine Chrome.</translation>
 <translation id="3286521253923406898">Kontroler hosta usluge Chromoting</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> želi napraviti promjene.</translation>
-<translation id="331779822864701136">• Dodana je podrška za Android 8.0 Oreo.</translation>
 <translation id="332624996707057614">Uredi naziv računala</translation>
 <translation id="3339299787263251426">Siguran pristup računalu putem interneta</translation>
 <translation id="3360306038446926262">Windows</translation>
@@ -122,8 +122,9 @@ Informacije o privatnosti potražite u Googleovim pravilima o privatnosti (http:
 <translation id="369442766917958684">Offline.</translation>
 <translation id="3695446226812920698">Saznajte kako</translation>
 <translation id="3718805989288361841">Došlo je do pogreške s postavkama pravila za Udaljenu radnu površinu Chrome. Obratite se administratoru sustava za pomoć.</translation>
-<translation id="3759645055923345178">Nakon dovršetka postavljanja moći ćete pristupiti računalu s te stranice unosom PIN-a ili pristupnog koda</translation>
 <translation id="3776024066357219166">Završila je vaša sesija u aplikaciji Udaljena radna površina Chrome.</translation>
+<translation id="3846148461359626420">• Bolji doživljaj pomicanja i zumiranja na uređaju iPhone X.
+• Poboljšanja stabilnosti i ispravci programskih pogrešaka.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Potvrdite svoj račun i PIN u nastavku da biste usluzi Udaljena radna površina Chrome dozvolili pristup.</translation>
 <translation id="3897092660631435901">Izbornik</translation>
@@ -137,6 +138,7 @@ Informacije o privatnosti potražite u Googleovim pravilima o privatnosti (http:
 <translation id="405887016757208221">Udaljeno računalo nije uspjelo inicijalizirati sesiju. Ako se problem ne riješi, pokušajte ponovo konfigurirati host.</translation>
 <translation id="4068946408131579958">Sve veze</translation>
 <translation id="409800995205263688">NAPOMENA: postavke pravila dopuštaju jedino veze između računala u vašoj mreži.</translation>
+<translation id="4126409073460786861">Nakon dovršetka postavljanja osvježite stranicu i moći ćete pristupiti računalu tako da odaberete uređaj i unesete PIN</translation>
 <translation id="4145029455188493639">Prijavljeni ste kao <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Nedostaju neke obavezne komponente. Provjerite jeste li instalirali najnoviju verziju softvera i pokušajte ponovo.</translation>
 <translation id="4156740505453712750">Da biste zaštitili pristup ovom računalu, odaberite PIN s <ph name="BOLD_START" />najmanje šest brojeva<ph name="BOLD_END" />. Taj će PIN biti potreban pri povezivanju s druge lokacije.</translation>
@@ -145,7 +147,6 @@ Informacije o privatnosti potražite u Googleovim pravilima o privatnosti (http:
 <translation id="4207623512727273241">Ponovo pokrenite instalacijski program prije nastavka.</translation>
 <translation id="4227991223508142681">Uslužni program za pružanje usluge hosta</translation>
 <translation id="4240294130679914010">Program za deinstaliranje usluge Chromoting</translation>
-<translation id="4249741460382919890">Općeniti ispravci programskih pogrešaka i poboljšanja stabilnosti.</translation>
 <translation id="4277463233460010382">To je računalo konfigurirano tako da dozvoljava povezivanje jednog ili više klijenata bez unosa PIN-a.</translation>
 <translation id="4277736576214464567">Pristupni je kôd nevažeći. Pokušajte ponovo.</translation>
 <translation id="4361728918881830843">Da biste omogućili povezivanje s različitim udaljenim računalima, na njima instalirajte Udaljenu radnu površinu Chrome pa kliknite gumb "<ph name="BUTTON_NAME" />".</translation>
@@ -271,6 +272,7 @@ PC</translation>
 <translation id="6998989275928107238">Do</translation>
 <translation id="7019153418965365059">Nepoznata pogreška hosta: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Daljinska pomoć</translation>
+<translation id="7026930240735156896">Slijedite upute za postavljanje računala za daljinski pristup</translation>
 <translation id="7038683108611689168">Pomognite nam da poboljšamo Chromoting tako da nam dopustite prikupljanje statistika o upotrebi i izvješća o padovima.</translation>
 <translation id="7067321367069083429">Zaslon se ponaša kao dodirni zaslon</translation>
 <translation id="7116737094673640201">Dobro došli na Udaljenu radnu površinu Chrome</translation>
@@ -296,7 +298,6 @@ PC</translation>
 <translation id="7782471917492991422">Provjerite postavke upravljanja potrošnjom energije svojeg računala i provjerite da nije konfigurirano tako da prelazi u stanje mirovanja kad je neaktivno.</translation>
 <translation id="7810127880729796595">Prikaži statistiku (veza: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Nedostaju neke obavezne komponente. Provjerite jeste li pokrenuli najnoviju verziju Chromea i pokušajte ponovo.</translation>
-<translation id="7850909060902317210">Instalirajte softver Udaljene radne površine Chrome i slijedite upute da biste dovršili postavljanje</translation>
 <translation id="7868137160098754906">Unesite PIN za udaljeno računalo.</translation>
 <translation id="7869445566579231750">Nemate dopuštenje za pokretanje te aplikacije.</translation>
 <translation id="7895403300744144251">Sigurnosna pravila na udaljenom računalu ne dopuštaju povezivanje s vašeg računa.</translation>

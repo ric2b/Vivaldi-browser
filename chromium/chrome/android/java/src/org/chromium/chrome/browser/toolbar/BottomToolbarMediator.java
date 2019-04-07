@@ -5,9 +5,9 @@
 package org.chromium.chrome.browser.toolbar;
 
 import android.content.res.Resources;
-import android.view.View.OnClickListener;
 
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager.OverlayPanelManagerObserver;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
@@ -15,24 +15,20 @@ import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior.Overv
 import org.chromium.chrome.browser.compositor.layouts.SceneChangeObserver;
 import org.chromium.chrome.browser.compositor.layouts.ToolbarSwipeLayout;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
-import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
-import org.chromium.chrome.browser.contextualsearch.ContextualSearchObserver;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager.FullscreenListener;
-import org.chromium.chrome.browser.gsa.GSAContextDisplaySelection;
+import org.chromium.chrome.browser.toolbar.ToolbarButtonSlotData.ToolbarButtonData;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.base.WindowAndroid.KeyboardVisibilityListener;
 import org.chromium.ui.resources.ResourceManager;
-
-import javax.annotation.Nullable;
 
 /**
  * This class is responsible for reacting to events from the outside world, interacting with other
  * coordinators, running most of the business logic associated with the bottom toolbar, and updating
  * the model accordingly.
  */
-class BottomToolbarMediator implements ContextualSearchObserver, FullscreenListener,
-                                       KeyboardVisibilityListener, OverviewModeObserver,
+class BottomToolbarMediator implements FullscreenListener, KeyboardVisibilityListener,
+                                       OverlayPanelManagerObserver, OverviewModeObserver,
                                        SceneChangeObserver {
     /** The model for the bottom toolbar that holds all of its state. */
     private BottomToolbarModel mModel;
@@ -43,9 +39,6 @@ class BottomToolbarMediator implements ContextualSearchObserver, FullscreenListe
     /** The overview mode manager. */
     private OverviewModeBehavior mOverviewModeBehavior;
 
-    /** The manager for Contextual Search to observe appearance/disappearance of the feature. */
-    private ContextualSearchManager mContextualSearchManger;
-
     /** A {@link WindowAndroid} for watching keyboard visibility events. */
     private WindowAndroid mWindowAndroid;
 
@@ -55,15 +48,25 @@ class BottomToolbarMediator implements ContextualSearchObserver, FullscreenListe
     /** Whether the swipe layout is currently active. */
     private boolean mIsInSwipeLayout;
 
+    /** The data required to fill in the first (leftmost) bottom toolbar button slot.*/
+    private final ToolbarButtonSlotData mFirstSlotData;
+
+    /** The data required to fill in the second bottom toolbar button slot.*/
+    private final ToolbarButtonSlotData mSecondSlotData;
+
     /**
      * Build a new mediator that handles events from outside the bottom toolbar.
      * @param model The {@link BottomToolbarModel} that holds all the state for the bottom toolbar.
      * @param fullscreenManager A {@link ChromeFullscreenManager} for events related to the browser
      *                          controls.
      * @param resources Android {@link Resources} to pull dimensions from.
+     * @param firstSlotData The data required to fill in the first bottom toolbar button slot.
+     * @param secondSlotData The data required to fill in the second bottom toolbar button slot.
+     * @param primaryColor The initial color for the bottom toolbar.
      */
     BottomToolbarMediator(BottomToolbarModel model, ChromeFullscreenManager fullscreenManager,
-            Resources resources) {
+            Resources resources, ToolbarButtonSlotData firstSlotData,
+            ToolbarButtonSlotData secondSlotData, int primaryColor) {
         mModel = model;
         mFullscreenManager = fullscreenManager;
         mFullscreenManager.addListener(this);
@@ -72,6 +75,16 @@ class BottomToolbarMediator implements ContextualSearchObserver, FullscreenListe
         fullscreenManager.setBottomControlsHeight(
                 resources.getDimensionPixelOffset(R.dimen.bottom_toolbar_height));
         fullscreenManager.updateViewportSize();
+
+        mFirstSlotData = firstSlotData;
+        mSecondSlotData = secondSlotData;
+
+        mModel.setValue(BottomToolbarModel.PRIMARY_COLOR, primaryColor);
+
+        mModel.setValue(
+                BottomToolbarModel.FIRST_BUTTON_DATA, mFirstSlotData.browsingModeButtonData);
+        mModel.setValue(
+                BottomToolbarModel.SECOND_BUTTON_DATA, mSecondSlotData.browsingModeButtonData);
     }
 
     /**
@@ -86,11 +99,12 @@ class BottomToolbarMediator implements ContextualSearchObserver, FullscreenListe
      */
     void destroy() {
         mFullscreenManager.removeListener(this);
-        if (mContextualSearchManger != null) mContextualSearchManger.removeObserver(this);
         if (mOverviewModeBehavior != null) mOverviewModeBehavior.removeOverviewModeObserver(this);
         if (mWindowAndroid != null) mWindowAndroid.removeKeyboardVisibilityListener(this);
         if (mModel.getValue(BottomToolbarModel.LAYOUT_MANAGER) != null) {
-            mModel.getValue(BottomToolbarModel.LAYOUT_MANAGER).removeSceneChangeObserver(this);
+            LayoutManager manager = mModel.getValue(BottomToolbarModel.LAYOUT_MANAGER);
+            manager.getOverlayPanelManager().removeObserver(this);
+            manager.removeSceneChangeObserver(this);
         }
     }
 
@@ -100,10 +114,10 @@ class BottomToolbarMediator implements ContextualSearchObserver, FullscreenListe
     @Override
     public void onControlsOffsetChanged(float topOffset, float bottomOffset, boolean needsAnimate) {
         mModel.setValue(BottomToolbarModel.Y_OFFSET, (int) bottomOffset);
-        if (bottomOffset > 0) {
+        if (bottomOffset > 0 || mFullscreenManager.getBottomControlsHeight() == 0) {
             mModel.setValue(BottomToolbarModel.ANDROID_VIEW_VISIBLE, false);
         } else {
-            mModel.setValue(BottomToolbarModel.ANDROID_VIEW_VISIBLE, true);
+            tryShowingAndroidView();
         }
     }
 
@@ -115,7 +129,10 @@ class BottomToolbarMediator implements ContextualSearchObserver, FullscreenListe
 
     @Override
     public void onOverviewModeStartedShowing(boolean showToolbar) {
-        mModel.setValue(BottomToolbarModel.SEARCH_ACCELERATOR_VISIBLE, false);
+        mModel.setValue(
+                BottomToolbarModel.FIRST_BUTTON_DATA, mFirstSlotData.tabSwitcherModeButtonData);
+        mModel.setValue(
+                BottomToolbarModel.SECOND_BUTTON_DATA, mSecondSlotData.tabSwitcherModeButtonData);
     }
 
     @Override
@@ -123,50 +140,58 @@ class BottomToolbarMediator implements ContextualSearchObserver, FullscreenListe
 
     @Override
     public void onOverviewModeStartedHiding(boolean showToolbar, boolean delayAnimation) {
-        mModel.setValue(BottomToolbarModel.SEARCH_ACCELERATOR_VISIBLE, true);
+        mModel.setValue(
+                BottomToolbarModel.FIRST_BUTTON_DATA, mFirstSlotData.browsingModeButtonData);
+        mModel.setValue(
+                BottomToolbarModel.SECOND_BUTTON_DATA, mSecondSlotData.browsingModeButtonData);
     }
 
     @Override
     public void onOverviewModeFinishedHiding() {}
 
     @Override
-    public void onShowContextualSearch(@Nullable GSAContextDisplaySelection selectionContext) {
+    public void onOverlayPanelShown() {
         mModel.setValue(BottomToolbarModel.ANDROID_VIEW_VISIBLE, false);
     }
 
     @Override
-    public void onHideContextualSearch() {
-        // If the scroll offset for the toolbar is non-zero, it needs to remain hidden after
-        // contextual search is hidden.
-        if (mModel.getValue(BottomToolbarModel.Y_OFFSET) != 0) return;
-        mModel.setValue(BottomToolbarModel.ANDROID_VIEW_VISIBLE, true);
-    }
-
-    void setSearchAcceleratorListener(OnClickListener searchAcceleratorListener) {
-        mModel.setValue(BottomToolbarModel.SEARCH_ACCELERATOR_LISTENER, searchAcceleratorListener);
+    public void onOverlayPanelHidden() {
+        tryShowingAndroidView();
     }
 
     @Override
     public void keyboardVisibilityChanged(boolean isShowing) {
         // The toolbars are force shown when the keyboard is visible, so we can blindly set
         // the bottom toolbar view to visible or invisible regardless of the previous state.
-        ChromeFullscreenManager fullscreenManager =
-                mModel.getValue(BottomToolbarModel.LAYOUT_MANAGER).getFullscreenManager();
         if (isShowing) {
-            mBottomToolbarHeightBeforeHide = fullscreenManager.getBottomControlsHeight();
+            mBottomToolbarHeightBeforeHide = mFullscreenManager.getBottomControlsHeight();
             mModel.setValue(BottomToolbarModel.ANDROID_VIEW_VISIBLE, false);
             mModel.setValue(BottomToolbarModel.COMPOSITED_VIEW_VISIBLE, false);
-            fullscreenManager.setBottomControlsHeight(0);
+            mFullscreenManager.setBottomControlsHeight(0);
         } else {
-            fullscreenManager.setBottomControlsHeight(mBottomToolbarHeightBeforeHide);
-            mModel.setValue(BottomToolbarModel.ANDROID_VIEW_VISIBLE, true);
+            mFullscreenManager.setBottomControlsHeight(mBottomToolbarHeightBeforeHide);
+            tryShowingAndroidView();
+            mModel.setValue(
+                    BottomToolbarModel.Y_OFFSET, (int) mFullscreenManager.getBottomControlOffset());
             mModel.setValue(BottomToolbarModel.COMPOSITED_VIEW_VISIBLE, true);
         }
+    }
+
+    /**
+     * Try showing the toolbar's Android view after it has been hidden. This accounts for cases
+     * where a browser signal would ordinarily re-show the view, but others still require it to be
+     * hidden.
+     */
+    private void tryShowingAndroidView() {
+        if (mFullscreenManager.getBottomControlOffset() > 0) return;
+        if (mModel.getValue(BottomToolbarModel.Y_OFFSET) != 0) return;
+        mModel.setValue(BottomToolbarModel.ANDROID_VIEW_VISIBLE, true);
     }
 
     void setLayoutManager(LayoutManager layoutManager) {
         mModel.setValue(BottomToolbarModel.LAYOUT_MANAGER, layoutManager);
         layoutManager.addSceneChangeObserver(this);
+        layoutManager.getOverlayPanelManager().addObserver(this);
     }
 
     @Override
@@ -193,12 +218,6 @@ class BottomToolbarMediator implements ContextualSearchObserver, FullscreenListe
         mOverviewModeBehavior.addOverviewModeObserver(this);
     }
 
-    void setContextualSearchManager(ContextualSearchManager contextualSearchManager) {
-        mContextualSearchManger = contextualSearchManager;
-        if (mContextualSearchManger == null) return;
-        mContextualSearchManger.addObserver(this);
-    }
-
     void setToolbarSwipeLayout(ToolbarSwipeLayout layout) {
         mModel.setValue(BottomToolbarModel.TOOLBAR_SWIPE_LAYOUT, layout);
     }
@@ -208,5 +227,22 @@ class BottomToolbarMediator implements ContextualSearchObserver, FullscreenListe
         // Watch for keyboard events so we can hide the bottom toolbar when the keyboard is showing.
         mWindowAndroid = windowAndroid;
         mWindowAndroid.addKeyboardVisibilityListener(this);
+    }
+
+    void setTabSwitcherButtonData(
+            ToolbarButtonData firstSlotButtonData, ToolbarButtonData secondSlotButtonData) {
+        mFirstSlotData.tabSwitcherModeButtonData = firstSlotButtonData;
+        mSecondSlotData.tabSwitcherModeButtonData = secondSlotButtonData;
+
+        if (mOverviewModeBehavior.overviewVisible()) {
+            mModel.setValue(
+                    BottomToolbarModel.FIRST_BUTTON_DATA, mFirstSlotData.tabSwitcherModeButtonData);
+            mModel.setValue(BottomToolbarModel.SECOND_BUTTON_DATA,
+                    mSecondSlotData.tabSwitcherModeButtonData);
+        }
+    }
+
+    void setPrimaryColor(int color) {
+        mModel.setValue(BottomToolbarModel.PRIMARY_COLOR, color);
     }
 }

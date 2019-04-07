@@ -208,7 +208,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   void GuestViewDidStopLoading() final;
   void GuestZoomChanged(double old_zoom_level, double new_zoom_level) final;
   bool IsAutoSizeSupported() const final;
-  void SignalWhenReady(const base::Closure& callback) final;
+  void SignalWhenReady(base::OnceClosure callback) final;
   void WillAttachToEmbedder() final;
   void WillDestroy() final;
 
@@ -336,7 +336,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   // Handles find requests and replies for the webview find API.
   WebViewFindHelper find_helper_;
 
-  base::ObserverList<ScriptExecutionObserver> script_observers_;
+  base::ObserverList<ScriptExecutionObserver>::Unchecked script_observers_;
   std::unique_ptr<ScriptExecutor> script_executor_;
 
   // True if the user agent is overridden.

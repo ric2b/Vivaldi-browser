@@ -5,7 +5,7 @@
 #ifndef UI_AURA_EVENT_INJECTOR_H_
 #define UI_AURA_EVENT_INJECTOR_H_
 
-#include "services/ui/public/interfaces/event_injector.mojom.h"
+#include "services/ws/public/mojom/event_injector.mojom.h"
 #include "ui/aura/aura_export.h"
 
 namespace ui {
@@ -28,7 +28,7 @@ class AURA_EXPORT EventInjector {
   ui::EventDispatchDetails Inject(WindowTreeHost* host, ui::Event* event);
 
  private:
-  ui::mojom::EventInjectorPtr event_injector_;
+  ws::mojom::EventInjectorPtr event_injector_;
 
   DISALLOW_COPY_AND_ASSIGN(EventInjector);
 };

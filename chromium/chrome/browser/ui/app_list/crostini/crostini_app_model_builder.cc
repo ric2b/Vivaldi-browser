@@ -11,6 +11,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/crostini/crostini_app_item.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -52,6 +53,8 @@ void CrostiniAppModelBuilder::InsertCrostiniAppItem(
       *registry_service->GetRegistration(app_id);
   if (registration.NoDisplay())
     return;
+
+  MaybeCreateRootFolder();
   InsertApp(std::make_unique<CrostiniAppItem>(profile(), model_updater(),
                                               GetSyncItem(app_id), app_id,
                                               registration.Name()));
@@ -66,8 +69,20 @@ void CrostiniAppModelBuilder::OnRegistryUpdated(
   for (const std::string& app_id : removed_apps)
     RemoveApp(app_id, unsynced_change);
   for (const std::string& app_id : updated_apps) {
-    RemoveApp(app_id, unsynced_change);
-    InsertCrostiniAppItem(registry_service, app_id);
+    crostini::CrostiniRegistryService::Registration registration =
+        *registry_service->GetRegistration(app_id);
+    if (registration.NoDisplay()) {
+      RemoveApp(app_id, unsynced_change);
+      continue;
+    }
+
+    CrostiniAppItem* app_item =
+        static_cast<CrostiniAppItem*>(GetAppItem(app_id));
+    if (!app_item) {
+      InsertCrostiniAppItem(registry_service, app_id);
+      continue;
+    }
+    app_item->SetName(registration.Name());
   }
   for (const std::string& app_id : inserted_apps) {
     // If the app has been installed before and has not been cleaned up
@@ -102,4 +117,24 @@ void CrostiniAppModelBuilder::OnCrostiniEnabledChanged() {
   } else {
     RemoveApp(kCrostiniTerminalId, unsynced_change);
   }
+}
+
+void CrostiniAppModelBuilder::MaybeCreateRootFolder() {
+  if (root_folder_created_)
+    return;
+
+  root_folder_created_ = true;
+  const app_list::AppListSyncableService::SyncItem* sync_item =
+      GetSyncItem(kCrostiniFolderId);
+  if (sync_item)
+    return;
+
+  std::unique_ptr<ChromeAppListItem> crositini_folder =
+      std::make_unique<ChromeAppListItem>(profile(), kCrostiniFolderId,
+                                          model_updater());
+  crositini_folder->SetChromeIsFolder(true);
+  crositini_folder->SetName(
+      l10n_util::GetStringUTF8(IDS_APP_LIST_CROSTINI_DEFAULT_FOLDER_NAME));
+  crositini_folder->SetDefaultPositionIfApplicable();
+  InsertApp(std::move(crositini_folder));
 }

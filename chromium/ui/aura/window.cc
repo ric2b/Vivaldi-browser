@@ -19,7 +19,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "cc/trees/layer_tree_frame_sink.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/cursor_client.h"
@@ -30,13 +30,13 @@
 #include "ui/aura/client/window_stacking_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
-#include "ui/aura/local/layer_tree_frame_sink_local.h"
 #include "ui/aura/scoped_keyboard_hook.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_observer.h"
 #include "ui/aura/window_occlusion_tracker.h"
 #include "ui/aura/window_port.h"
+#include "ui/aura/window_targeter.h"
 #include "ui/aura/window_tracker.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ui_base_features.h"
@@ -52,14 +52,22 @@
 #include "ui/gfx/scoped_canvas.h"
 
 namespace aura {
+namespace {
+#if DCHECK_IS_ON()
+const char* g_env_arg_required_string = nullptr;
+#endif
 
-Window::Window(WindowDelegate* delegate, client::WindowType type)
-    : Window(delegate, nullptr, type) {}
+}  // namespace
+
+Window::Window(WindowDelegate* delegate, client::WindowType type, Env* env)
+    : Window(delegate, nullptr, type, env) {}
 
 Window::Window(WindowDelegate* delegate,
                std::unique_ptr<WindowPort> port,
-               client::WindowType type)
-    : port_owner_(std::move(port)),
+               client::WindowType type,
+               Env* env)
+    : env_(env ? env : Env::GetInstance()),
+      port_owner_(std::move(port)),
       port_(port_owner_.get()),
       host_(nullptr),
       type_(type),
@@ -71,19 +79,20 @@ Window::Window(WindowDelegate* delegate,
       id_(kInitialId),
       transparent_(false),
       event_targeting_policy_(
-          ui::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS),
+          ws::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS),
       // Don't notify newly added observers during notification. This causes
       // problems for code that adds an observer as part of an observer
       // notification (such as the workspace code).
       observers_(base::ObserverListPolicy::EXISTING_ONLY) {
   SetTargetHandler(delegate_);
+#if DCHECK_IS_ON()
+  // NOTE: at the time of adding this this function is only called from ash.
+  DCHECK(env || !g_env_arg_required_string) << g_env_arg_required_string;
+#endif
 }
 
 Window::~Window() {
   WindowOcclusionTracker::ScopedPauseOcclusionTracking pause_occlusion_tracking;
-
-  // See comment in header as to why this is done.
-  std::unique_ptr<WindowPort> port = std::move(port_owner_);
 
   if (layer()->owner() == this)
     layer()->CompleteAllAnimations();
@@ -143,13 +152,18 @@ Window::~Window() {
   // acquired it.
   layer()->set_delegate(NULL);
   DestroyLayer();
+
+  // Delete the WindowPort now, in case it needs to reach back into the Window
+  // during destruction.
+  port_owner_.reset();
+  port_ = nullptr;
 }
 
 void Window::Init(ui::LayerType layer_type) {
   WindowOcclusionTracker::ScopedPauseOcclusionTracking pause_occlusion_tracking;
 
   if (!port_owner_) {
-    port_owner_ = Env::GetInstance()->CreateWindowPort(this);
+    port_owner_ = env_->CreateWindowPort(this);
     port_ = port_owner_.get();
   }
   SetLayer(std::make_unique<ui::Layer>(layer_type));
@@ -158,7 +172,7 @@ void Window::Init(ui::LayerType layer_type) {
   layer()->set_delegate(this);
   UpdateLayerName();
   layer()->SetFillsBoundsOpaquely(!transparent_);
-  Env::GetInstance()->NotifyWindowInitialized(this);
+  env_->NotifyWindowInitialized(this);
 }
 
 void Window::SetType(client::WindowType type) {
@@ -291,9 +305,9 @@ void Window::SetLayoutManager(LayoutManager* layout_manager) {
     layout_manager_->OnWindowAddedToLayout(*it);
 }
 
-std::unique_ptr<ui::EventTargeter> Window::SetEventTargeter(
-    std::unique_ptr<ui::EventTargeter> targeter) {
-  std::unique_ptr<ui::EventTargeter> old_targeter = std::move(targeter_);
+std::unique_ptr<WindowTargeter> Window::SetEventTargeter(
+    std::unique_ptr<WindowTargeter> targeter) {
+  std::unique_ptr<WindowTargeter> old_targeter = std::move(targeter_);
   targeter_ = std::move(targeter);
   return old_targeter;
 }
@@ -359,6 +373,8 @@ void Window::AddChild(Window* child) {
 
   DCHECK(layer()) << "Parent has not been Init()ed yet.";
   DCHECK(child->layer()) << "Child has not been Init()ed yt.";
+  DCHECK_EQ(env_, child->env_) << "All windows in a hierarchy must share the "
+                                  " same Env.";
   WindowObserver::HierarchyChangeParams params;
   params.target = child;
   params.new_parent = this;
@@ -530,7 +546,7 @@ bool Window::HasObserver(const WindowObserver* observer) const {
   return observers_.HasObserver(observer);
 }
 
-void Window::SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy policy) {
+void Window::SetEventTargetingPolicy(ws::mojom::EventTargetingPolicy policy) {
   if (event_targeting_policy_ == policy)
     return;
 
@@ -553,7 +569,55 @@ bool Window::ContainsPoint(const gfx::Point& local_point) const {
 }
 
 Window* Window::GetEventHandlerForPoint(const gfx::Point& local_point) {
-  return GetWindowForPoint(local_point, true, true);
+  if (!IsVisible())
+    return nullptr;
+
+  if (!HitTest(local_point))
+    return nullptr;
+
+  for (Windows::const_reverse_iterator it = children_.rbegin(),
+                                       rend = children_.rend();
+       it != rend; ++it) {
+    Window* child = *it;
+
+    if (child->event_targeting_policy_ ==
+        ws::mojom::EventTargetingPolicy::NONE) {
+      continue;
+    }
+
+    // The client may not allow events to be processed by certain subtrees.
+    client::EventClient* client = client::GetEventClient(GetRootWindow());
+    if (client && !client->CanProcessEventsWithinSubtree(child))
+      continue;
+
+    if (delegate_ && !delegate_->ShouldDescendIntoChildForEventHandling(
+                         child, local_point)) {
+      continue;
+    }
+
+    gfx::Point point_in_child_coords(local_point);
+    ConvertPointToTarget(this, child, &point_in_child_coords);
+    Window* match = child->GetEventHandlerForPoint(point_in_child_coords);
+    if (!match)
+      continue;
+
+    switch (child->event_targeting_policy_) {
+      case ws::mojom::EventTargetingPolicy::TARGET_ONLY:
+        if (child->delegate_)
+          return child;
+        break;
+      case ws::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS:
+        return match;
+      case ws::mojom::EventTargetingPolicy::DESCENDANTS_ONLY:
+        if (match != child)
+          return match;
+        break;
+      case ws::mojom::EventTargetingPolicy::NONE:
+        NOTREACHED();  // This case is handled early on.
+    }
+  }
+
+  return delegate_ ? this : nullptr;
 }
 
 Window* Window::GetToplevelWindow() {
@@ -809,69 +873,6 @@ void Window::Paint(const ui::PaintContext& context) {
     delegate_->OnPaint(context);
 }
 
-Window* Window::GetWindowForPoint(const gfx::Point& local_point,
-                                  bool return_tightest,
-                                  bool for_event_handling) {
-  if (!IsVisible())
-    return nullptr;
-
-  if ((for_event_handling && !HitTest(local_point)) ||
-      (!for_event_handling && !ContainsPoint(local_point))) {
-    return nullptr;
-  }
-
-  if (!return_tightest && delegate_)
-    return this;
-
-  for (Windows::const_reverse_iterator it = children_.rbegin(),
-           rend = children_.rend();
-       it != rend; ++it) {
-    Window* child = *it;
-
-    if (for_event_handling) {
-      if (child->event_targeting_policy_ ==
-          ui::mojom::EventTargetingPolicy::NONE) {
-        continue;
-      }
-
-      // The client may not allow events to be processed by certain subtrees.
-      client::EventClient* client = client::GetEventClient(GetRootWindow());
-      if (client && !client->CanProcessEventsWithinSubtree(child))
-        continue;
-
-      if (delegate_ && !delegate_->ShouldDescendIntoChildForEventHandling(
-                           child, local_point)) {
-        continue;
-      }
-    }
-
-    gfx::Point point_in_child_coords(local_point);
-    ConvertPointToTarget(this, child, &point_in_child_coords);
-    Window* match = child->GetWindowForPoint(point_in_child_coords,
-                                             return_tightest,
-                                             for_event_handling);
-    if (!match)
-      continue;
-
-    switch (child->event_targeting_policy_) {
-      case ui::mojom::EventTargetingPolicy::TARGET_ONLY:
-        if (child->delegate_)
-          return child;
-        break;
-      case ui::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS:
-        return match;
-      case ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY:
-        if (match != child)
-          return match;
-        break;
-      case ui::mojom::EventTargetingPolicy::NONE:
-        NOTREACHED();  // This case is handled early on.
-    }
-  }
-
-  return delegate_ ? this : nullptr;
-}
-
 void Window::RemoveChildImpl(Window* child, Window* new_parent) {
   if (layout_manager_)
     layout_manager_->OnWillRemoveWindowFromLayout(child);
@@ -1071,9 +1072,8 @@ void Window::NotifyWindowVisibilityChangedUp(aura::Window* target,
 
 bool Window::CleanupGestureState() {
   bool state_modified = false;
-  state_modified |= ui::GestureRecognizer::Get()->CancelActiveTouches(this);
-  state_modified |=
-      ui::GestureRecognizer::Get()->CleanupStateForConsumer(this);
+  state_modified |= env_->gesture_recognizer()->CancelActiveTouches(this);
+  state_modified |= env_->gesture_recognizer()->CleanupStateForConsumer(this);
   for (Window::Windows::iterator iter = children_.begin();
        iter != children_.end();
        ++iter) {
@@ -1147,6 +1147,13 @@ bool Window::RequiresDoubleTapGestureEvents() const {
   return delegate_ && delegate_->RequiresDoubleTapGestureEvents();
 }
 
+#if DCHECK_IS_ON()
+// static
+void Window::SetEnvArgRequired(const char* error_string) {
+  g_env_arg_required_string = error_string;
+}
+#endif
+
 void Window::OnPaintLayer(const ui::PaintContext& context) {
   Paint(context);
 }
@@ -1173,6 +1180,12 @@ void Window::OnLayerOpacityChanged(ui::PropertyChangeReason reason) {
   WindowOcclusionTracker::ScopedPauseOcclusionTracking pause_occlusion_tracking;
   for (WindowObserver& observer : observers_)
     observer.OnWindowOpacitySet(this, reason);
+}
+
+void Window::OnLayerAlphaShapeChanged() {
+  WindowOcclusionTracker::ScopedPauseOcclusionTracking pause_occlusion_tracking;
+  for (WindowObserver& observer : observers_)
+    observer.OnWindowAlphaShapeSet(this);
 }
 
 void Window::OnLayerTransformed(const gfx::Transform& old_transform,
@@ -1212,9 +1225,9 @@ bool Window::CanAcceptEvent(const ui::Event& event) {
 
 ui::EventTarget* Window::GetParentTarget() {
   if (IsRootWindow()) {
-    return client::GetEventClient(this) ?
-        client::GetEventClient(this)->GetToplevelEventTarget() :
-            Env::GetInstance();
+    return client::GetEventClient(this)
+               ? client::GetEventClient(this)->GetToplevelEventTarget()
+               : env_;
   }
   return parent_;
 }
@@ -1292,7 +1305,7 @@ void Window::RegisterFrameSinkId() {
   if (registered_frame_sink_id_ || disable_frame_sink_id_registration_)
     return;
   if (auto* compositor = layer()->GetCompositor()) {
-    compositor->AddFrameSink(frame_sink_id_);
+    compositor->AddChildFrameSink(frame_sink_id_);
     registered_frame_sink_id_ = true;
   }
 }
@@ -1302,7 +1315,7 @@ void Window::UnregisterFrameSinkId() {
     return;
   registered_frame_sink_id_ = false;
   if (auto* compositor = layer()->GetCompositor())
-    compositor->RemoveFrameSink(frame_sink_id_);
+    compositor->RemoveChildFrameSink(frame_sink_id_);
 }
 
 }  // namespace aura

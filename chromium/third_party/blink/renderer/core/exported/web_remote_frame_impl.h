@@ -99,8 +99,6 @@ class CORE_EXPORT WebRemoteFrameImpl final
 
   static WebRemoteFrameImpl* FromFrame(RemoteFrame&);
 
-  bool snapshotPage(SkBitmap&, bool, float, float) override { return false; }
-
   void Trace(blink::Visitor*);
 
  private:

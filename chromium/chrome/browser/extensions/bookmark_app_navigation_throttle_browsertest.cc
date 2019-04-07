@@ -19,7 +19,8 @@
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -587,6 +588,33 @@ IN_PROC_BROWSER_TEST_P(BookmarkAppNavigationThrottleExperimentalLinkBrowserTest,
 
   // Non-windowed apps are not considered when looking for a target app, so it's
   // as if there was no app installed for the URL.
+  ExpectNavigationResultHistogramEquals(global_histogram(), {});
+}
+
+// Tests that clicking a link to an app that isn't locally installed does not
+// open a new app window.
+IN_PROC_BROWSER_TEST_P(BookmarkAppNavigationThrottleExperimentalLinkBrowserTest,
+                       NotLocallyInstalledApp) {
+  InstallTestBookmarkApp();
+
+  // Part of the installation process (setting that this is a locally installed
+  // app) runs asynchronously. Wait for that to complete before setting locally
+  // installed to false.
+  base::RunLoop().RunUntilIdle();
+  SetBookmarkAppIsLocallyInstalled(browser()->profile(), test_bookmark_app(),
+                                   false /* is_locally_installed */);
+
+  NavigateToLaunchingPage();
+
+  const GURL app_url = https_server().GetURL(GetAppUrlHost(), GetAppUrlPath());
+  TestTabActionDoesNotOpenAppWindow(
+      app_url,
+      base::BindOnce(&ClickLinkAndWait,
+                     browser()->tab_strip_model()->GetActiveWebContents(),
+                     app_url, LinkTarget::SELF, GetParam()));
+
+  // Non-locally installed apps are not considered when looking for a target
+  // app, so it's as if there was no app installed for the URL.
   ExpectNavigationResultHistogramEquals(global_histogram(), {});
 }
 
@@ -1417,7 +1445,7 @@ IN_PROC_BROWSER_TEST_P(BookmarkAppNavigationThrottleCommonBrowserTest,
 
   const Extension* app =
       ExtensionRegistry::Get(profile())->enabled_extensions().GetByID(
-          web_app::GetExtensionIdFromApplicationName(app_browser->app_name()));
+          web_app::GetAppIdFromApplicationName(app_browser->app_name()));
   EXPECT_EQ(GetAppName(), app->name());
 }
 #endif  // OS_CHROMEOS

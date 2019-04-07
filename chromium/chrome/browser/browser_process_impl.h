@@ -25,6 +25,7 @@
 #include "chrome/common/buildflags.h"
 #include "components/keep_alive_registry/keep_alive_state_observer.h"
 #include "components/nacl/common/buildflags.h"
+#include "components/prefs/persistent_pref_store.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "extensions/buildflags/buildflags.h"
 #include "media/media_buildflags.h"
@@ -39,7 +40,6 @@ class ChromeResourceDispatcherHostDelegate;
 class DevToolsAutoOpener;
 class RemoteDebuggingServer;
 class PrefRegistrySimple;
-class WebRtcEventLogManager;
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 class PluginsResourceService;
@@ -47,7 +47,6 @@ class PluginsResourceService;
 
 namespace base {
 class CommandLine;
-class SequencedTaskRunner;
 }
 
 namespace extensions {
@@ -71,13 +70,19 @@ namespace resource_coordinator {
 class TabLifecycleUnitSource;
 }
 
+namespace webrtc_event_logging {
+class WebRtcEventLogManager;
+}  // namespace webrtc_event_logging
+
 // Real implementation of BrowserProcess that creates and returns the services.
 class BrowserProcessImpl : public BrowserProcess,
                            public KeepAliveStateObserver {
  public:
-  // |local_state_task_runner| must be a shutdown-blocking task runner.
+  // |user_pref_store|: if non-null, will be used as the source (and
+  // destination) of user prefs for Local State instead of loading the JSON file
+  // from disk.
   explicit BrowserProcessImpl(
-      base::SequencedTaskRunner* local_state_task_runner);
+      scoped_refptr<PersistentPrefStore> user_pref_store);
   ~BrowserProcessImpl() override;
 
   // Called to complete initialization.
@@ -126,7 +131,6 @@ class BrowserProcessImpl : public BrowserProcess,
   SystemNetworkContextManager* system_network_context_manager() override;
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory()
       override;
-  content::NetworkConnectionTracker* network_connection_tracker() override;
   network::NetworkQualityTracker* network_quality_tracker() override;
   WatchDogThread* watchdog_thread() override;
   ProfileManager* profile_manager() override;
@@ -185,6 +189,8 @@ class BrowserProcessImpl : public BrowserProcess,
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
  private:
+  using WebRtcEventLogManager = webrtc_event_logging::WebRtcEventLogManager;
+
   // KeepAliveStateObserver implementation
   void OnKeepAliveStateChanged(bool is_keeping_alive) override;
   void OnKeepAliveRestartStateChanged(bool can_restart) override;
@@ -242,9 +248,6 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<PrefService> local_state_;
 
   std::unique_ptr<SystemNetworkContextManager> system_network_context_manager_;
-
-  std::unique_ptr<content::NetworkConnectionTracker>
-      network_connection_tracker_;
 
   std::unique_ptr<network::NetworkQualityTracker> network_quality_tracker_;
 
@@ -323,8 +326,10 @@ class BrowserProcessImpl : public BrowserProcess,
 
   scoped_refptr<DownloadRequestLimiter> download_request_limiter_;
 
-  // Sequenced task runner for local state related I/O tasks.
-  const scoped_refptr<base::SequencedTaskRunner> local_state_task_runner_;
+  // A pref store that is created from the Local State file. This is handed-off
+  // to |local_state_| when it's created. It will use it, if non-null, instead
+  // of loading the user prefs from disk.
+  scoped_refptr<PersistentPrefStore> user_pref_store_;
 
   // Ensures that the observers of plugin/print disable/enable state
   // notifications are properly added and removed.

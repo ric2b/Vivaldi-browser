@@ -6,12 +6,14 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
 #include "content/browser/background_fetch/background_fetch_registration_id.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_version.h"
+#include "content/common/background_fetch/background_fetch_types.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace content {
@@ -27,8 +29,8 @@ std::string HistogramSuffixForEventType(ServiceWorkerMetrics::EventType event) {
       return "ClickEvent";
     case ServiceWorkerMetrics::EventType::BACKGROUND_FETCH_FAIL:
       return "FailEvent";
-    case ServiceWorkerMetrics::EventType::BACKGROUND_FETCHED:
-      return "FetchedEvent";
+    case ServiceWorkerMetrics::EventType::BACKGROUND_FETCH_SUCCESS:
+      return "SuccessEvent";
     default:
       NOTREACHED();
       return std::string();
@@ -75,103 +77,99 @@ BackgroundFetchEventDispatcher::~BackgroundFetchEventDispatcher() {
 
 void BackgroundFetchEventDispatcher::DispatchBackgroundFetchAbortEvent(
     const BackgroundFetchRegistrationId& registration_id,
-    const std::vector<BackgroundFetchSettledFetch>& fetches,
+    std::unique_ptr<BackgroundFetchRegistration> registration,
     base::OnceClosure finished_closure) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   LoadServiceWorkerRegistrationForDispatch(
       registration_id, ServiceWorkerMetrics::EventType::BACKGROUND_FETCH_ABORT,
       std::move(finished_closure),
-      base::Bind(
+      base::AdaptCallbackForRepeating(base::BindOnce(
           &BackgroundFetchEventDispatcher::DoDispatchBackgroundFetchAbortEvent,
-          registration_id.developer_id(), registration_id.unique_id(),
-          fetches));
+          std::move(registration))));
 }
 
 void BackgroundFetchEventDispatcher::DoDispatchBackgroundFetchAbortEvent(
-    const std::string& developer_id,
-    const std::string& unique_id,
-    const std::vector<BackgroundFetchSettledFetch>& fetches,
+    std::unique_ptr<BackgroundFetchRegistration> registration,
     scoped_refptr<ServiceWorkerVersion> service_worker_version,
     int request_id) {
   DCHECK(service_worker_version);
+  DCHECK(registration);
   service_worker_version->endpoint()->DispatchBackgroundFetchAbortEvent(
-      developer_id, unique_id, fetches,
+      *registration,
       service_worker_version->CreateSimpleEventCallback(request_id));
 }
 
 void BackgroundFetchEventDispatcher::DispatchBackgroundFetchClickEvent(
     const BackgroundFetchRegistrationId& registration_id,
-    mojom::BackgroundFetchState state,
+    std::unique_ptr<BackgroundFetchRegistration> registration,
     base::OnceClosure finished_closure) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   LoadServiceWorkerRegistrationForDispatch(
       registration_id, ServiceWorkerMetrics::EventType::BACKGROUND_FETCH_CLICK,
       std::move(finished_closure),
-      base::Bind(
+      base::AdaptCallbackForRepeating(base::BindOnce(
           &BackgroundFetchEventDispatcher::DoDispatchBackgroundFetchClickEvent,
-          registration_id.developer_id(), state));
+          std::move(registration))));
 }
 
 void BackgroundFetchEventDispatcher::DoDispatchBackgroundFetchClickEvent(
-    const std::string& developer_id,
-    mojom::BackgroundFetchState state,
+    std::unique_ptr<BackgroundFetchRegistration> registration,
     scoped_refptr<ServiceWorkerVersion> service_worker_version,
     int request_id) {
   DCHECK(service_worker_version);
+  DCHECK(registration);
   service_worker_version->endpoint()->DispatchBackgroundFetchClickEvent(
-      developer_id, state,
+      *registration,
       service_worker_version->CreateSimpleEventCallback(request_id));
 }
 
 void BackgroundFetchEventDispatcher::DispatchBackgroundFetchFailEvent(
     const BackgroundFetchRegistrationId& registration_id,
-    const std::vector<BackgroundFetchSettledFetch>& fetches,
+    std::unique_ptr<BackgroundFetchRegistration> registration,
     base::OnceClosure finished_closure) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   LoadServiceWorkerRegistrationForDispatch(
       registration_id, ServiceWorkerMetrics::EventType::BACKGROUND_FETCH_FAIL,
       std::move(finished_closure),
-      base::Bind(
+      base::AdaptCallbackForRepeating(base::BindOnce(
           &BackgroundFetchEventDispatcher::DoDispatchBackgroundFetchFailEvent,
-          registration_id.developer_id(), registration_id.unique_id(),
-          fetches));
+          std::move(registration))));
 }
 
 void BackgroundFetchEventDispatcher::DoDispatchBackgroundFetchFailEvent(
-    const std::string& developer_id,
-    const std::string& unique_id,
-    const std::vector<BackgroundFetchSettledFetch>& fetches,
+    std::unique_ptr<BackgroundFetchRegistration> registration,
     scoped_refptr<ServiceWorkerVersion> service_worker_version,
     int request_id) {
   DCHECK(service_worker_version);
+  DCHECK(registration);
   service_worker_version->endpoint()->DispatchBackgroundFetchFailEvent(
-      developer_id, unique_id, fetches,
+      *registration,
       service_worker_version->CreateSimpleEventCallback(request_id));
 }
 
-void BackgroundFetchEventDispatcher::DispatchBackgroundFetchedEvent(
+void BackgroundFetchEventDispatcher::DispatchBackgroundFetchSuccessEvent(
     const BackgroundFetchRegistrationId& registration_id,
-    const std::vector<BackgroundFetchSettledFetch>& fetches,
+    std::unique_ptr<BackgroundFetchRegistration> registration,
     base::OnceClosure finished_closure) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   LoadServiceWorkerRegistrationForDispatch(
-      registration_id, ServiceWorkerMetrics::EventType::BACKGROUND_FETCHED,
+      registration_id,
+      ServiceWorkerMetrics::EventType::BACKGROUND_FETCH_SUCCESS,
       std::move(finished_closure),
-      base::Bind(
-          &BackgroundFetchEventDispatcher::DoDispatchBackgroundFetchedEvent,
-          registration_id.developer_id(), registration_id.unique_id(),
-          fetches));
+      base::AdaptCallbackForRepeating(
+          base::BindOnce(&BackgroundFetchEventDispatcher::
+                             DoDispatchBackgroundFetchSuccessEvent,
+                         std::move(registration))));
 }
 
-void BackgroundFetchEventDispatcher::DoDispatchBackgroundFetchedEvent(
-    const std::string& developer_id,
-    const std::string& unique_id,
-    const std::vector<BackgroundFetchSettledFetch>& fetches,
+void BackgroundFetchEventDispatcher::DoDispatchBackgroundFetchSuccessEvent(
+    std::unique_ptr<BackgroundFetchRegistration> registration,
     scoped_refptr<ServiceWorkerVersion> service_worker_version,
     int request_id) {
   DCHECK(service_worker_version);
-  service_worker_version->endpoint()->DispatchBackgroundFetchedEvent(
-      developer_id, unique_id, fetches,
+  DCHECK(registration);
+  service_worker_version->endpoint()->DispatchBackgroundFetchSuccessEvent(
+      *registration,
       service_worker_version->CreateSimpleEventCallback(request_id));
 }
 

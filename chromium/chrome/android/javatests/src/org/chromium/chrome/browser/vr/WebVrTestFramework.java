@@ -21,6 +21,7 @@ public class WebVrTestFramework extends WebXrVrTestFramework {
      * Checks whether a VRDisplay was actually found. Keeps the "xrDeviceFound" naming instead of
      * "vrDisplayFound" since WebVR is being deprecated and maintaining consistency with WebXR
      * naming is more important in the long run.
+     *
      * @param webContents The WebContents to run the JavaScript through.
      * @return Whether a VRDisplay was found.
      */
@@ -31,18 +32,20 @@ public class WebVrTestFramework extends WebXrVrTestFramework {
 
     /**
      * WebVR-specific implementation of enterSessionWithUserGestureOrFail.
+     *
      * @param webContents The WebContents of the tab to enter WebVR presentation in.
      */
     @Override
     public void enterSessionWithUserGestureOrFail(WebContents webContents) {
         enterSessionWithUserGesture(webContents);
-        Assert.assertTrue(
-                pollJavaScriptBoolean("vrDisplay.isPresenting", POLL_TIMEOUT_LONG_MS, webContents));
-        Assert.assertTrue(TestVrShellDelegate.getVrShellForTesting().getWebVrModeEnabled());
+        pollJavaScriptBooleanOrFail("vrDisplay.isPresenting", POLL_TIMEOUT_LONG_MS, webContents);
+        Assert.assertTrue("VRDisplay presenting, but VR Shell not in WebVR mode",
+                TestVrShellDelegate.getVrShellForTesting().getWebVrModeEnabled());
     }
 
     /**
      * Exits WebVR presentation.
+     *
      * @param webContents The WebContents of the tab to exit WebVR presentation in.
      */
     @Override

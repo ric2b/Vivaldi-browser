@@ -47,13 +47,13 @@ class RadioInputType final : public BaseCheckableInputType {
   const AtomicString& FormControlType() const override;
   bool ValueMissing(const String&) const override;
   String ValueMissingText() const override;
-  void HandleClickEvent(MouseEvent*) override;
-  void HandleKeydownEvent(KeyboardEvent*) override;
-  void HandleKeyupEvent(KeyboardEvent*) override;
+  void HandleClickEvent(MouseEvent&) override;
+  void HandleKeydownEvent(KeyboardEvent&) override;
+  void HandleKeyupEvent(KeyboardEvent&) override;
   bool IsKeyboardFocusable() const override;
   bool ShouldSendChangeEventAfterCheckedChanged() override;
   ClickHandlingState* WillDispatchClick() override;
-  void DidDispatchClick(Event*, const ClickHandlingState&) override;
+  void DidDispatchClick(Event&, const ClickHandlingState&) override;
   bool ShouldAppearIndeterminate() const override;
 
   HTMLInputElement* FindNextFocusableRadioButtonInGroup(HTMLInputElement*,

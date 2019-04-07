@@ -8,6 +8,7 @@ to a tgz file."""
 
 import argparse
 import fnmatch
+import glob
 import itertools
 import os
 import shutil
@@ -229,7 +230,9 @@ def main():
   # Copy a whitelist of files to the directory we're going to tar up.
   # This supports the same patterns that the fnmatch module understands.
   exe_ext = '.exe' if sys.platform == 'win32' else ''
-  want = ['bin/llvm-symbolizer' + exe_ext,
+  want = ['bin/llvm-pdbutil' + exe_ext,
+          'bin/llvm-symbolizer' + exe_ext,
+          'bin/llvm-undname' + exe_ext,
           'bin/sancov' + exe_ext,
           # Copy built-in headers (lib/clang/3.x.y/include).
           'lib/clang/*/include/*',
@@ -275,6 +278,7 @@ def main():
   elif sys.platform == 'win32':
     want.extend(['lib/clang/*/lib/windows/clang_rt.asan*.dll',
                  'lib/clang/*/lib/windows/clang_rt.asan*.lib',
+                 'lib/clang/*/lib/windows/clang_rt.profile*.lib',
                  'lib/clang/*/lib/windows/clang_rt.ubsan*.lib',
                  ])
 
@@ -298,7 +302,12 @@ def main():
             os.path.splitext(f)[1] in ['.so', '.a']):
         subprocess.call([EU_STRIP, '-g', dest])
 
-  stripped_binaries = ['clang', 'llvm-symbolizer', 'sancov']
+  stripped_binaries = ['clang',
+                       'llvm-pdbutil',
+                       'llvm-symbolizer',
+                       'llvm-undname',
+                       'sancov',
+                       ]
   if sys.platform.startswith('linux'):
     stripped_binaries.append('lld')
     stripped_binaries.append('llvm-ar')
@@ -381,6 +390,23 @@ def main():
     tar.add(os.path.join(cfiverifydir, 'bin'), arcname='bin',
             filter=PrintTarProgress)
   MaybeUpload(args, cfiverifydir, platform)
+
+  # Zip up the SafeStack runtime for Linux
+  safestackdir = 'safestack-' + stamp
+  shutil.rmtree(safestackdir, ignore_errors=True)
+  os.makedirs(os.path.join(safestackdir, 'lib'))
+  for build in glob.glob(os.path.join(LLVM_RELEASE_DIR, 'lib', 'clang', '*')):
+    version = os.path.basename(build)
+    dest_dir = os.path.join(safestackdir, 'lib', 'clang', version,
+                            'lib', 'linux')
+    os.makedirs(dest_dir)
+    for lib in glob.glob(os.path.join(build, 'lib', 'linux',
+                                      '*libclang_rt.safestack*')):
+      shutil.copy(lib, dest_dir)
+  with tarfile.open(safestackdir + '.tgz', 'w:gz') as tar:
+    tar.add(os.path.join(safestackdir, 'lib'), arcname='lib',
+            filter=PrintTarProgress)
+  MaybeUpload(args, safestackdir, platform)
 
   # On Mac, lld isn't part of the main zip.  Upload it in a separate zip.
   if sys.platform == 'darwin':

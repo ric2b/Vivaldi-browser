@@ -8,29 +8,85 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings_utils.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_view_host.h"
 #include "content/public/common/url_constants.h"
+#include "media/base/media_switches.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/platform/autoplay.mojom.h"
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #endif
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(SoundContentSettingObserver);
 
 SoundContentSettingObserver::SoundContentSettingObserver(
     content::WebContents* contents)
     : content::WebContentsObserver(contents),
       logged_site_muted_ukm_(false),
       observer_(this) {
-  host_content_settings_map_ = HostContentSettingsMapFactory::GetForProfile(
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  host_content_settings_map_ =
+      HostContentSettingsMapFactory::GetForProfile(profile);
   observer_.Add(host_content_settings_map_);
+
+#if !defined(OS_ANDROID)
+  // Listen to changes of the block autoplay pref.
+  pref_change_registrar_.Init(profile->GetPrefs());
+  pref_change_registrar_.Add(
+      prefs::kBlockAutoplayEnabled,
+      base::BindRepeating(&SoundContentSettingObserver::UpdateAutoplayPolicy,
+                          base::Unretained(this)));
+#endif
 }
 
 SoundContentSettingObserver::~SoundContentSettingObserver() = default;
+
+void SoundContentSettingObserver::ReadyToCommitNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (navigation_handle->IsSameDocument())
+    return;
+
+  if (!base::FeatureList::IsEnabled(media::kAutoplaySoundSettings))
+    return;
+
+  GURL url = navigation_handle->IsInMainFrame()
+                 ? navigation_handle->GetURL()
+                 : navigation_handle->GetWebContents()->GetLastCommittedURL();
+
+  content_settings::SettingInfo setting_info;
+  std::unique_ptr<base::Value> setting =
+      host_content_settings_map_->GetWebsiteSetting(
+          url, navigation_handle->GetURL(),
+          CONTENT_SETTINGS_TYPE_SOUND, std::string(), &setting_info);
+
+  if (content_settings::ValueToContentSetting(setting.get()) !=
+      CONTENT_SETTING_ALLOW) {
+    return;
+  }
+
+  if (setting_info.source != content_settings::SETTING_SOURCE_USER)
+    return;
+
+  if (setting_info.primary_pattern == ContentSettingsPattern::Wildcard() &&
+      setting_info.secondary_pattern == ContentSettingsPattern::Wildcard()) {
+    return;
+  }
+
+  blink::mojom::AutoplayConfigurationClientAssociatedPtr client;
+  navigation_handle->GetRenderFrameHost()
+      ->GetRemoteAssociatedInterfaces()
+      ->GetInterface(&client);
+  client->AddAutoplayFlags(url::Origin::Create(navigation_handle->GetURL()),
+                           blink::mojom::kAutoplayFlagUserException);
+}
 
 void SoundContentSettingObserver::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
@@ -50,10 +106,19 @@ void SoundContentSettingObserver::OnContentSettingChanged(
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_type,
     const std::string& resource_identifier) {
-  if (content_type == CONTENT_SETTINGS_TYPE_SOUND) {
-    MuteOrUnmuteIfNecessary();
-    CheckSoundBlocked(web_contents()->IsCurrentlyAudible());
+  if (content_type != CONTENT_SETTINGS_TYPE_SOUND)
+    return;
+
+#if !defined(OS_ANDROID)
+  if (primary_pattern == ContentSettingsPattern() &&
+      secondary_pattern == ContentSettingsPattern() &&
+      resource_identifier.empty()) {
+    UpdateAutoplayPolicy();
   }
+#endif
+
+  MuteOrUnmuteIfNecessary();
+  CheckSoundBlocked(web_contents()->IsCurrentlyAudible());
 }
 
 void SoundContentSettingObserver::MuteOrUnmuteIfNecessary() {
@@ -139,3 +204,10 @@ SoundContentSettingObserver::GetSiteMutedReason() {
   }
   return MuteReason::kSiteException;
 }
+
+#if !defined(OS_ANDROID)
+void SoundContentSettingObserver::UpdateAutoplayPolicy() {
+  // Force a WebkitPreferences update to update the autoplay policy.
+  web_contents()->GetRenderViewHost()->OnWebkitPreferencesChanged();
+}
+#endif

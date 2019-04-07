@@ -141,7 +141,6 @@ void DrawDocumentMarker(GraphicsContext& context,
 
 }  // anonymous ns
 
-// TODO(yoichio) : Move this to document_marker_painter.cc
 void DocumentMarkerPainter::PaintStyleableMarkerUnderline(
     GraphicsContext& context,
     const LayoutPoint& box_origin,
@@ -176,6 +175,9 @@ void DocumentMarkerPainter::PaintStyleableMarkerUnderline(
   if (marker.HasThicknessThick() && logical_height.ToInt() - baseline >= 2)
     line_thickness = 2;
 
+  // Line thickness should change with zoom.
+  line_thickness *= style.EffectiveZoom();
+
   Color marker_color =
       marker.UseTextColor()
           ? style.VisitedDependentColor(GetCSSPropertyWebkitTextFillColor())
@@ -192,7 +194,6 @@ void DocumentMarkerPainter::PaintStyleableMarkerUnderline(
 
 static const int kMisspellingLineThickness = 3;
 
-// TODO(yoichio): Move this to document_marker_painter.cc
 void DocumentMarkerPainter::PaintDocumentMarker(
     GraphicsContext& context,
     const LayoutPoint& box_origin,

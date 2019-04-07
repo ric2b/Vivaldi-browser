@@ -164,6 +164,10 @@
       <part file="vivaldi_importer_strings.grdp" />
       <part file="vivaldi_notes_strings.grdp" />
       <part file="vivaldi_update_notifier_strings.grdp" />
+
+      <if expr="is_macosx">
+        <part file="vivaldi_mac_menus.grdp" />
+      </if>
     </messages>
   </release>
 </grit>

@@ -28,6 +28,10 @@ class AppLauncherTabHelper
                                 AppLauncherAbuseDetector* abuse_detector,
                                 id<AppLauncherTabHelperDelegate> delegate);
 
+  // Returns true, if the |url| has a scheme for an external application
+  // (eg. twitter:// , calshow://).
+  static bool IsAppUrl(const GURL& url);
+
   // Requests to open the application with |url|.
   // The method checks if the application for |url| has been opened repeatedly
   // by the |source_page_url| page in a short time frame, in that case a prompt
@@ -39,7 +43,7 @@ class AppLauncherTabHelper
   // method returns NO.
   bool RequestToLaunchApp(const GURL& url,
                           const GURL& source_page_url,
-                          bool link_tapped);
+                          bool link_transition);
 
   // web::WebStatePolicyDecider implementation
   bool ShouldAllowRequest(
@@ -53,6 +57,9 @@ class AppLauncherTabHelper
   AppLauncherTabHelper(web::WebState* web_state,
                        AppLauncherAbuseDetector* abuse_detector,
                        id<AppLauncherTabHelperDelegate> delegate);
+
+  // The WebState that this object is attached to.
+  web::WebState* web_state_ = nullptr;
 
   // Used to check for repeated launches and provide policy for launching apps.
   AppLauncherAbuseDetector* abuse_detector_ = nil;

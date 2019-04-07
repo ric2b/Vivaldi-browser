@@ -6,7 +6,8 @@
 
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/media_router/cast_toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -44,22 +45,10 @@ void MediaRemotingDialogView::GetPermission(content::WebContents* web_contents,
     std::move(callback).Run(false);
     return;
   }
-  BrowserActionsContainer* browser_actions =
-      BrowserView::GetBrowserViewForBrowser(browser)
-          ->toolbar()
-          ->browser_actions();
-  // |browser_actions| may be null in toolbar-less browser windows.
-  // TODO(takumif): Show the dialog at some default position if the toolbar is
-  // missing.
-  if (!browser_actions) {
-    std::move(callback).Run(false);
-    return;
-  }
-  views::View* anchor_view = browser_actions->GetViewForId(
-      ComponentToolbarActionsFactory::kMediaRouterActionId);
-
-  instance_ = new MediaRemotingDialogView(anchor_view, pref_service,
-                                          std::move(callback));
+  views::View* icon_view =
+      BrowserView::GetBrowserViewForBrowser(browser)->toolbar()->cast_button();
+  instance_ =
+      new MediaRemotingDialogView(icon_view, pref_service, std::move(callback));
   views::Widget* widget =
       views::BubbleDialogDelegateView::CreateBubble(instance_);
   widget->Show();
@@ -117,7 +106,8 @@ bool MediaRemotingDialogView::Close() {
 
 gfx::Size MediaRemotingDialogView::CalculatePreferredSize() const {
   const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-      DISTANCE_BUBBLE_PREFERRED_WIDTH);
+                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
+                    margins().width();
   return gfx::Size(width, GetHeightForWidth(width));
 }
 

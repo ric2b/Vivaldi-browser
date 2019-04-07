@@ -121,46 +121,33 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
   FakeControllerServiceWorker() = default;
   ~FakeControllerServiceWorker() override = default;
 
-  static ServiceWorkerResponse OkResponse() {
-    return ServiceWorkerResponse(
-        std::make_unique<std::vector<GURL>>(), 200, "OK",
-        network::mojom::FetchResponseType::kDefault,
-        std::make_unique<ServiceWorkerHeaderMap>(), "" /* blob_uuid */,
-        0 /* blob_size */, nullptr /* blob */,
-        blink::mojom::ServiceWorkerResponseError::kUnknown, base::Time(),
-        false /* response_is_in_cache_storage */,
-        std::string() /* response_cache_storage_cache_name */,
-        std::make_unique<
-            ServiceWorkerHeaderList>() /* cors_exposed_header_names */);
+  static blink::mojom::FetchAPIResponsePtr OkResponse(
+      blink::mojom::SerializedBlobPtr blob_body) {
+    auto response = blink::mojom::FetchAPIResponse::New();
+    response->status_code = 200;
+    response->status_text = "OK";
+    response->response_type = network::mojom::FetchResponseType::kDefault;
+    response->blob = std::move(blob_body);
+    return response;
   }
 
-  static ServiceWorkerResponse ErrorResponse() {
-    return ServiceWorkerResponse(
-        std::make_unique<std::vector<GURL>>(), 0 /* status_code */,
-        "" /* status_text */, network::mojom::FetchResponseType::kDefault,
-        std::make_unique<ServiceWorkerHeaderMap>(), "" /* blob_uuid */,
-        0 /* blob_size */, nullptr /* blob */,
-        blink::mojom::ServiceWorkerResponseError::kPromiseRejected,
-        base::Time(), false /* response_is_in_cache_storage */,
-        std::string() /* response_cache_storage_cache_name */,
-        std::make_unique<
-            ServiceWorkerHeaderList>() /* cors_exposed_header_names */);
+  static blink::mojom::FetchAPIResponsePtr ErrorResponse() {
+    auto response = blink::mojom::FetchAPIResponse::New();
+    response->status_code = 0;
+    response->response_type = network::mojom::FetchResponseType::kDefault;
+    response->error =
+        blink::mojom::ServiceWorkerResponseError::kPromiseRejected;
+    return response;
   }
 
-  static ServiceWorkerResponse RedirectResponse(
+  static blink::mojom::FetchAPIResponsePtr RedirectResponse(
       const std::string& redirect_location_header) {
-    auto headers = std::make_unique<ServiceWorkerHeaderMap>();
-    (*headers)["Location"] = redirect_location_header;
-
-    return ServiceWorkerResponse(
-        std::make_unique<std::vector<GURL>>(), 302, "Found",
-        network::mojom::FetchResponseType::kDefault, std::move(headers),
-        "" /* blob_uuid */, 0 /* blob_size */, nullptr /* blob */,
-        blink::mojom::ServiceWorkerResponseError::kUnknown, base::Time(),
-        false /* response_is_in_cache_storage */,
-        std::string() /* response_cache_storage_cache_name */,
-        std::make_unique<
-            ServiceWorkerHeaderList>() /* cors_exposed_header_names */);
+    auto response = blink::mojom::FetchAPIResponse::New();
+    response->status_code = 302;
+    response->status_text = "Found";
+    response->response_type = network::mojom::FetchResponseType::kDefault;
+    response->headers["Location"] = redirect_location_header;
+    return response;
   }
 
   void CloseAllBindings() { bindings_.CloseAllBindings(); }
@@ -197,9 +184,11 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
   void RespondWithBlob(base::Optional<std::vector<uint8_t>> metadata,
                        std::string body) {
     response_mode_ = ResponseMode::kBlob;
+    blob_body_ = blink::mojom::SerializedBlob::New();
+    blob_body_->uuid = "dummy-blob-uuid";
     mojo::MakeStrongBinding(
         std::make_unique<FakeBlob>(std::move(metadata), std::move(body)),
-        mojo::MakeRequest(&blob_));
+        mojo::MakeRequest(&blob_body_->blob));
   }
 
   void ReadRequestBody(std::string* out_string) {
@@ -233,7 +222,7 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
   // mojom::ControllerServiceWorker:
   void DispatchFetchEvent(
       blink::mojom::DispatchFetchEventParamsPtr params,
-      mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
+      blink::mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
       DispatchFetchEventCallback callback) override {
     EXPECT_FALSE(ServiceWorkerUtils::IsMainResourceType(
         static_cast<ResourceType>(params->request.resource_type)));
@@ -244,7 +233,8 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
 
     switch (response_mode_) {
       case ResponseMode::kDefault:
-        response_callback->OnResponse(OkResponse(), base::Time::Now());
+        response_callback->OnResponse(OkResponse(nullptr /* blob_body */),
+                                      base::Time::Now());
         std::move(callback).Run(
             blink::mojom::ServiceWorkerEventStatus::COMPLETED, base::Time());
         break;
@@ -253,14 +243,15 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
                                 base::Time());
         break;
       case ResponseMode::kStream:
-        response_callback->OnResponseStream(
-            OkResponse(), std::move(stream_handle_), base::Time::Now());
+        response_callback->OnResponseStream(OkResponse(nullptr /* blob_body */),
+                                            std::move(stream_handle_),
+                                            base::Time::Now());
         std::move(callback).Run(
             blink::mojom::ServiceWorkerEventStatus::COMPLETED, base::Time());
         break;
       case ResponseMode::kBlob:
-        response_callback->OnResponseBlob(OkResponse(), std::move(blob_),
-                                          base::Time::Now());
+        response_callback->OnResponse(OkResponse(std::move(blob_body_)),
+                                      base::Time::Now());
         std::move(callback).Run(
             blink::mojom::ServiceWorkerEventStatus::COMPLETED, base::Time());
         break;
@@ -326,7 +317,7 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
   blink::mojom::ServiceWorkerStreamHandlePtr stream_handle_;
 
   // For ResponseMode::kBlob.
-  blink::mojom::BlobPtr blob_;
+  blink::mojom::SerializedBlobPtr blob_body_;
 
   // For ResponseMode::kRedirectResponse
   std::string redirect_location_header_;
@@ -401,8 +392,7 @@ CreateResponseInfoFromServiceWorker() {
   head->was_fetched_via_service_worker = true;
   head->was_fallback_required_by_service_worker = false;
   head->url_list_via_service_worker = std::vector<GURL>();
-  head->response_type_via_service_worker =
-      network::mojom::FetchResponseType::kDefault;
+  head->response_type = network::mojom::FetchResponseType::kDefault;
   head->is_in_cache_storage = false;
   head->cache_storage_cache_name = std::string();
   head->did_service_worker_navigation_preload = false;
@@ -472,8 +462,7 @@ class ServiceWorkerSubresourceLoaderTest : public ::testing::Test {
               info.was_fallback_required_by_service_worker);
     EXPECT_EQ(expected_info.url_list_via_service_worker,
               info.url_list_via_service_worker);
-    EXPECT_EQ(expected_info.response_type_via_service_worker,
-              info.response_type_via_service_worker);
+    EXPECT_EQ(expected_info.response_type, info.response_type);
     EXPECT_EQ(expected_info.is_in_cache_storage, info.is_in_cache_storage);
     EXPECT_EQ(expected_info.cache_storage_cache_name,
               info.cache_storage_cache_name);
@@ -1032,8 +1021,7 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, RedirectResponse) {
 
   const network::ResourceResponseHead& info = client->response_head();
   EXPECT_EQ(200, info.headers->response_code());
-  EXPECT_EQ(network::mojom::FetchResponseType::kDefault,
-            info.response_type_via_service_worker);
+  EXPECT_EQ(network::mojom::FetchResponseType::kDefault, info.response_type);
 
   // Write the body stream.
   uint32_t written_bytes = sizeof(kResponseBody) - 1;

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/download/public/common//download_stats.h"
+#include "components/download/public/common/download_stats.h"
 
 #include <map>
 
@@ -331,12 +331,10 @@ void RecordDownloadCountWithSource(DownloadCountTypes type,
   base::UmaHistogramEnumeration(name, type, DOWNLOAD_COUNT_TYPES_LAST_ENTRY);
 }
 
-void RecordDownloadCompleted(const base::TimeTicks& start,
-                             int64_t download_len,
+void RecordDownloadCompleted(int64_t download_len,
                              bool is_parallelizable,
                              DownloadSource download_source) {
   RecordDownloadCountWithSource(COMPLETED_COUNT, download_source);
-  UMA_HISTOGRAM_LONG_TIMES("Download.Time", (base::TimeTicks::Now() - start));
   int64_t max = 1024 * 1024 * 1024;  // One Terabyte.
   download_len /= 1024;              // In Kilobytes
   UMA_HISTOGRAM_CUSTOM_COUNTS("Download.DownloadSize", download_len, 1, max,
@@ -451,8 +449,6 @@ void RecordDownloadInterrupted(DownloadInterruptReason reason,
       }
     }
   }
-
-  UMA_HISTOGRAM_BOOLEAN("Download.InterruptedUnknownSize", unknown_size);
 }
 
 void RecordMaliciousDownloadClassified(DownloadDangerType danger_type) {
@@ -493,27 +489,6 @@ void RecordDangerousDownloadDiscard(DownloadDiscardReason reason,
       break;
     default:
       NOTREACHED();
-  }
-}
-
-void RecordAcceptsRanges(const std::string& accepts_ranges,
-                         int64_t download_len,
-                         bool has_strong_validator) {
-  int64_t max = 1024 * 1024 * 1024;  // One Terabyte.
-  download_len /= 1024;              // In Kilobytes
-  static const int kBuckets = 50;
-
-  if (base::LowerCaseEqualsASCII(accepts_ranges, "none")) {
-    UMA_HISTOGRAM_CUSTOM_COUNTS("Download.AcceptRangesNone.KBytes",
-                                download_len, 1, max, kBuckets);
-  } else if (base::LowerCaseEqualsASCII(accepts_ranges, "bytes")) {
-    UMA_HISTOGRAM_CUSTOM_COUNTS("Download.AcceptRangesBytes.KBytes",
-                                download_len, 1, max, kBuckets);
-    if (has_strong_validator)
-      RecordDownloadCount(STRONG_VALIDATOR_AND_ACCEPTS_RANGES);
-  } else {
-    UMA_HISTOGRAM_CUSTOM_COUNTS("Download.AcceptRangesMissingOrInvalid.KBytes",
-                                download_len, 1, max, kBuckets);
   }
 }
 
@@ -806,19 +781,9 @@ void RecordDownloadContentDisposition(
       net::HttpContentDisposition::HAS_RFC2047_ENCODED_STRINGS);
 }
 
-void RecordFileThreadReceiveBuffers(size_t num_buffers) {
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Download.FileThreadReceiveBuffers", num_buffers,
-                              1, 100, 100);
-}
-
-void RecordOpen(const base::Time& end, bool first) {
-  if (!end.is_null()) {
+void RecordOpen(const base::Time& end) {
+  if (!end.is_null())
     UMA_HISTOGRAM_LONG_TIMES("Download.OpenTime", (base::Time::Now() - end));
-    if (first) {
-      UMA_HISTOGRAM_LONG_TIMES("Download.FirstOpenTime",
-                               (base::Time::Now() - end));
-    }
-  }
 }
 
 void RecordOpensOutstanding(int size) {
@@ -826,32 +791,10 @@ void RecordOpensOutstanding(int size) {
                               (1 << 10) /*max*/, 64 /*num_buckets*/);
 }
 
-void RecordContiguousWriteTime(base::TimeDelta time_blocked) {
-  UMA_HISTOGRAM_TIMES("Download.FileThreadBlockedTime", time_blocked);
-}
-
-// Record what percentage of the time we have the network flow controlled.
-void RecordNetworkBlockage(base::TimeDelta resource_handler_lifetime,
-                           base::TimeDelta resource_handler_blocked_time) {
-  int percentage = 0;
-  // Avoid division by zero errors.
-  if (!resource_handler_blocked_time.is_zero()) {
-    percentage =
-        resource_handler_blocked_time * 100 / resource_handler_lifetime;
-  }
-
-  UMA_HISTOGRAM_COUNTS_100("Download.ResourceHandlerBlockedPercentage",
-                           percentage);
-}
-
 void RecordFileBandwidth(size_t length,
-                         base::TimeDelta disk_write_time,
                          base::TimeDelta elapsed_time) {
   RecordBandwidthMetric("Download.BandwidthOverallBytesPerSecond",
                         CalculateBandwidthBytesPerSecond(length, elapsed_time));
-  RecordBandwidthMetric(
-      "Download.BandwidthDiskBytesPerSecond",
-      CalculateBandwidthBytesPerSecond(length, disk_write_time));
 }
 
 void RecordParallelizableDownloadCount(DownloadCountTypes type,
@@ -984,63 +927,14 @@ void RecordParallelDownloadCreationEvent(ParallelDownloadCreationEvent event) {
                             ParallelDownloadCreationEvent::COUNT);
 }
 
-void RecordDownloadFileRenameResultAfterRetry(
-    base::TimeDelta time_since_first_failure,
-    DownloadInterruptReason interrupt_reason) {
-  if (interrupt_reason == DOWNLOAD_INTERRUPT_REASON_NONE) {
-    UMA_HISTOGRAM_TIMES("Download.TimeToRenameSuccessAfterInitialFailure",
-                        time_since_first_failure);
-  } else {
-    UMA_HISTOGRAM_TIMES("Download.TimeToRenameFailureAfterInitialFailure",
-                        time_since_first_failure);
-  }
-}
-
 void RecordSavePackageEvent(SavePackageEvent event) {
   UMA_HISTOGRAM_ENUMERATION("Download.SavePackage", event,
                             SAVE_PACKAGE_LAST_ENTRY);
 }
 
-void RecordOriginStateOnResumption(bool is_partial,
-                                   OriginStateOnResumption state) {
-  if (is_partial)
-    UMA_HISTOGRAM_ENUMERATION("Download.OriginStateOnPartialResumption", state,
-                              ORIGIN_STATE_ON_RESUMPTION_MAX);
-  else
-    UMA_HISTOGRAM_ENUMERATION("Download.OriginStateOnFullResumption", state,
-                              ORIGIN_STATE_ON_RESUMPTION_MAX);
-}
-
-namespace {
-
-// Enumeration for histogramming purposes.
-// These values are written to logs.  New enum values can be added, but existing
-// enums must never be renumbered or deleted and reused.
-enum DownloadConnectionSecurity {
-  DOWNLOAD_SECURE = 0,  // Final download url and its redirects all use https
-  DOWNLOAD_TARGET_INSECURE =
-      1,  // Final download url uses http, redirects are all
-          // https
-  DOWNLOAD_REDIRECT_INSECURE =
-      2,  // Final download url uses https, but at least
-          // one redirect uses http
-  DOWNLOAD_REDIRECT_TARGET_INSECURE =
-      3,                      // Final download url uses http, and at
-                              // least one redirect uses http
-  DOWNLOAD_TARGET_OTHER = 4,  // Final download url uses a scheme not present in
-                              // this enumeration
-  DOWNLOAD_TARGET_BLOB = 5,   // Final download url uses blob scheme
-  DOWNLOAD_TARGET_DATA = 6,   //  Final download url uses data scheme
-  DOWNLOAD_TARGET_FILE = 7,   //  Final download url uses file scheme
-  DOWNLOAD_TARGET_FILESYSTEM = 8,  //  Final download url uses filesystem scheme
-  DOWNLOAD_TARGET_FTP = 9,         // Final download url uses ftp scheme
-  DOWNLOAD_CONNECTION_SECURITY_MAX
-};
-
-}  // namespace
-
-void RecordDownloadConnectionSecurity(const GURL& download_url,
-                                      const std::vector<GURL>& url_chain) {
+DownloadConnectionSecurity CheckDownloadConnectionSecurity(
+    const GURL& download_url,
+    const std::vector<GURL>& url_chain) {
   DownloadConnectionSecurity state = DOWNLOAD_TARGET_OTHER;
   if (download_url.SchemeIsHTTPOrHTTPS()) {
     bool is_final_download_secure = download_url.SchemeIsCryptographic();
@@ -1069,9 +963,15 @@ void RecordDownloadConnectionSecurity(const GURL& download_url,
   } else if (download_url.SchemeIs(url::kFtpScheme)) {
     state = DOWNLOAD_TARGET_FTP;
   }
+  return state;
+}
 
-  UMA_HISTOGRAM_ENUMERATION("Download.TargetConnectionSecurity", state,
-                            DOWNLOAD_CONNECTION_SECURITY_MAX);
+void RecordDownloadConnectionSecurity(const GURL& download_url,
+                                      const std::vector<GURL>& url_chain) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "Download.TargetConnectionSecurity",
+      CheckDownloadConnectionSecurity(download_url, url_chain),
+      DOWNLOAD_CONNECTION_SECURITY_MAX);
 }
 
 void RecordDownloadContentTypeSecurity(
@@ -1116,6 +1016,10 @@ void RecordDownloadHttpResponseCode(int response_code) {
       "Download.HttpResponseCode",
       net::HttpUtil::MapStatusCodeForHistogram(response_code),
       net::HttpUtil::GetStatusCodesForHistogram());
+}
+
+void RecordInProgressDBCount(InProgressDBCountTypes type) {
+  UMA_HISTOGRAM_ENUMERATION("Download.InProgressDB.Counts", type);
 }
 
 }  // namespace download

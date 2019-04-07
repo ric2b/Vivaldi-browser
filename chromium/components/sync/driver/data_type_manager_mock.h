@@ -16,10 +16,10 @@ class DataTypeManagerMock : public DataTypeManager {
   DataTypeManagerMock();
   ~DataTypeManagerMock() override;
 
-  MOCK_METHOD2(Configure, void(ModelTypeSet, ConfigureReason));
+  MOCK_METHOD2(Configure, void(ModelTypeSet, const ConfigureContext&));
   MOCK_METHOD1(ReenableType, void(ModelType));
   MOCK_METHOD0(ResetDataTypeErrors, void());
-  MOCK_METHOD2(PurgeForMigration, void(ModelTypeSet, ConfigureReason));
+  MOCK_METHOD1(PurgeForMigration, void(ModelTypeSet));
   MOCK_METHOD1(Stop, void(ShutdownReason));
   MOCK_METHOD0(controllers, const DataTypeController::TypeMap&());
   MOCK_CONST_METHOD0(GetActiveDataTypes, ModelTypeSet());

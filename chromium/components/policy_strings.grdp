@@ -55,6 +55,9 @@
   <message name="IDS_POLICY_DM_STATUS_CANNOT_SIGN_REQUEST" desc="Message indicating a failure to sign a request.">
     Request could not be signed
   </message>
+  <message name="IDS_POLICY_DM_STATUS_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE" desc="Message to show when the user tries to enroll a device with a packaged license using a consumer account.">
+    Can't enroll with consumer account (packaged license available).
+  </message>
 
   <message name="IDS_POLICY_VALIDATION_OK" desc="Message indicating successful policy validation.">
     Validation successful
@@ -94,6 +97,12 @@
   </message>
   <message name="IDS_POLICY_VALIDATION_BAD_KEY_VERIFICATION_SIGNATURE" desc="Message indicating a policy key had an invalid verification signature.">
     Bad verification signature
+  </message>
+  <message name="IDS_POLICY_VALIDATION_VALUE_WARNING" desc="Message indicating the policy value validation succeeded with non-fatal warnings.">
+    Validation of policy values has raised warnings
+  </message>
+  <message name="IDS_POLICY_VALIDATION_VALUE_ERROR" desc="Message indicating the policy value validation failed with fatal errors.">
+    Validation of policy values has failed with errors
   </message>
   <message name="IDS_POLICY_VALIDATION_UNKNOWN_ERROR" desc="Message indicating unknown error in policy validation.">
     Unknown error
@@ -207,11 +216,15 @@
     <message name="IDS_POLICY_NETWORK_CONFIG_PARSE_FAILED" desc="The text displayed in the status column when the corresponding network configuration policy failed to parse.">
       Network configuration failed to be parsed.
     </message>
-    <message name="IDS_POLICY_NETWORK_CONFIG_IMPORT_PARTIAL" desc="The text displayed in the status column when the corresponding network configuration policy is not standard conform and was imported partially.">
+    <message name="IDS_POLICY_NETWORK_CONFIG_IMPORT_PARTIAL" desc="The text displayed in the status column when the corresponding network configuration policy is not standard conform and was imported partially. DEBUG_INFO contains non-localized detailed information about existing warnings.">
       The network configuration doesn't comply to the ONC standard. Parts of the configuration may not be imported.
+Additional details:
+<ph name="DEBUG_INFO">$1<ex>WARNING: Field name 'SomeRandomField' is unknown. (at toplevel)</ex></ph>
     </message>
-    <message name="IDS_POLICY_NETWORK_CONFIG_IMPORT_FAILED" desc="The text displayed in the status column when the corresponding network configuration policy is invalid.">
+    <message name="IDS_POLICY_NETWORK_CONFIG_IMPORT_FAILED" desc="The text displayed in the status column when the corresponding network configuration policy is invalid. DEBUG_INFO contains non-localized detailed information about existing errors/warnings.">
       The network configuration is invalid and couldn't be imported.
+Additional details:
+<ph name="DEBUG_INFO">$1<ex>ERROR: Field name 'SomeRandomField' is unknown. (at toplevel)</ex></ph>
     </message>
     <message name="IDS_POLICY_SCOPE_ERROR" desc="Text displayed in the status column when a policy is set in an unsupported scope.">
       Policy scope is not supported.

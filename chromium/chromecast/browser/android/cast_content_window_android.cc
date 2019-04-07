@@ -9,6 +9,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/CastContentWindowAndroid_jni.h"
@@ -25,31 +26,31 @@ namespace {
 base::android::ScopedJavaLocalRef<jobject> CreateJavaWindow(
     jlong native_window,
     bool is_headless,
-    bool enable_touch_input) {
+    bool enable_touch_input,
+    bool is_remote_control_mode,
+    bool turn_on_screen) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  return Java_CastContentWindowAndroid_create(env, native_window, is_headless,
-                                              enable_touch_input);
+  return Java_CastContentWindowAndroid_create(
+      env, native_window, is_headless, enable_touch_input,
+      is_remote_control_mode, turn_on_screen);
 }
 
 }  // namespace
 
 // static
 std::unique_ptr<CastContentWindow> CastContentWindow::Create(
-    CastContentWindow::Delegate* delegate,
-    bool is_headless,
-    bool enable_touch_input) {
-  return base::WrapUnique(
-      new CastContentWindowAndroid(delegate, is_headless, enable_touch_input));
+    const CastContentWindow::CreateParams& params) {
+  return base::WrapUnique(new CastContentWindowAndroid(params));
 }
 
 CastContentWindowAndroid::CastContentWindowAndroid(
-    CastContentWindow::Delegate* delegate,
-    bool is_headless,
-    bool enable_touch_input)
-    : delegate_(delegate),
+    const CastContentWindow::CreateParams& params)
+    : delegate_(params.delegate),
       java_window_(CreateJavaWindow(reinterpret_cast<jlong>(this),
-                                    is_headless,
-                                    enable_touch_input)) {
+                                    params.is_headless,
+                                    params.enable_touch_input,
+                                    params.is_remote_control_mode,
+                                    params.turn_on_screen)) {
   DCHECK(delegate_);
 }
 
@@ -61,7 +62,6 @@ CastContentWindowAndroid::~CastContentWindowAndroid() {
 void CastContentWindowAndroid::CreateWindowForWebContents(
     content::WebContents* web_contents,
     CastWindowManager* /* window_manager */,
-    bool /* is_visible */,
     CastWindowManager::WindowId /* z_order */,
     VisibilityPriority visibility_priority) {
   DCHECK(web_contents);
@@ -72,6 +72,14 @@ void CastContentWindowAndroid::CreateWindowForWebContents(
   Java_CastContentWindowAndroid_createWindowForWebContents(
       env, java_window_, java_web_contents,
       static_cast<int>(visibility_priority));
+}
+
+void CastContentWindowAndroid::GrantScreenAccess() {
+  NOTIMPLEMENTED();
+}
+
+void CastContentWindowAndroid::RevokeScreenAccess() {
+  NOTIMPLEMENTED();
 }
 
 void CastContentWindowAndroid::EnableTouchInput(bool enabled) {

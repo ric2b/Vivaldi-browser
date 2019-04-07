@@ -4,8 +4,8 @@
 
 #include "extensions/browser/api/system_storage/system_storage_api.h"
 
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "content/public/browser/browser_thread.h"
 
 using storage_monitor::StorageMonitor;
@@ -98,7 +98,7 @@ void SystemStorageEjectDeviceFunction::HandleResponse(
 SystemStorageGetAvailableCapacityFunction::
     SystemStorageGetAvailableCapacityFunction()
     : query_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          base::TaskTraits(base::TaskPriority::BACKGROUND,
+          base::TaskTraits(base::TaskPriority::BEST_EFFORT,
                            base::MayBlock(),
                            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN))) {}
 

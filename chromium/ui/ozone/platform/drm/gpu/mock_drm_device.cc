@@ -73,8 +73,11 @@ MockDrmDevice::PlaneProperties::PlaneProperties(const PlaneProperties&) =
     default;
 MockDrmDevice::PlaneProperties::~PlaneProperties() = default;
 
-MockDrmDevice::MockDrmDevice()
-    : DrmDevice(base::FilePath(), base::File(), true /* is_primary_device */),
+MockDrmDevice::MockDrmDevice(std::unique_ptr<GbmDevice> gbm_device)
+    : DrmDevice(base::FilePath(),
+                base::File(),
+                true /* is_primary_device */,
+                std::move(gbm_device)),
       get_crtc_call_count_(0),
       set_crtc_call_count_(0),
       restore_crtc_call_count_(0),
@@ -395,24 +398,35 @@ bool MockDrmDevice::CommitProperties(
     uint32_t flags,
     uint32_t crtc_count,
     scoped_refptr<PageFlipRequest> page_flip_request) {
+  commit_count_++;
+  if (!commit_expectation_)
+    return false;
+
   for (uint32_t i = 0; i < request->cursor; ++i) {
     EXPECT_TRUE(ValidatePropertyValue(request->items[i].property_id,
                                       request->items[i].value));
+  }
+
+  if (page_flip_request)
+    callbacks_.push(page_flip_request->AddPageFlip());
+
+  if (flags & DRM_MODE_ATOMIC_TEST_ONLY)
+    return true;
+
+  // Only update values if not testing.
+  for (uint32_t i = 0; i < request->cursor; ++i) {
     EXPECT_TRUE(UpdateProperty(request->items[i].object_id,
                                request->items[i].property_id,
                                request->items[i].value));
   }
 
-  commit_count_++;
-  if (page_flip_request) {
-    callbacks_.push(page_flip_request->AddPageFlip());
-  }
   return true;
 }
 
 bool MockDrmDevice::SetGammaRamp(
     uint32_t crtc_id,
     const std::vector<display::GammaRampRGBEntry>& lut) {
+  set_gamma_ramp_count_++;
   return legacy_gamma_ramp_expectation_;
 }
 

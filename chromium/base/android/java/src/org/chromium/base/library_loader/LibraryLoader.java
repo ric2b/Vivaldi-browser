@@ -24,6 +24,7 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.FileUtils;
 import org.chromium.base.Log;
+import org.chromium.base.StreamUtil;
 import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
@@ -35,6 +36,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import javax.annotation.Nullable;
@@ -347,7 +349,7 @@ public class LibraryLoader {
         new LibraryPrefetchTask(coldStart).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
-    private static class LibraryPrefetchTask extends AsyncTask<Void, Void, Void> {
+    private static class LibraryPrefetchTask extends AsyncTask<Void> {
         private final boolean mColdStart;
 
         public LibraryPrefetchTask(boolean coldStart) {
@@ -355,7 +357,7 @@ public class LibraryLoader {
         }
 
         @Override
-        protected Void doInBackground(Void... params) {
+        protected Void doInBackground() {
             try (TraceEvent e = TraceEvent.scoped("LibraryLoader.asyncPrefetchLibrariesToMemory")) {
                 int percentage = nativePercentageOfResidentNativeLibraryCode();
                 // Arbitrary percentage threshold. If most of the native library is already
@@ -739,11 +741,13 @@ public class LibraryLoader {
         File libraryFile = new File(destDir, fileName);
 
         if (!libraryFile.exists()) {
-            try (ZipFile zipFile = new ZipFile(apkPath);
-                    InputStream inputStream =
-                            zipFile.getInputStream(zipFile.getEntry(pathWithinApk))) {
-                if (zipFile.getEntry(pathWithinApk) == null)
+            ZipFile zipFile = null;
+            try {
+                zipFile = new ZipFile(apkPath);
+                ZipEntry zipEntry = zipFile.getEntry(pathWithinApk);
+                if (zipEntry == null)
                     throw new RuntimeException("Cannot find ZipEntry" + pathWithinApk);
+                InputStream inputStream = zipFile.getInputStream(zipEntry);
 
                 FileUtils.copyFileStreamAtomicWithBuffer(
                         inputStream, libraryFile, new byte[16 * 1024]);
@@ -751,6 +755,8 @@ public class LibraryLoader {
                 libraryFile.setExecutable(true, false);
             } catch (IOException e) {
                 throw new RuntimeException(e);
+            } finally {
+                StreamUtil.closeQuietly(zipFile);
             }
         }
         return libraryFile.getAbsolutePath();

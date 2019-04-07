@@ -26,7 +26,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "base/win/win_util.h"
 #include "chrome/browser/browser_process.h"
@@ -333,7 +333,7 @@ void GetOsPasswordStatus() {
   OsPasswordStatus* status_weak = status.get();
   // This task calls ::LogonUser(), hence MayBlock().
   base::PostTaskWithTraitsAndReply(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&GetOsPasswordStatusInternal, prefs_weak, status_weak),
       base::Bind(&ReplyOsPasswordStatus, base::Passed(&prefs),
                  base::Passed(&status)));

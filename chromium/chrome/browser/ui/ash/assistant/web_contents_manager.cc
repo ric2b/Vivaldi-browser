@@ -9,6 +9,7 @@
 #include "ash/public/cpp/app_list/answer_card_contents_registry.h"
 #include "ash/public/interfaces/assistant_controller.mojom.h"
 #include "ash/public/interfaces/constants.mojom.h"
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/unguessable_token.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -25,26 +26,29 @@
 
 // ManagedWebContents ----------------------------------------------------------
 
-class ManagedWebContents : public content::WebContentsDelegate {
+class ManagedWebContents : public content::WebContentsDelegate,
+                           public content::WebContentsObserver {
  public:
   ManagedWebContents(
       ash::mojom::ManagedWebContentsParamsPtr params,
-      ash::mojom::WebContentsManager::ManageWebContentsCallback callback) {
+      ash::mojom::WebContentsManager::ManageWebContentsCallback callback)
+      : callback_(std::move(callback)), weak_factory_(this) {
     Profile* profile = chromeos::ProfileHelper::Get()->GetProfileByAccountId(
         params->account_id);
 
     if (!profile) {
       LOG(WARNING) << "Unable to retrieve profile for account_id.";
-      std::move(callback).Run(base::nullopt);
+      std::move(callback_).Run(base::nullopt);
       return;
     }
 
     InitWebContents(profile, std::move(params));
-    HandleWebContents(profile, std::move(callback));
+    HandleWebContents(profile);
   }
 
   ~ManagedWebContents() override {
     web_contents_->SetDelegate(nullptr);
+    Observe(nullptr);
 
     // When WebContents are rendered in the same process as ash, we need to
     // release the associated view registered in the
@@ -68,8 +72,42 @@ class ManagedWebContents : public content::WebContentsDelegate {
     if (!open_url_delegate_)
       return content::WebContentsDelegate::OpenURLFromTab(source, params);
 
-    open_url_delegate_->OnOpenUrlFromTab(params.url);
+    open_url_delegate_->ShouldOpenUrlFromTab(
+        params.url,
+        base::BindOnce(
+            [](base::WeakPtr<ManagedWebContents> managed_web_contents,
+               const GURL& url, bool should_open) {
+              if (should_open && managed_web_contents)
+                managed_web_contents->NavigateToUrl(url);
+            },
+            weak_factory_.GetWeakPtr(), params.url));
+
     return nullptr;
+  }
+
+  // content::WebContentsObserver:
+  void DidStopLoading() override {
+    // After the first load has stopped, notify |callback_| that we're ready for
+    // embedding. We wait until load completion to reduce UI jank.
+    if (callback_)
+      std::move(callback_).Run(embed_token_);
+  }
+
+  void NavigateBack(
+      ash::mojom::WebContentsManager::NavigateWebContentsBackCallback
+          callback) {
+    content::NavigationController& controller = web_contents_->GetController();
+    if (controller.CanGoBack()) {
+      controller.GoBack();
+      std::move(callback).Run(true);
+    } else {
+      std::move(callback).Run(false);
+    }
+  }
+
+  void NavigateToUrl(const GURL& url) {
+    content::NavigationController::LoadURLParams params(url);
+    web_contents_->GetController().LoadURLWithParams(params);
   }
 
  private:
@@ -93,6 +131,7 @@ class ManagedWebContents : public content::WebContentsDelegate {
     views::WebContentsSetBackgroundColor::CreateForWebContentsWithColor(
         web_contents_.get(), SK_ColorTRANSPARENT);
 
+    Observe(web_contents_.get());
     web_contents_->SetDelegate(this);
 
     // Load the desired URL into the web contents.
@@ -118,9 +157,7 @@ class ManagedWebContents : public content::WebContentsDelegate {
                                                                max_size_dip);
   }
 
-  void HandleWebContents(
-      Profile* profile,
-      ash::mojom::WebContentsManager::ManageWebContentsCallback callback) {
+  void HandleWebContents(Profile* profile) {
     // When rendering WebContents in the same process as ash, we register the
     // associated view with the AnswerCardContentsRegistry's token-to-view map.
     // The token returned from the registry will uniquely identify the view.
@@ -131,20 +168,21 @@ class ManagedWebContents : public content::WebContentsDelegate {
       web_view_->SetWebContents(web_contents_.get());
 
       embed_token_ = app_list::AnswerCardContentsRegistry::Get()->Register(
-          web_view_.get());
-
-      std::move(callback).Run(embed_token_.value());
+          web_view_.get(), web_contents_->GetNativeView());
     } else {
       // TODO(dmblack): Handle Mash case. https://crbug.com/854787.
-      std::move(callback).Run(base::nullopt);
     }
   }
+
+  ash::mojom::WebContentsManager::ManageWebContentsCallback callback_;
 
   std::unique_ptr<content::WebContents> web_contents_;
   std::unique_ptr<views::WebView> web_view_;
   base::Optional<base::UnguessableToken> embed_token_;
 
   ash::mojom::ManagedWebContentsOpenUrlDelegatePtr open_url_delegate_;
+
+  base::WeakPtrFactory<ManagedWebContents> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ManagedWebContents);
 };
@@ -181,4 +219,10 @@ void WebContentsManager::ReleaseAllWebContents(
     const std::vector<base::UnguessableToken>& id_tokens) {
   for (const base::UnguessableToken& id_token : id_tokens)
     managed_web_contents_map_.erase(id_token);
+}
+
+void WebContentsManager::NavigateWebContentsBack(
+    const base::UnguessableToken& id_token,
+    ash::mojom::WebContentsManager::NavigateWebContentsBackCallback callback) {
+  managed_web_contents_map_[id_token]->NavigateBack(std::move(callback));
 }

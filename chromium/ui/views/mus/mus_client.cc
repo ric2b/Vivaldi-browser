@@ -8,18 +8,17 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/threading/thread.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/cpp/gpu/gpu.h"
-#include "services/ui/public/cpp/input_devices/input_device_client.h"
-#include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/interfaces/constants.mojom.h"
-#include "services/ui/public/interfaces/event_matcher.mojom.h"
-#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "services/ws/public/cpp/gpu/gpu.h"
+#include "services/ws/public/cpp/input_devices/input_device_client.h"
+#include "services/ws/public/cpp/property_type_converters.h"
+#include "services/ws/public/mojom/constants.mojom.h"
+#include "services/ws/public/mojom/window_manager.mojom.h"
 #include "ui/aura/env.h"
 #include "ui/aura/mus/capture_synchronizer.h"
 #include "ui/aura/mus/mus_context_factory.h"
 #include "ui/aura/mus/property_converter.h"
+#include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
 #include "ui/aura/mus/window_tree_host_mus_init_params.h"
 #include "ui/aura/window.h"
@@ -41,11 +40,11 @@
 #include "ui/base/cursor/ozone/cursor_data_factory_ozone.h"
 #endif
 
-// Widget::InitParams::Type must match that of ui::mojom::WindowType.
+// Widget::InitParams::Type must match that of ws::mojom::WindowType.
 #define WINDOW_TYPES_MATCH(NAME)                                      \
   static_assert(                                                      \
       static_cast<int32_t>(views::Widget::InitParams::TYPE_##NAME) == \
-          static_cast<int32_t>(ui::mojom::WindowType::NAME),          \
+          static_cast<int32_t>(ws::mojom::WindowType::NAME),          \
       "Window type constants must match")
 
 WINDOW_TYPES_MATCH(WINDOW);
@@ -57,7 +56,7 @@ WINDOW_TYPES_MATCH(MENU);
 WINDOW_TYPES_MATCH(TOOLTIP);
 WINDOW_TYPES_MATCH(BUBBLE);
 WINDOW_TYPES_MATCH(DRAG);
-// ui::mojom::WindowType::UNKNOWN does not correspond to a value in
+// ws::mojom::WindowType::UNKNOWN does not correspond to a value in
 // Widget::InitParams::Type.
 
 namespace views {
@@ -85,35 +84,25 @@ MusClient::MusClient(const InitParams& params) : identity_(params.identity) {
     cursor_factory_ozone_ = std::make_unique<ui::CursorDataFactoryOzone>();
 #endif
 
-  scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
-      params.io_task_runner;
-  if (!io_task_runner) {
-    io_thread_ = std::make_unique<base::Thread>("IOThread");
-    base::Thread::Options thread_options(base::MessageLoop::TYPE_IO, 0);
-    thread_options.priority = base::ThreadPriority::NORMAL;
-    CHECK(io_thread_->StartWithOptions(thread_options));
-    io_task_runner = io_thread_->task_runner();
-  }
-
   property_converter_ = std::make_unique<aura::PropertyConverter>();
   property_converter_->RegisterPrimitiveProperty(
       ::wm::kShadowElevationKey,
-      ui::mojom::WindowManager::kShadowElevation_Property,
+      ws::mojom::WindowManager::kShadowElevation_Property,
       aura::PropertyConverter::CreateAcceptAnyValueCallback());
 
   if (params.create_wm_state)
     wm_state_ = std::make_unique<wm::WMState>();
 
   service_manager::Connector* connector = params.connector;
-  if (params.bind_test_ws_interfaces)
-    connector->BindInterface(ui::mojom::kServiceName, &event_injector_);
 
   if (!params.window_tree_client) {
-    DCHECK(io_task_runner);
+    // If this process is running in the WindowService, then discardable memory
+    // should have already been created.
+    const bool create_discardable_memory = !params.running_in_ws_process;
     owned_window_tree_client_ =
         aura::WindowTreeClient::CreateForWindowTreeFactory(
-            connector, this, true, std::move(io_task_runner),
-            params.wtc_config);
+            connector, this, create_discardable_memory,
+            std::move(params.io_task_runner));
     window_tree_client_ = owned_window_tree_client_.get();
     aura::Env::GetInstance()->SetWindowTreeClient(window_tree_client_);
   } else {
@@ -123,20 +112,21 @@ MusClient::MusClient(const InitParams& params) : identity_(params.identity) {
   pointer_watcher_event_router_ =
       std::make_unique<PointerWatcherEventRouter>(window_tree_client_);
 
-  if (connector) {
-    input_device_client_ = std::make_unique<ui::InputDeviceClient>();
-    ui::mojom::InputDeviceServerPtr input_device_server;
-    connector->BindInterface(ui::mojom::kServiceName, &input_device_server);
+  if (connector && !params.running_in_ws_process) {
+    input_device_client_ = std::make_unique<ws::InputDeviceClient>();
+    ws::mojom::InputDeviceServerPtr input_device_server;
+    connector->BindInterface(ws::mojom::kServiceName, &input_device_server);
     input_device_client_->Connect(std::move(input_device_server));
 
     screen_ = std::make_unique<ScreenMus>(this);
-    if (params.wtc_config == aura::WindowTreeClient::Config::kMashDeprecated)
-      screen_->InitDeprecated(connector);
-    else
-      window_tree_client_->WaitForDisplays();
+    display::Screen::SetScreenInstance(screen_.get());
+
+    // NOTE: this deadlocks if |running_in_ws_process| is true (because the main
+    // thread is running the WindowService).
+    window_tree_client_->WaitForDisplays();
 
     ui::mojom::ClipboardHostPtr clipboard_host_ptr;
-    connector->BindInterface(ui::mojom::kServiceName, &clipboard_host_ptr);
+    connector->BindInterface(ws::mojom::kServiceName, &clipboard_host_ptr);
     ui::Clipboard::SetClipboardForCurrentThread(
         std::make_unique<ui::ClipboardClient>(std::move(clipboard_host_ptr)));
 
@@ -153,6 +143,10 @@ MusClient::MusClient(const InitParams& params) : identity_(params.identity) {
 }
 
 MusClient::~MusClient() {
+  // Tear down accessibility before WindowTreeClient to ensure window tree
+  // cleanup doesn't trigger accessibility events.
+  ax_remote_host_.reset();
+
   // ~WindowTreeClient calls back to us (we're its delegate), destroy it while
   // we are still valid.
   owned_window_tree_client_.reset();
@@ -167,6 +161,11 @@ MusClient::~MusClient() {
         ViewsDelegate::DesktopWindowTreeHostFactory());
   }
 
+  if (screen_) {
+    display::Screen::SetScreenInstance(nullptr);
+    screen_.reset();
+  }
+
   DCHECK_EQ(instance_, this);
   instance_ = nullptr;
   DCHECK(aura::Env::GetInstance());
@@ -175,6 +174,19 @@ MusClient::~MusClient() {
 // static
 bool MusClient::ShouldCreateDesktopNativeWidgetAura(
     const Widget::InitParams& init_params) {
+  const bool from_window_service =
+      (init_params.context &&
+       init_params.context->env()->mode() == aura::Env::Mode::LOCAL) ||
+      (init_params.parent &&
+       init_params.parent->env()->mode() == aura::Env::Mode::LOCAL);
+  // |from_window_service| is true if the aura::Env has a mode of LOCAL. If
+  // the mode is LOCAL there are two envs, one used by the window service
+  // (LOCAL), and the other for non-window-service code. Windows created with
+  // LOCAL should use NativeWidgetAura (which happens if false is returned
+  // here).
+  if (from_window_service)
+    return false;
+
   // TYPE_CONTROL and child widgets require a NativeWidgetAura.
   return init_params.type != Widget::InitParams::TYPE_CONTROL &&
          !init_params.child;
@@ -195,12 +207,12 @@ std::map<std::string, std::vector<uint8_t>>
 MusClient::ConfigurePropertiesFromParams(
     const Widget::InitParams& init_params) {
   using PrimitiveType = aura::PropertyConverter::PrimitiveType;
-  using WindowManager = ui::mojom::WindowManager;
+  using WindowManager = ws::mojom::WindowManager;
   using TransportType = std::vector<uint8_t>;
 
   std::map<std::string, TransportType> properties = init_params.mus_properties;
 
-  // Widget::InitParams::Type matches ui::mojom::WindowType.
+  // Widget::InitParams::Type matches ws::mojom::WindowType.
   properties[WindowManager::kWindowType_InitProperty] =
       mojo::ConvertTo<TransportType>(static_cast<int32_t>(init_params.type));
 
@@ -337,11 +349,6 @@ void MusClient::CloseAllWidgets() {
   }
 }
 
-ui::mojom::EventInjector* MusClient::GetTestingEventInjector() const {
-  CHECK(event_injector_);
-  return event_injector_.get();
-}
-
 std::unique_ptr<DesktopWindowTreeHost> MusClient::CreateDesktopWindowTreeHost(
     const Widget::InitParams& init_params,
     internal::NativeWidgetDelegate* delegate,
@@ -370,18 +377,21 @@ void MusClient::OnEmbedRootDestroyed(
 }
 
 void MusClient::OnPointerEventObserved(const ui::PointerEvent& event,
-                                       int64_t display_id,
+                                       const gfx::Point& location_in_screen,
                                        aura::Window* target) {
-  pointer_watcher_event_router_->OnPointerEventObserved(event, display_id,
-                                                        target);
+  pointer_watcher_event_router_->OnPointerEventObserved(
+      event, location_in_screen, target);
 }
 
 void MusClient::OnDisplaysChanged(
-    std::vector<ui::mojom::WsDisplayPtr> ws_displays,
+    std::vector<ws::mojom::WsDisplayPtr> ws_displays,
     int64_t primary_display_id,
-    int64_t internal_display_id) {
-  screen_->OnDisplaysChanged(std::move(ws_displays), primary_display_id,
-                             internal_display_id);
+    int64_t internal_display_id,
+    int64_t display_id_for_new_windows) {
+  if (screen_) {
+    screen_->OnDisplaysChanged(std::move(ws_displays), primary_display_id,
+                               internal_display_id, display_id_for_new_windows);
+  }
 }
 
 void MusClient::OnWindowManagerFrameValuesChanged() {

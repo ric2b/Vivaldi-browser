@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_controller.h"
 
 #include "base/logging.h"
+#import "ios/chrome/browser/ui/material_components/chrome_app_bar_view_controller.h"
 #import "ios/chrome/browser/ui/material_components/utils.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_header_footer_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_item.h"
@@ -13,16 +14,10 @@
 #import "ios/chrome/browser/ui/table_view/table_view_loading_view.h"
 #import "ios/chrome/browser/ui/table_view/table_view_model.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
-#import "ios/third_party/material_components_ios/src/components/AppBar/src/MaterialAppBar.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-namespace {
-// Color of the TableView separators.
-const CGFloat kTableViewSeparatorColor = 0xC8C7CC;
-}
 
 @interface ChromeTableViewController ()
 // The loading displayed by [self startLoadingIndicatorWithLoadingMessage:].
@@ -32,7 +27,7 @@ const CGFloat kTableViewSeparatorColor = 0xC8C7CC;
 @end
 
 @implementation ChromeTableViewController
-@synthesize appBar = _appBar;
+@synthesize appBarViewController = _appBarViewController;
 @synthesize emptyView = _emptyView;
 @synthesize loadingView = _loadingView;
 @synthesize styler = _styler;
@@ -45,8 +40,7 @@ const CGFloat kTableViewSeparatorColor = 0xC8C7CC;
     _styler = [[ChromeTableViewStyler alloc] init];
 
     if (appBarStyle == ChromeTableViewControllerStyleWithAppBar) {
-      _appBar = [[MDCAppBar alloc] init];
-      [self addChildViewController:_appBar.headerViewController];
+      _appBarViewController = [[ChromeAppBarViewController alloc] init];
     }
   }
   return self;
@@ -83,16 +77,17 @@ const CGFloat kTableViewSeparatorColor = 0xC8C7CC;
   [super viewDidLoad];
 
   [self.tableView setBackgroundColor:self.styler.tableViewBackgroundColor];
-  [self.tableView setSeparatorColor:UIColorFromRGB(kTableViewSeparatorColor)];
+  [self.tableView setSeparatorColor:self.styler.cellSeparatorColor];
   [self.tableView setSeparatorInset:UIEdgeInsetsMake(0, 56, 0, 0)];
 
   // Configure the app bar if needed.
-  if (_appBar) {
-    ConfigureAppBarWithCardStyle(self.appBar);
-    self.appBar.headerViewController.headerView.trackingScrollView =
-        self.tableView;
+  if (_appBarViewController) {
+    ConfigureAppBarViewControllerWithCardStyle(self.appBarViewController);
+    self.appBarViewController.headerView.trackingScrollView = self.tableView;
     // Add the AppBar's views after all other views have been registered.
-    [self.appBar addSubviewsToParent];
+    [self addChildViewController:_appBarViewController];
+    [self.view addSubview:self.appBarViewController.view];
+    [self.appBarViewController didMoveToParentViewController:self];
   }
 }
 
@@ -135,6 +130,10 @@ const CGFloat kTableViewSeparatorColor = 0xC8C7CC;
   self.emptyView = [[TableViewEmptyView alloc] initWithFrame:self.view.bounds
                                            attributedMessage:attributedMessage
                                                        image:image];
+}
+
+- (void)updateEmptyTableViewMessageAccessibilityLabel:(NSString*)newLabel {
+  self.emptyView.messageAccessibilityLabel = newLabel;
 }
 
 - (void)removeEmptyTableView {
@@ -258,24 +257,22 @@ const CGFloat kTableViewSeparatorColor = 0xC8C7CC;
 #pragma mark - MDCAppBar support
 
 - (UIViewController*)childViewControllerForStatusBarHidden {
-  return self.appBar.headerViewController;
+  return self.appBarViewController;
 }
 
 - (UIViewController*)childViewControllerForStatusBarStyle {
-  return self.appBar.headerViewController;
+  return self.appBarViewController;
 }
 
 - (void)scrollViewDidScroll:(UIScrollView*)scrollView {
-  MDCFlexibleHeaderView* headerView =
-      self.appBar.headerViewController.headerView;
+  MDCFlexibleHeaderView* headerView = self.appBarViewController.headerView;
   if (scrollView == headerView.trackingScrollView) {
     [headerView trackingScrollViewDidScroll];
   }
 }
 
 - (void)scrollViewDidEndDecelerating:(UIScrollView*)scrollView {
-  MDCFlexibleHeaderView* headerView =
-      self.appBar.headerViewController.headerView;
+  MDCFlexibleHeaderView* headerView = self.appBarViewController.headerView;
   if (scrollView == headerView.trackingScrollView) {
     [headerView trackingScrollViewDidEndDecelerating];
   }
@@ -283,8 +280,7 @@ const CGFloat kTableViewSeparatorColor = 0xC8C7CC;
 
 - (void)scrollViewDidEndDragging:(UIScrollView*)scrollView
                   willDecelerate:(BOOL)decelerate {
-  MDCFlexibleHeaderView* headerView =
-      self.appBar.headerViewController.headerView;
+  MDCFlexibleHeaderView* headerView = self.appBarViewController.headerView;
   if (scrollView == headerView.trackingScrollView) {
     [headerView trackingScrollViewDidEndDraggingWillDecelerate:decelerate];
   }
@@ -293,8 +289,7 @@ const CGFloat kTableViewSeparatorColor = 0xC8C7CC;
 - (void)scrollViewWillEndDragging:(UIScrollView*)scrollView
                      withVelocity:(CGPoint)velocity
               targetContentOffset:(inout CGPoint*)targetContentOffset {
-  MDCFlexibleHeaderView* headerView =
-      self.appBar.headerViewController.headerView;
+  MDCFlexibleHeaderView* headerView = self.appBarViewController.headerView;
   if (scrollView == headerView.trackingScrollView) {
     [headerView
         trackingScrollViewWillEndDraggingWithVelocity:velocity

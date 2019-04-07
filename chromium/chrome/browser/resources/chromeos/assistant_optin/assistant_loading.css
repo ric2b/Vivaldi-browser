@@ -2,22 +2,17 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
-#retry-button {
+oobe-text-button {
   display: none;
 }
 
-.error #retry-button {
+.error oobe-text-button {
   display: block;
 }
 
 #loading-container,
 #error-container {
-  height: 372px;
-  overflow: hidden;
-  padding: 48px 48px 0 48px;
-  position: absolute;
   visibility: hidden;
-  width: 480px;
 }
 
 .loading-animation #loading-container,
@@ -25,25 +20,16 @@
   visibility: visible;
 }
 
-.loading #retry-button {
+.loading oobe-text-button {
   pointer-events: none;
 }
 
-.title {
-  font-size: 18px;
-  padding: 32px 0 18px 0;
-}
-
-.sub-title {
-  font-size: 12px;
-  padding-bottom: 8px;
-}
-
 #loading-message {
-  color: rgba(0, 0, 0, .54);
-  font-size: 12px;
-  line: 17px;
-  padding: 168px 0 0 0;
+  padding-top: 240px;
+}
+
+#retry-button {
+  margin-inline-end: 0;
 }
 
 paper-progress {
@@ -51,11 +37,7 @@ paper-progress {
   --paper-progress-container-color: #CEE0FC;
   --paper-progress-secondary-color: rgb(66, 133, 244);
   display: block;
-  height: 3px;
-  padding: 4px 0 0 0;
+  height: 4px;
+  padding: 12px 0 0 0;
   width: 100%;
-}
-
-#retry-button {
-  -webkit-margin-end: 18px;
 }

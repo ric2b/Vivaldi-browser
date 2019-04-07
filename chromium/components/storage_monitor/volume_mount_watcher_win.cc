@@ -22,8 +22,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/time/time.h"
 #include "base/win/scoped_handle.h"
 #include "components/storage_monitor/media_storage_util.h"
@@ -316,7 +316,7 @@ void EjectDeviceInThreadPool(
 
 VolumeMountWatcherWin::VolumeMountWatcherWin()
     : device_info_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})),
       notifications_(nullptr),
       weak_factory_(this) {}

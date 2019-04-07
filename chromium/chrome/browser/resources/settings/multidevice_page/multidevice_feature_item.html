@@ -7,37 +7,64 @@
 <link rel="import" href="../icons.html">
 <link rel="import" href="../route.html">
 <link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="../settings_vars_css.html">
+<link rel="import" href="multidevice_constants.html">
+<link rel="import" href="multidevice_feature_behavior.html">
+<link rel="import" href="multidevice_feature_toggle.html">
 
 <dom-module id="settings-multidevice-feature-item">
   <template>
     <style include="settings-shared">
+      #card {
+        border-top: var(--settings-separator-line);
+        border-top-style: var(--feature-item-border-top-style, solid);
+        padding: var(--feature-item-row-padding);
+      }
+
       iron-icon {
         padding: 2px;
       }
 
-      #item-text-container {
-        -webkit-padding-start: 18px;
+      cr-policy-indicator {
+        padding: 0 var(--cr-controlled-by-spacing);
       }
     </style>
-    <div class="settings-box two-line first"
+    <div id="card"
+        class="settings-box two-line"
         on-click="handleItemClick_"
-        actionable$="[[hasSubpageClickHandler_(subpageRoute)]]">
-      <iron-icon icon="[[iconName]]"></iron-icon>
+        actionable$="[[hasSubpageClickHandler_(
+            subpageRoute, pageContentData, feature)]]">
+      <iron-icon icon="[[getIconName(feature)]]"></iron-icon>
       <div id="item-text-container" class="middle">
-        [[featureName]]
+        [[getFeatureName(feature)]]
         <div class="secondary"
             id="featureSecondary"
-            inner-h-t-m-l="[[featureSummaryHtml]]">
+            inner-h-t-m-l="[[getFeatureSummaryHtml(feature)]]">
         </div>
       </div>
-      <template is="dom-if" if="[[hasSubpageClickHandler_(subpageRoute)]]">
+      <template is="dom-if"
+          if="[[hasSubpageClickHandler_(
+              subpageRoute, pageContentData, feature)]]"
+          restamp>
         <paper-icon-button-light class="subpage-arrow">
-            <button aria-label="[[featureName]]"
-                aria-describedby="featureSecondary"></button>
+          <button aria-label="[[getFeatureName(feature)]]"
+              aria-describedby="featureSecondary"></button>
         </paper-icon-button-light>
         <div class="separator"></div>
       </template>
-      <cr-toggle on-change="onChangeToggle_"></cr-toggle>
+      <template is="dom-if"
+          if="[[!isFeatureAllowedByPolicy(feature, pageContentData)]]"
+          restamp>
+        <cr-policy-indicator indicator-type="userPolicy"></cr-policy-indicator>
+      </template>
+      <slot name="feature-controller">
+        <!-- This settings-multidevice-feature-toggle is the default controller.
+        If an element with slot="feature-controller" is attached, it will
+        replace this one. -->
+        <settings-multidevice-feature-toggle feature="[[feature]]"
+            page-content-data="[[pageContentData]]">
+        </settings-multidevice-feature-toggle>
+      </slot>
     </div>
   </template>
   <script src="multidevice_feature_item.js"></script>

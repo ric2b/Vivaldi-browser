@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/callback.h"
+#include "base/cfi_buildflags.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -52,7 +53,15 @@ namespace dom_distiller {
 
 const char* kExternalTestResourcesPath =
     "third_party/dom_distiller_js/dist/test/data";
-const char* kTestFilePath = "/war/test.html?console_log=0&filter=*.*";
+// TODO(877461): Remove filter once image construction happens synchronously and
+// asserts do not flake anymore when exposed to different garbage collection
+// heuristics.
+const char* kTestFilePath =
+    "/war/test.html?console_log=0&filter="
+    "-*.testImageExtractorWithAttributesCSSHeightCM"
+    ":*.testImageExtractorWithHeightCSS"
+    ":*.testImageExtractorWithOneAttribute"
+    ":*.testImageExtractorWithSettingDimension";
 const char* kRunJsTestsJs =
     "(function() {return org.chromium.distiller.JsTestEntry.run();})();";
 
@@ -101,8 +110,13 @@ class DomDistillerJsTest : public content::ContentBrowserTest {
   }
 };
 
-#if defined(MEMORY_SANITIZER)
+// Disabled on MSan and Android CFI bots.
 // https://crbug.com/845180
+#if defined(MEMORY_SANITIZER) ||                                 \
+    (defined(OS_ANDROID) &&                                      \
+     (BUILDFLAG(CFI_CAST_CHECK) || BUILDFLAG(CFI_ICALL_CHECK) || \
+      BUILDFLAG(CFI_ENFORCEMENT_DIAGNOSTIC) ||                   \
+      BUILDFLAG(CFI_ENFORCEMENT_TRAP)))
 #define MAYBE_RunJsTests DISABLED_RunJsTests
 #else
 #define MAYBE_RunJsTests RunJsTests

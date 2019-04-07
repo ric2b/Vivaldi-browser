@@ -7,6 +7,7 @@
 
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/shared_memory.h"
+#include "cc/paint/skia_paint_canvas.h"
 #include "content/child/child_thread_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/renderer/content_renderer_client.h"
@@ -19,7 +20,18 @@
 #include "third_party/blink/public/web/web_element.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_view.h"
+#include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
+#include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/platform/graphics/compositing/paint_chunks_to_cc_layer.h"
+#include "third_party/blink/renderer/platform/graphics/graphics_context.h"
+#include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
+#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkSurface.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 
 using blink::WebDocument;
@@ -60,6 +72,138 @@ void VivaldiRenderViewObserver::OnInsertText(const base::string16& text) {
 }
 
 namespace {
+
+bool ToSkBitmap(
+    const scoped_refptr<blink::StaticBitmapImage>& static_bitmap_image,
+    SkBitmap& dest) {
+  const sk_sp<SkImage> image =
+      static_bitmap_image->PaintImageForCurrentFrame().GetSkImage();
+  return image && image->asLegacyBitmap(
+                      &dest, SkImage::LegacyBitmapMode::kRO_LegacyBitmapMode);
+}
+
+bool SnapshotPage(blink::LocalFrame* local_frame,
+                  bool full_page,
+                  float width,
+                  float height,
+                  SkBitmap& bitmap) {
+  blink::Document* document = local_frame->GetDocument();
+  if (!document || !document->GetLayoutView())
+    return false;
+
+  /*
+  We follow DragController::DragImageForSelection here while making sure that
+  we paint the whole document including the parts outside the scroll view.
+  TODO: See ChromePrintRenderFrameHelperDelegate::GetPdfElement for
+  capture of PDF.
+
+  TODO(igor@vivaldi.com): Find out why when full_page is true and we paint the
+  whole page including the invisible parts outside the scroll area and when
+  document->Lifecycle() is DocumentLifecycle::kVisualUpdatePending or perhaps is
+  anything but DocumentLifecycle::kPaintClean or kPrePaintClean painting here
+  may affect painting of the page later when the user scrolls the previously
+  invisible parts. In such case the scrolled in areas may contains unpainted
+  rectangles. For this reason we can only paint the visible part of the page
+  when !full_page and we are drawing thumbnails to avoid rendering regressions
+  later on each and every page.
+  */
+  bool has_accelerated_compositing =
+    document->GetSettings()->GetAcceleratedCompositingEnabled();
+
+  // Disable accelerated compositing temporary to make canvas and other
+  // normally HWA element show up, restrict to full page rendering for now.
+  if (full_page) {
+    document->GetSettings()->SetAcceleratedCompositingEnabled(false);
+  }
+
+  // Force an update of the lifecycle since we changed the painting method
+  // of accelerated elements.
+  local_frame->View()->UpdateAllLifecyclePhasesExceptPaint();
+
+  blink::LayoutView* view = document->GetLayoutView();
+  blink::IntRect document_rect = view->DocumentRect();
+  blink::IntRect visible_content_rect =
+    local_frame->View()->LayoutViewport()->VisibleContentRect();
+
+  blink::IntSize page_size;
+  if (full_page) {
+    blink::FloatSize float_page_size = local_frame->ResizePageRectsKeepingRatio(
+      blink::FloatSize(document_rect.Width(), document_rect.Height()),
+      blink::FloatSize(document_rect.Width(), document_rect.Height()));
+    float_page_size.SetHeight(std::min(float_page_size.Height(), height));
+    page_size = ExpandedIntSize(float_page_size);
+  } else {
+    page_size.SetWidth(visible_content_rect.Width());
+    page_size.SetHeight(visible_content_rect.Height());
+  }
+
+  blink::IntRect page_rect(0, 0, page_size.Width(), page_size.Height());
+  if (full_page) {
+    // page_rect is relative to the visible scroll area. To include the
+    // document top we must use negative offsets for the upper left
+    // corner.
+    page_rect.SetX(-visible_content_rect.X());
+    page_rect.SetY(-visible_content_rect.Y());
+  }
+
+  blink::PaintRecordBuilder picture_builder;
+  {
+    blink::GraphicsContext& context = picture_builder.Context();
+    context.SetShouldAntialias(false);
+
+    blink::GlobalPaintFlags global_paint_flags =
+      blink::kGlobalPaintFlattenCompositingLayers;
+    if (full_page) {
+      global_paint_flags |= blink::kGlobalPaintWholePage;
+    }
+
+    local_frame->View()->PaintContents(context, global_paint_flags, page_rect);
+  }
+
+  if (full_page) {
+    document->GetSettings()->
+      SetAcceleratedCompositingEnabled(has_accelerated_compositing);
+  }
+
+  SkSurfaceProps surface_props(0, kUnknown_SkPixelGeometry);
+  sk_sp<SkSurface> surface =
+    SkSurface::MakeRasterN32Premul(
+      page_size.Width(), page_size.Height(), &surface_props);
+  if (!surface)
+    return false;
+
+  cc::SkiaPaintCanvas canvas(surface->getCanvas());
+
+  if (full_page) {
+    // Translate scroll view coordinates into page-relative ones.
+    blink::AffineTransform transform;
+    transform.Translate(visible_content_rect.X(), visible_content_rect.Y());
+    canvas.concat(blink::AffineTransformToSkMatrix(transform));
+
+    // Prepare PaintChunksToCcLayer called deep under EndRecording
+    // to ignore clipping to the visible area.
+    DCHECK(!blink::PaintChunksToCcLayer::TopClipToIgnore());
+    const blink::ObjectPaintProperties *root_properties =
+      view->FirstFragment().PaintProperties();
+    if (root_properties) {
+      blink::PaintChunksToCcLayer::TopClipToIgnore() =
+        root_properties->OverflowClip();
+    }
+  }
+
+  blink::PropertyTreeState root_tree_state = blink::PropertyTreeState::Root();
+  picture_builder.EndRecording(canvas, root_tree_state);
+
+  if (full_page) {
+    blink::PaintChunksToCcLayer::TopClipToIgnore() = nullptr;
+  } else {
+    DCHECK(!blink::PaintChunksToCcLayer::TopClipToIgnore());
+  }
+
+  scoped_refptr<blink::StaticBitmapImage> image =
+    blink::StaticBitmapImage::Create(surface->makeImageSnapshot());
+  return ToSkBitmap(image, bitmap);
+}
 
 bool CopyBitmapToSharedMem(const SkBitmap& bitmap,
                            base::SharedMemoryHandle* shared_mem_handle) {
@@ -102,18 +246,24 @@ bool CopyBitmapToSharedMem(const SkBitmap& bitmap,
 void VivaldiRenderViewObserver::OnRequestThumbnailForFrame(
     VivaldiViewMsg_RequestThumbnailForFrame_Params params) {
   base::SharedMemoryHandle shared_memory_handle;
-  if (!render_view()->GetWebView() ||
-      !render_view()->GetWebView()->MainFrame()) {
-    Send(new VivaldiViewHostMsg_RequestThumbnailForFrame_ACK(
-        routing_id(), shared_memory_handle, gfx::Size(), params.callback_id,
-        false));
-  }
-  blink::WebFrame* main_frame = render_view()->GetWebView()->MainFrame();
-  bool capture_full_page = params.full_page;
-  gfx::Size size = params.size;
-  SkBitmap bitmap;
-  if (main_frame->snapshotPage(bitmap, capture_full_page, size.width(),
-                               size.height())) {
+  do {
+    if (!render_view()->GetWebView())
+      break;
+    blink::WebFrame* main_frame = render_view()->GetWebView()->MainFrame();
+    if (!main_frame || !main_frame->IsWebLocalFrame())
+      break;
+    blink::WebLocalFrameImpl* web_local_frame =
+        static_cast<blink::WebLocalFrameImpl*>(main_frame->ToWebLocalFrame());
+    blink::LocalFrame* local_frame = web_local_frame->GetFrame();
+    if (!local_frame)
+      break;
+
+    gfx::Size size = params.size;
+    SkBitmap bitmap;
+    if (!SnapshotPage(local_frame, params.full_page,
+                      size.width(), size.height(), bitmap))
+      break;
+
     SkBitmap thumbnail;
     if (bitmap.colorType() == kN32_SkColorType) {
       thumbnail = bitmap;
@@ -123,18 +273,19 @@ void VivaldiRenderViewObserver::OnRequestThumbnailForFrame(
                           thumbnail.rowBytes(), 0, 0);
       }
     }
-    if (CopyBitmapToSharedMem(thumbnail, &shared_memory_handle)) {
-      gfx::Size size(thumbnail.width(), thumbnail.height());
+    if (!CopyBitmapToSharedMem(thumbnail, &shared_memory_handle))
+      break;
 
-      Send(new VivaldiViewHostMsg_RequestThumbnailForFrame_ACK(
-          routing_id(), shared_memory_handle, size, params.callback_id, true));
-    }
-  } else {
+    size = gfx::Size(thumbnail.width(), thumbnail.height());
+
     Send(new VivaldiViewHostMsg_RequestThumbnailForFrame_ACK(
-        routing_id(), shared_memory_handle, gfx::Size(), params.callback_id,
-        false));
-  }
-  return;
+        routing_id(), shared_memory_handle, size, params.callback_id, true));
+    return;
+  } while (false);
+
+  Send(new VivaldiViewHostMsg_RequestThumbnailForFrame_ACK(
+      routing_id(), shared_memory_handle, gfx::Size(), params.callback_id,
+      false));
 }
 
 }  // namespace vivaldi

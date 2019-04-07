@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <utility>
@@ -9,6 +10,7 @@
 #include "base/auto_reset.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
@@ -47,6 +49,16 @@ blink::Manifest::ImageResource CreateIcon(const std::string& src,
   return icon;
 }
 
+bool ContainsHeader(const base::flat_map<std::string, std::string>& headers,
+                    const std::string& target) {
+  return headers.cend() !=
+         std::find_if(headers.cbegin(), headers.cend(),
+                      [target](const auto& pair) -> bool {
+                        return base::EqualsCaseInsensitiveASCII(pair.first,
+                                                                target);
+                      });
+}
+
 class BadMessageObserver {
  public:
   BadMessageObserver()
@@ -83,10 +95,11 @@ class BackgroundFetchServiceTest : public BackgroundFetchTestBase {
    public:
     ScopedCustomBackgroundFetchService(BackgroundFetchServiceTest* test,
                                        const url::Origin& origin)
-        : scoped_service_(
-              &test->service_,
-              std::make_unique<BackgroundFetchServiceImpl>(test->context_,
-                                                           origin)) {}
+        : scoped_service_(&test->service_,
+                          std::make_unique<BackgroundFetchServiceImpl>(
+                              test->context_,
+                              origin,
+                              nullptr /* render_frame_host */)) {}
 
    private:
     base::AutoReset<std::unique_ptr<BackgroundFetchServiceImpl>>
@@ -173,6 +186,24 @@ class BackgroundFetchServiceTest : public BackgroundFetchTestBase {
     run_loop.Run();
   }
 
+  // Calls BackgroundFetchServiceImpl::MatchRequests() to retrieve all settled
+  // fetches.
+  void MatchAllRequests(int64_t service_worker_registration_id,
+                        const std::string& developer_id,
+                        const std::string& unique_id,
+                        std::vector<BackgroundFetchSettledFetch>* out_fetches) {
+    DCHECK(out_fetches);
+    base::RunLoop run_loop;
+    service_->MatchRequests(
+        service_worker_registration_id, developer_id, unique_id,
+        base::nullopt /* request_to_match*/, nullptr /* cache_query_params*/,
+        true /* match_all */,
+        base::BindOnce(&BackgroundFetchServiceTest::DidMatchAllRequests,
+                       base::Unretained(this), run_loop.QuitClosure(),
+                       out_fetches));
+    run_loop.Run();
+  }
+
   // Synchronous wrapper for BackgroundFetchServiceImpl::UpdateUI().
   void UpdateUI(int64_t service_worker_registration_id,
                 const std::string& developer_id,
@@ -183,7 +214,7 @@ class BackgroundFetchServiceTest : public BackgroundFetchTestBase {
 
     base::RunLoop run_loop;
     service_->UpdateUI(service_worker_registration_id, unique_id, developer_id,
-                       title,
+                       title, SkBitmap(),
                        base::BindOnce(&BackgroundFetchServiceTest::DidGetError,
                                       base::Unretained(this),
                                       run_loop.QuitClosure(), out_error));
@@ -266,17 +297,18 @@ class BackgroundFetchServiceTest : public BackgroundFetchTestBase {
   void SetUp() override {
     BackgroundFetchTestBase::SetUp();
 
-    context_ = new BackgroundFetchContext(
+    context_ = base::MakeRefCounted<BackgroundFetchContext>(
         browser_context(),
         base::WrapRefCounted(embedded_worker_test_helper()->context_wrapper()),
-        nullptr /* cache_storage_context */);
+        nullptr /* cache_storage_context */, nullptr /* quota_manager_proxy */);
     context_->SetDataManagerForTesting(
         std::make_unique<BackgroundFetchTestDataManager>(
             browser_context(), storage_partition(),
             embedded_worker_test_helper()->context_wrapper()));
 
     context_->InitializeOnIOThread();
-    service_ = std::make_unique<BackgroundFetchServiceImpl>(context_, origin());
+    service_ = std::make_unique<BackgroundFetchServiceImpl>(
+        context_, origin(), nullptr /* render_frame_host */);
   }
 
   void TearDown() override {
@@ -290,9 +322,12 @@ class BackgroundFetchServiceTest : public BackgroundFetchTestBase {
     base::RunLoop().RunUntilIdle();
   }
 
+ protected:
+  scoped_refptr<BackgroundFetchContext> context_;
+
  private:
   void DidGetRegistration(
-      base::Closure quit_closure,
+      base::OnceClosure quit_closure,
       blink::mojom::BackgroundFetchError* out_error,
       BackgroundFetchRegistration* out_registration,
       blink::mojom::BackgroundFetchError error,
@@ -305,15 +340,14 @@ class BackgroundFetchServiceTest : public BackgroundFetchTestBase {
     std::move(quit_closure).Run();
   }
 
-  void DidStartFetch(
-      base::Closure quit_closure,
-      blink::mojom::BackgroundFetchError error,
-      std::unique_ptr<BackgroundFetchRegistration> registration) {
+  void DidStartFetch(base::OnceClosure quit_closure,
+                     blink::mojom::BackgroundFetchError error,
+                     const BackgroundFetchRegistration& registration) {
     ASSERT_EQ(error, blink::mojom::BackgroundFetchError::NONE);
     std::move(quit_closure).Run();
   }
 
-  void DidGetError(base::Closure quit_closure,
+  void DidGetError(base::OnceClosure quit_closure,
                    blink::mojom::BackgroundFetchError* out_error,
                    blink::mojom::BackgroundFetchError error) {
     *out_error = error;
@@ -321,7 +355,7 @@ class BackgroundFetchServiceTest : public BackgroundFetchTestBase {
     std::move(quit_closure).Run();
   }
 
-  void DidGetDeveloperIds(base::Closure quit_closure,
+  void DidGetDeveloperIds(base::OnceClosure quit_closure,
                           blink::mojom::BackgroundFetchError* out_error,
                           std::vector<std::string>* out_developer_ids,
                           blink::mojom::BackgroundFetchError error,
@@ -332,7 +366,14 @@ class BackgroundFetchServiceTest : public BackgroundFetchTestBase {
     std::move(quit_closure).Run();
   }
 
-  scoped_refptr<BackgroundFetchContext> context_;
+  void DidMatchAllRequests(
+      base::OnceClosure quit_closure,
+      std::vector<BackgroundFetchSettledFetch>* out_fetches,
+      const std::vector<BackgroundFetchSettledFetch>& fetches) {
+    *out_fetches = fetches;
+    std::move(quit_closure).Run();
+  }
+
   std::unique_ptr<BackgroundFetchServiceImpl> service_;
 
   DISALLOW_COPY_AND_ASSIGN(BackgroundFetchServiceTest);
@@ -455,7 +496,8 @@ TEST_F(BackgroundFetchServiceTest, FetchDuplicatedRegistrationFailure) {
 TEST_F(BackgroundFetchServiceTest, FetchSuccessEventDispatch) {
   // This test starts a new Background Fetch, completes the registration, then
   // fetches all files to complete the job, and then verifies that the
-  // `backgroundfetched` event will be dispatched with the expected contents.
+  // `backgroundfetchsuccess` event will be dispatched with the expected
+  // contents.
 
   int64_t service_worker_registration_id = RegisterServiceWorker();
   ASSERT_NE(blink::mojom::kInvalidServiceWorkerRegistrationId,
@@ -499,11 +541,10 @@ TEST_F(BackgroundFetchServiceTest, FetchSuccessEventDispatch) {
           .Build()));
 
   // Create the registration with the given |requests|.
+  BackgroundFetchRegistration registration;
   {
     BackgroundFetchOptions options;
-
     blink::mojom::BackgroundFetchError error;
-    BackgroundFetchRegistration registration;
 
     // Create the first registration. This must succeed.
     Fetch(service_worker_registration_id, kExampleDeveloperId, requests,
@@ -514,55 +555,58 @@ TEST_F(BackgroundFetchServiceTest, FetchSuccessEventDispatch) {
   // Spin the |event_dispatched_loop| to wait for the dispatched event.
   event_dispatched_loop.Run();
 
-  ASSERT_TRUE(embedded_worker_test_helper()->last_developer_id().has_value());
-  EXPECT_EQ(kExampleDeveloperId,
-            embedded_worker_test_helper()->last_developer_id().value());
+  ASSERT_TRUE(embedded_worker_test_helper()->last_registration().has_value());
+  EXPECT_EQ(kExampleDeveloperId, registration.developer_id);
 
-  ASSERT_TRUE(embedded_worker_test_helper()->last_fetches().has_value());
-
-  std::vector<BackgroundFetchSettledFetch> fetches =
-      embedded_worker_test_helper()->last_fetches().value();
+  // Get all the settled fetches and test properties.
+  std::vector<BackgroundFetchSettledFetch> fetches;
+  MatchAllRequests(service_worker_registration_id, registration.developer_id,
+                   registration.unique_id, &fetches);
   ASSERT_EQ(fetches.size(), requests.size());
 
   for (size_t i = 0; i < fetches.size(); ++i) {
     ASSERT_EQ(fetches[i].request.url, requests[i].url);
     EXPECT_EQ(fetches[i].request.method, requests[i].method);
 
-    EXPECT_EQ(fetches[i].response.url_list[0], fetches[i].request.url);
-    EXPECT_EQ(fetches[i].response.response_type,
+    EXPECT_EQ(fetches[i].response->url_list[0], fetches[i].request.url);
+    EXPECT_EQ(fetches[i].response->response_type,
               network::mojom::FetchResponseType::kDefault);
 
     switch (i) {
       case 0:
-        EXPECT_EQ(fetches[i].response.status_code, kFirstResponseCode);
-        EXPECT_EQ(fetches[i].response.headers.count("Content-Type"), 1u);
-        EXPECT_EQ(fetches[i].response.headers.count("X-Cat"), 1u);
+        EXPECT_EQ(fetches[i].response->status_code, kFirstResponseCode);
+        EXPECT_TRUE(
+            ContainsHeader(fetches[i].response->headers, "Content-Type"));
+        EXPECT_TRUE(ContainsHeader(fetches[i].response->headers, "X-Cat"));
         break;
       case 1:
-        EXPECT_EQ(fetches[i].response.status_code, kSecondResponseCode);
-        EXPECT_EQ(fetches[i].response.headers.count("Content-Type"), 1u);
-        EXPECT_EQ(fetches[i].response.headers.count("X-Cat"), 0u);
+        EXPECT_EQ(fetches[i].response->status_code, kSecondResponseCode);
+        EXPECT_TRUE(
+            ContainsHeader(fetches[i].response->headers, "Content-Type"));
+        EXPECT_FALSE(ContainsHeader(fetches[i].response->headers, "X-Cat"));
         break;
       case 2:
-        EXPECT_EQ(fetches[i].response.status_code, kThirdResponseCode);
-        EXPECT_EQ(fetches[i].response.headers.count("Content-Type"), 1u);
-        EXPECT_EQ(fetches[i].response.headers.count("X-Cat"), 0u);
+        EXPECT_EQ(fetches[i].response->status_code, kThirdResponseCode);
+        EXPECT_TRUE(
+            ContainsHeader(fetches[i].response->headers, "Content-Type"));
+        EXPECT_FALSE(ContainsHeader(fetches[i].response->headers, "X-Cat"));
         break;
       default:
         NOTREACHED();
     }
 
     // TODO(peter): change-detector tests for unsupported properties.
-    EXPECT_EQ(fetches[i].response.error,
+    EXPECT_EQ(fetches[i].response->error,
               blink::mojom::ServiceWorkerResponseError::kUnknown);
 
     // Verify that all properties have a sensible value.
-    EXPECT_FALSE(fetches[i].response.response_time.is_null());
+    EXPECT_FALSE(fetches[i].response->response_time.is_null());
 
     // Verify that the response blobs have been populated. We cannot consume
     // their data here since the handles have already been released.
-    ASSERT_FALSE(fetches[i].response.blob_uuid.empty());
-    ASSERT_GT(fetches[i].response.blob_size, 0u);
+    ASSERT_TRUE(fetches[i].response->blob);
+    ASSERT_FALSE(fetches[i].response->blob->uuid.empty());
+    ASSERT_GT(fetches[i].response->blob->size, 0u);
   }
 }
 
@@ -598,11 +642,12 @@ TEST_F(BackgroundFetchServiceTest, FetchFailEventDispatch) {
           .Build()));
 
   // Create the registration with the given |requests|.
+  BackgroundFetchRegistration registration;
+
   {
     BackgroundFetchOptions options;
 
     blink::mojom::BackgroundFetchError error;
-    BackgroundFetchRegistration registration;
 
     // Create the first registration. This must succeed.
     Fetch(service_worker_registration_id, kExampleDeveloperId, requests,
@@ -613,44 +658,42 @@ TEST_F(BackgroundFetchServiceTest, FetchFailEventDispatch) {
   // Spin the |event_dispatched_loop| to wait for the dispatched event.
   event_dispatched_loop.Run();
 
-  ASSERT_TRUE(embedded_worker_test_helper()->last_developer_id().has_value());
-  EXPECT_EQ(kExampleDeveloperId,
-            embedded_worker_test_helper()->last_developer_id().value());
+  ASSERT_TRUE(embedded_worker_test_helper()->last_registration().has_value());
+  EXPECT_EQ(kExampleDeveloperId, registration.developer_id);
 
-  ASSERT_TRUE(embedded_worker_test_helper()->last_fetches().has_value());
-
-  std::vector<BackgroundFetchSettledFetch> fetches =
-      embedded_worker_test_helper()->last_fetches().value();
+  // Get all the settled fetches and test properties.
+  std::vector<BackgroundFetchSettledFetch> fetches;
+  MatchAllRequests(service_worker_registration_id, registration.developer_id,
+                   registration.unique_id, &fetches);
   ASSERT_EQ(fetches.size(), requests.size());
 
   for (size_t i = 0; i < fetches.size(); ++i) {
     ASSERT_EQ(fetches[i].request.url, requests[i].url);
     EXPECT_EQ(fetches[i].request.method, requests[i].method);
 
-    EXPECT_EQ(fetches[i].response.url_list[0], fetches[i].request.url);
-    EXPECT_EQ(fetches[i].response.response_type,
+    EXPECT_EQ(fetches[i].response->url_list[0], fetches[i].request.url);
+    EXPECT_EQ(fetches[i].response->response_type,
               network::mojom::FetchResponseType::kDefault);
 
     switch (i) {
       case 0:
-        EXPECT_EQ(fetches[i].response.status_code, 404);
+        EXPECT_EQ(fetches[i].response->status_code, 404);
         break;
       case 1:
-        EXPECT_EQ(fetches[i].response.status_code, 0);
+        EXPECT_EQ(fetches[i].response->status_code, 0);
         break;
       default:
         NOTREACHED();
     }
 
-    EXPECT_TRUE(fetches[i].response.headers.empty());
-    EXPECT_TRUE(fetches[i].response.blob_uuid.empty());
-    EXPECT_EQ(fetches[i].response.blob_size, 0u);
-    EXPECT_FALSE(fetches[i].response.response_time.is_null());
+    EXPECT_TRUE(fetches[i].response->headers.empty());
+    EXPECT_FALSE(fetches[i].response->blob);
+    EXPECT_FALSE(fetches[i].response->response_time.is_null());
 
     // TODO(peter): change-detector tests for unsupported properties.
-    EXPECT_EQ(fetches[i].response.error,
+    EXPECT_EQ(fetches[i].response->error,
               blink::mojom::ServiceWorkerResponseError::kUnknown);
-    EXPECT_TRUE(fetches[i].response.cors_exposed_header_names.empty());
+    EXPECT_TRUE(fetches[i].response->cors_exposed_header_names.empty());
   }
 }
 
@@ -823,9 +866,9 @@ TEST_F(BackgroundFetchServiceTest, AbortEventDispatch) {
 
   event_dispatched_loop.Run();
 
-  ASSERT_TRUE(embedded_worker_test_helper()->last_developer_id().has_value());
+  ASSERT_TRUE(embedded_worker_test_helper()->last_registration().has_value());
   EXPECT_EQ(kExampleDeveloperId,
-            embedded_worker_test_helper()->last_developer_id().value());
+            embedded_worker_test_helper()->last_registration()->developer_id);
 }
 
 TEST_F(BackgroundFetchServiceTest, UniqueId) {
@@ -893,7 +936,7 @@ TEST_F(BackgroundFetchServiceTest, UniqueId) {
 
   // Calling UpdateUI for the aborted registration should fail (unlike, say,
   // calling UpdateUI before resolving the waitUntil promise of a
-  // backgroundfetched or backgroundfetchfail event, both of which should
+  // backgroundfetchsuccess or backgroundfetchfail event, both of which should
   // work even though that registration is no longer active).
   UpdateUI(aborted_registration_id.service_worker_registration_id(),
            aborted_registration_id.unique_id(),
@@ -1095,9 +1138,15 @@ TEST_F(BackgroundFetchServiceTest, JobsInitializedOnBrowserRestart) {
           .Build()));
   BackgroundFetchOptions options;
 
-  // Only register the Fetch.
-  StartFetch(service_worker_registration_id, kExampleDeveloperId, requests,
-             options, SkBitmap());
+  // Only register the Fetch. In order to appropriately simulate a browser
+  // restart, we do not want the fetch to start yet.
+  {
+    base::AutoReset<bool> hang_registration_creation_for_testing(
+        &context_->hang_registration_creation_for_testing_, true);
+
+    StartFetch(service_worker_registration_id, kExampleDeveloperId, requests,
+               options, SkBitmap());
+  }
 
   // Simulate browser restart by re-creating |context_| and |service_|.
   SetUp();

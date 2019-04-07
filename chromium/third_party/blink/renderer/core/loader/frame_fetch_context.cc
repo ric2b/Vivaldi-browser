@@ -383,6 +383,16 @@ SubresourceFilter* FrameFetchContext::GetSubresourceFilter() const {
   return document_loader ? document_loader->GetSubresourceFilter() : nullptr;
 }
 
+PreviewsResourceLoadingHints*
+FrameFetchContext::GetPreviewsResourceLoadingHints() const {
+  if (IsDetached())
+    return nullptr;
+  DocumentLoader* document_loader = MasterDocumentLoader();
+  if (!document_loader)
+    return nullptr;
+  return document_loader->GetPreviewsResourceLoadingHints();
+}
+
 LocalFrame* FrameFetchContext::GetFrame() const {
   DCHECK(!IsDetached());
 
@@ -782,7 +792,6 @@ void FrameFetchContext::RecordLoadingActivity(
 void FrameFetchContext::DidLoadResource(Resource* resource) {
   if (!document_)
     return;
-  FirstMeaningfulPaintDetector::From(*document_).CheckNetworkStable();
   if (LocalFrame* local_frame = document_->GetFrame()) {
     if (IdlenessDetector* idleness_detector =
             local_frame->GetIdlenessDetector()) {
@@ -809,7 +818,7 @@ void FrameFetchContext::AddResourceTiming(const ResourceTimingInfo& info) {
     // Main resource timing information is reported through the owner to be
     // passed to the parent frame, if appropriate.
     frame->Owner()->AddResourceTiming(info);
-    frame->DidSendResourceTimingInfoToParent();
+    frame->SetShouldSendResourceTimingInfoToParent(false);
     return;
   }
 
@@ -887,9 +896,12 @@ bool FrameFetchContext::UpdateTimingInfoForIFrameNavigation(
   if (!GetFrame()->should_send_resource_timing_info_to_parent())
     return false;
   // Do not report iframe navigation that restored from history, since its
-  // location may have been changed after initial navigation.
-  if (MasterDocumentLoader()->LoadType() == WebFrameLoadType::kBackForward)
+  // location may have been changed after initial navigation,
+  if (MasterDocumentLoader()->LoadType() == WebFrameLoadType::kBackForward) {
+    // ...and do not report subsequent navigations in the iframe too.
+    GetFrame()->SetShouldSendResourceTimingInfoToParent(false);
     return false;
+  }
   return true;
 }
 
@@ -1184,11 +1196,13 @@ bool FrameFetchContext::ShouldBlockFetchByMixedContentCheck(
 bool FrameFetchContext::ShouldBlockFetchAsCredentialedSubresource(
     const ResourceRequest& resource_request,
     const KURL& url) const {
-  // BlockCredentialedSubresources has already been checked on the
-  // browser-side. It should not be checked a second time here because the
-  // renderer-side implementation suffers from https://crbug.com/756846.
-  if (!resource_request.CheckForBrowserSideNavigation())
+  // BlockCredentialedSubresources for main resource has already been checked
+  // on the browser-side. It should not be checked a second time here because
+  // the renderer-side implementation suffers from https://crbug.com/756846.
+  if (resource_request.GetFrameType() !=
+      network::mojom::RequestContextFrameType::kNone) {
     return false;
+  }
 
   // URLs with no embedded credentials should load correctly.
   if (url.User().IsEmpty() && url.Pass().IsEmpty())
@@ -1518,7 +1532,6 @@ base::Optional<ResourceRequestBlockedReason> FrameFetchContext::CanRequest(
     const KURL& url,
     const ResourceLoaderOptions& options,
     SecurityViolationReportingPolicy reporting_policy,
-    FetchParameters::OriginRestriction origin_restriction,
     ResourceRequest::RedirectStatus redirect_status) const {
   if (document_ && document_->IsFreezingInProgress() &&
       !resource_request.GetKeepalive()) {
@@ -1528,8 +1541,7 @@ base::Optional<ResourceRequestBlockedReason> FrameFetchContext::CanRequest(
     return ResourceRequestBlockedReason::kOther;
   }
   return BaseFetchContext::CanRequest(type, resource_request, url, options,
-                                      reporting_policy, origin_restriction,
-                                      redirect_status);
+                                      reporting_policy, redirect_status);
 }
 
 }  // namespace blink

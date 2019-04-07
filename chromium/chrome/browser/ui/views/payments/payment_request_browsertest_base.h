@@ -28,7 +28,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/blink/public/platform/modules/payments/payment_request.mojom.h"
+#include "third_party/blink/public/mojom/payments/payment_request.mojom.h"
 
 namespace autofill {
 class AutofillProfile;
@@ -208,6 +208,10 @@ class PaymentRequestBrowserTestBase
   void PayWithCreditCardAndWait(const base::string16& cvc);
   void PayWithCreditCardAndWait(const base::string16& cvc,
                                 PaymentRequestDialogView* dialog_view);
+  void PayWithCreditCard(const base::string16& cvc);
+  void RetryPaymentRequest(const std::string& validation_errors);
+  void RetryPaymentRequest(const std::string& validation_errors,
+                           const DialogEvent& dialog_event);
 
   // Getting/setting the |value| in the textfield of a given |type|.
   base::string16 GetEditorTextfieldValue(autofill::ServerFieldType type);
@@ -253,6 +257,8 @@ class PaymentRequestBrowserTestBase
   // Resets the event waiter for a given |event| or |event_sequence|.
   void ResetEventWaiter(DialogEvent event);
   void ResetEventWaiterForSequence(std::list<DialogEvent> event_sequence);
+  // Resets the event waiter for the events that trigger when opening a dialog.
+  void ResetEventWaiterForDialogOpened();
   // Wait for the event(s) passed to ResetEventWaiter*() to occur.
   void WaitForObservedEvent();
 

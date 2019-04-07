@@ -161,6 +161,9 @@ message UserEventSpecifics {
       BACKUP_AND_RESTORE = 3;
       GOOGLE_LOCATION_SERVICE = 4;
       CHROME_UNIFIED_CONSENT = 5;
+      // TODO(markusheintz): ASSISTANT_ACTIVITY_CONTROL was only added as
+      // emergency fallback. Remove if not needed.
+      ASSISTANT_ACTIVITY_CONTROL = 6;
     }
     optional Feature feature = 1 [deprecated = true];
     // Ids of the strings of the consent text presented to the user.
@@ -238,7 +241,7 @@ message UserEventSpecifics {
     // Phishing or a Low-reputation site.
     optional PasswordReuseLookup reuse_lookup = 2;
 
-    // Logged when the user interacts with the dialog shown to encourage
+    // Logged when the user interacts with the warning UI shown to encourage
     // password change if the site is Phishing or Low-reputation.
     message PasswordReuseDialogInteraction {
       enum InteractionResult {
@@ -250,11 +253,15 @@ message UserEventSpecifics {
         // The warning UI was ignored, i.e. not interacted with by the user.
         // This could happen if the user navigates away from the page.
         WARNING_UI_IGNORED = 3;
+        // The user clicked "Change Password" on chrome://settings page.
+        WARNING_ACTION_TAKEN_ON_SETTINGS = 4;
       }
       optional InteractionResult interaction_result = 1;
     }
     optional PasswordReuseDialogInteraction dialog_interaction = 3;
 
+    // TODO(markusheintz): Remove
+    // DEPRECATED: DO NOT USE!
     // Logged when the user logs into Google, and at least once per 28d.
     message PasswordCaptured {
       enum EventTrigger {
@@ -269,6 +276,18 @@ message UserEventSpecifics {
     optional PasswordCaptured password_captured = 4;
   }
 
+  // Logged when the user logs into Google, and at least once per 28d.
+  message GaiaPasswordCaptured {
+    enum EventTrigger {
+      UNSPECIFIED = 0;
+      // Event added because user logged in.
+      USER_LOGGED_IN = 1;
+      // Event added because 28d timer fired.
+      EXPIRED_28D_TIMER = 2;
+    }
+    optional EventTrigger event_trigger = 1;
+  }
+
   oneof event {
     Test test_event = 8;
     FieldTrial field_trial_event = 9;
@@ -277,5 +296,6 @@ message UserEventSpecifics {
     UserConsent user_consent = 12;
     // Happens when a user types their Google account password on another site.
     GaiaPasswordReuse gaia_password_reuse_event = 104;
+    GaiaPasswordCaptured gaia_password_captured_event = 15;
   }
 }

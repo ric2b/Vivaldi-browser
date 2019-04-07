@@ -51,12 +51,13 @@ void EasyUnlockGetKeysOperation::OnCryptohomeAvailable(bool available) {
 }
 
 void EasyUnlockGetKeysOperation::GetKeyData() {
-  const cryptohome::Identification id(user_context_.GetAccountId());
   cryptohome::GetKeyDataRequest request;
   request.mutable_key()->mutable_data()->set_label(
       EasyUnlockKeyManager::GetKeyLabel(key_index_));
   DBusThreadManager::Get()->GetCryptohomeClient()->GetKeyDataEx(
-      id, cryptohome::AuthorizationRequest(), request,
+      cryptohome::CreateAccountIdentifierFromAccountId(
+          user_context_.GetAccountId()),
+      cryptohome::AuthorizationRequest(), request,
       base::BindOnce(&EasyUnlockGetKeysOperation::OnGetKeyData,
                      weak_ptr_factory_.GetWeakPtr()));
 }
@@ -72,6 +73,17 @@ void EasyUnlockGetKeysOperation::OnGetKeyData(
     // Other error codes are treated as failures.
     if (return_code == cryptohome::MOUNT_ERROR_NONE ||
         return_code == cryptohome::MOUNT_ERROR_KEY_FAILURE) {
+      // Prior to the introduction of the |unlock_key| field, only one
+      // EasyUnlockDeviceKeyData was peristed, and implicitly assumed to be the
+      // unlock key. Now, multiple EasyUnlockDeviceKeyData objects are
+      // persisted, and this deserializing logic cannot assume that a given
+      // object is the unlock key. To handle the case of migrating from the old
+      // paradigm of a single persisted EasyUnlockDeviceKeyData, the
+      // |unlock_key| field is defaulted to true if only a single device entry
+      // exists, in order to correctly mark that old entry as the unlock key.
+      if (devices_.size() == 1)
+        devices_[0].unlock_key = true;
+
       callback_.Run(true, devices_);
       return;
     }

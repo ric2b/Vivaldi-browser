@@ -137,7 +137,7 @@ class FakeSyncServiceObserverList {
   }
 
  private:
-  base::ObserverList<syncer::SyncServiceObserver, true> observers_;
+  base::ObserverList<syncer::SyncServiceObserver, true>::Unchecked observers_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeSyncServiceObserverList);
 };
@@ -202,8 +202,8 @@ class RecentTabsSubMenuModelTest
     EXPECT_CALL(*mock_sync_service_, GetDisableReasons())
         .WillRepeatedly(
             Return(syncer::SyncService::DISABLE_REASON_USER_CHOICE));
-    EXPECT_CALL(*mock_sync_service_, GetState())
-        .WillRepeatedly(Return(syncer::SyncService::State::DISABLED));
+    EXPECT_CALL(*mock_sync_service_, GetTransportState())
+        .WillRepeatedly(Return(syncer::SyncService::TransportState::DISABLED));
     EXPECT_CALL(*mock_sync_service_, IsDataTypeControllerRunning(_))
         .WillRepeatedly(Return(false));
     EXPECT_CALL(*mock_sync_service_, GetOpenTabsUIDelegateMock())
@@ -213,8 +213,10 @@ class RecentTabsSubMenuModelTest
   void EnableSync() {
     EXPECT_CALL(*mock_sync_service_, GetDisableReasons())
         .WillRepeatedly(Return(syncer::SyncService::DISABLE_REASON_NONE));
-    EXPECT_CALL(*mock_sync_service_, GetState())
-        .WillRepeatedly(Return(syncer::SyncService::State::ACTIVE));
+    EXPECT_CALL(*mock_sync_service_, GetTransportState())
+        .WillRepeatedly(Return(syncer::SyncService::TransportState::ACTIVE));
+    EXPECT_CALL(*mock_sync_service_, IsFirstSetupComplete())
+        .WillRepeatedly(Return(true));
     EXPECT_CALL(*mock_sync_service_,
                 IsDataTypeControllerRunning(syncer::SESSIONS))
         .WillRepeatedly(Return(true));

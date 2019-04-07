@@ -100,7 +100,7 @@ base::Closure GpuMemoryBufferImplIOSurface::AllocateForTesting(
 
 bool GpuMemoryBufferImplIOSurface::Map() {
   DCHECK(!mapped_);
-  IOReturn status = IOSurfaceLock(io_surface_, lock_flags_, NULL);
+  IOReturn status = IOSurfaceLock(io_surface_, lock_flags_, nullptr);
   DCHECK_NE(status, kIOReturnCannotLock);
   mapped_ = true;
   return true;
@@ -114,7 +114,7 @@ void* GpuMemoryBufferImplIOSurface::memory(size_t plane) {
 
 void GpuMemoryBufferImplIOSurface::Unmap() {
   DCHECK(mapped_);
-  IOSurfaceUnlock(io_surface_, lock_flags_, NULL);
+  IOSurfaceUnlock(io_surface_, lock_flags_, nullptr);
   mapped_ = false;
 }
 
@@ -131,10 +131,15 @@ void GpuMemoryBufferImplIOSurface::SetColorSpace(
   IOSurfaceSetColorSpace(io_surface_, color_space);
 }
 
-gfx::GpuMemoryBufferHandle GpuMemoryBufferImplIOSurface::GetHandle() const {
+gfx::GpuMemoryBufferType GpuMemoryBufferImplIOSurface::GetType() const {
+  return gfx::IO_SURFACE_BUFFER;
+}
+
+gfx::GpuMemoryBufferHandle GpuMemoryBufferImplIOSurface::CloneHandle() const {
   gfx::GpuMemoryBufferHandle handle;
   handle.type = gfx::IO_SURFACE_BUFFER;
   handle.id = id_;
+  handle.mach_port.reset(IOSurfaceCreateMachPort(io_surface_));
   return handle;
 }
 

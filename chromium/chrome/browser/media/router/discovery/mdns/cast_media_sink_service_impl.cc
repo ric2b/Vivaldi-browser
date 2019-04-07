@@ -8,14 +8,17 @@
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/default_clock.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/media/router/discovery/mdns/media_sink_util.h"
 #include "chrome/browser/media/router/media_router_feature.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/common/media_router/discovery/media_sink_internal.h"
 #include "chrome/common/media_router/media_sink.h"
 #include "components/cast_channel/cast_channel_enum.h"
 #include "components/cast_channel/cast_socket_service.h"
 #include "components/cast_channel/logger.h"
 #include "components/net_log/chrome_net_log.h"
+#include "content/public/browser/browser_thread.h"
 #include "net/base/backoff_entry.h"
 #include "net/base/net_errors.h"
 
@@ -183,6 +186,16 @@ MediaSink::Id CastMediaSinkServiceImpl::GetCastSinkIdFromDial(
 
   // Replace the "dial:" prefix with "cast:".
   return "cast:" + dial_sink_id.substr(5);
+}
+
+// static
+MediaSink::Id CastMediaSinkServiceImpl::GetDialSinkIdFromCast(
+    const MediaSink::Id& cast_sink_id) {
+  DCHECK_EQ("cast:", cast_sink_id.substr(0, 5))
+      << "unexpected Cast sink id " << cast_sink_id;
+
+  // Replace the "cast:" prefix with "dial:".
+  return "dial:" + cast_sink_id.substr(5);
 }
 
 CastMediaSinkServiceImpl::CastMediaSinkServiceImpl(
@@ -440,7 +453,7 @@ CastMediaSinkServiceImpl::CreateCastSocketOpenParams(
   // TODO(crbug.com/814419): Switching cast socket implementation to use network
   // service will allow us to get back NetLog.
   return cast_channel::CastSocketOpenParams(
-      sink.cast_data().ip_endpoint, nullptr,
+      sink.cast_data().ip_endpoint,
       base::TimeDelta::FromSeconds(connect_timeout_in_seconds),
       base::TimeDelta::FromSeconds(liveness_timeout_in_seconds),
       base::TimeDelta::FromSeconds(open_params_.ping_interval_in_seconds),
@@ -507,6 +520,11 @@ void CastMediaSinkServiceImpl::OpenChannel(
   cast_channel::CastSocketOpenParams open_params =
       CreateCastSocketOpenParams(cast_sink);
   cast_socket_service_->OpenSocket(
+      base::BindRepeating([] {
+        DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+        return g_browser_process->system_network_context_manager()
+            ->GetContext();
+      }),
       open_params,
       base::BindOnce(&CastMediaSinkServiceImpl::OnChannelOpened, GetWeakPtr(),
                      cast_sink, std::move(backoff_entry), sink_source,
@@ -632,6 +650,13 @@ void CastMediaSinkServiceImpl::OnChannelOpenSucceeded(
 
   if (old_sink_it != sinks.end())
     RemoveSink(old_sink_it->second);
+
+  // Certain classes of Cast sinks support advertising via SSDP but do not
+  // properly implement the rest of the DIAL protocol. If we successfully open
+  // a Cast channel to a device that came from DIAL, remove it from
+  // |dial_media_sink_service_|. This ensures the device shows up as a Cast sink
+  // only.
+  dial_media_sink_service_->RemoveSinkById(GetDialSinkIdFromCast(sink_id));
 }
 
 void CastMediaSinkServiceImpl::OnChannelOpenFailed(
@@ -674,6 +699,9 @@ void CastMediaSinkServiceImpl::TryConnectDialDiscoveredSink(
     DVLOG(2) << "Sink discovered by mDNS, skip adding [name]: "
              << sink.sink().name();
     metrics_.RecordCastSinkDiscoverySource(SinkSource::kMdnsDial);
+    // Sink is a Cast device; remove from |dial_media_sink_service_| to prevent
+    // duplicates.
+    dial_media_sink_service_->RemoveSink(dial_sink);
     return;
   }
 

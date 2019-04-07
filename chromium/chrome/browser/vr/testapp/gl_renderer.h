@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/vr/base_compositor_delegate.h"
 #include "ui/gfx/swap_result.h"
 
 namespace gl {
@@ -19,20 +20,46 @@ namespace vr {
 class VrTestContext;
 
 // This class manages an OpenGL context and initiates per-frame rendering.
-class GlRenderer {
+class GlRenderer : public BaseCompositorDelegate {
  public:
-  GlRenderer(const scoped_refptr<gl::GLSurface>& surface,
-             vr::VrTestContext* vr);
+  GlRenderer();
+  ~GlRenderer() override;
 
-  virtual ~GlRenderer();
+  // CompositorDelegate implementation.
+  bool Initialize(const scoped_refptr<gl::GLSurface>& surface) override;
+  FovRectangles GetRecommendedFovs() override;
+  float GetZNear() override;
+  RenderInfo GetRenderInfo(FrameType frame_type) override;
+  RenderInfo GetOptimizedRenderInfoForFovs(const FovRectangles& fovs) override;
+  void InitializeBuffers() override;
+  void PrepareBufferForWebXr() override;
+  void PrepareBufferForWebXrOverlayElements() override;
+  void PrepareBufferForContentQuadLayer(
+      const gfx::Transform& quad_transform) override;
+  void PrepareBufferForBrowserUi() override;
+  void OnFinishedDrawingBuffer() override;
+  void GetWebXrDrawParams(int* texture_id, Transform* uv_transform) override;
+  bool IsContentQuadReady() override;
+  void ResumeContentRendering() override;
+  void BufferBoundsChanged(const gfx::Size& content_buffer_size,
+                           const gfx::Size& overlay_buffer_size) override;
+  void GetContentQuadDrawParams(Transform* uv_transform,
+                                float* border_x,
+                                float* border_y) override;
+  void SubmitFrame(FrameType frame_type) override;
+  void SetUiInterface(CompositorUiInterface* ui) override;
+  void SetShowingVrDialog(bool showing) override;
+  int GetContentBufferWidth() override;
+  void ConnectPresentingService(
+      device::mojom::VRDisplayInfoPtr display_info,
+      device::mojom::XRRuntimeSessionOptionsPtr options) override;
 
-  bool Initialize();
   void RenderFrame();
-  void PostRenderFrameTask(gfx::SwapResult result);
+  void PostRenderFrameTask();
+  void set_vr_context(VrTestContext* vr_context) { vr_context_ = vr_context; }
 
  private:
-  scoped_refptr<gl::GLSurface> surface_;
-  vr::VrTestContext* vr_;
+  VrTestContext* vr_context_;
 
   base::WeakPtrFactory<GlRenderer> weak_ptr_factory_;
 

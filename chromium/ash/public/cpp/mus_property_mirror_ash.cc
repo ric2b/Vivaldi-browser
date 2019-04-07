@@ -31,7 +31,10 @@ void MusPropertyMirrorAsh::MirrorPropertyFromWidgetWindowToRootWindow(
     aura::Window* window,
     aura::Window* root_window,
     const void* key) {
-  if (key == kBlockedForAssistantSnapshotKey) {
+  if (key == aura::client::kAppType) {
+    root_window->SetProperty(aura::client::kAppType,
+                             window->GetProperty(aura::client::kAppType));
+  } else if (key == kBlockedForAssistantSnapshotKey) {
     root_window->SetProperty(
         kBlockedForAssistantSnapshotKey,
         window->GetProperty(kBlockedForAssistantSnapshotKey));
@@ -96,6 +99,10 @@ void MusPropertyMirrorAsh::MirrorPropertyFromWidgetWindowToRootWindow(
   } else if (key == kFrameTextColorKey) {
     root_window->SetProperty(kFrameTextColorKey,
                              window->GetProperty(kFrameTextColorKey));
+  } else if (key == kHideCaptionButtonsInTabletModeKey) {
+    root_window->SetProperty(
+        kHideCaptionButtonsInTabletModeKey,
+        window->GetProperty(kHideCaptionButtonsInTabletModeKey));
   }
 }
 

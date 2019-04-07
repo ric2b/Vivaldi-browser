@@ -7,11 +7,8 @@
 #include <string>
 
 #include "base/feature_list.h"
-#include "services/service_manager/sandbox/switches.h"
-
-#if defined(OS_WIN)
 #include "services/service_manager/sandbox/features.h"
-#endif
+#include "services/service_manager/sandbox/switches.h"
 
 namespace service_manager {
 
@@ -24,16 +21,14 @@ bool IsUnsandboxedSandboxType(SandboxType sandbox_type) {
       return true;
 #endif
     case SANDBOX_TYPE_AUDIO:
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
       return !base::FeatureList::IsEnabled(
           service_manager::features::kAudioServiceSandbox);
 #else
       return true;
 #endif
     case SANDBOX_TYPE_NETWORK:
-#if defined(OS_LINUX)
-      return false;
-#elif defined(OS_WIN)
+#if defined(OS_WIN)
       return !base::FeatureList::IsEnabled(
           service_manager::features::kNetworkServiceWindowsSandbox);
 #else

@@ -10,7 +10,7 @@ import "services/network/public/mojom/url_loader.mojom";
 const uint32 kURLLoadOptionNone = 0;
 // Sends the net::SSLInfo struct in OnReceiveResponse.
 const uint32 kURLLoadOptionSendSSLInfoWithResponse = 1;
-// Enables mime sniffing. NOTE: this is only used with the network service.
+// Enables mime sniffing.
 const uint32 kURLLoadOptionSniffMimeType = 2;
 // Indicates that execution is blocking on the completion of the request.
 const uint32 kURLLoadOptionSynchronous = 4;
@@ -24,7 +24,7 @@ const uint32 kURLLoadOptionSendSSLInfoForCertificateError = 8;
 const uint32 kURLLoadOptionPauseOnResponseStarted = 16;
 
 interface URLLoaderFactory {
-  // Creats a URLLoader and starts loading with the given |request|. |client|'s
+  // Creates a URLLoader and starts loading with the given |request|. |client|'s
   // method will be called when certain events related to that loading
   // (e.g., response arrival) happen.
   // |routing_id| is the routing_id for subframe requests, and is the

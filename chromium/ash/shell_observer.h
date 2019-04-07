@@ -28,9 +28,6 @@ class ASH_EXPORT ShellObserver {
   // Invoked after a non-primary root window is created.
   virtual void OnRootWindowAdded(aura::Window* root_window) {}
 
-  // Invoked after the shelf has been created for |root_window|.
-  virtual void OnShelfCreatedForRootWindow(aura::Window* root_window) {}
-
   // Invoked when the shelf alignment in |root_window| is changed.
   virtual void OnShelfAlignmentChanged(aura::Window* root_window) {}
 
@@ -55,7 +52,11 @@ class ASH_EXPORT ShellObserver {
   // Called after overview mode has ended.
   virtual void OnOverviewModeEnded() {}
 
-  // Called when the split view mode is about to be started (before the window
+  // Called after the animations that happen when overview mode is ended are
+  // complete.
+  virtual void OnOverviewModeEndingAnimationComplete() {}
+
+  // Called when the split view mode is about to be started before the window
   // gets snapped and activated).
   virtual void OnSplitViewModeStarting() {}
 

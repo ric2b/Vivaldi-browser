@@ -181,7 +181,7 @@ public class OmniboxTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable(){
             @Override
             public void run() {
-                urlBar.setUrl(UrlBarData.forUrl("http://www.example.com/"));
+                urlBar.setText("http://www.example.com/");
             }
         });
 
@@ -771,9 +771,15 @@ public class OmniboxTest {
                     securityButton.getId());
 
             if (mActivityTestRule.getActivity().isTablet()) {
-                Assert.assertTrue(locationBarLayout.shouldEmphasizeHttpsScheme());
+                Assert.assertTrue(mActivityTestRule.getActivity()
+                                          .getToolbarManager()
+                                          .getToolbarModelForTesting()
+                                          .shouldEmphasizeHttpsScheme());
             } else {
-                Assert.assertFalse(locationBarLayout.shouldEmphasizeHttpsScheme());
+                Assert.assertFalse(mActivityTestRule.getActivity()
+                                           .getToolbarManager()
+                                           .getToolbarModelForTesting()
+                                           .shouldEmphasizeHttpsScheme());
             }
         } finally {
             testServer.stopAndDestroyServer();

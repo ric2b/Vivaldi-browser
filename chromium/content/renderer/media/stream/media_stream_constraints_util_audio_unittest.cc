@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/message_loop/message_loop.h"
-#include "content/common/media/media_stream_controls.h"
 #include "content/renderer/media/stream/local_media_stream_audio_source.h"
 #include "content/renderer/media/stream/media_stream_audio_source.h"
 #include "content/renderer/media/stream/media_stream_source.h"
@@ -137,8 +136,8 @@ class MediaStreamConstraintsUtilAudioTest
     if (media_source.empty())
       return MEDIA_DEVICE_AUDIO_CAPTURE;
     else if (media_source == kMediaStreamSourceTab)
-      return MEDIA_TAB_AUDIO_CAPTURE;
-    return MEDIA_DESKTOP_AUDIO_CAPTURE;
+      return MEDIA_GUM_TAB_AUDIO_CAPTURE;
+    return MEDIA_GUM_DESKTOP_AUDIO_CAPTURE;
   }
 
   std::unique_ptr<ProcessedLocalAudioSource> GetProcessedLocalAudioSource(
@@ -492,12 +491,10 @@ TEST_P(MediaStreamConstraintsUtilAudioTest, Unconstrained) {
 // echo cancellation constraints, which are not mapped 1:1 to output audio
 // processing properties).
 TEST_P(MediaStreamConstraintsUtilAudioTest, SingleBoolConstraint) {
-  // TODO(crbug.com/736309): Use braced initialization instead of push_back once
-  // clang has been fixed.
-  AudioSettingsBoolMembers kMainSettings;
-  kMainSettings.push_back(&AudioCaptureSettings::hotword_enabled);
-  kMainSettings.push_back(&AudioCaptureSettings::disable_local_echo);
-  kMainSettings.push_back(&AudioCaptureSettings::render_to_associated_sink);
+  AudioSettingsBoolMembers kMainSettings = {
+      &AudioCaptureSettings::hotword_enabled,
+      &AudioCaptureSettings::disable_local_echo,
+      &AudioCaptureSettings::render_to_associated_sink};
 
   const std::vector<
       blink::BooleanConstraint blink::WebMediaTrackConstraintSet::*>

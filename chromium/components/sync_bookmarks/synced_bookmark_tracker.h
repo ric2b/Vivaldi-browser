@@ -47,8 +47,12 @@ class SyncedBookmarkTracker {
     // A commit may or may not be in progress at this time.
     bool IsUnsynced() const;
 
-    // Check whether |data| matches the stored specifics hash.
-    bool MatchesData(const syncer::EntityData& data) const;
+    // Check whether |data| matches the stored specifics hash. It ignores parent
+    // information.
+    bool MatchesDataIgnoringParent(const syncer::EntityData& data) const;
+
+    // Check whether |specifics| matches the stored specifics_hash.
+    bool MatchesSpecificsHash(const sync_pb::EntitySpecifics& specifics) const;
 
     // Returns null for tomstones.
     const bookmarks::BookmarkNode* bookmark_node() const {
@@ -62,9 +66,6 @@ class SyncedBookmarkTracker {
     sync_pb::EntityMetadata* metadata() { return metadata_.get(); }
 
    private:
-    // Check whether |specifics| matches the stored specifics_hash.
-    bool MatchesSpecificsHash(const sync_pb::EntitySpecifics& specifics) const;
-
     // Null for tombstones.
     const bookmarks::BookmarkNode* bookmark_node_;
 
@@ -104,6 +105,9 @@ class SyncedBookmarkTracker {
               base::Time modification_time,
               const sync_pb::UniquePosition& unique_position,
               const sync_pb::EntitySpecifics& specifics);
+
+  // Updates the server version of an existing entry for the |sync_id|.
+  void UpdateServerVersion(const std::string& sync_id, int64_t server_version);
 
   // This class maintains the order of calls to this method and the same order
   // is gauaranteed when returning local changes in
@@ -145,10 +149,29 @@ class SyncedBookmarkTracker {
                                 int64_t acked_sequence_number,
                                 int64_t server_version);
 
+  // Set the value of |EntityMetadata.acked_sequence_number| in the entity with
+  // |sync_id| to be equal to |EntityMetadata.sequence_number| such that it is
+  // not returned in GetEntitiesWithLocalChanges().
+  void AckSequenceNumber(const std::string& sync_id);
+
+  // Whether the tracker is empty or not.
+  bool IsEmpty() const;
+
   // Returns number of tracked entities. Used only in test.
   std::size_t TrackedEntitiesCountForTest() const;
 
  private:
+  // Reorders |entities| that represents local non-deletions such that parent
+  // creation/update is before child creation/update. Returns the ordered list.
+  std::vector<const Entity*> ReorderUnsyncedEntitiesExceptDeletions(
+      const std::vector<const Entity*>& entities) const;
+
+  // Recursive method that starting from |node| appends all corresponding
+  // entities with updates in top-down order to |ordered_entities|.
+  void TraverseAndAppend(const bookmarks::BookmarkNode* node,
+                         std::vector<const SyncedBookmarkTracker::Entity*>*
+                             ordered_entities) const;
+
   // A map of sync server ids to sync entities. This should contain entries and
   // metadata for almost everything.
   std::map<std::string, std::unique_ptr<Entity>> sync_id_to_entities_map_;

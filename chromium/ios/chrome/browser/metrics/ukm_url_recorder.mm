@@ -134,13 +134,20 @@ void SourceUrlRecorderWebStateObserver::MaybeRecordUrl(
   if (!ukm_recorder)
     return;
 
-  const SourceId source_id = ConvertToSourceId(
-      navigation_context->GetNavigationId(), SourceIdType::NAVIGATION_ID);
-  ukm_recorder->UpdateNavigationURL(source_id, initial_url);
-
   const GURL& final_url = navigation_context->GetUrl();
+
+  UkmSource::NavigationData navigation_data;
+  // TODO(crbug.com/869123): This check isn't quite correct, as self redirecting
+  // is possible. This may also be changed to include the entire redirect chain.
   if (final_url != initial_url)
-    ukm_recorder->UpdateNavigationURL(source_id, final_url);
+    navigation_data.urls = {initial_url};
+  navigation_data.urls.push_back(final_url);
+
+  // TODO(crbug.com/873316): Fill out the other fields in NavigationData.
+
+  const ukm::SourceId source_id = ukm::ConvertToSourceId(
+      navigation_context->GetNavigationId(), ukm::SourceIdType::NAVIGATION_ID);
+  ukm_recorder->RecordNavigation(source_id, navigation_data);
 }
 
 }  // namespace internal

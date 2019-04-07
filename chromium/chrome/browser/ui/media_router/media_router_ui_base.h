@@ -126,6 +126,9 @@ class MediaRouterUIBase
   // Opens a file picker for when the user selected local file casting.
   void OpenFileDialog();
 
+  // Closes the Media Router dialog.
+  virtual void Close() = 0;
+
   const std::vector<MediaRoute>& routes() const { return routes_; }
   content::WebContents* initiator() const { return initiator_; }
 
@@ -146,6 +149,12 @@ class MediaRouterUIBase
     int id;
     MediaSink::Id sink_id;
   };
+
+  static void RunRouteResponseCallbacks(
+      MediaRouteResponseCallback presentation_callback,
+      std::vector<MediaRouteResultCallback> callbacks,
+      mojom::RoutePresentationConnectionPtr connection,
+      const RouteRequestResult& result);
 
   std::vector<MediaSource> GetSourcesForCastMode(MediaCastMode cast_mode) const;
 

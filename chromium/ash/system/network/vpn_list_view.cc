@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "ash/metrics/user_metrics_recorder.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -54,17 +55,19 @@ struct CompareArcVPNProviderByLastLaunchTime {
 // Indicates whether |network| belongs to this VPN provider.
 bool VpnProviderMatchesNetwork(const VPNProvider& provider,
                                const chromeos::NetworkState& network) {
-  // Never display non-VPN networks or ARC VPNs.
-  if (network.type() != shill::kTypeVPN)
+  const chromeos::NetworkState::VpnProviderInfo* network_vpn_provider =
+      network.vpn_provider();
+  // Never display non-VPN networks or VPNs with no provider info.
+  if (network.type() != shill::kTypeVPN || !network_vpn_provider)
     return false;
 
   // Package name is the vpn provider id for ArcVPNProvider in network state.
-  if (network.vpn_provider_type() == shill::kProviderArcVpn) {
+  if (network_vpn_provider->type == shill::kProviderArcVpn) {
     return provider.provider_type == VPNProvider::ARC_VPN &&
-           network.vpn_provider_id() == provider.package_name;
-  } else if (network.vpn_provider_type() == shill::kProviderThirdPartyVpn) {
+           network_vpn_provider->id == provider.package_name;
+  } else if (network_vpn_provider->type == shill::kProviderThirdPartyVpn) {
     return provider.provider_type == VPNProvider::THIRD_PARTY_VPN &&
-           network.vpn_provider_id() == provider.app_id;
+           network_vpn_provider->id == provider.app_id;
   } else {
     return provider.provider_type == VPNProvider::BUILT_IN_VPN;
   }
@@ -80,7 +83,12 @@ class VPNListProviderEntry : public views::ButtonListener, public views::View {
       : vpn_provider_(vpn_provider) {
     TrayPopupUtils::ConfigureAsStickyHeader(this);
     SetLayoutManager(std::make_unique<views::FillLayout>());
-    TriView* tri_view = TrayPopupUtils::CreateSubHeaderRowView(false);
+    bool show_spacing = features::IsSystemTrayUnifiedEnabled();
+    TriView* tri_view = TrayPopupUtils::CreateSubHeaderRowView(show_spacing);
+    if (show_spacing) {
+      tri_view->AddView(TriView::Container::START,
+                        TrayPopupUtils::CreateMainImageView());
+    }
     AddChildView(tri_view);
 
     views::Label* label = TrayPopupUtils::CreateDefaultLabel();
@@ -362,7 +370,7 @@ void VPNListView::AddProvidersAndNetworks(
   for (const chromeos::NetworkState* const& network : networks) {
     if (!network->IsConnectingOrConnected())
       break;
-    if (network->vpn_provider_type() != shill::kProviderArcVpn)
+    if (network->GetVpnProviderType() != shill::kProviderArcVpn)
       continue;
 
     bool found_provider = false;

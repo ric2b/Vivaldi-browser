@@ -117,7 +117,7 @@ public class DownloadItemView extends SelectableItemView<DownloadHistoryItemWrap
                 context.getResources().getDimensionPixelSize(R.dimen.list_item_subsection_margin);
         mIconBackgroundColor = DownloadUtils.getIconBackgroundColor(context);
         mIconBackgroundColorSelected =
-                ApiCompatibilityUtils.getColor(context.getResources(), R.color.google_grey_600);
+                ApiCompatibilityUtils.getColor(context.getResources(), R.color.modern_grey_600);
         mIconSize = getResources().getDimensionPixelSize(R.dimen.list_item_start_icon_width);
         mCheckedIconForegroundColorList = DownloadUtils.getIconForegroundColorList(context);
 
@@ -246,7 +246,7 @@ public class DownloadItemView extends SelectableItemView<DownloadHistoryItemWrap
         int fileType = item.getFilterType();
 
         // Pick what icon to display for the item.
-        mIconResId = DownloadUtils.getIconResId(fileType, DownloadUtils.ICON_SIZE_24_DP);
+        mIconResId = DownloadUtils.getIconResId(fileType, DownloadUtils.IconSize.DP_24);
 
         // Request a thumbnail for the file to be sent to the ThumbnailCallback. This will happen
         // immediately if the thumbnail is cached or asynchronously if it has to be fetched from a

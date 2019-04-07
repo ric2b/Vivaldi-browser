@@ -5,85 +5,60 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_BOOKMARK_APPS_POLICY_WEB_APP_POLICY_MANAGER_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_BOOKMARK_APPS_POLICY_WEB_APP_POLICY_MANAGER_H_
 
-#include <memory>
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
+#include "chrome/browser/web_applications/components/pending_app_manager.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "url/gurl.h"
 
 class PrefService;
-class GURL;
+class Profile;
+
+namespace user_prefs {
+class PrefRegistrySyncable;
+}
 
 namespace web_app {
 
 // Tracks the policy that affects Web Apps and also tracks which Web Apps are
-// currently installed based on this policy. Based on these, it decides
-// which apps need to be installed, uninstalled, and updated. It uses
-// WebAppPolicyManager::PendingAppManager to actually install, uninstall,
-// and update apps.
+// currently installed based on this policy. Based on these, it decides which
+// apps to install, uninstall, and update, via a PendingAppManager.
 class WebAppPolicyManager {
  public:
-  class PendingAppManager;
-
-  // How the app will be launched after installation.
-  enum class LaunchContainer {
-    kTab,
-    kWindow,
-  };
-
-  struct AppInfo {
-    AppInfo(GURL url, LaunchContainer launch_container);
-    AppInfo(AppInfo&& other);
-    ~AppInfo();
-
-    bool operator==(const AppInfo& other) const;
-
-    GURL url;
-    LaunchContainer launch_container;
-
-    DISALLOW_COPY_AND_ASSIGN(AppInfo);
-  };
-
   // Constructs a WebAppPolicyManager instance that uses
-  // extensions::PendingBookmarkAppManager to manage apps.
-  explicit WebAppPolicyManager(PrefService* pref_service);
-
-  // Constructs a WebAppPolicyManager instance that uses |pending_app_manager|
-  // to manage apps.
-  explicit WebAppPolicyManager(
-      PrefService* pref_service,
-      std::unique_ptr<PendingAppManager> pending_app_manager);
-
+  // |pending_app_manager| to manage apps. |pending_app_manager| should outlive
+  // this class.
+  explicit WebAppPolicyManager(Profile* profile,
+                               PendingAppManager* pending_app_manager);
   ~WebAppPolicyManager();
 
-  const PendingAppManager& pending_app_manager() {
-    return *pending_app_manager_;
-  }
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
+  static bool ShouldEnableForProfile(Profile* profile);
 
  private:
-  std::vector<AppInfo> GetAppsToInstall();
+  void InitChangeRegistrarAndRefreshPolicyInstalledApps();
 
+  void RefreshPolicyInstalledApps();
+
+  Profile* profile_;
   PrefService* pref_service_;
-  std::unique_ptr<PendingAppManager> pending_app_manager_;
+
+  // Used to install, uninstall, and update apps. Should outlive this class.
+  PendingAppManager* pending_app_manager_;
+
+  PrefChangeRegistrar pref_change_registrar_;
+
+  // URLs of the apps that this class last installed. Populated with the current
+  // policy-installed apps at start up and replaced every time this class calls
+  // PendingAppManager::InstallApps().
+  std::vector<GURL> last_app_urls_;
+
+  base::WeakPtrFactory<WebAppPolicyManager> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(WebAppPolicyManager);
-};
-
-// Used by WebAppPolicyManager to install, uninstall, and update apps.
-//
-// Implementations of this class should perform each set of operations serially
-// in the order in which they arrive. For example, if an uninstall request gets
-// queued while an update request for the same app is pending, implementations
-// should wait for the update request to finish before uninstalling the app.
-class WebAppPolicyManager::PendingAppManager {
- public:
-  PendingAppManager();
-  virtual ~PendingAppManager();
-
-  // Starts the installation of |apps_to_install|.
-  virtual void ProcessAppOperations(std::vector<AppInfo> apps_to_install) = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(PendingAppManager);
 };
 
 }  // namespace web_app

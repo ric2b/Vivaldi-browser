@@ -58,11 +58,11 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/main_thread_debugger.h"
+#include "third_party/blink/renderer/core/origin_trials/origin_trials.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/script/modulator.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
-#include "third_party/blink/renderer/platform/bindings/script_wrappable_marking_visitor.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_context_data.h"
 #include "third_party/blink/renderer/platform/bindings/v8_private_property.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
@@ -73,6 +73,7 @@
 #include "third_party/blink/renderer/platform/weborigin/security_violation_reporting_policy.h"
 #include "third_party/blink/renderer/platform/wtf/address_sanitizer.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
+#include "third_party/blink/renderer/platform/wtf/stack_util.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/typed_arrays/array_buffer_contents.h"
 #include "v8/include/v8-profiler.h"
@@ -505,6 +506,14 @@ static bool WasmCodeGenerationCheckCallbackInMainThread(
   return false;
 }
 
+static bool WasmThreadsEnabledCallback(v8::Local<v8::Context> context) {
+  ExecutionContext* execution_context = ToExecutionContext(context);
+  if (!execution_context)
+    return false;
+
+  return OriginTrials::WebAssemblyThreadsEnabled(execution_context);
+}
+
 v8::Local<v8::Value> NewRangeException(v8::Isolate* isolate,
                                        const char* message) {
   return v8::Exception::RangeError(
@@ -552,8 +561,7 @@ static bool WasmInstanceOverride(
 
   v8::Local<v8::WasmCompiledModule> module =
       v8::Local<v8::WasmCompiledModule>::Cast(source);
-  if (static_cast<size_t>(module->GetWasmWireBytes()->Length()) >
-      kWasmWireBytesLimit) {
+  if (module->GetWasmWireBytesRef().size > kWasmWireBytesLimit) {
     ThrowRangeException(
         args.GetIsolate(),
         "WebAssembly.Instance is disallowed on the main thread, "
@@ -623,10 +631,7 @@ static void HostGetImportMetaProperties(v8::Local<v8::Context> context,
 static void InitializeV8Common(v8::Isolate* isolate) {
   isolate->AddGCPrologueCallback(V8GCController::GcPrologue);
   isolate->AddGCEpilogueCallback(V8GCController::GcEpilogue);
-  std::unique_ptr<ScriptWrappableMarkingVisitor> visitor(
-      new ScriptWrappableMarkingVisitor(isolate));
-  V8PerIsolateData::From(isolate)->SetScriptWrappableMarkingVisitor(
-      std::move(visitor));
+
   isolate->SetEmbedderHeapTracer(
       V8PerIsolateData::From(isolate)->GetScriptWrappableMarkingVisitor());
 
@@ -635,6 +640,7 @@ static void InitializeV8Common(v8::Isolate* isolate) {
   isolate->SetUseCounterCallback(&UseCounterCallback);
   isolate->SetWasmModuleCallback(WasmModuleOverride);
   isolate->SetWasmInstanceCallback(WasmInstanceOverride);
+  isolate->SetWasmThreadsEnabledCallback(WasmThreadsEnabledCallback);
   if (RuntimeEnabledFeatures::ModuleScriptsDynamicImportEnabled()) {
     isolate->SetHostImportModuleDynamicallyCallback(
         HostImportModuleDynamically);
@@ -783,11 +789,6 @@ static void ReportFatalErrorInWorker(const char* location,
 // base/threading/platform_thread_mac.mm for details.
 static const int kWorkerMaxStackSize = 500 * 1024;
 
-// This function uses a local stack variable to determine the isolate's stack
-// limit. AddressSanitizer may relocate that local variable to a fake stack,
-// which may lead to problems during JavaScript execution.  Therefore we disable
-// AddressSanitizer for V8Initializer::initializeWorker().
-NO_SANITIZE_ADDRESS
 void V8Initializer::InitializeWorker(v8::Isolate* isolate) {
   InitializeV8Common(isolate);
 
@@ -798,9 +799,7 @@ void V8Initializer::InitializeWorker(v8::Isolate* isolate) {
           v8::Isolate::kMessageLog);
   isolate->SetFatalErrorHandler(ReportFatalErrorInWorker);
 
-  uint32_t here;
-  isolate->SetStackLimit(reinterpret_cast<uintptr_t>(&here) -
-                         kWorkerMaxStackSize);
+  isolate->SetStackLimit(WTF::GetCurrentStackPosition() - kWorkerMaxStackSize);
   isolate->SetPromiseRejectCallback(PromiseRejectHandlerInWorker);
   if (RuntimeEnabledFeatures::BloatedRendererDetectionEnabled()) {
     isolate->AddNearHeapLimitCallback(NearHeapLimitCallbackOnWorkerThread,

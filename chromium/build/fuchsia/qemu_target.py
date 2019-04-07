@@ -11,9 +11,10 @@ import os
 import platform
 import socket
 import subprocess
+import sys
 import time
 
-from common import SDK_ROOT, EnsurePathExists
+from common import GetQemuRootForPlatform, EnsurePathExists
 
 
 # Virtual networking configuration data for QEMU.
@@ -33,7 +34,7 @@ def _GetAvailableTcpPort():
 
 
 class QemuTarget(target.Target):
-  def __init__(self, output_dir, target_cpu,
+  def __init__(self, output_dir, target_cpu, cpu_cores, system_log_file,
                ram_size_mb=2048):
     """output_dir: The directory which will contain the files that are
                    generated to support the QEMU deployment.
@@ -42,6 +43,8 @@ class QemuTarget(target.Target):
     super(QemuTarget, self).__init__(output_dir, target_cpu)
     self._qemu_process = None
     self._ram_size_mb = ram_size_mb
+    self._system_log_file = system_log_file
+    self._cpu_cores = cpu_cores
 
   def __enter__(self):
     return self
@@ -49,28 +52,31 @@ class QemuTarget(target.Target):
   # Used by the context manager to ensure that QEMU is killed when the Python
   # process exits.
   def __exit__(self, exc_type, exc_val, exc_tb):
-    if self.IsStarted():
-      self.Shutdown()
+    if self._IsQemuStillRunning():
+      logging.info('Shutting down QEMU.')
+      self._qemu_process.kill()
 
   def Start(self):
-    qemu_path = os.path.join(SDK_ROOT, 'qemu', 'bin',
-                             'qemu-system-' + self._GetTargetSdkArch())
+    qemu_path = os.path.join(GetQemuRootForPlatform(), 'bin',
+                             'qemu-system-' + self._GetTargetSdkLegacyArch())
     kernel_args = boot_data.GetKernelArgs(self._output_dir)
 
     # TERM=dumb tells the guest OS to not emit ANSI commands that trigger
     # noisy ANSI spew from the user's terminal emulator.
     kernel_args.append('TERM=dumb')
 
+    # Enable logging to the serial port. This is a temporary fix to investigate
+    # the root cause for https://crbug.com/869753 .
+    kernel_args.append('kernel.serial=legacy')
+
     qemu_command = [qemu_path,
         '-m', str(self._ram_size_mb),
         '-nographic',
-        '-kernel', EnsurePathExists(
-            boot_data.GetTargetFile(self._GetTargetSdkArch(),
-                                    'zircon.bin')),
+        '-kernel', EnsurePathExists(self._GetTargetKernelPath()),
         '-initrd', EnsurePathExists(
             boot_data.GetTargetFile(self._GetTargetSdkArch(),
                                     'bootdata-blob.bin')),
-        '-smp', '4',
+        '-smp', str(self._cpu_cores),
 
         # Attach the blobstore and data volumes. Use snapshot mode to discard
         # any changes.
@@ -94,24 +100,27 @@ class QemuTarget(target.Target):
       ]
 
     # Configure the machine & CPU to emulate, based on the target architecture.
-    # Enable lightweight virtualization (KVM) if the host and guest OS run on
-    # the same architecture.
     if self._target_cpu == 'arm64':
       qemu_command.extend([
           '-machine','virt',
           '-cpu', 'cortex-a53',
       ])
       netdev_type = 'virtio-net-pci'
-      if platform.machine() == 'aarch64':
-        qemu_command.append('-enable-kvm')
     else:
       qemu_command.extend([
           '-machine', 'q35',
-          '-cpu', 'host,migratable=no',
       ])
       netdev_type = 'e1000'
-      if platform.machine() == 'x86_64':
+
+    # On Linux, enable lightweight virtualization (KVM) if the host and guest
+    # architectures are the same.
+    if sys.platform.startswith('linux'):
+      if self._target_cpu == 'arm64' and platform.machine() == 'aarch64':
         qemu_command.append('-enable-kvm')
+      elif self._target_cpu == 'x64' and platform.machine() == 'x86_64':
+        qemu_command.extend([
+            '-enable-kvm', '-cpu', 'host,migratable=no',
+        ])
 
     # Configure virtual network. It is used in the tests to connect to
     # testserver running on the host.
@@ -133,22 +142,35 @@ class QemuTarget(target.Target):
     logging.debug('Launching QEMU.')
     logging.debug(' '.join(qemu_command))
 
-    stdio_flags = {'stdin': open(os.devnull),
-                   'stdout': open(os.devnull),
-                   'stderr': open(os.devnull)}
-    self._qemu_process = subprocess.Popen(qemu_command, **stdio_flags)
+    # Zircon sends debug logs to serial port (see kernel.serial=legacy flag
+    # above). Serial port is redirected to a file through QEMU stdout.
+    # This approach is used instead of loglistener to debug
+    # https://crbug.com/86975 .
+    if self._system_log_file:
+      stdout = self._system_log_file
+      stderr = subprocess.STDOUT
+    else:
+      stdout = open(os.devnull)
+      stderr = sys.stderr
+
+    self._qemu_process = subprocess.Popen(qemu_command, stdin=open(os.devnull),
+                                          stdout=stdout, stderr=stderr)
     self._WaitUntilReady();
 
-  def Shutdown(self):
-    logging.info('Shutting down QEMU.')
-    self._qemu_process.kill()
-
-  def GetQemuStdout(self):
-    return self._qemu_process.stdout
+  def _IsQemuStillRunning(self):
+    return os.waitpid(self._qemu_process.pid, os.WNOHANG)[0] == 0
 
   def _GetEndpoint(self):
+    if not self._IsQemuStillRunning():
+      raise Exception('QEMU quit unexpectedly.')
     return ('localhost', self._host_ssh_port)
 
   def _GetSshConfigPath(self):
     return boot_data.GetSSHConfigPath(self._output_dir)
 
+  def _GetTargetKernelPath(self):
+    kernel_name = 'zircon.bin'
+    if self._GetTargetSdkArch() == 'arm64':
+      kernel_name = 'qemu-zircon.bin'
+    return boot_data.GetTargetFile(self._GetTargetSdkArch(),
+                                   kernel_name)

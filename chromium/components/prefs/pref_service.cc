@@ -92,18 +92,17 @@ void PrefService::InitFromStorage(bool async) {
     // Guarantee that initialization happens after this function returned.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&PersistentPrefStore::ReadPrefsAsync, user_pref_store_,
-                   new ReadErrorHandler(read_error_callback_)));
+        base::BindOnce(&PersistentPrefStore::ReadPrefsAsync, user_pref_store_,
+                       new ReadErrorHandler(read_error_callback_)));
   }
 }
 
-void PrefService::CommitPendingWrite() {
-  CommitPendingWrite(base::OnceClosure());
-}
-
-void PrefService::CommitPendingWrite(base::OnceClosure done_callback) {
+void PrefService::CommitPendingWrite(
+    base::OnceClosure reply_callback,
+    base::OnceClosure synchronous_done_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  user_pref_store_->CommitPendingWrite(std::move(done_callback));
+  user_pref_store_->CommitPendingWrite(std::move(reply_callback),
+                                       std::move(synchronous_done_callback));
 }
 
 void PrefService::SchedulePendingLossyWrites() {
@@ -424,7 +423,8 @@ void PrefService::SetString(const std::string& path, const std::string& value) {
 
 void PrefService::SetFilePath(const std::string& path,
                               const base::FilePath& value) {
-  SetUserPrefValue(path, base::CreateFilePathValue(value));
+  SetUserPrefValue(
+      path, base::Value::ToUniquePtrValue(base::CreateFilePathValue(value)));
 }
 
 void PrefService::SetInt64(const std::string& path, int64_t value) {

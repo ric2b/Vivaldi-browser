@@ -22,7 +22,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/launchable.h"
 #if defined(USE_OZONE)
-#include "services/ui/public/cpp/input_devices/input_device_controller.h"
+#include "services/ws/public/cpp/input_devices/input_device_controller.h"
 #endif
 #endif
 #if BUILDFLAG(ENABLE_SPELLCHECK)
@@ -111,7 +111,7 @@ class ChromeService::IOThreadContext : public service_manager::Service {
 #if defined(OS_CHROMEOS)
   chromeos::Launchable launchable_;
 #if defined(USE_OZONE)
-  ui::InputDeviceController input_device_controller_;
+  ws::InputDeviceController input_device_controller_;
 #endif
 #endif
 

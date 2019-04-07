@@ -71,8 +71,11 @@ bool NetErrorPageController::TrackClick(const gin::Arguments& args) {
   if (args.PeekNext().IsEmpty() || !args.PeekNext()->IsInt32())
     return false;
 
-  if (delegate_)
-    delegate_->TrackClick(args.PeekNext()->Int32Value());
+  if (delegate_) {
+    delegate_->TrackClick(args.PeekNext()
+                              ->Int32Value(args.GetHolderCreationContext())
+                              .FromMaybe(0));
+  }
   return true;
 }
 
@@ -81,6 +84,20 @@ bool NetErrorPageController::ButtonClick(NetErrorHelperCore::Button button) {
     delegate_->ButtonPressed(button);
 
   return true;
+}
+
+void NetErrorPageController::LaunchOfflineItem(gin::Arguments* args) {
+  if (!delegate_)
+    return;
+  std::string id;
+  std::string name_space;
+  if (args->GetNext(&id) && args->GetNext(&name_space))
+    delegate_->LaunchOfflineItem(id, name_space);
+}
+
+void NetErrorPageController::LaunchDownloadsPage() {
+  if (delegate_)
+    delegate_->LaunchDownloadsPage();
 }
 
 NetErrorPageController::NetErrorPageController(base::WeakPtr<Delegate> delegate)
@@ -106,5 +123,9 @@ gin::ObjectTemplateBuilder NetErrorPageController::GetObjectTemplateBuilder(
       .SetMethod("trackClick", &NetErrorPageController::TrackClick)
       .SetMethod("trackEasterEgg", &NetErrorPageController::TrackEasterEgg)
       .SetMethod("trackCachedCopyButtonClick",
-                 &NetErrorPageController::TrackCachedCopyButtonClick);
+                 &NetErrorPageController::TrackCachedCopyButtonClick)
+      .SetMethod("launchOfflineItem",
+                 &NetErrorPageController::LaunchOfflineItem)
+      .SetMethod("launchDownloadsPage",
+                 &NetErrorPageController::LaunchDownloadsPage);
 }

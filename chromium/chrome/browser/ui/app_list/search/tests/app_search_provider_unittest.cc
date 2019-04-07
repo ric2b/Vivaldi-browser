@@ -11,9 +11,11 @@
 #include <string>
 #include <utility>
 
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/ui/app_list/app_list_test_util.h"
@@ -22,11 +24,13 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 #include "chrome/browser/ui/app_list/extension_app_model_builder.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
+#include "chrome/browser/ui/app_list/search/search_result_ranker/app_search_result_ranker.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/arc/test/fake_app_instance.h"
+#include "components/crx_file/id_util.h"
 #include "components/sync/model/string_ordinal.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/uninstall_reason.h"
@@ -46,7 +50,28 @@ constexpr char kGmailArcPackage[] = "com.google.android.gm";
 constexpr char kGmailArcActivity[] =
     "com.google.android.gm.ConversationListActivityGmail";
 constexpr char kKeyboardShortcutHelperInternalName[] = "Shortcuts";
+
+constexpr char kRankingAppQuery[] = "testRankingApp";
+
+// Activity and package should match
+// chrome/test/data/arc_default_apps/test_app1.json
+constexpr char kRankingInternalAppActivity[] = "test.app1.activity";
+constexpr char kRankingInternalAppName[] = "testRankingAppInternal";
+constexpr char kRankingInternalAppPackageName[] = "test.app1";
+
+constexpr char kRankingNormalAppActivity[] = "test.ranking.app.normal.activity";
+constexpr char kRankingNormalAppName[] = "testRankingAppNormal";
+constexpr char kRankingNormalAppPackageName[] = "test.ranking.app.normal";
+
 constexpr char kSettingsInternalName[] = "Settings";
+
+// Waits for base::Time::Now() is updated.
+void WaitTimeUpdated() {
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, run_loop.QuitClosure(), base::TimeDelta::FromMilliseconds(1));
+  run_loop.Run();
+}
 
 }  // namespace
 
@@ -67,13 +92,13 @@ class AppSearchProviderTest : public AppListTestBase {
     AppListTestBase::SetUp();
 
     model_updater_ = std::make_unique<FakeAppListModelUpdater>();
-    controller_.reset(new ::test::TestAppListControllerDelegate);
+    controller_ = std::make_unique<::test::TestAppListControllerDelegate>();
   }
 
   void CreateSearch() {
     clock_.SetNow(kTestCurrentTime);
-    app_search_.reset(new AppSearchProvider(profile_.get(), nullptr, &clock_,
-                                            model_updater_.get()));
+    app_search_ = std::make_unique<AppSearchProvider>(
+        profile_.get(), nullptr, &clock_, model_updater_.get());
   }
 
   std::string RunQuery(const std::string& query) {
@@ -108,7 +133,10 @@ class AppSearchProviderTest : public AppListTestBase {
     return ArcAppListPrefs::GetAppId(package, activity);
   }
 
-  void AddExtension(const std::string& id, const std::string& name) {
+  void AddExtension(const std::string& id,
+                    const std::string& name,
+                    extensions::Manifest::Location location,
+                    int extra_flags) {
     scoped_refptr<extensions::Extension> extension =
         extensions::ExtensionBuilder()
             .SetManifest(
@@ -132,13 +160,23 @@ class AppSearchProviderTest : public AppListTestBase {
                                       .Build())
                              .Build())
                     .Build())
+            .SetLocation(location)
+            .AddFlags(extra_flags)
             .SetID(id)
             .Build();
     service()->AddExtension(extension.get());
+    // This sets install time and other extension parameters.
+    extensions::ExtensionPrefs::Get(profile())->OnExtensionInstalled(
+        extension.get(), extensions::Extension::ENABLED,
+        syncer::StringOrdinal::CreateInitialOrdinal() /* page_ordinal */,
+        std::string() /* install_parameter */);
   }
 
   const SearchProvider::Results& results() { return app_search_->results(); }
   ArcAppTest& arc_test() { return arc_test_; }
+
+  // Train the |app_search| provider with id.
+  void Train(const std::string& id) { app_search_->Train(id); }
 
  private:
   base::SimpleTestClock clock_;
@@ -294,6 +332,53 @@ TEST_F(AppSearchProviderTest, FetchUnlaunchedRecommendations) {
             RunQuery(""));
 }
 
+TEST_F(AppSearchProviderTest, FetchRecommendationsFromRanker) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitWithFeatures(
+      {features::kEnableSearchResultRankerTrain,
+       features::kEnableSearchResultRankerInfer},
+      {});
+  CreateSearch();
+
+  extensions::ExtensionPrefs* prefs =
+      extensions::ExtensionPrefs::Get(profile_.get());
+
+  prefs->SetLastLaunchTime(kHostedAppId, base::Time::FromInternalValue(20));
+  prefs->SetLastLaunchTime(kPackagedApp1Id, base::Time::FromInternalValue(10));
+  prefs->SetLastLaunchTime(kPackagedApp2Id, base::Time::FromInternalValue(5));
+  EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings,Camera",
+            RunQuery(""));
+
+  Train(kPackagedApp2Id);
+  Train(kPackagedApp2Id);
+  Train(kPackagedApp1Id);
+  EXPECT_EQ("Packaged App 2,Packaged App 1,Hosted App,Settings,Camera",
+            RunQuery(""));
+}
+
+TEST_F(AppSearchProviderTest, RankerIsDisabledWithFlag) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitWithFeatures(
+      {features::kEnableSearchResultRankerTrain},
+      {features::kEnableSearchResultRankerInfer});
+  CreateSearch();
+
+  extensions::ExtensionPrefs* prefs =
+      extensions::ExtensionPrefs::Get(profile_.get());
+
+  prefs->SetLastLaunchTime(kHostedAppId, base::Time::FromInternalValue(20));
+  prefs->SetLastLaunchTime(kPackagedApp1Id, base::Time::FromInternalValue(10));
+  prefs->SetLastLaunchTime(kPackagedApp2Id, base::Time::FromInternalValue(5));
+  EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings,Camera",
+            RunQuery(""));
+
+  Train(kPackagedApp2Id);
+  Train(kPackagedApp2Id);
+  Train(kPackagedApp1Id);
+  EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings,Camera",
+            RunQuery(""));
+}
+
 TEST_F(AppSearchProviderTest, FilterDuplicate) {
   arc_test().SetUp(profile());
 
@@ -301,7 +386,9 @@ TEST_F(AppSearchProviderTest, FilterDuplicate) {
       extensions::ExtensionPrefs::Get(profile_.get());
   ASSERT_TRUE(extension_prefs);
 
-  AddExtension(extension_misc::kGmailAppId, kGmailExtensionName);
+  AddExtension(extension_misc::kGmailAppId, kGmailExtensionName,
+               extensions::Manifest::EXTERNAL_PREF_DOWNLOAD,
+               0 /* extra_flags */);
   const std::string arc_gmail_app_id =
       AddArcApp(kGmailArcName, kGmailArcPackage, kGmailArcActivity);
   arc_test().arc_app_list_prefs()->SetLastLaunchTime(arc_gmail_app_id);
@@ -340,6 +427,178 @@ TEST_F(AppSearchProviderTest, FetchInternalApp) {
   EXPECT_EQ(kSettingsInternalName, RunQuery("Settings"));
   EXPECT_EQ(kSettingsInternalName, RunQuery("Set"));
 }
+
+enum class TestExtensionInstallType {
+  CONTROLLED_BY_POLICY,
+  CHROME_COMPONENT,
+  INSTALLED_BY_DEFAULT,
+  INSTALLED_BY_OEM,
+};
+
+class AppSearchProviderWithExtensionInstallType
+    : public AppSearchProviderTest,
+      public ::testing::WithParamInterface<TestExtensionInstallType> {
+ public:
+  AppSearchProviderWithExtensionInstallType() = default;
+  ~AppSearchProviderWithExtensionInstallType() override = default;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(AppSearchProviderWithExtensionInstallType);
+};
+
+TEST_P(AppSearchProviderWithExtensionInstallType, InstallInernallyRanking) {
+  extensions::ExtensionPrefs* const prefs =
+      extensions::ExtensionPrefs::Get(profile());
+  ASSERT_TRUE(prefs);
+
+  // Install normal app.
+  const std::string normal_app_id =
+      crx_file::id_util::GenerateId(kRankingNormalAppName);
+  AddExtension(normal_app_id, kRankingNormalAppName,
+               extensions::Manifest::EXTERNAL_PREF_DOWNLOAD,
+               0 /* extra_flags */);
+
+  // Wait a bit to make sure time is updated.
+  WaitTimeUpdated();
+
+  // Install app internally.
+  const std::string internal_app_id =
+      crx_file::id_util::GenerateId(kRankingInternalAppName);
+  switch (GetParam()) {
+    case TestExtensionInstallType::CONTROLLED_BY_POLICY:
+      AddExtension(internal_app_id, kRankingInternalAppName,
+                   extensions::Manifest::EXTERNAL_POLICY_DOWNLOAD,
+                   0 /* extra_flags */);
+      break;
+    case TestExtensionInstallType::CHROME_COMPONENT:
+      AddExtension(internal_app_id, kRankingInternalAppName,
+                   extensions::Manifest::COMPONENT, 0 /* extra_flags */);
+      break;
+    case TestExtensionInstallType::INSTALLED_BY_DEFAULT:
+      AddExtension(internal_app_id, kRankingInternalAppName,
+                   extensions::Manifest::EXTERNAL_PREF_DOWNLOAD,
+                   extensions::Extension::WAS_INSTALLED_BY_DEFAULT);
+      break;
+    case TestExtensionInstallType::INSTALLED_BY_OEM:
+      AddExtension(internal_app_id, kRankingInternalAppName,
+                   extensions::Manifest::EXTERNAL_PREF_DOWNLOAD,
+                   extensions::Extension::WAS_INSTALLED_BY_OEM);
+      break;
+  }
+
+  EXPECT_LT(prefs->GetInstallTime(normal_app_id),
+            prefs->GetInstallTime(internal_app_id));
+
+  // Installed internally app has runking below other apps, even if it's install
+  // time is later.
+  CreateSearch();
+  EXPECT_EQ(std::string(kRankingNormalAppName) + "," +
+                std::string(kRankingInternalAppName),
+            RunQuery(kRankingAppQuery));
+
+  // Using installed internally app moves it in ranking up.
+  WaitTimeUpdated();
+  prefs->SetLastLaunchTime(internal_app_id, base::Time::Now());
+  CreateSearch();
+  EXPECT_EQ(std::string(kRankingInternalAppName) + "," +
+                std::string(kRankingNormalAppName),
+            RunQuery(kRankingAppQuery));
+}
+
+INSTANTIATE_TEST_CASE_P(
+    ,
+    AppSearchProviderWithExtensionInstallType,
+    ::testing::ValuesIn({TestExtensionInstallType::CONTROLLED_BY_POLICY,
+                         TestExtensionInstallType::CHROME_COMPONENT,
+                         TestExtensionInstallType::INSTALLED_BY_DEFAULT,
+                         TestExtensionInstallType::INSTALLED_BY_OEM}));
+
+enum class TestArcAppInstallType {
+  CONTROLLED_BY_POLICY,
+  INSTALLED_BY_DEFAULT,
+};
+
+class AppSearchProviderWithArcAppInstallType
+    : public AppSearchProviderTest,
+      public ::testing::WithParamInterface<TestArcAppInstallType> {
+ public:
+  AppSearchProviderWithArcAppInstallType() = default;
+  ~AppSearchProviderWithArcAppInstallType() override = default;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(AppSearchProviderWithArcAppInstallType);
+};
+
+TEST_P(AppSearchProviderWithArcAppInstallType, InstallInernallyRanking) {
+  const bool default_app =
+      GetParam() == TestArcAppInstallType::INSTALLED_BY_DEFAULT;
+  if (default_app) {
+    ArcDefaultAppList::UseTestAppsDirectory();
+    arc_test().set_wait_default_apps(true);
+  }
+  arc_test().SetUp(profile());
+
+  ArcAppListPrefs* const prefs = arc_test().arc_app_list_prefs();
+  ASSERT_TRUE(prefs);
+
+  // Install normal app.
+  const std::string normal_app_id =
+      AddArcApp(kRankingNormalAppName, kRankingNormalAppPackageName,
+                kRankingNormalAppActivity);
+
+  // Wait a bit to make sure time is updated.
+  WaitTimeUpdated();
+
+  if (GetParam() == TestArcAppInstallType::CONTROLLED_BY_POLICY) {
+    const std::string policy = base::StringPrintf(
+        "{\"applications\":[{\"installType\":\"FORCE_INSTALLED\","
+        "\"packageName\":"
+        "\"%s\"}]}",
+        kRankingInternalAppPackageName);
+    prefs->OnPolicySent(policy);
+  }
+
+  // Reinstall default app to make install time after normall app install time.
+  if (default_app) {
+    static_cast<arc::mojom::AppHost*>(prefs)->OnPackageAppListRefreshed(
+        kRankingInternalAppPackageName, {} /* apps */);
+  }
+
+  const std::string internal_app_id =
+      AddArcApp(kRankingInternalAppName, kRankingInternalAppPackageName,
+                kRankingInternalAppActivity);
+
+  EXPECT_EQ(default_app, prefs->IsDefault(internal_app_id));
+
+  std::unique_ptr<ArcAppListPrefs::AppInfo> normal_app =
+      prefs->GetApp(normal_app_id);
+  std::unique_ptr<ArcAppListPrefs::AppInfo> internal_app =
+      prefs->GetApp(internal_app_id);
+  ASSERT_TRUE(normal_app && internal_app);
+
+  EXPECT_LT(normal_app->install_time, internal_app->install_time);
+
+  // Installed internally app has runking below other apps, even if it's install
+  // time is later.
+  CreateSearch();
+  EXPECT_EQ(std::string(kRankingNormalAppName) + "," +
+                std::string(kRankingInternalAppName),
+            RunQuery(kRankingAppQuery));
+
+  // Using installed internally app moves it in ranking up.
+  WaitTimeUpdated();
+  prefs->SetLastLaunchTime(internal_app_id);
+  CreateSearch();
+  EXPECT_EQ(std::string(kRankingInternalAppName) + "," +
+                std::string(kRankingNormalAppName),
+            RunQuery(kRankingAppQuery));
+}
+
+INSTANTIATE_TEST_CASE_P(
+    ,
+    AppSearchProviderWithArcAppInstallType,
+    ::testing::ValuesIn({TestArcAppInstallType::CONTROLLED_BY_POLICY,
+                         TestArcAppInstallType::INSTALLED_BY_DEFAULT}));
 
 }  // namespace test
 }  // namespace app_list

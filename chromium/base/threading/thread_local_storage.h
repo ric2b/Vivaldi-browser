@@ -20,6 +20,7 @@
 
 namespace heap_profiling {
 class ScopedAllowAlloc;
+class ScopedAllowRealloc;
 }  // namespace heap_profiling
 
 namespace ui {
@@ -28,7 +29,7 @@ class TLSDestructionCheckerForX11;
 
 namespace base {
 
-class SamplingHeapProfiler;
+class PoissonAllocationSampler;
 
 namespace debug {
 class GlobalActivityTracker;
@@ -161,11 +162,12 @@ class BASE_EXPORT ThreadLocalStorage {
   // thread destruction. Attempting to call Slot::Get() during destruction is
   // disallowed and will hit a DCHECK. Any code that relies on TLS during thread
   // destruction must first check this method before calling Slot::Get().
-  friend class base::SamplingHeapProfiler;
+  friend class base::PoissonAllocationSampler;
   friend class base::internal::ThreadLocalStorageTestInternal;
   friend class base::trace_event::MallocDumpProvider;
   friend class debug::GlobalActivityTracker;
   friend class heap_profiling::ScopedAllowAlloc;
+  friend class heap_profiling::ScopedAllowRealloc;
   friend class ui::TLSDestructionCheckerForX11;
   static bool HasBeenDestroyed();
 

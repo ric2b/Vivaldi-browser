@@ -12,7 +12,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/power/ml/idle_event_notifier.h"
-#include "chrome/browser/chromeos/power/ml/smart_dim_model.h"
+#include "chrome/browser/chromeos/power/ml/smart_dim/model.h"
 #include "chrome/browser/chromeos/power/ml/user_activity_event.pb.h"
 #include "chrome/browser/chromeos/power/ml/user_activity_ukm_logger.h"
 #include "chrome/browser/resource_coordinator/tab_metrics_event.pb.h"
@@ -56,6 +56,20 @@ struct TabProperty {
   // Whether user has form entry, i.e. text input.
   bool has_form_entry;
 };
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// What happens after a screen dim imminent is received.
+enum class DimImminentAction {
+  kModelIgnored = 0,
+  kModelDim = 1,
+  kModelNoDim = 2,
+  kMaxValue = kModelNoDim
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class FinalResult { kReactivation = 0, kOff = 1, kMaxValue = kOff };
 
 // Logs user activity after an idle event is observed.
 // TODO(renjieliu): Add power-related activity as well.

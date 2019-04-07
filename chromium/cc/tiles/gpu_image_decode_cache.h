@@ -107,7 +107,8 @@ class CC_EXPORT GpuImageDecodeCache
                                bool use_transfer_cache,
                                SkColorType color_type,
                                size_t max_working_set_bytes,
-                               int max_texture_size);
+                               int max_texture_size,
+                               PaintImage::GeneratorClientId client_id);
   ~GpuImageDecodeCache() override;
 
   // Returns the GL texture ID backing the given SkImage.
@@ -157,8 +158,9 @@ class CC_EXPORT GpuImageDecodeCache
   bool SupportsColorSpaceConversion() const;
 
   // For testing only.
-  void SetWorkingSetLimitForTesting(size_t limit) {
-    max_working_set_bytes_ = limit;
+  void SetWorkingSetLimitsForTesting(size_t bytes_limit, size_t items_limit) {
+    max_working_set_bytes_ = bytes_limit;
+    max_working_set_items_ = items_limit;
   }
   size_t GetWorkingSetBytesForTesting() const { return working_set_bytes_; }
   size_t GetNumCacheEntriesForTesting() const {
@@ -478,6 +480,7 @@ class CC_EXPORT GpuImageDecodeCache
   const bool use_transfer_cache_ = false;
   viz::RasterContextProvider* context_;
   int max_texture_size_ = 0;
+  const PaintImage::GeneratorClientId generator_client_id_;
 
   // All members below this point must only be accessed while holding |lock_|.
   // The exception are const members like |normal_max_cache_bytes_| that can
@@ -505,7 +508,9 @@ class CC_EXPORT GpuImageDecodeCache
   InUseCache in_use_cache_;
 
   size_t max_working_set_bytes_ = 0;
+  size_t max_working_set_items_ = 0;
   size_t working_set_bytes_ = 0;
+  size_t working_set_items_ = 0;
   base::MemoryState memory_state_ = base::MemoryState::NORMAL;
   bool aggressively_freeing_resources_ = false;
 

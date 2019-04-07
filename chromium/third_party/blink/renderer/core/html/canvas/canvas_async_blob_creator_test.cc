@@ -22,7 +22,7 @@ typedef CanvasAsyncBlobCreator::IdleTaskStatus IdleTaskStatus;
 class MockCanvasAsyncBlobCreator : public CanvasAsyncBlobCreator {
  public:
   MockCanvasAsyncBlobCreator(scoped_refptr<StaticBitmapImage> image,
-                             ImageEncoder::MimeType mime_type,
+                             ImageEncodingMimeType mime_type,
                              Document* document,
                              bool fail_encoder_initialization = false)
       : CanvasAsyncBlobCreator(
@@ -35,6 +35,7 @@ class MockCanvasAsyncBlobCreator : public CanvasAsyncBlobCreator {
             nullptr) {
     if (fail_encoder_initialization)
       fail_encoder_initialization_for_test_ = true;
+    enforce_idle_encoding_for_test_ = true;
   }
 
   CanvasAsyncBlobCreator::IdleTaskStatus GetIdleTaskStatus() {
@@ -73,9 +74,7 @@ class MockCanvasAsyncBlobCreatorWithoutStart
  public:
   MockCanvasAsyncBlobCreatorWithoutStart(scoped_refptr<StaticBitmapImage> image,
                                          Document* document)
-      : MockCanvasAsyncBlobCreator(image,
-                                   ImageEncoder::kMimeTypePng,
-                                   document) {}
+      : MockCanvasAsyncBlobCreator(image, kMimeTypePng, document) {}
 
  protected:
   void ScheduleInitiateEncoding(double) override {
@@ -94,7 +93,7 @@ class MockCanvasAsyncBlobCreatorWithoutComplete
       Document* document,
       bool fail_encoder_initialization = false)
       : MockCanvasAsyncBlobCreator(image,
-                                   ImageEncoder::kMimeTypePng,
+                                   kMimeTypePng,
                                    document,
                                    fail_encoder_initialization) {}
 
@@ -177,7 +176,7 @@ TEST_F(CanvasAsyncBlobCreatorTest,
   EXPECT_CALL(*(AsyncBlobCreator()),
               SignalTaskSwitchInStartTimeoutEventForTesting());
 
-  AsyncBlobCreator()->ScheduleAsyncBlobCreation(true);
+  AsyncBlobCreator()->ScheduleAsyncBlobCreation(1.0);
   test::EnterRunLoop();
 
   testing::Mock::VerifyAndClearExpectations(AsyncBlobCreator());
@@ -195,7 +194,7 @@ TEST_F(CanvasAsyncBlobCreatorTest,
   EXPECT_CALL(*(AsyncBlobCreator()),
               SignalTaskSwitchInCompleteTimeoutEventForTesting());
 
-  AsyncBlobCreator()->ScheduleAsyncBlobCreation(true);
+  AsyncBlobCreator()->ScheduleAsyncBlobCreation(1.0);
   test::EnterRunLoop();
 
   testing::Mock::VerifyAndClearExpectations(AsyncBlobCreator());
@@ -209,7 +208,7 @@ TEST_F(CanvasAsyncBlobCreatorTest, IdleTaskFailedWhenStartTimeoutEventHappens) {
   // the idle task status.
   PrepareMockCanvasAsyncBlobCreatorFail();
 
-  AsyncBlobCreator()->ScheduleAsyncBlobCreation(true);
+  AsyncBlobCreator()->ScheduleAsyncBlobCreation(1.0);
   test::EnterRunLoop();
 
   EXPECT_EQ(IdleTaskStatus::kIdleTaskFailed,

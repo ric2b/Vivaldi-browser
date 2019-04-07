@@ -39,10 +39,14 @@ ASH_PUBLIC_EXPORT extern const base::Feature kKeyboardShortcutViewerApp;
 // Enables notifications on the lock screen.
 ASH_PUBLIC_EXPORT extern const base::Feature kLockScreenNotifications;
 
-// Enables the new overview animations.
-// TODO(wutao): Remove this after the feature is fully launched.
-// https://crbug.com/801465.
-ASH_PUBLIC_EXPORT extern const base::Feature kNewOverviewAnimations;
+// Enables inline reply on notifications on the lock screen.
+// This option is effective when |kLockScreenNotification| is enabled.
+ASH_PUBLIC_EXPORT extern const base::Feature kLockScreenInlineReply;
+
+// Supports the feature to hide sensitive content in notifications on the lock
+// screen. This option is effective when |kLockScreenNotification| is enabled.
+ASH_PUBLIC_EXPORT extern const base::Feature
+    kLockScreenHideSensitiveNotificationsSupport;
 
 // Enables the new wallpaper picker.
 // TODO(wzang): Remove this after the feature is fully launched.
@@ -52,6 +56,9 @@ ASH_PUBLIC_EXPORT extern const base::Feature kNewWallpaperPicker;
 // Enables the Night Light feature.
 ASH_PUBLIC_EXPORT extern const base::Feature kNightLight;
 
+// Enables notification scroll bar in UnifiedSystemTray.
+ASH_PUBLIC_EXPORT extern const base::Feature kNotificationScrollBar;
+
 // Enables swipe to close in overview mode.
 // TODO(sammiequon): Remove this after the feature is fully launched.
 // https://crbug.com/828646.
@@ -59,9 +66,6 @@ ASH_PUBLIC_EXPORT extern const base::Feature kOverviewSwipeToClose;
 
 // Enables new system menu.
 ASH_PUBLIC_EXPORT extern const base::Feature kSystemTrayUnified;
-
-// Enables the mojo app implementation of 'Show taps'.
-ASH_PUBLIC_EXPORT extern const base::Feature kTapVisualizerApp;
 
 // Enables trilinear filtering.
 ASH_PUBLIC_EXPORT extern const base::Feature kTrilinearFiltering;
@@ -77,9 +81,15 @@ ASH_PUBLIC_EXPORT bool IsKeyboardShortcutViewerAppEnabled();
 
 ASH_PUBLIC_EXPORT bool IsLockScreenNotificationsEnabled();
 
+ASH_PUBLIC_EXPORT bool IsLockScreenInlineReplyEnabled();
+
+ASH_PUBLIC_EXPORT bool IsLockScreenHideSensitiveNotificationsSupported();
+
 ASH_PUBLIC_EXPORT bool IsNewWallpaperPickerEnabled();
 
 ASH_PUBLIC_EXPORT bool IsNightLightEnabled();
+
+ASH_PUBLIC_EXPORT bool IsNotificationScrollBarEnabled();
 
 ASH_PUBLIC_EXPORT bool IsSystemTrayUnifiedEnabled();
 

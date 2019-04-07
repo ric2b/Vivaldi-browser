@@ -21,7 +21,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -127,31 +127,6 @@ class TestTaskCounter : public base::SingleThreadTaskRunner {
   int count_;
 };
 
-#if defined(COMPILER_MSVC)
-// See explanation for other RenderViewHostImpl which is the same issue.
-#pragma warning(push)
-#pragma warning(disable: 4250)
-#endif
-
-class RenderThreadImplForTest : public RenderThreadImpl {
- public:
-  RenderThreadImplForTest(
-      const InProcessChildThreadParams& params,
-      std::unique_ptr<blink::scheduler::WebThreadScheduler> scheduler,
-      scoped_refptr<base::SingleThreadTaskRunner>& test_task_counter,
-      base::MessageLoop* unowned_message_loop)
-      : RenderThreadImpl(params,
-                         std::move(scheduler),
-                         test_task_counter,
-                         unowned_message_loop) {}
-
-  ~RenderThreadImplForTest() override {}
-};
-
-#if defined(COMPILER_MSVC)
-#pragma warning(pop)
-#endif
-
 class QuitOnTestMsgFilter : public IPC::MessageFilter {
  public:
   explicit QuitOnTestMsgFilter(base::OnceClosure quit_closure)
@@ -206,12 +181,12 @@ class RenderThreadImplBrowserTest : public testing::Test {
     content_renderer_client_.reset(new ContentRendererClient());
     SetRendererClientForTesting(content_renderer_client_.get());
 
-    main_message_loop_.reset(new base::MessageLoop(base::MessageLoop::TYPE_IO));
+    main_message_loop_.reset(new base::MessageLoop(base::MessageLoop::TYPE_UI));
     test_task_scheduler_.reset(new TestTaskScheduler);
     browser_threads_.reset(
-        new TestBrowserThreadBundle(TestBrowserThreadBundle::IO_MAINLOOP));
+        new TestBrowserThreadBundle(TestBrowserThreadBundle::REAL_IO_THREAD));
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
-        blink::scheduler::GetSingleThreadTaskRunnerForTesting();
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
 
     InitializeMojo();
     mojo_ipc_support_.reset(new mojo::core::ScopedIPCSupport(
@@ -261,11 +236,10 @@ class RenderThreadImplBrowserTest : public testing::Test {
 
     base::FieldTrialList::CreateTrialsFromCommandLine(
         *cmd, switches::kFieldTrialHandle, -1);
-    thread_ = new RenderThreadImplForTest(
+    thread_ = new RenderThreadImpl(
         InProcessChildThreadParams(io_task_runner, &invitation,
                                    child_connection_->service_token()),
-        std::move(main_thread_scheduler), test_task_counter,
-        main_message_loop_.get());
+        std::move(main_thread_scheduler));
     cmd->InitFromArgv(old_argv);
 
     run_loop_ = std::make_unique<base::RunLoop>();
@@ -306,7 +280,11 @@ class RenderThreadImplBrowserTest : public testing::Test {
   // Need to disable IPC Audio for these tests, or the test will hang
   media::IPCFactory::ScopedDisableForTesting ipc_audio_decoder_disabler_;
 #endif
-  RenderThreadImplForTest* thread_;  // Owned by mock_process_.
+
+  // RenderThreadImpl doesn't currently support a proper shutdown sequence
+  // and it's okay when we're running in multi-process mode because renderers
+  // get killed by the OS. Memory leaks aren't nice but it's test-only.
+  RenderThreadImpl* thread_;
 
   base::FieldTrialList field_trial_list_;
 

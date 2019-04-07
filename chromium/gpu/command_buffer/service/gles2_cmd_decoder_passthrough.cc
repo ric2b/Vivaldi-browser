@@ -79,13 +79,13 @@ void RequestExtensions(gl::GLApi* api,
   }
 }
 
-void APIENTRY GLDebugMessageCallback(GLenum source,
-                                     GLenum type,
-                                     GLuint id,
-                                     GLenum severity,
-                                     GLsizei length,
-                                     const GLchar* message,
-                                     const GLvoid* user_param) {
+void APIENTRY PassthroughGLDebugMessageCallback(GLenum source,
+                                                GLenum type,
+                                                GLuint id,
+                                                GLenum severity,
+                                                GLsizei length,
+                                                const GLchar* message,
+                                                const GLvoid* user_param) {
   DCHECK(user_param != nullptr);
   GLES2DecoderPassthroughImpl* command_decoder =
       static_cast<GLES2DecoderPassthroughImpl*>(const_cast<void*>(user_param));
@@ -782,7 +782,8 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
   // only enable debug logging if requested.
   bool log_non_errors =
       group_->gpu_preferences().enable_gpu_driver_debug_logging;
-  InitializeGLDebugLogging(log_non_errors, GLDebugMessageCallback, this);
+  InitializeGLDebugLogging(log_non_errors, PassthroughGLDebugMessageCallback,
+                           this);
 
   if (feature_info_->feature_flags().chromium_texture_filtering_hint &&
       feature_info_->feature_flags().is_swiftshader) {
@@ -894,13 +895,17 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
 void GLES2DecoderPassthroughImpl::Destroy(bool have_context) {
   if (have_context) {
     FlushErrors();
-
-    // Destroy all pending read pixels operations
-    for (const PendingReadPixels& pending_read_pixels : pending_read_pixels_) {
-      api()->glDeleteBuffersARBFn(1, &pending_read_pixels.buffer_service_id);
-    }
-    pending_read_pixels_.clear();
   }
+
+  // Destroy all pending read pixels operations
+  for (PendingReadPixels& pending_read_pixels : pending_read_pixels_) {
+    if (have_context) {
+      api()->glDeleteBuffersARBFn(1, &pending_read_pixels.buffer_service_id);
+    } else {
+      pending_read_pixels.fence->Invalidate();
+    }
+  }
+  pending_read_pixels_.clear();
 
   for (auto& bound_texture_type : bound_textures_) {
     for (auto& bound_texture : bound_texture_type) {

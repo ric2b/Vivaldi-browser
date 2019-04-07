@@ -4,11 +4,14 @@
 
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory_util.h"
 
+#include <string>
+#include <utility>
+
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/json/json_reader.h"
 #include "base/memory/singleton.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "base/values.h"
@@ -182,7 +185,7 @@ void RegisterRemoteSuggestionsProvider(ContentSuggestionsService* service,
   }
   auto suggestions_fetcher = std::make_unique<RemoteSuggestionsFetcherImpl>(
       identity_manager, url_loader_factory, prefs, nullptr,
-      base::BindRepeating(&ParseJson), GetFetchEndpoint(GetChannel()), api_key,
+      base::BindRepeating(&ParseJson), GetFetchEndpoint(), api_key,
       service->user_classifier());
 
   // This pref is also used for logging. If it is changed, change it in the

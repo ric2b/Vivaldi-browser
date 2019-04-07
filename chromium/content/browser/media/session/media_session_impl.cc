@@ -5,8 +5,10 @@
 #include "content/browser/media/session/media_session_impl.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/numerics/ranges.h"
+#include "base/strings/string_util.h"
 #include "content/browser/media/session/audio_focus_delegate.h"
 #include "content/browser/media/session/media_session_controller.h"
 #include "content/browser/media/session/media_session_player_observer.h"
@@ -17,6 +19,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_content_type.h"
+#include "services/media_session/public/mojom/audio_focus.mojom.h"
 #include "third_party/blink/public/platform/modules/mediasession/media_session.mojom.h"
 
 #if defined(OS_ANDROID)
@@ -31,6 +34,12 @@ namespace {
 
 const double kUnduckedVolumeMultiplier = 1.0;
 const double kDefaultDuckingVolumeMultiplier = 0.2;
+
+const char kDebugInfoOwnerSeparator[] = " - ";
+const char kDebugInfoDucked[] = "Ducked";
+const char kDebugInfoActive[] = "Active";
+const char kDebugInfoInactive[] = "Inactive";
+const char kDebugInfoStateSeparator[] = " ";
 
 using MapRenderFrameHostToDepth = std::map<RenderFrameHost*, size_t>;
 
@@ -72,12 +81,19 @@ MediaSessionUserAction MediaSessionActionToUserAction(
   return MediaSessionUserAction::Count;
 }
 
+// If the string is not empty then push it to the back of a vector.
+void MaybePushBackString(std::vector<std::string>& vector,
+                         const std::string& str) {
+  if (!str.empty())
+    vector.push_back(str);
+}
+
 }  // anonymous namespace
+
+using media_session::mojom::AudioFocusType;
 
 using MediaSessionSuspendedSource =
     MediaSessionUmaHelper::MediaSessionSuspendedSource;
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(MediaSessionImpl);
 
 MediaSessionImpl::PlayerIdentifier::PlayerIdentifier(
     MediaSessionPlayerObserver* observer,
@@ -195,23 +211,23 @@ bool MediaSessionImpl::AddPlayer(MediaSessionPlayerObserver* observer,
 
   observer->OnSetVolumeMultiplier(player_id, GetVolumeMultiplier());
 
-  AudioFocusManager::AudioFocusType required_audio_focus_type;
-  if (media_content_type == media::MediaContentType::Persistent) {
-    required_audio_focus_type = AudioFocusManager::AudioFocusType::Gain;
-  } else {
-    required_audio_focus_type =
-        AudioFocusManager::AudioFocusType::GainTransientMayDuck;
-  }
+  AudioFocusType required_audio_focus_type;
+  if (media_content_type == media::MediaContentType::Persistent)
+    required_audio_focus_type = AudioFocusType::kGain;
+  else
+    required_audio_focus_type = AudioFocusType::kGainTransientMayDuck;
 
   // If the audio focus is already granted and is of type Content, there is
   // nothing to do. If it is granted of type Transient the requested type is
   // also transient, there is also nothing to do. Otherwise, the session needs
   // to request audio focus again.
-  if (audio_focus_state_ == State::ACTIVE &&
-      (audio_focus_type_ == AudioFocusManager::AudioFocusType::Gain ||
-       audio_focus_type_ == required_audio_focus_type)) {
-    normal_players_.insert(PlayerIdentifier(observer, player_id));
-    return true;
+  if (audio_focus_state_ == State::ACTIVE) {
+    AudioFocusType current_focus_type = delegate_->GetCurrentFocusType();
+    if (current_focus_type == AudioFocusType::kGain ||
+        current_focus_type == required_audio_focus_type) {
+      normal_players_.insert(PlayerIdentifier(observer, player_id));
+      return true;
+    }
   }
 
   State old_audio_focus_state = audio_focus_state_;
@@ -346,7 +362,7 @@ void MediaSessionImpl::Resume(SuspendType suspend_type) {
   if (suspend_type != SuspendType::SYSTEM) {
     // Request audio focus again in case we lost it because another app started
     // playing while the playback was paused.
-    State audio_focus_state = RequestSystemAudioFocus(audio_focus_type_)
+    State audio_focus_state = RequestSystemAudioFocus(desired_audio_focus_type_)
                                   ? State::ACTIVE
                                   : State::INACTIVE;
     SetAudioFocusState(audio_focus_state);
@@ -410,7 +426,7 @@ bool MediaSessionImpl::IsControllable() const {
   // inactive. Also, the session will be uncontrollable if it contains one-shot
   // players.
   return audio_focus_state_ != State::INACTIVE &&
-         audio_focus_type_ == AudioFocusManager::AudioFocusType::Gain &&
+         desired_audio_focus_type_ == AudioFocusType::kGain &&
          one_shot_players_.empty();
 }
 
@@ -560,8 +576,7 @@ void MediaSessionImpl::OnResumeInternal(SuspendType suspend_type) {
 MediaSessionImpl::MediaSessionImpl(WebContents* web_contents)
     : WebContentsObserver(web_contents),
       audio_focus_state_(State::INACTIVE),
-      audio_focus_type_(
-          AudioFocusManager::AudioFocusType::GainTransientMayDuck),
+      desired_audio_focus_type_(AudioFocusType::kGainTransientMayDuck),
       is_ducking_(false),
       ducking_volume_multiplier_(kDefaultDuckingVolumeMultiplier),
       routed_service_(nullptr) {
@@ -575,7 +590,7 @@ void MediaSessionImpl::Initialize() {
 }
 
 bool MediaSessionImpl::RequestSystemAudioFocus(
-    AudioFocusManager::AudioFocusType audio_focus_type) {
+    AudioFocusType audio_focus_type) {
   bool result = delegate_->RequestAudioFocus(audio_focus_type);
   uma_helper_.RecordRequestAudioFocusResult(result);
 
@@ -586,8 +601,39 @@ bool MediaSessionImpl::RequestSystemAudioFocus(
   // MediaSessionImpl must change its state & audio focus type AFTER requesting
   // audio focus.
   SetAudioFocusState(result ? State::ACTIVE : State::INACTIVE);
-  audio_focus_type_ = audio_focus_type;
+  desired_audio_focus_type_ = audio_focus_type;
   return result;
+}
+
+const MediaSessionImpl::DebugInfo MediaSessionImpl::GetDebugInfo() {
+  MediaSessionImpl::DebugInfo debug_info;
+
+  // Convert the address of |this| to a string and use it as the name.
+  std::stringstream stream;
+  stream << this;
+  debug_info.name = stream.str();
+
+  // Add the title and the url to the owner.
+  std::vector<std::string> owner_parts;
+  MaybePushBackString(owner_parts,
+                      base::UTF16ToUTF8(web_contents()->GetTitle()));
+  MaybePushBackString(owner_parts,
+                      web_contents()->GetLastCommittedURL().spec());
+  debug_info.owner = base::JoinString(owner_parts, kDebugInfoOwnerSeparator);
+
+  // Add the ducking state to state.
+  std::vector<std::string> state_parts;
+  MaybePushBackString(state_parts,
+                      IsActive() ? kDebugInfoActive : kDebugInfoInactive);
+  MaybePushBackString(state_parts, is_ducking_ ? kDebugInfoDucked : "");
+  debug_info.state = base::JoinString(state_parts, kDebugInfoStateSeparator);
+
+  return debug_info;
+}
+
+void MediaSessionImpl::BindToMojoRequest(
+    mojo::InterfaceRequest<media_session::mojom::MediaSession> request) {
+  bindings_.AddBinding(this, std::move(request));
 }
 
 void MediaSessionImpl::AbandonSystemAudioFocusIfNeeded() {
@@ -630,8 +676,7 @@ void MediaSessionImpl::SetAudioFocusState(State audio_focus_state) {
 
 bool MediaSessionImpl::AddPepperPlayer(MediaSessionPlayerObserver* observer,
                                        int player_id) {
-  bool success =
-      RequestSystemAudioFocus(AudioFocusManager::AudioFocusType::Gain);
+  bool success = RequestSystemAudioFocus(AudioFocusType::kGain);
   DCHECK(success);
 
   pepper_players_.insert(PlayerIdentifier(observer, player_id));
@@ -644,7 +689,7 @@ bool MediaSessionImpl::AddPepperPlayer(MediaSessionPlayerObserver* observer,
 
 bool MediaSessionImpl::AddOneShotPlayer(MediaSessionPlayerObserver* observer,
                                         int player_id) {
-  if (!RequestSystemAudioFocus(AudioFocusManager::AudioFocusType::Gain))
+  if (!RequestSystemAudioFocus(AudioFocusType::kGain))
     return false;
 
   one_shot_players_.insert(PlayerIdentifier(observer, player_id));

@@ -3,29 +3,29 @@
 // found in the LICENSE file.
 
 #include "content/browser/background_fetch/background_fetch_job_controller.h"
+#include "third_party/blink/public/platform/modules/background_fetch/background_fetch.mojom.h"
 
 #include <utility>
 
-#include "content/browser/background_fetch/background_fetch_request_manager.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace content {
 
 BackgroundFetchJobController::BackgroundFetchJobController(
     BackgroundFetchDelegateProxy* delegate_proxy,
+    BackgroundFetchScheduler* scheduler,
     const BackgroundFetchRegistrationId& registration_id,
     const BackgroundFetchOptions& options,
     const SkBitmap& icon,
     uint64_t bytes_downloaded,
-    BackgroundFetchRequestManager* request_manager,
     ProgressCallback progress_callback,
     BackgroundFetchScheduler::FinishedCallback finished_callback)
-    : BackgroundFetchScheduler::Controller(registration_id,
+    : BackgroundFetchScheduler::Controller(scheduler,
+                                           registration_id,
                                            std::move(finished_callback)),
       options_(options),
       icon_(icon),
       complete_requests_downloaded_bytes_cache_(bytes_downloaded),
-      request_manager_(request_manager),
       delegate_proxy_(delegate_proxy),
       progress_callback_(std::move(progress_callback)),
       weak_ptr_factory_(this) {
@@ -35,7 +35,8 @@ BackgroundFetchJobController::BackgroundFetchJobController(
 void BackgroundFetchJobController::InitializeRequestStatus(
     int completed_downloads,
     int total_downloads,
-    const std::vector<std::string>& outstanding_guids,
+    std::vector<scoped_refptr<BackgroundFetchRequestInfo>>
+        active_fetch_requests,
     const std::string& ui_title) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -47,16 +48,21 @@ void BackgroundFetchJobController::InitializeRequestStatus(
   total_downloads_ = total_downloads;
 
   // TODO(nator): Update this when we support uploads.
-  int total_downloads_size = options_.download_total;
+  total_downloads_size_ = options_.download_total;
+
+  std::vector<std::string> active_guids;
+  active_guids.reserve(active_fetch_requests.size());
+  for (const auto& request_info : active_fetch_requests)
+    active_guids.push_back(request_info->download_guid());
 
   auto fetch_description = std::make_unique<BackgroundFetchDescription>(
       registration_id().unique_id(), ui_title, registration_id().origin(),
       icon_, completed_downloads, total_downloads,
-      complete_requests_downloaded_bytes_cache_, total_downloads_size,
-      outstanding_guids);
+      complete_requests_downloaded_bytes_cache_, total_downloads_size_,
+      std::move(active_guids));
 
-  delegate_proxy_->CreateDownloadJob(GetWeakPtr(),
-                                     std::move(fetch_description));
+  delegate_proxy_->CreateDownloadJob(GetWeakPtr(), std::move(fetch_description),
+                                     std::move(active_fetch_requests));
 }
 
 BackgroundFetchJobController::~BackgroundFetchJobController() {
@@ -68,12 +74,15 @@ bool BackgroundFetchJobController::HasMoreRequests() {
 }
 
 void BackgroundFetchJobController::StartRequest(
-    scoped_refptr<BackgroundFetchRequestInfo> request) {
+    scoped_refptr<BackgroundFetchRequestInfo> request,
+    RequestFinishedCallback request_finished_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK_LT(completed_downloads_, total_downloads_);
+  DCHECK(request_finished_callback);
   DCHECK(request);
 
-  active_request_download_bytes_[request->download_guid()] = 0;
+  active_request_downloaded_bytes_ = 0;
+  active_request_finished_callback_ = std::move(request_finished_callback);
 
   delegate_proxy_->StartRequest(registration_id().unique_id(),
                                 registration_id().origin(), request);
@@ -93,11 +102,10 @@ void BackgroundFetchJobController::DidUpdateRequest(
     uint64_t bytes_downloaded) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  const std::string& download_guid = request->download_guid();
-  if (active_request_download_bytes_[download_guid] == bytes_downloaded)
+  if (active_request_downloaded_bytes_ == bytes_downloaded)
     return;
 
-  active_request_download_bytes_[download_guid] = bytes_downloaded;
+  active_request_downloaded_bytes_ = bytes_downloaded;
 
   progress_callback_.Run(registration_id().unique_id(), options_.download_total,
                          complete_requests_downloaded_bytes_cache_ +
@@ -108,43 +116,75 @@ void BackgroundFetchJobController::DidCompleteRequest(
     const scoped_refptr<BackgroundFetchRequestInfo>& request) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  active_request_download_bytes_.erase(request->download_guid());
+  // It's possible for the DidCompleteRequest() callback to have been in-flight
+  // while this Job Controller was being aborted, in which case the
+  // |active_request_finished_callback_| will have been reset.
+  if (!active_request_finished_callback_)
+    return;
+
+  active_request_downloaded_bytes_ = 0;
+
   complete_requests_downloaded_bytes_cache_ += request->GetFileSize();
   ++completed_downloads_;
 
-  request_manager_->MarkRequestAsComplete(registration_id(), request.get());
+  std::move(active_request_finished_callback_).Run(request);
 }
 
-void BackgroundFetchJobController::UpdateUI(const std::string& title) {
+void BackgroundFetchJobController::UpdateUI(
+    const base::Optional<std::string>& title,
+    const base::Optional<SkBitmap>& icon) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  delegate_proxy_->UpdateUI(registration_id().unique_id(), title);
+  delegate_proxy_->UpdateUI(registration_id().unique_id(), title, icon);
+}
+
+std::unique_ptr<BackgroundFetchRegistration>
+BackgroundFetchJobController::NewRegistration(
+    blink::mojom::BackgroundFetchState state) const {
+  return std::make_unique<BackgroundFetchRegistration>(
+      registration_id().developer_id(), registration_id().unique_id(),
+      0 /* upload_total */, 0 /* uploaded */, total_downloads_size_,
+      complete_requests_downloaded_bytes_cache_, state, MojoFailureReason());
 }
 
 uint64_t BackgroundFetchJobController::GetInProgressDownloadedBytes() {
-  uint64_t sum = 0;
-  for (const auto& entry : active_request_download_bytes_)
-    sum += entry.second;
-  return sum;
+  return active_request_downloaded_bytes_;
+}
+
+// TODO(crbug.com/876691): Get rid of BackgroundFetchReasonToAbort and remove
+// this method.
+blink::mojom::BackgroundFetchFailureReason
+BackgroundFetchJobController::MojoFailureReason() const {
+  switch (reason_to_abort_) {
+    case BackgroundFetchReasonToAbort::NONE:
+      return blink::mojom::BackgroundFetchFailureReason::NONE;
+    case BackgroundFetchReasonToAbort::CANCELLED_FROM_UI:
+      return blink::mojom::BackgroundFetchFailureReason::CANCELLED_FROM_UI;
+    case BackgroundFetchReasonToAbort::ABORTED_BY_DEVELOPER:
+      return blink::mojom::BackgroundFetchFailureReason::CANCELLED_BY_DEVELOPER;
+    case BackgroundFetchReasonToAbort::TOTAL_DOWNLOAD_SIZE_EXCEEDED:
+      return blink::mojom::BackgroundFetchFailureReason::
+          TOTAL_DOWNLOAD_SIZE_EXCEEDED;
+    case BackgroundFetchReasonToAbort::SERVICE_WORKER_UNAVAILABLE:
+      return blink::mojom::BackgroundFetchFailureReason::
+          SERVICE_WORKER_UNAVAILABLE;
+    case BackgroundFetchReasonToAbort::QUOTA_EXCEEDED:
+      return blink::mojom::BackgroundFetchFailureReason::QUOTA_EXCEEDED;
+  }
+  NOTREACHED();
 }
 
 void BackgroundFetchJobController::Abort(
     BackgroundFetchReasonToAbort reason_to_abort) {
+  reason_to_abort_ = reason_to_abort;
+
+  // Stop propagating any in-flight events to the scheduler.
+  active_request_finished_callback_.Reset();
+
+  // Cancel any in-flight downloads and UI through the BGFetchDelegate.
   delegate_proxy_->Abort(registration_id().unique_id());
 
-  std::vector<std::string> aborted_guids;
-  for (const auto& pair : active_request_download_bytes_)
-    aborted_guids.push_back(pair.first);
-  request_manager_->OnJobAborted(registration_id(), std::move(aborted_guids));
-  if (reason_to_abort != BackgroundFetchReasonToAbort::ABORTED_BY_DEVELOPER) {
-    // Don't call Finish() here, so that we don't mark data for deletion while
-    // there are active fetches.
-    // Once the controller finishes processing, this function will be called
-    // again. (BackgroundFetchScheduler's finished_callback_ will call
-    // BackgroundFetchJobController::Abort() with |cancel_download| set to
-    // true.)
-    Finish(reason_to_abort);
-  }
+  Finish(reason_to_abort);
 }
 
 }  // namespace content

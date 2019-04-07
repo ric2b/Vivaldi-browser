@@ -305,6 +305,13 @@
   <message name="IDS_PHISHING_WEBVIEW_EXPLANATION_PARAGRAPH" desc="The explanation of why Safe Browsing has blocked the page. Allows the user to proceed using a link.">
     This content might try to trick you into installing software or revealing personal information. <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>Show anyway<ph name="END_LINK">&lt;/a&gt;</ph>
   </message>
+  <message name="IDS_HARMFUL_WEBVIEW_HEADING" desc="The heading of the unwanted software interstitial on medium sized Webview.">
+    Harmful content blocked.
+  </message>
+  <message name="IDS_HARMFUL_WEBVIEW_EXPLANATION_PARAGRAPH" desc="The explanation of why Safe Browsing has blocked the page. Allows the user to proceed using a link.">
+    This content might try to install deceptive apps that pretend to be something else or collect data that may be used to track you. <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>Show anyway<ph name="END_LINK">&lt;/a&gt;</ph>
+  </message>
+
   <message name="IDS_CONNECTION_HELP_SHOW_MORE" desc="The button label to expand sections for the chrome://connection-help site. Paired with IDS_CONNECTION_HELP_SHOW_LESS">
     Show More
   </message>
@@ -381,4 +388,18 @@
       &lt;/ol&gt;
     </message>
   </if>
+
+  <!-- Billing interstitial -->
+  <message name="IDS_BILLING_HEADING" desc="The large heading at the top of the billing interstitial.">
+    The page ahead may try to charge you money
+  </message>
+  <message name="IDS_BILLING_PRIMARY_PARAGRAPH" desc="The primary explanatory paragraph for the billing interstitial.">
+    These charges could be one-time or recurring and may not be obvious.
+  </message>
+  <message name="IDS_BILLING_PRIMARY_BUTTON" desc="The text for the billing interstitial primary button.">
+    Go Back
+  </message>
+  <message name="IDS_BILLING_PROCEED_BUTTON" desc="The text for the billing interstitial proceed button.">
+    Proceed
+  </message>
 </grit-part>

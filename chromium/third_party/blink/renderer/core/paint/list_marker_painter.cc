@@ -4,13 +4,12 @@
 
 #include "third_party/blink/renderer/core/paint/list_marker_painter.h"
 
-#include "third_party/blink/renderer/core/layout/api/selection_state.h"
 #include "third_party/blink/renderer/core/layout/layout_list_item.h"
 #include "third_party/blink/renderer/core/layout/layout_list_marker.h"
 #include "third_party/blink/renderer/core/layout/list_marker_text.h"
-#include "third_party/blink/renderer/core/paint/adjust_paint_offset_scope.h"
 #include "third_party/blink/renderer/core/paint/box_model_object_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
+#include "third_party/blink/renderer/core/paint/paint_info_with_offset.h"
 #include "third_party/blink/renderer/core/paint/selection_painting_utils.h"
 #include "third_party/blink/renderer/core/paint/text_painter.h"
 #include "third_party/blink/renderer/platform/fonts/text_run_paint_info.h"
@@ -55,21 +54,20 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info) {
   if (paint_info.phase != PaintPhase::kForeground)
     return;
 
-  if (layout_list_marker_.Style()->Visibility() != EVisibility::kVisible)
+  if (layout_list_marker_.StyleRef().Visibility() != EVisibility::kVisible)
     return;
 
   if (DrawingRecorder::UseCachedDrawingIfPossible(
           paint_info.context, layout_list_marker_, paint_info.phase))
     return;
 
-  AdjustPaintOffsetScope adjustment(layout_list_marker_, paint_info);
-  const auto& local_paint_info = adjustment.GetPaintInfo();
-  auto box_origin = adjustment.PaintOffset();
-  LayoutRect overflow_rect(layout_list_marker_.VisualOverflowRect());
-  overflow_rect.MoveBy(box_origin);
-
-  if (!local_paint_info.GetCullRect().IntersectsCullRect(overflow_rect))
+  PaintInfoWithOffset paint_info_with_offset(layout_list_marker_, paint_info);
+  if (!paint_info_with_offset.LocalRectIntersectsCullRect(
+          layout_list_marker_.PhysicalVisualOverflowRect()))
     return;
+
+  const auto& local_paint_info = paint_info_with_offset.GetPaintInfo();
+  auto box_origin = paint_info_with_offset.PaintOffset();
 
   DrawingRecorder recorder(local_paint_info.context, layout_list_marker_,
                            local_paint_info.phase);
@@ -90,15 +88,6 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info) {
                        layout_list_marker_.StyleRef(), FloatSize(marker.Size()))
             .get(),
         Image::kSyncDecode, FloatRect(marker));
-    if (layout_list_marker_.GetSelectionState() != SelectionState::kNone) {
-      LayoutRect sel_rect = layout_list_marker_.LocalSelectionRect();
-      sel_rect.MoveBy(box_origin);
-      Color selection_bg = SelectionPaintingUtils::SelectionBackgroundColor(
-          layout_list_marker_.ListItem()->GetDocument(),
-          layout_list_marker_.ListItem()->StyleRef(),
-          layout_list_marker_.ListItem()->GetNode());
-      context.FillRect(PixelSnappedIntRect(sel_rect), selection_bg);
-    }
     return;
   }
 
@@ -126,12 +115,12 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info) {
   // Apply the color to the list marker text.
   context.SetFillColor(color);
 
-  const Font& font = layout_list_marker_.Style()->GetFont();
+  const Font& font = layout_list_marker_.StyleRef().GetFont();
   TextRun text_run = ConstructTextRun(font, layout_list_marker_.GetText(),
                                       layout_list_marker_.StyleRef());
 
   GraphicsContextStateSaver state_saver(context, false);
-  if (!layout_list_marker_.Style()->IsHorizontalWritingMode()) {
+  if (!layout_list_marker_.StyleRef().IsHorizontalWritingMode()) {
     marker.MoveBy(-box_origin);
     marker = marker.TransposedRect();
     marker.MoveBy(
@@ -146,7 +135,7 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info) {
   TextRunPaintInfo text_run_paint_info(text_run);
   text_run_paint_info.bounds = FloatRect(EnclosingIntRect(marker));
   const SimpleFontData* font_data =
-      layout_list_marker_.Style()->GetFont().PrimaryFont();
+      layout_list_marker_.StyleRef().GetFont().PrimaryFont();
   FloatPoint text_origin =
       FloatPoint(marker.X().Round(),
                  marker.Y().Round() +
@@ -168,16 +157,16 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info) {
   }
 
   const UChar suffix =
-      ListMarkerText::Suffix(layout_list_marker_.Style()->ListStyleType(),
+      ListMarkerText::Suffix(layout_list_marker_.StyleRef().ListStyleType(),
                              layout_list_marker_.ListItem()->Value());
   UChar suffix_str[2] = {suffix, static_cast<UChar>(' ')};
   TextRun suffix_run =
       ConstructTextRun(font, suffix_str, 2, layout_list_marker_.StyleRef(),
-                       layout_list_marker_.Style()->Direction());
+                       layout_list_marker_.StyleRef().Direction());
   TextRunPaintInfo suffix_run_info(suffix_run);
   suffix_run_info.bounds = FloatRect(EnclosingIntRect(marker));
 
-  if (layout_list_marker_.Style()->IsLeftToRightDirection()) {
+  if (layout_list_marker_.StyleRef().IsLeftToRightDirection()) {
     context.DrawText(font, text_run_paint_info, text_origin);
     context.DrawText(font, suffix_run_info,
                      text_origin + FloatSize(IntSize(font.Width(text_run), 0)));

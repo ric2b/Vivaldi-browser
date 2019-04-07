@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/profiles/profile.h"
@@ -136,7 +136,7 @@ void SwitchLanguage(const std::string& locale,
   base::Closure reloader(
       base::Bind(&SwitchLanguageDoReloadLocale, base::Unretained(data.get())));
   base::PostTaskWithTraitsAndReply(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND}, reloader,
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT}, reloader,
       base::Bind(&FinishSwitchLanguage, base::Passed(std::move(data))));
 }
 

@@ -39,7 +39,6 @@ class MockDelegatedFrameHostAndroidClient
   MOCK_METHOD2(DidPresentCompositorFrame,
                void(uint32_t, const gfx::PresentationFeedback&));
   MOCK_METHOD1(OnFrameTokenChanged, void(uint32_t));
-  MOCK_METHOD0(DidReceiveFirstFrameAfterNavigation, void());
 };
 
 class MockWindowAndroidCompositor : public WindowAndroidCompositor {
@@ -54,6 +53,7 @@ class MockWindowAndroidCompositor : public WindowAndroidCompositor {
   MOCK_METHOD2(DoGetCompositorLock,
                CompositorLock*(CompositorLockClient*, base::TimeDelta));
   MOCK_CONST_METHOD0(IsDrawingFirstVisibleFrame, bool());
+  MOCK_METHOD1(SetVSyncPaused, void(bool));
 
   // Helpers for move-only types:
   void RequestCopyOfOutputOnRootLayer(
@@ -148,6 +148,12 @@ class DelegatedFrameHostAndroidSurfaceSynchronizationTest
   bool ShouldEnableSurfaceSynchronization() const override { return true; }
 };
 
+// Resize lock is only enabled on O+.
+static bool IsResizeLockEnabled() {
+  return base::android::BuildInfo::GetInstance()->sdk_int() >=
+         base::android::SDK_VERSION_OREO;
+}
+
 // If surface synchronization is enabled then we should not be acquiring a
 // compositor lock on attach.
 TEST_F(DelegatedFrameHostAndroidSurfaceSynchronizationTest,
@@ -232,10 +238,8 @@ TEST_F(DelegatedFrameHostAndroidTest, CompositorLockReleasedWithDetach) {
 
 TEST_F(DelegatedFrameHostAndroidTest, ResizeLockBasic) {
   // Resize lock is only enabled on O+.
-  if (base::android::BuildInfo::GetInstance()->sdk_int() <
-      base::android::SDK_VERSION_OREO) {
+  if (!IsResizeLockEnabled())
     return;
-  }
 
   SetUpValidFrame(gfx::Size(10, 10));
 
@@ -259,10 +263,8 @@ TEST_F(DelegatedFrameHostAndroidTest, ResizeLockBasic) {
 
 TEST_F(DelegatedFrameHostAndroidTest, ResizeLockNotTakenIfNoSizeChange) {
   // Resize lock is only enabled on O+.
-  if (base::android::BuildInfo::GetInstance()->sdk_int() <
-      base::android::SDK_VERSION_OREO) {
+  if (!IsResizeLockEnabled())
     return;
-  }
 
   SetUpValidFrame(gfx::Size(10, 10));
 
@@ -274,10 +276,8 @@ TEST_F(DelegatedFrameHostAndroidTest, ResizeLockNotTakenIfNoSizeChange) {
 
 TEST_F(DelegatedFrameHostAndroidTest, ResizeLockReleasedWithDetach) {
   // Resize lock is only enabled on O+.
-  if (base::android::BuildInfo::GetInstance()->sdk_int() <
-      base::android::SDK_VERSION_OREO) {
+  if (!IsResizeLockEnabled())
     return;
-  }
 
   SetUpValidFrame(gfx::Size(10, 10));
 
@@ -296,10 +296,8 @@ TEST_F(DelegatedFrameHostAndroidTest, ResizeLockReleasedWithDetach) {
 
 TEST_F(DelegatedFrameHostAndroidTest, TestBothCompositorLocks) {
   // Resize lock is only enabled on O+.
-  if (base::android::BuildInfo::GetInstance()->sdk_int() <
-      base::android::SDK_VERSION_OREO) {
+  if (!IsResizeLockEnabled())
     return;
-  }
 
   // Attach during the first frame, first lock will be taken.
   EXPECT_CALL(compositor_, IsDrawingFirstVisibleFrame()).WillOnce(Return(true));

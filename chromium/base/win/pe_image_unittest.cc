@@ -203,6 +203,7 @@ TEST(PEImageTest, ForwardedExport) {
 
 // Test that we can get debug id out of a module.
 TEST(PEImageTest, GetDebugId) {
+  static constexpr char kPdbFileName[] = "advapi32.pdb";
   ScopedNativeLibrary module(FilePath(L"advapi32.dll"));
   ASSERT_TRUE(module.is_valid());
 
@@ -210,11 +211,13 @@ TEST(PEImageTest, GetDebugId) {
   GUID guid = {0};
   DWORD age = 0;
   LPCSTR pdb_file = nullptr;
-  EXPECT_TRUE(pe.GetDebugId(&guid, &age, &pdb_file));
-  EXPECT_STREQ("advapi32.pdb", pdb_file);
+  size_t pdb_file_length = 0;
+  EXPECT_TRUE(pe.GetDebugId(&guid, &age, &pdb_file, &pdb_file_length));
+  EXPECT_EQ(pdb_file_length, strlen(kPdbFileName));
+  EXPECT_STREQ(pdb_file, kPdbFileName);
 
   // Should be valid to call without parameters.
-  EXPECT_TRUE(pe.GetDebugId(nullptr, nullptr, nullptr));
+  EXPECT_TRUE(pe.GetDebugId(nullptr, nullptr, nullptr, nullptr));
 
   GUID empty_guid = {0};
   EXPECT_TRUE(!IsEqualGUID(empty_guid, guid));

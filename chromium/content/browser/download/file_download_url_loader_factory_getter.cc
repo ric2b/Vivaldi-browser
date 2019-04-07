@@ -4,8 +4,8 @@
 
 #include "content/browser/download/file_download_url_loader_factory_getter.h"
 
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "components/download/public/common/download_task_runner.h"
 #include "content/browser/file_url_loader_factory.h"
 #include "content/browser/url_loader_factory_getter.h"
@@ -33,7 +33,7 @@ FileDownloadURLLoaderFactoryGetter::GetURLLoaderFactory() {
   mojo::MakeStrongBinding(
       std::make_unique<FileURLLoaderFactory>(
           profile_path_, base::CreateSequencedTaskRunnerWithTraits(
-                             {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                             {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                               base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       MakeRequest(&url_loader_factory_ptr_info));
 

@@ -7,8 +7,10 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/containers/flat_set.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/no_destructor.h"
 #include "base/scoped_observer.h"
 #include "base/stl_util.h"
 #include "ui/aura/client/aura_constants.h"
@@ -33,31 +35,6 @@ DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(ui::Shadow, kShadowLayerKey, nullptr);
 namespace wm {
 
 namespace {
-
-int GetDefaultShadowElevationForWindow(aura::Window* window) {
-  switch (window->type()) {
-    case aura::client::WINDOW_TYPE_NORMAL:
-    case aura::client::WINDOW_TYPE_PANEL:
-      return kShadowElevationInactiveWindow;
-
-    case aura::client::WINDOW_TYPE_MENU:
-    case aura::client::WINDOW_TYPE_TOOLTIP:
-      return kShadowElevationMenuOrTooltip;
-
-    default:
-      break;
-  }
-  return kShadowElevationNone;
-}
-
-// Returns the shadow elevation for |window|, converting
-// |kShadowElevationDefault| to the appropriate value.
-int GetShadowElevationConvertDefault(aura::Window* window) {
-  int elevation = window->GetProperty(kShadowElevationKey);
-  return elevation == kShadowElevationDefault
-             ? GetDefaultShadowElevationForWindow(window)
-             : elevation;
-}
 
 int GetShadowElevationForActiveState(aura::Window* window) {
   int elevation = window->GetProperty(kShadowElevationKey);
@@ -96,8 +73,8 @@ class ShadowController::Impl :
       public aura::WindowObserver,
       public base::RefCounted<Impl> {
  public:
-  // Returns the singleton instance, destroyed when there are no more refs.
-  static Impl* GetInstance();
+  // Returns the singleton instance for the specified Env.
+  static Impl* GetInstance(aura::Env* env);
 
   void set_delegate(std::unique_ptr<ShadowControllerDelegate> delegate) {
     delegate_ = std::move(delegate);
@@ -123,8 +100,10 @@ class ShadowController::Impl :
   friend class base::RefCounted<Impl>;
   friend class ShadowController;
 
-  Impl();
+  explicit Impl(aura::Env* env);
   ~Impl() override;
+
+  static base::flat_set<Impl*>* GetInstances();
 
   // Forwarded from ShadowController.
   void OnWindowActivated(ActivationReason reason,
@@ -147,23 +126,22 @@ class ShadowController::Impl :
   // The shadow's bounds are initialized and it is added to the window's layer.
   void CreateShadowForWindow(aura::Window* window);
 
+  aura::Env* const env_;
   ScopedObserver<aura::Window, aura::WindowObserver> observer_manager_;
 
   std::unique_ptr<ShadowControllerDelegate> delegate_;
-
-  static Impl* instance_;
 
   DISALLOW_COPY_AND_ASSIGN(Impl);
 };
 
 // static
-ShadowController::Impl* ShadowController::Impl::instance_ = NULL;
+ShadowController::Impl* ShadowController::Impl::GetInstance(aura::Env* env) {
+  for (Impl* impl : *GetInstances()) {
+    if (impl->env_ == env)
+      return impl;
+  }
 
-// static
-ShadowController::Impl* ShadowController::Impl::GetInstance() {
-  if (!instance_)
-    instance_ = new Impl();
-  return instance_;
+  return new Impl(env);
 }
 
 bool ShadowController::Impl::IsShadowVisibleForWindow(aura::Window* window) {
@@ -255,8 +233,12 @@ void ShadowController::Impl::OnWindowActivated(ActivationReason reason,
 
 bool ShadowController::Impl::ShouldShowShadowForWindow(
     aura::Window* window) const {
-  if (delegate_ && !delegate_->ShouldShowShadowForWindow(window))
-    return false;
+  if (delegate_) {
+    const bool should_show = delegate_->ShouldShowShadowForWindow(window);
+    if (should_show)
+      DCHECK(GetShadowElevationConvertDefault(window) > 0);
+    return should_show;
+  }
 
   ui::WindowShowState show_state =
       window->GetProperty(aura::client::kShowStateKey);
@@ -296,15 +278,22 @@ void ShadowController::Impl::CreateShadowForWindow(aura::Window* window) {
   window->layer()->StackAtBottom(shadow->layer());
 }
 
-ShadowController::Impl::Impl()
-    : observer_manager_(this) {
-  aura::Env::GetInstance()->AddObserver(this);
+ShadowController::Impl::Impl(aura::Env* env)
+    : env_(env), observer_manager_(this) {
+  GetInstances()->insert(this);
+  env_->AddObserver(this);
 }
 
 ShadowController::Impl::~Impl() {
-  DCHECK_EQ(instance_, this);
-  aura::Env::GetInstance()->RemoveObserver(this);
-  instance_ = NULL;
+  env_->RemoveObserver(this);
+  GetInstances()->erase(this);
+}
+
+// static
+base::flat_set<ShadowController::Impl*>*
+ShadowController::Impl::GetInstances() {
+  static base::NoDestructor<base::flat_set<Impl*>> impls;
+  return impls.get();
 }
 
 // ShadowController ------------------------------------------------------------
@@ -315,8 +304,10 @@ ui::Shadow* ShadowController::GetShadowForWindow(aura::Window* window) {
 
 ShadowController::ShadowController(
     ActivationClient* activation_client,
-    std::unique_ptr<ShadowControllerDelegate> delegate)
-    : activation_client_(activation_client), impl_(Impl::GetInstance()) {
+    std::unique_ptr<ShadowControllerDelegate> delegate,
+    aura::Env* env)
+    : activation_client_(activation_client),
+      impl_(Impl::GetInstance(env ? env : aura::Env::GetInstance())) {
   // Watch for window activation changes.
   activation_client_->AddObserver(this);
   if (delegate)

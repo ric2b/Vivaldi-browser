@@ -39,10 +39,6 @@ class SystemNetworkContextManager;
 class WatchDogThread;
 class WebRtcLogUploader;
 
-namespace content {
-class NetworkConnectionTracker;
-}
-
 namespace network {
 class NetworkQualityTracker;
 class SharedURLLoaderFactory;
@@ -185,10 +181,6 @@ class BrowserProcess {
   // is enabled. When the network service is not enabled, its NetworkContext is
   // backed by the IOThread's URLRequestContext.
   virtual SystemNetworkContextManager* system_network_context_manager() = 0;
-
-  // Returns a NetworkConnectionTracker that can be used to subscribe for
-  // network change events.
-  virtual content::NetworkConnectionTracker* network_connection_tracker() = 0;
 
   // Returns a NetworkQualityTracker that can be used to subscribe for
   // network quality change events.

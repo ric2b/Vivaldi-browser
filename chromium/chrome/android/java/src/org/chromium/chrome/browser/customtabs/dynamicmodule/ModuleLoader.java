@@ -15,6 +15,8 @@ import org.chromium.base.AsyncTask;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
+import org.chromium.chrome.browser.crash.CrashKeyIndex;
+import org.chromium.chrome.browser.crash.CrashKeys;
 
 /**
  * Dynamically loads a module from another apk.
@@ -24,6 +26,7 @@ public class ModuleLoader {
 
     /** Specifies the module package name and entry point class name. */
     private final ComponentName mComponentName;
+    private final String mModuleId;
     private int mModuleUseCount;
     @Nullable
     private ModuleEntryPoint mModuleEntryPoint;
@@ -34,6 +37,18 @@ public class ModuleLoader {
      */
     public ModuleLoader(ComponentName componentName) {
         mComponentName = componentName;
+        String packageName = componentName.getPackageName();
+        String version = "";
+        try {
+            version = ContextUtils.getApplicationContext()
+                              .getPackageManager()
+                              .getPackageInfo(packageName, 0)
+                              .versionName;
+        } catch (PackageManager.NameNotFoundException ignored) {
+            // Ignore the exception. Failure to find the package name will be handled in
+            // getModuleContext() below.
+        }
+        mModuleId = packageName + ":" + version;
     }
 
     public ComponentName getComponentName() {
@@ -83,6 +98,7 @@ public class ModuleLoader {
         mModuleUseCount--;
         if (mModuleUseCount == 0) {
             mModuleEntryPoint.onDestroy();
+            CrashKeys.getInstance().set(CrashKeyIndex.ACTIVE_DYNAMIC_MODULE, null);
             mModuleEntryPoint = null;
         }
     }
@@ -90,7 +106,7 @@ public class ModuleLoader {
     /**
      * A task for loading the module entry point class on a background thread.
      */
-    private class LoadClassTask extends AsyncTask<Void, Void, Class<?>> {
+    private class LoadClassTask extends AsyncTask<Class<?>> {
         private final Context mModuleContext;
         private final Callback<ModuleEntryPoint> mCallback;
 
@@ -100,14 +116,14 @@ public class ModuleLoader {
          * @param callback The callback to receive the result of the task. If there was a problem
          *     the result will be null.
          */
-        private LoadClassTask(Context moduleContext, Callback<ModuleEntryPoint> callback) {
+        LoadClassTask(Context moduleContext, Callback<ModuleEntryPoint> callback) {
             mModuleContext = moduleContext;
             mCallback = callback;
         }
 
         @Override
         @Nullable
-        protected Class<?> doInBackground(Void... params) {
+        protected Class<?> doInBackground() {
             int oldPriority = Process.getThreadPriority(0);
             try {
                 // We don't want to block the UI thread, but we don't want to be really slow either.
@@ -160,6 +176,10 @@ public class ModuleLoader {
                     mCallback.onResult(null);
                     return;
                 }
+
+                CrashKeys crashKeys = CrashKeys.getInstance();
+                crashKeys.set(CrashKeyIndex.LOADED_DYNAMIC_MODULE, mModuleId);
+                crashKeys.set(CrashKeyIndex.ACTIVE_DYNAMIC_MODULE, mModuleId);
 
                 entryPoint.init(moduleHost);
                 ModuleMetrics.recordLoadResult(ModuleMetrics.LoadResult.SUCCESS_NEW);

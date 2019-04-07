@@ -10,22 +10,29 @@
 #include "base/test/scoped_task_environment.h"
 #include "chromeos/services/device_sync/public/cpp/fake_device_sync_client.h"
 #include "chromeos/services/multidevice_setup/account_status_change_delegate_notifier_impl.h"
+#include "chromeos/services/multidevice_setup/device_reenroller.h"
 #include "chromeos/services/multidevice_setup/eligible_host_devices_provider_impl.h"
 #include "chromeos/services/multidevice_setup/fake_account_status_change_delegate.h"
 #include "chromeos/services/multidevice_setup/fake_account_status_change_delegate_notifier.h"
 #include "chromeos/services/multidevice_setup/fake_eligible_host_devices_provider.h"
+#include "chromeos/services/multidevice_setup/fake_feature_state_manager.h"
+#include "chromeos/services/multidevice_setup/fake_feature_state_observer.h"
 #include "chromeos/services/multidevice_setup/fake_host_backend_delegate.h"
 #include "chromeos/services/multidevice_setup/fake_host_status_observer.h"
 #include "chromeos/services/multidevice_setup/fake_host_status_provider.h"
 #include "chromeos/services/multidevice_setup/fake_host_verifier.h"
 #include "chromeos/services/multidevice_setup/fake_setup_flow_completion_recorder.h"
+#include "chromeos/services/multidevice_setup/feature_state_manager_impl.h"
 #include "chromeos/services/multidevice_setup/host_backend_delegate_impl.h"
 #include "chromeos/services/multidevice_setup/host_status_provider_impl.h"
 #include "chromeos/services/multidevice_setup/host_verifier_impl.h"
 #include "chromeos/services/multidevice_setup/multidevice_setup_impl.h"
+#include "chromeos/services/multidevice_setup/public/cpp/fake_android_sms_app_helper_delegate.h"
+#include "chromeos/services/multidevice_setup/public/cpp/fake_auth_token_validator.h"
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
 #include "chromeos/services/multidevice_setup/setup_flow_completion_recorder_impl.h"
 #include "chromeos/services/secure_channel/public/cpp/client/fake_secure_channel_client.h"
+#include "components/cryptauth/fake_gcm_device_info_provider.h"
 #include "components/cryptauth/remote_device_test_util.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -37,6 +44,8 @@ namespace multidevice_setup {
 namespace {
 
 const size_t kNumTestDevices = 3;
+
+const char kValidAuthToken[] = "validAuthToken";
 
 cryptauth::RemoteDeviceList RefListToRawList(
     const cryptauth::RemoteDeviceRefList& ref_list) {
@@ -223,6 +232,47 @@ class FakeHostStatusProviderFactory : public HostStatusProviderImpl::Factory {
   DISALLOW_COPY_AND_ASSIGN(FakeHostStatusProviderFactory);
 };
 
+class FakeFeatureStateManagerFactory : public FeatureStateManagerImpl::Factory {
+ public:
+  FakeFeatureStateManagerFactory(
+      sync_preferences::TestingPrefServiceSyncable*
+          expected_testing_pref_service,
+      FakeHostStatusProviderFactory* fake_host_status_provider_factory,
+      device_sync::FakeDeviceSyncClient* expected_device_sync_client)
+      : expected_testing_pref_service_(expected_testing_pref_service),
+        fake_host_status_provider_factory_(fake_host_status_provider_factory),
+        expected_device_sync_client_(expected_device_sync_client) {}
+
+  ~FakeFeatureStateManagerFactory() override = default;
+
+  FakeFeatureStateManager* instance() { return instance_; }
+
+ private:
+  // FeatureStateManagerImpl::Factory:
+  std::unique_ptr<FeatureStateManager> BuildInstance(
+      PrefService* pref_service,
+      HostStatusProvider* host_status_provider,
+      device_sync::DeviceSyncClient* device_sync_client) override {
+    EXPECT_FALSE(instance_);
+    EXPECT_EQ(expected_testing_pref_service_, pref_service);
+    EXPECT_EQ(fake_host_status_provider_factory_->instance(),
+              host_status_provider);
+    EXPECT_EQ(expected_device_sync_client_, device_sync_client);
+
+    auto instance = std::make_unique<FakeFeatureStateManager>();
+    instance_ = instance.get();
+    return instance;
+  }
+
+  sync_preferences::TestingPrefServiceSyncable* expected_testing_pref_service_;
+  FakeHostStatusProviderFactory* fake_host_status_provider_factory_;
+  device_sync::FakeDeviceSyncClient* expected_device_sync_client_;
+
+  FakeFeatureStateManager* instance_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(FakeFeatureStateManagerFactory);
+};
+
 class FakeSetupFlowCompletionRecorderFactory
     : public SetupFlowCompletionRecorderImpl::Factory {
  public:
@@ -259,12 +309,12 @@ class FakeAccountStatusChangeDelegateNotifierFactory
     : public AccountStatusChangeDelegateNotifierImpl::Factory {
  public:
   FakeAccountStatusChangeDelegateNotifierFactory(
-      device_sync::FakeDeviceSyncClient* expected_device_sync_client,
+      FakeHostStatusProviderFactory* fake_host_status_provider_factory,
       sync_preferences::TestingPrefServiceSyncable*
           expected_testing_pref_service,
       FakeSetupFlowCompletionRecorderFactory*
           fake_setup_flow_completion_recorder_factory)
-      : expected_device_sync_client_(expected_device_sync_client),
+      : fake_host_status_provider_factory_(fake_host_status_provider_factory),
         expected_testing_pref_service_(expected_testing_pref_service),
         fake_setup_flow_completion_recorder_factory_(
             fake_setup_flow_completion_recorder_factory) {}
@@ -276,12 +326,13 @@ class FakeAccountStatusChangeDelegateNotifierFactory
  private:
   // AccountStatusChangeDelegateNotifierImpl::Factory:
   std::unique_ptr<AccountStatusChangeDelegateNotifier> BuildInstance(
-      device_sync::DeviceSyncClient* device_sync_client,
+      HostStatusProvider* host_status_provider,
       PrefService* pref_service,
       SetupFlowCompletionRecorder* setup_flow_completion_recorder,
       base::Clock* clock) override {
     EXPECT_FALSE(instance_);
-    EXPECT_EQ(expected_device_sync_client_, device_sync_client);
+    EXPECT_EQ(fake_host_status_provider_factory_->instance(),
+              host_status_provider);
     EXPECT_EQ(expected_testing_pref_service_, pref_service);
     EXPECT_EQ(fake_setup_flow_completion_recorder_factory_->instance(),
               setup_flow_completion_recorder);
@@ -291,7 +342,7 @@ class FakeAccountStatusChangeDelegateNotifierFactory
     return instance;
   }
 
-  device_sync::FakeDeviceSyncClient* expected_device_sync_client_;
+  FakeHostStatusProviderFactory* fake_host_status_provider_factory_;
   sync_preferences::TestingPrefServiceSyncable* expected_testing_pref_service_;
   FakeSetupFlowCompletionRecorderFactory*
       fake_setup_flow_completion_recorder_factory_;
@@ -299,6 +350,36 @@ class FakeAccountStatusChangeDelegateNotifierFactory
   FakeAccountStatusChangeDelegateNotifier* instance_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(FakeAccountStatusChangeDelegateNotifierFactory);
+};
+
+class FakeDeviceReenrollerFactory : public DeviceReenroller::Factory {
+ public:
+  FakeDeviceReenrollerFactory(
+      device_sync::FakeDeviceSyncClient* expected_device_sync_client,
+      const cryptauth::FakeGcmDeviceInfoProvider*
+          expected_gcm_device_info_provider)
+      : expected_device_sync_client_(expected_device_sync_client),
+        expected_gcm_device_info_provider_(expected_gcm_device_info_provider) {}
+
+  ~FakeDeviceReenrollerFactory() override = default;
+
+ private:
+  // DeviceReenroller::Factory:
+  std::unique_ptr<DeviceReenroller> BuildInstance(
+      device_sync::DeviceSyncClient* device_sync_client,
+      const cryptauth::GcmDeviceInfoProvider* gcm_device_info_provider,
+      std::unique_ptr<base::OneShotTimer> timer) override {
+    EXPECT_EQ(expected_device_sync_client_, device_sync_client);
+    EXPECT_EQ(expected_gcm_device_info_provider_, gcm_device_info_provider);
+    // Only check inputs and return nullptr. We do not want to trigger the
+    // DeviceReenroller logic in these unit tests.
+    return nullptr;
+  }
+
+  device_sync::FakeDeviceSyncClient* expected_device_sync_client_;
+  const cryptauth::GcmDeviceInfoProvider* expected_gcm_device_info_provider_;
+
+  DISALLOW_COPY_AND_ASSIGN(FakeDeviceReenrollerFactory);
 };
 
 }  // namespace
@@ -317,6 +398,18 @@ class MultiDeviceSetupImplTest : public testing::Test {
         std::make_unique<device_sync::FakeDeviceSyncClient>();
     fake_secure_channel_client_ =
         std::make_unique<secure_channel::FakeSecureChannelClient>();
+
+    fake_auth_token_validator_ = std::make_unique<FakeAuthTokenValidator>();
+    fake_auth_token_validator_->set_expected_auth_token(kValidAuthToken);
+
+    auto fake_android_sms_app_helper_delegate =
+        std::make_unique<FakeAndroidSmsAppHelperDelegate>();
+    fake_android_sms_app_helper_delegate_ =
+        fake_android_sms_app_helper_delegate.get();
+
+    fake_gcm_device_info_provider_ =
+        std::make_unique<cryptauth::FakeGcmDeviceInfoProvider>(
+            cryptauth::GcmDeviceInfo());
 
     fake_eligible_host_devices_provider_factory_ =
         std::make_unique<FakeEligibleHostDevicesProviderFactory>(
@@ -345,6 +438,13 @@ class MultiDeviceSetupImplTest : public testing::Test {
     HostStatusProviderImpl::Factory::SetFactoryForTesting(
         fake_host_status_provider_factory_.get());
 
+    fake_feature_state_manager_factory_ =
+        std::make_unique<FakeFeatureStateManagerFactory>(
+            test_pref_service_.get(), fake_host_status_provider_factory_.get(),
+            fake_device_sync_client_.get());
+    FeatureStateManagerImpl::Factory::SetFactoryForTesting(
+        fake_feature_state_manager_factory_.get());
+
     fake_setup_flow_completion_recorder_factory_ =
         std::make_unique<FakeSetupFlowCompletionRecorderFactory>(
             test_pref_service_.get());
@@ -353,14 +453,23 @@ class MultiDeviceSetupImplTest : public testing::Test {
 
     fake_account_status_change_delegate_notifier_factory_ =
         std::make_unique<FakeAccountStatusChangeDelegateNotifierFactory>(
-            fake_device_sync_client_.get(), test_pref_service_.get(),
+            fake_host_status_provider_factory_.get(), test_pref_service_.get(),
             fake_setup_flow_completion_recorder_factory_.get());
     AccountStatusChangeDelegateNotifierImpl::Factory::SetFactoryForTesting(
         fake_account_status_change_delegate_notifier_factory_.get());
 
+    fake_device_reenroller_factory_ =
+        std::make_unique<FakeDeviceReenrollerFactory>(
+            fake_device_sync_client_.get(),
+            fake_gcm_device_info_provider_.get());
+    DeviceReenroller::Factory::SetFactoryForTesting(
+        fake_device_reenroller_factory_.get());
+
     multidevice_setup_ = MultiDeviceSetupImpl::Factory::Get()->BuildInstance(
         test_pref_service_.get(), fake_device_sync_client_.get(),
-        fake_secure_channel_client_.get());
+        fake_secure_channel_client_.get(), fake_auth_token_validator_.get(),
+        std::move(fake_android_sms_app_helper_delegate),
+        fake_gcm_device_info_provider_.get());
   }
 
   void TearDown() override {
@@ -368,9 +477,11 @@ class MultiDeviceSetupImplTest : public testing::Test {
     HostBackendDelegateImpl::Factory::SetFactoryForTesting(nullptr);
     HostVerifierImpl::Factory::SetFactoryForTesting(nullptr);
     HostStatusProviderImpl::Factory::SetFactoryForTesting(nullptr);
+    FeatureStateManagerImpl::Factory::SetFactoryForTesting(nullptr);
     SetupFlowCompletionRecorderImpl::Factory::SetFactoryForTesting(nullptr);
     AccountStatusChangeDelegateNotifierImpl::Factory::SetFactoryForTesting(
         nullptr);
+    DeviceReenroller::Factory::SetFactoryForTesting(nullptr);
   }
 
   void CallSetAccountStatusChangeDelegate() {
@@ -399,10 +510,11 @@ class MultiDeviceSetupImplTest : public testing::Test {
     return eligible_devices_list;
   }
 
-  bool CallSetHostDevice(const std::string& host_public_key) {
+  bool CallSetHostDevice(const std::string& host_device_id,
+                         const std::string& auth_token) {
     base::RunLoop run_loop;
     multidevice_setup_->SetHostDevice(
-        host_public_key,
+        host_device_id, auth_token,
         base::BindOnce(&MultiDeviceSetupImplTest::OnHostSet,
                        base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
@@ -426,6 +538,37 @@ class MultiDeviceSetupImplTest : public testing::Test {
     last_host_status_.reset();
 
     return host_status_update;
+  }
+
+  bool CallSetFeatureEnabledState(
+      mojom::Feature feature,
+      bool enabled,
+      const base::Optional<std::string>& auth_token) {
+    base::RunLoop run_loop;
+    multidevice_setup_->SetFeatureEnabledState(
+        feature, enabled, auth_token,
+        base::BindOnce(&MultiDeviceSetupImplTest::OnSetFeatureEnabled,
+                       base::Unretained(this), run_loop.QuitClosure()));
+    run_loop.Run();
+
+    bool success = *last_set_host_success_;
+    last_set_host_success_.reset();
+
+    return success;
+  }
+
+  base::flat_map<mojom::Feature, mojom::FeatureState> CallGetFeatureStates() {
+    base::RunLoop run_loop;
+    multidevice_setup_->GetFeatureStates(
+        base::BindOnce(&MultiDeviceSetupImplTest::OnGetFeatureStates,
+                       base::Unretained(this), run_loop.QuitClosure()));
+    run_loop.Run();
+
+    base::flat_map<mojom::Feature, mojom::FeatureState> feature_states_map =
+        *last_get_feature_states_result_;
+    last_get_feature_states_result_.reset();
+
+    return feature_states_map;
   }
 
   bool CallRetrySetHostNow() {
@@ -503,6 +646,10 @@ class MultiDeviceSetupImplTest : public testing::Test {
     return fake_host_status_provider_factory_->instance();
   }
 
+  FakeFeatureStateManager* fake_feature_state_manager() {
+    return fake_feature_state_manager_factory_->instance();
+  }
+
   FakeSetupFlowCompletionRecorder* fake_setup_flow_completion_recorder() {
     return fake_setup_flow_completion_recorder_factory_->instance();
   }
@@ -510,6 +657,10 @@ class MultiDeviceSetupImplTest : public testing::Test {
   FakeAccountStatusChangeDelegateNotifier*
   fake_account_status_change_delegate_notifier() {
     return fake_account_status_change_delegate_notifier_factory_->instance();
+  }
+
+  FakeAndroidSmsAppHelperDelegate* fake_android_sms_app_helper_delegate() {
+    return fake_android_sms_app_helper_delegate_;
   }
 
   cryptauth::RemoteDeviceRefList& test_devices() { return test_devices_; }
@@ -542,6 +693,21 @@ class MultiDeviceSetupImplTest : public testing::Test {
     std::move(quit_closure).Run();
   }
 
+  void OnSetFeatureEnabled(base::OnceClosure quit_closure, bool success) {
+    EXPECT_FALSE(last_set_host_success_);
+    last_set_host_success_ = success;
+    std::move(quit_closure).Run();
+  }
+
+  void OnGetFeatureStates(
+      base::OnceClosure quit_closure,
+      const base::flat_map<mojom::Feature, mojom::FeatureState>&
+          feature_states_map) {
+    EXPECT_FALSE(last_get_feature_states_result_);
+    last_get_feature_states_result_ = feature_states_map;
+    std::move(quit_closure).Run();
+  }
+
   void OnHostRetried(base::OnceClosure quit_closure, bool success) {
     EXPECT_FALSE(last_retry_success_);
     last_retry_success_ = success;
@@ -563,6 +729,9 @@ class MultiDeviceSetupImplTest : public testing::Test {
   std::unique_ptr<device_sync::FakeDeviceSyncClient> fake_device_sync_client_;
   std::unique_ptr<secure_channel::FakeSecureChannelClient>
       fake_secure_channel_client_;
+  std::unique_ptr<FakeAuthTokenValidator> fake_auth_token_validator_;
+  std::unique_ptr<cryptauth::FakeGcmDeviceInfoProvider>
+      fake_gcm_device_info_provider_;
 
   std::unique_ptr<FakeEligibleHostDevicesProviderFactory>
       fake_eligible_host_devices_provider_factory_;
@@ -571,10 +740,14 @@ class MultiDeviceSetupImplTest : public testing::Test {
   std::unique_ptr<FakeHostVerifierFactory> fake_host_verifier_factory_;
   std::unique_ptr<FakeHostStatusProviderFactory>
       fake_host_status_provider_factory_;
+  std::unique_ptr<FakeFeatureStateManagerFactory>
+      fake_feature_state_manager_factory_;
   std::unique_ptr<FakeSetupFlowCompletionRecorderFactory>
       fake_setup_flow_completion_recorder_factory_;
   std::unique_ptr<FakeAccountStatusChangeDelegateNotifierFactory>
       fake_account_status_change_delegate_notifier_factory_;
+  std::unique_ptr<FakeDeviceReenrollerFactory> fake_device_reenroller_factory_;
+  FakeAndroidSmsAppHelperDelegate* fake_android_sms_app_helper_delegate_;
 
   std::unique_ptr<FakeAccountStatusChangeDelegate>
       fake_account_status_change_delegate_;
@@ -585,6 +758,9 @@ class MultiDeviceSetupImplTest : public testing::Test {
   base::Optional<
       std::pair<mojom::HostStatus, base::Optional<cryptauth::RemoteDevice>>>
       last_host_status_;
+  base::Optional<bool> last_set_feature_enabled_state_success_;
+  base::Optional<base::flat_map<mojom::Feature, mojom::FeatureState>>
+      last_get_feature_states_result_;
   base::Optional<bool> last_retry_success_;
 
   std::unique_ptr<mojom::MultiDeviceSetup> multidevice_setup_;
@@ -621,6 +797,163 @@ TEST_F(MultiDeviceSetupImplTest, AccountStatusChangeDelegate) {
                     ->num_existing_user_chromebook_added_events_handled());
 }
 
+// The feature mojom::Feature::kInstantTethering is used throughout this test
+// because it never requires authentication for either enabling or disabling.
+TEST_F(MultiDeviceSetupImplTest, FeatureStateChanges_NoAuthTokenRequired) {
+  auto observer = std::make_unique<FakeFeatureStateObserver>();
+  multidevice_setup()->AddFeatureStateObserver(
+      observer->GenerateInterfacePtr());
+
+  EXPECT_EQ(mojom::FeatureState::kUnavailableNoVerifiedHost,
+            CallGetFeatureStates()[mojom::Feature::kInstantTethering]);
+
+  fake_feature_state_manager()->SetFeatureState(
+      mojom::Feature::kInstantTethering,
+      mojom::FeatureState::kNotSupportedByChromebook);
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kNotSupportedByChromebook,
+            CallGetFeatureStates()[mojom::Feature::kInstantTethering]);
+  EXPECT_EQ(1u, observer->feature_state_updates().size());
+
+  fake_feature_state_manager()->SetFeatureState(
+      mojom::Feature::kInstantTethering, mojom::FeatureState::kEnabledByUser);
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kEnabledByUser,
+            CallGetFeatureStates()[mojom::Feature::kInstantTethering]);
+  EXPECT_EQ(2u, observer->feature_state_updates().size());
+
+  EXPECT_TRUE(CallSetFeatureEnabledState(mojom::Feature::kInstantTethering,
+                                         false /* enabled */,
+                                         base::nullopt /* auth_token */));
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kDisabledByUser,
+            CallGetFeatureStates()[mojom::Feature::kInstantTethering]);
+  EXPECT_EQ(3u, observer->feature_state_updates().size());
+}
+
+// mojom::Feature::kSmartLock requires authentication when attempting to enable.
+TEST_F(MultiDeviceSetupImplTest,
+       FeatureStateChanges_AuthTokenRequired_SmartLock) {
+  auto observer = std::make_unique<FakeFeatureStateObserver>();
+  multidevice_setup()->AddFeatureStateObserver(
+      observer->GenerateInterfacePtr());
+
+  EXPECT_EQ(mojom::FeatureState::kUnavailableNoVerifiedHost,
+            CallGetFeatureStates()[mojom::Feature::kSmartLock]);
+
+  fake_feature_state_manager()->SetFeatureState(
+      mojom::Feature::kSmartLock, mojom::FeatureState::kEnabledByUser);
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kEnabledByUser,
+            CallGetFeatureStates()[mojom::Feature::kSmartLock]);
+  EXPECT_EQ(1u, observer->feature_state_updates().size());
+
+  // No authentication is required to disable the feature.
+  EXPECT_TRUE(CallSetFeatureEnabledState(mojom::Feature::kSmartLock,
+                                         false /* enabled */,
+                                         base::nullopt /* auth_token */));
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kDisabledByUser,
+            CallGetFeatureStates()[mojom::Feature::kSmartLock]);
+  EXPECT_EQ(2u, observer->feature_state_updates().size());
+
+  // However, authentication is required to enable the feature.
+  EXPECT_FALSE(CallSetFeatureEnabledState(
+      mojom::Feature::kSmartLock, true /* enabled */, "invalidAuthToken"));
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kDisabledByUser,
+            CallGetFeatureStates()[mojom::Feature::kSmartLock]);
+  EXPECT_EQ(2u, observer->feature_state_updates().size());
+
+  // Now, send a valid auth token; it should successfully enable.
+  EXPECT_TRUE(CallSetFeatureEnabledState(mojom::Feature::kSmartLock,
+                                         true /* enabled */, kValidAuthToken));
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kEnabledByUser,
+            CallGetFeatureStates()[mojom::Feature::kSmartLock]);
+  EXPECT_EQ(3u, observer->feature_state_updates().size());
+}
+
+// mojom::Feature::kBetterTogetherSuite requires authentication when attempting
+// to enable, but only if the Smart Lock pref is enabled.
+TEST_F(MultiDeviceSetupImplTest,
+       FeatureStateChanges_AuthTokenRequired_BetterTogetherSuite) {
+  auto observer = std::make_unique<FakeFeatureStateObserver>();
+  multidevice_setup()->AddFeatureStateObserver(
+      observer->GenerateInterfacePtr());
+
+  EXPECT_EQ(mojom::FeatureState::kUnavailableNoVerifiedHost,
+            CallGetFeatureStates()[mojom::Feature::kBetterTogetherSuite]);
+
+  fake_feature_state_manager()->SetFeatureState(
+      mojom::Feature::kBetterTogetherSuite,
+      mojom::FeatureState::kEnabledByUser);
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kEnabledByUser,
+            CallGetFeatureStates()[mojom::Feature::kBetterTogetherSuite]);
+  EXPECT_EQ(1u, observer->feature_state_updates().size());
+
+  // No authentication is required to disable the feature.
+  EXPECT_TRUE(CallSetFeatureEnabledState(mojom::Feature::kBetterTogetherSuite,
+                                         false /* enabled */,
+                                         base::nullopt /* auth_token */));
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kDisabledByUser,
+            CallGetFeatureStates()[mojom::Feature::kBetterTogetherSuite]);
+  EXPECT_EQ(2u, observer->feature_state_updates().size());
+
+  // Authentication is required to enable the feature if SmartLock's state is
+  // kUnavailableInsufficientSecurity.
+  fake_feature_state_manager()->SetFeatureState(
+      mojom::Feature::kSmartLock,
+      mojom::FeatureState::kUnavailableInsufficientSecurity);
+  EXPECT_FALSE(CallSetFeatureEnabledState(mojom::Feature::kBetterTogetherSuite,
+                                          true /* enabled */,
+                                          "invalidAuthToken"));
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kDisabledByUser,
+            CallGetFeatureStates()[mojom::Feature::kBetterTogetherSuite]);
+  EXPECT_EQ(3u, observer->feature_state_updates().size());
+
+  // Now, send a valid auth token; it should successfully enable.
+  EXPECT_TRUE(CallSetFeatureEnabledState(mojom::Feature::kBetterTogetherSuite,
+                                         true /* enabled */, kValidAuthToken));
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kEnabledByUser,
+            CallGetFeatureStates()[mojom::Feature::kBetterTogetherSuite]);
+  EXPECT_EQ(4u, observer->feature_state_updates().size());
+
+  // Disable one more time.
+  EXPECT_TRUE(CallSetFeatureEnabledState(mojom::Feature::kBetterTogetherSuite,
+                                         false /* enabled */,
+                                         base::nullopt /* auth_token */));
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kDisabledByUser,
+            CallGetFeatureStates()[mojom::Feature::kBetterTogetherSuite]);
+  EXPECT_EQ(5u, observer->feature_state_updates().size());
+
+  // Authentication is required to enable the feature if SmartLock's state is
+  // kUnavailableSuiteDisabled.
+  fake_feature_state_manager()->SetFeatureState(
+      mojom::Feature::kSmartLock,
+      mojom::FeatureState::kUnavailableSuiteDisabled);
+  EXPECT_FALSE(CallSetFeatureEnabledState(mojom::Feature::kBetterTogetherSuite,
+                                          true /* enabled */,
+                                          "invalidAuthToken"));
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kDisabledByUser,
+            CallGetFeatureStates()[mojom::Feature::kBetterTogetherSuite]);
+  EXPECT_EQ(6u, observer->feature_state_updates().size());
+
+  // Now, send a valid auth token; it should successfully enable.
+  EXPECT_TRUE(CallSetFeatureEnabledState(mojom::Feature::kBetterTogetherSuite,
+                                         true /* enabled */, kValidAuthToken));
+  SendPendingObserverMessages();
+  EXPECT_EQ(mojom::FeatureState::kEnabledByUser,
+            CallGetFeatureStates()[mojom::Feature::kBetterTogetherSuite]);
+  EXPECT_EQ(7u, observer->feature_state_updates().size());
+}
+
 TEST_F(MultiDeviceSetupImplTest, ComprehensiveHostTest) {
   // Start with no eligible devices.
   EXPECT_TRUE(CallGetEligibleHostDevices().empty());
@@ -650,11 +983,12 @@ TEST_F(MultiDeviceSetupImplTest, ComprehensiveHostTest) {
   EXPECT_FALSE(CallRetrySetHostNow());
 
   // Set an invalid host as the host device; this should fail.
-  EXPECT_FALSE(CallSetHostDevice("invalidHostPublicKey"));
+  EXPECT_FALSE(CallSetHostDevice("invalidHostDeviceId", kValidAuthToken));
   EXPECT_FALSE(fake_host_backend_delegate()->HasPendingHostRequest());
 
   // Set device 0 as the host; this should succeed.
-  EXPECT_TRUE(CallSetHostDevice(test_devices()[0].public_key()));
+  EXPECT_TRUE(
+      CallSetHostDevice(test_devices()[0].GetDeviceId(), kValidAuthToken));
   EXPECT_TRUE(fake_host_backend_delegate()->HasPendingHostRequest());
   EXPECT_EQ(test_devices()[0],
             fake_host_backend_delegate()->GetPendingHostRequest());
@@ -689,6 +1023,9 @@ TEST_F(MultiDeviceSetupImplTest, ComprehensiveHostTest) {
   VerifyCurrentHostStatus(mojom::HostStatus::kHostVerified, test_devices()[0],
                           observer.get(), 3u /* expected_observer_index */);
 
+  // Messages App install should have succeeded.
+  EXPECT_TRUE(fake_android_sms_app_helper_delegate()->HasInstalledApp());
+
   // Remove the host.
   multidevice_setup()->RemoveHostDevice();
   fake_host_verifier()->set_is_host_verified(false);
@@ -702,6 +1039,22 @@ TEST_F(MultiDeviceSetupImplTest, ComprehensiveHostTest) {
 
   // Simulate the host being removed on the back-end.
   fake_host_backend_delegate()->NotifyHostChangedOnBackend(base::nullopt);
+}
+
+TEST_F(MultiDeviceSetupImplTest, TestSetHostDevice_InvalidAuthToken) {
+  // Start with no eligible devices.
+  EXPECT_TRUE(CallGetEligibleHostDevices().empty());
+  VerifyCurrentHostStatus(mojom::HostStatus::kNoEligibleHosts,
+                          base::nullopt /* host_device */);
+
+  // Add a status observer.
+  auto observer = std::make_unique<FakeHostStatusObserver>();
+  multidevice_setup()->AddHostStatusObserver(observer->GenerateInterfacePtr());
+
+  // Set a valid host as the host device, but pass an invalid token.
+  EXPECT_FALSE(
+      CallSetHostDevice(test_devices()[0].GetDeviceId(), "invalidAuthToken"));
+  EXPECT_FALSE(fake_host_backend_delegate()->HasPendingHostRequest());
 }
 
 }  // namespace multidevice_setup

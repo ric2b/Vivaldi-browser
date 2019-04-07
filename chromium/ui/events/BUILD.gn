@@ -182,6 +182,7 @@ component("events") {
     "events_export.h",
     "events_stub.cc",
     "gestures/gesture_recognizer_impl_mac.cc",
+    "gestures/gesture_recognizer_impl_mac.h",
     "gestures/gesture_types.cc",
     "gestures/gesture_types.h",
     "keyboard_hook.h",
@@ -509,7 +510,7 @@ if (!is_ios) {
       sources += [ "android/motion_event_android_unittest.cc" ]
     } else {
       data_deps = [
-        "//third_party/mesa:osmesa",
+        "//third_party/mesa_headers",
       ]
     }
 
@@ -530,7 +531,7 @@ if (!is_ios) {
       sources += [ "devices/device_data_manager_unittest.cc" ]
     }
 
-    if (use_ozone) {
+    if (use_ozone && (is_linux || is_chromeos)) {
       sources += [
         "ozone/chromeos/cursor_controller_unittest.cc",
         "ozone/evdev/event_converter_evdev_impl_unittest.cc",

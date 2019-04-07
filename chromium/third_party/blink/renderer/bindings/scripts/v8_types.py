@@ -280,9 +280,12 @@ def cpp_type(idl_type, extended_attributes=None, raw_type=False, used_as_rvalue_
                                   for member in idl_type.member_types)
         return 'const %s&' % idl_type_name if used_as_rvalue_type else idl_type_name
     if idl_type.is_callback_function:
+        v8_type_name = 'V8' + base_idl_type
         if idl_type.is_custom_callback_function:
-            return 'V8%s' % base_idl_type
-        return 'V8%s*' % base_idl_type
+            return v8_type_name
+        if not used_in_cpp_sequence:
+            return v8_type_name + '*'
+        return cpp_template_type('TraceWrapperMember', v8_type_name)
 
     if base_idl_type == 'void':
         return base_idl_type
@@ -387,7 +390,7 @@ IdlTypeBase.is_gc_type = property(is_gc_type)
 
 
 def is_traceable(idl_type):
-    return (idl_type.is_garbage_collected or idl_type.is_dictionary)
+    return idl_type.is_garbage_collected or idl_type.is_dictionary or idl_type.is_callback_function
 
 IdlTypeBase.is_traceable = property(is_traceable)
 IdlUnionType.is_traceable = property(lambda self: True)
@@ -520,6 +523,10 @@ def impl_includes_for_type(idl_type, interfaces_info):
     base_idl_type = idl_type.base_type
     if idl_type.is_string_type:
         includes_for_type.add('platform/wtf/text/wtf_string.h')
+    if idl_type.is_callback_function:
+        component = IdlType.callback_functions[base_idl_type]['component_dir']
+        return set(['bindings/%s/v8/%s' % (component, binding_header_filename(base_idl_type)),
+                    'platform/bindings/trace_wrapper_member.h'])
     if base_idl_type in interfaces_info:
         interface_info = interfaces_info[base_idl_type]
         includes_for_type.add(interface_info['include_path'])
@@ -1107,6 +1114,26 @@ def array_or_sequence_literal_cpp_value(idl_type, idl_literal):
 IdlType.literal_cpp_value = literal_cpp_value
 IdlUnionType.literal_cpp_value = union_literal_cpp_value
 IdlArrayOrSequenceType.literal_cpp_value = array_or_sequence_literal_cpp_value
+
+
+_IDL_TYPE_TO_NATIVE_VALUE_TRAITS_TAG_MAP = {
+    'DOMString': 'IDLString',
+    'USVString': 'IDLUSVString',
+    'any': 'ScriptValue',
+    'boolean': 'IDLBoolean',
+    'long': 'IDLLong',
+    'sequence<DOMString>': 'IDLSequence<IDLString>',
+    'unsigned short': 'IDLUnsignedShort',
+    'void': None,
+}
+
+
+def idl_type_to_native_value_traits_tag(idl_type):
+    idl_type_str = str(idl_type)
+    if idl_type_str in _IDL_TYPE_TO_NATIVE_VALUE_TRAITS_TAG_MAP:
+        return _IDL_TYPE_TO_NATIVE_VALUE_TRAITS_TAG_MAP[idl_type_str]
+    else:
+        raise Exception("Type `%s' is not supported." % idl_type_str)
 
 
 ################################################################################

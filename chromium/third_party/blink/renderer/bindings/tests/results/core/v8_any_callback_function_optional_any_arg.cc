@@ -28,18 +28,15 @@ const char* V8AnyCallbackFunctionOptionalAnyArg::NameInHeapSnapshot() const {
 }
 
 v8::Maybe<ScriptValue> V8AnyCallbackFunctionOptionalAnyArg::Invoke(ScriptWrappable* callback_this_value, ScriptValue optionalAnyArg) {
-  // This function implements "invoke" algorithm defined in
-  // "3.10. Invoking callback functions".
-  // https://heycam.github.io/webidl/#es-invoking-callback-functions
-
   if (!IsCallbackFunctionRunnable(CallbackRelevantScriptState(),
                                   IncumbentScriptState())) {
     // Wrapper-tracing for the callback function makes the function object and
     // its creation context alive. Thus it's safe to use the creation context
     // of the callback function here.
     v8::HandleScope handle_scope(GetIsolate());
-    CHECK(!CallbackFunction().IsEmpty());
-    v8::Context::Scope context_scope(CallbackFunction()->CreationContext());
+    v8::Local<v8::Object> callback_object = CallbackFunction();
+    CHECK(!callback_object.IsEmpty());
+    v8::Context::Scope context_scope(callback_object->CreationContext());
     V8ThrowException::ThrowError(
         GetIsolate(),
         ExceptionMessages::FailedToExecute(
@@ -49,28 +46,26 @@ v8::Maybe<ScriptValue> V8AnyCallbackFunctionOptionalAnyArg::Invoke(ScriptWrappab
     return v8::Nothing<ScriptValue>();
   }
 
+  // step: Prepare to run script with relevant settings.
+  ScriptState::Scope callback_relevant_context_scope(
+      CallbackRelevantScriptState());
+  // step: Prepare to run a callback with stored settings.
+  v8::Context::BackupIncumbentScope backup_incumbent_scope(
+      IncumbentScriptState()->GetContext());
+
+  v8::Local<v8::Function> function;
+  // callback function\'s invoke:
   // step 4. If ! IsCallable(F) is false:
   //
   // As Blink no longer supports [TreatNonObjectAsNull], there must be no such a
   // case.
-#if DCHECK_IS_ON()
-  {
-    v8::HandleScope handle_scope(GetIsolate());
-    DCHECK(CallbackFunction()->IsFunction());
-  }
-#endif
+  DCHECK(CallbackFunction()->IsFunction());
+  function = CallbackFunction();
 
-  // step 8. Prepare to run script with relevant settings.
-  ScriptState::Scope callback_relevant_context_scope(
-      CallbackRelevantScriptState());
-  // step 9. Prepare to run a callback with stored settings.
-  v8::Context::BackupIncumbentScope backup_incumbent_scope(
-      IncumbentScriptState()->GetContext());
+  v8::Local<v8::Value> this_arg;
+  this_arg = ToV8(callback_this_value, CallbackRelevantScriptState());
 
-  v8::Local<v8::Value> this_arg = ToV8(callback_this_value,
-                                       CallbackRelevantScriptState());
-
-  // step 10. Let esArgs be the result of converting args to an ECMAScript
+  // step: Let esArgs be the result of converting args to an ECMAScript
   //   arguments list. If this throws an exception, set completion to the
   //   completion value representing the thrown exception and jump to the step
   //   labeled return.
@@ -78,31 +73,129 @@ v8::Maybe<ScriptValue> V8AnyCallbackFunctionOptionalAnyArg::Invoke(ScriptWrappab
       CallbackRelevantScriptState()->GetContext()->Global();
   ALLOW_UNUSED_LOCAL(argument_creation_context);
   v8::Local<v8::Value> v8_optionalAnyArg = optionalAnyArg.V8Value();
+  constexpr int argc = 1;
   v8::Local<v8::Value> argv[] = { v8_optionalAnyArg };
+  static_assert(static_cast<size_t>(argc) == base::size(argv), "size mismatch");
 
-  // step 11. Let callResult be Call(X, thisArg, esArgs).
   v8::Local<v8::Value> call_result;
+  // step: Let callResult be Call(X, thisArg, esArgs).
   if (!V8ScriptRunner::CallFunction(
-          CallbackFunction(),
+          function,
           ExecutionContext::From(CallbackRelevantScriptState()),
           this_arg,
-          1,
+          argc,
           argv,
           GetIsolate()).ToLocal(&call_result)) {
-    // step 12. If callResult is an abrupt completion, set completion to
+    // step: If callResult is an abrupt completion, set completion to callResult
+    //   and jump to the step labeled return.
+    return v8::Nothing<ScriptValue>();
+  }
+
+  // step: Set completion to the result of converting callResult.[[Value]] to
+  //   an IDL value of the same type as the operation's return type.
+  {
+    ExceptionState exception_state(GetIsolate(),
+                                   ExceptionState::kExecutionContext,
+                                   "AnyCallbackFunctionOptionalAnyArg",
+                                   "invoke");
+    auto native_result =
+        NativeValueTraits<ScriptValue>::NativeValue(
+            GetIsolate(), call_result, exception_state);
+    if (exception_state.HadException())
+      return v8::Nothing<ScriptValue>();
+    else
+      return v8::Just<ScriptValue>(native_result);
+  }
+}
+
+v8::Maybe<ScriptValue> V8AnyCallbackFunctionOptionalAnyArg::Construct(ScriptValue optionalAnyArg) {
+  if (!IsCallbackFunctionRunnable(CallbackRelevantScriptState(),
+                                  IncumbentScriptState())) {
+    // Wrapper-tracing for the callback function makes the function object and
+    // its creation context alive. Thus it's safe to use the creation context
+    // of the callback function here.
+    v8::HandleScope handle_scope(GetIsolate());
+    v8::Local<v8::Object> callback_object = CallbackFunction();
+    CHECK(!callback_object.IsEmpty());
+    v8::Context::Scope context_scope(callback_object->CreationContext());
+    V8ThrowException::ThrowError(
+        GetIsolate(),
+        ExceptionMessages::FailedToExecute(
+            "construct",
+            "AnyCallbackFunctionOptionalAnyArg",
+            "The provided callback is no longer runnable."));
+    return v8::Nothing<ScriptValue>();
+  }
+
+  // step: Prepare to run script with relevant settings.
+  ScriptState::Scope callback_relevant_context_scope(
+      CallbackRelevantScriptState());
+  // step: Prepare to run a callback with stored settings.
+  v8::Context::BackupIncumbentScope backup_incumbent_scope(
+      IncumbentScriptState()->GetContext());
+
+  // step 3. If ! IsConstructor(F) is false, throw a TypeError exception.
+  //
+  // Note that step 7. and 8. are side effect free (except for a very rare
+  // exception due to no incumbent realm), so it's okay to put step 3. after
+  // step 7. and 8.
+  if (!CallbackFunction()->IsConstructor()) {
+    V8ThrowException::ThrowTypeError(
+        GetIsolate(),
+        ExceptionMessages::FailedToExecute(
+            "construct",
+            "AnyCallbackFunctionOptionalAnyArg",
+            "The provided callback is not a constructor."));
+    return v8::Nothing<ScriptValue>();
+  }
+
+  v8::Local<v8::Function> function;
+  // callback function\'s invoke:
+  // step 4. If ! IsCallable(F) is false:
+  //
+  // As Blink no longer supports [TreatNonObjectAsNull], there must be no such a
+  // case.
+  DCHECK(CallbackFunction()->IsFunction());
+  function = CallbackFunction();
+
+  // step: Let esArgs be the result of converting args to an ECMAScript
+  //   arguments list. If this throws an exception, set completion to the
+  //   completion value representing the thrown exception and jump to the step
+  //   labeled return.
+  v8::Local<v8::Object> argument_creation_context =
+      CallbackRelevantScriptState()->GetContext()->Global();
+  ALLOW_UNUSED_LOCAL(argument_creation_context);
+  v8::Local<v8::Value> v8_optionalAnyArg = optionalAnyArg.V8Value();
+  constexpr int argc = 1;
+  v8::Local<v8::Value> argv[] = { v8_optionalAnyArg };
+  static_assert(static_cast<size_t>(argc) == base::size(argv), "size mismatch");
+
+  v8::Local<v8::Value> call_result;
+  if (!V8ScriptRunner::CallAsConstructor(
+          GetIsolate(),
+          function,
+          ExecutionContext::From(CallbackRelevantScriptState()),
+          argc,
+          argv).ToLocal(&call_result)) {
+    // step 11. If callResult is an abrupt completion, set completion to
     //   callResult and jump to the step labeled return.
     return v8::Nothing<ScriptValue>();
   }
 
-  // step 13. Set completion to the result of converting callResult.[[Value]] to
+  // step: Set completion to the result of converting callResult.[[Value]] to
   //   an IDL value of the same type as the operation's return type.
   {
-    ExceptionState exceptionState(GetIsolate(),
-                                  ExceptionState::kExecutionContext,
-                                  "AnyCallbackFunctionOptionalAnyArg",
-                                  "invoke");
-    ScriptValue native_result = ScriptValue(ScriptState::Current(GetIsolate()), call_result);
-    return v8::Just<ScriptValue>(native_result);
+    ExceptionState exception_state(GetIsolate(),
+                                   ExceptionState::kExecutionContext,
+                                   "AnyCallbackFunctionOptionalAnyArg",
+                                   "construct");
+    auto native_result =
+        NativeValueTraits<ScriptValue>::NativeValue(
+            GetIsolate(), call_result, exception_state);
+    if (exception_state.HadException())
+      return v8::Nothing<ScriptValue>();
+    else
+      return v8::Just<ScriptValue>(native_result);
   }
 }
 

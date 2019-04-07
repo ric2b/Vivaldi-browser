@@ -355,7 +355,7 @@ AutomationPredicate.container = function(node) {
 AutomationPredicate.structuralContainer = AutomationPredicate.roles([
   Role.ALERT_DIALOG, Role.CLIENT, Role.DIALOG, Role.ROOT_WEB_AREA,
   Role.WEB_VIEW, Role.WINDOW, Role.EMBEDDED_OBJECT, Role.IFRAME,
-  Role.IFRAME_PRESENTATIONAL, Role.UNKNOWN
+  Role.IFRAME_PRESENTATIONAL, Role.IGNORED, Role.UNKNOWN
 ]);
 
 /**
@@ -457,7 +457,7 @@ AutomationPredicate.shouldIgnoreNode = function(node) {
  */
 AutomationPredicate.checkable = AutomationPredicate.roles([
   Role.CHECK_BOX, Role.RADIO_BUTTON, Role.MENU_ITEM_CHECK_BOX,
-  Role.MENU_ITEM_RADIO, Role.TOGGLE_BUTTON, Role.TREE_ITEM
+  Role.MENU_ITEM_RADIO, Role.SWITCH, Role.TOGGLE_BUTTON, Role.TREE_ITEM
 ]);
 
 /**

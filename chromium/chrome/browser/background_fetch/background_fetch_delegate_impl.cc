@@ -12,9 +12,14 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/download/download_request_limiter.h"
 #include "chrome/browser/download/download_service_factory.h"
 #include "chrome/browser/offline_items_collection/offline_content_aggregator_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/download/public/background_service/download_params.h"
 #include "components/download/public/background_service/download_service.h"
 #include "components/offline_items_collection/core/offline_content_aggregator.h"
@@ -25,17 +30,33 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
+#include "url/origin.h"
 
-BackgroundFetchDelegateImpl::BackgroundFetchDelegateImpl(Profile* profile)
-    : download_service_(
-          DownloadServiceFactory::GetInstance()->GetForBrowserContext(profile)),
+BackgroundFetchDelegateImpl::BackgroundFetchDelegateImpl(
+    Profile* profile,
+    const std::string& provider_namespace)
+    : profile_(profile),
+      provider_namespace_(provider_namespace),
       offline_content_aggregator_(
           OfflineContentAggregatorFactory::GetForBrowserContext(profile)),
       weak_ptr_factory_(this) {
-  offline_content_aggregator_->RegisterProvider("background_fetch", this);
+  DCHECK(profile_);
+  DCHECK(!provider_namespace_.empty());
+  offline_content_aggregator_->RegisterProvider(provider_namespace_, this);
 }
 
-BackgroundFetchDelegateImpl::~BackgroundFetchDelegateImpl() {}
+BackgroundFetchDelegateImpl::~BackgroundFetchDelegateImpl() {
+  offline_content_aggregator_->UnregisterProvider(provider_namespace_);
+}
+
+download::DownloadService* BackgroundFetchDelegateImpl::GetDownloadService() {
+  if (download_service_)
+    return download_service_;
+
+  download_service_ =
+      DownloadServiceFactory::GetInstance()->GetForBrowserContext(profile_);
+  return download_service_;
+}
 
 void BackgroundFetchDelegateImpl::Shutdown() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -48,10 +69,11 @@ void BackgroundFetchDelegateImpl::Shutdown() {
 BackgroundFetchDelegateImpl::JobDetails::JobDetails(JobDetails&&) = default;
 
 BackgroundFetchDelegateImpl::JobDetails::JobDetails(
-    std::unique_ptr<content::BackgroundFetchDescription> fetch_description)
+    std::unique_ptr<content::BackgroundFetchDescription> fetch_description,
+    const std::string& provider_namespace)
     : cancelled(false),
       offline_item(offline_items_collection::ContentId(
-          "background_fetch",
+          provider_namespace,
           fetch_description->job_unique_id)),
       fetch_description(std::move(fetch_description)) {
   UpdateOfflineItem();
@@ -137,6 +159,52 @@ void BackgroundFetchDelegateImpl::GetIconDisplaySize(
   std::move(callback).Run(display_size);
 }
 
+void BackgroundFetchDelegateImpl::GetPermissionForOrigin(
+    const url::Origin& origin,
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
+    GetPermissionForOriginCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (wc_getter) {
+    // There is an associated frame so we might need to expose some permission
+    // UI using the DownloadRequestLimiter.
+    DownloadRequestLimiter* limiter =
+        g_browser_process->download_request_limiter();
+    DCHECK(limiter);
+
+    // The fetch should be thought of as one download. So the origin will be
+    // used as the URL, and the |request_method| is set to GET.
+    limiter->CanDownload(wc_getter, origin.GetURL(), "GET",
+                         base::AdaptCallbackForRepeating(std::move(callback)));
+    return;
+  }
+
+  auto* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(profile_);
+  DCHECK(host_content_settings_map);
+
+  // This is running from a worker context, use the Automatic Downloads
+  // permission.
+  ContentSetting content_setting = host_content_settings_map->GetContentSetting(
+      origin.GetURL(), origin.GetURL(),
+      CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
+      std::string() /* resource_identifier */);
+
+  if (content_setting != CONTENT_SETTING_ALLOW) {
+    std::move(callback).Run(/* has_permission= */ false);
+    return;
+  }
+
+  // Also make sure that Background Sync has permission.
+  // TODO(crbug.com/616321): Remove this check after Automatic Downloads
+  // permissions can be modified from Android.
+  content_setting = host_content_settings_map->GetContentSetting(
+      origin.GetURL(), origin.GetURL(), CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC,
+      std::string() /* resource_identifier */);
+
+  std::move(callback).Run(content_setting == CONTENT_SETTING_ALLOW);
+}
+
 void BackgroundFetchDelegateImpl::CreateDownloadJob(
     std::unique_ptr<content::BackgroundFetchDescription> fetch_description) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -144,13 +212,17 @@ void BackgroundFetchDelegateImpl::CreateDownloadJob(
   std::string job_unique_id = fetch_description->job_unique_id;
   DCHECK(!job_details_map_.count(job_unique_id));
   auto emplace_result = job_details_map_.emplace(
-      job_unique_id, JobDetails(std::move(fetch_description)));
+      job_unique_id,
+      JobDetails(std::move(fetch_description), provider_namespace_));
 
   const JobDetails& details = emplace_result.first->second;
   for (const auto& download_guid : details.fetch_description->current_guids) {
     DCHECK(!download_job_unique_id_map_.count(download_guid));
     download_job_unique_id_map_.emplace(download_guid, job_unique_id);
-    download_service_->ResumeDownload(download_guid);
+    if (GetDownloadService()->GetStatus() ==
+        download::DownloadService::ServiceStatus::READY) {
+      GetDownloadService()->ResumeDownload(download_guid);
+    }
   }
 
   for (auto* observer : observers_) {
@@ -186,7 +258,7 @@ void BackgroundFetchDelegateImpl::DownloadUrl(
   params.traffic_annotation =
       net::MutableNetworkTrafficAnnotationTag(traffic_annotation);
 
-  download_service_->StartDownload(params);
+  GetDownloadService()->StartDownload(params);
 }
 
 void BackgroundFetchDelegateImpl::Abort(const std::string& job_unique_id) {
@@ -200,27 +272,35 @@ void BackgroundFetchDelegateImpl::Abort(const std::string& job_unique_id) {
   job_details.cancelled = true;
 
   for (const auto& download_guid : job_details.current_download_guids) {
-    download_service_->CancelDownload(download_guid);
+    GetDownloadService()->CancelDownload(download_guid);
     download_job_unique_id_map_.erase(download_guid);
   }
   UpdateOfflineItemAndUpdateObservers(&job_details);
   job_details_map_.erase(job_details_iter);
 }
 
-void BackgroundFetchDelegateImpl::UpdateUI(const std::string& job_unique_id,
-                                           const std::string& title) {
+void BackgroundFetchDelegateImpl::UpdateUI(
+    const std::string& job_unique_id,
+    const base::Optional<std::string>& title,
+    const base::Optional<SkBitmap>& icon) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK(title || icon);             // One of the UI options must be updatable.
+  DCHECK(!icon || !icon->isNull());  // The |icon|, if provided, is not null.
 
   auto job_details_iter = job_details_map_.find(job_unique_id);
   if (job_details_iter == job_details_map_.end())
     return;
 
   JobDetails& job_details = job_details_iter->second;
-
   // Update the title, if it's different.
-  if (job_details.fetch_description->title == title)
-    return;
-  job_details.fetch_description->title = title;
+  if (title && job_details.fetch_description->title != *title)
+    job_details.fetch_description->title = *title;
+
+  if (icon) {
+    job_details.fetch_description->icon = *icon;
+    job_details.offline_item.refresh_visuals = true;
+  }
+
   UpdateOfflineItemAndUpdateObservers(&job_details);
 }
 
@@ -412,6 +492,7 @@ void BackgroundFetchDelegateImpl::UpdateOfflineItemAndUpdateObservers(
 }
 
 void BackgroundFetchDelegateImpl::OpenItem(
+    offline_items_collection::LaunchLocation location,
     const offline_items_collection::ContentId& id) {
   if (client())
     client()->OnUIActivated(id.id);
@@ -469,9 +550,19 @@ void BackgroundFetchDelegateImpl::ResumeDownload(
 
   JobDetails& job_details = job_details_iter->second;
   for (auto& download_guid : job_details.current_download_guids)
-    download_service_->ResumeDownload(download_guid);
+    GetDownloadService()->ResumeDownload(download_guid);
 
   // TODO(delphick): Start new downloads that weren't started because of pause.
+}
+
+void BackgroundFetchDelegateImpl::ResumeActiveJobs() {
+  DCHECK_EQ(GetDownloadService()->GetStatus(),
+            download::DownloadService::ServiceStatus::READY);
+
+  for (const auto& job_details : job_details_map_) {
+    for (const auto& download_guid : job_details.second.current_download_guids)
+      GetDownloadService()->ResumeDownload(download_guid);
+  }
 }
 
 void BackgroundFetchDelegateImpl::GetItemById(
@@ -495,7 +586,7 @@ void BackgroundFetchDelegateImpl::GetAllItems(MultipleItemCallback callback) {
 
 void BackgroundFetchDelegateImpl::GetVisualsForItem(
     const offline_items_collection::ContentId& id,
-    const VisualsCallback& callback) {
+    VisualsCallback callback) {
   // GetVisualsForItem mustn't be called directly since offline_items_collection
   // is not re-entrant and it must be called even if there are no visuals.
   auto visuals =
@@ -504,10 +595,20 @@ void BackgroundFetchDelegateImpl::GetVisualsForItem(
   if (it != job_details_map_.end()) {
     visuals->icon =
         gfx::Image::CreateFrom1xBitmap(it->second.fetch_description->icon);
+    it->second.offline_item.refresh_visuals = false;
   }
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(callback, id, std::move(visuals)));
+      FROM_HERE, base::BindOnce(std::move(callback), id, std::move(visuals)));
+}
+
+void BackgroundFetchDelegateImpl::GetShareInfoForItem(
+    const offline_items_collection::ContentId& id,
+    ShareCallback callback) {
+  // TODO(xingliu): Provide OfflineItemShareInfo to |callback|.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), id,
+                                nullptr /* OfflineItemShareInfo */));
 }
 
 void BackgroundFetchDelegateImpl::AddObserver(Observer* observer) {

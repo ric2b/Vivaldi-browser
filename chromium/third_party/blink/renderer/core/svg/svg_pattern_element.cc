@@ -163,16 +163,16 @@ void SVGPatternElement::SvgAttributeChanged(const QualifiedName& attr_name) {
 }
 
 Node::InsertionNotificationRequest SVGPatternElement::InsertedInto(
-    ContainerNode* root_parent) {
+    ContainerNode& root_parent) {
   SVGElement::InsertedInto(root_parent);
-  if (root_parent->isConnected())
+  if (root_parent.isConnected())
     BuildPendingResource();
   return kInsertionDone;
 }
 
-void SVGPatternElement::RemovedFrom(ContainerNode* root_parent) {
+void SVGPatternElement::RemovedFrom(ContainerNode& root_parent) {
   SVGElement::RemovedFrom(root_parent);
-  if (root_parent->isConnected())
+  if (root_parent.isConnected())
     ClearResourceReferences();
 }
 

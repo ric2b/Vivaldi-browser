@@ -8,6 +8,7 @@ js_type_check("closure_compile") {
   deps = [
     ":cloud_printers",
     ":cups_add_printer_dialog",
+    ":cups_add_printer_dialog_elements",
     ":cups_add_printer_dialog_util",
     ":cups_edit_printer_dialog",
     ":cups_printers",
@@ -34,16 +35,22 @@ js_library("cups_add_printer_dialog") {
   ]
 }
 
-js_library("cups_add_printer_dialog_util") {
+js_library("cups_add_printer_dialog_elements") {
   deps = [
     ":cups_printers_browser_proxy",
-    "//ui/webui/resources/cr_elements:cr_scrollable_behavior",
+  ]
+}
+
+js_library("cups_add_printer_dialog_util") {
+  deps = [
+    "//ui/webui/resources/js:cr",
   ]
 }
 
 js_library("cups_edit_printer_dialog") {
   deps = [
     ":cups_set_manufacturer_model_behavior",
+    "//ui/webui/resources/cr_elements:cr_scrollable_behavior",
   ]
 }
 

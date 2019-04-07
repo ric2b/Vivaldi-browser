@@ -14,12 +14,6 @@
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/platform/modules/background_fetch/background_fetch.mojom.h"
 
-namespace content {
-namespace mojom {
-class BackgroundFetchSettledFetchDataView;
-}
-}
-
 namespace mojo {
 
 template <>
@@ -70,6 +64,14 @@ struct CONTENT_EXPORT
       const content::BackgroundFetchRegistration& registration) {
     return registration.downloaded;
   }
+  static blink::mojom::BackgroundFetchState state(
+      const content::BackgroundFetchRegistration& registration) {
+    return registration.state;
+  }
+  static blink::mojom::BackgroundFetchFailureReason failure_reason(
+      const content::BackgroundFetchRegistration& registration) {
+    return registration.failure_reason;
+  }
 
   static bool Read(blink::mojom::BackgroundFetchRegistrationDataView data,
                    content::BackgroundFetchRegistration* registration);
@@ -77,18 +79,18 @@ struct CONTENT_EXPORT
 
 template <>
 struct CONTENT_EXPORT
-    StructTraits<content::mojom::BackgroundFetchSettledFetchDataView,
+    StructTraits<blink::mojom::BackgroundFetchSettledFetchDataView,
                  content::BackgroundFetchSettledFetch> {
   static const content::ServiceWorkerFetchRequest& request(
       const content::BackgroundFetchSettledFetch& fetch) {
     return fetch.request;
   }
-  static const content::ServiceWorkerResponse& response(
+  static blink::mojom::FetchAPIResponsePtr response(
       const content::BackgroundFetchSettledFetch& fetch) {
-    return fetch.response;
+    return content::BackgroundFetchSettledFetch::CloneResponse(fetch.response);
   }
 
-  static bool Read(content::mojom::BackgroundFetchSettledFetchDataView data,
+  static bool Read(blink::mojom::BackgroundFetchSettledFetchDataView data,
                    content::BackgroundFetchSettledFetch* definition);
 };
 

@@ -47,7 +47,11 @@ class VIZ_SERVICE_EXPORT DisplayScheduler : public BeginFrameObserverBase,
   void SetClient(DisplaySchedulerClient* client);
 
   void SetVisible(bool visible);
-  void SetRootSurfaceResourcesLocked(bool locked);
+
+  // Notifies that the root surface doesn't exist or doesn't have an active
+  // frame and therefore draw is not possible.
+  void SetRootFrameMissing(bool missing);
+
   void ForceImmediateSwapIfPossible();
   void SetNeedsOneBeginFrame();
   base::TimeTicks current_frame_time() const {
@@ -85,7 +89,30 @@ class VIZ_SERVICE_EXPORT DisplayScheduler : public BeginFrameObserverBase,
                                const BeginFrameArgs& args) override;
 
  protected:
-  enum class BeginFrameDeadlineMode { kImmediate, kRegular, kLate, kNone };
+  // These values inidicate how a response to the BeginFrame should be
+  // scheduled.
+  enum class BeginFrameDeadlineMode {
+    // Respond immediately. This means either all clients have responded with a
+    // BeginFrameAck so there is nothing to wait for, or DrawAndSwap cannot
+    // happen anymore (for example, OutputSurface is lost) and we might as well
+    // respond right now.
+    kImmediate,
+    // Schedule a task at the the end of BeginFrame interval minus the estimated
+    // time to run DrawAndSwap. This indicates that all requirements for calling
+    // DrawAndSwap are met, but we just want to give clients as much time as
+    // possible to send CompositorFrames.
+    kRegular,
+    // Schedule a response at the end of the BeginFrame interval. This usually
+    // indicates that some requirements for calling DrawAndSwap are not
+    // currently met (for example, the previous swap is not acked yet) and
+    // we would like to wait as long as possible to see if DrawAndSwap becomes
+    // possible.
+    kLate,
+    // A response to the BeginFrame cannot be scheduled right now. This means we
+    // have an unlimited deadline and some clients haven't responded to the
+    // BeginFrame yet so we need to wait longer.
+    kNone
+  };
   base::TimeTicks DesiredBeginFrameDeadlineTime() const;
   BeginFrameDeadlineMode AdjustedBeginFrameDeadlineMode() const;
   BeginFrameDeadlineMode DesiredBeginFrameDeadlineMode() const;
@@ -96,10 +123,11 @@ class VIZ_SERVICE_EXPORT DisplayScheduler : public BeginFrameObserverBase,
   void MaybeStartObservingBeginFrames();
   void StartObservingBeginFrames();
   void StopObservingBeginFrames();
-  bool ShouldDraw();
+  bool ShouldDraw() const;
   void DidFinishFrame(bool did_draw);
   // Updates |has_pending_surfaces_| and returns whether its value changed.
   bool UpdateHasPendingSurfaces();
+  void ReportNotDrawReason();
 
   DisplaySchedulerClient* client_;
   BeginFrameSource* begin_frame_source_;
@@ -115,7 +143,7 @@ class VIZ_SERVICE_EXPORT DisplayScheduler : public BeginFrameObserverBase,
 
   bool visible_;
   bool output_surface_lost_;
-  bool root_surface_resources_locked_;
+  bool root_frame_missing_;
 
   bool inside_begin_frame_deadline_interval_;
   bool needs_draw_;

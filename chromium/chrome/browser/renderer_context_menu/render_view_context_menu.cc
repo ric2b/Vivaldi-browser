@@ -53,7 +53,6 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/spellchecker/spellcheck_service.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
@@ -64,7 +63,7 @@
 #include "chrome/browser/ui/exclusive_access/keyboard_lock_controller.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
@@ -75,15 +74,17 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/arc/arc_features.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/download/public/common/download_url_parameters.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/language/core/browser/language_model_manager.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/experiments.h"
 #include "components/prefs/pref_member.h"
@@ -351,11 +352,16 @@ const struct UmaEnumCommandIdPair {
     {90, -1, IDC_CONTENT_CONTEXT_SHOWALLSAVEDPASSWORDS},
     {91, -1, IDC_CONTENT_CONTEXT_PICTUREINPICTURE},
     {92, -1, IDC_CONTENT_CONTEXT_EMOJI},
-    {93, -1, IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION},
+    {93, -1, IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION1},
+    {94, -1, IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION2},
+    {95, -1, IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION3},
+    {96, -1, IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION4},
+    {97, -1, IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION5},
+    {98, -1, IDC_CONTENT_CONTEXT_LOOK_UP},
     // Add new items here and use |enum_id| from the next line.
     // Also, add new items to RenderViewContextMenuItem enum in
     // tools/metrics/histograms/enums.xml.
-    {94, -1, 0},  // Must be the last. Increment |enum_id| when new IDC
+    {99, -1, 0},  // Must be the last. Increment |enum_id| when new IDC
                   // was added.
 };
 
@@ -783,17 +789,6 @@ void RenderViewContextMenu::InitMenu() {
       menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   }
 
-  bool supports_smart_text_selection = content_type_->SupportsGroup(
-      ContextMenuContentType::ITEM_GROUP_SMART_SELECTION);
-#if defined(OS_CHROMEOS)
-  supports_smart_text_selection &=
-      arc::IsArcPlayStoreEnabledForProfile(GetProfile());
-#else
-  supports_smart_text_selection = false;
-#endif  // defined(OS_CHROMEOS)
-  if (supports_smart_text_selection)
-    AppendSmartSelectionActionItems();
-
   bool media_image = content_type_->SupportsGroup(
       ContextMenuContentType::ITEM_GROUP_MEDIA_IMAGE);
   if (media_image)
@@ -833,11 +828,6 @@ void RenderViewContextMenu::InitMenu() {
 
   if (content_type_->SupportsGroup(ContextMenuContentType::ITEM_GROUP_COPY)) {
     DCHECK(!editable);
-    // If smart text selection is supported, then a separator will be added
-    // below the suggested action item asynchronously, so there's no need to
-    // add another one here.
-    if (menu_model_.GetItemCount() && !supports_smart_text_selection)
-      menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
     AppendCopyItem();
   }
 
@@ -866,6 +856,20 @@ void RenderViewContextMenu::InitMenu() {
           ContextMenuContentType::ITEM_GROUP_MEDIA_PLUGIN)) {
     AppendRotationItems();
   }
+
+  bool supports_smart_text_selection = false;
+#if defined(OS_CHROMEOS)
+  supports_smart_text_selection =
+      base::FeatureList::IsEnabled(arc::kSmartTextSelectionFeature) &&
+      content_type_->SupportsGroup(
+          ContextMenuContentType::ITEM_GROUP_SMART_SELECTION) &&
+      arc::IsArcPlayStoreEnabledForProfile(GetProfile());
+#endif  // defined(OS_CHROMEOS)
+  if (supports_smart_text_selection)
+    AppendSmartSelectionActionItems();
+
+  extension_items_.set_smart_text_selection_enabled(
+      supports_smart_text_selection);
 
   if (content_type_->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_ALL_EXTENSION)) {
@@ -1011,7 +1015,7 @@ std::string RenderViewContextMenu::GetTargetLanguage() const {
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefs(browser_context_)));
   language::LanguageModel* language_model =
       LanguageModelManagerFactory::GetForBrowserContext(browser_context_)
-          ->GetDefaultModel();
+          ->GetPrimaryModel();
   return translate::TranslateManager::GetTargetLanguage(prefs.get(),
                                                         language_model);
 }
@@ -1063,13 +1067,16 @@ void RenderViewContextMenu::AppendDevtoolsForUnpackedExtensions() {
 void RenderViewContextMenu::AppendLinkItems() {
   if (!params_.link_url.is_empty()) {
     if (base::FeatureList::IsEnabled(features::kDesktopPWAWindowing)) {
+      const Browser* browser = GetBrowser();
+      const bool is_app = browser && browser->is_app();
+
       AppendOpenInBookmarkAppLinkItems();
 
       menu_model_.AddItemWithStringId(
           IDC_CONTENT_CONTEXT_OPENLINKNEWTAB,
-          GetBrowser()->is_app() ? IDS_CONTENT_CONTEXT_OPENLINKNEWTAB_INAPP
-                                 : IDS_CONTENT_CONTEXT_OPENLINKNEWTAB);
-      if (!GetBrowser()->is_app()) {
+          is_app ? IDS_CONTENT_CONTEXT_OPENLINKNEWTAB_INAPP
+                 : IDS_CONTENT_CONTEXT_OPENLINKNEWTAB);
+      if (!is_app) {
         menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW,
                                         IDS_CONTENT_CONTEXT_OPENLINKNEWWINDOW);
       }
@@ -1080,9 +1087,8 @@ void RenderViewContextMenu::AppendLinkItems() {
 
       menu_model_.AddItemWithStringId(
           IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD,
-          GetBrowser()->is_app()
-              ? IDS_CONTENT_CONTEXT_OPENLINKOFFTHERECORD_INAPP
-              : IDS_CONTENT_CONTEXT_OPENLINKOFFTHERECORD);
+          is_app ? IDS_CONTENT_CONTEXT_OPENLINKOFFTHERECORD_INAPP
+                 : IDS_CONTENT_CONTEXT_OPENLINKOFFTHERECORD);
 
     } else {
       menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB,
@@ -1212,6 +1218,9 @@ void RenderViewContextMenu::AppendSmartSelectionActionItems() {
   start_smart_selection_action_menu_observer_ =
       std::make_unique<arc::StartSmartSelectionActionMenu>(this);
   observers_.AddObserver(start_smart_selection_action_menu_observer_.get());
+
+  if (menu_model_.GetItemCount())
+    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   start_smart_selection_action_menu_observer_->InitMenu(params_);
 #endif
 }
@@ -1223,8 +1232,9 @@ void RenderViewContextMenu::AppendOpenInBookmarkAppLinkItems() {
     return;
 
   int open_in_app_string_id;
-  if (GetBrowser()->app_name() ==
-      web_app::GenerateApplicationNameFromExtensionId(pwa->id())) {
+  const Browser* browser = GetBrowser();
+  if (browser && browser->app_name() ==
+                     web_app::GenerateApplicationNameFromAppId(pwa->id())) {
     open_in_app_string_id = IDS_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP_SAMEAPP;
   } else {
     open_in_app_string_id = IDS_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP;
@@ -1376,7 +1386,7 @@ void RenderViewContextMenu::AppendPageItems() {
     if (prefs->IsTranslateAllowedByPolicy()) {
       language::LanguageModel* language_model =
           LanguageModelManagerFactory::GetForBrowserContext(browser_context_)
-              ->GetDefaultModel();
+              ->GetPrimaryModel();
       std::string locale = translate::TranslateManager::GetTargetLanguage(
           prefs.get(), language_model);
       base::string16 language =
@@ -1408,6 +1418,8 @@ void RenderViewContextMenu::AppendExitFullscreenItem() {
 }
 
 void RenderViewContextMenu::AppendCopyItem() {
+  if (menu_model_.GetItemCount())
+    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPY,
                                   IDS_CONTENT_CONTEXT_COPY);
   ::vivaldi::VivaldiAddCopyItems(&menu_model_, source_web_contents_, params_);
@@ -1635,9 +1647,10 @@ void RenderViewContextMenu::AppendPasswordItems() {
                                       IDS_CONTENT_CONTEXT_FORCESAVEPASSWORD);
       add_separator = true;
     }
-    if (password_manager_util::ManualPasswordGenerationEnabled(
-            ProfileSyncServiceFactory::GetSyncServiceForBrowserContext(
-                browser_context_))) {
+    password_manager::ContentPasswordManagerDriver* driver =
+        password_manager::ContentPasswordManagerDriver::GetForRenderFrameHost(
+            GetRenderFrameHost());
+    if (password_manager_util::ManualPasswordGenerationEnabled(driver)) {
       menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_GENERATEPASSWORD,
                                       IDS_CONTENT_CONTEXT_GENERATEPASSWORD);
       add_separator = true;
@@ -1869,7 +1882,11 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     case IDC_CONTENT_CONTEXT_EMOJI:
       return params_.is_editable;
 
-    case IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION:
+    case IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION1:
+    case IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION2:
+    case IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION3:
+    case IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION4:
+    case IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION5:
       return true;
 
     default:

@@ -17,8 +17,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/task_runner.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -298,8 +298,9 @@ ChromeDownloadManagerDelegate::ChromeDownloadManagerDelegate(Profile* profile)
       next_download_id_(download::DownloadItem::kInvalidId),
       download_prefs_(new DownloadPrefs(profile)),
       disk_access_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})),
+      is_file_picker_showing_(false),
       weak_ptr_factory_(this) {
 #if defined(OS_ANDROID)
   location_dialog_bridge_.reset(new DownloadLocationDialogBridgeImpl);
@@ -961,8 +962,47 @@ void ChromeDownloadManagerDelegate::RequestConfirmation(
 #else   // !OS_ANDROID
   // Desktop Chrome displays a file picker for all confirmation needs. We can do
   // better.
-  DownloadFilePicker::ShowFilePicker(download, suggested_path, callback);
+  if (is_file_picker_showing_) {
+    file_picker_callbacks_.emplace_back(
+        base::BindOnce(&ChromeDownloadManagerDelegate::ShowFilePicker,
+                       weak_ptr_factory_.GetWeakPtr(), download->GetGuid(),
+                       suggested_path, callback));
+  } else {
+    is_file_picker_showing_ = true;
+    ShowFilePicker(download->GetGuid(), suggested_path, callback);
+  }
 #endif  // !OS_ANDROID
+}
+
+void ChromeDownloadManagerDelegate::OnConfirmationCallbackComplete(
+    const DownloadTargetDeterminerDelegate::ConfirmationCallback& callback,
+    DownloadConfirmationResult result,
+    const base::FilePath& virtual_path) {
+  callback.Run(result, virtual_path);
+  if (!file_picker_callbacks_.empty()) {
+    base::OnceClosure callback = std::move(file_picker_callbacks_.front());
+    std::move(callback).Run();
+    file_picker_callbacks_.pop_front();
+  } else {
+    is_file_picker_showing_ = false;
+  }
+}
+
+void ChromeDownloadManagerDelegate::ShowFilePicker(
+    const std::string& guid,
+    const base::FilePath& suggested_path,
+    const DownloadTargetDeterminerDelegate::ConfirmationCallback& callback) {
+  DownloadItem* download = download_manager_->GetDownloadByGuid(guid);
+  if (download) {
+    DownloadFilePicker::ShowFilePicker(
+        download, suggested_path,
+        base::BindRepeating(
+            &ChromeDownloadManagerDelegate::OnConfirmationCallbackComplete,
+            weak_ptr_factory_.GetWeakPtr(), callback));
+  } else {
+    OnConfirmationCallbackComplete(
+        callback, DownloadConfirmationResult::CANCELED, base::FilePath());
+  }
 }
 
 #if defined(OS_ANDROID)

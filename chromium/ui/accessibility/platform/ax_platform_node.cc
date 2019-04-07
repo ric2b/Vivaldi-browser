@@ -14,7 +14,7 @@
 namespace ui {
 
 // static
-base::LazyInstance<base::ObserverList<AXModeObserver>>::Leaky
+base::LazyInstance<base::ObserverList<AXModeObserver>::Unchecked>::Leaky
     AXPlatformNode::ax_mode_observers_ = LAZY_INSTANCE_INITIALIZER;
 
 // static
@@ -93,6 +93,7 @@ void AXPlatformNode::OnInputSuggestionsUnavailable() {
 }
 
 // static
+// TODO(crbug.com/865101) Remove this once the autofill state works.
 bool AXPlatformNode::HasInputSuggestions() {
   return has_input_suggestions_;
 }

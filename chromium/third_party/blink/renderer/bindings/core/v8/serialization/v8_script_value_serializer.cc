@@ -20,6 +20,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_data.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_message_port.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_handle.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_offscreen_canvas.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_shared_array_buffer.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
@@ -31,7 +32,9 @@
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect_read_only.h"
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
+#include "third_party/blink/renderer/core/mojo/mojo_handle.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer_base.h"
+#include "third_party/blink/renderer/platform/file_metadata.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/wtf/date_math.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_utf8_adaptor.h"
@@ -395,6 +398,26 @@ bool V8ScriptValueSerializer::WriteDOMObject(ScriptWrappable* wrappable,
     WriteUint32(static_cast<uint32_t>(index));
     return true;
   }
+  if (wrapper_type_info == &V8MojoHandle::wrapperTypeInfo &&
+      RuntimeEnabledFeatures::MojoJSEnabled()) {
+    MojoHandle* mojo_handle = wrappable->ToImpl<MojoHandle>();
+    size_t index = kNotFound;
+    if (transferables_)
+      index = transferables_->mojo_handles.Find(mojo_handle);
+    if (index == kNotFound) {
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kDataCloneError,
+          "A MojoHandle could not be cloned because it was not transferred.");
+      return false;
+    }
+    DCHECK_LE(index, std::numeric_limits<uint32_t>::max());
+    serialized_script_value_->MojoHandles().push_back(
+        mojo_handle->TakeHandle());
+    index = serialized_script_value_->MojoHandles().size() - 1;
+    WriteTag(kMojoHandleTag);
+    WriteUint32(static_cast<uint32_t>(index));
+    return true;
+  }
   if (wrapper_type_info == &V8OffscreenCanvas::wrapperTypeInfo) {
     OffscreenCanvas* canvas = wrappable->ToImpl<OffscreenCanvas>();
     size_t index = kNotFound;
@@ -543,6 +566,18 @@ v8::Maybe<uint32_t> V8ScriptValueSerializer::GetSharedArrayBufferId(
 v8::Maybe<uint32_t> V8ScriptValueSerializer::GetWasmModuleTransferId(
     v8::Isolate* isolate,
     v8::Local<v8::WasmCompiledModule> module) {
+  if (for_storage_) {
+    DCHECK(exception_state_);
+    DCHECK_EQ(isolate, script_state_->GetIsolate());
+    ExceptionState exception_state(isolate, exception_state_->Context(),
+                                   exception_state_->InterfaceName(),
+                                   exception_state_->PropertyName());
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kDataCloneError,
+        "A WebAssembly.Module can not be serialized for storage.");
+    return v8::Nothing<uint32_t>();
+  }
+
   switch (wasm_policy_) {
     case Options::kSerialize:
       return v8::Nothing<uint32_t>();
@@ -581,8 +616,8 @@ void* V8ScriptValueSerializer::ReallocateBufferMemory(void* old_buffer,
                                                       size_t size,
                                                       size_t* actual_size) {
   *actual_size = WTF::Partitions::BufferActualSize(size);
-  return WTF::Partitions::BufferRealloc(old_buffer, *actual_size,
-                                        "SerializedScriptValue buffer");
+  return WTF::Partitions::BufferTryRealloc(old_buffer, *actual_size,
+                                           "SerializedScriptValue buffer");
 }
 
 void V8ScriptValueSerializer::FreeBufferMemory(void* buffer) {

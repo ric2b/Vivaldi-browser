@@ -50,6 +50,8 @@ class PreviewEnabledPreviewsDecider : public PreviewsDecider {
     return IsEnabled(type);
   }
 
+  void LoadResourceHints(const net::URLRequest& request) override {}
+
  private:
   bool IsEnabled(PreviewsType type) const {
     switch (type) {
@@ -63,6 +65,8 @@ class PreviewEnabledPreviewsDecider : public PreviewsDecider {
         return params::IsNoScriptPreviewsEnabled();
       case previews::PreviewsType::RESOURCE_LOADING_HINTS:
         return params::IsResourceLoadingHintsEnabled();
+      case previews::PreviewsType::LITE_PAGE_REDIRECT:
+        return params::IsLitePageServerPreviewsEnabled();
       case PreviewsType::LITE_PAGE:
       case PreviewsType::NONE:
       case PreviewsType::UNSPECIFIED:
@@ -219,7 +223,8 @@ TEST_F(PreviewsContentUtilTest, DetermineCommittedClientPreviewsState) {
 TEST_F(PreviewsContentUtilTest,
        DetermineCommittedClientPreviewsStateNoScriptCheckIfStillAllowed) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitFromCommandLine("Previews,ClientLoFi", std::string());
+  scoped_feature_list.InitFromCommandLine("Previews,ClientLoFi",
+                                          "NoScriptPreviews");
   // NoScript not allowed at commit time so Client LoFi chosen:
   EXPECT_EQ(content::PREVIEWS_OFF,
             previews::DetermineCommittedClientPreviewsState(

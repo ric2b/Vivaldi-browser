@@ -29,7 +29,7 @@ class VivaldiSyncAuthManager : public browser_sync::SyncAuthManager {
   ~VivaldiSyncAuthManager() override;
 
   void RegisterForAuthNotifications() override;
-  AccountInfo GetAuthenticatedAccountInfo() const override;
+  SyncAccountInfo GetActiveAccountInfo() const override;
   void ConnectionStatusChanged(syncer::ConnectionStatus status) override;
 
   void SetLoginInfo(const std::string& username,
@@ -39,7 +39,7 @@ class VivaldiSyncAuthManager : public browser_sync::SyncAuthManager {
  private:
   const NotifyTokenRequestedCallback notify_token_requested_;
 
-  AccountInfo account_info_;
+  SyncAccountInfo account_info_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiSyncAuthManager);
 };

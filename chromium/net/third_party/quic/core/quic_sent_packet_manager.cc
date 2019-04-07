@@ -5,7 +5,6 @@
 #include "net/third_party/quic/core/quic_sent_packet_manager.h"
 
 #include <algorithm>
-#include <sstream>
 
 #include "net/third_party/quic/core/congestion_control/general_loss_algorithm.h"
 #include "net/third_party/quic/core/congestion_control/pacing_sender.h"
@@ -58,20 +57,6 @@ QuicSentPacketManager::QuicSentPacketManager(
     QuicConnectionStats* stats,
     CongestionControlType congestion_control_type,
     LossDetectionType loss_type)
-    : QuicSentPacketManager(perspective,
-                            clock,
-                            stats,
-                            congestion_control_type,
-                            loss_type,
-                            this) {}
-
-QuicSentPacketManager::QuicSentPacketManager(
-    Perspective perspective,
-    const QuicClock* clock,
-    QuicConnectionStats* stats,
-    CongestionControlType congestion_control_type,
-    LossDetectionType loss_type,
-    QuicDebugInfoProviderInterface* debug_info_provider)
     : unacked_packets_(),
       perspective_(perspective),
       clock_(clock),
@@ -106,32 +91,18 @@ QuicSentPacketManager::QuicSentPacketManager(
       delayed_ack_time_(
           QuicTime::Delta::FromMilliseconds(kDefaultDelayedAckTimeMs)),
       rtt_updated_(false),
-      extra_checks_in_ack_processing_(
-          GetQuicReloadableFlag(quic_extra_checks_in_ack_processing)),
-      debug_info_provider_(debug_info_provider),
-      acked_packets_iter_(last_ack_frame_.packets.rbegin()) {
+      acked_packets_iter_(last_ack_frame_.packets.rbegin()),
+      aggregate_acked_stream_frames_(
+          GetQuicReloadableFlag(quic_aggregate_acked_stream_frames)) {
   SetSendAlgorithm(congestion_control_type);
 }
 
 QuicSentPacketManager::~QuicSentPacketManager() {}
 
-QuicString QuicSentPacketManager::DebugStringForAckProcessing() const {
-  std::ostringstream s;
-  s << "{ last_ack_frame: " << last_ack_frame_
-    << ", largest_observed: " << GetLargestObserved()
-    << ", least_unacked: " << unacked_packets_.GetLeastUnacked()
-    << ", unacked_packets_size: " << unacked_packets_.Size()
-    << ", packets_acked: " << packets_acked_ << " }";
-  return s.str();
-}
-
 void QuicSentPacketManager::SetFromConfig(const QuicConfig& config) {
   if (config.HasReceivedInitialRoundTripTimeUs() &&
       config.ReceivedInitialRoundTripTimeUs() > 0) {
-    if (GetQuicReloadableFlag(quic_no_irtt) &&
-        config.HasClientSentConnectionOption(kNRTT, perspective_)) {
-      QUIC_FLAG_COUNT(quic_reloadable_flag_quic_no_irtt);
-    } else {
+    if (!config.HasClientSentConnectionOption(kNRTT, perspective_)) {
       SetInitialRtt(QuicTime::Delta::FromMicroseconds(
           config.ReceivedInitialRoundTripTimeUs()));
     }
@@ -208,9 +179,7 @@ void QuicSentPacketManager::SetFromConfig(const QuicConfig& config) {
   if (config.HasClientSentConnectionOption(k1TLP, perspective_)) {
     max_tail_loss_probes_ = 1;
   }
-  if (GetQuicReloadableFlag(quic_one_rto) &&
-      config.HasClientSentConnectionOption(k1RTO, perspective_)) {
-    QUIC_FLAG_COUNT(quic_reloadable_flag_quic_one_rto);
+  if (config.HasClientSentConnectionOption(k1RTO, perspective_)) {
     max_rto_packets_ = 1;
   }
   if (config.HasClientSentConnectionOption(kTLPR, perspective_)) {
@@ -272,6 +241,10 @@ void QuicSentPacketManager::PostProcessAfterMarkingPacketHandled(
     QuicTime ack_receive_time,
     bool rtt_updated,
     QuicByteCount prior_bytes_in_flight) {
+  if (aggregate_acked_stream_frames_ && session_decides_what_to_write()) {
+    unacked_packets_.NotifyAggregatedStreamFrameAcked(
+        last_ack_frame_.ack_delay_time);
+  }
   InvokeLossDetection(ack_receive_time);
   // Ignore losses in RTO mode.
   if (consecutive_rto_count_ > 0 && !use_new_rto_) {
@@ -422,6 +395,18 @@ void QuicSentPacketManager::MarkForRetransmission(
       unacked_packets_.RetransmitFrames(*transmission_info, transmission_type);
     } else {
       unacked_packets_.NotifyFramesLost(*transmission_info, transmission_type);
+      if (unacked_packets_.fix_is_useful_for_retransmission()) {
+        if (transmission_type == LOSS_RETRANSMISSION) {
+          // Record the first packet sent after loss, which allows to wait 1
+          // more RTT before giving up on this lost packet.
+          transmission_info->retransmission =
+              unacked_packets_.largest_sent_packet() + 1;
+        } else {
+          // Clear the recorded first packet sent after loss when version or
+          // encryption changes.
+          transmission_info->retransmission = 0;
+        }
+      }
     }
     // Update packet state according to transmission type.
     transmission_info->state =
@@ -507,16 +492,12 @@ QuicPendingRetransmission QuicSentPacketManager::NextPendingRetransmission() {
 QuicPacketNumber QuicSentPacketManager::GetNewestRetransmission(
     QuicPacketNumber packet_number,
     const QuicTransmissionInfo& transmission_info) const {
-  const QuicPacketNumber original_packet_number = packet_number;
+  if (unacked_packets_.fix_is_useful_for_retransmission() &&
+      session_decides_what_to_write()) {
+    return packet_number;
+  }
   QuicPacketNumber retransmission = transmission_info.retransmission;
   while (retransmission != 0) {
-    if (extra_checks_in_ack_processing_) {
-      CHECK(unacked_packets_.Contains(retransmission))
-          << "Retransmisstted pkn out of bound. original_pkn: "
-          << original_packet_number << ", last_retrans_pkn: " << packet_number
-          << ", oob_retrans_pkn: " << retransmission
-          << " Context:" << debug_info_provider_->DebugStringForAckProcessing();
-    }
     packet_number = retransmission;
     retransmission =
         unacked_packets_.GetTransmissionInfo(retransmission).retransmission;
@@ -533,17 +514,29 @@ void QuicSentPacketManager::MarkPacketHandled(QuicPacketNumber packet_number,
   pending_retransmissions_.erase(newest_transmission);
 
   if (newest_transmission == packet_number) {
-    const bool new_data_acked =
-        unacked_packets_.NotifyFramesAcked(*info, ack_delay_time);
-    if (session_decides_what_to_write() && !new_data_acked &&
-        info->transmission_type != NOT_RETRANSMISSION) {
-      // Record as a spurious retransmission if this packet is a retransmission
-      // and no new data gets acked.
-      QUIC_DVLOG(1) << "Detect spurious retransmitted packet " << packet_number
-                    << " transmission type: "
-                    << QuicUtils::TransmissionTypeToString(
-                           info->transmission_type);
-      RecordSpuriousRetransmissions(*info, packet_number);
+    // Try to aggregate acked stream frames if acked packet is not a
+    // retransmission.
+    const bool fast_path = aggregate_acked_stream_frames_ &&
+                           session_decides_what_to_write() &&
+                           info->transmission_type == NOT_RETRANSMISSION;
+    if (fast_path) {
+      unacked_packets_.MaybeAggregateAckedStreamFrame(*info, ack_delay_time);
+    } else {
+      if (aggregate_acked_stream_frames_ && session_decides_what_to_write()) {
+        unacked_packets_.NotifyAggregatedStreamFrameAcked(ack_delay_time);
+      }
+      const bool new_data_acked =
+          unacked_packets_.NotifyFramesAcked(*info, ack_delay_time);
+      if (session_decides_what_to_write() && !new_data_acked &&
+          info->transmission_type != NOT_RETRANSMISSION) {
+        // Record as a spurious retransmission if this packet is a
+        // retransmission and no new data gets acked.
+        QUIC_DVLOG(1) << "Detect spurious retransmitted packet "
+                      << packet_number << " transmission type: "
+                      << QuicUtils::TransmissionTypeToString(
+                             info->transmission_type);
+        RecordSpuriousRetransmissions(*info, packet_number);
+      }
     }
   } else {
     DCHECK(!session_decides_what_to_write());
@@ -1061,11 +1054,6 @@ bool QuicSentPacketManager::OnAckFrameEnd(QuicTime ack_receive_time) {
   // Reverse packets_acked_ so that it is in ascending order.
   reverse(packets_acked_.begin(), packets_acked_.end());
   for (AckedPacket& acked_packet : packets_acked_) {
-    if (extra_checks_in_ack_processing_) {
-      CHECK(unacked_packets_.Contains(acked_packet.packet_number))
-          << "Acked pkn out of bound. pkn: " << acked_packet.packet_number
-          << " Context:" << debug_info_provider_->DebugStringForAckProcessing();
-    }
     QuicTransmissionInfo* info =
         unacked_packets_.GetMutableTransmissionInfo(acked_packet.packet_number);
     if (!QuicUtils::IsAckable(info->state)) {

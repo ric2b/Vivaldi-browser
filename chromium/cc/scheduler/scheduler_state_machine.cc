@@ -565,6 +565,10 @@ bool SchedulerStateMachine::ShouldInvalidateLayerTreeFrameSink() const {
   if (begin_impl_frame_state_ != BeginImplFrameState::INSIDE_BEGIN_FRAME)
     return false;
 
+  // Don't invalidate if we cannnot draw.
+  if (PendingDrawsShouldBeAborted())
+    return false;
+
   // TODO(sunnyps): needs_prepare_tiles_ is needed here because PrepareTiles is
   // called only inside the deadline / draw phase. We could remove this if we
   // allowed PrepareTiles to happen in OnBeginImplFrame.
@@ -1076,12 +1080,18 @@ void SchedulerStateMachine::OnBeginImplFrameIdle() {
 
 SchedulerStateMachine::BeginImplFrameDeadlineMode
 SchedulerStateMachine::CurrentBeginImplFrameDeadlineMode() const {
-  if (settings_.using_synchronous_renderer_compositor) {
-    // No deadline for synchronous compositor.
+  const bool outside_begin_frame =
+      begin_impl_frame_state_ != BeginImplFrameState::INSIDE_BEGIN_FRAME;
+  if (settings_.using_synchronous_renderer_compositor || outside_begin_frame) {
+    // No deadline for synchronous compositor, or when outside the begin frame.
     return BeginImplFrameDeadlineMode::NONE;
   } else if (ShouldBlockDeadlineIndefinitely()) {
+    // We do not want to wait for a deadline because we're waiting for full
+    // pipeline to be flushed for headless.
     return BeginImplFrameDeadlineMode::BLOCKED;
   } else if (ShouldTriggerBeginImplFrameDeadlineImmediately()) {
+    // We are ready to draw a new active tree immediately because there's no
+    // commit expected or we're prioritizing active tree latency.
     return BeginImplFrameDeadlineMode::IMMEDIATE;
   } else if (needs_redraw_) {
     // We have an animation or fast input path on the impl thread that wants
@@ -1089,7 +1099,7 @@ SchedulerStateMachine::CurrentBeginImplFrameDeadlineMode() const {
     return BeginImplFrameDeadlineMode::REGULAR;
   } else {
     // The impl thread doesn't have anything it wants to draw and we are just
-    // waiting for a new active tree. In short we are blocked.
+    // waiting for a new active tree.
     return BeginImplFrameDeadlineMode::LATE;
   }
 }

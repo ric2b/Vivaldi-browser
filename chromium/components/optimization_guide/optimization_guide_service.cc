@@ -10,7 +10,7 @@
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 
 namespace optimization_guide {
 
@@ -38,7 +38,7 @@ ComponentInfo::~ComponentInfo() {}
 OptimizationGuideService::OptimizationGuideService(
     const scoped_refptr<base::SingleThreadTaskRunner>& io_thread_task_runner)
     : background_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND})),
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT})),
       io_thread_task_runner_(io_thread_task_runner),
       latest_processed_version_(kNullVersion) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
@@ -57,8 +57,9 @@ void OptimizationGuideService::AddObserver(
     AddObserverOnIOThread(observer);
   } else {
     io_thread_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&OptimizationGuideService::AddObserverOnIOThread,
-                              base::Unretained(this), observer));
+        FROM_HERE,
+        base::BindOnce(&OptimizationGuideService::AddObserverOnIOThread,
+                       base::Unretained(this), observer));
   }
 }
 
@@ -75,8 +76,8 @@ void OptimizationGuideService::RemoveObserver(
   } else {
     io_thread_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&OptimizationGuideService::RemoveObserverOnIOThread,
-                   base::Unretained(this), observer));
+        base::BindOnce(&OptimizationGuideService::RemoveObserverOnIOThread,
+                       base::Unretained(this), observer));
   }
 }
 

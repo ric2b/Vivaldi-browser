@@ -14,17 +14,21 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "chrome/common/buildflags.h"
+#include "components/mirroring/mojom/constants.mojom.h"
+#include "components/mirroring/service/features.h"
+#include "components/mirroring/service/mirroring_service.h"
 #include "components/services/heap_profiling/heap_profiling_service.h"
 #include "components/services/heap_profiling/public/mojom/constants.mojom.h"
-#include "components/services/patch/patch_service.h"
-#include "components/services/patch/public/interfaces/constants.mojom.h"
 #include "components/services/unzip/public/interfaces/constants.mojom.h"
 #include "components/services/unzip/unzip_service.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/simple_connection_filter.h"
 #include "content/public/utility/utility_thread.h"
+#include "device/vr/buildflags/buildflags.h"
 #include "extensions/buildflags/buildflags.h"
+#include "services/network/public/cpp/features.h"
 #include "services/service_manager/embedder/embedded_service_info.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/sandbox/switches.h"
@@ -33,6 +37,8 @@
 #if !defined(OS_ANDROID)
 #include "chrome/utility/importer/profile_import_impl.h"
 #include "chrome/utility/importer/profile_import_service.h"
+#include "components/services/patch/patch_service.h"  // nogncheck
+#include "components/services/patch/public/interfaces/constants.mojom.h"  // nogncheck
 #include "services/network/url_request_context_builder_mojo.h"
 #include "services/proxy_resolver/proxy_resolver_service.h"  // nogncheck
 #include "services/proxy_resolver/public/mojom/proxy_resolver.mojom.h"  // nogncheck
@@ -41,6 +47,10 @@
 #if defined(OS_WIN)
 #include "chrome/services/util_win/public/mojom/constants.mojom.h"
 #include "chrome/services/util_win/util_win_service.h"
+#endif
+
+#if BUILDFLAG(ENABLE_ISOLATED_XR_SERVICE)
+#include "chrome/services/isolated_xr_device/xr_device_service.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -59,6 +69,8 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/utility/mash_service_factory.h"
+#include "chromeos/services/ime/ime_service.h"
+#include "chromeos/services/ime/public/mojom/constants.mojom.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PRINTING)
@@ -91,9 +103,9 @@
 #include "chrome/services/file_util/public/mojom/constants.mojom.h"  // nogncheck
 #endif
 
-#if BUILDFLAG(ENABLE_SIMPLE_BROWSER_SERVICE)
-#include "services/content/simple_browser/public/mojom/constants.mojom.h"
-#include "services/content/simple_browser/simple_browser_service.h"
+#if BUILDFLAG(ENABLE_SIMPLE_BROWSER_SERVICE_OUT_OF_PROCESS)
+#include "services/content/simple_browser/public/mojom/constants.mojom.h"  // nogncheck
+#include "services/content/simple_browser/simple_browser_service.h"  // nogncheck
 #endif
 
 namespace {
@@ -185,6 +197,13 @@ void ChromeContentUtilityClient::RegisterServices(
     return;
   }
 
+#if BUILDFLAG(ENABLE_ISOLATED_XR_SERVICE)
+  service_manager::EmbeddedServiceInfo service_info;
+  service_info.factory =
+      base::BindRepeating(&device::XrDeviceService::CreateXrDeviceService);
+  services->emplace(device::mojom::kVrIsolatedServiceName, service_info);
+#endif
+
 #if BUILDFLAG(ENABLE_PRINTING)
   service_manager::EmbeddedServiceInfo pdf_compositor_info;
   pdf_compositor_info.factory = base::BindRepeating(
@@ -248,12 +267,14 @@ void ChromeContentUtilityClient::RegisterServices(
   }
 #endif
 
+#if !defined(OS_ANDROID)
   {
     service_manager::EmbeddedServiceInfo service_info;
     service_info.factory =
         base::BindRepeating(&patch::PatchService::CreateService);
     services->emplace(patch::mojom::kServiceName, service_info);
   }
+#endif
 
   {
     service_manager::EmbeddedServiceInfo service_info;
@@ -277,17 +298,39 @@ void ChromeContentUtilityClient::RegisterServices(
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS) || defined(OS_ANDROID)
 
+#if !defined(OS_ANDROID)
+  if (base::FeatureList::IsEnabled(mirroring::features::kMirroringService) &&
+      base::FeatureList::IsEnabled(features::kAudioServiceAudioStreams) &&
+      base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    service_manager::EmbeddedServiceInfo mirroring_info;
+    mirroring_info.factory =
+        base::BindRepeating([]() -> std::unique_ptr<service_manager::Service> {
+          return std::make_unique<mirroring::MirroringService>();
+        });
+    services->emplace(mirroring::mojom::kServiceName, mirroring_info);
+  }
+#endif
+
 #if defined(OS_CHROMEOS)
   // TODO(jamescook): Figure out why we have to do this when not using mash.
   mash_service_factory_->RegisterOutOfProcessServices(services);
+
+  {
+    service_manager::EmbeddedServiceInfo service_info;
+    service_info.factory =
+        base::BindRepeating(&chromeos::ime::CreateImeService);
+    services->emplace(chromeos::ime::mojom::kServiceName, service_info);
+  }
 #endif
 
-#if BUILDFLAG(ENABLE_SIMPLE_BROWSER_SERVICE)
+#if BUILDFLAG(ENABLE_SIMPLE_BROWSER_SERVICE_OUT_OF_PROCESS)
   {
     service_manager::EmbeddedServiceInfo service_info;
     service_info.factory =
         base::BindRepeating([]() -> std::unique_ptr<service_manager::Service> {
-          return std::make_unique<simple_browser::SimpleBrowserService>();
+          return std::make_unique<simple_browser::SimpleBrowserService>(
+              simple_browser::SimpleBrowserService::UIInitializationMode::
+                  kInitializeUI);
         });
     services->emplace(simple_browser::mojom::kServiceName, service_info);
   }

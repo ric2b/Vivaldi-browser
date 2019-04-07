@@ -10,6 +10,7 @@
 #include "pdf/pdf.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace chrome_pdf {
 
@@ -61,15 +62,12 @@ TEST_F(PDFiumEngineExportsTest, GetPDFDocInfo) {
   std::string pdf_data;
   ASSERT_TRUE(base::ReadFileToString(pdf_path, &pdf_data));
 
-  EXPECT_FALSE(GetPDFDocInfo(nullptr, 0, nullptr, nullptr));
-
-  ASSERT_TRUE(
-      GetPDFDocInfo(pdf_data.data(), pdf_data.size(), nullptr, nullptr));
+  auto pdf_span = base::as_bytes(base::make_span(pdf_data));
+  ASSERT_TRUE(GetPDFDocInfo(pdf_span, nullptr, nullptr));
 
   int page_count;
   double max_page_width;
-  ASSERT_TRUE(GetPDFDocInfo(pdf_data.data(), pdf_data.size(), &page_count,
-                            &max_page_width));
+  ASSERT_TRUE(GetPDFDocInfo(pdf_span, &page_count, &max_page_width));
   EXPECT_EQ(2, page_count);
   EXPECT_DOUBLE_EQ(200.0, max_page_width);
 }
@@ -82,19 +80,79 @@ TEST_F(PDFiumEngineExportsTest, GetPDFPageSizeByIndex) {
   std::string pdf_data;
   ASSERT_TRUE(base::ReadFileToString(pdf_path, &pdf_data));
 
-  EXPECT_FALSE(GetPDFPageSizeByIndex(nullptr, 0, 0, nullptr, nullptr));
+  auto pdf_span = base::as_bytes(base::make_span(pdf_data));
+  EXPECT_FALSE(GetPDFPageSizeByIndex(pdf_span, 0, nullptr, nullptr));
 
   int page_count;
-  ASSERT_TRUE(
-      GetPDFDocInfo(pdf_data.data(), pdf_data.size(), &page_count, nullptr));
+  ASSERT_TRUE(GetPDFDocInfo(pdf_span, &page_count, nullptr));
   ASSERT_EQ(2, page_count);
   for (int page_number = 0; page_number < page_count; ++page_number) {
     double width;
     double height;
-    ASSERT_TRUE(GetPDFPageSizeByIndex(pdf_data.data(), pdf_data.size(),
-                                      page_number, &width, &height));
+    ASSERT_TRUE(GetPDFPageSizeByIndex(pdf_span, page_number, &width, &height));
     EXPECT_DOUBLE_EQ(200.0, width);
     EXPECT_DOUBLE_EQ(200.0, height);
+  }
+}
+
+TEST_F(PDFiumEngineExportsTest, ConvertPdfPagesToNupPdf) {
+  base::FilePath pdf_path =
+      pdf_data_dir().Append(FILE_PATH_LITERAL("rectangles.pdf"));
+  std::string pdf_data;
+  ASSERT_TRUE(base::ReadFileToString(pdf_path, &pdf_data));
+
+  std::vector<base::span<const uint8_t>> pdf_buffers;
+  std::vector<uint8_t> output_pdf_buffer =
+      ConvertPdfPagesToNupPdf(pdf_buffers, 1, gfx::Size(512, 792));
+  EXPECT_TRUE(output_pdf_buffer.empty());
+
+  pdf_buffers.push_back(base::as_bytes(base::make_span(pdf_data)));
+  pdf_buffers.push_back(base::as_bytes(base::make_span(pdf_data)));
+  output_pdf_buffer =
+      ConvertPdfPagesToNupPdf(pdf_buffers, 2, gfx::Size(512, 792));
+  ASSERT_GT(output_pdf_buffer.size(), 0U);
+
+  base::span<const uint8_t> output_pdf_span =
+      base::make_span(output_pdf_buffer);
+  int page_count;
+  ASSERT_TRUE(GetPDFDocInfo(output_pdf_span, &page_count, nullptr));
+  ASSERT_EQ(1, page_count);
+
+  double width;
+  double height;
+  ASSERT_TRUE(GetPDFPageSizeByIndex(output_pdf_span, 0, &width, &height));
+  EXPECT_DOUBLE_EQ(792.0, width);
+  EXPECT_DOUBLE_EQ(512.0, height);
+}
+
+TEST_F(PDFiumEngineExportsTest, ConvertPdfDocumentToNupPdf) {
+  base::FilePath pdf_path =
+      pdf_data_dir().Append(FILE_PATH_LITERAL("rectangles_multi_pages.pdf"));
+  std::string pdf_data;
+  ASSERT_TRUE(base::ReadFileToString(pdf_path, &pdf_data));
+
+  base::span<const uint8_t> pdf_buffer;
+  std::vector<uint8_t> output_pdf_buffer =
+      ConvertPdfDocumentToNupPdf(pdf_buffer, 1, gfx::Size(512, 792));
+  EXPECT_TRUE(output_pdf_buffer.empty());
+
+  pdf_buffer = base::as_bytes(base::make_span(pdf_data));
+  output_pdf_buffer =
+      ConvertPdfDocumentToNupPdf(pdf_buffer, 4, gfx::Size(512, 792));
+  ASSERT_GT(output_pdf_buffer.size(), 0U);
+
+  base::span<const uint8_t> output_pdf_span =
+      base::make_span(output_pdf_buffer);
+  int page_count;
+  ASSERT_TRUE(GetPDFDocInfo(output_pdf_span, &page_count, nullptr));
+  ASSERT_EQ(2, page_count);
+  for (int page_number = 0; page_number < page_count; ++page_number) {
+    double width;
+    double height;
+    ASSERT_TRUE(
+        GetPDFPageSizeByIndex(output_pdf_span, page_number, &width, &height));
+    EXPECT_DOUBLE_EQ(512.0, width);
+    EXPECT_DOUBLE_EQ(792.0, height);
   }
 }
 

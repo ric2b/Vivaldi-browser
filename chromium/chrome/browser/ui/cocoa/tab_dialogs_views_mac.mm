@@ -23,6 +23,9 @@
 #include "ui/base/ui_features.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 
+#include "app/vivaldi_apptools.h"
+#include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
+
 namespace {
 
 gfx::Point ScreenPointFromBrowser(Browser* browser, NSPoint ns_point) {
@@ -117,6 +120,31 @@ void TabDialogsViewsMac::ShowManagePasswordsBubble(bool user_action) {
     NSRect content_frame = [[window contentView] frame];
     ns_anchor_point = NSMakePoint(NSMidX(content_frame), NSMaxY(content_frame));
     arrow = views::BubbleBorder::TOP_CENTER;
+
+    if (vivaldi::IsVivaldiRunning()) {
+      // We will use the positioning api to position for our webui.
+      extensions::VivaldiUtilitiesAPI* api =
+          extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
+              browser->profile());
+
+      std::string flow_direction;
+      gfx::Rect rect(api->GetDialogPosition(browser->session_id().id(),
+                                            "password", &flow_direction));
+
+      // Normalize the rect
+      if (rect.x() < 0)
+        rect.set_x(0);
+      if (rect.y() < 0)
+        rect.set_y(0);
+
+      gfx::Point pos =
+          flow_direction == "down" ? rect.bottom_right() : rect.top_right();
+
+      ui::BaseWindow* window = browser->window();
+      gfx::Rect bounds = window->GetBounds();
+
+      ns_anchor_point = NSMakePoint(pos.x(), bounds.height() - pos.y());
+    }
   }
   gfx::Point anchor_point = ScreenPointFromBrowser(browser, ns_anchor_point);
   gfx::NativeView parent =

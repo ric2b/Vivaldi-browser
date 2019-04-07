@@ -37,6 +37,7 @@
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/common/render_messages.h"
@@ -363,6 +364,7 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
   ASSERT_FALSE(menu->IsItemInRangePresent(IDC_OPEN_LINK_IN_PROFILE_FIRST,
                                           IDC_OPEN_LINK_IN_PROFILE_LAST));
 }
+
 IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
                        OpenInAppPresentForURLsInScopeOfNonWindowedBookmarkApp) {
   base::test::ScopedFeatureList feature_list;
@@ -395,6 +397,31 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
+  ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
+  ASSERT_FALSE(menu->IsItemInRangePresent(IDC_OPEN_LINK_IN_PROFILE_FIRST,
+                                          IDC_OPEN_LINK_IN_PROFILE_LAST));
+}
+
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
+                       OpenInAppAbsentForURLsInNonLocallyInstalledApp) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kDesktopPWAWindowing);
+  const extensions::Extension* app = InstallTestBookmarkApp(GURL(kAppUrl1));
+
+  // Part of the installation process (setting that this is a locally installed
+  // app) runs asynchronously. Wait for that to complete before setting locally
+  // installed to false.
+  base::RunLoop().RunUntilIdle();
+  SetBookmarkAppIsLocallyInstalled(browser()->profile(), app,
+                                   false /* is_locally_installed */);
+
+  std::unique_ptr<TestRenderViewContextMenu> menu =
+      CreateContextMenuMediaTypeNone(GURL(kAppUrl1), GURL(kAppUrl1));
+
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
+  ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
   ASSERT_FALSE(menu->IsItemInRangePresent(IDC_OPEN_LINK_IN_PROFILE_FIRST,
                                           IDC_OPEN_LINK_IN_PROFILE_LAST));
@@ -1161,6 +1188,7 @@ class LoadImageRequestObserver : public content::WebContentsObserver {
 
   void ResourceLoadComplete(
       content::RenderFrameHost* render_frame_host,
+      const content::GlobalRequestID& request_id,
       const content::mojom::ResourceLoadInfo& resource_load_info) override {
     if (resource_load_info.url.path() == path_)
       run_loop_.Quit();
@@ -1215,9 +1243,6 @@ IN_PROC_BROWSER_TEST_F(LoadImageBrowserTest, LoadImage) {
 
 IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
                        ContextMenuForVideoNotInPictureInPicture) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(media::kPictureInPicture);
-
   content::ContextMenuParams params;
   params.media_type = blink::WebContextMenuData::kMediaTypeVideo;
   params.media_flags |= blink::WebContextMenuData::kMediaCanPictureInPicture;
@@ -1233,9 +1258,6 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
                        ContextMenuForVideoInPictureInPicture) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(media::kPictureInPicture);
-
   content::ContextMenuParams params;
   params.media_type = blink::WebContextMenuData::kMediaTypeVideo;
   params.media_flags |= blink::WebContextMenuData::kMediaCanPictureInPicture;
@@ -1248,6 +1270,20 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
 
   EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_PICTUREINPICTURE));
   EXPECT_TRUE(menu.IsItemChecked(IDC_CONTENT_CONTEXT_PICTUREINPICTURE));
+}
+
+// This test checks that we don't crash when creating a context menu for a
+// WebContents with no Browser.
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, BrowserlessWebContentsCrash) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kDesktopPWAWindowing);
+  std::unique_ptr<content::WebContents> web_contents =
+      content::WebContents::Create(
+          content::WebContents::CreateParams(browser()->profile()));
+  CreateContextMenuInWebContents(
+      web_contents.get(), GURL("http://www.google.com/"),
+      GURL("http://www.google.com/"), base::ASCIIToUTF16("Google"),
+      blink::WebContextMenuData::kMediaTypeNone, ui::MENU_SOURCE_MOUSE);
 }
 
 }  // namespace

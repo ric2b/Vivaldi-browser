@@ -70,6 +70,8 @@ class POLICY_EXPORT CloudPolicyService : public CloudPolicyClient::Observer,
   void OnStoreLoaded(CloudPolicyStore* store) override;
   void OnStoreError(CloudPolicyStore* store) override;
 
+  void ReportValidationResult(CloudPolicyStore* store);
+
   bool IsInitializationComplete() const { return initialization_complete_; }
 
  private:
@@ -123,7 +125,12 @@ class POLICY_EXPORT CloudPolicyService : public CloudPolicyClient::Observer,
 
   // Observers who will receive notifications when the service has finished
   // initializing.
-  base::ObserverList<Observer, true> observers_;
+  base::ObserverList<Observer, true>::Unchecked observers_;
+
+  // Identifier from the stored policy. Policy validations results are only
+  // reported once if the validated policy's data signature matches with this
+  // one. Will be cleared once we send the validation report.
+  std::string policy_pending_validation_signature_;
 
   DISALLOW_COPY_AND_ASSIGN(CloudPolicyService);
 };

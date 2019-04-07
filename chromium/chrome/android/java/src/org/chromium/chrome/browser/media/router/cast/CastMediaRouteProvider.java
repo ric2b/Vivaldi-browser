@@ -12,6 +12,7 @@ import org.json.JSONObject;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.media.router.ChromeMediaRouter;
+import org.chromium.chrome.browser.media.router.ClientRecord;
 import org.chromium.chrome.browser.media.router.MediaRoute;
 import org.chromium.chrome.browser.media.router.MediaRouteManager;
 import org.chromium.chrome.browser.media.router.MediaRouteProvider;
@@ -44,18 +45,21 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         return new CastMediaRouteProvider(ChromeMediaRouter.getAndroidMediaRouter(), manager);
     }
 
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     @Override
     public void onSessionStartFailed() {
         super.onSessionStartFailed();
         mClientRecords.clear();
     }
 
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     @Override
     public void onSessionStarted(CastSession session) {
         super.onSessionStarted(session);
         mMessageHandler.onSessionCreated(mSession);
     }
 
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     @Override
     public void onSessionEnded() {
         if (mSession == null) return;
@@ -102,10 +106,12 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         return mMessageHandler;
     }
 
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     public Set<String> getClients() {
         return mClientRecords.keySet();
     }
 
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     public Map<String, ClientRecord> getClientRecords() {
         return mClientRecords;
     }
@@ -124,6 +130,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
                 mMessageHandler);
     }
 
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     @Override
     public void onSessionStarting(
             ChromeCastSessionManager.CastSessionLaunchRequest sessionLaunchRequest) {
@@ -146,6 +153,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         }
     }
 
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     @Override
     public void joinRoute(String sourceId, String presentationId, String origin, int tabId,
             int nativeRequestId) {
@@ -170,6 +178,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         mManager.onRouteCreated(route.id, route.sinkId, nativeRequestId, this, false);
     }
 
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     @Override
     public void closeRoute(String routeId) {
         MediaRoute route = mRoutes.get(routeId);
@@ -190,6 +199,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         ChromeCastSessionManager.get().stopApplication();
     }
 
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     @Override
     public void detachRoute(String routeId) {
         mRoutes.remove(routeId);
@@ -197,6 +207,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         removeClient(getClientRecordByRouteId(routeId));
     }
 
+    // Migrated to CafMessageHandler. See https://crbug.com/711860.
     @Override
     public void sendStringMessage(String routeId, String message, int nativeCallbackId) {
         Log.d(TAG, "Received message from client: %s", message);
@@ -231,6 +242,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         mManager.onMessageSentResult(success, nativeCallbackId);
     }
 
+    // Migrated to CafMessageHandler. See https://crbug.com/711860.
     private boolean handleClientConnectMessage(JSONObject jsonMessage) throws JSONException {
         String clientId = jsonMessage.getString("clientId");
         if (clientId == null) return false;
@@ -251,6 +263,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         return true;
     }
 
+    // Migrated to CafMessageHandler. See https://crbug.com/711860.
     private boolean handleClientDisconnectMessage(JSONObject jsonMessage) throws JSONException {
         String clientId = jsonMessage.getString("clientId");
         if (clientId == null) return false;
@@ -266,6 +279,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         return true;
     }
 
+    // Migrated to CafMessageHandler. See https://crbug.com/711860.
     private boolean handleLeaveSessionMessage(JSONObject jsonMessage) throws JSONException {
         String clientId = jsonMessage.getString("clientId");
         if (clientId == null || mSession == null) return false;
@@ -295,6 +309,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         return true;
     }
 
+    // Migrated to CafMessageHandler. See https://crbug.com/711860.
     private String buildInternalMessage(
             String type, int sequenceNumber, String clientId, String message) throws JSONException {
         JSONObject jsonMessage = new JSONObject();
@@ -312,6 +327,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         mMessageHandler = new CastMessageHandler(this);
     }
 
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     private boolean canAutoJoin(CastMediaSource source, String origin, int tabId) {
         if (source.getAutoJoinPolicy().equals(CastMediaSource.AUTOJOIN_PAGE_SCOPED)) return false;
 
@@ -338,6 +354,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         return false;
     }
 
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     private boolean canJoinExistingSession(
             String presentationId, String origin, int tabId, CastMediaSource source) {
         if (AUTO_JOIN_PRESENTATION_ID.equals(presentationId)) {
@@ -353,6 +370,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         return false;
     }
 
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     @Nullable
     private ClientRecord getClientRecordByRouteId(String routeId) {
         for (ClientRecord record : mClientRecords.values()) {
@@ -361,6 +379,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
         return null;
     }
 
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     @VisibleForTesting
     void addRoute(MediaRoute route, String origin, int tabId) {
         mRoutes.put(route.id, route);
@@ -380,7 +399,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
                         tabId));
     }
 
-    // TODO(zqzhang): Move this method to CastMessageHandler.
+    // Migrated to CastMessageHandler.sendReceiverActionToClient. See https://crbug.com/711860.
     private void sendReceiverAction(
             String routeId, MediaSink sink, String clientId, String action) {
         try {
@@ -425,6 +444,7 @@ public class CastMediaRouteProvider extends BaseMediaRouteProvider {
      * @param originB A URL origin.
      * @return True if originA and originB represent the same origin, false otherwise.
      */
+    // Migrated to CafMediaRouteProvider. See https://crbug.com/711860.
     private static final boolean isSameOrigin(String originA, String originB) {
         if (originA == null || originA.isEmpty() || originB == null || originB.isEmpty())
             return false;

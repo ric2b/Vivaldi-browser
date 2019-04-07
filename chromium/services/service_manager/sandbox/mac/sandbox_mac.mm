@@ -38,6 +38,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
 #include "sandbox/mac/sandbox_compiler.h"
+#include "services/service_manager/sandbox/mac/audio.sb.h"
 #include "services/service_manager/sandbox/mac/cdm.sb.h"
 #include "services/service_manager/sandbox/mac/common.sb.h"
 #include "services/service_manager/sandbox/mac/gpu.sb.h"
@@ -62,7 +63,6 @@ struct SandboxTypeToResourceIDMapping {
 // Mapping from sandbox process types to resource IDs containing the sandbox
 // profile for all process types known to service_manager.
 // TODO(tsepez): Implement profile for SANDBOX_TYPE_NETWORK.
-// TODO(https://crbug.com/850878): Implement profile for SANDBOX_TYPE_AUDIO.
 SandboxTypeToResourceIDMapping kDefaultSandboxTypeToResourceIDMapping[] = {
     {SANDBOX_TYPE_NO_SANDBOX, nullptr},
     {SANDBOX_TYPE_RENDERER, kSeatbeltPolicyString_renderer},
@@ -74,7 +74,7 @@ SandboxTypeToResourceIDMapping kDefaultSandboxTypeToResourceIDMapping[] = {
     {SANDBOX_TYPE_NACL_LOADER, kSeatbeltPolicyString_nacl_loader},
     {SANDBOX_TYPE_PDF_COMPOSITOR, kSeatbeltPolicyString_ppapi},
     {SANDBOX_TYPE_PROFILING, kSeatbeltPolicyString_utility},
-    {SANDBOX_TYPE_AUDIO, nullptr},
+    {SANDBOX_TYPE_AUDIO, kSeatbeltPolicyString_audio},
 };
 
 static_assert(arraysize(kDefaultSandboxTypeToResourceIDMapping) ==
@@ -97,7 +97,6 @@ const char* SandboxMac::kSandboxOSVersion = "OS_VERSION";
 const char* SandboxMac::kSandboxElCapOrLater = "ELCAP_OR_LATER";
 const char* SandboxMac::kSandboxMacOS1013 = "MACOS_1013";
 const char* SandboxMac::kSandboxBundleVersionPath = "BUNDLE_VERSION_PATH";
-const char* SandboxMac::kSandboxHighSierraOrLater = "HIGH_SIERRA_OR_LATER";
 
 // Warm up System APIs that empirically need to be accessed before the Sandbox
 // is turned on.
@@ -239,13 +238,8 @@ bool SandboxMac::Enable(SandboxType sandbox_type) {
   if (!compiler.InsertBooleanParam(kSandboxElCapOrLater, elcap_or_later))
     return false;
 
-  bool macos_1013 = base::mac::IsOS10_13() ;
+  bool macos_1013 = base::mac::IsOS10_13();
   if (!compiler.InsertBooleanParam(kSandboxMacOS1013, macos_1013))
-    return false;
-
-  bool high_sierra_or_later = base::mac::IsAtLeastOS10_13();
-  if (!compiler.InsertBooleanParam(kSandboxHighSierraOrLater,
-      high_sierra_or_later))
     return false;
 
   if (sandbox_type == service_manager::SANDBOX_TYPE_CDM) {

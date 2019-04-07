@@ -26,16 +26,17 @@ class FakeStreamFactory : public mojom::StreamFactory {
 
   void CloseBinding() { binding_.Close(); }
 
-  void CreateInputStream(media::mojom::AudioInputStreamRequest stream_request,
-                         media::mojom::AudioInputStreamClientPtr client,
-                         media::mojom::AudioInputStreamObserverPtr observer,
-                         media::mojom::AudioLogPtr log,
+  void CreateInputStream(::media::mojom::AudioInputStreamRequest stream,
+                         ::media::mojom::AudioInputStreamClientPtr client,
+                         ::media::mojom::AudioInputStreamObserverPtr observer,
+                         ::media::mojom::AudioLogPtr log,
                          const std::string& device_id,
                          const media::AudioParameters& params,
                          uint32_t shared_memory_count,
                          bool enable_agc,
                          mojo::ScopedSharedBufferHandle key_press_count_buffer,
-                         CreateInputStreamCallback created_callback) override {}
+                         mojom::AudioProcessingConfigPtr processing_config,
+                         CreateInputStreamCallback callback) override {}
 
   void AssociateInputAndOutputForAec(
       const base::UnguessableToken& input_stream_id,
@@ -48,6 +49,7 @@ class FakeStreamFactory : public mojom::StreamFactory {
       const std::string& output_device_id,
       const media::AudioParameters& params,
       const base::UnguessableToken& group_id,
+      const base::Optional<base::UnguessableToken>& processing_id,
       CreateOutputStreamCallback created_callback) override {}
   void BindMuter(mojom::LocalMuterAssociatedRequest request,
                  const base::UnguessableToken& group_id) override {}
@@ -61,7 +63,14 @@ class FakeStreamFactory : public mojom::StreamFactory {
       CreateLoopbackStreamCallback created_callback) override {}
 
   mojo::Binding<mojom::StreamFactory> binding_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(FakeStreamFactory);
 };
+
+static_assert(
+    !std::is_abstract<FakeStreamFactory>(),
+    "FakeStreamFactory should implement all of the StreamFactory interface.");
 
 }  // namespace audio
 

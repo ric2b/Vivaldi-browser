@@ -6,13 +6,15 @@
 #ifndef NOTES_NOTES_MODEL_OBSERVER_H_
 #define NOTES_NOTES_MODEL_OBSERVER_H_
 
+#include "base/observer_list_types.h"
+
 namespace vivaldi {
 
 class Notes_Model;
 class Notes_Node;
 
 // Observer for the Notes_Model.
-class NotesModelObserver {
+class NotesModelObserver : public base::CheckedObserver {
  public:
   // Invoked when the model has finished loading. |ids_reassigned| mirrors
   // that of NotesLoadDetails::ids_reassigned. See it for details.
@@ -96,7 +98,7 @@ class NotesModelObserver {
   virtual void GroupedNotesChangesEnded(Notes_Model* model) {}
 
  protected:
-  virtual ~NotesModelObserver() {}
+  ~NotesModelObserver() override {}
 };
 
 }  // namespace vivaldi

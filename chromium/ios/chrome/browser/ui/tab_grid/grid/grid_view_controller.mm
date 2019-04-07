@@ -67,7 +67,8 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 @property(nonatomic, strong) GridLayout* defaultLayout;
 // The layout used while the grid is being reordered.
 @property(nonatomic, strong) UICollectionViewLayout* reorderingLayout;
-
+// YES if, when reordering is enabled, the order of the cells has changed.
+@property(nonatomic, assign) BOOL hasChangedOrder;
 @end
 
 @implementation GridViewController
@@ -88,6 +89,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 @synthesize emptyStateAnimator = _emptyStateAnimator;
 @synthesize defaultLayout = _defaultLayout;
 @synthesize reorderingLayout = _reorderingLayout;
+@synthesize hasChangedOrder = _hasChangedOrder;
 
 - (instancetype)init {
   if (self = [super init]) {
@@ -154,7 +156,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                               scrollPosition:UICollectionViewScrollPositionTop];
   // Update the delegate, in case it wasn't set when |items| was populated.
   [self.delegate gridViewController:self didChangeItemCount:self.items.count];
-  [self animateEmptyStateOut];
+  [self removeEmptyStateAnimated:NO];
   self.lastInsertedItemID = nil;
 }
 
@@ -286,7 +288,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   GridItem* item = self.items[source];
   [self.items removeObjectAtIndex:source];
   [self.items insertObject:item atIndex:destination];
-
+  self.hasChangedOrder = YES;
   [self.delegate gridViewController:self
                   didMoveItemWithID:item.identifier
                             toIndex:destination];
@@ -369,7 +371,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     [self.delegate gridViewController:self didChangeItemCount:self.items.count];
   };
   auto collectionViewUpdates = ^{
-    [self animateEmptyStateOut];
+    [self removeEmptyStateAnimated:YES];
     [self.collectionView insertItemsAtIndexPaths:@[ CreateIndexPath(index) ]];
   };
   auto completion = ^(BOOL finished) {
@@ -553,20 +555,25 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   [self.emptyStateAnimator startAnimation];
 }
 
-// Animates the empty state out of view.
-- (void)animateEmptyStateOut {
+// Removes the empty state out of view, with animation if |animated| is YES.
+- (void)removeEmptyStateAnimated:(BOOL)animated {
   // TODO(crbug.com/820410) : Polish the animation, and put constants where they
   // belong.
   [self.emptyStateAnimator stopAnimation:YES];
-  self.emptyStateAnimator = [[UIViewPropertyAnimator alloc]
-      initWithDuration:self.emptyStateView.alpha
-          dampingRatio:1.0
-            animations:^{
-              self.emptyStateView.alpha = 0.0;
-              self.emptyStateView.transform = CGAffineTransformScale(
-                  CGAffineTransformIdentity, /*sx=*/0.9, /*sy=*/0.9);
-            }];
-  [self.emptyStateAnimator startAnimation];
+  auto removeEmptyState = ^{
+    self.emptyStateView.alpha = 0.0;
+    self.emptyStateView.transform = CGAffineTransformScale(
+        CGAffineTransformIdentity, /*sx=*/0.9, /*sy=*/0.9);
+  };
+  if (animated) {
+    self.emptyStateAnimator = [[UIViewPropertyAnimator alloc]
+        initWithDuration:self.emptyStateView.alpha
+            dampingRatio:1.0
+              animations:removeEmptyState];
+    [self.emptyStateAnimator startAnimation];
+  } else {
+    removeEmptyState();
+  }
 }
 
 // Handle the long-press gesture used to reorder cells in the collection view.
@@ -582,6 +589,8 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       if (!moving) {
         gesture.enabled = NO;
       } else {
+        base::RecordAction(
+            base::UserMetricsAction("MobileTabGridBeganReordering"));
         CGPoint cellCenter =
             [self.collectionView cellForItemAtIndexPath:path].center;
         self.itemReorderTouchPoint =
@@ -619,12 +628,14 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                                             animated:YES];
       }];
       [self.collectionView endInteractiveMovement];
+      [self recordInteractiveReordering];
       [CATransaction commit];
       break;
     }
     case UIGestureRecognizerStateCancelled:
       self.itemReorderTouchPoint = CGPointZero;
       [self.collectionView cancelInteractiveMovement];
+      [self recordInteractiveReordering];
       [self.collectionView setCollectionViewLayout:self.defaultLayout
                                           animated:YES];
       // Re-enable cancelled gesture.
@@ -642,6 +653,16 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                   position.y - self.itemReorderTouchPoint.y);
 
   [self.collectionView updateInteractiveMovementTargetPosition:targetLocation];
+}
+
+- (void)recordInteractiveReordering {
+  if (self.hasChangedOrder) {
+    base::RecordAction(base::UserMetricsAction("MobileTabGridReordered"));
+  } else {
+    base::RecordAction(
+        base::UserMetricsAction("MobileTabGridEndedWithoutReordering"));
+  }
+  self.hasChangedOrder = NO;
 }
 
 @end

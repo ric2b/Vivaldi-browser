@@ -23,7 +23,7 @@ class ImeService : public service_manager::Service,
   ~ImeService() override;
 
  private:
-  // service_manager::Service:
+  // service_manager::Service overrides:
   void OnStart() override;
   void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
@@ -38,6 +38,8 @@ class ImeService : public service_manager::Service,
 
   // Binds the mojom::InputEngineManager interface to this object.
   void BindInputEngineManagerRequest(mojom::InputEngineManagerRequest request);
+
+  void OnConnectionLost();
 
   // For the duration of this service lifetime, there should be only one
   // input engine instance.

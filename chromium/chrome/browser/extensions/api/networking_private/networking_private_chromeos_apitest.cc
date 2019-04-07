@@ -220,10 +220,9 @@ class NetworkingPrivateChromeOSApiTest : public extensions::ExtensionApiTest {
 
     // TODO(pneubeck): Remove the following hack, once the NetworkingPrivateAPI
     // uses the ProfileHelper to obtain the userhash crbug/238623.
-    const cryptohome::Identification login_user =
-        cryptohome::Identification::FromString(
-            user_manager::CanonicalizeUserID(command_line->GetSwitchValueNative(
-                chromeos::switches::kLoginUser)));
+    cryptohome::AccountIdentifier login_user;
+    login_user.set_account_id(user_manager::CanonicalizeUserID(
+        command_line->GetSwitchValueNative(chromeos::switches::kLoginUser)));
     const std::string sanitized_user =
         CryptohomeClient::GetStubSanitizedUsername(login_user);
     command_line->AppendSwitchASCII(chromeos::switches::kLoginProfile,
@@ -236,7 +235,7 @@ class NetworkingPrivateChromeOSApiTest : public extensions::ExtensionApiTest {
     CHECK(user);
     std::string userhash;
     DBusThreadManager::Get()->GetCryptohomeClient()->GetSanitizedUsername(
-        cryptohome::Identification(user->GetAccountId()),
+        cryptohome::CreateAccountIdentifierFromAccountId(user->GetAccountId()),
         base::BindOnce(
             [](std::string* out, base::Optional<std::string> result) {
               CHECK(result.has_value());
@@ -424,6 +423,9 @@ class NetworkingPrivateChromeOSApiTest : public extensions::ExtensionApiTest {
         kWifi1ServicePath, shill::kConnectableProperty, base::Value(true));
     service_test_->SetServiceProperty(kWifi1ServicePath, shill::kDeviceProperty,
                                       base::Value(kWifiDevicePath));
+    service_test_->SetServiceProperty(
+        kWifi1ServicePath, shill::kTetheringProperty,
+        base::Value(shill::kTetheringNotDetectedState));
     base::DictionaryValue static_ipconfig;
     static_ipconfig.SetKey(shill::kAddressProperty, base::Value("1.2.3.4"));
     service_test_->SetServiceProperty(
@@ -445,6 +447,9 @@ class NetworkingPrivateChromeOSApiTest : public extensions::ExtensionApiTest {
         kWifi2ServicePath, shill::kSignalStrengthProperty, base::Value(80));
     service_test_->SetServiceProperty(
         kWifi2ServicePath, shill::kConnectableProperty, base::Value(true));
+    service_test_->SetServiceProperty(
+        kWifi2ServicePath, shill::kTetheringProperty,
+        base::Value(shill::kTetheringNotDetectedState));
 
     AddService("stub_wimax", "wimax", shill::kTypeWimax, shill::kStateOnline);
     service_test_->SetServiceProperty(

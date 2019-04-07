@@ -27,12 +27,6 @@ NGContainerFragmentBuilder& NGContainerFragmentBuilder::SetInlineSize(
   return *this;
 }
 
-NGContainerFragmentBuilder& NGContainerFragmentBuilder::SetBfcOffset(
-    const NGBfcOffset& bfc_offset) {
-  bfc_offset_ = bfc_offset;
-  return *this;
-}
-
 NGContainerFragmentBuilder& NGContainerFragmentBuilder::SetEndMarginStrut(
     const NGMarginStrut& end_margin_strut) {
   end_margin_strut_ = end_margin_strut;
@@ -101,7 +95,7 @@ NGContainerFragmentBuilder& NGContainerFragmentBuilder::AddChild(
 }
 
 NGContainerFragmentBuilder& NGContainerFragmentBuilder::AddChild(
-    scoped_refptr<NGPhysicalFragment> child,
+    scoped_refptr<const NGPhysicalFragment> child,
     const NGLogicalOffset& child_offset) {
   if (!has_last_resort_break_) {
     if (const auto* token = child->BreakToken()) {
@@ -110,7 +104,7 @@ NGContainerFragmentBuilder& NGContainerFragmentBuilder::AddChild(
         has_last_resort_break_ = true;
     }
   }
-  children_.push_back(std::move(child));
+  children_.emplace_back(std::move(child), NGPhysicalOffset());
   offsets_.push_back(child_offset);
   return *this;
 }
@@ -203,17 +197,23 @@ void NGContainerFragmentBuilder::GetAndClearOutOfFlowDescendantCandidates(
   oof_positioned_candidates_.clear();
 }
 
-void NGContainerFragmentBuilder::
-    MoveOutOfFlowDescendantCandidatesToDescendants() {
+void NGContainerFragmentBuilder::MoveOutOfFlowDescendantCandidatesToDescendants(
+    const LayoutObject* inline_container) {
   GetAndClearOutOfFlowDescendantCandidates(&oof_positioned_descendants_,
                                            nullptr);
+  if (inline_container) {
+    for (auto& descendant : oof_positioned_descendants_) {
+      if (!descendant.inline_container)
+        descendant.inline_container = inline_container;
+    }
+  }
 }
 
 #ifndef NDEBUG
 
 String NGContainerFragmentBuilder::ToString() const {
   StringBuilder builder;
-  builder.Append(String::Format("ContainerFragment %.2fx%.2f, Children %zu\n",
+  builder.Append(String::Format("ContainerFragment %.2fx%.2f, Children %u\n",
                                 InlineSize().ToFloat(), BlockSize().ToFloat(),
                                 children_.size()));
   for (auto& child : children_) {

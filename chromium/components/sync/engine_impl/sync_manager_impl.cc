@@ -19,6 +19,7 @@
 #include "components/sync/base/experiments.h"
 #include "components/sync/base/invalidation_interface.h"
 #include "components/sync/base/model_type.h"
+#include "components/sync/base/nigori.h"
 #include "components/sync/engine/configure_reason.h"
 #include "components/sync/engine/engine_components_factory.h"
 #include "components/sync/engine/engine_util.h"
@@ -152,21 +153,21 @@ ModelTypeSet SyncManagerImpl::InitialSyncEndedTypes() {
 ModelTypeSet SyncManagerImpl::GetTypesWithEmptyProgressMarkerToken(
     ModelTypeSet types) {
   ModelTypeSet result;
-  for (ModelTypeSet::Iterator i = types.First(); i.Good(); i.Inc()) {
+  for (ModelType type : types) {
     sync_pb::DataTypeProgressMarker marker;
-    directory()->GetDownloadProgress(i.Get(), &marker);
+    directory()->GetDownloadProgress(type, &marker);
 
     if (marker.token().empty())
-      result.Put(i.Get());
+      result.Put(type);
   }
   return result;
 }
 
-void SyncManagerImpl::ConfigureSyncer(
-    ConfigureReason reason,
-    ModelTypeSet to_download,
-    const base::Closure& ready_task,
-    const base::Closure& retry_task) {
+void SyncManagerImpl::ConfigureSyncer(ConfigureReason reason,
+                                      ModelTypeSet to_download,
+                                      SyncFeatureState sync_feature_state,
+                                      const base::Closure& ready_task,
+                                      const base::Closure& retry_task) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!ready_task.is_null());
   DCHECK(initialized_);
@@ -183,6 +184,10 @@ void SyncManagerImpl::ConfigureSyncer(
 
   scheduler_->Start(SyncScheduler::CONFIGURATION_MODE, base::Time());
   scheduler_->ScheduleConfiguration(params);
+  if (sync_feature_state != SyncFeatureState::INITIALIZING) {
+    cycle_context_->set_is_sync_feature_enabled(sync_feature_state ==
+                                                SyncFeatureState::ON);
+  }
 }
 
 void SyncManagerImpl::Init(InitArgs* args) {
@@ -216,7 +221,8 @@ void SyncManagerImpl::Init(InitArgs* args) {
       !args->restored_keystore_key_for_bootstrapping.empty());
   sync_encryption_handler_ = std::make_unique<SyncEncryptionHandlerImpl>(
       &share_, args->encryptor, args->restored_key_for_bootstrapping,
-      args->restored_keystore_key_for_bootstrapping);
+      args->restored_keystore_key_for_bootstrapping,
+      base::BindRepeating(&Nigori::GenerateScryptSalt));
   sync_encryption_handler_->AddObserver(this);
   sync_encryption_handler_->AddObserver(&debug_info_event_listener_);
   sync_encryption_handler_->AddObserver(&js_sync_encryption_handler_observer_);
@@ -333,6 +339,7 @@ void SyncManagerImpl::NotifyInitializationFailure() {
 
 void SyncManagerImpl::OnPassphraseRequired(
     PassphraseRequiredReason reason,
+    const KeyDerivationParams& key_derivation_params,
     const sync_pb::EncryptedData& pending_keys) {
   // Does nothing.
 }
@@ -585,11 +592,10 @@ void SyncManagerImpl::HandleTransactionCompleteChangeEvent(
     return;
 
   // Call commit.
-  for (ModelTypeSet::Iterator it = models_with_changes.First(); it.Good();
-       it.Inc()) {
-    change_delegate_->OnChangesComplete(it.Get());
+  for (ModelType type : models_with_changes) {
+    change_delegate_->OnChangesComplete(type);
     change_observer_.Call(
-        FROM_HERE, &SyncManager::ChangeObserver::OnChangesComplete, it.Get());
+        FROM_HERE, &SyncManager::ChangeObserver::OnChangesComplete, type);
   }
 }
 
@@ -761,7 +767,7 @@ void SyncManagerImpl::HandleCalculateChangesChangeEventFromSyncer(
 void SyncManagerImpl::RequestNudgeForDataTypes(
     const base::Location& nudge_location,
     ModelTypeSet types) {
-  debug_info_event_listener_.OnNudgeFromDatatype(types.First().Get());
+  debug_info_event_listener_.OnNudgeFromDatatype(*(types.begin()));
 
   scheduler_->ScheduleLocalNudge(types, nudge_location);
 }

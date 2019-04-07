@@ -89,12 +89,18 @@ base::Optional<std::string> CrostiniAppIdFromAppName(
 // numeric values should never be reused.
 enum class CrostiniUISurface { kSettings = 0, kAppList = 1, kCount };
 
+// See chrome/browser/ui/views/crostini for implementation of the ShowXXX
+// functions below.
+
+// Shows the Crostini Installer dialog.
 void ShowCrostiniInstallerView(Profile* profile, CrostiniUISurface ui_surface);
+// Shows the Crostini Uninstaller dialog.
 void ShowCrostiniUninstallerView(Profile* profile,
                                  CrostiniUISurface ui_surface);
+// Shows the Crostini Upgrade dialog.
+void ShowCrostiniUpgradeView(Profile* profile, CrostiniUISurface ui_surface);
 
-constexpr char kCrostiniTerminalAppName[] = "Terminal";
-// We can use any arbitrary well-formed extension id for the Terminal app, this
+// We use an arbitrary well-formed extension id for the Terminal app, this
 // is equal to GenerateId("Terminal").
 constexpr char kCrostiniTerminalId[] = "oajcgpnkmhaalajejhlfpacbiokdnnfe";
 
@@ -102,5 +108,12 @@ constexpr char kCrostiniDefaultVmName[] = "termina";
 constexpr char kCrostiniDefaultContainerName[] = "penguin";
 constexpr char kCrostiniCroshBuiltinAppId[] =
     "nkoccljplnhpfnfiajclkommnmllphnl";
+// In order to be compatible with sync folder id must match standard.
+// Generated using crx_file::id_util::GenerateId("LinuxAppsFolder")
+constexpr char kCrostiniFolderId[] = "ddolnhmblagmcagkedkbfejapapdimlk";
+
+// Whether running Crostini is allowed for unaffiliated users per enterprise
+// policy.
+bool IsUnaffiliatedCrostiniAllowedByPolicy();
 
 #endif  // CHROME_BROWSER_CHROMEOS_CROSTINI_CROSTINI_UTIL_H_

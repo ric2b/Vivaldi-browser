@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy_manager.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
@@ -19,6 +20,7 @@
 #include "third_party/blink/renderer/core/frame/location.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
+#include "third_party/blink/renderer/core/frame/user_activation.h"
 #include "third_party/blink/renderer/core/frame/window_post_message_options.h"
 #include "third_party/blink/renderer/core/input/input_device_capabilities.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
@@ -116,12 +118,13 @@ void DOMWindow::postMessage(LocalDOMWindow* incumbent_window,
                             ExceptionState& exception_state) {
   WindowPostMessageOptions options;
   options.setTargetOrigin(target_origin);
-  postMessage(incumbent_window, message, transfer, options, exception_state);
+  if (!transfer.IsEmpty())
+    options.setTransfer(transfer);
+  postMessage(incumbent_window, message, options, exception_state);
 }
 
 void DOMWindow::postMessage(LocalDOMWindow* incumbent_window,
                             const ScriptValue& message,
-                            Vector<ScriptValue>& transfer,
                             const WindowPostMessageOptions& options,
                             ExceptionState& exception_state) {
   UseCounter::Count(incumbent_window->GetFrame(),
@@ -133,24 +136,14 @@ void DOMWindow::postMessage(LocalDOMWindow* incumbent_window,
   v8::Isolate* isolate = window_proxy_manager_->GetIsolate();
 
   Transferables transferables;
-  if (!transfer.IsEmpty()) {
-    if (!SerializedScriptValue::ExtractTransferables(
-            isolate, transfer, transferables, exception_state)) {
-      return;
-    }
-  }
-
-  SerializedScriptValue::SerializeOptions serialize_options;
-  serialize_options.transferables = &transferables;
   scoped_refptr<SerializedScriptValue> serialized_message =
-      SerializedScriptValue::Serialize(isolate, message.V8Value(),
-                                       serialize_options, exception_state);
+      PostMessageHelper::SerializeMessageByMove(isolate, message, options,
+                                                transferables, exception_state);
   if (exception_state.HadException())
     return;
-
-  serialized_message->UnregisterMemoryAllocatedWithCurrentScriptContext();
+  DCHECK(serialized_message);
   DoPostMessage(std::move(serialized_message), transferables.message_ports,
-                options.targetOrigin(), incumbent_window, exception_state);
+                options, incumbent_window, exception_state);
 }
 
 DOMWindow* DOMWindow::AnonymousIndexedGetter(uint32_t index) const {
@@ -405,19 +398,22 @@ void DOMWindow::PostMessageForTesting(
     const String& target_origin,
     LocalDOMWindow* source,
     ExceptionState& exception_state) {
-  DoPostMessage(std::move(message), ports, target_origin, source,
-                exception_state);
+  WindowPostMessageOptions options;
+  options.setTargetOrigin(target_origin);
+  DoPostMessage(std::move(message), ports, options, source, exception_state);
 }
 
 void DOMWindow::DoPostMessage(scoped_refptr<SerializedScriptValue> message,
                               const MessagePortArray& ports,
-                              const String& target_origin,
+                              const WindowPostMessageOptions& options,
                               LocalDOMWindow* source,
                               ExceptionState& exception_state) {
   if (!IsCurrentlyDisplayedInFrame())
     return;
 
   Document* source_document = source->document();
+
+  const String& target_origin = options.targetOrigin();
 
   // Compute the target origin.  We need to do this synchronously in order
   // to generate the SyntaxError exception correctly.
@@ -483,9 +479,13 @@ void DOMWindow::DoPostMessage(scoped_refptr<SerializedScriptValue> message,
         source->GetFrame(),
         WebFeature::kPostMessageOutgoingWouldBeBlockedByConnectSrc);
   }
+  UserActivation* user_activation = nullptr;
+  if (options.includeUserActivation())
+    user_activation = UserActivation::CreateSnapshot(source);
 
-  MessageEvent* event = MessageEvent::Create(
-      std::move(channels), std::move(message), source_origin, String(), source);
+  MessageEvent* event =
+      MessageEvent::Create(std::move(channels), std::move(message),
+                           source_origin, String(), source, user_activation);
 
   SchedulePostMessage(event, std::move(target), source_document);
 }

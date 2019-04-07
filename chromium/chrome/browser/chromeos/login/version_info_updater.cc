@@ -13,7 +13,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
@@ -66,7 +66,7 @@ VersionInfoUpdater::~VersionInfoUpdater() {
 void VersionInfoUpdater::StartUpdate(bool is_official_build) {
   if (base::SysInfo::IsRunningOnChromeOS()) {
     base::PostTaskWithTraitsAndReplyWithResult(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
         base::Bind(&version_loader::GetVersion,
                    is_official_build ? version_loader::VERSION_SHORT_WITH_DATE
                                      : version_loader::VERSION_FULL),

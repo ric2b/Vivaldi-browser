@@ -20,6 +20,7 @@
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
+#include "ash/shell_state.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/voice_interaction/voice_interaction_controller.h"
@@ -77,7 +78,7 @@ AppListButton::AppListButton(InkDropButtonListener* listener,
   set_ink_drop_visible_opacity(kShelfInkDropVisibleOpacity);
   SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_ASH_SHELF_APP_LIST_LAUNCHER_TITLE));
-  SetSize(gfx::Size(kShelfSize, kShelfSize));
+  SetSize(gfx::Size(kShelfControlSizeNewUi, kShelfControlSizeNewUi));
   SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
   set_notify_action(Button::NOTIFY_ON_PRESS);
 
@@ -96,7 +97,10 @@ AppListButton::~AppListButton() {
 }
 
 void AppListButton::OnAppListShown() {
-  AnimateInkDrop(views::InkDropState::ACTIVATED, nullptr);
+  // Do not show a highlight in tablet mode since the "homecher" view is always
+  // open in the background.
+  if (shelf_view_->ShouldShowAppListButtonHighlight())
+    AnimateInkDrop(views::InkDropState::ACTIVATED, nullptr);
   is_showing_app_list_ = true;
   shelf_->UpdateAutoHideState();
 }
@@ -141,6 +145,8 @@ void AppListButton::OnGestureEvent(ui::GestureEvent* event) {
             "VoiceInteraction.Started.AppListButtonLongPress"));
         assistant_overlay_->BurstAnimation();
         event->SetHandled();
+        Shell::Get()->shell_state()->SetRootWindowForNewWindows(
+            GetWidget()->GetNativeWindow()->GetRootWindow());
         if (chromeos::switches::IsAssistantEnabled()) {
           Shell::Get()->assistant_controller()->ui_controller()->ShowUi(
               AssistantSource::kLongPressLauncher);
@@ -197,10 +203,11 @@ void AppListButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
 std::unique_ptr<views::InkDropRipple> AppListButton::CreateInkDropRipple()
     const {
+  const int app_list_button_radius = ShelfConstants::app_list_button_radius();
   gfx::Point center = GetCenterPoint();
-  gfx::Rect bounds(center.x() - kAppListButtonRadius,
-                   center.y() - kAppListButtonRadius, 2 * kAppListButtonRadius,
-                   2 * kAppListButtonRadius);
+  gfx::Rect bounds(center.x() - app_list_button_radius,
+                   center.y() - app_list_button_radius,
+                   2 * app_list_button_radius, 2 * app_list_button_radius);
   return std::make_unique<views::FloodFillInkDropRipple>(
       size(), GetLocalBounds().InsetsFrom(bounds),
       GetInkDropCenterBasedOnLastEvent(), GetInkDropBaseColor(),
@@ -229,8 +236,8 @@ std::unique_ptr<views::InkDrop> AppListButton::CreateInkDrop() {
 }
 
 std::unique_ptr<views::InkDropMask> AppListButton::CreateInkDropMask() const {
-  return std::make_unique<views::CircleInkDropMask>(size(), GetCenterPoint(),
-                                                    kAppListButtonRadius);
+  return std::make_unique<views::CircleInkDropMask>(
+      size(), GetCenterPoint(), ShelfConstants::app_list_button_radius());
 }
 
 void AppListButton::PaintButtonContents(gfx::Canvas* canvas) {
@@ -329,7 +336,9 @@ void AppListButton::OnVoiceInteractionStatusChanged(
     case mojom::VoiceInteractionState::NOT_READY:
       // If we are showing the bursting or waiting animation, no need to do
       // anything. Otherwise show the waiting animation now.
-      if (!assistant_overlay_->IsBursting() &&
+      // NOTE: No waiting animation for native assistant.
+      if (!chromeos::switches::IsAssistantEnabled() &&
+          !assistant_overlay_->IsBursting() &&
           !assistant_overlay_->IsWaiting()) {
         assistant_overlay_->WaitingAnimation();
       }

@@ -115,6 +115,7 @@ const char kVideoOnlyWebM[] = "video/webm; codecs=\"vp8\"";
 const char kMP4VideoVP9[] =
     "video/mp4; codecs=\"vp09.00.10.08.01.02.02.02.00\"";
 const char kMP4AudioFlac[] = "audio/mp4; codecs=\"flac\"";
+const char kMP4AudioOpus[] = "audio/mp4; codecs=\"opus\"";
 const char kMP3[] = "audio/mpeg";
 #if BUILDFLAG(ENABLE_AV1_DECODER)
 const char kMP4AV1[] = "video/mp4; codecs=\"av01.0.04M.08\"";
@@ -136,7 +137,6 @@ const int kAppendTimeSec = 1;
 const int kAppendTimeMs = kAppendTimeSec * 1000;
 const int k320WebMFileDurationMs = 2736;
 const int k640WebMFileDurationMs = 2762;
-const int kOpusEndTrimmingWebMFileDurationMs = 2741;
 const int kVP9WebMFileDurationMs = 2736;
 const int kVP8AWebMFileDurationMs = 2734;
 
@@ -741,6 +741,9 @@ const MSEPlaybackTestData kMediaSourceAudioFiles[] = {
     // FLAC in MP4
     {"sfx-flac_frag.mp4", kMP4AudioFlac, kAppendWholeFile, 288},
 
+    // Opus in MP4
+    {"sfx-opus_frag.mp4", kMP4AudioOpus, kAppendWholeFile, 301},
+
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
     // AAC in ADTS
     {"bear-audio-main-aac.aac", kADTS, kAppendWholeFile, 2773},
@@ -1113,7 +1116,7 @@ TEST_F(PipelineIntegrationTest, SwitchVideoTrackDuringPlayback) {
 }
 
 TEST_F(PipelineIntegrationTest, BasicPlaybackOpusOggTrimmingHashed) {
-  ASSERT_EQ(PIPELINE_OK, Start("opus-trimming-test.webm", kHashed));
+  ASSERT_EQ(PIPELINE_OK, Start("opus-trimming-test.ogg", kHashed));
 
   Play();
 
@@ -1126,7 +1129,7 @@ TEST_F(PipelineIntegrationTest, BasicPlaybackOpusOggTrimmingHashed) {
   ASSERT_TRUE(WaitUntilOnEnded());
   EXPECT_HASH_EQ(kOpusEndTrimmingHash_2, GetAudioHash());
 
-  // Seek somewhere outside of the pre-skip / end-trim section, demxuer should
+  // Seek somewhere outside of the pre-skip / end-trim section, demuxer should
   // correctly preroll enough to accurately decode this segment.
   ASSERT_TRUE(Seek(base::TimeDelta::FromMilliseconds(6360)));
   Play();
@@ -1148,12 +1151,38 @@ TEST_F(PipelineIntegrationTest, BasicPlaybackOpusWebmTrimmingHashed) {
   ASSERT_TRUE(WaitUntilOnEnded());
   EXPECT_HASH_EQ(kOpusEndTrimmingHash_2, GetAudioHash());
 
-  // Seek somewhere outside of the pre-skip / end-trim section, demxuer should
+  // Seek somewhere outside of the pre-skip / end-trim section, demuxer should
   // correctly preroll enough to accurately decode this segment.
   ASSERT_TRUE(Seek(base::TimeDelta::FromMilliseconds(6360)));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
   EXPECT_HASH_EQ(kOpusEndTrimmingHash_3, GetAudioHash());
+}
+
+TEST_F(PipelineIntegrationTest, BasicPlaybackOpusMp4TrimmingHashed) {
+  ASSERT_EQ(PIPELINE_OK, Start("opus-trimming-test.mp4", kHashed));
+
+  Play();
+
+  // TODO(dalecurtis): The test clip currently does not have the edit list
+  // entries required to achieve correctness here. Delete this comment and
+  // uncomment the EXPECT_HASH_EQ lines when https://crbug.com/876544 is fixed.
+
+  ASSERT_TRUE(WaitUntilOnEnded());
+  // EXPECT_HASH_EQ(kOpusEndTrimmingHash_1, GetAudioHash());
+
+  // Seek within the pre-skip section, this should not cause a beep.
+  ASSERT_TRUE(Seek(base::TimeDelta::FromSeconds(1)));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  // EXPECT_HASH_EQ(kOpusEndTrimmingHash_2, GetAudioHash());
+
+  // Seek somewhere outside of the pre-skip / end-trim section, demuxer should
+  // correctly preroll enough to accurately decode this segment.
+  ASSERT_TRUE(Seek(base::TimeDelta::FromMilliseconds(6360)));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  // EXPECT_HASH_EQ(kOpusEndTrimmingHash_3, GetAudioHash());
 }
 
 TEST_P(MSEPipelineIntegrationTest, BasicPlaybackOpusWebmTrimmingHashed) {
@@ -1186,14 +1215,55 @@ TEST_P(MSEPipelineIntegrationTest, BasicPlaybackOpusWebmTrimmingHashed) {
   EXPECT_HASH_EQ(kOpusEndTrimmingHash_3, GetAudioHash());
 }
 
+TEST_P(MSEPipelineIntegrationTest, BasicPlaybackOpusMp4TrimmingHashed) {
+  MockMediaSource source("opus-trimming-test.mp4", kMP4AudioOpus,
+                         kAppendWholeFile);
+
+  // TODO(dalecurtis): The test clip currently does not have the edit list
+  // entries required to achieve correctness here, so we're manually specifying
+  // the edits using append window trimming.
+  //
+  // It's unclear if MSE actually supports edit list features required to
+  // achieve correctness either. Delete this comment and remove the manual
+  // SetAppendWindow() if/when https://crbug.com/876544 is fixed.
+  source.SetAppendWindow(base::TimeDelta(), base::TimeDelta(),
+                         base::TimeDelta::FromMicroseconds(12720021));
+
+  EXPECT_EQ(PIPELINE_OK,
+            StartPipelineWithMediaSource(&source, kHashed, nullptr));
+  source.EndOfStream();
+
+  Play();
+
+  ASSERT_TRUE(WaitUntilOnEnded());
+  EXPECT_HASH_EQ(kOpusEndTrimmingHash_1, GetAudioHash());
+
+  // Seek within the pre-skip section, this should not cause a beep.
+  base::TimeDelta seek_time = base::TimeDelta::FromSeconds(1);
+  source.Seek(seek_time);
+  ASSERT_TRUE(Seek(seek_time));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  EXPECT_HASH_EQ(kOpusEndTrimmingHash_2, GetAudioHash());
+
+  // Seek somewhere outside of the pre-skip / end-trim section, demuxer should
+  // correctly preroll enough to accurately decode this segment.
+  seek_time = base::TimeDelta::FromMilliseconds(6360);
+  source.Seek(seek_time);
+  ASSERT_TRUE(Seek(seek_time));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  EXPECT_HASH_EQ(kOpusEndTrimmingHash_3, GetAudioHash());
+}
+
 TEST_F(PipelineIntegrationTest, BasicPlaybackOpusWebmHashed_MonoOutput) {
   ASSERT_EQ(PIPELINE_OK,
             Start("bunny-opus-intensity-stereo.webm", kHashed | kMonoOutput));
 
-  // File should have stereo output, which we know to be encoded using
-  // "phase intensity". Downmixing such files to MONO produces artifcats unless
-  // the decoder performs the downmix, which disables "phase inversion".
-  // See http://crbug.com/806219
+  // File should have stereo output, which we know to be encoded using "phase
+  // intensity". Downmixing such files to MONO produces artifacts unless the
+  // decoder performs the downmix, which disables "phase inversion". See
+  // http://crbug.com/806219
   AudioDecoderConfig config =
       demuxer_->GetFirstStream(DemuxerStream::AUDIO)->audio_decoder_config();
   ASSERT_EQ(config.channel_layout(), CHANNEL_LAYOUT_STEREO);
@@ -1229,9 +1299,76 @@ TEST_F(PipelineIntegrationTest, BasicPlaybackOpusPrerollExceedsCodecDelay) {
   EXPECT_HASH_EQ(kOpusSmallCodecDelayHash_2, GetAudioHash());
 }
 
+TEST_F(PipelineIntegrationTest, BasicPlaybackOpusMp4PrerollExceedsCodecDelay) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear-opus.mp4", kHashed));
+
+  AudioDecoderConfig config =
+      demuxer_->GetFirstStream(DemuxerStream::AUDIO)->audio_decoder_config();
+
+  // Verify that this file's preroll is not eclipsed by the codec delay so we
+  // can detect when preroll is not properly performed.
+  base::TimeDelta codec_delay = base::TimeDelta::FromSecondsD(
+      static_cast<double>(config.codec_delay()) / config.samples_per_second());
+  ASSERT_GT(config.seek_preroll(), codec_delay);
+
+  // TODO(dalecurtis): The test clip currently does not have the edit list
+  // entries required to achieve correctness here. Delete this comment and
+  // uncomment the EXPECT_HASH_EQ lines when https://crbug.com/876544 is fixed.
+
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  // EXPECT_HASH_EQ(kOpusSmallCodecDelayHash_1, GetAudioHash());
+
+  // Seek halfway through the file to invoke seek preroll.
+  ASSERT_TRUE(Seek(base::TimeDelta::FromSecondsD(1.414)));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  // EXPECT_HASH_EQ(kOpusSmallCodecDelayHash_2, GetAudioHash());
+}
+
 TEST_P(MSEPipelineIntegrationTest, BasicPlaybackOpusPrerollExceedsCodecDelay) {
   MockMediaSource source("bear-opus.webm", kOpusAudioOnlyWebM,
                          kAppendWholeFile);
+  EXPECT_EQ(PIPELINE_OK,
+            StartPipelineWithMediaSource(&source, kHashed, nullptr));
+  source.EndOfStream();
+
+  AudioDecoderConfig config =
+      demuxer_->GetFirstStream(DemuxerStream::AUDIO)->audio_decoder_config();
+
+  // Verify that this file's preroll is not eclipsed by the codec delay so we
+  // can detect when preroll is not properly performed.
+  base::TimeDelta codec_delay = base::TimeDelta::FromSecondsD(
+      static_cast<double>(config.codec_delay()) / config.samples_per_second());
+  ASSERT_GT(config.seek_preroll(), codec_delay);
+
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  EXPECT_HASH_EQ(kOpusSmallCodecDelayHash_1, GetAudioHash());
+
+  // Seek halfway through the file to invoke seek preroll.
+  base::TimeDelta seek_time = base::TimeDelta::FromSecondsD(1.414);
+  source.Seek(seek_time);
+  ASSERT_TRUE(Seek(seek_time));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  EXPECT_HASH_EQ(kOpusSmallCodecDelayHash_2, GetAudioHash());
+}
+
+TEST_P(MSEPipelineIntegrationTest,
+       BasicPlaybackOpusMp4PrerollExceedsCodecDelay) {
+  MockMediaSource source("bear-opus.mp4", kMP4AudioOpus, kAppendWholeFile);
+
+  // TODO(dalecurtis): The test clip currently does not have the edit list
+  // entries required to achieve correctness here, so we're manually specifying
+  // the edits using append window trimming.
+  //
+  // It's unclear if MSE actually supports edit list features required to
+  // achieve correctness either. Delete this comment and remove the manual
+  // SetAppendWindow() if/when https://crbug.com/876544 is fixed.
+  source.SetAppendWindow(base::TimeDelta(), base::TimeDelta(),
+                         base::TimeDelta::FromMicroseconds(2740834));
+
   EXPECT_EQ(PIPELINE_OK,
             StartPipelineWithMediaSource(&source, kHashed, nullptr));
   source.EndOfStream();
@@ -1462,52 +1599,6 @@ TEST_P(MSEPipelineIntegrationTest, BasicPlayback_VP8A_WebM) {
   Play();
 
   ASSERT_TRUE(WaitUntilOnEnded());
-  source.Shutdown();
-  Stop();
-}
-
-TEST_P(MSEPipelineIntegrationTest, BasicPlayback_Opus_WebM) {
-  MockMediaSource source("bear-opus-end-trimming.webm", kOpusAudioOnlyWebM,
-                         kAppendWholeFile);
-  EXPECT_EQ(PIPELINE_OK, StartPipelineWithMediaSource(&source));
-  source.EndOfStream();
-
-  EXPECT_EQ(1u, pipeline_->GetBufferedTimeRanges().size());
-  EXPECT_EQ(0, pipeline_->GetBufferedTimeRanges().start(0).InMilliseconds());
-  EXPECT_EQ(kOpusEndTrimmingWebMFileDurationMs,
-            pipeline_->GetBufferedTimeRanges().end(0).InMilliseconds());
-  Play();
-
-  ASSERT_TRUE(WaitUntilOnEnded());
-  source.Shutdown();
-  Stop();
-}
-
-// Flaky. http://crbug.com/304776
-TEST_P(MSEPipelineIntegrationTest, DISABLED_Opus_Seeking_WebM) {
-  MockMediaSource source("bear-opus-end-trimming.webm", kOpusAudioOnlyWebM,
-                         kAppendWholeFile);
-  EXPECT_EQ(PIPELINE_OK,
-            StartPipelineWithMediaSource(&source, kHashed, nullptr));
-
-  EXPECT_EQ(1u, pipeline_->GetBufferedTimeRanges().size());
-  EXPECT_EQ(0, pipeline_->GetBufferedTimeRanges().start(0).InMilliseconds());
-  EXPECT_EQ(kOpusEndTrimmingWebMFileDurationMs,
-            pipeline_->GetBufferedTimeRanges().end(0).InMilliseconds());
-
-  base::TimeDelta start_seek_time = base::TimeDelta::FromMilliseconds(1000);
-  base::TimeDelta seek_time = base::TimeDelta::FromMilliseconds(2000);
-
-  Play();
-  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(start_seek_time));
-  source.Seek(seek_time, 0x1D5, 34017);
-  source.EndOfStream();
-  ASSERT_TRUE(Seek(seek_time));
-
-  ASSERT_TRUE(WaitUntilOnEnded());
-
-  EXPECT_HASH_EQ("0.76,0.20,-0.82,-0.58,-1.29,-0.29,", GetAudioHash());
-
   source.Shutdown();
   Stop();
 }
@@ -1891,20 +1982,20 @@ INSTANTIATE_TEST_CASE_P(
     CBRSeek_HasTOC,
     Mp3FastSeekIntegrationTest,
     ::testing::Values(Mp3FastSeekParams("bear-audio-10s-CBR-has-TOC.mp3",
-                                        "-0.71,0.36,2.96,2.68,2.11,-1.08,")));
+                                        "-0.58,0.61,3.08,2.55,0.90,-1.20,")));
 
 INSTANTIATE_TEST_CASE_P(
     CBRSeeks_NoTOC,
     Mp3FastSeekIntegrationTest,
     ::testing::Values(Mp3FastSeekParams("bear-audio-10s-CBR-no-TOC.mp3",
-                                        "0.95,0.56,1.34,0.47,1.77,0.84,")));
+                                        "1.16,0.68,1.25,0.60,1.66,0.93,")));
 
 // VBR seeks can be fast *OR* accurate, but not both. We chose fast.
 INSTANTIATE_TEST_CASE_P(
     VBRSeeks_HasTOC,
     Mp3FastSeekIntegrationTest,
     ::testing::Values(Mp3FastSeekParams("bear-audio-10s-VBR-has-TOC.mp3",
-                                        "-0.15,-0.83,0.54,1.00,1.94,0.93,")));
+                                        "-0.08,-0.53,0.75,0.89,2.44,0.73,")));
 
 INSTANTIATE_TEST_CASE_P(
     VBRSeeks_NoTOC,
@@ -2754,13 +2845,6 @@ TEST_P(MSEPipelineIntegrationTest, ChunkDemuxerAbortRead_VideoOnly) {
                                  0x1C896, 65536));
 }
 
-// Verify that Opus audio in WebM containers can be played back.
-TEST_F(PipelineIntegrationTest, BasicPlayback_AudioOnly_Opus_WebM) {
-  ASSERT_EQ(PIPELINE_OK, Start("bear-opus-end-trimming.webm"));
-  Play();
-  ASSERT_TRUE(WaitUntilOnEnded());
-}
-
 TEST_F(PipelineIntegrationTest,
        BasicPlayback_AudioOnly_Opus_4ch_ChannelMapping2_WebM) {
   ASSERT_EQ(
@@ -2858,8 +2942,20 @@ TEST_F(PipelineIntegrationTest, BT709_VP9_WebM) {
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
   EXPECT_VIDEO_FORMAT_EQ(last_video_frame_format_, PIXEL_FORMAT_I420);
-  EXPECT_COLOR_SPACE_EQ(last_video_frame_color_space_, COLOR_SPACE_HD_REC709);
+  EXPECT_COLOR_SPACE_EQ(last_video_frame_color_space_,
+                        gfx::ColorSpace::CreateREC709());
 }
+
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+// Verify that full-range H264 video has the right color space.
+TEST_F(PipelineIntegrationTest, Fullrange_H264) {
+  ASSERT_EQ(PIPELINE_OK, Start("blackwhite_yuvj420p.mp4"));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  EXPECT_COLOR_SPACE_EQ(last_video_frame_color_space_,
+                        gfx::ColorSpace::CreateJpeg());
+}
+#endif
 
 TEST_F(PipelineIntegrationTest, HD_VP9_WebM) {
   ASSERT_EQ(PIPELINE_OK, Start("bear-1280x720.webm"));

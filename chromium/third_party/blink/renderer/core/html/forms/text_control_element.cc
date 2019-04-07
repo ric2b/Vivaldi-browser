@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/text.h"
+#include "third_party/blink/renderer/core/editing/editing_behavior.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
@@ -67,7 +68,6 @@ TextControlElement::TextControlElement(const QualifiedName& tag_name,
                                        Document& doc)
     : HTMLFormControlElementWithState(tag_name, doc),
       last_change_was_user_edit_(false),
-      user_has_edited_the_field_(false),
       cached_selection_start_(0),
       cached_selection_end_(0) {
   cached_selection_direction_ =
@@ -103,8 +103,8 @@ void TextControlElement::DispatchBlurEvent(
                                                      source_capabilities);
 }
 
-void TextControlElement::DefaultEventHandler(Event* event) {
-  if (event->type() == EventTypeNames::webkitEditableContentChanged &&
+void TextControlElement::DefaultEventHandler(Event& event) {
+  if (event.type() == EventTypeNames::webkitEditableContentChanged &&
       GetLayoutObject() && GetLayoutObject()->IsTextControl()) {
     last_change_was_user_edit_ = !GetDocument().IsRunningExecCommand();
     user_has_edited_the_field_ |= last_change_was_user_edit_;
@@ -127,9 +127,9 @@ void TextControlElement::DefaultEventHandler(Event* event) {
   HTMLFormControlElementWithState::DefaultEventHandler(event);
 }
 
-void TextControlElement::ForwardEvent(Event* event) {
-  if (event->type() == EventTypeNames::blur ||
-      event->type() == EventTypeNames::focus)
+void TextControlElement::ForwardEvent(Event& event) {
+  if (event.type() == EventTypeNames::blur ||
+      event.type() == EventTypeNames::focus)
     return;
   InnerEditorElement()->DefaultEventHandler(event);
 }
@@ -732,7 +732,7 @@ void TextControlElement::SelectionChanged(bool user_triggered) {
       frame->Selection().GetSelectionInDOMTree();
   if (selection.Type() != kRangeSelection)
     return;
-  DispatchEvent(Event::CreateBubble(EventTypeNames::select));
+  DispatchEvent(*Event::CreateBubble(EventTypeNames::select));
 }
 
 void TextControlElement::ScheduleSelectEvent() {
@@ -750,12 +750,6 @@ void TextControlElement::ParseAttribute(
   } else {
     HTMLFormControlElementWithState::ParseAttribute(params);
   }
-}
-
-bool TextControlElement::UserHasEditedTheField() const {
-  if (!IsTextControl())
-    return false;
-  return user_has_edited_the_field_;
 }
 
 bool TextControlElement::LastChangeWasUserEdit() const {

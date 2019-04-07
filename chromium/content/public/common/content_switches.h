@@ -16,8 +16,6 @@ namespace switches {
 // All switches in alphabetical order. The switches should be documented
 // alongside the definition of their values in the .cc file.
 CONTENT_EXPORT extern const char kAcceleratedCanvas2dMSAASampleCount[];
-CONTENT_EXPORT extern const char kAecRefinedAdaptiveFilter[];
-CONTENT_EXPORT extern const char kAgcStartupMinVolume[];
 CONTENT_EXPORT extern const char kAllowFileAccessFromFiles[];
 CONTENT_EXPORT extern const char kAllowInsecureLocalhost[];
 CONTENT_EXPORT extern const char kAllowLoopbackInPeerConnection[];
@@ -135,7 +133,6 @@ CONTENT_EXPORT extern const char kEnableStrictPowerfulFeatureRestrictions[];
 CONTENT_EXPORT extern const char kEnableThreadedCompositing[];
 CONTENT_EXPORT extern const char kEnableTracing[];
 CONTENT_EXPORT extern const char kEnableTracingOutput[];
-CONTENT_EXPORT extern const char kEnableUnsafeWebGPU[];
 CONTENT_EXPORT extern const char kEnableUserMediaScreenCapturing[];
 CONTENT_EXPORT extern const char kEnableUseZoomForDSF[];
 CONTENT_EXPORT extern const char kEnableViewport[];
@@ -157,7 +154,6 @@ CONTENT_EXPORT extern const char kEnableOopRasterization[];
 CONTENT_EXPORT extern const char kForceOverlayFullscreenVideo[];
 CONTENT_EXPORT extern const char kForcePresentationReceiverForTesting[];
 CONTENT_EXPORT extern const char kForceRendererAccessibility[];
-CONTENT_EXPORT extern const char kFMPNetworkQuietTimeout[];
 CONTENT_EXPORT extern const char kGenerateAccessibilityTestExpectations[];
 extern const char kGpuLauncher[];
 CONTENT_EXPORT extern const char kGpuProcess[];
@@ -185,7 +181,9 @@ CONTENT_EXPORT extern const char kMHTMLGeneratorOption[];
 CONTENT_EXPORT extern const char kMHTMLSkipNostoreMain[];
 CONTENT_EXPORT extern const char kMHTMLSkipNostoreAll[];
 CONTENT_EXPORT extern const char kMojoLocalStorage[];
+CONTENT_EXPORT extern const char kNetworkQuietTimeout[];
 CONTENT_EXPORT extern const char kNoZygote[];
+extern const char kNoV8UntrustedCodeMitigations[];
 CONTENT_EXPORT extern const char kEnableAppContainer[];
 CONTENT_EXPORT extern const char kDisableAppContainer[];
 CONTENT_EXPORT extern const char kNumRasterThreads[];

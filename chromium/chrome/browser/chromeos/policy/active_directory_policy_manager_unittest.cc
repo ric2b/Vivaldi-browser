@@ -14,13 +14,15 @@
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chromeos/dbus/auth_policy_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/mock_cloud_external_data_manager.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_store.h"
 #include "components/policy/core/common/schema_registry.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "components/user_manager/scoped_user_manager.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -93,7 +95,9 @@ namespace policy {
 // been fired.
 class ActiveDirectoryPolicyManagerTest : public testing::Test {
  public:
-  ActiveDirectoryPolicyManagerTest() = default;
+  ActiveDirectoryPolicyManagerTest()
+      : user_manager_enabler_(
+            std::make_unique<chromeos::FakeChromeUserManager>()) {}
 
   // testing::Test overrides:
   void SetUp() override {
@@ -129,7 +133,7 @@ class ActiveDirectoryPolicyManagerTest : public testing::Test {
       EXPECT_CALL(*mock_store(), Load());
     if (mock_external_data_manager()) {
       EXPECT_CALL(*mock_external_data_manager(),
-                  Connect(scoped_refptr<net::URLRequestContextGetter>()));
+                  Connect(scoped_refptr<network::SharedURLLoaderFactory>()));
     }
     policy_manager_->Init(&schema_registry_);
     testing::Mock::VerifyAndClearExpectations(mock_store());
@@ -139,6 +143,9 @@ class ActiveDirectoryPolicyManagerTest : public testing::Test {
 
   // Owned by DBusThreadManager.
   TestAuthPolicyClient* mock_client_ = nullptr;
+
+  // Used to set FakeUserManager.
+  user_manager::ScopedUserManager user_manager_enabler_;
 
   // Initialized by the individual tests but owned by the test class so that it
   // can be shut down automatically after the test has run.

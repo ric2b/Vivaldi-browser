@@ -10,17 +10,21 @@
 #include <vector>
 
 #include "base/optional.h"
+#include "build/build_config.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/quads/frame_deadline.h"
-#include "components/viz/common/quads/selection.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/common/surfaces/surface_range.h"
 #include "components/viz/common/viz_common_export.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
-#include "ui/gfx/selection_bound.h"
 #include "ui/latency/latency_info.h"
+
+#if defined(OS_ANDROID)
+#include "components/viz/common/quads/selection.h"
+#include "ui/gfx/selection_bound.h"
+#endif  // defined(OS_ANDROID)
 
 namespace viz {
 
@@ -50,13 +54,8 @@ class VIZ_COMMON_EXPORT CompositorFrameMetadata {
   gfx::Vector2dF root_scroll_offset;
   float page_scale_factor = 0.f;
 
-  // These limits can be used together with the scroll/scale fields above to
-  // determine if scrolling/scaling in a particular direction is possible.
   gfx::SizeF scrollable_viewport_size;
-  gfx::SizeF root_layer_size;
-  float min_page_scale_factor = 0.f;
-  float max_page_scale_factor = 0.f;
-  bool root_overflow_y_hidden = false;
+
   bool may_contain_video = false;
 
   // WebView makes quality decisions for rastering resourceless software frames
@@ -65,24 +64,10 @@ class VIZ_COMMON_EXPORT CompositorFrameMetadata {
   // depending on this anymore.
   bool is_resourceless_software_draw_with_scroll_or_animation = false;
 
-  // Used to position the Android location top bar and page content, whose
-  // precise position is computed by the renderer compositor.
-  float top_controls_height = 0.f;
-  float top_controls_shown_ratio = 0.f;
-
-  // Used to position Android bottom bar, whose position is computed by the
-  // renderer compositor.
-  float bottom_controls_height = 0.f;
-  float bottom_controls_shown_ratio = 0.f;
-
   // This color is usually obtained from the background color of the <body>
   // element. It can be used for filling in gutter areas around the frame when
   // it's too small to fill the box the parent reserved for it.
   SkColor root_background_color = SK_ColorWHITE;
-
-  // Provides selection region updates relative to the current viewport. If the
-  // selection is empty or otherwise unused, the bound types will indicate such.
-  Selection<gfx::SelectionBound> selection;
 
   std::vector<ui::LatencyInfo> latency_info;
 
@@ -142,6 +127,30 @@ class VIZ_COMMON_EXPORT CompositorFrameMetadata {
   // |request_presentation_feedback| flag turned on, a presentation feedback
   // will be provided to CompositorFrameSinkClient.
   bool request_presentation_feedback = false;
+
+  // These limits can be used together with the scroll/scale fields above to
+  // determine if scrolling/scaling in a particular direction is possible.
+  float min_page_scale_factor = 0.f;
+
+#if defined(OS_ANDROID)
+  float max_page_scale_factor = 0.f;
+  gfx::SizeF root_layer_size;
+  bool root_overflow_y_hidden = false;
+
+  // Used to position the Android location top bar and page content, whose
+  // precise position is computed by the renderer compositor.
+  float top_controls_height = 0.f;
+  float top_controls_shown_ratio = 0.f;
+
+  // Used to position Android bottom bar, whose position is computed by the
+  // renderer compositor.
+  float bottom_controls_height = 0.f;
+  float bottom_controls_shown_ratio = 0.f;
+
+  // Provides selection region updates relative to the current viewport. If the
+  // selection is empty or otherwise unused, the bound types will indicate such.
+  Selection<gfx::SelectionBound> selection;
+#endif  // defined(OS_ANDROID)
 
  private:
   CompositorFrameMetadata(const CompositorFrameMetadata& other);

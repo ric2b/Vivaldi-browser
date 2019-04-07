@@ -11,11 +11,11 @@
 #include <utility>
 #include <vector>
 
+#include "ash/public/cpp/ash_features.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/unified_consent_helper.h"
 #include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/browser/ui/webui/settings/about_handler.h"
 #include "chrome/browser/ui/webui/settings/appearance_handler.h"
@@ -45,10 +45,12 @@
 #include "chrome/grit/settings_resources_map.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/unified_consent/feature.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "content/public/common/content_features.h"
 #include "printing/buildflags/buildflags.h"
 
 #if defined(OS_WIN)
@@ -73,7 +75,10 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
+#include "chrome/browser/chromeos/multidevice_setup/android_sms_app_helper_delegate_impl.h"
+#include "chrome/browser/chromeos/multidevice_setup/multidevice_setup_client_factory.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/ui/webui/settings/chromeos/accessibility_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/account_manager_handler.h"
@@ -96,6 +101,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chromeos/account_manager/account_manager.h"
 #include "chromeos/account_manager/account_manager_factory.h"
+#include "chromeos/chromeos_features.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_util.h"
 #include "ui/base/ui_base_features.h"
@@ -213,8 +219,19 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
   }
   AddSettingsPageUIHandler(
       std::make_unique<chromeos::settings::KeyboardHandler>());
-  AddSettingsPageUIHandler(
-      std::make_unique<chromeos::settings::MultideviceHandler>());
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kEnableUnifiedMultiDeviceSetup) &&
+      base::FeatureList::IsEnabled(
+          chromeos::features::kEnableUnifiedMultiDeviceSettings) &&
+      base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi)) {
+    AddSettingsPageUIHandler(
+        std::make_unique<chromeos::settings::MultideviceHandler>(
+            chromeos::multidevice_setup::MultiDeviceSetupClientFactory::
+                GetForProfile(profile),
+            std::make_unique<
+                chromeos::multidevice_setup::AndroidSmsAppHelperDelegateImpl>(
+                profile)));
+  }
   AddSettingsPageUIHandler(
       std::make_unique<chromeos::settings::PointerHandler>());
   AddSettingsPageUIHandler(
@@ -297,11 +314,21 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
       chromeos::quick_unlock::IsPinDisabledByPolicy(profile->GetPrefs()));
   html_source->AddBoolean("fingerprintUnlockEnabled",
                           chromeos::quick_unlock::IsFingerprintEnabled());
+  html_source->AddBoolean("lockScreenNotificationsEnabled",
+                          ash::features::IsLockScreenNotificationsEnabled());
+  html_source->AddBoolean(
+      "lockScreenHideSensitiveNotificationsSupported",
+      ash::features::IsLockScreenHideSensitiveNotificationsSupported());
   html_source->AddBoolean("hasInternalStylus",
                           ash::stylus_utils::HasInternalStylus());
 
   html_source->AddBoolean("showCrostini",
                           IsCrostiniUIAllowedForProfile(profile));
+
+  // TODO(crbug.com/868747): Show an explanatory message instead of hiding the
+  // storage management info.
+  html_source->AddBoolean("hideStorageInfo",
+                          chromeos::DemoSession::IsDeviceInDemoMode());
 
   // We have 2 variants of Android apps settings. Default case, when the Play
   // Store app exists we show expandable section that allows as to
@@ -315,8 +342,8 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
   html_source->AddBoolean("androidAppsVisible", androidAppsVisible);
   html_source->AddBoolean("havePlayStoreApp", arc::IsPlayStoreAvailable());
 
-  // TODO(mash): Support Chrome power settings in Mash. crbug.com/644348
-  bool enable_power_settings = features::IsAshInBrowserProcess();
+  // TODO(mash): Support Chrome power settings in Mash. https://crbug.com/644348
+  bool enable_power_settings = !features::IsMultiProcessMash();
   html_source->AddBoolean("enablePowerSettings", enable_power_settings);
   if (enable_power_settings) {
     AddSettingsPageUIHandler(std::make_unique<chromeos::settings::PowerHandler>(
@@ -329,7 +356,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
 #endif  // defined(OS_CHROMEOS)
 
   html_source->AddBoolean("unifiedConsentEnabled",
-                          IsUnifiedConsentEnabled(profile));
+                          unified_consent::IsUnifiedConsentFeatureEnabled());
 
   // TODO(jdoerrie): https://crbug.com/854562.
   // Remove once Autofill Home is launched.
@@ -350,12 +377,18 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
   web_ui->AddMessageHandler(std::make_unique<MetricsHandler>());
 
 #if BUILDFLAG(OPTIMIZE_WEBUI)
+  const bool use_polymer_2 =
+      base::FeatureList::IsEnabled(features::kWebUIPolymer2);
   html_source->AddResourcePath("crisper.js", IDR_MD_SETTINGS_CRISPER_JS);
   html_source->AddResourcePath("lazy_load.crisper.js",
                                IDR_MD_SETTINGS_LAZY_LOAD_CRISPER_JS);
-  html_source->AddResourcePath("lazy_load.html",
-                               IDR_MD_SETTINGS_LAZY_LOAD_VULCANIZED_HTML);
-  html_source->SetDefaultResource(IDR_MD_SETTINGS_VULCANIZED_HTML);
+  html_source->AddResourcePath(
+      "lazy_load.html", use_polymer_2
+                            ? IDR_MD_SETTINGS_LAZY_LOAD_VULCANIZED_P2_HTML
+                            : IDR_MD_SETTINGS_LAZY_LOAD_VULCANIZED_HTML);
+  html_source->SetDefaultResource(use_polymer_2
+                                      ? IDR_MD_SETTINGS_VULCANIZED_P2_HTML
+                                      : IDR_MD_SETTINGS_VULCANIZED_HTML);
   html_source->UseGzip(exclude_from_gzip);
 #else
   // Add all settings resources.
@@ -372,8 +405,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
                                 html_source);
 }
 
-MdSettingsUI::~MdSettingsUI() {
-}
+MdSettingsUI::~MdSettingsUI() {}
 
 void MdSettingsUI::AddSettingsPageUIHandler(
     std::unique_ptr<content::WebUIMessageHandler> handler) {

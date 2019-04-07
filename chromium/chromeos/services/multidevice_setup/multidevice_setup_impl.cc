@@ -9,15 +9,23 @@
 #include "base/time/default_clock.h"
 #include "chromeos/components/proximity_auth/logging/logging.h"
 #include "chromeos/services/multidevice_setup/account_status_change_delegate_notifier_impl.h"
+#include "chromeos/services/multidevice_setup/device_reenroller.h"
 #include "chromeos/services/multidevice_setup/eligible_host_devices_provider_impl.h"
+#include "chromeos/services/multidevice_setup/feature_state_manager_impl.h"
 #include "chromeos/services/multidevice_setup/host_backend_delegate_impl.h"
 #include "chromeos/services/multidevice_setup/host_status_provider_impl.h"
 #include "chromeos/services/multidevice_setup/host_verifier_impl.h"
+#include "chromeos/services/multidevice_setup/public/cpp/android_sms_app_helper_delegate.h"
+#include "chromeos/services/multidevice_setup/public/cpp/auth_token_validator.h"
 #include "chromeos/services/multidevice_setup/setup_flow_completion_recorder_impl.h"
 
 namespace chromeos {
 
 namespace multidevice_setup {
+
+namespace {
+const char kTestDeviceNameForDebugNotification[] = "Test Device";
+}  // namespace
 
 // static
 MultiDeviceSetupImpl::Factory* MultiDeviceSetupImpl::Factory::test_factory_ =
@@ -44,16 +52,28 @@ std::unique_ptr<mojom::MultiDeviceSetup>
 MultiDeviceSetupImpl::Factory::BuildInstance(
     PrefService* pref_service,
     device_sync::DeviceSyncClient* device_sync_client,
-    secure_channel::SecureChannelClient* secure_channel_client) {
+    secure_channel::SecureChannelClient* secure_channel_client,
+    AuthTokenValidator* auth_token_validator,
+    std::unique_ptr<AndroidSmsAppHelperDelegate>
+        android_sms_app_helper_delegate,
+    const cryptauth::GcmDeviceInfoProvider* gcm_device_info_provider) {
   return base::WrapUnique(new MultiDeviceSetupImpl(
-      pref_service, device_sync_client, secure_channel_client));
+      pref_service, device_sync_client, secure_channel_client,
+      auth_token_validator, std::move(android_sms_app_helper_delegate),
+      gcm_device_info_provider));
 }
 
 MultiDeviceSetupImpl::MultiDeviceSetupImpl(
     PrefService* pref_service,
     device_sync::DeviceSyncClient* device_sync_client,
-    secure_channel::SecureChannelClient* secure_channel_client)
-    : eligible_host_devices_provider_(
+    secure_channel::SecureChannelClient* secure_channel_client,
+    AuthTokenValidator* auth_token_validator,
+    std::unique_ptr<AndroidSmsAppHelperDelegate>
+        android_sms_app_helper_delegate,
+    const cryptauth::GcmDeviceInfoProvider* gcm_device_info_provider)
+    : android_sms_app_helper_delegate_(
+          std::move(android_sms_app_helper_delegate)),
+      eligible_host_devices_provider_(
           EligibleHostDevicesProviderImpl::Factory::Get()->BuildInstance(
               device_sync_client)),
       host_backend_delegate_(
@@ -71,21 +91,32 @@ MultiDeviceSetupImpl::MultiDeviceSetupImpl(
               host_backend_delegate_.get(),
               host_verifier_.get(),
               device_sync_client)),
+      feature_state_manager_(
+          FeatureStateManagerImpl::Factory::Get()->BuildInstance(
+              pref_service,
+              host_status_provider_.get(),
+              device_sync_client)),
       setup_flow_completion_recorder_(
           SetupFlowCompletionRecorderImpl::Factory::Get()->BuildInstance(
               pref_service,
               base::DefaultClock::GetInstance())),
       delegate_notifier_(
           AccountStatusChangeDelegateNotifierImpl::Factory::Get()
-              ->BuildInstance(device_sync_client,
+              ->BuildInstance(host_status_provider_.get(),
                               pref_service,
                               setup_flow_completion_recorder_.get(),
-                              base::DefaultClock::GetInstance())) {
+                              base::DefaultClock::GetInstance())),
+      device_reenroller_(DeviceReenroller::Factory::Get()->BuildInstance(
+          device_sync_client,
+          gcm_device_info_provider)),
+      auth_token_validator_(auth_token_validator) {
   host_status_provider_->AddObserver(this);
+  feature_state_manager_->AddObserver(this);
 }
 
 MultiDeviceSetupImpl::~MultiDeviceSetupImpl() {
   host_status_provider_->RemoveObserver(this);
+  feature_state_manager_->RemoveObserver(this);
 }
 
 void MultiDeviceSetupImpl::SetAccountStatusChangeDelegate(
@@ -96,6 +127,11 @@ void MultiDeviceSetupImpl::SetAccountStatusChangeDelegate(
 void MultiDeviceSetupImpl::AddHostStatusObserver(
     mojom::HostStatusObserverPtr observer) {
   host_status_observers_.AddPtr(std::move(observer));
+}
+
+void MultiDeviceSetupImpl::AddFeatureStateObserver(
+    mojom::FeatureStateObserverPtr observer) {
+  feature_state_observers_.AddPtr(std::move(observer));
 }
 
 void MultiDeviceSetupImpl::GetEligibleHostDevices(
@@ -109,14 +145,20 @@ void MultiDeviceSetupImpl::GetEligibleHostDevices(
   std::move(callback).Run(eligible_remote_devices);
 }
 
-void MultiDeviceSetupImpl::SetHostDevice(const std::string& host_public_key,
+void MultiDeviceSetupImpl::SetHostDevice(const std::string& host_device_id,
+                                         const std::string& auth_token,
                                          SetHostDeviceCallback callback) {
+  if (!auth_token_validator_->IsAuthTokenValid(auth_token)) {
+    std::move(callback).Run(false /* success */);
+    return;
+  }
+
   cryptauth::RemoteDeviceRefList eligible_devices =
       eligible_host_devices_provider_->GetEligibleHostDevices();
   auto it =
       std::find_if(eligible_devices.begin(), eligible_devices.end(),
-                   [&host_public_key](const auto& eligible_device) {
-                     return eligible_device.public_key() == host_public_key;
+                   [&host_device_id](const auto& eligible_device) {
+                     return eligible_device.GetDeviceId() == host_device_id;
                    });
 
   if (it == eligible_devices.end()) {
@@ -125,6 +167,7 @@ void MultiDeviceSetupImpl::SetHostDevice(const std::string& host_public_key,
   }
 
   host_backend_delegate_->AttemptToSetMultiDeviceHostOnBackend(*it);
+  android_sms_app_helper_delegate_->InstallAndroidSmsApp();
   std::move(callback).Run(true /* success */);
 }
 
@@ -147,6 +190,25 @@ void MultiDeviceSetupImpl::GetHostStatus(GetHostStatusCallback callback) {
 
   std::move(callback).Run(host_status_with_device.host_status(),
                           device_for_callback);
+}
+
+void MultiDeviceSetupImpl::SetFeatureEnabledState(
+    mojom::Feature feature,
+    bool enabled,
+    const base::Optional<std::string>& auth_token,
+    SetFeatureEnabledStateCallback callback) {
+  if (IsAuthTokenRequiredForFeatureStateChange(feature, enabled) &&
+      (!auth_token || !auth_token_validator_->IsAuthTokenValid(*auth_token))) {
+    std::move(callback).Run(false /* success */);
+    return;
+  }
+
+  std::move(callback).Run(
+      feature_state_manager_->SetFeatureEnabledState(feature, enabled));
+}
+
+void MultiDeviceSetupImpl::GetFeatureStates(GetFeatureStatesCallback callback) {
+  std::move(callback).Run(feature_state_manager_->GetFeatureStates());
 }
 
 void MultiDeviceSetupImpl::RetrySetHostNow(RetrySetHostNowCallback callback) {
@@ -192,7 +254,8 @@ void MultiDeviceSetupImpl::TriggerEventForDebugging(
       delegate->OnPotentialHostExistsForNewUser();
       break;
     case mojom::EventTypeForDebugging::kExistingUserConnectedHostSwitched:
-      delegate->OnConnectedHostSwitchedForExistingUser();
+      delegate->OnConnectedHostSwitchedForExistingUser(
+          kTestDeviceNameForDebugNotification);
       break;
     case mojom::EventTypeForDebugging::kExistingUserNewChromebookAdded:
       delegate->OnNewChromebookAddedForExistingUser();
@@ -223,8 +286,46 @@ void MultiDeviceSetupImpl::OnHostStatusChange(
       });
 }
 
+void MultiDeviceSetupImpl::OnFeatureStatesChange(
+    const FeatureStateManager::FeatureStatesMap& feature_states_map) {
+  feature_state_observers_.ForAllPtrs(
+      [&feature_states_map](mojom::FeatureStateObserver* observer) {
+        observer->OnFeatureStatesChanged(feature_states_map);
+      });
+}
+
+bool MultiDeviceSetupImpl::IsAuthTokenRequiredForFeatureStateChange(
+    mojom::Feature feature,
+    bool enabled) {
+  // Disabling a feature never requires authentication.
+  if (!enabled)
+    return false;
+
+  // Enabling SmartLock always requires authentication.
+  if (feature == mojom::Feature::kSmartLock)
+    return true;
+
+  // Enabling any feature besides SmartLock and the Better Together suite does
+  // not require authentication.
+  if (feature != mojom::Feature::kBetterTogetherSuite)
+    return false;
+
+  mojom::FeatureState smart_lock_state =
+      feature_state_manager_->GetFeatureStates()[mojom::Feature::kSmartLock];
+
+  // If the user is enabling the Better Together suite and this change would
+  // result in SmartLock being implicitly enabled, authentication is required.
+  // SmartLock is implicitly enabled if it is only currently not enabled due
+  // to the suite being disabled or due to the SmartLock host device not
+  // having a lock screen set.
+  return smart_lock_state == mojom::FeatureState::kUnavailableSuiteDisabled ||
+         smart_lock_state ==
+             mojom::FeatureState::kUnavailableInsufficientSecurity;
+}
+
 void MultiDeviceSetupImpl::FlushForTesting() {
   host_status_observers_.FlushForTesting();
+  feature_state_observers_.FlushForTesting();
 }
 
 }  // namespace multidevice_setup

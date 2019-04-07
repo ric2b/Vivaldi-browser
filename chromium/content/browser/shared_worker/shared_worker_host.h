@@ -21,6 +21,7 @@
 #include "content/common/shared_worker/shared_worker_client.mojom.h"
 #include "content/common/shared_worker/shared_worker_factory.mojom.h"
 #include "content/common/shared_worker/shared_worker_host.mojom.h"
+#include "content/public/browser/global_routing_id.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
@@ -33,6 +34,8 @@ class MessagePortChannel;
 }
 
 namespace content {
+
+class AppCacheNavigationHandle;
 class SharedWorkerContentSettingsProxyImpl;
 class SharedWorkerInstance;
 class SharedWorkerServiceImpl;
@@ -59,16 +62,24 @@ class CONTENT_EXPORT SharedWorkerHost
   // supporting the shared worker as a service worker client.
   //
   // S13nServiceWorker:
-  // |script_loader_factory| is sent to the renderer process and is to be used
-  // to request the shared worker's script. Currently it's only non-null when
-  // S13nServiceWorker is enabled, to allow service worker machinery to observe
-  // the request, but other web platform features may also use it someday.
+  // |main_script_loader_factory| is sent to the renderer process and is to be
+  // used to request the shared worker's main script. Currently it's only
+  // non-null when S13nServiceWorker is enabled, to allow service worker
+  // machinery to observe the request, but other web platform features may also
+  // use it someday.
+  //
+  // NetworkService:
+  // |subresource_loader_factories| is sent to the renderer process and is to be
+  // used to request subresources where applicable. For example, this allows the
+  // shared worker to load chrome-extension:// URLs which the renderer's default
+  // loader factory can't load.
   void Start(
       mojom::SharedWorkerFactoryPtr factory,
       mojom::ServiceWorkerProviderInfoForSharedWorkerPtr
           service_worker_provider_info,
-      network::mojom::URLLoaderFactoryAssociatedPtrInfo script_loader_factory,
-      std::unique_ptr<URLLoaderFactoryBundleInfo> factory_bundle);
+      network::mojom::URLLoaderFactoryAssociatedPtrInfo
+          main_script_loader_factory,
+      std::unique_ptr<URLLoaderFactoryBundleInfo> subresource_loader_factories);
 
   void AllowFileSystem(const GURL& url,
                        base::OnceCallback<void(bool)> callback);
@@ -85,6 +96,9 @@ class CONTENT_EXPORT SharedWorkerHost
                  const blink::MessagePortChannel& port);
 
   void BindDevToolsAgent(blink::mojom::DevToolsAgentAssociatedRequest request);
+
+  void SetAppCacheHandle(
+      std::unique_ptr<AppCacheNavigationHandle> appcache_handle);
 
   SharedWorkerInstance* instance() { return instance_.get(); }
   int process_id() const { return process_id_; }
@@ -127,8 +141,8 @@ class CONTENT_EXPORT SharedWorkerHost
   void OnScriptLoadFailed() override;
   void OnFeatureUsed(blink::mojom::WebFeature feature) override;
 
-  // Return a vector of all the render process/render frame IDs.
-  std::vector<std::pair<int, int>> GetRenderFrameIDsForWorker();
+  // Returns the frame ids of this worker's clients.
+  std::vector<GlobalFrameRoutingId> GetRenderFrameIDsForWorker();
 
   void AllowFileSystemResponse(base::OnceCallback<void(bool)> callback,
                                bool allowed);
@@ -171,6 +185,11 @@ class CONTENT_EXPORT SharedWorkerHost
 
   mojo::Binding<service_manager::mojom::InterfaceProvider>
       interface_provider_binding_;
+
+  // NetworkService:
+  // The handle owns the precreated AppCacheHost until it's claimed by the
+  // renderer after main script loading finishes.
+  std::unique_ptr<AppCacheNavigationHandle> appcache_handle_;
 
   Phase phase_ = Phase::kInitial;
 

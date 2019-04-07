@@ -29,9 +29,10 @@ body {
 }
 
 .label {
-  -webkit-padding-end: 12px;
-  font-size: 12px;
+  font-size: 0.9em;
   font-weight: bold;
+  padding-inline-end: 5px;
+  text-align: end;
   vertical-align: top;
   line-height: 20px;
   white-space: nowrap;

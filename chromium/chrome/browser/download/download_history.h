@@ -135,6 +135,12 @@ class DownloadHistory : public download::AllDownloadItemNotifier::Observer {
   // Removes all |removing_ids_| from |history_|.
   void RemoveDownloadsBatch();
 
+  // Called when a download was restored from history.
+  void OnDownloadRestoredFromHistory(download::DownloadItem* item);
+
+  // Check whether an download item needs be updated or added to history DB.
+  bool NeedToUpdateDownloadHistory(download::DownloadItem* item);
+
   download::AllDownloadItemNotifier notifier_;
 
   std::unique_ptr<HistoryAdapter> history_;
@@ -159,7 +165,7 @@ class DownloadHistory : public download::AllDownloadItemNotifier::Observer {
 
   bool initial_history_query_complete_;
 
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   base::WeakPtrFactory<DownloadHistory> weak_ptr_factory_;
 

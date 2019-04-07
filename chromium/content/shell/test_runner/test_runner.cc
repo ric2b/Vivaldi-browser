@@ -38,8 +38,6 @@
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/wrappable.h"
-#include "services/device/public/cpp/generic_sensor/motion_data.h"
-#include "services/device/public/cpp/generic_sensor/orientation_data.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_registration.h"
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/platform/web_point.h"
@@ -90,6 +88,53 @@ double GetDefaultDeviceScaleFactor() {
   return 1.f;
 }
 
+void ConvertAndSet(gin::Arguments* args, int* set_param) {
+  v8::Local<v8::Value> value = args->PeekNext();
+  v8::Maybe<int> result = value->Int32Value(args->GetHolderCreationContext());
+
+  if (result.IsNothing()) {
+    // Skip so the error is thrown for the correct argument as PeekNext doesn't
+    // update the current argument pointer.
+    args->Skip();
+    args->ThrowError();
+    return;
+  }
+
+  *set_param = result.ToChecked();
+}
+
+void ConvertAndSet(gin::Arguments* args, bool* set_param) {
+  v8::Local<v8::Value> value = args->PeekNext();
+  v8::Maybe<bool> result =
+      value->BooleanValue(args->GetHolderCreationContext());
+
+  if (result.IsNothing()) {
+    // Skip so the error is thrown for the correct argument as PeekNext doesn't
+    // update the current argument pointer.
+    args->Skip();
+    args->ThrowError();
+    return;
+  }
+
+  *set_param = result.ToChecked();
+}
+
+void ConvertAndSet(gin::Arguments* args, blink::WebString* set_param) {
+  v8::Local<v8::Value> value = args->PeekNext();
+  v8::MaybeLocal<v8::String> result =
+      value->ToString(args->GetHolderCreationContext());
+
+  if (result.IsEmpty()) {
+    // Skip so the error is thrown for the correct argument as PeekNext doesn't
+    // update the current argument pointer.
+    args->Skip();
+    args->ThrowError();
+    return;
+  }
+
+  *set_param = V8StringToWebString(args->isolate(), result.ToLocalChecked());
+}
+
 }  // namespace
 
 class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
@@ -111,7 +156,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   gin::ObjectTemplateBuilder GetObjectTemplateBuilder(
       v8::Isolate* isolate) override;
 
-  void AddOriginAccessWhitelistEntry(const std::string& source_origin,
+  void AddOriginAccessAllowListEntry(const std::string& source_origin,
                                      const std::string& destination_protocol,
                                      const std::string& destination_host,
                                      bool allow_destination_subdomains);
@@ -164,17 +209,13 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void LogToStderr(const std::string& output);
   void NotImplemented(const gin::Arguments& args);
   void NotifyDone();
-  void OverridePreference(const std::string& key, v8::Local<v8::Value> value);
+  void OverridePreference(gin::Arguments* args);
   void QueueBackNavigation(int how_far_back);
   void QueueForwardNavigation(int how_far_forward);
   void QueueLoad(gin::Arguments* args);
   void QueueLoadingScript(const std::string& script);
   void QueueNonLoadingScript(const std::string& script);
   void QueueReload();
-  void RemoveOriginAccessWhitelistEntry(const std::string& source_origin,
-                                        const std::string& destination_protocol,
-                                        const std::string& destination_host,
-                                        bool allow_destination_subdomains);
   void RemoveSpellCheckResolvedCallback();
   void RemoveWebPageOverlay();
   void ResetTestHelperControllers();
@@ -360,8 +401,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
   return gin::Wrappable<TestRunnerBindings>::GetObjectTemplateBuilder(isolate)
       .SetMethod("abortModal", &TestRunnerBindings::NotImplemented)
       .SetMethod("addDisallowedURL", &TestRunnerBindings::NotImplemented)
-      .SetMethod("addOriginAccessWhitelistEntry",
-                 &TestRunnerBindings::AddOriginAccessWhitelistEntry)
+      .SetMethod("addOriginAccessAllowListEntry",
+                 &TestRunnerBindings::AddOriginAccessAllowListEntry)
       .SetMethod("addWebPageOverlay", &TestRunnerBindings::AddWebPageOverlay)
       .SetMethod("callShouldCloseOnWebView",
                  &TestRunnerBindings::CallShouldCloseOnWebView)
@@ -469,8 +510,6 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       .SetMethod("queueNonLoadingScript",
                  &TestRunnerBindings::QueueNonLoadingScript)
       .SetMethod("queueReload", &TestRunnerBindings::QueueReload)
-      .SetMethod("removeOriginAccessWhitelistEntry",
-                 &TestRunnerBindings::RemoveOriginAccessWhitelistEntry)
       .SetMethod("removeSpellCheckResolvedCallback",
                  &TestRunnerBindings::RemoveSpellCheckResolvedCallback)
       .SetMethod("removeWebPageOverlay",
@@ -802,27 +841,22 @@ void TestRunnerBindings::SetIsolatedWorldContentSecurityPolicy(
     view_runner_->SetIsolatedWorldContentSecurityPolicy(world_id, policy);
 }
 
-void TestRunnerBindings::AddOriginAccessWhitelistEntry(
+void TestRunnerBindings::AddOriginAccessAllowListEntry(
     const std::string& source_origin,
     const std::string& destination_protocol,
     const std::string& destination_host,
     bool allow_destination_subdomains) {
   if (runner_) {
-    runner_->AddOriginAccessWhitelistEntry(source_origin, destination_protocol,
+    // Non-standard schemes should be added to the scheme registeries to use
+    // for the origin access whitelisting.
+    GURL url(source_origin);
+    DCHECK(url.is_valid());
+    DCHECK(url.has_scheme());
+    DCHECK(url.has_host());
+
+    runner_->AddOriginAccessAllowListEntry(source_origin, destination_protocol,
                                            destination_host,
                                            allow_destination_subdomains);
-  }
-}
-
-void TestRunnerBindings::RemoveOriginAccessWhitelistEntry(
-    const std::string& source_origin,
-    const std::string& destination_protocol,
-    const std::string& destination_host,
-    bool allow_destination_subdomains) {
-  if (runner_) {
-    runner_->RemoveOriginAccessWhitelistEntry(
-        source_origin, destination_protocol, destination_host,
-        allow_destination_subdomains);
   }
 }
 
@@ -962,10 +996,9 @@ void TestRunnerBindings::SetAllowFileAccessFromFileURLs(bool allow) {
     runner_->SetAllowFileAccessFromFileURLs(allow);
 }
 
-void TestRunnerBindings::OverridePreference(const std::string& key,
-                                            v8::Local<v8::Value> value) {
+void TestRunnerBindings::OverridePreference(gin::Arguments* args) {
   if (runner_)
-    runner_->OverridePreference(key, value);
+    runner_->OverridePreference(args);
 }
 
 void TestRunnerBindings::SetAcceptLanguages(
@@ -1525,7 +1558,7 @@ void TestRunner::Reset() {
   mock_screen_orientation_client_->ResetData();
   drag_image_.reset();
 
-  WebSecurityPolicy::ResetOriginAccessWhitelists();
+  WebSecurityPolicy::ClearOriginAccessAllowList();
 #if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_FUCHSIA)
   WebFontRenderStyle::SetSubpixelPositioning(false);
 #endif
@@ -1572,6 +1605,10 @@ void TestRunner::Reset() {
 
 void TestRunner::SetTestIsRunning(bool running) {
   test_is_running_ = running;
+}
+
+bool TestRunner::ShouldDumpSelectionRect() const {
+  return layout_test_runtime_flags_.dump_selection_rect();
 }
 
 bool TestRunner::shouldDumpEditingCallbacks() const {
@@ -2051,7 +2088,7 @@ void TestRunner::ResetTestHelperControllers() {
   test_interfaces_->ResetTestHelperControllers();
 }
 
-void TestRunner::AddOriginAccessWhitelistEntry(
+void TestRunner::AddOriginAccessAllowListEntry(
     const std::string& source_origin,
     const std::string& destination_protocol,
     const std::string& destination_host,
@@ -2060,21 +2097,7 @@ void TestRunner::AddOriginAccessWhitelistEntry(
   if (!url.IsValid())
     return;
 
-  WebSecurityPolicy::AddOriginAccessWhitelistEntry(
-      url, WebString::FromUTF8(destination_protocol),
-      WebString::FromUTF8(destination_host), allow_destination_subdomains);
-}
-
-void TestRunner::RemoveOriginAccessWhitelistEntry(
-    const std::string& source_origin,
-    const std::string& destination_protocol,
-    const std::string& destination_host,
-    bool allow_destination_subdomains) {
-  WebURL url((GURL(source_origin)));
-  if (!url.IsValid())
-    return;
-
-  WebSecurityPolicy::RemoveOriginAccessWhitelistEntry(
+  WebSecurityPolicy::AddOriginAccessAllowListEntry(
       url, WebString::FromUTF8(destination_protocol),
       WebString::FromUTF8(destination_host), allow_destination_subdomains);
 }
@@ -2163,51 +2186,57 @@ void TestRunner::SetAllowFileAccessFromFileURLs(bool allow) {
   delegate_->ApplyPreferences();
 }
 
-void TestRunner::OverridePreference(const std::string& key,
-                                    v8::Local<v8::Value> value) {
+void TestRunner::OverridePreference(gin::Arguments* args) {
+  if (args->Length() != 2) {
+    args->ThrowTypeError("overridePreference expects 2 arguments");
+    return;
+  }
+
+  std::string key;
+  if (!args->GetNext(&key)) {
+    args->ThrowError();
+    return;
+  }
+
   TestPreferences* prefs = delegate_->Preferences();
   if (key == "WebKitDefaultFontSize") {
-    prefs->default_font_size = value->Int32Value();
+    ConvertAndSet(args, &prefs->default_font_size);
   } else if (key == "WebKitMinimumFontSize") {
-    prefs->minimum_font_size = value->Int32Value();
+    ConvertAndSet(args, &prefs->minimum_font_size);
   } else if (key == "WebKitDefaultTextEncodingName") {
-    v8::Isolate* isolate = blink::MainThreadIsolate();
-    prefs->default_text_encoding_name =
-        V8StringToWebString(value->ToString(isolate));
+    ConvertAndSet(args, &prefs->default_text_encoding_name);
   } else if (key == "WebKitJavaScriptEnabled") {
-    prefs->java_script_enabled = value->BooleanValue();
+    ConvertAndSet(args, &prefs->java_script_enabled);
   } else if (key == "WebKitSupportsMultipleWindows") {
-    prefs->supports_multiple_windows = value->BooleanValue();
+    ConvertAndSet(args, &prefs->supports_multiple_windows);
   } else if (key == "WebKitDisplayImagesKey") {
-    prefs->loads_images_automatically = value->BooleanValue();
+    ConvertAndSet(args, &prefs->loads_images_automatically);
   } else if (key == "WebKitPluginsEnabled") {
-    prefs->plugins_enabled = value->BooleanValue();
+    ConvertAndSet(args, &prefs->plugins_enabled);
   } else if (key == "WebKitTabToLinksPreferenceKey") {
-    prefs->tabs_to_links = value->BooleanValue();
+    ConvertAndSet(args, &prefs->tabs_to_links);
   } else if (key == "WebKitCSSGridLayoutEnabled") {
-    prefs->experimental_css_grid_layout_enabled = value->BooleanValue();
+    ConvertAndSet(args, &prefs->experimental_css_grid_layout_enabled);
   } else if (key == "WebKitHyperlinkAuditingEnabled") {
-    prefs->hyperlink_auditing_enabled = value->BooleanValue();
+    ConvertAndSet(args, &prefs->hyperlink_auditing_enabled);
   } else if (key == "WebKitEnableCaretBrowsing") {
-    prefs->caret_browsing_enabled = value->BooleanValue();
+    ConvertAndSet(args, &prefs->caret_browsing_enabled);
   } else if (key == "WebKitAllowRunningInsecureContent") {
-    prefs->allow_running_of_insecure_content = value->BooleanValue();
+    ConvertAndSet(args, &prefs->allow_running_of_insecure_content);
   } else if (key == "WebKitDisableReadingFromCanvas") {
-    prefs->disable_reading_from_canvas = value->BooleanValue();
+    ConvertAndSet(args, &prefs->disable_reading_from_canvas);
   } else if (key == "WebKitStrictMixedContentChecking") {
-    prefs->strict_mixed_content_checking = value->BooleanValue();
+    ConvertAndSet(args, &prefs->strict_mixed_content_checking);
   } else if (key == "WebKitStrictPowerfulFeatureRestrictions") {
-    prefs->strict_powerful_feature_restrictions = value->BooleanValue();
+    ConvertAndSet(args, &prefs->strict_powerful_feature_restrictions);
   } else if (key == "WebKitShouldRespectImageOrientation") {
-    prefs->should_respect_image_orientation = value->BooleanValue();
+    ConvertAndSet(args, &prefs->should_respect_image_orientation);
   } else if (key == "WebKitWebSecurityEnabled") {
-    prefs->web_security_enabled = value->BooleanValue();
+    ConvertAndSet(args, &prefs->web_security_enabled);
   } else if (key == "WebKitSpatialNavigationEnabled") {
-    prefs->spatial_navigation_enabled = value->BooleanValue();
+    ConvertAndSet(args, &prefs->spatial_navigation_enabled);
   } else {
-    std::string message("Invalid name for preference: ");
-    message.append(key);
-    delegate_->PrintMessage(std::string("CONSOLE MESSAGE: ") + message + "\n");
+    args->ThrowTypeError("Invalid name for preference: " + key);
   }
   delegate_->ApplyPreferences();
 }

@@ -42,7 +42,6 @@ namespace network {
 class SharedURLLoaderFactory;
 }
 
-class SearchTermsData;
 class TemplateURLService;
 
 class AutocompleteProviderClient {
@@ -65,7 +64,6 @@ class AutocompleteProviderClient {
       bool create_if_necessary) const = 0;
   virtual DocumentSuggestionsService* GetDocumentSuggestionsService(
       bool create_if_necessary) const = 0;
-  virtual const SearchTermsData& GetSearchTermsData() const = 0;
   virtual scoped_refptr<ShortcutsBackend> GetShortcutsBackend() = 0;
   virtual scoped_refptr<ShortcutsBackend> GetShortcutsBackendIfExists() = 0;
   virtual std::unique_ptr<KeywordExtensionsDelegate>
@@ -77,7 +75,7 @@ class AutocompleteProviderClient {
 
   // The embedder's representation of the |about| URL scheme for builtin URLs
   // (e.g., |chrome| for Chrome).
-  virtual std::string GetEmbedderRepresentationOfAboutScheme() = 0;
+  virtual std::string GetEmbedderRepresentationOfAboutScheme() const = 0;
 
   // The set of built-in URLs considered worth suggesting as autocomplete
   // suggestions to the user.  Some built-in URLs, e.g. hidden URLs that
@@ -107,6 +105,15 @@ class AutocompleteProviderClient {
 
   // This function returns true if the user is signed in.
   virtual bool IsAuthenticated() const = 0;
+
+  // Determines whether Unified Consent is on as a feature, and the user has
+  // accepted the bit. Note this is a subset of
+  // IsPersonalizedUrlDataCollectionActive() in that the user has not
+  // necessarily consented to share browsing data with Google.
+  virtual bool IsUnifiedConsentGiven() const = 0;
+
+  // Determines whether sync is enabled.
+  virtual bool IsSyncActive() const = 0;
 
   // Given some string |text| that the user wants to use for navigation,
   // determines how it should be interpreted.

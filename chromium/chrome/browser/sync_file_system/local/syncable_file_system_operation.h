@@ -63,7 +63,7 @@ class SyncableFileSystemOperation : public storage::FileSystemOperation {
               const StatusCallback& callback) override;
   void Write(const storage::FileSystemURL& url,
              std::unique_ptr<storage::FileWriterDelegate> writer_delegate,
-             std::unique_ptr<net::URLRequest> blob_request,
+             std::unique_ptr<storage::BlobReader> blob_reader,
              const WriteCallback& callback) override;
   void Truncate(const storage::FileSystemURL& url,
                 int64_t length,
@@ -77,7 +77,7 @@ class SyncableFileSystemOperation : public storage::FileSystemOperation {
                 const OpenFileCallback& callback) override;
   void Cancel(const StatusCallback& cancel_callback) override;
   void CreateSnapshotFile(const storage::FileSystemURL& path,
-                          const SnapshotFileCallback& callback) override;
+                          SnapshotFileCallback callback) override;
   void CopyInForeignFile(const base::FilePath& src_local_disk_path,
                          const storage::FileSystemURL& dest_url,
                          const StatusCallback& callback) override;

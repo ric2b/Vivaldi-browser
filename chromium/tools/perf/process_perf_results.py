@@ -8,18 +8,17 @@ import json
 import logging
 import multiprocessing as mp
 import os
+from os import listdir
+from os.path import isfile, join, basename
 import shutil
 import sys
 import tempfile
 import time
 import uuid
 
-from core import oauth_api
 from core import path_util
 from core import upload_results_to_perf_dashboard
 from core import results_merger
-from os import listdir
-from os.path import isfile, join, basename
 
 path_util.AddAndroidPylibToPath()
 
@@ -64,10 +63,9 @@ def _GetMachineGroup(build_properties):
 
 
 def _upload_perf_results(json_to_upload, name, configuration_name,
-    build_properties, oauth_file, tmp_dir, output_json_file):
+    build_properties, service_account_file, output_json_file):
   """Upload the contents of result JSON(s) to the perf dashboard."""
   args= [
-      '--tmp-dir', tmp_dir,
       '--buildername', build_properties['buildername'],
       '--buildnumber', build_properties['buildnumber'],
       '--name', name,
@@ -77,10 +75,20 @@ def _upload_perf_results(json_to_upload, name, configuration_name,
       '--got-revision-cp', build_properties['got_revision_cp'],
       '--got-v8-revision', build_properties['got_v8_revision'],
       '--got-webrtc-revision', build_properties['got_webrtc_revision'],
-      '--oauth-token-file', oauth_file,
       '--output-json-file', output_json_file,
       '--perf-dashboard-machine-group', _GetMachineGroup(build_properties)
   ]
+  is_luci = False
+  buildbucket = build_properties.get('buildbucket', {})
+  if isinstance(buildbucket, basestring):
+    buildbucket = json.loads(buildbucket)
+  if ('build' in buildbucket and
+      buildbucket['build'].get('bucket') == 'luci.chrome.ci'):
+    is_luci = True
+
+  if service_account_file and not is_luci:
+    args += ['--service-account-file', service_account_file]
+
   if build_properties.get('git_revision'):
     args.append('--git-revision')
     args.append(build_properties['git_revision'])
@@ -206,10 +214,11 @@ def _handle_benchmarks_shard_map(benchmarks_shard_map_file, extra_links):
 def _get_benchmark_name(directory):
   return basename(directory).replace(" benchmark", "")
 
+
 def process_perf_results(output_json, configuration_name,
-                          service_account_file,
-                          build_properties, task_output_dir,
-                          smoke_test_mode):
+                         service_account_file,
+                         build_properties, task_output_dir,
+                         smoke_test_mode):
   """Process perf results.
 
   Consists of merging the json-test-format output, uploading the perf test
@@ -221,9 +230,16 @@ def process_perf_results(output_json, configuration_name,
   perftest-output.json file containing the performance results in histogram
   or dashboard json format and an output.json file containing the json test
   results for the benchmark.
+
+  Returns:
+    (return_code, upload_results_map):
+      return_code is 0 if the whole operation is successful, non zero otherwise.
+      benchmark_upload_result_map: the dictionary that describe which benchmarks
+        were successfully uploaded.
   """
   begin_time = time.time()
   return_code = 0
+  benchmark_upload_result_map = {}
   directory_list = [
       f for f in listdir(task_output_dir)
       if not isfile(join(task_output_dir, f))
@@ -273,7 +289,7 @@ def process_perf_results(output_json, configuration_name,
 
   if not smoke_test_mode:
     try:
-      return_code = _handle_perf_results(
+      return_code, benchmark_upload_result_map = _handle_perf_results(
           benchmark_enabled_map, benchmark_directory_map,
           configuration_name, build_properties, service_account_file,
           extra_links)
@@ -286,7 +302,7 @@ def process_perf_results(output_json, configuration_name,
   _merge_json_output(output_json, test_results_list, extra_links)
   end_time = time.time()
   print_duration('Total process_perf_results', begin_time, end_time)
-  return return_code
+  return return_code, benchmark_upload_result_map
 
 def _merge_chartjson_results(chartjson_dicts):
   merged_results = chartjson_dicts[0]
@@ -331,7 +347,7 @@ def _merge_perf_results(benchmark_name, results_filename, directories):
 def _upload_individual(
     benchmark_name, directories, configuration_name,
     build_properties, output_json_file, service_account_file):
-  tmpfile_dir = tempfile.mkdtemp('resultscache')
+  tmpfile_dir = tempfile.mkdtemp()
   try:
     upload_begin_time = time.time()
     # There are potentially multiple directores with results, re-write and
@@ -349,20 +365,18 @@ def _upload_individual(
       # It was only written to one shard, use that shards data
       results_filename = join(directories[0], 'perf_results.json')
 
-    print 'Uploading perf results from %s benchmark' % benchmark_name
-    # We generate an oauth token for every benchmark upload in the event
-    # the token could time out, see crbug.com/854162
-    with oauth_api.with_access_token(
-        service_account_file, ("%s_tok" % benchmark_name)) as oauth_file:
-      with open(output_json_file, 'w') as oj:
-        upload_fail = _upload_perf_results(
-          results_filename,
-          benchmark_name, configuration_name, build_properties,
-          oauth_file, tmpfile_dir, oj)
-        upload_end_time = time.time()
-        print_duration(('%s upload time' % (benchmark_name)),
-                       upload_begin_time, upload_end_time)
-        return (benchmark_name, upload_fail)
+    results_size_in_mib = os.path.getsize(results_filename) / (2 ** 20)
+    print 'Uploading perf results from %s benchmark (size %s Mib)' % (
+        benchmark_name, results_size_in_mib)
+    with open(output_json_file, 'w') as oj:
+      upload_return_code = _upload_perf_results(
+        results_filename,
+        benchmark_name, configuration_name, build_properties,
+        service_account_file, oj)
+      upload_end_time = time.time()
+      print_duration(('%s upload time' % (benchmark_name)),
+                     upload_begin_time, upload_end_time)
+      return (benchmark_name, upload_return_code == 0)
   finally:
     shutil.rmtree(tmpfile_dir)
 
@@ -372,9 +386,9 @@ def _upload_individual_benchmark(params):
     return _upload_individual(*params)
   except Exception:
     benchmark_name = params[0]
-    upload_fail = True
+    upload_succeed = False
     logging.exception('Error uploading perf result of %s' % benchmark_name)
-    return benchmark_name, upload_fail
+    return benchmark_name, upload_succeed
 
 
 def _handle_perf_results(
@@ -387,7 +401,11 @@ def _handle_perf_results(
     |extra_links|.
 
     Returns:
-      0 if this upload to perf dashboard succesfully, 1 otherwise.
+      (return_code, benchmark_upload_result_map)
+      return_code is 0 if this upload to perf dashboard successfully, 1
+        otherwise.
+       benchmark_upload_result_map is a dictionary describes which benchmark
+        was successfully uploaded.
   """
   begin_time = time.time()
   tmpfile_dir = tempfile.mkdtemp('outputresults')
@@ -402,15 +420,14 @@ def _handle_perf_results(
       # Create a place to write the perf results that you will write out to
       # logdog.
       output_json_file = os.path.join(
-          os.path.abspath(tmpfile_dir), (str(uuid.uuid4()) + benchmark_name))
+          tmpfile_dir, (str(uuid.uuid4()) + benchmark_name))
       results_dict[benchmark_name] = output_json_file
       invocations.append((
           benchmark_name, directories, configuration_name,
           build_properties, output_json_file, service_account_file))
 
     # Kick off the uploads in mutliple processes
-    cpus = mp.cpu_count()
-    pool = mp.Pool(cpus)
+    pool = mp.Pool()
     try:
       async_result = pool.map_async(
           _upload_individual_benchmark, invocations)
@@ -425,21 +442,21 @@ def _handle_perf_results(
     # Keep a mapping of benchmarks to their upload results
     benchmark_upload_result_map = {}
     for r in results:
-      benchmark_upload_result_map[r[0]] = bool(r[1])
+      benchmark_upload_result_map[r[0]] = r[1]
 
     logdog_dict = {}
     upload_failures_counter = 0
     logdog_stream = None
     logdog_label = 'Results Dashboard'
     for benchmark_name, output_file in results_dict.iteritems():
-      failure = benchmark_upload_result_map[benchmark_name]
-      if failure:
+      upload_succeed = benchmark_upload_result_map[benchmark_name]
+      if not upload_succeed:
         upload_failures_counter += 1
       is_reference = '.reference' in benchmark_name
       _write_perf_data_to_logfile(
         benchmark_name, output_file,
         configuration_name, build_properties, logdog_dict,
-        is_reference, failure)
+        is_reference, upload_failure=not upload_succeed)
 
     logdog_file_name = _generate_unique_logdog_filename('Results_Dashboard_')
     logdog_stream = logdog_helper.text(logdog_file_name,
@@ -453,8 +470,8 @@ def _handle_perf_results(
     end_time = time.time()
     print_duration('Uploading results to perf dashboard', begin_time, end_time)
     if upload_failures_counter > 0:
-      return 1
-    return 0
+      return 1, benchmark_upload_result_map
+    return 0, benchmark_upload_result_map
   finally:
     shutil.rmtree(tmpfile_dir)
 
@@ -515,7 +532,8 @@ def main():
   # configuration-name and results-url are set in the json file which is going
   # away tools/perf/core/chromium.perf.fyi.extras.json
   parser.add_argument('--configuration-name', help=argparse.SUPPRESS)
-  parser.add_argument('--service-account-file', help=argparse.SUPPRESS)
+  parser.add_argument('--service-account-file', help=argparse.SUPPRESS,
+                      default=None)
 
   parser.add_argument('--build-properties', help=argparse.SUPPRESS)
   parser.add_argument('--summary-json', help=argparse.SUPPRESS)
@@ -529,15 +547,12 @@ def main():
 
   args = parser.parse_args()
 
-  if not args.service_account_file and not args.smoke_test_mode:
-    raise Exception(
-        'Service account file must be specificed for dashboard upload')
-
-  return process_perf_results(
+  return_code, _ = process_perf_results(
       args.output_json, args.configuration_name,
       args.service_account_file,
       args.build_properties, args.task_output_dir,
       args.smoke_test_mode)
+  return return_code
 
 
 if __name__ == '__main__':

@@ -6,11 +6,13 @@
 
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/session/session_controller.h"
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
+#include "ash/system/tray/tray_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/border.h"
@@ -31,11 +33,7 @@ SelectToSpeakTray::SelectToSpeakTray(Shelf* shelf)
     : TrayBackgroundView(shelf), icon_(new views::ImageView()) {
   SetInkDropMode(InkDropMode::ON);
 
-  inactive_image_ =
-      gfx::CreateVectorIcon(kSystemTraySelectToSpeakIcon, kShelfIconColor);
-  selecting_image_ = gfx::CreateVectorIcon(kSystemTraySelectToSpeakActiveIcon,
-                                           kShelfIconColor);
-  speaking_image_ = gfx::CreateVectorIcon(kSystemTrayStopIcon, kShelfIconColor);
+  UpdateIconsForSession();
   icon_->SetImage(inactive_image_);
   const int vertical_padding = (kTrayItemSize - inactive_image_.height()) / 2;
   const int horizontal_padding = (kTrayItemSize - inactive_image_.width()) / 2;
@@ -71,6 +69,32 @@ bool SelectToSpeakTray::PerformAction(const ui::Event& event) {
 
 void SelectToSpeakTray::OnAccessibilityStatusChanged() {
   CheckStatusAndUpdateIcon();
+}
+
+void SelectToSpeakTray::OnSessionStateChanged(
+    session_manager::SessionState state) {
+  UpdateIconsForSession();
+  CheckStatusAndUpdateIcon();
+}
+
+void SelectToSpeakTray::UpdateIconsForSession() {
+  session_manager::SessionState session_state =
+      Shell::Get()->session_controller()->GetSessionState();
+  SkColor color = TrayIconColor(session_state);
+
+  if (chromeos::switches::ShouldUseShelfNewUi()) {
+    inactive_image_ =
+        gfx::CreateVectorIcon(kSystemTraySelectToSpeakNewuiIcon, color);
+    selecting_image_ =
+        gfx::CreateVectorIcon(kSystemTraySelectToSpeakActiveNewuiIcon, color);
+    speaking_image_ = gfx::CreateVectorIcon(kSystemTrayStopNewuiIcon, color);
+  } else {
+    inactive_image_ =
+        gfx::CreateVectorIcon(kSystemTraySelectToSpeakIcon, color);
+    selecting_image_ =
+        gfx::CreateVectorIcon(kSystemTraySelectToSpeakActiveIcon, color);
+    speaking_image_ = gfx::CreateVectorIcon(kSystemTrayStopIcon, color);
+  }
 }
 
 void SelectToSpeakTray::CheckStatusAndUpdateIcon() {

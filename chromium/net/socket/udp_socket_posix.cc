@@ -21,8 +21,8 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/rand_util.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "net/base/io_buffer.h"
@@ -1023,8 +1023,9 @@ int UDPSocketPosix::LeaveGroup(const IPAddress& group_address) const {
     case IPAddress::kIPv4AddressSize: {
       if (addr_family_ != AF_INET)
         return ERR_ADDRESS_INVALID;
-      ip_mreq mreq = {};
-      mreq.imr_interface.s_addr = INADDR_ANY;
+      ip_mreqn mreq = {};
+      mreq.imr_ifindex = multicast_interface_;
+      mreq.imr_address.s_addr = INADDR_ANY;
       memcpy(&mreq.imr_multiaddr, group_address.bytes().data(),
              IPAddress::kIPv4AddressSize);
       int rv = setsockopt(socket_, IPPROTO_IP, IP_DROP_MEMBERSHIP,

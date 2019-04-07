@@ -13,11 +13,10 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/attestation/attestation_ca_client.h"
 #include "chrome/browser/chromeos/policy/active_directory_policy_manager.h"
@@ -42,7 +41,7 @@
 #include "chrome/browser/policy/device_management_service_configuration.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/attestation/attestation_flow.h"
-#include "chromeos/chromeos_paths.h"
+#include "chromeos/cert_loader.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
@@ -60,25 +59,20 @@
 #include "components/policy/core/common/proxy_policy_provider.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_registry_simple.h"
-#include "content/public/browser/browser_thread.h"
 #include "google_apis/gaia/gaia_auth_util.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
-
-using content::BrowserThread;
 
 namespace policy {
 
-namespace {
+namespace em = enterprise_management;
 
-// Install attributes for tests.
-chromeos::InstallAttributes* g_testing_install_attributes = nullptr;
+namespace {
 
 // Helper that returns a new BACKGROUND SequencedTaskRunner. Each
 // SequencedTaskRunner returned is independent from the others.
 scoped_refptr<base::SequencedTaskRunner> GetBackgroundTaskRunner() {
   return base::CreateSequencedTaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 
@@ -86,36 +80,21 @@ scoped_refptr<base::SequencedTaskRunner> GetBackgroundTaskRunner() {
 
 BrowserPolicyConnectorChromeOS::BrowserPolicyConnectorChromeOS()
     : weak_ptr_factory_(this) {
-  if (g_testing_install_attributes) {
-    install_attributes_.reset(g_testing_install_attributes);
-    g_testing_install_attributes = nullptr;
-  }
+  DCHECK(chromeos::InstallAttributes::IsInitialized());
 
-  // SystemSaltGetter, DBusThreadManager or DeviceSettingsService may be
+  // DBusThreadManager or DeviceSettingsService may be
   // uninitialized on unit tests.
 
   // TODO(satorux): Remove SystemSaltGetter::IsInitialized() when it's ready
   // (removing it now breaks tests). crbug.com/141016.
-  if (chromeos::SystemSaltGetter::IsInitialized() &&
-      chromeos::DBusThreadManager::IsInitialized() &&
+  if (chromeos::DBusThreadManager::IsInitialized() &&
       chromeos::DeviceSettingsService::IsInitialized()) {
-    // Don't initialize install attributes if g_testing_install_attributes have
-    // been injected.
-    if (!install_attributes_) {
-      install_attributes_ = std::make_unique<chromeos::InstallAttributes>(
-          chromeos::DBusThreadManager::Get()->GetCryptohomeClient());
-      base::FilePath install_attrs_file;
-      CHECK(base::PathService::Get(chromeos::FILE_INSTALL_ATTRIBUTES,
-                                   &install_attrs_file));
-      install_attributes_->Init(install_attrs_file);
-    }
-
     std::unique_ptr<DeviceCloudPolicyStoreChromeOS> device_cloud_policy_store =
         std::make_unique<DeviceCloudPolicyStoreChromeOS>(
-            chromeos::DeviceSettingsService::Get(), install_attributes_.get(),
-            GetBackgroundTaskRunner());
+            chromeos::DeviceSettingsService::Get(),
+            chromeos::InstallAttributes::Get(), GetBackgroundTaskRunner());
 
-    if (install_attributes_->IsActiveDirectoryManaged()) {
+    if (chromeos::InstallAttributes::Get()->IsActiveDirectoryManaged()) {
       chromeos::DBusThreadManager::Get()
           ->GetUpstartClient()
           ->StartAuthPolicyService();
@@ -148,11 +127,9 @@ BrowserPolicyConnectorChromeOS::~BrowserPolicyConnectorChromeOS() {}
 
 void BrowserPolicyConnectorChromeOS::Init(
     PrefService* local_state,
-    scoped_refptr<net::URLRequestContextGetter> request_context,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
   local_state_ = local_state;
-  ChromeBrowserPolicyConnector::Init(local_state, request_context,
-                                     url_loader_factory);
+  ChromeBrowserPolicyConnector::Init(local_state, url_loader_factory);
 
   affiliated_invalidation_service_provider_ =
       std::make_unique<AffiliatedInvalidationServiceProviderImpl>();
@@ -168,8 +145,7 @@ void BrowserPolicyConnectorChromeOS::Init(
     RestartDeviceCloudPolicyInitializer();
   }
 
-  DCHECK(install_attributes_);
-  if (!install_attributes_->IsActiveDirectoryManaged()) {
+  if (!chromeos::InstallAttributes::Get()->IsActiveDirectoryManaged()) {
     device_local_account_policy_service_ =
         std::make_unique<DeviceLocalAccountPolicyService>(
             chromeos::DBusThreadManager::Get()->GetSessionManagerClient(),
@@ -177,17 +153,14 @@ void BrowserPolicyConnectorChromeOS::Init(
             chromeos::CrosSettings::Get(),
             affiliated_invalidation_service_provider_.get(),
             GetBackgroundTaskRunner(), GetBackgroundTaskRunner(),
-            GetBackgroundTaskRunner(),
-            content::BrowserThread::GetTaskRunnerForThread(
-                content::BrowserThread::IO),
-            request_context, url_loader_factory);
+            GetBackgroundTaskRunner(), url_loader_factory);
     device_local_account_policy_service_->Connect(device_management_service());
   }
 
   if (device_cloud_policy_manager_) {
     device_cloud_policy_invalidator_ =
         std::make_unique<AffiliatedCloudPolicyInvalidator>(
-            enterprise_management::DeviceRegisterRequest::DEVICE,
+            em::DeviceRegisterRequest::DEVICE,
             device_cloud_policy_manager_->core(),
             affiliated_invalidation_service_provider_.get());
     device_remote_commands_invalidator_ =
@@ -206,6 +179,11 @@ void BrowserPolicyConnectorChromeOS::Init(
           chromeos::NetworkHandler::Get()->network_device_handler(),
           chromeos::CrosSettings::Get(),
           DeviceNetworkConfigurationUpdater::DeviceAssetIDFetcher());
+  // CertLoader may be not initialized in tests.
+  if (chromeos::CertLoader::IsInitialized()) {
+    chromeos::CertLoader::Get()->AddPolicyCertificateProvider(
+        device_network_configuration_updater_.get());
+  }
 
   bluetooth_policy_handler_ =
       std::make_unique<BluetoothPolicyHandler>(chromeos::CrosSettings::Get());
@@ -228,6 +206,11 @@ void BrowserPolicyConnectorChromeOS::PreShutdown() {
 }
 
 void BrowserPolicyConnectorChromeOS::Shutdown() {
+  // CertLoader may be not initialized in tests.
+  if (chromeos::CertLoader::IsInitialized()) {
+    chromeos::CertLoader::Get()->RemovePolicyCertificateProvider(
+        device_network_configuration_updater_.get());
+  }
   device_network_configuration_updater_.reset();
 
   if (device_local_account_policy_service_)
@@ -246,69 +229,61 @@ void BrowserPolicyConnectorChromeOS::Shutdown() {
 }
 
 bool BrowserPolicyConnectorChromeOS::IsEnterpriseManaged() const {
-  return install_attributes_ && install_attributes_->IsEnterpriseManaged();
+  return chromeos::InstallAttributes::Get()->IsEnterpriseManaged();
 }
 
 bool BrowserPolicyConnectorChromeOS::IsCloudManaged() const {
-  return install_attributes_ && install_attributes_->IsCloudManaged();
+  return chromeos::InstallAttributes::Get()->IsCloudManaged();
 }
 
 bool BrowserPolicyConnectorChromeOS::IsActiveDirectoryManaged() const {
-  return install_attributes_ && install_attributes_->IsActiveDirectoryManaged();
+  return chromeos::InstallAttributes::Get()->IsActiveDirectoryManaged();
 }
 
 std::string BrowserPolicyConnectorChromeOS::GetEnterpriseEnrollmentDomain()
     const {
-  return install_attributes_ ? install_attributes_->GetDomain() : std::string();
+  return chromeos::InstallAttributes::Get()->GetDomain();
 }
 
 std::string BrowserPolicyConnectorChromeOS::GetEnterpriseDisplayDomain() const {
-  if (device_cloud_policy_manager_) {
-    const enterprise_management::PolicyData* policy =
-        device_cloud_policy_manager_->device_store()->policy();
-    if (policy && policy->has_display_domain())
-      return policy->display_domain();
-  }
+  const em::PolicyData* policy = GetDevicePolicy();
+  if (policy && policy->has_display_domain())
+    return policy->display_domain();
   return GetEnterpriseEnrollmentDomain();
 }
 
 std::string BrowserPolicyConnectorChromeOS::GetRealm() const {
-  return install_attributes_ ? install_attributes_->GetRealm() : std::string();
+  return chromeos::InstallAttributes::Get()->GetRealm();
 }
 
 std::string BrowserPolicyConnectorChromeOS::GetDeviceAssetID() const {
-  if (device_cloud_policy_manager_) {
-    const enterprise_management::PolicyData* policy =
-        device_cloud_policy_manager_->device_store()->policy();
-    if (policy && policy->has_annotated_asset_id())
-      return policy->annotated_asset_id();
-  }
+  const em::PolicyData* policy = GetDevicePolicy();
+  if (policy && policy->has_annotated_asset_id())
+    return policy->annotated_asset_id();
   return std::string();
 }
 
 std::string BrowserPolicyConnectorChromeOS::GetDeviceAnnotatedLocation() const {
-  if (device_cloud_policy_manager_) {
-    const enterprise_management::PolicyData* policy =
-        device_cloud_policy_manager_->device_store()->policy();
-    if (policy && policy->has_annotated_location())
-      return policy->annotated_location();
-  }
+  const em::PolicyData* policy = GetDevicePolicy();
+  if (policy && policy->has_annotated_location())
+    return policy->annotated_location();
   return std::string();
 }
 
 std::string BrowserPolicyConnectorChromeOS::GetDirectoryApiID() const {
-  if (device_cloud_policy_manager_) {
-    const enterprise_management::PolicyData* policy =
-        device_cloud_policy_manager_->device_store()->policy();
-    if (policy && policy->has_directory_api_id())
-      return policy->directory_api_id();
-  }
+  const em::PolicyData* policy = GetDevicePolicy();
+  if (policy && policy->has_directory_api_id())
+    return policy->directory_api_id();
   return std::string();
 }
 
 DeviceMode BrowserPolicyConnectorChromeOS::GetDeviceMode() const {
-  return install_attributes_ ? install_attributes_->GetMode()
-                             : DEVICE_MODE_NOT_SET;
+  return chromeos::InstallAttributes::Get()->GetMode();
+}
+
+chromeos::InstallAttributes*
+BrowserPolicyConnectorChromeOS::GetInstallAttributes() const {
+  return chromeos::InstallAttributes::Get();
 }
 
 EnrollmentConfig BrowserPolicyConnectorChromeOS::GetPrescribedEnrollmentConfig()
@@ -327,21 +302,6 @@ void BrowserPolicyConnectorChromeOS::SetUserPolicyDelegate(
 void BrowserPolicyConnectorChromeOS::SetDeviceCloudPolicyInitializerForTesting(
     std::unique_ptr<DeviceCloudPolicyInitializer> initializer) {
   device_cloud_policy_initializer_ = std::move(initializer);
-}
-
-// static
-void BrowserPolicyConnectorChromeOS::SetInstallAttributesForTesting(
-    chromeos::InstallAttributes* attributes) {
-  DCHECK(!g_testing_install_attributes);
-  g_testing_install_attributes = attributes;
-}
-
-// static
-void BrowserPolicyConnectorChromeOS::RemoveInstallAttributesForTesting() {
-  if (g_testing_install_attributes) {
-    delete g_testing_install_attributes;
-    g_testing_install_attributes = nullptr;
-  }
 }
 
 // static
@@ -399,7 +359,7 @@ void BrowserPolicyConnectorChromeOS::RestartDeviceCloudPolicyInitializer() {
   device_cloud_policy_initializer_ =
       std::make_unique<DeviceCloudPolicyInitializer>(
           local_state_, device_management_service(), GetBackgroundTaskRunner(),
-          install_attributes_.get(), state_keys_broker_.get(),
+          chromeos::InstallAttributes::Get(), state_keys_broker_.get(),
           device_cloud_policy_manager_->device_store(),
           device_cloud_policy_manager_,
           cryptohome::AsyncMethodCaller::GetInstance(), CreateAttestationFlow(),
@@ -418,15 +378,22 @@ BrowserPolicyConnectorChromeOS::CreateAttestationFlow() {
 chromeos::AffiliationIDSet
 BrowserPolicyConnectorChromeOS::GetDeviceAffiliationIDs() const {
   chromeos::AffiliationIDSet affiliation_ids;
-  if (device_cloud_policy_manager_) {
-    const enterprise_management::PolicyData* const policy_data =
-        device_cloud_policy_manager_->device_store()->policy();
-    if (policy_data) {
-      affiliation_ids.insert(policy_data->device_affiliation_ids().begin(),
-                             policy_data->device_affiliation_ids().end());
-    }
+  const em::PolicyData* policy = GetDevicePolicy();
+  if (policy) {
+    affiliation_ids.insert(policy->device_affiliation_ids().begin(),
+                           policy->device_affiliation_ids().end());
   }
   return affiliation_ids;
+}
+
+const em::PolicyData* BrowserPolicyConnectorChromeOS::GetDevicePolicy() const {
+  if (device_cloud_policy_manager_)
+    return device_cloud_policy_manager_->device_store()->policy();
+
+  if (device_active_directory_policy_manager_)
+    return device_active_directory_policy_manager_->store()->policy();
+
+  return nullptr;
 }
 
 }  // namespace policy

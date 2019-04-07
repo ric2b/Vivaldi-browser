@@ -7,7 +7,7 @@
 #include "base/compiler_specific.h"
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/ui/browser_dialogs.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -292,20 +292,8 @@ void DownloadDangerPromptViews::RunDone(Action action) {
 
 }  // namespace
 
-#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
 // static
 DownloadDangerPrompt* DownloadDangerPrompt::Create(
-    download::DownloadItem* item,
-    content::WebContents* web_contents,
-    bool show_context,
-    const OnDone& done) {
-  return DownloadDangerPrompt::CreateDownloadDangerPromptViews(
-      item, web_contents, show_context, done);
-}
-#endif  // !OS_MACOSX || MAC_VIEWS_BROWSER
-
-// static
-DownloadDangerPrompt* DownloadDangerPrompt::CreateDownloadDangerPromptViews(
     download::DownloadItem* item,
     content::WebContents* web_contents,
     bool show_context,

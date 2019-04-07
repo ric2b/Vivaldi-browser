@@ -9,9 +9,11 @@
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "components/invalidation/impl/json_unsafe_parser.h"
+#include "components/invalidation/impl/profile_identity_provider.h"
 #include "components/invalidation/public/invalidation_util.h"
 #include "components/prefs/testing_pref_service.h"
 #include "net/http/http_status_code.h"
+#include "services/identity/public/cpp/identity_test_environment.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -32,21 +34,21 @@ const char kTypeRegisteredForInvalidation[] =
 
 const char kFakeInstanceIdToken[] = "fake_instance_id_token";
 
-invalidation::InvalidationObjectId GetIdForIndex(size_t index) {
+std::string IndexToName(size_t index) {
   char name[2] = "a";
   name[0] += static_cast<char>(index);
-  return invalidation::InvalidationObjectId(1 + index, name);
+  return name;
 }
 
-InvalidationObjectIdSet GetSequenceOfIdsStartingAt(size_t start, size_t count) {
-  InvalidationObjectIdSet ids;
+TopicSet GetSequenceOfTopicsStartingAt(size_t start, size_t count) {
+  TopicSet ids;
   for (size_t i = start; i < start + count; ++i)
-    ids.insert(GetIdForIndex(i));
+    ids.insert(IndexToName(i));
   return ids;
 }
 
-InvalidationObjectIdSet GetSequenceOfIds(size_t count) {
-  return GetSequenceOfIdsStartingAt(0, count);
+TopicSet GetSequenceOfTopics(size_t count) {
+  return GetSequenceOfTopicsStartingAt(0, count);
 }
 
 network::ResourceResponseHead CreateHeadersForTest(int responce_code) {
@@ -57,10 +59,17 @@ network::ResourceResponseHead CreateHeadersForTest(int responce_code) {
   return head;
 }
 
-GURL FullUrl() {
+GURL FullSubscriptionUrl() {
   return GURL(base::StringPrintf(
       "%s/v1/perusertopics/%s/rel/topics/?subscriber_token=%s",
       kInvalidationRegistrationScope, kProjectId, kFakeInstanceIdToken));
+}
+
+GURL FullUnSubscriptionUrlForTopic(const std::string& topic) {
+  return GURL(base::StringPrintf(
+      "%s/v1/perusertopics/%s/rel/topics/%s?subscriber_token=%s",
+      kInvalidationRegistrationScope, kProjectId, topic.c_str(),
+      kFakeInstanceIdToken));
 }
 
 network::URLLoaderCompletionStatus CreateStatusForTest(
@@ -82,13 +91,21 @@ class PerUserTopicRegistrationManagerTest : public testing::Test {
   void SetUp() override {
     PerUserTopicRegistrationManager::RegisterProfilePrefs(
         pref_service_.registry());
+    AccountInfo account =
+        identity_test_env_.MakePrimaryAccountAvailable("example@gmail.com");
+    identity_test_env_.SetAutomaticIssueOfAccessTokens(true);
+    identity_provider_ =
+        std::make_unique<invalidation::ProfileIdentityProvider>(
+            identity_test_env_.identity_manager());
+    identity_provider_->SetActiveAccountId(account.account_id);
   }
 
   std::unique_ptr<PerUserTopicRegistrationManager> BuildRegistrationManager() {
-    return std::make_unique<PerUserTopicRegistrationManager>(
-        kFakeInstanceIdToken, "access_token", &pref_service_,
-        url_loader_factory(),
+    auto reg_manager = std::make_unique<PerUserTopicRegistrationManager>(
+        identity_provider_.get(), &pref_service_, url_loader_factory(),
         base::BindRepeating(&syncer::JsonUnsafeParser::Parse));
+    reg_manager->Init();
+    return reg_manager;
   }
 
   network::TestURLLoaderFactory* url_loader_factory() {
@@ -97,17 +114,38 @@ class PerUserTopicRegistrationManagerTest : public testing::Test {
 
   TestingPrefServiceSimple* pref_service() { return &pref_service_; }
 
+  void AddCorrectSubscriptionResponce() {
+    std::string response_body = R"(
+    {
+      "privateTopicName": "test-pr"
+    }
+  )";
+    url_loader_factory()->AddResponse(
+        FullSubscriptionUrl(), CreateHeadersForTest(net::HTTP_OK),
+        response_body, CreateStatusForTest(net::OK, response_body));
+  }
+
+  void AddCorrectUnSubscriptionResponceForTopic(const std::string& topic) {
+    url_loader_factory()->AddResponse(
+        FullUnSubscriptionUrlForTopic(topic),
+        CreateHeadersForTest(net::HTTP_OK), std::string() /* response_body */,
+        CreateStatusForTest(net::OK, std::string() /* response_body */));
+  }
+
  private:
   base::MessageLoop message_loop_;
   network::TestURLLoaderFactory url_loader_factory_;
   TestingPrefServiceSimple pref_service_;
 
+  identity::IdentityTestEnvironment identity_test_env_;
+  std::unique_ptr<invalidation::ProfileIdentityProvider> identity_provider_;
+
   DISALLOW_COPY_AND_ASSIGN(PerUserTopicRegistrationManagerTest);
 };
 
 TEST_F(PerUserTopicRegistrationManagerTest,
-       EmptyPrivateTopicShouldNotUpdateRegisteredIds) {
-  InvalidationObjectIdSet ids = GetSequenceOfIds(kInvalidationObjectIdsCount);
+       EmptyPrivateTopicShouldNotUpdateRegisteredTopics) {
+  TopicSet ids = GetSequenceOfTopics(kInvalidationObjectIdsCount);
 
   auto per_user_topic_registration_manager = BuildRegistrationManager();
 
@@ -117,10 +155,10 @@ TEST_F(PerUserTopicRegistrationManagerTest,
   std::string response_body;
 
   url_loader_factory()->AddResponse(
-      FullUrl(), CreateHeadersForTest(net::HTTP_OK), response_body,
+      FullSubscriptionUrl(), CreateHeadersForTest(net::HTTP_OK), response_body,
       CreateStatusForTest(net::OK, response_body));
 
-  per_user_topic_registration_manager->UpdateRegisteredIds(
+  per_user_topic_registration_manager->UpdateRegisteredTopics(
       ids, kFakeInstanceIdToken);
   base::RunLoop().RunUntilIdle();
 
@@ -129,35 +167,69 @@ TEST_F(PerUserTopicRegistrationManagerTest,
   EXPECT_TRUE(per_user_topic_registration_manager->GetRegisteredIds().empty());
 }
 
-TEST_F(PerUserTopicRegistrationManagerTest, ShouldUpdateRegisteredIds) {
-  InvalidationObjectIdSet ids = GetSequenceOfIds(kInvalidationObjectIdsCount);
+TEST_F(PerUserTopicRegistrationManagerTest, ShouldUpdateRegisteredTopics) {
+  TopicSet ids = GetSequenceOfTopics(kInvalidationObjectIdsCount);
 
   auto per_user_topic_registration_manager = BuildRegistrationManager();
 
   EXPECT_TRUE(per_user_topic_registration_manager->GetRegisteredIds().empty());
 
-  std::string response_body = R"(
-    {
-      "private_topic_name": "test-pr"
-    }
-  )";
+  AddCorrectSubscriptionResponce();
 
-  url_loader_factory()->AddResponse(
-      FullUrl(), CreateHeadersForTest(net::HTTP_OK), response_body,
-      CreateStatusForTest(net::OK, response_body));
-
-  per_user_topic_registration_manager->UpdateRegisteredIds(
+  per_user_topic_registration_manager->UpdateRegisteredTopics(
       ids, kFakeInstanceIdToken);
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(ids, per_user_topic_registration_manager->GetRegisteredIds());
 
   for (const auto& id : ids) {
-    std::string topic_name = id.name();
     const base::DictionaryValue* topics =
         pref_service()->GetDictionary(kTypeRegisteredForInvalidation);
     const base::Value* private_topic_value =
-        topics->FindKeyOfType(topic_name, base::Value::Type::STRING);
+        topics->FindKeyOfType(id, base::Value::Type::STRING);
+    ASSERT_NE(private_topic_value, nullptr);
+  }
+}
+
+TEST_F(PerUserTopicRegistrationManagerTest,
+       ShouldDisableIdsAndDeleteFromPrefs) {
+  TopicSet ids = GetSequenceOfTopics(kInvalidationObjectIdsCount);
+
+  AddCorrectSubscriptionResponce();
+
+  auto per_user_topic_registration_manager = BuildRegistrationManager();
+  EXPECT_TRUE(per_user_topic_registration_manager->GetRegisteredIds().empty());
+
+  per_user_topic_registration_manager->UpdateRegisteredTopics(
+      ids, kFakeInstanceIdToken);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(ids, per_user_topic_registration_manager->GetRegisteredIds());
+
+  // Disable some ids.
+  TopicSet disabled_ids = GetSequenceOfTopics(3);
+  TopicSet enabled_ids =
+      GetSequenceOfTopicsStartingAt(3, kInvalidationObjectIdsCount - 3);
+  for (const auto& id : disabled_ids)
+    AddCorrectUnSubscriptionResponceForTopic(id);
+
+  per_user_topic_registration_manager->UpdateRegisteredTopics(
+      enabled_ids, kFakeInstanceIdToken);
+  base::RunLoop().RunUntilIdle();
+
+  // ids were disabled, check that they're not in the prefs.
+  for (const auto& id : disabled_ids) {
+    const base::DictionaryValue* topics =
+        pref_service()->GetDictionary(kTypeRegisteredForInvalidation);
+    const base::Value* private_topic_value = topics->FindKey(id);
+    ASSERT_EQ(private_topic_value, nullptr);
+  }
+
+  // Check that enable ids are still in the prefs.
+  for (const auto& id : enabled_ids) {
+    const base::DictionaryValue* topics =
+        pref_service()->GetDictionary(kTypeRegisteredForInvalidation);
+    const base::Value* private_topic_value =
+        topics->FindKeyOfType(id, base::Value::Type::STRING);
     ASSERT_NE(private_topic_value, nullptr);
   }
 }

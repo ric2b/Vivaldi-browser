@@ -7,6 +7,7 @@
 
 #include "ash/accessibility/accessibility_observer.h"
 #include "ash/ash_export.h"
+#include "ash/session/session_observer.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "base/macros.h"
 #include "ui/views/controls/image_view.h"
@@ -19,7 +20,8 @@ namespace ash {
 
 // A button in the tray that lets users start/stop Select-to-Speak.
 class ASH_EXPORT SelectToSpeakTray : public TrayBackgroundView,
-                                     public AccessibilityObserver {
+                                     public AccessibilityObserver,
+                                     public SessionObserver {
  public:
   explicit SelectToSpeakTray(Shelf* shelf);
   ~SelectToSpeakTray() override;
@@ -34,8 +36,14 @@ class ASH_EXPORT SelectToSpeakTray : public TrayBackgroundView,
   // AccessibilityObserver:
   void OnAccessibilityStatusChanged() override;
 
+  // SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
+
  private:
   friend class SelectToSpeakTrayTest;
+
+  // Updates the icons color depending on if the user is logged-in or not.
+  void UpdateIconsForSession();
 
   // Sets the icon when select-to-speak is activated (speaking) / deactivated.
   // Also updates visibility when select-to-speak is enabled / disabled.
@@ -47,6 +55,8 @@ class ASH_EXPORT SelectToSpeakTray : public TrayBackgroundView,
 
   // Weak pointer, will be parented by TrayContainer for its lifetime.
   views::ImageView* icon_;
+
+  ScopedSessionObserver session_observer_{this};
 
   DISALLOW_COPY_AND_ASSIGN(SelectToSpeakTray);
 };

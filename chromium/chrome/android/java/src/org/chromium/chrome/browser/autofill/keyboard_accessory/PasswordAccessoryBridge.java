@@ -18,7 +18,8 @@ class PasswordAccessoryBridge {
     private final KeyboardAccessoryData.PropertyProvider<Item> mItemProvider =
             new KeyboardAccessoryData.PropertyProvider<>();
     private final KeyboardAccessoryData.PropertyProvider<Action> mActionProvider =
-            new KeyboardAccessoryData.PropertyProvider<>();
+            new KeyboardAccessoryData.PropertyProvider<>(
+                    AccessoryAction.GENERATE_PASSWORD_AUTOMATIC);
     private final ManualFillingCoordinator mManualFillingCoordinator;
     private final ChromeActivity mActivity;
     private long mNativeView;
@@ -74,8 +75,8 @@ class PasswordAccessoryBridge {
     }
 
     @CalledByNative
-    private void openKeyboard() {
-        mManualFillingCoordinator.openKeyboard();
+    private void swapSheetWithKeyboard() {
+        mManualFillingCoordinator.swapSheetWithKeyboard();
     }
 
     @CalledByNative

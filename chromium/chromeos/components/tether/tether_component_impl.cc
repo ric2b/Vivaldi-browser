@@ -58,6 +58,9 @@ GetSessionCompletionReasonFromShutdownReason(
     case TetherComponent::ShutdownReason::MULTIDEVICE_HOST_UNVERIFIED:
       return TetherSessionCompletionLogger::SessionCompletionReason::
           MULTIDEVICE_HOST_UNVERIFIED;
+    case TetherComponent::ShutdownReason::BETTER_TOGETHER_SUITE_DISABLED:
+      return TetherSessionCompletionLogger::SessionCompletionReason::
+          BETTER_TOGETHER_SUITE_DISABLED;
     default:
       break;
   }
@@ -210,7 +213,8 @@ void TetherComponentImpl::OnPreCrashStateRestored() {
   }
 
   // Start a scan now that the Tether module has started up.
-  synchronous_shutdown_object_container_->host_scan_scheduler()->ScheduleScan();
+  synchronous_shutdown_object_container_->host_scan_scheduler()
+      ->AttemptScanIfOffline();
 }
 
 void TetherComponentImpl::InitiateShutdown() {

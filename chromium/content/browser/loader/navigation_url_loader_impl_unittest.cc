@@ -71,13 +71,13 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
 
   void MaybeCreateLoader(const network::ResourceRequest& resource_request,
                          ResourceContext* resource_context,
-                         LoaderCallback callback) override {
-    std::move(callback).Run(
-        base::BindOnce(&TestNavigationLoaderInterceptor::StartLoader,
-                       base::Unretained(this), resource_request));
+                         LoaderCallback callback,
+                         FallbackCallback fallback_callback) override {
+    std::move(callback).Run(base::BindOnce(
+        &TestNavigationLoaderInterceptor::StartLoader, base::Unretained(this)));
   }
 
-  void StartLoader(network::ResourceRequest resource_request,
+  void StartLoader(const network::ResourceRequest& resource_request,
                    network::mojom::URLLoaderRequest request,
                    network::mojom::URLLoaderClientPtr client) {
     *most_recent_resource_request_ = resource_request;
@@ -145,6 +145,10 @@ class NavigationURLLoaderImplTest : public testing::Test {
   }
 
   ~NavigationURLLoaderImplTest() override {
+    // The context needs to be deleted before ServiceManagerConnection is
+    // destroyed, so the storage partition in the context does not try to
+    // reconnect to the network service after ServiceManagerConnection is dead.
+    browser_context_.reset();
     ServiceManagerConnection::DestroyForProcess();
   }
 

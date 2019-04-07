@@ -37,7 +37,7 @@ class ASH_EXPORT ShutdownController : public mojom::ShutdownController {
 
   // Shuts down or reboots based on the current DeviceRebootOnShutdown policy.
   // Does not trigger the shutdown fade-out animation. For animated shutdown
-  // use ShellPort::RequestShutdown(). Virtual for testing.
+  // use LockStateController::RequestShutdown(). Virtual for testing.
   virtual void ShutDownOrReboot(ShutdownReason reason);
 
   // Binds the mojom::ShutdownController interface request to this object.
@@ -54,7 +54,7 @@ class ASH_EXPORT ShutdownController : public mojom::ShutdownController {
   // Cached copy of the DeviceRebootOnShutdown policy from chrome.
   bool reboot_on_shutdown_ = false;
 
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   // Bindings for the ShutdownController interface.
   mojo::BindingSet<mojom::ShutdownController> bindings_;

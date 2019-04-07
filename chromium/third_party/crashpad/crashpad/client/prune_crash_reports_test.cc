@@ -18,11 +18,11 @@
 #include <stdlib.h>
 
 #include <algorithm>
+#include <random>
 #include <string>
 #include <vector>
 
 #include "base/numerics/safe_conversions.h"
-#include "base/rand_util.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "test/scoped_temp_dir.h"
@@ -41,9 +41,10 @@ class MockDatabase : public CrashReportDatabase {
   MOCK_METHOD2(LookUpCrashReport, OperationStatus(const UUID&, Report*));
   MOCK_METHOD1(GetPendingReports, OperationStatus(std::vector<Report>*));
   MOCK_METHOD1(GetCompletedReports, OperationStatus(std::vector<Report>*));
-  MOCK_METHOD2(GetReportForUploading,
+  MOCK_METHOD3(GetReportForUploading,
                OperationStatus(const UUID&,
-                               std::unique_ptr<const UploadReport>*));
+                               std::unique_ptr<const UploadReport>*,
+                               bool report_metrics));
   MOCK_METHOD3(RecordUploadAttempt,
                OperationStatus(UploadReport*, bool, const std::string&));
   MOCK_METHOD2(SkipReportUpload,
@@ -217,7 +218,8 @@ TEST(PruneCrashReports, PruneOrder) {
     temp.creation_time = NDaysAgo(i * 10);
     reports.push_back(temp);
   }
-  base::RandomShuffle(reports.begin(), reports.end());
+  std::mt19937 urng(std::random_device{}());
+  std::shuffle(reports.begin(), reports.end(), urng);
   std::vector<CrashReportDatabase::Report> pending_reports(
       reports.begin(), reports.begin() + 5);
   std::vector<CrashReportDatabase::Report> completed_reports(

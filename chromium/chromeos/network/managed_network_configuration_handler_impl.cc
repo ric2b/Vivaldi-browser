@@ -329,10 +329,11 @@ void ManagedNetworkConfigurationHandlerImpl::SetProperties(
 
   // Validate the ONC dictionary. We are liberal and ignore unknown field
   // names. User settings are only partial ONC, thus we ignore missing fields.
-  onc::Validator validator(false,  // Ignore unknown fields.
-                           false,  // Ignore invalid recommended field names.
-                           false,  // Ignore missing fields.
-                           false);  // This ONC does not come from policy.
+  onc::Validator validator(false,   // Ignore unknown fields.
+                           false,   // Ignore invalid recommended field names.
+                           false,   // Ignore missing fields.
+                           false,   // This ONC does not come from policy.
+                           false);  // Don't log warnings.
 
   onc::Validator::Result validation_result;
   std::unique_ptr<base::DictionaryValue> validated_user_settings =
@@ -382,6 +383,15 @@ void ManagedNetworkConfigurationHandlerImpl::SetProperties(
                      error_callback);
 }
 
+void ManagedNetworkConfigurationHandlerImpl::SetManagerProperty(
+    const std::string& property_name,
+    const base::Value& value,
+    const base::Closure& callback,
+    const network_handler::ErrorCallback& error_callback) {
+  network_configuration_handler_->SetManagerProperty(property_name, value,
+                                                     callback, error_callback);
+}
+
 void ManagedNetworkConfigurationHandlerImpl::SetShillProperties(
     const std::string& service_path,
     std::unique_ptr<base::DictionaryValue> shill_dictionary,
@@ -405,7 +415,8 @@ void ManagedNetworkConfigurationHandlerImpl::CreateConfiguration(
   onc::Validator validator(false,   // Ignore unknown fields.
                            false,   // Ignore invalid recommended field names.
                            false,   // Ignore missing fields.
-                           false);  // This ONC does not come from policy.
+                           false,   // This ONC does not come from policy.
+                           false);  // Don't log warnings.
 
   onc::Validator::Result validation_result;
   std::unique_ptr<base::DictionaryValue> validated_properties =
@@ -716,6 +727,18 @@ void ManagedNetworkConfigurationHandlerImpl::OnPoliciesApplied(
     queued_modified_policies_.erase(userhash);
     ApplyOrQueuePolicies(userhash, &modified_policies);
   } else {
+    if (userhash.empty())
+      device_policy_applied_ = true;
+    else
+      user_policy_applied_ = true;
+
+    if (device_policy_applied_ && user_policy_applied_) {
+      network_state_handler_->UpdateBlockedWifiNetworks(
+          AllowOnlyPolicyNetworksToConnect(),
+          AllowOnlyPolicyNetworksToConnectIfAvailable(),
+          GetBlacklistedHexSSIDs());
+    }
+
     for (auto& observer : observers_)
       observer.PoliciesApplied(userhash);
   }
@@ -778,16 +801,19 @@ ManagedNetworkConfigurationHandlerImpl::FindPolicyByGuidAndProfile(
     const std::string& guid,
     const std::string& profile_path,
     ::onc::ONCSource* onc_source) const {
+  if (profile_path.empty())
+    return nullptr;
+
   const NetworkProfile* profile =
       network_profile_handler_->GetProfileForPath(profile_path);
   if (!profile) {
     NET_LOG_ERROR("Profile path unknown:" + profile_path, guid);
-    return NULL;
+    return nullptr;
   }
 
   const Policies* policies = GetPoliciesForProfile(*profile);
   if (!policies)
-    return NULL;
+    return nullptr;
 
   const base::DictionaryValue* policy =
       GetByGUID(policies->per_network_config, guid);
@@ -798,45 +824,69 @@ ManagedNetworkConfigurationHandlerImpl::FindPolicyByGuidAndProfile(
   return policy;
 }
 
-bool ManagedNetworkConfigurationHandlerImpl::IsNetworkBlockedByPolicy(
-    const std::string& type,
-    const std::string& guid,
-    const std::string& profile_path,
-    const std::string& hex_ssid) const {
-  // Only apply blocking to WiFi networks.
-  if (!NetworkTypePattern::WiFi().MatchesType(type))
-    return false;
-
-  // Policies to block WiFis are located in the |global_network_config|.
+bool ManagedNetworkConfigurationHandlerImpl::AllowOnlyPolicyNetworksToConnect()
+    const {
   const base::DictionaryValue* global_network_config =
       GetGlobalConfigFromPolicy(
           std::string() /* no username hash, device policy */);
   if (!global_network_config)
     return false;
 
-  // Check if the network is managed. Managed networks are always allowed.
-  bool is_managed =
-      !profile_path.empty() &&
-      FindPolicyByGuidAndProfile(guid, profile_path, nullptr /* onc_source */);
-  if (is_managed)
-    return false;
-
-  // Check if the network is blacklisted.
-  const base::Value* blacklist_value = global_network_config->FindKeyOfType(
-      ::onc::global_network_config::kBlacklistedHexSSIDs,
-      base::Value::Type::LIST);
-  if (blacklist_value && !blacklist_value->GetList().empty() &&
-      base::ContainsValue(blacklist_value->GetList(), base::Value(hex_ssid)))
-    return true;
-
-  // Check if only managed networks are allowed.
   const base::Value* managed_only_value = global_network_config->FindKeyOfType(
       ::onc::global_network_config::kAllowOnlyPolicyNetworksToConnect,
       base::Value::Type::BOOLEAN);
-  if (managed_only_value && managed_only_value->GetBool())
-    return true;
+  return managed_only_value && managed_only_value->GetBool();
+}
 
-  return false;
+bool ManagedNetworkConfigurationHandlerImpl::
+    AllowOnlyPolicyNetworksToConnectIfAvailable() const {
+  const base::DictionaryValue* global_network_config =
+      GetGlobalConfigFromPolicy(
+          std::string() /* no username hash, device policy */);
+  if (!global_network_config)
+    return false;
+
+  // Check if policy is enabled.
+  const base::Value* available_only_value =
+      global_network_config->FindKeyOfType(
+          ::onc::global_network_config::
+              kAllowOnlyPolicyNetworksToConnectIfAvailable,
+          base::Value::Type::BOOLEAN);
+  return available_only_value && available_only_value->GetBool();
+}
+
+bool ManagedNetworkConfigurationHandlerImpl::
+    AllowOnlyPolicyNetworksToAutoconnect() const {
+  const base::DictionaryValue* global_network_config =
+      GetGlobalConfigFromPolicy(
+          std::string() /* no username hash, device policy */);
+  if (!global_network_config)
+    return false;
+
+  const base::Value* autoconnect_value = global_network_config->FindKeyOfType(
+      ::onc::global_network_config::kAllowOnlyPolicyNetworksToAutoconnect,
+      base::Value::Type::BOOLEAN);
+  return autoconnect_value && autoconnect_value->GetBool();
+}
+
+std::vector<std::string>
+ManagedNetworkConfigurationHandlerImpl::GetBlacklistedHexSSIDs() const {
+  const base::DictionaryValue* global_network_config =
+      GetGlobalConfigFromPolicy(
+          std::string() /* no username hash, device policy */);
+  if (!global_network_config)
+    return std::vector<std::string>();
+
+  const base::Value* blacklist_value = global_network_config->FindKeyOfType(
+      ::onc::global_network_config::kBlacklistedHexSSIDs,
+      base::Value::Type::LIST);
+  if (!blacklist_value)
+    return std::vector<std::string>();
+
+  std::vector<std::string> blacklisted_hex_ssids;
+  for (const base::Value& entry : blacklist_value->GetList())
+    blacklisted_hex_ssids.push_back(entry.GetString());
+  return blacklisted_hex_ssids;
 }
 
 const ManagedNetworkConfigurationHandlerImpl::Policies*
@@ -861,6 +911,8 @@ ManagedNetworkConfigurationHandlerImpl::ManagedNetworkConfigurationHandlerImpl()
       network_profile_handler_(NULL),
       network_configuration_handler_(NULL),
       network_device_handler_(NULL),
+      user_policy_applied_(false),
+      device_policy_applied_(false),
       weak_ptr_factory_(this) {
   CHECK(base::ThreadTaskRunnerHandle::IsSet());
 }
@@ -933,8 +985,8 @@ void ManagedNetworkConfigurationHandlerImpl::GetDeviceStateProperties(
     NET_LOG(DEBUG)
         << "GetDeviceStateProperties: Setting IPv4 properties from network: "
         << service_path;
-    if (!network->ipv4_config().empty())
-      ip_configs->GetList().push_back(network->ipv4_config().Clone());
+    if (network->ipv4_config())
+      ip_configs->GetList().push_back(network->ipv4_config()->Clone());
   } else {
     // Convert the DeviceState IPConfigs dictionary to a ListValue.
     for (const auto iter : device_state->ip_configs().DictItems())

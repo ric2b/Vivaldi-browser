@@ -453,7 +453,7 @@ TEST_P(RasterDecoderTest, CopyTexSubImage2DTwiceClearsUnclearedTexture) {
 
   gles2::TextureManager* manager = group().texture_manager();
   gles2::TextureRef* texture_ref = manager->GetTexture(client_texture_id_);
-  ASSERT_TRUE(texture_ref != NULL);
+  ASSERT_TRUE(texture_ref != nullptr);
   gles2::Texture* texture = texture_ref->texture();
   EXPECT_TRUE(texture->SafeToRenderFrom());
 }
@@ -571,7 +571,7 @@ class RasterDecoderOOPTest : public testing::Test, DecoderClient {
     context_state_ = new raster::RasterDecoderContextState(
         std::move(share_group), std::move(surface), std::move(context),
         false /* use_virtualized_gl_contexts */);
-    context_state_->InitializeGrContext(workarounds);
+    context_state_->InitializeGrContext(workarounds, nullptr);
 
     GpuFeatureInfo gpu_feature_info;
     gpu_feature_info.status_values[GPU_FEATURE_TYPE_OOP_RASTERIZATION] =

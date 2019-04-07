@@ -14,6 +14,7 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -77,6 +78,21 @@ AccountReconcilor::Lock::~Lock() {
   reconcilor_->DecrementLockCount();
 }
 
+AccountReconcilor::ScopedSyncedDataDeletion::ScopedSyncedDataDeletion(
+    AccountReconcilor* reconcilor)
+    : reconcilor_(reconcilor->weak_factory_.GetWeakPtr()) {
+  DCHECK(reconcilor_);
+  ++reconcilor_->synced_data_deletion_in_progress_count_;
+}
+
+AccountReconcilor::ScopedSyncedDataDeletion::~ScopedSyncedDataDeletion() {
+  if (!reconcilor_)
+    return;  // The reconcilor was destroyed.
+
+  DCHECK_GT(reconcilor_->synced_data_deletion_in_progress_count_, 0);
+  --reconcilor_->synced_data_deletion_in_progress_count_;
+}
+
 AccountReconcilor::AccountReconcilor(
     ProfileOAuth2TokenService* token_service,
     SigninManagerBase* signin_manager,
@@ -98,7 +114,8 @@ AccountReconcilor::AccountReconcilor(
       chrome_accounts_changed_(false),
       account_reconcilor_lock_count_(0),
       reconcile_on_unblock_(false),
-      timer_(new base::OneShotTimer) {
+      timer_(new base::OneShotTimer),
+      weak_factory_(this) {
   VLOG(1) << "AccountReconcilor::AccountReconcilor";
   DCHECK(delegate_);
   delegate_->set_reconcilor(this);
@@ -220,6 +237,11 @@ signin_metrics::AccountReconcilorState AccountReconcilor::GetState() {
   return signin_metrics::ACCOUNT_RECONCILOR_RUNNING;
 }
 
+std::unique_ptr<AccountReconcilor::ScopedSyncedDataDeletion>
+AccountReconcilor::GetScopedSyncDataDeletion() {
+  return base::WrapUnique(new ScopedSyncedDataDeletion(this));
+}
+
 void AccountReconcilor::AddObserver(Observer* observer) {
   observer_list_.AddObserver(observer);
 }
@@ -286,6 +308,15 @@ void AccountReconcilor::PerformMergeAction(const std::string& account_id) {
                                               delegate_->GetGaiaApiSource());
 }
 
+void AccountReconcilor::PerformSetCookiesAction(
+    const std::vector<std::string>& account_ids) {
+  reconcile_is_noop_ = false;
+  VLOG(1) << "AccountReconcilor::PerformSetCookiesAction: "
+          << base::JoinString(account_ids, " ");
+  cookie_manager_service_->SetAccountsInCookie(account_ids,
+                                               delegate_->GetGaiaApiSource());
+}
+
 void AccountReconcilor::PerformLogoutAllAccountsAction() {
   reconcile_is_noop_ = false;
   if (!delegate_->IsAccountConsistencyEnforced())
@@ -331,8 +362,8 @@ void AccountReconcilor::StartReconcile() {
     // Keep using base::Bind() until base::OnceCallback get supported by
     // base::OneShotTimer.
     timer_->Start(FROM_HERE, timeout_,
-                  base::Bind(&AccountReconcilor::HandleReconcileTimeout,
-                             base::Unretained(this)));
+                  base::BindOnce(&AccountReconcilor::HandleReconcileTimeout,
+                                 base::Unretained(this)));
   }
 
   const std::string& account_id = signin_manager_->GetAuthenticatedAccountId();
@@ -425,6 +456,24 @@ void AccountReconcilor::OnGaiaAccountsInCookieUpdated(
   }
 }
 
+void AccountReconcilor::OnGaiaCookieDeletedByUserAction() {
+  if (!delegate_->ShouldRevokeTokensOnCookieDeleted())
+    return;
+
+  const std::string& primary_account =
+      signin_manager_->GetAuthenticatedAccountId();
+  // Revoke secondary tokens.
+  RevokeAllSecondaryTokens(primary_account, token_service_->GetAccounts());
+  if (primary_account.empty())
+    return;
+  if (token_service_->RefreshTokenHasError(primary_account) ||
+      synced_data_deletion_in_progress_count_ == 0) {
+    // Invalidate the primary token, but do not revoke it.
+    token_service_->UpdateCredentials(
+        primary_account, OAuth2TokenServiceDelegate::kInvalidRefreshToken);
+  }
+}
+
 std::vector<std::string> AccountReconcilor::LoadValidAccountsFromTokenService()
     const {
   std::vector<std::string> chrome_accounts = token_service_->GetAccounts();
@@ -440,9 +489,7 @@ std::vector<std::string> AccountReconcilor::LoadValidAccountsFromTokenService()
     }
   }
 
-  chrome_accounts.erase(std::remove(chrome_accounts.begin(),
-                                    chrome_accounts.end(), std::string()),
-                        chrome_accounts.end());
+  base::Erase(chrome_accounts, std::string());
 
   VLOG(1) << "AccountReconcilor::ValidateAccountsFromTokenService: "
           << "Chrome " << chrome_accounts.size() << " accounts";
@@ -595,8 +642,8 @@ void AccountReconcilor::ScheduleStartReconcileIfChromeAccountsChanged() {
   if (chrome_accounts_changed_) {
     chrome_accounts_changed_ = false;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&AccountReconcilor::StartReconcile, base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&AccountReconcilor::StartReconcile,
+                                  base::Unretained(this)));
   }
 }
 

@@ -10,7 +10,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "net/base/net_export.h"
-#include "net/cert/crl_set.h"
 #include "net/ssl/ssl_config.h"
 
 namespace net {
@@ -27,13 +26,13 @@ class NET_EXPORT SSLConfigService {
     // Notify observers if SSL settings have changed.  We don't check all of the
     // data in SSLConfig, just those that qualify as a user config change.
     // The following settings are considered user changes:
-    //     rev_checking_enabled
     //     version_min
     //     version_max
+    //     tls13_variant
     //     disabled_cipher_suites
     //     channel_id_enabled
     //     false_start_enabled
-    //     require_forward_secrecy
+    //     require_ecdhe
     virtual void OnSSLConfigChanged() = 0;
 
    protected:
@@ -46,19 +45,31 @@ class NET_EXPORT SSLConfigService {
   // May not be thread-safe, should only be called on the IO thread.
   virtual void GetSSLConfig(SSLConfig* config) = 0;
 
-  // Sets the current global CRL set to |crl_set|, if and only if the passed CRL
-  // set has a higher sequence number (as reported by CRLSet::sequence()) than
-  // the current set (or there is no current set). Can be called concurrently
-  // with itself and with GetCRLSet.
-  static void SetCRLSetIfNewer(scoped_refptr<CRLSet> crl_set);
-
-  // Like SetCRLSetIfNewer() but assigns it unconditionally. Should only be used
-  // by test code.
-  static void SetCRLSetForTesting(scoped_refptr<CRLSet> crl_set);
-
-  // Gets the current global CRL set. In the case that none exists, returns
-  // nullptr.
-  static scoped_refptr<CRLSet> GetCRLSet();
+  // Returns true if connections to |hostname| can reuse, or are permitted to
+  // reuse, connections on which a client cert has been negotiated. Note that
+  // this must return true for both hostnames being pooled - that is to say this
+  // function must return true for both the hostname of the existing connection
+  // and the potential hostname to pool before allowing the connection to be
+  // reused.
+  //
+  // NOTE: Pooling connections with ambient authority can create security issues
+  // with that ambient authority and privacy issues in that embedders (and
+  // users) may not have been consulted to send a client cert to |hostname|.
+  // Implementations of this method should only return true if they have
+  // received affirmative consent (e.g. through preferences or Enterprise
+  // policy).
+  //
+  // NOTE: For Web Platform clients, this violates the Fetch Standard's policies
+  // around connection pools: https://fetch.spec.whatwg.org/#connections.
+  // Implementations that return true should take steps to limit the Web
+  // Platform visibility of this, such as only allowing it to be used for
+  // Enterprise or internal configurations.
+  //
+  // DEPRECATED: For the reasons above, this method is temporary and will be
+  // removed in a future release. Please leave a comment on
+  // https://crbug.com/855690 if you believe this is needed.
+  virtual bool CanShareConnectionWithClientCerts(
+      const std::string& hostname) const = 0;
 
   // Add an observer of this service.
   void AddObserver(Observer* observer);
@@ -75,14 +86,15 @@ class NET_EXPORT SSLConfigService {
                                            const net::SSLConfig& config2);
 
  protected:
-  // Process before/after config update.
+  // Process before/after config update. If |force_notification| is true,
+  // NotifySSLConfigChange will be called regardless of whether |orig_config|
+  // and |new_config| are equal.
   void ProcessConfigUpdate(const SSLConfig& orig_config,
-                           const SSLConfig& new_config);
-
-  static void SetCRLSet(scoped_refptr<CRLSet> crl_set, bool if_newer);
+                           const SSLConfig& new_config,
+                           bool force_notification);
 
  private:
-  base::ObserverList<Observer> observer_list_;
+  base::ObserverList<Observer>::Unchecked observer_list_;
 };
 
 }  // namespace net

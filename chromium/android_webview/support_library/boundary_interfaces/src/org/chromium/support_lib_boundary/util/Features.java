@@ -124,4 +124,14 @@ public class Features {
 
     // WebViewCompat.getWebChromeClient
     public static final String GET_WEB_CHROME_CLIENT = "GET_WEB_CHROME_CLIENT";
+
+    // WebViewCompat.setProxyOverride
+    // WebViewCompat.clearProxyOverride
+    public static final String PROXY_OVERRIDE = "PROXY_OVERRIDE";
+
+    // WebViewCompat.getWebViewRenderer
+    public static final String GET_WEB_VIEW_RENDERER = "GET_WEB_VIEW_RENDERER";
+
+    // WebViewRenderer.terminate
+    public static final String WEB_VIEW_RENDERER_TERMINATE = "WEB_VIEW_RENDERER_TERMINATE";
 }

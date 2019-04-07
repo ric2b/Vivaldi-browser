@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/arc/input_method_manager/arc_input_method_manager_bridge_impl.h"
 
+#include <utility>
+
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_features.h"
 
@@ -14,9 +16,12 @@ ArcInputMethodManagerBridgeImpl::ArcInputMethodManagerBridgeImpl(
     ArcBridgeService* bridge_service)
     : delegate_(delegate), bridge_service_(bridge_service) {
   bridge_service_->input_method_manager()->SetHost(this);
+  bridge_service_->input_method_manager()->AddObserver(this);
 }
 
 ArcInputMethodManagerBridgeImpl::~ArcInputMethodManagerBridgeImpl() {
+  // It's okay not to call OnConnectionClosed() at all once shutdown starts.
+  bridge_service_->input_method_manager()->RemoveObserver(this);
   bridge_service_->input_method_manager()->SetHost(nullptr);
 }
 
@@ -49,9 +54,17 @@ void ArcInputMethodManagerBridgeImpl::SendSwitchImeTo(
   imm_instance->SwitchImeTo(ime_id, std::move(callback));
 }
 
+void ArcInputMethodManagerBridgeImpl::OnConnectionClosed() {
+  delegate_->OnConnectionClosed();
+}
+
 void ArcInputMethodManagerBridgeImpl::OnActiveImeChanged(
     const std::string& ime_id) {
   delegate_->OnActiveImeChanged(ime_id);
+}
+
+void ArcInputMethodManagerBridgeImpl::OnImeDisabled(const std::string& ime_id) {
+  delegate_->OnImeDisabled(ime_id);
 }
 
 void ArcInputMethodManagerBridgeImpl::OnImeInfoChanged(

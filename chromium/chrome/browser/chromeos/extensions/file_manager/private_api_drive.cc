@@ -13,7 +13,7 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/strcat.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
@@ -312,8 +312,8 @@ class SingleEntryPropertiesGetterForDrive {
 
     file_system->GetResourceEntry(
         file_path_,
-        base::Bind(&SingleEntryPropertiesGetterForDrive::OnGetFileInfo,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&SingleEntryPropertiesGetterForDrive::OnGetFileInfo,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   void OnGetFileInfo(drive::FileError error,
@@ -367,8 +367,8 @@ class SingleEntryPropertiesGetterForDrive {
 
     file_system->GetResourceEntry(
         file_path,
-        base::Bind(&SingleEntryPropertiesGetterForDrive::OnGetShareInfo,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&SingleEntryPropertiesGetterForDrive::OnGetShareInfo,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   void OnGetShareInfo(drive::FileError error,
@@ -533,9 +533,9 @@ class SingleEntryPropertiesGetterForFileSystemProvider {
 
     parser.file_system()->GetMetadata(
         parser.file_path(), field_mask,
-        base::Bind(&SingleEntryPropertiesGetterForFileSystemProvider::
-                       OnGetMetadataCompleted,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&SingleEntryPropertiesGetterForFileSystemProvider::
+                           OnGetMetadataCompleted,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   void OnGetMetadataCompleted(std::unique_ptr<EntryMetadata> metadata,
@@ -838,7 +838,7 @@ bool FileManagerPrivateInternalGetEntryPropertiesFunction::RunAsync() {
                            CompleteGetEntryProperties,
                        this, i, file_system_url));
         break;
-      case storage::kFileSystemTypeNativeLocal:
+      case storage::kFileSystemTypeDriveFs:
         SingleEntryPropertiesGetterForDriveFs::Start(
             file_system_url.path(),
             names_as_set.count(
@@ -903,7 +903,7 @@ bool FileManagerPrivateInternalPinDriveFileFunction::RunAsync() {
     case storage::kFileSystemTypeDrive:
       return RunAsyncForDrive(url, params->pin);
 
-    case storage::kFileSystemTypeNativeLocal:
+    case storage::kFileSystemTypeDriveFs:
       return RunAsyncForDriveFs(file_system_url, params->pin);
 
     default:
@@ -998,9 +998,9 @@ bool FileManagerPrivateInternalEnsureFileDownloadedFunction::RunAsync() {
 
   file_system->GetFile(
       drive_path,
-      base::Bind(&FileManagerPrivateInternalEnsureFileDownloadedFunction::
-                     OnDownloadFinished,
-                 this));
+      base::BindOnce(&FileManagerPrivateInternalEnsureFileDownloadedFunction::
+                         OnDownloadFinished,
+                     this));
   return true;
 }
 
@@ -1056,25 +1056,6 @@ bool FileManagerPrivateInternalCancelFileTransfersFunction::RunAsync() {
       for (size_t i = 0; i < it->second.size(); ++i)
         job_list->CancelJob(it->second[i]);
     }
-  }
-
-  SendResponse(true);
-  return true;
-}
-
-bool FileManagerPrivateCancelAllFileTransfersFunction::RunAsync() {
-  drive::DriveIntegrationService* const integration_service =
-      drive::DriveIntegrationServiceFactory::FindForProfile(GetProfile());
-  if (!integration_service || !integration_service->IsMounted())
-    return false;
-
-  drive::JobListInterface* const job_list = integration_service->job_list();
-  DCHECK(job_list);
-  const std::vector<drive::JobInfo> jobs = job_list->GetJobInfoList();
-
-  for (size_t i = 0; i < jobs.size(); ++i) {
-    if (drive::IsActiveFileTransferJobInfo(jobs[i]))
-      job_list->CancelJob(jobs[i].job_id);
   }
 
   SendResponse(true);
@@ -1452,7 +1433,7 @@ bool FileManagerPrivateInternalGetDownloadUrlFunction::RunAsync() {
   switch (file_system_url.type()) {
     case storage::kFileSystemTypeDrive:
       return RunAsyncForDrive(url);
-    case storage::kFileSystemTypeNativeLocal:
+    case storage::kFileSystemTypeDriveFs:
       return RunAsyncForDriveFs(file_system_url);
     default:
       return false;
@@ -1484,7 +1465,7 @@ bool FileManagerPrivateInternalGetDownloadUrlFunction::RunAsyncForDrive(
 
   file_system->GetResourceEntry(
       file_path,
-      base::Bind(
+      base::BindOnce(
           &FileManagerPrivateInternalGetDownloadUrlFunction::OnGetResourceEntry,
           this));
   return true;

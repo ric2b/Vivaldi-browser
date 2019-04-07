@@ -177,7 +177,9 @@ void SetInvalidRefreshTokenForPrimaryAccount(
 void RemoveRefreshTokenForPrimaryAccount(
     ProfileOAuth2TokenService* token_service,
     IdentityManager* identity_manager) {
-  DCHECK(identity_manager->HasPrimaryAccount());
+  if (!identity_manager->HasPrimaryAccount())
+    return;
+
   std::string account_id = identity_manager->GetPrimaryAccountInfo().account_id;
 
   RemoveRefreshTokenForAccount(token_service, identity_manager, account_id);
@@ -194,22 +196,44 @@ AccountInfo MakePrimaryAccountAvailable(
   return account_info;
 }
 
-void ClearPrimaryAccount(SigninManagerForTest* signin_manager,
-                         IdentityManager* identity_manager) {
+void ClearPrimaryAccount(SigninManagerBase* signin_manager,
+                         IdentityManager* identity_manager,
+                         ClearPrimaryAccountPolicy policy) {
 #if defined(OS_CHROMEOS)
   // TODO(blundell): If we ever need this functionality on ChromeOS (which seems
   // unlikely), plumb this through to just clear the primary account info
   // synchronously with IdentityManager.
   NOTREACHED();
 #else
-  DCHECK(identity_manager->HasPrimaryAccount());
+  if (!identity_manager->HasPrimaryAccount())
+    return;
 
   base::RunLoop run_loop;
   OneShotIdentityManagerObserver signout_observer(
       identity_manager, run_loop.QuitClosure(),
       IdentityManagerEvent::PRIMARY_ACCOUNT_CLEARED);
 
-  signin_manager->ForceSignOut();
+  SigninManager* real_signin_manager =
+      SigninManager::FromSigninManagerBase(signin_manager);
+  signin_metrics::ProfileSignout signout_source_metric =
+      signin_metrics::SIGNOUT_TEST;
+  signin_metrics::SignoutDelete signout_delete_metric =
+      signin_metrics::SignoutDelete::IGNORE_METRIC;
+
+  switch (policy) {
+    case ClearPrimaryAccountPolicy::DEFAULT:
+      real_signin_manager->SignOut(signout_source_metric,
+                                   signout_delete_metric);
+      break;
+    case ClearPrimaryAccountPolicy::KEEP_ALL_ACCOUNTS:
+      real_signin_manager->SignOutAndKeepAllAccounts(signout_source_metric,
+                                                     signout_delete_metric);
+      break;
+    case ClearPrimaryAccountPolicy::REMOVE_ALL_ACCOUNTS:
+      real_signin_manager->SignOutAndRemoveAllAccounts(signout_source_metric,
+                                                       signout_delete_metric);
+      break;
+  }
 
   run_loop.Run();
 #endif
@@ -253,7 +277,8 @@ void SetInvalidRefreshTokenForAccount(ProfileOAuth2TokenService* token_service,
 void RemoveRefreshTokenForAccount(ProfileOAuth2TokenService* token_service,
                                   IdentityManager* identity_manager,
                                   const std::string& account_id) {
-  DCHECK(identity_manager->HasAccountWithRefreshToken(account_id));
+  if (!identity_manager->HasAccountWithRefreshToken(account_id))
+    return;
 
   base::RunLoop run_loop;
   OneShotIdentityManagerObserver token_updated_observer(

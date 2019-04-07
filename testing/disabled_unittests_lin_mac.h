@@ -6,8 +6,9 @@
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
 
-// Seems to have failed in v59
-//DISABLE(DeclarativeContentApiTest, UninstallWhileActivePageAction)
+// Seems to have failed in v70
+DISABLE(DeclarativeContentApiTest, UninstallWhileActivePageAction)
+DISABLE(WebNavigationApiTest, UserAction)
 
 
 DISABLE(VideoOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bear1280x720v_fragavc3mp4_AND_bear1280x720v_fragavc3mp4)

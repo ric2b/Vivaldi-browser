@@ -16,7 +16,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -319,33 +319,26 @@ void MessageLoopRunner::Quit() {
 WindowedNotificationObserver::WindowedNotificationObserver(
     int notification_type,
     const NotificationSource& source)
-    : seen_(false),
-      running_(false),
-      source_(NotificationService::AllSources()) {
+    : source_(NotificationService::AllSources()) {
   AddNotificationType(notification_type, source);
 }
 
 WindowedNotificationObserver::WindowedNotificationObserver(
     int notification_type,
     const ConditionTestCallback& callback)
-    : seen_(false),
-      running_(false),
-      callback_(callback),
-      source_(NotificationService::AllSources()) {
+    : callback_(callback), source_(NotificationService::AllSources()) {
   AddNotificationType(notification_type, source_);
 }
 
 WindowedNotificationObserver::WindowedNotificationObserver(
     int notification_type,
     const ConditionTestCallbackWithoutSourceAndDetails& callback)
-    : seen_(false),
-      running_(false),
-      callback_(base::Bind(&IgnoreSourceAndDetails, callback)),
+    : callback_(base::Bind(&IgnoreSourceAndDetails, callback)),
       source_(NotificationService::AllSources()) {
   registrar_.Add(this, notification_type, source_);
 }
 
-WindowedNotificationObserver::~WindowedNotificationObserver() {}
+WindowedNotificationObserver::~WindowedNotificationObserver() = default;
 
 void WindowedNotificationObserver::AddNotificationType(
     int notification_type,
@@ -354,30 +347,21 @@ void WindowedNotificationObserver::AddNotificationType(
 }
 
 void WindowedNotificationObserver::Wait() {
-  if (seen_)
-    return;
-
-  running_ = true;
-  message_loop_runner_ = new MessageLoopRunner;
-  message_loop_runner_->Run();
+  if (!seen_)
+    run_loop_.Run();
   EXPECT_TRUE(seen_);
 }
 
-void WindowedNotificationObserver::Observe(
-    int type,
-    const NotificationSource& source,
-    const NotificationDetails& details) {
+void WindowedNotificationObserver::Observe(int type,
+                                           const NotificationSource& source,
+                                           const NotificationDetails& details) {
   source_ = source;
   details_ = details;
   if (!callback_.is_null() && !callback_.Run(source, details))
     return;
 
   seen_ = true;
-  if (!running_)
-    return;
-
-  message_loop_runner_->Quit();
-  running_ = false;
+  run_loop_.Quit();
 }
 
 InProcessUtilityThreadHelper::InProcessUtilityThreadHelper()

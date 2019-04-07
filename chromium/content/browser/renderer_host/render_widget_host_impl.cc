@@ -27,7 +27,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
@@ -293,7 +293,8 @@ class UnboundWidgetInputHandler : public mojom::WidgetInputHandler {
   void ImeCommitText(const base::string16& text,
                      const std::vector<ui::ImeTextSpan>& ime_text_spans,
                      const gfx::Range& range,
-                     int32_t relative_cursor_position) override {
+                     int32_t relative_cursor_position,
+                     ImeCommitTextCallback callback) override {
     DLOG(WARNING) << "Input request on unbound interface";
   }
   void ImeFinishComposingText(bool keep_selection) override {
@@ -351,7 +352,6 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
       is_unresponsive_(false),
       in_flight_event_count_(0),
       in_get_backing_store_(false),
-      ignore_input_events_(false),
       text_direction_updated_(false),
       text_direction_(blink::kWebTextDirectionLeftToRight),
       text_direction_canceled_(false),
@@ -408,8 +408,8 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
   const auto* command_line = base::CommandLine::ForCurrentProcess();
   if (!command_line->HasSwitch(switches::kDisableHangMonitor)) {
     input_event_ack_timeout_.reset(new TimeoutMonitor(
-        base::Bind(&RenderWidgetHostImpl::RendererIsUnresponsive,
-                   weak_factory_.GetWeakPtr())));
+        base::BindRepeating(&RenderWidgetHostImpl::OnInputEventAckTimeout,
+                            weak_factory_.GetWeakPtr())));
   }
 
   if (!command_line->HasSwitch(switches::kDisableNewContentRenderingTimeout)) {
@@ -571,6 +571,14 @@ void RenderWidgetHostImpl::SetFrameDepth(unsigned int depth) {
   UpdatePriority();
 }
 
+void RenderWidgetHostImpl::SetIntersectsViewport(bool intersects) {
+  if (intersects_viewport_ == intersects)
+    return;
+
+  intersects_viewport_ = intersects;
+  UpdatePriority();
+}
+
 void RenderWidgetHostImpl::UpdatePriority() {
   if (!destroyed_)
     process_->UpdateClientPriority(this);
@@ -673,8 +681,6 @@ bool RenderWidgetHostImpl::OnMessageReceived(const IPC::Message &msg) {
                         OnTextInputStateChanged)
     IPC_MESSAGE_HANDLER(ViewHostMsg_LockMouse, OnLockMouse)
     IPC_MESSAGE_HANDLER(ViewHostMsg_UnlockMouse, OnUnlockMouse)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_ShowDisambiguationPopup,
-                        OnShowDisambiguationPopup)
     IPC_MESSAGE_HANDLER(ViewHostMsg_SelectionBoundsChanged,
                         OnSelectionBoundsChanged)
     IPC_MESSAGE_HANDLER(ViewHostMsg_FocusedNodeTouched, OnFocusedNodeTouched)
@@ -1190,19 +1196,8 @@ void RenderWidgetHostImpl::DidNavigate(uint32_t next_source_id) {
     // |visual_properties_ack_pending_| and make sure the next resize will be
     // acked if the last resize before navigation was supposed to be acked.
     visual_properties_ack_pending_ = false;
-    viz::LocalSurfaceId old_surface_id = view_->GetLocalSurfaceId();
     if (view_)
       view_->DidNavigate();
-    viz::LocalSurfaceId new_surface_id = view_->GetLocalSurfaceId();
-    // If |view_| didn't allocate a new surface id, then don't start
-    // |new_content_rendering_timeout_|. Two reasons:
-    //  1. It's not needed (because this was the first navigation event)
-    //  2. If we don't change the surface id, then we will not get the call to
-    //     OnFirstSurfaceActivation, and not stop the timer (even if we get new
-    //     frames).
-    // https://crbug.com/853651, https://crbug.com/535375
-    if (old_surface_id == new_surface_id)
-      return;
   } else {
     // It is possible for a compositor frame to arrive before the browser is
     // notified about the page being committed, in which case no timer is
@@ -1248,7 +1243,11 @@ void RenderWidgetHostImpl::ForwardMouseEventWithLatencyInfo(
       return;
   }
 
-  if (ShouldDropInputEvents())
+  if (IsIgnoringInputEvents())
+    return;
+
+  // Delegate must be non-null, due to |IsIgnoringInputEvents()| test.
+  if (delegate_->PreHandleMouseEvent(mouse_event))
     return;
 
   auto* touch_emulator = GetExistingTouchEmulator();
@@ -1274,7 +1273,7 @@ void RenderWidgetHostImpl::ForwardWheelEventWithLatencyInfo(
   TRACE_EVENT2("input", "RenderWidgetHostImpl::ForwardWheelEvent", "dx",
                wheel_event.delta_x, "dy", wheel_event.delta_y);
 
-  if (ShouldDropInputEvents())
+  if (IsIgnoringInputEvents())
     return;
 
   auto* touch_emulator = GetExistingTouchEmulator();
@@ -1305,7 +1304,7 @@ void RenderWidgetHostImpl::ForwardGestureEventWithLatencyInfo(
   TRACE_EVENT1("input", "RenderWidgetHostImpl::ForwardGestureEvent", "type",
                WebInputEvent::GetName(gesture_event.GetType()));
   // Early out if necessary, prior to performing latency logic.
-  if (ShouldDropInputEvents())
+  if (IsIgnoringInputEvents())
     return;
 
   bool scroll_update_needs_wrapping = false;
@@ -1394,7 +1393,7 @@ void RenderWidgetHostImpl::ForwardGestureEventWithLatencyInfo(
             gesture_event));
   }
 
-  // Delegate must be non-null, due to |ShouldDropInputEvents()| test.
+  // Delegate must be non-null, due to |IsIgnoringInputEvents()| test.
   if (delegate_->PreHandleGestureEvent(gesture_event))
     return;
 
@@ -1460,7 +1459,7 @@ void RenderWidgetHostImpl::ForwardKeyboardEventWithCommands(
     return;
   }
 
-  if (ShouldDropInputEvents())
+  if (IsIgnoringInputEvents())
     return;
 
   if (!process_->IsInitializedAndNotDead())
@@ -1723,6 +1722,7 @@ RenderProcessHost::Priority RenderWidgetHostImpl::GetPriority() {
   RenderProcessHost::Priority priority = {
     is_hidden_,
     frame_depth_,
+    intersects_viewport_,
 #if defined(OS_ANDROID)
     importance_,
 #endif
@@ -1983,8 +1983,9 @@ void RenderWidgetHostImpl::ImeCommitText(
     const std::vector<ui::ImeTextSpan>& ime_text_spans,
     const gfx::Range& replacement_range,
     int relative_cursor_pos) {
-  GetWidgetInputHandler()->ImeCommitText(
-      text, ime_text_spans, replacement_range, relative_cursor_pos);
+  GetWidgetInputHandler()->ImeCommitText(text, ime_text_spans,
+                                         replacement_range, relative_cursor_pos,
+                                         base::OnceClosure());
 }
 
 void RenderWidgetHostImpl::ImeFinishComposingText(bool keep_selection) {
@@ -2078,18 +2079,24 @@ void RenderWidgetHostImpl::Destroy(bool also_delete) {
   }
 }
 
-void RenderWidgetHostImpl::RendererIsUnresponsive() {
+void RenderWidgetHostImpl::OnInputEventAckTimeout() {
+  RendererIsUnresponsive(base::BindRepeating(
+      &RenderWidgetHostImpl::RestartInputEventAckTimeoutIfNecessary,
+      weak_factory_.GetWeakPtr()));
+}
+
+void RenderWidgetHostImpl::RendererIsUnresponsive(
+    base::RepeatingClosure restart_hang_monitor_timeout) {
   NotificationService::current()->Notify(
       NOTIFICATION_RENDER_WIDGET_HOST_HANG,
       Source<RenderWidgetHost>(this),
       NotificationService::NoDetails());
   is_unresponsive_ = true;
 
-  if (delegate_)
-    delegate_->RendererUnresponsive(
-        this, base::BindRepeating(
-                  &RenderWidgetHostImpl::RestartInputEventAckTimeoutIfNecessary,
-                  weak_factory_.GetWeakPtr()));
+  if (delegate_) {
+    delegate_->RendererUnresponsive(this,
+                                    std::move(restart_hang_monitor_timeout));
+  }
 
   // Do not add code after this since the Delegate may delete this
   // RenderWidgetHostImpl in RendererUnresponsive.
@@ -2105,8 +2112,12 @@ void RenderWidgetHostImpl::RendererIsResponsive() {
 
 void RenderWidgetHostImpl::ClearDisplayedGraphics() {
   NotifyNewContentRenderingTimeoutForTesting();
-  if (view_)
-    view_->ClearCompositorFrame();
+  if (view_) {
+    if (enable_surface_synchronization_)
+      view_->ResetFallbackToFirstNavigationSurface();
+    else
+      view_->ClearCompositorFrame();
+  }
 }
 
 void RenderWidgetHostImpl::OnRenderProcessGone(int status, int exit_code) {
@@ -2226,7 +2237,7 @@ void RenderWidgetHostImpl::DidUpdateVisualProperties(
       NOTIFICATION_RENDER_WIDGET_HOST_DID_UPDATE_VISUAL_PROPERTIES,
       Source<RenderWidgetHost>(this), NotificationService::NoDetails());
 
-  if (!view_ || is_hidden_)
+  if (!view_)
     return;
 
   viz::ScopedSurfaceIdAllocator scoped_allocator =
@@ -2339,8 +2350,10 @@ bool RenderWidgetHostImpl::IsWheelScrollInProgress() {
 }
 
 void RenderWidgetHostImpl::SetMouseCapture(bool capture) {
-  if (delegate_)
-    delegate_->GetInputEventRouter()->SetMouseCaptureTarget(GetView(), capture);
+  if (!delegate_ || !delegate_->GetInputEventRouter())
+    return;
+
+  delegate_->GetInputEventRouter()->SetMouseCaptureTarget(GetView(), capture);
 }
 
 void RenderWidgetHostImpl::OnInvalidFrameToken(uint32_t frame_token) {
@@ -2435,39 +2448,6 @@ RenderWidgetHostImpl::GetKeyboardLayoutMap() {
   return view_->GetKeyboardLayoutMap();
 }
 
-void RenderWidgetHostImpl::OnShowDisambiguationPopup(
-    const gfx::Rect& rect_pixels,
-    const gfx::Size& size,
-    base::SharedMemoryHandle handle) {
-  DCHECK(!rect_pixels.IsEmpty());
-  DCHECK(!size.IsEmpty());
-
-  SkImageInfo info = SkImageInfo::MakeN32Premul(size.width(), size.height());
-  size_t shm_size = info.computeMinByteSize();
-
-  base::SharedMemory shm(handle, false /* read_only */);
-  if (shm_size == 0 || !shm.Map(shm_size)) {
-    bad_message::ReceivedBadMessage(GetProcess(),
-                                    bad_message::RWH_SHARED_BITMAP);
-    return;
-  }
-
-  SkBitmap zoomed_bitmap;
-  zoomed_bitmap.installPixels(info, shm.memory(), info.minRowBytes());
-
-  // Note that |rect| is in coordinates of pixels relative to the window origin.
-  // Aura-based systems will want to convert this to DIPs.
-  if (view_)
-    view_->ShowDisambiguationPopup(rect_pixels, zoomed_bitmap);
-
-  // It is assumed that the disambiguation popup will make a copy of the
-  // provided zoomed image, so we delete |zoomed_bitmap| and free shared memory.
-}
-
-void RenderWidgetHostImpl::SetIgnoreInputEvents(bool ignore_input_events) {
-  ignore_input_events_ = ignore_input_events;
-}
-
 bool RenderWidgetHostImpl::KeyPressListenersHandleEvent(
     const NativeWebKeyboardEvent& event) {
   if (event.skip_in_browser || event.GetType() != WebKeyboardEvent::kRawKeyDown)
@@ -2495,7 +2475,7 @@ InputEventAckState RenderWidgetHostImpl::FilterInputEvent(
   // Don't ignore touch cancel events, since they may be sent while input
   // events are being ignored in order to keep the renderer from getting
   // confused about how many touches are active.
-  if (ShouldDropInputEvents() && event.GetType() != WebInputEvent::kTouchCancel)
+  if (IsIgnoringInputEvents() && event.GetType() != WebInputEvent::kTouchCancel)
     return INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
 
   if (!process_->IsInitializedAndNotDead())
@@ -2644,13 +2624,16 @@ void RenderWidgetHostImpl::OnTouchEventAck(
   for (auto& input_event_observer : input_event_observers_)
     input_event_observer.OnInputEventAck(ack_source, ack_result, event.event);
 
-  auto* touch_emulator = GetExistingTouchEmulator();
-  if (touch_emulator &&
-      touch_emulator->HandleTouchEventAck(event.event, ack_result)) {
-    return;
-  }
+  auto* input_event_router =
+      delegate() ? delegate()->GetInputEventRouter() : nullptr;
 
-  if (view_)
+  // At present interstitial pages might not have an input event router, so we
+  // just have the view process the ack directly in that case; the view is
+  // guaranteed to be a top-level view with an appropriate implementation of
+  // ProcessAckedTouchEvent().
+  if (input_event_router)
+    input_event_router->ProcessAckedTouchEvent(event, ack_result, view_.get());
+  else if (view_)
     view_->ProcessAckedTouchEvent(event, ack_result);
 }
 
@@ -2662,8 +2645,9 @@ void RenderWidgetHostImpl::OnUnexpectedEventAck(UnexpectedEventAckType type) {
   }
 }
 
-bool RenderWidgetHostImpl::ShouldDropInputEvents() const {
-  return ignore_input_events_ || process_->IgnoreInputEvents() || !delegate_;
+bool RenderWidgetHostImpl::IsIgnoringInputEvents() const {
+  return process_->IgnoreInputEvents() || !delegate_ ||
+         delegate_->ShouldIgnoreInputEvents();
 }
 
 void RenderWidgetHostImpl::SetBackgroundOpaque(bool opaque) {
@@ -3006,9 +2990,6 @@ void RenderWidgetHostImpl::SubmitCompositorFrame(
       }
     }
   }
-
-  if (delegate_)
-    delegate_->DidReceiveCompositorFrame();
 }
 
 void RenderWidgetHostImpl::DidProcessFrame(uint32_t frame_token) {
@@ -3091,16 +3072,6 @@ void RenderWidgetHostImpl::SetWidget(mojom::WidgetPtr widget) {
 void RenderWidgetHostImpl::ProgressFlingIfNeeded(TimeTicks current_time) {
   browser_fling_needs_begin_frame_ = false;
   fling_scheduler_->ProgressFlingOnBeginFrameIfneeded(current_time);
-}
-
-void RenderWidgetHostImpl::DidReceiveFirstFrameAfterNavigation() {
-  DCHECK(enable_surface_synchronization_);
-  did_receive_first_frame_after_navigation_ = true;
-  if (!new_content_rendering_timeout_ ||
-      !new_content_rendering_timeout_->IsRunning()) {
-    return;
-  }
-  new_content_rendering_timeout_->Stop();
 }
 
 void RenderWidgetHostImpl::ForceFirstFrameAfterNavigationTimeout() {

@@ -15,6 +15,7 @@ import("//tools/grit/repack.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
+  import("//build/config/compiler/compiler.gni")
   import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
 }
 
@@ -55,6 +56,12 @@ test("components_unittests") {
 
   if (is_android) {
     enable_multidex = true
+
+    # The tracing unittests require this for testing unwinding. See
+    # stack_unwinder_android_unittest.cc.
+    if (can_unwind_with_cfi_table && is_official_build) {
+      add_unwind_tables_in_apk = true
+    }
   }
 
   # Add only ":unit_tests" dependencies here. If your tests have dependencies
@@ -101,12 +108,12 @@ test("components_unittests") {
     "//components/history/core/browser:unit_tests",
     "//components/history/core/common:unit_tests",
     "//components/image_fetcher/core:unit_tests",
-    "//components/json_schema:unit_tests",
     "//components/keyed_service/core:unit_tests",
     "//components/language/core/browser:unit_tests",
     "//components/language/core/common:unit_tests",
     "//components/language_usage_metrics:unit_tests",
     "//components/leveldb_proto:unit_tests",
+    "//components/live_tab_count_metrics:unit_tests",
     "//components/login:unit_tests",
     "//components/metrics:unit_tests",
     "//components/navigation_metrics:unit_tests",
@@ -130,6 +137,7 @@ test("components_unittests") {
     "//components/rappor:unit_tests",
     "//components/reading_list/core:unit_tests",
     "//components/safe_search_api:unit_tests",
+    "//components/scheduling_metrics:unit_tests",
     "//components/search:unit_tests",
     "//components/search_engines:unit_tests",
     "//components/search_provider_logos:unit_tests",
@@ -182,6 +190,7 @@ test("components_unittests") {
       "//components/autofill/ios/browser:unit_tests",
       "//components/autofill/ios/form_util:unit_tests",
       "//components/image_fetcher/ios:unit_tests",
+      "//components/password_manager/ios:unit_tests",
       "//components/signin/ios/browser:unit_tests",
       "//components/translate/ios/browser:unit_tests",
     ]
@@ -194,7 +203,7 @@ test("components_unittests") {
       "//components/cast_certificate:unit_tests",
       "//components/cast_channel:unit_tests",
       "//components/certificate_transparency:unit_tests",
-      "//components/contextual_search:unit_tests",
+      "//components/contextual_search/core:unit_tests",
       "//components/crash/content/app:unit_tests",
       "//components/crash/content/browser:unit_tests",
       "//components/crash/core/common:unit_tests",
@@ -211,6 +220,7 @@ test("components_unittests") {
       "//components/gcm_driver/instance_id:unit_tests",
       "//components/history/content/browser:unit_tests",
       "//components/invalidation/impl:unit_tests",
+      "//components/invalidation/public:unit_tests",
       "//components/keyed_service/content:unit_tests",
       "//components/language/content/browser:unit_tests",
       "//components/link_header_util:unit_tests",
@@ -221,12 +231,14 @@ test("components_unittests") {
       "//components/password_manager/content/browser:unit_tests",
       "//components/payments/content:unit_tests",
       "//components/payments/content/utility:unit_tests",
+      "//components/policy/content:unit_tests",
       "//components/policy/core/browser:unit_tests",
       "//components/policy/core/common:unit_tests",
       "//components/previews/content:unit_tests",
       "//components/safe_browsing/common:unit_tests",
       "//components/safe_browsing/password_protection:password_protection_unittest",
       "//components/safe_browsing/triggers:unit_tests",
+      "//components/safe_browsing/web_ui:unit_tests",
       "//components/security_interstitials/content:unit_tests",
       "//components/security_state/content:unit_tests",
       "//components/services/heap_profiling:unit_tests",
@@ -245,7 +257,7 @@ test("components_unittests") {
 
     data_deps = [
       ":components_tests_pak",
-      "//third_party/mesa:osmesa",
+      "//third_party/mesa_headers",
       "//ui/resources:ui_test_pak",
     ]
   }  # iOS/!iOS
@@ -261,6 +273,7 @@ test("components_unittests") {
   if (is_android) {
     deps += [
       "//base:base_java_unittest_support",
+      "//components/autofill_assistant/browser:unit_tests",
       "//components/cdm/browser:unit_tests",
       "//components/gcm_driver/instance_id:test_support",
       "//components/gcm_driver/instance_id/android:instance_id_driver_java",
@@ -432,6 +445,7 @@ if (!is_ios) {
 
     sources = [
       "autofill/content/browser/risk/fingerprint_browsertest.cc",
+      "autofill/content/renderer/field_data_manager_browsertest.cc",
       "autofill/content/renderer/form_autofill_util_browsertest.cc",
       "autofill/content/renderer/password_form_conversion_utils_browsertest.cc",
       "dom_distiller/content/browser/distillable_page_utils_browsertest.cc",
@@ -492,7 +506,7 @@ if (!is_ios) {
 
     data_deps = [
       ":components_tests_pak",
-      "//third_party/mesa:osmesa",
+      "//third_party/mesa_headers",
     ]
 
     if (is_mac) {
@@ -508,10 +522,12 @@ if (!is_ios) {
     if (is_android) {
       enable_multidex = true
       sources += [
+        "autofill_assistant/browser/assistant_web_controller_browsertest.cc",
         "test/android/browsertests_apk/components_browser_tests_jni_onload.cc",
       ]
       sources -= [ "autofill/content/browser/risk/fingerprint_browsertest.cc" ]
       deps += [
+        "//components/autofill_assistant/browser",
         "//content/public/test/android:layouttest_java_support",
         "//content/test:layouttest_support",
         "//testing/android/native_test:native_test_support",
@@ -547,6 +563,7 @@ if (!is_ios) {
   test("components_perftests") {
     sources = [
       "discardable_memory/common/discardable_shared_memory_heap_perftest.cc",
+      "leveldb_proto/proto_database_perftest.cc",
       "omnibox/browser/history_quick_provider_performance_unittest.cc",
       "subresource_filter/core/common/perftests/indexed_ruleset_perftest.cc",
       "test/run_all_perftests.cc",
@@ -557,6 +574,8 @@ if (!is_ios) {
       "//base",
       "//components/discardable_memory/common",
       "//components/history/core/test",
+      "//components/leveldb_proto",
+      "//components/leveldb_proto/testing/proto",
       "//components/omnibox/browser",
       "//components/omnibox/browser:test_support",
       "//components/subresource_filter/core/common",

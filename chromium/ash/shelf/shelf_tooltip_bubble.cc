@@ -31,9 +31,6 @@ const int kTooltipLeftRightMargin = 8;
 const int kArrowTopBottomOffset = 1;
 const int kArrowLeftRightOffset = 1;
 
-// Tooltip's border interior thickness that defines its minimum height.
-const int kBorderInteriorThickness = kTooltipHeight / 2;
-
 ShelfTooltipBubble::ShelfTooltipBubble(views::View* anchor,
                                        views::BubbleBorder::Arrow arrow,
                                        const base::string16& text)
@@ -60,16 +57,10 @@ ShelfTooltipBubble::ShelfTooltipBubble(views::View* anchor,
   // Adjust the anchor location for asymmetrical borders of shelf item.
   if (anchor->border())
     insets += anchor->border()->GetInsets();
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial())
-    insets += gfx::Insets(-kBubblePaddingHorizontalBottom);
+  insets += gfx::Insets(-kBubblePaddingHorizontalBottom);
   set_anchor_view_insets(insets);
 
   views::BubbleDialogDelegateView::CreateBubble(this);
-  if (!ui::MaterialDesignController::IsSecondaryUiMaterial()) {
-    // These must both be called after CreateBubble.
-    SetArrowPaintType(views::BubbleBorder::PAINT_TRANSPARENT);
-    SetBorderInteriorThickness(kBorderInteriorThickness);
-  }
 }
 
 gfx::Size ShelfTooltipBubble::CalculatePreferredSize() const {

@@ -5,6 +5,7 @@
 #include "ash/system/bluetooth/bluetooth_feature_pod_controller.h"
 
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/bluetooth/tray_bluetooth_helper.h"
@@ -59,6 +60,18 @@ void BluetoothFeaturePodController::UpdateButton() {
   if (!is_available)
     return;
 
+  // Bluetooth power setting is always mutable in login screen before any
+  // user logs in. The changes will affect local state preferences.
+  //
+  // Otherwise, the bluetooth setting should be mutable only if:
+  // * the active user is the primary user, and
+  // * the session is not in lock screen
+  // The changes will affect the primary user's preferences.
+  SessionController* session_controller = Shell::Get()->session_controller();
+  button_->SetEnabled(!session_controller->IsActiveUserSessionStarted() ||
+                      (session_controller->IsUserPrimary() &&
+                       !session_controller->IsScreenLocked()));
+
   bool is_enabled =
       Shell::Get()->tray_bluetooth_helper()->GetBluetoothEnabled();
   button_->SetToggled(is_enabled);
@@ -68,6 +81,8 @@ void BluetoothFeaturePodController::UpdateButton() {
     button_->SetLabel(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_BLUETOOTH));
     button_->SetSubLabel(l10n_util::GetStringUTF16(
         IDS_ASH_STATUS_TRAY_BLUETOOTH_DISABLED_SHORT));
+    SetTooltipState(l10n_util::GetStringUTF16(
+        IDS_ASH_STATUS_TRAY_BLUETOOTH_DISABLED_TOOLTIP));
     return;
   }
 
@@ -76,26 +91,41 @@ void BluetoothFeaturePodController::UpdateButton() {
        Shell::Get()->tray_bluetooth_helper()->GetAvailableBluetoothDevices()) {
     if (device.connected)
       connected_devices.push_back(device);
-    if (connected_devices.size() > 1)
-      break;
   }
 
   if (connected_devices.size() > 1) {
+    const size_t device_count = connected_devices.size();
     button_->SetVectorIcon(kUnifiedMenuBluetoothConnectedIcon);
     button_->SetLabel(l10n_util::GetStringUTF16(
         IDS_ASH_STATUS_TRAY_BLUETOOTH_MULTIPLE_DEVICES_CONNECTED_LABEL));
-    button_->SetSubLabel(base::FormatNumber(connected_devices.size()));
+    button_->SetSubLabel(base::FormatNumber(device_count));
+    SetTooltipState(l10n_util::GetPluralStringFUTF16(
+        IDS_ASH_STATUS_TRAY_BLUETOOTH_MULTIPLE_DEVICES_CONNECTED_TOOLTIP,
+        device_count));
   } else if (connected_devices.size() == 1) {
+    const base::string16& device_name = connected_devices.back().display_name;
     button_->SetVectorIcon(kUnifiedMenuBluetoothConnectedIcon);
-    button_->SetLabel(connected_devices.back().display_name);
+    button_->SetLabel(device_name);
     button_->SetSubLabel(l10n_util::GetStringUTF16(
         IDS_ASH_STATUS_TRAY_BLUETOOTH_DEVICE_CONNECTED_LABEL));
+    SetTooltipState(l10n_util::GetStringFUTF16(
+        IDS_ASH_STATUS_TRAY_BLUETOOTH_DEVICE_CONNECTED_TOOLTIP, device_name));
   } else {
     button_->SetVectorIcon(kUnifiedMenuBluetoothIcon);
     button_->SetLabel(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_BLUETOOTH));
     button_->SetSubLabel(
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_BLUETOOTH_ENABLED_SHORT));
+    SetTooltipState(l10n_util::GetStringUTF16(
+        IDS_ASH_STATUS_TRAY_BLUETOOTH_ENABLED_TOOLTIP));
   }
+}
+
+void BluetoothFeaturePodController::SetTooltipState(
+    const base::string16& tooltip_state) {
+  button_->SetIconTooltip(l10n_util::GetStringFUTF16(
+      IDS_ASH_STATUS_TRAY_BLUETOOTH_TOGGLE_TOOLTIP, tooltip_state));
+  button_->SetLabelTooltip(l10n_util::GetStringFUTF16(
+      IDS_ASH_STATUS_TRAY_BLUETOOTH_SETTINGS_TOOLTIP, tooltip_state));
 }
 
 void BluetoothFeaturePodController::OnBluetoothRefresh() {

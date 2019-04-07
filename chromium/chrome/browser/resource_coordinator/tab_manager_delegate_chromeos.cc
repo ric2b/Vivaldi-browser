@@ -18,6 +18,7 @@
 #include "base/files/file_util.h"
 #include "base/memory/memory_pressure_monitor_chromeos.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/process/memory.h"
 #include "base/process/process_handle.h"  // kNullProcessHandle.
 #include "base/process/process_metrics.h"
 #include "base/strings/string16.h"
@@ -80,7 +81,7 @@ void OnSetOomScoreAdj(bool success, const std::string& output) {
 }  // namespace
 
 // static
-const int TabManagerDelegate::kLowestOomScore = -1000;
+const int TabManagerDelegate::kPersistentArcAppOomScore = -100;
 
 std::ostream& operator<<(std::ostream& os, const ProcessType& type) {
   switch (type) {
@@ -145,8 +146,9 @@ ProcessType TabManagerDelegate::Candidate::GetProcessTypeInternal() const {
     if (lifecycle_unit_sort_key_.last_focused_time == base::TimeTicks::Max())
       return ProcessType::FOCUSED_TAB;
     DecisionDetails decision_details;
-    if (!lifecycle_unit()->CanDiscard(DiscardReason::kProactive,
-                                      &decision_details)) {
+    if (!lifecycle_unit()->CanDiscard(
+            ::mojom::LifecycleUnitDiscardReason::PROACTIVE,
+            &decision_details)) {
       return ProcessType::PROTECTED_BACKGROUND_TAB;
     }
     return ProcessType::BACKGROUND_TAB;
@@ -334,9 +336,10 @@ void TabManagerDelegate::ScheduleEarlyOomPrioritiesAdjustment() {
   AdjustOomPriorities();
 }
 
-// If able to get the list of ARC procsses, prioritize tabs and apps as a whole.
-// Otherwise try to kill tabs only.
-void TabManagerDelegate::LowMemoryKill(DiscardReason reason) {
+// If able to get the list of ARC processes, prioritize tabs and apps as a
+// whole. Otherwise try to kill tabs only.
+void TabManagerDelegate::LowMemoryKill(
+    ::mojom::LifecycleUnitDiscardReason reason) {
   arc::ArcProcessService* arc_process_service = arc::ArcProcessService::Get();
   base::TimeTicks now = base::TimeTicks::Now();
   if (arc_process_service &&
@@ -380,10 +383,10 @@ void TabManagerDelegate::OnFocusTabScoreAdjustmentTimeout() {
   // Sets OOM score.
   VLOG(3) << "Set OOM score " << chrome::kLowestRendererOomScore
           << " for focused tab " << pid;
-  std::map<int, int> dict;
-  dict[pid] = chrome::kLowestRendererOomScore;
-  DCHECK(GetDebugDaemonClient());
-  GetDebugDaemonClient()->SetOomScoreAdj(dict, base::Bind(&OnSetOomScoreAdj));
+  if (!base::AdjustOOMScore(pid, chrome::kLowestRendererOomScore))
+    LOG(ERROR) << "Failed to set oom_score_adj to "
+               << chrome::kLowestRendererOomScore
+               << " for focused tab, pid: " << pid;
 }
 
 void TabManagerDelegate::AdjustFocusedTabScore(base::ProcessHandle pid) {
@@ -535,17 +538,11 @@ bool TabManagerDelegate::KillArcProcess(const int nspid) {
 }
 
 bool TabManagerDelegate::KillTab(LifecycleUnit* lifecycle_unit,
-                                 DiscardReason reason) {
+                                 ::mojom::LifecycleUnitDiscardReason reason) {
   DecisionDetails decision_details;
   if (!lifecycle_unit->CanDiscard(reason, &decision_details))
     return false;
-  auto old_state = lifecycle_unit->GetState();
   bool did_discard = lifecycle_unit->Discard(reason);
-  if (did_discard) {
-    // TODO(chrisha): Move this to a LifecycleUnitObserver.
-    TabManagerStatsCollector::RecordDiscardDecision(
-        lifecycle_unit, decision_details, old_state, reason);
-  }
   return did_discard;
 }
 
@@ -555,7 +552,7 @@ chromeos::DebugDaemonClient* TabManagerDelegate::GetDebugDaemonClient() {
 
 void TabManagerDelegate::LowMemoryKillImpl(
     base::TimeTicks start_time,
-    DiscardReason reason,
+    ::mojom::LifecycleUnitDiscardReason reason,
     std::vector<arc::ArcProcess> arc_processes) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   VLOG(2) << "LowMemoryKillImpl";
@@ -657,7 +654,7 @@ void TabManagerDelegate::LowMemoryKillImpl(
 void TabManagerDelegate::AdjustOomPrioritiesImpl(
     std::vector<arc::ArcProcess> arc_processes) {
   std::vector<TabManagerDelegate::Candidate> candidates;
-  std::vector<TabManagerDelegate::Candidate> apps_non_killable;
+  std::vector<TabManagerDelegate::Candidate> apps_persistent;
 
   // Least important first.
   LifecycleUnitVector lifecycle_units = GetLifecycleUnits();
@@ -665,15 +662,15 @@ void TabManagerDelegate::AdjustOomPrioritiesImpl(
       GetSortedCandidates(std::move(lifecycle_units), arc_processes);
   for (auto& candidate : all_candidates) {
     // TODO(cylee|yusukes): Consider using IsImportant() instead of
-    // IsKernelKillable() for simplicity.
+    // IsPersistent() for simplicity.
     // TODO(cylee): Also consider protecting FOCUSED_TAB from the kernel OOM
     // killer so that Chrome and the kernel do the same regarding OOM handling.
-    if (!candidate.app() || candidate.app()->IsKernelKillable()) {
+    if (candidate.app() && candidate.app()->IsPersistent()) {
+      // Add persistent apps to |apps_persistent|.
+      apps_persistent.emplace_back(std::move(candidate));
+    } else {
       // Add tabs and killable apps to |candidates|.
       candidates.emplace_back(std::move(candidate));
-    } else {
-      // Add non-killable apps to |apps_non_killable|.
-      apps_non_killable.emplace_back(std::move(candidate));
     }
   }
 
@@ -704,9 +701,10 @@ void TabManagerDelegate::AdjustOomPrioritiesImpl(
 
   ProcessScoreMap new_map;
 
-  // Make the apps non-killable.
-  DistributeOomScoreInRange(apps_non_killable.begin(), apps_non_killable.end(),
-                            kLowestOomScore, kLowestOomScore, &new_map);
+  // Make the apps harder to kill.
+  DistributeOomScoreInRange(apps_persistent.begin(), apps_persistent.end(),
+                            kPersistentArcAppOomScore,
+                            kPersistentArcAppOomScore, &new_map);
 
   // Higher priority part.
   DistributeOomScoreInRange(candidates.begin(), lower_priority_part,
@@ -766,7 +764,13 @@ void TabManagerDelegate::DistributeOomScoreInRange(
     // current cached score.
     if (oom_score_map_[pid] != score) {
       VLOG(3) << "Update OOM score " << score << " for " << *cur;
-      oom_scores_to_change[pid] = static_cast<int32_t>(score);
+      if (cur->app()) {
+        oom_scores_to_change[pid] = static_cast<int32_t>(score);
+      } else {
+        if (!base::AdjustOOMScore(pid, score))
+          LOG(ERROR) << "Failed to set oom_score_adj to " << score
+                     << " for process " << pid;
+      }
     }
     priority += priority_increment;
   }

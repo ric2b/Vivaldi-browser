@@ -36,10 +36,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/public/platform/web_focus_type.h"
 #include "third_party/blink/public/platform/web_insecure_request_policy.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/css/css_style_sheet_init.h"
 #include "third_party/blink/renderer/core/dom/container_node.h"
 #include "third_party/blink/renderer/core/dom/create_element_flags.h"
 #include "third_party/blink/renderer/core/dom/document_encoding_data.h"
@@ -86,10 +83,12 @@ enum class PageVisibilityState : int32_t;
 }  // namespace mojom
 
 class AnimationClock;
+class AXContext;
 class AXObjectCache;
 class Attr;
 class CDATASection;
 class CSSStyleSheet;
+class CSSStyleSheetInit;
 class CanvasFontCache;
 class ChromeClient;
 class Comment;
@@ -138,6 +137,7 @@ class IntersectionObserverController;
 class LayoutPoint;
 class ReattachLegacyLayoutObjectList;
 class LayoutView;
+class LazyLoadImageObserver;
 class LiveNodeListBase;
 class LocalDOMWindow;
 class Locale;
@@ -159,6 +159,8 @@ class Range;
 class ResizeObserverController;
 class ResourceFetcher;
 class RootScrollerController;
+class ScriptPromise;
+class ScriptValue;
 class SVGDocumentExtensions;
 class SVGUseElement;
 class Text;
@@ -361,6 +363,12 @@ class CORE_EXPORT Document : public ContainerNode,
   // Creates an element without custom element processing.
   Element* CreateRawElement(const QualifiedName&,
                             const CreateElementFlags = CreateElementFlags());
+
+  CSSStyleSheet* createEmptyCSSStyleSheet(ScriptState*,
+                                          const CSSStyleSheetInit&,
+                                          ExceptionState&);
+
+  CSSStyleSheet* createEmptyCSSStyleSheet(ScriptState*, ExceptionState&);
 
   ScriptPromise createCSSStyleSheet(ScriptState*,
                                     const String&,
@@ -586,9 +594,12 @@ class CORE_EXPORT Document : public ContainerNode,
 
   LayoutView* GetLayoutView() const { return layout_view_; }
 
-  Document& AXObjectCacheOwner() const;
+  // This will return an AXObjectCache only if there's one or more
+  // AXContext associated with this document. When all associated
+  // AXContexts are deleted, the AXObjectCache will be removed.
   AXObjectCache* ExistingAXObjectCache() const;
-  AXObjectCache* GetOrCreateAXObjectCache() const;
+
+  Document& AXObjectCacheOwner() const;
   void ClearAXObjectCache();
 
   // to get visually ordered hebrew and arabic pages right
@@ -701,6 +712,12 @@ class CORE_EXPORT Document : public ContainerNode,
 
   String UserAgent() const final;
   void DisableEval(const String& error_message) final;
+
+  // TODO(https://crbug.com/880986): Implement Document's HTTPS state in more
+  // spec-conformant way.
+  HttpsState GetHttpsState() const final {
+    return CalculateHttpsState(GetSecurityOrigin());
+  }
 
   CSSStyleSheet& ElementSheet();
 
@@ -1427,6 +1444,7 @@ class CORE_EXPORT Document : public ContainerNode,
   StylePropertyMapReadOnly* ComputedStyleMap(Element*);
   void AddComputedStyleMapItem(Element*, StylePropertyMapReadOnly*);
   StylePropertyMapReadOnly* RemoveComputedStyleMapItem(Element*);
+  void NavigateLocalAdsFrames();
 
   SlotAssignmentEngine& GetSlotAssignmentEngine();
 
@@ -1445,6 +1463,20 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool IsVerticalScrollEnforced() const { return is_vertical_scroll_enforced_; }
 
+  LazyLoadImageObserver& EnsureLazyLoadImageObserver();
+
+  // TODO(binji): See http://crbug.com/798572. This implementation shares the
+  // same agent cluster ID for any one document. The proper implementation of
+  // this function must follow the rules described here:
+  // https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-agent-cluster-formalism.
+  //
+  // Even with this simple implementation, we can prevent sharing
+  // SharedArrayBuffers and WebAssembly modules with workers that happen to be
+  // in the same process.
+  const base::UnguessableToken& GetAgentClusterID() const final {
+    return agent_cluster_id_;
+  }
+
  protected:
   Document(const DocumentInit&, DocumentClassFlags = kDefaultDocumentClass);
 
@@ -1462,10 +1494,15 @@ class CORE_EXPORT Document : public ContainerNode,
  private:
   friend class IgnoreDestructiveWriteCountIncrementer;
   friend class ThrowOnDynamicMarkupInsertionCountIncrementer;
+  friend class IgnoreOpensDuringUnloadCountIncrementer;
   friend class NthIndexCache;
   FRIEND_TEST_ALL_PREFIXES(FrameFetchContextSubresourceFilterTest,
                            DuringOnFreeze);
   class NetworkStateObserver;
+
+  friend class AXContext;
+  void AddAXContext(AXContext*);
+  void RemoveAXContext(AXContext*);
 
   bool IsDocumentFragment() const =
       delete;  // This will catch anyone doing an unnecessary check.
@@ -1687,15 +1724,18 @@ class CORE_EXPORT Document : public ContainerNode,
   bool contains_validity_style_rules_;
   bool contains_plugins_;
 
-  // http://www.whatwg.org/specs/web-apps/current-work/#ignore-destructive-writes-counter
+  // https://html.spec.whatwg.org/C/dynamic-markup-insertion.html#ignore-destructive-writes-counter
   unsigned ignore_destructive_write_count_;
-  // https://html.spec.whatwg.org/#throw-on-dynamic-markup-insertion-counter
+  // https://html.spec.whatwg.org/C/dynamic-markup-insertion.html#throw-on-dynamic-markup-insertion-counter
   unsigned throw_on_dynamic_markup_insertion_count_;
+  // https://html.spec.whatwg.org/C/dynamic-markup-insertion.html#ignore-opens-during-unload-counter
+  unsigned ignore_opens_during_unload_count_;
 
   String title_;
   String raw_title_;
   Member<Element> title_element_;
 
+  Vector<AXContext*> ax_contexts_;
   Member<AXObjectCache> ax_object_cache_;
   Member<DocumentMarkerController> markers_;
 
@@ -1871,6 +1911,11 @@ class CORE_EXPORT Document : public ContainerNode,
 
   // This is set through feature policy 'vertical-scroll'.
   bool is_vertical_scroll_enforced_ = false;
+
+  Member<LazyLoadImageObserver> lazy_load_image_observer_;
+
+  // https://tc39.github.io/ecma262/#sec-agent-clusters
+  const base::UnguessableToken agent_cluster_id_;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<Document>;

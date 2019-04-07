@@ -216,7 +216,7 @@ void GCMDriverTest::TearDown() {
 void GCMDriverTest::PumpIOLoop() {
   base::RunLoop run_loop;
   io_thread_.task_runner()->PostTaskAndReply(
-      FROM_HERE, base::Bind(&PumpCurrentLoop), run_loop.QuitClosure());
+      FROM_HERE, base::BindOnce(&PumpCurrentLoop), run_loop.QuitClosure());
   run_loop.Run();
 }
 
@@ -243,15 +243,15 @@ void GCMDriverTest::CreateDriver() {
       new net::TestURLRequestContextGetter(io_thread_.task_runner());
   GCMClient::ChromeBuildInfo chrome_build_info;
   chrome_build_info.product_category_for_subtypes = "com.chrome.macosx";
-  driver_.reset(new GCMDriverDesktop(
+  driver_ = std::make_unique<GCMDriverDesktop>(
       std::unique_ptr<GCMClientFactory>(new FakeGCMClientFactory(
           base::ThreadTaskRunnerHandle::Get(), io_thread_.task_runner())),
       chrome_build_info, kTestChannelStatusRequestURL, "user-agent-string",
-      &prefs_, temp_dir_.GetPath(), request_context,
+      &prefs_, temp_dir_.GetPath(), base::DoNothing(),
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
           &test_url_loader_factory_),
       base::ThreadTaskRunnerHandle::Get(), io_thread_.task_runner(),
-      message_loop_.task_runner()));
+      message_loop_.task_runner());
 
   gcm_app_handler_.reset(new FakeGCMAppHandler);
   gcm_connection_observer_.reset(new FakeGCMConnectionObserver);

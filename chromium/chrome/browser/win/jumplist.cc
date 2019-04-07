@@ -17,8 +17,8 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
@@ -53,11 +53,10 @@
 #include "ui/gfx/image/image_skia_rep.h"
 #include "url/gurl.h"
 
-#include "chrome/browser/web_applications/web_app.h"
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "chrome/browser/shell_integration_win.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 
 namespace {
 
@@ -283,7 +282,7 @@ JumpList::JumpList(Profile* profile)
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})),
       delete_jumplisticons_task_runner_(
           base::CreateSequencedTaskRunnerWithTraits(
-              {base::MayBlock(), base::TaskPriority::BACKGROUND,
+              {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})),
       weak_ptr_factory_(this) {
   DCHECK(Enabled());
@@ -298,7 +297,7 @@ JumpList::JumpList(Profile* profile)
     return;
 
   if (vivaldi::IsVivaldiRunning()) {
-    std::string app_name = web_app::GenerateApplicationNameFromExtensionId(
+    std::string app_name = web_app::GenerateApplicationNameFromAppId(
                   vivaldi::kVivaldiAppId);
     app_id_ =
       shell_integration::win::GetAppModelIdForProfile(

@@ -41,6 +41,7 @@ namespace blink {
 
 class DedicatedWorkerObjectProxy;
 class DedicatedWorkerThread;
+class PostMessageOptions;
 class ScriptState;
 struct GlobalScopeCreationParams;
 
@@ -48,7 +49,8 @@ class CORE_EXPORT DedicatedWorkerGlobalScope final : public WorkerGlobalScope {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  DedicatedWorkerGlobalScope(std::unique_ptr<GlobalScopeCreationParams>,
+  DedicatedWorkerGlobalScope(const String& name,
+                             std::unique_ptr<GlobalScopeCreationParams>,
                              DedicatedWorkerThread*,
                              base::TimeTicks time_origin);
   ~DedicatedWorkerGlobalScope() override;
@@ -64,12 +66,16 @@ class CORE_EXPORT DedicatedWorkerGlobalScope final : public WorkerGlobalScope {
       FetchClientSettingsObjectSnapshot* outside_settings_object,
       network::mojom::FetchCredentialsMode) override;
 
-  void postMessage(ScriptState*,
-                   scoped_refptr<SerializedScriptValue>,
-                   const MessagePortArray&,
-                   ExceptionState&);
+  const String name() const;
 
-  static bool CanTransferArrayBuffersAndImageBitmaps() { return true; }
+  void postMessage(ScriptState*,
+                   const ScriptValue& message,
+                   Vector<ScriptValue>& transfer,
+                   ExceptionState&);
+  void postMessage(ScriptState*,
+                   const ScriptValue& message,
+                   const PostMessageOptions&,
+                   ExceptionState&);
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(messageerror);
@@ -77,6 +83,9 @@ class CORE_EXPORT DedicatedWorkerGlobalScope final : public WorkerGlobalScope {
   void Trace(blink::Visitor*) override;
 
   DedicatedWorkerObjectProxy& WorkerObjectProxy() const;
+
+ private:
+  const String name_;
 };
 
 DEFINE_TYPE_CASTS(DedicatedWorkerGlobalScope,

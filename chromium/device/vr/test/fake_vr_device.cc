@@ -6,8 +6,8 @@
 
 namespace device {
 
-FakeVRDevice::FakeVRDevice(unsigned int id)
-    : VRDeviceBase(static_cast<VRDeviceId>(id)), controller_binding_(this) {
+FakeVRDevice::FakeVRDevice(mojom::XRDeviceId id)
+    : VRDeviceBase(id), controller_binding_(this) {
   SetVRDisplayInfo(InitBasicDevice());
 }
 
@@ -15,7 +15,7 @@ FakeVRDevice::~FakeVRDevice() {}
 
 mojom::VRDisplayInfoPtr FakeVRDevice::InitBasicDevice() {
   mojom::VRDisplayInfoPtr display_info = mojom::VRDisplayInfo::New();
-  display_info->index = GetId();
+  display_info->id = GetId();
   display_info->displayName = "FakeVRDevice";
 
   display_info->capabilities = mojom::VRDisplayCapabilities::New();
@@ -51,21 +51,12 @@ mojom::VREyeParametersPtr FakeVRDevice::InitEye(float fov,
 }
 
 void FakeVRDevice::RequestSession(
-    mojom::XRDeviceRuntimeSessionOptionsPtr options,
+    mojom::XRRuntimeSessionOptionsPtr options,
     mojom::XRRuntime::RequestSessionCallback callback) {
   OnStartPresenting();
-
-  mojom::XRSessionControllerPtr exclusive_session_controller;
-  controller_binding_.Bind(mojo::MakeRequest(&exclusive_session_controller));
-
-  // Unretained is safe because the error handler won't be called after
-  // controller_binding_ is destroyed.
-  controller_binding_.set_connection_error_handler(
-      base::BindOnce(&FakeVRDevice::OnPresentingControllerMojoConnectionError,
-                     base::Unretained(this)));
-
-  std::move(callback).Run(mojom::XRPresentationConnection::New(),
-                          std::move(exclusive_session_controller));
+  // The current tests never use the return values, so it's fine to return
+  // invalid data here.
+  std::move(callback).Run(nullptr, nullptr);
 }
 
 void FakeVRDevice::OnPresentingControllerMojoConnectionError() {
@@ -74,7 +65,7 @@ void FakeVRDevice::OnPresentingControllerMojoConnectionError() {
 }
 
 void FakeVRDevice::OnMagicWindowFrameDataRequest(
-    mojom::VRMagicWindowProvider::GetFrameDataCallback callback) {
+    mojom::XRFrameDataProvider::GetFrameDataCallback callback) {
   mojom::XRFrameDataPtr frame_data = mojom::XRFrameData::New();
   frame_data->pose = pose_.Clone();
   std::move(callback).Run(std::move(frame_data));

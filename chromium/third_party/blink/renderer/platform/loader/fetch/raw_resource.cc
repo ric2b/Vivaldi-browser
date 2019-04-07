@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_client_walker.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
+#include "third_party/blink/renderer/platform/loader/fetch/script_cached_metadata_handler.h"
 #include "third_party/blink/renderer/platform/loader/fetch/source_keyed_cached_metadata_handler.h"
 #include "third_party/blink/renderer/platform/network/http_names.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
@@ -194,9 +195,15 @@ void RawResource::WillNotFollowRedirect() {
     c->RedirectBlocked();
 }
 
-SourceKeyedCachedMetadataHandler* RawResource::CacheHandler() {
+SourceKeyedCachedMetadataHandler* RawResource::InlineScriptCacheHandler() {
+  DCHECK_EQ(kMainResource, GetType());
   return static_cast<SourceKeyedCachedMetadataHandler*>(
       Resource::CacheHandler());
+}
+
+SingleCachedMetadataHandler* RawResource::ScriptCacheHandler() {
+  DCHECK_EQ(kRaw, GetType());
+  return static_cast<SingleCachedMetadataHandler*>(Resource::CacheHandler());
 }
 
 void RawResource::ResponseReceived(
@@ -205,7 +212,7 @@ void RawResource::ResponseReceived(
   if (response.WasFallbackRequiredByServiceWorker()) {
     // The ServiceWorker asked us to re-fetch the request. This resource must
     // not be reused.
-    // Note: This logic is needed here because DocumentThreadableLoader handles
+    // Note: This logic is needed here because ThreadableLoader handles
     // CORS independently from ResourceLoader. Fix it.
     if (IsMainThread())
       GetMemoryCache()->Remove(this);
@@ -227,16 +234,29 @@ void RawResource::ResponseReceived(
 
 CachedMetadataHandler* RawResource::CreateCachedMetadataHandler(
     std::unique_ptr<CachedMetadataSender> send_callback) {
-  return new SourceKeyedCachedMetadataHandler(Encoding(),
-                                              std::move(send_callback));
+  if (GetType() == kMainResource) {
+    // This is a document resource; create a cache handler that can handle
+    // multiple inline scripts.
+    return new SourceKeyedCachedMetadataHandler(Encoding(),
+                                                std::move(send_callback));
+  } else if (GetType() == kRaw) {
+    // This is a resource of indeterminate type, e.g. a fetched WebAssembly
+    // module; create a cache handler that can store a single metadata entry.
+    return new ScriptCachedMetadataHandler(Encoding(),
+                                           std::move(send_callback));
+  }
+  return Resource::CreateCachedMetadataHandler(std::move(send_callback));
 }
 
 void RawResource::SetSerializedCachedMetadata(const char* data, size_t size) {
   Resource::SetSerializedCachedMetadata(data, size);
 
-  SourceKeyedCachedMetadataHandler* cache_handler = CacheHandler();
-  if (cache_handler) {
-    cache_handler->SetSerializedCachedMetadata(data, size);
+  if (GetType() == kMainResource) {
+    SourceKeyedCachedMetadataHandler* cache_handler =
+        InlineScriptCacheHandler();
+    if (cache_handler) {
+      cache_handler->SetSerializedCachedMetadata(data, size);
+    }
   }
 
   ResourceClientWalker<RawResourceClient> w(Clients());
@@ -339,34 +359,11 @@ static bool ShouldIgnoreHeaderForCacheReuse(AtomicString header_name) {
   return headers.Contains(header_name);
 }
 
-static bool IsCacheableHTTPMethod(const AtomicString& method) {
-  // Per http://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html#sec13.10,
-  // these methods always invalidate the cache entry.
-  return method != HTTPNames::POST && method != HTTPNames::PUT &&
-         method != "DELETE";
-}
-
-bool RawResource::CanReuse(
+Resource::MatchStatus RawResource::CanReuse(
     const FetchParameters& new_fetch_parameters,
     scoped_refptr<const SecurityOrigin> new_source_origin) const {
   const ResourceRequest& new_request =
       new_fetch_parameters.GetResourceRequest();
-
-  if (GetDataBufferingPolicy() == kDoNotBufferData)
-    return false;
-
-  if (!IsCacheableHTTPMethod(GetResourceRequest().HttpMethod()))
-    return false;
-  if (GetResourceRequest().HttpMethod() != new_request.HttpMethod())
-    return false;
-
-  if (GetResourceRequest().HttpBody() != new_request.HttpBody())
-    return false;
-
-  if (GetResourceRequest().AllowStoredCredentials() !=
-      new_request.AllowStoredCredentials())
-    return false;
-
   // Ensure most headers match the existing headers before continuing. Note that
   // the list of ignored headers includes some headers explicitly related to
   // caching. A more detailed check of caching policy will be performed later,
@@ -378,15 +375,17 @@ bool RawResource::CanReuse(
   for (const auto& header : new_headers) {
     AtomicString header_name = header.key;
     if (!ShouldIgnoreHeaderForCacheReuse(header_name) &&
-        header.value != old_headers.Get(header_name))
-      return false;
+        header.value != old_headers.Get(header_name)) {
+      return MatchStatus::kRequestHeadersDoNotMatch;
+    }
   }
 
   for (const auto& header : old_headers) {
     AtomicString header_name = header.key;
     if (!ShouldIgnoreHeaderForCacheReuse(header_name) &&
-        header.value != new_headers.Get(header_name))
-      return false;
+        header.value != new_headers.Get(header_name)) {
+      return MatchStatus::kRequestHeadersDoNotMatch;
+    }
   }
 
   return Resource::CanReuse(new_fetch_parameters, std::move(new_source_origin));

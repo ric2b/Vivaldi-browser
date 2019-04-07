@@ -235,25 +235,25 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
     return TabLifecycleUnitExternal::FromWebContents(content)->IsDiscarded();
   }
 
+  TabLifecycleUnitSource::TabLifecycleUnit* GetTabLifecycleUnit(
+      content::WebContents* content) {
+    return TabLifecycleUnitSource::GetInstance()->GetTabLifecycleUnit(content);
+  }
+
   bool IsTabFrozen(content::WebContents* content) {
-    const LifecycleUnitState state =
-        static_cast<TabLifecycleUnitSource::TabLifecycleUnit*>(
-            TabLifecycleUnitExternal::FromWebContents(content))
-            ->GetState();
+    const LifecycleUnitState state = GetTabLifecycleUnit(content)->GetState();
     return state == LifecycleUnitState::PENDING_FREEZE ||
            state == LifecycleUnitState::FROZEN;
   }
 
   void SimulateFreezeCompletion(content::WebContents* content) {
-    static_cast<TabLifecycleUnitSource::TabLifecycleUnit*>(
-        TabLifecycleUnitExternal::FromWebContents(content))
-        ->UpdateLifecycleState(mojom::LifecycleState::kFrozen);
+    GetTabLifecycleUnit(content)->UpdateLifecycleState(
+        mojom::LifecycleState::kFrozen);
   }
 
   void SimulateUnfreezeCompletion(content::WebContents* content) {
-    static_cast<TabLifecycleUnitSource::TabLifecycleUnit*>(
-        TabLifecycleUnitExternal::FromWebContents(content))
-        ->UpdateLifecycleState(mojom::LifecycleState::kRunning);
+    GetTabLifecycleUnit(content)->UpdateLifecycleState(
+        mojom::LifecycleState::kRunning);
   }
 
   virtual void CheckThrottleResults(
@@ -527,7 +527,7 @@ TEST_F(TabManagerTest, MAYBE_DiscardTabWithNonVisibleTabs) {
   task_runner_->AdvanceMockTickClock(kBackgroundUrgentProtectionTime);
 
   for (int i = 0; i < 4; ++i)
-    tab_manager_->DiscardTab(DiscardReason::kUrgent);
+    tab_manager_->DiscardTab(LifecycleUnitDiscardReason::URGENT);
 
   // Active tab in a visible window should not be discarded.
   EXPECT_FALSE(IsTabDiscarded(tab_strip1->GetWebContentsAt(0)));
@@ -635,9 +635,7 @@ TEST_F(TabManagerTest, OnDelayedTabSelected) {
   EXPECT_TRUE(tab_manager_->IsNavigationDelayedForTest(nav_handle3_.get()));
 
   // Simulate selecting tab 3, which should start loading immediately.
-  tab_manager_->ActiveTabChanged(
-      contents1_.get(), contents3_.get(), 2,
-      TabStripModelObserver::CHANGE_REASON_USER_GESTURE);
+  tab_manager_->OnActiveTabChanged(contents1_.get(), contents3_.get());
 
   EXPECT_TRUE(tab_manager_->IsTabLoadingForTest(contents1_.get()));
   EXPECT_TRUE(tab_manager_->IsTabLoadingForTest(contents3_.get()));

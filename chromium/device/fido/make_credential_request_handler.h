@@ -27,30 +27,35 @@ namespace device {
 class FidoAuthenticator;
 class AuthenticatorMakeCredentialResponse;
 
-using RegisterResponseCallback = base::OnceCallback<
-    void(FidoReturnCode, base::Optional<AuthenticatorMakeCredentialResponse>)>;
+using RegisterResponseCallback =
+    base::OnceCallback<void(FidoReturnCode,
+                            base::Optional<AuthenticatorMakeCredentialResponse>,
+                            FidoTransportProtocol)>;
 
 class COMPONENT_EXPORT(DEVICE_FIDO) MakeCredentialRequestHandler
     : public FidoRequestHandler<AuthenticatorMakeCredentialResponse> {
  public:
   MakeCredentialRequestHandler(
       service_manager::Connector* connector,
-      const base::flat_set<FidoTransportProtocol>& protocols,
+      const base::flat_set<FidoTransportProtocol>& supported_transports,
       CtapMakeCredentialRequest request_parameter,
       AuthenticatorSelectionCriteria authenticator_criteria,
       RegisterResponseCallback completion_callback);
-  MakeCredentialRequestHandler(
-      service_manager::Connector* connector,
-      const base::flat_set<FidoTransportProtocol>& protocols,
-      CtapMakeCredentialRequest request_parameter,
-      AuthenticatorSelectionCriteria authenticator_criteria,
-      RegisterResponseCallback completion_callback,
-      AddPlatformAuthenticatorCallback add_platform_authenticator);
   ~MakeCredentialRequestHandler() override;
+
+  // FidoRequestHandlerBase:
+  void SetPlatformAuthenticatorOrMarkUnavailable(
+      base::Optional<PlatformAuthenticatorInfo> platform_authenticator_info)
+      override;
 
  private:
   // FidoRequestHandlerBase:
-  void DispatchRequest(FidoAuthenticator* authenticator) final;
+  void DispatchRequest(FidoAuthenticator* authenticator) override;
+
+  void HandleResponse(
+      FidoAuthenticator* authenticator,
+      CtapDeviceResponseCode response_code,
+      base::Optional<AuthenticatorMakeCredentialResponse> response);
 
   CtapMakeCredentialRequest request_parameter_;
   AuthenticatorSelectionCriteria authenticator_selection_criteria_;

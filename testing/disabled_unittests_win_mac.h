@@ -22,8 +22,3 @@ DISABLE(PipelineIntegrationTest, BasicFallback)
 DISABLE(PlatformMediaPipelineIntegrationTest, BasicPlayback)
 DISABLE(PlatformMediaPipelineIntegrationTest, PlayInLoop)
 DISABLE(PlatformMediaPipelineIntegrationTest, Seek_VideoOnly)
-
-// Should result in an error as the mode is unsupported in CDM 9,
-// but seems to actually play successfully
-DISABLE(CDM_9/ECKEncryptedMediaTest, Playback_Encryption_CBCS/0)
-DISABLE(CDM_9/ECKEncryptedMediaTest, DecryptOnly_VideoOnly_MP4_CBCS/0)

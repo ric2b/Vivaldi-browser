@@ -296,7 +296,7 @@ void HTMLFormControlElement::DidMoveToNewDocument(Document& old_document) {
 }
 
 Node::InsertionNotificationRequest HTMLFormControlElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   ancestor_disabled_state_ = kAncestorDisabledStateUnknown;
   // Force traversal to find ancestor
   may_have_field_set_ancestor_ = true;
@@ -304,17 +304,17 @@ Node::InsertionNotificationRequest HTMLFormControlElement::InsertedInto(
   SetNeedsWillValidateCheck();
   HTMLElement::InsertedInto(insertion_point);
   ListedElement::InsertedInto(insertion_point);
-  FieldSetAncestorsSetNeedsValidityCheck(insertion_point);
+  FieldSetAncestorsSetNeedsValidityCheck(&insertion_point);
 
   // Trigger for elements outside of forms.
-  if (!formOwner() && insertion_point->isConnected())
+  if (!formOwner() && insertion_point.isConnected())
     GetDocument().DidAssociateFormControl(this);
 
   return kInsertionDone;
 }
 
-void HTMLFormControlElement::RemovedFrom(ContainerNode* insertion_point) {
-  FieldSetAncestorsSetNeedsValidityCheck(insertion_point);
+void HTMLFormControlElement::RemovedFrom(ContainerNode& insertion_point) {
+  FieldSetAncestorsSetNeedsValidityCheck(&insertion_point);
   HideVisibleValidationMessage();
   has_validation_message_ = false;
   ancestor_disabled_state_ = kAncestorDisabledStateUnknown;
@@ -361,7 +361,7 @@ void HTMLFormControlElement::FieldSetAncestorsSetNeedsValidityCheck(
 }
 
 void HTMLFormControlElement::DispatchChangeEvent() {
-  DispatchScopedEvent(Event::CreateBubble(EventTypeNames::change));
+  DispatchScopedEvent(*Event::CreateBubble(EventTypeNames::change));
 }
 
 HTMLFormElement* HTMLFormControlElement::formOwner() const {
@@ -544,7 +544,7 @@ bool HTMLFormControlElement::checkValidity(
     return false;
   Document* original_document = &GetDocument();
   DispatchEventResult dispatch_result =
-      DispatchEvent(Event::CreateCancelable(EventTypeNames::invalid));
+      DispatchEvent(*Event::CreateCancelable(EventTypeNames::invalid));
   if (dispatch_result == DispatchEventResult::kNotCanceled &&
       unhandled_invalid_controls && isConnected() &&
       original_document == GetDocument())

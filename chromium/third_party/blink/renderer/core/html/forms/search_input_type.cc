@@ -85,17 +85,16 @@ void SearchInputType::CreateShadowSubtree() {
       view_port->nextSibling());
 }
 
-void SearchInputType::HandleKeydownEvent(KeyboardEvent* event) {
+void SearchInputType::HandleKeydownEvent(KeyboardEvent& event) {
   if (GetElement().IsDisabledOrReadOnly()) {
     TextFieldInputType::HandleKeydownEvent(event);
     return;
   }
 
-  const String& key = event->key();
-  if (key == "Escape") {
+  if (event.key() == "Escape") {
     GetElement().SetValueForUser("");
     GetElement().OnSearch();
-    event->SetDefaultHandled();
+    event.SetDefaultHandled();
     return;
   }
   TextFieldInputType::HandleKeydownEvent(event);
@@ -124,7 +123,7 @@ void SearchInputType::StartSearchEventTimer() {
 
 void SearchInputType::DispatchSearchEvent() {
   search_event_timer_.Stop();
-  GetElement().DispatchEvent(Event::CreateBubble(EventTypeNames::search));
+  GetElement().DispatchEvent(*Event::CreateBubble(EventTypeNames::search));
 }
 
 void SearchInputType::SearchEventTimerFired(TimerBase*) {

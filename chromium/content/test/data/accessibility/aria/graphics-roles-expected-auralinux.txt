@@ -1,4 +1,4 @@
-[document web] enabled focusable focused<newline>
-++[document web] name='graphics-document' enabled<newline>
-++[panel] name='graphics-object' enabled<newline>
-++[image] name='graphics-symbol' enabled<newline>
+[document web]
+++[document web] name='graphics-document' xml-roles:graphics-document
+++[panel] name='graphics-object' xml-roles:graphics-object
+++[image] name='graphics-symbol' xml-roles:graphics-symbol

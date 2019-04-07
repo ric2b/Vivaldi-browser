@@ -22,6 +22,11 @@ template <typename T>
 struct DefaultSingletonTraits;
 }  // namespace base
 
+namespace network {
+class SharedURLLoaderFactory;
+class TransitionalURLLoaderFactoryOwner;
+}  // namespace network
+
 // Houses the global resources on which the Chromoting components run
 // (e.g. message loops and task runners).
 namespace remoting {
@@ -72,11 +77,18 @@ class ChromotingClientRuntime {
     return url_requester_;
   }
 
+  // Must be called from the network thread.
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory();
+
   ChromotingEventLogWriter* log_writer() { return log_writer_.get(); }
 
  private:
   ChromotingClientRuntime();
   virtual ~ChromotingClientRuntime();
+
+  // Initializes URL loader factory owner, log writer, and other resources on
+  // the network thread.
+  void InitializeOnNetworkThread();
 
   // Chromium code's connection to the app message loop. Once created the
   // MessageLoop will live for the life of the program.
@@ -96,6 +108,8 @@ class ChromotingClientRuntime {
   scoped_refptr<AutoThreadTaskRunner> network_task_runner_;
 
   scoped_refptr<net::URLRequestContextGetter> url_requester_;
+  std::unique_ptr<network::TransitionalURLLoaderFactoryOwner>
+      url_loader_factory_owner_;
 
   // For logging session stage changes and stats.
   std::unique_ptr<TelemetryLogWriter> log_writer_;

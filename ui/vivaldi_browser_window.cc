@@ -23,14 +23,18 @@
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/apps/chrome_app_delegate.h"
+#include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_window_state.h"
+#include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
+#include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/download/download_in_progress_dialog_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
@@ -147,6 +151,7 @@ void VivaldiAppWindowContentsImpl::NativeWindowChanged(
   new_state.is_fullscreen_ = native_app_window->IsFullscreenOrPending();
   new_state.is_minimized_ = native_app_window->IsMinimized();
   new_state.is_maximized_ = native_app_window->IsMaximized();
+  new_state.bounds_ = native_app_window->GetBounds();
 
   // Call the delegate so it can dispatch events to the js side
   // for any change in state.
@@ -158,6 +163,12 @@ void VivaldiAppWindowContentsImpl::NativeWindowChanged(
 
   if (old_state.is_minimized_ != new_state.is_minimized_)
     delegate_->OnMinimizedChanged(new_state.is_minimized_);
+
+  if (old_state.bounds_.x() != new_state.bounds_.x() ||
+      old_state.bounds_.y() != new_state.bounds_.y()) {
+    // We only send an event when the position of the window changes.
+    delegate_->OnPositionChanged();
+  }
 
   state_ = new_state;
 }
@@ -228,6 +239,19 @@ bool VivaldiAppWindowContentsImpl::CheckMediaAccessPermission(
     const GURL& security_origin,
     content::MediaStreamType type) {
   return helper_->CheckMediaAccessPermission(render_frame_host, security_origin, type);
+}
+
+// If we should ever need to play PIP videos in our UI, this code enables
+// it. The implementation for webpages is in WebViewGuest.
+gfx::Size VivaldiAppWindowContentsImpl::EnterPictureInPicture(
+    const viz::SurfaceId& surface_id,
+    const gfx::Size& natural_size) {
+  return app_delegate_->EnterPictureInPicture(web_contents(), surface_id,
+                                        natural_size);
+}
+
+void VivaldiAppWindowContentsImpl::ExitPictureInPicture() {
+  app_delegate_->ExitPictureInPicture();
 }
 
 void VivaldiAppWindowContentsImpl::RenderViewCreated(
@@ -442,6 +466,13 @@ void VivaldiBrowserWindow::CreateWebContents(content::RenderFrameHost* host) {
   extensions::ExtensionWebContentsObserver::GetForWebContents(web_contents())
       ->dispatcher()
       ->set_delegate(this);
+
+  autofill::ChromeAutofillClient::CreateForWebContents(web_contents());
+  ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
+      web_contents(),
+      autofill::ChromeAutofillClient::FromWebContents(web_contents()));
+  ManagePasswordsUIController::CreateForWebContents(web_contents());
+  TabDialogs::CreateForWebContents(web_contents());
 
   web_modal::WebContentsModalDialogManager::CreateForWebContents(
       web_contents());
@@ -692,6 +723,11 @@ bool VivaldiBrowserWindow::IsFullscreenBubbleVisible() const {
 
 LocationBar* VivaldiBrowserWindow::GetLocationBar() const {
   return location_bar_.get();
+}
+
+void VivaldiBrowserWindow::UpdateToolbar(content::WebContents* contents) {
+  if (GetLocationBar())
+    GetLocationBar()->UpdateManagePasswordsIconAndBubble();
 }
 
 ToolbarActionsBar* VivaldiBrowserWindow::GetToolbarActionsBar() {
@@ -955,7 +991,7 @@ NativeAppWindow* VivaldiBrowserWindow::GetBaseWindow() const {
   return native_app_window_.get();
 }
 
-void VivaldiBrowserWindow::OnNativeWindowChanged() {
+void VivaldiBrowserWindow::OnNativeWindowChanged(bool moved) {
   // This may be called during Init before |native_app_window_| is set.
   if (!native_app_window_)
     return;
@@ -1175,6 +1211,14 @@ void VivaldiBrowserWindow::OnActivationChanged(bool activated) {
           browser_->session_id().id(), activated));
 }
 
+void VivaldiBrowserWindow::OnPositionChanged() {
+  vivaldi::DispatchEvent(
+      browser_->profile(),
+      extensions::vivaldi::window_private::OnPositionChanged::kEventName,
+      extensions::vivaldi::window_private::OnPositionChanged::Create(
+          browser_->session_id().id()));
+}
+
 void VivaldiBrowserWindow::OnDocumentLoaded() {
   has_loaded_document_ = true;
   Show();
@@ -1193,4 +1237,8 @@ VivaldiBrowserWindow::ShowLocalCardMigrationBubble(
     autofill::LocalCardMigrationBubbleController* controller,
     bool is_user_gesture) {
   return nullptr;
+}
+
+bool VivaldiBrowserWindow::CanUserExitFullscreen() const {
+  return true;
 }

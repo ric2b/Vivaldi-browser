@@ -24,8 +24,12 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
+#include "net/cert/cert_verifier.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_config_service.h"
+#include "url/url_canon.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -92,6 +96,27 @@ bool SSLProtocolVersionFromString(const std::string& version_str,
   return false;
 }
 
+// Given a vector of hostname patterns |patterns|, returns a vector containing
+// the canonical form. Any entries which cannot be parsed are skipped.
+std::vector<std::string> CanonicalizeHostnamePatterns(
+    const std::vector<std::string>& patterns) {
+  std::vector<std::string> out;
+  out.reserve(patterns.size());
+  for (base::StringPiece pattern : patterns) {
+    std::string canon_pattern;
+    url::Component canon_component;
+    url::StdStringCanonOutput canon_output(&canon_pattern);
+    if (!url::CanonicalizeHost(pattern.data(),
+                               url::Component(0, pattern.size()), &canon_output,
+                               &canon_component)) {
+      continue;
+    }
+    canon_output.Complete();
+    out.push_back(canon_pattern);
+  }
+  return out;
+}
+
 const char kTLS13VariantExperimentName[] = "TLS13Variant";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -136,6 +161,7 @@ class SSLConfigServiceManagerPref : public SSLConfigServiceManager {
   StringPrefMember ssl_version_min_;
   StringPrefMember ssl_version_max_;
   StringPrefMember tls13_variant_;
+  StringListPrefMember h2_client_cert_coalescing_host_patterns_;
 
   // The cached list of disabled SSL cipher suites.
   std::vector<uint16_t> disabled_cipher_suites_;
@@ -160,6 +186,9 @@ SSLConfigServiceManagerPref::SSLConfigServiceManagerPref(
     version_value = switches::kSSLVersionTLSv13;
   } else if (tls13_variant == "draft28") {
     tls13_value = switches::kTLS13VariantDraft28;
+    version_value = switches::kSSLVersionTLSv13;
+  } else if (tls13_variant == "final") {
+    tls13_value = switches::kTLS13VariantFinal;
     version_value = switches::kSSLVersionTLSv13;
   }
 
@@ -191,6 +220,8 @@ SSLConfigServiceManagerPref::SSLConfigServiceManagerPref(
   ssl_version_max_.Init(prefs::kSSLVersionMax, local_state,
                         local_state_callback);
   tls13_variant_.Init(prefs::kTLS13Variant, local_state, local_state_callback);
+  h2_client_cert_coalescing_host_patterns_.Init(
+      prefs::kH2ClientCertCoalescingHosts, local_state, local_state_callback);
 
   local_state_change_registrar_.Init(local_state);
   local_state_change_registrar_.Add(prefs::kCipherSuiteBlacklist,
@@ -203,18 +234,23 @@ SSLConfigServiceManagerPref::SSLConfigServiceManagerPref(
 // static
 void SSLConfigServiceManagerPref::RegisterPrefs(PrefRegistrySimple* registry) {
   net::SSLConfig default_config;
+  net::CertVerifier::Config default_verifier_config;
   registry->RegisterBooleanPref(prefs::kCertRevocationCheckingEnabled,
-                                default_config.rev_checking_enabled);
+                                default_verifier_config.enable_rev_checking);
   registry->RegisterBooleanPref(
       prefs::kCertRevocationCheckingRequiredLocalAnchors,
-      default_config.rev_checking_required_local_anchors);
-  registry->RegisterBooleanPref(prefs::kCertEnableSha1LocalAnchors, false);
-  registry->RegisterBooleanPref(prefs::kCertEnableSymantecLegacyInfrastructure,
-                                default_config.symantec_enforcement_disabled);
+      default_verifier_config.require_rev_checking_local_anchors);
+  registry->RegisterBooleanPref(
+      prefs::kCertEnableSha1LocalAnchors,
+      default_verifier_config.enable_sha1_local_anchors);
+  registry->RegisterBooleanPref(
+      prefs::kCertEnableSymantecLegacyInfrastructure,
+      default_verifier_config.disable_symantec_enforcement);
   registry->RegisterStringPref(prefs::kSSLVersionMin, std::string());
   registry->RegisterStringPref(prefs::kSSLVersionMax, std::string());
   registry->RegisterStringPref(prefs::kTLS13Variant, std::string());
   registry->RegisterListPref(prefs::kCipherSuiteBlacklist);
+  registry->RegisterListPref(prefs::kH2ClientCertCoalescingHosts);
 }
 
 void SSLConfigServiceManagerPref::AddToNetworkContextParams(
@@ -257,7 +293,7 @@ SSLConfigServiceManagerPref::GetSSLConfigFromPrefs() const {
   if (rev_checking_enabled_.IsManaged())
     config->rev_checking_enabled = rev_checking_enabled_.GetValue();
   else
-    config->rev_checking_enabled = false;
+    config->rev_checking_enabled = vivaldi::IsVivaldiRunning();
   config->rev_checking_required_local_anchors =
       rev_checking_required_local_anchors_.GetValue();
   config->sha1_local_anchors_enabled = sha1_local_anchors_enabled_.GetValue();
@@ -284,9 +320,13 @@ SSLConfigServiceManagerPref::GetSSLConfigFromPrefs() const {
     config->tls13_variant = network::mojom::TLS13Variant::kDraft23;
   } else if (tls13_variant_str == switches::kTLS13VariantDraft28) {
     config->tls13_variant = network::mojom::TLS13Variant::kDraft28;
+  } else if (tls13_variant_str == switches::kTLS13VariantFinal) {
+    config->tls13_variant = network::mojom::TLS13Variant::kFinal;
   }
 
   config->disabled_cipher_suites = disabled_cipher_suites_;
+  config->client_cert_pooling_policy = CanonicalizeHostnamePatterns(
+      h2_client_cert_coalescing_host_patterns_.GetValue());
 
   return config;
 }

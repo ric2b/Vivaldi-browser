@@ -5,11 +5,51 @@
 #ifndef NET_THIRD_PARTY_QUIC_QUARTC_QUARTC_PACKET_WRITER_H_
 #define NET_THIRD_PARTY_QUIC_QUARTC_QUARTC_PACKET_WRITER_H_
 
+#include "net/third_party/quic/core/quic_connection.h"
 #include "net/third_party/quic/core/quic_packet_writer.h"
+#include "net/third_party/quic/core/quic_types.h"
 #include "net/third_party/quic/platform/api/quic_export.h"
-#include "net/third_party/quic/quartc/quartc_session_interface.h"
 
 namespace quic {
+
+// Send and receive packets, like a virtual UDP socket. For example, this
+// could be implemented by WebRTC's IceTransport.
+class QUIC_EXPORT_PRIVATE QuartcPacketTransport {
+ public:
+  // Additional metadata provided for each packet written.
+  struct PacketInfo {
+    QuicPacketNumber packet_number;
+  };
+
+  // Delegate for packet transport callbacks.  Note that the delegate is not
+  // thread-safe.  Packet transport implementations must ensure that callbacks
+  // are synchronized with all other work done by QUIC.
+  class Delegate {
+   public:
+    virtual ~Delegate() = default;
+
+    // Called whenever the transport can write.
+    virtual void OnTransportCanWrite() = 0;
+
+    // Called when the transport receives a packet.
+    virtual void OnTransportReceived(const char* data, size_t data_len) = 0;
+  };
+
+  virtual ~QuartcPacketTransport() {}
+
+  // Called by the QuartcPacketWriter when writing packets to the network.
+  // Return the number of written bytes. Return 0 if the write is blocked.
+  virtual int Write(const char* buffer,
+                    size_t buf_len,
+                    const PacketInfo& info) = 0;
+
+  // Sets the delegate which must be called when the transport can write or
+  // a packet is received.  QUIC sets |delegate| to a nonnull pointer when it
+  // is ready to process incoming packets and sets |delegate| to nullptr before
+  // QUIC is deleted.  Implementations may assume |delegate| remains valid until
+  // it is set to nullptr.
+  virtual void SetDelegate(Delegate* delegate) = 0;
+};
 
 // Implements a QuicPacketWriter using a QuartcPacketTransport, which allows a
 // QuicConnection to use (for example), a WebRTC IceTransport.
@@ -20,7 +60,7 @@ class QUIC_EXPORT_PRIVATE QuartcPacketWriter : public QuicPacketWriter {
   ~QuartcPacketWriter() override {}
 
   // The QuicConnection calls WritePacket and the QuicPacketWriter writes them
-  // to the QuartcSessionInterface::PacketTransport.
+  // to the QuartcSession::PacketTransport.
   WriteResult WritePacket(const char* buffer,
                           size_t buf_len,
                           const QuicIpAddress& self_address,
@@ -55,6 +95,8 @@ class QUIC_EXPORT_PRIVATE QuartcPacketWriter : public QuicPacketWriter {
   // Sets the connection which sends packets using this writer.  Connection must
   // be set in order to attach packet info (eg. packet numbers) to writes.
   void set_connection(QuicConnection* connection) { connection_ = connection; }
+
+  void SetPacketTransportDelegate(QuartcPacketTransport::Delegate* delegate);
 
  private:
   // QuartcPacketWriter will not own the transport.

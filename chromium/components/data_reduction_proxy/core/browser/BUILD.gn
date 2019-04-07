@@ -79,6 +79,7 @@ if (is_android) {
       "//crypto",
       "//google_apis",
       "//net:net",
+      "//services/network/public/cpp",
       "//url:url",
     ]
   }
@@ -113,6 +114,8 @@ static_library("browser") {
     "//crypto",
     "//google_apis",
     "//net",
+    "//services/network:network_service",
+    "//services/network/public/cpp",
     "//third_party/leveldatabase",
     "//url",
   ]
@@ -144,8 +147,11 @@ static_library("test_support") {
     "//components/data_reduction_proxy/core/common",
     "//components/data_reduction_proxy/core/common:test_support",
     "//components/prefs:test_support",
+    "//components/previews/core:core",
+    "//components/previews/core:test_support",
     "//net",
     "//net:test_support",
+    "//services/network:test_support",
     "//testing/gmock",
     "//testing/gtest",
   ]
@@ -180,7 +186,6 @@ source_set("unit_tests") {
     "data_reduction_proxy_config_unittest.cc",
     "data_reduction_proxy_configurator_unittest.cc",
     "data_reduction_proxy_data_unittest.cc",
-    "data_reduction_proxy_data_use_observer_unittest.cc",
     "data_reduction_proxy_delegate_unittest.cc",
     "data_reduction_proxy_interceptor_unittest.cc",
     "data_reduction_proxy_io_data_unittest.cc",
@@ -209,8 +214,11 @@ source_set("unit_tests") {
     "//components/data_use_measurement/core:ascriber",
     "//components/prefs:test_support",
     "//components/previews/core",
+    "//components/previews/core:test_support",
     "//components/variations",
     "//net:test_support",
+    "//services/network:network_service",
+    "//services/network:test_support",
     "//testing/gmock",
     "//testing/gtest",
   ]

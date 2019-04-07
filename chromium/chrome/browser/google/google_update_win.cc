@@ -4,8 +4,6 @@
 
 #include "chrome/browser/google/google_update_win.h"
 
-#include <atlbase.h>
-#include <atlcom.h>
 #include <objbase.h>
 #include <stdint.h>
 #include <string.h>
@@ -28,11 +26,12 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/version.h"
+#include "base/win/atl.h"
 #include "base/win/scoped_bstr.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -535,7 +534,7 @@ HRESULT UpdateCheckDriver::BeginUpdateCheckInternal(
       // nice to have, a failure to do so does not affect the likelihood that
       // the update check and/or install will succeed.
       app_bundle->put_displayLanguage(
-          base::win::ScopedBstr(base::UTF8ToUTF16(locale_).c_str()));
+          base::win::ScopedBstr(base::UTF8ToUTF16(locale_)));
     }
 
     hresult = app_bundle->initialize();

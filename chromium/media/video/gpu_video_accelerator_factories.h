@@ -33,11 +33,11 @@ class Size;
 
 namespace gpu {
 struct SyncToken;
-};
+}
 
-namespace ui {
+namespace ws {
 class ContextProviderCommandBuffer;
-}  // namespace ui
+}  // namespace ws
 
 namespace media {
 
@@ -59,8 +59,10 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
     UYVY,             // One 422 GMB
     NV12_SINGLE_GMB,  // One NV12 GMB
     NV12_DUAL_GMB,    // One R8, one RG88 GMB
-    XR30,             // 10:10:10:2 BGRX in one GMB
+    XR30,             // 10:10:10:2 BGRX in one GMB (Usually Mac)
     XB30,             // 10:10:10:2 RGBX in one GMB
+    RGBA,             // One 8:8:8:8 RGBA
+    BGRA,             // One 8:8:8:8 BGRA (Usually Mac)
   };
 
   // Return whether GPU encoding/decoding is enabled.
@@ -95,6 +97,8 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
   virtual void ShallowFlushCHROMIUM() = 0;
 
   virtual void WaitSyncToken(const gpu::SyncToken& sync_token) = 0;
+  virtual void SignalSyncToken(const gpu::SyncToken& sync_token,
+                               base::OnceClosure callback) = 0;
 
   virtual std::unique_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBuffer(
       const gfx::Size& size,
@@ -110,7 +114,8 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
 
   // Pixel format of the hardware video frames created when GpuMemoryBuffers
   // video frames are enabled.
-  virtual OutputFormat VideoFrameOutputFormat(size_t bit_depth) = 0;
+  virtual OutputFormat VideoFrameOutputFormat(
+      VideoPixelFormat pixel_format) = 0;
 
   // Returns a GL Context that can be used on the task runner associated with
   // the same instance of GpuVideoAcceleratorFactories.
@@ -134,7 +139,7 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
   virtual VideoEncodeAccelerator::SupportedProfiles
   GetVideoEncodeAcceleratorSupportedProfiles() = 0;
 
-  virtual scoped_refptr<ui::ContextProviderCommandBuffer>
+  virtual scoped_refptr<ws::ContextProviderCommandBuffer>
   GetMediaContextProvider() = 0;
 
   // Sets the current pipeline rendering color space.

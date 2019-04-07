@@ -19,7 +19,6 @@
 #include "ash/shell.h"
 #include "ash/shell/example_factory.h"
 #include "ash/shell/toplevel_window.h"
-#include "ash/shell_port.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/i18n/case_conversion.h"
@@ -236,6 +235,8 @@ class ExampleAppListViewDelegate : public app_list::AppListViewDelegate {
     NOTIMPLEMENTED();
   }
 
+  void StartAssistant() override { NOTIMPLEMENTED(); }
+
   void StartSearch(const base::string16& raw_query) override {
     base::string16 query;
     base::TrimWhitespace(raw_query, base::TRIM_ALL, &query);
@@ -264,7 +265,6 @@ class ExampleAppListViewDelegate : public app_list::AppListViewDelegate {
   }
 
   void DismissAppList() override {
-    DCHECK(ShellPort::HasInstance());
     Shell::Get()->app_list_controller()->DismissAppList();
   }
 
@@ -311,6 +311,11 @@ class ExampleAppListViewDelegate : public app_list::AppListViewDelegate {
                                            int command_id,
                                            int event_flags) override {
     NOTIMPLEMENTED();
+  }
+
+  ws::WindowService* GetWindowService() override {
+    NOTIMPLEMENTED();
+    return nullptr;
   }
 
   std::unique_ptr<app_list::AppListModel> model_;

@@ -9,8 +9,10 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/session/session_controller.h"
 #include "ash/session/test_session_controller_client.h"
+#include "ash/shelf/shelf_constants.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/window_factory.h"
 #include "ash/wm/system_modal_container_layout_manager.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_properties.h"
@@ -29,6 +31,7 @@
 #include "ui/base/ime/dummy_text_input_client.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/test/event_generator.h"
@@ -142,6 +145,7 @@ TEST_F(RootWindowControllerTest, MoveWindows_Basic) {
   UpdateDisplay("600x600,300x300");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
+  int bottom_inset = 300 - ShelfConstants::shelf_size();
   views::Widget* normal = CreateTestWidget(gfx::Rect(650, 10, 100, 100));
   EXPECT_EQ(root_windows[1], normal->GetNativeView()->GetRootWindow());
   EXPECT_EQ("650,10 100x100", normal->GetWindowBoundsInScreen().ToString());
@@ -151,9 +155,9 @@ TEST_F(RootWindowControllerTest, MoveWindows_Basic) {
   views::Widget* maximized = CreateTestWidget(gfx::Rect(700, 10, 100, 100));
   maximized->Maximize();
   EXPECT_EQ(root_windows[1], maximized->GetNativeView()->GetRootWindow());
-  EXPECT_EQ(gfx::Rect(600, 0, 300, 252).ToString(),
+  EXPECT_EQ(gfx::Rect(600, 0, 300, bottom_inset).ToString(),
             maximized->GetWindowBoundsInScreen().ToString());
-  EXPECT_EQ(gfx::Rect(0, 0, 300, 252).ToString(),
+  EXPECT_EQ(gfx::Rect(0, 0, 300, bottom_inset).ToString(),
             maximized->GetNativeView()->GetBoundsInRootWindow().ToString());
 
   views::Widget* minimized = CreateTestWidget(gfx::Rect(550, 10, 200, 200));
@@ -178,6 +182,7 @@ TEST_F(RootWindowControllerTest, MoveWindows_Basic) {
   Widget::InitParams params;
   params.bounds = gfx::Rect(650, 10, 100, 100);
   params.type = Widget::InitParams::TYPE_CONTROL;
+  params.context = CurrentContext();
   unparented_control->Init(params);
   EXPECT_EQ(root_windows[1],
             unparented_control->GetNativeView()->GetRootWindow());
@@ -187,7 +192,6 @@ TEST_F(RootWindowControllerTest, MoveWindows_Basic) {
   aura::Window* panel = CreateTestWindowInShellWithDelegateAndType(
       NULL, aura::client::WINDOW_TYPE_PANEL, 0, gfx::Rect(700, 100, 100, 100));
   EXPECT_EQ(root_windows[1], panel->GetRootWindow());
-  EXPECT_EQ(kShellWindowId_PanelContainer, panel->parent()->id());
 
   // Make sure a window that will delete itself when losing focus
   // will not crash.
@@ -209,25 +213,24 @@ TEST_F(RootWindowControllerTest, MoveWindows_Basic) {
   EXPECT_EQ("100,20 100x100",
             normal->GetNativeView()->GetBoundsInRootWindow().ToString());
 
-  // Maximized area on primary display has 48px for inset at the bottom
-  // (kShelfSize).
+  bottom_inset = 600 - ShelfConstants::shelf_size();
 
   // First clear fullscreen status, since both fullscreen and maximized windows
   // share the same desktop workspace, which cancels the shelf status.
   fullscreen->SetFullscreen(false);
   EXPECT_EQ(root_windows[0], maximized->GetNativeView()->GetRootWindow());
-  EXPECT_EQ(gfx::Rect(0, 0, 600, 552).ToString(),
+  EXPECT_EQ(gfx::Rect(0, 0, 600, bottom_inset).ToString(),
             maximized->GetWindowBoundsInScreen().ToString());
-  EXPECT_EQ(gfx::Rect(0, 0, 600, 552).ToString(),
+  EXPECT_EQ(gfx::Rect(0, 0, 600, bottom_inset).ToString(),
             maximized->GetNativeView()->GetBoundsInRootWindow().ToString());
 
   // Set fullscreen to true, but maximized window's size won't change because
   // it's not visible. see crbug.com/504299.
   fullscreen->SetFullscreen(true);
   EXPECT_EQ(root_windows[0], maximized->GetNativeView()->GetRootWindow());
-  EXPECT_EQ(gfx::Rect(0, 0, 600, 552).ToString(),
+  EXPECT_EQ(gfx::Rect(0, 0, 600, bottom_inset).ToString(),
             maximized->GetWindowBoundsInScreen().ToString());
-  EXPECT_EQ(gfx::Rect(0, 0, 600, 552).ToString(),
+  EXPECT_EQ(gfx::Rect(0, 0, 600, bottom_inset).ToString(),
             maximized->GetNativeView()->GetBoundsInRootWindow().ToString());
 
   EXPECT_EQ(root_windows[0], minimized->GetNativeView()->GetRootWindow());
@@ -258,7 +261,6 @@ TEST_F(RootWindowControllerTest, MoveWindows_Basic) {
 
   // Test if the panel has moved.
   EXPECT_EQ(root_windows[0], panel->GetRootWindow());
-  EXPECT_EQ(kShellWindowId_PanelContainer, panel->parent()->id());
 }
 
 TEST_F(RootWindowControllerTest, MoveWindows_Modal) {
@@ -622,28 +624,28 @@ class DestroyedWindowObserver : public aura::WindowObserver {
 TEST_F(RootWindowControllerTest, DontDeleteWindowsNotOwnedByParent) {
   DestroyedWindowObserver observer1;
   aura::test::TestWindowDelegate delegate1;
-  aura::Window* window1 = new aura::Window(&delegate1);
-  window1->SetType(aura::client::WINDOW_TYPE_CONTROL);
+  std::unique_ptr<aura::Window> window1 =
+      window_factory::NewWindow(&delegate1, aura::client::WINDOW_TYPE_CONTROL);
   window1->set_owned_by_parent(false);
-  observer1.SetWindow(window1);
+  observer1.SetWindow(window1.get());
   window1->Init(ui::LAYER_NOT_DRAWN);
-  aura::client::ParentWindowWithContext(window1, Shell::GetPrimaryRootWindow(),
-                                        gfx::Rect());
+  aura::client::ParentWindowWithContext(
+      window1.get(), Shell::GetPrimaryRootWindow(), gfx::Rect());
 
   DestroyedWindowObserver observer2;
-  aura::Window* window2 = new aura::Window(NULL);
+  std::unique_ptr<aura::Window> window2 = window_factory::NewWindow();
   window2->set_owned_by_parent(false);
-  observer2.SetWindow(window2);
+  observer2.SetWindow(window2.get());
   window2->Init(ui::LAYER_NOT_DRAWN);
-  Shell::GetPrimaryRootWindow()->AddChild(window2);
+  Shell::GetPrimaryRootWindow()->AddChild(window2.get());
 
   Shell::GetPrimaryRootWindowController()->CloseChildWindows();
 
   ASSERT_FALSE(observer1.destroyed());
-  delete window1;
+  window1.reset();
 
   ASSERT_FALSE(observer2.destroyed());
-  delete window2;
+  window2.reset();
 }
 
 // Verify that the context menu gets hidden when entering or exiting tablet
@@ -798,9 +800,6 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, RestoreWorkspaceAfterLogin) {
 
   gfx::Rect before =
       display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
-
-  // Notify keyboard bounds changing.
-  controller->NotifyKeyboardBoundsChanging(keyboard_container->bounds());
 
   if (!keyboard::IsKeyboardOverscrollEnabled()) {
     gfx::Rect after =

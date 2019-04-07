@@ -6,6 +6,7 @@ cr.define('model_test', function() {
   /** @enum {string} */
   const TestNames = {
     SetStickySettings: 'set sticky settings',
+    SetPolicySettings: 'set policy settings',
     GetPrintTicket: 'get print ticket',
     GetCloudPrintTicket: 'get cloud print ticket',
   };
@@ -115,6 +116,35 @@ cr.define('model_test', function() {
           .then(() => testStickySetting('vendorItems', 'vendorOptions'));
     });
 
+    /**
+     * Tests that setSetting() won't change the value if there is already a
+     * policy for that setting.
+     */
+    test(assert(TestNames.SetPolicySettings), function() {
+      model.setSetting('headerFooter', false);
+      assertFalse(model.settings.headerFooter.value);
+
+      // Sets to true, but doesn't mark as controlled by a policy.
+      model.setPolicySettings(true, false);
+      model.setStickySettings(JSON.stringify({
+        version: 2,
+        headerFooter: false,
+      }));
+      model.applyStickySettings();
+      assertTrue(model.settings.headerFooter.value);
+      model.setSetting('headerFooter', false);
+      assertFalse(model.settings.headerFooter.value);
+
+      model.setPolicySettings(true, true);
+      model.applyStickySettings();
+      assertTrue(model.settings.headerFooter.value);
+
+      model.setSetting('headerFooter', false);
+      // The value didn't change after setSetting(), because the policy takes
+      // priority.
+      assertTrue(model.settings.headerFooter.value);
+    });
+
     function toggleSettings() {
       // Some non default setting values to change to.
       const settingsChange = {
@@ -212,6 +242,7 @@ cr.define('model_test', function() {
         pagesPerSheet: 1,
         dpiHorizontal: 200,
         dpiVertical: 200,
+        dpiDefault: false,
         deviceName: 'FooDevice',
         fitToPageEnabled: false,
         pageWidth: 612,
@@ -245,6 +276,7 @@ cr.define('model_test', function() {
         pagesPerSheet: 1,
         dpiHorizontal: 100,
         dpiVertical: 100,
+        dpiDefault: false,
         deviceName: 'FooDevice',
         fitToPageEnabled: true,
         pageWidth: 612,

@@ -31,13 +31,13 @@ namespace gpu {
 class GpuChannelEstablishFactory;
 }
 
-namespace ui {
-class ContextProviderCommandBuffer;
-}
-
 namespace viz {
 class CompositingModeReporterImpl;
 class RasterContextProvider;
+}
+
+namespace ws {
+class ContextProviderCommandBuffer;
 }
 
 namespace content {
@@ -78,7 +78,6 @@ class VizProcessTransportFactory : public ui::ContextFactory,
   bool IsGpuCompositingDisabled() override;
   ui::ContextFactory* GetContextFactory() override;
   ui::ContextFactoryPrivate* GetContextFactoryPrivate() override;
-  viz::GLHelper* GetGLHelper() override;
 
   // viz::ContextLostObserver implementation.
   void OnContextLost() override;
@@ -118,14 +117,14 @@ class VizProcessTransportFactory : public ui::ContextFactory,
   // are using.
   viz::CompositingModeReporterImpl* const compositing_mode_reporter_;
 
-  base::ObserverList<ui::ContextFactoryObserver> observer_list_;
+  base::ObserverList<ui::ContextFactoryObserver>::Unchecked observer_list_;
 
   // ContextProvider used on worker threads for rasterization.
   scoped_refptr<viz::RasterContextProvider> worker_context_provider_;
 
   // ContextProvider used on the main thread. Shared by ui::Compositors and also
   // returned from GetSharedMainThreadContextProvider().
-  scoped_refptr<ui::ContextProviderCommandBuffer> main_context_provider_;
+  scoped_refptr<ws::ContextProviderCommandBuffer> main_context_provider_;
 
   std::unique_ptr<cc::SingleThreadTaskGraphRunner> task_graph_runner_;
 

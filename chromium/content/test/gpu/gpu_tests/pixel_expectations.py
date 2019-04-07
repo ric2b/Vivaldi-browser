@@ -45,29 +45,38 @@ class PixelExpectations(GpuTestExpectations):
     self.Fail('Pixel_ScissorTestWithPreserveDrawingBuffer',
         ['android'], bug=521588)
 
+    # Tests crashing on marshmallow bot
+    self.Fail('Pixel_CanvasLowLatency2D', ['android'], bug=865957)
+    self.Fail('Pixel_CanvasUnacceleratedLowLatency2D', ['android'], bug=865957)
+
     # TODO(vmiura) check / generate reference images for Android devices
     self.Fail('Pixel_SolidColorBackground', ['mac', 'android'], bug=624256)
 
     self.Fail('Pixel_CSSFilterEffects',
         ['mac', ('nvidia', 0xfe9)], bug=690277)
 
+    # Became flaky on 10.13.6. When it flakes, it flakes 3 times, so
+    # mark failing, unfortunately.
+    self.Fail('Pixel_CSSFilterEffects', ['highsierra', 'amd'], bug=872423)
+
     # TODO(kbr): flakily timing out on this configuration.
     self.Flaky('*', ['linux', 'intel', 'debug'], bug=648369)
 
-    self.Flaky('Pixel_Video_MP4', ['android', 'nvidia'], bug=716564)
-    self.Flaky('Pixel_Video_MP4', ['linux', 'nvidia'], bug=819635)
+    # TODO(sunnyps): re-enable after rebaselining
+    # self.Flaky('Pixel_Video_MP4', ['android', 'nvidia'], bug=716564)
+    # self.Flaky('Pixel_Video_MP4', ['linux', 'nvidia'], bug=819635)
+
+    # TODO(sunnyps): temporarily disabling for rebaselining.
+    self.Fail('Pixel_Video_MP4', bug=869677)
+    self.Fail('Pixel_Video_VP9', bug=869677)
+    self.Fail('Pixel_DirectComposition_Video_MP4', bug=869677)
+    self.Fail('Pixel_DirectComposition_Video_VP9', bug=869677)
 
     # TODO(junov): rebaselining
     self.Fail('Pixel_OffscreenCanvasUnaccelerated2DGPUCompositing',
               ['mac', 'linux', 'win', 'android', 'chromeos'], bug=788439)
     self.Fail('Pixel_OffscreenCanvasUnaccelerated2DGPUCompositingWorker',
               ['mac', 'linux', 'win', 'android', 'chromeos'], bug=788439)
-
-    # TODO(junov); validate new test results
-    self.Fail('Pixel_CanvasLowLatency2D',
-        ['mac', 'linux', 'win', 'android', 'chromeos'], bug=788439)
-    self.Fail('Pixel_CanvasUnacceleratedLowLatency2D',
-        ['mac', 'linux', 'win', 'android', 'chromeos'], bug=788439)
 
     # Flaky for unknown reasons only on macOS. Not planning to investigate
     # further.
@@ -84,10 +93,11 @@ class PixelExpectations(GpuTestExpectations):
         ['android', ('qualcomm', 'Adreno (TM) 330')], bug=773293)
 
     # Failing on Mac Intel HighSierra
-    self.Fail('Pixel_Video_MP4',
-        ['highsierra', ('intel', 0xa2e)], bug=774809)
-    self.Fail('Pixel_Video_VP9',
-        ['highsierra', ('intel', 0xa2e)], bug=774809)
+    # TODO(sunnyps): re-enable after rebaselining.
+    # self.Fail('Pixel_Video_MP4',
+    #     ['highsierra', ('intel', 0xa2e)], bug=774809)
+    # self.Fail('Pixel_Video_VP9',
+    #     ['highsierra', ('intel', 0xa2e)], bug=774809)
     self.Fail('Pixel_WebGLGreenTriangle_NonChromiumImage_NoAA_NoAlpha',
         ['highsierra', ('intel', 0xa2e)], bug=774809)
     self.Flaky('Pixel_OffscreenCanvasTransferBeforeStyleResize',
@@ -108,11 +118,16 @@ class PixelExpectations(GpuTestExpectations):
     self.Flaky('Pixel_OffscreenCanvas2DResizeOnWorker',
         ['linux', 'mac'], bug=840394)
     self.Fail('Pixel_WorkerRAF_OOPD', ['android', 'nvidia'], bug=833902)
-    self.Fail('Pixel_WorkerRAF_OOPD', ['mac'], bug=851213)
 
     # TODO(kbr): temporary suppression for new test.
-    self.Flaky('Pixel_WebGLSadCanvas', ['linux', 'mac', 'win'], bug=575305)
+    self.Flaky('Pixel_WebGLSadCanvas', ['linux', 'win'], bug=575305)
+    self.Fail('Pixel_WebGLSadCanvas', ['mac'], bug=872423)
     self.Fail('Pixel_WebGLSadCanvas', ['android'], bug=575305)
 
     # Flaky on Android: crbug.com/860548
-    self.Flaky('Pixel_Video_VP9', ['android'], bug=860548)
+    # TODO(sunnyps): re-enable after rebaselining.
+    # self.Flaky('Pixel_Video_VP9', ['android'], bug=860548)
+
+    self.Fail('Pixel_CanvasLowLatencyWebGL', ['android', 'nvidia'], bug=868596)
+    self.Fail('Pixel_OffscreenCanvasWebGLPaintAfterResize',
+              ['android', 'nvidia'], bug=868596)

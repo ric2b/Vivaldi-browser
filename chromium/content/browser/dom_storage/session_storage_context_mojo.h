@@ -23,6 +23,7 @@
 #include "content/browser/dom_storage/session_storage_namespace_impl_mojo.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/session_storage_usage_info.h"
+#include "mojo/public/cpp/bindings/message.h"
 #include "services/file/public/mojom/file_system.mojom.h"
 #include "third_party/blink/public/mojom/dom_storage/session_storage_namespace.mojom.h"
 #include "url/origin.h"
@@ -45,7 +46,8 @@ struct SessionStorageUsageInfo;
 // ShutdownAndDelete (on the correct task runner).
 class CONTENT_EXPORT SessionStorageContextMojo
     : public base::trace_event::MemoryDumpProvider,
-      public SessionStorageDataMap::Listener {
+      public SessionStorageDataMap::Listener,
+      public SessionStorageNamespaceImplMojo::Delegate {
  public:
   using GetStorageUsageCallback =
       base::OnceCallback<void(std::vector<SessionStorageUsageInfo>)>;
@@ -82,6 +84,7 @@ class CONTENT_EXPORT SessionStorageContextMojo
 
   void OpenSessionStorage(int process_id,
                           const std::string& namespace_id,
+                          mojo::ReportBadMessageCallback bad_message_callback,
                           blink::mojom::SessionStorageNamespaceRequest request);
 
   void CreateSessionNamespace(const std::string& namespace_id);
@@ -123,12 +126,6 @@ class CONTENT_EXPORT SessionStorageContextMojo
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override;
 
-  // SessionStorageAreaImpl::Listener implementation:
-  void OnDataMapCreation(const std::vector<uint8_t>& map_prefix,
-                         SessionStorageDataMap* map) override;
-  void OnDataMapDestruction(const std::vector<uint8_t>& map_prefix) override;
-  void OnCommitResult(leveldb::mojom::DatabaseError error) override;
-
   // Sets the database for testing.
   void SetDatabaseForTesting(
       leveldb::mojom::LevelDBDatabaseAssociatedPtr database);
@@ -152,10 +149,20 @@ class CONTENT_EXPORT SessionStorageContextMojo
       SessionStorageMetadata::NamespaceEntry namespace_entry,
       const url::Origin& origin);
 
+  // SessionStorageAreaImpl::Listener implementation:
+  void OnDataMapCreation(const std::vector<uint8_t>& map_prefix,
+                         SessionStorageDataMap* map) override;
+  void OnDataMapDestruction(const std::vector<uint8_t>& map_prefix) override;
+  void OnCommitResult(leveldb::mojom::DatabaseError error) override;
+
+  // SessionStorageNamespaceImplMojo::Delegate implementation:
+  scoped_refptr<SessionStorageDataMap> MaybeGetExistingDataMapForId(
+      const std::vector<uint8_t>& map_number_as_bytes) override;
   void RegisterShallowClonedNamespace(
       SessionStorageMetadata::NamespaceEntry source_namespace_entry,
       const std::string& new_namespace_id,
-      const SessionStorageNamespaceImplMojo::OriginAreas& clone_from_areas);
+      const SessionStorageNamespaceImplMojo::OriginAreas& clone_from_areas)
+      override;
 
   std::unique_ptr<SessionStorageNamespaceImplMojo>
   CreateSessionStorageNamespaceImplMojo(std::string namespace_id);

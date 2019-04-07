@@ -19,7 +19,7 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/media/router/discovery/dial/dial_service.h"
 #include "chrome/browser/profiles/profile.h"
-#include "net/base/network_change_notifier.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 
 namespace base {
 class Clock;
@@ -35,8 +35,9 @@ namespace media_router {
 // the observer with an updated, complete set of active devices.  The registry's
 // observer (i.e., the Dial API) owns the registry instance.
 // DialRegistry lives on the IO thread.
-class DialRegistry : public DialService::Observer,
-                     public net::NetworkChangeNotifier::NetworkChangeObserver {
+class DialRegistry
+    : public DialService::Observer,
+      public network::NetworkConnectionTracker::NetworkConnectionObserver {
  public:
   using DeviceList = std::vector<DialDeviceData>;
 
@@ -118,6 +119,9 @@ class DialRegistry : public DialService::Observer,
   DialRegistry();
   ~DialRegistry() override;
 
+  // Called when we've gotten the NetworkConnectionTracker from the UI thread.
+  void SetNetworkConnectionTracker(network::NetworkConnectionTracker* tracker);
+
   // DialService::Observer:
   void OnDiscoveryRequest(DialService* service) override;
   void OnDeviceDiscovered(DialService* service,
@@ -126,9 +130,8 @@ class DialRegistry : public DialService::Observer,
   void OnError(DialService* service,
                const DialService::DialServiceErrorCode& code) override;
 
-  // net::NetworkChangeObserver:
-  void OnNetworkChanged(
-      net::NetworkChangeNotifier::ConnectionType type) override;
+  // network::NetworkConnectionTracker::NetworkConnectionObserver:
+  void OnConnectionChanged(network::mojom::ConnectionType type) override;
 
   // Notify all observers about DialDeviceEvent or DialError.
   void OnDialDeviceEvent(const DeviceList& devices);
@@ -198,13 +201,17 @@ class DialRegistry : public DialService::Observer,
 
   // Interface from which the DIAL API is notified of DIAL device events. the
   // DIAL API owns this DIAL registry.
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   // Set just after construction, only used on the IO thread.
   net::NetLog* net_log_ = nullptr;
 
+  network::NetworkConnectionTracker* network_connection_tracker_ = nullptr;
+
   base::Clock* clock_;
 
+  friend class DialMediaSinkServiceImplTest;
+  friend class DialRegistryTest;
   FRIEND_TEST_ALL_PREFIXES(DialRegistryTest, TestAddRemoveListeners);
   FRIEND_TEST_ALL_PREFIXES(DialRegistryTest, TestNoDevicesDiscovered);
   FRIEND_TEST_ALL_PREFIXES(DialRegistryTest, TestDevicesDiscovered);

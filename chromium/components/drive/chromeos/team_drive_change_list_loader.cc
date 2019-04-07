@@ -41,7 +41,9 @@ TeamDriveChangeListLoader::TeamDriveChangeListLoader(
     ResourceMetadata* resource_metadata,
     JobScheduler* scheduler,
     LoaderController* apply_task_controller)
-    : team_drive_id_(team_drive_id), root_entry_path_(root_entry_path) {
+    : team_drive_id_(team_drive_id),
+      root_entry_path_(root_entry_path),
+      weak_ptr_factory_(this) {
   root_folder_id_loader_ =
       std::make_unique<ConstantRootFolderIdLoader>(team_drive_id_);
 
@@ -57,11 +59,16 @@ TeamDriveChangeListLoader::TeamDriveChangeListLoader(
   directory_loader_ = std::make_unique<DirectoryLoader>(
       logger, blocking_task_runner, resource_metadata, scheduler,
       root_folder_id_loader_.get(), start_page_token_loader_.get(),
-      apply_task_controller, root_entry_path_);
+      apply_task_controller, root_entry_path_, team_drive_id);
   directory_loader_->AddObserver(this);
 }
 
 TeamDriveChangeListLoader::~TeamDriveChangeListLoader() = default;
+
+base::WeakPtr<TeamDriveChangeListLoader>
+TeamDriveChangeListLoader::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
 
 // DriveChangeListLoader overrides
 void TeamDriveChangeListLoader::AddChangeListLoaderObserver(
@@ -99,7 +106,7 @@ void TeamDriveChangeListLoader::LoadIfNeeded(
 
 void TeamDriveChangeListLoader::ReadDirectory(
     const base::FilePath& directory_path,
-    const ReadDirectoryEntriesCallback& entries_callback,
+    ReadDirectoryEntriesCallback entries_callback,
     const FileOperationCallback& completion_callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(root_entry_path_ == directory_path ||
@@ -107,7 +114,7 @@ void TeamDriveChangeListLoader::ReadDirectory(
       << "Directory paths are not related: " << root_entry_path_.value()
       << " -> " << directory_path.value();
 
-  directory_loader_->ReadDirectory(directory_path, entries_callback,
+  directory_loader_->ReadDirectory(directory_path, std::move(entries_callback),
                                    completion_callback);
 }
 

@@ -11,6 +11,7 @@
 #include "base/feature_list.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/values.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/conflicts/module_database_win.h"
@@ -21,6 +22,7 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(GOOGLE_CHROME_BUILD)
+#include "base/win/win_util.h"
 #include "chrome/browser/conflicts/incompatible_applications_updater_win.h"
 #include "chrome/browser/conflicts/module_blacklist_cache_updater_win.h"
 #endif
@@ -28,93 +30,165 @@
 namespace {
 
 #if defined(GOOGLE_CHROME_BUILD)
+
+// Strings used twice.
+constexpr char kNotLoaded[] = "Not loaded";
+constexpr char kAllowedInputMethodEditor[] = "Allowed - Input method editor";
+constexpr char kAllowedMatchingCertificate[] = "Allowed - Matching certificate";
+constexpr char kAllowedMicrosoftModule[] = "Allowed - Microsoft module";
+constexpr char kAllowedWhitelisted[] = "Allowed - Whitelisted";
+constexpr char kAllowedSameDirectory[] =
+#if defined(OFFICIAL_BUILD)
+    // In official builds, modules in the Chrome directory are blocked but they
+    // won't cause a warning because the warning would blame Chrome itself.
+    "Tolerated - In executable directory";
+#else  // !defined(OFFICIAL_BUILD)
+    // In developer builds, DLLs that are part of Chrome are not signed and thus
+    // the easy way to identify them is to check that they are in the same
+    // directory (or child folder) as the main exe.
+    "Allowed - In executable directory (dev builds only)";
+#endif
+
+void AppendString(base::StringPiece input, std::string* output) {
+  if (!output->empty())
+    *output += ", ";
+  input.AppendToString(output);
+}
+
+// Returns a string describing the current module blocking status: loaded or
+// not, blocked or not, was in blacklist cache or not, bypassed blocking or not.
+std::string GetBlockingStatusString(
+    const ModuleBlacklistCacheUpdater::ModuleBlockingState& blocking_state) {
+  std::string status;
+
+  // Output status regarding the blacklist cache, current blocking, and
+  // load status.
+  if (blocking_state.was_blocked)
+    status = "Blocked";
+  if (!blocking_state.was_loaded)
+    AppendString(kNotLoaded, &status);
+  else if (blocking_state.was_in_blacklist_cache)
+    AppendString("Bypassed blocking", &status);
+  if (blocking_state.was_in_blacklist_cache)
+    AppendString("In blacklist cache", &status);
+
+  return status;
+}
+
+// Returns a string describing the blocking decision related to a module. This
+// returns the empty string to indicate that the warning decision description
+// should be used instead.
+std::string GetBlockingDecisionString(
+    const ModuleBlacklistCacheUpdater::ModuleBlockingState& blocking_state,
+    IncompatibleApplicationsUpdater* incompatible_applications_updater) {
+  using BlockingDecision = ModuleBlacklistCacheUpdater::ModuleBlockingDecision;
+
+  // Append status regarding the logic that will be applied during the next
+  // startup.
+  switch (blocking_state.blocking_decision) {
+    case BlockingDecision::kUnknown:
+      NOTREACHED();
+      break;
+    case BlockingDecision::kAllowedIME:
+      return kAllowedInputMethodEditor;
+    case BlockingDecision::kAllowedSameCertificate:
+      return kAllowedMatchingCertificate;
+    case BlockingDecision::kAllowedSameDirectory:
+      return kAllowedSameDirectory;
+    case BlockingDecision::kAllowedMicrosoft:
+      return kAllowedMicrosoftModule;
+    case BlockingDecision::kAllowedWhitelisted:
+      return kAllowedWhitelisted;
+    case BlockingDecision::kTolerated:
+      // This is a module explicitly allowed to load by the Module List
+      // component. But it is still valid for a potential warning, and so the
+      // warning status is used instead.
+      if (incompatible_applications_updater)
+        break;
+      return "Tolerated - Will be blocked in the future";
+    case BlockingDecision::kDisallowedExplicit:
+      return "Disallowed - Explicitly blacklisted";
+    case BlockingDecision::kDisallowedImplicit:
+      return "Disallowed - Implicitly blacklisted";
+  }
+
+  // Returning an empty string indicates that the warning status should be used.
+  return std::string();
+}
+
+// Returns a string describing the warning decision that was made regarding a
+// module.
+std::string GetModuleWarningDecisionString(
+    const ModuleInfoKey& module_key,
+    IncompatibleApplicationsUpdater* incompatible_applications_updater) {
+  using WarningDecision =
+      IncompatibleApplicationsUpdater::ModuleWarningDecision;
+
+  WarningDecision warning_decision =
+      incompatible_applications_updater->GetModuleWarningDecision(module_key);
+
+  switch (warning_decision) {
+    case WarningDecision::kNotLoaded:
+      return kNotLoaded;
+    case WarningDecision::kAllowedIME:
+      return kAllowedInputMethodEditor;
+    case WarningDecision::kAllowedShellExtension:
+      return "Tolerated - Shell extension";
+    case WarningDecision::kAllowedSameCertificate:
+      return kAllowedMatchingCertificate;
+    case WarningDecision::kAllowedSameDirectory:
+      return kAllowedSameDirectory;
+    case WarningDecision::kAllowedMicrosoft:
+      return kAllowedMicrosoftModule;
+    case WarningDecision::kAllowedWhitelisted:
+      return kAllowedWhitelisted;
+    case WarningDecision::kNoTiedApplication:
+      return "Tolerated - Could not tie to an installed application";
+    case WarningDecision::kIncompatible:
+      return "Incompatible";
+    case WarningDecision::kAddedToBlacklist:
+    case WarningDecision::kUnknown:
+      NOTREACHED();
+      break;
+  }
+
+  return std::string();
+}
+
 std::string GetModuleStatusString(
     const ModuleInfoKey& module_key,
     IncompatibleApplicationsUpdater* incompatible_applications_updater,
     ModuleBlacklistCacheUpdater* module_blacklist_cache_updater) {
-  DCHECK(incompatible_applications_updater || module_blacklist_cache_updater);
+  if (!incompatible_applications_updater && !module_blacklist_cache_updater)
+    return std::string();
 
-  // Strings used twice.
-  constexpr char kNotLoaded[] = "Not loaded";
-  constexpr char kAllowedInputMethodEditor[] = "Allowed - Input method editor";
-  constexpr char kAllowedMatchingCertificate[] =
-      "Allowed - Matching certificate";
-  constexpr char kAllowedSameDirectory[] = "Allowed - In executable directory";
-  constexpr char kAllowedMicrosoftModule[] = "Allowed - Microsoft module";
-  constexpr char kAllowedWhitelisted[] = "Allowed - Whitelisted";
+  std::string status;
 
   // The blocking status is shown over the warning status.
   if (module_blacklist_cache_updater) {
-    using BlockingDecision =
-        ModuleBlacklistCacheUpdater::ModuleBlockingDecision;
+    const ModuleBlacklistCacheUpdater::ModuleBlockingState& blocking_state =
+        module_blacklist_cache_updater->GetModuleBlockingState(module_key);
 
-    BlockingDecision blocking_decision =
-        module_blacklist_cache_updater->GetModuleBlockingDecision(module_key);
+    status = GetBlockingStatusString(blocking_state);
 
-    switch (blocking_decision) {
-      case BlockingDecision::kNotLoaded:
-        return kNotLoaded;
-      case BlockingDecision::kAllowedIME:
-        return kAllowedInputMethodEditor;
-      case BlockingDecision::kAllowedSameCertificate:
-        return kAllowedMatchingCertificate;
-      case BlockingDecision::kAllowedSameDirectory:
-        return kAllowedSameDirectory;
-      case BlockingDecision::kAllowedMicrosoft:
-        return kAllowedMicrosoftModule;
-      case BlockingDecision::kAllowedWhitelisted:
-        return kAllowedWhitelisted;
-      case BlockingDecision::kTolerated:
-        // This is a module explicitely allowed to load by the Module List
-        // component. But it is still valid for a potential warning, and so the
-        // warning status is used instead.
-        if (incompatible_applications_updater)
-          break;
-        return "Tolerated - Will be blocked in the future";
-      case BlockingDecision::kBlacklisted:
-        return "Disallowed - Added to the blacklist";
-      case BlockingDecision::kBlocked:
-        return "Disallowed - Blocked";
-      case BlockingDecision::kUnknown:
-        NOTREACHED();
-        break;
+    std::string blocking_string = GetBlockingDecisionString(
+        blocking_state, incompatible_applications_updater);
+    if (!blocking_string.empty()) {
+      AppendString(blocking_string, &status);
+      return status;
     }
+
+    // An empty |blocking_string| indicates that a warning decision string
+    // should be used instead.
   }
 
   if (incompatible_applications_updater) {
-    using WarningDecision =
-        IncompatibleApplicationsUpdater::ModuleWarningDecision;
-
-    WarningDecision warning_decision =
-        incompatible_applications_updater->GetModuleWarningDecision(module_key);
-
-    switch (warning_decision) {
-      case WarningDecision::kNotLoaded:
-        return kNotLoaded;
-      case WarningDecision::kAllowedIME:
-        return kAllowedInputMethodEditor;
-      case WarningDecision::kAllowedShellExtension:
-        return "Tolerated - Shell extension";
-      case WarningDecision::kAllowedSameCertificate:
-        return kAllowedMatchingCertificate;
-      case WarningDecision::kAllowedSameDirectory:
-        return kAllowedSameDirectory;
-      case WarningDecision::kAllowedMicrosoft:
-        return kAllowedMicrosoftModule;
-      case WarningDecision::kAllowedWhitelisted:
-        return kAllowedWhitelisted;
-      case WarningDecision::kNoTiedApplication:
-        return "Tolerated - Could not tie to an installed application";
-      case WarningDecision::kIncompatible:
-        return "Incompatible";
-      case WarningDecision::kAddedToBlacklist:
-      case WarningDecision::kUnknown:
-        NOTREACHED();
-        break;
-    }
+    AppendString(GetModuleWarningDecisionString(
+                     module_key, incompatible_applications_updater),
+                 &status);
   }
 
-  return std::string();
+  return status;
 }
 #endif  // defined(GOOGLE_CHROME_BUILD)
 
@@ -162,11 +236,6 @@ void ConflictsHandler::OnNewModuleFound(const ModuleInfoKey& module_key,
   std::string type_string;
   if (module_data.module_properties & ModuleInfoData::kPropertyShellExtension)
     type_string = "Shell extension";
-  if (module_data.module_properties & ModuleInfoData::kPropertyBlocked) {
-    if (!type_string.empty())
-      type_string += ", ";
-    type_string += "blocked";
-  }
   data->SetString("type_description", type_string);
 
   const auto& inspection_result = *module_data.inspection_result;
@@ -234,7 +303,10 @@ void ConflictsHandler::HandleRequestModuleList(const base::ListValue* args) {
     third_party_features_status_ = kFeatureDisabled;
   }
 
-  // The above 2 cases are the only possible reasons why the manager wouldn't
+  if (base::win::IsEnterpriseManaged())
+    third_party_features_status_ = kEnterpriseManaged;
+
+  // The above 3 cases are the only possible reasons why the manager wouldn't
   // exist.
   DCHECK(third_party_features_status_.has_value());
 #else  // defined(GOOGLE_CHROME_BUILD)
@@ -298,6 +370,9 @@ std::string ConflictsHandler::GetThirdPartyFeaturesStatusString(
     case ThirdPartyFeaturesStatus::kNonGoogleChromeBuild:
       return "The third-party features are not available in non-Google Chrome "
              "builds.";
+    case ThirdPartyFeaturesStatus::kEnterpriseManaged:
+      return "The third-party features are temporarily disabled for clients on "
+             "domain-joined machines.";
     case ThirdPartyFeaturesStatus::kPolicyDisabled:
       return "The ThirdPartyBlockingEnabled group policy is disabled.";
     case ThirdPartyFeaturesStatus::kFeatureDisabled:

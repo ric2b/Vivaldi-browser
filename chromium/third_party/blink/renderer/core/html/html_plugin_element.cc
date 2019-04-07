@@ -69,6 +69,16 @@ enum PluginRequestObjectResult {
   kPluginRequestObjectResultMax
 };
 
+String GetMIMETypeFromURL(const KURL& url) {
+  String filename = url.LastPathComponent();
+  int extension_pos = filename.ReverseFind('.');
+  if (extension_pos >= 0) {
+    String extension = filename.Substring(extension_pos + 1);
+    return MIMETypeRegistry::GetWellKnownMIMETypeForExtension(extension);
+  }
+  return String();
+}
+
 }  // anonymous namespace
 
 const Vector<String>& PluginParameters::Names() const {
@@ -148,6 +158,12 @@ void HTMLPlugInElement::SetFocused(bool focused, WebFocusType focus_type) {
 
 bool HTMLPlugInElement::RequestObjectInternal(
     const PluginParameters& plugin_params) {
+  if (handled_externally_) {
+    // TODO(ekaramad): Fix this once we know what to do with frames inside
+    // plugins (https://crbug.com/776510).
+    return true;
+  }
+
   if (url_.IsEmpty() && service_type_.IsEmpty())
     return false;
 
@@ -159,9 +175,20 @@ bool HTMLPlugInElement::RequestObjectInternal(
   if (!AllowedToLoadObject(completed_url, service_type_))
     return false;
 
+  handled_externally_ =
+      GetDocument().GetFrame()->Client()->IsPluginHandledExternally(
+          *this, completed_url,
+          service_type_.IsEmpty() ? GetMIMETypeFromURL(completed_url)
+                                  : service_type_);
+  if (handled_externally_) {
+    // This is a temporary placeholder and the logic around
+    // |handled_externally_| might change as MimeHandlerView is moving towards
+    // depending on OOPIFs instead of WebPlugin (https://crbug.com/659750).
+    completed_url = BlankURL();
+  }
   ObjectContentType object_type = GetObjectContentType();
   if (object_type == ObjectContentType::kFrame ||
-      object_type == ObjectContentType::kImage) {
+      object_type == ObjectContentType::kImage || handled_externally_) {
     // If the plugin element already contains a subframe,
     // loadOrRedirectSubframe will re-use it. Otherwise, it will create a
     // new frame and set it as the LayoutEmbeddedContent's EmbeddedContentView,
@@ -252,7 +279,7 @@ void HTMLPlugInElement::UpdatePlugin() {
   }
 }
 
-void HTMLPlugInElement::RemovedFrom(ContainerNode* insertion_point) {
+void HTMLPlugInElement::RemovedFrom(ContainerNode& insertion_point) {
   // If we've persisted the plugin and we're removed from the tree then
   // make sure we cleanup the persistance pointer.
   if (persisted_plugin_) {
@@ -409,7 +436,7 @@ void HTMLPlugInElement::CollectStyleForPresentationAttribute(
   }
 }
 
-void HTMLPlugInElement::DefaultEventHandler(Event* event) {
+void HTMLPlugInElement::DefaultEventHandler(Event& event) {
   // Firefox seems to use a fake event listener to dispatch events to plugin
   // (tested with mouse events only). This is observable via different order
   // of events - in Firefox, event listeners specified in HTML attributes
@@ -431,7 +458,7 @@ void HTMLPlugInElement::DefaultEventHandler(Event* event) {
   if (!plugin)
     return;
   plugin->HandleEvent(event);
-  if (event->DefaultHandled())
+  if (event.DefaultHandled())
     return;
   HTMLFrameOwnerElement::DefaultEventHandler(event);
 }
@@ -489,13 +516,7 @@ HTMLPlugInElement::ObjectContentType HTMLPlugInElement::GetObjectContentType()
   KURL url = GetDocument().CompleteURL(url_);
   if (mime_type.IsEmpty()) {
     // Try to guess the MIME type based off the extension.
-    String filename = url.LastPathComponent();
-    int extension_pos = filename.ReverseFind('.');
-    if (extension_pos >= 0) {
-      String extension = filename.Substring(extension_pos + 1);
-      mime_type = MIMETypeRegistry::GetWellKnownMIMETypeForExtension(extension);
-    }
-
+    mime_type = GetMIMETypeFromURL(url);
     if (mime_type.IsEmpty())
       return ObjectContentType::kFrame;
   }
@@ -521,7 +542,7 @@ HTMLPlugInElement::ObjectContentType HTMLPlugInElement::GetObjectContentType()
 bool HTMLPlugInElement::IsImageType() const {
   if (GetDocument().GetFrame())
     return GetObjectContentType() == ObjectContentType::kImage;
-  return Image::SupportsType(service_type_);
+  return MIMETypeRegistry::IsSupportedImageResourceMIMEType(service_type_);
 }
 
 LayoutEmbeddedObject* HTMLPlugInElement::GetLayoutEmbeddedObject() const {
@@ -615,11 +636,12 @@ bool HTMLPlugInElement::LoadPlugin(const KURL& url,
 }
 
 void HTMLPlugInElement::DispatchErrorEvent() {
-  if (GetDocument().IsPluginDocument() && GetDocument().LocalOwner())
+  if (GetDocument().IsPluginDocument() && GetDocument().LocalOwner()) {
     GetDocument().LocalOwner()->DispatchEvent(
-        Event::Create(EventTypeNames::error));
-  else
-    DispatchEvent(Event::Create(EventTypeNames::error));
+        *Event::Create(EventTypeNames::error));
+  } else {
+    DispatchEvent(*Event::Create(EventTypeNames::error));
+  }
 }
 
 bool HTMLPlugInElement::AllowedToLoadObject(const KURL& url,

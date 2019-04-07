@@ -25,6 +25,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/resource_request_info.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/previews_state.h"
@@ -627,6 +628,100 @@ IN_PROC_BROWSER_TEST_F(LoaderBrowserTest, PageTransitionClientRedirect) {
   EXPECT_TRUE(delegate.page_transition() & ui::PAGE_TRANSITION_CLIENT_REDIRECT);
 }
 
+IN_PROC_BROWSER_TEST_F(LoaderBrowserTest, SubresourceRedirectToDataURLBlocked) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  EXPECT_TRUE(NavigateToURL(shell(), embedded_test_server()->GetURL("/echo")));
+
+  GURL subresource_url = embedded_test_server()->GetURL(
+      "/server-redirect?data:text/plain,redirected1");
+  std::string script = R"((url => {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onload = () => domAutomationController.send("ALLOWED");
+    xhr.onerror = () => domAutomationController.send("BLOCKED");
+    xhr.send();
+  }))";
+  std::string result;
+  ASSERT_TRUE(ExecuteScriptAndExtractString(
+      shell(), script + "('" + subresource_url.spec() + "')", &result));
+
+  EXPECT_EQ("BLOCKED", result);
+}
+
+IN_PROC_BROWSER_TEST_F(LoaderBrowserTest, RedirectToDataURLBlocked) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  EXPECT_FALSE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL(
+                   "/server-redirect?data:text/plain,redirected1")));
+}
+
+IN_PROC_BROWSER_TEST_F(LoaderBrowserTest, RedirectToAboutURLBlocked) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  EXPECT_FALSE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL(
+                   "/server-redirect?" + std::string(url::kAboutBlankURL))));
+}
+
+namespace {
+
+// Creates a valid filesystem URL.
+GURL CreateFileSystemURL(Shell* window) {
+  std::string filesystem_url_string;
+  EXPECT_TRUE(
+      ExecuteScriptAndExtractString(window, R"(
+      var blob = new Blob(['<html><body>hello</body></html>'],
+                          {type: 'text/html'});
+      window.webkitRequestFileSystem(TEMPORARY, blob.size, fs => {
+        fs.root.getFile('foo.html', {create: true}, file => {
+          file.createWriter(writer => {
+            writer.write(blob);
+            writer.onwriteend = () => {
+              domAutomationController.send(file.toURL());
+            }
+          });
+        });
+      });)", &filesystem_url_string));
+  GURL filesystem_url(filesystem_url_string);
+  EXPECT_TRUE(filesystem_url.is_valid());
+  EXPECT_TRUE(filesystem_url.SchemeIsFileSystem());
+  return filesystem_url;
+}
+
+}  // namespace
+
+IN_PROC_BROWSER_TEST_F(LoaderBrowserTest,
+                       SubresourceRedirectToFileSystemURLBlocked) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  EXPECT_TRUE(NavigateToURL(shell(), embedded_test_server()->GetURL("/echo")));
+
+  GURL subresource_url = embedded_test_server()->GetURL(
+      "/server-redirect?" + CreateFileSystemURL(shell()).spec());
+  std::string script = R"((url => {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onload = () => domAutomationController.send("ALLOWED");
+    xhr.onerror = () => domAutomationController.send("BLOCKED");
+    xhr.send();
+  }))";
+  std::string result;
+  ASSERT_TRUE(ExecuteScriptAndExtractString(
+      shell(), script + "('" + subresource_url.spec() + "')", &result));
+
+  EXPECT_EQ("BLOCKED", result);
+}
+
+IN_PROC_BROWSER_TEST_F(LoaderBrowserTest, RedirectToFileSystemURLBlocked) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  // Need to navigate to a URL first so the filesystem can be created.
+  EXPECT_TRUE(NavigateToURL(shell(), embedded_test_server()->GetURL("/echo")));
+
+  EXPECT_FALSE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL(
+                   "/server-redirect?" + CreateFileSystemURL(shell()).spec())));
+}
+
 namespace {
 
 // Checks whether the given urls are requested, and that GetPreviewsState()
@@ -1172,6 +1267,11 @@ IN_PROC_BROWSER_TEST_F(RequestDataBrowserTest, CrossOriginNested) {
 // bypass cookies SameSite=Strict protections by navigating a new window twice.
 IN_PROC_BROWSER_TEST_F(LoaderBrowserTest,
                        CookieSameSiteStrictOpenNewNamedWindowTwice) {
+  // TODO(lukasza): https://crbug.com/417518: Get tests working with
+  // --site-per-process.
+  if (SiteIsolationPolicy::UseDedicatedProcessesForAllSites())
+    return;
+
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // 1) Add cookies for 'a.com', one of them with the "SameSite=Strict" option.

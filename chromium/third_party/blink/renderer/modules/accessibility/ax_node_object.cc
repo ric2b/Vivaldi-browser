@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker_controller.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_field_set_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_label_element.h"
@@ -283,6 +284,12 @@ bool AXNodeObject::IsDescendantOfElementType(
   return false;
 }
 
+// TODO(accessibility) Needs a new name as it does check ARIA, including
+// checking the @role for an iframe, and @aria-haspopup/aria-pressed via
+// ButtonType().
+// TODO(accessibility) This value is cached in native_role_ so it needs to
+// be recached if anything it depends on change, such as IsClickable(),
+// DataList(), aria-pressed, the parent's tag, role on an iframe, etc.
 AccessibilityRole AXNodeObject::NativeAccessibilityRoleIgnoringAria() const {
   if (!GetNode())
     return kUnknownRole;
@@ -453,6 +460,7 @@ AccessibilityRole AXNodeObject::NativeAccessibilityRoleIgnoringAria() const {
   if (GetNode()->HasTagName(sectionTag))
     return kRegionRole;
 
+  // TODO(accessibility): http://crbug.com/873118
   if (GetNode()->HasTagName(addressTag))
     return kContentInfoRole;
 
@@ -464,7 +472,8 @@ AccessibilityRole AXNodeObject::NativeAccessibilityRoleIgnoringAria() const {
   if (IsHTMLHtmlElement(*GetNode()))
     return kIgnoredRole;
 
-  if (IsHTMLIFrameElement(*GetNode())) {
+  // Treat <iframe> and <frame> the same.
+  if (IsHTMLIFrameElement(*GetNode()) || IsHTMLFrameElement(*GetNode())) {
     const AtomicString& aria_role =
         GetAOMPropertyOrARIAAttribute(AOMStringProperty::kRole);
     if (aria_role == "none" || aria_role == "presentation")
@@ -1057,14 +1066,10 @@ bool AXNodeObject::IsRequired() const {
 }
 
 bool AXNodeObject::CanvasHasFallbackContent() const {
-  Node* node = this->GetNode();
-  if (!IsHTMLCanvasElement(node))
+  if (IsDetached())
     return false;
-
-  // If it has any children that are elements, we'll assume it might be fallback
-  // content. If it has no children or its only children are not elements
-  // (e.g. just text nodes), it doesn't have fallback content.
-  return ElementTraversal::FirstChild(*node);
+  Node* node = this->GetNode();
+  return IsHTMLCanvasElement(node) && node->hasChildren();
 }
 
 int AXNodeObject::HeadingLevel() const {
@@ -1180,7 +1185,8 @@ void AXNodeObject::Markers(Vector<DocumentMarker::MarkerType>& marker_types,
     return;
 
   DocumentMarkerController& marker_controller = GetDocument()->Markers();
-  DocumentMarkerVector markers = marker_controller.MarkersFor(GetNode());
+  DocumentMarkerVector markers =
+      marker_controller.MarkersFor(ToText(*GetNode()));
   for (size_t i = 0; i < markers.size(); ++i) {
     DocumentMarker* marker = markers[i];
     if (MarkerTypeIsUsedForAccessibility(marker->GetType())) {
@@ -2079,15 +2085,13 @@ AXObject* AXNodeObject::RawNextSibling() const {
 }
 
 void AXNodeObject::AddChildren() {
-  DCHECK(!IsDetached());
+  if (IsDetached())
+    return;
+
   // If the need to add more children in addition to existing children arises,
   // childrenChanged should have been called, leaving the object with no
   // children.
   DCHECK(!have_children_);
-
-  if (!node_)
-    return;
-
   have_children_ = true;
 
   // The only time we add children from the DOM tree to a node with a
@@ -2095,7 +2099,7 @@ void AXNodeObject::AddChildren() {
   if (GetLayoutObject() && !IsHTMLCanvasElement(*node_))
     return;
 
-  HeapVector<Member<AXObject>> owned_children;
+  AXObjectVector owned_children;
   ComputeAriaOwnsChildren(owned_children);
 
   for (Node& child : NodeTraversal::ChildrenOf(*node_)) {
@@ -2398,6 +2402,10 @@ void AXNodeObject::ChildrenChanged() {
   // Uses |cached_is_descendant_of_leaf_node_| to avoid updating cached
   // attributes for eachc change via | UpdateCachedAttributeValuesIfNeeded()|.
   if (!CanHaveChildren() || cached_is_descendant_of_leaf_node_)
+    return;
+
+  // Calling CanHaveChildren(), above, can occasionally detach |this|.
+  if (IsDetached())
     return;
 
   AXObjectCache().PostNotification(this, AXObjectCacheImpl::kAXChildrenChanged);

@@ -23,15 +23,16 @@ VivaldiSyncAuthManager::VivaldiSyncAuthManager(
                       account_state_changed,
                       credentials_changed),
       notify_token_requested_(notify_token_requested) {
-  account_info_.account_id = saved_username;
-  account_info_.email = saved_username;
+  account_info_.account_info.account_id = saved_username;
+  account_info_.account_info.email = saved_username;
+  account_info_.is_primary = true;
 }
 
 VivaldiSyncAuthManager::~VivaldiSyncAuthManager() {}
 
 void VivaldiSyncAuthManager::RegisterForAuthNotifications() {}
 
-AccountInfo VivaldiSyncAuthManager::GetAuthenticatedAccountInfo() const {
+browser_sync::SyncAuthManager::SyncAccountInfo VivaldiSyncAuthManager::GetActiveAccountInfo() const {
   return account_info_;
 }
 
@@ -71,8 +72,9 @@ void VivaldiSyncAuthManager::SetLoginInfo(const std::string& username,
   token_status_.last_get_token_error = error;
   token_status_.token_receive_time = base::Time::Now();
 
-  account_info_.account_id = username;
-  account_info_.email = username;
+  account_info_.account_info.account_id = username;
+  account_info_.account_info.email = username;
+  account_info_.is_primary = true;
 
   sync_prefs_->SetSyncAuthError(false);
   last_auth_error_ = GoogleServiceAuthError::AuthErrorNone();
@@ -81,7 +83,7 @@ void VivaldiSyncAuthManager::SetLoginInfo(const std::string& username,
 
 void VivaldiSyncAuthManager::ResetLoginInfo() {
   access_token_ = "";
-  account_info_ = AccountInfo();
+  account_info_ = SyncAccountInfo();
 
   token_status_.token_request_time = base::Time();
   token_status_.token_receive_time = base::Time();

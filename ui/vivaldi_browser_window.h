@@ -63,6 +63,7 @@ class VivaldiWindowEventDelegate {
   virtual void OnFullscreenChanged(bool fullscreen) = 0;
   virtual void OnActivationChanged(bool activated) = 0;
   virtual void OnDocumentLoaded() = 0;
+  virtual void OnPositionChanged() = 0;
 };
 
 // AppWindowContents class specific to vivaldi app windows. It maintains a
@@ -92,6 +93,7 @@ class VivaldiAppWindowContentsImpl : public AppWindowContents,
     bool is_fullscreen_ = false;
     bool is_maximized_ = false;
     bool is_minimized_ = false;
+    gfx::Rect bounds_;
   };
 
   // Overridden from WebContentsDelegate
@@ -115,6 +117,9 @@ class VivaldiAppWindowContentsImpl : public AppWindowContents,
   bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
                                   content::MediaStreamType type) override;
+  gfx::Size EnterPictureInPicture(const viz::SurfaceId& surface_id,
+    const gfx::Size& natural_size) override;
+  void ExitPictureInPicture() override;
 
  private:
   // content::WebContentsObserver
@@ -263,7 +268,7 @@ class VivaldiBrowserWindow
   LocationBar* GetLocationBar() const override;
   void SetFocusToLocationBar(bool select_all) override {}
   void UpdateReloadStopState(bool is_loading, bool force) override {}
-  void UpdateToolbar(content::WebContents* contents) override {}
+  void UpdateToolbar(content::WebContents* contents) override;
   void FocusToolbar() override {}
   ToolbarActionsBar* GetToolbarActionsBar() override;
   void ToolbarSizeChanged(bool is_animating) override{};
@@ -317,6 +322,7 @@ class VivaldiBrowserWindow
   void ShowOneClickSigninConfirmation(
       const base::string16& email,
       const StartSyncCallback& start_sync_callback) override{};
+  bool CanUserExitFullscreen() const override;
 
   // web_modal::WebContentsModalDialogManagerDelegate implementation.
   void SetWebContentsBlocked(content::WebContents* web_contents,
@@ -366,7 +372,8 @@ class VivaldiBrowserWindow
   void UpdateDraggableRegions(
       const std::vector<extensions::DraggableRegion>& regions);
 
-  void OnNativeWindowChanged();
+  // If moved is true, the change is caused by a move
+  void OnNativeWindowChanged(bool moved = false);
   void OnNativeClose();
   void OnNativeWindowActivationChanged(bool active);
 
@@ -376,6 +383,7 @@ class VivaldiBrowserWindow
   void OnFullscreenChanged(bool fullscreen) override;
   void OnActivationChanged(bool activated) override;
   void OnDocumentLoaded() override;
+  void OnPositionChanged() override;
   void FocusInactivePopupForAccessibility() override {};
 
   // Enable or disable fullscreen mode.

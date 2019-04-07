@@ -347,6 +347,10 @@ class BiodClientImpl : public BiodClient {
     int percent_complete =
         protobuf.has_percent_complete() ? protobuf.percent_complete() : -1;
 
+    // Enroll session is ended automatically when enrollment is done.
+    if (protobuf.done())
+      current_enroll_session_path_.reset();
+
     for (auto& observer : observers_) {
       observer.BiodEnrollScanDoneReceived(protobuf.scan_result(),
                                           protobuf.done(), percent_complete);
@@ -393,7 +397,7 @@ class BiodClientImpl : public BiodClient {
 
   dbus::Bus* bus_ = nullptr;
   dbus::ObjectProxy* biod_proxy_ = nullptr;
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
   std::unique_ptr<dbus::ObjectPath> current_enroll_session_path_;
   std::unique_ptr<dbus::ObjectPath> current_auth_session_path_;
 

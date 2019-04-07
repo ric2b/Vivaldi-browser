@@ -6,11 +6,12 @@
 
 #include <memory>
 
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/bind.h"
 #include "base/macros.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/webui/chromeos/assistant_optin/confirm_reject_screen_handler.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/webui/chromeos/assistant_optin/get_more_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/assistant_optin/ready_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/assistant_optin/third_party_screen_handler.h"
@@ -29,8 +30,8 @@ namespace {
 
 bool is_active = false;
 
-constexpr int kAssistantOptInDialogWidth = 576;
-constexpr int kAssistantOptInDialogHeight = 480;
+constexpr int kAssistantOptInDialogWidth = 768;
+constexpr int kAssistantOptInDialogHeight = 640;
 
 }  // namespace
 
@@ -50,13 +51,12 @@ AssistantOptInUI::AssistantOptInUI(content::WebUI* web_ui)
 
   AddScreenHandler(std::make_unique<ValuePropScreenHandler>(
       base::BindOnce(&AssistantOptInUI::OnExit, weak_factory_.GetWeakPtr())));
-  AddScreenHandler(std::make_unique<ConfirmRejectScreenHandler>(
-      base::BindOnce(&AssistantOptInUI::OnExit, weak_factory_.GetWeakPtr())));
   AddScreenHandler(std::make_unique<ThirdPartyScreenHandler>(
       base::BindOnce(&AssistantOptInUI::OnExit, weak_factory_.GetWeakPtr())));
   AddScreenHandler(std::make_unique<GetMoreScreenHandler>(
       base::BindOnce(&AssistantOptInUI::OnExit, weak_factory_.GetWeakPtr())));
-  AddScreenHandler(std::make_unique<ReadyScreenHandler>());
+  AddScreenHandler(std::make_unique<ReadyScreenHandler>(
+      base::BindOnce(&AssistantOptInUI::OnExit, weak_factory_.GetWeakPtr())));
 
   base::DictionaryValue localized_strings;
   for (auto* handler : screen_handlers_)
@@ -68,6 +68,10 @@ AssistantOptInUI::AssistantOptInUI(content::WebUI* web_ui)
   source->AddResourcePath("assistant_logo.png", IDR_ASSISTANT_LOGO_PNG);
   source->SetDefaultResource(IDR_ASSISTANT_OPTIN_HTML);
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source);
+
+  // Make sure enable Assistant service since we need it during the flow.
+  PrefService* prefs = Profile::FromWebUI(web_ui)->GetPrefs();
+  prefs->SetBoolean(arc::prefs::kVoiceInteractionEnabled, true);
 }
 
 AssistantOptInUI::~AssistantOptInUI() = default;
@@ -81,16 +85,10 @@ void AssistantOptInUI::AddScreenHandler(
 void AssistantOptInUI::OnExit(AssistantOptInScreenExitCode exit_code) {
   switch (exit_code) {
     case AssistantOptInScreenExitCode::VALUE_PROP_SKIPPED:
-      assistant_handler_->ShowNextScreen();
+      assistant_handler_->OnActivityControlOptInResult(false);
       break;
     case AssistantOptInScreenExitCode::VALUE_PROP_ACCEPTED:
       assistant_handler_->OnActivityControlOptInResult(true);
-      break;
-    case AssistantOptInScreenExitCode::CONFIRM_ACCEPTED:
-      assistant_handler_->OnActivityControlOptInResult(true);
-      break;
-    case AssistantOptInScreenExitCode::CONFIRM_REJECTED:
-      assistant_handler_->OnActivityControlOptInResult(false);
       break;
     case AssistantOptInScreenExitCode::THIRD_PARTY_CONTINUED:
       assistant_handler_->ShowNextScreen();
@@ -100,6 +98,9 @@ void AssistantOptInUI::OnExit(AssistantOptInScreenExitCode exit_code) {
       break;
     case AssistantOptInScreenExitCode::EMAIL_OPTED_OUT:
       assistant_handler_->OnEmailOptInResult(false);
+      break;
+    case AssistantOptInScreenExitCode::READY_SCREEN_CONTINUED:
+      CloseDialog(nullptr);
       break;
     default:
       NOTREACHED();
@@ -113,7 +114,12 @@ void AssistantOptInDialog::Show(
     ash::mojom::AssistantSetup::StartAssistantOptInFlowCallback callback) {
   DCHECK(!is_active);
   AssistantOptInDialog* dialog = new AssistantOptInDialog(std::move(callback));
-  dialog->ShowSystemDialog(true);
+
+  int container_id = dialog->GetDialogModalType() == ui::MODAL_TYPE_NONE
+                         ? ash::kShellWindowId_DefaultContainer
+                         : ash::kShellWindowId_LockSystemModalContainer;
+  chrome::ShowWebDialogInContainer(
+      container_id, ProfileManager::GetActiveUserProfile(), dialog, true);
 }
 
 // static

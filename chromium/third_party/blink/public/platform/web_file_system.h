@@ -31,6 +31,9 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_FILE_SYSTEM_H_
 #define THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_FILE_SYSTEM_H_
 
+#include "base/files/file.h"
+#include "mojo/public/cpp/system/message_pipe.h"
+#include "third_party/blink/public/platform/web_callbacks.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_file_system_callbacks.h"
 #include "third_party/blink/public/platform/web_file_system_type.h"
@@ -40,6 +43,7 @@ namespace blink {
 
 class WebFileWriter;
 class WebFileWriterClient;
+class WebFrame;
 
 class WebFileSystem {
  public:
@@ -171,6 +175,14 @@ class WebFileSystem {
                                 WebFileWriterClient*,
                                 WebFileSystemCallbacks) = 0;
 
+  // Creates a blink::mojom::FileWriter that can be used to write to the given
+  // file. The resulting FileWriter is passed as a ScopedMessagePipeHandle to
+  // deal with converting between non-blink and blink mojom bindings variants.
+  using CreateFileWriterCallbacks =
+      WebCallbacks<mojo::ScopedMessagePipeHandle, base::File::Error>;
+  virtual void CreateFileWriter(const WebURL& path,
+                                std::unique_ptr<CreateFileWriterCallbacks>) = 0;
+
   // Creates a snapshot file for a given file specified by |path|. It returns
   // the metadata of the created snapshot file.  The returned metadata should
   // include a local platform path to the snapshot image.  In local filesystem
@@ -187,12 +199,18 @@ class WebFileSystem {
   virtual void CreateSnapshotFileAndReadMetadata(const WebURL& path,
                                                  WebFileSystemCallbacks) = 0;
 
-  // Waits for additional results returned for the method call and returns true
-  // if possible.
-  // Returns false if there is no running method call corresponding for the
-  // given ID.
-  // |callbacks_id| must be the value returned by the original method call.
-  virtual bool WaitForAdditionalResult(int callbacks_id) = 0;
+  struct FileSystemEntry {
+    WebString file_system_id;
+    WebString base_name;
+  };
+
+  // Prompts the user to select a file from the native filesystem. Returns an
+  // error code if something failed, or a list of the selected entries on
+  // success.
+  using ChooseEntryCallbacks =
+      WebCallbacks<WebVector<FileSystemEntry>, base::File::Error>;
+  virtual void ChooseEntry(WebFrame* frame,
+                           std::unique_ptr<ChooseEntryCallbacks>) = 0;
 
  protected:
   virtual ~WebFileSystem() = default;

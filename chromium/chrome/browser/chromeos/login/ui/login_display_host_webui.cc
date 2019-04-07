@@ -83,8 +83,8 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "media/audio/sounds/sounds_manager.h"
-#include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "services/ws/public/cpp/property_type_converters.h"
+#include "services/ws/public/mojom/window_manager.mojom.h"
 #include "ui/aura/window.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -107,9 +107,9 @@
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/widget/widget_delegate.h"
 #include "url/gurl.h"
 
+namespace chromeos {
 namespace {
 
 // Maximum delay for startup sound after 'loginPromptVisible' signal.
@@ -138,14 +138,6 @@ const int kCrashCountLimit = 5;
 
 // The default fade out animation time in ms.
 const int kDefaultFadeTimeMs = 200;
-
-// Whether to enable tnitializing WebUI in hidden state (see
-// |initialize_webui_hidden_|) by default.
-const bool kHiddenWebUIInitializationDefault = true;
-
-// Switch values that might be used to override WebUI init type.
-const char kWebUIInitParallel[] = "parallel";
-const char kWebUIInitPostpone[] = "postpone";
 
 // A class to observe an implicit animation and invokes the callback after the
 // animation is completed.
@@ -311,6 +303,9 @@ void ResetKeyboardOverscrollOverride() {
       keyboard::KEYBOARD_OVERSCROLL_OVERRIDE_NONE);
 }
 
+// Workaround for graphical glitches with animated user avatars due to a race
+// between GPU process cleanup for the closing WebContents versus compositor
+// draw of new animation frames. https://crbug.com/759148
 class CloseAfterCommit : public ui::CompositorObserver,
                          public views::WidgetObserver {
  public:
@@ -332,7 +327,6 @@ class CloseAfterCommit : public ui::CompositorObserver,
   void OnCompositingStarted(ui::Compositor* compositor,
                             base::TimeTicks start_time) override {}
   void OnCompositingEnded(ui::Compositor* compositor) override {}
-  void OnCompositingLockStateChanged(ui::Compositor* compositor) override {}
   void OnCompositingChildResizing(ui::Compositor* compositor) override {}
   void OnCompositingShuttingDown(ui::Compositor* compositor) override {}
 
@@ -357,9 +351,21 @@ bool CanPlayStartupSound() {
          device.type != chromeos::AudioDeviceType::AUDIO_TYPE_OTHER;
 }
 
-}  // namespace
+bool ShouldInitializeWebUIHidden() {
+  // Always postpone WebUI initialization on first boot, otherwise we miss
+  // initial animation.
+  if (!StartupUtils::IsOobeCompleted())
+    return false;
 
-namespace chromeos {
+  // Tests and kiosk app autolaunch don't support hidden.
+  if (WizardController::IsZeroDelayEnabled())
+    return false;
+
+  // Default.
+  return true;
+}
+
+}  // namespace
 
 // static
 const int LoginDisplayHostWebUI::kShowLoginWebUIid = 0x1111;
@@ -387,55 +393,13 @@ class LoginDisplayHostWebUI::KeyboardDrivenOobeKeyHandler
   DISALLOW_COPY_AND_ASSIGN(KeyboardDrivenOobeKeyHandler);
 };
 
-// A login implementation of WidgetDelegate.
-class LoginDisplayHostWebUI::LoginWidgetDelegate
-    : public views::WidgetDelegate {
- public:
-  LoginWidgetDelegate(views::Widget* widget, LoginDisplayHostWebUI* host)
-      : widget_(widget), login_display_host_(host) {
-    DCHECK(widget_);
-    DCHECK(login_display_host_);
-  }
-  ~LoginWidgetDelegate() override {}
-
-  void LoginDisplayHostDestroyed() { login_display_host_ = nullptr; }
-
-  // Overridden from WidgetDelegate:
-  void WindowClosing() override {
-    // Reset the cached Widget and View pointers. The Widget may close due to:
-    // * Login completion
-    // * Ash crash at the login screen on mustash
-    // In the latter case the mash root process will trigger a clean restart
-    // of content_browser.
-    if (!features::IsAshInBrowserProcess() && login_display_host_)
-      login_display_host_->ResetLoginWindowAndView();
-  }
-  void DeleteDelegate() override { delete this; }
-  views::Widget* GetWidget() override { return widget_; }
-  const views::Widget* GetWidget() const override { return widget_; }
-  bool CanActivate() const override { return true; }
-  bool ShouldAdvanceFocusToTopLevelWidget() const override { return true; }
-
- private:
-  views::Widget* widget_;
-  // Set to null if LoginDisplayHostWebUI is destroyed before us.
-  LoginDisplayHostWebUI* login_display_host_;
-
-  DISALLOW_COPY_AND_ASSIGN(LoginWidgetDelegate);
-};
-
 ////////////////////////////////////////////////////////////////////////////////
 // LoginDisplayHostWebUI, public
 
 LoginDisplayHostWebUI::LoginDisplayHostWebUI()
-    : oobe_startup_sound_played_(StartupUtils::IsOobeCompleted()),
+    : initialize_webui_hidden_(ShouldInitializeWebUIHidden()),
+      oobe_startup_sound_played_(StartupUtils::IsOobeCompleted()),
       weak_factory_(this) {
-  if (!features::IsAshInBrowserProcess()) {
-    // Animation, and initializing hidden, are not currently supported for Mash.
-    finalize_animation_type_ = ANIMATION_NONE;
-    initialize_webui_hidden_ = false;
-  }
-
   DBusThreadManager::Get()->GetSessionManagerClient()->AddObserver(this);
   CrasAudioHandler::Get()->AddAudioObserver(this);
 
@@ -448,35 +412,7 @@ LoginDisplayHostWebUI::LoginDisplayHostWebUI()
                  content::NotificationService::AllSources());
 
   bool zero_delay_enabled = WizardController::IsZeroDelayEnabled();
-  // Mash always runs login screen with zero delay
-  if (!features::IsAshInBrowserProcess())
-    zero_delay_enabled = true;
-
   waiting_for_wallpaper_load_ = !zero_delay_enabled;
-
-  // Initializing hidden is not supported in Mash
-  if (features::IsAshInBrowserProcess()) {
-    initialize_webui_hidden_ =
-        kHiddenWebUIInitializationDefault && !zero_delay_enabled;
-  }
-
-  // Check if WebUI init type is overriden. Not supported in Mash.
-  if (features::IsAshInBrowserProcess() &&
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAshWebUIInit)) {
-    const std::string override_type =
-        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-            switches::kAshWebUIInit);
-    if (override_type == kWebUIInitParallel)
-      initialize_webui_hidden_ = true;
-    else if (override_type == kWebUIInitPostpone)
-      initialize_webui_hidden_ = false;
-  }
-
-  // Always postpone WebUI initialization on first boot, otherwise we miss
-  // initial animation.
-  if (!StartupUtils::IsOobeCompleted())
-    initialize_webui_hidden_ = false;
 
   if (waiting_for_wallpaper_load_) {
     registrar_.Add(this, chrome::NOTIFICATION_WALLPAPER_ANIMATION_FINISHED,
@@ -513,9 +449,6 @@ LoginDisplayHostWebUI::~LoginDisplayHostWebUI() {
 
   if (login_view_ && login_window_)
     login_window_->RemoveRemovalsObserver(this);
-
-  if (login_window_delegate_)
-    login_window_delegate_->LoginDisplayHostDestroyed();
 
   MultiUserWindowManager* window_manager =
       MultiUserWindowManager::GetInstance();
@@ -564,9 +497,7 @@ void LoginDisplayHostWebUI::OnFinalize() {
       ShutdownDisplayHost();
       break;
     case ANIMATION_WORKSPACE:
-      if (ash::Shell::HasInstance())
-        ScheduleWorkspaceAnimation();
-
+      ScheduleWorkspaceAnimation();
       ShutdownDisplayHost();
       break;
     case ANIMATION_FADE_OUT:
@@ -580,8 +511,6 @@ void LoginDisplayHostWebUI::OnFinalize() {
       // This is to guarantee OnUserSwitchAnimationFinished() is called before
       // LoginDisplayHost deletes itself.
       // See crbug.com/541864.
-      break;
-    default:
       break;
   }
 }
@@ -630,9 +559,12 @@ void LoginDisplayHostWebUI::OnStartUserAdding() {
   DisableKeyboardOverscroll();
 
   restore_path_ = RESTORE_ADD_USER_INTO_SESSION;
-  // Animation is not supported in Mash
-  if (features::IsAshInBrowserProcess())
+  // TODO(crbug.com/875111): MultiUserWindowManager support for mash.
+  if (!features::IsUsingWindowService())
     finalize_animation_type_ = ANIMATION_ADD_USER;
+  else
+    finalize_animation_type_ = ANIMATION_NONE;
+
   // Observe the user switch animation and defer the deletion of itself only
   // after the animation is finished.
   MultiUserWindowManager* window_manager =
@@ -647,7 +579,7 @@ void LoginDisplayHostWebUI::OnStartUserAdding() {
   // We should emit this signal only at login screen (after reboot or sign out).
   login_view_->set_should_emit_login_prompt_visible(false);
 
-  if (features::IsAshInBrowserProcess()) {
+  if (!features::IsMultiProcessMash()) {
     // Lock container can be transparent after lock screen animation.
     aura::Window* lock_container = ash::Shell::GetContainer(
         ash::Shell::GetPrimaryRootWindow(),
@@ -687,9 +619,7 @@ void LoginDisplayHostWebUI::OnStartSignInScreen(
 
   restore_path_ = RESTORE_SIGN_IN;
   is_showing_login_ = true;
-  // Animation is not supported in Mash
-  if (features::IsAshInBrowserProcess())
-    finalize_animation_type_ = ANIMATION_WORKSPACE;
+  finalize_animation_type_ = ANIMATION_WORKSPACE;
 
   if (waiting_for_wallpaper_load_ && !initialize_webui_hidden_) {
     VLOG(1) << "Login WebUI >> sign in postponed";
@@ -736,9 +666,7 @@ void LoginDisplayHostWebUI::OnPreferencesChanged() {
 }
 
 void LoginDisplayHostWebUI::OnStartAppLaunch() {
-  // Animation is not supported in Mash.
-  if (features::IsAshInBrowserProcess())
-    finalize_animation_type_ = ANIMATION_FADE_OUT;
+  finalize_animation_type_ = ANIMATION_FADE_OUT;
   if (!login_window_)
     LoadURL(GURL(kAppLaunchSplashURL));
 
@@ -746,9 +674,7 @@ void LoginDisplayHostWebUI::OnStartAppLaunch() {
 }
 
 void LoginDisplayHostWebUI::OnStartArcKiosk() {
-  // Animation is not supported in Mash.
-  if (features::IsAshInBrowserProcess())
-    finalize_animation_type_ = ANIMATION_FADE_OUT;
+  finalize_animation_type_ = ANIMATION_FADE_OUT;
   if (!login_window_) {
     LoadURL(GURL(kAppLaunchSplashURL));
     LoadURL(GURL(kArcKioskSplashURL));
@@ -924,7 +850,9 @@ void LoginDisplayHostWebUI::OnUserSwitchAnimationFinished() {
 // LoginDisplayHostWebUI, private
 
 void LoginDisplayHostWebUI::ScheduleWorkspaceAnimation() {
-  if (!features::IsAshInBrowserProcess()) {
+  // TODO(mash): Support finalize animations without reaching directly into
+  // ash::Shell.
+  if (features::IsMultiProcessMash()) {
     NOTIMPLEMENTED();
     return;
   }
@@ -1035,17 +963,15 @@ void LoginDisplayHostWebUI::InitLoginWindowAndView() {
                                      ? ash::kShellWindowId_AlwaysOnTopContainer
                                      : ash::kShellWindowId_LockScreenContainer;
   // The ash::Shell containers are not available in Mash
-  if (features::IsAshInBrowserProcess()) {
+  if (!features::IsUsingWindowService()) {
     params.parent =
         ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(), container);
   } else {
-    using ui::mojom::WindowManager;
+    using ws::mojom::WindowManager;
     params.mus_properties[WindowManager::kContainerId_InitProperty] =
         mojo::ConvertTo<std::vector<uint8_t>>(static_cast<int32_t>(container));
   }
   login_window_ = new views::Widget;
-  params.delegate = login_window_delegate_ =
-      new LoginWidgetDelegate(login_window_, this);
   login_window_->Init(params);
 
   login_view_ = new WebUILoginView(WebUILoginView::WebViewSettings());
@@ -1053,9 +979,8 @@ void LoginDisplayHostWebUI::InitLoginWindowAndView() {
   if (login_view_->webui_visible())
     OnLoginPromptVisible();
 
-  // Animations are not available in Mash.
   // For voice interaction OOBE, we do not want the animation here.
-  if (features::IsAshInBrowserProcess() && !is_voice_interaction_oobe_) {
+  if (!is_voice_interaction_oobe_) {
     login_window_->SetVisibilityAnimationDuration(
         base::TimeDelta::FromMilliseconds(kLoginFadeoutTransitionDurationMs));
     login_window_->SetVisibilityAnimationTransition(
@@ -1088,7 +1013,9 @@ void LoginDisplayHostWebUI::ResetLoginWindowAndView() {
   }
 
   if (login_window_) {
-    if (!features::IsAshInBrowserProcess()) {
+    if (features::IsUsingWindowService()) {
+      // TODO(mash): CompositorObserver::OnCompositingDidCommit() doesn't fire
+      // for either SingleProcessMash or MultiProcessMash.
       login_window_->Close();
     } else {
       login_window_->Hide();
@@ -1098,7 +1025,6 @@ void LoginDisplayHostWebUI::ResetLoginWindowAndView() {
     }
     login_window_->RemoveRemovalsObserver(this);
     login_window_ = nullptr;
-    login_window_delegate_ = nullptr;
   }
 
   // Release wizard controller with the webui and hosting window so that it
@@ -1157,6 +1083,11 @@ void LoginDisplayHostWebUI::UpdateOobeDialogSize(int width, int height) {
   NOTREACHED();
 }
 
+void LoginDisplayHostWebUI::UpdateOobeDialogState(
+    ash::mojom::OobeDialogState state) {
+  NOTREACHED();
+}
+
 const user_manager::UserList LoginDisplayHostWebUI::GetUsers() {
   return user_manager::UserList();
 }
@@ -1165,11 +1096,13 @@ void LoginDisplayHostWebUI::ShowFeedback() {
   NOTREACHED();
 }
 
-// This is handled differently in webui.
-void LoginDisplayHostWebUI::ShowDialogForCaptivePortal() {}
+void LoginDisplayHostWebUI::ShowResetScreen() {
+  NOTREACHED();
+}
 
-// This is handled differently in webui.
-void LoginDisplayHostWebUI::HideDialogForCaptivePortal() {}
+void LoginDisplayHostWebUI::HandleDisplayCaptivePortal() {
+  GetOobeUI()->GetErrorScreen()->FixCaptivePortal();
+}
 
 void LoginDisplayHostWebUI::OnCancelPasswordChangedFlow() {}
 

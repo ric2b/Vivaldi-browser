@@ -4,13 +4,12 @@
 
 #include "ui/accessibility/platform/ax_platform_node.h"
 
-#include <atlbase.h>
-#include <atlcom.h>
 #include <oleacc.h>
 #include <wrl/client.h>
 
 #include <memory>
 
+#include "base/win/atl.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_variant.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -1104,7 +1103,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetChildIndex) {
   root_obj.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long id;
+  LONG id;
   EXPECT_EQ(S_OK, result->get_childIndex(0, 0, &id));
   EXPECT_EQ(id, 0);
 
@@ -1160,7 +1159,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetColumnExtentAt) {
   root_obj.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long columns_spanned;
+  LONG columns_spanned;
   EXPECT_EQ(S_OK, result->get_columnExtentAt(1, 1, &columns_spanned));
   EXPECT_EQ(columns_spanned, 1);
 
@@ -1176,7 +1175,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetColumnIndex) {
   root_obj.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long index;
+  LONG index;
   EXPECT_EQ(S_OK, result->get_columnIndex(2, &index));
   EXPECT_EQ(index, 2);
   EXPECT_EQ(S_OK, result->get_columnIndex(3, &index));
@@ -1194,7 +1193,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetNColumns) {
   root_obj.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long count;
+  LONG count;
   EXPECT_EQ(S_OK, result->get_nColumns(&count));
   EXPECT_EQ(count, 3);
 }
@@ -1208,7 +1207,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetNRows) {
   root_obj.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long count;
+  LONG count;
   EXPECT_EQ(S_OK, result->get_nRows(&count));
   EXPECT_EQ(count, 3);
 }
@@ -1250,7 +1249,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetRowExtentAt) {
   root_obj.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long rows_spanned;
+  LONG rows_spanned;
   EXPECT_EQ(S_OK, result->get_rowExtentAt(0, 1, &rows_spanned));
   EXPECT_EQ(rows_spanned, 0);
 
@@ -1266,7 +1265,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetRowIndex) {
   root_obj.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long index;
+  LONG index;
   EXPECT_EQ(S_OK, result->get_rowIndex(2, &index));
   EXPECT_EQ(index, 0);
   EXPECT_EQ(S_OK, result->get_rowIndex(3, &index));
@@ -1284,7 +1283,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetRowColumnExtentsAtIndex) {
   root_obj.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long row, column, row_extents, column_extents;
+  LONG row, column, row_extents, column_extents;
   boolean is_selected;
   EXPECT_EQ(S_OK,
             result->get_rowColumnExtentsAtIndex(0, &row, &column, &row_extents,
@@ -1327,7 +1326,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableCellGetColumnExtent) {
   ComPtr<IAccessibleTableCell> cell = GetCellInTable();
   ASSERT_NE(nullptr, cell.Get());
 
-  long column_spanned;
+  LONG column_spanned;
   EXPECT_EQ(S_OK, cell->get_columnExtent(&column_spanned));
   EXPECT_EQ(column_spanned, 1);
 }
@@ -1340,7 +1339,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableCellGetColumnHeaderCells) {
 
   IUnknown** cell_accessibles;
 
-  long number_cells;
+  LONG number_cells;
   EXPECT_EQ(S_OK,
             cell->get_columnHeaderCells(&cell_accessibles, &number_cells));
   EXPECT_EQ(number_cells, 1);
@@ -1352,7 +1351,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableCellGetColumnIndex) {
   ComPtr<IAccessibleTableCell> cell = GetCellInTable();
   ASSERT_NE(nullptr, cell.Get());
 
-  long index;
+  LONG index;
   EXPECT_EQ(S_OK, cell->get_columnIndex(&index));
   EXPECT_EQ(index, 1);
 }
@@ -1363,7 +1362,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableCellGetRowExtent) {
   ComPtr<IAccessibleTableCell> cell = GetCellInTable();
   ASSERT_NE(nullptr, cell.Get());
 
-  long rows_spanned;
+  LONG rows_spanned;
   EXPECT_EQ(S_OK, cell->get_rowExtent(&rows_spanned));
   EXPECT_EQ(rows_spanned, 1);
 }
@@ -1376,7 +1375,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableCellGetRowHeaderCells) {
 
   IUnknown** cell_accessibles;
 
-  long number_cells;
+  LONG number_cells;
   EXPECT_EQ(S_OK, cell->get_rowHeaderCells(&cell_accessibles, &number_cells));
   EXPECT_EQ(number_cells, 1);
 }
@@ -1387,7 +1386,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableCellGetRowIndex) {
   ComPtr<IAccessibleTableCell> cell = GetCellInTable();
   ASSERT_NE(nullptr, cell.Get());
 
-  long index;
+  LONG index;
   EXPECT_EQ(S_OK, cell->get_rowIndex(&index));
   EXPECT_EQ(index, 1);
 }
@@ -1398,7 +1397,7 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableCellGetRowColumnExtent) {
   ComPtr<IAccessibleTableCell> cell = GetCellInTable();
   ASSERT_NE(nullptr, cell.Get());
 
-  long row, column, row_extents, column_extents;
+  LONG row, column, row_extents, column_extents;
   boolean is_selected;
   EXPECT_EQ(S_OK, cell->get_rowColumnExtents(&row, &column, &row_extents,
                                              &column_extents, &is_selected));
@@ -1927,9 +1926,9 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetSelectedColumnsZero) {
   table.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long max_columns = 10;
-  long* columns;
-  long n_columns;
+  LONG max_columns = 10;
+  LONG* columns;
+  LONG n_columns;
   EXPECT_EQ(S_OK,
             result->get_selectedColumns(max_columns, &columns, &n_columns));
   EXPECT_EQ(0, n_columns);
@@ -1957,9 +1956,9 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetSelectedColumnsOne) {
   table.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long max_columns = 10;
-  long* columns;
-  long n_columns;
+  LONG max_columns = 10;
+  LONG* columns;
+  LONG n_columns;
   EXPECT_EQ(S_OK,
             result->get_selectedColumns(max_columns, &columns, &n_columns));
   EXPECT_EQ(1, n_columns);
@@ -1995,9 +1994,9 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetSelectedColumnsMany) {
   table.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long max_columns = 10;
-  long* columns;
-  long n_columns;
+  LONG max_columns = 10;
+  LONG* columns;
+  LONG n_columns;
   EXPECT_EQ(S_OK,
             result->get_selectedColumns(max_columns, &columns, &n_columns));
   EXPECT_EQ(2, n_columns);
@@ -2018,9 +2017,9 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetSelectedRowsZero) {
   table.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long max_rows = 10;
-  long* rows;
-  long n_rows;
+  LONG max_rows = 10;
+  LONG* rows;
+  LONG n_rows;
   EXPECT_EQ(S_OK, result->get_selectedRows(max_rows, &rows, &n_rows));
   EXPECT_EQ(0, n_rows);
 }
@@ -2047,9 +2046,9 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetSelectedRowsOne) {
   table.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long max_rows = 10;
-  long* rows;
-  long n_rows;
+  LONG max_rows = 10;
+  LONG* rows;
+  LONG n_rows;
   EXPECT_EQ(S_OK, result->get_selectedRows(max_rows, &rows, &n_rows));
   EXPECT_EQ(1, n_rows);
   EXPECT_EQ(1, rows[0]);
@@ -2084,9 +2083,9 @@ TEST_F(AXPlatformNodeWinTest, TestIAccessibleTableGetSelectedRowsMany) {
   table.CopyTo(result.GetAddressOf());
   ASSERT_NE(nullptr, result.Get());
 
-  long max_rows = 10;
-  long* rows;
-  long n_rows;
+  LONG max_rows = 10;
+  LONG* rows;
+  LONG n_rows;
   EXPECT_EQ(S_OK, result->get_selectedRows(max_rows, &rows, &n_rows));
   EXPECT_EQ(2, n_rows);
   EXPECT_EQ(1, rows[0]);

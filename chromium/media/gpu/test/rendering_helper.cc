@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -23,6 +24,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "media/gpu/test/video_decode_accelerator_unittest_helpers.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface.h"
@@ -33,11 +35,12 @@
 #include "ui/ozone/public/ozone_platform.h"
 #endif  // defined(USE_OZONE)
 
+namespace media {
+
+namespace {
+
 // Helper for Shader creation.
-static void CreateShader(GLuint program,
-                         GLenum type,
-                         const char* source,
-                         int size) {
+void CreateShader(GLuint program, GLenum type, const char* source, int size) {
   GLuint shader = glCreateShader(type);
   glShaderSource(shader, 1, &source, &size);
   glCompileShader(shader);
@@ -53,17 +56,20 @@ static void CreateShader(GLuint program,
   CHECK_EQ(static_cast<int>(glGetError()), GL_NO_ERROR);
 }
 
-namespace media {
+void DeleteTexture(uint32_t texture_id) {
+  glDeleteTextures(1, &texture_id);
+  CHECK_EQ(static_cast<int>(glGetError()), GL_NO_ERROR);
+}
+
+// Helper function to set GL viewport.
+void GLSetViewPort(const gfx::Rect& area) {
+  glViewport(area.x(), area.y(), area.width(), area.height());
+  glScissor(area.x(), area.y(), area.width(), area.height());
+}
+
+}  // namespace
 
 bool RenderingHelper::use_gl_ = false;
-
-RenderingHelperParams::RenderingHelperParams()
-    : rendering_fps(0), render_as_thumbnails(false) {}
-
-RenderingHelperParams::RenderingHelperParams(
-    const RenderingHelperParams& other) = default;
-
-RenderingHelperParams::~RenderingHelperParams() {}
 
 VideoFrameTexture::VideoFrameTexture(uint32_t texture_target,
                                      uint32_t texture_id,
@@ -78,11 +84,9 @@ VideoFrameTexture::~VideoFrameTexture() {
   base::ResetAndReturn(&no_longer_needed_cb_).Run();
 }
 
-RenderingHelper::RenderedVideo::RenderedVideo()
-    : is_flushing(false), frames_to_drop(0) {}
+RenderingHelper::RenderedVideo::RenderedVideo() {}
 
-RenderingHelper::RenderedVideo::RenderedVideo(const RenderedVideo& other) =
-    default;
+RenderingHelper::RenderedVideo::RenderedVideo(const RenderedVideo&) = default;
 
 RenderingHelper::RenderedVideo::~RenderedVideo() {}
 
@@ -320,26 +324,33 @@ void RenderingHelper::UnInitialize(base::WaitableEvent* done) {
   done->Signal();
 }
 
-void RenderingHelper::CreateTexture(uint32_t texture_target,
-                                    uint32_t* texture_id,
-                                    const gfx::Size& size,
-                                    base::WaitableEvent* done) {
-  if (!task_runner_->BelongsToCurrentThread()) {
-    task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&RenderingHelper::CreateTexture, base::Unretained(this),
-                   texture_target, texture_id, size, done));
-    return;
+scoped_refptr<media::test::TextureRef> RenderingHelper::CreateTexture(
+    uint32_t texture_target,
+    bool pre_allocate,
+    VideoPixelFormat pixel_format,
+    const gfx::Size& size) {
+  CHECK(task_runner_->BelongsToCurrentThread());
+  uint32_t texture_id = CreateTextureId(texture_target, size);
+  base::OnceClosure delete_texture_cb =
+      use_gl_ ? base::BindOnce(DeleteTexture, texture_id) : base::DoNothing();
+  if (pre_allocate) {
+    return media::test::TextureRef::CreatePreallocated(
+        texture_id, std::move(delete_texture_cb), pixel_format, size);
   }
+  return media::test::TextureRef::Create(texture_id,
+                                         std::move(delete_texture_cb));
+}
 
+uint32_t RenderingHelper::CreateTextureId(uint32_t texture_target,
+                                          const gfx::Size& size) {
+  CHECK(task_runner_->BelongsToCurrentThread());
   if (!use_gl_) {
-    *texture_id = 0;
-    done->Signal();
-    return;
+    return 0;
   }
 
-  glGenTextures(1, texture_id);
-  glBindTexture(texture_target, *texture_id);
+  uint32_t texture_id;
+  glGenTextures(1, &texture_id);
+  glBindTexture(texture_target, texture_id);
   if (texture_target == GL_TEXTURE_2D) {
     glTexImage2D(GL_TEXTURE_2D,
                  0,
@@ -356,13 +367,7 @@ void RenderingHelper::CreateTexture(uint32_t texture_target,
   glTexParameteri(texture_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(texture_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   CHECK_EQ(static_cast<int>(glGetError()), GL_NO_ERROR);
-  done->Signal();
-}
-
-// Helper function to set GL viewport.
-static inline void GLSetViewPort(const gfx::Rect& area) {
-  glViewport(area.x(), area.y(), area.width(), area.height());
-  glScissor(area.x(), area.y(), area.width(), area.height());
+  return texture_id;
 }
 
 void RenderingHelper::ConsumeVideoFrame(
@@ -444,22 +449,8 @@ void RenderingHelper::RenderTexture(uint32_t texture_target,
   CHECK_EQ(static_cast<int>(glGetError()), GL_NO_ERROR);
 }
 
-void RenderingHelper::DeleteTexture(uint32_t texture_id) {
-  CHECK(task_runner_->BelongsToCurrentThread());
-
-  if (!use_gl_)
-    return;
-
-  glDeleteTextures(1, &texture_id);
-  CHECK_EQ(static_cast<int>(glGetError()), GL_NO_ERROR);
-}
-
 gl::GLContext* RenderingHelper::GetGLContext() {
   return gl_context_.get();
-}
-
-void* RenderingHelper::GetGLDisplay() {
-  return gl_surface_->GetDisplay();
 }
 
 void RenderingHelper::Clear() {

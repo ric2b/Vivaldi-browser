@@ -24,7 +24,6 @@
 #include "chrome/browser/signin/scoped_account_consistency.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/test_signin_client_builder.h"
-#include "chrome/browser/signin/unified_consent_helper.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/browser/unified_consent/unified_consent_service_factory.h"
@@ -39,11 +38,11 @@
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/browser/signin_pref_names.h"
+#include "components/unified_consent/feature.h"
 #include "components/unified_consent/scoped_unified_consent.h"
 #include "components/unified_consent/unified_consent_service.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "google_apis/gaia/google_service_auth_error.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -139,7 +138,6 @@ class FakeUserPolicySigninService : public policy::UserPolicySigninService {
                                 nullptr,
                                 signin_manager,
                                 nullptr,
-                                nullptr,
                                 oauth2_token_service) {}
 
   void set_dm_token(const std::string& dm_token) { dm_token_ = dm_token; }
@@ -164,7 +162,6 @@ class FakeUserPolicySigninService : public policy::UserPolicySigninService {
       const AccountId& account_id,
       const std::string& dm_token,
       const std::string& client_id,
-      scoped_refptr<net::URLRequestContextGetter> profile_request_context,
       scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory,
       const PolicyFetchCallback& callback) override {
     callback.Run(true);
@@ -262,8 +259,8 @@ class DiceTurnSyncOnHelperTestBase : public testing::Test {
     EXPECT_CALL(*sync_service_mock, GetSetupInProgressHandle()).Times(1);
     ON_CALL(*sync_service_mock, GetDisableReasons())
         .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
-    ON_CALL(*sync_service_mock, IsEngineInitialized())
-        .WillByDefault(Return(true));
+    ON_CALL(*sync_service_mock, GetTransportState())
+        .WillByDefault(Return(syncer::SyncService::TransportState::ACTIVE));
   }
 
   void SetExpectationsForSyncStartupPending() {
@@ -272,8 +269,9 @@ class DiceTurnSyncOnHelperTestBase : public testing::Test {
     EXPECT_CALL(*sync_service_mock, GetSetupInProgressHandle()).Times(1);
     ON_CALL(*sync_service_mock, GetDisableReasons())
         .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
-    ON_CALL(*sync_service_mock, IsEngineInitialized())
-        .WillByDefault(Return(false));
+    ON_CALL(*sync_service_mock, GetTransportState())
+        .WillByDefault(
+            Return(syncer::SyncService::TransportState::INITIALIZING));
     ON_CALL(*sync_service_mock, GetAuthError())
         .WillByDefault(ReturnRef(kNoAuthError));
   }
@@ -403,13 +401,13 @@ class DiceTurnSyncOnHelperTestBase : public testing::Test {
       GoogleServiceAuthError::AuthErrorNone();
 };
 
-// Test class with only DicePrepareMigration enabled.
+// Test class with only DiceMigration enabled.
 class DiceTurnSyncOnHelperTest : public DiceTurnSyncOnHelperTestBase {
  public:
   DiceTurnSyncOnHelperTest() = default;
 
  private:
-  ScopedAccountConsistencyDicePrepareMigration scoped_dice_;
+  ScopedAccountConsistencyDiceMigration scoped_dice_;
 };
 
 // Test class with Dice and UnifiedConsent enabled.
@@ -704,7 +702,7 @@ TEST_F(DiceTurnSyncOnHelperTest, ShowSyncDialogForEndConsumerAccount) {
 // Tests that the user enabled unified consent,
 TEST_F(DiceTurnSyncOnHelperTestWithUnifiedConsent,
        ShowSyncDialogForEndConsumerAccount_UnifiedConsentEnabled) {
-  ASSERT_TRUE(IsUnifiedConsentEnabled(profile()));
+  ASSERT_TRUE(unified_consent::IsUnifiedConsentFeatureEnabled());
   // Set expectations.
   expected_sync_confirmation_shown_ = true;
   sync_confirmation_result_ = LoginUIService::SyncConfirmationUIClosedResult::

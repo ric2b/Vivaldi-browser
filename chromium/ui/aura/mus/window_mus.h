@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "services/ui/public/interfaces/cursor/cursor.mojom.h"
+#include "services/ws/public/mojom/cursor/cursor.mojom.h"
 #include "ui/aura/aura_export.h"
 #include "ui/aura/mus/mus_types.h"
 
@@ -19,7 +19,7 @@ class Rect;
 class Transform;
 }
 
-namespace ui {
+namespace ws {
 namespace mojom {
 enum class OrderDirection;
 }
@@ -67,7 +67,7 @@ class AURA_EXPORT WindowMus {
   }
   static WindowMus* Get(Window* window);
 
-  ui::Id server_id() const { return server_id_; }
+  ws::Id server_id() const { return server_id_; }
 
   WindowMusType window_mus_type() const { return window_mus_type_; }
 
@@ -81,7 +81,7 @@ class AURA_EXPORT WindowMus {
   virtual void RemoveChildFromServer(WindowMus* child) = 0;
   virtual void ReorderFromServer(WindowMus* child,
                                  WindowMus* relative,
-                                 ui::mojom::OrderDirection) = 0;
+                                 ws::mojom::OrderDirection) = 0;
   virtual void SetBoundsFromServer(
       const gfx::Rect& bounds,
       const base::Optional<viz::LocalSurfaceId>& local_surface_id) = 0;
@@ -135,9 +135,9 @@ class AURA_EXPORT WindowMus {
   // Just for set_server_id(), which other places should not call.
   friend class WindowTreeClient;
 
-  void set_server_id(ui::Id id) { server_id_ = id; }
+  void set_server_id(ws::Id id) { server_id_ = id; }
 
-  ui::Id server_id_ = kInvalidServerId;
+  ws::Id server_id_ = kInvalidServerId;
   const WindowMusType window_mus_type_;
 };
 

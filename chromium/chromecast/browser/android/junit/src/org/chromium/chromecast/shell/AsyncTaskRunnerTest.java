@@ -10,7 +10,6 @@ import static org.junit.Assert.assertThat;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.asynctask.ShadowAsyncTask;
@@ -44,14 +43,6 @@ public class AsyncTaskRunnerTest {
     }
 
     @Test
-    public void testHappyPath() {
-        List<Integer> result = new ArrayList<>();
-        new AsyncTaskRunner().doAsync(() -> 45, result::add);
-        Robolectric.flushBackgroundThreadScheduler();
-        assertThat(result, contains(45));
-    }
-
-    @Test
     public void testSchedulesOnExecutor() {
         List<Integer> result = new ArrayList<>();
         TestExecutor executor = new TestExecutor();
@@ -80,7 +71,7 @@ public class AsyncTaskRunnerTest {
         AsyncTaskRunner runner = new AsyncTaskRunner(executor);
         // For each message in the controller, schedule a task to capitalize the message, and add
         // the capitalized message to the result list.
-        controller.watch(message -> runner.doAsync(() -> message.toUpperCase(), result::add));
+        controller.subscribe(message -> runner.doAsync(() -> message.toUpperCase(), result::add));
         // If the task is run before the controller is reset, it should add to the list.
         controller.set("new");
         executor.flush();

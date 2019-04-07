@@ -216,15 +216,6 @@ bool RenderWidgetHostViewGuest::HasFocus() const {
   return guest_->focused();
 }
 
-#if defined(USE_AURA)
-void RenderWidgetHostViewGuest::ProcessAckedTouchEvent(
-    const TouchEventWithLatencyInfo& touch, InputEventAckState ack_result) {
-  // TODO(tdresser): Since all ProcessAckedTouchEvent() uses is the event id,
-  // don't pass the full event object here. https://crbug.com/550581.
-  GetOwnerRenderWidgetHostView()->ProcessAckedTouchEvent(touch, ack_result);
-}
-#endif
-
 void RenderWidgetHostViewGuest::PreProcessMouseEvent(
     const blink::WebMouseEvent& event) {
   if (event.GetType() == blink::WebInputEvent::kMouseDown) {
@@ -399,6 +390,10 @@ gfx::Range RenderWidgetHostViewGuest::GetSelectedRange() {
   return platform_view_->GetSelectedRange();
 }
 
+size_t RenderWidgetHostViewGuest::GetOffsetForSurroundingText() {
+  return platform_view_->GetOffsetForSurroundingText();
+}
+
 void RenderWidgetHostViewGuest::SetNeedsBeginFrames(bool needs_begin_frames) {
   if (platform_view_)
     platform_view_->SetNeedsBeginFrames(needs_begin_frames);
@@ -437,7 +432,7 @@ void RenderWidgetHostViewGuest::OnDidUpdateVisualPropertiesComplete(
 void RenderWidgetHostViewGuest::OnAttached() {
   RegisterFrameSinkId();
 #if defined(USE_AURA)
-  if (!features::IsAshInBrowserProcess()) {
+  if (features::IsUsingWindowService()) {
     aura::Env::GetInstance()->ScheduleEmbed(
         GetWindowTreeClientFromRenderer(),
         base::BindOnce(&RenderWidgetHostViewGuest::OnGotEmbedToken,
@@ -455,6 +450,10 @@ bool RenderWidgetHostViewGuest::OnMessageReceived(const IPC::Message& msg) {
   }
 
   return platform_view_->OnMessageReceived(msg);
+}
+
+RenderWidgetHostViewBase* RenderWidgetHostViewGuest::GetRootView() {
+  return GetRootView(this);
 }
 
 void RenderWidgetHostViewGuest::InitAsChild(
@@ -664,11 +663,17 @@ RenderWidgetHostViewGuest::GetOwnerRenderWidgetHostView() const {
                 : nullptr;
 }
 
+void RenderWidgetHostViewGuest::MaybeSendSyntheticTapGestureForTest(
+    const blink::WebFloatPoint& position,
+    const blink::WebFloatPoint& screen_position) const {
+  MaybeSendSyntheticTapGesture(position, screen_position);
+}
+
 // TODO(wjmaclean): When we remove BrowserPlugin, delete this code.
 // http://crbug.com/533069
 void RenderWidgetHostViewGuest::MaybeSendSyntheticTapGesture(
     const blink::WebFloatPoint& position,
-    const blink::WebFloatPoint& screenPosition) const {
+    const blink::WebFloatPoint& screen_position) const {
   if (!HasFocus()) {
     // We need to a account for the position of the guest view within the
     // embedder, as well as the fact that the embedder's host will add its
@@ -684,7 +689,14 @@ void RenderWidgetHostViewGuest::MaybeSendSyntheticTapGesture(
         blink::kWebGestureDeviceTouchscreen);
     gesture_tap_event.SetPositionInWidget(
         blink::WebFloatPoint(position.x + offset.x(), position.y + offset.y()));
-    gesture_tap_event.SetPositionInScreen(screenPosition);
+    gesture_tap_event.SetPositionInScreen(screen_position);
+    // The touch action may not be set yet because this is still at the
+    // Pre-processing stage of a mouse or a touch event. In this case, set the
+    // touch action to Auto to prevent crashing.
+    static_cast<RenderWidgetHostImpl*>(
+        GetOwnerRenderWidgetHostView()->GetRenderWidgetHost())
+        ->input_router()
+        ->ForceSetTouchActionAuto();
     GetOwnerRenderWidgetHostView()->ProcessGestureEvent(
         gesture_tap_event, ui::LatencyInfo(ui::SourceEventType::TOUCH));
 

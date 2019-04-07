@@ -19,30 +19,38 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
   // DialogBrowserTest:
   void ShowUi(const std::string& name) override {
     auto model = std::make_unique<AuthenticatorRequestDialogModel>();
+    ::device::FidoRequestHandlerBase::TransportAvailabilityInfo
+        transport_availability;
+    transport_availability.rp_id = "example.com";
+    transport_availability.available_transports = {
+        AuthenticatorTransport::kBluetoothLowEnergy,
+        AuthenticatorTransport::kUsbHumanInterfaceDevice,
+        AuthenticatorTransport::kNearFieldCommunication,
+        AuthenticatorTransport::kInternal,
+        AuthenticatorTransport::kCloudAssistedBluetoothLowEnergy};
+    model->StartFlow(std::move(transport_availability), base::nullopt);
 
     // The dialog should immediately close as soon as it is displayed.
-    if (name == "completed") {
-      model->SetCurrentStep(AuthenticatorRequestDialogModel::Step::kCompleted);
+    if (name == "closed") {
+      model->SetCurrentStep(AuthenticatorRequestDialogModel::Step::kClosed);
     } else if (name == "transports") {
-      TransportListModel* transports = model->transport_list_model();
-      transports->AppendTransport(AuthenticatorTransport::kBluetoothLowEnergy);
-      transports->AppendTransport(AuthenticatorTransport::kUsb);
-      transports->AppendTransport(
-          AuthenticatorTransport::kNearFieldCommunication);
-      transports->AppendTransport(AuthenticatorTransport::kInternal);
-      transports->AppendTransport(
-          AuthenticatorTransport::kCloudAssistedBluetoothLowEnergy);
       model->SetCurrentStep(
           AuthenticatorRequestDialogModel::Step::kTransportSelection);
-    } else if (name == "insert_usb_register") {
-      model->SetCurrentStep(AuthenticatorRequestDialogModel::Step::
-                                kUsbInsertAndActivateOnRegister);
-    } else if (name == "insert_usb_sign") {
+    } else if (name == "activate_usb") {
       model->SetCurrentStep(
-          AuthenticatorRequestDialogModel::Step::kUsbInsertAndActivateOnSign);
+          AuthenticatorRequestDialogModel::Step::kUsbInsertAndActivate);
     } else if (name == "timeout") {
       model->SetCurrentStep(
-          AuthenticatorRequestDialogModel::Step::kErrorTimedOut);
+          AuthenticatorRequestDialogModel::Step::kPostMortemTimedOut);
+    } else if (name == "no_available_transports") {
+      model->SetCurrentStep(
+          AuthenticatorRequestDialogModel::Step::kErrorNoAvailableTransports);
+    } else if (name == "key_not_registered") {
+      model->SetCurrentStep(
+          AuthenticatorRequestDialogModel::Step::kPostMortemKeyNotRegistered);
+    } else if (name == "key_already_registered") {
+      model->SetCurrentStep(AuthenticatorRequestDialogModel::Step::
+                                kPostMortemKeyAlreadyRegistered);
     } else if (name == "ble_power_on_manual") {
       model->SetCurrentStep(
           AuthenticatorRequestDialogModel::Step::kBlePowerOnManual);
@@ -64,6 +72,11 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
     } else if (name == "ble_activate") {
       model->SetCurrentStep(
           AuthenticatorRequestDialogModel::Step::kBleActivate);
+    } else if (name == "touchid") {
+      model->SetCurrentStep(AuthenticatorRequestDialogModel::Step::kTouchId);
+    } else if (name == "cable_activate") {
+      model->SetCurrentStep(
+          AuthenticatorRequestDialogModel::Step::kCableActivate);
     }
 
     ShowAuthenticatorRequestDialog(
@@ -81,7 +94,7 @@ IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_default) {
   ShowAndVerifyUi();
 }
 
-IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_completed) {
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_closed) {
   ShowAndVerifyUi();
 }
 
@@ -89,15 +102,25 @@ IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_transports) {
   ShowAndVerifyUi();
 }
 
-IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_insert_usb_register) {
-  ShowAndVerifyUi();
-}
-
-IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_insert_usb_sign) {
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_activate_usb) {
   ShowAndVerifyUi();
 }
 
 IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_timeout) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest,
+                       InvokeUi_no_available_transports) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_key_not_registered) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest,
+                       InvokeUi_key_already_registered) {
   ShowAndVerifyUi();
 }
 
@@ -127,5 +150,13 @@ IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_ble_verifying) {
 }
 
 IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_ble_activate) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_touchid) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_cable_activate) {
   ShowAndVerifyUi();
 }

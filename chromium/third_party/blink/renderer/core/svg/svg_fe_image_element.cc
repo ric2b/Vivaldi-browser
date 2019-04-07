@@ -124,15 +124,15 @@ void SVGFEImageElement::SvgAttributeChanged(const QualifiedName& attr_name) {
 }
 
 Node::InsertionNotificationRequest SVGFEImageElement::InsertedInto(
-    ContainerNode* root_parent) {
+    ContainerNode& root_parent) {
   SVGFilterPrimitiveStandardAttributes::InsertedInto(root_parent);
   BuildPendingResource();
   return kInsertionDone;
 }
 
-void SVGFEImageElement::RemovedFrom(ContainerNode* root_parent) {
+void SVGFEImageElement::RemovedFrom(ContainerNode& root_parent) {
   SVGFilterPrimitiveStandardAttributes::RemovedFrom(root_parent);
-  if (root_parent->isConnected())
+  if (root_parent.isConnected())
     ClearResourceReferences();
 }
 

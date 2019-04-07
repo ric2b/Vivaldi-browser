@@ -15,12 +15,12 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
-#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/common/autofill_clock.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/form_data.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 
@@ -702,6 +702,11 @@ void AutofillMetrics::LogSaveCardCardholderNameWasEdited(bool edited) {
 }
 
 // static
+void AutofillMetrics::LogPaymentsCustomerDataBillingIdIsValid(bool valid) {
+  UMA_HISTOGRAM_BOOLEAN("Autofill.PaymentsCustomerDataBillingIdIsValid", valid);
+}
+
+// static
 void AutofillMetrics::LogCardUploadDecisionMetrics(
     int upload_decision_metrics) {
   DCHECK(upload_decision_metrics);
@@ -790,6 +795,17 @@ void AutofillMetrics::LogSaveCardPromptMetricBySecurityLevel(
 }
 
 // static
+void AutofillMetrics::LogManageCardsPromptMetric(ManageCardsPromptMetric metric,
+                                                 bool is_upload_save) {
+  DCHECK_LT(metric, NUM_MANAGE_CARDS_PROMPT_METRICS);
+  std::string destination = is_upload_save ? ".Upload" : ".Local";
+  std::string metric_with_destination =
+      "Autofill.ManageCardsPrompt" + destination;
+  base::UmaHistogramEnumeration(metric_with_destination, metric,
+                                NUM_MANAGE_CARDS_PROMPT_METRICS);
+}
+
+// static
 void AutofillMetrics::LogScanCreditCardPromptMetric(
     ScanCreditCardPromptMetric metric) {
   DCHECK_LT(metric, NUM_SCAN_CREDIT_CARD_PROMPT_METRICS);
@@ -829,6 +845,31 @@ void AutofillMetrics::LogLocalCardMigrationBubbleUserInteractionMetric(
   base::UmaHistogramEnumeration(
       histogram_name, metric,
       NUM_LOCAL_CARD_MIGRATION_BUBBLE_USER_INTERACTION_METRICS);
+}
+
+// static
+void AutofillMetrics::LogLocalCardMigrationPromptMetric(
+    LocalCardMigrationOrigin local_card_migration_origin,
+    LocalCardMigrationPromptMetric metric) {
+  DCHECK_LT(metric, NUM_LOCAL_CARD_MIGRATION_PROMPT_METRICS);
+  std::string histogram_name = "Autofill.LocalCardMigrationOrigin.";
+  // Switch to different sub-histogram depending on local card migration origin.
+  switch (local_card_migration_origin) {
+    case LocalCardMigrationOrigin::UseOfLocalCard:
+      histogram_name += "UseOfLocalCard";
+      break;
+    case LocalCardMigrationOrigin::UseOfServerCard:
+      histogram_name += "UseOfServerCard";
+      break;
+    case LocalCardMigrationOrigin::SettingsPage:
+      histogram_name += "SettingsPage";
+      break;
+    default:
+      NOTREACHED();
+      return;
+  }
+  base::UmaHistogramEnumeration(histogram_name, metric,
+                                NUM_LOCAL_CARD_MIGRATION_PROMPT_METRICS);
 }
 
 // static

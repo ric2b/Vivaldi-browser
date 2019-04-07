@@ -13,7 +13,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/update_client/action_runner.h"
 #include "components/update_client/component_unpacker.h"
@@ -70,7 +70,7 @@ void InstallComplete(
     const base::FilePath& unpack_path,
     const CrxInstaller::Result& result) {
   base::PostTaskWithTraits(
-      FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
+      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
       base::BindOnce(
           [](scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
              InstallOnBlockingTaskRunnerCompleteCallback callback,
@@ -149,9 +149,10 @@ void StartInstallOnBlockingTaskRunner(
     const std::string& fingerprint,
     scoped_refptr<CrxInstaller> installer,
     std::unique_ptr<service_manager::Connector> connector,
+    crx_file::VerifierFormat crx_format,
     InstallOnBlockingTaskRunnerCompleteCallback callback) {
   auto unpacker = base::MakeRefCounted<ComponentUnpacker>(
-      pk_hash, crx_path, installer, std::move(connector));
+      pk_hash, crx_path, installer, std::move(connector), crx_format);
 
   unpacker->Unpack(base::BindOnce(&UnpackCompleteOnBlockingTaskRunner,
                                   main_task_runner, crx_path, fingerprint,
@@ -256,7 +257,7 @@ void Component::Uninstall(const base::Version& version, int reason) {
 
   DCHECK_EQ(ComponentState::kNew, state());
 
-  crx_component_ = std::make_unique<CrxComponent>();
+  crx_component_ = CrxComponent();
   crx_component_->version = version;
 
   previous_version_ = version;
@@ -507,7 +508,7 @@ void Component::StateDownloadingDiff::DoHandle() {
 
   crx_downloader_ = update_context.crx_downloader_factory(
       component.CanDoBackgroundDownload(),
-      update_context.config->RequestContext());
+      update_context.config->URLLoaderFactory());
 
   const auto& id = component.id_;
   crx_downloader_->set_progress_callback(
@@ -521,12 +522,10 @@ void Component::StateDownloadingDiff::DoHandle() {
   component.NotifyObservers(Events::COMPONENT_UPDATE_DOWNLOADING);
 }
 
-// Called when progress is being made downloading a CRX. The progress may
-// not monotonically increase due to how the CRX downloader switches between
-// different downloaders and fallback urls.
-void Component::StateDownloadingDiff::DownloadProgress(
-    const std::string& id,
-    const CrxDownloader::Result& download_result) {
+// Called when progress is being made downloading a CRX. Can be called multiple
+// times due to how the CRX downloader switches between different downloaders
+// and fallback urls.
+void Component::StateDownloadingDiff::DownloadProgress(const std::string& id) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   component().NotifyObservers(Events::COMPONENT_UPDATE_DOWNLOADING);
@@ -576,7 +575,7 @@ void Component::StateDownloading::DoHandle() {
 
   crx_downloader_ = update_context.crx_downloader_factory(
       component.CanDoBackgroundDownload(),
-      update_context.config->RequestContext());
+      update_context.config->URLLoaderFactory());
 
   const auto& id = component.id_;
   crx_downloader_->set_progress_callback(
@@ -590,12 +589,10 @@ void Component::StateDownloading::DoHandle() {
   component.NotifyObservers(Events::COMPONENT_UPDATE_DOWNLOADING);
 }
 
-// Called when progress is being made downloading a CRX. The progress may
-// not monotonically increase due to how the CRX downloader switches between
-// different downloaders and fallback urls.
-void Component::StateDownloading::DownloadProgress(
-    const std::string& id,
-    const CrxDownloader::Result& download_result) {
+// Called when progress is being made downloading a CRX. Can be called multiple
+// times due to how the CRX downloader switches between different downloaders
+// and fallback urls.
+void Component::StateDownloading::DownloadProgress(const std::string& id) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   component().NotifyObservers(Events::COMPONENT_UPDATE_DOWNLOADING);
@@ -658,6 +655,7 @@ void Component::StateUpdatingDiff::DoHandle() {
               component.crx_component()->pk_hash, component.crx_path_,
               component.next_fp_, component.crx_component()->installer,
               std::move(connector),
+              component.crx_component()->crx_format_requirement,
               base::BindOnce(&Component::StateUpdatingDiff::InstallComplete,
                              base::Unretained(this))));
 }
@@ -721,6 +719,7 @@ void Component::StateUpdating::DoHandle() {
                      component.crx_component()->pk_hash, component.crx_path_,
                      component.next_fp_, component.crx_component()->installer,
                      std::move(connector),
+                     component.crx_component()->crx_format_requirement,
                      base::BindOnce(&Component::StateUpdating::InstallComplete,
                                     base::Unretained(this))));
 }

@@ -71,15 +71,21 @@ SwitchAccess.prototype = {
   },
 
   /**
-   * Move to the next/previous interesting node. If |doNext| is true, move to
-   * the next node. Otherwise, move to the previous node.
-   *
-   * @param {boolean} doNext
+   * Move to the next interesting node.
    * @override
    */
-  moveToNode: function(doNext) {
+  moveForward: function() {
     if (this.automationManager_)
-      this.automationManager_.moveToNode(doNext);
+      this.automationManager_.moveForward();
+  },
+
+  /**
+   * Move to the previous interesting node.
+   * @override
+   */
+  moveBackward: function() {
+    if (this.automationManager_)
+      this.automationManager_.moveBackward();
   },
 
   /**
@@ -224,45 +230,5 @@ SwitchAccess.prototype = {
    */
   keyCodeIsUsed: function(keyCode) {
     return this.switchAccessPrefs_.keyCodeIsUsed(keyCode);
-  },
-
-  /**
-   * Move to the next sibling of the current node if it has one.
-   *
-   * @override
-   */
-  debugMoveToNext: function() {
-    if (this.automationManager_)
-      this.automationManager_.debugMoveToNext();
-  },
-
-  /**
-   * Move to the previous sibling of the current node if it has one.
-   *
-   * @override
-   */
-  debugMoveToPrevious: function() {
-    if (this.automationManager_)
-      this.automationManager_.debugMoveToPrevious();
-  },
-
-  /**
-   * Move to the first child of the current node if it has one.
-   *
-   * @override
-   */
-  debugMoveToFirstChild: function() {
-    if (this.automationManager_)
-      this.automationManager_.debugMoveToFirstChild();
-  },
-
-  /**
-   * Move to the parent of the current node if it has one.
-   *
-   * @override
-   */
-  debugMoveToParent: function() {
-    if (this.automationManager_)
-      this.automationManager_.debugMoveToParent();
   }
 };

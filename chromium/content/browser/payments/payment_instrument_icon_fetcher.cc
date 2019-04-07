@@ -4,6 +4,8 @@
 
 #include "content/browser/payments/payment_instrument_icon_fetcher.h"
 
+#include <utility>
+
 #include "base/base64.h"
 #include "base/bind_helpers.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
@@ -13,8 +15,7 @@
 #include "content/public/browser/manifest_icon_downloader.h"
 #include "third_party/blink/public/common/manifest/manifest_icon_selector.h"
 #include "third_party/skia/include/core/SkBitmap.h"
-#include "ui/gfx/geometry/size.h"
-#include "ui/gfx/image/image.h"
+#include "ui/gfx/codec/png_codec.h"
 
 namespace content {
 namespace {
@@ -52,11 +53,13 @@ void OnIconFetched(
     return;
   }
 
-  gfx::Image decoded_image = gfx::Image::CreateFrom1xBitmap(bitmap);
-  scoped_refptr<base::RefCountedMemory> raw_data = decoded_image.As1xPNGBytes();
+  std::vector<unsigned char> bitmap_data;
+  bool success = gfx::PNGCodec::EncodeBGRASkBitmap(bitmap, false, &bitmap_data);
+  DCHECK(success);
   std::string encoded_data;
   base::Base64Encode(
-      base::StringPiece(raw_data->front_as<char>(), raw_data->size()),
+      base::StringPiece(reinterpret_cast<const char*>(&bitmap_data[0]),
+                        bitmap_data.size()),
       &encoded_data);
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
                           base::BindOnce(std::move(callback), encoded_data));
@@ -99,12 +102,12 @@ void DownloadBestMatchingIcon(
 
 WebContents* GetWebContentsFromProviderHostIds(
     const GURL& scope,
-    std::unique_ptr<std::vector<std::pair<int, int>>> provider_hosts) {
+    std::unique_ptr<std::vector<GlobalFrameRoutingId>> provider_hosts) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   for (const auto& host : *provider_hosts) {
     RenderFrameHostImpl* render_frame_host =
-        RenderFrameHostImpl::FromID(host.first, host.second);
+        RenderFrameHostImpl::FromID(host.child_id, host.frame_routing_id);
     if (!render_frame_host)
       continue;
 
@@ -122,7 +125,7 @@ WebContents* GetWebContentsFromProviderHostIds(
 
 void StartOnUI(
     const GURL& scope,
-    std::unique_ptr<std::vector<std::pair<int, int>>> provider_hosts,
+    std::unique_ptr<std::vector<GlobalFrameRoutingId>> provider_hosts,
     const std::vector<blink::Manifest::ImageResource>& icons,
     PaymentInstrumentIconFetcher::PaymentInstrumentIconFetcherCallback
         callback) {
@@ -138,7 +141,7 @@ void StartOnUI(
 // static
 void PaymentInstrumentIconFetcher::Start(
     const GURL& scope,
-    std::unique_ptr<std::vector<std::pair<int, int>>> provider_hosts,
+    std::unique_ptr<std::vector<GlobalFrameRoutingId>> provider_hosts,
     const std::vector<blink::Manifest::ImageResource>& icons,
     PaymentInstrumentIconFetcherCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);

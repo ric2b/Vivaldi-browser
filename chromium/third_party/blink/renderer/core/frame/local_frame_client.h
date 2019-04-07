@@ -45,7 +45,7 @@
 #include "third_party/blink/public/platform/web_worker_fetch_context.h"
 #include "third_party/blink/public/web/web_global_object_reuse_policy.h"
 #include "third_party/blink/public/web/web_history_commit_type.h"
-#include "third_party/blink/public/web/web_navigation_timings.h"
+#include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/public/web/web_triggering_event_info.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -158,7 +158,8 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
       HTMLFormElement*,
       ContentSecurityPolicyDisposition
           should_check_main_world_content_security_policy,
-      mojom::blink::BlobURLTokenPtr) = 0;
+      mojom::blink::BlobURLTokenPtr,
+      base::TimeTicks input_start_time) = 0;
 
   virtual void DispatchWillSendSubmitEvent(HTMLFormElement*) = 0;
   virtual void DispatchWillSubmitForm(HTMLFormElement*) = 0;
@@ -237,8 +238,8 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
       const SubstituteData&,
       ClientRedirectPolicy,
       const base::UnguessableToken& devtools_navigation_token,
-      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data,
-      const WebNavigationTimings& navigation_timings) = 0;
+      std::unique_ptr<WebNavigationParams> navigation_params,
+      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) = 0;
 
   virtual String UserAgent() = 0;
 
@@ -418,6 +419,15 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual void FrameRectsChanged(const IntRect&) {}
 
+  // Returns true when the contents of plugin are handled externally. This means
+  // the plugin element will own a content frame but the frame is than used
+  // externally to load the required handelrs.
+  virtual bool IsPluginHandledExternally(HTMLPlugInElement&,
+                                         const KURL&,
+                                         const String&) {
+    return false;
+  };
+
   // Returns a new WebWorkerFetchContext for a dedicated worker or worklet.
   virtual std::unique_ptr<WebWorkerFetchContext> CreateWorkerFetchContext() {
     return nullptr;
@@ -429,6 +439,10 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   }
 
   virtual void SetMouseCapture(bool) {}
+
+  // Returns whether we are associated with a print context who suggests to use
+  // printing layout.
+  virtual bool UsePrintingLayout() const { return false; }
 
   // VB-6063:
   virtual void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) {}

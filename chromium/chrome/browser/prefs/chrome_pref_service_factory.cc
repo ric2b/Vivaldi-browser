@@ -453,16 +453,21 @@ const char kSettingsEnforcementGroupEnforceAlwaysWithExtensionsAndDSE[] =
 
 std::unique_ptr<PrefService> CreateLocalState(
     const base::FilePath& pref_filename,
-    base::SequencedTaskRunner* pref_io_task_runner,
     policy::PolicyService* policy_service,
     scoped_refptr<PrefRegistry> pref_registry,
     bool async,
-    std::unique_ptr<PrefValueStore::Delegate> delegate) {
+    std::unique_ptr<PrefValueStore::Delegate> delegate,
+    scoped_refptr<PersistentPrefStore> user_pref_store) {
+  if (!user_pref_store) {
+    // The new JsonPrefStore will read content from |pref_filename| in
+    // PrefServiceSyncableFactory. Errors are ignored.
+    user_pref_store = base::MakeRefCounted<JsonPrefStore>(
+        pref_filename, std::unique_ptr<PrefFilter>());
+  }
   sync_preferences::PrefServiceSyncableFactory factory;
   PrepareFactory(&factory, pref_filename, policy_service,
                  nullptr,  // supervised_user_settings
-                 new JsonPrefStore(pref_filename, pref_io_task_runner,
-                                   std::unique_ptr<PrefFilter>()),
+                 std::move(user_pref_store),
                  nullptr,  // extension_prefs
                  async);
   return factory.Create(std::move(pref_registry), std::move(delegate));

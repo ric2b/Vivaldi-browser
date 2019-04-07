@@ -125,7 +125,7 @@ interface Element : Node {
 
     // Non-standard API
     [MeasureAs=ElementScrollIntoViewIfNeeded] void scrollIntoViewIfNeeded(optional boolean centerIfNeeded);
-    [RuntimeEnabled=ShadowDOMV0, RaisesException, MeasureAs=ElementCreateShadowRoot] ShadowRoot createShadowRoot();
+    [RuntimeEnabled=ShadowDOMV0, RaisesException, DeprecateAs=ElementCreateShadowRoot] ShadowRoot createShadowRoot();
     [RuntimeEnabled=ShadowDOMV0] NodeList getDestinationInsertionPoints();
 
     // Experimental accessibility API
@@ -134,6 +134,8 @@ interface Element : Node {
 
     // Accessibility Object Model
     [RuntimeEnabled=AccessibilityObjectModel] readonly attribute AccessibleNode? accessibleNode;
+
+    [RuntimeEnabled=InvisibleDOM, CEReactions, CustomElementCallbacks] attribute DOMString invisible;
 
     // Event handler attributes
     attribute EventHandler onbeforecopy;

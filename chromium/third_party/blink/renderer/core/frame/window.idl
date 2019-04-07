@@ -102,7 +102,7 @@
 
     [CrossOrigin, CallWith=CurrentWindow, RaisesException] void postMessage(any message, USVString targetOrigin, optional sequence<object> transfer = []);
 
-    [CrossOrigin, CallWith=CurrentWindow, RaisesException, RuntimeEnabled=WindowPostMessageOptions] void postMessage(any message, optional sequence<object> transfer = [], optional WindowPostMessageOptions options);
+    [CrossOrigin, CallWith=CurrentWindow, RaisesException, RuntimeEnabled=PostMessageOptions] void postMessage(any message, optional WindowPostMessageOptions options);
 
     // Custom elements
     // https://w3c.github.io/webcomponents/spec/custom/#custom-elements-api
@@ -148,7 +148,7 @@
 
     // Visual Viewport API
     // https://github.com/WICG/ViewportAPI
-    [RuntimeEnabled=VisualViewportAPI, Replaceable, SameObject] readonly attribute VisualViewport visualViewport;
+    [Replaceable, SameObject] readonly attribute VisualViewport visualViewport;
 
     // client
     [Affects=Nothing, Replaceable] readonly attribute long screenX;
@@ -217,6 +217,10 @@
     readonly attribute boolean isSecureContext;
 
     attribute DOMMatrixConstructor WebKitCSSMatrix;
+
+    //TrustedTypes API
+    //http://github.com/wicg/trusted-types
+    [RuntimeEnabled=TrustedDOMTypes] readonly attribute TrustedTypePolicyFactory TrustedTypes;
 };
 
 Window implements GlobalEventHandlers;

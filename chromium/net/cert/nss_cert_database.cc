@@ -18,7 +18,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/observer_list_threadsafe.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "crypto/scoped_nss_types.h"
 #include "net/base/net_errors.h"
@@ -342,6 +342,26 @@ bool NSSCertDatabase::IsUntrusted(const CERTCertificate* cert) const {
     return (nsstrust.sslFlags & kTrusted) == 0 &&
            (nsstrust.emailFlags & kTrusted) == 0 &&
            (nsstrust.objectSigningFlags & kTrusted) == 0;
+  }
+
+  return false;
+}
+
+bool NSSCertDatabase::IsWebTrustAnchor(const CERTCertificate* cert) const {
+  CERTCertTrust nsstrust;
+  SECStatus rv = CERT_GetCertTrust(cert, &nsstrust);
+  if (rv != SECSuccess) {
+    LOG(ERROR) << "CERT_GetCertTrust failed with error " << PORT_GetError();
+    return false;
+  }
+
+  // Note: This should return true iff a net::TrustStoreNSS instantiated with
+  // SECTrustType trustSSL would classify |cert| as a trust anchor.
+  const unsigned int ssl_trust_flags = nsstrust.sslFlags;
+
+  // Determine if the certificate is a trust anchor.
+  if ((ssl_trust_flags & CERTDB_TRUSTED_CA) == CERTDB_TRUSTED_CA) {
+    return true;
   }
 
   return false;

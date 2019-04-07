@@ -241,6 +241,7 @@ class TestingProfile : public Profile {
 
   // content::BrowserContext
   base::FilePath GetPath() const override;
+  base::FilePath GetCachePath() const override;
 #if !defined(OS_ANDROID)
   std::unique_ptr<content::ZoomLevelDelegate> CreateZoomLevelDelegate(
       const base::FilePath& partition_path) override;
@@ -334,11 +335,15 @@ class TestingProfile : public Profile {
   bool IsNewProfile() override;
   void SetExitType(ExitType exit_type) override {}
   ExitType GetLastSessionExitType() override;
-  network::mojom::NetworkContextPtr CreateMainNetworkContext() override;
+  network::mojom::NetworkContextPtr CreateNetworkContext(
+      bool in_memory,
+      const base::FilePath& relative_partition_path) override;
+
 #if defined(OS_CHROMEOS)
   void ChangeAppLocale(const std::string&, AppLocaleChangedVia) override {}
   void OnLogin() override {}
   void InitChromeOSPreferences() override {}
+  chromeos::ScopedCrosSettingsTestHelper* ScopedCrosSettingsTestHelper();
 #endif  // defined(OS_CHROMEOS)
 
   // Schedules a task on the history backend and runs a nested loop until the

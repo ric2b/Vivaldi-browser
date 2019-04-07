@@ -114,7 +114,7 @@ component("gpu") {
     "//base",
     "//gpu",
     "//media",
-    "//third_party/mesa:mesa_headers",
+    "//third_party/mesa_headers",
     "//ui/gfx/geometry",
   ]
   deps = [
@@ -197,6 +197,7 @@ component("gpu") {
     libs += [ "android" ]
     deps += [
       # TODO(crbug.com/789435): This can be removed once CdmManager is removed.
+      "//gpu/ipc/common:ipc_common_sources",
       "//media/mojo:buildflags",
       "//services/service_manager/public/cpp:cpp",
       "//third_party/libyuv",
@@ -319,6 +320,8 @@ source_set("common") {
     "format_utils.cc",
     "format_utils.h",
     "gpu_video_decode_accelerator_helpers.h",
+    "gpu_video_encode_accelerator_helpers.cc",
+    "gpu_video_encode_accelerator_helpers.h",
     "h264_decoder.cc",
     "h264_decoder.h",
     "h264_dpb.cc",
@@ -326,6 +329,7 @@ source_set("common") {
   ]
   if (use_v4l2_codec || use_vaapi) {
     sources += [
+      "decode_surface_handler.h",
       "vp8_decoder.cc",
       "vp8_decoder.h",
       "vp8_picture.cc",
@@ -365,6 +369,7 @@ if (is_win || is_android || use_v4l2_codec || use_vaapi) {
       "//base",
       "//base/test:test_support",
       "//media:test_support",
+      "//mojo/core/embedder",
       "//testing/gtest",
       "//ui/base",
       "//ui/display/manager",
@@ -473,6 +478,7 @@ if (use_v4l2_codec || use_vaapi || is_mac || is_win) {
       "//base/test:test_support",
       "//media:test_support",
       "//media/gpu",
+      "//mojo/core/embedder",
       "//testing/gtest",
       "//ui/base",
       "//ui/gfx",
@@ -502,6 +508,7 @@ if (use_vaapi) {
       "//base/test:test_support",
       "//media:test_support",
       "//media/gpu",
+      "//mojo/core/embedder",
       "//testing/gtest",
       "//third_party:jpeg",
       "//third_party/libyuv",
@@ -533,6 +540,7 @@ if (use_v4l2_codec || use_vaapi) {
       "//media:test_support",
       "//media/gpu",
       "//media/mojo/services",
+      "//mojo/core/embedder",
       "//testing/gtest",
       "//third_party/libyuv",
       "//ui/base",
@@ -553,6 +561,10 @@ if (use_v4l2_codec || use_vaapi) {
       "//media/test/data/peach_pi-41x22.jpg",
       "//media/test/data/peach_pi-41x23.jpg",
     ]
+    if (use_vaapi) {
+      sources += [ "vaapi/vaapi_jpeg_decode_accelerator_unittest.cc" ]
+      data += [ "//media/test/data/pixel-1280x720.jpg" ]
+    }
     if (use_x11) {
       deps += [ "//ui/gfx/x" ]
     }

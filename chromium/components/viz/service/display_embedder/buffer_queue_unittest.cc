@@ -12,7 +12,6 @@
 
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
-#include "components/viz/common/gl_helper.h"
 #include "components/viz/test/test_context_provider.h"
 #include "components/viz/test/test_gles2_interface.h"
 #include "components/viz/test/test_gpu_memory_buffer_manager.h"
@@ -43,18 +42,26 @@ class StubGpuMemoryBufferImpl : public gfx::GpuMemoryBuffer {
     return gfx::BufferFormat::BGRX_8888;
   }
   int stride(size_t plane) const override { return 0; }
+  gfx::GpuMemoryBufferType GetType() const override {
+    return gfx::EMPTY_BUFFER;
+  }
   gfx::GpuMemoryBufferId GetId() const override {
     return gfx::GpuMemoryBufferId(0);
   }
   void SetColorSpace(const gfx::ColorSpace& color_space) override {
     *set_color_space_count_ += 1;
   }
-  gfx::GpuMemoryBufferHandle GetHandle() const override {
+  gfx::GpuMemoryBufferHandle CloneHandle() const override {
     return gfx::GpuMemoryBufferHandle();
   }
   ClientBuffer AsClientBuffer() override {
     return reinterpret_cast<ClientBuffer>(this);
   }
+  void OnMemoryDump(
+      base::trace_event::ProcessMemoryDump* pmd,
+      const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
+      uint64_t tracing_process_id,
+      int importance) const override {}
 
   size_t* set_color_space_count_;
 };
@@ -107,7 +114,6 @@ class MockBufferQueue : public BufferQueue {
                     target,
                     kBufferQueueInternalformat,
                     kBufferQueueFormat,
-                    nullptr,
                     gpu_memory_buffer_manager,
                     kFakeSurfaceHandle) {}
   MOCK_METHOD4(CopyBufferDamage,
@@ -269,7 +275,7 @@ std::unique_ptr<BufferQueue> CreateBufferQueue(
     gpu::gles2::GLES2Interface* gl,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager) {
   std::unique_ptr<BufferQueue> buffer_queue(new BufferQueue(
-      gl, target, kBufferQueueInternalformat, kBufferQueueFormat, nullptr,
+      gl, target, kBufferQueueInternalformat, kBufferQueueFormat,
       gpu_memory_buffer_manager, kFakeSurfaceHandle));
   buffer_queue->Initialize();
   return buffer_queue;
@@ -334,14 +340,9 @@ TEST(BufferQueueStandaloneTest, CheckBoundFramebuffer) {
   std::unique_ptr<BufferQueue> output_surface;
   gpu_memory_buffer_manager.reset(new StubGpuMemoryBufferManager);
 
-  std::unique_ptr<GLHelper> gl_helper;
-  gl_helper.reset(new GLHelper(context_provider->ContextGL(),
-                               context_provider->ContextSupport()));
-
   output_surface.reset(new BufferQueue(
       context_provider->ContextGL(), GL_TEXTURE_2D,
       kBufferQueueInternalformat, kBufferQueueFormat,
-      gl_helper.get(),
       gpu_memory_buffer_manager.get(), kFakeSurfaceHandle));
   output_surface->Initialize();
   output_surface->Reshape(screen_size, 1.0f, gfx::ColorSpace(), false);

@@ -281,10 +281,10 @@ RenderWidgetFullscreenPepper::RenderWidgetFullscreenPepper(
                    compositor_deps,
                    blink::kWebPopupTypeNone,
                    screen_info,
+                   blink::kWebDisplayModeUndefined,
                    false,
                    false,
                    false,
-                   base::ThreadTaskRunnerHandle::Get(),
                    std::move(widget_request)),
       active_url_(active_url),
       plugin_(plugin),
@@ -295,7 +295,7 @@ RenderWidgetFullscreenPepper::~RenderWidgetFullscreenPepper() {
 }
 
 void RenderWidgetFullscreenPepper::Invalidate() {
-  InvalidateRect(gfx::Rect(size_.width(), size_.height()));
+  InvalidateRect(gfx::Rect(size()));
 }
 
 void RenderWidgetFullscreenPepper::InvalidateRect(const blink::WebRect& rect) {
@@ -321,7 +321,7 @@ void RenderWidgetFullscreenPepper::Destroy() {
   // away.
   SetLayer(nullptr);
 
-  Send(new ViewHostMsg_Close(routing_id_));
+  Send(new ViewHostMsg_Close(routing_id()));
   Release();
 }
 

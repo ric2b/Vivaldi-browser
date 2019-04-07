@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "components/download/public/background_service/client.h"
 #include "content/public/browser/background_fetch_delegate.h"
 
@@ -26,6 +27,10 @@ class LayoutTestBackgroundFetchDelegate : public BackgroundFetchDelegate {
 
   // BackgroundFetchDelegate implementation:
   void GetIconDisplaySize(GetIconDisplaySizeCallback callback) override;
+  void GetPermissionForOrigin(
+      const url::Origin& origin,
+      const ResourceRequestInfo::WebContentsGetter& wc_getter,
+      GetPermissionForOriginCallback callback) override;
   void CreateDownloadJob(
       std::unique_ptr<BackgroundFetchDescription> fetch_description) override;
   void DownloadUrl(const std::string& job_unique_id,
@@ -36,7 +41,8 @@ class LayoutTestBackgroundFetchDelegate : public BackgroundFetchDelegate {
                    const net::HttpRequestHeaders& headers) override;
   void Abort(const std::string& job_unique_id) override;
   void UpdateUI(const std::string& job_unique_id,
-                const std::string& title) override;
+                const base::Optional<std::string>& title,
+                const base::Optional<SkBitmap>& icon) override;
 
  private:
   class LayoutTestBackgroundFetchDownloadClient;

@@ -26,12 +26,14 @@
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/prefs/pref_service.h"
 #include "components/subresource_filter/content/browser/content_ruleset_service.h"
-#include "content/public/browser/network_connection_tracker.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/buildflags/buildflags.h"
 #include "media/media_buildflags.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "printing/buildflags/buildflags.h"
+#include "services/network/public/cpp/network_quality_tracker.h"
+#include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(ENABLE_BACKGROUND_MODE)
@@ -56,25 +58,6 @@
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "components/keep_alive_registry/keep_alive_registry.h"
 #endif
-
-namespace {
-
-class MockNetworkConnectionTracker : public content::NetworkConnectionTracker {
- public:
-  MockNetworkConnectionTracker() : content::NetworkConnectionTracker() {}
-  ~MockNetworkConnectionTracker() override {}
-
-  bool GetConnectionType(network::mojom::ConnectionType* type,
-                         ConnectionTypeCallback callback) override {
-    *type = network::mojom::ConnectionType::CONNECTION_UNKNOWN;
-    return true;
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockNetworkConnectionTracker);
-};
-
-}  // namespace
 
 // static
 TestingBrowserProcess* TestingBrowserProcess::GetGlobal() {
@@ -103,7 +86,14 @@ TestingBrowserProcess::TestingBrowserProcess()
       io_thread_(nullptr),
       system_request_context_(nullptr),
       rappor_service_(nullptr),
-      platform_part_(new TestingBrowserProcessPlatformPart()) {
+      platform_part_(new TestingBrowserProcessPlatformPart()),
+      test_network_connection_tracker_(
+          new network::TestNetworkConnectionTracker(
+              true /* respond_synchronously */,
+              network::mojom::ConnectionType::CONNECTION_UNKNOWN)) {
+  content::SetNetworkConnectionTrackerForTesting(
+      test_network_connection_tracker_.get());
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions_browser_client_.reset(
       new extensions::ChromeExtensionsBrowserClient);
@@ -130,6 +120,8 @@ TestingBrowserProcess::~TestingBrowserProcess() {
   tab_lifecycle_unit_source_.reset();
   tab_manager_.reset();
 #endif
+
+  content::SetNetworkConnectionTrackerForTesting(nullptr);
 
   // Destructors for some objects owned by TestingBrowserProcess will use
   // g_browser_process if it is not null, so it must be null before proceeding.
@@ -176,18 +168,13 @@ TestingBrowserProcess::shared_url_loader_factory() {
   return shared_url_loader_factory_;
 }
 
-content::NetworkConnectionTracker*
-TestingBrowserProcess::network_connection_tracker() {
-  if (!network_connection_tracker_) {
-    network_connection_tracker_ =
-        std::make_unique<MockNetworkConnectionTracker>();
-  }
-  return network_connection_tracker_.get();
-}
-
 network::NetworkQualityTracker*
 TestingBrowserProcess::network_quality_tracker() {
-  return nullptr;
+  if (!network_quality_tracker_) {
+    network_quality_tracker_ = std::make_unique<network::NetworkQualityTracker>(
+        base::BindRepeating(&content::GetNetworkService));
+  }
+  return network_quality_tracker_.get();
 }
 
 WatchDogThread* TestingBrowserProcess::watchdog_thread() {
@@ -468,11 +455,6 @@ void TestingBrowserProcess::SetSystemRequestContext(
 void TestingBrowserProcess::SetSharedURLLoaderFactory(
     scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory) {
   shared_url_loader_factory_ = shared_url_loader_factory;
-}
-
-void TestingBrowserProcess::SetNetworkConnectionTracker(
-    std::unique_ptr<content::NetworkConnectionTracker> tracker) {
-  network_connection_tracker_ = std::move(tracker);
 }
 
 void TestingBrowserProcess::SetNotificationUIManager(

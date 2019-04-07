@@ -59,12 +59,27 @@ class BackgroundFetchBridge final
   // Gets the size of the icon to be displayed in Background Fetch UI.
   void GetIconDisplaySize(GetIconDisplaySizeCallback callback);
 
+  // Matches completed requests for the fetch associated with the |developer_id|
+  // and |unique_id| and returns the {request, response} pairs based on the rest
+  // of the arguments. If |filter_by_request| is true, only response(s) for
+  // |request_to_match| are returned. |cache_query_params| are options for the
+  // query to the cache storage. |match_all|, when true, returns all responses
+  // from the result set, and when false, returns only the first one.
+  void MatchRequests(
+      const String& developer_id,
+      const String& unique_id,
+      base::Optional<WebServiceWorkerRequest> request_to_match,
+      mojom::blink::QueryParamsPtr cache_query_params,
+      bool match_all,
+      mojom::blink::BackgroundFetchService::MatchRequestsCallback callback);
+
   // Updates the user interface for the Background Fetch identified by
-  // |unique_id| with the updated |title|. Will invoke the |callback| when the
-  // interface has been requested to update.
+  // |unique_id| with the updated |title| or |icon|. Will invoke the |callback|
+  // when the interface has been requested to update.
   void UpdateUI(const String& developer_id,
                 const String& unique_id,
                 const String& title,
+                const SkBitmap& icon,
                 UpdateUICallback callback);
 
   // Aborts the active Background Fetch for |unique_id|. Will invoke the

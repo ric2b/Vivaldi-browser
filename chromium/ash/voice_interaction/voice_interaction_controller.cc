@@ -6,9 +6,14 @@
 
 #include <utility>
 
+#include "chromeos/chromeos_switches.h"
+
 namespace ash {
 
-VoiceInteractionController::VoiceInteractionController() = default;
+VoiceInteractionController::VoiceInteractionController() {
+  if (chromeos::switches::IsAssistantEnabled())
+    voice_interaction_state_ = mojom::VoiceInteractionState::NOT_READY;
+}
 
 VoiceInteractionController::~VoiceInteractionController() = default;
 
@@ -33,6 +38,7 @@ void VoiceInteractionController::NotifySettingsEnabled(bool enabled) {
 }
 
 void VoiceInteractionController::NotifyContextEnabled(bool enabled) {
+  context_enabled_ = enabled;
   observers_.ForAllPtrs([enabled](auto* observer) {
     observer->OnVoiceInteractionContextEnabled(enabled);
   });
@@ -60,6 +66,17 @@ void VoiceInteractionController::NotifyFeatureAllowed(
   });
 }
 
+void VoiceInteractionController::NotifyNotificationEnabled(bool enabled) {
+  notification_enabled_ = enabled;
+}
+
+void VoiceInteractionController::NotifyLocaleChanged(
+    const std::string& locale) {
+  locale_ = locale;
+  observers_.ForAllPtrs(
+      [locale](auto* observer) { observer->OnLocaleChanged(locale); });
+}
+
 void VoiceInteractionController::IsSettingEnabled(
     IsSettingEnabledCallback callback) {
   std::move(callback).Run(settings_enabled_);
@@ -70,6 +87,11 @@ void VoiceInteractionController::IsSetupCompleted(
   std::move(callback).Run(setup_completed_);
 }
 
+void VoiceInteractionController::IsContextEnabled(
+    IsContextEnabledCallback callback) {
+  std::move(callback).Run(context_enabled_);
+}
+
 void VoiceInteractionController::IsHotwordEnabled(
     IsHotwordEnabledCallback callback) {
   std::move(callback).Run(hotword_enabled_);
@@ -77,6 +99,10 @@ void VoiceInteractionController::IsHotwordEnabled(
 
 void VoiceInteractionController::AddObserver(
     mojom::VoiceInteractionObserverPtr observer) {
+  // Locale needs to be notified when adding observer as this property is
+  // changed at profile initialization and some observers (e.g. assistant) may
+  // be constructed at later timing.
+  observer->OnLocaleChanged(locale_);
   observers_.AddPtr(std::move(observer));
 }
 

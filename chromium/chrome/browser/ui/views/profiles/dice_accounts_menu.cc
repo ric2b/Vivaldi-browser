@@ -8,7 +8,7 @@
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -146,9 +146,9 @@ void DiceAccountsMenu::GetHorizontalIconMargins(int command_id,
   *right_margin = kHorizontalIconSpacing - config.item_horizontal_padding;
 }
 
-const gfx::FontList* DiceAccountsMenu::GetLabelFontList(int id) const {
+void DiceAccountsMenu::GetLabelStyle(int id, LabelStyle* style) const {
   const views::LayoutProvider* provider = views::LayoutProvider::Get();
   // Match the font of the HoverButtons in the avatar bubble.
-  return &provider->GetTypographyProvider().GetFont(
+  style->font_list = provider->GetTypographyProvider().GetFont(
       views::style::CONTEXT_BUTTON, STYLE_SECONDARY);
 }

@@ -15,7 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -60,7 +60,7 @@ void OnGetPagesByURLDone(
     const GURL& url,
     int tab_id,
     const std::vector<std::string>& namespaces_to_show_in_original_tab,
-    const base::Callback<void(const std::vector<OfflinePageItem>&)>& callback,
+    base::OnceCallback<void(const std::vector<OfflinePageItem>&)> callback,
     const MultipleOfflinePageItemResult& pages) {
   std::vector<OfflinePageItem> selected_pages;
   std::string tab_id_str = base::IntToString(tab_id);
@@ -79,7 +79,7 @@ void OnGetPagesByURLDone(
   std::sort(selected_pages.begin(), selected_pages.end(),
             OfflinePageComparer());
 
-  callback.Run(selected_pages);
+  std::move(callback).Run(selected_pages);
 }
 
 bool IsSupportedByDownload(content::BrowserContext* browser_context,
@@ -201,24 +201,22 @@ const base::FilePath::CharType OfflinePageUtils::kMHTMLExtension[] =
 void OfflinePageUtils::SelectPagesForURL(
     content::BrowserContext* browser_context,
     const GURL& url,
-    URLSearchMode url_search_mode,
     int tab_id,
-    const base::Callback<void(const std::vector<OfflinePageItem>&)>& callback) {
+    base::OnceCallback<void(const std::vector<OfflinePageItem>&)> callback) {
   OfflinePageModel* offline_page_model =
       OfflinePageModelFactory::GetForBrowserContext(browser_context);
   if (!offline_page_model) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, std::vector<OfflinePageItem>()));
+        FROM_HERE,
+        base::BindOnce(std::move(callback), std::vector<OfflinePageItem>()));
     return;
   }
 
   offline_page_model->GetPagesByURL(
-      url,
-      url_search_mode,
-      base::Bind(&OnGetPagesByURLDone, url, tab_id,
-                 offline_page_model->GetPolicyController()
-                     ->GetNamespacesRestrictedToOriginalTab(),
-                 callback));
+      url, base::BindOnce(&OnGetPagesByURLDone, url, tab_id,
+                          offline_page_model->GetPolicyController()
+                              ->GetNamespacesRestrictedToOriginalTab(),
+                          std::move(callback)));
 }
 
 const OfflinePageItem* OfflinePageUtils::GetOfflinePageFromWebContents(
@@ -329,8 +327,7 @@ void OfflinePageUtils::CheckDuplicateDownloads(
   };
 
   offline_page_model->GetPagesByURL(
-      url, URLSearchMode::SEARCH_BY_ALL_URLS,
-      base::Bind(continuation, browser_context, url, callback));
+      url, base::BindOnce(continuation, browser_context, url, callback));
 }
 
 // static

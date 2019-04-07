@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "content/public/test/fake_service_worker_context.h"
+#include "content/public/browser/service_worker_context_observer.h"
 
 #include "base/callback.h"
 #include "base/logging.h"
@@ -14,11 +15,11 @@ FakeServiceWorkerContext::~FakeServiceWorkerContext() {}
 
 void FakeServiceWorkerContext::AddObserver(
     ServiceWorkerContextObserver* observer) {
-  NOTREACHED();
+  observers_.AddObserver(observer);
 }
 void FakeServiceWorkerContext::RemoveObserver(
     ServiceWorkerContextObserver* observer) {
-  NOTREACHED();
+  observers_.RemoveObserver(observer);
 }
 void FakeServiceWorkerContext::RegisterServiceWorker(
     const GURL& script_url,
@@ -77,12 +78,43 @@ void FakeServiceWorkerContext::StartServiceWorkerForNavigationHint(
     StartServiceWorkerForNavigationHintCallback callback) {
   start_service_worker_for_navigation_hint_called_ = true;
 }
+
+void FakeServiceWorkerContext::StartServiceWorkerAndDispatchLongRunningMessage(
+    const GURL& pattern,
+    blink::TransferableMessage message,
+    ResultCallback result_callback) {
+  start_service_worker_and_dispatch_long_running_message_calls_.push_back(
+      std::make_tuple(pattern, std::move(message), std::move(result_callback)));
+}
+
 void FakeServiceWorkerContext::StopAllServiceWorkersForOrigin(
     const GURL& origin) {
-  NOTREACHED();
+  stop_all_service_workers_for_origin_calls_.push_back(origin);
 }
+
 void FakeServiceWorkerContext::StopAllServiceWorkers(base::OnceClosure) {
   NOTREACHED();
+}
+
+void FakeServiceWorkerContext::NotifyObserversOnVersionActivated(
+    int64_t version_id,
+    const GURL& scope) {
+  for (auto& observer : observers_)
+    observer.OnVersionActivated(version_id, scope);
+}
+
+void FakeServiceWorkerContext::NotifyObserversOnVersionRedundant(
+    int64_t version_id,
+    const GURL& scope) {
+  for (auto& observer : observers_)
+    observer.OnVersionRedundant(version_id, scope);
+}
+
+void FakeServiceWorkerContext::NotifyObserversOnNoControllees(
+    int64_t version_id,
+    const GURL& scope) {
+  for (auto& observer : observers_)
+    observer.OnNoControllees(version_id, scope);
 }
 
 }  // namespace content

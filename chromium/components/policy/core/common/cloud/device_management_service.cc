@@ -52,6 +52,7 @@ const int kDomainMismatch = 406;
 const int kDeviceIdConflict = 409;
 const int kDeviceNotFound = 410;
 const int kPendingApproval = 412;
+const int kConsumerAccountWithPackagedLicense = 417;
 const int kInternalServerError = 500;
 const int kServiceUnavailable = 503;
 const int kPolicyNotFound = 902;
@@ -161,6 +162,8 @@ const char* JobTypeToRequestType(DeviceManagementRequestJob::JobType type) {
       return dm_protocol::kValueRequestChromeDesktopReport;
     case DeviceManagementRequestJob::TYPE_INITIAL_ENROLLMENT_STATE_RETRIEVAL:
       return dm_protocol::kValueRequestInitialEnrollmentStateRetrieval;
+    case DeviceManagementRequestJob::TYPE_UPLOAD_POLICY_VALIDATION_REPORT:
+      return dm_protocol::kValueRequestUploadPolicyValidationReport;
   }
   NOTREACHED() << "Invalid job type " << type;
   return "";
@@ -338,6 +341,9 @@ void DeviceManagementRequestJobImpl::HandleResponse(int net_error,
       return;
     case kPendingApproval:
       ReportError(DM_STATUS_SERVICE_ACTIVATION_PENDING);
+      return;
+    case kConsumerAccountWithPackagedLicense:
+      ReportError(DM_STATUS_SERVICE_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE);
       return;
     case kInvalidURL:
     case kInternalServerError:
@@ -566,8 +572,9 @@ void DeviceManagementService::ScheduleInitialization(
   if (initialized_)
     return;
   task_runner_->PostDelayedTask(
-      FROM_HERE, base::Bind(&DeviceManagementService::Initialize,
-                            weak_ptr_factory_.GetWeakPtr()),
+      FROM_HERE,
+      base::BindOnce(&DeviceManagementService::Initialize,
+                     weak_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(delay_milliseconds));
 }
 
@@ -727,8 +734,8 @@ void DeviceManagementService::OnURLLoaderCompleteInternal(
                  << "s.";
     task_runner_->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&DeviceManagementService::StartJobAfterDelay,
-                   weak_ptr_factory_.GetWeakPtr(), job->GetWeakPtr()),
+        base::BindOnce(&DeviceManagementService::StartJobAfterDelay,
+                       weak_ptr_factory_.GetWeakPtr(), job->GetWeakPtr()),
         base::TimeDelta::FromMilliseconds(delay));
   } else {
     job->HandleResponse(net_error, response_code, response_body);

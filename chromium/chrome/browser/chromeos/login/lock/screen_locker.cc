@@ -29,6 +29,7 @@
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/lock/views_screen_locker.h"
 #include "chrome/browser/chromeos/login/lock/webui_screen_locker.h"
+#include "chrome/browser/chromeos/login/login_auth_recorder.h"
 #include "chrome/browser/chromeos/login/quick_unlock/pin_backend.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_storage.h"
@@ -663,8 +664,13 @@ void ScreenLocker::ScreenLockReady() {
       ->GetActiveIMEState()
       ->EnableLockScreenLayouts();
 
-  if (IsFingerprintAuthenticationAvailableForUsers(users_))
+  if (IsFingerprintAuthenticationAvailableForUsers(users_)) {
+    VLOG(1) << "Fingerprint is available on lock screen, start fingerprint "
+            << "auth session now.";
     fp_service_->StartAuthSession();
+  } else {
+    VLOG(1) << "Fingerprint is not available on lock screen";
+  }
 }
 
 bool ScreenLocker::IsUserLoggedIn(const AccountId& account_id) const {
@@ -678,6 +684,8 @@ bool ScreenLocker::IsUserLoggedIn(const AccountId& account_id) const {
 void ScreenLocker::OnAuthScanDone(
     uint32_t scan_result,
     const base::flat_map<std::string, std::vector<std::string>>& matches) {
+  VLOG(1) << "Receive fingerprint auth scan result. scan_result="
+          << scan_result;
   unlock_attempt_type_ = AUTH_FINGERPRINT;
   user_manager::User* active_user =
       user_manager::UserManager::Get()->GetActiveUser();
@@ -688,18 +696,29 @@ void ScreenLocker::OnAuthScanDone(
     return;
   }
 
+  LoginScreenClient::Get()->auth_recorder()->RecordAuthMethod(
+      LoginAuthRecorder::AuthMethod::kFingerprint);
+
   if (scan_result != biod::ScanResult::SCAN_RESULT_SUCCESS) {
+    LOG(ERROR) << "Fingerprint unlock failed because scan_result="
+               << scan_result;
     OnFingerprintAuthFailure(*active_user);
     return;
   }
 
   UserContext user_context(*active_user);
   if (!base::ContainsKey(matches, active_user->username_hash())) {
+    LOG(ERROR) << "Fingerprint unlock failed because it does not match active"
+               << " user's record";
     OnFingerprintAuthFailure(*active_user);
     return;
   }
   delegate_->SetFingerprintState(active_user->GetAccountId(),
                                  FingerprintState::kSignin);
+  VLOG(1) << "Fingerprint unlock is successful.";
+  LoginScreenClient::Get()->auth_recorder()->RecordFingerprintAuthSuccess(
+      true /*success*/,
+      quick_unlock_storage->fingerprint_storage()->unlock_attempt_count());
   OnAuthSuccess(user_context);
 }
 
@@ -710,7 +729,8 @@ void ScreenLocker::OnSessionFailed() {
 void ScreenLocker::OnFingerprintAuthFailure(const user_manager::User& user) {
   UMA_HISTOGRAM_ENUMERATION("ScreenLocker.AuthenticationFailure",
                             unlock_attempt_type_, UnlockType::AUTH_COUNT);
-
+  LoginScreenClient::Get()->auth_recorder()->RecordFingerprintAuthSuccess(
+      false /*success*/, base::nullopt /*num_attempts*/);
   delegate_->SetFingerprintState(user.GetAccountId(),
                                  FingerprintState::kFailed);
 
@@ -720,6 +740,8 @@ void ScreenLocker::OnFingerprintAuthFailure(const user_manager::User& user) {
       quick_unlock_storage->IsFingerprintAuthenticationAvailable()) {
     quick_unlock_storage->fingerprint_storage()->AddUnlockAttempt();
     if (quick_unlock_storage->fingerprint_storage()->ExceededUnlockAttempts()) {
+      VLOG(1) << "Fingerprint unlock is disabled because it reached maximum"
+              << " unlock attempt.";
       delegate_->SetFingerprintState(user.GetAccountId(),
                                      FingerprintState::kRemoved);
       delegate_->ShowErrorMessage(IDS_LOGIN_ERROR_FINGERPRINT_MAX_ATTEMPT,

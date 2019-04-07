@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -95,7 +96,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   };
 
   typedef std::vector<BluetoothUUID> UUIDList;
-  typedef std::unordered_set<BluetoothUUID, BluetoothUUIDHash> UUIDSet;
+  typedef base::flat_set<BluetoothUUID> UUIDSet;
   typedef std::unordered_map<BluetoothUUID,
                              std::vector<uint8_t>,
                              BluetoothUUIDHash>
@@ -356,8 +357,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // Returns Advertising Data Flags.
   // Returns cached value if the adapter is not discovering.
   //
-  // TODO(crbug.com/661814) Support this on platforms that don't use BlueZ.
-  // Only Chrome OS supports this now. Upstream BlueZ has this feature
+  // Only Chrome OS and WinRT support this now. Upstream BlueZ has this feature
   // as experimental. This method returns base::nullopt on platforms that don't
   // support this feature.
   base::Optional<uint8_t> GetAdvertisingDataFlags() const;
@@ -428,7 +428,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // ignores the |IsPaired()| value.
   //
   // In most cases |Connect()| should be preferred. This method is only
-  // implemented on ChromeOS and Linux.
+  // implemented on ChromeOS, Linux and Windows 10. On Windows, only pairing
+  // with a pin code is currently supported.
   virtual void Pair(PairingDelegate* pairing_delegate,
                     const base::Closure& callback,
                     const ConnectErrorCallback& error_callback);

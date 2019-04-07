@@ -197,15 +197,20 @@ struct GPU_EXPORT GpuPreferences {
   bool enable_oop_rasterization = false;
   bool disable_oop_rasterization = false;
 
-  // Use GpuFence objects to synchronize display of overlay planes.
-  bool use_gpu_fences_for_overlay_planes = false;
-
   // Start the watchdog suspended, as the app is already backgrounded and won't
   // send a background/suspend signal.
   bool watchdog_starts_backgrounded = false;
 
   // Use Vulkan for rasterization and display compositing.
   bool enable_vulkan = false;
+
+  // ===================================
+  // Settings from //cc/base/switches.h
+  // Enable the GPU benchmarking extension; used by tests only.
+  bool enable_gpu_benchmarking_extension = false;
+
+  // Enable the WebGPU command buffer.
+  bool enable_webgpu = false;
 
   // Please update gpu_preferences_unittest.cc when making additions or
   // changes to this struct.

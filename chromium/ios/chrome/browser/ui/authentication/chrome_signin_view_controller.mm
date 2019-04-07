@@ -22,6 +22,8 @@
 #include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/unified_consent/feature.h"
+#include "components/unified_consent/unified_consent_service.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/signin/account_tracker_service_factory.h"
@@ -44,7 +46,7 @@
 #import "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/util/label_link_controller.h"
-#include "ios/chrome/browser/unified_consent/feature.h"
+#include "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
 #include "ios/chrome/common/string_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -199,7 +201,7 @@ enum AuthenticationState {
                           dispatcher:(id<ApplicationCommands>)dispatcher {
   self = [super init];
   if (self) {
-    _unifiedConsentEnabled = IsUnifiedConsentEnabled();
+    _unifiedConsentEnabled = unified_consent::IsUnifiedConsentFeatureEnabled();
     _browserState = browserState;
     _accessPoint = accessPoint;
     _promoAction = promoAction;
@@ -277,10 +279,16 @@ enum AuthenticationState {
           ->PickAccountIdForAccount(
               base::SysNSStringToUTF8([_selectedIdentity gaiaID]),
               base::SysNSStringToUTF8([_selectedIdentity userEmail]));
+
+  sync_pb::UserConsentTypes::SyncConsent sync_consent;
+  sync_consent.set_status(sync_pb::UserConsentTypes::ConsentStatus::
+                              UserConsentTypes_ConsentStatus_GIVEN);
+  sync_consent.set_confirmation_grd_id(consent_confirmation_id);
+  for (int id : consent_text_ids) {
+    sync_consent.add_description_grd_ids(id);
+  }
   ConsentAuditorFactory::GetForBrowserState(_browserState)
-      ->RecordGaiaConsent(account_id, consent_auditor::Feature::CHROME_SYNC,
-                          consent_text_ids, consent_confirmation_id,
-                          consent_auditor::ConsentStatus::GIVEN);
+      ->RecordSyncConsent(account_id, sync_consent);
   _didAcceptSignIn = YES;
   if (!_didFinishSignIn) {
     _didFinishSignIn = YES;
@@ -290,6 +298,15 @@ enum AuthenticationState {
 
 - (void)acceptSignInAndCommitSyncChanges {
   DCHECK(_didSignIn);
+  if (_unifiedConsentEnabled) {
+    // The consent has to be given as soon as the user is signed in. Even when
+    // they open the settings through the link.
+    unified_consent::UnifiedConsentService* unifiedConsentService =
+        UnifiedConsentServiceFactory::GetForBrowserState(_browserState);
+    // |unifiedConsentService| may be null in unit tests.
+    if (unifiedConsentService)
+      unifiedConsentService->SetUnifiedConsentGiven(true);
+  }
   SyncSetupServiceFactory::GetForBrowserState(_browserState)->CommitChanges();
   [self acceptSignInAndShowAccountsSettings:_unifiedConsentCoordinator
                                                 .settingsLinkWasTapped];
@@ -611,6 +628,7 @@ enum AuthenticationState {
   // Add the account selector view controller.
   if (_unifiedConsentEnabled) {
     _unifiedConsentCoordinator = [[UnifiedConsentCoordinator alloc] init];
+    _unifiedConsentCoordinator.interactable = YES;
     _unifiedConsentCoordinator.delegate = self;
     if (_selectedIdentity)
       _unifiedConsentCoordinator.selectedIdentity = _selectedIdentity;

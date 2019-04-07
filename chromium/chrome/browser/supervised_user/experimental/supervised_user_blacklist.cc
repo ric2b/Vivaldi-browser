@@ -10,7 +10,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/memory_mapped_file.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "url/gurl.h"
 
 namespace {
@@ -72,7 +72,7 @@ void SupervisedUserBlacklist::ReadFromFile(const base::FilePath& path,
                                            const base::Closure& done_callback) {
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&ReadFromBinaryFileOnFileThread, path),
       base::BindOnce(&SupervisedUserBlacklist::OnReadFromFileCompleted,

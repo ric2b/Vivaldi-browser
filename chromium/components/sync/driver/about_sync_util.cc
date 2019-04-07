@@ -50,25 +50,30 @@ const char kGetAllNodes[] = "getAllNodes";
 const char kGetAllNodesCallback[] = "chrome.sync.getAllNodesCallback";
 const char kRegisterForEvents[] = "registerForEvents";
 const char kRegisterForPerTypeCounters[] = "registerForPerTypeCounters";
+const char kRequestIncludeSpecificsInitialState[] =
+    "requestIncludeSpecificsInitialState";
 const char kRequestListOfTypes[] = "requestListOfTypes";
+const char kRequestStart[] = "requestStart";
+const char kRequestStop[] = "requestStop";
 const char kRequestUpdatedAboutInfo[] = "requestUpdatedAboutInfo";
 const char kRequestUserEventsVisibility[] = "requestUserEventsVisibility";
 const char kSetIncludeSpecifics[] = "setIncludeSpecifics";
+const char kTriggerRefresh[] = "triggerRefresh";
 const char kUserEventsVisibilityCallback[] =
     "chrome.sync.userEventsVisibilityCallback";
 const char kWriteUserEvent[] = "writeUserEvent";
-const char kRequestStart[] = "requestStart";
-const char kRequestStop[] = "requestStop";
-const char kTriggerRefresh[] = "triggerRefresh";
 
 // Other strings.
 const char kCommit[] = "commit";
 const char kCounters[] = "counters";
 const char kCounterType[] = "counterType";
+const char kIncludeSpecifics[] = "includeSpecifics";
 const char kModelType[] = "modelType";
 const char kOnAboutInfoUpdated[] = "onAboutInfoUpdated";
 const char kOnCountersUpdated[] = "onCountersUpdated";
 const char kOnProtocolEvent[] = "onProtocolEvent";
+const char kOnReceivedIncludeSpecificsInitialState[] =
+    "onReceivedIncludeSpecificsInitialState";
 const char kOnReceivedListOfTypes[] = "onReceivedListOfTypes";
 const char kStatus[] = "status";
 const char kTypes[] = "types";
@@ -176,6 +181,9 @@ class SectionList {
 };
 
 std::string GetDisableReasonsString(int disable_reasons) {
+  if (disable_reasons == syncer::SyncService::DISABLE_REASON_NONE) {
+    return "None";
+  }
   std::vector<std::string> reason_strings;
   if (disable_reasons & syncer::SyncService::DISABLE_REASON_PLATFORM_OVERRIDE)
     reason_strings.push_back("Platform override");
@@ -190,22 +198,21 @@ std::string GetDisableReasonsString(int disable_reasons) {
   return base::JoinString(reason_strings, ", ");
 }
 
-std::string GetSummaryString(syncer::SyncService::State state,
-                             int disable_reasons) {
+std::string GetTransportStateString(syncer::SyncService::TransportState state) {
   switch (state) {
-    case syncer::SyncService::State::DISABLED:
-      return "Disabled (" + GetDisableReasonsString(disable_reasons) + ")";
-    case syncer::SyncService::State::WAITING_FOR_START_REQUEST:
+    case syncer::SyncService::TransportState::DISABLED:
+      return "Disabled";
+    case syncer::SyncService::TransportState::WAITING_FOR_START_REQUEST:
       return "Waiting for start request";
-    case syncer::SyncService::State::START_DEFERRED:
+    case syncer::SyncService::TransportState::START_DEFERRED:
       return "Start deferred";
-    case syncer::SyncService::State::INITIALIZING:
+    case syncer::SyncService::TransportState::INITIALIZING:
       return "Initializing";
-    case syncer::SyncService::State::PENDING_DESIRED_CONFIGURATION:
+    case syncer::SyncService::TransportState::PENDING_DESIRED_CONFIGURATION:
       return "Pending desired configuration";
-    case syncer::SyncService::State::CONFIGURING:
+    case syncer::SyncService::TransportState::CONFIGURING:
       return "Configuring data types";
-    case syncer::SyncService::State::ACTIVE:
+    case syncer::SyncService::TransportState::ACTIVE:
       return "Active";
   }
   NOTREACHED();
@@ -299,7 +306,12 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
   SectionList section_list;
 
   Section* section_summary = section_list.AddSection("Summary");
-  Stat<std::string>* summary_string = section_summary->AddStringStat("Summary");
+  Stat<std::string>* transport_state =
+      section_summary->AddStringStat("Transport State");
+  Stat<std::string>* disable_reasons =
+      section_summary->AddStringStat("Disable Reasons");
+  Stat<bool>* feature_enabled =
+      section_summary->AddBoolStat("Sync Feature Enabled");
 
   Section* section_version = section_list.AddSection("Version Info");
   Stat<std::string>* client_version =
@@ -422,14 +434,15 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
   client_version->Set(GetVersionString(channel));
 
   if (!service) {
-    summary_string->Set("Sync service does not exist");
+    transport_state->Set("Sync service does not exist");
     about_info->SetKey(kDetailsKey, section_list.ToValue());
     return about_info;
   }
 
   // Summary.
-  summary_string->Set(
-      GetSummaryString(service->GetState(), service->GetDisableReasons()));
+  transport_state->Set(GetTransportStateString(service->GetTransportState()));
+  disable_reasons->Set(GetDisableReasonsString(service->GetDisableReasons()));
+  feature_enabled->Set(service->IsSyncFeatureEnabled());
 
   SyncStatus full_status;
   bool is_status_valid = service->QueryDetailedSyncStatus(&full_status);

@@ -72,9 +72,11 @@ std::string GetUserAgent() {
 #if defined(OS_ANDROID)
       "Linux; ",
       BuildAndroidOsInfo().c_str()
+#elif BUILDFLAG(USE_ANDROID_USER_AGENT)
+                      "Linux; ", "Android"
 #else
       "X11; ",
-      content::BuildOSCpuInfo().c_str()
+      content::BuildOSCpuInfo(false /* include_android_build_number */).c_str()
 #endif
       );
   return content::BuildUserAgentFromOSAndProduct(os_info, product) +

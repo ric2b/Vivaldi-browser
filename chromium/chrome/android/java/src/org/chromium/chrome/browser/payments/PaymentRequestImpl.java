@@ -70,6 +70,7 @@ import org.chromium.payments.mojom.PaymentRequestClient;
 import org.chromium.payments.mojom.PaymentResponse;
 import org.chromium.payments.mojom.PaymentShippingOption;
 import org.chromium.payments.mojom.PaymentShippingType;
+import org.chromium.payments.mojom.PaymentValidationErrors;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -87,7 +88,7 @@ import javax.annotation.Nullable;
 
 /**
  * Android implementation of the PaymentRequest service defined in
- * components/payments/content/payment_request.mojom.
+ * third_party/blink/public/mojom/payments/payment_request.mojom.
  */
 public class PaymentRequestImpl
         implements PaymentRequest, PaymentRequestUI.Client, PaymentApp.InstrumentsCallback,
@@ -641,7 +642,8 @@ public class PaymentRequestImpl
             // one. Only the first one will be shown. This also prevents multiple tabs and windows
             // from showing PaymentRequest UI at the same time.
             mJourneyLogger.setNotShown(NotShownReason.CONCURRENT_REQUESTS);
-            disconnectFromClientWithDebugMessage("A PaymentRequest UI is already showing");
+            disconnectFromClientWithDebugMessage(
+                    "A PaymentRequest UI is already showing", PaymentErrorReason.ALREADY_SHOWING);
             if (sObserverForTest != null) sObserverForTest.onPaymentRequestServiceShowFailed();
             return;
         }
@@ -1476,6 +1478,20 @@ public class PaymentRequestImpl
                 selectedPaymentMethod.getIdentifier(), System.currentTimeMillis());
 
         closeUIAndDestroyNativeObjects(/*immediateClose=*/PaymentComplete.FAIL != result);
+    }
+
+    @Override
+    public void retry(PaymentValidationErrors errors) {
+        if (mClient == null) return;
+
+        if (!PaymentValidator.validatePaymentValidationErrors(errors)) {
+            mJourneyLogger.setAborted(AbortReason.INVALID_DATA_FROM_RENDERER);
+            disconnectFromClientWithDebugMessage("Invalid payment validation errors");
+            return;
+        }
+
+        // TODO(zino): Should implement this method (including updating UI part).
+        // Please see https://crbug.com/861704
     }
 
     @Override

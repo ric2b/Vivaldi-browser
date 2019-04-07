@@ -12,13 +12,14 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
+#include "chromeos/disks/disk.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace file_manager {
 namespace {
 
 namespace file_manager_private = extensions::api::file_manager_private;
-typedef chromeos::disks::DiskMountManager::Disk Disk;
+using chromeos::disks::Disk;
 
 const char kTestDevicePath[] = "/device/test";
 
@@ -70,10 +71,16 @@ class DeviceEventRouterTest : public testing::Test {
   // Creates a disk instance with |device_path| and |mount_path| for testing.
   Disk CreateTestDisk(const std::string& device_path,
                       const std::string& mount_path,
-                      bool is_read_only_hardware) {
-    return Disk(device_path, mount_path, false, "", "", "", "", "", "", "", "",
-                "", device_path, chromeos::DEVICE_TYPE_UNKNOWN, 0, false,
-                is_read_only_hardware, false, false, false, false, "vfat", "");
+                      bool is_read_only_hardware,
+                      bool is_mounted) {
+    return *Disk::Builder()
+                .SetDevicePath(device_path)
+                .SetMountPath(mount_path)
+                .SetSystemPathPrefix(device_path)
+                .SetIsReadOnlyHardware(is_read_only_hardware)
+                .SetFileSystemType("vfat")
+                .SetIsMounted(is_mounted)
+                .Build();
   }
 
   std::unique_ptr<DeviceEventRouterImpl> device_event_router;
@@ -83,8 +90,9 @@ class DeviceEventRouterTest : public testing::Test {
 };
 
 TEST_F(DeviceEventRouterTest, AddAndRemoveDevice) {
-  const Disk disk1 = CreateTestDisk("/device/test", "/mount/path1", false);
-  const Disk disk1_unmounted = CreateTestDisk("/device/test", "", false);
+  const Disk disk1 =
+      CreateTestDisk("/device/test", "/mount/path1", false, true);
+  const Disk disk1_unmounted = CreateTestDisk("/device/test", "", false, false);
   std::unique_ptr<Volume> volume(Volume::CreateForTesting(
       base::FilePath(FILE_PATH_LITERAL("/device/test")),
       base::FilePath(FILE_PATH_LITERAL("/mount/path1"))));
@@ -103,8 +111,10 @@ TEST_F(DeviceEventRouterTest, AddAndRemoveDevice) {
 }
 
 TEST_F(DeviceEventRouterTest, HardUnplugged) {
-  const Disk disk1 = CreateTestDisk("/device/test", "/mount/path1", false);
-  const Disk disk2 = CreateTestDisk("/device/test", "/mount/path2", false);
+  const Disk disk1 =
+      CreateTestDisk("/device/test", "/mount/path1", false, true);
+  const Disk disk2 =
+      CreateTestDisk("/device/test", "/mount/path2", false, true);
   device_event_router->OnDeviceAdded("/device/test");
   device_event_router->OnDiskAdded(disk1, true);
   device_event_router->OnDiskAdded(disk2, true);
@@ -122,8 +132,8 @@ TEST_F(DeviceEventRouterTest, HardUnplugged) {
 }
 
 TEST_F(DeviceEventRouterTest, HardUnplugReadOnlyVolume) {
-  const Disk disk1 = CreateTestDisk("/device/test", "/mount/path1", true);
-  const Disk disk2 = CreateTestDisk("/device/test", "/mount/path2", true);
+  const Disk disk1 = CreateTestDisk("/device/test", "/mount/path1", true, true);
+  const Disk disk2 = CreateTestDisk("/device/test", "/mount/path2", true, true);
   device_event_router->OnDeviceAdded("/device/test");
   device_event_router->OnDiskAdded(disk1, true);
   device_event_router->OnDiskAdded(disk2, true);
@@ -136,6 +146,24 @@ TEST_F(DeviceEventRouterTest, HardUnplugReadOnlyVolume) {
             device_event_router->events[0].type);
   EXPECT_EQ("/device/test", device_event_router->events[0].device_path);
   // Should not warn hard unplug because the volumes are read-only.
+}
+
+TEST_F(DeviceEventRouterTest, HardUnpluggedNotMounted) {
+  const Disk disk1 = CreateTestDisk("/device/test", "", false, false);
+  const Disk disk2 =
+      CreateTestDisk("/device/test", "/mount/path2", true, false);
+  device_event_router->OnDeviceAdded("/device/test");
+  device_event_router->OnDiskAdded(disk1, true);
+  device_event_router->OnDiskAdded(disk2, true);
+  device_event_router->OnDiskRemoved(disk1);
+  device_event_router->OnDiskRemoved(disk2);
+  device_event_router->OnDeviceRemoved(kTestDevicePath);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, device_event_router->events.size());
+  EXPECT_EQ(file_manager_private::DEVICE_EVENT_TYPE_REMOVED,
+            device_event_router->events[0].type);
+  EXPECT_EQ("/device/test", device_event_router->events[0].device_path);
+  // Should not warn hard unplug because the volumes are not mounted.
 }
 
 }  // namespace file_manager

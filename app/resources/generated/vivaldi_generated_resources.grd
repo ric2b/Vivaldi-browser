@@ -80,6 +80,11 @@
       <message name="IDS_EXTENSIONS_SHOW_BUTTON" desc="The text for the Show link.">
         Show button
       </message>
+      <if expr="is_macosx">
+        <message name="IDS_VIV_JAVASCRIPT_UNSUPPORTED_ERROR_APPLESCRIPT_MAC" desc="Error dialog title to be displayed when the user attempts to execute JavaScript via AppleScript. Mac-only.">
+          Executing JavaScript through AppleScript is turned off. To turn it on, from the menu bar, go to Tools > Allow JavaScript from Apple Events.
+        </message>
+      </if> <!-- is_macosx -->
     </messages>
   </release>
 </grit>

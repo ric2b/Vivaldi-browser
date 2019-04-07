@@ -270,6 +270,12 @@ Panel.setMode = function(mode) {
  * @param {*=} opt_activateMenuTitle Title msg id of menu to open.
  */
 Panel.onOpenMenus = function(opt_event, opt_activateMenuTitle) {
+  // If the menu was already open, close it now and exit early.
+  if (Panel.mode_ != Panel.Mode.COLLAPSED) {
+    Panel.setMode(Panel.Mode.COLLAPSED);
+    return;
+  }
+
   // Eat the event so that a mousedown isn't turned into a drag, allowing
   // users to click-drag-release to select a menu item.
   if (opt_event) {
@@ -818,27 +824,20 @@ Panel.getCallbackForCurrentItem = function() {
 Panel.closeMenusAndRestoreFocus = function() {
   var bkgnd = chrome.extension.getBackgroundPage();
   bkgnd.chrome.automation.getDesktop(function(desktop) {
-    // Watch for a blur on the panel, then a focus on the page.
-    var onFocus = function(evt) {
-      desktop.removeEventListener(
-          chrome.automation.EventType.FOCUS, onFocus, true);
-      if (Panel.pendingCallback_) {
-        // Clear it before calling it, in case the callback itself triggers
-        // another pending callback.
-        var pendingCallback = Panel.pendingCallback_;
-        Panel.pendingCallback_ = null;
-        pendingCallback();
-      }
-    };
-
+    // Watch for a blur on the panel.
+    var pendingCallback = Panel.pendingCallback_;
+    Panel.pendingCallback_ = null;
     var onBlur = function(evt) {
       if (evt.target.docUrl != location.href)
         return;
 
       desktop.removeEventListener(
           chrome.automation.EventType.BLUR, onBlur, true);
-      desktop.addEventListener(
-          chrome.automation.EventType.FOCUS, onFocus, true);
+
+      setTimeout(function() {
+        if (pendingCallback)
+          pendingCallback();
+      }, 0);
     };
 
     desktop.addEventListener(chrome.automation.EventType.BLUR, onBlur, true);

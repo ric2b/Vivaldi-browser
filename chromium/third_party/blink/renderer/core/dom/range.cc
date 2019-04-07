@@ -45,6 +45,7 @@
 #include "third_party/blink/renderer/core/editing/set_selection_options.h"
 #include "third_party/blink/renderer/core/editing/visible_position.h"
 #include "third_party/blink/renderer/core/editing/visible_units.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect_list.h"
@@ -823,7 +824,16 @@ DocumentFragment* Range::extractContents(ExceptionState& exception_state) {
     return nullptr;
 
   EventQueueScope scope;
-  return ProcessContents(EXTRACT_CONTENTS, exception_state);
+  DocumentFragment* fragment = ProcessContents(EXTRACT_CONTENTS,
+                                               exception_state);
+  // |extractContents| has extended attributes [NewObject, DoNotTestNewObject],
+  // so it's better to have a test that exercises the following condition:
+  //
+  //   !fragment || DOMDataStore::GetWrapper(fragment, isolate).IsEmpty()
+  //
+  // however, there is no access to |isolate| so far.  So, we simply omit the
+  // test so far.
+  return fragment;
 }
 
 DocumentFragment* Range::cloneContents(ExceptionState& exception_state) {
@@ -975,23 +985,16 @@ DocumentFragment* Range::createContextualFragment(
   // Algorithm:
   // http://domparsing.spec.whatwg.org/#extensions-to-the-range-interface
 
-  DCHECK(string_or_html.IsString() ||
-         RuntimeEnabledFeatures::TrustedDOMTypesEnabled());
   DCHECK(!string_or_html.IsNull());
 
   Document& document = start_.Container().GetDocument();
 
-  if (string_or_html.IsString() && document.RequireTrustedTypes()) {
-    exception_state.ThrowTypeError(
-        "This document requires `TrustedHTML` assignment.");
-    return nullptr;
+  String markup =
+      TrustedHTML::GetString(string_or_html, &document, exception_state);
+  if (!exception_state.HadException()) {
+    return createContextualFragmentFromString(markup, exception_state);
   }
-
-  String markup = string_or_html.IsString()
-                      ? string_or_html.GetAsString()
-                      : string_or_html.GetAsTrustedHTML()->toString();
-
-  return createContextualFragmentFromString(markup, exception_state);
+  return nullptr;
 }
 
 DocumentFragment* Range::createContextualFragmentFromString(

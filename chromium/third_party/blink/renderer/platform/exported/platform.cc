@@ -62,6 +62,7 @@
 #include "third_party/blink/renderer/platform/language.h"
 #include "third_party/blink/renderer/platform/memory_coordinator.h"
 #include "third_party/blink/renderer/platform/partition_alloc_memory_dump_provider.h"
+#include "third_party/blink/renderer/platform/scheduler/common/simple_thread_scheduler.h"
 #include "third_party/blink/renderer/platform/web_task_runner.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/webrtc/api/rtpparameters.h"
@@ -114,12 +115,45 @@ Platform::Platform() : main_thread_(nullptr) {
 
 Platform::~Platform() = default;
 
-void Platform::Initialize(Platform* platform) {
+namespace {
+
+class SimpleMainThread : public WebThread {
+ public:
+  bool IsCurrentThread() const override {
+    DCHECK(WTF::IsMainThread());
+    return true;
+  }
+  // TODO(yutak): Remove the const qualifier so we don't have to use mutable.
+  ThreadScheduler* Scheduler() const override { return &scheduler_; }
+  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() const override {
+    DCHECK(WTF::IsMainThread());
+    return base::ThreadTaskRunnerHandle::Get();
+  }
+
+ private:
+  mutable scheduler::SimpleThreadScheduler scheduler_;
+};
+
+}  // namespace
+
+void Platform::Initialize(Platform* platform, WebThread* main_thread) {
   DCHECK(!g_platform);
   DCHECK(platform);
   g_platform = platform;
-  g_platform->main_thread_ = platform->CurrentThread();
+  g_platform->main_thread_ = main_thread;
+  InitializeCommon(platform);
+}
 
+void Platform::CreateMainThreadAndInitialize(Platform* platform) {
+  DCHECK(!g_platform);
+  DCHECK(platform);
+  g_platform = platform;
+  g_platform->owned_main_thread_ = std::make_unique<SimpleMainThread>();
+  g_platform->main_thread_ = g_platform->owned_main_thread_.get();
+  InitializeCommon(platform);
+}
+
+void Platform::InitializeCommon(Platform* platform) {
   WTF::Initialize(CallOnMainThreadFunction);
 
   ProcessHeap::Init();
@@ -175,6 +209,13 @@ WebThread* Platform::MainThread() const {
   return main_thread_;
 }
 
+WebThread* Platform::CurrentThread() {
+  // This version must be called only if the main thread is owned by Platform.
+  // See the comments in the header.
+  DCHECK(owned_main_thread_);
+  return main_thread_;
+}
+
 service_manager::Connector* Platform::GetConnector() {
   DEFINE_STATIC_LOCAL(DefaultConnector, connector, ());
   return connector.Get();
@@ -220,6 +261,12 @@ Platform::CreateSharedOffscreenGraphicsContext3DProvider() {
   return nullptr;
 }
 
+std::unique_ptr<WebGraphicsContext3DProvider>
+Platform::CreateWebGPUGraphicsContext3DProvider(const WebURL& top_document_url,
+                                                GraphicsInfo*) {
+  return nullptr;
+}
+
 std::unique_ptr<WebRTCPeerConnectionHandler>
 Platform::CreateRTCPeerConnectionHandler(
     WebRTCPeerConnectionHandlerClient*,
@@ -245,11 +292,6 @@ std::unique_ptr<WebCanvasCaptureHandler> Platform::CreateCanvasCaptureHandler(
     const WebSize&,
     double,
     WebMediaStreamTrack*) {
-  return nullptr;
-}
-
-std::unique_ptr<WebSocketHandshakeThrottle>
-Platform::CreateWebSocketHandshakeThrottle() {
   return nullptr;
 }
 

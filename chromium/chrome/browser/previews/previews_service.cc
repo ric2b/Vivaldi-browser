@@ -7,7 +7,8 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
+#include "chrome/browser/previews/previews_lite_page_decider.h"
 #include "chrome/common/chrome_constants.h"
 #include "components/blacklist/opt_out_blacklist/opt_out_blacklist_data.h"
 #include "components/blacklist/opt_out_blacklist/opt_out_store.h"
@@ -35,6 +36,8 @@ bool IsPreviewsTypeEnabled(previews::PreviewsType type) {
       return previews::params::IsOfflinePreviewsEnabled();
     case previews::PreviewsType::LOFI:
       return server_previews_enabled || previews::params::IsClientLoFiEnabled();
+    case previews::PreviewsType::LITE_PAGE_REDIRECT:
+      return previews::params::IsLitePageServerPreviewsEnabled();
     case previews::PreviewsType::LITE_PAGE:
       return server_previews_enabled;
     case previews::PreviewsType::NOSCRIPT:
@@ -64,6 +67,8 @@ int GetPreviewsTypeVersion(previews::PreviewsType type) {
       return previews::params::ClientLoFiVersion();
     case previews::PreviewsType::LITE_PAGE:
       return data_reduction_proxy::params::LitePageVersion();
+    case previews::PreviewsType::LITE_PAGE_REDIRECT:
+      return previews::params::LitePageServerPreviewsVersion();
     case previews::PreviewsType::NOSCRIPT:
       return previews::params::NoScriptPreviewsVersion();
     case previews::PreviewsType::RESOURCE_LOADING_HINTS:
@@ -94,7 +99,8 @@ blacklist::BlacklistData::AllowedTypesAndVersions GetAllowedPreviews() {
 
 }  // namespace
 
-PreviewsService::PreviewsService() {
+PreviewsService::PreviewsService()
+    : previews_lite_page_decider_(std::make_unique<PreviewsLitePageDecider>()) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 }
 
@@ -112,7 +118,7 @@ void PreviewsService::Initialize(
   // Get the background thread to run SQLite on.
   scoped_refptr<base::SequencedTaskRunner> background_task_runner =
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND});
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
 
   previews_ui_service_ = std::make_unique<previews::PreviewsUIService>(
       previews_decider_impl, io_task_runner,

@@ -23,6 +23,7 @@
 #include "chrome/browser/chromeos/system/timezone_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/chromeos_switches.h"
 #include "chromeos/network/device_state.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state_handler.h"
@@ -178,8 +179,23 @@ const char kPropertyStylusStatus[] = "stylusStatus";
 const char kStylusStatusUnsupported[] = "unsupported";
 
 // Value to which stylusStatus property is set when the device supports stylus
-// input.
+// input, but no stylus has been seen before.
 const char kStylusStatusSupported[] = "supported";
+
+// Value to which stylusStatus property is set when the device has a built-in
+// stylus or a stylus has been seen before.
+const char kStylusStatusSeen[] = "seen";
+
+// Key which corresponds to the assistantStatus property in JS.
+const char kPropertyAssistantStatus[] = "assistantStatus";
+
+// Value to which assistantStatus property is set when the device does not
+// support Assistant.
+const char kAssistantStatusUnsupported[] = "unsupported";
+
+// Value to which assistantStatus property is set when the device supports
+// Assistant.
+const char kAssistantStatusSupported[] = "supported";
 
 const struct {
   const char* api_name;
@@ -352,8 +368,16 @@ std::unique_ptr<base::Value> ChromeosInfoPrivateGetFunction::GetValue(
       return std::make_unique<base::Value>(kStylusStatusUnsupported);
     }
 
-    // TODO(michaelpg): Return "seen" if stylus has been used.
-    return std::make_unique<base::Value>(kStylusStatusSupported);
+    bool seen = g_browser_process->local_state()->HasPrefPath(
+        ash::prefs::kHasSeenStylus);
+    return std::make_unique<base::Value>(seen ? kStylusStatusSeen
+                                              : kStylusStatusSupported);
+  }
+
+  if (property_name == kPropertyAssistantStatus) {
+    return std::make_unique<base::Value>(
+        chromeos::switches::IsAssistantEnabled() ? kAssistantStatusSupported
+                                                 : kAssistantStatusUnsupported);
   }
 
   if (property_name == kPropertyClientId) {

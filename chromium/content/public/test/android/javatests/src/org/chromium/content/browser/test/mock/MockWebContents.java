@@ -5,7 +5,6 @@
 package org.chromium.content.browser.test.mock;
 
 import android.annotation.SuppressLint;
-import android.content.Context;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Parcel;
@@ -19,7 +18,6 @@ import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.ViewEventSink;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.WebContents.UserDataFactory;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.OverscrollRefreshHandler;
 import org.chromium.ui.base.EventForwarder;
@@ -34,8 +32,9 @@ public class MockWebContents implements WebContents {
     public RenderFrameHost renderFrameHost;
 
     @Override
-    public void initialize(Context context, String productVersion, ViewAndroidDelegate viewDelegate,
-            ViewEventSink.InternalAccessDelegate accessDelegate, WindowAndroid windowAndroid) {}
+    public void initialize(String productVersion, ViewAndroidDelegate viewDelegate,
+            ViewEventSink.InternalAccessDelegate accessDelegate, WindowAndroid windowAndroid,
+            WebContents.InternalsHolder internalsHolder) {}
 
     @Override
     public int describeContents() {
@@ -44,9 +43,6 @@ public class MockWebContents implements WebContents {
 
     @Override
     public void writeToParcel(Parcel dest, int flags) {}
-
-    @Override
-    public void setInternalsHolder(InternalsHolder holder) {}
 
     @Override
     public WindowAndroid getTopLevelNativeWindow() {
@@ -67,11 +63,6 @@ public class MockWebContents implements WebContents {
     @Override
     public boolean isDestroyed() {
         return false;
-    }
-
-    @Override
-    public <T> T getOrSetUserData(Class<T> key, UserDataFactory<T> userDataFactory) {
-        return null;
     }
 
     @Override
@@ -254,11 +245,6 @@ public class MockWebContents implements WebContents {
 
     @Override
     public void simulateRendererKilledForTesting(boolean wasOomProtected) {}
-
-    @Override
-    public boolean isSelectPopupVisibleForTesting() {
-        return false;
-    }
 
     @Override
     public void setHasPersistentVideo(boolean value) {}

@@ -20,6 +20,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/accessibility/chromevox_panel.h"
 #include "chrome/browser/extensions/api/braille_display_private/braille_controller.h"
+#include "chromeos/audio/cras_audio_handler.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_observer.h"
@@ -57,6 +58,7 @@ enum AccessibilityNotificationType {
   ACCESSIBILITY_TOGGLE_CURSOR_HIGHLIGHT,
   ACCESSIBILITY_TOGGLE_FOCUS_HIGHLIGHT,
   ACCESSIBILITY_TOGGLE_DICTATION,
+  ACCESSIBILITY_TOGGLE_DOCKED_MAGNIFIER,
 };
 
 struct AccessibilityStatusEventDetails {
@@ -77,7 +79,7 @@ typedef base::CallbackList<void(const AccessibilityStatusEventDetails&)>
 typedef AccessibilityStatusCallbackList::Subscription
     AccessibilityStatusSubscription;
 
-class ChromeVoxPanelWidgetObserver;
+class AccessibilityPanelWidgetObserver;
 
 enum class PlaySoundOption {
   // The sound is always played.
@@ -96,7 +98,8 @@ class AccessibilityManager
       public extensions::api::braille_display_private::BrailleObserver,
       public extensions::ExtensionRegistryObserver,
       public user_manager::UserManager::UserSessionStateObserver,
-      public input_method::InputMethodManager::Observer {
+      public input_method::InputMethodManager::Observer,
+      public CrasAudioHandler::AudioObserver {
  public:
   // Creates an instance of AccessibilityManager, this should be called once,
   // because only one instance should exist at the same time.
@@ -300,6 +303,15 @@ class AccessibilityManager
   // Hides highlight on screen.
   void HideHighlights();
 
+  // Sets the bounds used to highlight the text input caret.
+  void SetCaretBounds(const gfx::Rect& bounds_in_screen);
+
+  // Gets the startup sound user preference.
+  bool GetStartupSoundEnabled() const;
+
+  // Sets the startup sound user preference.
+  void SetStartupSoundEnabled(bool value) const;
+
   // Test helpers:
   void SetProfileForTest(Profile* profile);
   static void SetBrailleControllerForTest(
@@ -308,6 +320,8 @@ class AccessibilityManager
   void SetFocusRingObserverForTest(base::RepeatingCallback<void()> observer);
   void SetSelectToSpeakStateObserverForTest(
       base::RepeatingCallback<void()> observer);
+  void SetCaretBoundsObserverForTest(
+      base::RepeatingCallback<void(const gfx::Rect&)> observer);
 
  protected:
   AccessibilityManager();
@@ -319,6 +333,7 @@ class AccessibilityManager
   void PostSwitchChromeVoxProfile();
 
   void PostUnloadSelectToSpeak();
+  void PostUnloadSwitchAccess();
   void UpdateAlwaysShowMenuFromPref();
   void OnLargeCursorChanged();
   void OnStickyKeysChanged();
@@ -367,6 +382,9 @@ class AccessibilityManager
                           Profile* profile,
                           bool show_message) override;
 
+  // CrasAudioHandler::AudioObserver:
+  void OnActiveOutputNodeChanged() override;
+
   // Profile which has the current a11y context.
   Profile* profile_;
 
@@ -390,7 +408,7 @@ class AccessibilityManager
   bool braille_ime_current_;
 
   ChromeVoxPanel* chromevox_panel_;
-  std::unique_ptr<ChromeVoxPanelWidgetObserver>
+  std::unique_ptr<AccessibilityPanelWidgetObserver>
       chromevox_panel_widget_observer_;
 
   std::string keyboard_listener_extension_id_;
@@ -426,12 +444,14 @@ class AccessibilityManager
   std::unique_ptr<DictationChromeos> dictation_;
 
   base::RepeatingCallback<void()> focus_ring_observer_for_test_;
-
   base::RepeatingCallback<void()> select_to_speak_state_observer_for_test_;
+  base::RepeatingCallback<void(const gfx::Rect&)>
+      caret_bounds_observer_for_test_;
 
   base::WeakPtrFactory<AccessibilityManager> weak_ptr_factory_;
 
   friend class DictationTest;
+  friend class SwitchAccessTest;
   DISALLOW_COPY_AND_ASSIGN(AccessibilityManager);
 };
 

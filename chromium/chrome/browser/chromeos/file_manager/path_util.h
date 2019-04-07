@@ -46,11 +46,17 @@ bool MigratePathFromOldFormat(Profile* profile,
 // The canonical mount point name for "Downloads" folder.
 std::string GetDownloadsMountPointName(Profile* profile);
 
-// The canonical mount point name for crostini "Linux Files" folder.
+// The canonical mount point name for crostini "Linux files" folder.
 std::string GetCrostiniMountPointName(Profile* profile);
 
-// The actual directory the crostini "Linux Files" folder is mounted.
+// The actual directory the crostini "Linux files" folder is mounted.
 base::FilePath GetCrostiniMountDirectory(Profile* profile);
+
+// The sshfs mount options for crostini "Linux files" mount.
+std::vector<std::string> GetCrostiniMountOptions(
+    const std::string& hostname,
+    const std::string& host_private_key,
+    const std::string& container_public_key);
 
 // Convert a cracked url to a path inside the Crostini VM.
 std::string ConvertFileSystemURLToPathInsideCrostini(
@@ -73,6 +79,16 @@ using ConvertToContentUrlsCallback =
 void ConvertToContentUrls(
     const std::vector<storage::FileSystemURL>& file_system_urls,
     ConvertToContentUrlsCallback callback);
+
+// Convert download location path into a string suitable for display.
+// Replacements:
+// * /home/chronos/user/Downloads                => Downloads
+// * /home/chronos/u-<hash>/Downloads            => Downloads
+// * /special/drive-<hash>/root                  => Google Drive
+// * /run/arc/sdcard/write/emulated/0            => Play files
+// * /media/fuse/crostini_<hash>_termina_penguin => Linux files
+// * '/' with ' \u203a ' (angled quote sign) for display purposes.
+std::string GetDownloadLocationText(Profile* profile, const std::string& path);
 
 }  // namespace util
 }  // namespace file_manager

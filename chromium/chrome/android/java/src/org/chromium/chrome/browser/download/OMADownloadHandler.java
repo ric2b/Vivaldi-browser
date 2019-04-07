@@ -260,13 +260,13 @@ public class OMADownloadHandler extends BroadcastReceiver
      */
     public void handleOMADownload(DownloadInfo downloadInfo, long downloadId) {
         OMAParserTask task = new OMAParserTask(downloadInfo, downloadId);
-        task.execute();
+        task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     /**
      * Async task to parse an OMA download descriptor.
      */
-    private class OMAParserTask extends AsyncTask<Void, Void, OMAInfo> {
+    private class OMAParserTask extends AsyncTask<OMAInfo> {
         private final DownloadInfo mDownloadInfo;
         private final long mDownloadId;
         private long mFreeSpace;
@@ -276,7 +276,7 @@ public class OMADownloadHandler extends BroadcastReceiver
         }
 
         @Override
-        public OMAInfo doInBackground(Void...voids) {
+        public OMAInfo doInBackground() {
             OMAInfo omaInfo = null;
             final DownloadManager manager =
                     (DownloadManager) mContext.getSystemService(Context.DOWNLOAD_SERVICE);
@@ -452,7 +452,7 @@ public class OMADownloadHandler extends BroadcastReceiver
         if (omaInfo == null) return false;
         if (omaInfo.isValueEmpty(OMA_INSTALL_NOTIFY_URI)) return false;
         PostStatusTask task = new PostStatusTask(omaInfo, downloadInfo, downloadId, statusMessage);
-        task.execute();
+        task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
         return true;
     }
 
@@ -759,8 +759,7 @@ public class OMADownloadHandler extends BroadcastReceiver
      * Async task to clear the pending OMA download from SharedPrefs and inform
      * the OMADownloadHandler about download status.
      */
-    protected class ClearPendingOMADownloadTask
-            extends AsyncTask<Void, Void, Pair<Integer, Boolean>> {
+    protected class ClearPendingOMADownloadTask extends AsyncTask<Pair<Integer, Boolean>> {
         private final DownloadItem mDownloadItem;
         private final String mInstallNotifyURI;
         private DownloadInfo mDownloadInfo;
@@ -773,7 +772,7 @@ public class OMADownloadHandler extends BroadcastReceiver
         }
 
         @Override
-        public Pair<Integer, Boolean> doInBackground(Void... voids) {
+        public Pair<Integer, Boolean> doInBackground() {
             DownloadManager manager =
                     (DownloadManager) mContext.getSystemService(Context.DOWNLOAD_SERVICE);
             Cursor c = manager.query(
@@ -849,7 +848,7 @@ public class OMADownloadHandler extends BroadcastReceiver
             item.setSystemDownloadId(downloadId);
         }
         ClearPendingOMADownloadTask task = new ClearPendingOMADownloadTask(item, installNotifyURI);
-        task.execute();
+        task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     /**
@@ -903,7 +902,7 @@ public class OMADownloadHandler extends BroadcastReceiver
     /**
      * This class is responsible for posting the status message to the notification server.
      */
-    private class PostStatusTask extends AsyncTask<Void, Void, Boolean> {
+    private class PostStatusTask extends AsyncTask<Boolean> {
         private static final String TAG = "PostStatusTask";
         private final OMAInfo mOMAInfo;
         private final DownloadInfo mDownloadInfo;
@@ -919,7 +918,7 @@ public class OMADownloadHandler extends BroadcastReceiver
         }
 
         @Override
-        protected Boolean doInBackground(Void...voids) {
+        protected Boolean doInBackground() {
             HttpURLConnection urlConnection = null;
             try {
                 URL url = new URL(mOMAInfo.getValue(OMA_INSTALL_NOTIFY_URI));
@@ -944,7 +943,7 @@ public class OMADownloadHandler extends BroadcastReceiver
                     dos.close();
                 }
                 int responseCode = urlConnection.getResponseCode();
-                if (responseCode == 200 || responseCode == -1) {
+                if (responseCode == HttpURLConnection.HTTP_OK || responseCode == -1) {
                     return true;
                 }
                 return false;

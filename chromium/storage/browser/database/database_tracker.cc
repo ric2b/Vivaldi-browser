@@ -14,9 +14,9 @@
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "net/base/net_errors.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 #include "sql/meta_table.h"
 #include "sql/transaction.h"
 #include "storage/browser/database/database_quota_client.h"
@@ -37,8 +37,8 @@ const base::FilePath::CharType kIncognitoDatabaseDirectoryName[] =
     FILE_PATH_LITERAL("databases-incognito");
 const base::FilePath::CharType kTrackerDatabaseFileName[] =
     FILE_PATH_LITERAL("Databases.db");
-static const int kCurrentVersion = 2;
-static const int kCompatibleVersion = 1;
+static const int kDatabaseTrackerCurrentSchemaVersion = 2;
+static const int kDatabaseTrackerCompatibleVersion = 1;
 
 const base::FilePath::CharType kTemporaryDirectoryPrefix[] =
     FILE_PATH_LITERAL("DeleteMe");
@@ -86,7 +86,7 @@ DatabaseTracker::DatabaseTracker(
       db_dir_(is_incognito_
                   ? profile_path_.Append(kIncognitoDatabaseDirectoryName)
                   : profile_path_.Append(kDatabaseDirectoryName)),
-      db_(new sql::Connection()),
+      db_(new sql::Database()),
       special_storage_policy_(special_storage_policy),
       quota_manager_proxy_(quota_manager_proxy),
       task_runner_(base::CreateSequencedTaskRunnerWithTraits(
@@ -176,7 +176,7 @@ void DatabaseTracker::HandleSqliteError(
   // a small optimization, see WebDatabaseObserverImpl::HandleSqliteError.
   if (error == SQLITE_CORRUPT || error == SQLITE_NOTADB) {
     DeleteDatabase(origin_identifier, database_name,
-                   net::CompletionCallback());
+                   net::CompletionOnceCallback());
   }
 }
 
@@ -222,8 +222,7 @@ void DatabaseTracker::DeleteDatabaseIfNeeded(
         if (databases.empty()) {
           callback->second.erase(found_origin);
           if (callback->second.empty()) {
-            net::CompletionCallback cb = callback->first;
-            cb.Run(net::OK);
+            std::move(callback->first).Run(net::OK);
             callback = deletion_callbacks_.erase(callback);
             continue;
           }
@@ -357,7 +356,7 @@ bool DatabaseTracker::DeleteClosedDatabase(
 
   // Try to delete the file on the hard drive.
   base::FilePath db_file = GetFullDBFilePath(origin_identifier, database_name);
-  if (!sql::Connection::Delete(db_file))
+  if (!sql::Database::Delete(db_file))
     return false;
 
   if (quota_manager_proxy_.get() && db_file_size)
@@ -500,13 +499,15 @@ bool DatabaseTracker::UpgradeToCurrentVersion() {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   sql::Transaction transaction(db_.get());
   if (!transaction.Begin() ||
-      !meta_table_->Init(db_.get(), kCurrentVersion, kCompatibleVersion) ||
-      (meta_table_->GetCompatibleVersionNumber() > kCurrentVersion) ||
+      !meta_table_->Init(db_.get(), kDatabaseTrackerCurrentSchemaVersion,
+                         kDatabaseTrackerCompatibleVersion) ||
+      (meta_table_->GetCompatibleVersionNumber() >
+       kDatabaseTrackerCurrentSchemaVersion) ||
       !databases_table_->Init())
     return false;
 
-  if (meta_table_->GetVersionNumber() < kCurrentVersion)
-    meta_table_->SetVersionNumber(kCurrentVersion);
+  if (meta_table_->GetVersionNumber() < kDatabaseTrackerCurrentSchemaVersion)
+    meta_table_->SetVersionNumber(kDatabaseTrackerCurrentSchemaVersion);
 
   return transaction.Commit();
 }
@@ -640,11 +641,12 @@ void DatabaseTracker::ScheduleDatabaseForDeletion(
 
 void DatabaseTracker::ScheduleDatabasesForDeletion(
     const DatabaseSet& databases,
-    const net::CompletionCallback& callback) {
+    net::CompletionOnceCallback callback) {
   DCHECK(!databases.empty());
 
   if (!callback.is_null())
-    deletion_callbacks_.push_back(std::make_pair(callback, databases));
+    deletion_callbacks_.push_back(
+        std::make_pair(std::move(callback), databases));
   for (const auto& origin_dbs : databases) {
     for (const base::string16& db : origin_dbs.second)
       ScheduleDatabaseForDeletion(origin_dbs.first, db);
@@ -653,7 +655,7 @@ void DatabaseTracker::ScheduleDatabasesForDeletion(
 
 int DatabaseTracker::DeleteDatabase(const std::string& origin_identifier,
                                     const base::string16& database_name,
-                                    const net::CompletionCallback& callback) {
+                                    net::CompletionOnceCallback callback) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   if (!LazyInit())
     return net::ERR_FAILED;
@@ -663,7 +665,7 @@ int DatabaseTracker::DeleteDatabase(const std::string& origin_identifier,
     if (!callback.is_null()) {
       DatabaseSet set;
       set[origin_identifier].insert(database_name);
-      deletion_callbacks_.emplace_back(callback, set);
+      deletion_callbacks_.emplace_back(std::move(callback), set);
     }
     ScheduleDatabaseForDeletion(origin_identifier, database_name);
     return net::ERR_IO_PENDING;
@@ -674,7 +676,7 @@ int DatabaseTracker::DeleteDatabase(const std::string& origin_identifier,
 
 int DatabaseTracker::DeleteDataModifiedSince(
     const base::Time& cutoff,
-    const net::CompletionCallback& callback) {
+    net::CompletionOnceCallback callback) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   if (!LazyInit())
     return net::ERR_FAILED;
@@ -715,14 +717,14 @@ int DatabaseTracker::DeleteDataModifiedSince(
     return rv;
 
   if (!to_be_deleted.empty()) {
-    ScheduleDatabasesForDeletion(to_be_deleted, callback);
+    ScheduleDatabasesForDeletion(to_be_deleted, std::move(callback));
     return net::ERR_IO_PENDING;
   }
   return net::OK;
 }
 
-int DatabaseTracker::DeleteDataForOrigin(
-    const std::string& origin, const net::CompletionCallback& callback) {
+int DatabaseTracker::DeleteDataForOrigin(const std::string& origin,
+                                         net::CompletionOnceCallback callback) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   if (!LazyInit())
     return net::ERR_FAILED;
@@ -742,7 +744,7 @@ int DatabaseTracker::DeleteDataForOrigin(
   }
 
   if (!to_be_deleted.empty()) {
-    ScheduleDatabasesForDeletion(to_be_deleted, callback);
+    ScheduleDatabasesForDeletion(to_be_deleted, std::move(callback));
     return net::ERR_IO_PENDING;
   }
   return net::OK;

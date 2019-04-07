@@ -10,6 +10,10 @@ component("cpp") {
   sources = [
     "cors/cors.cc",
     "cors/cors.h",
+    "cors/origin_access_entry.cc",
+    "cors/origin_access_entry.h",
+    "cors/origin_access_list.cc",
+    "cors/origin_access_list.h",
     "cors/preflight_cache.cc",
     "cors/preflight_cache.h",
     "cors/preflight_result.cc",
@@ -20,6 +24,8 @@ component("cpp") {
     "features.h",
     "net_adapters.cc",
     "net_adapters.h",
+    "network_connection_tracker.cc",
+    "network_connection_tracker.h",
     "network_quality_tracker.cc",
     "network_quality_tracker.h",
     "network_switches.cc",
@@ -85,6 +91,9 @@ component("cpp_base") {
     "net_ipc_param_traits.h",
     "network_ipc_param_traits.cc",
     "network_ipc_param_traits.h",
+    "p2p_param_traits.cc",
+    "p2p_param_traits.h",
+    "p2p_socket_type.h",
     "proxy_config_mojom_traits.cc",
     "proxy_config_mojom_traits.h",
     "proxy_config_with_annotation_mojom_traits.cc",
@@ -114,6 +123,9 @@ component("cpp_base") {
     "//mojo/public/mojom/base",
     "//net",
     "//services/network/public/mojom:mojom_shared",
+    "//third_party/webrtc/rtc_base",
+    "//third_party/webrtc_overrides",
+    "//third_party/webrtc_overrides:init_webrtc",
   ]
   defines = [ "IS_NETWORK_CPP_BASE_IMPL" ]
 }
@@ -132,12 +144,15 @@ source_set("tests") {
 
   sources = [
     "cors/cors_unittest.cc",
+    "cors/origin_access_entry_unittest.cc",
+    "cors/origin_access_list_unittest.cc",
     "cors/preflight_cache_unittest.cc",
     "cors/preflight_result_unittest.cc",
     "cross_thread_shared_url_loader_factory_info_unittest.cc",
     "digitally_signed_mojom_traits_unittest.cc",
     "mutable_network_traffic_annotation_tag_mojom_traits_unittest.cc",
     "mutable_partial_network_traffic_annotation_tag_mojom_traits_unittest.cc",
+    "network_connection_tracker_unittest.cc",
     "network_mojom_traits_unittest.cc",
     "network_quality_tracker_unittest.cc",
     "proxy_config_mojom_traits_unittest.cc",

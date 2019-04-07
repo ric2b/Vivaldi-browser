@@ -56,7 +56,7 @@ using extensions::Action;
 
 // Delay between cleaning passes (to delete old action records) through the
 // database.
-const int kCleaningDelayInHours = 12;
+constexpr base::TimeDelta kCleaningDelay = base::TimeDelta::FromHours(12);
 
 // We should log the arguments to these API calls.  Be careful when
 // constructing this whitelist to not keep arguments that might compromise
@@ -178,7 +178,7 @@ CountingPolicy::CountingPolicy(Profile* profile)
 
 CountingPolicy::~CountingPolicy() {}
 
-bool CountingPolicy::InitDatabase(sql::Connection* db) {
+bool CountingPolicy::InitDatabase(sql::Database* db) {
   if (!string_table_.Initialize(db))
     return false;
   if (!url_table_.Initialize(db))
@@ -231,7 +231,7 @@ void CountingPolicy::QueueAction(scoped_refptr<Action> action) {
   }
 }
 
-bool CountingPolicy::FlushDatabase(sql::Connection* db) {
+bool CountingPolicy::FlushDatabase(sql::Database* db) {
   // Columns that must match exactly for database rows to be coalesced.
   static const char* const matched_columns[] = {
       "extension_id_x", "action_type", "api_name_x", "args_x", "page_url_x",
@@ -244,8 +244,7 @@ bool CountingPolicy::FlushDatabase(sql::Connection* db) {
   // always check on the first database flush (since there might be a large
   // amount of data to clear).
   bool clean_database = (last_database_cleaning_time_.is_null() ||
-                         Now() - last_database_cleaning_time_ >
-                             base::TimeDelta::FromHours(kCleaningDelayInHours));
+                         Now() - last_database_cleaning_time_ > kCleaningDelay);
 
   if (queue.empty() && !clean_database)
     return true;
@@ -432,7 +431,7 @@ std::unique_ptr<Action::ActionVector> CountingPolicy::DoReadFilteredData(
   activity_database()->AdviseFlush(ActivityDatabase::kFlushImmediately);
   std::unique_ptr<Action::ActionVector> actions(new Action::ActionVector());
 
-  sql::Connection* db = GetDatabaseConnection();
+  sql::Database* db = GetDatabaseConnection();
   if (!db)
     return actions;
 
@@ -529,7 +528,7 @@ void CountingPolicy::DoRemoveActions(const std::vector<int64_t>& action_ids) {
   if (action_ids.empty())
     return;
 
-  sql::Connection* db = GetDatabaseConnection();
+  sql::Database* db = GetDatabaseConnection();
   if (!db) {
     LOG(ERROR) << "Unable to connect to database";
     return;
@@ -564,7 +563,7 @@ void CountingPolicy::DoRemoveActions(const std::vector<int64_t>& action_ids) {
 }
 
 void CountingPolicy::DoRemoveURLs(const std::vector<GURL>& restrict_urls) {
-  sql::Connection* db = GetDatabaseConnection();
+  sql::Database* db = GetDatabaseConnection();
   if (!db) {
     LOG(ERROR) << "Unable to connect to database";
     return;
@@ -639,7 +638,7 @@ void CountingPolicy::DoRemoveExtensionData(const std::string& extension_id) {
   if (extension_id.empty())
     return;
 
-  sql::Connection* db = GetDatabaseConnection();
+  sql::Database* db = GetDatabaseConnection();
   if (!db) {
     LOG(ERROR) << "Unable to connect to database";
     return;
@@ -670,7 +669,7 @@ void CountingPolicy::DoRemoveExtensionData(const std::string& extension_id) {
 }
 
 void CountingPolicy::DoDeleteDatabase() {
-  sql::Connection* db = GetDatabaseConnection();
+  sql::Database* db = GetDatabaseConnection();
   if (!db) {
     LOG(ERROR) << "Unable to connect to database";
     return;
@@ -757,7 +756,7 @@ void CountingPolicy::OnDatabaseClose() {
 }
 
 // Cleans old records from the activity log database.
-bool CountingPolicy::CleanOlderThan(sql::Connection* db,
+bool CountingPolicy::CleanOlderThan(sql::Database* db,
                                     const base::Time& cutoff) {
   std::string clean_statement =
       "DELETE FROM " + std::string(kTableName) + " WHERE time < ?";
@@ -771,7 +770,7 @@ bool CountingPolicy::CleanOlderThan(sql::Connection* db,
 
 // Cleans unused interned strings from the database.  This should be run after
 // deleting rows from the main log table to clean out stale values.
-bool CountingPolicy::CleanStringTables(sql::Connection* db) {
+bool CountingPolicy::CleanStringTables(sql::Database* db) {
   sql::Statement cleaner1(db->GetCachedStatement(
       sql::StatementID(SQL_FROM_HERE), kStringTableCleanup));
   if (!cleaner1.Run())

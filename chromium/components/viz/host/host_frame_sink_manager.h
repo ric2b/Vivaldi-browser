@@ -179,6 +179,7 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
                            uint32_t frame_token) override;
 
  private:
+  friend class HostFrameSinkManagerTestApi;
   friend class HostFrameSinkManagerTestBase;
 
   struct FrameSinkData {
@@ -274,7 +275,7 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
 
   // TODO(jonross): Separate out all hit testing work into its own separate
   // class.
-  base::ObserverList<HitTestRegionObserver> observers_;
+  base::ObserverList<HitTestRegionObserver>::Unchecked observers_;
 
   base::WeakPtrFactory<HostFrameSinkManager> weak_ptr_factory_;
 

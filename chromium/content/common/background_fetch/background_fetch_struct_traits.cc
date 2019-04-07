@@ -6,7 +6,6 @@
 
 #include "content/common/service_worker/service_worker.mojom.h"
 #include "content/common/service_worker/service_worker_fetch_request_mojom_traits.h"
-#include "content/common/service_worker/service_worker_messages.h"
 #include "mojo/public/cpp/bindings/array_data_view.h"
 #include "third_party/blink/public/common/manifest/manifest_mojom_traits.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
@@ -39,13 +38,15 @@ bool StructTraits<blink::mojom::BackgroundFetchRegistrationDataView,
   registration->uploaded = data.uploaded();
   registration->download_total = data.download_total();
   registration->downloaded = data.downloaded();
+  registration->state = data.state();
+  registration->failure_reason = data.failure_reason();
   return true;
 }
 
 // static
-bool StructTraits<content::mojom::BackgroundFetchSettledFetchDataView,
+bool StructTraits<blink::mojom::BackgroundFetchSettledFetchDataView,
                   content::BackgroundFetchSettledFetch>::
-    Read(content::mojom::BackgroundFetchSettledFetchDataView data,
+    Read(blink::mojom::BackgroundFetchSettledFetchDataView data,
          content::BackgroundFetchSettledFetch* fetch) {
   return data.ReadRequest(&fetch->request) &&
          data.ReadResponse(&fetch->response);

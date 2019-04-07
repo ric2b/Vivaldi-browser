@@ -103,14 +103,14 @@ class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
     RenderSurfaceList update_list;
     LayerTreeHostCommon::CalcDrawPropsImplInputs inputs(
         active_tree->root_layer_for_testing(),
-        active_tree->DeviceViewport().size(), host_impl->DrawTransform(),
+        active_tree->GetDeviceViewport().size(), host_impl->DrawTransform(),
         active_tree->device_scale_factor(),
         active_tree->current_page_scale_factor(),
         active_tree->InnerViewportContainerLayer(),
         active_tree->InnerViewportScrollLayer(),
         active_tree->OuterViewportScrollLayer(),
         active_tree->elastic_overscroll()->Current(active_tree->IsActiveTree()),
-        active_tree->OverscrollElasticityLayer(), max_texture_size,
+        active_tree->OverscrollElasticityElementId(), max_texture_size,
         host_impl->settings().layer_transforms_should_scale_layer_contents,
         &update_list, active_tree->property_trees(),
         active_tree->property_trees()->transform_tree.Node(

@@ -19,6 +19,7 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "ui/events/base_event_utils.h"
@@ -89,74 +90,11 @@ void AutofillUiTest::TearDownOnMainThread() {
   test::ReenableSystemServices();
 }
 
-bool AutofillUiTest::TryFillForm(const std::string& focus_element_xpath,
-                                 const int attempts) {
-  content::WebContents* web_contents = GetWebContents();
-  AutofillManager* autofill_manager =
-      ContentAutofillDriverFactory::FromWebContents(web_contents)
-          ->DriverForFrame(web_contents->GetMainFrame())
-          ->autofill_manager();
-
-  int tries = 0;
-  while (tries < attempts) {
-    tries++;
-    autofill_manager->client()->HideAutofillPopup();
-
-    if (!ShowAutofillSuggestion(focus_element_xpath)) {
-      LOG(WARNING) << "Failed to bring up the autofill suggestion drop down.";
-      continue;
-    }
-
-    // Press the down key again to highlight the first choice in the autofill
-    // suggestion drop down.
-    test_delegate()->Reset();
-    SendKeyToPopup(ui::DomKey::ARROW_DOWN);
-    if (!test_delegate()->Wait({ObservedUiEvents::kPreviewFormData},
-                               base::TimeDelta::FromSeconds(5))) {
-      LOG(WARNING) << "Failed to select an option from the"
-                   << " autofill suggestion drop down.";
-      continue;
-    }
-
-    // Press the enter key to invoke autofill using the first suggestion.
-    test_delegate()->Reset();
-    SendKeyToPopup(ui::DomKey::ENTER);
-    if (!test_delegate()->Wait({ObservedUiEvents::kFormDataFilled},
-                               base::TimeDelta::FromSeconds(5))) {
-      LOG(WARNING) << "Failed to fill the form.";
-      continue;
-    }
-
-    return true;
-  }
-
-  autofill_manager->client()->HideAutofillPopup();
-  return false;
-}
-
-bool AutofillUiTest::ShowAutofillSuggestion(
-    const std::string& focus_element_xpath) {
-  const std::string js(base::StringPrintf(
-      "try {"
-      "  var element = automation_helper.getElementByXpath(`%s`);"
-      "  while (document.activeElement !== element) {"
-      "    element.focus();"
-      "  }"
-      "} catch(ex) {}",
-      focus_element_xpath.c_str()));
-  if (content::ExecuteScript(GetWebContents(), js)) {
-    test_delegate()->Reset();
-    SendKeyToPage(ui::DomKey::ARROW_DOWN);
-    return test_delegate()->Wait({ObservedUiEvents::kSuggestionShown},
-                                 base::TimeDelta::FromSeconds(5));
-  }
-  return false;
-}
-
-void AutofillUiTest::SendKeyToPage(ui::DomKey key) {
+void AutofillUiTest::SendKeyToPage(content::WebContents* web_contents,
+                                   const ui::DomKey key) {
   ui::KeyboardCode key_code = ui::NonPrintableDomKeyToKeyboardCode(key);
   ui::DomCode code = ui::UsLayoutKeyboardCodeToDomCode(key_code);
-  content::SimulateKeyPress(GetWebContents(), key, code, key_code, false, false,
+  content::SimulateKeyPress(web_contents, key, code, key_code, false, false,
                             false, false);
 }
 
@@ -179,10 +117,12 @@ void AutofillUiTest::SendKeyToPageAndWait(
   test_delegate()->Wait(std::move(expected_events));
 }
 
-void AutofillUiTest::SendKeyToPopup(ui::DomKey key) {
+void AutofillUiTest::SendKeyToPopup(content::RenderFrameHost* render_frame_host,
+                                    const ui::DomKey key) {
   ui::KeyboardCode key_code = ui::NonPrintableDomKeyToKeyboardCode(key);
   ui::DomCode code = ui::UsLayoutKeyboardCodeToDomCode(key_code);
-  content::RenderWidgetHost* widget = GetRenderViewHost()->GetWidget();
+  content::RenderWidgetHost* widget =
+      render_frame_host->GetView()->GetRenderWidgetHost();
 
   // Route popup-targeted key presses via the render view host.
   content::NativeWebKeyboardEvent event(blink::WebKeyboardEvent::kRawKeyDown,

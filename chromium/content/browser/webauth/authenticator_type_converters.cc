@@ -5,7 +5,9 @@
 #include "content/browser/webauth/authenticator_type_converters.h"
 
 #include <algorithm>
+#include <utility>
 
+#include "base/containers/flat_set.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_parsing_utils.h"
 
@@ -33,6 +35,10 @@ TypeConverter<::device::FidoTransportProtocol, AuthenticatorTransport>::Convert(
       return ::device::FidoTransportProtocol::kNearFieldCommunication;
     case AuthenticatorTransport::BLE:
       return ::device::FidoTransportProtocol::kBluetoothLowEnergy;
+    case AuthenticatorTransport::CABLE:
+      return ::device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy;
+    case AuthenticatorTransport::INTERNAL:
+      return ::device::FidoTransportProtocol::kInternal;
   }
   NOTREACHED();
   return ::device::FidoTransportProtocol::kUsbHumanInterfaceDevice;
@@ -78,8 +84,14 @@ TypeConverter<std::vector<::device::PublicKeyCredentialDescriptor>,
   credential_descriptors.reserve(input.size());
 
   for (const auto& credential : input) {
+    base::flat_set<::device::FidoTransportProtocol> protocols;
+    for (const auto& protocol : credential->transports) {
+      protocols.emplace(ConvertTo<::device::FidoTransportProtocol>(protocol));
+    }
+
     credential_descriptors.emplace_back(::device::PublicKeyCredentialDescriptor(
-        ConvertTo<::device::CredentialType>(credential->type), credential->id));
+        ConvertTo<::device::CredentialType>(credential->type), credential->id,
+        std::move(protocols)));
   }
   return credential_descriptors;
 }
@@ -162,30 +174,30 @@ TypeConverter<::device::PublicKeyCredentialUserEntity,
 }
 
 // static
-std::vector<::device::FidoCableDiscovery::CableDiscoveryData>
-TypeConverter<std::vector<::device::FidoCableDiscovery::CableDiscoveryData>,
+std::vector<::device::CableDiscoveryData>
+TypeConverter<std::vector<::device::CableDiscoveryData>,
               std::vector<CableAuthenticationPtr>>::
     Convert(const std::vector<CableAuthenticationPtr>& input) {
-  std::vector<::device::FidoCableDiscovery::CableDiscoveryData> discovery_data;
+  std::vector<::device::CableDiscoveryData> discovery_data;
   discovery_data.reserve(input.size());
 
   for (const auto& data : input) {
-    ::device::FidoCableDiscovery::EidArray client_eid;
+    ::device::EidArray client_eid;
     DCHECK_EQ(client_eid.size(), data->client_eid.size());
     std::copy(data->client_eid.begin(), data->client_eid.end(),
               client_eid.begin());
 
-    ::device::FidoCableDiscovery::EidArray authenticator_eid;
+    ::device::EidArray authenticator_eid;
     DCHECK_EQ(authenticator_eid.size(), data->authenticator_eid.size());
     std::copy(data->authenticator_eid.begin(), data->authenticator_eid.end(),
               authenticator_eid.begin());
 
-    ::device::FidoCableDiscovery::SessionPreKeyArray session_pre_key;
+    ::device::SessionPreKeyArray session_pre_key;
     DCHECK_EQ(session_pre_key.size(), data->session_pre_key.size());
     std::copy(data->session_pre_key.begin(), data->session_pre_key.end(),
               session_pre_key.begin());
 
-    discovery_data.push_back(::device::FidoCableDiscovery::CableDiscoveryData{
+    discovery_data.push_back(::device::CableDiscoveryData{
         data->version, client_eid, authenticator_eid, session_pre_key});
   }
 

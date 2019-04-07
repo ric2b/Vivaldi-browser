@@ -17,6 +17,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/metrics/field_trial.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_split.h"
@@ -40,6 +41,7 @@
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "net/base/cache_type.h"
 #include "net/base/hash_value.h"
+#include "net/base/host_port_pair.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
@@ -49,6 +51,7 @@
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/cookie_store.h"
 #include "net/disk_cache/disk_cache.h"
+#include "net/dns/mock_host_resolver.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_network_session.h"
@@ -59,6 +62,7 @@
 #include "net/proxy_resolution/proxy_config.h"
 #include "net/proxy_resolution/proxy_info.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
+#include "net/socket/ssl_client_socket_pool.h"
 #include "net/socket/transport_client_socket_pool.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/channel_id_store.h"
@@ -72,10 +76,12 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_job_factory.h"
+#include "services/network/cookie_manager.h"
 #include "services/network/mojo_net_log.h"
 #include "services/network/network_context.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/host_resolver.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/proxy_config.mojom.h"
 #include "services/network/test/test_url_loader_client.h"
@@ -128,6 +134,52 @@ mojom::NetworkContextParamsPtr CreateContextParams() {
   return params;
 }
 
+// ProxyLookupClient that drives proxy lookups and can wait for the responses to
+// be received.
+class TestProxyLookupClient : public mojom::ProxyLookupClient {
+ public:
+  TestProxyLookupClient() : binding_(this) {}
+  ~TestProxyLookupClient() override = default;
+
+  void StartLookUpProxyForURL(const GURL& url,
+                              mojom::NetworkContext* network_context) {
+    // Make sure this method is called at most once.
+    EXPECT_FALSE(binding_.is_bound());
+
+    mojom::ProxyLookupClientPtr proxy_lookup_client;
+    binding_.Bind(mojo::MakeRequest(&proxy_lookup_client));
+    network_context->LookUpProxyForURL(url, std::move(proxy_lookup_client));
+  }
+
+  void WaitForResult() { run_loop_.Run(); }
+
+  // mojom::ProxyLookupClient implementation:
+  void OnProxyLookupComplete(
+      const base::Optional<net::ProxyInfo>& proxy_info) override {
+    EXPECT_FALSE(is_done_);
+    EXPECT_FALSE(proxy_info_);
+
+    is_done_ = true;
+    proxy_info_ = proxy_info;
+    binding_.Close();
+    run_loop_.Quit();
+  }
+
+  const base::Optional<net::ProxyInfo>& proxy_info() const {
+    return proxy_info_;
+  }
+  bool is_done() const { return is_done_; }
+
+ private:
+  mojo::Binding<mojom::ProxyLookupClient> binding_;
+
+  bool is_done_ = false;
+  base::Optional<net::ProxyInfo> proxy_info_;
+
+  base::RunLoop run_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestProxyLookupClient);
+};
 
 class NetworkContextTest : public testing::Test,
                            public net::SSLConfigService::Observer {
@@ -171,6 +223,53 @@ class NetworkContextTest : public testing::Test,
   }
 
   void OnSSLConfigChanged() override { ++ssl_config_changed_count_; }
+
+  // Looks up a value with the given name from the NetworkContext's
+  // TransportSocketPool info dictionary.
+  int GetSocketPoolInfo(NetworkContext* context, base::StringPiece name) {
+    int value;
+    context->url_request_context()
+        ->http_transaction_factory()
+        ->GetSession()
+        ->GetTransportSocketPool(
+            net::HttpNetworkSession::SocketPoolType::NORMAL_SOCKET_POOL)
+        ->GetInfoAsValue("", "", false)
+        ->GetInteger(name, &value);
+    return value;
+  }
+
+  // Looks up a value with the given name from the NetworkContext's
+  // SSLSocketPool info dictionary.
+  int GetSSLSocketPoolInfo(NetworkContext* context, base::StringPiece name) {
+    int value;
+    context->url_request_context()
+        ->http_transaction_factory()
+        ->GetSession()
+        ->GetSSLSocketPool(
+            net::HttpNetworkSession::SocketPoolType::NORMAL_SOCKET_POOL)
+        ->GetInfoAsValue("", "", false)
+        ->GetInteger(name, &value);
+    return value;
+  }
+
+  int GetSocketCount(NetworkContext* network_context) {
+    return GetSocketPoolInfo(network_context, "idle_socket_count") +
+           GetSocketPoolInfo(network_context, "connecting_socket_count") +
+           GetSocketPoolInfo(network_context, "handed_out_socket_count");
+  }
+
+  int GetSSLSocketCount(NetworkContext* network_context) {
+    return GetSSLSocketPoolInfo(network_context, "idle_socket_count") +
+           GetSSLSocketPoolInfo(network_context, "connecting_socket_count") +
+           GetSSLSocketPoolInfo(network_context, "handed_out_socket_count");
+  }
+
+  GURL GetHttpUrlFromHttps(const GURL& https_url) {
+    url::Replacements<char> replacements;
+    const char http[] = "http";
+    replacements.SetScheme(http, url::Component(0, strlen(http)));
+    return https_url.ReplaceComponents(replacements);
+  }
 
  protected:
   base::test::ScopedTaskEnvironment scoped_task_environment_;
@@ -1899,27 +1998,46 @@ TEST_F(NetworkContextTest, CookieManager) {
 }
 
 TEST_F(NetworkContextTest, ProxyConfig) {
-  // Create a bunch of proxy rules to switch between. All that matters is that
-  // they're all different. It's important that none of these configs require
+  // Each ProxyConfigSet consists of a net::ProxyConfig, and the net::ProxyInfos
+  // that it will result in for http and ftp URLs. All that matters is that each
+  // ProxyConfig is different. It's important that none of these configs require
   // fetching a PAC scripts, as this test checks
   // ProxyResolutionService::config(), which is only updated after fetching PAC
   // scripts (if applicable).
-  net::ProxyConfig proxy_configs[3];
-  proxy_configs[0].proxy_rules().ParseFromString("http=foopy:80");
-  proxy_configs[1].proxy_rules().ParseFromString("http=foopy:80;ftp=foopy2");
-  proxy_configs[2] = net::ProxyConfig::CreateDirect();
+  struct ProxyConfigSet {
+    net::ProxyConfig proxy_config;
+    net::ProxyInfo http_proxy_info;
+    net::ProxyInfo ftp_proxy_info;
+  } proxy_config_sets[3];
+
+  proxy_config_sets[0].proxy_config.proxy_rules().ParseFromString(
+      "http=foopy:80");
+  proxy_config_sets[0].http_proxy_info.UsePacString("PROXY foopy:80");
+  proxy_config_sets[0].ftp_proxy_info.UseDirect();
+
+  proxy_config_sets[1].proxy_config.proxy_rules().ParseFromString(
+      "http=foopy:80;ftp=foopy2");
+  proxy_config_sets[1].http_proxy_info.UsePacString("PROXY foopy:80");
+  proxy_config_sets[1].ftp_proxy_info.UsePacString("PROXY foopy2");
+
+  proxy_config_sets[2].proxy_config = net::ProxyConfig::CreateDirect();
+  proxy_config_sets[2].http_proxy_info.UseDirect();
+  proxy_config_sets[2].ftp_proxy_info.UseDirect();
 
   // Sanity check.
-  EXPECT_FALSE(proxy_configs[0].Equals(proxy_configs[1]));
-  EXPECT_FALSE(proxy_configs[0].Equals(proxy_configs[2]));
-  EXPECT_FALSE(proxy_configs[1].Equals(proxy_configs[2]));
+  EXPECT_FALSE(proxy_config_sets[0].proxy_config.Equals(
+      proxy_config_sets[1].proxy_config));
+  EXPECT_FALSE(proxy_config_sets[0].proxy_config.Equals(
+      proxy_config_sets[2].proxy_config));
+  EXPECT_FALSE(proxy_config_sets[1].proxy_config.Equals(
+      proxy_config_sets[2].proxy_config));
 
   // Try each proxy config as the initial config, to make sure setting the
   // initial config works.
-  for (const auto& initial_proxy_config : proxy_configs) {
+  for (const auto& initial_proxy_config_set : proxy_config_sets) {
     mojom::NetworkContextParamsPtr context_params = CreateContextParams();
     context_params->initial_proxy_config = net::ProxyConfigWithAnnotation(
-        initial_proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS);
+        initial_proxy_config_set.proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS);
     mojom::ProxyConfigClientPtr config_client;
     context_params->proxy_config_client_request =
         mojo::MakeRequest(&config_client);
@@ -1928,23 +2046,56 @@ TEST_F(NetworkContextTest, ProxyConfig) {
 
     net::ProxyResolutionService* proxy_resolution_service =
         network_context->url_request_context()->proxy_resolution_service();
-    // Kick the ProxyResolutionService into action, as it doesn't start updating
-    // its config until it's first used.
-    proxy_resolution_service->ForceReloadProxyConfig();
+    // Need to do proxy resolutions before can check the ProxyConfig, as the
+    // ProxyService doesn't start updating its config until it's first used.
+    // This also gives some test coverage of LookUpProxyForURL.
+    TestProxyLookupClient http_proxy_lookup_client;
+    http_proxy_lookup_client.StartLookUpProxyForURL(GURL("http://foo"),
+                                                    network_context.get());
+    http_proxy_lookup_client.WaitForResult();
+    ASSERT_TRUE(http_proxy_lookup_client.proxy_info());
+    EXPECT_EQ(initial_proxy_config_set.http_proxy_info.ToPacString(),
+              http_proxy_lookup_client.proxy_info()->ToPacString());
+
+    TestProxyLookupClient ftp_proxy_lookup_client;
+    ftp_proxy_lookup_client.StartLookUpProxyForURL(GURL("ftp://foo"),
+                                                   network_context.get());
+    ftp_proxy_lookup_client.WaitForResult();
+    ASSERT_TRUE(ftp_proxy_lookup_client.proxy_info());
+    EXPECT_EQ(initial_proxy_config_set.ftp_proxy_info.ToPacString(),
+              ftp_proxy_lookup_client.proxy_info()->ToPacString());
+
     EXPECT_TRUE(proxy_resolution_service->config());
     EXPECT_TRUE(proxy_resolution_service->config()->value().Equals(
-        initial_proxy_config));
+        initial_proxy_config_set.proxy_config));
 
     // Always go through the other configs in the same order. This has the
     // advantage of testing the case where there's no change, for
     // proxy_config[0].
-    for (const auto& proxy_config : proxy_configs) {
+    for (const auto& proxy_config_set : proxy_config_sets) {
       config_client->OnProxyConfigUpdated(net::ProxyConfigWithAnnotation(
-          proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS));
+          proxy_config_set.proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS));
       scoped_task_environment_.RunUntilIdle();
+
+      TestProxyLookupClient http_proxy_lookup_client2;
+      http_proxy_lookup_client2.StartLookUpProxyForURL(GURL("http://foo"),
+                                                       network_context.get());
+      http_proxy_lookup_client2.WaitForResult();
+      ASSERT_TRUE(http_proxy_lookup_client2.proxy_info());
+      EXPECT_EQ(proxy_config_set.http_proxy_info.ToPacString(),
+                http_proxy_lookup_client2.proxy_info()->ToPacString());
+
+      TestProxyLookupClient ftp_proxy_lookup_client2;
+      ftp_proxy_lookup_client2.StartLookUpProxyForURL(GURL("ftp://foo"),
+                                                      network_context.get());
+      ftp_proxy_lookup_client2.WaitForResult();
+      ASSERT_TRUE(ftp_proxy_lookup_client2.proxy_info());
+      EXPECT_EQ(proxy_config_set.ftp_proxy_info.ToPacString(),
+                ftp_proxy_lookup_client2.proxy_info()->ToPacString());
+
       EXPECT_TRUE(proxy_resolution_service->config());
-      EXPECT_TRUE(
-          proxy_resolution_service->config()->value().Equals(proxy_config));
+      EXPECT_TRUE(proxy_resolution_service->config()->value().Equals(
+          proxy_config_set.proxy_config));
     }
   }
 }
@@ -1984,26 +2135,88 @@ TEST_F(NetworkContextTest, NoInitialProxyConfig) {
   EXPECT_FALSE(proxy_resolution_service->fetched_config());
 
   // Before there's a proxy configuration, proxy requests should hang.
-  net::ProxyInfo proxy_info;
-  net::TestCompletionCallback test_callback;
-  net::ProxyResolutionService::Request* request = nullptr;
-  ASSERT_EQ(net::ERR_IO_PENDING, proxy_resolution_service->ResolveProxy(
-                                     GURL("http://bar/"), "GET", &proxy_info,
-                                     test_callback.callback(), &request,
-                                     nullptr, net::NetLogWithSource()));
+  // Create two lookups, to make sure two simultaneous lookups can be handled at
+  // once.
+  TestProxyLookupClient http_proxy_lookup_client;
+  http_proxy_lookup_client.StartLookUpProxyForURL(GURL("http://foo/"),
+                                                  network_context.get());
+  TestProxyLookupClient ftp_proxy_lookup_client;
+  ftp_proxy_lookup_client.StartLookUpProxyForURL(GURL("ftp://foo/"),
+                                                 network_context.get());
   scoped_task_environment_.RunUntilIdle();
   EXPECT_FALSE(proxy_resolution_service->config());
   EXPECT_FALSE(proxy_resolution_service->fetched_config());
-  ASSERT_FALSE(test_callback.have_result());
+  EXPECT_FALSE(http_proxy_lookup_client.is_done());
+  EXPECT_FALSE(ftp_proxy_lookup_client.is_done());
+  EXPECT_EQ(2u, network_context->pending_proxy_lookup_requests_for_testing());
 
   net::ProxyConfig proxy_config;
   proxy_config.proxy_rules().ParseFromString("http=foopy:80");
   config_client->OnProxyConfigUpdated(net::ProxyConfigWithAnnotation(
       proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS));
-  ASSERT_EQ(net::OK, test_callback.WaitForResult());
 
-  EXPECT_TRUE(proxy_info.is_http());
-  EXPECT_EQ("foopy", proxy_info.proxy_server().host_port_pair().host());
+  http_proxy_lookup_client.WaitForResult();
+  ASSERT_TRUE(http_proxy_lookup_client.proxy_info());
+  EXPECT_EQ("PROXY foopy:80",
+            http_proxy_lookup_client.proxy_info()->ToPacString());
+
+  ftp_proxy_lookup_client.WaitForResult();
+  ASSERT_TRUE(ftp_proxy_lookup_client.proxy_info());
+  EXPECT_EQ("DIRECT", ftp_proxy_lookup_client.proxy_info()->ToPacString());
+
+  EXPECT_EQ(0u, network_context->pending_proxy_lookup_requests_for_testing());
+}
+
+TEST_F(NetworkContextTest, DestroyedWithoutProxyConfig) {
+  // Create a NetworkContext without an initial proxy configuration.
+  mojom::NetworkContextParamsPtr context_params = CreateContextParams();
+  context_params->initial_proxy_config.reset();
+  mojom::ProxyConfigClientPtr config_client;
+  context_params->proxy_config_client_request =
+      mojo::MakeRequest(&config_client);
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(std::move(context_params));
+
+  // Proxy requests should hang.
+  TestProxyLookupClient proxy_lookup_client;
+  proxy_lookup_client.StartLookUpProxyForURL(GURL("http://foo/"),
+                                             network_context.get());
+  scoped_task_environment_.RunUntilIdle();
+  EXPECT_EQ(1u, network_context->pending_proxy_lookup_requests_for_testing());
+  EXPECT_FALSE(proxy_lookup_client.is_done());
+
+  // Destroying the NetworkContext should cause the pending lookup to fail with
+  // ERR_ABORTED.
+  network_context.reset();
+  proxy_lookup_client.WaitForResult();
+  EXPECT_FALSE(proxy_lookup_client.proxy_info());
+}
+
+TEST_F(NetworkContextTest, CancelPendingProxyLookup) {
+  // Create a NetworkContext without an initial proxy configuration.
+  mojom::NetworkContextParamsPtr context_params = CreateContextParams();
+  context_params->initial_proxy_config.reset();
+  mojom::ProxyConfigClientPtr config_client;
+  context_params->proxy_config_client_request =
+      mojo::MakeRequest(&config_client);
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(std::move(context_params));
+
+  // Proxy requests should hang.
+  std::unique_ptr<TestProxyLookupClient> proxy_lookup_client =
+      std::make_unique<TestProxyLookupClient>();
+  proxy_lookup_client->StartLookUpProxyForURL(GURL("http://foo/"),
+                                              network_context.get());
+  scoped_task_environment_.RunUntilIdle();
+  EXPECT_FALSE(proxy_lookup_client->is_done());
+  EXPECT_EQ(1u, network_context->pending_proxy_lookup_requests_for_testing());
+
+  // Cancelling the proxy lookup should cause the proxy lookup request objects
+  // to be deleted.
+  proxy_lookup_client.reset();
+  scoped_task_environment_.RunUntilIdle();
+
+  EXPECT_EQ(0u, network_context->pending_proxy_lookup_requests_for_testing());
 }
 
 TEST_F(NetworkContextTest, PacQuickCheck) {
@@ -2058,34 +2271,6 @@ TEST_F(NetworkContextTest, DangerouslyAllowPacAccessToSecureURLs) {
                 ->proxy_resolution_service()
                 ->sanitize_url_policy_for_testing());
 }
-
-class TestProxyConfigLazyPoller : public mojom::ProxyConfigPollerClient {
- public:
-  TestProxyConfigLazyPoller() : binding_(this) {}
-  ~TestProxyConfigLazyPoller() override {}
-
-  void OnLazyProxyConfigPoll() override { ++times_polled_; }
-
-  mojom::ProxyConfigPollerClientPtr BindInterface() {
-    mojom::ProxyConfigPollerClientPtr interface;
-    binding_.Bind(MakeRequest(&interface));
-    return interface;
-  }
-
-  int GetAndClearTimesPolled() {
-    int out = times_polled_;
-    times_polled_ = 0;
-    return out;
-  }
-
- private:
-  int times_polled_ = 0;
-  mojo::Binding<ProxyConfigPollerClient> binding_;
-
-  std::unique_ptr<base::RunLoop> run_loop_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestProxyConfigLazyPoller);
-};
 
 net::IPEndPoint GetLocalHostWithAnyPort() {
   return net::IPEndPoint(net::IPAddress(127, 0, 0, 1), 0);
@@ -2325,6 +2510,469 @@ TEST_F(NetworkContextTest, DestroyNetLogExporterWhileCreatingScratchDir) {
   base::DeleteFile(temp_path, false);
 }
 
+net::IPEndPoint CreateExpectedEndPoint(const std::string& address,
+                                       uint16_t port) {
+  net::IPAddress ip_address;
+  CHECK(ip_address.AssignFromIPLiteral(address));
+  return net::IPEndPoint(ip_address, port);
+}
+
+class TestResolveHostClient : public mojom::ResolveHostClient {
+ public:
+  TestResolveHostClient(mojom::ResolveHostClientPtr* interface_ptr,
+                        base::RunLoop* run_loop)
+      : binding_(this, mojo::MakeRequest(interface_ptr)),
+        complete_(false),
+        run_loop_(run_loop) {
+    DCHECK(run_loop_);
+  }
+
+  void CloseBinding() { binding_.Close(); }
+
+  void OnComplete(int error,
+                  const base::Optional<net::AddressList>& addresses) override {
+    DCHECK(!complete_);
+
+    complete_ = true;
+    result_error_ = error;
+    result_addresses_ = addresses;
+    run_loop_->Quit();
+  }
+
+  bool complete() const { return complete_; }
+
+  int result_error() const {
+    DCHECK(complete_);
+    return result_error_;
+  }
+
+  const base::Optional<net::AddressList>& result_addresses() const {
+    DCHECK(complete_);
+    return result_addresses_;
+  }
+
+ private:
+  mojo::Binding<mojom::ResolveHostClient> binding_;
+
+  bool complete_;
+  int result_error_;
+  base::Optional<net::AddressList> result_addresses_;
+  base::RunLoop* const run_loop_;
+};
+
+TEST_F(NetworkContextTest, ResolveHost_Sync) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  auto resolver = std::make_unique<net::MockHostResolver>();
+  network_context->url_request_context()->set_host_resolver(resolver.get());
+  resolver->set_synchronous_mode(true);
+
+  base::RunLoop run_loop;
+  mojom::ResolveHostHandlePtr control_handle;
+  mojom::ResolveHostParametersPtr optional_parameters =
+      mojom::ResolveHostParameters::New();
+  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
+  mojom::ResolveHostClientPtr response_client_ptr;
+  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+
+  network_context->ResolveHost(net::HostPortPair("localhost", 160),
+                               std::move(optional_parameters),
+                               std::move(response_client_ptr));
+  run_loop.Run();
+
+  EXPECT_EQ(net::OK, response_client.result_error());
+  EXPECT_THAT(
+      response_client.result_addresses().value().endpoints(),
+      testing::UnorderedElementsAre(CreateExpectedEndPoint("127.0.0.1", 160)));
+  EXPECT_EQ(0u,
+            network_context->GetNumOutstandingResolveHostRequestsForTesting());
+}
+
+TEST_F(NetworkContextTest, ResolveHost_Async) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  auto resolver = std::make_unique<net::MockHostResolver>();
+  network_context->url_request_context()->set_host_resolver(resolver.get());
+  resolver->set_synchronous_mode(false);
+
+  base::RunLoop run_loop;
+  mojom::ResolveHostHandlePtr control_handle;
+  mojom::ResolveHostParametersPtr optional_parameters =
+      mojom::ResolveHostParameters::New();
+  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
+  mojom::ResolveHostClientPtr response_client_ptr;
+  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+
+  network_context->ResolveHost(net::HostPortPair("localhost", 160),
+                               std::move(optional_parameters),
+                               std::move(response_client_ptr));
+
+  bool control_handle_closed = false;
+  auto connection_error_callback =
+      base::BindLambdaForTesting([&]() { control_handle_closed = true; });
+  control_handle.set_connection_error_handler(connection_error_callback);
+  run_loop.Run();
+
+  EXPECT_EQ(net::OK, response_client.result_error());
+  EXPECT_THAT(
+      response_client.result_addresses().value().endpoints(),
+      testing::UnorderedElementsAre(CreateExpectedEndPoint("127.0.0.1", 160)));
+  EXPECT_TRUE(control_handle_closed);
+  EXPECT_EQ(0u,
+            network_context->GetNumOutstandingResolveHostRequestsForTesting());
+}
+
+TEST_F(NetworkContextTest, ResolveHost_Failure_Sync) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  auto resolver = std::make_unique<net::MockHostResolver>();
+  network_context->url_request_context()->set_host_resolver(resolver.get());
+  resolver->rules()->AddSimulatedFailure("example.com");
+  resolver->set_synchronous_mode(true);
+
+  base::RunLoop run_loop;
+  mojom::ResolveHostHandlePtr control_handle;
+  mojom::ResolveHostParametersPtr optional_parameters =
+      mojom::ResolveHostParameters::New();
+  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
+  mojom::ResolveHostClientPtr response_client_ptr;
+  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+
+  network_context->ResolveHost(net::HostPortPair("example.com", 160),
+                               std::move(optional_parameters),
+                               std::move(response_client_ptr));
+  run_loop.Run();
+
+  EXPECT_EQ(net::ERR_NAME_NOT_RESOLVED, response_client.result_error());
+  EXPECT_FALSE(response_client.result_addresses());
+  EXPECT_EQ(0u,
+            network_context->GetNumOutstandingResolveHostRequestsForTesting());
+}
+
+TEST_F(NetworkContextTest, ResolveHost_Failure_Async) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  auto resolver = std::make_unique<net::MockHostResolver>();
+  network_context->url_request_context()->set_host_resolver(resolver.get());
+  resolver->rules()->AddSimulatedFailure("example.com");
+  resolver->set_synchronous_mode(false);
+
+  base::RunLoop run_loop;
+  mojom::ResolveHostHandlePtr control_handle;
+  mojom::ResolveHostParametersPtr optional_parameters =
+      mojom::ResolveHostParameters::New();
+  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
+  mojom::ResolveHostClientPtr response_client_ptr;
+  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+
+  network_context->ResolveHost(net::HostPortPair("example.com", 160),
+                               std::move(optional_parameters),
+                               std::move(response_client_ptr));
+
+  bool control_handle_closed = false;
+  auto connection_error_callback =
+      base::BindLambdaForTesting([&]() { control_handle_closed = true; });
+  control_handle.set_connection_error_handler(connection_error_callback);
+  run_loop.Run();
+
+  EXPECT_EQ(net::ERR_NAME_NOT_RESOLVED, response_client.result_error());
+  EXPECT_FALSE(response_client.result_addresses());
+  EXPECT_TRUE(control_handle_closed);
+  EXPECT_EQ(0u,
+            network_context->GetNumOutstandingResolveHostRequestsForTesting());
+}
+
+TEST_F(NetworkContextTest, ResolveHost_NoControlHandle) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  base::RunLoop run_loop;
+  mojom::ResolveHostClientPtr response_client_ptr;
+  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+
+  // Resolve "localhost" because it should always resolve fast and locally, even
+  // when using a real HostResolver.
+  network_context->ResolveHost(net::HostPortPair("localhost", 80), nullptr,
+                               std::move(response_client_ptr));
+  run_loop.Run();
+
+  EXPECT_EQ(net::OK, response_client.result_error());
+  EXPECT_THAT(
+      response_client.result_addresses().value().endpoints(),
+      testing::UnorderedElementsAre(CreateExpectedEndPoint("127.0.0.1", 80),
+                                    CreateExpectedEndPoint("::1", 80)));
+  EXPECT_EQ(0u,
+            network_context->GetNumOutstandingResolveHostRequestsForTesting());
+}
+
+TEST_F(NetworkContextTest, ResolveHost_CloseControlHandle) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  base::RunLoop run_loop;
+  mojom::ResolveHostHandlePtr control_handle;
+  mojom::ResolveHostParametersPtr optional_parameters =
+      mojom::ResolveHostParameters::New();
+  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
+  mojom::ResolveHostClientPtr response_client_ptr;
+  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+
+  // Resolve "localhost" because it should always resolve fast and locally, even
+  // when using a real HostResolver.
+  network_context->ResolveHost(net::HostPortPair("localhost", 160),
+                               std::move(optional_parameters),
+                               std::move(response_client_ptr));
+  control_handle = nullptr;
+  run_loop.Run();
+
+  EXPECT_EQ(net::OK, response_client.result_error());
+  EXPECT_THAT(
+      response_client.result_addresses().value().endpoints(),
+      testing::UnorderedElementsAre(CreateExpectedEndPoint("127.0.0.1", 160),
+                                    CreateExpectedEndPoint("::1", 160)));
+  EXPECT_EQ(0u,
+            network_context->GetNumOutstandingResolveHostRequestsForTesting());
+}
+
+TEST_F(NetworkContextTest, ResolveHost_Cancellation) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  // Override the HostResolver with a hanging one, so the test can ensure the
+  // request won't be completed before the cancellation arrives.
+  auto resolver = std::make_unique<net::HangingHostResolver>();
+  network_context->url_request_context()->set_host_resolver(resolver.get());
+
+  ASSERT_EQ(0, resolver->num_cancellations());
+
+  base::RunLoop run_loop;
+  mojom::ResolveHostHandlePtr control_handle;
+  mojom::ResolveHostParametersPtr optional_parameters =
+      mojom::ResolveHostParameters::New();
+  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
+  mojom::ResolveHostClientPtr response_client_ptr;
+  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+
+  network_context->ResolveHost(net::HostPortPair("localhost", 80),
+                               std::move(optional_parameters),
+                               std::move(response_client_ptr));
+  bool control_handle_closed = false;
+  auto connection_error_callback =
+      base::BindLambdaForTesting([&]() { control_handle_closed = true; });
+  control_handle.set_connection_error_handler(connection_error_callback);
+
+  control_handle->Cancel(net::ERR_ABORTED);
+  run_loop.Run();
+
+  // On cancellation, should receive an ERR_FAILED result, and the internal
+  // resolver request should have been cancelled.
+  EXPECT_EQ(net::ERR_ABORTED, response_client.result_error());
+  EXPECT_FALSE(response_client.result_addresses());
+  EXPECT_EQ(1, resolver->num_cancellations());
+  EXPECT_TRUE(control_handle_closed);
+  EXPECT_EQ(0u,
+            network_context->GetNumOutstandingResolveHostRequestsForTesting());
+}
+
+TEST_F(NetworkContextTest, ResolveHost_DestroyContext) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  // Override the HostResolver with a hanging one, so the test can ensure the
+  // request won't be completed before the cancellation arrives.
+  auto resolver = std::make_unique<net::HangingHostResolver>();
+  network_context->url_request_context()->set_host_resolver(resolver.get());
+
+  ASSERT_EQ(0, resolver->num_cancellations());
+
+  base::RunLoop run_loop;
+  mojom::ResolveHostHandlePtr control_handle;
+  mojom::ResolveHostParametersPtr optional_parameters =
+      mojom::ResolveHostParameters::New();
+  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
+  mojom::ResolveHostClientPtr response_client_ptr;
+  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+
+  network_context->ResolveHost(net::HostPortPair("localhost", 80),
+                               std::move(optional_parameters),
+                               std::move(response_client_ptr));
+  bool control_handle_closed = false;
+  auto connection_error_callback =
+      base::BindLambdaForTesting([&]() { control_handle_closed = true; });
+  control_handle.set_connection_error_handler(connection_error_callback);
+
+  network_context = nullptr;
+  run_loop.Run();
+
+  // On context destruction, should receive an ERR_FAILED result, and the
+  // internal resolver request should have been cancelled.
+  EXPECT_EQ(net::ERR_FAILED, response_client.result_error());
+  EXPECT_FALSE(response_client.result_addresses());
+  EXPECT_EQ(1, resolver->num_cancellations());
+  EXPECT_TRUE(control_handle_closed);
+}
+
+TEST_F(NetworkContextTest, ResolveHost_CloseClient) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  // Override the HostResolver with a hanging one, so the test can ensure the
+  // request won't be completed before the cancellation arrives.
+  auto resolver = std::make_unique<net::HangingHostResolver>();
+  network_context->url_request_context()->set_host_resolver(resolver.get());
+
+  ASSERT_EQ(0, resolver->num_cancellations());
+
+  base::RunLoop run_loop;
+  mojom::ResolveHostHandlePtr control_handle;
+  mojom::ResolveHostParametersPtr optional_parameters =
+      mojom::ResolveHostParameters::New();
+  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
+  mojom::ResolveHostClientPtr response_client_ptr;
+  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+
+  network_context->ResolveHost(net::HostPortPair("localhost", 80),
+                               std::move(optional_parameters),
+                               std::move(response_client_ptr));
+  bool control_handle_closed = false;
+  auto connection_error_callback =
+      base::BindLambdaForTesting([&]() { control_handle_closed = true; });
+  control_handle.set_connection_error_handler(connection_error_callback);
+
+  response_client.CloseBinding();
+  run_loop.RunUntilIdle();
+
+  // Response pipe is closed, so no results to check. Internal request should be
+  // cancelled.
+  EXPECT_FALSE(response_client.complete());
+  EXPECT_EQ(1, resolver->num_cancellations());
+  EXPECT_TRUE(control_handle_closed);
+  EXPECT_EQ(0u,
+            network_context->GetNumOutstandingResolveHostRequestsForTesting());
+}
+
+TEST_F(NetworkContextTest, CreateHostResolver) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  mojom::HostResolverPtr resolver;
+  network_context->CreateHostResolver(mojo::MakeRequest(&resolver));
+
+  base::RunLoop run_loop;
+  mojom::ResolveHostClientPtr response_client_ptr;
+  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+
+  resolver->ResolveHost(net::HostPortPair("localhost", 80), nullptr,
+                        std::move(response_client_ptr));
+  run_loop.Run();
+
+  EXPECT_EQ(net::OK, response_client.result_error());
+  EXPECT_THAT(
+      response_client.result_addresses().value().endpoints(),
+      testing::UnorderedElementsAre(CreateExpectedEndPoint("127.0.0.1", 80),
+                                    CreateExpectedEndPoint("::1", 80)));
+  EXPECT_EQ(0u,
+            network_context->GetNumOutstandingResolveHostRequestsForTesting());
+}
+
+TEST_F(NetworkContextTest, CreateHostResolver_CloseResolver) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  // Override the HostResolver with a hanging one, so the test can ensure the
+  // request won't be completed before the cancellation arrives.
+  auto internal_resolver = std::make_unique<net::HangingHostResolver>();
+  network_context->url_request_context()->set_host_resolver(
+      internal_resolver.get());
+
+  mojom::HostResolverPtr resolver;
+  network_context->CreateHostResolver(mojo::MakeRequest(&resolver));
+
+  ASSERT_EQ(0, internal_resolver->num_cancellations());
+
+  base::RunLoop run_loop;
+  mojom::ResolveHostHandlePtr control_handle;
+  mojom::ResolveHostParametersPtr optional_parameters =
+      mojom::ResolveHostParameters::New();
+  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
+  mojom::ResolveHostClientPtr response_client_ptr;
+  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+
+  resolver->ResolveHost(net::HostPortPair("localhost", 80),
+                        std::move(optional_parameters),
+                        std::move(response_client_ptr));
+  bool control_handle_closed = false;
+  auto connection_error_callback =
+      base::BindLambdaForTesting([&]() { control_handle_closed = true; });
+  control_handle.set_connection_error_handler(connection_error_callback);
+
+  resolver = nullptr;
+  run_loop.Run();
+
+  // On resolver destruction, should receive an ERR_FAILED result, and the
+  // internal resolver request should have been cancelled.
+  EXPECT_EQ(net::ERR_FAILED, response_client.result_error());
+  EXPECT_FALSE(response_client.result_addresses());
+  EXPECT_EQ(1, internal_resolver->num_cancellations());
+  EXPECT_TRUE(control_handle_closed);
+}
+
+TEST_F(NetworkContextTest, CreateHostResolver_CloseContext) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  // Override the HostResolver with a hanging one, so the test can ensure the
+  // request won't be completed before the cancellation arrives.
+  auto internal_resolver = std::make_unique<net::HangingHostResolver>();
+  network_context->url_request_context()->set_host_resolver(
+      internal_resolver.get());
+
+  mojom::HostResolverPtr resolver;
+  network_context->CreateHostResolver(mojo::MakeRequest(&resolver));
+
+  ASSERT_EQ(0, internal_resolver->num_cancellations());
+
+  base::RunLoop run_loop;
+  mojom::ResolveHostHandlePtr control_handle;
+  mojom::ResolveHostParametersPtr optional_parameters =
+      mojom::ResolveHostParameters::New();
+  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
+  mojom::ResolveHostClientPtr response_client_ptr;
+  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+
+  resolver->ResolveHost(net::HostPortPair("localhost", 80),
+                        std::move(optional_parameters),
+                        std::move(response_client_ptr));
+  // Run a bit to ensure the resolve request makes it to the resolver. Otherwise
+  // the resolver will be destroyed and close its pipe before it even knows
+  // about the request to send a failure.
+  scoped_task_environment_.RunUntilIdle();
+
+  bool control_handle_closed = false;
+  auto connection_error_callback =
+      base::BindLambdaForTesting([&]() { control_handle_closed = true; });
+  control_handle.set_connection_error_handler(connection_error_callback);
+  bool resolver_closed = false;
+  auto resolver_closed_callback =
+      base::BindLambdaForTesting([&]() { resolver_closed = true; });
+  resolver.set_connection_error_handler(resolver_closed_callback);
+
+  network_context = nullptr;
+  run_loop.Run();
+
+  // On context destruction, should receive an ERR_FAILED result, and the
+  // internal resolver request should have been cancelled.
+  EXPECT_EQ(net::ERR_FAILED, response_client.result_error());
+  EXPECT_FALSE(response_client.result_addresses());
+  EXPECT_EQ(1, internal_resolver->num_cancellations());
+  EXPECT_TRUE(control_handle_closed);
+  EXPECT_TRUE(resolver_closed);
+}
+
 // Gets notified by the EmbeddedTestServer on incoming connections being
 // accepted or read from, keeps track of them and exposes that info to
 // the tests.
@@ -2335,7 +2983,9 @@ class ConnectionListener
     : public net::test_server::EmbeddedTestServerConnectionListener {
  public:
   ConnectionListener()
-      : task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      : total_sockets_seen_(0),
+        total_sockets_waited_for_(0),
+        task_runner_(base::ThreadTaskRunnerHandle::Get()),
         num_accepted_connections_needed_(0),
         num_accepted_connections_loop_(nullptr) {}
 
@@ -2349,13 +2999,14 @@ class ConnectionListener
     EXPECT_TRUE(sockets_.find(socket) == sockets_.end());
 
     sockets_[socket] = SOCKET_ACCEPTED;
+    total_sockets_seen_++;
     CheckAccepted();
   }
 
   // Get called from the EmbeddedTestServer thread to be notified that
   // a connection was read from.
   void ReadFromSocket(const net::StreamSocket& connection, int rv) override {
-    NOTREACHED();
+    EXPECT_EQ(net::OK, rv);
   }
 
   // Wait for exactly |n| items in |sockets_|. |n| must be greater than 0.
@@ -2365,7 +3016,7 @@ class ConnectionListener
     base::RunLoop run_loop;
     {
       base::AutoLock lock(lock_);
-      EXPECT_GE(num_connections, sockets_.size());
+      EXPECT_GE(num_connections, sockets_.size() - total_sockets_waited_for_);
       num_accepted_connections_loop_ = &run_loop;
       num_accepted_connections_needed_ = num_connections;
       CheckAccepted();
@@ -2377,7 +3028,8 @@ class ConnectionListener
     // Grab the mutex again and make sure that the number of accepted sockets is
     // indeed |num_connections|.
     base::AutoLock lock(lock_);
-    EXPECT_EQ(num_connections, sockets_.size());
+    total_sockets_waited_for_ += num_connections;
+    EXPECT_EQ(total_sockets_seen_, total_sockets_waited_for_);
   }
 
   // Helper function to stop the waiting for sockets to be accepted for
@@ -2391,7 +3043,8 @@ class ConnectionListener
     DCHECK(num_accepted_connections_loop_ ||
            num_accepted_connections_needed_ == 0);
     if (!num_accepted_connections_loop_ ||
-        num_accepted_connections_needed_ != sockets_.size()) {
+        num_accepted_connections_needed_ !=
+            sockets_.size() - total_sockets_waited_for_) {
       return;
     }
 
@@ -2415,6 +3068,9 @@ class ConnectionListener
     EXPECT_EQ(net::OK, connection.GetPeerAddress(&address));
     return address.port();
   }
+
+  int total_sockets_seen_;
+  int total_sockets_waited_for_;
 
   enum SocketStatus { SOCKET_ACCEPTED, SOCKET_READ_FROM };
 
@@ -2449,6 +3105,39 @@ TEST_F(NetworkContextTest, PreconnectOne) {
   connection_listener.WaitForAcceptedConnections(1u);
 }
 
+TEST_F(NetworkContextTest, PreconnectHSTS) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  ConnectionListener connection_listener;
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  test_server.SetConnectionListener(&connection_listener);
+  ASSERT_TRUE(test_server.Start());
+
+  const GURL server_http_url = GetHttpUrlFromHttps(test_server.base_url());
+  network_context->PreconnectSockets(1, server_http_url, net::LOAD_NORMAL,
+                                     true);
+  connection_listener.WaitForAcceptedConnections(1u);
+
+  int num_sockets = GetSocketCount(network_context.get());
+  EXPECT_EQ(num_sockets, 1);
+  int num_ssl_sockets = GetSSLSocketCount(network_context.get());
+  EXPECT_EQ(num_ssl_sockets, 0);
+
+  const base::Time expiry =
+      base::Time::Now() + base::TimeDelta::FromSeconds(1000);
+  network_context->url_request_context()->transport_security_state()->AddHSTS(
+      server_http_url.host(), expiry, false);
+  network_context->PreconnectSockets(1, server_http_url, net::LOAD_NORMAL,
+                                     true);
+  connection_listener.WaitForAcceptedConnections(1u);
+
+  num_sockets = GetSocketCount(network_context.get());
+  EXPECT_EQ(num_sockets, 2);
+  num_ssl_sockets = GetSSLSocketCount(network_context.get());
+  EXPECT_EQ(num_ssl_sockets, 1);
+}
+
 TEST_F(NetworkContextTest, PreconnectZero) {
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateContextParams());
@@ -2462,23 +3151,11 @@ TEST_F(NetworkContextTest, PreconnectZero) {
                                      net::LOAD_NORMAL, true);
   base::RunLoop().RunUntilIdle();
 
-  int num_sockets;
-  network_context->url_request_context()
-      ->http_transaction_factory()
-      ->GetSession()
-      ->GetTransportSocketPool(
-          net::HttpNetworkSession::SocketPoolType::NORMAL_SOCKET_POOL)
-      ->GetInfoAsValue("", "", false)
-      ->GetInteger("idle_socket_count", &num_sockets);
+  int num_sockets =
+      GetSocketPoolInfo(network_context.get(), "idle_socket_count");
   ASSERT_EQ(num_sockets, 0);
-  int num_connecting_sockets;
-  network_context->url_request_context()
-      ->http_transaction_factory()
-      ->GetSession()
-      ->GetTransportSocketPool(
-          net::HttpNetworkSession::SocketPoolType::NORMAL_SOCKET_POOL)
-      ->GetInfoAsValue("", "", false)
-      ->GetInteger("connecting_socket_count", &num_connecting_sockets);
+  int num_connecting_sockets =
+      GetSocketPoolInfo(network_context.get(), "connecting_socket_count");
   ASSERT_EQ(num_connecting_sockets, 0);
 }
 
@@ -2495,14 +3172,8 @@ TEST_F(NetworkContextTest, PreconnectTwo) {
                                      net::LOAD_NORMAL, true);
   connection_listener.WaitForAcceptedConnections(2u);
 
-  int num_sockets;
-  network_context->url_request_context()
-      ->http_transaction_factory()
-      ->GetSession()
-      ->GetTransportSocketPool(
-          net::HttpNetworkSession::SocketPoolType::NORMAL_SOCKET_POOL)
-      ->GetInfoAsValue("", "", false)
-      ->GetInteger("idle_socket_count", &num_sockets);
+  int num_sockets =
+      GetSocketPoolInfo(network_context.get(), "idle_socket_count");
   ASSERT_EQ(num_sockets, 2);
 }
 
@@ -2520,18 +3191,13 @@ TEST_F(NetworkContextTest, PreconnectFour) {
 
   connection_listener.WaitForAcceptedConnections(4u);
 
-  int num_sockets;
-  network_context->url_request_context()
-      ->http_transaction_factory()
-      ->GetSession()
-      ->GetTransportSocketPool(
-          net::HttpNetworkSession::SocketPoolType::NORMAL_SOCKET_POOL)
-      ->GetInfoAsValue("", "", false)
-      ->GetInteger("idle_socket_count", &num_sockets);
+  int num_sockets =
+      GetSocketPoolInfo(network_context.get(), "idle_socket_count");
   ASSERT_EQ(num_sockets, 4);
 }
 
-TEST_F(NetworkContextTest, PreconnectMax) {
+// Flaky; see http://crbug.com/874419
+TEST_F(NetworkContextTest, DISABLED_PreconnectMax) {
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateContextParams());
 
@@ -2540,28 +3206,71 @@ TEST_F(NetworkContextTest, PreconnectMax) {
   test_server.SetConnectionListener(&connection_listener);
   ASSERT_TRUE(test_server.Start());
 
-  int num_sockets, max_num_sockets;
-  network_context->url_request_context()
-      ->http_transaction_factory()
-      ->GetSession()
-      ->GetTransportSocketPool(
-          net::HttpNetworkSession::SocketPoolType::NORMAL_SOCKET_POOL)
-      ->GetInfoAsValue("", "", false)
-      ->GetInteger("max_sockets_per_group", &max_num_sockets);
+  int max_num_sockets =
+      GetSocketPoolInfo(network_context.get(), "max_sockets_per_group");
   EXPECT_GT(76, max_num_sockets);
 
   network_context->PreconnectSockets(76, test_server.base_url(),
                                      net::LOAD_NORMAL, true);
   base::RunLoop().RunUntilIdle();
 
-  network_context->url_request_context()
-      ->http_transaction_factory()
-      ->GetSession()
-      ->GetTransportSocketPool(
-          net::HttpNetworkSession::SocketPoolType::NORMAL_SOCKET_POOL)
-      ->GetInfoAsValue("", "", false)
-      ->GetInteger("idle_socket_count", &num_sockets);
+  int num_sockets =
+      GetSocketPoolInfo(network_context.get(), "idle_socket_count");
   ASSERT_EQ(num_sockets, max_num_sockets);
+}
+
+TEST_F(NetworkContextTest, CloseAllConnections) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  ConnectionListener connection_listener;
+  net::EmbeddedTestServer test_server;
+  test_server.SetConnectionListener(&connection_listener);
+  ASSERT_TRUE(test_server.Start());
+
+  network_context->PreconnectSockets(2, test_server.base_url(),
+                                     net::LOAD_NORMAL, true);
+  connection_listener.WaitForAcceptedConnections(2u);
+
+  int num_sockets =
+      GetSocketPoolInfo(network_context.get(), "idle_socket_count");
+  EXPECT_EQ(num_sockets, 2);
+
+  base::RunLoop run_loop;
+  network_context->CloseAllConnections(run_loop.QuitClosure());
+  run_loop.Run();
+
+  num_sockets = GetSocketPoolInfo(network_context.get(), "idle_socket_count");
+  EXPECT_EQ(num_sockets, 0);
+}
+
+TEST_F(NetworkContextTest, QueryHSTS) {
+  const char kTestDomain[] = "example.com";
+
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+
+  bool result = false, got_result = false;
+  network_context->IsHSTSActiveForHost(
+      kTestDomain, base::BindLambdaForTesting([&](bool is_hsts) {
+        result = is_hsts;
+        got_result = true;
+      }));
+  EXPECT_TRUE(got_result);
+  EXPECT_FALSE(result);
+
+  network_context->AddHSTSForTesting(
+      kTestDomain, base::Time::Now() + base::TimeDelta::FromDays(1000),
+      false /*include_subdomains*/, base::DoNothing());
+
+  bool result2 = false, got_result2 = false;
+  network_context->IsHSTSActiveForHost(
+      kTestDomain, base::BindLambdaForTesting([&](bool is_hsts) {
+        result2 = is_hsts;
+        got_result2 = true;
+      }));
+  EXPECT_TRUE(got_result2);
+  EXPECT_TRUE(result2);
 }
 
 }  // namespace

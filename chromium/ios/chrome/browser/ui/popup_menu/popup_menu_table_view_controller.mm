@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_table_view_controller.h"
 
+#include "base/ios/ios_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
@@ -138,6 +139,15 @@ const CGFloat kScrollIndicatorVerticalInsets = 11;
       initWithFrame:CGRectMake(0.0f, 0.0f, self.tableView.bounds.size.width,
                                0.01f)];
 
+  if (!base::ios::IsRunningOnIOS11OrLater()) {
+    // On iOS 10, a footer with a height of 0 is also needed to prevent inset at
+    // the bottom.
+    self.tableView.tableFooterView = [[UIView alloc]
+        initWithFrame:CGRectMake(0.0f, 0.0f, self.tableView.bounds.size.width,
+                                 0.01f)];
+    self.tableView.sectionFooterHeight = 0.0;
+  }
+
   self.view.layer.cornerRadius = kPopupMenuCornerRadius;
   self.view.layer.masksToBounds = YES;
 }
@@ -161,14 +171,14 @@ const CGFloat kScrollIndicatorVerticalInsets = 11;
          [self.tableViewModel itemsInSectionWithIdentifier:sectionIdentifier]) {
       CGSize sizeForCell = [item cellSizeForWidth:self.view.bounds.size.width];
       width = MAX(width, ceil(sizeForCell.width));
-      height += ceil(sizeForCell.height);
+      height += sizeForCell.height;
     }
     // Add the separator height (only available the non-final sections).
     height += [self tableView:self.tableView heightForFooterInSection:section];
   }
   height +=
       self.tableView.contentInset.top + self.tableView.contentInset.bottom;
-  return CGSizeMake(width, height);
+  return CGSizeMake(width, ceil(height));
 }
 
 #pragma mark - UITableViewDelegate
@@ -263,13 +273,15 @@ const CGFloat kScrollIndicatorVerticalInsets = 11;
       break;
     case PopupMenuActionOpenNewTab:
       base::RecordAction(UserMetricsAction("MobileMenuNewTab"));
-      [self.dispatcher openURL:[OpenNewTabCommand commandWithIncognito:NO
-                                                           originPoint:origin]];
+      [self.dispatcher
+          openURLInNewTab:[OpenNewTabCommand commandWithIncognito:NO
+                                                      originPoint:origin]];
       break;
     case PopupMenuActionOpenNewIncognitoTab:
       base::RecordAction(UserMetricsAction("MobileMenuNewIncognitoTab"));
-      [self.dispatcher openURL:[OpenNewTabCommand commandWithIncognito:YES
-                                                           originPoint:origin]];
+      [self.dispatcher
+          openURLInNewTab:[OpenNewTabCommand commandWithIncognito:YES
+                                                      originPoint:origin]];
       break;
     case PopupMenuActionReadLater:
       base::RecordAction(UserMetricsAction("MobileMenuReadLater"));

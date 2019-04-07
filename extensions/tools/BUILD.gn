@@ -4,8 +4,10 @@ source_set("tools") {
     "../tools/vivaldi_tools.h",
   ]
   deps = [
-    "//components/google/core/browser:browser",
+    "//components/google/core/browser",
     "//extensions/buildflags",
-    "//net:net"
+    "//extensions/browser",
+    "//net",
+    "//skia",
   ]
 }

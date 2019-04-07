@@ -12,6 +12,7 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
 #include "base/test/scoped_feature_list.h"
@@ -28,7 +29,7 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/events/test/test_event_handler.h"
 #include "ui/gfx/animation/slide_animation.h"
-#include "ui/views/bubble/bubble_dialog_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -107,6 +108,20 @@ class ConsumeEventHandler : public ui::test::TestEventHandler {
 
 /////////////////////////////////////////////////////////////////////////////
 
+class TestWidgetDelegate : public views::WidgetDelegateView {
+ public:
+  TestWidgetDelegate() = default;
+  ~TestWidgetDelegate() override = default;
+
+  // views::WidgetDelegateView:
+  bool CanResize() const override { return true; }
+  bool CanMaximize() const override { return true; }
+  bool CanActivate() const override { return true; }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TestWidgetDelegate);
+};
+
 class ImmersiveFullscreenControllerTest : public AshTestBase {
  public:
   enum Modality {
@@ -147,6 +162,8 @@ class ImmersiveFullscreenControllerTest : public AshTestBase {
 
     widget_ = new views::Widget();
     views::Widget::InitParams params;
+    params.delegate = new TestWidgetDelegate();
+    params.context = CurrentContext();
     widget_->Init(params);
     widget_->Show();
 
@@ -539,7 +556,7 @@ TEST_F(ImmersiveFullscreenControllerTest, MouseEventsVerticalDisplayLayout) {
   event_generator->MoveMouseTo(x, y_top_edge + 1);
   EXPECT_TRUE(top_edge_hover_timer_running());
   EXPECT_EQ(y_top_edge + 1,
-            aura::Env::GetInstance()->last_mouse_location().y());
+            Shell::Get()->aura_env()->last_mouse_location().y());
 
   // The timer should continue running if the user moves the mouse to the top
   // edge even though the mouse is warped to the secondary display.
@@ -671,8 +688,9 @@ TEST_F(ImmersiveFullscreenControllerTest, DifferentModalityEnterExit) {
   EXPECT_FALSE(controller()->IsRevealed());
 }
 
-// Tests the top-of-window views for maximized window in tablet mode.
-TEST_F(ImmersiveFullscreenControllerTest, MaximizedWindowInTabletMode) {
+// Tests the top-of-window views for maximized/full-screened/snapped windows in
+// tablet mode.
+TEST_F(ImmersiveFullscreenControllerTest, WindowsInTabletMode) {
   SetWindowShowState(ui::SHOW_STATE_MAXIMIZED);
   EnableTabletMode(true);
   SetEnabled(true);
@@ -692,11 +710,21 @@ TEST_F(ImmersiveFullscreenControllerTest, MaximizedWindowInTabletMode) {
   AttemptUnreveal(MODALITY_GESTURE_SCROLL);
   EXPECT_FALSE(controller()->IsRevealed());
 
-  // Top-of-window views will be revealed for fullscreen window in tablet mode.
+  // Top-of-window views will not be revealed for full-screened window in tablet
+  // mode either.
   EnableTabletMode(true);
   SetWindowShowState(ui::SHOW_STATE_FULLSCREEN);
   AttemptReveal(MODALITY_GESTURE_SCROLL);
-  EXPECT_TRUE(controller()->IsRevealed());
+  EXPECT_FALSE(controller()->IsRevealed());
+
+  // Top-of-window views will not be revealed for snapped window in splitview
+  // mode either.
+  Shell::Get()->split_view_controller()->SnapWindow(window(),
+                                                    SplitViewController::LEFT);
+  EXPECT_TRUE(wm::GetWindowState(window())->IsSnapped());
+  EXPECT_TRUE(Shell::Get()->split_view_controller()->IsSplitViewModeActive());
+  AttemptReveal(MODALITY_GESTURE_SCROLL);
+  EXPECT_FALSE(controller()->IsRevealed());
 }
 
 // Test when the SWIPE_CLOSE edge gesture closes the top-of-window views.
@@ -910,6 +938,7 @@ TEST_F(ImmersiveFullscreenControllerTest, Transient) {
       views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   non_transient_params.bounds = gfx::Rect(0, 100, 100, 100);
   std::unique_ptr<views::Widget> non_transient_widget(new views::Widget());
+  non_transient_params.context = CurrentContext();
   non_transient_widget->Init(non_transient_params);
 
   EXPECT_FALSE(controller()->IsRevealed());

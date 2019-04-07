@@ -50,6 +50,7 @@ POLICY_EXPORT extern const char kValueRequestAppInstallReport[];
 POLICY_EXPORT extern const char kValueRequestTokenEnrollment[];
 POLICY_EXPORT extern const char kValueRequestChromeDesktopReport[];
 POLICY_EXPORT extern const char kValueRequestInitialEnrollmentStateRetrieval[];
+POLICY_EXPORT extern const char kValueRequestUploadPolicyValidationReport[];
 
 // Policy type strings for the policy_type field in PolicyFetchRequest.
 POLICY_EXPORT extern const char kChromeDevicePolicyType[];
@@ -120,6 +121,8 @@ enum DeviceManagementStatus {
   DM_STATUS_SERVICE_POLICY_NOT_FOUND = 902,
   // Service error: ARC is not enabled on this domain.
   DM_STATUS_SERVICE_ARC_DISABLED = 904,
+  // Service error: Non-dasher account with packaged license can't enroll.
+  DM_STATUS_SERVICE_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE = 905,
 };
 
 // List of modes that the device can be locked into.
@@ -141,6 +144,10 @@ enum DeviceMode {
   DEVICE_MODE_CONSUMER_KIOSK_AUTOLAUNCH,  // The device is locally owned as
                                           // consumer kiosk with ability to auto
                                           // launch a kiosk webapp.
+  DEVICE_MODE_DEMO,                       // The device is in demo mode. It was
+                                          // either enrolled online or setup
+                                          // offline into demo mode domain
+                                          // cros-demo-mode.com.
 };
 
 // License types available for enrollment.

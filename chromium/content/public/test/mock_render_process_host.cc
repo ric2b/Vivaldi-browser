@@ -57,6 +57,7 @@ MockRenderProcessHost::MockRenderProcessHost(BrowserContext* browser_context)
       child_identity_(mojom::kRendererServiceName,
                       BrowserContext::GetServiceUserIdFor(browser_context),
                       base::StringPrintf("%d", id_)),
+      url_loader_factory_(nullptr),
       weak_ptr_factory_(this) {
   // Child process security operations can't be unit tested unless we add
   // ourselves as an existing child process.
@@ -166,6 +167,11 @@ int MockRenderProcessHost::VisibleClientCount() const {
 unsigned int MockRenderProcessHost::GetFrameDepth() const {
   NOTIMPLEMENTED();
   return 0u;
+}
+
+bool MockRenderProcessHost::GetIntersectsViewport() const {
+  NOTIMPLEMENTED();
+  return true;
 }
 
 bool MockRenderProcessHost::IsForGuestsOnly() const {
@@ -429,6 +435,8 @@ void MockRenderProcessHost::BindCacheStorage(
     const url::Origin& origin) {
   cache_storage_request_ = std::move(request);
 }
+
+void MockRenderProcessHost::CleanupCorbExceptionForPluginUponDestruction() {}
 
 void MockRenderProcessHost::FilterURL(bool empty_allowed, GURL* url) {
   RenderProcessHostImpl::FilterURL(this, empty_allowed, url);

@@ -88,7 +88,7 @@ bool HasUserActivation(GamepadList* gamepads) {
 }  // namespace
 
 template <typename T>
-static void SampleGamepad(unsigned index,
+static void SampleGamepad(size_t index,
                           T& gamepad,
                           const device::Gamepad& device_gamepad,
                           const TimeTicks& navigation_start) {
@@ -138,7 +138,7 @@ static void SampleGamepads(ListType* into,
 
   GamepadDispatcher::Instance().SampleGamepads(gamepads);
 
-  for (unsigned i = 0; i < device::Gamepads::kItemsLengthCap; ++i) {
+  for (size_t i = 0; i < device::Gamepads::kItemsLengthCap; ++i) {
     device::Gamepad& web_gamepad = gamepads.items[i];
 
     bool hide_xr_gamepad = false;
@@ -146,7 +146,7 @@ static void SampleGamepads(ListType* into,
       bool webxr_enabled =
           (context && OriginTrials::WebXRGamepadSupportEnabled(context) &&
            OriginTrials::WebXREnabled(context));
-      bool webvr_enabled = (context && RuntimeEnabledFeatures::WebVREnabled());
+      bool webvr_enabled = (context && OriginTrials::WebVREnabled(context));
 
       if (!webxr_enabled && !webvr_enabled) {
         // If neither WebXR nor WebVR are enabled, we should not expose XR-
@@ -256,7 +256,7 @@ void NavigatorGamepad::DispatchOneEvent() {
   const AtomicString& event_name = gamepad->connected()
                                        ? EventTypeNames::gamepadconnected
                                        : EventTypeNames::gamepaddisconnected;
-  DomWindow()->DispatchEvent(GamepadEvent::Create(
+  DomWindow()->DispatchEvent(*GamepadEvent::Create(
       event_name, Event::Bubbles::kNo, Event::Cancelable::kYes, gamepad));
 
   if (!pending_events_.IsEmpty()) {
@@ -384,7 +384,7 @@ void NavigatorGamepad::SampleAndCheckConnectedGamepads() {
 bool NavigatorGamepad::CheckConnectedGamepads(GamepadList* old_gamepads,
                                               GamepadList* new_gamepads) {
   int disconnection_count = 0;
-  for (unsigned i = 0; i < device::Gamepads::kItemsLengthCap; ++i) {
+  for (size_t i = 0; i < device::Gamepads::kItemsLengthCap; ++i) {
     Gamepad* old_gamepad = old_gamepads ? old_gamepads->item(i) : nullptr;
     Gamepad* new_gamepad = new_gamepads->item(i);
     bool connected, disconnected;

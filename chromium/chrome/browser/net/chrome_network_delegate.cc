@@ -33,8 +33,6 @@
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/domain_reliability/monitor.h"
-#include "components/prefs/pref_member.h"
-#include "components/prefs/pref_service.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
@@ -81,19 +79,6 @@ namespace {
 
 bool g_access_to_all_files_enabled = false;
 
-// Gets called when the extensions finish work on the URL. If the extensions
-// did not do a redirect (so |new_url| is empty) then we enforce the
-// SafeSearch parameters. Otherwise we will get called again after the
-// redirect and we enforce SafeSearch then.
-void ForceGoogleSafeSearchCallbackWrapper(net::CompletionOnceCallback callback,
-                                          net::URLRequest* request,
-                                          GURL* new_url,
-                                          int rv) {
-  if (rv == net::OK && new_url->is_empty())
-    safe_search_util::ForceGoogleSafeSearch(request, new_url);
-  std::move(callback).Run(rv);
-}
-
 bool IsAccessAllowedInternal(const base::FilePath& path,
                              const base::FilePath& profile_path) {
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
@@ -110,6 +95,7 @@ bool IsAccessAllowedInternal(const base::FilePath& path,
       "/home/chronos/user/WebRTC Logs",
       "/media",
       "/opt/oem",
+      "/run/arc/sdcard/write/emulated/0",
       "/usr/share/chromeos-assets",
       "/var/log",
   };
@@ -170,9 +156,6 @@ ChromeNetworkDelegate::ChromeNetworkDelegate(
     : extensions_delegate_(
           ChromeExtensionsNetworkDelegate::Create(event_router)),
       profile_(nullptr),
-      force_google_safe_search_(nullptr),
-      force_youtube_restrict_(nullptr),
-      allowed_domains_for_apps_(nullptr),
       experimental_web_platform_features_enabled_(
           base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kEnableExperimentalWebPlatformFeatures)) {}
@@ -194,77 +177,19 @@ void ChromeNetworkDelegate::set_cookie_settings(
   cookie_settings_ = cookie_settings;
 }
 
-// static
-void ChromeNetworkDelegate::InitializePrefsOnUIThread(
-    BooleanPrefMember* force_google_safe_search,
-    IntegerPrefMember* force_youtube_restrict,
-    StringPrefMember* allowed_domains_for_apps,
-    PrefService* pref_service) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (force_google_safe_search) {
-    force_google_safe_search->Init(prefs::kForceGoogleSafeSearch, pref_service);
-    force_google_safe_search->MoveToThread(
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
-  }
-  if (force_youtube_restrict) {
-    force_youtube_restrict->Init(prefs::kForceYouTubeRestrict, pref_service);
-    force_youtube_restrict->MoveToThread(
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
-  }
-  if (allowed_domains_for_apps) {
-    allowed_domains_for_apps->Init(prefs::kAllowedDomainsForApps, pref_service);
-    allowed_domains_for_apps->MoveToThread(
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
-  }
-}
-
 int ChromeNetworkDelegate::OnBeforeURLRequest(
     net::URLRequest* request,
     net::CompletionOnceCallback callback,
     GURL* new_url) {
   extensions_delegate_->ForwardStartRequestStatus(request);
-
-  bool force_safe_search =
-      (force_google_safe_search_ && force_google_safe_search_->GetValue());
-
-  net::CompletionOnceCallback wrapped_callback = std::move(callback);
-  if (force_safe_search) {
-    wrapped_callback = base::BindOnce(
-        &ForceGoogleSafeSearchCallbackWrapper, std::move(wrapped_callback),
-        base::Unretained(request), base::Unretained(new_url));
-  }
-
-  int rv = extensions_delegate_->NotifyBeforeURLRequest(
-      request, std::move(wrapped_callback), new_url);
-
-  if (force_safe_search && rv == net::OK && new_url->is_empty())
-    safe_search_util::ForceGoogleSafeSearch(request, new_url);
-
-  if (allowed_domains_for_apps_ &&
-      !allowed_domains_for_apps_->GetValue().empty() &&
-      request->url().DomainIs("google.com")) {
-    request->SetExtraRequestHeaderByName("X-GoogApps-Allowed-Domains",
-                                         allowed_domains_for_apps_->GetValue(),
-                                         true);
-  }
-
-  return rv;
+  return extensions_delegate_->NotifyBeforeURLRequest(
+      request, std::move(callback), new_url);
 }
 
 int ChromeNetworkDelegate::OnBeforeStartTransaction(
     net::URLRequest* request,
     net::CompletionOnceCallback callback,
     net::HttpRequestHeaders* headers) {
-  if (force_youtube_restrict_) {
-    int value = force_youtube_restrict_->GetValue();
-    static_assert(safe_search_util::YOUTUBE_RESTRICT_OFF == 0,
-                  "OFF must be first");
-    if (value > safe_search_util::YOUTUBE_RESTRICT_OFF &&
-        value < safe_search_util::YOUTUBE_RESTRICT_COUNT) {
-      safe_search_util::ForceYouTubeRestrict(request, headers,
-          static_cast<safe_search_util::YouTubeRestrictMode>(value));
-    }
-  }
 
   // NOTE(jarle@vivaldi.com): For the WhatsApp domain, provide a
   // Vivaldi-free useragent. This is a temp. workaround until WhatsApp

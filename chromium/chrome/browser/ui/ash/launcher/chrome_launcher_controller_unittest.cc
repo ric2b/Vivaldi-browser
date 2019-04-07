@@ -39,6 +39,9 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/crostini/crostini_test_helper.h"
+#include "chrome/browser/chromeos/crostini/crostini_util.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
@@ -82,14 +85,18 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/fake_image_loader_client.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/common/app.mojom.h"
+#include "components/arc/metrics/arc_metrics_constants.h"
 #include "components/arc/test/fake_app_instance.h"
 #include "components/exo/shell_surface.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/prefs/pref_notifier_impl.h"
+#include "components/session_manager/core/session_manager.h"
 #include "components/sync/model/fake_sync_change_processor.h"
 #include "components/sync/model/sync_error_factory_mock.h"
 #include "components/sync/protocol/sync.pb.h"
@@ -104,8 +111,12 @@
 #include "extensions/browser/app_window/app_window_contents.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/app_window/native_app_window.h"
+#include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_constants.h"
+#include "extensions/grit/extensions_browser_resources.h"
+#include "net/base/mock_network_change_notifier.h"
+#include "net/base/network_change_notifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/window.h"
@@ -115,6 +126,7 @@
 #include "ui/display/screen.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event_constants.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/views/widget/widget.h"
 
@@ -278,7 +290,7 @@ class TestV2AppLauncherItemController : public ash::ShelfItemDelegate {
 class TestShelfController : public ash::mojom::ShelfController {
  public:
   TestShelfController() : binding_(this) {}
-  ~TestShelfController() override {}
+  ~TestShelfController() override = default;
 
   size_t added_count() const { return added_count_; }
   size_t removed_count() const { return removed_count_; }
@@ -312,6 +324,35 @@ class TestShelfController : public ash::mojom::ShelfController {
     set_delegate_count_++;
   }
 
+  // Helper that waits for idle and extracts the non-default bitmap from the
+  // last updated item in shelf controller.
+  SkBitmap GetLastItemImage() {
+    if (default_app_image_.isNull()) {
+      default_app_image_ =
+          *gfx::ImageSkiaOperations::CreateResizedImage(
+               *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+                   IDR_APP_DEFAULT_ICON),
+               skia::ImageOperations::RESIZE_BEST,
+               gfx::Size(extension_misc::EXTENSION_ICON_SMALL,
+                         extension_misc::EXTENSION_ICON_SMALL))
+               .bitmap();
+    }
+
+    // Loading icon is multistep process. At first step default app icon is
+    // loaded while real icon is requested and decoded.
+    // base::RunLoop().RunUntilIdle() hides these steps and in most cases real
+    // icon is returned afterward. However in rare cases default icon is left
+    // after base::RunLoop().RunUntilIdle(). So make sure we don't return
+    // default icon that may fail test expectations.
+    while (true) {
+      base::RunLoop().RunUntilIdle();
+      const SkBitmap* bitmap = last_item().image.bitmap();
+      CHECK(bitmap);
+      if (!gfx::test::AreBitmapsEqual(default_app_image_, *bitmap))
+        return *bitmap;
+    }
+  }
+
  private:
   size_t added_count_ = 0;
   size_t removed_count_ = 0;
@@ -321,6 +362,9 @@ class TestShelfController : public ash::mojom::ShelfController {
 
   ash::mojom::ShelfObserverAssociatedPtr observer_;
   mojo::Binding<ash::mojom::ShelfController> binding_;
+
+  // Used to cache default app image.
+  SkBitmap default_app_image_;
 
   DISALLOW_COPY_AND_ASSIGN(TestShelfController);
 };
@@ -332,15 +376,6 @@ void SelectItem(ash::ShelfItemDelegate* delegate) {
       ui::EF_NONE, 0);
   delegate->ItemSelected(std::move(event), display::kInvalidDisplayId,
                          ash::LAUNCH_FROM_UNKNOWN, base::DoNothing());
-}
-
-// Helper that waits for idle and extracts the bitmap from the last updated item
-// in shelf controller.
-SkBitmap GetLastItemImage(TestShelfController* shelf_controller) {
-  base::RunLoop().RunUntilIdle();
-  const SkBitmap* bitmap = shelf_controller->last_item().image.bitmap();
-  CHECK(bitmap);
-  return *bitmap;
 }
 
 // Creates a window with TYPE_APP shelf item type and the given app_id.
@@ -873,6 +908,8 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
             result += "Platform_App";
           } else if (app == arc_support_host_->id()) {
             result += "Play Store";
+          } else if (app == kCrostiniTerminalId) {
+            result += "Terminal";
           } else {
             bool arc_app_found = false;
             for (const auto& arc_app : arc_test_.fake_apps()) {
@@ -953,6 +990,7 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
   views::Widget* CreateArcWindow(const std::string& window_app_id) {
     views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
     params.bounds = gfx::Rect(5, 5, 20, 20);
+    params.context = ash_test_helper()->CurrentContext();
     views::Widget* widget = new views::Widget();
     widget->Init(params);
     // Set ARC id before showing the window to be recognized in
@@ -1047,6 +1085,10 @@ class ChromeLauncherControllerWithArcTest
   void SetUp() override {
     if (GetParam())
       arc::SetArcAlwaysStartForTesting(true);
+
+    // To prevent crash on test exit and pending decode request.
+    ArcAppIcon::DisableSafeDecodingForTesting();
+
     ChromeLauncherControllerTest::SetUp();
   }
 
@@ -2410,19 +2452,21 @@ TEST_P(ChromeLauncherControllerWithArcTest, ArcCustomAppIcon) {
       launcher_controller_->test_shelf_controller();
   ASSERT_TRUE(shelf_controller);
 
-  ArcAppIcon::DisableSafeDecodingForTesting();
+  // Wait until other apps are updated to avoid race condition while accessing
+  // last updated item.
+  base::RunLoop().RunUntilIdle();
 
   // Register fake ARC apps.
   SendListOfArcApps();
   // Use first fake ARC app for testing.
-  const std::string arc_app_id = ArcAppTest::GetAppId(arc_test_.fake_apps()[0]);
+  const arc::mojom::AppInfo& app = arc_test_.fake_apps()[0];
+  const std::string arc_app_id = ArcAppTest::GetAppId(app);
 
   // Generate icon for the testing app and use compressed png content as test
-  // input.
+  // input. Take shortcut to separate from default app icon.
   std::string png_data;
-  EXPECT_TRUE(arc_test_.app_instance()->GenerateAndSendIcon(
-      arc_test_.fake_apps()[0], arc::mojom::ScaleFactor::SCALE_FACTOR_100P,
-      &png_data));
+  EXPECT_TRUE(arc_test_.app_instance()->GenerateIconResponse(
+      extension_misc::EXTENSION_ICON_SMALL, false /* app_icon */, &png_data));
   EXPECT_FALSE(png_data.empty());
   // Some input that represents invalid png content.
   std::string invalid_png_data("aaaaaa");
@@ -2432,67 +2476,102 @@ TEST_P(ChromeLauncherControllerWithArcTest, ArcCustomAppIcon) {
   std::string window_app_id2("org.chromium.arc.2");
   views::Widget* window1 = CreateArcWindow(window_app_id1);
   ASSERT_TRUE(window1 && window1->GetNativeWindow());
-  arc_test_.app_instance()->SendTaskCreated(1, arc_test_.fake_apps()[0],
-                                            std::string());
+  arc_test_.app_instance()->SendTaskCreated(1, app, std::string());
 
   views::Widget* window2 = CreateArcWindow(window_app_id2);
   ASSERT_TRUE(window2 && window2->GetNativeWindow());
-  arc_test_.app_instance()->SendTaskCreated(2, arc_test_.fake_apps()[0],
-                                            std::string());
+  arc_test_.app_instance()->SendTaskCreated(2, app, std::string());
   EXPECT_TRUE(launcher_controller_->GetItem(ash::ShelfID(arc_app_id)));
   ash::ShelfItemDelegate* item_delegate =
       model_->GetShelfItemDelegate(ash::ShelfID(arc_app_id));
   ASSERT_TRUE(item_delegate);
-
-  const SkBitmap default_icon = GetLastItemImage(shelf_controller);
+  base::RunLoop().RunUntilIdle();
+  const SkBitmap default_icon = shelf_controller->GetLastItemImage();
 
   // No custom icon set. Acitivating windows should not change icon.
   window1->Activate();
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(default_icon,
-                                         GetLastItemImage(shelf_controller)));
+                                         shelf_controller->GetLastItemImage()));
   window2->Activate();
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(default_icon,
-                                         GetLastItemImage(shelf_controller)));
+                                         shelf_controller->GetLastItemImage()));
 
   // Set custom icon on active item. Icon should change to custom.
   arc_test_.app_instance()->SendTaskDescription(2, std::string(), png_data);
-  const SkBitmap custom_icon = GetLastItemImage(shelf_controller);
+  const SkBitmap custom_icon = shelf_controller->GetLastItemImage();
   EXPECT_FALSE(gfx::test::AreBitmapsEqual(default_icon, custom_icon));
 
   // Switch back to the item without custom icon. Icon should be changed to
   // default.
   window1->Activate();
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(default_icon,
-                                         GetLastItemImage(shelf_controller)));
+                                         shelf_controller->GetLastItemImage()));
 
   // Test that setting an invalid icon should not change custom icon.
   arc_test_.app_instance()->SendTaskDescription(1, std::string(), png_data);
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(custom_icon,
-                                         GetLastItemImage(shelf_controller)));
+                                         shelf_controller->GetLastItemImage()));
   arc_test_.app_instance()->SendTaskDescription(1, std::string(),
                                                 invalid_png_data);
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(custom_icon,
-                                         GetLastItemImage(shelf_controller)));
+                                         shelf_controller->GetLastItemImage()));
 
   // Check window removing with active custom icon. Reseting custom icon of
   // inactive window doesn't reset shelf icon.
   arc_test_.app_instance()->SendTaskDescription(2, std::string(),
                                                 std::string());
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(custom_icon,
-                                         GetLastItemImage(shelf_controller)));
+                                         shelf_controller->GetLastItemImage()));
   // Set custom icon back to validate closing active window later.
   arc_test_.app_instance()->SendTaskDescription(2, std::string(), png_data);
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(custom_icon,
-                                         GetLastItemImage(shelf_controller)));
+                                         shelf_controller->GetLastItemImage()));
 
   // Reseting custom icon of active window resets shelf icon.
   arc_test_.app_instance()->SendTaskDescription(1, std::string(),
                                                 std::string());
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(default_icon,
-                                         GetLastItemImage(shelf_controller)));
+                                         shelf_controller->GetLastItemImage()));
   window1->CloseNow();
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(custom_icon,
-                                         GetLastItemImage(shelf_controller)));
+                                         shelf_controller->GetLastItemImage()));
+}
+
+TEST_P(ChromeLauncherControllerWithArcTest, ArcWindowPackageName) {
+  InitLauncherController();
+  SendListOfArcApps();
+
+  std::string window_app_id1("org.chromium.arc.1");
+  std::string window_app_id2("org.chromium.arc.2");
+  std::string window_app_id3("org.chromium.arc.3");
+  views::Widget* arc_window1 = CreateArcWindow(window_app_id1);
+  arc_test_.app_instance()->SendTaskCreated(1, arc_test_.fake_apps()[0],
+                                            std::string());
+  const std::string* package_name1 =
+      arc_window1->GetNativeWindow()->GetProperty(ash::kArcPackageNameKey);
+  ASSERT_TRUE(package_name1);
+  EXPECT_EQ(*package_name1, arc_test_.fake_apps()[0].package_name);
+
+  views::Widget* arc_window2 = CreateArcWindow(window_app_id2);
+  arc_test_.app_instance()->SendTaskCreated(2, arc_test_.fake_apps()[1],
+                                            std::string());
+  const std::string* package_name2 =
+      arc_window2->GetNativeWindow()->GetProperty(ash::kArcPackageNameKey);
+  ASSERT_TRUE(package_name2);
+  EXPECT_EQ(*package_name2, arc_test_.fake_apps()[1].package_name);
+
+  // Create another window with the same package name.
+  views::Widget* arc_window3 = CreateArcWindow(window_app_id3);
+  arc_test_.app_instance()->SendTaskCreated(3, arc_test_.fake_apps()[1],
+                                            std::string());
+  const std::string* package_name3 =
+      arc_window3->GetNativeWindow()->GetProperty(ash::kArcPackageNameKey);
+  ASSERT_TRUE(package_name3);
+  EXPECT_EQ(*package_name3, arc_test_.fake_apps()[1].package_name);
+
+  arc_window1->CloseNow();
+  arc_window2->CloseNow();
+  arc_window3->CloseNow();
 }
 
 // Check that with multi profile V1 apps are properly added / removed from the
@@ -3524,25 +3603,25 @@ TEST_F(ChromeLauncherControllerTest, V1AppMenuExecution) {
       model_->GetShelfItemDelegate(gmail_id);
   ASSERT_TRUE(item_delegate);
   EXPECT_EQ(1, browser()->tab_strip_model()->active_index());
-  // Execute the second item in the menu, after the title and two separators,
+  // Execute the second item in the menu, after the title,
   // this shouldn't do anything since that item is already the active tab.
   {
     ash::ShelfApplicationMenuModel menu(
         base::string16(),
         launcher_controller_->GetAppMenuItemsForTesting(item_gmail),
         item_delegate);
-    menu.ActivatedAt(4);
+    menu.ActivatedAt(2);
   }
   EXPECT_EQ(1, browser()->tab_strip_model()->active_index());
 
-  // Execute the first item in the menu, after the title and two separators,
+  // Execute the first item in the menu, after the title,
   // this should activate the other tab.
   {
     ash::ShelfApplicationMenuModel menu(
         base::string16(),
         launcher_controller_->GetAppMenuItemsForTesting(item_gmail),
         item_delegate);
-    menu.ActivatedAt(3);
+    menu.ActivatedAt(1);
   }
   EXPECT_EQ(0, browser()->tab_strip_model()->active_index());
 }
@@ -3552,7 +3631,6 @@ TEST_F(ChromeLauncherControllerTest, V1AppMenuDeletionExecution) {
   InitLauncherControllerWithBrowser();
 
   // Add |extension3_| to the launcher and add two items.
-  GURL gmail = GURL("https://mail.google.com/mail/u");
   const ash::ShelfID gmail_id(extension3_->id());
   extension_service_->AddExtension(extension3_.get());
   launcher_controller_->SetRefocusURLPatternForTest(gmail_id, GURL(kGmailUrl));
@@ -3952,6 +4030,7 @@ class ChromeLauncherControllerArcDefaultAppsTest
   void SetUp() override {
     if (GetParam())
       arc::SetArcAlwaysStartForTesting(true);
+    ArcAppIcon::DisableSafeDecodingForTesting();
     ArcDefaultAppList::UseTestAppsDirectory();
     ChromeLauncherControllerTest::SetUp();
   }
@@ -3993,8 +4072,9 @@ TEST_P(ChromeLauncherControllerArcDefaultAppsTest, DefaultApps) {
   arc_test_.SetUp(profile());
   InitLauncherController();
 
-  // Prevent safe decoding which requires IPC.
-  ArcAppIcon::DisableSafeDecodingForTesting();
+  TestShelfController* shelf_controller =
+      launcher_controller_->test_shelf_controller();
+  ASSERT_TRUE(shelf_controller);
 
   ArcAppListPrefs* const prefs = arc_test_.arc_app_list_prefs();
   EnablePlayStore(false);
@@ -4011,6 +4091,7 @@ TEST_P(ChromeLauncherControllerArcDefaultAppsTest, DefaultApps) {
 
   // Stop ARC again. Shelf item should go away.
   EnablePlayStore(false);
+
   EXPECT_FALSE(launcher_controller_->GetItem(ash::ShelfID(app_id)));
 
   EXPECT_TRUE(arc::LaunchApp(profile(), app_id, ui::EF_LEFT_MOUSE_BUTTON,
@@ -4023,18 +4104,36 @@ TEST_P(ChromeLauncherControllerArcDefaultAppsTest, DefaultApps) {
   ASSERT_TRUE(item_delegate);
   EXPECT_TRUE(
       launcher_controller_->GetShelfSpinnerController()->HasApp(app_id));
+  // Wait for non-default item.
+  shelf_controller->GetLastItemImage();
   EXPECT_FALSE(item_delegate->image_set_by_controller());
+
+  const size_t update_count_before_launch = shelf_controller->updated_count();
 
   std::string window_app_id("org.chromium.arc.1");
   CreateArcWindow(window_app_id);
   arc_test_.app_instance()->SendTaskCreated(1, arc_test_.fake_default_apps()[0],
                                             std::string());
   EXPECT_TRUE(launcher_controller_->GetItem(ash::ShelfID(app_id)));
+  // Refresh delegate, it was changed.
   item_delegate = model_->GetShelfItemDelegate(ash::ShelfID(app_id));
   ASSERT_TRUE(item_delegate);
   EXPECT_FALSE(
       launcher_controller_->GetShelfSpinnerController()->HasApp(app_id));
-  EXPECT_TRUE(item_delegate->image_set_by_controller());
+  // Default icon is not set.
+  EXPECT_FALSE(item_delegate->image_set_by_controller());
+  EXPECT_EQ(update_count_before_launch, shelf_controller->updated_count());
+
+  item_delegate = model_->GetShelfItemDelegate(ash::ShelfID(app_id));
+  // Shelf icon should not be overwritten by default app icon.
+  EXPECT_FALSE(item_delegate->image_set_by_controller());
+  EXPECT_EQ(update_count_before_launch, shelf_controller->updated_count());
+
+  // Wait for real app icon image is decoded and set for shelf item.
+  shelf_controller->GetLastItemImage();
+  // Should have only one update that guarantees default icon was not set in
+  // between.
+  EXPECT_EQ(update_count_before_launch + 1, shelf_controller->updated_count());
 }
 
 TEST_P(ChromeLauncherControllerArcDefaultAppsTest, PlayStoreDeferredLaunch) {
@@ -4304,8 +4403,7 @@ TEST_F(ChromeLauncherControllerTest, InternalAppWindowRecreation) {
   InitLauncherController();
 
   // Only test the first internal app. The others should be the same.
-  const auto& internal_app =
-      app_list::GetInternalAppList(profile()->IsGuestSession()).front();
+  const auto& internal_app = app_list::GetInternalAppList(profile()).front();
   const std::string app_id = internal_app.app_id;
   const ash::ShelfID shelf_id(app_id);
   EXPECT_FALSE(launcher_controller_->GetItem(shelf_id));
@@ -4336,8 +4434,7 @@ TEST_F(ChromeLauncherControllerTest, InternalAppWindowPropertyChanged) {
   InitLauncherController();
 
   // Only test the first internal app. The others should be the same.
-  const auto& internal_app =
-      app_list::GetInternalAppList(profile()->IsGuestSession()).front();
+  const auto& internal_app = app_list::GetInternalAppList(profile()).front();
   std::string app_id;
   ash::ShelfID shelf_id;
   EXPECT_FALSE(launcher_controller_->GetItem(shelf_id));
@@ -4367,4 +4464,192 @@ TEST_F(ChromeLauncherControllerTest, InternalAppWindowPropertyChanged) {
   internal_app_window->Close();
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(launcher_controller_->GetItem(shelf_id));
+}
+
+class ChromeLauncherControllerDemoModeTest
+    : public ChromeLauncherControllerTest {
+ protected:
+  ChromeLauncherControllerDemoModeTest() { auto_start_arc_test_ = true; }
+  ~ChromeLauncherControllerDemoModeTest() override {}
+
+  void SetUp() override {
+    arc::SetArcAlwaysStartForTesting(true);
+
+    // To prevent crash on test exit and pending decode request.
+    ArcAppIcon::DisableSafeDecodingForTesting();
+
+    // Fake online Demo Mode.
+    session_manager_ = std::make_unique<session_manager::SessionManager>();
+    chromeos::DBusThreadManager::GetSetterForTesting()->SetImageLoaderClient(
+        std::make_unique<chromeos::FakeImageLoaderClient>());
+    chromeos::DemoSession::SetDemoConfigForTesting(
+        chromeos::DemoSession::DemoModeConfig::kOnline);
+    ASSERT_TRUE(chromeos::DemoSession::StartIfInDemoMode());
+    chromeos::DemoSession::Get()->SetOfflineResourcesLoadedForTesting(
+        base::FilePath());
+
+    ChromeLauncherControllerTest::SetUp();
+  }
+
+  void TearDown() override {
+    ChromeLauncherControllerTest::TearDown();
+
+    chromeos::DemoSession::ShutDownIfInitialized();
+    chromeos::DemoSession::ResetDemoConfigForTesting();
+    chromeos::DBusThreadManager::Shutdown();
+  }
+
+ private:
+  std::unique_ptr<session_manager::SessionManager> session_manager_;
+
+  DISALLOW_COPY_AND_ASSIGN(ChromeLauncherControllerDemoModeTest);
+};
+
+TEST_F(ChromeLauncherControllerDemoModeTest, PinnedAppsOnline) {
+  net::test::MockNetworkChangeNotifier notifier;
+  notifier.SetConnectionType(net::NetworkChangeNotifier::CONNECTION_ETHERNET);
+
+  InitLauncherControllerWithBrowser();
+
+  base::ListValue policy_value;
+
+  extension_service_->AddExtension(extension1_.get());
+  extension_service_->AddExtension(extension2_.get());
+  InsertPrefValue(&policy_value, 0, extension1_->id());
+  InsertPrefValue(&policy_value, 1, extension2_->id());
+
+  arc::mojom::AppInfo appinfo =
+      CreateAppInfo("Some App", "SomeActivity", "com.example.app");
+  const std::string app_id = AddArcAppAndShortcut(appinfo);
+
+  arc::mojom::AppInfo online_only_appinfo =
+      CreateAppInfo("Some App", "SomeActivity", "com.example.onlineonly");
+  const std::string online_only_app_id =
+      AddArcAppAndShortcut(online_only_appinfo);
+
+  InsertPrefValue(&policy_value, 2, appinfo.package_name);
+  InsertPrefValue(&policy_value, 3, online_only_appinfo.package_name);
+
+  // If the device is offline, extension2 and onlineonly should be unpinned.
+  chromeos::DemoSession::Get()->OverrideIgnorePinPolicyAppsForTesting(
+      {extension2_->id(), online_only_appinfo.package_name});
+
+  profile()->GetTestingPrefService()->SetManagedPref(
+      prefs::kPolicyPinnedLauncherApps, policy_value.CreateDeepCopy());
+
+  // Since the device is online, all policy pinned apps are pinned.
+  EXPECT_TRUE(launcher_controller_->IsAppPinned(extension1_->id()));
+  EXPECT_EQ(AppListControllerDelegate::PIN_FIXED,
+            GetPinnableForAppID(extension1_->id(), profile()));
+
+  EXPECT_TRUE(launcher_controller_->IsAppPinned(extension2_->id()));
+  EXPECT_EQ(AppListControllerDelegate::PIN_FIXED,
+            GetPinnableForAppID(extension2_->id(), profile()));
+
+  EXPECT_TRUE(launcher_controller_->IsAppPinned(app_id));
+  EXPECT_EQ(AppListControllerDelegate::PIN_FIXED,
+            GetPinnableForAppID(app_id, profile()));
+
+  EXPECT_TRUE(launcher_controller_->IsAppPinned(online_only_app_id));
+  EXPECT_EQ(AppListControllerDelegate::PIN_FIXED,
+            GetPinnableForAppID(online_only_app_id, profile()));
+}
+
+TEST_F(ChromeLauncherControllerDemoModeTest, PinnedAppsOffline) {
+  net::test::MockNetworkChangeNotifier notifier;
+  notifier.SetConnectionType(net::NetworkChangeNotifier::CONNECTION_NONE);
+
+  InitLauncherControllerWithBrowser();
+
+  base::ListValue policy_value;
+
+  extension_service_->AddExtension(extension1_.get());
+  extension_service_->AddExtension(extension2_.get());
+  InsertPrefValue(&policy_value, 0, extension1_->id());
+  InsertPrefValue(&policy_value, 1, extension2_->id());
+
+  arc::mojom::AppInfo appinfo =
+      CreateAppInfo("Some App", "SomeActivity", "com.example.app");
+  const std::string app_id = AddArcAppAndShortcut(appinfo);
+
+  arc::mojom::AppInfo online_only_appinfo =
+      CreateAppInfo("Some App", "SomeActivity", "com.example.onlineonly");
+  const std::string online_only_app_id =
+      AddArcAppAndShortcut(online_only_appinfo);
+
+  InsertPrefValue(&policy_value, 2, appinfo.package_name);
+  InsertPrefValue(&policy_value, 3, online_only_appinfo.package_name);
+
+  // If the device is offline, extension2 and onlineonly should be unpinned.
+  chromeos::DemoSession::Get()->OverrideIgnorePinPolicyAppsForTesting(
+      {extension2_->id(), online_only_appinfo.package_name});
+
+  profile()->GetTestingPrefService()->SetManagedPref(
+      prefs::kPolicyPinnedLauncherApps, policy_value.CreateDeepCopy());
+
+  // Since the device is online, the policy pinned apps that shouldn't be pinned
+  // in Demo Mode are unpinned.
+  EXPECT_TRUE(launcher_controller_->IsAppPinned(extension1_->id()));
+  EXPECT_EQ(AppListControllerDelegate::PIN_FIXED,
+            GetPinnableForAppID(extension1_->id(), profile()));
+
+  EXPECT_FALSE(launcher_controller_->IsAppPinned(extension2_->id()));
+  EXPECT_EQ(AppListControllerDelegate::PIN_EDITABLE,
+            GetPinnableForAppID(extension2_->id(), profile()));
+
+  EXPECT_TRUE(launcher_controller_->IsAppPinned(app_id));
+  EXPECT_EQ(AppListControllerDelegate::PIN_FIXED,
+            GetPinnableForAppID(app_id, profile()));
+
+  EXPECT_FALSE(launcher_controller_->IsAppPinned(online_only_app_id));
+  EXPECT_EQ(AppListControllerDelegate::PIN_EDITABLE,
+            GetPinnableForAppID(online_only_app_id, profile()));
+
+  // Pin a Chrome app that would have been pinned by policy but was suppressed
+  // for Demo Mode.
+  launcher_controller_->PinAppWithID(extension2_->id());
+  EXPECT_TRUE(launcher_controller_->IsAppPinned(extension2_->id()));
+  EXPECT_EQ(AppListControllerDelegate::PIN_EDITABLE,
+            GetPinnableForAppID(extension2_->id(), profile()));
+
+  // Pin an ARC app that would have been pinned by policy but was suppressed
+  // for Demo Mode.
+  launcher_controller_->PinAppWithID(online_only_app_id);
+  EXPECT_TRUE(launcher_controller_->IsAppPinned(app_id));
+  EXPECT_EQ(AppListControllerDelegate::PIN_EDITABLE,
+            GetPinnableForAppID(online_only_app_id, profile()));
+}
+
+TEST_F(ChromeLauncherControllerTest, CrostiniTerminalPinUnpin) {
+  InitLauncherController();
+
+  const std::string app_id = kCrostiniTerminalId;
+  EXPECT_FALSE(launcher_controller_->IsAppPinned(app_id));
+
+  // Load pinned Terminal from prefs without Crostini UI being allowed
+  base::ListValue value;
+  InsertPrefValue(&value, 0, app_id);
+  StartPrefSyncServiceForPins(value);
+  EXPECT_EQ("Back, AppList, Chrome", GetPinnedAppStatus());
+
+  // Reload after allowing Crostini UI
+  crostini::CrostiniTestHelper test_helper(profile());
+  StopPrefSyncService();
+  StartPrefSyncServiceForPins(value);
+  EXPECT_EQ("Back, AppList, Chrome, Terminal", GetPinnedAppStatus());
+  EXPECT_EQ(ash::TYPE_PINNED_APP, model_->items()[3].type);
+  EXPECT_EQ(ash::STATUS_CLOSED, model_->items()[3].status);
+  EXPECT_TRUE(launcher_controller_->IsAppPinned(app_id));
+
+  // Unpin the Terminal
+  launcher_controller_->UnpinAppWithID(app_id);
+  EXPECT_EQ(3, model_->item_count());
+  EXPECT_FALSE(launcher_controller_->IsAppPinned(app_id));
+
+  // Pin Terminal again.
+  launcher_controller_->PinAppWithID(app_id);
+  EXPECT_EQ("Back, AppList, Chrome, Terminal", GetPinnedAppStatus());
+  EXPECT_EQ(ash::TYPE_PINNED_APP, model_->items()[3].type);
+  EXPECT_EQ(ash::STATUS_CLOSED, model_->items()[3].status);
+  EXPECT_TRUE(launcher_controller_->IsAppPinned(app_id));
 }

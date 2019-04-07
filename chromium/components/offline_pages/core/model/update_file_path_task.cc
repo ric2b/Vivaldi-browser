@@ -9,7 +9,7 @@
 #include "components/offline_pages/core/model/offline_page_model_utils.h"
 #include "components/offline_pages/core/offline_page_metadata_store.h"
 #include "components/offline_pages/core/offline_store_utils.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
 
@@ -19,10 +19,7 @@ namespace {
 
 bool UpdateFilePathSync(const base::FilePath& new_file_path,
                         int64_t offline_id,
-                        sql::Connection* db) {
-  if (!db)
-    return false;
-
+                        sql::Database* db) {
   sql::Transaction transaction(db);
   if (!transaction.Begin())
     return false;
@@ -66,7 +63,8 @@ UpdateFilePathTask::~UpdateFilePathTask(){};
 void UpdateFilePathTask::Run() {
   store_->Execute(base::BindOnce(&UpdateFilePathSync, file_path_, offline_id_),
                   base::BindOnce(&UpdateFilePathTask::OnUpdateFilePathDone,
-                                 weak_ptr_factory_.GetWeakPtr()));
+                                 weak_ptr_factory_.GetWeakPtr()),
+                  false);
 }
 
 void UpdateFilePathTask::OnUpdateFilePathDone(bool result) {

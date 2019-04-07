@@ -108,7 +108,7 @@ class Tab : public gfx::AnimationDelegate,
   TabController* controller() const { return controller_; }
 
   // Used to set/check whether this Tab is being animated closed.
-  void set_closing(bool closing) { closing_ = closing; }
+  void SetClosing(bool closing);
   bool closing() const { return closing_; }
 
   // See description above field.
@@ -308,6 +308,10 @@ class Tab : public gfx::AnimationDelegate,
   // indicator, and close button colors if necessary.  This should be called any
   // time the theme or active state may have changed.
   void OnButtonColorMaybeChanged();
+
+  // Updates the blocked attention state of the |icon_|. This only updates
+  // state; it is the responsibility of the caller to request a paint.
+  void UpdateTabIconNeedsAttentionBlocked();
 
   // Generate and update close button and alert icon colors for proper contrast.
   void UpdateButtonIconColors(SkColor title_color);

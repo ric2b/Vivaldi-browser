@@ -16,12 +16,12 @@ import org.chromium.blink_public.web.WebInputEventType;
 import org.chromium.content.browser.input.ImeAdapterImpl;
 import org.chromium.content.browser.selection.SelectionPopupControllerImpl;
 import org.chromium.content.browser.webcontents.WebContentsImpl;
+import org.chromium.content.browser.webcontents.WebContentsImpl.UserDataFactory;
 import org.chromium.content.browser.webcontents.WebContentsUserData;
 import org.chromium.content_public.browser.GestureListenerManager;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.ViewEventSink.InternalAccessDelegate;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.WebContents.UserDataFactory;
 import org.chromium.ui.base.GestureEventType;
 import org.chromium.ui.base.ViewAndroidDelegate;
 
@@ -165,7 +165,7 @@ public class GestureListenerManagerImpl implements GestureListenerManager, Windo
     }
 
     /* Called when ongoing fling gesture needs to be reset. */
-    public void resetFlingGesture() {
+    private void resetFlingGesture() {
         if (mHasActiveFlingScroll) {
             onFlingEnd();
             mHasActiveFlingScroll = false;
@@ -274,9 +274,6 @@ public class GestureListenerManagerImpl implements GestureListenerManager, Windo
             return true;
         }
 
-        TapDisambiguator tapDisambiguator = TapDisambiguator.fromWebContents(mWebContents);
-        if (!tapDisambiguator.isShowing()) tapDisambiguator.setLastTouch(x, y);
-
         return false;
     }
 
@@ -298,16 +295,11 @@ public class GestureListenerManagerImpl implements GestureListenerManager, Windo
         contentHeight = Math.max(
                 contentHeight, containerView.getHeight() / (deviceScale * pageScaleFactor));
 
-        final boolean contentSizeChanged = contentWidth != rc.getContentWidthCss()
-                || contentHeight != rc.getContentHeightCss();
         final boolean scaleLimitsChanged = minPageScaleFactor != rc.getMinPageScaleFactor()
                 || maxPageScaleFactor != rc.getMaxPageScaleFactor();
         final boolean pageScaleChanged = pageScaleFactor != rc.getPageScaleFactor();
         final boolean scrollChanged = pageScaleChanged || scrollOffsetX != rc.getScrollX()
                 || scrollOffsetY != rc.getScrollY();
-
-        if (contentSizeChanged || scrollChanged)
-            TapDisambiguator.fromWebContents(mWebContents).hidePopup(true);
 
         if (scrollChanged) {
             mScrollDelegate.onScrollChanged((int) rc.fromLocalCssToPix(scrollOffsetX),
@@ -332,7 +324,7 @@ public class GestureListenerManagerImpl implements GestureListenerManager, Windo
         return mIsTouchScrollInProgress || mHasActiveFlingScroll;
     }
 
-    void setTouchScrollInProgress(boolean touchScrollInProgress) {
+    private void setTouchScrollInProgress(boolean touchScrollInProgress) {
         mIsTouchScrollInProgress = touchScrollInProgress;
 
         // Use the active touch scroll signal for hiding. The animation movement
@@ -344,7 +336,7 @@ public class GestureListenerManagerImpl implements GestureListenerManager, Windo
      * Reset scroll and fling accounting, notifying listeners as appropriate.
      * This is useful as a failsafe when the input stream may have been interruped.
      */
-    void resetScrollInProgress() {
+    private void resetScrollInProgress() {
         if (!isScrollInProgress()) return;
 
         final boolean touchScrollInProgress = mIsTouchScrollInProgress;

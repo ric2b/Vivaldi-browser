@@ -5,7 +5,7 @@
 #include "ash/ime/ime_focus_handler.h"
 
 #include "base/logging.h"
-#include "services/ui/ws2/window_service.h"
+#include "services/ws/window_service.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/base/ime/input_method.h"
 
@@ -26,9 +26,9 @@ ImeFocusHandler::~ImeFocusHandler() {
 void ImeFocusHandler::OnWindowFocused(aura::Window* gained_focus,
                                       aura::Window* lost_focus) {
   const bool client_window_gaining_focus =
-      ui::ws2::WindowService::HasRemoteClient(gained_focus);
+      ws::WindowService::HasRemoteClient(gained_focus);
   const bool client_window_losing_focus =
-      ui::ws2::WindowService::HasRemoteClient(lost_focus);
+      ws::WindowService::HasRemoteClient(lost_focus);
 
   // Focus moves to a ClientWindow from an ash window.
   if (client_window_gaining_focus && !client_window_losing_focus)

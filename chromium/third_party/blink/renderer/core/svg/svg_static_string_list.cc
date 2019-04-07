@@ -30,7 +30,6 @@
 
 #include "third_party/blink/renderer/core/svg/svg_static_string_list.h"
 
-#include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/core/svg/svg_string_list_tear_off.h"
 
 namespace blink {
@@ -78,19 +77,16 @@ void SVGStaticStringList::AnimationEnded() {
   NOTREACHED();
 }
 
-bool SVGStaticStringList::NeedsSynchronizeAttribute() {
-  return tear_off_;
-}
-
 SVGStringListTearOff* SVGStaticStringList::TearOff() {
-  if (!tear_off_)
-    tear_off_ = SVGStringListTearOff::Create(
-        value_, contextElement(), kPropertyIsNotAnimVal, AttributeName());
-
+  if (!tear_off_) {
+    tear_off_ =
+        SVGStringListTearOff::Create(value_, this, kPropertyIsNotAnimVal);
+  }
   return tear_off_.Get();
 }
 
-SVGParsingError SVGStaticStringList::SetBaseValueAsString(const String& value) {
+SVGParsingError SVGStaticStringList::AttributeChanged(const String& value) {
+  ClearBaseValueNeedsSynchronization();
   return value_->SetValueAsString(value);
 }
 

@@ -4,12 +4,12 @@
 
 #include "chrome/test/views/chrome_test_views_delegate.h"
 
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 
 ChromeTestViewsDelegate::ChromeTestViewsDelegate()
     : views::TestViewsDelegate() {
   // Overrides the LayoutProvider created by TestViewsDelegate.
-  set_layout_provider(std::make_unique<ChromeLayoutProvider>());
+  set_layout_provider(ChromeLayoutProvider::CreateLayoutProvider());
 }
 
 ChromeTestViewsDelegate::~ChromeTestViewsDelegate() {}

@@ -12,6 +12,14 @@
 #include "content/common/content_export.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_response.mojom.h"
+
+namespace blink {
+namespace mojom {
+enum class BackgroundFetchFailureReason;
+enum class BackgroundFetchState;
+}  // namespace mojom
+}  // namespace blink
 
 namespace content {
 
@@ -33,6 +41,15 @@ struct CONTENT_EXPORT BackgroundFetchOptions {
 // https://wicg.github.io/background-fetch/#background-fetch-registration
 struct CONTENT_EXPORT BackgroundFetchRegistration {
   BackgroundFetchRegistration();
+  BackgroundFetchRegistration(
+      const std::string& developer_id,
+      const std::string& unique_id,
+      uint64_t upload_total,
+      uint64_t uploaded,
+      uint64_t download_total,
+      uint64_t downloaded,
+      blink::mojom::BackgroundFetchState state,
+      blink::mojom::BackgroundFetchFailureReason failure_reason);
   BackgroundFetchRegistration(const BackgroundFetchRegistration& other);
   ~BackgroundFetchRegistration();
 
@@ -48,19 +65,24 @@ struct CONTENT_EXPORT BackgroundFetchRegistration {
   uint64_t uploaded = 0;
   uint64_t download_total = 0;
   uint64_t downloaded = 0;
-  // TODO(crbug.com/699957): Support the `activeFetches` member.
+  blink::mojom::BackgroundFetchState state;
+  blink::mojom::BackgroundFetchFailureReason failure_reason;
 };
 
 // Represents a request/response pair for a settled Background Fetch fetch.
 // Analogous to the following structure in the spec:
 // http://wicg.github.io/background-fetch/#backgroundfetchsettledfetch
 struct CONTENT_EXPORT BackgroundFetchSettledFetch {
+  static blink::mojom::FetchAPIResponsePtr CloneResponse(
+      const blink::mojom::FetchAPIResponsePtr& response);
   BackgroundFetchSettledFetch();
   BackgroundFetchSettledFetch(const BackgroundFetchSettledFetch& other);
+  BackgroundFetchSettledFetch& operator=(
+      const BackgroundFetchSettledFetch& other);
   ~BackgroundFetchSettledFetch();
 
   ServiceWorkerFetchRequest request;
-  ServiceWorkerResponse response;
+  blink::mojom::FetchAPIResponsePtr response;
 };
 
 }  // namespace content

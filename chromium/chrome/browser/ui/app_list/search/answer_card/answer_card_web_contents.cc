@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "ash/app_list/views/app_list_view.h"
 #include "ash/public/cpp/app_list/answer_card_contents_registry.h"
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
@@ -45,7 +44,7 @@ class SearchAnswerWebView : public views::WebView {
  public:
   explicit SearchAnswerWebView(content::BrowserContext* browser_context)
       : WebView(browser_context) {
-    DCHECK(::features::IsAshInBrowserProcess());
+    DCHECK(!::features::IsUsingWindowService());
     holder()->set_can_process_events_within_subtree(false);
   }
 
@@ -68,14 +67,6 @@ class SearchAnswerWebView : public views::WebView {
   // views::WebView overrides:
   void AddedToWidget() override {
     WebView::AddedToWidget();
-
-    // Find the root element that attached to the app list view.
-    aura::Window* const app_list_window =
-        web_contents()->GetTopLevelNativeWindow();
-    aura::Window* window = web_contents()->GetNativeView();
-    while (window->parent() != app_list_window)
-      window = window->parent();
-    AppListView::ExcludeWindowFromEventHandling(window);
 
     OnVisibilityEvent(false);
     // Focus Behavior is originally set in WebView::SetWebContents, but
@@ -173,7 +164,8 @@ AnswerCardWebContents::AnswerCardWebContents(Profile* profile)
     web_view_->SetWebContents(web_contents_.get());
     web_view_->SetResizeBackgroundColor(SK_ColorTRANSPARENT);
 
-    token_ = AnswerCardContentsRegistry::Get()->Register(web_view_.get());
+    token_ = AnswerCardContentsRegistry::Get()->Register(
+        web_view_.get(), web_contents_->GetNativeView());
   }
 }
 

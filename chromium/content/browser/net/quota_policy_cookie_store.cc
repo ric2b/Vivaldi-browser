@@ -13,7 +13,7 @@
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "net/cookies/canonical_cookie.h"
@@ -67,12 +67,14 @@ CookieStoreConfig::~CookieStoreConfig() {
 }
 
 std::unique_ptr<net::CookieStore> CreateCookieStore(
-    const CookieStoreConfig& config) {
+    const CookieStoreConfig& config,
+    net::NetLog* net_log) {
   std::unique_ptr<net::CookieMonster> cookie_monster;
 
   if (config.path.empty()) {
     // Empty path means in-memory store.
-    cookie_monster.reset(new net::CookieMonster(nullptr));
+    cookie_monster = std::make_unique<net::CookieMonster>(
+        nullptr /* store */, nullptr /* channel_id_service */, net_log);
   } else {
     scoped_refptr<base::SequencedTaskRunner> client_task_runner =
         config.client_task_runner;
@@ -86,7 +88,7 @@ std::unique_ptr<net::CookieStore> CreateCookieStore(
 
     if (!background_task_runner.get()) {
       background_task_runner = base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
     }
 
@@ -100,8 +102,8 @@ std::unique_ptr<net::CookieStore> CreateCookieStore(
             sqlite_store.get(),
             config.storage_policy.get());
 
-    cookie_monster.reset(new net::CookieMonster(persistent_store,
-                                                config.channel_id_service));
+    cookie_monster = std::make_unique<net::CookieMonster>(
+        persistent_store, config.channel_id_service, net_log);
     if (config.persist_session_cookies)
       cookie_monster->SetPersistSessionCookies(true);
   }

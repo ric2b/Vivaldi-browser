@@ -16,12 +16,11 @@
 #include "ui/gl/gl_surface_egl.h"
 #include "ui/ozone/common/egl_util.h"
 #include "ui/ozone/common/gl_ozone_egl.h"
-#include "ui/ozone/common/gl_ozone_osmesa.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_thread_proxy.h"
 #include "ui/ozone/platform/drm/gpu/drm_window_proxy.h"
-#include "ui/ozone/platform/drm/gpu/gbm_buffer.h"
 #include "ui/ozone/platform/drm/gpu/gbm_overlay_surface.h"
+#include "ui/ozone/platform/drm/gpu/gbm_pixmap.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surface.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surfaceless.h"
 #include "ui/ozone/platform/drm/gpu/proxy_helpers.h"
@@ -32,7 +31,22 @@
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "ui/ozone/platform/drm/gpu/vulkan_implementation_gbm.h"
 #if defined(OS_CHROMEOS)
-#include <vulkan/vulkan_intel.h>
+#define VK_STRUCTURE_TYPE_DMA_BUF_IMAGE_CREATE_INFO_INTEL 1024
+typedef struct VkDmaBufImageCreateInfo_ {
+  VkStructureType sType;
+  const void* pNext;
+  int fd;
+  VkFormat format;
+  VkExtent3D extent;
+  uint32_t strideInBytes;
+} VkDmaBufImageCreateInfo;
+
+typedef VkResult(VKAPI_PTR* PFN_vkCreateDmaBufImageINTEL)(
+    VkDevice device,
+    const VkDmaBufImageCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkDeviceMemory* pMem,
+    VkImage* pImage);
 #endif
 #endif
 
@@ -88,7 +102,6 @@ class GLOzoneEGLGbm : public GLOzoneEGL {
 GbmSurfaceFactory::GbmSurfaceFactory(DrmThreadProxy* drm_thread_proxy)
     : egl_implementation_(
           std::make_unique<GLOzoneEGLGbm>(this, drm_thread_proxy)),
-      osmesa_implementation_(std::make_unique<GLOzoneOSMesa>()),
       drm_thread_proxy_(drm_thread_proxy) {}
 
 GbmSurfaceFactory::~GbmSurfaceFactory() {
@@ -118,7 +131,6 @@ std::vector<gl::GLImplementation>
 GbmSurfaceFactory::GetAllowedGLImplementations() {
   DCHECK(thread_checker_.CalledOnValidThread());
   return std::vector<gl::GLImplementation>{gl::kGLImplementationEGLGLES2,
-                                           gl::kGLImplementationOSMesaGL,
                                            gl::kGLImplementationSwiftShaderGL};
 }
 
@@ -127,8 +139,6 @@ GLOzone* GbmSurfaceFactory::GetGLOzone(gl::GLImplementation implementation) {
     case gl::kGLImplementationEGLGLES2:
     case gl::kGLImplementationSwiftShaderGL:
       return egl_implementation_.get();
-    case gl::kGLImplementationOSMesaGL:
-      return osmesa_implementation_.get();
     default:
       return nullptr;
   }
@@ -149,9 +159,13 @@ scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmapForVulkan(
     VkDeviceMemory* vk_device_memory,
     VkImage* vk_image) {
 #if defined(OS_CHROMEOS)
-  scoped_refptr<GbmBuffer> buffer = drm_thread_proxy_->CreateBuffer(
-      widget, size, format, usage, GbmBuffer::kFlagNoModifiers);
-  if (!buffer.get())
+  std::unique_ptr<GbmBuffer> buffer;
+  scoped_refptr<DrmFramebuffer> framebuffer;
+
+  drm_thread_proxy_->CreateBuffer(widget, size, format, usage,
+                                  GbmPixmap::kFlagNoModifiers, &buffer,
+                                  &framebuffer);
+  if (!buffer)
     return nullptr;
 
   PFN_vkCreateDmaBufImageINTEL create_dma_buf_image_intel =
@@ -166,7 +180,7 @@ scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmapForVulkan(
   DCHECK(buffer->AreFdsValid());
   DCHECK_EQ(buffer->GetFdCount(), 1U);
 
-  base::ScopedFD vk_image_fd(dup(buffer->GetFd(0)));
+  base::ScopedFD vk_image_fd(dup(buffer->GetPlaneFd(0)));
   DCHECK(vk_image_fd.is_valid());
 
   VkDmaBufImageCreateInfo dma_buf_image_create_info = {
@@ -175,7 +189,7 @@ scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmapForVulkan(
       .fd = vk_image_fd.release(),
       .format = VK_FORMAT_B8G8R8A8_SRGB,
       .extent = (VkExtent3D){size.width(), size.height(), 1},
-      .strideInBytes = buffer->GetStride(0),
+      .strideInBytes = buffer->GetPlaneStride(0),
   };
 
   VkResult result =
@@ -186,7 +200,8 @@ scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmapForVulkan(
     return nullptr;
   }
 
-  return base::MakeRefCounted<GbmPixmap>(this, buffer);
+  return base::MakeRefCounted<GbmPixmap>(this, std::move(buffer),
+                                         std::move(framebuffer));
 #else
   return nullptr;
 #endif
@@ -218,12 +233,14 @@ scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmap(
     gfx::Size size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage) {
-  scoped_refptr<GbmBuffer> buffer = drm_thread_proxy_->CreateBuffer(
-      widget, size, format, usage, 0 /* flags */);
-  if (!buffer.get())
+  std::unique_ptr<GbmBuffer> buffer;
+  scoped_refptr<DrmFramebuffer> framebuffer;
+  drm_thread_proxy_->CreateBuffer(widget, size, format, usage, 0 /* flags */,
+                                  &buffer, &framebuffer);
+  if (!buffer)
     return nullptr;
-
-  return base::MakeRefCounted<GbmPixmap>(this, buffer);
+  return base::MakeRefCounted<GbmPixmap>(this, std::move(buffer),
+                                         std::move(framebuffer));
 }
 
 scoped_refptr<gfx::NativePixmap>
@@ -247,12 +264,15 @@ GbmSurfaceFactory::CreateNativePixmapFromHandleInternal(
     planes.push_back(plane);
   }
 
-  scoped_refptr<GbmBuffer> buffer = drm_thread_proxy_->CreateBufferFromFds(
-      widget, size, format, std::move(scoped_fds), planes);
+  std::unique_ptr<GbmBuffer> buffer;
+  scoped_refptr<DrmFramebuffer> framebuffer;
+  drm_thread_proxy_->CreateBufferFromFds(widget, size, format,
+                                         std::move(scoped_fds), planes, &buffer,
+                                         &framebuffer);
   if (!buffer)
     return nullptr;
-
-  return base::MakeRefCounted<GbmPixmap>(this, buffer);
+  return base::MakeRefCounted<GbmPixmap>(this, std::move(buffer),
+                                         std::move(framebuffer));
 }
 
 scoped_refptr<gfx::NativePixmap>

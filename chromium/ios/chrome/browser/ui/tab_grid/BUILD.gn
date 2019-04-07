@@ -40,6 +40,7 @@ source_set("tab_grid") {
     "//ios/chrome/browser/ui/tab_switcher",
     "//ios/chrome/browser/web",
     "//ios/chrome/browser/web_state_list",
+    "//ios/chrome/browser/web_state_list/web_usage_enabler",
     "//ios/web",
     "//ui/gfx",
   ]
@@ -85,6 +86,7 @@ source_set("tab_grid_ui") {
     "//ios/chrome/browser/ui/tab_grid/transitions",
     "//ios/chrome/browser/ui/table_view:styler",
     "//ios/chrome/common/ui_util",
+    "//ios/web/public",
     "//ui/base",
   ]
 }
@@ -133,6 +135,7 @@ source_set("egtest_support") {
     "//base/test:test_support",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui:ui_util",
+    "//ios/chrome/browser/ui/ntp/recent_tabs",
     "//ios/chrome/browser/ui/tools_menu/public",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
@@ -150,7 +153,9 @@ source_set("eg_tests") {
 
   deps = [
     ":egtest_support",
+    "//ios/chrome/browser/ui/tab_grid:tab_grid_ui",
     "//ios/chrome/test/earl_grey:test_support",
+    "//ios/web/public/test/http_server",
   ]
   libs = [ "XCTest.framework" ]
 }

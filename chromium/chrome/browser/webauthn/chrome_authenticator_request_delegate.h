@@ -5,10 +5,19 @@
 #ifndef CHROME_BROWSER_WEBAUTHN_CHROME_AUTHENTICATOR_REQUEST_DELEGATE_H_
 #define CHROME_BROWSER_WEBAUTHN_CHROME_AUTHENTICATOR_REQUEST_DELEGATE_H_
 
+#include <memory>
+#include <string>
+
+#include "base/callback.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
+#include "base/strings/string_piece.h"
 #include "build/build_config.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
+#include "device/fido/fido_request_handler_base.h"
+#include "device/fido/fido_transport_protocol.h"
 
 class Profile;
 
@@ -21,7 +30,9 @@ namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
-class AuthenticatorRequestDialogModel;
+namespace device {
+class FidoAuthenticator;
+}
 
 class ChromeAuthenticatorRequestDelegate
     : public content::AuthenticatorRequestClientDelegate,
@@ -43,6 +54,7 @@ class ChromeAuthenticatorRequestDelegate
       const override;
 #endif  // defined(OS_MACOSX)
 
+  base::Optional<device::FidoTransportProtocol> GetLastTransportUsed() const;
   base::WeakPtr<ChromeAuthenticatorRequestDelegate> AsWeakPtr();
 
  private:
@@ -52,19 +64,45 @@ class ChromeAuthenticatorRequestDelegate
   content::BrowserContext* browser_context() const;
 
   // content::AuthenticatorRequestClientDelegate:
-  void DidStartRequest() override;
+  void DidFailWithInterestingReason(InterestingFailureReason reason) override;
+  void RegisterActionCallbacks(
+      base::OnceClosure cancel_callback,
+      device::FidoRequestHandlerBase::RequestCallback request_callback,
+      base::RepeatingClosure bluetooth_adapter_power_on_callback) override;
   bool ShouldPermitIndividualAttestation(
       const std::string& relying_party_id) override;
   void ShouldReturnAttestation(
       const std::string& relying_party_id,
       base::OnceCallback<void(bool)> callback) override;
   bool IsFocused() override;
+  void UpdateLastTransportUsed(
+      device::FidoTransportProtocol transport) override;
+
+  // device::FidoRequestHandlerBase::TransportAvailabilityObserver:
+  void OnTransportAvailabilityEnumerated(
+      device::FidoRequestHandlerBase::TransportAvailabilityInfo data) override;
+  bool EmbedderControlsAuthenticatorDispatch(
+      const device::FidoAuthenticator& authenticator) override;
+  void FidoAuthenticatorAdded(
+      const device::FidoAuthenticator& authenticator) override;
+  void FidoAuthenticatorRemoved(base::StringPiece authenticator_id) override;
+  void BluetoothAdapterPowerChanged(bool is_powered_on) override;
 
   // AuthenticatorRequestDialogModel::Observer:
   void OnModelDestroyed() override;
+  void OnCancelRequest() override;
 
   content::RenderFrameHost* const render_frame_host_;
   AuthenticatorRequestDialogModel* weak_dialog_model_ = nullptr;
+  // Holds ownership of AuthenticatorRequestDialogModel until
+  // OnTransportAvailabilityEnumerated() is invoked, at which point the
+  // ownership of the model is transferred to AuthenticatorRequestDialogView and
+  // |this| instead holds weak pointer of the model via above
+  // |weak_dialog_model_|.
+  std::unique_ptr<AuthenticatorRequestDialogModel>
+      transient_dialog_model_holder_;
+  base::OnceClosure cancel_callback_;
+  device::FidoRequestHandlerBase::RequestCallback request_callback_;
 
   base::WeakPtrFactory<ChromeAuthenticatorRequestDelegate> weak_ptr_factory_;
 

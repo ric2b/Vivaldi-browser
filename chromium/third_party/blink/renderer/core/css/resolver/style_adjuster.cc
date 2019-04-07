@@ -88,6 +88,63 @@ bool IsImageOrVideoElement(const Element* element) {
     return true;
   return false;
 }
+
+bool ShouldForceLegacyLayout(const ComputedStyle& style,
+                             const ComputedStyle& layout_parent_style,
+                             const Element& element) {
+  // Form controls are not supported yet.
+  if (element.ShouldForceLegacyLayout())
+    return true;
+
+  // When the actual parent (to inherit style from) doesn't have a layout box
+  // (display:contents), it may not have been switched over to forcing legacy
+  // layout, even if it's inside a subtree that should use legacy. Check with
+  // the layout parent as well, so that we don't risk switching back to LayoutNG
+  // when we shouldn't.
+  if (layout_parent_style.ForceLegacyLayout())
+    return true;
+
+  const Document& document = element.GetDocument();
+
+  // TODO(layout-dev): Once LayoutNG handles inline content editable, we
+  // should get rid of following code fragment.
+  if (!RuntimeEnabledFeatures::EditingNGEnabled()) {
+    if (style.UserModify() != EUserModify::kReadOnly || document.InDesignMode())
+      return true;
+  }
+
+  if (style.Display() == EDisplay::kWebkitBox ||
+      style.Display() == EDisplay::kWebkitInlineBox)
+    return true;
+
+  if (!RuntimeEnabledFeatures::LayoutNGBlockFragmentationEnabled()) {
+    // Disable NG for the entire subtree if we're establishing a block
+    // fragmentation context.
+    if (style.SpecifiesColumns() ||
+        (style.IsOverflowPaged() &&
+         &element != document.ViewportDefiningElement()))
+      return true;
+    if (document.Printing()) {
+      // This needs to be discovered on the root element.
+      DCHECK_EQ(element, document.documentElement());
+      return true;
+    }
+  }
+
+  // The custom container is laid out by the legacy engine. Its children may
+  // not establish new formatting contexts, so we need to protect against
+  // re-entering LayoutNG there.
+  if (style.Display() == EDisplay::kLayoutCustom ||
+      style.Display() == EDisplay::kInlineLayoutCustom)
+    return true;
+
+  // 'text-combine-upright' property is not supported yet.
+  if (style.HasTextCombine() && !style.IsHorizontalWritingMode())
+    return true;
+
+  return false;
+}
+
 }  // namespace
 
 static EDisplay EquivalentBlockDisplay(EDisplay display) {
@@ -506,11 +563,14 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
   const ComputedStyle& parent_style = *state.ParentStyle();
   const ComputedStyle& layout_parent_style = *state.LayoutParentStyle();
 
-  if (element &&
-      (style.Display() != EDisplay::kNone ||
-       element->LayoutObjectIsNeeded(style)) &&
-      element->IsHTMLElement()) {
-    AdjustStyleForHTMLElement(style, ToHTMLElement(*element));
+  if (element && (style.Display() != EDisplay::kNone ||
+                  element->LayoutObjectIsNeeded(style))) {
+    // TODO(rakina): Move this attribute check somewhere else.
+    if (RuntimeEnabledFeatures::InvisibleDOMEnabled() &&
+        !element->invisible().IsNull())
+      style.SetDisplay(EDisplay::kNone);
+    else if (element->IsHTMLElement())
+      AdjustStyleForHTMLElement(style, ToHTMLElement(*element));
   }
   if (style.Display() != EDisplay::kNone) {
     bool is_document_element =
@@ -672,40 +732,9 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
   }
 
   if (RuntimeEnabledFeatures::LayoutNGEnabled() && !style.ForceLegacyLayout() &&
-      element) {
-    const Document& document = element->GetDocument();
-    if (element->ShouldForceLegacyLayout()) {
-      // Form controls are not supported yet.
-      style.SetForceLegacyLayout(true);
-    } else if (style.UserModify() != EUserModify::kReadOnly ||
-               document.InDesignMode() ||
-               style.Display() == EDisplay::kWebkitBox ||
-               style.Display() == EDisplay::kWebkitInlineBox) {
-      // TODO(layout-dev): Once LayoutNG handles inline content editable, we
-      // should get rid of following code fragment.
-      style.SetForceLegacyLayout(true);
-
-    } else if (!RuntimeEnabledFeatures::LayoutNGBlockFragmentationEnabled()) {
-      // Disable NG for the entire subtree if we're establishing a block
-      // fragmentation context.
-      if (style.SpecifiesColumns() ||
-          (style.IsOverflowPaged() &&
-           element != document.ViewportDefiningElement())) {
-        style.SetForceLegacyLayout(true);
-      } else if (document.Printing()) {
-        // This needs to be discovered on the root element.
-        DCHECK_EQ(element, document.documentElement());
-        style.SetForceLegacyLayout(true);
-      }
-    }
-    if (!style.ForceLegacyLayout()) {
-      // The custom container is laid out by the legacy engine. Its children may
-      // not establish new formatting contexts, so we need to protect against
-      // re-entering LayoutNG there.
-      if (style.Display() == EDisplay::kLayoutCustom ||
-          style.Display() == EDisplay::kInlineLayoutCustom)
-        style.SetForceLegacyLayout(true);
-    }
+      element &&
+      ShouldForceLegacyLayout(style, layout_parent_style, *element)) {
+    style.SetForceLegacyLayout(true);
   }
 
   // If intrinsically sized images or videos are disallowed by feature policy,
@@ -713,12 +742,20 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
   if (IsImageOrVideoElement(element)) {
     if (RuntimeEnabledFeatures::ExperimentalProductivityFeaturesEnabled() &&
         element->GetDocument().GetFrame() &&
-        !element->GetDocument().GetFrame()->IsFeatureEnabled(
-            mojom::FeaturePolicyFeature::kUnsizedMedia)) {
-      if (!style.Width().IsSpecified())
-        style.SetLogicalWidth(Length(LayoutReplaced::kDefaultWidth, kFixed));
-      if (!style.Height().IsSpecified())
-        style.SetLogicalHeight(Length(LayoutReplaced::kDefaultHeight, kFixed));
+        (!style.Width().IsSpecified() || !style.Height().IsSpecified())) {
+      // This check will trigger reporting, so only do it if either width or
+      // height is unspecified.
+      if (!element->GetDocument().GetFrame()->IsFeatureEnabled(
+              mojom::FeaturePolicyFeature::kUnsizedMedia,
+              ReportOptions::kReportOnFailure)) {
+        if (!style.Width().IsSpecified()) {
+          style.SetLogicalWidth(Length(LayoutReplaced::kDefaultWidth, kFixed));
+        }
+        if (!style.Height().IsSpecified()) {
+          style.SetLogicalHeight(
+              Length(LayoutReplaced::kDefaultHeight, kFixed));
+        }
+      }
     }
   }
 }

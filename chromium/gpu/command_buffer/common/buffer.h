@@ -27,6 +27,20 @@ class GPU_EXPORT BufferBacking {
   virtual size_t GetSize() const = 0;
 };
 
+class GPU_EXPORT MemoryBufferBacking : public BufferBacking {
+ public:
+  explicit MemoryBufferBacking(size_t size);
+  ~MemoryBufferBacking() override;
+  void* GetMemory() const override;
+  size_t GetSize() const override;
+
+ private:
+  std::unique_ptr<char[]> memory_;
+  size_t size_;
+  DISALLOW_COPY_AND_ASSIGN(MemoryBufferBacking);
+};
+
+
 class GPU_EXPORT SharedMemoryBufferBacking : public BufferBacking {
  public:
   SharedMemoryBufferBacking(
@@ -53,10 +67,10 @@ class GPU_EXPORT Buffer : public base::RefCountedThreadSafe<Buffer> {
   void* memory() const { return memory_; }
   size_t size() const { return size_; }
 
-  // Returns NULL if the address overflows the memory.
+  // Returns nullptr if the address overflows the memory.
   void* GetDataAddress(uint32_t data_offset, uint32_t data_size) const;
 
-  // Returns NULL if the address overflows the memory.
+  // Returns nullptr if the address overflows the memory.
   void* GetDataAddressAndSize(uint32_t data_offset, uint32_t* data_size) const;
 
   // Returns the remaining size of the buffer after an offset
@@ -82,8 +96,13 @@ static inline std::unique_ptr<BufferBacking> MakeBackingFromSharedMemory(
 static inline scoped_refptr<Buffer> MakeBufferFromSharedMemory(
     base::UnsafeSharedMemoryRegion shared_memory_region,
     base::WritableSharedMemoryMapping shared_memory_mapping) {
-  return new Buffer(MakeBackingFromSharedMemory(
+  return base::MakeRefCounted<Buffer>(MakeBackingFromSharedMemory(
       std::move(shared_memory_region), std::move(shared_memory_mapping)));
+}
+
+static inline scoped_refptr<Buffer> MakeMemoryBuffer(size_t size) {
+  return base::MakeRefCounted<Buffer>(
+      std::make_unique<MemoryBufferBacking>(size));
 }
 
 // Generates GUID which can be used to trace buffer using an Id.

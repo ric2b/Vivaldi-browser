@@ -31,7 +31,7 @@ class FileManagerBrowserTestBase : public extensions::ExtensionApiTest {
   FileManagerBrowserTestBase();
   ~FileManagerBrowserTestBase() override;
 
-  // ExtensionApiTest overrides.
+  // extensions::ExtensionApiTest:
   void SetUp() override;
   void SetUpCommandLine(base::CommandLine* command_line) override;
   bool SetUpUserDataDirectory() override;
@@ -40,10 +40,13 @@ class FileManagerBrowserTestBase : public extensions::ExtensionApiTest {
 
   // Overrides for each FileManagerBrowserTest test extension type.
   virtual GuestMode GetGuestMode() const = 0;
+  virtual const char* GetTestCaseName() const = 0;
+  virtual std::string GetFullTestCaseName() const = 0;
+  virtual const char* GetTestExtensionManifestName() const = 0;
   virtual bool GetEnableDriveFs() const;
   virtual bool GetRequiresStartupBrowser() const;
-  virtual const char* GetTestCaseName() const = 0;
-  virtual const char* GetTestExtensionManifestName() const = 0;
+  virtual bool GetNeedsZipSupport() const;
+  virtual bool GetIsOffline() const;
 
   // Launches the test extension from GetTestExtensionManifestName() and uses
   // it to drive the testing the actual FileManager component extension under
@@ -59,6 +62,12 @@ class FileManagerBrowserTestBase : public extensions::ExtensionApiTest {
 
   // Returns true if the test requires DriveFS.
   bool IsDriveFsTest() const { return GetEnableDriveFs(); }
+
+  // Returns true if the test requires zip/unzip support.
+  bool IsZipTest() const { return GetNeedsZipSupport(); }
+
+  // Returns true if Drive should act as if offline.
+  bool IsOfflineTest() const { return GetIsOffline(); }
 
   // Launches the test extension with manifest |manifest_name|. The extension
   // manifest_name file should reside in the specified |path| relative to the

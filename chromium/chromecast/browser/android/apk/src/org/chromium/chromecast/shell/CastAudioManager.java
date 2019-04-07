@@ -47,9 +47,9 @@ public class CastAudioManager {
      * TODO(sanfin): Distinguish between transient, ducking, and full audio focus losses.
      */
     public Observable<Unit> requestAudioFocusWhen(
-            Observable<?> event, int streamType, int durationHint) {
+            Observable<?> event, CastAudioFocusRequest castAudioFocusRequest) {
         Controller<Unit> audioFocusState = new Controller<>();
-        event.watch(() -> {
+        event.subscribe(x -> {
             AudioManager.OnAudioFocusChangeListener listener = (int focusChange) -> {
                 switch (focusChange) {
                     case AudioManager.AUDIOFOCUS_GAIN:
@@ -60,14 +60,16 @@ public class CastAudioManager {
                         return;
                 }
             };
+            castAudioFocusRequest.setAudioFocusChangeListener(listener);
             // Request audio focus when the source event is activated.
-            if (requestAudioFocus(listener, streamType, durationHint)
+            if (requestAudioFocus(castAudioFocusRequest)
                     != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                 Log.e(TAG, "Failed to get audio focus");
             }
             // Abandon audio focus when the source event is deactivated.
             return () -> {
-                if (abandonAudioFocus(listener) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                if (abandonAudioFocus(castAudioFocusRequest)
+                        != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                     Log.e(TAG, "Failed to abandon audio focus");
                 }
                 audioFocusState.reset();
@@ -105,17 +107,12 @@ public class CastAudioManager {
         }
     }
 
-    // TODO(sanfin): Use the AudioFocusRequest version on O and above.
-    @SuppressWarnings("deprecation")
-    public int requestAudioFocus(
-            AudioManager.OnAudioFocusChangeListener l, int streamType, int durationHint) {
-        return mAudioManager.requestAudioFocus(l, streamType, durationHint);
+    public int requestAudioFocus(CastAudioFocusRequest castAudioFocusRequest) {
+        return castAudioFocusRequest.request(mAudioManager);
     }
 
-    // TODO(sanfin): Use the AudioFocusRequest version on O and above.
-    @SuppressWarnings("deprecation")
-    public int abandonAudioFocus(AudioManager.OnAudioFocusChangeListener l) {
-        return mAudioManager.abandonAudioFocus(l);
+    public int abandonAudioFocus(CastAudioFocusRequest castAudioFocusRequest) {
+        return castAudioFocusRequest.abandon(mAudioManager);
     }
 
     public int getStreamMaxVolume(int streamType) {

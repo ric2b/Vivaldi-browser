@@ -8,8 +8,8 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/task/post_task.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/WebRestrictionsClient_jni.h"
 
@@ -32,7 +32,7 @@ bool RequestPermissionTask(
 
 bool CheckSupportsRequestTask(
     const base::android::JavaRef<jobject>& java_provider) {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
   JNIEnv* env = base::android::AttachCurrentThread();
   return Java_WebRestrictionsClient_supportsRequest(env, java_provider);
 }
@@ -42,7 +42,7 @@ bool CheckSupportsRequestTask(
 WebRestrictionsClient::WebRestrictionsClient()
     : initialized_(false), supports_request_(false) {
   background_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 
@@ -86,7 +86,7 @@ void WebRestrictionsClient::SetAuthorityTask(
       reinterpret_cast<jlong>(this)));
   supports_request_ = false;
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&CheckSupportsRequestTask, java_provider_),
       base::Bind(&WebRestrictionsClient::RequestSupportKnown,
                  base::Unretained(this), provider_authority_));

@@ -10,7 +10,7 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_state.h"
 #include "base/command_line.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/display/manager/display_manager.h"
@@ -76,6 +76,7 @@ class LockLayoutManagerTest : public AshTestBase {
     views::Widget* widget = new views::Widget;
     if (use_delegate)
       params.delegate = new LoginTestWidgetDelegate(widget);
+    params.context = CurrentContext();
     widget->Init(params);
     widget->Show();
     aura::Window* window = widget->GetNativeView();
@@ -299,7 +300,7 @@ TEST_F(LockLayoutManagerTest, MultipleMonitors) {
   std::unique_ptr<aura::Window> window(
       CreateTestLoginWindow(widget_params, false /* use_delegate */));
   window->SetProperty(aura::client::kResizeBehaviorKey,
-                      ui::mojom::kResizeBehaviorCanMaximize);
+                      ws::mojom::kResizeBehaviorCanMaximize);
 
   EXPECT_EQ(screen_bounds.ToString(), window->GetBoundsInScreen().ToString());
 
@@ -354,7 +355,7 @@ TEST_F(LockLayoutManagerTest, AccessibilityPanelWithMultipleMonitors) {
   std::unique_ptr<aura::Window> window(
       CreateTestLoginWindow(widget_params, false /* use_delegate */));
   window->SetProperty(aura::client::kResizeBehaviorKey,
-                      ui::mojom::kResizeBehaviorCanMaximize);
+                      ws::mojom::kResizeBehaviorCanMaximize);
 
   gfx::Rect target_bounds =
       display::Screen::GetScreen()->GetPrimaryDisplay().bounds();

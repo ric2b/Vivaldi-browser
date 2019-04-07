@@ -76,6 +76,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   struct Priority {
     bool is_hidden;
     unsigned int frame_depth;
+    bool intersects_viewport;
 #if defined(OS_ANDROID)
     ChildProcessImportance importance;
 #endif
@@ -148,6 +149,9 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
 
   // Get computed frame depth from PriorityClients.
   virtual unsigned int GetFrameDepth() const = 0;
+
+  // Get computed viewport intersection state from PriorityClients.
+  virtual bool GetIntersectsViewport() const = 0;
 
   virtual RendererAudioOutputStreamFactoryContext*
   GetRendererAudioOutputStreamFactoryContext() = 0;
@@ -452,6 +456,16 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // function can only be called on the browser's UI thread (and the |task| will
   // be posted back on the UI thread).
   void PostTaskWhenProcessIsReady(base::OnceClosure task);
+
+  // Controls whether the destructor of RenderProcessHost*Impl* will end up
+  // cleaning the memory used by the exception added via
+  // RenderProcessHostImpl::AddCorbExceptionForPlugin.
+  //
+  // TODO(lukasza): https://crbug.com/652474: This method shouldn't be part of
+  // the //content public API, because it shouldn't be called by anyone other
+  // than RenderProcessHostImpl (from underneath
+  // RenderProcessHostImpl::AddCorbExceptionForPlugin).
+  virtual void CleanupCorbExceptionForPluginUponDestruction() = 0;
 
   // Static management functions -----------------------------------------------
 

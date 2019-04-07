@@ -6,7 +6,7 @@
 
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "third_party/metrics_proto/system_profile.pb.h"
 
@@ -57,7 +57,7 @@ void GoogleUpdateMetricsProviderWin::AsyncInit(
   // Schedules a task on a blocking pool thread to gather Google Update
   // statistics (requires Registry reads).
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&GoogleUpdateMetricsProviderWin::GetGoogleUpdateDataBlocking),
       base::Bind(&GoogleUpdateMetricsProviderWin::ReceiveGoogleUpdateData,
                  weak_ptr_factory_.GetWeakPtr(), done_callback));

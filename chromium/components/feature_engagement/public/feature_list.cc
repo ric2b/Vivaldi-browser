@@ -21,6 +21,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHDownloadHomeFeature,
     &kIPHDownloadPageFeature,
     &kIPHDownloadPageScreenshotFeature,
+    &kIPHChromeDuetFeature,
     &kIPHChromeHomeExpandFeature,
     &kIPHChromeHomePullToRefreshFeature,
     &kIPHMediaDownloadFeature,
@@ -33,6 +34,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHDownloadInfoBarDownloadContinuingFeature,
     &kIPHDownloadInfoBarDownloadsAreFasterFeature,
     &kIPHHomePageButtonFeature,
+    &kIPHHomepageTileFeature,
     &kIPHNewTabPageButtonFeature,
 #endif  // defined(OS_ANDROID)
 #if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)

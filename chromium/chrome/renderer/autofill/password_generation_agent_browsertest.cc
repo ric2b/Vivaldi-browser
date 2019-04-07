@@ -126,10 +126,6 @@ class PasswordGenerationAgentTest : public ChromeRenderViewTest {
     fake_pw_client_.reset_called_show_manual_pw_generation_popup();
   }
 
-  void AllowToRunFormClassifier() {
-    password_generation_->AllowToRunFormClassifier();
-  }
-
   void ExpectFormClassifierVoteReceived(
       bool received,
       const base::string16& expected_generation_element) {
@@ -855,20 +851,6 @@ TEST_F(PasswordGenerationAgentTest, FallbackForSaving) {
   EXPECT_EQ(2, fake_driver_.called_show_manual_fallback_for_saving_count());
 }
 
-TEST_F(PasswordGenerationAgentTest, FormClassifierVotesSignupForm) {
-  AllowToRunFormClassifier();
-  LoadHTMLWithUserGesture(kAccountCreationFormHTML);
-  ExpectFormClassifierVoteReceived(true /* vote is expected */,
-                                   base::ASCIIToUTF16("first_password"));
-}
-
-TEST_F(PasswordGenerationAgentTest, FormClassifierVotesSigninForm) {
-  AllowToRunFormClassifier();
-  LoadHTMLWithUserGesture(kSigninFormHTML);
-  ExpectFormClassifierVoteReceived(true /* vote is expected */,
-                                   base::string16());
-}
-
 TEST_F(PasswordGenerationAgentTest, FormClassifierDisabled) {
   LoadHTMLWithUserGesture(kSigninFormHTML);
   ExpectFormClassifierVoteReceived(false /* vote is not expected */,
@@ -1058,6 +1040,11 @@ TEST_F(PasswordGenerationAgentTestForHtmlAnnotation, AnnotateForm) {
     blink::WebString form_signature_in_username = username_element.GetAttribute(
         blink::WebString::FromUTF8("form_signature"));
     EXPECT_EQ(kFormSignature, form_signature_in_username.Ascii());
+    EXPECT_EQ(
+        "username_element",
+        username_element
+            .GetAttribute(blink::WebString::FromUTF8("pm_parser_annotation"))
+            .Ascii());
 
     blink::WebElement password_element =
         document.GetElementById(blink::WebString::FromUTF8("first_password"));
@@ -1069,12 +1056,31 @@ TEST_F(PasswordGenerationAgentTestForHtmlAnnotation, AnnotateForm) {
     blink::WebString form_signature_in_password = password_element.GetAttribute(
         blink::WebString::FromUTF8("form_signature"));
     EXPECT_EQ(kFormSignature, form_signature_in_password.Ascii());
+    // The parser annotation is based on local heuristics, but not server side
+    // prediction. So, the new password element is classified as the current
+    // password.
+    EXPECT_EQ(
+        "password_element",
+        password_element
+            .GetAttribute(blink::WebString::FromUTF8("pm_parser_annotation"))
+            .Ascii());
 
     // Check the generation element is marked.
     blink::WebString generation_mark = password_element.GetAttribute(
         blink::WebString::FromUTF8("password_creation_field"));
     ASSERT_FALSE(generation_mark.IsNull());
     EXPECT_EQ("1", generation_mark.Utf8());
+
+    blink::WebElement confirmation_password_element =
+        document.GetElementById(blink::WebString::FromUTF8("second_password"));
+    // The parser annotation is based on local heuristics, but not server side
+    // prediction. So, the confirmation password element is classified as the
+    // new password.
+    EXPECT_EQ(
+        "new_password_element",
+        confirmation_password_element
+            .GetAttribute(blink::WebString::FromUTF8("pm_parser_annotation"))
+            .Ascii());
   }
 }
 

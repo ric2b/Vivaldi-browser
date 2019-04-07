@@ -8,7 +8,7 @@
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 
 namespace login {
 
@@ -40,7 +40,7 @@ void GetSecureModuleUsed(GetSecureModuleUsedCallback callback) {
   }
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&GetSecureModuleInfoFromFilesAndCacheIt),
       std::move(callback));
 }

@@ -22,8 +22,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
+#include "base/task/post_task.h"
 #include "base/task_runner.h"
-#include "base/task_scheduler/post_task.h"
 #include "chromeos/settings/timezone_settings_helper.h"
 
 namespace chromeos {
@@ -299,7 +299,7 @@ class TimezoneSettingsBaseImpl : public chromeos::system::TimezoneSettings {
   const icu::TimeZone* GetKnownTimezoneOrNull(
       const icu::TimeZone& timezone) const;
 
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
   std::vector<std::unique_ptr<icu::TimeZone>> timezones_;
   std::unique_ptr<icu::TimeZone> timezone_;
 
@@ -394,7 +394,7 @@ void TimezoneSettingsImpl::SetTimezone(const icu::TimeZone& timezone) {
   // It's safe to change the timezone config files in the background as the
   // following operations don't depend on the completion of the config change.
   base::PostTaskWithTraits(FROM_HERE,
-                           {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                           {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                             base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
                            base::BindOnce(&SetTimezoneIDFromString, id));
   icu::TimeZone::setDefault(*known_timezone);

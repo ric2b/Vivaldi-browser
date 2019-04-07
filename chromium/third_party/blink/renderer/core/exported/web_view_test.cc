@@ -87,6 +87,7 @@
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -1024,6 +1025,32 @@ TEST_F(WebViewTest, FinishComposingTextDoesNotAssert) {
       WebInputMethodController::kKeepSelection);
 }
 
+// Regression test for https://crbug.com/873999
+TEST_F(WebViewTest, LongPressOutsideInputShouldNotSelectPlaceholderText) {
+  RegisterMockedHttpURLLoad("input_placeholder.html");
+  WebViewImpl* web_view =
+      web_view_helper_.InitializeAndLoad(base_url_ + "input_placeholder.html");
+  web_view->SetInitialFocus(false);
+  web_view->Resize(WebSize(500, 300));
+  web_view->UpdateAllLifecyclePhases();
+  RunPendingTasks();
+
+  WebString input_id = WebString::FromUTF8("input");
+
+  // Focus in input.
+  EXPECT_TRUE(TapElementById(WebInputEvent::kGestureTap, input_id));
+
+  // Long press below input.
+  WebGestureEvent event(WebInputEvent::kGestureLongPress,
+                        WebInputEvent::kNoModifiers,
+                        WebInputEvent::GetStaticTimeStampForTests(),
+                        kWebGestureDeviceTouchscreen);
+  event.SetPositionInWidget(WebFloatPoint(100, 150));
+  EXPECT_EQ(WebInputEventResult::kHandledSystem,
+            web_view->HandleInputEvent(WebCoalescedInputEvent(event)));
+  EXPECT_TRUE(web_view->MainFrameImpl()->SelectionAsText().IsEmpty());
+}
+
 TEST_F(WebViewTest, FinishComposingTextCursorPositionChange) {
   RegisterMockedHttpURLLoad("input_field_populated.html");
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
@@ -1523,7 +1550,7 @@ TEST_F(WebViewTest, SetCompositionFromExistingText) {
   web_view->SetInitialFocus(false);
   WebVector<WebImeTextSpan> ime_text_spans(static_cast<size_t>(1));
   ime_text_spans[0] = WebImeTextSpan(WebImeTextSpan::Type::kComposition, 0, 4,
-                                     ui::mojom::ImeTextSpanThickness::kThin, 0);
+                                     ws::mojom::ImeTextSpanThickness::kThin, 0);
   WebLocalFrameImpl* frame = web_view->MainFrameImpl();
   WebInputMethodController* active_input_method_controller =
       frame->GetInputMethodController();
@@ -1550,7 +1577,7 @@ TEST_F(WebViewTest, SetCompositionFromExistingTextInTextArea) {
   web_view->SetInitialFocus(false);
   WebVector<WebImeTextSpan> ime_text_spans(static_cast<size_t>(1));
   ime_text_spans[0] = WebImeTextSpan(WebImeTextSpan::Type::kComposition, 0, 4,
-                                     ui::mojom::ImeTextSpanThickness::kThin, 0);
+                                     ws::mojom::ImeTextSpanThickness::kThin, 0);
   WebLocalFrameImpl* frame = web_view->MainFrameImpl();
   WebInputMethodController* active_input_method_controller =
       frame->FrameWidget()->GetActiveWebInputMethodController();
@@ -1594,7 +1621,7 @@ TEST_F(WebViewTest, SetCompositionFromExistingTextInRichText) {
   web_view->SetInitialFocus(false);
   WebVector<WebImeTextSpan> ime_text_spans(static_cast<size_t>(1));
   ime_text_spans[0] = WebImeTextSpan(WebImeTextSpan::Type::kComposition, 0, 4,
-                                     ui::mojom::ImeTextSpanThickness::kThin, 0);
+                                     ws::mojom::ImeTextSpanThickness::kThin, 0);
   WebLocalFrameImpl* frame = web_view->MainFrameImpl();
   frame->SetEditableSelectionOffsets(1, 1);
   WebDocument document = web_view->MainFrameImpl()->GetDocument();
@@ -2484,7 +2511,8 @@ static void DragAndDropURL(WebViewImpl* web_view, const std::string& url) {
   widget->DragTargetDragEnter(drag_data, client_point, screen_point,
                               kWebDragOperationCopy, 0);
   widget->DragTargetDrop(drag_data, client_point, screen_point, 0);
-  FrameTestHelpers::PumpPendingRequestsForFrameToLoad();
+  FrameTestHelpers::PumpPendingRequestsForFrameToLoad(
+      web_view->MainFrameImpl());
 }
 
 TEST_F(WebViewTest, DragDropURL) {
@@ -4131,25 +4159,6 @@ TEST_F(WebViewTest, PreferredSize) {
   EXPECT_EQ(2, size.height);
 }
 
-TEST_F(WebViewTest, PreferredSizeDirtyLayout) {
-  std::string url = base_url_ + "specify_size.html?100px:100px";
-  URLTestHelpers::RegisterMockedURLLoad(
-      ToKURL(url), test::CoreTestDataPath("specify_size.html"));
-  WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(url);
-  WebElement document_element =
-      web_view->MainFrameImpl()->GetDocument().DocumentElement();
-
-  WebSize size = web_view->ContentsPreferredMinimumSize();
-  EXPECT_EQ(100, size.width);
-  EXPECT_EQ(100, size.height);
-
-  document_element.SetAttribute("style", "display: none");
-
-  size = web_view->ContentsPreferredMinimumSize();
-  EXPECT_EQ(0, size.width);
-  EXPECT_EQ(0, size.height);
-}
-
 TEST_F(WebViewTest, PreferredSizeWithGrid) {
   WebViewImpl* web_view = web_view_helper_.Initialize();
   WebURL base_url = URLTestHelpers::ToKURL("http://example.com/");
@@ -4465,6 +4474,24 @@ TEST_F(WebViewTest, WebSubstringUtil) {
   result = WebSubstringUtil::AttributedWordAtPoint(frame->FrameWidget(), point,
                                                    baseline_point);
   ASSERT_TRUE(!!result);
+}
+
+TEST_F(WebViewTest, WebSubstringUtilBaselinePoint) {
+  RegisterMockedHttpURLLoad("content_editable_multiline.html");
+  WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
+      base_url_ + "content_editable_multiline.html");
+  web_view->GetSettings()->SetDefaultFontSize(12);
+  web_view->Resize(WebSize(400, 400));
+  WebLocalFrameImpl* frame = web_view->MainFrameImpl();
+
+  WebPoint old_point;
+  WebSubstringUtil::AttributedSubstringInRange(frame, 3, 1, &old_point);
+
+  WebPoint new_point;
+  WebSubstringUtil::AttributedSubstringInRange(frame, 3, 20, &new_point);
+
+  EXPECT_EQ(old_point.x, new_point.x);
+  EXPECT_EQ(old_point.y, new_point.y);
 }
 
 TEST_F(WebViewTest, WebSubstringUtilPinchZoom) {

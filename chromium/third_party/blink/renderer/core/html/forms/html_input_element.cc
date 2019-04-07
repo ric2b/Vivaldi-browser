@@ -1230,23 +1230,23 @@ void HTMLInputElement::SetValueFromRenderer(const String& value) {
 }
 
 EventDispatchHandlingState* HTMLInputElement::PreDispatchEventHandler(
-    Event* event) {
-  if (event->type() == EventTypeNames::textInput &&
+    Event& event) {
+  if (event.type() == EventTypeNames::textInput &&
       input_type_view_->ShouldSubmitImplicitly(event)) {
-    event->stopPropagation();
+    event.stopPropagation();
     return nullptr;
   }
-  if (event->type() != EventTypeNames::click)
+  if (event.type() != EventTypeNames::click)
     return nullptr;
-  if (!event->IsMouseEvent() ||
-      ToMouseEvent(event)->button() !=
+  if (!event.IsMouseEvent() ||
+      ToMouseEvent(event).button() !=
           static_cast<short>(WebPointerProperties::Button::kLeft))
     return nullptr;
   return input_type_view_->WillDispatchClick();
 }
 
 void HTMLInputElement::PostDispatchEventHandler(
-    Event* event,
+    Event& event,
     EventDispatchHandlingState* state) {
   if (!state)
     return;
@@ -1254,18 +1254,18 @@ void HTMLInputElement::PostDispatchEventHandler(
                                      *static_cast<ClickHandlingState*>(state));
 }
 
-void HTMLInputElement::DefaultEventHandler(Event* evt) {
-  if (evt->IsMouseEvent() && evt->type() == EventTypeNames::click &&
-      ToMouseEvent(evt)->button() ==
+void HTMLInputElement::DefaultEventHandler(Event& evt) {
+  if (evt.IsMouseEvent() && evt.type() == EventTypeNames::click &&
+      ToMouseEvent(evt).button() ==
           static_cast<short>(WebPointerProperties::Button::kLeft)) {
     input_type_view_->HandleClickEvent(ToMouseEvent(evt));
-    if (evt->DefaultHandled())
+    if (evt.DefaultHandled())
       return;
   }
 
-  if (evt->IsKeyboardEvent() && evt->type() == EventTypeNames::keydown) {
+  if (evt.IsKeyboardEvent() && evt.type() == EventTypeNames::keydown) {
     input_type_view_->HandleKeydownEvent(ToKeyboardEvent(evt));
-    if (evt->DefaultHandled())
+    if (evt.DefaultHandled())
       return;
   }
 
@@ -1273,11 +1273,11 @@ void HTMLInputElement::DefaultEventHandler(Event* evt) {
   // all events in text fields.  Makes editing keyboard handling take precedence
   // over the keydown and keypress handling in this function.
   bool call_base_class_early =
-      IsTextField() && (evt->type() == EventTypeNames::keydown ||
-                        evt->type() == EventTypeNames::keypress);
+      IsTextField() && (evt.type() == EventTypeNames::keydown ||
+                        evt.type() == EventTypeNames::keypress);
   if (call_base_class_early) {
     TextControlElement::DefaultEventHandler(evt);
-    if (evt->DefaultHandled())
+    if (evt.DefaultHandled())
       return;
   }
 
@@ -1287,23 +1287,23 @@ void HTMLInputElement::DefaultEventHandler(Event* evt) {
   // the element, or presses enter while it is the active element. JavaScript
   // code wishing to activate the element must dispatch a DOMActivate event - a
   // click event will not do the job.
-  if (evt->type() == EventTypeNames::DOMActivate) {
+  if (evt.type() == EventTypeNames::DOMActivate) {
     input_type_view_->HandleDOMActivateEvent(evt);
-    if (evt->DefaultHandled())
+    if (evt.DefaultHandled())
       return;
   }
 
   // Use key press event here since sending simulated mouse events
   // on key down blocks the proper sending of the key press event.
-  if (evt->IsKeyboardEvent() && evt->type() == EventTypeNames::keypress) {
+  if (evt.IsKeyboardEvent() && evt.type() == EventTypeNames::keypress) {
     input_type_view_->HandleKeypressEvent(ToKeyboardEvent(evt));
-    if (evt->DefaultHandled())
+    if (evt.DefaultHandled())
       return;
   }
 
-  if (evt->IsKeyboardEvent() && evt->type() == EventTypeNames::keyup) {
+  if (evt.IsKeyboardEvent() && evt.type() == EventTypeNames::keyup) {
     input_type_view_->HandleKeyupEvent(ToKeyboardEvent(evt));
-    if (evt->DefaultHandled())
+    if (evt.DefaultHandled())
       return;
   }
 
@@ -1327,24 +1327,24 @@ void HTMLInputElement::DefaultEventHandler(Event* evt) {
       form_for_submission->SubmitImplicitly(evt,
                                             CanTriggerImplicitSubmission());
     }
-    evt->SetDefaultHandled();
+    evt.SetDefaultHandled();
     return;
   }
 
-  if (evt->IsBeforeTextInsertedEvent()) {
+  if (evt.IsBeforeTextInsertedEvent()) {
     input_type_view_->HandleBeforeTextInsertedEvent(
-        static_cast<BeforeTextInsertedEvent*>(evt));
+        static_cast<BeforeTextInsertedEvent&>(evt));
   }
 
-  if (evt->IsMouseEvent() && evt->type() == EventTypeNames::mousedown) {
+  if (evt.IsMouseEvent() && evt.type() == EventTypeNames::mousedown) {
     input_type_view_->HandleMouseDownEvent(ToMouseEvent(evt));
-    if (evt->DefaultHandled())
+    if (evt.DefaultHandled())
       return;
   }
 
   input_type_view_->ForwardEvent(evt);
 
-  if (!call_base_class_early && !evt->DefaultHandled())
+  if (!call_base_class_early && !evt.DefaultHandled())
     TextControlElement::DefaultEventHandler(evt);
 }
 
@@ -1540,18 +1540,18 @@ void HTMLInputElement::DidChangeForm() {
 }
 
 Node::InsertionNotificationRequest HTMLInputElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   TextControlElement::InsertedInto(insertion_point);
-  if (insertion_point->isConnected() && !Form())
+  if (insertion_point.isConnected() && !Form())
     AddToRadioButtonGroup();
   ResetListAttributeTargetObserver();
   LogAddElementIfIsolatedWorldAndInDocument("input", typeAttr, formactionAttr);
   return kInsertionShouldCallDidNotifySubtreeInsertions;
 }
 
-void HTMLInputElement::RemovedFrom(ContainerNode* insertion_point) {
+void HTMLInputElement::RemovedFrom(ContainerNode& insertion_point) {
   input_type_view_->ClosePopupView();
-  if (insertion_point->isConnected() && !Form())
+  if (insertion_point.isConnected() && !Form())
     RemoveFromRadioButtonGroup();
   TextControlElement::RemovedFrom(insertion_point);
   DCHECK(!isConnected());

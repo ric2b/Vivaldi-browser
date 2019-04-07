@@ -6,7 +6,7 @@
 
 #include <string.h>
 
-#include "base/base64url.h"
+#include "base/base64.h"
 #include "base/big_endian.h"
 #include "base/numerics/safe_conversions.h"
 #include "net/base/io_buffer.h"
@@ -19,7 +19,7 @@ namespace {
 // maximum record size in TLS and the default maximum frame size in HTTP/2.
 constexpr uint64_t kMaxRecordSize = 16 * 1024;
 
-constexpr char kMiSha256Header[] = "mi-sha256-draft2=";
+constexpr char kMiSha256Header[] = "mi-sha256-03=";
 constexpr size_t kMiSha256HeaderLength = sizeof(kMiSha256Header) - 1;
 
 // Copies as many bytes from |input| as will fit in |output| and advances both.
@@ -34,16 +34,14 @@ size_t CopyClamped(base::span<const char>* input, base::span<char>* output) {
 }  // namespace
 
 MerkleIntegritySourceStream::MerkleIntegritySourceStream(
-    base::StringPiece mi_header_value,
+    base::StringPiece digest_header_value,
     std::unique_ptr<SourceStream> upstream)
     // TODO(ksakamoto): Use appropriate SourceType.
     : net::FilterSourceStream(SourceStream::TYPE_NONE, std::move(upstream)) {
-  // TODO(ksakamoto): Support quoted parameter value.
   std::string next_proof;
-  if (!mi_header_value.starts_with(kMiSha256Header) ||
-      !base::Base64UrlDecode(mi_header_value.substr(kMiSha256HeaderLength),
-                             base::Base64UrlDecodePolicy::DISALLOW_PADDING,
-                             &next_proof) ||
+  if (!digest_header_value.starts_with(kMiSha256Header) ||
+      !base::Base64Decode(digest_header_value.substr(kMiSha256HeaderLength),
+                          &next_proof) ||
       next_proof.size() != SHA256_DIGEST_LENGTH) {
     failed_ = true;
   } else {
@@ -91,7 +89,17 @@ bool MerkleIntegritySourceStream::FilterDataImpl(base::span<char>* output,
   if (record_size_ == 0) {
     base::span<const char> bytes;
     if (!ConsumeBytes(input, 8, &bytes, &storage)) {
-      return !upstream_eof_reached;
+      if (!upstream_eof_reached) {
+        return true;  // Wait for more data later.
+      }
+      if (partial_input_.empty()) {
+        // As a special case, the encoding of an empty payload is itself an
+        // empty message (i.e. it omits the initial record size), and its
+        // integrity proof is SHA-256("\0").
+        final_record_done_ = true;
+        return ProcessRecord({}, final_record_done_, output);
+      }
+      return false;
     }
     uint64_t record_size;
     base::ReadBigEndian(bytes.data(), &record_size);
@@ -124,14 +132,8 @@ bool MerkleIntegritySourceStream::FilterDataImpl(base::span<char>* output,
       }
 
       // The final record is shorter and does not contain a hash. Process all
-      // remaining input the final record.
-      //
-      // TODO(davidben): This matches the previous implementation in that it
-      // allows empty final records, but this does not match the specification
-      // and means some inputs have two valid encodings. However, the
-      // specification's version cannot represent the empty string. Update this
-      // when https://github.com/martinthomson/http-mice/issues/3 is resolved.
-      if (partial_input_.size() > record_size_) {
+      // remaining input as the final record.
+      if (partial_input_.empty() || partial_input_.size() > record_size_) {
         return false;
       }
       record = partial_input_;

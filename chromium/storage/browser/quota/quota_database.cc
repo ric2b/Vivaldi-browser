@@ -16,7 +16,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 #include "sql/meta_table.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
@@ -29,8 +29,8 @@ namespace {
 
 // Definitions for database schema.
 
-const int kCurrentVersion = 5;
-const int kCompatibleVersion = 2;
+const int kQuotaDatabaseCurrentSchemaVersion = 5;
+const int kQuotaDatabaseCompatibleVersion = 2;
 
 const char kHostQuotaTable[] = "HostQuotaTable";
 const char kOriginInfoTable[] = "OriginInfoTable";
@@ -38,30 +38,12 @@ const char kEvictionInfoTable[] = "EvictionInfoTable";
 const char kIsOriginTableBootstrapped[] = "IsOriginTableBootstrapped";
 
 bool VerifyValidQuotaConfig(const char* key) {
-  return (key != NULL &&
+  return (key != nullptr &&
           (!strcmp(key, QuotaDatabase::kDesiredAvailableSpaceKey) ||
            !strcmp(key, QuotaDatabase::kTemporaryQuotaOverrideKey)));
 }
 
 const int kCommitIntervalMs = 30000;
-
-enum OriginType {
-  // This enum is logged to UMA so only append to it - don't change
-  // the meaning of the existing values.
-  OTHER = 0,
-  NONE = 1,
-  GOOGLE_DURABLE = 2,
-  NON_GOOGLE_DURABLE = 3,
-  GOOGLE_UNLIMITED_EXTENSION = 4,
-  NON_GOOGLE_UNLIMITED_EXTENSION = 5,
-  IN_USE = 6,
-
-  MAX_ORIGIN_TYPE
-};
-
-void HistogramOriginType(const OriginType& entry) {
-  UMA_HISTOGRAM_ENUMERATION("Quota.LRUOriginTypes", entry, MAX_ORIGIN_TYPE);
-}
 
 void LogDaysSinceLastAccess(base::Time this_time,
                             const QuotaDatabase::OriginInfoTableEntry& entry) {
@@ -164,7 +146,7 @@ QuotaDatabase::~QuotaDatabase() {
   }
 }
 
-void QuotaDatabase::CloseConnection() {
+void QuotaDatabase::CloseDatabase() {
   meta_table_.reset();
   db_.reset();
 }
@@ -450,37 +432,29 @@ bool QuotaDatabase::GetLRUOrigin(
   if (!LazyOpen(false))
     return false;
 
-  const char* kSql = "SELECT origin FROM OriginInfoTable"
-                     " WHERE type = ?"
-                     " ORDER BY last_access_time ASC";
+  static const char kSql[] =
+      "SELECT origin FROM OriginInfoTable"
+      " WHERE type = ?"
+      " ORDER BY last_access_time ASC";
 
   sql::Statement statement(db_->GetCachedStatement(SQL_FROM_HERE, kSql));
   statement.BindInt(0, static_cast<int>(type));
 
   while (statement.Step()) {
     GURL url(statement.ColumnString(0));
-    if (base::ContainsKey(exceptions, url)) {
-      HistogramOriginType(IN_USE);
+    if (base::ContainsKey(exceptions, url))
+      continue;
+
+    if (special_storage_policy && (
+        special_storage_policy->IsStorageDurable(url) ||
+        special_storage_policy->IsStorageUnlimited(url))) {
       continue;
     }
-    if (special_storage_policy) {
-      bool is_google = url.DomainIs("google.com");
-      if (special_storage_policy->IsStorageDurable(url)) {
-        HistogramOriginType(is_google ? GOOGLE_DURABLE : NON_GOOGLE_DURABLE);
-        continue;
-      }
-      if (special_storage_policy->IsStorageUnlimited(url)) {
-        HistogramOriginType(is_google ? GOOGLE_UNLIMITED_EXTENSION
-                                      : NON_GOOGLE_UNLIMITED_EXTENSION);
-        continue;
-      }
-    }
-    HistogramOriginType(OTHER);
+
     *origin = url;
     return true;
   }
 
-  HistogramOriginType(NONE);
   *origin = GURL();
   return statement.Succeeded();
 }
@@ -556,7 +530,7 @@ bool QuotaDatabase::LazyOpen(bool create_if_needed) {
     return false;
   }
 
-  db_.reset(new sql::Connection);
+  db_.reset(new sql::Database);
   meta_table_.reset(new sql::MetaTable);
 
   db_->set_histogram_tag("Quota");
@@ -594,19 +568,21 @@ bool QuotaDatabase::EnsureDatabaseVersion() {
   static const size_t kIndexCount = arraysize(kIndexes);
   if (!sql::MetaTable::DoesTableExist(db_.get()))
     return CreateSchema(db_.get(), meta_table_.get(),
-                        kCurrentVersion, kCompatibleVersion,
-                        kTables, kTableCount,
+                        kQuotaDatabaseCurrentSchemaVersion,
+                        kQuotaDatabaseCompatibleVersion, kTables, kTableCount,
                         kIndexes, kIndexCount);
 
-  if (!meta_table_->Init(db_.get(), kCurrentVersion, kCompatibleVersion))
+  if (!meta_table_->Init(db_.get(), kQuotaDatabaseCurrentSchemaVersion,
+                         kQuotaDatabaseCompatibleVersion))
     return false;
 
-  if (meta_table_->GetCompatibleVersionNumber() > kCurrentVersion) {
+  if (meta_table_->GetCompatibleVersionNumber() >
+      kQuotaDatabaseCurrentSchemaVersion) {
     LOG(WARNING) << "Quota database is too new.";
     return false;
   }
 
-  if (meta_table_->GetVersionNumber() < kCurrentVersion) {
+  if (meta_table_->GetVersionNumber() < kQuotaDatabaseCurrentSchemaVersion) {
     if (!UpgradeSchema(meta_table_->GetVersionNumber()))
       return ResetSchema();
   }
@@ -622,12 +598,14 @@ bool QuotaDatabase::EnsureDatabaseVersion() {
 }
 
 // static
-bool QuotaDatabase::CreateSchema(
-    sql::Connection* database,
-    sql::MetaTable* meta_table,
-    int schema_version, int compatible_version,
-    const TableSchema* tables, size_t tables_size,
-    const IndexSchema* indexes, size_t indexes_size) {
+bool QuotaDatabase::CreateSchema(sql::Database* database,
+                                 sql::MetaTable* meta_table,
+                                 int schema_version,
+                                 int compatible_version,
+                                 const TableSchema* tables,
+                                 size_t tables_size,
+                                 const IndexSchema* indexes,
+                                 size_t indexes_size) {
   // TODO(kinuko): Factor out the common code to create databases.
   sql::Transaction transaction(database);
   if (!transaction.Begin())
@@ -674,7 +652,7 @@ bool QuotaDatabase::ResetSchema() {
   db_.reset();
   meta_table_.reset();
 
-  if (!sql::Connection::Delete(db_file_path_))
+  if (!sql::Database::Delete(db_file_path_))
     return false;
 
   // So we can't go recursive.

@@ -62,6 +62,14 @@ bool IsResourceHotForCaching(SingleCachedMetadataHandler* cache_handler,
 
 }  // namespace
 
+bool V8CodeCache::HasCodeCache(SingleCachedMetadataHandler* cache_handler) {
+  if (!cache_handler)
+    return false;
+
+  uint32_t code_cache_tag = V8CodeCache::TagForCodeCache(cache_handler);
+  return cache_handler->GetCachedMetadata(code_cache_tag).get();
+}
+
 v8::ScriptCompiler::CachedData* V8CodeCache::CreateCachedData(
     SingleCachedMetadataHandler* cache_handler) {
   DCHECK(cache_handler);
@@ -124,10 +132,7 @@ V8CodeCache::GetCompileOptions(V8CacheOptions cache_options,
                            no_cache_reason);
   }
 
-  uint32_t code_cache_tag = V8CodeCache::TagForCodeCache(cache_handler);
-  scoped_refptr<CachedMetadata> code_cache =
-      cache_handler->GetCachedMetadata(code_cache_tag);
-  if (code_cache) {
+  if (HasCodeCache(cache_handler)) {
     return std::make_tuple(v8::ScriptCompiler::kConsumeCodeCache,
                            ProduceCacheOptions::kNoProduceCache,
                            no_cache_reason);
@@ -225,7 +230,7 @@ void V8CodeCache::ProduceCache(
                       compile_options, cached_data ? cached_data->length : 0),
                   base::Optional<InspectorCompileScriptEvent::V8CacheResult::
                                      ConsumeResult>()),
-              source.Streamer()));
+              source.Streamer(), source.NotStreamingReason()));
       break;
     }
     case ProduceCacheOptions::kNoProduceCache:
@@ -314,7 +319,7 @@ scoped_refptr<CachedMetadata> V8CodeCache::GenerateFullCodeCache(
                   cached_data ? cached_data->length : 0),
               base::Optional<
                   InspectorCompileScriptEvent::V8CacheResult::ConsumeResult>()),
-          false));
+          false, ScriptStreamer::kHasCodeCache));
 
   return cached_metadata;
 }

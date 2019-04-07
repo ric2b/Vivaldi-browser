@@ -6,17 +6,18 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/core/frame/dom_window.h"
+#include "third_party/blink/renderer/core/performance_entry_names.h"
 
 namespace blink {
 
-TaskAttributionTiming::TaskAttributionTiming(String name,
-                                             String container_type,
-                                             String container_src,
-                                             String container_id,
-                                             String container_name,
+TaskAttributionTiming::TaskAttributionTiming(const AtomicString& name,
+                                             const String& container_type,
+                                             const String& container_src,
+                                             const String& container_id,
+                                             const String& container_name,
                                              double start_time,
                                              double finish_time,
-                                             String script_url)
+                                             const String& script_url)
     : PerformanceEntry(name, start_time, finish_time),
       container_type_(container_type),
       container_src_(container_src),
@@ -27,7 +28,7 @@ TaskAttributionTiming::TaskAttributionTiming(String name,
 TaskAttributionTiming::~TaskAttributionTiming() = default;
 
 AtomicString TaskAttributionTiming::entryType() const {
-  return PerformanceEntry::TaskattributionKeyword();
+  return PerformanceEntryNames::taskattribution;
 }
 
 PerformanceEntryType TaskAttributionTiming::EntryTypeEnum() const {

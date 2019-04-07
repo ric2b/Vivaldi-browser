@@ -26,7 +26,9 @@ Host *
   ServerAliveCountMax 5
   ControlMaster auto
   ControlPersist 1m
-  ControlPath /tmp/ssh-%r@%h:%p"""
+  ControlPath /tmp/ssh-%r@%h:%p
+  ConnectTimeout 5
+  """
 
 FVM_TYPE_QCOW = 'qcow'
 FVM_TYPE_SPARSE = 'sparse'
@@ -83,7 +85,7 @@ def _MakeQcowDisk(output_dir, disk_path):
   """Creates a QEMU copy-on-write version of |disk_path| in the output
   directory."""
 
-  qimg_path = os.path.join(common.SDK_ROOT, 'qemu', 'bin', 'qemu-img')
+  qimg_path = os.path.join(common.GetQemuRootForPlatform(), 'bin', 'qemu-img')
   output_path = os.path.join(output_dir,
                              os.path.basename(disk_path) + '.qcow2')
   subprocess.check_call([qimg_path, 'create', '-q', '-f', 'qcow2',
@@ -114,6 +116,9 @@ def ConfigureDataFVM(output_dir, output_type):
                sparse/compressed FVM file."""
 
   logging.debug('Building /data partition FVM file.')
+  # minfs expects absolute paths(bug:
+  #   https://fuchsia.atlassian.net/browse/ZX-2397)
+  output_dir = os.path.abspath(output_dir)
   with tempfile.NamedTemporaryFile() as data_file:
     # Build up the minfs partition data and install keys into it.
     ssh_config, ssh_data = _ProvisionSSH(output_dir)

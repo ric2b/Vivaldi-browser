@@ -6,13 +6,7 @@
 
 namespace audio {
 
-MockGroupMember::MockGroupMember(const base::UnguessableToken& group_id)
-    : group_id_(group_id) {}
-
+MockGroupMember::MockGroupMember() = default;
 MockGroupMember::~MockGroupMember() = default;
-
-const base::UnguessableToken& MockGroupMember::GetGroupId() {
-  return group_id_;
-}
 
 }  // namespace audio

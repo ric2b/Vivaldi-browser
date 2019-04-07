@@ -17,9 +17,9 @@
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
-#include "components/ukm/ukm_source.h"
 #include "components/variations/variations_associated_data.h"
 #include "services/metrics/public/cpp/ukm_decode.h"
+#include "services/metrics/public/cpp/ukm_source.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/metrics_proto/ukm/entry.pb.h"
 #include "third_party/metrics_proto/ukm/report.pb.h"
@@ -138,6 +138,11 @@ GURL SanitizeURL(const GURL& url) {
   // prepopulate data on the page, so don't include their params.
   if (url.SchemeIs(url::kAboutScheme) || url.SchemeIs("chrome")) {
     remove_params.ClearQuery();
+  }
+  if (url.SchemeIs(kExtensionScheme)) {
+    remove_params.ClearPath();
+    remove_params.ClearQuery();
+    remove_params.ClearRef();
   }
   return url.ReplaceComponents(remove_params);
 }
@@ -276,7 +281,7 @@ void UkmRecorderImpl::StoreRecordingsInReport(Report* report) {
     // UpdateSourceURL().
     if (!IsWhitelistedSourceId(kv.first)) {
       // UkmSource should not keep initial_url for non-navigation source IDs.
-      DCHECK(kv.second->initial_url().is_empty());
+      DCHECK_EQ(1u, kv.second->urls().size());
       if (!url_whitelist.count(kv.second->url().spec())) {
         RecordDroppedSource(DroppedDataReason::NOT_MATCHED);
         unmatched_sources++;
@@ -391,64 +396,20 @@ bool UkmRecorderImpl::ShouldRestrictToWhitelistedEntries() const {
 void UkmRecorderImpl::UpdateSourceURL(SourceId source_id,
                                       const GURL& unsanitized_url) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  if (!recording_enabled_) {
-    RecordDroppedSource(DroppedDataReason::RECORDING_DISABLED);
+  const GURL sanitized_url = SanitizeURL(unsanitized_url);
+  if (!ShouldRecordUrl(source_id, sanitized_url))
     return;
-  }
 
-  if (ShouldRestrictToWhitelistedSourceIds() &&
-      !IsWhitelistedSourceId(source_id)) {
-    RecordDroppedSource(DroppedDataReason::NOT_WHITELISTED);
+  // TODO(csharrison): These checks can probably move to ShouldRecordUrl.
+
+  if (base::ContainsKey(recordings_.sources, source_id))
     return;
-  }
-
-  if (unsanitized_url.is_empty()) {
-    RecordDroppedSource(DroppedDataReason::EMPTY_URL);
-    return;
-  }
-
-  recordings_.source_counts.observed++;
-  if (GetSourceIdType(source_id) == SourceIdType::NAVIGATION_ID)
-    recordings_.source_counts.navigation_sources++;
-
-  GURL url = SanitizeURL(unsanitized_url);
-
-  if (!HasSupportedScheme(url)) {
-    RecordDroppedSource(DroppedDataReason::UNSUPPORTED_URL_SCHEME);
-    DVLOG(2) << "Dropped Unsupported UKM URL:" << source_id << ":"
-             << url.spec();
-    return;
-  }
-
-  // Extension URLs need to be specifically enabled and the extension synced.
-  if (url.SchemeIs(kExtensionScheme)) {
-    if (!extensions_enabled_) {
-      RecordDroppedSource(DroppedDataReason::EXTENSION_URLS_DISABLED);
-      return;
-    }
-    if (!is_webstore_extension_callback_ ||
-        !is_webstore_extension_callback_.Run(url.host_piece())) {
-      RecordDroppedSource(DroppedDataReason::EXTENSION_NOT_SYNCED);
-      return;
-    }
-    url = url.GetWithEmptyPath();
-  }
-
-  // Update the pre-existing source if there is any. This happens when the
-  // initial URL is different from the committed URL for the same source, e.g.,
-  // when there is redirection.
-  if (base::ContainsKey(recordings_.sources, source_id)) {
-    recordings_.sources[source_id]->UpdateUrl(url);
-    return;
-  }
 
   if (recordings_.sources.size() >= GetMaxSources()) {
     RecordDroppedSource(DroppedDataReason::MAX_HIT);
     return;
   }
-  recordings_.sources.emplace(source_id,
-                              std::make_unique<UkmSource>(source_id, url));
+  RecordSource(std::make_unique<UkmSource>(source_id, sanitized_url));
 }
 
 void UkmRecorderImpl::UpdateAppURL(SourceId source_id, const GURL& url) {
@@ -457,6 +418,86 @@ void UkmRecorderImpl::UpdateAppURL(SourceId source_id, const GURL& url) {
     return;
   }
   UpdateSourceURL(source_id, url);
+}
+
+void UkmRecorderImpl::RecordNavigation(
+    SourceId source_id,
+    const UkmSource::NavigationData& unsanitized_navigation_data) {
+  DCHECK(GetSourceIdType(source_id) == SourceIdType::NAVIGATION_ID);
+  // TODO(csharrison): Consider changing this behavior so the Source isn't event
+  // recorded at all if the final URL in |unsanitized_navigation_data| should
+  // not be recorded.
+  std::vector<GURL> urls;
+  for (const GURL& url : unsanitized_navigation_data.urls) {
+    const GURL sanitized_url = SanitizeURL(url);
+    if (ShouldRecordUrl(source_id, sanitized_url))
+      urls.push_back(std::move(sanitized_url));
+  }
+
+  // None of the URLs passed the ShouldRecordUrl check, so do not create a new
+  // Source for them.
+  if (urls.empty())
+    return;
+
+  UkmSource::NavigationData sanitized_navigation_data =
+      unsanitized_navigation_data.CopyWithSanitizedUrls(urls);
+  // TODO(csharrison): This check can probably move to ShouldRecordUrl.
+  DCHECK(!base::ContainsKey(recordings_.sources, source_id));
+  if (recordings_.sources.size() >= GetMaxSources()) {
+    RecordDroppedSource(DroppedDataReason::MAX_HIT);
+    return;
+  }
+  RecordSource(
+      std::make_unique<UkmSource>(source_id, sanitized_navigation_data));
+}
+
+bool UkmRecorderImpl::ShouldRecordUrl(SourceId source_id,
+                                      const GURL& sanitized_url) const {
+  if (!recording_enabled_) {
+    RecordDroppedSource(DroppedDataReason::RECORDING_DISABLED);
+    return false;
+  }
+
+  if (ShouldRestrictToWhitelistedSourceIds() &&
+      !IsWhitelistedSourceId(source_id)) {
+    RecordDroppedSource(DroppedDataReason::NOT_WHITELISTED);
+    return false;
+  }
+
+  if (sanitized_url.is_empty()) {
+    RecordDroppedSource(DroppedDataReason::EMPTY_URL);
+    return false;
+  }
+
+  if (!HasSupportedScheme(sanitized_url)) {
+    RecordDroppedSource(DroppedDataReason::UNSUPPORTED_URL_SCHEME);
+    DVLOG(2) << "Dropped Unsupported UKM URL:" << source_id << ":"
+             << sanitized_url.spec();
+    return false;
+  }
+
+  // Extension URLs need to be specifically enabled and the extension synced.
+  if (sanitized_url.SchemeIs(kExtensionScheme)) {
+    DCHECK_EQ(sanitized_url.GetWithEmptyPath(), sanitized_url);
+    if (!extensions_enabled_) {
+      RecordDroppedSource(DroppedDataReason::EXTENSION_URLS_DISABLED);
+      return false;
+    }
+    if (!is_webstore_extension_callback_ ||
+        !is_webstore_extension_callback_.Run(sanitized_url.host_piece())) {
+      RecordDroppedSource(DroppedDataReason::EXTENSION_NOT_SYNCED);
+      return false;
+    }
+  }
+  return true;
+}
+
+void UkmRecorderImpl::RecordSource(std::unique_ptr<UkmSource> source) {
+  SourceId source_id = source->id();
+  if (GetSourceIdType(source_id) == SourceIdType::NAVIGATION_ID)
+    recordings_.source_counts.navigation_sources++;
+  recordings_.source_counts.observed++;
+  recordings_.sources.emplace(source_id, std::move(source));
 }
 
 void UkmRecorderImpl::AddEntry(mojom::UkmEntryPtr entry) {

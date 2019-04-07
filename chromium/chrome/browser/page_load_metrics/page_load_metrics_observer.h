@@ -12,11 +12,11 @@
 #include "base/optional.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
-#include "components/ukm/ukm_source.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/resource_type.h"
 #include "net/base/host_port_pair.h"
+#include "services/metrics/public/cpp/ukm_source.h"
 #include "third_party/blink/public/platform/web_input_event.h"
 #include "url/gurl.h"
 
@@ -420,13 +420,11 @@ class PageLoadMetricsObserver {
   virtual void OnFeaturesUsageObserved(const mojom::PageLoadFeatures& features,
                                        const PageLoadExtraInfo& extra_info) {}
 
-  // Invoked when data use is observed for the page load across all frames.
-  // These bytes are the additional bytes reported since the last call to
-  // OnDataUseObserved. |received_data_length| is the received network bytes.
-  // |data_reduction_proxy_bytes_saved| is the bytes saved by the data reduction
-  // proxy, which could be negative if the proxy had inflated the resource.
-  virtual void OnDataUseObserved(int64_t received_data_length,
-                                 int64_t data_reduction_proxy_bytes_saved) {}
+  // Invoked when there is data use for loading a resource on the page
+  // acrosss all frames. This only contains resources that have had new
+  // data use since the last callback.
+  virtual void OnResourceDataUseObserved(
+      const std::vector<mojom::ResourceDataUpdatePtr>& resources) {}
 
   // Invoked when a media element starts playing.
   virtual void MediaStartedPlaying(

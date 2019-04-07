@@ -8,14 +8,18 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "components/autofill/core/browser/webdata/autocomplete_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autofill_profile_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autofill_profile_syncable_service.h"
+#include "components/autofill/core/browser/webdata/autofill_wallet_metadata_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autofill_wallet_metadata_syncable_service.h"
+#include "components/autofill/core/browser/webdata/autofill_wallet_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autofill_wallet_syncable_service.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/browser_sync/profile_sync_components_factory_impl.h"
 #include "components/browser_sync/profile_sync_service.h"
@@ -46,6 +50,7 @@
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "ios/chrome/browser/bookmarks/bookmark_sync_service_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state_manager.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
@@ -156,11 +161,18 @@ IOSChromeSyncClient::~IOSChromeSyncClient() {}
 void IOSChromeSyncClient::Initialize() {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
 
-  web_data_service_ =
+  profile_web_data_service_ =
       ios::WebDataServiceFactory::GetAutofillWebDataForBrowserState(
           browser_state_, ServiceAccessType::IMPLICIT_ACCESS);
-  db_thread_ =
-      web_data_service_ ? web_data_service_->GetDBTaskRunner() : nullptr;
+  account_web_data_service_ =
+      base::FeatureList::IsEnabled(
+          autofill::features::kAutofillEnableAccountWalletStorage)
+          ? ios::WebDataServiceFactory::GetAutofillWebDataForAccount(
+                browser_state_, ServiceAccessType::IMPLICIT_ACCESS)
+          : nullptr;
+  db_thread_ = profile_web_data_service_
+                   ? profile_web_data_service_->GetDBTaskRunner()
+                   : nullptr;
   password_store_ = IOSChromePasswordStoreFactory::GetForBrowserState(
       browser_state_, ServiceAccessType::IMPLICIT_ACCESS);
 
@@ -171,7 +183,8 @@ void IOSChromeSyncClient::Initialize() {
         ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET,
         prefs::kSavingBrowserHistoryDisabled,
         web::WebThread::GetTaskRunnerForThread(web::WebThread::UI), db_thread_,
-        web_data_service_, password_store_));
+        profile_web_data_service_, account_web_data_service_, password_store_,
+        ios::BookmarkSyncServiceFactory::GetForBrowserState(browser_state_)));
   }
 }
 
@@ -275,19 +288,19 @@ IOSChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
     case syncer::AUTOFILL_PROFILE:
     case syncer::AUTOFILL_WALLET_DATA:
     case syncer::AUTOFILL_WALLET_METADATA: {
-      if (!web_data_service_)
+      if (!profile_web_data_service_)
         return base::WeakPtr<syncer::SyncableService>();
       if (type == syncer::AUTOFILL_PROFILE) {
         return autofill::AutofillProfileSyncableService::FromWebDataService(
-                   web_data_service_.get())
+                   profile_web_data_service_.get())
             ->AsWeakPtr();
       } else if (type == syncer::AUTOFILL_WALLET_METADATA) {
         return autofill::AutofillWalletMetadataSyncableService::
-            FromWebDataService(web_data_service_.get())
+            FromWebDataService(profile_web_data_service_.get())
                 ->AsWeakPtr();
       }
       return autofill::AutofillWalletSyncableService::FromWebDataService(
-                 web_data_service_.get())
+                 profile_web_data_service_.get())
           ->AsWeakPtr();
     }
     case syncer::HISTORY_DELETE_DIRECTIVES: {
@@ -305,7 +318,7 @@ IOSChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       return favicons ? favicons->AsWeakPtr()
                       : base::WeakPtr<syncer::SyncableService>();
     }
-    case syncer::ARTICLES: {
+    case syncer::DEPRECATED_ARTICLES: {
       // DomDistillerService is used in iOS ReadingList. The distilled articles
       // are saved separately and must not be synced.
       // Add a not reached to avoid having ARTICLES sync be enabled silently.
@@ -332,44 +345,37 @@ IOSChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
   switch (type) {
     case syncer::DEVICE_INFO:
       return ProfileSyncServiceFactory::GetForBrowserState(browser_state_)
-          ->GetDeviceInfoSyncControllerDelegateOnUIThread();
+          ->GetDeviceInfoSyncControllerDelegate();
     case syncer::READING_LIST: {
       ReadingListModel* reading_list_model =
           ReadingListModelFactory::GetForBrowserState(browser_state_);
       return reading_list_model->GetModelTypeSyncBridge()
           ->change_processor()
-          ->GetControllerDelegateOnUIThread();
-    }
-    case syncer::AUTOFILL:
-      return autofill::AutocompleteSyncBridge::FromWebDataService(
-                 web_data_service_.get())
-          ->change_processor()
-          ->GetControllerDelegateOnUIThread();
-    case syncer::AUTOFILL_PROFILE:
-      return autofill::AutofillProfileSyncBridge::FromWebDataService(
-                 web_data_service_.get())
-          ->change_processor()
-          ->GetControllerDelegateOnUIThread();
-    case syncer::TYPED_URLS: {
-      history::HistoryService* history =
-          ios::HistoryServiceFactory::GetForBrowserState(
-              browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
-      return history ? history->GetTypedURLSyncBridge()
-                           ->change_processor()
-                           ->GetControllerDelegateOnUIThread()
-                     : base::WeakPtr<syncer::ModelTypeControllerDelegate>();
+          ->GetControllerDelegate();
     }
     case syncer::USER_CONSENTS:
       return ConsentAuditorFactory::GetForBrowserState(browser_state_)
-          ->GetControllerDelegateOnUIThread();
+          ->GetControllerDelegate();
     case syncer::USER_EVENTS:
       return IOSUserEventServiceFactory::GetForBrowserState(browser_state_)
           ->GetSyncBridge()
           ->change_processor()
-          ->GetControllerDelegateOnUIThread();
+          ->GetControllerDelegate();
     case syncer::SESSIONS:
       return ProfileSyncServiceFactory::GetForBrowserState(browser_state_)
-          ->GetSessionSyncControllerDelegateOnUIThread();
+          ->GetSessionSyncControllerDelegate();
+
+    // We don't exercise this function for certain datatypes, because their
+    // controllers get the delegate elsewhere.
+    case syncer::AUTOFILL:
+    case syncer::AUTOFILL_PROFILE:
+    case syncer::AUTOFILL_WALLET_DATA:
+    case syncer::AUTOFILL_WALLET_METADATA:
+    case syncer::BOOKMARKS:
+    case syncer::TYPED_URLS:
+      NOTREACHED();
+      return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
+
     default:
       NOTREACHED();
       return base::WeakPtr<syncer::ModelTypeControllerDelegate>();

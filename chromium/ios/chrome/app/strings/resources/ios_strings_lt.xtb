@@ -4,6 +4,7 @@
 <translation id="1016495303386450659">Elementas atnaujintas</translation>
 <translation id="1047726139967079566">Įtraukti šį puslapį į žymes...</translation>
 <translation id="1049743911850919806">Inkognito</translation>
+<translation id="1063454504051558093">Naudoti kitą slaptažodį...</translation>
 <translation id="1076421457278169141">Kodas nuskaitytas</translation>
 <translation id="1084365883616172403">„Facebook“ įrašas paskelbtas.</translation>
 <translation id="1104948393051856124">Sutikti ir tęsti</translation>
@@ -36,7 +37,6 @@
 <translation id="145015347812617860">Elementų: <ph name="COUNT" /></translation>
 <translation id="1491277525950327607">Dukart palieskite, kad perjungtumėte nustatymą</translation>
 <translation id="152234381334907219">Niekada neišsaugota</translation>
-<translation id="1532451416480227577">Rodyti „Google Pay“ adresus ir kredito korteles</translation>
 <translation id="1540800554400757039">1 adreso eil.</translation>
 <translation id="1545749641540134597">Nuskaitykite QR kodą</translation>
 <translation id="1558704936695638228">Paspauskite ir palaikykite, kad būtų pateikta daugiau skirtukų parinkčių</translation>
@@ -44,16 +44,15 @@
 <translation id="1582732959743469162">Bus sustabdytas dabartinis atsisiuntimas.</translation>
 <translation id="1605658421715042784">Kopijuoti vaizdą</translation>
 <translation id="1612730193129642006">Rodyti skirtuko tinklelį</translation>
+<translation id="162035744160882748">Įjunkite sinchronizavimą, suasmeninimą ir kitas „Google“ paslaugas</translation>
 <translation id="1644574205037202324">Istorija</translation>
-<translation id="1646446875146297738">Įgalinus „Nestebėti“, į naršymo srautą bus įtraukta užklausa. Bet koks poveikis priklauso nuo to, ar svetainė atsako į užklausą ir kaip ji interpretuojama.
-
-Pvz., kai kurios svetainės gali atsakyti į šią užklausą parodydamos skelbimus, nepagrįstus kitomis svetainėmis, kuriose lankėtės. Daugybė svetainių vis tiek rinks ir naudos jūsų naršymo duomenis, pvz., siekdamos pagerinti saugumą, teikti svetainėse turinį, paslaugas, skelbimus ir rekomendacijas bei generuoti ataskaitų statistiką. <ph name="BEGIN_LINK" />Sužinokite daugiau<ph name="END_LINK" /></translation>
 <translation id="1657011748321897393">Bendrinant įvyko klaida, nes nesate prisijungę prie tinklo.</translation>
 <translation id="165877110639533037">Nėra atidarytų skirtukų</translation>
 <translation id="1687475363370981210">Pažymėti visus kaip skaitytus</translation>
 <translation id="1690731385917361335">Nėra jokių elementų</translation>
 <translation id="1700629756560807968">Pasirinkta: <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /></translation>
 <translation id="1740468249224277719">Dukart palieskite, kad įdiegtumėte.</translation>
+<translation id="1746815479209538200">Norėdami naršyti žiniatinklyje, pridėkite naują skirtuką.</translation>
 <translation id="17513872634828108">Atidaryti skirtukai</translation>
 <translation id="1752547299766512813">Išs. slaptažod.</translation>
 <translation id="1753905327828125965">Dažniausiai lankomi</translation>
@@ -64,6 +63,7 @@ Pvz., kai kurios svetainės gali atsakyti į šią užklausą parodydamos skelbi
 <translation id="1876721852596493031">Siųsti naud. duom.</translation>
 <translation id="1886928167269928266">Laiko pradžia</translation>
 <translation id="1911619930368729126">Įkelti į „Google“ diską</translation>
+<translation id="191179954310195971">Kitos „Google“ paslaugos</translation>
 <translation id="1941314575388338491">Dukart palieskite, kad nukopijuotumėte.</translation>
 <translation id="1952728750904661634">Prisijunkite naudodami valdomą paskyrą</translation>
 <translation id="1974060860693918893">Išplėstiniai</translation>
@@ -85,7 +85,6 @@ Pvz., kai kurios svetainės gali atsakyti į šią užklausą parodydamos skelbi
 <translation id="2320166752086256636">Slėpti klaviatūrą</translation>
 <translation id="2339560363438331454">Sinchron. ir „Google“ paslaugos</translation>
 <translation id="2351097562818989364">Vertimo nustatymai buvo nustatyti iš naujo.</translation>
-<translation id="2354750644801399986">Nestebėti</translation>
 <translation id="2359808026110333948">Tęsti</translation>
 <translation id="2381405137052800939">Pagrindiniai</translation>
 <translation id="2386793615875593361">Pasirinkta: 1</translation>
@@ -119,7 +118,6 @@ Pvz., kai kurios svetainės gali atsakyti į šią užklausą parodydamos skelbi
 <translation id="2870560284913253234">Svetainė</translation>
 <translation id="2871695793448672541">Paslėptas slaptažodis</translation>
 <translation id="2898963176829412617">Naujas aplankas...</translation>
-<translation id="2903493209154104877">Adresai</translation>
 <translation id="2909437209446960244">Naujausi skirtukai</translation>
 <translation id="2916171785467530738">Automatiškai užbaigti paieškas ir URL</translation>
 <translation id="291754862089661335">QR arba brūkšninis kodas turėtų būti rodomas šiame rėmelyje</translation>
@@ -166,10 +164,12 @@ Pvz., kai kurios svetainės gali atsakyti į šią užklausą parodydamos skelbi
 <translation id="3588820906588687999">Atidaryti vaizdą naujo skirtuko lape</translation>
 <translation id="3603009562372709545">Kopijuoti nuorodos URL</translation>
 <translation id="3607167657931203000">Autom. pild. duom.</translation>
+<translation id="360930808415985584">Sinchronizavimo, suasmeninimo ir kitų funkcijų valdymas</translation>
 <translation id="3609785682760573515">Sinchronizuojama...</translation>
 <translation id="3628119975092896051">Skaitymo sąrašas pasiekiamas neprisijungus. Kad pridėtumėte puslapį prie skaitymo sąrašo, palieskite <ph name="SHARE_OPENING_ICON" />.</translation>
 <translation id="3638472932233958418">Iš anksto įk. tinkl.</translation>
 <translation id="3691593122358196899">Sukurta „<ph name="FOLDER_TITLE" />“ žymė</translation>
+<translation id="3765471630796399471">Naudokite kitą slaptažodį</translation>
 <translation id="3771033907050503522">Inkognito skirt.</translation>
 <translation id="3779810277399252432">Nėra interneto ryšio.</translation>
 <translation id="3783017676699494206">Išsaugoti vaizdą</translation>
@@ -194,6 +194,7 @@ Pvz., kai kurios svetainės gali atsakyti į šią užklausą parodydamos skelbi
 <translation id="4124987746317609294">Laikotarpis</translation>
 <translation id="4172051516777682613">Visada rodyti</translation>
 <translation id="418156467088430727">Žiūrėti neprisij. naudoj. versiją naujame skirtuke</translation>
+<translation id="4192273449750167573">Peržiūrėkite nustatymus kitame ekrane</translation>
 <translation id="4237682350741091554">Tvarkykite „Chrome“ sinchronizavimo ir suasmeninimo funkcijas skiltyje <ph name="BEGIN_LINK" />„Nustatymai“<ph name="END_LINK" /></translation>
 <translation id="424315890655130736">Slaptafrazės įvedimas</translation>
 <translation id="4272631900155121838">Jei norite nuskaityti QR kodą, nustatymuose įgalinkite fotoaparatą</translation>
@@ -211,6 +212,7 @@ Pvz., kai kurios svetainės gali atsakyti į šią užklausą parodydamos skelbi
 <translation id="4508750114462689118">Uždaryti prisijungimo reklamą</translation>
 <translation id="4526249700380860531">Peržiūrėkite ir tvarkykite išsaugotus slaptažodžius apsilankę adresu <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Bandykite prisijungti dar kartą.</translation>
+<translation id="4541241553780729349">Su „Google“ sinchronizuojami duomenys ir naudojamos funkcijos nepasikeis</translation>
 <translation id="457386861538956877">Daugiau...</translation>
 <translation id="461440297010471931">Ieškoma naudojant „Google“</translation>
 <translation id="4619615317237390068">Skirtukai iš kitų įrenginių</translation>
@@ -245,9 +247,9 @@ Duomenys užšifruoti naudojant slaptafrazę. Įveskite ją, kad pradėtumėte s
 <translation id="5186185447130319458">Privatu</translation>
 <translation id="5190835502935405962">Žymių juosta</translation>
 <translation id="5197255632782567636">Internetas</translation>
+<translation id="5215116848420601511">„Google Pay“ naudojami mokėjimo metodai ir adresai</translation>
 <translation id="5228579091201413441">Įgalinti sinchronizavimą</translation>
 <translation id="5244474230056479698">Sinchronizavimas su <ph name="EMAIL" /></translation>
-<translation id="527973086555161537">Atidarykite skirtuką, kad galėtumėte privačiai naršyti žiniatinklyje.</translation>
 <translation id="5300589172476337783">Rodyti</translation>
 <translation id="5317780077021120954">Išsaugoti</translation>
 <translation id="5327248766486351172">Pavadinimas</translation>
@@ -284,8 +286,10 @@ Be to, reikia įgalinti „Handoff“ nustatymų skiltyje „Bendrieji“, o įr
 <translation id="5938160824633642847">Jūsų įrenginys beveik pilnas. Atlaisvinkite vietos ir bandykite dar kartą.</translation>
 <translation id="5948291296578561264">Taip galėsite išsaugoti nuotraukas nuotraukų bibliotekoje.</translation>
 <translation id="5955891643922670672">Peržiūros neprisijungus versija</translation>
+<translation id="5957613098218939406">Daugiau parinkčių</translation>
 <translation id="5964480694698977962">Kurti naują inkognito skirtuką.</translation>
 <translation id="5965679971710331625">Esate prisijungę</translation>
+<translation id="5979837087407522202">Ieškoti slaptažodžių</translation>
 <translation id="5982717868370722439">Pridėti esamus duomenis prie <ph name="USER_EMAIL" />.</translation>
 <translation id="6012140227487808125">Šifruojama...</translation>
 <translation id="6021332621416007159">Atidaryti...</translation>
@@ -315,6 +319,7 @@ Be to, reikia įgalinti „Handoff“ nustatymų skiltyje „Bendrieji“, o įr
 <translation id="6344783595350022745">Išvalyti tekstą</translation>
 <translation id="6346549652287021269">Pradėti naują atsisiuntimą?</translation>
 <translation id="6362362396625799311">Nėra inkognito skirtukų</translation>
+<translation id="6363526231572697780">Nėra naudotojo vardo</translation>
 <translation id="6374469231428023295">Bandyti dar kartą</translation>
 <translation id="6380866119319257197">Jei pamiršote slaptafr. arba norite pakeisti šį nust., <ph name="BEGIN_LINK" />iš naujo nust. sinchr.<ph name="END_LINK" /></translation>
 <translation id="6389470377220713856">Vardas kortel.</translation>
@@ -330,7 +335,6 @@ Be to, reikia įgalinti „Handoff“ nustatymų skiltyje „Bendrieji“, o įr
 <translation id="6464071786529933911">Atid. nauj. ink. skirtuk.</translation>
 <translation id="6482629121755362506">Ištrinta elementų: <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /></translation>
 <translation id="6541915733953096570">Pastaroji valanda</translation>
-<translation id="6570040839871198836">Aut. pild. f.</translation>
 <translation id="6656103420185847513">Redaguoti aplanką</translation>
 <translation id="6657585470893396449">Slaptažodis</translation>
 <translation id="667999046851023355">Dokumentas</translation>
@@ -343,6 +347,7 @@ Be to, reikia įgalinti „Handoff“ nustatymų skiltyje „Bendrieji“, o įr
 <translation id="6797885426782475225">Paieška balsu</translation>
 <translation id="6807889908376551050">Rodyti viską...</translation>
 <translation id="681368974849482173">Elementas sukurtas</translation>
+<translation id="685040365210406336">Neatlikti jokių pakeitimų</translation>
 <translation id="6896758677409633944">Kopijuoti</translation>
 <translation id="6903907808598579934">Įjungti sinchronizavimą</translation>
 <translation id="6914783257214138813">Jūsų slaptažodžiai bus matomi visiems, kurie gali peržiūrėti eksportuotą failą.</translation>
@@ -372,6 +377,7 @@ Be to, reikia įgalinti „Handoff“ nustatymų skiltyje „Bendrieji“, o įr
 <translation id="7336264872878993241">Atsisiųsta <ph name="PERCENT" /> proc.</translation>
 <translation id="7346909386216857016">Gerai, supratau</translation>
 <translation id="7400418766976504921">URL adresas</translation>
+<translation id="741204030948306876">Taip, sutinku</translation>
 <translation id="7425346204213733349">Žymių, istorijos, slaptažodžių ir kitų nustatymų pakeitimai nebebus sinchronizuojami su „Google“ paskyra. Tačiau esami duomenys ir toliau bus saugomi „Google“ paskyroje.</translation>
 <translation id="744343212394640790">Ne <ph name="EMAIL" /></translation>
 <translation id="7454057999980797137">Valst. / apyg.</translation>
@@ -389,12 +395,14 @@ Be to, reikia įgalinti „Handoff“ nustatymų skiltyje „Bendrieji“, o įr
 <translation id="7638584964844754484">Neteisinga slaptafrazė</translation>
 <translation id="7649070708921625228">Žinynas</translation>
 <translation id="7658239707568436148">Atšaukti</translation>
+<translation id="766891008101699113">Norėdami privačiai naršyti žiniatinklyje, pridėkite naują skirtuką.</translation>
 <translation id="7671141431838911305">ĮDIEGTI</translation>
 <translation id="7765158879357617694">Perkelti</translation>
 <translation id="7769602470925380267">Sutikti ir atsijungti</translation>
 <translation id="7772032839648071052">Patvirtinti slaptafrazę</translation>
+<translation id="7781829728241885113">Vakar</translation>
 <translation id="780301667611848630">Ačiū, ne</translation>
-<translation id="7830720446622801252">Nesuasmenintos paslaugos</translation>
+<translation id="7840771868269352570">Pasirinkti elementai bus pašalinti.</translation>
 <translation id="7856733331829174190">Nepavyko atsisiųsti</translation>
 <translation id="7859704718976024901">Naršymo istorija</translation>
 <translation id="7918293828610777738">Skaitymo sąrašas pasiekiamas neprisijungus. Kad pridėtumėte puslapį prie skaitymo sąrašo, palieskite <ph name="SHARE_OPENING_ICON" />, tada „<ph name="READ_LATER_TEXT" />“.</translation>
@@ -415,11 +423,9 @@ Be to, reikia įgalinti „Handoff“ nustatymų skiltyje „Bendrieji“, o įr
 <translation id="8080028325999236607">Uždaryti visus skirtukus</translation>
 <translation id="8114753159095730575">Galima atsisiųsti failą. Parinktys pasiekiamos netoli ekrano apačios.</translation>
 <translation id="8160722851663543621">Numatytajam paieškos varikliui siunčiamos į adreso juostą ir paieškos laukelį įvestos paieškos ir kai kurie slapukai</translation>
-<translation id="8178325540017397816">Pasirinkti elementai bus pašalinti</translation>
 <translation id="8205564605687841303">Atšaukti</translation>
 <translation id="8225985093977202398">Talp. vaiz. ir fail.</translation>
 <translation id="8261506727792406068">Ištrinti</translation>
-<translation id="8272426682713568063">Kredito kortelės</translation>
 <translation id="8281781826761538115">Numatytoji – <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8328777765163860529">Uždaryti viską</translation>
 <translation id="8381750437846184350">Valdykite, kaip „Google“ turėtų naudoti jūsų naršymo istoriją, kad suasmenintų Paiešką, skelbimus ir kitas „Google“ paslaugas</translation>

@@ -31,17 +31,25 @@
 #include "content/browser/indexed_db/indexed_db_tracing.h"
 #include "content/browser/indexed_db/indexed_db_transaction.h"
 #include "content/browser/indexed_db/indexed_db_value.h"
-#include "content/common/indexed_db/indexed_db_constants.h"
-#include "content/common/indexed_db/indexed_db_key_path.h"
-#include "content/common/indexed_db/indexed_db_key_range.h"
 #include "content/public/common/content_switches.h"
+#include "ipc/ipc_channel.h"
 #include "storage/browser/blob/blob_data_handle.h"
+#include "third_party/blink/public/common/indexeddb/indexeddb_key_path.h"
+#include "third_party/blink/public/common/indexeddb/indexeddb_key_range.h"
+#include "third_party/blink/public/common/indexeddb/indexeddb_metadata.h"
 #include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_exception.h"
 #include "third_party/leveldatabase/env_chromium.h"
 #include "url/origin.h"
 
 using base::ASCIIToUTF16;
 using base::Int64ToString16;
+using blink::IndexedDBDatabaseMetadata;
+using blink::IndexedDBIndexKeys;
+using blink::IndexedDBIndexMetadata;
+using blink::IndexedDBKey;
+using blink::IndexedDBKeyPath;
+using blink::IndexedDBKeyRange;
+using blink::IndexedDBObjectStoreMetadata;
 using blink::kWebIDBKeyTypeNumber;
 using leveldb::Status;
 
@@ -469,8 +477,18 @@ IndexedDBDatabase::~IndexedDBDatabase() {
   DCHECK(pending_requests_.empty());
 }
 
-size_t IndexedDBDatabase::GetMaxMessageSizeInBytes() const {
-  return kMaxIDBMessageSizeInBytes;
+// kIDBMaxMessageSize is defined based on the original
+// IPC::Channel::kMaximumMessageSize value.  We use kIDBMaxMessageSize to limit
+// the size of arguments we pass into our Mojo calls.  We want to ensure this
+// value is always no bigger than the current kMaximumMessageSize value which
+// also ensures it is always no bigger than the current Mojo message size limit.
+static_assert(
+    blink::mojom::kIDBMaxMessageSize <= IPC::Channel::kMaximumMessageSize,
+    "kIDBMaxMessageSize is bigger than IPC::Channel::kMaximumMessageSize");
+
+size_t IndexedDBDatabase::GetUsableMessageSizeInBytes() const {
+  return blink::mojom::kIDBMaxMessageSize -
+         blink::mojom::kIDBMaxMessageOverhead;
 }
 
 std::unique_ptr<IndexedDBConnection> IndexedDBDatabase::CreateConnection(
@@ -816,7 +834,7 @@ void IndexedDBDatabase::FilterObservation(IndexedDBTransaction* transaction,
           !observer->IsRecordingObjectStore(object_store_id))
         continue;
       if (!recorded) {
-        auto observation = ::indexed_db::mojom::Observation::New();
+        auto observation = blink::mojom::IDBObservation::New();
         observation->object_store_id = object_store_id;
         observation->type = type;
         if (type != blink::kWebIDBClear)
@@ -824,14 +842,14 @@ void IndexedDBDatabase::FilterObservation(IndexedDBTransaction* transaction,
         transaction->AddObservation(connection->id(), std::move(observation));
         recorded = true;
       }
-      ::indexed_db::mojom::ObserverChangesPtr& changes =
+      blink::mojom::IDBObserverChangesPtr& changes =
           *transaction->GetPendingChangesForConnection(connection->id());
 
       changes->observation_index_map[observer->id()].push_back(
           changes->observations.size() - 1);
       if (observer->include_transaction() &&
           !base::ContainsKey(changes->transaction_map, observer->id())) {
-        auto mojo_transaction = ::indexed_db::mojom::ObserverTransaction::New();
+        auto mojo_transaction = blink::mojom::IDBObserverTransaction::New();
         mojo_transaction->id = connection->NewObserverTransactionId();
         mojo_transaction->scope.insert(mojo_transaction->scope.end(),
                                        observer->object_store_ids().begin(),
@@ -851,14 +869,14 @@ void IndexedDBDatabase::FilterObservation(IndexedDBTransaction* transaction,
 }
 
 void IndexedDBDatabase::SendObservations(
-    std::map<int32_t, ::indexed_db::mojom::ObserverChangesPtr> changes_map) {
+    std::map<int32_t, blink::mojom::IDBObserverChangesPtr> changes_map) {
   for (auto* conn : connections_) {
     auto it = changes_map.find(conn->id());
     if (it == changes_map.end())
       continue;
 
     // Start all of the transactions.
-    ::indexed_db::mojom::ObserverChangesPtr& changes = it->second;
+    blink::mojom::IDBObserverChangesPtr& changes = it->second;
     for (const auto& transaction_pair : changes->transaction_map) {
       std::set<int64_t> scope(transaction_pair.second->scope.begin(),
                               transaction_pair.second->scope.end());
@@ -1047,6 +1065,11 @@ Status IndexedDBDatabase::GetOperation(
   return s;
 }
 
+static_assert(sizeof(size_t) >= sizeof(int32_t),
+              "Size of size_t is less than size of int32");
+static_assert(blink::mojom::kIDBMaxMessageOverhead <= INT32_MAX,
+              "kIDBMaxMessageOverhead is more than INT32_MAX");
+
 Status IndexedDBDatabase::GetAllOperation(
     int64_t object_store_id,
     int64_t index_id,
@@ -1114,7 +1137,7 @@ Status IndexedDBDatabase::GetAllOperation(
   bool generated_key = object_store_metadata.auto_increment &&
                        !object_store_metadata.key_path.IsNull();
 
-  size_t response_size = kMaxIDBMessageOverhead;
+  size_t response_size = blink::mojom::kIDBMaxMessageOverhead;
   int64_t num_found_items = 0;
   while (num_found_items++ < max_count) {
     bool cursor_valid;
@@ -1148,7 +1171,7 @@ Status IndexedDBDatabase::GetAllOperation(
       response_size += return_key.size_estimate();
     else
       response_size += return_value.SizeEstimate();
-    if (response_size > GetMaxMessageSizeInBytes()) {
+    if (response_size > GetUsableMessageSizeInBytes()) {
       callbacks->OnError(
           IndexedDBDatabaseError(blink::kWebIDBDatabaseExceptionUnknownError,
                                  "Maximum IPC message size exceeded."));
@@ -1216,7 +1239,6 @@ struct IndexedDBDatabase::PutOperationParams {
   PutOperationParams() {}
   int64_t object_store_id;
   IndexedDBValue value;
-  std::vector<std::unique_ptr<storage::BlobDataHandle>> handles;
   std::unique_ptr<IndexedDBKey> key;
   blink::WebIDBPutMode put_mode;
   scoped_refptr<IndexedDBCallbacks> callbacks;
@@ -1230,7 +1252,6 @@ void IndexedDBDatabase::Put(
     IndexedDBTransaction* transaction,
     int64_t object_store_id,
     IndexedDBValue* value,
-    std::vector<std::unique_ptr<storage::BlobDataHandle>>* handles,
     std::unique_ptr<IndexedDBKey> key,
     blink::WebIDBPutMode put_mode,
     scoped_refptr<IndexedDBCallbacks> callbacks,
@@ -1248,7 +1269,6 @@ void IndexedDBDatabase::Put(
       std::make_unique<PutOperationParams>());
   params->object_store_id = object_store_id;
   params->value.swap(*value);
-  params->handles.swap(*handles);
   params->key = std::move(key);
   params->put_mode = put_mode;
   params->callbacks = callbacks;
@@ -1336,7 +1356,7 @@ Status IndexedDBDatabase::PutOperation(
   // transaction in case of error.
   s = backing_store_->PutRecord(transaction->BackingStoreTransaction(), id(),
                                 params->object_store_id, *key, &params->value,
-                                &params->handles, &record_identifier);
+                                &record_identifier);
   if (!s.ok())
     return s;
 

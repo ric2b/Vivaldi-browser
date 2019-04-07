@@ -17,8 +17,8 @@
 #include "chrome/browser/vr/elements/laser.h"
 #include "chrome/browser/vr/elements/reticle.h"
 #include "chrome/browser/vr/elements/shadow.h"
+#include "chrome/browser/vr/gl_texture_location.h"
 #include "chrome/browser/vr/macros.h"
-#include "chrome/browser/vr/ui_element_renderer.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
@@ -37,9 +37,9 @@ namespace vr {
 class BaseRenderer;
 class ExternalTexturedQuadRenderer;
 class RadialGradientQuadRenderer;
+class TextureCopyRenderer;
 class TexturedQuadRenderer;
 class TransparentQuadRenderer;
-class WebVrRenderer;
 
 // An instance of this class is passed to UiElements by the UiRenderer in order
 // to issue the GL commands for drawing the frame. In some ways, this class is a
@@ -51,18 +51,13 @@ class WebVrRenderer;
 // loss/recreation.
 class UiElementRenderer {
  public:
-  enum TextureLocation {
-    kTextureLocationLocal,
-    kTextureLocationExternal,
-  };
-
   UiElementRenderer();
   VIRTUAL_FOR_MOCKS ~UiElementRenderer();
 
   VIRTUAL_FOR_MOCKS void DrawTexturedQuad(
       int texture_data_handle,
       int overlay_texture_data_handle,
-      TextureLocation texture_location,
+      GlTextureLocation texture_location,
       const gfx::Transform& model_view_proj_matrix,
       const gfx::RectF& clip_rect,
       float opacity,
@@ -95,10 +90,10 @@ class UiElementRenderer {
       float opacity,
       const gfx::Transform& model_view_proj_matrix);
 
-  VIRTUAL_FOR_MOCKS void DrawWebVr(int texture_data_handle,
-                                   const float (&uv_transform)[16],
-                                   float xborder,
-                                   float yborder);
+  VIRTUAL_FOR_MOCKS void DrawTextureCopy(int texture_data_handle,
+                                         const float (&uv_transform)[16],
+                                         float xborder,
+                                         float yborder);
 
   VIRTUAL_FOR_MOCKS void DrawShadow(
       const gfx::Transform& model_view_proj_matrix,
@@ -143,7 +138,7 @@ class UiElementRenderer {
   std::unique_ptr<TransparentQuadRenderer> transparent_quad_renderer_;
   std::unique_ptr<TexturedQuadRenderer> textured_quad_renderer_;
   std::unique_ptr<RadialGradientQuadRenderer> radial_gradient_quad_renderer_;
-  std::unique_ptr<WebVrRenderer> webvr_renderer_;
+  std::unique_ptr<TextureCopyRenderer> texture_copy_renderer_;
   std::unique_ptr<Reticle::Renderer> reticle_renderer_;
   std::unique_ptr<Laser::Renderer> laser_renderer_;
   std::unique_ptr<Controller::Renderer> controller_renderer_;

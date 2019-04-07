@@ -11,9 +11,9 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/extensions/web_app_info_image_source.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/strings/grit/components_strings.h"
@@ -30,7 +30,13 @@
 #include "ui/views/window/dialog_client_view.h"
 #include "url/origin.h"
 
+namespace {
+
 constexpr int kPWAConfirmationViewIconSize = 48;
+
+bool g_auto_accept_pwa_for_testing = false;
+
+}  // namespace
 
 PWAConfirmationView::PWAConfirmationView(
     const WebApplicationInfo& web_app_info,
@@ -44,6 +50,9 @@ PWAConfirmationView::PWAConfirmationView(
   InitializeView();
 
   chrome::RecordDialogCreation(chrome::DialogIdentifier::PWA_CONFIRMATION);
+
+  if (g_auto_accept_pwa_for_testing)
+    Accept();
 }
 
 PWAConfirmationView::~PWAConfirmationView() {}
@@ -163,6 +172,10 @@ void ShowPWAInstallDialog(content::WebContents* web_contents,
                           AppInstallationAcceptanceCallback callback) {
   constrained_window::ShowWebModalDialogViews(
       new PWAConfirmationView(web_app_info, std::move(callback)), web_contents);
+}
+
+void SetAutoAcceptPWAInstallDialogForTesting(bool auto_accept) {
+  g_auto_accept_pwa_for_testing = auto_accept;
 }
 
 }  // namespace chrome

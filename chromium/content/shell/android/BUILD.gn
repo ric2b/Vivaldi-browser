@@ -79,6 +79,7 @@ android_library("content_shell_java") {
     "//base:base_java",
     "//components/embedder_support/android:content_view_java",
     "//components/embedder_support/android:view_java",
+    "//components/viz/service:service_java",
     "//content/public/android:content_java",
     "//media/base/android:media_java",
     "//media/capture/video/android:capture_java",
@@ -172,18 +173,20 @@ android_apk("content_shell_apk") {
     ":content_shell_assets",
     ":content_shell_java",
     "//base:base_java",
+    "//base:base_java_test_support",
+    "//components/crash/android:java",
     "//content/public/android:content_java",
     "//content/public/test/android:layouttest_java_support",
     "//media/capture/video/android:capture_java",
     "//net/android:net_java",
-    "//third_party/mesa:osmesa",
+    "//services/shape_detection:shape_detection_java",
+    "//third_party/mesa_headers",
     "//ui/android:ui_java",
   ]
   apk_name = "ContentShell"
   android_manifest = content_shell_manifest
   android_manifest_dep = ":content_shell_manifest"
   shared_libraries = [ ":libcontent_shell_content_view" ]
-  loadable_modules = [ "$root_out_dir/libosmesa.so" ]
   command_line_flags_file = "content-shell-command-line"
 }
 

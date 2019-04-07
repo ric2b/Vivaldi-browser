@@ -1,15 +1,16 @@
 const StructuredClonePerfTestRunner = (function() {
   function pingPong(data) {
     return new Promise((resolve, reject) => {
-      let beginSerialize, endSerialize, beginDeserialize;
+      let beginSerialize, endSerialize, beginDeserialize, endDeserialize;
       window.addEventListener('message', function listener(e) {
         try {
           e.data;  // Force deserialization.
-          const endDeserialize = PerfTestRunner.now();
+          endDeserialize = PerfTestRunner.now();
           window.removeEventListener('message', listener);
           resolve([endSerialize - beginSerialize, endDeserialize - beginDeserialize]);
         } catch (err) { reject(err); }
       });
+
       beginSerialize = PerfTestRunner.now();
       window.postMessage(data, '*');
       beginDeserialize = endSerialize = PerfTestRunner.now();

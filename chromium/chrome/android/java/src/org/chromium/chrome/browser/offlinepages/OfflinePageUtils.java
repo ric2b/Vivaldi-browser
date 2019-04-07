@@ -21,6 +21,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.FileProviderHelper;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -35,6 +36,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.util.ChromeFileProvider;
 import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.components.offline_items_collection.LaunchLocation;
 import org.chromium.components.offlinepages.SavePageResult;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
@@ -373,6 +375,37 @@ public class OfflinePageUtils {
     }
 
     /**
+     * Save the page loaded in current tab and share the saved page.
+     *
+     * @param activity The activity used for sharing and file provider interaction.
+     * @param currentTab The current tab from which the page is being shared.
+     * @param shareCallback The callback to be used to send the ShareParams. This will only be
+     *                      called if this function call returns true.
+     * @return true if the sharing of the page is possible. The callback will be invoked if
+     *                      saving the page succeeds.
+     */
+    public static boolean saveAndSharePage(
+            final Activity activity, Tab tab, final Callback<ShareParams> shareCallback) {
+        OfflinePageBridge offlinePageBridge = getInstance().getOfflinePageBridge(tab.getProfile());
+
+        if (offlinePageBridge == null) {
+            Log.e(TAG, "Unable to share current tab as an offline page.");
+            return false;
+        }
+
+        WebContents webContents = tab.getWebContents();
+        if (webContents == null) return false;
+
+        GetPagesByNamespaceForLivePageSharingCallback callback =
+                new GetPagesByNamespaceForLivePageSharingCallback(
+                        activity, tab, shareCallback, offlinePageBridge);
+        offlinePageBridge.getPagesByNamespace(
+                OfflinePageBridge.LIVE_PAGE_SHARING_NAMESPACE, callback);
+
+        return true;
+    }
+
+    /**
      * If possible, creates the ShareParams needed to share the current offline page loaded in the
      * provided tab as a MHTML file.
      *
@@ -385,7 +418,22 @@ public class OfflinePageUtils {
      */
     public static boolean maybeShareOfflinePage(
             final Activity activity, Tab tab, final Callback<ShareParams> shareCallback) {
+        if (!OfflinePageBridge.isPageSharingEnabled()) return false;
+
         if (tab == null) return false;
+
+        boolean isOfflinePage = OfflinePageUtils.isOfflinePage(tab);
+        RecordHistogram.recordBooleanHistogram("OfflinePages.SharedPageWasOffline", isOfflinePage);
+
+        // If the current tab is not showing an offline page, try to see if we should do live page
+        // sharing.
+        if (!isOfflinePage) {
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.OFFLINE_PAGES_LIVE_PAGE_SHARING)) {
+                return saveAndSharePage(activity, tab, shareCallback);
+            } else {
+                return false;
+            }
+        }
 
         OfflinePageBridge offlinePageBridge = getInstance().getOfflinePageBridge(tab.getProfile());
 
@@ -398,6 +446,8 @@ public class OfflinePageUtils {
         if (webContents == null) return false;
 
         OfflinePageItem offlinePage = offlinePageBridge.getOfflinePage(webContents);
+        if (offlinePage == null) return false;
+
         String offlinePath = offlinePage.getFilePath();
 
         final String pageUrl = tab.getUrl();
@@ -406,9 +456,16 @@ public class OfflinePageUtils {
         Uri uri;
         boolean isPageUserRequested = offlinePageBridge.isUserRequestedDownloadNamespace(
                 offlinePage.getClientId().getNamespace());
-        if (!isPageUserRequested) {
-            File file = new File(offlinePage.getFilePath());
-            uri = (new FileProviderHelper()).getContentUriFromFile(file);
+        // Ensure that we have a file path that is longer than just "/".
+        if (!isPageUserRequested && offlinePath.length() > 1) {
+            File file = new File(offlinePath);
+            // We might get an exception if chrome does not have sharing roots configured.  If so,
+            // just share by URL of the original page instead of sharing the offline page.
+            try {
+                uri = (new FileProviderHelper()).getContentUriFromFile(file);
+            } catch (Exception e) {
+                uri = Uri.parse(pageUrl);
+            }
         } else {
             uri = Uri.parse(pageUrl);
         }
@@ -449,8 +506,8 @@ public class OfflinePageUtils {
      */
     public static boolean isOfflinePageShareable(
             OfflinePageBridge offlinePageBridge, OfflinePageItem offlinePage, Uri uri) {
-        // Return false if there is no offline page or sharing is not enabled.
-        if (offlinePage == null || !OfflinePageBridge.isPageSharingEnabled()) return false;
+        // Return false if there is no offline page.
+        if (offlinePage == null) return false;
 
         String offlinePath = offlinePage.getFilePath();
 
@@ -527,9 +584,9 @@ public class OfflinePageUtils {
     public static void sharePage(Activity activity, String pageUrl, String pageTitle,
             String offlinePath, File offlinePageFile, final Callback<ShareParams> shareCallback) {
         RecordUserAction.record("OfflinePages.Sharing.SharePageFromOverflowMenu");
-        AsyncTask<Void, Void, Uri> task = new AsyncTask<Void, Void, Uri>() {
+        AsyncTask<Uri> task = new AsyncTask<Uri>() {
             @Override
-            protected Uri doInBackground(Void... v) {
+            protected Uri doInBackground() {
                 // If we have a content or file URI, we will not have a filename, just return the
                 // URI.
                 if (offlinePath.isEmpty()) {
@@ -569,10 +626,11 @@ public class OfflinePageUtils {
      * the URL to ensure loading a specific version of offline page.
      * @param url       The url of the offline page to open.
      * @param offlineId The ID of the offline page to open.
+     * @param location  Indicates where the offline page is launched.
      * @param callback  The callback to pass back the LoadUrlParams for launching an URL.
      */
-    public static void getLoadUrlParamsForOpeningOfflineVersion(
-            final String url, long offlineId, Callback<LoadUrlParams> callback) {
+    public static void getLoadUrlParamsForOpeningOfflineVersion(final String url, long offlineId,
+            final @LaunchLocation int location, Callback<LoadUrlParams> callback) {
         OfflinePageBridge offlinePageBridge =
                 getInstance().getOfflinePageBridge(Profile.getLastUsedProfile());
         if (offlinePageBridge == null) {
@@ -580,15 +638,8 @@ public class OfflinePageUtils {
             return;
         }
 
-        offlinePageBridge.getLaunchUrlByOfflineId(offlineId, (launchUrl) -> {
-            if (launchUrl == null) callback.onResult(null);
-            LoadUrlParams params = new LoadUrlParams(launchUrl);
-            Map<String, String> headers = new HashMap<String, String>();
-            headers.put(
-                    "X-Chrome-offline", "persist=1 reason=download id=" + Long.toString(offlineId));
-            params.setExtraHeaders(headers);
-            callback.onResult(params);
-        });
+        offlinePageBridge.getLoadUrlParamsByOfflineId(
+                offlineId, location, (loadUrlParams) -> { callback.onResult(loadUrlParams); });
     }
 
     /**

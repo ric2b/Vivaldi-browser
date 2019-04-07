@@ -6,6 +6,7 @@
 #define ASH_SYSTEM_UNIFIED_UNIFIED_SYSTEM_TRAY_VIEW_H_
 
 #include "ash/ash_export.h"
+#include "ui/views/focus/focus_manager.h"
 #include "ui/views/view.h"
 
 namespace ash {
@@ -46,14 +47,12 @@ class UnifiedSlidersContainerView : public views::View {
 };
 
 // View class of the main bubble in UnifiedSystemTray.
-class ASH_EXPORT UnifiedSystemTrayView : public views::View {
+class ASH_EXPORT UnifiedSystemTrayView : public views::View,
+                                         public views::FocusTraversable {
  public:
   UnifiedSystemTrayView(UnifiedSystemTrayController* controller,
                         bool initially_expanded);
   ~UnifiedSystemTrayView() override;
-
-  // Initialize after the view is attached to the widget.
-  void Init();
 
   // Set the maximum height that the view can take.
   void SetMaxHeight(int max_height);
@@ -75,10 +74,6 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View {
   void SaveFeaturePodFocus();
   void RestoreFeaturePodFocus();
 
-  // Request focus of the element that should initially have focus after opening
-  // the bubble.
-  void RequestInitFocus();
-
   // Change the expanded state. 0.0 if collapsed, and 1.0 if expanded.
   // Otherwise, it shows intermediate state.
   void SetExpandedAmount(double expanded_amount);
@@ -97,25 +92,43 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View {
 
   void ShowClearAllAnimation();
 
+  // Update the top of the SystemTray part to imitate notification list
+  // scrolling under SystemTray. |height_below_scroll| should not be negative.
+  void SetNotificationHeightBelowScroll(int height_below_scroll);
+
+  // Create background of UnifiedSystemTray that is semi-transparent and has
+  // rounded corners.
+  static std::unique_ptr<views::Background> CreateBackground();
+
   // views::View:
   void OnGestureEvent(ui::GestureEvent* event) override;
   void ChildPreferredSizeChanged(views::View* child) override;
+  views::FocusTraversable* GetFocusTraversable() override;
+
+  // views::FocusTraversable:
+  views::FocusSearch* GetFocusSearch() override;
+  views::FocusTraversable* GetFocusTraversableParent() override;
+  views::View* GetFocusTraversableParentView() override;
 
  private:
+  class FocusSearch;
+
   double expanded_amount_;
 
   // Unowned.
-  UnifiedSystemTrayController* controller_;
+  UnifiedSystemTrayController* const controller_;
 
   // Owned by views hierarchy.
-  UnifiedMessageCenterView* message_center_view_;
-  TopShortcutsView* top_shortcuts_view_;
-  FeaturePodsContainerView* feature_pods_container_;
-  UnifiedSlidersContainerView* sliders_container_;
-  UnifiedSystemInfoView* system_info_view_;
-  views::View* system_tray_container_;
-  views::View* detailed_view_container_;
+  views::View* const notification_hidden_view_;
+  TopShortcutsView* const top_shortcuts_view_;
+  FeaturePodsContainerView* const feature_pods_container_;
+  UnifiedSlidersContainerView* const sliders_container_;
+  UnifiedSystemInfoView* const system_info_view_;
+  views::View* const system_tray_container_;
+  views::View* const detailed_view_container_;
+  UnifiedMessageCenterView* const message_center_view_;
 
+  const std::unique_ptr<FocusSearch> focus_search_;
   const std::unique_ptr<ui::EventHandler> interacted_by_tap_recorder_;
 
   DISALLOW_COPY_AND_ASSIGN(UnifiedSystemTrayView);

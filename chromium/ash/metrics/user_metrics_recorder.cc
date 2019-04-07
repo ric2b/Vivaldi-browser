@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "ash/login/ui/lock_screen.h"
+#include "ash/metrics/demo_session_metrics_recorder.h"
 #include "ash/metrics/desktop_task_switch_metric_recorder.h"
 #include "ash/metrics/pointer_metrics_recorder.h"
 #include "ash/public/cpp/shelf_item.h"
@@ -99,8 +100,7 @@ bool IsUserActive() {
 // UMA statistics. Note the containers are ordered from top most visible
 // container to the lowest to allow the |GetNumVisibleWindows| method to short
 // circuit when processing a maximized or fullscreen window.
-int kVisibleWindowContainerIds[] = {kShellWindowId_PanelContainer,
-                                    kShellWindowId_AlwaysOnTopContainer,
+int kVisibleWindowContainerIds[] = {kShellWindowId_AlwaysOnTopContainer,
                                     kShellWindowId_DefaultContainer};
 
 // Returns an approximate count of how many windows are currently visible in the
@@ -139,9 +139,7 @@ int GetNumVisibleWindowsInPrimaryDisplay() {
       // windows. Only windows in the kShellWindowId_DefaultContainer and
       // kShellWindowId_AlwaysOnTopContainer can be maximized or fullscreened
       // and completely obscure windows beneath them.
-      if ((kShellWindowId_DefaultContainer == current_container_id ||
-           kShellWindowId_AlwaysOnTopContainer == current_container_id) &&
-          child_window_state->IsMaximizedOrFullscreenOrPinned()) {
+      if (child_window_state->IsMaximizedOrFullscreenOrPinned()) {
         maximized_or_fullscreen_window_present = true;
         break;
       }
@@ -442,6 +440,11 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
   }
 }
 
+void UserMetricsRecorder::StartDemoSessionMetricsRecording() {
+  demo_session_metrics_recorder_ =
+      std::make_unique<DemoSessionMetricsRecorder>();
+}
+
 void UserMetricsRecorder::OnShellInitialized() {
   // Lazy creation of the DesktopTaskSwitchMetricRecorder because it accesses
   // Shell::Get() which is not available when |this| is instantiated.
@@ -453,6 +456,7 @@ void UserMetricsRecorder::OnShellInitialized() {
 }
 
 void UserMetricsRecorder::OnShellShuttingDown() {
+  demo_session_metrics_recorder_.reset();
   desktop_task_switch_metric_recorder_.reset();
 
   // To clean up pointer_metrics_recorder_ properly, a valid shell instance is

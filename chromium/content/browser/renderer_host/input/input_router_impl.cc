@@ -31,6 +31,14 @@
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
+#include "app/vivaldi_apptools.h"
+#include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
+
+// NOTE(igor@vivaldi.com): Include implementation so it can access
+// anonymous functions.
+#include "browser/renderer_host/vivaldi_input_router_helper.cc"
+
 namespace content {
 
 using base::Time;
@@ -215,8 +223,7 @@ void InputRouterImpl::SetForceEnableZoom(bool enabled) {
 }
 
 base::Optional<cc::TouchAction> InputRouterImpl::AllowedTouchAction() {
-  return touch_action_filter_.allowed_touch_action().value_or(
-      cc::kTouchActionAuto);
+  return touch_action_filter_.allowed_touch_action();
 }
 
 void InputRouterImpl::BindHost(mojom::WidgetInputHandlerHostRequest request,
@@ -255,15 +262,6 @@ void InputRouterImpl::DidOverscroll(const ui::DidOverscrollParams& params) {
   fling_updated_params.current_fling_velocity =
       gesture_event_queue_.CurrentFlingVelocity();
   client_->DidOverscroll(fling_updated_params);
-}
-
-void InputRouterImpl::DidStopFlinging() {
-  DCHECK_GT(active_renderer_fling_count_, 0);
-  // Note that we're only guaranteed to get a fling end notification from the
-  // renderer, not from any other consumers. Consequently, the GestureEventQueue
-  // cannot use this bookkeeping for logic like tap suppression.
-  --active_renderer_fling_count_;
-  client_->DidStopFlinging();
 }
 
 void InputRouterImpl::DidStartScrollingViewport() {
@@ -349,14 +347,17 @@ void InputRouterImpl::OnTouchEventAck(const TouchEventWithLatencyInfo& event,
   // in some cases we may filter out sending the touchstart - catch those here.
   if (WebTouchEventTraits::IsTouchSequenceStart(event.event) &&
       ack_result == INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS) {
+    touch_action_filter_.AppendToGestureSequenceForDebugging("T");
     // Touch action must be auto when there is no consumer
     touch_action_filter_.OnSetTouchAction(cc::kTouchActionAuto);
+    touch_action_filter_.SetActiveTouchInProgress(true);
     UpdateTouchAckTimeoutEnabled();
   }
   disposition_handler_->OnTouchEventAck(event, ack_source, ack_result);
 
   if (WebTouchEventTraits::IsTouchSequenceEnd(event.event)) {
     touch_action_filter_.ReportAndResetTouchAction();
+    touch_action_filter_.SetActiveTouchInProgress(false);
     UpdateTouchAckTimeoutEnabled();
   }
 }
@@ -370,10 +371,6 @@ void InputRouterImpl::OnFilteringTouchEvent(const WebTouchEvent& touch_event) {
   // additional validator for the events which are actually sent to the
   // renderer.
   output_stream_validator_.Validate(touch_event);
-}
-
-bool InputRouterImpl::TouchscreenFlingInProgress() {
-  return gesture_event_queue_.TouchscreenFlingInProgress();
 }
 
 void InputRouterImpl::SendGestureEventImmediately(
@@ -561,11 +558,6 @@ void InputRouterImpl::GestureEventHandled(
                InputEventAckStateToString(state));
   if (source != InputEventAckSource::BROWSER)
     client_->DecrementInFlightEventCount(source);
-  if (gesture_event.event.GetType() ==
-          blink::WebInputEvent::kGestureFlingStart &&
-      state == INPUT_EVENT_ACK_STATE_CONSUMED) {
-    ++active_renderer_fling_count_;
-  }
 
   if (overscroll) {
     DCHECK_EQ(WebInputEvent::kGestureScrollUpdate,
@@ -585,6 +577,19 @@ void InputRouterImpl::MouseWheelEventHandled(
     InputEventAckState state,
     const base::Optional<ui::DidOverscrollParams>& overscroll,
     const base::Optional<cc::TouchAction>& touch_action) {
+  MouseWheelEventHandledWithRedirect(event, false, nullptr, source, latency,
+                                     state, overscroll, touch_action);
+}
+
+void InputRouterImpl::MouseWheelEventHandledWithRedirect(
+    const MouseWheelEventWithLatencyInfo& event,
+    bool root_redirect,
+    base::WeakPtr<InputRouterImpl> child_router,
+    InputEventAckSource source,
+    const ui::LatencyInfo& latency,
+    InputEventAckState state,
+    const base::Optional<ui::DidOverscrollParams>& overscroll,
+    const base::Optional<cc::TouchAction>& touch_action) {
   TRACE_EVENT2("input", "InputRouterImpl::MouseWheelEventHandled", "type",
                WebInputEvent::GetName(event.event.GetType()), "ack",
                InputEventAckStateToString(state));
@@ -595,9 +600,108 @@ void InputRouterImpl::MouseWheelEventHandled(
   if (overscroll)
     DidOverscroll(overscroll.value());
 
-  wheel_event_queue_.ProcessMouseWheelAck(source, state, event.latency);
-  touchpad_pinch_event_queue_.ProcessMouseWheelAck(source, state,
-                                                   event.latency);
+  // NOTE(igor@vivaldi.com): We received an ack that the wheel event
+  // was processed in the render process potentially running through JS
+  // eventhandlers. Before we pass the event to wheel and touchpad
+  // queues for processing in the native code but after we accounted for its
+  // in-flight status, latency, overscroll forward the event to our root view so
+  // Vivaldi UI can react to the event as well. When we receive an ack from this
+  // forwarding for the root view the root_redirect is true and child_router
+  // points to the original router.
+  InputRouterImpl* ack_receiver = this;
+  if (!vivaldi::IsVivaldiRunning()) {
+    DCHECK(!root_redirect);
+    DCHECK(!child_router);
+  } else if (root_redirect) {
+    if (!child_router) {
+      // The child was destroyed when event was being dispatched.
+      return;
+    }
+    ack_receiver = child_router.get();
+  } else {
+    DCHECK(!child_router);
+
+    // TODO(igor@vivaldi.com) Ideally we should forwards any wheel event to UI
+    // view and let the JS code there to decide if it handles the event or not.
+    // But to minimize the risk of regressions for now we only forward the
+    // events when we know for sure that UI may handle it like the page zoom and
+    // the tab switch. Also, as PDF viewer handles zooming later in the native
+    // code, we should not forward the zoom directed towards it. So consider to
+    // call JS function in the UI directly and pass the event and any extra
+    // information there so the JS code can decide on its own what to do.
+    do {
+      // Check if the page called event.preventDefault().
+      if (state == INPUT_EVENT_ACK_STATE_CONSUMED)
+        break;
+
+      int zoom_modifier =
+#if defined(OS_MACOSX)
+          blink::WebInputEvent::kMetaKey
+#else
+          blink::WebInputEvent::kControlKey
+#endif
+          ;
+      int tab_scroll_modifier = blink::WebInputEvent::kAltKey;
+      int all_key_modifier_mask =
+          blink::WebInputEvent::kShiftKey | blink::WebInputEvent::kControlKey |
+          blink::WebInputEvent::kAltKey | blink::WebInputEvent::kMetaKey;
+      int modifiers = event.event.GetModifiers();
+      int pressed_key_modifiers = modifiers & all_key_modifier_mask;
+      bool zoom = pressed_key_modifiers == zoom_modifier;
+      bool tab_switch = pressed_key_modifiers == tab_scroll_modifier ||
+                        (modifiers & blink::WebInputEvent::kRightButtonDown);
+      if (!zoom && !tab_switch)
+        break;
+
+      // Root view with UI will look at the event. Find its router.
+      RenderWidgetHostImpl* host =
+          static_cast<RenderWidgetHostImpl*>(disposition_handler_);
+      RenderWidgetHostViewBase* view_base = host->GetView();
+      if (!view_base || !view_base->IsRenderWidgetHostViewChildFrame())
+        break;
+
+      // Check if it is a PDF viewer zoom.
+      if (zoom && view_base->IsRenderWidgetHostViewGuest())
+        break;
+
+      RenderWidgetHostViewChildFrame* view =
+          static_cast<RenderWidgetHostViewChildFrame*>(view_base);
+      RenderWidgetHostViewBase* root_view = view->GetRootRenderWidgetHostView();
+      if (!root_view)
+        break;
+
+      // Check if the view is already the root view.
+      if (root_view == view)
+        break;
+      RenderWidgetHostImpl* root_host = root_view->host();
+      if (!root_host)
+        break;
+      InputRouter* root_router_base = root_host->input_router();
+      if (!root_router_base)
+        break;
+      InputRouterImpl* root_router =
+          static_cast<InputRouterImpl*>(root_router_base);
+
+      blink::WebMouseWheelEvent wheel_event(event.event);
+      const gfx::PointF root_point =
+          view->TransformPointToRootCoordSpaceF(wheel_event.PositionInWidget());
+      wheel_event.SetPositionInWidget(root_point);
+
+      // Send via the root router but pass this router as an argument.
+      mojom::WidgetInputHandler::DispatchEventCallback callback =
+          base::BindOnce(&InputRouterImpl::MouseWheelEventHandledWithRedirect,
+                         root_router->weak_this_, event, true, weak_this_);
+      root_router->FilterAndSendWebInputEvent(
+          wheel_event, ui::LatencyInfo(ui::SourceEventType::WHEEL),
+          std::move(callback));
+      return;
+    } while (false);
+  }
+
+  ack_receiver->wheel_event_queue_.ProcessMouseWheelAck(source, state,
+                                                        event.latency);
+  ack_receiver->touchpad_pinch_event_queue_.ProcessMouseWheelAck(source, state,
+                                                                 event.latency);
 }
 
 void InputRouterImpl::OnHasTouchEventHandlers(bool has_handlers) {
@@ -610,7 +714,13 @@ void InputRouterImpl::OnHasTouchEventHandlers(bool has_handlers) {
 }
 
 void InputRouterImpl::ForceSetTouchActionAuto() {
+  touch_action_filter_.AppendToGestureSequenceForDebugging("F");
   touch_action_filter_.OnSetTouchAction(cc::kTouchActionAuto);
+  touch_action_filter_.SetActiveTouchInProgress(true);
+}
+
+void InputRouterImpl::OnHasTouchEventHandlersForTest(bool has_handlers) {
+  touch_action_filter_.OnHasTouchEventHandlers(has_handlers);
 }
 
 void InputRouterImpl::OnSetTouchAction(cc::TouchAction touch_action) {
@@ -622,7 +732,11 @@ void InputRouterImpl::OnSetTouchAction(cc::TouchAction touch_action) {
   if (!touch_event_queue_.IsPendingAckTouchStart())
     return;
 
+  touch_action_filter_.AppendToGestureSequenceForDebugging("S");
+  touch_action_filter_.AppendToGestureSequenceForDebugging(
+      std::to_string(touch_action).c_str());
   touch_action_filter_.OnSetTouchAction(touch_action);
+  touch_action_filter_.SetActiveTouchInProgress(true);
 
   // kTouchActionNone should disable the touch ack timeout.
   UpdateTouchAckTimeoutEnabled();

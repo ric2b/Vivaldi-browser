@@ -102,11 +102,11 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="3171922709365450819">Asiakassovellus ei tue laitetta, koska laite edellyttää kolmannen osapuolen todennusta.</translation>
 <translation id="3194245623920924351">Chrome-etäkäyttö</translation>
 <translation id="3197730452537982411">Etäkäyttö</translation>
+<translation id="3212472844831225214">• Lisätty Android 9.0 Pie ‑tuki</translation>
 <translation id="324272851072175193">Lähetä nämä ohjeet sähköpostilla</translation>
 <translation id="3258789396564295715">Tähän tietokoneeseen voi muodostaa suojatun yhteyden Chrome-etäkäytön avulla.</translation>
 <translation id="3286521253923406898">Chromoting-isännän hallinta</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> haluaa tehdä muutoksia.</translation>
-<translation id="331779822864701136">• Lisätty Android 8.0 Oreo ‑tuki</translation>
 <translation id="332624996707057614">Muokkaa tietokoneen nimeä</translation>
 <translation id="3339299787263251426">Käytä tietokonettasi turvallisesti internetissä</translation>
 <translation id="3360306038446926262">Windows</translation>
@@ -122,8 +122,9 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="369442766917958684">Offline.</translation>
 <translation id="3695446226812920698">Lisätietoja</translation>
 <translation id="3718805989288361841">Chrome-etäkäytön käytäntöasetuksissa on virhe. Ota yhteyttä järjestelmänvalvojaan.</translation>
-<translation id="3759645055923345178">Kun määritys on valmis, voit käyttää tietokonetta tältä sivulta antamalla PIN- tai käyttökoodin.</translation>
 <translation id="3776024066357219166">Chrome-etäkäyttökerta on päättynyt.</translation>
+<translation id="3846148461359626420">• Parempi panorointi ja zoomaus iPhone X:llä
+• Vakausparannuksia ja virheenkorjauksia</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Myönnä käyttöoikeus Chrome-etäkäytön kautta vahvistamalla tilisi ja PIN-koodisi alla.</translation>
 <translation id="3897092660631435901">Valikko</translation>
@@ -137,6 +138,7 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="405887016757208221">Etätietokone ei alustanut istuntoa oikein. Jos ongelma ei ratkea, yritä määrittää isäntäkoneen asetukset uudelleen.</translation>
 <translation id="4068946408131579958">Kaikki yhteydet</translation>
 <translation id="409800995205263688">HUOMAA: käytäntöasetusten vuoksi vain verkossasi olevien tietokoneiden väliset yhteydet sallitaan.</translation>
+<translation id="4126409073460786861">Päivitä tämä sivu määrityksen jälkeen, niin voit käyttää tietokonetta valitsemalla laitteesi ja syöttämällä PIN-koodin</translation>
 <translation id="4145029455188493639">Kirjautunut osoitteella <ph name="EMAIL_ADDRESS" /></translation>
 <translation id="4155497795971509630">Joitakin vaadittavia komponentteja puuttuu. Varmista, että olet asentanut ohjelmiston uusimman version, ja yritä uudelleen.</translation>
 <translation id="4156740505453712750">Suojaa tämän tietokoneen käyttöä valitsemalla <ph name="BOLD_START" />vähintään kuusinumeroinen<ph name="BOLD_END" /> PIN-koodi. Tarvitset PIN-koodin muodostaessasi yhteyden toiselta koneelta.</translation>
@@ -145,7 +147,6 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="4207623512727273241">Suorita asennusohjelma ennen kuin jatkat.</translation>
 <translation id="4227991223508142681">Isäntien hallintatyökalu</translation>
 <translation id="4240294130679914010">Chromoting-isännän asennuksen poisto</translation>
-<translation id="4249741460382919890">Yleisiä korjauksia ja vakausparannuksia</translation>
 <translation id="4277463233460010382">Tämä tietokone on määritetty sallimaan vähintään yhden asiakkaan yhteys ilman PIN-koodia.</translation>
 <translation id="4277736576214464567">Käyttökoodi on virheellinen. Yritä uudelleen.</translation>
 <translation id="4361728918881830843">Ota etäyhteys käyttöön asentamalla toiselle tietokoneelle Chrome-etäkäyttö ja valitsemalla <ph name="BUTTON_NAME" />.</translation>
@@ -271,6 +272,7 @@ PC</translation>
 <translation id="6998989275928107238">Vastaanottaja</translation>
 <translation id="7019153418965365059">Tuntematon isäntävirhe: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Etätuki</translation>
+<translation id="7026930240735156896">Määritä tietokone etäyhteyttä varten seuraamalla ohjeita</translation>
 <translation id="7038683108611689168">Auta meitä parantamaan Chromotingia antamalla meidän kerätä käyttötilastoja ja virheraportteja.</translation>
 <translation id="7067321367069083429">Näyttö toimii kosketusnäyttönä</translation>
 <translation id="7116737094673640201">Tervetuloa Chrome-etäkäyttöön</translation>
@@ -296,7 +298,6 @@ PC</translation>
 <translation id="7782471917492991422">Tarkista tietokoneen virranhallinta-asetukset ja varmista, että sitä ei ole määritetty siirtymään virransäästötilaan, kun sitä ei käytetä.</translation>
 <translation id="7810127880729796595">Näytä tilastot (yhteys: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Jotkin vaadittavat komponentit puuttuvat. Varmista, että käytät uusinta Chrome-versiota, ja yritä uudelleen.</translation>
-<translation id="7850909060902317210">Asenna Chrome-etäkäyttöohjelma ja viimeistele määritys näytöllä näkyvien ohjeiden mukaisesti.</translation>
 <translation id="7868137160098754906">Anna etätietokoneen PIN-koodi.</translation>
 <translation id="7869445566579231750">Sinulla ei ole lupaa suorittaa tätä sovellusta.</translation>
 <translation id="7895403300744144251">Etätietokoneen suojauskäytännöt eivät salli tililtäsi saapuvia yhteyksiä.</translation>

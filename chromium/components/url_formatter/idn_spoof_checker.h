@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece_forward.h"
@@ -30,6 +31,8 @@ struct USpoofChecker;
 namespace url_formatter {
 FORWARD_DECLARE_TEST(UrlFormatterTest, IDNToUnicode);
 
+using Skeletons = base::flat_set<std::string>;
+
 // A helper class for IDN Spoof checking, used to ensure that no IDN input is
 // spoofable per Chromium's standard of spoofability. For a more thorough
 // explanation of how spoof checking works in Chromium, see
@@ -44,6 +47,7 @@ class IDNSpoofChecker {
     size_t trie_bits;
     size_t trie_root_position;
   };
+
   IDNSpoofChecker();
   ~IDNSpoofChecker();
 
@@ -52,15 +56,20 @@ class IDNSpoofChecker {
   // See the function body for details on the specific safety checks performed.
   bool SafeToDisplayAsUnicode(base::StringPiece16 label, bool is_tld_ascii);
 
-  // Returns true if |hostname| or the last few components of |hostname| looks
-  // similar to one of top domains listed in top_domains/alexa_domains.list. Two
-  // checks are done:
+  // Returns the matching top domain if |hostname| or the last few components of
+  // |hostname| looks similar to one of top domains listed i
+  // top_domains/alexa_domains.list.
+  // Two checks are done:
   //   1. Calculate the skeleton of |hostname| based on the Unicode confusable
   //   character list and look it up in the pre-calculated skeleton list of
   //   top domains.
   //   2. Look up the diacritic-free version of |hostname| in the list of
   //   top domains. Note that non-IDN hostnames will not get here.
-  bool SimilarToTopDomains(base::StringPiece16 hostname);
+  std::string GetSimilarTopDomain(base::StringPiece16 hostname);
+
+  // Returns skeleton strings computed from |hostname|. This function can apply
+  // extra mappings to some characters to produce multiple skeletons.
+  Skeletons GetSkeletons(base::StringPiece16 hostname);
 
  private:
   // Sets allowed characters in IDN labels and turns on USPOOF_CHAR_LIMIT.

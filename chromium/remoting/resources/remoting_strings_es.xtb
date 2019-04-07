@@ -102,11 +102,11 @@ Para obtener información sobre la privacidad, consulta la Política de Privacid
 <translation id="3171922709365450819">Este cliente no admite el dispositivo porque necesita autenticación de terceros.</translation>
 <translation id="3194245623920924351">Escritorio Remoto de Chrome</translation>
 <translation id="3197730452537982411">Escritorio remoto</translation>
+<translation id="3212472844831225214">• Compatibilidad con Android 9.0 Pie.</translation>
 <translation id="324272851072175193">Enviar estas instrucciones por correo electrónico</translation>
 <translation id="3258789396564295715">Puedes acceder de forma segura a este ordenador con Escritorio Remoto de Chrome.</translation>
 <translation id="3286521253923406898">Controlador de host de Chromoting</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> quiere realizar cambios.</translation>
-<translation id="331779822864701136">• Compatibilidad con Android 8.0 (Oreo).</translation>
 <translation id="332624996707057614">Edita el nombre del ordenador</translation>
 <translation id="3339299787263251426">Accede a tu ordenador de forma segura a través de Internet</translation>
 <translation id="3360306038446926262">Ventanas</translation>
@@ -122,8 +122,9 @@ Para obtener información sobre la privacidad, consulta la Política de Privacid
 <translation id="369442766917958684">No conectado</translation>
 <translation id="3695446226812920698">Descubre cómo hacerlo</translation>
 <translation id="3718805989288361841">Se ha producido un error relacionado con la configuración de políticas de Escritorio Remoto de Chrome. Ponte en contacto con el administrador de tu sistema para obtener ayuda.</translation>
-<translation id="3759645055923345178">Cuando hayas completado la configuración, podrás acceder al ordenador desde esta página introduciendo el PIN o el código de acceso</translation>
 <translation id="3776024066357219166">Ha finalizado tu sesión en Escritorio Remoto de Chrome.</translation>
+<translation id="3846148461359626420">• Se ha mejorado la experiencia al ver panorámicas y hacer zoom en iPhone X.
+• Mejoras de estabilidad y corrección de errores.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Confirma la cuenta y el PIN a continuación para permitir el acceso de Escritorio Remoto de Chrome.</translation>
 <translation id="3897092660631435901">Menú</translation>
@@ -137,6 +138,7 @@ Para obtener información sobre la privacidad, consulta la Política de Privacid
 <translation id="405887016757208221">El equipo remoto no ha podido inicializar la sesión. Si el problema persiste, prueba a volver a configurar el host.</translation>
 <translation id="4068946408131579958">Todas las conexiones</translation>
 <translation id="409800995205263688">NOTA: la configuración de la política solo permite establecer conexiones entre ordenadores de tu misma red.</translation>
+<translation id="4126409073460786861">Cuando hayas completado la configuración, podrás acceder al ordenador seleccionando tu dispositivo e introduciendo el PIN</translation>
 <translation id="4145029455188493639">Has iniciado sesión como <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Faltan algunos componentes requeridos. Asegúrate de haber instalado la última versión del software y vuelve a intentarlo.</translation>
 <translation id="4156740505453712750">Debes elegir un PIN de <ph name="BOLD_START" />al menos seis dígitos<ph name="BOLD_END" /> para proteger el acceso a este ordenador. Se solicitará ese PIN cada vez que se establezca conexión con ese ordenador desde otra ubicación.</translation>
@@ -145,7 +147,6 @@ Para obtener información sobre la privacidad, consulta la Política de Privacid
 <translation id="4207623512727273241">Ejecuta el archivo de instalación antes de continuar.</translation>
 <translation id="4227991223508142681">Utilidad de asignación de host</translation>
 <translation id="4240294130679914010">Programa de desinstalación del host de Chromoting</translation>
-<translation id="4249741460382919890">Correcciones generales y mejoras de estabilidad.</translation>
 <translation id="4277463233460010382">Este ordenador está configurado para permitir que uno o más clientes se conecten sin introducir un PIN.</translation>
 <translation id="4277736576214464567">El código de acceso no es válido. Vuelve a intentarlo.</translation>
 <translation id="4361728918881830843">Para habilitar conexiones remotas con otro ordenador, instala Escritorio Remoto de Chrome en él y haz clic en <ph name="BUTTON_NAME" />.</translation>
@@ -271,6 +272,7 @@ PC</translation>
 <translation id="6998989275928107238">Para</translation>
 <translation id="7019153418965365059">Error de host no reconocido: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Asistencia remota</translation>
+<translation id="7026930240735156896">Sigue las instrucciones para configurar el acceso remoto a tu ordenador</translation>
 <translation id="7038683108611689168">Ayúdanos a mejorar la aplicación Chromoting autorizando la recopilación de estadísticas de uso e informes sobre fallos.</translation>
 <translation id="7067321367069083429">La pantalla hace de pantalla táctil</translation>
 <translation id="7116737094673640201">Te damos la bienvenida a Escritorio Remoto de Chrome</translation>
@@ -296,7 +298,6 @@ PC</translation>
 <translation id="7782471917492991422">Comprueba las opciones de energía de tu ordenador y asegúrate de que no esté configurado para entrar en modo de suspensión cuando esté inactivo.</translation>
 <translation id="7810127880729796595">Mostrar estadísticas (conexión: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Faltan algunos componentes requeridos. Asegúrate de estar ejecutando la última versión de Chrome y vuelve a intentarlo.</translation>
-<translation id="7850909060902317210">Instala el software Escritorio Remoto de Chrome y sigue las instrucciones para completar la configuración</translation>
 <translation id="7868137160098754906">Introduce tu código PIN para el ordenador remoto.</translation>
 <translation id="7869445566579231750">No tienes permiso para ejecutar esta aplicación.</translation>
 <translation id="7895403300744144251">Las políticas de seguridad del ordenador remoto no permiten conexiones desde tu cuenta.</translation>

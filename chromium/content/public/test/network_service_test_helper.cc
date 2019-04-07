@@ -26,6 +26,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "net/test/test_data_directory.h"
+#include "services/network/host_resolver.h"
 #include "services/network/network_context.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/features.h"
@@ -38,6 +39,26 @@
 #endif
 
 namespace content {
+namespace {
+
+#define STATIC_ASSERT_ENUM(a, b)                            \
+  static_assert(static_cast<int>(a) == static_cast<int>(b), \
+                "mismatching enums: " #a)
+
+STATIC_ASSERT_ENUM(network::mojom::ResolverType::kResolverTypeFail,
+                   net::RuleBasedHostResolverProc::Rule::kResolverTypeFail);
+STATIC_ASSERT_ENUM(network::mojom::ResolverType::kResolverTypeSystem,
+                   net::RuleBasedHostResolverProc::Rule::kResolverTypeSystem);
+STATIC_ASSERT_ENUM(
+    network::mojom::ResolverType::kResolverTypeIPLiteral,
+    net::RuleBasedHostResolverProc::Rule::kResolverTypeIPLiteral);
+
+void CrashResolveHost(const std::string& host_to_crash,
+                      const std::string& host) {
+  if (host_to_crash == host)
+    base::Process::TerminateCurrentProcessImmediately(1);
+}
+}  // namespace
 
 class NetworkServiceTestHelper::NetworkServiceTestImpl
     : public network::mojom::NetworkServiceTest,
@@ -60,8 +81,14 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
   void AddRules(std::vector<network::mojom::RulePtr> rules,
                 AddRulesCallback callback) override {
     for (const auto& rule : rules) {
-      test_host_resolver_.host_resolver()->AddRule(rule->host_pattern,
-                                                   rule->replacement);
+      if (rule->resolver_type ==
+          network::mojom::ResolverType::kResolverTypeFail) {
+        test_host_resolver_.host_resolver()->AddSimulatedFailure(
+            rule->host_pattern);
+      } else {
+        test_host_resolver_.host_resolver()->AddRule(rule->host_pattern,
+                                                     rule->replacement);
+      }
     }
     std::move(callback).Run();
   }
@@ -123,6 +150,11 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
 
     net::TransportSecurityState::SetShouldRequireCTForTesting(&ct);
     std::move(callback).Run();
+  }
+
+  void CrashOnResolveHost(const std::string& host) override {
+    network::HostResolver::SetResolveHostCallbackForTesting(
+        base::BindRepeating(CrashResolveHost, host));
   }
 
   void BindRequest(network::mojom::NetworkServiceTestRequest request) {

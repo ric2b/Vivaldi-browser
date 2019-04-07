@@ -107,19 +107,6 @@ TEST_F(FidoMakeCredentialTaskTest, TestRegisterSuccessWithFake) {
       make_credential_callback_receiver().value()->raw_credential_id().size());
 }
 
-TEST_F(FidoMakeCredentialTaskTest, MakeCredentialWithIncorrectRpIdHash) {
-  auto device = MockFidoDevice::MakeCtap();
-  device->ExpectCtap2CommandAndRespondWith(
-      CtapRequestCommand::kAuthenticatorMakeCredential,
-      test_data::kTestMakeCredentialResponseWithIncorrectRpIdHash);
-
-  const auto task = CreateMakeCredentialTask(device.get());
-  make_credential_callback_receiver().WaitForCallback();
-
-  EXPECT_EQ(CtapDeviceResponseCode::kCtap2ErrOther,
-            make_credential_callback_receiver().status());
-}
-
 TEST_F(FidoMakeCredentialTaskTest, FallbackToU2fRegisterSuccess) {
   auto device = MockFidoDevice::MakeU2f();
   device->ExpectRequestAndRespondWith(
@@ -150,8 +137,7 @@ TEST_F(FidoMakeCredentialTaskTest, TestDefaultU2fRegisterOperationWithoutFlag) {
 
 TEST_F(FidoMakeCredentialTaskTest, DefaultToU2fWhenClientPinSet) {
   AuthenticatorGetInfoResponse device_info(
-      {ProtocolVersion::kCtap, ProtocolVersion::kU2f},
-      fido_parsing_utils::Materialize(kTestDeviceAaguid));
+      {ProtocolVersion::kCtap, ProtocolVersion::kU2f}, kTestDeviceAaguid);
   AuthenticatorSupportedOptions options;
   options.SetClientPinAvailability(
       AuthenticatorSupportedOptions::ClientPinAvailability::
@@ -165,6 +151,7 @@ TEST_F(FidoMakeCredentialTaskTest, DefaultToU2fWhenClientPinSet) {
 
   const auto task = CreateMakeCredentialTask(device.get());
   make_credential_callback_receiver().WaitForCallback();
+  EXPECT_EQ(ProtocolVersion::kU2f, device->supported_protocol());
   EXPECT_EQ(CtapDeviceResponseCode::kSuccess,
             make_credential_callback_receiver().status());
   EXPECT_TRUE(make_credential_callback_receiver().value());
@@ -172,8 +159,7 @@ TEST_F(FidoMakeCredentialTaskTest, DefaultToU2fWhenClientPinSet) {
 
 TEST_F(FidoMakeCredentialTaskTest, EnforceClientPinWhenUserVerificationSet) {
   AuthenticatorGetInfoResponse device_info(
-      {ProtocolVersion::kCtap, ProtocolVersion::kU2f},
-      fido_parsing_utils::Materialize(kTestDeviceAaguid));
+      {ProtocolVersion::kCtap, ProtocolVersion::kU2f}, kTestDeviceAaguid);
   AuthenticatorSupportedOptions options;
   options.SetClientPinAvailability(
       AuthenticatorSupportedOptions::ClientPinAvailability::

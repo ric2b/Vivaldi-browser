@@ -28,6 +28,8 @@ ClientDiscardableHandle ClientDiscardableTextureManager::InitializeTexture(
   if (handle_id.is_null())
     return ClientDiscardableHandle();
 
+  // We must have a valid handle here, since the id was generated above and
+  // should be in locked state.
   texture_entries_.emplace(texture_id, TextureEntry(handle_id));
   return discardable_manager_.GetHandle(handle_id);
 }
@@ -35,7 +37,9 @@ ClientDiscardableHandle ClientDiscardableTextureManager::InitializeTexture(
 bool ClientDiscardableTextureManager::LockTexture(uint32_t texture_id) {
   base::AutoLock hold(lock_);
   auto found = texture_entries_.find(texture_id);
-  DCHECK(found != texture_entries_.end());
+  if (found == texture_entries_.end())
+    return false;
+
   TextureEntry& entry = found->second;
   if (!discardable_manager_.LockHandle(entry.id)) {
     DCHECK_EQ(0u, entry.client_lock_count);

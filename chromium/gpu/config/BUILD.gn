@@ -160,12 +160,18 @@ source_set("config_sources") {
   ]
 
   # Prefer mesa GL headers to system headers, which cause problems on Win.
-  include_dirs = [ "//third_party/mesa/src/include" ]
+  include_dirs = [ "//third_party/mesa_headers" ]
 
   if (is_win) {
     libs = [
       "dxguid.lib",
       "setupapi.lib",
+    ]
+
+    sources += [
+      "//third_party/nvml/nvml.h",
+      "nvml_info.cc",
+      "nvml_info.h",
     ]
 
     if (is_chrome_branded && is_official_build) {

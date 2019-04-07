@@ -27,7 +27,8 @@
 /apache-win32/modules/*.so
 /apache-win32/modules/*.dll
 /apk-patch-size-estimator/lib/
-/arcore-android-sdk
+/arcore-android-sdk/src/
+/arcore-android-sdk/test-apks/arcore/*.apk
 /asan
 /auto/src
 /bazel/desugar/Desugar.jar
@@ -54,10 +55,10 @@
 /custom_tabs_client/src
 /cygwin
 /depot_tools
-/deqp/src
 /devtools-node-modules
 /directxsdk
 /dom_distiller_js/dist
+/dynamicmodule
 /elfutils/src
 /errorprone/lib
 /espresso/lib/
@@ -166,6 +167,7 @@
 /perfetto
 /perl
 /ppapi
+/proguard/lib/
 /psyco_win32
 /pthreads-win32
 /py_trace_event/src
@@ -177,6 +179,8 @@
 /python_26
 /pywebsocket/src
 /pywebsocket/src
+/qemu-linux-x64
+/qemu-mac-x64
 /quic_trace/src
 /r8/lib
 /re2/src

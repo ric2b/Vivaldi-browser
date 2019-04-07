@@ -251,7 +251,8 @@ class VivaldiNativeAppWindowViews : public VivaldiNativeAppWindow,
 
   views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
 
-  base::ObserverList<web_modal::ModalDialogHostObserver> observer_list_;
+  base::ObserverList<web_modal::ModalDialogHostObserver>::Unchecked
+      observer_list_;
 
   // The class that registers for keyboard shortcuts for extension commands.
   std::unique_ptr<ExtensionKeybindingRegistryViews>

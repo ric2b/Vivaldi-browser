@@ -9,11 +9,12 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 #include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
@@ -103,6 +104,7 @@ CheckClientDownloadRequest::CheckClientDownloadRequest(
       skipped_certificate_whitelist_(false),
       is_extended_reporting_(false),
       is_incognito_(false),
+      is_under_advanced_protection_(false),
       weakptr_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   item_->AddObserver(this);
@@ -132,6 +134,9 @@ void CheckClientDownloadRequest::Start() {
     is_extended_reporting_ =
         profile && IsExtendedReportingEnabled(*profile->GetPrefs());
     is_incognito_ = browser_context->IsOffTheRecord();
+    is_under_advanced_protection_ =
+        profile &&
+        AdvancedProtectionStatusManager::IsUnderAdvancedProtection(profile);
   }
 
   // If whitelist check passes, PostFinishTask() will be called to avoid
@@ -419,7 +424,7 @@ void CheckClientDownloadRequest::AnalyzeFile() {
     // archive-type extension, then calls ExtractFileOrDmgFeatures() with
     // result.
     base::PostTaskWithTraitsAndReplyWithResult(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
         base::Bind(DiskImageTypeSnifferMac::IsAppleDiskImage,
                    item_->GetTargetFilePath()),
         base::Bind(&CheckClientDownloadRequest::ExtractFileOrDmgFeatures,
@@ -461,7 +466,7 @@ void CheckClientDownloadRequest::StartExtractFileFeatures() {
   // The task does not need to block shutdown.
   base::PostTaskWithTraits(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&CheckClientDownloadRequest::ExtractFileFeatures, this,
                      item_->GetFullPath()));
@@ -911,6 +916,8 @@ void CheckClientDownloadRequest::SendRequest() {
   request->mutable_population()->set_profile_management_status(
       GetProfileManagementStatus(
           g_browser_process->browser_policy_connector()));
+  request->mutable_population()->set_is_under_advanced_protection(
+      is_under_advanced_protection_);
 
   request->set_url(SanitizeUrl(item_->GetUrlChain().back()));
   request->mutable_digests()->set_sha256(item_->GetHash());

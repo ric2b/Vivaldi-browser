@@ -29,9 +29,11 @@ class HeadlessDevToolsManagerDelegate
   ~HeadlessDevToolsManagerDelegate() override;
 
   // DevToolsManagerDelegate implementation:
-  bool HandleCommand(content::DevToolsAgentHost* agent_host,
+  void HandleCommand(content::DevToolsAgentHost* agent_host,
                      content::DevToolsAgentHostClient* client,
-                     base::DictionaryValue* command) override;
+                     std::unique_ptr<base::DictionaryValue> command,
+                     const std::string& message,
+                     NotHandledCallback callback) override;
   scoped_refptr<content::DevToolsAgentHost> CreateNewTarget(
       const GURL& url) override;
   std::string GetDiscoveryPageHTML() override;
@@ -40,6 +42,12 @@ class HeadlessDevToolsManagerDelegate
                       content::DevToolsAgentHostClient* client) override;
   void ClientDetached(content::DevToolsAgentHost* agent_host,
                       content::DevToolsAgentHostClient* client) override;
+
+  std::vector<content::BrowserContext*> GetBrowserContexts() override;
+  content::BrowserContext* GetDefaultBrowserContext() override;
+  content::BrowserContext* CreateBrowserContext() override;
+  void DisposeBrowserContext(content::BrowserContext* context,
+                             DisposeCallback callback) override;
 
  private:
   base::WeakPtr<HeadlessBrowserImpl> browser_;

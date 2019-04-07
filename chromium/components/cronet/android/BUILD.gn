@@ -6,12 +6,26 @@ import("//base/android/jni_generator/jni_exception_list.gni")
 import("//build/buildflag_header.gni")
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
+import("//build/util/lastchange.gni")
 import("//build/util/process_version.gni")
 import("//build/util/version.gni")
 import("//testing/test.gni")
 import("//third_party/netty4/netty4.gni")
 import("//third_party/protobuf/proto_library.gni")
 import("//url/features.gni")
+
+declare_args() {
+  # In integrated mode, CronetEngine will use the shared network task runner by
+  # other Chromium-based clients like webview without self-initialization.
+  # Besides, the native library would be compiled and loaded together with the
+  # native library of host. This mode is only for Android.
+  integrated_mode = false
+}
+
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  flags = [ "INTEGRATED_MODE=$integrated_mode" ]
+}
 
 generate_jni("cronet_jni_headers") {
   sources = [
@@ -82,6 +96,16 @@ java_cpp_template("load_states_list") {
   package_path = "org/chromium/net/impl"
 }
 
+java_cpp_template("integrated_mode_state") {
+  sources = [
+    "java/src/org/chromium/net/impl/IntegratedModeState.template",
+  ]
+  package_path = "org/chromium/net/impl"
+  if (integrated_mode) {
+    defines = [ "INTEGRATED_MODE" ]
+  }
+}
+
 _generated_api_version_java_dir =
     "$target_gen_dir/templates/cronet_api_version_java"
 _generated_api_version_java =
@@ -91,8 +115,8 @@ process_version("cronet_api_version_java") {
   _api_level = read_file("api_version.txt", "value")
   template_file = "api/src/org/chromium/net/ApiVersion.template"
   sources = [
-    "//build/util/LASTCHANGE",
     "//chrome/VERSION",
+    lastchange_file,
   ]
   extra_args = [
     "-e",
@@ -121,8 +145,8 @@ process_version("cronet_impl_version_java") {
   _api_level = read_file("api_version.txt", "value")
   template_file = "java/src/org/chromium/net/impl/ImplVersion.template"
   sources = [
-    "//build/util/LASTCHANGE",
     "//chrome/VERSION",
+    lastchange_file,
   ]
   extra_args = [
     "-e",
@@ -146,6 +170,7 @@ _cronet_version_header_include_dir = "$target_gen_dir/cronet_version_header"
 
 source_set("cronet_static") {
   deps = [
+    ":buildflags",
     ":cronet_jni_headers",
     ":cronet_jni_registration",
     "//base",
@@ -164,7 +189,6 @@ source_set("cronet_static") {
     "//components/cronet/android/cronet_bidirectional_stream_adapter.cc",
     "//components/cronet/android/cronet_bidirectional_stream_adapter.h",
     "//components/cronet/android/cronet_library_loader.cc",
-    "//components/cronet/android/cronet_library_loader.h",
     "//components/cronet/android/cronet_upload_data_stream_adapter.cc",
     "//components/cronet/android/cronet_upload_data_stream_adapter.h",
     "//components/cronet/android/cronet_url_request_adapter.cc",
@@ -178,6 +202,15 @@ source_set("cronet_static") {
     "//components/cronet/android/url_request_error.cc",
     "//components/cronet/android/url_request_error.h",
   ]
+
+  if (integrated_mode) {
+    sources += [
+      "//components/cronet/android/cronet_integrated_mode_state.cc",
+      "//components/cronet/android/cronet_integrated_mode_state.h",
+    ]
+  } else {
+    sources += [ "//components/cronet/android/cronet_library_loader.h" ]
+  }
 
   include_dirs = [ _cronet_version_header_include_dir ]
 
@@ -255,6 +288,7 @@ cronet_impl_common_java_srcjar_deps = [
   ":cronet_impl_version_srcjar",
   ":effective_connection_type_java",
   ":http_cache_type_java",
+  ":integrated_mode_state",
   ":load_states_list",
   ":rtt_throughput_values_java",
 ]
@@ -1188,6 +1222,33 @@ if (!is_component_build) {
       "//base/test:test_support",
       "//components/cronet:cronet_common_unittests",
       "//components/cronet/native:cronet_native_unittests",
+      "//components/metrics",
+      "//components/prefs:test_support",
+      "//net",
+      "//net:test_support",
+      "//net/android:net_java",
+      "//testing/gtest",
+    ]
+
+    sources = [
+      "../run_all_unittests.cc",
+    ]
+
+    data = [
+      "//components/cronet/test/data/",
+    ]
+
+    if (is_android) {
+      shard_timeout = 180
+    }
+  }
+
+  test("cronet_tests_android") {
+    deps = [
+      ":cronet_impl_native_base_java",
+      ":cronet_static",
+      "//base",
+      "//base/test:test_support",
       "//components/cronet/native/test:cronet_native_tests",
       "//components/metrics",
       "//components/prefs:test_support",
@@ -1196,6 +1257,12 @@ if (!is_component_build) {
       "//net/android:net_java",
       "//testing/gtest",
     ]
+
+    sources = [
+      "../run_all_unittests.cc",
+    ]
+
+    defines = [ "CRONET_TESTS_IMPLEMENTATION" ]
 
     data = [
       "//components/cronet/test/data/",
@@ -1623,8 +1690,8 @@ if (!is_component_build) {
   process_version("cronet_maven_build_embedded_copy") {
     template_file = "maven/test/build_embedded.gradle.template"
     sources = [
-      "//build/util/LASTCHANGE",
       "//chrome/VERSION",
+      lastchange_file,
     ]
     output = "$_maven_test_dir/test_embedded/build.gradle"
   }
@@ -1632,8 +1699,8 @@ if (!is_component_build) {
   process_version("cronet_maven_build_fallback_copy") {
     template_file = "maven/test/build_fallback.gradle.template"
     sources = [
-      "//build/util/LASTCHANGE",
       "//chrome/VERSION",
+      lastchange_file,
     ]
     output = "$_maven_test_dir/test_fallback/build.gradle"
   }
@@ -1680,8 +1747,8 @@ if (!is_component_build) {
     process_version(_pom_target_name) {
       template_file = "maven/$_module_name.pom.template"
       sources = [
-        "//build/util/LASTCHANGE",
         "//chrome/VERSION",
+        lastchange_file,
       ]
       output = "$_maven_modules_dir/$_module_name/$_maven_version/$_module_name-$_maven_version.pom"
     }

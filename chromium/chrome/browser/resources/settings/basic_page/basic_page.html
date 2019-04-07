@@ -85,7 +85,7 @@
       }
 
       iron-icon {
-        -webkit-margin-start: 16px;
+        margin-inline-start: 16px;
       }
     </style>
     <template is="dom-if" if="[[showBasicPage_(
@@ -110,24 +110,24 @@
             </settings-internet-page>
           </settings-section>
         </template>
-        <template is="dom-if"
-            if="[[canShowMultideviceSection_(showMultidevice, pageVisibility)]]"
-            restamp>
-          <settings-section page-title="$i18n{multidevicePageTitle}"
-              section="multidevice"
-              hidden$="[[!doesAccountSupportMultiDeviceSection_]]">
-            <settings-multidevice-page-container prefs="{{prefs}}"
-                does-potential-connected-phone-exist=
-                    "{{doesAccountSupportMultiDeviceSection_}}">
-            </settings-multidevice-page-container>
-          </settings-section>
-        </template>
         <template is="dom-if" if="[[showPage_(pageVisibility.bluetooth)]]"
             restamp>
           <settings-section page-title="$i18n{bluetoothPageTitle}"
               section="bluetooth">
             <settings-bluetooth-page prefs="{{prefs}}">
             </settings-bluetooth-page>
+          </settings-section>
+        </template>
+        <template is="dom-if"
+            if="[[canShowMultideviceSection_(showMultidevice, pageVisibility)]]"
+            restamp>
+          <settings-section page-title="$i18n{multidevicePageTitle}"
+              section="multidevice"
+              hidden$="[[!doesChromebookSupportMultiDeviceSection_]]">
+            <settings-multidevice-page-container
+                does-chromebook-support-multi-device-features=
+                    "{{doesChromebookSupportMultiDeviceSection_}}">
+            </settings-multidevice-page-container>
           </settings-section>
         </template>
 </if>

@@ -13,7 +13,6 @@
 <translation id="2350172092385603347">Usanidi wa eneo umetumiwa, lakini eneo_chaguo-msingi halikubainishwa katika ratiba</translation>
 <translation id="2576842806987913196">Tayari kuna faili ya CRX iliyo na jina hili.</translation>
 <translation id="2753617847762399167">Njia haramu (kabisa au kiasi na '..'): '<ph name="IMAGE_PATH" />'</translation>
-<translation id="27822970480436970">Kiendelezi hiki kimeshindwa kurekebisha ombi la mtandao kwa sababu ya ukizano wa urekebishaji na kirefusho kingine.</translation>
 <translation id="2785530881066938471">Isingweza kupakia faili '<ph name="RELATIVE_PATH" />' ya hati ya maudhui. Haijasimbwa kwa UTF-8.</translation>
 <translation id="2903070246402204397"><ph name="EXTENSION_NAME" /> (kitambulisho cha kiendelezi cha "<ph name="EXTENSION_ID" />") kimezuiwa na msimamizi. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">Isingeweza kusakinisha furushi: '<ph name="ERROR_CODE" />'</translation>
@@ -57,19 +56,16 @@
 <translation id="7003844668372540529">Bidhaa isiyojulikana <ph name="PRODUCT_ID" /> kutoka kwa <ph name="VENDOR_NAME" /></translation>
 <translation id="7068383018033524534">Faili ya maelezo si sahihi</translation>
 <translation id="7217838517480956708">Msimamizi wa mashine haya anahitaji <ph name="EXTENSION_NAME" /> kisakinishwe. Hakiwezi kuondolewa au kurekebishwa.</translation>
+<translation id="7612608473764576263">Ni lazima uweke thamani ya ufunguo wa faragha katika muundo sahihi (Ufunguo wa RSA wa PKCS#8-format PEM-encoded).</translation>
 <translation id="7939686037314084444">Imeshindwa kupakia kiendelezi vizuri. Huenda haitaweza kuingilia maombi ya mtandao.</translation>
 <translation id="7972881773422714442">Chaguzi: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Kamera ya mbele</translation>
 <translation id="8047248493720652249">Kiendelezi hiki kimeshindwa kukipa kipakuliwa jina "<ph name="ATTEMPTED_FILENAME" />" kwa sababu kipakuliwa kingine (<ph name="EXTENSION_NAME" />) kimechagua jina tofauti la faili "<ph name="ACTUAL_FILENAME" />".</translation>
 <translation id="8284835137979141223"><ph name="PRODUCT_NAME" /> kutoka <ph name="VENDOR_NAME" /></translation>
-<translation id="8341840687457896278">Kiendelezi hiki kimeshindwa kutoa vitambulisho kwenye ombi la mtandao kwa sababu kiendelezi kingine (<ph name="EXTENSION_NAME" />) kimetoa vitambulisho tofauti.</translation>
 <translation id="8517576857589387417">Faili ya maelezo haipatikani au haisomeki</translation>
 <translation id="8636666366616799973">Furushi ni batili. Maelezo: '<ph name="ERROR_MESSAGE" />'.</translation>
-<translation id="8670869118777164560">Kiendelezi kimeshindwa kuelekeza upya ombi la mtandao kwenye <ph name="ATTEMPTED_REDIRECT_DESTINATION" /> kwa sababu kiendelezi kingine (<ph name="EXTENSION_NAME" />) kimeelekeza upya kwenye <ph name="ACTUAL_REDIRECT_DESTINATION" />.</translation>
 <translation id="8761756413268424715">"<ph name="APP_NAME" />" inaomba idhini ya kufikia mojawapo ya vifaa vyako:</translation>
-<translation id="8825366169884721447">Kiendelezi hiki kimeshindwa kuboresha kichwa cha ombi "<ph name="HEADER_NAME" />" cha ombi la mtandao kwa sababu uboreshaji umekinzana na kiendelezi kingine (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="8885905466771744233">Ufunguo binafsi wa kiendelezi kilichobainishwa tayari upo. Tumia ufunguo huo tena au uufute kwanza.</translation>
 <translation id="907841381057066561">Imeshindwa kuunda faili ya muda ya zip wakati wa kufungasha.</translation>
-<translation id="9111791539553342076">Kiendelezi hiki kimeshindwa kuboresha kichwa cha jibu "<ph name="HEADER_NAME" />" cha ombi la mtandao kwa sababu uboreshaji umekinzana na kiendelezi kingine (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="941543339607623937">Ufunguo binafsi sio halali.</translation>
 </translationbundle>

@@ -158,8 +158,8 @@ CompositingLayerAssigner::GetReasonsPreventingSquashing(
   if (SquashingWouldExceedSparsityTolerance(layer, squashing_state))
     return SquashingDisallowedReason::kSquashingSparsityExceeded;
 
-  if (layer->GetLayoutObject().Style()->HasBlendMode() ||
-      squashing_layer.GetLayoutObject().Style()->HasBlendMode())
+  if (layer->GetLayoutObject().StyleRef().HasBlendMode() ||
+      squashing_layer.GetLayoutObject().StyleRef().HasBlendMode())
     return SquashingDisallowedReason::kSquashingBlendingIsDisallowed;
 
   if (layer->ClippingContainer() != squashing_layer.ClippingContainer() &&
@@ -196,15 +196,18 @@ CompositingLayerAssigner::GetReasonsPreventingSquashing(
   if (layer->NearestFixedPositionLayer() !=
       squashing_layer.NearestFixedPositionLayer())
     return SquashingDisallowedReason::kNearestFixedPositionMismatch;
-  DCHECK_NE(layer->GetLayoutObject().Style()->GetPosition(), EPosition::kFixed);
+  DCHECK_NE(layer->GetLayoutObject().StyleRef().GetPosition(),
+            EPosition::kFixed);
 
-  if ((squashing_layer.GetLayoutObject().Style()->SubtreeWillChangeContents() &&
+  if ((squashing_layer.GetLayoutObject()
+           .StyleRef()
+           .SubtreeWillChangeContents() &&
        squashing_layer.GetLayoutObject()
-           .Style()
-           ->IsRunningAnimationOnCompositor()) ||
+           .StyleRef()
+           .IsRunningAnimationOnCompositor()) ||
       squashing_layer.GetLayoutObject()
-          .Style()
-          ->ShouldCompositeForCurrentAnimations())
+          .StyleRef()
+          .ShouldCompositeForCurrentAnimations())
     return SquashingDisallowedReason::kSquashingLayerIsAnimating;
 
   if (layer->EnclosingPaginationLayer())
@@ -311,8 +314,8 @@ void CompositingLayerAssigner::AssignLayersToBackingsInternal(
       if (ScrollingCoordinator* scrolling_coordinator =
               layer->GetScrollingCoordinator()) {
         if (layer->GetLayoutObject()
-                .Style()
-                ->HasViewportConstrainedPosition()) {
+                .StyleRef()
+                .HasViewportConstrainedPosition()) {
           scrolling_coordinator->FrameViewFixedObjectsDidChange(
               layer->GetLayoutObject().View()->GetFrameView());
         }

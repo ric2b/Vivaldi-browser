@@ -16,7 +16,7 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 #include "sql/init_status.h"
 #include "sql/meta_table.h"
 
@@ -52,7 +52,7 @@ class ContactDatabase : public ContactTable,
   // Call before Init() to set the error callback to be used for the
   // underlying database connection.
   void set_error_callback(
-      const sql::Connection::ErrorCallback& error_callback) {
+      const sql::Database::ErrorCallback& error_callback) {
     db_.set_error_callback(error_callback);
   }
 
@@ -103,9 +103,9 @@ class ContactDatabase : public ContactTable,
   std::string GetDiagnosticInfo(int extended_error, sql::Statement* statement);
 
  private:
-  sql::Connection& GetDB() override;
+  sql::Database& GetDB() override;
   sql::InitStatus EnsureCurrentVersion();
-  sql::Connection db_;
+  sql::Database db_;
   sql::MetaTable meta_table_;
 
   DISALLOW_COPY_AND_ASSIGN(ContactDatabase);

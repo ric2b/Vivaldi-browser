@@ -14,7 +14,6 @@ goog.require('PanelCommand');
 goog.require('cvox.AbstractTts');
 goog.require('cvox.ChromeTtsBase');
 goog.require('cvox.ChromeVox');
-goog.require('cvox.MathMap');
 goog.require('goog.i18n.MessageFormat');
 
 
@@ -38,20 +37,10 @@ cvox.Utterance.nextUtteranceId_ = 1;
 
 /**
  * @constructor
- * @param {boolean=} opt_enableMath Whether to process math. Used when running
- * on forge. Defaults to true.
  * @extends {cvox.ChromeTtsBase}
  */
-cvox.TtsBackground = function(opt_enableMath) {
-  opt_enableMath = opt_enableMath == undefined ? true : opt_enableMath;
+cvox.TtsBackground = function() {
   goog.base(this);
-
-  this.ttsProperties['rate'] =
-      (parseFloat(localStorage['rate']) || this.propertyDefault['rate']);
-  this.ttsProperties['pitch'] =
-      (parseFloat(localStorage['pitch']) || this.propertyDefault['pitch']);
-  this.ttsProperties['volume'] =
-      (parseFloat(localStorage['volume']) || this.propertyDefault['volume']);
 
   // Use the current locale as the speech language if not otherwise
   // specified.
@@ -114,12 +103,6 @@ cvox.TtsBackground = function(opt_enableMath) {
   this.retainPunctuation_ = [';', '?', '!', '\''];
 
   /**
-   * Mapping for math elements.
-   * @type {cvox.MathMap}
-   */
-  this.mathmap = opt_enableMath ? new cvox.MathMap() : null;
-
-  /**
    * The id of a callback returned from setTimeout.
    * @type {number|undefined}
    */
@@ -158,23 +141,60 @@ cvox.TtsBackground = function(opt_enableMath) {
    */
   this.utteranceQueue_ = [];
 
+  /**
+   * The current voice name.
+   * @type {string}
+   */
+  this.currentVoice;
+
   // TODO(dtseng): Done while migrating away from using localStorage.
   if (localStorage['voiceName']) {
     chrome.storage.local.set({voiceName: localStorage['voiceName']});
     delete localStorage['voiceName'];
   }
 
-  window.speechSynthesis.onvoiceschanged = function() {
-    chrome.storage.local.get({voiceName: ''}, function(items) {
-      this.updateVoice_(items.voiceName);
-    }.bind(this));
-  }.bind(this);
+  if (window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = function() {
+      chrome.storage.local.get({voiceName: ''}, function(items) {
+        this.updateVoice_(items.voiceName);
+      }.bind(this));
+    }.bind(this);
+  } else {
+    // SpeechSynthesis API is not available on chromecast. Call
+    // updateVoice_ to set the one and only voice as the current
+    // voice.
+    this.updateVoice_('');
+  }
 
   chrome.storage.onChanged.addListener(function(changes, namespace) {
     if (changes.voiceName) {
       this.updateVoice_(changes.voiceName.newValue);
     }
   }.bind(this));
+
+  // Migration: localStorage tts properties -> Chrome pref settings.
+  if (localStorage['rate']) {
+    chrome.settingsPrivate.setPref(
+        'settings.tts.speech_rate', parseFloat(localStorage['rate']));
+    delete localStorage['rate'];
+  }
+  if (localStorage['pitch']) {
+    chrome.settingsPrivate.setPref(
+        'settings.tts.speech_pitch', parseFloat(localStorage['pitch']));
+    delete localStorage['pitch'];
+  }
+  if (localStorage['volume']) {
+    chrome.settingsPrivate.setPref(
+        'settings.tts.speech_volume', parseFloat(localStorage['volume']));
+    delete localStorage['volume'];
+  }
+
+  // At startup.
+  chrome.settingsPrivate.getAllPrefs(this.updateFromPrefs_.bind(this, false));
+
+  // At runtime.
+  chrome.settingsPrivate.onPrefsChanged.addListener(
+      this.updateFromPrefs_.bind(this, true));
 };
 goog.inherits(cvox.TtsBackground, cvox.ChromeTtsBase);
 
@@ -247,9 +267,32 @@ cvox.TtsBackground.prototype.speak = function(
   // pattern causes ChromeVox to read numbers as digits rather than words.
   textString = this.getNumberAsDigits_(textString);
 
+  // TODO(dtseng): some TTS engines don't handle strings that don't produce any
+  // speech very well. Handle empty and whitespace only strings (including
+  // non-breaking space) here to mitigate the issue somewhat.
+  if (cvox.TtsBackground.SKIP_WHITESPACE_.test(textString)) {
+    // Explicitly call start and end callbacks before skipping this text.
+    if (properties['startCallback']) {
+      try {
+        properties['startCallback']();
+      } catch (e) {
+      }
+    }
+    if (properties['endCallback']) {
+      try {
+        properties['endCallback']();
+      } catch (e) {
+      }
+    }
+    if (queueMode === cvox.QueueMode.FLUSH) {
+      this.stop();
+    }
+    return this;
+  }
+
   var mergedProperties = this.mergeProperties(properties);
 
-  if (this.currentVoice) {
+  if (this.currentVoice && this.currentVoice !== constants.SYSTEM_VOICE) {
     mergedProperties['voiceName'] = this.currentVoice;
   }
 
@@ -466,7 +509,23 @@ cvox.TtsBackground.prototype.cancelUtterance_ = function(utterance) {
 cvox.TtsBackground.prototype.increaseOrDecreaseProperty = function(
     propertyName, increase) {
   goog.base(this, 'increaseOrDecreaseProperty', propertyName, increase);
-  localStorage[propertyName] = this.ttsProperties[propertyName];
+
+  var pref;
+  switch (propertyName) {
+    case cvox.AbstractTts.RATE:
+      pref = 'settings.tts.speech_rate';
+      break;
+    case cvox.AbstractTts.PITCH:
+      pref = 'settings.tts.speech_pitch';
+      break;
+    case cvox.AbstractTts.VOLUME:
+      pref = 'settings.tts.speech_volume';
+      break;
+    default:
+      return;
+  }
+  var value = this.ttsProperties[propertyName];
+  chrome.settingsPrivate.setPref(pref, value);
 };
 
 /** @override */
@@ -516,11 +575,6 @@ cvox.TtsBackground.prototype.onError_ = function(errorMessage) {
 cvox.TtsBackground.prototype.preprocess = function(text, properties) {
   properties = properties ? properties : {};
 
-  // Perform specialized processing, such as mathematics.
-  if (properties.math) {
-    text = this.preprocessMath_(text, properties.math);
-  }
-
   // Perform generic processing.
   text = goog.base(this, 'preprocess', text, properties);
 
@@ -543,14 +597,6 @@ cvox.TtsBackground.prototype.preprocess = function(text, properties) {
   if (properties.math || !properties['phoneticCharacters'] ||
       !this.pronouncePhonetically_(text)) {
     this.clearTimeout_();
-  }
-
-  // Try looking up in our unicode tables for a short description.
-  if (!properties.math && text.length == 1 && this.mathmap) {
-    text = this.mathmap.store.lookupString(
-               text.toLowerCase(),
-               cvox.MathStore.createDynamicConstraint('default', 'short')) ||
-        text;
   }
 
   //  Remove all whitespace from the beginning and end, and collapse all
@@ -594,29 +640,6 @@ cvox.TtsBackground.prototype.cyclePunctuationEcho = function() {
   localStorage[cvox.AbstractTts.PUNCTUATION_ECHO] =
       this.currentPunctuationEcho_;
   return this.punctuationEchoes_[this.currentPunctuationEcho_].msg;
-};
-
-
-/**
- * Process a math expression into a string suitable for a speech engine.
- * @param {string} text Text representing a math expression.
- * @param {Object= } math Parameter containing information how to
- *     process the math expression.
- * @return {string} The string with a spoken version of the math expression.
- * @private
- */
-cvox.TtsBackground.prototype.preprocessMath_ = function(text, math) {
-  if (!this.mathmap) {
-    return text;
-  }
-  var result = '';
-  var dynamicCstr =
-      cvox.MathStore.createDynamicConstraint(math['domain'], math['style']);
-  result = this.mathmap.store.lookupString(text, dynamicCstr);
-  if (result) {
-    return result;
-  }
-  return text;
 };
 
 
@@ -705,30 +728,60 @@ cvox.TtsBackground.prototype.clearTimeout_ = function() {
  */
 cvox.TtsBackground.prototype.updateVoice_ = function(voiceName, opt_callback) {
   chrome.tts.getVoices(goog.bind(function(voices) {
-    chrome.i18n.getAcceptLanguages(goog.bind(function(acceptLanguages) {
-      var currentLocale =
-          acceptLanguages[0] || chrome.i18n.getUILanguage() || '';
-      var match = voices.find.bind(voices);
-      var newVoice = match(function(v) {
-                       return v.voiceName == voiceName;
-                     }) ||
-          match(function(v) {
-                       return v.lang === currentLocale;
-                     }) ||
-          match(function(v) {
-                       return currentLocale.startsWith(v.lang);
-                     }) ||
-          match(function(v) {
-                       return v.lang && v.lang.startsWith(currentLocale);
-                     }) ||
-          voices[0];
-
-      if (newVoice) {
-        this.currentVoice = newVoice.voiceName;
-        this.startSpeakingNextItemInQueue_();
-      }
-      if (opt_callback)
-        opt_callback(this.currentVoice);
-    }, this));
+    let systemVoice = {voiceName: constants.SYSTEM_VOICE};
+    voices.unshift(systemVoice);
+    let newVoice = voices.find((v) => {
+      return v.voiceName == voiceName;
+    }) ||
+        systemVoice;
+    if (newVoice) {
+      this.currentVoice = newVoice.voiceName;
+      this.startSpeakingNextItemInQueue_();
+    }
+    if (opt_callback)
+      opt_callback(this.currentVoice);
   }, this));
 };
+
+/**
+ * @param {boolean} announce
+ * @param {Array<chrome.settingsPrivate.PrefObject>} prefs
+ * @private
+ */
+cvox.TtsBackground.prototype.updateFromPrefs_ = function(announce, prefs) {
+  prefs.forEach((pref) => {
+    var msg;
+    var propertyName;
+    switch (pref.key) {
+      case 'settings.tts.speech_rate':
+        propertyName = cvox.AbstractTts.RATE;
+        msg = 'announce_rate';
+        break;
+      case 'settings.tts.speech_pitch':
+        propertyName = cvox.AbstractTts.PITCH;
+        msg = 'announce_pitch';
+        break;
+      case 'settings.tts.speech_volume':
+        propertyName = cvox.AbstractTts.VOLUME;
+        msg = 'announce_volume';
+        break;
+      default:
+        return;
+    }
+
+    this.ttsProperties[propertyName] = pref.value;
+
+    if (!announce)
+      return;
+
+    var valueAsPercent =
+        Math.round(this.propertyToPercentage(propertyName) * 100);
+    var announcement = Msgs.getMsg(msg, [valueAsPercent]);
+    cvox.ChromeVox.tts.speak(
+        announcement, cvox.QueueMode.FLUSH,
+        cvox.AbstractTts.PERSONALITY_ANNOTATION);
+  });
+};
+
+/** @private {RegExp} */
+cvox.TtsBackground.SKIP_WHITESPACE_ = /^[\s\u00a0]*$/;

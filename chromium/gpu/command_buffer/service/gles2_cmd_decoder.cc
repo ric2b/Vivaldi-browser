@@ -121,11 +121,6 @@ const char kEXTFragDepthExtension[] = "GL_EXT_frag_depth";
 const char kEXTDrawBuffersExtension[] = "GL_EXT_draw_buffers";
 const char kEXTShaderTextureLodExtension[] = "GL_EXT_shader_texture_lod";
 
-const GLfloat kIdentityMatrix[16] = {1.0f, 0.0f, 0.0f, 0.0f,
-                                     0.0f, 1.0f, 0.0f, 0.0f,
-                                     0.0f, 0.0f, 1.0f, 0.0f,
-                                     0.0f, 0.0f, 0.0f, 1.0f};
-
 gfx::OverlayTransform GetGFXOverlayTransform(GLenum plane_transform) {
   switch (plane_transform) {
     case GL_OVERLAY_TRANSFORM_NONE_CHROMIUM:
@@ -223,9 +218,9 @@ class GLES2DecoderImpl;
 // Local versions of the SET_GL_ERROR macros
 #define LOCAL_SET_GL_ERROR(error, function_name, msg) \
     ERRORSTATE_SET_GL_ERROR(state_.GetErrorState(), error, function_name, msg)
-#define LOCAL_SET_GL_ERROR_INVALID_ENUM(function_name, value, label) \
-    ERRORSTATE_SET_GL_ERROR_INVALID_ENUM(state_.GetErrorState(), \
-                                         function_name, value, label)
+#define LOCAL_SET_GL_ERROR_INVALID_ENUM(function_name, value, label)          \
+  ERRORSTATE_SET_GL_ERROR_INVALID_ENUM(state_.GetErrorState(), function_name, \
+                                       static_cast<uint32_t>(value), label)
 #define LOCAL_COPY_REAL_GL_ERRORS_TO_WRAPPER(function_name) \
     ERRORSTATE_COPY_REAL_GL_ERRORS_TO_WRAPPER(state_.GetErrorState(), \
                                               function_name)
@@ -1025,7 +1020,9 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
                                        GLbitfield flags);
 
   // Callback for async SwapBuffers.
-  void FinishAsyncSwapBuffers(uint64_t swap_id, gfx::SwapResult result);
+  void FinishAsyncSwapBuffers(uint64_t swap_id,
+                              gfx::SwapResult result,
+                              std::unique_ptr<gfx::GpuFence>);
   void FinishSwapBuffers(gfx::SwapResult result);
 
   void DoCommitOverlayPlanes(uint64_t swap_id, GLbitfield flags);
@@ -1641,6 +1638,9 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   // Wrapper for glFlush.
   void DoFlush();
 
+  // Wrapper for glFramebufferParameteri.
+  void DoFramebufferParameteri(GLenum target, GLenum pname, GLint param);
+
   // Wrapper for glFramebufferRenderbufffer.
   void DoFramebufferRenderbuffer(
       GLenum target, GLenum attachment, GLenum renderbuffertarget,
@@ -1665,6 +1665,14 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   void DoFramebufferTextureLayer(
       GLenum target, GLenum attachment, GLuint texture, GLint level,
       GLint layer);
+
+  // Wrapper for glFramebufferTextureLayer.
+  void DoFramebufferTextureMultiviewLayeredANGLE(GLenum target,
+                                                 GLenum attachment,
+                                                 GLuint texture,
+                                                 GLint level,
+                                                 GLint base_view_index,
+                                                 GLsizei num_views);
 
   // Wrapper for glGenerateMipmap
   void DoGenerateMipmap(GLenum target);
@@ -2360,6 +2368,9 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
 
   void ReadBackBuffersIntoShadowCopies(
       base::flat_set<scoped_refptr<Buffer>> buffers_to_shadow_copy);
+
+  // Compiles the given shader and exits command processing early.
+  void CompileShaderAndExitCommandProcessingEarly(Shader* shader);
 
   // Generate a member function prototype for each command in an automated and
   // typesafe way.
@@ -3359,6 +3370,17 @@ gpu::ContextResult GLES2DecoderImpl::Initialize(
     return gpu::ContextResult::kFatalFailure;
   }
 
+  // Only create webgl2-compute for passthrough cmd decoder.
+  if (attrib_helper.context_type == CONTEXT_TYPE_WEBGL2_COMPUTE) {
+    // Must not destroy ContextGroup if it is not initialized.
+    group_ = nullptr;
+    Destroy(true);
+    LOG(ERROR)
+        << "ContextResult::kFatalFailure: "
+           "webgl2-compute is not supported on validating command decoder.";
+    return gpu::ContextResult::kFatalFailure;
+  }
+
   auto result =
       group_->Initialize(this, attrib_helper.context_type, disallowed_features);
   if (result != gpu::ContextResult::kSuccess) {
@@ -3368,11 +3390,6 @@ gpu::ContextResult GLES2DecoderImpl::Initialize(
     return result;
   }
   CHECK_GL_ERROR();
-
-  if (features().chromium_gpu_fence &&
-      group_->gpu_preferences().use_gpu_fences_for_overlay_planes) {
-    surface_->SetUsePlaneGpuFences();
-  }
 
   should_use_native_gmb_for_backbuffer_ =
       attrib_helper.should_use_native_gmb_for_backbuffer;
@@ -4018,6 +4035,7 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
   // This is unconditionally true on mac, no need to test for it at runtime.
   caps.iosurface = true;
 #endif
+  caps.use_gpu_fences_for_overlay_planes = surface_->SupportsPlaneGpuFences();
 
   caps.post_sub_buffer = supports_post_sub_buffer_;
   caps.swap_buffers_with_bounds = supports_swap_buffers_with_bounds_;
@@ -4078,8 +4096,6 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
       feature_info_->feature_flags().chromium_texture_storage_image;
   caps.supports_oop_raster = false;
   caps.chromium_gpu_fence = feature_info_->feature_flags().chromium_gpu_fence;
-  caps.use_gpu_fences_for_overlay_planes =
-      group_->gpu_preferences().use_gpu_fences_for_overlay_planes;
   caps.unpremultiply_and_dither_copy =
       feature_info_->feature_flags().unpremultiply_and_dither_copy;
   caps.texture_target_exception_list =
@@ -4089,6 +4105,8 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
   caps.chromium_nonblocking_readback =
       feature_info_->context_type() == CONTEXT_TYPE_WEBGL2;
   caps.num_surface_buffers = surface_->GetBufferCount();
+  caps.mesa_framebuffer_flip_y =
+      feature_info_->feature_flags().mesa_framebuffer_flip_y;
 
   return caps;
 }
@@ -5354,12 +5372,11 @@ void GLES2DecoderImpl::ReleaseNotInUseBackTextures() {
     if (!saved_back_texture.in_use)
       saved_back_texture.back_texture->Destroy();
   }
-  auto to_remove =
-      std::remove_if(saved_back_textures_.begin(), saved_back_textures_.end(),
-                     [](const SavedBackTexture& saved_back_texture) {
-                       return !saved_back_texture.in_use;
-                     });
-  saved_back_textures_.erase(to_remove, saved_back_textures_.end());
+
+  base::EraseIf(saved_back_textures_,
+                [](const SavedBackTexture& saved_back_texture) {
+                  return !saved_back_texture.in_use;
+                });
 }
 
 void GLES2DecoderImpl::ReleaseAllBackTextures(bool have_context) {
@@ -5669,9 +5686,11 @@ error::Error GLES2DecoderImpl::DoCommandsImpl(unsigned int num_commands,
 
 #if defined(OS_MACOSX)
   // Aggressively call glFlush on macOS. This is the only fix that has been
-  // found so far to avoid crashes on Intel drivers.
+  // found so far to avoid crashes on Intel drivers. The workaround
+  // isn't needed for WebGL contexts, though.
   // https://crbug.com/863817
-  context_->FlushForDriverCrashWorkaround();
+  if (!feature_info_->IsWebGLContext())
+    context_->FlushForDriverCrashWorkaround();
 #endif
 
   *entries_processed = process_pos;
@@ -7270,7 +7289,6 @@ bool GLES2DecoderImpl::GetHelper(
     case GL_PROGRAM_BINARY_FORMATS:
       *num_written = 0;
       return true;
-
     default:
       if (pname >= GL_DRAW_BUFFER0_ARB && pname <= GL_DRAW_BUFFER15_ARB) {
         *num_written = 1;
@@ -7932,6 +7950,18 @@ void GLES2DecoderImpl::DoClearBufferfi(
   api()->glClearBufferfiFn(buffer, drawbuffer, depth, stencil);
 }
 
+void GLES2DecoderImpl::DoFramebufferParameteri(GLenum target,
+                                               GLenum pname,
+                                               GLint param) {
+  const char* func_name = "glFramebufferParameteri";
+  Framebuffer* framebuffer = GetFramebufferInfoForTarget(target);
+  if (!framebuffer) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, func_name, "no framebuffer bound");
+    return;
+  }
+  api()->glFramebufferParameteriFn(target, pname, param);
+}
+
 void GLES2DecoderImpl::DoFramebufferRenderbuffer(
     GLenum target, GLenum attachment, GLenum renderbuffertarget,
     GLuint client_renderbuffer_id) {
@@ -8289,6 +8319,17 @@ void GLES2DecoderImpl::DoFramebufferTextureLayer(
   if (framebuffer == framebuffer_state_.bound_draw_framebuffer.get()) {
     framebuffer_state_.clear_state_dirty = true;
   }
+}
+
+void GLES2DecoderImpl::DoFramebufferTextureMultiviewLayeredANGLE(
+    GLenum target,
+    GLenum attachment,
+    GLuint client_texture_id,
+    GLint level,
+    GLint base_view_index,
+    GLsizei num_views) {
+  // This is only supported in passthrough command buffer.
+  NOTREACHED();
 }
 
 void GLES2DecoderImpl::DoGetFramebufferAttachmentParameteriv(
@@ -11038,7 +11079,7 @@ void GLES2DecoderImpl::DoGetShaderiv(GLuint shader_id,
     case GL_COMPILE_STATUS:
     case GL_INFO_LOG_LENGTH:
     case GL_TRANSLATED_SHADER_SOURCE_LENGTH_ANGLE:
-      shader->DoCompile();
+      CompileShaderAndExitCommandProcessingEarly(shader);
       break;
 
     default:
@@ -11104,7 +11145,7 @@ error::Error GLES2DecoderImpl::HandleGetTranslatedShaderSourceANGLE(
   }
 
   // Make sure translator has been utilized in compile.
-  shader->DoCompile();
+  CompileShaderAndExitCommandProcessingEarly(shader);
 
   bucket->SetFromString(shader->translated_source().c_str());
   return error::kNoError;
@@ -11143,7 +11184,7 @@ error::Error GLES2DecoderImpl::HandleGetShaderInfoLog(
   }
 
   // Shader must be compiled in order to get the info log.
-  shader->DoCompile();
+  CompileShaderAndExitCommandProcessingEarly(shader);
 
   bucket->SetFromString(shader->log_info().c_str());
   return error::kNoError;
@@ -11345,29 +11386,24 @@ void GLES2DecoderImpl::GetTexParameterImpl(
         return;
       }
       break;
-    // Get the level information from the texture to avoid a Mac driver
-    // bug where they store the levels in int16_t, making values bigger
-    // than 2^15-1 overflow in the negative range.
     case GL_TEXTURE_BASE_LEVEL:
-      if (workarounds().use_shadowed_tex_level_params) {
-        if (fparams) {
-          fparams[0] = static_cast<GLfloat>(texture->base_level());
-        } else {
-          iparams[0] = texture->base_level();
-        }
-        return;
+      // Use shadowed value in case it's clamped; also because older MacOSX
+      // stores the value on int16_t (see https://crbug.com/610153).
+      if (fparams) {
+        fparams[0] = static_cast<GLfloat>(texture->unclamped_base_level());
+      } else {
+        iparams[0] = texture->unclamped_base_level();
       }
-      break;
+      return;
     case GL_TEXTURE_MAX_LEVEL:
-      if (workarounds().use_shadowed_tex_level_params) {
-        if (fparams) {
-          fparams[0] = static_cast<GLfloat>(texture->max_level());
-        } else {
-          iparams[0] = texture->max_level();
-        }
-        return;
+      // Use shadowed value in case it's clamped; also because older MacOSX
+      // stores the value on int16_t (see https://crbug.com/610153).
+      if (fparams) {
+        fparams[0] = static_cast<GLfloat>(texture->unclamped_max_level());
+      } else {
+        iparams[0] = texture->unclamped_max_level();
       }
-      break;
+      return;
     case GL_TEXTURE_SWIZZLE_R:
       if (fparams) {
         fparams[0] = static_cast<GLfloat>(texture->swizzle_r());
@@ -13186,32 +13222,30 @@ bool GLES2DecoderImpl::ClearLevelUsingGL(Texture* texture,
                                          int width,
                                          int height) {
   TRACE_EVENT0("gpu", "GLES2DecoderImpl::ClearLevelUsingGL");
+  GLenum fb_target = GetDrawFramebufferTarget();
   GLuint fb = 0;
   api()->glGenFramebuffersEXTFn(1, &fb);
-  api()->glBindFramebufferEXTFn(GL_DRAW_FRAMEBUFFER_EXT, fb);
+  api()->glBindFramebufferEXTFn(fb_target, fb);
 
   bool have_color = (channels & GLES2Util::kRGBA) != 0;
   if (have_color) {
-    api()->glFramebufferTexture2DEXTFn(GL_DRAW_FRAMEBUFFER_EXT,
-                                       GL_COLOR_ATTACHMENT0, target,
+    api()->glFramebufferTexture2DEXTFn(fb_target, GL_COLOR_ATTACHMENT0, target,
                                        texture->service_id(), level);
   }
   bool have_depth = (channels & GLES2Util::kDepth) != 0;
   if (have_depth) {
-    api()->glFramebufferTexture2DEXTFn(GL_DRAW_FRAMEBUFFER_EXT,
-                                       GL_DEPTH_ATTACHMENT, target,
+    api()->glFramebufferTexture2DEXTFn(fb_target, GL_DEPTH_ATTACHMENT, target,
                                        texture->service_id(), level);
   }
   bool have_stencil = (channels & GLES2Util::kStencil) != 0;
   if (have_stencil) {
-    api()->glFramebufferTexture2DEXTFn(GL_DRAW_FRAMEBUFFER_EXT,
-                                       GL_STENCIL_ATTACHMENT, target,
+    api()->glFramebufferTexture2DEXTFn(fb_target, GL_STENCIL_ATTACHMENT, target,
                                        texture->service_id(), level);
   }
   // Attempt to do the clear only if the framebuffer is complete. ANGLE
   // promises a depth only attachment ok.
   bool result = false;
-  if (api()->glCheckFramebufferStatusEXTFn(GL_DRAW_FRAMEBUFFER_EXT) ==
+  if (api()->glCheckFramebufferStatusEXTFn(fb_target) ==
       GL_FRAMEBUFFER_COMPLETE) {
     api()->glColorMaskFn(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     api()->glClearColorFn(0.0, 0.0, 0.0, 0.0);
@@ -13233,11 +13267,10 @@ bool GLES2DecoderImpl::ClearLevelUsingGL(Texture* texture,
   }
   RestoreClearState();
   api()->glDeleteFramebuffersEXTFn(1, &fb);
-  Framebuffer* framebuffer =
-      GetFramebufferInfoForTarget(GL_DRAW_FRAMEBUFFER_EXT);
+  Framebuffer* framebuffer = GetFramebufferInfoForTarget(fb_target);
   GLuint fb_service_id =
       framebuffer ? framebuffer->service_id() : GetBackbufferServiceId();
-  api()->glBindFramebufferEXTFn(GL_DRAW_FRAMEBUFFER_EXT, fb_service_id);
+  api()->glBindFramebufferEXTFn(fb_target, fb_service_id);
   return result;
 }
 
@@ -13413,29 +13446,6 @@ bool GLES2DecoderImpl::ClearLevel3D(Texture* texture,
 
 namespace {
 
-const int kS3TCBlockWidth = 4;
-
-typedef struct {
-  int blockWidth;
-  int blockHeight;
-} ASTCBlockArray;
-
-const ASTCBlockArray kASTCBlockArray[] = {
-    {4, 4},   /* GL_COMPRESSED_RGBA_ASTC_4x4_KHR */
-    {5, 4},   /* and GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR */
-    {5, 5},
-    {6, 5},
-    {6, 6},
-    {8, 5},
-    {8, 6},
-    {8, 8},
-    {10, 5},
-    {10, 6},
-    {10, 8},
-    {10, 10},
-    {12, 10},
-    {12, 12}};
-
 bool CheckETCFormatSupport(const FeatureInfo& feature_info) {
   const gl::GLVersionInfo& version_info = feature_info.gl_version_info();
   return version_info.IsAtLeastGL(4, 3) || version_info.IsAtLeastGLES(3, 0) ||
@@ -13577,18 +13587,6 @@ std::unique_ptr<uint8_t[]> DecompressTextureData(
   return decompressed_data;
 }
 
-bool IsValidS3TCSizeForWebGL(GLint level, GLsizei size) {
-  // WebGL only allows multiple-of-4 sizes, except for levels > 0 where it also
-  // allows 1 or 2. See WEBGL_compressed_texture_s3tc.
-  return (level && size == 1) ||
-         (level && size == 2) ||
-         !(size % kS3TCBlockWidth);
-}
-
-bool IsValidPVRTCSize(GLint level, GLsizei size) {
-  return GLES2Util::IsPOT(size);
-}
-
 }  // anonymous namespace.
 
 bool GLES2DecoderImpl::ValidateCompressedTexFuncData(const char* function_name,
@@ -13625,106 +13623,14 @@ bool GLES2DecoderImpl::ValidateCompressedTexFuncData(const char* function_name,
 bool GLES2DecoderImpl::ValidateCompressedTexDimensions(
     const char* function_name, GLenum target, GLint level,
     GLsizei width, GLsizei height, GLsizei depth, GLenum format) {
-  switch (format) {
-    case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
-    case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
-    case GL_COMPRESSED_RGBA_S3TC_DXT3_EXT:
-    case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
-    case GL_COMPRESSED_SRGB_S3TC_DXT1_EXT:
-    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT:
-    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT:
-    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT:
-      DCHECK_EQ(1, depth);  // 2D formats.
-      if (feature_info_->IsWebGLContext() &&
-          (!IsValidS3TCSizeForWebGL(level, width) ||
-           !IsValidS3TCSizeForWebGL(level, height))) {
-        LOCAL_SET_GL_ERROR(
-            GL_INVALID_OPERATION, function_name,
-            "width or height invalid for level");
-        return false;
-      }
-      return true;
-    case GL_COMPRESSED_RGBA_ASTC_4x4_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_5x4_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_5x5_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_6x5_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_6x6_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_8x5_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_8x6_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_8x8_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_10x5_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_10x6_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_10x8_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_10x10_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_12x10_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_12x12_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR:
-    case GL_ATC_RGB_AMD:
-    case GL_ATC_RGBA_EXPLICIT_ALPHA_AMD:
-    case GL_ATC_RGBA_INTERPOLATED_ALPHA_AMD:
-    case GL_ETC1_RGB8_OES:
-      DCHECK_EQ(1, depth);  // 2D formats.
-      if (width <= 0 || height <= 0) {
-        LOCAL_SET_GL_ERROR(
-            GL_INVALID_OPERATION, function_name,
-            "width or height invalid for level");
-        return false;
-      }
-      return true;
-    case GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG:
-    case GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG:
-    case GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG:
-    case GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG:
-      DCHECK_EQ(1, depth);  // 2D formats.
-      if (!IsValidPVRTCSize(level, width) ||
-          !IsValidPVRTCSize(level, height)) {
-        LOCAL_SET_GL_ERROR(
-            GL_INVALID_OPERATION, function_name,
-            "width or height invalid for level");
-        return false;
-      }
-      return true;
-
-    // ES3 formats.
-    case GL_COMPRESSED_R11_EAC:
-    case GL_COMPRESSED_SIGNED_R11_EAC:
-    case GL_COMPRESSED_RG11_EAC:
-    case GL_COMPRESSED_SIGNED_RG11_EAC:
-    case GL_COMPRESSED_RGB8_ETC2:
-    case GL_COMPRESSED_SRGB8_ETC2:
-    case GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2:
-    case GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2:
-    case GL_COMPRESSED_RGBA8_ETC2_EAC:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC:
-      if (width < 0 || height < 0 || depth < 0) {
-        LOCAL_SET_GL_ERROR(
-            GL_INVALID_OPERATION, function_name,
-            "width, height, or depth invalid");
-        return false;
-      }
-      if (target == GL_TEXTURE_3D) {
-        LOCAL_SET_GL_ERROR(
-            GL_INVALID_OPERATION, function_name,
-            "target invalid for format");
-        return false;
-      }
-      return true;
-    default:
-      return false;
+  const char* error_message = "";
+  if (!::gpu::gles2::ValidateCompressedTexDimensions(
+          target, level, width, height, depth, format,
+          feature_info_->IsWebGLContext(), &error_message)) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, function_name, error_message);
+    return false;
   }
+  return true;
 }
 
 bool GLES2DecoderImpl::ValidateCompressedTexSubDimensions(
@@ -13732,179 +13638,14 @@ bool GLES2DecoderImpl::ValidateCompressedTexSubDimensions(
     GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset,
     GLsizei width, GLsizei height, GLsizei depth, GLenum format,
     Texture* texture) {
-  if (xoffset < 0 || yoffset < 0 || zoffset < 0) {
-    LOCAL_SET_GL_ERROR(
-        GL_INVALID_VALUE, function_name, "x/y/z offset < 0");
+  const char* error_message = "";
+  if (!::gpu::gles2::ValidateCompressedTexSubDimensions(
+          target, level, xoffset, yoffset, zoffset, width, height, depth,
+          format, texture, feature_info_->IsWebGLContext(), &error_message)) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, function_name, error_message);
     return false;
   }
-
-  switch (format) {
-    case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
-    case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
-    case GL_COMPRESSED_RGBA_S3TC_DXT3_EXT:
-    case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
-    case GL_COMPRESSED_SRGB_S3TC_DXT1_EXT:
-    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT:
-    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT:
-    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT: {
-      const int kBlockWidth = 4;
-      const int kBlockHeight = 4;
-      if ((xoffset % kBlockWidth) || (yoffset % kBlockHeight)) {
-        LOCAL_SET_GL_ERROR(
-            GL_INVALID_OPERATION, function_name,
-            "xoffset or yoffset not multiple of 4");
-        return false;
-      }
-      GLsizei tex_width = 0;
-      GLsizei tex_height = 0;
-      if (!texture->GetLevelSize(target, level,
-                                 &tex_width, &tex_height, nullptr) ||
-          width - xoffset > tex_width ||
-          height - yoffset > tex_height) {
-        LOCAL_SET_GL_ERROR(
-            GL_INVALID_OPERATION, function_name, "dimensions out of range");
-        return false;
-      }
-      if ((((width % kBlockWidth) != 0) && (width + xoffset != tex_width)) ||
-          (((height % kBlockHeight) != 0) &&
-           (height + yoffset != tex_height))) {
-        LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, function_name,
-                           "dimensions do not align to a block boundary");
-        return false;
-      }
-      return true;
-    }
-    case GL_COMPRESSED_RGBA_ASTC_4x4_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_5x4_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_5x5_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_6x5_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_6x6_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_8x5_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_8x6_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_8x8_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_10x5_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_10x6_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_10x8_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_10x10_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_12x10_KHR:
-    case GL_COMPRESSED_RGBA_ASTC_12x12_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR: {
-      const int index =
-          (format < GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR)
-              ? static_cast<int>(format - GL_COMPRESSED_RGBA_ASTC_4x4_KHR)
-              : static_cast<int>(format -
-                                 GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR);
-
-      const int kBlockWidth = kASTCBlockArray[index].blockWidth;
-      const int kBlockHeight = kASTCBlockArray[index].blockHeight;
-
-      if ((xoffset % kBlockWidth) || (yoffset % kBlockHeight)) {
-        LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, function_name,
-                           "xoffset or yoffset not multiple of 4");
-        return false;
-      }
-      GLsizei tex_width = 0;
-      GLsizei tex_height = 0;
-      if (!texture->GetLevelSize(target, level, &tex_width, &tex_height,
-                                 nullptr) ||
-          width - xoffset > tex_width || height - yoffset > tex_height) {
-        LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, function_name,
-                           "dimensions out of range");
-        return false;
-      }
-      if ((((width % kBlockWidth) != 0) && (width + xoffset != tex_width)) ||
-          (((height % kBlockHeight) != 0) &&
-           (height + yoffset != tex_height))) {
-        LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, function_name,
-                           "dimensions do not align to a block boundary");
-        return false;
-      }
-      return true;
-    }
-    case GL_ATC_RGB_AMD:
-    case GL_ATC_RGBA_EXPLICIT_ALPHA_AMD:
-    case GL_ATC_RGBA_INTERPOLATED_ALPHA_AMD: {
-      LOCAL_SET_GL_ERROR(
-          GL_INVALID_OPERATION, function_name,
-          "not supported for ATC textures");
-      return false;
-    }
-    case GL_ETC1_RGB8_OES: {
-      LOCAL_SET_GL_ERROR(
-          GL_INVALID_OPERATION, function_name,
-          "not supported for ECT1_RGB8_OES textures");
-      return false;
-    }
-    case GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG:
-    case GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG:
-    case GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG:
-    case GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG: {
-      if ((xoffset != 0) || (yoffset != 0)) {
-        LOCAL_SET_GL_ERROR(
-            GL_INVALID_OPERATION, function_name,
-            "xoffset and yoffset must be zero");
-        return false;
-      }
-      GLsizei tex_width = 0;
-      GLsizei tex_height = 0;
-      if (!texture->GetLevelSize(target, level,
-                                 &tex_width, &tex_height, nullptr) ||
-          width != tex_width ||
-          height != tex_height) {
-        LOCAL_SET_GL_ERROR(
-            GL_INVALID_OPERATION, function_name,
-            "dimensions must match existing texture level dimensions");
-        return false;
-      }
-      return ValidateCompressedTexDimensions(
-          function_name, target, level, width, height, 1, format);
-    }
-
-    // ES3 formats
-    case GL_COMPRESSED_R11_EAC:
-    case GL_COMPRESSED_SIGNED_R11_EAC:
-    case GL_COMPRESSED_RG11_EAC:
-    case GL_COMPRESSED_SIGNED_RG11_EAC:
-    case GL_COMPRESSED_RGB8_ETC2:
-    case GL_COMPRESSED_SRGB8_ETC2:
-    case GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2:
-    case GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2:
-    case GL_COMPRESSED_RGBA8_ETC2_EAC:
-    case GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC:
-      {
-        const int kBlockSize = 4;
-        GLsizei tex_width, tex_height;
-        if (target == GL_TEXTURE_3D ||
-            !texture->GetLevelSize(target, level,
-                                   &tex_width, &tex_height, nullptr) ||
-            (xoffset % kBlockSize) || (yoffset % kBlockSize) ||
-            ((width % kBlockSize) && xoffset + width != tex_width) ||
-            ((height % kBlockSize) && yoffset + height != tex_height)) {
-          LOCAL_SET_GL_ERROR(
-              GL_INVALID_OPERATION, function_name,
-              "dimensions must match existing texture level dimensions");
-          return false;
-        }
-        return true;
-      }
-    default:
-      LOCAL_SET_GL_ERROR(GL_INVALID_ENUM, function_name,
-                         "unknown compressed texture format");
-      return false;
-  }
+  return true;
 }
 
 error::Error GLES2DecoderImpl::HandleCompressedTexImage2DBucket(
@@ -15996,9 +15737,14 @@ void GLES2DecoderImpl::DoSwapBuffers(uint64_t swap_id, GLbitfield flags) {
   ExitCommandProcessingEarly();
 }
 
-void GLES2DecoderImpl::FinishAsyncSwapBuffers(uint64_t swap_id,
-                                              gfx::SwapResult result) {
+void GLES2DecoderImpl::FinishAsyncSwapBuffers(
+    uint64_t swap_id,
+    gfx::SwapResult result,
+    std::unique_ptr<gfx::GpuFence> gpu_fence) {
   TRACE_EVENT_ASYNC_END0("gpu", "AsyncSwapBuffers", swap_id);
+  // Handling of the out-fence should have already happened before reaching
+  // this function, so we don't expect to get a valid fence here.
+  DCHECK(!gpu_fence);
 
   FinishSwapBuffers(result);
 }
@@ -16032,8 +15778,8 @@ void GLES2DecoderImpl::DoCommitOverlayPlanes(uint64_t swap_id,
   if (supports_async_swap_) {
     client_->OnSwapBuffers(swap_id, flags);
     surface_->CommitOverlayPlanesAsync(
-        base::Bind(&GLES2DecoderImpl::FinishSwapBuffers,
-                   weak_ptr_factory_.GetWeakPtr()),
+        base::Bind(&GLES2DecoderImpl::FinishAsyncSwapBuffers,
+                   weak_ptr_factory_.GetWeakPtr(), swap_id),
         base::DoNothing());
   } else {
     client_->OnSwapBuffers(swap_id, flags);
@@ -16708,7 +16454,7 @@ void GLES2DecoderImpl::ReadBackBuffersIntoShadowCopies(
     void* mapped = api()->glMapBufferRangeFn(GL_ARRAY_BUFFER, 0, buffer->size(),
                                              GL_MAP_READ_BIT);
     if (!mapped) {
-      DLOG(ERROR) << "glMapBufferRange unexpectedly returned NULL";
+      DLOG(ERROR) << "glMapBufferRange unexpectedly returned nullptr";
       MarkContextLost(error::kOutOfMemory);
       group_->LoseContexts(error::kUnknown);
       return;
@@ -17824,25 +17570,6 @@ void GLES2DecoderImpl::TexStorageImpl(GLenum target,
     compatibility_internal_format = format_info->decompressed_internal_format;
   }
 
-  if (workarounds().reset_base_mipmap_level_before_texstorage &&
-      texture->base_level() > 0)
-    api()->glTexParameteriFn(target, GL_TEXTURE_BASE_LEVEL, 0);
-
-  // TODO(zmo): We might need to emulate TexStorage using TexImage or
-  // CompressedTexImage on Mac OSX where we expose ES3 APIs when the underlying
-  // driver is lower than 4.2 and ARB_texture_storage extension doesn't exist.
-  if (dimension == ContextState::k2D) {
-    api()->glTexStorage2DEXTFn(target, levels, compatibility_internal_format,
-                               width, height);
-  } else {
-    api()->glTexStorage3DFn(target, levels, compatibility_internal_format,
-                            width, height, depth);
-  }
-  if (workarounds().reset_base_mipmap_level_before_texstorage &&
-      texture->base_level() > 0)
-    api()->glTexParameteriFn(target, GL_TEXTURE_BASE_LEVEL,
-                             texture->base_level());
-
   {
     GLsizei level_width = width;
     GLsizei level_height = height;
@@ -17870,6 +17597,29 @@ void GLES2DecoderImpl::TexStorageImpl(GLenum target,
     }
     texture->ApplyFormatWorkarounds(feature_info_.get());
     texture->SetImmutable(true);
+  }
+
+  if (workarounds().reset_base_mipmap_level_before_texstorage &&
+      texture->base_level() > 0)
+    api()->glTexParameteriFn(target, GL_TEXTURE_BASE_LEVEL, 0);
+
+  // TODO(zmo): We might need to emulate TexStorage using TexImage or
+  // CompressedTexImage on Mac OSX where we expose ES3 APIs when the underlying
+  // driver is lower than 4.2 and ARB_texture_storage extension doesn't exist.
+  if (dimension == ContextState::k2D) {
+    api()->glTexStorage2DEXTFn(target, levels, compatibility_internal_format,
+                               width, height);
+  } else {
+    api()->glTexStorage3DFn(target, levels, compatibility_internal_format,
+                            width, height, depth);
+  }
+  if (workarounds().reset_base_mipmap_level_before_texstorage &&
+      texture->base_level() > 0) {
+    // Note base_level is already clamped due to texture->SetImmutable(true).
+    // This is necessary for certain NVidia Linux drivers; otherwise they
+    // may trigger segmentation fault. See https://crbug.com/877874.
+    api()->glTexParameteriFn(target, GL_TEXTURE_BASE_LEVEL,
+                             texture->base_level());
   }
 }
 
@@ -20259,6 +20009,21 @@ void GLES2DecoderImpl::DoSetReadbackBufferShadowAllocationINTERNAL(
   // All buffers in writes_submitted_but_not_completed_ should have shm
   // allocations.
   writes_submitted_but_not_completed_.insert(buffer);
+}
+
+void GLES2DecoderImpl::CompileShaderAndExitCommandProcessingEarly(
+    Shader* shader) {
+  // No need to call DoCompile or exit command processing early if the call
+  // to DoCompile will be a no-op.
+  if (!shader->CanCompile())
+    return;
+
+  shader->DoCompile();
+
+  // Shader compilation can be very slow (see https://crbug.com/844780), Exit
+  // command processing to allow for context preemption and GPU watchdog
+  // checks.
+  ExitCommandProcessingEarly();
 }
 
 // Include the auto-generated part of this file. We split this because it means

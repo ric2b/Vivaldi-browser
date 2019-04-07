@@ -4,23 +4,28 @@
 
 #include "ash/login/ui/login_expanded_public_account_view.h"
 
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "ash/login/login_screen_controller.h"
 #include "ash/login/ui/arrow_button_view.h"
 #include "ash/login/ui/login_bubble.h"
 #include "ash/login/ui/login_button.h"
 #include "ash/login/ui/login_menu_view.h"
 #include "ash/login/ui/login_user_view.h"
+#include "ash/login/ui/public_account_warning_dialog.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/controls/styled_label.h"
 #include "ui/views/controls/styled_label_listener.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
@@ -53,7 +58,7 @@ constexpr SkColor kArrowButtonColor = SkColorSetARGB(0xFF, 0x42, 0x85, 0xF4);
 
 constexpr int kDropDownIconSizeDp = 16;
 constexpr int kArrowButtonSizeDp = 40;
-constexpr int kAdvancedViewButtonWidthDp = 132;
+constexpr int kAdvancedViewButtonWidthDp = 190;
 constexpr int kAdvancedViewButtonHeightDp = 16;
 constexpr int kSelectionBoxWidthDp = 178;
 constexpr int kSelectionBoxHeightDp = 28;
@@ -68,6 +73,10 @@ constexpr int kTopSpacingForUserViewDp = 62;
 
 constexpr int kNonEmptyWidth = 1;
 constexpr int kNonEmptyHeight = 1;
+
+constexpr char kMonitoringWarningClassName[] = "MonitoringWarning";
+constexpr int kSpacingBetweenMonitoringWarningIconAndLabelDp = 8;
+constexpr int kMonitoringWarningIconSizeDp = 20;
 
 views::Label* CreateLabel(const base::string16& text, SkColor color) {
   auto* label = new views::Label(text);
@@ -132,7 +141,7 @@ class SelectionButtonView : public LoginButton {
   ~SelectionButtonView() override = default;
 
   // Return the preferred height of this view. This overrides the default
-  // behavior in FillLayout::GetPreferredHeightForWidth which caluculates the
+  // behavior in FillLayout::GetPreferredHeightForWidth which calculates the
   // height based on its child height.
   int GetHeightForWidth(int w) const override {
     return GetPreferredSize().height();
@@ -173,15 +182,45 @@ class SelectionButtonView : public LoginButton {
   DISALLOW_COPY_AND_ASSIGN(SelectionButtonView);
 };
 
+// Container for the device monitoring warning.  Contains the warning icon on
+// the left side, and text on the right side.
+class MonitoringWarningView : public NonAccessibleView {
+ public:
+  MonitoringWarningView() : NonAccessibleView(kMonitoringWarningClassName) {
+    SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::kHorizontal, gfx::Insets(),
+        kSpacingBetweenMonitoringWarningIconAndLabelDp));
+
+    views::ImageView* image = new views::ImageView();
+    image->SetImage(gfx::CreateVectorIcon(
+        vector_icons::kWarningIcon, kMonitoringWarningIconSizeDp, SK_ColorRED));
+    image->SetPreferredSize(
+        gfx::Size(kMonitoringWarningIconSizeDp, kMonitoringWarningIconSizeDp));
+    AddChildView(image);
+
+    const base::string16 label_text = l10n_util::GetStringUTF16(
+        IDS_ASH_LOGIN_PUBLIC_ACCOUNT_MONITORING_WARNING);
+    views::Label* label = CreateLabel(label_text, SK_ColorWHITE);
+    label->SetMultiLine(true);
+    label->SetLineHeight(kTextLineHeightDp);
+    AddChildView(label);
+  }
+
+  ~MonitoringWarningView() override = default;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MonitoringWarningView);
+};
+
 // Implements the right part of the expanded public session view.
 class RightPaneView : public NonAccessibleView,
                       public views::ButtonListener,
                       public views::StyledLabelListener {
  public:
-  RightPaneView()
+  explicit RightPaneView(const base::RepeatingClosure& on_learn_more_tapped)
       : language_menu_(std::make_unique<LoginBubble>()),
         keyboard_menu_(std::make_unique<LoginBubble>()),
-        weak_factory_(this) {
+        on_learn_more_tapped_(on_learn_more_tapped) {
     SetPreferredSize(
         gfx::Size(kExpandedViewWidthDp / 2, kExpandedViewHeightDp));
     SetBorder(views::CreateEmptyBorder(gfx::Insets(kRightPaneMarginDp)));
@@ -192,34 +231,29 @@ class RightPaneView : public NonAccessibleView,
         views::BoxLayout::kVertical, gfx::Insets(), kSpacingBetweenLabelsDp));
     AddChildView(labels_view_);
 
-    views::Label* top_label =
-        CreateLabel(l10n_util::GetStringUTF16(
-                        IDS_ASH_LOGIN_PUBLIC_ACCOUNT_MONITORING_WARNING),
-                    SK_ColorWHITE);
-    top_label->SetMultiLine(true);
-    top_label->SetLineHeight(kTextLineHeightDp);
+    auto* top_container = new MonitoringWarningView();
+    labels_view_->AddChildView(top_container);
 
     const base::string16 link = l10n_util::GetStringUTF16(IDS_ASH_LEARN_MORE);
     size_t offset;
     const base::string16 text = l10n_util::GetStringFUTF16(
         IDS_ASH_LOGIN_PUBLIC_ACCOUNT_SIGNOUT_REMINDER, link, &offset);
-    views::StyledLabel* bottom_label = new views::StyledLabel(text, this);
+    learn_more_label_ = new views::StyledLabel(text, this);
 
     views::StyledLabel::RangeStyleInfo style;
-    style.custom_font = bottom_label->GetDefaultFontList().Derive(
+    style.custom_font = learn_more_label_->GetDefaultFontList().Derive(
         0, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL);
     style.override_color = SK_ColorWHITE;
-    bottom_label->AddStyleRange(gfx::Range(0, offset), style);
+    learn_more_label_->AddStyleRange(gfx::Range(0, offset), style);
 
     views::StyledLabel::RangeStyleInfo link_style =
         views::StyledLabel::RangeStyleInfo::CreateForLink();
     link_style.override_color = kPublicSessionBlueColor;
-    bottom_label->AddStyleRange(gfx::Range(offset, offset + link.length()),
-                                link_style);
-    bottom_label->set_auto_color_readability_enabled(false);
+    learn_more_label_->AddStyleRange(gfx::Range(offset, offset + link.length()),
+                                     link_style);
+    learn_more_label_->set_auto_color_readability_enabled(false);
 
-    labels_view_->AddChildView(top_label);
-    labels_view_->AddChildView(bottom_label);
+    labels_view_->AddChildView(learn_more_label_);
 
     // Create button to show/hide advanced view.
     advanced_view_button_ = new SelectionButtonView(
@@ -361,7 +395,7 @@ class RightPaneView : public NonAccessibleView,
   void StyledLabelLinkClicked(views::StyledLabel* label,
                               const gfx::Range& range,
                               int event_flags) override {
-    NOTIMPLEMENTED();
+    on_learn_more_tapped_.Run();
   }
 
   void UpdateForUser(const mojom::LoginUserInfoPtr& user) {
@@ -461,11 +495,9 @@ class RightPaneView : public NonAccessibleView,
     language_changed_by_user_ = false;
   }
 
-  SelectionButtonView* advanced_view_button() { return advanced_view_button_; }
-  ArrowButtonView* submit_button() { return submit_button_; }
-  views::View* advanced_view() { return advanced_view_; }
-
  private:
+  friend class LoginExpandedPublicAccountView::TestApi;
+
   bool show_advanced_view_ = false;
   mojom::LoginUserInfoPtr current_user_;
 
@@ -475,6 +507,7 @@ class RightPaneView : public NonAccessibleView,
   SelectionButtonView* language_selection_ = nullptr;
   SelectionButtonView* keyboard_selection_ = nullptr;
   ArrowButtonView* submit_button_ = nullptr;
+  views::StyledLabel* learn_more_label_ = nullptr;
 
   std::unique_ptr<LoginBubble> language_menu_;
   std::unique_ptr<LoginBubble> keyboard_menu_;
@@ -492,7 +525,9 @@ class RightPaneView : public NonAccessibleView,
   bool show_advanced_changed_by_user_ = false;
   bool language_changed_by_user_ = false;
 
-  base::WeakPtrFactory<RightPaneView> weak_factory_;
+  base::RepeatingClosure on_learn_more_tapped_;
+
+  base::WeakPtrFactory<RightPaneView> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(RightPaneView);
 };
@@ -504,15 +539,25 @@ LoginExpandedPublicAccountView::TestApi::TestApi(
 LoginExpandedPublicAccountView::TestApi::~TestApi() = default;
 
 views::View* LoginExpandedPublicAccountView::TestApi::advanced_view_button() {
-  return view_->right_pane_->advanced_view_button();
+  return view_->right_pane_->advanced_view_button_;
 }
 
 ArrowButtonView* LoginExpandedPublicAccountView::TestApi::submit_button() {
-  return view_->right_pane_->submit_button();
+  return view_->right_pane_->submit_button_;
 }
 
 views::View* LoginExpandedPublicAccountView::TestApi::advanced_view() {
-  return view_->right_pane_->advanced_view();
+  return view_->right_pane_->advanced_view_;
+}
+
+PublicAccountWarningDialog*
+LoginExpandedPublicAccountView::TestApi::warning_dialog() {
+  return view_->warning_dialog_;
+}
+
+views::StyledLabel*
+LoginExpandedPublicAccountView::TestApi::learn_more_label() {
+  return view_->right_pane_->learn_more_label_;
 }
 
 LoginExpandedPublicAccountView::LoginExpandedPublicAccountView(
@@ -545,7 +590,9 @@ LoginExpandedPublicAccountView::LoginExpandedPublicAccountView(
   left_pane->SetBorder(
       views::CreateSolidSidedBorder(0, 0, 0, kBorderThicknessDp, kBorderColor));
 
-  right_pane_ = new RightPaneView();
+  right_pane_ = new RightPaneView(
+      base::BindRepeating(&LoginExpandedPublicAccountView::ShowWarningDialog,
+                          base::Unretained(this)));
   AddChildView(right_pane_);
 }
 
@@ -556,6 +603,10 @@ LoginExpandedPublicAccountView::~LoginExpandedPublicAccountView() {
 void LoginExpandedPublicAccountView::ProcessPressedEvent(
     const ui::LocatedEvent* event) {
   if (!visible())
+    return;
+
+  // Keep this view to be visible until warning dialog is dismissed.
+  if (warning_dialog_ && warning_dialog_->IsVisible())
     return;
 
   if (GetBoundsInScreen().Contains(event->root_location()))
@@ -598,6 +649,16 @@ void LoginExpandedPublicAccountView::Hide() {
   on_dismissed_.Run();
 }
 
+void LoginExpandedPublicAccountView::ShowWarningDialog() {
+  DCHECK(!warning_dialog_);
+  warning_dialog_ = new PublicAccountWarningDialog(weak_factory_.GetWeakPtr());
+  warning_dialog_->Show();
+}
+
+void LoginExpandedPublicAccountView::OnWarningDialogClosed() {
+  warning_dialog_ = nullptr;
+}
+
 void LoginExpandedPublicAccountView::OnPaint(gfx::Canvas* canvas) {
   views::View::OnPaint(canvas);
 
@@ -622,6 +683,10 @@ void LoginExpandedPublicAccountView::OnGestureEvent(ui::GestureEvent* event) {
 
 void LoginExpandedPublicAccountView::OnKeyEvent(ui::KeyEvent* event) {
   if (!visible() || event->type() != ui::ET_KEY_PRESSED)
+    return;
+
+  // Give warning dialog a chance to handle key event.
+  if (warning_dialog_ && warning_dialog_->IsVisible())
     return;
 
   if (event->key_code() == ui::KeyboardCode::VKEY_ESCAPE) {

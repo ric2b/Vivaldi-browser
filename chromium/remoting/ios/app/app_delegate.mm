@@ -8,6 +8,8 @@
 
 #import "remoting/ios/app/app_delegate.h"
 
+#import <AVFoundation/AVFoundation.h>
+
 #import "remoting/ios/app/app_initializer.h"
 #import "remoting/ios/app/app_view_controller.h"
 #import "remoting/ios/app/first_launch_view_presenter.h"
@@ -48,6 +50,8 @@
     didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
   [self launchRootViewController];
   [RemotingTheme applyColorSchemes];
+  [AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryAmbient
+                                       error:NULL];
   [AppInitializer onAppDidFinishLaunching];
 
   return YES;

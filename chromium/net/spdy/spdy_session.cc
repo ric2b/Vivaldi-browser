@@ -42,7 +42,7 @@
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source_type.h"
 #include "net/log/net_log_with_source.h"
-#include "net/quic/chromium/quic_http_utils.h"
+#include "net/quic/quic_http_utils.h"
 #include "net/socket/socket.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/spdy/header_coalescer.h"
@@ -54,7 +54,7 @@
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
-#include "net/third_party/quic/core/spdy_utils.h"
+#include "net/third_party/quic/core/http/spdy_utils.h"
 #include "net/third_party/spdy/core/spdy_frame_builder.h"
 #include "net/third_party/spdy/core/spdy_protocol.h"
 #include "url/url_constants.h"
@@ -716,6 +716,7 @@ void SpdyStreamRequest::Reset() {
 // static
 bool SpdySession::CanPool(TransportSecurityState* transport_security_state,
                           const SSLInfo& ssl_info,
+                          const SSLConfigService& ssl_config_service,
                           const std::string& old_hostname,
                           const std::string& new_hostname) {
   // Pooling is prohibited if the server cert is not valid for the new domain,
@@ -724,8 +725,11 @@ bool SpdySession::CanPool(TransportSecurityState* transport_security_state,
   if (IsCertStatusError(ssl_info.cert_status))
     return false;
 
-  if (ssl_info.client_cert_sent)
+  if (ssl_info.client_cert_sent &&
+      !(ssl_config_service.CanShareConnectionWithClientCerts(old_hostname) &&
+        ssl_config_service.CanShareConnectionWithClientCerts(new_hostname))) {
     return false;
+  }
 
   if (ssl_info.channel_id_sent &&
       ChannelIDService::GetDomainForHost(new_hostname) !=
@@ -772,6 +776,7 @@ SpdySession::SpdySession(
     const SpdySessionKey& spdy_session_key,
     HttpServerProperties* http_server_properties,
     TransportSecurityState* transport_security_state,
+    SSLConfigService* ssl_config_service,
     const quic::QuicTransportVersionVector& quic_supported_versions,
     bool enable_sending_initial_data,
     bool enable_ping_based_connection_checking,
@@ -787,6 +792,7 @@ SpdySession::SpdySession(
       pool_(NULL),
       http_server_properties_(http_server_properties),
       transport_security_state_(transport_security_state),
+      ssl_config_service_(ssl_config_service),
       stream_hi_water_mark_(kFirstStreamId),
       last_accepted_push_stream_id_(0),
       push_delegate_(push_delegate),
@@ -971,8 +977,8 @@ bool SpdySession::VerifyDomainAuthentication(const std::string& domain) const {
   if (!GetSSLInfo(&ssl_info))
     return true;  // This is not a secure session, so all domains are okay.
 
-  return CanPool(transport_security_state_, ssl_info, host_port_pair().host(),
-                 domain);
+  return CanPool(transport_security_state_, ssl_info, *ssl_config_service_,
+                 host_port_pair().host(), domain);
 }
 
 void SpdySession::EnqueueStreamWrite(
@@ -1774,8 +1780,8 @@ void SpdySession::TryCreatePushStream(spdy::SpdyStreamId stream_id,
       }
       SSLInfo ssl_info;
       CHECK(GetSSLInfo(&ssl_info));
-      if (!CanPool(transport_security_state_, ssl_info, associated_url.host(),
-                   gurl.host())) {
+      if (!CanPool(transport_security_state_, ssl_info, *ssl_config_service_,
+                   associated_url.host(), gurl.host())) {
         RecordSpdyPushedStreamFateHistogram(
             SpdyPushedStreamFate::kCertificateMismatch);
         EnqueueResetStreamFrame(stream_id, request_priority,
@@ -2047,7 +2053,7 @@ int SpdySession::DoRead() {
   CHECK(connection_->socket());
   read_state_ = READ_STATE_DO_READ_COMPLETE;
   int rv = ERR_READ_IF_READY_NOT_IMPLEMENTED;
-  read_buffer_ = new IOBuffer(kReadBufferSize);
+  read_buffer_ = base::MakeRefCounted<IOBuffer>(kReadBufferSize);
   if (base::FeatureList::IsEnabled(Socket::kReadIfReadyExperiment)) {
     rv = connection_->socket()->ReadIfReady(
         read_buffer_.get(), kReadBufferSize,
@@ -2618,6 +2624,8 @@ void SpdySession::RecordHistograms() {
   DCHECK_LE(bytes_pushed_and_unclaimed_count_, bytes_pushed_count_);
   UMA_HISTOGRAM_COUNTS_1M("Net.SpdySession.PushedAndUnclaimedBytes",
                           bytes_pushed_and_unclaimed_count_);
+  UMA_HISTOGRAM_BOOLEAN("Net.SpdySession.ServerSupportsWebSocket",
+                        support_websocket_);
 }
 
 void SpdySession::RecordProtocolErrorHistogram(
@@ -3144,8 +3152,8 @@ void SpdySession::OnAltSvc(
     SSLInfo ssl_info;
     if (!GetSSLInfo(&ssl_info))
       return;
-    if (!CanPool(transport_security_state_, ssl_info, host_port_pair().host(),
-                 gurl.host())) {
+    if (!CanPool(transport_security_state_, ssl_info, *ssl_config_service_,
+                 host_port_pair().host(), gurl.host())) {
       return;
     }
     scheme_host_port = url::SchemeHostPort(gurl);

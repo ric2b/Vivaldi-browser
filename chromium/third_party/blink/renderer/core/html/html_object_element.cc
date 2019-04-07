@@ -289,13 +289,13 @@ void HTMLObjectElement::UpdatePluginInternal() {
 }
 
 Node::InsertionNotificationRequest HTMLObjectElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   HTMLPlugInElement::InsertedInto(insertion_point);
   ListedElement::InsertedInto(insertion_point);
   return kInsertionDone;
 }
 
-void HTMLObjectElement::RemovedFrom(ContainerNode* insertion_point) {
+void HTMLObjectElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLPlugInElement::RemovedFrom(insertion_point);
   ListedElement::RemovedFrom(insertion_point);
 }

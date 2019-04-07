@@ -7,17 +7,11 @@
 namespace web {
 namespace features {
 
-const base::Feature kContextMenuElementPostMessage{
-    "ContextMenuElementPostMessage", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kWebFrameMessaging{"WebFrameMessaging",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kSlimNavigationManager{"SlimNavigationManager",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kNewFileDownload{"NewFileDownload",
-                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kWebErrorPages{"WebErrorPages",
                                    base::FEATURE_ENABLED_BY_DEFAULT};
@@ -34,6 +28,9 @@ const base::Feature kCrashOnUnexpectedURLChange{
 
 const base::Feature kBrowserContainerFullscreen{
     "BrowserContainerFullscreen", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kOutOfWebFullscreen{"OutOfWebFullscreen",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features
 }  // namespace web

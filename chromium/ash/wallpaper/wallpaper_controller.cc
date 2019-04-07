@@ -37,8 +37,8 @@
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/values.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -515,15 +515,10 @@ gfx::Size WallpaperController::GetMaxDisplaySizeInNative() {
   for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
     // Use the native size, not ManagedDisplayInfo::size_in_pixel or
     // Display::size.
-    // TODO(msw): Avoid using Display::size here; see http://crbug.com/613657.
-    gfx::Size size = display.size();
-    if (Shell::HasInstance()) {
-      display::ManagedDisplayInfo info =
-          Shell::Get()->display_manager()->GetDisplayInfo(display.id());
-      // TODO(mash): Mash returns a fake ManagedDisplayInfo. crbug.com/622480
-      if (info.id() == display.id())
-        size = info.bounds_in_native().size();
-    }
+    display::ManagedDisplayInfo info =
+        Shell::Get()->display_manager()->GetDisplayInfo(display.id());
+    DCHECK_EQ(display.id(), info.id());
+    gfx::Size size = info.bounds_in_native().size();
     if (display.rotation() == display::Display::ROTATE_90 ||
         display.rotation() == display::Display::ROTATE_270) {
       size = gfx::Size(size.height(), size.width());
@@ -651,6 +646,10 @@ bool WallpaperController::CanOpenWallpaperPicker() {
          !IsActiveUserWallpaperControlledByPolicyImpl();
 }
 
+bool WallpaperController::HasShownAnyWallpaper() const {
+  return !!current_wallpaper_;
+}
+
 void WallpaperController::ShowWallpaperImage(const gfx::ImageSkia& image,
                                              WallpaperInfo info,
                                              bool preview_mode) {
@@ -692,6 +691,10 @@ void WallpaperController::ShowWallpaperImage(const gfx::ImageSkia& image,
   current_wallpaper_->AddObserver(this);
   current_wallpaper_->StartResize();
 
+  if (is_first_wallpaper_) {
+    for (auto& observer : observers_)
+      observer.OnFirstWallpaperShown();
+  }
   mojo_observers_.ForAllPtrs([this](mojom::WallpaperObserver* observer) {
     observer->OnWallpaperChanged(current_wallpaper_->original_image_id());
   });
@@ -708,8 +711,8 @@ bool WallpaperController::IsPolicyControlled(const AccountId& account_id,
          info.type == POLICY;
 }
 
-void WallpaperController::PrepareWallpaperForLockScreenChange(bool locking) {
-  bool needs_blur = locking && IsBlurEnabled();
+void WallpaperController::UpdateWallpaperBlur(bool blur) {
+  bool needs_blur = blur && IsBlurAllowed();
   if (needs_blur == is_wallpaper_blurred_)
     return;
 
@@ -733,10 +736,14 @@ bool WallpaperController::ShouldApplyDimming() const {
              switches::kAshDisableLoginDimAndBlur);
 }
 
-bool WallpaperController::IsBlurEnabled() const {
+bool WallpaperController::IsBlurAllowed() const {
   return !IsDevicePolicyWallpaper() && !IsOneShotWallpaper() &&
          !base::CommandLine::ForCurrentProcess()->HasSwitch(
              switches::kAshDisableLoginDimAndBlur);
+}
+
+bool WallpaperController::IsWallpaperBlurred() const {
+  return is_wallpaper_blurred_;
 }
 
 bool WallpaperController::SetUserWallpaperInfo(const AccountId& account_id,
@@ -1450,7 +1457,7 @@ void WallpaperController::InstallDesktopController(aura::Window* root_window) {
       Shell::Get()->session_controller()->IsUserSessionBlocked();
   bool in_overview = Shell::Get()->window_selector_controller()->IsSelecting();
   bool is_wallpaper_blurred =
-      (session_blocked || in_overview) && IsBlurEnabled();
+      (session_blocked || in_overview) && IsBlurAllowed();
 
   if (is_wallpaper_blurred_ != is_wallpaper_blurred) {
     is_wallpaper_blurred_ = is_wallpaper_blurred;
@@ -1536,7 +1543,7 @@ void WallpaperController::RemoveUserWallpaperImpl(
 
   base::PostTaskWithTraits(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&DeleteWallpaperInList, std::move(files_to_remove)));
 }

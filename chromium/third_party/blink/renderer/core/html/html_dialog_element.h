@@ -43,7 +43,7 @@ class HTMLDialogElement final : public HTMLElement {
   void close(const String& return_value = String());
   void show();
   void showModal(ExceptionState&);
-  void RemovedFrom(ContainerNode*) override;
+  void RemovedFrom(ContainerNode&) override;
 
   // NotCentered means do not center the dialog. Centered means the dialog has
   // been centered and centeredPosition() is set. NeedsCentering means attempt
@@ -66,7 +66,7 @@ class HTMLDialogElement final : public HTMLElement {
   explicit HTMLDialogElement(Document&);
 
   bool IsPresentationAttribute(const QualifiedName&) const override;
-  void DefaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event&) override;
 
   void ForceLayoutForCentering();
 

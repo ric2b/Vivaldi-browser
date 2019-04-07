@@ -43,10 +43,11 @@ static constexpr base::TimeDelta kTabAudioProtectionTime =
 static constexpr base::TimeDelta kProactiveDiscardFreezeTimeout =
     base::TimeDelta::FromMilliseconds(500);
 
+class TabLifecycleUnitExternalImpl;
+
 // Represents a tab.
 class TabLifecycleUnitSource::TabLifecycleUnit
     : public LifecycleUnitBase,
-      public TabLifecycleUnitExternal,
       public content::WebContentsObserver {
  public:
   // |observers| is a list of observers to notify when the discarded state or
@@ -56,11 +57,12 @@ class TabLifecycleUnitSource::TabLifecycleUnit
   // time. |web_contents| and |tab_strip_model| are the WebContents and
   // TabStripModel associated with this tab. The |source| is optional and may be
   // nullptr.
-  TabLifecycleUnit(TabLifecycleUnitSource* source,
-                   base::ObserverList<TabLifecycleObserver>* observers,
-                   UsageClock* usage_clock,
-                   content::WebContents* web_contents,
-                   TabStripModel* tab_strip_model);
+  TabLifecycleUnit(
+      TabLifecycleUnitSource* source,
+      base::ObserverList<TabLifecycleObserver>::Unchecked* observers,
+      UsageClock* usage_clock,
+      content::WebContents* web_contents,
+      TabStripModel* tab_strip_model);
   ~TabLifecycleUnit() override;
 
   // Sets the TabStripModel associated with this tab. The source that created
@@ -99,25 +101,19 @@ class TabLifecycleUnitSource::TabLifecycleUnit
   int GetEstimatedMemoryFreedOnDiscardKB() const override;
   bool CanPurge() const override;
   bool CanFreeze(DecisionDetails* decision_details) const override;
-  bool CanDiscard(DiscardReason reason,
+  bool CanDiscard(LifecycleUnitDiscardReason reason,
                   DecisionDetails* decision_details) const override;
   bool Freeze() override;
   bool Unfreeze() override;
-  bool Discard(DiscardReason discard_reason) override;
   ukm::SourceId GetUkmSourceId() const override;
 
-  // TabLifecycleUnitExternal:
-  content::WebContents* GetWebContents() const override;
-  bool IsMediaTab() const override;
-  bool IsAutoDiscardable() const override;
-  void SetAutoDiscardable(bool auto_discardable) override;
-  bool DiscardTab() override;
-  bool IsDiscarded() const override;
-  int GetDiscardCount() const override;
+  // Implementations of some functions from TabLifecycleUnitExternal. These are
+  // actually called by an instance of TabLifecycleUnitExternalImpl.
+  bool IsMediaTab() const;
+  bool IsAutoDiscardable() const;
+  void SetAutoDiscardable(bool auto_discardable);
 
-  void SetDiscardCountForTesting(size_t discard_count);
-
-  void SetIsDiscarded() override;
+  void SetIsDiscarded();
 
  protected:
   friend class TabManagerTest;
@@ -133,6 +129,9 @@ class TabLifecycleUnitSource::TabLifecycleUnit
     kExternalOrUrgent,
   };
 
+  // LifecycleUnitBase:
+  bool DiscardImpl(LifecycleUnitDiscardReason discard_reason) override;
+
   // Same as GetSource, but cast to the most derived type.
   TabLifecycleUnitSource* GetTabSource() const;
 
@@ -142,7 +141,7 @@ class TabLifecycleUnitSource::TabLifecycleUnit
 
   // For non-urgent discarding, sends a request for freezing to occur prior to
   // discarding the tab.
-  void RequestFreezeForDiscard(DiscardReason reason);
+  void RequestFreezeForDiscard(LifecycleUnitDiscardReason reason);
 
   // Finishes a tab discard. For an urgent discard, this is invoked by
   // Discard(). For a proactive or external discard, where the tab is frozen
@@ -150,7 +149,7 @@ class TabLifecycleUnitSource::TabLifecycleUnit
   // callback has been received, or by |freeze_timeout_timer_| if the
   // kProactiveDiscardFreezeTimeout timeout has passed without receiving the
   // callback.
-  void FinishDiscard(DiscardReason discard_reason);
+  void FinishDiscard(LifecycleUnitDiscardReason discard_reason);
 
   // Returns the RenderProcessHost associated with this tab.
   content::RenderProcessHost* GetRenderProcessHost() const;
@@ -177,13 +176,10 @@ class TabLifecycleUnitSource::TabLifecycleUnit
 
   // List of observers to notify when the discarded state or the auto-
   // discardable state of this tab changes.
-  base::ObserverList<TabLifecycleObserver>* observers_;
+  base::ObserverList<TabLifecycleObserver>::Unchecked* observers_;
 
   // TabStripModel to which this tab belongs.
   TabStripModel* tab_strip_model_;
-
-  // The number of times that this tab has been discarded.
-  int discard_count_ = 0;
 
   // Last time at which this tab was focused, or TimeTicks::Max() if it is
   // currently focused. For tabs that aren't currently focused this is
@@ -198,9 +194,6 @@ class TabLifecycleUnitSource::TabLifecycleUnit
   // When this is false, CanDiscard() always returns false.
   bool auto_discardable_ = true;
 
-  // Maintains the most recent DiscardReason that was pased into Discard().
-  DiscardReason discard_reason_;
-
   // Timer that ensures that this tab does not wait forever for the callback
   // when it is being frozen.
   std::unique_ptr<base::OneShotTimer> freeze_timeout_timer_;
@@ -209,6 +202,8 @@ class TabLifecycleUnitSource::TabLifecycleUnit
   // TimeTicks() if the tab was never "recently audible", last time at which the
   // tab was "recently audible" otherwise.
   base::TimeTicks recently_audible_time_;
+
+  std::unique_ptr<TabLifecycleUnitExternalImpl> external_impl_;
 
   DISALLOW_COPY_AND_ASSIGN(TabLifecycleUnit);
 };

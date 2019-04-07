@@ -26,12 +26,10 @@ class WMState;
 namespace aura {
 class Env;
 class TestScreen;
-class TestWindowManagerDelegate;
 class TestWindowTree;
 class TestWindowTreeClientDelegate;
 class TestWindowTreeClientSetup;
 class Window;
-class WindowManagerDelegate;
 class WindowTreeClient;
 class WindowTreeClientDelegate;
 
@@ -57,12 +55,8 @@ class AuraTestHelper {
 
   // Makes aura target mus with a mock WindowTree (TestWindowTree). Must be
   // called before SetUp().
-  // TODO(sky): remove |config|. https://crbug.com/842365
   void EnableMusWithTestWindowTree(
-      WindowTreeClientDelegate* window_tree_delegate,
-      WindowManagerDelegate* window_manager_delegate,
-      WindowTreeClient::Config config =
-          WindowTreeClient::Config::kMashDeprecated);
+      WindowTreeClientDelegate* window_tree_delegate);
 
   // Makes aura target mus with the specified WindowTreeClient. Must be called
   // before SetUp().
@@ -110,16 +104,10 @@ class AuraTestHelper {
     // service:ui.
     MUS_CREATE_WINDOW_TREE_CLIENT,
 
-    // Mus with a test WindowTree implementation that does not target the real
-    // service:ui.
-    // TODO(sky): combine this with MUS_CREATE_WINDOW_TREE_CLIENT.
-    // https://crbug.com/842365.
-    MUS2_CREATE_WINDOW_TREE_CLIENT,
-
-    // Mus without creating a WindowTree. This is used when the test wants to
-    // create the WindowTreeClient itself. This mode is enabled by way of
-    // EnableMusWithWindowTreeClient().
-    MUS,
+    // Mus without creating a WindowTree and WindowTreeHost. This is used when
+    // the test wants to create the WindowTreeClient itself. This mode is
+    // enabled by way of EnableMusWithWindowTreeClient().
+    MUS_DONT_CREATE_WINDOW_TREE_CLIENT,
   };
 
   // Initializes a WindowTreeClient with a test WindowTree.
@@ -134,8 +122,6 @@ class AuraTestHelper {
   // This is only created if Env has already been created and it's Mode is MUS.
   std::unique_ptr<TestWindowTreeClientDelegate>
       test_window_tree_client_delegate_;
-  // This is only created if Env has already been created and it's Mode is MUS.
-  std::unique_ptr<TestWindowManagerDelegate> test_window_manager_delegate_;
   std::unique_ptr<TestWindowTreeClientSetup> window_tree_client_setup_;
   Env::Mode env_mode_to_restore_ = Env::Mode::LOCAL;
   std::unique_ptr<aura::Env> env_;
@@ -147,7 +133,6 @@ class AuraTestHelper {
   std::unique_ptr<TestScreen> test_screen_;
   std::unique_ptr<ui::ScopedAnimationDurationScaleMode> zero_duration_mode_;
   WindowTreeClientDelegate* window_tree_delegate_ = nullptr;
-  WindowManagerDelegate* window_manager_delegate_ = nullptr;
 
   WindowTreeClient* window_tree_client_ = nullptr;
 

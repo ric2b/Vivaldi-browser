@@ -23,12 +23,7 @@ struct MenuItem;
 
 class SelectPopup {
  public:
-  SelectPopup(JNIEnv* env,
-              const base::android::JavaParamRef<jobject>& obj,
-              WebContentsImpl* web_contents);
-  base::android::ScopedJavaLocalRef<jobject> GetWindowAndroid(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj);
+  explicit SelectPopup(WebContentsImpl* web_contents);
   ~SelectPopup();
 
   // Creates a popup menu with |items|.

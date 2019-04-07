@@ -6,6 +6,7 @@
 
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/dom/events/event_listener.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_elements_helper.h"
 #include "third_party/blink/renderer/modules/media_controls/media_controls_impl.h"
@@ -124,7 +125,7 @@ void MediaControlPanelElement::MakeTransparent() {
   opaque_ = false;
 }
 
-void MediaControlPanelElement::RemovedFrom(ContainerNode*) {
+void MediaControlPanelElement::RemovedFrom(ContainerNode&) {
   DetachTransitionEventListener();
 }
 
@@ -164,17 +165,17 @@ void MediaControlPanelElement::DetachTransitionEventListener() {
     event_listener_->Detach();
 }
 
-void MediaControlPanelElement::DefaultEventHandler(Event* event) {
+void MediaControlPanelElement::DefaultEventHandler(Event& event) {
   // Suppress the media element activation behavior (toggle play/pause) when
   // any part of the control panel is clicked.
-  if (event->type() == EventTypeNames::click) {
-    event->SetDefaultHandled();
+  if (event.type() == EventTypeNames::click) {
+    event.SetDefaultHandled();
     return;
   }
   HTMLDivElement::DefaultEventHandler(event);
 }
 
-bool MediaControlPanelElement::KeepEventInNode(Event* event) {
+bool MediaControlPanelElement::KeepEventInNode(const Event& event) const {
   return !MediaControlsImpl::IsModern() &&
          MediaControlElementsHelper::IsUserInteractionEvent(event);
 }

@@ -236,19 +236,17 @@ PrefProxyConfigTrackerImpl::GetEffectiveProxyConfig(
 
 // static
 void PrefProxyConfigTrackerImpl::RegisterPrefs(PrefRegistrySimple* registry) {
-  std::unique_ptr<base::DictionaryValue> default_settings =
-      ProxyConfigDictionary::CreateSystem();
-  registry->RegisterDictionaryPref(proxy_config::prefs::kProxy,
-                                   std::move(default_settings));
+  registry->RegisterDictionaryPref(
+      proxy_config::prefs::kProxy,
+      std::make_unique<base::Value>(ProxyConfigDictionary::CreateSystem()));
 }
 
 // static
 void PrefProxyConfigTrackerImpl::RegisterProfilePrefs(
     PrefRegistrySimple* registry) {
-  std::unique_ptr<base::DictionaryValue> default_settings =
-      ProxyConfigDictionary::CreateSystem();
-  registry->RegisterDictionaryPref(proxy_config::prefs::kProxy,
-                                   std::move(default_settings));
+  registry->RegisterDictionaryPref(
+      proxy_config::prefs::kProxy,
+      std::make_unique<base::Value>(ProxyConfigDictionary::CreateSystem()));
   registry->RegisterBooleanPref(proxy_config::prefs::kUseSharedProxies, false);
 }
 
@@ -267,7 +265,7 @@ ProxyPrefs::ConfigState PrefProxyConfigTrackerImpl::ReadPrefConfig(
   const base::DictionaryValue* dict =
       pref_service->GetDictionary(proxy_config::prefs::kProxy);
   DCHECK(dict);
-  ProxyConfigDictionary proxy_dict(dict->CreateDeepCopy());
+  ProxyConfigDictionary proxy_dict(dict->Clone());
 
   if (PrefConfigToNetConfig(proxy_dict, config)) {
     if (!pref->IsUserModifiable() || pref->HasUserSetting()) {
@@ -322,9 +320,9 @@ void PrefProxyConfigTrackerImpl::OnProxyConfigChanged(
   }
 
   proxy_config_service_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&ProxyConfigServiceImpl::UpdateProxyConfig,
-                            base::Unretained(proxy_config_service_impl_),
-                            config_state, config));
+      FROM_HERE, base::BindOnce(&ProxyConfigServiceImpl::UpdateProxyConfig,
+                                base::Unretained(proxy_config_service_impl_),
+                                config_state, config));
 }
 
 bool PrefProxyConfigTrackerImpl::PrefConfigToNetConfig(

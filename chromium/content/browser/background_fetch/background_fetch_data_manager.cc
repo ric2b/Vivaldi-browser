@@ -18,6 +18,7 @@
 #include "content/browser/background_fetch/storage/delete_registration_task.h"
 #include "content/browser/background_fetch/storage/get_developer_ids_task.h"
 #include "content/browser/background_fetch/storage/get_metadata_task.h"
+#include "content/browser/background_fetch/storage/get_registration_task.h"
 #include "content/browser/background_fetch/storage/get_settled_fetches_task.h"
 #include "content/browser/background_fetch/storage/mark_registration_for_deletion_task.h"
 #include "content/browser/background_fetch/storage/mark_request_complete_task.h"
@@ -28,44 +29,19 @@
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "storage/browser/quota/quota_manager_proxy.h"
 #include "third_party/blink/public/mojom/blob/blob.mojom.h"
 
 namespace content {
 
-namespace {
-
-// Helper function to convert a BackgroundFetchRegistration proto into a
-// BackgroundFetchRegistration struct, and call the appropriate callback.
-void GetRegistrationFromMetadata(
-    BackgroundFetchDataManager::GetRegistrationCallback callback,
-    blink::mojom::BackgroundFetchError error,
-    std::unique_ptr<proto::BackgroundFetchMetadata> metadata_proto) {
-  if (!metadata_proto) {
-    std::move(callback).Run(error, nullptr);
-    return;
-  }
-
-  const auto& registration_proto = metadata_proto->registration();
-  auto registration = std::make_unique<BackgroundFetchRegistration>();
-  registration->developer_id = registration_proto.developer_id();
-  registration->unique_id = registration_proto.unique_id();
-  // TODO(crbug.com/774054): Uploads are not yet supported.
-  registration->upload_total = registration_proto.upload_total();
-  registration->uploaded = registration_proto.uploaded();
-  registration->download_total = registration_proto.download_total();
-  registration->downloaded = registration_proto.downloaded();
-
-  std::move(callback).Run(error, std::move(registration));
-}
-
-}  // namespace
-
 BackgroundFetchDataManager::BackgroundFetchDataManager(
     BrowserContext* browser_context,
     scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
-    scoped_refptr<CacheStorageContextImpl> cache_storage_context)
+    scoped_refptr<CacheStorageContextImpl> cache_storage_context,
+    scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy)
     : service_worker_context_(std::move(service_worker_context)),
       cache_storage_context_(std::move(cache_storage_context)),
+      quota_manager_proxy_(std::move(quota_manager_proxy)),
       weak_ptr_factory_(this) {
   // Constructed on the UI thread, then used on the IO thread.
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -125,23 +101,8 @@ void BackgroundFetchDataManager::CreateRegistration(
     GetRegistrationCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  auto registration_callback =
-      base::BindOnce(&GetRegistrationFromMetadata, std::move(callback));
   AddDatabaseTask(std::make_unique<background_fetch::CreateMetadataTask>(
-      this, registration_id, requests, options, icon,
-      std::move(registration_callback)));
-}
-
-void BackgroundFetchDataManager::GetMetadata(
-    int64_t service_worker_registration_id,
-    const url::Origin& origin,
-    const std::string& developer_id,
-    GetMetadataCallback callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  AddDatabaseTask(std::make_unique<background_fetch::GetMetadataTask>(
-      this, service_worker_registration_id, origin, developer_id,
-      std::move(callback)));
+      this, registration_id, requests, options, icon, std::move(callback)));
 }
 
 void BackgroundFetchDataManager::GetRegistration(
@@ -151,20 +112,20 @@ void BackgroundFetchDataManager::GetRegistration(
     GetRegistrationCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  auto registration_callback =
-      base::BindOnce(&GetRegistrationFromMetadata, std::move(callback));
-  GetMetadata(service_worker_registration_id, origin, developer_id,
-              std::move(registration_callback));
+  AddDatabaseTask(std::make_unique<background_fetch::GetRegistrationTask>(
+      this, service_worker_registration_id, origin, developer_id,
+      std::move(callback)));
 }
 
 void BackgroundFetchDataManager::UpdateRegistrationUI(
     const BackgroundFetchRegistrationId& registration_id,
-    const std::string& title,
+    const base::Optional<std::string>& title,
+    const base::Optional<SkBitmap>& icon,
     blink::mojom::BackgroundFetchService::UpdateUICallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   AddDatabaseTask(std::make_unique<background_fetch::UpdateRegistrationUITask>(
-      this, registration_id, title, std::move(callback)));
+      this, registration_id, title, icon, std::move(callback)));
 }
 
 void BackgroundFetchDataManager::PopNextRequest(
@@ -174,50 +135,49 @@ void BackgroundFetchDataManager::PopNextRequest(
 
   auto start_next_request = base::BindOnce(
       &BackgroundFetchDataManager::AddStartNextPendingRequestTask,
-      weak_ptr_factory_.GetWeakPtr(),
-      registration_id.service_worker_registration_id(), std::move(callback));
+      weak_ptr_factory_.GetWeakPtr(), registration_id, std::move(callback));
 
   // Get the associated metadata, and add a StartNextPendingRequestTask.
-  GetMetadata(registration_id.service_worker_registration_id(),
-              registration_id.origin(), registration_id.developer_id(),
-              std::move(start_next_request));
+  AddDatabaseTask(std::make_unique<background_fetch::GetRegistrationTask>(
+      this, registration_id.service_worker_registration_id(),
+      registration_id.origin(), registration_id.developer_id(),
+      std::move(start_next_request)));
 }
 
 void BackgroundFetchDataManager::AddStartNextPendingRequestTask(
-    int64_t service_worker_registration_id,
+    const BackgroundFetchRegistrationId& registration_id,
     NextRequestCallback callback,
     blink::mojom::BackgroundFetchError error,
-    std::unique_ptr<proto::BackgroundFetchMetadata> metadata) {
-  if (!metadata) {
+    const BackgroundFetchRegistration& registration) {
+  if (error != blink::mojom::BackgroundFetchError::NONE) {
     // Stop giving out requests as registration aborted (or otherwise finished).
     std::move(callback).Run(nullptr /* request */);
     return;
   }
-  DCHECK_EQ(error, blink::mojom::BackgroundFetchError::NONE);
 
   AddDatabaseTask(
       std::make_unique<background_fetch::StartNextPendingRequestTask>(
-          this, service_worker_registration_id, std::move(metadata),
-          std::move(callback)));
+          this, registration_id, registration, std::move(callback)));
 }
 
 void BackgroundFetchDataManager::MarkRequestAsComplete(
     const BackgroundFetchRegistrationId& registration_id,
-    BackgroundFetchRequestInfo* request,
-    BackgroundFetchScheduler::MarkedCompleteCallback callback) {
+    scoped_refptr<BackgroundFetchRequestInfo> request_info,
+    base::OnceClosure closure) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   AddDatabaseTask(std::make_unique<background_fetch::MarkRequestCompleteTask>(
-      this, registration_id, request, std::move(callback)));
+      this, registration_id, std::move(request_info), std::move(closure)));
 }
 
 void BackgroundFetchDataManager::GetSettledFetchesForRegistration(
     const BackgroundFetchRegistrationId& registration_id,
+    std::unique_ptr<BackgroundFetchRequestMatchParams> match_params,
     SettledFetchesCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   AddDatabaseTask(std::make_unique<background_fetch::GetSettledFetchesTask>(
-      this, registration_id, std::move(callback)));
+      this, registration_id, std::move(match_params), std::move(callback)));
 }
 
 void BackgroundFetchDataManager::MarkRegistrationForDeletion(

@@ -845,6 +845,24 @@ GLboolean IsVertexArrayOES(GLuint array) override;
 
 void BindVertexArrayOES(GLuint array) override;
 
+void FramebufferParameteri(GLenum target, GLenum pname, GLint param) override;
+
+void BindImageTexture(GLuint unit,
+                      GLuint texture,
+                      GLint level,
+                      GLboolean layered,
+                      GLint layer,
+                      GLenum access,
+                      GLenum format) override;
+
+void DispatchCompute(GLuint num_groups_x,
+                     GLuint num_groups_y,
+                     GLuint num_groups_z) override;
+
+void MemoryBarrierEXT(GLbitfield barriers) override;
+
+void MemoryBarrierByRegion(GLbitfield barriers) override;
+
 void SwapBuffers(GLuint64 swap_id, GLbitfield flags = 0) override;
 
 GLuint GetMaxValueInBufferCHROMIUM(GLuint buffer_id,
@@ -1259,5 +1277,12 @@ void WaitGpuFenceCHROMIUM(GLuint gpu_fence_id) override;
 void DestroyGpuFenceCHROMIUM(GLuint gpu_fence_id) override;
 
 void InvalidateReadbackBufferShadowDataCHROMIUM(GLuint buffer_id) override;
+
+void FramebufferTextureMultiviewLayeredANGLE(GLenum target,
+                                             GLenum attachment,
+                                             GLuint texture,
+                                             GLint level,
+                                             GLint baseViewIndex,
+                                             GLsizei numViews) override;
 
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_IMPLEMENTATION_AUTOGEN_H_

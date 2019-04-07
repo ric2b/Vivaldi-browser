@@ -15,27 +15,12 @@ is_windows = platform.system() == "Windows"
 is_linux = platform.system() == "Linux"
 is_android = os.access(os.path.join(sourcedir, ".enable_android"), os.F_OK)
 
-os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"]="0"
-
 # Check python version on Windows
 if is_windows:
-  version = sys.version_info
-  problem_version = (version.major, version.minor) != (2, 7)  or version.micro < 14
-  problem_pywin32 = False
-  try:
-    import win32file
-  except:
-    problem_pywin32 = True
+  import check_win_python
+  check_win_python.CheckPythonInstall()
 
-  if problem_version or problem_pywin32:
-    string = ""
-    if problem_version:
-      string += "Python 2 version 2.7.14 or higher needed (Current version %d.%d.%d)" % (version.major, version.minor, version.micro)
-    if problem_pywin32:
-      if string:
-        string += ", and additionally "
-      string += """pypiwin32 must be installed, use "pip install pypiwin32" to install."""
-    raise Exception(string)
+  os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"]="0"
 elif is_linux:
   # Add path for downloaded clang
   os.environ["PATH"] = os.pathsep.join([
@@ -65,7 +50,7 @@ args = parser.parse_args()
 
 # Need this file to be present
 gclient_gni_content = """checkout_nacl=false
-checkout_libaom=false
+checkout_libaom=true
 checkout_oculus_sdk=false
 build_with_chromium=true
 """
@@ -180,6 +165,10 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
 gn_defines = os.environ.get("GN_DEFINES", "")
 if gn_defines:
   gn_defines = " "+gn_defines
+
+# Remove Google API client ID/secret apparently not needed
+# and removing them is another way to disable Account Consistency
+gn_defines += ' google_default_client_id="" google_default_client_secret=""'
 
 if args.official:
   gn_defines += " is_official_build=true"

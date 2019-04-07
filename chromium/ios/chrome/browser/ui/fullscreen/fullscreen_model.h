@@ -47,6 +47,17 @@ class FullscreenModel : public ChromeBroadcastObserverInterface {
     return expanded_toolbar_height_ - collapsed_toolbar_height_;
   }
 
+  // Returns whether the page content is tall enough for the toolbar to be
+  // scrolled to an entirely collapsed position.
+  bool can_collapse_toolbar() const {
+    return content_height_ > scroll_view_height_ + toolbar_height_delta();
+  }
+
+  // Whether the view is scrolled all the way to the bottom.
+  bool is_scrolled_to_bottom() const {
+    return y_content_offset_ + scroll_view_height_ >= content_height_;
+  }
+
   // Increments and decrements |disabled_counter_| for features that require the
   // toolbar be completely visible.
   void IncrementDisabledCounter();
@@ -148,7 +159,7 @@ class FullscreenModel : public ChromeBroadcastObserverInterface {
   void OnBottomToolbarHeightBroadcasted(CGFloat height) override;
 
   // The observers for this model.
-  base::ObserverList<FullscreenModelObserver> observers_;
+  base::ObserverList<FullscreenModelObserver>::Unchecked observers_;
   // The percentage of the toolbar that should be visible, where 1.0 denotes a
   // fully visible toolbar and 0.0 denotes a completely hidden one.
   CGFloat progress_ = 0.0;

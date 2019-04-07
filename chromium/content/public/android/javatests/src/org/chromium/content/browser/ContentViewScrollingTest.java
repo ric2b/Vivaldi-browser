@@ -23,6 +23,7 @@ import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content.browser.test.util.WebContentsUtils;
 import org.chromium.content_public.browser.ViewEventSink.InternalAccessDelegate;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule.RerunWithUpdatedContainerView;
@@ -144,7 +145,7 @@ public class ContentViewScrollingTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                // Synthesize joystick motion event and send to ContentViewCore.
+                // Synthesize joystick motion event and send to content layer.
                 MotionEvent leftJoystickMotionEvent =
                         MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE,
                                 deltaAxisX, deltaAxisY, 0);
@@ -160,6 +161,7 @@ public class ContentViewScrollingTest {
         mActivityTestRule.launchContentShellWithUrl(LARGE_PAGE);
         mActivityTestRule.waitForActiveShellToBeDoneLoading();
         mCoordinates = mActivityTestRule.getRenderCoordinates();
+        WebContentsUtils.reportAllFrameSubmissions(mActivityTestRule.getWebContents(), true);
         waitForViewportInitialization();
 
         Assert.assertEquals(0, mCoordinates.getScrollXPixInt());

@@ -17,7 +17,7 @@
 #include "base/scoped_observer.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_power_manager_client.h"
-#include "services/ui/public/cpp/input_devices/input_device_client_test_api.h"
+#include "services/ws/public/cpp/input_devices/input_device_client_test_api.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/test/touch_transform_controller_test_api.h"
 #include "ui/display/manager/touch_transform_setter.h"
@@ -229,7 +229,7 @@ TEST_F(BacklightsForcedOffSetterTest,
   ui::TouchscreenDevice internal_touchdevice(
       234, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
       std::string("test internal touch device"), gfx::Size(1000, 1000), 1);
-  ui::InputDeviceClientTestApi().SetTouchscreenDevices(
+  ws::InputDeviceClientTestApi().SetTouchscreenDevices(
       {external_touchdevice, internal_touchdevice});
 
   std::vector<ui::TouchDeviceTransform> transforms;
@@ -275,7 +275,7 @@ TEST_F(BacklightsForcedOffSetterTest, TouchscreensDisableOnBrightnessChange) {
   ui::TouchscreenDevice internal_touchdevice(
       234, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
       std::string("test internal touch device"), gfx::Size(1000, 1000), 1);
-  ui::InputDeviceClientTestApi().SetTouchscreenDevices({internal_touchdevice});
+  ws::InputDeviceClientTestApi().SetTouchscreenDevices({internal_touchdevice});
 
   // Add internal touch device to the list.
   std::vector<ui::TouchDeviceTransform> transforms;

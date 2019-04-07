@@ -31,6 +31,7 @@
 
 #include <memory>
 #include "base/auto_reset.h"
+#include "third_party/blink/public/common/origin_policy/origin_policy.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_network_provider.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -50,7 +51,6 @@
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
-#include "third_party/blink/renderer/core/html/parser/css_preload_scanner.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html/parser/text_resource_decoder.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
@@ -97,6 +97,7 @@
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
+#include "third_party/blink/renderer/platform/wtf/text/string_utf8_adaptor.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
@@ -174,6 +175,7 @@ void DocumentLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(history_item_);
   visitor->Trace(parser_);
   visitor->Trace(subresource_filter_);
+  visitor->Trace(resource_loading_hints_);
   visitor->Trace(document_load_timing_);
   visitor->Trace(application_cache_host_);
   visitor->Trace(content_security_policy_);
@@ -208,14 +210,17 @@ const KURL& DocumentLoader::Url() const {
 }
 
 Resource* DocumentLoader::StartPreload(Resource::Type type,
-                                       FetchParameters& params,
-                                       CSSPreloaderResourceClient* client) {
+                                       FetchParameters& params) {
   Resource* resource = nullptr;
-  DCHECK(!client || type == Resource::kCSSStyleSheet);
   switch (type) {
     case Resource::kImage:
-      if (frame_)
-        frame_->MaybeAllowImagePlaceholder(params);
+      if (frame_) {
+        if (frame_->IsClientLoFiAllowed(params.GetResourceRequest())) {
+          params.SetClientLoFiPlaceholder();
+        } else if (frame_->IsLazyLoadingImageAllowed()) {
+          params.SetAllowImagePlaceholder();
+        }
+      }
       resource = ImageResource::Fetch(params, Fetcher());
       break;
     case Resource::kScript:
@@ -223,7 +228,7 @@ Resource* DocumentLoader::StartPreload(Resource::Type type,
       resource = ScriptResource::Fetch(params, Fetcher(), nullptr);
       break;
     case Resource::kCSSStyleSheet:
-      resource = CSSStyleSheetResource::Fetch(params, Fetcher(), client);
+      resource = CSSStyleSheetResource::Fetch(params, Fetcher(), nullptr);
       break;
     case Resource::kFont:
       resource = FontResource::Fetch(params, Fetcher(), nullptr);
@@ -254,8 +259,15 @@ void DocumentLoader::SetServiceWorkerNetworkProvider(
 }
 
 void DocumentLoader::SetSourceLocation(
-    std::unique_ptr<SourceLocation> source_location) {
-  source_location_ = std::move(source_location);
+    const WebSourceLocation& source_location) {
+  std::unique_ptr<SourceLocation> location =
+      SourceLocation::Create(source_location.url, source_location.line_number,
+                             source_location.column_number, nullptr);
+  source_location_ = std::move(location);
+}
+
+void DocumentLoader::ResetSourceLocation() {
+  source_location_ = nullptr;
 }
 
 std::unique_ptr<SourceLocation> DocumentLoader::CopySourceLocation() const {
@@ -608,6 +620,23 @@ void DocumentLoader::ResponseReceived(
   if (!frame_->GetSettings()->BypassCSP()) {
     content_security_policy_->DidReceiveHeaders(
         ContentSecurityPolicyResponseHeaders(response));
+
+    // Handle OriginPolicy. We can skip the entire block if the OP policies have
+    // already been passed down.
+    if (!content_security_policy_->HasPolicyFromSource(
+            kContentSecurityPolicyHeaderSourceOriginPolicy)) {
+      std::unique_ptr<OriginPolicy> origin_policy = OriginPolicy::From(
+          StringUTF8Adaptor(request_.GetOriginPolicy()).AsStringPiece());
+      if (origin_policy) {
+        for (auto csp : origin_policy->GetContentSecurityPolicies()) {
+          content_security_policy_->DidReceiveHeader(
+              WTF::String::FromUTF8(csp.policy.data(), csp.policy.length()),
+              csp.report_only ? kContentSecurityPolicyHeaderTypeReport
+                              : kContentSecurityPolicyHeaderTypeEnforce,
+              kContentSecurityPolicyHeaderSourceOriginPolicy);
+        }
+      }
+    }
   }
   if (!content_security_policy_->AllowAncestors(frame_, response.Url())) {
     CancelLoadAfterCSPDenied(response);
@@ -615,7 +644,6 @@ void DocumentLoader::ResponseReceived(
   }
 
   if (!frame_->GetSettings()->BypassCSP() &&
-      RuntimeEnabledFeatures::EmbedderCSPEnforcementEnabled() &&
       !GetFrameLoader().RequiredCSP().IsEmpty()) {
     const SecurityOrigin* parent_security_origin =
         frame_->Tree().Parent()->GetSecurityContext()->GetSecurityOrigin();
@@ -867,6 +895,7 @@ bool DocumentLoader::MaybeLoadEmpty() {
       !GetFrameLoader().StateMachine()->CreatingInitialEmptyDocument())
     request_.SetURL(BlankURL());
   response_ = ResourceResponse(request_.Url(), "text/html");
+  response_.SetTextEncodingName("utf-8");
   FinishedLoading(CurrentTimeTicks());
   return true;
 }
@@ -1073,7 +1102,7 @@ void DocumentLoader::InstallNewDocument(
   Document* document = frame_->DomWindow()->InstallNewDocument(
       mime_type,
       DocumentInit::Create()
-          .WithFrame(frame_)
+          .WithDocumentLoader(this)
           .WithURL(url)
           .WithOwnerDocument(owner_document)
           .WithNewRegistrationContext(),
@@ -1141,7 +1170,7 @@ void DocumentLoader::InstallNewDocument(
       parser_->AsScriptableDocumentParser();
   if (scriptable_parser && GetResource()) {
     scriptable_parser->SetInlineScriptCacheHandler(
-        ToRawResource(GetResource())->CacheHandler());
+        ToRawResource(GetResource())->InlineScriptCacheHandler());
   }
 
   // FeaturePolicy is reset in the browser process on commit, so this needs to
@@ -1217,7 +1246,12 @@ void DocumentLoader::UpdateNavigationTimings(
     base::TimeTicks navigation_start_time,
     base::TimeTicks redirect_start_time,
     base::TimeTicks redirect_end_time,
-    base::TimeTicks fetch_start_time) {
+    base::TimeTicks fetch_start_time,
+    base::TimeTicks input_start_time) {
+  if (!input_start_time.is_null()) {
+    GetTiming().SetInputStart(input_start_time);
+  }
+
   // If we don't have any navigation timings yet, just start the navigation.
   if (navigation_start_time.is_null()) {
     GetTiming().SetNavigationStart(CurrentTimeTicks());

@@ -98,6 +98,9 @@ class CrOSComponentManager {
     kForce,
     // Do not update if a compatible component is installed.
     kDontForce,
+    // Do not run updater, even if a compatible component is not installed at
+    // the moment.
+    kSkip
   };
 
   class Delegate {
@@ -113,6 +116,7 @@ class CrOSComponentManager {
   void SetDelegate(Delegate* delegate);
 
   // Installs a component and keeps it up-to-date.
+  // The |load_callback| is run on the calling thread.
   void Load(const std::string& name,
             MountPolicy mount_policy,
             UpdatePolicy update_policy,
@@ -141,6 +145,10 @@ class CrOSComponentManager {
   // Broadcasts a D-Bus signal for a successful component installation.
   void EmitInstalledSignal(const std::string& component);
 
+  // Returns true if any previously registered version of a component exists,
+  // even if it is incompatible.
+  bool IsRegistered(const std::string& name);
+
  private:
   FRIEND_TEST_ALL_PREFIXES(CrOSComponentInstallerTest, RegisterComponent);
   FRIEND_TEST_ALL_PREFIXES(CrOSComponentInstallerTest,
@@ -159,15 +167,16 @@ class CrOSComponentManager {
   // Installs a component with a dedicated ComponentUpdateService instance.
   void Install(ComponentUpdateService* cus,
                const std::string& name,
-               OnDemandUpdater::Priority priority,
+               UpdatePolicy update_policy,
                MountPolicy mount_policy,
                LoadCallback load_callback);
 
   // Calls OnDemandUpdate to install the component right after being registered.
   // |id| is the component id generated from its sha2 hash.
   void StartInstall(ComponentUpdateService* cus,
+                    const std::string& name,
                     const std::string& id,
-                    OnDemandUpdater::Priority priority,
+                    UpdatePolicy update_policy,
                     update_client::Callback install_callback);
 
   // Calls LoadInternal to load the installed component.

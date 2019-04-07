@@ -15,13 +15,13 @@ extern const base::Feature kOffliningRecentPagesFeature;
 extern const base::Feature kOfflinePagesSvelteConcurrentLoadingFeature;
 extern const base::Feature kOfflinePagesCTFeature;
 extern const base::Feature kOfflinePagesSharingFeature;
+extern const base::Feature kOfflinePagesLivePageSharingFeature;
 extern const base::Feature kBackgroundLoaderForDownloadsFeature;
 extern const base::Feature kPrefetchingOfflinePagesFeature;
 extern const base::Feature kOfflinePagesLoadSignalCollectingFeature;
 extern const base::Feature kOfflinePagesCTV2Feature;
 extern const base::Feature kOfflinePagesRenovationsFeature;
 extern const base::Feature kOfflinePagesResourceBasedSnapshotFeature;
-extern const base::Feature kOfflinePagesPrefetchingUIFeature;
 extern const base::Feature kOfflinePagesLimitlessPrefetchingFeature;
 extern const base::Feature kOfflinePagesDescriptivePendingStatusFeature;
 extern const base::Feature kOfflinePagesInDownloadHomeOpenInCctFeature;
@@ -29,6 +29,7 @@ extern const base::Feature kOfflinePagesDescriptiveFailStatusFeature;
 extern const base::Feature kOfflinePagesCTSuppressNotificationsFeature;
 extern const base::Feature kOfflinePagesShowAlternateDinoPageFeature;
 extern const base::Feature kOfflineIndicatorFeature;
+extern const base::Feature kOfflineIndicatorAlwaysHttpProbeFeature;
 
 // The parameter name used to find the experiment tag for prefetching offline
 // pages.
@@ -46,6 +47,9 @@ bool IsOfflinePagesCTEnabled();
 // Returns true if offline page sharing is enabled.
 bool IsOfflinePagesSharingEnabled();
 
+// Returns true if live page sharing of offline page is enabled.
+bool IsOfflinePagesLivePageSharingEnabled();
+
 // Returns true if saving a foreground tab that is taking too long using the
 // background scheduler is enabled.
 bool IsBackgroundLoaderForDownloadsEnabled();
@@ -55,9 +59,6 @@ bool IsOfflinePagesSvelteConcurrentLoadingEnabled();
 
 // Returns true if prefetching offline pages is enabled.
 bool IsPrefetchingOfflinePagesEnabled();
-
-// Returns true if we should show UI for prefetched pages.
-bool IsOfflinePagesPrefetchingUIEnabled();
 
 // Returns true if prefetching offline pages should ignore its normal resource
 // usage limits.
@@ -112,6 +113,12 @@ std::string GetPrefetchingOfflinePagesExperimentTag();
 
 // Returns true if offline indicator UI is shown when the user is offline.
 bool IsOfflineIndicatorFeatureEnabled();
+
+// Returns true if we should always do http probes to detect network
+// connectivity instead of retrieving it from the system. This enables the user
+// to test our http probe detection on Android devices with Marshmallow and
+// above.
+bool IsOfflineIndicatorAlwaysHttpProbeEnabled();
 
 }  // namespace offline_pages
 

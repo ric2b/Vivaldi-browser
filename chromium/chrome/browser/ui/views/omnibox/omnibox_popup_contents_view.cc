@@ -476,6 +476,11 @@ void OmniboxPopupContentsView::OnDragCanceled() {
   SetMouseHandler(nullptr);
 }
 
+void OmniboxPopupContentsView::ProvideButtonFocusHint(size_t line) {
+  OmniboxResultView* result = result_view_at(line);
+  result->ProvideButtonFocusHint();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // OmniboxPopupContentsView, views::View overrides:
 
@@ -486,11 +491,6 @@ void OmniboxPopupContentsView::Layout() {
   // We need to manually schedule a paint here since we are a layered window and
   // won't implicitly require painting until we ask for one.
   SchedulePaint();
-}
-
-views::View* OmniboxPopupContentsView::GetTooltipHandlerForPoint(
-    const gfx::Point& point) {
-  return nullptr;
 }
 
 bool OmniboxPopupContentsView::OnMouseDragged(const ui::MouseEvent& event) {

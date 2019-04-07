@@ -23,6 +23,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/network_service_instance.h"
 #include "crypto/sha2.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "url/gurl.h"
@@ -375,7 +376,7 @@ AutoEnrollmentClientImpl::FactoryImpl::CreateForInitialEnrollment(
 }
 
 AutoEnrollmentClientImpl::~AutoEnrollmentClientImpl() {
-  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
+  content::GetNetworkConnectionTracker()->RemoveNetworkConnectionObserver(this);
 }
 
 // static
@@ -386,8 +387,8 @@ void AutoEnrollmentClientImpl::RegisterPrefs(PrefRegistrySimple* registry) {
 
 void AutoEnrollmentClientImpl::Start() {
   // (Re-)register the network change observer.
-  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
-  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
+  content::GetNetworkConnectionTracker()->RemoveNetworkConnectionObserver(this);
+  content::GetNetworkConnectionTracker()->AddNetworkConnectionObserver(this);
 
   // Drop the previous job and reset state.
   request_job_.reset();
@@ -425,9 +426,9 @@ AutoEnrollmentState AutoEnrollmentClientImpl::state() const {
   return state_;
 }
 
-void AutoEnrollmentClientImpl::OnNetworkChanged(
-    net::NetworkChangeNotifier::ConnectionType type) {
-  if (type != net::NetworkChangeNotifier::CONNECTION_NONE &&
+void AutoEnrollmentClientImpl::OnConnectionChanged(
+    network::mojom::ConnectionType type) {
+  if (type != network::mojom::ConnectionType::CONNECTION_NONE &&
       !progress_callback_.is_null()) {
     RetryStep();
   }

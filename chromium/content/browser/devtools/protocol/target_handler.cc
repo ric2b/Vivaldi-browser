@@ -27,8 +27,6 @@ namespace protocol {
 
 namespace {
 
-static const char kMethod[] = "method";
-static const char kResumeMethod[] = "Runtime.runIfWaitingForDebugger";
 static const char kInitializerScript[] = R"(
   (function() {
     const bindingName = "%s";
@@ -241,8 +239,10 @@ class TargetHandler::Session : public DevToolsAgentHostClient {
     DevToolsAgentHostImpl* agent_host_impl =
         static_cast<DevToolsAgentHostImpl*>(agent_host);
     if (flatten_protocol) {
-      handler->target_registry_->AttachSubtargetSession(id, agent_host_impl,
-                                                        session);
+      handler->target_registry_->AttachSubtargetSession(
+          id, agent_host_impl, session,
+          base::BindOnce(&Session::ResumeIfThrottled,
+                         base::Unretained(session)));
     } else {
       agent_host_impl->AttachClient(session);
     }
@@ -275,17 +275,16 @@ class TargetHandler::Session : public DevToolsAgentHostClient {
 
   void SetThrottle(Throttle* throttle) { throttle_ = throttle; }
 
+  void ResumeIfThrottled() {
+    if (throttle_)
+      throttle_->Clear();
+  }
+
   void SendMessageToAgentHost(const std::string& message) {
     if (throttle_) {
-      bool resuming = false;
       std::unique_ptr<base::Value> value = base::JSONReader::Read(message);
-      if (value && value->is_dict()) {
-        base::Value* method = value->FindKey(kMethod);
-        resuming = method && method->is_string() &&
-                   method->GetString() == kResumeMethod;
-      }
-      if (resuming)
-        throttle_->Clear();
+      if (TargetRegistry::IsRuntimeResumeCommand(value.get()))
+        ResumeIfThrottled();
     }
 
     agent_host_->DispatchProtocolMessage(this, message);
@@ -426,7 +425,7 @@ void TargetHandler::SetRenderer(int process_host_id,
 }
 
 Response TargetHandler::Disable() {
-  SetAutoAttach(false, false);
+  SetAutoAttach(false, false, false);
   SetDiscoverTargets(false);
   auto_attached_sessions_.clear();
   attached_sessions_.clear();
@@ -455,7 +454,7 @@ void TargetHandler::ClearThrottles() {
 void TargetHandler::AutoAttach(DevToolsAgentHost* host,
                                bool waiting_for_debugger) {
   std::string session_id =
-      Session::Attach(this, host, waiting_for_debugger, false);
+      Session::Attach(this, host, waiting_for_debugger, flatten_auto_attach_);
   auto_attached_sessions_[host] = attached_sessions_[session_id].get();
 }
 
@@ -517,8 +516,10 @@ Response TargetHandler::SetDiscoverTargets(bool discover) {
   return Response::OK();
 }
 
-Response TargetHandler::SetAutoAttach(
-    bool auto_attach, bool wait_for_debugger_on_start) {
+Response TargetHandler::SetAutoAttach(bool auto_attach,
+                                      bool wait_for_debugger_on_start,
+                                      Maybe<bool> flatten) {
+  flatten_auto_attach_ = flatten.fromMaybe(false);
   auto_attacher_.SetAutoAttach(auto_attach, wait_for_debugger_on_start);
   if (!auto_attacher_.ShouldThrottleFramesNavigation())
     ClearThrottles();
@@ -643,19 +644,6 @@ Response TargetHandler::ExposeDevToolsProtocol(
   return Response::OK();
 }
 
-Response TargetHandler::CreateBrowserContext(std::string* out_context_id) {
-  return Response::Error("Not supported");
-}
-
-Response TargetHandler::DisposeBrowserContext(const std::string& context_id) {
-  return Response::Error("Not supported");
-}
-
-Response TargetHandler::GetBrowserContexts(
-    std::unique_ptr<protocol::Array<String>>* browser_context_ids) {
-  return Response::Error("Not supported");
-}
-
 Response TargetHandler::CreateTarget(const std::string& url,
                                      Maybe<int> width,
                                      Maybe<int> height,
@@ -730,6 +718,68 @@ void TargetHandler::DevToolsAgentHostCrashed(DevToolsAgentHost* host,
                            host->GetWebContents()
                                ? host->GetWebContents()->GetCrashedErrorCode()
                                : 0);
+}
+
+protocol::Response TargetHandler::CreateBrowserContext(
+    std::string* out_context_id) {
+  DevToolsManagerDelegate* delegate =
+      DevToolsManager::GetInstance()->delegate();
+  if (!delegate)
+    return Response::Error("Browser context management is not supported.");
+  BrowserContext* context = delegate->CreateBrowserContext();
+  if (!context)
+    return Response::Error("Failed to create browser context.");
+  *out_context_id = context->UniqueId();
+  return protocol::Response::OK();
+}
+
+protocol::Response TargetHandler::GetBrowserContexts(
+    std::unique_ptr<protocol::Array<protocol::String>>* browser_context_ids) {
+  DevToolsManagerDelegate* delegate =
+      DevToolsManager::GetInstance()->delegate();
+  if (!delegate)
+    return Response::Error("Browser context management is not supported.");
+  std::vector<content::BrowserContext*> contexts =
+      delegate->GetBrowserContexts();
+  *browser_context_ids = std::make_unique<protocol::Array<protocol::String>>();
+  for (auto* context : contexts)
+    (*browser_context_ids)->addItem(context->UniqueId());
+  return protocol::Response::OK();
+}
+
+void TargetHandler::DisposeBrowserContext(
+    const std::string& context_id,
+    std::unique_ptr<DisposeBrowserContextCallback> callback) {
+  DevToolsManagerDelegate* delegate =
+      DevToolsManager::GetInstance()->delegate();
+  if (!delegate) {
+    callback->sendFailure(protocol::Response::Error(
+        "Browser context management is not supported."));
+    return;
+  }
+  std::vector<content::BrowserContext*> contexts =
+      delegate->GetBrowserContexts();
+  auto context_it =
+      std::find_if(contexts.begin(), contexts.end(),
+                   [&context_id](content::BrowserContext* context) {
+                     return context->UniqueId() == context_id;
+                   });
+  if (context_it == contexts.end()) {
+    callback->sendFailure(protocol::Response::Error(
+        "Failed to find context with id " + context_id));
+    return;
+  }
+  delegate->DisposeBrowserContext(
+      *context_it,
+      base::BindOnce(
+          [](std::unique_ptr<DisposeBrowserContextCallback> callback,
+             bool success, const std::string& error) {
+            if (success)
+              callback->sendSuccess();
+            else
+              callback->sendFailure(protocol::Response::Error(error));
+          },
+          std::move(callback)));
 }
 
 }  // namespace protocol

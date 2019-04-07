@@ -13,8 +13,8 @@
 #include "components/viz/client/hit_test_data_provider.h"
 #include "components/viz/client/local_surface_id_provider.h"
 #include "content/renderer/mus/renderer_window_tree_client.h"
-#include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "services/ws/public/cpp/property_type_converters.h"
+#include "services/ws/public/mojom/window_manager.mojom.h"
 
 namespace content {
 namespace {
@@ -64,7 +64,7 @@ void MusEmbeddedFrame::SetWindowBounds(
 MusEmbeddedFrame::MusEmbeddedFrame(
     RendererWindowTreeClient* renderer_window_tree_client,
     MusEmbeddedFrameDelegate* delegate,
-    ui::ClientSpecificId window_id,
+    ws::ClientSpecificId window_id,
     const base::UnguessableToken& token)
     : renderer_window_tree_client_(renderer_window_tree_client),
       delegate_(delegate),
@@ -81,7 +81,7 @@ void MusEmbeddedFrame::CreateChildWindowAndEmbed(
     const base::UnguessableToken& token) {
   // Set a name for debugging.
   base::flat_map<std::string, std::vector<uint8_t>> properties;
-  properties[ui::mojom::WindowManager::kName_Property] =
+  properties[ws::mojom::WindowManager::kName_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(std::string("RendererFrame"));
   window_tree()->NewWindow(GetAndAdvanceNextChangeId(), window_id_, properties);
   window_tree()->AddWindow(GetAndAdvanceNextChangeId(),
@@ -108,7 +108,7 @@ uint32_t MusEmbeddedFrame::GetAndAdvanceNextChangeId() {
   return renderer_window_tree_client_->GetAndAdvanceNextChangeId();
 }
 
-ui::mojom::WindowTree* MusEmbeddedFrame::window_tree() {
+ws::mojom::WindowTree* MusEmbeddedFrame::window_tree() {
   // Once |tree_changed_| is true the WindowTree this instance used has changed
   // and it no longer makes sense to use it (the original window was deleted).
   return tree_changed_ ? nullptr : renderer_window_tree_client_->tree_.get();

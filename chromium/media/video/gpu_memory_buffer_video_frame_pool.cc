@@ -27,6 +27,7 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "media/base/bind_to_current_loop.h"
@@ -182,9 +183,13 @@ class GpuMemoryBufferVideoFramePool::PoolImpl
 
   // Callback called when a VideoFrame generated with GetFrameResources is no
   // longer referenced.
-  // This must be called on the thread where |media_task_runner_| is current.
   void MailboxHoldersReleased(FrameResources* frame_resources,
                               const gpu::SyncToken& sync_token);
+
+  // Callback called when a VideoFrame generated with GetFrameResources has
+  // outlived its release SyncToken.
+  // This must be called on the thread where |media_task_runner_| is current.
+  void MailboxHoldersWaited(FrameResources* frame_resources);
 
   // Delete resources. This has to be called on the thread where |task_runner|
   // is current.
@@ -246,6 +251,12 @@ gfx::BufferFormat GpuMemoryBufferFormat(
     case GpuVideoAcceleratorFactories::OutputFormat::XB30:
       DCHECK_EQ(0u, plane);
       return gfx::BufferFormat::RGBX_1010102;
+    case GpuVideoAcceleratorFactories::OutputFormat::RGBA:
+      DCHECK_EQ(0u, plane);
+      return gfx::BufferFormat::RGBA_8888;
+    case GpuVideoAcceleratorFactories::OutputFormat::BGRA:
+      DCHECK_EQ(0u, plane);
+      return gfx::BufferFormat::BGRA_8888;
     case GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED:
       NOTREACHED();
       break;
@@ -274,6 +285,12 @@ unsigned ImageInternalFormat(GpuVideoAcceleratorFactories::OutputFormat format,
       // Technically speaking we should say GL_RGB10_EXT, but that format is not
       // supported in OpenGLES.
       return GL_RGB10_A2_EXT;
+    case GpuVideoAcceleratorFactories::OutputFormat::RGBA:
+      DCHECK_EQ(0u, plane);
+      return GL_RGBA;
+    case GpuVideoAcceleratorFactories::OutputFormat::BGRA:
+      DCHECK_EQ(0u, plane);
+      return GL_BGRA_EXT;
     case GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED:
       NOTREACHED();
       break;
@@ -286,6 +303,8 @@ size_t PlanesPerCopy(GpuVideoAcceleratorFactories::OutputFormat format) {
   switch (format) {
     case GpuVideoAcceleratorFactories::OutputFormat::I420:
     case GpuVideoAcceleratorFactories::OutputFormat::UYVY:
+    case GpuVideoAcceleratorFactories::OutputFormat::RGBA:
+    case GpuVideoAcceleratorFactories::OutputFormat::BGRA:
       return 1;
     case GpuVideoAcceleratorFactories::OutputFormat::NV12_DUAL_GMB:
     case GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB:
@@ -313,6 +332,8 @@ VideoPixelFormat VideoFormat(
     case GpuVideoAcceleratorFactories::OutputFormat::XR30:
       return PIXEL_FORMAT_ARGB;
     case GpuVideoAcceleratorFactories::OutputFormat::XB30:
+    case GpuVideoAcceleratorFactories::OutputFormat::RGBA:
+    case GpuVideoAcceleratorFactories::OutputFormat::BGRA:
       return PIXEL_FORMAT_RGB32;
     case GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED:
       NOTREACHED();
@@ -334,6 +355,9 @@ size_t NumGpuMemoryBuffers(GpuVideoAcceleratorFactories::OutputFormat format) {
       return 1;
     case GpuVideoAcceleratorFactories::OutputFormat::XR30:
     case GpuVideoAcceleratorFactories::OutputFormat::XB30:
+      return 1;
+    case GpuVideoAcceleratorFactories::OutputFormat::RGBA:
+    case GpuVideoAcceleratorFactories::OutputFormat::BGRA:
       return 1;
     case GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED:
       NOTREACHED();
@@ -409,7 +433,8 @@ void CopyRowsToNV12Buffer(int first_row,
   DCHECK_LE(bytes_per_row, std::abs(dest_stride_y));
   DCHECK_LE(bytes_per_row, std::abs(dest_stride_uv));
   DCHECK_EQ(0, first_row % 2);
-
+  DCHECK(source_frame->format() == PIXEL_FORMAT_I420 ||
+         source_frame->format() == PIXEL_FORMAT_YV12);
   libyuv::I420ToNV12(
       source_frame->visible_data(VideoFrame::kYPlane) +
           first_row * source_frame->stride(VideoFrame::kYPlane),
@@ -442,6 +467,8 @@ void CopyRowsToUYVYBuffer(int first_row,
   DCHECK_NE(dest_stride, 0);
   DCHECK_LE(width, std::abs(dest_stride / 2));
   DCHECK_EQ(0, first_row % 2);
+  DCHECK(source_frame->format() == PIXEL_FORMAT_I420 ||
+         source_frame->format() == PIXEL_FORMAT_YV12);
   libyuv::I420ToUYVY(
       source_frame->visible_data(VideoFrame::kYPlane) +
           first_row * source_frame->stride(VideoFrame::kYPlane),
@@ -472,6 +499,7 @@ void CopyRowsToRGB10Buffer(bool is_argb,
   DCHECK_NE(dest_stride, 0);
   DCHECK_LE(width, std::abs(dest_stride / 2));
   DCHECK_EQ(0, first_row % 2);
+  DCHECK_EQ(source_frame->format(), PIXEL_FORMAT_YUV420P10);
 
   const uint16_t* y_plane = reinterpret_cast<const uint16_t*>(
       source_frame->visible_data(VideoFrame::kYPlane) +
@@ -513,6 +541,46 @@ void CopyRowsToRGB10Buffer(bool is_argb,
   }
 }
 
+void CopyRowsToRGBABuffer(bool is_rgba,
+                          int first_row,
+                          int rows,
+                          int width,
+                          const scoped_refptr<VideoFrame>& source_frame,
+                          uint8_t* output,
+                          int dest_stride,
+                          base::OnceClosure done) {
+  base::ScopedClosureRunner done_runner(std::move(done));
+  TRACE_EVENT2("media", "CopyRowsToRGBABuffer", "bytes_per_row", width * 2,
+               "rows", rows);
+
+  if (!output)
+    return;
+
+  DCHECK_NE(dest_stride, 0);
+  DCHECK_LE(width, std::abs(dest_stride / 2));
+  DCHECK_EQ(0, first_row % 2);
+  DCHECK_EQ(source_frame->format(), PIXEL_FORMAT_I420A);
+
+  // libyuv uses little-endian for RGBx formats, whereas here we use big endian.
+  auto* func_ptr = is_rgba ? libyuv::I420AlphaToABGR : libyuv::I420AlphaToARGB;
+
+  func_ptr(source_frame->visible_data(VideoFrame::kYPlane) +
+               first_row * source_frame->stride(VideoFrame::kYPlane),
+           source_frame->stride(VideoFrame::kYPlane),
+           source_frame->visible_data(VideoFrame::kUPlane) +
+               first_row / 2 * source_frame->stride(VideoFrame::kUPlane),
+           source_frame->stride(VideoFrame::kUPlane),
+           source_frame->visible_data(VideoFrame::kVPlane) +
+               first_row / 2 * source_frame->stride(VideoFrame::kVPlane),
+           source_frame->stride(VideoFrame::kVPlane),
+           source_frame->visible_data(VideoFrame::kAPlane) +
+               first_row * source_frame->stride(VideoFrame::kAPlane),
+           source_frame->stride(VideoFrame::kAPlane),
+           output + first_row * dest_stride, dest_stride, width, rows,
+           // Textures are expected to be premultiplied by GL and compositors.
+           1 /* attenuate, meaning premultiply */);
+}
+
 gfx::Size CodedSize(const scoped_refptr<VideoFrame>& video_frame,
                     GpuVideoAcceleratorFactories::OutputFormat output_format) {
   DCHECK(gfx::Rect(video_frame->coded_size())
@@ -530,6 +598,8 @@ gfx::Size CodedSize(const scoped_refptr<VideoFrame>& video_frame,
     case GpuVideoAcceleratorFactories::OutputFormat::UYVY:
     case GpuVideoAcceleratorFactories::OutputFormat::XR30:
     case GpuVideoAcceleratorFactories::OutputFormat::XB30:
+    case GpuVideoAcceleratorFactories::OutputFormat::RGBA:
+    case GpuVideoAcceleratorFactories::OutputFormat::BGRA:
       output = gfx::Size((video_frame->visible_rect().width() + 1) & ~1,
                          video_frame->visible_rect().height());
       break;
@@ -550,26 +620,36 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
     const scoped_refptr<VideoFrame>& video_frame,
     FrameReadyCB frame_ready_cb) {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
-  // Lazily initialize output_format_ since VideoFrameOutputFormat() has to be
+  // Lazily initialize |output_format_| since VideoFrameOutputFormat() has to be
   // called on the media_thread while this object might be instantiated on any.
-  if (output_format_ == GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED) {
-    output_format_ =
-        gpu_factories_->VideoFrameOutputFormat(video_frame->BitDepth());
+  const VideoPixelFormat pixel_format = video_frame->format();
+  if (output_format_ == GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED)
+    output_format_ = gpu_factories_->VideoFrameOutputFormat(pixel_format);
+  // Bail if we have a change of GpuVideoAcceleratorFactories::OutputFormat;
+  // such changes should not happen in general (see https://crbug.com/875158).
+  if (output_format_ != gpu_factories_->VideoFrameOutputFormat(pixel_format)) {
+    std::move(frame_ready_cb).Run(video_frame);
+    return;
   }
+
+  bool is_software_backed_video_frame = !video_frame->HasTextures();
+#if defined(OS_LINUX)
+  is_software_backed_video_frame &= !video_frame->HasDmaBufs();
+#endif
 
   bool passthrough = false;
   if (output_format_ == GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED)
     passthrough = true;
-  switch (video_frame->format()) {
+  switch (pixel_format) {
     // Supported cases.
     case PIXEL_FORMAT_YV12:
     case PIXEL_FORMAT_I420:
     case PIXEL_FORMAT_YUV420P9:
     case PIXEL_FORMAT_YUV420P10:
     case PIXEL_FORMAT_YUV420P12:
+    case PIXEL_FORMAT_I420A:
       break;
     // Unsupported cases.
-    case PIXEL_FORMAT_I420A:
     case PIXEL_FORMAT_I422:
     case PIXEL_FORMAT_I444:
     case PIXEL_FORMAT_NV12:
@@ -590,10 +670,10 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
     case PIXEL_FORMAT_YUV444P12:
     case PIXEL_FORMAT_Y16:
     case PIXEL_FORMAT_UNKNOWN:
-      if (!video_frame->HasTextures()) {
+      if (is_software_backed_video_frame) {
         UMA_HISTOGRAM_ENUMERATION(
             "Media.GpuMemoryBufferVideoFramePool.UnsupportedFormat",
-            video_frame->format(), PIXEL_FORMAT_MAX + 1);
+            pixel_format, PIXEL_FORMAT_MAX + 1);
       }
       passthrough = true;
   }
@@ -639,18 +719,8 @@ bool GpuMemoryBufferVideoFramePool::PoolImpl::OnMemoryDump(
         dump->AddScalar("free_size",
                         base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                         frame_resources->is_used() ? 0 : buffer_size_in_bytes);
-        auto shared_memory_guid =
-            plane_resource.gpu_memory_buffer->GetHandle().handle.GetGUID();
-        if (!shared_memory_guid.is_empty()) {
-          pmd->CreateSharedMemoryOwnershipEdge(dump->guid(), shared_memory_guid,
-                                               kImportance);
-        } else {
-          auto shared_buffer_guid =
-              plane_resource.gpu_memory_buffer->GetGUIDForTracing(
-                  tracing_process_id);
-          pmd->CreateSharedGlobalAllocatorDump(shared_buffer_guid);
-          pmd->AddOwnershipEdge(dump->guid(), shared_buffer_guid, kImportance);
-        }
+        plane_resource.gpu_memory_buffer->OnMemoryDump(
+            pmd, dump->guid(), tracing_process_id, kImportance);
       }
     }
   }
@@ -820,6 +890,20 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CopyVideoFrameToGpuMemoryBuffers(
                              buffer->stride(0), barrier));
           break;
         }
+
+        case GpuVideoAcceleratorFactories::OutputFormat::RGBA:
+        case GpuVideoAcceleratorFactories::OutputFormat::BGRA: {
+          const bool is_rgba = output_format_ ==
+                               GpuVideoAcceleratorFactories::OutputFormat::RGBA;
+          worker_task_runner_->PostTask(
+              FROM_HERE,
+              base::BindOnce(&CopyRowsToRGBABuffer, is_rgba, row, rows_to_copy,
+                             coded_size.width(), video_frame,
+                             static_cast<uint8_t*>(buffer->memory(0)),
+                             buffer->stride(0), barrier));
+          break;
+        }
+
         case GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED:
           NOTREACHED();
       }
@@ -918,7 +1002,11 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::
       // libyuv or find a way for later passes to make up the difference.
       frame->set_color_space(video_frame->ColorSpace().GetAsRGB());
       break;
-    default:
+    case GpuVideoAcceleratorFactories::OutputFormat::RGBA:
+    case GpuVideoAcceleratorFactories::OutputFormat::BGRA:
+      allow_overlay = true;
+      break;
+    case GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED:
       break;
   }
 
@@ -1061,6 +1149,27 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::MailboxHoldersReleased(
                                   frame_resources, release_sync_token));
     return;
   }
+
+  // TODO(sandersd): Remove once https://crbug.com/819914 is fixed. Correct
+  // clients must wait for READ_LOCK_FENCES_ENABLED frames to be read before
+  // returning the frame, so waiting on the sync token should be a no-op.
+  //
+  // If the context is lost, SignalSyncToken() drops its callbacks. Using a
+  // ScopedClosureRunner ensures MailboxHoldersWaited() is called if that
+  // happens.
+  std::unique_ptr<base::ScopedClosureRunner> waited_cb =
+      std::make_unique<base::ScopedClosureRunner>(base::BindOnce(
+          &GpuMemoryBufferVideoFramePool::PoolImpl::MailboxHoldersWaited, this,
+          frame_resources));
+  gpu_factories_->SignalSyncToken(
+      release_sync_token,
+      base::BindOnce(&base::ScopedClosureRunner::RunAndReset,
+                     std::move(waited_cb)));
+}
+
+void GpuMemoryBufferVideoFramePool::PoolImpl::MailboxHoldersWaited(
+    FrameResources* frame_resources) {
+  DCHECK(media_task_runner_->BelongsToCurrentThread());
 
   if (in_shutdown_) {
     DeleteFrameResources(gpu_factories_, frame_resources);

@@ -36,6 +36,7 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/components/drivefs/drivefs_host.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/disks/disk.h"
 #include "chromeos/login/login_state.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state_handler.h"
@@ -55,6 +56,7 @@
 #include "storage/common/fileapi/file_system_types.h"
 #include "storage/common/fileapi/file_system_util.h"
 
+using chromeos::disks::Disk;
 using chromeos::disks::DiskMountManager;
 using chromeos::NetworkHandler;
 using content::BrowserThread;
@@ -173,10 +175,9 @@ MountErrorToMountCompletedStatus(chromeos::MountError error) {
           MOUNT_COMPLETED_STATUS_ERROR_UNSUPPORTED_FILESYSTEM;
     case chromeos::MOUNT_ERROR_INVALID_ARCHIVE:
       return file_manager_private::MOUNT_COMPLETED_STATUS_ERROR_INVALID_ARCHIVE;
-    case chromeos::MOUNT_ERROR_NOT_AUTHENTICATED:
-      return file_manager_private::MOUNT_COMPLETED_STATUS_ERROR_AUTHENTICATION;
-    case chromeos::MOUNT_ERROR_PATH_UNMOUNTED:
-      return file_manager_private::MOUNT_COMPLETED_STATUS_ERROR_PATH_UNMOUNTED;
+    // Not a real error.
+    case chromeos::MOUNT_ERROR_COUNT:
+      NOTREACHED();
   }
   NOTREACHED();
   return file_manager_private::MOUNT_COMPLETED_STATUS_NONE;
@@ -295,9 +296,8 @@ bool ShouldShowNotificationForVolume(
   // chrome-os-partner:58309.
   // TODO(fukino): Remove this workaround when the root cause is fixed.
   if (volume.type() == VOLUME_TYPE_REMOVABLE_DISK_PARTITION) {
-    const DiskMountManager::Disk* disk =
-        DiskMountManager::GetInstance()->FindDiskBySourcePath(
-            volume.source_path().AsUTF8Unsafe());
+    const Disk* disk = DiskMountManager::GetInstance()->FindDiskBySourcePath(
+        volume.source_path().AsUTF8Unsafe());
     if (disk && disk->vendor_id() == "0ea0" && disk->product_id() == "2272")
       return false;
   }
@@ -994,13 +994,12 @@ void EventRouter::DispatchDirectoryChangeEventWithEntryDefinition(
       file_manager_private::OnDirectoryChanged::Create(event));
 }
 
-void EventRouter::OnDiskAdded(
-    const DiskMountManager::Disk& disk, bool mounting) {
+void EventRouter::OnDiskAdded(const Disk& disk, bool mounting) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // Do nothing.
 }
 
-void EventRouter::OnDiskRemoved(const DiskMountManager::Disk& disk) {
+void EventRouter::OnDiskRemoved(const Disk& disk) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // Do nothing.
 }

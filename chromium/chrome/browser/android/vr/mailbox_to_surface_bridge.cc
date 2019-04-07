@@ -9,7 +9,7 @@
 
 #include "base/logging.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "content/public/browser/android/compositor.h"
@@ -22,7 +22,7 @@
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/ipc/common/gpu_memory_buffer_impl_android_hardware_buffer.h"
 #include "gpu/ipc/common/gpu_surface_tracker.h"
-#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
+#include "services/ws/public/cpp/gpu/context_provider_command_buffer.h"
 #include "ui/gl/android/surface_texture.h"
 
 #include <android/native_window_jni.h>

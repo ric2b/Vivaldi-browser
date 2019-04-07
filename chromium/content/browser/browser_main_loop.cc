@@ -38,7 +38,7 @@
 #include "base/strings/string_split.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/system_monitor/system_monitor.h"
-#include "base/task_scheduler/initialization_util.h"
+#include "base/task/task_scheduler/initialization_util.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -54,6 +54,7 @@
 #include "components/tracing/common/tracing_switches.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/switches.h"
+#include "components/viz/host/gpu_host_impl.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/display_embedder/compositing_mode_reporter_impl.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
@@ -68,7 +69,7 @@
 #include "content/browser/download/download_resource_handler.h"
 #include "content/browser/download/save_file_manager.h"
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
-#include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
+#include "content/browser/gpu/browser_gpu_client_delegate.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
@@ -83,6 +84,7 @@
 #include "content/browser/net/browser_online_state_observer.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
+#include "content/browser/scheduler/responsiveness/watcher.h"
 #include "content/browser/service_manager/service_manager_context.h"
 #include "content/browser/speech/speech_recognition_manager_impl.h"
 #include "content/browser/startup_data_impl.h"
@@ -128,6 +130,8 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "services/audio/public/cpp/audio_system_factory.h"
 #include "services/audio/public/mojom/constants.mojom.h"
+#include "services/content/public/cpp/navigable_contents_view.h"
+#include "services/network/transitional_url_loader_factory_owner.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/client_process_impl.h"
 #include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
 #include "services/resource_coordinator/public/mojom/service_constants.mojom.h"
@@ -153,6 +157,7 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/jni_android.h"
+#include "base/trace_event/cpufreq_monitor_android.h"
 #include "components/tracing/common/graphics_memory_dump_provider_android.h"
 #include "content/browser/android/browser_startup_controller.h"
 #include "content/browser/android/launcher_thread.h"
@@ -295,21 +300,14 @@ void OnStoppedStartupTracing(const base::FilePath& trace_file) {
   VLOG(0) << "Completed startup tracing to " << trace_file.value();
 }
 
-// Disable optimizations for this block of functions so the compiler doesn't
-// merge them all together. This makes it possible to tell what thread was
-// unresponsive by inspecting the callstack.
-MSVC_DISABLE_OPTIMIZE()
-MSVC_PUSH_DISABLE_WARNING(4748)
-
+// Tell compiler not to inline this function so it's possible to tell what
+// thread was unresponsive by inspecting the callstack.
 NOINLINE void ResetThread_IO(
     std::unique_ptr<BrowserProcessSubThread> io_thread) {
   const int line_number = __LINE__;
   io_thread.reset();
   base::debug::Alias(&line_number);
 }
-
-MSVC_POP_WARNING()
-MSVC_ENABLE_OPTIMIZE();
 
 #if defined(OS_WIN)
 // Creates a memory pressure monitor using automatic thresholds, or those
@@ -436,6 +434,9 @@ void SetFileUrlPathAliasForIpcFuzzer() {
 }
 #endif
 
+const base::Feature kBrowserResponsivenessCalculator{
+    "BrowserResponsivenessCalculator", base::FEATURE_DISABLED_BY_DEFAULT};
+
 }  // namespace
 
 #if defined(USE_X11)
@@ -501,8 +502,9 @@ class HDRProxy {
     auto* gpu_process_host =
         GpuProcessHost::Get(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED, false);
     if (gpu_process_host) {
-      gpu_process_host->RequestHDRStatus(
-          base::BindRepeating(&HDRProxy::GotResultOnIOThread));
+      auto* gpu_service = gpu_process_host->gpu_host()->gpu_service();
+      gpu_service->RequestHDRStatus(
+          base::BindOnce(&HDRProxy::GotResultOnIOThread));
     } else {
       bool hdr_enabled = false;
       GotResultOnIOThread(hdr_enabled);
@@ -642,8 +644,7 @@ int BrowserMainLoop::EarlyInitialization() {
   // Up the priority of the UI thread unless it was already high (since recent
   // versions of Android (O+) do this automatically).
   if (base::PlatformThread::GetCurrentThreadPriority() <
-          base::ThreadPriority::DISPLAY ||
-      base::FeatureList::IsEnabled(features::kOverrideUIThreadPriority)) {
+      base::ThreadPriority::DISPLAY) {
     base::PlatformThread::SetCurrentThreadPriority(
         base::ThreadPriority::DISPLAY);
   }
@@ -757,7 +758,7 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
         BrowserThread::GetTaskRunnerForThread(BrowserThread::UI));
   }
 
-  if (features::IsAshInBrowserProcess()) {
+  if (!features::IsMultiProcessMash()) {
     discardable_shared_memory_manager_ =
         std::make_unique<discardable_memory::DiscardableSharedMemoryManager>();
     // TODO(boliu): kSingleProcess check is a temporary workaround for
@@ -788,6 +789,9 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
     screen_orientation_delegate_.reset(
         new ScreenOrientationDelegateAndroid());
   }
+
+  base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(
+      base::trace_event::CPUFreqMonitor::GetInstance());
 #endif
 
   if (parsed_command_line_.HasSwitch(
@@ -811,6 +815,7 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
       skia::SkiaMemoryDumpProvider::GetInstance(), "Skia", nullptr);
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       sql::SqlMemoryDumpProvider::GetInstance(), "Sql", nullptr);
+  network::TransitionalURLLoaderFactoryOwner::DisallowUsageInProcess();
 }
 
 int BrowserMainLoop::PreCreateThreads() {
@@ -1118,9 +1123,8 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
   device_monitor_mac_.reset();
 #endif
 
-  if (BrowserGpuChannelHostFactory::instance()) {
+  if (BrowserGpuChannelHostFactory::instance())
     BrowserGpuChannelHostFactory::instance()->CloseChannel();
-  }
 
   // Shutdown the Service Manager and IPC.
   service_manager_context_.reset();
@@ -1207,7 +1211,7 @@ void BrowserMainLoop::GetCompositingModeReporter(
   // CompositingModeReporter.
   return;
 #else
-  if (!features::IsAshInBrowserProcess()) {
+  if (features::IsUsingWindowService()) {
     // Mash == ChromeOS, which doesn't support software compositing, so no need
     // to report compositing mode.
     return;
@@ -1242,7 +1246,7 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   InitializeMojo();
 
 #if BUILDFLAG(ENABLE_MUS)
-  if (!features::IsAshInBrowserProcess()) {
+  if (features::IsUsingWindowService()) {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kEnableSurfaceSynchronization);
   }
@@ -1273,11 +1277,11 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(
-          &GpuProcessHost::InitFontRenderParamsOnIO,
+          &viz::GpuHostImpl::InitFontRenderParams,
           gfx::GetFontRenderParams(gfx::FontRenderParamsQuery(), nullptr)));
 
-  // If mus is not hosting viz, then the browser must.
-  bool browser_is_viz_host = features::IsAshInBrowserProcess();
+  // If ash/ws is not hosting viz, then the browser must.
+  bool browser_is_viz_host = !features::IsMultiProcessMash();
 
   bool always_uses_gpu = true;
   bool established_gpu_channel = false;
@@ -1326,7 +1330,9 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   }
 
 #if defined(USE_AURA)
-  if (browser_is_viz_host) {
+  // In single process mash mode the aura::Env created here uses the
+  // WindowService, and needs to use the context-factory from aura.
+  if (browser_is_viz_host && !features::IsSingleProcessMash()) {
     env_->set_context_factory(GetContextFactory());
     env_->set_context_factory_private(GetContextFactoryPrivate());
   }
@@ -1471,6 +1477,11 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   SystemHotkeyHelperMac::GetInstance()->DeferredLoadSystemHotkeys();
 #endif  // defined(OS_MACOSX)
 
+  if (base::FeatureList::IsEnabled(kBrowserResponsivenessCalculator)) {
+    responsiveness_watcher_ = new responsiveness::Watcher;
+    responsiveness_watcher_->SetUp();
+  }
+
 #if defined(OS_ANDROID)
   media::SetMediaDrmBridgeClient(GetContentClient()->GetMediaDrmBridgeClient());
 #endif
@@ -1548,9 +1559,9 @@ bool BrowserMainLoop::InitializeToolkit() {
 
   // Env creates the compositor. Aura widgets need the compositor to be created
   // before they can be initialized by the browser.
-  env_ = aura::Env::CreateInstance(features::IsAshInBrowserProcess()
-                                       ? aura::Env::Mode::LOCAL
-                                       : aura::Env::Mode::MUS);
+  env_ = aura::Env::CreateInstance(features::IsUsingWindowService()
+                                       ? aura::Env::Mode::MUS
+                                       : aura::Env::Mode::LOCAL);
 #endif  // defined(USE_AURA)
 
   if (parts_)
@@ -1596,6 +1607,10 @@ void BrowserMainLoop::InitializeMojo() {
 #endif  // defined(OS_MACOSX)
   GetContentClient()->OnServiceManagerConnected(
       ServiceManagerConnection::GetForProcess());
+
+  // Ensure that any NavigableContentsViews constructed in the browser process
+  // know they're running in the same process as the service.
+  content::NavigableContentsView::SetClientRunningInServiceProcess();
 
   tracing_controller_ = std::make_unique<content::TracingControllerImpl>();
   content::BackgroundTracingManagerImpl::GetInstance()

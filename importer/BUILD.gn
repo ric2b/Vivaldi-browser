@@ -33,6 +33,9 @@ jumbo_static_library("importer") {
       "//vivaldi/app:vivaldi_native_resources",
       "//vivaldi/app:vivaldi_unscaled_native_resources",
     ]
+    public_deps = [
+      "//components/os_crypt:os_crypt",
+    ]
   }
 }
 

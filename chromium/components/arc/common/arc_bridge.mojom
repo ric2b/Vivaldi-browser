@@ -30,10 +30,12 @@ import "components/arc/common/net.mojom";
 import "components/arc/common/notifications.mojom";
 import "components/arc/common/obb_mounter.mojom";
 import "components/arc/common/oemcrypto.mojom";
+import "components/arc/common/pip.mojom";
 import "components/arc/common/policy.mojom";
 import "components/arc/common/power.mojom";
 import "components/arc/common/print.mojom";
 import "components/arc/common/process.mojom";
+import "components/arc/common/property.mojom";
 import "components/arc/common/rotation_lock.mojom";
 import "components/arc/common/screen_capture.mojom";
 import "components/arc/common/storage_manager.mojom";
@@ -48,9 +50,9 @@ import "components/arc/common/volume_mounter.mojom";
 import "components/arc/common/wake_lock.mojom";
 import "components/arc/common/wallpaper.mojom";
 
-// Next MinVersion: 41
+// Next MinVersion: 43
 // Deprecated method IDs: 101, 105
-// Next method ID: 146
+// Next method ID: 148
 interface ArcBridgeHost {
   // Keep the entries alphabetical. In order to do so without breaking
   // compatibility with the ARC instance, explicitly assign each interface a
@@ -143,6 +145,9 @@ interface ArcBridgeHost {
   // Notifies Chrome that the OemCryptoInstance interface is ready.
   [MinVersion=28] OnOemCryptoInstanceReady@133(OemCryptoInstance instance_ptr);
 
+  // Notifies Chrome that the PipInstance interface is ready.
+  [MinVersion=41] OnPipInstanceReady@146(PipInstance instance_ptr);
+
   // Notifies Chrome that the PolicyInstance interface is ready.
   [MinVersion=7] OnPolicyInstanceReady@114(PolicyInstance instance_ptr);
 
@@ -154,6 +159,9 @@ interface ArcBridgeHost {
 
   // Notifies Chrome that the ProcessInstance interface is ready.
   OnProcessInstanceReady@104(ProcessInstance instance_ptr);
+
+  // Notifies Chrome that the PropertyInstance interface is ready.
+  [MinVersion=42] OnPropertyInstanceReady@147(PropertyInstance instance_ptr);
 
   // Notifies Chrome that the RotationLockInstance interface is ready.
   [MinVersion=32] OnRotationLockInstanceReady@137(RotationLockInstance instance_ptr);

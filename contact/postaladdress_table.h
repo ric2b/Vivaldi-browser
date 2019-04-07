@@ -17,7 +17,7 @@
 #include "sql/statement.h"
 
 namespace sql {
-class Connection;
+class Database;
 }
 
 namespace contact {
@@ -44,7 +44,7 @@ class PostalAddressTable {
                                 ContactID contact_id);
 
  protected:
-  virtual sql::Connection& GetDB() = 0;
+  virtual sql::Database& GetDB() = 0;
   bool CreatePostalAddressTable();
 
  private:

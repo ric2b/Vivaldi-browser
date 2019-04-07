@@ -81,9 +81,9 @@ class CORE_EXPORT V0InsertionPoint : public HTMLElement {
   V0InsertionPoint(const QualifiedName&, Document&);
   bool LayoutObjectIsNeeded(const ComputedStyle&) const override;
   void ChildrenChanged(const ChildrenChange&) override;
-  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
-  void RemovedFrom(ContainerNode*) override;
-  void WillRecalcStyle(StyleRecalcChange) override;
+  InsertionNotificationRequest InsertedInto(ContainerNode&) override;
+  void RemovedFrom(ContainerNode&) override;
+  void DidRecalcStyle(StyleRecalcChange) override;
 
  private:
   bool IsV0InsertionPoint() const =

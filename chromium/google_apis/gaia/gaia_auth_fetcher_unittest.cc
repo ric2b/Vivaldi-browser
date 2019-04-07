@@ -23,7 +23,6 @@
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "google_apis/gaia/mock_url_fetcher_factory.h"
 #include "google_apis/google_api_keys.h"
-#include "mojo/core/embedder/embedder.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
@@ -127,8 +126,6 @@ class GaiaAuthFetcherTest : public testing::Test {
   GURL deprecated_client_login_to_oauth2_url_;
 
  protected:
-  void SetUp() override { mojo::core::Init(); }
-
   void OnResourceIntercepted(const network::ResourceRequest& resource) {
     received_requests_.push_back(resource);
   }
@@ -331,7 +328,8 @@ TEST_F(GaiaAuthFetcherTest, OAuthLoginTokenSuccess) {
   EXPECT_CALL(consumer, OnClientOAuthCode("test-code")).Times(0);
   EXPECT_CALL(consumer,
               OnClientOAuthSuccess(GaiaAuthConsumer::ClientOAuthResult(
-                  "rt1", "at1", 3600, false /* is_child_account */)))
+                  "rt1", "at1", 3600, false /* is_child_account */,
+                  false /* is_advanced_protection */)))
       .Times(1);
 
   TestGaiaAuthFetcher auth(&consumer, std::string(), GetURLLoaderFactory());
@@ -357,7 +355,8 @@ TEST_F(GaiaAuthFetcherTest, OAuthLoginTokenSuccessNoTokenFetch) {
   EXPECT_CALL(consumer, OnClientOAuthCode("test-code")).Times(1);
   EXPECT_CALL(consumer,
               OnClientOAuthSuccess(GaiaAuthConsumer::ClientOAuthResult(
-                  "", "", 0, false /* is_child_account */)))
+                  "", "", 0, false /* is_child_account */,
+                  false /* is_advanced_protection */)))
       .Times(0);
 
   net::TestURLFetcherFactory factory;

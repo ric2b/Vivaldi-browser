@@ -11,7 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/note_taking_helper.h"
@@ -447,7 +447,7 @@ void DownloadItemNotification::UpdateNotificationData(bool display,
     if (model.HasSupportedImageMimeType()) {
       base::FilePath file_path = item_->GetFullPath();
       base::PostTaskWithTraitsAndReplyWithResult(
-          FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+          FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
           base::Bind(&ReadNotificationImage, file_path),
           base::Bind(&DownloadItemNotification::OnImageLoaded,
                      weak_factory_.GetWeakPtr()));
@@ -499,7 +499,7 @@ void DownloadItemNotification::OnImageDecoded(const SkBitmap& decoded_bitmap) {
   }
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&CropImage, decoded_bitmap),
       base::Bind(&DownloadItemNotification::OnImageCropped,
                  weak_factory_.GetWeakPtr()));

@@ -11,7 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/ssl/ssl_error_handler.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -87,7 +87,7 @@ void SSLErrorAssistantComponentInstallerPolicy::ComponentReady(
            << install_dir.value();
 
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&LoadProtoFromDisk, GetInstalledPath(install_dir)));
 }
 
@@ -113,7 +113,8 @@ void SSLErrorAssistantComponentInstallerPolicy::GetHash(
 }
 
 std::string SSLErrorAssistantComponentInstallerPolicy::GetName() const {
-  return "SSL Error Assistant";
+  // This is a user visible string, so using something other than SSL and TLS.
+  return "Certificate Error Assistant";
 }
 
 update_client::InstallerAttributes

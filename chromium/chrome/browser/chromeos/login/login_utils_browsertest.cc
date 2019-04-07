@@ -32,7 +32,7 @@
 #include "ui/base/ui_base_features.h"
 
 #if BUILDFLAG(ENABLE_RLZ)
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "components/rlz/rlz_tracker.h"
 #endif
 
@@ -79,7 +79,9 @@ class LoginUtilsTest : public OobeBaseTest {
 
 // Exercises login, like the desktopui_MashLogin Chrome OS autotest.
 IN_PROC_BROWSER_TEST_F(LoginUtilsTest, MashLogin) {
-  if (features::IsAshInBrowserProcess())
+  // Test is relevant for both SingleProcessMash and MultiProcessMash, but
+  // not classic ash.
+  if (!features::IsUsingWindowService())
     return;
 
   WaitForSigninScreen();
@@ -114,7 +116,7 @@ IN_PROC_BROWSER_TEST_F(LoginUtilsTest, RlzInitialized) {
     base::RunLoop loop;
     base::string16 rlz_string;
     base::PostTaskWithTraitsAndReply(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
         base::Bind(&GetAccessPointRlzInBackgroundThread,
                    rlz::RLZTracker::ChromeHomePage(), &rlz_string),
         loop.QuitClosure());

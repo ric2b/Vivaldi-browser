@@ -102,6 +102,7 @@ class CORE_EXPORT AXObjectCache
   virtual void HandleLoadComplete(Document*) = 0;
   virtual void HandleLayoutComplete(Document*) = 0;
   virtual void HandleClicked(Node*) = 0;
+  virtual void HandleAutofillStateChanged(Element*, bool) = 0;
 
   // Changes to virtual Accessibility Object Model nodes.
   virtual void HandleAttributeChanged(const QualifiedName& attr_name,
@@ -141,23 +142,6 @@ class CORE_EXPORT AXObjectCache
  private:
   static AXObjectCacheCreateFunction create_function_;
   DISALLOW_COPY_AND_ASSIGN(AXObjectCache);
-};
-
-class CORE_EXPORT ScopedAXObjectCache {
-  USING_FAST_MALLOC(ScopedAXObjectCache);
-
- public:
-  static std::unique_ptr<ScopedAXObjectCache> Create(Document&);
-  ~ScopedAXObjectCache();
-
-  AXObjectCache* Get();
-
- private:
-  explicit ScopedAXObjectCache(Document&);
-
-  Persistent<Document> document_;
-  Persistent<AXObjectCache> cache_;
-  DISALLOW_COPY_AND_ASSIGN(ScopedAXObjectCache);
 };
 
 }  // namespace blink

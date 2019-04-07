@@ -526,9 +526,9 @@ void IndexedDBTransaction::ProcessTaskQueue() {
   // never requests further activity. Read-only transactions don't
   // block other transactions, so don't time those out.
   if (mode_ != blink::kWebIDBTransactionModeReadOnly) {
-    timeout_timer_.Start(
-        FROM_HERE, GetInactivityTimeout(),
-        base::Bind(&IndexedDBTransaction::Timeout, ptr_factory_.GetWeakPtr()));
+    timeout_timer_.Start(FROM_HERE, GetInactivityTimeout(),
+                         base::BindOnce(&IndexedDBTransaction::Timeout,
+                                        ptr_factory_.GetWeakPtr()));
   }
   processing_event_queue_ = false;
 }
@@ -571,18 +571,18 @@ void IndexedDBTransaction::RemovePendingObservers(
 
 void IndexedDBTransaction::AddObservation(
     int32_t connection_id,
-    ::indexed_db::mojom::ObservationPtr observation) {
+    blink::mojom::IDBObservationPtr observation) {
   auto it = connection_changes_map_.find(connection_id);
   if (it == connection_changes_map_.end()) {
     it = connection_changes_map_
-             .insert(std::make_pair(
-                 connection_id, ::indexed_db::mojom::ObserverChanges::New()))
+             .insert(std::make_pair(connection_id,
+                                    blink::mojom::IDBObserverChanges::New()))
              .first;
   }
   it->second->observations.push_back(std::move(observation));
 }
 
-::indexed_db::mojom::ObserverChangesPtr*
+blink::mojom::IDBObserverChangesPtr*
 IndexedDBTransaction::GetPendingChangesForConnection(int32_t connection_id) {
   auto it = connection_changes_map_.find(connection_id);
   if (it != connection_changes_map_.end())

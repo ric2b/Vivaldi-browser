@@ -46,7 +46,6 @@
 #include "ui/base/window_open_disposition.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/genius_app/app_id.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "extensions/browser/extension_registry.h"
 #endif
@@ -55,6 +54,8 @@
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "components/signin/core/browser/signin_manager.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 using base::UserMetricsAction;
 
@@ -87,7 +88,7 @@ void ShowHelpImpl(Browser* browser, Profile* profile, HelpSource source) {
 #if defined(OS_CHROMEOS) && defined(GOOGLE_CHROME_BUILD)
   const extensions::Extension* extension =
       extensions::ExtensionRegistry::Get(profile)->GetExtensionById(
-          genius_app::kGeniusAppId,
+          extension_misc::kGeniusAppId,
           extensions::ExtensionRegistry::EVERYTHING);
   if (!extension) {
     DCHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -369,10 +370,18 @@ void ShowAboutChrome(Browser* browser) {
   SettingsWindowManager::GetInstance()->ShowChromePageForProfile(
       browser->profile(), GURL(kChromeUIHelpURL));
 #else
+  if (vivaldi::IsVivaldiRunning()) {
+    // Use kChromeUIVersionURL which gets mapped into our regular About page.
+    NavigateParams params(
+      GetSingletonTabNavigateParams(browser, GURL(kChromeUIVersionURL)));
+    params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
+    ShowSingletonTabOverwritingNTP(browser, std::move(params));
+  } else {
   NavigateParams params(
       GetSingletonTabNavigateParams(browser, GURL(kChromeUIHelpURL)));
   params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
   ShowSingletonTabOverwritingNTP(browser, std::move(params));
+  }
 #endif
 }
 
@@ -388,6 +397,11 @@ void ShowBrowserSignin(Browser* browser,
   SigninManagerBase* manager =
       SigninManagerFactory::GetForProfile(original_profile);
   DCHECK(manager->IsSigninAllowed());
+
+  // NOTE(pettern@vivaldi.com): Disable the modal login dialog for Chrome that
+  // is used as a fallback. See the comments below.
+  if (vivaldi::IsVivaldiRunning())
+    return;
 
   // If the browser's profile is an incognito profile, make sure to use
   // a browser window from the original profile. The user cannot sign in
@@ -414,7 +428,7 @@ void ShowBrowserSignin(Browser* browser,
       !signin::DiceMethodGreaterOrEqual(
           AccountConsistencyModeManager::GetMethodForProfile(
               browser->profile()),
-          signin::AccountConsistencyMethod::kDicePrepareMigration) &&
+          signin::AccountConsistencyMethod::kDiceMigration) &&
       browser->tab_strip_model()->empty();
 #endif  // defined(OS_CHROMEOS)
   if (show_full_tab_chrome_signin_page) {

@@ -13,7 +13,6 @@
 <translation id="2350172092385603347">Lokalizácia sa použila, parameter default_locale však nebol v manifeste určený.</translation>
 <translation id="2576842806987913196">Súbor CRX s týmto názvom už existuje.</translation>
 <translation id="2753617847762399167">Neplatná cesta (absolútna alebo relatívna s '..'): <ph name="IMAGE_PATH" /></translation>
-<translation id="27822970480436970">Tomuto rozšíreniu sa nepodarilo upraviť žiadosť siete, pretože úprava bola v rozpore s ďalším rozšírením.</translation>
 <translation id="2785530881066938471">Pre skript obsahu sa nepodarilo sa načítať súbor „<ph name="RELATIVE_PATH" />“. Nepoužíva kódovanie UTF-8.</translation>
 <translation id="2903070246402204397">Rozšírenie <ph name="EXTENSION_NAME" /> (ID rozšírenia: <ph name="EXTENSION_ID" />) je blokované správcom. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">Nepodarilo sa nainštalovať balík: <ph name="ERROR_CODE" /></translation>
@@ -57,19 +56,16 @@
 <translation id="7003844668372540529">Neznámy produkt <ph name="PRODUCT_ID" /> od dodávateľa <ph name="VENDOR_NAME" /></translation>
 <translation id="7068383018033524534">Súbor manifestu je neplatný</translation>
 <translation id="7217838517480956708">Správca tohto zariadenia vyžaduje inštaláciu rozšírenia <ph name="EXTENSION_NAME" />. Nemôže byť odstránené alebo upravené.</translation>
+<translation id="7612608473764576263">Vstupná hodnota pre súkromný kľúč musí mať platný formát (kľúč RSA vo formáte PKCS#8 so šifrovaním PEM).</translation>
 <translation id="7939686037314084444">Rozšírenie sa nepodarilo správne načítať. Môže sa stať, že nebude môcť zachytávať žiadosti siete.</translation>
 <translation id="7972881773422714442">Možnosti: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Nasmerovaný na používateľa</translation>
 <translation id="8047248493720652249">Tomuto rozšíreniu sa nepodarilo pomenovať stiahnutý súbor s názvom „<ph name="ATTEMPTED_FILENAME" />„, pretože ďalšie rozšírenie (<ph name="EXTENSION_NAME" />) určilo odlišný názov súboru „<ph name="ACTUAL_FILENAME" />“.</translation>
 <translation id="8284835137979141223"><ph name="PRODUCT_NAME" /> od dodávateľa <ph name="VENDOR_NAME" /></translation>
-<translation id="8341840687457896278">Tomuto rozšíreniu sa nepodarilo poskytnúť poverenia žiadosti o sieť, pretože iné rozšírenie (<ph name="EXTENSION_NAME" />) poskytlo odlišné poverenia.</translation>
 <translation id="8517576857589387417">Súbor manifestu chýba alebo je nečitateľný</translation>
 <translation id="8636666366616799973">Package is invalid. Details: '<ph name="ERROR_MESSAGE" />'.</translation>
-<translation id="8670869118777164560">Tomuto rozšíreniu sa nepodarilo presmerovať žiadosť o siete na stránky <ph name="ATTEMPTED_REDIRECT_DESTINATION" />, pretože ju iné rozšírenie (<ph name="EXTENSION_NAME" />) presmerovalo na stránky <ph name="ACTUAL_REDIRECT_DESTINATION" />.</translation>
 <translation id="8761756413268424715">Aplikácia <ph name="APP_NAME" /> žiada o prístup k jednému z vašich zariadení:</translation>
-<translation id="8825366169884721447">Tomuto rozšíreniu sa nepodarilo upraviť hlavičku <ph name="HEADER_NAME" /> žiadosti o sieť, pretože táto úprava kolidovala s iným rozšírením (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="8885905466771744233">Pre určené rozšírenie už existuje súkromný kľúč. Použite ho znova, alebo ho najprv odstráňte.</translation>
 <translation id="907841381057066561">Vytvorenie dočasného súboru zip počas balenia zlyhalo.</translation>
-<translation id="9111791539553342076">Tomuto rozšíreniu sa nepodarilo upraviť hlavičku odpovede <ph name="HEADER_NAME" /> žiadosti o sieť, pretože táto úprava kolidovala s iným rozšírením (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="941543339607623937">Neplatný súkromný kľúč.</translation>
 </translationbundle>

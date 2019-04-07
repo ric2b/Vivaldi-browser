@@ -17,6 +17,7 @@ GlobalScopeCreationParams::GlobalScopeCreationParams(
     ReferrerPolicy referrer_policy,
     const SecurityOrigin* starter_origin,
     bool starter_secure_context,
+    HttpsState starter_https_state,
     WorkerClients* worker_clients,
     mojom::IPAddressSpace address_space,
     const Vector<String>* origin_trial_tokens,
@@ -27,13 +28,15 @@ GlobalScopeCreationParams::GlobalScopeCreationParams(
     service_manager::mojom::blink::InterfaceProviderPtrInfo
         interface_provider_info,
     BeginFrameProviderParams begin_frame_provider_params,
-    const FeaturePolicy* parent_feature_policy)
+    const FeaturePolicy* parent_feature_policy,
+    base::UnguessableToken agent_cluster_id)
     : script_url(script_url.Copy()),
       script_type(script_type),
       user_agent(user_agent.IsolatedCopy()),
       referrer_policy(referrer_policy),
       starter_origin(starter_origin ? starter_origin->IsolatedCopy() : nullptr),
       starter_secure_context(starter_secure_context),
+      starter_https_state(starter_https_state),
       worker_clients(worker_clients),
       address_space(address_space),
       parent_devtools_token(parent_devtools_token),
@@ -47,7 +50,8 @@ GlobalScopeCreationParams::GlobalScopeCreationParams(
       worker_feature_policy(FeaturePolicy::CreateFromParentPolicy(
           parent_feature_policy,
           ParsedFeaturePolicy() /* container_policy */,
-          starter_origin->ToUrlOrigin())) {
+          starter_origin->ToUrlOrigin())),
+      agent_cluster_id(agent_cluster_id) {
   this->content_security_policy_parsed_headers.ReserveInitialCapacity(
       content_security_policy_parsed_headers.size());
   for (const auto& header : content_security_policy_parsed_headers) {

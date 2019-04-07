@@ -12,7 +12,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/strings/string16.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/offline_pages/offline_page_utils.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
@@ -29,7 +29,7 @@ namespace {
 void DeleteFileOnFileThread(const base::FilePath& file_path,
                             const base::Closure& callback) {
   base::PostTaskWithTraitsAndReply(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(base::IgnoreResult(&base::DeleteFile), file_path,
                      false /* recursive */),
       callback);
@@ -42,7 +42,7 @@ void ComputeDigestOnFileThread(
     const base::FilePath& file_path,
     const base::Callback<void(const std::string&)>& callback) {
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&ArchiveValidator::ComputeDigest, file_path), callback);
 }
 }  // namespace

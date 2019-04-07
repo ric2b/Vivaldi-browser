@@ -37,7 +37,6 @@ ProxyResolvingClientSocket::ProxyResolvingClientSocket(
     : network_session_(network_session),
       socket_handle_(std::make_unique<net::ClientSocketHandle>()),
       ssl_config_(ssl_config),
-      proxy_resolve_request_(nullptr),
       url_(url),
       use_tls_(use_tls),
       net_log_(net::NetLogWithSource::Make(network_session_->net_log(),
@@ -75,7 +74,8 @@ int ProxyResolvingClientSocket::ReadIfReady(
 int ProxyResolvingClientSocket::CancelReadIfReady() {
   if (socket_handle_->socket())
     return socket_handle_->socket()->CancelReadIfReady();
-  return net::ERR_SOCKET_NOT_CONNECTED;
+  // Return net::OK as ReadIfReady() is canceled when socket is disconnected.
+  return net::OK;
 }
 
 int ProxyResolvingClientSocket::Write(
@@ -117,9 +117,7 @@ int ProxyResolvingClientSocket::Connect(net::CompletionOnceCallback callback) {
 void ProxyResolvingClientSocket::Disconnect() {
   CloseSocket(true /*close_connection*/);
   if (proxy_resolve_request_) {
-    network_session_->proxy_resolution_service()->CancelRequest(
-        proxy_resolve_request_);
-    proxy_resolve_request_ = nullptr;
+    proxy_resolve_request_.reset();
   }
   user_connect_callback_.Reset();
 }
@@ -266,8 +264,9 @@ int ProxyResolvingClientSocket::DoProxyResolveComplete(int result) {
   proxy_resolve_request_ = nullptr;
   if (result == net::OK) {
     // Removes unsupported proxies from the list. Currently, this removes
-    // just the SCHEME_QUIC proxy, which doesn't yet support tunneling.
-    // TODO(xunjieli): Allow QUIC proxy once it supports tunneling.
+    // just the SCHEME_QUIC proxy.
+    // TODO(crbug.com/876885): Allow QUIC proxy once net::QuicProxyClientSocket
+    // supports ReadIfReady() and CancelReadIfReady().
     proxy_info_.RemoveProxiesWithoutScheme(
         net::ProxyServer::SCHEME_DIRECT | net::ProxyServer::SCHEME_HTTP |
         net::ProxyServer::SCHEME_HTTPS | net::ProxyServer::SCHEME_SOCKS4 |

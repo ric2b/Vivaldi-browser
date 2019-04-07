@@ -57,11 +57,13 @@
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/session_manager/core/session_manager.h"
 #include "google_apis/gaia/gaia_oauth_client.h"
-#include "net/url_request/test_url_fetcher_factory.h"
+#include "google_apis/gaia/gaia_urls.h"
 #include "net/url_request/url_request_test_util.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
+#include "services/network/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -149,32 +151,30 @@ class DeviceCloudPolicyManagerChromeOSTest
     chromeos::DBusThreadManager::Get()->GetCryptohomeClient();
     cryptohome::AsyncMethodCaller::Initialize();
 
-    install_attributes_.reset(
-        new chromeos::InstallAttributes(fake_cryptohome_client_));
+    install_attributes_ =
+        std::make_unique<chromeos::InstallAttributes>(fake_cryptohome_client_);
     store_ = new DeviceCloudPolicyStoreChromeOS(
         &device_settings_service_, install_attributes_.get(),
         base::ThreadTaskRunnerHandle::Get());
-    manager_.reset(new TestingDeviceCloudPolicyManagerChromeOS(
+    manager_ = std::make_unique<TestingDeviceCloudPolicyManagerChromeOS>(
         base::WrapUnique(store_), base::ThreadTaskRunnerHandle::Get(),
-        &state_keys_broker_));
+        &state_keys_broker_);
 
     RegisterLocalState(local_state_.registry());
     manager_->Init(&schema_registry_);
 
-    // DeviceOAuth2TokenService uses the system request context to fetch
+    // DeviceOAuth2TokenService uses the system url loader factory fetch
     // OAuth tokens, then writes the token to local state, encrypting it
     // first with methods in CryptohomeTokenEncryptor.
-    request_context_getter_ = new net::TestURLRequestContextGetter(
-        base::ThreadTaskRunnerHandle::Get());
-    TestingBrowserProcess::GetGlobal()->SetSystemRequestContext(
-        request_context_getter_.get());
+    TestingBrowserProcess::GetGlobal()->SetSharedURLLoaderFactory(
+        test_shared_loader_factory_);
     TestingBrowserProcess::GetGlobal()->SetLocalState(&local_state_);
     // SystemSaltGetter is used in DeviceOAuth2TokenService.
     chromeos::SystemSaltGetter::Initialize();
     chromeos::DeviceOAuth2TokenServiceFactory::Initialize(
         test_shared_loader_factory_);
 
-    url_fetcher_response_code_ = 200;
+    url_fetcher_response_code_ = net::HTTP_OK;
     url_fetcher_response_string_ = "{\"access_token\":\"accessToken4Test\","
                                    "\"expires_in\":1234,"
                                    "\"refresh_token\":\"refreshToken4Test\"}";
@@ -266,14 +266,10 @@ class DeviceCloudPolicyManagerChromeOSTest
 
   std::unique_ptr<chromeos::InstallAttributes> install_attributes_;
 
-  scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
-  net::TestURLFetcherFactory url_fetcher_factory_;
-  int url_fetcher_response_code_;
+  net::HttpStatusCode url_fetcher_response_code_;
   std::string url_fetcher_response_string_;
   TestingPrefServiceSimple local_state_;
   MockDeviceManagementService device_management_service_;
-  chromeos::ScopedTestDeviceSettingsService test_device_settings_service_;
-  chromeos::ScopedTestCrosSettings test_cros_settings_;
   chromeos::system::ScopedFakeStatisticsProvider fake_statistics_provider_;
   chromeos::FakeSessionManagerClient fake_session_manager_client_;
   chromeos::FakeCryptohomeClient* fake_cryptohome_client_;
@@ -284,11 +280,14 @@ class DeviceCloudPolicyManagerChromeOSTest
   SchemaRegistry schema_registry_;
   std::unique_ptr<TestingDeviceCloudPolicyManagerChromeOS> manager_;
   std::unique_ptr<DeviceCloudPolicyInitializer> initializer_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
 
  private:
-  network::TestURLLoaderFactory test_url_loader_factory_;
   scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
       test_shared_loader_factory_;
+  // This property is required to instantiate the session manager, a singleton
+  // which is used by the device status collector.
+  session_manager::SessionManager session_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(DeviceCloudPolicyManagerChromeOSTest);
 };
@@ -588,17 +587,14 @@ class DeviceCloudPolicyManagerChromeOSEnrollmentTest
     // Process robot refresh token fetch if the auth code fetch succeeded.
     // DeviceCloudPolicyInitializer holds an EnrollmentHandlerChromeOS which
     // holds a GaiaOAuthClient that fetches the refresh token during enrollment.
-    // We return a successful OAuth response via a TestURLFetcher to trigger the
-    // happy path for these classes so that enrollment can continue.
+    // We return a successful OAuth response via a TestURLLoaderFactory to
+    // trigger the happy path for these classes so that enrollment can continue.
     if (robot_auth_fetch_status_ == DM_STATUS_SUCCESS) {
-      net::TestURLFetcher* url_fetcher = url_fetcher_factory_.GetFetcherByID(
-          gaia::GaiaOAuthClient::kUrlFetcherId);
-      ASSERT_TRUE(url_fetcher);
-      url_fetcher->SetMaxRetriesOn5xx(0);
-      url_fetcher->set_status(net::URLRequestStatus());
-      url_fetcher->set_response_code(url_fetcher_response_code_);
-      url_fetcher->SetResponseString(url_fetcher_response_string_);
-      url_fetcher->delegate()->OnURLFetchComplete(url_fetcher);
+      test_url_loader_factory_.SimulateResponseForPendingRequest(
+          GaiaUrls::GetInstance()->oauth2_token_url(),
+          network::URLLoaderCompletionStatus(net::OK),
+          network::CreateResourceResponseHead(url_fetcher_response_code_),
+          url_fetcher_response_string_);
     }
 
     // Process robot refresh token store and policy store.
@@ -716,10 +712,10 @@ TEST_P(DeviceCloudPolicyManagerChromeOSEnrollmentTest,
 
 TEST_P(DeviceCloudPolicyManagerChromeOSEnrollmentTest,
        RobotRefreshTokenFetchResponseCodeFailed) {
-  url_fetcher_response_code_ = 400;
+  url_fetcher_response_code_ = net::HTTP_BAD_REQUEST;
   RunTest();
   ExpectFailedEnrollment(EnrollmentStatus::ROBOT_REFRESH_FETCH_FAILED);
-  EXPECT_EQ(400, status_.http_status());
+  EXPECT_EQ(net::HTTP_BAD_REQUEST, status_.http_status());
 }
 
 TEST_P(DeviceCloudPolicyManagerChromeOSEnrollmentTest,

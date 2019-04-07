@@ -304,6 +304,14 @@ bool PrefsGetForCacheFunction::RunAsync() {
     PrefService* prefs = properties->local_pref
                              ? g_browser_process->local_state()
                              : GetProfile()->GetOriginalProfile()->GetPrefs();
+
+    if (!prefs->FindPreference(path)) {
+        // Trying to get a pref that's not registered. This can happen
+        // when listing a chromium pref that's only registered for specific
+        // OS'es
+      continue;
+    }
+
     result.path = path;
     result.default_value =
         TranslateEnumValue(GetPrefDefaultValue(prefs, path), properties);

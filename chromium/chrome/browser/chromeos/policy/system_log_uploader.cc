@@ -15,7 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/syslog_logging.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/upload_job_impl.h"
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service.h"
@@ -27,6 +27,7 @@
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/user_manager/user_manager.h"
 #include "net/http/http_request_headers.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace policy {
 
@@ -134,7 +135,7 @@ void SystemLogDelegate::LoadSystemLogs(LogUploadCallback upload_callback) {
   // Run ReadFiles() in the thread that interacts with the file system and
   // return system logs to |upload_callback| on the current thread.
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&ReadFiles), std::move(upload_callback));
 }
 
@@ -144,8 +145,6 @@ std::unique_ptr<UploadJob> SystemLogDelegate::CreateUploadJob(
   chromeos::DeviceOAuth2TokenService* device_oauth2_token_service =
       chromeos::DeviceOAuth2TokenServiceFactory::Get();
 
-  scoped_refptr<net::URLRequestContextGetter> system_request_context =
-      g_browser_process->system_request_context();
   std::string robot_account_id =
       device_oauth2_token_service->GetRobotAccountId();
 
@@ -173,7 +172,7 @@ std::unique_ptr<UploadJob> SystemLogDelegate::CreateUploadJob(
       )");
   return std::make_unique<UploadJobImpl>(
       upload_url, robot_account_id, device_oauth2_token_service,
-      system_request_context, delegate,
+      g_browser_process->shared_url_loader_factory(), delegate,
       std::make_unique<UploadJobImpl::RandomMimeBoundaryGenerator>(),
       traffic_annotation, task_runner_);
 }

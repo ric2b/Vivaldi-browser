@@ -10,9 +10,11 @@
 #include "chrome/browser/ui/autofill/autofill_popup_controller.h"
 #include "chrome/browser/ui/autofill/autofill_popup_layout_model.h"
 #include "chrome/browser/ui/autofill/popup_view_common.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
-#include "chrome/browser/ui/views/harmony/harmony_typography_provider.h"
+#include "chrome/browser/ui/views/autofill/view_util.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
+#include "chrome/browser/ui/views/chrome_typography_provider.h"
+#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/browser/suggestion.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -33,6 +35,7 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/style/typography.h"
+#include "ui/views/style/typography_provider.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
@@ -42,6 +45,7 @@ namespace {
 // should always have a width which is a multiple of 12.
 constexpr int kAutofillPopupWidthMultiple = 12;
 constexpr int kAutofillPopupMinWidth = 64;
+// TODO(crbug.com/831603): move handling the max width to the base class.
 constexpr int kAutofillPopupMaxWidth = 456;
 
 // Max width for the username and masked password.
@@ -51,10 +55,6 @@ constexpr int kAutofillPopupPasswordMaxWidth = 108;
 // The additional height of the row in case it has two labels on top of each
 // other in comparison to the normal row with one line of text.
 constexpr int kAutofillPopupAdditionalDoubleRowHeight = 22;
-
-// A space between the input element and the dropdown, so that the dropdown's
-// border doesn't look too close to the element.
-constexpr int kElementBorderPadding = 1;
 
 // Vertical spacing between labels in one row.
 constexpr int kAdjacentLabelsVerticalSpacing = 2;
@@ -81,16 +81,25 @@ enum class PopupItemLayoutType {
   kTrailingIcon  // Icon (if any) shown on the trailing (right in LTR) side.
 };
 
-// Returns the icon alignment for the drop down of type |frontend_id|. See
-// PopupItemId for allowed values.
+// By default, this returns kLeadingIcon for passwords and kTrailingIcon for all
+// other contexts. When a study parameter is present for
+// kAutofillDropdownLayoutExperiment, this will return the layout type which
+// corresponds to that parameter.
 PopupItemLayoutType GetLayoutType(int frontend_id) {
-  switch (frontend_id) {
-    case autofill::PopupItemId::POPUP_ITEM_ID_USERNAME_ENTRY:
-    case autofill::PopupItemId::POPUP_ITEM_ID_PASSWORD_ENTRY:
-    case autofill::PopupItemId::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY:
+  switch (GetForcedPopupLayoutState()) {
+    case ForcedPopupLayoutState::kLeadingIcon:
       return PopupItemLayoutType::kLeadingIcon;
-    default:
+    case ForcedPopupLayoutState::kTrailingIcon:
       return PopupItemLayoutType::kTrailingIcon;
+    case ForcedPopupLayoutState::kDefault:
+      switch (frontend_id) {
+        case autofill::PopupItemId::POPUP_ITEM_ID_USERNAME_ENTRY:
+        case autofill::PopupItemId::POPUP_ITEM_ID_PASSWORD_ENTRY:
+        case autofill::PopupItemId::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY:
+          return PopupItemLayoutType::kLeadingIcon;
+        default:
+          return PopupItemLayoutType::kTrailingIcon;
+      }
   }
 }
 
@@ -141,6 +150,17 @@ class AutofillPopupItemView : public AutofillPopupRowView {
                         int line_number,
                         int extra_height = 0)
       : AutofillPopupRowView(popup_view, line_number),
+        layout_type_(GetLayoutType(popup_view_->controller()
+                                       ->GetSuggestionAt(line_number_)
+                                       .frontend_id)),
+        extra_height_(extra_height) {}
+
+  AutofillPopupItemView(AutofillPopupViewNativeViews* popup_view,
+                        int line_number,
+                        PopupItemLayoutType override_layout_type,
+                        int extra_height = 0)
+      : AutofillPopupRowView(popup_view, line_number),
+        layout_type_(override_layout_type),
         extra_height_(extra_height) {}
 
   // AutofillPopupRowView:
@@ -157,12 +177,18 @@ class AutofillPopupItemView : public AutofillPopupRowView {
   // Creates a label matching the style of the description label.
   views::Label* CreateSecondaryLabel(const base::string16& text) const;
 
+  // Sets |font_weight| as the font weight to be used for primary information on
+  // the current item. Returns false if no custom font weight is undefined.
+  virtual bool ShouldUseCustomFontWeightForPrimaryInfo(
+      gfx::Font::Weight* font_weight) const = 0;
+
  private:
   void AddIcon(gfx::ImageSkia icon);
   void AddSpacerWithSize(int spacer_width,
                          bool resize,
                          views::BoxLayout* layout);
 
+  const PopupItemLayoutType layout_type_;
   const int extra_height_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillPopupItemView);
@@ -182,6 +208,8 @@ class AutofillPopupSuggestionView : public AutofillPopupItemView {
   // AutofillPopupItemView:
   std::unique_ptr<views::Background> CreateBackground() override;
   int GetPrimaryTextStyle() override;
+  bool ShouldUseCustomFontWeightForPrimaryInfo(
+      gfx::Font::Weight* font_weight) const override;
 
   AutofillPopupSuggestionView(AutofillPopupViewNativeViews* popup_view,
                               int line_number);
@@ -203,6 +231,8 @@ class PasswordPopupSuggestionView : public AutofillPopupSuggestionView {
   views::View* CreateValueLabel() override;
   views::View* CreateSubtextLabel() override;
   views::View* CreateDescriptionLabel() override;
+  bool ShouldUseCustomFontWeightForPrimaryInfo(
+      gfx::Font::Weight* font_weight) const override;
 
  private:
   PasswordPopupSuggestionView(AutofillPopupViewNativeViews* popup_view,
@@ -226,6 +256,8 @@ class AutofillPopupFooterView : public AutofillPopupItemView {
   void CreateContent() override;
   std::unique_ptr<views::Background> CreateBackground() override;
   int GetPrimaryTextStyle() override;
+  bool ShouldUseCustomFontWeightForPrimaryInfo(
+      gfx::Font::Weight* font_weight) const override;
 
  private:
   AutofillPopupFooterView(AutofillPopupViewNativeViews* popup_view,
@@ -354,21 +386,19 @@ void AutofillPopupItemView::OnMouseReleased(const ui::MouseEvent& event) {
 
 void AutofillPopupItemView::CreateContent() {
   AutofillPopupController* controller = popup_view_->controller();
-  auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
+  auto* layout_manager = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::kHorizontal, gfx::Insets(0, GetHorizontalMargin())));
 
-  layout->set_cross_axis_alignment(
+  layout_manager->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::CROSS_AXIS_ALIGNMENT_STRETCH);
 
   const gfx::ImageSkia icon =
       controller->layout_model().GetIconImage(line_number_);
-  int frontend_id = controller->GetSuggestionAt(line_number_).frontend_id;
 
-  if (!icon.isNull() &&
-      GetLayoutType(frontend_id) == PopupItemLayoutType::kLeadingIcon) {
+  if (!icon.isNull() && layout_type_ == PopupItemLayoutType::kLeadingIcon) {
     AddIcon(icon);
     AddSpacerWithSize(views::MenuConfig::instance().item_horizontal_padding,
-                      /*resize=*/false, layout);
+                      /*resize=*/false, layout_manager);
   }
 
   views::View* value_label = CreateValueLabel();
@@ -376,10 +406,10 @@ void AutofillPopupItemView::CreateContent() {
   const int kStandardRowHeight =
       views::MenuConfig::instance().touchable_menu_height + extra_height_;
   if (!lower_value_label) {
-    layout->set_minimum_cross_axis_size(kStandardRowHeight);
+    layout_manager->set_minimum_cross_axis_size(kStandardRowHeight);
     AddChildView(value_label);
   } else {
-    layout->set_minimum_cross_axis_size(
+    layout_manager->set_minimum_cross_axis_size(
         kStandardRowHeight + kAutofillPopupAdditionalDoubleRowHeight);
     views::View* values_container = new views::View();
     auto* vertical_layout =
@@ -395,17 +425,16 @@ void AutofillPopupItemView::CreateContent() {
     AddChildView(values_container);
   }
 
-  AddSpacerWithSize(views::MenuConfig::instance().item_horizontal_padding,
-                    /*resize=*/true, layout);
+  AddSpacerWithSize(AutofillPopupBaseView::kValueLabelPadding,
+                    /*resize=*/true, layout_manager);
 
   views::View* description_label = CreateDescriptionLabel();
   if (description_label)
     AddChildView(description_label);
 
-  if (!icon.isNull() &&
-      GetLayoutType(frontend_id) == PopupItemLayoutType::kTrailingIcon) {
+  if (!icon.isNull() && layout_type_ == PopupItemLayoutType::kTrailingIcon) {
     AddSpacerWithSize(views::MenuConfig::instance().item_horizontal_padding,
-                      /*resize=*/false, layout);
+                      /*resize=*/false, layout_manager);
     AddIcon(icon);
   }
 }
@@ -421,16 +450,21 @@ views::View* AutofillPopupItemView::CreateValueLabel() {
       popup_view_->controller()->GetElidedValueAt(line_number_);
   if (popup_view_->controller()
           ->GetSuggestionAt(line_number_)
-          .is_value_secondary)
+          .is_value_secondary) {
     return CreateSecondaryLabel(text);
-  views::Label* text_label = new views::Label(
+  }
+
+  views::Label* text_label = CreateLabelWithColorReadabilityDisabled(
       popup_view_->controller()->GetElidedValueAt(line_number_),
-      {views::style::GetFont(ChromeTextContext::CONTEXT_BODY_TEXT_LARGE,
-                             GetPrimaryTextStyle())});
-  text_label->SetEnabledColor(
-      views::style::GetColor(*this, ChromeTextContext::CONTEXT_BODY_TEXT_LARGE,
-                             GetPrimaryTextStyle()));
+      ChromeTextContext::CONTEXT_BODY_TEXT_LARGE, GetPrimaryTextStyle());
+
+  gfx::Font::Weight font_weight;
+  if (ShouldUseCustomFontWeightForPrimaryInfo(&font_weight)) {
+    text_label->SetFontList(
+        text_label->font_list().DeriveWithWeight(font_weight));
+  }
   text_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+
   return text_label;
 }
 
@@ -446,12 +480,9 @@ views::View* AutofillPopupItemView::CreateDescriptionLabel() {
 
 views::Label* AutofillPopupItemView::CreateSecondaryLabel(
     const base::string16& text) const {
-  views::Label* subtext_label = new views::Label(
-      text, {views::style::GetFont(ChromeTextContext::CONTEXT_BODY_TEXT_LARGE,
-                                   ChromeTextStyle::STYLE_SECONDARY)});
-  subtext_label->SetEnabledColor(
-      views::style::GetColor(*this, ChromeTextContext::CONTEXT_BODY_TEXT_LARGE,
-                             ChromeTextStyle::STYLE_SECONDARY));
+  views::Label* subtext_label = CreateLabelWithColorReadabilityDisabled(
+      text, ChromeTextContext::CONTEXT_BODY_TEXT_LARGE,
+      ChromeTextStyle::STYLE_SECONDARY);
   subtext_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
   return subtext_label;
@@ -495,6 +526,22 @@ AutofillPopupSuggestionView::CreateBackground() {
 
 int AutofillPopupSuggestionView::GetPrimaryTextStyle() {
   return views::style::TextStyle::STYLE_PRIMARY;
+}
+
+bool AutofillPopupSuggestionView::ShouldUseCustomFontWeightForPrimaryInfo(
+    gfx::Font::Weight* font_weight) const {
+  switch (autofill::GetForcedFontWeight()) {
+    case ForcedFontWeight::kDefault:
+      return false;
+
+    case ForcedFontWeight::kMedium:
+      *font_weight = views::TypographyProvider::MediumWeightForUI();
+      return true;
+
+    case ForcedFontWeight::kBold:
+      *font_weight = gfx::Font::Weight::BOLD;
+      return true;
+  }
 }
 
 AutofillPopupSuggestionView::AutofillPopupSuggestionView(
@@ -541,6 +588,11 @@ views::View* PasswordPopupSuggestionView::CreateDescriptionLabel() {
   return new ConstrainedWidthView(label, kAutofillPopupPasswordMaxWidth);
 }
 
+bool PasswordPopupSuggestionView::ShouldUseCustomFontWeightForPrimaryInfo(
+    gfx::Font::Weight* font_weight) const {
+  return false;
+}
+
 PasswordPopupSuggestionView::PasswordPopupSuggestionView(
     AutofillPopupViewNativeViews* popup_view,
     int line_number)
@@ -578,11 +630,17 @@ int AutofillPopupFooterView::GetPrimaryTextStyle() {
   return ChromeTextStyle::STYLE_SECONDARY;
 }
 
+bool AutofillPopupFooterView::ShouldUseCustomFontWeightForPrimaryInfo(
+    gfx::Font::Weight* font_weight) const {
+  return false;
+}
+
 AutofillPopupFooterView::AutofillPopupFooterView(
     AutofillPopupViewNativeViews* popup_view,
     int line_number)
     : AutofillPopupItemView(popup_view,
                             line_number,
+                            PopupItemLayoutType::kTrailingIcon,
                             AutofillPopupBaseView::GetCornerRadius()) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
 }
@@ -671,10 +729,9 @@ void AutofillPopupWarningView::CreateContent() {
   SetBorder(views::CreateEmptyBorder(
       gfx::Insets(vertical_margin, horizontal_margin)));
 
-  views::Label* text_label = new views::Label(
+  views::Label* text_label = CreateLabelWithColorReadabilityDisabled(
       controller->GetElidedValueAt(line_number_),
-      {views::style::GetFont(ChromeTextContext::CONTEXT_BODY_TEXT_LARGE,
-                             ChromeTextStyle::STYLE_RED)});
+      ChromeTextContext::CONTEXT_BODY_TEXT_LARGE, ChromeTextStyle::STYLE_RED);
   text_label->SetEnabledColor(AutofillPopupBaseView::kWarningColor);
   text_label->SetMultiLine(true);
   int max_width =
@@ -828,9 +885,12 @@ void AutofillPopupViewNativeViews::CreateChildViews() {
   scroll_view_->set_draw_overflow_indicator(false);
   scroll_view_->ClipHeightTo(0, body_container->GetPreferredSize().height());
 
-  // Use an additional container to apply padding outside the scroll view.
-  // This ensures that the rounded corners appear properly by cutting them
-  // out of normal, static padding.
+  // Use an additional container to apply padding outside the scroll view, so
+  // that the padding area is stationary. This ensures that the rounded corners
+  // appear properly; on Mac, the clipping path will not apply properly to a
+  // scrollable area.
+  // NOTE: GetContentsVerticalPadding is guaranteed to return a size which
+  // accommodates the rounded corners.
   views::View* padding_wrapper = new views::View();
   padding_wrapper->SetBorder(
       views::CreateEmptyBorder(gfx::Insets(GetContentsVerticalPadding(), 0)));

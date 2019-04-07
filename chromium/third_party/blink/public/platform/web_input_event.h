@@ -188,6 +188,7 @@ class WebInputEvent {
     kPointerTypeFirst = kPointerDown,
     kPointerUp,
     kPointerMove,
+    kPointerRawMove,  // To be only used within blink.
     kPointerCancel,
     kPointerCausedUaAction,
     kPointerTypeLast = kPointerCausedUaAction,
@@ -362,6 +363,11 @@ class WebInputEvent {
     return kGesturePinchTypeFirst <= type && type <= kGesturePinchTypeLast;
   }
 
+  // Returns true if the WebInputEvent |type| is a fling gesture event.
+  static bool IsFlingGestureEventType(WebInputEvent::Type type) {
+    return kGestureFlingStart <= type && type <= kGestureFlingCancel;
+  }
+
   static const char* GetName(WebInputEvent::Type type) {
 #define CASE_TYPE(t)        \
   case WebInputEvent::k##t: \
@@ -404,6 +410,7 @@ class WebInputEvent {
       CASE_TYPE(PointerDown);
       CASE_TYPE(PointerUp);
       CASE_TYPE(PointerMove);
+      CASE_TYPE(PointerRawMove);
       CASE_TYPE(PointerCancel);
       CASE_TYPE(PointerCausedUaAction);
     }

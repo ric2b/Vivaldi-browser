@@ -13,9 +13,7 @@
 
 #include "base/macros.h"
 #include "services/service_manager/public/cpp/identity.h"
-#include "services/ui/public/interfaces/event_injector.mojom.h"
 #include "ui/aura/client/capture_client.h"
-#include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_client_delegate.h"
 #include "ui/views/mus/mus_export.h"
 #include "ui/views/mus/screen_mus_delegate.h"
@@ -29,7 +27,6 @@ class WindowTreeClient;
 
 namespace base {
 class SingleThreadTaskRunner;
-class Thread;
 }
 
 namespace service_manager {
@@ -38,11 +35,14 @@ class Connector;
 
 namespace ui {
 class CursorDataFactoryOzone;
-class InputDeviceClient;
 }
 
 namespace wm {
 class WMState;
+}
+
+namespace ws {
+class InputDeviceClient;
 }
 
 namespace views {
@@ -68,15 +68,13 @@ class VIEWS_MUS_EXPORT MusClient : public aura::WindowTreeClientDelegate,
     InitParams();
     ~InitParams();
 
-    // Production code should provide |connector|, |identity|, |wtc_config|
-    // and an |io_task_runner| if the process already has one. Test code may
-    // skip these parameters (e.g. a unit test that does not need to connect
-    // to the window service does not need to provide a connector).
+    // Production code should provide |connector|, |identity|, and an
+    // |io_task_runner| if the process already has one. Test code may skip these
+    // parameters (e.g. a unit test that does not need to connect to the window
+    // service does not need to provide a connector).
     service_manager::Connector* connector = nullptr;
     service_manager::Identity identity;
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner = nullptr;
-    aura::WindowTreeClient::Config wtc_config =
-        aura::WindowTreeClient::Config::kMashDeprecated;
 
     // Create a wm::WMState. Some processes (e.g. the browser) may already
     // have one.
@@ -84,7 +82,6 @@ class VIEWS_MUS_EXPORT MusClient : public aura::WindowTreeClientDelegate,
 
     // Tests may need to control objects owned by MusClient.
     bool create_cursor_factory = true;
-    bool bind_test_ws_interfaces = false;
 
     // If provided, MusClient will not create the WindowTreeClient. Not owned.
     // Must outlive MusClient.
@@ -93,6 +90,10 @@ class VIEWS_MUS_EXPORT MusClient : public aura::WindowTreeClientDelegate,
     // Connect to the accessibility host service in the browser (e.g. to support
     // ChromeVox).
     bool use_accessibility_host = false;
+
+    // Set to true if the WindowService is running in the same process and on
+    // the same thread as MusClient.
+    bool running_in_ws_process = false;
   };
 
   // Most clients should use AuraInit, which creates a MusClient.
@@ -116,6 +117,10 @@ class VIEWS_MUS_EXPORT MusClient : public aura::WindowTreeClientDelegate,
   static std::map<std::string, std::vector<uint8_t>>
   ConfigurePropertiesFromParams(const Widget::InitParams& init_params);
 
+  aura::PropertyConverter* property_converter() {
+    return property_converter_.get();
+  }
+
   aura::WindowTreeClient* window_tree_client() { return window_tree_client_; }
 
   PointerWatcherEventRouter* pointer_watcher_event_router() {
@@ -123,9 +128,6 @@ class VIEWS_MUS_EXPORT MusClient : public aura::WindowTreeClientDelegate,
   }
 
   AXRemoteHost* ax_remote_host() { return ax_remote_host_.get(); }
-
-  // Getter for type safety. Most code can use display::Screen::GetScreen().
-  ScreenMus* screen() { return screen_.get(); }
 
   // Creates DesktopNativeWidgetAura with DesktopWindowTreeHostMus. This is
   // set as the factory function used for creating NativeWidgets when a
@@ -153,10 +155,6 @@ class VIEWS_MUS_EXPORT MusClient : public aura::WindowTreeClientDelegate,
   // Close all widgets this client knows.
   void CloseAllWidgets();
 
-  // Returns an interface to inject events into the Window Service. Only
-  // available when created with MusClientTestingState::CREATE_TESTING_STATE.
-  ui::mojom::EventInjector* GetTestingEventInjector() const;
-
  private:
   friend class AuraInit;
   friend class MusClientTestApi;
@@ -175,12 +173,13 @@ class VIEWS_MUS_EXPORT MusClient : public aura::WindowTreeClientDelegate,
   void OnLostConnection(aura::WindowTreeClient* client) override;
   void OnEmbedRootDestroyed(aura::WindowTreeHostMus* window_tree_host) override;
   void OnPointerEventObserved(const ui::PointerEvent& event,
-                              int64_t display_id,
+                              const gfx::Point& location_in_screen,
                               aura::Window* target) override;
   aura::PropertyConverter* GetPropertyConverter() override;
-  void OnDisplaysChanged(std::vector<ui::mojom::WsDisplayPtr> ws_displays,
+  void OnDisplaysChanged(std::vector<ws::mojom::WsDisplayPtr> ws_displays,
                          int64_t primary_display_id,
-                         int64_t internal_display_id) override;
+                         int64_t internal_display_id,
+                         int64_t display_id_for_new_windows) override;
 
   // ScreenMusDelegate:
   void OnWindowManagerFrameValuesChanged() override;
@@ -190,9 +189,7 @@ class VIEWS_MUS_EXPORT MusClient : public aura::WindowTreeClientDelegate,
 
   service_manager::Identity identity_;
 
-  std::unique_ptr<base::Thread> io_thread_;
-
-  base::ObserverList<MusClientObserver> observer_list_;
+  base::ObserverList<MusClientObserver>::Unchecked observer_list_;
 
 #if defined(USE_OZONE)
   std::unique_ptr<ui::CursorDataFactoryOzone> cursor_factory_ozone_;
@@ -216,14 +213,12 @@ class VIEWS_MUS_EXPORT MusClient : public aura::WindowTreeClientDelegate,
   std::unique_ptr<PointerWatcherEventRouter> pointer_watcher_event_router_;
 
   // Gives services transparent remote access the InputDeviceManager.
-  std::unique_ptr<ui::InputDeviceClient> input_device_client_;
+  std::unique_ptr<ws::InputDeviceClient> input_device_client_;
 
   // Forwards accessibility events to extensions in the browser. Can be null for
   // apps that do not need accessibility support and for the browser itself
   // under OopAsh.
   std::unique_ptr<AXRemoteHost> ax_remote_host_;
-
-  ui::mojom::EventInjectorPtr event_injector_;
 
   DISALLOW_COPY_AND_ASSIGN(MusClient);
 };

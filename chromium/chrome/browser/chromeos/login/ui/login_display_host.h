@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "ash/public/interfaces/login_screen.mojom.h"
 #include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
@@ -146,6 +147,9 @@ class LoginDisplayHost {
   // Update the size of the oobe dialog.
   virtual void UpdateOobeDialogSize(int width, int height) = 0;
 
+  // Update the state of the oobe dialog.
+  virtual void UpdateOobeDialogState(ash::mojom::OobeDialogState state) = 0;
+
   // Get users that are visible in the login screen UI.
   // This is mainly used by views login screen. WebUI login screen will
   // return an empty list.
@@ -194,13 +198,13 @@ class LoginDisplayHost {
   // Shows a feedback report dialog.
   virtual void ShowFeedback() = 0;
 
-  // In the views case, make the OobeUIDialogDelegate visible so that Captive
-  // Portal web modal can be seen. In webui login, this should be a no-op.
-  virtual void ShowDialogForCaptivePortal() = 0;
+  // Shows the powerwash dialog.
+  virtual void ShowResetScreen() = 0;
 
-  // Hide the captive portal signin dialog (e.g. when authentication is
-  // complete). In webui login, this should be a no-op.
-  virtual void HideDialogForCaptivePortal() = 0;
+  // Handles a request to show the captive portal web dialog. For webui, the
+  // dialog is displayed immediately. For views, the dialog is displayed as soon
+  // as the OOBE dialog is visible.
+  virtual void HandleDisplayCaptivePortal() = 0;
 
   // Update status of add user button in the shelf.
   virtual void UpdateAddUserButtonStatus() = 0;

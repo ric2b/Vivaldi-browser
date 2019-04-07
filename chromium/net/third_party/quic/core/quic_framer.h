@@ -195,6 +195,8 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
   QuicFramer(const ParsedQuicVersionVector& supported_versions,
              QuicTime creation_time,
              Perspective perspective);
+  QuicFramer(const QuicFramer&) = delete;
+  QuicFramer& operator=(const QuicFramer&) = delete;
 
   virtual ~QuicFramer();
 
@@ -298,6 +300,10 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
 
   // Size in bytes required for a serialized stop sending frame.
   static size_t GetStopSendingFrameSize(const QuicStopSendingFrame& frame);
+
+  // Size in bytes required for a serialized retransmittable control |frame|.
+  static size_t GetRetransmittableControlFrameSize(QuicTransportVersion version,
+                                                   const QuicFrame& frame);
 
   // Returns the number of bytes added to the packet for the specified frame,
   // and 0 if the frame doesn't fit.  Includes the header size for the first
@@ -461,8 +467,6 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
   bool is_ietf_format() {
     return version_.transport_version == QUIC_VERSION_99;
   }
-
-  QuicString VerboseDebugString() const;
 
  private:
   friend class test::QuicFramerPeer;
@@ -766,12 +770,9 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
   // owned. TODO(fayang): Consider add data producer to framer's constructor.
   QuicStreamFrameDataProducer* data_producer_;
 
-  // If the framer is processing a decrypted payload of a data packet,
-  // |decrypted_payload_reader_| will be set to the reader of that payload,
-  // otherwise nullptr.
-  QuicDataReader* decrypted_payload_reader_;
-
-  DISALLOW_COPY_AND_ASSIGN(QuicFramer);
+  // Latched value of
+  // quic_reloadable_flag_quic_process_stateless_reset_at_client_only.
+  const bool process_stateless_reset_at_client_only_;
 };
 
 }  // namespace quic

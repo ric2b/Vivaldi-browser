@@ -12,8 +12,8 @@
 #include "chrome/browser/ui/autofill/create_card_unmask_prompt_view.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/autofill/view_util.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_controller.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/strings/grit/components_strings.h"
@@ -22,7 +22,6 @@
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
@@ -31,6 +30,7 @@
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
+#include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/image_view.h"
@@ -206,9 +206,7 @@ views::View* CardUnmaskPromptViews::CreateFootnoteView() {
 
   storage_checkbox_ = new views::Checkbox(l10n_util::GetStringUTF16(
       IDS_AUTOFILL_CARD_UNMASK_PROMPT_STORAGE_CHECKBOX));
-  storage_checkbox_->SetBorder(
-      views::CreateEmptyBorder(ChromeLayoutProvider::Get()->GetInsetsMetric(
-          views::INSETS_DIALOG_SUBSECTION)));
+  storage_checkbox_->SetBorder(views::CreateEmptyBorder(gfx::Insets()));
   storage_checkbox_->SetChecked(controller_->GetStoreLocallyStartState());
   storage_checkbox_->SetEnabledTextColors(views::style::GetColor(
       *storage_checkbox_, ChromeTextContext::CONTEXT_BODY_TEXT_SMALL,
@@ -218,9 +216,18 @@ views::View* CardUnmaskPromptViews::CreateFootnoteView() {
 }
 
 gfx::Size CardUnmaskPromptViews::CalculatePreferredSize() const {
+  // If the margins width is not discounted here, the bubble border will be
+  // taken into consideration in the frame width size. Because of that, the
+  // dialog width will be snapped to a larger size when Harmony is enabled.
   const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-      DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH);
+                        DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH) -
+                    margins().width();
   return gfx::Size(width, GetHeightForWidth(width));
+}
+
+void CardUnmaskPromptViews::AddedToWidget() {
+  GetBubbleFrameView()->SetTitleView(
+      std::make_unique<TitleWithIconAndSeparatorView>(GetWindowTitle()));
 }
 
 void CardUnmaskPromptViews::OnNativeThemeChanged(const ui::NativeTheme* theme) {
@@ -280,8 +287,7 @@ views::View* CardUnmaskPromptViews::GetInitiallyFocusedView() {
 }
 
 bool CardUnmaskPromptViews::ShouldShowCloseButton() const {
-  // Material UI has no [X] in the corner of this dialog.
-  return !ui::MaterialDesignController::IsSecondaryUiMaterial();
+  return false;
 }
 
 bool CardUnmaskPromptViews::Cancel() {
@@ -344,8 +350,8 @@ void CardUnmaskPromptViews::InitIfNecessary() {
   // fields).
   SetLayoutManager(std::make_unique<views::FillLayout>());
   // Inset the whole main section.
-  SetBorder(views::CreateEmptyBorder(
-      provider->GetDialogInsetsForContentType(views::TEXT, views::CONTROL)));
+  set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
+      views::TEXT, views::CONTROL));
 
   controls_container_ = new views::View();
   controls_container_->SetLayoutManager(std::make_unique<views::BoxLayout>(

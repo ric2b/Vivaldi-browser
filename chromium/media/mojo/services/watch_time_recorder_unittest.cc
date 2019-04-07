@@ -51,16 +51,21 @@ class WatchTimeRecorderTest : public testing::Test {
                        kDiscardedWatchTimeAudioVideoSrc,
                        kDiscardedWatchTimeAudioVideoMse,
                        kDiscardedWatchTimeAudioVideoEme}) {
+    source_id_ = test_recorder_->GetNewSourceID();
     ResetMetricRecorders();
-    MediaMetricsProvider::Create(VideoDecodePerfHistory::SaveCallback(),
-                                 mojo::MakeRequest(&provider_));
+    MediaMetricsProvider::Create(
+        true /* is_top_frame */,
+        base::BindRepeating(&WatchTimeRecorderTest::GetSourceId,
+                            base::Unretained(this)),
+        VideoDecodePerfHistory::SaveCallback(), mojo::MakeRequest(&provider_));
   }
 
   ~WatchTimeRecorderTest() override { base::RunLoop().RunUntilIdle(); }
 
   void Initialize(mojom::PlaybackPropertiesPtr properties) {
-    provider_->Initialize(properties->is_mse, true /* is_top_frame */,
-                          url::Origin::Create(GURL(kTestOrigin)));
+    provider_->Initialize(properties->is_mse,
+                          properties->is_mse ? mojom::MediaURLScheme::kUnknown
+                                             : mojom::MediaURLScheme::kHttp);
     provider_->AcquireWatchTimeRecorder(std::move(properties),
                                         mojo::MakeRequest(&wtr_));
   }
@@ -117,7 +122,8 @@ class WatchTimeRecorderTest : public testing::Test {
   }
 
   void ExpectNoUkmWatchTime() {
-    ASSERT_EQ(0u, test_recorder_->sources_count());
+    // We always add a source in testing.
+    ASSERT_EQ(1u, test_recorder_->sources_count());
     ASSERT_EQ(0u, test_recorder_->entries_count());
   }
 
@@ -140,7 +146,10 @@ class WatchTimeRecorderTest : public testing::Test {
     // Ensure cleared global before attempting to create a new TestUkmReporter.
     test_recorder_.reset();
     test_recorder_.reset(new ukm::TestAutoSetUkmRecorder());
+    test_recorder_->UpdateSourceURL(source_id_, GURL(kTestOrigin));
   }
+
+  ukm::SourceId GetSourceId() { return source_id_; }
 
   MOCK_METHOD0(GetCurrentMediaTime, base::TimeDelta());
 
@@ -149,6 +158,7 @@ class WatchTimeRecorderTest : public testing::Test {
   mojom::MediaMetricsProviderPtr provider_;
   std::unique_ptr<base::HistogramTester> histogram_tester_;
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> test_recorder_;
+  ukm::SourceId source_id_;
   mojom::WatchTimeRecorderPtr wtr_;
   const std::vector<WatchTimeKey> computation_keys_;
   const std::vector<base::StringPiece> mtbr_keys_;

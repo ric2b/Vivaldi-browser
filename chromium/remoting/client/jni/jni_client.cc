@@ -41,28 +41,20 @@ JniClient::~JniClient() {
 void JniClient::ConnectToHost(const ConnectToHostInfo& info) {
   DCHECK(runtime_->ui_task_runner()->BelongsToCurrentThread());
   DCHECK(!display_handler_);
-  DCHECK(!audio_player_);
   DCHECK(!session_);
   host_id_ = info.host_id;
 
   display_handler_.reset(new JniGlDisplayHandler(java_client_));
 
-  audio_player_.reset(new AudioPlayerAndroid());
-
   session_.reset(new ChromotingSession(
       weak_ptr_, display_handler_->CreateCursorShapeStub(),
-      display_handler_->CreateVideoRenderer(), audio_player_->GetWeakPtr(),
-      info));
-  session_->Connect();
+      display_handler_->CreateVideoRenderer(),
+      std::make_unique<AudioPlayerAndroid>(), info));
 }
 
 void JniClient::DisconnectFromHost() {
   DCHECK(runtime_->ui_task_runner()->BelongsToCurrentThread());
   session_.reset();
-  if (audio_player_) {
-    runtime_->network_task_runner()->DeleteSoon(FROM_HERE,
-                                                audio_player_.release());
-  }
   display_handler_.reset();
 }
 
@@ -293,6 +285,15 @@ void JniClient::SendExtensionMessage(
     const JavaParamRef<jstring>& data) {
   session_->SendClientMessage(ConvertJavaStringToUTF8(env, type),
                               ConvertJavaStringToUTF8(env, data));
+}
+
+void JniClient::SendClientResolution(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& caller,
+    jint dips_width,
+    jint dips_height,
+    jfloat scale) {
+  session_->SendClientResolution(dips_width, dips_height, scale);
 }
 
 void JniClient::Destroy(JNIEnv* env, const JavaParamRef<jobject>& caller) {

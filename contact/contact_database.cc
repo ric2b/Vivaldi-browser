@@ -212,7 +212,7 @@ bool ContactDatabase::Raze() {
   return db_.Raze();
 }
 
-sql::Connection& ContactDatabase::GetDB() {
+sql::Database& ContactDatabase::GetDB() {
   return db_;
 }
 

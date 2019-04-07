@@ -7,7 +7,7 @@
 #include "db/vivaldi_history_types.h"
 
 namespace sql {
-class Connection;
+class Database;
 }
 
 namespace history {
@@ -24,7 +24,7 @@ class VivaldiHistoryDatabase {
  private:
   // Returns the database for the functions in this interface. The decendent of
   // this class implements these functions to return its objects.
-  virtual sql::Connection& GetDB() = 0;
+  virtual sql::Database& GetDB() = 0;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiHistoryDatabase);
 };

@@ -35,11 +35,11 @@
 
 #include "base/atomicops.h"
 #include "base/macros.h"
+#include "third_party/blink/public/platform/scheduler/web_rail_mode_observer.h"
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/heap/blink_gc.h"
 #include "third_party/blink/renderer/platform/heap/threading_traits.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
-#include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/address_sanitizer.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -139,7 +139,7 @@ class PLATFORM_EXPORT BlinkGCObserver {
 };
 
 class PLATFORM_EXPORT ThreadState final
-    : scheduler::WebThreadScheduler::RAILModeObserver {
+    : private scheduler::WebRAILModeObserver {
   USING_FAST_MALLOC(ThreadState);
 
  public:
@@ -408,37 +408,16 @@ class PLATFORM_EXPORT ThreadState final
 
   void FlushHeapDoesNotContainCacheIfNeeded();
 
-  // Safepoint related functionality.
-  //
-  // When a thread attempts to perform GC it needs to stop all other threads
-  // that use the heap or at least guarantee that they will not touch any
-  // heap allocated object until GC is complete.
-  //
-  // We say that a thread is at a safepoint if this thread is guaranteed to
-  // not touch any heap allocated object or any heap related functionality until
-  // it leaves the safepoint.
-  //
-  // Notice that a thread does not have to be paused if it is at safepoint it
-  // can continue to run and perform tasks that do not require interaction
-  // with the heap. It will be paused if it attempts to leave the safepoint and
-  // there is a GC in progress.
-  //
-  // Each thread that has ThreadState attached must:
-  //   - periodically check if GC is requested from another thread by calling a
-  //     safePoint() method;
-  //   - use SafePointScope around long running loops that have no safePoint()
-  //     invocation inside, such loops must not touch any heap object;
-  //
-  // Check if GC is requested by another thread and pause this thread if this is
-  // the case.  Can only be called when current thread is in a consistent state.
   void SafePoint(BlinkGC::StackState);
 
-  // Mark current thread as running inside safepoint.
-  void EnterSafePoint(BlinkGC::StackState, void*);
-  void LeaveSafePoint();
-
   void RecordStackEnd(intptr_t* end_of_stack) { end_of_stack_ = end_of_stack; }
-  NO_SANITIZE_ADDRESS void CopyStackUntilSafePointScope();
+#if HAS_FEATURE(safe_stack)
+  void RecordUnsafeStackEnd(intptr_t* end_of_unsafe_stack) {
+    end_of_unsafe_stack_ = end_of_unsafe_stack;
+  }
+#endif
+
+  void PushRegistersAndVisitStack();
 
   // A region of non-weak PersistentNodes allocated on the given thread.
   PersistentRegion* GetPersistentRegion() const {
@@ -464,8 +443,13 @@ class PLATFORM_EXPORT ThreadState final
   // Visit all weak persistents allocated on this thread.
   void VisitWeakPersistents(Visitor*);
 
+  // Visit all DOM wrappers allocatd on this thread.
+  void VisitDOMWrappers(Visitor*);
+
   struct GCSnapshotInfo {
     STACK_ALLOCATED();
+
+   public:
     GCSnapshotInfo(size_t num_object_types);
 
     // Map from gcInfoIndex (vector-index) to count/size.
@@ -527,8 +511,6 @@ class PLATFORM_EXPORT ThreadState final
 
   v8::Isolate* GetIsolate() const { return isolate_; }
 
-  BlinkGC::StackState GetStackState() const { return stack_state_; }
-
   void CollectGarbage(BlinkGC::StackState,
                       BlinkGC::MarkingType,
                       BlinkGC::SweepingType,
@@ -569,20 +551,15 @@ class PLATFORM_EXPORT ThreadState final
 
   MarkingVisitor* CurrentVisitor() { return current_gc_data_.visitor.get(); }
 
-  // Implementation for RAILModeObserver
+  // Implementation for WebRAILModeObserver
   void OnRAILModeChanged(v8::RAILMode new_mode) override {
     should_optimize_for_load_time_ = new_mode == v8::RAILMode::PERFORMANCE_LOAD;
+    if (should_optimize_for_load_time_ && IsIncrementalMarking() &&
+        GetGCState() == GCState::kIncrementalMarkingStepScheduled)
+      ScheduleIncrementalMarkingFinalize();
   }
 
  private:
-  // Needs to set up visitor for testing purposes.
-  friend class incremental_marking_test::IncrementalMarkingScope;
-  friend class incremental_marking_test::IncrementalMarkingTestDriver;
-  template <typename T>
-  friend class PrefinalizerRegistration;
-  friend class TestGCMarkingScope;
-  friend class ThreadStateSchedulingTest;
-
   // Number of ThreadState's that are currently in incremental marking. The
   // counter is incremented by one when some ThreadState enters incremental
   // marking and decremented upon finishing.
@@ -594,6 +571,24 @@ class PLATFORM_EXPORT ThreadState final
   ThreadState();
   ~ThreadState() override;
 
+  // The following methods are used to compose RunAtomicPause. Public users
+  // should use the CollectGarbage entrypoint. Internal users should use these
+  // methods to compose a full garbage collection.
+  void AtomicPauseMarkPrologue(BlinkGC::StackState,
+                               BlinkGC::MarkingType,
+                               BlinkGC::GCReason);
+  void AtomicPauseMarkTransitiveClosure();
+  void AtomicPauseMarkEpilogue(BlinkGC::MarkingType);
+  void AtomicPauseSweepAndCompact(BlinkGC::MarkingType marking_type,
+                                  BlinkGC::SweepingType sweeping_type);
+
+  void RunAtomicPause(BlinkGC::StackState,
+                      BlinkGC::MarkingType,
+                      BlinkGC::SweepingType,
+                      BlinkGC::GCReason);
+
+  void UpdateStatisticsAfterSweeping();
+
   // The version is needed to be able to start incremental marking.
   void MarkPhasePrologue(BlinkGC::StackState,
                          BlinkGC::MarkingType,
@@ -604,18 +599,9 @@ class PLATFORM_EXPORT ThreadState final
   void AtomicPauseEpilogue(BlinkGC::MarkingType, BlinkGC::SweepingType);
   void MarkPhaseEpilogue(BlinkGC::MarkingType);
   void MarkPhaseVisitRoots();
+  void MarkPhaseVisitNotFullyConstructedObjects();
   bool MarkPhaseAdvanceMarking(TimeTicks deadline);
   void VerifyMarking(BlinkGC::MarkingType);
-
-  void RunAtomicPause(BlinkGC::StackState,
-                      BlinkGC::MarkingType,
-                      BlinkGC::SweepingType,
-                      BlinkGC::GCReason);
-
-  void ClearSafePointScopeMarker() {
-    safe_point_stack_copy_.clear();
-    safe_point_scope_marker_ = nullptr;
-  }
 
   bool ShouldVerifyMarking() const;
 
@@ -669,7 +655,6 @@ class PLATFORM_EXPORT ThreadState final
 
   void ReportMemoryToV8();
 
-  friend class SafePointScope;
 
   friend class BlinkGCObserver;
 
@@ -698,12 +683,14 @@ class PLATFORM_EXPORT ThreadState final
   ThreadIdentifier thread_;
   std::unique_ptr<PersistentRegion> persistent_region_;
   std::unique_ptr<PersistentRegion> weak_persistent_region_;
-  BlinkGC::StackState stack_state_;
   intptr_t* start_of_stack_;
   intptr_t* end_of_stack_;
 
-  void* safe_point_scope_marker_;
-  Vector<Address> safe_point_stack_copy_;
+#if HAS_FEATURE(safe_stack)
+  intptr_t* start_of_unsafe_stack_;
+  intptr_t* end_of_unsafe_stack_;
+#endif
+
   bool sweep_forbidden_;
   size_t no_allocation_count_;
   size_t gc_forbidden_count_;
@@ -765,6 +752,14 @@ class PLATFORM_EXPORT ThreadState final
     std::unique_ptr<MarkingVisitor> visitor;
   };
   GCData current_gc_data_;
+
+  // Needs to set up visitor for testing purposes.
+  friend class incremental_marking_test::IncrementalMarkingScope;
+  friend class incremental_marking_test::IncrementalMarkingTestDriver;
+  template <typename T>
+  friend class PrefinalizerRegistration;
+  friend class TestGCScope;
+  friend class ThreadStateSchedulingTest;
 
   DISALLOW_COPY_AND_ASSIGN(ThreadState);
 };

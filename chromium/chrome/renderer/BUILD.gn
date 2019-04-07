@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//build/config/jumbo.gni")
 import("//chrome/common/features.gni")
 import("//components/nacl/features.gni")
 import("//components/offline_pages/buildflags/features.gni")
@@ -33,9 +34,12 @@ grit("resources") {
     "//url/mojom:url_mojom_gurl_js",
     "//url/mojom:url_mojom_origin_js",
   ]
+  if (is_chromeos) {
+    deps += [ "//chromeos/services/ime/public/mojom:mojom_js" ]
+  }
 }
 
-static_library("renderer") {
+jumbo_static_library("renderer") {
   sources = [
     "app_categorizer.cc",
     "app_categorizer.h",
@@ -123,7 +127,7 @@ static_library("renderer") {
     "//chrome/common/net",
     "//components/autofill/content/renderer",
     "//components/cdm/renderer",
-    "//components/contextual_search:renderer",
+    "//components/contextual_search/content:renderer",
     "//components/data_reduction_proxy/content/renderer",
     "//components/data_reduction_proxy/core/common",
     "//components/dom_distiller/content/renderer",
@@ -412,9 +416,16 @@ static_library("renderer") {
       "searchbox/searchbox_extension.h",
     ]
   }
+
+  if (is_android) {
+    sources += [
+      "net/available_offline_content_helper.cc",
+      "net/available_offline_content_helper.h",
+    ]
+  }
 }
 
-static_library("test_support") {
+jumbo_static_library("test_support") {
   testonly = true
   visibility = [ "//chrome/test:test_support" ]
 

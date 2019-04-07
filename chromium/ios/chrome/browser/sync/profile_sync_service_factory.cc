@@ -11,14 +11,14 @@
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/network_time/network_time_tracker.h"
+#include "components/signin/core/browser/device_id_helper.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/browser/signin_manager.h"
-#include "components/sync/driver/signin_manager_wrapper.h"
 #include "components/sync/driver/startup_controller.h"
 #include "components/sync/driver/sync_util.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "ios/chrome/browser/bookmarks/bookmark_sync_service_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/favicon/favicon_service_factory.h"
 #include "ios/chrome/browser/gcm/ios_chrome_gcm_profile_service_factory.h"
@@ -30,8 +30,6 @@
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
 #include "ios/chrome/browser/signin/about_signin_internals_factory.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
-#include "ios/chrome/browser/signin/signin_client_factory.h"
-#include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/sync/consent_auditor_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_sync_client.h"
 #include "ios/chrome/browser/sync/model_type_store_service_factory.h"
@@ -39,7 +37,6 @@
 #include "ios/chrome/browser/web_data_service_factory.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/web/public/web_thread.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "url/gurl.h"
 
@@ -102,10 +99,10 @@ ProfileSyncServiceFactory::ProfileSyncServiceFactory()
   DependsOn(ConsentAuditorFactory::GetInstance());
   DependsOn(ios::AboutSigninInternalsFactory::GetInstance());
   DependsOn(ios::BookmarkModelFactory::GetInstance());
+  DependsOn(ios::BookmarkSyncServiceFactory::GetInstance());
   DependsOn(ios::BookmarkUndoServiceFactory::GetInstance());
   DependsOn(ios::FaviconServiceFactory::GetInstance());
   DependsOn(ios::HistoryServiceFactory::GetInstance());
-  DependsOn(ios::SigninManagerFactory::GetInstance());
   DependsOn(ios::TemplateURLServiceFactory::GetInstance());
   DependsOn(ios::WebDataServiceFactory::GetInstance());
   DependsOn(IdentityManagerFactory::GetInstance());
@@ -114,7 +111,6 @@ ProfileSyncServiceFactory::ProfileSyncServiceFactory()
   DependsOn(IOSChromeProfileInvalidationProviderFactory::GetInstance());
   DependsOn(ModelTypeStoreServiceFactory::GetInstance());
   DependsOn(ReadingListModelFactory::GetInstance());
-  DependsOn(SigninClientFactory::GetInstance());
 }
 
 ProfileSyncServiceFactory::~ProfileSyncServiceFactory() {}
@@ -135,17 +131,14 @@ ProfileSyncServiceFactory::BuildServiceInstanceFor(
   ios::AboutSigninInternalsFactory::GetForBrowserState(browser_state);
 
   ProfileSyncService::InitParams init_params;
-  init_params.signin_wrapper = std::make_unique<SigninManagerWrapper>(
-      IdentityManagerFactory::GetForBrowserState(browser_state),
-      ios::SigninManagerFactory::GetForBrowserState(browser_state));
+  init_params.identity_manager =
+      IdentityManagerFactory::GetForBrowserState(browser_state);
   init_params.signin_scoped_device_id_callback = base::BindRepeating(
-      &SigninClient::GetSigninScopedDeviceId,
-      base::Unretained(SigninClientFactory::GetForBrowserState(browser_state)));
+      &signin::GetSigninScopedDeviceId, browser_state->GetPrefs());
   init_params.start_behavior = ProfileSyncService::MANUAL_START;
   init_params.sync_client =
       std::make_unique<IOSChromeSyncClient>(browser_state);
   init_params.network_time_update_callback = base::Bind(&UpdateNetworkTime);
-  init_params.url_request_context = browser_state->GetRequestContext();
   init_params.url_loader_factory = browser_state->GetSharedURLLoaderFactory();
   init_params.debug_identifier = browser_state->GetDebugName();
   init_params.channel = ::GetChannel();

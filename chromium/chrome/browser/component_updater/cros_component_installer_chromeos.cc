@@ -11,7 +11,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/component_installer_errors.h"
 #include "chrome/browser/component_updater/metadata_table_chromeos.h"
@@ -33,9 +34,9 @@ constexpr char kComponentsRootPath[] = "cros-components";
 const ComponentConfig kConfigs[] = {
     {"epson-inkjet-printer-escpr", "2.1",
      "1913a5e0a6cad30b6f03e176177e0d7ed62c5d6700a9c66da556d7c3f5d6a47e"},
-    {"cros-termina", "1.1",
+    {"cros-termina", "70.1",
      "e9d960f84f628e1f42d05de4046bb5b3154b6f1f65c08412c6af57a29aecaffb"},
-    {"rtanalytics-light", "5.0",
+    {"rtanalytics-light", "6.0",
      "69f09d33c439c2ab55bbbe24b47ab55cb3f6c0bd1f1ef46eefea3216ec925038"},
     {"rtanalytics-full", "1.0",
      "c93c3e1013c52100a20038b405ac854d69fa889f6dc4fa6f188267051e05e444"},
@@ -43,12 +44,17 @@ const ComponentConfig kConfigs[] = {
      "6d24de30f671da5aee6d463d9e446cafe9ddac672800a9defe86877dcde6c466"},
     {"cros-cellular", "1.0",
      "5714811c04f0a63aac96b39096faa759ace4c04e9b68291e7c9716128f5a2722"},
+    {"demo-mode-resources", "1.0",
+     "93c093ebac788581389015e9c59c5af111d2fa5174d206eb795042e6376cbd10"},
 };
 
 const ComponentConfig* FindConfig(const std::string& name) {
-  return std::find_if(
+  const ComponentConfig* config = std::find_if(
       std::begin(kConfigs), std::end(kConfigs),
       [&name](const ComponentConfig& config) { return config.name == name; });
+  if (config == std::end(kConfigs))
+    return nullptr;
+  return config;
 }
 
 // TODO(xiaochu): add metrics for component usage (https://crbug.com/793052).
@@ -213,25 +219,18 @@ void CrOSComponentManager::Load(const std::string& name,
                                 MountPolicy mount_policy,
                                 UpdatePolicy update_policy,
                                 LoadCallback load_callback) {
-  if (!IsCompatible(name)) {
-    // A compatible component is not installed.
-    // Start installation process.
+  if (!IsCompatible(name) || update_policy == UpdatePolicy::kForce) {
+    // A compatible component is not installed, or forced update is requested.
+    // Start registration and installation/update process.
     auto* const cus = g_browser_process->component_updater();
-    Install(cus, name, OnDemandUpdater::Priority::FOREGROUND, mount_policy,
-            std::move(load_callback));
-  } else if (update_policy == UpdatePolicy::kForce) {
-    // Caller forces update check.
-    // Start update process.
-    auto* const cus = g_browser_process->component_updater();
-    Install(cus, name, OnDemandUpdater::Priority::BACKGROUND, mount_policy,
-            std::move(load_callback));
+    Install(cus, name, update_policy, mount_policy, std::move(load_callback));
   } else if (mount_policy == MountPolicy::kMount) {
     // A compatible component is installed, load it.
     LoadInternal(name, std::move(load_callback));
   } else {
     // A compatible component is installed, do not load it.
-    base::PostTask(FROM_HERE,
-                   base::BindOnce(std::move(load_callback),
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(load_callback),
                                   ReportError(Error::NONE), base::FilePath()));
   }
 }
@@ -275,6 +274,14 @@ void CrOSComponentManager::EmitInstalledSignal(const std::string& component) {
     delegate_->EmitInstalledSignal(component);
 }
 
+bool CrOSComponentManager::IsRegistered(const std::string& name) {
+  base::FilePath root;
+  if (!base::PathService::Get(DIR_COMPONENT_USER, &root))
+    return false;
+
+  return base::PathExists(root.Append(kComponentsRootPath).Append(name));
+}
+
 void CrOSComponentManager::Register(ComponentUpdateService* cus,
                                     const ComponentConfig& config,
                                     base::OnceClosure register_callback) {
@@ -285,21 +292,22 @@ void CrOSComponentManager::Register(ComponentUpdateService* cus,
 
 void CrOSComponentManager::Install(ComponentUpdateService* cus,
                                    const std::string& name,
-                                   OnDemandUpdater::Priority priority,
+                                   UpdatePolicy update_policy,
                                    MountPolicy mount_policy,
                                    LoadCallback load_callback) {
   const ComponentConfig* config = FindConfig(name);
   if (!config) {
-    base::PostTask(FROM_HERE,
-                   base::BindOnce(std::move(load_callback),
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(load_callback),
                                   ReportError(Error::UNKNOWN_COMPONENT),
                                   base::FilePath()));
     return;
   }
+
   Register(cus, *config,
            base::BindOnce(
                &CrOSComponentManager::StartInstall, base::Unretained(this), cus,
-               GenerateId(config->sha2hash), priority,
+               name, GenerateId(config->sha2hash), update_policy,
                base::BindOnce(&CrOSComponentManager::FinishInstall,
                               base::Unretained(this), name, mount_policy,
                               std::move(load_callback))));
@@ -307,9 +315,24 @@ void CrOSComponentManager::Install(ComponentUpdateService* cus,
 
 void CrOSComponentManager::StartInstall(
     ComponentUpdateService* cus,
+    const std::string& name,
     const std::string& id,
-    OnDemandUpdater::Priority priority,
+    UpdatePolicy update_policy,
     update_client::Callback install_callback) {
+  // Check whether an installed component was found during registration, and
+  // determine whether OnDemandUpdater should be started accordingly.
+  const bool is_compatible = IsCompatible(name);
+  if (update_policy == UpdatePolicy::kSkip ||
+      (is_compatible && update_policy != UpdatePolicy::kForce)) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(install_callback),
+                                  update_client::Error::NONE));
+    return;
+  }
+
+  const component_updater::OnDemandUpdater::Priority priority =
+      is_compatible ? component_updater::OnDemandUpdater::Priority::BACKGROUND
+                    : component_updater::OnDemandUpdater::Priority::FOREGROUND;
   cus->GetOnDemandUpdater().OnDemandUpdate(id, priority,
                                            std::move(install_callback));
 }
@@ -319,22 +342,21 @@ void CrOSComponentManager::FinishInstall(const std::string& name,
                                          LoadCallback load_callback,
                                          update_client::Error error) {
   if (error != update_client::Error::NONE) {
-    base::PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(load_callback),
                        ReportError(Error::INSTALL_FAILURE), base::FilePath()));
   } else if (mount_policy == MountPolicy::kMount) {
     LoadInternal(name, std::move(load_callback));
   } else {
-    base::PostTask(FROM_HERE,
-                   base::BindOnce(std::move(load_callback),
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(load_callback),
                                   ReportError(Error::NONE), base::FilePath()));
   }
 }
 
 void CrOSComponentManager::LoadInternal(const std::string& name,
                                         LoadCallback load_callback) {
-  DCHECK(IsCompatible(name));
   const base::FilePath path = GetCompatiblePath(name);
   // path is empty if no compatible component is available to load.
   if (!path.empty()) {
@@ -346,7 +368,7 @@ void CrOSComponentManager::LoadInternal(const std::string& name,
                            base::Unretained(this), std::move(load_callback),
                            base::TimeTicks::Now(), name));
   } else {
-    base::PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(load_callback),
                        ReportError(Error::COMPATIBILITY_CHECK_FAILED),
@@ -362,13 +384,14 @@ void CrOSComponentManager::FinishLoad(LoadCallback load_callback,
   UMA_HISTOGRAM_LONG_TIMES("ComponentUpdater.ChromeOS.MountTime",
                            base::TimeTicks::Now() - start_time);
   if (!result.has_value()) {
-    base::PostTask(FROM_HERE, base::BindOnce(std::move(load_callback),
-                                             ReportError(Error::MOUNT_FAILURE),
-                                             base::FilePath()));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(load_callback),
+                       ReportError(Error::MOUNT_FAILURE), base::FilePath()));
   } else {
     metadata_table_->AddComponentForCurrentUser(name);
-    base::PostTask(FROM_HERE,
-                   base::BindOnce(std::move(load_callback),
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(load_callback),
                                   ReportError(Error::NONE), result.value()));
   }
 }

@@ -7,6 +7,8 @@
 <translation id="1037492556044956303">Idinagdag ang <ph name="DEVICE_NAME" /></translation>
 <translation id="1056775291175587022">Walang network</translation>
 <translation id="1059194134494239015"><ph name="DISPLAY_NAME" />: <ph name="RESOLUTION" /></translation>
+<translation id="109942774857561566">Naiinip ako</translation>
+<translation id="1104084341931202936">Ipakita ang mga setting ng pagiging naa-access</translation>
 <translation id="1104621072296271835">Gagana nang mas maayos ang iyong mga device kung magkakasama</translation>
 <translation id="112308213915226829">Awtomatikong itago ang shelf</translation>
 <translation id="1153356358378277386">Mga nakapares na device</translation>
@@ -14,32 +16,41 @@
 <translation id="119944043368869598">I-clear lahat</translation>
 <translation id="1247372569136754018">Mikropono (internal)</translation>
 <translation id="1252999807265626933">Nagcha-charge mula sa <ph name="POWER_SOURCE" /></translation>
+<translation id="1255033239764210633">Ano'ng lagay ng panahon?</translation>
 <translation id="1267032506238418139">Pagbabago ng shortcut</translation>
 <translation id="1270290102613614947">Naka-disable ang on-screen na keyboard</translation>
 <translation id="1272079795634619415">Stop</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
 <translation id="1290331692326790741">Mahina ang signal</translation>
 <translation id="1293264513303784526">USB-C device (port sa kaliwa)</translation>
+<translation id="1294929383540927798">Baguhin ang mga setting ng notification ng lock-screen</translation>
+<translation id="1302880136325416935">Ipakita ang mga setting ng Bluetooth. <ph name="STATE_TEXT" /></translation>
 <translation id="1346748346194534595">Kanan</translation>
 <translation id="1351937230027495976">I-collapse ang menu</translation>
 <translation id="1383876407941801731">Hanapin</translation>
+<translation id="1419738280318246476">I-unlock ang device para maisagawa ang pagkilos sa notification</translation>
 <translation id="1467432559032391204">Kaliwa</translation>
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1510238584712386396">Launcher</translation>
+<translation id="1520303207432623762">{NUM_APPS,plural, =1{Ipakita ang mga setting ng notification. Naka-off ang mga notification para sa isang app}one{Ipakita ang mga setting ng notification. Naka-off ang mga notification para sa # app}other{Ipakita ang mga setting ng notification. Naka-off ang mga notification para sa # na app}}</translation>
 <translation id="1525508553941733066">I-DISMISS</translation>
 <translation id="1537254971476575106">Fullscreen magnifier</translation>
 <translation id="15373452373711364">Malaking mouse cursor</translation>
 <translation id="1550523713251050646">Mag-click para sa higit pang mga opsyon</translation>
 <translation id="1567387640189251553">Nagkonekta ng ibang keyboard mula nang huli mong inilagay ang iyong password. Maaaring sinusubukan nitong nakawin ang iyong mga keystroke.</translation>
+<translation id="1570871743947603115">I-toggle ang Bluetooth. <ph name="STATE_TEXT" /></translation>
 <translation id="1608626060424371292">Alisin ang user na ito</translation>
 <translation id="1621499497873603021">Natitirang oras bago maubos ang baterya, <ph name="TIME_LEFT" /></translation>
+<translation id="1654477262762802994">Magsimula ng query gamit ang boses</translation>
 <translation id="1658406695958299976">Paumanhin, hindi pa rin ma-verify ang iyong password. Tandaan: kung pinalitan mo kamakailan ang iyong password, malalapat ang bago mong password kapag nag-sign out ka, pakigamit ang lumang password dito.</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> na lang ang natitira</translation>
 <translation id="1698760176351776263">IPv6 address: <ph name="ADDRESS" /></translation>
-<translation id="170389796989115980">Maaaring masubaybayan ng admin ng device ang iyong aktibidad.</translation>
 <translation id="1734367976349034509">Ang device na ito ay pinamamahalaan ng enterprise</translation>
+<translation id="1743570585616704562">Hindi nakilala</translation>
 <translation id="1746730358044914197">Isinasaayos ng iyong administrator ang mga pamamaraan sa pag-input.</translation>
 <translation id="1747827819627189109">Naka-enable ang on-screen na keyboard</translation>
+<translation id="1761222317188459878">I-toggle ang koneksyon sa network. <ph name="STATE_TEXT" /></translation>
+<translation id="1812997170047690955">Ano ang nasa screen ko?</translation>
 <translation id="1823873187264960516">Ethernet: <ph name="ADDRESS" /></translation>
 <translation id="1836215606488044471">Assistant (naglo-load...)</translation>
 <translation id="1850504506766569011">Naka-off ang Wi-Fi.</translation>
@@ -74,13 +85,15 @@
 <translation id="2303600792989757991">I-toggle ang window ng pangkalahatang-ideya</translation>
 <translation id="2338501278241028356">I-on ang Bluetooth upang tuklasin ang mga kalapit na device</translation>
 <translation id="2339073806695260576">I-tap ang button na stylus sa shelf para magsulat ng tala, mag-screenshot, gamitin ang laser pointer, o magnifying glass.</translation>
-<translation id="2351266942280602854">Wika at input</translation>
+<translation id="2341729377289034582">Naka-lock sa vertical</translation>
 <translation id="2352467521400612932">Mga setting ng stylus</translation>
 <translation id="2354174487190027830">Ina-activate ang <ph name="NAME" /></translation>
 <translation id="2359808026110333948">Magpatuloy</translation>
 <translation id="2365393535144473978">Kapag na-enable ang mobile data, mae-enable din ang Bluetooth.</translation>
 <translation id="2391579633712104609">180°</translation>
+<translation id="239188844683466770">I-toggle ang Huwag istorbohin</translation>
 <translation id="2412593942846481727">May available na update</translation>
+<translation id="2416346634399901812">Nakakonekta sa <ph name="NETWORK_NAME" /></translation>
 <translation id="2429753432712299108">Gusto ng bluetooth device na "<ph name="DEVICE_NAME" />" ng pahintulot na magpares . Bago tanggapin, pakikumpirma na ipinapakita ang passkey na ito sa device na iyon: <ph name="PASSKEY" /></translation>
 <translation id="2482878487686419369">Mga Abiso</translation>
 <translation id="2484513351006226581">Pindutin ang <ph name="KEYBOARD_SHORTCUT" /> upang palitan ang layout ng keyboard.</translation>
@@ -92,12 +105,12 @@
 <translation id="2597972630681408282">Night Light: <ph name="NIGHT_LIGHT_STATUS" /></translation>
 <translation id="2617342710774726426">Naka-lock ang SIM card</translation>
 <translation id="2653659639078652383">Isumite</translation>
-<translation id="2696763960464195425">Aalisin ang iyong impormasyon kapag nag-sign out ka. <ph name="LEARN_MORE" /></translation>
 <translation id="2700493154570097719">Itakda ang iyong keyboard</translation>
 <translation id="2718395828230677721">Night Light</translation>
 <translation id="2727977024730340865">Naka-saksak sa isang low-power charger. Maaaring hindi maging tiyak ang pag-charge ng baterya.</translation>
 <translation id="2761704814324807722">Status tray, oras <ph name="TIME" />, <ph name="BATTERY" /></translation>
 <translation id="277257480934873581">Muling kumokonekta sa <ph name="NAME" /></translation>
+<translation id="2790844815106384441">Piliin kung makakagamit ang mga website ng mga serbisyo ng lokasyon o mikropono, camera, o iba pang feature ng device</translation>
 <translation id="2792498699870441125">Alt+Search</translation>
 <translation id="2805756323405976993">Mga App</translation>
 <translation id="2808012452536866044">Nalipat ang Better Together sa isang bagong telepono</translation>
@@ -114,6 +127,8 @@
 <translation id="2946119680249604491">Magdagdag ng koneksyon</translation>
 <translation id="2961963223658824723">Nagkaproblema. Subukang muli sa loob ng ilang segundo.</translation>
 <translation id="2963773877003373896">mod3</translation>
+<translation id="2992931425024192067">Ipakita ang lahat ng content ng notification</translation>
+<translation id="2995447421581609334">Ipakita ang mga cast device.</translation>
 <translation id="2996462380875591307">Na-enable ang Naka-dock na Magnifier. Pinduting muli ang Ctrl+Search+D para i-off ito.</translation>
 <translation id="2999742336789313416">Ang <ph name="DISPLAY_NAME" /> ay isang pampublikong session na pinamamahalaan ng <ph name="DOMAIN" /></translation>
 <translation id="3000461861112256445">Mono audio</translation>
@@ -123,13 +138,15 @@
 <translation id="3081696990447829002">I-expand ang menu</translation>
 <translation id="3087734570205094154">Sa ilalim</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
+<translation id="3124698051292518391">Palaging Ipakita ang Shelf</translation>
 <translation id="3126069444801937830">I-restart upang mag-update</translation>
 <translation id="3147142846278915599">Launcher (nagsi-sync ng mga app...)</translation>
 <translation id="315116470104423982">Data sa mobile</translation>
 <translation id="3151786313568798007">Oryentasyon</translation>
 <translation id="3153444934357957346">Maaari ka lang magkaroon ng hanggang <ph name="MULTI_PROFILE_USER_LIMIT" /> (na) account sa maraming pag-sign in.</translation>
+<translation id="3202010236269062730">{NUM_DEVICES,plural, =1{Nakakonekta sa isang device}one{Nakakonekta sa # device}other{Nakakonekta sa # na device}}</translation>
 <translation id="3236488194889173876">Walang available na mobile network</translation>
-<translation id="3238765806255363838"><ph name="USERNAME" /> <ph name="MAIL" /></translation>
+<translation id="3255483164551725916">Ano'ng maaari mong gawin?</translation>
 <translation id="3294437725009624529">Bisita</translation>
 <translation id="332587331255250389">Pakipalitan ang baterya</translation>
 <translation id="3351879221545518001">Kasalukuyan kang nagka-cast ng screen.</translation>
@@ -159,10 +176,12 @@
 <translation id="3784455785234192852">I-lock</translation>
 <translation id="3798670284305777884">Speaker (internal)</translation>
 <translation id="380165613292957338">Kumusta, ano ang maitutulong ko?</translation>
+<translation id="383629559565718788">Ipakita ang mga setting ng keyboard</translation>
 <translation id="3846575436967432996">Walang available na impormasyon sa network</translation>
 <translation id="385051799172605136">Bumalik</translation>
 <translation id="3891340733213178823">Pindutin ang Ctrl+Shift+Q nang dalawang beses upang mag-sign out.</translation>
 <translation id="3893630138897523026">ChromeVox (pasalitang feedback)</translation>
+<translation id="3897533311200664389">Magsimula ng query gamit ang text</translation>
 <translation id="3899995891769452915">Input na boses</translation>
 <translation id="3900355044994618856">Matatapos ang iyong session sa loob ng <ph name="SESSION_TIME_REMAINING" /></translation>
 <translation id="3901991538546252627">Kumokonekta sa <ph name="NAME" /></translation>
@@ -172,10 +191,14 @@
 <translation id="4017989525502048489">Laser pointer</translation>
 <translation id="4065525899979931964">{NUM_APPS,plural, =1{Naka-off para sa isang app}one{Naka-off para sa # app}other{Naka-off para sa # na app}}</translation>
 <translation id="4072264167173457037">Katamtaman ang signal</translation>
+<translation id="4146833061457621061">Mag-play ng musika</translation>
 <translation id="4200057768455216496">Napindot mo ang shortcut para sa naka-dock na magnifier. Gusto mo ba itong i-on?</translation>
 <translation id="4217571870635786043">Pagdidikta</translation>
+<translation id="4261870227682513959">Ipakita ang mga setting ng notification. Naka-off ang mga notification</translation>
+<translation id="4269883910223712419">May kakayahan ang admin ng device na ito na:</translation>
 <translation id="4274921305979314545">Ikonekta ang iyong Chromebook sa telepono mo</translation>
 <translation id="4279490309300973883">Nagmi-mirror</translation>
+<translation id="4292681942966152062">Ina-activate ang <ph name="NETWORK_NAME" /></translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4338109981321384717">Magnifying glass</translation>
@@ -198,12 +221,15 @@
 <translation id="4628757576491864469">Mga Device</translation>
 <translation id="4659419629803378708">Na-enable ang ChromeVox</translation>
 <translation id="4734965478015604180">Horizontal</translation>
+<translation id="476166673298332917">May access ang administrator ng device na ito sa lahat ng aktibidad, kabilang ang mga password at komunikasyon.</translation>
 <translation id="4776917500594043016">Password para sa <ph name="USER_EMAIL_ADDRESS" /></translation>
+<translation id="4778095205580009397">Hindi available ang Google Assistant sa demo session.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">I-disconnect</translation>
 <translation id="4849058404725798627">I-highlight ang bagay sa pamamagitan ng pag-focus ng keyboard</translation>
 <translation id="4872237917498892622">Alt+Search o Shift</translation>
 <translation id="4890187583552566966">Na-disable ng iyong administrator ang Google Assistant.</translation>
+<translation id="4893522937062257019">Sa lock screen</translation>
 <translation id="4895488851634969361">Puno na ang baterya.</translation>
 <translation id="490375751687810070">Vertical</translation>
 <translation id="4905614135390995787">Nagbago ang shortcut upang i-toggle ang High Contrast Mode. Pakigamit ang <ph name="NEW_SHORTCUT" /> sa halip na <ph name="OLD_SHORTCUT" />.</translation>
@@ -211,6 +237,7 @@
 <translation id="4918086044614829423">Tanggapin</translation>
 <translation id="4924411785043111640">I-restart at i-reset</translation>
 <translation id="4961318399572185831">I-cast ang screen</translation>
+<translation id="5083553833479578423">Mag-unlock ng higit pang feature ng Assistant.</translation>
 <translation id="5136175204352732067">Ibang keyboard ang nakakonekta</translation>
 <translation id="5168181903108465623">I-cast ang mga available na device</translation>
 <translation id="5207949376430453814">I-highlight ang text caret</translation>
@@ -218,6 +245,7 @@
 <translation id="523505283826916779">Mga setting ng accessibility</translation>
 <translation id="5313326810920013265">Mga setting ng Bluetooth</translation>
 <translation id="5331975486040154427">USB-C device (port sa kaliwang bahagi sa likod)</translation>
+<translation id="5379115545237091094">Masyadong maraming pagtatangka</translation>
 <translation id="5397578532367286026">Ang paggamit at kasaysayan ng user na ito ay maaaring suriin ng manager (<ph name="MANAGER_EMAIL" />) sa chrome.com.</translation>
 <translation id="5430931332414098647">Instant na Pag-tether</translation>
 <translation id="5431825016875453137">OpenVPN / L2TP</translation>
@@ -238,6 +266,7 @@
 <translation id="5673434351075758678">Gagawing "<ph name="TO_LOCALE" />" mula "<ph name="FROM_LOCALE" />" pagkatapos i-sync ang iyong mga setting.</translation>
 <translation id="574392208103952083">Katamtaman</translation>
 <translation id="5744083938413354016">Pag-tap upang mag-drag</translation>
+<translation id="5750765938512549687">Naka-off ang Bluetooth</translation>
 <translation id="5777841717266010279">Itigil ang screen sharing?</translation>
 <translation id="57838592816432529">I-mute</translation>
 <translation id="5805697420284793859">Window manager</translation>
@@ -248,6 +277,7 @@
 <translation id="5895138241574237353">I-restart</translation>
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5911533659001334206">Shortcut viewer</translation>
+<translation id="5911909173233110115"><ph name="USERNAME" /> (<ph name="MAIL" />)</translation>
 <translation id="5916664084637901428">Naka-on</translation>
 <translation id="592343074608792716">Awtomatikong kokonekta ang Chromebook na ito at ang iyong telepono</translation>
 <translation id="5947494881799873997">I-revert</translation>
@@ -271,14 +301,18 @@
 <translation id="615957422585914272">Ipakita ang on-screen na keyboard</translation>
 <translation id="6164005077879661055">Permanenteng matatanggal ang lahat ng file at lokal na data na kaugnay ng pinangangasiwaang user sa oras na alisin ang pinangangasiwaang user na ito. Maaari pa ring makita ng manager ang mga nabisitang website at setting para sa pinangangasiwaang user na ito sa <ph name="MANAGEMENT_URL" />.</translation>
 <translation id="6165508094623778733">Matuto nang higit pa</translation>
+<translation id="6254629735336163724">Naka-lock sa horizontal</translation>
 <translation id="6259254695169772643">Gamitin ang iyong stylus para pumili</translation>
 <translation id="6267036997247669271"><ph name="NAME" />: Ina-activate...</translation>
 <translation id="6284232397434400372">Binago ang resolution</translation>
 <translation id="6297287540776456956">Gamitin ang stylus upang pumili ng rehiyon</translation>
 <translation id="6310121235600822547">Na-rotate ang <ph name="DISPLAY_NAME" /> sa <ph name="ROTATION" /></translation>
 <translation id="632744581670418035">Overlay ng keyboard</translation>
+<translation id="6344698853700675736">I-toggle ang Night Light</translation>
+<translation id="6376931439017688372">Naka-on ang Bluetooth</translation>
 <translation id="639644700271529076">Naka-off ang CAPS LOCK</translation>
 <translation id="6406704438230478924">altgr</translation>
+<translation id="642644398083277086">I-clear ang lahat ng notification</translation>
 <translation id="643147933154517414">Tapos na ang lahat</translation>
 <translation id="6445835306623867477"><ph name="ROUTE_TITLE" /> sa <ph name="RECEIVER_NAME" /></translation>
 <translation id="6452181791372256707">Tanggihan</translation>
@@ -306,11 +340,13 @@
 <translation id="6751826523481687655">Naka-on ang pag-trace ng performance</translation>
 <translation id="6785414152754474415">Ang baterya ay <ph name="PERCENTAGE" />% na puno at nagcha-charge.</translation>
 <translation id="6803622936009808957">Hindi ma-mirror ang mga display dahil walang mga sinusuportahang resolusyon na nakita. Pumasok na lang sa pinalawak na desktop.</translation>
+<translation id="6814658242098378692">Pamahalaan ang mga app, extension, at tema</translation>
 <translation id="6820676911989879663">Magpahinga!</translation>
 <translation id="683971173229319003">Search+L</translation>
 <translation id="6857811139397017780">I-activate <ph name="NETWORKSERVICE" /></translation>
 <translation id="6910714959251846841">Kinakailangang i-powerwash ang iyong device para sa update na ito. Matuto pa tungkol sa pinakabagong update sa <ph name="SYSTEM_APP_NAME" />.</translation>
 <translation id="6911468394164995108">Sumali sa iba...</translation>
+<translation id="6972754398087986839">Magsimula</translation>
 <translation id="6981982820502123353">Pagiging Maa-access</translation>
 <translation id="698231206551913481">Permanenteng made-delete ang lahat ng file at lokal na data na nauugnay sa user na ito kapag inalis na ang user na ito.</translation>
 <translation id="7015766095477679451">Bumalik nang <ph name="COME_BACK_TIME" />.</translation>
@@ -318,7 +354,8 @@
 <translation id="7037152028959403492">Napindot mo ang shortcut para sa mataas na contrast. Gusto mo ba itong i-on?</translation>
 <translation id="7066646422045619941">Na-disable ng iyong administrator ang network na ito.</translation>
 <translation id="7067196344162293536">Awtomatikong pag-rotate</translation>
-<translation id="7076293881109082629">Nagsa-sign in</translation>
+<translation id="7068360136237591149">Magbukas ng mga file</translation>
+<translation id="7092922358121866860">Ipakita ang mga setting ng Night Light</translation>
 <translation id="7098389117866926363">USB-C device (kaliwang port sa likod)</translation>
 <translation id="7131634465328662194">Awtomatiko kang masa-sign out.</translation>
 <translation id="7143207342074048698">Kumokonekta</translation>
@@ -326,12 +363,14 @@
 <translation id="7168224885072002358">Magre-revert sa lumang resolution sa loob ng <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7256634071279256947">Mikropono sa likod</translation>
 <translation id="726276584504105859">I-drag dito upang magamit ang split screen</translation>
+<translation id="7303365578352795231">Sinasagot sa ibang device.</translation>
 <translation id="7348093485538360975">Nasa screen na keyboard</translation>
 <translation id="735745346212279324">Nakadiskonekta ang VPN</translation>
 <translation id="7377169924702866686">Naka-on ang Caps Lock.</translation>
 <translation id="7398254312354928459">Lumipat ng koneksyon ng network</translation>
 <translation id="742594950370306541">Ginagamit ang camera.</translation>
 <translation id="743058460480092004">Ginagamit ang camera at mikropono.</translation>
+<translation id="7497767806359279797">Pumili ng wika at keyboard</translation>
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7526573455193969409">Maaaring sinusubaybayan ang network</translation>
 <translation id="7536035074519304529">IP address: <ph name="ADDRESS" /></translation>
@@ -340,6 +379,8 @@
 <translation id="7564874036684306347">Kapag inilipat ang mga window sa isa pang desktop, maaari itong magresulta sa hindi inaasahang gawi. Maaaring hatiin ang mga susunod na notification, window, at dialog sa pagitan ng mga desktop.</translation>
 <translation id="7569509451529460200">Na-enable ang Braille at ChromeVox</translation>
 <translation id="7593891976182323525">Search or Shift</translation>
+<translation id="7604942372593434070">I-access ang iyong aktibidad sa pag-browse</translation>
+<translation id="7642778300616172920">Itago ang sensitibong content</translation>
 <translation id="7645176681409127223"><ph name="USER_NAME" /> (may-ari)</translation>
 <translation id="7647488630410863958">I-unlock ang device upang tingnan ang iyong mga notification</translation>
 <translation id="7649070708921625228">Tulong</translation>
@@ -352,8 +393,12 @@
 <translation id="7798302898096527229">Pindutin ang Search o Shift upang kanselahin.</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> at <ph name="MINUTE" /></translation>
 <translation id="7829386189513694949">Malakas ang signal</translation>
+<translation id="7842211907556571265">Kumokonekta sa <ph name="NETWORK_NAME" /></translation>
 <translation id="7842569679327885685">Babala: Pang-eskperimentong feature</translation>
 <translation id="7846634333498149051">Keyboard</translation>
+<translation id="7886169021410746335">Isaayos ang mga setting ng privacy</translation>
+<translation id="7886277072580235377">Maki-clear ang iyong session sa internet kapag nag-sign out ka. <ph name="LEARN_MORE" /></translation>
+<translation id="788781083998633524">Magpadala ng email</translation>
 <translation id="7904094684485781019">Hindi pinayagan ng administrator para sa account na ito ang multiple na pag-sign in.</translation>
 <translation id="7933084174919150729">Available lang ang Google Assistant para sa pangunahing profile.</translation>
 <translation id="79341161159229895">Pinamamahalaan nina <ph name="FIRST_PARENT_EMAIL" /> at <ph name="SECOND_PARENT_EMAIL" /> ang account</translation>
@@ -362,6 +407,7 @@
 <translation id="7994370417837006925">Multiple na pag-sign in</translation>
 <translation id="8000066093800657092">Walang network</translation>
 <translation id="8029241286966751120">Na-enable ang Fullscreen Magnifier. Pinduting muli ang Ctrl+Search+M para i-off ito.</translation>
+<translation id="8030169304546394654">Naalis sa pagkakakonekta</translation>
 <translation id="8054466585765276473">Kinakalkula ang oras ng baterya.</translation>
 <translation id="8061464966246066292">Mataas na contrast</translation>
 <translation id="8098591350844501178">Ihinto ang pag-cast ng screen sa <ph name="RECEIVER_NAME" /></translation>
@@ -371,12 +417,15 @@
 <translation id="8142699993796781067">Pribadong network</translation>
 <translation id="8152119955266188852">Napindot mo ang shortcut para sa full-screen magnifier. Gusto mo ba itong i-on?</translation>
 <translation id="8190698733819146287">I-customize ang mga wika at input...</translation>
+<translation id="8192202700944119416">Nakatago ang mga notification.</translation>
 <translation id="8261506727792406068">I-delete</translation>
 <translation id="8297006494302853456">Mahina</translation>
 <translation id="8308637677604853869">Nakaraang menu</translation>
+<translation id="8341451174107936385"><ph name="UNLOCK_MORE_FEATURES" />  <ph name="GET_STARTED" /></translation>
 <translation id="8351131234907093545">Gumawa ng tala</translation>
 <translation id="8392451568018454956">Menu ng mga pagpipilian para sa <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="8406981827175133772">Fullscreen Magnifier</translation>
+<translation id="8425213833346101688">Baguhin</translation>
 <translation id="8427213022735114808">Ipinapadala ng Dictation ang iyong boses sa Google para mabigyang-daan ang voice-typing sa anumang field ng text.</translation>
 <translation id="8428213095426709021">Mga Setting</translation>
 <translation id="8431190899827883166">Ipakita ang mga pag-tap</translation>
@@ -389,29 +438,39 @@
 <translation id="8484916590211895857"><ph name="NAME" />: Muling kumokonekta...</translation>
 <translation id="8513108775083588393">I-auto rotate</translation>
 <translation id="8517041960877371778">Maaaring hindi mag-charge ang iyong <ph name="DEVICE_TYPE" /> habang naka-on ito.</translation>
+<translation id="8592141010104017453">Huwag magpakita ng anumang notification</translation>
+<translation id="8627191004499078455">Nakakonekta sa <ph name="DEVICE_NAME" /></translation>
 <translation id="8639760480004882931"><ph name="PERCENTAGE" /> na lang ang natitira</translation>
 <translation id="8649101189709089199">Select-to-Speak</translation>
 <translation id="8652175077544655965">Isara ang mga setting</translation>
+<translation id="8653151467777939995">Ipakita ang mga setting ng notification. Naka-on ang mga notification</translation>
+<translation id="8664753092453405566">Ipakita ang listahan ng network. <ph name="STATE_TEXT" /></translation>
 <translation id="8673028979667498656">270°</translation>
 <translation id="8676770494376880701">Nakakabit ang low-power charger</translation>
 <translation id="8683506306463609433">Aktibo ang pag-trace ng performance</translation>
 <translation id="8734991477317290293">Maaaring sinusubukan nitong nakawin ang iyong mga keystroke</translation>
+<translation id="8735953464173050365">Ipakita ang mga setting ng keyboard. Napili ang <ph name="KEYBOARD_NAME" /></translation>
+<translation id="875593634123171288">Ipakita ang mga setting ng VPN</translation>
 <translation id="8809737090443522491">Mag-type ng pangalan ng app o dokumento</translation>
 <translation id="8814190375133053267">Wi-Fi</translation>
 <translation id="8825534185036233643">Hindi sinusuportahan ang pagmi-mirror sa mahigit sa dalawang display.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8841375032071747811">Button na Bumalik</translation>
+<translation id="8843682306134542540">I-toggle ang lock ng pag-rotate. <ph name="STATE_TEXT" /></translation>
 <translation id="8850991929411075241">Search+Esc</translation>
 <translation id="8870509716567206129">Hindi sinusuportahan ng app ang split-screen.</translation>
 <translation id="8874184842967597500">Hindi nakakonekta</translation>
+<translation id="8877788021141246043">Magtakda ng paalala</translation>
 <translation id="8878886163241303700">Pinapalawak ang screen</translation>
 <translation id="8921624153894383499">Hindi nagsasalita ng ganitong wika ang Google Assistant.</translation>
 <translation id="8938800817013097409">USB-C device (kanang port sa likod)</translation>
 <translation id="8940956008527784070">Mahina na ang baterya (<ph name="PERCENTAGE" />%)</translation>
 <translation id="8984179138335769204">Mabilisang paglunsad</translation>
+<translation id="899350903320462459">I-unlock ang device bilang <ph name="LOGIN_ID" /> para maisagawa ang pagkilos sa notification</translation>
 <translation id="8995603266996330174">Pinamamahalaan ni <ph name="DOMAIN" /></translation>
 <translation id="9029474291399787231">Available ang update sa Adobe Flash Player</translation>
 <translation id="9056839673611986238">Iro-roll back ang device</translation>
+<translation id="9070640332319875144">Mga Setting ng Assistant</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9079731690316798640">Wi-Fi: <ph name="ADDRESS" /></translation>
 <translation id="9080206825613744995">Ginagamit ang mikropono.</translation>
@@ -424,10 +483,9 @@
 <translation id="9194617393863864469">Mag-sign in ng isa pang user...</translation>
 <translation id="9201131092683066720">Ang baterya ay <ph name="PERCENTAGE" />% na puno.</translation>
 <translation id="9210037371811586452">Lumalabas sa unified desktop mode</translation>
-<translation id="921331154633982721"><ph name="LABEL" /> <ph name="SUBLABEL" /></translation>
 <translation id="9215934040295798075">Magtakda ng wallpaper</translation>
 <translation id="923686485342484400">Pindutin ang Control Shift Q nang dalawang beses upang mag-sign out.</translation>
+<translation id="938963181863597773">Ano'ng nakaiskedyul sa kalendaryo ko?</translation>
 <translation id="945522503751344254">Magpadala ng feedback...</translation>
 <translation id="98515147261107953">Landscape</translation>
-<translation id="995927048686010764">Autoclick</translation>
 </translationbundle>

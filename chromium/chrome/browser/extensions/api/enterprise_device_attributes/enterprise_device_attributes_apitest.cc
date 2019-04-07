@@ -55,9 +55,16 @@ constexpr char kAnotherAffiliationID[] = "another-affiliation-id";
 constexpr char kTestExtensionID[] = "nbiliclbejdndfpchgkbmfoppjplbdok";
 
 struct Params {
-  explicit Params(bool affiliated) : affiliated_(affiliated) {}
-  bool affiliated_;
+  explicit Params(bool affiliated) : affiliated(affiliated) {}
+  bool affiliated;
 };
+
+// Must be a valid test name (no spaces etc.). Makes the test show up as e.g.
+// AffiliationCheck/U.A.B.T.Affiliated/NotAffiliated_NotActiveDirectory
+std::string PrintParam(testing::TestParamInfo<Params> param_info) {
+  return base::StringPrintf("%sAffiliated",
+                            param_info.param.affiliated ? "" : "Not");
+}
 
 base::Value BuildCustomArg(const std::string& expected_directory_device_id,
                            const std::string& expected_serial_number,
@@ -78,9 +85,9 @@ base::Value BuildCustomArg(const std::string& expected_directory_device_id,
 
 namespace extensions {
 
-class EnterpriseDeviceAttributesTest :
-    public ExtensionApiTest,
-    public ::testing::WithParamInterface<Params> {
+class EnterpriseDeviceAttributesTest
+    : public ExtensionApiTest,
+      public ::testing::WithParamInterface<Params> {
  public:
   EnterpriseDeviceAttributesTest() {
     fake_statistics_provider_.SetMachineStatistic(
@@ -93,8 +100,8 @@ class EnterpriseDeviceAttributesTest :
   // ExtensionApiTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ExtensionApiTest::SetUpCommandLine(command_line);
-    policy::affiliation_test_helper::
-      AppendCommandLineSwitchesForLoginManager(command_line);
+    policy::AffiliationTestHelper::AppendCommandLineSwitchesForLoginManager(
+        command_line);
   }
 
   void SetUpInProcessBrowserTestFixture() override {
@@ -106,29 +113,24 @@ class EnterpriseDeviceAttributesTest :
         std::unique_ptr<chromeos::SessionManagerClient>(
             fake_session_manager_client));
 
+    policy::AffiliationTestHelper affiliation_helper =
+        policy::AffiliationTestHelper::CreateForCloud(
+            fake_session_manager_client);
+
     std::set<std::string> device_affiliation_ids;
     device_affiliation_ids.insert(kAffiliationID);
-    policy::affiliation_test_helper::SetDeviceAffiliationID(
-        &test_helper_, fake_session_manager_client, device_affiliation_ids);
+    ASSERT_NO_FATAL_FAILURE(affiliation_helper.SetDeviceAffiliationIDs(
+        &test_helper_, device_affiliation_ids));
 
     std::set<std::string> user_affiliation_ids;
-    if (GetParam().affiliated_) {
+    if (GetParam().affiliated) {
       user_affiliation_ids.insert(kAffiliationID);
     } else {
       user_affiliation_ids.insert(kAnotherAffiliationID);
     }
     policy::UserPolicyBuilder user_policy;
-    policy::affiliation_test_helper::SetUserAffiliationIDs(
-        &user_policy, fake_session_manager_client, affiliated_account_id_,
-        user_affiliation_ids);
-
-    // Set up fake install attributes.
-    std::unique_ptr<chromeos::StubInstallAttributes> attributes =
-        std::make_unique<chromeos::StubInstallAttributes>();
-
-    attributes->SetCloudManaged("fake-domain", "fake-id");
-    policy::BrowserPolicyConnectorChromeOS::SetInstallAttributesForTesting(
-        attributes.release());
+    ASSERT_NO_FATAL_FAILURE(affiliation_helper.SetUserAffiliationIDs(
+        &user_policy, affiliated_account_id_, user_affiliation_ids));
 
     test_helper_.InstallOwnerKey();
     // Init the device policy.
@@ -157,7 +159,7 @@ class EnterpriseDeviceAttributesTest :
     const base::ListValue* users =
         g_browser_process->local_state()->GetList("LoggedInUsers");
     if (!users->empty())
-      policy::affiliation_test_helper::LoginUser(affiliated_account_id_);
+      policy::AffiliationTestHelper::LoginUser(affiliated_account_id_);
 
     ExtensionApiTest::SetUpOnMainThread();
   }
@@ -221,13 +223,16 @@ class EnterpriseDeviceAttributesTest :
                                      kAffiliatedUserGaiaId);
 
  private:
+  chromeos::ScopedStubInstallAttributes test_install_attributes_{
+      chromeos::StubInstallAttributes::CreateCloudManaged("fake-domain",
+                                                          "fake-id")};
   policy::MockConfigurationPolicyProvider policy_provider_;
   policy::DevicePolicyCrosTestHelper test_helper_;
   chromeos::system::ScopedFakeStatisticsProvider fake_statistics_provider_;
 };
 
 IN_PROC_BROWSER_TEST_P(EnterpriseDeviceAttributesTest, PRE_Success) {
-  policy::affiliation_test_helper::PreLoginUser(affiliated_account_id_);
+  policy::AffiliationTestHelper::PreLoginUser(affiliated_account_id_);
 }
 
 IN_PROC_BROWSER_TEST_P(EnterpriseDeviceAttributesTest, Success) {
@@ -237,17 +242,18 @@ IN_PROC_BROWSER_TEST_P(EnterpriseDeviceAttributesTest, Success) {
 
   SetPolicy();
 
-  EXPECT_EQ(GetParam().affiliated_, user_manager::UserManager::Get()->
-      FindUser(affiliated_account_id_)->IsAffiliated());
+  EXPECT_EQ(GetParam().affiliated, user_manager::UserManager::Get()
+                                       ->FindUser(affiliated_account_id_)
+                                       ->IsAffiliated());
 
   // Device attributes are available only for affiliated user.
   std::string expected_directory_device_id =
-      GetParam().affiliated_ ? kDeviceId : "";
+      GetParam().affiliated ? kDeviceId : "";
   std::string expected_serial_number =
-      GetParam().affiliated_ ? kSerialNumber : "";
-  std::string expected_asset_id = GetParam().affiliated_ ? kAssetId : "";
+      GetParam().affiliated ? kSerialNumber : "";
+  std::string expected_asset_id = GetParam().affiliated ? kAssetId : "";
   std::string expected_annotated_location =
-      GetParam().affiliated_ ? kAnnotatedLocation : "";
+      GetParam().affiliated ? kAnnotatedLocation : "";
 
   // Pass the expected value (device_id) to test.
   ASSERT_TRUE(TestExtension(
@@ -284,6 +290,8 @@ IN_PROC_BROWSER_TEST_F(
 
 // Both cases of affiliated and non-affiliated on the device user are tested.
 INSTANTIATE_TEST_CASE_P(AffiliationCheck,
-                          EnterpriseDeviceAttributesTest,
-                        ::testing::Values(Params(true), Params(false)));
+                        EnterpriseDeviceAttributesTest,
+                        ::testing::Values(Params(true /* affiliated */),
+                                          Params(false /* affiliated */)),
+                        PrintParam);
 }  //  namespace extensions

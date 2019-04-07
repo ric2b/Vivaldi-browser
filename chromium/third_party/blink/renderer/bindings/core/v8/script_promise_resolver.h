@@ -15,7 +15,7 @@
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/heap/self_keep_alive.h"
-#include "third_party/blink/renderer/platform/timer.h"
+#include "third_party/blink/renderer/platform/web_task_runner.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -28,6 +28,9 @@ namespace blink {
 //    ExecutionContext state. When the ExecutionContext is suspended,
 //    resolve or reject will be delayed. When it is stopped, resolve or reject
 //    will be ignored.
+//
+// There are cases where promises cannot work (e.g., where the thread is being
+// terminated). In such cases operations will silently fail.
 class CORE_EXPORT ScriptPromiseResolver
     : public GarbageCollectedFinalized<ScriptPromiseResolver>,
       public PausableObject {
@@ -153,20 +156,19 @@ class CORE_EXPORT ScriptPromiseResolver
     // resolve.
     // See: http://crbug.com/663476
     if (ScriptForbiddenScope::IsScriptForbidden()) {
-      // Retain this object until it is actually resolved or rejected.
-      KeepAliveWhilePending();
-      timer_.StartOneShot(TimeDelta(), FROM_HERE);
+      ScheduleResolveOrReject();
       return;
     }
     ResolveOrRejectImmediately();
   }
 
   void ResolveOrRejectImmediately();
-  void OnTimerFired(TimerBase*);
+  void ScheduleResolveOrReject();
+  void ResolveOrRejectDeferred();
 
   ResolutionState state_;
   const Member<ScriptState> script_state_;
-  TaskRunnerTimer<ScriptPromiseResolver> timer_;
+  TaskHandle deferred_resolve_task_;
   Resolver resolver_;
   ScopedPersistent<v8::Value> value_;
 

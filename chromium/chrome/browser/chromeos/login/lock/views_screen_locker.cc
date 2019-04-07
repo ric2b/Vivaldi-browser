@@ -18,7 +18,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
 #include "chrome/browser/chromeos/login/lock_screen_utils.h"
-#include "chrome/browser/chromeos/login/mojo_version_info_dispatcher.h"
+#include "chrome/browser/chromeos/login/mojo_system_info_dispatcher.h"
 #include "chrome/browser/chromeos/login/quick_unlock/pin_backend.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/chromeos/login/screens/chrome_user_selection_screen.h"
@@ -42,14 +42,16 @@ constexpr char kLockDisplay[] = "lock";
 ash::mojom::FingerprintUnlockState ConvertFromFingerprintState(
     ScreenLocker::FingerprintState state) {
   switch (state) {
-    case ScreenLocker::FingerprintState::kRemoved:
     case ScreenLocker::FingerprintState::kHidden:
-    case ScreenLocker::FingerprintState::kDefault:
       return ash::mojom::FingerprintUnlockState::UNAVAILABLE;
+    case ScreenLocker::FingerprintState::kDefault:
+      return ash::mojom::FingerprintUnlockState::AVAILABLE;
     case ScreenLocker::FingerprintState::kSignin:
       return ash::mojom::FingerprintUnlockState::AUTH_SUCCESS;
     case ScreenLocker::FingerprintState::kFailed:
       return ash::mojom::FingerprintUnlockState::AUTH_FAILED;
+    case ScreenLocker::FingerprintState::kRemoved:
+      return ash::mojom::FingerprintUnlockState::AUTH_DISABLED;
   }
 }
 
@@ -57,8 +59,7 @@ ash::mojom::FingerprintUnlockState ConvertFromFingerprintState(
 
 ViewsScreenLocker::ViewsScreenLocker(ScreenLocker* screen_locker)
     : screen_locker_(screen_locker),
-      version_info_updater_(std::make_unique<MojoVersionInfoDispatcher>()),
-      weak_factory_(this) {
+      system_info_updater_(std::make_unique<MojoSystemInfoDispatcher>()) {
   LoginScreenClient::Get()->SetDelegate(this);
   user_board_view_mojo_ = std::make_unique<UserBoardViewMojo>();
   user_selection_screen_ =
@@ -81,9 +82,10 @@ ViewsScreenLocker::~ViewsScreenLocker() {
 void ViewsScreenLocker::Init() {
   lock_time_ = base::TimeTicks::Now();
   user_selection_screen_->Init(screen_locker_->users());
-  LoginScreenClient::Get()->login_screen()->LoadUsers(
-      user_selection_screen_->UpdateAndReturnUserListForMojo(),
-      false /* show_guests */);
+  LoginScreenClient::Get()->login_screen()->SetUserList(
+      user_selection_screen_->UpdateAndReturnUserListForMojo());
+  LoginScreenClient::Get()->login_screen()->SetAllowLoginAsGuest(
+      false /*show_guest*/);
   if (!ime_state_.get())
     ime_state_ = input_method::InputMethodManager::Get()->GetActiveIMEState();
 
@@ -99,8 +101,7 @@ void ViewsScreenLocker::Init() {
     }
   }
 
-  // Start to request version info.
-  version_info_updater_->StartUpdate();
+  system_info_updater_->StartRequest();
 }
 
 void ViewsScreenLocker::OnLockScreenReady() {

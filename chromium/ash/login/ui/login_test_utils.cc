@@ -5,6 +5,8 @@
 #include "ash/login/ui/login_test_utils.h"
 #include "ash/login/ui/login_big_user_view.h"
 #include "base/strings/string_split.h"
+#include "testing/gtest/include/gtest/gtest.h"
+#include "ui/events/test/event_generator.h"
 
 namespace ash {
 namespace {
@@ -71,6 +73,7 @@ mojom::LoginUserInfoPtr CreatePublicAccountUser(const std::string& email) {
   user->basic_user_info->type = user_manager::USER_TYPE_PUBLIC_ACCOUNT;
   user->public_account_info = ash::mojom::PublicAccountInfo::New();
   user->public_account_info->enterprise_domain = email_parts[1];
+  user->public_account_info->show_expanded_view = true;
   return user;
 }
 
@@ -81,6 +84,24 @@ bool HasFocusInAnyChildView(views::View* view) {
     if (HasFocusInAnyChildView(view->child_at(i)))
       return true;
   }
+  return false;
+}
+
+bool TabThroughView(ui::test::EventGenerator* event_generator,
+                    views::View* view,
+                    bool reverse) {
+  if (!HasFocusInAnyChildView(view)) {
+    ADD_FAILURE() << "View not focused initially.";
+    return false;
+  }
+
+  for (int i = 0; i < 50; ++i) {
+    event_generator->PressKey(ui::KeyboardCode::VKEY_TAB,
+                              reverse ? ui::EF_SHIFT_DOWN : 0);
+    if (!HasFocusInAnyChildView(view))
+      return true;
+  }
+
   return false;
 }
 

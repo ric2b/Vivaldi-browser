@@ -26,10 +26,10 @@
       }
 
       :host .label {
-        -webkit-padding-end: 20px;
         display: flex;
         flex-direction: column;
         justify-content: center;
+        padding-inline-end: 20px;
         width: 250px;
       }
 
@@ -59,7 +59,7 @@
         </div>
       </template>
       <span hidden$="[[isCapabilityTypeSelect_(capability)]]">
-        <input type="text" on-input="onUserInput_"
+        <input type="text" on-input="onUserInput_" spellcheck="false"
             placeholder="[[getCapabilityPlaceholder_(capability)]]">
       </span>
     </div>

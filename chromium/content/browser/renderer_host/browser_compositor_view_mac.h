@@ -13,10 +13,12 @@
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/common/surfaces/scoped_surface_id_allocator.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
+#include "content/public/common/screen_info.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/layer_observer.h"
 #include "ui/display/display.h"
+#include "ui/gfx/ca_layer_params.h"
 
 namespace ui {
 class AcceleratedWidgetMacNSView;
@@ -30,7 +32,6 @@ class BrowserCompositorMacClient {
   virtual SkColor BrowserCompositorMacGetGutterColor() const = 0;
   virtual void BrowserCompositorMacOnBeginFrame(base::TimeTicks frame_time) = 0;
   virtual void OnFrameTokenChanged(uint32_t frame_token) = 0;
-  virtual void DidReceiveFirstFrameAfterNavigation() = 0;
   virtual void DestroyCompositorForShutdown() = 0;
   virtual bool SynchronizeVisualProperties(
       const base::Optional<viz::LocalSurfaceId>&
@@ -136,7 +137,6 @@ class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient,
   void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
   void OnBeginFrame(base::TimeTicks frame_time) override;
   void OnFrameTokenChanged(uint32_t frame_token) override;
-  void DidReceiveFirstFrameAfterNavigation() override;
 
   base::WeakPtr<BrowserCompositorMac> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -148,7 +148,7 @@ class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient,
 
   bool ForceNewSurfaceForTesting();
 
-  ui::Compositor* GetCompositorForTesting() const;
+  ui::Compositor* GetCompositor() const;
 
  private:
   // ui::LayerObserver implementation:

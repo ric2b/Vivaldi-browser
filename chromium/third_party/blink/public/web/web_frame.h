@@ -42,8 +42,6 @@
 #include "third_party/blink/public/web/web_tree_scope_type.h"
 #include "v8/include/v8.h"
 
-class SkBitmap;
-
 namespace blink {
 
 class Frame;
@@ -205,9 +203,6 @@ class BLINK_EXPORT WebFrame {
   // Detaches a frame from its parent frame if it has one.
   void DetachFromParent();
 #endif
-
-  // Vivaldi specific:
-  virtual bool snapshotPage(SkBitmap&, bool, float, float) = 0;
 
  protected:
   explicit WebFrame(WebTreeScopeType);

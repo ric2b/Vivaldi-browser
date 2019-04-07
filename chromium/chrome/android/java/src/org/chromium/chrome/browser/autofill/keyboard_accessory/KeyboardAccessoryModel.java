@@ -5,12 +5,12 @@
 package org.chromium.chrome.browser.autofill.keyboard_accessory;
 
 import android.support.annotation.Nullable;
+import android.support.annotation.Px;
 import android.support.design.widget.TabLayout;
 
-import org.chromium.chrome.browser.autofill.AutofillKeyboardSuggestions;
+import org.chromium.chrome.browser.modelutil.ListModel;
 import org.chromium.chrome.browser.modelutil.ListObservable;
 import org.chromium.chrome.browser.modelutil.PropertyObservable;
-import org.chromium.chrome.browser.modelutil.SimpleListObservable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,7 +30,7 @@ class KeyboardAccessoryModel extends PropertyObservable<KeyboardAccessoryModel.P
         static final List<PropertyKey> ALL_PROPERTIES = new ArrayList<>();
 
         static final PropertyKey VISIBLE = new PropertyKey();
-        static final PropertyKey SUGGESTIONS = new PropertyKey();
+        static final PropertyKey BOTTOM_OFFSET = new PropertyKey();
         static final PropertyKey ACTIVE_TAB = new PropertyKey();
         static final PropertyKey TAB_SELECTION_CALLBACKS = new PropertyKey();
 
@@ -39,18 +39,16 @@ class KeyboardAccessoryModel extends PropertyObservable<KeyboardAccessoryModel.P
         }
     }
 
-    private SimpleListObservable<KeyboardAccessoryData.Action> mActionListObservable;
-    private SimpleListObservable<KeyboardAccessoryData.Tab> mTabListObservable;
+    private ListModel<KeyboardAccessoryData.Action> mActionListObservable;
+    private ListModel<KeyboardAccessoryData.Tab> mTabListObservable;
     private boolean mVisible;
+    private @Px int mBottomOffset;
     private @Nullable Integer mActiveTab;
     private TabLayout.OnTabSelectedListener mTabSelectionCallbacks;
 
-    // TODO(fhorschig): Ideally, make this a ListObservable populating a RecyclerView.
-    private AutofillKeyboardSuggestions mAutofillSuggestions;
-
     KeyboardAccessoryModel() {
-        mActionListObservable = new SimpleListObservable<>();
-        mTabListObservable = new SimpleListObservable<>();
+        mActionListObservable = new ListModel<>();
+        mTabListObservable = new ListModel<>();
     }
 
     void addActionListObserver(ListObservable.ListObserver<Void> observer) {
@@ -61,7 +59,7 @@ class KeyboardAccessoryModel extends PropertyObservable<KeyboardAccessoryModel.P
         mActionListObservable.set(actions);
     }
 
-    SimpleListObservable<KeyboardAccessoryData.Action> getActionList() {
+    ListModel<KeyboardAccessoryData.Action> getActionList() {
         return mActionListObservable;
     }
 
@@ -77,7 +75,7 @@ class KeyboardAccessoryModel extends PropertyObservable<KeyboardAccessoryModel.P
         mTabListObservable.remove(tab);
     }
 
-    SimpleListObservable<KeyboardAccessoryData.Tab> getTabList() {
+    ListModel<KeyboardAccessoryData.Tab> getTabList() {
         return mTabListObservable;
     }
 
@@ -89,6 +87,17 @@ class KeyboardAccessoryModel extends PropertyObservable<KeyboardAccessoryModel.P
 
     boolean isVisible() {
         return mVisible;
+    }
+
+    void setBottomOffset(@Px int bottomOffset) {
+        if (mBottomOffset == bottomOffset) return; // Nothing to do here: same value.
+        mBottomOffset = bottomOffset;
+        notifyPropertyChanged(PropertyKey.BOTTOM_OFFSET);
+    }
+
+    @Px
+    int bottomOffset() {
+        return mBottomOffset;
     }
 
     @SuppressWarnings("ReferenceEquality") // No action if both are null or exact same object.
@@ -112,15 +121,5 @@ class KeyboardAccessoryModel extends PropertyObservable<KeyboardAccessoryModel.P
         if (tabSelectionCallbacks == mTabSelectionCallbacks) return; // Nothing to do: same object.
         mTabSelectionCallbacks = tabSelectionCallbacks;
         notifyPropertyChanged(PropertyKey.TAB_SELECTION_CALLBACKS);
-    }
-
-    AutofillKeyboardSuggestions getAutofillSuggestions() {
-        return mAutofillSuggestions;
-    }
-
-    void setAutofillSuggestions(AutofillKeyboardSuggestions autofillSuggestions) {
-        if (autofillSuggestions == mAutofillSuggestions) return; // Nothing to do: same object.
-        mAutofillSuggestions = autofillSuggestions;
-        notifyPropertyChanged(PropertyKey.SUGGESTIONS);
     }
 }

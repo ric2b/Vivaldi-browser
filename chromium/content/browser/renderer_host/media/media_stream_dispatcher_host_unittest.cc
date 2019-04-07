@@ -185,7 +185,7 @@ class MockMediaStreamDispatcherHost : public MediaStreamDispatcherHost,
 
   void OnDeviceStoppedInternal(const std::string& label,
                                const MediaStreamDevice& device) {
-    if (IsVideoMediaType(device.type))
+    if (IsVideoInputMediaType(device.type))
       EXPECT_TRUE(device.IsSameDevice(video_devices_[0]));
     if (IsAudioInputMediaType(device.type))
       EXPECT_TRUE(device.IsSameDevice(audio_devices_[0]));
@@ -298,8 +298,8 @@ class MediaStreamDispatcherHostTest : public testing::Test {
     devices_to_enumerate[MEDIA_DEVICE_TYPE_AUDIO_INPUT] = true;
     media_stream_manager_->media_devices_manager()->EnumerateDevices(
         devices_to_enumerate,
-        base::Bind(&AudioInputDevicesEnumerated, run_loop.QuitClosure(),
-                   &audio_device_descriptions_));
+        base::BindOnce(&AudioInputDevicesEnumerated, run_loop.QuitClosure(),
+                       &audio_device_descriptions_));
     run_loop.Run();
 
     ASSERT_GT(audio_device_descriptions_.size(), 0u);

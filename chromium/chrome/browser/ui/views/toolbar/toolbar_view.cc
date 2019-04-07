@@ -17,6 +17,7 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/extensions/extension_util.h"
+#include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/bookmarks/bookmark_bubble_sign_in_delegate.h"
@@ -35,6 +36,7 @@
 #include "chrome/browser/ui/views/extensions/extension_popup.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/star_view.h"
+#include "chrome/browser/ui/views/media_router/cast_toolbar_button.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
 #include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
@@ -43,7 +45,7 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/translate/translate_bubble_view.h"
 #include "chrome/browser/ui/views/translate/translate_icon_view.h"
-#include "chrome/browser/upgrade_detector.h"
+#include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -64,7 +66,6 @@
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/scoped_canvas.h"
-#include "ui/keyboard/keyboard_controller.h"
 #include "ui/native_theme/native_theme_aura.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/widget/tooltip_manager.h"
@@ -206,6 +207,11 @@ void ToolbarView::Init() {
       new BrowserActionsContainer(browser_, main_container, this);
 
   if (ui::MaterialDesignController::IsRefreshUi()) {
+    if (media_router::MediaRouterEnabled(browser_->profile()) &&
+        media_router::ShouldUseViewsDialog()) {
+      cast_ = media_router::CastToolbarButton::Create(browser_).release();
+    }
+
     bool show_avatar_toolbar_button = true;
 #if defined(OS_CHROMEOS)
     // ChromeOS only badges Incognito and Guest icons in the browser window.
@@ -231,6 +237,8 @@ void ToolbarView::Init() {
   AddChildView(home_);
   AddChildView(location_bar_);
   AddChildView(browser_actions_);
+  if (cast_)
+    AddChildView(cast_);
   if (avatar_)
     AddChildView(avatar_);
   AddChildView(app_menu_button_);
@@ -308,14 +316,8 @@ void ToolbarView::ShowBookmarkBubble(
     const GURL& url,
     bool already_bookmarked,
     bookmarks::BookmarkBubbleObserver* observer) {
-  views::View* anchor_view = location_bar();
+  views::View* const anchor_view = location_bar();
   PageActionIconView* const star_view = location_bar()->star_view();
-  if (!ui::MaterialDesignController::IsSecondaryUiMaterial()) {
-    if (star_view && star_view->visible())
-      anchor_view = star_view;
-    else
-      anchor_view = app_menu_button_;
-  }
 
   std::unique_ptr<BubbleSyncPromoDelegate> delegate;
   delegate.reset(new BookmarkBubbleSignInDelegate(browser_));
@@ -331,15 +333,9 @@ void ToolbarView::ShowTranslateBubble(
     translate::TranslateStep step,
     translate::TranslateErrors::Type error_type,
     bool is_user_gesture) {
-  views::View* anchor_view = location_bar();
+  views::View* const anchor_view = location_bar();
   PageActionIconView* translate_icon_view =
       location_bar()->translate_icon_view();
-  if (!ui::MaterialDesignController::IsSecondaryUiMaterial()) {
-    if (translate_icon_view && translate_icon_view->visible())
-      anchor_view = translate_icon_view;
-    else
-      anchor_view = app_menu_button_;
-  }
 
   views::Widget* bubble_widget = TranslateBubbleView::ShowBubble(
       anchor_view, gfx::Point(), web_contents, step, error_type,
@@ -552,6 +548,10 @@ void ToolbarView::Layout() {
       width() - end_padding - app_menu_width -
       (browser_actions_->GetPreferredSize().IsEmpty() ? right_padding : 0) -
       next_element_x);
+  if (cast_ && cast_->visible()) {
+    available_width -= cast_->GetPreferredSize().width();
+    available_width -= element_padding;
+  }
   if (avatar_) {
     available_width -= avatar_->GetPreferredSize().width();
     available_width -= element_padding;
@@ -567,7 +567,6 @@ void ToolbarView::Layout() {
   const int location_y = (height() - location_height) / 2;
   location_bar_->SetBounds(next_element_x, location_y,
                            location_bar_width, location_height);
-
   next_element_x = location_bar_->bounds().right();
 
   // Note height() may be zero in fullscreen.
@@ -589,6 +588,11 @@ void ToolbarView::Layout() {
   //                required.
   browser_actions_->Layout();
 
+  if (cast_ && cast_->visible()) {
+    cast_->SetBounds(next_element_x, toolbar_button_y,
+                     cast_->GetPreferredSize().width(), toolbar_button_height);
+    next_element_x = cast_->bounds().right() + element_padding;
+  }
   if (avatar_) {
     avatar_->SetBounds(next_element_x, toolbar_button_y,
                        avatar_->GetPreferredSize().width(),
@@ -614,6 +618,11 @@ void ToolbarView::OnPaintBackground(gfx::Canvas* canvas) {
 
   const ui::ThemeProvider* tp = GetThemeProvider();
 
+  // Always fill the toolbar with its bg color first in case the image is
+  // transparent.
+  canvas->FillRect(GetLocalBounds(),
+                   tp->GetColor(ThemeProperties::COLOR_TOOLBAR));
+
   if (tp->HasCustomImage(IDR_THEME_TOOLBAR)) {
     const int x_offset =
         GetMirroredX() + browser_view_->GetMirroredX() +
@@ -623,14 +632,12 @@ void ToolbarView::OnPaintBackground(gfx::Canvas* canvas) {
                          GetLayoutConstant(TABSTRIP_TOOLBAR_OVERLAP);
     canvas->TileImageInt(*tp->GetImageSkiaNamed(IDR_THEME_TOOLBAR), x_offset,
                          y_offset, 0, 0, width(), height());
-  } else {
-    canvas->FillRect(GetLocalBounds(),
-                     tp->GetColor(ThemeProperties::COLOR_TOOLBAR));
   }
 
   // Toolbar/content separator.
   BrowserView::Paint1pxHorizontalLine(
-      canvas, tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR),
+      canvas,
+      tp->GetColor(ThemeProperties::COLOR_TOOLBAR_CONTENT_AREA_SEPARATOR),
       GetLocalBounds(), true);
 }
 
@@ -813,6 +820,8 @@ void ToolbarView::LoadImages() {
   home_->SetImage(views::Button::STATE_NORMAL,
                   gfx::CreateVectorIcon(home_image, normal_color));
 
+  if (cast_)
+    cast_->UpdateIcon();
   if (avatar_)
     avatar_->UpdateIcon();
 

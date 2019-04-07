@@ -12,7 +12,9 @@
 #include <vector>
 
 #include "base/files/scoped_temp_dir.h"
+#include "base/optional.h"
 #include "content/public/browser/background_fetch_delegate.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -63,6 +65,10 @@ class MockBackgroundFetchDelegate : public BackgroundFetchDelegate {
   ~MockBackgroundFetchDelegate() override;
 
   // BackgroundFetchDelegate implementation:
+  void GetPermissionForOrigin(
+      const url::Origin& origin,
+      const ResourceRequestInfo::WebContentsGetter& wc_getter,
+      GetPermissionForOriginCallback callback) override;
   void GetIconDisplaySize(
       BackgroundFetchDelegate::GetIconDisplaySizeCallback callback) override;
   void CreateDownloadJob(
@@ -75,7 +81,8 @@ class MockBackgroundFetchDelegate : public BackgroundFetchDelegate {
                    const net::HttpRequestHeaders& headers) override;
   void Abort(const std::string& job_unique_id) override;
   void UpdateUI(const std::string& job_unique_id,
-                const std::string& title) override;
+                const base::Optional<std::string>& title,
+                const base::Optional<SkBitmap>& icon) override;
 
   void RegisterResponse(const GURL& url,
                         std::unique_ptr<TestResponse> response);

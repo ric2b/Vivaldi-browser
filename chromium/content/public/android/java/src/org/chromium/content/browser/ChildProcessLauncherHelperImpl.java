@@ -137,7 +137,7 @@ public final class ChildProcessLauncherHelperImpl {
                     sLauncherByPid.put(pid, ChildProcessLauncherHelperImpl.this);
                     if (mRanking != null) {
                         mRanking.addConnection(connection, false /* visible */, 1 /* frameDepth */,
-                                ChildProcessImportance.MODERATE);
+                                false /* intersectsViewport */, ChildProcessImportance.MODERATE);
                     }
 
                     // If the connection fails and pid == 0, the Java-side cleanup was already
@@ -258,8 +258,8 @@ public final class ChildProcessLauncherHelperImpl {
             public void run() {
                 ChildConnectionAllocator allocator =
                         getConnectionAllocator(context, true /* sandboxed */);
-                sBindingManager = new BindingManager(
-                        context, allocator.getNumberOfServices(), false /* onTesting */);
+                sBindingManager = new BindingManager(context, allocator.getNumberOfServices(),
+                        sSandboxedChildConnectionRanking, false /* onTesting */);
             }
         });
 
@@ -435,7 +435,8 @@ public final class ChildProcessLauncherHelperImpl {
 
     @CalledByNative
     private void setPriority(int pid, boolean visible, boolean hasMediaStream, long frameDepth,
-            boolean boostForPendingViews, @ChildProcessImportance int importance) {
+            boolean intersectsViewport, boolean boostForPendingViews,
+            @ChildProcessImportance int importance) {
         assert LauncherThread.runningOnLauncherThread();
         assert mLauncher.getPid() == pid;
         if (getByPid(pid) == null) {
@@ -457,7 +458,7 @@ public final class ChildProcessLauncherHelperImpl {
         if ((visible && frameDepth == 0) || importance == ChildProcessImportance.IMPORTANT
                 || (hasMediaStream && !mediaRendererHasModerate)) {
             newEffectiveImportance = ChildProcessImportance.IMPORTANT;
-        } else if ((visible && frameDepth > 0) || boostForPendingViews
+        } else if ((visible && frameDepth > 0 && intersectsViewport) || boostForPendingViews
                 || importance == ChildProcessImportance.MODERATE
                 || (hasMediaStream && mediaRendererHasModerate)) {
             newEffectiveImportance = ChildProcessImportance.MODERATE;
@@ -494,7 +495,8 @@ public final class ChildProcessLauncherHelperImpl {
         }
 
         if (mRanking != null) {
-            mRanking.updateConnection(connection, visible, frameDepth, importance);
+            mRanking.updateConnection(
+                    connection, visible, frameDepth, intersectsViewport, importance);
         }
 
         if (mEffectiveImportance != newEffectiveImportance) {

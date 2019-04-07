@@ -6,11 +6,12 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value_factory.h"
+#include "third_party/blink/renderer/core/performance_entry_names.h"
 
 namespace blink {
 
 PerformanceMark::PerformanceMark(ScriptState* script_state,
-                                 const String& name,
+                                 const AtomicString& name,
                                  double start_time,
                                  const ScriptValue& detail)
     : PerformanceEntry(name, start_time, start_time) {
@@ -22,7 +23,7 @@ PerformanceMark::PerformanceMark(ScriptState* script_state,
 }
 
 AtomicString PerformanceMark::entryType() const {
-  return PerformanceEntry::MarkKeyword();
+  return PerformanceEntryNames::mark;
 }
 
 PerformanceEntryType PerformanceMark::EntryTypeEnum() const {

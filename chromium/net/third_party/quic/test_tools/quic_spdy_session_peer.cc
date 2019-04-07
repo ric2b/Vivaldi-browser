@@ -4,7 +4,7 @@
 
 #include "net/third_party/quic/test_tools/quic_spdy_session_peer.h"
 
-#include "net/third_party/quic/core/quic_spdy_session.h"
+#include "net/third_party/quic/core/http/quic_spdy_session.h"
 
 namespace quic {
 namespace test {
@@ -20,7 +20,7 @@ void QuicSpdySessionPeer::SetHeadersStream(QuicSpdySession* session,
                                            QuicHeadersStream* headers_stream) {
   session->headers_stream_.reset(headers_stream);
   if (headers_stream != nullptr) {
-    session->static_streams()[headers_stream->id()] = headers_stream;
+    session->RegisterStaticStream(headers_stream->id(), headers_stream);
   }
 }
 

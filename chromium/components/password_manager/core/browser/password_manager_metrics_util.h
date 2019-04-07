@@ -77,6 +77,8 @@ enum PasswordSyncState {
   NOT_SYNCING_FAILED_READ,
   NOT_SYNCING_DUPLICATE_TAGS,
   NOT_SYNCING_SERVER_ERROR,
+  NOT_SYNCING_FAILED_CLEANUP,
+  NOT_SYNCING_FAILED_DECRYPTION,
   NUM_SYNC_STATES
 };
 
@@ -197,6 +199,20 @@ enum class CredentialSourceType {
   kCredentialManagementAPI
 };
 
+// Metrics: PasswordManager.DeleteUndecryptableLoginsReturnValue
+enum class DeleteUndecryptableLoginsReturnValue {
+  // No broken entries were deleted.
+  kSuccessNoDeletions = 0,
+  // There were broken entries that were successfully deleted.
+  kSuccessLoginsDeleted = 1,
+  // Broken entries were found, but failed to be deleted.
+  kItemFailure = 2,
+  // Encryption is unavailable, it's impossible to determine which entries are
+  // broken.
+  kEncryptionUnavailable = 3,
+  kMaxValue = kEncryptionUnavailable,
+};
+
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
 enum class SyncPasswordHashChange {
   SAVED_ON_CHROME_SIGNIN,
@@ -264,6 +280,16 @@ enum class PasswordType {
   // Passwords captured from enterprise login page.
   ENTERPRISE_PASSWORD = 3,
   PASSWORD_TYPE_COUNT
+};
+
+enum class LinuxBackendMigrationStatus {
+  // No migration was attempted (this value should not occur).
+  kNotAttempted = 0,
+  // The last attempt was not completed.
+  kFailed = 1,
+  // All the data is in the encrypted loginDB.
+  kCopiedAll = 2,
+  kMaxValue = kCopiedAll
 };
 
 // A version of the UMA_HISTOGRAM_BOOLEAN macro that allows the |name|
@@ -355,6 +381,10 @@ void LogPasswordAcceptedSaveUpdateSubmissionIndicatorEvent(
 
 // Log a frame of a submitted password form.
 void LogSubmittedFormFrame(SubmittedFormFrame frame);
+
+// Log a return value of LoginDatabase::DeleteUndecryptableLogins method.
+void LogDeleteUndecryptableLoginsReturnValue(
+    DeleteUndecryptableLoginsReturnValue return_value);
 
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
 // Log a save sync password change event.

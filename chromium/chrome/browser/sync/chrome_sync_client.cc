@@ -19,6 +19,7 @@
 #include "chrome/browser/dom_distiller/dom_distiller_service_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/invalidation/deprecated_profile_invalidation_provider_factory.h"
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
@@ -47,9 +48,12 @@
 #include "components/autofill/core/browser/webdata/autocomplete_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autofill_profile_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autofill_profile_syncable_service.h"
+#include "components/autofill/core/browser/webdata/autofill_wallet_metadata_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autofill_wallet_metadata_syncable_service.h"
+#include "components/autofill/core/browser/webdata/autofill_wallet_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autofill_wallet_syncable_service.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/browser_sync/profile_sync_components_factory_impl.h"
 #include "components/browser_sync/profile_sync_service.h"
@@ -57,6 +61,7 @@
 #include "components/dom_distiller/core/dom_distiller_service.h"
 #include "components/history/core/browser/history_model_worker.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/invalidation/impl/invalidation_switches.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/sync/browser/password_model_worker.h"
@@ -230,10 +235,24 @@ ChromeSyncClient::~ChromeSyncClient() {
 void ChromeSyncClient::Initialize() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  web_data_service_ = WebDataServiceFactory::GetAutofillWebDataForProfile(
-      profile_, ServiceAccessType::IMPLICIT_ACCESS);
-  db_thread_ =
-      web_data_service_ ? web_data_service_->GetDBTaskRunner() : nullptr;
+  profile_web_data_service_ =
+      WebDataServiceFactory::GetAutofillWebDataForProfile(
+          profile_, ServiceAccessType::IMPLICIT_ACCESS);
+  account_web_data_service_ =
+      base::FeatureList::IsEnabled(
+          autofill::features::kAutofillEnableAccountWalletStorage)
+          ? WebDataServiceFactory::GetAutofillWebDataForAccount(
+                profile_, ServiceAccessType::IMPLICIT_ACCESS)
+          : nullptr;
+  web_data_service_thread_ = profile_web_data_service_
+                                 ? profile_web_data_service_->GetDBTaskRunner()
+                                 : nullptr;
+
+  // This class assumes that the database thread is the same across the profile
+  // and account storage. This DCHECK makes that assumption explicit.
+  DCHECK(!account_web_data_service_ ||
+         web_data_service_thread_ ==
+             account_web_data_service_->GetDBTaskRunner());
   password_store_ = PasswordStoreFactory::GetForProfile(
       profile_, ServiceAccessType::IMPLICIT_ACCESS);
 
@@ -245,7 +264,9 @@ void ChromeSyncClient::Initialize() {
         prefs::kSavingBrowserHistoryDisabled,
         content::BrowserThread::GetTaskRunnerForThread(
             content::BrowserThread::UI),
-        db_thread_, web_data_service_, password_store_);
+        web_data_service_thread_, profile_web_data_service_,
+        account_web_data_service_, password_store_,
+        BookmarkSyncServiceFactory::GetForProfile(profile_));
   }
 }
 
@@ -431,8 +452,14 @@ BookmarkUndoService* ChromeSyncClient::GetBookmarkUndoServiceIfExists() {
 }
 
 invalidation::InvalidationService* ChromeSyncClient::GetInvalidationService() {
-  invalidation::ProfileInvalidationProvider* provider =
-      invalidation::ProfileInvalidationProviderFactory::GetForProfile(profile_);
+  invalidation::ProfileInvalidationProvider* provider;
+  if (base::FeatureList::IsEnabled(invalidation::switches::kFCMInvalidations)) {
+    provider = invalidation::ProfileInvalidationProviderFactory::GetForProfile(
+        profile_);
+  } else {
+    provider = invalidation::DeprecatedProfileInvalidationProviderFactory::
+        GetForProfile(profile_);
+  }
   if (provider)
     return provider->GetInvalidationService();
   return nullptr;
@@ -467,19 +494,37 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
           ->GetSyncableService(syncer::PRIORITY_PREFERENCES)
           ->AsWeakPtr();
     case syncer::AUTOFILL_PROFILE:
-    case syncer::AUTOFILL_WALLET_DATA:
-    case syncer::AUTOFILL_WALLET_METADATA: {
-      if (!web_data_service_)
-        return base::WeakPtr<syncer::SyncableService>();
-      if (type == syncer::AUTOFILL_PROFILE) {
+      if (profile_web_data_service_) {
         return autofill::AutofillProfileSyncableService::FromWebDataService(
-            web_data_service_.get())->AsWeakPtr();
-      } else if (type == syncer::AUTOFILL_WALLET_METADATA) {
-        return autofill::AutofillWalletMetadataSyncableService::
-            FromWebDataService(web_data_service_.get())->AsWeakPtr();
+                   profile_web_data_service_.get())
+            ->AsWeakPtr();
       }
-      return autofill::AutofillWalletSyncableService::FromWebDataService(
-          web_data_service_.get())->AsWeakPtr();
+      return base::WeakPtr<syncer::SyncableService>();
+    case syncer::AUTOFILL_WALLET_DATA: {
+      // TODO(feuunk): This doesn't allow switching which database to use at
+      // runtime. This should be fixed as part of the USS migration for
+      // payments.
+      auto service = account_web_data_service_ ? account_web_data_service_
+                                               : profile_web_data_service_;
+      if (service) {
+        return autofill::AutofillWalletSyncableService::FromWebDataService(
+                   service.get())
+            ->AsWeakPtr();
+      }
+      return base::WeakPtr<syncer::SyncableService>();
+    }
+    case syncer::AUTOFILL_WALLET_METADATA: {
+      // TODO(feuunk): This doesn't allow switching which database to use at
+      // runtime. This should be fixed as part of the USS migration for
+      // payments.
+      auto service = account_web_data_service_ ? account_web_data_service_
+                                               : profile_web_data_service_;
+      if (service) {
+        return autofill::AutofillWalletMetadataSyncableService::
+            FromWebDataService(service.get())
+                ->AsWeakPtr();
+      }
+      return base::WeakPtr<syncer::SyncableService>();
     }
     case syncer::SEARCH_ENGINES:
       return TemplateURLServiceFactory::GetForProfile(profile_)->AsWeakPtr();
@@ -534,14 +579,6 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       return base::WeakPtr<syncer::SyncableService>();
     }
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
-    case syncer::ARTICLES: {
-      dom_distiller::DomDistillerService* service =
-          dom_distiller::DomDistillerServiceFactory::GetForBrowserContext(
-              profile_);
-      if (service)
-        return service->GetSyncableService()->AsWeakPtr();
-      return base::WeakPtr<syncer::SyncableService>();
-    }
     case syncer::SESSIONS: {
       return ProfileSyncServiceFactory::GetForProfile(profile_)->
           GetSessionsSyncableService()->AsWeakPtr();
@@ -573,58 +610,43 @@ ChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
   switch (type) {
     case syncer::DEVICE_INFO:
       return ProfileSyncServiceFactory::GetForProfile(profile_)
-          ->GetDeviceInfoSyncControllerDelegateOnUIThread();
+          ->GetDeviceInfoSyncControllerDelegate();
     case syncer::READING_LIST:
       // Reading List is only supported on iOS at the moment.
       NOTREACHED();
       return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
-    case syncer::AUTOFILL:
-      return autofill::AutocompleteSyncBridge::FromWebDataService(
-                 web_data_service_.get())
-          ->change_processor()
-          ->GetControllerDelegateOnUIThread();
-    case syncer::AUTOFILL_PROFILE:
-      return autofill::AutofillProfileSyncBridge::FromWebDataService(
-                 web_data_service_.get())
-          ->change_processor()
-          ->GetControllerDelegateOnUIThread();
 #if defined(OS_CHROMEOS)
     case syncer::PRINTERS:
       return chromeos::SyncedPrintersManagerFactory::GetForBrowserContext(
                  profile_)
           ->GetSyncBridge()
           ->change_processor()
-          ->GetControllerDelegateOnUIThread();
+          ->GetControllerDelegate();
 #endif  // defined(OS_CHROMEOS)
-    case syncer::TYPED_URLS: {
-      // We request history service with explicit access here because this
-      // codepath is executed on backend thread while HistoryServiceFactory
-      // checks preference value in implicit mode and PrefService expectes calls
-      // only from UI thread.
-      history::HistoryService* history = HistoryServiceFactory::GetForProfile(
-          profile_, ServiceAccessType::EXPLICIT_ACCESS);
-      if (!history)
-        return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
-      return history->GetTypedURLSyncBridge()
-          ->change_processor()
-          ->GetControllerDelegateOnUIThread();
-    }
     case syncer::USER_CONSENTS:
       return ConsentAuditorFactory::GetForProfile(profile_)
-          ->GetControllerDelegateOnUIThread();
+          ->GetControllerDelegate();
     case syncer::USER_EVENTS:
       return browser_sync::UserEventServiceFactory::GetForProfile(profile_)
           ->GetSyncBridge()
           ->change_processor()
-          ->GetControllerDelegateOnUIThread();
+          ->GetControllerDelegate();
     case syncer::SESSIONS: {
       return ProfileSyncServiceFactory::GetForProfile(profile_)
-          ->GetSessionSyncControllerDelegateOnUIThread();
+          ->GetSessionSyncControllerDelegate();
     }
-    case syncer::BOOKMARKS: {
-      return BookmarkSyncServiceFactory::GetForProfile(profile_)
-          ->GetBookmarkSyncControllerDelegateOnUIThread();
-    }
+
+    // We don't exercise this function for certain datatypes, because their
+    // controllers get the delegate elsewhere.
+    case syncer::AUTOFILL:
+    case syncer::AUTOFILL_PROFILE:
+    case syncer::AUTOFILL_WALLET_DATA:
+    case syncer::AUTOFILL_WALLET_METADATA:
+    case syncer::BOOKMARKS:
+    case syncer::TYPED_URLS:
+      NOTREACHED();
+      return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
+
     default:
       NOTREACHED();
       return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
@@ -636,7 +658,8 @@ ChromeSyncClient::CreateModelWorkerForGroup(syncer::ModelSafeGroup group) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   switch (group) {
     case syncer::GROUP_DB:
-      return new syncer::SequencedModelWorker(db_thread_, syncer::GROUP_DB);
+      return new syncer::SequencedModelWorker(web_data_service_thread_,
+                                              syncer::GROUP_DB);
     // TODO(stanisc): crbug.com/731903: Rename GROUP_FILE to reflect that it is
     // used only for app and extension settings.
     case syncer::GROUP_FILE:

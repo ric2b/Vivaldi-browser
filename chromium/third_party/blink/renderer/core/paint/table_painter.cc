@@ -7,7 +7,6 @@
 #include "third_party/blink/renderer/core/layout/collapsed_border_value.h"
 #include "third_party/blink/renderer/core/layout/layout_table.h"
 #include "third_party/blink/renderer/core/layout/layout_table_section.h"
-#include "third_party/blink/renderer/core/paint/box_clipper.h"
 #include "third_party/blink/renderer/core/paint/box_painter.h"
 #include "third_party/blink/renderer/core/paint/object_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
@@ -44,7 +43,7 @@ void TablePainter::PaintObject(const PaintInfo& paint_info,
 
     if (layout_table_.HasCollapsedBorders() &&
         ShouldPaintDescendantBlockBackgrounds(paint_phase) &&
-        layout_table_.Style()->Visibility() == EVisibility::kVisible) {
+        layout_table_.StyleRef().Visibility() == EVisibility::kVisible) {
       PaintCollapsedBorders(paint_info_for_descendants);
     }
   }
@@ -57,18 +56,18 @@ void TablePainter::PaintBoxDecorationBackground(
     const PaintInfo& paint_info,
     const LayoutPoint& paint_offset) {
   if (!layout_table_.HasBoxDecorationBackground() ||
-      layout_table_.Style()->Visibility() != EVisibility::kVisible)
+      layout_table_.StyleRef().Visibility() != EVisibility::kVisible)
     return;
 
   LayoutRect rect(paint_offset, layout_table_.Size());
   layout_table_.SubtractCaptionRect(rect);
   BoxPainter(layout_table_)
-      .PaintBoxDecorationBackgroundWithRect(paint_info, paint_offset, rect);
+      .PaintBoxDecorationBackgroundWithRect(paint_info, rect);
 }
 
 void TablePainter::PaintMask(const PaintInfo& paint_info,
                              const LayoutPoint& paint_offset) {
-  if (layout_table_.Style()->Visibility() != EVisibility::kVisible ||
+  if (layout_table_.StyleRef().Visibility() != EVisibility::kVisible ||
       paint_info.phase != PaintPhase::kMask)
     return;
 

@@ -39,7 +39,7 @@
 // <include src="oobe_i18n_dropdown.js">
 // <include src="oobe_welcome_dialog.js">
 // <include src="oobe_welcome.js">
-// <include src="oobe_network_dialog.js">
+// <include src="oobe_network.js">
 // <include src="offline_ad_login.js">
 // <include src="active_directory_password_change.js">
 // <include src="arc_terms_of_service.js">
@@ -49,8 +49,11 @@
 // <include src="enterprise_header.js">
 // <include src="enrollment_license_card.js">
 // <include src="sync_consent.js">
+// <include src="fingerprint_setup.js">
 // <include src="demo_setup.js">
 // <include src="demo_preferences.js">
 // <include src="recommend_apps.js">
 // <include src="app_downloading.js">
 // <include src="discover/discover_components.js">
+// <include src="marketing_opt_in.js">
+// <include src="../assistant_optin/assistant_optin_flow.js">

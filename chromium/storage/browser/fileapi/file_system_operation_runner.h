@@ -21,10 +21,6 @@
 #include "storage/browser/fileapi/file_system_url.h"
 #include "storage/browser/storage_browser_export.h"
 
-namespace net {
-class URLRequestContext;
-}
-
 namespace storage {
 
 class FileSystemURL;
@@ -37,8 +33,7 @@ class FileSystemContext;
 // operation fails, in addition to dispatching the callback with an error
 // code (therefore in most cases the caller does not need to check the
 // returned operation ID).
-class STORAGE_EXPORT FileSystemOperationRunner
-    : public base::SupportsWeakPtr<FileSystemOperationRunner> {
+class STORAGE_EXPORT FileSystemOperationRunner {
  public:
   using GetMetadataCallback = FileSystemOperation::GetMetadataCallback;
   using ReadDirectoryCallback = FileSystemOperation::ReadDirectoryCallback;
@@ -115,9 +110,7 @@ class STORAGE_EXPORT FileSystemOperationRunner
                      const StatusCallback& callback);
 
   // Writes contents of |blob_url| to |url| at |offset|.
-  // |url_request_context| is used to read contents in |blob|.
-  OperationID Write(const net::URLRequestContext* url_request_context,
-                    const FileSystemURL& url,
+  OperationID Write(const FileSystemURL& url,
                     std::unique_ptr<storage::BlobDataHandle> blob,
                     int64_t offset,
                     const WriteCallback& callback);
@@ -164,7 +157,7 @@ class STORAGE_EXPORT FileSystemOperationRunner
   // temporary file.  Or if the implementaiton already has the local cache
   // data for |url| it can simply return the url to the cache.
   OperationID CreateSnapshotFile(const FileSystemURL& url,
-                                 const SnapshotFileCallback& callback);
+                                 SnapshotFileCallback callback);
 
   // Copies in a single file from a different filesystem.
   //
@@ -246,50 +239,39 @@ class STORAGE_EXPORT FileSystemOperationRunner
                                         base::FilePath* platform_path);
 
  private:
-  class BeginOperationScoper;
-
-  struct OperationHandle {
-    OperationID id;
-    base::WeakPtr<BeginOperationScoper> scope;
-
-    OperationHandle();
-    OperationHandle(const OperationHandle& other);
-    ~OperationHandle();
-  };
-
   friend class FileSystemContext;
   explicit FileSystemOperationRunner(FileSystemContext* file_system_context);
 
-  void DidFinish(const OperationHandle& handle,
+  void DidFinish(const OperationID id,
                  const StatusCallback& callback,
                  base::File::Error rv);
-  void DidGetMetadata(const OperationHandle& handle,
+  void DidGetMetadata(const OperationID id,
                       const GetMetadataCallback& callback,
                       base::File::Error rv,
                       const base::File::Info& file_info);
-  void DidReadDirectory(const OperationHandle& handle,
+  void DidReadDirectory(const OperationID id,
                         const ReadDirectoryCallback& callback,
                         base::File::Error rv,
                         std::vector<filesystem::mojom::DirectoryEntry> entries,
                         bool has_more);
-  void DidWrite(const OperationHandle& handle,
+  void DidWrite(const OperationID id,
                 const WriteCallback& callback,
                 base::File::Error rv,
                 int64_t bytes,
                 bool complete);
-  void DidOpenFile(const OperationHandle& handle,
+  void DidOpenFile(const OperationID id,
                    const OpenFileCallback& callback,
                    base::File file,
                    base::OnceClosure on_close_callback);
   void DidCreateSnapshot(
-      const OperationHandle& handle,
-      const SnapshotFileCallback& callback,
+      const OperationID id,
+      SnapshotFileCallback callback,
       base::File::Error rv,
       const base::File::Info& file_info,
       const base::FilePath& platform_path,
       scoped_refptr<storage::ShareableFileReference> file_ref);
 
-  void OnCopyProgress(const OperationHandle& handle,
+  void OnCopyProgress(const OperationID id,
                       const CopyProgressCallback& callback,
                       FileSystemOperation::CopyProgressType type,
                       const FileSystemURL& source_url,
@@ -300,8 +282,7 @@ class STORAGE_EXPORT FileSystemOperationRunner
   void PrepareForRead(OperationID id, const FileSystemURL& url);
 
   // These must be called at the beginning and end of any async operations.
-  OperationHandle BeginOperation(std::unique_ptr<FileSystemOperation> operation,
-                                 base::WeakPtr<BeginOperationScoper> scope);
+  OperationID BeginOperation(std::unique_ptr<FileSystemOperation> operation);
   // Cleans up the FileSystemOperation for |id|, which may result in the
   // FileSystemContext, and |this| being deleted, by the time the call returns.
   void FinishOperation(OperationID id);
@@ -314,6 +295,12 @@ class STORAGE_EXPORT FileSystemOperationRunner
   OperationID next_operation_id_ = 1;
   Operations operations_;
 
+  // Used to detect synchronous invocation of completion callbacks by the
+  // back-end, to re-post them to be notified asynchronously. Note that some
+  // operations are recursive, so this may already be true when BeginOperation
+  // is called.
+  bool is_beginning_operation_ = false;
+
   // We keep track of the file to be modified by each operation so that
   // we can notify observers when we're done.
   using OperationToURLSet = std::map<OperationID, FileSystemURLSet>;
@@ -324,6 +311,9 @@ class STORAGE_EXPORT FileSystemOperationRunner
 
   // Callbacks for stray cancels whose target operation is already finished.
   std::map<OperationID, StatusCallback> stray_cancel_callbacks_;
+
+  base::WeakPtr<FileSystemOperationRunner> weak_ptr_;
+  base::WeakPtrFactory<FileSystemOperationRunner> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(FileSystemOperationRunner);
 };

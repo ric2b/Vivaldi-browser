@@ -29,8 +29,12 @@ const int kDefaultSpeedInPixelsPerSec = 800;
 
 SyntheticSmoothMoveGestureParams::SyntheticSmoothMoveGestureParams()
     : speed_in_pixels_s(kDefaultSpeedInPixelsPerSec),
+      fling_velocity_x(0),
+      fling_velocity_y(0),
       prevent_fling(true),
-      add_slop(true) {}
+      add_slop(true),
+      precise_scrolling_deltas(false),
+      scroll_by_page(false) {}
 
 SyntheticSmoothMoveGestureParams::SyntheticSmoothMoveGestureParams(
     const SyntheticSmoothMoveGestureParams& other) = default;
@@ -185,10 +189,18 @@ void SyntheticSmoothMoveGesture::ForwardMouseWheelInputEvents(
           ComputeNextMoveSegment();
         } else {
           state_ = DONE;
-          // Forward a wheel event with phase ended and zero deltas.
-          ForwardMouseWheelEvent(target, gfx::Vector2d(),
-                                 blink::WebMouseWheelEvent::kPhaseEnded,
-                                 event_timestamp);
+
+          // Start flinging on the swipe action.
+          if (!params_.prevent_fling && (params_.fling_velocity_x != 0 ||
+                                         params_.fling_velocity_y != 0)) {
+            ForwardFlingGestureEvent(
+                target, blink::WebGestureEvent::kGestureFlingStart);
+          } else {
+            // Forward a wheel event with phase ended and zero deltas.
+            ForwardMouseWheelEvent(target, gfx::Vector2d(),
+                                   blink::WebMouseWheelEvent::kPhaseEnded,
+                                   event_timestamp);
+          }
           needs_scroll_begin_ = true;
         }
       }
@@ -258,8 +270,9 @@ void SyntheticSmoothMoveGesture::ForwardMouseWheelEvent(
     const blink::WebMouseWheelEvent::Phase phase,
     const base::TimeTicks& timestamp) const {
   blink::WebMouseWheelEvent mouse_wheel_event =
-      SyntheticWebMouseWheelEventBuilder::Build(0, 0, delta.x(), delta.y(), 0,
-                                                false);
+      SyntheticWebMouseWheelEventBuilder::Build(
+          0, 0, delta.x(), delta.y(), 0, params_.precise_scrolling_deltas,
+          params_.scroll_by_page);
 
   mouse_wheel_event.SetPositionInWidget(
       current_move_segment_start_position_.x(),
@@ -269,6 +282,18 @@ void SyntheticSmoothMoveGesture::ForwardMouseWheelEvent(
   mouse_wheel_event.SetTimeStamp(timestamp);
 
   target->DispatchInputEventToPlatform(mouse_wheel_event);
+}
+
+void SyntheticSmoothMoveGesture::ForwardFlingGestureEvent(
+    SyntheticGestureTarget* target,
+    const blink::WebInputEvent::Type type) const {
+  blink::WebGestureEvent fling_gesture_event =
+      SyntheticWebGestureEventBuilder::Build(type,
+                                             blink::kWebGestureDeviceTouchpad);
+  fling_gesture_event.data.fling_start.velocity_x = params_.fling_velocity_x;
+  fling_gesture_event.data.fling_start.velocity_y = params_.fling_velocity_y;
+  fling_gesture_event.SetPositionInWidget(current_move_segment_start_position_);
+  target->DispatchInputEventToPlatform(fling_gesture_event);
 }
 
 void SyntheticSmoothMoveGesture::PressPoint(SyntheticGestureTarget* target,

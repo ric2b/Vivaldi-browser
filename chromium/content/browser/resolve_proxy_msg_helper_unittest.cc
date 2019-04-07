@@ -7,47 +7,68 @@
 #include <tuple>
 
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "content/common/view_messages.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "ipc/ipc_test_sink.h"
 #include "net/base/net_errors.h"
-#include "net/proxy_resolution/mock_proxy_resolver.h"
-#include "net/proxy_resolution/proxy_config_service.h"
-#include "net/proxy_resolution/proxy_resolution_service.h"
+#include "net/proxy_resolution/proxy_info.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "services/network/public/mojom/proxy_lookup_client.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
 
-// This ProxyConfigService always returns "http://pac" as the PAC url to use.
-class MockProxyConfigService : public net::ProxyConfigService {
- public:
-  void AddObserver(Observer* observer) override {}
-  void RemoveObserver(Observer* observer) override {}
-  ConfigAvailability GetLatestProxyConfig(
-      net::ProxyConfigWithAnnotation* results) override {
-    *results = net::ProxyConfigWithAnnotation(
-        net::ProxyConfig::CreateFromCustomPacURL(GURL("http://pac")),
-        TRAFFIC_ANNOTATION_FOR_TESTS);
-    return CONFIG_VALID;
-  }
-};
-
 class TestResolveProxyMsgHelper : public ResolveProxyMsgHelper {
  public:
-  TestResolveProxyMsgHelper(net::ProxyResolutionService* proxy_resolution_service,
-                            IPC::Listener* listener)
-      : ResolveProxyMsgHelper(proxy_resolution_service), listener_(listener) {}
+  // Incoming ProxyLookupClientPtrs are written to |proxy_lookup_client|.
+  explicit TestResolveProxyMsgHelper(
+      IPC::Listener* listener,
+      network::mojom::ProxyLookupClientPtr* proxy_lookup_client)
+      : ResolveProxyMsgHelper(0 /* renderer_process_host_id */),
+        listener_(listener),
+        proxy_lookup_client_(proxy_lookup_client) {}
+
   bool Send(IPC::Message* message) override {
+    // Shouldn't be calling Send() if there are no live references to |this|.
+    EXPECT_TRUE(HasAtLeastOneRef());
+
     listener_->OnMessageReceived(*message);
     delete message;
     return true;
+  }
+
+  bool SendRequestToNetworkService(
+      const GURL& url,
+      network::mojom::ProxyLookupClientPtr proxy_lookup_client) override {
+    // Only one request should be send at a time.
+    EXPECT_FALSE(*proxy_lookup_client_);
+
+    if (fail_to_send_request_)
+      return false;
+
+    pending_url_ = url;
+    *proxy_lookup_client_ = std::move(proxy_lookup_client);
+    return true;
+  }
+
+  const GURL& pending_url() const { return pending_url_; }
+
+  void set_fail_to_send_request(bool fail_to_send_request) {
+    fail_to_send_request_ = fail_to_send_request;
   }
 
  protected:
   ~TestResolveProxyMsgHelper() override {}
 
   IPC::Listener* listener_;
+
+  bool fail_to_send_request_ = false;
+
+  network::mojom::ProxyLookupClientPtr* proxy_lookup_client_;
+  GURL pending_url_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestResolveProxyMsgHelper);
 };
 
 class ResolveProxyMsgHelperTest : public testing::Test, public IPC::Listener {
@@ -63,12 +84,9 @@ class ResolveProxyMsgHelperTest : public testing::Test, public IPC::Listener {
   };
 
   ResolveProxyMsgHelperTest()
-      : resolver_factory_(new net::MockAsyncProxyResolverFactory(false)),
-        service_(new net::ProxyResolutionService(
-            base::WrapUnique(new MockProxyConfigService),
-            base::WrapUnique(resolver_factory_),
-            nullptr)),
-        helper_(new TestResolveProxyMsgHelper(service_.get(), this)) {
+      : helper_(base::MakeRefCounted<TestResolveProxyMsgHelper>(
+            this,
+            &proxy_lookup_client_)) {
     test_sink_.AddFilter(this);
   }
 
@@ -86,13 +104,6 @@ class ResolveProxyMsgHelperTest : public testing::Test, public IPC::Listener {
     return IPC::SyncMessage::GenerateReply(&message);
   }
 
-  net::MockAsyncProxyResolverFactory* resolver_factory_;
-  net::MockAsyncProxyResolver resolver_;
-  std::unique_ptr<net::ProxyResolutionService> service_;
-  scoped_refptr<ResolveProxyMsgHelper> helper_;
-  std::unique_ptr<PendingResult> pending_result_;
-
- private:
   bool OnMessageReceived(const IPC::Message& msg) override {
     ViewHostMsg_ResolveProxy::ReplyParam reply_data;
     EXPECT_TRUE(ViewHostMsg_ResolveProxy::ReadReplyParam(&msg, &reply_data));
@@ -104,6 +115,12 @@ class ResolveProxyMsgHelperTest : public testing::Test, public IPC::Listener {
   }
 
   TestBrowserThreadBundle thread_bundle_;
+
+  scoped_refptr<TestResolveProxyMsgHelper> helper_;
+  std::unique_ptr<PendingResult> pending_result_;
+
+  network::mojom::ProxyLookupClientPtr proxy_lookup_client_;
+
   IPC::TestSink test_sink_;
 };
 
@@ -123,15 +140,14 @@ TEST_F(ResolveProxyMsgHelperTest, Sequential) {
 
   helper_->OnResolveProxy(url1, msg1);
 
-  // Finish ProxyResolutionService's initialization.
-  ASSERT_EQ(1u, resolver_factory_->pending_requests().size());
-  resolver_factory_->pending_requests()[0]->CompleteNowWithForwarder(
-      net::OK, &resolver_);
-
-  ASSERT_EQ(1u, resolver_.pending_jobs().size());
-  EXPECT_EQ(url1, resolver_.pending_jobs()[0]->url());
-  resolver_.pending_jobs()[0]->results()->UseNamedProxy("result1:80");
-  resolver_.pending_jobs()[0]->CompleteNow(net::OK);
+  // There should be a pending proxy lookup request. Respond to it.
+  EXPECT_EQ(url1, helper_->pending_url());
+  ASSERT_TRUE(proxy_lookup_client_);
+  net::ProxyInfo proxy_info;
+  proxy_info.UseNamedProxy("result1:80");
+  proxy_lookup_client_->OnProxyLookupComplete(proxy_info);
+  proxy_lookup_client_.reset();
+  base::RunLoop().RunUntilIdle();
 
   // Check result.
   EXPECT_EQ(true, pending_result()->result);
@@ -140,10 +156,12 @@ TEST_F(ResolveProxyMsgHelperTest, Sequential) {
 
   helper_->OnResolveProxy(url2, msg2);
 
-  ASSERT_EQ(1u, resolver_.pending_jobs().size());
-  EXPECT_EQ(url2, resolver_.pending_jobs()[0]->url());
-  resolver_.pending_jobs()[0]->results()->UseNamedProxy("result2:80");
-  resolver_.pending_jobs()[0]->CompleteNow(net::OK);
+  EXPECT_EQ(url2, helper_->pending_url());
+  ASSERT_TRUE(proxy_lookup_client_);
+  proxy_info.UseNamedProxy("result2:80");
+  proxy_lookup_client_->OnProxyLookupComplete(proxy_info);
+  proxy_lookup_client_.reset();
+  base::RunLoop().RunUntilIdle();
 
   // Check result.
   EXPECT_EQ(true, pending_result()->result);
@@ -152,10 +170,11 @@ TEST_F(ResolveProxyMsgHelperTest, Sequential) {
 
   helper_->OnResolveProxy(url3, msg3);
 
-  ASSERT_EQ(1u, resolver_.pending_jobs().size());
-  EXPECT_EQ(url3, resolver_.pending_jobs()[0]->url());
-  resolver_.pending_jobs()[0]->results()->UseNamedProxy("result3:80");
-  resolver_.pending_jobs()[0]->CompleteNow(net::OK);
+  EXPECT_EQ(url3, helper_->pending_url());
+  ASSERT_TRUE(proxy_lookup_client_);
+  proxy_info.UseNamedProxy("result3:80");
+  proxy_lookup_client_->OnProxyLookupComplete(proxy_info);
+  base::RunLoop().RunUntilIdle();
 
   // Check result.
   EXPECT_EQ(true, pending_result()->result);
@@ -173,48 +192,45 @@ TEST_F(ResolveProxyMsgHelperTest, QueueRequests) {
   IPC::Message* msg2 = GenerateReply();
   IPC::Message* msg3 = GenerateReply();
 
-  // Start three requests. Since the proxy resolver is async, all the
-  // requests will be pending.
+  // Start three requests. All the requests will be pending.
 
   helper_->OnResolveProxy(url1, msg1);
-
-  // Finish ProxyResolutionService's initialization.
-  ASSERT_EQ(1u, resolver_factory_->pending_requests().size());
-  resolver_factory_->pending_requests()[0]->CompleteNowWithForwarder(
-      net::OK, &resolver_);
-
   helper_->OnResolveProxy(url2, msg2);
   helper_->OnResolveProxy(url3, msg3);
 
-  // ResolveProxyHelper only keeps 1 request outstanding in
-  // ProxyResolutionService at a time.
-  ASSERT_EQ(1u, resolver_.pending_jobs().size());
-  EXPECT_EQ(url1, resolver_.pending_jobs()[0]->url());
-
-  resolver_.pending_jobs()[0]->results()->UseNamedProxy("result1:80");
-  resolver_.pending_jobs()[0]->CompleteNow(net::OK);
+  // Complete first request.
+  EXPECT_EQ(url1, helper_->pending_url());
+  ASSERT_TRUE(proxy_lookup_client_);
+  net::ProxyInfo proxy_info;
+  proxy_info.UseNamedProxy("result1:80");
+  proxy_lookup_client_->OnProxyLookupComplete(proxy_info);
+  proxy_lookup_client_.reset();
+  base::RunLoop().RunUntilIdle();
 
   // Check result.
   EXPECT_EQ(true, pending_result()->result);
   EXPECT_EQ("PROXY result1:80", pending_result()->proxy_list);
   clear_pending_result();
 
-  ASSERT_EQ(1u, resolver_.pending_jobs().size());
-  EXPECT_EQ(url2, resolver_.pending_jobs()[0]->url());
-
-  resolver_.pending_jobs()[0]->results()->UseNamedProxy("result2:80");
-  resolver_.pending_jobs()[0]->CompleteNow(net::OK);
+  // Complete second request.
+  EXPECT_EQ(url2, helper_->pending_url());
+  ASSERT_TRUE(proxy_lookup_client_);
+  proxy_info.UseNamedProxy("result2:80");
+  proxy_lookup_client_->OnProxyLookupComplete(proxy_info);
+  proxy_lookup_client_.reset();
+  base::RunLoop().RunUntilIdle();
 
   // Check result.
   EXPECT_EQ(true, pending_result()->result);
   EXPECT_EQ("PROXY result2:80", pending_result()->proxy_list);
   clear_pending_result();
 
-  ASSERT_EQ(1u, resolver_.pending_jobs().size());
-  EXPECT_EQ(url3, resolver_.pending_jobs()[0]->url());
-
-  resolver_.pending_jobs()[0]->results()->UseNamedProxy("result3:80");
-  resolver_.pending_jobs()[0]->CompleteNow(net::OK);
+  // Complete third request.
+  EXPECT_EQ(url3, helper_->pending_url());
+  ASSERT_TRUE(proxy_lookup_client_);
+  proxy_info.UseNamedProxy("result3:80");
+  proxy_lookup_client_->OnProxyLookupComplete(proxy_info);
+  base::RunLoop().RunUntilIdle();
 
   // Check result.
   EXPECT_EQ(true, pending_result()->result);
@@ -222,7 +238,7 @@ TEST_F(ResolveProxyMsgHelperTest, QueueRequests) {
   clear_pending_result();
 }
 
-// Delete the helper while a request is in progress, and others are pending.
+// Delete the helper while a request is in progress and others are pending.
 TEST_F(ResolveProxyMsgHelperTest, CancelPendingRequests) {
   GURL url1("http://www.google1.com/");
   GURL url2("http://www.google2.com/");
@@ -237,32 +253,133 @@ TEST_F(ResolveProxyMsgHelperTest, CancelPendingRequests) {
   // requests will be pending.
 
   helper_->OnResolveProxy(url1, msg1);
-
-  // Finish ProxyResolutionService's initialization.
-  ASSERT_EQ(1u, resolver_factory_->pending_requests().size());
-  resolver_factory_->pending_requests()[0]->CompleteNowWithForwarder(
-      net::OK, &resolver_);
-
   helper_->OnResolveProxy(url2, msg2);
   helper_->OnResolveProxy(url3, msg3);
 
-  // ResolveProxyHelper only keeps 1 request outstanding in
-  // ProxyResolutionService at a time.
-  ASSERT_EQ(1u, resolver_.pending_jobs().size());
-  EXPECT_EQ(url1, resolver_.pending_jobs()[0]->url());
+  // Check the first request is pending.
+  EXPECT_EQ(url1, helper_->pending_url());
+  ASSERT_TRUE(proxy_lookup_client_);
 
-  // Delete the underlying ResolveProxyMsgHelper -- this should cancel all
-  // the requests which are outstanding.
+  // Release a reference. The |helper_| will not be deleted, since there's a
+  // pending resolution.
   helper_ = nullptr;
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(proxy_lookup_client_.is_bound());
+  EXPECT_FALSE(proxy_lookup_client_.encountered_error());
 
-  // The pending requests sent to the proxy resolver should have been cancelled.
+  // Send Mojo message on the pipe.
+  net::ProxyInfo proxy_info;
+  proxy_info.UseNamedProxy("result1:80");
+  proxy_lookup_client_->OnProxyLookupComplete(proxy_info);
 
-  EXPECT_EQ(0u, resolver_.pending_jobs().size());
-
-  EXPECT_TRUE(pending_result() == nullptr);
+  // Spinning the message loop results in the helper being destroyed and closing
+  // the pipe.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(!proxy_lookup_client_.is_bound() ||
+              proxy_lookup_client_.encountered_error());
+  // The result should not have been sent.
+  EXPECT_FALSE(pending_result());
 
   // It should also be the case that msg1, msg2, msg3 were deleted by the
-  // cancellation. (Else will show up as a leak in Valgrind).
+  // cancellation. (Else will show up as a leak).
+}
+
+// Issue a request that fails.
+TEST_F(ResolveProxyMsgHelperTest, RequestFails) {
+  GURL url("http://www.google.com/");
+
+  // Message will be deleted by the sink.
+  IPC::Message* msg = GenerateReply();
+
+  helper_->OnResolveProxy(url, msg);
+
+  // There should be a pending proxy lookup request. Respond to it.
+  EXPECT_EQ(url, helper_->pending_url());
+  ASSERT_TRUE(proxy_lookup_client_);
+  proxy_lookup_client_->OnProxyLookupComplete(base::nullopt);
+  base::RunLoop().RunUntilIdle();
+
+  // Check result.
+  EXPECT_EQ(false, pending_result()->result);
+  EXPECT_EQ("", pending_result()->proxy_list);
+  clear_pending_result();
+}
+
+// Issue a request, only to have the Mojo pipe closed.
+TEST_F(ResolveProxyMsgHelperTest, PipeClosed) {
+  GURL url("http://www.google.com/");
+
+  // Message will be deleted by the sink.
+  IPC::Message* msg = GenerateReply();
+
+  helper_->OnResolveProxy(url, msg);
+
+  // There should be a pending proxy lookup request. Respond to it by closing
+  // the pipe.
+  EXPECT_EQ(url, helper_->pending_url());
+  ASSERT_TRUE(proxy_lookup_client_);
+  proxy_lookup_client_.reset();
+  base::RunLoop().RunUntilIdle();
+
+  // Check result.
+  EXPECT_EQ(false, pending_result()->result);
+  EXPECT_EQ("", pending_result()->proxy_list);
+  clear_pending_result();
+}
+
+// Fail to send a request to the network service.
+TEST_F(ResolveProxyMsgHelperTest, FailToSendRequest) {
+  GURL url("http://www.google.com/");
+
+  // Message will be deleted by the sink.
+  IPC::Message* msg = GenerateReply();
+
+  helper_->set_fail_to_send_request(true);
+
+  helper_->OnResolveProxy(url, msg);
+  // No request should be pending.
+  EXPECT_TRUE(helper_->pending_url().is_empty());
+
+  // Check result.
+  EXPECT_EQ(false, pending_result()->result);
+  EXPECT_EQ("", pending_result()->proxy_list);
+  clear_pending_result();
+}
+
+// Make sure if mojo callback is invoked after last externally owned reference
+// is released, there is no crash.
+// Regression test for https://crbug.com/870675
+TEST_F(ResolveProxyMsgHelperTest, Lifetime) {
+  GURL url("http://www.google1.com/");
+
+  // Messages are deleted by the sink.
+  IPC::Message* msg = GenerateReply();
+
+  helper_->OnResolveProxy(url, msg);
+
+  // There should be a pending proxy lookup request. Respond to it.
+  EXPECT_EQ(url, helper_->pending_url());
+  ASSERT_TRUE(proxy_lookup_client_);
+
+  // Release the |helper_| pointer. The object should keep a reference to
+  // itself, so should not be deleted.
+  helper_ = nullptr;
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(proxy_lookup_client_.is_bound());
+  EXPECT_FALSE(proxy_lookup_client_.encountered_error());
+
+  // Send Mojo message on the pipe.
+  net::ProxyInfo proxy_info;
+  proxy_info.UseNamedProxy("result1:80");
+  proxy_lookup_client_->OnProxyLookupComplete(proxy_info);
+
+  // Spinning the message loop results in the helper being destroyed and closing
+  // the pipe.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(!proxy_lookup_client_.is_bound() ||
+              proxy_lookup_client_.encountered_error());
+  // The result should not have been sent.
+  EXPECT_FALSE(pending_result());
 }
 
 }  // namespace content

@@ -72,8 +72,14 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, E2E_ENABLED(Race)) {
   ASSERT_TRUE(SamePasswordFormsChecker().Wait());
 }
 
+// Disabled due to flakiness on Chrome OS: https://crbug.com/873494.
+#if defined(OS_CHROMEOS)
+#define MAYBE_SetPassphraseAndAddPassword DISABLED_SetPassphraseAndAddPassword
+#else
+#define MAYBE_SetPassphraseAndAddPassword SetPassphraseAndAddPassword
+#endif
 IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest,
-                       E2E_ENABLED(SetPassphraseAndAddPassword)) {
+                       E2E_ENABLED(MAYBE_SetPassphraseAndAddPassword)) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   GetSyncService(0)->SetEncryptionPassphrase(
@@ -135,8 +141,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, Delete) {
   ASSERT_TRUE(AllProfilesContainSamePasswordFormsAsVerifier());
 }
 
+// https://crbug.com/874929, flaky on all platform.
 IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest,
-                       SetPassphraseAndThenSetupSync) {
+                       DISABLED_SetPassphraseAndThenSetupSync) {
   ASSERT_TRUE(SetupClients());
 
   ASSERT_TRUE(GetClient(0)->SetupSync());

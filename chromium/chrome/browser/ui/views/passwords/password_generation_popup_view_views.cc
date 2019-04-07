@@ -8,8 +8,9 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/passwords/password_generation_popup_controller.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
+#include "chrome/browser/ui/views/autofill/view_util.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -24,6 +25,14 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/widget/widget.h"
+
+namespace {
+
+// The max width prevents the popup from growing too much when the password
+// field is too long.
+constexpr int kPasswordGenerationMaxWidth = 480;
+
+}  // namespace
 
 // Class that shows the generated password and associated UI (currently an
 // explanatory text).
@@ -43,15 +52,14 @@ class PasswordGenerationPopupViewViews::GeneratedPasswordBox
     BuildColumnSet(layout);
     layout->StartRow(views::GridLayout::kFixedSize, 0);
 
-    views::Label* suggestion_label = new views::Label(
+    layout->AddView(autofill::CreateLabelWithColorReadabilityDisabled(
         suggestion, ChromeTextContext::CONTEXT_BODY_TEXT_LARGE,
         state == PasswordGenerationPopupController::kOfferGeneration
             ? views::style::STYLE_PRIMARY
-            : STYLE_SECONDARY);
-    layout->AddView(suggestion_label);
+            : STYLE_SECONDARY));
 
     DCHECK(!password_label_);
-    password_label_ = new views::Label(
+    password_label_ = autofill::CreateLabelWithColorReadabilityDisabled(
         password, ChromeTextContext::CONTEXT_BODY_TEXT_LARGE, STYLE_SECONDARY);
     layout->AddView(password_label_);
   }
@@ -103,12 +111,6 @@ void PasswordGenerationPopupViewViews::Hide() {
   controller_ = NULL;
 
   DoHide();
-}
-
-gfx::Size PasswordGenerationPopupViewViews::GetPreferredSizeOfPasswordView() {
-  int width =
-      std::max(controller_->GetMinimumWidth(), GetPreferredSize().width());
-  return gfx::Size(width, GetHeightForWidth(width));
 }
 
 void PasswordGenerationPopupViewViews::UpdateState() {
@@ -207,6 +209,14 @@ void PasswordGenerationPopupViewViews::GetAccessibleNodeData(
                        base::ASCIIToUTF16(" ")));
   node_data->SetDescription(controller_->HelpText());
   node_data->role = ax::mojom::Role::kMenuItem;
+}
+
+gfx::Size PasswordGenerationPopupViewViews::CalculatePreferredSize() const {
+  int width =
+      std::max(GetLayoutManager()->GetPreferredSize(this).width(),
+               gfx::ToEnclosingRect(controller_->element_bounds()).width());
+  width = std::min(width, kPasswordGenerationMaxWidth);
+  return gfx::Size(width, GetHeightForWidth(width));
 }
 
 void PasswordGenerationPopupViewViews::StyledLabelLinkClicked(

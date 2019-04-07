@@ -172,7 +172,8 @@ class NativeAppWindowViews : public extensions::NativeAppWindow,
 
   views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
 
-  base::ObserverList<web_modal::ModalDialogHostObserver> observer_list_;
+  base::ObserverList<web_modal::ModalDialogHostObserver>::Unchecked
+      observer_list_;
 
   // NOTE(pettern@vivaldi): If true, this window is hidden for the user but
   // "visible" for the underlying chromium code so that a thumbnail can be

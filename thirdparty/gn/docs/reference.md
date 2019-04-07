@@ -154,7 +154,7 @@
 
 ## <a name="commands"></a>Commands
 
-### <a name="analyze"></a>**gn analyze <out_dir> <input_path> <output_path>**
+### <a name="analyze"></a>**gn analyze &lt;out_dir&gt; &lt;input_path&gt; &lt;output_path&gt;**
 
 ```
   Analyze which targets are affected by a list of files.
@@ -224,7 +224,7 @@
   tries really hard to always write something to the output JSON and convey
   errors that way rather than via return codes.
 ```
-### <a name="args"></a>**gn args <out_dir> [\--list] [\--short] [\--args] [\--overrides-only]**
+### <a name="args"></a>**gn args &lt;out_dir&gt; [\--list] [\--short] [\--args] [\--overrides-only]**
 
 ```
   See also "gn help buildargs" for a more high-level overview of how
@@ -309,7 +309,7 @@
     given arguments set (which may affect the values of other
     arguments).
 ```
-### <a name="check"></a>**gn check <out_dir> [<label_pattern>] [\--force]**
+### <a name="check"></a>**gn check &lt;out_dir&gt; [&lt;label_pattern&gt;] [\--force]**
 
 ```
   GN's include header checker validates that the includes for C-like source
@@ -424,13 +424,13 @@
   gn check out/Default "//foo/*
       Check only the files in targets in the //foo directory tree.
 ```
-### <a name="clean"></a>**gn clean <out_dir>**
+### <a name="clean"></a>**gn clean &lt;out_dir&gt;**
 
 ```
   Deletes the contents of the output directory except for args.gn and
   creates a Ninja build environment sufficient to regenerate the build.
 ```
-### <a name="desc"></a>**gn desc <out_dir> <label or pattern> [<what to show>] [\--blame] "**
+### <a name="desc"></a>**gn desc &lt;out_dir&gt; &lt;label or pattern&gt; [&lt;what to show&gt;] [\--blame] "**
 #### **[\--format=json]**
 
 ```
@@ -442,7 +442,7 @@
   targets.
 ```
 
-#### **Possibilities for <what to show>**
+#### **Possibilities for &lt;what to show&gt;**
 
 ```
   (If unspecified an overall summary will be displayed.)
@@ -589,7 +589,7 @@
       Shows defines set for the //base:base target, annotated by where
       each one was set from.
 ```
-### <a name="format"></a>**gn format [\--dump-tree] (\--stdin | <build_file>)**
+### <a name="format"></a>**gn format [\--dump-tree] (\--stdin | &lt;build_file&gt;)**
 
 ```
   Formats .gn file to a standard format.
@@ -632,7 +632,7 @@
   gn format /abspath/some/BUILD.gn
   gn format --stdin
 ```
-### <a name="gen"></a>**gn gen [\--check] [<ide options>] <out_dir>**
+### <a name="gen"></a>**gn gen [\--check] [&lt;ide options&gt;] &lt;out_dir&gt;**
 
 ```
   Generates ninja files from the current tree and puts them in the given output
@@ -762,7 +762,7 @@
       used for various Clang-based tooling, allowing for the replay of individual
       compilations independent of the build system.
 ```
-### <a name="help"></a>**gn help <anything>**
+### <a name="help"></a>**gn help &lt;anything&gt;**
 
 ```
   Yo dawg, I heard you like help on your help so I put help on the help in the
@@ -784,7 +784,7 @@
   gn help --markdown all
       Dump all help to stdout in markdown format.
 ```
-### <a name="ls"></a>**gn ls <out_dir> [<label_pattern>] [\--all-toolchains] [\--as=...]**
+### <a name="ls"></a>**gn ls &lt;out_dir&gt; [&lt;label_pattern&gt;] [\--all-toolchains] [\--as=...]**
 ```
       [--type=...] [--testonly=...]
 
@@ -857,7 +857,7 @@
       Lists all variants of the target //base:base (it may be referenced
       in multiple toolchains).
 ```
-### <a name="path"></a>**gn path <out_dir> <target_one> <target_two>**
+### <a name="path"></a>**gn path &lt;out_dir&gt; &lt;target_one&gt; &lt;target_two&gt;**
 
 ```
   Finds paths of dependencies between two targets. Each unique path will be
@@ -902,7 +902,7 @@
 ```
   gn path out/Default //base //tools/gn
 ```
-### <a name="refs"></a>**gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)***
+### <a name="refs"></a>**gn refs &lt;out_dir&gt; (&lt;label_pattern&gt;|&lt;label&gt;|&lt;file&gt;|@&lt;response_file&gt;)***
 ```
         [--all] [--all-toolchains] [--as=...] [--testonly=...] [--type=...]
 
@@ -2584,7 +2584,7 @@
     configs = [ "//tools/mything:settings" ]
   }
 
-  static_library("mylib")
+  static_library("mylib") {
     # The configs will be auto-populated as above. You can remove it if
     # you don't want the default for a particular default:
     configs -= [ "//tools/mything:settings" ]
@@ -3999,7 +3999,6 @@
   action("myscript") {
     # Pass the output dir to the script.
     args = [ "-o", rebase_path(target_out_dir, root_build_dir) ]"
-
   }
 ```
 ## <a name="target_variables"></a>Variables you set in targets

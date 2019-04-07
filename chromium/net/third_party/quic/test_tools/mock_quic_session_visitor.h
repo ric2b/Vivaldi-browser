@@ -16,24 +16,27 @@ namespace test {
 class MockQuicSessionVisitor : public QuicTimeWaitListManager::Visitor {
  public:
   MockQuicSessionVisitor();
+  MockQuicSessionVisitor(const MockQuicSessionVisitor&) = delete;
+  MockQuicSessionVisitor& operator=(const MockQuicSessionVisitor&) = delete;
   ~MockQuicSessionVisitor() override;
   MOCK_METHOD3(OnConnectionClosed,
                void(QuicConnectionId connection_id,
                     QuicErrorCode error,
-                    const std::string& error_details));
+                    const QuicString& error_details));
   MOCK_METHOD1(OnWriteBlocked,
                void(QuicBlockedWriterInterface* blocked_writer));
   MOCK_METHOD1(OnRstStreamReceived, void(const QuicRstStreamFrame& frame));
   MOCK_METHOD1(OnConnectionAddedToTimeWaitList,
                void(QuicConnectionId connection_id));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockQuicSessionVisitor);
 };
 
 class MockQuicCryptoServerStreamHelper : public QuicCryptoServerStream::Helper {
  public:
   MockQuicCryptoServerStreamHelper();
+  MockQuicCryptoServerStreamHelper(const MockQuicCryptoServerStreamHelper&) =
+      delete;
+  MockQuicCryptoServerStreamHelper& operator=(
+      const MockQuicCryptoServerStreamHelper&) = delete;
   ~MockQuicCryptoServerStreamHelper() override;
   MOCK_CONST_METHOD1(GenerateConnectionIdForReject,
                      QuicConnectionId(QuicConnectionId connection_id));
@@ -42,10 +45,7 @@ class MockQuicCryptoServerStreamHelper : public QuicCryptoServerStream::Helper {
                           const QuicSocketAddress& client_address,
                           const QuicSocketAddress& peer_address,
                           const QuicSocketAddress& self_address,
-                          std::string* error_details));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockQuicCryptoServerStreamHelper);
+                          QuicString* error_details));
 };
 
 }  // namespace test

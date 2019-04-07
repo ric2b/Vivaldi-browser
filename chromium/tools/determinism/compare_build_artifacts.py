@@ -7,6 +7,7 @@
 
 import ast
 import difflib
+import glob
 import json
 import optparse
 import os
@@ -25,7 +26,9 @@ def get_files_to_compare(build_dir, recursive=False):
   # TODO(maruel): Add '.pdb'.
   allowed = frozenset(
       ('', '.apk', '.app', '.dll', '.dylib', '.exe', '.nexe', '.so'))
-  non_x_ok_exts = frozenset(('.apk', '.isolated'))
+
+  # .bin is for the V8 snapshot files natives_blob.bin, snapshot_blob.bin
+  non_x_ok_exts = frozenset(('.apk', '.bin', '.isolated', '.zip'))
   def check(f):
     if not os.path.isfile(f):
       return False
@@ -43,6 +46,47 @@ def get_files_to_compare(build_dir, recursive=False):
     for f in (f for f in files if check(os.path.join(root, f))):
       ret_files.add(os.path.relpath(os.path.join(root, f), build_dir))
   return ret_files
+
+
+def get_files_to_compare_using_isolate(build_dir):
+  # First, find all .isolate files in build_dir.
+  isolates = glob.glob(os.path.join(build_dir, '*.isolate'))
+
+  # Then, extract their contents.
+  ret_files = set()
+
+  for isolate in isolates:
+    with open(isolate) as f:
+      isolate_contents = ast.literal_eval(f.read())
+      isolate_files = isolate_contents['variables']['files']
+      for isolate_file in isolate_files:
+        normalized_path = os.path.normpath(
+            os.path.join(build_dir, isolate_file))
+
+        # Ignore isolate files that are not in the build dir ... for now.
+        # If we ever move to comparing determinism of artifacts built from two
+        # repositories, we'll want to get rid of this check.
+        if os.path.commonprefix((normalized_path, build_dir)) != build_dir:
+          continue
+
+        # Theoretically, directories should end in '/' and files should not, but
+        # this doesn't hold true because some GN build files are incorrectly
+        # configured. We explicitly check whether the path is a directory or
+        # file.
+        if not os.path.isdir(normalized_path):
+          ret_files.add(normalized_path)
+          continue
+
+        for root, dirs, files in os.walk(normalized_path):
+          for inner_file in files:
+            ret_files.add(os.path.join(root, inner_file))
+
+  # Also add any .isolated files that exist.
+  for isolated in glob.glob(os.path.join(build_dir, '*.isolated')):
+    ret_files.add(isolated)
+
+  # Convert back to a relpath since that's what the caller is expecting.
+  return set(os.path.relpath(f, build_dir) for f in ret_files)
 
 
 def diff_dict(a, b):
@@ -75,57 +119,26 @@ def diff_binary(first_filepath, second_filepath, file_len):
   diffs = 0
   streams = []
   offset = 0
-  with open(first_filepath, 'rb') as lhs:
-    with open(second_filepath, 'rb') as rhs:
-      # Skip part of Win32 COFF header if timestamps are different.
-      #
-      # COFF header:
-      #   0 -  1: magic.
-      #   2 -  3: # sections.
-      #   4 -  7: timestamp.
-      #   ....
-      #
-      # COFF BigObj header:
-      #   0 -  3: signature (0000 FFFF)
-      #   4 -  5: version
-      #   6 -  7: machine
-      #   8 - 11: timestamp.
-      COFF_HEADER_TO_COMPARE_SIZE = 12
-      if (sys.platform == 'win32'
-          and os.path.splitext(first_filepath)[1] in ('.o', '.obj')
-          and file_len > COFF_HEADER_TO_COMPARE_SIZE):
-        rhs_data = rhs.read(COFF_HEADER_TO_COMPARE_SIZE)
-        lhs_data = lhs.read(COFF_HEADER_TO_COMPARE_SIZE)
-        if (lhs_data[0:4] == rhs_data[0:4] and lhs_data[4:8] != rhs_data[4:8]
-            and lhs_data[8:12] == rhs_data[8:12]):
-          offset += COFF_HEADER_TO_COMPARE_SIZE
-        elif (lhs_data[0:4] == '\x00\x00\xff\xff' and
-              lhs_data[0:8] == rhs_data[0:8] and
-              lhs_data[8:12] != rhs_data[8:12]):
-          offset += COFF_HEADER_TO_COMPARE_SIZE
-        else:
-          lhs.seek(0)
-          rhs.seek(0)
-
-      while True:
-        lhs_data = lhs.read(BLOCK_SIZE)
-        rhs_data = rhs.read(BLOCK_SIZE)
-        if not lhs_data:
-          break
-        if lhs_data != rhs_data:
-          diffs += sum(l != r for l, r in zip(lhs_data, rhs_data))
-          for idx in xrange(NUM_CHUNKS_IN_BLOCK):
-            lhs_chunk = lhs_data[idx * CHUNK_SIZE:(idx + 1) * CHUNK_SIZE]
-            rhs_chunk = rhs_data[idx * CHUNK_SIZE:(idx + 1) * CHUNK_SIZE]
-            if streams is not None and lhs_chunk != rhs_chunk:
-              if len(streams) < MAX_STREAMS:
-                streams.append((offset + CHUNK_SIZE * idx,
-                                lhs_chunk, rhs_chunk))
-              else:
-                streams = None
-        offset += len(lhs_data)
-        del lhs_data
-        del rhs_data
+  with open(first_filepath, 'rb') as lhs, open(second_filepath, 'rb') as rhs:
+    while True:
+      lhs_data = lhs.read(BLOCK_SIZE)
+      rhs_data = rhs.read(BLOCK_SIZE)
+      if not lhs_data:
+        break
+      if lhs_data != rhs_data:
+        diffs += sum(l != r for l, r in zip(lhs_data, rhs_data))
+        for idx in xrange(NUM_CHUNKS_IN_BLOCK):
+          lhs_chunk = lhs_data[idx * CHUNK_SIZE:(idx + 1) * CHUNK_SIZE]
+          rhs_chunk = rhs_data[idx * CHUNK_SIZE:(idx + 1) * CHUNK_SIZE]
+          if streams is not None and lhs_chunk != rhs_chunk:
+            if len(streams) < MAX_STREAMS:
+              streams.append((offset + CHUNK_SIZE * idx,
+                              lhs_chunk, rhs_chunk))
+            else:
+              streams = None
+      offset += len(lhs_data)
+      del lhs_data
+      del rhs_data
   if not diffs:
     return None
   result = '%d out of %d bytes are different (%.2f%%)' % (
@@ -146,6 +159,12 @@ def compare_files(first_filepath, second_filepath):
 
   Returns None if the files are equal, a string otherwise.
   """
+  if not os.path.exists(first_filepath):
+    return 'file does not exist %s' % first_filepath
+  if not os.path.exists(second_filepath):
+    return 'file does not exist %s' % second_filepath
+
+
   if first_filepath.endswith('.isolated'):
     with open(first_filepath, 'rb') as f:
       lhs = json.load(f)
@@ -220,7 +239,7 @@ def compare_deps(first_dir, second_dir, ninja_path, targets):
       print 'deps on %s are different: %s' % (
           target, set(first_deps).symmetric_difference(set(second_deps)))
       continue
-    max_filepath_len = max(len(n) for n in first_deps)
+    max_filepath_len = max([0] + [len(n) for n in first_deps])
     for d in first_deps:
       first_file = os.path.join(first_dir, d)
       second_file = os.path.join(second_dir, d)
@@ -232,7 +251,7 @@ def compare_deps(first_dir, second_dir, ninja_path, targets):
 
 
 def compare_build_artifacts(first_dir, second_dir, ninja_path, target_platform,
-                            json_output, recursive=False):
+                            json_output, recursive, use_isolate_files):
   """Compares the artifacts from two distinct builds."""
   if not os.path.isdir(first_dir):
     print >> sys.stderr, '%s isn\'t a valid directory.' % first_dir
@@ -245,14 +264,16 @@ def compare_build_artifacts(first_dir, second_dir, ninja_path, target_platform,
   print('Epoch: %s' %
       ' '.join(epoch_hex[i:i+2] for i in xrange(0, len(epoch_hex), 2)))
 
-  with open(os.path.join(BASE_DIR, 'deterministic_build_blacklist.json')) as f:
-    blacklist = frozenset(json.load(f))
   with open(os.path.join(BASE_DIR, 'deterministic_build_whitelist.pyl')) as f:
     whitelist = frozenset(ast.literal_eval(f.read())[target_platform])
 
-  # The two directories.
-  first_list = get_files_to_compare(first_dir, recursive) - blacklist
-  second_list = get_files_to_compare(second_dir, recursive) - blacklist
+  if use_isolate_files:
+    first_list = get_files_to_compare_using_isolate(first_dir)
+    second_list = get_files_to_compare_using_isolate(second_dir)
+  else:
+    first_list = get_files_to_compare(first_dir, recursive)
+    second_list = get_files_to_compare(second_dir, recursive)
+
 
   equals = []
   expected_diffs = []
@@ -265,7 +286,9 @@ def compare_build_artifacts(first_dir, second_dir, ninja_path, target_platform,
     print >> sys.stderr, '\n'.join('  ' + i for i in missing_files)
     unexpected_diffs.extend(missing_files)
 
-  max_filepath_len = max(len(n) for n in all_files)
+  max_filepath_len = 0
+  if all_files:
+    max_filepath_len = max(len(n) for n in all_files)
   for f in all_files:
     first_file = os.path.join(first_dir, f)
     second_file = os.path.join(second_dir, f)
@@ -326,6 +349,11 @@ def main():
       '-s', '--second-build-dir', help='The second build directory.')
   parser.add_option('-r', '--recursive', action='store_true', default=False,
                     help='Indicates if the comparison should be recursive.')
+  parser.add_option(
+      '--use-isolate-files', action='store_true', default=False,
+      help='Use .isolate files in each directory to determine which artifacts '
+           'to compare.')
+
   parser.add_option('--json-output', help='JSON file to output differences')
   parser.add_option('--ninja-path', help='path to ninja command.',
                     default='ninja')
@@ -348,7 +376,8 @@ def main():
                                  options.ninja_path,
                                  options.target_platform,
                                  options.json_output,
-                                 options.recursive)
+                                 options.recursive,
+                                 options.use_isolate_files)
 
 
 if __name__ == '__main__':

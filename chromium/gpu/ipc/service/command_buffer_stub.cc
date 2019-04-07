@@ -81,6 +81,8 @@
         UMA_HISTOGRAM_MEMORY_LARGE_MB("GPU.ContextMemory.GLES." category,  \
                                       mb_used);                            \
         break;                                                             \
+      case CONTEXT_TYPE_WEBGPU:                                            \
+        break;                                                             \
     }                                                                      \
   } while (false)
 
@@ -610,7 +612,15 @@ void CommandBufferStub::OnAsyncFlush(int32_t put_offset, uint32_t flush_id) {
   last_flush_id_ = flush_id;
   CommandBuffer::State pre_state = command_buffer_->GetState();
   FastSetActiveURL(active_url_, active_url_hash_, channel_);
-  command_buffer_->Flush(put_offset, decoder_context_.get());
+
+  {
+    auto* gr_shader_cache = channel_->gpu_channel_manager()->gr_shader_cache();
+    base::Optional<raster::GrShaderCache::ScopedCacheUse> cache_use;
+    if (gr_shader_cache)
+      cache_use.emplace(gr_shader_cache, channel_->client_id());
+    command_buffer_->Flush(put_offset, decoder_context_.get());
+  }
+
   CommandBuffer::State post_state = command_buffer_->GetState();
 
   if (pre_state.get_offset != post_state.get_offset)
@@ -636,8 +646,8 @@ void CommandBufferStub::OnRegisterTransferBuffer(
 
   if (command_buffer_) {
     command_buffer_->RegisterTransferBuffer(
-        id, MakeBackingFromSharedMemory(std::move(transfer_buffer),
-                                        std::move(mapping)));
+        id, MakeBufferFromSharedMemory(std::move(transfer_buffer),
+                                       std::move(mapping)));
   }
 }
 
@@ -753,6 +763,8 @@ void CommandBufferStub::ScheduleGrContextCleanup() {
   channel_->gpu_channel_manager()->ScheduleGrContextCleanup();
 }
 
+// TODO(sunnyps): Remove the wait command once all sync tokens are passed as
+// task dependencies.
 bool CommandBufferStub::OnWaitSyncToken(const SyncToken& sync_token) {
   DCHECK(!waiting_for_sync_point_);
   DCHECK(command_buffer_->scheduled());
@@ -789,10 +801,9 @@ void CommandBufferStub::OnWaitSyncTokenCompleted(const SyncToken& sync_token) {
 }
 
 void CommandBufferStub::OnCreateImage(
-    const GpuCommandBufferMsg_CreateImage_Params& params) {
+    GpuCommandBufferMsg_CreateImage_Params params) {
   TRACE_EVENT0("gpu", "CommandBufferStub::OnCreateImage");
   const int32_t id = params.id;
-  const gfx::GpuMemoryBufferHandle& handle = params.gpu_memory_buffer;
   const gfx::Size& size = params.size;
   const gfx::BufferFormat& format = params.format;
   const uint32_t internalformat = params.internal_format;
@@ -823,7 +834,8 @@ void CommandBufferStub::OnCreateImage(
   }
 
   scoped_refptr<gl::GLImage> image = channel()->CreateImageForGpuMemoryBuffer(
-      handle, size, format, internalformat, surface_handle_);
+      std::move(params.gpu_memory_buffer), size, format, internalformat,
+      surface_handle_);
   if (!image.get())
     return;
 

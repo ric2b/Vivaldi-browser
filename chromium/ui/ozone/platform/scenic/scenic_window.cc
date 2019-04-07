@@ -4,15 +4,18 @@
 
 #include "ui/ozone/platform/scenic/scenic_window.h"
 
-#include <string>
-
 #include <fuchsia/sys/cpp/fidl.h>
+#include <algorithm>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/fuchsia/fuchsia_logging.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
+#include "ui/events/ozone/events_ozone.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/ozone/platform/scenic/scenic_window_manager.h"
 #include "ui/platform_window/platform_window_delegate.h"
@@ -40,7 +43,7 @@ int KeyModifiersToFlags(int modifiers) {
 ScenicWindow::ScenicWindow(
     ScenicWindowManager* window_manager,
     PlatformWindowDelegate* delegate,
-    fidl::InterfaceRequest<fuchsia::ui::views_v1_token::ViewOwner>
+    fidl::InterfaceRequest<fuchsia::ui::viewsv1token::ViewOwner>
         view_owner_request)
     : manager_(window_manager),
       delegate_(delegate),
@@ -86,23 +89,31 @@ ScenicWindow::ScenicWindow(
       input_connection_.NewRequest().TakeChannel());
   input_connection_->SetEventListener(input_listener_binding_.NewBinding());
 
+  // Add shape node for window.
+  shape_id_ = scenic_session_.CreateShapeNode();
+  scenic_session_.AddNodeChild(node_id_, shape_id_);
+  material_id_ = scenic_session_.CreateMaterial();
+  scenic_session_.SetNodeMaterial(shape_id_, material_id_);
+
   // Call Present() to ensure that the scenic session commands are processed,
   // which is necessary to receive metrics event from Scenic.
-  // OnAcceleratedWidgetAvailable() will be called after View metrics are
-  // received.
   scenic_session_.Present();
+
+  delegate_->OnAcceleratedWidgetAvailable(window_id_);
 }
 
 ScenicWindow::~ScenicWindow() {
-  delegate_->OnAcceleratedWidgetDestroying();
-
   scenic_session_.ReleaseResource(node_id_);
   scenic_session_.ReleaseResource(parent_node_id_);
+  scenic_session_.ReleaseResource(shape_id_);
+  scenic_session_.ReleaseResource(material_id_);
 
   manager_->RemoveWindow(window_id_, this);
   view_.Unbind();
+}
 
-  delegate_->OnAcceleratedWidgetDestroyed();
+void ScenicWindow::SetTexture(ScenicSession::ResourceId texture) {
+  scenic_session_.SetMaterialTexture(material_id_, texture);
 }
 
 gfx::Rect ScenicWindow::GetBounds() {
@@ -184,14 +195,42 @@ PlatformImeController* ScenicWindow::GetPlatformImeController() {
   return nullptr;
 }
 
+void ScenicWindow::SetRestoredBoundsInPixels(const gfx::Rect& bounds) {
+  NOTIMPLEMENTED();
+}
+
+gfx::Rect ScenicWindow::GetRestoredBoundsInPixels() const {
+  NOTIMPLEMENTED();
+  return gfx::Rect();
+}
+
 void ScenicWindow::UpdateSize() {
   gfx::SizeF scaled = ScaleSize(size_dips_, device_pixel_ratio_);
   size_pixels_ = gfx::Size(ceilf(scaled.width()), ceilf(scaled.height()));
-  delegate_->OnBoundsChanged(gfx::Rect(size_pixels_));
+  gfx::Rect size_rect(size_pixels_);
+
+  // Update this window's Screen's dimensions to match the new size.
+  ScenicScreen* screen = manager_->screen();
+  if (screen)
+    screen->OnWindowBoundsChanged(window_id_, size_rect);
+
+  // Translate the node by half of the view dimensions to put it in the center
+  // of the view.
+  const float translation[] = {size_dips_.width() / 2.0,
+                               size_dips_.height() / 2.0, 0.f};
+
+  // Set node shape to rectangle that matches size of the view.
+  ScenicSession::ResourceId rect_id =
+      scenic_session_.CreateRectangle(size_dips_.width(), size_dips_.height());
+  scenic_session_.SetNodeShape(shape_id_, rect_id);
+  scenic_session_.SetNodeTranslation(shape_id_, translation);
+  scenic_session_.ReleaseResource(rect_id);
+
+  delegate_->OnBoundsChanged(size_rect);
 }
 
 void ScenicWindow::OnPropertiesChanged(
-    fuchsia::ui::views_v1::ViewProperties properties,
+    fuchsia::ui::viewsv1::ViewProperties properties,
     OnPropertiesChangedCallback callback) {
   if (properties.view_layout) {
     size_dips_.SetSize(properties.view_layout->size.width,
@@ -215,23 +254,18 @@ void ScenicWindow::OnScenicEvents(
       continue;
 
     auto& metrics = event.gfx().metrics();
-    if (metrics.node_id == parent_node_id_) {
-      float new_device_pixel_ratio =
-          std::max(metrics.metrics.scale_x, metrics.metrics.scale_y);
-      if (device_pixel_ratio_ == 0.0) {
-        device_pixel_ratio_ = new_device_pixel_ratio;
-        delegate_->OnAcceleratedWidgetAvailable(window_id_,
-                                                device_pixel_ratio_);
-        if (!size_dips_.IsEmpty())
-          UpdateSize();
-      } else if (device_pixel_ratio_ != new_device_pixel_ratio) {
-        // Ozone currently doesn't support dynamic changes in
-        // device_pixel_ratio.
-        // TODO(crbug.com/850650): Update Ozone/Aura to allow DPI changes
-        // after OnAcceleratedWidgetAvailable().
-        NOTIMPLEMENTED() << "Ignoring display metrics event.";
-      }
-    }
+    if (metrics.node_id != parent_node_id_)
+      continue;
+
+    device_pixel_ratio_ =
+        std::max(metrics.metrics.scale_x, metrics.metrics.scale_y);
+
+    ScenicScreen* screen = manager_->screen();
+    if (screen)
+      screen->OnWindowMetrics(window_id_, device_pixel_ratio_);
+
+    if (!size_dips_.IsEmpty())
+      UpdateSize();
   }
 }
 
@@ -241,9 +275,18 @@ void ScenicWindow::OnEvent(fuchsia::ui::input::InputEvent event,
 
   switch (event.Which()) {
     case fuchsia::ui::input::InputEvent::Tag::kPointer:
-      // TODO(crbug.com/829980): Add touch support.
-      if (event.pointer().type == fuchsia::ui::input::PointerEventType::MOUSE)
-        result = OnMouseEvent(event.pointer());
+      switch (event.pointer().type) {
+        case fuchsia::ui::input::PointerEventType::MOUSE:
+          result = OnMouseEvent(event.pointer());
+          break;
+        case fuchsia::ui::input::PointerEventType::TOUCH:
+          result = OnTouchEvent(event.pointer());
+          break;
+        case fuchsia::ui::input::PointerEventType::STYLUS:
+        case fuchsia::ui::input::PointerEventType::INVERTED_STYLUS:
+          NOTIMPLEMENTED() << "Stylus input is not yet supported.";
+          break;
+      }
       break;
 
     case fuchsia::ui::input::InputEvent::Tag::kKeyboard:
@@ -251,6 +294,9 @@ void ScenicWindow::OnEvent(fuchsia::ui::input::InputEvent event,
       break;
 
     case fuchsia::ui::input::InputEvent::Tag::kFocus:
+      result = OnFocusEvent(event.focus());
+      break;
+
     case fuchsia::ui::input::InputEvent::Tag::Invalid:
       break;
   }
@@ -259,7 +305,7 @@ void ScenicWindow::OnEvent(fuchsia::ui::input::InputEvent event,
 }
 
 void ScenicWindow::OnViewError() {
-  VLOG(1) << "views_v1::View connection was closed.";
+  VLOG(1) << "viewsv1::View connection was closed.";
   delegate_->OnClosed();
 }
 
@@ -290,7 +336,8 @@ bool ScenicWindow::OnMouseEvent(const fuchsia::ui::input::PointerEvent& event) {
     case fuchsia::ui::input::PointerEventPhase::CANCEL:
     case fuchsia::ui::input::PointerEventPhase::ADD:
     case fuchsia::ui::input::PointerEventPhase::REMOVE:
-      NOTREACHED() << "Unexpected mouse phase " << event.phase;
+      NOTREACHED() << "Unexpected mouse phase "
+                   << fidl::ToUnderlying(event.phase);
       return false;
   }
 
@@ -300,6 +347,43 @@ bool ScenicWindow::OnMouseEvent(const fuchsia::ui::input::PointerEvent& event) {
                              base::TimeTicks::FromZxTime(event.event_time),
                              flags, 0);
   delegate_->DispatchEvent(&mouse_event);
+  return true;
+}
+
+bool ScenicWindow::OnTouchEvent(const fuchsia::ui::input::PointerEvent& event) {
+  EventType event_type;
+
+  switch (event.phase) {
+    case fuchsia::ui::input::PointerEventPhase::DOWN:
+      event_type = ET_TOUCH_PRESSED;
+      break;
+    case fuchsia::ui::input::PointerEventPhase::MOVE:
+      event_type = ET_TOUCH_MOVED;
+      break;
+    case fuchsia::ui::input::PointerEventPhase::CANCEL:
+      event_type = ET_TOUCH_CANCELLED;
+      break;
+    case fuchsia::ui::input::PointerEventPhase::UP:
+      event_type = ET_TOUCH_RELEASED;
+      break;
+    case fuchsia::ui::input::PointerEventPhase::ADD:
+    case fuchsia::ui::input::PointerEventPhase::REMOVE:
+    case fuchsia::ui::input::PointerEventPhase::HOVER:
+      return false;
+  }
+
+  // TODO(crbug.com/876933): Add more detailed fields such as
+  // force/orientation/tilt once they are added to PointerEvent.
+  ui::PointerDetails pointer_details(ui::EventPointerType::POINTER_TYPE_TOUCH,
+                                     event.pointer_id);
+
+  gfx::Point location =
+      gfx::Point(event.x * device_pixel_ratio_, event.y * device_pixel_ratio_);
+  ui::TouchEvent touch_event(event_type, location,
+                             base::TimeTicks::FromZxTime(event.event_time),
+                             pointer_details);
+
+  delegate_->DispatchEvent(&touch_event);
   return true;
 }
 
@@ -344,6 +428,11 @@ bool ScenicWindow::OnKeyboardEvent(
                      KeyModifiersToFlags(event.modifiers), dom_key,
                      base::TimeTicks::FromZxTime(event.event_time));
   delegate_->DispatchEvent(&key_event);
+  return true;
+}
+
+bool ScenicWindow::OnFocusEvent(const fuchsia::ui::input::FocusEvent& event) {
+  delegate_->OnActivationChanged(event.focused);
   return true;
 }
 

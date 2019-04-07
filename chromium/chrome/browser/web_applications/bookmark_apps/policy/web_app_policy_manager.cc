@@ -7,66 +7,117 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
+#include "base/stl_util.h"
 #include "base/values.h"
+#include "build/build_config.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/bookmark_apps/policy/web_app_policy_constants.h"
 #include "chrome/browser/web_applications/extensions/pending_bookmark_app_manager.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_ids_map.h"
 #include "chrome/common/pref_names.h"
+#include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_thread.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#endif  // OS_CHROMEOS
 
 namespace web_app {
 
-WebAppPolicyManager::AppInfo::AppInfo(GURL url,
-                                      LaunchContainer launch_container)
-    : url(std::move(url)), launch_container(launch_container) {}
-
-WebAppPolicyManager::AppInfo::AppInfo(AppInfo&& other) = default;
-
-WebAppPolicyManager::AppInfo::~AppInfo() = default;
-
-bool WebAppPolicyManager::AppInfo::operator==(const AppInfo& other) const {
-  return std::tie(url, launch_container) ==
-         std::tie(other.url, other.launch_container);
+WebAppPolicyManager::WebAppPolicyManager(Profile* profile,
+                                         PendingAppManager* pending_app_manager)
+    : profile_(profile),
+      pref_service_(profile_->GetPrefs()),
+      pending_app_manager_(pending_app_manager) {
+  content::BrowserThread::PostAfterStartupTask(
+      FROM_HERE,
+      content::BrowserThread::GetTaskRunnerForThread(
+          content::BrowserThread::UI),
+      base::BindOnce(&WebAppPolicyManager::
+                         InitChangeRegistrarAndRefreshPolicyInstalledApps,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
-
-WebAppPolicyManager::WebAppPolicyManager(
-    PrefService* pref_service,
-    std::unique_ptr<PendingAppManager> pending_app_manager)
-    : pref_service_(pref_service),
-      pending_app_manager_(std::move(pending_app_manager)) {
-  pending_app_manager_->ProcessAppOperations(GetAppsToInstall());
-}
-
-WebAppPolicyManager::WebAppPolicyManager(PrefService* pref_service)
-    : WebAppPolicyManager(
-          pref_service,
-          std::make_unique<extensions::PendingBookmarkAppManager>()) {}
 
 WebAppPolicyManager::~WebAppPolicyManager() = default;
 
-std::vector<WebAppPolicyManager::AppInfo>
-WebAppPolicyManager::GetAppsToInstall() {
+// static
+void WebAppPolicyManager::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterListPref(prefs::kWebAppInstallForceList);
+}
+
+// static
+bool WebAppPolicyManager::ShouldEnableForProfile(Profile* profile) {
+// PolicyBrowserTests applies test policies to all profiles, including the
+// sign-in profile. This causes tests to become flaky since the tests could
+// finish before, during, or after the policy apps fail to install in the
+// sign-in profile. So we temporarily add a guard to ignore the policy for the
+// sign-in profile.
+// TODO(crbug.com/876705): Remove once the policy no longer applies to the
+// sign-in profile during tests.
+#if defined(OS_CHROMEOS)
+  return !chromeos::ProfileHelper::IsSigninProfile(profile);
+#else  // !OS_CHROMEOS
+  return true;
+#endif
+}
+
+void WebAppPolicyManager::InitChangeRegistrarAndRefreshPolicyInstalledApps() {
+  pref_change_registrar_.Init(pref_service_);
+  pref_change_registrar_.Add(
+      prefs::kWebAppInstallForceList,
+      base::BindRepeating(&WebAppPolicyManager::RefreshPolicyInstalledApps,
+                          weak_ptr_factory_.GetWeakPtr()));
+
+  // Populate `last_app_urls_` with the current policy-installed apps so that
+  // we can uninstall any apps that are no longer in the policy.
+  last_app_urls_ = ExtensionIdsMap::GetPolicyInstalledAppUrls(profile_);
+
+  // Sort so that we can later use base::STLSetDifference.
+  std::sort(last_app_urls_.begin(), last_app_urls_.end());
+
+  RefreshPolicyInstalledApps();
+}
+
+void WebAppPolicyManager::RefreshPolicyInstalledApps() {
   const base::Value* web_apps =
       pref_service_->GetList(prefs::kWebAppInstallForceList);
 
-  std::vector<AppInfo> apps_to_install;
+  std::vector<GURL> app_urls;
+  std::vector<PendingAppManager::AppInfo> apps_to_install;
   for (const base::Value& info : web_apps->GetList()) {
     const base::Value& url = *info.FindKey(kUrlKey);
-    const base::Value& launch_container = *info.FindKey(kLaunchContainerKey);
+    const base::Value* launch_container = info.FindKey(kLaunchContainerKey);
 
-    DCHECK(launch_container.GetString() == kLaunchContainerWindowValue ||
-           launch_container.GetString() == kLaunchContainerTabValue);
+    DCHECK(!launch_container ||
+           launch_container->GetString() == kLaunchContainerWindowValue ||
+           launch_container->GetString() == kLaunchContainerTabValue);
 
-    apps_to_install.emplace_back(
-        GURL(url.GetString()),
-        launch_container.GetString() == kLaunchContainerWindowValue
-            ? LaunchContainer::kWindow
-            : LaunchContainer::kTab);
+    PendingAppManager::LaunchContainer container;
+    if (!launch_container)
+      container = PendingAppManager::LaunchContainer::kDefault;
+    else if (launch_container->GetString() == kLaunchContainerWindowValue)
+      container = PendingAppManager::LaunchContainer::kWindow;
+    else
+      container = PendingAppManager::LaunchContainer::kTab;
+
+    // There is a separate policy to create shortcuts/pin apps to shelf.
+    apps_to_install.push_back(PendingAppManager::AppInfo::CreateForPolicy(
+        GURL(url.GetString()), container, false /* create_shortcuts */));
+    app_urls.emplace_back(url.GetString());
   }
-  return apps_to_install;
+
+  pending_app_manager_->InstallApps(std::move(apps_to_install),
+                                    base::DoNothing());
+  std::sort(app_urls.begin(), app_urls.end());
+
+  auto apps_to_uninstall =
+      base::STLSetDifference<std::vector<GURL>>(last_app_urls_, app_urls);
+  pending_app_manager_->UninstallApps(std::move(apps_to_uninstall),
+                                      base::DoNothing());
+  last_app_urls_.swap(app_urls);
 }
-
-WebAppPolicyManager::PendingAppManager::PendingAppManager() = default;
-
-WebAppPolicyManager::PendingAppManager::~PendingAppManager() = default;
 
 }  // namespace web_app

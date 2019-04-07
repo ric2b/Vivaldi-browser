@@ -104,7 +104,7 @@ public class CompositorViewHolder extends FrameLayout
     private ControlContainer mControlContainer;
 
     private InsetObserverView mInsetObserverView;
-    private boolean mShowingFullscreenNonVideoContent;
+    private boolean mShowingFullscreen;
     private Runnable mSystemUiFullscreenResizeRunnable;
 
     /** The currently visible Tab. */
@@ -210,13 +210,12 @@ public class CompositorViewHolder extends FrameLayout
             @Override
             public void onLayoutChange(View v, int left, int top, int right, int bottom,
                     int oldLeft, int oldTop, int oldRight, int oldBottom) {
-                // Have content pick up the size and browser control information when the content
-                // view got laid out. Successive calls with the same values are ignored by
-                // ViewAndroid that stores the size.
-                View view = getContentView();
-                if (view != null) {
+                Tab tab = getCurrentTab();
+                // Set the size of NTP if we're in the attached state as it may have not been sized
+                // properly when initializing tab. See the comment in #initializeTab() for why.
+                if (tab != null && tab.isNativePage() && isAttachedToWindow(tab.getView())) {
                     Point viewportSize = getViewportSize();
-                    setSize(getWebContents(), view, viewportSize.x, viewportSize.y);
+                    setSize(tab.getWebContents(), tab.getView(), viewportSize.x, viewportSize.y);
                 }
                 onViewportChanged();
 
@@ -258,7 +257,7 @@ public class CompositorViewHolder extends FrameLayout
         // contents.
         //
         // [1] - https://developer.android.com/reference/android/view/WindowManager.LayoutParams.html#FLAG_FULLSCREEN
-        if (mShowingFullscreenNonVideoContent && UiUtils.isKeyboardShowing(getContext(), this)) {
+        if (mShowingFullscreen && UiUtils.isKeyboardShowing(getContext(), this)) {
             getWindowVisibleDisplayFrame(mCacheRect);
 
             // On certain devices, getWindowVisibleDisplayFrame is larger than the screen size, so
@@ -273,36 +272,26 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     private void handleSystemUiVisibilityChange() {
-        boolean isInFullscreen = false;
-        boolean layoutFullscreen = false;
-
         View view = getContentView();
         if (view == null || !ViewCompat.isAttachedToWindow(view)) view = this;
 
+        int uiVisibility = 0;
         while (view != null) {
-            int uiVisibility = view.getSystemUiVisibility();
-            layoutFullscreen |= (uiVisibility & View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) != 0;
-            isInFullscreen |= (uiVisibility & View.SYSTEM_UI_FLAG_FULLSCREEN) != 0;
-            if (layoutFullscreen && isInFullscreen) break;
+            uiVisibility |= view.getSystemUiVisibility();
             if (!(view.getParent() instanceof View)) break;
             view = (View) view.getParent();
         }
 
-        if (!isInFullscreen && !mShowingFullscreenNonVideoContent) return;
+        // SYSTEM_UI_FLAG_FULLSCREEN is cleared when showing the soft keyboard in older version of
+        // Android (prior to P).  The immersive mode flags are not cleared, so use those in
+        // combination to detect this state.
+        boolean isInFullscreen = (uiVisibility & View.SYSTEM_UI_FLAG_FULLSCREEN) != 0
+                || (uiVisibility & View.SYSTEM_UI_FLAG_IMMERSIVE) != 0
+                || (uiVisibility & View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY) != 0;
+        boolean layoutFullscreen = (uiVisibility & View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) != 0;
 
-        if (isInFullscreen && mFullscreenManager != null
-                && mFullscreenManager.getPersistentFullscreenMode()) {
-            Tab tab = getCurrentTab();
-            WebContents webContents = tab != null ? tab.getWebContents() : null;
-            // When playing fullscreen video, the inset size adjustments are always temporary and
-            // should be ignored to avoid relayout janks.
-            if (webContents != null && webContents.hasActiveEffectivelyFullscreenVideo()) {
-                isInFullscreen = false;
-            }
-        }
-
-        if (mShowingFullscreenNonVideoContent == isInFullscreen) return;
-        mShowingFullscreenNonVideoContent = isInFullscreen;
+        if (mShowingFullscreen == isInFullscreen) return;
+        mShowingFullscreen = isInFullscreen;
 
         if (mSystemUiFullscreenResizeRunnable == null) {
             mSystemUiFullscreenResizeRunnable = () -> {
@@ -376,8 +365,8 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     @Override
-    public void onInsetChanged(int top, int left, int bottom, int right) {
-        if (mShowingFullscreenNonVideoContent) onViewportChanged();
+    public void onInsetChanged(int left, int top, int right, int bottom) {
+        if (mShowingFullscreen) onViewportChanged();
     }
 
     @Override
@@ -1019,7 +1008,7 @@ public class CompositorViewHolder extends FrameLayout
         if (mView == newView) return;
 
         // TODO(dtrainor): Look into changing this only if the views differ, but still parse the
-        // ContentViewCore list even if they're the same.
+        // WebContents list even if they're the same.
         updateContentOverlayVisibility(false);
 
         if (mTabVisible != tab) {
@@ -1049,6 +1038,13 @@ public class CompositorViewHolder extends FrameLayout
         if (tab.getView() == null) return;
         tab.setTopControlsHeight(getTopControlsHeightPixels(), controlsResizeView());
         tab.setBottomControlsHeight(getBottomControlsHeightPixels());
+
+        // TextView with compound drawables in the NTP gets a wrong width when measure/layout is
+        // performed in the unattached state. Delay the layout till #onLayoutChange().
+        // See https://crbug.com/876686.
+        if (tab.isNativePage() && !isAttachedToWindow(tab.getView())) return;
+        Point viewportSize = getViewportSize();
+        setSize(webContents, tab.getView(), viewportSize.x, viewportSize.y);
     }
 
     /**
@@ -1061,8 +1057,8 @@ public class CompositorViewHolder extends FrameLayout
     private void setSizeOfUnattachedView(View view, WebContents webContents, int controlsHeight) {
         // Need to call layout() for the following View if it is not attached to the view hierarchy.
         // Calling {@code view.onSizeChanged()} is dangerous because if the View has a different
-        // size than the ContentViewCore it might think a future size update is a NOOP and not call
-        // onSizeChanged() on the ContentViewCore.
+        // size than the WebContents, it might think a future size update is a NOOP and not call
+        // onSizeChanged() on the WebContents.
         if (isAttachedToWindow(view)) return;
         Point viewportSize = getViewportSize();
         int width = viewportSize.x;

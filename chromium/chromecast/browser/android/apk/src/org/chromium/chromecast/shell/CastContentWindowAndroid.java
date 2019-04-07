@@ -36,20 +36,23 @@ public class CastContentWindowAndroid implements CastWebContentsComponent.OnComp
 
     @SuppressWarnings("unused")
     @CalledByNative
-    private static CastContentWindowAndroid create(
-            long nativeCastContentWindowAndroid, boolean isHeadless, boolean enableTouchInput) {
+    private static CastContentWindowAndroid create(long nativeCastContentWindowAndroid,
+            boolean isHeadless, boolean enableTouchInput, boolean isRemoteControlMode,
+            boolean turnOnScreen) {
         return new CastContentWindowAndroid(nativeCastContentWindowAndroid,
-                ContextUtils.getApplicationContext(), isHeadless, enableTouchInput);
+                ContextUtils.getApplicationContext(), isHeadless, enableTouchInput,
+                isRemoteControlMode, turnOnScreen);
     }
 
     private CastContentWindowAndroid(long nativeCastContentWindowAndroid, final Context context,
-            boolean isHeadless, boolean enableTouchInput) {
+            boolean isHeadless, boolean enableTouchInput, boolean isRemoteControlMode,
+            boolean turnOnScreen) {
         mNativeCastContentWindowAndroid = nativeCastContentWindowAndroid;
         mContext = context;
         mInstanceId = Integer.toString(sInstanceId++);
         // TODO call nativeGetId() to set ID to CastWebContentsComponent.
-        mComponent = new CastWebContentsComponent(
-                mInstanceId, this, this, this, isHeadless, enableTouchInput);
+        mComponent = new CastWebContentsComponent(mInstanceId, this, this, this, isHeadless,
+                enableTouchInput, isRemoteControlMode, turnOnScreen);
     }
 
     @SuppressWarnings("unused")

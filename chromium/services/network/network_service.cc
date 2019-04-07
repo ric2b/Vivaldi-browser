@@ -6,16 +6,20 @@
 
 #include <map>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/no_destructor.h"
+#include "base/task/post_task.h"
+#include "base/timer/timer.h"
 #include "base/values.h"
 #include "components/certificate_transparency/sth_distributor.h"
 #include "components/certificate_transparency/sth_observer.h"
+#include "components/os_crypt/os_crypt.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/logging_network_change_observer.h"
 #include "net/base/network_change_notifier.h"
@@ -24,13 +28,19 @@
 #include "net/dns/host_resolver.h"
 #include "net/dns/mapped_host_resolver.h"
 #include "net/http/http_auth_handler_factory.h"
+#include "net/log/file_net_log_observer.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_util.h"
+#include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
+#include "services/network/crl_set_distributor.h"
+#include "services/network/cross_origin_read_blocking.h"
 #include "services/network/mojo_net_log.h"
 #include "services/network/network_context.h"
 #include "services/network/network_usage_accumulator.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/network_switches.h"
+#include "services/network/url_loader.h"
 #include "services/network/url_request_context_builder_mojo.h"
 
 #if defined(OS_ANDROID) && defined(ARCH_CPU_ARMEL)
@@ -40,7 +50,6 @@
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(IS_CHROMECAST)
 #include "components/os_crypt/key_storage_config_linux.h"
-#include "components/os_crypt/os_crypt.h"
 #endif
 
 namespace network {
@@ -48,6 +57,15 @@ namespace network {
 namespace {
 
 NetworkService* g_network_service = nullptr;
+
+MojoNetLog* GetMojoNetLog() {
+  static base::NoDestructor<MojoNetLog> instance;
+  return instance.get();
+}
+
+// The interval for calls to NetworkService::UpdateLoadStates
+constexpr auto kUpdateLoadStatesInterval =
+    base::TimeDelta::FromMilliseconds(250);
 
 std::unique_ptr<net::NetworkChangeNotifier>
 CreateNetworkChangeNotifierIfNeeded() {
@@ -84,6 +102,26 @@ std::unique_ptr<net::HostResolver> CreateHostResolver(net::NetLog* net_log) {
   remapped_host_resolver->SetRulesFromString(
       command_line.GetSwitchValueASCII(switches::kHostResolverRules));
   return std::move(remapped_host_resolver);
+}
+
+// This is duplicated in content/browser/loader/resource_dispatcher_host_impl.cc
+bool LoadInfoIsMoreInteresting(const mojom::LoadInfo& a,
+                               const mojom::LoadInfo& b) {
+  // Set |*_uploading_size| to be the size of the corresponding upload body if
+  // it's currently being uploaded.
+
+  uint64_t a_uploading_size = 0;
+  if (a.load_state == net::LOAD_STATE_SENDING_REQUEST)
+    a_uploading_size = a.upload_size;
+
+  uint64_t b_uploading_size = 0;
+  if (b.load_state == net::LOAD_STATE_SENDING_REQUEST)
+    b_uploading_size = b.upload_size;
+
+  if (a_uploading_size != b_uploading_size)
+    return a_uploading_size > b_uploading_size;
+
+  return a.load_state > b.load_state;
 }
 
 }  // namespace
@@ -134,12 +172,11 @@ NetworkService::NetworkService(
   if (net_log) {
     net_log_ = net_log;
   } else {
-    owned_net_log_ = std::make_unique<MojoNetLog>();
+    network_service_net_log_ = GetMojoNetLog();
     // Note: The command line switches are only checked when not using the
     // embedder's NetLog, as it may already be writing to the destination log
     // file.
-    owned_net_log_->ProcessCommandLine(*command_line);
-    net_log_ = owned_net_log_.get();
+    net_log_ = network_service_net_log_;
   }
 
   // Add an observer that will emit network change events to the ChromeNetLog.
@@ -156,6 +193,7 @@ NetworkService::NetworkService(
   network_usage_accumulator_ = std::make_unique<NetworkUsageAccumulator>();
   sth_distributor_ =
       std::make_unique<certificate_transparency::STHDistributor>();
+  crl_set_distributor_ = std::make_unique<CRLSetDistributor>();
 }
 
 NetworkService::~NetworkService() {
@@ -167,6 +205,13 @@ NetworkService::~NetworkService() {
   // All NetworkContexts (Owned and unowned) must have been deleted by this
   // point.
   DCHECK(network_contexts_.empty());
+
+  if (network_service_net_log_)
+    network_service_net_log_->ShutDown();
+}
+
+void NetworkService::set_os_crypt_is_configured() {
+  os_crypt_config_set_ = true;
 }
 
 std::unique_ptr<NetworkService> NetworkService::Create(
@@ -233,6 +278,16 @@ void NetworkService::SetClient(mojom::NetworkServiceClientPtr client) {
   client_ = std::move(client);
 }
 
+void NetworkService::StartNetLog(base::File file,
+                                 base::Value client_constants) {
+  DCHECK(client_constants.is_dict());
+  std::unique_ptr<base::DictionaryValue> constants = net::GetNetConstants();
+  constants->MergeDictionary(&client_constants);
+
+  network_service_net_log_->ObserveFileWithConstants(std::move(file),
+                                                     std::move(*constants));
+}
+
 void NetworkService::CreateNetworkContext(
     mojom::NetworkContextRequest request,
     mojom::NetworkContextParamsPtr params) {
@@ -270,8 +325,8 @@ void NetworkService::ConfigureStubHostResolver(
 
     host_resolver_->SetRequestContext(network_context->url_request_context());
     for (const auto& doh_server : *dns_over_https_servers) {
-      host_resolver_->AddDnsOverHttpsServer(doh_server->url.spec(),
-                                            doh_server->use_posts);
+      host_resolver_->AddDnsOverHttpsServer(doh_server->server_template,
+                                            doh_server->use_post);
     }
     return;
   }
@@ -367,9 +422,14 @@ void NetworkService::UpdateSignedTreeHead(const net::ct::SignedTreeHead& sth) {
   sth_distributor_->NewSTHObserved(sth);
 }
 
+void NetworkService::UpdateCRLSet(base::span<const uint8_t> crl_set) {
+  crl_set_distributor_->OnNewCRLSet(crl_set);
+}
+
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 void NetworkService::SetCryptConfig(mojom::CryptConfigPtr crypt_config) {
 #if !defined(IS_CHROMECAST)
+  DCHECK(!os_crypt_config_set_);
   auto config = std::make_unique<os_crypt::Config>();
   config->store = crypt_config->store;
   config->product_name = crypt_config->product_name;
@@ -382,12 +442,33 @@ void NetworkService::SetCryptConfig(mojom::CryptConfigPtr crypt_config) {
 }
 #endif
 
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+void NetworkService::SetEncryptionKey(const std::string& encryption_key) {
+  OSCrypt::SetRawEncryptionKey(encryption_key);
+}
+#endif  // OS_MACOSX
+
+void NetworkService::AddCorbExceptionForPlugin(uint32_t process_id) {
+  DCHECK_NE(mojom::kBrowserProcessId, process_id);
+  CrossOriginReadBlocking::AddExceptionForPlugin(process_id);
+}
+
+void NetworkService::RemoveCorbExceptionForPlugin(uint32_t process_id) {
+  DCHECK_NE(mojom::kBrowserProcessId, process_id);
+  CrossOriginReadBlocking::RemoveExceptionForPlugin(process_id);
+}
+
 net::HttpAuthHandlerFactory* NetworkService::GetHttpAuthHandlerFactory() {
   if (!http_auth_handler_factory_) {
     http_auth_handler_factory_ = net::HttpAuthHandlerFactory::CreateDefault(
         host_resolver_.get(), &http_auth_preferences_);
   }
   return http_auth_handler_factory_.get();
+}
+
+void NetworkService::OnBeforeURLRequest() {
+  if (base::FeatureList::IsEnabled(features::kNetworkService))
+    MaybeStartUpdateLoadInfoTimer();
 }
 
 certificate_transparency::STHReporter* NetworkService::sth_reporter() {
@@ -434,6 +515,92 @@ void NetworkService::OnNetworkContextConnectionClosed(
   auto it = owned_network_contexts_.find(network_context);
   DCHECK(it != owned_network_contexts_.end());
   owned_network_contexts_.erase(it);
+}
+
+void NetworkService::MaybeStartUpdateLoadInfoTimer() {
+  if (waiting_on_load_state_ack_ || update_load_info_timer_.IsRunning())
+    return;
+
+  bool has_loader = false;
+  for (auto* network_context : network_contexts_) {
+    if (!network_context->url_request_context()->url_requests()->empty()) {
+      has_loader = true;
+      break;
+    }
+  }
+
+  if (!has_loader)
+    return;
+
+  update_load_info_timer_.Start(FROM_HERE, kUpdateLoadStatesInterval, this,
+                                &NetworkService::UpdateLoadInfo);
+}
+
+void NetworkService::UpdateLoadInfo() {
+  // For requests from the same {process_id, routing_id} pair, pick the most
+  // important. For ones from the browser, return all of them.
+  std::vector<mojom::LoadInfoPtr> infos;
+  std::map<std::pair<uint32_t, uint32_t>, mojom::LoadInfoPtr> frame_infos;
+
+  for (auto* network_context : network_contexts_) {
+    for (auto* loader :
+         *network_context->url_request_context()->url_requests()) {
+      auto* url_loader = URLLoader::ForRequest(*loader);
+      if (!url_loader)
+        continue;
+
+      auto process_id = url_loader->GetProcessId();
+      auto routing_id = url_loader->GetRenderFrameId();
+      if (routing_id == static_cast<uint32_t>(MSG_ROUTING_NONE)) {
+        // If there is no routing_id, then the browser can't associate this with
+        // a page so no need to send.
+        continue;
+      }
+
+      auto load_info = mojom::LoadInfo::New();
+      load_info->process_id = process_id;
+      load_info->routing_id = routing_id;
+      load_info->host = loader->url().host();
+      auto load_state = loader->GetLoadState();
+      load_info->load_state = static_cast<uint32_t>(load_state.state);
+      load_info->state_param = std::move(load_state.param);
+      auto upload_progress = loader->GetUploadProgress();
+      load_info->upload_size = upload_progress.size();
+      load_info->upload_position = upload_progress.position();
+
+      if (process_id == 0) {
+        // Requests from the browser can't be compared to ones from child
+        // processes, so send them all without looking for the most interesting.
+        infos.push_back(std::move(load_info));
+        continue;
+      }
+
+      auto key = std::make_pair(process_id, routing_id);
+      auto existing = frame_infos.find(key);
+      if (existing == frame_infos.end() ||
+          LoadInfoIsMoreInteresting(*load_info, *existing->second)) {
+        frame_infos[key] = std::move(load_info);
+      }
+    }
+  }
+
+  for (auto& it : frame_infos)
+    infos.push_back(std::move(it.second));
+
+  if (infos.empty())
+    return;
+
+  DCHECK(!waiting_on_load_state_ack_);
+  waiting_on_load_state_ack_ = true;
+  client_->OnLoadingStateUpdate(
+      std::move(infos), base::BindOnce(&NetworkService::AckUpdateLoadInfo,
+                                       base::Unretained(this)));
+}
+
+void NetworkService::AckUpdateLoadInfo() {
+  DCHECK(waiting_on_load_state_ack_);
+  waiting_on_load_state_ack_ = false;
+  MaybeStartUpdateLoadInfoTimer();
 }
 
 void NetworkService::Bind(mojom::NetworkServiceRequest request) {

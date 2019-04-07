@@ -293,12 +293,6 @@ void WebFrameWidgetImpl::UpdateLifecycle(LifecycleUpdate requested_update) {
   if (!LocalRootImpl())
     return;
 
-  bool pre_paint_only = requested_update == LifecycleUpdate::kPrePaint;
-
-  WebDevToolsAgentImpl* devtools = LocalRootImpl()->DevToolsAgentImpl();
-  if (devtools && !pre_paint_only)
-    devtools->PaintOverlay();
-
   DocumentLifecycle::AllowThrottlingScope throttling_scope(
       LocalRootImpl()->GetFrame()->GetDocument()->Lifecycle());
   PageWidgetDelegate::UpdateLifecycle(*GetPage(), *LocalRootImpl()->GetFrame(),
@@ -696,14 +690,15 @@ void WebFrameWidgetImpl::WillCloseLayerTreeView() {
 }
 
 void WebFrameWidgetImpl::SetRemoteViewportIntersection(
-    const WebRect& viewport_intersection) {
+    const WebRect& viewport_intersection,
+    bool occluded_or_obscured) {
   // Remote viewports are only applicable to local frames with remote ancestors.
   DCHECK(LocalRootImpl()->Parent() &&
          LocalRootImpl()->Parent()->IsWebRemoteFrame() &&
          LocalRootImpl()->GetFrame());
 
   LocalRootImpl()->GetFrame()->SetViewportIntersectionFromParent(
-      viewport_intersection);
+      viewport_intersection, occluded_or_obscured);
 }
 
 void WebFrameWidgetImpl::SetIsInert(bool inert) {
@@ -877,7 +872,16 @@ WebInputEventResult WebFrameWidgetImpl::HandleGestureEvent(
       View()->SetLastHiddenPagePopup(nullptr);
       break;
     case WebInputEvent::kGestureShowPress:
+      break;
     case WebInputEvent::kGestureDoubleTap:
+      // Until https://crbug.com/734209 is resolved and OOPIFs learn how to
+      // handle AnimateDoubleTap, we shouldn't pass this event to the event
+      // handler as it will just result in (at best) hitting NOTREACHED() in
+      // debug builds.
+      LOG(INFO) << "DoubleTap zoom animations not yet implemented for OOPIF.";
+      event_result = WebInputEventResult::kHandledSystem;
+      Client()->DidHandleGestureEvent(event, event_cancelled);
+      return event_result;
       break;
     case WebInputEvent::kGestureTwoFingerTap:
     case WebInputEvent::kGestureLongPress:

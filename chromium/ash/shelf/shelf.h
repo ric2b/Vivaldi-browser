@@ -91,6 +91,8 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
 
   void UpdateVisibilityState();
 
+  void MaybeUpdateShelfBackground();
+
   ShelfVisibilityState GetVisibilityState() const;
 
   int GetAccessibilityPanelHeight() const;
@@ -103,10 +105,6 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   gfx::Rect GetIdealBounds();
 
   gfx::Rect GetUserWorkAreaBounds() const;
-
-  // Updates the icon position given the current window bounds. This is used
-  // when dragging panels to reposition them with respect to the other panels.
-  void UpdateIconPositionForPanel(aura::Window* window);
 
   // Returns the screen bounds of the item for the specified window. If there is
   // no item for the specified window an empty rect is returned.
@@ -182,7 +180,7 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   // Sets shelf alignment to bottom during login and screen lock.
   ShelfLockingManager shelf_locking_manager_;
 
-  base::ObserverList<ShelfObserver> observers_;
+  base::ObserverList<ShelfObserver>::Unchecked observers_;
 
   // Forwards mouse and gesture events to ShelfLayoutManager for auto-hide.
   std::unique_ptr<AutoHideEventHandler> auto_hide_event_handler_;

@@ -17,6 +17,7 @@
 #include "chromeos/components/proximity_auth/logging/logging.h"
 #include "components/cryptauth/cryptauth_client.h"
 #include "components/cryptauth/pref_names.h"
+#include "components/cryptauth/proto/enum_util.h"
 #include "components/cryptauth/software_feature_state.h"
 #include "components/cryptauth/sync_scheduler_impl.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -109,20 +110,22 @@ void RecordDeviceSyncSoftwareFeaturesResult(bool success) {
 // value that can be stored in user prefs.
 std::unique_ptr<base::DictionaryValue>
 SupportedAndEnabledSoftwareFeaturesToDictionaryValue(
-    const google::protobuf::RepeatedField<int>& supported_software_features,
-    const google::protobuf::RepeatedField<int>& enabled_software_features,
+    const google::protobuf::RepeatedPtrField<std::string>&
+        supported_software_features,
+    const google::protobuf::RepeatedPtrField<std::string>&
+        enabled_software_features,
     bool legacy_unlock_key,
     bool legacy_mobile_hotspot_supported) {
   std::unique_ptr<base::DictionaryValue> dictionary =
       std::make_unique<base::DictionaryValue>();
 
   for (const auto& supported_software_feature : supported_software_features) {
-    dictionary->SetInteger(std::to_string(supported_software_feature),
+    dictionary->SetInteger(supported_software_feature,
                            static_cast<int>(SoftwareFeatureState::kSupported));
   }
 
   for (const auto& enabled_software_feature : enabled_software_features) {
-    std::string software_feature_key = std::to_string(enabled_software_feature);
+    std::string software_feature_key = enabled_software_feature;
 
     int software_feature_state;
     if (!dictionary->GetInteger(software_feature_key,
@@ -148,13 +151,15 @@ SupportedAndEnabledSoftwareFeaturesToDictionaryValue(
   // software features, and only serving the deprecated booleans.
   int software_feature_state;
   std::string software_feature_key;
-  software_feature_key = std::to_string(SoftwareFeature::EASY_UNLOCK_HOST);
+  software_feature_key =
+      SoftwareFeatureEnumToString(cryptauth::SoftwareFeature::EASY_UNLOCK_HOST);
   if (legacy_unlock_key &&
       !dictionary->GetInteger(software_feature_key, &software_feature_state)) {
     dictionary->SetInteger(software_feature_key,
                            static_cast<int>(SoftwareFeatureState::kEnabled));
   }
-  software_feature_key = std::to_string(SoftwareFeature::MAGIC_TETHER_HOST);
+  software_feature_key = SoftwareFeatureEnumToString(
+      cryptauth::SoftwareFeature::MAGIC_TETHER_HOST);
   if (legacy_mobile_hotspot_supported &&
       !dictionary->GetInteger(software_feature_key, &software_feature_state)) {
     dictionary->SetInteger(software_feature_key,
@@ -295,14 +300,26 @@ void AddSoftwareFeaturesToExternalDevice(
     bool old_unlock_key_value_from_prefs,
     bool old_mobile_hotspot_supported_from_prefs) {
   for (const auto& it : software_features_dictionary.DictItems()) {
+    std::string software_feature = it.first;
+    if (SoftwareFeatureStringToEnum(software_feature) ==
+        SoftwareFeature::UNKNOWN_FEATURE) {
+      // SoftwareFeatures were previously stored in prefs as ints. Now,
+      // SoftwareFeatures are stored as full string values, e.g.,
+      // "betterTogetherHost". If |it.first| is not recognized by
+      // SoftwareFeatureStringToEnum(), that means it is in the old int
+      // representation of the SoftwareFeature. Convert it to its full string
+      // representation using SoftwareFeatureEnumToString();
+      int software_feature_int = std::atoi(software_feature.c_str());
+      software_feature = SoftwareFeatureEnumToString(
+          static_cast<SoftwareFeature>(software_feature_int));
+    }
+
     int software_feature_state;
     if (!it.second.GetAsInteger(&software_feature_state)) {
       PA_LOG(WARNING) << "Unable to retrieve SoftwareFeature; skipping.";
       continue;
     }
 
-    SoftwareFeature software_feature =
-        static_cast<SoftwareFeature>(std::stoi(it.first));
     switch (static_cast<SoftwareFeatureState>(software_feature_state)) {
       case SoftwareFeatureState::kEnabled:
         external_device->add_enabled_software_features(software_feature);
@@ -321,22 +338,25 @@ void AddSoftwareFeaturesToExternalDevice(
   // software features. To work around this, these pref values are migrated to
   // software features locally.
   if (old_unlock_key_value_from_prefs) {
-    if (!base::ContainsValue(external_device->supported_software_features(),
-                             SoftwareFeature::EASY_UNLOCK_HOST)) {
+    if (!base::ContainsValue(
+            external_device->supported_software_features(),
+            SoftwareFeatureEnumToString(SoftwareFeature::EASY_UNLOCK_HOST))) {
       external_device->add_supported_software_features(
-          SoftwareFeature::EASY_UNLOCK_HOST);
+          SoftwareFeatureEnumToString(SoftwareFeature::EASY_UNLOCK_HOST));
     }
-    if (!base::ContainsValue(external_device->enabled_software_features(),
-                             SoftwareFeature::EASY_UNLOCK_HOST)) {
+    if (!base::ContainsValue(
+            external_device->enabled_software_features(),
+            SoftwareFeatureEnumToString(SoftwareFeature::EASY_UNLOCK_HOST))) {
       external_device->add_enabled_software_features(
-          SoftwareFeature::EASY_UNLOCK_HOST);
+          SoftwareFeatureEnumToString(SoftwareFeature::EASY_UNLOCK_HOST));
     }
   }
   if (old_mobile_hotspot_supported_from_prefs) {
-    if (!base::ContainsValue(external_device->supported_software_features(),
-                             SoftwareFeature::MAGIC_TETHER_HOST)) {
+    if (!base::ContainsValue(
+            external_device->supported_software_features(),
+            SoftwareFeatureEnumToString(SoftwareFeature::MAGIC_TETHER_HOST))) {
       external_device->add_supported_software_features(
-          SoftwareFeature::MAGIC_TETHER_HOST);
+          SoftwareFeatureEnumToString(SoftwareFeature::MAGIC_TETHER_HOST));
     }
   }
 }
@@ -561,8 +581,9 @@ std::vector<ExternalDeviceInfo> CryptAuthDeviceManagerImpl::GetUnlockKeys()
     const {
   std::vector<ExternalDeviceInfo> unlock_keys;
   for (const auto& device : synced_devices_) {
-    if (base::ContainsValue(device.enabled_software_features(),
-                            SoftwareFeature::EASY_UNLOCK_HOST)) {
+    if (base::ContainsValue(
+            device.enabled_software_features(),
+            SoftwareFeatureEnumToString(SoftwareFeature::EASY_UNLOCK_HOST))) {
       unlock_keys.push_back(device);
     }
   }
@@ -573,8 +594,9 @@ std::vector<ExternalDeviceInfo> CryptAuthDeviceManagerImpl::GetPixelUnlockKeys()
     const {
   std::vector<ExternalDeviceInfo> unlock_keys;
   for (const auto& device : synced_devices_) {
-    if (base::ContainsValue(device.enabled_software_features(),
-                            SoftwareFeature::EASY_UNLOCK_HOST) &&
+    if (base::ContainsValue(
+            device.enabled_software_features(),
+            SoftwareFeatureEnumToString(SoftwareFeature::EASY_UNLOCK_HOST)) &&
         device.pixel_phone()) {
       unlock_keys.push_back(device);
     }
@@ -586,8 +608,9 @@ std::vector<ExternalDeviceInfo> CryptAuthDeviceManagerImpl::GetTetherHosts()
     const {
   std::vector<ExternalDeviceInfo> tether_hosts;
   for (const auto& device : synced_devices_) {
-    if (base::ContainsValue(device.supported_software_features(),
-                            SoftwareFeature::MAGIC_TETHER_HOST)) {
+    if (base::ContainsValue(
+            device.supported_software_features(),
+            SoftwareFeatureEnumToString(SoftwareFeature::MAGIC_TETHER_HOST))) {
       tether_hosts.push_back(device);
     }
   }
@@ -598,8 +621,9 @@ std::vector<ExternalDeviceInfo>
 CryptAuthDeviceManagerImpl::GetPixelTetherHosts() const {
   std::vector<ExternalDeviceInfo> tether_hosts;
   for (const auto& device : synced_devices_) {
-    if (base::ContainsValue(device.supported_software_features(),
-                            SoftwareFeature::MAGIC_TETHER_HOST) &&
+    if (base::ContainsValue(
+            device.supported_software_features(),
+            SoftwareFeatureEnumToString(SoftwareFeature::MAGIC_TETHER_HOST)) &&
         device.pixel_phone())
       tether_hosts.push_back(device);
   }

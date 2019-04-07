@@ -134,7 +134,6 @@ class WebSettings {
   // contents at an insecure URL. Otherwise, disallows it. The
   // LocalFrameClient set to the frame may override the value set by this
   // method.
-  virtual void SetAccessibilityEnabled(bool) = 0;
   virtual void SetAccessibilityPasswordValuesEnabled(bool) = 0;
   virtual void SetAllowAccessKeys(bool) = 0;
   virtual void SetAllowFileAccessFromFileURLs(bool) = 0;
@@ -173,15 +172,13 @@ class WebSettings {
   virtual void SetEnableScrollAnimator(bool) = 0;
   virtual void SetEnableTouchAdjustment(bool) = 0;
   virtual void SetSmoothScrollForFindEnabled(bool) = 0;
-  virtual bool MultiTargetTapNotificationEnabled() = 0;
-  virtual void SetMultiTargetTapNotificationEnabled(bool) = 0;
   virtual void SetWebGL1Enabled(bool) = 0;
   virtual void SetWebGL2Enabled(bool) = 0;
   virtual void SetFantasyFontFamily(const WebString&,
                                     UScriptCode = USCRIPT_COMMON) = 0;
   virtual void SetFixedFontFamily(const WebString&,
                                   UScriptCode = USCRIPT_COMMON) = 0;
-  virtual void SetFMPNetworkQuietTimeout(double timeout) = 0;
+  virtual void SetNetworkQuietTimeout(double timeout) = 0;
   virtual void SetForceMainWorldInitialization(bool) = 0;
   virtual void SetForcePreloadNoneForMediaElements(bool) = 0;
   virtual void SetForceZeroLayoutHeight(bool) = 0;
@@ -309,6 +306,12 @@ class WebSettings {
   virtual void SetLazyFrameLoadingDistanceThresholdPx2G(int) = 0;
   virtual void SetLazyFrameLoadingDistanceThresholdPx3G(int) = 0;
   virtual void SetLazyFrameLoadingDistanceThresholdPx4G(int) = 0;
+  virtual void SetLazyImageLoadingDistanceThresholdPxUnknown(int) = 0;
+  virtual void SetLazyImageLoadingDistanceThresholdPxOffline(int) = 0;
+  virtual void SetLazyImageLoadingDistanceThresholdPxSlow2G(int) = 0;
+  virtual void SetLazyImageLoadingDistanceThresholdPx2G(int) = 0;
+  virtual void SetLazyImageLoadingDistanceThresholdPx3G(int) = 0;
+  virtual void SetLazyImageLoadingDistanceThresholdPx4G(int) = 0;
 
  protected:
   ~WebSettings() = default;

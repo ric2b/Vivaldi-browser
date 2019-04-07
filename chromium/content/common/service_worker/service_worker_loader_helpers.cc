@@ -5,11 +5,13 @@
 #include "content/common/service_worker/service_worker_loader_helpers.h"
 
 #include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/strings/stringprintf.h"
-#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/resource_type.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/http/http_util.h"
 #include "services/network/loader_util.h"
@@ -40,13 +42,65 @@ class BlobCompleteCaller : public blink::mojom::BlobReaderClient {
   BlobCompleteCallback callback_;
 };
 
+// Sets |has_range_out| to true if |headers| specify a single range request, and
+// |offset_out| and |size_out| to the range. Returns true on valid input
+// (regardless of |has_range_out|), and false if there is more than one range or
+// if the bounds overflow.
+bool ExtractSinglePartHttpRange(const net::HttpRequestHeaders& headers,
+                                bool* has_range_out,
+                                uint64_t* offset_out,
+                                uint64_t* length_out) {
+  std::string range_header;
+  *has_range_out = false;
+  if (!headers.GetHeader(net::HttpRequestHeaders::kRange, &range_header))
+    return true;
+
+  std::vector<net::HttpByteRange> ranges;
+  if (!net::HttpUtil::ParseRangeHeader(range_header, &ranges))
+    return true;
+
+  // Multi-part (or invalid) ranges are not supported.
+  if (ranges.size() != 1)
+    return false;
+
+  // Safely parse the single range to our more-sane output format.
+  *has_range_out = true;
+  const net::HttpByteRange& byte_range = ranges[0];
+  if (byte_range.first_byte_position() < 0)
+    return false;
+  // Allow the range [0, -1] to be valid and specify the entire range.
+  if (byte_range.first_byte_position() == 0 &&
+      byte_range.last_byte_position() == -1) {
+    *has_range_out = false;
+    return true;
+  }
+  if (byte_range.last_byte_position() < 0)
+    return false;
+
+  uint64_t first_byte_position =
+      static_cast<uint64_t>(byte_range.first_byte_position());
+  uint64_t last_byte_position =
+      static_cast<uint64_t>(byte_range.last_byte_position());
+
+  base::CheckedNumeric<uint64_t> length = last_byte_position;
+  length -= first_byte_position;
+  length += 1;
+
+  if (!length.IsValid())
+    return false;
+
+  *offset_out = static_cast<uint64_t>(byte_range.first_byte_position());
+  *length_out = length.ValueOrDie();
+  return true;
+}
+
 }  // namespace
 
 // static
 void ServiceWorkerLoaderHelpers::SaveResponseHeaders(
     const int status_code,
     const std::string& status_text,
-    const ServiceWorkerHeaderMap& headers,
+    const base::flat_map<std::string, std::string>& headers,
     network::ResourceResponseHead* out_head) {
   // Build a string instead of using HttpResponseHeaders::AddHeader on
   // each header, since AddHeader has O(n^2) performance.
@@ -64,15 +118,11 @@ void ServiceWorkerLoaderHelpers::SaveResponseHeaders(
       net::HttpUtil::AssembleRawHeaders(buf.c_str(), buf.size()));
 
   // Populate |out_head|'s MIME type with the value from the HTTP response
-  // headers. If there is none, set a default value.
-  // TODO(crbug.com/771118): Make the MIME sniffer work for SW controlled page
-  // loads, so we don't need to set a simple default value.
+  // headers.
   if (out_head->mime_type.empty()) {
     std::string mime_type;
-    out_head->headers->GetMimeType(&mime_type);
-    if (mime_type.empty())
-      mime_type = "text/plain";
-    out_head->mime_type = mime_type;
+    if (out_head->headers->GetMimeType(&mime_type))
+      out_head->mime_type = mime_type;
   }
 
   // Populate |out_head|'s charset with the value from the HTTP response
@@ -86,15 +136,18 @@ void ServiceWorkerLoaderHelpers::SaveResponseHeaders(
 
 // static
 void ServiceWorkerLoaderHelpers::SaveResponseInfo(
-    const ServiceWorkerResponse& response,
+    const blink::mojom::FetchAPIResponse& response,
     network::ResourceResponseHead* out_head) {
   out_head->was_fetched_via_service_worker = true;
   out_head->was_fallback_required_by_service_worker = false;
   out_head->url_list_via_service_worker = response.url_list;
-  out_head->response_type_via_service_worker = response.response_type;
+  out_head->response_type = response.response_type;
   out_head->response_time = response.response_time;
   out_head->is_in_cache_storage = response.is_in_cache_storage;
-  out_head->cache_storage_cache_name = response.cache_storage_cache_name;
+  if (response.cache_storage_cache_name)
+    out_head->cache_storage_cache_name = *(response.cache_storage_cache_name);
+  else
+    out_head->cache_storage_cache_name.clear();
   out_head->cors_exposed_header_names = response.cors_exposed_header_names;
   out_head->did_service_worker_navigation_preload = false;
 }
@@ -136,8 +189,7 @@ int ServiceWorkerLoaderHelpers::ReadBlobResponseBody(
   // We don't support multiple range requests in one single URL request,
   // because we need to do multipart encoding here.
   // TODO(falken): Support multipart byte range requests.
-  if (!ServiceWorkerUtils::ExtractSinglePartHttpRange(headers, &byte_range_set,
-                                                      &offset, &length)) {
+  if (!ExtractSinglePartHttpRange(headers, &byte_range_set, &offset, &length)) {
     return net::ERR_REQUEST_RANGE_NOT_SATISFIABLE;
   }
 

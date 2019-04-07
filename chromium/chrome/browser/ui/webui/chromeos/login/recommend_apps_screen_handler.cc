@@ -105,6 +105,10 @@ void RecommendAppsScreenHandler::OnLoadSuccess(const base::Value& app_list) {
   LoadAppListInUI(app_list);
 }
 
+void RecommendAppsScreenHandler::OnParseResponseError() {
+  HandleSkip();
+}
+
 void RecommendAppsScreenHandler::HandleSkip() {
   for (auto& observer : observer_list_)
     observer.OnSkip();
@@ -116,6 +120,13 @@ void RecommendAppsScreenHandler::HandleRetry() {
 }
 
 void RecommendAppsScreenHandler::HandleInstall(const base::ListValue* args) {
+  // If the user does not select any apps, we should skip the app downloading
+  // screen.
+  if (args->GetList().empty()) {
+    HandleSkip();
+    return;
+  }
+
   pref_service_->Set(arc::prefs::kArcFastAppReinstallPackages, *args);
 
   arc::ArcFastAppReinstallStarter* fast_app_reinstall_starter =

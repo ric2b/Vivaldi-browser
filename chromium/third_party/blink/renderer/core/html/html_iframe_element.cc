@@ -173,8 +173,7 @@ void HTMLIFrameElement::ParseAttribute(
       FrameOwnerPropertiesChanged();
       UpdateContainerPolicy();
     }
-  } else if (RuntimeEnabledFeatures::EmbedderCSPEnforcementEnabled() &&
-             name == cspAttr) {
+  } else if (name == cspAttr) {
     if (!ContentSecurityPolicy::IsValidCSPAttr(
             value.GetString(), GetDocument().RequiredCSP().GetString())) {
       required_csp_ = g_null_atom;
@@ -274,11 +273,11 @@ LayoutObject* HTMLIFrameElement::CreateLayoutObject(const ComputedStyle&) {
 }
 
 Node::InsertionNotificationRequest HTMLIFrameElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   InsertionNotificationRequest result =
       HTMLFrameElementBase::InsertedInto(insertion_point);
 
-  if (insertion_point->IsInDocumentTree() && GetDocument().IsHTMLDocument()) {
+  if (insertion_point.IsInDocumentTree() && GetDocument().IsHTMLDocument()) {
     ToHTMLDocument(GetDocument()).AddNamedItem(name_);
 
     if (!ContentSecurityPolicy::IsValidCSPAttr(
@@ -298,9 +297,9 @@ Node::InsertionNotificationRequest HTMLIFrameElement::InsertedInto(
   return result;
 }
 
-void HTMLIFrameElement::RemovedFrom(ContainerNode* insertion_point) {
+void HTMLIFrameElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLFrameElementBase::RemovedFrom(insertion_point);
-  if (insertion_point->IsInDocumentTree() && GetDocument().IsHTMLDocument())
+  if (insertion_point.IsInDocumentTree() && GetDocument().IsHTMLDocument())
     ToHTMLDocument(GetDocument()).RemoveNamedItem(name_);
 }
 

@@ -25,6 +25,10 @@ namespace base {
 class FilePath;
 }  // namespace base
 
+namespace user_prefs {
+class PrefRegistrySyncable;
+}  // namespace user_prefs
+
 namespace chromeos {
 namespace smb_client {
 
@@ -46,6 +50,8 @@ class SmbService : public KeyedService,
 
   // Gets the singleton instance for the |context|.
   static SmbService* Get(content::BrowserContext* context);
+
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // Starts the process of mounting an SMB file system.
   // Calls SmbProviderClient::Mount().
@@ -71,10 +77,7 @@ class SmbService : public KeyedService,
   void GatherSharesInNetwork(GatherSharesResponse callback);
 
  private:
-  // Initializes |temp_file_manager_|. Must be called on a non-ui thread.
-  void InitTempFileManager();
-
-  // Calls SmbProviderClient::Mount(). temp_file_manager_ must be initialized
+  // Calls SmbProviderClient::Mount(). |temp_file_manager_| must be initialized
   // before this is called.
   void CallMount(const file_system_provider::MountOptions& options,
                  const base::FilePath& share_path,
@@ -112,7 +115,7 @@ class SmbService : public KeyedService,
 
   // Completes SmbService setup including ShareFinder initialization and
   // remounting shares. Called by SetupTempFileManagerAndCompleteSetup().
-  void CompleteSetup();
+  void CompleteSetup(std::unique_ptr<TempFileManager> temp_file_manager);
 
   // Handles the response from attempting to setup Kerberos.
   void OnSetupKerberosResponse(bool success);
@@ -129,9 +132,16 @@ class SmbService : public KeyedService,
   // Set up NetBios host locator.
   void SetUpNetBiosHostLocator();
 
+  // Whether Network File Shares are allowed to be used. Controlled via policy.
+  bool IsAllowedByPolicy() const;
+
+  // Whether NetBios discovery should be used. Controlled via policy.
+  bool IsNetBiosDiscoveryEnabled() const;
+
   // Records metrics on the number of SMB mounts a user has.
   void RecordMountCount() const;
 
+  static bool service_should_run_;
   const ProviderId provider_id_;
   Profile* profile_;
   std::unique_ptr<TempFileManager> temp_file_manager_;

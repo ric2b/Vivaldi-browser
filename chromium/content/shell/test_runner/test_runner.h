@@ -87,6 +87,7 @@ class TestRunner : public WebTestRunner {
   void GetAudioData(std::vector<unsigned char>* buffer_view) const override;
   bool IsRecursiveLayoutDumpRequested() override;
   std::string DumpLayout(blink::WebLocalFrame* frame) override;
+  bool ShouldDumpSelectionRect() const override;
   // Returns true if the browser should capture the pixels instead.
   bool DumpPixelsAsync(
       blink::WebLocalFrame* frame,
@@ -161,6 +162,10 @@ class TestRunner : public WebTestRunner {
   midi::mojom::Result midiAccessorResult();
 
   bool ShouldDumpConsoleMessages() const;
+  // Controls whether console messages produced by the page are dumped
+  // to test output.
+  void SetDumpConsoleMessages(bool value);
+
   bool ShouldDumpJavaScriptDialogs() const;
 
   blink::WebEffectiveConnectionType effective_connection_type() const {
@@ -236,15 +241,11 @@ class TestRunner : public WebTestRunner {
   void SetCloseRemainingWindowsWhenComplete(bool close_remaining_windows);
   void ResetTestHelperControllers();
 
-  // Allows layout tests to manage origins' whitelisting.
-  void AddOriginAccessWhitelistEntry(const std::string& source_origin,
+  // Allows layout tests to manage origins' allow list.
+  void AddOriginAccessAllowListEntry(const std::string& source_origin,
                                      const std::string& destination_protocol,
                                      const std::string& destination_host,
                                      bool allow_destination_subdomains);
-  void RemoveOriginAccessWhitelistEntry(const std::string& source_origin,
-                                        const std::string& destination_protocol,
-                                        const std::string& destination_host,
-                                        bool allow_destination_subdomains);
 
   // Add |source_code| as an injected stylesheet to the active document of the
   // window of the current V8 context.
@@ -285,7 +286,7 @@ class TestRunner : public WebTestRunner {
   void SetXSSAuditorEnabled(bool enabled);
   void SetAllowUniversalAccessFromFileURLs(bool allow);
   void SetAllowFileAccessFromFileURLs(bool allow);
-  void OverridePreference(const std::string& key, v8::Local<v8::Value> value);
+  void OverridePreference(gin::Arguments* arguments);
 
   // Modify accept_languages in RendererPreferences.
   void SetAcceptLanguages(const std::string& accept_languages);
@@ -424,10 +425,6 @@ class TestRunner : public WebTestRunner {
   // Sets a flag that tells the WebViewTestProxy to dump the default navigation
   // policy passed to the decidePolicyForNavigation callback.
   void DumpNavigationPolicy();
-
-  // Controls whether console messages produced by the page are dumped
-  // to test output.
-  void SetDumpConsoleMessages(bool value);
 
   // Controls whether JavaScript dialogs such as alert() are dumped to test
   // output.

@@ -62,9 +62,8 @@ enum class TransformedWritingMode {
 
 class FlexItem {
  public:
+  // flex_base_content_size includes scrollbar width but not border or padding.
   FlexItem(LayoutBox*,
-           // flex_base_content_size includes scrollbar width but not border or
-           // padding.
            LayoutUnit flex_base_content_size,
            MinMaxSize min_max_sizes,
            LayoutUnit main_axis_border_and_padding,
@@ -243,11 +242,13 @@ class FlexLayoutAlgorithm {
                       Vector<FlexItem>& all_items);
 
   const ComputedStyle* Style() const { return style_; }
+  const ComputedStyle& StyleRef() const { return *style_; }
 
   Vector<FlexLine>& FlexLines() { return flex_lines_; }
 
   // Computes the next flex line, stores it in FlexLines(), and returns a
   // pointer to it. Returns nullptr if there are no more lines.
+  // container_logical_width is the border box width.
   FlexLine* ComputeNextFlexLine(LayoutUnit container_logical_width);
 
   bool IsHorizontalFlow() const;

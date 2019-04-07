@@ -8,21 +8,17 @@
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace gcm {
 
 AccountTracker::AccountTracker(
-    SigninManagerBase* signin_manager,
-    ProfileOAuth2TokenService* token_service,
-    net::URLRequestContextGetter* request_context_getter)
-    : signin_manager_(signin_manager),
-      token_service_(token_service),
-      request_context_getter_(request_context_getter),
+    identity::IdentityManager* identity_manager,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
+    : identity_manager_(identity_manager),
+      url_loader_factory_(std::move(url_loader_factory)),
       shutdown_called_(false) {
-  signin_manager_->AddObserver(this);
-  token_service_->AddObserver(this);
+  identity_manager_->AddObserver(this);
 }
 
 AccountTracker::~AccountTracker() {
@@ -32,8 +28,7 @@ AccountTracker::~AccountTracker() {
 void AccountTracker::Shutdown() {
   shutdown_called_ = true;
   user_info_requests_.clear();
-  token_service_->RemoveObserver(this);
-  signin_manager_->RemoveObserver(this);
+  identity_manager_->RemoveObserver(this);
 }
 
 bool AccountTracker::IsAllUserInfoFetched() const {
@@ -50,7 +45,7 @@ void AccountTracker::RemoveObserver(Observer* observer) {
 
 std::vector<AccountIds> AccountTracker::GetAccounts() const {
   const std::string active_account_id =
-      signin_manager_->GetAuthenticatedAccountId();
+      identity_manager_->GetPrimaryAccountInfo().account_id;
   std::vector<AccountIds> accounts;
 
   for (std::map<std::string, AccountState>::const_iterator it =
@@ -72,43 +67,46 @@ std::vector<AccountIds> AccountTracker::GetAccounts() const {
   return accounts;
 }
 
-void AccountTracker::OnRefreshTokenAvailable(const std::string& account_id) {
-  TRACE_EVENT1("identity", "AccountTracker::OnRefreshTokenAvailable",
-               "account_key", account_id);
+void AccountTracker::OnRefreshTokenUpdatedForAccount(
+    const AccountInfo& account_info,
+    bool is_valid) {
+  TRACE_EVENT1("identity", "AccountTracker::OnRefreshTokenUpdatedForAccount",
+               "account_id", account_info.account_id);
 
   // Ignore refresh tokens if there is no active account ID at all.
-  if (signin_manager_->GetAuthenticatedAccountId().empty())
+  if (!identity_manager_->HasPrimaryAccount())
     return;
 
-  DVLOG(1) << "AVAILABLE " << account_id;
-  UpdateSignInState(account_id, true);
+  DVLOG(1) << "AVAILABLE " << account_info.account_id;
+  UpdateSignInState(account_info.account_id, /*is_signed_in=*/true);
 }
 
-void AccountTracker::OnRefreshTokenRevoked(const std::string& account_id) {
-  TRACE_EVENT1("identity", "AccountTracker::OnRefreshTokenRevoked",
-               "account_key", account_id);
+void AccountTracker::OnRefreshTokenRemovedForAccount(
+    const AccountInfo& account_info) {
+  TRACE_EVENT1("identity", "AccountTracker::OnRefreshTokenRemovedForAccount",
+               "account_id", account_info.account_id);
 
-  DVLOG(1) << "REVOKED " << account_id;
-  UpdateSignInState(account_id, false);
+  DVLOG(1) << "REVOKED " << account_info.account_id;
+  UpdateSignInState(account_info.account_id, /*is_signed_in=*/false);
 }
 
-void AccountTracker::GoogleSigninSucceeded(const std::string& account_id,
-                                           const std::string& username) {
-  TRACE_EVENT0("identity", "AccountTracker::GoogleSigninSucceeded");
+void AccountTracker::OnPrimaryAccountSet(
+    const AccountInfo& primary_account_info) {
+  TRACE_EVENT0("identity", "AccountTracker::OnPrimaryAccountSet");
 
-  std::vector<std::string> accounts = token_service_->GetAccounts();
+  std::vector<AccountInfo> accounts =
+      identity_manager_->GetAccountsWithRefreshTokens();
 
   DVLOG(1) << "LOGIN " << accounts.size() << " accounts available.";
 
-  for (std::vector<std::string>::const_iterator it = accounts.begin();
-       it != accounts.end(); ++it) {
-    OnRefreshTokenAvailable(*it);
+  for (const AccountInfo& account_info : accounts) {
+    UpdateSignInState(account_info.account_id, /*is_signed_in=*/true);
   }
 }
 
-void AccountTracker::GoogleSignedOut(const std::string& account_id,
-                                     const std::string& username) {
-  TRACE_EVENT0("identity", "AccountTracker::GoogleSignedOut");
+void AccountTracker::OnPrimaryAccountCleared(
+    const AccountInfo& previous_primary_account_info) {
+  TRACE_EVENT0("identity", "AccountTracker::OnPrimaryAccountCleared");
   DVLOG(1) << "LOGOUT";
   StopTrackingAllAccounts();
 }
@@ -150,7 +148,7 @@ void AccountTracker::StopTrackingAccount(const std::string account_key) {
   if (base::ContainsKey(accounts_, account_key)) {
     AccountState& account = accounts_[account_key];
     if (!account.ids.gaia.empty()) {
-      UpdateSignInState(account_key, false);
+      UpdateSignInState(account_key, /*is_signed_in=*/false);
     }
     accounts_.erase(account_key);
   }
@@ -171,7 +169,7 @@ void AccountTracker::StartFetchingUserInfo(const std::string& account_key) {
 
   DVLOG(1) << "StartFetching " << account_key;
   AccountIdFetcher* fetcher = new AccountIdFetcher(
-      token_service_, request_context_getter_.get(), this, account_key);
+      identity_manager_, url_loader_factory_, this, account_key);
   user_info_requests_[account_key] = base::WrapUnique(fetcher);
   fetcher->Start();
 }
@@ -206,13 +204,12 @@ void AccountTracker::DeleteFetcher(AccountIdFetcher* fetcher) {
 }
 
 AccountIdFetcher::AccountIdFetcher(
-    OAuth2TokenService* token_service,
-    net::URLRequestContextGetter* request_context_getter,
+    identity::IdentityManager* identity_manager,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     AccountTracker* tracker,
     const std::string& account_key)
-    : OAuth2TokenService::Consumer("gaia_account_tracker"),
-      token_service_(token_service),
-      request_context_getter_(request_context_getter),
+    : identity_manager_(identity_manager),
+      url_loader_factory_(std::move(url_loader_factory)),
       tracker_(tracker),
       account_key_(account_key) {
   TRACE_EVENT_ASYNC_BEGIN1("identity", "AccountIdFetcher", this, "account_key",
@@ -226,33 +223,35 @@ AccountIdFetcher::~AccountIdFetcher() {
 void AccountIdFetcher::Start() {
   OAuth2TokenService::ScopeSet scopes;
   scopes.insert("https://www.googleapis.com/auth/userinfo.profile");
-  login_token_request_ =
-      token_service_->StartRequest(account_key_, scopes, this);
+  access_token_fetcher_ = identity_manager_->CreateAccessTokenFetcherForAccount(
+      account_key_, "gaia_account_tracker", scopes,
+      base::BindOnce(&AccountIdFetcher::AccessTokenFetched,
+                     base::Unretained(this)),
+      identity::AccessTokenFetcher::Mode::kImmediate);
 }
 
-void AccountIdFetcher::OnGetTokenSuccess(
-    const OAuth2TokenService::Request* request,
-    const std::string& access_token,
-    const base::Time& expiration_time) {
-  TRACE_EVENT_ASYNC_STEP_PAST0("identity", "AccountIdFetcher", this,
-                               "OnGetTokenSuccess");
-  DCHECK_EQ(request, login_token_request_.get());
+void AccountIdFetcher::AccessTokenFetched(
+    GoogleServiceAuthError error,
+    identity::AccessTokenInfo access_token_info) {
+  access_token_fetcher_.reset();
 
-  gaia_oauth_client_.reset(new gaia::GaiaOAuthClient(request_context_getter_));
+  if (error != GoogleServiceAuthError::AuthErrorNone()) {
+    TRACE_EVENT_ASYNC_STEP_PAST1("identity", "AccountIdFetcher", this,
+                                 "AccessTokenFetched",
+                                 "google_service_auth_error", error.ToString());
+    LOG(ERROR) << "AccessTokenFetched error: " << error.ToString();
+    tracker_->OnUserInfoFetchFailure(this);
+    return;
+  }
+
+  TRACE_EVENT_ASYNC_STEP_PAST0("identity", "AccountIdFetcher", this,
+                               "AccessTokenFetched");
+
+  gaia_oauth_client_.reset(new gaia::GaiaOAuthClient(url_loader_factory_));
 
   const int kMaxGetUserIdRetries = 3;
-  gaia_oauth_client_->GetUserId(access_token, kMaxGetUserIdRetries, this);
-}
-
-void AccountIdFetcher::OnGetTokenFailure(
-    const OAuth2TokenService::Request* request,
-    const GoogleServiceAuthError& error) {
-  TRACE_EVENT_ASYNC_STEP_PAST1("identity", "AccountIdFetcher", this,
-                               "OnGetTokenFailure", "google_service_auth_error",
-                               error.ToString());
-  LOG(ERROR) << "OnGetTokenFailure: " << error.ToString();
-  DCHECK_EQ(request, login_token_request_.get());
-  tracker_->OnUserInfoFetchFailure(this);
+  gaia_oauth_client_->GetUserId(access_token_info.token, kMaxGetUserIdRetries,
+                                this);
 }
 
 void AccountIdFetcher::OnGetUserIdResponse(const std::string& gaia_id) {

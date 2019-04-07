@@ -32,9 +32,6 @@ import("//build/toolchain/goma.gni")
 # export CCACHE_PREFIX=icecc
 
 declare_args() {
-  # Set to true to enable distributed compilation using Goma.
-  use_cc_wrapper = false
-
   # Set to "ccache", "icecc" or "distcc".  Probably doesn't work on windows.
   cc_wrapper = ""
 }

@@ -9,8 +9,10 @@
 
 #include <list>
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/test/web_contents_tester.h"
@@ -60,6 +62,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
                     bool bypass_cache,
                     ImageDownloadCallback callback) override;
   const GURL& GetLastCommittedURL() const override;
+  const base::string16& GetTitle() const override;
 
   // WebContentsTester implementation.
   void CommitPendingNavigation() override;
@@ -96,9 +99,11 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       const std::vector<SkBitmap>& bitmaps,
       const std::vector<gfx::Size>& original_bitmap_sizes) override;
   void SetLastCommittedURL(const GURL& url) override;
+  void SetTitle(const base::string16& new_title) override;
   void SetMainFrameMimeType(const std::string& mime_type) override;
   void SetIsCurrentlyAudible(bool audible) override;
   void TestDidReceiveInputEvent(blink::WebInputEvent::Type type) override;
+  void TestDidFinishLoad(const GURL& url) override;
   void TestDidFailLoadWithError(
       const GURL& url,
       int error_code,
@@ -147,8 +152,6 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   bool GetPauseSubresourceLoadingCalled() override;
 
   void ResetPauseSubresourceLoadingCalled() override;
-
-  void TestDidFinishLoad(const GURL& url);
 
   void SetPageImportanceSignals(PageImportanceSignals signals) override;
 
@@ -200,6 +203,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   std::map<GURL, std::list<std::pair<int, ImageDownloadCallback>>>
       pending_image_downloads_;
   GURL last_committed_url_;
+  base::Optional<base::string16> title_;
   bool pause_subresource_loading_called_;
 };
 

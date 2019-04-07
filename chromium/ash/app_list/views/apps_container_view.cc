@@ -13,7 +13,6 @@
 #include "ash/app_list/views/app_list_view.h"
 #include "ash/app_list/views/apps_grid_view.h"
 #include "ash/app_list/views/contents_view.h"
-#include "ash/app_list/views/expand_arrow_view.h"
 #include "ash/app_list/views/folder_background_view.h"
 #include "ash/app_list/views/horizontal_page_container.h"
 #include "ash/app_list/views/page_switcher.h"
@@ -40,8 +39,9 @@ constexpr int kSearchBoxMinimumTopPadding = 24;
 // Height of suggestion chip container.
 constexpr int kSuggestionChipContainerHeight = 32;
 
-// Vertical spacing between search box and suggestion chips.
-constexpr int kSearchBoxSuggestionChipSpacing = 24;
+// The y position of suggestion chips in peeking and fullscreen state.
+constexpr int kSuggestionChipPeekingY = 156;
+constexpr int kSuggestionChipFullscreenY = 96;
 
 // The ratio of allowed bounds for apps grid view to its maximum margin.
 constexpr int kAppsGridMarginRatio = 16;
@@ -52,6 +52,11 @@ constexpr int kAppsGridMinimumMargin = 8;
 // The horizontal spacing between apps grid view and page switcher.
 constexpr int kAppsGridPageSwitcherSpacing = 8;
 
+// The range of app list transition progress in which the suggestion chips'
+// opacity changes from 0 to 1.
+constexpr float kSuggestionChipOpacityStartProgress = 0.66;
+constexpr float kSuggestionChipOpacityEndProgress = 1;
+
 }  // namespace
 
 AppsContainerView::AppsContainerView(ContentsView* contents_view,
@@ -59,10 +64,6 @@ AppsContainerView::AppsContainerView(ContentsView* contents_view,
     : contents_view_(contents_view),
       is_new_style_launcher_enabled_(features::IsNewStyleLauncherEnabled()) {
   if (is_new_style_launcher_enabled_) {
-    expand_arrow_view_ =
-        new ExpandArrowView(contents_view_, contents_view_->app_list_view());
-    AddChildView(expand_arrow_view_);
-
     suggestion_chip_container_view_ =
         new SuggestionChipContainerView(contents_view);
     AddChildView(suggestion_chip_container_view_);
@@ -109,7 +110,7 @@ void AppsContainerView::ShowActiveFolder(AppListFolderItem* folder_item) {
   // Disable all the items behind the folder so that they will not be reached
   // during focus traversal.
   contents_view_->GetSearchBoxView()->search_box()->RequestFocus();
-  apps_grid_view_->DisableFocusForShowingActiveFolder(true);
+  DisableFocusForShowingActiveFolder(true);
 }
 
 void AppsContainerView::ShowApps(AppListFolderItem* folder_item) {
@@ -117,12 +118,12 @@ void AppsContainerView::ShowApps(AppListFolderItem* folder_item) {
     return;
 
   SetShowState(SHOW_APPS, folder_item ? true : false);
-  apps_grid_view_->DisableFocusForShowingActiveFolder(false);
+  DisableFocusForShowingActiveFolder(false);
 }
 
 void AppsContainerView::ResetForShowApps() {
   SetShowState(SHOW_APPS, false);
-  apps_grid_view_->DisableFocusForShowingActiveFolder(false);
+  DisableFocusForShowingActiveFolder(false);
 }
 
 void AppsContainerView::SetDragAndDropHostOfCurrentAppList(
@@ -137,7 +138,7 @@ void AppsContainerView::ReparentFolderItemTransit(
   if (app_list_folder_view_->IsAnimationRunning())
     return;
   SetShowState(SHOW_ITEM_REPARENT, false);
-  apps_grid_view_->DisableFocusForShowingActiveFolder(false);
+  DisableFocusForShowingActiveFolder(false);
 }
 
 bool AppsContainerView::IsInFolderView() const {
@@ -154,6 +155,11 @@ void AppsContainerView::UpdateControlVisibility(AppListViewState app_list_state,
   apps_grid_view_->UpdateControlVisibility(app_list_state, is_in_drag);
   page_switcher_->SetVisible(
       app_list_state == AppListViewState::FULLSCREEN_ALL_APPS || is_in_drag);
+  if (suggestion_chip_container_view_) {
+    suggestion_chip_container_view_->SetVisible(
+        app_list_state == AppListViewState::FULLSCREEN_ALL_APPS ||
+        app_list_state == AppListViewState::PEEKING || is_in_drag);
+  }
 }
 
 void AppsContainerView::UpdateOpacity() {
@@ -175,11 +181,27 @@ void AppsContainerView::UpdateOpacity() {
                         0.f),
                1.0f);
   page_switcher_->layer()->SetOpacity(should_restore_opacity ? 1.0f : opacity);
+
+  const float progress =
+      contents_view_->app_list_view()->GetAppListTransitionProgress();
+  if (suggestion_chip_container_view_) {
+    // Changes the opacity of suggestion chips between 0 and 1 when app list
+    // transition progress changes between |kSuggestionChipOpacityStartProgress|
+    // and |kSuggestionChipOpacityEndProgress|.
+    float chips_opacity =
+        std::min(std::max((progress - kSuggestionChipOpacityStartProgress) /
+                              (kSuggestionChipOpacityEndProgress -
+                               kSuggestionChipOpacityStartProgress),
+                          0.f),
+                 1.0f);
+    suggestion_chip_container_view_->layer()->SetOpacity(
+        should_restore_opacity ? 1.0f : chips_opacity);
+  }
 }
 
 gfx::Size AppsContainerView::CalculatePreferredSize() const {
   if (is_new_style_launcher_enabled_)
-    return contents_view_->GetWorkAreaSize();
+    return contents_view_->GetPreferredSize();
 
   gfx::Size size = apps_grid_view_->GetPreferredSize();
   // Add padding to both side of the apps grid to keep it horizontally
@@ -196,21 +218,27 @@ void AppsContainerView::Layout() {
   switch (show_state_) {
     case SHOW_APPS: {
       if (is_new_style_launcher_enabled_) {
-        gfx::Rect arrow_rect(rect);
-        const gfx::Size arrow_size(expand_arrow_view_->GetPreferredSize());
-        arrow_rect.set_height(arrow_size.height());
-        arrow_rect.ClampToCenteredSize(arrow_size);
-        expand_arrow_view_->SetBoundsRect(arrow_rect);
-        expand_arrow_view_->SchedulePaint();
-
+        // Layout suggestion chips.
         gfx::Rect chip_container_rect(rect);
-        chip_container_rect.set_y(GetSearchBoxExpectedBounds().bottom() +
-                                  kSearchBoxSuggestionChipSpacing);
+        const float progress =
+            contents_view_->app_list_view()->GetAppListTransitionProgress();
+        if (progress <= 1) {
+          // Currently transition progress is between closed and peeking state.
+          chip_container_rect.set_y(gfx::Tween::IntValueBetween(
+              progress, 0, kSuggestionChipPeekingY));
+        } else {
+          // Currently transition progress is between peeking and fullscreen
+          // state.
+          chip_container_rect.set_y(
+              gfx::Tween::IntValueBetween(progress - 1, kSuggestionChipPeekingY,
+                                          kSuggestionChipFullscreenY));
+        }
         chip_container_rect.set_height(kSuggestionChipContainerHeight);
         suggestion_chip_container_view_->SetBoundsRect(chip_container_rect);
         rect.Inset(0, chip_container_rect.bottom(), 0, 0);
       }
 
+      // Layout apps grid.
       gfx::Rect grid_rect = rect;
       if (is_new_style_launcher_enabled_) {
         // Switch the column and row size if apps grid's height is greater than
@@ -251,11 +279,13 @@ void AppsContainerView::Layout() {
         grid_rect.Inset(horizontal_margin, vertical_margin);
         grid_rect.ClampToCenteredSize(
             apps_grid_view_->GetMaximumTileGridSize());
+        grid_rect.Inset(-apps_grid_view_->GetInsets());
       } else {
         grid_rect.Inset(kAppsGridLeftRightPadding, 0);
       }
       apps_grid_view_->SetBoundsRect(grid_rect);
 
+      // Layout page switcher.
       gfx::Rect page_switcher_rect = rect;
       page_switcher_rect.Inset(grid_rect.right() + kAppsGridPageSwitcherSpacing,
                                0, 0, 0);
@@ -287,6 +317,31 @@ const char* AppsContainerView::GetClassName() const {
   return "AppsContainerView";
 }
 
+void AppsContainerView::OnGestureEvent(ui::GestureEvent* event) {
+  // Will forward events to |apps_grid_view_| if they occur in the same y-region
+  if (event->type() == ui::ET_GESTURE_SCROLL_BEGIN &&
+      event->location().y() <= apps_grid_view_->bounds().y()) {
+    return;
+  }
+
+  // If a folder is currently opening or closing, we should ignore the event.
+  // This is here until the animation for pagination while closing folders is
+  // fixed: https://crbug.com/875133
+  if (app_list_folder_view_->IsAnimationRunning()) {
+    event->SetHandled();
+    return;
+  }
+
+  // Temporary event for use by |apps_grid_view_|
+  ui::GestureEvent grid_event(*event);
+  ConvertEventToTarget(apps_grid_view_, &grid_event);
+  apps_grid_view_->OnGestureEvent(&grid_event);
+
+  // If the temporary event was handled, we don't want to handle it again.
+  if (grid_event.handled())
+    event->SetHandled();
+}
+
 void AppsContainerView::OnWillBeHidden() {
   if (show_state_ == SHOW_APPS || show_state_ == SHOW_ITEM_REPARENT)
     apps_grid_view_->EndDrag(true);
@@ -309,7 +364,7 @@ views::View* AppsContainerView::GetFirstFocusableView() {
 gfx::Rect AppsContainerView::GetPageBoundsForState(
     ash::AppListState state) const {
   if (is_new_style_launcher_enabled_)
-    return gfx::Rect(contents_view_->GetWorkAreaSize());
+    return gfx::Rect(contents_view_->GetPreferredSize());
 
   if (contents_view_->app_list_view()->is_in_drag())
     return GetPageBoundsDuringDragging(state);
@@ -335,22 +390,15 @@ gfx::Rect AppsContainerView::GetPageBoundsForState(
 
 gfx::Rect AppsContainerView::GetSearchBoxExpectedBounds() const {
   gfx::Rect search_box_bounds(contents_view_->GetDefaultSearchBoxBounds());
-  const int current_height =
-      contents_view_->app_list_view()->GetCurrentAppListHeight();
-  const int peeking_height =
-      AppListConfig::instance().peeking_app_list_height();
-  if (current_height <= peeking_height) {
+  const float progress =
+      contents_view_->app_list_view()->GetAppListTransitionProgress();
+  if (progress <= 1) {
     search_box_bounds.set_y(gfx::Tween::IntValueBetween(
-        static_cast<double>(current_height - kShelfSize) /
-            (peeking_height - kShelfSize),
-        AppListConfig::instance().search_box_closed_top_padding(),
+        progress, AppListConfig::instance().search_box_closed_top_padding(),
         AppListConfig::instance().search_box_peeking_top_padding()));
   } else {
-    const double peeking_to_fullscreen_height =
-        contents_view_->GetDisplaySize().height() - peeking_height;
-    DCHECK_GT(peeking_to_fullscreen_height, 0);
     search_box_bounds.set_y(gfx::Tween::IntValueBetween(
-        (current_height - peeking_height) / peeking_to_fullscreen_height,
+        progress - 1,
         AppListConfig::instance().search_box_peeking_top_padding(),
         is_new_style_launcher_enabled_
             ? AppListConfig::instance().search_box_fullscreen_top_padding()
@@ -365,9 +413,9 @@ int AppsContainerView::GetSearchBoxFinalTopPadding() const {
       GetPreferredSize().height() + search_box_bounds.height();
 
   // Makes search box and content vertically centered in contents_view.
-  int y =
-      std::max(search_box_bounds.y(),
-               (contents_view_->GetWorkAreaSize().height() - total_height) / 2);
+  int y = std::max(
+      search_box_bounds.y(),
+      (contents_view_->GetPreferredSize().height() - total_height) / 2);
 
   // Top padding of the searchbox should not be smaller than
   // |kSearchBoxMinimumTopPadding|
@@ -376,10 +424,11 @@ int AppsContainerView::GetSearchBoxFinalTopPadding() const {
 
 gfx::Rect AppsContainerView::GetPageBoundsDuringDragging(
     ash::AppListState state) const {
+  const int shelf_height = AppListConfig::instance().shelf_height();
   const float drag_amount = std::max(
       0.f, static_cast<float>(
                contents_view_->app_list_view()->GetCurrentAppListHeight() -
-               kShelfSize));
+               shelf_height));
   const int peeking_height =
       AppListConfig::instance().peeking_app_list_height();
 
@@ -388,14 +437,14 @@ gfx::Rect AppsContainerView::GetPageBoundsDuringDragging(
       AppListConfig::instance().search_box_peeking_top_padding() +
       search_box::kSearchBoxPreferredHeight + kSearchBoxPeekingBottomPadding -
       kSearchBoxBottomPadding;
-  if (drag_amount <= (peeking_height - kShelfSize)) {
+  if (drag_amount <= (peeking_height - shelf_height)) {
     // App list is dragged from collapsed to peeking, which moved up at most
-    // |peeking_height - kShelfSize| (272px). The top padding of apps
+    // |peeking_height - shelf_size| (272px). The top padding of apps
     // container view changes from |-kSearchBoxFullscreenBottomPadding| to
     // |kSearchBoxPeekingTopPadding + kSearchBoxPreferredHeight +
     // kSearchBoxPeekingBottomPadding - kSearchBoxFullscreenBottomPadding|.
     y = std::ceil(((peeking_final_y + kSearchBoxBottomPadding) * drag_amount) /
-                      (peeking_height - kShelfSize) -
+                      (peeking_height - shelf_height) -
                   kSearchBoxBottomPadding);
   } else {
     // App list is dragged from peeking to fullscreen, which moved up at most
@@ -404,9 +453,9 @@ gfx::Rect AppsContainerView::GetPageBoundsDuringDragging(
     float final_y =
         GetSearchBoxFinalTopPadding() + search_box::kSearchBoxPreferredHeight;
     float peeking_to_fullscreen_height =
-        contents_view_->GetWorkAreaSize().height() - peeking_height;
+        contents_view_->GetPreferredSize().height() - peeking_height;
     y = std::ceil((final_y - peeking_final_y) *
-                      (drag_amount - (peeking_height - kShelfSize)) /
+                      (drag_amount - (peeking_height - shelf_height)) /
                       peeking_to_fullscreen_height +
                   peeking_final_y);
     y = std::max(std::min(final_y, y), peeking_final_y);
@@ -441,6 +490,8 @@ void AppsContainerView::SetShowState(ShowState show_state,
     case SHOW_APPS:
       folder_background_view_->SetVisible(false);
       apps_grid_view_->ResetForShowApps();
+      if (is_new_style_launcher_enabled_)
+        UpdateSuggestionChips();
       if (show_apps_with_animation)
         app_list_folder_view_->ScheduleShowHideAnimation(false, false);
       else
@@ -466,6 +517,14 @@ void AppsContainerView::UpdateSuggestionChips() {
           ->view_delegate()
           ->GetSearchModel()
           ->results());
+}
+
+void AppsContainerView::DisableFocusForShowingActiveFolder(bool disabled) {
+  if (suggestion_chip_container_view_) {
+    suggestion_chip_container_view_->DisableFocusForShowingActiveFolder(
+        disabled);
+  }
+  apps_grid_view_->DisableFocusForShowingActiveFolder(disabled);
 }
 
 }  // namespace app_list

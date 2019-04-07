@@ -10,6 +10,7 @@
 #include "base/containers/flat_set.h"
 #include "base/i18n/case_conversion.h"
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
@@ -209,14 +210,10 @@ void RemoveFieldsWithNegativeWords(
       kNegativeLatin, kNegativeLatinSize, kNegativeNonLatin,
       kNegativeNonLatinSize};
 
-  possible_usernames_data->erase(
-      std::remove_if(possible_usernames_data->begin(),
-                     possible_usernames_data->end(),
-                     [](const UsernameFieldData& possible_username) {
-                       return ContainsWordFromCategory(possible_username,
-                                                       kNegativeCategory);
-                     }),
-      possible_usernames_data->end());
+  base::EraseIf(
+      *possible_usernames_data, [](const UsernameFieldData& possible_username) {
+        return ContainsWordFromCategory(possible_username, kNegativeCategory);
+      });
 }
 
 // Check if any word from the given category (|category|) appears in fields from
@@ -240,12 +237,9 @@ void FindWordsFromCategoryInForm(
     }
   }
 
-  if (fields_found > 0 && fields_found <= 2) {
-    if (std::find(username_predictions->begin(), username_predictions->end(),
-                  chosen_field) == username_predictions->end()) {
+  if (fields_found > 0 && fields_found <= 2)
+    if (!base::ContainsValue(*username_predictions, chosen_field))
       username_predictions->push_back(chosen_field);
-    }
-  }
 }
 
 // Find username elements if there is no cached result for the given form and

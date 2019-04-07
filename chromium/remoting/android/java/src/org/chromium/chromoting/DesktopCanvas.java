@@ -26,6 +26,12 @@ public class DesktopCanvas {
     private final RenderData mRenderData;
 
     /**
+     * The insets from each edge of the screen which avoid display cutouts. Note that this is not
+     * a real rectangle as left > right and top > bottom can be true.
+     */
+    private final Rect mSafeInsets = new Rect();
+
+    /**
      * Represents the desired center of the viewport in image space.  This value may not represent
      * the actual center of the viewport as adjustments are made to ensure as much of the desktop is
      * visible as possible.  This value needs to be a pair of floats so the desktop image can be
@@ -137,6 +143,20 @@ public class DesktopCanvas {
         }
     }
 
+    /**
+     *  Sets the insets from each edge on the screen that avoid display cutouts.
+     *
+     * @param insets The insets from each edge on the screen that avoid display cutouts.
+     */
+    public void setSafeInsets(Rect insets) {
+        mSafeInsets.set(insets);
+
+        if (mRenderData.initialized()) {
+            // The viewport center may have changed so update the position to reflect the new value.
+            repositionImage();
+        }
+    }
+
     public void adjustViewportForSystemUi(boolean adjustViewportForSystemUi) {
         mAdjustViewportSizeForSystemUi = adjustViewportForSystemUi;
 
@@ -153,8 +173,11 @@ public class DesktopCanvas {
             return;
         }
 
-        float widthRatio = (float) mRenderData.screenWidth / mRenderData.imageWidth;
-        float heightRatio = (float) mRenderData.screenHeight / mRenderData.imageHeight;
+        // Reset to identity so that screen dimensions and image dimensions match up.
+        mRenderData.transform.reset();
+
+        float widthRatio = getSafeScreenWidth() / mRenderData.imageWidth;
+        float heightRatio = getSafeScreenHeight() / mRenderData.imageHeight;
         float screenToImageScale = Math.max(widthRatio, heightRatio);
 
         // If the image is smaller than the screen in either dimension, then we want to scale it
@@ -195,11 +218,11 @@ public class DesktopCanvas {
         float[] imageSize = {mRenderData.imageWidth, mRenderData.imageHeight};
         mRenderData.transform.mapVectors(imageSize);
 
-        if (imageSize[0] < mRenderData.screenWidth && imageSize[1] < mRenderData.screenHeight) {
+        if (imageSize[0] < getSafeScreenWidth() && imageSize[1] < getSafeScreenHeight()) {
             // Displayed image is too small in both directions, so apply the minimum zoom
             // level needed to fit either the width or height.
-            float scale = Math.min((float) mRenderData.screenWidth / mRenderData.imageWidth,
-                                   (float) mRenderData.screenHeight / mRenderData.imageHeight);
+            float scale = Math.min(getSafeScreenWidth() / mRenderData.imageWidth,
+                    getSafeScreenHeight() / mRenderData.imageHeight);
             mRenderData.transform.setScale(scale, scale);
         }
 
@@ -208,8 +231,9 @@ public class DesktopCanvas {
         } else {
             // Find the new screen center (it probably changed during the zoom operation) and update
             // the viewport to smoothly track the zoom gesture.
-            float[] mappedPoints = {((float) mRenderData.screenWidth / 2) - mViewportOffset.x,
-                    ((float) mRenderData.screenHeight / 2) - mViewportOffset.y};
+            PointF safeScreenCenter = getSafeScreenCenterPoint();
+            float[] mappedPoints = {
+                    safeScreenCenter.x - mViewportOffset.x, safeScreenCenter.y - mViewportOffset.y};
             Matrix screenToImage = new Matrix();
             mRenderData.transform.invert(screenToImage);
             screenToImage.mapPoints(mappedPoints);
@@ -241,7 +265,7 @@ public class DesktopCanvas {
             // Find the center point of the viewport on the screen.
             adjustedScreenHeight = mSystemUiScreenRect.bottom;
         } else {
-            adjustedScreenHeight = ((float) mRenderData.screenHeight);
+            adjustedScreenHeight = getSafeScreenHeight();
         }
 
         return adjustedScreenHeight;
@@ -252,7 +276,7 @@ public class DesktopCanvas {
      * account.
      */
     private PointF getViewportScreenCenter() {
-        return new PointF((float) mRenderData.screenWidth / 2, getAdjustedScreenHeight() / 2);
+        return getAdjustedScreenCenterPoint();
     }
 
     /**
@@ -309,8 +333,7 @@ public class DesktopCanvas {
         Matrix screenToImage = new Matrix();
         mRenderData.transform.invert(screenToImage);
 
-        PointF viewportCenter = getViewportScreenCenter();
-        float[] screenVectors = {viewportCenter.x, viewportCenter.y};
+        float[] screenVectors = {getSafeScreenWidth() / 2, getAdjustedScreenHeight() / 2};
         screenToImage.mapVectors(screenVectors);
 
         PointF letterboxPadding = getLetterboxPadding();
@@ -356,7 +379,7 @@ public class DesktopCanvas {
 
         // We want to letterbox when the image is smaller than the screen in a specific dimension.
         // Since we center the image, split the difference so it is equally distributed.
-        float widthAdjust = Math.max(((float) mRenderData.screenWidth - imageVectors[0]) / 2, 0);
+        float widthAdjust = Math.max((getSafeScreenWidth() - imageVectors[0]) / 2, 0);
         float heightAdjust = Math.max((getAdjustedScreenHeight() - imageVectors[1]) / 2, 0);
 
         return new PointF(widthAdjust, heightAdjust);
@@ -464,5 +487,50 @@ public class DesktopCanvas {
 
     private boolean arePointsEqual(PointF a, PointF b, float epsilon) {
         return Math.abs(a.x - b.x) < epsilon && Math.abs(a.y - b.y) < epsilon;
+    }
+
+    /**
+     * @return Screen width inset by {@link #mSafeInsets} if {@link #mSystemUiScreenRect} is empty,
+     * otherwise just the screen width.
+     */
+    private float getSafeScreenWidth() {
+        if (!mSystemUiScreenRect.isEmpty()) {
+            return mRenderData.screenWidth;
+        }
+        return mRenderData.screenWidth - mSafeInsets.left - mSafeInsets.right;
+    }
+
+    /**
+     * @return Screen height inset by {@link #mSafeInsets} if {@link #mSystemUiScreenRect} is empty,
+     * otherwise just the screen height.
+     */
+    private float getSafeScreenHeight() {
+        if (!mSystemUiScreenRect.isEmpty()) {
+            return mRenderData.screenHeight;
+        }
+        return mRenderData.screenHeight - mSafeInsets.top - mSafeInsets.bottom;
+    }
+
+    /**
+     * @return Center point of the screen area inset by {@link #mSafeInsets} if {@link
+     * #mSystemUiScreenRect} is empty, otherwise just the center of the screen.
+     */
+    private PointF getSafeScreenCenterPoint() {
+        if (!mSystemUiScreenRect.isEmpty()) {
+            return new PointF(mRenderData.screenWidth / 2.f, mRenderData.screenHeight / 2.f);
+        }
+        return new PointF((mRenderData.screenWidth + mSafeInsets.left - mSafeInsets.right) / 2.f,
+                (mRenderData.screenHeight + mSafeInsets.top - mSafeInsets.bottom) / 2.f);
+    }
+
+    /**
+     * @return Same as {@link #getSafeScreenCenterPoint()} if {@link #mSystemUiScreenRect} is empty,
+     * otherwise return (screenWidth / 2, adjustedScreenHeight / 2).
+     */
+    private PointF getAdjustedScreenCenterPoint() {
+        if (mSystemUiScreenRect.isEmpty()) {
+            return getSafeScreenCenterPoint();
+        }
+        return new PointF(mRenderData.screenWidth / 2.f, getAdjustedScreenHeight() / 2.f);
     }
 }

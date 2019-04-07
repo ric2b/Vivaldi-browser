@@ -88,9 +88,9 @@ void HTMLScriptElement::ParseAttribute(
 }
 
 Node::InsertionNotificationRequest HTMLScriptElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   ScriptType script_type = ScriptType::kClassic;
-  if (insertion_point->isConnected() && HasSourceAttribute() &&
+  if (insertion_point.isConnected() && HasSourceAttribute() &&
       !ScriptLoader::IsValidScriptTypeAndLanguage(
           TypeAttributeValue(), LanguageAttributeValue(),
           ScriptLoader::kDisallowLegacyTypeInTypeAttribute, script_type)) {
@@ -160,6 +160,10 @@ String HTMLScriptElement::IntegrityAttributeValue() const {
   return getAttribute(integrityAttr);
 }
 
+String HTMLScriptElement::ReferrerPolicyAttributeValue() const {
+  return getAttribute(referrerpolicyAttr);
+}
+
 String HTMLScriptElement::TextFromChildren() {
   return Element::TextFromChildren();
 }
@@ -204,11 +208,11 @@ Document& HTMLScriptElement::GetDocument() const {
 }
 
 void HTMLScriptElement::DispatchLoadEvent() {
-  DispatchEvent(Event::Create(EventTypeNames::load));
+  DispatchEvent(*Event::Create(EventTypeNames::load));
 }
 
 void HTMLScriptElement::DispatchErrorEvent() {
-  DispatchEvent(Event::Create(EventTypeNames::error));
+  DispatchEvent(*Event::Create(EventTypeNames::error));
 }
 
 void HTMLScriptElement::SetScriptElementForBinding(

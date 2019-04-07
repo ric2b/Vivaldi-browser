@@ -135,8 +135,10 @@ class RendererResourceDelegate : public content::ResourceDispatcherDelegate {
 }  // namespace
 
 bool ChromeRenderThreadObserver::is_incognito_process_ = false;
-
-bool ChromeRenderThreadObserver::is_signed_in_ = false;
+bool ChromeRenderThreadObserver::force_safe_search_ = false;
+int32_t ChromeRenderThreadObserver::youtube_restrict_ = 0;
+std::string* ChromeRenderThreadObserver::allowed_domains_for_apps_ = nullptr;
+std::string* ChromeRenderThreadObserver::variation_ids_header_ = nullptr;
 
 ChromeRenderThreadObserver::ChromeRenderThreadObserver()
     : visited_link_slave_(new visitedlink::VisitedLinkSlave),
@@ -193,8 +195,19 @@ void ChromeRenderThreadObserver::SetInitialConfiguration(
   is_incognito_process_ = is_incognito_process;
 }
 
-void ChromeRenderThreadObserver::SetIsSignedIn(bool is_signed_in) {
-  is_signed_in_ = is_signed_in;
+void ChromeRenderThreadObserver::SetConfiguration(
+    bool force_safe_search,
+    int32_t youtube_restrict,
+    const std::string& allowed_domains_for_apps,
+    const std::string& variation_ids_header) {
+  force_safe_search_ = force_safe_search;
+  youtube_restrict_ = youtube_restrict;
+  if (!allowed_domains_for_apps_)
+    allowed_domains_for_apps_ = new std::string();
+  *allowed_domains_for_apps_ = allowed_domains_for_apps;
+  if (!variation_ids_header_)
+    variation_ids_header_ = new std::string();
+  *variation_ids_header_ = variation_ids_header;
 }
 
 void ChromeRenderThreadObserver::SetContentSettingRules(

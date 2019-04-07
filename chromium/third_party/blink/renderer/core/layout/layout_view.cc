@@ -137,8 +137,6 @@ bool LayoutView::HitTestNoLifecycleUpdate(const HitTestLocation& location,
   TRACE_EVENT_BEGIN0("blink,devtools.timeline", "HitTest");
   hit_test_count_++;
 
-  DCHECK(!location.IsRectBasedTest() || result.GetHitTestRequest().ListBased());
-
   uint64_t dom_tree_version = GetDocument().DomTreeVersion();
   HitTestResult cache_result = result;
   bool hit_layer = false;
@@ -253,13 +251,29 @@ void LayoutView::SetShouldDoFullPaintInvalidationOnResizeIfNeeded(
   // should fully invalidate on viewport resize if the background image is not
   // composited and needs full paint invalidation on background positioning area
   // resize.
-  if (Style()->HasFixedBackgroundImage()) {
+  if (StyleRef().HasFixedBackgroundImage()) {
     if ((width_changed && MustInvalidateFillLayersPaintOnWidthChange(
-                              Style()->BackgroundLayers())) ||
+                              StyleRef().BackgroundLayers())) ||
         (height_changed && MustInvalidateFillLayersPaintOnHeightChange(
-                               Style()->BackgroundLayers())))
+                               StyleRef().BackgroundLayers())))
       SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kBackground);
   }
+}
+
+bool LayoutView::ShouldPlaceBlockDirectionScrollbarOnLogicalLeft() const {
+  LocalFrame& frame = GetFrameView()->GetFrame();
+  // See crbug.com/249860
+  if (frame.IsMainFrame())
+    return false;
+  // <body> inherits 'direction' from <html>, so checking style on the body is
+  // sufficient.
+  if (Element* body = GetDocument().body()) {
+    if (LayoutObject* body_layout_object = body->GetLayoutObject()) {
+      return body_layout_object->StyleRef()
+          .ShouldPlaceBlockDirectionScrollbarOnLogicalLeft();
+    }
+  }
+  return false;
 }
 
 void LayoutView::UpdateBlockLayout(bool relayout_children) {
@@ -280,9 +294,9 @@ void LayoutView::UpdateBlockLayout(bool relayout_children) {
         continue;
 
       if ((child->IsBox() && ToLayoutBox(child)->HasRelativeLogicalHeight()) ||
-          child->Style()->LogicalHeight().IsPercentOrCalc() ||
-          child->Style()->LogicalMinHeight().IsPercentOrCalc() ||
-          child->Style()->LogicalMaxHeight().IsPercentOrCalc())
+          child->StyleRef().LogicalHeight().IsPercentOrCalc() ||
+          child->StyleRef().LogicalMinHeight().IsPercentOrCalc() ||
+          child->StyleRef().LogicalMaxHeight().IsPercentOrCalc())
         layout_scope.SetChildNeedsLayout(child);
     }
 
@@ -374,7 +388,8 @@ void LayoutView::MapLocalToAncestor(const LayoutBoxModelObject* ancestor,
   if (mode & kTraverseDocumentBoundaries) {
     auto* parent_doc_layout_object = GetFrame()->OwnerLayoutObject();
     if (parent_doc_layout_object) {
-      transform_state.Move(parent_doc_layout_object->ContentBoxOffset());
+      transform_state.Move(
+          parent_doc_layout_object->PhysicalContentBoxOffset());
       parent_doc_layout_object->MapLocalToAncestor(ancestor, transform_state,
                                                    mode);
     } else {
@@ -391,7 +406,7 @@ const LayoutObject* LayoutView::PushMappingToContainer(
 
   if (geometry_map.GetMapCoordinatesFlags() & kTraverseDocumentBoundaries) {
     if (auto* parent_doc_layout_object = GetFrame()->OwnerLayoutObject()) {
-      offset += parent_doc_layout_object->ContentBoxOffset();
+      offset += parent_doc_layout_object->PhysicalContentBoxOffset();
       container = parent_doc_layout_object;
     }
   }
@@ -423,7 +438,8 @@ void LayoutView::MapAncestorToLocal(const LayoutBoxModelObject* ancestor,
       parent_doc_layout_object->MapAncestorToLocal(ancestor, transform_state,
                                                    mode & ~kIsFixed);
 
-      transform_state.Move(parent_doc_layout_object->ContentBoxOffset());
+      transform_state.Move(
+          parent_doc_layout_object->PhysicalContentBoxOffset());
     }
   } else {
     DCHECK(this == ancestor || !ancestor);
@@ -463,13 +479,13 @@ static void SetShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(
 
 void LayoutView::SetShouldDoFullPaintInvalidationForViewAndAllDescendants() {
   if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
-    SetShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
+    SetSubtreeShouldDoFullPaintInvalidation();
   else
     SetShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(this);
 }
 
 void LayoutView::InvalidatePaintForViewAndCompositedLayers() {
-  SetShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
+  SetSubtreeShouldDoFullPaintInvalidation();
 
   // The only way we know how to hit these ASSERTS below this point is via the
   // Chromium OS login screen.
@@ -552,7 +568,7 @@ bool LayoutView::MapToVisualRectInAncestorSpaceInternal(
     rect = LayoutRect(EnclosingIntRect(rect));
 
     // Adjust for frame border.
-    rect.Move(obj->ContentBoxOffset());
+    rect.Move(obj->PhysicalContentBoxOffset());
     transform_state.SetQuad(FloatQuad(FloatRect(rect)));
 
     return obj->MapToVisualRectInAncestorSpaceInternal(
@@ -578,10 +594,6 @@ void LayoutView::AbsoluteQuads(Vector<FloatQuad>& quads,
                                MapCoordinatesFlags mode) const {
   quads.push_back(LocalToAbsoluteQuad(
       FloatRect(FloatPoint(), FloatSize(Layer()->Size())), mode));
-}
-
-void LayoutView::ClearSelection() {
-  frame_view_->GetFrame().Selection().ClearLayoutSelection();
 }
 
 void LayoutView::CommitPendingSelection() {
@@ -751,14 +763,14 @@ IntSize LayoutView::GetLayoutSize(
 
 int LayoutView::ViewLogicalWidth(
     IncludeScrollbarsInRect scrollbar_inclusion) const {
-  return Style()->IsHorizontalWritingMode() ? ViewWidth(scrollbar_inclusion)
-                                            : ViewHeight(scrollbar_inclusion);
+  return StyleRef().IsHorizontalWritingMode() ? ViewWidth(scrollbar_inclusion)
+                                              : ViewHeight(scrollbar_inclusion);
 }
 
 int LayoutView::ViewLogicalHeight(
     IncludeScrollbarsInRect scrollbar_inclusion) const {
-  return Style()->IsHorizontalWritingMode() ? ViewHeight(scrollbar_inclusion)
-                                            : ViewWidth(scrollbar_inclusion);
+  return StyleRef().IsHorizontalWritingMode() ? ViewHeight(scrollbar_inclusion)
+                                              : ViewWidth(scrollbar_inclusion);
 }
 
 LayoutUnit LayoutView::ViewLogicalHeightForPercentages() const {
@@ -876,7 +888,7 @@ bool LayoutView::RecalcOverflowAfterStyleChange() {
     if (NeedsLayout())
       return result;
     if (GetFrameView()->VisualViewportSuppliesScrollbars())
-      SetMayNeedPaintInvalidation();
+      SetShouldCheckForPaintInvalidation();
     GetFrameView()->AdjustViewSize();
     SetNeedsPaintPropertyUpdate();
   }

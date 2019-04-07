@@ -1,6 +1,6 @@
-<link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="../html/polymer.html">
 
-<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
+<link rel="import" href="../cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
 
 <dom-module id="md-select">
@@ -11,13 +11,9 @@
       }
 
       .md-select {
-        --md-arrow-width: 0.9em;
+        --md-arrow-width: 10px;
 
         -webkit-appearance: none;
-        /* Ensures 3px space between text and arrow */
-        -webkit-padding-end: calc(var(--md-select-side-padding) +
-            var(--md-arrow-width) + 3px);
-        -webkit-padding-start: var(--md-select-side-padding);
         background: url(chrome://resources/images/arrow_down.svg)
             calc(100% - var(--md-select-side-padding))
             center no-repeat;
@@ -33,6 +29,10 @@
         max-width: 100%;
         outline: none;
         padding-bottom: 6px;
+        /* Ensures 3px space between text and arrow */
+        padding-inline-end: calc(var(--md-select-side-padding) +
+            var(--md-arrow-width) + 3px);
+        padding-inline-start: var(--md-select-side-padding);
         padding-top: 6px;
         width: var(--md-select-width, 200px);
       }

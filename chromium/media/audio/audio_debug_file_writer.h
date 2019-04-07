@@ -14,7 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/media_export.h"
 
@@ -64,7 +64,7 @@ class MEDIA_EXPORT AudioDebugFileWriter {
   // The task runner to do file output operations on.
   const scoped_refptr<base::SequencedTaskRunner> file_task_runner_ =
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
 
   AudioFileWriterUniquePtr file_writer_;

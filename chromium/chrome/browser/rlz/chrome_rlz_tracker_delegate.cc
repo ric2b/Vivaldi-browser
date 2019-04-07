@@ -16,7 +16,7 @@
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/omnibox/browser/omnibox_log.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -31,6 +31,7 @@
 #include "content/public/browser/notification_source.h"
 #include "content/public/common/content_switches.h"
 #include "rlz/buildflags/buildflags.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if defined(OS_WIN)
 #include "chrome/installer/util/google_update_settings.h"
@@ -115,8 +116,9 @@ bool ChromeRLZTrackerDelegate::IsOnUIThread() {
   return content::BrowserThread::CurrentlyOn(content::BrowserThread::UI);
 }
 
-net::URLRequestContextGetter* ChromeRLZTrackerDelegate::GetRequestContext() {
-  return g_browser_process->system_request_context();
+scoped_refptr<network::SharedURLLoaderFactory>
+ChromeRLZTrackerDelegate::GetURLLoaderFactory() {
+  return g_browser_process->shared_url_loader_factory();
 }
 
 bool ChromeRLZTrackerDelegate::GetBrand(std::string* brand) {

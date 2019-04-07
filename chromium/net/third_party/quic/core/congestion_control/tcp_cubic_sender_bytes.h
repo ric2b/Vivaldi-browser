@@ -40,6 +40,8 @@ class QUIC_EXPORT_PRIVATE TcpCubicSenderBytes : public SendAlgorithmInterface {
                       QuicPacketCount initial_tcp_congestion_window,
                       QuicPacketCount max_congestion_window,
                       QuicConnectionStats* stats);
+  TcpCubicSenderBytes(const TcpCubicSenderBytes&) = delete;
+  TcpCubicSenderBytes& operator=(const TcpCubicSenderBytes&) = delete;
   ~TcpCubicSenderBytes() override;
 
   // Start implementation of SendAlgorithmInterface.
@@ -70,7 +72,7 @@ class QUIC_EXPORT_PRIVATE TcpCubicSenderBytes : public SendAlgorithmInterface {
   CongestionControlType GetCongestionControlType() const override;
   bool InSlowStart() const override;
   bool InRecovery() const override;
-  bool IsProbingForMoreBandwidth() const override;
+  bool ShouldSendProbingPacket() const override;
   QuicString GetDebugState() const override;
   void OnApplicationLimited(QuicByteCount bytes_in_flight) override;
   // End implementation of SendAlgorithmInterface.
@@ -164,8 +166,6 @@ class QUIC_EXPORT_PRIVATE TcpCubicSenderBytes : public SendAlgorithmInterface {
 
   // The minimum window when exiting slow start with large reduction.
   QuicByteCount min_slow_start_exit_window_;
-
-  DISALLOW_COPY_AND_ASSIGN(TcpCubicSenderBytes);
 };
 
 }  // namespace quic

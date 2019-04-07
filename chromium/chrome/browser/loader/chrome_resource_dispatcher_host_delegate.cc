@@ -32,6 +32,7 @@
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/prerender/prerender_resource_throttle.h"
 #include "chrome/browser/prerender/prerender_util.h"
+#include "chrome/browser/previews/previews_lite_page_navigation_throttle.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
@@ -49,7 +50,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/nacl/common/buildflags.h"
 #include "components/offline_pages/buildflags/buildflags.h"
 #include "components/offline_pages/core/request_header/offline_page_navigation_ui_data.h"
@@ -96,9 +97,6 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/api/streams_private/streams_private_api.h"
-#include "chrome/browser/extensions/user_script_listener.h"
-#include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
-#include "extensions/browser/extension_throttle_manager.h"
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/user_script.h"
@@ -140,18 +138,6 @@ using navigation_interception::InterceptNavigationDelegate;
 #endif
 
 namespace {
-
-void NotifyDownloadInitiatedOnUI(
-    const content::ResourceRequestInfo::WebContentsGetter& wc_getter) {
-  content::WebContents* web_contents = wc_getter.Run();
-  if (!web_contents)
-    return;
-
-  content::NotificationService::current()->Notify(
-      chrome::NOTIFICATION_DOWNLOAD_INITIATED,
-      content::Source<content::WebContents>(web_contents),
-      content::NotificationService::NoDetails());
-}
 
 prerender::PrerenderManager* GetPrerenderManager(
     content::WebContents* web_contents) {
@@ -348,17 +334,7 @@ void LogCommittedPreviewsDecision(
 
 ChromeResourceDispatcherHostDelegate::ChromeResourceDispatcherHostDelegate()
     : download_request_limiter_(g_browser_process->download_request_limiter()),
-      safe_browsing_(g_browser_process->safe_browsing_service())
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-      , user_script_listener_(new extensions::UserScriptListener())
-#endif
-      {
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(
-          content::ServiceWorkerContext::AddExcludedHeadersForFetchEvent,
-          variations::GetVariationHeaderNames()));
-}
+      safe_browsing_(g_browser_process->safe_browsing_service()) {}
 
 ChromeResourceDispatcherHostDelegate::~ChromeResourceDispatcherHostDelegate() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -453,11 +429,6 @@ void ChromeResourceDispatcherHostDelegate::DownloadStarting(
     std::vector<std::unique_ptr<content::ResourceThrottle>>* throttles) {
   const content::ResourceRequestInfo* info =
         content::ResourceRequestInfo::ForRequest(request);
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::BindOnce(&NotifyDownloadInitiatedOnUI,
-                     info->GetWebContentsGetterForRequest()));
-
   // If it's from the web, we don't trust it, so we push the throttle on.
   if (is_content_initiated) {
     // NOTE(igor@vivaldi.com): download_data is null when the user clicks
@@ -538,23 +509,6 @@ void ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
   if (first_throttle)
     throttles->push_back(base::WrapUnique(first_throttle));
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  content::ResourceThrottle* wait_for_extensions_init_throttle =
-      user_script_listener_->CreateResourceThrottle(request->url(),
-                                                    resource_type);
-  if (wait_for_extensions_init_throttle)
-    throttles->push_back(base::WrapUnique(wait_for_extensions_init_throttle));
-
-  extensions::ExtensionThrottleManager* extension_throttle_manager =
-      io_data->GetExtensionThrottleManager();
-  if (extension_throttle_manager) {
-    std::unique_ptr<content::ResourceThrottle> extension_throttle =
-        extension_throttle_manager->MaybeCreateThrottle(request);
-    if (extension_throttle)
-      throttles->push_back(std::move(extension_throttle));
-  }
-#endif
-
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
   if (info->IsPrerendering()) {
     // TODO(jam): remove this throttle once http://crbug.com/740130 is fixed and
@@ -620,7 +574,7 @@ void ChromeResourceDispatcherHostDelegate::OnResponseStarted(
     net::URLRequest* request,
     content::ResourceContext* resource_context,
     network::ResourceResponse* response) {
-  const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
+  ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
   ProfileIOData* io_data = ProfileIOData::FromResourceContext(resource_context);
 
   signin::ResponseAdapter signin_response_adapter(request);
@@ -643,7 +597,7 @@ void ChromeResourceDispatcherHostDelegate::OnResponseStarted(
 #endif
 
   // Update the PreviewsState for main frame response if needed.
-  if (previews::HasEnabledPreviews(response->head.previews_state) &&
+  if (previews::HasEnabledPreviews(info->GetPreviewsState()) &&
       info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME &&
       request->url().SchemeIsHTTPOrHTTPS()) {
     // Annotate request if no-transform directive found in response headers.
@@ -658,11 +612,11 @@ void ChromeResourceDispatcherHostDelegate::OnResponseStarted(
 
     // Determine effective PreviewsState for this committed main frame response.
     content::PreviewsState committed_state = DetermineCommittedPreviews(
-        request, io_data->previews_decider_impl(),
-        static_cast<content::PreviewsState>(response->head.previews_state));
+        request, io_data->previews_decider_impl(), info->GetPreviewsState());
 
-    // Update previews state in response to renderer.
-    response->head.previews_state = static_cast<int>(committed_state);
+    // Update previews state in ResourceRequestInfo before it is sent to
+    // renderer.
+    info->SetPreviewsState(committed_state);
 
     // Update previews state in nav data to UI.
     ChromeNavigationData* data =
@@ -854,6 +808,13 @@ ChromeResourceDispatcherHostDelegate::DetermineCommittedPreviews(
   content::PreviewsState previews_state =
       data_reduction_proxy::ContentLoFiDecider::
           DetermineCommittedServerPreviewsState(*request, initial_state);
+
+  // TODO(crbug.com/842233): This should be removed in the previews s13n work.
+  if (PreviewsLitePageNavigationThrottle::GetOriginalURL(
+          request->url(), nullptr /* original_url */)) {
+    previews_state = previews_state & content::LITE_PAGE_REDIRECT_ON;
+  }
+
   return previews::DetermineCommittedClientPreviewsState(
       *request, previews_state, previews_decider);
 }

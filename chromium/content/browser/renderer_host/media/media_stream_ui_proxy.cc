@@ -7,13 +7,11 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/macros.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_delegate.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "media/capture/video/fake_video_capture_device.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
@@ -25,9 +23,6 @@ namespace content {
 bool IsFeatureEnabled(RenderFrameHost* rfh,
                       bool tests_use_fake_render_frame_hosts,
                       blink::mojom::FeaturePolicyFeature feature) {
-  if (!base::FeatureList::IsEnabled(features::kUseFeaturePolicyForPermissions))
-    return true;
-
   // Some tests don't (or can't) set up the RenderFrameHost. In these cases we
   // just ignore feature policy checks (there is no feature policy to test).
   if (!rfh && tests_use_fake_render_frame_hosts)
@@ -125,9 +120,9 @@ void MediaStreamUIProxy::Core::RequestAccess(
 
   render_delegate->RequestMediaAccessPermission(
       *request,
-      base::Bind(&Core::ProcessAccessRequestResponse,
-                 weak_factory_.GetWeakPtr(), request->render_process_id,
-                 request->render_frame_id));
+      base::BindOnce(&Core::ProcessAccessRequestResponse,
+                     weak_factory_.GetWeakPtr(), request->render_process_id,
+                     request->render_frame_id));
 }
 
 void MediaStreamUIProxy::Core::OnStarted(gfx::NativeViewId* window_id) {
@@ -324,9 +319,8 @@ void FakeMediaStreamUIProxy::RequestAccess(
          request->requested_audio_device_id == it->id)) {
       devices_to_use.push_back(*it);
       accepted_audio = true;
-    } else if (!accepted_video &&
-               IsVideoMediaType(request->video_type) &&
-               IsVideoMediaType(it->type) &&
+    } else if (!accepted_video && IsVideoInputMediaType(request->video_type) &&
+               IsVideoInputMediaType(it->type) &&
                (request->requested_video_device_id.empty() ||
                 request->requested_video_device_id == it->id)) {
       devices_to_use.push_back(*it);

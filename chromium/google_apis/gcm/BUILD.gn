@@ -66,9 +66,10 @@ component("gcm") {
   deps = [
     "//base",
     "//base/third_party/dynamic_annotations",
+    "//mojo/public/cpp/system:system",
     "//net",
-    "//services/network:network_service",
     "//services/network/public/cpp",
+    "//services/network/public/mojom",
     "//third_party/leveldatabase",
     "//url",
   ]
@@ -107,6 +108,7 @@ static_library("test_support") {
   ]
   deps = [
     "//base",
+    "//mojo/public/cpp/system:system",
     "//net",
     "//net:test_support",
     "//testing/gtest",
@@ -155,7 +157,6 @@ test("gcm_unit_tests") {
     "engine/mcs_client_unittest.cc",
     "engine/registration_request_unittest.cc",
     "engine/unregistration_request_unittest.cc",
-    "test/run_all_unittests.cc",
   ]
 
   deps = [
@@ -163,9 +164,11 @@ test("gcm_unit_tests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
-    "//mojo/core/embedder",
+    "//google_apis:run_all_unittests",
+    "//mojo/public/cpp/system:system",
     "//net",
     "//net:test_support",
+    "//services/network:network_service",
     "//services/network:test_support",
     "//testing/gtest",
     "//third_party/protobuf:protobuf_lite",

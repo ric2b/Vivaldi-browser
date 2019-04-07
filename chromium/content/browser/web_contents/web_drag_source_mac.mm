@@ -16,7 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "content/browser/download/drag_download_file.h"
@@ -149,8 +149,9 @@ void PromiseWriterHelper(const DropData& drop_data,
     // If NSURL creation failed, check for a badly-escaped JavaScript URL.
     // Strip out any existing escapes and then re-escape uniformly.
     if (!url && dropData_->url.SchemeIs(url::kJavaScriptScheme)) {
-      std::string unescapedUrlString =
-          net::UnescapeBinaryURLComponent(dropData_->url.spec());
+      std::string unescapedUrlString;
+      net::UnescapeBinaryURLComponent(dropData_->url.spec(),
+                                      &unescapedUrlString);
       std::string escapedUrlString =
           net::EscapeUrlEncodedData(unescapedUrlString, false);
       url = [NSURL URLWithString:SysUTF8ToNSString(escapedUrlString)];

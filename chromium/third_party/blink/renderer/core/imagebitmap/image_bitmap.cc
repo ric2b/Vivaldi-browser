@@ -18,6 +18,7 @@
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/image-decoders/image_decoder.h"
 #include "third_party/blink/renderer/platform/scheduler/public/background_scheduler.h"
+#include "third_party/blink/renderer/platform/wtf/saturated_arithmetic.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColorSpaceXformCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -43,10 +44,19 @@ namespace {
 
 // The following two functions are helpers used in cropImage
 static inline IntRect NormalizeRect(const IntRect& rect) {
-  return IntRect(std::min(rect.X(), rect.MaxX()),
-                 std::min(rect.Y(), rect.MaxY()),
-                 std::max(rect.Width(), -rect.Width()),
-                 std::max(rect.Height(), -rect.Height()));
+  int x = rect.X();
+  int y = rect.Y();
+  int width = rect.Width();
+  int height = rect.Height();
+  if (width < 0) {
+    x = ClampAdd(x, width);
+    width = -width;
+  }
+  if (height < 0) {
+    y = ClampAdd(y, height);
+    height = -height;
+  }
+  return IntRect(x, y, width, height);
 }
 
 ImageBitmap::ParsedOptions ParseOptions(const ImageBitmapOptions& options,
@@ -613,7 +623,8 @@ ImageBitmap::ImageBitmap(HTMLVideoElement* video,
           0,                    // msaa_sample_count
           CanvasColorParams(),  // TODO: set color space here to avoid clamping
           CanvasResourceProvider::kDefaultPresentationMode,
-          nullptr);  // canvas_resource_dispatcher
+          nullptr,              // canvas_resource_dispatcher
+          IsAccelerated());     // is_origin_top_left
   if (!resource_provider)
     return;
 

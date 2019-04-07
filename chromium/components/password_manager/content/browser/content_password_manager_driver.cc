@@ -22,7 +22,7 @@
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
 #include "net/cert/cert_status_flags.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 
 namespace password_manager {
 
@@ -130,8 +130,8 @@ void ContentPasswordManagerDriver::ClearPreviewedForm() {
 
 void ContentPasswordManagerDriver::ForceSavePassword() {
   GetPasswordAutofillAgent()->FindFocusedPasswordForm(
-      base::Bind(&ContentPasswordManagerDriver::OnFocusedPasswordFormFound,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&ContentPasswordManagerDriver::OnFocusedPasswordFormFound,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void ContentPasswordManagerDriver::GeneratePassword() {
@@ -155,10 +155,6 @@ ContentPasswordManagerDriver::GetPasswordAutofillManager() {
 void ContentPasswordManagerDriver::SendLoggingAvailability() {
   GetPasswordAutofillAgent()->SetLoggingState(
       client_->GetLogManager()->IsLoggingActive());
-}
-
-void ContentPasswordManagerDriver::AllowToRunFormClassifier() {
-  GetPasswordGenerationAgent()->AllowToRunFormClassifier();
 }
 
 autofill::AutofillDriver* ContentPasswordManagerDriver::GetAutofillDriver() {
@@ -189,7 +185,7 @@ void ContentPasswordManagerDriver::OnFocusedPasswordFormFound(
   GetPasswordManager()->OnPasswordFormForceSaveRequested(this, password_form);
 }
 
-const autofill::mojom::AutofillAgentPtr&
+const autofill::mojom::AutofillAgentAssociatedPtr&
 ContentPasswordManagerDriver::GetAutofillAgent() {
   autofill::ContentAutofillDriver* autofill_driver =
       autofill::ContentAutofillDriver::GetForRenderFrameHost(
@@ -198,13 +194,13 @@ ContentPasswordManagerDriver::GetAutofillAgent() {
   return autofill_driver->GetAutofillAgent();
 }
 
-const autofill::mojom::PasswordAutofillAgentPtr&
+const autofill::mojom::PasswordAutofillAgentAssociatedPtr&
 ContentPasswordManagerDriver::GetPasswordAutofillAgent() {
   if (!password_autofill_agent_) {
     auto request = mojo::MakeRequest(&password_autofill_agent_);
     // Some test environments may have no remote interface support.
-    if (render_frame_host_->GetRemoteInterfaces()) {
-      render_frame_host_->GetRemoteInterfaces()->GetInterface(
+    if (render_frame_host_->GetRemoteAssociatedInterfaces()) {
+      render_frame_host_->GetRemoteAssociatedInterfaces()->GetInterface(
           std::move(request));
     }
   }
@@ -212,10 +208,10 @@ ContentPasswordManagerDriver::GetPasswordAutofillAgent() {
   return password_autofill_agent_;
 }
 
-const autofill::mojom::PasswordGenerationAgentPtr&
+const autofill::mojom::PasswordGenerationAgentAssociatedPtr&
 ContentPasswordManagerDriver::GetPasswordGenerationAgent() {
   if (!password_gen_agent_) {
-    render_frame_host_->GetRemoteInterfaces()->GetInterface(
+    render_frame_host_->GetRemoteAssociatedInterfaces()->GetInterface(
         mojo::MakeRequest(&password_gen_agent_));
   }
 

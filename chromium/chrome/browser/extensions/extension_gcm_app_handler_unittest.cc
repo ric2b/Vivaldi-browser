@@ -22,7 +22,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -34,8 +34,6 @@
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_profile.h"
@@ -46,7 +44,6 @@
 #include "components/gcm_driver/gcm_driver.h"
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
@@ -65,8 +62,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/users/scoped_test_user_manager.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/settings/device_settings_service.h"
+#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #endif
 
@@ -75,6 +71,28 @@ namespace extensions {
 namespace {
 
 const char kTestExtensionName[] = "FooBar";
+
+void RequestProxyResolvingSocketFactoryOnUIThread(
+    Profile* profile,
+    base::WeakPtr<gcm::GCMProfileService> service,
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  if (!service)
+    return;
+  network::mojom::NetworkContext* network_context =
+      content::BrowserContext::GetDefaultStoragePartition(profile)
+          ->GetNetworkContext();
+  network_context->CreateProxyResolvingSocketFactory(std::move(request));
+}
+
+void RequestProxyResolvingSocketFactory(
+    Profile* profile,
+    base::WeakPtr<gcm::GCMProfileService> service,
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  content::BrowserThread::PostTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&RequestProxyResolvingSocketFactoryOnUIThread, profile,
+                     service, std::move(request)));
+}
 
 }  // namespace
 
@@ -210,14 +228,13 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
         base::CreateSequencedTaskRunnerWithTraits(
             {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
     return std::make_unique<gcm::GCMProfileService>(
-        profile->GetPrefs(), profile->GetPath(), profile->GetRequestContext(),
+        profile->GetPrefs(), profile->GetPath(),
+        base::BindRepeating(&RequestProxyResolvingSocketFactory, profile),
         content::BrowserContext::GetDefaultStoragePartition(profile)
             ->GetURLLoaderFactoryForBrowserProcess(),
         chrome::GetChannel(),
         gcm::GetProductCategoryForSubtypes(profile->GetPrefs()),
         IdentityManagerFactory::GetForProfile(profile),
-        SigninManagerFactory::GetForProfile(profile),
-        ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
         base::WrapUnique(new gcm::FakeGCMClientFactory(ui_thread, io_thread)),
         ui_thread, io_thread, blocking_task_runner);
   }
@@ -392,8 +409,7 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
 
   // This is needed to create extension service under CrOS.
 #if defined(OS_CHROMEOS)
-  chromeos::ScopedTestDeviceSettingsService test_device_settings_service_;
-  chromeos::ScopedTestCrosSettings test_cros_settings_;
+  chromeos::ScopedCrosSettingsTestHelper cros_settings_test_helper_;
   std::unique_ptr<chromeos::ScopedTestUserManager> test_user_manager_;
 #endif
 

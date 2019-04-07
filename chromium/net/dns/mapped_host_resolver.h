@@ -46,6 +46,11 @@ class NET_EXPORT MappedHostResolver : public HostResolver {
   }
 
   // HostResolver methods:
+  std::unique_ptr<ResolveHostRequest> CreateRequest(
+      const HostPortPair& host,
+      const NetLogWithSource& net_log,
+      const base::Optional<ResolveHostParameters>& optional_parameters)
+      override;
   int Resolve(const RequestInfo& info,
               RequestPriority priority,
               AddressList* addresses,
@@ -71,6 +76,8 @@ class NET_EXPORT MappedHostResolver : public HostResolver {
   bool GetNoIPv6OnWifi() override;
 
  private:
+  class AlwaysErrorRequestImpl;
+
   // Modify the request |info| according to |rules_|. Returns either OK or
   // the network error code that the hostname's resolution mapped to.
   int ApplyRules(RequestInfo* info) const;

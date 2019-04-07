@@ -27,6 +27,8 @@
 
 namespace net {
 
+const int HttpProxyClientSocket::kDrainBodyBufferSize;
+
 HttpProxyClientSocket::HttpProxyClientSocket(
     std::unique_ptr<ClientSocketHandle> transport_socket,
     const std::string& user_agent,
@@ -198,20 +200,24 @@ int HttpProxyClientSocket::Read(IOBuffer* buf,
                                 int buf_len,
                                 CompletionOnceCallback callback) {
   DCHECK(user_callback_.is_null());
-  if (next_state_ != STATE_DONE) {
-    // We're trying to read the body of the response but we're still trying
-    // to establish an SSL tunnel through the proxy.  We can't read these
-    // bytes when establishing a tunnel because they might be controlled by
-    // an active network attacker.  We don't worry about this for HTTP
-    // because an active network attacker can already control HTTP sessions.
-    // We reach this case when the user cancels a 407 proxy auth prompt.
-    // See http://crbug.com/8473.
-    DCHECK_EQ(407, response_.headers->response_code());
-
+  if (!CheckDone())
     return ERR_TUNNEL_CONNECTION_FAILED;
-  }
 
   return transport_->socket()->Read(buf, buf_len, std::move(callback));
+}
+
+int HttpProxyClientSocket::ReadIfReady(IOBuffer* buf,
+                                       int buf_len,
+                                       CompletionOnceCallback callback) {
+  DCHECK(user_callback_.is_null());
+  if (!CheckDone())
+    return ERR_TUNNEL_CONNECTION_FAILED;
+
+  return transport_->socket()->ReadIfReady(buf, buf_len, std::move(callback));
+}
+
+int HttpProxyClientSocket::CancelReadIfReady() {
+  return transport_->socket()->CancelReadIfReady();
 }
 
 int HttpProxyClientSocket::Write(
@@ -259,7 +265,7 @@ int HttpProxyClientSocket::PrepareForAuthRestart() {
   // If the auth request had a body, need to drain it before reusing the socket.
   if (!http_stream_parser_->IsResponseBodyComplete()) {
     next_state_ = STATE_DRAIN_BODY;
-    drain_buf_ = new IOBuffer(kDrainBodyBufferSize);
+    drain_buf_ = base::MakeRefCounted<IOBuffer>(kDrainBodyBufferSize);
     return OK;
   }
 
@@ -393,7 +399,7 @@ int HttpProxyClientSocket::DoSendRequest() {
                    base::Unretained(&request_headers_), &request_line_));
   }
 
-  parser_buf_ = new GrowableIOBuffer();
+  parser_buf_ = base::MakeRefCounted<GrowableIOBuffer>();
   http_stream_parser_.reset(new HttpStreamParser(
       transport_.get(), &request_, parser_buf_.get(), net_log_));
   return http_stream_parser_->SendRequest(request_line_, request_headers_,
@@ -495,6 +501,22 @@ int HttpProxyClientSocket::DoDrainBodyComplete(int result) {
   }
 
   return DidDrainBodyForAuthRestart();
+}
+
+bool HttpProxyClientSocket::CheckDone() {
+  if (next_state_ != STATE_DONE) {
+    // We're trying to read the body of the response but we're still trying
+    // to establish an SSL tunnel through the proxy.  We can't read these
+    // bytes when establishing a tunnel because they might be controlled by
+    // an active network attacker.  We don't worry about this for HTTP
+    // because an active network attacker can already control HTTP sessions.
+    // We reach this case when the user cancels a 407 proxy auth prompt.
+    // See http://crbug.com/8473.
+    DCHECK_EQ(407, response_.headers->response_code());
+
+    return false;
+  }
+  return true;
 }
 
 //----------------------------------------------------------------

@@ -411,10 +411,7 @@ static Resource* PreloadIfNeeded(const LinkLoadParameters& params,
   resource_request.SetRequestContext(ResourceFetcher::DetermineRequestContext(
       resource_type.value(), ResourceFetcher::kImageNotImageSet, false));
 
-  if (params.referrer_policy != kReferrerPolicyDefault) {
-    resource_request.SetHTTPReferrer(SecurityPolicy::GenerateReferrer(
-        params.referrer_policy, url, document.OutgoingReferrer()));
-  }
+  resource_request.SetReferrerPolicy(params.referrer_policy);
 
   resource_request.SetFetchImportanceMode(
       GetFetchImportanceAttributeValue(params.importance));
@@ -438,10 +435,10 @@ static Resource* PreloadIfNeeded(const LinkLoadParameters& params,
   }
   link_fetch_params.SetLinkPreload(true);
   return document.Loader()->StartPreload(resource_type.value(),
-                                         link_fetch_params, nullptr);
+                                         link_fetch_params);
 }
 
-// https://html.spec.whatwg.org/#link-type-modulepreload
+// https://html.spec.whatwg.org/multipage/links.html#link-type-modulepreload
 static void ModulePreloadIfNeeded(const LinkLoadParameters& params,
                                   Document& document,
                                   ViewportDescription* viewport_description,
@@ -547,8 +544,7 @@ static void ModulePreloadIfNeeded(const LinkLoadParameters& params,
       ScriptFetchOptions(params.nonce, integrity_metadata, params.integrity,
                          kNotParserInserted, credentials_mode,
                          params.referrer_policy),
-      Referrer(Referrer::NoReferrer(), params.referrer_policy),
-      TextPosition::MinimumPosition());
+      Referrer::NoReferrer(), TextPosition::MinimumPosition());
 
   // Step 11. "Fetch a single module script given url, settings object,
   // destination, options, settings object, "client", and with the top-level
@@ -577,13 +573,18 @@ static Resource* PrefetchIfNeeded(const LinkLoadParameters& params,
     UseCounter::Count(document, WebFeature::kLinkRelPrefetch);
 
     ResourceRequest resource_request(params.href);
-    if (params.referrer_policy != kReferrerPolicyDefault) {
-      resource_request.SetHTTPReferrer(SecurityPolicy::GenerateReferrer(
-          params.referrer_policy, params.href, document.OutgoingReferrer()));
-    }
-
+    resource_request.SetReferrerPolicy(params.referrer_policy);
     resource_request.SetFetchImportanceMode(
         GetFetchImportanceAttributeValue(params.importance));
+
+    // If Signed Exchange is enabled, prefer the application/signed-exchange
+    // content type
+    // (https://wicg.github.io/webpackage/draft-yasskin-http-origin-signed-responses.html#internet-media-type-applicationsigned-exchange).
+    if (RuntimeEnabledFeatures::SignedHTTPExchangeEnabled()) {
+      DEFINE_STATIC_LOCAL(const AtomicString, accept_prefetch,
+                          ("application/signed-exchange;v=b2;q=0.9,*/*;q=0.8"));
+      resource_request.SetHTTPAccept(accept_prefetch);
+    }
 
     ResourceLoaderOptions options;
     options.initiator_info.name = FetchInitiatorTypeNames::link;
@@ -702,11 +703,7 @@ void LinkLoader::LoadStylesheet(const LinkLoadParameters& params,
                                 Document& document,
                                 ResourceClient* link_client) {
   ResourceRequest resource_request(document.CompleteURL(params.href));
-  ReferrerPolicy referrer_policy = params.referrer_policy;
-  if (referrer_policy != kReferrerPolicyDefault) {
-    resource_request.SetHTTPReferrer(SecurityPolicy::GenerateReferrer(
-        referrer_policy, params.href, document.OutgoingReferrer()));
-  }
+  resource_request.SetReferrerPolicy(params.referrer_policy);
 
   mojom::FetchImportanceMode importance_mode =
       GetFetchImportanceAttributeValue(params.importance);

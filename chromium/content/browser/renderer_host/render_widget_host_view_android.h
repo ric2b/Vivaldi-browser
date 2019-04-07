@@ -53,7 +53,6 @@ class OverscrollControllerAndroid;
 class SelectionPopupController;
 class SynchronousCompositorHost;
 class SynchronousCompositorClient;
-class TapDisambiguator;
 class TextSuggestionHostAndroid;
 class TouchSelectionControllerClientManagerAndroid;
 class WebContentsAccessibilityAndroid;
@@ -67,7 +66,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
     : public RenderWidgetHostViewBase,
       public StylusTextSelectorClient,
       public content::TextInputManager::Observer,
-      public ui::DelegatedFrameHostAndroid::Client,
       public ui::EventHandlerAndroid,
       public ui::GestureProviderClient,
       public ui::TouchSelectionControllerClient,
@@ -156,13 +154,13 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       base::Optional<viz::HitTestRegionList> hit_test_region_list) override;
   void OnDidNotProduceFrame(const viz::BeginFrameAck& ack) override;
   void ClearCompositorFrame() override;
+  void ResetFallbackToFirstNavigationSurface() override;
   bool RequestRepaintForTesting() override;
   void SetIsInVR(bool is_in_vr) override;
   bool IsInVR() const override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
   void DidStopFlinging() override;
-  void ShowDisambiguationPopup(const gfx::Rect& rect_pixels,
-                               const SkBitmap& zoomed_bitmap) override;
+  void OnInterstitialPageAttached() override;
   void OnInterstitialPageGoingAway() override;
   std::unique_ptr<SyntheticGestureTarget> CreateSyntheticGestureTarget()
       override;
@@ -235,17 +233,13 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   std::unique_ptr<ui::TouchHandleDrawable> CreateDrawable() override;
   void DidScroll() override;
 
-  // DelegatedFrameHostAndroid::Client implementation.
-  void SetBeginFrameSource(viz::BeginFrameSource* begin_frame_source) override;
-  void DidPresentCompositorFrame(
-      uint32_t presentation_token,
-      const gfx::PresentationFeedback& feedback) override;
+  // Used by DelegatedFrameHostClientAndroid.
+  void SetBeginFrameSource(viz::BeginFrameSource* begin_frame_source);
+  void DidPresentCompositorFrame(uint32_t presentation_token,
+                                 const gfx::PresentationFeedback& feedback);
   void DidReceiveCompositorFrameAck(
-      const std::vector<viz::ReturnedResource>& resources) override;
-  void ReclaimResources(
-      const std::vector<viz::ReturnedResource>& resources) override;
-  void OnFrameTokenChanged(uint32_t frame_token) override;
-  void DidReceiveFirstFrameAfterNavigation() override;
+      const std::vector<viz::ReturnedResource>& resources);
+  void ReclaimResources(const std::vector<viz::ReturnedResource>& resources);
 
   // viz::BeginFrameObserver implementation.
   void OnBeginFrame(const viz::BeginFrameArgs& args) override;
@@ -264,14 +258,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void SendMouseWheelEvent(const blink::WebMouseWheelEvent& event);
   void SendGestureEvent(const blink::WebGestureEvent& event);
   bool ShowSelectionMenu(const ContextMenuParams& params);
-  void ResolveTapDisambiguation(double timestamp_seconds,
-                                gfx::Point tap_viewport_offset,
-                                bool is_long_press);
   void set_ime_adapter(ImeAdapterAndroid* ime_adapter) {
     ime_adapter_android_ = ime_adapter;
-  }
-  void set_tap_disambiguator(TapDisambiguator* tap_disambiguator) {
-    tap_disambiguator_ = tap_disambiguator;
   }
   void set_selection_popup_controller(SelectionPopupController* controller) {
     selection_popup_controller_ = controller;
@@ -348,6 +336,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
  protected:
   // RenderWidgetHostViewBase:
   void UpdateBackgroundColor() override;
+  bool HasFallbackSurface() const override;
 
  private:
   MouseWheelPhaseHandler* GetMouseWheelPhaseHandler() override;
@@ -449,12 +438,14 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool handles_hidden_by_selection_ui_ = false;
 
   ImeAdapterAndroid* ime_adapter_android_;
-  TapDisambiguator* tap_disambiguator_;
   SelectionPopupController* selection_popup_controller_;
   TextSuggestionHostAndroid* text_suggestion_host_;
   GestureListenerManager* gesture_listener_manager_;
 
   mutable ui::ViewAndroid view_;
+
+  std::unique_ptr<ui::DelegatedFrameHostAndroid::Client>
+      delegated_frame_host_client_;
 
   // Manages the Compositor Frames received from the renderer.
   std::unique_ptr<ui::DelegatedFrameHostAndroid> delegated_frame_host_;
@@ -482,7 +473,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   std::unique_ptr<TouchSelectionControllerClientManagerAndroid>
       touch_selection_controller_client_manager_;
 
-  // Bounds to use if we have no backing ContentViewCore
+  // Bounds to use if we have no backing WebContents.
   gfx::Rect default_bounds_;
 
   const bool using_browser_compositor_;
@@ -508,7 +499,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
 
-  base::ObserverList<DestructionObserver> destruction_observers_;
+  base::ObserverList<DestructionObserver>::Unchecked destruction_observers_;
 
   MouseWheelPhaseHandler mouse_wheel_phase_handler_;
   uint32_t latest_capture_sequence_number_ = 0u;

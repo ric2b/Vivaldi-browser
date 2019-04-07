@@ -15,8 +15,8 @@ namespace autofill {
 namespace {
 
 // Increment this anytime pickle format is modified as well as provide
-// deserialization routine from previous kPickleVersion format.
-const int kPickleVersion = 7;
+// deserialization routine from previous kFormFieldDataPickleVersion format.
+const int kFormFieldDataPickleVersion = 7;
 
 void AddVectorToPickle(std::vector<base::string16> strings,
                        base::Pickle* pickle) {
@@ -147,7 +147,6 @@ FormFieldData::FormFieldData()
       properties_mask(0),
       is_enabled(false),
       is_readonly(false),
-      is_default(false),
       label_source(LabelSource::UNKNOWN) {}
 
 FormFieldData::FormFieldData(const FormFieldData& other) = default;
@@ -281,7 +280,7 @@ bool FormFieldData::operator<(const FormFieldData& field) const {
 
 void SerializeFormFieldData(const FormFieldData& field_data,
                             base::Pickle* pickle) {
-  pickle->WriteInt(kPickleVersion);
+  pickle->WriteInt(kFormFieldDataPickleVersion);
   pickle->WriteString16(field_data.label);
   pickle->WriteString16(field_data.name);
   pickle->WriteString16(field_data.value);
@@ -455,7 +454,6 @@ std::ostream& operator<<(std::ostream& os, const FormFieldData& field) {
             << "text_direction=" << field.text_direction << " "
             << "is_enabled=" << field.is_enabled << " "
             << "is_readonly=" << field.is_readonly << " "
-            << "is_default=" << field.is_default << " "
             << "typed_value=" << field.typed_value << " "
             << "properties_mask=" << field.properties_mask << " "
             << "label_source=" << field.label_source;

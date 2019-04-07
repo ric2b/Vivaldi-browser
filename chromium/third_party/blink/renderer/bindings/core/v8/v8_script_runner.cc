@@ -215,10 +215,10 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
   v8::MaybeLocal<v8::Script> script =
       CompileScriptInternal(isolate, execution_context, source, origin,
                             compile_options, no_cache_reason, &cache_result);
-  TRACE_EVENT_END1(
-      kTraceEventCategoryGroup, "v8.compile", "data",
-      InspectorCompileScriptEvent::Data(file_name, script_start_position,
-                                        cache_result, source.Streamer()));
+  TRACE_EVENT_END1(kTraceEventCategoryGroup, "v8.compile", "data",
+                   InspectorCompileScriptEvent::Data(
+                       file_name, script_start_position, cache_result,
+                       source.Streamer(), source.NotStreamingReason()));
   return script;
 }
 
@@ -280,7 +280,7 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::RunCompiledScript(
                                          v8::MicrotasksScope::kRunMicrotasks);
     // ToCoreString here should be zero copy due to externalized string
     // unpacked.
-    String script_url = ToCoreString(script_name->ToString());
+    String script_url = ToCoreString(script_name->ToString(isolate));
     probe::ExecuteScript probe(context, script_url);
     result = script->Run(isolate->GetCurrentContext());
   }

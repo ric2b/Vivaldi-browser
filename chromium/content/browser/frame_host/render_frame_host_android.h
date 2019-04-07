@@ -52,6 +52,8 @@ class RenderFrameHostAndroid : public base::SupportsUserData::Data {
   void NotifyUserActivation(JNIEnv* env,
                             const base::android::JavaParamRef<jobject>&);
 
+  RenderFrameHostImpl* render_frame_host() const { return render_frame_host_; }
+
  private:
   RenderFrameHostImpl* const render_frame_host_;
   service_manager::mojom::InterfaceProviderPtr interface_provider_ptr_;

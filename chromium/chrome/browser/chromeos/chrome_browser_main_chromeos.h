@@ -10,8 +10,10 @@
 #include "base/macros.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "chrome/browser/chrome_browser_main_linux.h"
+#include "chrome/browser/chromeos/crostini/crosvm_metrics.h"
 #include "chrome/browser/chromeos/external_metrics.h"
 #include "chrome/browser/memory/memory_kills_monitor.h"
+#include "chromeos/assistant/buildflags.h"
 
 class SpokenFeedbackEventRewriterDelegate;
 
@@ -24,9 +26,14 @@ class ArcServiceLauncher;
 class VoiceInteractionControllerClient;
 }
 
+#if BUILDFLAG(ENABLE_CROS_ASSISTANT)
+class AssistantClient;
+#endif
+
 namespace chromeos {
 
 class ArcKioskAppManager;
+class DemoModeResourcesRemover;
 class EventRewriterDelegateImpl;
 class IdleActionWarningObserver;
 class LowDiskNotification;
@@ -61,9 +68,10 @@ class UserActivityController;
 // src/ash or chrome/browser/ui/ash.
 class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
  public:
-  explicit ChromeBrowserMainPartsChromeos(
+  ChromeBrowserMainPartsChromeos(
       const content::MainFunctionParams& parameters,
-      std::unique_ptr<ui::DataPack> data_pack);
+      std::unique_ptr<ui::DataPack> data_pack,
+      ChromeFeatureListCreator* chrome_feature_list_creator);
   ~ChromeBrowserMainPartsChromeos() override;
 
   // ChromeBrowserMainParts overrides.
@@ -111,6 +119,10 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<arc::VoiceInteractionControllerClient>
       arc_voice_interaction_controller_client_;
 
+#if BUILDFLAG(ENABLE_CROS_ASSISTANT)
+  std::unique_ptr<AssistantClient> assistant_client_;
+#endif
+
   std::unique_ptr<LowDiskNotification> low_disk_notification_;
   std::unique_ptr<ArcKioskAppManager> arc_kiosk_app_manager_;
 
@@ -123,6 +135,9 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
       adaptive_screen_brightness_manager_;
 
   std::unique_ptr<power::ml::UserActivityController> user_activity_controller_;
+
+  std::unique_ptr<DemoModeResourcesRemover> demo_mode_resources_remover_;
+  std::unique_ptr<crostini::CrosvmMetrics> crosvm_metrics_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainPartsChromeos);
 };

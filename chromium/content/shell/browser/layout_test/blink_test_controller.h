@@ -10,6 +10,8 @@
 #include <ostream>
 #include <set>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "base/cancelable_callback.h"
 #include "base/files/file_path.h"
@@ -21,6 +23,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/public/browser/bluetooth_chooser.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/gpu_data_manager_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -241,7 +244,7 @@ class BlinkTestController : public WebContentsObserver,
                                          const std::string& argument);
   void OnBlockThirdPartyCookies(bool block);
   mojom::LayoutTestControl* GetLayoutTestControlPtr(RenderFrameHost* frame);
-  void HandleLayoutTestControlError(RenderFrameHost* frame);
+  void HandleLayoutTestControlError(const GlobalFrameRoutingId& key);
 
   void OnCleanupFinished();
   void OnCaptureDumpCompleted(mojom::LayoutTestDumpPtr dump);
@@ -327,7 +330,7 @@ class BlinkTestController : public WebContentsObserver,
   bool waiting_for_main_frame_dump_ = false;
 
   // Map from one frame to one mojo pipe.
-  std::map<RenderFrameHost*, mojom::LayoutTestControlAssociatedPtr>
+  std::map<GlobalFrameRoutingId, mojom::LayoutTestControlAssociatedPtr>
       layout_test_control_map_;
 #if defined(OS_ANDROID)
   // Because of the nested message pump implementation, Android needs to allow

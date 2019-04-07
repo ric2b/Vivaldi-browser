@@ -127,7 +127,7 @@ GetDictionaryValueForAppCacheResourceInfo(
 }
 
 std::unique_ptr<base::ListValue> GetListValueForAppCacheResourceInfoVector(
-    AppCacheResourceInfoVector* resource_info_vector) {
+    std::vector<AppCacheResourceInfo>* resource_info_vector) {
   std::unique_ptr<base::ListValue> list(new base::ListValue);
   for (const AppCacheResourceInfo& res_info : *resource_info_vector)
     list->Append(GetDictionaryValueForAppCacheResourceInfo(res_info));
@@ -238,9 +238,9 @@ void AppCacheInternalsUI::Proxy::RequestAppCacheDetails(
 
 void AppCacheInternalsUI::Proxy::OnGroupLoaded(AppCacheGroup* appcache_group,
                                                const GURL& manifest_gurl) {
-  std::unique_ptr<AppCacheResourceInfoVector> resource_info_vector;
+  std::unique_ptr<std::vector<AppCacheResourceInfo>> resource_info_vector;
   if (appcache_group && appcache_group->newest_complete_cache()) {
-    resource_info_vector.reset(new AppCacheResourceInfoVector);
+    resource_info_vector.reset(new std::vector<AppCacheResourceInfo>);
     appcache_group->newest_complete_cache()->ToResourceInfoVector(
         resource_info_vector.get());
     std::sort(resource_info_vector->begin(), resource_info_vector->end(),
@@ -445,7 +445,7 @@ void AppCacheInternalsUI::OnAppCacheInfoDeleted(
 void AppCacheInternalsUI::OnAppCacheDetailsReady(
     const base::FilePath& partition_path,
     const std::string& manifest_url,
-    std::unique_ptr<AppCacheResourceInfoVector> resource_info_vector) {
+    std::unique_ptr<std::vector<AppCacheResourceInfo>> resource_info_vector) {
   if (resource_info_vector) {
     web_ui()->CallJavascriptFunctionUnsafe(
         kFunctionOnAppCacheDetailsReady, base::Value(manifest_url),
@@ -464,25 +464,22 @@ void AppCacheInternalsUI::OnFileDetailsReady(
     scoped_refptr<net::IOBuffer> response_data,
     int data_length) {
   std::string headers;
-  if (response_info->http_response_info()) {
-    headers.append("<hr><pre>");
-    headers.append(net::EscapeForHTML(
-        response_info->http_response_info()->headers->GetStatusLine()));
-    headers.push_back('\n');
+  headers.append("<hr><pre>");
+  headers.append(net::EscapeForHTML(
+      response_info->http_response_info().headers->GetStatusLine()));
+  headers.push_back('\n');
 
-    size_t iter = 0;
-    std::string name, value;
-    while (response_info->http_response_info()->headers->EnumerateHeaderLines(
-        &iter, &name, &value)) {
-      headers.append(net::EscapeForHTML(name));
-      headers.append(": ");
-      headers.append(net::EscapeForHTML(value));
-      headers.push_back('\n');
-    }
-    headers.append("</pre>");
-  } else {
-    headers.append("Failed to read response headers. <br>");
+  size_t iter = 0;
+  std::string name, value;
+  while (response_info->http_response_info().headers->EnumerateHeaderLines(
+      &iter, &name, &value)) {
+    headers.append(net::EscapeForHTML(name));
+    headers.append(": ");
+    headers.append(net::EscapeForHTML(value));
+    headers.push_back('\n');
   }
+  headers.append("</pre>");
+
   std::string hex_dump = base::StringPrintf(
       "<hr><pre> Showing %d of %d bytes\n\n", static_cast<int>(data_length),
       static_cast<int>(response_info->response_data_size()));

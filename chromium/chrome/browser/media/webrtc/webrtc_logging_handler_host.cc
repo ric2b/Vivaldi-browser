@@ -11,14 +11,14 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/bad_message.h"
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager.h"
 #include "chrome/browser/media/webrtc/webrtc_log_uploader.h"
 #include "chrome/browser/media/webrtc/webrtc_rtp_dump_handler.h"
 #include "chrome/common/media/webrtc_logging_messages.h"
-#include "components/webrtc_logging/browser/log_list.h"
+#include "components/webrtc_logging/browser/text_log_list.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -30,6 +30,7 @@
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 using content::BrowserThread;
+using webrtc_event_logging::WebRtcEventLogManager;
 
 // Key used to attach the handler to the RenderProcessHost.
 const char WebRtcLoggingHandlerHost::kWebRtcLoggingHandlerHostKey[] =
@@ -253,10 +254,12 @@ void WebRtcLoggingHandlerHost::StopRtpDump(
 void WebRtcLoggingHandlerHost::StartEventLogging(
     const std::string& peer_connection_id,
     size_t max_log_size_bytes,
+    size_t web_app_id,
     const StartEventLoggingCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   WebRtcEventLogManager::GetInstance()->StartRemoteLogging(
-      render_process_id_, peer_connection_id, max_log_size_bytes, callback);
+      render_process_id_, peer_connection_id, max_log_size_bytes, web_app_id,
+      callback);
 }
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
@@ -417,7 +420,7 @@ base::FilePath WebRtcLoggingHandlerHost::GetLogDirectoryAndEnsureExists() {
   // profile has been deleted and removed from disk. If that happens it will be
   // cleaned up (at a higher level) the next browser restart.
   base::FilePath log_dir_path =
-      webrtc_logging::LogList::GetWebRtcLogDirectoryForBrowserContextPath(
+      webrtc_logging::TextLogList::GetWebRtcLogDirectoryForBrowserContextPath(
           browser_context_directory_path_);
   base::File::Error error;
   if (!base::CreateDirectoryAndGetError(log_dir_path, &error)) {
@@ -454,6 +457,16 @@ void WebRtcLoggingHandlerHost::StoreLogInDirectory(
     const GenericDoneCallback& done_callback,
     const base::FilePath& directory) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  if (text_log_handler_->GetState() != WebRtcTextLogHandler::STOPPED &&
+      text_log_handler_->GetState() != WebRtcTextLogHandler::CHANNEL_CLOSING) {
+    BrowserThread::PostTask(
+        content::BrowserThread::UI, FROM_HERE,
+        base::BindOnce(done_callback, false,
+                       "Logging not stopped or no log open."));
+    return;
+  }
+
   log_paths->log_path = directory;
 
   std::unique_ptr<WebRtcLogBuffer> log_buffer;

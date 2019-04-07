@@ -7,12 +7,11 @@
 #include <list>
 #include <map>
 
+#include "ash/message_center/ash_message_center_lock_screen_controller.h"
 #include "ash/message_center/message_center_button_bar.h"
 #include "ash/message_center/message_center_scroll_bar.h"
 #include "ash/message_center/message_center_style.h"
 #include "ash/message_center/notifier_settings_view.h"
-#include "ash/public/cpp/ash_features.h"
-#include "ash/public/cpp/ash_switches.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
@@ -28,6 +27,7 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/skia_paint_util.h"
 #include "ui/message_center/message_center.h"
@@ -182,24 +182,19 @@ class ScrollShadowView : public views::View {
 
 // MessageCenterView ///////////////////////////////////////////////////////////
 
-MessageCenterView::MessageCenterView(
-    MessageCenter* message_center,
-    int max_height,
-    bool initially_settings_visible)
+MessageCenterView::MessageCenterView(MessageCenter* message_center,
+                                     int max_height)
     : message_center_(message_center),
-      settings_visible_(initially_settings_visible),
+      settings_visible_(false),
       is_locked_(Shell::Get()->session_controller()->IsScreenLocked()) {
-  if (is_locked_ && !features::IsLockScreenNotificationsEnabled())
+  if (is_locked_ && !AshMessageCenterLockScreenController::IsEnabled())
     mode_ = Mode::LOCKED;
-  else if (initially_settings_visible)
-    mode_ = Mode::SETTINGS;
 
   message_center_->AddObserver(this);
   set_notify_enter_exit_on_child(true);
   SetFocusBehavior(views::View::FocusBehavior::NEVER);
 
-  button_bar_ = new MessageCenterButtonBar(
-      this, message_center, initially_settings_visible, is_locked_);
+  button_bar_ = new MessageCenterButtonBar(this, message_center, is_locked_);
   button_bar_->SetCloseAllButtonEnabled(false);
 
   const int button_height = button_bar_->GetPreferredSize().height();
@@ -213,7 +208,7 @@ MessageCenterView::MessageCenterView(
   // set the default opaque background color.
   scroller_->SetBackgroundColor(SK_ColorTRANSPARENT);
   scroller_->ClipHeightTo(kMinScrollViewHeight, max_scroll_view_height);
-  scroller_->SetVerticalScrollBar(new MessageCenterScrollBar());
+  scroller_->SetVerticalScrollBar(new MessageCenterScrollBar(nullptr));
 
   message_list_view_.reset(new MessageListView());
   message_list_view_->SetBorderPadding();
@@ -254,15 +249,6 @@ MessageCenterView::~MessageCenterView() {
 
   if (!is_closing_)
     message_center_->RemoveObserver(this);
-
-  if (focus_manager_)
-    focus_manager_->RemoveFocusChangeListener(this);
-}
-
-void MessageCenterView::Init() {
-  focus_manager_ = GetFocusManager();
-  if (focus_manager_)
-    focus_manager_->AddFocusChangeListener(this);
 }
 
 void MessageCenterView::SetNotifications(
@@ -339,26 +325,6 @@ void MessageCenterView::SetIsClosing(bool is_closing) {
     message_center_->RemoveObserver(this);
   else
     message_center_->AddObserver(this);
-}
-
-void MessageCenterView::OnDidChangeFocus(views::View* before,
-                                         views::View* now) {
-  // Update the button visibility when the focus state is changed.
-  size_t count = message_list_view_->GetNotificationCount();
-  for (size_t i = 0; i < count; ++i) {
-    MessageView* view = message_list_view_->GetNotificationAt(i);
-    // ControlButtonsView is not in the same view hierarchy on ARC++
-    // notifications, so check it separately.
-    if (view->Contains(before) || view->Contains(now) ||
-        (view->GetControlButtonsView() &&
-         (view->GetControlButtonsView()->Contains(before) ||
-          view->GetControlButtonsView()->Contains(now)))) {
-      view->UpdateControlButtonsVisibility();
-    }
-
-    // Ensure that a notification is not removed or added during iteration.
-    DCHECK_EQ(count, message_list_view_->GetNotificationCount());
-  }
 }
 
 void MessageCenterView::UpdateScrollerShadowVisibility() {
@@ -463,7 +429,9 @@ void MessageCenterView::OnNotificationRemoved(const std::string& id,
   // We skip repositioning during clear-all anomation, since we don't need keep
   // positions.
   if (by_user && !is_clearing_all_notifications_) {
-    message_list_view_->SetRepositionTarget(view->bounds());
+    gfx::RectF rect_f(view->x(), view->y(), view->width(), view->height());
+    views::View::ConvertRectToTarget(view, message_list_view_.get(), &rect_f);
+    message_list_view_->SetRepositionTarget(gfx::ToNearestRect(rect_f));
     // Moves the keyboard focus to the next notification if the removed
     // notification is focused so that the user can dismiss notifications
     // without re-focusing by tab key.
@@ -524,11 +492,6 @@ void MessageCenterView::OnQuietModeChanged(bool is_quiet_mode) {
 void MessageCenterView::AnimationEnded(const gfx::Animation* animation) {
   DCHECK_EQ(animation, settings_transition_animation_.get());
 
-  message_center::Visibility visibility =
-      mode_ == Mode::SETTINGS ? message_center::VISIBILITY_SETTINGS
-                              : message_center::VISIBILITY_MESSAGE_CENTER;
-  message_center_->SetVisibility(visibility);
-
   if (source_view_) {
     source_view_->SetVisible(false);
   }
@@ -577,7 +540,7 @@ void MessageCenterView::AddNotificationAt(const Notification& notification,
 void MessageCenterView::Update(bool animate) {
   bool no_message_views = (message_list_view_->GetNotificationCount() == 0);
 
-  if (is_locked_ && !features::IsLockScreenNotificationsEnabled())
+  if (is_locked_ && !AshMessageCenterLockScreenController::IsEnabled())
     SetVisibilityMode(Mode::LOCKED, animate);
   else if (settings_visible_)
     SetVisibilityMode(Mode::SETTINGS, animate);

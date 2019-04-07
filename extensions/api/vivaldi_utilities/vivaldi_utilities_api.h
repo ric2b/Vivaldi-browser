@@ -19,8 +19,8 @@
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/vivaldi_utilities.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
-
 
 class Browser;
 
@@ -69,13 +69,48 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   // exist.
   const base::Value* GetSharedData(const std::string& key);
 
+  // Sets anchor rect for the named dialog. Returns true if the key didn't not
+  // exist previously, false if it updated an existing value
+  bool SetDialogPostion(int window_id,
+                        const std::string& dialog,
+                        const gfx::Rect& rect,
+                        const std::string& flow_direction);
+
+  // Sets anchor rect for the named dialog
+  gfx::Rect GetDialogPosition(int window_id,
+                              const std::string& dialog,
+                              std::string* flow_direction);
+
   // PowerObserver implementation
   void OnPowerStateChange(bool on_battery_power) override;
   void OnSuspend() override;
   void OnResume() override;
 
+  void OnPasswordIconStatusChanged(bool show);
+
   // Close all app windows generating thumbnails.
   void CloseAllThumbnailWindows();
+
+  class DialogPosition {
+   public:
+    DialogPosition(int window_id,
+                   const std::string& dialog_name,
+                   gfx::Rect rect,
+                   const std::string& flow_direction);
+
+    ~DialogPosition() {}
+
+    int window_id() { return window_id_; }
+    const std::string& dialog_name() { return dialog_name_; }
+    const gfx::Rect& rect() { return rect_; }
+    const std::string& flow_direction() { return flow_direction_;  }
+
+   private:
+    int window_id_ = 0;
+    std::string dialog_name_;
+    gfx::Rect rect_;
+    std::string flow_direction_;
+  };
 
  private:
   friend class BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI>;
@@ -91,6 +126,9 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
 
   // Map used for the *sharedData apis.
   std::map<std::string, base::Value*> key_to_values_map_;
+
+  // List used for the dialog position apis.
+  std::vector<std::unique_ptr<DialogPosition> > dialog_to_point_list_;
 };
 
 class UtilitiesBasicPrintFunction : public ChromeAsyncExtensionFunction {
@@ -565,6 +603,33 @@ class UtilitiesCanShowWelcomePageFunction
 
  private:
   DISALLOW_COPY_AND_ASSIGN(UtilitiesCanShowWelcomePageFunction);
+};
+
+class UtilitiesShowPasswordDialogFunction
+    : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.showPasswordDialog",
+                             UTILITIES_SHOW_PASSWORD_DIALOG);
+  UtilitiesShowPasswordDialogFunction() = default;
+
+ private:
+  ~UtilitiesShowPasswordDialogFunction() override = default;
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesShowPasswordDialogFunction);
+};
+
+class UtilitiesSetDialogPositionFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.setDialogPosition",
+                             UTILITIES_SET_DIALOG_POSITION);
+  UtilitiesSetDialogPositionFunction() = default;
+
+ private:
+  ~UtilitiesSetDialogPositionFunction() override = default;
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetDialogPositionFunction);
 };
 
 }  // namespace extensions

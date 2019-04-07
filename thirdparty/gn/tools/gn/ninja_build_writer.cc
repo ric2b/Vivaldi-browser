@@ -163,12 +163,14 @@ NinjaBuildWriter::NinjaBuildWriter(
     const BuildSettings* build_settings,
     const std::unordered_map<const Settings*, const Toolchain*>&
         used_toolchains,
+    const std::vector<const Target*>& all_targets,
     const Toolchain* default_toolchain,
     const std::vector<const Target*>& default_toolchain_targets,
     std::ostream& out,
     std::ostream& dep_out)
     : build_settings_(build_settings),
       used_toolchains_(used_toolchains),
+      all_targets_(all_targets),
       default_toolchain_(default_toolchain),
       default_toolchain_targets_(default_toolchain_targets),
       out_(out),
@@ -221,8 +223,9 @@ bool NinjaBuildWriter::RunAndWriteFile(const BuildSettings* build_settings,
 
   std::stringstream file;
   std::stringstream depfile;
-  NinjaBuildWriter gen(build_settings, used_toolchains, default_toolchain,
-                       default_toolchain_targets, file, depfile);
+  NinjaBuildWriter gen(build_settings, used_toolchains, all_targets,
+                       default_toolchain, default_toolchain_targets,
+                       file, depfile);
   if (!gen.Run(err))
     return false;
 
@@ -301,7 +304,7 @@ void NinjaBuildWriter::WriteAllPools() {
     }
   }
 
-  for (const Target* target : default_toolchain_targets_) {
+  for (const Target* target : all_targets_) {
     if (target->output_type() == Target::ACTION) {
       const LabelPtrPair<Pool>& pool = target->action_values().pool();
       if (pool.ptr)

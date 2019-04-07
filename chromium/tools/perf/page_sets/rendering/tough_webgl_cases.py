@@ -25,8 +25,7 @@ class ToughWebglPage(rendering_story.RenderingStory):
   @property
   def skipped_gpus(self):
     # crbug.com/462729
-    return ['arm', 'broadcom', 'hisilicon', 'imagination', 'qualcomm',
-            'vivante']
+    return ['arm', 'broadcom', 'hisilicon', 'imagination', 'vivante']
 
   def RunNavigateSteps(self, action_runner):
     super(ToughWebglPage, self).RunNavigateSteps(action_runner)
@@ -92,3 +91,10 @@ class KenRussellPage(ToughWebglPage):
   BASE_NAME = 'animometer_webgl'
   # pylint: disable=line-too-long
   URL = 'http://kenrussell.github.io/webgl-animometer/Animometer/tests/3d/webgl.html'
+
+
+class CameraToWebGLPage(ToughWebglPage):
+  TAGS = ToughWebglPage.TAGS + [story_tags.USE_FAKE_CAMERA_DEVICE]
+  BASE_NAME = 'camera_to_webgl'
+  # pylint: disable=line-too-long
+  URL = 'https://www.khronos.org/registry/webgl/sdk/tests/extra/texture-from-camera-stress.html?uploadsPerFrame=200'

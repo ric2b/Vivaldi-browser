@@ -12,7 +12,7 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "components/cookie_config/cookie_store_util.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/prefs/json_pref_store.h"
@@ -187,12 +187,11 @@ void ChromeBrowserStateImplIOData::InitializeInternal(
   // Set up a persistent store for use by the network stack on the IO thread.
   base::FilePath network_json_store_filepath(
       profile_path_.Append(kIOSChromeNetworkPersistentStateFilename));
-  network_json_store_ =
-      new JsonPrefStore(network_json_store_filepath,
-                        base::CreateSequencedTaskRunnerWithTraits(
-                            {base::MayBlock(), base::TaskPriority::BACKGROUND,
-                             base::TaskShutdownBehavior::BLOCK_SHUTDOWN}),
-                        std::unique_ptr<PrefFilter>());
+  network_json_store_ = new JsonPrefStore(
+      network_json_store_filepath, std::unique_ptr<PrefFilter>(),
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+           base::TaskShutdownBehavior::BLOCK_SHUTDOWN}));
   network_json_store_->ReadPrefsAsync(nullptr);
 
   net::URLRequestContext* main_context = main_request_context();
@@ -231,7 +230,8 @@ void ChromeBrowserStateImplIOData::InitializeInternal(
       cookie_util::CookieStoreConfig::COOKIE_STORE_IOS,
       cookie_config::GetCookieCryptoDelegate());
   main_cookie_store_ = cookie_util::CreateCookieStore(
-      ios_cookie_config, std::move(profile_params->system_cookie_store));
+      ios_cookie_config, std::move(profile_params->system_cookie_store),
+      io_thread->net_log());
 
   if (profile_params->path.BaseName().value() ==
       kIOSChromeInitialBrowserState) {
@@ -250,7 +250,7 @@ void ChromeBrowserStateImplIOData::InitializeInternal(
         new net::SQLiteChannelIDStore(
             lazy_params_->channel_id_path,
             base::CreateSequencedTaskRunnerWithTraits(
-                {base::MayBlock(), base::TaskPriority::BACKGROUND}));
+                {base::MayBlock(), base::TaskPriority::BEST_EFFORT}));
     channel_id_service = new net::ChannelIDService(
         new net::DefaultChannelIDStore(channel_id_db.get()));
   }
@@ -311,7 +311,8 @@ ChromeBrowserStateImplIOData::InitializeAppRequestContext(
   // TODO(crbug.com/779106): Check if cookiestore type should be changed.
   std::unique_ptr<net::CookieStore> cookie_store =
       cookie_util::CreateCookieStore(
-          ios_cookie_config, std::make_unique<net::NSHTTPSystemCookieStore>());
+          ios_cookie_config, std::make_unique<net::NSHTTPSystemCookieStore>(),
+          main_context->net_log());
 
   // Transfer ownership of the ChannelIDStore, HttpNetworkSession, cookies, and
   // cache to AppRequestContext.

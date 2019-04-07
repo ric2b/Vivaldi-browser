@@ -73,7 +73,7 @@ public final class DefaultBrowserInfo {
     /** A lock to synchronize background tasks to retrieve browser information. */
     private static final Object sDirCreationLock = new Object();
 
-    private static AsyncTask<Void, Void, ArrayList<String>> sDefaultBrowserFetcher;
+    private static AsyncTask<ArrayList<String>> sDefaultBrowserFetcher;
 
     /** Don't instantiate me. */
     private DefaultBrowserInfo() {}
@@ -84,9 +84,9 @@ public final class DefaultBrowserInfo {
     public static void initBrowserFetcher() {
         synchronized (sDirCreationLock) {
             if (sDefaultBrowserFetcher == null) {
-                sDefaultBrowserFetcher = new AsyncTask<Void, Void, ArrayList<String>>() {
+                sDefaultBrowserFetcher = new AsyncTask<ArrayList<String>>() {
                     @Override
-                    protected ArrayList<String> doInBackground(Void... params) {
+                    protected ArrayList<String> doInBackground() {
                         Context context = ContextUtils.getApplicationContext();
                         ArrayList<String> menuTitles = new ArrayList<String>(2);
                         // Store the package label of current application.
@@ -100,8 +100,8 @@ public final class DefaultBrowserInfo {
                         boolean isDefault = info != null && info.match != 0
                                 && TextUtils.equals(
                                            context.getPackageName(), info.activityInfo.packageName);
-                        ChromePreferenceManager.getInstance().setCachedChromeDefaultBrowser(
-                                isDefault);
+                        ChromePreferenceManager.getInstance().writeBoolean(
+                                ChromePreferenceManager.CHROME_DEFAULT_BROWSER, isDefault);
 
                         // Check if there is a default handler for the Intent.  If so, store its
                         // label.
@@ -173,10 +173,10 @@ public final class DefaultBrowserInfo {
                 .isStartupSuccessfullyCompleted();
 
         try {
-            new AsyncTask<Context, Void, DefaultInfo>() {
+            new AsyncTask<DefaultInfo>() {
                 @Override
-                protected DefaultInfo doInBackground(Context... params) {
-                    Context context = params[0];
+                protected DefaultInfo doInBackground() {
+                    Context context = ContextUtils.getApplicationContext();
 
                     PackageManager pm = context.getPackageManager();
 
@@ -222,8 +222,7 @@ public final class DefaultBrowserInfo {
                             getDefaultBrowserUmaState(info), MobileDefaultBrowserState.NUM_ENTRIES);
                 }
             }
-                    .executeOnExecutor(
-                            AsyncTask.THREAD_POOL_EXECUTOR, ContextUtils.getApplicationContext());
+                    .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
         } catch (RejectedExecutionException ex) {
             // Fail silently here since this is not a critical task.
         }

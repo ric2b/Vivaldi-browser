@@ -200,10 +200,11 @@ bool NetworkConfigurationPolicyHandler::CheckPolicySettings(
   if (value) {
     std::string onc_blob;
     value->GetAsString(&onc_blob);
-    std::unique_ptr<base::DictionaryValue> root_dict =
+    std::unique_ptr<base::Value> root_dict =
         chromeos::onc::ReadDictionaryFromJson(onc_blob);
-    if (root_dict.get() == NULL) {
+    if (!root_dict) {
       errors->AddError(policy_name(), IDS_POLICY_NETWORK_CONFIG_PARSE_FAILED);
+      errors->SetDebugInfo(policy_name(), "ERROR: JSON parse error");
       return false;
     }
 
@@ -213,7 +214,8 @@ bool NetworkConfigurationPolicyHandler::CheckPolicySettings(
         false,  // Ignore unknown fields.
         false,  // Ignore invalid recommended field names.
         true,   // Fail on missing fields.
-        true);  // Validate for managed ONC
+        true,   // Validate for managed ONC.
+        true);  // Log warnings.
     validator.SetOncSource(onc_source_);
 
     // ONC policies are always unencrypted.
@@ -221,10 +223,31 @@ bool NetworkConfigurationPolicyHandler::CheckPolicySettings(
     root_dict = validator.ValidateAndRepairObject(
         &chromeos::onc::kToplevelConfigurationSignature, *root_dict,
         &validation_result);
+
+    // Pass error/warning message and non-localized debug_info to
+    // PolicyErrorMap.
+    std::vector<base::StringPiece> messages;
+    for (const chromeos::onc::Validator::ValidationIssue& issue :
+         validator.validation_issues()) {
+      messages.push_back(issue.message);
+    }
+    std::string debug_info = base::JoinString(messages, "\n");
+
     if (validation_result == chromeos::onc::Validator::VALID_WITH_WARNINGS)
-      errors->AddError(policy_name(), IDS_POLICY_NETWORK_CONFIG_IMPORT_PARTIAL);
+      errors->AddError(policy_name(), IDS_POLICY_NETWORK_CONFIG_IMPORT_PARTIAL,
+                       debug_info);
     else if (validation_result == chromeos::onc::Validator::INVALID)
-      errors->AddError(policy_name(), IDS_POLICY_NETWORK_CONFIG_IMPORT_FAILED);
+      errors->AddError(policy_name(), IDS_POLICY_NETWORK_CONFIG_IMPORT_FAILED,
+                       debug_info);
+
+    if (!validator.validation_issues().empty()) {
+      std::vector<std::string> messages;
+      for (const chromeos::onc::Validator::ValidationIssue& issue :
+           validator.validation_issues()) {
+        messages.push_back(issue.message);
+      }
+      errors->SetDebugInfo(policy_name(), base::JoinString(messages, "\n"));
+    }
 
     // In any case, don't reject the policy as some networks or certificates
     // could still be applied.
@@ -289,9 +312,10 @@ NetworkConfigurationPolicyHandler::SanitizeNetworkConfig(
     return NULL;
 
   std::unique_ptr<base::DictionaryValue> toplevel_dict =
-      chromeos::onc::ReadDictionaryFromJson(json_string);
+      base::DictionaryValue::From(
+          chromeos::onc::ReadDictionaryFromJson(json_string));
   if (!toplevel_dict)
-    return NULL;
+    return nullptr;
 
   // Placeholder to insert in place of the filtered setting.
   const char kPlaceholder[] = "********";

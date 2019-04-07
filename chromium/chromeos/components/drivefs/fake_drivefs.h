@@ -16,8 +16,6 @@
 #include "chromeos/components/drivefs/mojom/drivefs.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
-class AccountId;
-
 namespace drivefs {
 
 class FakeDriveFs : public drivefs::mojom::DriveFs,
@@ -27,14 +25,15 @@ class FakeDriveFs : public drivefs::mojom::DriveFs,
   ~FakeDriveFs() override;
 
   void RegisterMountingForAccountId(
-      base::RepeatingCallback<AccountId()> account_id_getter);
+      base::RepeatingCallback<std::string()> account_id_getter);
 
   std::unique_ptr<drivefs::DriveFsHost::MojoConnectionDelegate>
   CreateConnectionDelegate();
 
   void SetMetadata(const base::FilePath& path,
                    const std::string& mime_type,
-                   const std::string& original_name);
+                   const std::string& original_name,
+                   bool pinned);
 
   const base::FilePath& mount_path() { return mount_path_; }
 
@@ -54,6 +53,10 @@ class FakeDriveFs : public drivefs::mojom::DriveFs,
   void SetPinned(const base::FilePath& path,
                  bool pinned,
                  SetPinnedCallback callback) override;
+
+  void UpdateNetworkState(bool pause_syncing, bool is_offline) override;
+
+  void ResetCache(ResetCacheCallback callback) override;
 
   const base::FilePath mount_path_;
 

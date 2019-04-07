@@ -84,7 +84,8 @@ class RasterTaskImpl : public TileTask {
                  std::unique_ptr<RasterBuffer> raster_buffer,
                  TileTask::Vector* dependencies,
                  bool is_gpu_rasterization,
-                 PlaybackImageProvider image_provider)
+                 PlaybackImageProvider image_provider,
+                 GURL url)
       : TileTask(!is_gpu_rasterization, dependencies),
         tile_manager_(tile_manager),
         tile_id_(tile->id()),
@@ -102,7 +103,8 @@ class RasterTaskImpl : public TileTask {
         source_frame_number_(tile->source_frame_number()),
         is_gpu_rasterization_(is_gpu_rasterization),
         raster_buffer_(std::move(raster_buffer)),
-        image_provider_(std::move(image_provider)) {
+        image_provider_(std::move(image_provider)),
+        url_(std::move(url)) {
     DCHECK(origin_thread_checker_.CalledOnValidThread());
     playback_settings_.image_provider = &image_provider_;
   }
@@ -124,7 +126,7 @@ class RasterTaskImpl : public TileTask {
 
     raster_buffer_->Playback(raster_source_.get(), content_rect_,
                              invalid_content_rect_, new_content_id_,
-                             raster_transform_, playback_settings_);
+                             raster_transform_, playback_settings_, url_);
   }
 
   // Overridden from TileTask:
@@ -171,6 +173,7 @@ class RasterTaskImpl : public TileTask {
   bool is_gpu_rasterization_;
   std::unique_ptr<RasterBuffer> raster_buffer_;
   PlaybackImageProvider image_provider_;
+  GURL url_;
 
   DISALLOW_COPY_AND_ASSIGN(RasterTaskImpl);
 };
@@ -359,7 +362,7 @@ TileManager::TileManager(
       did_oom_on_last_assign_(false),
       image_controller_(origin_task_runner,
                         std::move(image_worker_task_runner)),
-      decoded_image_tracker_(&image_controller_),
+      decoded_image_tracker_(&image_controller_, origin_task_runner),
       checker_image_tracker_(&image_controller_,
                              this,
                              tile_manager_settings_.enable_checker_imaging,
@@ -483,7 +486,7 @@ bool TileManager::PrepareTiles(
     const GlobalStateThatImpactsTilePriority& state) {
   ++prepare_tiles_count_;
 
-  TRACE_EVENT1("cc", "TileManager::PrepareTiles", "prepare_tiles_id",
+  TRACE_EVENT1("cc,benchmark", "TileManager::PrepareTiles", "prepare_tiles_id",
                prepare_tiles_count_);
 
   if (!tile_task_manager_) {
@@ -1029,8 +1032,10 @@ void TileManager::ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule) {
       prepare_tiles_count_, TilePriority::SOON,
       ImageDecodeCache::TaskType::kInRaster);
   std::vector<scoped_refptr<TileTask>> new_locked_image_tasks =
-      image_controller_.SetPredecodeImages(std::move(new_locked_images),
-                                           tracing_info);
+      image_controller_.SetPredecodeImages(new_locked_images, tracing_info);
+  // Notify |decoded_image_tracker_| after |image_controller_| to ensure we've
+  // taken new refs on the images before releasing the predecode API refs.
+  decoded_image_tracker_.OnImagesUsedInDraw(new_locked_images);
   work_to_schedule.extra_prepaint_images.clear();
 
   for (auto& task : new_locked_image_tasks) {
@@ -1152,6 +1157,9 @@ scoped_refptr<TileTask> TileManager::CreateRasterTask(
   bool has_at_raster_images = false;
   image_controller_.GetTasksForImagesAndRef(
       &sync_decoded_images, &decode_tasks, &has_at_raster_images, tracing_info);
+  // Notify |decoded_image_tracker_| after |image_controller_| to ensure we've
+  // taken new refs on the images before releasing the predecode API refs.
+  decoded_image_tracker_.OnImagesUsedInDraw(sync_decoded_images);
 
   const bool has_checker_images = !checkered_images.empty();
   tile->set_raster_task_scheduled_with_checker_images(has_checker_images);
@@ -1208,7 +1216,8 @@ scoped_refptr<TileTask> TileManager::CreateRasterTask(
       this, tile, std::move(resource), prioritized_tile.raster_source(),
       playback_settings, prioritized_tile.priority().resolution,
       invalidated_rect, prepare_tiles_count_, std::move(raster_buffer),
-      &decode_tasks, use_gpu_rasterization_, std::move(image_provider));
+      &decode_tasks, use_gpu_rasterization_, std::move(image_provider),
+      active_url_);
 }
 
 void TileManager::ResetSignalsForTesting() {
@@ -1330,14 +1339,14 @@ bool TileManager::AreRequiredTilesReadyToDraw(
 }
 
 bool TileManager::IsReadyToActivate() const {
-  TRACE_EVENT0("cc", "TileManager::IsReadyToActivate");
+  TRACE_EVENT0("cc,benchmark", "TileManager::IsReadyToActivate");
   return pending_required_for_activation_callback_id_ == 0 &&
          AreRequiredTilesReadyToDraw(
              RasterTilePriorityQueue::Type::REQUIRED_FOR_ACTIVATION);
 }
 
 bool TileManager::IsReadyToDraw() const {
-  TRACE_EVENT0("cc", "TileManager::IsReadyToDraw");
+  TRACE_EVENT0("cc,benchmark", "TileManager::IsReadyToDraw");
   return pending_required_for_draw_callback_id_ == 0 &&
          AreRequiredTilesReadyToDraw(
              RasterTilePriorityQueue::Type::REQUIRED_FOR_DRAW);

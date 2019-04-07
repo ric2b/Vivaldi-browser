@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.webapps;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
+import android.util.DisplayMetrics;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -95,6 +96,11 @@ class WebappSplashScreenController extends EmptyTabObserver {
         mWebappUma.recordSplashscreenThemeColor(webappInfo.hasValidThemeColor()
                         ? WebappUma.SplashScreenColorStatus.CUSTOM
                         : WebappUma.SplashScreenColorStatus.DEFAULT);
+
+        if (activityType == WebappActivity.ActivityType.WEBAPK) {
+            initializeLayout(webappInfo, backgroundColor, ((WebApkInfo) webappInfo).splashIcon());
+            return;
+        }
 
         WebappDataStorage storage =
                 WebappRegistry.getInstance().getWebappDataStorage(webappInfo.id());
@@ -235,16 +241,19 @@ class WebappSplashScreenController extends EmptyTabObserver {
         int bigThreshold =
                 resources.getDimensionPixelSize(R.dimen.webapp_splash_image_size_threshold);
 
+        DisplayMetrics metrics =
+                ContextUtils.getApplicationContext().getResources().getDisplayMetrics();
+
         // Inflate the correct layout for the image.
         int layoutId;
-        if (displayIcon == null || displayIcon.getWidth() < minimiumSizeThreshold
+        if (displayIcon == null || displayIcon.getScaledWidth(metrics) < minimiumSizeThreshold
                 || (displayIcon == webappInfo.icon() && webappInfo.isIconGenerated())) {
             mWebappUma.recordSplashscreenIconType(WebappUma.SplashScreenIconType.NONE);
             layoutId = R.layout.webapp_splash_screen_no_icon;
         } else {
             // The size of the splash screen image determines which layout to use.
-            boolean isUsingSmallSplashImage = displayIcon.getWidth() <= bigThreshold
-                    || displayIcon.getHeight() <= bigThreshold;
+            boolean isUsingSmallSplashImage = displayIcon.getScaledWidth(metrics) <= bigThreshold
+                    || displayIcon.getScaledHeight(metrics) <= bigThreshold;
             if (isUsingSmallSplashImage) {
                 layoutId = R.layout.webapp_splash_screen_small;
             } else {

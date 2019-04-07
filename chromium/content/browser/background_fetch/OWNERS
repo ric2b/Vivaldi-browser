@@ -3,9 +3,10 @@
 # //chrome/browser/background_fetch/
 # //content/common/background_fetch/
 
-awdf@chromium.org
 peter@chromium.org
 delphick@chromium.org
+nator@chromium.org
+rayankans@chromium.org
 
 # TEAM: platform-capabilities@chromium.org
 # COMPONENT: Blink>BackgroundFetch

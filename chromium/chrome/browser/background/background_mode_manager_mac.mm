@@ -6,7 +6,7 @@
 #include "base/command_line.h"
 #include "base/mac/mac_util.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/background/background_mode_manager.h"
 #include "chrome/browser/browser_process.h"
@@ -157,6 +157,6 @@ void BackgroundModeManager::DisplayClientInstalledNotification(
 scoped_refptr<base::SequencedTaskRunner>
 BackgroundModeManager::CreateTaskRunner() {
   return base::CreateSequencedTaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
 }

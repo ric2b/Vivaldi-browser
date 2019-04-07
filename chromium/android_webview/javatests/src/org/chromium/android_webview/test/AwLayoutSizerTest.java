@@ -4,6 +4,8 @@
 
 package org.chromium.android_webview.test;
 
+import static org.chromium.android_webview.test.OnlyRunIn.ProcessMode.SINGLE_PROCESS;
+
 import android.support.test.filters.SmallTest;
 import android.view.View;
 import android.view.View.MeasureSpec;
@@ -13,13 +15,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwLayoutSizer;
-import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
 
 /**
  * Unittests for the AwLayoutSizer class.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
+@RunWith(AwJUnit4ClassRunner.class)
+@OnlyRunIn(SINGLE_PROCESS)
 public class AwLayoutSizerTest {
     static class LayoutSizerDelegate implements AwLayoutSizer.Delegate {
         public int requestLayoutCallCount;

@@ -31,6 +31,7 @@
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/auth/authenticator.h"
 #include "chromeos/login/auth/user_context.h"
+#include "components/arc/net/always_on_vpn_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "net/base/network_change_notifier.h"
@@ -362,7 +363,8 @@ class UserSessionManager
 
   // Initializes |chromeos::DemoSession| if starting user session for demo mode.
   // Runs |callback| when demo session initialization finishes, i.e. when the
-  // offline demo session resources are loaded.
+  // offline demo session resources are loaded. In addition, disables browser
+  // launch if demo session is started.
   void InitDemoSessionIfNeeded(base::OnceClosure callback);
 
   // Updates ARC file system compatibility pref, and then calls
@@ -539,7 +541,7 @@ class UserSessionManager
 
   PendingUserSessions pending_user_sessions_;
 
-  base::ObserverList<chromeos::UserSessionStateObserver>
+  base::ObserverList<chromeos::UserSessionStateObserver>::Unchecked
       session_state_observer_list_;
 
   // OAuth2 session related members.
@@ -612,6 +614,8 @@ class UserSessionManager
 
   // Mapped to |chrome::AttemptRestart|, except in tests.
   base::RepeatingClosure attempt_restart_closure_;
+
+  std::unique_ptr<arc::AlwaysOnVpnManager> always_on_vpn_manager_;
 
   base::WeakPtrFactory<UserSessionManager> weak_factory_;
 

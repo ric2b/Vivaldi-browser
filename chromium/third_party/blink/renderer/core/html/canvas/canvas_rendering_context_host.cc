@@ -7,6 +7,7 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_async_blob_creator.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
+#include "third_party/blink/renderer/platform/graphics/canvas_2d_layer_bridge.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
@@ -60,6 +61,12 @@ bool CanvasRenderingContextHost::Is2d() const {
 CanvasResourceProvider*
 CanvasRenderingContextHost::GetOrCreateCanvasResourceProvider(
     AccelerationHint hint) {
+  return GetOrCreateCanvasResourceProviderImpl(hint);
+}
+
+CanvasResourceProvider*
+CanvasRenderingContextHost::GetOrCreateCanvasResourceProviderImpl(
+    AccelerationHint hint) {
   if (!ResourceProvider() && !did_fail_to_create_resource_provider_) {
     if (IsValidImageSize(Size())) {
       base::WeakPtr<CanvasResourceDispatcher> dispatcher =
@@ -67,37 +74,45 @@ CanvasRenderingContextHost::GetOrCreateCanvasResourceProvider(
               ? GetOrCreateResourceDispatcher()->GetWeakPtr()
               : nullptr;
       if (Is3d()) {
+        const CanvasResourceProvider::ResourceUsage usage =
+            SharedGpuContext::IsGpuCompositingEnabled()
+                ? CanvasResourceProvider::kAcceleratedCompositedResourceUsage
+                : CanvasResourceProvider::kSoftwareCompositedResourceUsage;
+
         CanvasResourceProvider::PresentationMode presentation_mode =
             RuntimeEnabledFeatures::WebGLImageChromiumEnabled()
                 ? CanvasResourceProvider::kAllowImageChromiumPresentationMode
                 : CanvasResourceProvider::kDefaultPresentationMode;
 
+        const bool is_origin_top_left =
+            !SharedGpuContext::IsGpuCompositingEnabled();
+
         ReplaceResourceProvider(CanvasResourceProvider::Create(
-            Size(),
-            SharedGpuContext::IsGpuCompositingEnabled()
-                ? CanvasResourceProvider::kAcceleratedCompositedResourceUsage
-                : CanvasResourceProvider::kSoftwareCompositedResourceUsage,
-            SharedGpuContext::ContextProviderWrapper(),
-            0,  // msaa_sample_count
-            ColorParams(), presentation_mode, std::move(dispatcher)));
+            Size(), usage, SharedGpuContext::ContextProviderWrapper(),
+            0 /* msaa_sample_count */, ColorParams(), presentation_mode,
+            std::move(dispatcher), is_origin_top_left));
       } else {
-        bool want_acceleration =
+        DCHECK(Is2d());
+        const bool want_acceleration =
             hint == kPreferAcceleration && ShouldAccelerate2dContext();
 
-        CanvasResourceProvider::ResourceUsage usage =
+        const CanvasResourceProvider::ResourceUsage usage =
             want_acceleration
                 ? CanvasResourceProvider::kAcceleratedCompositedResourceUsage
                 : CanvasResourceProvider::kSoftwareCompositedResourceUsage;
 
-        CanvasResourceProvider::PresentationMode presentation_mode =
+        const CanvasResourceProvider::PresentationMode presentation_mode =
             RuntimeEnabledFeatures::Canvas2dImageChromiumEnabled()
                 ? CanvasResourceProvider::kAllowImageChromiumPresentationMode
                 : CanvasResourceProvider::kDefaultPresentationMode;
 
+        const bool is_origin_top_left =
+            !want_acceleration || LowLatencyEnabled();
+
         ReplaceResourceProvider(CanvasResourceProvider::Create(
             Size(), usage, SharedGpuContext::ContextProviderWrapper(),
             GetMSAASampleCountFor2dContext(), ColorParams(), presentation_mode,
-            std::move(dispatcher)));
+            std::move(dispatcher), is_origin_top_left));
 
         if (ResourceProvider()) {
           // Always save an initial frame, to support resetting the top level
@@ -108,9 +123,8 @@ CanvasRenderingContextHost::GetOrCreateCanvasResourceProvider(
         }
       }
     }
-    if (!ResourceProvider()) {
+    if (!ResourceProvider())
       did_fail_to_create_resource_provider_ = true;
-    }
   }
   return ResourceProvider();
 }

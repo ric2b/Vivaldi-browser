@@ -2287,7 +2287,7 @@ TYPED_TEST(RendererPixelTest, EnlargedRenderPassTextureWithAntiAliasing) {
   EXPECT_TRUE(this->RunPixelTest(
       &pass_list,
       base::FilePath(FILE_PATH_LITERAL("blue_yellow_anti_aliasing.png")),
-      cc::FuzzyPixelComparator(true, 100.f, 0.f, 5.f, 5, 0)));
+      cc::FuzzyPixelComparator(true, 100.f, 0.f, 5.f, 7, 0)));
 }
 
 // This tests the case where we have a RenderPass with a mask, but the quad
@@ -3003,10 +3003,7 @@ TEST_F(GLRendererPixelTest, AntiAliasingPerspective) {
 }
 
 // Trilinear filtering is only supported in the gl renderer.
-// TODO(reveman): Enable test after updating osmesa to a version where
-// GL_LINEAR_MIPMAP_LINEAR works correctly. --use-gpu-in-tests can be
-// used to verify that trilinear filtering works until then.
-TEST_F(GLRendererPixelTest, DISABLED_TrilinearFiltering) {
+TEST_F(GLRendererPixelTest, TrilinearFiltering) {
   gfx::Rect viewport_rect(this->device_viewport_size_);
 
   int root_pass_id = 1;

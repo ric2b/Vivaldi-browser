@@ -15,11 +15,12 @@
 #include "base/feature_list.h"
 #include "base/hash.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/win/core_winrt_util.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_hstring.h"
@@ -701,7 +702,10 @@ class NotificationPlatformBridgeWinImpl
     HRESULT error_code;
     HRESULT hr = arguments->get_ErrorCode(&error_code);
     if (SUCCEEDED(hr)) {
+      // Error code successfully obtained from the Action Center.
       LogOnFailedStatus(OnFailedStatus::SUCCESS);
+      base::UmaHistogramSparse("Notifications.Windows.DisplayFailure",
+                               error_code);
       DLOG(ERROR) << "Failed to raise the toast notification, error code: "
                   << std::hex << error_code;
     } else {
@@ -831,6 +835,11 @@ bool NotificationPlatformBridgeWin::HandleActivation(
   if (!launch_id.is_valid()) {
     LogActivationStatus(ActivationStatus::INVALID_LAUNCH_ID);
     return false;
+  }
+
+  if (launch_id.is_for_dismiss_button()) {
+    LogActivationStatus(ActivationStatus::SUCCESS);
+    return true;  // We're done! The toast has already dismissed.
   }
 
   base::Optional<base::string16> reply;

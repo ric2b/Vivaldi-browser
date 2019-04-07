@@ -76,6 +76,8 @@ std::unique_ptr<Value> CopyWithoutEmptyChildren(const Value& node) {
 
 }  // namespace
 
+constexpr uint32_t Value::kMagicIsAlive;
+
 // static
 std::unique_ptr<Value> Value::CreateWithCopiedBuffer(const char* buffer,
                                                      size_t size) {
@@ -153,8 +155,11 @@ Value::Value(const char16* in_string16) : Value(StringPiece16(in_string16)) {}
 
 Value::Value(StringPiece16 in_string16) : Value(UTF16ToUTF8(in_string16)) {}
 
-Value::Value(const BlobStorage& in_blob)
-    : type_(Type::BINARY), binary_value_(in_blob) {}
+Value::Value(const std::vector<char>& in_blob)
+    : type_(Type::BINARY), binary_value_(in_blob.begin(), in_blob.end()) {}
+
+Value::Value(base::span<const uint8_t> in_blob)
+    : type_(Type::BINARY), binary_value_(in_blob.begin(), in_blob.end()) {}
 
 Value::Value(BlobStorage&& in_blob) noexcept
     : type_(Type::BINARY), binary_value_(std::move(in_blob)) {}
@@ -212,6 +217,7 @@ Value Value::Clone() const {
 
 Value::~Value() {
   InternalCleanup();
+  is_alive_ = 0;
 }
 
 // static
@@ -438,6 +444,26 @@ size_t Value::DictSize() const {
 bool Value::DictEmpty() const {
   CHECK(is_dict());
   return dict_.empty();
+}
+
+void Value::MergeDictionary(const Value* dictionary) {
+  CHECK(is_dict());
+  CHECK(dictionary->is_dict());
+  for (const auto& pair : dictionary->dict_) {
+    const auto& key = pair.first;
+    const auto& val = pair.second;
+    // Check whether we have to merge dictionaries.
+    if (val->is_dict()) {
+      auto found = dict_.find(key);
+      if (found != dict_.end() && found->second->is_dict()) {
+        found->second->MergeDictionary(val.get());
+        continue;
+      }
+    }
+
+    // All other cases: Make a copy and hook it up.
+    SetKey(key, val->Clone());
+  }
 }
 
 bool Value::GetAsBoolean(bool* out_value) const {
@@ -678,6 +704,8 @@ void Value::InternalMoveConstructFrom(Value&& that) {
 }
 
 void Value::InternalCleanup() {
+  CHECK_EQ(is_alive_, kMagicIsAlive);
+
   switch (type_) {
     case Type::NONE:
     case Type::BOOLEAN:
@@ -1109,24 +1137,6 @@ std::unique_ptr<DictionaryValue> DictionaryValue::DeepCopyWithoutEmptyChildren()
   if (!copy)
     copy = std::make_unique<DictionaryValue>();
   return copy;
-}
-
-void DictionaryValue::MergeDictionary(const DictionaryValue* dictionary) {
-  CHECK(dictionary->is_dict());
-  for (DictionaryValue::Iterator it(*dictionary); !it.IsAtEnd(); it.Advance()) {
-    const Value* merge_value = &it.value();
-    // Check whether we have to merge dictionaries.
-    if (merge_value->is_dict()) {
-      DictionaryValue* sub_dict;
-      if (GetDictionaryWithoutPathExpansion(it.key(), &sub_dict)) {
-        sub_dict->MergeDictionary(
-            static_cast<const DictionaryValue*>(merge_value));
-        continue;
-      }
-    }
-    // All other cases: Make a copy and hook it up.
-    SetKey(it.key(), merge_value->Clone());
-  }
 }
 
 void DictionaryValue::Swap(DictionaryValue* other) {

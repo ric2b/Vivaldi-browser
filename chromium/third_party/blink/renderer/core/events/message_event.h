@@ -43,6 +43,8 @@
 
 namespace blink {
 
+class UserActivation;
+
 class CORE_EXPORT MessageEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -60,15 +62,26 @@ class CORE_EXPORT MessageEvent final : public Event {
                               const String& last_event_id = String(),
                               EventTarget* source = nullptr) {
     return new MessageEvent(std::move(data), origin, last_event_id, source,
-                            ports);
+                            ports, nullptr);
+  }
+  static MessageEvent* Create(MessagePortArray* ports,
+                              scoped_refptr<SerializedScriptValue> data,
+                              UserActivation* user_activation) {
+    return new MessageEvent(std::move(data), String(), String(), nullptr, ports,
+                            user_activation);
   }
   static MessageEvent* Create(Vector<MessagePortChannel> channels,
                               scoped_refptr<SerializedScriptValue> data,
                               const String& origin = String(),
                               const String& last_event_id = String(),
-                              EventTarget* source = nullptr) {
+                              EventTarget* source = nullptr,
+                              UserActivation* user_activation = nullptr) {
     return new MessageEvent(std::move(data), origin, last_event_id, source,
-                            std::move(channels));
+                            std::move(channels), user_activation);
+  }
+  static MessageEvent* CreateError(const String& origin = String(),
+                                   EventTarget* source = nullptr) {
+    return new MessageEvent(origin, source);
   }
   static MessageEvent* Create(const String& data,
                               const String& origin = String()) {
@@ -101,7 +114,8 @@ class CORE_EXPORT MessageEvent final : public Event {
                         const String& origin,
                         const String& last_event_id,
                         EventTarget* source,
-                        MessagePortArray*);
+                        MessagePortArray*,
+                        UserActivation* user_activation);
   void initMessageEvent(const AtomicString& type,
                         bool bubbles,
                         bool cancelable,
@@ -116,12 +130,14 @@ class CORE_EXPORT MessageEvent final : public Event {
   EventTarget* source() const { return source_.Get(); }
   MessagePortArray ports();
   bool isPortsDirty() const { return is_ports_dirty_; }
+  UserActivation* userActivation() const { return user_activation_; }
 
   Vector<MessagePortChannel> ReleaseChannels() { return std::move(channels_); }
 
   const AtomicString& InterfaceName() const override;
 
   enum DataType {
+    kDataTypeNull,  // For "messageerror" events.
     kDataTypeScriptValue,
     kDataTypeSerializedScriptValue,
     kDataTypeString,
@@ -191,12 +207,17 @@ class CORE_EXPORT MessageEvent final : public Event {
                const String& origin,
                const String& last_event_id,
                EventTarget* source,
-               MessagePortArray*);
+               MessagePortArray*,
+               UserActivation* user_activation);
   MessageEvent(scoped_refptr<SerializedScriptValue> data,
                const String& origin,
                const String& last_event_id,
                EventTarget* source,
-               Vector<MessagePortChannel>);
+               Vector<MessagePortChannel>,
+               UserActivation* user_activation);
+
+  // Creates a "messageerror" event.
+  MessageEvent(const String& origin, EventTarget* source);
 
   MessageEvent(const String& data, const String& origin);
   MessageEvent(Blob* data, const String& origin);
@@ -217,6 +238,7 @@ class CORE_EXPORT MessageEvent final : public Event {
   Member<MessagePortArray> ports_;
   bool is_ports_dirty_ = true;
   Vector<MessagePortChannel> channels_;
+  Member<UserActivation> user_activation_;
 };
 
 }  // namespace blink

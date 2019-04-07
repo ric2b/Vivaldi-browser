@@ -13,6 +13,7 @@ const char kCredentialsEnableService[] = "credentials_enable_service";
 
 #if !defined(OS_MACOSX) && !defined(OS_CHROMEOS) && defined(OS_POSIX)
 const char kLocalProfileId[] = "profile.local_profile_id";
+const char kMigrationToLoginDBStep[] = "profile.migration_to_logindb_step";
 #endif
 
 #if defined(OS_WIN)
@@ -23,6 +24,8 @@ const char kOsPasswordLastChanged[] =
 
 #if defined(OS_MACOSX)
 const char kKeychainMigrationStatus[] = "password_manager.keychain_migration";
+const char kSyncUsersPasswordRecovery[] =
+    "password_manager.sync_users_password_recovery";
 #endif
 
 const char kWasAutoSignInFirstRunExperienceShown[] =
@@ -39,8 +42,8 @@ const char kSyncPasswordHash[] = "profile.sync_password_hash";
 const char kSyncPasswordLengthAndHashSalt[] =
     "profile.sync_password_length_and_hash_salt";
 
-const char kBlacklistedCredentialsStripped[] =
-    "profile.blacklisted_credentials_stripped";
+const char kDuplicatedBlacklistedCredentialsRemoved[] =
+    "profile.duplicated_blacklisted_credentials_removed";
 
 const char kPasswordHashDataList[] = "profile.password_hash_data_list";
 

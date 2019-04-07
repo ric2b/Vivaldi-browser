@@ -22,7 +22,9 @@
 #include "ui/events/event.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/mus/mus_client.h"
+#include "ui/views/mus/mus_client_test_api.h"
 #include "ui/views/mus/screen_mus.h"
+#include "ui/views/mus/window_manager_frame_values.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -157,8 +159,7 @@ TEST_F(DesktopWindowTreeHostMusTest, Capture) {
                          ->capture_window());
 }
 
-// TODO(http://crbug.com/864614): Fails flakily in mus with ws2.
-TEST_F(DesktopWindowTreeHostMusTest, DISABLED_Deactivate) {
+TEST_F(DesktopWindowTreeHostMusTest, Deactivate) {
   std::unique_ptr<Widget> widget1(CreateWidget());
   widget1->Show();
 
@@ -239,6 +240,44 @@ TEST_F(DesktopWindowTreeHostMusTest, ActivateBeforeShow) {
                                      ->active_focus_client());
 }
 
+// Tests that changes to a widget's show state will cause the client area to be
+// updated.
+TEST_F(DesktopWindowTreeHostMusTest, ServerShowStateChangeUpdatesClientArea) {
+  WindowManagerFrameValues test_frame_values;
+  test_frame_values.normal_insets = {3, 0, 0, 0};
+  test_frame_values.maximized_insets = {7, 0, 0, 0};
+  WindowManagerFrameValues::SetInstance(test_frame_values);
+
+  std::unique_ptr<Widget> widget(CreateWidget());
+  widget->Show();
+
+  // Simulate state changes from the server.
+  auto set_widget_state =
+      [&widget](ui::WindowShowState state) {
+        widget->GetNativeWindow()->GetRootWindow()->SetProperty(
+            aura::client::kShowStateKey, state);
+      };
+
+  // A restored window respects normal_insets (the client area is inset from the
+  // root view).
+  gfx::Rect expected_restored_bounds = widget->GetRootView()->bounds();
+  expected_restored_bounds.Inset(test_frame_values.normal_insets);
+  EXPECT_EQ(expected_restored_bounds, widget->client_view()->bounds());
+
+  // A fullscreen window has no insets.
+  EXPECT_FALSE(widget->IsFullscreen());
+  set_widget_state(ui::SHOW_STATE_FULLSCREEN);
+  EXPECT_TRUE(widget->IsFullscreen());
+  EXPECT_EQ(widget->GetRootView()->bounds(), widget->client_view()->bounds());
+
+  // A maximized window respects maximized_insets.
+  gfx::Rect expected_maximized_bounds = widget->GetRootView()->bounds();
+  expected_maximized_bounds.Inset(test_frame_values.maximized_insets);
+  set_widget_state(ui::SHOW_STATE_MAXIMIZED);
+  EXPECT_FALSE(widget->IsFullscreen());
+  EXPECT_EQ(expected_maximized_bounds, widget->client_view()->bounds());
+}
+
 TEST_F(DesktopWindowTreeHostMusTest, CursorClientDuringTearDown) {
   std::unique_ptr<Widget> widget(CreateWidget());
   widget->Show();
@@ -279,8 +318,7 @@ TEST_F(DesktopWindowTreeHostMusTest, StackAtTopAlreadyOnTop) {
   waiter.Wait();
 }
 
-// TODO(http://crbug.com/864615): Fails consistently in mus with ws2.
-TEST_F(DesktopWindowTreeHostMusTest, DISABLED_StackAbove) {
+TEST_F(DesktopWindowTreeHostMusTest, StackAbove) {
   std::unique_ptr<Widget> widget1(CreateWidget(nullptr));
   widget1->Show();
 
@@ -365,7 +403,7 @@ TEST_F(DesktopWindowTreeHostMusTest, CreateFullscreenWidget) {
 }
 
 TEST_F(DesktopWindowTreeHostMusTest, GetWindowBoundsInScreen) {
-  ScreenMus* screen = MusClient::Get()->screen();
+  ScreenMus* screen = MusClientTestApi::screen();
 
   // Add a second display to the right of the primary.
   const int64_t kSecondDisplayId = 222;
@@ -385,11 +423,12 @@ TEST_F(DesktopWindowTreeHostMusTest, GetWindowBoundsInScreen) {
   Widget widget2;
   Widget::InitParams params2(Widget::InitParams::TYPE_WINDOW);
   params2.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params2.bounds = gfx::Rect(0, 0, 100, 100);
+  params2.bounds = gfx::Rect(800, 0, 100, 100);
   widget2.Init(params2);
-  aura::WindowTreeHostMus::ForWindow(widget2.GetNativeWindow())
-      ->set_display_id(kSecondDisplayId);
   EXPECT_EQ(gfx::Rect(800, 0, 100, 100), widget2.GetWindowBoundsInScreen());
+  EXPECT_EQ(kSecondDisplayId,
+            aura::WindowTreeHostMus::ForWindow(widget2.GetNativeWindow())
+                ->display_id());
 }
 
 // WidgetDelegate implementation that allows setting window-title and whether

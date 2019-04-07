@@ -22,7 +22,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #import "chrome/browser/mac/keystone_registration.h"
@@ -87,7 +87,7 @@ class PerformBridge : public base::RefCountedThreadSafe<PerformBridge> {
 
     scoped_refptr<PerformBridge> op = new PerformBridge(target, sel, arg);
     base::PostTaskWithTraits(FROM_HERE,
-                             {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                             {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                               base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
                              base::Bind(&PerformBridge::Run, op.get()));
   }

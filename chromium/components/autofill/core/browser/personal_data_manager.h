@@ -18,15 +18,19 @@
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
+#include "components/autofill/core/browser/account_info_getter.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/payments/payments_customer_data.h"
+#include "components/autofill/core/browser/proto/server.pb.h"
 #include "components/autofill/core/browser/suggestion.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_member.h"
+#include "components/signin/core/browser/account_info.h"
 #include "components/sync/driver/sync_service_observer.h"
 #include "components/webdata/common/web_data_service_consumer.h"
 
@@ -66,7 +70,8 @@ extern const char kFrecencyFieldTrialLimitParam[];
 class PersonalDataManager : public KeyedService,
                             public WebDataServiceConsumer,
                             public AutofillWebDataServiceObserverOnUISequence,
-                            public syncer::SyncServiceObserver {
+                            public syncer::SyncServiceObserver,
+                            public AccountInfoGetter {
  public:
   explicit PersonalDataManager(const std::string& app_locale);
   ~PersonalDataManager() override;
@@ -93,13 +98,6 @@ class PersonalDataManager : public KeyedService,
   // not be started, but it's preferences can be queried.
   virtual void OnSyncServiceInitialized(syncer::SyncService* sync_service);
 
-  // Set whether this should use the passed in account storage for server
-  // cards. If false, this will use the profile_storage.
-  // It's an error to call this if no account storage was passed in at
-  // initialization time.
-  void SetUseAccountStorageForServerCards(
-      bool use_account_storage_for_server_cards);
-
   // WebDataServiceConsumer:
   void OnWebDataServiceRequestDone(
       WebDataServiceBase::Handle h,
@@ -112,6 +110,10 @@ class PersonalDataManager : public KeyedService,
   // SyncServiceObserver:
   void OnStateChanged(syncer::SyncService* sync) override;
   void OnSyncShutdown(syncer::SyncService* sync) override;
+
+  // AccountInfoGetter:
+  AccountInfo GetAccountInfoForPaymentsServer() const override;
+  bool IsSyncFeatureEnabled() const override;
 
   // Adds a listener to be notified of PersonalDataManager events.
   virtual void AddObserver(PersonalDataManagerObserver* observer);
@@ -227,6 +229,9 @@ class PersonalDataManager : public KeyedService,
   // Returns all credit cards, server and local.
   virtual std::vector<CreditCard*> GetCreditCards() const;
 
+  // Returns the Payments customer data. Returns nullptr if no data is present.
+  virtual PaymentsCustomerData* GetPaymentsCustomerData() const;
+
   // Returns the profiles to suggest to the user, ordered by frecency.
   std::vector<AutofillProfile*> GetProfilesToSuggest() const;
 
@@ -335,6 +340,9 @@ class PersonalDataManager : public KeyedService,
   // |credit_card| is equal to any masked server card known by the browser.
   bool IsKnownCard(const CreditCard& credit_card);
 
+  // Check whether a card is a server card or has a duplicated server card.
+  bool IsServerCard(const CreditCard* credit_card) const;
+
   // Sets the value that can skip the checks to see if we are syncing in a test.
   void SetSyncingForTest(bool is_syncing_for_test) {
     is_syncing_for_test_ = is_syncing_for_test;
@@ -415,6 +423,9 @@ class PersonalDataManager : public KeyedService,
                            ClearProfileNonSettingsOrigins);
   FRIEND_TEST_ALL_PREFIXES(PersonalDataManagerTest,
                            ClearCreditCardNonSettingsOrigins);
+  FRIEND_TEST_ALL_PREFIXES(PersonalDataManagerTest,
+                           MoveJapanCityToStreetAddress);
+  FRIEND_TEST_ALL_PREFIXES(PersonalDataManagerTest, RequestProfileValidity);
 
   friend class autofill::AutofillInteractiveTest;
   friend class autofill::PersonalDataManagerFactory;
@@ -456,6 +467,9 @@ class PersonalDataManager : public KeyedService,
 
   // Loads the saved credit cards from the web database.
   virtual void LoadCreditCards();
+
+  // Loads the payments customer data from the web database.
+  virtual void LoadPaymentsCustomerData();
 
   // Cancels a pending query to the local web database.  |handle| is a pointer
   // to the query handle.
@@ -503,11 +517,20 @@ class PersonalDataManager : public KeyedService,
   void ClearProfileNonSettingsOrigins();
   void ClearCreditCardNonSettingsOrigins();
 
+  // Appends the value of the city field of a JP address to its street address
+  // field, separated by a newline, and clears the city field.
+  // TODO(rouslan): Remove this migration in or after October 2019. See bug:
+  // https://crbug.com/871301
+  void MoveJapanCityToStreetAddress();
+
+  // Get the profiles fields validity map by |guid|.
+  const ProfileValidityMap& GetProfileValidityByGUID(std::string& guid);
+
   // Decides which database type to use for server and local cards.
   std::unique_ptr<PersonalDatabaseHelper> database_helper_;
 
   // True if personal data has been loaded from the web database.
-  bool is_data_loaded_;
+  bool is_data_loaded_ = false;
 
   // The loaded web profiles. These are constructed from entries on web pages
   // and from manually editing in the settings.
@@ -515,6 +538,9 @@ class PersonalDataManager : public KeyedService,
 
   // Profiles read from the user's account stored on the server.
   mutable std::vector<std::unique_ptr<AutofillProfile>> server_profiles_;
+
+  // Stores the PaymentsCustomerData obtained from the database.
+  std::unique_ptr<PaymentsCustomerData> payments_customer_data_;
 
   // Storage for web profiles.  Contents are weak references.  Lifetime managed
   // by |web_profiles_|.
@@ -528,13 +554,14 @@ class PersonalDataManager : public KeyedService,
   // is queried on another sequence, we record the query handle until we
   // get called back.  We store handles for both profile and credit card queries
   // so they can be loaded at the same time.
-  WebDataServiceBase::Handle pending_profiles_query_;
-  WebDataServiceBase::Handle pending_server_profiles_query_;
-  WebDataServiceBase::Handle pending_creditcards_query_;
-  WebDataServiceBase::Handle pending_server_creditcards_query_;
+  WebDataServiceBase::Handle pending_profiles_query_ = 0;
+  WebDataServiceBase::Handle pending_server_profiles_query_ = 0;
+  WebDataServiceBase::Handle pending_creditcards_query_ = 0;
+  WebDataServiceBase::Handle pending_server_creditcards_query_ = 0;
+  WebDataServiceBase::Handle pending_customer_data_query_ = 0;
 
   // The observers.
-  base::ObserverList<PersonalDataManagerObserver> observers_;
+  base::ObserverList<PersonalDataManagerObserver>::Unchecked observers_;
 
  private:
   // Saves |imported_credit_card| to the WebDB if it exists. Returns the guid of
@@ -546,8 +573,12 @@ class PersonalDataManager : public KeyedService,
   // Prefers verified profiles over unverified ones.
   std::string MostCommonCountryCodeFromProfiles() const;
 
-  // Called when the value of prefs::kAutofillEnabled changes.
-  void EnabledPrefChanged();
+  // Called when the value of prefs::kAutofillWalletImportEnabled changes.
+  void EnableWalletIntegrationPrefChanged();
+
+  // Called when the value of prefs::kAutofillCreditCardEnabled or
+  // prefs::kAutofillProfileEnabled changes.
+  void EnableAutofillPrefChanged();
 
   // Returns credit card suggestions based on the |cards_to_suggest| and the
   // |type| and |field_contents| of the credit card field.
@@ -655,38 +686,45 @@ class PersonalDataManager : public KeyedService,
   // Applies various fixes and cleanups on autofill credit cards.
   void ApplyCardFixesAndCleanups();
 
+  // Resets |synced_profile_validity_|.
+  void ResetProfileValidity() { synced_profile_validity_.reset(); };
+
   const std::string app_locale_;
 
   // The default country code for new addresses.
   mutable std::string default_country_code_;
 
   // The PrefService that this instance uses. Must outlive this instance.
-  PrefService* pref_service_;
+  PrefService* pref_service_ = nullptr;
+
+  // Pref registrar for managing the change observers.
+  PrefChangeRegistrar pref_registrar_;
+
+  // Profiles validity read from the prefs. They are kept updated by
+  // observing changes in pref_services.
+  std::unique_ptr<UserProfileValidityMap> synced_profile_validity_;
 
   // The identity manager that this instance uses. Must outlive this instance.
-  identity::IdentityManager* identity_manager_;
+  identity::IdentityManager* identity_manager_ = nullptr;
 
   // The sync service this instances uses. Must outlive this instance.
-  syncer::SyncService* sync_service_;
+  syncer::SyncService* sync_service_ = nullptr;
 
   // Whether the user is currently operating in an off-the-record context.
   // Default value is false.
-  bool is_off_the_record_;
+  bool is_off_the_record_ = false;
 
   // Whether we have already logged the stored profile metrics this session.
-  mutable bool has_logged_stored_profile_metrics_;
+  mutable bool has_logged_stored_profile_metrics_ = false;
 
   // Whether we have already logged the stored credit card metrics this session.
-  mutable bool has_logged_stored_credit_card_metrics_;
+  mutable bool has_logged_stored_credit_card_metrics_ = false;
 
   // An observer to listen for changes to prefs::kAutofillCreditCardEnabled.
   std::unique_ptr<BooleanPrefMember> credit_card_enabled_pref_;
 
   // An observer to listen for changes to prefs::kAutofillProfileEnabled.
   std::unique_ptr<BooleanPrefMember> profile_enabled_pref_;
-
-  // An observer to listen for changes to prefs::kAutofillEnabled.
-  std::unique_ptr<BooleanPrefMember> enabled_pref_;
 
   // An observer to listen for changes to prefs::kAutofillWalletImportEnabled.
   std::unique_ptr<BooleanPrefMember> wallet_enabled_pref_;

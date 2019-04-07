@@ -366,6 +366,14 @@ std::wstring GetRegistryPath() {
   return result;
 }
 
+std::wstring GetClientsKeyPath() {
+  return GetClientsKeyPath(GetAppGuid());
+}
+
+std::wstring GetClientStateKeyPath() {
+  return GetClientStateKeyPath(GetAppGuid());
+}
+
 std::wstring GetUninstallRegistryPath() {
   std::wstring result(
       L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\");
@@ -427,6 +435,10 @@ int GetIconResourceIndex() {
 
 const wchar_t* GetSandboxSidPrefix() {
   return InstallDetails::Get().mode().sandbox_sid_prefix;
+}
+
+std::string GetSafeBrowsingName() {
+  return kSafeBrowsingName;
 }
 
 bool GetCollectStatsConsent() {

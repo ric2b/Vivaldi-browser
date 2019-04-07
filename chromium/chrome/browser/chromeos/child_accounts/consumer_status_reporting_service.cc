@@ -90,6 +90,16 @@ void ConsumerStatusReportingService::CreateStatusUploaderIfNeeded(
       base::ThreadTaskRunnerHandle::Get(), kStatusUploadFrequency);
 }
 
+void ConsumerStatusReportingService::RequestImmediateStatusReport() {
+  status_uploader_->ScheduleNextStatusUploadImmediately();
+}
+
+base::TimeDelta ConsumerStatusReportingService::GetChildScreenTime() const {
+  return const_cast<policy::DeviceStatusCollector*>(
+             status_uploader_->device_status_collector())
+      ->GetActiveChildScreenTime();
+}
+
 void ConsumerStatusReportingService::OnTimeLimitsPolicyChanged() {
   CreateStatusUploaderIfNeeded(user_cloud_policy_manager_->core()->client());
 }

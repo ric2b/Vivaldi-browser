@@ -48,15 +48,17 @@ FetchRequestData* FetchRequestData::Create(
         nullptr /* AbortSignal */));
   }
   request->SetContext(web_request.GetRequestContext());
-  request->SetReferrer(
-      Referrer(web_request.ReferrerUrl().GetString(),
-               static_cast<ReferrerPolicy>(web_request.GetReferrerPolicy())));
+  request->SetReferrerString(web_request.ReferrerUrl().GetString());
+  request->SetReferrerPolicy(
+      static_cast<ReferrerPolicy>(web_request.GetReferrerPolicy()));
   request->SetMode(web_request.Mode());
   request->SetCredentials(web_request.CredentialsMode());
   request->SetCacheMode(web_request.CacheMode());
   request->SetRedirect(web_request.RedirectMode());
   request->SetMIMEType(request->header_list_->ExtractMIMEType());
   request->SetIntegrity(web_request.Integrity());
+  request->SetPriority(
+      static_cast<ResourceLoadPriority>(web_request.Priority()));
   request->SetKeepalive(web_request.Keepalive());
   request->SetIsHistoryNavigation(web_request.IsHistoryNavigation());
   return request;
@@ -70,7 +72,8 @@ FetchRequestData* FetchRequestData::CloneExceptBody() {
   request->origin_ = origin_;
   request->same_origin_data_url_flag_ = same_origin_data_url_flag_;
   request->context_ = context_;
-  request->referrer_ = referrer_;
+  request->referrer_string_ = referrer_string_;
+  request->referrer_policy_ = referrer_policy_;
   request->mode_ = mode_;
   request->credentials_ = credentials_;
   request->cache_mode_ = cache_mode_;
@@ -78,6 +81,7 @@ FetchRequestData* FetchRequestData::CloneExceptBody() {
   request->response_tainting_ = response_tainting_;
   request->mime_type_ = mime_type_;
   request->integrity_ = integrity_;
+  request->priority_ = priority_;
   request->importance_ = importance_;
   request->keepalive_ = keepalive_;
   request->is_history_navigation_ = is_history_navigation_;
@@ -124,13 +128,15 @@ FetchRequestData::FetchRequestData()
       header_list_(FetchHeaderList::Create()),
       context_(WebURLRequest::kRequestContextUnspecified),
       same_origin_data_url_flag_(false),
-      referrer_(Referrer(ClientReferrerString(), kReferrerPolicyDefault)),
+      referrer_string_(Referrer::ClientReferrerString()),
+      referrer_policy_(kReferrerPolicyDefault),
       mode_(network::mojom::FetchRequestMode::kNoCORS),
       credentials_(network::mojom::FetchCredentialsMode::kOmit),
       cache_mode_(mojom::FetchCacheMode::kDefault),
       redirect_(network::mojom::FetchRedirectMode::kFollow),
       importance_(mojom::FetchImportanceMode::kImportanceAuto),
       response_tainting_(kBasicTainting),
+      priority_(ResourceLoadPriority::kUnresolved),
       keepalive_(false) {}
 
 void FetchRequestData::Trace(blink::Visitor* visitor) {

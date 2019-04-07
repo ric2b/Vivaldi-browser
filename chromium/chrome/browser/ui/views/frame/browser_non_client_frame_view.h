@@ -87,6 +87,15 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
   // Returns whether the top UI should hide.
   virtual bool ShouldHideTopUIForFullscreen() const;
 
+  // Returns whether the user is allowed to exit fullscreen on their own (some
+  // special modes lock the user in fullscreen).
+  virtual bool CanUserExitFullscreen() const;
+
+  // Determines whether the top frame is condensed vertically, as when the
+  // window is maximized. If true, the top frame is just the height of a tab,
+  // rather than having extra vertical space above the tabs.
+  virtual bool IsFrameCondensed() const;
+
   // Returns whether the content is painted with a client edge or not.
   virtual bool HasClientEdge() const;
 
@@ -190,11 +199,6 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
   void UpdateProfileIcons();
 
   void LayoutIncognitoButton();
-
-  // ToolbarView can't paint its own top stroke because the stroke is drawn just
-  // above its bounds, where the active tab can overwrite it to visually join
-  // with the toolbar.
-  void PaintToolbarTopStroke(gfx::Canvas* canvas) const;
 
   // views::NonClientFrameView:
   void ActivationChanged(bool active) override;

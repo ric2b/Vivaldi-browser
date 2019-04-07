@@ -10,15 +10,13 @@
 #include <string>
 #include <vector>
 
-#include "ash/frame/custom_frame_view_ash.h"
 #include "ash/frame/detached_title_area_renderer.h"
+#include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/public/cpp/ash_constants.h"
 #include "ash/public/cpp/ash_layout_constants.h"
 #include "ash/public/cpp/immersive/immersive_fullscreen_controller_delegate.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
-#include "ash/wm/move_event_handler.h"
-#include "ash/wm/panels/panel_frame_view.h"
 #include "ash/wm/property_util.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_util.h"
@@ -26,15 +24,14 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "services/ui/public/interfaces/window_manager.mojom.h"
-#include "services/ui/ws2/window_properties.h"
-#include "services/ui/ws2/window_service.h"
+#include "services/ws/public/mojom/window_manager.mojom.h"
+#include "services/ws/window_properties.h"
+#include "services/ws/window_service.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/transient_window_client.h"
 #include "ui/aura/mus/property_converter.h"
 #include "ui/aura/mus/property_utils.h"
-#include "ui/aura/mus/window_manager_delegate.h"
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/window.h"
 #include "ui/base/class_property.h"
@@ -175,19 +172,17 @@ class ImmersiveFullscreenControllerDelegateMus
 class WmNativeWidgetAura : public views::NativeWidgetAura {
  public:
   WmNativeWidgetAura(views::internal::NativeWidgetDelegate* delegate,
-                     aura::WindowManagerClient* window_manager_client,
                      bool remove_standard_frame,
                      bool enable_immersive,
                      mojom::WindowStyle window_style)
       // The NativeWidget is mirroring the real Widget created in client code.
       // |is_parallel_widget_in_window_manager| is used to indicate this
-      : views::NativeWidgetAura(
-            delegate,
-            true /* is_parallel_widget_in_window_manager */),
+      : views::NativeWidgetAura(delegate,
+                                true /* is_parallel_widget_in_window_manager */,
+                                Shell::Get()->aura_env()),
         remove_standard_frame_(remove_standard_frame),
         enable_immersive_(enable_immersive),
-        window_style_(window_style),
-        window_manager_client_(window_manager_client) {}
+        window_style_(window_style) {}
   ~WmNativeWidgetAura() override = default;
 
   void SetHeaderHeight(int height) {
@@ -199,25 +194,18 @@ class WmNativeWidgetAura : public views::NativeWidgetAura {
 
   // views::NativeWidgetAura:
   views::NonClientFrameView* CreateNonClientFrameView() override {
-    if (window_manager_client_) {
-      move_event_handler_ = std::make_unique<MoveEventHandler>(
-          window_manager_client_, GetNativeView());
-    }
     // TODO(sky): investigate why we have this. Seems this should be the same
     // as not specifying client area insets.
     if (remove_standard_frame_)
       return new EmptyDraggableNonClientFrameView();
     aura::Window* window = GetNativeView();
-    if (window->GetProperty(aura::client::kWindowTypeKey) ==
-        ui::mojom::WindowType::PANEL)
-      return new PanelFrameView(GetWidget(), PanelFrameView::FRAME_ASH);
     immersive_delegate_ =
         std::make_unique<ImmersiveFullscreenControllerDelegateMus>(GetWidget(),
                                                                    window);
     // See description for details on ownership.
     custom_frame_view_ =
-        new CustomFrameViewAsh(GetWidget(), immersive_delegate_.get(),
-                               enable_immersive_, window_style_);
+        new NonClientFrameViewAsh(GetWidget(), immersive_delegate_.get(),
+                                  enable_immersive_, window_style_);
 
     // Only the header actually paints any content. So the rest of the region is
     // marked as transparent content (see below in NonClientFrameController()
@@ -239,17 +227,11 @@ class WmNativeWidgetAura : public views::NativeWidgetAura {
   const bool enable_immersive_;
   const mojom::WindowStyle window_style_;
 
-  // TODO: this is no longer necessary once --mash is removed,
-  // https://crbug.com/842365.
-  std::unique_ptr<MoveEventHandler> move_event_handler_;
-
-  aura::WindowManagerClient* window_manager_client_;
-
   std::unique_ptr<ImmersiveFullscreenControllerDelegateMus> immersive_delegate_;
 
   // Not used for panels or if |remove_standard_frame_| is true. This is owned
   // by the Widget's view hierarchy (e.g. it's a child of Widget's root View).
-  CustomFrameViewAsh* custom_frame_view_ = nullptr;
+  NonClientFrameViewAsh* custom_frame_view_ = nullptr;
 
   // The cursor for this widget. CompoundEventFilter will retrieve this cursor
   // via GetCursor and update the CursorManager's active cursor as appropriate
@@ -296,13 +278,8 @@ class ClientViewMus : public views::ClientView {
     // pass the request to the remote client and return false (to cancel the
     // close). If the remote client wants the window to close, it will close it
     // in a way that does not reenter this code path.
-    if (frame_controller_->window_manager_client()) {
-      frame_controller_->window_manager_client()->RequestClose(
-          frame_controller_->window());
-    } else {
-      Shell::Get()->window_service_owner()->window_service()->RequestClose(
-          frame_controller_->window());
-    }
+    Shell::Get()->window_service_owner()->window_service()->RequestClose(
+        frame_controller_->window());
     return false;
   }
 
@@ -321,19 +298,16 @@ NonClientFrameController::NonClientFrameController(
     aura::Window* parent,
     aura::Window* context,
     const gfx::Rect& bounds,
-    ui::mojom::WindowType window_type,
+    ws::mojom::WindowType window_type,
     aura::PropertyConverter* property_converter,
-    std::map<std::string, std::vector<uint8_t>>* properties,
-    aura::WindowManagerClient* window_manager_client)
-    : window_manager_client_(window_manager_client),
-      widget_(new views::Widget),
-      window_(nullptr) {
+    std::map<std::string, std::vector<uint8_t>>* properties)
+    : widget_(new views::Widget), window_(nullptr) {
   // To simplify things this code creates a Widget. While a Widget is created
   // we need to ensure we don't inadvertently change random properties of the
   // underlying ui::Window. For example, showing the Widget shouldn't change
   // the bounds of the ui::Window in anyway.
   //
-  // Assertions around InitParams::Type matching ui::mojom::WindowType exist in
+  // Assertions around InitParams::Type matching ws::mojom::WindowType exist in
   // MusClient.
   views::Widget::InitParams params(
       static_cast<views::Widget::InitParams::Type>(window_type));
@@ -347,11 +321,9 @@ NonClientFrameController::NonClientFrameController(
   params.opacity = views::Widget::InitParams::OPAQUE_WINDOW;
   params.layer_type = ui::LAYER_SOLID_COLOR;
   WmNativeWidgetAura* native_widget = new WmNativeWidgetAura(
-      widget_, window_manager_client_, ShouldRemoveStandardFrame(*properties),
+      widget_, ShouldRemoveStandardFrame(*properties),
       ShouldEnableImmersive(*properties), GetWindowStyle(*properties));
   window_ = native_widget->GetNativeView();
-  window_->SetProperty(aura::client::kEmbedType,
-                       aura::client::WindowEmbedType::TOP_LEVEL_IN_WM);
   window_->SetProperty(kNonClientFrameControllerKey, this);
   window_->SetProperty(kWidgetCreationTypeKey, WidgetCreationType::FOR_CLIENT);
   window_->AddObserver(this);
@@ -420,22 +392,22 @@ base::string16 NonClientFrameController::GetWindowTitle() const {
 
 bool NonClientFrameController::CanResize() const {
   return window_ && (window_->GetProperty(aura::client::kResizeBehaviorKey) &
-                     ui::mojom::kResizeBehaviorCanResize) != 0;
+                     ws::mojom::kResizeBehaviorCanResize) != 0;
 }
 
 bool NonClientFrameController::CanMaximize() const {
   return window_ && (window_->GetProperty(aura::client::kResizeBehaviorKey) &
-                     ui::mojom::kResizeBehaviorCanMaximize) != 0;
+                     ws::mojom::kResizeBehaviorCanMaximize) != 0;
 }
 
 bool NonClientFrameController::CanMinimize() const {
   return window_ && (window_->GetProperty(aura::client::kResizeBehaviorKey) &
-                     ui::mojom::kResizeBehaviorCanMinimize) != 0;
+                     ws::mojom::kResizeBehaviorCanMinimize) != 0;
 }
 
 bool NonClientFrameController::CanActivate() const {
   // kCanFocus is used for both focus and activation.
-  return window_ && window_->GetProperty(ui::ws2::kCanFocus) &&
+  return window_ && window_->GetProperty(ws::kCanFocus) &&
          views::WidgetDelegate::CanActivate();
 }
 

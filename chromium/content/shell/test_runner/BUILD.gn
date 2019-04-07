@@ -11,6 +11,12 @@ if (is_android) {
 component("test_runner") {
   testonly = true
 
+  # See comment at the top of //content/BUILD.gn for why this is disabled in
+  # component builds.
+  if (is_component_build) {
+    check_includes = false
+  }
+
   defines = [ "TEST_RUNNER_IMPLEMENTATION" ]
 
   sources = [
@@ -98,7 +104,9 @@ component("test_runner") {
     "//content/public/common",
     "//content/public/common:service_names",
     "//content/public/renderer",
+    "//content/renderer:for_content_tests",
     "//content/shell:layout_test_switches",
+    "//content/shell:layout_test_utils",
     "//content/test:test_runner_support",
     "//device/base/synchronization",
     "//device/gamepad/public/cpp:shared_with_blink",
@@ -108,7 +116,6 @@ component("test_runner") {
     "//gpu/command_buffer/client:gles2_interface",
     "//media/midi:mojo",
     "//net",
-    "//services/device/public/cpp/generic_sensor:shared_with_blink",
     "//services/device/public/mojom",
     "//skia",
     "//third_party/blink/public:blink",

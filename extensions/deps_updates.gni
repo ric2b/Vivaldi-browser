@@ -13,17 +13,15 @@ update_template_instance("//chrome:packed_resources") {
   public_deps += [ "//vivaldi/extensions:resources" ]
 }
 
-update_template_instance("//chrome/browser:browser") {
-  public_deps += [
-    "//vivaldi/extensions/schema:api",
-  ]
-}
-
 if (!is_android) {
+  update_template_instance("//chrome/browser:browser") {
+    public_deps += [
+      "//vivaldi/extensions/schema",
+    ]
+  }
   update_target("//chrome/browser/extensions:extensions") {
     deps += [
-      "//vivaldi/extensions/schema:api",
-      "//vivaldi/extensions/schema:api_registration",
+      "//vivaldi/extensions/schema",
     ]
   }
 }
@@ -31,7 +29,7 @@ if (!is_android) {
 update_template_instance("//chrome/browser/ui:ui") {
   public_deps += [
     "//components/sessions:sessions",
-    "//vivaldi/extensions/schema:api",
+    "//vivaldi/extensions/schema",
   ]
 }
 

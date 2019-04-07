@@ -26,20 +26,6 @@
 
 namespace ui {
 
-namespace {
-
-void UpdateCursorImage(DrmBuffer* cursor, const SkBitmap& image) {
-  SkRect damage;
-  image.getBounds(&damage);
-
-  // Clear to transparent in case |image| is smaller than the canvas.
-  SkCanvas* canvas = cursor->GetCanvas();
-  canvas->clear(SK_ColorTRANSPARENT);
-  canvas->drawBitmapRect(image, damage, NULL);
-}
-
-}  // namespace
-
 DrmWindow::DrmWindow(gfx::AcceleratedWidget widget,
                      DrmDeviceManager* device_manager,
                      ScreenManager* screen_manager)
@@ -51,12 +37,11 @@ DrmWindow::DrmWindow(gfx::AcceleratedWidget widget,
 DrmWindow::~DrmWindow() {
 }
 
-void DrmWindow::Initialize(ScanoutBufferGenerator* buffer_generator) {
+void DrmWindow::Initialize() {
   TRACE_EVENT1("drm", "DrmWindow::Initialize", "widget", widget_);
 
   device_manager_->UpdateDrmDevice(widget_, nullptr);
-  overlay_validator_ =
-      std::make_unique<DrmOverlayValidator>(this, buffer_generator);
+  overlay_validator_ = std::make_unique<DrmOverlayValidator>(this);
 }
 
 void DrmWindow::Shutdown() {
@@ -91,28 +76,18 @@ void DrmWindow::SetCursor(const std::vector<SkBitmap>& bitmaps,
   cursor_frame_delay_ms_ = frame_delay_ms;
   cursor_timer_.Stop();
 
-  if (cursor_frame_delay_ms_)
+  if (cursor_frame_delay_ms_) {
     cursor_timer_.Start(
         FROM_HERE, base::TimeDelta::FromMilliseconds(cursor_frame_delay_ms_),
         this, &DrmWindow::OnCursorAnimationTimeout);
+  }
 
-  ResetCursor(false);
-}
-
-void DrmWindow::SetCursorWithoutAnimations(const std::vector<SkBitmap>& bitmaps,
-                                           const gfx::Point& location) {
-  cursor_bitmaps_ = bitmaps;
-  cursor_location_ = location;
-  cursor_frame_ = 0;
-  cursor_frame_delay_ms_ = 0;
-  ResetCursor(false);
+  ResetCursor();
 }
 
 void DrmWindow::MoveCursor(const gfx::Point& location) {
   cursor_location_ = location;
-
-  if (controller_)
-    controller_->MoveCursor(location);
+  UpdateCursorLocation();
 }
 
 void DrmWindow::SchedulePageFlip(
@@ -122,8 +97,7 @@ void DrmWindow::SchedulePageFlip(
   if (controller_) {
     const DrmDevice* drm = controller_->GetDrmDevice().get();
     for (const auto& plane : planes) {
-      if (plane.buffer &&
-          plane.buffer->GetGbmDeviceLinux() != drm->AsGbmDeviceLinux()) {
+      if (plane.buffer && plane.buffer->drm_device() != drm) {
         // Although |force_buffer_reallocation_| is set to true during window
         // bounds update, this may still be needed because of in-flight buffers.
         force_buffer_reallocation_ = true;
@@ -178,31 +152,33 @@ void DrmWindow::GetVSyncParameters(
                base::TimeDelta::FromSeconds(1) / crtc->mode().vrefresh);
 }
 
-void DrmWindow::ResetCursor(bool bitmap_only) {
+void DrmWindow::UpdateCursorImage() {
   if (!controller_)
     return;
-
   if (cursor_bitmaps_.size()) {
-    // Draw new cursor into backbuffer.
-    UpdateCursorImage(cursor_buffers_[cursor_frontbuffer_ ^ 1].get(),
-                      cursor_bitmaps_[cursor_frame_]);
-
-    // Reset location & buffer.
-    if (!bitmap_only)
-      controller_->MoveCursor(cursor_location_);
-    controller_->SetCursor(cursor_buffers_[cursor_frontbuffer_ ^ 1]);
-    cursor_frontbuffer_ ^= 1;
+    controller_->SetCursor(cursor_bitmaps_[cursor_frame_]);
   } else {
     // No cursor set.
-    controller_->UnsetCursor();
+    controller_->SetCursor(SkBitmap());
   }
+}
+
+void DrmWindow::UpdateCursorLocation() {
+  if (!controller_)
+    return;
+  controller_->MoveCursor(cursor_location_);
+}
+
+void DrmWindow::ResetCursor() {
+  UpdateCursorLocation();
+  UpdateCursorImage();
 }
 
 void DrmWindow::OnCursorAnimationTimeout() {
   cursor_frame_++;
   cursor_frame_ %= cursor_bitmaps_.size();
 
-  ResetCursor(true);
+  UpdateCursorImage();
 }
 
 void DrmWindow::SetController(HardwareDisplayController* controller) {
@@ -219,34 +195,8 @@ void DrmWindow::SetController(HardwareDisplayController* controller) {
   device_manager_->UpdateDrmDevice(
       widget_, controller ? controller->GetDrmDevice() : nullptr);
 
-  UpdateCursorBuffers();
   // We changed displays, so we want to update the cursor as well.
-  ResetCursor(false /* bitmap_only */);
-}
-
-void DrmWindow::UpdateCursorBuffers() {
-  TRACE_EVENT0("drm", "DrmWindow::UpdateCursorBuffers");
-  if (!controller_) {
-    for (size_t i = 0; i < arraysize(cursor_buffers_); ++i) {
-      cursor_buffers_[i] = nullptr;
-    }
-  } else {
-    scoped_refptr<DrmDevice> drm = controller_->GetDrmDevice();
-    gfx::Size max_cursor_size = GetMaximumCursorSize(drm->get_fd());
-    SkImageInfo info = SkImageInfo::MakeN32Premul(max_cursor_size.width(),
-                                                  max_cursor_size.height());
-    for (size_t i = 0; i < arraysize(cursor_buffers_); ++i) {
-      cursor_buffers_[i] = new DrmBuffer(drm);
-      // Don't register a framebuffer for cursors since they are special (they
-      // aren't modesetting buffers and drivers may fail to register them due to
-      // their small sizes).
-      if (!cursor_buffers_[i]->Initialize(
-              info, false /* should_register_framebuffer */)) {
-        LOG(FATAL) << "Failed to initialize cursor buffer";
-        return;
-      }
-    }
-  }
+  ResetCursor();
 }
 
 }  // namespace ui

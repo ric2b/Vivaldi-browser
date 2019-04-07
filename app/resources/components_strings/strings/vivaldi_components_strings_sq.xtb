@@ -15,7 +15,6 @@
 <translation id="2609632851001447353">Variantet</translation>
 <translation id="2909946352844186028">U diktua një ndryshim në rrjet.</translation>
 <translation id="3005723025932146533">Tregoj kopjen e ruajtur</translation>
-<translation id="3093245981617870298">Nuk jeni në linjë.</translation>
 <translation id="3109728660330352905">Nuk keni autorizim për ta hapur këtë faqen.</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> nuk mund të arrihet për momentin.</translation>
 <translation id="3447661539832366887">Zotëruesi i këtij aparati e ka fikur lojën me dinozaur.</translation>
@@ -48,5 +47,4 @@ interneti që jeni duke përdorur.</translation>
 <translation id="8225771182978767009">Faqja është bllokuar nga personi që ka konfiguruar kompjuterin.</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> mori shumë kohë për t'u përgjigjur.</translation>
 <translation id="8740359287975076522">Nuk gjendet &lt;abbr id="dnsDefinition"&gt;adresa DNS&lt;/abbr&gt; e <ph name="HOST_NAME" />. Problemi po diagnostikohet.</translation>
-<translation id="933612690413056017">Nuk ka linjë interneti</translation>
 </translationbundle>

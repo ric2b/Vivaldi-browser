@@ -176,8 +176,10 @@ TEST_F(ClearBrowsingDataCollectionViewControllerTest,
        TestItemsSignedInSyncActiveHistoryOff) {
   EXPECT_CALL(*mock_sync_service_, GetDisableReasons())
       .WillRepeatedly(Return(syncer::SyncService::DISABLE_REASON_NONE));
-  EXPECT_CALL(*mock_sync_service_, GetState())
-      .WillRepeatedly(Return(syncer::SyncService::State::ACTIVE));
+  EXPECT_CALL(*mock_sync_service_, GetTransportState())
+      .WillRepeatedly(Return(syncer::SyncService::TransportState::ACTIVE));
+  EXPECT_CALL(*mock_sync_service_, IsFirstSetupComplete())
+      .WillRepeatedly(Return(true));
   EXPECT_CALL(*mock_sync_service_, GetActiveDataTypes())
       .WillRepeatedly(Return(syncer::ModelTypeSet()));
   EXPECT_CALL(*mock_sync_service_, IsUsingSecondaryPassphrase())

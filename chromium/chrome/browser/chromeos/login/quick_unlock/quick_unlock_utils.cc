@@ -60,8 +60,6 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   // 0 indicates no maximum length for the pin.
   registry->RegisterIntegerPref(prefs::kPinUnlockMaximumLength, 0);
   registry->RegisterBooleanPref(prefs::kPinUnlockWeakPinsAllowed, true);
-
-  registry->RegisterBooleanPref(prefs::kEnableQuickUnlockFingerprint, false);
 }
 
 bool IsPinDisabledByPolicy(PrefService* pref_service) {
@@ -102,6 +100,11 @@ bool IsPinEnabled(PrefService* pref_service) {
 bool IsFingerprintEnabled() {
   if (enable_for_testing_)
     return true;
+
+  // Disable fingerprint for secondary user.
+  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
+  if (user_manager->GetActiveUser() != user_manager->GetPrimaryUser())
+    return false;
 
   // Enable fingerprint unlock only if the switch is present.
   return base::FeatureList::IsEnabled(features::kQuickUnlockFingerprint);

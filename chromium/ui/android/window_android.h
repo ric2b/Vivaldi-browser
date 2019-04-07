@@ -113,12 +113,13 @@ class UI_ANDROID_EXPORT WindowAndroid : public ViewAndroid {
   const int display_id_;
   WindowAndroidCompositor* compositor_;
 
-  base::ObserverList<WindowAndroidObserver> observer_list_;
+  base::ObserverList<WindowAndroidObserver>::Unchecked observer_list_;
 
   std::unique_ptr<WindowBeginFrameSource> begin_frame_source_;
   bool needs_begin_frames_;
   std::list<base::Closure> vsync_complete_callbacks_;
   float mouse_wheel_scroll_factor_;
+  bool vsync_paused_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(WindowAndroid);
 };

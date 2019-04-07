@@ -45,7 +45,10 @@
 #include "content/public/test/test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/network/public/cpp/network_switches.h"
-#include "testing/gmock/include/gmock/gmock.h"
+
+#if defined(OS_CHROMEOS)
+#include "chromeos/chromeos_switches.h"
+#endif
 
 using content::InterstitialPage;
 using content::NavigationController;
@@ -186,7 +189,14 @@ class SupervisedUserTest : public InProcessBrowserTest,
                                         "MAP *.new-example.com " + host_port +
                                         "," + "MAP *.a.com " + host_port);
 
-    command_line->AppendSwitchASCII(switches::kSupervisedUserId, "asdf");
+    command_line->AppendSwitchASCII(switches::kSupervisedUserId,
+                                    supervised_users::kChildAccountSUID);
+#if defined(OS_CHROMEOS)
+    command_line->AppendSwitchASCII(
+        chromeos::switches::kLoginUser,
+        "supervised_user@locally-managed.localhost");
+    command_line->AppendSwitchASCII(chromeos::switches::kLoginProfile, "hash");
+#endif
   }
 
   // Acts like a synchronous call to history's QueryHistory. Modified from
@@ -230,19 +240,49 @@ class SupervisedUserBlockModeTest : public SupervisedUserTest {
   }
 };
 
-class MockTabStripModelObserver : public TabStripModelObserver {
+class TabClosingObserver : public TabStripModelObserver {
  public:
-  explicit MockTabStripModelObserver(TabStripModel* tab_strip)
-      : tab_strip_(tab_strip) {
+  TabClosingObserver(TabStripModel* tab_strip, content::WebContents* contents)
+      : tab_strip_(tab_strip), contents_(contents) {
     tab_strip_->AddObserver(this);
   }
 
-  ~MockTabStripModelObserver() override { tab_strip_->RemoveObserver(this); }
+  ~TabClosingObserver() override { tab_strip_->RemoveObserver(this); }
 
-  MOCK_METHOD3(TabClosingAt, void(TabStripModel*, content::WebContents*, int));
+  void WaitForContentsClosing() {
+    if (!contents_)
+      return;
+
+    run_loop_.Run();
+  }
+
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override {
+    if (change.type() != TabStripModelChange::kRemoved)
+      return;
+
+    for (const auto& delta : change.deltas()) {
+      if (delta.remove.will_be_deleted && contents_ == delta.remove.contents) {
+        if (run_loop_.running())
+          run_loop_.Quit();
+
+        contents_ = nullptr;
+        return;
+      }
+    }
+  }
 
  private:
-  TabStripModel* tab_strip_;
+  TabStripModel* tab_strip_ = nullptr;
+
+  base::RunLoop run_loop_;
+
+  // Contents to wait for.
+  content::WebContents* contents_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(TabClosingObserver);
 };
 
 INSTANTIATE_TEST_CASE_P(, SupervisedUserTest, ::testing::Values(false, true));
@@ -294,13 +334,10 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserBlockModeTest, OpenBlockedURLInNewTab) {
 
   // On pressing the "back" button, the new tab should be closed, and we should
   // get back to the previous active tab.
-  MockTabStripModelObserver observer(tab_strip);
-  base::RunLoop run_loop;
-  EXPECT_CALL(observer,
-              TabClosingAt(tab_strip, tab, tab_strip->active_index()))
-      .WillOnce(testing::InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
+  TabClosingObserver observer(tab_strip, tab);
   GoBack(tab);
-  run_loop.Run();
+  observer.WaitForContentsClosing();
+
   EXPECT_EQ(prev_tab, tab_strip->GetActiveWebContents());
 }
 
@@ -355,13 +392,9 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserTest, BlockNewTabAfterLoading) {
   {
     // On pressing the "back" button, the new tab should be closed, and we
     // should get back to the previous active tab.
-    MockTabStripModelObserver observer(tab_strip);
-    base::RunLoop run_loop;
-    EXPECT_CALL(observer,
-                TabClosingAt(tab_strip, tab, tab_strip->active_index()))
-        .WillOnce(testing::InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
+    TabClosingObserver observer(tab_strip, tab);
     GoBack(tab);
-    run_loop.Run();
+    observer.WaitForContentsClosing();
     EXPECT_EQ(prev_tab, tab_strip->GetActiveWebContents());
   }
 }

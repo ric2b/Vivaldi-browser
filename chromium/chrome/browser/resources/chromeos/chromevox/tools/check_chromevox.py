@@ -46,6 +46,10 @@ _ACCESSIBILITY_PRIVATE_EXTERNS = (
     ChromeRootPath(
         'third_party/closure_compiler/externs/accessibility_private.js'))
 
+# Audio API externs file.
+_AUDIO_EXTERNS = (
+    ChromeRootPath('third_party/closure_compiler/externs/audio.js'))
+
 # Automation API externs file.
 _AUTOMATION_EXTERNS = (
     ChromeRootPath('third_party/closure_compiler/externs/automation.js'))
@@ -54,6 +58,9 @@ _AUTOMATION_EXTERNS = (
 _METRICS_PRIVATE_EXTERNS = (
     ChromeRootPath('third_party/closure_compiler/externs/metrics_private.js'))
 
+# Settings private API externs file.
+_SETTINGS_PRIVATE_EXTERNS = (
+    ChromeRootPath('third_party/closure_compiler/externs/settings_private.js'))
 
 # Additional chrome api externs file.
 _CHROME_EXTERNS = (
@@ -63,24 +70,32 @@ _CHROME_EXTERNS = (
 _CHROME_EXTENSIONS_EXTERNS = (
     ChromeRootPath('third_party/closure_compiler/externs/chrome_extensions.js'))
 
+# CommandLinePrivate externs file.
+_COMMANDLINE_PRIVATE_EXTERNS = (
+    ChromeRootPath(
+        'third_party/closure_compiler/externs/command_line_private.js'))
+
 
 # Externs common to many ChromeVox scripts.
 _COMMON_EXTERNS = [
     CVoxPath('common/externs.js'),
     CVoxPath('common/chrome_extension_externs.js'),
     CVoxPath('chromevox/background/externs.js'),
-    CVoxPath('chromevox/injected/externs.js'),
     CVoxPath('host/chrome/externs.js'),
     _ACCESSIBILITY_PRIVATE_EXTERNS,
+    _AUDIO_EXTERNS,
     _AUTOMATION_EXTERNS,
     _CHROME_EXTERNS,
     _CHROME_EXTENSIONS_EXTERNS,
-    _METRICS_PRIVATE_EXTERNS]
+    _COMMANDLINE_PRIVATE_EXTERNS,
+    _METRICS_PRIVATE_EXTERNS,
+    _SETTINGS_PRIVATE_EXTERNS,]
 
 # List of top-level scripts and externs that we can check.
 _TOP_LEVEL_SCRIPTS = [
     [[CVoxPath('chromevox/background/kbexplorer_loader.js')], _COMMON_EXTERNS],
     [[CVoxPath('chromevox/background/options_loader.js')], _COMMON_EXTERNS],
+    [[CVoxPath('cvox2/background/log_loader.js')], _COMMON_EXTERNS],
     [[CVoxPath('chromevox/injected/loader.js')], _COMMON_EXTERNS],
     [[CVoxPath('cvox2/background/loader.js')], _COMMON_EXTERNS],
     [[CVoxPath('cvox2/background/panel_loader.js')], _COMMON_EXTERNS],

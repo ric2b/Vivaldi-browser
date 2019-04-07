@@ -8,7 +8,7 @@
 #include "rlz/buildflags/buildflags.h"
 
 // Supported on all platforms, but on Windows only if RLZ is enabled.
-#if !defined(OS_WIN) || BUILDFLAG(ENABLE_RLZ) || defined(VIVALDI_BUILD)
+#if !defined(OS_WIN) || BUILDFLAG(ENABLE_RLZ)
 
 class MusicManagerPrivateTest : public extensions::PlatformAppBrowserTest {
 };

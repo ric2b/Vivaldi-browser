@@ -1,5 +1,6 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/chromeos/network/cr_network_listener_behavior.html">
 <link rel="import" href="chrome://resources/cr_elements/chromeos/network/cr_onc_types.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_expand_button/cr_expand_button.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
@@ -17,16 +18,15 @@
 <link rel="import" href="internet_detail_page.html">
 <link rel="import" href="internet_known_networks_page.html">
 <link rel="import" href="internet_subpage.html">
-<link rel="import" href="network_listener_behavior.html">
 <link rel="import" href="network_summary.html">
 
 <dom-module id="settings-internet-page">
   <template>
     <style include="settings-shared">
       iron-icon.policy {
-        -webkit-margin-end: 12px;
-        -webkit-margin-start: 4px;
         height: 24px;
+        margin-inline-end: 12px;
+        margin-inline-start: 4px;
         width: 24px;
       }
     </style>
@@ -37,7 +37,8 @@
             device-states="{{deviceStates}}"
             networking-private="[[networkingPrivate]]">
         </network-summary>
-        <template is="dom-if" if="[[allowAddConnection_(globalPolicy_)]]">
+        <template is="dom-if" if="[[allowAddConnection_(globalPolicy_,
+            managedNetworkAvailable)]]">
           <div actionable class="settings-box two-line"
               on-click="onExpandAddConnectionsTap_">
             <div class="start layout horizontal center">
@@ -88,7 +89,8 @@
             </div>
           </template>
         </template>
-        <template is="dom-if" if="[[!allowAddConnection_(globalPolicy_)]]">
+        <template is="dom-if" if="[[!allowAddConnection_(globalPolicy_,
+            managedNetworkAvailable)]]">
           <div class="settings-box">
             <iron-icon class="policy" icon="cr20:domain"></iron-icon>
             <div>$i18n{internetAddConnectionNotAllowed}</div>
@@ -101,7 +103,8 @@
           <settings-internet-detail-page prefs="{{prefs}}"
               default-network="[[defaultNetwork]]"
               global-policy="[[globalPolicy_]]"
-              networking-private="[[networkingPrivate]]">
+              networking-private="[[networkingPrivate]]"
+              managed-network-available="[[managedNetworkAvailable]]">
           </settings-internet-detail-page>
         </settings-subpage>
       </template>

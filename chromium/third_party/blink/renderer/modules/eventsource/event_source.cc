@@ -151,17 +151,13 @@ void EventSource::Connect() {
 
   const SecurityOrigin* origin = execution_context.GetSecurityOrigin();
 
-  ThreadableLoaderOptions options;
-
   ResourceLoaderOptions resource_loader_options;
   resource_loader_options.data_buffering_policy = kDoNotBufferData;
   resource_loader_options.security_origin = origin;
 
   probe::willSendEventSourceRequest(&execution_context, this);
-  // probe::documentThreadableLoaderStartedLoadingForClient
-  // will be called synchronously.
-  loader_ = ThreadableLoader::Create(execution_context, this, options,
-                                     resource_loader_options);
+  loader_ =
+      new ThreadableLoader(execution_context, this, resource_loader_options);
   loader_->Start(request);
 }
 
@@ -176,7 +172,7 @@ void EventSource::ScheduleReconnect() {
   state_ = kConnecting;
   connect_timer_.StartOneShot(TimeDelta::FromMilliseconds(reconnect_delay_),
                               FROM_HERE);
-  DispatchEvent(Event::Create(EventTypeNames::error));
+  DispatchEvent(*Event::Create(EventTypeNames::error));
 }
 
 void EventSource::ConnectTimerFired(TimerBase*) {
@@ -277,7 +273,7 @@ void EventSource::DidReceiveResponse(
       last_event_id = parser_->LastEventId();
     }
     parser_ = new EventSourceParser(last_event_id, this);
-    DispatchEvent(Event::Create(EventTypeNames::open));
+    DispatchEvent(*Event::Create(EventTypeNames::open));
   } else {
     loader_->Cancel();
   }
@@ -337,7 +333,7 @@ void EventSource::OnMessageEvent(const AtomicString& event_type,
   probe::willDispatchEventSourceEvent(GetExecutionContext(),
                                       resource_identifier_, event_type,
                                       last_event_id, data);
-  DispatchEvent(e);
+  DispatchEvent(*e);
 }
 
 void EventSource::OnReconnectionTimeSet(unsigned long long reconnection_time) {
@@ -351,7 +347,7 @@ void EventSource::AbortConnectionAttempt() {
   state_ = kClosed;
   NetworkRequestEnded();
 
-  DispatchEvent(Event::Create(EventTypeNames::error));
+  DispatchEvent(*Event::Create(EventTypeNames::error));
 }
 
 void EventSource::ContextDestroyed(ExecutionContext*) {

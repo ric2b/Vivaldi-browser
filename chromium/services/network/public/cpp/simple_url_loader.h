@@ -18,11 +18,15 @@
 
 class GURL;
 
+template <class T>
+class scoped_refptr;
+
 namespace base {
 class FilePath;
 }
 
 namespace net {
+class HttpResponseHeaders;
 struct NetworkTrafficAnnotationTag;
 struct RedirectInfo;
 }  // namespace net
@@ -85,8 +89,14 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
   using BodyAsStringCallback =
       base::OnceCallback<void(std::unique_ptr<std::string> response_body)>;
 
-  // Callback used when download the response body to a file. On failure, |path|
-  // will be empty. It is safe to delete the SimpleURLLoader during the
+  // Callback used when ignoring the response body. |headers| are the received
+  // HTTP headers, or nullptr if none were received. It is safe to delete the
+  // SimpleURLLoader during the callback.
+  using HeadersOnlyCallback =
+      base::OnceCallback<void(scoped_refptr<net::HttpResponseHeaders> headers)>;
+
+  // Callback used when downloading the response body to a file. On failure,
+  // |path| will be empty. It is safe to delete the SimpleURLLoader during the
   // callback.
   using DownloadToFileCompleteCallback =
       base::OnceCallback<void(base::FilePath path)>;
@@ -106,6 +116,18 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
       base::OnceCallback<void(const GURL& final_url,
                               const ResourceResponseHead& response_head)>;
 
+  // Callback used when an upload progress is reported. It is safe to
+  // delete the SimpleURLLoader during the callback.
+  using UploadProgressCallback =
+      base::RepeatingCallback<void(uint64_t position, uint64_t total)>;
+
+  // Callback used for reporting upload or download progress.
+  // |current| is the number of bytes transferred thus far for the current
+  // fetch attempt (so in case of retries, it might appear to go backwards). It
+  // is safe to delete the SimpleURLLoader during the callback.
+  using DownloadProgressCallback =
+      base::RepeatingCallback<void(uint64_t current)>;
+
   // Creates a SimpleURLLoader for |resource_request|. The request can be
   // started by calling any one of the Download methods once. The loader may not
   // be reused.
@@ -115,7 +137,7 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
 
   virtual ~SimpleURLLoader();
 
-  // Starts the request using |network_context|. The SimpleURLLoader will
+  // Starts the request using |url_loader_factory|. The SimpleURLLoader will
   // accumulate all downloaded data in an in-memory string of bounded size. If
   // |max_body_size| is exceeded, the request will fail with
   // net::ERR_INSUFFICIENT_RESOURCES. |max_body_size| must be no greater than 1
@@ -139,6 +161,14 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
   virtual void DownloadToStringOfUnboundedSizeUntilCrashAndDie(
       mojom::URLLoaderFactory* url_loader_factory,
       BodyAsStringCallback body_as_string_callback) = 0;
+
+  // Starts the request using |url_loader_factory|. The SimpleURLLoader will
+  // discard the response body as it is received and |headers_only_callback|
+  // will be invoked on completion. It is safe to delete the SimpleURLLoader in
+  // this callback.
+  virtual void DownloadHeadersOnly(
+      mojom::URLLoaderFactory* url_loader_factory,
+      HeadersOnlyCallback headers_only_callback) = 0;
 
   // SimpleURLLoader will download the entire response to a file at the
   // specified path. File I/O will happen on another sequence, so it's safe to
@@ -189,6 +219,21 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
   virtual void SetOnResponseStartedCallback(
       OnResponseStartedCallback on_response_started_callback) = 0;
 
+  // Sets callback to be invoked during resource uploads to provide
+  // progress information. Callback may delete the SimpleURLLoader.
+  virtual void SetOnUploadProgressCallback(
+      UploadProgressCallback on_upload_progress_callback) = 0;
+
+  // Sets callback to be invoked to notify of body download progress.
+  // Note that this may be non-monotonic in case of retries.
+  // DownloadHeadersOnly() will disregard this setting, and never invoke the
+  // callback; otherwise it's guaranteed to fire at least once, with the final
+  // size.
+  //
+  // Callback may delete the SimpleURLLoader.
+  virtual void SetOnDownloadProgressCallback(
+      DownloadProgressCallback on_download_progress_callback) = 0;
+
   // Sets whether partially received results are allowed. Defaults to false.
   // When true, if an error is received after reading the body starts or the max
   // allowed body size exceeded, the partial response body that was received
@@ -234,10 +279,16 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
   // open the file itself off-thread. May only be called once, and only if the
   // ResourceRequest passed to the constructor had a null |request_body|.
   //
+  // The |offset| and |length| can optionally be set to specify the desired
+  // range of the file to be uploaded. By default the entire file is uploaded.
+  //
   // |content_type| will overwrite any Content-Type header in the
   // ResourceRequest passed to Create().
-  virtual void AttachFileForUpload(const base::FilePath& upload_file_path,
-                                   const std::string& upload_content_type) = 0;
+  virtual void AttachFileForUpload(
+      const base::FilePath& upload_file_path,
+      const std::string& upload_content_type,
+      uint64_t offset = 0,
+      uint64_t length = std::numeric_limits<uint64_t>::max()) = 0;
 
   // Sets the when to try and the max number of times to retry a request, if
   // any. |max_retries| is the number of times to retry the request, not
@@ -274,6 +325,18 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
   // HTTP cache. May only be called once the loader has informed the caller of
   // completion.
   virtual bool LoadedFromCache() const = 0;
+
+  // Indicates the total of decompressed bytes of the response body.
+  // May only be called once the loader has informed the caller of completion.
+  //
+  // The value might be different than the number of bytes actually
+  // received over the network. This happens, for example, in the case
+  // of gzipped bodies (Content-Encoding: gzip).
+  //
+  // When |SetAllowPartialResults| is set to true and there is an error,
+  // the method returns the total bytes decompressed bytes until the failure
+  // occurred.
+  virtual int64_t GetContentSize() const = 0;
 
  protected:
   SimpleURLLoader();

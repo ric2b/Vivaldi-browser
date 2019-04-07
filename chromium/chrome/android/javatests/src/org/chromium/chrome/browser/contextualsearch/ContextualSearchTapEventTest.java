@@ -27,10 +27,13 @@ import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.Context
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.content.browser.test.util.TestSelectionPopupController;
 import org.chromium.content_public.browser.SelectionClient;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.base.ActivityWindowAndroid;
+import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import org.chromium.ui.touch_selection.SelectionEventType;
 
@@ -80,12 +83,16 @@ public class ContextualSearchTapEventTest {
             super(activity, null);
             setSelectionController(new MockCSSelectionController(activity, this));
             WebContents webContents = WebContentsFactory.createWebContents(false, false);
+            ContentView cv = ContentView.createContentView(activity, webContents);
+            webContents.initialize(null, ViewAndroidDelegate.createBasicDelegate(cv), null,
+                    new ActivityWindowAndroid(activity),
+                    WebContents.createDefaultInternalsHolder());
             SelectionPopupController selectionPopupController =
-                    SelectionPopupController.createForTesting(activity, null, webContents);
+                    SelectionPopupController.createForTesting(webContents);
             selectionPopupController.setSelectionClient(this.getContextualSearchSelectionClient());
             MockContextualSearchPolicy policy = new MockContextualSearchPolicy();
             setContextualSearchPolicy(policy);
-            mTranslateController = new MockedCSTranslateController(activity, policy, null);
+            mTranslateController = new MockedCSTranslateController(policy, null);
         }
 
         @Override
@@ -112,7 +119,7 @@ public class ContextualSearchTapEventTest {
     // --------------------------------------------------------------------------------------------
 
     /**
-     * Selection controller that mocks out anything to do with a ContentViewCore.
+     * Selection controller that mocks out anything to do with a WebContents.
      */
     private static class MockCSSelectionController extends ContextualSearchSelectionController {
         private StubbedSelectionPopupController mPopupController;
@@ -138,9 +145,9 @@ public class ContextualSearchTapEventTest {
         private static final String ENGLISH_TARGET_LANGUAGE = "en";
         private static final String ENGLISH_ACCEPT_LANGUAGES = "en-US,en";
 
-        MockedCSTranslateController(ChromeActivity activity, ContextualSearchPolicy policy,
-                ContextualSearchTranslateInterface hostInterface) {
-            super(activity, policy, hostInterface);
+        MockedCSTranslateController(
+                ContextualSearchPolicy policy, ContextualSearchTranslateInterface hostInterface) {
+            super(policy, hostInterface);
         }
 
         @Override

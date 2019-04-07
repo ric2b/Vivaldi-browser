@@ -278,6 +278,11 @@ void SearchResultPageView::OnSearchResultContainerResultsChanged() {
 
   first_result_view_ = result_container_views_[0]->GetFirstResultView();
 
+  // Update SearchBoxView search box autocomplete as necessary based on new
+  // first result view.
+  if (first_result_view_)
+    AppListPage::contents_view()->GetSearchBoxView()->ProcessAutocomplete();
+
   // If one of the search result is focused, do not highlight the first search
   // result.
   if (Contains(focused_view))
@@ -290,6 +295,12 @@ void SearchResultPageView::OnSearchResultContainerResultsChanged() {
   // focus is not set on the first result to prevent frequent focus switch
   // between the search box and the first result when the user is typing query.
   first_result_view_->SetBackgroundHighlighted(true);
+}
+
+void SearchResultPageView::OnHidden() {
+  // Hide the search results page when it is behind search box to avoid focus
+  // being moved onto suggested apps when zero state is enabled.
+  SetVisible(false);
 }
 
 gfx::Rect SearchResultPageView::GetPageBoundsForState(

@@ -13,7 +13,6 @@ import android.view.accessibility.AccessibilityEvent;
 import android.widget.AdapterView;
 import android.widget.PopupWindow;
 
-import org.chromium.ui.DropdownAdapter;
 import org.chromium.ui.DropdownItem;
 import org.chromium.ui.DropdownPopupWindow;
 
@@ -70,9 +69,10 @@ public class AutofillPopup extends DropdownPopupWindow implements AdapterView.On
      * Filters the Autofill suggestions to the ones that we support and shows the popup.
      * @param suggestions Autofill suggestion data.
      * @param isRtl @code true if right-to-left text.
+     * @param isRefresh Whether or not refreshed visual style should be used.
      */
     @SuppressLint("InlinedApi")
-    public void filterAndShow(AutofillSuggestion[] suggestions, boolean isRtl) {
+    public void filterAndShow(AutofillSuggestion[] suggestions, boolean isRtl, boolean isRefresh) {
         mSuggestions = new ArrayList<AutofillSuggestion>(Arrays.asList(suggestions));
         // Remove the AutofillSuggestions with IDs that are not supported by Android
         ArrayList<DropdownItem> cleanedData = new ArrayList<DropdownItem>();
@@ -86,7 +86,7 @@ public class AutofillPopup extends DropdownPopupWindow implements AdapterView.On
             }
         }
 
-        setAdapter(new DropdownAdapter(mContext, cleanedData, separators));
+        setAdapter(new AutofillDropdownAdapter(mContext, cleanedData, separators, isRefresh));
         setRtl(isRtl);
         show();
         getListView().setOnItemLongClickListener(this);
@@ -107,7 +107,7 @@ public class AutofillPopup extends DropdownPopupWindow implements AdapterView.On
 
     @Override
     public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-        DropdownAdapter adapter = (DropdownAdapter) parent.getAdapter();
+        AutofillDropdownAdapter adapter = (AutofillDropdownAdapter) parent.getAdapter();
         int listIndex = mSuggestions.indexOf(adapter.getItem(position));
         assert listIndex > -1;
         mAutofillDelegate.suggestionSelected(listIndex);
@@ -115,7 +115,7 @@ public class AutofillPopup extends DropdownPopupWindow implements AdapterView.On
 
     @Override
     public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
-        DropdownAdapter adapter = (DropdownAdapter) parent.getAdapter();
+        AutofillDropdownAdapter adapter = (AutofillDropdownAdapter) parent.getAdapter();
         AutofillSuggestion suggestion = (AutofillSuggestion) adapter.getItem(position);
         if (!suggestion.isDeletable()) return false;
 

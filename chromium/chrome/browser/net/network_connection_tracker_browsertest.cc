@@ -10,12 +10,11 @@
 #include "base/sequence_checker.h"
 #include "base/test/bind_test_util.h"
 #include "build/build_config.h"
-#include "chrome/browser/browser_process_impl.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/network_connection_tracker.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
@@ -23,17 +22,17 @@
 #include "content/public/test/browser_test_utils.h"
 #include "net/base/network_change_notifier.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 #include "services/network/public/mojom/network_service_test.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
-
-namespace content {
 
 namespace {
 
 class TestNetworkConnectionObserver
-    : public NetworkConnectionTracker::NetworkConnectionObserver {
+    : public network::NetworkConnectionTracker::NetworkConnectionObserver {
  public:
-  explicit TestNetworkConnectionObserver(NetworkConnectionTracker* tracker)
+  explicit TestNetworkConnectionObserver(
+      network::NetworkConnectionTracker* tracker)
       : num_notifications_(0),
         tracker_(tracker),
         run_loop_(std::make_unique<base::RunLoop>()),
@@ -73,7 +72,7 @@ class TestNetworkConnectionObserver
 
  private:
   size_t num_notifications_;
-  NetworkConnectionTracker* tracker_;
+  network::NetworkConnectionTracker* tracker_;
   std::unique_ptr<base::RunLoop> run_loop_;
   network::mojom::ConnectionType connection_type_;
 
@@ -96,8 +95,10 @@ class NetworkConnectionTrackerBrowserTest : public InProcessBrowserTest {
     if (network_service_enabled_ &&
         !content::IsNetworkServiceRunningInProcess()) {
       network::mojom::NetworkServiceTestPtr network_service_test;
-      ServiceManagerConnection::GetForProcess()->GetConnector()->BindInterface(
-          mojom::kNetworkServiceName, &network_service_test);
+      content::ServiceManagerConnection::GetForProcess()
+          ->GetConnector()
+          ->BindInterface(content::mojom::kNetworkServiceName,
+                          &network_service_test);
       base::RunLoop run_loop;
       network_service_test->SimulateNetworkChange(
           type, base::Bind([](base::RunLoop* run_loop) { run_loop->Quit(); },
@@ -125,8 +126,8 @@ IN_PROC_BROWSER_TEST_F(NetworkConnectionTrackerBrowserTest,
   if (network_service_enabled())
     return;
 #endif
-  NetworkConnectionTracker* tracker =
-      g_browser_process->network_connection_tracker();
+  network::NetworkConnectionTracker* tracker =
+      content::GetNetworkConnectionTracker();
   EXPECT_NE(nullptr, tracker);
   // Issue a GetConnectionType() request to make sure NetworkService has been
   // started up. This way, NetworkService will receive the broadcast when
@@ -160,8 +161,8 @@ IN_PROC_BROWSER_TEST_F(NetworkConnectionTrackerBrowserTest,
   if (!network_service_enabled())
     return;
 
-  NetworkConnectionTracker* tracker =
-      g_browser_process->network_connection_tracker();
+  network::NetworkConnectionTracker* tracker =
+      content::GetNetworkConnectionTracker();
   EXPECT_NE(nullptr, tracker);
 
   // Issue a GetConnectionType() request to make sure NetworkService has been
@@ -221,5 +222,3 @@ IN_PROC_BROWSER_TEST_F(NetworkConnectionTrackerBrowserTest,
 
   EXPECT_EQ(2u, network_connection_observer.num_notifications());
 }
-
-}  // namespace content

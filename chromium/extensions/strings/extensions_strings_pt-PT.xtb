@@ -13,7 +13,6 @@
 <translation id="2350172092385603347">Localização utilizada, mas não foi especificado default_locale no manifesto.</translation>
 <translation id="2576842806987913196">Já existe um ficheiro CRX com este nome.</translation>
 <translation id="2753617847762399167">Caminho ilegal (absoluto ou relativo com ".."): "<ph name="IMAGE_PATH" />"</translation>
-<translation id="27822970480436970">Esta extensão não conseguiu modificar um pedido de rede, porque a modificação entrou em conflito com outra extensão.</translation>
 <translation id="2785530881066938471">Não foi possível carregar o ficheiro "<ph name="RELATIVE_PATH" />" para script de conteúdo. Não está codificado em UTF-8.</translation>
 <translation id="2903070246402204397"><ph name="EXTENSION_NAME" /> (ID de extensão "<ph name="EXTENSION_ID" />") está bloqueada pelo gestor. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">Não foi possível instalar o pacote: "<ph name="ERROR_CODE" />"</translation>
@@ -57,19 +56,16 @@
 <translation id="7003844668372540529">Produto desconhecido <ph name="PRODUCT_ID" /> de <ph name="VENDOR_NAME" /></translation>
 <translation id="7068383018033524534">O ficheiro de manifesto é inválido.</translation>
 <translation id="7217838517480956708">O gestor desta máquina exige que o <ph name="EXTENSION_NAME" /> seja instalado. Este não pode ser removido ou modificado.</translation>
+<translation id="7612608473764576263">O valor de entrada para uma chave privada tem de ter um formato válido (chave RSA com codificação PEM no formato PKCS#8).</translation>
 <translation id="7939686037314084444">Não foi possível carregar a extensão corretamente. Pode não conseguir intercetar pedidos de rede.</translation>
 <translation id="7972881773422714442">Opções: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Virada para o utilizador</translation>
 <translation id="8047248493720652249">Esta extensão não conseguiu atribuir o nome "<ph name="ATTEMPTED_FILENAME" />" à transferência, porque outra extensão (<ph name="EXTENSION_NAME" />) determinou um nome de ficheiro diferente: "<ph name="ACTUAL_FILENAME" />".</translation>
 <translation id="8284835137979141223"><ph name="PRODUCT_NAME" /> de <ph name="VENDOR_NAME" /></translation>
-<translation id="8341840687457896278">Falha desta extensão ao fornecer credenciais a um pedido de rede, porque outra extensão (<ph name="EXTENSION_NAME" />) forneceu credenciais diferentes.</translation>
 <translation id="8517576857589387417">O ficheiro de manifesto está em falta ou é ilegível.</translation>
 <translation id="8636666366616799973">O pacote é inválido. Detalhes: "<ph name="ERROR_MESSAGE" />".</translation>
-<translation id="8670869118777164560">Falha desta extensão ao redirecionar um pedido de rede para <ph name="ATTEMPTED_REDIRECT_DESTINATION" />, porque outra extensão (<ph name="EXTENSION_NAME" />) o redirecionou para <ph name="ACTUAL_REDIRECT_DESTINATION" />.</translation>
 <translation id="8761756413268424715">"<ph name="APP_NAME" />" está a solicitar acesso a um dos seus dispositivos:</translation>
-<translation id="8825366169884721447">Falha desta extensão ao modificar o cabeçalho do pedido "<ph name="HEADER_NAME" />" de um pedido de rede, porque a modificação entrou em conflito com outra extensão (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="8885905466771744233">Já existe uma chave privada para a extensão especificada. Volte a utilizar essa chave ou elimine-a primeiro.</translation>
 <translation id="907841381057066561">Falha ao criar ficheiro zip temporário durante o empacotamento.</translation>
-<translation id="9111791539553342076">Falha desta extensão ao modificar o cabeçalho da resposta "<ph name="HEADER_NAME" />" de um pedido de rede, porque a modificação entrou em conflito com outra extensão (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="941543339607623937">Chave privada inválida.</translation>
 </translationbundle>

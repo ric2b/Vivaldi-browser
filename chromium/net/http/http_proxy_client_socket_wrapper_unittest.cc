@@ -16,10 +16,10 @@
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_server_properties_impl.h"
 #include "net/http/transport_security_state.h"
-#include "net/quic/chromium/mock_crypto_client_stream_factory.h"
-#include "net/quic/chromium/mock_quic_data.h"
-#include "net/quic/chromium/quic_http_utils.h"
-#include "net/quic/chromium/quic_test_packet_maker.h"
+#include "net/quic/mock_crypto_client_stream_factory.h"
+#include "net/quic/mock_quic_data.h"
+#include "net/quic/quic_http_utils.h"
+#include "net/quic/quic_test_packet_maker.h"
 #include "net/socket/socket_tag.h"
 #include "net/socket/socket_test_util.h"
 #include "net/ssl/channel_id_service.h"
@@ -52,6 +52,11 @@ class MockSSLConfigService : public SSLConfigService {
   ~MockSSLConfigService() override = default;
 
   void GetSSLConfig(SSLConfig* config) override { *config = config_; }
+
+  bool CanShareConnectionWithClientCerts(
+      const std::string& hostname) const override {
+    return false;
+  }
 
  private:
   SSLConfig config_;
@@ -131,7 +136,10 @@ class HttpProxyClientSocketWrapperTest
         quic::kInitialIdleTimeoutSecs,
         /*migrate_sessions_on_network_change_v2=*/false,
         /*migrate_sessions_early_v2=*/false,
+        /*retry_on_alternate_network_before_handshake=*/false,
+        /*go_away_on_path_degrading=*/false,
         base::TimeDelta::FromSeconds(kMaxTimeOnNonDefaultNetworkSecs),
+        kMaxMigrationsToNonDefaultNetworkOnWriteError,
         kMaxMigrationsToNonDefaultNetworkOnPathDegrading,
         allow_server_migration_, race_cert_verification_, estimate_initial_rtt_,
         client_headers_include_h2_stream_dependency_, connection_options_,

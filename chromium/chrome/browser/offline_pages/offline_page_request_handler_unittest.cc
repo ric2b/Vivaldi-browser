@@ -860,6 +860,8 @@ OfflinePageRequestHandlerTestBase::GetExpectedAccessEntryPoint() const {
       return OfflinePageRequestHandler::AccessEntryPoint::FILE_URL_INTENT;
     case OfflinePageHeader::Reason::CONTENT_URL_INTENT:
       return OfflinePageRequestHandler::AccessEntryPoint::CONTENT_URL_INTENT;
+    case OfflinePageHeader::Reason::NET_ERROR_SUGGESTION:
+      return OfflinePageRequestHandler::AccessEntryPoint::NET_ERROR_PAGE;
     default:
       return OfflinePageRequestHandler::AccessEntryPoint::LINK;
   }
@@ -1249,6 +1251,7 @@ class OfflinePageURLLoaderBuilder : public TestURLLoaderClient::Observer {
                             const net::HttpRequestHeaders& extra_headers,
                             bool is_main_frame);
   void MaybeStartLoader(
+      const network::ResourceRequest& request,
       content::URLLoaderRequestInterceptor::RequestHandler request_handler);
   void ReadBody();
   void ReadCompletedOnIO(const ResponseInfo& response);
@@ -1308,7 +1311,7 @@ void OfflinePageURLLoaderBuilder::InterceptRequestOnIO(
       navigation_ui_data_.get(),
       test_base_->web_contents()->GetMainFrame()->GetFrameTreeNodeId(), request,
       base::BindOnce(&OfflinePageURLLoaderBuilder::MaybeStartLoader,
-                     base::Unretained(this)));
+                     base::Unretained(this), request));
 
   // |url_loader_| may not be created.
   if (!url_loader_)
@@ -1336,6 +1339,7 @@ void OfflinePageURLLoaderBuilder::InterceptRequest(
 }
 
 void OfflinePageURLLoaderBuilder::MaybeStartLoader(
+    const network::ResourceRequest& request,
     content::URLLoaderRequestInterceptor::RequestHandler request_handler) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
@@ -1350,7 +1354,7 @@ void OfflinePageURLLoaderBuilder::MaybeStartLoader(
   url_loader_.release();
 
   std::move(request_handler)
-      .Run(mojo::MakeRequest(&loader_), client_->CreateInterfacePtr());
+      .Run(request, mojo::MakeRequest(&loader_), client_->CreateInterfacePtr());
 }
 
 void OfflinePageURLLoaderBuilder::ReadBody() {
@@ -1487,6 +1491,24 @@ TYPED_TEST(OfflinePageRequestHandlerTest, PageNotFoundOnDisconnectedNetwork) {
   this->ExpectNoOfflinePageServed(
       offline_id, OfflinePageRequestHandler::AggregatedRequestResult::
                       PAGE_NOT_FOUND_ON_DISCONNECTED_NETWORK);
+}
+
+TYPED_TEST(OfflinePageRequestHandlerTest,
+           NetErrorPageSuggestionOnDisconnectedNetwork) {
+  this->SimulateHasNetworkConnectivity(false);
+
+  int64_t offline_id = this->SaveInternalPage(kUrl, GURL(), kFilename1,
+                                              kFileSize1, std::string());
+
+  net::HttpRequestHeaders extra_headers;
+  extra_headers.AddHeaderFromString(this->UseOfflinePageHeader(
+      OfflinePageHeader::Reason::NET_ERROR_SUGGESTION, 0));
+  this->LoadPageWithHeaders(kUrl, extra_headers);
+
+  this->ExpectOfflinePageServed(
+      offline_id, kFileSize1,
+      OfflinePageRequestHandler::AggregatedRequestResult::
+          SHOW_OFFLINE_ON_DISCONNECTED_NETWORK);
 }
 
 TYPED_TEST(OfflinePageRequestHandlerTest,
@@ -1638,6 +1660,7 @@ TYPED_TEST(OfflinePageRequestHandlerTest,
                       AGGREGATED_REQUEST_RESULT_MAX);
 }
 
+// TODO(https://crbug.com/830282): Flaky on "Marshmallow Phone Tester (rel)".
 TYPED_TEST(OfflinePageRequestHandlerTest,
            DISABLED_LoadMostRecentlyCreatedOfflinePage) {
   this->SimulateHasNetworkConnectivity(false);
@@ -1703,6 +1726,7 @@ TYPED_TEST(OfflinePageRequestHandlerTest, FailToLoadByOfflineIDOnUrlMismatch) {
                       PAGE_NOT_FOUND_ON_CONNECTED_NETWORK);
 }
 
+// TODO(https://crbug.com/830282): Flaky on "Marshmallow Phone Tester (rel)".
 TYPED_TEST(OfflinePageRequestHandlerTest,
            DISABLED_LoadOfflinePageForUrlWithFragment) {
   this->SimulateHasNetworkConnectivity(false);

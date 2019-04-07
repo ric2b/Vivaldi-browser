@@ -9,13 +9,9 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/timer/timer.h"
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
+#include "chrome/browser/chromeos/login/screens/recommend_apps/recommend_apps_fetcher.h"
 #include "chrome/browser/chromeos/login/screens/recommend_apps_screen_view.h"
-
-namespace network {
-class SimpleURLLoader;
-}
 
 namespace chromeos {
 
@@ -41,27 +37,9 @@ class RecommendAppsScreen : public BaseScreen,
   void OnViewDestroyed(RecommendAppsScreenView* view) override;
 
  private:
-  // Start downloading the recommended app list.
-  void StartDownload();
-
-  // Abort the attempt to download the recommended app list if it takes too
-  // long.
-  void OnDownloadTimeout();
-
-  // Callback function called when SimpleURLLoader completes.
-  void OnDownloaded(std::unique_ptr<std::string> response_body);
-
-  // If the response is not a valid JSON, return false.
-  // If the response contains no app, return false;
-  bool ParseResponse(const std::string& response, base::Value* output);
-
   RecommendAppsScreenView* view_;
 
-  std::unique_ptr<network::SimpleURLLoader> app_list_loader_;
-
-  // Timer that enforces a custom (shorter) timeout on the attempt to download
-  // the recommended app list.
-  base::OneShotTimer download_timer_;
+  std::unique_ptr<RecommendAppsFetcher> recommend_apps_fetcher_;
 
   DISALLOW_COPY_AND_ASSIGN(RecommendAppsScreen);
 };

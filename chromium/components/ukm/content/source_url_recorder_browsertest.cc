@@ -8,7 +8,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "components/ukm/ukm_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -17,6 +16,7 @@
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_download_manager_delegate.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_source.h"
 
 class SourceUrlRecorderWebContentsObserverBrowserTest
     : public content::ContentBrowserTest {
@@ -93,7 +93,7 @@ IN_PROC_BROWSER_TEST_F(SourceUrlRecorderWebContentsObserverBrowserTest, Basic) {
       GetSourceForNavigationId(observer.navigation_id());
   EXPECT_NE(nullptr, source);
   EXPECT_EQ(url, source->url());
-  EXPECT_TRUE(source->initial_url().is_empty());
+  EXPECT_EQ(1u, source->urls().size());
 
   EXPECT_EQ(url, GetAssociatedURLForWebContentsDocument());
 

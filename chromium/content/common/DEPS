@@ -55,13 +55,10 @@ include_rules = [
   "+third_party/blink/public/platform/modules/device_orientation/WebDeviceMotionData.h",
   "+third_party/blink/public/platform/modules/device_orientation/WebDeviceOrientationData.h",
   "+third_party/blink/public/platform/modules/fetch/fetch_api_request.mojom.h",
-  "+third_party/blink/public/platform/modules/fetch/fetch_api_response.mojom.h",
-  "+third_party/blink/public/platform/modules/indexeddb/web_idb_types.h",
   "+third_party/blink/public/platform/modules/mediasession/media_session.mojom.h",
   "+third_party/blink/public/platform/modules/mediastream/media_devices.mojom.h",
   "+third_party/blink/public/platform/modules/permissions/permission.mojom.h",
   "+third_party/blink/public/platform/modules/permissions/permission_status.mojom.h",
-  "+third_party/blink/public/platform/modules/presentation/presentation.mojom.h",
   "+third_party/blink/public/platform/modules/push_messaging/web_push_error.h",
   "+third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_availability.h",
   "+third_party/blink/public/platform/modules/payments/WebPaymentAppRequest.h",
@@ -85,3 +82,8 @@ include_rules = [
   "+third_party/blink/public/web/web_triggering_event_info.h",
   "+third_party/blink/public/web/win/web_font_rendering.h",
 ]
+specific_include_rules = {
+  '.*_unittest.*': [
+    "+services/network/test",
+  ]
+}

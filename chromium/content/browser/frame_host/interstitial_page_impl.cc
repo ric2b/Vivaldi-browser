@@ -569,6 +569,7 @@ void InterstitialPageImpl::DidNavigate(
   if (!controller_->delegate()->IsHidden())
     render_view_host_->GetWidget()->GetView()->Show();
   controller_->delegate()->AttachInterstitialPage(this);
+  render_view_host_->GetWidget()->GetView()->OnInterstitialPageAttached();
 
   RenderWidgetHostView* rwh_view =
       controller_->delegate()->GetRenderViewHost()->GetWidget()->GetView();
@@ -619,6 +620,20 @@ KeyboardEventProcessingResult InterstitialPageImpl::PreHandleKeyboardEvent(
   if (!enabled())
     return KeyboardEventProcessingResult::NOT_HANDLED;
   return render_widget_host_delegate_->PreHandleKeyboardEvent(event);
+}
+
+bool InterstitialPageImpl::PreHandleMouseEvent(
+    const blink::WebMouseEvent& event) {
+  if (!enabled())
+    return false;
+
+  if (event.GetType() == blink::WebInputEvent::Type::kMouseUp &&
+      event.button == blink::WebPointerProperties::Button::kBack &&
+      controller_->CanGoBack()) {
+    controller_->GoBack();
+    return true;
+  }
+  return false;
 }
 
 void InterstitialPageImpl::HandleKeyboardEvent(
@@ -791,6 +806,8 @@ RenderWidgetHostView* InterstitialPageImpl::GetView() {
 }
 
 RenderFrameHost* InterstitialPageImpl::GetMainFrame() const {
+  if (!render_view_host_)
+    return nullptr;
   return render_view_host_->GetMainFrame();
 }
 
@@ -1112,6 +1129,18 @@ InterstitialPageImpl::GetOrCreateRootBrowserAccessibilityManager() {
     return nullptr;
 
   return web_contents_impl->GetOrCreateRootBrowserAccessibilityManager();
+}
+
+void InterstitialPageImpl::AudioContextPlaybackStarted(RenderFrameHost* host,
+                                                       int context_id) {
+  // Interstitial pages should not be playing any sound via WebAudio
+  NOTREACHED();
+}
+
+void InterstitialPageImpl::AudioContextPlaybackStopped(RenderFrameHost* host,
+                                                       int context_id) {
+  // Interstitial pages should not be playing any sound via WebAudio.
+  NOTREACHED();
 }
 
 }  // namespace content

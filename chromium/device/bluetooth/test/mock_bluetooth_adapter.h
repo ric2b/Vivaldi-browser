@@ -51,6 +51,7 @@ class MockBluetoothAdapter : public BluetoothAdapter {
                     const ErrorCallback& error_callback));
   MOCK_CONST_METHOD0(IsPresent, bool());
   MOCK_CONST_METHOD0(IsPowered, bool());
+  MOCK_CONST_METHOD0(CanPower, bool());
   MOCK_METHOD3(SetPowered,
                void(bool powered,
                     const base::Closure& callback,
@@ -114,7 +115,8 @@ class MockBluetoothAdapter : public BluetoothAdapter {
   // The observers are maintained by the default behavior of AddObserver() and
   // RemoveObserver(). Test fakes can use this function to notify the observers
   // about events.
-  base::ObserverList<device::BluetoothAdapter::Observer>& GetObservers() {
+  base::ObserverList<device::BluetoothAdapter::Observer>::Unchecked&
+  GetObservers() {
     return observers_;
   }
 

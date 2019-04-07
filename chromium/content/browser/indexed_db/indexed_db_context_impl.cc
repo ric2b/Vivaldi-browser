@@ -16,7 +16,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
@@ -402,6 +402,17 @@ void IndexedDBContextImpl::ForceClose(const Origin origin,
 
   if (factory_.get())
     factory_->ForceClose(origin);
+  DCHECK_EQ(0UL, GetConnectionCount(origin));
+}
+
+void IndexedDBContextImpl::ForceSchemaDowngrade(const Origin& origin) {
+  DCHECK(TaskRunner()->RunsTasksInCurrentSequence());
+
+  if (data_path_.empty() || !HasOrigin(origin))
+    return;
+
+  if (factory_.get())
+    factory_->ForceSchemaDowngrade(origin);
   DCHECK_EQ(0UL, GetConnectionCount(origin));
 }
 

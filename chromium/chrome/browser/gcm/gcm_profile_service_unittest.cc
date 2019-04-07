@@ -11,13 +11,11 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/gcm/gcm_product_util.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/gcm_driver/gcm_profile_service.h"
@@ -31,7 +29,6 @@
 #include "components/gcm_driver/gcm_client_factory.h"
 #include "components/gcm_driver/gcm_driver.h"
 #include "components/pref_registry/pref_registry_syncable.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
@@ -46,6 +43,27 @@ namespace {
 const char kTestAppID[] = "TestApp";
 const char kUserID[] = "user";
 
+void RequestProxyResolvingSocketFactoryOnUIThread(
+    Profile* profile,
+    base::WeakPtr<gcm::GCMProfileService> service,
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  if (!service)
+    return;
+  return content::BrowserContext::GetDefaultStoragePartition(profile)
+      ->GetNetworkContext()
+      ->CreateProxyResolvingSocketFactory(std::move(request));
+}
+
+void RequestProxyResolvingSocketFactory(
+    Profile* profile,
+    base::WeakPtr<gcm::GCMProfileService> service,
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  content::BrowserThread::PostTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&RequestProxyResolvingSocketFactoryOnUIThread, profile,
+                     service, std::move(request)));
+}
+
 std::unique_ptr<KeyedService> BuildGCMProfileService(
     content::BrowserContext* context) {
   Profile* profile = Profile::FromBrowserContext(context);
@@ -53,14 +71,13 @@ std::unique_ptr<KeyedService> BuildGCMProfileService(
       base::CreateSequencedTaskRunnerWithTraits(
           {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
   return std::make_unique<gcm::GCMProfileService>(
-      profile->GetPrefs(), profile->GetPath(), profile->GetRequestContext(),
+      profile->GetPrefs(), profile->GetPath(),
+      base::BindRepeating(&RequestProxyResolvingSocketFactory, profile),
       content::BrowserContext::GetDefaultStoragePartition(profile)
           ->GetURLLoaderFactoryForBrowserProcess(),
       chrome::GetChannel(),
       gcm::GetProductCategoryForSubtypes(profile->GetPrefs()),
       IdentityManagerFactory::GetForProfile(profile),
-      SigninManagerFactory::GetForProfile(profile),
-      ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
       std::unique_ptr<gcm::GCMClientFactory>(new gcm::FakeGCMClientFactory(
           content::BrowserThread::GetTaskRunnerForThread(
               content::BrowserThread::UI),

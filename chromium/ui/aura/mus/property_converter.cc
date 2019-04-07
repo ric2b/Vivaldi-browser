@@ -6,8 +6,9 @@
 
 #include "base/unguessable_token.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
-#include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "services/ws/public/cpp/property_type_converters.h"
+#include "services/ws/public/mojom/window_manager.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/base/class_property.h"
 
@@ -34,19 +35,18 @@ bool AlwaysTrue(int64_t value) {
 
 bool ValidateResizeBehaviour(int64_t value) {
   // Resize behaviour is a 3 bitfield.
-  return value >= 0 &&
-         value <= (ui::mojom::kResizeBehaviorCanMaximize |
-                   ui::mojom::kResizeBehaviorCanMinimize |
-                   ui::mojom::kResizeBehaviorCanResize);
+  return value >= 0 && value <= (ws::mojom::kResizeBehaviorCanMaximize |
+                                 ws::mojom::kResizeBehaviorCanMinimize |
+                                 ws::mojom::kResizeBehaviorCanResize);
 }
 
 bool ValidateShowState(int64_t value) {
-  return value == int64_t(ui::mojom::ShowState::DEFAULT) ||
-         value == int64_t(ui::mojom::ShowState::NORMAL) ||
-         value == int64_t(ui::mojom::ShowState::MINIMIZED) ||
-         value == int64_t(ui::mojom::ShowState::MAXIMIZED) ||
-         value == int64_t(ui::mojom::ShowState::INACTIVE) ||
-         value == int64_t(ui::mojom::ShowState::FULLSCREEN);
+  return value == int64_t(ws::mojom::ShowState::DEFAULT) ||
+         value == int64_t(ws::mojom::ShowState::NORMAL) ||
+         value == int64_t(ws::mojom::ShowState::MINIMIZED) ||
+         value == int64_t(ws::mojom::ShowState::MAXIMIZED) ||
+         value == int64_t(ws::mojom::ShowState::INACTIVE) ||
+         value == int64_t(ws::mojom::ShowState::FULLSCREEN);
 }
 
 bool ValidateWindowCornerRadius(int64_t value) {
@@ -71,39 +71,43 @@ PropertyConverter::CreateAcceptAnyValueCallback() {
 PropertyConverter::PropertyConverter() {
   // Add known aura properties with associated mus properties.
   RegisterImageSkiaProperty(client::kAppIconKey,
-                            ui::mojom::WindowManager::kAppIcon_Property);
+                            ws::mojom::WindowManager::kAppIcon_Property);
   RegisterImageSkiaProperty(client::kWindowIconKey,
-                            ui::mojom::WindowManager::kWindowIcon_Property);
+                            ws::mojom::WindowManager::kWindowIcon_Property);
   RegisterPrimitiveProperty(client::kAlwaysOnTopKey,
-                            ui::mojom::WindowManager::kAlwaysOnTop_Property,
+                            ws::mojom::WindowManager::kAlwaysOnTop_Property,
                             CreateAcceptAnyValueCallback());
   RegisterPrimitiveProperty(client::kDrawAttentionKey,
-                            ui::mojom::WindowManager::kDrawAttention_Property,
+                            ws::mojom::WindowManager::kDrawAttention_Property,
                             CreateAcceptAnyValueCallback());
   RegisterPrimitiveProperty(
       client::kImmersiveFullscreenKey,
-      ui::mojom::WindowManager::kImmersiveFullscreen_Property,
+      ws::mojom::WindowManager::kImmersiveFullscreen_Property,
       CreateAcceptAnyValueCallback());
   RegisterPrimitiveProperty(client::kResizeBehaviorKey,
-                            ui::mojom::WindowManager::kResizeBehavior_Property,
+                            ws::mojom::WindowManager::kResizeBehavior_Property,
                             base::Bind(&ValidateResizeBehaviour));
   RegisterPrimitiveProperty(client::kShowStateKey,
-                            ui::mojom::WindowManager::kShowState_Property,
+                            ws::mojom::WindowManager::kShowState_Property,
                             base::Bind(&ValidateShowState));
   RegisterRectProperty(client::kRestoreBoundsKey,
-                       ui::mojom::WindowManager::kRestoreBounds_Property);
+                       ws::mojom::WindowManager::kRestoreBounds_Property);
   RegisterSizeProperty(client::kPreferredSize,
-                       ui::mojom::WindowManager::kPreferredSize_Property);
+                       ws::mojom::WindowManager::kPreferredSize_Property);
   RegisterSizeProperty(client::kMinimumSize,
-                       ui::mojom::WindowManager::kMinimumSize_Property);
+                       ws::mojom::WindowManager::kMinimumSize_Property);
   RegisterStringProperty(client::kNameKey,
-                         ui::mojom::WindowManager::kName_Property);
+                         ws::mojom::WindowManager::kName_Property);
   RegisterString16Property(client::kTitleKey,
-                           ui::mojom::WindowManager::kWindowTitle_Property);
+                           ws::mojom::WindowManager::kWindowTitle_Property);
   RegisterPrimitiveProperty(
       client::kWindowCornerRadiusKey,
-      ui::mojom::WindowManager::kWindowCornerRadius_Property,
+      ws::mojom::WindowManager::kWindowCornerRadius_Property,
       base::BindRepeating(&ValidateWindowCornerRadius));
+  RegisterPrimitiveProperty(
+      client::kAnimationsDisabledKey,
+      ws::mojom::WindowManager::kAnimationsDisabled_Property,
+      CreateAcceptAnyValueCallback());
 }
 
 PropertyConverter::~PropertyConverter() {}
@@ -290,12 +294,15 @@ void PropertyConverter::SetPropertyFromTransportValue(
 
   for (const auto& unguessable_token_property : unguessable_token_properties_) {
     if (unguessable_token_property.second == transport_name) {
-      auto* token = new base::UnguessableToken();
-      *token = mojo::ConvertTo<base::UnguessableToken>(*data);
-      if (token->is_empty())
+      base::UnguessableToken token =
+          mojo::ConvertTo<base::UnguessableToken>(*data);
+      if (token.is_empty()) {
         window->ClearProperty(unguessable_token_property.first);
-      else
-        window->SetProperty(unguessable_token_property.first, token);
+      } else {
+        // |window| takes ownership of the newly allocated token.
+        window->SetProperty(unguessable_token_property.first,
+                            new base::UnguessableToken(token));
+      }
       return;
     }
   }

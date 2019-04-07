@@ -59,7 +59,12 @@ bool IsIPhoneX() {
 }
 
 bool IsRefreshInfobarEnabled() {
-  return base::FeatureList::IsEnabled(kInfobarsUIReboot);
+  return base::FeatureList::IsEnabled(kUIRefreshPhase1);
+}
+
+// TODO(crbug.com/893314) : Remove this flag.
+bool IsClosingLastIncognitoTabEnabled() {
+  return base::FeatureList::IsEnabled(kClosingLastIncognitoTab);
 }
 
 bool IsRefreshLocationBarEnabled() {
@@ -98,6 +103,10 @@ CGFloat StatusBarHeight() {
                              .keyWindow.traitCollection.verticalSizeClass ==
                          UIUserInterfaceSizeClassCompact;
   return isCompactHeight ? 0 : 20;
+}
+
+CGFloat DeviceCornerRadius() {
+  return IsIPhoneX() ? 40.0 : 0.0;
 }
 
 CGFloat AlignValueToPixel(CGFloat value) {

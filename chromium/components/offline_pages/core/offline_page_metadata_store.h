@@ -25,7 +25,7 @@ class SequencedTaskRunner;
 }
 
 namespace sql {
-class Connection;
+class Database;
 }
 
 namespace offline_pages {
@@ -83,7 +83,7 @@ class OfflinePageMetadataStore {
   // Definition of the callback that is going to run the core of the command in
   // the |Execute| method.
   template <typename T>
-  using RunCallback = base::OnceCallback<T(sql::Connection*)>;
+  using RunCallback = base::OnceCallback<T(sql::Database*)>;
 
   // Definition of the callback used to pass the result back to the caller of
   // |Execute| method.
@@ -119,18 +119,20 @@ class OfflinePageMetadataStore {
   // its result back to calling thread through |result_callback|.
   // Calling |Execute| when store is NOT_LOADED will cause the store
   // initialization to start.
-  // Store state needs to be LOADED for test task to run, or FAILURE, in which
-  // case the |db| pointer passed to |run_callback| will be null and such case
-  // should be gracefully handled.
+  // Store state needs to be LOADED for |run_callback| to run.
+  // If initialization fails, |result_callback| is invoked with |default_value|.
   template <typename T>
-  void Execute(RunCallback<T> run_callback, ResultCallback<T> result_callback) {
+  void Execute(RunCallback<T> run_callback,
+               ResultCallback<T> result_callback,
+               T default_value) {
     // TODO(fgorski): Add a proper state indicating in progress initialization
     // and CHECK that state.
 
     if (state_ == StoreState::NOT_LOADED) {
       InitializeInternal(base::BindOnce(
           &OfflinePageMetadataStore::Execute<T>, weak_ptr_factory_.GetWeakPtr(),
-          std::move(run_callback), std::move(result_callback)));
+          std::move(run_callback), std::move(result_callback),
+          std::move(default_value)));
       return;
     }
 
@@ -142,7 +144,8 @@ class OfflinePageMetadataStore {
     if (state_ == StoreState::INITIALIZING) {
       pending_commands_.push_back(base::BindOnce(
           &OfflinePageMetadataStore::Execute<T>, weak_ptr_factory_.GetWeakPtr(),
-          std::move(run_callback), std::move(result_callback)));
+          std::move(run_callback), std::move(result_callback),
+          std::move(default_value)));
       TRACE_EVENT_ASYNC_END1("offline_pages", "Metadata Store: task execution",
                              this, "postponed", true);
       return;
@@ -151,8 +154,13 @@ class OfflinePageMetadataStore {
     // Ensure that any scheduled close operations are canceled.
     closing_weak_ptr_factory_.InvalidateWeakPtrs();
 
-    sql::Connection* db = state_ == StoreState::LOADED ? db_.get() : nullptr;
-
+    sql::Database* db = state_ == StoreState::LOADED ? db_.get() : nullptr;
+    if (!db) {
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE,
+          base::BindOnce(std::move(result_callback), std::move(default_value)));
+      return;
+    }
     base::PostTaskAndReplyWithResult(
         background_task_runner_.get(), FROM_HERE,
         base::BindOnce(std::move(run_callback), db),
@@ -198,7 +206,7 @@ class OfflinePageMetadataStore {
   void CloseInternal();
 
   // Completes the closing. Main purpose is to destroy the db pointer.
-  void CloseInternalDone(std::unique_ptr<sql::Connection> db);
+  void CloseInternalDone(std::unique_ptr<sql::Database> db);
 
   // Background thread where all SQL access should be run.
   scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
@@ -210,7 +218,7 @@ class OfflinePageMetadataStore {
   base::FilePath db_file_path_;
 
   // Database connection.
-  std::unique_ptr<sql::Connection> db_;
+  std::unique_ptr<sql::Database> db_;
 
   // State of the store.
   StoreState state_;

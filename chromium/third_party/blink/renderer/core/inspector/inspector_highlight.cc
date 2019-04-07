@@ -15,10 +15,11 @@
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/shapes/shape_outside_info.h"
+#include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/platform/graphics/path.h"
-#include "third_party/blink/renderer/platform/platform_chrome_client.h"
+#include "third_party/blink/renderer/platform/layout_test_support.h"
 
 namespace blink {
 
@@ -418,11 +419,17 @@ void InspectorHighlight::AppendNodeHighlight(
   if (!layout_object)
     return;
 
+  // Just for testing, invert the content color for nodes rendered by LayoutNG.
+  // TODO(layout-dev): Stop munging the color before NG ships. crbug.com/869866
+  Color content_color = layout_object->IsLayoutNGObject() &&
+                                !LayoutTestSupport::IsRunningLayoutTest()
+                            ? Color(highlight_config.content.Rgb() ^ 0x00ffffff)
+                            : highlight_config.content;
+
   Vector<FloatQuad> svg_quads;
   if (BuildSVGQuads(node, svg_quads)) {
     for (size_t i = 0; i < svg_quads.size(); ++i) {
-      AppendQuad(svg_quads[i], highlight_config.content,
-                 highlight_config.content_outline);
+      AppendQuad(svg_quads[i], content_color, highlight_config.content_outline);
     }
     return;
   }
@@ -430,8 +437,8 @@ void InspectorHighlight::AppendNodeHighlight(
   FloatQuad content, padding, border, margin;
   if (!BuildNodeQuads(node, &content, &padding, &border, &margin))
     return;
-  AppendQuad(content, highlight_config.content,
-             highlight_config.content_outline, "content");
+  AppendQuad(content, content_color, highlight_config.content_outline,
+             "content");
   AppendQuad(padding, highlight_config.padding, Color::kTransparent, "padding");
   AppendQuad(border, highlight_config.border, Color::kTransparent, "border");
   AppendQuad(margin, highlight_config.margin, Color::kTransparent, "margin");
@@ -616,11 +623,11 @@ bool InspectorHighlight::BuildNodeQuads(Node* node,
     const int vertical_scrollbar_width = layout_box->VerticalScrollbarWidth();
     const int horizontal_scrollbar_height =
         layout_box->HorizontalScrollbarHeight();
-    content_box = layout_box->ContentBoxRect();
+    content_box = layout_box->PhysicalContentBoxRect();
     content_box.SetWidth(content_box.Width() + vertical_scrollbar_width);
     content_box.SetHeight(content_box.Height() + horizontal_scrollbar_height);
 
-    padding_box = layout_box->PaddingBoxRect();
+    padding_box = layout_box->PhysicalPaddingBoxRect();
     padding_box.SetWidth(padding_box.Width() + vertical_scrollbar_width);
     padding_box.SetHeight(padding_box.Height() + horizontal_scrollbar_height);
 

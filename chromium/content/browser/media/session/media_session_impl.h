@@ -23,6 +23,9 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/media_metadata.h"
+#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/media_session/public/mojom/audio_focus.mojom.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/scoped_java_ref.h"
@@ -33,6 +36,12 @@ class MediaSessionImplBrowserTest;
 namespace media {
 enum class MediaContentType;
 }  // namespace media
+
+namespace media_session {
+namespace mojom {
+enum class AudioFocusType;
+}  // namespace mojom
+}  // namespace media_session
 
 namespace content {
 
@@ -161,12 +170,6 @@ class MediaSessionImpl : public MediaSession,
   // Returns if the session is currently suspended.
   CONTENT_EXPORT bool IsSuspended() const;
 
-  // Returns the audio focus type. The type is updated everytime after the
-  // session requests audio focus.
-  CONTENT_EXPORT AudioFocusManager::AudioFocusType audio_focus_type() const {
-    return audio_focus_type_;
-  }
-
   // Returns whether the session has Pepper instances.
   bool HasPepper() const;
 
@@ -202,7 +205,24 @@ class MediaSessionImpl : public MediaSession,
   // Requests audio focus to the AudioFocusDelegate.
   // Returns whether the request was granted.
   CONTENT_EXPORT bool RequestSystemAudioFocus(
-      AudioFocusManager::AudioFocusType audio_focus_type);
+      media_session::mojom::AudioFocusType audio_focus_type);
+
+  // Returns debugging information to be displayed on chrome://media-internals.
+  struct DebugInfo {
+    // A unique name for the MediaSession.
+    std::string name;
+
+    // The title and URL of the owning WebContents.
+    std::string owner;
+
+    // State information stored in a string e.g. Ducked.
+    std::string state;
+  };
+  const DebugInfo GetDebugInfo();
+
+  // Creates a binding between |this| and |request|.
+  void BindToMojoRequest(
+      mojo::InterfaceRequest<media_session::mojom::MediaSession> request);
 
  private:
   friend class content::WebContentsUserData<MediaSessionImpl>;
@@ -212,6 +232,7 @@ class MediaSessionImpl : public MediaSession,
   friend class content::MediaSessionImplServiceRoutingTest;
   friend class content::MediaSessionImplStateObserver;
   friend class content::MediaSessionServiceImplBrowserTest;
+  friend class MediaInternalsAudioFocusTest;
 
   CONTENT_EXPORT void SetDelegateForTests(
       std::unique_ptr<AudioFocusDelegate> delegate);
@@ -294,9 +315,12 @@ class MediaSessionImpl : public MediaSession,
   PlayersMap pepper_players_;
   PlayersMap one_shot_players_;
 
-  State audio_focus_state_;
+  State audio_focus_state_ = State::INACTIVE;
   MediaSession::SuspendType suspend_type_;
-  AudioFocusManager::AudioFocusType audio_focus_type_;
+
+  // The |desired_audio_focus_type_| is the AudioFocusType we will request when
+  // we request system audio focus.
+  media_session::mojom::AudioFocusType desired_audio_focus_type_;
 
   MediaSessionUmaHelper uma_helper_;
 
@@ -309,7 +333,7 @@ class MediaSessionImpl : public MediaSession,
 
   base::CallbackList<void(State)> media_session_state_listeners_;
 
-  base::ObserverList<MediaSessionObserver> observers_;
+  base::ObserverList<MediaSessionObserver>::Unchecked observers_;
 
 #if defined(OS_ANDROID)
   std::unique_ptr<MediaSessionAndroid> session_android_;
@@ -324,6 +348,9 @@ class MediaSessionImpl : public MediaSession,
   ServicesMap services_;
   // The currently routed service (non-owned pointer).
   MediaSessionServiceImpl* routed_service_;
+
+  // Bindings for Mojo pointers to |this| held by media route providers.
+  mojo::BindingSet<media_session::mojom::MediaSession> bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaSessionImpl);
 };

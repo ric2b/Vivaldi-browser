@@ -19,7 +19,6 @@ class SharedURLLoaderFactory;
 
 namespace blink {
 
-class ContentSecurityPolicy;
 class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
 class WebSettings;
@@ -29,7 +28,7 @@ class WebSettings;
 // Loading components are strongly associated with frames, but out-of-process
 // workers (i.e., SharedWorker and ServiceWorker) don't have frames. To enable
 // loading on such workers, this class provides a virtual frame (a.k.a, shadow
-// page) to them.
+// page) to them. Note that this class is now only used for main script loading.
 //
 // WorkerShadowPage lives on the main thread.
 //
@@ -66,9 +65,6 @@ class CORE_EXPORT WorkerShadowPage : public WebLocalFrameClient {
   // complete.
   void Initialize(const KURL& script_url);
 
-  void SetContentSecurityPolicyAndReferrerPolicy(ContentSecurityPolicy*,
-                                                 String referrer_policy);
-
   // WebLocalFrameClient overrides.
   std::unique_ptr<WebApplicationCacheHost> CreateApplicationCacheHost(
       WebApplicationCacheHostClient*) override;
@@ -81,11 +77,6 @@ class CORE_EXPORT WorkerShadowPage : public WebLocalFrameClient {
   std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory() override;
   base::UnguessableToken GetDevToolsFrameToken() override;
   void WillSendRequest(WebURLRequest&) override;
-
-  // TODO(nhiroki): Remove this once the off-main-thread WebSocket is enabled by
-  // default (https://crbug.com/825740).
-  std::unique_ptr<WebSocketHandshakeThrottle> CreateWebSocketHandshakeThrottle()
-      override;
 
   Document* GetDocument() { return main_frame_->GetFrame()->GetDocument(); }
   WebSettings* GetSettings() { return web_view_->GetSettings(); }

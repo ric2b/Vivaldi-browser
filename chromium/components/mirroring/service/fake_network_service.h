@@ -6,7 +6,7 @@
 #define COMPONENTS_MIRRORING_SERVICE_FAKE_NETWORK_SERVICE_H_
 
 #include "base/callback.h"
-#include "media/cast/net/cast_transport_config.h"
+#include "media/cast/net/cast_transport_defines.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/network/public/mojom/udp_socket.mojom.h"
 #include "services/network/test/test_network_context.h"
@@ -31,6 +31,10 @@ class MockUdpSocket final : public network::mojom::UDPSocket {
             network::mojom::UDPSocketOptionsPtr options,
             BindCallback callback) override {}
   void SetBroadcast(bool broadcast, SetBroadcastCallback callback) override {}
+  void SetSendBufferSize(int32_t send_buffer_size,
+                         SetSendBufferSizeCallback callback) override {}
+  void SetReceiveBufferSize(int32_t receive_buffer_size,
+                            SetReceiveBufferSizeCallback callback) override {}
   void JoinGroup(const net::IPAddress& group_address,
                  JoinGroupCallback callback) override {}
   void LeaveGroup(const net::IPAddress& group_address,

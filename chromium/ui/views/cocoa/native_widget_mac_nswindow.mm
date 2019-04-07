@@ -7,6 +7,7 @@
 #include "base/mac/foundation_util.h"
 #import "base/mac/sdk_forward_declarations.h"
 #import "ui/base/cocoa/user_interface_item_command_handler.h"
+#import "ui/base/cocoa/window_size_constants.h"
 #import "ui/views/cocoa/bridged_native_widget.h"
 #import "ui/views/cocoa/views_nswindow_delegate.h"
 #import "ui/views/cocoa/window_touch_bar_delegate.h"
@@ -88,7 +89,8 @@
                           styleMask:(NSUInteger)windowStyle
                             backing:(NSBackingStoreType)bufferingType
                               defer:(BOOL)deferCreation {
-  if ((self = [super initWithContentRect:contentRect
+  DCHECK(NSEqualRects(contentRect, ui::kWindowSizeDeterminedLater));
+  if ((self = [super initWithContentRect:ui::kWindowSizeDeterminedLater
                                styleMask:windowStyle
                                  backing:bufferingType
                                    defer:deferCreation])) {

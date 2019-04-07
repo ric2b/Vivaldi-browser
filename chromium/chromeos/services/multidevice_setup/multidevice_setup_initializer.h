@@ -5,6 +5,8 @@
 #ifndef CHROMEOS_SERVICES_MULTIDEVICE_SETUP_MULTIDEVICE_SETUP_INITIALIZER_H_
 #define CHROMEOS_SERVICES_MULTIDEVICE_SETUP_MULTIDEVICE_SETUP_INITIALIZER_H_
 
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #include "chromeos/services/device_sync/public/cpp/device_sync_client.h"
@@ -14,6 +16,10 @@
 
 class PrefService;
 
+namespace cryptauth {
+class GcmDeviceInfoProvider;
+}  // namespace cryptauth
+
 namespace chromeos {
 
 namespace secure_channel {
@@ -21,6 +27,9 @@ class SecureChannelClient;
 }  // namespace secure_channel
 
 namespace multidevice_setup {
+
+class AndroidSmsAppHelperDelegate;
+class AuthTokenValidator;
 
 // Initializes the MultiDeviceSetup service. This class is responsible for
 // waiting for asynchronous initialization steps to complete before creating
@@ -37,7 +46,11 @@ class MultiDeviceSetupInitializer
     virtual std::unique_ptr<MultiDeviceSetupBase> BuildInstance(
         PrefService* pref_service,
         device_sync::DeviceSyncClient* device_sync_client,
-        secure_channel::SecureChannelClient* secure_channel_client);
+        secure_channel::SecureChannelClient* secure_channel_client,
+        AuthTokenValidator* auth_token_validator,
+        std::unique_ptr<AndroidSmsAppHelperDelegate>
+            android_sms_app_helper_delegate,
+        const cryptauth::GcmDeviceInfoProvider* gcm_device_info_provider);
 
    private:
     static Factory* test_factory_;
@@ -49,17 +62,29 @@ class MultiDeviceSetupInitializer
   MultiDeviceSetupInitializer(
       PrefService* pref_service,
       device_sync::DeviceSyncClient* device_sync_client,
-      secure_channel::SecureChannelClient* secure_channel_client);
+      secure_channel::SecureChannelClient* secure_channel_client,
+      AuthTokenValidator* auth_token_validator,
+      std::unique_ptr<AndroidSmsAppHelperDelegate>
+          android_sms_app_helper_delegate,
+      const cryptauth::GcmDeviceInfoProvider* gcm_device_info_provider);
 
   // mojom::MultiDeviceSetup:
   void SetAccountStatusChangeDelegate(
       mojom::AccountStatusChangeDelegatePtr delegate) override;
   void AddHostStatusObserver(mojom::HostStatusObserverPtr observer) override;
+  void AddFeatureStateObserver(
+      mojom::FeatureStateObserverPtr observer) override;
   void GetEligibleHostDevices(GetEligibleHostDevicesCallback callback) override;
-  void SetHostDevice(const std::string& host_public_key,
+  void SetHostDevice(const std::string& host_device_id,
+                     const std::string& auth_token,
                      SetHostDeviceCallback callback) override;
   void RemoveHostDevice() override;
   void GetHostStatus(GetHostStatusCallback callback) override;
+  void SetFeatureEnabledState(mojom::Feature feature,
+                              bool enabled,
+                              const base::Optional<std::string>& auth_token,
+                              SetFeatureEnabledStateCallback callback) override;
+  void GetFeatureStates(GetFeatureStatesCallback callback) override;
   void RetrySetHostNow(RetrySetHostNowCallback callback) override;
   void TriggerEventForDebugging(
       mojom::EventTypeForDebugging type,
@@ -73,6 +98,9 @@ class MultiDeviceSetupInitializer
   PrefService* pref_service_;
   device_sync::DeviceSyncClient* device_sync_client_;
   secure_channel::SecureChannelClient* secure_channel_client_;
+  AuthTokenValidator* auth_token_validator_;
+  std::unique_ptr<AndroidSmsAppHelperDelegate> android_sms_app_helper_delegate_;
+  const cryptauth::GcmDeviceInfoProvider* gcm_device_info_provider_;
 
   std::unique_ptr<mojom::MultiDeviceSetup> multidevice_setup_impl_;
 
@@ -80,15 +108,22 @@ class MultiDeviceSetupInitializer
   // parameters are cached here. Once asynchronous initialization is complete,
   // the parameters are passed to |multidevice_setup_impl_|.
   mojom::AccountStatusChangeDelegatePtr pending_delegate_;
-  std::vector<mojom::HostStatusObserverPtr> pending_observers_;
+  std::vector<mojom::HostStatusObserverPtr> pending_host_status_observers_;
+  std::vector<mojom::FeatureStateObserverPtr> pending_feature_state_observers_;
   std::vector<GetEligibleHostDevicesCallback> pending_get_eligible_hosts_args_;
   std::vector<GetHostStatusCallback> pending_get_host_args_;
+  std::vector<std::tuple<mojom::Feature,
+                         bool,
+                         base::Optional<std::string>,
+                         SetFeatureEnabledStateCallback>>
+      pending_set_feature_enabled_args_;
+  std::vector<GetFeatureStatesCallback> pending_get_feature_states_args_;
   std::vector<RetrySetHostNowCallback> pending_retry_set_host_args_;
 
   // Special case: for SetHostDevice() and RemoveHostDevice(), only keep track
   // of the most recent call. Since each call to either of these functions
   // overwrites the previous call, only one needs to be passed.
-  base::Optional<std::pair<std::string, SetHostDeviceCallback>>
+  base::Optional<std::tuple<std::string, std::string, SetHostDeviceCallback>>
       pending_set_host_args_;
   bool pending_should_remove_host_device_ = false;
 

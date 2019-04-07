@@ -64,6 +64,7 @@ class MockPasswordStore : public PasswordStore {
                bool(std::vector<std::unique_ptr<autofill::PasswordForm>>*));
   MOCK_METHOD1(FillBlacklistLogins,
                bool(std::vector<std::unique_ptr<autofill::PasswordForm>>*));
+  MOCK_METHOD0(DeleteUndecryptableLogins, DatabaseCleanupResult());
   MOCK_METHOD1(NotifyLoginsChanged, void(const PasswordStoreChangeList&));
   MOCK_METHOD0(GetAllSiteStatsImpl, std::vector<InteractionsStats>());
   MOCK_METHOD1(GetSiteStatsImpl,
@@ -82,7 +83,9 @@ class MockPasswordStore : public PasswordStore {
                     metrics_util::SyncPasswordHashChange));
   MOCK_METHOD2(SaveEnterprisePasswordHash,
                void(const std::string&, const base::string16&));
-  MOCK_METHOD1(ClearPasswordHash, void(const std::string&));
+  MOCK_METHOD1(ClearGaiaPasswordHash, void(const std::string&));
+  MOCK_METHOD0(ClearAllGaiaPasswordHash, void());
+  MOCK_METHOD0(ClearAllEnterprisePasswordHash, void());
 #endif
 
   PasswordStoreSync* GetSyncInterface() { return this; }

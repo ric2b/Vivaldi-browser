@@ -27,6 +27,24 @@ std::string GetTopVariableName(const std::string& fullname) {
 
 }  // namespace anonymous
 
+void CompileShaderWithLog(GLuint shader, const char* shader_source) {
+  glShaderSource(shader, 1, &shader_source, 0);
+  glCompileShader(shader);
+#if DCHECK_IS_ON()
+  GLint compile_status = GL_FALSE;
+  glGetShaderiv(shader, GL_COMPILE_STATUS, &compile_status);
+  if (GL_TRUE != compile_status) {
+    GLint info_log_length;
+    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &info_log_length);
+    std::vector<GLchar> info_log(info_log_length);
+    glGetShaderInfoLog(shader, info_log_length, nullptr, &info_log[0]);
+    std::string log(&info_log[0], info_log_length - 1);
+    DLOG(ERROR) << "Error compiling shader: " << log;
+    DLOG(ERROR) << "Shader compilation failure.";
+  }
+#endif
+}
+
 Shader::Shader(GLuint service_id, GLenum shader_type)
       : use_count_(0),
         shader_state_(kShaderStateWaiting),
@@ -57,9 +75,7 @@ void Shader::RequestCompile(scoped_refptr<ShaderTranslatorInterface> translator,
 }
 
 void Shader::DoCompile() {
-  // We require that RequestCompile() must be called before DoCompile(),
-  // so we can return early if the shader state is not what we expect.
-  if (shader_state_ != kShaderStateCompileRequested) {
+  if (!CanCompile()) {
     return;
   }
 
@@ -83,7 +99,7 @@ void Shader::DoCompile() {
     source_for_driver = translated_source_.c_str();
   }
 
-  glShaderSource(service_id_, 1, &source_for_driver, NULL);
+  glShaderSource(service_id_, 1, &source_for_driver, nullptr);
   glCompileShader(service_id_);
 
   if (source_type_ == kANGLE) {
@@ -163,7 +179,7 @@ const sh::Attribute* Shader::GetAttribInfo(const std::string& name) const {
   // 4.3.4, "Input Variables"), so |name| is the top level name used as
   // the AttributeMap key.
   AttributeMap::const_iterator it = attrib_map_.find(name);
-  return it != attrib_map_.end() ? &it->second : NULL;
+  return it != attrib_map_.end() ? &it->second : nullptr;
 }
 
 const std::string* Shader::GetAttribMappedName(
@@ -191,7 +207,7 @@ const std::string* Shader::GetVaryingMappedName(
     if (it->second.name == original_name)
       return &(it->first);
   }
-  return NULL;
+  return nullptr;
 }
 
 const std::string* Shader::GetInterfaceBlockMappedName(
@@ -200,7 +216,7 @@ const std::string* Shader::GetInterfaceBlockMappedName(
     if (key_value.second.name == original_name)
       return &(key_value.first);
   }
-  return NULL;
+  return nullptr;
 }
 
 const std::string* Shader::GetOutputVariableMappedName(
@@ -234,19 +250,19 @@ const std::string* Shader::GetOriginalNameFromHashedName(
 
 const sh::Uniform* Shader::GetUniformInfo(const std::string& name) const {
   UniformMap::const_iterator it = uniform_map_.find(GetTopVariableName(name));
-  return it != uniform_map_.end() ? &it->second : NULL;
+  return it != uniform_map_.end() ? &it->second : nullptr;
 }
 
 const sh::Varying* Shader::GetVaryingInfo(const std::string& name) const {
   VaryingMap::const_iterator it = varying_map_.find(GetTopVariableName(name));
-  return it != varying_map_.end() ? &it->second : NULL;
+  return it != varying_map_.end() ? &it->second : nullptr;
 }
 
 const sh::InterfaceBlock* Shader::GetInterfaceBlockInfo(
     const std::string& name) const {
   InterfaceBlockMap::const_iterator it =
       interface_block_map_.find(GetTopVariableName(name));
-  return it != interface_block_map_.end() ? &it->second : NULL;
+  return it != interface_block_map_.end() ? &it->second : nullptr;
 }
 
 const sh::OutputVariable* Shader::GetOutputVariableInfo(
@@ -294,7 +310,7 @@ Shader* ShaderManager::CreateShader(
 
 Shader* ShaderManager::GetShader(GLuint client_id) {
   ShaderMap::iterator it = shaders_.find(client_id);
-  return it != shaders_.end() ? it->second.get() : NULL;
+  return it != shaders_.end() ? it->second.get() : nullptr;
 }
 
 bool ShaderManager::GetClientId(GLuint service_id, GLuint* client_id) const {

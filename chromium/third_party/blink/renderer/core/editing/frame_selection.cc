@@ -39,6 +39,7 @@
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/editing/caret_display_item_client.h"
 #include "third_party/blink/renderer/core/editing/commands/typing_command.h"
+#include "third_party/blink/renderer/core/editing/editing_behavior.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
@@ -294,7 +295,7 @@ void FrameSelection::DidSetSelectionDeprecated(
   // The task source should be kDOMManipulation, but the spec doesn't say
   // anything about this.
   frame_->DomWindow()->EnqueueDocumentEvent(
-      Event::Create(EventTypeNames::selectionchange),
+      *Event::Create(EventTypeNames::selectionchange),
       TaskType::kMiscPlatformAPI);
 }
 
@@ -333,7 +334,7 @@ static DispatchEventResult DispatchSelectStart(
     return DispatchEventResult::kNotCanceled;
 
   return select_start_target->DispatchEvent(
-      Event::CreateCancelableBubble(EventTypeNames::selectstart));
+      *Event::CreateCancelableBubble(EventTypeNames::selectstart));
 }
 
 // The return value of |FrameSelection::modify()| is different based on
@@ -727,7 +728,7 @@ void FrameSelection::SelectAll(SetSelectionBy set_selection_by) {
 
   if (select_start_target) {
     const Document& expected_document = GetDocument();
-    if (select_start_target->DispatchEvent(Event::CreateCancelableBubble(
+    if (select_start_target->DispatchEvent(*Event::CreateCancelableBubble(
             EventTypeNames::selectstart)) != DispatchEventResult::kNotCanceled)
       return;
     // The frame may be detached due to selectstart event.
@@ -1226,17 +1227,6 @@ Range* FrameSelection::DocumentCachedRange() const {
 
 void FrameSelection::ClearDocumentCachedRange() {
   selection_editor_->ClearDocumentCachedRange();
-}
-
-base::Optional<unsigned> FrameSelection::LayoutSelectionStart() const {
-  return layout_selection_->SelectionStart();
-}
-base::Optional<unsigned> FrameSelection::LayoutSelectionEnd() const {
-  return layout_selection_->SelectionEnd();
-}
-
-void FrameSelection::ClearLayoutSelection() {
-  layout_selection_->ClearSelection();
 }
 
 LayoutSelectionStatus FrameSelection::ComputeLayoutSelectionStatus(

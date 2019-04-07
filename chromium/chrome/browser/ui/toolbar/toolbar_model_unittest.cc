@@ -72,7 +72,7 @@ struct TestItem {
     {
         GURL("https://m.google.ca/search?q=tractor+supply"),
         "https://m.google.ca/search?q=tractor+supply",
-        "google.ca/search?q=tractor+supply",
+        "m.google.ca/search?q=tractor+supply",
     },
 };
 

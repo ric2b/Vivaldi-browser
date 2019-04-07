@@ -23,7 +23,9 @@
 #include "ios/web/public/browser_state.h"
 #import "ios/web/public/crw_navigation_item_storage.h"
 #import "ios/web/public/crw_session_storage.h"
+#include "ios/web/public/favicon_url.h"
 #import "ios/web/public/java_script_dialog_presenter.h"
+#include "ios/web/public/load_committed_details.h"
 #import "ios/web/public/navigation_item.h"
 #include "ios/web/public/url_util.h"
 #import "ios/web/public/web_client.h"
@@ -322,11 +324,6 @@ const base::string16& WebStateImpl::GetTitle() const {
   DCHECK(Configured());
   web::NavigationItem* item = navigation_manager_->GetLastCommittedItem();
   if (web::GetWebClient()->IsSlimNavigationManagerEnabled()) {
-    if (!restored_title_.empty()) {
-      DCHECK(!item);
-      return restored_title_;
-    }
-
     // Display title for the visible item makes more sense. Only do this in
     // WKBasedNavigationManager for now to limit impact.
     item = navigation_manager_->GetVisibleItem();
@@ -457,12 +454,6 @@ void WebStateImpl::OnAuthRequired(
   } else {
     callback.Run(nil, nil);
   }
-}
-
-bool WebStateImpl::ShouldAllowAppLaunching() {
-  if (delegate_)
-    return delegate_->ShouldAllowAppLaunching(this);
-  return false;
 }
 
 void WebStateImpl::CancelDialogs() {
@@ -862,13 +853,14 @@ void WebStateImpl::OnNavigationItemChanged() {
 
 void WebStateImpl::OnNavigationItemCommitted(
     const LoadCommittedDetails& load_details) {
+  if (wk_navigation_util::IsWKInternalUrl(load_details.item->GetURL()))
+    return;
+
   // A committed navigation item indicates that NavigationManager has a new
   // valid session history so should invalidate the cached restored session
   // history.
-  if (web::GetWebClient()->IsSlimNavigationManagerEnabled()) {
+  if (web::GetWebClient()->IsSlimNavigationManagerEnabled())
     restored_session_storage_ = nil;
-    restored_title_.clear();
-  }
   for (auto& observer : observers_)
     observer.NavigationItemCommitted(this, load_details);
 }
@@ -893,15 +885,8 @@ void WebStateImpl::RestoreSessionStorage(CRWSessionStorage* session_storage) {
   // happen to inactive tabs when a navigation in the current tab triggers the
   // serialization of all tabs and when user clicks on tab switcher without
   // switching to a tab.
-  if (web::GetWebClient()->IsSlimNavigationManagerEnabled()) {
+  if (web::GetWebClient()->IsSlimNavigationManagerEnabled())
     restored_session_storage_ = session_storage;
-    NSInteger index = session_storage.lastCommittedItemIndex;
-    if (index > -1) {
-      CRWNavigationItemStorage* item_storage =
-          session_storage.itemStorages[index];
-      restored_title_ = item_storage.title;
-    }
-  }
   SessionStorageBuilder session_storage_builder;
   session_storage_builder.ExtractSessionState(this, session_storage);
 }

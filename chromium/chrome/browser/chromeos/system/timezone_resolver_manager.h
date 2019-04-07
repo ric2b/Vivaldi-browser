@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "chromeos/timezone/timezone_resolver.h"
 #include "components/prefs/pref_change_registrar.h"
 
@@ -85,7 +86,7 @@ class TimeZoneResolverManager : public TimeZoneResolver::Delegate {
   // Local State initialization observer.
   void OnLocalStateInitialized(bool initialized);
 
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer>::Unchecked observers_;
 
   // This is non-null only after user logs in.
   PrefService* primary_user_prefs_ = nullptr;

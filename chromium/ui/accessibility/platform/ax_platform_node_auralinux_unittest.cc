@@ -35,9 +35,141 @@ class AXPlatformNodeAuraLinuxTest : public AXPlatformNodeTest {
   AtkObject* GetRootAtkObject() { return AtkObjectFromNode(GetRootNode()); }
 };
 
+static void EnsureAtkObjectHasAttributeWithValue(
+    AtkObject* atk_object,
+    const gchar* attribute_name,
+    const gchar* attribute_value) {
+  AtkAttributeSet* attributes = atk_object_get_attributes(atk_object);
+  bool saw_attribute = false;
+
+  AtkAttributeSet* current = attributes;
+  while (current) {
+    AtkAttribute* attribute = static_cast<AtkAttribute*>(current->data);
+
+    if (0 == strcmp(attribute_name, attribute->name)) {
+      // Ensure that we only see this attribute once.
+      ASSERT_FALSE(saw_attribute);
+
+      EXPECT_STREQ(attribute_value, attribute->value);
+      saw_attribute = true;
+    }
+
+    current = current->next;
+  }
+
+  ASSERT_TRUE(saw_attribute);
+  atk_attribute_set_free(attributes);
+}
+
+static void EnsureAtkObjectDoesNotHaveAttribute(
+    AtkObject* atk_object,
+    const gchar* attribute_name) {
+  AtkAttributeSet* attributes = atk_object_get_attributes(atk_object);
+  AtkAttributeSet* current = attributes;
+  while (current) {
+    AtkAttribute* attribute = static_cast<AtkAttribute*>(current->data);
+    ASSERT_NE(0, strcmp(attribute_name, attribute->name));
+    current = current->next;
+  }
+  atk_attribute_set_free(attributes);
+}
+
+static void SetStringAttributeOnNode(
+    AXNode* ax_node,
+    ax::mojom::StringAttribute attribute,
+    const char* attribute_value,
+    base::Optional<ax::mojom::Role> role = base::nullopt) {
+  AXNodeData new_data = AXNodeData();
+  new_data.role = role.value_or(ax::mojom::Role::kApplication);
+  new_data.id = ax_node->data().id;
+  new_data.AddStringAttribute(attribute, attribute_value);
+  ax_node->SetData(new_data);
+}
+
+static void TestAtkObjectIntAttribute(
+    AXNode* ax_node,
+    AtkObject* atk_object,
+    ax::mojom::IntAttribute mojom_attribute,
+    const gchar* attribute_name,
+    base::Optional<ax::mojom::Role> role = base::nullopt) {
+  AXNodeData new_data = AXNodeData();
+  new_data.role = role.value_or(ax::mojom::Role::kApplication);
+  ax_node->SetData(new_data);
+  EnsureAtkObjectDoesNotHaveAttribute(atk_object, attribute_name);
+
+  std::pair<int, const char*> tests[] = {
+      std::make_pair(0, "0"),       std::make_pair(1, "1"),
+      std::make_pair(2, "2"),       std::make_pair(-100, "-100"),
+      std::make_pair(1000, "1000"),
+  };
+
+  for (unsigned i = 0; i < G_N_ELEMENTS(tests); i++) {
+    AXNodeData new_data = AXNodeData();
+    new_data.role = role.value_or(ax::mojom::Role::kApplication);
+    new_data.id = ax_node->data().id;
+    new_data.AddIntAttribute(mojom_attribute, tests[i].first);
+    ax_node->SetData(new_data);
+    EnsureAtkObjectHasAttributeWithValue(atk_object, attribute_name,
+                                         tests[i].second);
+  }
+}
+
+static void TestAtkObjectStringAttribute(
+    AXNode* ax_node,
+    AtkObject* atk_object,
+    ax::mojom::StringAttribute mojom_attribute,
+    const gchar* attribute_name,
+    base::Optional<ax::mojom::Role> role = base::nullopt) {
+  AXNodeData new_data = AXNodeData();
+  new_data.role = role.value_or(ax::mojom::Role::kApplication);
+  ax_node->SetData(new_data);
+  EnsureAtkObjectDoesNotHaveAttribute(atk_object, attribute_name);
+
+  const char* tests[] = {
+      "",
+      "a string with spaces"
+      "a string with , a comma",
+      "\xE2\x98\xBA",  // The smiley emoji.
+  };
+
+  for (unsigned i = 0; i < G_N_ELEMENTS(tests); i++) {
+    SetStringAttributeOnNode(ax_node, mojom_attribute, tests[i], role);
+    EnsureAtkObjectHasAttributeWithValue(atk_object, attribute_name, tests[i]);
+  }
+}
+
+static void TestAtkObjectBoolAttribute(
+    AXNode* ax_node,
+    AtkObject* atk_object,
+    ax::mojom::BoolAttribute mojom_attribute,
+    const gchar* attribute_name,
+    base::Optional<ax::mojom::Role> role = base::nullopt) {
+  AXNodeData new_data = AXNodeData();
+  new_data.role = role.value_or(ax::mojom::Role::kApplication);
+  ax_node->SetData(new_data);
+  EnsureAtkObjectDoesNotHaveAttribute(atk_object, attribute_name);
+
+  new_data = AXNodeData();
+  new_data.role = role.value_or(ax::mojom::Role::kApplication);
+  new_data.id = ax_node->data().id;
+  new_data.AddBoolAttribute(mojom_attribute, true);
+  ax_node->SetData(new_data);
+  EnsureAtkObjectHasAttributeWithValue(atk_object, attribute_name, "true");
+
+  new_data = AXNodeData();
+  new_data.role = role.value_or(ax::mojom::Role::kApplication);
+  new_data.id = ax_node->data().id;
+  new_data.AddBoolAttribute(mojom_attribute, false);
+  ax_node->SetData(new_data);
+  EnsureAtkObjectHasAttributeWithValue(atk_object, attribute_name, "false");
+}
+
 //
 // AtkObject tests
 //
+#if defined(ATK_CHECK_VERSION) && ATK_CHECK_VERSION(2, 16, 0)
+#define ATK_216
+#endif
 
 TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkObjectDetachedObject) {
   AXNodeData root;
@@ -105,12 +237,19 @@ TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkObjectRole) {
   AXNodeData root;
   root.id = 1;
   root.child_ids.push_back(2);
+  root.role = ax::mojom::Role::kApplication;
 
   AXNodeData child;
   child.id = 2;
 
   Init(root, child);
   AXNode* child_node = GetRootNode()->children()[0];
+
+  AtkObject* root_obj(AtkObjectFromNode(GetRootNode()));
+  ASSERT_TRUE(ATK_IS_OBJECT(root_obj));
+  g_object_ref(root_obj);
+  EXPECT_EQ(ATK_ROLE_APPLICATION, atk_object_get_role(root_obj));
+  g_object_unref(root_obj);
 
   child.role = ax::mojom::Role::kAlert;
   child_node->SetData(child);
@@ -135,14 +274,27 @@ TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkObjectRole) {
   g_object_ref(child_obj);
   EXPECT_EQ(ATK_ROLE_CANVAS, atk_object_get_role(child_obj));
   g_object_unref(child_obj);
+
+  child.role = ax::mojom::Role::kApplication;
+  child_node->SetData(child);
+  child_obj = AtkObjectFromNode(child_node);
+  ASSERT_TRUE(ATK_IS_OBJECT(child_obj));
+  g_object_ref(child_obj);
+  EXPECT_EQ(ATK_ROLE_EMBEDDED, atk_object_get_role(child_obj));
+  g_object_unref(child_obj);
+
+  child.role = ax::mojom::Role::kWindow;
+  child_node->SetData(child);
+  child_obj = AtkObjectFromNode(child_node);
+  ASSERT_TRUE(ATK_IS_OBJECT(child_obj));
+  g_object_ref(child_obj);
+  EXPECT_EQ(ATK_ROLE_FRAME, atk_object_get_role(child_obj));
+  g_object_unref(child_obj);
 }
 
 TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkObjectState) {
   AXNodeData root;
   root.id = 1;
-  root.AddState(ax::mojom::State::kDefault);
-  root.AddState(ax::mojom::State::kExpanded);
-
   Init(root);
 
   AtkObject* root_obj(GetRootAtkObject());
@@ -151,9 +303,107 @@ TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkObjectState) {
 
   AtkStateSet* state_set = atk_object_ref_state_set(root_obj);
   ASSERT_TRUE(ATK_IS_STATE_SET(state_set));
-  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_DEFAULT));
-  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_EXPANDED));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_ENABLED));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_SENSITIVE));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_SHOWING));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_VISIBLE));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_BUSY));
+#if defined(ATK_216)
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_CHECKABLE));
+#endif
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_CHECKED));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_DEFAULT));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_EDITABLE));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_EXPANDABLE));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_EXPANDED));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_FOCUSABLE));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_FOCUSED));
+#if defined(ATK_216)
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_HAS_POPUP));
+#endif
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_HORIZONTAL));
+  ASSERT_FALSE(
+      atk_state_set_contains_state(state_set, ATK_STATE_INVALID_ENTRY));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_MODAL));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_MULTI_LINE));
+  ASSERT_FALSE(
+      atk_state_set_contains_state(state_set, ATK_STATE_MULTISELECTABLE));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_REQUIRED));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_SELECTABLE));
+  ASSERT_FALSE(
+      atk_state_set_contains_state(state_set, ATK_STATE_SELECTABLE_TEXT));
   ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_SELECTED));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_SINGLE_LINE));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set,
+                                            ATK_STATE_SUPPORTS_AUTOCOMPLETION));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_VERTICAL));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_VISITED));
+  g_object_unref(state_set);
+
+  root = AXNodeData();
+  root.AddState(ax::mojom::State::kDefault);
+  root.AddState(ax::mojom::State::kEditable);
+  root.AddState(ax::mojom::State::kExpanded);
+  root.AddState(ax::mojom::State::kFocusable);
+  root.AddState(ax::mojom::State::kMultiselectable);
+  root.AddState(ax::mojom::State::kRequired);
+  root.AddState(ax::mojom::State::kVertical);
+  root.AddBoolAttribute(ax::mojom::BoolAttribute::kBusy, true);
+  root.SetInvalidState(ax::mojom::InvalidState::kTrue);
+  root.AddStringAttribute(ax::mojom::StringAttribute::kAutoComplete, "foo");
+  GetRootNode()->SetData(root);
+
+  state_set = atk_object_ref_state_set(root_obj);
+  ASSERT_TRUE(ATK_IS_STATE_SET(state_set));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_BUSY));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_DEFAULT));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_EDITABLE));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_EXPANDABLE));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_EXPANDED));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_FOCUSABLE));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_INVALID_ENTRY));
+  ASSERT_TRUE(
+      atk_state_set_contains_state(state_set, ATK_STATE_MULTISELECTABLE));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_REQUIRED));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set,
+                                           ATK_STATE_SUPPORTS_AUTOCOMPLETION));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_VERTICAL));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_FOCUSED));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_HORIZONTAL));
+  g_object_unref(state_set);
+
+  root = AXNodeData();
+  root.AddState(ax::mojom::State::kCollapsed);
+  root.AddState(ax::mojom::State::kHorizontal);
+  root.AddState(ax::mojom::State::kVisited);
+  root.AddBoolAttribute(ax::mojom::BoolAttribute::kSelected, true);
+  root.SetHasPopup(ax::mojom::HasPopup::kTrue);
+  GetRootNode()->SetData(root);
+
+  state_set = atk_object_ref_state_set(root_obj);
+  ASSERT_TRUE(ATK_IS_STATE_SET(state_set));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_EXPANDABLE));
+#if defined(ATK_216)
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_HAS_POPUP));
+#endif
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_HORIZONTAL));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_SELECTABLE));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_SELECTED));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_VISITED));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_EXPANDED));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_VERTICAL));
+  g_object_unref(state_set);
+
+  root = AXNodeData();
+  root.AddState(ax::mojom::State::kInvisible);
+  root.AddBoolAttribute(ax::mojom::BoolAttribute::kModal, true);
+  GetRootNode()->SetData(root);
+
+  state_set = atk_object_ref_state_set(root_obj);
+  ASSERT_TRUE(ATK_IS_STATE_SET(state_set));
+  ASSERT_TRUE(atk_state_set_contains_state(state_set, ATK_STATE_MODAL));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_SHOWING));
+  ASSERT_FALSE(atk_state_set_contains_state(state_set, ATK_STATE_VISIBLE));
   g_object_unref(state_set);
 
   g_object_unref(root_obj);
@@ -242,6 +492,118 @@ TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkObjectIndexInParent) {
   g_object_unref(left_obj);
   g_object_unref(right_obj);
   g_object_unref(root_obj);
+}
+
+TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkObjectStringAttributes) {
+  AXNodeData root_data;
+  root_data.id = 1;
+
+  Init(root_data);
+
+  AXNode* root_node = GetRootNode();
+  AtkObject* root_atk_object(AtkObjectFromNode(root_node));
+  ASSERT_TRUE(ATK_IS_OBJECT(root_atk_object));
+  g_object_ref(root_atk_object);
+
+  std::pair<ax::mojom::StringAttribute, const char*> tests[] = {
+      std::make_pair(ax::mojom::StringAttribute::kDisplay, "display"),
+      std::make_pair(ax::mojom::StringAttribute::kHtmlTag, "tag"),
+      std::make_pair(ax::mojom::StringAttribute::kRole, "xml-roles"),
+      std::make_pair(ax::mojom::StringAttribute::kPlaceholder, "placeholder"),
+      std::make_pair(ax::mojom::StringAttribute::kRoleDescription,
+                     "roledescription"),
+      std::make_pair(ax::mojom::StringAttribute::kKeyShortcuts, "keyshortcuts"),
+      std::make_pair(ax::mojom::StringAttribute::kLiveStatus, "live"),
+      std::make_pair(ax::mojom::StringAttribute::kLiveRelevant, "relevant"),
+      std::make_pair(ax::mojom::StringAttribute::kContainerLiveStatus,
+                     "container-live"),
+      std::make_pair(ax::mojom::StringAttribute::kContainerLiveRelevant,
+                     "container-relevant"),
+  };
+
+  for (unsigned i = 0; i < G_N_ELEMENTS(tests); i++) {
+    TestAtkObjectStringAttribute(root_node, root_atk_object, tests[i].first,
+                                 tests[i].second);
+  }
+
+  g_object_unref(root_atk_object);
+}
+
+TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkObjectBoolAttributes) {
+  AXNodeData root_data;
+  root_data.id = 1;
+
+  Init(root_data);
+
+  AXNode* root_node = GetRootNode();
+  AtkObject* root_atk_object(AtkObjectFromNode(root_node));
+  ASSERT_TRUE(ATK_IS_OBJECT(root_atk_object));
+  g_object_ref(root_atk_object);
+
+  std::pair<ax::mojom::BoolAttribute, const char*> tests[] = {
+      std::make_pair(ax::mojom::BoolAttribute::kLiveAtomic, "atomic"),
+      std::make_pair(ax::mojom::BoolAttribute::kBusy, "busy"),
+      std::make_pair(ax::mojom::BoolAttribute::kContainerLiveAtomic,
+                     "container-atomic"),
+      std::make_pair(ax::mojom::BoolAttribute::kContainerLiveBusy,
+                     "container-busy"),
+  };
+
+  for (unsigned i = 0; i < G_N_ELEMENTS(tests); i++) {
+    TestAtkObjectBoolAttribute(root_node, root_atk_object, tests[i].first,
+                               tests[i].second);
+  }
+
+  g_object_unref(root_atk_object);
+}
+
+TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkObjectIntAttributes) {
+  AXNodeData root_data;
+  root_data.id = 1;
+
+  Init(root_data);
+
+  AXNode* root_node = GetRootNode();
+  AtkObject* root_atk_object(AtkObjectFromNode(root_node));
+  ASSERT_TRUE(ATK_IS_OBJECT(root_atk_object));
+  g_object_ref(root_atk_object);
+
+  TestAtkObjectIntAttribute(root_node, root_atk_object,
+                            ax::mojom::IntAttribute::kHierarchicalLevel,
+                            "level");
+  TestAtkObjectIntAttribute(root_node, root_atk_object,
+                            ax::mojom::IntAttribute::kSetSize, "setsize");
+  TestAtkObjectIntAttribute(root_node, root_atk_object,
+                            ax::mojom::IntAttribute::kPosInSet, "posinset");
+
+  TestAtkObjectIntAttribute(root_node, root_atk_object,
+                            ax::mojom::IntAttribute::kAriaColumnCount,
+                            "colcount", ax::mojom::Role::kTable);
+  TestAtkObjectIntAttribute(root_node, root_atk_object,
+                            ax::mojom::IntAttribute::kAriaColumnCount,
+                            "colcount", ax::mojom::Role::kGrid);
+  TestAtkObjectIntAttribute(root_node, root_atk_object,
+                            ax::mojom::IntAttribute::kAriaColumnCount,
+                            "colcount", ax::mojom::Role::kTreeGrid);
+
+  TestAtkObjectIntAttribute(root_node, root_atk_object,
+                            ax::mojom::IntAttribute::kAriaRowCount, "rowcount",
+                            ax::mojom::Role::kTable);
+  TestAtkObjectIntAttribute(root_node, root_atk_object,
+                            ax::mojom::IntAttribute::kAriaRowCount, "rowcount",
+                            ax::mojom::Role::kGrid);
+  TestAtkObjectIntAttribute(root_node, root_atk_object,
+                            ax::mojom::IntAttribute::kAriaRowCount, "rowcount",
+                            ax::mojom::Role::kTreeGrid);
+
+  TestAtkObjectIntAttribute(root_node, root_atk_object,
+                            ax::mojom::IntAttribute::kAriaCellColumnIndex,
+                            "colindex", ax::mojom::Role::kCell);
+  TestAtkObjectIntAttribute(root_node, root_atk_object,
+                            ax::mojom::IntAttribute::kAriaCellRowIndex,
+                            "rowindex", ax::mojom::Role::kCell);
+
+  g_object_unref(root_atk_object);
 }
 
 //

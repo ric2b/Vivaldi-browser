@@ -12,7 +12,7 @@
 #include "base/files/memory_mapped_file.h"
 #include "base/files/scoped_temp_dir.h"
 #include "build/build_config.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 #include "sql/statement.h"
 #include "sql/test/sql_test_base.h"
 #include "sql/test/test_helpers.h"
@@ -317,13 +317,11 @@ base::ScopedCFTypeRef<CFURLRef> CFURLRefForPath(const base::FilePath& path){
 
 // If a database file is marked to be excluded from Time Machine, verify that
 // journal files are also excluded.
-// TODO(shess): Disabled because CSBackupSetItemExcluded() does not work on the
-// bots, though it's fine on dev machines.  See <http://crbug.com/410350>.
-TEST_F(SQLiteFeaturesTest, DISABLED_TimeMachine) {
+TEST_F(SQLiteFeaturesTest, TimeMachine) {
   ASSERT_TRUE(db().Execute("CREATE TABLE t (id INTEGER PRIMARY KEY)"));
   db().Close();
 
-  base::FilePath journal(db_path().value() + FILE_PATH_LITERAL("-journal"));
+  base::FilePath journal = sql::Database::JournalPath(db_path());
   ASSERT_TRUE(GetPathExists(db_path()));
   ASSERT_TRUE(GetPathExists(journal));
 
@@ -452,7 +450,7 @@ TEST_F(SQLiteFeaturesTest, SmartAutoVacuum) {
 // additional work into Chromium shutdown.  Verify that SQLite supports a config
 // option to not checkpoint on close.
 TEST_F(SQLiteFeaturesTest, WALNoClose) {
-  base::FilePath wal_path(db_path().value() + FILE_PATH_LITERAL("-wal"));
+  base::FilePath wal_path = sql::Database::WriteAheadLogPath(db_path());
 
   // Turn on WAL mode, then verify that the mode changed (WAL is supported).
   ASSERT_TRUE(db().Execute("PRAGMA journal_mode = WAL"));

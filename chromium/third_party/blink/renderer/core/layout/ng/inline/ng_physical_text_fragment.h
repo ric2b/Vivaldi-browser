@@ -67,21 +67,7 @@ class CORE_EXPORT NGPhysicalTextFragment final : public NGPhysicalFragment {
                          NGPhysicalSize size,
                          NGLineOrientation line_orientation,
                          NGTextEndEffect end_effect,
-                         scoped_refptr<const ShapeResult> shape_result)
-      : NGPhysicalFragment(layout_object,
-                           style,
-                           style_variant,
-                           size,
-                           kFragmentText,
-                           text_type),
-        text_(text),
-        start_offset_(start_offset),
-        end_offset_(end_offset),
-        shape_result_(shape_result),
-        line_orientation_(static_cast<unsigned>(line_orientation)),
-        end_effect_(static_cast<unsigned>(end_effect)) {
-    DCHECK(shape_result_ || IsFlowControl()) << ToString();
-  }
+                         scoped_refptr<const ShapeResult> shape_result);
 
   NGTextType TextType() const { return static_cast<NGTextType>(sub_type_); }
   // True if this is a generated text.
@@ -96,6 +82,7 @@ class CORE_EXPORT NGPhysicalTextFragment final : public NGPhysicalFragment {
 
   unsigned Length() const { return end_offset_ - start_offset_; }
   StringView Text() const { return StringView(text_, start_offset_, Length()); }
+  const String& TextContent() const { return text_; }
 
   // ShapeResult may be nullptr if |IsFlowControl()|.
   const ShapeResult* TextShapeResult() const { return shape_result_.get(); }
@@ -131,10 +118,10 @@ class CORE_EXPORT NGPhysicalTextFragment final : public NGPhysicalFragment {
 
   // Create a new fragment that has part of the text of this fragment.
   // All other properties are the same as this fragment.
-  scoped_refptr<NGPhysicalFragment> TrimText(unsigned start_offset,
-                                             unsigned end_offset) const;
+  scoped_refptr<const NGPhysicalFragment> TrimText(unsigned start_offset,
+                                                   unsigned end_offset) const;
 
-  scoped_refptr<NGPhysicalFragment> CloneWithoutOffset() const;
+  scoped_refptr<const NGPhysicalFragment> CloneWithoutOffset() const;
 
   NGTextFragmentPaintInfo PaintInfo() const {
     return NGTextFragmentPaintInfo{text_, StartOffset(), EndOffset(),
@@ -143,7 +130,7 @@ class CORE_EXPORT NGPhysicalTextFragment final : public NGPhysicalFragment {
 
   // Returns true if the text is generated (from, e.g., list marker,
   // pseudo-element, ...) instead of from a DOM text node.
-  bool IsAnonymousText() const;
+  bool IsAnonymousText() const { return is_anonymous_text_; }
 
   // Returns the text offset in the fragment placed closest to the given point.
   unsigned TextOffsetForPoint(const NGPhysicalOffset&) const;
@@ -170,13 +157,14 @@ class CORE_EXPORT NGPhysicalTextFragment final : public NGPhysicalFragment {
   const String text_;
 
   // Start and end offset of the parent block text.
-  unsigned start_offset_;
-  unsigned end_offset_;
+  const unsigned start_offset_;
+  const unsigned end_offset_;
 
-  scoped_refptr<const ShapeResult> shape_result_;
+  const scoped_refptr<const ShapeResult> shape_result_;
 
-  unsigned line_orientation_ : 2;  // NGLineOrientation
-  unsigned end_effect_ : 1;        // NGTextEndEffect
+  const unsigned line_orientation_ : 2;  // NGLineOrientation
+  const unsigned end_effect_ : 1;        // NGTextEndEffect
+  const unsigned is_anonymous_text_ : 1;
 };
 
 DEFINE_TYPE_CASTS(NGPhysicalTextFragment,

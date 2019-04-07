@@ -13,15 +13,16 @@
 #include "base/files/file_path.h"
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
+#include "base/timer/timer.h"
 #include "chromeos/components/drivefs/mojom/drivefs.mojom.h"
 #include "chromeos/disks/disk_mount_manager.h"
 #include "components/account_id/account_id.h"
 #include "google_apis/gaia/oauth2_mint_token_flow.h"
 #include "services/identity/public/mojom/identity_manager.mojom.h"
 
-namespace net {
-class URLRequestContextGetter;
-}  // namespace net
+namespace network {
+class SharedURLLoaderFactory;
+}  // namespace network
 
 namespace service_manager {
 class Connector;
@@ -56,9 +57,11 @@ class COMPONENT_EXPORT(DRIVEFS) DriveFsHost
     Delegate() = default;
     virtual ~Delegate() = default;
 
-    virtual net::URLRequestContextGetter* GetRequestContext() = 0;
+    virtual scoped_refptr<network::SharedURLLoaderFactory>
+    GetURLLoaderFactory() = 0;
     virtual service_manager::Connector* GetConnector() = 0;
     virtual const AccountId& GetAccountId() = 0;
+    virtual std::string GetObfuscatedAccountId() = 0;
     virtual std::unique_ptr<OAuth2MintTokenFlow> CreateMintTokenFlow(
         OAuth2MintTokenFlow::Delegate* delegate,
         const std::string& client_id,
@@ -77,7 +80,8 @@ class COMPONENT_EXPORT(DRIVEFS) DriveFsHost
   };
 
   DriveFsHost(const base::FilePath& profile_path,
-              Delegate* delegate);
+              Delegate* delegate,
+              std::unique_ptr<base::OneShotTimer> timer);
   ~DriveFsHost() override;
 
   void AddObserver(DriveFsHostObserver* observer);
@@ -95,6 +99,9 @@ class COMPONENT_EXPORT(DRIVEFS) DriveFsHost
   // Returns the path where DriveFS is mounted. It is only valid to call when
   // |IsMounted()| returns true.
   const base::FilePath& GetMountPath() const;
+
+  // Returns the path where DriveFS keeps its data and caches.
+  base::FilePath GetDataPath() const;
 
   mojom::DriveFs* GetDriveFsInterface() const;
 
@@ -117,13 +124,15 @@ class COMPONENT_EXPORT(DRIVEFS) DriveFsHost
 
   Delegate* const delegate_;
 
+  std::unique_ptr<base::OneShotTimer> timer_;
+
   // State specific to the current mount, or null if not mounted.
   std::unique_ptr<MountState> mount_state_;
 
   // The connection to the identity service. Access via |GetIdentityManager()|.
   identity::mojom::IdentityManagerPtr identity_manager_;
 
-  base::ObserverList<DriveFsHostObserver> observers_;
+  base::ObserverList<DriveFsHostObserver>::Unchecked observers_;
 
   DISALLOW_COPY_AND_ASSIGN(DriveFsHost);
 };

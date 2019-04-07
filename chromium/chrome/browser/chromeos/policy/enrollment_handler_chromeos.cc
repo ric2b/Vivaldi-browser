@@ -9,11 +9,12 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/guid.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
@@ -37,6 +38,7 @@
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/http/http_status_code.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace em = enterprise_management;
 
@@ -206,11 +208,13 @@ void EnrollmentHandlerChromeOS::CheckAvailableLicenses(
 void EnrollmentHandlerChromeOS::HandleAvailableLicensesResult(
     DeviceManagementStatus status,
     const CloudPolicyClient::LicenseMap& license_map) {
-  if (status == DM_STATUS_SERVICE_MANAGEMENT_NOT_SUPPORTED) {
+  if (status == DM_STATUS_SERVICE_MANAGEMENT_NOT_SUPPORTED ||
+      status == DM_STATUS_SERVICE_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(&EnrollmentHandlerChromeOS::ReportResult,
-                              weak_ptr_factory_.GetWeakPtr(),
-                              EnrollmentStatus::ForRegistrationError(status)));
+        FROM_HERE,
+        base::BindOnce(&EnrollmentHandlerChromeOS::ReportResult,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       EnrollmentStatus::ForRegistrationError(status)));
     return;
   } else if (status != DM_STATUS_SUCCESS) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -313,6 +317,7 @@ void EnrollmentHandlerChromeOS::OnRegistrationStateChanged(
     device_mode_ = client_->device_mode();
     switch (device_mode_) {
       case DEVICE_MODE_ENTERPRISE:
+      case DEVICE_MODE_DEMO:
         // Do nothing.
         break;
       case DEVICE_MODE_ENTERPRISE_AD:
@@ -436,7 +441,7 @@ void EnrollmentHandlerChromeOS::HandleRegistrationCertificateResult(
 void EnrollmentHandlerChromeOS::StartOfflineDemoEnrollmentFlow() {
   DCHECK(!enrollment_config_.offline_policy_path.empty());
 
-  device_mode_ = policy::DeviceMode::DEVICE_MODE_ENTERPRISE;
+  device_mode_ = policy::DeviceMode::DEVICE_MODE_DEMO;
   domain_ = enrollment_config_.management_domain;
   skip_robot_auth_ = true;
   SetStep(STEP_POLICY_FETCH);
@@ -490,7 +495,9 @@ void EnrollmentHandlerChromeOS::OnOfflinePolicyValidated(
     return;
   }
 
-  device_id_ = validator->policy_data()->device_id();
+  // Don't use the device ID within the validated policy -- it's common among
+  // all of the offline-enrolled devices.
+  device_id_ = base::GenerateGUID();
   policy_ = std::move(validator->policy());
 
   // The steps for OAuth2 token fetching is skipped for the OFFLINE_DEMO_MODE.
@@ -563,8 +570,8 @@ void EnrollmentHandlerChromeOS::OnRobotAuthCodesFetched(
   client_info.redirect_uri = "oob";
 
   // Use the system request context to avoid sending user cookies.
-  gaia_oauth_client_.reset(
-      new gaia::GaiaOAuthClient(g_browser_process->system_request_context()));
+  gaia_oauth_client_.reset(new gaia::GaiaOAuthClient(
+      g_browser_process->shared_url_loader_factory()));
   gaia_oauth_client_->GetTokensFromAuthCode(
       client_info, client->robot_api_auth_code(), 0 /* max_retries */, this);
 }

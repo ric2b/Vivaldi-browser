@@ -57,7 +57,7 @@
     <link rel="stylesheet" href="oobe_welcome.css">
     <link rel="stylesheet" href="oobe_flex_layout.css">
     <oobe-welcome-dialog id="welcomeScreen" role="dialog"
-        aria-label$="[[i18nDynamic(locale, 'networkScreenGreeting')]]"
+        aria-label$="[[i18nDynamic(locale, 'welcomeScreenGreeting')]]"
         current-language="[[currentLanguage]]"
         on-language-button-clicked="onWelcomeSelectLanguageButtonClicked_"
         on-accessibility-button-clicked="onWelcomeAccessibilityButtonClicked_"
@@ -120,7 +120,7 @@
       <div slot="subtitle">
         [[i18nDynamic(locale, 'accessibilitySectionHint')]]
       </div>
-      <div slot="footer" class="layout vertical">
+      <div slot="footer" class="layout vertical scroll">
         <oobe-a11y-option checked="[[a11yStatus.spokenFeedbackEnabled]]"
             on-change="onA11yOptionChanged_"
             chrome-message="enableSpokenFeedback"
@@ -168,6 +168,38 @@
             label-for-aria="[[i18nDynamic(locale, 'screenMagnifierOption')]]">
           <span slot="title">
             [[i18nDynamic(locale, 'screenMagnifierOption')]]
+          </span>
+          <span slot="checked-value">
+            [[i18nDynamic(locale, 'screenMagnifierOptionOn')]]
+          </span>
+          <span slot="unchecked-value">
+            [[i18nDynamic(locale, 'screenMagnifierOptionOff')]]
+          </span>
+        </oobe-a11y-option>
+        <oobe-a11y-option checked="[[a11yStatus.selectToSpeakEnabled]]"
+            on-change="onA11yOptionChanged_"
+            chrome-message="enableSelectToSpeak"
+            label-for-aria="[[i18nDynamic(locale, 'selectToSpeakOption')]]"
+            id="selectToSpeakOobeOption"
+            hidden="[[!a11yStatus.enableExperimentalA11yFeatures]]">
+          <span slot="title">
+            [[i18nDynamic(locale, 'selectToSpeakOption')]]
+          </span>
+          <span slot="checked-value">
+            [[i18nDynamic(locale, 'selectToSpeakOptionOn')]]
+          </span>
+          <span slot="unchecked-value">
+            [[i18nDynamic(locale, 'selectToSpeakOptionOff')]]
+          </span>
+        </oobe-a11y-option>
+        <oobe-a11y-option checked="[[a11yStatus.dockedMagnifierEnabled]]"
+            on-change="onA11yOptionChanged_"
+            chrome-message="enableDockedMagnifier"
+            label-for-aria="[[i18nDynamic(locale, 'dockedMagnifierOption')]]"
+            id="dockedMagnifierOobeOption"
+            hidden="[[!a11yStatus.enableExperimentalA11yFeatures]]">
+          <span slot="title">
+            [[i18nDynamic(locale, 'dockedMagnifierOption')]]
           </span>
           <span slot="checked-value">
             [[i18nDynamic(locale, 'screenMagnifierOptionOn')]]
@@ -272,9 +304,5 @@
         </oobe-text-button>
       </div>
     </oobe-dialog>
-    <oobe-network-dialog id="networkSelectionScreen" role="dialog" hidden
-        on-back-button-clicked="onNetworkSelectionBackButtonClicked_"
-        on-next-button-clicked="onNetworkSelectionNextButtonClicked_">
-    </oobe-network-dialog>
   </template>
 </dom-module>

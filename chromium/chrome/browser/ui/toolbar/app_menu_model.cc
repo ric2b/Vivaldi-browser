@@ -39,7 +39,7 @@
 #include "chrome/browser/ui/toolbar/bookmark_sub_menu_model.h"
 #include "chrome/browser/ui/toolbar/recent_tabs_sub_menu_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
-#include "chrome/browser/upgrade_detector.h"
+#include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -107,21 +107,20 @@ base::string16 GetUpgradeDialogMenuItemName() {
   }
 }
 
-// Returns the appropriate menu label for the IDC_CREATE_HOSTED_APP command.
-base::string16 GetCreateHostedAppMenuItemName(Browser* browser) {
-  if (browser->tab_strip_model()) {
-    WebContents* web_contents =
-        browser->tab_strip_model()->GetActiveWebContents();
-    if (web_contents) {
-      base::string16 app_name =
-          banners::AppBannerManager::GetInstallableAppName(web_contents);
-      if (!app_name.empty()) {
-        return l10n_util::GetStringFUTF16(IDS_INSTALL_TO_OS_LAUNCH_SURFACE,
-                                          app_name);
-      }
-    }
-  }
-  return l10n_util::GetStringUTF16(IDS_ADD_TO_OS_LAUNCH_SURFACE);
+// Returns the appropriate menu label for the IDC_INSTALL_PWA command if
+// available.
+base::Optional<base::string16> GetInstallPWAAppMenuItemName(Browser* browser) {
+  if (!browser->tab_strip_model())
+    return base::nullopt;
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  if (!web_contents)
+    return base::nullopt;
+  base::string16 app_name =
+      banners::AppBannerManager::GetInstallableAppName(web_contents);
+  if (app_name.empty())
+    return base::nullopt;
+  return l10n_util::GetStringFUTF16(IDS_INSTALL_TO_OS_LAUNCH_SURFACE, app_name);
 }
 
 }  // namespace
@@ -202,12 +201,8 @@ ToolsMenuModel::~ToolsMenuModel() {}
 void ToolsMenuModel::Build(Browser* browser) {
   AddItemWithStringId(IDC_SAVE_PAGE, IDS_SAVE_PAGE);
 
-  if (extensions::util::IsNewBookmarkAppsEnabled() &&
-      // If kExperimentalAppBanners is enabled, this is moved to the top level
-      // menu.
-      !banners::AppBannerManager::IsExperimentalAppBannersEnabled()) {
-    AddItemWithStringId(IDC_CREATE_HOSTED_APP, IDS_ADD_TO_OS_LAUNCH_SURFACE);
-  }
+  if (extensions::util::IsNewBookmarkAppsEnabled())
+    AddItemWithStringId(IDC_CREATE_SHORTCUT, IDS_ADD_TO_OS_LAUNCH_SURFACE);
 
   AddSeparator(ui::NORMAL_SEPARATOR);
   AddItemWithStringId(IDC_CLEAR_BROWSING_DATA, IDS_CLEAR_BROWSING_DATA);
@@ -266,8 +261,7 @@ bool AppMenuModel::IsItemForCommandIdDynamic(int command_id) const {
 #elif defined(OS_WIN)
          command_id == IDC_PIN_TO_START_SCREEN ||
 #endif
-         command_id == IDC_CREATE_HOSTED_APP ||
-         command_id == IDC_UPGRADE_DIALOG;
+         command_id == IDC_INSTALL_PWA || command_id == IDC_UPGRADE_DIALOG;
 }
 
 base::string16 AppMenuModel::GetLabelForCommandId(int command_id) const {
@@ -289,8 +283,8 @@ base::string16 AppMenuModel::GetLabelForCommandId(int command_id) const {
       return l10n_util::GetStringUTF16(string_id);
     }
 #endif
-    case IDC_CREATE_HOSTED_APP:
-      return GetCreateHostedAppMenuItemName(browser_);
+    case IDC_INSTALL_PWA:
+      return GetInstallPWAAppMenuItemName(browser_).value();
     case IDC_UPGRADE_DIALOG:
       return GetUpgradeDialogMenuItemName();
     default:
@@ -443,7 +437,7 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
       break;
 
     // Tools menu.
-    case IDC_CREATE_HOSTED_APP:
+    case IDC_CREATE_SHORTCUT:
       if (!uma_action_recorded_) {
         UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.CreateHostedApp",
                                    delta);
@@ -634,12 +628,6 @@ bool AppMenuModel::IsCommandIdChecked(int command_id) const {
     return Profiling::BeingProfiled();
   if (command_id == IDC_TOGGLE_REQUEST_TABLET_SITE)
     return chrome::IsRequestingTabletSite(browser_);
-#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
-  if (command_id == IDC_TOGGLE_CONFIRM_TO_QUIT_OPTION) {
-    return browser_->profile()->GetPrefs()->GetBoolean(
-        prefs::kConfirmToQuitEnabled);
-  }
-#endif
 
   return false;
 }
@@ -773,7 +761,10 @@ void AppMenuModel::Build() {
               gfx::TruncateString(base::UTF8ToUTF16(pwa->name()),
                                   kMaxAppNameLength, gfx::CHARACTER_BREAK)));
     } else {
-      AddItem(IDC_CREATE_HOSTED_APP, GetCreateHostedAppMenuItemName(browser_));
+      base::Optional<base::string16> install_pwa_item_name =
+          GetInstallPWAAppMenuItemName(browser_);
+      if (install_pwa_item_name)
+        AddItem(IDC_INSTALL_PWA, *install_pwa_item_name);
     }
   }
 
@@ -807,16 +798,6 @@ void AppMenuModel::Build() {
 
   if (browser_defaults::kShowExitMenuItem) {
     AddSeparator(ui::NORMAL_SEPARATOR);
-#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
-    if (base::FeatureList::IsEnabled(features::kWarnBeforeQuitting)) {
-      AddCheckItem(IDC_TOGGLE_CONFIRM_TO_QUIT_OPTION,
-                   l10n_util::GetStringFUTF16(
-                       IDS_CONFIRM_TO_QUIT_OPTION,
-                       ui::Accelerator(ui::VKEY_Q,
-                                       ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN)
-                           .GetShortcutText()));
-    }
-#endif
     AddItemWithStringId(IDC_EXIT, IDS_EXIT);
   }
   uma_action_recorded_ = false;

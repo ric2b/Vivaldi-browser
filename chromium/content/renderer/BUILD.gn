@@ -39,8 +39,6 @@ target(link_target_type, "renderer") {
     "accessibility/blink_ax_tree_source.h",
     "accessibility/render_accessibility_impl.cc",
     "accessibility/render_accessibility_impl.h",
-    "android/disambiguation_popup_helper.cc",
-    "android/disambiguation_popup_helper.h",
     "android/renderer_date_time_picker.cc",
     "android/renderer_date_time_picker.h",
     "android/synchronous_compositor_proxy.cc",
@@ -207,6 +205,10 @@ target(link_target_type, "renderer") {
     "layout_test_dependencies.h",
     "loader/child_url_loader_factory_bundle.cc",
     "loader/child_url_loader_factory_bundle.h",
+    "loader/code_cache_loader_impl.cc",
+    "loader/code_cache_loader_impl.h",
+    "loader/frame_request_blocker.cc",
+    "loader/frame_request_blocker.h",
     "loader/ftp_directory_listing_response_delegate.cc",
     "loader/ftp_directory_listing_response_delegate.h",
     "loader/navigation_response_override_parameters.cc",
@@ -296,6 +298,8 @@ target(link_target_type, "renderer") {
     "media/stream/aec_dump_message_filter.h",
     "media/stream/apply_constraints_processor.cc",
     "media/stream/apply_constraints_processor.h",
+    "media/stream/audio_service_audio_processor_proxy.cc",
+    "media/stream/audio_service_audio_processor_proxy.h",
     "media/stream/external_media_stream_audio_source.cc",
     "media/stream/external_media_stream_audio_source.h",
     "media/stream/local_media_stream_audio_source.cc",
@@ -382,8 +386,6 @@ target(link_target_type, "renderer") {
     "media/webrtc/peer_connection_remote_audio_source.h",
     "media/webrtc/peer_connection_tracker.cc",
     "media/webrtc/peer_connection_tracker.h",
-    "media/webrtc/rtc_certificate.cc",
-    "media/webrtc/rtc_certificate.h",
     "media/webrtc/rtc_certificate_generator.cc",
     "media/webrtc/rtc_certificate_generator.h",
     "media/webrtc/rtc_data_channel_handler.cc",
@@ -407,6 +409,8 @@ target(link_target_type, "renderer") {
     "media/webrtc/rtc_stats.h",
     "media/webrtc/rtc_video_decoder.cc",
     "media/webrtc/rtc_video_decoder.h",
+    "media/webrtc/rtc_video_decoder_adapter.cc",
+    "media/webrtc/rtc_video_decoder_adapter.h",
     "media/webrtc/rtc_video_decoder_factory.cc",
     "media/webrtc/rtc_video_decoder_factory.h",
     "media/webrtc/rtc_video_encoder.cc",
@@ -441,6 +445,8 @@ target(link_target_type, "renderer") {
     "media/webrtc/webrtc_video_capturer_adapter.h",
     "media/webrtc/webrtc_video_frame_adapter.cc",
     "media/webrtc/webrtc_video_frame_adapter.h",
+    "media/webrtc/webrtc_video_utils.cc",
+    "media/webrtc/webrtc_video_utils.h",
     "media/webrtc_local_audio_source_provider.cc",
     "media/webrtc_local_audio_source_provider.h",
     "media/webrtc_logging.cc",
@@ -469,7 +475,6 @@ target(link_target_type, "renderer") {
     "media_recorder/vpx_encoder.h",
     "menu_item_builder.cc",
     "menu_item_builder.h",
-    "message_delivery_policy.h",
     "mojo/blink_interface_provider_impl.cc",
     "mojo/blink_interface_provider_impl.h",
     "mojo/blink_interface_registry_impl.cc",
@@ -571,6 +576,8 @@ target(link_target_type, "renderer") {
     "service_worker/service_worker_network_provider.h",
     "service_worker/service_worker_provider_context.cc",
     "service_worker/service_worker_provider_context.h",
+    "service_worker/service_worker_provider_state_for_client.cc",
+    "service_worker/service_worker_provider_state_for_client.h",
     "service_worker/service_worker_subresource_loader.cc",
     "service_worker/service_worker_subresource_loader.h",
     "service_worker/service_worker_timeout_timer.cc",
@@ -641,6 +648,7 @@ target(link_target_type, "renderer") {
   defines = []
 
   public_deps = [
+    "//content/common:mojo_bindings",
     "//content/public/common:common_sources",
     "//ipc",
   ]
@@ -678,6 +686,7 @@ target(link_target_type, "renderer") {
     "//gpu",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/command_buffer/client:raster_interface",
+    "//gpu/command_buffer/client:webgpu_interface",
     "//jingle:jingle_glue",
     "//media",
     "//media:media_buildflags",
@@ -692,11 +701,13 @@ target(link_target_type, "renderer") {
     "//media/mojo/clients",
     "//media/mojo/interfaces",
     "//media/mojo/interfaces:remoting",
+    "//media/webrtc",
     "//mojo/public/cpp/bindings",
     "//net",
     "//ppapi/buildflags",
     "//printing/buildflags",
     "//sandbox",
+    "//services/audio/public/mojom",
     "//services/device/public/cpp/generic_sensor",
     "//services/device/public/mojom",
     "//services/device/public/mojom:constants",
@@ -704,7 +715,7 @@ target(link_target_type, "renderer") {
     "//services/network:network_service",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/mojom",
-    "//services/ui/public/cpp/gpu",
+    "//services/ws/public/cpp/gpu",
     "//skia",
     "//storage/common",
     "//third_party/blink/public:blink",
@@ -717,6 +728,7 @@ target(link_target_type, "renderer") {
     "//third_party/libvpx",
     "//third_party/libyuv",
     "//third_party/opus",
+    "//third_party/sqlite",
     "//third_party/webrtc/api:libjingle_logging_api",
     "//third_party/webrtc/api:libjingle_peerconnection_api",
     "//third_party/webrtc/api:rtc_stats_api",
@@ -754,6 +766,9 @@ target(link_target_type, "renderer") {
     "//third_party/webrtc/pc:rtc_pc_base",
     "//third_party/webrtc/rtc_base:rtc_base",
     "//third_party/webrtc/rtc_base:rtc_task_queue",
+
+    # TODO(titovartem) remove dependency on WebRTC internals.
+    "//third_party/webrtc/rtc_base/third_party/sigslot:sigslot",
     "//third_party/webrtc/stats",
     "//third_party/webrtc/system_wrappers",
     "//third_party/webrtc_overrides:init_webrtc",
@@ -777,7 +792,7 @@ target(link_target_type, "renderer") {
   if (use_aura) {
     public_deps += [ "//content/renderer/mus" ]
     allow_circular_includes_from += [ "//content/renderer/mus" ]
-    deps += [ "//services/ui/public/cpp" ]
+    deps += [ "//services/ws/public/cpp" ]
   }
 
   if (use_external_popup_menu) {
@@ -1033,7 +1048,10 @@ target(link_target_type, "renderer") {
 
 # See comment at the top of //content/BUILD.gn for how this works.
 group("for_content_tests") {
-  visibility = [ "//content/test/*" ]
+  visibility = [
+    "//content/shell/test_runner",
+    "//content/test/*",
+  ]
 
   if (!is_component_build) {
     public_deps = [

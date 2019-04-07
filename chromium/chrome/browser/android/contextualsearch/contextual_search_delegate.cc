@@ -20,7 +20,6 @@
 #include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/signin/unified_consent_helper.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/common/pref_names.h"
@@ -167,6 +166,9 @@ void ContextualSearchDelegate::ResolveSearchTermFromContext() {
 
   SetDiscourseContextAndAddToHeader(*context_);
 
+  // Disable cookies for this request.
+  search_term_fetcher_->SetAllowCredentials(false);
+
   search_term_fetcher_->Start();
 }
 
@@ -259,7 +261,8 @@ std::string ContextualSearchDelegate::BuildRequestUrl(
   }
 
   TemplateURLRef::SearchTermsArgs::ContextualSearchParams params(
-      kContextualSearchRequestVersion, contextual_cards_version, home_country);
+      kContextualSearchRequestVersion, contextual_cards_version, home_country,
+      0L, 0);
 
   search_terms_args.contextual_search_params = params;
 
@@ -382,18 +385,16 @@ bool ContextualSearchDelegate::CanSendPageURL(
   if (!sync_service)
     return false;
 
-  // Check whether the user has enabled *personalized* URL-keyed data collection
+  // Check whether the user has enabled anonymous URL-keyed data collection
   // from the unified consent service.
-  bool is_unified_consent_enabled = IsUnifiedConsentEnabled(profile);
   std::unique_ptr<UrlKeyedDataCollectionConsentHelper>
-      personalized_unified_consent_url_helper =
+      anonymized_unified_consent_url_helper =
           UrlKeyedDataCollectionConsentHelper::
-              NewPersonalizedDataCollectionConsentHelper(
-                  is_unified_consent_enabled, sync_service);
-  // TODO(donnd): if not enabled, check if *anonymous* URL-keyed data collection
-  // is enabled and do what's needed to send it but not logging it.
-  // See https://crbug.com.com/865104 for details.
-  return personalized_unified_consent_url_helper->IsEnabled();
+              NewAnonymizedDataCollectionConsentHelper(
+                  ProfileManager::GetActiveUserProfile()->GetPrefs(),
+                  sync_service);
+  // If they have, then allow sending of the URL.
+  return anonymized_unified_consent_url_helper->IsEnabled();
 }
 
 // Gets the target language from the translate service using the user's profile.
@@ -402,7 +403,7 @@ std::string ContextualSearchDelegate::GetTargetLanguage() {
   PrefService* pref_service = profile->GetPrefs();
   language::LanguageModel* language_model =
       LanguageModelManagerFactory::GetForBrowserContext(profile)
-          ->GetDefaultModel();
+          ->GetPrimaryModel();
   std::string result =
       TranslateService::GetTargetLanguage(pref_service, language_model);
   DCHECK(!result.empty());

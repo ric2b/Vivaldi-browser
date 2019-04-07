@@ -5,12 +5,14 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_PAYMENTS_PAYMENTS_VALIDATORS_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PAYMENTS_PAYMENTS_VALIDATORS_H_
 
-#include "third_party/blink/public/platform/modules/payments/payment_request.mojom-blink.h"
+#include "third_party/blink/public/mojom/payments/payment_request.mojom-blink.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
+
+class PaymentValidationErrors;
 
 class MODULES_EXPORT PaymentsValidators final {
   STATIC_ONLY(PaymentsValidators);
@@ -51,6 +53,12 @@ class MODULES_EXPORT PaymentsValidators final {
   // Returns false if |error| is too long (greater than 2048).
   static bool IsValidErrorMsgFormat(const String& code,
                                     String* optional_error_message);
+
+  // Returns false if |payment_validation_errors| has too long string (greater
+  // than 2048).
+  static bool IsValidPaymentValidationErrorsFormat(
+      const PaymentValidationErrors& errors,
+      String* optional_error_message);
 };
 
 }  // namespace blink

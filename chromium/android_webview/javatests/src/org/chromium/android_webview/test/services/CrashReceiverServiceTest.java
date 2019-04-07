@@ -4,6 +4,8 @@
 
 package org.chromium.android_webview.test.services;
 
+import static org.chromium.android_webview.test.OnlyRunIn.ProcessMode.SINGLE_PROCESS;
+
 import android.os.ParcelFileDescriptor;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
@@ -14,8 +16,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.services.CrashReceiverService;
+import org.chromium.android_webview.test.AwJUnit4ClassRunner;
+import org.chromium.android_webview.test.OnlyRunIn;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.test.BaseJUnit4ClassRunner;
 
 import java.io.File;
 import java.io.IOException;
@@ -23,7 +26,8 @@ import java.io.IOException;
 /**
  * Instrumentation tests for CrashReceiverService.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
+@RunWith(AwJUnit4ClassRunner.class)
+@OnlyRunIn(SINGLE_PROCESS)
 public class CrashReceiverServiceTest {
     @Before
     public void setUp() throws Exception {

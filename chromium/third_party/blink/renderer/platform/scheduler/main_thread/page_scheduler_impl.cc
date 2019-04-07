@@ -10,6 +10,7 @@
 #include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/budget_pool.h"
@@ -288,9 +289,10 @@ void PageSchedulerImpl::RegisterFrameSchedulerImpl(
 }
 
 std::unique_ptr<blink::FrameScheduler> PageSchedulerImpl::CreateFrameScheduler(
+    FrameScheduler::Delegate* delegate,
     blink::BlameContext* blame_context,
     FrameScheduler::FrameType frame_type) {
-  return FrameSchedulerImpl::Create(this, blame_context, frame_type);
+  return FrameSchedulerImpl::Create(this, delegate, blame_context, frame_type);
 }
 
 void PageSchedulerImpl::Unregister(FrameSchedulerImpl* frame_scheduler) {
@@ -577,24 +579,12 @@ MainThreadSchedulerImpl* PageSchedulerImpl::GetMainThreadScheduler() const {
   return main_thread_scheduler_;
 }
 
-ukm::UkmRecorder* PageSchedulerImpl::GetUkmRecorder() {
-  if (!delegate_)
-    return nullptr;
-  return delegate_->GetUkmRecorder();
-}
-
-int64_t PageSchedulerImpl::GetUkmSourceId() {
-  if (!delegate_)
-    return 0;
-  return delegate_->GetUkmSourceId();
-}
-
 bool PageSchedulerImpl::IsBackgrounded() const {
   return page_visibility_ == PageVisibilityState::kHidden && !IsAudioPlaying();
 }
 
 bool PageSchedulerImpl::ShouldFreezePage() const {
-  if (!RuntimeEnabledFeatures::StopInBackgroundEnabled())
+  if (!base::FeatureList::IsEnabled(blink::features::kStopInBackground))
     return false;
   return IsBackgrounded();
 }
@@ -686,6 +676,14 @@ PageSchedulerImpl::PageLifecycleStateTracker::
           return base::nullopt;
       }
   }
+}
+
+FrameSchedulerImpl* PageSchedulerImpl::SelectFrameForUkmAttribution() {
+  for (FrameSchedulerImpl* frame_scheduler : frame_schedulers_) {
+    if (frame_scheduler->GetUkmRecorder())
+      return frame_scheduler;
+  }
+  return nullptr;
 }
 
 // static

@@ -10,10 +10,10 @@
 #include "base/macros.h"
 #include "base/unguessable_token.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
-#include "services/ui/common/types.h"
+#include "services/ws/common/types.h"
 #include "ui/gfx/geometry/rect.h"
 
-namespace ui {
+namespace ws {
 namespace mojom {
 class WindowTree;
 }
@@ -52,7 +52,7 @@ class MusEmbeddedFrame {
 
   MusEmbeddedFrame(RendererWindowTreeClient* renderer_window_tree_client,
                    MusEmbeddedFrameDelegate* delegate,
-                   ui::ClientSpecificId window_id,
+                   ws::ClientSpecificId window_id,
                    const base::UnguessableToken& token);
 
   // Called once the WindowTree has been obtained. This is only called if
@@ -68,11 +68,11 @@ class MusEmbeddedFrame {
 
   uint32_t GetAndAdvanceNextChangeId();
 
-  ui::mojom::WindowTree* window_tree();
+  ws::mojom::WindowTree* window_tree();
 
   RendererWindowTreeClient* renderer_window_tree_client_;
   MusEmbeddedFrameDelegate* delegate_;
-  const ui::ClientSpecificId window_id_;
+  const ws::ClientSpecificId window_id_;
 
   std::unique_ptr<PendingState> pending_state_;
 

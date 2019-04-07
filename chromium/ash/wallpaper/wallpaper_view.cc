@@ -9,7 +9,6 @@
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/wallpaper/wallpaper_controller.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "ash/wm/overview/window_selector_controller.h"
@@ -52,22 +51,16 @@ class LayerControlView : public views::View {
     display::Display display =
         display::Screen::GetScreen()->GetDisplayNearestWindow(window);
 
-    float ui_scale = 1.f;
     display::ManagedDisplayInfo info =
         Shell::Get()->display_manager()->GetDisplayInfo(display.id());
-    if (info.id() == display.id())
-      ui_scale = info.GetEffectiveUIScale();
 
-    gfx::Size rounded_size =
-        gfx::ScaleToFlooredSize(display.size(), 1.f / ui_scale);
     DCHECK_EQ(1, child_count());
     views::View* child = child_at(0);
-    child->SetBounds(0, 0, rounded_size.width(), rounded_size.height());
+    child->SetBounds(0, 0, display.size().width(), display.size().height());
     gfx::Transform transform;
     // Apply RTL transform explicitly becacuse Views layer code
     // doesn't handle RTL.  crbug.com/458753.
     transform.Translate(-child->GetMirroredX(), 0);
-    transform.Scale(ui_scale, ui_scale);
     child->SetTransform(transform);
   }
 
@@ -233,7 +226,7 @@ bool WallpaperView::OnMousePressed(const ui::MouseEvent& event) {
 void WallpaperView::ShowContextMenuForView(views::View* source,
                                            const gfx::Point& point,
                                            ui::MenuSourceType source_type) {
-  ShellPort::Get()->ShowContextMenu(point, source_type);
+  Shell::Get()->ShowContextMenu(point, source_type);
 }
 
 views::Widget* CreateWallpaperWidget(aura::Window* root_window,

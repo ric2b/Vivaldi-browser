@@ -77,6 +77,7 @@ struct CORE_EXPORT NGBoxStrut {
   }
 
   bool operator==(const NGBoxStrut& other) const;
+  bool operator!=(const NGBoxStrut& other) const;
 
   String ToString() const;
 
@@ -108,6 +109,7 @@ struct CORE_EXPORT NGLineBoxStrut {
   NGLineBoxStrut(const NGBoxStrut&, bool is_flipped_lines);
 
   LayoutUnit InlineSum() const { return inline_start + inline_end; }
+  LayoutUnit BlockSum() const { return line_over + line_under; }
 
   LayoutUnit inline_start;
   LayoutUnit inline_end;
@@ -128,7 +130,14 @@ struct CORE_EXPORT NGPhysicalBoxStrut {
                      LayoutUnit left)
       : top(top), right(right), bottom(bottom), left(left) {}
 
+  // Converts physical dimensions to logical ones per
+  // https://drafts.csswg.org/css-writing-modes-3/#logical-to-physical
   NGBoxStrut ConvertToLogical(WritingMode, TextDirection) const;
+
+  // Converts physical dimensions to line-relative logical ones per
+  // https://drafts.csswg.org/css-writing-modes-3/#line-directions
+  NGLineBoxStrut ConvertToLineLogical(WritingMode, TextDirection) const;
+
   NGPixelSnappedPhysicalBoxStrut SnapToDevicePixels() const;
 
   LayoutUnit HorizontalSum() const { return left + right; }

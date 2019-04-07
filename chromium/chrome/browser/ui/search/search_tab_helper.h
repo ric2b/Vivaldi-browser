@@ -79,6 +79,8 @@ class SearchTabHelper : public content::WebContentsObserver,
                            ChromeIdentityCheckSignedOutMismatch);
   FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest, HistorySyncCheckSyncing);
   FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest, HistorySyncCheckNotSyncing);
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
+                           FileSelectedUpdatesLastSelectedDirectory);
 
   explicit SearchTabHelper(content::WebContents* web_contents);
 
@@ -123,8 +125,8 @@ class SearchTabHelper : public content::WebContentsObserver,
 
   // Overridden from InstantServiceObserver:
   void ThemeInfoChanged(const ThemeBackgroundInfo& theme_info) override;
-  void MostVisitedItemsChanged(
-      const std::vector<InstantMostVisitedItem>& items) override;
+  void MostVisitedItemsChanged(const std::vector<InstantMostVisitedItem>& items,
+                               bool is_custom_links) override;
 
   // Overridden from SelectFileDialog::Listener:
   void FileSelected(const base::FilePath& path,

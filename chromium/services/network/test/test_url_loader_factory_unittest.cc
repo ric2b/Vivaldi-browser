@@ -41,6 +41,9 @@ class TestURLLoaderFactoryTest : public testing::Test {
     EXPECT_TRUE(client->response_body().is_valid());
     EXPECT_TRUE(
         mojo::BlockingCopyToString(client->response_body_release(), &response));
+    EXPECT_EQ(
+        static_cast<size_t>(client->completion_status().decoded_body_length),
+        response.length());
     return response;
   }
 
@@ -70,6 +73,20 @@ TEST_F(TestURLLoaderFactoryTest, Simple) {
   StartRequest(url, &client2);
   client2.RunUntilComplete();
   EXPECT_EQ(GetData(&client2), data);
+}
+
+TEST_F(TestURLLoaderFactoryTest, AddResponseAdvanced) {
+  std::string url = "http://example.com";
+  std::string body = "Happy robot";
+
+  // Test the full-featured version of AddResponse.
+  factory()->AddResponse(GURL(url), CreateResourceResponseHead(net::HTTP_OK),
+                         body, URLLoaderCompletionStatus(net::OK));
+  StartRequest(url);
+  client()->RunUntilComplete();
+  ASSERT_TRUE(client()->response_head().headers != nullptr);
+  EXPECT_EQ(net::HTTP_OK, client()->response_head().headers->response_code());
+  EXPECT_EQ(body, GetData(client()));
 }
 
 TEST_F(TestURLLoaderFactoryTest, AddResponse404) {
@@ -125,7 +142,6 @@ TEST_F(TestURLLoaderFactoryTest, Redirects) {
       {redirect_info, ResourceResponseHead()}};
   URLLoaderCompletionStatus status;
   std::string content = "foo";
-  status.decoded_body_length = content.size();
   factory()->AddResponse(url, ResourceResponseHead(), content, status,
                          redirects);
   StartRequest(url.spec());
@@ -214,11 +230,10 @@ TEST_F(TestURLLoaderFactoryTest, NumPending2) {
 
 TEST_F(TestURLLoaderFactoryTest, SimulateResponse) {
   std::string url = "http://foo/";
-  std::string cookie_line = "my_cookie=myvalue";
   network::URLLoaderCompletionStatus ok_status(net::OK);
   ResourceResponseHead response_head =
       CreateResourceResponseHead(net::HTTP_NOT_FOUND);
-  AddCookiesToResourceResponseHead({cookie_line}, &response_head);
+  response_head.headers->AddHeader("Foo: Bar");
 
   // By default no request is pending.
   EXPECT_FALSE(factory()->SimulateResponseForPendingRequest(
@@ -238,16 +253,11 @@ TEST_F(TestURLLoaderFactoryTest, SimulateResponse) {
   ASSERT_TRUE(client()->response_head().headers);
   EXPECT_EQ(net::HTTP_NOT_FOUND,
             client()->response_head().headers->response_code());
-  // Our cookie should be set.
-  int cookie_count = 0;
+  // Our header should be set.
   std::string value;
-  size_t iter = 0;
-  while (client()->response_head().headers->EnumerateHeader(&iter, "Set-Cookie",
-                                                            &value)) {
-    EXPECT_EQ(cookie_line, value);
-    cookie_count++;
-  }
-  EXPECT_EQ(1, cookie_count);
+  EXPECT_TRUE(
+      client()->response_head().headers->GetNormalizedHeader("Foo", &value));
+  EXPECT_EQ("Bar", value);
   std::string response;
   EXPECT_TRUE(
       mojo::BlockingCopyToString(client()->response_body_release(), &response));

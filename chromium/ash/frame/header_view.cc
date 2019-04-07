@@ -10,8 +10,8 @@
 #include "ash/frame/caption_buttons/caption_button_model.h"
 #include "ash/frame/caption_buttons/frame_back_button.h"
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
-#include "ash/frame/custom_frame_view_ash.h"
 #include "ash/frame/default_frame_header.h"
+#include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
@@ -132,7 +132,8 @@ HeaderView::HeaderView(views::Widget* target_widget,
         target_widget, this, caption_button_container_);
   } else {
     DCHECK_EQ(mojom::WindowStyle::BROWSER, window_style);
-    DCHECK(!::features::IsAshInBrowserProcess());
+    // Only used with mash.
+    DCHECK(::features::IsUsingWindowService());
     appearance_provider_ = std::make_unique<WindowPropertyAppearanceProvider>(
         target_widget_->GetNativeWindow());
     auto frame_header = std::make_unique<CustomFrameHeader>(
@@ -239,6 +240,7 @@ void HeaderView::ChildPreferredSizeChanged(views::View* child) {
 }
 
 void HeaderView::OnTabletModeStarted() {
+  UpdateCaptionButtonsVisibility();
   caption_button_container_->UpdateCaptionButtonState(true /*=animate*/);
   parent()->Layout();
   if (target_widget_ &&
@@ -249,6 +251,7 @@ void HeaderView::OnTabletModeStarted() {
 }
 
 void HeaderView::OnTabletModeEnded() {
+  UpdateCaptionButtonsVisibility();
   caption_button_container_->UpdateCaptionButtonState(true /*=animate*/);
   parent()->Layout();
   if (target_widget_)
@@ -296,7 +299,7 @@ void HeaderView::SetShouldPaintHeader(bool paint) {
     return;
 
   should_paint_ = paint;
-  caption_button_container_->SetVisible(should_paint_);
+  UpdateCaptionButtonsVisibility();
   SchedulePaint();
 }
 
@@ -334,7 +337,9 @@ void HeaderView::OnImmersiveFullscreenExited() {
   in_immersive_mode_ = false;
   fullscreen_visible_fraction_ = 0;
   DestroyLayer();
-  parent()->Layout();
+  parent()->InvalidateLayout();
+  if (target_widget_)
+    target_widget_->non_client_view()->Layout();
 }
 
 void HeaderView::SetVisibleFraction(double visible_fraction) {
@@ -384,6 +389,18 @@ void HeaderView::UpdateBackButton() {
     delete back_button;
     frame_header_->SetBackButton(nullptr);
   }
+}
+
+void HeaderView::UpdateCaptionButtonsVisibility() {
+  if (!target_widget_)
+    return;
+
+  caption_button_container_->SetVisible(
+      should_paint_ && !(Shell::Get()
+                             ->tablet_mode_controller()
+                             ->IsTabletModeWindowManagerEnabled() &&
+                         target_widget_->GetNativeWindow()->GetProperty(
+                             ash::kHideCaptionButtonsInTabletModeKey)));
 }
 
 }  // namespace ash

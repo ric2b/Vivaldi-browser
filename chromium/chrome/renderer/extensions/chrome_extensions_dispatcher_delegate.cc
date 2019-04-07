@@ -78,7 +78,7 @@ void ChromeExtensionsDispatcherDelegate::AddOriginAccessPermissions(
   // conservative.
   if (extensions::Manifest::IsComponentLocation(extension.location()) &&
       is_extension_active) {
-    blink::WebSecurityPolicy::AddOriginAccessWhitelistEntry(
+    blink::WebSecurityPolicy::AddOriginAccessAllowListEntry(
         extension.url(), blink::WebString::FromUTF8(content::kChromeUIScheme),
         blink::WebString::FromUTF8(chrome::kChromeUIThemeHost), false);
   }
@@ -88,7 +88,7 @@ void ChromeExtensionsDispatcherDelegate::AddOriginAccessPermissions(
   // changes.
   if (is_extension_active && extension.permissions_data()->HasAPIPermission(
                                  extensions::APIPermission::kManagement)) {
-    blink::WebSecurityPolicy::AddOriginAccessWhitelistEntry(
+    blink::WebSecurityPolicy::AddOriginAccessAllowListEntry(
         extension.url(), blink::WebString::FromUTF8(content::kChromeUIScheme),
         blink::WebString::FromUTF8(chrome::kChromeUIExtensionIconHost), false);
   }
@@ -227,6 +227,12 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
   source_map->RegisterSource("platformKeys.utils", IDR_PLATFORM_KEYS_UTILS_JS);
   source_map->RegisterSource("terminalPrivate",
                              IDR_TERMINAL_PRIVATE_CUSTOM_BINDINGS_JS);
+
+  // IME service on Chrome OS.
+  source_map->RegisterSource("chromeos.ime.mojom.input_engine.mojom",
+                             IDR_IME_SERVICE_MOJOM_JS);
+  source_map->RegisterSource("chromeos.ime.service",
+                             IDR_IME_SERVICE_BINDINGS_JS);
 #endif  // defined(OS_CHROMEOS)
 
   source_map->RegisterSource("cast.streaming.rtpStream",
@@ -277,6 +283,18 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
   source_map->RegisterSource(
       "media/mojo/interfaces/mirror_service_remoting.mojom",
       IDR_MEDIA_REMOTING_JS);
+  source_map->RegisterSource(
+      "components/mirroring/mojom/mirroring_service_host.mojom",
+      IDR_MIRRORING_SERVICE_HOST_MOJOM_JS);
+  source_map->RegisterSource(
+      "components/mirroring/mojom/cast_message_channel.mojom",
+      IDR_MIRRORING_CAST_MESSAGE_CHANNEL_MOJOM_JS);
+  source_map->RegisterSource(
+      "components/mirroring/mojom/session_observer.mojom",
+      IDR_MIRRORING_SESSION_OBSERVER_MOJOM_JS);
+  source_map->RegisterSource(
+      "components/mirroring/mojom/session_parameters.mojom",
+      IDR_MIRRORING_SESSION_PARAMETERS_JS);
 
   // These bindings are unnecessary with native bindings enabled.
   if (!base::FeatureList::IsEnabled(extensions::features::kNativeCrxBindings)) {

@@ -432,7 +432,8 @@ class ExtensionPrefs : public KeyedService {
   // version directory and the location. Blacklisted extensions won't be saved
   // and neither will external extensions the user has explicitly uninstalled.
   // Caller takes ownership of returned structure.
-  std::unique_ptr<ExtensionsInfo> GetInstalledExtensionsInfo() const;
+  std::unique_ptr<ExtensionsInfo> GetInstalledExtensionsInfo(
+      bool include_component_extensions = false) const;
 
   // Same as above, but only includes external extensions the user has
   // explicitly uninstalled.
@@ -441,7 +442,8 @@ class ExtensionPrefs : public KeyedService {
   // Returns the ExtensionInfo from the prefs for the given extension. If the
   // extension is not present, NULL is returned.
   std::unique_ptr<ExtensionInfo> GetInstalledExtensionInfo(
-      const std::string& extension_id) const;
+      const std::string& extension_id,
+      bool include_component_extensions = false) const;
 
   // We've downloaded an updated .crx file for the extension, but are waiting
   // to install it.
@@ -571,8 +573,8 @@ class ExtensionPrefs : public KeyedService {
   // |dnr_ruleset_checksum|.
   bool GetDNRRulesetChecksum(const ExtensionId& extension_id,
                              int* dnr_ruleset_checksum) const;
-  void SetDNRRulesetChecksumForTesting(const ExtensionId& extension_id,
-                                       int dnr_ruleset_checksum);
+  void SetDNRRulesetChecksum(const ExtensionId& extension_id,
+                             int dnr_ruleset_checksum);
 
   // Sets the set of allowed pages for the given |extension_id|.
   void SetDNRAllowedPages(const ExtensionId& extension_id, URLPatternSet set);
@@ -624,7 +626,8 @@ class ExtensionPrefs : public KeyedService {
   // |extension| dictionary.
   std::unique_ptr<ExtensionInfo> GetInstalledInfoHelper(
       const std::string& extension_id,
-      const base::DictionaryValue* extension) const;
+      const base::DictionaryValue* extension,
+      bool include_component_extensions) const;
 
   // Interprets the list pref, |pref_key| in |extension_id|'s preferences, as a
   // URLPatternSet. The |valid_schemes| specify how to parse the URLPatterns.
@@ -754,7 +757,7 @@ class ExtensionPrefs : public KeyedService {
 
   bool extensions_disabled_;
 
-  base::ObserverList<ExtensionPrefsObserver> observer_list_;
+  base::ObserverList<ExtensionPrefsObserver>::Unchecked observer_list_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionPrefs);
 };

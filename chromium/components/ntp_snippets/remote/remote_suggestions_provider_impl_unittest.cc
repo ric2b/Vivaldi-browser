@@ -119,6 +119,7 @@ const char kSuggestionUrl[] = "http://localhost/foobar";
 const char kSuggestionTitle[] = "Title";
 const char kSuggestionText[] = "Suggestion";
 const char kSuggestionPublisherName[] = "Foo News";
+const char kImageUrl[] = "http://image/image.png";
 
 const char kSuggestionUrl2[] = "http://foo.com/bar";
 
@@ -179,7 +180,7 @@ gfx::Image FetchImage(RemoteSuggestionsProviderImpl* provider,
   gfx::Image result;
   base::RunLoop run_loop;
   provider->FetchSuggestionImage(
-      suggestion_id, base::Bind(
+      suggestion_id, base::BindOnce(
                          [](base::Closure signal, gfx::Image* output,
                             const gfx::Image& loaded) {
                            *output = loaded;
@@ -715,6 +716,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, Full) {
                                        .AddId(kSuggestionUrl)
                                        .SetTitle(kSuggestionTitle)
                                        .SetSnippet(kSuggestionText)
+                                       .SetImageUrl(kImageUrl)
                                        .SetPublishDate(GetDefaultCreationTime())
                                        .SetPublisher(kSuggestionPublisherName))
           .Build());
@@ -732,6 +734,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, Full) {
   EXPECT_EQ(MakeArticleID(kSuggestionUrl), suggestion.id());
   EXPECT_EQ(kSuggestionTitle, base::UTF16ToUTF8(suggestion.title()));
   EXPECT_EQ(kSuggestionText, base::UTF16ToUTF8(suggestion.snippet_text()));
+  EXPECT_EQ(kImageUrl, suggestion.salient_image_url());
   EXPECT_EQ(GetDefaultCreationTime(), suggestion.publish_date());
   EXPECT_EQ(kSuggestionPublisherName,
             base::UTF16ToUTF8(suggestion.publisher_name()));
@@ -1608,7 +1611,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, ReturnFetchRequestEmptyBeforeInit) {
   EXPECT_CALL(loaded, Call(Field(&Status::code, StatusCode::TEMPORARY_ERROR),
                            IsEmpty()));
   provider->Fetch(articles_category(), std::set<std::string>(),
-                  base::Bind(&SuggestionsLoaded, &loaded));
+                  base::BindOnce(&SuggestionsLoaded, &loaded));
   RunUntilIdle();
 }
 
@@ -1620,8 +1623,8 @@ TEST_F(RemoteSuggestionsProviderImplTest, ReturnRefetchRequestEmptyBeforeInit) {
   EXPECT_CALL(*mock_suggestions_fetcher(), FetchSnippets(_, _)).Times(0);
   MockFunction<void(Status)> loaded;
   EXPECT_CALL(loaded, Call(Field(&Status::code, StatusCode::TEMPORARY_ERROR)));
-  provider->RefetchInTheBackground(
-      base::Bind(&MockFunction<void(Status)>::Call, base::Unretained(&loaded)));
+  provider->RefetchInTheBackground(base::BindOnce(
+      &MockFunction<void(Status)>::Call, base::Unretained(&loaded)));
   RunUntilIdle();
 }
 
@@ -1652,7 +1655,7 @@ TEST_F(RemoteSuggestionsProviderImplTest,
       .RetiresOnSaturation();
   provider->Fetch(articles_category(),
                   /*known_ids=*/std::set<std::string>(),
-                  base::Bind(&SuggestionsLoaded, &loaded));
+                  base::BindOnce(&SuggestionsLoaded, &loaded));
 
   EXPECT_CALL(loaded, Call(Field(&Status::code, StatusCode::TEMPORARY_ERROR),
                            IsEmpty()));
@@ -1807,7 +1810,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, GetDismissed) {
 
   provider->GetDismissedSuggestionsForDebugging(
       articles_category(),
-      base::Bind(
+      base::BindOnce(
           [](RemoteSuggestionsProviderImpl* provider,
              RemoteSuggestionsProviderImplTest* test,
              std::vector<ContentSuggestion> dismissed_suggestions) {
@@ -1824,7 +1827,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, GetDismissed) {
   provider->ClearDismissedSuggestionsForDebugging(articles_category());
   provider->GetDismissedSuggestionsForDebugging(
       articles_category(),
-      base::Bind(
+      base::BindOnce(
           [](RemoteSuggestionsProviderImpl* provider,
              RemoteSuggestionsProviderImplTest* test,
              std::vector<ContentSuggestion> dismissed_suggestions) {
@@ -2127,8 +2130,8 @@ TEST_F(RemoteSuggestionsProviderImplTest, ImageReturnedWithTheSameId) {
 
   provider->FetchSuggestionImage(
       MakeArticleID(kSuggestionUrl),
-      base::Bind(&MockFunction<void(const gfx::Image&)>::Call,
-                 base::Unretained(&image_fetched)));
+      base::BindOnce(&MockFunction<void(const gfx::Image&)>::Call,
+                     base::Unretained(&image_fetched)));
   RunUntilIdle();
   // Check that the image by ServeOneByOneImage is really served.
   EXPECT_EQ(1, image.Width());
@@ -2147,8 +2150,8 @@ TEST_F(RemoteSuggestionsProviderImplTest, EmptyImageReturnedForNonExistentId) {
 
   provider->FetchSuggestionImage(
       MakeArticleID("nonexistent"),
-      base::Bind(&MockFunction<void(const gfx::Image&)>::Call,
-                 base::Unretained(&image_fetched)));
+      base::BindOnce(&MockFunction<void(const gfx::Image&)>::Call,
+                     base::Unretained(&image_fetched)));
 
   RunUntilIdle();
   EXPECT_TRUE(image.IsEmpty());
@@ -2176,8 +2179,8 @@ TEST_F(RemoteSuggestionsProviderImplTest,
 
   provider->FetchSuggestionImage(
       MakeArticleID(kSuggestionUrl2),
-      base::Bind(&MockFunction<void(const gfx::Image&)>::Call,
-                 base::Unretained(&image_fetched)));
+      base::BindOnce(&MockFunction<void(const gfx::Image&)>::Call,
+                     base::Unretained(&image_fetched)));
 
   RunUntilIdle();
   EXPECT_TRUE(image.IsEmpty()) << "got image with width: " << image.Width();
@@ -2505,8 +2508,8 @@ TEST_F(RemoteSuggestionsProviderImplTest,
               FetchSnippets(Field(&RequestParams::excluded_ids, known_ids), _));
   provider->Fetch(
       articles_category(), known_ids,
-      base::Bind([](Status status_code,
-                    std::vector<ContentSuggestion> suggestions) {}));
+      base::BindOnce([](Status status_code,
+                        std::vector<ContentSuggestion> suggestions) {}));
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest,
@@ -2539,8 +2542,8 @@ TEST_F(RemoteSuggestionsProviderImplTest,
                     _));
   provider->Fetch(
       articles_category(), std::set<std::string>(),
-      base::Bind([](Status status_code,
-                    std::vector<ContentSuggestion> suggestions) {}));
+      base::BindOnce([](Status status_code,
+                        std::vector<ContentSuggestion> suggestions) {}));
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest,
@@ -2577,8 +2580,8 @@ TEST_F(RemoteSuggestionsProviderImplTest,
                             _));
   provider->Fetch(
       articles_category(), std::set<std::string>(),
-      base::Bind([](Status status_code,
-                    std::vector<ContentSuggestion> suggestions) {}));
+      base::BindOnce([](Status status_code,
+                        std::vector<ContentSuggestion> suggestions) {}));
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest,
@@ -2622,8 +2625,8 @@ TEST_F(RemoteSuggestionsProviderImplTest,
                             _));
   provider->Fetch(
       articles_category(), std::set<std::string>(),
-      base::Bind([](Status status_code,
-                    std::vector<ContentSuggestion> suggestions) {}));
+      base::BindOnce([](Status status_code,
+                        std::vector<ContentSuggestion> suggestions) {}));
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest,
@@ -2650,9 +2653,10 @@ TEST_F(RemoteSuggestionsProviderImplTest,
       provider.get(), articles_category(),
       /*known_suggestion_ids=*/std::set<std::string>(),
       /*fetch_done_callback=*/
-      base::Bind([](Status status, std::vector<ContentSuggestion> suggestions) {
-        ASSERT_THAT(suggestions, SizeIs(5));
-      }),
+      base::BindOnce(
+          [](Status status, std::vector<ContentSuggestion> suggestions) {
+            ASSERT_THAT(suggestions, SizeIs(5));
+          }),
       Status::Success(), std::move(fetched_categories));
 
   // Dismiss them.
@@ -2673,8 +2677,8 @@ TEST_F(RemoteSuggestionsProviderImplTest,
                     _));
   provider->Fetch(
       articles_category(), std::set<std::string>(),
-      base::Bind([](Status status_code,
-                    std::vector<ContentSuggestion> suggestions) {}));
+      base::BindOnce([](Status status_code,
+                        std::vector<ContentSuggestion> suggestions) {}));
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest, ClearDismissedAfterFetchMore) {
@@ -2693,7 +2697,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, ClearDismissedAfterFetchMore) {
       provider.get(), articles_category(),
       /*known_suggestion_ids=*/std::set<std::string>(),
       /*fetch_done_callback=*/
-      base::Bind(
+      base::BindOnce(
           [](Status status, std::vector<ContentSuggestion> suggestions) {}),
       Status::Success(), std::move(fetched_categories));
 
@@ -2710,8 +2714,8 @@ TEST_F(RemoteSuggestionsProviderImplTest, ClearDismissedAfterFetchMore) {
                             _));
   provider->Fetch(
       articles_category(), std::set<std::string>(),
-      base::Bind([](Status status_code,
-                    std::vector<ContentSuggestion> suggestions) {}));
+      base::BindOnce([](Status status_code,
+                        std::vector<ContentSuggestion> suggestions) {}));
 
   // Clear dismissals.
   provider->ClearDismissedSuggestionsForDebugging(articles_category());
@@ -2721,8 +2725,8 @@ TEST_F(RemoteSuggestionsProviderImplTest, ClearDismissedAfterFetchMore) {
               FetchSnippets(Field(&RequestParams::excluded_ids, IsEmpty()), _));
   provider->Fetch(
       articles_category(), std::set<std::string>(),
-      base::Bind([](Status status_code,
-                    std::vector<ContentSuggestion> suggestions) {}));
+      base::BindOnce([](Status status_code,
+                        std::vector<ContentSuggestion> suggestions) {}));
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest,
@@ -2778,8 +2782,8 @@ TEST_F(RemoteSuggestionsProviderImplTest,
                     _));
   provider->Fetch(
       articles_category(), std::set<std::string>(),
-      base::Bind([](Status status_code,
-                    std::vector<ContentSuggestion> suggestions) {}));
+      base::BindOnce([](Status status_code,
+                        std::vector<ContentSuggestion> suggestions) {}));
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest,
@@ -2832,8 +2836,8 @@ TEST_F(RemoteSuggestionsProviderImplTest,
                             _));
   provider->Fetch(
       articles_category(), std::set<std::string>(),
-      base::Bind([](Status status_code,
-                    std::vector<ContentSuggestion> suggestions) {}));
+      base::BindOnce([](Status status_code,
+                        std::vector<ContentSuggestion> suggestions) {}));
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest,
@@ -4409,8 +4413,9 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   provider->Fetch(
       articles_category(), /*known_suggestion_ids=*/std::set<std::string>(),
       /*fetch_done_callback=*/
-      base::Bind([](Status status_code,
-                    std::vector<ContentSuggestion> suggestions) -> void {}));
+      base::BindOnce(
+          [](Status status_code,
+             std::vector<ContentSuggestion> suggestions) -> void {}));
 
   ASSERT_TRUE(params.exclusive_category.has_value());
   EXPECT_EQ(*params.exclusive_category, articles_category());

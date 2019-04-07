@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/vector_icons/vector_icons.h"
 #include "chromeos/network/device_state.h"
 #include "chromeos/network/network_connection_handler.h"
 #include "chromeos/network/network_state.h"
@@ -181,6 +182,10 @@ SkColor GetDefaultColorForIconType(IconType icon_type) {
 }
 
 bool IconTypeIsDark(IconType icon_type) {
+  if (features::IsSystemTrayUnifiedEnabled()) {
+    // Dark icon is used for OOBE tray icon because the background is white.
+    return icon_type == ICON_TYPE_TRAY_OOBE;
+  }
   return icon_type != ICON_TYPE_TRAY_REGULAR;
 }
 
@@ -189,6 +194,8 @@ bool IconTypeHasVPNBadge(IconType icon_type) {
 }
 
 gfx::Size GetSizeForBaseIconSize(const gfx::Size& base_icon_size) {
+  if (features::IsSystemTrayUnifiedEnabled())
+    return base_icon_size;
   gfx::Size size = base_icon_size;
   const int badge_offset = base_icon_size.width() == kTrayIconSize
                                ? kTrayIconBadgeOffset
@@ -233,8 +240,14 @@ ImageType ImageTypeForNetwork(const NetworkState* network, IconType icon_type) {
 }
 
 gfx::Size GetSizeForIconType(IconType icon_type) {
-  int side = IsTrayIcon(icon_type) ? kTrayIconSize : kMenuIconSize;
-  return gfx::Size(side, side);
+  int size = kMenuIconSize;
+  if (IsTrayIcon(icon_type)) {
+    size = TrayConstants::GetTrayIconSize();
+  } else if (features::IsSystemTrayUnifiedEnabled() &&
+             icon_type == ICON_TYPE_DEFAULT_VIEW) {
+    size = kUnifiedFeaturePodVectorIconSize;
+  }
+  return gfx::Size(size, size);
 }
 
 gfx::ImageSkia GetImageForIndex(ImageType image_type,
@@ -293,7 +306,8 @@ gfx::ImageSkia ConnectingVpnImage(double animation) {
 }
 
 Badge ConnectingVpnBadge(double animation, IconType icon_type) {
-  return {&kNetworkBadgeVpnIcon,
+  return {features::IsSystemTrayUnifiedEnabled() ? &kUnifiedNetworkBadgeVpnIcon
+                                                 : &kNetworkBadgeVpnIcon,
           SkColorSetA(GetDefaultColorForIconType(icon_type), 0xFF * animation)};
 }
 
@@ -342,7 +356,9 @@ gfx::ImageSkia GetIcon(const NetworkState* network,
                        IconType icon_type,
                        int strength_index) {
   if (network->Matches(NetworkTypePattern::Ethernet())) {
-    return gfx::CreateVectorIcon(kNetworkEthernetIcon,
+    return gfx::CreateVectorIcon(features::IsSystemTrayUnifiedEnabled()
+                                     ? vector_icons::kEthernetIcon
+                                     : kNetworkEthernetIcon,
                                  GetDefaultColorForIconType(icon_type));
   }
   if (network->Matches(NetworkTypePattern::Wireless())) {
@@ -486,7 +502,10 @@ bool NetworkIconImpl::UpdateVPNBadge() {
           NetworkTypePattern::VPN());
   Badge vpn_badge = {};
   if (vpn)
-    vpn_badge = {&kNetworkBadgeVpnIcon, GetDefaultColorForIconType(icon_type_)};
+    vpn_badge = {features::IsSystemTrayUnifiedEnabled()
+                     ? &kUnifiedNetworkBadgeVpnIcon
+                     : &kNetworkBadgeVpnIcon,
+                 GetDefaultColorForIconType(icon_type_)};
   if (vpn_badge != vpn_badge_) {
     vpn_badge_ = vpn_badge;
     return true;
@@ -501,8 +520,11 @@ void NetworkIconImpl::GetBadges(const NetworkState* network, Badges* badges) {
   const SkColor icon_color = GetDefaultColorForIconType(icon_type_);
   if (type == shill::kTypeWifi) {
     if (network->security_class() != shill::kSecurityNone &&
-        IconTypeIsDark(icon_type_)) {
-      badges->bottom_right = {&kNetworkBadgeSecureIcon, icon_color};
+        !IsTrayIcon(icon_type_)) {
+      badges->bottom_right = {features::IsSystemTrayUnifiedEnabled()
+                                  ? &kUnifiedNetworkBadgeSecureIcon
+                                  : &kNetworkBadgeSecureIcon,
+                              icon_color};
     }
   } else if (type == shill::kTypeWimax) {
     technology_badge_ = {&kNetworkBadgeTechnology4gIcon, icon_color};
@@ -526,7 +548,10 @@ void NetworkIconImpl::GetBadges(const NetworkState* network, Badges* badges) {
     badges->top_left = technology_badge_;
     badges->bottom_left = vpn_badge_;
     if (behind_captive_portal_)
-      badges->bottom_right = {&kNetworkBadgeCaptivePortalIcon, icon_color};
+      badges->bottom_right = {features::IsSystemTrayUnifiedEnabled()
+                                  ? &kUnifiedNetworkBadgeCaptivePortalIcon
+                                  : &kNetworkBadgeCaptivePortalIcon,
+                              icon_color};
   }
 }
 
@@ -580,6 +605,12 @@ gfx::ImageSkia GetImageForNetwork(const NetworkState* network,
 }
 
 gfx::ImageSkia GetImageForWiFiEnabledState(bool enabled, IconType icon_type) {
+  if (features::IsSystemTrayUnifiedEnabled() && !enabled) {
+    return gfx::CreateVectorIcon(kUnifiedMenuWifiOffIcon,
+                                 GetSizeForIconType(icon_type).width(),
+                                 GetDefaultColorForIconType(icon_type));
+  }
+
   gfx::ImageSkia image =
       GetBasicImage(true /* connected */, icon_type, shill::kTypeWifi);
   Badges badges;

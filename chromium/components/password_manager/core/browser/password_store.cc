@@ -14,7 +14,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/form_data.h"
@@ -82,10 +82,10 @@ void PasswordStore::CheckReuseRequest::OnReuseFound(
     const std::vector<std::string>& matching_domains,
     int saved_passwords) {
   origin_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&PasswordReuseDetectorConsumer::OnReuseFound, consumer_weak_,
-                 password_length, reused_protected_password_hash,
-                 matching_domains, saved_passwords));
+      FROM_HERE, base::BindOnce(&PasswordReuseDetectorConsumer::OnReuseFound,
+                                consumer_weak_, password_length,
+                                reused_protected_password_hash,
+                                matching_domains, saved_passwords));
 }
 #endif
 
@@ -410,14 +410,23 @@ void PasswordStore::SaveSyncPasswordHash(
   }
 }
 
-void PasswordStore::ClearPasswordHash(const std::string& username) {
+void PasswordStore::ClearGaiaPasswordHash(const std::string& username) {
   hash_password_manager_.ClearSavedPasswordHash(username,
                                                 /*is_gaia_password=*/true);
-  // TODO(crbug.com/844134): Find a way to clear corresponding Gaia password
-  // hash when user logs out individual Gaia account in content area.
-  hash_password_manager_.ClearAllPasswordHash(/*is_gaia_password=*/true);
+  ScheduleTask(base::BindRepeating(&PasswordStore::ClearGaiaPasswordHashImpl,
+                                   this, username));
+}
+
+void PasswordStore::ClearAllGaiaPasswordHash() {
+  hash_password_manager_.ClearAllPasswordHash(/* is_gaia_password= */ true);
+  ScheduleTask(
+      base::BindRepeating(&PasswordStore::ClearAllGaiaPasswordHashImpl, this));
+}
+
+void PasswordStore::ClearAllEnterprisePasswordHash() {
+  hash_password_manager_.ClearAllPasswordHash(/* is_gaia_password= */ false);
   ScheduleTask(base::BindRepeating(
-      &PasswordStore::ClearProtectedPasswordHashImpl, this));
+      &PasswordStore::ClearAllEnterprisePasswordHashImpl, this));
 }
 
 void PasswordStore::SetPasswordStoreSigninNotifier(
@@ -579,11 +588,19 @@ void PasswordStore::SaveEnterprisePasswordURLs(
                                              enterprise_change_password_url);
 }
 
-void PasswordStore::ClearProtectedPasswordHashImpl() {
-  // TODO(crbug.com/844134): Find a way to clear corresponding Gaia password
-  // hash when user logs out individual Gaia account in content area.
+void PasswordStore::ClearGaiaPasswordHashImpl(const std::string& username) {
+  if (reuse_detector_)
+    reuse_detector_->ClearGaiaPasswordHash(username);
+}
+
+void PasswordStore::ClearAllGaiaPasswordHashImpl() {
   if (reuse_detector_)
     reuse_detector_->ClearAllGaiaPasswordHash();
+}
+
+void PasswordStore::ClearAllEnterprisePasswordHashImpl() {
+  if (reuse_detector_)
+    reuse_detector_->ClearAllEnterprisePasswordHash();
 }
 #endif
 
@@ -804,8 +821,9 @@ void PasswordStore::FindAndUpdateAffiliatedWebLogins(
 void PasswordStore::ScheduleFindAndUpdateAffiliatedWebLogins(
     const PasswordForm& added_or_updated_android_form) {
   main_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&PasswordStore::FindAndUpdateAffiliatedWebLogins,
-                            this, added_or_updated_android_form));
+      FROM_HERE,
+      base::BindOnce(&PasswordStore::FindAndUpdateAffiliatedWebLogins, this,
+                     added_or_updated_android_form));
 }
 
 void PasswordStore::UpdateAffiliatedWebLoginsImpl(

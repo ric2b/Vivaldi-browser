@@ -61,6 +61,8 @@ class ObbMounterHost;
 class ObbMounterInstance;
 class OemCryptoHost;
 class OemCryptoInstance;
+class PipHost;
+class PipInstance;
 class PolicyHost;
 class PolicyInstance;
 class PowerHost;
@@ -68,6 +70,7 @@ class PowerInstance;
 class PrintHost;
 class PrintInstance;
 class ProcessInstance;
+class PropertyInstance;
 class RotationLockInstance;
 class ScreenCaptureHost;
 class ScreenCaptureInstance;
@@ -187,6 +190,7 @@ class ArcBridgeService {
   oemcrypto() {
     return &oemcrypto_;
   }
+  ConnectionHolder<mojom::PipInstance, mojom::PipHost>* pip() { return &pip_; }
   ConnectionHolder<mojom::PolicyInstance, mojom::PolicyHost>* policy() {
     return &policy_;
   }
@@ -197,6 +201,7 @@ class ArcBridgeService {
     return &print_;
   }
   ConnectionHolder<mojom::ProcessInstance>* process() { return &process_; }
+  ConnectionHolder<mojom::PropertyInstance>* property() { return &property_; }
   ConnectionHolder<mojom::RotationLockInstance>* rotation_lock() {
     return &rotation_lock_;
   }
@@ -277,10 +282,12 @@ class ArcBridgeService {
   ConnectionHolder<mojom::ObbMounterInstance, mojom::ObbMounterHost>
       obb_mounter_;
   ConnectionHolder<mojom::OemCryptoInstance, mojom::OemCryptoHost> oemcrypto_;
+  ConnectionHolder<mojom::PipInstance, mojom::PipHost> pip_;
   ConnectionHolder<mojom::PolicyInstance, mojom::PolicyHost> policy_;
   ConnectionHolder<mojom::PowerInstance, mojom::PowerHost> power_;
   ConnectionHolder<mojom::PrintInstance, mojom::PrintHost> print_;
   ConnectionHolder<mojom::ProcessInstance> process_;
+  ConnectionHolder<mojom::PropertyInstance> property_;
   ConnectionHolder<mojom::RotationLockInstance> rotation_lock_;
   ConnectionHolder<mojom::ScreenCaptureInstance, mojom::ScreenCaptureHost>
       screen_capture_;

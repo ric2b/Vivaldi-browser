@@ -25,11 +25,11 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.NativePage;
-import org.chromium.chrome.browser.NativePageHost;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
 import org.chromium.chrome.browser.download.DownloadManagerService;
+import org.chromium.chrome.browser.native_page.NativePage;
+import org.chromium.chrome.browser.native_page.NativePageHost;
 import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.omnibox.LocationBarVoiceRecognitionHandler;
@@ -92,7 +92,7 @@ public class NewTabPage
     private TabObserver mTabObserver;
     protected boolean mSearchProviderHasLogo;
 
-    private FakeboxDelegate mFakeboxDelegate;
+    protected FakeboxDelegate mFakeboxDelegate;
     private LocationBarVoiceRecognitionHandler mVoiceRecognitionHandler;
 
     // The timestamp at which the constructor was called.
@@ -314,7 +314,7 @@ public class NewTabPage
 
             @Override
             public void onPageLoadStarted(Tab tab, String url) {
-                restoreLastScrollPosition();
+                saveLastScrollPosition();
             }
         };
         mTab.addObserver(mTabObserver);
@@ -349,9 +349,9 @@ public class NewTabPage
     }
 
     /**
-     * Restore the last scroll position stored in the navigation entry (if set).
+     * Save the last scroll position stored in the navigation entry if necessary.
      */
-    protected void restoreLastScrollPosition() {
+    protected void saveLastScrollPosition() {
         int scrollPosition = mNewTabPageView.getScrollPosition();
         if (scrollPosition == RecyclerView.NO_POSITION) return;
 

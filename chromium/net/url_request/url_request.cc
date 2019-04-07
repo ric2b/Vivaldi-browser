@@ -593,7 +593,8 @@ URLRequest::URLRequest(const GURL& url,
       raw_header_size_(0),
       is_pac_request_(false),
       traffic_annotation_(traffic_annotation),
-      upgrade_if_insecure_(false) {
+      upgrade_if_insecure_(false),
+      weak_factory_(this) {
   // Sanity check out environment.
   DCHECK(base::ThreadTaskRunnerHandle::IsSet());
 
@@ -1074,19 +1075,26 @@ void URLRequest::NotifySSLCertificateError(const SSLInfo& ssl_info,
 
 bool URLRequest::CanGetCookies(const CookieList& cookie_list) const {
   DCHECK(!(load_flags_ & LOAD_DO_NOT_SEND_COOKIES));
+  bool can_get_cookies = g_default_can_use_cookies;
   if (network_delegate_) {
-    return network_delegate_->CanGetCookies(*this, cookie_list);
+    can_get_cookies = network_delegate_->CanGetCookies(*this, cookie_list);
   }
-  return g_default_can_use_cookies;
+
+  if (!can_get_cookies)
+    net_log_.AddEvent(NetLogEventType::COOKIE_GET_BLOCKED_BY_NETWORK_DELEGATE);
+  return can_get_cookies;
 }
 
 bool URLRequest::CanSetCookie(const net::CanonicalCookie& cookie,
                               CookieOptions* options) const {
   DCHECK(!(load_flags_ & LOAD_DO_NOT_SAVE_COOKIES));
+  bool can_set_cookies = g_default_can_use_cookies;
   if (network_delegate_) {
-    return network_delegate_->CanSetCookie(*this, cookie, options);
+    can_set_cookies = network_delegate_->CanSetCookie(*this, cookie, options);
   }
-  return g_default_can_use_cookies;
+  if (!can_set_cookies)
+    net_log_.AddEvent(NetLogEventType::COOKIE_SET_BLOCKED_BY_NETWORK_DELEGATE);
+  return can_set_cookies;
 }
 
 bool URLRequest::CanEnablePrivacyMode() const {
@@ -1267,6 +1275,10 @@ void URLRequest::set_status(URLRequestStatus status) {
   DCHECK(status_.is_io_pending() || status_.is_success() ||
          (!status.is_success() && !status.is_io_pending()));
   status_ = status;
+}
+
+base::WeakPtr<URLRequest> URLRequest::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 }  // namespace net

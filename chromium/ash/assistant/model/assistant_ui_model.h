@@ -21,6 +21,7 @@ enum class AssistantSource {
   kLongPressLauncher,
   kSetup,
   kStylus,
+  kLauncherSearchBox,
 };
 
 // Enumeration of Assistant UI modes.
@@ -28,6 +29,13 @@ enum class AssistantUiMode {
   kMainUi,
   kMiniUi,
   kWebUi,
+};
+
+// Enumeration of Assistant visibility states.
+enum class AssistantVisibility {
+  kClosed,   // Assistant UI is hidden and the previous session has finished.
+  kHidden,   // Assistant UI is hidden and the previous session is paused.
+  kVisible,  // Assistant UI is visible and a session is in progress.
 };
 
 // Models the Assistant UI.
@@ -47,19 +55,20 @@ class AssistantUiModel {
   AssistantUiMode ui_mode() const { return ui_mode_; }
 
   // Sets the UI visibility.
-  void SetVisible(bool visible, AssistantSource source);
+  void SetVisibility(AssistantVisibility visibility, AssistantSource source);
 
-  bool visible() const { return visible_; }
+  AssistantVisibility visibility() const { return visibility_; }
 
  private:
   void NotifyUiModeChanged();
-  void NotifyUiVisibilityChanged(AssistantSource source);
+  void NotifyUiVisibilityChanged(AssistantVisibility old_visibility,
+                                 AssistantSource source);
 
   AssistantUiMode ui_mode_ = AssistantUiMode::kMainUi;
 
-  bool visible_ = false;
+  AssistantVisibility visibility_ = AssistantVisibility::kClosed;
 
-  base::ObserverList<AssistantUiModelObserver> observers_;
+  base::ObserverList<AssistantUiModelObserver>::Unchecked observers_;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantUiModel);
 };

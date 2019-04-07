@@ -29,6 +29,13 @@ class SupervisedUserURLFilterTest : public ::testing::Test,
 
   // SupervisedUserURLFilter::Observer:
   void OnSiteListUpdated() override { run_loop_.Quit(); }
+  void OnURLChecked(const GURL& url,
+                    SupervisedUserURLFilter::FilteringBehavior behavior,
+                    supervised_user_error_page::FilteringBehaviorReason reason,
+                    bool uncertain) override {
+    behavior_ = behavior;
+    reason_ = reason;
+  }
 
  protected:
   bool IsURLWhitelisted(const std::string& url) {
@@ -36,13 +43,45 @@ class SupervisedUserURLFilterTest : public ::testing::Test,
            SupervisedUserURLFilter::ALLOW;
   }
 
-  GURL GetEmbeddedURL(const std::string& url) {
-    return filter_.GetEmbeddedURL(GURL(url));
+  void ExpectURLInDefaultWhitelist(const std::string& url) {
+    ExpectURLCheckMatches(url, SupervisedUserURLFilter::ALLOW,
+                          supervised_user_error_page::DEFAULT);
+  }
+
+  void ExpectURLInDefaultBlacklist(const std::string& url) {
+    ExpectURLCheckMatches(url, SupervisedUserURLFilter::BLOCK,
+                          supervised_user_error_page::DEFAULT);
+  }
+
+  void ExpectURLInManualWhitelist(const std::string& url) {
+    ExpectURLCheckMatches(url, SupervisedUserURLFilter::ALLOW,
+                          supervised_user_error_page::MANUAL);
+  }
+
+  void ExpectURLInManualBlacklist(const std::string& url) {
+    ExpectURLCheckMatches(url, SupervisedUserURLFilter::BLOCK,
+                          supervised_user_error_page::MANUAL);
   }
 
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::RunLoop run_loop_;
   SupervisedUserURLFilter filter_;
+  SupervisedUserURLFilter::FilteringBehavior behavior_;
+  supervised_user_error_page::FilteringBehaviorReason reason_;
+
+ private:
+  void ExpectURLCheckMatches(
+      const std::string& url,
+      SupervisedUserURLFilter::FilteringBehavior expected_behavior,
+      supervised_user_error_page::FilteringBehaviorReason expected_reason) {
+    bool called_synchronously =
+        filter_.GetFilteringBehaviorForURLWithAsyncChecks(GURL(url),
+                                                          base::DoNothing());
+    ASSERT_TRUE(called_synchronously);
+
+    EXPECT_EQ(behavior_, expected_behavior);
+    EXPECT_EQ(reason_, expected_reason);
+  }
 };
 
 TEST_F(SupervisedUserURLFilterTest, Basic) {
@@ -403,30 +442,85 @@ TEST_F(SupervisedUserURLFilterTest, HostMatchesPattern) {
                                                   "www.*.google.com"));
 }
 
-TEST_F(SupervisedUserURLFilterTest, Patterns) {
+TEST_F(SupervisedUserURLFilterTest, PatternsWithoutConflicts) {
   std::map<std::string, bool> hosts;
 
-  // Initally, the second rule is ignored because has the same value as the
-  // default (block). When we change the default to allow, the first rule is
-  // ignored instead.
+  // The third rule is redundant with the first, but it's not a conflict
+  // since they have the same value (allow).
   hosts["*.google.com"] = true;
-  hosts["www.google.*"] = false;
-
   hosts["accounts.google.com"] = false;
   hosts["mail.google.com"] = true;
-  filter_.SetManualHosts(std::move(hosts));
 
-  // Initially, the default filtering behavior is BLOCK.
+  filter_.SetManualHosts(std::move(hosts));
+  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+
   EXPECT_TRUE(IsURLWhitelisted("http://www.google.com/foo/"));
   EXPECT_FALSE(IsURLWhitelisted("http://accounts.google.com/bar/"));
-  EXPECT_FALSE(IsURLWhitelisted("http://www.google.co.uk/blurp/"));
   EXPECT_TRUE(IsURLWhitelisted("http://mail.google.com/moose/"));
+  EXPECT_FALSE(IsURLWhitelisted("http://www.google.co.uk/blurp/"));
 
   filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::ALLOW);
+
+  EXPECT_TRUE(IsURLWhitelisted("http://www.google.com/foo/"));
+  EXPECT_FALSE(IsURLWhitelisted("http://accounts.google.com/bar/"));
+  EXPECT_TRUE(IsURLWhitelisted("http://mail.google.com/moose/"));
+  EXPECT_TRUE(IsURLWhitelisted("http://www.google.co.uk/blurp/"));
+}
+
+TEST_F(SupervisedUserURLFilterTest, PatternsWithConflicts) {
+  std::map<std::string, bool> hosts;
+
+  // The fourth rule conflicts with the first for "www.google.com" host.
+  // Blocking then takes precedence.
+  hosts["*.google.com"] = true;
+  hosts["accounts.google.com"] = false;
+  hosts["mail.google.com"] = true;
+  hosts["www.google.*"] = false;
+
+  filter_.SetManualHosts(std::move(hosts));
+  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+
   EXPECT_FALSE(IsURLWhitelisted("http://www.google.com/foo/"));
   EXPECT_FALSE(IsURLWhitelisted("http://accounts.google.com/bar/"));
-  EXPECT_FALSE(IsURLWhitelisted("http://www.google.co.uk/blurp/"));
   EXPECT_TRUE(IsURLWhitelisted("http://mail.google.com/moose/"));
+  EXPECT_FALSE(IsURLWhitelisted("http://www.google.co.uk/blurp/"));
+
+  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::ALLOW);
+
+  EXPECT_FALSE(IsURLWhitelisted("http://www.google.com/foo/"));
+  EXPECT_FALSE(IsURLWhitelisted("http://accounts.google.com/bar/"));
+  EXPECT_TRUE(IsURLWhitelisted("http://mail.google.com/moose/"));
+  EXPECT_FALSE(IsURLWhitelisted("http://www.google.co.uk/blurp/"));
+}
+
+TEST_F(SupervisedUserURLFilterTest, Reason) {
+  std::map<std::string, bool> hosts;
+  std::map<GURL, bool> urls;
+  hosts["youtube.com"] = true;
+  hosts["*.google.*"] = true;
+  urls[GURL("https://youtube.com/robots.txt")] = false;
+  urls[GURL("https://google.co.uk/robots.txt")] = false;
+
+  filter_.SetManualHosts(std::move(hosts));
+  filter_.SetManualURLs(std::move(urls));
+
+  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+
+  ExpectURLInDefaultBlacklist("https://m.youtube.com/feed/trending");
+  ExpectURLInDefaultBlacklist("https://com.google");
+  ExpectURLInManualWhitelist("https://youtube.com/feed/trending");
+  ExpectURLInManualWhitelist("https://google.com/humans.txt");
+  ExpectURLInManualBlacklist("https://youtube.com/robots.txt");
+  ExpectURLInManualBlacklist("https://google.co.uk/robots.txt");
+
+  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::ALLOW);
+
+  ExpectURLInDefaultWhitelist("https://m.youtube.com/feed/trending");
+  ExpectURLInDefaultWhitelist("https://com.google");
+  ExpectURLInManualWhitelist("https://youtube.com/feed/trending");
+  ExpectURLInManualWhitelist("https://google.com/humans.txt");
+  ExpectURLInManualBlacklist("https://youtube.com/robots.txt");
+  ExpectURLInManualBlacklist("https://google.co.uk/robots.txt");
 }
 
 TEST_F(SupervisedUserURLFilterTest, WhitelistsPatterns) {
@@ -593,171 +687,4 @@ TEST_F(SupervisedUserURLFilterTest, GoogleFamiliesAlwaysAllowed) {
   EXPECT_TRUE(IsURLWhitelisted("http://families.google.com/"));
   EXPECT_FALSE(IsURLWhitelisted("https://families.google.com:8080/"));
   EXPECT_FALSE(IsURLWhitelisted("https://subdomain.families.google.com/"));
-}
-
-TEST_F(SupervisedUserURLFilterTest, GetEmbeddedURLAmpCache) {
-  // Base case.
-  EXPECT_EQ(GURL("http://example.com"),
-            GetEmbeddedURL("https://cdn.ampproject.org/c/example.com"));
-  // "s/" means "use https".
-  EXPECT_EQ(GURL("https://example.com"),
-            GetEmbeddedURL("https://cdn.ampproject.org/c/s/example.com"));
-  // With path and query. Fragment is not extracted.
-  EXPECT_EQ(GURL("https://example.com/path/to/file.html?q=asdf"),
-            GetEmbeddedURL("https://cdn.ampproject.org/c/s/example.com/path/to/"
-                           "file.html?q=asdf#baz"));
-
-  // Different host is not supported.
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://www.ampproject.org/c/example.com"));
-  // Different TLD is not supported.
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://cdn.ampproject.com/c/example.com"));
-  // Content type ("c/") is missing.
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://cdn.ampproject.org/example.com"));
-  // Content type is mis-formatted, must be a single character.
-  EXPECT_EQ(GURL(),
-            GetEmbeddedURL("https://cdn.ampproject.org/cd/example.com"));
-}
-
-TEST_F(SupervisedUserURLFilterTest, GetEmbeddedURLGoogleAmpViewer) {
-  // Base case.
-  EXPECT_EQ(GURL("http://example.com"),
-            GetEmbeddedURL("https://www.google.com/amp/example.com"));
-  // "s/" means "use https".
-  EXPECT_EQ(GURL("https://example.com"),
-            GetEmbeddedURL("https://www.google.com/amp/s/example.com"));
-  // Different Google TLDs are supported.
-  EXPECT_EQ(GURL("http://example.com"),
-            GetEmbeddedURL("https://www.google.de/amp/example.com"));
-  EXPECT_EQ(GURL("http://example.com"),
-            GetEmbeddedURL("https://www.google.co.uk/amp/example.com"));
-  // With path.
-  EXPECT_EQ(GURL("http://example.com/path"),
-            GetEmbeddedURL("https://www.google.com/amp/example.com/path"));
-  // Query is *not* part of the embedded URL.
-  EXPECT_EQ(
-      GURL("http://example.com/path"),
-      GetEmbeddedURL("https://www.google.com/amp/example.com/path?q=baz"));
-  // Query and fragment in percent-encoded form *are* part of the embedded URL.
-  EXPECT_EQ(
-      GURL("http://example.com/path?q=foo#bar"),
-      GetEmbeddedURL(
-          "https://www.google.com/amp/example.com/path%3fq=foo%23bar?q=baz"));
-  // "/" may also be percent-encoded.
-  EXPECT_EQ(GURL("http://example.com/path?q=foo#bar"),
-            GetEmbeddedURL("https://www.google.com/amp/"
-                           "example.com%2fpath%3fq=foo%23bar?q=baz"));
-
-  // Missing "amp/".
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://www.google.com/example.com"));
-  // Path component before the "amp/".
-  EXPECT_EQ(GURL(),
-            GetEmbeddedURL("https://www.google.com/foo/amp/example.com"));
-  // Different host.
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://www.other.com/amp/example.com"));
-  // Different subdomain.
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://mail.google.com/amp/example.com"));
-  // Invalid TLD.
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://www.google.nope/amp/example.com"));
-}
-
-TEST_F(SupervisedUserURLFilterTest, GetEmbeddedURLGoogleWebCache) {
-  // Base case.
-  EXPECT_EQ(GURL("http://example.com"),
-            GetEmbeddedURL("https://webcache.googleusercontent.com/"
-                           "search?q=cache:ABCDEFGHI-JK:example.com/"));
-  // With search query.
-  EXPECT_EQ(
-      GURL("http://example.com"),
-      GetEmbeddedURL("https://webcache.googleusercontent.com/"
-                     "search?q=cache:ABCDEFGHI-JK:example.com/+search_query"));
-  // Without fingerprint.
-  EXPECT_EQ(GURL("http://example.com"),
-            GetEmbeddedURL("https://webcache.googleusercontent.com/"
-                           "search?q=cache:example.com/"));
-  // With search query, without fingerprint.
-  EXPECT_EQ(GURL("http://example.com"),
-            GetEmbeddedURL("https://webcache.googleusercontent.com/"
-                           "search?q=cache:example.com/+search_query"));
-  // Query params other than "q=" don't matter.
-  EXPECT_EQ(GURL("http://example.com"),
-            GetEmbeddedURL("https://webcache.googleusercontent.com/"
-                           "search?a=b&q=cache:example.com/&c=d"));
-  // With scheme.
-  EXPECT_EQ(GURL("http://example.com"),
-            GetEmbeddedURL("https://webcache.googleusercontent.com/"
-                           "search?q=cache:http://example.com/"));
-  // Preserve https.
-  EXPECT_EQ(GURL("https://example.com"),
-            GetEmbeddedURL("https://webcache.googleusercontent.com/"
-                           "search?q=cache:https://example.com/"));
-
-  // Wrong host.
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://www.googleusercontent.com/"
-                                   "search?q=cache:example.com/"));
-  // Wrong path.
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://webcache.googleusercontent.com/"
-                                   "path?q=cache:example.com/"));
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://webcache.googleusercontent.com/"
-                                   "path/search?q=cache:example.com/"));
-  // Missing "cache:".
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://webcache.googleusercontent.com/"
-                                   "search?q=example.com"));
-  // Wrong fingerprint.
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://webcache.googleusercontent.com/"
-                                   "search?q=cache:123:example.com/"));
-  // Wrong query param.
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://webcache.googleusercontent.com/"
-                                   "search?a=cache:example.com/"));
-  // Invalid scheme.
-  EXPECT_EQ(GURL(), GetEmbeddedURL("https://webcache.googleusercontent.com/"
-                                   "search?q=cache:abc://example.com/"));
-}
-
-TEST_F(SupervisedUserURLFilterTest, GetEmbeddedURLTranslate) {
-  // Base case.
-  EXPECT_EQ(GURL("http://example.com"),
-            GetEmbeddedURL("https://translate.google.com/path?u=example.com"));
-  // Different TLD.
-  EXPECT_EQ(GURL("http://example.com"),
-            GetEmbeddedURL("https://translate.google.de/path?u=example.com"));
-  // Alternate base URL.
-  EXPECT_EQ(GURL("http://example.com"),
-            GetEmbeddedURL(
-                "https://translate.googleusercontent.com/path?u=example.com"));
-  // With scheme.
-  EXPECT_EQ(
-      GURL("http://example.com"),
-      GetEmbeddedURL("https://translate.google.com/path?u=http://example.com"));
-  // With https scheme.
-  EXPECT_EQ(GURL("https://example.com"),
-            GetEmbeddedURL(
-                "https://translate.google.com/path?u=https://example.com"));
-  // With other parameters.
-  EXPECT_EQ(
-      GURL("http://example.com"),
-      GetEmbeddedURL(
-          "https://translate.google.com/path?a=asdf&u=example.com&b=fdsa"));
-
-  // Different subdomain is not supported.
-  EXPECT_EQ(GURL(), GetEmbeddedURL(
-                        "https://translate.foo.google.com/path?u=example.com"));
-  EXPECT_EQ(GURL(), GetEmbeddedURL(
-                        "https://translate.www.google.com/path?u=example.com"));
-  EXPECT_EQ(
-      GURL(),
-      GetEmbeddedURL("https://translate.google.google.com/path?u=example.com"));
-  EXPECT_EQ(GURL(), GetEmbeddedURL(
-                        "https://foo.translate.google.com/path?u=example.com"));
-  EXPECT_EQ(GURL(),
-            GetEmbeddedURL("https://translate2.google.com/path?u=example.com"));
-  EXPECT_EQ(GURL(),
-            GetEmbeddedURL(
-                "https://translate2.googleusercontent.com/path?u=example.com"));
-  // Different TLD is not supported for googleusercontent.
-  EXPECT_EQ(GURL(),
-            GetEmbeddedURL(
-                "https://translate.googleusercontent.de/path?u=example.com"));
-  // Query parameter ("u=...") is missing.
-  EXPECT_EQ(GURL(),
-            GetEmbeddedURL("https://translate.google.com/path?t=example.com"));
 }

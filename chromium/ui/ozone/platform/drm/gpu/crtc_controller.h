@@ -20,6 +20,7 @@
 
 namespace ui {
 
+class DrmBuffer;
 class DrmDevice;
 
 // Wrapper around a CRTC.
@@ -60,18 +61,13 @@ class CrtcController {
   // gbm will pick a modifier as it allocates the bo.
   std::vector<uint64_t> GetFormatModifiers(uint32_t fourcc_format);
 
-
-  bool SetCursor(const scoped_refptr<ScanoutBuffer>& buffer);
-  bool MoveCursor(const gfx::Point& location);
+  void SetCursor(uint32_t handle, const gfx::Size& size);
+  void MoveCursor(const gfx::Point& location);
 
  private:
-  bool ResetCursor();
+  void DisableCursor();
 
   const scoped_refptr<DrmDevice> drm_;
-
-  // Buffers need to be declared first so that they are destroyed last. Needed
-  // since the controllers may reference the buffers.
-  scoped_refptr<ScanoutBuffer> cursor_buffer_;
 
   uint32_t crtc_;
 

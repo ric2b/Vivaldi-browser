@@ -16,7 +16,7 @@
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/power/ml/fake_boot_clock.h"
 #include "chrome/browser/chromeos/power/ml/idle_event_notifier.h"
-#include "chrome/browser/chromeos/power/ml/smart_dim_model.h"
+#include "chrome/browser/chromeos/power/ml/smart_dim/model.h"
 #include "chrome/browser/chromeos/power/ml/user_activity_event.pb.h"
 #include "chrome/browser/chromeos/power/ml/user_activity_ukm_logger.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
@@ -35,9 +35,9 @@
 #include "components/session_manager/session_manager_types.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "components/ukm/ukm_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/web_contents_tester.h"
+#include "services/metrics/public/cpp/ukm_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/user_activity/user_activity_detector.h"
 
@@ -63,12 +63,19 @@ void EqualEvent(const UserActivityEvent::Event& expected_event,
 void EqualModelPrediction(
     const UserActivityEvent::ModelPrediction& expected_prediction,
     const UserActivityEvent::ModelPrediction& result_prediction) {
-  EXPECT_EQ(expected_prediction.decision_threshold(),
-            result_prediction.decision_threshold());
-  EXPECT_EQ(expected_prediction.inactivity_score(),
-            result_prediction.inactivity_score());
   EXPECT_EQ(expected_prediction.model_applied(),
             result_prediction.model_applied());
+  EXPECT_EQ(expected_prediction.response(), result_prediction.response());
+  if (expected_prediction.response() !=
+      UserActivityEvent::ModelPrediction::MODEL_ERROR) {
+    EXPECT_EQ(expected_prediction.decision_threshold(),
+              result_prediction.decision_threshold());
+    EXPECT_EQ(expected_prediction.inactivity_score(),
+              result_prediction.inactivity_score());
+  } else {
+    EXPECT_FALSE(result_prediction.has_decision_threshold());
+    EXPECT_FALSE(result_prediction.has_inactivity_score());
+  }
 }
 
 // Testing UKM logger.
@@ -96,26 +103,42 @@ class FakeSmartDimModel : public SmartDimModel {
   FakeSmartDimModel() = default;
   ~FakeSmartDimModel() override = default;
 
-  void set_inactive_probability(const float inactive_probability) {
-    inactive_probability_ = inactive_probability;
+  void set_inactivity_score(const int inactivity_score) {
+    inactivity_score_ = inactivity_score;
   }
 
-  void set_threshold(const float threshold) { threshold_ = threshold; }
+  void set_decision_threshold(const int decision_threshold) {
+    decision_threshold_ = decision_threshold;
+  }
 
   // SmartDimModel overrides:
-  bool ShouldDim(const UserActivityEvent::Features& features,
-                 float* inactive_probability_out,
-                 float* threshold_out) override {
-    DCHECK(inactive_probability_out);
-    DCHECK(threshold_out);
-    *inactive_probability_out = inactive_probability_;
-    *threshold_out = threshold_;
-    return inactive_probability_ >= threshold_;
+  UserActivityEvent::ModelPrediction ShouldDim(
+      const UserActivityEvent::Features& features) override {
+    UserActivityEvent::ModelPrediction model_prediction;
+    // If either of these two values are set outside of the legal range [0,100],
+    // return an error code.
+    // The |model_applied| field is not filled by the model but by
+    // UserActivityManager.
+    if (inactivity_score_ < 0 || inactivity_score_ > 100 ||
+        decision_threshold_ < 0 || decision_threshold_ > 100) {
+      model_prediction.set_response(
+          UserActivityEvent::ModelPrediction::MODEL_ERROR);
+      return model_prediction;
+    }
+    model_prediction.set_decision_threshold(decision_threshold_);
+    model_prediction.set_inactivity_score(inactivity_score_);
+    if (inactivity_score_ < decision_threshold_) {
+      model_prediction.set_response(UserActivityEvent::ModelPrediction::NO_DIM);
+    } else {
+      model_prediction.set_response(UserActivityEvent::ModelPrediction::DIM);
+    }
+    return model_prediction;
   }
 
  private:
-  float inactive_probability_ = 0;
-  float threshold_ = 0;
+  int inactivity_score_ = -1;
+  int decision_threshold_ = -1;
+
   DISALLOW_COPY_AND_ASSIGN(FakeSmartDimModel);
 };
 
@@ -853,8 +876,8 @@ TEST_F(UserActivityManagerTest, ScreenDimDeferredWithFinalEvent) {
   scoped_feature_list.InitAndEnableFeatureWithParameters(
       features::kUserActivityPrediction, params);
 
-  model_.set_inactive_probability(0.6);
-  model_.set_threshold(0.651);
+  model_.set_inactivity_score(60);
+  model_.set_decision_threshold(65);
 
   const IdleEventNotifier::ActivityData data;
   ReportIdleEvent(data);
@@ -877,6 +900,7 @@ TEST_F(UserActivityManagerTest, ScreenDimDeferredWithFinalEvent) {
   expected_prediction.set_decision_threshold(65);
   expected_prediction.set_inactivity_score(60);
   expected_prediction.set_model_applied(true);
+  expected_prediction.set_response(UserActivityEvent::ModelPrediction::NO_DIM);
   EqualModelPrediction(expected_prediction, events[0].model_prediction());
 }
 
@@ -887,8 +911,8 @@ TEST_F(UserActivityManagerTest, ScreenDimDeferredWithoutFinalEvent) {
   scoped_feature_list.InitAndEnableFeatureWithParameters(
       features::kUserActivityPrediction, params);
 
-  model_.set_inactive_probability(0.6);
-  model_.set_threshold(0.651);
+  model_.set_inactivity_score(60);
+  model_.set_decision_threshold(65);
 
   const IdleEventNotifier::ActivityData data;
   ReportIdleEvent(data);
@@ -905,8 +929,8 @@ TEST_F(UserActivityManagerTest, ScreenDimNotDeferred) {
   scoped_feature_list.InitAndEnableFeatureWithParameters(
       features::kUserActivityPrediction, params);
 
-  model_.set_inactive_probability(0.6);
-  model_.set_threshold(0.5);
+  model_.set_inactivity_score(60);
+  model_.set_decision_threshold(50);
 
   const IdleEventNotifier::ActivityData data;
   ReportIdleEvent(data);
@@ -920,6 +944,8 @@ TEST_F(UserActivityManagerTest, ScreenDimNotDeferred) {
   expected_prediction.set_decision_threshold(50);
   expected_prediction.set_inactivity_score(60);
   expected_prediction.set_model_applied(true);
+  expected_prediction.set_response(UserActivityEvent::ModelPrediction::DIM);
+
   EqualModelPrediction(expected_prediction, events[0].model_prediction());
 }
 
@@ -929,10 +955,10 @@ TEST_F(UserActivityManagerTest, TwoScreenDimImminentWithEventInBetween) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeatureWithParameters(
       features::kUserActivityPrediction, params);
-  model_.set_threshold(0.5);
+  model_.set_decision_threshold(50);
 
   // 1st ScreenDimImminent gets deferred
-  model_.set_inactive_probability(0.4);
+  model_.set_inactivity_score(40);
 
   const IdleEventNotifier::ActivityData data;
   ReportIdleEvent(data);
@@ -943,7 +969,7 @@ TEST_F(UserActivityManagerTest, TwoScreenDimImminentWithEventInBetween) {
                 base::TimeDelta::FromSeconds(3));
 
   // 2nd ScreenDimImminent is not deferred despite model score says so.
-  model_.set_inactive_probability(0.2);
+  model_.set_inactivity_score(20);
   GetTaskRunner()->FastForwardBy(base::TimeDelta::FromSeconds(10));
   ReportIdleEvent(data);
   EXPECT_EQ(1, GetNumberOfDeferredDims());
@@ -970,6 +996,8 @@ TEST_F(UserActivityManagerTest, TwoScreenDimImminentWithEventInBetween) {
   expected_prediction1.set_decision_threshold(50);
   expected_prediction1.set_inactivity_score(40);
   expected_prediction1.set_model_applied(true);
+  expected_prediction1.set_response(UserActivityEvent::ModelPrediction::NO_DIM);
+
   EqualModelPrediction(expected_prediction1, events[0].model_prediction());
 
   // The second screen dim imminent event.
@@ -986,6 +1014,7 @@ TEST_F(UserActivityManagerTest, TwoScreenDimImminentWithEventInBetween) {
   expected_prediction2.set_decision_threshold(50);
   expected_prediction2.set_inactivity_score(20);
   expected_prediction2.set_model_applied(false);
+  expected_prediction2.set_response(UserActivityEvent::ModelPrediction::NO_DIM);
   EqualModelPrediction(expected_prediction2, events[1].model_prediction());
 }
 
@@ -995,16 +1024,16 @@ TEST_F(UserActivityManagerTest, TwoScreenDimImminentWithoutEventInBetween) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeatureWithParameters(
       features::kUserActivityPrediction, params);
-  model_.set_threshold(0.5);
+  model_.set_decision_threshold(50);
 
   // 1st ScreenDimImminent gets deferred
-  model_.set_inactive_probability(0.4);
+  model_.set_inactivity_score(40);
   const IdleEventNotifier::ActivityData data;
   ReportIdleEvent(data);
   EXPECT_EQ(1, GetNumberOfDeferredDims());
 
   // 2nd ScreenDimImminent is not deferred despite model score says so.
-  model_.set_inactive_probability(0.2);
+  model_.set_inactivity_score(20);
   GetTaskRunner()->FastForwardBy(base::TimeDelta::FromSeconds(10));
   ReportIdleEvent(data);
   EXPECT_EQ(1, GetNumberOfDeferredDims());
@@ -1017,7 +1046,7 @@ TEST_F(UserActivityManagerTest, TwoScreenDimImminentWithoutEventInBetween) {
   const std::vector<UserActivityEvent>& events = delegate_.events();
   ASSERT_EQ(2U, events.size());
 
-  // The first event logged is the current one.
+  // The current event logged is after the earlier idle event.
   UserActivityEvent::Event expected_event1;
   expected_event1.set_type(UserActivityEvent::Event::TIMEOUT);
   expected_event1.set_reason(UserActivityEvent::Event::IDLE_SLEEP);
@@ -1025,24 +1054,62 @@ TEST_F(UserActivityManagerTest, TwoScreenDimImminentWithoutEventInBetween) {
   expected_event1.set_screen_dim_occurred(false);
   expected_event1.set_screen_off_occurred(false);
   expected_event1.set_screen_lock_occurred(false);
-  EqualEvent(expected_event1, events[0].event());
+  EqualEvent(expected_event1, events[1].event());
 
   UserActivityEvent::ModelPrediction expected_prediction1;
   expected_prediction1.set_decision_threshold(50);
   expected_prediction1.set_inactivity_score(20);
   expected_prediction1.set_model_applied(false);
-  EqualModelPrediction(expected_prediction1, events[0].model_prediction());
+  expected_prediction1.set_response(UserActivityEvent::ModelPrediction::NO_DIM);
 
-  // The earlier idle event is logged afterwards.
+  EqualModelPrediction(expected_prediction1, events[1].model_prediction());
+
   UserActivityEvent::Event expected_event2 = expected_event1;
   expected_event2.set_log_duration_sec(30);
-  EqualEvent(expected_event2, events[1].event());
+  EqualEvent(expected_event2, events[0].event());
 
   UserActivityEvent::ModelPrediction expected_prediction2;
   expected_prediction2.set_decision_threshold(50);
   expected_prediction2.set_inactivity_score(40);
   expected_prediction2.set_model_applied(true);
-  EqualModelPrediction(expected_prediction2, events[1].model_prediction());
+  expected_prediction2.set_response(UserActivityEvent::ModelPrediction::NO_DIM);
+
+  EqualModelPrediction(expected_prediction2, events[0].model_prediction());
+}
+
+TEST_F(UserActivityManagerTest, ModelError) {
+  const std::map<std::string, std::string> params = {
+      {"dim_threshold", "0.651"}};
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      features::kUserActivityPrediction, params);
+
+  // This value will trigger a model error.
+  model_.set_inactivity_score(160);
+  model_.set_decision_threshold(65);
+
+  const IdleEventNotifier::ActivityData data;
+  ReportIdleEvent(data);
+  ReportUserActivity(nullptr);
+  EXPECT_EQ(0, GetNumberOfDeferredDims());
+
+  const std::vector<UserActivityEvent>& events = delegate_.events();
+  ASSERT_EQ(1U, events.size());
+
+  UserActivityEvent::Event expected_event;
+  expected_event.set_type(UserActivityEvent::Event::REACTIVATE);
+  expected_event.set_reason(UserActivityEvent::Event::USER_ACTIVITY);
+  expected_event.set_log_duration_sec(0);
+  expected_event.set_screen_dim_occurred(false);
+  expected_event.set_screen_off_occurred(false);
+  expected_event.set_screen_lock_occurred(false);
+  EqualEvent(expected_event, events[0].event());
+
+  UserActivityEvent::ModelPrediction expected_prediction;
+  expected_prediction.set_model_applied(false);
+  expected_prediction.set_response(
+      UserActivityEvent::ModelPrediction::MODEL_ERROR);
+  EqualModelPrediction(expected_prediction, events[0].model_prediction());
 }
 
 TEST_F(UserActivityManagerTest, BasicTabs) {

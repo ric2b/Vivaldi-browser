@@ -53,11 +53,12 @@
 #include "chrome/test/base/chrome_test_suite.h"
 #include "chrome/test/base/test_launcher_utils.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/os_crypt/os_crypt_mocker.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
+#include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_launcher.h"
@@ -89,6 +90,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/input_method/input_method_configuration.h"
 #include "chrome/test/base/default_ash_event_generator_delegate.h"
+#include "ui/events/test/event_generator.h"
 #endif  // defined(OS_CHROMEOS)
 
 #if !defined(OS_CHROMEOS) && defined(OS_LINUX)
@@ -102,8 +104,6 @@
 #if defined(TOOLKIT_VIEWS)
 #include "chrome/test/views/accessibility_checker.h"
 #endif
-
-#include "app/vivaldi_version_constants.h"
 
 namespace {
 
@@ -128,16 +128,19 @@ InProcessBrowserTest::InProcessBrowserTest()
 #if defined(OS_MACOSX)
   base::mac::SetOverrideAmIBundled(true);
 
-  // TODO(phajdan.jr): Make browser_tests self-contained on Mac, remove this.
-  // Before we run the browser, we have to hack the path to the exe to match
-  // what it would be if Chrome was running, because it is used to fork renderer
-  // processes, on Linux at least (failure to do so will cause a browser_test to
-  // be run instead of a renderer).
-  base::FilePath chrome_path;
-  CHECK(base::PathService::Get(base::FILE_EXE, &chrome_path));
-  chrome_path = chrome_path.DirName();
-  chrome_path = chrome_path.Append(chrome::kBrowserProcessExecutablePath);
+  base::FilePath file_exe;
+  CHECK(base::PathService::Get(base::FILE_EXE, &file_exe));
+
+  // Override the path to the running executable to make it look like it is
+  // the browser running as the bundled application.
+  base::FilePath chrome_path =
+      file_exe.DirName().Append(chrome::kBrowserProcessExecutablePath);
   CHECK(base::PathService::Override(base::FILE_EXE, chrome_path));
+
+  // Then override the path to the child process binaries to point back at
+  // the current test executable, otherwise the FILE_EXE overridden above would
+  // be used to launch children.
+  CHECK(base::PathService::Override(content::CHILD_PROCESS_EXE, file_exe));
 #endif  // defined(OS_MACOSX)
 
   CreateTestServer(base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
@@ -155,7 +158,8 @@ InProcessBrowserTest::InProcessBrowserTest()
 #endif
 
 #if defined(OS_CHROMEOS)
-  DefaultAshEventGeneratorDelegate::GetInstance();
+  ui::test::EventGeneratorDelegate::SetFactoryFunction(
+      base::BindRepeating(&CreateAshEventGeneratorDelegate));
 #endif
 
 #if defined(TOOLKIT_VIEWS)
@@ -264,26 +268,6 @@ void InProcessBrowserTest::SetUpDefaultCommandLine(
   // Use an sRGB color profile to ensure that the machine's color profile does
   // not affect the results.
   command_line->AppendSwitchASCII(switches::kForceColorProfile, "srgb");
-
-#if defined(OS_MACOSX)
-  // Explicitly set the path of the binary used for child processes, otherwise
-  // they'll try to use browser_tests which doesn't contain ChromeMain.
-  base::FilePath subprocess_path;
-  base::PathService::Get(base::FILE_EXE, &subprocess_path);
-  // Recreate the real environment, run the helper within the app bundle.
-  subprocess_path = subprocess_path.DirName().DirName();
-  DCHECK_EQ(subprocess_path.BaseName().value(), "Contents");
-  subprocess_path =
-#if defined(VIVALDI_BUILD)
-      subprocess_path.Append("Versions").Append(vivaldi::kVivaldiVersion);
-#else
-      subprocess_path.Append("Versions").Append(chrome::kChromeVersion);
-#endif
-  subprocess_path =
-      subprocess_path.Append(chrome::kHelperProcessExecutablePath);
-  command_line->AppendSwitchPath(switches::kBrowserSubprocessPath,
-                                 subprocess_path);
-#endif
 
   // TODO(pkotwicz): Investigate if we can remove this switch.
   if (exit_when_last_browser_closes_)

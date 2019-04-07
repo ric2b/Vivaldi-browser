@@ -213,11 +213,10 @@ Background.prototype = {
     var prevRange = this.currentRange_;
 
     // Specialization for math output.
-    var forceQueue = false;
+    var skipOutput = false;
     if (MathHandler.init(range)) {
-      MathHandler.instance.speak();
+      skipOutput = MathHandler.instance.speak();
       opt_focus = false;
-      forceQueue = true;
     }
 
     if (opt_focus)
@@ -243,6 +242,8 @@ Background.prototype = {
       if (pageRootStart != pageRootEnd || pageRootStart != curRootStart ||
           pageRootEnd != curRootEnd) {
         o.format('@end_selection');
+        DesktopAutomationHandler.instance.ignoreDocumentSelectionFromAction(
+            false);
         this.pageSel_ = null;
       } else {
         // Expand or shrink requires different feedback.
@@ -284,7 +285,7 @@ Background.prototype = {
     o.withRichSpeechAndBraille(
         selectedRange || range, prevRange, Output.EventType.NAVIGATE);
 
-    o.withQueueMode(forceQueue ? cvox.QueueMode.QUEUE : cvox.QueueMode.FLUSH);
+    o.withQueueMode(cvox.QueueMode.FLUSH);
 
     if (msg)
       o.format(msg);
@@ -292,7 +293,8 @@ Background.prototype = {
     for (var prop in opt_speechProps)
       o.format('!' + prop);
 
-    o.go();
+    if (!skipOutput)
+      o.go();
   },
 
   /**
@@ -421,11 +423,6 @@ Background.prototype = {
       return node.state[StateType.FOCUSABLE] &&
           AutomationPredicate.linkOrControl(node);
     };
-
-    // Always try to give nodes selection.
-    if (start.defaultActionVerb == chrome.automation.DefaultActionVerb.SELECT) {
-      start.doDefault();
-    }
 
     // Next, try to focus the start or end node.
     if (!AutomationPredicate.structuralContainer(start) &&

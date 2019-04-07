@@ -97,21 +97,11 @@ const int kBottomSeparatorLeftRightPadding = 24;
 // The bottom padding from the bottom separator to the top of the app item.
 const int kBottomSeparatorBottomPadding = 24;
 
-// The padding around the outside of the search box (top and sides).
-const int kSearchBoxPadding = 16;
-const int kSearchBoxTopPadding = 24;
-
 // Bottom padding of search box in peeking state.
 const int kSearchBoxPeekingBottomPadding = 12;
 
 // Bottom padding of search box.
 const int kSearchBoxBottomPadding = 24;
-
-// The height of the peeking app list from the bottom of the screen.
-const int kPeekingAppListHeight = 320;
-
-// The height/width of the shelf from the bottom/side of the screen.
-const int kShelfSize = 48;
 
 // Max pages allowed in a folder.
 const size_t kMaxFolderPages = 3;
@@ -120,7 +110,7 @@ const size_t kMaxFolderPages = 3;
 const size_t kMaxFolderItemsPerPage = 16;
 
 // Maximum length of the folder name in chars.
-const size_t kMaxFolderNameChars = 80;
+const size_t kMaxFolderNameChars = 28;
 
 // Font style for app item labels.
 const ui::ResourceBundle::FontStyle kItemTextFontStyle =
@@ -130,6 +120,13 @@ const ui::ResourceBundle::FontStyle kItemTextFontStyle =
 // change opacity. NOTE: this is used to change page switcher's opacity as well.
 const float kAllAppsOpacityStartPx = 8.0f;
 const float kAllAppsOpacityEndPx = 144.0f;
+
+// Delta applied to font size of all AppListSearchResult titles.
+const int kSearchResultTitleTextSizeDelta = 2;
+
+// Font style for AppListSearchResultTileItemViews that are not suggested apps.
+const ui::ResourceBundle::FontStyle kSearchResultTitleFontStyle =
+    ui::ResourceBundle::BaseFont;
 
 // The UMA histogram that logs usage of suggested and regular apps.
 const char kAppListAppLaunched[] = "Apps.AppListAppLaunched";

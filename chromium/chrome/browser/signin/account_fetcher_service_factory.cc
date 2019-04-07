@@ -4,13 +4,14 @@
 
 #include "chrome/browser/signin/account_fetcher_service_factory.h"
 
-#include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
+#include "chrome/browser/invalidation/deprecated_profile_invalidation_provider_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/suggestions/image_decoder_impl.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/pref_registry/pref_registry_syncable.h"
 #include "components/signin/core/browser/account_fetcher_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 
@@ -20,7 +21,8 @@ AccountFetcherServiceFactory::AccountFetcherServiceFactory()
         BrowserContextDependencyManager::GetInstance()) {
   DependsOn(AccountTrackerServiceFactory::GetInstance());
   DependsOn(ChromeSigninClientFactory::GetInstance());
-  DependsOn(invalidation::ProfileInvalidationProviderFactory::GetInstance());
+  DependsOn(invalidation::DeprecatedProfileInvalidationProviderFactory::
+                GetInstance());
   DependsOn(ProfileOAuth2TokenServiceFactory::GetInstance());
 }
 

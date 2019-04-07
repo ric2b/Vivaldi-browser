@@ -4,11 +4,11 @@
 
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "components/ukm/ukm_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_renderer_host.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -40,7 +40,7 @@ TEST_F(SourceUrlRecorderWebContentsObserverTest, Basic) {
   EXPECT_EQ(1ul, sources.size());
   for (const auto& kv : sources) {
     EXPECT_EQ(url, kv.second->url());
-    EXPECT_TRUE(kv.second->initial_url().is_empty());
+    EXPECT_EQ(1u, kv.second->urls().size());
   }
 }
 
@@ -56,7 +56,7 @@ TEST_F(SourceUrlRecorderWebContentsObserverTest, InitialUrl) {
   EXPECT_EQ(1ul, sources.size());
   for (const auto& kv : sources) {
     EXPECT_EQ(final_url, kv.second->url());
-    EXPECT_EQ(initial_url, kv.second->initial_url());
+    EXPECT_EQ(initial_url, kv.second->urls().front());
   }
 
   EXPECT_EQ(final_url, GetAssociatedURLForWebContentsDocument());
@@ -75,7 +75,7 @@ TEST_F(SourceUrlRecorderWebContentsObserverTest, IgnoreUrlInSubframe) {
   EXPECT_EQ(1ul, sources.size());
   for (const auto& kv : sources) {
     EXPECT_EQ(main_frame_url, kv.second->url());
-    EXPECT_TRUE(kv.second->initial_url().is_empty());
+    EXPECT_EQ(1u, kv.second->urls().size());
   }
 
   EXPECT_EQ(main_frame_url, GetAssociatedURLForWebContentsDocument());
@@ -94,7 +94,7 @@ TEST_F(SourceUrlRecorderWebContentsObserverTest, IgnoreSameDocumentNavigation) {
   EXPECT_EQ(1ul, sources.size());
   for (const auto& kv : sources) {
     EXPECT_EQ(url, kv.second->url());
-    EXPECT_TRUE(kv.second->initial_url().is_empty());
+    EXPECT_EQ(1u, kv.second->urls().size());
   }
 
   EXPECT_EQ(url, GetAssociatedURLForWebContentsDocument());

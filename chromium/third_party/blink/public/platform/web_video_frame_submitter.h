@@ -14,17 +14,20 @@ namespace cc {
 class LayerTreeSettings;
 }
 
-namespace ui {
-class ContextProviderCommandBuffer;
-}  // namespace ui
+namespace viz {
+class ContextProvider;
+}  // namespace viz
 
 namespace blink {
 
+// Sets the proper context_provider and compositing mode onto the Submitter.
+using WebSubmitterConfigurationCallback =
+    base::OnceCallback<void(bool, scoped_refptr<viz::ContextProvider>)>;
 // Callback to obtain the media ContextProvider and a bool indicating whether
 // we are in software compositing mode.
-using WebContextProviderCallback = base::RepeatingCallback<void(
-    base::OnceCallback<void(bool,
-                            scoped_refptr<ui::ContextProviderCommandBuffer>)>)>;
+using WebContextProviderCallback =
+    base::RepeatingCallback<void(scoped_refptr<viz::ContextProvider>,
+                                 WebSubmitterConfigurationCallback)>;
 using WebFrameSinkDestroyedCallback = base::RepeatingCallback<void()>;
 
 // Exposes the VideoFrameSubmitter, which submits CompositorFrames containing
@@ -35,7 +38,8 @@ class BLINK_PLATFORM_EXPORT WebVideoFrameSubmitter
  public:
   static std::unique_ptr<WebVideoFrameSubmitter> Create(
       WebContextProviderCallback,
-      const cc::LayerTreeSettings&);
+      const cc::LayerTreeSettings&,
+      bool use_sync_primitives);
   ~WebVideoFrameSubmitter() override = default;
 
   // Intialize must be called before submissions occur, pulled out of

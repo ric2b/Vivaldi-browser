@@ -16,12 +16,10 @@
 <translation id="1620510694547887537">Camera</translation>
 <translation id="1640244768702815859">Try <ph name="BEGIN_LINK" />visiting the site's homepage<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Unsupported protocol</translation>
-<translation id="1676269943528358898"><ph name="SITE" /> normally uses encryption to protect your information. When Google Chrome tried to connect to <ph name="SITE" /> this time, the website sent back unusual and incorrect credentials. This may happen when an attacker is trying to pretend to be <ph name="SITE" />, or a Wi-Fi sign-in screen has interrupted the connection. Your information is still secure because Google Chrome stopped the connection before any data was exchanged.</translation>
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">You're viewing the source of a web page</translation>
 <translation id="1734878702283171397">Try contacting the system admin.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Try running Windows Network Diagnostics<ph name="END_LINK" />.</translation>
-<translation id="1789575671122666129">Popups</translation>
 <translation id="1834321415901700177">This site contains harmful programs</translation>
 <translation id="1916770123977586577">To apply your updated settings to this site, reload this page</translation>
 <translation id="1919345977826869612">Ads</translation>
@@ -29,7 +27,6 @@
 <translation id="1974060860693918893">Advanced</translation>
 <translation id="2030481566774242610">Did you mean <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Checking the proxy and the firewall<ph name="END_LINK" /></translation>
-<translation id="2065985942032347596">Authentication Required</translation>
 <translation id="2091887806945687916">Sound</translation>
 <translation id="2147827593068025794">Background Sync</translation>
 <translation id="2166378884831602661">This site can’t provide a secure connection</translation>
@@ -50,20 +47,14 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Access to the file was denied</translation>
 <translation id="2705137772291741111">The saved (cached) copy of this site was unreadable.</translation>
-<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Running Connectivity Diagnostics<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">The connection was reset.</translation>
 <translation id="2826760142808435982">The connection is encrypted and authenticated using <ph name="CIPHER" /> and uses <ph name="KX" /> as the key exchange mechanism.</translation>
 <translation id="2856444702002559011">Attackers might be trying to steal your information from <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (for example, passwords, messages, or credit cards). <ph name="BEGIN_LEARN_MORE_LINK" />Learn more<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">A network change was detected.</translation>
-<translation id="2948083400971632585">You can disable any proxies configured for a connection from the settings page.</translation>
-<translation id="298138621710431427">Help Me Fix This</translation>
 <translation id="2991571918955627853">You cannot visit <ph name="SITE" /> right now because the website uses HSTS. Network errors and attacks are usually temporary, so this page will probably work later.</translation>
 <translation id="3005723025932146533">Show saved copy</translation>
 <translation id="301521992641321250">Automatically blocked</translation>
-<translation id="3041612393474885105">Certificate Information</translation>
-<translation id="3093245981617870298">You are offline.</translation>
 <translation id="3109728660330352905">You don't have authorisation to view this page.</translation>
-<translation id="31207688938192855"><ph name="BEGIN_LINK" />Try running Connectivity Diagnostics<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">This page includes a form that may not submit securely. Data that you send can be viewed by others while in transit or could be modified by an attacker to change what the server receives.</translation>
 <translation id="3176929007561373547">Check your proxy settings or contact your network administrator to
       make sure that the proxy server is working. If you don't believe you should
@@ -100,7 +91,6 @@
 <translation id="4235360514405112390">Valid</translation>
 <translation id="4250431568374086873">Your connection to this site is not fully secure</translation>
 <translation id="4265872034478892965">Allowed by your administrator</translation>
-<translation id="4304224509867189079">Log In</translation>
 <translation id="4312866146174492540">Block (default)</translation>
 <translation id="4356973930735388585">Attackers on this site might attempt to install dangerous programs on your computer that steal or delete your information (for example, photos, passwords, messages, and credit cards).</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
@@ -110,24 +100,19 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Try disabling your extensions.</translation>
 <translation id="4592951414987517459">Your connection to <ph name="DOMAIN" /> is encrypted using a modern cipher suite.</translation>
-<translation id="4611292653554630842">Log in</translation>
 <translation id="4690462567478992370">Stop using an invalid certificate</translation>
-<translation id="4690954380545377795">You could lose access to your Google Account or experience identity theft. Chrome recommends changing your password now.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Your connection was interrupted</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Running Windows Network Diagnostics<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Executable Path</translation>
 <translation id="4750917950439032686">Your information (for example, passwords or credit card numbers) is private when it is sent to this site.</translation>
 <translation id="4764776831041365478">The web page at <ph name="URL" /> might be temporarily down or it may have moved permanently to a new web address.</translation>
-<translation id="4807049035289105102">You cannot visit <ph name="SITE" /> right now because the website sent scrambled credentials that Google Chrome cannot process. Network errors and attacks are usually temporary, so this page will probably work later.</translation>
-<translation id="4913131542719409934">Authentication required</translation>
 <translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">Re-enable warnings</translation>
 <translation id="5023310440958281426">Check your administrator's policies</translation>
 <translation id="5039804452771397117">Allow</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Checking the proxy address<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="522700295135997067">This site may have just stolen your password</translation>
 <translation id="5287240709317226393">Show cookies</translation>
 <translation id="5355557959165512791">You cannot visit <ph name="SITE" /> right now because its certificate has been revoked. Network errors and attacks are usually temporary, so this page will probably work later.</translation>
 <translation id="5386426401304769735">The certificate chain for this site contains a certificate signed using SHA-1.</translation>
@@ -154,7 +139,6 @@
 <translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 in use} other {# in use}}</translation>
 <translation id="5990559369517809815">Requests to the server have been blocked by an extension.</translation>
 <translation id="6051221802930200923">You cannot visit <ph name="SITE" /> right now because the website uses certificate pinning. Network errors and attacks are usually temporary, so this page will probably work later.</translation>
-<translation id="6080696365213338172">You have accessed content using an administrator-provided certificate. Data you provide to <ph name="DOMAIN" /> can be intercepted by your administrator.</translation>
 <translation id="6146055958333702838">Check any cables and reboot any routers, modems or other network
     devices you may be using.</translation>
 <translation id="614940544461990577">Try:</translation>
@@ -171,7 +155,6 @@
 <translation id="6417515091412812850">Unable to check whether the certificate has been revoked.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> refused to connect.</translation>
 <translation id="6447842834002726250">Cookies</translation>
-<translation id="6556239504065605927">Secure connection</translation>
 <translation id="6569060085658103619">You're viewing an extension page</translation>
 <translation id="6657585470893396449">Password</translation>
 <translation id="6685834062052613830">Sign out and complete setup</translation>
@@ -204,7 +187,6 @@
 <translation id="7800304661137206267">The connection is encrypted using <ph name="CIPHER" />, with <ph name="MAC" /> for message authentication and <ph name="KX" /> as the key exchange mechanism.</translation>
 <translation id="7802523362929240268">Site is legitimate</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> normally uses encryption to protect your information. When Vivaldi tried to connect to <ph name="SITE" /> this time, the website sent back unusual and incorrect credentials. This may happen when an attacker is trying to pretend to be <ph name="SITE" />, or a Wi-Fi sign-in screen has interrupted the connection. Your information is still secure because Vivaldi stopped the connection before any data was exchanged.</translation>
-<translation id="7878562273885520351">Your password may be compromised</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="8025119109950072390">Attackers on this site may trick you into doing something dangerous like installing software or revealing your personal information (for example, passwords, phone numbers, or credit cards).</translation>
 <translation id="8037357227543935929">Ask (default)</translation>
@@ -234,7 +216,6 @@
 <translation id="9169664750068251925">Always block on this site</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> uses an unsupported protocol.</translation>
 <translation id="9219103736887031265">Images</translation>
-<translation id="933612690413056017">There is no Internet connection</translation>
 <translation id="969892804517981540">Official Build</translation>
 <translation id="988159990683914416">Developer Build</translation>
 </translationbundle>

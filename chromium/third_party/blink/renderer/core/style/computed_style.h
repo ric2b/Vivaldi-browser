@@ -287,8 +287,8 @@ class ComputedStyle : public ComputedStyleBase,
   StyleDifference VisualInvalidationDiff(const Document&,
                                          const ComputedStyle&) const;
 
-  void InheritFrom(const ComputedStyle& inherit_parent,
-                   IsAtShadowBoundary = kNotAtShadowBoundary);
+  CORE_EXPORT void InheritFrom(const ComputedStyle& inherit_parent,
+                               IsAtShadowBoundary = kNotAtShadowBoundary);
   void CopyNonInheritedFromCached(const ComputedStyle&);
 
   PseudoId StyleType() const { return static_cast<PseudoId>(StyleTypeInternal()); }
@@ -1079,8 +1079,8 @@ class ComputedStyle : public ComputedStyleBase,
   void ClearResetDirectives();
 
   // Variables.
-  StyleInheritedVariables* InheritedVariables() const;
-  StyleNonInheritedVariables* NonInheritedVariables() const;
+  CORE_EXPORT StyleInheritedVariables* InheritedVariables() const;
+  CORE_EXPORT StyleNonInheritedVariables* NonInheritedVariables() const;
 
   void SetUnresolvedInheritedVariable(const AtomicString&,
                                       scoped_refptr<CSSVariableData>);
@@ -1479,10 +1479,10 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   bool BorderSizeEquals(const ComputedStyle& o) const {
-    return BorderLeftWidthInternal() == o.BorderLeftWidthInternal() &&
-           BorderTopWidthInternal() == o.BorderTopWidthInternal() &&
-           BorderRightWidthInternal() == o.BorderRightWidthInternal() &&
-           BorderBottomWidthInternal() == o.BorderBottomWidthInternal();
+    return BorderLeftWidth() == o.BorderLeftWidth() &&
+           BorderTopWidth() == o.BorderTopWidth() &&
+           BorderRightWidth() == o.BorderRightWidth() &&
+           BorderBottomWidth() == o.BorderBottomWidth();
   }
 
   BorderValue BorderBeforeUsing(const ComputedStyle& other) const {
@@ -2220,9 +2220,7 @@ class ComputedStyle : public ComputedStyleBase,
   InterpolationQuality GetInterpolationQuality() const;
 
   bool CanGeneratePseudoElement(PseudoId pseudo) const {
-    // The first letter pseudo element has to look up the tree and see if any
-    // of the ancestors are first letter.
-    if (pseudo != kPseudoIdFirstLetter && !HasPseudoStyle(pseudo))
+    if (!HasPseudoStyle(pseudo))
       return false;
     if (Display() == EDisplay::kNone)
       return false;
@@ -2233,6 +2231,9 @@ class ComputedStyle : public ComputedStyleBase,
     // elements with an actual layout object.
     return pseudo == kPseudoIdBefore || pseudo == kPseudoIdAfter;
   }
+
+  // Load the images of CSS properties that were deferred by LazyLoad.
+  void LoadDeferredImages(Document&) const;
 
  private:
   void SetVisitedLinkBackgroundColor(const StyleColor& v) {

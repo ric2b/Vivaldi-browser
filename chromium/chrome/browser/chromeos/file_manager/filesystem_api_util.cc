@@ -129,6 +129,7 @@ bool IsNonNativeFileSystemType(storage::FileSystemType type) {
   switch (type) {
     case storage::kFileSystemTypeNativeLocal:
     case storage::kFileSystemTypeRestrictedNativeLocal:
+    case storage::kFileSystemTypeDriveFs:
       return false;
     default:
       // The path indeed corresponds to a mount point not associated with a
@@ -175,7 +176,7 @@ void GetNonNativeLocalPathMimeType(
 
     file_system->GetResourceEntry(
         drive::util::ExtractDrivePath(path),
-        base::Bind(&GetMimeTypeAfterGetResourceEntryForDrive, callback));
+        base::BindOnce(&GetMimeTypeAfterGetResourceEntryForDrive, callback));
     return;
   }
 

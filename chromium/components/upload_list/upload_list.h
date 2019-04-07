@@ -14,7 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/task_traits.h"
 #include "base/time/time.h"
 
 // An UploadList is an abstraction over a list of client-side data files that
@@ -64,7 +64,6 @@ class UploadList : public base::RefCountedThreadSafe<UploadList> {
     base::string16 file_size;
   };
 
-  // Creates a new upload list with the given callback delegate.
   UploadList();
 
   // Starts loading the upload list. OnUploadListAvailable will be called when

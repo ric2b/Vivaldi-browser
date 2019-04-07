@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.ntp.cards;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder.PartialBindCallback;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus;
 import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
@@ -33,8 +34,8 @@ import java.util.Set;
  * A node in the tree containing a list of all suggestions sections. It listens to changes in the
  * suggestions source and updates the corresponding sections.
  */
-public class SectionList
-        extends InnerNode implements SuggestionsSource.Observer, SuggestionsSection.Delegate {
+public class SectionList extends InnerNode<NewTabPageViewHolder, PartialBindCallback>
+        implements SuggestionsSource.Observer, SuggestionsSection.Delegate {
     private static final String TAG = "Ntp";
 
     /** Maps suggestion categories to sections, with stable iteration ordering. */
@@ -166,6 +167,12 @@ public class SectionList
                 return;
 
             case CategoryStatus.CATEGORY_EXPLICITLY_DISABLED:
+                // Need to remove the entire section from the UI immediately. If the section is
+                // expandable, we may add the section back for displaying the header.
+                removeSection(mSections.get(category));
+                maybeAddSectionForHeader(category);
+                return;
+
             case CategoryStatus.LOADING_ERROR:
                 // Need to remove the entire section from the UI immediately.
                 removeSection(mSections.get(category));

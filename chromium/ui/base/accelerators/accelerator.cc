@@ -37,6 +37,14 @@ const int kModifierMask = EF_SHIFT_DOWN | EF_CONTROL_DOWN | EF_ALT_DOWN |
 const int kInterestingFlagsMask =
     kModifierMask | EF_IS_SYNTHESIZED | EF_IS_REPEAT;
 
+base::string16 ApplyModifierToAcceleratorString(
+    const base::string16& accelerator,
+    int modifier_message_id) {
+  return l10n_util::GetStringFUTF16(
+      IDS_APP_ACCELERATOR_WITH_MODIFIER,
+      l10n_util::GetStringUTF16(modifier_message_id), accelerator);
+}
+
 }  // namespace
 
 Accelerator::Accelerator() : Accelerator(VKEY_UNKNOWN, EF_NONE) {}
@@ -229,29 +237,29 @@ base::string16 Accelerator::ApplyLongFormModifiers(
   if (vivaldi::IsVivaldiRunning()) {
     // We allow all modifier combinations.
     if (IsShiftDown())
-      shortcut = l10n_util::GetStringFUTF16(IDS_APP_SHIFT_MODIFIER, shortcut);
+      shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_SHIFT_KEY);
     if (IsAltDown())
-      shortcut = l10n_util::GetStringFUTF16(IDS_APP_ALT_MODIFIER, shortcut);
+      shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_ALT_KEY);
     if (IsCtrlDown())
-      shortcut = l10n_util::GetStringFUTF16(IDS_APP_CONTROL_MODIFIER, shortcut);
+      shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_CTRL_KEY);
   } else  {
   if (IsShiftDown())
-    shortcut = l10n_util::GetStringFUTF16(IDS_APP_SHIFT_MODIFIER, shortcut);
+    shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_SHIFT_KEY);
 
   // Note that we use 'else-if' in order to avoid using Ctrl+Alt as a shortcut.
   // See http://blogs.msdn.com/oldnewthing/archive/2004/03/29/101121.aspx for
   // more information.
   if (IsCtrlDown())
-    shortcut = l10n_util::GetStringFUTF16(IDS_APP_CONTROL_MODIFIER, shortcut);
+    shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_CTRL_KEY);
   else if (IsAltDown())
-    shortcut = l10n_util::GetStringFUTF16(IDS_APP_ALT_MODIFIER, shortcut);
+    shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_ALT_KEY);
   }
 
   if (IsCmdDown()) {
 #if defined(OS_MACOSX)
-    shortcut = l10n_util::GetStringFUTF16(IDS_APP_COMMAND_MODIFIER, shortcut);
+    shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_COMMAND_KEY);
 #elif defined(OS_CHROMEOS)
-    shortcut = l10n_util::GetStringFUTF16(IDS_APP_SEARCH_MODIFIER, shortcut);
+    shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_SEARCH_KEY);
 #else
     NOTREACHED();
 #endif
@@ -369,12 +377,15 @@ base::string16 Accelerator::KeyCodeToName(KeyboardCode key_code) const {
     case VKEY_F11:
       string_id = IDS_APP_F11_KEY;
       break;
+#if !defined(OS_MACOSX)
+    // On Mac, commas and periods are used literally in accelerator text.
     case VKEY_OEM_COMMA:
       string_id = IDS_APP_COMMA_KEY;
       break;
     case VKEY_OEM_PERIOD:
       string_id = IDS_APP_PERIOD_KEY;
       break;
+#endif
     case VKEY_MEDIA_NEXT_TRACK:
       string_id = IDS_APP_MEDIA_NEXT_TRACK_KEY;
       break;

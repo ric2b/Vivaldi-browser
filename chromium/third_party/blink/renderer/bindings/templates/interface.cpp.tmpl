@@ -886,10 +886,10 @@ static const V8DOMConfiguration::AttributeConfiguration {{method.name}}OriginSaf
 {% set getter_callback_for_main_world = '%sForMainWorld' % getter_callback %}
 {% set setter_callback_for_main_world = '%sForMainWorld' % setter_callback
        if not method.is_unforgeable else 'nullptr' %}
-    {"{{method.name}}", {{getter_callback_for_main_world}}, {{setter_callback_for_main_world}}, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::MainWorld},
-    {"{{method.name}}", {{getter_callback}}, {{setter_callback}}, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::NonMainWorlds}}
+    {"{{method.name}}", {{getter_callback_for_main_world}}, {{setter_callback_for_main_world}}, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAlwaysCallGetter, V8DOMConfiguration::MainWorld},
+    {"{{method.name}}", {{getter_callback}}, {{setter_callback}}, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAlwaysCallGetter, V8DOMConfiguration::NonMainWorlds}}
 {% else %}
-    {"{{method.name}}", {{getter_callback}}, {{setter_callback}}, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds}
+    {"{{method.name}}", {{getter_callback}}, {{setter_callback}}, {{property_attribute}}, {{property_location(method)}}, {{holder_check}}, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAlwaysCallGetter, V8DOMConfiguration::kAllWorlds}
 {% endif %}
 };
 for (const auto& attributeConfig : {{method.name}}OriginSafeAttributeConfiguration)
@@ -1050,7 +1050,8 @@ v8::Local<v8::Object> {{v8_class}}::findInstanceInPrototypeChain(v8::Local<v8::V
                                             v8Contents.Data(),
                                             v8Contents.ByteLength(),
                                             kind,
-                                            WTF::ArrayBufferContents::FreeMemory);
+                                            v8Contents.Deleter(),
+                                            v8Contents.DeleterData());
   WTF::ArrayBufferContents contents(std::move(data), WTF::ArrayBufferContents::k{% if interface_name == 'ArrayBuffer' %}Not{% endif %}Shared);
   {{cpp_class}}* buffer = {{cpp_class}}::Create(contents);
   v8::Local<v8::Object> associatedWrapper = buffer->AssociateWithWrapper(v8::Isolate::GetCurrent(), buffer->GetWrapperTypeInfo(), object);

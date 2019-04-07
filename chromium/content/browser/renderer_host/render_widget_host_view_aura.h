@@ -180,6 +180,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       base::Optional<viz::HitTestRegionList> hit_test_region_list) override;
   void OnDidNotProduceFrame(const viz::BeginFrameAck& ack) override;
   void ClearCompositorFrame() override;
+  void ResetFallbackToFirstNavigationSurface() override;
   bool RequestRepaintForTesting() override;
   void DidStopFlinging() override;
   void OnDidNavigateMainFrameToNewPage() override;
@@ -199,7 +200,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   void FocusedNodeChanged(bool is_editable_node,
                           const gfx::Rect& node_bounds_in_screen) override;
-  void ScheduleEmbed(ui::mojom::WindowTreeClientPtr client,
+  void ScheduleEmbed(ws::mojom::WindowTreeClientPtr client,
                      base::OnceCallback<void(const base::UnguessableToken&)>
                          callback) override;
   void OnSynchronizedDisplayPropertiesChanged() override;
@@ -344,6 +345,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   void ScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect);
 
+  // TODO(lanwei): Use TestApi interface to write functions that are used in
+  // tests and remove FRIEND_TEST_ALL_PREFIXES.
+  void SetLastPointerType(ui::EventPointerType last_pointer_type) {
+    last_pointer_type_ = last_pointer_type;
+  }
+
  protected:
   ~RenderWidgetHostViewAura() override;
 
@@ -356,6 +363,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   // RenderWidgetHostViewBase:
   void UpdateBackgroundColor() override;
+  bool HasFallbackSurface() const override;
 
  private:
   friend class DelegatedFrameHostClientAura;
@@ -410,6 +418,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                            DiscardDelegatedFramesWithMemoryPressure);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraKeyboardTest,
                            KeyboardObserverDestroyed);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraKeyboardTest,
+                           KeyboardObserverForOnlyTouchInput);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
                            DropFallbackWhenHidden);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraSurfaceSynchronizationTest,

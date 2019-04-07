@@ -21,6 +21,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "cc/base/math_util.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/surface_layer.h"
 #include "cc/trees/latency_info_swap_promise.h"
@@ -40,7 +41,6 @@
 #include "content/browser/android/overscroll_controller_android.h"
 #include "content/browser/android/selection/selection_popup_controller.h"
 #include "content/browser/android/synchronous_compositor_host.h"
-#include "content/browser/android/tap_disambiguator.h"
 #include "content/browser/android/text_suggestion_host_android.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/compositor/surface_utils.h"
@@ -48,6 +48,7 @@
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/media/android/media_web_contents_observer_android.h"
 #include "content/browser/renderer_host/compositor_impl_android.h"
+#include "content/browser/renderer_host/delegated_frame_host_client_android.h"
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/frame_metadata_util.h"
 #include "content/browser/renderer_host/input/input_router.h"
@@ -148,12 +149,8 @@ void RecordToolTypeForActionDown(const ui::MotionEventAndroid& event) {
   }
 }
 
-bool FloatEquals(float a, float b) {
-  return std::abs(a - b) < FLT_EPSILON;
-}
-
 void WakeUpGpu(GpuProcessHost* host) {
-  if (host && host->wake_up_gpu_before_drawing()) {
+  if (host && host->gpu_host()->wake_up_gpu_before_drawing()) {
     host->gpu_service()->WakeUpGpu();
   }
 }
@@ -171,7 +168,6 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
       is_window_activity_started_(true),
       is_in_vr_(false),
       ime_adapter_android_(nullptr),
-      tap_disambiguator_(nullptr),
       selection_popup_controller_(nullptr),
       text_suggestion_host_(nullptr),
       gesture_listener_manager_(nullptr),
@@ -198,9 +194,12 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
   view_.set_event_handler(this);
 
   if (using_browser_compositor_) {
+    delegated_frame_host_client_ =
+        std::make_unique<DelegatedFrameHostClientAndroid>(this);
     delegated_frame_host_ = std::make_unique<ui::DelegatedFrameHostAndroid>(
-        &view_, CompositorImpl::GetHostFrameSinkManager(), this,
-        host()->GetFrameSinkId(), features::IsSurfaceSynchronizationEnabled());
+        &view_, CompositorImpl::GetHostFrameSinkManager(),
+        delegated_frame_host_client_.get(), host()->GetFrameSinkId(),
+        features::IsSurfaceSynchronizationEnabled());
     if (is_showing_) {
       delegated_frame_host_->WasShown(
           local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
@@ -218,7 +217,14 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
   host()->SetView(this);
   touch_selection_controller_client_manager_ =
       std::make_unique<TouchSelectionControllerClientManagerAndroid>(this);
+
   UpdateNativeViewTree(parent_native_view);
+  // This RWHVA may have been created speculatively. We should give any
+  // existing RWHVAs priority for receiving input events, otherwise a
+  // speculative RWHVA could be sent input events intended for the currently
+  // showing RWHVA.
+  if (parent_native_view)
+    parent_native_view->MoveToBack(&view_);
 
   CreateOverscrollControllerIfPossible();
 
@@ -387,7 +393,7 @@ void RenderWidgetHostViewAndroid::OnRenderFrameMetadataChangedBeforeActivation(
   float top_content_offset_dip = IsUseZoomForDSFEnabled()
                                      ? top_content_offset / dip_scale
                                      : top_content_offset;
-  view_.UpdateFrameInfo({scrollable_viewport_size_dip, top_content_offset});
+  view_.UpdateFrameInfo({scrollable_viewport_size_dip, top_content_offset_dip});
   bool controls_changed = UpdateControls(
       view_.GetDipScale(), metadata.top_controls_height,
       metadata.top_controls_shown_ratio, metadata.bottom_controls_height,
@@ -415,6 +421,7 @@ void RenderWidgetHostViewAndroid::OnRenderFrameMetadataChangedBeforeActivation(
   page_scale_ = metadata.page_scale_factor;
   min_page_scale_ = metadata.min_page_scale_factor;
   max_page_scale_ = metadata.max_page_scale_factor;
+  current_surface_size_ = metadata.viewport_size_in_pixels;
 }
 
 void RenderWidgetHostViewAndroid::Focus() {
@@ -820,6 +827,8 @@ void RenderWidgetHostViewAndroid::ResetGestureDetection() {
 }
 
 void RenderWidgetHostViewAndroid::OnDidNavigateMainFrameToNewPage() {
+  if (view_.parent())
+    view_.parent()->MoveToFront(&view_);
   ResetGestureDetection();
 }
 
@@ -871,12 +880,17 @@ void RenderWidgetHostViewAndroid::UpdateBackgroundColor() {
   view_.OnBackgroundColorChanged(color);
 }
 
+bool RenderWidgetHostViewAndroid::HasFallbackSurface() const {
+  return delegated_frame_host_ && delegated_frame_host_->HasFallbackSurface();
+}
+
 void RenderWidgetHostViewAndroid::CopyFromSurface(
     const gfx::Rect& src_subrect,
     const gfx::Size& output_size,
     base::OnceCallback<void(const SkBitmap&)> callback) {
   TRACE_EVENT0("cc", "RenderWidgetHostViewAndroid::CopyFromSurface");
-  if (!IsSurfaceAvailableForCopy()) {
+  if (!features::IsSurfaceSynchronizationEnabled() &&
+      !IsSurfaceAvailableForCopy()) {
     std::move(callback).Run(SkBitmap());
     return;
   }
@@ -915,12 +929,9 @@ uint32_t RenderWidgetHostViewAndroid::GetCaptureSequenceNumber() const {
   return latest_capture_sequence_number_;
 }
 
-void RenderWidgetHostViewAndroid::ShowDisambiguationPopup(
-    const gfx::Rect& rect_pixels, const SkBitmap& zoomed_bitmap) {
-  if (!tap_disambiguator_)
-    return;
-
-  tap_disambiguator_->ShowPopup(rect_pixels, zoomed_bitmap);
+void RenderWidgetHostViewAndroid::OnInterstitialPageAttached() {
+  if (view_.parent())
+    view_.parent()->MoveToFront(&view_);
 }
 
 void RenderWidgetHostViewAndroid::OnInterstitialPageGoingAway() {
@@ -955,14 +966,6 @@ void RenderWidgetHostViewAndroid::DidPresentCompositorFrame(
 void RenderWidgetHostViewAndroid::ReclaimResources(
     const std::vector<viz::ReturnedResource>& resources) {
   renderer_compositor_frame_sink_->ReclaimResources(resources);
-}
-
-void RenderWidgetHostViewAndroid::OnFrameTokenChanged(uint32_t frame_token) {
-  OnFrameTokenChangedForView(frame_token);
-}
-
-void RenderWidgetHostViewAndroid::DidReceiveFirstFrameAfterNavigation() {
-  host_->DidReceiveFirstFrameAfterNavigation();
 }
 
 void RenderWidgetHostViewAndroid::DidCreateNewRendererCompositorFrameSink(
@@ -1037,6 +1040,11 @@ void RenderWidgetHostViewAndroid::OnDidNotProduceFrame(
 
 void RenderWidgetHostViewAndroid::ClearCompositorFrame() {
   EvictDelegatedFrame();
+}
+
+void RenderWidgetHostViewAndroid::ResetFallbackToFirstNavigationSurface() {
+  if (delegated_frame_host_)
+    delegated_frame_host_->ResetFallbackToFirstNavigationSurface();
 }
 
 bool RenderWidgetHostViewAndroid::RequestRepaintForTesting() {
@@ -1333,7 +1341,8 @@ bool RenderWidgetHostViewAndroid::UpdateControls(
   float top_content_offset = top_controls_height * top_controls_shown_ratio;
   float top_shown_pix = top_content_offset * to_pix;
   float top_translate = top_shown_pix - top_controls_pix;
-  bool top_changed = !FloatEquals(top_shown_pix, prev_top_shown_pix_);
+  bool top_changed =
+      !cc::MathUtil::IsFloatNearlyTheSame(top_shown_pix, prev_top_shown_pix_);
   // TODO(mthiesse, https://crbug.com/853686): Remove the IsInVR check once
   // there are no use cases for ignoring the initial update.
   if (top_changed || (!controls_initialized_ && IsInVR()))
@@ -1343,7 +1352,8 @@ bool RenderWidgetHostViewAndroid::UpdateControls(
 
   float bottom_controls_pix = bottom_controls_height * to_pix;
   float bottom_shown_pix = bottom_controls_pix * bottom_controls_shown_ratio;
-  bool bottom_changed = !FloatEquals(bottom_shown_pix, prev_bottom_shown_pix_);
+  bool bottom_changed = !cc::MathUtil::IsFloatNearlyTheSame(
+      bottom_shown_pix, prev_bottom_shown_pix_);
   float bottom_translate = bottom_controls_pix - bottom_shown_pix;
   if (bottom_changed || (!controls_initialized_ && IsInVR()))
     view_.OnBottomControlsChanged(bottom_translate, bottom_shown_pix);
@@ -1357,6 +1367,9 @@ void RenderWidgetHostViewAndroid::OnDidUpdateVisualPropertiesComplete(
     const cc::RenderFrameMetadata& metadata) {
   SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),
                               metadata.local_surface_id);
+  // We've just processed new RenderFrameMetadata and potentially embedded a
+  // new surface for that data. Check if we need to evict it.
+  EvictFrameIfNecessary();
 }
 
 void RenderWidgetHostViewAndroid::ShowInternal() {
@@ -1848,17 +1861,6 @@ bool RenderWidgetHostViewAndroid::ShowSelectionMenu(
                                                         GetTouchHandleHeight());
 }
 
-void RenderWidgetHostViewAndroid::ResolveTapDisambiguation(
-    double timestamp_seconds,
-    gfx::Point tap_viewport_offset,
-    bool is_long_press) {
-  DCHECK(host());
-  host()->Send(new ViewMsg_ResolveTapDisambiguation(
-      host()->GetRoutingID(),
-      base::TimeTicks() + base::TimeDelta::FromSecondsD(timestamp_seconds),
-      tap_viewport_offset, is_long_press));
-}
-
 void RenderWidgetHostViewAndroid::MoveCaret(const gfx::Point& point) {
   if (host() && host()->delegate())
     host()->delegate()->MoveCaret(point);
@@ -2076,8 +2078,6 @@ bool RenderWidgetHostViewAndroid::RequiresDoubleTapGestureEvents() const {
 void RenderWidgetHostViewAndroid::OnSizeChanged() {
   if (ime_adapter_android_)
     ime_adapter_android_->UpdateAfterViewSizeChanged();
-  if (tap_disambiguator_)
-    tap_disambiguator_->HidePopup();
 }
 
 void RenderWidgetHostViewAndroid::OnPhysicalBackingSizeChanged() {
@@ -2329,8 +2329,6 @@ void RenderWidgetHostViewAndroid::CreateOverscrollControllerIfPossible() {
   // If window_android is null here, this is bad because we don't listen for it
   // being set, so we won't be able to construct the OverscrollController at the
   // proper time.
-  // TODO(rlanday): once we get WindowAndroid from ViewAndroid instead of
-  // ContentViewCore, listen for WindowAndroid being set and create the
   ui::WindowAndroid* window_android = view_.GetWindowAndroid();
   if (!window_android)
     return;

@@ -4,6 +4,7 @@
 
 #include "ui/base/ui_base_features.h"
 
+#include "app/vivaldi_apptools.h"
 #include "ui/base/ui_base_switches_util.h"
 
 #if defined(OS_WIN)
@@ -16,7 +17,7 @@ namespace features {
 // text areas.
 const base::Feature kEnableEmojiContextMenu {
   "EnableEmojiContextMenu",
-#if defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_MACOSX) || defined(OS_WIN) || defined(OS_CHROMEOS)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -25,7 +26,7 @@ const base::Feature kEnableEmojiContextMenu {
 
 // Enables the floating virtual keyboard behavior.
 const base::Feature kEnableFloatingVirtualKeyboard = {
-    "enable-floating-virtual-keyboard", base::FEATURE_DISABLED_BY_DEFAULT};
+    "enable-floating-virtual-keyboard", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables the full screen handwriting virtual keyboard behavior.
 const base::Feature kEnableFullscreenHandwritingVirtualKeyboard = {
@@ -33,30 +34,25 @@ const base::Feature kEnableFullscreenHandwritingVirtualKeyboard = {
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kEnableStylusVirtualKeyboard = {
-    "enable-stylus-virtual-keyboard", base::FEATURE_DISABLED_BY_DEFAULT};
+    "enable-stylus-virtual-keyboard", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // If enabled, uses the Material Design UI for virtual keyboard.
 const base::Feature kEnableVirtualKeyboardMdUi = {
-    "EnableVirtualKeyboardMdUi", base::FEATURE_DISABLED_BY_DEFAULT};
+    "EnableVirtualKeyboardMdUi", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kEnableVirtualKeyboardUkm = {
-    "EnableVirtualKeyboardUkm", base::FEATURE_DISABLED_BY_DEFAULT};
+    "EnableVirtualKeyboardUkm", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables all upcoming UI features.
 const base::Feature kExperimentalUi{"ExperimentalUi",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Applies the material design mode to elements throughout Chrome (not just top
-// Chrome).
-const base::Feature kSecondaryUiMd = {"SecondaryUiMd",
-                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Allows system keyboard event capture when |features::kKeyboardLockApi| is on.
 const base::Feature kSystemKeyboardLock{"SystemKeyboardLock",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kTouchableAppContextMenu = {
-    "EnableTouchableAppContextMenu", base::FEATURE_DISABLED_BY_DEFAULT};
+    "EnableTouchableAppContextMenu", base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool IsTouchableAppContextMenuEnabled() {
   return base::FeatureList::IsEnabled(kTouchableAppContextMenu) ||
@@ -134,12 +130,19 @@ const base::Feature kDirectManipulationStylus = {
 
 const base::Feature kMash = {"Mash", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kMashDeprecated = {"MashDeprecated",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kSingleProcessMash = {"SingleProcessMash",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
-bool IsAshInBrowserProcess() {
-  return !base::FeatureList::IsEnabled(features::kMashDeprecated) &&
-         !base::FeatureList::IsEnabled(features::kMash);
+bool IsUsingWindowService() {
+  return IsSingleProcessMash() || IsMultiProcessMash();
+}
+
+bool IsMultiProcessMash() {
+  return base::FeatureList::IsEnabled(features::kMash);
+}
+
+bool IsSingleProcessMash() {
+  return base::FeatureList::IsEnabled(features::kSingleProcessMash);
 }
 
 #if defined(OS_MACOSX)
@@ -156,15 +159,24 @@ bool HostWindowsInAppShimProcess() {
 // Causes Views browser builds to use Views browser windows by default rather
 // than Cocoa browser windows.
 const base::Feature kViewsBrowserWindows{"ViewsBrowserWindows",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Returns whether a Views-capable browser build should use the Cocoa browser
 // UI.
 bool IsViewsBrowserCocoa() {
-  return !base::FeatureList::IsEnabled(kViewsBrowserWindows) &&
-      !base::FeatureList::IsEnabled(kExperimentalUi);
+  return vivaldi::IsVivaldiRunning() ||
+    (!base::FeatureList::IsEnabled(kViewsBrowserWindows) &&
+      !base::FeatureList::IsEnabled(kExperimentalUi));
 }
 #endif  //  BUILDFLAG(MAC_VIEWS_BROWSER)
 #endif  //  defined(OS_MACOSX)
+
+const base::Feature kEnableOzoneDrmMojo = {"OzoneDrmMojo",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsOzoneDrmMojo() {
+  return base::FeatureList::IsEnabled(kEnableOzoneDrmMojo) ||
+         IsMultiProcessMash();
+}
 
 }  // namespace features

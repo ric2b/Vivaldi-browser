@@ -8,9 +8,17 @@
 #include <map>
 
 #include "ash/app_list/views/suggestion_chip_view.h"
+#include "ash/assistant/model/assistant_cache_model_observer.h"
 #include "ash/assistant/model/assistant_interaction_model_observer.h"
+#include "ash/assistant/model/assistant_ui_model_observer.h"
+#include "ash/assistant/ui/assistant_scroll_view.h"
 #include "base/macros.h"
+#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "ui/views/controls/scroll_view.h"
+
+namespace views {
+class BoxLayout;
+}  // namespace views
 
 namespace ash {
 
@@ -19,41 +27,63 @@ class AssistantController;
 // SuggestionContainerView is the child of AssistantMainView concerned with
 // laying out SuggestionChipViews in response to Assistant interaction model
 // suggestion events.
-class SuggestionContainerView : public views::ScrollView,
+class SuggestionContainerView : public AssistantScrollView,
+                                public AssistantCacheModelObserver,
                                 public AssistantInteractionModelObserver,
+                                public AssistantUiModelObserver,
                                 public views::ButtonListener {
  public:
   using AssistantSuggestion = chromeos::assistant::mojom::AssistantSuggestion;
+  using AssistantSuggestionPtr =
+      chromeos::assistant::mojom::AssistantSuggestionPtr;
 
   explicit SuggestionContainerView(AssistantController* assistant_controller);
   ~SuggestionContainerView() override;
 
-  // views::View:
+  // AssistantScrollView:
   gfx::Size CalculatePreferredSize() const override;
   int GetHeightForWidth(int width) const override;
+  void OnContentsPreferredSizeChanged(views::View* content_view) override;
+
+  // AssistantCacheModelObserver:
+  void OnConversationStartersChanged(
+      const std::map<int, const AssistantSuggestion*>& conversation_starters)
+      override;
 
   // AssistantInteractionModelObserver:
-  void OnSuggestionsAdded(
-      const std::map<int, AssistantSuggestion*>& suggestions) override;
-  void OnSuggestionsCleared() override;
+  void OnResponseChanged(const AssistantResponse& response) override;
+  void OnResponseCleared() override;
+
+  // AssistantUiModelObserver:
+  void OnUiVisibilityChanged(AssistantVisibility new_visibility,
+                             AssistantVisibility old_visibility,
+                             AssistantSource source) override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
  private:
   void InitLayout();
-  void UpdateContentsBounds();
+
+  void OnSuggestionsChanged(
+      const std::map<int, const AssistantSuggestion*>& suggestions);
+  void OnSuggestionsCleared();
 
   // Invoked on suggestion chip icon downloaded event.
   void OnSuggestionChipIconDownloaded(int id, const gfx::ImageSkia& icon);
 
   AssistantController* const assistant_controller_;  // Owned by Shell.
-  views::View* contents_view_;                       // Owned by view hierarchy.
+
+  views::BoxLayout* layout_manager_;  // Owned by view hierarchy.
 
   // Cache of suggestion chip views owned by the view hierarchy. The key for the
   // map is the unique identifier by which the Assistant interaction model
   // identifies the view's underlying suggestion.
   std::map<int, app_list::SuggestionChipView*> suggestion_chip_views_;
+
+  // True if we have received a query response during this Assistant UI session,
+  // false otherwise.
+  bool has_received_response_ = false;
 
   // Weak pointer factory used for image downloading requests.
   base::WeakPtrFactory<SuggestionContainerView> download_request_weak_factory_;

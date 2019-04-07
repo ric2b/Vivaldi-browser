@@ -26,7 +26,6 @@
 #include "components/autofill/core/common/password_form.h"
 #include "components/os_crypt/os_crypt.h"
 #include "importer/chrome_importer_utils.h"
-#include "sql/connection.h"
 #include "sql/statement.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -99,7 +98,7 @@ void ChromiumImporter::ImportPasswords() {
 bool ChromiumImporter::ReadAndParseSignons(
     const base::FilePath& sqlite_file,
     std::vector<autofill::PasswordForm>* forms) {
-  sql::Connection db;
+  sql::Database db;
   if (!db.Open(sqlite_file))
     return false;
 
@@ -162,7 +161,7 @@ void ChromiumImporter::ImportHistory() {
 
 bool ChromiumImporter::ReadAndParseHistory(const base::FilePath& sqlite_file,
                                            std::vector<ImporterURLRow>* forms) {
-  sql::Connection db;
+  sql::Database db;
   if (!db.Open(sqlite_file))
     return false;
 

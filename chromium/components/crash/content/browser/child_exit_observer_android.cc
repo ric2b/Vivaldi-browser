@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
+#include "components/crash/content/browser/crash_memory_metrics_collector_android.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/child_process_termination_info.h"
@@ -65,7 +66,15 @@ ChildExitObserver* ChildExitObserver::GetInstance() {
   return g_instance.Pointer();
 }
 
-ChildExitObserver::ChildExitObserver() {
+ChildExitObserver::ChildExitObserver()
+    : notification_registrar_(),
+      registered_clients_lock_(),
+      registered_clients_(),
+      process_host_id_to_pid_(),
+      browser_child_process_info_(),
+      crash_signals_lock_(),
+      child_pid_to_crash_signal_(),
+      scoped_observer_(this) {
   notification_registrar_.Add(this,
                               content::NOTIFICATION_RENDERER_PROCESS_CREATED,
                               content::NotificationService::AllSources());
@@ -76,6 +85,7 @@ ChildExitObserver::ChildExitObserver() {
                               content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
                               content::NotificationService::AllSources());
   BrowserChildProcessObserver::Add(this);
+  scoped_observer_.Add(crashpad::CrashHandlerHost::Get());
 }
 
 ChildExitObserver::~ChildExitObserver() {
@@ -88,8 +98,26 @@ void ChildExitObserver::RegisterClient(std::unique_ptr<Client> client) {
   registered_clients_.push_back(std::move(client));
 }
 
-void ChildExitObserver::OnChildExit(const TerminationInfo& info) {
+void ChildExitObserver::ChildReceivedCrashSignal(base::ProcessId pid,
+                                                 int signo) {
+  base::AutoLock lock(crash_signals_lock_);
+  bool result =
+      child_pid_to_crash_signal_.insert(std::make_pair(pid, signo)).second;
+  DCHECK(result);
+}
+
+void ChildExitObserver::OnChildExit(TerminationInfo* info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  {
+    base::AutoLock lock(crash_signals_lock_);
+    auto pid_and_signal = child_pid_to_crash_signal_.find(info->pid);
+    if (pid_and_signal != child_pid_to_crash_signal_.end()) {
+      info->crash_signo = pid_and_signal->second;
+      child_pid_to_crash_signal_.erase(pid_and_signal);
+    }
+  }
+
   std::vector<Client*> registered_clients_copy;
   {
     base::AutoLock auto_lock(registered_clients_lock_);
@@ -97,7 +125,7 @@ void ChildExitObserver::OnChildExit(const TerminationInfo& info) {
       registered_clients_copy.push_back(client.get());
   }
   for (auto* client : registered_clients_copy) {
-    client->OnChildExit(info);
+    client->OnChildExit(*info);
   }
 }
 
@@ -125,12 +153,12 @@ void ChildExitObserver::BrowserChildProcessHostDisconnected(
     browser_child_process_info_.erase(it);
   } else {
     info.process_host_id = data.id;
-    info.pid = data.handle;
+    info.pid = data.GetHandle();
     info.process_type = static_cast<content::ProcessType>(data.process_type);
     info.app_state = base::android::ApplicationStatusListener::GetState();
     info.normal_termination = true;
   }
-  OnChildExit(info);
+  OnChildExit(&info);
 }
 
 void ChildExitObserver::BrowserChildProcessKilled(
@@ -140,7 +168,7 @@ void ChildExitObserver::BrowserChildProcessKilled(
   DCHECK(!base::ContainsKey(browser_child_process_info_, data.id));
   TerminationInfo info;
   info.process_host_id = data.id;
-  info.pid = data.handle;
+  info.pid = data.GetHandle();
   info.process_type = static_cast<content::ProcessType>(data.process_type);
   info.app_state = base::android::ApplicationStatusListener::GetState();
   PopulateTerminationInfo(content_info, &info);
@@ -161,6 +189,17 @@ void ChildExitObserver::Observe(int type,
   info.app_state = base::android::APPLICATION_STATE_UNKNOWN;
   info.renderer_has_visible_clients = rph->VisibleClientCount() > 0;
   info.renderer_was_subframe = rph->GetFrameDepth() > 0u;
+  CrashMemoryMetricsCollector* collector =
+      CrashMemoryMetricsCollector::GetFromRenderProcessHost(rph);
+
+  // CrashMemoryMetircsCollector is created in chrome_content_browser_client,
+  // and does not exist in non-chrome platforms such as android webview /
+  // chromecast.
+  if (collector) {
+    // SharedMemory creation / Map() might fail.
+    DCHECK(collector->MemoryMetrics());
+    info.blink_oom_metrics = *collector->MemoryMetrics();
+  }
   switch (type) {
     case content::NOTIFICATION_RENDERER_PROCESS_TERMINATED: {
       // NOTIFICATION_RENDERER_PROCESS_TERMINATED is sent when the renderer
@@ -196,7 +235,7 @@ void ChildExitObserver::Observe(int type,
     }
     process_host_id_to_pid_.erase(iter);
   }
-  OnChildExit(info);
+  OnChildExit(&info);
 }
 
 }  // namespace crash_reporter

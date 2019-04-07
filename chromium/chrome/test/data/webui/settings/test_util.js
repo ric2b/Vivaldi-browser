@@ -192,10 +192,24 @@ cr.define('test_util', function() {
    * @return {SiteGroup}
    */
   function createSiteGroup(eTLDPlus1Name, originList) {
+    const originInfoList = originList.map(origin => createOriginInfo(origin));
     return {
       etldPlus1: eTLDPlus1Name,
-      origins: originList,
+      origins: originInfoList,
+      numCookies: 0,
     };
+  }
+
+  function createOriginInfo(origin, override) {
+    if (override === undefined)
+      override = {};
+    return Object.assign(
+        {
+          origin: origin,
+          engagement: 0,
+          usage: 0,
+        },
+        override);
   }
 
   return {
@@ -207,6 +221,7 @@ cr.define('test_util', function() {
     createRawSiteException: createRawSiteException,
     createSiteSettingsPrefs: createSiteSettingsPrefs,
     createSiteGroup: createSiteGroup,
+    createOriginInfo: createOriginInfo,
   };
 
 });

@@ -272,8 +272,8 @@ class FakeImageDecoder : public image_fetcher::ImageDecoder {
       const image_fetcher::ImageDecodedCallback& callback) override {
     gfx::Image image = gfx::Image::CreateFrom1xPNGBytes(
         reinterpret_cast<const uint8_t*>(image_data.data()), image_data.size());
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  base::Bind(callback, image));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(callback, image));
   }
 };
 
@@ -284,6 +284,7 @@ class SigninHelper {
   explicit SigninHelper(base::test::ScopedTaskEnvironment* task_environment)
       : task_environment_(task_environment),
         signin_client_(&pref_service_),
+        token_service_(&pref_service_),
         cookie_service_(&token_service_, "test_source", &signin_client_) {
     // GaiaCookieManagerService calls static methods of AccountTrackerService
     // which access prefs.
@@ -936,8 +937,9 @@ void EnqueueCallbacks(LogoServiceImpl* logo_service,
       std::move((*fresh_callbacks)[start_index]);
   logo_service->GetLogo(std::move(callbacks));
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&EnqueueCallbacks, logo_service, cached_callbacks,
-                            fresh_callbacks, start_index + 1));
+      FROM_HERE,
+      base::BindOnce(&EnqueueCallbacks, logo_service, cached_callbacks,
+                     fresh_callbacks, start_index + 1));
 }
 
 TEST_F(LogoServiceImplTest, SupportOverlappingLogoRequests) {

@@ -113,6 +113,7 @@ import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
+import org.chromium.content.browser.test.util.WebContentsUtils;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -373,6 +374,12 @@ public class CustomTabActivityTest {
         vectorDrawable.setBounds(0, 0, widthPx, heightPx);
         vectorDrawable.draw(canvas);
         return bitmap;
+    }
+
+    private static boolean isSelectPopupVisible(ChromeActivity activity) {
+        Tab tab = activity.getActivityTab();
+        if (tab == null || tab.getWebContents() == null) return false;
+        return WebContentsUtils.isSelectPopupVisible(tab.getWebContents());
     }
 
     /**
@@ -859,19 +866,14 @@ public class CustomTabActivityTest {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return mCustomTabActivityTestRule.getActivity()
-                        .getActivityTab()
-                        .getWebContents()
-                        .isSelectPopupVisibleForTesting();
+                return isSelectPopupVisible(mCustomTabActivityTestRule.getActivity());
             }
         });
         final ChromeActivity newActivity = reparentAndVerifyTab();
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                Tab currentTab = newActivity.getActivityTab();
-                return currentTab != null && currentTab.getWebContents() != null
-                        && !currentTab.getWebContents().isSelectPopupVisibleForTesting();
+                return isSelectPopupVisible(newActivity);
             }
         });
     }
@@ -893,8 +895,16 @@ public class CustomTabActivityTest {
                 "A custom tab toolbar is never shown", toolbarView instanceof CustomTabToolbar);
         CustomTabToolbar toolbar = (CustomTabToolbar) toolbarView;
         Assert.assertEquals(expectedColor, toolbar.getBackground().getColor());
-        Assert.assertFalse(toolbar.shouldEmphasizeHttpsScheme());
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP) {
+        Assert.assertFalse(mCustomTabActivityTestRule.getActivity()
+                                   .getToolbarManager()
+                                   .getToolbarModelForTesting()
+                                   .shouldEmphasizeHttpsScheme());
+        // TODO(https://crbug.com/871805): Use helper class to determine whether dark status icons
+        // are supported.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Assert.assertEquals(expectedColor,
+                    mCustomTabActivityTestRule.getActivity().getWindow().getStatusBarColor());
+        } else if (Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP) {
             Assert.assertEquals(ColorUtils.getDarkenedColorForStatusBar(expectedColor),
                     mCustomTabActivityTestRule.getActivity().getWindow().getStatusBarColor());
         }

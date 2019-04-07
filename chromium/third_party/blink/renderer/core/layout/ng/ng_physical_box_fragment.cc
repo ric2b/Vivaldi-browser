@@ -21,8 +21,9 @@ NGPhysicalBoxFragment::NGPhysicalBoxFragment(
     const ComputedStyle& style,
     NGStyleVariant style_variant,
     NGPhysicalSize size,
-    Vector<scoped_refptr<NGPhysicalFragment>>& children,
-    const NGPixelSnappedPhysicalBoxStrut& padding,
+    Vector<NGLink>& children,
+    const NGPhysicalBoxStrut& borders,
+    const NGPhysicalBoxStrut& padding,
     const NGPhysicalOffsetRect& contents_ink_overflow,
     Vector<NGBaseline>& baselines,
     NGBoxType box_type,
@@ -39,10 +40,12 @@ NGPhysicalBoxFragment::NGPhysicalBoxFragment(
                                   contents_ink_overflow,
                                   std::move(break_token)),
       baselines_(std::move(baselines)),
+      borders_(borders),
       padding_(padding) {
   DCHECK(baselines.IsEmpty());  // Ensure move semantics is used.
   is_old_layout_root_ = is_old_layout_root;
   border_edge_ = border_edges;
+  children_inline_ = layout_object && layout_object->ChildrenInline();
 
   // Compute visual contribution from descendant outlines.
   NGOutlineUtils::FragmentMap anchor_fragment_map;
@@ -60,12 +63,6 @@ NGPhysicalBoxFragment::NGPhysicalBoxFragment(
       !descendant_outlines_.IsEmpty());
 }
 
-bool NGPhysicalBoxFragment::IsFirstLineAnonymousInlineBox() const {
-  return IsInlineBox() && UsesFirstLineStyle() &&
-         layout_object_->IsAnonymous() && layout_object_->IsLayoutInline() &&
-         ToLayoutInline(layout_object_)->IsFirstLineAnonymous();
-}
-
 const NGBaseline* NGPhysicalBoxFragment::Baseline(
     const NGBaselineRequest& request) const {
   for (const auto& baseline : baselines_) {
@@ -80,12 +77,6 @@ bool NGPhysicalBoxFragment::HasSelfPaintingLayer() const {
   DCHECK(layout_object);
   DCHECK(layout_object->IsBoxModelObject());
   return ToLayoutBoxModelObject(layout_object)->HasSelfPaintingLayer();
-}
-
-bool NGPhysicalBoxFragment::ChildrenInline() const {
-  const LayoutObject* layout_object = GetLayoutObject();
-  DCHECK(layout_object);
-  return layout_object->ChildrenInline();
 }
 
 bool NGPhysicalBoxFragment::HasOverflowClip() const {
@@ -124,7 +115,7 @@ NGPhysicalOffsetRect NGPhysicalBoxFragment::ScrollableOverflow() const {
     for (const auto& child_fragment : Children()) {
       NGPhysicalOffsetRect child_overflow =
           child_fragment->ScrollableOverflow();
-      child_overflow.offset += child_fragment->Offset();
+      child_overflow.offset += child_fragment.Offset();
       overflow.Unite(child_overflow);
     }
     return overflow;
@@ -205,7 +196,7 @@ void NGPhysicalBoxFragment::AddSelfOutlineRects(
         DCHECK(line_child.fragment->GetLayoutObject());
         line_child.fragment->GetLayoutObject()->LocalToAncestorRects(
             line_child_rects, ToLayoutBoxModelObject(GetLayoutObject()),
-            child->Offset().ToLayoutPoint(), additional_offset);
+            child.Offset().ToLayoutPoint(), additional_offset);
         if (!line_child_rects.IsEmpty())
           outline_rects->push_back(line_child_rects[0]);
       }
@@ -245,18 +236,6 @@ UBiDiLevel NGPhysicalBoxFragment::BidiLevel() const {
   DCHECK(self_item);
   DCHECK_NE(self_item, inline_items.end());
   return self_item->BidiLevel();
-}
-
-scoped_refptr<NGPhysicalFragment> NGPhysicalBoxFragment::CloneWithoutOffset()
-    const {
-  Vector<scoped_refptr<NGPhysicalFragment>> children_copy(children_);
-  Vector<NGBaseline> baselines_copy(baselines_);
-  scoped_refptr<NGPhysicalFragment> physical_fragment =
-      base::AdoptRef(new NGPhysicalBoxFragment(
-          layout_object_, Style(), StyleVariant(), size_, children_copy,
-          padding_, contents_ink_overflow_, baselines_copy, BoxType(),
-          is_old_layout_root_, border_edge_, break_token_));
-  return physical_fragment;
 }
 
 }  // namespace blink

@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
@@ -22,14 +23,22 @@ namespace multidevice_setup {
 // Provides clients access to the MultiDeviceSetup API.
 class MultiDeviceSetupClient {
  public:
+  using HostStatusWithDevice =
+      std::pair<mojom::HostStatus, base::Optional<cryptauth::RemoteDeviceRef>>;
+  using FeatureStatesMap = base::flat_map<mojom::Feature, mojom::FeatureState>;
+
   class Observer {
    public:
     // Called whenever the host status changes. If the host status is
     // HostStatus::kNoEligibleHosts or
-    // HostStatus::kEligibleHostExistsButNoHostSet, |host_device| is null.
+    // HostStatus::kEligibleHostExistsButNoHostSet, the provided RemoteDeviceRef
+    // will be null.
     virtual void OnHostStatusChanged(
-        mojom::HostStatus host_status,
-        const base::Optional<cryptauth::RemoteDeviceRef>& host_device) = 0;
+        const HostStatusWithDevice& host_device_with_status) {}
+
+    // Called whenever the state of any feature has changed.
+    virtual void OnFeatureStatesChanged(
+        const FeatureStatesMap& feature_states_map) {}
 
    protected:
     virtual ~Observer() = default;
@@ -37,9 +46,6 @@ class MultiDeviceSetupClient {
 
   using GetEligibleHostDevicesCallback =
       base::OnceCallback<void(const cryptauth::RemoteDeviceRefList&)>;
-  using GetHostStatusCallback = base::OnceCallback<void(
-      mojom::HostStatus host_status,
-      const base::Optional<cryptauth::RemoteDeviceRef>&)>;
 
   MultiDeviceSetupClient();
   virtual ~MultiDeviceSetupClient();
@@ -50,10 +56,18 @@ class MultiDeviceSetupClient {
   virtual void GetEligibleHostDevices(
       GetEligibleHostDevicesCallback callback) = 0;
   virtual void SetHostDevice(
-      const std::string& public_key,
+      const std::string& host_device_id,
+      const std::string& auth_token,
       mojom::MultiDeviceSetup::SetHostDeviceCallback callback) = 0;
   virtual void RemoveHostDevice() = 0;
-  virtual void GetHostStatus(GetHostStatusCallback callback) = 0;
+  virtual const HostStatusWithDevice& GetHostStatus() const = 0;
+  virtual void SetFeatureEnabledState(
+      mojom::Feature feature,
+      bool enabled,
+      const base::Optional<std::string>& auth_token,
+      mojom::MultiDeviceSetup::SetFeatureEnabledStateCallback callback) = 0;
+  virtual const FeatureStatesMap& GetFeatureStates() const = 0;
+  mojom::FeatureState GetFeatureState(mojom::Feature feature) const;
   virtual void RetrySetHostNow(
       mojom::MultiDeviceSetup::RetrySetHostNowCallback callback) = 0;
   virtual void TriggerEventForDebugging(
@@ -61,12 +75,17 @@ class MultiDeviceSetupClient {
       mojom::MultiDeviceSetup::TriggerEventForDebuggingCallback callback) = 0;
 
  protected:
+  static HostStatusWithDevice GenerateDefaultHostStatusWithDevice();
+  static FeatureStatesMap GenerateDefaultFeatureStatesMap();
+
   void NotifyHostStatusChanged(
-      mojom::HostStatus host_status,
-      const base::Optional<cryptauth::RemoteDeviceRef>& host_device);
+      const HostStatusWithDevice& host_status_with_device);
+  void NotifyFeatureStateChanged(const FeatureStatesMap& feature_states_map);
 
  private:
-  base::ObserverList<Observer> observer_list_;
+  friend class MultiDeviceSetupClientImplTest;
+
+  base::ObserverList<Observer>::Unchecked observer_list_;
 
   DISALLOW_COPY_AND_ASSIGN(MultiDeviceSetupClient);
 };

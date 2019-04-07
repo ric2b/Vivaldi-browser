@@ -20,7 +20,6 @@
 #include "net/base/net_errors.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/http/http_util.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
@@ -30,11 +29,22 @@ namespace content {
 
 namespace {
 
-net::RedirectInfo CreateRedirectInfo(const GURL& new_url) {
+net::RedirectInfo CreateRedirectInfo(const GURL& new_url,
+                                     const GURL& outer_request_url) {
   net::RedirectInfo redirect_info;
-  redirect_info.new_url = new_url;
+  if (outer_request_url.has_ref()) {
+    // Propagate ref fragment from the outer request URL.
+    url::Replacements<char> replacements;
+    base::StringPiece ref = outer_request_url.ref_piece();
+    replacements.SetRef(ref.data(), url::Component(0, ref.length()));
+    redirect_info.new_url = new_url.ReplaceComponents(replacements);
+  } else {
+    redirect_info.new_url = new_url;
+  }
   redirect_info.new_method = "GET";
-  redirect_info.status_code = 302;
+  // https://wicg.github.io/webpackage/loading.html#mp-http-fetch
+  // Step 3. Set actualResponse's status to 303. [spec text]
+  redirect_info.status_code = 303;
   redirect_info.new_site_for_cookies = redirect_info.new_url;
   return redirect_info;
 }
@@ -57,7 +67,7 @@ class SignedExchangeLoader::ResponseTimingInfo {
   network::ResourceResponseHead CreateRedirectResponseHead() const {
     network::ResourceResponseHead response_head;
     response_head.encoded_data_length = 0;
-    std::string buf(base::StringPrintf("HTTP/1.1 %d %s\r\n", 302, "Found"));
+    std::string buf(base::StringPrintf("HTTP/1.1 %d %s\r\n", 303, "See Other"));
     response_head.headers = new net::HttpResponseHeaders(
         net::HttpUtil::AssembleRawHeaders(buf.c_str(), buf.size()));
     response_head.encoded_data_length = 0;
@@ -87,12 +97,14 @@ SignedExchangeLoader::SignedExchangeLoader(
     url::Origin request_initiator,
     uint32_t url_loader_options,
     int load_flags,
+    bool should_redirect_on_failure,
     const base::Optional<base::UnguessableToken>& throttling_profile_id,
     std::unique_ptr<SignedExchangeDevToolsProxy> devtools_proxy,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     URLLoaderThrottlesGetter url_loader_throttles_getter,
-    scoped_refptr<net::URLRequestContextGetter> request_context_getter)
-    : outer_response_timing_info_(
+    base::RepeatingCallback<int(void)> frame_tree_node_id_getter)
+    : outer_request_url_(outer_request_url),
+      outer_response_timing_info_(
           std::make_unique<ResponseTimingInfo>(outer_response)),
       outer_response_(outer_response),
       forwarding_client_(std::move(forwarding_client)),
@@ -100,13 +112,15 @@ SignedExchangeLoader::SignedExchangeLoader(
       request_initiator_(request_initiator),
       url_loader_options_(url_loader_options),
       load_flags_(load_flags),
+      should_redirect_on_failure_(should_redirect_on_failure),
       throttling_profile_id_(throttling_profile_id),
       devtools_proxy_(std::move(devtools_proxy)),
       url_loader_factory_(std::move(url_loader_factory)),
       url_loader_throttles_getter_(std::move(url_loader_throttles_getter)),
-      request_context_getter_(std::move(request_context_getter)),
+      frame_tree_node_id_getter_(frame_tree_node_id_getter),
       weak_factory_(this) {
   DCHECK(signed_exchange_utils::IsSignedExchangeHandlingEnabled());
+  DCHECK(outer_request_url_.is_valid());
 
   // https://wicg.github.io/webpackage/draft-yasskin-http-origin-signed-responses.html#privacy-considerations
   // This can be difficult to determine when the exchange is being loaded from
@@ -117,25 +131,6 @@ SignedExchangeLoader::SignedExchangeLoader(
   if (!IsOriginSecure(outer_request_url)) {
     devtools_proxy_->ReportError(
         "Signed exchange response from non secure origin is not supported.",
-        base::nullopt /* error_field */);
-    // Calls OnSignedExchangeReceived() to show the outer response in DevTool's
-    // Network panel and the error message in the Preview panel.
-    devtools_proxy_->OnSignedExchangeReceived(base::nullopt /* header */,
-                                              nullptr /* certificate */,
-                                              nullptr /* ssl_info */);
-    // This will asynchronously delete |this|.
-    forwarding_client_->OnComplete(
-        network::URLLoaderCompletionStatus(net::ERR_INVALID_SIGNED_EXCHANGE));
-    return;
-  }
-
-  // TODO(https://crbug.com/849935): Remove this once we have Network Service
-  // friendly cert, OCSP, and CT verification.
-  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
-    devtools_proxy_->ReportError(
-        "Currently, signed exchange does not work when "
-        "chrome://flags/#network-service is enabled. "
-        "See http://crbug.com/849935 for details.",
         base::nullopt /* error_field */);
     // Calls OnSignedExchangeReceived() to show the outer response in DevTool's
     // Network panel and the error message in the Preview panel.
@@ -228,8 +223,8 @@ void SignedExchangeLoader::OnStartLoadingResponseBody(
       content_type_, std::make_unique<DataPipeToSourceStream>(std::move(body)),
       base::BindOnce(&SignedExchangeLoader::OnHTTPExchangeFound,
                      weak_factory_.GetWeakPtr()),
-      std::move(cert_fetcher_factory), load_flags_,
-      std::move(request_context_getter_), std::move(devtools_proxy_));
+      std::move(cert_fetcher_factory), load_flags_, std::move(devtools_proxy_),
+      frame_tree_node_id_getter_);
 }
 
 void SignedExchangeLoader::OnComplete(
@@ -243,9 +238,6 @@ void SignedExchangeLoader::FollowRedirect(
 }
 
 void SignedExchangeLoader::ProceedWithResponse() {
-  // TODO(https://crbug.com/791049): Remove this when NetworkService is
-  // enabled by default.
-  DCHECK(!base::FeatureList::IsEnabled(network::features::kNetworkService));
   DCHECK(body_data_pipe_adapter_);
   DCHECK(pending_body_consumer_.is_valid());
 
@@ -280,15 +272,28 @@ void SignedExchangeLoader::OnHTTPExchangeFound(
     const network::ResourceResponseHead& resource_response,
     std::unique_ptr<net::SourceStream> payload_stream) {
   if (error) {
-    // This will eventually delete |this|.
-    forwarding_client_->OnComplete(network::URLLoaderCompletionStatus(error));
+    if (error != net::ERR_INVALID_SIGNED_EXCHANGE ||
+        !should_redirect_on_failure_ || !request_url.is_valid()) {
+      // Let the request fail.
+      // This will eventually delete |this|.
+      forwarding_client_->OnComplete(network::URLLoaderCompletionStatus(error));
+      return;
+    }
+    // Make a fallback redirect to |request_url|.
+    DCHECK(!has_redirected_to_fallback_url_);
+    has_redirected_to_fallback_url_ = true;
+    DCHECK(outer_response_timing_info_);
+    forwarding_client_->OnReceiveRedirect(
+        CreateRedirectInfo(request_url, outer_request_url_),
+        std::move(outer_response_timing_info_)->CreateRedirectResponseHead());
+    forwarding_client_.reset();
     return;
   }
 
   // TODO(https://crbug.com/803774): Handle no-GET request_method as a error.
   DCHECK(outer_response_timing_info_);
   forwarding_client_->OnReceiveRedirect(
-      CreateRedirectInfo(request_url),
+      CreateRedirectInfo(request_url, outer_request_url_),
       std::move(outer_response_timing_info_)->CreateRedirectResponseHead());
   forwarding_client_.reset();
 

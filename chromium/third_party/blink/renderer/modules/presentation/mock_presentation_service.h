@@ -6,7 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PRESENTATION_MOCK_PRESENTATION_SERVICE_H_
 
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/blink/public/platform/modules/presentation/presentation.mojom-blink.h"
+#include "third_party/blink/public/mojom/presentation/presentation.mojom-blink.h"
 
 namespace blink {
 
@@ -36,17 +36,6 @@ class MockPresentationService : public mojom::blink::PresentationService {
                void(const Vector<KURL>& presentation_urls,
                     const String& presentation_id,
                     ReconnectPresentationCallback&));
-
-  void SetPresentationConnection(
-      mojom::blink::PresentationInfoPtr presentation_info,
-      mojom::blink::PresentationConnectionPtr controller_conn_ptr,
-      mojom::blink::PresentationConnectionRequest receiver_conn_request)
-      override {
-    SetPresentationConnection(*presentation_info, controller_conn_ptr.get());
-  }
-  MOCK_METHOD2(SetPresentationConnection,
-               void(const mojom::blink::PresentationInfo&,
-                    mojom::blink::PresentationConnection*));
 
   MOCK_METHOD2(CloseConnection, void(const KURL&, const String&));
   MOCK_METHOD2(Terminate, void(const KURL&, const String&));

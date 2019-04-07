@@ -51,6 +51,8 @@ int GetIDSForDMStatus(DeviceManagementStatus status) {
     case DM_STATUS_SERVICE_ARC_DISABLED:
       // This error is never shown on the UI.
       return IDS_POLICY_DM_STATUS_UNKNOWN_ERROR;
+    case DM_STATUS_SERVICE_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE:
+      return IDS_POLICY_DM_STATUS_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE;
   }
   NOTREACHED() << "Unhandled DM status " << status;
   return IDS_POLICY_DM_STATUS_UNKNOWN_ERROR;
@@ -84,6 +86,10 @@ int GetIDSForValidationStatus(CloudPolicyValidatorBase::Status status) {
       return IDS_POLICY_VALIDATION_POLICY_PARSE_ERROR;
     case CloudPolicyValidatorBase::VALIDATION_BAD_KEY_VERIFICATION_SIGNATURE:
       return IDS_POLICY_VALIDATION_BAD_KEY_VERIFICATION_SIGNATURE;
+    case CloudPolicyValidatorBase::VALIDATION_VALUE_WARNING:
+      return IDS_POLICY_VALIDATION_VALUE_WARNING;
+    case CloudPolicyValidatorBase::VALIDATION_VALUE_ERROR:
+      return IDS_POLICY_VALIDATION_VALUE_ERROR;
     case CloudPolicyValidatorBase::VALIDATION_STATUS_SIZE:
       NOTREACHED();
   }

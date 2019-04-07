@@ -36,7 +36,8 @@ chrome.autofillPrivate.AddressField = {
  *   summaryLabel: string,
  *   summarySublabel: (string|undefined),
  *   isLocal: (boolean|undefined),
- *   isCached: (boolean|undefined)
+ *   isCached: (boolean|undefined),
+ *   isMigratable: (boolean|undefined)
  * }}
  */
 chrome.autofillPrivate.AutofillMetadata;
@@ -184,6 +185,11 @@ chrome.autofillPrivate.getCreditCardList = function(callback) {};
  * @param {string} guid GUID of the credit card to mask.
  */
 chrome.autofillPrivate.maskCreditCard = function(guid) {};
+
+/**
+ * Triggers local credit cards migration.
+ */
+chrome.autofillPrivate.migrateCreditCards = function() {};
 
 /**
  * Fired when the address list has changed, meaning that an entry has been

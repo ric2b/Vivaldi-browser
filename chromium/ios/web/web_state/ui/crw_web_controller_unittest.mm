@@ -804,10 +804,12 @@ TEST_P(CRWWebControllerDownloadTest, DataUrlResponse) {
 
 // Tests |currentURLWithTrustLevel:| method.
 TEST_P(CRWWebControllerTest, CurrentUrlWithTrustLevel) {
-  AddPendingItem(GURL("http://chromium.test"), ui::PAGE_TRANSITION_TYPED);
+  GURL url("http://chromium.test");
+  AddPendingItem(url, ui::PAGE_TRANSITION_TYPED);
 
   [[[mock_web_view_ stub] andReturnBool:NO] hasOnlySecureContent];
   [static_cast<WKWebView*>([[mock_web_view_ stub] andReturn:@""]) title];
+  SetWebViewURL(@"http://chromium.test");
 
   // Stub out the injection process.
   [[mock_web_view_ stub] evaluateJavaScript:OCMOCK_ANY
@@ -820,9 +822,7 @@ TEST_P(CRWWebControllerTest, CurrentUrlWithTrustLevel) {
   [navigation_delegate_ webView:mock_web_view_ didCommitNavigation:nil];
 
   URLVerificationTrustLevel trust_level = kNone;
-  GURL url = [web_controller() currentURLWithTrustLevel:&trust_level];
-
-  EXPECT_EQ(GURL(kTestURLString), url);
+  EXPECT_EQ(url, [web_controller() currentURLWithTrustLevel:&trust_level]);
   EXPECT_EQ(kAbsolute, trust_level);
 }
 
@@ -834,8 +834,6 @@ class CRWWebControllerPolicyDeciderTest : public CRWWebControllerTest {
  protected:
   void SetUp() override {
     CRWWebControllerTest::SetUp();
-    mock_delegate_ = OCMProtocolMock(@protocol(CRWWebDelegate));
-    [web_controller() setDelegate:mock_delegate_];
   }
   // Calls webView:decidePolicyForNavigationAction:decisionHandler: callback
   // and waits for decision handler call. Returns false if decision handler
@@ -862,8 +860,6 @@ class CRWWebControllerPolicyDeciderTest : public CRWWebControllerTest {
     });
     return policy_match;
   }
-
-  id<CRWWebDelegate> mock_delegate_;
 };
 
 // Tests that App specific URLs in iframes are allowed if the main frame is App
@@ -1089,18 +1085,11 @@ TEST_P(CRWWebControllerTitleTest, TitleChange) {
   scoped_observer.Add(web_state());
   ASSERT_EQ(0, observer.title_change_count());
 
-  int initial_title_change_count = 0;
-  if (web::GetWebClient()->IsSlimNavigationManagerEnabled()) {
-    // WKBasedNavigationManager produces an extra call to TitleWasSet because it
-    // loads New Tab Page in web view.
-    initial_title_change_count += 1;
-  }
-
   // Expect TitleWasSet callback after the page is loaded and due to WKWebView
   // title change KVO.
   LoadHtml(@"<title>Title1</title>");
   EXPECT_EQ("Title1", base::UTF16ToUTF8(web_state()->GetTitle()));
-  EXPECT_EQ(initial_title_change_count + 2, observer.title_change_count());
+  EXPECT_EQ(2, observer.title_change_count());
 
   // Expect at least one more TitleWasSet callback after changing title via
   // JavaScript. On iOS 10 WKWebView fires 3 callbacks after JS excucution
@@ -1109,7 +1098,7 @@ TEST_P(CRWWebControllerTitleTest, TitleChange) {
   // Fix expecteation when WKWebView stops sending extra KVO calls.
   ExecuteJavaScript(@"window.document.title = 'Title2';");
   EXPECT_EQ("Title2", base::UTF16ToUTF8(web_state()->GetTitle()));
-  EXPECT_GE(observer.title_change_count(), initial_title_change_count + 3);
+  EXPECT_GE(observer.title_change_count(), 3);
 };
 
 // Tests that fragment change navigations use title from the previous page.

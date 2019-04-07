@@ -16,12 +16,10 @@
 <translation id="1620510694547887537">Caméra</translation>
 <translation id="1640244768702815859">Essayez de <ph name="BEGIN_LINK" />consulter la page d’accueil du site<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocole non supporté</translation>
-<translation id="1676269943528358898">Le site <ph name="SITE" /> utilise normalement un chiffrement pour protéger vos informations. Cette fois, lorsque Vivaldi a essayé de se connecter à <ph name="SITE" />, le site Web a renvoyé des informations d’identification inhabituelles et incorrectes. Cela peut se produire quand un attaquant essaie de se faire passer pour le site <ph name="SITE" />, ou que l’écran de connexion au Wi-Fi a interrompu la connexion. Vos informations restent protégées car Vivaldi a stoppé la connexion avant que toute donnée soit échangée.</translation>
 <translation id="1710259589646384581">Système d’exploitation</translation>
 <translation id="1728677426644403582">Vous consultez actuellement le code source d’une page Web</translation>
 <translation id="1734878702283171397">Essayer de contacter l’administrateur système.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Essayer de lancer le diagnostic réseau de Windows<ph name="END_LINK" />.</translation>
-<translation id="1789575671122666129">Fenêtres pop-up</translation>
 <translation id="1834321415901700177">Ce site contient des programmes dangereux</translation>
 <translation id="1916770123977586577">Pour appliquer vos paramètres mis à jour sur ce site, actualisez la page</translation>
 <translation id="1919345977826869612">Publicités</translation>
@@ -29,11 +27,11 @@
 <translation id="1974060860693918893">Paramètres avancés</translation>
 <translation id="2030481566774242610">Souhaitez-vous plutôt accéder à ce lien : <ph name="LINK" /> ?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Vérifier le proxy et le pare-feu<ph name="END_LINK" /></translation>
-<translation id="2065985942032347596">Authentification requise</translation>
 <translation id="2091887806945687916">Son</translation>
 <translation id="2147827593068025794">Synchronisation en arrière-plan</translation>
 <translation id="2166378884831602661">Ce site ne peut pas fournir de connexion sécurisée</translation>
 <translation id="2187317261103489799">Détecter (par défaut)</translation>
+<translation id="2224337661447660594">Aucun accès à Internet</translation>
 <translation id="2230458221926704099">Vérifier la connexion à l’aide de l’<ph name="BEGIN_LINK" />application de diagnostic<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Votre accès à Internet est bloqué</translation>
 <translation id="2317259163369394535">Le <ph name="DOMAIN" /> nécessite un nom d'utilisateur et un mot de passe.</translation>
@@ -50,20 +48,14 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Accès au fichier refusé</translation>
 <translation id="2705137772291741111">La copie enregistrée (en cache) de ce site est illisible.</translation>
-<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Exécution des tests de connexion<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">La connexion a été réinitialisée.</translation>
 <translation id="2826760142808435982">La connexion est chiffrée et authentifiée avec la clé <ph name="CIPHER" />. La méthode d’échange de clés utilisée est <ph name="KX" />.</translation>
 <translation id="2856444702002559011">Des individus malveillants tentent peut-être de subtiliser vos informations personnelles sur le site <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (mots de passe, messages ou numéros de carte de crédit, par exemple). <ph name="BEGIN_LEARN_MORE_LINK" />En savoir plus<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Un changement de réseau a été détecté.</translation>
-<translation id="2948083400971632585">Vous pouvez désactiver le proxy configuré pour une connexion depuis les Réglages &gt; Réseau.</translation>
-<translation id="298138621710431427">Aidez-moi à corriger ça</translation>
 <translation id="2991571918955627853">Le site <ph name="SITE" /> est actuellement inaccessible, car il utilise la technologie HSTS. Les erreurs réseau et les attaques sont généralement temporaires. Vous devriez donc pouvoir accéder à cette page plus tard.</translation>
 <translation id="3005723025932146533">Afficher la copie enregistrée</translation>
 <translation id="301521992641321250">Bloquée automatiquement</translation>
-<translation id="3041612393474885105">Informations</translation>
-<translation id="3093245981617870298">Vous êtes en mode « hors-ligne ».</translation>
 <translation id="3109728660330352905">Vous n’êtes pas autorisé à consulter cette page.</translation>
-<translation id="31207688938192855"><ph name="BEGIN_LINK" />Essayer de lancer les tests de connexion<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Cette page inclut un formulaire dont la transmission n’est peut-être pas sécurisée. Les données envoyées pourront être vues par d’autres personnes pendant leur transfert ou modifiées par un pirate informatique afin de changer le message reçu par le serveur.</translation>
 <translation id="3176929007561373547">Vérifiez vos paramètres de proxy ou contactez votre administrateur réseau pour
       vous assurer que le serveur proxy fonctionne. Si vous
@@ -87,6 +79,7 @@
 <translation id="3681007416295224113">Informations relatives au certificat</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Vérifier les configurations du proxy, du pare-feu et du DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Si vous utilisez un serveur proxy…</translation>
+<translation id="3950820424414687140">Ouvrir une session</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> est bloqué</translation>
 <translation id="3987940399970879459">Moins de 1 Mo</translation>
 <translation id="4075732493274867456">Le client et le serveur ne sont pas compatibles avec une version de protocole ou une méthode de chiffrement SSL commune.</translation>
@@ -100,7 +93,6 @@
 <translation id="4235360514405112390">Valide</translation>
 <translation id="4250431568374086873">Votre connexion à ce site n’est pas totalement sécurisée</translation>
 <translation id="4265872034478892965">Autorisé par votre administrateur</translation>
-<translation id="4304224509867189079">Se connecter</translation>
 <translation id="4312866146174492540">Bloquer (par défaut)</translation>
 <translation id="4356973930735388585">Des individus malveillants à l’œuvre sur ce site pourraient tenter d’installer des applications dangereuses sur votre ordinateur afin de récupérer ou de supprimer certaines informations : photos, mots de passe, messages, numéros de carte de paiement, etc.</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
@@ -110,24 +102,19 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Essayer de désactiver les extensions.</translation>
 <translation id="4592951414987517459">Votre connexion à <ph name="DOMAIN" /> est chiffrée à l’aide d'une méthode de chiffrement récente.</translation>
-<translation id="4611292653554630842">Connexion</translation>
 <translation id="4690462567478992370">Cesser d’utiliser un certificat non valide</translation>
-<translation id="4690954380545377795">Vous pourriez perdre l’accès à votre compte Google ou subir une usurpation d’identité. Il est recommandé de modifier votre mot de passe maintenant.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Votre connexion a été interrompue</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Exécution du diagnostic réseau de Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Chemin d’accès à l’exécutable</translation>
 <translation id="4750917950439032686">Vos informations, par exemple vos mots de passe ou vos numéros de carte de paiement, sont privées lorsqu'elles sont transmises à ce site.</translation>
 <translation id="4764776831041365478">Il se peut que la page Web à l’adresse <ph name="URL" /> soit temporairement inaccessible ou qu'elle ait été déplacée de façon permanente à une autre adresse Web.</translation>
-<translation id="4807049035289105102">Vous ne pouvez pas aller sur <ph name="SITE" /> pour le moment car le site Web a envoyé des informations d’identification brouillées que Vivaldi ne peut analyser. Les erreurs réseau et les attaques sont généralement temporaires, aussi la page devrait fonctionner plus tard.</translation>
-<translation id="4913131542719409934">Authentification requise</translation>
 <translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">Réactiver les avertissements</translation>
 <translation id="5023310440958281426">Vérifiez les règles définies par votre administrateur</translation>
 <translation id="5039804452771397117">Autoriser</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Vérifier l'adresse du proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bits)</translation>
-<translation id="522700295135997067">Ce site vient peut-être de dérober votre mot de passe</translation>
 <translation id="5287240709317226393">Afficher les cookies</translation>
 <translation id="5355557959165512791">Le site <ph name="SITE" /> est actuellement inaccessible, car son certificat a été révoqué. Les erreurs réseau et les attaques sont généralement temporaires. Vous devriez donc pouvoir accéder à cette page plus tard.</translation>
 <translation id="5386426401304769735">La chaîne de certificats de ce site contient un certificat signé avec SHA-1.</translation>
@@ -154,7 +141,6 @@
 <translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 en cours d’utilisation}one{# en cours d'utilisation}other{# en cours d’utilisation}}</translation>
 <translation id="5990559369517809815">Les requêtes vers le serveur ont été bloquées par une extension.</translation>
 <translation id="6051221802930200923">Le site <ph name="SITE" /> est actuellement inaccessible, car il utilise l’épinglage des certificats. Les erreurs réseau et les attaques sont généralement temporaires. Vous devriez donc pouvoir accéder à cette page plus tard.</translation>
-<translation id="6080696365213338172">Vous avez accédé à du contenu à l’aide d’un certificat fourni par l’administrateur. Les données que vous fournissez à <ph name="DOMAIN" /> peuvent être interceptées par votre administrateur.</translation>
 <translation id="6146055958333702838">Vérifiez les câbles et redémarrez votre routeur, votre modem
     ou tout autre périphérique réseau utilisé.</translation>
 <translation id="614940544461990577">Essayez les suggestions ci-dessous :</translation>
@@ -171,7 +157,6 @@
 <translation id="6417515091412812850">Impossible de vérifier si le certificat a été révoqué.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> n’autorise pas la connexion.</translation>
 <translation id="6447842834002726250">Cookies</translation>
-<translation id="6556239504065605927">Connexion sécurisée</translation>
 <translation id="6569060085658103619">Vous consultez actuellement une page d’extension</translation>
 <translation id="6657585470893396449">Mot de passe</translation>
 <translation id="6685834062052613830">Déconnectez-vous et complétez la configuration</translation>
@@ -204,7 +189,7 @@
 <translation id="7800304661137206267">La connexion est chiffrée au moyen de <ph name="CIPHER" />, avec <ph name="MAC" /> pour l’authentification des messages et <ph name="KX" /> pour la méthode d’échange de clés.</translation>
 <translation id="7802523362929240268">Ce site est légitime</translation>
 <translation id="7834399512844817676">Un chiffrement est normalement utilisé sur le site <ph name="SITE" /> pour protéger vos informations. Lors de la dernière tentative de connexion de Vivaldi au site <ph name="SITE" />, des identifiants inhabituels et incorrects ont été retournés. Il est possible qu'un individu malveillant tente de se faire passer pour <ph name="SITE" /> ou qu'un écran de connexion Wi-Fi ait interrompu la connexion. Vos informations restent sécurisées, car nous avons arrêté la connexion avant l'échange des données.</translation>
-<translation id="7878562273885520351">Votre mot de passe a peut-être été piraté</translation>
+<translation id="7878562273885520351">Votre mot de passe a peut-être été compromis</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
 <translation id="8025119109950072390">Des individus malveillants à l’œuvre sur ce site pourraient vous inciter à effectuer des opérations dangereuses, telles que l’installation d’un logiciel ou la révélation d’informations personnelles (par exemple des mots de passe, des numéros de téléphone ou des numéros de carte de paiement).</translation>
 <translation id="8037357227543935929">Demander (par défaut)</translation>
@@ -214,6 +199,7 @@
 <translation id="8150722005171944719">Le fichier disponible à l’adresse <ph name="URL" /> n’est pas lisible. Il est possible qu’il ait été supprimé ou déplacé, ou que les autorisations associées empêchent d’y accéder.</translation>
 <translation id="8184538546369750125">Utiliser le paramètre global par défaut (« Autoriser »)</translation>
 <translation id="8205463626947051446">Le site a tendance à afficher des publicités intrusives</translation>
+<translation id="8211406090763984747">La connexion est sécurisée</translation>
 <translation id="8225771182978767009">La personne qui a configuré cet ordinateur a choisi de bloquer ce site.</translation>
 <translation id="8241712895048303527">Bloquer sur ce site</translation>
 <translation id="8288807391153049143">Afficher le certificat</translation>
@@ -234,7 +220,6 @@
 <translation id="9169664750068251925">Toujours bloquer sur ce site</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utilise un protocole incompatible.</translation>
 <translation id="9219103736887031265">Images</translation>
-<translation id="933612690413056017">Aucune connexion Internet</translation>
 <translation id="969892804517981540">Version officielle</translation>
 <translation id="988159990683914416">Version de développement</translation>
 </translationbundle>

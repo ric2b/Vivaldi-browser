@@ -14,7 +14,7 @@ NGPhysicalLineBoxFragment::NGPhysicalLineBoxFragment(
     const ComputedStyle& style,
     NGStyleVariant style_variant,
     NGPhysicalSize size,
-    Vector<scoped_refptr<NGPhysicalFragment>>& children,
+    Vector<NGLink>& children,
     const NGPhysicalOffsetRect& contents_ink_overflow,
     const NGLineHeightMetrics& metrics,
     TextDirection base_direction,
@@ -52,7 +52,7 @@ NGPhysicalOffsetRect NGPhysicalLineBoxFragment::ScrollableOverflow(
   NGPhysicalOffsetRect overflow({}, Size());
   for (const auto& child : Children()) {
     NGPhysicalOffsetRect child_scroll_overflow = child->ScrollableOverflow();
-    child_scroll_overflow.offset += child->Offset();
+    child_scroll_overflow.offset += child.Offset();
     // If child has the same style as parent, parent will compute relative
     // offset.
     if (&child->Style() != container_style) {
@@ -72,7 +72,7 @@ const NGPhysicalFragment* NGPhysicalLineBoxFragment::FirstLogicalLeaf() const {
   // should compute and store it during layout.
   const TextDirection direction = Style().Direction();
   const NGPhysicalFragment* runner = this;
-  while (runner->IsContainer() && !runner->IsBlockLayoutRoot()) {
+  while (runner->IsContainer() && !runner->IsBlockFormattingContextRoot()) {
     const NGPhysicalContainerFragment* runner_as_container =
         ToNGPhysicalContainerFragment(runner);
     if (runner_as_container->Children().IsEmpty())
@@ -92,7 +92,7 @@ const NGPhysicalFragment* NGPhysicalLineBoxFragment::LastLogicalLeaf() const {
   // should compute and store it during layout.
   const TextDirection direction = Style().Direction();
   const NGPhysicalFragment* runner = this;
-  while (runner->IsContainer() && !runner->IsBlockLayoutRoot()) {
+  while (runner->IsContainer() && !runner->IsBlockFormattingContextRoot()) {
     const NGPhysicalContainerFragment* runner_as_container =
         ToNGPhysicalContainerFragment(runner);
     if (runner_as_container->Children().IsEmpty())

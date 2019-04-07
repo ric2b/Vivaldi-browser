@@ -42,7 +42,9 @@
 #include "components/tracing/common/trace_startup.h"
 #include "content/app/mojo/mojo_init.h"
 #include "content/browser/browser_process_sub_thread.h"
+#include "content/browser/browser_thread_impl.h"
 #include "content/browser/startup_data_impl.h"
+#include "content/common/content_constants_internal.h"
 #include "content/common/url_schemes.h"
 #include "content/public/app/content_main_delegate.h"
 #include "content/public/common/content_constants.h"
@@ -73,8 +75,8 @@
 #include "base/trace_event/trace_event_etw_export_win.h"
 #include "ui/display/win/dpi.h"
 #elif defined(OS_MACOSX)
+#include "base/mac/mach_port_broker.h"
 #include "base/power_monitor/power_monitor_device_source.h"
-#include "content/browser/mach_broker_mac.h"
 #include "sandbox/mac/seatbelt_exec.h"
 #endif  // OS_WIN
 
@@ -119,6 +121,7 @@
 #endif  // OS_LINUX
 
 #if !defined(CHROME_MULTIPLE_DLL_BROWSER)
+#include "content/child/field_trial.h"
 #include "content/public/gpu/content_gpu_client.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/utility/content_utility_client.h"
@@ -168,40 +171,6 @@ namespace {
 #define kV8SnapshotDataDescriptor kV8Snapshot32DataDescriptor
 #endif
 #endif
-
-// This sets up two singletons responsible for managing field trials. The
-// |field_trial_list| singleton lives on the stack and must outlive the Run()
-// method of the process.
-void InitializeFieldTrialAndFeatureList(
-    std::unique_ptr<base::FieldTrialList>* field_trial_list) {
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-
-  // Initialize statistical testing infrastructure.  We set the entropy
-  // provider to nullptr to disallow non-browser processes from creating
-  // their own one-time randomized trials; they should be created in the
-  // browser process.
-  field_trial_list->reset(new base::FieldTrialList(nullptr));
-
-// Ensure any field trials in browser are reflected into the child
-// process.
-#if defined(OS_WIN)
-  base::FieldTrialList::CreateTrialsFromCommandLine(
-      command_line, switches::kFieldTrialHandle, -1);
-#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
-  // On POSIX systems that use the zygote, we get the trials from a shared
-  // memory segment backed by an fd instead of the command line.
-  base::FieldTrialList::CreateTrialsFromCommandLine(
-      command_line, switches::kFieldTrialHandle,
-      service_manager::kFieldTrialDescriptor);
-#endif
-
-  std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-  base::FieldTrialList::CreateFeaturesFromCommandLine(
-      command_line, switches::kEnableFeatures, switches::kDisableFeatures,
-      feature_list.get());
-  base::FeatureList::SetInstance(std::move(feature_list));
-}
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
 void LoadV8SnapshotFile() {
@@ -434,57 +403,30 @@ bool IsRootProcess() {
 
 }  // namespace
 
-#if !defined(CHROME_MULTIPLE_DLL_CHILD)
-base::LazyInstance<ContentBrowserClient>::DestructorAtExit
-    g_empty_content_browser_client = LAZY_INSTANCE_INITIALIZER;
-#endif  //  !CHROME_MULTIPLE_DLL_CHILD
-
-#if !defined(CHROME_MULTIPLE_DLL_BROWSER)
-base::LazyInstance<ContentGpuClient>::DestructorAtExit
-    g_empty_content_gpu_client = LAZY_INSTANCE_INITIALIZER;
-base::LazyInstance<ContentRendererClient>::DestructorAtExit
-    g_empty_content_renderer_client = LAZY_INSTANCE_INITIALIZER;
-base::LazyInstance<ContentUtilityClient>::DestructorAtExit
-    g_empty_content_utility_client = LAZY_INSTANCE_INITIALIZER;
-#endif  // !CHROME_MULTIPLE_DLL_BROWSER
-
 class ContentClientInitializer {
  public:
   static void Set(const std::string& process_type,
                   ContentMainDelegate* delegate) {
     ContentClient* content_client = GetContentClient();
 #if !defined(CHROME_MULTIPLE_DLL_CHILD)
-    if (process_type.empty()) {
+    if (process_type.empty())
       content_client->browser_ = delegate->CreateContentBrowserClient();
-      if (!content_client->browser_)
-        content_client->browser_ = &g_empty_content_browser_client.Get();
-    }
 #endif  // !CHROME_MULTIPLE_DLL_CHILD
 
 #if !defined(CHROME_MULTIPLE_DLL_BROWSER)
     base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
     if (process_type == switches::kGpuProcess ||
         cmd->HasSwitch(switches::kSingleProcess) ||
-        (process_type.empty() && cmd->HasSwitch(switches::kInProcessGPU))) {
+        (process_type.empty() && cmd->HasSwitch(switches::kInProcessGPU)))
       content_client->gpu_ = delegate->CreateContentGpuClient();
-      if (!content_client->gpu_)
-        content_client->gpu_ = &g_empty_content_gpu_client.Get();
-    }
 
     if (process_type == switches::kRendererProcess ||
-        cmd->HasSwitch(switches::kSingleProcess)) {
+        cmd->HasSwitch(switches::kSingleProcess))
       content_client->renderer_ = delegate->CreateContentRendererClient();
-      if (!content_client->renderer_)
-        content_client->renderer_ = &g_empty_content_renderer_client.Get();
-    }
 
     if (process_type == switches::kUtilityProcess ||
-        cmd->HasSwitch(switches::kSingleProcess)) {
+        cmd->HasSwitch(switches::kSingleProcess))
       content_client->utility_ = delegate->CreateContentUtilityClient();
-      // TODO(scottmg): http://crbug.com/237249 Should be in _child.
-      if (!content_client->utility_)
-        content_client->utility_ = &g_empty_content_utility_client.Get();
-    }
 #endif  // !CHROME_MULTIPLE_DLL_BROWSER
   }
 };
@@ -541,8 +483,7 @@ int RunZygote(ContentMainDelegate* delegate) {
   MainFunctionParams main_params(command_line);
   main_params.zygote_child = true;
 
-  std::unique_ptr<base::FieldTrialList> field_trial_list;
-  InitializeFieldTrialAndFeatureList(&field_trial_list);
+  InitializeFieldTrialAndFeatureList();
 
   service_manager::SandboxType sandbox_type =
       service_manager::SandboxTypeFromCommandLine(command_line);
@@ -779,7 +720,7 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
     }
 
     if (!process_type.empty() && delegate_->ShouldSendMachPort(process_type)) {
-      MachBroker::ChildSendTaskPortToParent();
+      base::MachPortBroker::ChildSendTaskPortToParent(kMachBootstrapName);
     }
 #endif
 
@@ -901,12 +842,13 @@ int ContentMainRunnerImpl::Run(bool start_service_manager_only) {
   std::string process_type =
       command_line.GetSwitchValueASCII(switches::kProcessType);
 
+#if !defined(CHROME_MULTIPLE_DLL_BROWSER)
   // Run this logic on all child processes. Zygotes will run this at a later
   // point in time when the command line has been updated.
-  std::unique_ptr<base::FieldTrialList> field_trial_list;
   if (!process_type.empty() &&
       process_type != service_manager::switches::kZygoteProcess)
-    InitializeFieldTrialAndFeatureList(&field_trial_list);
+    InitializeFieldTrialAndFeatureList();
+#endif
 
   MainFunctionParams main_params(command_line);
   main_params.ui_task = ui_task_;
@@ -936,7 +878,11 @@ int ContentMainRunnerImpl::Run(bool start_service_manager_only) {
       base::TaskScheduler::Create("Browser");
     }
 
-    delegate_->PreContentInitialization();
+    // Register the TaskExecutor for posting task to the BrowserThreads. It is
+    // incorrect to post to a BrowserThread before this point.
+    BrowserThreadImpl::CreateTaskExecutor();
+
+    delegate_->PreCreateMainMessageLoop();
 
     // Create a MessageLoop if one does not already exist for the current
     // thread. This thread won't be promoted as BrowserThread::UI until
@@ -944,6 +890,7 @@ int ContentMainRunnerImpl::Run(bool start_service_manager_only) {
     if (!base::MessageLoopCurrentForUI::IsSet())
       main_message_loop_ = std::make_unique<base::MessageLoopForUI>();
 
+    delegate_->PostEarlyInitialization();
     return RunBrowserProcessMain(main_params, delegate_);
   }
 #endif  // !defined(CHROME_MULTIPLE_DLL_CHILD)

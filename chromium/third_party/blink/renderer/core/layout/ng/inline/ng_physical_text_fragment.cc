@@ -7,11 +7,54 @@
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/line/line_orientation_utils.h"
+#include "third_party/blink/renderer/core/layout/ng/geometry/ng_logical_size.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_physical_offset_rect.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
 namespace blink {
+
+namespace {
+
+inline bool IsPhysicalTextFragmentAnonymousText(
+    const LayoutObject* layout_object) {
+  if (!layout_object)
+    return false;
+  if (layout_object->IsText() && ToLayoutText(layout_object)->IsTextFragment())
+    return !ToLayoutTextFragment(layout_object)->AssociatedTextNode();
+  const Node* node = layout_object->GetNode();
+  return !node || node->IsPseudoElement();
+}
+
+}  // anonymous namespace
+
+NGPhysicalTextFragment::NGPhysicalTextFragment(
+    LayoutObject* layout_object,
+    const ComputedStyle& style,
+    NGStyleVariant style_variant,
+    NGTextType text_type,
+    const String& text,
+    unsigned start_offset,
+    unsigned end_offset,
+    NGPhysicalSize size,
+    NGLineOrientation line_orientation,
+    NGTextEndEffect end_effect,
+    scoped_refptr<const ShapeResult> shape_result)
+    : NGPhysicalFragment(layout_object,
+                         style,
+                         style_variant,
+                         size,
+                         kFragmentText,
+                         text_type),
+      text_(text),
+      start_offset_(start_offset),
+      end_offset_(end_offset),
+      shape_result_(shape_result),
+      line_orientation_(static_cast<unsigned>(line_orientation)),
+      end_effect_(static_cast<unsigned>(end_effect)),
+      is_anonymous_text_(IsPhysicalTextFragmentAnonymousText(layout_object)) {
+  DCHECK(shape_result_ || IsFlowControl()) << ToString();
+}
 
 // Convert logical cooridnate to local physical coordinate.
 NGPhysicalOffsetRect NGPhysicalTextFragment::ConvertToLocal(
@@ -41,7 +84,8 @@ LayoutUnit NGPhysicalTextFragment::InlinePositionForOffset(
 
   offset -= start_offset_;
   if (shape_result_) {
-    return round(shape_result_->PositionForOffset(offset, adjust_mid_cluster));
+    return round(shape_result_->CaretPositionForOffset(offset, Text(),
+                                                       adjust_mid_cluster));
   }
 
   // This fragment is a flow control because otherwise ShapeResult exists.
@@ -149,7 +193,7 @@ NGPhysicalOffsetRect NGPhysicalTextFragment::SelfInkOverflow() const {
   return local_ink_overflow;
 }
 
-scoped_refptr<NGPhysicalFragment> NGPhysicalTextFragment::TrimText(
+scoped_refptr<const NGPhysicalFragment> NGPhysicalTextFragment::TrimText(
     unsigned new_start_offset,
     unsigned new_end_offset) const {
   DCHECK(shape_result_);
@@ -167,35 +211,33 @@ scoped_refptr<NGPhysicalFragment> NGPhysicalTextFragment::TrimText(
       LineOrientation(), EndEffect(), std::move(new_shape_result)));
 }
 
-scoped_refptr<NGPhysicalFragment> NGPhysicalTextFragment::CloneWithoutOffset()
-    const {
-  return base::AdoptRef(new NGPhysicalTextFragment(
-      layout_object_, Style(), static_cast<NGStyleVariant>(style_variant_),
-      TextType(), text_, start_offset_, end_offset_, size_, LineOrientation(),
-      EndEffect(), shape_result_));
-}
-
-bool NGPhysicalTextFragment::IsAnonymousText() const {
-  // TODO(xiaochengh): Introduce and set a flag for anonymous text.
-  const LayoutObject* layout_object = GetLayoutObject();
-  if (layout_object && layout_object->IsText() &&
-      ToLayoutText(layout_object)->IsTextFragment())
-    return !ToLayoutTextFragment(layout_object)->AssociatedTextNode();
-  const Node* node = GetNode();
-  return !node || node->IsPseudoElement();
-}
-
 unsigned NGPhysicalTextFragment::TextOffsetForPoint(
     const NGPhysicalOffset& point) const {
-  if (IsLineBreak())
-    return StartOffset();
-  DCHECK(TextShapeResult());
+  const ComputedStyle& style = Style();
   const LayoutUnit& point_in_line_direction =
-      Style().IsHorizontalWritingMode() ? point.left : point.top;
-  return TextShapeResult()->OffsetForPosition(point_in_line_direction.ToFloat(),
-                                              IncludePartialGlyphs,
-                                              BreakGlyphs) +
-         StartOffset();
+      style.IsHorizontalWritingMode() ? point.left : point.top;
+  if (const ShapeResult* shape_result = TextShapeResult()) {
+    return shape_result->CaretOffsetForHitTest(
+               point_in_line_direction.ToFloat(), Text(), BreakGlyphs) +
+           StartOffset();
+  }
+
+  // Flow control fragments such as forced line break, tabulation, soft-wrap
+  // opportunities, etc. do not have ShapeResult.
+  DCHECK(IsFlowControl());
+
+  // Zero-inline-size objects such as newline always return the start offset.
+  NGLogicalSize size = Size().ConvertToLogical(style.GetWritingMode());
+  if (!size.inline_size)
+    return StartOffset();
+
+  // Sized objects such as tabulation returns the next offset if the given point
+  // is on the right half.
+  LayoutUnit inline_offset = IsLtr(ResolvedDirection())
+                                 ? point_in_line_direction
+                                 : size.inline_size - point_in_line_direction;
+  DCHECK_EQ(1u, Length());
+  return inline_offset <= size.inline_size / 2 ? StartOffset() : EndOffset();
 }
 
 UBiDiLevel NGPhysicalTextFragment::BidiLevel() const {

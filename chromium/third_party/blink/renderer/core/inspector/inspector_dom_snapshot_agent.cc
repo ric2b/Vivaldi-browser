@@ -43,13 +43,8 @@
 #include "v8/include/v8-inspector.h"
 
 namespace blink {
-
 using protocol::Maybe;
 using protocol::Response;
-
-namespace DOMSnapshotAgentState {
-static const char kDomSnapshotAgentEnabled[] = "DOMSnapshotAgentEnabled";
-};
 
 namespace {
 
@@ -148,14 +143,10 @@ InspectorDOMSnapshotAgent::InspectorDOMSnapshotAgent(
     InspectedFrames* inspected_frames,
     InspectorDOMDebuggerAgent* dom_debugger_agent)
     : inspected_frames_(inspected_frames),
-      dom_debugger_agent_(dom_debugger_agent) {}
+      dom_debugger_agent_(dom_debugger_agent),
+      enabled_(&agent_state_, /*default_value=*/false) {}
 
 InspectorDOMSnapshotAgent::~InspectorDOMSnapshotAgent() = default;
-
-bool InspectorDOMSnapshotAgent::Enabled() const {
-  return state_->booleanProperty(
-      DOMSnapshotAgentState::kDomSnapshotAgentEnabled, false);
-}
 
 void InspectorDOMSnapshotAgent::GetOriginUrl(String* origin_url_ptr,
                                              const Node* node) {
@@ -197,28 +188,27 @@ void InspectorDOMSnapshotAgent::DidInsertDOMNode(Node* node) {
     origin_url_map_->insert(DOMNodeIds::IdForNode(node), origin_url);
 }
 
-void InspectorDOMSnapshotAgent::InnerEnable() {
-  state_->setBoolean(DOMSnapshotAgentState::kDomSnapshotAgentEnabled, true);
+void InspectorDOMSnapshotAgent::EnableAndReset() {
+  enabled_.Set(true);
   origin_url_map_ = std::make_unique<OriginUrlMap>();
   instrumenting_agents_->addInspectorDOMSnapshotAgent(this);
 }
 
 void InspectorDOMSnapshotAgent::Restore() {
-  if (!Enabled())
-    return;
-  InnerEnable();
+  if (enabled_.Get())
+    EnableAndReset();
 }
 
 Response InspectorDOMSnapshotAgent::enable() {
-  if (!Enabled())
-    InnerEnable();
+  if (!enabled_.Get())
+    EnableAndReset();
   return Response::OK();
 }
 
 Response InspectorDOMSnapshotAgent::disable() {
-  if (!Enabled())
+  if (!enabled_.Get())
     return Response::Error("DOM snapshot agent hasn't been enabled.");
-  state_->setBoolean(DOMSnapshotAgentState::kDomSnapshotAgentEnabled, false);
+  enabled_.Clear();
   origin_url_map_.reset();
   instrumenting_agents_->removeInspectorDOMSnapshotAgent(this);
   return Response::OK();
@@ -431,7 +421,8 @@ int InspectorDOMSnapshotAgent::VisitNode(Node* node,
       if (InspectorDOMAgent::GetPseudoElementType(element->GetPseudoId(),
                                                   &pseudo_type)) {
         value->setPseudoType(pseudo_type);
-        VisitPseudoLayoutChildren(node, node->GetLayoutObject(), index);
+        if (node->GetLayoutObject())
+          VisitPseudoLayoutChildren(node, index);
       }
     } else {
       value->setPseudoElementIndexes(
@@ -549,6 +540,7 @@ void InspectorDOMSnapshotAgent::VisitDocument2(Document* document) {
                   .setBounds(protocol::Array<protocol::Array<double>>::create())
                   .setText(protocol::Array<int>::create())
                   .setStyles(protocol::Array<protocol::Array<int>>::create())
+                  .setStackingContexts(BooleanData())
                   .build())
           .setTextBoxes(
               protocol::DOMSnapshot::TextBoxSnapshot::create()
@@ -639,7 +631,8 @@ int InspectorDOMSnapshotAgent::VisitNode2(Node* node, int parent_index) {
       if (InspectorDOMAgent::GetPseudoElementType(element->GetPseudoId(),
                                                   &pseudo_type)) {
         SetRare(nodes->getPseudoType(nullptr), index, pseudo_type);
-        VisitPseudoLayoutChildren2(node, node->GetLayoutObject(), index);
+        if (node->GetLayoutObject())
+          VisitPseudoLayoutChildren2(node, index);
       }
     } else {
       VisitPseudoElements2(element, index);
@@ -726,23 +719,21 @@ void InspectorDOMSnapshotAgent::VisitContainerChildren2(Node* container,
   }
 }
 
-void InspectorDOMSnapshotAgent::VisitPseudoLayoutChildren(
-    Node* pseudo_node,
-    LayoutObject* layout_object,
-    int index) {
-  for (LayoutObject* child = layout_object->SlowFirstChild(); child;
-       child = child->NextSibling()) {
-    VisitLayoutTreeNode(child, pseudo_node, index);
+void InspectorDOMSnapshotAgent::VisitPseudoLayoutChildren(Node* pseudo_node,
+                                                          int index) {
+  for (LayoutObject* child = pseudo_node->GetLayoutObject()->SlowFirstChild();
+       child; child = child->NextSibling()) {
+    if (child->IsAnonymous())
+      VisitLayoutTreeNode(child, pseudo_node, index);
   }
 }
 
-void InspectorDOMSnapshotAgent::VisitPseudoLayoutChildren2(
-    Node* pseudo_node,
-    LayoutObject* layout_object,
-    int index) {
-  for (LayoutObject* child = layout_object->SlowFirstChild(); child;
-       child = child->NextSibling()) {
-    BuildLayoutTreeNode(child, pseudo_node, index);
+void InspectorDOMSnapshotAgent::VisitPseudoLayoutChildren2(Node* pseudo_node,
+                                                           int index) {
+  for (LayoutObject* child = pseudo_node->GetLayoutObject()->SlowFirstChild();
+       child; child = child->NextSibling()) {
+    if (child->IsAnonymous())
+      BuildLayoutTreeNode(child, pseudo_node, index);
   }
 }
 
@@ -759,11 +750,9 @@ InspectorDOMSnapshotAgent::VisitPseudoElements(
   }
 
   auto pseudo_elements = protocol::Array<int>::create();
-  PseudoId pseudo_types[] = {kPseudoIdFirstLetter, kPseudoIdBefore,
-                             kPseudoIdAfter};
-  for (PseudoId pseudo_id : pseudo_types) {
-    if (parent->GetPseudoElement(pseudo_id)) {
-      Node* pseudo_node = parent->GetPseudoElement(pseudo_id);
+  for (PseudoId pseudo_id :
+       {kPseudoIdFirstLetter, kPseudoIdBefore, kPseudoIdAfter}) {
+    if (Node* pseudo_node = parent->GetPseudoElement(pseudo_id)) {
       pseudo_elements->addItem(VisitNode(pseudo_node, include_event_listeners,
                                          include_user_agent_shadow_tree));
     }
@@ -773,18 +762,10 @@ InspectorDOMSnapshotAgent::VisitPseudoElements(
 
 void InspectorDOMSnapshotAgent::VisitPseudoElements2(Element* parent,
                                                      int parent_index) {
-  if (!parent->GetPseudoElement(kPseudoIdFirstLetter) &&
-      !parent->GetPseudoElement(kPseudoIdBefore) &&
-      !parent->GetPseudoElement(kPseudoIdAfter)) {
-    return;
-  }
-  PseudoId pseudo_types[] = {kPseudoIdFirstLetter, kPseudoIdBefore,
-                             kPseudoIdAfter};
-  for (PseudoId i : pseudo_types) {
-    if (parent->GetPseudoElement(i)) {
-      Node* pseudo_node = parent->GetPseudoElement(i);
+  for (PseudoId pseudo_id :
+       {kPseudoIdFirstLetter, kPseudoIdBefore, kPseudoIdAfter}) {
+    if (Node* pseudo_node = parent->GetPseudoElement(pseudo_id))
       VisitNode2(pseudo_node, parent_index);
-    }
   }
 }
 
@@ -833,6 +814,9 @@ int InspectorDOMSnapshotAgent::VisitLayoutTreeNode(LayoutObject* layout_object,
   if (style_index != -1)
     layout_tree_node->setStyleIndex(style_index);
 
+  if (layout_object->Style() && layout_object->Style()->IsStacked())
+    layout_tree_node->setIsStackingContext(true);
+
   if (paint_order_map_) {
     PaintLayer* paint_layer = layout_object->EnclosingLayer();
 
@@ -846,19 +830,19 @@ int InspectorDOMSnapshotAgent::VisitLayoutTreeNode(LayoutObject* layout_object,
   if (layout_object->IsText()) {
     LayoutText* layout_text = ToLayoutText(layout_object);
     layout_tree_node->setLayoutText(layout_text->GetText());
-    if (layout_text->HasTextBoxes()) {
+    Vector<LayoutText::TextBoxInfo> text_boxes = layout_text->GetTextBoxInfo();
+    if (!text_boxes.IsEmpty()) {
       std::unique_ptr<protocol::Array<protocol::DOMSnapshot::InlineTextBox>>
           inline_text_nodes =
               protocol::Array<protocol::DOMSnapshot::InlineTextBox>::create();
-      for (const InlineTextBox* text_box : layout_text->TextBoxes()) {
-        FloatRect local_coords_text_box_rect(text_box->FrameRect());
+      for (const LayoutText::TextBoxInfo& text_box : text_boxes) {
         FloatRect absolute_coords_text_box_rect =
-            layout_object->LocalToAbsoluteQuad(local_coords_text_box_rect)
+            layout_object->LocalToAbsoluteQuad(FloatRect(text_box.local_rect))
                 .BoundingBox();
         inline_text_nodes->addItem(
             protocol::DOMSnapshot::InlineTextBox::create()
-                .setStartCharacterIndex(text_box->Start())
-                .setNumCharacters(text_box->Len())
+                .setStartCharacterIndex(text_box.dom_start_offset)
+                .setNumCharacters(text_box.dom_length)
                 .setBoundingBox(
                     BuildRectForFloatRect(absolute_coords_text_box_rect))
                 .build());
@@ -885,6 +869,9 @@ int InspectorDOMSnapshotAgent::BuildLayoutTreeNode(LayoutObject* layout_object,
   layout_tree_snapshot->getStyles()->addItem(BuildStylesForNode(node));
   layout_tree_snapshot->getBounds()->addItem(BuildRectForFloatRect2(
       FloatRect(layout_object->AbsoluteBoundingBoxRect())));
+
+  if (layout_object->Style() && layout_object->Style()->IsStacked())
+    SetRare(layout_tree_snapshot->getStackingContexts(), layout_index);
 
   String text = layout_object->IsText() ? ToLayoutText(layout_object)->GetText()
                                         : String();

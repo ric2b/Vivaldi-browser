@@ -12,7 +12,7 @@
 #include "chrome/browser/ui/autofill/popup_view_common.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -77,7 +77,9 @@ void AutofillPopupBaseView::DoShow() {
     AddExtraInitParams(&params);
     widget->Init(params);
 
-    widget->SetContentsView(CreateWrapperView().release());
+    std::unique_ptr<views::View> wrapper = CreateWrapperView();
+    if (wrapper)
+      widget->SetContentsView(wrapper.release());
     widget->AddObserver(this);
 
     // No animation for popup appearance (too distracting).
@@ -165,13 +167,7 @@ void AutofillPopupBaseView::AddExtraInitParams(
 }
 
 std::unique_ptr<views::View> AutofillPopupBaseView::CreateWrapperView() {
-  // Create a wrapper view that contains the current view and will receive the
-  // bubble border. This is needed so that a clipping path can be later applied
-  // on the contents only and not affect the border.
-  auto wrapper_view = std::make_unique<views::View>();
-  wrapper_view->SetLayoutManager(std::make_unique<views::FillLayout>());
-  wrapper_view->AddChildView(this);
-  return wrapper_view;
+  return nullptr;
 }
 
 std::unique_ptr<views::Border> AutofillPopupBaseView::CreateBorder() {
@@ -194,23 +190,21 @@ void AutofillPopupBaseView::SetClipPath() {
 }
 
 void AutofillPopupBaseView::DoUpdateBoundsAndRedrawPopup() {
-  gfx::Rect bounds = delegate()->popup_bounds();
+  gfx::Size size = GetPreferredSize();
+  // When a bubble border is shown, the contents area (inside the shadow) is
+  // supposed to be aligned with input element boundaries.
+  gfx::Rect element_bounds = gfx::ToEnclosingRect(delegate()->element_bounds());
+  element_bounds.Inset(/*horizontal=*/0, /*vertical=*/-kElementBorderPadding);
 
-  SetSize(bounds.size());
-
-  gfx::Rect clipping_bounds = CalculateClippingBounds();
-
-  int available_vertical_space =
-      clipping_bounds.height() - (bounds.y() - clipping_bounds.y());
-
-  if (available_vertical_space < bounds.height())
-    bounds.set_height(available_vertical_space);
-
+  gfx::Rect popup_bounds = PopupViewCommon().CalculatePopupBounds(
+      size.width(), size.height(), element_bounds, delegate()->container_view(),
+      delegate()->IsRTL());
   // Account for the scroll view's border so that the content has enough space.
-  bounds.Inset(-GetWidget()->GetRootView()->border()->GetInsets());
-  GetWidget()->SetBounds(bounds);
-  SetClipPath();
+  popup_bounds.Inset(-GetWidget()->GetRootView()->border()->GetInsets());
+  GetWidget()->SetBounds(popup_bounds);
 
+  Layout();
+  SetClipPath();
   SchedulePaint();
 }
 
@@ -314,7 +308,12 @@ void AutofillPopupBaseView::OnGestureEvent(ui::GestureEvent* event) {
 }
 
 void AutofillPopupBaseView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ax::mojom::Role::kMenu;
+  // TODO(aleventhal) The correct role spec-wise to use here is kMenu, however
+  // as of NVDA 2018.2.1, firing a menu event with kMenu breaks left/right
+  // arrow editing feedback in text field. If NVDA addresses this we should
+  // consider returning to using kMenu, so that users are notified that a
+  // menu popup has been shown.
+  node_data->role = ax::mojom::Role::kPane;
   node_data->SetName(
       l10n_util::GetStringUTF16(IDS_AUTOFILL_POPUP_ACCESSIBLE_NODE_DATA));
 }

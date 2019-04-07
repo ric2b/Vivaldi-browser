@@ -6,10 +6,13 @@
 
 #include <cmath>
 
+#include "ash/public/cpp/ash_pref_names.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/chromeos/power/ml/real_boot_clock.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/resource_coordinator/tab_metrics_logger.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -27,9 +30,53 @@ namespace power {
 namespace ml {
 
 namespace {
+
 void LogPowerMLPreviousEventLoggingResult(PreviousEventLoggingResult result) {
   UMA_HISTOGRAM_ENUMERATION("PowerML.PreviousEventLogging.Result", result);
 }
+
+void LogPowerMLDimImminentAction(DimImminentAction action) {
+  UMA_HISTOGRAM_ENUMERATION("PowerML.DimImminent.Action", action);
+}
+
+void LogPowerMLNonModelDimResult(FinalResult result) {
+  UMA_HISTOGRAM_ENUMERATION("PowerML.NonModelDim.Result", result);
+}
+
+void LogPowerMLModelDimResult(FinalResult result) {
+  UMA_HISTOGRAM_ENUMERATION("PowerML.ModelDim.Result", result);
+}
+
+void LogPowerMLModelNoDimResult(FinalResult result) {
+  UMA_HISTOGRAM_ENUMERATION("PowerML.ModelNoDim.Result", result);
+}
+
+void LogMetricsToUMA(const UserActivityEvent& event) {
+  const FinalResult result =
+      event.event().type() == UserActivityEvent::Event::REACTIVATE
+          ? FinalResult::kReactivation
+          : FinalResult::kOff;
+  if (!event.has_model_prediction() ||
+      !event.model_prediction().model_applied()) {
+    LogPowerMLDimImminentAction(DimImminentAction::kModelIgnored);
+    LogPowerMLNonModelDimResult(result);
+    return;
+  }
+
+  if (event.model_prediction().response() ==
+      UserActivityEvent::ModelPrediction::DIM) {
+    LogPowerMLDimImminentAction(DimImminentAction::kModelDim);
+    LogPowerMLModelDimResult(result);
+    return;
+  }
+
+  CHECK_EQ(UserActivityEvent::ModelPrediction::NO_DIM,
+           event.model_prediction().response());
+
+  LogPowerMLDimImminentAction(DimImminentAction::kModelNoDim);
+  LogPowerMLModelNoDimResult(result);
+}
+
 }  // namespace
 
 struct UserActivityManager::PreviousIdleEventData {
@@ -191,32 +238,40 @@ void UserActivityManager::OnIdleEventObserved(
   screen_off_occurred_ = false;
   screen_lock_occurred_ = false;
   ExtractFeatures(activity_data);
-  if (base::FeatureList::IsEnabled(features::kUserActivityPrediction) &&
+  // Default is to enable smart dim, unless user profile specifically says
+  // otherwise.
+  bool smart_dim_enabled = true;
+  // If there are multiple users, the primary one may have more-restrictive
+  // policy-controlled settings.
+  const Profile* const profile = ProfileManager::GetPrimaryUserProfile();
+  if (profile) {
+    smart_dim_enabled =
+        profile->GetPrefs()->GetBoolean(ash::prefs::kPowerSmartDimEnabled);
+  }
+  if (smart_dim_enabled &&
+      base::FeatureList::IsEnabled(features::kUserActivityPrediction) &&
       smart_dim_model_) {
-    float inactivity_probability = -1;
-    float threshold = -1;
-    const bool should_dim = smart_dim_model_->ShouldDim(
-        features_, &inactivity_probability, &threshold);
-    DCHECK(inactivity_probability >= 0 && inactivity_probability <= 1.0)
-        << inactivity_probability;
-    DCHECK(threshold >= 0 && threshold <= 1.0) << threshold;
-
-    UserActivityEvent::ModelPrediction model_prediction;
-    // If previous dim was deferred, then model decision will not be applied
-    // to this event.
-    model_prediction.set_model_applied(!dim_deferred_);
-    model_prediction.set_decision_threshold(round(threshold * 100));
-    model_prediction.set_inactivity_score(round(inactivity_probability * 100));
-    model_prediction_ = model_prediction;
+    // Decide whether to defer the imminent screen dim.
+    UserActivityEvent::ModelPrediction model_prediction =
+        smart_dim_model_->ShouldDim(features_);
 
     // Only defer the dim if the model predicts so and also if the dim was not
     // previously deferred.
-    if (should_dim || dim_deferred_) {
-      dim_deferred_ = false;
-    } else {
+    if (model_prediction.response() ==
+            UserActivityEvent::ModelPrediction::NO_DIM &&
+        !dim_deferred_) {
       power_manager_client_->DeferScreenDim();
       dim_deferred_ = true;
+      model_prediction.set_model_applied(true);
+    } else {
+      // Either model predicts dim or model fails, or it was previously dimmed.
+      dim_deferred_ = false;
+      model_prediction.set_model_applied(
+          model_prediction.response() ==
+              UserActivityEvent::ModelPrediction::DIM &&
+          !dim_deferred_);
     }
+    model_prediction_ = model_prediction;
   }
   waiting_for_final_action_ = true;
 }
@@ -429,23 +484,29 @@ void UserActivityManager::MaybeLogEvent(
     *activity_event.mutable_model_prediction() = model_prediction_.value();
   }
 
-  // Log to metrics.
-  ukm_logger_->LogActivity(activity_event);
-
   // If there's an earlier idle event that has not received its own event, log
-  // it here too.
+  // it here too. Note, we log the earlier event before the current event.
   if (previous_idle_event_data_) {
-    if (event->has_log_duration_sec()) {
-      event->set_log_duration_sec(
-          event->log_duration_sec() +
+    UserActivityEvent previous_activity_event = activity_event;
+    UserActivityEvent::Event* previous_event =
+        previous_activity_event.mutable_event();
+    if (previous_event->has_log_duration_sec()) {
+      previous_event->set_log_duration_sec(
+          previous_event->log_duration_sec() +
           previous_idle_event_data_->dim_imminent_signal_interval.InSeconds());
     }
 
-    *activity_event.mutable_features() = previous_idle_event_data_->features;
-    *activity_event.mutable_model_prediction() =
+    *previous_activity_event.mutable_features() =
+        previous_idle_event_data_->features;
+    *previous_activity_event.mutable_model_prediction() =
         previous_idle_event_data_->model_prediction;
-    ukm_logger_->LogActivity(activity_event);
+    ukm_logger_->LogActivity(previous_activity_event);
+    LogMetricsToUMA(previous_activity_event);
   }
+
+  // Log to metrics.
+  ukm_logger_->LogActivity(activity_event);
+  LogMetricsToUMA(activity_event);
 
   // Update the counters for next event logging.
   if (type == UserActivityEvent::Event::REACTIVATE) {

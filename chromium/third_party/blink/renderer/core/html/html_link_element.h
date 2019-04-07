@@ -133,8 +133,8 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
 
   // From Node and subclassses
   void ParseAttribute(const AttributeModificationParams&) override;
-  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
-  void RemovedFrom(ContainerNode*) override;
+  InsertionNotificationRequest InsertedInto(ContainerNode&) override;
+  void RemovedFrom(ContainerNode&) override;
   bool IsURLAttribute(const Attribute&) const override;
   bool HasLegalLinkAttribute(const QualifiedName&) const override;
   const QualifiedName& SubResourceAttributeName() const override;

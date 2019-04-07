@@ -9,7 +9,7 @@
 #include "base/files/file_path.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/crostini/crostini_app_launch_observer.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
@@ -17,6 +17,7 @@
 #include "chrome/browser/chromeos/crostini/crostini_registry_service.h"
 #include "chrome/browser/chromeos/crostini/crostini_registry_service_factory.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/virtual_machines/virtual_machines_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/crostini/crostini_app_icon.h"
@@ -70,7 +71,8 @@ void OnLaunchFailed(const std::string& app_id) {
   chrome_controller->GetShelfSpinnerController()->Close(app_id);
 }
 
-void OnCrostiniRestarted(const std::string& app_id,
+void OnCrostiniRestarted(Profile* profile,
+                         const std::string& app_id,
                          Browser* browser,
                          base::OnceClosure callback,
                          crostini::ConciergeClientResult result) {
@@ -78,6 +80,10 @@ void OnCrostiniRestarted(const std::string& app_id,
     OnLaunchFailed(app_id);
     if (browser && browser->window())
       browser->window()->Close();
+    if (result ==
+        crostini::ConciergeClientResult::OFFLINE_WHEN_UPGRADE_REQUIRED) {
+      ShowCrostiniUpgradeView(profile, CrostiniUISurface::kAppList);
+    }
     return;
   }
   std::move(callback).Run();
@@ -214,6 +220,15 @@ bool IsCrostiniAllowedForProfile(Profile* profile) {
   if (profile && (profile->IsChild() || profile->IsLegacySupervised())) {
     return false;
   }
+  if (!profile->GetPrefs()->GetBoolean(
+          crostini::prefs::kUserCrostiniAllowedByPolicy)) {
+    return false;
+  }
+  const user_manager::User* user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
+  if (!user->IsAffiliated() && !IsUnaffiliatedCrostiniAllowedByPolicy()) {
+    return false;
+  }
   return virtual_machines::AreVirtualMachinesAllowedByVersionAndChannel() &&
          virtual_machines::AreVirtualMachinesAllowedByPolicy() &&
          base::FeatureList::IsEnabled(features::kCrostini);
@@ -232,7 +247,8 @@ bool IsCrostiniUIAllowedForProfile(Profile* profile) {
 }
 
 bool IsCrostiniEnabled(Profile* profile) {
-  return profile->GetPrefs()->GetBoolean(crostini::prefs::kCrostiniEnabled);
+  return IsCrostiniUIAllowedForProfile(profile) &&
+         profile->GetPrefs()->GetBoolean(crostini::prefs::kCrostiniEnabled);
 }
 
 bool IsCrostiniRunning(Profile* profile) {
@@ -246,15 +262,16 @@ void LaunchCrostiniApp(Profile* profile,
   LaunchCrostiniApp(profile, app_id, display_id, std::vector<std::string>());
 }
 
-void AddSpinner(const std::string& app_id,
+void AddSpinner(crostini::CrostiniManager::RestartId restart_id,
+                const std::string& app_id,
                 Profile* profile,
                 std::string vm_name,
                 std::string container_name) {
   ChromeLauncherController* chrome_controller =
       ChromeLauncherController::instance();
   if (chrome_controller &&
-      !crostini::CrostiniManager::GetInstance()->IsContainerRunning(
-          profile, vm_name, container_name)) {
+      crostini::CrostiniManager::GetInstance()->IsRestartPending(profile,
+                                                                 restart_id)) {
     chrome_controller->GetShelfSpinnerController()->AddSpinnerToShelf(
         app_id, std::make_unique<ShelfSpinnerItemController>(app_id));
   }
@@ -296,7 +313,7 @@ void LaunchCrostiniApp(Profile* profile,
     }
 
     GURL vsh_in_crosh_url = crostini::CrostiniManager::GenerateVshInCroshUrl(
-        profile, vm_name, container_name);
+        profile, vm_name, container_name, std::vector<std::string>());
     AppLaunchParams launch_params =
         crostini::CrostiniManager::GenerateTerminalAppLaunchParams(profile);
     // Create the terminal here so it's created in the right display. If the
@@ -312,17 +329,20 @@ void LaunchCrostiniApp(Profile* profile,
                        std::move(*registration), display_id, std::move(files));
   }
 
-  // Update the last launched time.
+  // Update the last launched time and Termina version.
   registry_service->AppLaunched(app_id);
+  crostini_manager->UpdateLaunchMetricsForEnterpriseReporting(profile);
+
+  auto restart_id = crostini_manager->RestartCrostini(
+      profile, vm_name, container_name,
+      base::BindOnce(OnCrostiniRestarted, profile, app_id, browser,
+                     std::move(launch_closure)));
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::BindOnce(&AddSpinner, app_id, profile, vm_name, container_name),
+      base::BindOnce(&AddSpinner, restart_id, app_id, profile, vm_name,
+                     container_name),
       base::TimeDelta::FromMilliseconds(kDelayBeforeSpinnerMs));
-  crostini_manager->RestartCrostini(
-      profile, vm_name, container_name,
-      base::BindOnce(OnCrostiniRestarted, app_id, browser,
-                     std::move(launch_closure)));
 }
 
 void LoadIcons(Profile* profile,
@@ -370,4 +390,15 @@ base::Optional<std::string> CrostiniAppIdFromAppName(
     return base::nullopt;
   }
   return app_name.substr(strlen(kCrostiniAppNamePrefix));
+}
+
+bool IsUnaffiliatedCrostiniAllowedByPolicy() {
+  bool unaffiliated_crostini_allowed;
+  if (chromeos::CrosSettings::Get()->GetBoolean(
+          chromeos::kDeviceUnaffiliatedCrostiniAllowed,
+          &unaffiliated_crostini_allowed)) {
+    return unaffiliated_crostini_allowed;
+  }
+  // If device policy is not set, allow Crostini.
+  return true;
 }

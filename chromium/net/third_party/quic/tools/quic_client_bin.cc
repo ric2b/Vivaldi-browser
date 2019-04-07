@@ -43,7 +43,7 @@
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "net/base/net_errors.h"
 #include "net/base/privacy_mode.h"
 #include "net/cert/cert_verifier.h"
@@ -51,7 +51,7 @@
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/multi_log_ct_verifier.h"
 #include "net/http/transport_security_state.h"
-#include "net/quic/chromium/crypto/proof_verifier_chromium.h"
+#include "net/quic/crypto/proof_verifier_chromium.h"
 #include "net/third_party/quic/core/quic_packets.h"
 #include "net/third_party/quic/core/quic_server_id.h"
 #include "net/third_party/quic/platform/api/quic_flags.h"
@@ -134,6 +134,9 @@ class FakeProofVerifier : public ProofVerifier {
       std::unique_ptr<quic::ProofVerifyDetails>* /*verify_details*/,
       std::unique_ptr<quic::ProofVerifierCallback> /*callback*/) override {
     return quic::QUIC_SUCCESS;
+  }
+  std::unique_ptr<quic::ProofVerifyContext> CreateDefaultContext() override {
+    return nullptr;
   }
 };
 

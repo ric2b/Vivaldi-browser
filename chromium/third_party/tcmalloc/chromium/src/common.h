@@ -41,8 +41,9 @@
 #ifdef HAVE_STDINT_H
 #include <stdint.h>                     // for uintptr_t, uint64_t
 #endif
-#include "internal_logging.h"  // for ASSERT, etc
 #include "base/basictypes.h"   // for LIKELY, etc
+#include "free_list.h"         // for SIZE_CLASS macros
+#include "internal_logging.h"  // for ASSERT, etc
 
 // Type that can hold a page number
 typedef uintptr_t PageID;
@@ -72,12 +73,27 @@ static const size_t kMinAlign   = 16;
 // the thread cache allowance to avoid passing more free ranges to and from
 // central lists.  Also, larger pages are less likely to get freed.
 // These two factors cause a bounded increase in memory use.
+
+static const size_t kAlignment = 8;
+
+// Constants dependent on tcmalloc configuration and architecture.  Chromium
+// tunes these constants.
+// We need to guarantee the smallest class size is big enough to hold the
+// pointers that form the free list.
+static const size_t kNumFreeListPointers =
+    (tcmalloc::kSupportsDoublyLinkedList ? 2 : 1);
+static const size_t kLinkSize = kNumFreeListPointers * sizeof(void*);
+static const size_t kMinClassSize =
+    (kLinkSize > kAlignment ? kLinkSize : kAlignment);
+
 #if defined(TCMALLOC_32K_PAGES)
 static const size_t kPageShift  = 15;
 #elif defined(TCMALLOC_64K_PAGES)
 static const size_t kPageShift  = 16;
 #else
-static const size_t kPageShift  = 13;
+// Original TCMalloc code used kPageShift == 13.  In Chromium, we changed
+// this to 12 (as was done in prior versions of TCMalloc).
+static const size_t kPageShift = 12;
 #endif
 
 static const size_t kClassSizesMax = 96;
@@ -85,8 +101,9 @@ static const size_t kClassSizesMax = 96;
 static const size_t kMaxThreadCacheSize = 4 << 20;
 
 static const size_t kPageSize   = 1 << kPageShift;
-static const size_t kMaxSize    = 256 * 1024;
-static const size_t kAlignment  = 8;
+// Original TCMalloc code used kMaxSize == 256 * 1024.  In Chromium, we
+// changed this to 32K.
+static const size_t kMaxSize = 32u * 1024;
 // For all span-lengths <= kMaxPages we keep an exact-size list in PageHeap.
 static const size_t kMaxPages = 1 << (20 - kPageShift);
 

@@ -10,9 +10,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/ime/ime_controller.h"
-#include "ash/ime/test_ime_controller.h"
-#include "ash/shell.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
@@ -23,6 +20,7 @@
 #include "chrome/browser/chromeos/input_method/mock_input_method_engine.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/ime_controller_client.h"
+#include "chrome/browser/ui/ash/test_ime_controller.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -68,9 +66,10 @@ class TestObserver : public InputMethodManager::Observer,
  public:
   TestObserver()
       : input_method_changed_count_(0),
+        input_method_extension_added_count_(0),
+        input_method_extension_removed_count_(0),
         input_method_menu_item_changed_count_(0),
-        last_show_message_(false) {
-  }
+        last_show_message_(false) {}
   ~TestObserver() override {}
 
   void InputMethodChanged(InputMethodManager* manager,
@@ -79,12 +78,23 @@ class TestObserver : public InputMethodManager::Observer,
     ++input_method_changed_count_;
     last_show_message_ = show_message;
   }
+
+  void OnInputMethodExtensionAdded(const std::string& id) override {
+    ++input_method_extension_added_count_;
+  }
+
+  void OnInputMethodExtensionRemoved(const std::string& id) override {
+    ++input_method_extension_removed_count_;
+  }
+
   void InputMethodMenuItemChanged(
       ui::ime::InputMethodMenuManager* manager) override {
     ++input_method_menu_item_changed_count_;
   }
 
   int input_method_changed_count_;
+  int input_method_extension_added_count_;
+  int input_method_extension_removed_count_;
   int input_method_menu_item_changed_count_;
   bool last_show_message_;
 
@@ -387,6 +397,8 @@ TEST_F(InputMethodManagerImplTest, TestObserver) {
   manager_->AddObserver(&observer);
   menu_manager_->AddObserver(&observer);
   EXPECT_EQ(0, observer.input_method_changed_count_);
+  EXPECT_EQ(0, observer.input_method_extension_added_count_);
+  EXPECT_EQ(0, observer.input_method_extension_removed_count_);
   manager_->GetActiveIMEState()->EnableLoginLayouts("en-US", keyboard_layouts);
   EXPECT_EQ(8U, manager_->GetActiveIMEState()->GetActiveInputMethods()->size());
   EXPECT_EQ(1, observer.input_method_changed_count_);
@@ -409,6 +421,21 @@ TEST_F(InputMethodManagerImplTest, TestObserver) {
   // If the same input method ID is passed, PropertyChanged() is not
   // notified.
   EXPECT_EQ(1, observer.input_method_menu_item_changed_count_);
+
+  // Add an ARC IME, remove it, then check the observer counts.
+  MockInputMethodEngine engine;
+  const std::string ime_id =
+      extension_ime_util::GetArcInputMethodID(kExtensionId1, "engine_id");
+  InputMethodDescriptor descriptor(ime_id, "arc ime", "AI", {"us"}, {"en-US"},
+                                   false /* is_login_keyboard */, GURL(),
+                                   GURL());
+  manager_->GetActiveIMEState()->AddInputMethodExtension(kExtensionId1,
+                                                         {descriptor}, &engine);
+  EXPECT_EQ(1, observer.input_method_extension_added_count_);
+  EXPECT_EQ(0, observer.input_method_extension_removed_count_);
+  manager_->GetActiveIMEState()->RemoveInputMethodExtension(kExtensionId1);
+  EXPECT_EQ(1, observer.input_method_extension_added_count_);
+  EXPECT_EQ(1, observer.input_method_extension_removed_count_);
 
   manager_->RemoveObserver(&observer);
   menu_manager_->RemoveObserver(&observer);
@@ -1425,7 +1452,7 @@ TEST_F(InputMethodManagerImplTest, SetLoginDefaultWithAllowedKeyboardLayouts) {
 // Verifies that the combination of InputMethodManagerImpl and
 // ImeControllerClient sends the correct data to ash.
 TEST_F(InputMethodManagerImplTest, IntegrationWithAsh) {
-  ash::TestImeController ime_controller;  // Mojo interface to ash.
+  TestImeController ime_controller;  // Mojo interface to ash.
   ImeControllerClient ime_controller_client(manager_.get());
   ime_controller_client.InitForTesting(ime_controller.CreateInterfacePtr());
 

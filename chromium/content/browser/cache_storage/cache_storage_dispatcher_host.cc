@@ -34,6 +34,7 @@ namespace content {
 namespace {
 
 using blink::mojom::CacheStorageError;
+using blink::mojom::CacheStorageVerboseError;
 
 const int32_t kCachePreservationSeconds = 5;
 
@@ -84,13 +85,14 @@ class CacheStorageDispatcherHost::CacheImpl
   void OnCacheMatchCallback(
       blink::mojom::CacheStorageCache::MatchCallback callback,
       blink::mojom::CacheStorageError error,
-      std::unique_ptr<ServiceWorkerResponse> response) {
+      blink::mojom::FetchAPIResponsePtr response) {
     if (error != CacheStorageError::kSuccess) {
       std::move(callback).Run(blink::mojom::MatchResult::NewStatus(error));
       return;
     }
 
-    std::move(callback).Run(blink::mojom::MatchResult::NewResponse(*response));
+    std::move(callback).Run(
+        blink::mojom::MatchResult::NewResponse(std::move(response)));
   }
 
   void MatchAll(const base::Optional<ServiceWorkerFetchRequest>& request,
@@ -120,7 +122,7 @@ class CacheStorageDispatcherHost::CacheImpl
   void OnCacheMatchAllCallback(
       blink::mojom::CacheStorageCache::MatchAllCallback callback,
       blink::mojom::CacheStorageError error,
-      std::vector<ServiceWorkerResponse> responses) {
+      std::vector<blink::mojom::FetchAPIResponsePtr> responses) {
     if (error != CacheStorageError::kSuccess &&
         error != CacheStorageError::kErrorNotFound) {
       std::move(callback).Run(blink::mojom::MatchAllResult::NewStatus(error));
@@ -167,14 +169,16 @@ class CacheStorageDispatcherHost::CacheImpl
   }
 
   void Batch(std::vector<blink::mojom::BatchOperationPtr> batch_operations,
+             bool fail_on_duplicates,
              BatchCallback callback) override {
     content::CacheStorageCache* cache = cache_handle_.value();
     if (!cache) {
-      std::move(callback).Run(CacheStorageError::kErrorNotFound);
+      std::move(callback).Run(CacheStorageVerboseError::New(
+          CacheStorageError::kErrorNotFound, base::nullopt));
       return;
     }
     cache->BatchOperation(
-        std::move(batch_operations),
+        std::move(batch_operations), fail_on_duplicates,
         base::BindOnce(&CacheImpl::OnCacheBatchCallback,
                        weak_factory_.GetWeakPtr(), std::move(callback)),
         base::BindOnce(&CacheImpl::OnBadMessage, weak_factory_.GetWeakPtr(),
@@ -183,8 +187,8 @@ class CacheStorageDispatcherHost::CacheImpl
 
   void OnCacheBatchCallback(
       blink::mojom::CacheStorageCache::BatchCallback callback,
-      blink::mojom::CacheStorageError error) {
-    std::move(callback).Run(error);
+      blink::mojom::CacheStorageVerboseErrorPtr error) {
+    std::move(callback).Run(std::move(error));
   }
 
   void OnBadMessage(mojo::ReportBadMessageCallback bad_message_callback) {
@@ -371,14 +375,14 @@ void CacheStorageDispatcherHost::OnKeysCallback(
 void CacheStorageDispatcherHost::OnMatchCallback(
     blink::mojom::CacheStorage::MatchCallback callback,
     CacheStorageError error,
-    std::unique_ptr<ServiceWorkerResponse> response) {
+    blink::mojom::FetchAPIResponsePtr response) {
   if (error != CacheStorageError::kSuccess) {
     std::move(callback).Run(blink::mojom::MatchResult::NewStatus(error));
     return;
   }
 
   std::move(callback).Run(
-      blink::mojom::MatchResult::NewResponse(std::move(*response)));
+      blink::mojom::MatchResult::NewResponse(std::move(response)));
 }
 
 void CacheStorageDispatcherHost::AddBinding(

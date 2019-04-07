@@ -4,11 +4,15 @@
 
 #include "content/public/test/url_loader_interceptor.h"
 
+#include <string>
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/test/bind_test_util.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/loader/navigation_url_loader_impl.h"
 #include "content/browser/loader/resource_message_filter.h"
@@ -32,11 +36,9 @@ base::FilePath GetDataFilePath(const std::string& relative_path) {
   return root_path.AppendASCII(relative_path);
 }
 
-// Returns the contents of the given filename relative to the root source
-// directory.
-static std::string ReadFile(const std::string& relative_path) {
+static std::string ReadFile(const base::FilePath& path) {
   std::string contents;
-  CHECK(base::ReadFileToString(GetDataFilePath(relative_path), &contents));
+  CHECK(base::ReadFileToString(path, &contents));
   return contents;
 }
 
@@ -266,13 +268,15 @@ URLLoaderInterceptor::~URLLoaderInterceptor() {
 void URLLoaderInterceptor::WriteResponse(
     const std::string& headers,
     const std::string& body,
-    network::mojom::URLLoaderClient* client) {
+    network::mojom::URLLoaderClient* client,
+    base::Optional<net::SSLInfo> ssl_info) {
   net::HttpResponseInfo info;
   info.headers = new net::HttpResponseHeaders(
       net::HttpUtil::AssembleRawHeaders(headers.c_str(), headers.length()));
   network::ResourceResponseHead response;
   response.headers = info.headers;
   response.headers->GetMimeType(&response.mime_type);
+  response.ssl_info = std::move(ssl_info);
   client->OnReceiveResponse(response);
 
   uint32_t bytes_written = body.size();
@@ -291,24 +295,40 @@ void URLLoaderInterceptor::WriteResponse(
 void URLLoaderInterceptor::WriteResponse(
     const std::string& relative_path,
     network::mojom::URLLoaderClient* client,
-    const std::string* headers) {
+    const std::string* headers,
+    base::Optional<net::SSLInfo> ssl_info) {
+  return WriteResponse(GetDataFilePath(relative_path), client, headers,
+                       std::move(ssl_info));
+}
+
+void URLLoaderInterceptor::WriteResponse(
+    const base::FilePath& file_path,
+    network::mojom::URLLoaderClient* client,
+    const std::string* headers,
+    base::Optional<net::SSLInfo> ssl_info) {
   base::ScopedAllowBlockingForTesting allow_io;
   std::string headers_str;
   if (headers) {
     headers_str = *headers;
   } else {
-    std::string headers_path =
-        relative_path + "." + net::test_server::kMockHttpHeadersExtension;
-    if (base::PathExists(GetDataFilePath(headers_path))) {
+    base::FilePath::StringPieceType mock_headers_extension;
+#if defined(OS_WIN)
+    base::string16 temp =
+        base::ASCIIToUTF16(net::test_server::kMockHttpHeadersExtension);
+    mock_headers_extension = temp;
+#else
+    mock_headers_extension = net::test_server::kMockHttpHeadersExtension;
+#endif
+
+    base::FilePath headers_path(file_path.AddExtension(mock_headers_extension));
+    if (base::PathExists(headers_path)) {
       headers_str = ReadFile(headers_path);
     } else {
       headers_str = "HTTP/1.0 200 OK\nContent-type: " +
-                    net::test_server::GetContentType(
-                        base::FilePath().AppendASCII(relative_path)) +
-                    "\n\n";
+                    net::test_server::GetContentType(file_path) + "\n\n";
     }
   }
-  WriteResponse(headers_str, ReadFile(relative_path), client);
+  WriteResponse(headers_str, ReadFile(file_path), client, std::move(ssl_info));
 }
 
 void URLLoaderInterceptor::CreateURLLoaderFactoryForSubresources(
@@ -453,6 +473,21 @@ void URLLoaderInterceptor::ShutdownOnIOThread(base::OnceClosure closure) {
   }
 
   std::move(closure).Run();
+}
+
+// static
+std::unique_ptr<content::URLLoaderInterceptor>
+URLLoaderInterceptor::SetupRequestFailForURL(const GURL& url,
+                                             net::Error error) {
+  return std::make_unique<content::URLLoaderInterceptor>(base::BindRepeating(
+      [](const GURL& url, net::Error error,
+         content::URLLoaderInterceptor::RequestParams* params) {
+        if (params->url_request.url != url)
+          return false;
+        params->client->OnComplete(network::URLLoaderCompletionStatus(error));
+        return true;
+      },
+      url, error));
 }
 
 }  // namespace content

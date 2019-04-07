@@ -30,6 +30,7 @@
 #include "chrome/test/chromedriver/chrome/status.h"
 #include "chrome/test/chromedriver/chrome/ui_events.h"
 #include "chrome/test/chromedriver/chrome/web_view.h"
+#include "chrome/test/chromedriver/element_commands.h"
 #include "chrome/test/chromedriver/element_util.h"
 #include "chrome/test/chromedriver/key_converter.h"
 #include "chrome/test/chromedriver/keycode_text_conversion.h"
@@ -502,18 +503,9 @@ Status ExecuteGetCurrentUrl(Session* session,
     return status;
   if (url == kUnreachableWebDataURL ||
       url == kDeprecatedUnreachableWebDataURL) {
-    // https://bugs.chromium.org/p/chromedriver/issues/detail?id=1272
-    const BrowserInfo* browser_info = session->chrome->GetBrowserInfo();
-    bool is_kitkat_webview = browser_info->browser_name == "webview" &&
-                             browser_info->major_version <= 30 &&
-                             browser_info->is_android;
-    if (!is_kitkat_webview) {
-      // Page.getNavigationHistory isn't implemented in WebView for KitKat and
-      // older Android releases.
-      status = web_view->GetUrl(&url);
-      if (status.IsError())
-        return status;
-    }
+    status = web_view->GetUrl(&url);
+    if (status.IsError())
+      return status;
   }
   value->reset(new base::Value(url));
   return Status(kOk);
@@ -727,10 +719,6 @@ Status ExecuteTouchScroll(Session* session,
                           const base::DictionaryValue& params,
                           std::unique_ptr<base::Value>* value,
                           Timeout* timeout) {
-  if (session->chrome->GetBrowserInfo()->build_no < 2286) {
-    // TODO(samuong): remove this once we stop supporting M41.
-    return Status(kUnknownCommand, "Touch scroll action requires Chrome 42+");
-  }
   WebPoint location = session->mouse_position;
   std::string element;
   if (params.GetString("element", &element)) {
@@ -754,10 +742,6 @@ Status ExecuteTouchPinch(Session* session,
                          const base::DictionaryValue& params,
                          std::unique_ptr<base::Value>* value,
                          Timeout* timeout) {
-  if (session->chrome->GetBrowserInfo()->build_no < 2286) {
-    // TODO(samuong): remove this once we stop supporting M41.
-    return Status(kUnknownCommand, "Pinch action requires Chrome 42+");
-  }
   WebPoint location;
   if (!params.GetInteger("x", &location.x))
     return Status(kUnknownError, "'x' must be an integer");
@@ -1327,11 +1311,15 @@ Status ExecuteScreenshot(Session* session,
       return status;
     status = extension->CaptureScreenshot(&screenshot);
   } else {
-    status = web_view->CaptureScreenshot(&screenshot);
+    std::unique_ptr<base::DictionaryValue> screenshot_params(
+        const base::DictionaryValue&);
+  status = web_view->CaptureScreenshot(&screenshot, base::DictionaryValue());
   }
   if (status.IsError()) {
     LOG(WARNING) << "screenshot failed, retrying";
-    status = web_view->CaptureScreenshot(&screenshot);
+    std::unique_ptr<base::DictionaryValue> screenshot_params(
+        new base::DictionaryValue);
+    status = web_view->CaptureScreenshot(&screenshot, base::DictionaryValue());
   }
   if (status.IsError())
     return status;

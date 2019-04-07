@@ -195,6 +195,8 @@ class LinkedHashSet {
 
   struct AddResult final {
     STACK_ALLOCATED();
+
+   public:
     AddResult(const typename ImplType::AddResult& hash_table_add_result)
         : stored_value(&hash_table_add_result.stored_value->value_),
           is_new_entry(hash_table_add_result.is_new_entry) {}
@@ -305,16 +307,19 @@ class LinkedHashSet {
     impl_.Trace(visitor);
     // Should the underlying table be moved by GC, register a callback
     // that fixes up the interior pointers that the (Heap)LinkedHashSet keeps.
-    if (impl_.table_) {
-      Allocator::RegisterBackingStoreCallback(
-          visitor, impl_.table_, MoveBackingCallback,
-          reinterpret_cast<void*>(&anchor_));
-    }
+    Allocator::RegisterBackingStoreCallback(visitor, &impl_.table_,
+                                            MoveBackingCallback,
+                                            reinterpret_cast<void*>(&anchor_));
   }
 
   int64_t Modifications() const { return impl_.Modifications(); }
   void CheckModifications(int64_t mods) const {
     impl_.CheckModifications(mods);
+  }
+
+ protected:
+  typename ImplType::ValueType** GetBufferSlot() {
+    return impl_.GetBufferSlot();
   }
 
  private:

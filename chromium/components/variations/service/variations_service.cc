@@ -20,8 +20,8 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
 #include "base/version.h"
@@ -462,7 +462,7 @@ bool VariationsService::StoreSeed(const std::string& seed_data,
   // simulation with, which must be done on a background thread, and then do the
   // actual simulation on the UI thread.
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       client_->GetVersionForSimulationCallback(),
       base::Bind(&VariationsService::PerformSimulationWithVersion,
                  weak_ptr_factory_.GetWeakPtr(), base::Passed(&seed)));
@@ -516,9 +516,7 @@ bool VariationsService::DoFetchFromURL(const GURL& url, bool is_http_retry) {
         })");
   auto resource_request = std::make_unique<network::ResourceRequest>();
   resource_request->url = url;
-  resource_request->load_flags = net::LOAD_DO_NOT_SEND_COOKIES |
-                                 net::LOAD_DO_NOT_SEND_AUTH_DATA |
-                                 net::LOAD_DO_NOT_SAVE_COOKIES;
+  resource_request->allow_credentials = false;
   bool enable_deltas = false;
   std::string serial_number =
       field_trial_creator_.seed_store()->GetLatestSerialNumber();

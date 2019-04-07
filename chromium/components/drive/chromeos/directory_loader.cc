@@ -15,9 +15,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/time/clock.h"
 #include "base/time/time.h"
 #include "components/drive/chromeos/change_list_loader_observer.h"
 #include "components/drive/chromeos/change_list_processor.h"
+#include "components/drive/chromeos/drive_file_util.h"
 #include "components/drive/chromeos/loader_controller.h"
 #include "components/drive/chromeos/resource_metadata.h"
 #include "components/drive/chromeos/root_folder_id_loader.h"
@@ -37,8 +39,12 @@ namespace {
 // Minimum changestamp gap required to start loading directory.
 constexpr int kMinimumChangestampGap = 50;
 
+constexpr base::TimeDelta kMinimumPerDirectoryFetchTimeGap =
+    base::TimeDelta::FromSeconds(30);
+
 FileError CheckLocalState(ResourceMetadata* resource_metadata,
                           const base::FilePath& root_entry_path,
+                          const std::string& team_drive_id,
                           const std::string& root_folder_id,
                           const std::string& local_id,
                           ResourceEntry* entry,
@@ -64,12 +70,14 @@ FileError CheckLocalState(ResourceMetadata* resource_metadata,
     return error;
 
   // Get the local start page token..
-  return resource_metadata->GetStartPageToken(start_page_token);
+  return GetStartPageToken(resource_metadata, team_drive_id, start_page_token);
 }
 
 FileError UpdateStartPageToken(ResourceMetadata* resource_metadata,
                                const DirectoryFetchInfo& directory_fetch_info,
-                               base::FilePath* directory_path) {
+                               base::FilePath* directory_path,
+                               const base::Clock* clock) {
+  DCHECK(clock);
   // Update the directory start page token.
   ResourceEntry directory;
   FileError error = resource_metadata->GetResourceEntryById(
@@ -80,8 +88,14 @@ FileError UpdateStartPageToken(ResourceMetadata* resource_metadata,
   if (!directory.file_info().is_directory())
     return FILE_ERROR_NOT_A_DIRECTORY;
 
-  directory.mutable_directory_specific_info()->set_start_page_token(
+  DirectorySpecificInfo* directory_specific_info =
+      directory.mutable_directory_specific_info();
+
+  directory_specific_info->set_start_page_token(
       directory_fetch_info.start_page_token());
+  directory_specific_info->set_last_read_time_ms(
+      clock->Now().ToDeltaSinceWindowsEpoch().InMilliseconds());
+
   error = resource_metadata->RefreshEntry(directory);
   if (error != FILE_ERROR_OK)
     return error;
@@ -94,6 +108,10 @@ FileError UpdateStartPageToken(ResourceMetadata* resource_metadata,
 }  // namespace
 
 struct DirectoryLoader::ReadDirectoryCallbackState {
+  explicit ReadDirectoryCallbackState(
+      ReadDirectoryEntriesCallback entries_callback)
+      : entries_callback(std::move(entries_callback)) {}
+
   ReadDirectoryEntriesCallback entries_callback;
   FileOperationCallback completion_callback;
   std::set<std::string> sent_entry_names;
@@ -145,15 +163,15 @@ class DirectoryLoader::FeedFetcher {
     GURL next_url = file_list->next_link();
 
     ResourceEntryVector* entries = new ResourceEntryVector;
-    loader_->loader_controller_->ScheduleRun(base::Bind(
+    loader_->loader_controller_->ScheduleRun(base::BindOnce(
         &drive::util::RunAsyncTask,
         base::RetainedRef(loader_->blocking_task_runner_), FROM_HERE,
-        base::Bind(&ChangeListProcessor::RefreshDirectory,
-                   loader_->resource_metadata_, directory_fetch_info_,
-                   base::Passed(&change_list), entries),
-        base::Bind(&FeedFetcher::OnDirectoryRefreshed,
-                   weak_ptr_factory_.GetWeakPtr(), callback, next_url,
-                   base::Owned(entries))));
+        base::BindOnce(&ChangeListProcessor::RefreshDirectory,
+                       loader_->resource_metadata_, directory_fetch_info_,
+                       std::move(change_list), entries),
+        base::BindOnce(&FeedFetcher::OnDirectoryRefreshed,
+                       weak_ptr_factory_.GetWeakPtr(), callback, next_url,
+                       base::Owned(entries))));
   }
 
   void OnDirectoryRefreshed(
@@ -210,7 +228,9 @@ DirectoryLoader::DirectoryLoader(
     RootFolderIdLoader* root_folder_id_loader,
     StartPageTokenLoader* start_page_token_loader,
     LoaderController* loader_controller,
-    const base::FilePath& root_entry_path)
+    const base::FilePath& root_entry_path,
+    const std::string& team_drive_id,
+    const base::Clock* clock)
     : logger_(logger),
       blocking_task_runner_(blocking_task_runner),
       resource_metadata_(resource_metadata),
@@ -219,6 +239,8 @@ DirectoryLoader::DirectoryLoader(
       start_page_token_loader_(start_page_token_loader),
       loader_controller_(loader_controller),
       root_entry_path_(root_entry_path),
+      team_drive_id_(team_drive_id),
+      clock_(clock),
       weak_ptr_factory_(this) {}
 
 DirectoryLoader::~DirectoryLoader() = default;
@@ -235,31 +257,26 @@ void DirectoryLoader::RemoveObserver(ChangeListLoaderObserver* observer) {
 
 void DirectoryLoader::ReadDirectory(
     const base::FilePath& directory_path,
-    const ReadDirectoryEntriesCallback& entries_callback,
+    ReadDirectoryEntriesCallback entries_callback,
     const FileOperationCallback& completion_callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(completion_callback);
 
   ResourceEntry* entry = new ResourceEntry;
   base::PostTaskAndReplyWithResult(
-      blocking_task_runner_.get(),
-      FROM_HERE,
+      blocking_task_runner_.get(), FROM_HERE,
       base::Bind(&ResourceMetadata::GetResourceEntryByPath,
-                 base::Unretained(resource_metadata_),
-                 directory_path,
-                 entry),
+                 base::Unretained(resource_metadata_), directory_path, entry),
       base::Bind(&DirectoryLoader::ReadDirectoryAfterGetEntry,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 directory_path,
-                 entries_callback,
-                 completion_callback,
+                 weak_ptr_factory_.GetWeakPtr(), directory_path,
+                 base::Passed(std::move(entries_callback)), completion_callback,
                  true,  // should_try_loading_parent
                  base::Owned(entry)));
 }
 
 void DirectoryLoader::ReadDirectoryAfterGetEntry(
     const base::FilePath& directory_path,
-    const ReadDirectoryEntriesCallback& entries_callback,
+    ReadDirectoryEntriesCallback entries_callback,
     const FileOperationCallback& completion_callback,
     bool should_try_loading_parent,
     const ResourceEntry* entry,
@@ -271,12 +288,10 @@ void DirectoryLoader::ReadDirectoryAfterGetEntry(
       should_try_loading_parent &&
       util::GetDriveGrandRootPath().IsParent(directory_path)) {
     // This entry may be found after loading the parent.
-    ReadDirectory(directory_path.DirName(),
-                  ReadDirectoryEntriesCallback(),
+    ReadDirectory(directory_path.DirName(), ReadDirectoryEntriesCallback(),
                   base::Bind(&DirectoryLoader::ReadDirectoryAfterLoadParent,
-                             weak_ptr_factory_.GetWeakPtr(),
-                             directory_path,
-                             entries_callback,
+                             weak_ptr_factory_.GetWeakPtr(), directory_path,
+                             base::Passed(std::move(entries_callback)),
                              completion_callback));
     return;
   }
@@ -292,14 +307,14 @@ void DirectoryLoader::ReadDirectoryAfterGetEntry(
 
   DirectoryFetchInfo directory_fetch_info(
       entry->local_id(), entry->resource_id(),
-      entry->directory_specific_info().start_page_token(), root_entry_path_);
+      entry->directory_specific_info().start_page_token(), root_entry_path_,
+      directory_path);
 
   // Register the callback function to be called when it is loaded.
   const std::string& local_id = directory_fetch_info.local_id();
-  ReadDirectoryCallbackState callback_state;
-  callback_state.entries_callback = entries_callback;
+  ReadDirectoryCallbackState callback_state(std::move(entries_callback));
   callback_state.completion_callback = completion_callback;
-  pending_load_callback_[local_id].push_back(callback_state);
+  pending_load_callback_[local_id].emplace_back(std::move(callback_state));
 
   // If loading task for |local_id| is already running, do nothing.
   if (pending_load_callback_[local_id].size() > 1)
@@ -307,12 +322,12 @@ void DirectoryLoader::ReadDirectoryAfterGetEntry(
 
   root_folder_id_loader_->GetRootFolderId(
       base::Bind(&DirectoryLoader::ReadDirectoryAfterGetRootFolderId,
-                 weak_ptr_factory_.GetWeakPtr(), local_id));
+                 weak_ptr_factory_.GetWeakPtr(), directory_path, local_id));
 }
 
 void DirectoryLoader::ReadDirectoryAfterLoadParent(
     const base::FilePath& directory_path,
-    const ReadDirectoryEntriesCallback& entries_callback,
+    ReadDirectoryEntriesCallback entries_callback,
     const FileOperationCallback& completion_callback,
     FileError error) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -325,22 +340,18 @@ void DirectoryLoader::ReadDirectoryAfterLoadParent(
 
   ResourceEntry* entry = new ResourceEntry;
   base::PostTaskAndReplyWithResult(
-      blocking_task_runner_.get(),
-      FROM_HERE,
+      blocking_task_runner_.get(), FROM_HERE,
       base::Bind(&ResourceMetadata::GetResourceEntryByPath,
-                 base::Unretained(resource_metadata_),
-                 directory_path,
-                 entry),
+                 base::Unretained(resource_metadata_), directory_path, entry),
       base::Bind(&DirectoryLoader::ReadDirectoryAfterGetEntry,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 directory_path,
-                 entries_callback,
-                 completion_callback,
+                 weak_ptr_factory_.GetWeakPtr(), directory_path,
+                 base::Passed(std::move(entries_callback)), completion_callback,
                  false,  // should_try_loading_parent
                  base::Owned(entry)));
 }
 
 void DirectoryLoader::ReadDirectoryAfterGetRootFolderId(
+    const base::FilePath& directory_path,
     const std::string& local_id,
     FileError error,
     base::Optional<std::string> root_folder_id) {
@@ -353,12 +364,14 @@ void DirectoryLoader::ReadDirectoryAfterGetRootFolderId(
 
   DCHECK(root_folder_id);
 
-  start_page_token_loader_->GetStartPageToken(base::Bind(
-      &DirectoryLoader::ReadDirectoryAfterGetStartPageToken,
-      weak_ptr_factory_.GetWeakPtr(), local_id, root_folder_id.value()));
+  start_page_token_loader_->GetStartPageToken(
+      base::Bind(&DirectoryLoader::ReadDirectoryAfterGetStartPageToken,
+                 weak_ptr_factory_.GetWeakPtr(), directory_path, local_id,
+                 root_folder_id.value()));
 }
 
 void DirectoryLoader::ReadDirectoryAfterGetStartPageToken(
+    const base::FilePath& directory_path,
     const std::string& local_id,
     const std::string& root_folder_id,
     google_apis::DriveApiErrorCode status,
@@ -379,15 +392,17 @@ void DirectoryLoader::ReadDirectoryAfterGetStartPageToken(
   base::PostTaskAndReplyWithResult(
       blocking_task_runner_.get(), FROM_HERE,
       base::BindOnce(&CheckLocalState, resource_metadata_, root_entry_path_,
-                     root_folder_id, local_id, entry, local_start_page_token),
+                     team_drive_id_, root_folder_id, local_id, entry,
+                     local_start_page_token),
       base::BindOnce(&DirectoryLoader::ReadDirectoryAfterCheckLocalState,
-                     weak_ptr_factory_.GetWeakPtr(),
+                     weak_ptr_factory_.GetWeakPtr(), directory_path,
                      start_page_token->start_page_token(), local_id,
                      root_folder_id, base::Owned(entry),
                      base::Owned(local_start_page_token)));
 }
 
 void DirectoryLoader::ReadDirectoryAfterCheckLocalState(
+    const base::FilePath& directory_path,
     const std::string& remote_start_page_token,
     const std::string& local_id,
     const std::string& root_folder_id,
@@ -413,7 +428,7 @@ void DirectoryLoader::ReadDirectoryAfterCheckLocalState(
 
   DirectoryFetchInfo directory_fetch_info(local_id, entry->resource_id(),
                                           remote_start_page_token,
-                                          root_entry_path_);
+                                          root_entry_path_, directory_path);
 
   int64_t directory_changestamp = 0;
   // The directory_specific_info may be enpty, so default changestamp to 0.
@@ -428,6 +443,26 @@ void DirectoryLoader::ReadDirectoryAfterCheckLocalState(
         directory_start_page_token.c_str());
     LoadDirectoryFromServer(directory_fetch_info, root_folder_id);
     return;
+  }
+
+  // If we haven't finished loading the drive corpus, local_start_page_token
+  // will be empty. In this case we will keep track of the last time we loaded
+  // the directory, and only reload after an appropriate delay.
+  if (local_start_page_token->empty()) {
+    if (entry->directory_specific_info().has_last_read_time_ms()) {
+      base::Time last_read = base::Time::FromDeltaSinceWindowsEpoch(
+          base::TimeDelta::FromMilliseconds(
+              entry->directory_specific_info().last_read_time_ms()));
+      base::TimeDelta elapsed = clock_->Now() - last_read;
+      if (elapsed < kMinimumPerDirectoryFetchTimeGap) {
+        logger_->Log(
+            logging::LOG_INFO,
+            "Skipping read of directory (%s), contents considered fresh.",
+            directory_fetch_info.ToString().c_str());
+        OnDirectoryLoadComplete(local_id, FILE_ERROR_OK);
+        return;
+      }
+    }
   }
 
   int64_t remote_changestamp = 0;
@@ -519,7 +554,7 @@ void DirectoryLoader::OnDirectoryLoadCompleteAfterRead(
 void DirectoryLoader::SendEntries(const std::string& local_id,
                                   const ResourceEntryVector& entries) {
   LoadCallbackMap::iterator it = pending_load_callback_.find(local_id);
-  DCHECK(it != pending_load_callback_.end());
+  DCHECK(it != pending_load_callback_.end()) << "local_id: " << local_id;
 
   for (size_t i = 0; i < it->second.size(); ++i) {
     ReadDirectoryCallbackState* callback_state = &it->second[i];
@@ -536,7 +571,7 @@ void DirectoryLoader::SendEntries(const std::string& local_id,
         entries_to_send->push_back(entry);
       }
     }
-    callback_state->entries_callback.Run(std::move(entries_to_send));
+    std::move(callback_state->entries_callback).Run(std::move(entries_to_send));
   }
 }
 
@@ -600,7 +635,8 @@ void DirectoryLoader::LoadDirectoryFromServerAfterLoad(
   base::PostTaskAndReplyWithResult(
       blocking_task_runner_.get(), FROM_HERE,
       base::Bind(&UpdateStartPageToken, resource_metadata_,
-                 directory_fetch_info, directory_path),
+                 directory_fetch_info, directory_path,
+                 base::Unretained(clock_)),
       base::Bind(
           &DirectoryLoader::LoadDirectoryFromServerAfterUpdateStartPageToken,
           weak_ptr_factory_.GetWeakPtr(), directory_fetch_info,

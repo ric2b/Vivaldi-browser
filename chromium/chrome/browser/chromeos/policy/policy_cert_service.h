@@ -14,6 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/chromeos/policy/user_network_configuration_updater.h"
+#include "chromeos/policy_certificate_provider.h"
 #include "components/keyed_service/core/keyed_service.h"
 
 namespace user_manager {
@@ -26,17 +27,16 @@ typedef std::vector<scoped_refptr<X509Certificate> > CertificateList;
 }
 
 namespace policy {
-
 class PolicyCertVerifier;
+class TempCertsCacheNSS;
 
 // This service is the counterpart of PolicyCertVerifier on the UI thread. It's
 // responsible for pushing the current list of trust anchors to the CertVerifier
 // and marking the profile's prefs if any of the trust anchors was used.
 // Except for unit tests, PolicyCertVerifier should only be created through this
 // class.
-class PolicyCertService
-    : public KeyedService,
-      public UserNetworkConfigurationUpdater::WebTrustedCertsObserver {
+class PolicyCertService : public KeyedService,
+                          public chromeos::PolicyCertificateProvider::Observer {
  public:
   PolicyCertService(const std::string& user_id,
                     UserNetworkConfigurationUpdater* net_conf_updater,
@@ -54,8 +54,9 @@ class PolicyCertService
 
   bool has_policy_certificates() const { return has_trust_anchors_; }
 
-  // UserNetworkConfigurationUpdater::WebTrustedCertsObserver:
-  void OnTrustAnchorsChanged(
+  // UserNetworkConfigurationUpdater::PolicyProvidedCertsObserver:
+  void OnPolicyProvidedCertsChanged(
+      const net::CertificateList& all_server_and_authority_certs,
       const net::CertificateList& trust_anchors) override;
 
   // KeyedService:
@@ -76,6 +77,11 @@ class PolicyCertService
   UserNetworkConfigurationUpdater* net_conf_updater_;
   user_manager::UserManager* user_manager_;
   bool has_trust_anchors_;
+
+  // Holds all policy-provided server and authority certificates and makes them
+  // available to NSS as temp certificates. This is needed so they can be used
+  // as intermediates when NSS verifies a certificate.
+  std::unique_ptr<TempCertsCacheNSS> temp_policy_provided_certs_;
 
   // Weak pointers to handle callbacks from PolicyCertVerifier on the IO thread.
   // The factory and the created WeakPtrs must only be used on the UI thread.

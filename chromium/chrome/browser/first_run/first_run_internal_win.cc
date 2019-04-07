@@ -17,8 +17,8 @@
 #include "base/process/kill.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/time/time.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
@@ -112,7 +112,7 @@ void DoPostImportPlatformSpecificTasks(Profile* /* profile */) {
     content::BrowserThread::PostAfterStartupTask(
         FROM_HERE,
         base::CreateTaskRunnerWithTraits(
-            {base::MayBlock(), base::TaskPriority::BACKGROUND,
+            {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
              base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN}),
         base::BindOnce(&InstallUtil::TriggerActiveSetupCommand));
   }

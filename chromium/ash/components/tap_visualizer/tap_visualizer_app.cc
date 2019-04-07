@@ -11,8 +11,9 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "services/service_manager/public/cpp/service_context.h"
-#include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/cpp/property_type_converters.h"
+#include "services/ws/public/mojom/window_manager.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/mus/property_converter.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -48,7 +49,6 @@ void TapVisualizerApp::OnStart() {
   views::AuraInit::InitParams params;
   params.connector = context()->connector();
   params.identity = context()->identity();
-  params.mode = views::AuraInit::Mode::AURA_MUS2;
   params.register_path_provider = false;
   aura_init_ = views::AuraInit::Create(params);
   if (!aura_init_) {
@@ -93,10 +93,10 @@ void TapVisualizerApp::CreateWidgetForDisplay(int64_t display_id) {
   params.activatable = views::Widget::InitParams::ACTIVATABLE_NO;
   params.accept_events = false;
   params.delegate = new views::WidgetDelegateView;
-  params.mus_properties[ui::mojom::WindowManager::kContainerId_InitProperty] =
+  params.mus_properties[ws::mojom::WindowManager::kContainerId_InitProperty] =
       mojo::ConvertTo<std::vector<uint8_t>>(
           static_cast<int32_t>(ash::kShellWindowId_OverlayContainer));
-  params.mus_properties[ui::mojom::WindowManager::kDisplayId_InitProperty] =
+  params.mus_properties[ws::mojom::WindowManager::kDisplayId_InitProperty] =
       mojo::ConvertTo<std::vector<uint8_t>>(display_id);
   params.show_state = ui::SHOW_STATE_FULLSCREEN;
   params.name = "TapVisualizer";

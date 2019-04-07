@@ -23,7 +23,7 @@
 #include "components/variations/variations_associated_data.h"
 #include "net/base/host_mapping_rules.h"
 #include "net/http/http_stream_factory.h"
-#include "net/quic/chromium/quic_utils_chromium.h"
+#include "net/quic/quic_utils_chromium.h"
 #include "net/third_party/quic/core/quic_packets.h"
 #include "net/third_party/spdy/core/spdy_protocol.h"
 
@@ -283,12 +283,32 @@ bool ShouldQuicMigrateSessionsEarlyV2(
       "true");
 }
 
+bool ShouldQuicGoawayOnPathDegrading(
+    const VariationParameters& quic_trial_params) {
+  return base::LowerCaseEqualsASCII(
+      GetVariationParam(quic_trial_params, "go_away_on_path_degrading"),
+      "true");
+}
+
 int GetQuicMaxTimeOnNonDefaultNetworkSeconds(
     const VariationParameters& quic_trial_params) {
   int value;
   if (base::StringToInt(
           GetVariationParam(quic_trial_params,
                             "max_time_on_non_default_network_seconds"),
+          &value)) {
+    return value;
+  }
+  return 0;
+}
+
+int GetQuicMaxNumMigrationsToNonDefaultNetworkOnWriteError(
+    const VariationParameters& quic_trial_params) {
+  int value;
+  if (base::StringToInt(
+          GetVariationParam(
+              quic_trial_params,
+              "max_migrations_to_non_default_network_on_write_error"),
           &value)) {
     return value;
   }
@@ -409,11 +429,20 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
         ShouldQuicMigrateSessionsOnNetworkChangeV2(quic_trial_params);
     params->quic_migrate_sessions_early_v2 =
         ShouldQuicMigrateSessionsEarlyV2(quic_trial_params);
+    params->quic_go_away_on_path_degrading =
+        ShouldQuicGoawayOnPathDegrading(quic_trial_params);
     int max_time_on_non_default_network_seconds =
         GetQuicMaxTimeOnNonDefaultNetworkSeconds(quic_trial_params);
     if (max_time_on_non_default_network_seconds > 0) {
       params->quic_max_time_on_non_default_network =
           base::TimeDelta::FromSeconds(max_time_on_non_default_network_seconds);
+    }
+    int max_migrations_to_non_default_network_on_write_error =
+        GetQuicMaxNumMigrationsToNonDefaultNetworkOnWriteError(
+            quic_trial_params);
+    if (max_migrations_to_non_default_network_on_write_error > 0) {
+      params->quic_max_migrations_to_non_default_network_on_write_error =
+          max_migrations_to_non_default_network_on_write_error;
     }
     int max_migrations_to_non_default_network_on_path_degrading =
         GetQuicMaxNumMigrationsToNonDefaultNetworkOnPathDegrading(
@@ -562,8 +591,6 @@ void ParseCommandLineAndFieldTrials(const base::CommandLine& command_line,
         command_line.GetSwitchValueASCII(switches::kHostRules));
   }
 
-  params->enable_token_binding =
-      base::FeatureList::IsEnabled(features::kTokenBinding);
   params->enable_channel_id =
       base::FeatureList::IsEnabled(features::kChannelID);
 }

@@ -47,6 +47,15 @@
       "5107DE9024C329EEA9C9A72D94C16723790C6422"   // Apps Developer Tool Dev.
     ]
   },
+  "arcAppsPrivate": {
+    "channel": "stable",
+    "extension_types": ["platform_app"],
+    "whitelist": [
+      "46578A13607D38F1DC8E280C4F499FB0A2F9565C", // http://crbug.com/819404
+      "898FB5A39687D210766B8998BA4530B99C9E6586", // http://crbug.com/819404
+      "82F30B65397BC3E4ADE627BBD857AB8A58210648"  // http://crbug.com/819404
+    ]
+  },
   "autofillPrivate": {
     "channel": "trunk",
     "extension_types": ["extension", "platform_app"],
@@ -158,7 +167,10 @@
       "0136FCB13DB29FD5CD442F56E59E53B61F1DF96F",  // http://crbug.com/642141
       "9834387FDA1F66A1B5CA06CB442137B556F12F2A",  // http://crbug.com/772346
       "930F7D9989A5FBCDCCD7D85BB5C3B7006C24D91D",  // http://crbug.com/782139
-      "A9A9FC0228ADF541F0334F22BEFB8F9C245B21D7"   // http://crbug.com/839189
+      "A9A9FC0228ADF541F0334F22BEFB8F9C245B21D7",  // http://crbug.com/839189
+      "46578A13607D38F1DC8E280C4F499FB0A2F9565C",  // http://crbug.com/841089
+      "898FB5A39687D210766B8998BA4530B99C9E6586",  // http://crbug.com/841089
+      "82F30B65397BC3E4ADE627BBD857AB8A58210648"   // http://crbug.com/841089
     ]
   },
   "clipboardRead": {
@@ -313,6 +325,11 @@
     "channel": "stable",
     "platforms": ["chromeos"],
     "extension_types": ["extension", "platform_app"],
+    "location": "policy"
+  },
+  "enterprise.hardwarePlatform": {
+    "channel": "beta",
+    "extension_types": ["extension"],
     "location": "policy"
   },
   "enterprise.platformKeys": [{
@@ -528,7 +545,10 @@
         "9FDE6E7F06FCFA11D9A05041C7FF6D8AE662F5D1",  // Spark release.
         "50B4A905D522C06E27CA6D099E3E54BDA1F152C5",  // Spark Beta channel.
         "BA0C8BB92084C9741312D90D3EA882526853455F",  // Spark dev channel.
-        "5F57A9AE8DFF5D6BB09DF8606270402612E871E5"   // http://crbug.com/422624
+        "5F57A9AE8DFF5D6BB09DF8606270402612E871E5",  // http://crbug.com/422624
+        "46578A13607D38F1DC8E280C4F499FB0A2F9565C",  // http://crbug.com/819404
+        "898FB5A39687D210766B8998BA4530B99C9E6586",  // http://crbug.com/819404
+        "82F30B65397BC3E4ADE627BBD857AB8A58210648"   // http://crbug.com/819404
       ]
     },
     {

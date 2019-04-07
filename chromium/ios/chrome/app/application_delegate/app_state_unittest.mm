@@ -637,13 +637,16 @@ TEST_F(AppStateTest, resumeSessionShouldOpenNTPTabSwitcher) {
   [[[getStartupInformationMock() stub] andReturn:nil] startupParameters];
   [[[getStartupInformationMock() stub] andReturnValue:@NO] isColdStart];
 
-  // TabOpening.
-  id tabOpener = [OCMockObject mockForProtocol:@protocol(TabOpening)];
-
   // BrowserViewInformation.
   id mainTabModel = [OCMockObject mockForClass:[TabModel class]];
   [[mainTabModel expect] resetSessionMetrics];
   [[[browserViewInformation stub] andReturn:mainTabModel] mainTabModel];
+  [[[browserViewInformation stub] andReturn:mainTabModel] currentTabModel];
+
+  // TabOpening.
+  id tabOpener = [OCMockObject mockForProtocol:@protocol(TabOpening)];
+  [[[tabOpener stub] andReturnValue:@YES]
+      shouldOpenNTPTabOnActivationOfTabModel:mainTabModel];
 
   // TabSwitcher.
   id tabSwitcher = [OCMockObject mockForProtocol:@protocol(TabSwitching)];
@@ -682,23 +685,26 @@ TEST_F(AppStateTest, resumeSessionShouldOpenNTPNoTabSwitcher) {
   [[[getStartupInformationMock() stub] andReturn:nil] startupParameters];
   [[[getStartupInformationMock() stub] andReturnValue:@NO] isColdStart];
 
-  // TabOpening.
-  id tabOpener = [OCMockObject mockForProtocol:@protocol(TabOpening)];
-
   // BrowserViewInformation.
   id mainTabModel = [OCMockObject mockForClass:[TabModel class]];
   [[mainTabModel expect] resetSessionMetrics];
 
   id dispatcher = [OCMockObject mockForProtocol:@protocol(ApplicationCommands)];
-  [((id<ApplicationCommands>)[dispatcher expect]) openURL:[OCMArg any]];
+  [((id<ApplicationCommands>)[dispatcher expect]) openURLInNewTab:[OCMArg any]];
 
   id currentBVC = [OCMockObject mockForClass:[BrowserViewController class]];
   stubBrowserState(currentBVC);
   [[[currentBVC stub] andReturn:dispatcher] dispatcher];
 
   [[[browserViewInformation stub] andReturn:mainTabModel] mainTabModel];
+  [[[browserViewInformation stub] andReturn:mainTabModel] currentTabModel];
   [[[browserViewInformation stub] andReturn:currentBVC] currentBVC];
   [[[browserViewInformation stub] andReturn:nil] otrBVC];
+
+  // TabOpening.
+  id tabOpener = [OCMockObject mockForProtocol:@protocol(TabOpening)];
+  [[[tabOpener stub] andReturnValue:@YES]
+      shouldOpenNTPTabOnActivationOfTabModel:mainTabModel];
 
   // TabSwitcher.
   id tabSwitcher = [OCMockObject mockForProtocol:@protocol(TabSwitching)];

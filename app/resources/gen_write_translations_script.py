@@ -34,8 +34,8 @@ for locale in LOCALES:
   spec_locale = locale if locale != "nb" else "no"
   params = dict(
     path = options.prefix_path,
-    locale = locale
-    spec_locale = spec_locale
+    locale = locale,
+    spec_locale = spec_locale,
   )
   fname = "%%(path)s_%%(locale)s.xtb" %% params
   if not os.access(fname, os.R_OK):
@@ -43,8 +43,7 @@ for locale in LOCALES:
       print >>f, \"\"\"<?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="%%s">
-</translationbundle>
-\"\"\" %% locale
+</translationbundle>\"\"\" %% spec_locale
   print '  <file path="%%(path)s_%%(locale)s.xtb" lang="%%(spec_locale)s" />' %% params
 
 print "</translations>"

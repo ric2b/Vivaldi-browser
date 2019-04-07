@@ -26,21 +26,22 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LOADER_RESOURCE_SCRIPT_RESOURCE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LOADER_RESOURCE_SCRIPT_RESOURCE_H_
 
+#include <memory>
+
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/loader/resource/text_resource.h"
+#include "third_party/blink/renderer/platform/bindings/parkable_string.h"
 #include "third_party/blink/renderer/platform/loader/fetch/access_control_status.h"
 #include "third_party/blink/renderer/platform/loader/fetch/integrity_metadata.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_client.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_loader_options.h"
 #include "third_party/blink/renderer/platform/loader/fetch/text_resource_decoder_options.h"
-#include "third_party/blink/renderer/platform/wtf/text/movable_string.h"
 
 namespace blink {
 
 class FetchParameters;
 class KURL;
 class ResourceFetcher;
-class ScriptResource;
 
 class CORE_EXPORT ScriptResource final : public TextResource {
  public:
@@ -69,9 +70,9 @@ class CORE_EXPORT ScriptResource final : public TextResource {
 
   void SetSerializedCachedMetadata(const char*, size_t) override;
 
-  const MovableString& SourceText();
+  const ParkableString& SourceText();
 
-  AccessControlStatus CalculateAccessControlStatus(const SecurityOrigin*) const;
+  AccessControlStatus CalculateAccessControlStatus() const;
 
   SingleCachedMetadataHandler* CacheHandler();
 
@@ -80,8 +81,6 @@ class CORE_EXPORT ScriptResource final : public TextResource {
       std::unique_ptr<CachedMetadataSender> send_callback) override;
 
  private:
-  class SingleCachedMetadataHandlerImpl;
-
   class ScriptResourceFactory : public ResourceFactory {
    public:
     ScriptResourceFactory()
@@ -102,11 +101,11 @@ class CORE_EXPORT ScriptResource final : public TextResource {
 
   bool CanUseCacheValidator() const override;
 
-  MovableString source_text_;
+  ParkableString source_text_;
 };
 
 DEFINE_RESOURCE_TYPE_CASTS(Script);
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LOADER_RESOURCE_SCRIPT_RESOURCE_H_

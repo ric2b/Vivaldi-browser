@@ -7,6 +7,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/wm/wm_toplevel_window_event_handler.h"
+#include "ui/display/display_observer.h"
 
 namespace ui {
 class GestureEvent;
@@ -17,10 +18,19 @@ class TabletModeWindowDragDelegate;
 
 // Handles app windows dragging in tablet mode. App windows can be dragged into
 // splitscreen through swiping from the top of the screen in tablet mode.
-class ASH_EXPORT TabletModeAppWindowDragController {
+class ASH_EXPORT TabletModeAppWindowDragController
+    : public display::DisplayObserver {
  public:
+  // Threshold of the fling velocity to drop the dragged window into overview if
+  // fling from the top of the display.
+  static constexpr float kFlingToOverviewThreshold = 2000.f;
+
+  // Threshold of the fling velocity to drop the dragged window into overview if
+  // fling inside preview area or when splitview is active.
+  static constexpr float kFlingToOverviewFromSnappingAreaThreshold = 1000.f;
+
   TabletModeAppWindowDragController();
-  ~TabletModeAppWindowDragController();
+  ~TabletModeAppWindowDragController() override;
 
   // Processes a gesture event and updates the transform of |dragged_window_|.
   // Returns true if the gesture has been handled and it should not be processed
@@ -28,19 +38,26 @@ class ASH_EXPORT TabletModeAppWindowDragController {
   // window may be 1) maximized, or 2) snapped in splitscren.
   bool DragWindowFromTop(ui::GestureEvent* event);
 
+  TabletModeWindowDragDelegate* drag_delegate_for_testing() {
+    return drag_delegate_.get();
+  }
+
  private:
   // Gesture window drag related functions. Used in DragWindowFromTop.
-  void StartWindowDrag(ui::GestureEvent* event);
+  bool StartWindowDrag(ui::GestureEvent* event);
   void UpdateWindowDrag(ui::GestureEvent* event);
   void EndWindowDrag(ui::GestureEvent* event,
                      wm::WmToplevelWindowEventHandler::DragResult result);
 
-  // Apply transform to the dragged window during dragging.
-  void UpdateDraggedWindow(const gfx::Point& location_in_screen);
+  // Returns true if fling event should drop the window into overview grid.
+  bool ShouldFlingIntoOverview(ui::GestureEvent* event);
+
+  // display::DisplayObserver:
+  void OnDisplayMetricsChanged(const display::Display& display,
+                               uint32_t metrics) override;
 
   std::unique_ptr<TabletModeWindowDragDelegate> drag_delegate_;
-
-  gfx::Point initial_location_in_screen_;
+  gfx::Point previous_location_in_screen_;
 
   DISALLOW_COPY_AND_ASSIGN(TabletModeAppWindowDragController);
 };

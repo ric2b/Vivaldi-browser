@@ -50,9 +50,9 @@
 #include "third_party/blink/renderer/core/layout/scroll_anchor.h"
 #include "third_party/blink/renderer/core/page/scrolling/sticky_position_scrolling_constraints.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_fragment.h"
+#include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/scroll/scroll_types.h"
-#include "third_party/blink/renderer/platform/scroll/scrollable_area.h"
 
 namespace blink {
 
@@ -65,7 +65,6 @@ class LayoutScrollbarPart;
 struct PaintInvalidatorContext;
 class PaintLayer;
 class ScrollingCoordinator;
-class StickyPositionScrollingConstraints;
 class SubtreeLayoutScope;
 
 struct CORE_EXPORT PaintLayerScrollableAreaRareData {
@@ -263,7 +262,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   }
 
   bool IsThrottled() const override;
-  PlatformChromeClient* GetChromeClient() const override;
+  ChromeClient* GetChromeClient() const override;
 
   SmoothScrollSequencer* GetSmoothScrollSequencer() const override;
 
@@ -318,6 +317,11 @@ class CORE_EXPORT PaintLayerScrollableArea final
   LayoutRect VisibleScrollSnapportRect(
       IncludeScrollbarsInRect = kExcludeScrollbars) const override;
   IntSize ContentsSize() const override;
+
+  // Similar to |ContentsSize| but snapped considering |paint_offset| which can
+  // have subpixel accumulation.
+  IntSize PixelSnappedContentsSize(const LayoutPoint& paint_offset) const;
+
   void ContentsResized() override;
   IntPoint LastKnownMousePosition() const override;
   bool ScrollAnimatorEnabled() const override;
@@ -373,8 +377,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
   void UpdateAfterStyleChange(const ComputedStyle*);
   void UpdateAfterOverflowRecalc();
 
-  void UpdateAfterCompositingChange();
-
   bool HasScrollbar() const {
     return HasHorizontalScrollbar() || HasVerticalScrollbar();
   }
@@ -397,8 +399,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   LayoutUnit ScrollWidth() const;
   LayoutUnit ScrollHeight() const;
-  int PixelSnappedScrollWidth() const;
-  int PixelSnappedScrollHeight() const;
 
   int VerticalScrollbarWidth(
       OverlayScrollbarClipBehavior =
@@ -542,13 +542,13 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   bool VisualViewportSuppliesScrollbars() const override;
 
+  bool HasHorizontalOverflow() const;
+  bool HasVerticalOverflow() const;
+
   void Trace(blink::Visitor*) override;
 
  private:
   explicit PaintLayerScrollableArea(PaintLayer&);
-
-  bool HasHorizontalOverflow() const;
-  bool HasVerticalOverflow() const;
 
   bool NeedsScrollbarReconstruction() const;
 

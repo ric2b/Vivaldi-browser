@@ -11,6 +11,10 @@ namespace flag_descriptions {
 extern const char kAutofillCacheQueryResponsesName[];
 extern const char kAutofillCacheQueryResponsesDescription[];
 
+// Title and description for the flag to control deprecating company name.
+extern const char kAutofillEnableCompanyNameName[];
+extern const char kAutofillEnableCompanyNameDescription[];
+
 // Title and description for the flag to control upstreaming credit cards.
 extern const char kAutofillCreditCardUploadName[];
 extern const char kAutofillCreditCardUploadDescription[];
@@ -31,10 +35,24 @@ extern const char
 extern const char kSyncSandboxName[];
 extern const char kSyncSandboxDescription[];
 
+// Title and description for the flag to control if Chrome Sync can start up in
+// standalone transport mode.
+extern const char kSyncStandaloneTransportName[];
+extern const char kSyncStandaloneTransportDescription[];
+
+// Title and description for the flag to control if Chrome Sync (in standalone
+// transport mode) supports non-primary accounts.
+extern const char kSyncSupportSecondaryAccountName[];
+extern const char kSyncSupportSecondaryAccountDescription[];
+
 // Title and description for the flag to control if Google Payments API calls
 // should use the sandbox servers.
 extern const char kWalletServiceUseSandboxName[];
 extern const char kWalletServiceUseSandboxDescription[];
+
+// Title and description for the flag to control the new app launcher.
+extern const char kAppLauncherRefreshName[];
+extern const char kAppLauncherRefreshDescription[];
 
 // Title and description for the flag to control the dynamic autofill.
 extern const char kAutofillDynamicFormsName[];
@@ -84,22 +102,18 @@ extern const char kBrowserContainerFullscreenDescription[];
 extern const char kBrowserTaskScheduler[];
 extern const char kBrowserTaskSchedulerDescription[];
 
-// Title and description for the flag to enable Captive Portal Login.
-extern const char kCaptivePortalName[];
-extern const char kCaptivePortalDescription[];
-
 // Title and description for the flag to enable Captive Portal metrics logging.
 extern const char kCaptivePortalMetricsName[];
 extern const char kCaptivePortalMetricsDescription[];
 
+// Title and description for the flag to enable automatically switching to the
+// regular tabs after closing the last incognito tab.
+extern const char kClosingLastIncognitoTabName[];
+extern const char kClosingLastIncognitoTabDescription[];
+
 // Title and description for the flag to enable Contextual Search.
 extern const char kContextualSearch[];
 extern const char kContextualSearchDescription[];
-
-// Title and description for the flag to enable returning the DOM element for
-// context menu using webkit postMessage API.
-extern const char kContextMenuElementPostMessageName[];
-extern const char kContextMenuElementPostMessageDescription[];
 
 // Title and description for the flag to enable copying image.
 extern const char kCopyImageName[];
@@ -157,6 +171,11 @@ extern const char kNewPasswordFormParsingDescription[];
 extern const char kOmniboxUIElideSuggestionUrlAfterHostName[];
 extern const char kOmniboxUIElideSuggestionUrlAfterHostDescription[];
 
+// Title and description for the flag to control the out of web implementation
+// of fullscreen.
+extern const char kOutOfWebFullscreenName[];
+extern const char kOutOfWebFullscreenDescription[];
+
 // Title and description for the flag to enable the ability to export passwords
 // from the password settings.
 extern const char kPasswordExportName[];
@@ -167,11 +186,6 @@ extern const char kPhysicalWeb[];
 extern const char kPhysicalWebDescription[];
 
 // Title and description for the flag to enable the new UI Reboot on existing
-// Collections.
-extern const char kCollectionsUIRebootName[];
-extern const char kCollectionsUIRebootDescription[];
-
-// Title and description for the flag to enable the new UI Reboot on existing
 // Infobars.
 extern const char kInfobarsUIRebootName[];
 extern const char kInfobarsUIRebootDescription[];
@@ -180,11 +194,6 @@ extern const char kInfobarsUIRebootDescription[];
 // navigation manager.
 extern const char kSlimNavigationManagerName[];
 extern const char kSlimNavigationManagerDescription[];
-
-// Title and description for the flag to enable new Download Manager UI and
-// backend.
-extern const char kNewFileDownloadName[];
-extern const char kNewFileDownloadDescription[];
 
 // Title and description for the flag to enable web based error pages.
 extern const char kWebErrorPagesName[];
@@ -208,9 +217,18 @@ extern const char kUIRefreshLocationBarDescription[];
 extern const char kUIRefreshPhase1Name[];
 extern const char kUIRefreshPhase1Description[];
 
+// Title and description for the flag to enable the custom toolbar container
+// view fix for crbug.com/889884.
+extern const char kToolbarContainerCustomViewName[];
+extern const char kToolbarContainerCustomViewDescription[];
+
 // Title and description for the flag to enable the unified consent.
 extern const char kUnifiedConsentName[];
 extern const char kUnifiedConsentDescription[];
+
+// Title and description for the flag to force the consent bump.
+extern const char kForceUnifiedConsentBumpName[];
+extern const char kForceUnifiedConsentBumpDescription[];
 
 // Title and description for the flag to enable the ddljson Doodle API.
 extern const char kUseDdljsonApiName[];

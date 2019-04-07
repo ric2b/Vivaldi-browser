@@ -11,16 +11,20 @@
 
 namespace aura {
 
+EnvInputStateController::EnvInputStateController(Env* env) : env_(env) {}
+
+EnvInputStateController::~EnvInputStateController() = default;
+
 void EnvInputStateController::UpdateStateForMouseEvent(
     const Window* window,
     const ui::MouseEvent& event) {
   switch (event.type()) {
     case ui::ET_MOUSE_PRESSED:
-      Env::GetInstance()->set_mouse_button_flags(event.button_flags());
+      env_->set_mouse_button_flags(event.button_flags());
       break;
     case ui::ET_MOUSE_RELEASED:
-      Env::GetInstance()->set_mouse_button_flags(
-          event.button_flags() & ~event.changed_button_flags());
+      env_->set_mouse_button_flags(event.button_flags() &
+                                   ~event.changed_button_flags());
       break;
     default:
       break;
@@ -40,7 +44,7 @@ void EnvInputStateController::UpdateStateForTouchEvent(
   switch (event.type()) {
     case ui::ET_TOUCH_PRESSED:
       touch_ids_down_ |= (1 << event.pointer_details().id);
-      Env::GetInstance()->set_touch_down(touch_ids_down_ != 0);
+      env_->set_touch_down(touch_ids_down_ != 0);
       break;
 
     // Handle ET_TOUCH_CANCELLED only if it has a native event.
@@ -51,7 +55,7 @@ void EnvInputStateController::UpdateStateForTouchEvent(
     case ui::ET_TOUCH_RELEASED:
       touch_ids_down_ = (touch_ids_down_ | (1 << event.pointer_details().id)) ^
                         (1 << event.pointer_details().id);
-      Env::GetInstance()->set_touch_down(touch_ids_down_ != 0);
+      env_->set_touch_down(touch_ids_down_ != 0);
       break;
 
     case ui::ET_TOUCH_MOVED:
@@ -68,7 +72,11 @@ void EnvInputStateController::SetLastMouseLocation(
     const gfx::Point& location_in_root) const {
   // If |root_window| is null, we are only using the event to update event
   // states, so we shouldn't update mouse location.
-  if (!root_window && Env::GetInstance()->mode() == aura::Env::Mode::MUS)
+  // This should be able to be skipped for Mus regardless of |root_window|, the
+  // last mouse location should be taken care of by MusMouseLocationUpdater. But
+  // leave this as-is for now since some test functions rely on it.
+  // TODO(mukai): fix this.
+  if (!root_window && env_->mode() == aura::Env::Mode::MUS)
     return;
 
   client::ScreenPositionClient* client =
@@ -76,9 +84,9 @@ void EnvInputStateController::SetLastMouseLocation(
   if (client) {
     gfx::Point location_in_screen = location_in_root;
     client->ConvertPointToScreen(root_window, &location_in_screen);
-    Env::GetInstance()->SetLastMouseLocation(location_in_screen);
+    env_->SetLastMouseLocation(location_in_screen);
   } else {
-    Env::GetInstance()->SetLastMouseLocation(location_in_root);
+    env_->SetLastMouseLocation(location_in_root);
   }
 }
 

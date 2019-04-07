@@ -23,7 +23,6 @@
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_tracker_factory.h"
 #include "chrome/browser/signin/signin_util.h"
-#include "chrome/browser/signin/unified_consent_helper.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -45,10 +44,10 @@
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/sync/base/sync_prefs.h"
+#include "components/unified_consent/feature.h"
 #include "components/unified_consent/unified_consent_service.h"
 #include "content/public/browser/storage_partition.h"
 #include "net/base/url_util.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using browser_sync::ProfileSyncService;
@@ -269,7 +268,7 @@ void OneClickSigninSyncStarter::LoadPolicyWithCachedCredentials() {
       username.empty() ? EmptyAccountId()
                        : AccountId::FromUserEmailGaiaId(username, gaia_id);
   policy_service->FetchPolicyForSignedInUser(
-      account_id, dm_token_, client_id_, profile_->GetRequestContext(),
+      account_id, dm_token_, client_id_,
       content::BrowserContext::GetDefaultStoragePartition(profile_)
           ->GetURLLoaderFactoryForBrowserProcess(),
       base::Bind(&OneClickSigninSyncStarter::OnPolicyFetchComplete,
@@ -297,8 +296,7 @@ void OneClickSigninSyncStarter::CreateNewSignedInProfile() {
       base::UTF8ToUTF16(signin->GetUsernameForAuthInProgress()),
       profiles::GetDefaultAvatarIconUrl(icon_index),
       base::Bind(&OneClickSigninSyncStarter::CompleteInitForNewProfile,
-                 weak_pointer_factory_.GetWeakPtr()),
-      std::string());
+                 weak_pointer_factory_.GetWeakPtr()));
 }
 
 void OneClickSigninSyncStarter::CompleteInitForNewProfile(
@@ -471,7 +469,7 @@ void OneClickSigninSyncStarter::OnSyncConfirmationUIClosed(
 }
 
 void OneClickSigninSyncStarter::EnableUnifiedConsentIfNeeded() {
-  if (IsUnifiedConsentEnabled(profile_)) {
+  if (unified_consent::IsUnifiedConsentFeatureEnabled()) {
     UnifiedConsentServiceFactory::GetForProfile(profile_)
         ->SetUnifiedConsentGiven(true);
   }

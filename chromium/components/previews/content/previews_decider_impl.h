@@ -25,8 +25,7 @@
 #include "components/previews/core/previews_experiments.h"
 #include "components/previews/core/previews_logger.h"
 #include "net/nqe/effective_connection_type.h"
-
-class GURL;
+#include "url/gurl.h"
 
 namespace base {
 class Clock;
@@ -122,6 +121,8 @@ class PreviewsDeciderImpl : public PreviewsDecider,
   bool IsURLAllowedForPreview(const net::URLRequest& request,
                               PreviewsType type) const override;
 
+  void LoadResourceHints(const net::URLRequest& request) override;
+
   // Generates a page ID that is guaranteed to be unique from any other page ID
   // generated in this browser session. Also, guaranteed to be non-zero.
   uint64_t GeneratePageId();
@@ -133,15 +134,29 @@ class PreviewsDeciderImpl : public PreviewsDecider,
       std::unique_ptr<blacklist::OptOutStore> previews_opt_out_store,
       blacklist::BlacklistData::AllowedTypesAndVersions allowed_previews);
 
+  // Posts a task to deliver the resource patterns to the PreviewsUIService.
+  void OnResourceLoadingHints(
+      const GURL& document_gurl,
+      const std::vector<std::string>& patterns_to_block);
+
   // Sets a blacklist for testing.
   void SetPreviewsBlacklistForTesting(
       std::unique_ptr<PreviewsBlackList> previews_back_list);
 
  private:
+  // Whether the preview |type| should be allowed to be considered for |request|
+  // subject to any server provided optimization hints. This is meant for
+  // checking the initial navigation URL. Returns ALLOWED if no reason found
+  // to deny the preview for consideration.
+  PreviewsEligibilityReason ShouldAllowPreviewPerOptimizationHints(
+      const net::URLRequest& request,
+      PreviewsType type,
+      std::vector<PreviewsEligibilityReason>* passed_reasons) const;
+
   // Whether |request| is allowed for |type| according to server provided
-  // optimization hints, if available. Returns ALLOWED if no optimization
-  // hints are available.
-  PreviewsEligibilityReason IsPreviewAllowedByOptmizationHints(
+  // optimization hints, if available. This is meant for checking the committed
+  // navigation URL against any specific hint details.
+  PreviewsEligibilityReason IsURLAllowedForPreviewByOptmizationHints(
       const net::URLRequest& request,
       PreviewsType type,
       std::vector<PreviewsEligibilityReason>* passed_reasons) const;

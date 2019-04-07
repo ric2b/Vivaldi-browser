@@ -16,7 +16,7 @@
 #include "sql/statement.h"
 
 namespace sql {
-class Connection;
+class Database;
 }
 
 namespace calendar {
@@ -45,7 +45,7 @@ class EventDatabase {
   bool DeleteEvent(EventID event_id);
 
  protected:
-  virtual sql::Connection& GetDB() = 0;
+  virtual sql::Database& GetDB() = 0;
   void FillEventRow(sql::Statement& statement, EventRow* event);
 
  private:

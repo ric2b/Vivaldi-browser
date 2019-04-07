@@ -268,10 +268,8 @@ TEST_P(PaintPropertyTreeUpdateTest,
                    ->ScrollTranslation()
                    ->ScrollNode()
                    ->HasBackgroundAttachmentFixedDescendants());
-
-  // TODO(bokan): Viewport property node generation has been disabled
-  // temporarily with the flag off to diagnose https//crbug.com/868927.
-  if (RuntimeEnabledFeatures::BlinkGenPropertyTreesEnabled()) {
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() ||
+      RuntimeEnabledFeatures::BlinkGenPropertyTreesEnabled()) {
     EXPECT_EQ(visual_viewport.GetScrollNode(), overflow_b->GetLayoutObject()
                                                    ->FirstFragment()
                                                    .PaintProperties()
@@ -279,13 +277,14 @@ TEST_P(PaintPropertyTreeUpdateTest,
                                                    ->ScrollNode()
                                                    ->Parent());
   } else {
+    // Pre-BGPT we don't create the visual viewport property nodes.
     EXPECT_TRUE(overflow_b->GetLayoutObject()
-                  ->FirstFragment()
-                  .PaintProperties()
-                  ->ScrollTranslation()
-                  ->ScrollNode()
-                  ->Parent()
-                  ->IsRoot());
+                    ->FirstFragment()
+                    .PaintProperties()
+                    ->ScrollTranslation()
+                    ->ScrollNode()
+                    ->Parent()
+                    ->IsRoot());
   }
 
   // Removing a main thread scrolling reason should update the entire tree.
@@ -803,6 +802,37 @@ TEST_P(PaintPropertyTreeUpdateTest, ScrollBoundsChange) {
   EXPECT_EQ(IntRect(0, 0, 200, 300), scroll_node->ContentsRect());
 }
 
+// The scrollbars are attached to the visual viewport but created by (and have
+// space saved by) the frame view. So we need to exclude them from the container
+// rect but also from the contents rect because we don't want to be able to
+// scroll into the region saved for scrollbars.
+TEST_P(PaintPropertyTreeUpdateTest,
+       ViewportContentsAndContainerRectsDoNotIncludeScrollbar) {
+  // Pre-BGPT we don't create the visual viewport property nodes.
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
+      !RuntimeEnabledFeatures::BlinkGenPropertyTreesEnabled())
+    return;
+
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      ::-webkit-scrollbar {width: 20px; height: 20px}
+      body {height: 10000px; width: 10000px; margin: 0;}
+    </style>
+  )HTML");
+
+  VisualViewport& visual_viewport =
+      GetDocument().GetPage()->GetVisualViewport();
+
+  // TODO(bokan): Viewport property node generation has been disabled
+  // temporarily with the flag off to diagnose https://crbug.com/868927.
+  if (RuntimeEnabledFeatures::BlinkGenPropertyTreesEnabled()) {
+    EXPECT_EQ(IntRect(0, 0, 780, 580),
+              visual_viewport.GetScrollNode()->ContainerRect());
+    EXPECT_EQ(IntRect(0, 0, 780, 580),
+              visual_viewport.GetScrollNode()->ContentsRect());
+  }
+}
+
 TEST_P(PaintPropertyTreeUpdateTest, ScrollbarWidthChange) {
   SetBodyInnerHTML(R"HTML(
     <style>::-webkit-scrollbar {width: 20px; height: 20px}</style>
@@ -1202,36 +1232,36 @@ TEST_P(PaintPropertyTreeUpdateTest,
 
   auto* flow_thread = GetLayoutObjectByElementId("multicol")->SlowFirstChild();
   ASSERT_EQ(2u, NumFragments(flow_thread));
-  EXPECT_EQ(50, FragmentAt(flow_thread, 0)
-                    .PaintProperties()
-                    ->FragmentClip()
-                    ->ClipRect()
-                    .Rect()
-                    .MaxX());
-  EXPECT_EQ(50, FragmentAt(flow_thread, 1)
-                    .PaintProperties()
-                    ->FragmentClip()
-                    ->ClipRect()
-                    .Rect()
-                    .X());
+  EXPECT_EQ(1000000, FragmentAt(flow_thread, 0)
+                         .PaintProperties()
+                         ->FragmentClip()
+                         ->ClipRect()
+                         .Rect()
+                         .MaxX());
+  EXPECT_EQ(-999950, FragmentAt(flow_thread, 1)
+                         .PaintProperties()
+                         ->FragmentClip()
+                         ->ClipRect()
+                         .Rect()
+                         .X());
 
   GetDocument()
       .getElementById("container")
       ->setAttribute(HTMLNames::styleAttr, "width: 500px");
   GetDocument().View()->UpdateAllLifecyclePhases();
   ASSERT_EQ(2u, NumFragments(flow_thread));
-  EXPECT_EQ(250, FragmentAt(flow_thread, 0)
-                     .PaintProperties()
-                     ->FragmentClip()
-                     ->ClipRect()
-                     .Rect()
-                     .MaxX());
-  EXPECT_EQ(250, FragmentAt(flow_thread, 1)
-                     .PaintProperties()
-                     ->FragmentClip()
-                     ->ClipRect()
-                     .Rect()
-                     .X());
+  EXPECT_EQ(1000000, FragmentAt(flow_thread, 0)
+                         .PaintProperties()
+                         ->FragmentClip()
+                         ->ClipRect()
+                         .Rect()
+                         .MaxX());
+  EXPECT_EQ(-999750, FragmentAt(flow_thread, 1)
+                         .PaintProperties()
+                         ->FragmentClip()
+                         ->ClipRect()
+                         .Rect()
+                         .X());
 }
 
 TEST_P(PaintPropertyTreeUpdateTest,
@@ -1262,6 +1292,54 @@ TEST_P(PaintPropertyTreeUpdateTest,
   props = blended_element->GetLayoutObject()->FirstFragment().PaintProperties();
   ASSERT_TRUE(props->Effect());
   EXPECT_EQ(props->Effect()->BlendMode(), SkBlendMode::kLighten);
+}
+
+TEST_P(PaintPropertyTreeUpdateTest, EnsureSnapContainerData) {
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <style>
+    body {
+      overflow: scroll;
+      scroll-snap-type: both proximity;
+      height: 300px;
+      width: 300px;
+      margin: 0px;
+      padding: 0px;
+    }
+    #container {
+      margin: 0px;
+      padding: 0px;
+      width: 600px;
+      height: 2000px;
+    }
+    #area {
+      position: relative;
+      left: 100px;
+      top: 700px;
+      width: 200px;
+      height: 200px;
+      scroll-snap-align: start;
+    }
+
+    </style>
+
+    <div id="container">
+      <div id="area"></div>
+    </div>
+  )HTML");
+
+  GetDocument().View()->Resize(300, 300);
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  auto doc_snap_container_data = DocScroll()->SnapContainerData();
+  ASSERT_TRUE(doc_snap_container_data);
+  EXPECT_EQ(doc_snap_container_data->scroll_snap_type().axis, SnapAxis::kBoth);
+  EXPECT_EQ(doc_snap_container_data->scroll_snap_type().strictness,
+            SnapStrictness::kProximity);
+  EXPECT_EQ(doc_snap_container_data->rect(), gfx::RectF(0, 0, 300, 300));
+  EXPECT_EQ(doc_snap_container_data->size(), 1u);
+  EXPECT_EQ(doc_snap_container_data->at(0).rect,
+            gfx::RectF(100, 700, 200, 200));
 }
 
 }  // namespace blink

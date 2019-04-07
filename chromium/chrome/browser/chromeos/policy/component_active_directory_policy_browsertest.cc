@@ -14,6 +14,7 @@
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_cryptohome_client.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
@@ -71,7 +72,7 @@ class ComponentActiveDirectoryPolicyTest
  protected:
   ComponentActiveDirectoryPolicyTest()
       : install_attributes_(
-            chromeos::ScopedStubInstallAttributes::CreateActiveDirectoryManaged(
+            chromeos::StubInstallAttributes::CreateActiveDirectoryManaged(
                 kTestDomain,
                 kTestDeviceId)) {
     builder_.policy_data().set_policy_type(

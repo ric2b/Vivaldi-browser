@@ -19,7 +19,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/dom_storage/dom_storage_area.h"
@@ -35,7 +35,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 
 namespace content {
 namespace {
@@ -128,7 +128,7 @@ DOMStorageContextWrapper::DOMStorageContextWrapper(
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
   scoped_refptr<base::SequencedTaskRunner> commit_sequence =
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
 
   legacy_localstorage_path_ =
@@ -173,7 +173,8 @@ DOMStorageContextWrapper::DOMStorageContextWrapper(
     base::MemoryCoordinatorClientRegistry::GetInstance()->Register(this);
   } else {
     memory_pressure_listener_.reset(new base::MemoryPressureListener(
-        base::Bind(&DOMStorageContextWrapper::OnMemoryPressure, this)));
+        base::BindRepeating(&DOMStorageContextWrapper::OnMemoryPressure,
+                            base::Unretained(this))));
   }
 }
 
@@ -243,7 +244,7 @@ void DOMStorageContextWrapper::DeleteLocalStorage(const GURL& origin,
   if (!legacy_localstorage_path_.empty()) {
     context_->task_runner()->PostShutdownBlockingTask(
         FROM_HERE, DOMStorageTaskRunner::PRIMARY_SEQUENCE,
-        base::BindOnce(base::IgnoreResult(&sql::Connection::Delete),
+        base::BindOnce(base::IgnoreResult(&sql::Database::Delete),
                        legacy_localstorage_path_.Append(
                            DOMStorageArea::DatabaseFileNameFromOrigin(
                                url::Origin::Create(origin)))));
@@ -395,6 +396,7 @@ void DOMStorageContextWrapper::OpenLocalStorage(
 void DOMStorageContextWrapper::OpenSessionStorage(
     int process_id,
     const std::string& namespace_id,
+    mojo::ReportBadMessageCallback bad_message_callback,
     blink::mojom::SessionStorageNamespaceRequest request) {
   if (!mojo_session_state_)
     return;
@@ -403,9 +405,11 @@ void DOMStorageContextWrapper::OpenSessionStorage(
   // as soon as that task is posted, mojo_state_ is set to null, preventing
   // further tasks from being queued.
   mojo_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&SessionStorageContextMojo::OpenSessionStorage,
-                                base::Unretained(mojo_session_state_),
-                                process_id, namespace_id, std::move(request)));
+      FROM_HERE,
+      base::BindOnce(&SessionStorageContextMojo::OpenSessionStorage,
+                     base::Unretained(mojo_session_state_), process_id,
+                     namespace_id, std::move(bad_message_callback),
+                     std::move(request)));
 }
 
 void DOMStorageContextWrapper::SetLocalStorageDatabaseForTesting(

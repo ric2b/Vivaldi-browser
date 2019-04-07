@@ -12,15 +12,17 @@ import("//tools/json_schema_compiler/json_schema_api.gni")
 
 assert(enable_extensions)
 
-json_schema_api("api") {
-  sources = chrome_extensions_api_schema_sources
-  schemas = true
-  bundle = true
+# TODO(devlin): Enforce visibility restrictions on more of these targets?
+
+generated_json_strings("generated_api_json_strings") {
+  sources = chrome_extensions_api_schema_sources +
+            chrome_extensions_api_uncompiled_sources
+
   configs = [ "//build/config:precompiled_headers" ]
   bundle_name = "Chrome"
   schema_include_rules = chrome_extensions_api_schema_include_rules
 
-  uncompiled_bundle_schema_sources = [
+  sources += [
     "app.json",
     "browser_action.json",
     "commands.json",
@@ -28,26 +30,39 @@ json_schema_api("api") {
     "page_action.json",
     "privacy.json",
     "proxy.json",
-    "tts_engine.json",
     "tts.json",
+    "tts_engine.json",
     "webstore.json",
   ]
   if (is_chromeos) {
-    uncompiled_bundle_schema_sources += [ "file_browser_handler.json" ]
+    sources += [ "file_browser_handler.json" ]
   } else {
     # On ChromeOS, input_method_private is fully compiled (as part of
     # schema_files), and so gets added to the bundle already. On other
     # platforms, we still need it added to the bundle.
     # TODO(devlin): That's weird. Investigate.
-    uncompiled_bundle_schema_sources += [ "input_method_private.json" ]
+    sources += [ "input_method_private.json" ]
   }
-
-  uncompiled_sources = chrome_extensions_api_uncompiled_sources
 
   root_namespace = chrome_extensions_api_root_namespace
   deps = [
     "//extensions/common/api",
   ]
+
+  visibility = [ ":api" ]
+}
+
+generated_types("generated_api_types") {
+  sources = chrome_extensions_api_schema_sources
+  configs = [ "//build/config:precompiled_headers" ]
+  schema_include_rules = chrome_extensions_api_schema_include_rules
+
+  root_namespace = chrome_extensions_api_root_namespace
+  deps = [
+    "//extensions/common/api",
+  ]
+
+  visibility = [ ":api" ]
 }
 
 json_features("api_features") {
@@ -71,6 +86,15 @@ json_features("manifest_features") {
   method_name = "AddChromeManifestFeatures"
   sources = [
     "_manifest_features.json",
+  ]
+}
+
+# Public Targets
+
+group("api") {
+  public_deps = [
+    ":generated_api_json_strings",
+    ":generated_api_types",
   ]
 }
 

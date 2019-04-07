@@ -17,8 +17,8 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread_restrictions.h"
 #include "chromecast/base/metrics/cast_histograms.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
@@ -57,7 +57,7 @@ scoped_refptr<base::SequencedTaskRunner> CreateTaskRunner() {
   // Note that CollectEvents accesses a global singleton, and thus
   // scheduling with CONTINUE_ON_SHUTDOWN might not be safe.
   return base::CreateSequencedTaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 

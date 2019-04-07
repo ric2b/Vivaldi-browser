@@ -84,6 +84,19 @@ const UiPageContainerBehaviorImpl = {
   },
 
   /**
+   * Returns a promise which always resolves and returns a boolean representing
+   * whether it should be possible to navigate forward. This function is called
+   * before forward navigation is requested; if false is returned, the active
+   * page does not change.
+   * @return {!Promise}
+   */
+  getCanNavigateToNextPage: function() {
+    return new Promise((resolve) => {
+      resolve(true /* canNavigate */);
+    });
+  },
+
+  /**
    * @param {string} textId Key for the localized string to appear on a
    *     button.
    * @return {string|undefined} The localized string corresponding to the key
@@ -95,8 +108,10 @@ const UiPageContainerBehaviorImpl = {
   computeLocalizedText_: function(textId) {
     if (!this.i18nExists(textId))
       return;
+
+    const validNodeFn = (node, value) => node.tagName == 'A';
     return this.i18nAdvanced(
-        textId, {attrs: {'id': (node, value) => node.tagName == 'A'}});
+        textId, {attrs: {'id': validNodeFn, 'href': validNodeFn}});
   },
 };
 

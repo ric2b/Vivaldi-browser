@@ -40,8 +40,10 @@ static const std::vector<std::wstring> kExtraLanguages = {
 
 std::map<const std::wstring, const std::wstring> kLanguages = {
   // please keep this map alphabetically sorted by language name!
+  {L"af", L"Afrikaans"},
   {L"sq", L"Albanian"},
   {L"hy", L"Armenian"},
+  {L"be", L"Belarusian"},
   {L"bg", L"Bulgarian"},
   {L"zh_CN", L"Chinese (Simplified)"},
   {L"zh_TW", L"Chinese (Traditional)"},
@@ -79,6 +81,7 @@ std::map<const std::wstring, const std::wstring> kLanguages = {
   {L"sl", L"Slovenian"},
   {L"es", L"Spanish"},
   {L"sv", L"Swedish"},
+  {L"de_CH", L"Swiss German"},
   {L"tr", L"Turkish"},
   {L"uk", L"Ukrainian"},
   {L"vi", L"Vietnamese"} };

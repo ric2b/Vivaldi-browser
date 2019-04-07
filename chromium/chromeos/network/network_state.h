@@ -20,7 +20,7 @@
 namespace base {
 class DictionaryValue;
 class Value;
-}
+}  // namespace base
 
 namespace chromeos {
 
@@ -38,6 +38,20 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
  public:
   explicit NetworkState(const std::string& path);
   ~NetworkState() override;
+
+  struct CaptivePortalProviderInfo {
+    // The id used by chrome to identify the provider (i.e. an extension id).
+    std::string id;
+    // The display name for the captive portal provider (i.e. extension name).
+    std::string name;
+  };
+
+  struct VpnProviderInfo {
+    // The id used by chrome to identify the provider (i.e. an extension id).
+    std::string id;
+    // The VPN type, provided by the VPN provider/extension.
+    std::string type;
+  };
 
   // ManagedState overrides
   // If you change this method, update GetProperties too.
@@ -65,14 +79,14 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   const std::string& error() const { return error_; }
   const std::string& last_error() const { return last_error_; }
   void clear_last_error() { last_error_.clear(); }
+  ::onc::ONCSource onc_source() const { return onc_source_; }
 
   // Returns |connection_state_| if visible, kStateDisconnect otherwise.
   std::string connection_state() const;
   void set_connection_state(const std::string connection_state);
 
-  const base::DictionaryValue& proxy_config() const { return proxy_config_; }
-
-  const base::DictionaryValue& ipv4_config() const { return ipv4_config_; }
+  const base::Value* proxy_config() const { return proxy_config_.get(); }
+  const base::Value* ipv4_config() const { return ipv4_config_.get(); }
   std::string GetIpAddress() const;
   std::string GetGateway() const;
   GURL GetWebProxyAutoDiscoveryUrl() const;
@@ -81,9 +95,17 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   bool connectable() const { return connectable_; }
   void set_connectable(bool connectable) { connectable_ = connectable; }
   bool is_captive_portal() const { return is_captive_portal_; }
+  const CaptivePortalProviderInfo* captive_portal_provider() const {
+    return captive_portal_provider_.get();
+  }
+  void SetCaptivePortalProvider(const std::string& id, const std::string& name);
   int signal_strength() const { return signal_strength_; }
   void set_signal_strength(int signal_strength) {
     signal_strength_ = signal_strength;
+  }
+  bool blocked_by_policy() const { return blocked_by_policy_; }
+  void set_blocked_by_policy(bool blocked_by_policy) {
+    blocked_by_policy_ = blocked_by_policy;
   }
 
   // Wifi property accessors
@@ -91,9 +113,7 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   const std::vector<uint8_t>& raw_ssid() const { return raw_ssid_; }
 
   // Cellular property accessors
-  const std::string& network_technology() const {
-    return network_technology_;
-  }
+  const std::string& network_technology() const { return network_technology_; }
   const std::string& activation_type() const { return activation_type_; }
   const std::string& activation_state() const { return activation_state_; }
   const std::string& roaming() const { return roaming_; }
@@ -102,8 +122,8 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   const std::string& tethering_state() const { return tethering_state_; }
 
   // VPN property accessors
-  const std::string& vpn_provider_type() const { return vpn_provider_type_; }
-  const std::string& vpn_provider_id() const { return vpn_provider_id_; }
+  const VpnProviderInfo* vpn_provider() const { return vpn_provider_.get(); }
+  std::string GetVpnProviderType() const;
 
   // Tether accessors and setters.
   int battery_percentage() const { return battery_percentage_; }
@@ -120,6 +140,10 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   }
   const std::string& tether_guid() const { return tether_guid_; }
   void set_tether_guid(const std::string& guid) { tether_guid_ = guid; }
+
+  // Returns true if the network is managed by policy (determined by
+  // |onc_source_|).
+  bool IsManagedByPolicy() const;
 
   // Returns true if current connection is using mobile data.
   bool IsUsingMobileData() const;
@@ -189,6 +213,8 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   // Returns true if |name_| changes.
   bool UpdateName(const base::DictionaryValue& properties);
 
+  void SetVpnProvider(const std::string& id, const std::string& type);
+
   // Set to true if the network is a member of Manager.Services.
   bool visible_ = false;
 
@@ -196,7 +222,7 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   // Instead use NetworkConfigurationHandler::GetProperties() to asynchronously
   // request properties from Shill.
   std::string security_class_;
-  std::string eap_method_;  // Needed for WiFi EAP networks
+  std::string eap_method_;    // Needed for WiFi EAP networks
   std::string eap_key_mgmt_;  // Needed for identifying Dynamic WEP networks
   std::string device_path_;
   std::string guid_;
@@ -206,6 +232,7 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   std::string profile_path_;
   std::vector<uint8_t> raw_ssid_;  // Unknown encoding. Not necessarily UTF-8.
   int priority_ = 0;
+  ::onc::ONCSource onc_source_ = ::onc::ONC_SOURCE_UNKNOWN;
 
   // Reflects the current Shill Service.Error property. This might get cleared
   // by Shill shortly after a failure.
@@ -217,14 +244,16 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
 
   // Cached copy of the Shill Service IPConfig object. For ipv6 properties use
   // the ip_configs_ property in the corresponding DeviceState.
-  base::DictionaryValue ipv4_config_;
+  std::unique_ptr<base::Value> ipv4_config_;
 
   // Wireless properties, used for icons and Connect logic.
   bool connectable_ = false;
   bool is_captive_portal_ = false;
+  std::unique_ptr<CaptivePortalProviderInfo> captive_portal_provider_;
   int signal_strength_ = 0;
   std::string bssid_;  // For ARC
   int frequency_ = 0;  // For ARC
+  bool blocked_by_policy_ = false;
 
   // Cellular properties, used for icons, Connect, and Activation.
   std::string network_technology_;
@@ -236,10 +265,9 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   std::string tethering_state_;
 
   // VPN properties, used to construct the display name and to show the correct
-  // configuration dialog.
-  std::string vpn_provider_type_;
-  // Extension ID or Arc package name for extension or Arc provider VPNs.
-  std::string vpn_provider_id_;
+  // configuration dialog. The id is the Extension ID or Arc package name for
+  // extension or Arc provider VPNs.
+  std::unique_ptr<VpnProviderInfo> vpn_provider_;
 
   // Tether properties.
   std::string carrier_;
@@ -254,7 +282,7 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
 
   // TODO(pneubeck): Remove this once (Managed)NetworkConfigurationHandler
   // provides proxy configuration. crbug.com/241775
-  base::DictionaryValue proxy_config_;
+  std::unique_ptr<base::Value> proxy_config_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkState);
 };

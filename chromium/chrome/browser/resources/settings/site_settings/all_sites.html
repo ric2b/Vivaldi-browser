@@ -22,13 +22,13 @@
       }
 
       #sortMethod {
-        -webkit-margin-start: 1em;
+        margin-inline-start: 1em;
       }
 
       /* There is only one top-level heading for All Sites, so remove the
        * additional leading padding used for lists. */
       .list-frame.without-heading {
-        -webkit-padding-start: var(--settings-box-row-padding);
+        padding-inline-start: var(--settings-box-row-padding);
       }
     </style>
     <div id="searchAndSort">
@@ -40,23 +40,28 @@
         <label id="sortLabel">$i18n{siteSettingsAllSitesSort}</label>
         <select id="sortMethod" class="md-select" aria-labelledby="sortLabel"
           on-change="onSortMethodChanged_">
-          <!-- TODO(https://crbug.com/835712): Implement remaining two sort
-              methods. -->
+          <option value="[[sortMethods_.mostVisited]]">
+            $i18n{siteSettingsAllSitesSortMethodMostVisited}
+          </option>
+          <option value="[[sortMethods_.storage]]">
+            $i18n{siteSettingsAllSitesSortMethodStorage}
+          </option>
           <option value="[[sortMethods_.name]]">
             $i18n{siteSettingsAllSitesSortMethodName}
           </option>
         </select>
       </div>
     </div>
-    <div class="list-frame" hidden$="[[siteGroupList.length]]">
+    <div class="list-frame" hidden$="[[siteGroupMap.size]]">
       <div class="list-item secondary">$i18n{noSitesAdded}</div>
     </div>
     <div class="list-frame without-heading" id="listContainer">
       <iron-list id="allSitesList"
-          items="[[filterPopulatedList_(siteGroupList, searchQuery_)]]"
+          items="[[filterPopulatedList_(siteGroupMap, searchQuery_)]]"
           scroll-target="[[subpageScrollTarget]]">
         <template>
-          <site-entry site-group="[[item]]" list-index="[[index]]"></site-entry>
+          <site-entry site-group="[[item]]" list-index="[[index]]"
+              tabindex$="[[tabIndex]]"></site-entry>
         </template>
       </iron-list>
     </div>

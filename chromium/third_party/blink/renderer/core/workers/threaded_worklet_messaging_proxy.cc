@@ -59,11 +59,14 @@ void ThreadedWorkletMessagingProxy::Initialize(
           document->Url(), ScriptType::kModule, document->UserAgent(),
           csp->Headers(), document->GetReferrerPolicy(),
           document->GetSecurityOrigin(), document->IsSecureContext(),
-          worker_clients, document->AddressSpace(),
+          document->GetHttpsState(), worker_clients, document->AddressSpace(),
           OriginTrialContext::GetTokens(document).get(),
           base::UnguessableToken::Create(),
           std::make_unique<WorkerSettings>(document->GetSettings()),
-          kV8CacheOptionsDefault, module_responses_map);
+          kV8CacheOptionsDefault, module_responses_map,
+          service_manager::mojom::blink::InterfaceProviderPtrInfo(),
+          BeginFrameProviderParams(), nullptr /* parent_feature_policy */,
+          document->GetAgentClusterID());
 
   // Worklets share the pre-initialized backing thread so that we don't have to
   // specify the backing thread startup data.

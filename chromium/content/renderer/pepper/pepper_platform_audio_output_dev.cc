@@ -290,9 +290,9 @@ void PepperPlatformAudioOutputDev::RequestDeviceAuthorizationOnIOThread() {
     auth_timeout_action_.reset(new base::OneShotTimer());
     auth_timeout_action_->Start(
         FROM_HERE, auth_timeout_,
-        base::Bind(&PepperPlatformAudioOutputDev::OnDeviceAuthorized, this,
-                   media::OUTPUT_DEVICE_STATUS_ERROR_TIMED_OUT,
-                   media::AudioParameters(), std::string()));
+        base::BindOnce(&PepperPlatformAudioOutputDev::OnDeviceAuthorized, this,
+                       media::OUTPUT_DEVICE_STATUS_ERROR_TIMED_OUT,
+                       media::AudioParameters(), std::string()));
   }
 }
 
@@ -310,7 +310,7 @@ void PepperPlatformAudioOutputDev::CreateStreamOnIOThread(
     case IDLE:
       if (did_receive_auth_.IsSignaled() && device_id_.empty()) {
         state_ = CREATING_STREAM;
-        ipc_->CreateStream(this, params);
+        ipc_->CreateStream(this, params, base::nullopt);
       } else {
         RequestDeviceAuthorizationOnIOThread();
         start_on_authorized_ = true;
@@ -323,7 +323,7 @@ void PepperPlatformAudioOutputDev::CreateStreamOnIOThread(
 
     case AUTHORIZED:
       state_ = CREATING_STREAM;
-      ipc_->CreateStream(this, params);
+      ipc_->CreateStream(this, params, base::nullopt);
       start_on_authorized_ = false;
       break;
 

@@ -31,6 +31,9 @@ config("config") {
   if (is_chromecast) {
     defines += [ "BLINK_MEDIA_LOG=LOG(INFO)" ]
   }
+  if (blink_animation_use_time_delta) {
+    defines += [ "BLINK_ANIMATION_USE_TIME_DELTA" ]
+  }
 }
 
 config("core_include_dirs") {
@@ -101,7 +104,7 @@ source_set("prerequisites") {
   public_deps = [
     "//services/network/public/cpp:cpp",
     "//services/service_manager/public/cpp",
-    "//services/ui/public/interfaces/ime",
+    "//services/ws/public/mojom/ime",
     "//skia",
     "//third_party/angle:translator",
     "//third_party/blink/public:core_mojo_bindings_blink",
@@ -193,6 +196,7 @@ component("core") {
     "//third_party/blink/renderer/core/input",
     "//third_party/blink/renderer/core/inspector",
     "//third_party/blink/renderer/core/intersection_observer",
+    "//third_party/blink/renderer/core/invisible_dom",
     "//third_party/blink/renderer/core/layout",
     "//third_party/blink/renderer/core/layout/svg:svg_layout",
     "//third_party/blink/renderer/core/loader",
@@ -206,6 +210,7 @@ component("core") {
     "//third_party/blink/renderer/core/probe",
     "//third_party/blink/renderer/core/resize_observer",
     "//third_party/blink/renderer/core/script",
+    "//third_party/blink/renderer/core/scroll",
     "//third_party/blink/renderer/core/streams",
     "//third_party/blink/renderer/core/style:rendering",
     "//third_party/blink/renderer/core/style:svg_style",
@@ -273,6 +278,7 @@ jumbo_source_set("testing") {
     "testing/dummy_page_holder.h",
     "testing/garbage_collected_script_wrappable.cc",
     "testing/garbage_collected_script_wrappable.h",
+    "testing/gc_object_liveness_observer.h",
     "testing/gc_observation.cc",
     "testing/gc_observation.h",
     "testing/internal_settings.cc",
@@ -357,6 +363,7 @@ generate_event_interfaces("core_event_interfaces") {
     "events/wheel_event.idl",
     "html/forms/form_data_event.idl",
     "html/track/track_event.idl",
+    "invisible_dom/activate_invisible_event.idl",
     "mojo/test/mojo_interface_request_event.idl",
   ]
   output_file = "core/event_names.json5"
@@ -510,6 +517,7 @@ css_properties("make_core_generated_css_longhand_property_classes") {
       "../build/scripts/core/css/properties/make_css_property_subclasses.py"
   in_files = [ "css/properties/CSSPropertyMethods.json5" ]
   other_inputs = [
+    "css/CSSProperties.json5",
     "../build/scripts/core/css/properties/templates/css_property_subclass.h.tmpl",
     "../build/scripts/core/css/properties/templates/css_property_subclass.cc.tmpl",
   ]
@@ -553,6 +561,12 @@ css_properties("make_core_generated_css_longhand_property_classes") {
     "$blink_core_output_dir/css/properties/longhands/background_size.cc",
     "$blink_core_output_dir/css/properties/longhands/baseline_shift.h",
     "$blink_core_output_dir/css/properties/longhands/block_size.h",
+    "$blink_core_output_dir/css/properties/longhands/border_block_end_color.h",
+    "$blink_core_output_dir/css/properties/longhands/border_block_end_style.h",
+    "$blink_core_output_dir/css/properties/longhands/border_block_end_width.h",
+    "$blink_core_output_dir/css/properties/longhands/border_block_start_color.h",
+    "$blink_core_output_dir/css/properties/longhands/border_block_start_style.h",
+    "$blink_core_output_dir/css/properties/longhands/border_block_start_width.h",
     "$blink_core_output_dir/css/properties/longhands/border_bottom_color.h",
     "$blink_core_output_dir/css/properties/longhands/border_bottom_color.cc",
     "$blink_core_output_dir/css/properties/longhands/border_bottom_left_radius.h",
@@ -565,6 +579,12 @@ css_properties("make_core_generated_css_longhand_property_classes") {
     "$blink_core_output_dir/css/properties/longhands/border_image_slice.h",
     "$blink_core_output_dir/css/properties/longhands/border_image_source.h",
     "$blink_core_output_dir/css/properties/longhands/border_image_width.h",
+    "$blink_core_output_dir/css/properties/longhands/border_inline_end_color.h",
+    "$blink_core_output_dir/css/properties/longhands/border_inline_end_style.h",
+    "$blink_core_output_dir/css/properties/longhands/border_inline_end_width.h",
+    "$blink_core_output_dir/css/properties/longhands/border_inline_start_color.h",
+    "$blink_core_output_dir/css/properties/longhands/border_inline_start_style.h",
+    "$blink_core_output_dir/css/properties/longhands/border_inline_start_width.h",
     "$blink_core_output_dir/css/properties/longhands/border_left_color.h",
     "$blink_core_output_dir/css/properties/longhands/border_left_color.cc",
     "$blink_core_output_dir/css/properties/longhands/border_left_style.h",
@@ -670,6 +690,10 @@ css_properties("make_core_generated_css_longhand_property_classes") {
     "$blink_core_output_dir/css/properties/longhands/image_orientation.h",
     "$blink_core_output_dir/css/properties/longhands/image_rendering.h",
     "$blink_core_output_dir/css/properties/longhands/inline_size.h",
+    "$blink_core_output_dir/css/properties/longhands/inset_block_end.h",
+    "$blink_core_output_dir/css/properties/longhands/inset_block_start.h",
+    "$blink_core_output_dir/css/properties/longhands/inset_inline_end.h",
+    "$blink_core_output_dir/css/properties/longhands/inset_inline_start.h",
     "$blink_core_output_dir/css/properties/longhands/isolation.h",
     "$blink_core_output_dir/css/properties/longhands/justify_content.h",
     "$blink_core_output_dir/css/properties/longhands/justify_items.h",
@@ -683,7 +707,11 @@ css_properties("make_core_generated_css_longhand_property_classes") {
     "$blink_core_output_dir/css/properties/longhands/list_style_image.h",
     "$blink_core_output_dir/css/properties/longhands/list_style_position.h",
     "$blink_core_output_dir/css/properties/longhands/list_style_type.h",
+    "$blink_core_output_dir/css/properties/longhands/margin_block_start.h",
+    "$blink_core_output_dir/css/properties/longhands/margin_block_end.h",
     "$blink_core_output_dir/css/properties/longhands/margin_bottom.h",
+    "$blink_core_output_dir/css/properties/longhands/margin_inline_start.h",
+    "$blink_core_output_dir/css/properties/longhands/margin_inline_end.h",
     "$blink_core_output_dir/css/properties/longhands/margin_left.h",
     "$blink_core_output_dir/css/properties/longhands/margin_right.h",
     "$blink_core_output_dir/css/properties/longhands/margin_top.h",
@@ -727,7 +755,11 @@ css_properties("make_core_generated_css_longhand_property_classes") {
     "$blink_core_output_dir/css/properties/longhands/overflow_y.h",
     "$blink_core_output_dir/css/properties/longhands/overscroll_behavior_x.h",
     "$blink_core_output_dir/css/properties/longhands/overscroll_behavior_y.h",
+    "$blink_core_output_dir/css/properties/longhands/padding_block_start.h",
+    "$blink_core_output_dir/css/properties/longhands/padding_block_end.h",
     "$blink_core_output_dir/css/properties/longhands/padding_bottom.h",
+    "$blink_core_output_dir/css/properties/longhands/padding_inline_start.h",
+    "$blink_core_output_dir/css/properties/longhands/padding_inline_end.h",
     "$blink_core_output_dir/css/properties/longhands/padding_left.h",
     "$blink_core_output_dir/css/properties/longhands/padding_right.h",
     "$blink_core_output_dir/css/properties/longhands/padding_top.h",
@@ -992,16 +1024,31 @@ css_properties("make_core_generated_css_shorthand_property_classes") {
   script =
       "../build/scripts/core/css/properties/make_css_property_subclasses.py"
   in_files = [ "css/properties/CSSPropertyMethods.json5" ]
-  other_inputs = [ "../build/scripts/core/css/properties/templates/css_property_subclass.h.tmpl" ]
+  other_inputs = [
+    "css/CSSProperties.json5",
+    "../build/scripts/core/css/properties/templates/css_property_subclass.h.tmpl",
+  ]
   outputs = [
     "$blink_core_output_dir/css/properties/shorthands/animation.h",
     "$blink_core_output_dir/css/properties/shorthands/background.h",
     "$blink_core_output_dir/css/properties/shorthands/background_position.h",
     "$blink_core_output_dir/css/properties/shorthands/background_repeat.h",
     "$blink_core_output_dir/css/properties/shorthands/border.h",
+    "$blink_core_output_dir/css/properties/shorthands/border_block.h",
+    "$blink_core_output_dir/css/properties/shorthands/border_block_color.h",
+    "$blink_core_output_dir/css/properties/shorthands/border_block_end.h",
+    "$blink_core_output_dir/css/properties/shorthands/border_block_start.h",
+    "$blink_core_output_dir/css/properties/shorthands/border_block_style.h",
+    "$blink_core_output_dir/css/properties/shorthands/border_block_width.h",
     "$blink_core_output_dir/css/properties/shorthands/border_bottom.h",
     "$blink_core_output_dir/css/properties/shorthands/border_color.h",
     "$blink_core_output_dir/css/properties/shorthands/border_image.h",
+    "$blink_core_output_dir/css/properties/shorthands/border_inline.h",
+    "$blink_core_output_dir/css/properties/shorthands/border_inline_color.h",
+    "$blink_core_output_dir/css/properties/shorthands/border_inline_end.h",
+    "$blink_core_output_dir/css/properties/shorthands/border_inline_start.h",
+    "$blink_core_output_dir/css/properties/shorthands/border_inline_style.h",
+    "$blink_core_output_dir/css/properties/shorthands/border_inline_width.h",
     "$blink_core_output_dir/css/properties/shorthands/border_left.h",
     "$blink_core_output_dir/css/properties/shorthands/border_radius.h",
     "$blink_core_output_dir/css/properties/shorthands/border_right.h",
@@ -1025,14 +1072,21 @@ css_properties("make_core_generated_css_shorthand_property_classes") {
     "$blink_core_output_dir/css/properties/shorthands/grid_gap.h",
     "$blink_core_output_dir/css/properties/shorthands/grid_row.h",
     "$blink_core_output_dir/css/properties/shorthands/grid_template.h",
+    "$blink_core_output_dir/css/properties/shorthands/inset.h",
+    "$blink_core_output_dir/css/properties/shorthands/inset_block.h",
+    "$blink_core_output_dir/css/properties/shorthands/inset_inline.h",
     "$blink_core_output_dir/css/properties/shorthands/list_style.h",
     "$blink_core_output_dir/css/properties/shorthands/margin.h",
+    "$blink_core_output_dir/css/properties/shorthands/margin_block.h",
+    "$blink_core_output_dir/css/properties/shorthands/margin_inline.h",
     "$blink_core_output_dir/css/properties/shorthands/marker.h",
     "$blink_core_output_dir/css/properties/shorthands/offset.h",
     "$blink_core_output_dir/css/properties/shorthands/outline.h",
     "$blink_core_output_dir/css/properties/shorthands/overflow.h",
     "$blink_core_output_dir/css/properties/shorthands/overscroll_behavior.h",
     "$blink_core_output_dir/css/properties/shorthands/padding.h",
+    "$blink_core_output_dir/css/properties/shorthands/padding_block.h",
+    "$blink_core_output_dir/css/properties/shorthands/padding_inline.h",
     "$blink_core_output_dir/css/properties/shorthands/page_break_after.h",
     "$blink_core_output_dir/css/properties/shorthands/page_break_before.h",
     "$blink_core_output_dir/css/properties/shorthands/page_break_inside.h",
@@ -1270,6 +1324,11 @@ make_names("make_core_generated_input_type_names") {
 
 make_names("make_core_generated_input_mode_names") {
   in_files = [ "editing/input_mode_names.json5" ]
+  output_dir = blink_core_output_dir
+}
+
+make_names("make_core_generated_performance_entry_names") {
+  in_files = [ "timing/performance_entry_names.json5" ]
   output_dir = blink_core_output_dir
 }
 
@@ -1533,6 +1592,7 @@ targets_generating_sources = [
   ":make_core_generated_math_ml_names",
   ":make_core_generated_media_feature_names",
   ":make_core_generated_media_type_names",
+  ":make_core_generated_performance_entry_names",
   ":make_core_generated_origin_trials",
   ":make_core_generated_style_property_shorthand",
   ":make_core_generated_svg_names",
@@ -1639,6 +1699,7 @@ jumbo_source_set("unit_tests") {
     "animation/animation_test.cc",
     "animation/animation_test_helper.cc",
     "animation/animation_test_helper.h",
+    "animation/animation_time_delta_test.cc",
     "animation/compositor_animations_test.cc",
     "animation/css/css_animations_test.cc",
     "animation/css/css_transition_data_test.cc",
@@ -1704,7 +1765,6 @@ jumbo_source_set("unit_tests") {
     "css/resolver/font_builder_test.cc",
     "css/resolver/font_style_resolver_test.cc",
     "css/resolver/match_result_test.cc",
-    "css/resolver/scoped_style_resolver_test.cc",
     "css/resolver/style_adjuster_test.cc",
     "css/rule_feature_set_test.cc",
     "css/rule_set_test.cc",
@@ -1728,7 +1788,6 @@ jumbo_source_set("unit_tests") {
     "dom/events/event_target_test.cc",
     "dom/events/listener_leak_test.cc",
     "dom/first_letter_pseudo_element_test.cc",
-    "dom/flat_tree_traversal_ng_test.cc",
     "dom/flat_tree_traversal_test.cc",
     "dom/idle_deadline_test.cc",
     "dom/layout_tree_builder_traversal_test.cc",
@@ -1821,6 +1880,7 @@ jumbo_source_set("unit_tests") {
     "frame/rotation_viewport_anchor_test.cc",
     "frame/use_counter_test.cc",
     "frame/visual_viewport_test.cc",
+    "fullscreen/scoped_allow_fullscreen_test.cc",
     "geometry/dom_matrix_test.cc",
     "html/anchor_element_metrics_test.cc",
     "html/canvas/canvas_async_blob_creator_test.cc",
@@ -1853,6 +1913,7 @@ jumbo_source_set("unit_tests") {
     "html/forms/type_ahead_test.cc",
     "html/html_content_element_test.cc",
     "html/html_dimension_test.cc",
+    "html/html_element_test.cc",
     "html/html_embed_element_test.cc",
     "html/html_frame_element_test.cc",
     "html/html_iframe_element_test.cc",
@@ -1878,7 +1939,6 @@ jumbo_source_set("unit_tests") {
     "html/media_element_filling_viewport_test.cc",
     "html/parser/atomic_html_token_test.cc",
     "html/parser/compact_html_token_test.cc",
-    "html/parser/css_preload_scanner_test.cc",
     "html/parser/html_document_parser_loading_test.cc",
     "html/parser/html_document_parser_test.cc",
     "html/parser/html_entity_parser_test.cc",
@@ -1903,12 +1963,14 @@ jumbo_source_set("unit_tests") {
     "input/scroll_snap_test.cc",
     "input/touch_action_test.cc",
     "input/touch_event_manager_test.cc",
+    "inspector/inspector_session_state_test.cc",
     "inspector/main_thread_debugger_test.cc",
     "inspector/protocol_parser_test.cc",
     "intersection_observer/intersection_observer_test.cc",
     "layout/api/selection_state_test.cc",
     "layout/collapsed_border_value_test.cc",
     "layout/custom/layout_worklet_test.cc",
+    "layout/grid_test.cc",
     "layout/jank_tracker_test.cc",
     "layout/layout_block_test.cc",
     "layout/layout_box_model_object_test.cc",
@@ -1982,16 +2044,17 @@ jumbo_source_set("unit_tests") {
     "loader/base_fetch_context_test.cc",
     "loader/document_load_timing_test.cc",
     "loader/document_loader_test.cc",
-    "loader/document_threadable_loader_test.cc",
     "loader/frame_fetch_context_test.cc",
     "loader/idleness_detector_test.cc",
     "loader/interactive_detector_test.cc",
     "loader/link_loader_test.cc",
+    "loader/long_task_detector_test.cc",
     "loader/mixed_content_checker_test.cc",
     "loader/modulescript/module_script_loader_test.cc",
     "loader/modulescript/module_tree_linker_test.cc",
     "loader/navigation_policy_test.cc",
     "loader/ping_loader_test.cc",
+    "loader/previews_resource_loading_hints_test.cc",
     "loader/programmatic_scroll_test.cc",
     "loader/progress_tracker_test.cc",
     "loader/resource/css_style_sheet_resource_test.cc",
@@ -2079,7 +2142,10 @@ jumbo_source_set("unit_tests") {
     "script/module_map_test.cc",
     "script/script_module_resolver_impl_test.cc",
     "script/script_runner_test.cc",
+    "scroll/scrollable_area_test.cc",
+    "scroll/scrollbar_theme_overlay_test.cc",
     "streams/readable_stream_operations_test.cc",
+    "streams/transform_stream_test.cc",
     "style/border_value_test.cc",
     "style/computed_style_test.cc",
     "style/filter_operations_test.cc",
@@ -2110,6 +2176,7 @@ jumbo_source_set("unit_tests") {
     "timing/performance_observer_test.cc",
     "timing/performance_resource_timing_test.cc",
     "timing/performance_test.cc",
+    "timing/time_clamper_test.cc",
     "timing/window_performance_test.cc",
     "url/url_search_params_test.cc",
     "workers/dedicated_worker_test.cc",
@@ -2143,6 +2210,18 @@ jumbo_source_set("unit_tests") {
   # crbug.com/741925
   if (!is_android) {
     deps += [ "//third_party/blink/renderer/core/mojo:unit_tests" ]
+  }
+
+  if (!is_mac) {
+    sources += [ "scroll/scroll_animator_test.cc" ]
+  }
+
+  if (use_default_render_theme) {
+    sources += [ "scroll/scrollbar_theme_aura_test.cc" ]
+  }
+
+  if (blink_animation_use_time_delta) {
+    defines = [ "BLINK_ANIMATION_USE_TIME_DELTA" ]
   }
 }
 

@@ -126,6 +126,15 @@ void LayoutSVGModelObject::AddLayerHitTestRects(
 
 void LayoutSVGModelObject::StyleDidChange(StyleDifference diff,
                                           const ComputedStyle* old_style) {
+  // Since layout depends on the bounds of the filter, we need to force layout
+  // when the filter changes. We also need to make sure paint will be
+  // performed, since if the filter changed we will not have cached result from
+  // before and thus will not flag paint in ClientLayoutChanged.
+  if (diff.FilterChanged()) {
+    SetNeedsLayoutAndFullPaintInvalidation(
+        LayoutInvalidationReason::kStyleChange);
+  }
+
   if (diff.NeedsFullLayout()) {
     SetNeedsBoundariesUpdate();
     if (diff.TransformChanged())
@@ -134,11 +143,12 @@ void LayoutSVGModelObject::StyleDidChange(StyleDifference diff,
 
   if (IsBlendingAllowed()) {
     bool has_blend_mode_changed =
-        (old_style && old_style->HasBlendMode()) == !Style()->HasBlendMode();
-    if (Parent() && has_blend_mode_changed)
+        (old_style && old_style->HasBlendMode()) == !StyleRef().HasBlendMode();
+    if (Parent() && has_blend_mode_changed) {
       Parent()->DescendantIsolationRequirementsChanged(
-          Style()->HasBlendMode() ? kDescendantIsolationRequired
-                                  : kDescendantIsolationNeedsUpdate);
+          StyleRef().HasBlendMode() ? kDescendantIsolationRequired
+                                    : kDescendantIsolationNeedsUpdate);
+    }
 
     if (has_blend_mode_changed)
       SetNeedsPaintPropertyUpdate();

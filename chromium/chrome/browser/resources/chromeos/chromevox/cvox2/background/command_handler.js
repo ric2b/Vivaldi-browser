@@ -105,6 +105,15 @@ CommandHandler.onCommand = function(command) {
       };
       chrome.windows.create(explorerPage);
       break;
+    case 'showLogPage':
+      chrome.commandLinePrivate.hasSwitch(
+          'enable-chromevox-developer-option', function(enable) {
+            if (enable) {
+              var logPage = {url: 'cvox2/background/log.html', type: 'panel'};
+              chrome.windows.create(logPage);
+            }
+          });
+      break;
     case 'decreaseTtsRate':
       CommandHandler.increaseOrDecreaseSpeechProperty_(
           cvox.AbstractTts.RATE, false);
@@ -232,6 +241,10 @@ CommandHandler.onCommand = function(command) {
     case 'disableChromeVoxArcSupportForCurrentApp':
       chrome.accessibilityPrivate.setNativeChromeVoxArcSupportForCurrentApp(
           false);
+      break;
+    case 'showTtsSettings':
+      var ttsSettings = {url: 'chrome://settings/manageAccessibility/tts'};
+      chrome.windows.create(ttsSettings);
       break;
     default:
       break;
@@ -491,6 +504,12 @@ CommandHandler.onCommand = function(command) {
           return false;
         }
 
+        if (EventSourceState.get() == EventSourceType.TOUCH_GESTURE &&
+            AutomationPredicate.editText(actionNode)) {
+          actionNode.focus();
+          return false;
+        }
+
         while (actionNode.role == RoleType.INLINE_TEXT_BOX ||
                actionNode.role == RoleType.STATIC_TEXT)
           actionNode = actionNode.parent;
@@ -608,6 +627,8 @@ CommandHandler.onCommand = function(command) {
     case 'toggleSelection':
       if (!ChromeVoxState.instance.pageSel_) {
         ChromeVoxState.instance.pageSel_ = ChromeVoxState.instance.currentRange;
+        DesktopAutomationHandler.instance.ignoreDocumentSelectionFromAction(
+            true);
       } else {
         var root = ChromeVoxState.instance.currentRange.start.node.root;
         if (root && root.anchorObject && root.focusObject) {
@@ -618,6 +639,8 @@ CommandHandler.onCommand = function(command) {
                       .format('@end_selection')
                       .withSpeechAndBraille(sel, sel, Output.EventType.NAVIGATE)
                       .go();
+          DesktopAutomationHandler.instance.ignoreDocumentSelectionFromAction(
+              false);
         }
         ChromeVoxState.instance.pageSel_ = null;
         return false;
@@ -753,6 +776,48 @@ CommandHandler.onCommand = function(command) {
       if (node)
         node.scrollForward();
       break;
+
+    // These commands are only available when invoked from touch.
+    case 'nextAtGranularity':
+    case 'previousAtGranularity':
+      var backwards = command == 'previousAtGranularity';
+      switch (GestureCommandHandler.granularity) {
+        case GestureGranularity.CHARACTER:
+          command = backwards ? 'previousCharacter' : 'nextCharacter';
+          break;
+        case GestureGranularity.WORD:
+          command = backwards ? 'previousWord' : 'nextWord';
+          break;
+        case GestureGranularity.LINE:
+          command = backwards ? 'previousLine' : 'nextLine';
+          break;
+      }
+      CommandHandler.onCommand(command);
+      return false;
+    case 'nextGranularity':
+    case 'previousGranularity':
+      var backwards = command == 'previousGranularity';
+      var gran = GestureCommandHandler.granularity;
+      var next = backwards ?
+          (--gran >= 0 ? gran : GestureGranularity.COUNT - 1) :
+          ++gran % GestureGranularity.COUNT;
+      GestureCommandHandler.granularity =
+          /** @type {GestureGranularity} */ (next);
+
+      var announce = '';
+      switch (GestureCommandHandler.granularity) {
+        case GestureGranularity.CHARACTER:
+          announce = Msgs.getMsg('character_granularity');
+          break;
+        case GestureGranularity.WORD:
+          announce = Msgs.getMsg('word_granularity');
+          break;
+        case GestureGranularity.LINE:
+          announce = Msgs.getMsg('line_granularity');
+          break;
+      }
+      cvox.ChromeVox.tts.speak(announce, cvox.QueueMode.FLUSH);
+      return false;
     default:
       return true;
   }
@@ -902,25 +967,6 @@ CommandHandler.onCommand = function(command) {
 CommandHandler.increaseOrDecreaseSpeechProperty_ = function(
     propertyName, increase) {
   cvox.ChromeVox.tts.increaseOrDecreaseProperty(propertyName, increase);
-  var announcement;
-  var valueAsPercent =
-      Math.round(cvox.ChromeVox.tts.propertyToPercentage(propertyName) * 100);
-  switch (propertyName) {
-    case cvox.AbstractTts.RATE:
-      announcement = Msgs.getMsg('announce_rate', [valueAsPercent]);
-      break;
-    case cvox.AbstractTts.PITCH:
-      announcement = Msgs.getMsg('announce_pitch', [valueAsPercent]);
-      break;
-    case cvox.AbstractTts.VOLUME:
-      announcement = Msgs.getMsg('announce_volume', [valueAsPercent]);
-      break;
-  }
-  if (announcement) {
-    cvox.ChromeVox.tts.speak(
-        announcement, cvox.QueueMode.FLUSH,
-        cvox.AbstractTts.PERSONALITY_ANNOTATION);
-  }
 };
 
 /**

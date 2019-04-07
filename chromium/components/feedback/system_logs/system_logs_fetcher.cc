@@ -9,8 +9,8 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
@@ -79,9 +79,9 @@ void SystemLogsFetcher::Fetch(SysLogsFetcherCallback callback) {
   callback_ = std::move(callback);
   for (size_t i = 0; i < data_sources_.size(); ++i) {
     VLOG(1) << "Fetching SystemLogSource: " << data_sources_[i]->source_name();
-    data_sources_[i]->Fetch(base::Bind(&SystemLogsFetcher::OnFetched,
-                                       weak_ptr_factory_.GetWeakPtr(),
-                                       data_sources_[i]->source_name()));
+    data_sources_[i]->Fetch(base::BindOnce(&SystemLogsFetcher::OnFetched,
+                                           weak_ptr_factory_.GetWeakPtr(),
+                                           data_sources_[i]->source_name()));
   }
 }
 

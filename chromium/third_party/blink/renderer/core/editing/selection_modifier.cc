@@ -26,6 +26,7 @@
 
 #include "third_party/blink/renderer/core/editing/selection_modifier.h"
 
+#include "third_party/blink/renderer/core/editing/editing_behavior.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
@@ -38,7 +39,11 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/line/inline_text_box.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_caret_position.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_offset_mapping.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_physical_fragment.h"
 #include "third_party/blink/renderer/core/page/spatial_navigation.h"
+#include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
 
 namespace blink {
 
@@ -136,22 +141,42 @@ TextDirection SelectionModifier::DirectionOfEnclosingBlock() const {
              : TextDirection::kLtr;
 }
 
-static TextDirection DirectionOf(const VisibleSelection& visible_selection) {
-  const InlineBox* start_box = nullptr;
-  const InlineBox* end_box = nullptr;
-  // Cache the VisiblePositions because visibleStart() and visibleEnd()
-  // can cause layout, which has the potential to invalidate lineboxes.
-  const VisiblePosition& start_position = visible_selection.VisibleStart();
-  const VisiblePosition& end_position = visible_selection.VisibleEnd();
-  if (start_position.IsNotNull())
-    start_box = ComputeInlineBoxPosition(start_position).inline_box;
-  if (end_position.IsNotNull())
-    end_box = ComputeInlineBoxPosition(end_position).inline_box;
-  if (start_box && end_box && start_box->Direction() == end_box->Direction())
-    return start_box->Direction();
+namespace {
+
+base::Optional<TextDirection> DirectionAt(const VisiblePosition& position) {
+  if (position.IsNull())
+    return base::nullopt;
+  const PositionWithAffinity adjusted = ComputeInlineAdjustedPosition(position);
+  if (adjusted.IsNull())
+    return base::nullopt;
+
+  if (NGInlineFormattingContextOf(adjusted.GetPosition())) {
+    if (const NGPaintFragment* fragment =
+            ComputeNGCaretPosition(adjusted).fragment)
+      return fragment->PhysicalFragment().ResolvedDirection();
+    return base::nullopt;
+  }
+
+  if (const InlineBox* box =
+          ComputeInlineBoxPositionForInlineAdjustedPosition(adjusted)
+              .inline_box)
+    return box->Direction();
+  return base::nullopt;
+}
+
+TextDirection DirectionOf(const VisibleSelection& visible_selection) {
+  base::Optional<TextDirection> maybe_start_direction =
+      DirectionAt(visible_selection.VisibleStart());
+  base::Optional<TextDirection> maybe_end_direction =
+      DirectionAt(visible_selection.VisibleEnd());
+  if (maybe_start_direction.has_value() && maybe_end_direction.has_value() &&
+      maybe_start_direction.value() == maybe_end_direction.value())
+    return maybe_start_direction.value();
 
   return DirectionOfEnclosingBlockOf(visible_selection.Extent());
 }
+
+}  // namespace
 
 TextDirection SelectionModifier::DirectionOfSelection() const {
   return DirectionOf(selection_);

@@ -8,8 +8,8 @@
 #include <stdint.h>
 
 #include <memory>
-#include <set>
 #include <string>
+#include <unordered_map>
 
 #include "base/logging.h"
 #include "base/macros.h"
@@ -127,6 +127,9 @@ class ExtensionHost : public DeferredStartRenderHost,
                                   const GURL& security_origin,
                                   content::MediaStreamType type) override;
   bool IsNeverVisible(content::WebContents* web_contents) override;
+  gfx::Size EnterPictureInPicture(const viz::SurfaceId& surface_id,
+                                  const gfx::Size& natural_size) override;
+  void ExitPictureInPicture() override;
 
   // ExtensionRegistryObserver:
   void OnExtensionReady(content::BrowserContext* browser_context,
@@ -197,7 +200,8 @@ class ExtensionHost : public DeferredStartRenderHost,
   GURL initial_url_;
 
   // Messages sent out to the renderer that have not been acknowledged yet.
-  std::set<int> unacked_messages_;
+  // Maps event ID to event name.
+  std::unordered_map<int, std::string> unacked_messages_;
 
   // The type of view being hosted.
   ViewType extension_host_type_;
@@ -213,8 +217,8 @@ class ExtensionHost : public DeferredStartRenderHost,
   // started only once the ExtensionHost has exited the ExtensionHostQueue.
   std::unique_ptr<base::ElapsedTimer> load_start_;
 
-  base::ObserverList<ExtensionHostObserver> observer_list_;
-  base::ObserverList<DeferredStartRenderHostObserver>
+  base::ObserverList<ExtensionHostObserver>::Unchecked observer_list_;
+  base::ObserverList<DeferredStartRenderHostObserver>::Unchecked
       deferred_start_render_host_observer_list_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionHost);

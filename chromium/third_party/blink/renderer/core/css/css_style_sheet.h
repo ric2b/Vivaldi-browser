@@ -53,7 +53,6 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
  public:
   static const Document* SingleOwnerDocument(const CSSStyleSheet*);
 
-  static CSSStyleSheet* Create(Document&, ExceptionState&);
   static CSSStyleSheet* Create(Document&,
                                const CSSStyleSheetInit&,
                                ExceptionState&);
@@ -127,14 +126,6 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
   void SetAllowRuleAccessFromOrigin(
       scoped_refptr<const SecurityOrigin> allowed_origin);
 
-  void AddedConstructedToTreeScope(TreeScope* tree_scope) {
-    constructed_tree_scopes_.insert(tree_scope);
-  }
-
-  void RemovedConstructedFromTreeScope(TreeScope* tree_scope) {
-    constructed_tree_scopes_.erase(tree_scope);
-  }
-
   class RuleMutationScope {
     STACK_ALLOCATED();
 
@@ -204,6 +195,11 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
   FRIEND_TEST_ALL_PREFIXES(
       CSSStyleSheetTest,
       CSSStyleSheetConstructionWithNonEmptyCSSStyleSheetInit);
+  FRIEND_TEST_ALL_PREFIXES(CSSStyleSheetTest,
+                           CreateEmptyCSSStyleSheetWithEmptyCSSStyleSheetInit);
+  FRIEND_TEST_ALL_PREFIXES(
+      CSSStyleSheetTest,
+      CreateEmptyCSSStyleSheetWithNonEmptyCSSStyleSheetInit);
   FRIEND_TEST_ALL_PREFIXES(
       CSSStyleSheetTest,
       CreateCSSStyleSheetWithEmptyCSSStyleSheetInitAndText);
@@ -230,7 +226,6 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
 
   Member<Node> owner_node_;
   Member<CSSRule> owner_rule_;
-  HeapHashSet<Member<TreeScope>> constructed_tree_scopes_;
 
   TextPosition start_position_;
   Member<MediaList> media_cssom_wrapper_;

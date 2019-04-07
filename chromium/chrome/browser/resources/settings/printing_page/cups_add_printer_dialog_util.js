@@ -1,104 +1,71 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/** 'add-printers-list' is the list of discovered printers. */
-Polymer({
-  is: 'add-printer-list',
+/**
+ * @fileoverview  Utility functions that are used in Cups printer setup dialogs.
+ */
 
-  properties: {
-    /** @type {!Array<!CupsPrinterInfo>} */
-    printers: {
-      type: Array,
-      notify: true,
-    },
+cr.define('settings.printing', function() {
+  /**
+   * Returns true if the printer's name and address is valid. This function
+   * uses regular expressions to determine whether the provided printer name
+   * and address are valid. Address can be either an ipv4/6 address or a
+   * hostname followed by an optional port.
+   * NOTE: The regular expression for hostnames will allow hostnames that are
+   * over 255 characters.
+   * @param {string} name
+   * @param {string} address
+   * @return {boolean}
+   */
+  function isNameAndAddressValid(name, address) {
+    if (!name || !address)
+      return false;
 
-    /** @type {!CupsPrinterInfo} */
-    selectedPrinter: {
-      type: Object,
-      notify: true,
-    },
-  },
+    const hostnamePrefix = '([a-z\\d]|[a-z\\d][a-z\\d\\-]{0,61}[a-z\\d])';
+
+    // Matches an arbitrary number of 'prefix patterns' which are separated by a
+    // dot.
+    const hostnameSuffix = `(\\.${hostnamePrefix})*`;
+
+    // Matches an optional port at the end of the address.
+    const portNumber = '(:\\d+)?';
+
+    const ipv6Full = '(([a-f\\d]){1,4}(:(:)?([a-f\\d]){1,4}){1,7})';
+
+    // Special cases for addresses using a shorthand notation.
+    const ipv6Prefix = '(::([a-f\\d]){1,4})';
+    const ipv6Suffix = '(([a-f\\d]){1,4}::)';
+    const ipv6Combined = `(${ipv6Full}|${ipv6Prefix}|${ipv6Suffix})`;
+    const ipv6WithPort = `(\\[${ipv6Combined}\\]${portNumber})`;
+
+    // Matches valid hostnames and ipv4 addresses.
+    const hostnameRegex =
+        new RegExp(`^${hostnamePrefix}${hostnameSuffix}${portNumber}$`, 'i');
+
+    // Matches valid ipv6 addresses.
+    const ipv6AddressRegex =
+        new RegExp(`^(${ipv6Combined}|${ipv6WithPort})$`, 'i');
+
+    const invalidIpv6Regex = new RegExp('.*::.*::.*');
+
+    return hostnameRegex.test(address) ||
+        (ipv6AddressRegex.test(address) && !invalidIpv6Regex.test(address));
+  }
 
   /**
-   * @param {{model:Object}} event
-   * @private
+   * Returns true if the printer's manufacturer and model or ppd path is valid.
+   * @param {string} manufacturer
+   * @param {string} model
+   * @param {string} ppdPath
+   * @return {boolean}
    */
-  onSelect_: function(event) {
-    this.selectedPrinter = event.model.item;
-  },
-});
+  function isPPDInfoValid(manufacturer, model, ppdPath) {
+    return !!((manufacturer && model) || ppdPath);
+  }
 
-/** 'drop-down-search-box' implements a search box with suggestions dropdown. */
-Polymer({
-  is: 'drop-down-search-box',
-
-  properties: {
-    /** @type {!Array<string>} */
-    items: {
-      type: Array,
-    },
-
-    /** @type {string} */
-    value: {
-      type: String,
-      notify: true,
-    },
-
-    /** @private {string} */
-    searchTerm_: String,
-
-    label: String,
-  },
-
-  /**
-   * @param {!Event} event
-   * @private
-   */
-  onClick_: function(event) {
-    this.$$('iron-dropdown').open();
-  },
-
-  /** @private */
-  onInputValueChanged_: function() {
-    this.searchTerm_ = this.$.search.value;
-  },
-
-  /**
-   * @param {{model:Object}} event
-   * @private
-   */
-  onSelect_: function(event) {
-    this.$$('iron-dropdown').close();
-
-    this.value = event.model.item;
-    this.searchTerm_ = '';
-  },
-
-  /** @private */
-  filterItems_: function(searchTerm) {
-    if (!searchTerm)
-      return null;
-    return function(item) {
-      return item.toLowerCase().includes(searchTerm.toLowerCase());
-    };
-  },
-});
-
-/** 'add-printer-dialog' is the template of the Add Printer dialog. */
-Polymer({
-  is: 'add-printer-dialog',
-
-  behaviors: [
-    CrScrollableBehavior,
-  ],
-
-  /** @private */
-  attached: function() {
-    this.$.dialog.showModal();
-  },
-
-  close: function() {
-    this.$.dialog.close();
-  },
+  return {
+    isNameAndAddressValid: isNameAndAddressValid,
+    isPPDInfoValid: isPPDInfoValid,
+  };
 });

@@ -8,17 +8,34 @@
 #include "ash/shell.h"
 #include "ash/wm/non_client_frame_controller.h"
 #include "ash/ws/window_service_delegate_impl.h"
+#include "base/lazy_instance.h"
 #include "services/service_manager/public/cpp/service_context.h"
-#include "services/ui/ws2/gpu_interface_provider.h"
-#include "services/ui/ws2/window_service.h"
+#include "services/ws/gpu_interface_provider.h"
+#include "services/ws/window_service.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/wm/core/focus_controller.h"
 
 namespace ash {
 
 WindowServiceOwner::WindowServiceOwner(
-    std::unique_ptr<ui::ws2::GpuInterfaceProvider> gpu_interface_provider)
-    : gpu_interface_provider_(std::move(gpu_interface_provider)) {}
+    std::unique_ptr<ws::GpuInterfaceProvider> gpu_interface_provider)
+    : window_service_delegate_(std::make_unique<WindowServiceDelegateImpl>()),
+      owned_window_service_(
+          std::make_unique<ws::WindowService>(window_service_delegate_.get(),
+                                              std::move(gpu_interface_provider),
+                                              Shell::Get()->focus_controller(),
+                                              !::features::IsMultiProcessMash(),
+                                              Shell::Get()->aura_env())),
+      window_service_(owned_window_service_.get()) {
+  window_service_->SetFrameDecorationValues(
+      NonClientFrameController::GetPreferredClientAreaInsets(),
+      NonClientFrameController::GetMaxTitleBarButtonWidth());
+  window_service_->SetDisplayForNewWindows(
+      display::Screen::GetScreen()->GetDisplayForNewWindows().id());
+  RegisterWindowProperties(window_service_->property_converter());
+}
 
 WindowServiceOwner::~WindowServiceOwner() = default;
 
@@ -26,21 +43,11 @@ void WindowServiceOwner::BindWindowService(
     service_manager::mojom::ServiceRequest request) {
   // This should only be called once. If called more than once it means the
   // WindowService lost its connection to the service_manager, which triggered
-  // a new connection WindowService to be created. That should never happen.
+  // a new WindowService to be created. That should never happen.
   DCHECK(!service_context_);
 
-  window_service_delegate_ = std::make_unique<WindowServiceDelegateImpl>();
-  std::unique_ptr<ui::ws2::WindowService> window_service =
-      std::make_unique<ui::ws2::WindowService>(
-          window_service_delegate_.get(), std::move(gpu_interface_provider_),
-          Shell::Get()->focus_controller(), features::IsAshInBrowserProcess());
-  window_service_ = window_service.get();
-  window_service_->SetFrameDecorationValues(
-      NonClientFrameController::GetPreferredClientAreaInsets(),
-      NonClientFrameController::GetMaxTitleBarButtonWidth());
-  RegisterWindowProperties(window_service_->property_converter());
   service_context_ = std::make_unique<service_manager::ServiceContext>(
-      std::move(window_service), std::move(request));
+      std::move(owned_window_service_), std::move(request));
 }
 
 }  // namespace ash

@@ -10,16 +10,19 @@
 #include <memory>
 #include <utility>
 
+#include <va/va.h>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
-#include "gpu/ipc/service/gpu_channel.h"
+#include "media/base/bitstream_buffer.h"
 #include "media/base/unaligned_shared_memory.h"
 #include "media/base/video_frame.h"
 #include "media/filters/jpeg_parser.h"
 #include "media/gpu/vaapi/vaapi_picture.h"
+#include "media/gpu/vaapi/vaapi_wrapper.h"
 #include "third_party/libyuv/include/libyuv.h"
 
 #define VLOGF(level) VLOG(level) << __func__ << "(): "
@@ -78,40 +81,184 @@ static unsigned int VaSurfaceFormatForJpeg(
   return 0;
 }
 
+// VAAPI only supports a subset of JPEG profiles. This function determines
+// whether a given parsed JPEG result is supported or not.
+static bool IsVaapiSupportedJpeg(const JpegParseResult& jpeg) {
+  if (jpeg.frame_header.visible_width < 1 ||
+      jpeg.frame_header.visible_height < 1) {
+    DLOG(ERROR) << "width(" << jpeg.frame_header.visible_width
+                << ") and height(" << jpeg.frame_header.visible_height
+                << ") should be at least 1";
+    return false;
+  }
+
+  // Size 64k*64k is the maximum in the JPEG standard. VAAPI doesn't support
+  // resolutions larger than 16k*16k.
+  const int kMaxDimension = 16384;
+  if (jpeg.frame_header.coded_width > kMaxDimension ||
+      jpeg.frame_header.coded_height > kMaxDimension) {
+    DLOG(ERROR) << "VAAPI doesn't support size("
+                << jpeg.frame_header.coded_width << "*"
+                << jpeg.frame_header.coded_height << ") larger than "
+                << kMaxDimension << "*" << kMaxDimension;
+    return false;
+  }
+
+  if (jpeg.frame_header.num_components != 3) {
+    DLOG(ERROR) << "VAAPI doesn't support num_components("
+                << static_cast<int>(jpeg.frame_header.num_components)
+                << ") != 3";
+    return false;
+  }
+
+  if (jpeg.frame_header.components[0].horizontal_sampling_factor <
+          jpeg.frame_header.components[1].horizontal_sampling_factor ||
+      jpeg.frame_header.components[0].horizontal_sampling_factor <
+          jpeg.frame_header.components[2].horizontal_sampling_factor) {
+    DLOG(ERROR) << "VAAPI doesn't supports horizontal sampling factor of Y"
+                << " smaller than Cb and Cr";
+    return false;
+  }
+
+  if (jpeg.frame_header.components[0].vertical_sampling_factor <
+          jpeg.frame_header.components[1].vertical_sampling_factor ||
+      jpeg.frame_header.components[0].vertical_sampling_factor <
+          jpeg.frame_header.components[2].vertical_sampling_factor) {
+    DLOG(ERROR) << "VAAPI doesn't supports vertical sampling factor of Y"
+                << " smaller than Cb and Cr";
+    return false;
+  }
+
+  return true;
+}
+
+static void FillPictureParameters(
+    const JpegFrameHeader& frame_header,
+    VAPictureParameterBufferJPEGBaseline* pic_param) {
+  memset(pic_param, 0, sizeof(*pic_param));
+  pic_param->picture_width = frame_header.coded_width;
+  pic_param->picture_height = frame_header.coded_height;
+  pic_param->num_components = frame_header.num_components;
+
+  for (int i = 0; i < pic_param->num_components; i++) {
+    pic_param->components[i].component_id = frame_header.components[i].id;
+    pic_param->components[i].h_sampling_factor =
+        frame_header.components[i].horizontal_sampling_factor;
+    pic_param->components[i].v_sampling_factor =
+        frame_header.components[i].vertical_sampling_factor;
+    pic_param->components[i].quantiser_table_selector =
+        frame_header.components[i].quantization_table_selector;
+  }
+}
+
+static void FillIQMatrix(const JpegQuantizationTable* q_table,
+                         VAIQMatrixBufferJPEGBaseline* iq_matrix) {
+  memset(iq_matrix, 0, sizeof(*iq_matrix));
+  static_assert(kJpegMaxQuantizationTableNum ==
+                    base::size(decltype(iq_matrix->load_quantiser_table){}),
+                "max number of quantization table mismatched");
+  static_assert(
+      sizeof(iq_matrix->quantiser_table[0]) == sizeof(q_table[0].value),
+      "number of quantization entries mismatched");
+  for (size_t i = 0; i < kJpegMaxQuantizationTableNum; i++) {
+    if (!q_table[i].valid)
+      continue;
+    iq_matrix->load_quantiser_table[i] = 1;
+    for (size_t j = 0; j < base::size(q_table[i].value); j++)
+      iq_matrix->quantiser_table[i][j] = q_table[i].value[j];
+  }
+}
+
+static void FillHuffmanTable(const JpegHuffmanTable* dc_table,
+                             const JpegHuffmanTable* ac_table,
+                             VAHuffmanTableBufferJPEGBaseline* huffman_table) {
+  memset(huffman_table, 0, sizeof(*huffman_table));
+  // Use default huffman tables if not specified in header.
+  bool has_huffman_table = false;
+  for (size_t i = 0; i < kJpegMaxHuffmanTableNumBaseline; i++) {
+    if (dc_table[i].valid || ac_table[i].valid) {
+      has_huffman_table = true;
+      break;
+    }
+  }
+  if (!has_huffman_table) {
+    dc_table = kDefaultDcTable;
+    ac_table = kDefaultAcTable;
+  }
+
+  static_assert(kJpegMaxHuffmanTableNumBaseline ==
+                    base::size(decltype(huffman_table->load_huffman_table){}),
+                "max number of huffman table mismatched");
+  static_assert(sizeof(huffman_table->huffman_table[0].num_dc_codes) ==
+                    sizeof(dc_table[0].code_length),
+                "size of huffman table code length mismatch");
+  static_assert(sizeof(huffman_table->huffman_table[0].dc_values[0]) ==
+                    sizeof(dc_table[0].code_value[0]),
+                "size of huffman table code value mismatch");
+  for (size_t i = 0; i < kJpegMaxHuffmanTableNumBaseline; i++) {
+    if (!dc_table[i].valid || !ac_table[i].valid)
+      continue;
+    huffman_table->load_huffman_table[i] = 1;
+
+    memcpy(huffman_table->huffman_table[i].num_dc_codes,
+           dc_table[i].code_length,
+           sizeof(huffman_table->huffman_table[i].num_dc_codes));
+    memcpy(huffman_table->huffman_table[i].dc_values, dc_table[i].code_value,
+           sizeof(huffman_table->huffman_table[i].dc_values));
+    memcpy(huffman_table->huffman_table[i].num_ac_codes,
+           ac_table[i].code_length,
+           sizeof(huffman_table->huffman_table[i].num_ac_codes));
+    memcpy(huffman_table->huffman_table[i].ac_values, ac_table[i].code_value,
+           sizeof(huffman_table->huffman_table[i].ac_values));
+  }
+}
+
+static void FillSliceParameters(
+    const JpegParseResult& parse_result,
+    VASliceParameterBufferJPEGBaseline* slice_param) {
+  memset(slice_param, 0, sizeof(*slice_param));
+  slice_param->slice_data_size = parse_result.data_size;
+  slice_param->slice_data_offset = 0;
+  slice_param->slice_data_flag = VA_SLICE_DATA_FLAG_ALL;
+  slice_param->slice_horizontal_position = 0;
+  slice_param->slice_vertical_position = 0;
+  slice_param->num_components = parse_result.scan.num_components;
+  for (int i = 0; i < slice_param->num_components; i++) {
+    slice_param->components[i].component_selector =
+        parse_result.scan.components[i].component_selector;
+    slice_param->components[i].dc_table_selector =
+        parse_result.scan.components[i].dc_selector;
+    slice_param->components[i].ac_table_selector =
+        parse_result.scan.components[i].ac_selector;
+  }
+  slice_param->restart_interval = parse_result.restart_interval;
+
+  // Cast to int to prevent overflow.
+  int max_h_factor =
+      parse_result.frame_header.components[0].horizontal_sampling_factor;
+  int max_v_factor =
+      parse_result.frame_header.components[0].vertical_sampling_factor;
+  int mcu_cols = parse_result.frame_header.coded_width / (max_h_factor * 8);
+  DCHECK_GT(mcu_cols, 0);
+  int mcu_rows = parse_result.frame_header.coded_height / (max_v_factor * 8);
+  DCHECK_GT(mcu_rows, 0);
+  slice_param->num_mcus = mcu_rows * mcu_cols;
+}
+
 }  // namespace
-
-// An input buffer and the corresponding output video frame awaiting
-// consumption, provided by the client.
-struct VaapiJpegDecodeAccelerator::DecodeRequest {
-  DecodeRequest(int32_t bitstream_buffer_id,
-                std::unique_ptr<UnalignedSharedMemory> shm,
-                const scoped_refptr<VideoFrame>& video_frame)
-      : bitstream_buffer_id(bitstream_buffer_id),
-        shm(std::move(shm)),
-        video_frame(video_frame) {}
-  ~DecodeRequest() = default;
-
-  int32_t bitstream_buffer_id;
-  std::unique_ptr<UnalignedSharedMemory> shm;
-  scoped_refptr<VideoFrame> video_frame;
-};
 
 void VaapiJpegDecodeAccelerator::NotifyError(int32_t bitstream_buffer_id,
                                              Error error) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  if (!task_runner_->BelongsToCurrentThread()) {
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&VaapiJpegDecodeAccelerator::NotifyError,
+                                  weak_this_factory_.GetWeakPtr(),
+                                  bitstream_buffer_id, error));
+    return;
+  }
   VLOGF(1) << "Notifying of error " << error;
   DCHECK(client_);
   client_->NotifyError(bitstream_buffer_id, error);
-}
-
-void VaapiJpegDecodeAccelerator::NotifyErrorFromDecoderThread(
-    int32_t bitstream_buffer_id,
-    Error error) {
-  DCHECK(decoder_task_runner_->BelongsToCurrentThread());
-  task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&VaapiJpegDecodeAccelerator::NotifyError,
-                                weak_this_factory_.GetWeakPtr(),
-                                bitstream_buffer_id, error));
 }
 
 void VaapiJpegDecodeAccelerator::VideoFrameReady(int32_t bitstream_buffer_id) {
@@ -123,8 +270,10 @@ VaapiJpegDecodeAccelerator::VaapiJpegDecodeAccelerator(
     const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner)
     : task_runner_(base::ThreadTaskRunnerHandle::Get()),
       io_task_runner_(io_task_runner),
+      client_(nullptr),
       decoder_thread_("VaapiJpegDecoderThread"),
       va_surface_id_(VA_INVALID_SURFACE),
+      va_rt_format_(0),
       weak_this_factory_(this) {}
 
 VaapiJpegDecodeAccelerator::~VaapiJpegDecodeAccelerator() {
@@ -140,6 +289,21 @@ bool VaapiJpegDecodeAccelerator::Initialize(Client* client) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   client_ = client;
+
+  // Set the image format that will be requested from the VA API. Currently we
+  // always use I420, as this is the expected output format.
+  // TODO(crbug.com/828119): Try a list of possible supported formats rather
+  // than hardcoding the format to I420 here.
+  va_image_format_ = base::WrapUnique(new VAImageFormat{});
+  va_image_format_->fourcc = VA_FOURCC_I420;
+  va_image_format_->byte_order = VA_LSB_FIRST;
+  va_image_format_->bits_per_pixel = 12;
+
+  if (!VaapiWrapper::IsImageFormatSupported(*va_image_format_)) {
+    VLOGF(1) << "I420 image format not supported";
+    va_image_format_.reset();
+    return false;
+  }
 
   vaapi_wrapper_ =
       VaapiWrapper::Create(VaapiWrapper::kDecode, VAProfileJPEGBaseline,
@@ -173,14 +337,11 @@ bool VaapiJpegDecodeAccelerator::OutputPicture(
             << input_buffer_id;
 
   VAImage image = {};
-  VAImageFormat format = {};
-  format.fourcc = VA_FOURCC_I420;
-  format.byte_order = VA_LSB_FIRST;
-  format.bits_per_pixel = 12;  // 12 for I420
-
   uint8_t* mem = nullptr;
   gfx::Size coded_size = video_frame->coded_size();
-  if (!vaapi_wrapper_->GetVaImage(va_surface_id, &format, coded_size, &image,
+  DCHECK(va_image_format_);
+  if (!vaapi_wrapper_->GetVaImage(va_surface_id, va_image_format_.get(),
+                                  coded_size, &image,
                                   reinterpret_cast<void**>(&mem))) {
     VLOGF(1) << "Cannot get VAImage";
     return false;
@@ -226,18 +387,18 @@ bool VaapiJpegDecodeAccelerator::OutputPicture(
 }
 
 void VaapiJpegDecodeAccelerator::DecodeTask(
-    std::unique_ptr<DecodeRequest> request) {
+    int32_t bitstream_buffer_id,
+    std::unique_ptr<UnalignedSharedMemory> shm,
+    scoped_refptr<VideoFrame> video_frame) {
   DVLOGF(4);
   DCHECK(decoder_task_runner_->BelongsToCurrentThread());
   TRACE_EVENT0("jpeg", "DecodeTask");
 
   JpegParseResult parse_result;
-  if (!ParseJpegPicture(
-          reinterpret_cast<const uint8_t*>(request->shm->memory()),
-          request->shm->size(), &parse_result)) {
+  if (!ParseJpegPicture(static_cast<const uint8_t*>(shm->memory()), shm->size(),
+                        &parse_result)) {
     VLOGF(1) << "ParseJpegPicture failed";
-    NotifyErrorFromDecoderThread(request->bitstream_buffer_id,
-                                 PARSE_JPEG_FAILED);
+    NotifyError(bitstream_buffer_id, PARSE_JPEG_FAILED);
     return;
   }
 
@@ -245,8 +406,7 @@ void VaapiJpegDecodeAccelerator::DecodeTask(
       VaSurfaceFormatForJpeg(parse_result.frame_header);
   if (!new_va_rt_format) {
     VLOGF(1) << "Unsupported subsampling";
-    NotifyErrorFromDecoderThread(request->bitstream_buffer_id,
-                                 UNSUPPORTED_JPEG);
+    NotifyError(bitstream_buffer_id, UNSUPPORTED_JPEG);
     return;
   }
 
@@ -263,27 +423,22 @@ void VaapiJpegDecodeAccelerator::DecodeTask(
     if (!vaapi_wrapper_->CreateSurfaces(va_rt_format_, new_coded_size, 1,
                                         &va_surfaces)) {
       VLOGF(1) << "Create VA surface failed";
-      NotifyErrorFromDecoderThread(request->bitstream_buffer_id,
-                                   PLATFORM_FAILURE);
+      NotifyError(bitstream_buffer_id, PLATFORM_FAILURE);
       return;
     }
     va_surface_id_ = va_surfaces[0];
     coded_size_ = new_coded_size;
   }
 
-  if (!VaapiJpegDecoder::Decode(vaapi_wrapper_.get(), parse_result,
-                                va_surface_id_)) {
+  if (!DoDecode(vaapi_wrapper_.get(), parse_result, va_surface_id_)) {
     VLOGF(1) << "Decode JPEG failed";
-    NotifyErrorFromDecoderThread(request->bitstream_buffer_id,
-                                 PLATFORM_FAILURE);
+    NotifyError(bitstream_buffer_id, PLATFORM_FAILURE);
     return;
   }
 
-  if (!OutputPicture(va_surface_id_, request->bitstream_buffer_id,
-                     request->video_frame)) {
+  if (!OutputPicture(va_surface_id_, bitstream_buffer_id, video_frame)) {
     VLOGF(1) << "Output picture failed";
-    NotifyErrorFromDecoderThread(request->bitstream_buffer_id,
-                                 PLATFORM_FAILURE);
+    NotifyError(bitstream_buffer_id, PLATFORM_FAILURE);
     return;
   }
 }
@@ -303,27 +458,73 @@ void VaapiJpegDecodeAccelerator::Decode(
 
   if (bitstream_buffer.id() < 0) {
     VLOGF(1) << "Invalid bitstream_buffer, id: " << bitstream_buffer.id();
-    NotifyErrorFromDecoderThread(bitstream_buffer.id(), INVALID_ARGUMENT);
+    NotifyError(bitstream_buffer.id(), INVALID_ARGUMENT);
     return;
   }
 
   if (!shm->MapAt(bitstream_buffer.offset(), bitstream_buffer.size())) {
     VLOGF(1) << "Failed to map input buffer";
-    NotifyErrorFromDecoderThread(bitstream_buffer.id(), UNREADABLE_INPUT);
+    NotifyError(bitstream_buffer.id(), UNREADABLE_INPUT);
     return;
   }
 
-  std::unique_ptr<DecodeRequest> request(
-      new DecodeRequest(bitstream_buffer.id(), std::move(shm), video_frame));
-
+  // It's safe to use base::Unretained(this) because |decoder_task_runner_| runs
+  // tasks on |decoder_thread_| which is stopped in the destructor of |this|.
   decoder_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&VaapiJpegDecodeAccelerator::DecodeTask,
-                     base::Unretained(this), base::Passed(std::move(request))));
+      FROM_HERE, base::BindOnce(&VaapiJpegDecodeAccelerator::DecodeTask,
+                                base::Unretained(this), bitstream_buffer.id(),
+                                std::move(shm), std::move(video_frame)));
 }
 
 bool VaapiJpegDecodeAccelerator::IsSupported() {
   return VaapiWrapper::IsJpegDecodeSupported();
+}
+
+// static
+bool VaapiJpegDecodeAccelerator::DoDecode(VaapiWrapper* vaapi_wrapper,
+                                          const JpegParseResult& parse_result,
+                                          VASurfaceID va_surface) {
+  DCHECK_NE(va_surface, VA_INVALID_SURFACE);
+  if (!IsVaapiSupportedJpeg(parse_result))
+    return false;
+
+  // Set picture parameters.
+  VAPictureParameterBufferJPEGBaseline pic_param;
+  FillPictureParameters(parse_result.frame_header, &pic_param);
+  if (!vaapi_wrapper->SubmitBuffer(VAPictureParameterBufferType, &pic_param)) {
+    return false;
+  }
+
+  // Set quantization table.
+  VAIQMatrixBufferJPEGBaseline iq_matrix;
+  FillIQMatrix(parse_result.q_table, &iq_matrix);
+  if (!vaapi_wrapper->SubmitBuffer(VAIQMatrixBufferType, &iq_matrix)) {
+    return false;
+  }
+
+  // Set huffman table.
+  VAHuffmanTableBufferJPEGBaseline huffman_table;
+  FillHuffmanTable(parse_result.dc_table, parse_result.ac_table,
+                   &huffman_table);
+  if (!vaapi_wrapper->SubmitBuffer(VAHuffmanTableBufferType, &huffman_table)) {
+    return false;
+  }
+
+  // Set slice parameters.
+  VASliceParameterBufferJPEGBaseline slice_param;
+  FillSliceParameters(parse_result, &slice_param);
+  if (!vaapi_wrapper->SubmitBuffer(VASliceParameterBufferType, &slice_param)) {
+    return false;
+  }
+
+  // Set scan data.
+  if (!vaapi_wrapper->SubmitBuffer(VASliceDataBufferType,
+                                   parse_result.data_size,
+                                   const_cast<char*>(parse_result.data))) {
+    return false;
+  }
+
+  return vaapi_wrapper->ExecuteAndDestroyPendingBuffers(va_surface);
 }
 
 }  // namespace media

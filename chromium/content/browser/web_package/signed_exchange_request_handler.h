@@ -12,10 +12,6 @@
 #include "content/public/common/resource_type.h"
 #include "url/origin.h"
 
-namespace net {
-class URLRequestContextGetter;
-}  // namespace net
-
 namespace network {
 class SharedURLLoaderFactory;
 }  // namespace network
@@ -42,14 +38,15 @@ class SignedExchangeRequestHandler final : public NavigationLoaderInterceptor {
       bool report_raw_headers,
       int load_flags,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      URLLoaderThrottlesGetter url_loader_throttles_getter,
-      scoped_refptr<net::URLRequestContextGetter> request_context_getter);
+      URLLoaderThrottlesGetter url_loader_throttles_getter);
   ~SignedExchangeRequestHandler() override;
 
   // NavigationLoaderInterceptor implementation
-  void MaybeCreateLoader(const network::ResourceRequest& resource_request,
-                         ResourceContext* resource_context,
-                         LoaderCallback callback) override;
+  void MaybeCreateLoader(
+      const network::ResourceRequest& tentative_resource_request,
+      ResourceContext* resource_context,
+      LoaderCallback callback,
+      FallbackCallback fallback_callback) override;
   bool MaybeCreateLoaderForResponse(
       const network::ResourceResponseHead& response,
       network::mojom::URLLoaderPtr* loader,
@@ -57,7 +54,8 @@ class SignedExchangeRequestHandler final : public NavigationLoaderInterceptor {
       ThrottlingURLLoader* url_loader) override;
 
  private:
-  void StartResponse(network::mojom::URLLoaderRequest request,
+  void StartResponse(const network::ResourceRequest& resource_request,
+                     network::mojom::URLLoaderRequest request,
                      network::mojom::URLLoaderClientPtr client);
 
   // Valid after MaybeCreateLoaderForResponse intercepts the request and until
@@ -75,7 +73,6 @@ class SignedExchangeRequestHandler final : public NavigationLoaderInterceptor {
   const int load_flags_;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   URLLoaderThrottlesGetter url_loader_throttles_getter_;
-  scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
 
   base::WeakPtrFactory<SignedExchangeRequestHandler> weak_factory_;
 

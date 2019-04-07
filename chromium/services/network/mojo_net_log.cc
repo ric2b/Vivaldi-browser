@@ -9,8 +9,8 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/values.h"
 #include "net/log/file_net_log_observer.h"
 #include "net/log/net_log_util.h"
@@ -21,27 +21,24 @@
 
 namespace network {
 
-MojoNetLog::MojoNetLog() {}
+MojoNetLog::MojoNetLog() = default;
+MojoNetLog::~MojoNetLog() = default;
 
-MojoNetLog::~MojoNetLog() {
-  if (file_net_log_observer_)
+void MojoNetLog::ShutDown() {
+  if (file_net_log_observer_) {
     file_net_log_observer_->StopObserving(nullptr /*polled_data*/,
                                           base::OnceClosure());
+  }
 }
 
-void MojoNetLog::ProcessCommandLine(const base::CommandLine& command_line) {
-  if (!command_line.HasSwitch(switches::kLogNetLog))
-    return;
-
-  base::FilePath log_path =
-      command_line.GetSwitchValuePath(switches::kLogNetLog);
-
+void MojoNetLog::ObserveFileWithConstants(base::File file,
+                                          base::Value constants) {
   // TODO(eroman): Should get capture mode from the command line.
   net::NetLogCaptureMode capture_mode =
       net::NetLogCaptureMode::IncludeCookiesAndCredentials();
 
-  file_net_log_observer_ = net::FileNetLogObserver::CreateUnbounded(
-      log_path, nullptr /* constants */);
+  file_net_log_observer_ = net::FileNetLogObserver::CreateUnboundedPreExisting(
+      std::move(file), std::make_unique<base::Value>(std::move(constants)));
   file_net_log_observer_->StartObserving(this, capture_mode);
 }
 

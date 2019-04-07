@@ -313,8 +313,8 @@ void TestRunnerForSpecificView::GetBluetoothManualChooserEvents(
   return delegate()->GetBluetoothManualChooserEvents(base::BindOnce(
       &TestRunnerForSpecificView::GetBluetoothManualChooserEventsCallback,
       weak_factory_.GetWeakPtr(),
-      base::Passed(v8::UniquePersistent<v8::Function>(
-          blink::MainThreadIsolate(), callback))));
+      v8::UniquePersistent<v8::Function>(blink::MainThreadIsolate(),
+                                         callback)));
 }
 
 void TestRunnerForSpecificView::GetBluetoothManualChooserEventsCallback(
@@ -390,8 +390,8 @@ void TestRunnerForSpecificView::DispatchBeforeInstallPromptEvent(
       base::BindOnce(
           &TestRunnerForSpecificView::DispatchBeforeInstallPromptCallback,
           weak_factory_.GetWeakPtr(),
-          base::Passed(v8::UniquePersistent<v8::Function>(
-              blink::MainThreadIsolate(), callback))));
+          v8::UniquePersistent<v8::Function>(blink::MainThreadIsolate(),
+                                             callback)));
 }
 
 void TestRunnerForSpecificView::DispatchBeforeInstallPromptCallback(
@@ -592,8 +592,8 @@ void TestRunnerForSpecificView::SetIsolatedWorldSecurityOrigin(
 
   WebSecurityOrigin web_origin;
   if (origin->IsString()) {
-    web_origin = WebSecurityOrigin::CreateFromString(
-        V8StringToWebString(origin.As<v8::String>()));
+    web_origin = WebSecurityOrigin::CreateFromString(V8StringToWebString(
+        blink::MainThreadIsolate(), origin.As<v8::String>()));
   }
   web_view()->FocusedFrame()->SetIsolatedWorldSecurityOrigin(world_id,
                                                              web_origin);
@@ -626,10 +626,6 @@ bool TestRunnerForSpecificView::FindString(
       find_options.forward = false;
     else if (option == "StartInSelection")
       find_options.find_next = false;
-    else if (option == "AtWordStarts")
-      find_options.word_start = true;
-    else if (option == "TreatMedialCapitalAsWordStart")
-      find_options.medial_capital_as_word_start = true;
     else if (option == "WrapAround")
       wrap_around = true;
   }

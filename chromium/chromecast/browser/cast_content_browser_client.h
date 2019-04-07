@@ -61,7 +61,6 @@ class VideoResolutionPolicy;
 namespace shell {
 class CastBrowserMainParts;
 class CastResourceDispatcherHostDelegate;
-class RendererConfigManager;
 class URLRequestContextFactory;
 
 class CastContentBrowserClient : public content::ContentBrowserClient {
@@ -133,6 +132,7 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   void SiteInstanceGotProcess(content::SiteInstance* site_instance) override;
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                       int child_process_id) override;
+  std::string GetAcceptLangs(content::BrowserContext* context) override;
   void OverrideWebkitPrefs(content::RenderViewHost* render_view_host,
                            content::WebPreferences* prefs) override;
   void ResourceDispatcherHostCreated() override;
@@ -191,14 +191,11 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   content::DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
   std::unique_ptr<content::NavigationUIData> GetNavigationUIData(
       content::NavigationHandle* navigation_handle) override;
+  bool ShouldEnableStrictSiteIsolation() override;
 
-  RendererConfigManager* renderer_config_manager() const {
-    return renderer_config_manager_.get();
-  }
-
-#if BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+#if BUILDFLAG(USE_CHROMECAST_CDMS)
   virtual std::unique_ptr<::media::CdmFactory> CreateCdmFactory();
-#endif  // BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
+#endif  // BUILDFLAG(USE_CHROMECAST_CDMS)
 
  protected:
   CastContentBrowserClient();
@@ -246,7 +243,6 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   std::unique_ptr<CastResourceDispatcherHostDelegate>
       resource_dispatcher_host_delegate_;
   std::unique_ptr<media::CmaBackendFactory> cma_backend_factory_;
-  std::unique_ptr<RendererConfigManager> renderer_config_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(CastContentBrowserClient);
 };

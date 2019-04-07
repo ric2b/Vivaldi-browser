@@ -66,6 +66,7 @@ class NGPaintFragment;
 class NGPhysicalFragment;
 
 struct NGInlineNodeData;
+struct NGPhysicalOffset;
 
 enum IndentTextOrNot { kDoNotIndentText, kIndentText };
 
@@ -143,7 +144,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
       LayoutUnit position,
       IndentTextOrNot indent_text,
       LayoutUnit logical_height = LayoutUnit()) const {
-    return Style()->IsLeftToRightDirection()
+    return StyleRef().IsLeftToRightDirection()
                ? LogicalLeftOffsetForLine(position, indent_text, logical_height)
                : LogicalWidth() - LogicalRightOffsetForLine(
                                       position, indent_text, logical_height);
@@ -171,7 +172,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
   LayoutUnit StartOffsetForAvoidingFloats(
       LayoutUnit position,
       LayoutUnit logical_height = LayoutUnit()) const {
-    return Style()->IsLeftToRightDirection()
+    return StyleRef().IsLeftToRightDirection()
                ? LogicalLeftOffsetForAvoidingFloats(position, logical_height)
                : LogicalWidth() - LogicalRightOffsetForAvoidingFloats(
                                       position, logical_height);
@@ -179,7 +180,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
   LayoutUnit EndOffsetForAvoidingFloats(
       LayoutUnit position,
       LayoutUnit logical_height = LayoutUnit()) const {
-    return !Style()->IsLeftToRightDirection()
+    return !StyleRef().IsLeftToRightDirection()
                ? LogicalLeftOffsetForAvoidingFloats(position, logical_height)
                : LogicalWidth() - LogicalRightOffsetForAvoidingFloats(
                                       position, logical_height);
@@ -305,7 +306,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   static bool ShouldSkipCreatingRunsForObject(LineLayoutItem obj) {
     return obj.IsFloating() || (obj.IsOutOfFlowPositioned() &&
-                                !obj.Style()->IsOriginalDisplayInlineType() &&
+                                !obj.StyleRef().IsOriginalDisplayInlineType() &&
                                 !obj.Container().IsLayoutInline());
   }
 
@@ -454,14 +455,18 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
   virtual scoped_refptr<NGLayoutResult> CachedLayoutResult(
       const NGConstraintSpace&,
       NGBreakToken*) const;
-  virtual const NGConstraintSpace* CachedConstraintSpace() const;
   virtual scoped_refptr<NGLayoutResult> CachedLayoutResultForTesting();
   virtual void SetCachedLayoutResult(const NGConstraintSpace&,
                                      NGBreakToken*,
                                      scoped_refptr<NGLayoutResult>);
   virtual void WillCollectInlines() {}
-  virtual void SetPaintFragment(scoped_refptr<const NGPhysicalFragment>);
-  virtual void ClearPaintFragment() {}
+  virtual void SetPaintFragment(const NGBreakToken*,
+                                scoped_refptr<const NGPhysicalFragment>,
+                                NGPhysicalOffset);
+  virtual void UpdatePaintFragmentFromCachedLayoutResult(
+      const NGBreakToken*,
+      scoped_refptr<const NGPhysicalFragment>,
+      NGPhysicalOffset);
   virtual const NGPhysicalBoxFragment* CurrentFragment() const {
     return nullptr;
   }

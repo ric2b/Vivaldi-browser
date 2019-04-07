@@ -5,6 +5,7 @@
 #include "components/crash/content/app/minidump_with_crashpad_info.h"
 
 #include "base/files/file_util.h"
+#include "base/stl_util.h"
 #include "third_party/crashpad/crashpad/client/crash_report_database.h"
 #include "third_party/crashpad/crashpad/client/crashpad_info.h"
 #include "third_party/crashpad/crashpad/client/settings.h"
@@ -15,7 +16,6 @@ namespace crash_reporter {
 namespace {
 
 using FilePosition = uint32_t;
-const FilePosition kInvalidFilePos = static_cast<FilePosition>(-1);
 
 // This class is a helper to edit minidump files written by MiniDumpWriteDump.
 // It assumes the minidump file it operates on has a directory entry pointing to
@@ -75,11 +75,9 @@ bool MinidumpUpdater::Initialize(base::File* file) {
 
   // Start by removing any unused directory entries.
   // TODO(siggi): Fix Crashpad to ignore unused streams.
-  directory_.erase(std::remove_if(directory_.begin(), directory_.end(),
-                                  [](const MINIDUMP_DIRECTORY& entry) {
-                                    return entry.StreamType == UnusedStream;
-                                  }),
-                   directory_.end());
+  base::EraseIf(directory_, [](const MINIDUMP_DIRECTORY& entry) {
+    return entry.StreamType == UnusedStream;
+  });
 
   // Update the header.
   // TODO(siggi): Fix Crashpad's version checking.
@@ -139,9 +137,14 @@ bool MinidumpUpdater::AppendSimpleDictionary(
     return false;
 
   // Seek to the tail of the file, where we're going to extend it.
-  FilePosition next_available_byte = file_->Seek(base::File::FROM_END, 0);
-  if (next_available_byte == kInvalidFilePos)
+  int64_t seek_position = file_->Seek(base::File::FROM_END, 0);
+
+  if (seek_position == -1 ||
+      seek_position > std::numeric_limits<FilePosition>::max()) {
     return false;
+  }
+
+  FilePosition next_available_byte = static_cast<FilePosition>(seek_position);
 
   // Write the key/value pairs and collect their locations.
   std::vector<crashpad::MinidumpSimpleStringDictionaryEntry> entries;

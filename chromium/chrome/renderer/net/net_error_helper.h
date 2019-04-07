@@ -65,6 +65,9 @@ class NetErrorHelper
   // NetErrorPageController::Delegate implementation
   void ButtonPressed(NetErrorHelperCore::Button button) override;
   void TrackClick(int tracking_id) override;
+  void LaunchOfflineItem(const std::string& id,
+                         const std::string& name_space) override;
+  void LaunchDownloadsPage() override;
 
   // SSLCertificateErrorPageController::Delegate implementation
   void SendCommand(
@@ -114,6 +117,8 @@ class NetErrorHelper
       bool* show_saved_copy_button_shown,
       bool* show_cached_copy_button_shown,
       bool* download_button_shown,
+      error_page::LocalizedError::OfflineContentOnNetErrorFeatureState*
+          offline_content_feature_state,
       std::string* html) const override;
   void LoadErrorPage(const std::string& html, const GURL& failed_url) override;
   void EnablePageHelperFunctions(net::Error net_error) override;
@@ -131,6 +136,10 @@ class NetErrorHelper
   void DiagnoseError(const GURL& page_url) override;
   void DownloadPageLater() override;
   void SetIsShowingDownloadButton(bool show) override;
+  void OfflineContentAvailable(
+      const std::string& offline_content_json) override;
+  void OfflineContentSummaryAvailable(
+      const std::string& offline_content_summary_json) override;
 
   void OnSetNavigationCorrectionInfo(const GURL& navigation_correction_url,
                                      const std::string& language,

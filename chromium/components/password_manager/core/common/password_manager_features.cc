@@ -19,6 +19,11 @@ const base::Feature kAffiliationBasedMatching = {
 const base::Feature kAutofillHome = {"AutofillHome",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Deletes entries from local database on Mac which cannot be decrypted when
+// merging data with Sync.
+const base::Feature kDeleteUndecryptableLogins = {
+    "DeleteUndecryptableLogins", base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Use HTML based username detector.
 const base::Feature kHtmlBasedUsernameDetector = {
     "HtmlBaseUsernameDetector", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -71,10 +76,21 @@ const base::Feature kPasswordsKeyboardAccessory = {
 // selection, rather than autofilling on page load, with highlighting of fields.
 const base::Feature kFillOnAccountSelect = {"fill-on-account-select",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
-// Enables new password form parsing mechanism, details in
-// go/new-cpm-design-refactoring.
+
+// Enables new password form parsing mechanism for filling passwords, details in
+// https://goo.gl/QodPH1
 const base::Feature kNewPasswordFormParsing = {
     "new-password-form-parsing", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables new password form parsing mechanism for saving passwords, details in
+// https://goo.gl/QodPH1
+const base::Feature kNewPasswordFormParsingForSaving = {
+    "new-password-form-parsing-for-saving", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Performs a one-off migration (with retries) from a native backend into
+// logindb. Passwords are served from the new location.
+const base::Feature kMigrateLinuxToLoginDB = {
+    "migrate-linux-to-logindb", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Field trial identifier for password generation requirements.
 const char* kGenerationRequirementsFieldTrial =

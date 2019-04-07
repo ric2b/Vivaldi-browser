@@ -68,6 +68,9 @@
   // WebContentsDelegate
   void ShowRepostFormWarningDialog(content::WebContents* source) override;
   bool HasOwnerShipOfContents() override;
+  gfx::Size EnterPictureInPicture(const viz::SurfaceId&,
+                                  const gfx::Size& natural_size) override;
+  void ExitPictureInPicture() override;
 
   const std::string& sourceSpec() { return src_.spec(); }
 

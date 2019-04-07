@@ -8,7 +8,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/shell.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -216,9 +215,9 @@ bool InputMethodEngine::IsActive() const {
 }
 
 void InputMethodEngine::HideInputView() {
-  // TODO(mash): Support virtual keyboard under MASH. There is no
+  // TODO(crbug.com/756059): Support virtual keyboard under MASH. There is no
   // KeyboardController in the browser process under MASH.
-  if (features::IsAshInBrowserProcess()) {
+  if (!features::IsUsingWindowService()) {
     auto* keyboard_controller = keyboard::KeyboardController::Get();
     if (keyboard_controller->enabled()) {
       keyboard_controller->HideKeyboardByUser();
@@ -230,9 +229,9 @@ void InputMethodEngine::EnableInputView() {
   input_method::InputMethodManager::Get()
       ->GetActiveIMEState()
       ->EnableInputView();
-  // TODO(mash): Support virtual keyboard under MASH. There is no
+  // TODO(crbug.com/756059): Support virtual keyboard under MASH. There is no
   // KeyboardController in the browser process under MASH.
-  if (features::IsAshInBrowserProcess()) {
+  if (!features::IsUsingWindowService()) {
     auto* keyboard_controller = keyboard::KeyboardController::Get();
     if (keyboard_controller->enabled())
       keyboard_controller->Reload();
@@ -331,10 +330,13 @@ bool InputMethodEngine::SendKeyEvent(ui::KeyEvent* event,
   if (event->key_code() == ui::VKEY_UNKNOWN)
     event->set_key_code(ui::DomKeycodeToKeyboardCode(code));
 
-  ui::EventSink* sink =
-      ash::Shell::GetPrimaryRootWindow()->GetHost()->event_sink();
-  ui::EventDispatchDetails details = sink->OnEventFromSource(event);
-  return !details.dispatcher_destroyed;
+  ui::IMEInputContextHandlerInterface* input_context =
+      ui::IMEBridge::Get()->GetInputContextHandler();
+  if (!input_context)
+    return false;
+
+  input_context->SendKeyEvent(event);
+  return true;
 }
 
 }  // namespace chromeos

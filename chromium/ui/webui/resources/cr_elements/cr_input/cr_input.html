@@ -1,6 +1,6 @@
-<link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="../../html/polymer.html">
 
-<link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="../../html/assert.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
 <link rel="import" href="../hidden_style_css.html">
 <link rel="import" href="../shared_vars_css.html">
@@ -36,7 +36,7 @@
 
       /* Margin between <input> and <paper-button> in the 'suffix' slot */
       :host ::slotted(paper-button[slot=suffix]) {
-        -webkit-margin-start: var(--cr-button-edge-spacing);
+        margin-inline-start: var(--cr-button-edge-spacing);
       }
 
       :host([invalid]) #label {
@@ -107,7 +107,8 @@
             value="{{value::input}}" tabindex$="[[tabindex]]" type="[[type]]"
             readonly$="[[readonly]]" maxlength$="[[maxlength]]"
             pattern="[[pattern]]" required="[[required]]"
-            incremental="[[incremental]]" minlength$="[[minlength]]">
+            incremental="[[incremental]]" minlength$="[[minlength]]"
+            max="[[max]]" min="[[min]]">
         <div id="underline"></div>
       </div>
       <slot name="suffix"></slot>

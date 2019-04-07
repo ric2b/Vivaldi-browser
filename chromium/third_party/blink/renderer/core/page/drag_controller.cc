@@ -55,6 +55,7 @@
 #include "third_party/blink/renderer/core/editing/selection_template.h"
 #include "third_party/blink/renderer/core/editing/serializers/serialization.h"
 #include "third_party/blink/renderer/core/events/text_event.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -470,34 +471,34 @@ DragOperation DragController::OperationForLoad(DragData* drag_data,
 // |range|, otherwise returns false.
 // TODO(yosin): We should return |VisibleSelection| rather than three values.
 static bool SetSelectionToDragCaret(LocalFrame* frame,
-                                    VisibleSelection& drag_caret,
+                                    const SelectionInDOMTree& drag_caret,
                                     Range*& range,
                                     const LayoutPoint& point) {
-  frame->Selection().SetSelectionAndEndTyping(drag_caret.AsSelection());
-  if (frame->Selection()
-          .ComputeVisibleSelectionInDOMTreeDeprecated()
-          .IsNone()) {
-    // TODO(editing-dev): The use of
-    // updateStyleAndLayoutIgnorePendingStylesheets
-    // needs to be audited.  See http://crbug.com/590369 for more details.
-    // |LocalFrame::positinForPoint()| requires clean layout.
-    frame->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
-    const PositionWithAffinity& position = frame->PositionForPoint(point);
-    if (!position.IsConnected())
-      return false;
-
-    frame->Selection().SetSelectionAndEndTyping(
-        SelectionInDOMTree::Builder().Collapse(position).Build());
-    drag_caret =
-        frame->Selection().ComputeVisibleSelectionInDOMTreeDeprecated();
-    range = CreateRange(drag_caret.ToNormalizedEphemeralRange());
+  frame->Selection().SetSelectionAndEndTyping(drag_caret);
+  // TODO(editing-dev): The use of
+  // UpdateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  frame->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
+  if (!frame->Selection().ComputeVisibleSelectionInDOMTree().IsNone()) {
+    return frame->Selection()
+        .ComputeVisibleSelectionInDOMTree()
+        .IsContentEditable();
   }
-  return !frame->Selection()
-              .ComputeVisibleSelectionInDOMTreeDeprecated()
-              .IsNone() &&
-         frame->Selection()
-             .ComputeVisibleSelectionInDOMTreeDeprecated()
-             .IsContentEditable();
+
+  const PositionWithAffinity& position = frame->PositionForPoint(point);
+  if (!position.IsConnected())
+    return false;
+
+  frame->Selection().SetSelectionAndEndTyping(
+      SelectionInDOMTree::Builder().Collapse(position).Build());
+  // TODO(editing-dev): The use of
+  // UpdateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  frame->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
+  const VisibleSelection& visible_selection =
+      frame->Selection().ComputeVisibleSelectionInDOMTree();
+  range = CreateRange(visible_selection.ToNormalizedEphemeralRange());
+  return !visible_selection.IsNone() && visible_selection.IsContentEditable();
 }
 
 DispatchEventResult DragController::DispatchTextInputEventFor(
@@ -517,7 +518,7 @@ DispatchEventResult DragController::DispatchTextInputEventFor(
       CreateVisibleSelection(
           SelectionInDOMTree::Builder().Collapse(caret_position).Build()));
   return target->DispatchEvent(
-      TextEvent::CreateForDrop(inner_frame->DomWindow(), text));
+      *TextEvent::CreateForDrop(inner_frame->DomWindow(), text));
 }
 
 bool DragController::ConcludeEditDrag(DragData* drag_data) {
@@ -652,7 +653,8 @@ bool DragController::ConcludeEditDrag(DragData* drag_data) {
           return false;
       }
     } else {
-      if (SetSelectionToDragCaret(inner_frame, drag_caret, range, point)) {
+      if (SetSelectionToDragCaret(inner_frame, drag_caret.AsSelection(), range,
+                                  point)) {
         DCHECK(document_under_mouse_);
         if (!inner_frame->GetEditor().ReplaceSelectionAfterDraggingWithEvents(
                 element, drag_data, fragment, range,
@@ -667,7 +669,8 @@ bool DragController::ConcludeEditDrag(DragData* drag_data) {
     if (text.IsEmpty())
       return false;
 
-    if (SetSelectionToDragCaret(inner_frame, drag_caret, range, point)) {
+    if (SetSelectionToDragCaret(inner_frame, drag_caret.AsSelection(), range,
+                                point)) {
       DCHECK(document_under_mouse_);
       if (!inner_frame->GetEditor().ReplaceSelectionAfterDraggingWithEvents(
               element, drag_data,

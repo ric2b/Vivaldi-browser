@@ -12,17 +12,14 @@
 #include "ash/accessibility/accessibility_observer.h"
 #include "ash/accessibility/accessibility_panel_layout_manager.h"
 #include "ash/autoclick/autoclick_controller.h"
-#include "ash/components/autoclick/public/mojom/autoclick.mojom.h"
 #include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/policy/policy_recommendation_restorer.h"
 #include "ash/public/cpp/ash_pref_names.h"
-#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/session/session_observer.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/power/backlights_forced_off_setter.h"
@@ -35,10 +32,6 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "mash/public/mojom/launchable.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/interfaces/accessibility_manager.mojom.h"
-#include "services/ui/public/interfaces/constants.mojom.h"
 #include "ui/aura/window.h"
 #include "ui/base/cursor/cursor_type.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -46,6 +39,7 @@
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/notifier_id.h"
+#include "ui/wm/core/cursor_manager.h"
 
 using session_manager::SessionState;
 
@@ -215,7 +209,7 @@ void ShowAccessibilityNotification(A11yNotificationType type) {
   std::unique_ptr<message_center::Notification> notification =
       message_center::Notification::CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId, title,
-          text, gfx::Image(), base::string16(), GURL(),
+          text, base::string16(), GURL(),
           message_center::NotifierId(
               message_center::NotifierId::SYSTEM_COMPONENT,
               kNotifierAccessibility),
@@ -225,12 +219,22 @@ void ShowAccessibilityNotification(A11yNotificationType type) {
   message_center->AddNotification(std::move(notification));
 }
 
+AccessibilityPanelLayoutManager* GetLayoutManager() {
+  // The accessibility panel is only shown on the primary display.
+  aura::Window* root = Shell::GetPrimaryRootWindow();
+  aura::Window* container =
+      Shell::GetContainer(root, kShellWindowId_AccessibilityPanelContainer);
+  // TODO(jamescook): Avoid this cast by moving ash::AccessibilityObserver
+  // ownership to this class and notifying it on accessibility panel fullscreen
+  // updates.
+  return static_cast<AccessibilityPanelLayoutManager*>(
+      container->layout_manager());
+}
+
 }  // namespace
 
-AccessibilityController::AccessibilityController(
-    service_manager::Connector* connector)
-    : connector_(connector),
-      autoclick_delay_(AutoclickController::GetDefaultAutoclickDelay()) {
+AccessibilityController::AccessibilityController()
+    : autoclick_delay_(AutoclickController::GetDefaultAutoclickDelay()) {
   Shell::Get()->session_controller()->AddObserver(this);
   Shell::Get()->tablet_mode_controller()->AddObserver(this);
 }
@@ -696,17 +700,22 @@ void AccessibilityController::SetFocusHighlightRect(
   accessibility_highlight_controller_->SetFocusHighlightRect(bounds_in_screen);
 }
 
-void AccessibilityController::SetAccessibilityPanelFullscreen(bool fullscreen) {
-  // The accessibility panel is only shown on the primary display.
-  aura::Window* root = Shell::GetPrimaryRootWindow();
-  aura::Window* container =
-      Shell::GetContainer(root, kShellWindowId_AccessibilityPanelContainer);
-  // TODO(jamescook): Avoid this cast by moving ash::AccessibilityObserver
-  // ownership to this class and notifying it on ChromeVox fullscreen updates.
-  AccessibilityPanelLayoutManager* layout =
-      static_cast<AccessibilityPanelLayoutManager*>(
-          container->layout_manager());
-  layout->SetPanelFullscreen(fullscreen);
+void AccessibilityController::SetCaretBounds(
+    const gfx::Rect& bounds_in_screen) {
+  if (!accessibility_highlight_controller_)
+    return;
+  accessibility_highlight_controller_->SetCaretBounds(bounds_in_screen);
+}
+
+void AccessibilityController::SetAccessibilityPanelAlwaysVisible(
+    bool always_visible) {
+  GetLayoutManager()->SetAlwaysVisible(always_visible);
+}
+
+void AccessibilityController::SetAccessibilityPanelBounds(
+    const gfx::Rect& bounds,
+    mojom::AccessibilityPanelState state) {
+  GetLayoutManager()->SetPanelBounds(bounds, state);
 }
 
 void AccessibilityController::OnSigninScreenPrefServiceInitialized(
@@ -844,15 +853,6 @@ void AccessibilityController::UpdateAutoclickFromPref() {
 
   NotifyAccessibilityStatusChanged();
 
-  if (Shell::GetAshConfig() == Config::MASH_DEPRECATED) {
-    if (!connector_)  // Null in tests.
-      return;
-    mash::mojom::LaunchablePtr launchable;
-    connector_->BindInterface("autoclick_app", &launchable);
-    launchable->Launch(mash::mojom::kWindow, mash::mojom::LaunchMode::DEFAULT);
-    return;
-  }
-
   Shell::Get()->autoclick_controller()->SetEnabled(enabled);
 }
 
@@ -864,15 +864,6 @@ void AccessibilityController::UpdateAutoclickDelayFromPref() {
   if (autoclick_delay_ == autoclick_delay)
     return;
   autoclick_delay_ = autoclick_delay;
-
-  if (Shell::GetAshConfig() == Config::MASH_DEPRECATED) {
-    if (!connector_)  // Null in tests.
-      return;
-    autoclick::mojom::AutoclickControllerPtr autoclick_controller;
-    connector_->BindInterface("autoclick_app", &autoclick_controller);
-    autoclick_controller->SetAutoclickDelay(autoclick_delay_.InMilliseconds());
-    return;
-  }
 
   Shell::Get()->autoclick_controller()->SetAutoclickDelay(autoclick_delay_);
 }
@@ -949,17 +940,6 @@ void AccessibilityController::UpdateHighContrastFromPref() {
 
   NotifyAccessibilityStatusChanged();
 
-  // Under mash the UI service (window server) handles high contrast mode.
-  if (Shell::GetAshConfig() == Config::MASH_DEPRECATED) {
-    if (!connector_)  // Null in tests.
-      return;
-    ui::mojom::AccessibilityManagerPtr accessibility_ptr;
-    connector_->BindInterface(ui::mojom::kServiceName, &accessibility_ptr);
-    accessibility_ptr->SetHighContrastMode(enabled);
-    return;
-  }
-
-  // Under classic ash high contrast mode is handled internally.
   Shell::Get()->high_contrast_controller()->SetEnabled(enabled);
   Shell::Get()->UpdateCursorCompositingEnabled();
 }
@@ -982,7 +962,7 @@ void AccessibilityController::UpdateLargeCursorFromPref() {
 
   NotifyAccessibilityStatusChanged();
 
-  ShellPort::Get()->SetCursorSize(
+  Shell::Get()->cursor_manager()->SetCursorSize(
       large_cursor_enabled_ ? ui::CursorSize::kLarge : ui::CursorSize::kNormal);
   Shell::Get()->SetLargeCursorSizeInDip(large_cursor_size_in_dip_);
   Shell::Get()->UpdateCursorCompositingEnabled();
@@ -1083,7 +1063,7 @@ void AccessibilityController::UpdateVirtualKeyboardFromPref() {
 
   keyboard::SetAccessibilityKeyboardEnabled(enabled);
 
-  if (!features::IsAshInBrowserProcess()) {
+  if (::features::IsUsingWindowService()) {
     // TODO(mash): Support on-screen keyboard. See https://crbug.com/646565.
     NOTIMPLEMENTED();
     return;

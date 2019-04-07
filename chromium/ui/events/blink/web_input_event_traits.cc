@@ -9,6 +9,7 @@
 #include "third_party/blink/public/platform/web_gesture_event.h"
 #include "third_party/blink/public/platform/web_keyboard_event.h"
 #include "third_party/blink/public/platform/web_mouse_wheel_event.h"
+#include "third_party/blink/public/platform/web_pointer_event.h"
 #include "third_party/blink/public/platform/web_touch_event.h"
 
 using base::StringAppendF;
@@ -18,6 +19,7 @@ using blink::WebInputEvent;
 using blink::WebKeyboardEvent;
 using blink::WebMouseEvent;
 using blink::WebMouseWheelEvent;
+using blink::WebPointerEvent;
 using blink::WebTouchEvent;
 using blink::WebTouchPoint;
 
@@ -72,11 +74,12 @@ void ApppendTouchPointDetails(const WebTouchPoint& point, std::string* result) {
   StringAppendF(result,
                 "  (ID: %d, State: %d, ScreenPos: (%f, %f), Pos: (%f, %f),"
                 " Radius: (%f, %f), Rot: %f, Force: %f,"
-                " Tilt: (%d, %d)),\n",
+                " Tilt: (%d, %d), Twist: %d, TangentialPressure: %f),\n",
                 point.id, point.state, point.PositionInScreen().x,
                 point.PositionInScreen().y, point.PositionInWidget().x,
                 point.PositionInWidget().y, point.radius_x, point.radius_y,
-                point.rotation_angle, point.force, point.tilt_x, point.tilt_y);
+                point.rotation_angle, point.force, point.tilt_x, point.tilt_y,
+                point.twist, point.tangential_pressure);
 }
 
 void ApppendEventDetails(const WebTouchEvent& event, std::string* result) {
@@ -89,6 +92,20 @@ void ApppendEventDetails(const WebTouchEvent& event, std::string* result) {
   for (unsigned i = 0; i < event.touches_length; ++i)
     ApppendTouchPointDetails(event.touches[i], result);
   result->append(" ]\n}");
+}
+
+void ApppendEventDetails(const WebPointerEvent& event, std::string* result) {
+  StringAppendF(
+      result,
+      "{\n Id: %d\n Button: %d\n Pos: (%f, %f)\n"
+      " GlobalPos: (%f, %f)\n Movement: (%d, %d)\n width: %f\n height: "
+      "%f\n Pressure: %f\n TangentialPressure: %f\n Rotation: %f\n Tilt: "
+      "(%d, %d)\n}",
+      event.id, static_cast<int>(event.button), event.PositionInWidget().x,
+      event.PositionInWidget().y, event.PositionInScreen().x,
+      event.PositionInScreen().y, event.movement_x, event.movement_y,
+      event.width, event.height, event.force, event.tangential_pressure,
+      event.rotation_angle, event.tilt_x, event.tilt_y);
 }
 
 struct WebInputEventDelete {
@@ -139,7 +156,9 @@ bool Apply(Operator op,
            WebInputEvent::Type type,
            const ArgIn& arg_in,
            ArgOut* arg_out) {
-  if (WebInputEvent::IsMouseEventType(type))
+  if (WebInputEvent::IsPointerEventType(type))
+    return op.template Execute<WebPointerEvent>(arg_in, arg_out);
+  else if (WebInputEvent::IsMouseEventType(type))
     return op.template Execute<WebMouseEvent>(arg_in, arg_out);
   else if (type == WebInputEvent::kMouseWheel)
     return op.template Execute<WebMouseWheelEvent>(arg_in, arg_out);
@@ -251,6 +270,10 @@ LatencyInfo WebInputEventTraits::CreateLatencyInfoForWebGestureEvent(
   if (event.SourceDevice() ==
       blink::WebGestureDevice::kWebGestureDeviceTouchpad) {
     source_event_type = SourceEventType::WHEEL;
+    if (event.GetType() >= blink::WebInputEvent::kGesturePinchTypeFirst &&
+        event.GetType() <= blink::WebInputEvent::kGesturePinchTypeLast) {
+      source_event_type = SourceEventType::TOUCHPAD;
+    }
   } else if (event.SourceDevice() ==
              blink::WebGestureDevice::kWebGestureDeviceTouchscreen) {
     blink::WebGestureEvent::InertialPhaseState inertial_phase_state =

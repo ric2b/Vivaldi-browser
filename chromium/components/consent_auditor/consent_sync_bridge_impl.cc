@@ -51,16 +51,6 @@ std::unique_ptr<EntityData> MoveToEntityData(
   return entity_data;
 }
 
-// TODO(vitaliii): Delete this function both here and in UserEventSyncBridge.
-std::unique_ptr<EntityData> CopyToEntityData(
-    const UserConsentSpecifics specifics) {
-  auto entity_data = std::make_unique<EntityData>();
-  entity_data->non_unique_name =
-      base::Int64ToString(specifics.client_consent_time_usec());
-  *entity_data->specifics.mutable_user_consent() = specifics;
-  return entity_data;
-}
-
 }  // namespace
 
 ConsentSyncBridgeImpl::ConsentSyncBridgeImpl(
@@ -211,6 +201,12 @@ void ConsentSyncBridgeImpl::RecordConsent(
   deferred_consents_while_initializing_.push_back(std::move(specifics));
 }
 
+// static
+std::string ConsentSyncBridgeImpl::GetStorageKeyFromSpecificsForTest(
+    const UserConsentSpecifics& specifics) {
+  return GetStorageKeyFromSpecifics(specifics);
+}
+
 void ConsentSyncBridgeImpl::RecordConsentImpl(
     std::unique_ptr<UserConsentSpecifics> specifics) {
   DCHECK(store_);
@@ -228,8 +224,8 @@ void ConsentSyncBridgeImpl::RecordConsentImpl(
 }
 
 base::WeakPtr<syncer::ModelTypeControllerDelegate>
-ConsentSyncBridgeImpl::GetControllerDelegateOnUIThread() {
-  return change_processor()->GetControllerDelegateOnUIThread();
+ConsentSyncBridgeImpl::GetControllerDelegate() {
+  return change_processor()->GetControllerDelegate();
 }
 
 void ConsentSyncBridgeImpl::ProcessQueuedEvents() {
@@ -296,11 +292,12 @@ void ConsentSyncBridgeImpl::OnReadAllData(
   }
 
   auto batch = std::make_unique<MutableDataBatch>();
-  UserConsentSpecifics specifics;
   for (const Record& r : *data_records) {
-    if (specifics.ParseFromString(r.value)) {
-      DCHECK_EQ(r.id, GetStorageKeyFromSpecifics(specifics));
-      batch->Put(r.id, CopyToEntityData(specifics));
+    auto specifics = std::make_unique<UserConsentSpecifics>();
+
+    if (specifics->ParseFromString(r.value)) {
+      DCHECK_EQ(r.id, GetStorageKeyFromSpecifics(*specifics));
+      batch->Put(r.id, MoveToEntityData(std::move(specifics)));
     } else {
       change_processor()->ReportError(
           {FROM_HERE, "Failed deserializing user events."});

@@ -6,6 +6,8 @@
 #define CHROME_BROWSER_CHROMEOS_DRIVE_DRIVE_INTEGRATION_SERVICE_H_
 
 #include <memory>
+#include <set>
+#include <string>
 
 #include "base/callback.h"
 #include "base/feature_list.h"
@@ -115,6 +117,9 @@ class DriveIntegrationService : public KeyedService,
   // |IsMounted()|.
   base::FilePath GetMountPointPath() const;
 
+  // Returns the path of DriveFS log if enabled or empty path.
+  base::FilePath GetDriveFsLogPath() const;
+
   // Returns true if |local_path| resides inside |GetMountPointPath()|.
   // In this case |drive_path| will contain 'drive' path of this file, e.g.
   // reparented to the mount point.
@@ -127,7 +132,8 @@ class DriveIntegrationService : public KeyedService,
   void RemoveObserver(DriveIntegrationServiceObserver* observer);
 
   // DriveNotificationObserver implementation.
-  void OnNotificationReceived() override;
+  void OnNotificationReceived(const std::set<std::string>& ids) override;
+  void OnNotificationTimerFired() override;
   void OnPushNotificationEnabled(bool enabled) override;
 
   EventLogger* event_logger() { return logger_.get(); }
@@ -162,6 +168,9 @@ class DriveIntegrationService : public KeyedService,
     REMOUNTING,
   };
   class DriveFsHolder;
+
+  // Manages passing changes in team drives to the drive notification manager.
+  class NotificationManager;
 
   // Returns true if Drive is enabled.
   // Must be called on UI thread.
@@ -227,12 +236,15 @@ class DriveIntegrationService : public KeyedService,
   std::unique_ptr<DownloadHandler> download_handler_;
   std::unique_ptr<DebugInfoCollector> debug_info_collector_;
 
-  base::ObserverList<DriveIntegrationServiceObserver> observers_;
+  base::ObserverList<DriveIntegrationServiceObserver>::Unchecked observers_;
   std::unique_ptr<PreferenceWatcher> preference_watcher_;
   std::unique_ptr<content::NotificationRegistrar>
       profile_notification_registrar_;
 
   std::unique_ptr<DriveFsHolder> drivefs_holder_;
+  std::unique_ptr<NotificationManager> notification_manager_;
+  int drivefs_total_failures_count_ = 0;
+  int drivefs_consecutive_failures_count_ = 0;
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

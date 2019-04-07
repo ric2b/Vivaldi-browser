@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.autofill.keyboard_accessory;
 import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetModel.NO_ACTIVE_TAB;
 
 import android.support.annotation.Nullable;
+import android.support.annotation.Px;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.modelutil.PropertyObservable;
@@ -37,6 +38,14 @@ class AccessorySheetMediator
 
     void show() {
         mModel.setVisible(true);
+    }
+
+    void setHeight(int height) {
+        mModel.setHeight(height);
+    }
+
+    public @Px int getHeight() {
+        return mModel.getHeight();
     }
 
     void hide() {
@@ -104,7 +113,8 @@ class AccessorySheetMediator
             }
             return;
         }
-        if (propertyKey == AccessorySheetModel.PropertyKey.ACTIVE_TAB_INDEX) {
+        if (propertyKey == AccessorySheetModel.PropertyKey.ACTIVE_TAB_INDEX
+                || propertyKey == AccessorySheetModel.PropertyKey.HEIGHT) {
             return;
         }
         assert false : "Every property update needs to be handled explicitly!";

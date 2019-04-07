@@ -362,6 +362,7 @@ class UserMediaRequest::V8Callbacks final : public UserMediaRequest::Callbacks {
 UserMediaRequest* UserMediaRequest::Create(
     ExecutionContext* context,
     UserMediaController* controller,
+    WebUserMediaRequest::MediaType media_type,
     const MediaStreamConstraints& options,
     Callbacks* callbacks,
     MediaErrorState& error_state) {
@@ -375,6 +376,30 @@ UserMediaRequest* UserMediaRequest::Create(
   if (error_state.HadException())
     return nullptr;
 
+  if (media_type == WebUserMediaRequest::MediaType::kDisplayMedia) {
+    // TODO(emircan): Support constraints after the spec change.
+    // https://w3c.github.io/mediacapture-screen-share/#constraints
+    // 5.2 Constraining Display Surface Selection
+    // The getDisplayMedia function does not permit the use of constraints for
+    // selection of a source as described in the getUserMedia() algorithm.
+    // Prior to invoking the getUserMedia() algorithm, if either of the video
+    // and audio attributes are set to a MediaTrackConstraints value (as
+    // opposed to being absent or set to a Boolean value), reject the promise
+    // with a InvalidAccessError and abort.
+    if (options.audio().IsMediaTrackConstraints() ||
+        options.video().IsMediaTrackConstraints()) {
+      error_state.ThrowDOMException(
+          DOMExceptionCode::kInvalidAccessError,
+          "getDisplayMedia() does not permit the use of constraints.");
+      return nullptr;
+    }
+    // TODO(emircan): Enable when audio capture is supported.
+    if (!options.audio().IsNull() && options.audio().GetAsBoolean()) {
+      error_state.ThrowTypeError("Audio is not supported");
+      return nullptr;
+    }
+  }
+
   if (audio.IsNull() && video.IsNull()) {
     error_state.ThrowTypeError(
         "At least one of audio and video must be requested");
@@ -386,7 +411,8 @@ UserMediaRequest* UserMediaRequest::Create(
   if (!video.IsNull())
     CountVideoConstraintUses(context, video);
 
-  return new UserMediaRequest(context, controller, audio, video, callbacks);
+  return new UserMediaRequest(context, controller, media_type, audio, video,
+                              callbacks);
 }
 
 UserMediaRequest* UserMediaRequest::Create(
@@ -396,23 +422,27 @@ UserMediaRequest* UserMediaRequest::Create(
     V8NavigatorUserMediaSuccessCallback* success_callback,
     V8NavigatorUserMediaErrorCallback* error_callback,
     MediaErrorState& error_state) {
-  return Create(context, controller, options,
-                V8Callbacks::Create(success_callback, error_callback),
+  return Create(context, controller, WebUserMediaRequest::MediaType::kUserMedia,
+                options, V8Callbacks::Create(success_callback, error_callback),
                 error_state);
 }
 
 UserMediaRequest* UserMediaRequest::CreateForTesting(
     const WebMediaConstraints& audio,
     const WebMediaConstraints& video) {
-  return new UserMediaRequest(nullptr, nullptr, audio, video, nullptr);
+  return new UserMediaRequest(nullptr, nullptr,
+                              WebUserMediaRequest::MediaType::kUserMedia, audio,
+                              video, nullptr);
 }
 
 UserMediaRequest::UserMediaRequest(ExecutionContext* context,
                                    UserMediaController* controller,
+                                   WebUserMediaRequest::MediaType media_type,
                                    WebMediaConstraints audio,
                                    WebMediaConstraints video,
                                    Callbacks* callbacks)
     : ContextLifecycleObserver(context),
+      media_type_(media_type),
       audio_(audio),
       video_(video),
       should_disable_hardware_noise_suppression_(
@@ -431,6 +461,10 @@ UserMediaRequest::UserMediaRequest(ExecutionContext* context,
 }
 
 UserMediaRequest::~UserMediaRequest() = default;
+
+WebUserMediaRequest::MediaType UserMediaRequest::MediaRequestType() const {
+  return media_type_;
+}
 
 bool UserMediaRequest::Audio() const {
   return !audio_.IsNull();
@@ -463,27 +497,19 @@ bool UserMediaRequest::IsSecureContextUse(String& error_message) {
 
     // Feature policy deprecation messages.
     if (Audio()) {
-      if (RuntimeEnabledFeatures::FeaturePolicyForPermissionsEnabled()) {
-        if (!document->GetFrame()->IsFeatureEnabled(
-                mojom::FeaturePolicyFeature::kMicrophone)) {
-          UseCounter::Count(
-              document, WebFeature::kMicrophoneDisabledByFeaturePolicyEstimate);
-        }
-      } else {
-        Deprecation::CountDeprecationFeaturePolicy(
-            *document, mojom::FeaturePolicyFeature::kMicrophone);
+      if (!document->GetFrame()->IsFeatureEnabled(
+              mojom::FeaturePolicyFeature::kMicrophone,
+              ReportOptions::kReportOnFailure)) {
+        UseCounter::Count(
+            document, WebFeature::kMicrophoneDisabledByFeaturePolicyEstimate);
       }
     }
     if (Video()) {
-      if (RuntimeEnabledFeatures::FeaturePolicyForPermissionsEnabled()) {
-        if (!document->GetFrame()->IsFeatureEnabled(
-                mojom::FeaturePolicyFeature::kCamera)) {
-          UseCounter::Count(document,
-                            WebFeature::kCameraDisabledByFeaturePolicyEstimate);
-        }
-      } else {
-        Deprecation::CountDeprecationFeaturePolicy(
-            *document, mojom::FeaturePolicyFeature::kCamera);
+      if (!document->GetFrame()->IsFeatureEnabled(
+              mojom::FeaturePolicyFeature::kCamera,
+              ReportOptions::kReportOnFailure)) {
+        UseCounter::Count(document,
+                          WebFeature::kCameraDisabledByFeaturePolicyEstimate);
       }
     }
 
@@ -526,14 +552,12 @@ void UserMediaRequest::Succeed(MediaStreamDescriptor* stream_descriptor) {
   MediaStreamTrackVector audio_tracks = stream->getAudioTracks();
   for (MediaStreamTrackVector::iterator iter = audio_tracks.begin();
        iter != audio_tracks.end(); ++iter) {
-    (*iter)->Component()->Source()->SetConstraints(audio_);
     (*iter)->SetConstraints(audio_);
   }
 
   MediaStreamTrackVector video_tracks = stream->getVideoTracks();
   for (MediaStreamTrackVector::iterator iter = video_tracks.begin();
        iter != video_tracks.end(); ++iter) {
-    (*iter)->Component()->Source()->SetConstraints(video_);
     (*iter)->SetConstraints(video_);
   }
 

@@ -26,6 +26,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HTML_MEDIA_HTML_VIDEO_ELEMENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_MEDIA_HTML_VIDEO_ELEMENT_H_
 
+#include "third_party/blink/public/common/picture_in_picture/picture_in_picture_control_info.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_image_source.h"
 #include "third_party/blink/renderer/core/html/html_image_loader.h"
@@ -57,13 +58,15 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   bool HasPendingActivity() const final;
 
   // Node override.
-  Node::InsertionNotificationRequest InsertedInto(ContainerNode*) override;
-  void RemovedFrom(ContainerNode*) override;
+  Node::InsertionNotificationRequest InsertedInto(ContainerNode&) override;
+  void RemovedFrom(ContainerNode&) override;
 
   unsigned videoWidth() const;
   unsigned videoHeight() const;
 
   IntSize videoVisibleSize() const;
+
+  IntSize GetOverriddenIntrinsicSize() const;
 
   // Fullscreen
   void webkitEnterFullscreen();
@@ -71,6 +74,8 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   bool webkitSupportsFullscreen();
   bool webkitDisplayingFullscreen();
   bool UsesOverlayFullscreenVideo() const override;
+  void DidEnterFullscreen();
+  void DidExitFullscreen();
 
   // Statistics
   unsigned webkitDecodedFrameCount() const;
@@ -82,9 +87,9 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
       const IntRect&,
       const cc::PaintFlags*,
       int already_uploaded_id = -1,
-      WebMediaPlayer::VideoFrameUploadMetadata* = nullptr) const;
+      WebMediaPlayer::VideoFrameUploadMetadata* out_metadata = nullptr) const;
 
-  // Used by WebGL to do GPU-GPU textures copy if possible.
+  // Used by WebGL to do GPU-GPU texture copy if possible.
   bool CopyVideoTextureToPlatformTexture(
       gpu::gles2::GLES2Interface*,
       GLenum target,
@@ -95,8 +100,22 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
       GLint level,
       bool premultiply_alpha,
       bool flip_y,
-      int already_uploaded_id = -1,
-      WebMediaPlayer::VideoFrameUploadMetadata* out_metadata = nullptr);
+      int already_uploaded_id,
+      WebMediaPlayer::VideoFrameUploadMetadata* out_metadata);
+
+  // Used by WebGL to do YUV-RGB, CPU-GPU texture copy if possible.
+  bool CopyVideoYUVDataToPlatformTexture(
+      gpu::gles2::GLES2Interface*,
+      GLenum target,
+      GLuint texture,
+      GLenum internal_format,
+      GLenum format,
+      GLenum type,
+      GLint level,
+      bool premultiply_alpha,
+      bool flip_y,
+      int already_uploaded_id,
+      WebMediaPlayer::VideoFrameUploadMetadata* out_metadata);
 
   // Used by WebGL to do CPU-GPU texture upload if possible.
   bool TexImageImpl(WebMediaPlayer::TexImageFunctionID,
@@ -148,6 +167,9 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
 
   void MediaRemotingStarted(const WebString& remote_device_friendly_name) final;
   bool SupportsPictureInPicture() const final;
+  void enterPictureInPicture(WebMediaPlayer::PipWindowOpenedCallback callback);
+  void exitPictureInPicture(WebMediaPlayer::PipWindowClosedCallback callback);
+  void SendCustomControlsToPipWindow();
   void PictureInPictureStopped() final;
   void PictureInPictureControlClicked(const WebString& control_id) final;
   void MediaRemotingStopped(WebLocalizedString::Name error_msg) final;
@@ -158,6 +180,14 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   // enters or exits Picture-in-Picture state.
   void OnEnteredPictureInPicture();
   void OnExitedPictureInPicture();
+
+  void SetPictureInPictureCustomControls(
+      const std::vector<PictureInPictureControlInfo>& pip_custom_controls);
+  const std::vector<PictureInPictureControlInfo>&
+  GetPictureInPictureCustomControls() const;
+  bool HasPictureInPictureCustomControls() const;
+
+  void SetIsEffectivelyFullscreen(blink::WebFullscreenVideoStatus);
 
  protected:
   // EventTarget overrides.
@@ -190,6 +220,8 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   void DidMoveToNewDocument(Document& old_document) override;
   void SetDisplayMode(DisplayMode) override;
 
+  void ParseIntrinsicSizeAttribute(const String& value);
+
   Member<HTMLImageLoader> image_loader_;
   Member<MediaCustomControlsFullscreenDetector>
       custom_controls_fullscreen_detector_;
@@ -207,6 +239,20 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   // Whether the video is currently in auto-pip (Android). It is not similar to
   // a video being in regular Picture-in-Picture mode.
   bool is_auto_picture_in_picture_ = false;
+
+  // Whether this element is in overlay fullscreen mode.
+  bool in_overlay_fullscreen_video_;
+
+  // Holds the most recently set custom controls. These will be persistent
+  // across active/inactive windows until new controls are passed in.
+  std::vector<PictureInPictureControlInfo> pip_custom_controls_;
+
+  // Whether the video element should be considered as fullscreen with regards
+  // to display type and other UI features. This does not mean the DOM element
+  // is fullscreen.
+  bool is_effectively_fullscreen_ = false;
+
+  IntSize overridden_intrinsic_size_;
 };
 
 }  // namespace blink

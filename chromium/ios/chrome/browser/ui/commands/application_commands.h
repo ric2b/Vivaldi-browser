@@ -69,6 +69,9 @@
 // Closes the History UI.
 - (void)closeSettingsUI;
 
+// Prepare to show the TabSwitcher UI.
+- (void)prepareTabSwitcher;
+
 // Shows the TabSwitcher UI.
 - (void)displayTabSwitcher;
 
@@ -85,9 +88,8 @@
 - (void)showReportAnIssueFromViewController:
     (UIViewController*)baseViewController;
 
-// TODO(crbug.com/861729): Rename this to openURLInNewTab.
 // Opens the |command| URL in a new tab.
-- (void)openURL:(OpenNewTabCommand*)command;
+- (void)openURLInNewTab:(OpenNewTabCommand*)command;
 
 // TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
 // Shows the signin UI, presenting from |baseViewController|.

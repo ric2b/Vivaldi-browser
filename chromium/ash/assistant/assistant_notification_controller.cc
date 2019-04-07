@@ -6,9 +6,11 @@
 
 #include "ash/assistant/assistant_controller.h"
 #include "ash/new_window_controller.h"
-#include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/public/cpp/vector_icons/vector_icons.h"
+#include "ash/public/interfaces/voice_interaction_controller.mojom.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/voice_interaction/voice_interaction_controller.h"
 #include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -53,8 +55,10 @@ class AssistantNotificationDelegate
   void Click(const base::Optional<int>& button_index,
              const base::Optional<base::string16>& reply) override {
     // Open the action url if it is valid.
-    if (notification_->action_url.is_valid() && assistant_controller_)
+    if (notification_->action_url.is_valid() && assistant_controller_) {
       assistant_controller_->OpenUrl(notification_->action_url);
+      return;
+    }
 
     if (notification_controller_) {
       // TODO(wutao): support buttons with different |action_index|.
@@ -121,6 +125,10 @@ void AssistantNotificationController::OnShowNotification(
     AssistantNotificationPtr notification) {
   DCHECK(assistant_);
 
+  // Do not show notification if the setting is false.
+  if (!Shell::Get()->voice_interaction_controller()->notification_enabled())
+    return;
+
   // Create the specified |notification| that should be rendered in the
   // |message_center| for the interaction.
   const base::string16 title = base::UTF8ToUTF16(notification->title);
@@ -136,11 +144,11 @@ void AssistantNotificationController::OnShowNotification(
       message_center::Notification::CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE,
           GetNotificationId(notification->grouping_key), title, message,
-          gfx::Image(), display_source, GURL(), notifier_id_, optional_field,
+          display_source, GURL(), notifier_id_, optional_field,
           new AssistantNotificationDelegate(weak_factory_.GetWeakPtr(),
                                             assistant_controller_->GetWeakPtr(),
                                             notification.Clone()),
-          kAssistantIcon,
+          kNotificationAssistantIcon,
           message_center::SystemNotificationWarningLevel::NORMAL);
   system_notification->set_priority(message_center::DEFAULT_PRIORITY);
   message_center->AddNotification(std::move(system_notification));

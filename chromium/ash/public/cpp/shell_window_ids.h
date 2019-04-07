@@ -75,9 +75,6 @@ enum ShellWindowId {
   // The container for bubbles which float over the shelf.
   kShellWindowId_ShelfBubbleContainer,
 
-  // The container for panel windows.
-  kShellWindowId_PanelContainer,
-
   // The container for user-specific modal windows.
   kShellWindowId_SystemModalContainer,
 
@@ -169,7 +166,6 @@ const int32_t kAllShellContainerIds[] = {
     kShellWindowId_ArcVirtualKeyboardContainer,
     kShellWindowId_ShelfContainer,
     kShellWindowId_ShelfBubbleContainer,
-    kShellWindowId_PanelContainer,
     kShellWindowId_SystemModalContainer,
     kShellWindowId_LockScreenWallpaperContainer,
     kShellWindowId_LockScreenContainer,
@@ -187,6 +183,12 @@ const int32_t kAllShellContainerIds[] = {
     kShellWindowId_MouseCursorContainer,
     kShellWindowId_PowerButtonAnimationContainer,
 };
+
+// A list of system modal container IDs. The order of the list is important that
+// the more restrictive container appears before the less restrictive ones.
+const int32_t kSystemModalContainerIds[] = {
+    kShellWindowId_LockSystemModalContainer,
+    kShellWindowId_SystemModalContainer};
 
 // These are the list of container ids of containers which may contain windows
 // that need to be activated.

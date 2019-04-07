@@ -13,13 +13,8 @@
 namespace remoting {
 namespace protocol {
 
-HttpIceConfigRequest::HttpIceConfigRequest(
-    UrlRequestFactory* url_request_factory,
-    const std::string& url,
-    OAuthTokenGetter* oauth_token_getter)
-    : url_(url), weak_factory_(this) {
-  net::NetworkTrafficAnnotationTag traffic_annotation =
-      net::DefineNetworkTrafficAnnotation("CRD_ice_config_request", R"(
+net::NetworkTrafficAnnotationTag CreateIceConfigRequestAnnotation() {
+  return net::DefineNetworkTrafficAnnotation("CRD_ice_config_request", R"(
         semantics {
           sender: "Chrome Remote Desktop"
           description:
@@ -56,6 +51,15 @@ HttpIceConfigRequest::HttpIceConfigRequest(
           "doesn't have effect in Android and iOS client apps. The product "
           "is shipped separately from Chromium, except on Chrome OS."
         )");
+}
+
+HttpIceConfigRequest::HttpIceConfigRequest(
+    UrlRequestFactory* url_request_factory,
+    const std::string& url,
+    OAuthTokenGetter* oauth_token_getter)
+    : url_(url), weak_factory_(this) {
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      CreateIceConfigRequestAnnotation();
   url_request_ = url_request_factory->CreateUrlRequest(
       UrlRequest::Type::GET, url_, traffic_annotation);
   oauth_token_getter_ = oauth_token_getter;
@@ -99,15 +103,15 @@ void HttpIceConfigRequest::SendRequest() {
 void HttpIceConfigRequest::OnResponse(const UrlRequest::Result& result) {
   DCHECK(!on_ice_config_callback_.is_null());
 
-  if (!result.success) {
-    LOG(ERROR) << "Failed to fetch " << url_;
+  if (result.status != -1 && result.status != 200) {
+    LOG(ERROR) << "Received status code " << result.status << " from " << url_
+               << ": " << result.response_body;
     base::ResetAndReturn(&on_ice_config_callback_).Run(IceConfig());
     return;
   }
 
-  if (result.status != 200) {
-    LOG(ERROR) << "Received status code " << result.status << " from " << url_
-               << ": " << result.response_body;
+  if (!result.success) {
+    LOG(ERROR) << "Failed to fetch " << url_;
     base::ResetAndReturn(&on_ice_config_callback_).Run(IceConfig());
     return;
   }

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/offline_pages/offline_page_tab_helper.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/guid.h"
@@ -30,8 +32,6 @@
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "ui/base/page_transition_types.h"
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(offline_pages::OfflinePageTabHelper);
 
 namespace offline_pages {
 
@@ -284,10 +284,9 @@ void OfflinePageTabHelper::TryLoadingOfflinePageOnNetError(
   }
 
   OfflinePageUtils::SelectPagesForURL(
-      web_contents()->GetBrowserContext(), navigation_handle->GetURL(),
-      URLSearchMode::SEARCH_BY_ALL_URLS, tab_id,
-      base::Bind(&OfflinePageTabHelper::SelectPagesForURLDone,
-                 weak_ptr_factory_.GetWeakPtr()));
+      web_contents()->GetBrowserContext(), navigation_handle->GetURL(), tab_id,
+      base::BindOnce(&OfflinePageTabHelper::SelectPagesForURLDone,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void OfflinePageTabHelper::SelectPagesForURLDone(

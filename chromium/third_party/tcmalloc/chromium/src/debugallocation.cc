@@ -69,6 +69,7 @@
 #include <gperftools/malloc_hook.h>
 #include <gperftools/stacktrace.h>
 #include "addressmap-inl.h"
+#include "base/abort.h"
 #include "base/commandlineflags.h"
 #include "base/googleinit.h"
 #include "base/logging.h"
@@ -925,7 +926,7 @@ static void TracePrintf(int fd, const char *fmt, ...) {
         write(STDERR_FILENO, "Unimplemented TracePrintf format\n", 33);
         write(STDERR_FILENO, p, 2);
         write(STDERR_FILENO, "\n", 1);
-        abort();
+        tcmalloc::Abort();
       }
       p++;
       if (base != 0) {
@@ -1152,8 +1153,10 @@ static union {
 
 REGISTER_MODULE_INITIALIZER(debugallocation, {
 #if (__cplusplus >= 201103L)
-    COMPILE_ASSERT(alignof(debug_malloc_implementation_space) >= alignof(DebugMallocImplementation),
-                   debug_malloc_implementation_space_is_not_properly_aligned);
+  static_assert(
+      alignof(decltype(debug_malloc_implementation_space)) >=
+          alignof(DebugMallocImplementation),
+      "DebugMallocImplementation is expected to need just word alignment");
 #endif
   // Either we or valgrind will control memory management.  We
   // register our extension if we're the winner. Otherwise let

@@ -347,7 +347,7 @@ bool TabStrip::IsRectInWindowCaption(const gfx::Rect& rect) {
       (height() - Tab::GetTabSeparatorHeight()) / 2 - 1;
 
   // Disable drag handle extension when tab shapes are visible.
-  bool extend_drag_handle = !SizeTabButtonToTopOfTabStrip() &&
+  bool extend_drag_handle = !controller_->IsFrameCondensed() &&
                             !controller_->EverHasVisibleBackgroundTabShapes();
 
   // A hit on the tab is not in the caption unless it is in the thin strip
@@ -425,13 +425,6 @@ void TabStrip::SetStackedLayout(bool stacked_layout) {
 
   for (int i = 0; i < tab_count(); ++i)
     tab_at(i)->Layout();
-}
-
-bool TabStrip::SizeTabButtonToTopOfTabStrip() {
-  // Extend the button to the screen edge in maximized and immersive fullscreen.
-  views::Widget* widget = GetWidget();
-  return browser_defaults::kSizeTabButtonToTopOfTabStrip ||
-         (widget && (widget->IsMaximized() || widget->IsFullscreen()));
 }
 
 void TabStrip::StartHighlight(int model_index) {
@@ -574,7 +567,7 @@ void TabStrip::RemoveTabAt(content::WebContents* contents,
     PrepareForAnimation();
 
   Tab* tab = tab_at(model_index);
-  tab->set_closing(true);
+  tab->SetClosing(true);
 
   int old_x = tabs_.ideal_bounds(model_index).x();
   RemoveTabFromViewModel(model_index);
@@ -1077,12 +1070,12 @@ Tab* TabStrip::GetTabAt(const gfx::Point& point) {
   return view && view->id() == VIEW_ID_TAB ? static_cast<Tab*>(view) : nullptr;
 }
 
-const Tab* TabStrip::GetSubsequentTab(const Tab* tab) {
+const Tab* TabStrip::GetAdjacentTab(const Tab* tab, int offset) {
   int index = GetModelIndexOfTab(tab);
   if (index < 0)
     return nullptr;
-  ++index;
-  return index >= tab_count() ? nullptr : tab_at(index);
+  index += offset;
+  return IsValidModelIndex(index) ? tab_at(index) : nullptr;
 }
 
 void TabStrip::OnMouseEventInTab(views::View* source,
@@ -1225,21 +1218,47 @@ void TabStrip::PaintChildren(const views::PaintInfo& paint_info) {
   // The view order doesn't match the paint order (tabs_ contains the tab
   // ordering). Additionally we need to paint the tabs that are closing in
   // |tabs_closing_map_|.
+  const bool is_refresh = MD::IsRefreshUi();
   bool is_dragging = false;
   Tab* active_tab = nullptr;
-  Tab* hovered_tab = nullptr;
   Tabs tabs_dragging;
-  Tabs selected_tabs;
-  Tabs hovered_tabs;
+  Tabs selected_and_hovered_tabs;
 
   {
-    // We pass false for |lcd_text_requires_opaque_layer| so that background
-    // tab titles will get LCD AA.  These are rendered opaquely on an opaque tab
-    // background before the layer is composited, so this is safe.
-    ui::CompositingRecorder opacity_recorder(paint_info.context(),
-                                             GetInactiveAlpha(false), false);
+    // Using transparency here normally disables LCD AA on title text in favor
+    // of greyscale AA.  In most cases, the tabs will be rendered opaquely on an
+    // opaque background before compositing, so it's safe to pass false for
+    // |lcd_text_requires_opaque_layer| to allow LCD AA.  The GTK theme avoids
+    // drawing backgrounds, however, and thus must fall back to greyscale AA.
+    // Checking whether the background alpha is zero distinguishes these cases.
+    bool has_background_color =
+        SkColorGetA(GetTabBackgroundColor(TAB_INACTIVE, false)) > 0;
+    ui::CompositingRecorder opacity_recorder(
+        paint_info.context(), GetInactiveAlpha(false), !has_background_color);
 
-    PaintClosingTabs(tab_count(), paint_info);
+    // Under refresh, the different tab shape can lead to odd painting artifacts
+    // of hovered background tabs due to the painting order. This manifests as
+    // the lower left curve the tab being visibly overwritten. This code detects
+    // the hovered cases and defers painting of the given tab to below.
+    const auto paint_or_add_to_tabs = [&paint_info, &selected_and_hovered_tabs,
+                                       is_refresh](Tab* tab) {
+      if (tab->IsSelected() ||
+          (is_refresh &&
+           (tab->mouse_hovered() || tab->hover_controller()->ShouldDraw()))) {
+        selected_and_hovered_tabs.push_back(tab);
+      } else {
+        tab->Paint(paint_info);
+      }
+    };
+
+    const auto paint_closing_tabs = [=](int index) {
+      if (tabs_closing_map_.find(index) == tabs_closing_map_.end())
+        return;
+      for (Tab* tab : base::Reversed(tabs_closing_map_[index]))
+        paint_or_add_to_tabs(tab);
+    };
+
+    paint_closing_tabs(tab_count());
 
     int active_tab_index = -1;
     for (int i = tab_count() - 1; i >= 0; --i) {
@@ -1255,18 +1274,10 @@ void TabStrip::PaintChildren(const views::PaintInfo& paint_info) {
       } else if (tab->IsActive()) {
         active_tab = tab;
         active_tab_index = i;
-      } else if (tab->IsSelected()) {
-        selected_tabs.push_back(tab);
-      } else if (stacked_layout_) {
-        // Do nothing; this will be handled below.
-      } else if (MD::IsRefreshUi() && tab->mouse_hovered()) {
-        hovered_tab = tab;
-      } else if (MD::IsRefreshUi() && tab->hover_controller()->ShouldDraw()) {
-        hovered_tabs.push_back(tab);
-      } else {
-        tab->Paint(paint_info);
+      } else if (!stacked_layout_) {
+        paint_or_add_to_tabs(tab);
       }
-      PaintClosingTabs(i, paint_info);
+      paint_closing_tabs(i);
     }
 
     // Draw from the left and then the right if we're in touch mode.
@@ -1283,27 +1294,47 @@ void TabStrip::PaintChildren(const views::PaintInfo& paint_info) {
     }
   }
 
-  // Now selected but not active. We don't want these dimmed if using native
-  // frame, so they're painted after initial pass.
-  for (Tab* tab : selected_tabs)
+  // Under refresh, this will sort the inactive tabs so that they paint in the
+  // following order:
+  //
+  // o Unselected and hover-animating tabs in ascending animation value order.
+  // o The single unselected mouse hovered tab, if present.
+  // o Selected tabs in trailing-to-leading order.
+  // o Selected and hover animating tabs in ascending animation value order.
+  // o The single selected and mouse_hovered tab, if present.
+  //
+  // This is accomplished by adding a "weight" to the current hover animation
+  // value which represents the above groupings.
+  //
+  // 0.0 == sort_value         Unselected/non hover animating (already painted).
+  // 0.0 <  sort_value <= 1.0  Unselected/hover animating.
+  // 2.0 <= sort_value <= 3.0  Unselected/mouse hovered tab.
+  // 4.0 == sort_value         Selected/non hover animating.
+  // 4.0 <  sort_value <= 5.0  Selected/hover animating.
+  // 6.0 <= sort_value <= 7.0  Selected/mouse hovered tab.
+  //
+  auto tab_sort_value = [](Tab* tab) {
+    float sort_value = tab->hover_controller()->GetAnimationValue();
+    if (tab->IsSelected())
+      sort_value += 4.f;
+    if (tab->mouse_hovered())
+      sort_value += 2.f;
+    return sort_value;
+  };
+
+  // Only sort the list under refresh. Under pre-fresh, the list only contains
+  // the selected tabs already in the proper trailing-to-leading order.
+  if (is_refresh) {
+    std::stable_sort(selected_and_hovered_tabs.begin(),
+                     selected_and_hovered_tabs.end(),
+                     [&tab_sort_value](Tab* tab1, Tab* tab2) -> bool {
+                       return tab_sort_value(tab1) < tab_sort_value(tab2);
+                     });
+  }
+  for (Tab* tab : selected_and_hovered_tabs)
     tab->Paint(paint_info);
 
-  // Next, paint the hover animating tabs in ascending order of the current
-  // animation value.
-  std::sort(hovered_tabs.begin(), hovered_tabs.end(),
-            [](Tab* tab1, Tab* tab2) -> bool {
-              return tab1->hover_controller()->GetAnimationValue() <
-                     tab2->hover_controller()->GetAnimationValue();
-            });
-  for (Tab* tab : hovered_tabs)
-    tab->Paint(paint_info);
-
-  // The currently hovered tab should be painted right before the active tab
-  // to ensure the highlighted tab shape looks reasonable.
-  if (hovered_tab)
-    hovered_tab->Paint(paint_info);
-
-  // Next comes the active tab.
+  // Always paint the active tab over all the inactive tabs.
   if (active_tab && !is_dragging)
     active_tab->Paint(paint_info);
 
@@ -1327,23 +1358,6 @@ void TabStrip::PaintChildren(const views::PaintInfo& paint_info) {
   // If the active tab is being dragged, it goes last.
   if (active_tab && is_dragging)
     active_tab->Paint(paint_info);
-
-  if (controller_->ShouldDrawStrokes()) {
-    // Keep the recording scales consistent for the tab strip and its children.
-    // See https://crbug.com/753911
-    ui::PaintRecorder recorder(paint_info.context(),
-                               paint_info.paint_recording_size(),
-                               paint_info.paint_recording_scale_x(),
-                               paint_info.paint_recording_scale_y(), nullptr);
-    gfx::Canvas* canvas = recorder.canvas();
-    if (active_tab && active_tab->visible()) {
-      canvas->sk_canvas()->clipRect(
-          gfx::RectToSkRect(active_tab->GetMirroredBounds()),
-          SkClipOp::kDifference);
-    }
-    BrowserView::PaintToolbarTopSeparator(canvas, GetToolbarTopSeparatorColor(),
-                                          GetLocalBounds());
-  }
 }
 
 void TabStrip::OnPaint(gfx::Canvas* canvas) {
@@ -1827,12 +1841,18 @@ const Tab* TabStrip::GetLastVisibleTab() const {
 }
 
 void TabStrip::RemoveTabFromViewModel(int index) {
+  Tab* closing_tab = tab_at(index);
+  bool closing_tab_was_active = closing_tab->IsActive();
+
   // We still need to paint the tab until we actually remove it. Put it
   // in tabs_closing_map_ so we can find it.
-  tabs_closing_map_[index].push_back(tab_at(index));
+  tabs_closing_map_[index].push_back(closing_tab);
   UpdateTabsClosingMap(index + 1, -1);
   tabs_.Remove(index);
   selected_tabs_.DecrementFrom(index);
+
+  if (closing_tab_was_active)
+    closing_tab->ActiveStateChanged();
 }
 
 void TabStrip::RemoveAndDeleteTab(Tab* tab) {
@@ -1976,13 +1996,6 @@ TabStrip::FindClosingTabResult TabStrip::FindClosingTab(const Tab* tab) {
   }
   NOTREACHED();
   return FindClosingTabResult(tabs_closing_map_.end(), Tabs::iterator());
-}
-
-void TabStrip::PaintClosingTabs(int index, const views::PaintInfo& paint_info) {
-  if (tabs_closing_map_.find(index) == tabs_closing_map_.end())
-    return;
-  for (Tab* tab : base::Reversed(tabs_closing_map_[index]))
-    tab->Paint(paint_info);
 }
 
 void TabStrip::UpdateStackedLayoutFromMouseEvent(views::View* source,
@@ -2173,7 +2186,7 @@ void TabStrip::AddMessageLoopObserver() {
             this, gfx::Insets(0, 0, kTabStripAnimationVSlop, 0)),
         this);
   }
-  mouse_watcher_->Start();
+  mouse_watcher_->Start(GetWidget()->GetNativeWindow());
 }
 
 void TabStrip::RemoveMessageLoopObserver() {

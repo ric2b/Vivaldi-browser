@@ -7,7 +7,7 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_info.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/smb_client/discovery/mdns_host_locator.h"
@@ -20,8 +20,11 @@
 #include "chrome/browser/chromeos/smb_client/smb_service_helper.h"
 #include "chrome/browser/chromeos/smb_client/smb_url.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/pref_names.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/smb_provider_client.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "net/base/network_interfaces.h"
@@ -52,6 +55,10 @@ std::unique_ptr<NetBiosClientInterface> GetNetBiosClient(Profile* profile) {
   return std::make_unique<NetBiosClient>(network_context);
 }
 
+bool IsEnabledByFlag() {
+  return base::FeatureList::IsEnabled(features::kNativeSmb);
+}
+
 // Metric recording functions.
 void RecordMountResult(SmbMountResult result) {
   DCHECK_LE(result, SmbMountResult::kMaxValue);
@@ -63,11 +70,18 @@ void RecordRemountResult(SmbMountResult result) {
   UMA_HISTOGRAM_ENUMERATION("NativeSmbFileShare.RemountResult", result);
 }
 
+std::unique_ptr<TempFileManager> CreateTempFileManager() {
+  return std::make_unique<TempFileManager>();
+}
+
 }  // namespace
+
+bool SmbService::service_should_run_ = false;
 
 SmbService::SmbService(Profile* profile)
     : provider_id_(ProviderId::CreateFromNativeId("smb")), profile_(profile) {
-  if (base::FeatureList::IsEnabled(features::kNativeSmb)) {
+  service_should_run_ = IsEnabledByFlag() && IsAllowedByPolicy();
+  if (service_should_run_) {
     StartSetup();
   }
 }
@@ -76,7 +90,17 @@ SmbService::~SmbService() {}
 
 // static
 SmbService* SmbService::Get(content::BrowserContext* context) {
-  return SmbServiceFactory::Get(context);
+  if (service_should_run_) {
+    return SmbServiceFactory::Get(context);
+  }
+  return nullptr;
+}
+
+// static
+void SmbService::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterBooleanPref(prefs::kNetworkFileSharesAllowed, true);
+  registry->RegisterBooleanPref(prefs::kNetBiosShareDiscoveryEnabled, true);
 }
 
 void SmbService::Mount(const file_system_provider::MountOptions& options,
@@ -179,6 +203,12 @@ Service* SmbService::GetProviderService() const {
 }
 
 SmbProviderClient* SmbService::GetSmbProviderClient() const {
+  // If the DBusThreadManager or the SmbProviderClient aren't available,
+  // there isn't much we can do. This should only happen when running tests.
+  if (!chromeos::DBusThreadManager::IsInitialized() ||
+      !chromeos::DBusThreadManager::Get()) {
+    return nullptr;
+  }
   return chromeos::DBusThreadManager::Get()->GetSmbProviderClient();
 }
 
@@ -226,14 +256,9 @@ void SmbService::OnRemountResponse(const std::string& file_system_id,
   RecordRemountResult(TranslateErrorToMountResult(error));
 
   if (error != smbprovider::ERROR_OK) {
-    LOG(ERROR) << "SmbService: failed to restore filesystem: "
-               << file_system_id;
+    LOG(ERROR) << "SmbService: failed to restore filesystem: ";
     Unmount(file_system_id, file_system_provider::Service::UNMOUNT_REASON_USER);
   }
-}
-
-void SmbService::InitTempFileManager() {
-  temp_file_manager_ = std::make_unique<TempFileManager>();
 }
 
 void SmbService::StartSetup() {
@@ -243,6 +268,11 @@ void SmbService::StartSetup() {
   if (!user) {
     // An instance of SmbService is created on the lockscreen. When this
     // instance is created, no setup will run.
+    return;
+  }
+
+  SmbProviderClient* client = GetSmbProviderClient();
+  if (!client) {
     return;
   }
 
@@ -260,18 +290,16 @@ void SmbService::StartSetup() {
 }
 
 void SmbService::SetupTempFileManagerAndCompleteSetup() {
-  // InitTempFileManager() has to be called on a separate thread since it
+  // CreateTempFileManager() has to be called on a separate thread since it
   // contains a call that requires a blockable thread.
   base::TaskTraits task_traits = {base::MayBlock(),
                                   base::TaskPriority::USER_BLOCKING,
                                   base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN};
-  base::OnceClosure task =
-      base::BindOnce(&SmbService::InitTempFileManager, base::Unretained(this));
-  base::OnceClosure reply =
-      base::BindOnce(&SmbService::CompleteSetup, base::Unretained(this));
+  auto task = base::BindOnce(&CreateTempFileManager);
+  auto reply = base::BindOnce(&SmbService::CompleteSetup, AsWeakPtr());
 
-  base::PostTaskWithTraitsAndReply(FROM_HERE, task_traits, std::move(task),
-                                   std::move(reply));
+  base::PostTaskWithTraitsAndReplyWithResult(FROM_HERE, task_traits,
+                                             std::move(task), std::move(reply));
 }
 
 void SmbService::OnSetupKerberosResponse(bool success) {
@@ -282,7 +310,12 @@ void SmbService::OnSetupKerberosResponse(bool success) {
   SetupTempFileManagerAndCompleteSetup();
 }
 
-void SmbService::CompleteSetup() {
+void SmbService::CompleteSetup(
+    std::unique_ptr<TempFileManager> temp_file_manager) {
+  DCHECK(temp_file_manager);
+  DCHECK(!temp_file_manager_);
+
+  temp_file_manager_ = std::move(temp_file_manager);
   share_finder_ = std::make_unique<SmbShareFinder>(GetSmbProviderClient());
   RegisterHostLocators();
 
@@ -300,7 +333,11 @@ void SmbService::FireMountCallback(MountResponse callback,
 
 void SmbService::RegisterHostLocators() {
   SetUpMdnsHostLocator();
-  SetUpNetBiosHostLocator();
+  if (IsNetBiosDiscoveryEnabled()) {
+    SetUpNetBiosHostLocator();
+  } else {
+    LOG(WARNING) << "SmbService: NetBios discovery disabled.";
+  }
 }
 
 void SmbService::SetUpMdnsHostLocator() {
@@ -316,6 +353,14 @@ void SmbService::SetUpNetBiosHostLocator() {
       GetSmbProviderClient());
 
   share_finder_->RegisterHostLocator(std::move(netbios_host_locator));
+}
+
+bool SmbService::IsAllowedByPolicy() const {
+  return profile_->GetPrefs()->GetBoolean(prefs::kNetworkFileSharesAllowed);
+}
+
+bool SmbService::IsNetBiosDiscoveryEnabled() const {
+  return profile_->GetPrefs()->GetBoolean(prefs::kNetBiosShareDiscoveryEnabled);
 }
 
 void SmbService::RecordMountCount() const {

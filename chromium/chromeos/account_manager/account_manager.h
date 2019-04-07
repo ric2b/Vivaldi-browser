@@ -102,7 +102,12 @@ class CHROMEOS_EXPORT AccountManager {
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       DelayNetworkCallRunner delay_network_call_runner);
 
-  // Gets (async) a list of account keys known to |AccountManager|.
+  // Gets (async) a list of account keys known to |AccountManager|. Note that
+  // |callback| will be immediately called in the same thread if
+  // |AccountManager| has been fully initialized and hence it may not be safe to
+  // call this method directly in some class's constructor, with a callback on
+  // the same class, since it may result in a method call on a partially
+  // constructed object.
   void GetAccounts(AccountListCallback callback);
 
   // Removes an account. Does not do anything if |account_key| is not known by
@@ -234,7 +239,7 @@ class CHROMEOS_EXPORT AccountManager {
 
   // A list of |AccountManager| observers.
   // Verifies that the list is empty on destruction.
-  base::ObserverList<Observer, true /* check_empty */> observers_;
+  base::ObserverList<Observer, true /* check_empty */>::Unchecked observers_;
 
   // A list of pending token revocation requests.
   // |AccountManager| is a long living object in general and these requests are

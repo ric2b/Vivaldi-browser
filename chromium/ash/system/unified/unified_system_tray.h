@@ -17,6 +17,7 @@ class TimeTrayItemView;
 }  // namespace tray
 
 class ImeModeView;
+class ManagedDeviceView;
 class NotificationCounterView;
 class QuietModeView;
 class UnifiedSliderBubbleController;
@@ -60,6 +61,9 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView {
   // is same as one shown when volume buttons on keyboard are pressed.
   void ShowVolumeSliderBubble();
 
+  // Shows main bubble with audio settings detailed view.
+  void ShowAudioDetailedViewBubble();
+
   // Return the bounds of the bubble in the screen.
   gfx::Rect GetBubbleBoundsInScreen() const;
 
@@ -84,6 +88,10 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView {
   void HideBubbleWithView(const views::TrayBubbleView* bubble_view) override;
   void ClickedOutsideBubble() override;
   void UpdateAfterShelfAlignmentChange() override;
+  bool ShouldEnableExtraKeyboardAccessibility() override;
+  void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
+  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
   UnifiedSystemTrayModel* model() { return model_.get(); }
 
@@ -91,7 +99,7 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView {
   friend class UnifiedSystemTrayTest;
   friend class UnifiedSystemTrayTestApi;
 
-  // Private class implements message_center::UiDelegate.
+  // Private class implements MessageCenterUiDelegate.
   class UiDelegate;
 
   // Private class implements TrayNetworkStateObserver::Delegate.
@@ -115,9 +123,12 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView {
       slider_bubble_controller_;
 
   ImeModeView* const ime_mode_view_;
+  ManagedDeviceView* const managed_device_view_;
   NotificationCounterView* const notification_counter_item_;
   QuietModeView* const quiet_mode_view_;
   tray::TimeTrayItemView* const time_view_;
+
+  ui::Layer* ink_drop_layer_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(UnifiedSystemTray);
 };

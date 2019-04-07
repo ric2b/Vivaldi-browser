@@ -10,6 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -21,6 +22,7 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_with_install.h"
 #include "chrome/browser/extensions/extension_util.h"
+#include "chrome/browser/extensions/permissions_updater.h"
 #include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
@@ -41,6 +43,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/web_contents_tester.h"
 #include "extensions/browser/api_test_utils.h"
+#include "extensions/browser/event_router.h"
 #include "extensions/browser/event_router_factory.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_error_test_util.h"
@@ -51,12 +54,15 @@
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/install/extension_install_ui.h"
 #include "extensions/browser/mock_external_provider.h"
+#include "extensions/browser/test_event_router_observer.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_features.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest_constants.h"
+#include "extensions/common/permissions/permission_set.h"
+#include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/value_builder.h"
 #include "extensions/test/test_extension_dir.h"
 #include "services/data_decoder/data_decoder_service.h"
@@ -88,6 +94,34 @@ bool HasPrefsPermission(bool (*has_pref)(const std::string&,
                         content::BrowserContext* context,
                         const std::string& id) {
   return has_pref(id, context);
+}
+
+bool WasPermissionsUpdatedEventDispatched(
+    const TestEventRouterObserver& observer,
+    const ExtensionId& extension_id) {
+  const std::string kEventName =
+      api::developer_private::OnItemStateChanged::kEventName;
+  const auto& event_map = observer.events();
+  auto iter = event_map.find(kEventName);
+  if (iter == event_map.end())
+    return false;
+
+  const Event& event = *iter->second;
+  CHECK(event.event_args);
+  CHECK_GE(1u, event.event_args->GetList().size());
+  std::unique_ptr<api::developer_private::EventData> event_data =
+      api::developer_private::EventData::FromValue(
+          event.event_args->GetList()[0]);
+  if (!event_data)
+    return false;
+
+  if (event_data->item_id != extension_id ||
+      event_data->event_type !=
+          api::developer_private::EVENT_TYPE_PERMISSIONS_CHANGED) {
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace
@@ -1341,19 +1375,33 @@ TEST_F(DeveloperPrivateApiUnitTest, GrantHostPermission) {
     }
   };
 
-  GURL host("https://example.com");
-  EXPECT_FALSE(modifier.HasGrantedHostPermission(host));
-  run_add_host_permission(host.spec(), true, nullptr);
+  const GURL kExampleCom("https://example.com/");
+  EXPECT_FALSE(modifier.HasGrantedHostPermission(kExampleCom));
+  run_add_host_permission("https://example.com/*", true, nullptr);
+  EXPECT_TRUE(modifier.HasGrantedHostPermission(kExampleCom));
+
+  const GURL kGoogleCom("https://google.com");
+  const GURL kMapsGoogleCom("https://maps.google.com/");
+  EXPECT_FALSE(modifier.HasGrantedHostPermission(kGoogleCom));
+  EXPECT_FALSE(modifier.HasGrantedHostPermission(kMapsGoogleCom));
+  run_add_host_permission("https://*.google.com/*", true, nullptr);
+  EXPECT_TRUE(modifier.HasGrantedHostPermission(kGoogleCom));
+  EXPECT_TRUE(modifier.HasGrantedHostPermission(kMapsGoogleCom));
 
   run_add_host_permission(kInvalidHost, false, kInvalidHostError);
+  // Path of the pattern must exactly match "/*".
+  run_add_host_permission("https://example.com/", false, kInvalidHostError);
   run_add_host_permission("https://example.com/foobar", false,
                           kInvalidHostError);
   run_add_host_permission("https://example.com/#foobar", false,
                           kInvalidHostError);
+  run_add_host_permission("https://example.com/*foobar", false,
+                          kInvalidHostError);
 
-  GURL chrome_host("chrome://settings");
-  run_add_host_permission(chrome_host.spec(), false,
-                          "Cannot grant a permission that wasn't withheld.");
+  // Cannot grant chrome:-scheme URLs.
+  GURL chrome_host("chrome://settings/*");
+  run_add_host_permission(chrome_host.spec(), false, kInvalidHostError);
+
   EXPECT_FALSE(modifier.HasGrantedHostPermission(chrome_host));
 }
 
@@ -1386,22 +1434,41 @@ TEST_F(DeveloperPrivateApiUnitTest, RemoveHostPermission) {
     }
   };
 
-  GURL host("https://example.com");
-  run_remove_host_permission(host.spec(), false,
+  run_remove_host_permission("https://example.com/*", false,
                              "Cannot remove a host that hasn't been granted.");
 
-  modifier.GrantHostPermission(host);
-  EXPECT_TRUE(modifier.HasGrantedHostPermission(host));
+  const GURL kExampleCom("https://example.com");
+  modifier.GrantHostPermission(kExampleCom);
+  EXPECT_TRUE(modifier.HasGrantedHostPermission(kExampleCom));
 
+  // Path of the pattern must exactly match "/*".
+  run_remove_host_permission("https://example.com/", false, kInvalidHostError);
   run_remove_host_permission("https://example.com/foobar", false,
                              kInvalidHostError);
   run_remove_host_permission("https://example.com/#foobar", false,
                              kInvalidHostError);
+  run_remove_host_permission("https://example.com/*foobar", false,
+                             kInvalidHostError);
   run_remove_host_permission(kInvalidHost, false, kInvalidHostError);
-  EXPECT_TRUE(modifier.HasGrantedHostPermission(host));
+  EXPECT_TRUE(modifier.HasGrantedHostPermission(kExampleCom));
 
-  run_remove_host_permission(host.spec(), true, nullptr);
-  EXPECT_FALSE(modifier.HasGrantedHostPermission(host));
+  run_remove_host_permission("https://example.com/*", true, nullptr);
+  EXPECT_FALSE(modifier.HasGrantedHostPermission(kExampleCom));
+
+  URLPattern new_pattern(Extension::kValidHostPermissionSchemes,
+                         "https://*.google.com/*");
+  PermissionsUpdater(profile()).GrantRuntimePermissions(
+      *extension, PermissionSet(APIPermissionSet(), ManifestPermissionSet(),
+                                URLPatternSet({new_pattern}), URLPatternSet()));
+
+  const GURL kGoogleCom("https://google.com/");
+  const GURL kMapsGoogleCom("https://maps.google.com/");
+  EXPECT_TRUE(modifier.HasGrantedHostPermission(kGoogleCom));
+  EXPECT_TRUE(modifier.HasGrantedHostPermission(kMapsGoogleCom));
+
+  run_remove_host_permission("https://*.google.com/*", true, nullptr);
+  EXPECT_FALSE(modifier.HasGrantedHostPermission(kGoogleCom));
+  EXPECT_FALSE(modifier.HasGrantedHostPermission(kMapsGoogleCom));
 }
 
 TEST_F(DeveloperPrivateApiUnitTest, UpdateHostAccess) {
@@ -1492,6 +1559,165 @@ TEST_F(DeveloperPrivateApiUnitTest,
   RunUpdateHostAccess(*extension, "ON_SPECIFIC_SITES");
   EXPECT_TRUE(modifier.HasWithheldHostPermissions());
   EXPECT_FALSE(modifier.HasGrantedHostPermission(example_com));
+}
+
+TEST_F(DeveloperPrivateApiUnitTest,
+       UpdateHostAccess_GrantScopeGreaterThanRequestedScope) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kRuntimeHostPermissions);
+
+  scoped_refptr<const Extension> extension =
+      ExtensionBuilder("test").AddPermission("http://*/*").Build();
+  service()->AddExtension(extension.get());
+  ScriptingPermissionsModifier modifier(profile(), extension.get());
+  modifier.SetWithholdHostPermissions(true);
+
+  ExtensionPrefs* extension_prefs = ExtensionPrefs::Get(profile());
+  EXPECT_EQ(PermissionSet(),
+            extension->permissions_data()->active_permissions());
+  EXPECT_EQ(PermissionSet(),
+            *extension_prefs->GetRuntimeGrantedPermissions(extension->id()));
+
+  {
+    scoped_refptr<UIThreadExtensionFunction> function =
+        base::MakeRefCounted<api::DeveloperPrivateAddHostPermissionFunction>();
+    std::string args = base::StringPrintf(
+        R"(["%s", "%s"])", extension->id().c_str(), "*://chromium.org/*");
+    EXPECT_TRUE(api_test_utils::RunFunction(function.get(), args, profile()))
+        << function->GetError();
+  }
+
+  // The active permissions (which are given to the extension process) should
+  // only include the intersection of what was requested by the extension and
+  // the runtime granted permissions - which is http://chromium.org/*.
+  URLPattern http_chromium(Extension::kValidHostPermissionSchemes,
+                           "http://chromium.org/*");
+  const PermissionSet http_chromium_set(
+      APIPermissionSet(), ManifestPermissionSet(),
+      URLPatternSet({http_chromium}), URLPatternSet());
+  EXPECT_EQ(http_chromium_set,
+            extension->permissions_data()->active_permissions());
+
+  // The runtime granted permissions should include all of what was approved by
+  // the user, which is *://chromium.org/*, and should be present in both the
+  // scriptable and explicit hosts.
+  URLPattern all_chromium(Extension::kValidHostPermissionSchemes,
+                          "*://chromium.org/*");
+  const PermissionSet all_chromium_set(
+      APIPermissionSet(), ManifestPermissionSet(),
+      URLPatternSet({all_chromium}), URLPatternSet({all_chromium}));
+  EXPECT_EQ(all_chromium_set,
+            *extension_prefs->GetRuntimeGrantedPermissions(extension->id()));
+
+  {
+    scoped_refptr<UIThreadExtensionFunction> function = base::MakeRefCounted<
+        api::DeveloperPrivateRemoveHostPermissionFunction>();
+    std::string args = base::StringPrintf(
+        R"(["%s", "%s"])", extension->id().c_str(), "*://chromium.org/*");
+    EXPECT_TRUE(api_test_utils::RunFunction(function.get(), args, profile()))
+        << function->GetError();
+  }
+
+  // Removing the granted permission should remove it entirely from both
+  // the active and the stored permissions.
+  EXPECT_EQ(PermissionSet(),
+            extension->permissions_data()->active_permissions());
+  EXPECT_EQ(PermissionSet(),
+            *extension_prefs->GetRuntimeGrantedPermissions(extension->id()));
+}
+
+TEST_F(DeveloperPrivateApiUnitTest,
+       UpdateHostAccess_UnrequestedHostsDispatchUpdateEvents) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kRuntimeHostPermissions);
+
+  scoped_refptr<const Extension> extension =
+      ExtensionBuilder("test").AddPermission("http://google.com/*").Build();
+  service()->AddExtension(extension.get());
+  ScriptingPermissionsModifier modifier(profile(), extension.get());
+  modifier.SetWithholdHostPermissions(true);
+
+  // We need to call DeveloperPrivateAPI::Get() in order to instantiate the
+  // keyed service, since it's not created by default in unit tests.
+  DeveloperPrivateAPI::Get(profile());
+  const ExtensionId listener_id = crx_file::id_util::GenerateId("listener");
+  EventRouter* event_router = EventRouter::Get(profile());
+
+  // The DeveloperPrivateEventRouter will only dispatch events if there's at
+  // least one listener to dispatch to. Create one.
+  content::RenderProcessHost* process = nullptr;
+  const char* kEventName =
+      api::developer_private::OnItemStateChanged::kEventName;
+  event_router->AddEventListener(kEventName, process, listener_id);
+
+  TestEventRouterObserver test_observer(event_router);
+  EXPECT_FALSE(
+      WasPermissionsUpdatedEventDispatched(test_observer, extension->id()));
+
+  URLPatternSet hosts({URLPattern(Extension::kValidHostPermissionSchemes,
+                                  "https://example.com/*")});
+  PermissionSet permissions(APIPermissionSet(), ManifestPermissionSet(), hosts,
+                            hosts);
+  PermissionsUpdater(profile()).GrantRuntimePermissions(*extension,
+                                                        permissions);
+  // The event router fetches icons from a blocking thread when sending the
+  // update event; allow it to finish before verifying the event was dispatched.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(
+      WasPermissionsUpdatedEventDispatched(test_observer, extension->id()));
+
+  test_observer.ClearEvents();
+
+  PermissionsUpdater(profile()).RevokeRuntimePermissions(*extension,
+                                                         permissions);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(
+      WasPermissionsUpdatedEventDispatched(test_observer, extension->id()));
+}
+
+TEST_F(DeveloperPrivateApiUnitTest, ExtensionUpdatedEventOnPermissionsChange) {
+  // We need to call DeveloperPrivateAPI::Get() in order to instantiate the
+  // keyed service, since it's not created by default in unit tests.
+  DeveloperPrivateAPI::Get(profile());
+  const ExtensionId listener_id = crx_file::id_util::GenerateId("listener");
+  EventRouter* event_router = EventRouter::Get(profile());
+
+  // The DeveloperPrivateEventRouter will only dispatch events if there's at
+  // least one listener to dispatch to. Create one.
+  content::RenderProcessHost* process = nullptr;
+  const char* kEventName =
+      api::developer_private::OnItemStateChanged::kEventName;
+  event_router->AddEventListener(kEventName, process, listener_id);
+
+  scoped_refptr<const Extension> dummy_extension =
+      ExtensionBuilder("dummy")
+          .SetManifestKey("optional_permissions",
+                          ListBuilder().Append("tabs").Build())
+          .Build();
+
+  TestEventRouterObserver test_observer(event_router);
+  EXPECT_FALSE(WasPermissionsUpdatedEventDispatched(test_observer,
+                                                    dummy_extension->id()));
+
+  APIPermissionSet apis;
+  apis.insert(APIPermission::kTab);
+  PermissionSet permissions(apis, ManifestPermissionSet(), URLPatternSet(),
+                            URLPatternSet());
+  PermissionsUpdater(profile()).GrantOptionalPermissions(*dummy_extension,
+                                                         permissions);
+  // The event router fetches icons from a blocking thread when sending the
+  // update event; allow it to finish before verifying the event was dispatched.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(WasPermissionsUpdatedEventDispatched(test_observer,
+                                                   dummy_extension->id()));
+
+  test_observer.ClearEvents();
+
+  PermissionsUpdater(profile()).RevokeOptionalPermissions(
+      *dummy_extension, permissions, PermissionsUpdater::REMOVE_HARD);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(WasPermissionsUpdatedEventDispatched(test_observer,
+                                                   dummy_extension->id()));
 }
 
 class DeveloperPrivateZipInstallerUnitTest

@@ -33,7 +33,7 @@ class ThrottledOfflineContentProvider
   // Taking actions on the OfflineContentProvider will flush any queued updates
   // immediately after performing the action. This is to make sure item updates
   // in response to the update are immediately reflected back to the caller.
-  void OpenItem(const ContentId& id) override;
+  void OpenItem(LaunchLocation location, const ContentId& id) override;
   void RemoveItem(const ContentId& id) override;
   void CancelDownload(const ContentId& id) override;
   void PauseDownload(const ContentId& id) override;
@@ -45,7 +45,9 @@ class ThrottledOfflineContentProvider
   void GetItemById(const ContentId& id, SingleItemCallback callback) override;
   void GetAllItems(MultipleItemCallback callback) override;
   void GetVisualsForItem(const ContentId& id,
-                         const VisualsCallback& callback) override;
+                         VisualsCallback callback) override;
+  void GetShareInfoForItem(const ContentId& id,
+                           ShareCallback callback) override;
   void AddObserver(OfflineContentProvider::Observer* observer) override;
   void RemoveObserver(OfflineContentProvider::Observer* observer) override;
 
@@ -78,7 +80,7 @@ class ThrottledOfflineContentProvider
   bool update_queued_;
 
   OfflineContentProvider* const wrapped_provider_;
-  base::ObserverList<OfflineContentProvider::Observer> observers_;
+  base::ObserverList<OfflineContentProvider::Observer>::Unchecked observers_;
 
   typedef std::map<ContentId, OfflineItem> OfflineItemMap;
   OfflineItemMap updates_;

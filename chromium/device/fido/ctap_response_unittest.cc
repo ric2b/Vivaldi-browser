@@ -544,7 +544,7 @@ TEST(CTAPResponseTest, TestParseU2fSignWithNullCorruptedSignature) {
 
 TEST(CTAPResponseTest, TestReadGetInfoResponse) {
   auto get_info_response =
-      ReadCTAPGetInfoResponse(test_data::kTestAuthenticatorGetInfoResponse);
+      ReadCTAPGetInfoResponse(test_data::kTestGetInfoResponsePlatformDevice);
   ASSERT_TRUE(get_info_response);
   ASSERT_TRUE(get_info_response->max_msg_size());
   EXPECT_EQ(*get_info_response->max_msg_size(), 1200u);
@@ -574,8 +574,7 @@ TEST(CTAPResponseTest, TestReadGetInfoResponseWithIncorrectFormat) {
 
 TEST(CTAPResponseTest, TestSerializeGetInfoResponse) {
   AuthenticatorGetInfoResponse response(
-      {ProtocolVersion::kCtap, ProtocolVersion::kU2f},
-      fido_parsing_utils::Materialize(kTestDeviceAaguid));
+      {ProtocolVersion::kCtap, ProtocolVersion::kU2f}, kTestDeviceAaguid);
   response.SetExtensions({"uvm", "hmac-secret"});
   AuthenticatorSupportedOptions options;
   options.SetSupportsResidentKey(true);
@@ -592,7 +591,7 @@ TEST(CTAPResponseTest, TestSerializeGetInfoResponse) {
 
   EXPECT_THAT(EncodeToCBOR(response),
               ::testing::ElementsAreArray(
-                  base::make_span(test_data::kTestAuthenticatorGetInfoResponse)
+                  base::make_span(test_data::kTestGetInfoResponsePlatformDevice)
                       .subspan(1)));
 }
 

@@ -33,8 +33,6 @@
 namespace GetFrame = extensions::api::web_navigation::GetFrame;
 namespace GetAllFrames = extensions::api::web_navigation::GetAllFrames;
 
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(extensions::WebNavigationTabObserver);
-
 namespace extensions {
 
 namespace web_navigation = api::web_navigation;
@@ -90,25 +88,32 @@ bool WebNavigationEventRouter::ShouldTrackBrowser(Browser* browser) {
   return profile_->IsSameProfile(browser->profile());
 }
 
-void WebNavigationEventRouter::TabReplacedAt(
+void WebNavigationEventRouter::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
-    content::WebContents* old_contents,
-    content::WebContents* new_contents,
-    int index) {
-  WebNavigationTabObserver* tab_observer =
-      WebNavigationTabObserver::Get(old_contents);
-  if (!tab_observer) {
-    // If you hit this DCHECK(), please add reproduction steps to
-    // http://crbug.com/109464.
-    DCHECK(GetViewType(old_contents) != VIEW_TYPE_TAB_CONTENTS);
-    return;
-  }
-  if (!FrameNavigationState::IsValidUrl(old_contents->GetURL()) ||
-      !FrameNavigationState::IsValidUrl(new_contents->GetURL()))
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
+  if (change.type() != TabStripModelChange::kReplaced)
     return;
 
-  web_navigation_api_helpers::DispatchOnTabReplaced(old_contents, profile_,
-                                                    new_contents);
+  for (const auto& delta : change.deltas()) {
+    content::WebContents* old_contents = delta.replace.old_contents;
+    content::WebContents* new_contents = delta.replace.new_contents;
+
+    WebNavigationTabObserver* tab_observer =
+        WebNavigationTabObserver::Get(old_contents);
+    if (!tab_observer) {
+      // If you hit this DCHECK(), please add reproduction steps to
+      // http://crbug.com/109464.
+      DCHECK(GetViewType(old_contents) != VIEW_TYPE_TAB_CONTENTS);
+      continue;
+    }
+    if (!FrameNavigationState::IsValidUrl(old_contents->GetURL()) ||
+        !FrameNavigationState::IsValidUrl(new_contents->GetURL()))
+      continue;
+
+    web_navigation_api_helpers::DispatchOnTabReplaced(old_contents, profile_,
+                                                      new_contents);
+  }
 }
 
 void WebNavigationEventRouter::Observe(
@@ -388,10 +393,14 @@ void WebNavigationTabObserver::DidOpenRequestedURL(
   if (!router)
     return;
 
-  router->RecordNewWebContents(web_contents(),
-                               source_render_frame_host->GetProcess()->GetID(),
-                               source_render_frame_host->GetRoutingID(), url,
-                               new_contents, renderer_initiated);
+  TabStripModel* ignored_tab_strip_model = nullptr;
+  int ignored_tab_index = -1;
+  bool new_contents_is_present_in_tabstrip = ExtensionTabUtil::GetTabStripModel(
+      new_contents, &ignored_tab_strip_model, &ignored_tab_index);
+  router->RecordNewWebContents(
+      web_contents(), source_render_frame_host->GetProcess()->GetID(),
+      source_render_frame_host->GetRoutingID(), url, new_contents,
+      !new_contents_is_present_in_tabstrip);
 }
 
 void WebNavigationTabObserver::WebContentsDestroyed() {

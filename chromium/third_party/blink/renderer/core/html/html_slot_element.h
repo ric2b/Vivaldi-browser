@@ -53,6 +53,13 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   const HeapVector<Member<Element>> AssignedElementsForBinding(
       const AssignedNodesOptions&);
 
+  bool IsAssignedNodeSameWithBefore(
+      HeapVector<Member<Node>>& new_assigned_nodes,
+      HeapHashSet<Member<Node>>& old_assigned_nodes);
+  void assign(HeapVector<Member<Node>> nodes);
+  bool ContainsInAssignedNodesCandidates(Node&) const;
+  void SignalSlotChange();
+
   const HeapVector<Member<Node>> FlattenedAssignedNodes();
 
   Node* FirstAssignedNode() const {
@@ -134,9 +141,8 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
  private:
   HTMLSlotElement(Document&);
 
-  InsertionNotificationRequest InsertedInto(ContainerNode*) final;
-  void RemovedFrom(ContainerNode*) final;
-  void WillRecalcStyle(StyleRecalcChange) final;
+  InsertionNotificationRequest InsertedInto(ContainerNode&) final;
+  void RemovedFrom(ContainerNode&) final;
   void DidRecalcStyle(StyleRecalcChange) final;
 
   void EnqueueSlotChangeEvent();
@@ -161,6 +167,8 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
 
   HeapVector<Member<Node>> assigned_nodes_;
   bool slotchange_event_enqueued_ = false;
+
+  HeapHashSet<Member<Node>> assigned_nodes_candidates_;
 
   // For IncrementalShadowDOM
   HeapVector<Member<Node>> flat_tree_children_;

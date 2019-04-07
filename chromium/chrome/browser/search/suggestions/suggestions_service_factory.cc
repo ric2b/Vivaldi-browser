@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/default_tick_clock.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
@@ -90,7 +90,9 @@ KeyedService* SuggestionsServiceFactory::BuildServiceInstanceFor(
   std::unique_ptr<ImageManager> thumbnail_manager(
       new ImageManager(std::move(image_fetcher), std::move(db), database_dir));
   return new SuggestionsServiceImpl(
-      identity_manager, sync_service, profile->GetRequestContext(),
+      identity_manager, sync_service,
+      content::BrowserContext::GetDefaultStoragePartition(profile)
+          ->GetURLLoaderFactoryForBrowserProcess(),
       std::move(suggestions_store), std::move(thumbnail_manager),
       std::move(blacklist_store), base::DefaultTickClock::GetInstance());
 }

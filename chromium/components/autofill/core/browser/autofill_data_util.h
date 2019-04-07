@@ -9,6 +9,7 @@
 
 #include "base/strings/string16.h"
 #include "base/strings/string_piece_forward.h"
+#include "components/autofill/core/browser/field_types.h"
 
 namespace autofill {
 
@@ -21,6 +22,12 @@ struct NameParts {
   base::string16 middle;
   base::string16 family;
 };
+
+// Truncates a string to the nearest UTF-8 character that will leave
+// the string less than or equal to the specified byte size.
+std::string TruncateUTF8(const std::string& data);
+
+bool IsCreditCardExpirationType(ServerFieldType type);
 
 // Used to map Chrome card issuer networks to Payment Request API basic card
 // payment spec issuer networks and icons.

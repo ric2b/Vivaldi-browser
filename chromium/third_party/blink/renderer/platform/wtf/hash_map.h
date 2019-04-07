@@ -31,6 +31,12 @@ namespace WTF {
 template <typename KeyTraits, typename MappedTraits>
 struct HashMapValueTraits;
 
+template <typename Value,
+          typename HashFunctions,
+          typename Traits,
+          typename Allocator>
+class HashCountedSet;
+
 struct KeyValuePairKeyExtractor {
   STATIC_ONLY(KeyValuePairKeyExtractor);
   template <typename T>
@@ -51,6 +57,8 @@ template <typename KeyArg,
           typename Allocator = PartitionAllocator>
 class HashMap {
   USE_ALLOCATOR(HashMap, Allocator);
+  template <typename T, typename U, typename V, typename W>
+  friend class HashCountedSet;
 
  private:
   typedef KeyTraitsArg KeyTraits;
@@ -196,6 +204,9 @@ class HashMap {
   std::enable_if_t<A::kIsGarbageCollected> Trace(VisitorDispatcher visitor) {
     impl_.Trace(visitor);
   }
+
+ protected:
+  ValueType** GetBufferSlot() { return impl_.GetBufferSlot(); }
 
  private:
   template <typename IncomingKeyType, typename IncomingMappedType>
@@ -353,7 +364,7 @@ template <typename T,
           typename Y>
 HashMap<T, U, V, W, X, Y>::HashMap(std::initializer_list<ValueType> elements) {
   if (elements.size())
-    impl_.ReserveCapacityForSize(elements.size());
+    impl_.ReserveCapacityForSize(SafeCast<wtf_size_t>(elements.size()));
   for (const ValueType& element : elements)
     insert(element.key, element.value);
 }

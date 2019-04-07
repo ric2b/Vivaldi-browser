@@ -18,9 +18,8 @@ namespace identity {
 class IdentityManager;
 }
 
-namespace user_prefs {
-class PrefRegistrySyncable;
-}
+class PrefService;
+class PrefRegistrySimple;
 
 // ProfileOAuth2TokenService is a KeyedService that retrieves
 // OAuth2 access tokens for a given set of scopes using the OAuth2 login
@@ -41,11 +40,12 @@ class ProfileOAuth2TokenService : public OAuth2TokenService,
                                   public KeyedService {
  public:
   ProfileOAuth2TokenService(
+      PrefService* user_prefs,
       std::unique_ptr<OAuth2TokenServiceDelegate> delegate);
   ~ProfileOAuth2TokenService() override;
 
   // Registers per-profile prefs.
-  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
   // KeyedService implementation.
   void Shutdown() override;
@@ -109,6 +109,12 @@ class ProfileOAuth2TokenService : public OAuth2TokenService,
     DCHECK(!diagnostics_client_ || !diagnostics_client);
     diagnostics_client_ = diagnostics_client;
   }
+
+  // Creates a new device ID if there are no accounts, or if the current device
+  // ID is empty.
+  void RecreateDeviceIdIfNeeded();
+
+  PrefService* user_prefs_;
 
   // Whether all credentials have been loaded.
   bool all_credentials_loaded_;

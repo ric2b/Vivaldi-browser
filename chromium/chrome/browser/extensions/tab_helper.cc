@@ -29,7 +29,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/common/extensions/api/webstore/webstore_api_constants.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
@@ -64,15 +64,9 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "url/url_constants.h"
 
-#if defined(OS_WIN)
-#include "chrome/browser/web_applications/web_app_win.h"
-#endif
-
 using content::NavigationController;
 using content::NavigationEntry;
 using content::WebContents;
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(extensions::TabHelper);
 
 namespace extensions {
 
@@ -187,14 +181,14 @@ TabHelper::TabHelper(content::WebContents* web_contents)
   BookmarkManagerPrivateDragEventRouter::CreateForWebContents(web_contents);
 }
 
-void TabHelper::CreateHostedAppFromWebContents() {
+void TabHelper::CreateHostedAppFromWebContents(bool shortcut_app_requested) {
   DCHECK(CanCreateBookmarkApp());
   if (pending_web_app_action_ != NONE)
     return;
 
   // Start fetching web app info for CreateApplicationShortcut dialog and show
   // the dialog when the data is available in OnDidGetWebApplicationInfo.
-  GetApplicationInfo(CREATE_HOSTED_APP);
+  GetApplicationInfo(CREATE_HOSTED_APP, shortcut_app_requested);
 }
 
 bool TabHelper::CanCreateBookmarkApp() const {
@@ -301,7 +295,7 @@ void TabHelper::DidFinishNavigation(
     Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
     if (browser && browser->is_app()) {
       const Extension* extension = registry->GetExtensionById(
-          web_app::GetExtensionIdFromApplicationName(browser->app_name()),
+          web_app::GetAppIdFromApplicationName(browser->app_name()),
           ExtensionRegistry::EVERYTHING);
       if (extension && AppLaunchInfo::GetFullLaunchURL(extension).is_valid())
         SetExtensionApp(extension);
@@ -345,6 +339,7 @@ void TabHelper::DidCloneToNewWebContents(WebContents* old_web_contents,
 
 void TabHelper::OnDidGetWebApplicationInfo(
     chrome::mojom::ChromeRenderFrameAssociatedPtr chrome_render_frame,
+    bool shortcut_app_requested,
     const WebApplicationInfo& info) {
   web_app_info_ = info;
 
@@ -368,6 +363,8 @@ void TabHelper::OnDidGetWebApplicationInfo(
           new BookmarkAppHelper(profile_, web_app_info_, contents,
                                 InstallableMetrics::GetInstallSource(
                                     contents, InstallTrigger::MENU)));
+      if (shortcut_app_requested)
+        bookmark_app_helper_->set_shortcut_app_requested();
       bookmark_app_helper_->Create(base::Bind(
           &TabHelper::FinishCreateBookmarkApp, weak_ptr_factory_.GetWeakPtr()));
       break;
@@ -587,7 +584,8 @@ void TabHelper::OnExtensionUnloaded(content::BrowserContext* browser_context,
     SetExtensionApp(nullptr);
 }
 
-void TabHelper::GetApplicationInfo(WebAppAction action) {
+void TabHelper::GetApplicationInfo(WebAppAction action,
+                                   bool shortcut_app_requested) {
   NavigationEntry* entry =
       web_contents()->GetController().GetLastCommittedEntry();
   if (!entry)
@@ -607,7 +605,7 @@ void TabHelper::GetApplicationInfo(WebAppAction action) {
   auto* web_app_info_proxy = chrome_render_frame.get();
   web_app_info_proxy->GetWebApplicationInfo(
       base::Bind(&TabHelper::OnDidGetWebApplicationInfo, base::Unretained(this),
-                 base::Passed(&chrome_render_frame)));
+                 base::Passed(&chrome_render_frame), shortcut_app_requested));
 }
 
 void TabHelper::SetTabId(content::RenderFrameHost* render_frame_host) {

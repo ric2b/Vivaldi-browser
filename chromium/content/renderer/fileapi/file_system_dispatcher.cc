@@ -11,11 +11,15 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/no_destructor.h"
 #include "base/process/process.h"
 #include "components/services/filesystem/public/interfaces/types.mojom.h"
 #include "content/child/child_thread_impl.h"
-#include "content/common/fileapi/file_system_messages.h"
+#include "content/public/common/service_names.mojom.h"
+#include "content/public/renderer/worker_thread.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "storage/common/fileapi/file_system_info.h"
+#include "storage/common/fileapi/file_system_type_converters.h"
 
 namespace content {
 
@@ -85,16 +89,17 @@ class FileSystemDispatcher::CallbackDispatcher {
     error_callback_.Run(error_code);
   }
 
-  void DidReadMetadata(
-      const base::File::Info& file_info) {
+  void DidReadMetadata(const base::File::Info& file_info) {
     metadata_callback_.Run(file_info);
   }
 
   void DidCreateSnapshotFile(
       const base::File::Info& file_info,
       const base::FilePath& platform_path,
+      base::Optional<blink::mojom::ReceivedSnapshotListenerPtr> opt_listener,
       int request_id) {
-    snapshot_callback_.Run(file_info, platform_path, request_id);
+    snapshot_callback_.Run(file_info, platform_path, std::move(opt_listener),
+                           request_id);
   }
 
   void DidReadDirectory(
@@ -103,8 +108,7 @@ class FileSystemDispatcher::CallbackDispatcher {
     directory_callback_.Run(entries, has_more);
   }
 
-  void DidOpenFileSystem(const std::string& name,
-                         const GURL& root) {
+  void DidOpenFileSystem(const std::string& name, const GURL& root) {
     filesystem_callback_.Run(name, root);
   }
 
@@ -134,8 +138,28 @@ class FileSystemDispatcher::CallbackDispatcher {
   DISALLOW_COPY_AND_ASSIGN(CallbackDispatcher);
 };
 
-FileSystemDispatcher::FileSystemDispatcher() {
-}
+class FileSystemDispatcher::FileSystemOperationListenerImpl
+    : public blink::mojom::FileSystemOperationListener {
+ public:
+  FileSystemOperationListenerImpl(int request_id,
+                                  FileSystemDispatcher* dispatcher)
+      : request_id_(request_id), dispatcher_(dispatcher) {}
+
+ private:
+  // blink::mojom::FileSystemOperationListener
+  void ResultsRetrieved(
+      std::vector<filesystem::mojom::DirectoryEntryPtr> entries,
+      bool has_more) override;
+  void ErrorOccurred(base::File::Error error_code) override;
+  void DidWrite(int64_t byte_count, bool complete) override;
+
+  const int request_id_;
+  FileSystemDispatcher* const dispatcher_;
+};
+
+FileSystemDispatcher::FileSystemDispatcher(
+    scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner)
+    : main_thread_task_runner_(std::move(main_thread_task_runner)) {}
 
 FileSystemDispatcher::~FileSystemDispatcher() {
   // Make sure we fire all the remaining callbacks.
@@ -150,21 +174,25 @@ FileSystemDispatcher::~FileSystemDispatcher() {
   }
 }
 
-bool FileSystemDispatcher::OnMessageReceived(const IPC::Message& msg) {
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(FileSystemDispatcher, msg)
-    IPC_MESSAGE_HANDLER(FileSystemMsg_DidOpenFileSystem, OnDidOpenFileSystem)
-    IPC_MESSAGE_HANDLER(FileSystemMsg_DidResolveURL, OnDidResolveURL)
-    IPC_MESSAGE_HANDLER(FileSystemMsg_DidSucceed, OnDidSucceed)
-    IPC_MESSAGE_HANDLER(FileSystemMsg_DidReadDirectory, OnDidReadDirectory)
-    IPC_MESSAGE_HANDLER(FileSystemMsg_DidReadMetadata, OnDidReadMetadata)
-    IPC_MESSAGE_HANDLER(FileSystemMsg_DidCreateSnapshotFile,
-                        OnDidCreateSnapshotFile)
-    IPC_MESSAGE_HANDLER(FileSystemMsg_DidFail, OnDidFail)
-    IPC_MESSAGE_HANDLER(FileSystemMsg_DidWrite, OnDidWrite)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  return handled;
+blink::mojom::FileSystemManager& FileSystemDispatcher::GetFileSystemManager() {
+  auto BindInterfaceOnMainThread =
+      [](blink::mojom::FileSystemManagerRequest request) {
+        DCHECK(ChildThreadImpl::current());
+        ChildThreadImpl::current()->GetConnector()->BindInterface(
+            mojom::kBrowserServiceName, std::move(request));
+      };
+  if (!file_system_manager_ptr_) {
+    if (WorkerThread::GetCurrentId()) {
+      blink::mojom::FileSystemManagerRequest request =
+          mojo::MakeRequest(&file_system_manager_ptr_);
+      main_thread_task_runner_->PostTask(
+          FROM_HERE,
+          base::BindOnce(BindInterfaceOnMainThread, std::move(request)));
+    } else {
+      BindInterfaceOnMainThread(mojo::MakeRequest(&file_system_manager_ptr_));
+    }
+  }
+  return *file_system_manager_ptr_;
 }
 
 void FileSystemDispatcher::OpenFileSystem(
@@ -174,8 +202,26 @@ void FileSystemDispatcher::OpenFileSystem(
     const StatusCallback& error_callback) {
   int request_id = dispatchers_.Add(
       CallbackDispatcher::Create(success_callback, error_callback));
-  ChildThreadImpl::current()->Send(new FileSystemHostMsg_OpenFileSystem(
-      request_id, origin_url, type));
+  GetFileSystemManager().Open(
+      origin_url, mojo::ConvertTo<blink::mojom::FileSystemType>(type),
+      base::BindOnce(&FileSystemDispatcher::DidOpenFileSystem,
+                     base::Unretained(this), request_id));
+}
+
+void FileSystemDispatcher::OpenFileSystemSync(
+    const GURL& origin_url,
+    storage::FileSystemType type,
+    const OpenFileSystemCallback& success_callback,
+    const StatusCallback& error_callback) {
+  int request_id = dispatchers_.Add(
+      CallbackDispatcher::Create(success_callback, error_callback));
+  std::string name;
+  GURL root_url;
+  base::File::Error error_code = base::File::FILE_ERROR_FAILED;
+  GetFileSystemManager().Open(
+      origin_url, mojo::ConvertTo<blink::mojom::FileSystemType>(type), &name,
+      &root_url, &error_code);
+  DidOpenFileSystem(request_id, std::move(name), root_url, error_code);
 }
 
 void FileSystemDispatcher::ResolveURL(
@@ -184,35 +230,82 @@ void FileSystemDispatcher::ResolveURL(
     const StatusCallback& error_callback) {
   int request_id = dispatchers_.Add(
       CallbackDispatcher::Create(success_callback, error_callback));
-  ChildThreadImpl::current()->Send(new FileSystemHostMsg_ResolveURL(
-          request_id, filesystem_url));
+  GetFileSystemManager().ResolveURL(
+      filesystem_url, base::BindOnce(&FileSystemDispatcher::DidResolveURL,
+                                     base::Unretained(this), request_id));
 }
 
-void FileSystemDispatcher::Move(
-    const GURL& src_path,
-    const GURL& dest_path,
-    const StatusCallback& callback) {
-  int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
-  ChildThreadImpl::current()->Send(new FileSystemHostMsg_Move(
-          request_id, src_path, dest_path));
+void FileSystemDispatcher::ResolveURLSync(
+    const GURL& filesystem_url,
+    const ResolveURLCallback& success_callback,
+    const StatusCallback& error_callback) {
+  int request_id = dispatchers_.Add(
+      CallbackDispatcher::Create(success_callback, error_callback));
+  blink::mojom::FileSystemInfoPtr info;
+  base::FilePath file_path;
+  bool is_directory;
+  base::File::Error error_code = base::File::FILE_ERROR_FAILED;
+  GetFileSystemManager().ResolveURL(filesystem_url, &info, &file_path,
+                                    &is_directory, &error_code);
+  DidResolveURL(request_id, std::move(info), std::move(file_path), is_directory,
+                error_code);
 }
 
-void FileSystemDispatcher::Copy(
-    const GURL& src_path,
-    const GURL& dest_path,
-    const StatusCallback& callback) {
+void FileSystemDispatcher::Move(const GURL& src_path,
+                                const GURL& dest_path,
+                                const StatusCallback& callback) {
   int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
-  ChildThreadImpl::current()->Send(new FileSystemHostMsg_Copy(
-      request_id, src_path, dest_path));
+  GetFileSystemManager().Move(
+      src_path, dest_path,
+      base::BindOnce(&FileSystemDispatcher::DidFinish, base::Unretained(this),
+                     request_id));
 }
 
-void FileSystemDispatcher::Remove(
-    const GURL& path,
-    bool recursive,
-    const StatusCallback& callback) {
+void FileSystemDispatcher::MoveSync(const GURL& src_path,
+                                    const GURL& dest_path,
+                                    const StatusCallback& callback) {
   int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
-  ChildThreadImpl::current()->Send(
-      new FileSystemHostMsg_Remove(request_id, path, recursive));
+  base::File::Error error_code = base::File::FILE_ERROR_FAILED;
+  GetFileSystemManager().Move(src_path, dest_path, &error_code);
+  DidFinish(request_id, error_code);
+}
+
+void FileSystemDispatcher::Copy(const GURL& src_path,
+                                const GURL& dest_path,
+                                const StatusCallback& callback) {
+  int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
+  GetFileSystemManager().Copy(
+      src_path, dest_path,
+      base::BindOnce(&FileSystemDispatcher::DidFinish, base::Unretained(this),
+                     request_id));
+}
+
+void FileSystemDispatcher::CopySync(const GURL& src_path,
+                                    const GURL& dest_path,
+                                    const StatusCallback& callback) {
+  int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
+  base::File::Error error_code = base::File::FILE_ERROR_FAILED;
+  GetFileSystemManager().Copy(src_path, dest_path, &error_code);
+  DidFinish(request_id, error_code);
+}
+
+void FileSystemDispatcher::Remove(const GURL& path,
+                                  bool recursive,
+                                  const StatusCallback& callback) {
+  int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
+  GetFileSystemManager().Remove(
+      path, recursive,
+      base::BindOnce(&FileSystemDispatcher::DidFinish, base::Unretained(this),
+                     request_id));
+}
+
+void FileSystemDispatcher::RemoveSync(const GURL& path,
+                                      bool recursive,
+                                      const StatusCallback& callback) {
+  int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
+  base::File::Error error_code = base::File::FILE_ERROR_FAILED;
+  GetFileSystemManager().Remove(path, recursive, &error_code);
+  DidFinish(request_id, error_code);
 }
 
 void FileSystemDispatcher::ReadMetadata(
@@ -221,37 +314,81 @@ void FileSystemDispatcher::ReadMetadata(
     const StatusCallback& error_callback) {
   int request_id = dispatchers_.Add(
       CallbackDispatcher::Create(success_callback, error_callback));
-  ChildThreadImpl::current()->Send(
-      new FileSystemHostMsg_ReadMetadata(request_id, path));
+  GetFileSystemManager().ReadMetadata(
+      path, base::BindOnce(&FileSystemDispatcher::DidReadMetadata,
+                           base::Unretained(this), request_id));
 }
 
-void FileSystemDispatcher::CreateFile(
+void FileSystemDispatcher::ReadMetadataSync(
     const GURL& path,
-    bool exclusive,
-    const StatusCallback& callback) {
-  int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
-  ChildThreadImpl::current()->Send(new FileSystemHostMsg_Create(
-      request_id, path, exclusive,
-      false /* is_directory */, false /* recursive */));
+    const MetadataCallback& success_callback,
+    const StatusCallback& error_callback) {
+  int request_id = dispatchers_.Add(
+      CallbackDispatcher::Create(success_callback, error_callback));
+  base::File::Info file_info;
+  base::File::Error error_code = base::File::FILE_ERROR_FAILED;
+  GetFileSystemManager().ReadMetadata(path, &file_info, &error_code);
+  DidReadMetadata(request_id, std::move(file_info), error_code);
 }
 
-void FileSystemDispatcher::CreateDirectory(
-    const GURL& path,
-    bool exclusive,
-    bool recursive,
-    const StatusCallback& callback) {
+void FileSystemDispatcher::CreateFile(const GURL& path,
+                                      bool exclusive,
+                                      const StatusCallback& callback) {
   int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
-  ChildThreadImpl::current()->Send(new FileSystemHostMsg_Create(
-      request_id, path, exclusive, true /* is_directory */, recursive));
+  GetFileSystemManager().Create(
+      path, exclusive, /*is_directory=*/false, /*is_recursive=*/false,
+      base::BindOnce(&FileSystemDispatcher::DidFinish, base::Unretained(this),
+                     request_id));
 }
 
-void FileSystemDispatcher::Exists(
-    const GURL& path,
-    bool is_directory,
-    const StatusCallback& callback) {
+void FileSystemDispatcher::CreateFileSync(const GURL& path,
+                                          bool exclusive,
+                                          const StatusCallback& callback) {
   int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
-  ChildThreadImpl::current()->Send(
-      new FileSystemHostMsg_Exists(request_id, path, is_directory));
+  base::File::Error error_code = base::File::FILE_ERROR_FAILED;
+  GetFileSystemManager().Create(path, exclusive, /*is_directory=*/false,
+                                /*is_recursive=*/false, &error_code);
+  DidFinish(request_id, error_code);
+}
+
+void FileSystemDispatcher::CreateDirectory(const GURL& path,
+                                           bool exclusive,
+                                           bool recursive,
+                                           const StatusCallback& callback) {
+  int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
+  GetFileSystemManager().Create(
+      path, exclusive, true, recursive,
+      base::BindOnce(&FileSystemDispatcher::DidFinish, base::Unretained(this),
+                     request_id));
+}
+
+void FileSystemDispatcher::CreateDirectorySync(const GURL& path,
+                                               bool exclusive,
+                                               bool recursive,
+                                               const StatusCallback& callback) {
+  int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
+  base::File::Error error_code = base::File::FILE_ERROR_FAILED;
+  GetFileSystemManager().Create(path, exclusive, true, recursive, &error_code);
+  DidFinish(request_id, error_code);
+}
+
+void FileSystemDispatcher::Exists(const GURL& path,
+                                  bool is_directory,
+                                  const StatusCallback& callback) {
+  int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
+  GetFileSystemManager().Exists(
+      path, is_directory,
+      base::BindOnce(&FileSystemDispatcher::DidFinish, base::Unretained(this),
+                     request_id));
+}
+
+void FileSystemDispatcher::ExistsSync(const GURL& path,
+                                      bool is_directory,
+                                      const StatusCallback& callback) {
+  int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
+  base::File::Error error_code = base::File::FILE_ERROR_FAILED;
+  GetFileSystemManager().Exists(path, is_directory, &error_code);
+  DidFinish(request_id, error_code);
 }
 
 void FileSystemDispatcher::ReadDirectory(
@@ -260,8 +397,28 @@ void FileSystemDispatcher::ReadDirectory(
     const StatusCallback& error_callback) {
   int request_id = dispatchers_.Add(
       CallbackDispatcher::Create(success_callback, error_callback));
-  ChildThreadImpl::current()->Send(
-      new FileSystemHostMsg_ReadDirectory(request_id, path));
+  blink::mojom::FileSystemOperationListenerPtr ptr;
+  blink::mojom::FileSystemOperationListenerRequest request =
+      mojo::MakeRequest(&ptr);
+  op_listeners_.AddBinding(
+      std::make_unique<FileSystemOperationListenerImpl>(request_id, this),
+      std::move(request));
+  GetFileSystemManager().ReadDirectory(path, std::move(ptr));
+}
+
+void FileSystemDispatcher::ReadDirectorySync(
+    const GURL& path,
+    const ReadDirectoryCallback& success_callback,
+    const StatusCallback& error_callback) {
+  int request_id = dispatchers_.Add(
+      CallbackDispatcher::Create(success_callback, error_callback));
+  std::vector<filesystem::mojom::DirectoryEntryPtr> entries;
+  base::File::Error result = base::File::FILE_ERROR_FAILED;
+  GetFileSystemManager().ReadDirectorySync(path, &entries, &result);
+  if (result == base::File::FILE_OK)
+    DidReadDirectory(request_id, std::move(entries), /*has_more=*/false);
+  else
+    DidFail(request_id, result);
 }
 
 void FileSystemDispatcher::Truncate(const GURL& path,
@@ -269,11 +426,28 @@ void FileSystemDispatcher::Truncate(const GURL& path,
                                     int* request_id_out,
                                     const StatusCallback& callback) {
   int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
-  ChildThreadImpl::current()->Send(
-      new FileSystemHostMsg_Truncate(request_id, path, offset));
+  blink::mojom::FileSystemCancellableOperationPtr op_ptr;
+  blink::mojom::FileSystemCancellableOperationRequest op_request =
+      mojo::MakeRequest(&op_ptr);
+  op_ptr.set_connection_error_handler(
+      base::BindOnce(&FileSystemDispatcher::RemoveOperationPtr,
+                     base::Unretained(this), request_id));
+  cancellable_operations_[request_id] = std::move(op_ptr);
+  GetFileSystemManager().Truncate(
+      path, offset, std::move(op_request),
+      base::BindOnce(&FileSystemDispatcher::DidTruncate, base::Unretained(this),
+                     request_id));
 
   if (request_id_out)
     *request_id_out = request_id;
+}
+
+void FileSystemDispatcher::TruncateSync(const GURL& path,
+                                        int64_t offset,
+                                        const StatusCallback& callback) {
+  base::File::Error error_code = base::File::FILE_ERROR_FAILED;
+  GetFileSystemManager().TruncateSync(path, offset, &error_code);
+  std::move(callback).Run(error_code);
 }
 
 void FileSystemDispatcher::Write(const GURL& path,
@@ -284,30 +458,66 @@ void FileSystemDispatcher::Write(const GURL& path,
                                  const StatusCallback& error_callback) {
   int request_id = dispatchers_.Add(
       CallbackDispatcher::Create(success_callback, error_callback));
-  ChildThreadImpl::current()->Send(
-      new FileSystemHostMsg_Write(request_id, path, blob_id, offset));
+
+  blink::mojom::FileSystemCancellableOperationPtr op_ptr;
+  blink::mojom::FileSystemCancellableOperationRequest op_request =
+      mojo::MakeRequest(&op_ptr);
+  op_ptr.set_connection_error_handler(
+      base::BindOnce(&FileSystemDispatcher::RemoveOperationPtr,
+                     base::Unretained(this), request_id));
+  cancellable_operations_[request_id] = std::move(op_ptr);
+
+  blink::mojom::FileSystemOperationListenerPtr listener_ptr;
+  blink::mojom::FileSystemOperationListenerRequest request =
+      mojo::MakeRequest(&listener_ptr);
+  op_listeners_.AddBinding(
+      std::make_unique<FileSystemOperationListenerImpl>(request_id, this),
+      std::move(request));
+
+  GetFileSystemManager().Write(path, blob_id, offset, std::move(op_request),
+                               std::move(listener_ptr));
 
   if (request_id_out)
     *request_id_out = request_id;
 }
 
-void FileSystemDispatcher::Cancel(
-    int request_id_to_cancel,
-    const StatusCallback& callback) {
-  int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
-  ChildThreadImpl::current()->Send(new FileSystemHostMsg_CancelWrite(
-      request_id, request_id_to_cancel));
+void FileSystemDispatcher::WriteSync(const GURL& path,
+                                     const std::string& blob_id,
+                                     int64_t offset,
+                                     const WriteCallback& success_callback,
+                                     const StatusCallback& error_callback) {
+  int64_t byte_count;
+  base::File::Error error_code = base::File::FILE_ERROR_FAILED;
+  GetFileSystemManager().WriteSync(path, blob_id, offset, &byte_count,
+                                   &error_code);
+  if (error_code == base::File::FILE_OK)
+    std::move(success_callback).Run(byte_count, /*complete=*/true);
+  else
+    std::move(error_callback).Run(error_code);
 }
 
-void FileSystemDispatcher::TouchFile(
-    const GURL& path,
-    const base::Time& last_access_time,
-    const base::Time& last_modified_time,
-    const StatusCallback& callback) {
+void FileSystemDispatcher::Cancel(int request_id_to_cancel,
+                                  const StatusCallback& callback) {
   int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
-  ChildThreadImpl::current()->Send(
-      new FileSystemHostMsg_TouchFile(
-          request_id, path, last_access_time, last_modified_time));
+  if (cancellable_operations_.find(request_id_to_cancel) ==
+      cancellable_operations_.end()) {
+    DidFail(request_id, base::File::FILE_ERROR_INVALID_OPERATION);
+    return;
+  }
+  cancellable_operations_[request_id_to_cancel]->Cancel(
+      base::BindOnce(&FileSystemDispatcher::DidCancel, base::Unretained(this),
+                     request_id, request_id_to_cancel));
+}
+
+void FileSystemDispatcher::TouchFile(const GURL& path,
+                                     const base::Time& last_access_time,
+                                     const base::Time& last_modified_time,
+                                     const StatusCallback& callback) {
+  int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
+  GetFileSystemManager().TouchFile(
+      path, last_access_time, last_modified_time,
+      base::BindOnce(&FileSystemDispatcher::DidFinish, base::Unretained(this),
+                     request_id));
 }
 
 void FileSystemDispatcher::CreateSnapshotFile(
@@ -316,83 +526,214 @@ void FileSystemDispatcher::CreateSnapshotFile(
     const StatusCallback& error_callback) {
   int request_id = dispatchers_.Add(
       CallbackDispatcher::Create(success_callback, error_callback));
-  ChildThreadImpl::current()->Send(
-      new FileSystemHostMsg_CreateSnapshotFile(
-          request_id, file_path));
+  GetFileSystemManager().CreateSnapshotFile(
+      file_path, base::BindOnce(&FileSystemDispatcher::DidCreateSnapshotFile,
+                                base::Unretained(this), request_id));
 }
 
-void FileSystemDispatcher::OnDidOpenFileSystem(int request_id,
-                                               const std::string& name,
-                                               const GURL& root) {
-  DCHECK(root.is_valid());
-  CallbackDispatcher* dispatcher = dispatchers_.Lookup(request_id);
-  DCHECK(dispatcher);
-  dispatcher->DidOpenFileSystem(name, root);
-  dispatchers_.Remove(request_id);
+void FileSystemDispatcher::CreateSnapshotFileSync(
+    const GURL& file_path,
+    const CreateSnapshotFileCallback& success_callback,
+    const StatusCallback& error_callback) {
+  int request_id = dispatchers_.Add(
+      CallbackDispatcher::Create(success_callback, error_callback));
+  base::File::Info file_info;
+  base::FilePath platform_path;
+  base::File::Error error_code = base::File::FILE_ERROR_FAILED;
+  blink::mojom::ReceivedSnapshotListenerPtr listener;
+  GetFileSystemManager().CreateSnapshotFile(
+      file_path, &file_info, &platform_path, &error_code, &listener);
+  DidCreateSnapshotFile(request_id, std::move(file_info),
+                        std::move(platform_path), error_code,
+                        std::move(listener));
 }
 
-void FileSystemDispatcher::OnDidResolveURL(int request_id,
-                                           const storage::FileSystemInfo& info,
-                                           const base::FilePath& file_path,
-                                           bool is_directory) {
-  DCHECK(info.root_url.is_valid());
-  CallbackDispatcher* dispatcher = dispatchers_.Lookup(request_id);
-  DCHECK(dispatcher);
-  dispatcher->DidResolveURL(info, file_path, is_directory);
-  dispatchers_.Remove(request_id);
+void FileSystemDispatcher::CreateFileWriter(
+    const GURL& file_path,
+    std::unique_ptr<CreateFileWriterCallbacks> callbacks) {
+  GetFileSystemManager().CreateWriter(
+      file_path,
+      base::BindOnce(
+          [](std::unique_ptr<CreateFileWriterCallbacks> callbacks,
+             base::File::Error result, blink::mojom::FileWriterPtr writer) {
+            if (result != base::File::FILE_OK) {
+              callbacks->OnError(result);
+            } else {
+              callbacks->OnSuccess(writer.PassInterface().PassHandle());
+            }
+          },
+          std::move(callbacks)));
 }
 
-void FileSystemDispatcher::OnDidSucceed(int request_id) {
-  CallbackDispatcher* dispatcher = dispatchers_.Lookup(request_id);
-  DCHECK(dispatcher);
-  dispatcher->DidSucceed();
-  dispatchers_.Remove(request_id);
+void FileSystemDispatcher::ChooseEntry(
+    int render_frame_id,
+    std::unique_ptr<ChooseEntryCallbacks> callbacks) {
+  GetFileSystemManager().ChooseEntry(
+      render_frame_id,
+      base::BindOnce(
+          [](std::unique_ptr<ChooseEntryCallbacks> callbacks,
+             base::File::Error result,
+             std::vector<blink::mojom::FileSystemEntryPtr> entries) {
+            if (result != base::File::FILE_OK) {
+              callbacks->OnError(result);
+            } else {
+              blink::WebVector<blink::WebFileSystem::FileSystemEntry>
+                  web_entries(entries.size());
+              for (size_t i = 0; i < entries.size(); ++i) {
+                web_entries[i].file_system_id =
+                    blink::WebString::FromASCII(entries[i]->file_system_id);
+                web_entries[i].base_name =
+                    blink::WebString::FromASCII(entries[i]->base_name);
+              }
+              callbacks->OnSuccess(std::move(web_entries));
+            }
+          },
+          std::move(callbacks)));
 }
 
-void FileSystemDispatcher::OnDidReadMetadata(
-    int request_id, const base::File::Info& file_info) {
-  CallbackDispatcher* dispatcher = dispatchers_.Lookup(request_id);
-  DCHECK(dispatcher);
-  dispatcher->DidReadMetadata(file_info);
-  dispatchers_.Remove(request_id);
+void FileSystemDispatcher::DidOpenFileSystem(int request_id,
+                                             const std::string& name,
+                                             const GURL& root,
+                                             base::File::Error error_code) {
+  if (error_code == base::File::Error::FILE_OK) {
+    CallbackDispatcher* dispatcher = dispatchers_.Lookup(request_id);
+    DCHECK(dispatcher);
+    dispatcher->DidOpenFileSystem(name, root);
+    dispatchers_.Remove(request_id);
+  } else {
+    DidFail(request_id, error_code);
+  }
 }
 
-void FileSystemDispatcher::OnDidCreateSnapshotFile(
-    int request_id, const base::File::Info& file_info,
-    const base::FilePath& platform_path) {
-  CallbackDispatcher* dispatcher = dispatchers_.Lookup(request_id);
-  DCHECK(dispatcher);
-  dispatcher->DidCreateSnapshotFile(file_info, platform_path, request_id);
-  dispatchers_.Remove(request_id);
+void FileSystemDispatcher::DidResolveURL(int request_id,
+                                         blink::mojom::FileSystemInfoPtr info,
+                                         const base::FilePath& file_path,
+                                         bool is_directory,
+                                         base::File::Error error_code) {
+  if (error_code == base::File::Error::FILE_OK) {
+    DCHECK(info->root_url.is_valid());
+    CallbackDispatcher* dispatcher = dispatchers_.Lookup(request_id);
+    DCHECK(dispatcher);
+    dispatcher->DidResolveURL(mojo::ConvertTo<storage::FileSystemInfo>(info),
+                              file_path, is_directory);
+    dispatchers_.Remove(request_id);
+  } else {
+    DidFail(request_id, error_code);
+  }
 }
 
-void FileSystemDispatcher::OnDidReadDirectory(
+void FileSystemDispatcher::DidFinish(int request_id,
+                                     base::File::Error error_code) {
+  if (error_code == base::File::Error::FILE_OK) {
+    CallbackDispatcher* dispatcher = dispatchers_.Lookup(request_id);
+    DCHECK(dispatcher);
+    dispatcher->DidSucceed();
+    dispatchers_.Remove(request_id);
+  } else {
+    DidFail(request_id, error_code);
+  }
+}
+
+void FileSystemDispatcher::DidReadMetadata(int request_id,
+                                           const base::File::Info& file_info,
+                                           base::File::Error error_code) {
+  if (error_code == base::File::FILE_OK) {
+    CallbackDispatcher* dispatcher = dispatchers_.Lookup(request_id);
+    DCHECK(dispatcher);
+    dispatcher->DidReadMetadata(file_info);
+    dispatchers_.Remove(request_id);
+  } else {
+    DidFail(request_id, error_code);
+  }
+}
+
+void FileSystemDispatcher::DidCreateSnapshotFile(
     int request_id,
-    const std::vector<filesystem::mojom::DirectoryEntry>& entries,
+    const base::File::Info& file_info,
+    const base::FilePath& platform_path,
+    base::File::Error error_code,
+    blink::mojom::ReceivedSnapshotListenerPtr listener) {
+  base::Optional<blink::mojom::ReceivedSnapshotListenerPtr> opt_listener;
+  if (listener)
+    opt_listener = std::move(listener);
+  if (error_code == base::File::FILE_OK) {
+    CallbackDispatcher* dispatcher = dispatchers_.Lookup(request_id);
+    DCHECK(dispatcher);
+    dispatcher->DidCreateSnapshotFile(file_info, platform_path,
+                                      std::move(opt_listener), request_id);
+    dispatchers_.Remove(request_id);
+  } else {
+    DidFail(request_id, error_code);
+  }
+}
+
+void FileSystemDispatcher::DidReadDirectory(
+    int request_id,
+    std::vector<filesystem::mojom::DirectoryEntryPtr> entries,
     bool has_more) {
   CallbackDispatcher* dispatcher = dispatchers_.Lookup(request_id);
   DCHECK(dispatcher);
-  dispatcher->DidReadDirectory(entries, has_more);
+  std::vector<filesystem::mojom::DirectoryEntry> entries_copy;
+  for (const auto& entry : entries) {
+    entries_copy.push_back(*entry);
+  }
+  dispatcher->DidReadDirectory(std::move(entries_copy), has_more);
   if (!has_more)
     dispatchers_.Remove(request_id);
 }
 
-void FileSystemDispatcher::OnDidFail(
-    int request_id, base::File::Error error_code) {
+void FileSystemDispatcher::DidFail(int request_id,
+                                   base::File::Error error_code) {
   CallbackDispatcher* dispatcher = dispatchers_.Lookup(request_id);
   DCHECK(dispatcher);
   dispatcher->DidFail(error_code);
   dispatchers_.Remove(request_id);
 }
 
-void FileSystemDispatcher::OnDidWrite(int request_id,
-                                      int64_t bytes,
-                                      bool complete) {
+void FileSystemDispatcher::DidWrite(int request_id,
+                                    int64_t bytes,
+                                    bool complete) {
   CallbackDispatcher* dispatcher = dispatchers_.Lookup(request_id);
   DCHECK(dispatcher);
   dispatcher->DidWrite(bytes, complete);
-  if (complete)
+  if (complete) {
     dispatchers_.Remove(request_id);
+    RemoveOperationPtr(request_id);
+  }
+}
+
+void FileSystemDispatcher::DidTruncate(int request_id,
+                                       base::File::Error error_code) {
+  // If |error_code| is ABORT, it means the operation was cancelled,
+  // so we let DidCancel clean up the interface pointer.
+  if (error_code != base::File::FILE_ERROR_ABORT)
+    RemoveOperationPtr(request_id);
+  DidFinish(request_id, error_code);
+}
+
+void FileSystemDispatcher::DidCancel(int request_id,
+                                     int cancelled_request_id,
+                                     base::File::Error error_code) {
+  if (error_code == base::File::FILE_OK)
+    RemoveOperationPtr(cancelled_request_id);
+  DidFinish(request_id, error_code);
+}
+
+void FileSystemDispatcher::FileSystemOperationListenerImpl::ResultsRetrieved(
+    std::vector<filesystem::mojom::DirectoryEntryPtr> entries,
+    bool has_more) {
+  dispatcher_->DidReadDirectory(request_id_, std::move(entries), has_more);
+}
+
+void FileSystemDispatcher::FileSystemOperationListenerImpl::ErrorOccurred(
+    base::File::Error error_code) {
+  dispatcher_->DidFail(request_id_, error_code);
+}
+
+void FileSystemDispatcher::FileSystemOperationListenerImpl::DidWrite(
+    int64_t byte_count,
+    bool complete) {
+  dispatcher_->DidWrite(request_id_, byte_count, complete);
 }
 
 }  // namespace content

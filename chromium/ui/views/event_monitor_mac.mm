@@ -17,7 +17,9 @@ namespace views {
 
 // static
 std::unique_ptr<EventMonitor> EventMonitor::CreateApplicationMonitor(
-    ui::EventHandler* event_handler) {
+    ui::EventHandler* event_handler,
+    gfx::NativeWindow context) {
+  // |context| is not needed on Mac.
   return base::WrapUnique(new EventMonitorMac(event_handler, nullptr));
 }
 
@@ -26,11 +28,6 @@ std::unique_ptr<EventMonitor> EventMonitor::CreateWindowMonitor(
     ui::EventHandler* event_handler,
     gfx::NativeWindow target_window) {
   return base::WrapUnique(new EventMonitorMac(event_handler, target_window));
-}
-
-// static
-gfx::Point EventMonitor::GetLastMouseLocation() {
-  return display::Screen::GetScreen()->GetCursorScreenPoint();
 }
 
 EventMonitorMac::EventMonitorMac(ui::EventHandler* event_handler,
@@ -48,8 +45,13 @@ EventMonitorMac::EventMonitorMac(ui::EventHandler* event_handler,
 
     if (!target_window || [event window] == target_window) {
       std::unique_ptr<ui::Event> ui_event = ui::EventFromNative(event);
-      if (ui_event)
+      if (ui_event) {
         event_handler->OnEvent(ui_event.get());
+        // If an event is handled, swallow it by returning nil so the event
+        // never proceeds to the normal event handling machinery.
+        if (ui_event->handled())
+          return nil;
+      }
     }
     return event;
   };
@@ -60,6 +62,10 @@ EventMonitorMac::EventMonitorMac(ui::EventHandler* event_handler,
 
 EventMonitorMac::~EventMonitorMac() {
   [NSEvent removeMonitor:monitor_];
+}
+
+gfx::Point EventMonitorMac::GetLastMouseLocation() {
+  return display::Screen::GetScreen()->GetCursorScreenPoint();
 }
 
 }  // namespace views

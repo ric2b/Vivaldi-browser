@@ -112,10 +112,10 @@ void CrashMetricsReporter::CrashDumpProcessed(
     const ChildExitObserver::TerminationInfo& info,
     breakpad::CrashDumpManager::CrashDumpStatus status) {
   ReportedCrashTypeSet reported_counts;
-  if (status == breakpad::CrashDumpManager::CrashDumpStatus::kMissingDump) {
-    NotifyObservers(info.process_host_id, reported_counts);
+
+  // Avoid duplicating processing for the same process.
+  if (status == breakpad::CrashDumpManager::CrashDumpStatus::kMissingDump)
     return;
-  }
 
   bool has_valid_dump = false;
   switch (status) {
@@ -139,10 +139,26 @@ void CrashMetricsReporter::CrashDumpProcessed(
                                 !has_valid_dump && !info.normal_termination;
   const bool renderer_visible = info.renderer_has_visible_clients;
   const bool renderer_subframe = info.renderer_was_subframe;
+  const bool renderer_virtual_oom = info.blink_oom_metrics.virtual_memory_oom;
+  const uint64_t private_footprint_kb =
+      info.blink_oom_metrics.current_private_footprint_kb;
+  const uint64_t swap_kb = info.blink_oom_metrics.current_swap_kb;
+  const uint64_t vm_size_kb = info.blink_oom_metrics.current_vm_size_kb;
+  const uint64_t blink_usage_kb = info.blink_oom_metrics.current_blink_usage_kb;
 
   if (info.process_type == content::PROCESS_TYPE_GPU && app_foreground &&
       android_oom_kill) {
     ReportCrashCount(ProcessedCrashCounts::kGpuForegroundOom, &reported_counts);
+  }
+
+  if (info.process_type == content::PROCESS_TYPE_RENDERER &&
+      !intentional_kill && !info.normal_termination && renderer_virtual_oom) {
+    ReportCrashCount(ProcessedCrashCounts::kRendererVirtualMemoryOomAll,
+                     &reported_counts);
+    if (app_foreground && renderer_visible)
+      ReportCrashCount(
+          ProcessedCrashCounts::kRendererForegroundVisibleVirtualMemoryOom,
+          &reported_counts);
   }
 
   if (info.process_type == content::PROCESS_TYPE_RENDERER && app_foreground) {
@@ -176,6 +192,24 @@ void CrashMetricsReporter::CrashDumpProcessed(
                            &reported_counts);
           base::RecordAction(
               base::UserMetricsAction("RendererForegroundMainFrameOOM"));
+        }
+        // Report memory metrics when visible foreground renderer is OOM.
+        if (private_footprint_kb > 0) {
+          // Report only when the metrics are not non-0, because the metrics
+          // are recorded only when oom intervention is on.
+          UMA_HISTOGRAM_MEMORY_LARGE_MB(
+              "Memory.Experimental.OomIntervention."
+              "RendererPrivateMemoryFootprintAtOOM",
+              private_footprint_kb / 1024);
+          UMA_HISTOGRAM_MEMORY_MB(
+              "Memory.Experimental.OomIntervention.RendererSwapFootprintAtOOM",
+              swap_kb / 1024);
+          UMA_HISTOGRAM_MEMORY_MB(
+              "Memory.Experimental.OomIntervention.RendererBlinkUsageAtOOM",
+              blink_usage_kb / 1024);
+          UMA_HISTOGRAM_MEMORY_LARGE_MB(
+              "Memory.Experimental.OomIntervention.RendererVmSizeAtOOMLarge",
+              vm_size_kb / 1024);
         }
       }
     } else if (!has_valid_dump) {
@@ -254,6 +288,9 @@ void CrashMetricsReporter::CrashDumpProcessed(
     }
     UMA_HISTOGRAM_ENUMERATION(
         "Stability.Android.StrongBindingOomRemainingBindingState", combo);
+    UMA_HISTOGRAM_EXACT_LINEAR(
+        "Stability.Android.StrongBindingOomRemainingStrongBindingCount",
+        info.remaining_process_with_strong_binding, 20);
   }
 
   ReportLegacyCrashUma(info, has_valid_dump);

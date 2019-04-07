@@ -5,6 +5,7 @@
 #include "base/profiler/stack_sampling_profiler.h"
 
 #include <algorithm>
+#include <map>
 #include <utility>
 
 #include "base/atomic_sequence_num.h"
@@ -25,8 +26,6 @@
 
 namespace base {
 
-const size_t kUnknownModuleIndex = static_cast<size_t>(-1);
-
 namespace {
 
 // This value is used to initialize the WaitableEvent object. This MUST BE set
@@ -41,84 +40,13 @@ const int kNullProfilerId = -1;
 
 }  // namespace
 
-// StackSamplingProfiler::Module ----------------------------------------------
-
-StackSamplingProfiler::Module::Module() : base_address(0u) {}
-
-StackSamplingProfiler::Module::Module(uintptr_t base_address,
-                                      const std::string& id,
-                                      const FilePath& filename)
-    : base_address(base_address), id(id), filename(filename) {}
-
-StackSamplingProfiler::Module::~Module() = default;
-
-// StackSamplingProfiler::InternalModule --------------------------------------
-
-StackSamplingProfiler::InternalModule::InternalModule() : is_valid(false) {}
-
-StackSamplingProfiler::InternalModule::InternalModule(uintptr_t base_address,
-                                                      const std::string& id,
-                                                      const FilePath& filename)
-    : base_address(base_address), id(id), filename(filename), is_valid(true) {}
-
-StackSamplingProfiler::InternalModule::~InternalModule() = default;
-
-// StackSamplingProfiler::Frame -----------------------------------------------
+// StackSamplingProfiler::Frame -------------------------------------
 
 StackSamplingProfiler::Frame::Frame(uintptr_t instruction_pointer,
-                                    size_t module_index)
-    : instruction_pointer(instruction_pointer), module_index(module_index) {}
+                                    ModuleCache::Module module)
+    : instruction_pointer(instruction_pointer), module(std::move(module)) {}
 
 StackSamplingProfiler::Frame::~Frame() = default;
-
-StackSamplingProfiler::Frame::Frame()
-    : instruction_pointer(0), module_index(kUnknownModuleIndex) {}
-
-// StackSamplingProfiler::InternalFrame -------------------------------------
-
-StackSamplingProfiler::InternalFrame::InternalFrame(
-    uintptr_t instruction_pointer,
-    InternalModule internal_module)
-    : instruction_pointer(instruction_pointer),
-      internal_module(std::move(internal_module)) {}
-
-StackSamplingProfiler::InternalFrame::~InternalFrame() = default;
-
-// StackSamplingProfiler::Sample ----------------------------------------------
-
-StackSamplingProfiler::Sample::Sample() = default;
-
-StackSamplingProfiler::Sample::Sample(const Sample& sample) = default;
-
-StackSamplingProfiler::Sample::~Sample() = default;
-
-StackSamplingProfiler::Sample::Sample(const Frame& frame) {
-  frames.push_back(std::move(frame));
-}
-
-StackSamplingProfiler::Sample::Sample(const std::vector<Frame>& frames)
-    : frames(frames) {}
-
-// StackSamplingProfiler::CallStackProfile ------------------------------------
-
-StackSamplingProfiler::CallStackProfile::CallStackProfile() = default;
-
-StackSamplingProfiler::CallStackProfile::CallStackProfile(
-    CallStackProfile&& other) = default;
-
-StackSamplingProfiler::CallStackProfile::~CallStackProfile() = default;
-
-StackSamplingProfiler::CallStackProfile&
-StackSamplingProfiler::CallStackProfile::operator=(CallStackProfile&& other) =
-    default;
-
-StackSamplingProfiler::CallStackProfile
-StackSamplingProfiler::CallStackProfile::CopyForTesting() const {
-  return CallStackProfile(*this);
-}
-
-StackSamplingProfiler::CallStackProfile::CallStackProfile(
-    const CallStackProfile& other) = default;
 
 // StackSamplingProfiler::SamplingThread --------------------------------------
 
@@ -698,9 +626,22 @@ StackSamplingProfiler::StackSamplingProfiler(
     const SamplingParams& params,
     std::unique_ptr<ProfileBuilder> profile_builder,
     NativeStackSamplerTestDelegate* test_delegate)
+    : StackSamplingProfiler(thread_id,
+                            params,
+                            std::move(profile_builder),
+                            nullptr,
+                            test_delegate) {}
+
+StackSamplingProfiler::StackSamplingProfiler(
+    PlatformThreadId thread_id,
+    const SamplingParams& params,
+    std::unique_ptr<ProfileBuilder> profile_builder,
+    std::unique_ptr<NativeStackSampler> sampler,
+    NativeStackSamplerTestDelegate* test_delegate)
     : thread_id_(thread_id),
       params_(params),
       profile_builder_(std::move(profile_builder)),
+      native_sampler_(std::move(sampler)),
       // The event starts "signaled" so code knows it's safe to start thread
       // and "manual" so that it can be waited in multiple places.
       profiling_inactive_(kResetPolicy, WaitableEvent::InitialState::SIGNALED),
@@ -734,10 +675,10 @@ void StackSamplingProfiler::Start() {
   // already.
   DCHECK(profile_builder_);
 
-  std::unique_ptr<NativeStackSampler> native_sampler =
-      NativeStackSampler::Create(thread_id_, test_delegate_);
+  if (!native_sampler_)
+    native_sampler_ = NativeStackSampler::Create(thread_id_, test_delegate_);
 
-  if (!native_sampler)
+  if (!native_sampler_)
     return;
 
   // The IsSignaled() check below requires that the WaitableEvent be manually
@@ -755,7 +696,7 @@ void StackSamplingProfiler::Start() {
   DCHECK_EQ(kNullProfilerId, profiler_id_);
   profiler_id_ = SamplingThread::GetInstance()->Add(
       std::make_unique<SamplingThread::CollectionContext>(
-          thread_id_, params_, &profiling_inactive_, std::move(native_sampler),
+          thread_id_, params_, &profiling_inactive_, std::move(native_sampler_),
           std::move(profile_builder_)));
   DCHECK_NE(kNullProfilerId, profiler_id_);
 }
@@ -763,46 +704,6 @@ void StackSamplingProfiler::Start() {
 void StackSamplingProfiler::Stop() {
   SamplingThread::GetInstance()->Remove(profiler_id_);
   profiler_id_ = kNullProfilerId;
-}
-
-// StackSamplingProfiler::Frame global functions ------------------------------
-
-bool operator==(const StackSamplingProfiler::Module& a,
-                const StackSamplingProfiler::Module& b) {
-  return a.base_address == b.base_address && a.id == b.id &&
-         a.filename == b.filename;
-}
-
-bool operator==(const StackSamplingProfiler::Sample& a,
-                const StackSamplingProfiler::Sample& b) {
-  return a.process_milestones == b.process_milestones && a.frames == b.frames;
-}
-
-bool operator!=(const StackSamplingProfiler::Sample& a,
-                const StackSamplingProfiler::Sample& b) {
-  return !(a == b);
-}
-
-bool operator<(const StackSamplingProfiler::Sample& a,
-               const StackSamplingProfiler::Sample& b) {
-  if (a.process_milestones != b.process_milestones)
-    return a.process_milestones < b.process_milestones;
-
-  return a.frames < b.frames;
-}
-
-bool operator==(const StackSamplingProfiler::Frame& a,
-                const StackSamplingProfiler::Frame& b) {
-  return a.instruction_pointer == b.instruction_pointer &&
-         a.module_index == b.module_index;
-}
-
-bool operator<(const StackSamplingProfiler::Frame& a,
-               const StackSamplingProfiler::Frame& b) {
-  if (a.module_index != b.module_index)
-    return a.module_index < b.module_index;
-
-  return a.instruction_pointer < b.instruction_pointer;
 }
 
 }  // namespace base

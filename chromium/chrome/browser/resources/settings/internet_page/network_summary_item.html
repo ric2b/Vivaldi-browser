@@ -15,7 +15,12 @@
   <template>
     <style include="internet-shared iron-flex">
       network-siminfo {
-        -webkit-padding-start: var(--settings-box-row-padding);
+        padding-inline-start: var(--settings-box-row-padding);
+      }
+
+      #outerBox {
+        padding: 0 var(--settings-box-row-padding);
+        @apply(--network-summary-item-outer-box);
       }
 
       #details {
@@ -24,9 +29,10 @@
         flex: auto;
       }
 
-      #networkName {
+      #networkTitleText {
         color: #333;
         font-weight: 500;
+        @apply(--network-summary-item-title);
       }
 
       #networkState {
@@ -35,7 +41,7 @@
         font-weight: 400;
       }
     </style>
-    <div class="settings-box two-line">
+    <div id="outerBox" class="settings-box two-line">
       <div actionable class="flex layout horizontal center"
           on-click="onShowDetailsTap_">
         <div id="details" no-flex$="[[showSimInfo_(deviceState)]]">
@@ -43,7 +49,9 @@
               device-state="[[deviceState]]">
           </cr-network-icon>
           <div class="flex">
-            <div id="networkName">[[getNetworkName_(activeNetworkState)]]</div>
+            <div id="networkTitleText">
+              [[getTitleText_(activeNetworkState)]]
+            </div>
             <div id="networkState">
               [[getNetworkStateText_(activeNetworkState, deviceState)]]
             </div>

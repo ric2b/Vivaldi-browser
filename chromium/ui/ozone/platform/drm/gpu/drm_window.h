@@ -33,7 +33,6 @@ class DrmOverlayValidator;
 class HardwareDisplayController;
 struct OverlayCheck_Params;
 struct OverlayCheckReturn_Params;
-class ScanoutBufferGenerator;
 class ScreenManager;
 
 // The GPU object representing a window.
@@ -55,7 +54,7 @@ class DrmWindow {
 
   gfx::Rect bounds() const { return bounds_; }
 
-  void Initialize(ScanoutBufferGenerator* buffer_generator);
+  void Initialize();
 
   void Shutdown();
 
@@ -77,11 +76,6 @@ class DrmWindow {
                  const gfx::Point& location,
                  int frame_delay_ms);
 
-  // Update the HW cursor bitmap & move to specified location. If
-  // the bitmap is empty, the cursor is hidden.
-  void SetCursorWithoutAnimations(const std::vector<SkBitmap>& bitmaps,
-                                  const gfx::Point& location);
-
   // Move the HW cursor to the specified location.
   void MoveCursor(const gfx::Point& location);
 
@@ -98,15 +92,8 @@ class DrmWindow {
       const gfx::VSyncProvider::UpdateVSyncCallback& callback) const;
 
  private:
-  // Draw the last set cursor & update the cursor plane.
-  void ResetCursor(bool bitmap_only);
-
   // Draw next frame in an animated cursor.
   void OnCursorAnimationTimeout();
-
-  // When |controller_| changes this is called to reallocate the cursor buffers
-  // since the allocation DRM device may have changed.
-  void UpdateCursorBuffers();
 
   gfx::AcceleratedWidget widget_;
 
@@ -121,11 +108,13 @@ class DrmWindow {
   HardwareDisplayController* controller_ = nullptr;
   std::unique_ptr<DrmOverlayValidator> overlay_validator_;
 
+  void UpdateCursorImage();
+  void UpdateCursorLocation();
+
+  // Draw the last set cursor & update the cursor plane.
+  void ResetCursor();
+
   base::RepeatingTimer cursor_timer_;
-
-  scoped_refptr<DrmBuffer> cursor_buffers_[2];
-  int cursor_frontbuffer_ = 0;
-
   std::vector<SkBitmap> cursor_bitmaps_;
   gfx::Point cursor_location_;
   int cursor_frame_ = 0;

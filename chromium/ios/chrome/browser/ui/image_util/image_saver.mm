@@ -10,8 +10,8 @@
 #include "base/files/file_path.h"
 #include "base/format_macros.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/task/post_task.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "components/image_fetcher/ios/ios_image_data_fetcher_wrapper.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
@@ -120,10 +120,11 @@
            completion:(void (^)(BOOL, NSError*))completion {
   base::PostTaskWithTraits(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(^{
-        base::AssertBlockingAllowed();
+        base::ScopedBlockingCall scoped_blocking_call(
+            base::BlockingType::MAY_BLOCK);
 
         NSString* fileName = [[[NSProcessInfo processInfo] globallyUniqueString]
             stringByAppendingString:fileExtension];
@@ -145,10 +146,11 @@
             completionHandler:^(BOOL success, NSError* error) {
               base::PostTaskWithTraits(
                   FROM_HERE,
-                  {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                  {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                    base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
                   base::BindOnce(^{
-                    base::AssertBlockingAllowed();
+                    base::ScopedBlockingCall scoped_blocking_call(
+                        base::BlockingType::MAY_BLOCK);
                     if (completion)
                       completion(success, error);
 

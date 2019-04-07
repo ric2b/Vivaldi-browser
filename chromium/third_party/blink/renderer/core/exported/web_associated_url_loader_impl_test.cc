@@ -520,7 +520,7 @@ TEST_F(WebAssociatedURLLoaderTest,
 
   ServeRequests();
   // We should get a notification about access control check failure.
-  EXPECT_FALSE(will_follow_redirect_);
+  EXPECT_TRUE(will_follow_redirect_);
   EXPECT_FALSE(did_receive_response_);
   EXPECT_FALSE(did_receive_data_);
   EXPECT_TRUE(did_fail_);
@@ -568,8 +568,7 @@ TEST_F(WebAssociatedURLLoaderTest,
   EXPECT_TRUE(expected_loader_);
   expected_loader_->LoadAsynchronously(request, this);
   ServeRequests();
-  // We should not receive a notification for the redirect.
-  EXPECT_FALSE(will_follow_redirect_);
+  EXPECT_TRUE(will_follow_redirect_);
   EXPECT_TRUE(did_receive_response_);
   EXPECT_TRUE(did_receive_data_);
   EXPECT_TRUE(did_finish_loading_);
@@ -684,6 +683,61 @@ TEST_F(WebAssociatedURLLoaderTest, CrossOriginHeaderAllowResponseHeaders) {
   EXPECT_TRUE(did_finish_loading_);
 
   EXPECT_FALSE(actual_response_.HttpHeaderField(header_name_string).IsEmpty());
+}
+
+TEST_F(WebAssociatedURLLoaderTest, AccessCheckForLocalURL) {
+  KURL url = ToKURL("file://test.pdf");
+
+  WebURLRequest request(url);
+  request.SetRequestContext(WebURLRequest::kRequestContextPlugin);
+  request.SetFetchRequestMode(network::mojom::FetchRequestMode::kNoCORS);
+  request.SetFetchCredentialsMode(network::mojom::FetchCredentialsMode::kOmit);
+
+  expected_response_ = WebURLResponse();
+  expected_response_.SetMIMEType("text/plain");
+  expected_response_.SetHTTPStatusCode(200);
+  Platform::Current()->GetURLLoaderMockFactory()->RegisterURL(
+      url, expected_response_, frame_file_path_);
+
+  WebAssociatedURLLoaderOptions options;
+  expected_loader_ = CreateAssociatedURLLoader(options);
+  EXPECT_TRUE(expected_loader_);
+  expected_loader_->LoadAsynchronously(request, this);
+  ServeRequests();
+
+  // The request failes due to a security check.
+  EXPECT_FALSE(did_receive_response_);
+  EXPECT_FALSE(did_receive_data_);
+  EXPECT_FALSE(did_finish_loading_);
+  EXPECT_TRUE(did_fail_);
+}
+
+TEST_F(WebAssociatedURLLoaderTest, BypassAccessCheckForLocalURL) {
+  KURL url = ToKURL("file://test.pdf");
+
+  WebURLRequest request(url);
+  request.SetRequestContext(WebURLRequest::kRequestContextPlugin);
+  request.SetFetchRequestMode(network::mojom::FetchRequestMode::kNoCORS);
+  request.SetFetchCredentialsMode(network::mojom::FetchCredentialsMode::kOmit);
+
+  expected_response_ = WebURLResponse();
+  expected_response_.SetMIMEType("text/plain");
+  expected_response_.SetHTTPStatusCode(200);
+  Platform::Current()->GetURLLoaderMockFactory()->RegisterURL(
+      url, expected_response_, frame_file_path_);
+
+  WebAssociatedURLLoaderOptions options;
+  options.grant_universal_access = true;
+  expected_loader_ = CreateAssociatedURLLoader(options);
+  EXPECT_TRUE(expected_loader_);
+  expected_loader_->LoadAsynchronously(request, this);
+  ServeRequests();
+
+  // The security check is bypassed due to |grant_universal_access|.
+  EXPECT_TRUE(did_receive_response_);
+  EXPECT_TRUE(did_receive_data_);
+  EXPECT_TRUE(did_finish_loading_);
+  EXPECT_FALSE(did_fail_);
 }
 
 #undef MAYBE_UntrustedCheckHeaders

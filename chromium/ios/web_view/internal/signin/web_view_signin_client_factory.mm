@@ -47,12 +47,11 @@ WebViewSigninClientFactory::BuildServiceInstanceFor(
   WebViewBrowserState* browser_state =
       WebViewBrowserState::FromBrowserState(context);
   return std::make_unique<IOSWebViewSigninClient>(
-      browser_state->GetPrefs(), browser_state->GetRequestContext(),
-      browser_state->GetSharedURLLoaderFactory(),
+      browser_state->GetPrefs(), browser_state->GetSharedURLLoaderFactory(),
+      browser_state->GetCookieManager(),
       WebViewSigninErrorControllerFactory::GetForBrowserState(browser_state),
       WebViewCookieSettingsFactory::GetForBrowserState(browser_state),
-      WebViewHostContentSettingsMapFactory::GetForBrowserState(browser_state),
-      nullptr /** scoped_refptr<TokenWebData> */);
+      WebViewHostContentSettingsMapFactory::GetForBrowserState(browser_state));
 }
 
 }  // namespace ios_web_view

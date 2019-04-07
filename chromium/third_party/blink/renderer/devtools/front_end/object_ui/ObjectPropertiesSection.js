@@ -35,13 +35,16 @@ ObjectUI.ObjectPropertiesSection = class extends UI.TreeOutlineInShadow {
    * @param {?string=} emptyPlaceholder
    * @param {boolean=} ignoreHasOwnProperty
    * @param {!Array.<!SDK.RemoteObjectProperty>=} extraProperties
+   * @param {boolean=} showOverflow
    */
-  constructor(object, title, linkifier, emptyPlaceholder, ignoreHasOwnProperty, extraProperties) {
+  constructor(object, title, linkifier, emptyPlaceholder, ignoreHasOwnProperty, extraProperties, showOverflow) {
     super();
     this._object = object;
     this._editable = true;
-    this.hideOverflow();
-    this.setFocusable(false);
+    if (!showOverflow)
+      this.hideOverflow();
+    this.setFocusable(true);
+    this.setShowSelectionOnKeyboardFocus(true);
     this._objectTreeElement = new ObjectUI.ObjectPropertiesSection.RootElement(
         object, linkifier, emptyPlaceholder, ignoreHasOwnProperty, extraProperties);
     this.appendChild(this._objectTreeElement);
@@ -435,7 +438,7 @@ ObjectUI.ObjectPropertiesSection.RootElement = class extends UI.TreeElement {
     this._emptyPlaceholder = emptyPlaceholder;
 
     this.setExpandable(true);
-    this.selectable = false;
+    this.selectable = true;
     this.toggleOnClick = true;
     this.listItemElement.classList.add('object-properties-section-root-element');
     this._linkifier = linkifier;
@@ -490,7 +493,6 @@ ObjectUI.ObjectPropertyTreeElement = class extends UI.TreeElement {
 
     this.property = property;
     this.toggleOnClick = true;
-    this.selectable = false;
     /** @type {!Array.<!Object>} */
     this._highlightChanges = [];
     this._linkifier = linkifier;
@@ -792,7 +794,7 @@ ObjectUI.ObjectPropertyTreeElement = class extends UI.TreeElement {
       this.expandedValueElement = this._createExpandedValueElement(this.property.value);
 
     this.listItemElement.removeChildren();
-    this._rowContainer = UI.html`<span>${this.nameElement}: ${this.valueElement}</span>`;
+    this._rowContainer = UI.html`<span class='name-and-value'>${this.nameElement}: ${this.valueElement}</span>`;
     this.listItemElement.appendChild(this._rowContainer);
   }
 
@@ -864,6 +866,7 @@ ObjectUI.ObjectPropertyTreeElement = class extends UI.TreeElement {
 
     const proxyElement =
         this._prompt.attachAndStartEditing(this._editableDiv, this._editingCommitted.bind(this, originalContent));
+    proxyElement.classList.add('property-prompt');
     this.listItemElement.getComponentSelection().selectAllChildren(this._editableDiv);
     proxyElement.addEventListener('keydown', this._promptKeyDown.bind(this, originalContent), false);
   }
@@ -918,7 +921,7 @@ ObjectUI.ObjectPropertyTreeElement = class extends UI.TreeElement {
    */
   async _applyExpression(expression) {
     const property = SDK.RemoteObject.toCallArgument(this.property.symbol || this.property.name);
-    expression = SDK.RuntimeModel.wrapObjectLiteralExpressionIfNeeded(expression.trim());
+    expression = ObjectUI.JavaScriptREPL.wrapObjectLiteral(expression.trim());
 
     if (this.property.synthetic) {
       let invalidate = false;
@@ -1000,7 +1003,6 @@ ObjectUI.ArrayGroupingTreeElement = class extends UI.TreeElement {
   constructor(object, fromIndex, toIndex, propertyCount, linkifier) {
     super(String.sprintf('[%d \u2026 %d]', fromIndex, toIndex), true);
     this.toggleOnClick = true;
-    this.selectable = false;
     this._fromIndex = fromIndex;
     this._toIndex = toIndex;
     this._object = object;

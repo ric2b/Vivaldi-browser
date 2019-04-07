@@ -78,10 +78,11 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
       const base::Optional<AccountId>& prefilled_account) override;
   void HideOobeDialog() override;
   void UpdateOobeDialogSize(int width, int height) override;
+  void UpdateOobeDialogState(ash::mojom::OobeDialogState state) override;
   const user_manager::UserList GetUsers() override;
   void ShowFeedback() override;
-  void ShowDialogForCaptivePortal() override;
-  void HideDialogForCaptivePortal() override;
+  void ShowResetScreen() override;
+  void HandleDisplayCaptivePortal() override;
   void UpdateAddUserButtonStatus() override;
 
   void OnCancelPasswordChangedFlow() override;
@@ -127,8 +128,6 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
   void OnUserSwitchAnimationFinished() override;
 
  private:
-  class LoginWidgetDelegate;
-
   // Way to restore if renderer have crashed.
   enum RestorePath {
     RESTORE_UNKNOWN,
@@ -199,9 +198,6 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
 
   // Container of the screen we are displaying.
   views::Widget* login_window_ = nullptr;
-
-  // The delegate of |login_window_|; owned by |login_window_|.
-  LoginWidgetDelegate* login_window_delegate_ = nullptr;
 
   // Container of the view we are displaying.
   WebUILoginView* login_view_ = nullptr;

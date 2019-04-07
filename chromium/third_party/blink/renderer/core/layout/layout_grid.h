@@ -76,7 +76,9 @@ class LayoutGrid final : public LayoutBlock {
     return row_positions_;
   }
 
-  const GridCell& GetGridCell(int row, int column) const {
+  // TODO(svillar): rename this method as this does not return a
+  // GridCell but its contents.
+  const GridItemList& GetGridCell(int row, int column) const {
     SECURITY_DCHECK(!grid_->NeedsItemsPlacement());
     return grid_->Cell(row, column);
   }
@@ -122,6 +124,9 @@ class LayoutGrid final : public LayoutBlock {
 
   StyleContentAlignmentData ContentAlignment(GridTrackSizingDirection) const;
 
+  // Exposed for testing *ONLY*.
+  Grid* InternalGrid() const { return grid_.get(); }
+
  protected:
   ItemPosition SelfAlignmentNormalBehavior(
       const LayoutBox* child = nullptr) const override {
@@ -155,9 +160,6 @@ class LayoutGrid final : public LayoutBlock {
                                    const ComputedStyle& old_style,
                                    const ComputedStyle& new_style) const;
   void StyleDidChange(StyleDifference, const ComputedStyle*) override;
-
-  base::Optional<LayoutUnit> AvailableSpaceForGutters(
-      GridTrackSizingDirection) const;
 
   bool ExplicitGridDidResize(const ComputedStyle&) const;
   bool NamedGridLinesDefinitionDidChange(const ComputedStyle&) const;
@@ -197,7 +199,6 @@ class LayoutGrid final : public LayoutBlock {
                                           GridTrackSizingDirection,
                                           LayoutUnit& min_intrinsic_size,
                                           LayoutUnit& max_intrinsic_size) const;
-  LayoutUnit ComputeTrackBasedLogicalHeight() const;
   void ComputeTrackSizesForDefiniteSize(GridTrackSizingDirection,
                                         LayoutUnit free_space);
 

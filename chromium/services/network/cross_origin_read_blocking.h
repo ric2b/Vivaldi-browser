@@ -56,8 +56,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CrossOriginReadBlocking {
     // Creates a ResponseAnalyzer for the |request|, |response| pair.  The
     // ResponseAnalyzer will decide whether |response| needs to be blocked.
     ResponseAnalyzer(const net::URLRequest& request,
-                     const ResourceResponse& response,
-                     base::StringPiece excluded_initiator_scheme);
+                     const ResourceResponse& response);
 
     ~ResponseAnalyzer();
 
@@ -121,8 +120,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CrossOriginReadBlocking {
     };
     BlockingDecision ShouldBlockBasedOnHeaders(
         const net::URLRequest& request,
-        const ResourceResponse& response,
-        base::StringPiece excluded_initiator_scheme);
+        const ResourceResponse& response);
 
     // Populates |sniffers_| container based on |canonical_mime_type_|.  Called
     // if ShouldBlockBasedOnHeaders returns kNeedToSniffMore
@@ -161,14 +159,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CrossOriginReadBlocking {
   static void SanitizeBlockedResponse(
       const scoped_refptr<network::ResourceResponse>& response);
 
-  // Returns explicitly named headers from
-  // https://fetch.spec.whatwg.org/#cors-safelisted-response-header-name.
-  //
-  // Note that CORB doesn't block responses allowed through CORS - this means
-  // that the list of allowed headers below doesn't have to consider header
-  // names listed in the Access-Control-Expose-Headers header.
-  static std::vector<std::string> GetCorsSafelistedHeadersForTesting();
-
   // This enum backs a histogram, so do not change the order of entries or
   // remove entries. When adding new entries update |kMaxValue| and enums.xml
   // (see the SiteIsolationResponseAction enum).
@@ -204,6 +194,23 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CrossOriginReadBlocking {
     kMaybe,
     kYes,
   };
+
+  // Notifies CORB that |process_id| is proxying requests on behalf of a
+  // universal-access plugin and therefore CORB should stop blocking requests
+  // marked as RESOURCE_TYPE_PLUGIN_RESOURCE.
+  //
+  // TODO(lukasza, laforge): https://crbug.com/702995: Remove the static
+  // ...ForPlugin methods once Flash support is removed from Chromium (probably
+  // around 2020 - see https://www.chromium.org/flash-roadmap).
+  static void AddExceptionForPlugin(int process_id);
+
+  // Returns true if CORB should ignore a request initiated by a universal
+  // access plugin - i.e. if |process_id| has been previously passed to
+  // AddExceptionForPlugin.
+  static bool ShouldAllowForPlugin(int process_id);
+
+  // Reverts AddExceptionForPlugin.
+  static void RemoveExceptionForPlugin(int process_id);
 
  private:
   CrossOriginReadBlocking();  // Not instantiable.

@@ -35,6 +35,7 @@
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
 #include "third_party/blink/public/mojom/loader/pause_subresource_loading_handle.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/previews_resource_loading_hints.mojom-blink.h"
+#include "third_party/blink/public/platform/reporting.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/accessibility/axid.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -42,6 +43,7 @@
 #include "third_party/blink/renderer/core/dom/weak_identifier_map.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
+#include "third_party/blink/renderer/core/frame/frame_types.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
@@ -71,7 +73,6 @@ class Editor;
 class Element;
 class EventHandler;
 class EventHandlerRegistry;
-class FetchParameters;
 class FloatSize;
 class FrameConsole;
 class FrameResourceCoordinator;
@@ -93,8 +94,10 @@ class Node;
 class NodeTraversal;
 class PerformanceMonitor;
 class PluginData;
+class ResourceRequest;
 class ScriptController;
 class SharedBuffer;
+class SmoothScrollSequencer;
 class SpellChecker;
 class TextSuggestionController;
 class WebComputedAXTree;
@@ -104,6 +107,7 @@ class WebURLLoaderFactory;
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<LocalFrame>;
 
 class CORE_EXPORT LocalFrame final : public Frame,
+                                     public FrameScheduler::Delegate,
                                      public Supplementable<LocalFrame> {
   USING_GARBAGE_COLLECTED_MIXIN(LocalFrame);
 
@@ -125,7 +129,6 @@ class CORE_EXPORT LocalFrame final : public Frame,
                           bool replace_current_item,
                           UserGestureStatus) override;
   void Navigate(const FrameLoadRequest&) override;
-  void Reload(WebFrameLoadType, ClientRedirectPolicy) override;
   void Detach(FrameDetachType) override;
   bool ShouldClose() override;
   SecurityContext* GetSecurityContext() const override;
@@ -150,6 +153,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   Frame* FindFrameForNavigation(const AtomicString& name,
                                 LocalFrame& active_frame,
                                 const KURL& destination_url);
+  void Reload(WebFrameLoadType, ClientRedirectPolicy);
 
   // Note: these two functions are not virtual but intentionally shadow the
   // corresponding method in the Frame base class to return the
@@ -203,13 +207,11 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   // Begin printing with the given page size information.
   // The frame content will fit to the page size with specified shrink ratio.
-  void StartPrinting(const FloatSize& page_size,
-                     const FloatSize& original_page_size,
-                     float maximum_shrink_ratio);
-
-  // Begin printing without changing the the frame's layout. This is used for
-  // child frames because they don't need to fit to a page size.
-  void StartPrintingWithoutPrintingLayout();
+  // If this frame doesn't need to fit into a page size, default values are
+  // used.
+  void StartPrinting(const FloatSize& page_size = FloatSize(),
+                     const FloatSize& original_page_size = FloatSize(),
+                     float maximum_shrink_ratio = 0);
 
   void EndPrinting();
   bool ShouldUsePrintingLayout() const;
@@ -286,10 +288,11 @@ class CORE_EXPORT LocalFrame final : public Frame,
   AdTracker* GetAdTracker() { return ad_tracker_; }
   void SetAdTrackerForTesting(AdTracker* ad_tracker);
 
-  // Convenience function to allow loading image placeholders for the request if
-  // either the flag in Settings() for using image placeholders is set, or if
-  // the embedder decides that Client Lo-Fi should be used for this request.
-  void MaybeAllowImagePlaceholder(FetchParameters&) const;
+  // Returns true if Client Lo-Fi should be used for this request.
+  bool IsClientLoFiAllowed(const ResourceRequest&) const;
+
+  // Returns true if lazyloading the image is possible.
+  bool IsLazyLoadingImageAllowed() const;
 
   // The returned value is a off-heap raw-ptr and should not be stored.
   WebURLLoaderFactory* GetURLLoaderFactory();
@@ -305,10 +308,13 @@ class CORE_EXPORT LocalFrame final : public Frame,
   WebPluginContainerImpl* GetWebPluginContainer(Node* = nullptr) const;
 
   // Called on a view for a LocalFrame with a RemoteFrame parent. This makes
-  // viewport intersection available that accounts for remote ancestor frames
-  // and their respective scroll positions, clips, etc.
-  void SetViewportIntersectionFromParent(const IntRect&);
+  // viewport intersection and occlusion/obscuration available that accounts for
+  // remote ancestor frames and their respective scroll positions, clips, etc.
+  void SetViewportIntersectionFromParent(const IntRect&, bool);
   IntRect RemoteViewportIntersection() { return remote_viewport_intersection_; }
+  bool MayBeOccludedOrObscuredByRemoteAncestor() const {
+    return occluded_or_obscured_by_ancestor_;
+  }
 
   // Replaces the initial empty document with a Document suitable for
   // |mime_type| and populated with the contents of |data|. Only intended for
@@ -319,8 +325,8 @@ class CORE_EXPORT LocalFrame final : public Frame,
   bool should_send_resource_timing_info_to_parent() const {
     return should_send_resource_timing_info_to_parent_;
   }
-  void DidSendResourceTimingInfoToParent() {
-    should_send_resource_timing_info_to_parent_ = false;
+  void SetShouldSendResourceTimingInfoToParent(bool value) {
+    should_send_resource_timing_info_to_parent_ = value;
   }
 
   // TODO(https://crbug.com/578349): provisional frames are a hack that should
@@ -364,6 +370,10 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void BindPreviewsResourceLoadingHintsRequest(
       blink::mojom::blink::PreviewsResourceLoadingHintsReceiverRequest request);
 
+  SmoothScrollSequencer& GetSmoothScrollSequencer();
+
+  void ReportFeaturePolicyViolation(mojom::FeaturePolicyFeature) const override;
+
  private:
   friend class FrameNavigationDisabler;
 
@@ -386,13 +396,17 @@ class CORE_EXPORT LocalFrame final : public Frame,
   // Internal implementation for starting or ending printing.
   // |printing| is true when printing starts, false when printing ends.
   // |page_size|, |original_page_size|, and |maximum_shrink_ratio| are only
-  // meaningful when starting to print with printing layout -- both |printing|
-  // and |use_printing_layout| are true.
+  // meaningful when we should use printing layout for this frame.
   void SetPrinting(bool printing,
-                   bool use_printing_layout,
                    const FloatSize& page_size,
                    const FloatSize& original_page_size,
                    float maximum_shrink_ratio);
+
+  // FrameScheduler::Delegate overrides:
+  ukm::UkmRecorder* GetUkmRecorder() override;
+  ukm::SourceId GetUkmSourceId() override;
+
+  const mojom::blink::ReportingServiceProxyPtr& GetReportingService() const;
 
   std::unique_ptr<FrameScheduler> frame_scheduler_;
 
@@ -443,10 +457,17 @@ class CORE_EXPORT LocalFrame final : public Frame,
   Member<AdTracker> ad_tracker_;
   Member<IdlenessDetector> idleness_detector_;
   Member<InspectorTraceEvents> inspector_trace_events_;
+  // SmoothScrollSequencer is only populated for local roots; all local frames
+  // use the instance owned by their local root.
+  Member<SmoothScrollSequencer> smooth_scroll_sequencer_;
 
   InterfaceRegistry* const interface_registry_;
+  // This is declared mutable so that the service endpoint can be cached by
+  // const methods.
+  mutable mojom::blink::ReportingServiceProxyPtr reporting_service_;
 
   IntRect remote_viewport_intersection_;
+  bool occluded_or_obscured_by_ancestor_ = false;
   std::unique_ptr<FrameResourceCoordinator> frame_resource_coordinator_;
 
   // Used to keep track of which ComputedAccessibleNodes have already been

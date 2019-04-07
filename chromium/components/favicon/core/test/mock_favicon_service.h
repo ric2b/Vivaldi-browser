@@ -23,7 +23,7 @@ ACTION_TEMPLATE(PostReply,
   auto callback = ::testing::get<K - 2>(args);
   base::CancelableTaskTracker* tracker = ::testing::get<K - 1>(args);
   return tracker->PostTask(base::ThreadTaskRunnerHandle::Get().get(), FROM_HERE,
-                           base::Bind(callback, p0));
+                           base::BindOnce(callback, p0));
 }
 
 class MockFaviconService : public FaviconService {
@@ -97,6 +97,8 @@ class MockFaviconService : public FaviconService {
   MOCK_METHOD1(TouchOnDemandFavicon, void(const GURL& icon_url));
   MOCK_METHOD1(SetImportedFavicons,
                void(const favicon_base::FaviconUsageDataList& favicon_usage));
+  MOCK_METHOD2(AddPageNoVisitForBookmark,
+               void(const GURL& url, const base::string16& title));
   MOCK_METHOD5(MergeFavicon,
                void(const GURL& page_url,
                     const GURL& icon_url,

@@ -19,6 +19,7 @@ class PlaceholderSheetModel : public AuthenticatorSheetModelBase {
 
  private:
   // AuthenticatorSheetModelBase:
+  gfx::ImageSkia* GetStepIllustration() const override { return nullptr; }
   base::string16 GetStepTitle() const override { return base::string16(); }
   base::string16 GetStepDescription() const override {
     return base::string16();
@@ -33,29 +34,47 @@ std::unique_ptr<AuthenticatorRequestSheetView> CreateSheetViewForCurrentStepOf(
 
   std::unique_ptr<AuthenticatorRequestSheetView> sheet_view;
   switch (dialog_model->current_step()) {
-    case Step::kInitial:
+    case Step::kWelcomeScreen:
       sheet_view = std::make_unique<AuthenticatorRequestSheetView>(
-          std::make_unique<AuthenticatorInitialSheetModel>(dialog_model));
+          std::make_unique<AuthenticatorWelcomeSheetModel>(dialog_model));
       break;
     case Step::kTransportSelection:
       sheet_view = std::make_unique<AuthenticatorTransportSelectorSheetView>(
           std::make_unique<AuthenticatorTransportSelectorSheetModel>(
               dialog_model));
       break;
-    case Step::kUsbInsertAndActivateOnRegister:
+    case Step::kUsbInsertAndActivate:
       sheet_view = std::make_unique<AuthenticatorRequestSheetView>(
-          std::make_unique<
-              AuthenticatorInsertAndActivateUsbOnRegisterSheetModel>(
+          std::make_unique<AuthenticatorInsertAndActivateUsbSheetModel>(
               dialog_model));
       break;
-    case Step::kUsbInsertAndActivateOnSign:
+    case Step::kErrorNoAvailableTransports:
       sheet_view = std::make_unique<AuthenticatorRequestSheetView>(
-          std::make_unique<AuthenticatorInsertAndActivateUsbOnSignSheetModel>(
+          std::make_unique<AuthenticatorNoAvailableTransportsErrorModel>(
               dialog_model));
       break;
-    case Step::kErrorTimedOut:
+    case Step::kPostMortemTimedOut:
       sheet_view = std::make_unique<AuthenticatorRequestSheetView>(
           std::make_unique<AuthenticatorTimeoutErrorModel>(dialog_model));
+      break;
+    case Step::kPostMortemKeyNotRegistered:
+      sheet_view = std::make_unique<AuthenticatorRequestSheetView>(
+          std::make_unique<AuthenticatorNotRegisteredErrorModel>(dialog_model));
+      break;
+    case Step::kPostMortemKeyAlreadyRegistered:
+      sheet_view = std::make_unique<AuthenticatorRequestSheetView>(
+          std::make_unique<AuthenticatorAlreadyRegisteredErrorModel>(
+              dialog_model));
+      break;
+    case Step::kErrorInternalUnrecognized:
+      sheet_view = std::make_unique<AuthenticatorRequestSheetView>(
+          std::make_unique<AuthenticatorInternalUnrecognizedErrorSheetModel>(
+              dialog_model));
+      break;
+    case Step::kBlePowerOnAutomatic:
+      sheet_view = std::make_unique<AuthenticatorRequestSheetView>(
+          std::make_unique<AuthenticatorBlePowerOnAutomaticSheetModel>(
+              dialog_model));
       break;
     case Step::kBlePowerOnManual:
       sheet_view = std::make_unique<AuthenticatorRequestSheetView>(
@@ -89,14 +108,21 @@ std::unique_ptr<AuthenticatorRequestSheetView> CreateSheetViewForCurrentStepOf(
       sheet_view = std::make_unique<AuthenticatorRequestSheetView>(
           std::make_unique<AuthenticatorBleActivateSheetModel>(dialog_model));
       break;
-    case Step::kCompleted:
-    case Step::kBlePowerOnAutomatic:
+    case Step::kTouchId:
+      sheet_view = std::make_unique<AuthenticatorRequestSheetView>(
+          std::make_unique<AuthenticatorTouchIdSheetModel>(dialog_model));
+      break;
+    case Step::kCableActivate:
+      sheet_view = std::make_unique<AuthenticatorRequestSheetView>(
+          std::make_unique<AuthenticatorPaaskSheetModel>(dialog_model));
+      break;
+    case Step::kNotStarted:
+    case Step::kClosed:
       sheet_view = std::make_unique<AuthenticatorRequestSheetView>(
           std::make_unique<PlaceholderSheetModel>(dialog_model));
       break;
   }
 
   CHECK(sheet_view);
-  sheet_view->InitChildViews();
   return sheet_view;
 }

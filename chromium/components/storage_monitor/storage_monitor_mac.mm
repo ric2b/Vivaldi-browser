@@ -10,8 +10,8 @@
 #include "base/mac/mac_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread_restrictions.h"
 #include "components/storage_monitor/image_capture_device_manager.h"
 #include "components/storage_monitor/media_storage_util.h"
@@ -337,7 +337,7 @@ void StorageMonitorMac::GetDiskInfoAndUpdate(
   base::ScopedCFTypeRef<CFDictionaryRef> dict(DADiskCopyDescription(disk));
   std::string* bsd_name = new std::string;
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&BuildStorageInfo, dict, bsd_name),
       base::BindOnce(&StorageMonitorMac::UpdateDisk, AsWeakPtr(), update_type,
                      base::Owned(bsd_name)));

@@ -92,7 +92,8 @@ TestArrayBuffer* V8ArrayBuffer::ToImpl(v8::Local<v8::Object> object) {
                                             v8Contents.Data(),
                                             v8Contents.ByteLength(),
                                             kind,
-                                            WTF::ArrayBufferContents::FreeMemory);
+                                            v8Contents.Deleter(),
+                                            v8Contents.DeleterData());
   WTF::ArrayBufferContents contents(std::move(data), WTF::ArrayBufferContents::kNotShared);
   TestArrayBuffer* buffer = TestArrayBuffer::Create(contents);
   v8::Local<v8::Object> associatedWrapper = buffer->AssociateWithWrapper(v8::Isolate::GetCurrent(), buffer->GetWrapperTypeInfo(), object);

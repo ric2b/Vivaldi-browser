@@ -29,6 +29,13 @@ interface DriveFs {
   // Sets the file at |path| to pinned or unpinned depending on the value of
   // |pinned|.
   SetPinned(mojo_base.mojom.FilePath path, bool pinned) => (FileError error);
+
+  // Update DriveFS with the current network state, including whether the
+  // network is available and whether syncing should be paused.
+  UpdateNetworkState(bool pause_syncing, bool is_offline);
+
+  // Reset DriveFS cache.
+  ResetCache() => (FileError error);
 };
 
 // Implemented by Chrome, used from DriveFS.

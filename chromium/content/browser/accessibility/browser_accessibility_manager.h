@@ -347,8 +347,6 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXEventGenerator {
   // AXTreeDelegate implementation.
   void OnNodeWillBeDeleted(ui::AXTree* tree, ui::AXNode* node) override;
   void OnSubtreeWillBeDeleted(ui::AXTree* tree, ui::AXNode* node) override;
-  void OnNodeWillBeReparented(ui::AXTree* tree, ui::AXNode* node) override;
-  void OnSubtreeWillBeReparented(ui::AXTree* tree, ui::AXNode* node) override;
   void OnNodeCreated(ui::AXTree* tree, ui::AXNode* node) override;
   void OnNodeReparented(ui::AXTree* tree, ui::AXNode* node) override;
   void OnNodeChanged(ui::AXTree* tree, ui::AXNode* node) override;
@@ -454,11 +452,6 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXEventGenerator {
 
   // The global ID of this accessibility tree.
   ui::AXTreeIDRegistry::AXTreeID ax_tree_id_;
-
-  // If this tree has a parent tree, this is the cached ID of the parent
-  // node within that parent tree. It's computed as needed and cached for
-  // speed so that it can be accessed quickly if it hasn't changed.
-  int parent_node_id_from_parent_tree_;
 
   // The device scale factor for the view associated with this frame,
   // cached each time there's any update to the accessibility tree.

@@ -55,15 +55,18 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['win', 'mac', 'linux'])
     self.Skip('WebglExtension_WEBGL_compressed_texture_s3tc_srgb',
         ['win', 'mac', 'linux', 'android'])
-    self.Skip('WebglExtension_EXT_disjoint_timer_query', bug=808744)
+    self.Skip('WebglExtension_EXT_disjoint_timer_query',
+        ['android'], bug=808744)
+    self.Fail('WebglExtension_EXT_disjoint_timer_query',
+        ['linux', 'intel'], bug=867675)
 
     # Extensions not available under D3D9
     self.Fail('WebglExtension_EXT_sRGB',
         ['win', 'd3d9'])
-
+    self.Fail('WebglExtension_EXT_disjoint_timer_query',
+        ['win', 'd3d9'], bug=867718)
     self.Fail('WebglExtension_WEBGL_depth_texture',
         ['win', 'amd', 'd3d9'])
-
     self.Fail('WebglExtension_WEBGL_draw_buffers',
         ['win', 'd3d9'])
 
@@ -87,13 +90,6 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     # Conformance expectations
     # ========================
     # Fails on all platforms
-
-    # Need to forbid mipmap generation with this extension.
-    # Uncomment suppressions below when re-enabling. (Or remove them?
-    # Were the failures caused by this gray area in the spec, now
-    # forbidden?)
-    self.Fail('conformance/extensions/ext-sRGB.html',
-        ['linux', 'mac', 'win', 'android'], bug=769989)
 
     # Need to implement new lifetime/deletion semantics.
     self.Fail('conformance/extensions/oes-vertex-array-object.html', bug=739604)
@@ -130,19 +126,10 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('conformance/textures/misc/tex-sub-image-2d-bad-args.html',
         bug=625738)
 
-    # canvas.commit() promise synchronization isn't fully reliable yet.
-    self.Fail('conformance/offscreencanvas/offscreencanvas-resize.html',
-        bug=709484)
-
     # This test needs to be rewritten to measure its expected
     # performance; it's currently too flaky even on release bots.
     self.Skip('conformance/rendering/texture-switch-performance.html',
         bug=735483)
-
-    # Flaky on multiple platforms. Going to rewrite the test to make
-    # it more obviously correct.
-    self.Flaky('conformance/textures/misc/' +
-        'tex-video-using-tex-unit-non-zero.html', bug=830901)
 
     # Passthrough command decoder / OpenGL
     self.Fail('conformance/renderbuffers/framebuffer-test.html',
@@ -252,6 +239,8 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['win10', ('nvidia', 0x1cb3), 'd3d9'], bug=750896)
     self.Flaky('conformance/textures/video/*',
         ['win10', ('nvidia', 0x1cb3), 'd3d9'], bug=750896)
+    self.Flaky('conformance/textures/misc/texture-corner-case-videos.html',
+        ['win10', ('nvidia', 0x1cb3), 'd3d9'], bug=750896)
 
     self.Flaky('conformance/uniforms/uniform-samplers-test.html',
         ['win10', ('nvidia', 0x1cb3), 'passthrough', 'd3d9'], bug=829389)
@@ -285,6 +274,10 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     # Mark as Fail since it often flakes in all 3 retries
     self.Fail('conformance/extensions/oes-texture-half-float.html',
               ['win', 'no_passthrough', ('amd', 0x6613)], bug=653533)
+
+    # Win / AMD D3D11 failures
+    self.Flaky('conformance/textures/webgl_canvas/*', ['win', 'amd'],
+        bug=878780)
 
     # Win / AMD D3D9 failures
     self.Fail('conformance/extensions/angle-instanced-arrays.html',
@@ -448,6 +441,8 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['mac', ('nvidia', 0xfe9)], bug=635081)
     self.Fail('conformance/glsl/bugs/init-array-with-loop.html',
         ['mac', ('nvidia', 0xfe9)], bug=784817)
+    self.Fail('conformance/uniforms/uniform-samplers-test.html',
+        ['mac', 'debug', ('nvidia', 0xfe9)], bug=871352)
 
     # Linux failures
     self.Fail('conformance/extensions/webgl-compressed-texture-astc.html',
@@ -651,6 +646,9 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Flaky('conformance/textures/image_bitmap_from_video/' +
         'tex-2d-rgb-rgb-unsigned_byte.html',
         ['android', ('qualcomm', 'Adreno (TM) 418')], bug=716496)
+    self.Flaky('conformance/textures/misc/' +
+        'tex-video-using-tex-unit-non-zero.html',
+        ['android', ('qualcomm', 'Adreno (TM) 418')], bug=830901)
     self.Fail('conformance/uniforms/uniform-samplers-test.html',
         ['android', ('qualcomm', 'Adreno (TM) 418'), 'no_passthrough'],
         bug=610951)
@@ -699,12 +697,12 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         'copy-tex-image-and-sub-image-2d.html',
         ['android', ('qualcomm', 'Adreno (TM) 420'), 'no_passthrough'],
         bug=499555)
-    # self.Flaky('conformance/textures/misc/' +
-    #     'tex-video-using-tex-unit-non-zero.html',
-    #     ['android', ('qualcomm', 'Adreno (TM) 420')], bug=830901)
-    # self.Flaky('conformance/textures/misc/' +
-    #     'tex-video-using-tex-unit-non-zero.html',
-    #     ['android', ('qualcomm', 'Adreno (TM) 430')], bug=830901)
+    self.Flaky('conformance/textures/misc/' +
+        'tex-video-using-tex-unit-non-zero.html',
+        ['android', ('qualcomm', 'Adreno (TM) 420')], bug=830901)
+    self.Flaky('conformance/textures/misc/' +
+        'tex-video-using-tex-unit-non-zero.html',
+        ['android', ('qualcomm', 'Adreno (TM) 430')], bug=830901)
     self.Fail('conformance/uniforms/uniform-samplers-test.html',
         ['android', ('qualcomm', 'Adreno (TM) 430'), 'no_passthrough'],
         bug=663071)
@@ -723,9 +721,9 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['android', 'nvidia'], bug=478572)
     self.Fail('conformance/glsl/bugs/multiplication-assignment.html',
         ['android', 'nvidia'], bug=606096)
-    # self.Flaky('conformance/textures/misc/' +
-    #     'tex-video-using-tex-unit-non-zero.html',
-    #     ['android', 'nvidia'], bug=830901)
+    self.Flaky('conformance/textures/misc/' +
+        'tex-video-using-tex-unit-non-zero.html',
+        ['android', 'nvidia'], bug=830901)
 
     # Nexus 9 and Shield TV (NVIDIA GPUs currently on the waterfall)
     self.Fail('conformance/ogles/GL/array/array_001_to_006.html',

@@ -50,7 +50,7 @@ CommitQueueProxy::~CommitQueueProxy() {}
 
 void CommitQueueProxy::NudgeForCommit() {
   sync_thread_->PostTask(FROM_HERE,
-                         base::Bind(&CommitQueue::NudgeForCommit, worker_));
+                         base::BindOnce(&CommitQueue::NudgeForCommit, worker_));
 }
 
 }  // namespace
@@ -312,6 +312,7 @@ base::WeakPtr<ModelTypeConnector> ModelTypeRegistry::AsWeakPtr() {
 
 void ModelTypeRegistry::OnPassphraseRequired(
     PassphraseRequiredReason reason,
+    const KeyDerivationParams& key_derivation_params,
     const sync_pb::EncryptedData& pending_keys) {}
 
 void ModelTypeRegistry::OnPassphraseAccepted() {

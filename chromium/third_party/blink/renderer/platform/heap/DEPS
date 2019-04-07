@@ -8,9 +8,8 @@ include_rules = [
     # Dependencies.
     "+base/atomicops.h",
     "+base/bits.h",
-    "+base/compiler_specific.h",
+    "+base/sampling_heap_profiler/poisson_allocation_sampler.h",
     "+base/synchronization/lock.h",
-    "+base/sys_info.h",
 
     "+third_party/blink/renderer/platform/bindings",
     "+third_party/blink/renderer/platform/cross_thread_functional.h",

@@ -25,6 +25,7 @@
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
+#include "gpu/ipc/common/gpu_client_ids.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "gpu/ipc/common/memory_stats.h"
 #include "gpu/ipc/service/gpu_channel.h"
@@ -58,7 +59,8 @@ GpuChannelManager::GpuChannelManager(
     SyncPointManager* sync_point_manager,
     GpuMemoryBufferFactory* gpu_memory_buffer_factory,
     const GpuFeatureInfo& gpu_feature_info,
-    GpuProcessActivityFlags activity_flags)
+    GpuProcessActivityFlags activity_flags,
+    scoped_refptr<gl::GLSurface> default_offscreen_surface)
     : task_runner_(task_runner),
       io_task_runner_(io_task_runner),
       gpu_preferences_(gpu_preferences),
@@ -71,6 +73,7 @@ GpuChannelManager::GpuChannelManager(
       scheduler_(scheduler),
       sync_point_manager_(sync_point_manager),
       shader_translator_cache_(gpu_preferences_),
+      default_offscreen_surface_(std::move(default_offscreen_surface)),
       gpu_memory_buffer_factory_(gpu_memory_buffer_factory),
       gpu_feature_info_(gpu_feature_info),
       exiting_for_lost_context_(false),
@@ -82,6 +85,15 @@ GpuChannelManager::GpuChannelManager(
   DCHECK(task_runner->BelongsToCurrentThread());
   DCHECK(io_task_runner);
   DCHECK(scheduler);
+
+  const bool enable_raster_transport =
+      gpu_feature_info_.status_values[GPU_FEATURE_TYPE_OOP_RASTERIZATION] ==
+      gpu::kGpuFeatureStatusEnabled;
+  const bool disable_disk_cache =
+      gpu_preferences_.disable_gpu_shader_disk_cache ||
+      gpu_driver_bug_workarounds_.disable_program_disk_cache;
+  if (enable_raster_transport && !disable_disk_cache)
+    gr_shader_cache_.emplace(gpu_preferences.gpu_program_cache_size, this);
 }
 
 GpuChannelManager::~GpuChannelManager() {
@@ -89,7 +101,7 @@ GpuChannelManager::~GpuChannelManager() {
   gpu_channels_.clear();
   if (default_offscreen_surface_.get()) {
     default_offscreen_surface_->Destroy();
-    default_offscreen_surface_ = NULL;
+    default_offscreen_surface_ = nullptr;
   }
 }
 
@@ -133,7 +145,11 @@ GpuChannel* GpuChannelManager::LookupChannel(int32_t client_id) const {
 
 GpuChannel* GpuChannelManager::EstablishChannel(int client_id,
                                                 uint64_t client_tracing_id,
-                                                bool is_gpu_host) {
+                                                bool is_gpu_host,
+                                                bool cache_shaders_on_disk) {
+  if (gr_shader_cache_ && cache_shaders_on_disk)
+    gr_shader_cache_->CacheClientIdOnDisk(client_id);
+
   std::unique_ptr<GpuChannel> gpu_channel = std::make_unique<GpuChannel>(
       this, scheduler_, sync_point_manager_, share_group_, task_runner_,
       io_task_runner_, client_id, client_tracing_id, is_gpu_host);
@@ -170,8 +186,15 @@ void GpuChannelManager::DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
   }
 }
 
-void GpuChannelManager::PopulateShaderCache(const std::string& key,
+void GpuChannelManager::PopulateShaderCache(int32_t client_id,
+                                            const std::string& key,
                                             const std::string& program) {
+  if (client_id == kGrShaderCacheClientId) {
+    if (gr_shader_cache_)
+      gr_shader_cache_->PopulateCache(key, program);
+    return;
+  }
+
   if (program_cache())
     program_cache()->LoadProgram(key, program);
 }
@@ -196,14 +219,6 @@ void GpuChannelManager::MaybeExitOnContextLost() {
 
 void GpuChannelManager::DestroyAllChannels() {
   gpu_channels_.clear();
-}
-
-gl::GLSurface* GpuChannelManager::GetDefaultOffscreenSurface() {
-  if (!default_offscreen_surface_.get()) {
-    default_offscreen_surface_ =
-        gl::init::CreateOffscreenGLSurface(gfx::Size());
-  }
-  return default_offscreen_surface_.get();
 }
 
 void GpuChannelManager::GetVideoMemoryUsageStats(
@@ -322,6 +337,8 @@ void GpuChannelManager::HandleMemoryPressure(
   discardable_manager_.HandleMemoryPressure(memory_pressure_level);
   if (raster_decoder_context_state_)
     raster_decoder_context_state_->PurgeMemory(memory_pressure_level);
+  if (gr_shader_cache_)
+    gr_shader_cache_->PurgeMemory(memory_pressure_level);
 }
 
 scoped_refptr<raster::RasterDecoderContextState>
@@ -332,13 +349,7 @@ GpuChannelManager::GetRasterDecoderContextState(ContextResult* result) {
     return raster_decoder_context_state_;
   }
 
-  scoped_refptr<gl::GLSurface> surface = GetDefaultOffscreenSurface();
-  if (!surface) {
-    LOG(ERROR) << "Failed to create offscreen surface";
-    *result = ContextResult::kFatalFailure;
-    return nullptr;
-  }
-
+  scoped_refptr<gl::GLSurface> surface = default_offscreen_surface();
   bool use_virtualized_gl_contexts = false;
 #if defined(OS_MACOSX)
   // Virtualize PreferIntegratedGpu contexts by default on OS X to prevent
@@ -411,7 +422,7 @@ GpuChannelManager::GetRasterDecoderContextState(ContextResult* result) {
       gpu::kGpuFeatureStatusEnabled;
   if (enable_raster_transport) {
     raster_decoder_context_state_->InitializeGrContext(
-        gpu_driver_bug_workarounds_);
+        gpu_driver_bug_workarounds_, gr_shader_cache(), &activity_flags_);
   }
 
   gr_cache_controller_.emplace(raster_decoder_context_state_.get(),
@@ -424,6 +435,11 @@ GpuChannelManager::GetRasterDecoderContextState(ContextResult* result) {
 void GpuChannelManager::ScheduleGrContextCleanup() {
   if (gr_cache_controller_)
     gr_cache_controller_->ScheduleGrContextCleanup();
+}
+
+void GpuChannelManager::StoreShader(const std::string& key,
+                                    const std::string& shader) {
+  delegate_->StoreShaderToDisk(kGrShaderCacheClientId, key, shader);
 }
 
 }  // namespace gpu

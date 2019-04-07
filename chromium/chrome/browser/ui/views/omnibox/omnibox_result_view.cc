@@ -2,14 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// For WinDDK ATL compatibility, these ATL headers must come first.
-#include "build/build_config.h"
-
-#if defined(OS_WIN)
-#include <atlbase.h>  // NOLINT
-#include <atlwin.h>  // NOLINT
-#endif
-
 #include "chrome/browser/ui/views/omnibox/omnibox_result_view.h"
 
 #include <limits.h>
@@ -21,6 +13,7 @@
 #include "base/macros.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/omnibox/omnibox_theme.h"
 #include "chrome/browser/ui/views/location_bar/background_with_1_px_border.h"
@@ -42,6 +35,10 @@
 #include "ui/base/theme_provider.h"
 #include "ui/events/event.h"
 #include "ui/gfx/paint_vector_icon.h"
+
+#if defined(OS_WIN)
+#include "base/win/atl.h"
+#endif
 
 namespace {
 
@@ -148,21 +145,19 @@ void OmniboxResultView::Invalidate() {
       suggestion_view_->content()->SetText(match_.answer->second_line());
       suggestion_view_->description()->SetText(match_.contents,
                                                match_.contents_class, true);
+      suggestion_view_->description()->ApplyTextColor(
+          OmniboxPart::RESULTS_TEXT_DIMMED);
       suggestion_view_->description()->AppendExtraText(
           match_.answer->first_line());
     } else {
       suggestion_view_->content()->SetText(match_.contents,
                                            match_.contents_class);
+      suggestion_view_->content()->ApplyTextColor(
+          OmniboxPart::RESULTS_TEXT_DEFAULT);
       suggestion_view_->content()->AppendExtraText(match_.answer->first_line());
       suggestion_view_->description()->SetText(match_.answer->second_line(),
                                                true);
     }
-    // AppendExtraText has side effect on color, so explicitly set color.
-    // TODO(orinj): Consolidate text color specification in one place.
-    suggestion_view_->content()->ApplyTextColor(
-        OmniboxPart::RESULTS_TEXT_DEFAULT);
-    suggestion_view_->description()->ApplyTextColor(
-        OmniboxPart::RESULTS_TEXT_DIMMED);
   } else if (match_.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY) {
     // Entities use match text and calculated classifications, but with style
     // adjustments like answers above.
@@ -364,6 +359,10 @@ gfx::Size OmniboxResultView::CalculatePreferredSize() const {
 void OmniboxResultView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   Invalidate();
   SchedulePaint();
+}
+
+void OmniboxResultView::ProvideButtonFocusHint() {
+  suggestion_tab_switch_button_->ProvideFocusHint();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

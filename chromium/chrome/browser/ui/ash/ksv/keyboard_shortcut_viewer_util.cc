@@ -7,27 +7,17 @@
 #include "ash/components/shortcut_viewer/public/mojom/shortcut_viewer.mojom.h"
 #include "ash/components/shortcut_viewer/views/keyboard_shortcut_view.h"
 #include "ash/public/cpp/ash_features.h"
+#include "ash/shell.h"
 #include "base/time/time.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "content/public/common/service_manager_connection.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "ui/base/ui_base_features.h"
 
 namespace keyboard_shortcut_viewer_util {
-namespace {
 
-// Keyboard shortcut viewer app is incompatible with some a11y features.
-bool IsUsingA11yIncompatibleWithApp() {
-  chromeos::AccessibilityManager* a11y = chromeos::AccessibilityManager::Get();
-  return a11y->IsCaretHighlightEnabled() || a11y->IsFocusHighlightEnabled() ||
-         a11y->IsSelectToSpeakEnabled() || a11y->IsSwitchAccessEnabled();
-}
-
-}  // namespace
-
-void ShowKeyboardShortcutViewer() {
+void ToggleKeyboardShortcutViewer() {
   base::TimeTicks user_gesture_time = base::TimeTicks::Now();
-  if (ash::features::IsKeyboardShortcutViewerAppEnabled() &&
-      !IsUsingA11yIncompatibleWithApp()) {
+  if (ash::features::IsKeyboardShortcutViewerAppEnabled()) {
     shortcut_viewer::mojom::ShortcutViewerPtr shortcut_viewer_ptr;
     service_manager::Connector* connector =
         content::ServiceManagerConnection::GetForProcess()->GetConnector();
@@ -35,7 +25,15 @@ void ShowKeyboardShortcutViewer() {
                              &shortcut_viewer_ptr);
     shortcut_viewer_ptr->Toggle(user_gesture_time);
   } else {
-    keyboard_shortcut_viewer::KeyboardShortcutView::Toggle(user_gesture_time);
+    // A value of |null| while IsSingleProcessMash() results in the keyboard
+    // shortcut viewer using DesktopNativeWidgetAura, just as all other non-ash
+    // codes does in single-process-mash.
+    aura::Window* context =
+        features::IsSingleProcessMash()
+            ? nullptr
+            : ash::Shell::Get()->GetRootWindowForNewWindows();
+    keyboard_shortcut_viewer::KeyboardShortcutView::Toggle(user_gesture_time,
+                                                           context);
   }
 }
 

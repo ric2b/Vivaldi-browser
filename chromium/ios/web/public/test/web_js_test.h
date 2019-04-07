@@ -10,6 +10,7 @@
 #include <memory>
 
 #import "base/mac/bundle_locations.h"
+#import "ios/web/public/test/js_test_util.h"
 #include "ios/web/public/web_client.h"
 #import "testing/gtest_mac.h"
 
@@ -28,6 +29,10 @@ class WebJsTest : public WebTestT {
   // Loads |html| and inject JavaScripts at |javaScriptPaths_|.
   void LoadHtmlAndInject(NSString* html) {
     WebTestT::LoadHtml(html);
+    Inject();
+  }
+  void LoadHtmlAndInject(NSString* html, const GURL& url) {
+    WebTestT::LoadHtml(html, url);
     Inject();
   }
 
@@ -66,13 +71,7 @@ void WebJsTest<WebTestT>::Inject() {
   ASSERT_NSEQ(@"object", WebTestT::ExecuteJavaScript(@"typeof __gCrWeb"));
 
   for (NSString* java_script_path in java_script_paths_) {
-    NSString* path =
-        [base::mac::FrameworkBundle() pathForResource:java_script_path
-                                               ofType:@"js"];
-    WebTestT::ExecuteJavaScript([NSString
-        stringWithContentsOfFile:path
-                        encoding:NSUTF8StringEncoding
-                           error:nil]);
+    WebTestT::ExecuteJavaScript(web::test::GetPageScript(java_script_path));
   }
 }
 

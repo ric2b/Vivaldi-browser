@@ -31,7 +31,7 @@ namespace {
 
 scoped_refptr<base::RefCountedBytes> CreateTestData() {
   const unsigned char blob1[] =
-      "12346102356120394751634516591348710478123649165419234519234512349134";
+      "%PDF-1.4123461023561203947516345165913487104781236491654192345192345";
   std::vector<unsigned char> preview_data(blob1, blob1 + sizeof(blob1));
   return base::MakeRefCounted<base::RefCountedBytes>(preview_data);
 }
@@ -105,11 +105,6 @@ TEST_F(PrintPreviewUIUnitTest, PrintPreviewData) {
   EXPECT_EQ(dummy_data->size(), data->size());
   EXPECT_EQ(dummy_data.get(), data.get());
 
-  // This should not cause any memory leaks.
-  dummy_data = base::MakeRefCounted<base::RefCountedBytes>();
-  preview_ui->SetPrintPreviewDataForIndex(printing::FIRST_PAGE_INDEX,
-                                          dummy_data.get());
-
   // Clear the preview data.
   preview_ui->ClearAllPreviewData();
 
@@ -180,7 +175,7 @@ TEST_F(PrintPreviewUIUnitTest, PrintPreviewDraftPages) {
 }
 
 // Test the browser-side print preview cancellation functionality.
-TEST_F(PrintPreviewUIUnitTest, GetCurrentPrintPreviewStatus) {
+TEST_F(PrintPreviewUIUnitTest, ShouldCancelRequest) {
   WebContents* initiator = browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(initiator);
 
@@ -201,38 +196,21 @@ TEST_F(PrintPreviewUIUnitTest, GetCurrentPrintPreviewStatus) {
       preview_dialog->GetWebUI()->GetController());
   ASSERT_TRUE(preview_ui);
 
-  // Test with invalid |preview_ui_addr|.
-  bool cancel = false;
+  // Test with invalid UI ID.
   const int32_t kInvalidId = -5;
-  preview_ui->GetCurrentPrintPreviewStatus(
-      PrintHostMsg_PreviewIds(0, kInvalidId), &cancel);
-  EXPECT_TRUE(cancel);
+  EXPECT_TRUE(preview_ui->ShouldCancelRequest({0, kInvalidId}));
 
   const int kFirstRequestId = 1000;
   const int kSecondRequestId = 1001;
-  const int32_t preview_ui_addr = preview_ui->GetIDForPrintPreviewUI();
+  const int32_t preview_id = preview_ui->GetIDForPrintPreviewUI();
 
   // Test with kFirstRequestId.
   preview_ui->OnPrintPreviewRequest(kFirstRequestId);
-  cancel = true;
-  preview_ui->GetCurrentPrintPreviewStatus(
-      PrintHostMsg_PreviewIds(kFirstRequestId, preview_ui_addr), &cancel);
-  EXPECT_FALSE(cancel);
-
-  cancel = false;
-  preview_ui->GetCurrentPrintPreviewStatus(
-      PrintHostMsg_PreviewIds(kSecondRequestId, preview_ui_addr), &cancel);
-  EXPECT_TRUE(cancel);
+  EXPECT_FALSE(preview_ui->ShouldCancelRequest({kFirstRequestId, preview_id}));
+  EXPECT_TRUE(preview_ui->ShouldCancelRequest({kSecondRequestId, preview_id}));
 
   // Test with kSecondRequestId.
   preview_ui->OnPrintPreviewRequest(kSecondRequestId);
-  cancel = false;
-  preview_ui->GetCurrentPrintPreviewStatus(
-      PrintHostMsg_PreviewIds(kFirstRequestId, preview_ui_addr), &cancel);
-  EXPECT_TRUE(cancel);
-
-  cancel = true;
-  preview_ui->GetCurrentPrintPreviewStatus(
-      PrintHostMsg_PreviewIds(kSecondRequestId, preview_ui_addr), &cancel);
-  EXPECT_FALSE(cancel);
+  EXPECT_TRUE(preview_ui->ShouldCancelRequest({kFirstRequestId, preview_id}));
+  EXPECT_FALSE(preview_ui->ShouldCancelRequest({kSecondRequestId, preview_id}));
 }

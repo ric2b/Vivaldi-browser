@@ -8,11 +8,13 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "components/sync/base/cryptographer.h"
@@ -37,6 +39,9 @@ class WriteTransaction;
 // The class should live as long as the directory itself in order to ensure
 // any data read/written is properly decrypted/encrypted.
 //
+// |random_salt_generator| is a callback that accepts no arguments and returns a
+// random salt. Used with scrypt key derivation method.
+//
 // Note: See sync_encryption_handler.h for a description of the chrome visible
 // methods and what they do, and nigori_handler.h for a description of the
 // sync methods.
@@ -49,7 +54,8 @@ class SyncEncryptionHandlerImpl : public SyncEncryptionHandler,
       UserShare* user_share,
       Encryptor* encryptor,
       const std::string& restored_key_for_bootstrapping,
-      const std::string& restored_keystore_key_for_bootstrapping);
+      const std::string& restored_keystore_key_for_bootstrapping,
+      const base::RepeatingCallback<std::string()>& random_salt_generator);
   ~SyncEncryptionHandlerImpl() override;
 
   // SyncEncryptionHandler implementation.
@@ -176,6 +182,17 @@ class SyncEncryptionHandlerImpl : public SyncEncryptionHandler,
   bool UpdateEncryptedTypesFromNigori(const sync_pb::NigoriSpecifics& nigori,
                                       syncable::BaseTransaction* const trans);
 
+  // If the Nigori node doesn't contain an explicit custom passphrase key
+  // derivation method, it means it was committed with a previous version
+  // which was unaware of this field and implicitly used PBKDF2. This method
+  // checks for this condition and explicitly writes PBKDF2 as the key
+  // derivation method.
+  void ReplaceImplicitKeyDerivationMethodInNigori(WriteTransaction* trans);
+
+  // Same as ReplaceImplicitKeyDerivationMethodInNigori, just
+  // wrapped in a write transaction.
+  void ReplaceImplicitKeyDerivationMethodInNigoriWithTransaction();
+
   // TODO(zea): make these public and have them replace SetEncryptionPassphrase
   // and SetDecryptionPassphrase.
   // Helper methods for handling passphrases once keystore migration has taken
@@ -188,13 +205,15 @@ class SyncEncryptionHandlerImpl : public SyncEncryptionHandler,
   void SetCustomPassphrase(const std::string& passphrase,
                            WriteTransaction* trans,
                            WriteNode* nigori_node);
+
   // Decrypt the encryption keybag using a user provided passphrase.
   // Should only be called if the current passphrase is a frozen implicit
   // passphrase or a custom passphrase.
   // Triggers OnPassphraseAccepted on success, OnPassphraseRequired on failure.
-  void DecryptPendingKeysWithExplicitPassphrase(const std::string& passphrase,
-                                                WriteTransaction* trans,
-                                                WriteNode* nigori_node);
+  void DecryptPendingKeysWithExplicitPassphrase(
+      const std::string& passphrase,
+      WriteTransaction* trans,
+      WriteNode* nigori_node);
 
   // The final step of SetEncryptionPassphrase and SetDecryptionPassphrase that
   // notifies observers of the result of the set passphrase operation, updates
@@ -206,7 +225,6 @@ class SyncEncryptionHandlerImpl : public SyncEncryptionHandler,
   // |is_explicit|: used to differentiate between a custom passphrase (true) and
   //                a GAIA passphrase that is implicitly used for encryption
   //                (false).
-  // |trans| and |nigori_node|: used to access data in the cryptographer.
   void FinishSetPassphrase(bool success,
                            const std::string& bootstrap_token,
                            WriteTransaction* trans,
@@ -276,7 +294,7 @@ class SyncEncryptionHandlerImpl : public SyncEncryptionHandler,
 
   SEQUENCE_CHECKER(sequence_checker_);
 
-  base::ObserverList<SyncEncryptionHandler::Observer> observers_;
+  base::ObserverList<SyncEncryptionHandler::Observer>::Unchecked observers_;
 
   // The current user share (for creating transactions).
   UserShare* user_share_;
@@ -312,6 +330,13 @@ class SyncEncryptionHandlerImpl : public SyncEncryptionHandler,
   // if there is no custom passphrase or the custom passphrase was set
   // before support for this field was added.
   base::Time custom_passphrase_time_;
+
+  // The key derivation params we are using for the custom passphrase. This can
+  // end up not being set e.g. in cases when we reach a CUSTOM_PASSPHRASE state
+  // through a legacy code path.
+  base::Optional<KeyDerivationParams> custom_passphrase_key_derivation_params_;
+
+  base::RepeatingCallback<std::string()> random_salt_generator_;
 
   base::WeakPtrFactory<SyncEncryptionHandlerImpl> weak_ptr_factory_;
 

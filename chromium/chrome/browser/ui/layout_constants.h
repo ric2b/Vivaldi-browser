@@ -10,10 +10,13 @@
 #include "ui/gfx/geometry/size.h"
 
 enum LayoutConstant {
-  // The minimum height of Bookmarks Bar, when attached to the toolbar. The
-  // height of the toolbar may grow to more than this value if the embedded
-  // views need more space, for example, when the font is larger than normal.
+  // The height of Bookmarks Bar when attached to the toolbar. The height of the
+  // Bookmarks Bar is larger than the BOOKMARK_BAR_BUTTON_HEIGHT by a fixed
+  // amount.
   BOOKMARK_BAR_HEIGHT,
+
+  // The height of a button within the Bookmarks Bar.
+  BOOKMARK_BAR_BUTTON_HEIGHT,
 
 #if defined(OS_MACOSX)
   // This is a little smaller than the bookmarkbar height because of the visual
@@ -54,9 +57,11 @@ enum LayoutConstant {
   // images inside.
   LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET,
 
-  // The horizontal padding between location bar decorations as well as the
-  // vertical and horizontal padding inside the border.
+  // The vertical and horizontal padding inside the border.
   LOCATION_BAR_ELEMENT_PADDING,
+
+  // The horizontal padding between location bar decorations.
+  LOCATION_BAR_BETWEEN_ELEMENTS_PADDING,
 
   // The height to be occupied by the LocationBar.
   LOCATION_BAR_HEIGHT,

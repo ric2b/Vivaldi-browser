@@ -68,16 +68,18 @@ CastWebViewDefault::CastWebViewDefault(
       allow_media_access_(params.allow_media_access),
       enabled_for_dev_(params.enabled_for_dev),
       web_contents_(CreateWebContents(browser_context_, site_instance_)),
-      window_(shell::CastContentWindow::Create(params.delegate,
-                                               params.is_headless,
-                                               params.enable_touch_input)),
+      window_(shell::CastContentWindow::Create(params.window_params)),
       did_start_navigation_(false) {
   DCHECK(delegate_);
   DCHECK(web_contents_manager_);
   DCHECK(browser_context_);
   DCHECK(window_);
   content::WebContentsObserver::Observe(web_contents_.get());
+
   web_contents_->SetDelegate(this);
+#if defined(USE_AURA)
+  web_contents_->GetNativeView()->SetName(params.activity_id);
+#endif
 
 #if BUILDFLAG(IS_ANDROID_THINGS)
 // Configure the ducking multiplier for AThings speakers. When CMA backend is
@@ -138,7 +140,6 @@ void CastWebViewDefault::CloseContents(content::WebContents* source) {
 }
 
 void CastWebViewDefault::InitializeWindow(CastWindowManager* window_manager,
-                                          bool is_visible,
                                           CastWindowManager::WindowId z_order,
                                           VisibilityPriority initial_priority) {
   if (media::CastMediaShlib::ClearVideoPlaneImage) {
@@ -147,8 +148,16 @@ void CastWebViewDefault::InitializeWindow(CastWindowManager* window_manager,
 
   DCHECK(window_manager);
   window_->CreateWindowForWebContents(web_contents_.get(), window_manager,
-                                      is_visible, z_order, initial_priority);
+                                      z_order, initial_priority);
   web_contents_->Focus();
+}
+
+void CastWebViewDefault::GrantScreenAccess() {
+  window_->GrantScreenAccess();
+}
+
+void CastWebViewDefault::RevokeScreenAccess() {
+  window_->RevokeScreenAccess();
 }
 
 content::WebContents* CastWebViewDefault::OpenURLFromTab(

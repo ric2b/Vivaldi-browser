@@ -75,21 +75,14 @@ void TurnButtonBlue(GtkWidget* button);
 // it above |parent|. Do nothing if |parent| is nullptr.
 void SetGtkTransientForAura(GtkWidget* dialog, aura::Window* parent);
 
-// Gets the transient parent aura window for |dialog|.
-aura::Window* GetAuraTransientParent(GtkWidget* dialog);
-
-// Clears the transient parent for |dialog|.
-void ClearAuraTransientParent(GtkWidget* dialog);
-
 // Parses |button_string| into |leading_buttons| and
 // |trailing_buttons|.  The string is of the format
 // "<button>*:<button*>", for example, "close:minimize:maximize".
-// This format is used by GTK3 settings and gsettings.
+// This format is used by GTK settings and gsettings.
 void ParseButtonLayout(const std::string& button_string,
                        std::vector<views::FrameButton>* leading_buttons,
                        std::vector<views::FrameButton>* trailing_buttons);
 
-#if GTK_MAJOR_VERSION > 2
 void* GetGdkSharedLibrary();
 void* GetGtkSharedLibrary();
 
@@ -206,7 +199,6 @@ SkColor GetSelectionBgColor(const std::string& css_selector);
 
 // Get the color of the GtkSeparator specified by |css_selector|.
 SkColor GetSeparatorColor(const std::string& css_selector);
-#endif
 
 }  // namespace libgtkui
 

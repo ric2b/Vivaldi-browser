@@ -7,12 +7,18 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/views/overlay/close_image_button.h"
+#include "chrome/browser/ui/views/overlay/control_image_button.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/picture_in_picture_window_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "media/base/video_util.h"
+#include "third_party/blink/public/common/picture_in_picture/picture_in_picture_control_info.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -35,13 +41,13 @@ std::unique_ptr<content::OverlayWindow> content::OverlayWindow::Create(
 namespace {
 constexpr gfx::Size kMinWindowSize = gfx::Size(144, 100);
 
-const int kOverlayBorderThickness = 5;
+const int kOverlayBorderThickness = 10;
 
-// |play_pause_controls_view_| scales at 30% the size of the smaller of the
-// screen's width and height.
-const float kPlayPauseControlRatioToWindow = 0.3;
+// |button_size_| scales both its width and height to be 30% the size of the
+// smaller of the screen's width and height.
+const float kControlRatioToWindow = 0.3;
 
-const int kMinPlayPauseButtonSize = 48;
+const int kMinControlButtonSize = 48;
 
 // Colors for the control buttons.
 SkColor kBgColor = SK_ColorWHITE;
@@ -74,6 +80,8 @@ class OverlayWindowFrameView : public views::NonClientFrameView {
     // The media controls should take and handle user interaction.
     OverlayWindowViews* window = static_cast<OverlayWindowViews*>(widget_);
     if (window->GetCloseControlsBounds().Contains(point) ||
+        window->GetFirstCustomControlsBounds().Contains(point) ||
+        window->GetSecondCustomControlsBounds().Contains(point) ||
         window->GetPlayPauseControlsBounds().Contains(point)) {
       return window_component;
     }
@@ -129,12 +137,18 @@ class OverlayWindowWidgetDelegate : public views::WidgetDelegate {
 OverlayWindowViews::OverlayWindowViews(
     content::PictureInPictureWindowController* controller)
     : controller_(controller),
-      play_pause_button_size_(gfx::Size()),
       window_background_view_(new views::View()),
       video_view_(new views::View()),
-      controls_background_view_(new views::View()),
+      controls_scrim_view_(new views::View()),
+      controls_parent_view_(new views::View()),
       close_controls_view_(new views::CloseImageButton(this)),
-      play_pause_controls_view_(new views::ToggleImageButton(this)) {
+      play_pause_controls_view_(new views::ToggleImageButton(this)),
+      hide_controls_timer_(
+          FROM_HERE,
+          base::TimeDelta::FromMilliseconds(2500 /* 2.5 seconds */),
+          base::BindRepeating(&OverlayWindowViews::UpdateControlsVisibility,
+                              base::Unretained(this),
+                              false /* is_visible */)) {
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.bounds = CalculateAndUpdateWindowBounds();
@@ -149,7 +163,6 @@ OverlayWindowViews::OverlayWindowViews(
   SetUpViews();
 
   is_initialized_ = true;
-  should_show_controls_ = false;
 }
 
 OverlayWindowViews::~OverlayWindowViews() = default;
@@ -195,15 +208,22 @@ gfx::Rect OverlayWindowViews::CalculateAndUpdateWindowBounds() {
 
   // Use the previous window origin location, if exists.
   gfx::Point origin = window_bounds_.origin();
-  if (!has_been_shown_) {
-    int window_diff_width = work_area.right() - window_size.width();
-    int window_diff_height = work_area.bottom() - window_size.height();
 
-    // Keep a margin distance of 2% the average of the two window size
-    // differences, keeping the margins consistent.
-    int buffer = (window_diff_width + window_diff_height) / 2 * 0.02;
-    origin =
-        gfx::Point(window_diff_width - buffer, window_diff_height - buffer);
+  int window_diff_width = work_area.right() - window_size.width();
+  int window_diff_height = work_area.bottom() - window_size.height();
+
+  // Keep a margin distance of 2% the average of the two window size
+  // differences, keeping the margins consistent.
+  int buffer = (window_diff_width + window_diff_height) / 2 * 0.02;
+
+  gfx::Point default_origin =
+      gfx::Point(window_diff_width - buffer, window_diff_height - buffer);
+
+  if (has_been_shown_) {
+    // Make sure window is displayed entirely in the work area.
+    origin.SetToMin(default_origin);
+  } else {
+    origin = default_origin;
   }
 
   window_bounds_ = gfx::Rect(origin, window_size);
@@ -212,24 +232,31 @@ gfx::Rect OverlayWindowViews::CalculateAndUpdateWindowBounds() {
 
 void OverlayWindowViews::SetUpViews() {
   // views::View that is displayed when video is hidden. ----------------------
-  window_background_view_->SetSize(GetBounds().size());
+  // Adding an extra pixel to width/height makes sure controls background cover
+  // entirely window when platform has fractional scale applied.
+  gfx::Rect larger_window_bounds = GetBounds();
+  larger_window_bounds.Inset(-1, -1);
+  window_background_view_->SetSize(larger_window_bounds.size());
   window_background_view_->SetPaintToLayer(ui::LAYER_SOLID_COLOR);
   GetWindowBackgroundLayer()->SetColor(SK_ColorBLACK);
 
-  // views::View that slightly darkens the video so the media controls appear
-  // more prominently. This is especially important in cases with a very light
-  // background. --------------------------------------------------------------
-  controls_background_view_->SetSize(GetBounds().size());
-  controls_background_view_->SetPaintToLayer(ui::LAYER_SOLID_COLOR);
-  GetControlsBackgroundLayer()->SetColor(SK_ColorBLACK);
-  GetControlsBackgroundLayer()->SetOpacity(0.4f);
+  // views::View that holds the scrim, which appears with the controls. -------
+  controls_scrim_view_->SetSize(GetBounds().size());
+  controls_scrim_view_->SetPaintToLayer(ui::LAYER_SOLID_COLOR);
+  GetControlsScrimLayer()->SetColor(gfx::kGoogleGrey900);
+  GetControlsScrimLayer()->SetOpacity(0.43f);
 
   // views::View that toggles play/pause. -------------------------------------
   play_pause_controls_view_->SetImageAlignment(
       views::ImageButton::ALIGN_CENTER, views::ImageButton::ALIGN_MIDDLE);
   play_pause_controls_view_->SetToggled(controller_->IsPlayerActive());
-  play_pause_controls_view_->SetBackgroundImageAlignment(
-      views::ImageButton::ALIGN_LEFT, views::ImageButton::ALIGN_TOP);
+  play_pause_controls_view_->set_owned_by_client();
+
+  // views::View that closes the window. --------------------------------------
+  close_controls_view_->SetPaintToLayer(ui::LAYER_TEXTURED);
+  close_controls_view_->layer()->SetFillsBoundsOpaquely(false);
+  close_controls_view_->set_owned_by_client();
+
   UpdatePlayPauseControlsSize();
 
   // Accessibility.
@@ -247,19 +274,20 @@ void OverlayWindowViews::SetUpViews() {
   play_pause_controls_view_->SetToggledTooltipText(pause_button_label);
   play_pause_controls_view_->SetInstallFocusRingOnFocus(true);
 
+  // Add as child views to |controls_parent_view_|. --------------------------
+  controls_parent_view_->SetSize(GetBounds().size());
+  controls_parent_view_->SetPaintToLayer(ui::LAYER_TEXTURED);
+  controls_parent_view_->AddChildView(play_pause_controls_view_.get());
+  controls_parent_view_->layer()->SetFillsBoundsOpaquely(false);
+  controls_parent_view_->set_owned_by_client();
+
   // Add as child views to this widget. ---------------------------------------
-  GetContentsView()->AddChildView(controls_background_view_.get());
+  GetContentsView()->AddChildView(controls_scrim_view_.get());
+  GetContentsView()->AddChildView(controls_parent_view_.get());
   GetContentsView()->AddChildView(close_controls_view_.get());
-  GetContentsView()->AddChildView(play_pause_controls_view_.get());
 
   // Paint to ui::Layers. -----------------------------------------------------
   video_view_->SetPaintToLayer(ui::LAYER_TEXTURED);
-  close_controls_view_->SetPaintToLayer(ui::LAYER_TEXTURED);
-  play_pause_controls_view_->SetPaintToLayer(ui::LAYER_TEXTURED);
-
-  // Controls should have a transparent background. ---------------------------
-  close_controls_view_->layer()->SetFillsBoundsOpaquely(false);
-  play_pause_controls_view_->layer()->SetFillsBoundsOpaquely(false);
 
   UpdateControlsVisibility(false);
 }
@@ -292,51 +320,146 @@ void OverlayWindowViews::UpdateLayerBoundsWithLetterboxing(
 }
 
 void OverlayWindowViews::UpdateControlsVisibility(bool is_visible) {
-  GetControlsBackgroundLayer()->SetVisible(is_visible);
   GetCloseControlsLayer()->SetVisible(is_visible);
-  GetPlayPauseControlsLayer()->SetVisible(is_visible);
+  GetControlsScrimLayer()->SetVisible(
+      (playback_state_ == kNoVideo) ? false : is_visible);
+  GetControlsParentLayer()->SetVisible(
+      (playback_state_ == kNoVideo) ? false : is_visible);
 }
 
 void OverlayWindowViews::UpdateControlsBounds() {
-  controls_background_view_->SetBoundsRect(
-      gfx::Rect(gfx::Point(0, 0), GetBounds().size()));
+  // Adding an extra pixel to width/height makes sure the scrim covers the
+  // entire window when the platform has fractional scaling applied.
+  gfx::Rect larger_window_bounds = GetBounds();
+  larger_window_bounds.Inset(-1, -1);
+  controls_scrim_view_->SetBoundsRect(
+      gfx::Rect(gfx::Point(0, 0), larger_window_bounds.size()));
 
   close_controls_view_->SetPosition(GetBounds().size());
 
-  play_pause_controls_view_->SetBoundsRect(gfx::Rect(
-      gfx::Point(
-          (GetBounds().size().width() - play_pause_button_size_.width()) / 2,
-          (GetBounds().size().height() - play_pause_button_size_.height()) / 2),
-      play_pause_button_size_));
+  controls_parent_view_->SetBoundsRect(
+      gfx::Rect(gfx::Point(0, 0), GetBounds().size()));
+
+  UpdateControlsPositions();
+}
+
+void OverlayWindowViews::UpdateButtonSize() {
+  const gfx::Size window_size = GetBounds().size();
+  int scaled_button_dimension =
+      window_size.width() < window_size.height()
+          ? window_size.width() * kControlRatioToWindow
+          : window_size.height() * kControlRatioToWindow;
+
+  int new_button_dimension =
+      std::max(kMinControlButtonSize, scaled_button_dimension);
+
+  button_size_.SetSize(new_button_dimension, new_button_dimension);
+}
+
+void OverlayWindowViews::UpdateCustomControlsSize(
+    views::ControlImageButton* control) {
+  if (!control)
+    return;
+  UpdateButtonSize();
+  control->SetSize(button_size_);
+  // TODO(sawtelle): Download the images and add them to the controls.
+  // https://crbug.com/864271.
+  if (control == first_custom_controls_view_.get()) {
+    first_custom_controls_view_->SetImage(
+        views::Button::STATE_NORMAL,
+        gfx::CreateVectorIcon(kPlayArrowIcon, button_size_.width() / 2,
+                              kControlIconColor));
+  }
+  if (control == second_custom_controls_view_.get()) {
+    second_custom_controls_view_->SetImage(
+        views::Button::STATE_NORMAL,
+        gfx::CreateVectorIcon(kPauseIcon, button_size_.width() / 2,
+                              kControlIconColor));
+  }
+  const gfx::ImageSkia control_background = gfx::CreateVectorIcon(
+      kPictureInPictureControlBackgroundIcon, button_size_.width(), kBgColor);
+  control->SetBackgroundImage(kBgColor, &control_background,
+                              &control_background);
 }
 
 void OverlayWindowViews::UpdatePlayPauseControlsSize() {
-  const gfx::Size window_size = GetBounds().size();
-
-  int scaled_button_dimension =
-      window_size.width() < window_size.height()
-          ? window_size.width() * kPlayPauseControlRatioToWindow
-          : window_size.height() * kPlayPauseControlRatioToWindow;
-
-  int new_play_pause_button_dimension =
-      std::max(kMinPlayPauseButtonSize, scaled_button_dimension);
-
-  play_pause_button_size_.SetSize(new_play_pause_button_dimension,
-                                  new_play_pause_button_dimension);
-  play_pause_controls_view_->SetSize(play_pause_button_size_);
+  UpdateButtonSize();
+  play_pause_controls_view_->SetSize(button_size_);
   play_pause_controls_view_->SetImage(
       views::Button::STATE_NORMAL,
-      gfx::CreateVectorIcon(kPlayArrowIcon, play_pause_button_size_.width() / 2,
+      gfx::CreateVectorIcon(kPlayArrowIcon, button_size_.width() / 2,
                             kControlIconColor));
   gfx::ImageSkia pause_icon = gfx::CreateVectorIcon(
-      kPauseIcon, play_pause_button_size_.width() / 2, kControlIconColor);
+      kPauseIcon, button_size_.width() / 2, kControlIconColor);
   play_pause_controls_view_->SetToggledImage(views::Button::STATE_NORMAL,
                                              &pause_icon);
-  const gfx::ImageSkia play_pause_background =
-      gfx::CreateVectorIcon(kPictureInPictureControlBackgroundIcon,
-                            play_pause_button_size_.width(), kBgColor);
+  const gfx::ImageSkia play_pause_background = gfx::CreateVectorIcon(
+      kPictureInPictureControlBackgroundIcon, button_size_.width(), kBgColor);
   play_pause_controls_view_->SetBackgroundImage(
       kBgColor, &play_pause_background, &play_pause_background);
+}
+
+void OverlayWindowViews::SetUpCustomControl(
+    std::unique_ptr<views::ControlImageButton>& control,
+    const blink::PictureInPictureControlInfo& web_control,
+    ControlPosition position) {
+  if (!control) {
+    control = std::make_unique<views::ControlImageButton>(this);
+    controls_parent_view_->AddChildView(control.get());
+    control->set_owned_by_client();
+    control->SetImageAlignment(views::ImageButton::ALIGN_CENTER,
+                               views::ImageButton::ALIGN_MIDDLE);
+  }
+
+  // Sizing/positioning.
+  UpdateCustomControlsSize(control.get());
+  control->set_id(web_control.id);
+  UpdateControlsBounds();
+
+  // Accessibility.
+  base::string16 custom_button_label = base::UTF8ToUTF16(web_control.label);
+  control->SetAccessibleName(custom_button_label);
+  control->SetTooltipText(custom_button_label);
+  control->SetInstallFocusRingOnFocus(true);
+  control->SetFocusForPlatform();
+}
+
+bool OverlayWindowViews::OnlyOneCustomControlAdded() {
+  return first_custom_controls_view_ && !second_custom_controls_view_;
+}
+
+gfx::Rect OverlayWindowViews::CalculateControlsBounds(int x,
+                                                      const gfx::Size& size) {
+  return gfx::Rect(
+      gfx::Point(x, (GetBounds().size().height() - size.height()) / 2), size);
+}
+
+void OverlayWindowViews::UpdateControlsPositions() {
+  int mid_window_x = GetBounds().size().width() / 2;
+  if (OnlyOneCustomControlAdded()) {
+    // Draw |first_custom_controls_view_| to the left of
+    // |play_pause_controls_view_| and offset both so they are centered on the
+    // screen.
+    play_pause_controls_view_->SetBoundsRect(
+        CalculateControlsBounds(mid_window_x, button_size_));
+    first_custom_controls_view_->SetBoundsRect(CalculateControlsBounds(
+        mid_window_x - button_size_.width(), button_size_));
+    return;
+  }
+
+  play_pause_controls_view_->SetBoundsRect(CalculateControlsBounds(
+      mid_window_x - button_size_.width() / 2, button_size_));
+
+  if (first_custom_controls_view_ && second_custom_controls_view_) {
+    // Draw |first_custom_controls_view_| to the left and
+    // |second_custom_controls_view_| to the right of
+    // |play_pause_controls_view_|.
+    first_custom_controls_view_->SetBoundsRect(CalculateControlsBounds(
+        mid_window_x - button_size_.width() / 2 - button_size_.width(),
+        button_size_));
+    second_custom_controls_view_->SetBoundsRect(CalculateControlsBounds(
+        mid_window_x + button_size_.width() / 2, button_size_));
+  }
 }
 
 bool OverlayWindowViews::IsActive() const {
@@ -349,9 +472,6 @@ void OverlayWindowViews::Close() {
 
 void OverlayWindowViews::Show() {
   views::Widget::Show();
-
-  // Don't show the controls until the mouse hovers over the window.
-  should_show_controls_ = false;
 
   // If this is not the first time the window is shown, this will be a no-op.
   has_been_shown_ = true;
@@ -382,9 +502,6 @@ void OverlayWindowViews::UpdateVideoSize(const gfx::Size& natural_size) {
   natural_size_ = natural_size;
   SetAspectRatio(gfx::SizeF(natural_size_));
 
-  if (IsVisible())
-    return;
-
   // Update the views::Widget bounds to adhere to sizing spec. This will also
   // update the layout of the controls.
   SetBounds(CalculateAndUpdateWindowBounds());
@@ -392,26 +509,40 @@ void OverlayWindowViews::UpdateVideoSize(const gfx::Size& natural_size) {
 
 void OverlayWindowViews::SetPlaybackState(PlaybackState playback_state) {
   // TODO(apacible): have machine state for controls visibility.
-  bool play_pause_layer_visible = GetPlayPauseControlsLayer()->visible();
+  bool controls_parent_layer_visible = GetControlsParentLayer()->visible();
 
-  switch (playback_state) {
+  playback_state_ = playback_state;
+
+  switch (playback_state_) {
     case kPlaying:
       play_pause_controls_view_->SetToggled(true);
-      play_pause_controls_view_->SetVisible(true);
+      controls_parent_view_->SetVisible(true);
       video_view_->SetVisible(true);
+      GetControlsParentLayer()->SetVisible(controls_parent_layer_visible);
       break;
     case kPaused:
       play_pause_controls_view_->SetToggled(false);
-      play_pause_controls_view_->SetVisible(true);
+      controls_parent_view_->SetVisible(true);
       video_view_->SetVisible(true);
+      GetControlsParentLayer()->SetVisible(controls_parent_layer_visible);
       break;
     case kNoVideo:
-      play_pause_controls_view_->SetVisible(false);
+      controls_scrim_view_->SetVisible(false);
+      controls_parent_view_->SetVisible(false);
       video_view_->SetVisible(false);
+      GetControlsParentLayer()->SetVisible(false);
       break;
   }
+}
 
-  GetPlayPauseControlsLayer()->SetVisible(play_pause_layer_visible);
+void OverlayWindowViews::SetPictureInPictureCustomControls(
+    const std::vector<blink::PictureInPictureControlInfo>& controls) {
+  if (controls.size() > 0)
+    SetUpCustomControl(first_custom_controls_view_, controls[0],
+                       ControlPosition::kLeft);
+  if (controls.size() > 1)
+    SetUpCustomControl(second_custom_controls_view_, controls[1],
+                       ControlPosition::kRight);
 }
 
 ui::Layer* OverlayWindowViews::GetWindowBackgroundLayer() {
@@ -422,16 +553,16 @@ ui::Layer* OverlayWindowViews::GetVideoLayer() {
   return video_view_->layer();
 }
 
-ui::Layer* OverlayWindowViews::GetControlsBackgroundLayer() {
-  return controls_background_view_->layer();
+ui::Layer* OverlayWindowViews::GetControlsScrimLayer() {
+  return controls_scrim_view_->layer();
 }
 
 ui::Layer* OverlayWindowViews::GetCloseControlsLayer() {
   return close_controls_view_->layer();
 }
 
-ui::Layer* OverlayWindowViews::GetPlayPauseControlsLayer() {
-  return play_pause_controls_view_->layer();
+ui::Layer* OverlayWindowViews::GetControlsParentLayer() {
+  return controls_parent_view_->layer();
 }
 
 gfx::Rect OverlayWindowViews::GetVideoBounds() {
@@ -444,6 +575,18 @@ gfx::Rect OverlayWindowViews::GetCloseControlsBounds() {
 
 gfx::Rect OverlayWindowViews::GetPlayPauseControlsBounds() {
   return play_pause_controls_view_->GetMirroredBounds();
+}
+
+gfx::Rect OverlayWindowViews::GetFirstCustomControlsBounds() {
+  if (!first_custom_controls_view_)
+    return gfx::Rect();
+  return first_custom_controls_view_->GetMirroredBounds();
+}
+
+gfx::Rect OverlayWindowViews::GetSecondCustomControlsBounds() {
+  if (!second_custom_controls_view_)
+    return gfx::Rect();
+  return second_custom_controls_view_->GetMirroredBounds();
 }
 
 gfx::Size OverlayWindowViews::GetMinimumSize() const {
@@ -460,14 +603,51 @@ void OverlayWindowViews::OnNativeWidgetWorkspaceChanged() {
   // does not trigger this function. http://crbug.com/819673
 }
 
+void OverlayWindowViews::OnNativeWidgetBeginUserBoundsChange() {
+  // Hide the controls when the window is being dragged or resized. The
+  // controls will reappear when the user hovers over the window again.
+  UpdateControlsVisibility(false);
+}
+
+void OverlayWindowViews::OnKeyEvent(ui::KeyEvent* event) {
+  // Any keystroke will make the controls visible, if not already. The Tab key
+  // needs to be handled separately.
+  // If the controls are already visible, this is a no-op.
+  if (event->type() == ui::ET_KEY_PRESSED ||
+      event->key_code() == ui::VKEY_TAB) {
+    UpdateControlsVisibility(true);
+  }
+
+// On Mac, the space key event isn't automatically handled. Only handle space
+// for TogglePlayPause() since tabbing between the buttons is not supported and
+// there is no focus affordance on the buttons.
+#if defined(OS_MACOSX)
+  if (event->type() == ui::ET_KEY_PRESSED &&
+      event->key_code() == ui::VKEY_SPACE) {
+    TogglePlayPause();
+    event->SetHandled();
+  }
+#endif  // OS_MACOSX
+
+// On Windows, the Alt+F4 keyboard combination closes the window. Only handle
+// closure on key press so Close() is not called a second time when the key
+// is released.
+#if defined(OS_WIN)
+  if (event->type() == ui::ET_KEY_PRESSED && event->IsAltDown() &&
+      event->key_code() == ui::VKEY_F4) {
+    controller_->Close(true /* should_pause_video */,
+                       true /* should_reset_pip_player */);
+    event->SetHandled();
+  }
+#endif  // OS_WIN
+
+  views::Widget::OnKeyEvent(event);
+}
+
 void OverlayWindowViews::OnMouseEvent(ui::MouseEvent* event) {
   switch (event->type()) {
-    // Only show the media controls when the mouse is hovering over the window.
-    // This is checking for both ENTERED and MOVED because ENTERED is not fired
-    // after a resize on Windows.
-#if defined (OS_WIN)
+// Only show the media controls when the mouse is hovering over the window.
     case ui::ET_MOUSE_MOVED:
-#endif  // OS_WIN
     case ui::ET_MOUSE_ENTERED:
       UpdateControlsVisibility(true);
       break;
@@ -484,6 +664,10 @@ void OverlayWindowViews::OnMouseEvent(ui::MouseEvent* event) {
       break;
   }
 
+  // If the user interacts with the window using a mouse, stop the timer to
+  // automatically hide the controls.
+  hide_controls_timer_.Reset();
+
   views::Widget::OnMouseEvent(event);
 }
 
@@ -491,43 +675,45 @@ void OverlayWindowViews::OnGestureEvent(ui::GestureEvent* event) {
   if (event->type() != ui::ET_GESTURE_TAP)
     return;
 
+  // Every time a user taps on the window, restart the timer to automatically
+  // hide the controls.
+  hide_controls_timer_.Reset();
+
   // If the controls were not shown, make them visible. All controls related
   // layers are expected to have the same visibility.
   // TODO(apacible): This placeholder logic should be updated with touchscreen
   // specific investigation. https://crbug/854373
-  if (!GetControlsBackgroundLayer()->visible()) {
+  if (!GetControlsScrimLayer()->visible()) {
     UpdateControlsVisibility(true);
     return;
   }
 
   if (GetCloseControlsBounds().Contains(event->location())) {
-    controller_->Close(true /* should_pause_video */);
+    controller_->Close(true /* should_pause_video */,
+                       true /* should_reset_pip_player */);
     event->SetHandled();
   } else if (GetPlayPauseControlsBounds().Contains(event->location())) {
     TogglePlayPause();
     event->SetHandled();
   }
+
+  views::Widget::OnGestureEvent(event);
 }
 
 void OverlayWindowViews::ButtonPressed(views::Button* sender,
                                        const ui::Event& event) {
   if (sender == close_controls_view_.get())
-    controller_->Close(true /* should_pause_video */);
+    controller_->Close(true /* should_pause_video */,
+                       true /* should_reset_pip_player */);
 
   if (sender == play_pause_controls_view_.get())
     TogglePlayPause();
-}
 
-void OverlayWindowViews::OnNativeFocus() {
-  // Show the controls when the window takes focus. This is used for tab and
-  // touch interactions. If initialisation happens after the window takes
-  // focus, any tabbing or touch gesture will show the controls.
-  if (is_initialized_) {
-    UpdateControlsVisibility(should_show_controls_);
-    should_show_controls_ = true;
-  }
+  if (sender == first_custom_controls_view_.get())
+    controller_->ClickCustomControl(first_custom_controls_view_->id());
 
-  views::Widget::OnNativeFocus();
+  if (sender == second_custom_controls_view_.get())
+    controller_->ClickCustomControl(second_custom_controls_view_->id());
 }
 
 void OverlayWindowViews::OnNativeBlur() {
@@ -549,6 +735,8 @@ void OverlayWindowViews::OnNativeWidgetMove() {
 
 void OverlayWindowViews::OnNativeWidgetSizeChanged(const gfx::Size& new_size) {
   // Update the view layers to scale to |new_size|.
+  UpdateCustomControlsSize(first_custom_controls_view_.get());
+  UpdateCustomControlsSize(second_custom_controls_view_.get());
   UpdatePlayPauseControlsSize();
   UpdateLayerBoundsWithLetterboxing(new_size);
 
@@ -574,4 +762,13 @@ void OverlayWindowViews::ClickCustomControl(const std::string& control_id) {
 views::ToggleImageButton*
 OverlayWindowViews::play_pause_controls_view_for_testing() const {
   return play_pause_controls_view_.get();
+}
+
+views::View* OverlayWindowViews::controls_parent_view_for_testing() const {
+  return controls_parent_view_.get();
+}
+
+OverlayWindowViews::PlaybackState
+OverlayWindowViews::playback_state_for_testing() const {
+  return playback_state_;
 }

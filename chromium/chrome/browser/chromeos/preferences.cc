@@ -75,10 +75,15 @@ static const char kFallbackInputMethodLocale[] = "en-US";
 // preferences will be saved in global user preferences dictionary so that they
 // can be used on signin screen.
 const char* const kLanguageRemapPrefs[] = {
-    prefs::kLanguageRemapSearchKeyTo, prefs::kLanguageRemapControlKeyTo,
-    prefs::kLanguageRemapAltKeyTo,    prefs::kLanguageRemapCapsLockKeyTo,
-    prefs::kLanguageRemapEscapeKeyTo, prefs::kLanguageRemapBackspaceKeyTo,
-    prefs::kLanguageRemapDiamondKeyTo};
+    prefs::kLanguageRemapSearchKeyTo,
+    prefs::kLanguageRemapControlKeyTo,
+    prefs::kLanguageRemapAltKeyTo,
+    prefs::kLanguageRemapCapsLockKeyTo,
+    prefs::kLanguageRemapEscapeKeyTo,
+    prefs::kLanguageRemapBackspaceKeyTo,
+    prefs::kLanguageRemapDiamondKeyTo,
+    prefs::kLanguageRemapExternalCommandKeyTo,
+    prefs::kLanguageRemapExternalMetaKeyTo};
 
 // Migrates kResolveTimezoneByGeolocation value to
 // kResolveTimezoneByGeolocationMethod.
@@ -114,9 +119,13 @@ void WhitelistLateRegistrationPrefsForSync(
   // perhaps after sync system initialization. Whitelist these prefs so that any
   // values obtained via sync before the prefs are registered will be stored.
   const char* const kAshForeignSyncablePrefs[] = {
-      ash::prefs::kEnableAutoScreenLock,      ash::prefs::kEnableStylusTools,
-      ash::prefs::kLaunchPaletteOnEjectEvent, ash::prefs::kShelfAlignment,
-      ash::prefs::kShelfAutoHideBehavior,     ash::prefs::kTapDraggingEnabled,
+      ash::prefs::kEnableAutoScreenLock,
+      ash::prefs::kEnableStylusTools,
+      ash::prefs::kLaunchPaletteOnEjectEvent,
+      ash::prefs::kMessageCenterLockScreenMode,
+      ash::prefs::kShelfAlignment,
+      ash::prefs::kShelfAutoHideBehavior,
+      ash::prefs::kTapDraggingEnabled,
   };
   for (const auto* pref : kAshForeignSyncablePrefs)
     registry->WhitelistLateRegistrationPrefForSync(pref);
@@ -189,7 +198,8 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kPerformanceTracingEnabled, false);
 
   registry->RegisterBooleanPref(
-      prefs::kTapToClickEnabled, true,
+      prefs::kTapToClickEnabled,
+      true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
   registry->RegisterBooleanPref(prefs::kEnableTouchpadThreeFingerClick, false);
   // This preference can only be set to true by policy or command_line flag
@@ -306,6 +316,7 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(
       drive::prefs::kDisableDriveHostedFiles, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterStringPref(drive::prefs::kDriveFsProfileSalt, "");
   // We don't sync prefs::kLanguageCurrentInputMethod and PreviousInputMethod
   // because they're just used to track the logout state of the device.
   registry->RegisterStringPref(prefs::kLanguageCurrentInputMethod, "");
@@ -348,6 +359,18 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterIntegerPref(
       prefs::kLanguageRemapDiamondKeyTo,
       static_cast<int>(ui::chromeos::ModifierKey::kControlKey),
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+  // The Command key on external Apple keyboards is remapped by default to Ctrl
+  // until the user changes it from the keyboard settings.
+  registry->RegisterIntegerPref(
+      prefs::kLanguageRemapExternalCommandKeyTo,
+      static_cast<int>(ui::chromeos::ModifierKey::kControlKey),
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+  // The Meta key (Search or Windows keys) on external keyboards is remapped by
+  // default to Search until the user changes it from the keyboard settings.
+  registry->RegisterIntegerPref(
+      prefs::kLanguageRemapExternalMetaKeyTo,
+      static_cast<int>(ui::chromeos::ModifierKey::kSearchKey),
       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
   // The following pref isn't synced since the user may desire a different value
   // depending on whether an external keyboard is attached to a particular
@@ -480,6 +503,9 @@ void Preferences::RegisterProfilePrefs(
 
   // By default showing Sync Consent is set to true. It can changed by policy.
   registry->RegisterBooleanPref(prefs::kEnableSyncConsent, true);
+
+  registry->RegisterBooleanPref(prefs::kTPMFirmwareUpdateCleanupDismissed,
+                                false);
 }
 
 void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {

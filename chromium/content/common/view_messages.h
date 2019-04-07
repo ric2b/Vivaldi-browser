@@ -97,14 +97,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(content::NavigationGesture,
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(content::PageZoom,
                               content::PageZoom::PAGE_ZOOM_OUT,
                               content::PageZoom::PAGE_ZOOM_IN)
-IPC_ENUM_TRAITS_MAX_VALUE(gfx::FontRenderParams::Hinting,
-                          gfx::FontRenderParams::HINTING_MAX)
-IPC_ENUM_TRAITS_MAX_VALUE(gfx::FontRenderParams::SubpixelRendering,
-                          gfx::FontRenderParams::SUBPIXEL_RENDERING_MAX)
 IPC_ENUM_TRAITS_MAX_VALUE(content::ScreenOrientationValues,
                           content::SCREEN_ORIENTATION_VALUES_LAST)
-IPC_ENUM_TRAITS_MAX_VALUE(content::TapMultipleTargetsStrategy,
-                          content::TAP_MULTIPLE_TARGETS_STRATEGY_MAX)
 IPC_ENUM_TRAITS_MAX_VALUE(content::ThreeDAPIType,
                           content::THREE_D_API_TYPE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(ui::TextInputMode, ui::TEXT_INPUT_MODE_MAX)
@@ -188,62 +182,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::DateTimeSuggestion)
   IPC_STRUCT_TRAITS_MEMBER(value)
   IPC_STRUCT_TRAITS_MEMBER(localized_value)
   IPC_STRUCT_TRAITS_MEMBER(label)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(content::RendererPreferences)
-  IPC_STRUCT_TRAITS_MEMBER(can_accept_load_drops)
-  IPC_STRUCT_TRAITS_MEMBER(should_antialias_text)
-  IPC_STRUCT_TRAITS_MEMBER(hinting)
-  IPC_STRUCT_TRAITS_MEMBER(use_autohinter)
-  IPC_STRUCT_TRAITS_MEMBER(use_bitmaps)
-  IPC_STRUCT_TRAITS_MEMBER(should_show_images)
-  IPC_STRUCT_TRAITS_MEMBER(should_ask_plugin_content)
-  IPC_STRUCT_TRAITS_MEMBER(subpixel_rendering)
-  IPC_STRUCT_TRAITS_MEMBER(use_subpixel_positioning)
-  IPC_STRUCT_TRAITS_MEMBER(focus_ring_color)
-  IPC_STRUCT_TRAITS_MEMBER(thumb_active_color)
-  IPC_STRUCT_TRAITS_MEMBER(thumb_inactive_color)
-  IPC_STRUCT_TRAITS_MEMBER(track_color)
-  IPC_STRUCT_TRAITS_MEMBER(active_selection_bg_color)
-  IPC_STRUCT_TRAITS_MEMBER(active_selection_fg_color)
-  IPC_STRUCT_TRAITS_MEMBER(inactive_selection_bg_color)
-  IPC_STRUCT_TRAITS_MEMBER(inactive_selection_fg_color)
-  IPC_STRUCT_TRAITS_MEMBER(browser_handles_all_top_level_requests)
-  IPC_STRUCT_TRAITS_MEMBER(caret_blink_interval)
-  IPC_STRUCT_TRAITS_MEMBER(use_custom_colors)
-  IPC_STRUCT_TRAITS_MEMBER(enable_referrers)
-  IPC_STRUCT_TRAITS_MEMBER(enable_do_not_track)
-  IPC_STRUCT_TRAITS_MEMBER(enable_encrypted_media)
-  IPC_STRUCT_TRAITS_MEMBER(webrtc_ip_handling_policy)
-  IPC_STRUCT_TRAITS_MEMBER(webrtc_udp_min_port)
-  IPC_STRUCT_TRAITS_MEMBER(webrtc_udp_max_port)
-  IPC_STRUCT_TRAITS_MEMBER(user_agent_override)
-  IPC_STRUCT_TRAITS_MEMBER(accept_languages)
-  IPC_STRUCT_TRAITS_MEMBER(tap_multiple_targets_strategy)
-  IPC_STRUCT_TRAITS_MEMBER(disable_client_blocked_error_page)
-  IPC_STRUCT_TRAITS_MEMBER(plugin_fullscreen_allowed)
-  IPC_STRUCT_TRAITS_MEMBER(network_contry_iso)
-#if defined(OS_LINUX)
-  IPC_STRUCT_TRAITS_MEMBER(system_font_family_name)
-#endif
-#if defined(OS_WIN)
-  IPC_STRUCT_TRAITS_MEMBER(caption_font_family_name)
-  IPC_STRUCT_TRAITS_MEMBER(caption_font_height)
-  IPC_STRUCT_TRAITS_MEMBER(small_caption_font_family_name)
-  IPC_STRUCT_TRAITS_MEMBER(small_caption_font_height)
-  IPC_STRUCT_TRAITS_MEMBER(menu_font_family_name)
-  IPC_STRUCT_TRAITS_MEMBER(menu_font_height)
-  IPC_STRUCT_TRAITS_MEMBER(status_font_family_name)
-  IPC_STRUCT_TRAITS_MEMBER(status_font_height)
-  IPC_STRUCT_TRAITS_MEMBER(message_font_family_name)
-  IPC_STRUCT_TRAITS_MEMBER(message_font_height)
-  IPC_STRUCT_TRAITS_MEMBER(vertical_scroll_bar_width_in_dips)
-  IPC_STRUCT_TRAITS_MEMBER(horizontal_scroll_bar_height_in_dips)
-  IPC_STRUCT_TRAITS_MEMBER(arrow_bitmap_height_vertical_scroll_bar_in_dips)
-  IPC_STRUCT_TRAITS_MEMBER(arrow_bitmap_width_horizontal_scroll_bar_in_dips)
-#endif
-  IPC_STRUCT_TRAITS_MEMBER(serve_resources_only_from_cache)
-  IPC_STRUCT_TRAITS_MEMBER(allow_tab_cycle_from_webpage_into_ui)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::TextInputState)
@@ -465,14 +403,6 @@ IPC_MESSAGE_ROUTED1(ViewMsg_PpapiBrokerPermissionResult,
                     bool /* result */)
 #endif
 
-// If the ViewHostMsg_ShowDisambiguationPopup resulted in the user tapping
-// inside the popup, instruct the renderer to generate a synthetic tap at that
-// offset.
-IPC_MESSAGE_ROUTED3(ViewMsg_ResolveTapDisambiguation,
-                    base::TimeTicks /* timestamp */,
-                    gfx::Point /* tap_viewport_offset */,
-                    bool /* is_long_press */)
-
 IPC_MESSAGE_ROUTED0(ViewMsg_SelectWordAroundCaret)
 
 // Sent by the browser to ask the renderer to redraw. Robust to events that can
@@ -482,9 +412,10 @@ IPC_MESSAGE_ROUTED1(ViewMsg_ForceRedraw, int /* snapshot_id */)
 
 // Sets the viewport intersection and compositor raster area on the widget for
 // an out-of-process iframe.
-IPC_MESSAGE_ROUTED2(ViewMsg_SetViewportIntersection,
+IPC_MESSAGE_ROUTED3(ViewMsg_SetViewportIntersection,
                     gfx::Rect /* viewport_intersection */,
-                    gfx::Rect /* compositor_visible_rect */)
+                    gfx::Rect /* compositor_visible_rect */,
+                    bool /* occluded or obscured */)
 
 // Sets the inert bit on an out-of-process iframe.
 IPC_MESSAGE_ROUTED1(ViewMsg_SetIsInert, bool /* inert */)
@@ -679,13 +610,6 @@ IPC_MESSAGE_ROUTED1(ViewHostMsg_IntrinsicSizingInfoChanged,
 // ViewHostMsg_UnlockMouse).
 IPC_MESSAGE_ROUTED0(ViewHostMsg_UnlockMouse)
 
-// Notifies that multiple touch targets may have been pressed, and to show
-// the disambiguation popup.
-IPC_MESSAGE_ROUTED3(ViewHostMsg_ShowDisambiguationPopup,
-                    gfx::Rect, /* Border of touched targets */
-                    gfx::Size, /* Size of zoomed image */
-                    base::SharedMemoryHandle /* Bitmap pixels */)
-
 // Message sent from renderer to the browser when the element that is focused
 // has been touched. A bool is passed in this message which indicates if the
 // node is editable.
@@ -695,6 +619,9 @@ IPC_MESSAGE_ROUTED1(ViewHostMsg_FocusedNodeTouched,
 // Sent once a paint happens after the first non empty layout. In other words,
 // after the frame widget has painted something.
 IPC_MESSAGE_ROUTED0(ViewHostMsg_DidFirstVisuallyNonEmptyPaint)
+
+// Sent once the RenderWidgetCompositor issues a draw command.
+IPC_MESSAGE_ROUTED0(ViewHostMsg_DidCommitAndDrawCompositorFrame)
 
 // Sent in reply to ViewMsg_WaitForNextFrameForTests.
 IPC_MESSAGE_ROUTED0(ViewHostMsg_WaitForNextFrameForTests_ACK)

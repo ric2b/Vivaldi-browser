@@ -14,6 +14,7 @@
 #include "base/values.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/chromeos/settings/stub_install_attributes.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
@@ -485,7 +486,8 @@ TEST_F(EPKPChallengeUserKeyTest, KeyRegistrationFailed) {
 
 TEST_F(EPKPChallengeUserKeyTest, KeyExists) {
   cryptohome_client_.SetTpmAttestationUserCertificate(
-      cryptohome::Identification(AccountId::FromUserEmail(kUserEmail)),
+      cryptohome::CreateAccountIdentifierFromAccountId(
+          AccountId::FromUserEmail(kUserEmail)),
       "attest-ent-user", std::string());
   // GetCertificate must not be called if the key exists.
   EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, _))

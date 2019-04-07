@@ -26,19 +26,17 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_DOM_EVENTS_EVENT_H_
 
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
-#include "third_party/blink/renderer/core/dom/dom_time_stamp.h"
-#include "third_party/blink/renderer/core/dom/events/event_dispatcher.h"
-#include "third_party/blink/renderer/core/dom/events/event_init.h"
-#include "third_party/blink/renderer/core/dom/events/event_path.h"
+#include "third_party/blink/renderer/core/dom/events/event_dispatch_result.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
-#include "third_party/blink/renderer/platform/wtf/time.h"
 
 namespace blink {
 
 class DOMWrapperWorld;
+class EventDispatcher;
+class EventInit;
+class EventPath;
 class EventTarget;
 class ScriptState;
 class ScriptValue;
@@ -190,6 +188,8 @@ class CORE_EXPORT Event : public ScriptWrappable {
 
   virtual bool IsBeforeUnloadEvent() const;
 
+  virtual bool IsActivateInvisibleEvent() const;
+
   bool PropagationStopped() const {
     return propagation_stopped_ || immediate_propagation_stopped_;
   }
@@ -259,6 +259,14 @@ class CORE_EXPORT Event : public ScriptWrappable {
     executed_listener_or_default_action_ = true;
   }
 
+  bool LegacyDidListenersThrow() const {
+    return legacy_did_listeners_throw_flag_;
+  }
+
+  void LegacySetDidListenersThrowFlag() {
+    legacy_did_listeners_throw_flag_ = true;
+  }
+
   virtual DispatchEventResult DispatchEvent(EventDispatcher&);
 
   void Trace(blink::Visitor*) override;
@@ -317,6 +325,12 @@ class CORE_EXPORT Event : public ScriptWrappable {
   unsigned prevent_default_called_during_passive_ : 1;
   // Whether preventDefault was called on uncancelable event.
   unsigned prevent_default_called_on_uncancelable_event_ : 1;
+
+  // Whether any of listeners have thrown an exception or not.
+  // Corresponds to |legacyOutputDidListenersThrowFlag| in DOM standard.
+  // https://dom.spec.whatwg.org/#dispatching-events
+  // https://dom.spec.whatwg.org/#concept-event-listener-inner-invoke
+  unsigned legacy_did_listeners_throw_flag_ : 1;
 
   PassiveMode handling_passive_;
   unsigned short event_phase_;

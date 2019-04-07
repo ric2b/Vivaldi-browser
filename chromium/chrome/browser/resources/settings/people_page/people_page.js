@@ -86,26 +86,6 @@ Polymer({
      */
     profileName_: String,
 
-    /**
-     * The profile deletion warning. The message indicates the number of
-     * profile stats that will be deleted if a non-zero count for the profile
-     * stats is returned from the browser.
-     * @private
-     */
-    deleteProfileWarning_: String,
-
-    /**
-     * True if the profile deletion warning is visible.
-     * @private
-     */
-    deleteProfileWarningVisible_: Boolean,
-
-    /**
-     * True if the checkbox to delete the profile has been checked.
-     * @private
-     */
-    deleteProfile_: Boolean,
-
     // <if expr="not chromeos">
     /** @private */
     showImportDataDialog_: {
@@ -115,7 +95,7 @@ Polymer({
     // </if>
 
     /** @private */
-    showDisconnectDialog_: Boolean,
+    showSignoutDialog_: Boolean,
 
     // <if expr="chromeos">
     /**
@@ -126,6 +106,18 @@ Polymer({
       type: Boolean,
       value: function() {
         return loadTimeData.getBoolean('fingerprintUnlockEnabled');
+      },
+      readOnly: true,
+    },
+
+    /**
+     * True if Chrome OS Account Manager is enabled.
+     * @private
+     */
+    isAccountManagerEnabled_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('isAccountManagerEnabled');
       },
       readOnly: true,
     },
@@ -147,7 +139,10 @@ Polymer({
               settings.routes.MANAGE_PASSWORDS.path, '#passwordManagerButton');
         }
         if (settings.routes.AUTOFILL) {
-          map.set(settings.routes.AUTOFILL.path, '#paymentManagerButton');
+          map.set(settings.routes.AUTOFILL.path, '#addressesManagerButton');
+        }
+        if (settings.routes.PAYMENTS) {
+          map.set(settings.routes.PAYMENTS.path, '#paymentManagerButton');
         }
         // <if expr="not chromeos">
         if (settings.routes.MANAGE_PROFILE) {
@@ -171,6 +166,11 @@ Polymer({
           map.set(
               settings.routes.ACCOUNTS.path,
               '#manage-other-people-subpage-trigger .subpage-arrow button');
+        }
+        if (settings.routes.ACCOUNT_MANAGER) {
+          map.set(
+              settings.routes.ACCOUNT_MANAGER.path,
+              '#account-manager-subpage-trigger .subpage-arrow button');
         }
         // </if>
         return map;
@@ -202,9 +202,6 @@ Polymer({
     this.addWebUIListener(
         'profile-info-changed', this.handleProfileInfo_.bind(this));
 
-    this.addWebUIListener(
-        'profile-stats-count-ready', this.handleProfileStatsCount_.bind(this));
-
     this.syncBrowserProxy_ = settings.SyncBrowserProxyImpl.getInstance();
     this.syncBrowserProxy_.getSyncStatus().then(
         this.handleSyncStatus_.bind(this));
@@ -223,22 +220,14 @@ Polymer({
         settings.getCurrentRoute() == settings.routes.IMPORT_DATA;
 
     if (settings.getCurrentRoute() == settings.routes.SIGN_OUT) {
-      // <if expr="not chromeos">
-      settings.ProfileInfoBrowserProxyImpl.getInstance().getProfileStatsCount();
-      // </if>
       // If the sync status has not been fetched yet, optimistically display
-      // the disconnect dialog. There is another check when the sync status is
-      // fetched. The dialog will be closed then the user is not signed in.
+      // the sign-out dialog. There is another check when the sync status is
+      // fetched. The dialog will be closed when the user is not signed in.
       if (this.syncStatus && !this.syncStatus.signedIn) {
         settings.navigateToPreviousRoute();
       } else {
-        this.showDisconnectDialog_ = true;
-        this.async(() => {
-          this.$$('#disconnectDialog').showModal();
-        });
+        this.showSignoutDialog_ = true;
       }
-    } else if (this.showDisconnectDialog_) {
-      this.$$('#disconnectDialog').close();
     }
   },
 
@@ -276,24 +265,6 @@ Polymer({
   },
 
   /**
-   * Handler for when the profile stats count is pushed from the browser.
-   * @param {number} count
-   * @private
-   */
-  handleProfileStatsCount_: function(count) {
-    this.deleteProfileWarning_ = (count > 0) ?
-        (count == 1) ? loadTimeData.getStringF(
-                           'deleteProfileWarningWithCountsSingular',
-                           this.syncStatus.signedInUsername) :
-                       loadTimeData.getStringF(
-                           'deleteProfileWarningWithCountsPlural', count,
-                           this.syncStatus.signedInUsername) :
-        loadTimeData.getStringF(
-            'deleteProfileWarningWithoutCounts',
-            this.syncStatus.signedInUsername);
-  },
-
-  /**
    * Handler for when the sync state is pushed from the browser.
    * @param {?settings.SyncStatus} syncStatus
    * @private
@@ -304,9 +275,6 @@ Polymer({
     // |this.syncStatus| is set.
     const shouldRecordSigninImpression =
         !this.syncStatus && syncStatus && this.showSignin_(syncStatus);
-
-    if (!syncStatus.signedIn && this.showDisconnectDialog_)
-      this.$$('#disconnectDialog').close();
 
     this.syncStatus = syncStatus;
 
@@ -341,7 +309,7 @@ Polymer({
   },
 
   /**
-   * Shows the manage autofill sub page.
+   * Shows the manage autofill addresses sub page.
    * @param {!Event} event
    * @private
    */
@@ -349,9 +317,18 @@ Polymer({
     settings.navigateTo(settings.routes.AUTOFILL);
   },
 
+  /**
+   * Shows the manage payment information sub page.
+   * @param {!Event} event
+   * @private
+   */
+  onPaymentsTap_: function(event) {
+    settings.navigateTo(settings.routes.PAYMENTS);
+  },
+
   /** @private */
-  onDisconnectClosed_: function() {
-    this.showDisconnectDialog_ = false;
+  onDisconnectDialogClosed_: function(e) {
+    this.showSignoutDialog_ = false;
     // <if expr="not chromeos">
     if (!this.diceEnabled_) {
       // If DICE-enabled, this button won't exist here.
@@ -365,33 +342,11 @@ Polymer({
 
     if (settings.getCurrentRoute() == settings.routes.SIGN_OUT)
       settings.navigateToPreviousRoute();
-    this.fire('signout-dialog-closed');
   },
 
   /** @private */
   onDisconnectTap_: function() {
     settings.navigateTo(settings.routes.SIGN_OUT);
-  },
-
-  /** @private */
-  onDisconnectCancel_: function() {
-    this.$$('#disconnectDialog').close();
-  },
-
-  /** @private */
-  onDisconnectConfirm_: function() {
-    const deleteProfile = !!this.syncStatus.domain || this.deleteProfile_;
-    // Trigger the sign out event after the navigateToPreviousRoute().
-    // So that the navigation to the setting page could be finished before the
-    // sign out if navigateToPreviousRoute() returns synchronously even the
-    // browser is closed after the sign out. Otherwise, the navigation will be
-    // finished during session restore if the browser is closed before the async
-    // callback executed.
-    listenOnce(this, 'signout-dialog-closed', () => {
-      this.syncBrowserProxy_.signOut(deleteProfile);
-    });
-
-    this.$$('#disconnectDialog').close();
   },
 
   /** @private */
@@ -453,6 +408,14 @@ Polymer({
     e.preventDefault();
     settings.navigateTo(settings.routes.LOCK_SCREEN);
   },
+
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onAccountManagerTap_: function(e) {
+    settings.navigateTo(settings.routes.ACCOUNT_MANAGER);
+  },
   // </if>
 
   /** @private */
@@ -499,22 +462,6 @@ Polymer({
         !!this.syncStatus.signinAllowed;
   },
   // </if>
-
-  /**
-   * @private
-   * @param {string} domain
-   * @return {string}
-   */
-  getDisconnectExplanationHtml_: function(domain) {
-    // <if expr="not chromeos">
-    if (domain) {
-      return loadTimeData.getStringF(
-          'syncDisconnectManagedProfileExplanation',
-          '<span id="managed-by-domain-name">' + domain + '</span>');
-    }
-    // </if>
-    return loadTimeData.getString('syncDisconnectExplanation');
-  },
 
   /**
    * @private

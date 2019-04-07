@@ -4,6 +4,7 @@
 <translation id="1016495303386450659">อัปเดตรายการแล้ว</translation>
 <translation id="1047726139967079566">บุ๊กมาร์กหน้านี้...</translation>
 <translation id="1049743911850919806">โหมดไม่ระบุตัวตน</translation>
+<translation id="1063454504051558093">ใช้รหัสผ่านอื่น...</translation>
 <translation id="1076421457278169141">สแกนโค้ดแล้ว</translation>
 <translation id="1084365883616172403">โพสต์ใน Facebook แล้ว</translation>
 <translation id="1104948393051856124">ยอมรับและดำเนินการต่อ</translation>
@@ -36,7 +37,6 @@
 <translation id="145015347812617860"><ph name="COUNT" /> รายการ</translation>
 <translation id="1491277525950327607">แตะ 2 ครั้งเพื่อสลับการตั้งค่า</translation>
 <translation id="152234381334907219">ไม่เคยบันทึก</translation>
-<translation id="1532451416480227577">แสดงที่อยู่และบัตรเครดิตจาก Google Pay</translation>
 <translation id="1540800554400757039">ที่อยู่ 1</translation>
 <translation id="1545749641540134597">สแกนโค้ด QR</translation>
 <translation id="1558704936695638228">กดค้างไว้เพื่อดูตัวเลือกแท็บอื่นๆ</translation>
@@ -44,14 +44,15 @@
 <translation id="1582732959743469162">การดำเนินการนี้จะหยุดการดาวน์โหลดที่ดำเนินอยู่ทั้งหมด</translation>
 <translation id="1605658421715042784">คัดลอกรูปภาพ</translation>
 <translation id="1612730193129642006">แสดงตารางแท็บ</translation>
+<translation id="162035744160882748">เปิดการซิงค์ การปรับเปลี่ยนในแบบของคุณ และบริการอื่นๆ ของ Google</translation>
 <translation id="1644574205037202324">ประวัติการเข้าชม</translation>
-<translation id="1646446875146297738">การเปิดใช้ "ไม่ติดตาม" จะทำให้คำขอหนึ่งๆ ไปรวมอยู่กับการรับส่งข้อมูลในการเรียกดูของคุณ ผลที่จะเกิดขึ้นขึ้นอยู่กับว่าเว็บไซต์ตอบสนองต่อคำขอหรือไม่และคำขอนั้นถูกตีความอย่างไร ตัวอย่างเช่น บางเว็บไซต์อาจตอบสนองต่อคำขอนี้ด้วยการแสดงโฆษณาที่ไม่ได้อยู่บนเว็บไซต์อื่นๆ ที่คุณเคยเยี่ยมชมให้คุณเห็น เว็บไซต์จำนวนมากจะยังคงเก็บรวบรวมและใช้ข้อมูลการท่องเว็บของคุณไว้ เพื่อปรับปรุงการรักษาความปลอดภัย จัดเตรียมเนื้อหา บริการ โฆษณา และคำแนะนำบนเว็บไซต์ รวมทั้งเพื่อสร้างสถิติการรายงาน เป็นต้น <ph name="BEGIN_LINK" />ดูข้อมูลเพิ่มเติม<ph name="END_LINK" /></translation>
 <translation id="1657011748321897393">การแชร์ล้มเหลวเนื่องจากคุณไม่ได้เชื่อมต่อเครือข่าย</translation>
 <translation id="165877110639533037">ไม่มีแท็บที่เปิดไว้</translation>
 <translation id="1687475363370981210">ทำเครื่องหมายทั้งหมดว่าอ่านแล้ว</translation>
 <translation id="1690731385917361335">ไม่มีรายการ</translation>
 <translation id="1700629756560807968">เลือก <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> รายการ</translation>
 <translation id="1740468249224277719">แตะ 2 ครั้งเพื่อติดตั้ง</translation>
+<translation id="1746815479209538200">หากต้องการท่องเว็บ ให้เพิ่มแท็บใหม่</translation>
 <translation id="17513872634828108">แท็บที่เปิดอยู่</translation>
 <translation id="1752547299766512813">บันทึกรหัสผ่าน</translation>
 <translation id="1753905327828125965">เข้าชมบ่อยสุด</translation>
@@ -62,6 +63,7 @@
 <translation id="1876721852596493031">ส่งข้อมูลการใช้งาน</translation>
 <translation id="1886928167269928266">ตั้งแต่ต้น</translation>
 <translation id="1911619930368729126">อัปโหลดไปยัง Google ไดรฟ์</translation>
+<translation id="191179954310195971">บริการอื่นๆ ของ Google</translation>
 <translation id="1941314575388338491">แตะสองครั้งเพื่อคัดลอก</translation>
 <translation id="1952728750904661634">ลงชื่อเข้าใช้ด้วยบัญชีที่มีการจัดการ</translation>
 <translation id="1974060860693918893">ขั้นสูง</translation>
@@ -83,7 +85,6 @@
 <translation id="2320166752086256636">ซ่อนแป้นพิมพ์</translation>
 <translation id="2339560363438331454">การซิงค์และบริการของ Google</translation>
 <translation id="2351097562818989364">รีเซ็ตการตั้งค่าการแปลภาษาของคุณแล้ว</translation>
-<translation id="2354750644801399986">"ไม่ติดตาม"</translation>
 <translation id="2359808026110333948">ดำเนินการต่อ</translation>
 <translation id="2381405137052800939">พื้นฐาน</translation>
 <translation id="2386793615875593361">เลือก 1 รูป</translation>
@@ -117,7 +118,6 @@
 <translation id="2870560284913253234">เว็บไซต์</translation>
 <translation id="2871695793448672541">รหัสผ่านแบบซ่อน</translation>
 <translation id="2898963176829412617">โฟลเดอร์ใหม่…</translation>
-<translation id="2903493209154104877">ที่อยู่</translation>
 <translation id="2909437209446960244">แท็บล่าสุด</translation>
 <translation id="2916171785467530738">เติมข้อความค้นหาและ URL อัตโนมัติ</translation>
 <translation id="291754862089661335">จัดตำแหน่งโค้ด QR หรือบาร์โค้ดให้อยู่ในกรอบนี้</translation>
@@ -164,10 +164,12 @@
 <translation id="3588820906588687999">เปิดภาพในแท็บใหม่</translation>
 <translation id="3603009562372709545">คัดลอก URL ของลิงก์</translation>
 <translation id="3607167657931203000">ป้อนข้อมูลอัตโนมัติ</translation>
+<translation id="360930808415985584">ควบคุมการซิงค์ การปรับเปลี่ยนในแบบของคุณ และอื่นๆ</translation>
 <translation id="3609785682760573515">กำลังซิงค์...</translation>
 <translation id="3628119975092896051">เรื่องรออ่านของคุณพร้อมใช้งานในแบบออฟไลน์ หากต้องการเพิ่มหน้าลงในเรื่องรออ่าน ให้แตะ<ph name="SHARE_OPENING_ICON" /></translation>
 <translation id="3638472932233958418">โหลดหน้าเว็บล่วงหน้า</translation>
 <translation id="3691593122358196899">เพิ่มบุ๊กมาร์กไปยัง <ph name="FOLDER_TITLE" /> แล้ว</translation>
+<translation id="3765471630796399471">ใช้รหัสผ่านอื่น</translation>
 <translation id="3771033907050503522">แท็บที่ไม่ระบุตัวตน</translation>
 <translation id="3779810277399252432">ไม่มีการเชื่อมต่ออินเทอร์เน็ต</translation>
 <translation id="3783017676699494206">บันทึกภาพ</translation>
@@ -192,6 +194,7 @@
 <translation id="4124987746317609294">ช่วงเวลา</translation>
 <translation id="4172051516777682613">แสดงทุกครั้ง</translation>
 <translation id="418156467088430727">ดูเวอร์ชันออฟไลน์ในแท็บใหม่</translation>
+<translation id="4192273449750167573">ตรวจสอบการตั้งค่าในหน้าจอถัดไป</translation>
 <translation id="4237682350741091554">จัดการการซิงค์ของ Chrome และการปรับเปลี่ยนในแบบของคุณใน<ph name="BEGIN_LINK" />การตั้งค่า<ph name="END_LINK" /></translation>
 <translation id="424315890655130736">ป้อนรหัสผ่าน</translation>
 <translation id="4272631900155121838">หากต้องการสแกนโค้ด QR ให้เปิดใช้กล้องถ่ายรูปจากการตั้งค่า</translation>
@@ -209,6 +212,7 @@
 <translation id="4508750114462689118">ปิดโปรโมชันการลงชื่อเข้าใช้</translation>
 <translation id="4526249700380860531">ดูและจัดการรหัสผ่านที่บันทึกไว้ที่ <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">ลองลงชื่อเข้าใช้อีกครั้ง</translation>
+<translation id="4541241553780729349">ข้อมูลที่ซิงค์กับ Google และฟีเจอร์ที่ใช้จะไม่เปลี่ยนแปลง</translation>
 <translation id="457386861538956877">เพิ่มเติม...</translation>
 <translation id="461440297010471931">กำลังค้นหาด้วย Google</translation>
 <translation id="4619615317237390068">แท็บจากอุปกรณ์อื่นๆ</translation>
@@ -243,9 +247,9 @@
 <translation id="5186185447130319458">ส่วนตัว</translation>
 <translation id="5190835502935405962">แถบบุ๊กมาร์ก</translation>
 <translation id="5197255632782567636">อินเทอร์เน็ต</translation>
+<translation id="5215116848420601511">วิธีการชำระเงินและที่อยู่จาก Google Pay</translation>
 <translation id="5228579091201413441">เปิดใช้การซิงค์</translation>
 <translation id="5244474230056479698">กำลังซิงค์กับ <ph name="EMAIL" /></translation>
-<translation id="527973086555161537">เปิดแท็บเพื่อท่องเว็บในแบบส่วนตัว</translation>
 <translation id="5300589172476337783">แสดง</translation>
 <translation id="5317780077021120954">บันทึก</translation>
 <translation id="5327248766486351172">ชื่อ</translation>
@@ -282,8 +286,10 @@
 <translation id="5938160824633642847">พื้นที่ในอุปกรณ์เกือบเต็มแล้ว เพิ่มพื้นที่ว่างแล้วลองอีกครั้ง</translation>
 <translation id="5948291296578561264">ช่วยให้คุณบันทึกรูปภาพในคลังภาพได้</translation>
 <translation id="5955891643922670672">การดูเวอร์ชันออฟไลน์</translation>
+<translation id="5957613098218939406">ตัวเลือกเพิ่มเติม</translation>
 <translation id="5964480694698977962">สร้างแท็บที่ไม่ระบุตัวตนใหม่</translation>
 <translation id="5965679971710331625">คุณลงชื่อเข้าใช้แล้ว</translation>
+<translation id="5979837087407522202">ค้นหารหัสผ่าน</translation>
 <translation id="5982717868370722439">เพิ่มข้อมูลที่มีอยู่ลงใน <ph name="USER_EMAIL" /></translation>
 <translation id="6012140227487808125">กำลังเข้ารหัส…</translation>
 <translation id="6021332621416007159">เปิดใน...</translation>
@@ -313,6 +319,7 @@
 <translation id="6344783595350022745">ข้อความที่ชัดเจน</translation>
 <translation id="6346549652287021269">เริ่มดาวน์โหลดใหม่ใช่ไหม</translation>
 <translation id="6362362396625799311">ไม่มีแท็บที่ไม่ระบุตัวตน</translation>
+<translation id="6363526231572697780">ไม่มีชื่อผู้ใช้</translation>
 <translation id="6374469231428023295">ลองอีกครั้ง</translation>
 <translation id="6380866119319257197">หากคุณลืมรหัสผ่านหรือต้องการเปลี่ยนการตั้งค่านี้ โปรด<ph name="BEGIN_LINK" />รีเซ็ตการซิงค์<ph name="END_LINK" /></translation>
 <translation id="6389470377220713856">ชื่อบนบัตร</translation>
@@ -328,7 +335,6 @@
 <translation id="6464071786529933911">เปิดในแท็บที่ไม่ระบุตัวตนใหม่</translation>
 <translation id="6482629121755362506">ลบแล้ว <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> รายการ</translation>
 <translation id="6541915733953096570">ชั่วโมงที่ผ่านมา</translation>
-<translation id="6570040839871198836">ป้อนฟอร์มอัตโนมัติ</translation>
 <translation id="6656103420185847513">แก้ไขโฟลเดอร์</translation>
 <translation id="6657585470893396449">รหัสผ่าน</translation>
 <translation id="667999046851023355">เอกสาร</translation>
@@ -341,6 +347,7 @@
 <translation id="6797885426782475225">ค้นหาด้วยเสียง</translation>
 <translation id="6807889908376551050">แสดงทั้งหมด...</translation>
 <translation id="681368974849482173">สร้างรายการแล้ว</translation>
+<translation id="685040365210406336">ไม่เปลี่ยนแปลง</translation>
 <translation id="6896758677409633944">คัดลอก</translation>
 <translation id="6903907808598579934">เปิดการซิงค์</translation>
 <translation id="6914783257214138813">คนที่ดูไฟล์ที่ส่งออกได้จะเห็นรหัสผ่านของคุณ</translation>
@@ -370,6 +377,7 @@
 <translation id="7336264872878993241">ดาวน์โหลดแล้ว <ph name="PERCENT" /> เปอร์เซ็นต์</translation>
 <translation id="7346909386216857016">รับทราบ</translation>
 <translation id="7400418766976504921">URL</translation>
+<translation id="741204030948306876">ได้สิ ตกลง</translation>
 <translation id="7425346204213733349">การเปลี่ยนแปลงบุ๊กมาร์ก ประวัติการเข้าชม รหัสผ่าน และการตั้งค่าอื่นๆ จะไม่ซิงค์กับบัญชี Google ของคุณอีกต่อไป อย่างไรก็ตาม ข้อมูลที่คุณมีจะยังคงจัดเก็บอยู่ในบัญชี Google</translation>
 <translation id="744343212394640790">ไม่ใช่ <ph name="EMAIL" /></translation>
 <translation id="7454057999980797137">เขต/แขวง</translation>
@@ -387,12 +395,14 @@
 <translation id="7638584964844754484">รหัสผ่านไม่ถูกต้อง</translation>
 <translation id="7649070708921625228">ช่วยเหลือ</translation>
 <translation id="7658239707568436148">ยกเลิก</translation>
+<translation id="766891008101699113">หากต้องการท่องเว็บแบบเป็นส่วนตัว ให้เพิ่มแท็บใหม่</translation>
 <translation id="7671141431838911305">ติดตั้ง</translation>
 <translation id="7765158879357617694">ย้าย</translation>
 <translation id="7769602470925380267">ยอมรับและออกจากระบบ</translation>
 <translation id="7772032839648071052">ยืนยันข้อความรหัสผ่าน</translation>
+<translation id="7781829728241885113">เมื่อวานนี้</translation>
 <translation id="780301667611848630">ไม่ ขอบคุณ</translation>
-<translation id="7830720446622801252">บริการที่ไม่ได้ปรับเปลี่ยนในแบบของคุณ</translation>
+<translation id="7840771868269352570">ระบบจะนำรายการที่คุณเลือกออก</translation>
 <translation id="7856733331829174190">ดาวน์โหลดไม่ได้</translation>
 <translation id="7859704718976024901">ประวัติการเข้าชม</translation>
 <translation id="7918293828610777738">เรื่องรออ่านของคุณพร้อมใช้งานในแบบออฟไลน์ หากต้องการเพิ่มหน้าลงในเรื่องรออ่าน ให้แตะ <ph name="SHARE_OPENING_ICON" /> แล้วแตะ "<ph name="READ_LATER_TEXT" />"</translation>
@@ -413,11 +423,9 @@
 <translation id="8080028325999236607">ปิดแท็บทั้งหมด</translation>
 <translation id="8114753159095730575">การดาวน์โหลดไฟล์พร้อมใช้งาน มีตัวเลือกอยู่ทางด้านล่างของหน้าจอ</translation>
 <translation id="8160722851663543621">ส่งการค้นหาจากแถบที่อยู่และช่องค้นหารวมถึงคุกกี้บางรายการไปยังเครื่องมือค้นหาเริ่มต้น</translation>
-<translation id="8178325540017397816">ระบบจะนำรายการที่คุณเลือกออก</translation>
 <translation id="8205564605687841303">ยกเลิก</translation>
 <translation id="8225985093977202398">รูปภาพและไฟล์ที่แคชไว้</translation>
 <translation id="8261506727792406068">ลบ</translation>
-<translation id="8272426682713568063">บัตรเครดิต</translation>
 <translation id="8281781826761538115">ค่าเริ่มต้น - <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8328777765163860529">ปิดทั้งหมด</translation>
 <translation id="8381750437846184350">ควบคุมวิธีที่ Google ใช้ประวัติการท่องเว็บของคุณเพื่อปรับเปลี่ยนการค้นหา โฆษณา และบริการอื่นๆ ของ Google ในแบบของคุณ</translation>

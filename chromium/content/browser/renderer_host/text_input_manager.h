@@ -184,6 +184,10 @@ class CONTENT_EXPORT TextInputManager {
   void SelectionBoundsChanged(RenderWidgetHostViewBase* view,
                               const ViewHostMsg_SelectionBounds_Params& params);
 
+  // Notify observers that the selection bounds have been updated. This is also
+  // called when a view with a selection is reactivated.
+  void NotifySelectionBoundsChanged(RenderWidgetHostViewBase* view);
+
   // Called when the composition range and/or character bounds have changed.
   void ImeCompositionRangeChanged(
       RenderWidgetHostViewBase* view,
@@ -255,7 +259,7 @@ class CONTENT_EXPORT TextInputManager {
   // user.
   bool should_do_learning_;
 
-  base::ObserverList<Observer> observer_list_;
+  base::ObserverList<Observer>::Unchecked observer_list_;
 
   DISALLOW_COPY_AND_ASSIGN(TextInputManager);
 };

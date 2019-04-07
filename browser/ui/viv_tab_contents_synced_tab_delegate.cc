@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Vivaldi Technologies
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved
 
 #include "chrome/browser/ui/sync/tab_contents_synced_tab_delegate.h"
 

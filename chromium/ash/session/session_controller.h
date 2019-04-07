@@ -76,6 +76,9 @@ class ASH_EXPORT SessionController : public mojom::SessionController {
   // Returns true if the session is in a kiosk-like mode running a single app.
   bool IsRunningInAppMode() const;
 
+  // Returns true if the current session is a demo session for Demo Mode.
+  bool IsDemoSession() const;
+
   // Returns true if user session blocked by some overlying UI. It can be
   // login screen, lock screen or screen for adding users into multi-profile
   // session.
@@ -204,6 +207,8 @@ class ASH_EXPORT SessionController : public mojom::SessionController {
                                      std::unique_ptr<PrefService> pref_service);
 
  private:
+  // Marks the session as a demo session for Demo Mode.
+  void SetIsDemoSession();
   void SetSessionState(session_manager::SessionState state);
   void AddUserSession(mojom::UserSessionPtr user_session);
 
@@ -247,6 +252,7 @@ class ASH_EXPORT SessionController : public mojom::SessionController {
   bool can_lock_ = false;
   bool should_lock_screen_automatically_ = false;
   bool is_running_in_app_mode_ = false;
+  bool is_demo_session_ = false;
   AddUserSessionPolicy add_user_session_policy_ = AddUserSessionPolicy::ALLOWED;
   session_manager::SessionState state_;
 
@@ -288,7 +294,7 @@ class ASH_EXPORT SessionController : public mojom::SessionController {
   // OnSigninScreenPrefServiceInitialized().
   bool on_active_user_prefs_changed_notify_deferred_ = false;
 
-  base::ObserverList<ash::SessionObserver> observers_;
+  base::ObserverList<ash::SessionObserver>::Unchecked observers_;
 
   service_manager::Connector* const connector_;
 

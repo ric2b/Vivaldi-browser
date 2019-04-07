@@ -13,32 +13,34 @@
 #include "base/single_thread_task_runner.h"
 #include "chrome/browser/android/vr/gl_browser_interface.h"
 #include "chrome/browser/android/vr/gvr_keyboard_delegate.h"
+#include "chrome/browser/android/vr/render_loop_factory.h"
 #include "chrome/browser/vr/browser_ui_interface.h"
-#include "chrome/browser/vr/content_input_delegate.h"
 #include "chrome/browser/vr/model/omnibox_suggestions.h"
 #include "chrome/browser/vr/model/sound_id.h"
 #include "chrome/browser/vr/platform_input_handler.h"
+#include "chrome/browser/vr/render_loop_browser_interface.h"
 #include "chrome/browser/vr/text_input_delegate.h"
-#include "chrome/browser/vr/ui.h"
 #include "chrome/browser/vr/ui_browser_interface.h"
 #include "chrome/browser/vr/ui_test_input.h"
 #include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
-#include "ui/gfx/native_widget_types.h"
 
 namespace base {
 class Version;
 class WaitableEvent;
 }  // namespace base
 
+namespace gvr {
+class GvrApi;
+}
+
 namespace vr {
 
-class AudioDelegate;
 class VrInputConnection;
 class VrShell;
-class VrShellGl;
 
 class VrGLThread : public base::android::JavaHandlerThread,
                    public PlatformInputHandler,
+                   public RenderLoopBrowserInterface,
                    public GlBrowserInterface,
                    public UiBrowserInterface,
                    public BrowserUiInterface {
@@ -46,17 +48,17 @@ class VrGLThread : public base::android::JavaHandlerThread,
   VrGLThread(
       const base::WeakPtr<VrShell>& weak_vr_shell,
       scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
-      base::WaitableEvent* gl_surface_created_event,
       gvr_context* gvr_api,
       const UiInitialState& ui_initial_state,
       bool reprojected_rendering,
       bool daydream_support,
       bool pause_content,
       bool low_density,
+      base::WaitableEvent* gl_surface_created_event,
       base::OnceCallback<gfx::AcceleratedWidget()> surface_callback);
 
   ~VrGLThread() override;
-  base::WeakPtr<VrShellGl> GetVrShellGl();
+  base::WeakPtr<RenderLoop> GetRenderLoop();
   void SetInputConnection(VrInputConnection* input_connection);
 
   // GlBrowserInterface implementation (GL calling to VrShell).
@@ -65,16 +67,15 @@ class VrGLThread : public base::android::JavaHandlerThread,
   void ContentOverlaySurfaceCreated(jobject surface,
                                     gl::SurfaceTexture* texture) override;
   void GvrDelegateReady(gvr::ViewerType viewer_type) override;
-  void SendRequestPresentReply(
-      bool success,
-      device::mojom::VRSubmitFrameClientRequest,
-      device::mojom::VRPresentationProviderPtr,
-      device::mojom::VRDisplayFrameTransportOptionsPtr) override;
+  void SendRequestPresentReply(device::mojom::XRSessionPtr) override;
   void DialogSurfaceCreated(jobject surface,
                             gl::SurfaceTexture* texture) override;
   void UpdateGamepadData(device::GvrGamepadData) override;
-  void ForceExitVr() override;
   void ToggleCardboardGamepad(bool enabled) override;
+  // RenderLoopBrowserInterface implementation (RenderLoop calling to VrShell).
+  void ForceExitVr() override;
+  void ReportUiActivityResultForTesting(
+      const VrUiTestActivityResult& result) override;
 
   // PlatformInputHandler
   void ForwardEventToPlatformUi(std::unique_ptr<InputEvent> event) override;
@@ -123,7 +124,10 @@ class VrGLThread : public base::android::JavaHandlerThread,
   void SetLoadProgress(float progress) override;
   void SetIsExiting() override;
   void SetHistoryButtonsEnabled(bool can_go_back, bool can_go_forward) override;
-  void SetCapturingState(const CapturingStateModel& state) override;
+  void SetCapturingState(
+      const CapturingStateModel& active_capturing,
+      const CapturingStateModel& background_capturing,
+      const CapturingStateModel& potential_capturing) override;
   void ShowExitVrPrompt(UiUnsupportedMode reason) override;
   void SetSpeechRecognitionEnabled(bool enabled) override;
   void SetRecognitionResult(const base::string16& result) override;
@@ -147,9 +151,6 @@ class VrGLThread : public base::android::JavaHandlerThread,
   void RemoveTab(int id, bool incognito) override;
   void RemoveAllTabs() override;
 
-  void ReportUiActivityResultForTesting(
-      const VrUiTestActivityResult& result) override;
-
  protected:
   void Init() override;
   void CleanUp() override;
@@ -157,12 +158,6 @@ class VrGLThread : public base::android::JavaHandlerThread,
  private:
   bool OnMainThread() const;
   bool OnGlThread() const;
-
-  // Created on GL thread.
-  std::unique_ptr<VrShellGl> vr_shell_gl_;
-  std::unique_ptr<GvrKeyboardDelegate> keyboard_delegate_;
-  std::unique_ptr<TextInputDelegate> text_input_delegate_;
-  std::unique_ptr<AudioDelegate> audio_delegate_;
 
   base::WeakPtr<VrShell> weak_vr_shell_;
   base::WeakPtr<BrowserUiInterface> weak_browser_ui_;
@@ -172,16 +167,15 @@ class VrGLThread : public base::android::JavaHandlerThread,
   // VrGlThread. So it is safe to use raw pointer here.
   VrInputConnection* input_connection_ = nullptr;
 
-  // This state is used for initializing vr_shell_gl_.
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
-  base::WaitableEvent* gl_surface_created_event_;
-  gvr_context* gvr_api_;
-  UiInitialState ui_initial_state_;
-  bool reprojected_rendering_;
-  bool daydream_support_;
-  bool pause_content_;
-  bool low_density_;
-  base::OnceCallback<gfx::AcceleratedWidget()> surface_callback_;
+
+  // Created on GL thread.
+  std::unique_ptr<UiFactory> ui_factory_;
+  std::unique_ptr<RenderLoop> render_loop_;
+  std::unique_ptr<gvr::GvrApi> gvr_api_;
+
+  // This state is used for initializing the RenderLoop.
+  std::unique_ptr<RenderLoopFactory::Params> factory_params_;
 
   DISALLOW_COPY_AND_ASSIGN(VrGLThread);
 };

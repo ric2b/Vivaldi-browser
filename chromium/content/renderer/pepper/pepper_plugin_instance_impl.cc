@@ -125,6 +125,7 @@
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/blink/web_input_event.h"
+#include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_rep.h"
@@ -135,8 +136,8 @@
 #if BUILDFLAG(ENABLE_PRINTING)
 // nogncheck because dependency on //printing is conditional upon
 // enable_basic_printing flags.
+#include "printing/metafile_skia.h"          // nogncheck
 #include "printing/metafile_skia_wrapper.h"  // nogncheck
-#include "printing/pdf_metafile_skia.h"  // nogncheck
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -373,7 +374,7 @@ class PluginInstanceLockTarget : public MouseLockDispatcher::LockTarget {
 };
 
 void PrintPDFOutput(PP_Resource print_output,
-                    printing::PdfMetafileSkia* metafile) {
+                    printing::MetafileSkia* metafile) {
 #if BUILDFLAG(ENABLE_PRINTING)
   DCHECK(metafile);
 
@@ -486,9 +487,8 @@ PPB_Gamepad_API* PepperPluginInstanceImpl::GamepadImpl::AsPPB_Gamepad_API() {
 void PepperPluginInstanceImpl::GamepadImpl::Sample(
     PP_Instance instance,
     PP_GamepadsSampleData* data) {
-  device::Gamepads gamepads_data;
-  RenderThreadImpl::current()->SampleGamepads(&gamepads_data);
-  ppapi::ConvertDeviceGamepadData(gamepads_data, data);
+  // This gamepad singleton resource method should not be called
+  NOTREACHED();
 }
 
 PepperPluginInstanceImpl::PepperPluginInstanceImpl(
@@ -1019,7 +1019,7 @@ bool PepperPluginInstanceImpl::
   // Set the composition target.
   for (size_t i = 0; i < ime_text_spans.size(); ++i) {
     if (ime_text_spans[i].thickness ==
-        ui::mojom::ImeTextSpanThickness::kThick) {
+        ws::mojom::ImeTextSpanThickness::kThick) {
       std::vector<uint32_t>::iterator it =
           std::find(event.composition_segment_offsets.begin(),
                     event.composition_segment_offsets.end(),
@@ -1549,7 +1549,8 @@ void PepperPluginInstanceImpl::SelectAll() {
   static const ui::EventFlags kPlatformModifier = ui::EF_CONTROL_DOWN;
   // Synthesize a ctrl + a key event to send to the plugin and let it sort out
   // the event. See also https://crbug.com/739529.
-  ui::KeyEvent char_event(L'A', ui::VKEY_A, kPlatformModifier);
+  ui::KeyEvent char_event(L'A', ui::VKEY_A, ui::DomCode::NONE,
+                          kPlatformModifier);
 
   // Also synthesize a key up event to look more like a real key press.
   // Otherwise the plugin will not do all the required work to keep the renderer
@@ -2005,7 +2006,7 @@ void PepperPluginInstanceImpl::PrintPage(int page_number,
   DCHECK(plugin_print_interface_);
 
   // |canvas| should always have an associated metafile.
-  printing::PdfMetafileSkia* metafile =
+  printing::MetafileSkia* metafile =
       printing::MetafileSkiaWrapper::GetMetafileFromCanvas(canvas);
   DCHECK(metafile);
 
@@ -2426,7 +2427,7 @@ void PepperPluginInstanceImpl::SimulateImeSetCompositionEvent(
     ime_text_span.start_offset = offsets[i];
     ime_text_span.end_offset = offsets[i + 1];
     if (input_event.composition_target_segment == static_cast<int32_t>(i - 2))
-      ime_text_span.thickness = ui::mojom::ImeTextSpanThickness::kThick;
+      ime_text_span.thickness = ws::mojom::ImeTextSpanThickness::kThick;
     ime_text_spans.push_back(ime_text_span);
   }
 
@@ -2610,7 +2611,7 @@ uint32_t PepperPluginInstanceImpl::GetAudioHardwareOutputSampleRate(
     PP_Instance instance) {
   return render_frame() ? AudioDeviceFactory::GetOutputDeviceInfo(
                               render_frame()->GetRoutingID(),
-                              0 /* session_id */, std::string() /* device_id */)
+                              media::AudioSinkParameters())
                               .output_params()
                               .sample_rate()
                         : 0;
@@ -2620,8 +2621,7 @@ uint32_t PepperPluginInstanceImpl::GetAudioHardwareOutputBufferSize(
     PP_Instance instance) {
   return render_frame() ? AudioDeviceFactory::GetOutputDeviceInfo(
                               render_frame()->GetRoutingID(),
-                              0 /* session_id */, std::string() /* device_id */
-                              )
+                              media::AudioSinkParameters())
                               .output_params()
                               .frames_per_buffer()
                         : 0;
@@ -2655,20 +2655,19 @@ void PepperPluginInstanceImpl::NumberOfFindResultsChanged(
   // them.
   if (find_identifier_ == -1)
     return;
-  if (render_frame_) {
-    render_frame_->ReportFindInPageMatchCount(find_identifier_, total,
-                                              PP_ToBool(final_result));
-  }
+  if (!container_)
+    return;
+  container_->ReportFindInPageMatchCount(find_identifier_, total,
+                                         PP_ToBool(final_result));
 }
 
 void PepperPluginInstanceImpl::SelectedFindResultChanged(PP_Instance instance,
                                                          int32_t index) {
   if (find_identifier_ == -1)
     return;
-  if (render_frame_) {
-    render_frame_->ReportFindInPageSelection(find_identifier_, index + 1,
-                                             blink::WebRect());
-  }
+  if (!container_)
+    return;
+  container_->ReportFindInPageSelection(find_identifier_, index + 1);
 }
 
 void PepperPluginInstanceImpl::SetTickmarks(PP_Instance instance,

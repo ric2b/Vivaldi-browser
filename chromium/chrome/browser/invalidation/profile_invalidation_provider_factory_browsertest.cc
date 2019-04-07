@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,19 +32,15 @@ class ProfileInvalidationProviderFactoryTestBase : public InProcessBrowserTest {
 };
 
 ProfileInvalidationProviderFactoryTestBase::
-    ProfileInvalidationProviderFactoryTestBase() {
-}
+    ProfileInvalidationProviderFactoryTestBase() {}
 
 ProfileInvalidationProviderFactoryTestBase::
-    ~ProfileInvalidationProviderFactoryTestBase() {
-}
+    ~ProfileInvalidationProviderFactoryTestBase() {}
 
-bool
-ProfileInvalidationProviderFactoryTestBase::
+bool ProfileInvalidationProviderFactoryTestBase::
     CanConstructProfileInvalidationProvider(Profile* profile) {
-  return static_cast<bool>(
-      ProfileInvalidationProviderFactory::GetInstance()->
-          GetServiceForBrowserContext(profile, false));
+  return static_cast<bool>(ProfileInvalidationProviderFactory::GetInstance()
+                               ->GetServiceForBrowserContext(profile, false));
 }
 
 class ProfileInvalidationProviderFactoryLoginScreenBrowserTest
@@ -61,12 +57,10 @@ class ProfileInvalidationProviderFactoryLoginScreenBrowserTest
 };
 
 ProfileInvalidationProviderFactoryLoginScreenBrowserTest::
-    ProfileInvalidationProviderFactoryLoginScreenBrowserTest() {
-}
+    ProfileInvalidationProviderFactoryLoginScreenBrowserTest() {}
 
 ProfileInvalidationProviderFactoryLoginScreenBrowserTest::
-    ~ProfileInvalidationProviderFactoryLoginScreenBrowserTest() {
-}
+    ~ProfileInvalidationProviderFactoryLoginScreenBrowserTest() {}
 
 void ProfileInvalidationProviderFactoryLoginScreenBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
@@ -96,12 +90,10 @@ class ProfileInvalidationProviderFactoryGuestBrowserTest
 };
 
 ProfileInvalidationProviderFactoryGuestBrowserTest::
-    ProfileInvalidationProviderFactoryGuestBrowserTest() {
-}
+    ProfileInvalidationProviderFactoryGuestBrowserTest() {}
 
 ProfileInvalidationProviderFactoryGuestBrowserTest::
-    ~ProfileInvalidationProviderFactoryGuestBrowserTest() {
-}
+    ~ProfileInvalidationProviderFactoryGuestBrowserTest() {}
 
 void ProfileInvalidationProviderFactoryGuestBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {

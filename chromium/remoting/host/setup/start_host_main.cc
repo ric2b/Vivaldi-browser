@@ -13,9 +13,10 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
+#include "mojo/core/embedder/embedder.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "remoting/base/logging.h"
@@ -24,6 +25,8 @@
 #include "remoting/base/url_request_context_getter.h"
 #include "remoting/host/setup/host_starter.h"
 #include "remoting/host/setup/pin_validator.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/transitional_url_loader_factory_owner.h"
 
 #if defined(OS_POSIX)
 #include <termios.h>
@@ -137,6 +140,8 @@ int StartHostMain(int argc, char** argv) {
 
   base::TaskScheduler::CreateAndStartWithDefaultParams("RemotingHostSetup");
 
+  mojo::core::Init();
+
   std::string host_name = command_line->GetSwitchValueASCII("name");
   std::string host_pin = command_line->GetSwitchValueASCII("pin");
   std::string auth_code = command_line->GetSwitchValueASCII("code");
@@ -221,12 +226,15 @@ int StartHostMain(int argc, char** argv) {
 
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter(
       new remoting::URLRequestContextGetter(io_thread.task_runner()));
+  network::TransitionalURLLoaderFactoryOwner url_loader_factory_owner(
+      url_request_context_getter);
 
   net::URLFetcher::SetIgnoreCertificateRequests(true);
 
   // Start the host.
   std::unique_ptr<HostStarter> host_starter(HostStarter::Create(
       remoting::ServiceUrls::GetInstance()->directory_hosts_url(),
+      url_loader_factory_owner.GetURLLoaderFactory(),
       url_request_context_getter.get()));
   if (redirect_url.empty()) {
     redirect_url = remoting::GetDefaultOauthRedirectUrl();

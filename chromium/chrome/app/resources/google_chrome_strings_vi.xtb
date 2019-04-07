@@ -13,6 +13,7 @@
 <translation id="123620459398936149">Chrome OS không thể đồng bộ hóa dữ liệu của bạn. Vui lòng cập nhật cụm mật khẩu Đồng bộ hóa của bạn.</translation>
 <translation id="127345590676626841">Chrome tự động cập nhật nên bạn luôn có phiên bản mới nhất. Khi quá trình tải xuống này hoàn tất, Chrome sẽ khởi động lại và bạn có thể tiếp tục sử dụng.</translation>
 <translation id="1302523850133262269">Vui lòng đợi khi Chrome cài đặt các bản cập nhật hệ thống mới nhất.</translation>
+<translation id="1312676208694947750">{0,plural, =0{Đã có bản cập nhật Chrome OS}=1{Đã có bản cập nhật Chrome OS}other{Đã có bản cập nhật Chrome OS từ # ngày trước}}</translation>
 <translation id="137466361146087520">Google Chrome Beta</translation>
 <translation id="1393853151966637042">Nhận trợ giúp sử dụng Chrome</translation>
 <translation id="1399397803214730675">Máy tính này đã có phiên bản Google Chrome mới hơn. Nếu phần mềm hiện không hoạt động, vui lòng gỡ cài đặt Google Chrome và thử lại.</translation>
@@ -25,6 +26,7 @@
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> nguy hiểm, do đó Chrome đã chặn tệp.</translation>
 <translation id="1619887657840448962">Để làm cho Chrome an toàn hơn, chúng tôi đã vô hiệu hóa tiện ích không được liệt kê trong <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> và có thể đã được thêm mà bạn không biết.</translation>
 <translation id="1628000112320670027">Nhận trợ giúp về Chrome</translation>
+<translation id="1662639173275167396">Chrome OS có thể hoạt động được là nhờ <ph name="BEGIN_LINK_CROS_OSS" />phần mềm nguồn mở<ph name="END_LINK_CROS_OSS" /> bổ sung, tương tự như <ph name="BEGIN_LINK_LINUX_OSS" />Linux (Bản beta)<ph name="END_LINK_LINUX_OSS" />.</translation>
 <translation id="1674870198290878346">Mở liên kết trong cửa sổ ẩn &amp;danh của Chrome</translation>
 <translation id="1682634494516646069">Google Chrome không thể đọc và ghi vào thư mục dữ liệu:
 
@@ -36,21 +38,22 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">Nhận trợ giúp về cách sử dụng Chrome OS</translation>
 <translation id="1795405610103747296">Cài đặt Chrome trên điện thoại của bạn. Chúng tôi sẽ gửi SMS tới điện thoại của bạn: <ph name="PHONE_NUMBER" /></translation>
+<translation id="1812689907177901597">Bằng việc tắt tính năng này, bạn có thể đăng nhập vào các trang web của Google, chẳng hạn như Gmail mà không cần đăng nhập vào Chrome</translation>
 <translation id="1860536484129686729">Chrome cần có quyền truy cập vào máy ảnh của bạn cho trang web này</translation>
 <translation id="1873233029667955273">Google Chrome không phải là trình duyệt mặc định của bạn</translation>
 <translation id="1874309113135274312">Google Chrome Beta (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome đã lỗi thời</translation>
 <translation id="1915828456209461693">Đã có bản cập nhật Chrome mới và bản cập nhật này sẽ áp dụng ngay khi bạn chạy lại.</translation>
-<translation id="2007150628464581396">{0,plural, =1{Chrome sẽ chạy lại sau 1 phút}other{Chrome sẽ chạy lại sau # phút}}</translation>
+<translation id="1919130412786645364">Cho phép đăng nhập vào Chrome</translation>
 <translation id="2063848847527508675">Chrome OS cần được khởi động lại để áp dụng bản cập nhật.</translation>
 <translation id="2084710999043359739">Thêm vào Chrome</translation>
 <translation id="2094919256425865063">Bạn vẫn muốn thoát khỏi Chrome?</translation>
-<translation id="210890598424854131">{0,plural, =0{Chrome sẽ chay lại ngay bây giờ}=1{Chrome sẽ chạy lại sau 1 giây}other{Chrome sẽ chạy lại sau # giây}}</translation>
 <translation id="2120620239521071941">Thao tác này sẽ xóa <ph name="ITEMS_COUNT" /> mục khỏi thiết bị này. Để truy xuất dữ liệu của bạn sau, hãy đăng nhập vào Chrome dưới dạng <ph name="USER_EMAIL" />.</translation>
 <translation id="2123055963409958220">Giúp cải thiện Chrome bằng cách báo cáo <ph name="BEGIN_LINK" />cài đặt hiện tại<ph name="END_LINK" /></translation>
 <translation id="216054706567564023">Cài đặt Chrome trên điện thoại của bạn. Chúng tôi sẽ gửi SMS tới số điện thoại khôi phục tài khoản của bạn.</translation>
 <translation id="2246246234298806438">Google Chrome không thể hiển thị xem trước bản in khi thiếu trình xem PDF được cài sẵn.</translation>
 <translation id="2252923619938421629">Giúp cải thiện Google Chrome bằng cách báo cáo cài đặt hiện tại</translation>
+<translation id="225363235161345695">{0,plural, =1{Chrome sẽ chạy lại sau một giờ}other{Chrome sẽ chạy lại sau # giờ}}</translation>
 <translation id="2286950485307333924">Bạn hiện đã đăng nhập vào Chrome</translation>
 <translation id="2290014774651636340">Khóa API của Google bị thiếu. Một số chức năng của Google Chrome sẽ bị tắt.</translation>
 <translation id="2290095356545025170">Bạn có chắc chắn muốn gỡ cài đặt Google Chrome không?</translation>
@@ -148,16 +151,16 @@ Vui lòng xem email của bạn tại <ph name="ACCOUNT_EMAIL" /> để biết t
 <translation id="4771048833395599659">Tệp này có thể nguy hiểm, do đó Chrome đã chặn tệp.</translation>
 <translation id="4794050651896644714">Lưu chi tiết trong Chrome</translation>
 <translation id="4804732725083176494">Quản trị viên của thiết bị này đã tắt tính năng đăng nhập vào Chrome.</translation>
-<translation id="4833487314064352405">{0,plural, =1{Khởi động lại Chrome trong vòng một ngày}other{Khởi động lại Chrome trong vòng # ngày}}</translation>
 <translation id="4891791193823137474">Để Google Chrome chạy trên nền</translation>
 <translation id="4895437082222824641">Mở liên kết trong tab mới của Chrome</translation>
 <translation id="4921569541910214635">Bạn muốn chia sẻ máy tính? Giờ đây, bạn có thể thiết lập Chrome theo cách mình muốn.</translation>
+<translation id="4945319281866068441">{0,plural, =1{Khởi động lại Chrome OS trong vòng một ngày}other{Khởi động lại Chrome OS trong vòng # ngày}}</translation>
 <translation id="4953650215774548573">Đặt Google Chrome làm trình duyệt mặc định của bạn</translation>
 <translation id="495931528404527476">Trong Chrome</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="5028489144783860647">Google Chrome không thể đồng bộ hóa dữ liệu của bạn. Vui lòng cập nhật cụm mật khẩu Đồng bộ hóa của bạn.</translation>
+<translation id="5062123544085870375">Khởi động lại Chrome OS</translation>
 <translation id="5090044601776247154">Kể từ Google Chrome 70, tính năng hồ sơ người dùng được giám sát sẽ không còn được cung cấp nữa.</translation>
-<translation id="5131923704757666404">{0,plural, =1{Chrome sẽ khởi động lại sau một giờ}other{Chrome sẽ khởi động lại sau # giờ}}</translation>
 <translation id="5132929315877954718">Khám phá các ứng dụng, trò chơi, tiện ích và chủ đề tuyệt vời cho Google Chrome.</translation>
 <translation id="5166975452760862670">Google Chrome được hiển thị bằng ngôn ngữ này</translation>
 <translation id="5170938038195470297">Không thể sử dụng hồ sơ của bạn vì hồ sơ được tạo từ phiên bản Google Chrome mới hơn.
@@ -169,6 +172,7 @@ Một số tính năng có thể không khả dụng. Vui lòng chỉ định th
 <translation id="532046782124376502">Cảnh báo: Google Chrome không thể ngăn các tiện ích ghi lại lịch sử duyệt web của bạn. Để tắt tiện ích này trong chế độ ẩn danh, hãy bỏ chọn tùy chọn này.</translation>
 <translation id="5386244825306882791">Tiện ích này cũng điều khiển trang nào được hiển thị khi bạn khởi động Chrome hoặc tìm kiếm từ Thanh địa chỉ.</translation>
 <translation id="5430073640787465221">Tệp tùy chọn của bạn bị hỏng hoặc không hợp lệ. Google Chrome không thể khôi phục cài đặt của bạn.</translation>
+<translation id="5483595757826856374">{0,plural, =0{Chrome sẽ chạy lại ngay bây giờ}=1{Chrome sẽ chạy lại sau 1 giây}other{Chrome sẽ chạy lại sau # giây}}</translation>
 <translation id="556024056938947818">Google Chrome đang cố gắng hiển thị mật khẩu.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> có thể nguy hiểm, do đó Chrome đã chặn tệp.</translation>
@@ -194,6 +198,7 @@ Một số tính năng có thể không khả dụng. Vui lòng chỉ định th
 <translation id="6291549208091401781">Google Chrome đã được cài đặt cho tất cả người dùng trên máy tính của bạn.</translation>
 <translation id="6338556085225130112">Đang cập nhật Google Chrome</translation>
 <translation id="6368958679917195344">Chrome OS trở nên khả thi là nhờ <ph name="BEGIN_LINK_CROS_OSS" />phần mềm nguồn mở<ph name="END_LINK_CROS_OSS" /> bổ sung.</translation>
+<translation id="6468844726266617801">{0,plural, =1{Chạy lại Chrome trong vòng một ngày}other{Chạy lại Chrome trong vòng # ngày}}</translation>
 <translation id="6515495397637126556"><ph name="PAGE_TITLE" /> - Google Chrome dành cho nhà phát triển</translation>
 <translation id="6566149418543181476">Đang cập nhật Google Chrome (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6598387184982954187">Bạn đang sử dụng <ph name="PROFILE_EMAIL" /> để đồng bộ hóa nội dung Chrome của mình. Để cập nhật tùy chọn đồng bộ hóa hoặc sử dụng Chrome mà không cần tài khoản Google, hãy truy cập <ph name="SETTINGS_LINK" />.</translation>
@@ -205,10 +210,12 @@ Một số tính năng có thể không khả dụng. Vui lòng chỉ định th
 <translation id="683440813066116847">Quy tắc kết nối để Google Chrome Canary cho phép lưu lượng truy cập mDNS.</translation>
 <translation id="686561893457936865">Mang Chrome tới mọi nơi</translation>
 <translation id="6885412569789873916">Ứng dụng Chrome Beta</translation>
+<translation id="6964107240822114422">{0,plural, =0{Đã có bản cập nhật Chrome}=1{Đã có bản cập nhật Chrome}other{Đã có bản cập nhật Chrome từ # ngày trước}}</translation>
 <translation id="6967962315388095737">Quy tắc kết nối để Google Chrome Beta cho phép lưu lượng truy cập mDNS.</translation>
 <translation id="6970811910055250180">Đang cập nhật thiết bị của bạn...</translation>
 <translation id="6982337800632491844"><ph name="DOMAIN" /> yêu cầu bạn đọc và chấp nhận Điều khoản dịch vụ sau đây trước khi sử dụng thiết bị này. Những điều khoản này không mở rộng, sửa đổi hoặc giới hạn Điều khoản Google Chrome OS.</translation>
 <translation id="6989339256997917931">Google Chrome đã được cập nhật, nhưng bạn đã không sử dụng chương trình này ít nhất 30 ngày.</translation>
+<translation id="7023651421574588884">Quản trị viên yêu cầu bạn khởi động lại Chrome OS để áp dụng một bản cập nhật</translation>
 <translation id="7098166902387133879">Google Chrome đang sử dụng micrô của bạn.</translation>
 <translation id="7106741999175697885">Trình quản lý Tác vụ - Google Chrome</translation>
 <translation id="7164397146364144019">Bạn có thể giúp Chrome an toàn và dễ sử dụng hơn bằng cách tự động báo cáo với Google chi tiết về sự cố bảo mật có thể xảy ra.</translation>
@@ -224,6 +231,7 @@ Một số tính năng có thể không khả dụng. Vui lòng chỉ định th
 <translation id="7486227612705979895">Chrome sẽ truy cập vào Drive của bạn để đưa ra đề xuất trên thanh địa chỉ</translation>
 <translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7552219221109926349">Hiển thị Chrome OS bằng ngôn ngữ này</translation>
+<translation id="7561940363513215021">{0,plural, =1{Chrome sẽ chạy lại sau 1 phút}other{Chrome sẽ chạy lại sau # phút}}</translation>
 <translation id="7589360514048265910">Máy tính này sẽ không còn nhận được bản cập nhật của Google Chrome do hệ điều hành Mac OS X 10.9 không được hỗ trợ nữa.</translation>
 <translation id="7592736734348559088">Google Chrome không thể đồng bộ hóa dữ liệu của bạn vì chi tiết đăng nhập tài khoản của bạn đã cũ.</translation>
 <translation id="7626032353295482388">Chào mừng bạn đến với Chrome</translation>
@@ -245,9 +253,12 @@ Một số tính năng có thể không khả dụng. Vui lòng chỉ định th
 <translation id="8008534537613507642">Cài đặt lại Chrome</translation>
 <translation id="8030318113982266900">Đang cập nhật thiết bị tới kênh <ph name="CHANNEL_NAME" />...</translation>
 <translation id="8032142183999901390">Sau khi xóa tài khoản khỏi Chrome, bạn có thể cần phải tải lại các tab đang mở của mình để tác vụ có hiệu lực.</translation>
+<translation id="8077352834923175128">Quản trị viên yêu cầu bạn khởi động lại Chrome OS để áp dụng bản cập nhật này</translation>
 <translation id="8129812357326543296">Giới thiệu về &amp;Google Chrome</translation>
 <translation id="8179874765710681175">Cài đặt Chrome trên điện thoại của bạn. Chúng tôi sẽ gửi SMS tới điện thoại của bạn.</translation>
 <translation id="8183957050892517584">Chrome sẽ lưu trữ an toàn chi tiết cá nhân của bạn nên bạn không cần nhập lại thông tin này.</translation>
+<translation id="8226081633851087288">{0,plural, =0{Chrome OS sẽ khởi động lại ngay bây giờ}=1{Chrome OS sẽ khởi động lại sau 1 giây}other{Chrome OS sẽ khởi động lại sau # giây}}</translation>
+<translation id="825412236959742607">Trang này sử dụng quá nhiều bộ nhớ, nên Chrome đã xóa bớt nội dung.</translation>
 <translation id="8255190535488645436">Google Chrome đang sử dụng máy ảnh và micrô của bạn.</translation>
 <translation id="8286862437124483331">Google Chrome đang cố gắng hiển thị mật khẩu. Hãy nhập mật khẩu Windows của bạn để cho phép việc này.</translation>
 <translation id="8290100596633877290">Chà! Google Chrome đã bị lỗi. Mở lại bây giờ không? </translation>
@@ -262,7 +273,6 @@ Một số tính năng có thể không khả dụng. Vui lòng chỉ định th
 <translation id="8547799825197623713">Canary trình chạy ứng dụng Chrome</translation>
 <translation id="8556340503434111824">Hiện đã có phiên bản mới của Google Chrome và phiên bản này nhanh hơn bao giờ hết.</translation>
 <translation id="8568392309447938879">Bạn cần đăng nhập vào Chrome để sử dụng ứng dụng. Điều này cho phép Chrome đồng bộ hóa ứng dụng, dấu trang, lịch sử, mật khẩu và cài đặt khác của bạn trên các thiết bị.</translation>
-<translation id="859960207076826247">{0,plural, =0{Đã có bản cập nhật Chrome}=1{Đã có bản cập nhật Chrome}other{Đã có bản cập nhật Chrome từ # ngày trước}}</translation>
 <translation id="8606668294522778825">Google Chrome có thể sử dụng dịch vụ web để cải thiện trải nghiệm duyệt web của bạn. Bạn có thể tùy ý vô hiệu hóa các dịch vụ này. <ph name="BEGIN_LINK" />Tìm hiểu thêm<ph name="END_LINK" /></translation>
 <translation id="8614913330719544658">Google Chrome không hồi đáp. Chạy lại ngay bây giờ?</translation>
 <translation id="8667808506758191620"><ph name="DEVICE_TYPE" /> của bạn đã cập nhật.</translation>
@@ -271,6 +281,7 @@ Một số tính năng có thể không khả dụng. Vui lòng chỉ định th
 <translation id="870251953148363156">Cập nhật &amp;Google Chrome</translation>
 <translation id="873133009373065397">Google Chrome không thể xác định hoặc đặt trình duyệt mặc định</translation>
 <translation id="8736674169840206667">Quản trị viên của bạn yêu cầu bạn chạy lại Chrome để áp dụng bản cập nhật</translation>
+<translation id="8791470158600044404">{0,plural, =1{Chrome OS sẽ khởi động lại sau 1 phút}other{Chrome OS sẽ khởi động lại sau # phút}}</translation>
 <translation id="8796108026289707191">Bạn phải khởi động lại Google Chrome ngay bây giờ.</translation>
 <translation id="8823341990149967727">Chrome đã lỗi thời</translation>
 <translation id="884296878221830158">Tiện ích này cũng điều khiển trang nào được hiển thị khi bạn khởi động Chrome hoặc nhấp vào nút Trang chủ.</translation>
@@ -279,7 +290,9 @@ Một số tính năng có thể không khả dụng. Vui lòng chỉ định th
 <translation id="9026991721384951619">Chrome OS không thể đồng bộ hóa dữ liệu của bạn do chi tiết đăng nhập tài khoản của bạn đã lỗi thời.</translation>
 <translation id="9067395829937117663">Google Chrome yêu cầu Windows 7 trở lên.</translation>
 <translation id="9084668267983921457">Lỗi chứng chỉ xác thực. Vui lòng đăng nhập lại vào Google Chrome hoặc liên hệ với quản trị viên của bạn để biết thêm thông tin. <ph name="ADDITIONAL_EXPLANATION" /></translation>
+<translation id="909149346112452267">{0,plural, =1{Chrome OS sẽ khởi động lại sau một giờ}other{Chrome OS sẽ khởi động lại sau # giờ}}</translation>
 <translation id="911206726377975832">Bạn cũng muốn xóa dữ liệu duyệt web của mình?</translation>
+<translation id="9138603949443464873">Để áp dụng các mục thay đổi của bạn, hãy khởi động lại Chrome</translation>
 <translation id="919706545465235479">Cập nhật Chrome để bắt đầu đồng bộ hóa</translation>
 <translation id="924447568950697217">Đặt Chrome làm trình duyệt mặc định của bạn</translation>
 <translation id="989369509083708165">Google Chrome là trình duyệt mặc định của bạn</translation>

@@ -12,8 +12,8 @@
 #include "base/memory/singleton.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "chrome/browser/background_fetch/background_fetch_download_client.h"
 #include "chrome/browser/download/download_task_scheduler_impl.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
@@ -28,6 +28,7 @@
 #include "components/offline_pages/buildflags/buildflags.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
 
 #if defined(OS_ANDROID)
@@ -85,8 +86,8 @@ KeyedService* DownloadServiceFactory::BuildServiceInstanceFor(
             content::BrowserThread::IO);
 
     return download::BuildInMemoryDownloadService(
-        context, std::move(clients), base::FilePath(), blob_context_getter,
-        io_task_runner);
+        context, std::move(clients), content::GetNetworkConnectionTracker(),
+        base::FilePath(), blob_context_getter, io_task_runner);
   } else {
     // Build download service for normal profile.
     base::FilePath storage_dir;
@@ -96,7 +97,7 @@ KeyedService* DownloadServiceFactory::BuildServiceInstanceFor(
     }
     scoped_refptr<base::SequencedTaskRunner> background_task_runner =
         base::CreateSequencedTaskRunnerWithTraits(
-            {base::MayBlock(), base::TaskPriority::BACKGROUND});
+            {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
 
     std::unique_ptr<download::TaskScheduler> task_scheduler;
 #if defined(OS_ANDROID)
@@ -106,9 +107,9 @@ KeyedService* DownloadServiceFactory::BuildServiceInstanceFor(
     task_scheduler = std::make_unique<DownloadTaskSchedulerImpl>(context);
 #endif
 
-    return download::BuildDownloadService(context, std::move(clients),
-                                          storage_dir, background_task_runner,
-                                          std::move(task_scheduler));
+    return download::BuildDownloadService(
+        context, std::move(clients), content::GetNetworkConnectionTracker(),
+        storage_dir, background_task_runner, std::move(task_scheduler));
   }
 }
 

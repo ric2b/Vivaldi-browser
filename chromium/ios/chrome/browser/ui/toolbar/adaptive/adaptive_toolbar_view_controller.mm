@@ -31,7 +31,7 @@
 namespace {
 const CGFloat kRotationInRadians = 5.0 / 180 * M_PI;
 // Scale factor for the animation, must be < 1.
-const CGFloat kScaleFactorDiff = 0.25;
+const CGFloat kScaleFactorDiff = 0.50;
 const CGFloat kTabGridAnimationsTotalDuration = 0.5;
 }  // namespace
 
@@ -119,6 +119,13 @@ const CGFloat kTabGridAnimationsTotalDuration = 0.5;
   } else if (self.loading) {
     [self.view.progressBar setHidden:NO animated:NO completion:nil];
   }
+}
+
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
+  // TODO(crbug.com/882723): Remove this call once iPad trait collection
+  // override issue is fixed.
+  [self updateAllButtonsVisibility];
 }
 
 #pragma mark - Public

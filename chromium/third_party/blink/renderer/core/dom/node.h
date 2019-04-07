@@ -634,6 +634,8 @@ class CORE_EXPORT Node : public EventTarget {
 
   struct AttachContext {
     STACK_ALLOCATED();
+
+   public:
     // Keep track of previously attached in-flow box during attachment so that
     // we don't need to backtrack past display:none/contents and out of flow
     // objects when we need to do whitespace re-attachment.
@@ -710,7 +712,7 @@ class CORE_EXPORT Node : public EventTarget {
   };
 
   virtual InsertionNotificationRequest InsertedInto(
-      ContainerNode* insertion_point);
+      ContainerNode& insertion_point);
   virtual void DidNotifySubtreeInsertionsToDocument() {}
 
   // Notifies the node that it is no longer part of the tree.
@@ -719,7 +721,7 @@ class CORE_EXPORT Node : public EventTarget {
   // DOMNodeRemovedFromDocument DOM event, but does not require the overhead of
   // event dispatching, and is called _after_ the node is removed from the tree.
   //
-  virtual void RemovedFrom(ContainerNode* insertion_point);
+  virtual void RemovedFrom(ContainerNode& insertion_point);
 
   // FIXME(dominicc): This method is not debug-only--it is used by
   // Tracing--rename it to something indicative.
@@ -769,12 +771,12 @@ class CORE_EXPORT Node : public EventTarget {
   // Handlers to do/undo actions on the target node before an event is
   // dispatched to it and after the event has been dispatched.  The data pointer
   // is handed back by the preDispatch and passed to postDispatch.
-  virtual EventDispatchHandlingState* PreDispatchEventHandler(Event*) {
+  virtual EventDispatchHandlingState* PreDispatchEventHandler(Event&) {
     return nullptr;
   }
-  virtual void PostDispatchEventHandler(Event*, EventDispatchHandlingState*) {}
+  virtual void PostDispatchEventHandler(Event&, EventDispatchHandlingState*) {}
 
-  void DispatchScopedEvent(Event*);
+  void DispatchScopedEvent(Event&);
 
   virtual void HandleLocalEvents(Event&);
 
@@ -796,7 +798,7 @@ class CORE_EXPORT Node : public EventTarget {
   void DispatchInputEvent();
 
   // Perform the default action for an event.
-  virtual void DefaultEventHandler(Event*);
+  virtual void DefaultEventHandler(Event&);
   virtual void WillCallDefaultEventHandler(const Event&);
   // Should return true if this Node has activation behavior.
   // https://dom.spec.whatwg.org/#eventtarget-activation-behavior
@@ -930,7 +932,7 @@ class CORE_EXPORT Node : public EventTarget {
 
  protected:
   enum ConstructionType {
-    kCreateOther = kDefaultNodeFlags,
+    kCreateOther = kIsFinishedParsingChildrenFlag,
     kCreateText = kDefaultNodeFlags | kIsTextFlag,
     kCreateContainer =
         kDefaultNodeFlags | kChildNeedsStyleRecalcFlag | kIsContainerFlag,
@@ -957,7 +959,7 @@ class CORE_EXPORT Node : public EventTarget {
                           RegisteredEventListener&) override;
   void RemovedEventListener(const AtomicString& event_type,
                             const RegisteredEventListener&) override;
-  DispatchEventResult DispatchEventInternal(Event*) override;
+  DispatchEventResult DispatchEventInternal(Event&) override;
 
   bool HasRareData() const { return GetFlag(kHasRareDataFlag); }
 

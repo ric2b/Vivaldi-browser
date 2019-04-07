@@ -261,7 +261,7 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
 
   bool IsTransparent() const {
     return GetLayoutObject().IsTransparent() ||
-           GetLayoutObject().Style()->HasBlendMode() ||
+           GetLayoutObject().StyleRef().HasBlendMode() ||
            GetLayoutObject().HasMask();
   }
 
@@ -352,12 +352,6 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   bool HasVisibleBoxDecorations() const;
   // True if this layer container layoutObjects that paint.
   bool HasNonEmptyChildLayoutObjects() const;
-
-  // Will ensure that isAllScrollingContentComposited() is up to date.
-  void UpdateScrollingStateAfterCompositingChange();
-  bool IsAllScrollingContentComposited() const {
-    return is_all_scrolling_content_composited_;
-  }
 
   // Gets the ancestor layer that serves as the containing block (in the sense
   // of LayoutObject::container() instead of LayoutObject::containingBlock())
@@ -492,7 +486,9 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   // Note that this transform does not have the perspective-origin baked in.
   TransformationMatrix PerspectiveTransform() const;
   FloatPoint PerspectiveOrigin() const;
-  bool Preserves3D() const { return GetLayoutObject().Style()->Preserves3D(); }
+  bool Preserves3D() const {
+    return GetLayoutObject().StyleRef().Preserves3D();
+  }
   bool Has3DTransform() const {
     return rare_data_ && rare_data_->transform &&
            !rare_data_->transform->IsAffine();
@@ -502,7 +498,7 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   // https://bugs.webkit.org/show_bug.cgi?id=106959
   bool ShouldPreserve3D() const {
     return !GetLayoutObject().HasReflection() &&
-           GetLayoutObject().Style()->Preserves3D();
+           GetLayoutObject().StyleRef().Preserves3D();
   }
 
   // Returns |true| if any property that renders using filter operations is
@@ -1109,7 +1105,8 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   bool HasOverflowControls() const;
 
   enum UpdateLayerPositionBehavior { AllLayers, OnlyStickyLayers };
-  void UpdateLayerPositionRecursive(UpdateLayerPositionBehavior = AllLayers);
+  void UpdateLayerPositionRecursive(UpdateLayerPositionBehavior = AllLayers,
+                                    bool dirty_compositing_if_needed = true);
 
   void SetNextSibling(PaintLayer* next) { next_ = next; }
   void SetPreviousSibling(PaintLayer* prev) { previous_ = prev; }
@@ -1276,11 +1273,6 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   // Used only while determining what layers should be composited. Applies to
   // the tree of z-order lists.
   unsigned has_compositing_descendant_ : 1;
-
-  // True iff we have scrollable overflow and all children of layout_object_ are
-  // known to paint exclusively into their own composited layers.  Set by
-  // updateScrollingStateAfterCompositingChange().
-  unsigned is_all_scrolling_content_composited_ : 1;
 
   // Should be for stacking contexts having unisolated blending descendants.
   unsigned should_isolate_composited_descendants_ : 1;

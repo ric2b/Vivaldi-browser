@@ -140,7 +140,6 @@ PipelineIntegrationTestBase::PipelineIntegrationTestBase()
       ended_(false),
       pipeline_status_(PIPELINE_OK),
       last_video_frame_format_(PIXEL_FORMAT_UNKNOWN),
-      last_video_frame_color_space_(COLOR_SPACE_UNSPECIFIED),
       current_duration_(kInfiniteDuration),
       renderer_factory_(new RendererFactoryImpl(this)) {
   ResetVideoHash();
@@ -457,7 +456,7 @@ void PipelineIntegrationTestBase::CreateDemuxer(
           base::Unretained(this)),
       base::Bind(&PipelineIntegrationTestBase::DemuxerMediaTracksUpdatedCB,
                  base::Unretained(this)),
-      &media_log_));
+      &media_log_, true));
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -550,9 +549,7 @@ std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateRenderer(
 void PipelineIntegrationTestBase::OnVideoFramePaint(
     const scoped_refptr<VideoFrame>& frame) {
   last_video_frame_format_ = frame->format();
-  int result;
-  if (frame->metadata()->GetInteger(VideoFrameMetadata::COLOR_SPACE, &result))
-    last_video_frame_color_space_ = static_cast<ColorSpace>(result);
+  last_video_frame_color_space_ = frame->ColorSpace();
   if (!hashing_enabled_ || last_frame_ == frame)
     return;
   last_frame_ = frame;

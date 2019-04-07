@@ -49,6 +49,8 @@ class MockWebMediaPlayer : public blink::WebMediaPlayer,
   void SetVolume(double) override {}
   void EnterPictureInPicture(PipWindowOpenedCallback) override {}
   void ExitPictureInPicture(PipWindowClosedCallback) override {}
+  void SetPictureInPictureCustomControls(
+      const std::vector<blink::PictureInPictureControlInfo>&) override {}
   void RegisterPictureInPictureWindowResizeCallback(
       PipWindowResizedCallback) override {}
   blink::WebTimeRanges Buffered() const override {
@@ -81,8 +83,8 @@ class MockWebMediaPlayer : public blink::WebMediaPlayer,
   unsigned DecodedFrameCount() const override { return 0; }
   unsigned DroppedFrameCount() const override { return 0; }
   unsigned CorruptedFrameCount() const override { return 0; }
-  size_t AudioDecodedByteCount() const override { return 0; }
-  size_t VideoDecodedByteCount() const override { return 0; }
+  uint64_t AudioDecodedByteCount() const override { return 0; }
+  uint64_t VideoDecodedByteCount() const override { return 0; }
 
   void Paint(cc::PaintCanvas* canvas,
              const blink::WebRect& paint_rectangle,

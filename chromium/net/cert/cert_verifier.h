@@ -27,6 +27,45 @@ class NetLogWithSource;
 // CertVerifiers can handle multiple requests at a time.
 class NET_EXPORT CertVerifier {
  public:
+  struct NET_EXPORT Config {
+    Config();
+    Config(const Config&);
+    Config(Config&&);
+    ~Config();
+    Config& operator=(const Config&);
+    Config& operator=(Config&&);
+
+    // Enable online revocation checking via CRLs and OCSP for the certificate
+    // chain. Note that revocation checking is soft-fail.
+    bool enable_rev_checking = false;
+
+    // Enable online revocation checking via CRLs and OCSP for the certificate
+    // chain if the constructed chain terminates in a locally-installed,
+    // non-public trust anchor. A revocation error, such as a failure to
+    // obtain fresh revocation information, is treated as a hard failure.
+    bool require_rev_checking_local_anchors = false;
+
+    // Enable support for SHA-1 signatures if the constructed chain terminates
+    // in a locally-installed, non-public trust anchor.
+    bool enable_sha1_local_anchors = false;
+
+    // Disable enforcement of the policies described at
+    // https://security.googleblog.com/2017/09/chromes-plan-to-distrust-symantec.html
+    bool disable_symantec_enforcement = false;
+
+    // Provides an optional CRLSet structure that can be used to avoid
+    // revocation checks over the network. CRLSets can be used to add
+    // additional certificates to be blacklisted beyond the internal blacklist,
+    // whether leaves or intermediates.
+    scoped_refptr<CRLSet> crl_set;
+
+    // Additional trust anchors to consider during path validation. Ordinarily,
+    // implementations of CertVerifier use trust anchors from the configured
+    // system store. This is implementation-specific plumbing for passing
+    // additional anchors through.
+    CertificateList additional_trust_anchors;
+  };
+
   class Request {
    public:
     Request() {}
@@ -39,35 +78,16 @@ class NET_EXPORT CertVerifier {
   };
 
   enum VerifyFlags {
-    // If set, enables online revocation checking via CRLs and OCSP for the
-    // certificate chain.
-    VERIFY_REV_CHECKING_ENABLED = 1 << 0,
-
-    // 1 << 1 is reserved (used to be VERIFY_EV_CERT).
-    // 1 << 2 is reserved (used to be VERIY_CERT_IO_ENABLED).
-    // 1 << 3 is reserved (used to be VERIFY_REV_CHECKING_ENABLED_EV_ONLY).
-
-    // If set, this is equivalent to VERIFY_REV_CHECKING_ENABLED, in that it
-    // enables online revocation checking via CRLs or OCSP, but only
-    // for certificates issued by non-public trust anchors. Failure to check
-    // revocation is treated as a hard failure.
-    // Note: If VERIFY_CERT_IO_ENABLE is not also supplied, certificates
-    // that chain to local trust anchors will likely fail - for example, due to
-    // lacking fresh cached revocation issue (Windows) or because OCSP stapling
-    // can only provide information for the leaf, and not for any
-    // intermediates.
-    VERIFY_REV_CHECKING_REQUIRED_LOCAL_ANCHORS = 1 << 4,
-
-    // If set, certificates with SHA-1 signatures will be allowed, but only if
-    // they are issued by non-public trust anchors.
-    VERIFY_ENABLE_SHA1_LOCAL_ANCHORS = 1 << 5,
-
-    // 1 << 6 is reserved (used to be
-    // VERIFY_ENABLE_COMMON_NAME_FALLBACK_LOCAL_ANCHORS).
-
-    // If set, disables the policy enforcement described at
-    // https://security.googleblog.com/2017/09/chromes-plan-to-distrust-symantec.html
-    VERIFY_DISABLE_SYMANTEC_ENFORCEMENT = 1 << 7,
+    // If set, actively overrides the current CertVerifier::Config to disable
+    // dependent network fetches. This can be used to avoid triggering
+    // re-entrancy in the network stack. For example, fetching a PAC script
+    // over HTTPS may cause AIA, OCSP, or CRL fetches to block on retrieving
+    // the PAC script, while the PAC script fetch is waiting for those
+    // dependent fetches, creating a deadlock. When set, this flag prevents
+    // those fetches from being started (best effort).
+    // Note that cached information may still be used, if it can be accessed
+    // without accessing the network.
+    VERIFY_DISABLE_NETWORK_FETCHES = 1 << 0,
   };
 
   // Parameters to verify |certificate| against the supplied
@@ -86,17 +106,12 @@ class NET_EXPORT CertVerifier {
   // |ocsp_response| is optional, but if non-empty, should contain an OCSP
   // response obtained via OCSP stapling. It may be ignored by the
   // CertVerifier.
-  //
-  // |additional_trust_anchors| is optional, but if non-empty, should contain
-  // additional certificates to be treated as trust anchors. It may be ignored
-  // by the CertVerifier.
   class NET_EXPORT RequestParams {
    public:
     RequestParams(scoped_refptr<X509Certificate> certificate,
                   const std::string& hostname,
                   int flags,
-                  const std::string& ocsp_response,
-                  CertificateList additional_trust_anchors);
+                  const std::string& ocsp_response);
     RequestParams(const RequestParams& other);
     ~RequestParams();
 
@@ -106,9 +121,6 @@ class NET_EXPORT CertVerifier {
     const std::string& hostname() const { return hostname_; }
     int flags() const { return flags_; }
     const std::string& ocsp_response() const { return ocsp_response_; }
-    const CertificateList& additional_trust_anchors() const {
-      return additional_trust_anchors_;
-    }
 
     bool operator==(const RequestParams& other) const;
     bool operator<(const RequestParams& other) const;
@@ -118,7 +130,6 @@ class NET_EXPORT CertVerifier {
     std::string hostname_;
     int flags_;
     std::string ocsp_response_;
-    CertificateList additional_trust_anchors_;
 
     // Used to optimize sorting/indexing comparisons.
     std::string key_;
@@ -137,9 +148,6 @@ class NET_EXPORT CertVerifier {
   // |verify_result->cert_status|, and the error code for the most serious
   // error is returned.
   //
-  // |crl_set| points to an optional CRLSet structure which can be used to
-  // avoid revocation checks over the network.
-  //
   // |callback| must not be null.  ERR_IO_PENDING is returned if the operation
   // could not be completed synchronously, in which case the result code will
   // be passed to the callback when available.
@@ -152,16 +160,36 @@ class NET_EXPORT CertVerifier {
   // nullptr. However it is not guaranteed that all implementations will reset
   // it in this case.
   virtual int Verify(const RequestParams& params,
-                     CRLSet* crl_set,
                      CertVerifyResult* verify_result,
                      CompletionOnceCallback callback,
                      std::unique_ptr<Request>* out_req,
                      const NetLogWithSource& net_log) = 0;
 
+  // Sets the configuration for new certificate verifications to be |config|.
+  // Any in-progress verifications (i.e. those with outstanding Request
+  // handles) will continue using the old configuration. This may be called
+  // throughout the CertVerifier's lifetime in response to configuration
+  // changes from embedders.
+  // Note: As configuration changes will replace any existing configuration,
+  // this should only be called by the logical 'owner' of this CertVerifier.
+  // Callers should NOT attempt to change configuration for single calls, and
+  // should NOT attempt to change configuration for CertVerifiers they do not
+  // explicitly manage.
+  virtual void SetConfig(const Config& config) = 0;
+
   // Creates a CertVerifier implementation that verifies certificates using
-  // the preferred underlying cryptographic libraries.
+  // the preferred underlying cryptographic libraries, using the specified
+  // configuration.
   static std::unique_ptr<CertVerifier> CreateDefault();
 };
+
+// Overloads for comparing two configurations. Note, comparison is shallow -
+// that is, two scoped_refptr<CRLSet>s are equal iff they point to the same
+// object.
+NET_EXPORT bool operator==(const CertVerifier::Config& lhs,
+                           const CertVerifier::Config& rhs);
+NET_EXPORT bool operator!=(const CertVerifier::Config& lhs,
+                           const CertVerifier::Config& rhs);
 
 }  // namespace net
 

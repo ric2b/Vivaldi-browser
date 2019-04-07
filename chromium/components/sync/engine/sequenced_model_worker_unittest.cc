@@ -9,7 +9,7 @@
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -62,7 +62,7 @@ class SequencedModelWorkerTest : public testing::Test {
  protected:
   void SetUp() override {
     task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
-        {base::MayBlock(), base::TaskPriority::BACKGROUND});
+        {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
     worker_ = new SequencedModelWorker(task_runner_, GROUP_DB);
   }
 
@@ -82,8 +82,8 @@ class SequencedModelWorkerTest : public testing::Test {
 
 TEST_F(SequencedModelWorkerTest, DoesWorkOnDatabaseSequence) {
   base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&SequencedModelWorkerTest::ScheduleWork,
-                            factory()->GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&SequencedModelWorkerTest::ScheduleWork,
+                                factory()->GetWeakPtr()));
   run_loop_.Run();
   EXPECT_TRUE(did_do_work());
 }

@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="uk">
 <translation id="100812568230599391">Змінити стиль дисплея на чергування.</translation>
+<translation id="1011903154582639569">Знайдіть клавішу й підніміть палець, щоб ввести символ</translation>
 <translation id="1012173283529841972">Пункт списку</translation>
 <translation id="1013742170491673792">пошук</translation>
 <translation id="1022586497894531524">Уперше користуєтеся голосовими підказками ChromeVox? З цього посібника ви швидко дізнаєтеся про основні функції програми.</translation>
@@ -15,6 +16,7 @@
 <translation id="1065552602950927991">Неправильно введені дані</translation>
 <translation id="1080471004309605942">Кінець тексту курсивом</translation>
 <translation id="1082209053475788238">Немає попереднього заголовка рівня 6.</translation>
+<translation id="1087788677726983142">Сховати фільтри потоку подій</translation>
 <translation id="1088219014394087294">Немає заголовків.</translation>
 <translation id="1106741348836243114">Увімкнути або вимкнути звуковий сигнал (звуковий ефект).</translation>
 <translation id="1108651818222110612">підзаголовок</translation>
@@ -77,6 +79,7 @@
 <translation id="1618597272655350600">Повідомляє повний опис поточної позиції</translation>
 <translation id="1639634871799530612">{COUNT,plural, =1{знак "більше"}one{# знак "більше"}few{# знаки "більше"}many{# знаків "більше"}other{# greater than signs}}</translation>
 <translation id="1653266918374749391">Попередній заголовок рівня 3</translation>
+<translation id="1657616855184033958">Показати фільтри потоку подій</translation>
 <translation id="1659072772017912254">Без прапорця</translation>
 <translation id="1669290819662866522">тиждень</translation>
 <translation id="1674262202423278359">Навігація в ChromeVox</translation>
@@ -135,6 +138,7 @@
 <translation id="2267945578749931355">Наступний символ</translation>
 <translation id="2281234842553884450">Попередній повзунок</translation>
 <translation id="2294136146931447363">Початок тексту курсивом</translation>
+<translation id="2311237334957139798">Перейти до попереднього рівня деталізації</translation>
 <translation id="2318372665160196757">Головний</translation>
 <translation id="2329324941084714723">Панель вкладок</translation>
 <translation id="2344193891939537199">Елемент керування для вибору дати та часу</translation>
@@ -155,12 +159,14 @@
 <translation id="2462626033734746142">Група перемикачів</translation>
 <translation id="2471138580042810658">Заголовок 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{зірочка}one{# зірочка}few{# зірочки}many{# зірочок}other{# asterisks}}</translation>
+<translation id="249330843868392562">Відкрити налаштування синтезу мовлення</translation>
 <translation id="2523609930580546572">Навчальний посібник ChromeVox</translation>
 <translation id="2525706221823668172">Комбінації клавіш Chromebook</translation>
 <translation id="2549392850788122959">Налаштування клавіші <ph name="KEY" /> скинуто.</translation>
 <translation id="2553108862507765288">граматична помилка</translation>
 <translation id="257674075312929031">Група</translation>
 <translation id="2582407057977008361">Бічний колонтитул</translation>
+<translation id="2592212930811759050">Двічі торкніться, щоб змінити текст</translation>
 <translation id="2606210917827248971">з {COUNT,plural, =1{1 пунктом}one{# пунктом}few{# пунктами}many{# пунктами}other{# пункту}}</translation>
 <translation id="2614981083756825552">Розмітка Math ML</translation>
 <translation id="2624431853467395961">Відкрити сторінку "Докладніше"</translation>
@@ -408,6 +414,7 @@
 <translation id="4255943572433203166">Щоб налаштувати ChromeVox, використовуйте параметри нижче. Зміни почнуть діяти негайно.</translation>
 <translation id="4271220233568730077">Математичний – далі</translation>
 <translation id="4271521365602459209">Більше результатів немає.</translation>
+<translation id="4275397969489577657">Увімкнути реєстрацію потоку подій</translation>
 <translation id="4287520460805643128">Немає наступної статті.</translation>
 <translation id="4289540628985791613">Огляд</translation>
 <translation id="4300318234632215983">Повідомити URL-адресу посилання</translation>
@@ -486,6 +493,7 @@
 <translation id="4973762002207131920">Змінено на <ph name="KEY" />.</translation>
 <translation id="4975416682604111799">мілісекунд</translation>
 <translation id="49787999531187221">Розширення ChromeVox зараз неактивне.</translation>
+<translation id="4979263087381759787">Параметри розробника</translation>
 <translation id="4979404613699303341">Попередня кнопка</translation>
 <translation id="4982773647088557172"><ph name="VALUE" />, <ph name="NAME" />, вікно списку</translation>
 <translation id="4983588134362688868">Перейти вгору сторінки</translation>
@@ -497,6 +505,7 @@
 <translation id="5000760171916499057">Немає форм.</translation>
 <translation id="5005670136041063723">Немає інших схожих елементів.</translation>
 <translation id="501473567976723023">січень</translation>
+<translation id="5020651427400641814">Увімкнути реєстрацію мовлення</translation>
 <translation id="5041394372352067729">Перемістити брайлівський дисплей угору сторінки</translation>
 <translation id="5042770794184672516">Збільшити гучність мовлення</translation>
 <translation id="5050015258024679800">Попередній заголовок рівня 4</translation>
@@ -511,6 +520,7 @@
 <translation id="5106547198195128110">Нижче зазначено, що змінилося в новому випуску.</translation>
 <translation id="5110983769041734144">Немає попереднього поля форми.</translation>
 <translation id="5111640677200759579">Заголовок стовпця</translation>
+<translation id="5115892389597951922">Журнал ChromeVox</translation>
 <translation id="5136967254288895616">Немає попереднього посилання.</translation>
 <translation id="513774504516943387">посилання</translation>
 <translation id="5158275234811857234">Обкладинка</translation>
@@ -544,6 +554,7 @@
 <translation id="5407530583102765689">{COUNT,plural, =1{крапка з комою}one{# крапка з комою}few{# крапки з комою}many{# крапок із комою}other{# semicolons}}</translation>
 <translation id="5411891038905756502">Немає попередньої точки переходу.</translation>
 <translation id="5417034931411865818">Натиснути елемент під клавішею напрямку $1</translation>
+<translation id="5435274640623994081">Увімкнути реєстрацію звукових ефектів</translation>
 <translation id="5436105723448703439">{COUNT,plural, =1{знак "менше"}one{# знак "менше"}few{# знаки "менше"}many{# знаків "менше"}other{# less than signs}}</translation>
 <translation id="5444587279251314700">(активна)</translation>
 <translation id="5446809554778706307">Елемент не вибрано. Натисніть Ctrl + T, щоб відкрити нову вкладку.</translation>
@@ -677,6 +688,7 @@
 <translation id="6540201937398578274">У ChromeVox клавіша пошуку – це клавіша-модифікатор. Більшість комбінацій клавіш ChromeVox починаються з неї. Для навігації використовуються клавіші зі стрілками.</translation>
 <translation id="6550720799683018100">Змініть поточну розкладку клавіатури, вибравши один із варіантів зі списку нижче.</translation>
 <translation id="6561818612645211875">Перейти на початок поточного рядка</translation>
+<translation id="6583174818554398774">Перейти до наступного рівня деталізації</translation>
 <translation id="6587021927234520429">Немає наступного заголовка рівня 4.</translation>
 <translation id="6601344353291556895">Увімкнути докладні описи.</translation>
 <translation id="6615602925644411249">Знайти на сторінці.</translation>
@@ -752,6 +764,7 @@
 <translation id="7241683698754534149">Відкрити докладний опис у новій вкладці</translation>
 <translation id="7248671827512403053">Додаток</translation>
 <translation id="725969808843520477">Наступний перемикач</translation>
+<translation id="7261612856573623172">Системний голос для синтезу мовлення</translation>
 <translation id="7269119382257320590">Без розділових знаків</translation>
 <translation id="7273174640290488576">Порожньо</translation>
 <translation id="7274770952766771364">Посилання на примітку</translation>
@@ -892,6 +905,7 @@
 <translation id="8650576015643545550">Немає попереднього списку.</translation>
 <translation id="8651481478098336970">вимкнути звук</translation>
 <translation id="8653646212587894517">Показати список посилань</translation>
+<translation id="8656888282555543604">Увімкнути реєстрацію шрифту Брайля</translation>
 <translation id="8664519043722036194">секунд</translation>
 <translation id="867187640362843212">Заголовок 5</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{вертикальна риска}one{# вертикальна риска}few{# вертикальні риски}many{# вертикальних рисок}other{# vertical pipes}}</translation>

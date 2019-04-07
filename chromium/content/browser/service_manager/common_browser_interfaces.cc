@@ -11,12 +11,13 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/memory/ref_counted.h"
+#include "base/task/post_task.h"
 #include "base/task_runner.h"
-#include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "components/discardable_memory/service/discardable_shared_memory_manager.h"
+#include "components/viz/host/gpu_client.h"
 #include "content/browser/browser_main_loop.h"
-#include "content/browser/gpu/gpu_client_impl.h"
+#include "content/browser/gpu/browser_gpu_client_delegate.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/connection_filter.h"
@@ -24,7 +25,7 @@
 #include "content/public/common/service_names.mojom.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/ui/public/interfaces/gpu.mojom.h"
+#include "services/ws/public/mojom/gpu.mojom.h"
 #include "ui/base/ui_base_features.h"
 
 #if defined(OS_WIN)
@@ -50,7 +51,7 @@ class ConnectionFilterImpl : public ConnectionFilter {
 #elif defined(OS_MACOSX)
     registry_.AddInterface(base::BindRepeating(&FontLoaderDispatcher::Create));
 #endif
-    if (features::IsAshInBrowserProcess()) {
+    if (!features::IsUsingWindowService()) {
       // For mus, the mojom::discardable_memory::DiscardableSharedMemoryManager
       // is exposed from ui::Service. So we don't need bind the interface here.
       auto* browser_main_loop = BrowserMainLoop::GetInstance();
@@ -62,8 +63,6 @@ class ConnectionFilterImpl : public ConnectionFilter {
               base::Unretained(manager)));
         }
       }
-    }
-    if (features::IsAshInBrowserProcess()) {
       registry_.AddInterface(base::BindRepeating(
           &ConnectionFilterImpl::BindGpuRequest, base::Unretained(this)));
     }
@@ -82,16 +81,16 @@ class ConnectionFilterImpl : public ConnectionFilter {
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle* interface_pipe,
                        service_manager::Connector* connector) override {
-    // Ignore ui::mojom::Gpu interface request from Renderer process.
+    // Ignore ws::mojom::Gpu interface request from Renderer process.
     // The request will be handled in RenderProcessHostImpl.
     if (source_info.identity.name() == mojom::kRendererServiceName &&
-        interface_name == ui::mojom::Gpu::Name_)
+        interface_name == ws::mojom::Gpu::Name_)
       return;
 
     registry_.TryBindInterface(interface_name, interface_pipe, source_info);
   }
 
-  void BindGpuRequest(ui::mojom::GpuRequest request,
+  void BindGpuRequest(ws::mojom::GpuRequest request,
                       const service_manager::BindSourceInfo& source_info) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -104,8 +103,9 @@ class ConnectionFilterImpl : public ConnectionFilter {
     const uint64_t gpu_client_tracing_id =
         ChildProcessHostImpl::ChildProcessUniqueIdToTracingProcessId(
             gpu_client_id);
-    auto gpu_client = std::make_unique<GpuClientImpl>(
-        gpu_client_id, gpu_client_tracing_id,
+    auto gpu_client = std::make_unique<viz::GpuClient>(
+        std::make_unique<BrowserGpuClientDelegate>(), gpu_client_id,
+        gpu_client_tracing_id,
         BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
     gpu_client->SetConnectionErrorHandler(
         base::BindOnce(&ConnectionFilterImpl::OnGpuConnectionClosed,
@@ -115,7 +115,7 @@ class ConnectionFilterImpl : public ConnectionFilter {
   }
 
   void OnGpuConnectionClosed(const service_manager::Identity& service_identity,
-                             GpuClient* client) {
+                             viz::GpuClient* client) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     gpu_clients_.erase(service_identity);
   }
@@ -133,7 +133,7 @@ class ConnectionFilterImpl : public ConnectionFilter {
   service_manager::BinderRegistryWithArgs<
       const service_manager::BindSourceInfo&>
       registry_;
-  std::map<service_manager::Identity, std::unique_ptr<GpuClientImpl>>
+  std::map<service_manager::Identity, std::unique_ptr<viz::GpuClient>>
       gpu_clients_;
 
   DISALLOW_COPY_AND_ASSIGN(ConnectionFilterImpl);

@@ -13,6 +13,7 @@ namespace blink {
 class WebGestureEvent;
 class WebMouseEvent;
 class WebMouseWheelEvent;
+class WebTouchEvent;
 }  // namespace blink
 
 namespace ui {
@@ -53,6 +54,8 @@ class RenderWidgetHostNSViewLocalClient {
   // Forward events to the renderer or the input router, as appropriate.
   virtual void RouteOrProcessMouseEvent(
       const blink::WebMouseEvent& web_event) = 0;
+  virtual void RouteOrProcessTouchEvent(
+      const blink::WebTouchEvent& web_event) = 0;
   virtual void RouteOrProcessWheelEvent(
       const blink::WebMouseWheelEvent& web_event) = 0;
 

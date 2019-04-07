@@ -13,6 +13,7 @@
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/signin/chrome_device_id_helper.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -22,7 +23,6 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/network_time/network_time_tracker.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/sync/driver/signin_manager_wrapper.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
@@ -106,14 +106,10 @@ VivaldiSyncManagerFactory::~VivaldiSyncManagerFactory() {}
 KeyedService* VivaldiSyncManagerFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = static_cast<Profile*>(context);
-  SigninManager* signin =
-      SigninManagerFactory::GetForProfile(profile);
 
   ProfileSyncService::InitParams init_params;
 
-  init_params.signin_wrapper =
-      std::make_unique<SigninManagerWrapper>(
-          IdentityManagerFactory::GetForProfile(profile), signin);
+  init_params.identity_manager = IdentityManagerFactory::GetForProfile(profile);
   init_params.url_loader_factory =
       content::BrowserContext::GetDefaultStoragePartition(profile)
           ->GetURLLoaderFactoryForBrowserProcess();
@@ -124,9 +120,8 @@ KeyedService* VivaldiSyncManagerFactory::BuildServiceInstanceFor(
   // Note: base::Unretained(signin_client) is safe because the SigninClient is
   // guaranteed to outlive the PSS, per a DependsOn() above (and because PSS
   // clears the callback in its Shutdown()).
-  init_params.signin_scoped_device_id_callback = base::BindRepeating(
-    &SigninClient::GetSigninScopedDeviceId,
-    base::Unretained(ChromeSigninClientFactory::GetForProfile(profile)));
+  init_params.signin_scoped_device_id_callback =
+      base::BindRepeating(&GetSigninScopedDeviceIdForProfile, profile);
 #endif
 
   init_params.start_behavior = ProfileSyncService::MANUAL_START;
@@ -135,7 +130,6 @@ KeyedService* VivaldiSyncManagerFactory::BuildServiceInstanceFor(
   init_params.sync_client = base::WrapUnique(sync_client);
 
   init_params.network_time_update_callback = base::Bind(&UpdateNetworkTime);
-  init_params.url_request_context = profile->GetRequestContext();
   init_params.debug_identifier = profile->GetDebugName();
   init_params.channel = chrome::GetChannel();
 

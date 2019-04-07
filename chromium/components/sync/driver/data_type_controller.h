@@ -22,6 +22,7 @@
 
 namespace syncer {
 
+struct ConfigureContext;
 class ModelTypeConfigurer;
 class SyncError;
 class SyncMergeResult;
@@ -105,7 +106,8 @@ class DataTypeController : public base::SupportsWeakPtr<DataTypeController> {
   // with the result. If the models are already loaded it is safe to call the
   // callback right away. Else the callback needs to be stored and called when
   // the models are ready.
-  virtual void LoadModels(const ModelLoadCallback& model_load_callback) = 0;
+  virtual void LoadModels(const ConfigureContext& configure_context,
+                          const ModelLoadCallback& model_load_callback) = 0;
 
   // Registers with sync backend if needed. This function is called by
   // DataTypeManager before downloading initial data. Non-blocking types need to
@@ -162,17 +164,18 @@ class DataTypeController : public base::SupportsWeakPtr<DataTypeController> {
   virtual bool ReadyForStart() const;
 
   // Returns a ListValue representing all nodes for this data type through
-  // |callback| on this thread.
+  // |callback| on this thread. Can only be called if state() != NOT_RUNNING.
   // Used for populating nodes in Sync Node Browser of chrome://sync-internals.
   virtual void GetAllNodes(const AllNodesCallback& callback) = 0;
 
-  // Collects StatusCounters for this datatype and passes them to |callback|,
-  // which should be wrapped with syncer::BindToCurrentThread already.
-  // Used to display entity counts in chrome://sync-internals.
+  // Collects StatusCounters for this datatype and passes them to |callback|.
+  // Used to display entity counts in chrome://sync-internals. Can be called
+  // only if state() != NOT_RUNNING.
   virtual void GetStatusCounters(const StatusCountersCallback& callback) = 0;
 
-  // Estimates memory usage of type and records it into histogram.
-  virtual void RecordMemoryUsageHistogram() = 0;
+  // Records entities count and estimated memory usage of the type into
+  // histograms. Can be called only if state() != NOT_RUNNING.
+  virtual void RecordMemoryUsageAndCountsHistograms() = 0;
 
  protected:
   explicit DataTypeController(ModelType type);

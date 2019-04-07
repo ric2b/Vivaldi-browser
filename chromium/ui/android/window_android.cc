@@ -48,7 +48,7 @@ class WindowAndroid::WindowBeginFrameSource : public viz::BeginFrameSource {
 
  private:
   WindowAndroid* const window_;
-  base::ObserverList<viz::BeginFrameObserver> observers_;
+  base::ObserverList<viz::BeginFrameObserver>::Unchecked observers_;
   int observer_count_;
   viz::BeginFrameArgs last_begin_frame_args_;
   uint64_t next_sequence_number_;
@@ -191,6 +191,8 @@ void WindowAndroid::AttachCompositor(WindowAndroidCompositor* compositor) {
   compositor_ = compositor;
   for (WindowAndroidObserver& observer : observer_list_)
     observer.OnAttachCompositor();
+
+  compositor_->SetVSyncPaused(vsync_paused_);
 }
 
 void WindowAndroid::DetachCompositor() {
@@ -271,6 +273,11 @@ void WindowAndroid::OnActivityStarted(JNIEnv* env,
 void WindowAndroid::SetVSyncPaused(JNIEnv* env,
                                    const JavaParamRef<jobject>& obj,
                                    bool paused) {
+  vsync_paused_ = paused;
+
+  if (compositor_)
+    compositor_->SetVSyncPaused(paused);
+
   begin_frame_source_->OnPauseChanged(paused);
 }
 

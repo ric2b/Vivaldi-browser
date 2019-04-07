@@ -11,7 +11,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #import "base/test/ios/wait_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/autofill/core/browser/autofill_manager.h"
@@ -84,12 +84,6 @@ const std::vector<base::FilePath> GetTestFiles() {
   return files;
 }
 
-const std::set<std::string>& GetFailingTestNames() {
-  static std::set<std::string>* failing_test_names =
-      new std::set<std::string>{};
-  return *failing_test_names;
-}
-
 }  // namespace
 
 // Test fixture for verifying Autofill heuristics. Each input is an HTML
@@ -113,7 +107,7 @@ class FormStructureBrowserTest
 
   // Serializes the given |forms| into a string.
   std::string FormStructuresToString(
-      const std::vector<std::unique_ptr<FormStructure>>& forms);
+      const AutofillManager::FormStructureMap& forms);
 
   FormSuggestionController* suggestionController_;
   AutofillController* autofillController_;
@@ -173,15 +167,21 @@ void FormStructureBrowserTest::GenerateResults(const std::string& input,
   AutofillManager* autofill_manager =
       AutofillDriverIOS::FromWebState(web_state())->autofill_manager();
   ASSERT_NE(nullptr, autofill_manager);
-  const std::vector<std::unique_ptr<FormStructure>>& forms =
-      autofill_manager->form_structures();
-  *output = FormStructureBrowserTest::FormStructuresToString(forms);
+  *output = FormStructuresToString(autofill_manager->form_structures());
 }
 
 std::string FormStructureBrowserTest::FormStructuresToString(
-    const std::vector<std::unique_ptr<FormStructure>>& forms) {
+    const AutofillManager::FormStructureMap& forms) {
+  std::map<base::TimeTicks, const FormStructure*> sorted_forms;
+  for (const auto& form_kv : forms) {
+    const auto* form = form_kv.second.get();
+    EXPECT_TRUE(
+        sorted_forms.emplace(form->form_parsed_timestamp(), form).second);
+  }
+
   std::string forms_string;
-  for (const std::unique_ptr<FormStructure>& form : forms) {
+  for (const auto& form_kv : sorted_forms) {
+    const auto* form = form_kv.second;
     for (const auto& field : *form) {
       std::string name = base::UTF16ToUTF8(field->name);
       if (base::StartsWith(name, "gChrome~field~",
@@ -209,8 +209,23 @@ std::string FormStructureBrowserTest::FormStructuresToString(
   return forms_string;
 }
 
-// Crashes on iPhone 6 Plus.  https://crbug.com/857488
-TEST_P(FormStructureBrowserTest, DISABLED_DataDrivenHeuristics) {
+namespace {
+
+// To disable a data driven test, please add the name of the test file
+// (i.e., "NNN_some_site.html") as a literal to the initializer_list given
+// to the failing_test_names constructor.
+const std::set<std::string>& GetFailingTestNames() {
+  static std::set<std::string>* failing_test_names =
+      new std::set<std::string>{};
+  return *failing_test_names;
+}
+
+}  // namespace
+
+// If disabling a test, prefer to add the name names of the specific test cases
+// to GetFailingTestNames(), directly above, instead of renaming the test to
+// DISABLED_DataDrivenHeuristics.
+TEST_P(FormStructureBrowserTest, DataDrivenHeuristics) {
   bool is_expected_to_pass =
       !base::ContainsKey(GetFailingTestNames(), GetParam().BaseName().value());
   RunOneDataDrivenTest(GetParam(), GetIOSOutputDirectory(),

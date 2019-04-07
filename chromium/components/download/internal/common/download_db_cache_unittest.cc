@@ -14,11 +14,17 @@
 #include "components/download/database/download_db_conversions.h"
 #include "components/download/database/download_db_entry.h"
 #include "components/download/database/download_db_impl.h"
+#include "components/download/database/in_progress/download_entry.h"
+#include "components/download/public/common/download_item_impl.h"
+#include "components/download/public/common/download_utils.h"
+#include "components/download/public/common/mock_download_item.h"
 #include "components/leveldb_proto/testing/fake_db.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using testing::_;
+using testing::Return;
+using testing::ReturnRefOfCopy;
 
 namespace download {
 
@@ -36,6 +42,44 @@ std::string GetKey(const std::string& guid) {
   return DownloadNamespaceToString(
              DownloadNamespace::NAMESPACE_BROWSER_DOWNLOAD) +
          "," + guid;
+}
+
+std::unique_ptr<DownloadItem> CreateDownloadItem(const std::string& guid) {
+  std::unique_ptr<MockDownloadItem> item(
+      new ::testing::NiceMock<MockDownloadItem>());
+  ON_CALL(*item, GetGuid()).WillByDefault(ReturnRefOfCopy(guid));
+  ON_CALL(*item, GetUrlChain())
+      .WillByDefault(ReturnRefOfCopy(std::vector<GURL>()));
+  ON_CALL(*item, GetReferrerUrl()).WillByDefault(ReturnRefOfCopy(GURL()));
+  ON_CALL(*item, GetSiteUrl()).WillByDefault(ReturnRefOfCopy(GURL()));
+  ON_CALL(*item, GetTabUrl()).WillByDefault(ReturnRefOfCopy(GURL()));
+  ON_CALL(*item, GetTabReferrerUrl()).WillByDefault(ReturnRefOfCopy(GURL()));
+  ON_CALL(*item, GetETag()).WillByDefault(ReturnRefOfCopy(std::string("etag")));
+  ON_CALL(*item, GetLastModifiedTime())
+      .WillByDefault(ReturnRefOfCopy(std::string("last-modified")));
+  ON_CALL(*item, GetMimeType()).WillByDefault(Return("text/html"));
+  ON_CALL(*item, GetOriginalMimeType()).WillByDefault(Return("text/html"));
+  ON_CALL(*item, GetTotalBytes()).WillByDefault(Return(1000));
+  ON_CALL(*item, GetFullPath())
+      .WillByDefault(ReturnRefOfCopy(base::FilePath()));
+  ON_CALL(*item, GetTargetFilePath())
+      .WillByDefault(ReturnRefOfCopy(base::FilePath()));
+  ON_CALL(*item, GetReceivedBytes()).WillByDefault(Return(1000));
+  ON_CALL(*item, GetStartTime()).WillByDefault(Return(base::Time()));
+  ON_CALL(*item, GetEndTime()).WillByDefault(Return(base::Time()));
+  ON_CALL(*item, GetReceivedSlices())
+      .WillByDefault(
+          ReturnRefOfCopy(std::vector<DownloadItem::ReceivedSlice>()));
+  ON_CALL(*item, GetHash()).WillByDefault(ReturnRefOfCopy(std::string("hash")));
+  ON_CALL(*item, IsTransient()).WillByDefault(Return(false));
+  ON_CALL(*item, GetDangerType())
+      .WillByDefault(Return(DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS));
+  ON_CALL(*item, GetLastReason())
+      .WillByDefault(Return(DOWNLOAD_INTERRUPT_REASON_NONE));
+  ON_CALL(*item, GetState()).WillByDefault(Return(DownloadItem::IN_PROGRESS));
+  ON_CALL(*item, IsPaused()).WillByDefault(Return(false));
+  ON_CALL(*item, GetBytesWasted()).WillByDefault(Return(10));
+  return std::move(item);
 }
 
 }  // namespace
@@ -82,6 +126,10 @@ class DownloadDBCacheTest : public testing::Test {
 
   DownloadDB* GetDownloadDB() { return db_cache_->download_db_.get(); }
 
+  void OnDownloadUpdated(DownloadItem* item) {
+    db_cache_->OnDownloadUpdated(item);
+  }
+
  protected:
   std::map<std::string, download_pb::DownloadDBEntry> db_entries_;
   leveldb_proto::test::FakeDB<download_pb::DownloadDBEntry>* db_;
@@ -95,9 +143,10 @@ TEST_F(DownloadDBCacheTest, InitializeAndRetrieve) {
   PrepopulateSampleEntries();
   CreateDBCache();
   std::vector<DownloadDBEntry> loaded_entries;
-  db_cache_->Initialize(base::BindOnce(&DownloadDBCacheTest::InitCallback,
-                                       base::Unretained(this), &loaded_entries,
-                                       true));
+  db_cache_->Initialize(
+      std::vector<DownloadEntry>(),
+      base::BindOnce(&DownloadDBCacheTest::InitCallback, base::Unretained(this),
+                     &loaded_entries));
   db_->InitCallback(true);
   db_->LoadCallback(true);
   ASSERT_EQ(loaded_entries.size(), 2u);
@@ -115,9 +164,10 @@ TEST_F(DownloadDBCacheTest, AddNewEntry) {
   PrepopulateSampleEntries();
   CreateDBCache();
   std::vector<DownloadDBEntry> loaded_entries;
-  db_cache_->Initialize(base::BindOnce(&DownloadDBCacheTest::InitCallback,
-                                       base::Unretained(this), &loaded_entries,
-                                       true));
+  db_cache_->Initialize(
+      std::vector<DownloadEntry>(),
+      base::BindOnce(&DownloadDBCacheTest::InitCallback, base::Unretained(this),
+                     &loaded_entries));
   db_->InitCallback(true);
   db_->LoadCallback(true);
   ASSERT_EQ(loaded_entries.size(), 2u);
@@ -140,9 +190,10 @@ TEST_F(DownloadDBCacheTest, ModifyExistingEntry) {
   PrepopulateSampleEntries();
   CreateDBCache();
   std::vector<DownloadDBEntry> loaded_entries;
-  db_cache_->Initialize(base::BindOnce(&DownloadDBCacheTest::InitCallback,
-                                       base::Unretained(this), &loaded_entries,
-                                       true));
+  db_cache_->Initialize(
+      std::vector<DownloadEntry>(),
+      base::BindOnce(&DownloadDBCacheTest::InitCallback, base::Unretained(this),
+                     &loaded_entries));
   db_->InitCallback(true);
   db_->LoadCallback(true);
   ASSERT_EQ(loaded_entries.size(), 2u);
@@ -180,9 +231,10 @@ TEST_F(DownloadDBCacheTest, FilePathChange) {
                      DownloadDBConversions::DownloadDBEntryToProto(entry)));
   CreateDBCache();
   std::vector<DownloadDBEntry> loaded_entries;
-  db_cache_->Initialize(base::BindOnce(&DownloadDBCacheTest::InitCallback,
-                                       base::Unretained(this), &loaded_entries,
-                                       true));
+  db_cache_->Initialize(
+      std::vector<DownloadEntry>(),
+      base::BindOnce(&DownloadDBCacheTest::InitCallback, base::Unretained(this),
+                     &loaded_entries));
   db_->InitCallback(true);
   db_->LoadCallback(true);
   ASSERT_EQ(loaded_entries.size(), 1u);
@@ -209,9 +261,10 @@ TEST_F(DownloadDBCacheTest, RemoveEntry) {
   PrepopulateSampleEntries();
   CreateDBCache();
   std::vector<DownloadDBEntry> loaded_entries;
-  db_cache_->Initialize(base::BindOnce(&DownloadDBCacheTest::InitCallback,
-                                       base::Unretained(this), &loaded_entries,
-                                       true));
+  db_cache_->Initialize(
+      std::vector<DownloadEntry>(),
+      base::BindOnce(&DownloadDBCacheTest::InitCallback, base::Unretained(this),
+                     &loaded_entries));
   db_->InitCallback(true);
   db_->LoadCallback(true);
   ASSERT_EQ(loaded_entries.size(), 2u);
@@ -231,6 +284,85 @@ TEST_F(DownloadDBCacheTest, RemoveEntry) {
   db_->LoadCallback(true);
   ASSERT_EQ(loaded_entries.size(), 1u);
   ASSERT_EQ(guid2, loaded_entries[0].GetGuid());
+}
+
+// Test that removing an entry during the middle of modifying it should work.
+TEST_F(DownloadDBCacheTest, RemoveWhileModifyExistingEntry) {
+  PrepopulateSampleEntries();
+  CreateDBCache();
+  std::vector<DownloadDBEntry> loaded_entries;
+  db_cache_->Initialize(
+      std::vector<DownloadEntry>(),
+      base::BindOnce(&DownloadDBCacheTest::InitCallback, base::Unretained(this),
+                     &loaded_entries));
+  db_->InitCallback(true);
+  db_->LoadCallback(true);
+  ASSERT_EQ(loaded_entries.size(), 2u);
+
+  loaded_entries[0].download_info->id = 100;
+  db_cache_->AddOrReplaceEntry(loaded_entries[0]);
+
+  ASSERT_EQ(task_runner_->GetPendingTaskCount(), 1u);
+  ASSERT_GT(task_runner_->NextPendingTaskDelay(), base::TimeDelta());
+  db_cache_->RemoveEntry(loaded_entries[0].GetGuid());
+  task_runner_->FastForwardUntilNoTasksRemain();
+
+  DownloadDBEntry remaining = loaded_entries[1];
+  loaded_entries.clear();
+  DownloadDB* download_db = GetDownloadDB();
+  download_db->LoadEntries(base::BindOnce(&DownloadDBCacheTest::InitCallback,
+                                          base::Unretained(this),
+                                          &loaded_entries));
+  db_->LoadCallback(true);
+  ASSERT_EQ(loaded_entries.size(), 1u);
+  ASSERT_EQ(remaining, loaded_entries[0]);
+}
+
+// Tests that Migrating a DownloadEntry from InProgressCache should store
+// a DownloadDBEntry in the DownloadDB.
+TEST_F(DownloadDBCacheTest, MigrateFromInProgressCache) {
+  CreateDBCache();
+  std::vector<DownloadEntry> download_entries;
+  download_entries.emplace_back(
+      "guid1", "foo.com", DownloadSource::DRAG_AND_DROP, true,
+      DownloadUrlParameters::RequestHeadersType(), 100);
+  download_entries.emplace_back(
+      "guid2", "foobar.com", DownloadSource::UNKNOWN, false,
+      DownloadUrlParameters::RequestHeadersType(), 200);
+
+  std::vector<DownloadDBEntry> loaded_entries;
+  db_cache_->Initialize(
+      download_entries,
+      base::BindOnce(&DownloadDBCacheTest::InitCallback, base::Unretained(this),
+                     &loaded_entries));
+  db_->InitCallback(true);
+  db_->UpdateCallback(true);
+  db_->LoadCallback(true);
+  ASSERT_FALSE(loaded_entries.empty());
+
+  std::unique_ptr<DownloadItem> item = CreateDownloadItem("guid1");
+  OnDownloadUpdated(item.get());
+
+  ASSERT_EQ(task_runner_->GetPendingTaskCount(), 1u);
+  ASSERT_GT(task_runner_->NextPendingTaskDelay(), base::TimeDelta());
+  task_runner_->FastForwardUntilNoTasksRemain();
+  db_->UpdateCallback(true);
+
+  DownloadDBEntry entry1 = CreateDownloadDBEntryFromItem(
+      *item, UkmInfo(DownloadSource::DRAG_AND_DROP, 100), true,
+      DownloadUrlParameters::RequestHeadersType());
+  DownloadDBEntry entry2 =
+      DownloadDBConversions::DownloadDBEntryFromDownloadEntry(
+          download_entries[1]);
+
+  DownloadDB* download_db = GetDownloadDB();
+  download_db->LoadEntries(base::BindOnce(&DownloadDBCacheTest::InitCallback,
+                                          base::Unretained(this),
+                                          &loaded_entries));
+  db_->LoadCallback(true);
+  ASSERT_EQ(loaded_entries.size(), 2u);
+  ASSERT_TRUE(entry1 == loaded_entries[0]);
+  ASSERT_TRUE(entry2 == loaded_entries[1]);
 }
 
 }  // namespace download

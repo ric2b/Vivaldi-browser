@@ -69,7 +69,7 @@ struct CONTENT_EXPORT CommonNavigationParams {
       const GURL& base_url_for_data_url,
       const GURL& history_url_for_data_url,
       PreviewsState previews_state,
-      const base::TimeTicks& navigation_start,
+      base::TimeTicks navigation_start,
       std::string method,
       const scoped_refptr<network::ResourceRequestBody>& post_data,
       base::Optional<SourceLocation> source_location,
@@ -77,7 +77,8 @@ struct CONTENT_EXPORT CommonNavigationParams {
       bool started_from_context_menu,
       bool has_user_gesture,
       const std::vector<ContentSecurityPolicy>& initiator_csp,
-      const base::Optional<CSPSource>& initiator_self_source);
+      const base::Optional<CSPSource>& initiator_self_source,
+      base::TimeTicks input_start = base::TimeTicks());
   CommonNavigationParams(const CommonNavigationParams& other);
   ~CommonNavigationParams();
 
@@ -160,6 +161,11 @@ struct CONTENT_EXPORT CommonNavigationParams {
   // The current origin policy for this request's origin.
   // (Empty if none applies.)
   std::string origin_policy;
+
+  // The time the input event leading to the navigation occurred. This will
+  // not always be set; it depends on the creator of the CommonNavigationParams
+  // setting it.
+  base::TimeTicks input_start;
 };
 
 // Provided by the browser -----------------------------------------------------
@@ -279,7 +285,6 @@ struct CONTENT_EXPORT RequestNavigationParams {
   // navigation commits.
   bool should_clear_history_list = false;
 
-  // PlzNavigate
   // Whether a ServiceWorkerProviderHost should be created for the window.
   bool should_create_service_worker = false;
 
@@ -287,11 +292,8 @@ struct CONTENT_EXPORT RequestNavigationParams {
   // Timing of navigation events.
   NavigationTiming navigation_timing;
 
-  // PlzNavigate
   // The ServiceWorkerProviderHost ID used for navigations, if it was already
   // created by the browser. Set to kInvalidServiceWorkerProviderId otherwise.
-  // This parameter is not used in the current navigation architecture, where
-  // it will always be equal to kInvalidServiceWorkerProviderId.
   int service_worker_provider_id = kInvalidServiceWorkerProviderId;
 
   // PlzNavigate

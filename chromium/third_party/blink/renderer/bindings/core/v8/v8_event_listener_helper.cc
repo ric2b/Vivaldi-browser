@@ -30,11 +30,11 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_event_listener_helper.h"
 
+#include "third_party/blink/renderer/bindings/core/v8/custom_wrappable_adapter.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_error_handler.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_event_listener.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_event_listener_or_event_handler.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_window.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_worker_or_worklet_event_listener.h"
 #include "third_party/blink/renderer/platform/bindings/v8_private_property.h"
 
 namespace blink {
@@ -42,34 +42,24 @@ namespace {
 
 template <typename ListenerType, typename ListenerFactory>
 ListenerType* GetEventListenerInternal(
-    v8::Isolate* isolate,
+    ScriptState* script_state,
     v8::Local<v8::Object> object,
     const V8PrivateProperty::Symbol& listener_property,
     ListenerLookupType lookup,
     const ListenerFactory& listener_factory) {
-  DCHECK(isolate->InContext());
-  v8::Local<v8::Value> listener_value;
-  if (!listener_property.GetOrUndefined(object).ToLocal(&listener_value))
-    return nullptr;
+  DCHECK(script_state->GetIsolate()->InContext());
   ListenerType* listener =
-      listener_value->IsUndefined()
-          ? nullptr
-          : static_cast<ListenerType*>(
-                listener_value.As<v8::External>()->Value());
+      CustomWrappableAdapter::Lookup<ListenerType>(object, listener_property);
   if (listener || lookup == kListenerFindOnly)
     return listener;
 
-  listener = listener_factory();
-  if (listener)
-    listener_property.Set(object, v8::External::New(isolate, listener));
-
-  return listener;
+  return listener_factory();
 }
 
 }  // namespace
 
 // static
-V8EventListener* V8EventListenerHelper::GetEventListener(
+EventListener* V8EventListenerHelper::GetEventListener(
     ScriptState* script_state,
     v8::Local<v8::Value> value,
     bool is_attribute,
@@ -83,22 +73,21 @@ V8EventListener* V8EventListenerHelper::GetEventListener(
   v8::Isolate* isolate = script_state->GetIsolate();
   V8PrivateProperty::Symbol listener_property =
       is_attribute
-          ? V8PrivateProperty::GetV8EventListenerAttributeListener(isolate)
-          : V8PrivateProperty::GetV8EventListenerListener(isolate);
+          ? V8PrivateProperty::
+                GetV8EventListenerOrEventHandlerAttributeListener(isolate)
+          : V8PrivateProperty::GetV8EventListenerOrEventHandlerListener(
+                isolate);
 
-  return GetEventListenerInternal<V8EventListener>(
-      isolate, object, listener_property, lookup,
-      [object, is_attribute, script_state]() {
-        return script_state->World().IsWorkerWorld()
-                   ? V8WorkerOrWorkletEventListener::Create(
-                         object, is_attribute, script_state)
-                   : V8EventListener::Create(object, is_attribute,
-                                             script_state);
+  return GetEventListenerInternal<V8AbstractEventListener>(
+      script_state, object, listener_property, lookup,
+      [object, is_attribute, script_state, listener_property]() {
+        return V8EventListenerOrEventHandler::Create(
+            object, is_attribute, script_state, listener_property);
       });
 }
 
 // static
-V8ErrorHandler* V8EventListenerHelper::EnsureErrorHandler(
+EventListener* V8EventListenerHelper::EnsureErrorHandler(
     ScriptState* script_state,
     v8::Local<v8::Value> value) {
   if (!value->IsObject())
@@ -109,10 +98,11 @@ V8ErrorHandler* V8EventListenerHelper::EnsureErrorHandler(
       V8PrivateProperty::GetV8ErrorHandlerErrorHandler(isolate);
 
   return GetEventListenerInternal<V8ErrorHandler>(
-      isolate, object, listener_property, kListenerFindOrCreate,
-      [object, script_state]() {
+      script_state, object, listener_property, kListenerFindOrCreate,
+      [object, script_state, listener_property]() {
         const bool is_attribute = true;
-        return V8ErrorHandler::Create(object, is_attribute, script_state);
+        return V8ErrorHandler::Create(object, is_attribute, script_state,
+                                      listener_property);
       });
 }
 

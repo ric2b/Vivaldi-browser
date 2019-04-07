@@ -24,23 +24,25 @@ namespace {
 
 void RunTask(LazyContextTaskQueue::PendingTask task,
              const ExtensionId& extension_id,
+             int64_t version_id,
              int process_id,
              int thread_id) {
   auto params = std::make_unique<LazyContextTaskQueue::ContextInfo>(
-      extension_id, content::RenderProcessHost::FromID(process_id), thread_id,
-      GURL());
+      extension_id, content::RenderProcessHost::FromID(process_id), version_id,
+      thread_id, GURL());
   std::move(task).Run(std::move(params));
 }
 
 void DidStartWorkerForPattern(LazyContextTaskQueue::PendingTask task,
                               const ExtensionId& extension_id,
+                              int64_t version_id,
                               int process_id,
                               int thread_id) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::BindOnce(RunTask, std::move(task), extension_id, process_id,
-                     thread_id));
+      base::BindOnce(RunTask, std::move(task), extension_id, version_id,
+                     process_id, thread_id));
 }
 
 void DidStartWorkerFail() {
@@ -159,8 +161,10 @@ void ServiceWorkerTaskQueue::RunTaskAfterStartWorker(
   content::ServiceWorkerContext* service_worker_context =
       partition->GetServiceWorkerContext();
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
+  content::ServiceWorkerContext::RunTask(
+      content::BrowserThread::GetTaskRunnerForThread(
+          content::BrowserThread::IO),
+      FROM_HERE, service_worker_context,
       base::BindOnce(
           &GetServiceWorkerInfoOnIO, context_id->service_worker_scope(),
           context_id->extension_id(), service_worker_context, std::move(task)));

@@ -39,11 +39,23 @@ void StreamFactory::CreateInputStream(
     uint32_t shared_memory_count,
     bool enable_agc,
     mojo::ScopedSharedBufferHandle key_press_count_buffer,
+    mojom::AudioProcessingConfigPtr processing_config,
     CreateInputStreamCallback created_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
   TRACE_EVENT_NESTABLE_ASYNC_INSTANT1(
       "audio", "CreateInputStream", bindings_.dispatch_context().id_for_trace(),
       "device id", device_id);
+
+  if (processing_config && processing_config->settings.requires_apm() &&
+      params.GetBufferDuration() != base::TimeDelta::FromMilliseconds(10)) {
+    // If the buffer size is incorrect, the data can't be fed into the APM.
+    // This should never happen unless a renderer misbehaves.
+    log->OnLogMessage("Invalid APM config.");
+    log->OnError();
+    // The callback must still be invoked or mojo complains.
+    std::move(created_callback).Run(nullptr, false, base::nullopt);
+    return;
+  }
 
   // Unretained is safe since |this| indirectly owns the InputStream.
   auto deleter_callback = base::BindOnce(&StreamFactory::DestroyInputStream,
@@ -54,7 +66,8 @@ void StreamFactory::CreateInputStream(
       std::move(stream_request), std::move(client), std::move(observer),
       std::move(log), audio_manager_,
       UserInputMonitor::Create(std::move(key_press_count_buffer)), device_id,
-      params, shared_memory_count, enable_agc));
+      params, shared_memory_count, enable_agc, &stream_monitor_coordinator_,
+      std::move(processing_config)));
 }
 
 void StreamFactory::AssociateInputAndOutputForAec(
@@ -76,6 +89,7 @@ void StreamFactory::CreateOutputStream(
     const std::string& output_device_id,
     const media::AudioParameters& params,
     const base::UnguessableToken& group_id,
+    const base::Optional<base::UnguessableToken>& processing_id,
     CreateOutputStreamCallback created_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
   TRACE_EVENT_NESTABLE_ASYNC_INSTANT1(
@@ -93,7 +107,9 @@ void StreamFactory::CreateOutputStream(
   output_streams_.insert(std::make_unique<OutputStream>(
       std::move(created_callback), std::move(deleter_callback),
       std::move(stream_request), std::move(observer), std::move(log),
-      audio_manager_, output_device_id, params, &coordinator_, group_id));
+      audio_manager_, output_device_id, params, &coordinator_, group_id,
+      &stream_monitor_coordinator_,
+      processing_id.value_or(base::UnguessableToken())));
 }
 
 void StreamFactory::BindMuter(mojom::LocalMuterAssociatedRequest request,

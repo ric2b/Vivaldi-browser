@@ -74,7 +74,7 @@ class HitTestDataProviderAuraTest : public test::AuraTestBaseMus {
 
     root_ = std::make_unique<Window>(nullptr);
     root_->SetProperty(aura::client::kEmbedType,
-                       aura::client::WindowEmbedType::TOP_LEVEL_IN_WM);
+                       aura::client::WindowEmbedType::EMBED_IN_OWNER);
     root_->Init(ui::LAYER_NOT_DRAWN);
     root_->SetEventTargeter(std::make_unique<WindowTargeter>());
     root_->SetBounds(gfx::Rect(0, 0, 300, 200));
@@ -265,40 +265,40 @@ TEST_F(HitTestDataProviderAuraTest, HoleTargeter) {
 }
 
 TEST_F(HitTestDataProviderAuraTest, TargetingPolicies) {
-  root()->SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy::NONE);
+  root()->SetEventTargetingPolicy(ws::mojom::EventTargetingPolicy::NONE);
   base::Optional<viz::HitTestRegionList> hit_test_data =
       hit_test_data_provider()->GetHitTestData(compositor_frame_);
   ASSERT_FALSE(hit_test_data);
 
-  root()->SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy::TARGET_ONLY);
+  root()->SetEventTargetingPolicy(ws::mojom::EventTargetingPolicy::TARGET_ONLY);
   window3()->SetEventTargetingPolicy(
-      ui::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
+      ws::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
   hit_test_data = hit_test_data_provider()->GetHitTestData(compositor_frame_);
   ASSERT_TRUE(hit_test_data);
   EXPECT_EQ(hit_test_data->flags, viz::HitTestRegionFlags::kHitTestMine);
   EXPECT_EQ(hit_test_data->regions.size(), 3u);
 
-  root()->SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy::TARGET_ONLY);
+  root()->SetEventTargetingPolicy(ws::mojom::EventTargetingPolicy::TARGET_ONLY);
   window3()->SetEventTargetingPolicy(
-      ui::mojom::EventTargetingPolicy::TARGET_ONLY);
+      ws::mojom::EventTargetingPolicy::TARGET_ONLY);
   hit_test_data = hit_test_data_provider()->GetHitTestData(compositor_frame_);
   ASSERT_TRUE(hit_test_data);
   EXPECT_EQ(hit_test_data->flags, viz::HitTestRegionFlags::kHitTestMine);
   EXPECT_EQ(hit_test_data->regions.size(), 2u);
 
   root()->SetEventTargetingPolicy(
-      ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
+      ws::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
   window3()->SetEventTargetingPolicy(
-      ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
+      ws::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
   hit_test_data = hit_test_data_provider()->GetHitTestData(compositor_frame_);
   ASSERT_TRUE(hit_test_data);
   EXPECT_EQ(hit_test_data->flags, viz::HitTestRegionFlags::kHitTestIgnore);
   EXPECT_EQ(hit_test_data->regions.size(), 2u);
 
   root()->SetEventTargetingPolicy(
-      ui::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
+      ws::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
   window3()->SetEventTargetingPolicy(
-      ui::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
+      ws::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
   hit_test_data = hit_test_data_provider()->GetHitTestData(compositor_frame_);
   ASSERT_TRUE(hit_test_data);
   EXPECT_EQ(hit_test_data->flags, viz::HitTestRegionFlags::kHitTestMine);

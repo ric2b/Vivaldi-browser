@@ -7,61 +7,13 @@
 
 #include <memory>
 
-#include "base/power_monitor/power_observer.h"
+#include "base/macros.h"
 #include "base/timer/timer.h"
+#include "components/download/internal/background_service/scheduler/battery_status_listener.h"
 #include "components/download/internal/background_service/scheduler/device_status.h"
 #include "components/download/internal/background_service/scheduler/network_status_listener.h"
-#include "net/base/network_change_notifier.h"
 
 namespace download {
-
-// Helper class to listen to battery changes.
-class BatteryStatusListener : public base::PowerObserver {
- public:
-  class Observer {
-   public:
-    // Called when device charging state changed.
-    virtual void OnPowerStateChange(bool on_battery_power) = 0;
-
-   protected:
-    virtual ~Observer() {}
-  };
-
-  BatteryStatusListener(const base::TimeDelta& battery_query_interval);
-  ~BatteryStatusListener() override;
-
-  int GetBatteryPercentage();
-  bool IsOnBatteryPower();
-
-  void Start(Observer* observer);
-  void Stop();
-
- protected:
-  // Platform specific code should override to query the actual battery state.
-  virtual int GetBatteryPercentageInternal();
-
- private:
-  // Updates battery percentage. Will throttle based on
-  // |battery_query_interval_| when |force| is false.
-  void UpdateBatteryPercentage(bool force);
-
-  // base::PowerObserver implementation.
-  void OnPowerStateChange(bool on_battery_power) override;
-
-  // Cached battery percentage.
-  int battery_percentage_;
-
-  // Interval to throttle battery queries. Cached value will be returned inside
-  // this interval.
-  base::TimeDelta battery_query_interval_;
-
-  // Time stamp to record last battery query.
-  base::Time last_battery_query_;
-
-  Observer* observer_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(BatteryStatusListener);
-};
 
 // Listens to network and battery status change and notifies the observer.
 class DeviceStatusListener : public NetworkStatusListener::Observer,
@@ -76,7 +28,8 @@ class DeviceStatusListener : public NetworkStatusListener::Observer,
   explicit DeviceStatusListener(
       const base::TimeDelta& startup_delay,
       const base::TimeDelta& online_delay,
-      std::unique_ptr<BatteryStatusListener> battery_listener);
+      std::unique_ptr<BatteryStatusListener> battery_listener,
+      std::unique_ptr<NetworkStatusListener> network_listener);
   ~DeviceStatusListener() override;
 
   bool is_valid_state() { return is_valid_state_; }
@@ -91,8 +44,8 @@ class DeviceStatusListener : public NetworkStatusListener::Observer,
   virtual void Stop();
 
  protected:
-  // Creates the instance of |network_listener_|, visible for testing.
-  virtual void BuildNetworkStatusListener();
+  // NetworkStatusListener::Observer implementation. Visible for testing.
+  void OnNetworkChanged(network::mojom::ConnectionType type) override;
 
   // Used to listen to network connectivity changes.
   std::unique_ptr<NetworkStatusListener> network_listener_;
@@ -111,10 +64,6 @@ class DeviceStatusListener : public NetworkStatusListener::Observer,
  private:
   // Start after a delay to wait for potential network stack setup.
   void StartAfterDelay();
-
-  // NetworkStatusListener::Observer implementation.
-  void OnNetworkChanged(
-      net::NetworkChangeNotifier::ConnectionType type) override;
 
   // BatteryStatusListener::Observer implementation.
   void OnPowerStateChange(bool on_battery_power) override;

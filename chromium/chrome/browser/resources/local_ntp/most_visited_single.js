@@ -155,13 +155,6 @@ let isCustomLinksEnabled = false;
 
 
 /**
- * True if the tiles to be shown are custom links.
- * @type {boolean}
- */
-let tilesAreCustomLinks = false;
-
-
-/**
  * Log an event on the NTP.
  * @param {number} eventType Event from LOG_TYPE.
  */
@@ -213,19 +206,18 @@ var countLoad = function() {
   if (loadedCounter <= 0) {
     swapInNewTiles();
     logEvent(LOG_TYPE.NTP_ALL_TILES_LOADED);
+    let tilesAreCustomLinks =
+        isCustomLinksEnabled && chrome.embeddedSearch.newTabPage.isCustomLinks;
     // Note that it's easiest to capture this when all custom links are loaded,
     // rather than when the impression for each link is logged.
-    if (isCustomLinksEnabled && tilesAreCustomLinks) {
+    if (tilesAreCustomLinks) {
       chrome.embeddedSearch.newTabPage.logEvent(
           LOG_TYPE.NTP_SHORTCUT_CUSTOMIZED);
     }
     // Tell the parent page whether to show the restore default shortcuts option
     // in the menu.
     window.parent.postMessage(
-        {
-          cmd: 'loaded',
-          showRestoreDefault: (isCustomLinksEnabled && tilesAreCustomLinks)
-        },
+        {cmd: 'loaded', showRestoreDefault: tilesAreCustomLinks},
         DOMAIN_ORIGIN);
     tilesAreCustomLinks = false;
     // Reset to 1, so that any further 'show' message will cause us to swap in
@@ -393,7 +385,7 @@ function truncateTitleText(titles) {
     const originalTitle = el.innerText;
     let truncatedTitle = el.innerText;
     while (el.scrollHeight > el.offsetHeight && truncatedTitle.length > 0) {
-      el.innerText = (truncatedTitle = truncatedTitle.slice(0, -1)) + '...';
+      el.innerText = (truncatedTitle = truncatedTitle.slice(0, -1)) + '\u2026';
     }
     if (truncatedTitle.length === 0) {
       console.error('Title truncation failed: ' + originalTitle);
@@ -671,9 +663,6 @@ function renderMaterialDesignTile(data) {
   }
   mdTileContainer.className = CLASSES.MD_TILE_CONTAINER;
 
-  if (data.isCustomLink)
-    tilesAreCustomLinks = true;
-
   // The tile will be appended to tiles.
   const position = tiles.children.length;
   // This is set in the load/error event for the favicon image.
@@ -764,6 +753,9 @@ function renderMaterialDesignTile(data) {
       let fallbackLetter = document.createElement('div');
       fallbackLetter.className = CLASSES.MD_FALLBACK_LETTER;
       fallbackLetter.innerText = data.title.charAt(0).toUpperCase();
+      if (navigator.userAgent.indexOf('Windows') > -1) {
+        fallbackLetter.style.fontWeight = 600;
+      }
       mdFavicon.classList.add(CLASSES.FAILED_FAVICON);
 
       fallbackBackground.appendChild(fallbackLetter);
@@ -793,6 +785,11 @@ function renderMaterialDesignTile(data) {
   mdTitle.className = CLASSES.MD_TITLE;
   mdTitle.innerText = data.title;
   mdTitle.style.direction = data.direction || 'ltr';
+  // Font weight on Mac and ChromeOS is heavier and needs to be reduced.
+  if (navigator.userAgent.indexOf('Mac') > -1 ||
+      navigator.userAgent.indexOf('CrOS') > -1) {
+    mdTitle.style.fontWeight = 400;
+  }
   mdTitleContainer.appendChild(mdTitle);
   mdTileInner.appendChild(mdTitleContainer);
   mdTile.appendChild(mdTileInner);

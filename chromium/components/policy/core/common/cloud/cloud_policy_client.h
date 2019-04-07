@@ -21,13 +21,11 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
+#include "components/policy/core/common/cloud/cloud_policy_validator.h"
 #include "components/policy/core/common/remote_commands/remote_command_job.h"
 #include "components/policy/policy_export.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 
-namespace net {
-class URLRequestContextGetter;
-}
 namespace network {
 class SharedURLLoaderFactory;
 }
@@ -68,7 +66,7 @@ class POLICY_EXPORT CloudPolicyClient {
       const LicenseMap& map)>;
 
   // A callback which receives fetched remote commands.
-  using RemoteCommandCallback = base::Callback<void(
+  using RemoteCommandCallback = base::OnceCallback<void(
       DeviceManagementStatus,
       const std::vector<enterprise_management::RemoteCommand>&)>;
 
@@ -113,7 +111,6 @@ class POLICY_EXPORT CloudPolicyClient {
       const std::string& machine_model,
       const std::string& brand_code,
       DeviceManagementService* service,
-      scoped_refptr<net::URLRequestContextGetter> request_context,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       SigningService* signing_service,
       DeviceDMTokenCallback device_dm_token_callback);
@@ -171,6 +168,16 @@ class POLICY_EXPORT CloudPolicyClient {
   // multiple requests to fetch policy, new requests will cancel any pending
   // requests and the latest request will eventually trigger notifications.
   virtual void FetchPolicy();
+
+  // Upload a policy validation report to the server. Like FetchPolicy, this
+  // method requires that the client is in a registered state. This method
+  // should only be called if the policy was rejected (e.g. validation or
+  // serialization error).
+  virtual void UploadPolicyValidationReport(
+      CloudPolicyValidatorBase::Status status,
+      const std::vector<ValueValidationIssue>& value_validation_issues,
+      const std::string& policy_type,
+      const std::string& policy_token);
 
   // Requests OAuth2 auth codes for the device robot account. The client being
   // registered is a prerequisite to this operation and this call will CHECK if
@@ -241,7 +248,7 @@ class POLICY_EXPORT CloudPolicyClient {
       std::unique_ptr<RemoteCommandJob::UniqueIDType> last_command_id,
       const std::vector<enterprise_management::RemoteCommandResult>&
           command_results,
-      const RemoteCommandCallback& callback);
+      RemoteCommandCallback callback);
 
   // Sends a device attribute update permission request to the server, uses
   // OAuth2 token |auth_token| to identify user who requests a permission to
@@ -353,8 +360,6 @@ class POLICY_EXPORT CloudPolicyClient {
     return fetched_invalidation_version_;
   }
 
-  scoped_refptr<net::URLRequestContextGetter> GetRequestContext();
-
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory();
 
   // Returns the number of active requests.
@@ -427,7 +432,7 @@ class POLICY_EXPORT CloudPolicyClient {
   // Callback for remote command fetch requests.
   void OnRemoteCommandsFetched(
       const DeviceManagementRequestJob* job,
-      const RemoteCommandCallback& callback,
+      RemoteCommandCallback callback,
       DeviceManagementStatus status,
       int net_error,
       const enterprise_management::DeviceManagementResponse& response);
@@ -523,9 +528,8 @@ class POLICY_EXPORT CloudPolicyClient {
 
   DeviceDMTokenCallback device_dm_token_callback_;
 
-  base::ObserverList<Observer, true> observers_;
+  base::ObserverList<Observer, true>::Unchecked observers_;
 
-  scoped_refptr<net::URLRequestContextGetter> request_context_;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
  private:

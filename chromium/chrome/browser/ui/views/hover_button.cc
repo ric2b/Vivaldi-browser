@@ -7,9 +7,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
-#include "ui/base/material_design/material_design_controller.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/animation/ink_drop_highlight.h"
@@ -70,8 +69,10 @@ HoverButton::HoverButton(views::ButtonListener* button_listener,
     : views::MenuButton(text, this, false),
       title_(nullptr),
       subtitle_(nullptr),
+      icon_view_(nullptr),
       secondary_icon_view_(nullptr),
       listener_(button_listener) {
+  SetInstallFocusRingOnFocus(false);
   SetFocusBehavior(FocusBehavior::ALWAYS);
   SetFocusPainter(nullptr);
 
@@ -80,9 +81,6 @@ HoverButton::HoverButton(views::ButtonListener* button_listener,
   SetBorder(CreateBorderWithVerticalSpacing(vert_spacing));
 
   SetInkDropMode(views::InkDropHostView::InkDropMode::ON);
-  // Don't show the ripple on non-MD.
-  if (!ui::MaterialDesignController::IsSecondaryUiMaterial())
-    set_ink_drop_visible_opacity(0);
 }
 
 HoverButton::HoverButton(views::ButtonListener* button_listener,
@@ -146,6 +144,7 @@ HoverButton::HoverButton(views::ButtonListener* button_listener,
   taken_width_ = GetInsets().width() + icon_view->GetPreferredSize().width() +
                  icon_label_spacing;
 
+  icon_view_ = icon_view.get();
   // Make sure hovering over the icon also hovers the |HoverButton|.
   icon_view->set_can_process_events_within_subtree(false);
   // Don't cover |icon_view| when the ink drops are being painted. |MenuButton|
@@ -291,7 +290,7 @@ void HoverButton::StateChanged(ButtonState old_state) {
 }
 
 bool HoverButton::ShouldUseFloodFillInkDrop() const {
-  return views::MenuButton::ShouldUseFloodFillInkDrop() || title_ != nullptr;
+  return true;
 }
 
 SkColor HoverButton::GetInkDropBaseColor() const {

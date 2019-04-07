@@ -72,7 +72,10 @@ class SegregatedPrefStore : public PersistentPrefStore {
   PrefReadError GetReadError() const override;
   PrefReadError ReadPrefs() override;
   void ReadPrefsAsync(ReadErrorDelegate* error_delegate) override;
-  void CommitPendingWrite(base::OnceClosure done_callback) override;
+  void CommitPendingWrite(
+      base::OnceClosure reply_callback = base::OnceClosure(),
+      base::OnceClosure synchronous_done_callback =
+          base::OnceClosure()) override;
   void SchedulePendingLossyWrites() override;
   void ClearMutableValues() override;
   void OnStoreDeletionFromDisk() override;
@@ -113,7 +116,7 @@ class SegregatedPrefStore : public PersistentPrefStore {
   std::set<std::string> selected_preference_names_;
 
   std::unique_ptr<PersistentPrefStore::ReadErrorDelegate> read_error_delegate_;
-  base::ObserverList<PrefStore::Observer, true> observers_;
+  base::ObserverList<PrefStore::Observer, true>::Unchecked observers_;
   AggregatingObserver aggregating_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(SegregatedPrefStore);

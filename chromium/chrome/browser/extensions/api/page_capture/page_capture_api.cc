@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -95,7 +95,7 @@ bool PageCaptureSaveAsMHTMLFunction::RunAsync() {
   // time, we show the user a dialog where they can choose whether to allow the
   // extension access to the API.
 #if defined(OS_CHROMEOS)
-  if (profiles::IsPublicSession()) {
+  if (profiles::ArePublicSessionRestrictionsEnabled()) {
     WebContents* web_contents = GetWebContents();
     if (!web_contents) {
       ReturnFailure(kTabClosedError);

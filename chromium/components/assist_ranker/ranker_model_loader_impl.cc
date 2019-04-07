@@ -17,8 +17,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/assist_ranker/proto/ranker_model.pb.h"
 #include "components/assist_ranker/ranker_url_fetcher.h"
@@ -96,7 +96,7 @@ RankerModelLoaderImpl::RankerModelLoaderImpl(
     GURL model_url,
     std::string uma_prefix)
     : background_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       validate_model_cb_(std::move(validate_model_cb)),
       on_model_available_cb_(std::move(on_model_available_cb)),

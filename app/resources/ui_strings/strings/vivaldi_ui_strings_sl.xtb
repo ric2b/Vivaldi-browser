@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="sl">
+<translation id="1127811143501539442">{DAYS,plural, =1{Pred 1 dnevom}one{Pred # dnevom}two{Pred # dnevoma}few{Pred # dnevi}other{Pred # dnevi}}</translation>
+<translation id="1156623771253174079">{SECONDS,plural, =1{Pred 1 minuto}one{Pred # minuto}two{Pred # minutama}few{Pred # minutami}other{Pred # minutami}}</translation>
+<translation id="1368832886055348810">Od leve proti desni</translation>
+<translation id="1591184457164800433">{MINUTES,plural, =1{1 min in }one{# min in }two{# min in }few{# min in }other{# min in }}</translation>
+<translation id="1752946267035950200">{MINUTES,plural, =1{1 min}one{# min}two{# min}few{# min}other{# min}}</translation>
+<translation id="1761785978543082658"><ph name="QUANTITY" /> B</translation>
+<translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
+<translation id="1830179671306812954">{HOURS,plural, =1{1 h in }one{# h in }two{# h in }few{# h in }other{# h in }}</translation>
+<translation id="1859234291848436338">Smer pisanja</translation>
+<translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
+<translation id="3291688615589870984">{DAYS,plural, =1{1 dan}one{# dan}two{# dneva}few{# dni}other{# dni}}</translation>
+<translation id="3600566671520689681">{DAYS,plural, =1{Še 1 dan}one{Še # dan}two{Še # dneva}few{Še # dni}other{Še # dni}}</translation>
+<translation id="3618849550573277856">Poišči “<ph name="LOOKUP_STRING" />”</translation>
+<translation id="3740362395218339114"><ph name="QUANTITY" /> GB/s</translation>
+<translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
+<translation id="3889424535448813030">Desna puščica</translation>
+<translation id="4968171027979920686">{SECONDS,plural, =1{1 s}one{# s}two{# s}few{# s}other{# s}}</translation>
+<translation id="5076340679995252485">&amp;Prilepi</translation>
+<translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
+<translation id="5613020302032141669">Leva puščica</translation>
+<translation id="5754277640426581776">{MINUTES,plural, =1{1 min}one{# min}two{# min}few{# min}other{# min}}</translation>
+<translation id="5768079895599174203">{DAYS,plural, =1{1 dan in }one{# dan in }two{# dneva in }few{# dni in }other{# dni in }}</translation>
+<translation id="5906667377645263094">{SECONDS,plural, =1{Še 1 s}one{Še # s}two{Še # s}few{Še # s}other{Še # s}}</translation>
+<translation id="5943826764092288734">{HOURS,plural, =1{1 h}one{# h}two{# h}few{# h}other{# h}}</translation>
+<translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
+<translation id="6404817160109697034">{SECONDS,plural, =1{Pred 1 s}one{Pred # s}two{Pred # s}few{Pred # s}other{Pred # s}}</translation>
+<translation id="6483402905448010557">{SECONDS,plural, =1{Pred 1 sekundo}one{Pred # sekundo}two{Pred # sekundama}few{Pred # sekundami}other{Pred # sekundami}}</translation>
+<translation id="6863590663815976734">{HOURS,plural, =1{Še 1 h}one{Še # h}two{Še # h}few{Še # h}other{Še # h}}</translation>
+<translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
+<translation id="6974053822202609517">Od desne proti levi</translation>
+<translation id="7238427729722629793">{MINUTES,plural, =1{Še 1 min}one{Še # min}two{Še # min}few{Še # min}other{Še # min}}</translation>
+<translation id="7365057348334984696">{MINUTES,plural, =1{Pred 1 min}one{Pred # min}two{Pred # min}few{Pred # min}other{Pred # min}}</translation>
+<translation id="7410957453383678442">{MINUTES,plural, =1{Še 1 min}one{Še # min}two{Še # min}few{Še # min}other{Še # min}}</translation>
+<translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
+<translation id="8106081041558092062">{HOURS,plural, =1{Pred 1 h}one{Pred # h}two{Pred # urama}few{Pred # urami}other{Pred # urami}}</translation>
+<translation id="8131263257437993507">{SECONDS,plural, =1{Še 1 s}one{Še # s}two{Še # s}few{Še # s}other{Še # s}}</translation>
+<translation id="8677655579646609597"><ph name="QUANTITY" /> KB/s</translation>
+<translation id="8798099450830957504">Privzeto</translation>
+<translation id="8901569739625249689"><ph name="QUANTITY" /> KB</translation>
+<translation id="9044832324875206639">{SECONDS,plural, =1{1 s}one{# s}two{# s}few{# s}other{# s}}</translation>
+</translationbundle>

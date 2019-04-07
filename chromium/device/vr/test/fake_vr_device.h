@@ -17,11 +17,11 @@ namespace device {
 class DEVICE_VR_EXPORT FakeVRDevice : public VRDeviceBase,
                                       public mojom::XRSessionController {
  public:
-  FakeVRDevice(unsigned int id);
+  explicit FakeVRDevice(mojom::XRDeviceId id);
   ~FakeVRDevice() override;
 
   void RequestSession(
-      mojom::XRDeviceRuntimeSessionOptionsPtr options,
+      mojom::XRRuntimeSessionOptionsPtr options,
       mojom::XRRuntime::RequestSessionCallback callback) override;
   void SetPose(mojom::VRPosePtr pose) { pose_ = std::move(pose); }
 
@@ -35,7 +35,7 @@ class DEVICE_VR_EXPORT FakeVRDevice : public VRDeviceBase,
   void OnPresentingControllerMojoConnectionError();
 
   void OnMagicWindowFrameDataRequest(
-      mojom::VRMagicWindowProvider::GetFrameDataCallback callback) override;
+      mojom::XRFrameDataProvider::GetFrameDataCallback callback) override;
 
   mojom::VRDisplayInfoPtr InitBasicDevice();
   mojom::VREyeParametersPtr InitEye(float fov, float offset, uint32_t size);

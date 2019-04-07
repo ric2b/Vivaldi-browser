@@ -1564,7 +1564,7 @@ TEST_F(GLES2ImplementationTest, ShaderSource) {
   expected.cmd_bucket.Init(1, kBucketId);
   expected.clear_bucket_size.Init(kBucketId, 0);
   const char* kStrings[] = {kString1, kString2};
-  gl_->ShaderSource(1, 2, kStrings, NULL);
+  gl_->ShaderSource(1, 2, kStrings, nullptr);
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 
@@ -2679,6 +2679,61 @@ TEST_F(GLES2ImplementationTest, IsVertexArrayOES) {
   EXPECT_TRUE(result);
 }
 
+TEST_F(GLES2ImplementationTest, FramebufferParameteri) {
+  struct Cmds {
+    cmds::FramebufferParameteri cmd;
+  };
+  Cmds expected;
+  expected.cmd.Init(GL_FRAMEBUFFER, 2, 3);
+
+  gl_->FramebufferParameteri(GL_FRAMEBUFFER, 2, 3);
+  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
+}
+
+TEST_F(GLES2ImplementationTest, BindImageTexture) {
+  struct Cmds {
+    cmds::BindImageTexture cmd;
+  };
+  Cmds expected;
+  expected.cmd.Init(1, 2, 3, true, 5, 6, 7);
+
+  gl_->BindImageTexture(1, 2, 3, true, 5, 6, 7);
+  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
+}
+
+TEST_F(GLES2ImplementationTest, DispatchCompute) {
+  struct Cmds {
+    cmds::DispatchCompute cmd;
+  };
+  Cmds expected;
+  expected.cmd.Init(1, 2, 3);
+
+  gl_->DispatchCompute(1, 2, 3);
+  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
+}
+
+TEST_F(GLES2ImplementationTest, MemoryBarrierEXT) {
+  struct Cmds {
+    cmds::MemoryBarrierEXT cmd;
+  };
+  Cmds expected;
+  expected.cmd.Init(1);
+
+  gl_->MemoryBarrierEXT(1);
+  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
+}
+
+TEST_F(GLES2ImplementationTest, MemoryBarrierByRegion) {
+  struct Cmds {
+    cmds::MemoryBarrierByRegion cmd;
+  };
+  Cmds expected;
+  expected.cmd.Init(1);
+
+  gl_->MemoryBarrierByRegion(1);
+  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
+}
+
 TEST_F(GLES2ImplementationTest, FlushMappedBufferRange) {
   struct Cmds {
     cmds::FlushMappedBufferRange cmd;
@@ -3137,6 +3192,17 @@ TEST_F(GLES2ImplementationTest, DestroyGpuFenceCHROMIUM) {
   expected.cmd.Init(1);
 
   gl_->DestroyGpuFenceCHROMIUM(1);
+  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
+}
+
+TEST_F(GLES2ImplementationTest, FramebufferTextureMultiviewLayeredANGLE) {
+  struct Cmds {
+    cmds::FramebufferTextureMultiviewLayeredANGLE cmd;
+  };
+  Cmds expected;
+  expected.cmd.Init(1, 2, 3, 4, 5, 6);
+
+  gl_->FramebufferTextureMultiviewLayeredANGLE(1, 2, 3, 4, 5, 6);
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_IMPLEMENTATION_UNITTEST_AUTOGEN_H_

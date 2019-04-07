@@ -100,6 +100,7 @@ int FileSystemContext::GetPermissionPolicy(FileSystemType type) {
     case kFileSystemTypeCloudDevice:
     case kFileSystemTypeProvided:
     case kFileSystemTypeDeviceMediaAsFileStorage:
+    case kFileSystemTypeDriveFs:
       return FILE_PERMISSION_USE_FILE_PERMISSION;
 
     case kFileSystemTypeRestrictedNativeLocal:
@@ -256,7 +257,7 @@ FileSystemQuotaUtil*
 FileSystemContext::GetQuotaUtil(FileSystemType type) const {
   FileSystemBackend* backend = GetFileSystemBackend(type);
   if (!backend)
-    return NULL;
+    return nullptr;
   return backend->GetQuotaUtil();
 }
 
@@ -264,7 +265,7 @@ AsyncFileUtil* FileSystemContext::GetAsyncFileUtil(
     FileSystemType type) const {
   FileSystemBackend* backend = GetFileSystemBackend(type);
   if (!backend)
-    return NULL;
+    return nullptr;
   return backend->GetAsyncFileUtil(type);
 }
 
@@ -275,7 +276,7 @@ FileSystemContext::GetCopyOrMoveFileValidatorFactory(
   *error_code = base::File::FILE_OK;
   FileSystemBackend* backend = GetFileSystemBackend(type);
   if (!backend)
-    return NULL;
+    return nullptr;
   return backend->GetCopyOrMoveFileValidatorFactory(
       type, error_code);
 }
@@ -286,14 +287,14 @@ FileSystemBackend* FileSystemContext::GetFileSystemBackend(
   if (found != backend_map_.end())
     return found->second;
   NOTREACHED() << "Unknown filesystem type: " << type;
-  return NULL;
+  return nullptr;
 }
 
 WatcherManager* FileSystemContext::GetWatcherManager(
     FileSystemType type) const {
   FileSystemBackend* backend = GetFileSystemBackend(type);
   if (!backend)
-    return NULL;
+    return nullptr;
   return backend->GetWatcherManager(type);
 }
 
@@ -524,14 +525,14 @@ FileSystemOperation* FileSystemContext::CreateFileSystemOperation(
   if (!url.is_valid()) {
     if (error_code)
       *error_code = base::File::FILE_ERROR_INVALID_URL;
-    return NULL;
+    return nullptr;
   }
 
   FileSystemBackend* backend = GetFileSystemBackend(url.type());
   if (!backend) {
     if (error_code)
       *error_code = base::File::FILE_ERROR_FAILED;
-    return NULL;
+    return nullptr;
   }
 
   base::File::Error fs_error = base::File::FILE_OK;

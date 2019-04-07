@@ -13,7 +13,6 @@
 <translation id="2350172092385603347">Yerelleştirme kullanıldı, ancak bildiride default_locale belirtilmedi.</translation>
 <translation id="2576842806987913196">Bu adla bir CRX dosyası zaten var.</translation>
 <translation id="2753617847762399167">Geçersiz yol (mutlak veya '..' ile göreli): '<ph name="IMAGE_PATH" />'</translation>
-<translation id="27822970480436970">Bu uzantı, değişikliğin başka bir uzantıyla çakışması nedeniyle bir ağ isteğini değiştiremedi.</translation>
 <translation id="2785530881066938471">İçerik komut dosyası için '<ph name="RELATIVE_PATH" />' dosyası yüklenemedi. Dosya UTF-8 olarak kodlanmamış.</translation>
 <translation id="2903070246402204397"><ph name="EXTENSION_NAME" /> (uzantı kimliği "<ph name="EXTENSION_ID" />") yönetici tarafından engelleniyor. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">Paket yüklenemedi: '<ph name="ERROR_CODE" />'</translation>
@@ -57,19 +56,16 @@
 <translation id="7003844668372540529"><ph name="VENDOR_NAME" /> tarafından sağlanan <ph name="PRODUCT_ID" /> ürün kimliğine sahip bilinmeyen ürün</translation>
 <translation id="7068383018033524534">Manifest dosyası geçersiz</translation>
 <translation id="7217838517480956708">Bu makinenin yöneticisi <ph name="EXTENSION_NAME" /> yüklenmesini gerektiriyor. Kaldırılamaz veya değiştirilemez.</translation>
+<translation id="7612608473764576263">Özel anahtarın giriş değeri geçerli bir biçimde (PKCS#8 biçimli PEM kodlamalı RSA anahtarı) olmalıdır.</translation>
 <translation id="7939686037314084444">Uzantı doğru şekilde yüklenemedi. Ağ isteklerine müdahale edemeyebilir.</translation>
 <translation id="7972881773422714442">Seçenekler: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Ön kamera</translation>
 <translation id="8047248493720652249">Başka bir uzantı (<ph name="EXTENSION_NAME" />) farklı bir dosya adı ("<ph name="ACTUAL_FILENAME" />") belirlediğinden, uzantı indirilen dosyayı "<ph name="ATTEMPTED_FILENAME" />" olarak adlandıramadı.</translation>
 <translation id="8284835137979141223"><ph name="VENDOR_NAME" /> adlı firmadan <ph name="PRODUCT_NAME" /></translation>
-<translation id="8341840687457896278">Başka bir uzantı (<ph name="EXTENSION_NAME" />) farklı kimlik bilgileri sağladığından, bu uzantı bir ağ isteğine kimlik bilgileri sağlayamadı.</translation>
 <translation id="8517576857589387417">Manifest dosyası eksik veya okunamıyor</translation>
 <translation id="8636666366616799973">Paket geçersiz. Ayrıntılar: '<ph name="ERROR_MESSAGE" />'</translation>
-<translation id="8670869118777164560">Bu uzantı bir ağ isteğini <ph name="ATTEMPTED_REDIRECT_DESTINATION" /> hedefine yönlendiremedi, çünkü başka bir uzantı (<ph name="EXTENSION_NAME" />) o isteği <ph name="ACTUAL_REDIRECT_DESTINATION" /> hedefine yönlendirmişti.</translation>
 <translation id="8761756413268424715">"<ph name="APP_NAME" />" uygulaması cihazlarınızdan birine erişim izni istiyor:</translation>
-<translation id="8825366169884721447">Bu uzantı bir ağ isteğinin "<ph name="HEADER_NAME" />" adlı istek başlığını değiştiremedi, çünkü söz konusu değişiklik başka bir uzantı (<ph name="EXTENSION_NAME" />) ile çakışıyordu.</translation>
 <translation id="8885905466771744233">Belirtilen uzantıya ilişkin özel anahtar zaten var. Var olan anahtarı yeniden kullanın veya öncelikle bu anahtarı silin.</translation>
 <translation id="907841381057066561">Paketleme sırasında geçici zip dosyası oluşturulamadı.</translation>
-<translation id="9111791539553342076">Bu uzantı bir ağ isteğinin "<ph name="HEADER_NAME" />" adlı yanıt başlığını değiştiremedi, çünkü söz konusu değişiklik başka bir uzantı (<ph name="EXTENSION_NAME" />) ile çakışıyordu.</translation>
 <translation id="941543339607623937">Geçersiz özel anahtar.</translation>
 </translationbundle>

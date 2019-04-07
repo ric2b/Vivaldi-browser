@@ -88,7 +88,6 @@ Polymer({
     /** @type {settings.SyncStatus} */
     syncStatus: {
       type: Object,
-      observer: 'onSyncStatusChanged_',
     },
 
     /**
@@ -127,6 +126,14 @@ Polymer({
     existingPassphrase_: {
       type: String,
       value: '',
+    },
+
+    /** @private */
+    signedIn_: {
+      type: Boolean,
+      value: true,
+      computed: 'computeSignedIn_(syncStatus.signedIn)',
+      observer: 'onSignedInChanged_',
     },
 
     /** @private */
@@ -229,12 +236,20 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  computeSyncSectionDisabled_() {
+  computeSignedIn_: function() {
+    return !!this.syncStatus.signedIn;
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeSyncSectionDisabled_: function() {
     return !!this.unifiedConsentEnabled &&
         (!this.syncStatus.signedIn || !!this.syncStatus.disabled ||
          (!!this.syncStatus.hasError &&
-          this.syncStatus.statusAction ===
-              settings.StatusAction.REAUTHENTICATE));
+          this.syncStatus.statusAction !==
+              settings.StatusAction.ENTER_PASSPHRASE));
   },
 
   /** @protected */
@@ -291,7 +306,10 @@ Polymer({
    * @private
    */
   onUnifiedConsentToggleChange_: function() {
-    if(!this.$$('#unifiedConsentToggle').checked){
+    const checked = this.$$('#unifiedConsentToggle').checked;
+    this.browserProxy_.unifiedConsentToggleChanged(checked);
+
+    if (!checked) {
       this.syncSectionOpened_ = true;
       this.personalizeSectionOpened_ = true;
     }
@@ -592,9 +610,12 @@ Polymer({
     settings.navigateTo(settings.routes.BASIC);
   },
 
-  /** @private */
-  onSyncStatusChanged_: function() {
-    this.syncSectionOpened_ = !!this.syncStatus.signedIn;
+  /**
+   * Collapses/Expands the sync section if the signedIn state has changed.
+   * @private
+   */
+  onSignedInChanged_: function() {
+    this.syncSectionOpened_ = !!this.signedIn_;
   },
 
   /**
@@ -639,13 +660,23 @@ Polymer({
     return this.unifiedConsentEnabled ? 'list-item' : 'settings-box';
   },
 
+  /**
+   * When there is a sync passphrase, some items have an additional line for the
+   * passphrase reset hint, making them three lines rather than two.
+   * @return {string}
+   * @private
+   */
+  getPassphraseHintLines_: function() {
+    return this.syncPrefs.encryptAllData ? 'three-line' : 'two-line';
+  },
+
   // <if expr="not chromeos">
   /**
    * @return {boolean}
    * @private
    */
   shouldShowSyncAccountControl_: function() {
-    return !!this.diceEnabled && !!this.unifiedConsentEnabled &&
+    return !!this.unifiedConsentEnabled &&
         !!this.syncStatus.syncSystemEnabled && !!this.syncStatus.signinAllowed;
   },
   // </if>

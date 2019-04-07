@@ -10,48 +10,48 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "services/ui/common/task_runner_test_base.h"
-#include "services/ui/public/interfaces/user_activity_monitor.mojom.h"
+#include "services/ws/common/task_runner_test_base.h"
+#include "services/ws/public/mojom/user_activity_monitor.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/user_activity/user_activity_detector.h"
 
 namespace {
 
-// Fake implementation of ui::mojom::UserActivityMonitor for testing that just
+// Fake implementation of ws::mojom::UserActivityMonitor for testing that just
 // supports tracking and notifying observers.
-class FakeUserActivityMonitor : public ui::mojom::UserActivityMonitor {
+class FakeUserActivityMonitor : public ws::mojom::UserActivityMonitor {
  public:
   FakeUserActivityMonitor() : binding_(this) {}
   ~FakeUserActivityMonitor() override {}
 
-  ui::mojom::UserActivityMonitorPtr GetPtr() {
-    ui::mojom::UserActivityMonitorPtr ptr;
+  ws::mojom::UserActivityMonitorPtr GetPtr() {
+    ws::mojom::UserActivityMonitorPtr ptr;
     binding_.Bind(mojo::MakeRequest(&ptr));
     return ptr;
   }
 
   // Notifies all observers about user activity.
-  // ui::TaskRunnerTestBase::RunUntilIdle() must be called after this method in
+  // ws::TaskRunnerTestBase::RunUntilIdle() must be called after this method in
   // order for observers to receive notifications.
   void NotifyUserActivityObservers() {
     for (auto& observer : activity_observers_)
       observer->OnUserActivity();
   }
 
-  // ui::mojom::UserActivityMonitor:
+  // ws::mojom::UserActivityMonitor:
   void AddUserActivityObserver(
       uint32_t delay_between_notify_secs,
-      ui::mojom::UserActivityObserverPtr observer) override {
+      ws::mojom::UserActivityObserverPtr observer) override {
     activity_observers_.push_back(std::move(observer));
   }
   void AddUserIdleObserver(uint32_t idleness_in_minutes,
-                           ui::mojom::UserIdleObserverPtr observer) override {
+                           ws::mojom::UserIdleObserverPtr observer) override {
     NOTREACHED() << "Unexpected AddUserIdleObserver call";
   }
 
  private:
-  mojo::Binding<ui::mojom::UserActivityMonitor> binding_;
-  std::vector<ui::mojom::UserActivityObserverPtr> activity_observers_;
+  mojo::Binding<ws::mojom::UserActivityMonitor> binding_;
+  std::vector<ws::mojom::UserActivityObserverPtr> activity_observers_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeUserActivityMonitor);
 };
@@ -60,7 +60,7 @@ class FakeUserActivityMonitor : public ui::mojom::UserActivityMonitor {
 
 namespace aura {
 
-using UserActivityForwarderTest = ui::TaskRunnerTestBase;
+using UserActivityForwarderTest = ws::TaskRunnerTestBase;
 
 TEST_F(UserActivityForwarderTest, ForwardActivityToDetector) {
   FakeUserActivityMonitor monitor;

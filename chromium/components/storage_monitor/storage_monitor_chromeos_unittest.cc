@@ -17,6 +17,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_task_environment.h"
+#include "chromeos/disks/disk.h"
 #include "chromeos/disks/mock_disk_mount_manager.h"
 #include "components/storage_monitor/mock_removable_storage_observer.h"
 #include "components/storage_monitor/removable_device_constants.h"
@@ -30,6 +31,7 @@ namespace storage_monitor {
 
 namespace {
 
+using chromeos::disks::Disk;
 using chromeos::disks::DiskMountManager;
 using testing::_;
 
@@ -84,9 +86,8 @@ class TestStorageMonitorCros : public StorageMonitorCros {
     StorageMonitorCros::OnMountEvent(event, error_code, mount_info);
   }
 
-  void OnBootDeviceDiskEvent(
-      DiskMountManager::DiskEvent event,
-      const chromeos::disks::DiskMountManager::Disk& disk) override {
+  void OnBootDeviceDiskEvent(DiskMountManager::DiskEvent event,
+                             const chromeos::disks::Disk& disk) override {
     StorageMonitorCros::OnBootDeviceDiskEvent(event, disk);
   }
 
@@ -506,12 +507,6 @@ TEST_F(StorageMonitorCrosTest, GetStorageSize) {
             observer().last_detached().device_id());
 }
 
-void UnmountFake(const std::string& location,
-                 chromeos::UnmountOptions options,
-                 const DiskMountManager::UnmountPathCallback& cb) {
-  cb.Run(chromeos::MOUNT_ERROR_NONE);
-}
-
 TEST_F(StorageMonitorCrosTest, EjectTest) {
   base::FilePath mount_path1 = CreateMountPoint(kMountPointA, true);
   ASSERT_FALSE(mount_path1.empty());
@@ -531,8 +526,13 @@ TEST_F(StorageMonitorCrosTest, EjectTest) {
   EXPECT_EQ(1, observer().attach_calls());
   EXPECT_EQ(0, observer().detach_calls());
 
+  // testing::Invoke doesn't handle move-only types, so use a lambda instead.
   ON_CALL(*disk_mount_manager_mock_, UnmountPath(_, _, _))
-      .WillByDefault(testing::Invoke(&UnmountFake));
+      .WillByDefault([](const std::string& location,
+                        chromeos::UnmountOptions options,
+                        DiskMountManager::UnmountPathCallback cb) {
+        std::move(cb).Run(chromeos::MOUNT_ERROR_NONE);
+      });
   EXPECT_CALL(*disk_mount_manager_mock_,
               UnmountPath(observer().last_attached().location(), _, _));
   monitor_->EjectDevice(observer().last_attached().device_id(),
@@ -549,24 +549,28 @@ TEST_F(StorageMonitorCrosTest, FixedStroageTest) {
 
   // Fixed storage (stateful partition) added.
   const std::string label = "fixed1";
-  const chromeos::disks::DiskMountManager::Disk disk(
-      "", mount_point, false, "", "", label, "", "", "", "", "", uuid, "",
-      chromeos::DEVICE_TYPE_UNKNOWN, 0, false, false, false, false, false,
-      false, "", "");
+
+  std::unique_ptr<const Disk> disk = Disk::Builder()
+                                         .SetMountPath(mount_point)
+                                         .SetDeviceLabel(label)
+                                         .SetFileSystemUUID(uuid)
+                                         .Build();
   monitor_->OnBootDeviceDiskEvent(DiskMountManager::DiskEvent::DISK_ADDED,
-                                  disk);
+                                  *disk);
   std::vector<StorageInfo> disks = monitor_->GetAllAvailableStorages();
   ASSERT_EQ(1U, disks.size());
   EXPECT_EQ(mount_point, disks[0].location());
   EXPECT_EQ(base::ASCIIToUTF16(label), disks[0].storage_label());
 
   // Fixed storage (not stateful partition) added - ignore.
-  const chromeos::disks::DiskMountManager::Disk ignored_disk(
-      "", "usr/share/OEM", false, "", "", "fixed2", "", "", "", "", "",
-      "fixed2-uuid", "", chromeos::DEVICE_TYPE_UNKNOWN, 0, false, false, false,
-      false, false, false, "", "");
+  std::unique_ptr<const Disk> ignored_disk =
+      Disk::Builder()
+          .SetMountPath("usr/share/OEM")
+          .SetDeviceLabel("fixed2")
+          .SetFileSystemUUID("fixed2-uuid")
+          .Build();
   monitor_->OnBootDeviceDiskEvent(DiskMountManager::DiskEvent::DISK_ADDED,
-                                  ignored_disk);
+                                  *ignored_disk);
   disks = monitor_->GetAllAvailableStorages();
   ASSERT_EQ(1U, disks.size());
   EXPECT_EQ(mount_point, disks[0].location());
@@ -574,7 +578,7 @@ TEST_F(StorageMonitorCrosTest, FixedStroageTest) {
 
   // Fixed storage (stateful partition) removed.
   monitor_->OnBootDeviceDiskEvent(DiskMountManager::DiskEvent::DISK_REMOVED,
-                                  disk);
+                                  *disk);
   disks = monitor_->GetAllAvailableStorages();
   EXPECT_EQ(0U, disks.size());
 }

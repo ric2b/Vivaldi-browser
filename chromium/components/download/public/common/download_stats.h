@@ -27,7 +27,6 @@ namespace base {
 class FilePath;
 class Time;
 class TimeDelta;
-class TimeTicks;
 }  // namespace base
 
 namespace download {
@@ -151,6 +150,36 @@ enum DownloadDiscardReason {
   DOWNLOAD_DISCARD_DUE_TO_SHUTDOWN
 };
 
+// Enum for in-progress download DB, used in histogram
+// "Download.InProgressDB.Counts".
+enum InProgressDBCountTypes {
+  // Count of initialization attempts.
+  kInitializationCount = 0,
+
+  // Count of initialization attempts that succeeded.
+  kInitializationSucceededCount = 1,
+
+  // Count of initialization attempts that failed.
+  kInitializationFailedCount = 2,
+
+  // Count of load attempts that succeeded.
+  kLoadSucceededCount = 3,
+
+  // Count of load attempts that failed.
+  kLoadFailedCount = 4,
+
+  // Count of in-progress cache migration attempts.
+  kCacheMigrationCount = 5,
+
+  // Count of in-progress cache migration attempts that succeeded.
+  kCacheMigrationSucceededCount = 6,
+
+  // Count of in-progress cache migration attempts that failed.
+  kCacheMigrationFailedCount = 7,
+
+  kMaxValue = kCacheMigrationFailedCount
+};
+
 // When parallel download is enabled, the download may fall back to a normal
 // download for various reasons. This enum counts the number of parallel
 // download and fallbacks. Also records the reasons why the download falls back
@@ -200,7 +229,6 @@ COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadCountWithSource(
 
 // Record COMPLETED_COUNT and how long the download took.
 COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadCompleted(
-    const base::TimeTicks& start,
     int64_t download_len,
     bool is_parallelizable,
     DownloadSource download_source);
@@ -251,43 +279,16 @@ COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadMimeTypeForNormalProfile(
 COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadContentDisposition(
     const std::string& content_disposition);
 
-// Record the number of buffers piled up by the IO thread
-// before the file thread gets to draining them.
-COMPONENTS_DOWNLOAD_EXPORT void RecordFileThreadReceiveBuffers(
-    size_t num_buffers);
-
-// Record the time of both the first open and all subsequent opens since the
-// download completed.
-COMPONENTS_DOWNLOAD_EXPORT void RecordOpen(const base::Time& end, bool first);
-
-// Record whether or not the server accepts ranges, and the download size. Also
-// counts if a strong validator is supplied. The combination of range request
-// support and ETag indicates downloads that are candidates for partial
-// resumption.
-COMPONENTS_DOWNLOAD_EXPORT void RecordAcceptsRanges(
-    const std::string& accepts_ranges,
-    int64_t download_len,
-    bool has_strong_validator);
+// Record the time of all opens since the download completed.
+COMPONENTS_DOWNLOAD_EXPORT void RecordOpen(const base::Time& end);
 
 // Record the number of completed unopened downloads when a download is opened.
 COMPONENTS_DOWNLOAD_EXPORT void RecordOpensOutstanding(int size);
-
-// Record how long we block the file thread at a time.
-COMPONENTS_DOWNLOAD_EXPORT void RecordContiguousWriteTime(
-    base::TimeDelta time_blocked);
-
-// Record the percentage of time we had to block the network (i.e.
-// how often, for each download, something other than the network
-// was the bottleneck).
-COMPONENTS_DOWNLOAD_EXPORT void RecordNetworkBlockage(
-    base::TimeDelta resource_handler_lifetime,
-    base::TimeDelta resource_handler_blocked_time);
 
 // Record overall bandwidth stats at the file end.
 // Does not count in any hash computation or file open/close time.
 COMPONENTS_DOWNLOAD_EXPORT void RecordFileBandwidth(
     size_t length,
-    base::TimeDelta disk_write_time,
     base::TimeDelta elapsed_time);
 
 // Records the size of the download from content-length header.
@@ -366,12 +367,33 @@ enum OriginStateOnResumption {
   ORIGIN_STATE_ON_RESUMPTION_MAX = 1 << 3
 };
 
-// Record the state of the origin information across a download resumption
-// request. |state| is a combination of values from OriginStateOnResumption
-// enum.
-COMPONENTS_DOWNLOAD_EXPORT void RecordOriginStateOnResumption(
-    bool is_partial,
-    OriginStateOnResumption state);
+// Enumeration for histogramming purposes.
+// These values are written to logs.  New enum values can be added, but existing
+// enums must never be renumbered or deleted and reused.
+enum DownloadConnectionSecurity {
+  DOWNLOAD_SECURE = 0,  // Final download url and its redirects all use https
+  DOWNLOAD_TARGET_INSECURE =
+      1,  // Final download url uses http, redirects are all
+          // https
+  DOWNLOAD_REDIRECT_INSECURE =
+      2,  // Final download url uses https, but at least
+          // one redirect uses http
+  DOWNLOAD_REDIRECT_TARGET_INSECURE =
+      3,                      // Final download url uses http, and at
+                              // least one redirect uses http
+  DOWNLOAD_TARGET_OTHER = 4,  // Final download url uses a scheme not present in
+                              // this enumeration
+  DOWNLOAD_TARGET_BLOB = 5,   // Final download url uses blob scheme
+  DOWNLOAD_TARGET_DATA = 6,   //  Final download url uses data scheme
+  DOWNLOAD_TARGET_FILE = 7,   //  Final download url uses file scheme
+  DOWNLOAD_TARGET_FILESYSTEM = 8,  //  Final download url uses filesystem scheme
+  DOWNLOAD_TARGET_FTP = 9,         // Final download url uses ftp scheme
+  DOWNLOAD_CONNECTION_SECURITY_MAX
+};
+
+COMPONENTS_DOWNLOAD_EXPORT DownloadConnectionSecurity
+CheckDownloadConnectionSecurity(const GURL& download_url,
+                                const std::vector<GURL>& url_chain);
 
 COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadConnectionSecurity(
     const GURL& download_url,
@@ -389,6 +411,9 @@ COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadSourcePageTransitionType(
 
 COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadHttpResponseCode(
     int response_code);
+
+COMPONENTS_DOWNLOAD_EXPORT void RecordInProgressDBCount(
+    InProgressDBCountTypes type);
 
 }  // namespace download
 

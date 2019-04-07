@@ -30,7 +30,9 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
+
 #include "extensions/helper/vivaldi_app_helper.h"
+#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 
 using base::UserMetricsAction;
 using content::BrowserPluginGuestDelegate;
@@ -229,8 +231,8 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     content::MediaResponseCallback callback) {
   // Vivaldi
   // If this is a TabCast request.
-  if (request.video_type == content::MEDIA_TAB_VIDEO_CAPTURE ||
-      request.audio_type == content::MEDIA_TAB_AUDIO_CAPTURE) {
+  if (request.video_type == content::MEDIA_GUM_TAB_VIDEO_CAPTURE ||
+      request.audio_type == content::MEDIA_GUM_TAB_AUDIO_CAPTURE) {
     // Only allow the stable Google cast component extension...
     std::string extension_id = request.security_origin.host();
     if (extension_id == extension_misc::kMediaRouterStableExtensionId) {
@@ -242,20 +244,29 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
           tab_capture_registry->VerifyRequest(request.render_process_id,
                                               request.render_frame_id,
                                               extension_id)) {
-        if (request.audio_type == content::MEDIA_TAB_AUDIO_CAPTURE) {
-          devices.push_back(content::MediaStreamDevice(
-              content::MEDIA_TAB_AUDIO_CAPTURE, std::string(), std::string()));
+        if (request.audio_type == content::MEDIA_GUM_TAB_AUDIO_CAPTURE) {
+          devices.push_back(
+              content::MediaStreamDevice(content::MEDIA_GUM_TAB_AUDIO_CAPTURE,
+                                         std::string(), std::string()));
         }
-        if (request.video_type == content::MEDIA_TAB_VIDEO_CAPTURE) {
-          devices.push_back(content::MediaStreamDevice(
-              content::MEDIA_TAB_VIDEO_CAPTURE, std::string(), std::string()));
+        if (request.video_type == content::MEDIA_GUM_TAB_VIDEO_CAPTURE) {
+          devices.push_back(
+              content::MediaStreamDevice(content::MEDIA_GUM_TAB_VIDEO_CAPTURE,
+                                         std::string(), std::string()));
         }
       }
+      content::MediaStreamRequestResult result =
+          content::MEDIA_DEVICE_INVALID_STATE;
 
-      std::move(callback).Run(devices,
-                   devices.empty() ? content::MEDIA_DEVICE_INVALID_STATE
-                                   : content::MEDIA_DEVICE_OK,
-                   std::unique_ptr<content::MediaStreamUI>(nullptr));
+      std::unique_ptr<content::MediaStreamUI> ui;
+      if (!devices.empty()) {
+        result = content::MEDIA_DEVICE_OK;
+        ui = MediaCaptureDevicesDispatcher::GetInstance()
+          ->GetMediaStreamCaptureIndicator()
+          ->RegisterMediaStream(source, devices);
+      }
+
+      std::move(callback).Run(devices, result, std::move(ui));
       return;
     }
   }

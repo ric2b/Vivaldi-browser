@@ -97,6 +97,21 @@ class ExtensionActionViewController
   // ExtensionHostObserver:
   void OnExtensionHostDestroyed(const extensions::ExtensionHost* host) override;
 
+  // The status of the extension's interaction for the page. This is independent
+  // of the action's clickability.
+  enum class PageInteractionStatus {
+    // The extension cannot run on the page.
+    kNone,
+    // The extension tried to access the page, but is pending user approval.
+    kPending,
+    // The extension has permission to run on the page.
+    kActive,
+  };
+
+  // Returns the PageInteractionStatus for the current page.
+  PageInteractionStatus GetPageInteractionStatus(
+      content::WebContents* web_contents) const;
+
   // Checks if the associated |extension| is still valid by checking its
   // status in the registry. Since the OnExtensionUnloaded() notifications are
   // not in a deterministic order, it's possible that the view tries to refresh

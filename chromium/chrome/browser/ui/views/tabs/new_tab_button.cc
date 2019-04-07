@@ -9,8 +9,8 @@
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/feature_promos/new_tab_promo_bubble_view.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/tabs/browser_tab_strip_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/grit/theme_resources.h"
@@ -109,7 +109,7 @@ NewTabButton::NewTabButton(TabStrip* tab_strip, views::ButtonListener* listener)
     set_ink_drop_visible_opacity(0.08f);
 
     SetFocusPainter(nullptr);
-    focus_ring_ = views::FocusRing::Install(this);
+    SetInstallFocusRingOnFocus(true);
   }
 
   // In newer material UI, the button is placed vertically exactly in the
@@ -346,7 +346,7 @@ void NewTabButton::Layout() {
 
     SkPath path;
     path.addOval(gfx::RectToSkRect(contents_bounds));
-    focus_ring_->SetPath(path);
+    focus_ring()->SetPath(path);
   }
 }
 
@@ -382,7 +382,7 @@ bool NewTabButton::GetHitTestMask(gfx::Path* mask) const {
   const float scale = GetWidget()->GetCompositor()->device_scale_factor();
   // TODO(pkasting): Fitts' Law horizontally when appropriate.
   GetBorderPath(contents_origin.y() * scale, scale,
-                tab_strip_->SizeTabButtonToTopOfTabStrip(), &border);
+                tab_strip_->controller()->IsFrameCondensed(), &border);
   border.offset(contents_origin.x(), 0);
   mask->addPath(border, SkMatrix::MakeScale(1 / scale));
   return true;

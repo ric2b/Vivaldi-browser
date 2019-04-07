@@ -189,6 +189,47 @@ const HeapVector<Member<Element>> HTMLSlotElement::AssignedElementsForBinding(
   return elements;
 }
 
+bool HTMLSlotElement::IsAssignedNodeSameWithBefore(
+    HeapVector<Member<Node>>& new_assigned_nodes,
+    HeapHashSet<Member<Node>>& old_assigned_nodes) {
+  if (new_assigned_nodes.size() != old_assigned_nodes.size())
+    return false;
+  for (auto node : old_assigned_nodes) {
+    if (!new_assigned_nodes.Contains(*node))
+      return false;
+  }
+  return true;
+}
+
+void HTMLSlotElement::assign(HeapVector<Member<Node>> nodes) {
+  if (ContainingShadowRoot()) {
+    SlotChangeType slot_change_type =
+        IsAssignedNodeSameWithBefore(nodes, assigned_nodes_candidates_)
+            ? SlotChangeType::kSuppressSlotChangeEvent
+            : SlotChangeType::kSignalSlotChangeEvent;
+    DidSlotChange(slot_change_type);
+  }
+  assigned_nodes_candidates_.clear();
+  for (Member<Node> child : nodes) {
+    assigned_nodes_candidates_.insert(child);
+  }
+  if (ContainingShadowRoot()) {
+    ContainingShadowRoot()->GetSlotAssignment().CallSlotChangeIfNeeded(*this);
+    // TODO(crbug.com/869308): Don't call SetNeedsAssignmentRecalc if we can
+    // detect all possible slotchange surely
+    ContainingShadowRoot()->GetSlotAssignment().SetNeedsAssignmentRecalc();
+  }
+}
+
+bool HTMLSlotElement::ContainsInAssignedNodesCandidates(
+    Node& host_child) const {
+  return assigned_nodes_candidates_.Contains(&host_child);
+}
+
+void HTMLSlotElement::SignalSlotChange() {
+  DidSlotChange(SlotChangeType::kSignalSlotChangeEvent);
+}
+
 const HeapVector<Member<Node>>& HTMLSlotElement::GetDistributedNodes() {
   DCHECK(!RuntimeEnabledFeatures::IncrementalShadowDOMEnabled());
   DCHECK(!NeedsDistributionRecalc());
@@ -231,7 +272,6 @@ void HTMLSlotElement::AppendDistributedNodesFrom(const HTMLSlotElement& other) {
   for (const auto& node : other.distributed_nodes_)
     distributed_indices_.Set(node.Get(), index++);
 }
-
 void HTMLSlotElement::ClearAssignedNodes() {
   DCHECK(RuntimeEnabledFeatures::IncrementalShadowDOMEnabled());
   assigned_nodes_.clear();
@@ -278,7 +318,7 @@ void HTMLSlotElement::DispatchSlotChangeEvent() {
   DCHECK(!IsInUserAgentShadowRoot());
   Event* event = Event::CreateBubble(EventTypeNames::slotchange);
   event->SetTarget(this);
-  DispatchScopedEvent(event);
+  DispatchScopedEvent(*event);
 }
 
 Node* HTMLSlotElement::AssignedNodeNextTo(const Node& node) const {
@@ -357,17 +397,12 @@ void HTMLSlotElement::AttachLayoutTree(AttachContext& context) {
 // of IncementalShadowDOM.
 const HeapVector<Member<Node>>&
 HTMLSlotElement::ChildrenInFlatTreeIfAssignmentIsSupported() {
-  if (RuntimeEnabledFeatures::SlotInFlatTreeEnabled())
-    return AssignedNodes();
-  DCHECK(!NeedsDistributionRecalc());
-  return distributed_nodes_;
+  return AssignedNodes();
 }
 
 void HTMLSlotElement::DetachLayoutTree(const AttachContext& context) {
   if (SupportsAssignment()) {
-    const HeapVector<Member<Node>>& flat_tree_children =
-        RuntimeEnabledFeatures::SlotInFlatTreeEnabled() ? assigned_nodes_
-                                                        : distributed_nodes_;
+    const HeapVector<Member<Node>>& flat_tree_children = assigned_nodes_;
     for (auto& node : flat_tree_children)
       node->LazyReattachIfAttached();
   }
@@ -404,17 +439,17 @@ void HTMLSlotElement::AttributeChanged(
 }
 
 Node::InsertionNotificationRequest HTMLSlotElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   HTMLElement::InsertedInto(insertion_point);
   if (SupportsAssignment()) {
     ShadowRoot* root = ContainingShadowRoot();
     DCHECK(root);
     DCHECK(root->IsV1());
-    if (root == insertion_point->ContainingShadowRoot()) {
+    if (root == insertion_point.ContainingShadowRoot()) {
       // This slot is inserted into the same tree of |insertion_point|
       root->DidAddSlot(*this);
     } else if (RuntimeEnabledFeatures::IncrementalShadowDOMEnabled() &&
-               insertion_point->isConnected() &&
+               insertion_point.isConnected() &&
                root->NeedsSlotAssignmentRecalc()) {
       // Even when a slot and its containing shadow root is removed together
       // and inserted together again, the slot's cached assigned nodes can be
@@ -429,7 +464,7 @@ Node::InsertionNotificationRequest HTMLSlotElement::InsertedInto(
   return kInsertionDone;
 }
 
-void HTMLSlotElement::RemovedFrom(ContainerNode* insertion_point) {
+void HTMLSlotElement::RemovedFrom(ContainerNode& insertion_point) {
   // `removedFrom` is called after the node is removed from the tree.
   // That means:
   // 1. If this slot is still in a tree scope, it means the slot has been in a
@@ -472,11 +507,11 @@ void HTMLSlotElement::RemovedFrom(ContainerNode* insertion_point) {
     } else {
       ClearDistribution();
     }
-  } else if (insertion_point->IsInV1ShadowTree()) {
+  } else if (insertion_point.IsInV1ShadowTree()) {
     // This slot was in a shadow tree and got disconnected from the shadow tree.
     // In the above example, (this slot == s1), (insertion point == d)
     // and (insertion_point->ContainingShadowRoot == sr1).
-    insertion_point->ContainingShadowRoot()->GetSlotAssignment().DidRemoveSlot(
+    insertion_point.ContainingShadowRoot()->GetSlotAssignment().DidRemoveSlot(
         *this);
     if (RuntimeEnabledFeatures::IncrementalShadowDOMEnabled()) {
       ClearAssignedNodesAndFlatTreeChildren();
@@ -490,28 +525,13 @@ void HTMLSlotElement::RemovedFrom(ContainerNode* insertion_point) {
   HTMLElement::RemovedFrom(insertion_point);
 }
 
-void HTMLSlotElement::WillRecalcStyle(StyleRecalcChange change) {
-  if (RuntimeEnabledFeatures::SlotInFlatTreeEnabled())
-    return;
-  if (change < kIndependentInherit &&
-      GetStyleChangeType() < kSubtreeStyleChange) {
-    return;
-  }
-  for (auto& node : distributed_nodes_) {
-    node->SetNeedsStyleRecalc(
-        kLocalStyleChange,
-        StyleChangeReasonForTracing::Create(
-            StyleChangeReason::kPropagateInheritChangeToDistributedNodes));
-  }
-}
 
 void HTMLSlotElement::DidRecalcStyle(StyleRecalcChange change) {
-  if (!RuntimeEnabledFeatures::SlotInFlatTreeEnabled())
-    return;
   if (change < kIndependentInherit)
     return;
   for (auto& node : assigned_nodes_) {
     if (change == kReattach && node->IsElementNode()) {
+      DCHECK(node->ShouldCallRecalcStyle(kReattach));
       ToElement(node)->RecalcStyle(kReattach);
       continue;
     }
@@ -713,6 +733,7 @@ void HTMLSlotElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(distributed_nodes_);
   visitor->Trace(old_distributed_nodes_);
   visitor->Trace(distributed_indices_);
+  visitor->Trace(assigned_nodes_candidates_);
   HTMLElement::Trace(visitor);
 }
 

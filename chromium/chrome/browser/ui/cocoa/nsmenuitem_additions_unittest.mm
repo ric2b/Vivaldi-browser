@@ -267,12 +267,30 @@ TEST(NSMenuItemAdditionsTest, TestFiresForKeyEvent) {
   ExpectKeyDoesntFireItem(key, MenuItem(@"z", 0x100000));
   ExpectKeyFiresItem(key, MenuItem(@";", 0x100000));
 
+  // Change to Dvorak-QWERTY
+  SetIsInputSourceDvorakQwertyForTesting(true);
+
   // cmd-z on dvorak qwerty layout (so that the key produces ';', but 'z' if
   // cmd is down)
-  SetIsInputSourceDvorakQwertyForTesting(true);
   key = KeyEvent(0x100108, @"z", @";", 6);
   ExpectKeyFiresItem(key, MenuItem(@"z", 0x100000), false);
   ExpectKeyDoesntFireItem(key, MenuItem(@";", 0x100000), false);
+
+  // On dvorak-qwerty, pressing the keys for 'cmd' and '=' triggers an event
+  // whose characters are cmd-'+'.
+  // cmd-'+' on dvorak qwerty should not trigger a menu item for cmd-']', and
+  // not a menu item for cmd-'+'.
+  key = KeyEvent(0x100108, @"+", @"+", 30);
+  ExpectKeyFiresItem(key, MenuItem(@"]", 0x100000), false);
+  ExpectKeyDoesntFireItem(key, MenuItem(@"+", 0x100000), false);
+
+  // cmd-shift-'+' on dvorak qwerty should trigger a menu item for cmd-shift-'}'
+  // and not a menu item for cmd-shift-'+'.
+  key = KeyEvent(0x12010a, @"}", @"+", 30);
+  ExpectKeyFiresItem(key, MenuItem(@"}", 0x100000), false);
+  ExpectKeyDoesntFireItem(key, MenuItem(@"+", 0x100000), false);
+
+  // Change away from Dvorak-QWERTY
   SetIsInputSourceDvorakQwertyForTesting(false);
 
   // cmd-shift-z on dvorak layout (so that we get a ':')
@@ -298,6 +316,21 @@ TEST(NSMenuItemAdditionsTest, TestFiresForKeyEvent) {
   key = KeyEvent(0x60103, @"\x19", @"\x19", 1);
   ExpectKeyFiresItem(key, MenuItem(@"\x9", NSShiftKeyMask | NSControlKeyMask),
                      false);
+
+  // In 2-set Korean layout, (cmd + shift + t) and (cmd + t) both produce
+  // multi-byte unmodified chars. For keyEquivalent purposes, we use their
+  // raw characters, where "shift" should be handled correctly.
+  key = KeyEvent(0x100108, @"t", @"\u3145", 17);
+  ExpectKeyFiresItem(key, MenuItem(@"t", NSCommandKeyMask),
+                     /*compareCocoa=*/false);
+  ExpectKeyDoesntFireItem(key, MenuItem(@"T", NSCommandKeyMask),
+                          /*compareCocoa=*/false);
+
+  key = KeyEvent(0x12010a, @"t", @"\u3146", 17);
+  ExpectKeyDoesntFireItem(key, MenuItem(@"t", NSCommandKeyMask),
+                          /*compareCocoa=*/false);
+  ExpectKeyFiresItem(key, MenuItem(@"T", NSCommandKeyMask),
+                     /*compareCocoa=*/false);
 }
 
 NSString* keyCodeToCharacter(NSUInteger keyCode,

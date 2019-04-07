@@ -49,7 +49,9 @@ class ArcInputMethodManagerService
 
   // ArcInputMethodManagerBridge::Delegate overrides:
   void OnActiveImeChanged(const std::string& ime_id) override;
+  void OnImeDisabled(const std::string& ime_id) override;
   void OnImeInfoChanged(std::vector<mojom::ImeInfoPtr> ime_info_array) override;
+  void OnConnectionClosed() override;
 
   // chromeos::input_method::InputMethodManager::ImeMenuObserver overrides:
   void ImeMenuListChanged() override;
@@ -65,6 +67,9 @@ class ArcInputMethodManagerService
                           bool show_message) override;
 
  private:
+  class ArcProxyInputMethodObserver;
+  class TabletModeObserver;
+
   void EnableIme(const std::string& ime_id, bool enable);
   void SwitchImeTo(const std::string& ime_id);
   chromeos::input_method::InputMethodDescriptor BuildInputMethodDescriptor(
@@ -76,6 +81,12 @@ class ArcInputMethodManagerService
   void RemoveArcIMEFromPrefs();
   void RemoveArcIMEFromPref(const char* pref_name);
 
+  // Calls InputMethodManager.SetAllowedInputMethods according to the argument.
+  void SetArcIMEAllowed(bool allowed);
+
+  // Notifies InputMethodManager's observers of possible ARC IME state changes.
+  void NotifyInputMethodManagerObservers(bool is_tablet_mode);
+
   Profile* const profile_;
 
   std::unique_ptr<ArcInputMethodManagerBridge> imm_bridge_;
@@ -86,6 +97,8 @@ class ArcInputMethodManagerService
   // proxy IME.
   const std::string proxy_ime_extension_id_;
   std::unique_ptr<chromeos::InputMethodEngine> proxy_ime_engine_;
+
+  std::unique_ptr<TabletModeObserver> tablet_mode_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcInputMethodManagerService);
 };

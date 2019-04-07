@@ -8,6 +8,7 @@ import static org.chromium.chrome.browser.vr.XrTestFramework.PAGE_LOAD_TIMEOUT_S
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_LONG_MS;
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_SHORT_MS;
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_DEVICE_DAYDREAM;
+import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_SVR;
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM;
 
 import android.support.test.filters.MediumTest;
@@ -20,7 +21,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.vr.rules.ChromeTabbedActivityVrTestRule;
 import org.chromium.chrome.browser.vr.util.VrBrowserTransitionUtils;
@@ -36,9 +36,7 @@ import java.util.concurrent.TimeoutException;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "enable-webvr"})
-@Restriction(RESTRICTION_TYPE_DEVICE_DAYDREAM)
-@RetryOnFailure(message = "These tests have a habit of hitting a race condition, preventing "
-                + "VR entry. See crbug.com/762724")
+@Restriction({RESTRICTION_TYPE_DEVICE_DAYDREAM, RESTRICTION_TYPE_SVR})
 public class VrFeedbackInfoBarTest {
     // We explicitly instantiate a rule here instead of using parameterization since this class
     // only ever runs in ChromeTabbedActivity.
@@ -61,11 +59,13 @@ public class VrFeedbackInfoBarTest {
         mWebXrVrTestFramework = new WebXrVrTestFramework(mTestRule);
         mWebVrTestFramework = new WebVrTestFramework(mTestRule);
         mVrBrowserTestFramework = new VrBrowserTestFramework(mTestRule);
-        Assert.assertFalse(VrFeedbackStatus.getFeedbackOptOut());
+        Assert.assertFalse(
+                "Test started opting out of feedback", VrFeedbackStatus.getFeedbackOptOut());
     }
 
     private void assertState(boolean isInVr, boolean isInfobarVisible) {
-        Assert.assertEquals("Browser is in VR", isInVr, VrShellDelegate.isInVr());
+        Assert.assertEquals(
+                "Browser VR state did not match expectation", isInVr, VrShellDelegate.isInVr());
         VrInfoBarUtils.expectInfoBarPresent(mTestRule, isInfobarVisible);
     }
 
@@ -100,6 +100,7 @@ public class VrFeedbackInfoBarTest {
         enterThenExitVr();
         assertState(false /* isInVr */, true /* isInfobarVisible  */);
         VrInfoBarUtils.clickInfobarCloseButton(mTestRule);
+        mVrBrowserTestFramework.assertNoJavaScriptErrors();
     }
 
     /**
@@ -121,11 +122,12 @@ public class VrFeedbackInfoBarTest {
 
         // Opt-out of seeing the infobar.
         VrInfoBarUtils.clickInfoBarButton(VrInfoBarUtils.Button.SECONDARY, mTestRule);
-        Assert.assertTrue(VrFeedbackStatus.getFeedbackOptOut());
+        Assert.assertTrue("Did not opt out of VR feedback", VrFeedbackStatus.getFeedbackOptOut());
 
         // The infobar should not show because the user opted out.
         enterThenExitVr();
         assertState(false /* isInVr */, false /* isInfobarVisible  */);
+        mVrBrowserTestFramework.assertNoJavaScriptErrors();
     }
 
     /**
@@ -156,11 +158,13 @@ public class VrFeedbackInfoBarTest {
         framework.loadUrlAndAwaitInitialization(url, PAGE_LOAD_TIMEOUT_S);
         framework.enterSessionWithUserGestureOrFail();
         assertState(true /* isInVr */, false /* isInfobarVisible  */);
-        Assert.assertTrue(TestVrShellDelegate.getVrShellForTesting().getWebVrModeEnabled());
+        Assert.assertTrue("Did not enter WebVR presentation",
+                TestVrShellDelegate.getVrShellForTesting().getWebVrModeEnabled());
 
         // Exiting VR should not prompt for feedback since the no VR browsing was performed.
         VrBrowserTransitionUtils.forceExitVr();
         assertState(false /* isInVr */, false /* isInfobarVisible  */);
+        framework.assertNoJavaScriptErrors();
     }
 
     /**
@@ -195,21 +199,18 @@ public class VrFeedbackInfoBarTest {
         framework.loadUrlAndAwaitInitialization(url, PAGE_LOAD_TIMEOUT_S);
         framework.enterSessionWithUserGestureOrFail();
         assertState(true /* isInVr */, false /* isInfobarVisible  */);
-        Assert.assertTrue(TestVrShellDelegate.getVrShellForTesting().getWebVrModeEnabled());
+        Assert.assertTrue("Did not enter WebVR presentation",
+                TestVrShellDelegate.getVrShellForTesting().getWebVrModeEnabled());
 
         // Exit presentation mode by navigating to a different url.
-        ChromeTabUtils.waitForTabPageLoaded(
-                mTestRule.getActivity().getActivityTab(), new Runnable() {
-                    @Override
-                    public void run() {
-                        mVrBrowserTestFramework.runJavaScriptOrFail(
-                                "window.location.href = '" + TEST_PAGE_2D_URL + "';",
-                                POLL_TIMEOUT_SHORT_MS);
-                    }
-                }, POLL_TIMEOUT_LONG_MS);
+        ChromeTabUtils.waitForTabPageLoaded(mTestRule.getActivity().getActivityTab(), () -> {
+            mVrBrowserTestFramework.runJavaScriptOrFail(
+                    "window.location.href = '" + TEST_PAGE_2D_URL + "';", POLL_TIMEOUT_SHORT_MS);
+        }, POLL_TIMEOUT_LONG_MS);
 
         // Exiting VR should prompt for feedback since 2D browsing was performed after.
         VrBrowserTransitionUtils.forceExitVr();
         assertState(false /* isInVr */, true /* isInfobarVisible  */);
+        framework.assertNoJavaScriptErrors();
     }
 }

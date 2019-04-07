@@ -33,7 +33,9 @@ class ASH_EXPORT FrameCaptionButton : public views::Button {
 
   static const char kViewClassName[];
 
-  FrameCaptionButton(views::ButtonListener* listener, CaptionButtonIcon icon);
+  FrameCaptionButton(views::ButtonListener* listener,
+                     CaptionButtonIcon icon,
+                     int hit_test_type);
   ~FrameCaptionButton() override;
 
   // Gets the color to use for a frame caption button while a theme color is
@@ -78,6 +80,8 @@ class ASH_EXPORT FrameCaptionButton : public views::Button {
   bool paint_as_active() { return paint_as_active_; }
 
   CaptionButtonIcon icon() const { return icon_; }
+
+  const gfx::ImageSkia& icon_image() { return icon_image_; }
 
   const gfx::VectorIcon* icon_definition_for_test() const {
     return icon_definition_;

@@ -6,7 +6,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/extensions/api/networking_private/networking_private_credentials_getter.h"
 #include "chrome/services/wifi_util_win/public/mojom/wifi_credentials_getter.mojom.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -29,7 +29,7 @@ class NetworkingPrivateCredentialsGetterTest : public InProcessBrowserTest {
 
     done_called_ = false;
     base::PostTaskWithTraits(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
         base::Bind(&NetworkingPrivateCredentialsGetterTest::GetCredentials,
                    base::Unretained(this)));
     run_loop.Run();

@@ -54,7 +54,7 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/translate/translate_bubble_view_state_transition.h"
-#include "chrome/browser/upgrade_detector.h"
+#include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/content_restriction.h"
@@ -64,7 +64,7 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/feature_engagement/buildflags.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/live_tab_context.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -101,7 +101,7 @@
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/ui/extensions/settings_api_bubble_helpers.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/common/extensions/extension_metrics.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "extensions/browser/extension_registry.h"
@@ -216,12 +216,12 @@ bool GetBookmarkOverrideCommand(Profile* profile,
 #endif
 
 // Based on |disposition|, creates a new tab as necessary, and returns the
-// appropriate tab to navigate.  If that tab is the current tab, reverts the
+// appropriate tab to navigate.  If that tab is the |current_tab|, reverts the
 // location bar contents, since all browser-UI-triggered navigations should
-// revert any omnibox edits in the current tab.
-WebContents* GetTabAndRevertIfNecessary(Browser* browser,
-                                        WindowOpenDisposition disposition) {
-  WebContents* current_tab = browser->tab_strip_model()->GetActiveWebContents();
+// revert any omnibox edits in the |current_tab|.
+WebContents* GetTabAndRevertIfNecessaryHelper(Browser* browser,
+                                              WindowOpenDisposition disposition,
+                                              WebContents* current_tab) {
   switch (disposition) {
     case WindowOpenDisposition::NEW_FOREGROUND_TAB:
     case WindowOpenDisposition::NEW_BACKGROUND_TAB: {
@@ -254,27 +254,48 @@ WebContents* GetTabAndRevertIfNecessary(Browser* browser,
   }
 }
 
+// Like the above, but auto-computes the current tab
+WebContents* GetTabAndRevertIfNecessary(Browser* browser,
+                                        WindowOpenDisposition disposition) {
+  WebContents* activate_tab =
+      browser->tab_strip_model()->GetActiveWebContents();
+  return GetTabAndRevertIfNecessaryHelper(browser, disposition, activate_tab);
+}
+
 void ReloadInternal(Browser* browser,
                     WindowOpenDisposition disposition,
                     bool bypass_cache) {
-  // As this is caused by a user action, give the focus to the page.
-  //
-  // Also notify RenderViewHostDelegate of the user gesture; this is
-  // normally done in Browser::Navigate, but a reload bypasses Navigate.
-  WebContents* new_tab = GetTabAndRevertIfNecessary(browser, disposition);
-  new_tab->NavigatedByUser();
-  if (!new_tab->FocusLocationBarByDefault())
-    new_tab->Focus();
+  const WebContents* active_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  const auto& selected_indices =
+      browser->tab_strip_model()->selection_model().selected_indices();
+  for (int index : selected_indices) {
+    WebContents* selected_tab =
+        browser->tab_strip_model()->GetWebContentsAt(index);
+    WebContents* new_tab =
+        GetTabAndRevertIfNecessaryHelper(browser, disposition, selected_tab);
 
-  DevToolsWindow* devtools =
-      DevToolsWindow::GetInstanceForInspectedWebContents(new_tab);
-  if (devtools && devtools->ReloadInspectedWebContents(bypass_cache))
-    return;
+    // Notify RenderViewHostDelegate of the user gesture; this is
+    // normally done in Browser::Navigate, but a reload bypasses Navigate.
+    new_tab->NavigatedByUser();
 
-  new_tab->GetController().Reload(bypass_cache
-                                      ? content::ReloadType::BYPASSING_CACHE
-                                      : content::ReloadType::NORMAL,
-                                  true);
+    // If the selected_tab is the activated page, give the focus to it, as this
+    // is caused by a user action
+    if (selected_tab == active_contents &&
+        !new_tab->FocusLocationBarByDefault()) {
+      new_tab->Focus();
+    }
+
+    DevToolsWindow* devtools =
+        DevToolsWindow::GetInstanceForInspectedWebContents(new_tab);
+    constexpr content::ReloadType kBypassingType =
+        content::ReloadType::BYPASSING_CACHE;
+    constexpr content::ReloadType kNormalType = content::ReloadType::NORMAL;
+    if (!devtools || !devtools->ReloadInspectedWebContents(bypass_cache)) {
+      new_tab->GetController().Reload(
+          bypass_cache ? kBypassingType : kNormalType, true);
+    }
+  }
 }
 
 bool IsShowingWebContentsModalDialog(Browser* browser) {
@@ -503,7 +524,7 @@ void Home(Browser* browser, WindowOpenDisposition disposition) {
     const extensions::Extension* extension =
         extensions::ExtensionRegistry::Get(browser->profile())
             ->GetExtensionById(
-                web_app::GetExtensionIdFromApplicationName(browser->app_name()),
+                web_app::GetAppIdFromApplicationName(browser->app_name()),
                 extensions::ExtensionRegistry::EVERYTHING);
     if (!extension)
       return;
@@ -1226,21 +1247,23 @@ void CopyURL(Browser* browser) {
                                       .spec()));
 }
 
-void OpenInChrome(Browser* browser) {
+Browser* OpenInChrome(Browser* hosted_app_browser) {
+  DCHECK(hosted_app_browser->hosted_app_controller());
   // Find a non-incognito browser.
   Browser* target_browser =
-      chrome::FindTabbedBrowser(browser->profile(), false);
+      chrome::FindTabbedBrowser(hosted_app_browser->profile(), false);
 
   if (!target_browser) {
     target_browser =
-        new Browser(Browser::CreateParams(browser->profile(), true));
+        new Browser(Browser::CreateParams(hosted_app_browser->profile(), true));
   }
 
-  TabStripModel* source_tabstrip = browser->tab_strip_model();
+  TabStripModel* source_tabstrip = hosted_app_browser->tab_strip_model();
   target_browser->tab_strip_model()->AppendWebContents(
       source_tabstrip->DetachWebContentsAt(source_tabstrip->active_index()),
       true);
   target_browser->window()->Show();
+  return target_browser;
 }
 
 bool CanViewSource(const Browser* browser) {
@@ -1258,11 +1281,12 @@ void ToggleConfirmToQuitOption(Browser* browser) {
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-void CreateBookmarkAppFromCurrentWebContents(Browser* browser) {
+void CreateBookmarkAppFromCurrentWebContents(Browser* browser,
+                                             bool force_shortcut_app) {
   base::RecordAction(UserMetricsAction("CreateHostedApp"));
   extensions::TabHelper::FromWebContents(
-      browser->tab_strip_model()->GetActiveWebContents())->
-          CreateHostedAppFromWebContents();
+      browser->tab_strip_model()->GetActiveWebContents())
+      ->CreateHostedAppFromWebContents(force_shortcut_app);
 }
 
 bool CanCreateBookmarkApp(const Browser* browser) {

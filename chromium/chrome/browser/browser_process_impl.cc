@@ -25,8 +25,8 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -117,7 +117,6 @@
 #include "components/web_resource/web_resource_pref_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
-#include "content/public/browser/network_connection_tracker.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/plugin_service.h"
@@ -171,6 +170,7 @@
 #include "chrome/browser/extensions/event_router_forwarder.h"
 #include "chrome/browser/media_galleries/media_file_system_registry.h"
 #include "chrome/browser/ui/apps/chrome_app_window_client.h"
+#include "chrome/common/initialize_extensions_client.h"
 #include "components/storage_monitor/storage_monitor.h"
 #include "extensions/common/extension_l10n_util.h"
 #endif
@@ -218,8 +218,8 @@ rappor::RapporService* GetBrowserRapporService() {
 }
 
 BrowserProcessImpl::BrowserProcessImpl(
-    base::SequencedTaskRunner* local_state_task_runner)
-    : local_state_task_runner_(local_state_task_runner),
+    scoped_refptr<PersistentPrefStore> user_pref_store)
+    : user_pref_store_(std::move(user_pref_store)),
       pref_service_factory_(
           std::make_unique<prefs::InProcessPrefServiceFactory>()) {
   g_browser_process = this;
@@ -263,8 +263,7 @@ void BrowserProcessImpl::Init() {
   extension_event_router_forwarder_ =
       base::MakeRefCounted<extensions::EventRouterForwarder>();
 
-  extensions::ExtensionsClient::Set(
-      extensions::ChromeExtensionsClient::GetInstance());
+  EnsureExtensionsClientInitialized();
 
   extensions_browser_client_ =
       std::make_unique<extensions::ChromeExtensionsBrowserClient>();
@@ -473,15 +472,15 @@ class RundownTaskCounter :
  public:
   RundownTaskCounter();
 
-  // Posts a rundown task to |task_runner|, can be invoked an arbitrary number
-  // of times before calling TimedWait.
-  void Post(base::SequencedTaskRunner* task_runner);
+  // Increments |count_| and returns a closure bound to Decrement(). All
+  // closures returned by this RundownTaskCounter's GetRundownClosure() method
+  // must be invoked for TimedWait() to complete its wait without timing
+  // out.
+  base::OnceClosure GetRundownClosure();
 
-  // Waits until the count is zero or |end_time| is reached.
-  // This can only be called once per instance. Returns true if a count of zero
-  // is reached or false if the |end_time| is reached. It is valid to pass an
-  // |end_time| in the past.
-  bool TimedWaitUntil(const base::TimeTicks& end_time);
+  // Waits until the count is zero or |timeout| expires.
+  // This can only be called once per instance.
+  void TimedWait(base::TimeDelta timeout);
 
  private:
   friend class base::RefCountedThreadSafe<RundownTaskCounter>;
@@ -493,28 +492,22 @@ class RundownTaskCounter :
 
   // The count starts at one to defer the possibility of one->zero transitions
   // until TimedWait is called.
-  base::AtomicRefCount count_;
+  base::AtomicRefCount count_{1};
   base::WaitableEvent waitable_event_;
 
   DISALLOW_COPY_AND_ASSIGN(RundownTaskCounter);
 };
 
-RundownTaskCounter::RundownTaskCounter()
-    : count_(1),
-      waitable_event_(base::WaitableEvent::ResetPolicy::MANUAL,
-                      base::WaitableEvent::InitialState::NOT_SIGNALED) {}
+RundownTaskCounter::RundownTaskCounter() = default;
 
-void RundownTaskCounter::Post(base::SequencedTaskRunner* task_runner) {
+base::OnceClosure RundownTaskCounter::GetRundownClosure() {
   // As the count starts off at one, it should never get to zero unless
   // TimedWait has been called.
   DCHECK(!count_.IsZero());
 
   count_.Increment();
 
-  // The task must be non-nestable to guarantee that it runs after all tasks
-  // currently scheduled on |task_runner| have completed.
-  task_runner->PostNonNestableTask(
-      FROM_HERE, base::BindOnce(&RundownTaskCounter::Decrement, this));
+  return base::BindOnce(&RundownTaskCounter::Decrement, this);
 }
 
 void RundownTaskCounter::Decrement() {
@@ -522,20 +515,42 @@ void RundownTaskCounter::Decrement() {
     waitable_event_.Signal();
 }
 
-bool RundownTaskCounter::TimedWaitUntil(const base::TimeTicks& end_time) {
+void RundownTaskCounter::TimedWait(base::TimeDelta timeout) {
   // Decrement the excess count from the constructor.
   Decrement();
 
-  return waitable_event_.TimedWaitUntil(end_time);
+  // RundownTaskCounter::TimedWait() could return
+  // |waitable_event_.TimedWait()|'s result if any user ever cared about whether
+  // it returned per success or timeout. Currently no user of this API cares and
+  // as such this return value is ignored.
+  waitable_event_.TimedWait(timeout);
 }
+
+#if !defined(OS_ANDROID)
+void RequestProxyResolvingSocketFactoryOnUIThread(
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  network::mojom::NetworkContext* network_context =
+      g_browser_process->system_network_context_manager()->GetContext();
+  network_context->CreateProxyResolvingSocketFactory(std::move(request));
+}
+
+void RequestProxyResolvingSocketFactory(
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&RequestProxyResolvingSocketFactoryOnUIThread,
+                     std::move(request)));
+}
+#endif
 
 }  // namespace
 
 void BrowserProcessImpl::FlushLocalStateAndReply(base::OnceClosure reply) {
-  if (local_state_)
-    local_state_->CommitPendingWrite();
-  local_state_task_runner_->PostTaskAndReply(FROM_HERE, base::DoNothing(),
-                                             std::move(reply));
+  if (local_state_) {
+    local_state_->CommitPendingWrite(std::move(reply));
+    return;
+  }
+  base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE, std::move(reply));
 }
 
 void BrowserProcessImpl::EndSession() {
@@ -548,8 +563,8 @@ void BrowserProcessImpl::EndSession() {
     Profile* profile = profiles[i];
     profile->SetExitType(Profile::EXIT_SESSION_ENDED);
     if (profile->GetPrefs()) {
-      profile->GetPrefs()->CommitPendingWrite();
-      rundown_counter->Post(profile->GetIOTaskRunner().get());
+      profile->GetPrefs()->CommitPendingWrite(
+          base::OnceClosure(), rundown_counter->GetRundownClosure());
     }
   }
 
@@ -561,9 +576,8 @@ void BrowserProcessImpl::EndSession() {
     // MetricsService lazily writes to prefs, force it to write now.
     // On ChromeOS, chrome gets killed when hangs, so no need to
     // commit metrics::prefs::kStabilitySessionEndCompleted change immediately.
-    local_state_->CommitPendingWrite();
-
-    rundown_counter->Post(local_state_task_runner_.get());
+    local_state_->CommitPendingWrite(base::OnceClosure(),
+                                     rundown_counter->GetRundownClosure());
 #endif
   }
 
@@ -590,8 +604,7 @@ void BrowserProcessImpl::EndSession() {
   // GPU process synchronously. Because the system may not be allowing
   // processes to launch, this can result in a hang. See
   // http://crbug.com/318527.
-  const base::TimeTicks end_time = base::TimeTicks::Now() + kEndSessionTimeout;
-  rundown_counter->TimedWaitUntil(end_time);
+  rundown_counter->TimedWait(kEndSessionTimeout);
 #elif !defined(OS_MACOSX)
   NOTIMPLEMENTED();
 #endif
@@ -637,18 +650,6 @@ BrowserProcessImpl::system_network_context_manager() {
 scoped_refptr<network::SharedURLLoaderFactory>
 BrowserProcessImpl::shared_url_loader_factory() {
   return system_network_context_manager()->GetSharedURLLoaderFactory();
-}
-
-content::NetworkConnectionTracker*
-BrowserProcessImpl::network_connection_tracker() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(io_thread_);
-  if (!network_connection_tracker_) {
-    network_connection_tracker_ =
-        std::make_unique<content::NetworkConnectionTracker>(
-            base::BindRepeating(&content::GetNetworkService));
-  }
-  return network_connection_tracker_.get();
 }
 
 network::NetworkQualityTracker* BrowserProcessImpl::network_quality_tracker() {
@@ -1120,8 +1121,8 @@ void BrowserProcessImpl::CreateLocalState() {
   auto delegate = pref_service_factory_->CreateDelegate();
   delegate->InitPrefRegistry(pref_registry.get());
   local_state_ = chrome_prefs::CreateLocalState(
-      local_state_path, local_state_task_runner_.get(), policy_service(),
-      std::move(pref_registry), false, std::move(delegate));
+      local_state_path, policy_service(), std::move(pref_registry), false,
+      std::move(delegate), std::move(user_pref_store_));
   DCHECK(local_state_);
 
   sessions::SessionIdGenerator::GetInstance()->Init(local_state_.get());
@@ -1174,7 +1175,7 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
   // resume its initialization now that the loops are spinning and the
   // system request context is available for the fetchers.
   browser_policy_connector()->Init(
-      local_state(), system_request_context(),
+      local_state(),
       system_network_context_manager()->GetSharedURLLoaderFactory());
 
   if (local_state_->IsManagedPreference(prefs::kDefaultBrowserSettingEnabled))
@@ -1309,7 +1310,7 @@ void BrowserProcessImpl::CreateSubresourceFilterRulesetService() {
   // Runner for tasks that do not influence user experience.
   scoped_refptr<base::SequencedTaskRunner> background_task_runner(
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
 
   base::FilePath user_data_dir;
@@ -1320,7 +1321,7 @@ void BrowserProcessImpl::CreateSubresourceFilterRulesetService() {
   subresource_filter_ruleset_service_ =
       std::make_unique<subresource_filter::ContentRulesetService>(
           blocking_task_runner);
-  subresource_filter_ruleset_service_->set_ruleset_service(
+  subresource_filter_ruleset_service_->SetAndInitializeRulesetService(
       std::make_unique<subresource_filter::RulesetService>(
           local_state(), background_task_runner,
           subresource_filter_ruleset_service_.get(), indexed_ruleset_base_dir));
@@ -1354,12 +1355,12 @@ void BrowserProcessImpl::CreateGCMDriver() {
   CHECK(base::PathService::Get(chrome::DIR_GLOBAL_GCM_STORE, &store_path));
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
 
   gcm_driver_ = gcm::CreateGCMDriverDesktop(
       base::WrapUnique(new gcm::GCMClientFactory), local_state(), store_path,
-      system_request_context(),
+      base::BindRepeating(&RequestProxyResolvingSocketFactory),
       system_network_context_manager()->GetSharedURLLoaderFactory(),
       chrome::GetChannel(), gcm::GetProductCategoryForSubtypes(local_state()),
       content::BrowserThread::GetTaskRunnerForThread(
@@ -1513,7 +1514,7 @@ void BrowserProcessImpl::OnAutoupdateTimer() {
     // suitable thread.
     base::PostTaskWithTraitsAndReplyWithResult(
         FROM_HERE,
-        {base::TaskPriority::BACKGROUND,
+        {base::TaskPriority::BEST_EFFORT,
          base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN, base::MayBlock()},
         base::BindOnce(&upgrade_util::IsUpdatePendingRestart),
         base::BindOnce(&BrowserProcessImpl::OnPendingRestartResult,

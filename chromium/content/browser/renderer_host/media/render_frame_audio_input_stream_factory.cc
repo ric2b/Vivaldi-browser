@@ -90,7 +90,8 @@ void RenderFrameAudioInputStreamFactory::CreateStream(
     int32_t session_id,
     const media::AudioParameters& audio_params,
     bool automatic_gain_control,
-    uint32_t shared_memory_count) {
+    uint32_t shared_memory_count,
+    audio::mojom::AudioProcessingConfigPtr processing_config) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   TRACE_EVENT_INSTANT1("audio",
                        "RenderFrameAudioInputStreamFactory::CreateStream",
@@ -105,7 +106,7 @@ void RenderFrameAudioInputStreamFactory::CreateStream(
                              CreateStreamAfterLookingUpDevice,
                          weak_ptr_factory_.GetWeakPtr(), std::move(client),
                          audio_params, automatic_gain_control,
-                         shared_memory_count)));
+                         shared_memory_count, std::move(processing_config))));
 }
 
 void RenderFrameAudioInputStreamFactory::CreateStreamAfterLookingUpDevice(
@@ -113,6 +114,7 @@ void RenderFrameAudioInputStreamFactory::CreateStreamAfterLookingUpDevice(
     const media::AudioParameters& audio_params,
     bool automatic_gain_control,
     uint32_t shared_memory_count,
+    audio::mojom::AudioProcessingConfigPtr processing_config,
     const MediaStreamDevice& device) {
   TRACE_EVENT1(
       "audio",
@@ -126,9 +128,9 @@ void RenderFrameAudioInputStreamFactory::CreateStreamAfterLookingUpDevice(
 
   WebContentsMediaCaptureId capture_id;
   if (WebContentsMediaCaptureId::Parse(device.id, &capture_id)) {
-    // For MEDIA_DESKTOP_AUDIO_CAPTURE, the source is selected from picker
-    // window, we do not mute the source audio.
-    // For MEDIA_TAB_AUDIO_CAPTURE, the probable use case is Cast, we mute
+    // For MEDIA_GUM_DESKTOP_AUDIO_CAPTURE, the source is selected from
+    // picker window, we do not mute the source audio. For
+    // MEDIA_GUM_TAB_AUDIO_CAPTURE, the probable use case is Cast, we mute
     // the source audio.
     // TODO(qiangchen): Analyze audio constraints to make a duplicating or
     // diverting decision. It would give web developer more flexibility.
@@ -144,16 +146,16 @@ void RenderFrameAudioInputStreamFactory::CreateStreamAfterLookingUpDevice(
         render_frame_host_, source_host, audio_params, shared_memory_count,
         capture_id.disable_local_echo, std::move(client));
 
-    if (device.type == MEDIA_DESKTOP_AUDIO_CAPTURE)
+    if (device.type == MEDIA_GUM_DESKTOP_AUDIO_CAPTURE)
       IncrementDesktopCaptureCounter(SYSTEM_LOOPBACK_AUDIO_CAPTURER_CREATED);
   } else {
     factory->CreateInputStream(render_frame_host_, device.id, audio_params,
                                shared_memory_count, automatic_gain_control,
-                               std::move(client));
+                               std::move(processing_config), std::move(client));
 
     // Only count for captures from desktop media picker dialog and system loop
     // back audio.
-    if (device.type == MEDIA_DESKTOP_AUDIO_CAPTURE &&
+    if (device.type == MEDIA_GUM_DESKTOP_AUDIO_CAPTURE &&
         (media::AudioDeviceDescription::IsLoopbackDevice(device.id))) {
       IncrementDesktopCaptureCounter(SYSTEM_LOOPBACK_AUDIO_CAPTURER_CREATED);
     }

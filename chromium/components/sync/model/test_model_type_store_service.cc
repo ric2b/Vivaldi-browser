@@ -4,7 +4,7 @@
 
 #include "components/sync/model/test_model_type_store_service.h"
 
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/sync/model/model_type_store_test_util.h"
 #include "components/sync/model_impl/blocking_model_type_store_impl.h"
 #include "components/sync/model_impl/model_type_store_backend.h"
@@ -12,7 +12,7 @@
 namespace syncer {
 
 TestModelTypeStoreService::TestModelTypeStoreService()
-    : store_backend_(ModelTypeStoreBackend::GetOrCreateInMemoryForTest()) {
+    : store_backend_(ModelTypeStoreBackend::CreateInMemoryForTest()) {
   DCHECK(sync_data_path_.CreateUniqueTempDir());
 }
 
@@ -28,13 +28,14 @@ RepeatingModelTypeStoreFactory TestModelTypeStoreService::GetStoreFactory() {
 
 scoped_refptr<base::SequencedTaskRunner>
 TestModelTypeStoreService::GetBackendTaskRunner() {
-  return base::ThreadTaskRunnerHandle::Get();
+  return base::SequencedTaskRunnerHandle::Get();
 }
 
 std::unique_ptr<BlockingModelTypeStore>
 TestModelTypeStoreService::CreateBlockingStoreFromBackendSequence(
     ModelType type) {
-  return std::make_unique<BlockingModelTypeStoreImpl>(type, store_backend_);
+  return std::make_unique<BlockingModelTypeStoreImpl>(type,
+                                                      store_backend_.get());
 }
 
 }  // namespace syncer

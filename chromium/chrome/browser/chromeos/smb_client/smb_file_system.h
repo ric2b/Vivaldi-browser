@@ -39,10 +39,10 @@ namespace smb_client {
 
 class RequestManager;
 
-// Smb provided file system implementation. For communication with Smb
+// SMB provided file system implementation. For communication with SMB
 // filesystems.
-// Smb is an application level protocol used by Windows and Samba fileservers.
-// Allows Files App to mount smb filesystems.
+// SMB is an application level protocol used by Windows and Samba fileservers.
+// Allows Files App to mount SMB filesystems.
 class SmbFileSystem : public file_system_provider::ProvidedFileSystemInterface,
                       public base::SupportsWeakPtr<SmbFileSystem> {
  public:
@@ -174,11 +174,14 @@ class SmbFileSystem : public file_system_provider::ProvidedFileSystemInterface,
  private:
   void Abort(OperationId operation_id);
 
-  // Initializes temp_file_manager_.
-  void InitTempFileManager();
+  // Calls CreateTempFileManager() and executes |task|.
+  void CreateTempFileManagerAndExecuteTask(SmbTask task);
 
-  // Calls InitTempFileManager() and executes |task|.
-  void InitTempFileManagerAndExecuteTask(SmbTask task);
+  // Initializes |temp_file_manager_| with |temp_file_manager| and executes
+  // |task|.
+  void InitTempFileManagerAndExecuteTask(
+      SmbTask task,
+      std::unique_ptr<TempFileManager> temp_file_manager);
 
   // Calls WriteFile in SmbProviderClient.
   file_system_provider::AbortCallback CallWriteFile(
@@ -214,6 +217,10 @@ class SmbFileSystem : public file_system_provider::ProvidedFileSystemInterface,
       const base::ElapsedTimer& metrics_timer,
       smbprovider::ErrorType error,
       const smbprovider::DirectoryEntryListProto& entries) const;
+
+  file_system_provider::AbortCallback HandleSyncRedundantGetMetadata(
+      ProvidedFileSystemInterface::MetadataFieldMask fields,
+      ProvidedFileSystemInterface::GetMetadataCallback callback);
 
   void HandleRequestGetMetadataEntryCallback(
       ProvidedFileSystemInterface::MetadataFieldMask fields,

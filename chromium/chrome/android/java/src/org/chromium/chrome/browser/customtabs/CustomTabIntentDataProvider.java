@@ -18,19 +18,25 @@ import android.os.Bundle;
 import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
 import android.support.customtabs.CustomTabsIntent;
+import android.support.customtabs.CustomTabsSessionToken;
+import android.support.customtabs.TrustedWebUtils;
 import android.text.TextUtils;
 import android.util.Pair;
 import android.view.View;
 import android.widget.RemoteViews;
 
+import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.browserservices.BrowserSessionDataProvider;
+import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.IntentUtils;
@@ -131,8 +137,10 @@ public class CustomTabIntentDataProvider extends BrowserSessionDataProvider {
     private final int mInitialBackgroundColor;
     private final boolean mDisableStar;
     private final boolean mDisableDownload;
+    private final boolean mIsTrustedWebActivity;
     @Nullable
     private final ComponentName mModuleComponentName;
+    private final boolean mIsIncognito;
 
     private int mToolbarColor;
     private int mBottomBarColor;
@@ -150,9 +158,7 @@ public class CustomTabIntentDataProvider extends BrowserSessionDataProvider {
     private PendingIntent.OnFinished mOnFinished;
 
     /** Whether this CustomTabActivity was explicitly started by another Chrome Activity. */
-    private boolean mIsOpenedByChrome;
-
-    private boolean mIsIncognito;
+    private final boolean mIsOpenedByChrome;
 
     /**
      * Add extras to customize menu items for opening payment request UI custom tab from Chrome.
@@ -178,6 +184,15 @@ public class CustomTabIntentDataProvider extends BrowserSessionDataProvider {
     public CustomTabIntentDataProvider(Intent intent, Context context) {
         super(intent);
         if (intent == null) assert false;
+
+        mIsOpenedByChrome = IntentUtils.safeGetBooleanExtra(
+                intent, EXTRA_IS_OPENED_BY_CHROME, false);
+
+        final int requestedUiType =
+                IntentUtils.safeGetIntExtra(intent, EXTRA_UI_TYPE, CustomTabsUiType.DEFAULT);
+        mUiType = verifiedUiType(requestedUiType);
+
+        mIsIncognito = isIncognitoForPaymentsFlow(intent) || isValidExternalIncognitoIntent(intent);
 
         retrieveCustomButtons(intent, context);
         retrieveToolbarColor(intent, context);
@@ -215,19 +230,13 @@ public class CustomTabIntentDataProvider extends BrowserSessionDataProvider {
             }
         }
 
-        mIsOpenedByChrome =
-                IntentUtils.safeGetBooleanExtra(intent, EXTRA_IS_OPENED_BY_CHROME, false);
-        mIsIncognito = IntentUtils.safeGetBooleanExtra(
-                intent, IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, false);
-
-        final int requestedUiType =
-                IntentUtils.safeGetIntExtra(intent, EXTRA_UI_TYPE, CustomTabsUiType.DEFAULT);
-        mUiType = verifiedUiType(requestedUiType);
-
+        mIsTrustedWebActivity = IntentUtils.safeGetBooleanExtra(
+                intent, TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, false);
         mTitleVisibilityState = IntentUtils.safeGetIntExtra(
                 intent, CustomTabsIntent.EXTRA_TITLE_VISIBILITY_STATE, CustomTabsIntent.NO_TITLE);
-        mShowShareItem = IntentUtils.safeGetBooleanExtra(
-                intent, CustomTabsIntent.EXTRA_DEFAULT_SHARE_MENU_ITEM, false);
+        mShowShareItem = IntentUtils.safeGetBooleanExtra(intent,
+                CustomTabsIntent.EXTRA_DEFAULT_SHARE_MENU_ITEM,
+                mIsOpenedByChrome && mUiType == CustomTabsUiType.DEFAULT);
         mRemoteViews =
                 IntentUtils.safeGetParcelableExtra(intent, CustomTabsIntent.EXTRA_REMOTEVIEWS);
         mClickableViewIds = IntentUtils.safeGetIntArrayExtra(
@@ -252,6 +261,39 @@ public class CustomTabIntentDataProvider extends BrowserSessionDataProvider {
         } else {
             mModuleComponentName = null;
         }
+    }
+
+    private boolean isIncognitoForPaymentsFlow(Intent intent) {
+        return incognitoRequested(intent) && isTrustedIntent() && isOpenedByChrome()
+                && isForPaymentRequest();
+    }
+
+    public static boolean isValidExternalIncognitoIntent(Intent intent) {
+        if (!CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_INCOGNITO_CUSTOM_TABS)) {
+            return false;
+        }
+
+        if (!incognitoRequested(intent)) {
+            return false;
+        }
+
+        return isVerifiedFirstPartyIntent(intent)
+                || CommandLine.getInstance().hasSwitch(
+                           ChromeSwitches.ALLOW_INCOGNITO_CUSTOM_TABS_FROM_THIRD_PARTY);
+    }
+
+    private static boolean incognitoRequested(Intent intent) {
+        return IntentUtils.safeGetBooleanExtra(
+                intent, IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, false);
+    }
+
+    private static boolean isVerifiedFirstPartyIntent(Intent intent) {
+        CustomTabsSessionToken sessionToken =
+                CustomTabsSessionToken.getSessionTokenFromIntent(intent);
+        String packageNameFromSession =
+                CustomTabsConnection.getInstance().getClientPackageNameForSession(sessionToken);
+        return !TextUtils.isEmpty(packageNameFromSession)
+                && ExternalAuthUtils.getInstance().isGoogleSigned(packageNameFromSession);
     }
 
     /**
@@ -302,8 +344,12 @@ public class CustomTabIntentDataProvider extends BrowserSessionDataProvider {
      * Processes the color passed from the client app and updates {@link #mToolbarColor}.
      */
     private void retrieveToolbarColor(Intent intent, Context context) {
-        int defaultColor = ColorUtils.getDefaultThemeColor(
-                context.getResources(), FeatureUtilities.isChromeModernDesignEnabled(), false);
+        int defaultColor = ColorUtils.getDefaultThemeColor(context.getResources(),
+                FeatureUtilities.isChromeModernDesignEnabled(), isIncognito());
+        if (isIncognito()) {
+            mToolbarColor = defaultColor;
+            return; // Don't allow toolbar color customization for incognito tabs.
+        }
         int color = IntentUtils.safeGetIntExtra(
                 intent, CustomTabsIntent.EXTRA_TOOLBAR_COLOR, defaultColor);
         mToolbarColor = removeTransparencyFromColor(color);
@@ -313,6 +359,10 @@ public class CustomTabIntentDataProvider extends BrowserSessionDataProvider {
      * Must be called after calling {@link #retrieveToolbarColor(Intent, Context)}.
      */
     private void retrieveBottomBarColor(Intent intent) {
+        if (isIncognito()) {
+            mBottomBarColor = mToolbarColor;
+            return;
+        }
         int defaultColor = mToolbarColor;
         int color = IntentUtils.safeGetIntExtra(
                 intent, CustomTabsIntent.EXTRA_SECONDARY_TOOLBAR_COLOR, defaultColor);
@@ -611,8 +661,22 @@ public class CustomTabIntentDataProvider extends BrowserSessionDataProvider {
      * @return Whether the custom Tab should be opened in incognito mode.
      */
     boolean isIncognito() {
-        // Only open custom tab in incognito mode for payment request.
-        return isTrustedIntent() && mIsOpenedByChrome && isForPaymentRequest() && mIsIncognito;
+        return mIsIncognito;
+    }
+
+    /**
+     * @return Whether the Custom Tab should attempt to display a Trusted Web Activity.
+     * Will return false if native is not initialized.
+     *
+     * Trusted Web Activities require CustomTabsClient#warmup to have been called, meaning that
+     * native will have been initialized when the client is trying to use a TWA.
+     */
+    boolean isTrustedWebActivity() {
+        if (!ChromeFeatureList.isInitialized()) return false;
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.TRUSTED_WEB_ACTIVITY)) return false;
+        if (ChromeVersionInfo.isBetaBuild() || ChromeVersionInfo.isStableBuild()) return false;
+
+        return mIsTrustedWebActivity;
     }
 
     /**

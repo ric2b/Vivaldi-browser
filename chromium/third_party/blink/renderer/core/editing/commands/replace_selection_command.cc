@@ -212,7 +212,7 @@ ReplacementFragment::ReplacementFragment(Document* document,
       String original_text = fragment_->textContent();
       BeforeTextInsertedEvent* event =
           BeforeTextInsertedEvent::Create(original_text);
-      editable_root->DispatchEvent(event);
+      editable_root->DispatchEvent(*event);
       if (original_text != event->GetText()) {
         fragment_ = CreateFragmentFromText(
             selection.ToNormalizedEphemeralRange(), event->GetText());
@@ -244,7 +244,7 @@ ReplacementFragment::ReplacementFragment(Document* document,
 
   // Give the root a chance to change the text.
   BeforeTextInsertedEvent* evt = BeforeTextInsertedEvent::Create(text);
-  editable_root->DispatchEvent(evt);
+  editable_root->DispatchEvent(*evt);
   if (text != evt->GetText() || !HasRichlyEditableStyle(*editable_root)) {
     RestoreAndRemoveTestRenderingNodesToFragment(holder);
 
@@ -1788,7 +1788,13 @@ void ReplaceSelectionCommand::CompleteHTMLReplacement(
 
     if (match_style_) {
       DCHECK(insertion_style_);
+      // Since |ApplyStyle()| changes contents of anchor node of |start| and
+      // |end|, we should relocate them.
+      Range* const range = Range::Create(GetDocument(), start, end);
       ApplyStyle(insertion_style_.Get(), start, end, editing_state);
+      start = range->StartPosition();
+      end = range->EndPosition();
+      range->Dispose();
       if (editing_state->IsAborted())
         return;
     }

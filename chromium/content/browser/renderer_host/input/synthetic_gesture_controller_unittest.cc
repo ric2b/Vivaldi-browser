@@ -68,6 +68,7 @@ WebTouchPoint::State ToWebTouchPointState(
       return WebTouchPoint::kStateReleased;
     case SyntheticPointerActionParams::PointerActionType::IDLE:
       return WebTouchPoint::kStateStationary;
+    case SyntheticPointerActionParams::PointerActionType::LEAVE:
     case SyntheticPointerActionParams::PointerActionType::NOT_INITIALIZED:
       NOTREACHED()
           << "Invalid SyntheticPointerActionParams::PointerActionType.";
@@ -86,6 +87,8 @@ WebInputEvent::Type ToWebMouseEventType(
       return WebInputEvent::kMouseMove;
     case SyntheticPointerActionParams::PointerActionType::RELEASE:
       return WebInputEvent::kMouseUp;
+    case SyntheticPointerActionParams::PointerActionType::LEAVE:
+      return WebInputEvent::kMouseLeave;
     case SyntheticPointerActionParams::PointerActionType::IDLE:
     case SyntheticPointerActionParams::PointerActionType::NOT_INITIALIZED:
       NOTREACHED()
@@ -188,7 +191,10 @@ class MockSyntheticGestureTarget : public SyntheticGestureTarget {
 
 class MockMoveGestureTarget : public MockSyntheticGestureTarget {
  public:
-  MockMoveGestureTarget() : total_abs_move_distance_length_(0) {}
+  MockMoveGestureTarget()
+      : total_abs_move_distance_length_(0),
+        precise_scrolling_deltas_(false),
+        scroll_by_page_(false) {}
   ~MockMoveGestureTarget() override {}
 
   gfx::Vector2dF start_to_end_distance() const {
@@ -197,10 +203,14 @@ class MockMoveGestureTarget : public MockSyntheticGestureTarget {
   float total_abs_move_distance_length() const {
     return total_abs_move_distance_length_;
   }
+  bool precise_scrolling_deltas() const { return precise_scrolling_deltas_; }
+  bool scroll_by_page() const { return scroll_by_page_; }
 
  protected:
   gfx::Vector2dF start_to_end_distance_;
   float total_abs_move_distance_length_;
+  bool precise_scrolling_deltas_;
+  bool scroll_by_page_;
 };
 
 class MockScrollMouseTarget : public MockMoveGestureTarget {
@@ -215,6 +225,8 @@ class MockScrollMouseTarget : public MockMoveGestureTarget {
     gfx::Vector2dF delta(mouse_wheel_event.delta_x, mouse_wheel_event.delta_y);
     start_to_end_distance_ += delta;
     total_abs_move_distance_length_ += delta.Length();
+    precise_scrolling_deltas_ = mouse_wheel_event.has_precise_scrolling_deltas;
+    scroll_by_page_ = mouse_wheel_event.scroll_by_page;
   }
 };
 
@@ -254,6 +266,28 @@ class MockMoveTouchTarget : public MockMoveGestureTarget {
   gfx::Point start_;
   gfx::PointF last_touch_point_;
   bool started_;
+};
+
+class MockFlingGestureTarget : public MockMoveGestureTarget {
+ public:
+  MockFlingGestureTarget() : fling_velocity_x_(0), fling_velocity_y_(0) {}
+  ~MockFlingGestureTarget() override {}
+
+  void DispatchInputEventToPlatform(const WebInputEvent& event) override {
+    if (event.GetType() == WebInputEvent::kGestureFlingStart) {
+      const blink::WebGestureEvent& gesture_event =
+          static_cast<const blink::WebGestureEvent&>(event);
+      fling_velocity_x_ = gesture_event.data.fling_start.velocity_x;
+      fling_velocity_y_ = gesture_event.data.fling_start.velocity_y;
+    }
+  }
+
+  float fling_velocity_x() const { return fling_velocity_x_; }
+  float fling_velocity_y() const { return fling_velocity_y_; }
+
+ private:
+  float fling_velocity_x_;
+  float fling_velocity_y_;
 };
 
 class MockDragMouseTarget : public MockMoveGestureTarget {
@@ -534,16 +568,20 @@ class MockSyntheticTapMouseTarget : public MockSyntheticTapGestureTarget {
 
 class MockSyntheticPointerActionTarget : public MockSyntheticGestureTarget {
  public:
-  MockSyntheticPointerActionTarget() : num_actions_dispatched_(0) {}
+  MockSyntheticPointerActionTarget() : num_dispatched_pointer_actions_(0) {}
   ~MockSyntheticPointerActionTarget() override {}
 
   WebInputEvent::Type type() const { return type_; }
-  int num_actions_dispatched() const { return num_actions_dispatched_; }
-  void reset_num_actions_dispatched() { num_actions_dispatched_ = 0; }
+  int num_dispatched_pointer_actions() const {
+    return num_dispatched_pointer_actions_;
+  }
+  void reset_num_dispatched_pointer_actions() {
+    num_dispatched_pointer_actions_ = 0;
+  }
 
  protected:
   WebInputEvent::Type type_;
-  int num_actions_dispatched_;
+  int num_dispatched_pointer_actions_;
 };
 
 class MockSyntheticPointerTouchActionTarget
@@ -559,25 +597,26 @@ class MockSyntheticPointerTouchActionTarget
     for (size_t i = 0; i < WebTouchEvent::kTouchesLengthCap; ++i) {
       if (WebTouchPointStateToEventType(touch_event.touches[i].state) != type_)
         continue;
-
-      indexes_[i] = touch_event.touches[i].id;
-      positions_[i] = gfx::PointF(touch_event.touches[i].PositionInWidget());
-      states_[i] = touch_event.touches[i].state;
+      indexes_[num_dispatched_pointer_actions_] = i;
+      positions_[num_dispatched_pointer_actions_] =
+          gfx::PointF(touch_event.touches[i].PositionInWidget());
+      states_[num_dispatched_pointer_actions_] = touch_event.touches[i].state;
+      num_dispatched_pointer_actions_++;
     }
-    num_actions_dispatched_++;
   }
 
   testing::AssertionResult SyntheticTouchActionDispatchedCorrectly(
       const SyntheticPointerActionParams& param,
-      int index) {
+      int index,
+      int touch_index) {
     if (param.pointer_action_type() ==
             SyntheticPointerActionParams::PointerActionType::PRESS ||
         param.pointer_action_type() ==
             SyntheticPointerActionParams::PointerActionType::MOVE) {
-      if (indexes_[index] != param.index()) {
+      if (indexes_[index] != touch_index) {
         return testing::AssertionFailure()
                << "Pointer index at index " << index << " was "
-               << indexes_[index] << ", expected " << param.index() << ".";
+               << indexes_[index] << ", expected " << touch_index << ".";
       }
 
       if (positions_[index] != param.position()) {
@@ -598,13 +637,15 @@ class MockSyntheticPointerTouchActionTarget
   }
 
   testing::AssertionResult SyntheticTouchActionListDispatchedCorrectly(
-      const std::vector<SyntheticPointerActionParams>& params_list) {
+      const std::vector<SyntheticPointerActionParams>& params_list,
+      int start_index,
+      int index_array[]) {
     testing::AssertionResult result = testing::AssertionSuccess();
     for (size_t i = 0; i < params_list.size(); ++i) {
       if (params_list[i].pointer_action_type() !=
           SyntheticPointerActionParams::PointerActionType::IDLE)
         result = SyntheticTouchActionDispatchedCorrectly(
-            params_list[i], params_list[i].index());
+            params_list[i], start_index + i, index_array[i]);
       if (result == testing::AssertionFailure())
         return result;
     }
@@ -630,7 +671,7 @@ class MockSyntheticPointerMouseActionTarget
     position_ = gfx::PointF(mouse_event.PositionInWidget());
     clickCount_ = mouse_event.click_count;
     button_ = mouse_event.button;
-    num_actions_dispatched_++;
+    num_dispatched_pointer_actions_++;
   }
 
   testing::AssertionResult SyntheticMouseActionDispatchedCorrectly(
@@ -1179,6 +1220,73 @@ TEST_F(SyntheticGestureControllerTest, MultiScrollGestureMouseHorizontal) {
                   scroll_target->start_to_end_distance().x());
 }
 
+TEST_F(SyntheticGestureControllerTest, SingleScrollGestureTouchpadSwipe) {
+  CreateControllerAndTarget<MockFlingGestureTarget>();
+
+  SyntheticSmoothMoveGestureParams params;
+  params.input_type = SyntheticSmoothMoveGestureParams::MOUSE_WHEEL_INPUT;
+  params.start_point.SetPoint(39, 86);
+  params.distances.push_back(gfx::Vector2d(0, -132));
+  params.fling_velocity_x = 800;
+  params.fling_velocity_y = -1000;
+  params.prevent_fling = false;
+
+  std::unique_ptr<SyntheticSmoothMoveGesture> gesture(
+      new SyntheticSmoothMoveGesture(params));
+  QueueSyntheticGesture(std::move(gesture));
+  FlushInputUntilComplete();
+
+  MockFlingGestureTarget* swipe_target =
+      static_cast<MockFlingGestureTarget*>(target_);
+  EXPECT_EQ(1, num_success_);
+  EXPECT_EQ(0, num_failure_);
+  EXPECT_EQ(params.fling_velocity_x, swipe_target->fling_velocity_x());
+  EXPECT_EQ(params.fling_velocity_y, swipe_target->fling_velocity_y());
+}
+
+TEST_F(SyntheticGestureControllerTest, SingleScrollGestureMousePreciseScroll) {
+  CreateControllerAndTarget<MockScrollMouseTarget>();
+
+  SyntheticSmoothMoveGestureParams params;
+  params.input_type = SyntheticSmoothMoveGestureParams::MOUSE_WHEEL_INPUT;
+  params.start_point.SetPoint(39, 86);
+  params.distances.push_back(gfx::Vector2d(0, -132));
+  params.precise_scrolling_deltas = true;
+
+  std::unique_ptr<SyntheticSmoothMoveGesture> gesture(
+      new SyntheticSmoothMoveGesture(params));
+  QueueSyntheticGesture(std::move(gesture));
+  FlushInputUntilComplete();
+
+  MockMoveGestureTarget* scroll_target =
+      static_cast<MockMoveGestureTarget*>(target_);
+  EXPECT_EQ(1, num_success_);
+  EXPECT_EQ(0, num_failure_);
+  EXPECT_EQ(params.precise_scrolling_deltas,
+            scroll_target->precise_scrolling_deltas());
+}
+
+TEST_F(SyntheticGestureControllerTest, SingleScrollGestureMouseScrollByPage) {
+  CreateControllerAndTarget<MockScrollMouseTarget>();
+
+  SyntheticSmoothMoveGestureParams params;
+  params.input_type = SyntheticSmoothMoveGestureParams::MOUSE_WHEEL_INPUT;
+  params.start_point.SetPoint(39, 86);
+  params.distances.push_back(gfx::Vector2d(0, -132));
+  params.scroll_by_page = true;
+
+  std::unique_ptr<SyntheticSmoothMoveGesture> gesture(
+      new SyntheticSmoothMoveGesture(params));
+  QueueSyntheticGesture(std::move(gesture));
+  FlushInputUntilComplete();
+
+  MockMoveGestureTarget* scroll_target =
+      static_cast<MockMoveGestureTarget*>(target_);
+  EXPECT_EQ(1, num_success_);
+  EXPECT_EQ(0, num_failure_);
+  EXPECT_EQ(params.scroll_by_page, scroll_target->scroll_by_page());
+}
+
 void CheckIsWithinRangeMulti(float scroll_distance,
                              int target_distance,
                              SyntheticGestureTarget* target) {
@@ -1666,11 +1774,12 @@ TEST_F(SyntheticGestureControllerTest, PointerTouchAction) {
 
   MockSyntheticPointerTouchActionTarget* pointer_touch_target =
       static_cast<MockSyntheticPointerTouchActionTarget*>(target_);
+  int index_array[2] = {0, 1};
   EXPECT_EQ(1, num_success_);
   EXPECT_EQ(0, num_failure_);
-  EXPECT_EQ(pointer_touch_target->num_actions_dispatched(), 2);
+  EXPECT_EQ(pointer_touch_target->num_dispatched_pointer_actions(), 2);
   EXPECT_TRUE(pointer_touch_target->SyntheticTouchActionListDispatchedCorrectly(
-      param_list));
+      param_list, 0, index_array));
 
   // Second, send a touch release for finger 0, a touch move for finger 1.
   param0.set_pointer_action_type(
@@ -1684,14 +1793,15 @@ TEST_F(SyntheticGestureControllerTest, PointerTouchAction) {
   params.PushPointerActionParamsList(param_list);
   gesture.reset(new SyntheticPointerAction(params));
   QueueSyntheticGesture(std::move(gesture));
-  pointer_touch_target->reset_num_actions_dispatched();
+  pointer_touch_target->reset_num_dispatched_pointer_actions();
   FlushInputUntilComplete();
 
+  index_array[1] = 0;
   EXPECT_EQ(2, num_success_);
   EXPECT_EQ(0, num_failure_);
-  EXPECT_EQ(pointer_touch_target->num_actions_dispatched(), 4);
+  EXPECT_EQ(pointer_touch_target->num_dispatched_pointer_actions(), 4);
   EXPECT_TRUE(pointer_touch_target->SyntheticTouchActionListDispatchedCorrectly(
-      param_list));
+      param_list, 2, index_array));
 
   // Third, send a touch release for finger 1.
   param1.set_pointer_action_type(
@@ -1701,14 +1811,14 @@ TEST_F(SyntheticGestureControllerTest, PointerTouchAction) {
   params.PushPointerActionParamsList(param_list);
   gesture.reset(new SyntheticPointerAction(params));
   QueueSyntheticGesture(std::move(gesture));
-  pointer_touch_target->reset_num_actions_dispatched();
+  pointer_touch_target->reset_num_dispatched_pointer_actions();
   FlushInputUntilComplete();
 
   EXPECT_EQ(3, num_success_);
   EXPECT_EQ(0, num_failure_);
-  EXPECT_EQ(pointer_touch_target->num_actions_dispatched(), 5);
+  EXPECT_EQ(pointer_touch_target->num_dispatched_pointer_actions(), 5);
   EXPECT_TRUE(pointer_touch_target->SyntheticTouchActionListDispatchedCorrectly(
-      param_list));
+      param_list, 4, index_array));
 }
 
 TEST_F(SyntheticGestureControllerTest, PointerMouseAction) {
@@ -1732,7 +1842,7 @@ TEST_F(SyntheticGestureControllerTest, PointerMouseAction) {
       static_cast<MockSyntheticPointerMouseActionTarget*>(target_);
   EXPECT_EQ(1, num_success_);
   EXPECT_EQ(0, num_failure_);
-  EXPECT_EQ(pointer_mouse_target->num_actions_dispatched(), 1);
+  EXPECT_EQ(pointer_mouse_target->num_dispatched_pointer_actions(), 1);
   EXPECT_TRUE(
       pointer_mouse_target->SyntheticMouseActionDispatchedCorrectly(param, 0));
 
@@ -1743,12 +1853,12 @@ TEST_F(SyntheticGestureControllerTest, PointerMouseAction) {
   params.PushPointerActionParams(param);
   gesture.reset(new SyntheticPointerAction(params));
   QueueSyntheticGesture(std::move(gesture));
-  pointer_mouse_target->reset_num_actions_dispatched();
+  pointer_mouse_target->reset_num_dispatched_pointer_actions();
   FlushInputUntilComplete();
 
   EXPECT_EQ(2, num_success_);
   EXPECT_EQ(0, num_failure_);
-  EXPECT_EQ(pointer_mouse_target->num_actions_dispatched(), 2);
+  EXPECT_EQ(pointer_mouse_target->num_dispatched_pointer_actions(), 2);
   EXPECT_TRUE(
       pointer_mouse_target->SyntheticMouseActionDispatchedCorrectly(param, 1));
 
@@ -1759,12 +1869,12 @@ TEST_F(SyntheticGestureControllerTest, PointerMouseAction) {
   params.PushPointerActionParams(param);
   gesture.reset(new SyntheticPointerAction(params));
   QueueSyntheticGesture(std::move(gesture));
-  pointer_mouse_target->reset_num_actions_dispatched();
+  pointer_mouse_target->reset_num_dispatched_pointer_actions();
   FlushInputUntilComplete();
 
   EXPECT_EQ(3, num_success_);
   EXPECT_EQ(0, num_failure_);
-  EXPECT_EQ(pointer_mouse_target->num_actions_dispatched(), 3);
+  EXPECT_EQ(pointer_mouse_target->num_dispatched_pointer_actions(), 3);
   EXPECT_TRUE(
       pointer_mouse_target->SyntheticMouseActionDispatchedCorrectly(param, 1));
 
@@ -1774,14 +1884,102 @@ TEST_F(SyntheticGestureControllerTest, PointerMouseAction) {
   params.PushPointerActionParams(param);
   gesture.reset(new SyntheticPointerAction(params));
   QueueSyntheticGesture(std::move(gesture));
-  pointer_mouse_target->reset_num_actions_dispatched();
+  pointer_mouse_target->reset_num_dispatched_pointer_actions();
   FlushInputUntilComplete();
 
   EXPECT_EQ(4, num_success_);
   EXPECT_EQ(0, num_failure_);
-  EXPECT_EQ(pointer_mouse_target->num_actions_dispatched(), 4);
+  EXPECT_EQ(pointer_mouse_target->num_dispatched_pointer_actions(), 4);
   EXPECT_TRUE(
       pointer_mouse_target->SyntheticMouseActionDispatchedCorrectly(param, 1));
+}
+
+TEST_F(SyntheticGestureControllerTest, PointerPenAction) {
+  CreateControllerAndTarget<MockSyntheticPointerMouseActionTarget>();
+
+  // First, send a pen move.
+  SyntheticPointerActionListParams::ParamList param_list;
+  SyntheticPointerActionParams param = SyntheticPointerActionParams(
+      SyntheticPointerActionParams::PointerActionType::MOVE);
+
+  param.set_position(gfx::PointF(54, 89));
+  SyntheticPointerActionListParams params;
+  params.PushPointerActionParams(param);
+  params.gesture_source_type = SyntheticGestureParams::PEN_INPUT;
+  std::unique_ptr<SyntheticPointerAction> gesture(
+      new SyntheticPointerAction(params));
+  QueueSyntheticGesture(std::move(gesture));
+  FlushInputUntilComplete();
+
+  MockSyntheticPointerMouseActionTarget* pointer_pen_target =
+      static_cast<MockSyntheticPointerMouseActionTarget*>(target_);
+  EXPECT_EQ(1, num_success_);
+  EXPECT_EQ(0, num_failure_);
+  EXPECT_EQ(pointer_pen_target->num_dispatched_pointer_actions(), 1);
+  EXPECT_TRUE(
+      pointer_pen_target->SyntheticMouseActionDispatchedCorrectly(param, 0));
+
+  // Second, send a pen press.
+  param.set_pointer_action_type(
+      SyntheticPointerActionParams::PointerActionType::PRESS);
+  param.set_position(gfx::PointF(183, 239));
+  params.PushPointerActionParams(param);
+  gesture.reset(new SyntheticPointerAction(params));
+  QueueSyntheticGesture(std::move(gesture));
+  pointer_pen_target->reset_num_dispatched_pointer_actions();
+  FlushInputUntilComplete();
+
+  EXPECT_EQ(2, num_success_);
+  EXPECT_EQ(0, num_failure_);
+  EXPECT_EQ(pointer_pen_target->num_dispatched_pointer_actions(), 2);
+  EXPECT_TRUE(
+      pointer_pen_target->SyntheticMouseActionDispatchedCorrectly(param, 1));
+
+  // Third, send a pen move.
+  param.set_pointer_action_type(
+      SyntheticPointerActionParams::PointerActionType::MOVE);
+  param.set_position(gfx::PointF(254, 279));
+  params.PushPointerActionParams(param);
+  gesture.reset(new SyntheticPointerAction(params));
+  QueueSyntheticGesture(std::move(gesture));
+  pointer_pen_target->reset_num_dispatched_pointer_actions();
+  FlushInputUntilComplete();
+
+  EXPECT_EQ(3, num_success_);
+  EXPECT_EQ(0, num_failure_);
+  EXPECT_EQ(pointer_pen_target->num_dispatched_pointer_actions(), 3);
+  EXPECT_TRUE(
+      pointer_pen_target->SyntheticMouseActionDispatchedCorrectly(param, 1));
+
+  // Fourth, send a pen release.
+  param.set_pointer_action_type(
+      SyntheticPointerActionParams::PointerActionType::RELEASE);
+  params.PushPointerActionParams(param);
+  gesture.reset(new SyntheticPointerAction(params));
+  QueueSyntheticGesture(std::move(gesture));
+  pointer_pen_target->reset_num_dispatched_pointer_actions();
+  FlushInputUntilComplete();
+
+  EXPECT_EQ(4, num_success_);
+  EXPECT_EQ(0, num_failure_);
+  EXPECT_EQ(pointer_pen_target->num_dispatched_pointer_actions(), 4);
+  EXPECT_TRUE(
+      pointer_pen_target->SyntheticMouseActionDispatchedCorrectly(param, 1));
+
+  // Fifth, send a pen leave.
+  param.set_pointer_action_type(
+      SyntheticPointerActionParams::PointerActionType::LEAVE);
+  params.PushPointerActionParams(param);
+  gesture.reset(new SyntheticPointerAction(params));
+  QueueSyntheticGesture(std::move(gesture));
+  pointer_pen_target->reset_num_dispatched_pointer_actions();
+  FlushInputUntilComplete();
+
+  EXPECT_EQ(5, num_success_);
+  EXPECT_EQ(0, num_failure_);
+  EXPECT_EQ(pointer_pen_target->num_dispatched_pointer_actions(), 5);
+  EXPECT_TRUE(
+      pointer_pen_target->SyntheticMouseActionDispatchedCorrectly(param, 0));
 }
 
 }  // namespace content

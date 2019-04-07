@@ -683,7 +683,7 @@ Remote computers with non US-English keyboards may receive incorrect text input.
 For information about privacy, please see the Google Privacy Policy (http://goo.gl/SyrVzj) and the Chrome Privacy Policy (http://goo.gl/0uXE5d).
         </message>
         <message name="IDS_PLAY_STORE_CHANGES" desc="List of what's changed in this release of Chrome Remote Desktop for Android. [CHAR-LIMIT=500] [NAME=play_store_changes]">
-• Added support for Android 8.0 Oreo.
+• Added support for Android 9.0 Pie.
         </message>
 
         <!-- iOS App Store metadata text. Won't be bundled into the app. -->
@@ -710,7 +710,8 @@ Securely access your computer from your iOS device. It's fast, simple and free.
 • On your iOS device, open the app and tap on any of your online computers to connect.
         </message>
         <message name="IDS_APP_STORE_CHANGES" desc="List of what's changed in this release of Chrome Remote Desktop for iOS. [CHAR-LIMIT=4000] [NAME=app_store_changes]">
-General fixes and stability improvements.
+• Better panning and zooming experience on iPhone X.
+• Stability improvements and bug fixes.
         </message>
       </if>  <!-- is_android or is_ios -->
 
@@ -799,8 +800,8 @@ General fixes and stability improvements.
         Welcome to Chrome Remote Desktop
       </message>
       <message desc="Step 1 to set up a computer to be remotely accessible." name="IDS_HOST_SETUP_STEP_1">On the computer you want to access remotely, open Chrome and visit <ph name="INSTALLATION_LINK">$1<ex>google.com/remotedesktop</ex></ph></message>
-      <message desc="Step 2 to set up a computer to be remotely accessible." name="IDS_HOST_SETUP_STEP_2">Install Chrome Remote Desktop software and follow the instructions to complete setup</message>
-      <message desc="Step 3 to set up a computer to be remotely accessible." name="IDS_HOST_SETUP_STEP_3">After setup is complete, you'll be able to access the computer from this page by entering the PIN or access code</message>
+      <message desc="Step 2 to set up a computer to be remotely accessible." name="IDS_HOST_SETUP_STEP_2">Follow the instructions to set up your computer for remote access</message>
+      <message desc="Step 3 to set up a computer to be remotely accessible." name="IDS_HOST_SETUP_STEP_3">After setup is complete, refresh this page, then you'll be able to access the computer by choosing your device and entering the PIN</message>
       <message desc="Label for a button for sending the user an email with link and instructions for setting up a computer for remote access." name="IDS_EMAIL_LINKS_AND_INSTRUCTIONS">
         Email these instructions
       </message>
@@ -1166,7 +1167,7 @@ General fixes and stability improvements.
       <message desc="Label for button to reconnect to the previous Me2Me host. This button appears on the 'session-finished' page." name="IDS_RECONNECT">
         Reconnect
       </message>
-      <message desc="Button for enabling or disabling the 'resize-to-client' functionality, whereby the host desktop is resized to match the client size as closely as possible." name="IDS_RESIZE_TO_CLIENT">
+      <message desc="Button for enabling or disabling the 'resize-to-client' functionality, whereby the host desktop is resized to match the client size as closely as possible." name="IDS_RESIZE_TO_CLIENT" formatter_data="android_java">
         Resize desktop to fit
       </message>
       <message desc="Label for button to retry connecting to a Me2Me host, after failing to connect to that host. This button appears on the 'session-finished' page." name="IDS_RETRY">

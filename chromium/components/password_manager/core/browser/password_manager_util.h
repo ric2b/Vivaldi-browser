@@ -19,7 +19,14 @@ struct PasswordForm;
 class AutofillClient;
 }
 
+namespace network {
+namespace mojom {
+class NetworkContext;
+}
+}
+
 namespace password_manager {
+class PasswordManagerDriver;
 class PasswordManagerClient;
 class PasswordStore;
 }
@@ -31,6 +38,9 @@ class SyncService;
 class PrefService;
 
 namespace password_manager_util {
+
+// Update |credential| to reflect usage.
+void UpdateMetadataForUsage(autofill::PasswordForm* credential);
 
 // Reports whether and how passwords are currently synced. In particular, for a
 // null |sync_service| returns NOT_SYNCING.
@@ -64,9 +74,9 @@ void TrimUsernameOnlyCredentials(
 // and required to always return non-null.
 bool IsLoggingActive(const password_manager::PasswordManagerClient* client);
 
-// True iff the manual password generation is enabled and the user is sync user
-// without custom passphrase.
-bool ManualPasswordGenerationEnabled(syncer::SyncService* sync_service);
+// True iff the manual password generation is enabled for the current site.
+bool ManualPasswordGenerationEnabled(
+    password_manager::PasswordManagerDriver* driver);
 
 // Returns true iff the "Show all saved passwords" option should be shown in
 // Context Menu. Also records metric, that the Context Menu will have "Show all
@@ -81,12 +91,20 @@ void UserTriggeredShowAllSavedPasswordsFromContextMenu(
 void UserTriggeredManualGenerationFromContextMenu(
     password_manager::PasswordManagerClient* password_manager_client);
 
-// Clean up the blacklisted entries in the password store. Those shouldn't
-// contain username/password pair. https://crbug.com/817754
-void CleanUserDataInBlacklistedCredentials(
-    password_manager::PasswordStore* store,
-    PrefService* prefs,
-    int delay_in_seconds);
+// Two blacklisted forms are considered equal if they have the same
+// signon_realm.
+void DeleteBlacklistedDuplicates(password_manager::PasswordStore* store,
+                                 PrefService* prefs,
+                                 int delay_in_seconds);
+
+// Report metrics about HTTP to HTTPS migration process. This function cannot be
+// used on iOS platform because the HSTS query is not supported.
+// |network_context_getter| should return nullptr if it can't get the network
+// context because whatever owns it is dead.
+void ReportHttpMigrationMetrics(
+    scoped_refptr<password_manager::PasswordStore> store,
+    base::RepeatingCallback<network::mojom::NetworkContext*()>
+        network_context_getter);
 
 // Given all non-blacklisted |matches|, finds and populates
 // |best_matches_|, |preferred_match_| and |non_best_matches_| accordingly.

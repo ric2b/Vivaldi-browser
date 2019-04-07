@@ -16,6 +16,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
+#include "device/fido/cable/cable_discovery_data.h"
 #include "device/fido/fido_transport_protocol.h"
 
 namespace service_manager {
@@ -43,7 +44,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDiscovery {
     virtual ~Observer();
 
     // It is guaranteed that this is never invoked synchronously from Start().
-    virtual void DiscoveryStarted(FidoDiscovery* discovery, bool success) = 0;
+    virtual void DiscoveryStarted(FidoDiscovery* discovery, bool success) {}
 
     // It is guaranteed that DeviceAdded/DeviceRemoved() will not be invoked
     // before the client of FidoDiscovery calls FidoDiscovery::Start(). However,
@@ -59,14 +60,17 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDiscovery {
                                FidoDevice* device) = 0;
   };
 
-  // Factory function to construct an instance that discovers authenticators on
-  // the given |transport| protocol.
+  // Factory functions to construct an instance that discovers authenticators on
+  // the given |transport| protocol. The first variant is for everything except
+  // for cloud-assisted BLE which is handled by the second variant.
   //
   // FidoTransportProtocol::kUsbHumanInterfaceDevice requires specifying a valid
   // |connector| on Desktop, and is not valid on Android.
   static std::unique_ptr<FidoDiscovery> Create(
       FidoTransportProtocol transport,
       ::service_manager::Connector* connector);
+  static std::unique_ptr<FidoDiscovery> CreateCable(
+      std::vector<CableDiscoveryData> cable_data);
 
   virtual ~FidoDiscovery();
 
@@ -113,7 +117,9 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDiscovery {
 
   // Factory function can be overridden by tests to construct fakes.
   using FactoryFuncPtr = decltype(&Create);
+  using CableFactoryFuncPtr = decltype(&CreateCable);
   static FactoryFuncPtr g_factory_func_;
+  static CableFactoryFuncPtr g_cable_factory_func_;
 
   const FidoTransportProtocol transport_;
   State state_ = State::kIdle;
@@ -136,7 +142,15 @@ class COMPONENT_EXPORT(DEVICE_FIDO) ScopedFidoDiscoveryFactory {
   ScopedFidoDiscoveryFactory();
   virtual ~ScopedFidoDiscoveryFactory();
 
+  const std::vector<CableDiscoveryData>& last_cable_data() const {
+    return last_cable_data_;
+  }
+
  protected:
+  void set_last_cable_data(std::vector<CableDiscoveryData> cable_data) {
+    last_cable_data_ = std::move(cable_data);
+  }
+
   virtual std::unique_ptr<FidoDiscovery> CreateFidoDiscovery(
       FidoTransportProtocol transport,
       ::service_manager::Connector* connector) = 0;
@@ -147,8 +161,15 @@ class COMPONENT_EXPORT(DEVICE_FIDO) ScopedFidoDiscoveryFactory {
       FidoTransportProtocol transport,
       ::service_manager::Connector* connector);
 
+  static std::unique_ptr<FidoDiscovery>
+  ForwardCreateCableDiscoveryToCurrentFactory(
+      std::vector<CableDiscoveryData> cable_data);
+
   static ScopedFidoDiscoveryFactory* g_current_factory;
+
   FidoDiscovery::FactoryFuncPtr original_factory_func_;
+  FidoDiscovery::CableFactoryFuncPtr original_cable_factory_func_;
+  std::vector<CableDiscoveryData> last_cable_data_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedFidoDiscoveryFactory);
 };

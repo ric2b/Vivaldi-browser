@@ -11,32 +11,33 @@ import("//tools/json_schema_compiler/json_schema_api.gni")
 
 assert(enable_extensions)
 
-json_schema_api("generated_api") {
-  sources = extensions_api_schema_files
-  schemas = true
-  bundle = true
+# TODO(devlin): Enforce visibility restrictions on more of these targets?
+
+generated_json_strings("generated_api_json_strings") {
+  sources = extensions_api_schema_files + extensions_api_uncompiled_sources +
+            extensions_api_uncompiled_bundle_schema_sources
   bundle_name = ""
   root_namespace = extensions_api_root_namespace
-  uncompiled_sources = extensions_api_uncompiled_sources
-  uncompiled_bundle_schema_sources =
-      extensions_api_uncompiled_bundle_schema_sources
   deps = [
     "//base",
     "//extensions/buildflags",
   ]
+  visibility = [ ":api" ]
+}
+
+generated_types("generated_api_types") {
+  sources = extensions_api_schema_files
+  root_namespace = extensions_api_root_namespace
+  deps = [
+    "//base",
+    "//extensions/buildflags",
+  ]
+  visibility = [ ":api" ]
 }
 
 mojom("mojom") {
   sources = [
     "mime_handler.mojom",
-  ]
-}
-
-group("api") {
-  public_deps = [
-    ":generated_api",
-    ":mojom",
-    "//extensions/buildflags",
   ]
 }
 
@@ -69,6 +70,17 @@ json_features("behavior_features") {
   method_name = "AddCoreBehaviorFeatures"
   sources = [
     "_behavior_features.json",
+  ]
+}
+
+# Public Targets
+
+group("api") {
+  public_deps = [
+    ":generated_api_json_strings",
+    ":generated_api_types",
+    ":mojom",
+    "//extensions/buildflags",
   ]
 }
 

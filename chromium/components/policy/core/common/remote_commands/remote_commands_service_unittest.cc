@@ -26,7 +26,6 @@
 #include "components/policy/core/common/remote_commands/test_remote_command_job.h"
 #include "components/policy/core/common/remote_commands/testing_remote_commands_server.h"
 #include "components/policy/proto/device_management_backend.pb.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -89,7 +88,6 @@ class TestingCloudPolicyClientForRemoteCommands : public CloudPolicyClient {
                           std::string() /* machine_model */,
                           std::string() /* brand_code */,
                           nullptr /* service */,
-                          nullptr /* request_context */,
                           nullptr /* url_loader_factory */,
                           nullptr /* signing_service */,
                           CloudPolicyClient::DeviceDMTokenCallback()),
@@ -131,7 +129,7 @@ class TestingCloudPolicyClientForRemoteCommands : public CloudPolicyClient {
   void FetchRemoteCommands(
       std::unique_ptr<RemoteCommandJob::UniqueIDType> last_command_id,
       const std::vector<em::RemoteCommandResult>& command_results,
-      const RemoteCommandCallback& callback) override {
+      RemoteCommandCallback callback) override {
     ASSERT_FALSE(expected_fetch_commands_calls_.empty());
 
     const FetchCallExpectation fetch_call_expectation =
@@ -144,7 +142,7 @@ class TestingCloudPolicyClientForRemoteCommands : public CloudPolicyClient {
         base::BindOnce(
             &TestingCloudPolicyClientForRemoteCommands::DoFetchRemoteCommands,
             base::Unretained(this), std::move(last_command_id), command_results,
-            callback, fetch_call_expectation),
+            std::move(callback), fetch_call_expectation),
         base::TimeDelta::FromSeconds(
             kTestClientServerCommunicationDelayInSeconds));
   }
@@ -152,7 +150,7 @@ class TestingCloudPolicyClientForRemoteCommands : public CloudPolicyClient {
   void DoFetchRemoteCommands(
       std::unique_ptr<RemoteCommandJob::UniqueIDType> last_command_id,
       const std::vector<em::RemoteCommandResult>& command_results,
-      const RemoteCommandCallback& callback,
+      RemoteCommandCallback callback,
       const FetchCallExpectation& fetch_call_expectation) {
     const std::vector<em::RemoteCommand> fetched_commands =
         server_->FetchCommands(std::move(last_command_id), command_results);
@@ -167,7 +165,9 @@ class TestingCloudPolicyClientForRemoteCommands : public CloudPolicyClient {
 
     // Simulate delay from DMServer back to client.
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, base::Bind(callback, DM_STATUS_SUCCESS, fetched_commands),
+        FROM_HERE,
+        base::BindOnce(std::move(callback), DM_STATUS_SUCCESS,
+                       fetched_commands),
         base::TimeDelta::FromSeconds(
             kTestClientServerCommunicationDelayInSeconds));
   }

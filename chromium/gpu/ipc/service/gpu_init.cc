@@ -15,6 +15,7 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/config/gpu_driver_bug_list.h"
+#include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/config/gpu_switching.h"
@@ -24,18 +25,22 @@
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_features.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 
 #if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
-#include "ui/ozone/public/ozone_switches.h"
 #endif
 
 #if defined(OS_WIN)
 #include "gpu/ipc/service/direct_composition_surface_win.h"
 #include "ui/gl/gl_surface_egl.h"
+#endif
+
+#if defined(OS_ANDROID)
+#include "base/android/android_image_reader_compat.h"
 #endif
 
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -100,8 +105,9 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   // Blacklist decisions based on basic GPUInfo may not be final. It might
   // need more context based GPUInfo. In such situations, switching to
   // SwiftShader needs to wait until creating a context.
-  bool needs_more_info = false;
+  bool needs_more_info = true;
 #if !defined(OS_ANDROID) && !defined(IS_CHROMECAST)
+  needs_more_info = false;
   if (!PopGPUInfoCache(&gpu_info_)) {
     CollectBasicGraphicsInfo(command_line, &gpu_info_);
   }
@@ -212,7 +218,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   // may also have started at this point.
   ui::OzonePlatform::InitParams params;
   params.single_process = false;
-  params.using_mojo = command_line->HasSwitch(switches::kEnableDrmMojo);
+  params.using_mojo = features::IsOzoneDrmMojo();
   ui::OzonePlatform::InitializeForGPU(params);
 #endif
 
@@ -272,6 +278,12 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
       VLOG(1) << "gl::init::InitializeExtensionSettingsOneOffPlatform failed";
       return false;
     }
+    default_offscreen_surface_ =
+        gl::init::CreateOffscreenGLSurface(gfx::Size());
+    if (!default_offscreen_surface_) {
+      VLOG(1) << "gl::init::CreateOffscreenGLSurface failed";
+      return false;
+    }
   }
 
   base::TimeDelta initialize_one_off_time =
@@ -315,6 +327,14 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
 #if defined(USE_OZONE)
   ui::OzonePlatform::GetInstance()->AfterSandboxEntry();
 #endif
+
+#if defined(OS_ANDROID)
+  // Disable AImageReader if the workaround is enabled.
+  if (gpu_feature_info_.IsWorkaroundEnabled(DISABLE_AIMAGEREADER)) {
+    base::android::AndroidImageReader::DisableSupport();
+  }
+#endif
+
   return true;
 }
 
@@ -329,6 +349,13 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
 
   InitializeGLThreadSafe(command_line, gpu_preferences_, &gpu_info_,
                          &gpu_feature_info_);
+
+  default_offscreen_surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
+
+  // Disable AImageReader if the workaround is enabled.
+  if (gpu_feature_info_.IsWorkaroundEnabled(DISABLE_AIMAGEREADER)) {
+    base::android::AndroidImageReader::DisableSupport();
+  }
 }
 #else
 void GpuInit::InitializeInProcess(base::CommandLine* command_line,
@@ -339,16 +366,17 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
   ui::OzonePlatform::InitParams params;
   params.single_process = true;
 #if defined(OS_CHROMEOS)
-  params.using_mojo = !features::IsAshInBrowserProcess() ||
-                      command_line->HasSwitch(switches::kEnableDrmMojo);
+  params.using_mojo =
+      features::IsMultiProcessMash() || features::IsOzoneDrmMojo();
 #else
-  params.using_mojo = command_line->HasSwitch(switches::kEnableDrmMojo);
+  params.using_mojo = features::IsOzoneDrmMojo();
 #endif
   ui::OzonePlatform::InitializeForGPU(params);
   ui::OzonePlatform::GetInstance()->AfterSandboxEntry();
 #endif
-  bool needs_more_info = false;
+  bool needs_more_info = true;
 #if !defined(IS_CHROMECAST)
+  needs_more_info = false;
   if (!PopGPUInfoCache(&gpu_info_)) {
     CollectBasicGraphicsInfo(command_line, &gpu_info_);
   }
@@ -398,6 +426,11 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
     }
     if (!gl::init::InitializeExtensionSettingsOneOffPlatform()) {
       VLOG(1) << "gl::init::InitializeExtensionSettingsOneOffPlatform failed";
+    }
+    default_offscreen_surface_ =
+        gl::init::CreateOffscreenGLSurface(gfx::Size());
+    if (!default_offscreen_surface_) {
+      VLOG(1) << "gl::init::CreateOffscreenGLSurface failed";
     }
   }
 }

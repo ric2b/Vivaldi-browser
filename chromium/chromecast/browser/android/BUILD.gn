@@ -57,8 +57,10 @@ android_resources("cast_shell_android_resources") {
 
 android_library("cast_audio_manager_java") {
   java_src_dir = "//chromecast/browser/android/apk/src"
-  java_files =
-      [ "$java_src_dir/org/chromium/chromecast/shell/CastAudioManager.java" ]
+  java_files = [
+    "$java_src_dir/org/chromium/chromecast/shell/CastAudioManager.java",
+    "$java_src_dir/org/chromium/chromecast/shell/CastAudioFocusRequest.java",
+  ]
   deps = [
     "//base:base_java",
     "//chromecast/base:base_java",
@@ -162,10 +164,12 @@ junit_binary("cast_shell_junit_tests") {
   java_files = [
     "junit/src/org/chromium/chromecast/shell/AsyncTaskRunnerTest.java",
     "junit/src/org/chromium/chromecast/shell/CastAudioManagerTest.java",
+    "junit/src/org/chromium/chromecast/shell/CastAudioFocusRequestTest.java",
     "junit/src/org/chromium/chromecast/shell/CastCommandLineHelperTest.java",
     "junit/src/org/chromium/chromecast/shell/CastWebContentsActivityTest.java",
     "junit/src/org/chromium/chromecast/shell/CastWebContentsComponentTest.java",
     "junit/src/org/chromium/chromecast/shell/CastWebContentsIntentUtilsTest.java",
+    "junit/src/org/chromium/chromecast/shell/CastWebContentsServiceTest.java",
     "junit/src/org/chromium/chromecast/shell/CastWebContentsSurfaceHelperTest.java",
     "junit/src/org/chromium/chromecast/shell/LocalBroadcastReceiverScopeTest.java",
     "junit/src/org/chromium/chromecast/shell/LogcatElisionUnitTest.java",
@@ -179,6 +183,7 @@ junit_binary("cast_shell_junit_tests") {
     ":cast_shell_java",
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
+    "//chromecast/base:cast_base_test_utils_java",
     "//content/public/android:content_java",
     "//third_party/android_tools:android_support_core_utils_java",
     "//third_party/hamcrest:hamcrest_java",

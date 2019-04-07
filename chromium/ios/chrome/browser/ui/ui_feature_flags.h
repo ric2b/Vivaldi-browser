@@ -21,11 +21,6 @@ extern const base::Feature kUIRefreshLocationBar;
 // used directly. Instead use ui_util::IsUIRefreshPhase1Enabled().
 extern const base::Feature kUIRefreshPhase1;
 
-// Feature to choose whether to use the new UI Reboot Collection stack, or the
-// legacy one. This flag should not be used directly. Instead use
-// experimental_flags::IsCollectionsUIRebootEnabled()
-extern const base::Feature kCollectionsUIReboot;
-
 // Feature to choose whether to use the new UI Reboot Infobar UX, or the legacy
 // one. This flag should not be used directly. Instead, use
 // IsRefreshInfobarEnabled().
@@ -35,6 +30,10 @@ extern const base::Feature kInfobarsUIReboot;
 // navigating the key window, rather than using -sendAction to find the first
 // responder.
 extern const base::Feature kFirstResponderKeyWindow;
+
+// Feature to automatically switch to the regular tabs panel in tab grid after
+// closing the last incognito tab.
+extern const base::Feature kClosingLastIncognitoTab;
 
 // Feature to copy image to system pasteboard via context menu.
 extern const base::Feature kCopyImage;

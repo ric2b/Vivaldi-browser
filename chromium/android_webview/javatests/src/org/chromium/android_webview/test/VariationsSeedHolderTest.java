@@ -4,6 +4,8 @@
 
 package org.chromium.android_webview.test;
 
+import static org.chromium.android_webview.test.OnlyRunIn.ProcessMode.SINGLE_PROCESS;
+
 import android.os.ParcelFileDescriptor;
 import android.support.test.filters.MediumTest;
 
@@ -17,9 +19,7 @@ import org.chromium.android_webview.VariationsUtils;
 import org.chromium.android_webview.services.ServiceInit;
 import org.chromium.android_webview.services.VariationsSeedHolder;
 import org.chromium.android_webview.test.util.VariationsTestUtils;
-import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.base.test.util.parameter.SkipCommandLineParameterization;
 import org.chromium.components.variations.firstrun.VariationsSeedFetcher.SeedInfo;
 
 import java.io.File;
@@ -34,8 +34,8 @@ import java.util.concurrent.TimeoutException;
 /**
  * Test VariationsSeedHolder.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
-@SkipCommandLineParameterization
+@RunWith(AwJUnit4ClassRunner.class)
+@OnlyRunIn(SINGLE_PROCESS)
 public class VariationsSeedHolderTest {
     private class TestHolder extends VariationsSeedHolder {
         private final CallbackHelper mWriteFinished; // notified after each writeSeedIfNewer

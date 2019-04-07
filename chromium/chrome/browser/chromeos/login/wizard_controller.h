@@ -40,6 +40,11 @@ class SharkConnectionListener;
 
 namespace chromeos {
 
+namespace login {
+class NetworkStateHelper;
+}  // namespace login
+
+class DemoSetupController;
 class ErrorScreen;
 struct Geoposition;
 class LoginDisplayHost;
@@ -102,7 +107,10 @@ class WizardController : public BaseScreenDelegate,
   // Starts Demo Mode setup flow. The flow starts from network screen and reuses
   // some of regular OOBE screens. It consists of the following screens:
   //    chromeos::OobeScreen::SCREEN_OOBE_DEMO_PREFERENCES
+  //    chromeos::OobeScreen::SCREEN_OOBE_NETWORK
   //    chromeos::OobeScreen::SCREEN_OOBE_EULA
+  //    chromeos::OobeScreen::SCREEN_ARC_TERMS_OF_SERVICE
+  //    chromeos::OobeScreen::SCREEN_OOBE_UPDATE
   //    chromeos::OobeScreen::SCREEN_OOBE_DEMO_SETUP
   void StartDemoModeSetup();
 
@@ -123,6 +131,12 @@ class WizardController : public BaseScreenDelegate,
   // reworked at hackaton.
   void EnableUserImageScreenReturnToPreviousHack();
 
+  // Returns current DemoSetupController if demo setup flow is in progress or
+  // nullptr otherwise.
+  DemoSetupController* demo_setup_controller() const {
+    return demo_setup_controller_.get();
+  }
+
   // Returns a pointer to the current screen or nullptr if there's no such
   // screen.
   BaseScreen* current_screen() const { return current_screen_; }
@@ -130,14 +144,11 @@ class WizardController : public BaseScreenDelegate,
   // Returns true if the current wizard instance has reached the login screen.
   bool login_screen_started() const { return login_screen_started_; }
 
-  // Whether demo mode setup OOBE flow is currently in progress.
-  bool is_in_demo_mode_setup_flow() const { return is_in_demo_setup_flow_; }
-
   // Returns a given screen. Creates it lazily.
   BaseScreen* GetScreen(OobeScreen screen);
 
   // Returns the current ScreenManager instance.
-  ScreenManager* screen_manager() { return screen_manager_.get(); }
+  ScreenManager* screen_manager() const { return screen_manager_.get(); }
 
   // Volume percent at which spoken feedback is still audible.
   static const int kMinAudibleOutputVolumePercent;
@@ -149,9 +160,13 @@ class WizardController : public BaseScreenDelegate,
   // Set the current screen. For Test use only.
   void SetCurrentScreenForTesting(BaseScreen* screen);
 
+  void SetSharedURLLoaderFactoryForTesting(
+      scoped_refptr<network::SharedURLLoaderFactory> factory);
+
  private:
   // Show specific screen.
   void ShowWelcomeScreen();
+  void ShowNetworkScreen();
   void ShowUserImageScreen();
   void ShowEulaScreen();
   void ShowEnrollmentScreen();
@@ -163,6 +178,7 @@ class WizardController : public BaseScreenDelegate,
   void ShowKioskEnableScreen();
   void ShowTermsOfServiceScreen();
   void ShowSyncConsentScreen();
+  void ShowFingerprintSetupScreen();
   void ShowArcTermsOfServiceScreen();
   void ShowRecommendAppsScreen();
   void ShowAppDownloadingScreen();
@@ -178,7 +194,9 @@ class WizardController : public BaseScreenDelegate,
   void ShowVoiceInteractionValuePropScreen();
   void ShowWaitForContainerReadyScreen();
   void ShowUpdateRequiredScreen();
+  void ShowAssistantOptInFlowScreen();
   void ShowDiscoverScreen();
+  void ShowMarketingOptInScreen();
 
   // Shows images login screen.
   void ShowLoginScreen(const LoginScreenContext& context);
@@ -188,7 +206,10 @@ class WizardController : public BaseScreenDelegate,
 
   // Exit handlers:
   void OnHIDDetectionCompleted();
+  void OnWelcomeContinued();
+  void OnNetworkBack();
   void OnNetworkConnected();
+  void OnOfflineDemoModeSetup();
   void OnConnectionFailed();
   void OnUpdateCompleted();
   void OnEulaAccepted();
@@ -205,6 +226,8 @@ class WizardController : public BaseScreenDelegate,
   void OnWrongHWIDWarningSkipped();
   void OnTermsOfServiceDeclined();
   void OnTermsOfServiceAccepted();
+  void OnSyncConsentFinished();
+  void OnFingerprintSetupFinished();
   void OnArcTermsOfServiceSkipped();
   void OnArcTermsOfServiceAccepted();
   void OnArcTermsOfServiceBack();
@@ -220,7 +243,9 @@ class WizardController : public BaseScreenDelegate,
   void OnDemoPreferencesContinued();
   void OnDemoPreferencesCanceled();
   void OnWaitForContainerReadyFinished();
+  void OnAssistantOptInFlowFinished();
   void OnOobeFlowFinished();
+  void OnMarketingOptInFinished();
 
   // Callback invoked once it has been determined whether the device is disabled
   // or not.
@@ -241,9 +266,7 @@ class WizardController : public BaseScreenDelegate,
   void PerformOOBECompletedActions();
 
   // Overridden from BaseScreenDelegate:
-  void OnExit(BaseScreen& screen,
-              ScreenExitCode exit_code,
-              const ::login::ScreenContext* context) override;
+  void OnExit(ScreenExitCode exit_code) override;
   void ShowCurrentScreen() override;
   ErrorScreen* GetErrorScreen() override;
   void ShowErrorScreen() override;
@@ -371,8 +394,6 @@ class WizardController : public BaseScreenDelegate,
   // (registration, Terms of Service, user image selection).
   static bool skip_post_login_screens_;
 
-  static bool zero_delay_enabled_;
-
   static bool skip_enrollment_prompts_;
 
   // Screen that's currently active.
@@ -426,9 +447,6 @@ class WizardController : public BaseScreenDelegate,
 
   bool is_in_session_oobe_ = false;
 
-  // Whether the currently presented flow is Demo Mode setup.
-  bool is_in_demo_setup_flow_ = false;
-
   // Indicates that once image selection screen finishes we should return to
   // a previous screen instead of proceeding with usual flow.
   bool user_image_screen_return_to_previous_hack_ = false;
@@ -440,6 +458,9 @@ class WizardController : public BaseScreenDelegate,
   FRIEND_TEST_ALL_PREFIXES(WizardControllerFlowTest, Accelerators);
   FRIEND_TEST_ALL_PREFIXES(WizardControllerDeviceStateTest,
                            ControlFlowNoForcedReEnrollmentOnFirstBoot);
+
+  friend class DemoSetupTest;
+  friend class HandsOffEnrollmentTest;
   friend class WizardControllerBrokenLocalStateTest;
   friend class WizardControllerDemoSetupTest;
   friend class WizardControllerDeviceStateTest;
@@ -459,6 +480,13 @@ class WizardController : public BaseScreenDelegate,
 
   // Pairing controller for remora devices.
   std::unique_ptr<pairing_chromeos::HostPairingController> remora_controller_;
+
+  // Helper for network realted operations.
+  std::unique_ptr<login::NetworkStateHelper> network_state_helper_;
+
+  // Controller of the demo mode setup. It has the lifetime of the single demo
+  // mode setup flow.
+  std::unique_ptr<DemoSetupController> demo_setup_controller_;
 
   // Maps screen names to last time of their shows.
   std::map<std::string, base::Time> screen_show_times_;

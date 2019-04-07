@@ -14,10 +14,11 @@ namespace page_load_metrics {
 class PageTimingSender {
  public:
   virtual ~PageTimingSender() {}
-  virtual void SendTiming(const mojom::PageLoadTimingPtr& timing,
-                          const mojom::PageLoadMetadataPtr& metadata,
-                          mojom::PageLoadFeaturesPtr new_features,
-                          mojom::PageLoadDataUsePtr new_data_use) = 0;
+  virtual void SendTiming(
+      const mojom::PageLoadTimingPtr& timing,
+      const mojom::PageLoadMetadataPtr& metadata,
+      mojom::PageLoadFeaturesPtr new_features,
+      std::vector<mojom::ResourceDataUpdatePtr> resources) = 0;
 };
 
 }  // namespace page_load_metrics

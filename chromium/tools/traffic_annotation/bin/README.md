@@ -2,8 +2,9 @@
 We do not want every developer to have to build clang, and so we store pre-built
 binaries in a Google Cloud Storage bucket and retrieve them via gclient hooks.
 
-To roll new versions of the binaries, assuming you have write access
-to the chromium-tools-traffic_annotation bucket, run:
+To roll new versions of the binaries, you need to have write access to the
+chromium-tools-traffic_annotation bucket. If you don't, contact the OWNERS list
+in this folder, otherwise run:
 
 # On Linux:
 ```bash
@@ -73,5 +74,5 @@ and land the resulting CL.
 The following two lines will be updated by the above script, and the modified
 README should be committed along with the updated .sha1 checksums.
 
-CLANG_REVISION = '336424'
-LASTCHANGE=410d3d75c58860d371551c79045f35b7b277a183-refs/heads/master@{#574126}
+CLANG_REVISION = '338452'
+LASTCHANGE=91de2a347a0372128c51c770e912097ce4c07a70-refs/heads/master@{#581211}

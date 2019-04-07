@@ -76,7 +76,6 @@ void HostFrameSinkManager::InvalidateFrameSinkId(
     const FrameSinkId& frame_sink_id) {
   DCHECK(frame_sink_id.is_valid());
 
-
   FrameSinkData& data = frame_sink_data_map_[frame_sink_id];
   DCHECK(data.IsFrameSinkRegistered());
 

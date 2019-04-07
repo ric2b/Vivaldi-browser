@@ -16,7 +16,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/version.h"
 #include "chrome/browser/media/media_engagement_preloaded_list.h"
 #include "components/component_updater/component_updater_paths.h"
@@ -83,7 +83,7 @@ void MediaEngagementPreloadComponentInstallerPolicy::ComponentReady(
     const base::FilePath& install_dir,
     std::unique_ptr<base::DictionaryValue> manifest) {
   base::TaskTraits task_traits = {
-      base::MayBlock(), base::TaskPriority::BACKGROUND,
+      base::MayBlock(), base::TaskPriority::BEST_EFFORT,
       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN};
   base::OnceClosure task =
       base::BindOnce(&LoadPreloadedDataFromDisk, GetInstalledPath(install_dir));

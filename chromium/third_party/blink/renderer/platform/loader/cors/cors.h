@@ -18,6 +18,11 @@ class HTTPHeaderMap;
 class KURL;
 class SecurityOrigin;
 
+enum class CORSFlag : uint8_t {
+  Unset,
+  Set,
+};
+
 // CORS related utility functions.
 namespace CORS {
 
@@ -38,8 +43,11 @@ PLATFORM_EXPORT base::Optional<network::CORSErrorStatus> CheckPreflightAccess(
     network::mojom::FetchCredentialsMode,
     const SecurityOrigin&);
 
-PLATFORM_EXPORT base::Optional<network::mojom::CORSError> CheckRedirectLocation(
-    const KURL&);
+PLATFORM_EXPORT base::Optional<network::CORSErrorStatus> CheckRedirectLocation(
+    const KURL&,
+    network::mojom::FetchRequestMode,
+    const SecurityOrigin*,
+    CORSFlag);
 
 PLATFORM_EXPORT base::Optional<network::mojom::CORSError> CheckPreflight(
     const int preflight_response_status_code);
@@ -49,14 +57,14 @@ PLATFORM_EXPORT base::Optional<network::CORSErrorStatus> CheckExternalPreflight(
 
 PLATFORM_EXPORT bool IsCORSEnabledRequestMode(network::mojom::FetchRequestMode);
 
-PLATFORM_EXPORT bool EnsurePreflightResultAndCacheOnSuccess(
+PLATFORM_EXPORT base::Optional<network::CORSErrorStatus>
+EnsurePreflightResultAndCacheOnSuccess(
     const HTTPHeaderMap& response_header_map,
     const String& origin,
     const KURL& request_url,
     const String& request_method,
     const HTTPHeaderMap& request_header_map,
-    network::mojom::FetchCredentialsMode request_credentials_mode,
-    String* error_description);
+    network::mojom::FetchCredentialsMode request_credentials_mode);
 
 PLATFORM_EXPORT bool CheckIfRequestCanSkipPreflight(
     const String& origin,

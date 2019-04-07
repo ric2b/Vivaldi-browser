@@ -28,9 +28,10 @@ class CastContentWindowAndroid : public CastContentWindow {
   void CreateWindowForWebContents(
       content::WebContents* web_contents,
       CastWindowManager* window_manager,
-      bool is_visible,
       CastWindowManager::WindowId z_order,
       VisibilityPriority visibility_priority) override;
+  void GrantScreenAccess() override;
+  void RevokeScreenAccess() override;
   void EnableTouchInput(bool enabled) override;
   void RequestVisibility(VisibilityPriority visibility_priority) override;
   void NotifyVisibilityChange(VisibilityType visibility_type) override;
@@ -56,9 +57,7 @@ class CastContentWindowAndroid : public CastContentWindow {
   friend class CastContentWindow;
 
   // This class should only be instantiated by CastContentWindow::Create.
-  CastContentWindowAndroid(CastContentWindow::Delegate* delegate,
-                           bool is_headless,
-                           bool enable_touch_input);
+  CastContentWindowAndroid(const CastContentWindow::CreateParams& params);
 
   CastContentWindow::Delegate* const delegate_;
   base::android::ScopedJavaGlobalRef<jobject> java_window_;

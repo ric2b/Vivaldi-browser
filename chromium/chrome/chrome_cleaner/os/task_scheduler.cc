@@ -15,6 +15,7 @@
 #include "base/logging.h"
 #include "base/native_library.h"
 #include "base/path_service.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
@@ -324,7 +325,7 @@ class TaskSchedulerV2 : public TaskScheduler {
     if (!root_task_folder_)
       return false;
 
-    VLOG(1) << "Delete Task '" << task_name << "'.";
+    LOG(INFO) << "Delete Task '" << task_name << "'.";
 
     HRESULT hr =
         root_task_folder_->DeleteTask(base::win::ScopedBstr(task_name), 0);
@@ -490,11 +491,12 @@ class TaskSchedulerV2 : public TaskScheduler {
         task_trigger_type = TASK_TRIGGER_DAILY;
         if (base::CommandLine::ForCurrentProcess()->HasSwitch(
                 kLogUploadRetryIntervalSwitch)) {
-          base::string16 interval_switch(base::StringPrintf(
-              L"PT%lsM",
-              base::CommandLine::ForCurrentProcess()
-                  ->GetSwitchValueNative(kLogUploadRetryIntervalSwitch)
-                  .c_str()));
+          // String format: PT%lsM
+          const base::string16 interval_switch = base::StrCat(
+              {L"PT",
+               base::CommandLine::ForCurrentProcess()->GetSwitchValueNative(
+                   kLogUploadRetryIntervalSwitch),
+               L"M"});
           LOG(WARNING) << "Command line switch overriding retry interval to: "
                        << interval_switch;
           repetition_interval.Reset(::SysAllocString(interval_switch.c_str()));
@@ -559,7 +561,7 @@ class TaskSchedulerV2 : public TaskScheduler {
 
       // Start now.
       base::Time now(base::Time::NowFromSystemTime());
-      base::win::ScopedBstr start_boundary(GetTimestampString(now).c_str());
+      base::win::ScopedBstr start_boundary(GetTimestampString(now));
       hr = trigger->put_StartBoundary(start_boundary);
       if (FAILED(hr)) {
         PLOG(ERROR) << "Can't put 'StartBoundary' to " << start_boundary << ". "
@@ -587,7 +589,7 @@ class TaskSchedulerV2 : public TaskScheduler {
     // None of the triggers should go beyond kNumDaysBeforeExpiry.
     base::Time expiry_date(base::Time::NowFromSystemTime() +
                            base::TimeDelta::FromDays(kNumDaysBeforeExpiry));
-    base::win::ScopedBstr end_boundary(GetTimestampString(expiry_date).c_str());
+    base::win::ScopedBstr end_boundary(GetTimestampString(expiry_date));
     hr = trigger->put_EndBoundary(end_boundary);
     if (FAILED(hr)) {
       PLOG(ERROR) << "Can't put 'EndBoundary' to " << end_boundary << ". "
@@ -616,14 +618,14 @@ class TaskSchedulerV2 : public TaskScheduler {
       return false;
     }
 
-    base::win::ScopedBstr path(run_command.GetProgram().value().c_str());
+    base::win::ScopedBstr path(run_command.GetProgram().value());
     hr = exec_action->put_Path(path);
     if (FAILED(hr)) {
       PLOG(ERROR) << "Can't set path of exec action. " << std::hex << hr;
       return false;
     }
 
-    base::win::ScopedBstr args(run_command.GetArgumentsString().c_str());
+    base::win::ScopedBstr args(run_command.GetArgumentsString());
     hr = exec_action->put_Arguments(args);
     if (FAILED(hr)) {
       PLOG(ERROR) << "Can't set arguments of exec action. " << std::hex << hr;
@@ -648,7 +650,8 @@ class TaskSchedulerV2 : public TaskScheduler {
 
     DCHECK(IsTaskRegistered(task_name));
 
-    VLOG(1) << "Successfully registered: " << SanitizeCommandLine(run_command);
+    LOG(INFO) << "Successfully registered: "
+              << SanitizeCommandLine(run_command);
     return true;
   }
 

@@ -226,13 +226,9 @@ Output.ROLE_INFO_ = {
   listBoxOption: {msgId: 'role_listitem', earconId: 'LIST_ITEM'},
   listItem:
       {msgId: 'role_listitem', earconId: 'LIST_ITEM', inherits: 'abstractItem'},
-  log: {
-    msgId: 'role_log',
-  },
+  log: {msgId: 'role_log', inherits: 'abstractNameFromContents'},
   main: {msgId: 'role_main', inherits: 'abstractContainer'},
-  marquee: {
-    msgId: 'role_marquee',
-  },
+  marquee: {msgId: 'role_marquee', inherits: 'abstractNameFromContents'},
   math: {msgId: 'role_math', inherits: 'abstractContainer'},
   menu: {msgId: 'role_menu', outputContextFirst: true, ignoreAncestry: true},
   menuBar: {
@@ -263,7 +259,7 @@ Output.ROLE_INFO_ = {
     inherits: 'abstractRange',
     earconId: 'LISTBOX'
   },
-  status: {msgId: 'role_status'},
+  status: {msgId: 'role_status', inherits: 'abstractNameFromContents'},
   tab: {msgId: 'role_tab'},
   tabList: {msgId: 'role_tablist', inherits: 'abstractContainer'},
   tabPanel: {msgId: 'role_tabpanel'},
@@ -271,7 +267,7 @@ Output.ROLE_INFO_ = {
   textField: {msgId: 'input_type_text', earconId: 'EDITABLE_TEXT'},
   textFieldWithComboBox: {msgId: 'role_combobox', earconId: 'EDITABLE_TEXT'},
   time: {msgId: 'tag_time', inherits: 'abstractContainer'},
-  timer: {msgId: 'role_timer'},
+  timer: {msgId: 'role_timer', inherits: 'abstractNameFromContents'},
   toolbar: {msgId: 'role_toolbar', ignoreAncestry: true},
   toggleButton: {msgId: 'role_button', inherits: 'checkBox'},
   tree: {msgId: 'role_tree'},
@@ -368,6 +364,10 @@ Output.RULES = {
       speak: `$state $nameOrTextContent= $role
           $if($posInSet, @describe_index($posInSet, $setSize))
           $description $restriction`
+    },
+    abstractNameFromContents: {
+      speak: `$nameOrDescendants $node(activeDescendant) $value $state
+          $restriction $role $description`,
     },
     abstractRange: {
       speak: `$name $node(activeDescendant) $description $role
@@ -468,27 +468,31 @@ Output.RULES = {
     },
     listMarker: {speak: `$name`},
     menu: {
-      enter: `$name $role`,
+      enter: `$name $role `,
       speak: `$name $node(activeDescendant)
-          $role @@list_with_items($countChildren(menuItem))
+          $role @@list_with_items(
+              $countChildren(menuItem, menuItemCheckBox, menuItemRadio))
           $description $state $restriction`
     },
     menuItem: {
       speak: `$name $role $if($haspopup, @has_submenu)
-          @describe_index($posInSet, $setSize)
+          @describe_index($if($posInSet, $posInSet, $indexInParent(menuItem, menuItemCheckBox, menuItemRadio)),
+              $if($setSize, $setSize, $parentChildCount(menuItem, menuItemCheckBox, menuItemRadio)))
           $description $state $restriction`
     },
     menuItemCheckBox: {
       speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
           $name $role $checked $state $restriction $description
-          @describe_index($posInSet, $setSize)`
+          @describe_index($if($posInSet, $posInSet, $indexInParent(menuItem, menuItemCheckBox, menuItemRadio)),
+              $if($setSize, $setSize, $parentChildCount(menuItem, menuItemCheckBox, menuItemRadio))) `
     },
     menuItemRadio: {
       speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
           $if($checked, @describe_radio_selected($name),
           @describe_radio_unselected($name)) $state $roleDescription
-          $restriction
-          $description @describe_index($posInSet, $setSize) `
+          $restriction $description
+          @describe_index($if($posInSet, $posInSet, $indexInParent(menuItem, menuItemCheckBox, menuItemRadio)),
+              $if($setSize, $setSize, $parentChildCount(menuItem, menuItemCheckBox, menuItemRadio))) `
     },
     menuListOption: {
       speak: `$name $role @describe_index($posInSet, $setSize) $state
@@ -573,6 +577,7 @@ Output.RULES = {
           @describe_index($posInSet, $setSize)
           @describe_depth($hierarchicalLevel)`
     },
+    unknown: {speak: ``},
     window: {
       enter: `@describe_window($name)`,
       speak: `@describe_window($name) $earcon(OBJECT_OPEN)`
@@ -1035,6 +1040,7 @@ Output.prototype = {
 
       var output = new cvox.NavBraille(
           {text: buff, startIndex: startIndex, endIndex: endIndex});
+      output.brailleLogging();
 
       cvox.ChromeVox.braille.write(output);
     }
@@ -1208,17 +1214,20 @@ Output.prototype = {
           } else {
             this.format_(node, '$descendants', buff);
           }
-        } else if (token == 'description') {
-          if (node.name == node.description || node.value == node.description)
-            return;
-          options.annotation.push(token);
-          this.append_(buff, node.description || '', options);
         } else if (token == 'indexInParent') {
           if (node.parent) {
             options.annotation.push(token);
+            var roles;
+            if (tree.firstChild) {
+              roles = this.createRoles_(tree);
+            } else {
+              roles = new Set();
+              roles.add(node.role);
+            }
+
             var count = 0;
             for (var i = 0, child; child = node.parent.children[i]; i++) {
-              if (node.role == child.role)
+              if (roles.has(child.role))
                 count++;
               if (node === child)
                 break;
@@ -1228,9 +1237,17 @@ Output.prototype = {
         } else if (token == 'parentChildCount') {
           if (node.parent) {
             options.annotation.push(token);
+            var roles;
+            if (tree.firstChild) {
+              roles = this.createRoles_(tree);
+            } else {
+              roles = new Set();
+              roles.add(node.role);
+            }
+
             var count = node.parent.children
                             .filter(function(child) {
-                              return node.role == child.role;
+                              return roles.has(child.role);
                             })
                             .length;
             this.append_(buff, String(count));
@@ -1475,10 +1492,11 @@ Output.prototype = {
                 tree.firstChild.value, node.location || undefined));
             this.append_(buff, '', options);
           } else if (token == 'countChildren') {
-            var role = tree.firstChild.value;
+            var roles = this.createRoles_(tree);
+
             var count = node.children
                             .filter(function(e) {
-                              return e.role == role;
+                              return roles.has(e.role);
                             })
                             .length;
             this.append_(buff, String(count));
@@ -1577,6 +1595,19 @@ Output.prototype = {
         }
       }
     }.bind(this));
+  },
+
+  /**
+   * @param {Object} tree
+   * @return {!Set}
+   * @private
+   */
+  createRoles_: function(tree) {
+    var roles = new Set();
+    var currentNode = tree.firstChild;
+    for (; currentNode; currentNode = currentNode.nextSibling)
+      roles.add(currentNode.value);
+    return roles;
   },
 
   /**
@@ -1766,10 +1797,16 @@ Output.prototype = {
     var parentRole = (Output.ROLE_INFO_[node.role] || {}).inherits;
     var parentRoleBlock = eventBlock[parentRole || ''] || {};
 
-    var format =
-        roleBlock.speak || parentRoleBlock.speak || eventBlock['default'].speak;
-    if (this.formatOptions_.braille)
-      format = roleBlock.braille || parentRoleBlock.braille || format;
+    var format = roleBlock.speak !== undefined ?
+        roleBlock.speak :
+        parentRoleBlock.speak !== undefined ? parentRoleBlock.speak :
+                                              eventBlock['default'].speak;
+    if (this.formatOptions_.braille) {
+      format = roleBlock.braille !== undefined ?
+          roleBlock.braille :
+          parentRoleBlock.braille !== undefined ? parentRoleBlock.braille :
+                                                  format;
+    }
 
     this.format_(node, format, buff, prevNode);
 
@@ -1871,6 +1908,7 @@ Output.prototype = {
       return;
 
     var node = range.start.node;
+
     if (!node) {
       this.append_(buff, Msgs.getMsg('warning_no_current_range'));
       return;
@@ -1882,10 +1920,26 @@ Output.prototype = {
       return;
     }
 
-    if (type == EventType.HOVER ||
-        EventSourceState.get() == EventSourceType.TOUCH_GESTURE) {
-      if (node.defaultActionVerb != 'none')
+    if (EventSourceState.get() == EventSourceType.TOUCH_GESTURE) {
+      if (node.state[StateType.EDITABLE]) {
+        this.format_(
+            node,
+            node.state[StateType.FOCUSED] ? '@hint_is_editing' :
+                                            '@hint_double_tap_to_edit',
+            buff);
+        return;
+      }
+
+      var isWithinVirtualKeyboard = AutomationUtil.getAncestors(node).find(
+          (n) => n.role == RoleType.KEYBOARD);
+      if (node.defaultActionVerb != 'none' && !isWithinVirtualKeyboard)
         this.format_(node, '@hint_double_tap', buff);
+
+      var enteredVirtualKeyboard =
+          uniqueAncestors.find((n) => n.role == RoleType.KEYBOARD);
+      if (enteredVirtualKeyboard)
+        this.format_(node, '@hint_touch_type', buff);
+
       return;
     }
 
@@ -1894,7 +1948,6 @@ Output.prototype = {
 
     if (node.state[StateType.EDITABLE] && node.state[StateType.FOCUSED] &&
         !this.formatOptions_.braille) {
-      this.format_(node, '@hint_is_editing', buff);
       if (node.state[StateType.MULTILINE] ||
           node.state[StateType.RICHLY_EDITABLE])
         this.format_(node, '@hint_search_within_text_field', buff);
@@ -1905,8 +1958,10 @@ Output.prototype = {
     else if (AutomationPredicate.clickable(node))
       this.format_(node, '@hint_clickable', buff);
 
-    if (node.autoComplete == 'list' || node.autoComplete == 'both')
+    if (node.autoComplete == 'list' || node.autoComplete == 'both' ||
+        node.state[StateType.AUTOFILL_AVAILABLE]) {
       this.format_(node, '@hint_autocomplete_list', buff);
+    }
     if (node.autoComplete == 'inline' || node.autoComplete == 'both')
       this.format_(node, '@hint_autocomplete_inline', buff);
     if (node.accessKey)

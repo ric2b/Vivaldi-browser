@@ -15,6 +15,7 @@
 // <include src="oobe_screen_user_image.js">
 // <include src="oobe_screen_voice_interaction_value_prop.js">
 // <include src="oobe_screen_wait_for_container_ready.js">
+// <include src="oobe_screen_assistant_optin_flow.js">
 // <include src="oobe_select.js">
 
 // <include src="screen_app_launch_splash.js">
@@ -34,9 +35,11 @@
 // <include src="screen_encryption_migration.js">
 // <include src="screen_update_required.js">
 // <include src="screen_sync_consent.js">
+// <include src="screen_fingerprint_setup.js">
 // <include src="screen_recommend_apps.js">
 // <include src="screen_app_downloading.js">
 // <include src="screen_discover.js">
+// <include src="screen_marketing_opt_in.js">
 
 // <include src="../../gaia_auth_host/authenticator.js">
 

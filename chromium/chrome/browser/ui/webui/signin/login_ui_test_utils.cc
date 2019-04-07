@@ -141,7 +141,7 @@ bool IsDiceSigninPageEnabled(Profile* profile) {
   return (account_consistency != signin::AccountConsistencyMethod::kMirror) &&
          signin::DiceMethodGreaterOrEqual(
              account_consistency,
-             signin::AccountConsistencyMethod::kDicePrepareMigration);
+             signin::AccountConsistencyMethod::kDiceMigration);
 }
 
 // Returns the render frame host where Gaia credentials can be filled in.
@@ -150,10 +150,9 @@ content::RenderFrameHost* GetSigninFrame(content::WebContents* web_contents) {
           Profile::FromBrowserContext(web_contents->GetBrowserContext()))) {
     // Dice displays the Gaia page directly in a tab.
     return web_contents->GetMainFrame();
-  } else {
-    // Embedded signin flow, uses a sub-frame in WebUI.
-    return signin::GetAuthFrame(web_contents, "signin-frame");
   }
+  // Embedded signin flow, uses a sub-frame in WebUI.
+  return signin::GetAuthFrame(web_contents, "signin-frame");
 }
 
 // Waits until the condition is met, by polling.

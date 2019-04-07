@@ -5,6 +5,8 @@
 #include "components/history/core/common/thumbnail_score.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+namespace history {
+
 // Tests that the different types of thumbnails are compared properly.
 TEST(ThumbnailScoreTest, ShouldReplaceThumbnailWithType) {
   base::Time now = base::Time::Now();
@@ -82,7 +84,8 @@ TEST(ThumbnailScoreTest, ShouldConsiderUpdating) {
   EXPECT_FALSE(score.ShouldConsiderUpdating());
 
   // Make it old. Then, it's no longer new enough.
-  score.time_at_snapshot -=
-      base::TimeDelta::FromDays(ThumbnailScore::kUpdateThumbnailTimeDays);
+  score.time_at_snapshot -= ThumbnailScore::kUpdateThumbnailTime;
   EXPECT_TRUE(score.ShouldConsiderUpdating());
 }
+
+}  // namespace history

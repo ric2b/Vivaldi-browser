@@ -19,6 +19,7 @@
 #include "chrome/renderer/searchbox/searchbox_extension.h"
 #include "components/favicon_base/favicon_types.h"
 #include "components/favicon_base/favicon_url_parser.h"
+#include "components/url_formatter/url_fixer.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -203,6 +204,23 @@ bool TranslateIconRestrictedUrl(const GURL& transient_url,
   return true;
 }
 
+std::string FixupAndValidateUrl(const std::string& url) {
+  GURL gurl = url_formatter::FixupURL(url, /*desired_tld=*/std::string());
+  if (!gurl.is_valid())
+    return std::string();
+
+  // Unless "http" was specified, replaces FixupURL's default "http" with
+  // "https".
+  if (url.find(std::string("http://")) == std::string::npos &&
+      gurl.SchemeIs(url::kHttpScheme)) {
+    GURL::Replacements replacements;
+    replacements.SetSchemeStr(url::kHttpsScheme);
+    gurl = gurl.ReplaceComponents(replacements);
+  }
+
+  return gurl.spec();
+}
+
 }  // namespace internal
 
 SearchBox::IconURLHelper::IconURLHelper() = default;
@@ -322,6 +340,10 @@ void SearchBox::UndoMostVisitedDeletion(
   embedded_search_service_->UndoMostVisitedDeletion(page_seq_no_, url);
 }
 
+bool SearchBox::IsCustomLinks() const {
+  return is_custom_links_;
+}
+
 void SearchBox::AddCustomLink(const GURL& url, const std::string& title) {
   if (!url.is_valid()) {
     AddCustomLinkResult(false);
@@ -365,6 +387,10 @@ void SearchBox::UndoCustomLinkAction() {
 
 void SearchBox::ResetCustomLinks() {
   embedded_search_service_->ResetCustomLinks(page_seq_no_);
+}
+
+std::string SearchBox::FixupAndValidateUrl(const std::string& url) const {
+  return internal::FixupAndValidateUrl(url);
 }
 
 void SearchBox::SetCustomBackgroundURL(const GURL& background_url) {
@@ -455,8 +481,10 @@ void SearchBox::DeleteCustomLinkResult(bool success) {
 }
 
 void SearchBox::MostVisitedChanged(
-    const std::vector<InstantMostVisitedItem>& items) {
+    const std::vector<InstantMostVisitedItem>& items,
+    bool is_custom_links) {
   has_received_most_visited_ = true;
+  is_custom_links_ = is_custom_links;
 
   std::vector<InstantMostVisitedItemIDPair> last_known_items;
   GetMostVisitedItems(&last_known_items);

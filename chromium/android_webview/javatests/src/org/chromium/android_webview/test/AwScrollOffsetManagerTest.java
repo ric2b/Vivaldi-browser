@@ -4,6 +4,8 @@
 
 package org.chromium.android_webview.test;
 
+import static org.chromium.android_webview.test.OnlyRunIn.ProcessMode.SINGLE_PROCESS;
+
 import android.graphics.Rect;
 import android.support.test.filters.SmallTest;
 
@@ -12,13 +14,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwScrollOffsetManager;
-import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
 
 /**
  * Integration tests for ScrollOffsetManager.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
+@RunWith(AwJUnit4ClassRunner.class)
+@OnlyRunIn(SINGLE_PROCESS)
 public class AwScrollOffsetManagerTest {
     private static class TestScrollOffsetManagerDelegate implements AwScrollOffsetManager.Delegate {
         private int mOverScrollDeltaX;

@@ -9,9 +9,10 @@
 
 #include "base/guid.h"
 #include "base/ios/ios_util.h"
+#include "base/mac/foundation_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
@@ -19,17 +20,18 @@
 #import "components/autofill/ios/browser/autofill_agent.h"
 #include "components/autofill/ios/browser/autofill_driver_ios.h"
 #import "components/autofill/ios/browser/form_suggestion.h"
+#import "components/autofill/ios/browser/js_suggestion_manager.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "components/infobars/core/infobar_manager.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/security_state/ios/ssl_status_input_event_data.h"
-#import "ios/chrome/browser/autofill/form_input_accessory_view_controller.h"
 #import "ios/chrome/browser/autofill/form_suggestion_controller.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #include "ios/chrome/browser/ssl/ios_security_state_tab_helper.h"
 #import "ios/chrome/browser/ui/autofill/chrome_autofill_client_ios.h"
+#import "ios/chrome/browser/ui/autofill/form_input_accessory_mediator.h"
 #include "ios/chrome/browser/ui/settings/personal_data_manager_data_changed_observer.h"
 #include "ios/chrome/browser/web/chrome_web_client.h"
 #import "ios/chrome/browser/web/chrome_web_test.h"
@@ -37,6 +39,7 @@
 #import "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/ssl_status.h"
+#import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
 #import "ios/web/public/web_state/web_state.h"
 #import "testing/gtest_mac.h"
 #include "ui/base/test/ios/ui_view_test_utils.h"
@@ -192,7 +195,7 @@ class AutofillControllerTest : public ChromeWebTest {
   TestSuggestionController* suggestion_controller_;
 
   // Retrieves accessory views according to form events.
-  FormInputAccessoryViewController* accessory_controller_;
+  FormInputAccessoryMediator* accessory_mediator_;
 
   // Manages autofill for a single page.
   AutofillController* autofill_controller_;
@@ -222,9 +225,17 @@ void AutofillControllerTest::SetUp() {
   suggestion_controller_ = [[TestSuggestionController alloc]
       initWithWebState:web_state()
              providers:@[ [autofill_controller_ suggestionProvider] ]];
-  accessory_controller_ = [[FormInputAccessoryViewController alloc]
-      initWithWebState:web_state()
-             providers:@[ [suggestion_controller_ accessoryViewProvider] ]];
+  accessory_mediator_ =
+      [[FormInputAccessoryMediator alloc] initWithConsumer:nil
+                                              webStateList:NULL];
+  [accessory_mediator_ injectWebState:web_state()];
+  [accessory_mediator_
+      injectProviders:@[ [suggestion_controller_ accessoryViewProvider] ]];
+  auto suggestionManager = base::mac::ObjCCastStrict<JsSuggestionManager>(
+      [web_state()->GetJSInjectionReceiver()
+          instanceOfClass:[JsSuggestionManager class]]);
+  [accessory_mediator_ injectSuggestionManager:suggestionManager];
+
   histogram_tester_.reset(new base::HistogramTester());
 }
 
@@ -268,14 +279,14 @@ TEST_F(AutofillControllerTest, ReadForm) {
   EXPECT_TRUE(autofill_manager->form_structures().empty())
       << "Forms are registered at beginning";
   LoadHtml(kProfileFormHtml);
-  const std::vector<std::unique_ptr<FormStructure>>& forms =
-      autofill_manager->form_structures();
+  const auto& forms = autofill_manager->form_structures();
   ASSERT_EQ(1U, forms.size());
-  CheckField(*forms[0], NAME_FULL, "name_1");
-  CheckField(*forms[0], ADDRESS_HOME_LINE1, "address_1");
-  CheckField(*forms[0], ADDRESS_HOME_CITY, "city_1");
-  CheckField(*forms[0], ADDRESS_HOME_STATE, "state_1");
-  CheckField(*forms[0], ADDRESS_HOME_ZIP, "zip_1");
+  const auto& form = *(forms.begin()->second);
+  CheckField(form, NAME_FULL, "name_1");
+  CheckField(form, ADDRESS_HOME_LINE1, "address_1");
+  CheckField(form, ADDRESS_HOME_CITY, "city_1");
+  CheckField(form, ADDRESS_HOME_STATE, "state_1");
+  CheckField(form, ADDRESS_HOME_ZIP, "zip_1");
   ExpectMetric("Autofill.IsEnabled.PageLoad", 1);
   ExpectHappinessMetric(AutofillMetrics::FORMS_LOADED);
 };
@@ -287,10 +298,10 @@ TEST_F(AutofillControllerTest, ReadFormName) {
   AutofillManager* autofill_manager =
       AutofillDriverIOS::FromWebState(web_state())->autofill_manager();
   LoadHtml(kMinimalFormWithNameHtml);
-  const std::vector<std::unique_ptr<FormStructure>>& forms =
-      autofill_manager->form_structures();
+  const auto& forms = autofill_manager->form_structures();
   ASSERT_EQ(1U, forms.size());
-  EXPECT_EQ(base::UTF8ToUTF16("form1"), forms[0]->ToFormData().name);
+  const auto& form = *(forms.begin()->second);
+  EXPECT_EQ(base::UTF8ToUTF16("form1"), form.ToFormData().name);
 };
 
 // Checks that an HTML page containing a profile-type form which is submitted

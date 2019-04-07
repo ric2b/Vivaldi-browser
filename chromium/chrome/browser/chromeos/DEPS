@@ -2,16 +2,8 @@ include_rules = [
   # TODO(ananta): Remove this when we move files which display UI in
   # chrome/browser/chromeos to chrome/browser/ui/views/chromeos
   # crbug.com/728877
-  "+chrome/browser/ui/views/harmony/chrome_layout_provider.h",
+  "+chrome/browser/ui/views/chrome_layout_provider.h",
 
-  "+components/constrained_window",
-  "+components/drive/drive_pref_names.h",
-  "+components/pairing",
-  "+components/password_manager/core/browser/hash_password_manager.h",
-  "+components/onc",
-  "+components/ownership",
-  "+components/session_manager/core",
-  "+components/user_manager",
   "+cros",
   "+dbus",
   "+device/bluetooth",
@@ -19,6 +11,7 @@ include_rules = [
   "+media/audio/sounds",  # For system sounds
   "+media/base/media_switches.h",  # For media command line switches.
   "+media/mojo/interfaces",  # For platform verification mojom interface.
+  "+remoting/host/it2me",  # For CRD host in remote command
   "+services/device/public",
   "+services/metrics/public",
   "+services/tracing/public",

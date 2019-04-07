@@ -66,7 +66,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.RenderTestRule;
 import org.chromium.chrome.test.util.ViewUtils;
-import org.chromium.chrome.test.util.browser.ChromeModernDesign;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
@@ -79,6 +78,7 @@ import org.chromium.content.browser.test.util.TestWebContentsObserver;
 import org.chromium.content_public.browser.GestureListenerManager;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.RenderCoordinates;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.test.util.UiRestriction;
@@ -96,7 +96,6 @@ import java.util.concurrent.TimeoutException;
 @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
 @CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
 @EnableFeatures(ChromeFeatureList.CONTEXTUAL_SUGGESTIONS_BOTTOM_SHEET)
-@ChromeModernDesign.Enable
 public class ContextualSuggestionsTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
@@ -612,6 +611,7 @@ public class ContextualSuggestionsTest {
     @Test
     @MediumTest
     @Feature({"ContextualSuggestions"})
+    @DisabledTest(message = "Needs updates for SurfaceSynchronization - crbug.com/876943")
     public void testPeekWithPageScrollPercentage() throws Exception {
         // Set the screen orientation to portrait since we scroll the web contents in absolute
         // pixels in the test.
@@ -629,6 +629,8 @@ public class ContextualSuggestionsTest {
         WebContents webContents = mActivityTestRule.getWebContents();
         GestureListenerManager.fromWebContents(webContents).addListener(gestureStateListener);
         View view = webContents.getViewAndroidDelegate().getContainerView();
+        int maxScrollOffset =
+                RenderCoordinates.fromWebContents(webContents).getMaxVerticalScrollPixInt();
 
         // Verify that suggestions are not shown before scroll.
         ThreadUtils.runOnUiThreadBlocking(
@@ -636,10 +638,10 @@ public class ContextualSuggestionsTest {
         assertEquals("Bottom sheet should be hidden before scroll.", BottomSheet.SheetState.HIDDEN,
                 mBottomSheet.getSheetState());
 
-        // Scroll the page to 30% and verify that the suggestions are not shown. The pixel to scroll
-        // is hard coded (approximately) based on the html height of the TEST_PAGE.
+        // Scroll the page to 30% and verify that the suggestions are not shown.
         int callCount = scrollChangedCallback.getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(() -> view.scrollBy(0, 3000));
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> view.scrollBy(0, Math.round(maxScrollOffset * 0.3f)));
         scrollChangedCallback.waitForCallback(callCount);
 
         // Simulate call to show content without browser controls being hidden.
@@ -648,9 +650,10 @@ public class ContextualSuggestionsTest {
         assertEquals("Bottom sheet should be hidden on 30% scroll percentage.",
                 BottomSheet.SheetState.HIDDEN, mBottomSheet.getSheetState());
 
-        // Scroll the page to approximately 60% and verify that the suggestions are shown.
+        // Scroll the page 20% more for a total of 50% and verify that the suggestions are shown.
         callCount = scrollChangedCallback.getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(() -> view.scrollBy(0, 3000));
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> view.scrollBy(0, Math.round(maxScrollOffset * 0.2f)));
         scrollChangedCallback.waitForCallback(callCount);
 
         // Simulate call to show content without browser controls being hidden.

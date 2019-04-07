@@ -346,10 +346,7 @@ class BrowserUMAReporter : public CompositorTimingHistory::UMAReporter {
         "Scheduling.Browser.PrepareTilesDuration", duration);
   }
 
-  void AddActivateDuration(base::TimeDelta duration) override {
-    UMA_HISTOGRAM_CUSTOM_TIMES_DURATION("Scheduling.Browser.ActivateDuration",
-                                        duration);
-  }
+  void AddActivateDuration(base::TimeDelta duration) override {}
 
   void AddDrawDuration(base::TimeDelta duration) override {
     UMA_HISTOGRAM_CUSTOM_TIMES_DURATION("Scheduling.Browser.DrawDuration",
@@ -361,10 +358,7 @@ class BrowserUMAReporter : public CompositorTimingHistory::UMAReporter {
                                         duration);
   }
 
-  void AddMainAndImplFrameTimeDelta(base::TimeDelta delta) override {
-    UMA_HISTOGRAM_CUSTOM_TIMES_VSYNC_ALIGNED(
-        "Scheduling.Browser.MainAndImplFrameTimeDelta", delta);
-  }
+  void AddMainAndImplFrameTimeDelta(base::TimeDelta delta) override {}
 };
 
 class NullUMAReporter : public CompositorTimingHistory::UMAReporter {

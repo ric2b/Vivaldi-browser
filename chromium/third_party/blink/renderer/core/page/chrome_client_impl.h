@@ -116,7 +116,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   float ClampPageScaleFactorToLimits(float scale) const override;
   void MainFrameScrollOffsetChanged() const override;
   void ResizeAfterLayout() const override;
-  void LayoutUpdated() const override;
+  void MainFrameLayoutUpdated() const override;
   void ShowMouseOverURL(const HitTestResult&) override;
   void SetToolTip(LocalFrame&, const String&, TextDirection) override;
   void DispatchViewportPropertiesDidChange(
@@ -165,9 +165,8 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   void FullscreenElementChanged(Element* old_element,
                                 Element* new_element) override;
 
-  void ClearCompositedSelection(LocalFrame*) override;
-  void UpdateCompositedSelection(LocalFrame*,
-                                 const CompositedSelection&) override;
+  void ClearLayerSelection(LocalFrame*) override;
+  void UpdateLayerSelection(LocalFrame*, const cc::LayerSelection&) override;
 
   // ChromeClient methods:
   String AcceptLanguages() override;
@@ -175,6 +174,10 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
 
   // ChromeClientImpl:
   void SetNewWindowNavigationPolicy(WebNavigationPolicy);
+
+  // FileChooser calls this function to kick pending file chooser
+  // requests.
+  void DidCompleteFileChooser(FileChooser& file_chooser);
 
   void AutoscrollStart(WebFloatPoint viewport_point, LocalFrame*) override;
   void AutoscrollFling(WebFloatSize velocity, LocalFrame*) override;
@@ -245,9 +248,12 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
 
   WebViewImpl* web_view_;  // Weak pointer.
   HeapHashSet<WeakMember<PopupOpeningObserver>> popup_opening_observers_;
+  Vector<scoped_refptr<FileChooser>> file_chooser_queue_;
   Cursor last_set_mouse_cursor_for_testing_;
   bool cursor_overridden_;
   bool did_request_non_empty_tool_tip_;
+
+  FRIEND_TEST_ALL_PREFIXES(FileChooserQueueTest, DerefQueuedChooser);
 };
 
 DEFINE_TYPE_CASTS(ChromeClientImpl,

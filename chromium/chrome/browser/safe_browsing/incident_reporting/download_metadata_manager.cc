@@ -20,8 +20,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "components/download/public/common/download_item.h"
 #include "components/safe_browsing/proto/csd.pb.h"
 #include "content/public/browser/browser_context.h"
@@ -340,7 +340,7 @@ class DownloadMetadataManager::ManagerContext
 
 DownloadMetadataManager::DownloadMetadataManager()
     : task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::TaskPriority::BACKGROUND,
+          {base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN,
            base::MayBlock()})) {}
 

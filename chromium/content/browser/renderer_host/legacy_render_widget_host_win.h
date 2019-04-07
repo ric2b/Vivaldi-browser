@@ -5,15 +5,14 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_LEGACY_RENDER_WIDGET_HOST_WIN_H_
 #define CONTENT_BROWSER_RENDERER_HOST_LEGACY_RENDER_WIDGET_HOST_WIN_H_
 
-#include <atlbase.h>
 #include <atlcrack.h>
-#include <atlwin.h>
 #include <oleacc.h>
 #include <wrl/client.h>
 
 #include <memory>
 
 #include "base/macros.h"
+#include "base/win/atl.h"
 #include "content/common/content_export.h"
 #include "ui/compositor/compositor_animation_observer.h"
 #include "ui/gfx/geometry/rect.h"
@@ -123,9 +122,6 @@ class CONTENT_EXPORT LegacyRenderWidgetHostHWND
   void set_host(RenderWidgetHostViewAura* host) {
     host_ = host;
   }
-
-  // Changes the position of the system caret used for accessibility.
-  void MoveCaretTo(const gfx::Rect& bounds);
 
   // DirectManipulation needs to poll for new events every frame while finger
   // gesturing on touchpad.

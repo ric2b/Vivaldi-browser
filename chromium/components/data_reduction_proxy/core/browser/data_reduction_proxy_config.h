@@ -26,10 +26,10 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_type_info.h"
 #include "components/data_reduction_proxy/proto/client_config.pb.h"
 #include "components/previews/core/previews_experiments.h"
-#include "net/base/network_change_notifier.h"
 #include "net/log/net_log_with_source.h"
 #include "net/proxy_resolution/proxy_config.h"
 #include "net/proxy_resolution/proxy_retry_info.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -88,7 +88,7 @@ enum SecureProxyCheckFetchResult {
 // This object lives on the IO thread and all of its methods are expected to be
 // called from there.
 class DataReductionProxyConfig
-    : public net::NetworkChangeNotifier::NetworkChangeObserver {
+    : public network::NetworkConnectionTracker::NetworkConnectionObserver {
  public:
   // The caller must ensure that all parameters remain alive for the lifetime
   // of the |DataReductionProxyConfig| instance, with the exception of
@@ -100,6 +100,7 @@ class DataReductionProxyConfig
   DataReductionProxyConfig(
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
       net::NetLog* net_log,
+      network::NetworkConnectionTracker* network_connection_tracker,
       std::unique_ptr<DataReductionProxyConfigValues> config_values,
       DataReductionProxyConfigurator* configurator,
       DataReductionProxyEventCreator* event_creator);
@@ -205,6 +206,12 @@ class DataReductionProxyConfig
   // When triggering previews, prevent long term black list rules.
   void SetIgnoreLongTermBlackListRules(bool ignore_long_term_black_list_rules);
 
+  // Called when there is a change in the HTTP RTT estimate.
+  void OnRTTOrThroughputEstimatesComputed(base::TimeDelta http_rtt);
+
+  // Returns the current HTTP RTT estimate.
+  base::Optional<base::TimeDelta> GetHttpRttEstimate() const;
+
   // Returns the value set in SetIgnoreLongTermBlackListRules.
   bool IgnoreBlackListLongTermRulesForTesting() const;
 
@@ -258,7 +265,7 @@ class DataReductionProxyConfig
                            ShouldAcceptServerPreview);
 
   // Values of the estimated network quality at the beginning of the most
-  // recent query of the Network Quality Estimator.
+  // recent query of the Network quality estimate provider.
   enum NetworkQualityAtLastQuery {
     NETWORK_QUALITY_AT_LAST_QUERY_UNKNOWN,
     NETWORK_QUALITY_AT_LAST_QUERY_SLOW,
@@ -270,9 +277,8 @@ class DataReductionProxyConfig
   // |configurator_|. Used by the Data Reduction Proxy config service client.
   void ReloadConfig();
 
-  // NetworkChangeNotifier::NetworkChangeObserver implementation:
-  void OnNetworkChanged(
-      net::NetworkChangeNotifier::ConnectionType type) override;
+  // network::NetworkConnectionTracker::NetworkConnectionObserver:
+  void OnConnectionChanged(network::mojom::ConnectionType type) override;
 
   // Invoked to continue network changed handling after the network id is
   // retrieved. If |get_network_id_asynchronously_| is set, the network id is
@@ -351,6 +357,9 @@ class DataReductionProxyConfig
   net::NetLog* net_log_;
   net::NetLogWithSource net_log_with_source_;
 
+  // Watches for network connection changes.
+  network::NetworkConnectionTracker* network_connection_tracker_;
+
   // The caller must ensure that the |configurator_| outlives this instance.
   DataReductionProxyConfigurator* configurator_;
 
@@ -361,7 +370,7 @@ class DataReductionProxyConfig
   base::ThreadChecker thread_checker_;
 
   // The current connection type.
-  net::NetworkChangeNotifier::ConnectionType connection_type_;
+  network::mojom::ConnectionType connection_type_;
 
   // Stores the properties of the proxy which is currently being probed. The
   // values are valid only if a probe (or warmup URL) fetch is currently
@@ -375,6 +384,9 @@ class DataReductionProxyConfig
   // Should be accessed only on the IO thread. Guaranteed to be non-null during
   // the lifetime of |this| if accessed on the IO thread.
   NetworkPropertiesManager* network_properties_manager_;
+
+  // Current HTTP RTT estimate.
+  base::Optional<base::TimeDelta> http_rtt_;
 
   base::WeakPtrFactory<DataReductionProxyConfig> weak_factory_;
 

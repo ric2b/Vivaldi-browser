@@ -5,7 +5,7 @@ include_rules = [
   "+components/autofill/core/common",
   "+components/cdm/renderer",
   "+components/content_settings/core/common",
-  "+components/contextual_search/renderer",
+  "+components/contextual_search/content/renderer",
   "+components/crash/core/common/crash_key.h",
   "+components/crx_file",
   "+components/data_reduction_proxy/content/renderer",
@@ -61,6 +61,7 @@ include_rules = [
   "+storage/common",
   "+third_party/blink/public/mojom",
   "+third_party/metrics_proto",
+  "+third_party/widevine/cdm/widevine_cdm_common.h",
   "-components/spellcheck/browser",  # Allow all spellcheck but browser.
 ]
 

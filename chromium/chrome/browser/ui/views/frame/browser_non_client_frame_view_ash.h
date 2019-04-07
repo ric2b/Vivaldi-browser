@@ -35,8 +35,7 @@ namespace ash {
 class DefaultFrameHeader;
 class FrameCaptionButton;
 class FrameCaptionButtonContainerView;
-class FrameHeaderOriginText;
-}
+}  // namespace ash
 
 // Provides the BrowserNonClientFrameView for Chrome OS.
 class BrowserNonClientFrameViewAsh
@@ -50,9 +49,6 @@ class BrowserNonClientFrameViewAsh
       public aura::WindowObserver,
       public ImmersiveModeController::Observer {
  public:
-  // How long to delay the hosted app origin text animation from starting.
-  static const base::TimeDelta kTitlebarAnimationDelay;
-
   BrowserNonClientFrameViewAsh(BrowserFrame* frame, BrowserView* browser_view);
   ~BrowserNonClientFrameViewAsh() override;
 
@@ -70,6 +66,7 @@ class BrowserNonClientFrameViewAsh
   void UpdateMinimumSize() override;
   int GetTabStripLeftInset() const override;
   void OnTabsMaxXChanged() override;
+  bool CanUserExitFullscreen() const override;
 
   // views::NonClientFrameView:
   gfx::Rect GetBoundsForClientView() const override;
@@ -150,13 +147,13 @@ class BrowserNonClientFrameViewAsh
                            AvatarDisplayOnTeleportedWindow);
   FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
                            HeaderVisibilityInOverviewAndSplitview);
-  FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
+  FRIEND_TEST_ALL_PREFIXES(NonHomeLauncherBrowserNonClientFrameViewAshTest,
                            HeaderHeightForSnappedBrowserInSplitView);
   FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshBackButtonTest,
                            V1BackButton);
   FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
                            ToggleTabletModeOnMinimizedWindow);
-  FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
+  FRIEND_TEST_ALL_PREFIXES(HostedAppNonClientFrameViewAshTest,
                            ActiveStateOfButtonMatchesWidget);
   FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
                            RestoreMinimizedBrowserUpdatesCaption);
@@ -215,12 +212,8 @@ class BrowserNonClientFrameViewAsh
   // Owned by views hierarchy.
   HostedAppButtonContainer* hosted_app_button_container_ = nullptr;
 
-  // URL origin text for hosted app windows.
-  // Owned by views hierarchy.
-  ash::FrameHeaderOriginText* frame_header_origin_text_ = nullptr;
-
   // A view that contains the extra views used for hosted apps
-  // (|hosted_app_button_container_| and |frame_header_origin_text_|).
+  // (|hosted_app_button_container_| and |hosted_app_origin_text_|).
   // Only used in Mash.
   views::View* hosted_app_extras_container_ = nullptr;
 
@@ -248,8 +241,6 @@ class BrowserNonClientFrameViewAsh
   scoped_refptr<ImageRegistration> inactive_frame_image_registration_;
   scoped_refptr<ImageRegistration> active_frame_overlay_image_registration_;
   scoped_refptr<ImageRegistration> inactive_frame_overlay_image_registration_;
-
-  base::WeakPtrFactory<BrowserNonClientFrameViewAsh> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(BrowserNonClientFrameViewAsh);
 };

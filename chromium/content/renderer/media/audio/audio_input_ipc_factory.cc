@@ -4,6 +4,7 @@
 
 #include "content/renderer/media/audio/audio_input_ipc_factory.h"
 
+#include <string>
 #include <utility>
 
 #include "base/logging.h"
@@ -12,6 +13,7 @@
 #include "content/common/media/renderer_audio_input_stream_factory.mojom.h"
 #include "content/renderer/media/audio/mojo_audio_input_ipc.h"
 #include "content/renderer/render_frame_impl.h"
+#include "services/audio/public/mojom/audio_processing.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace content {
@@ -20,30 +22,39 @@ namespace {
 
 void CreateMojoAudioInputStreamOnMainThread(
     int frame_id,
-    int32_t session_id,
+    const media::AudioSourceParameters& source_params,
     mojom::RendererAudioInputStreamFactoryClientPtr client,
+    audio::mojom::AudioProcessorControlsRequest controls_request,
     const media::AudioParameters& params,
     bool automatic_gain_control,
     uint32_t total_segments) {
   RenderFrameImpl* frame = RenderFrameImpl::FromRoutingID(frame_id);
   if (frame) {
+    audio::mojom::AudioProcessingConfigPtr processing_config;
+    if (source_params.processing) {
+      processing_config = audio::mojom::AudioProcessingConfig::New(
+          std::move(controls_request), source_params.processing->id,
+          source_params.processing->settings);
+    }
     frame->GetAudioInputStreamFactory()->CreateStream(
-        std::move(client), session_id, params, automatic_gain_control,
-        total_segments);
+        std::move(client), source_params.session_id, params,
+        automatic_gain_control, total_segments, std::move(processing_config));
   }
 }
 
 void CreateMojoAudioInputStream(
     scoped_refptr<base::SequencedTaskRunner> main_task_runner,
     int frame_id,
-    int32_t session_id,
+    const media::AudioSourceParameters& source_params,
     mojom::RendererAudioInputStreamFactoryClientPtr client,
+    audio::mojom::AudioProcessorControlsRequest controls_request,
     const media::AudioParameters& params,
     bool automatic_gain_control,
     uint32_t total_segments) {
   main_task_runner->PostTask(
       FROM_HERE, base::BindOnce(&CreateMojoAudioInputStreamOnMainThread,
-                                frame_id, session_id, std::move(client), params,
+                                frame_id, source_params, std::move(client),
+                                std::move(controls_request), params,
                                 automatic_gain_control, total_segments));
 }
 
@@ -86,11 +97,12 @@ AudioInputIPCFactory::~AudioInputIPCFactory() {
 
 std::unique_ptr<media::AudioInputIPC> AudioInputIPCFactory::CreateAudioInputIPC(
     int frame_id,
-    int session_id) const {
-  DCHECK_NE(0, session_id);
+    const media::AudioSourceParameters& source_params) const {
+  DCHECK_NE(0, source_params.session_id);
   return std::make_unique<MojoAudioInputIPC>(
+      source_params,
       base::BindRepeating(&CreateMojoAudioInputStream, main_task_runner_,
-                          frame_id, session_id),
+                          frame_id),
       base::BindRepeating(&AssociateInputAndOutputForAec, main_task_runner_,
                           frame_id));
 }

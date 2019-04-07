@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/component_export.h"
 #include "base/containers/flat_set.h"
+#include "net/base/completion_once_callback.h"
 #include "net/cert/cert_verifier.h"
 
 namespace net {
@@ -58,11 +59,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) IgnoreErrorsCertVerifier
   // from the whitelist. Otherwise, it invokes Verify on the wrapped verifier
   // and returns the result.
   int Verify(const RequestParams& params,
-             net::CRLSet* crl_set,
              net::CertVerifyResult* verify_result,
              net::CompletionOnceCallback callback,
              std::unique_ptr<Request>* out_req,
              const net::NetLogWithSource& net_log) override;
+  void SetConfig(const Config& config) override;
 
  private:
   friend class IgnoreErrorsCertVerifierTest;

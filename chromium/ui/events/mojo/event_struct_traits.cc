@@ -8,6 +8,7 @@
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/gesture_event_details.h"
+#include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/mojo/event_constants.mojom.h"
 #include "ui/latency/mojo/latency_info_struct_traits.h"
@@ -74,6 +75,36 @@ bool ReadPointerDetails(ui::mojom::EventType event_type,
   }
   NOTREACHED();
   return false;
+}
+
+bool ReadScrollData(ui::mojom::EventDataView* event,
+                    base::TimeTicks time_stamp,
+                    EventUniquePtr* out) {
+  ui::mojom::ScrollDataPtr scroll_data;
+  if (!event->ReadScrollData<ui::mojom::ScrollDataPtr>(&scroll_data))
+    return false;
+
+  *out = std::make_unique<ui::ScrollEvent>(
+      mojo::ConvertTo<ui::EventType>(event->action()),
+      gfx::Point(scroll_data->location->x, scroll_data->location->y),
+      time_stamp, event->flags(), scroll_data->x_offset, scroll_data->y_offset,
+      scroll_data->x_offset_ordinal, scroll_data->y_offset_ordinal,
+      scroll_data->finger_count, scroll_data->momentum_phase);
+  return true;
+}
+
+bool ReadGestureData(ui::mojom::EventDataView* event,
+                     base::TimeTicks time_stamp,
+                     EventUniquePtr* out) {
+  ui::mojom::GestureDataPtr gesture_data;
+  if (!event->ReadGestureData<ui::mojom::GestureDataPtr>(&gesture_data))
+    return false;
+
+  *out = std::make_unique<ui::GestureEvent>(
+      gesture_data->location->x, gesture_data->location->y, event->flags(),
+      time_stamp,
+      ui::GestureEventDetails(ConvertTo<ui::EventType>(event->action())));
+  return true;
 }
 
 }  // namespace
@@ -379,8 +410,8 @@ bool StructTraits<ui::mojom::EventDataView, EventUniquePtr>::Read(
       if (key_data->is_char) {
         *out = std::make_unique<ui::KeyEvent>(
             static_cast<base::char16>(key_data->character),
-            static_cast<ui::KeyboardCode>(key_data->key_code), event.flags(),
-            time_stamp);
+            static_cast<ui::KeyboardCode>(key_data->key_code),
+            ui::DomCode::NONE, event.flags(), time_stamp);
       } else {
         *out = std::make_unique<ui::KeyEvent>(
             event.action() == ui::mojom::EventType::KEY_PRESSED
@@ -421,32 +452,25 @@ bool StructTraits<ui::mojom::EventDataView, EventUniquePtr>::Read(
           pointer_details, time_stamp);
       break;
     }
-    case ui::mojom::EventType::GESTURE_TAP: {
-      ui::mojom::GestureDataPtr gesture_data;
-      if (!event.ReadGestureData<ui::mojom::GestureDataPtr>(&gesture_data))
+    case ui::mojom::EventType::GESTURE_TAP:
+      if (!ReadGestureData(&event, time_stamp, out))
         return false;
-
-      *out = std::make_unique<ui::GestureEvent>(
-          gesture_data->location->x, gesture_data->location->y, event.flags(),
-          time_stamp, ui::GestureEventDetails(ui::ET_GESTURE_TAP));
       break;
-    }
     case ui::mojom::EventType::SCROLL:
-    case ui::mojom::EventType::SCROLL_FLING_START:
-    case ui::mojom::EventType::SCROLL_FLING_CANCEL: {
-      ui::mojom::ScrollDataPtr scroll_data;
-      if (!event.ReadScrollData<ui::mojom::ScrollDataPtr>(&scroll_data))
+      if (!ReadScrollData(&event, time_stamp, out))
         return false;
-
-      *out = std::make_unique<ui::ScrollEvent>(
-          mojo::ConvertTo<ui::EventType>(event.action()),
-          gfx::Point(scroll_data->location->x, scroll_data->location->y),
-          time_stamp, event.flags(), scroll_data->x_offset,
-          scroll_data->y_offset, scroll_data->x_offset_ordinal,
-          scroll_data->y_offset_ordinal, scroll_data->finger_count,
-          scroll_data->momentum_phase);
       break;
-    }
+    case ui::mojom::EventType::SCROLL_FLING_START:
+    case ui::mojom::EventType::SCROLL_FLING_CANCEL:
+      // SCROLL_FLING_START/CANCEL is represented by a GestureEvent if
+      // EF_FROM_TOUCH is set.
+      if ((event.flags() & ui::EF_FROM_TOUCH) != 0) {
+        if (!ReadGestureData(&event, time_stamp, out))
+          return false;
+      } else if (!ReadScrollData(&event, time_stamp, out)) {
+        return false;
+      }
+      break;
     case ui::mojom::EventType::CANCEL_MODE:
       *out = std::make_unique<ui::CancelModeEvent>();
       break;

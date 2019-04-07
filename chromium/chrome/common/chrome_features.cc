@@ -40,10 +40,6 @@ const base::Feature kFullscreenToolbarReveal{"FullscreenToolbarReveal",
 // Use the Toolkit-Views Task Manager window.
 const base::Feature kViewsTaskManager{"ViewsTaskManager",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables the suggested text touch bar for autocomplete in textfields.
-const base::Feature kSuggestedTextTouchBar{"SuggestedTextTouchBar",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_MACOSX)
 
 #if !defined(OS_ANDROID)
@@ -147,6 +143,12 @@ const base::Feature kTabMetricsLogging{"TabMetricsLogging",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
+#if defined(OS_MACOSX)
+// Enables the suggested text touch bar for autocomplete in textfields.
+const base::Feature kTextSuggestionsTouchBar{"TextSuggestionsTouchBar",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 #if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
 // Enables the blocking of third-party modules.
 // Note: Due to a limitation in the implementation of this feature, it is
@@ -208,7 +210,7 @@ const base::Feature kDesktopIOSPromotion{"DesktopIOSPromotion",
 // Enables or disables windowing related features for desktop PWAs.
 const base::Feature kDesktopPWAWindowing {
   "DesktopPWAWindowing",
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || defined(OS_WIN) || defined(OS_LINUX)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -238,7 +240,7 @@ const base::Feature kDownloadsForeground{"DownloadsForeground",
 #if defined(OS_ANDROID)
 // Enable changing default downloads storage location on Android.
 const base::Feature kDownloadsLocationChange{"DownloadsLocationChange",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // An experimental way of showing app banners, which has modal banners and gives
@@ -309,10 +311,22 @@ const base::Feature kHappinessTrackingSystem {
 #endif
 
 #if !defined(OS_ANDROID)
+// Enables or disables the Happiness Tracking System for Desktop Chrome.
+const base::Feature kHappinessTrackingSurveysForDesktop{
+    "HappinessTrackingSurveysForDesktop", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // !defined(OS_ANDROID)
+
+#if !defined(OS_ANDROID)
 // Replaces the WebUI Cast dialog with a Views toolkit one.
 const base::Feature kViewsCastDialog{"ViewsCastDialog",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // !defined(OS_ANDROID)
+
+// Enables navigation suggestions for lookalike URLs (e.g. internationalized
+// domain names that are visually similar to popular domains or to domains with
+// engagement score, such as googlé.com).
+const base::Feature kLookalikeUrlNavigationSuggestions{
+    "LookalikeUrlNavigationSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether the "improved recovery component" is used. The improved
 // recovery component is a redesigned Chrome component intended to restore
@@ -347,9 +361,6 @@ const base::Feature kMacRTL{"MacRTL", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kMacFullSizeContentView{"MacFullSizeContentView",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables "Share" submenu in File menu.
-const base::Feature kMacSystemShareMenu{"MacSystemShareMenu",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 #if defined(OS_MACOSX)
@@ -363,11 +374,6 @@ const base::Feature kMacMaterialDesignDownloadShelf{
 // acknowledgement.
 const base::Feature kAcknowledgeNtpOverrideOnDeactivate{
     "AcknowledgeNtpOverrideOnDeactivate", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
-
-#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
-const base::Feature kWarnBeforeQuitting{"WarnBeforeQuitting",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 // The material redesign of the Incognito NTP.
@@ -388,14 +394,24 @@ const base::Feature kModalPermissionPrompts{"ModalPermissionPrompts",
 // Center for displaying the toasts. The feature is hardcoded to enabled for
 // Chrome OS.
 #if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS) && !defined(OS_CHROMEOS)
-#if defined(OS_MACOSX) || defined(OS_ANDROID) || defined(OS_LINUX)
 const base::Feature kNativeNotifications{"NativeNotifications",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
-#else
-const base::Feature kNativeNotifications{"NativeNotifications",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
 #endif  // BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
+
+#if defined(OS_ANDROID)
+// Changes the net error page UI by adding suggested offline content or
+// enabling automatic fetching of the page when online again.
+const base::Feature kNewNetErrorPageUI{"NewNetErrorPageUI",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+const char kNewNetErrorPageUIAlternateParameterName[] = "ui-alternate";
+
+const char kNewNetErrorPageUIAlternateContentList[] = "content_list";
+const char kNewNetErrorPageUIAlternateContentListAutoDownload[] =
+    "content_list_auto_download";
+const char kNewNetErrorPageUIAlternateContentPreview[] = "content_preview";
+const char kNewNetErrorPageUIAlternateContentPreviewAutoDownload[] =
+    "content_preview_auto_download";
+#endif  // OS_ANDROID
 
 const base::Feature kNetworkPrediction{"NetworkPrediction",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
@@ -420,10 +436,12 @@ const base::Feature kOomIntervention{"OomIntervention",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
-#if !defined(OS_ANDROID)
-// Enables or disabled the OneGoogleBar on the local NTP.
-const base::Feature kOneGoogleBarOnLocalNtp{"OneGoogleBarOnLocalNtp",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
+#if defined(OS_CHROMEOS)
+// Enables the Recommend Apps screen in OOBE.
+// TODO(https://crbug.com/862774): Remove this after the feature is fully
+// launched.
+const base::Feature kOobeRecommendAppsScreen{"OobeRecommendAppsScreen",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 // Adds the base language code to the Language-Accept headers if at least one
@@ -497,8 +515,7 @@ const base::Feature kSecurityKeyAttestationPrompt{
     "SecurityKeyAttestationPrompt", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if defined(OS_MACOSX)
-// Whether to show all dialogs with toolkit-views on Mac, rather than Cocoa. A
-// subset of "pilot" dialogs can be enabled with kSecondaryUiMd.
+// Whether to show all dialogs with toolkit-views on Mac, rather than Cocoa.
 const base::Feature kShowAllDialogsWithViewsToolkit{
     "ShowAllDialogsWithViewsToolkit", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_MACOSX)
@@ -509,11 +526,17 @@ const base::Feature kShowTrustedPublisherURL{"ShowTrustedPublisherURL",
 #endif
 
 // Alternative to switches::kSitePerProcess, for turning on full site isolation.
-// Launch bug: https://crbug.com/739418.  This is a //chrome-layer feature to
+// Launch bug: https://crbug.com/810843.  This is a //chrome-layer feature to
 // avoid turning on site-per-process by default for *all* //content embedders
 // (e.g. this approach lets ChromeCast avoid site-per-process mode).
-const base::Feature kSitePerProcess{"site-per-process",
-                                    base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kSitePerProcess {
+  "site-per-process",
+#if defined(OS_ANDROID)
+      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
 
 // kSitePerProcessOnlyForHighMemoryClients is checked before kSitePerProcess,
 // and (if enabled) can restrict if kSitePerProcess feature is checked at all -
@@ -533,9 +556,14 @@ const char kSitePerProcessOnlyForHighMemoryClientsParamName[] =
 const base::Feature kSiteSettings{"SiteSettings",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables committed error pages instead of transient navigation entries for
+// SSL interstitial error pages (i.e. certificate errors).
+const base::Feature kSSLCommittedInterstitials{
+    "SSLCommittedInterstitials", base::FEATURE_DISABLED_BY_DEFAULT};
+
 #if defined(OS_CHROMEOS)
 // Enables or disables the ability to add a Samba Share to the Files app
-const base::Feature kNativeSmb{"NativeSmb", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kNativeSmb{"NativeSmb", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
 
 // Enables a special visual treatment for windows with a single tab.
@@ -550,7 +578,7 @@ const base::Feature kSoundContentSetting{"SoundContentSetting",
 // Enables or disabled committed interstitials for Supervised User
 // interstitials.
 const base::Feature kSupervisedUserCommittedInterstitials{
-    "SupervisedUserCommittedInterstitials", base::FEATURE_DISABLED_BY_DEFAULT};
+    "SupervisedUserCommittedInterstitials", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if defined(OS_CHROMEOS)
 // Enables or disables chrome://sys-internals.
@@ -642,13 +670,31 @@ const base::Feature kCrOSEnableUSMUserService{"CrOSEnableUSMUserService",
 // Enables or disables initialization & use of the Chrome OS ML Service.
 const base::Feature kMachineLearningService{"MachineLearningService",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable USBGuard at the lockscreen on Chrome OS.
+// TODO(crbug.com/874630): Remove this kill-switch
+const base::Feature kUsbguard{"USBGuard", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable running shill in a minijail sandbox on Chrome OS.
+const base::Feature kShillSandboxing{"ShillSandboxing",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
+
+// Enable showing a tab-modal dialog while a Web Authentication API request is
+// pending, to help guide the user through the flow of using their security key.
+const base::Feature kWebAuthenticationUI{"WebAuthenticationUI",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if !defined(OS_ANDROID)
 // Allow capturing of WebRTC event logs, and uploading of those logs to Crash.
 // Please note that a Chrome policy must also be set, for this to have effect.
+// Effectively, this is a kill-switch for the feature.
+// TODO(crbug.com/775415): Remove this kill-switch.
 extern const base::Feature kWebRtcRemoteEventLog{
-    "WebRtcRemoteEventLog", base::FEATURE_DISABLED_BY_DEFAULT};
+    "WebRtcRemoteEventLog", base::FEATURE_ENABLED_BY_DEFAULT};
+// Compress remote-bound WebRTC event logs (if used; see kWebRtcRemoteEventLog).
+extern const base::Feature kWebRtcRemoteEventLogGzipped{
+    "WebRtcRemoteEventLogGzipped", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 #if defined(OS_WIN)
@@ -656,4 +702,10 @@ extern const base::Feature kWebRtcRemoteEventLog{
 const base::Feature kWin10AcceleratedDefaultBrowserFlow{
     "Win10AcceleratedDefaultBrowserFlow", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_WIN)
+
+#if defined(OS_ANDROID)
+// Enables showing alternative incognito strings.
+const base::Feature kIncognitoStrings{"IncognitoStrings",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_ANDROID)
 }  // namespace features

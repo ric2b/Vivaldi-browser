@@ -17,8 +17,6 @@
 #include "components/viz/host/host_frame_sink_client.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/renderer_host/dip_util.h"
-#include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/content_export.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 #include "services/viz/public/interfaces/hit_test/hit_test_region_list.mojom.h"
@@ -53,7 +51,6 @@ class CONTENT_EXPORT DelegatedFrameHostClient {
       const viz::SurfaceInfo& surface_info) = 0;
   virtual void OnBeginFrame(base::TimeTicks frame_time) = 0;
   virtual void OnFrameTokenChanged(uint32_t frame_token) = 0;
-  virtual void DidReceiveFirstFrameAfterNavigation() = 0;
 };
 
 // The DelegatedFrameHost is used to host all of the RenderWidgetHostView state
@@ -73,7 +70,6 @@ class CONTENT_EXPORT DelegatedFrameHost
   // responsible for doing the appropriate [un]registration.
   DelegatedFrameHost(const viz::FrameSinkId& frame_sink_id,
                      DelegatedFrameHostClient* client,
-                     bool enable_viz,
                      bool should_register_frame_sink_id);
   ~DelegatedFrameHost() override;
 
@@ -82,7 +78,6 @@ class CONTENT_EXPORT DelegatedFrameHost
   void OnCompositingStarted(ui::Compositor* compositor,
                             base::TimeTicks start_time) override;
   void OnCompositingEnded(ui::Compositor* compositor) override;
-  void OnCompositingLockStateChanged(ui::Compositor* compositor) override;
   void OnCompositingChildResizing(ui::Compositor* compositor) override;
   void OnCompositingShuttingDown(ui::Compositor* compositor) override;
 
@@ -92,6 +87,8 @@ class CONTENT_EXPORT DelegatedFrameHost
 
   // FrameEvictorClient implementation.
   void EvictDelegatedFrame() override;
+
+  void ResetFallbackToFirstNavigationSurface();
 
   // viz::mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
@@ -126,8 +123,8 @@ class CONTENT_EXPORT DelegatedFrameHost
                     const gfx::Size& dip_size,
                     cc::DeadlinePolicy deadline_policy);
   bool HasSavedFrame() const;
-  void SetCompositor(ui::Compositor* compositor);
-  void ResetCompositor();
+  void AttachToCompositor(ui::Compositor* compositor);
+  void DetachFromCompositor();
   // Note: |src_subrect| is specified in DIP dimensions while |output_size|
   // expects pixels. If |src_subrect| is empty, the entire surface area is
   // copied.
@@ -146,17 +143,6 @@ class CONTENT_EXPORT DelegatedFrameHost
       const gfx::PointF& point,
       const viz::SurfaceId& original_surface,
       gfx::PointF* transformed_point);
-
-  // Given a RenderWidgetHostViewBase that renders to a Surface that is
-  // contained within this class' Surface, find the relative transform between
-  // the Surfaces and apply it to a point. Returns false if a Surface has not
-  // yet been created or if |target_view| is not a descendant RWHV from our
-  // client.
-  bool TransformPointToCoordSpaceForView(
-      const gfx::PointF& point,
-      RenderWidgetHostViewBase* target_view,
-      gfx::PointF* transformed_point,
-      viz::EventSource source = viz::EventSource::ANY);
 
   void SetNeedsBeginFrames(bool needs_begin_frames);
   void SetWantsAnimateOnlyBeginFrames();
@@ -239,6 +225,8 @@ class CONTENT_EXPORT DelegatedFrameHost
   // This is the last root background color from a swapped frame.
   SkColor background_color_;
 
+  viz::HostFrameSinkManager* const host_frame_sink_manager_;
+
   // State for rendering into a Surface.
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
 
@@ -249,7 +237,7 @@ class CONTENT_EXPORT DelegatedFrameHost
 
   std::unique_ptr<viz::FrameEvictor> frame_evictor_;
 
-  uint32_t first_parent_sequence_number_after_navigation_ = 0;
+  viz::LocalSurfaceId first_local_surface_id_after_navigation_;
   bool received_frame_after_navigation_ = false;
 
   std::vector<std::unique_ptr<viz::CopyOutputRequest>>

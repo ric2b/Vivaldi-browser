@@ -1,4 +1,4 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,11 +20,13 @@
 #include "chrome/test/base/testing_profile_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/http/http_status_code.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_request_status.h"
-#include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
+#include "services/network/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+namespace webrtc_event_logging {
 
 using ::testing::StrictMock;
 using BrowserContextId = WebRtcEventLogPeerConnectionKey::BrowserContextId;
@@ -63,31 +65,28 @@ void RemoveReadPermissions(const base::FilePath& path) {
                                    base::FILE_PERMISSION_READ_BY_OTHERS;
   RemovePermissions(path, read_permissions);
 }
-
-void RemoveWritePermissions(const base::FilePath& path) {
-  constexpr int write_permissions = base::FILE_PERMISSION_WRITE_BY_USER |
-                                    base::FILE_PERMISSION_WRITE_BY_GROUP |
-                                    base::FILE_PERMISSION_WRITE_BY_OTHERS;
-  RemovePermissions(path, write_permissions);
-}
 #endif  // defined(OS_POSIX)
 }  // namespace
 
 class WebRtcEventLogUploaderImplTest : public ::testing::Test {
  public:
   WebRtcEventLogUploaderImplTest()
-      : url_request_context_getter_(new net::TestURLRequestContextGetter(
-            base::ThreadTaskRunnerHandle::Get())),
+      : test_shared_url_loader_factory_(
+            base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+                &test_url_loader_factory_)),
         observer_run_loop_(),
         observer_(observer_run_loop_.QuitWhenIdleClosure()) {
-    TestingBrowserProcess::GetGlobal()->SetSystemRequestContext(
-        url_request_context_getter_.get());
+    TestingBrowserProcess::GetGlobal()->SetSharedURLLoaderFactory(
+        test_shared_url_loader_factory_);
 
-    uploader_factory_ = std::make_unique<WebRtcEventLogUploaderImpl::Factory>(
-        url_request_context_getter_.get());
+    EXPECT_TRUE(base::Time::FromString("30 Dec 1983", &kReasonableTime));
+
+    uploader_factory_ = std::make_unique<WebRtcEventLogUploaderImpl::Factory>();
   }
 
-  ~WebRtcEventLogUploaderImplTest() override = default;
+  ~WebRtcEventLogUploaderImplTest() override {
+    test_browser_thread_bundle_.RunUntilIdle();
+  }
 
   void SetUp() override {
     testing_profile_manager_ = std::make_unique<TestingProfileManager>(
@@ -117,40 +116,24 @@ class WebRtcEventLogUploaderImplTest : public ::testing::Test {
         static_cast<int>(file_contents.size()));
   }
 
-  void TearDown() override {
-    if (uploader_) {
-      uploader_->Cancel();
-    }
-  }
-
   // For tests which imitate a response (or several).
-  void UseFakeUrlFetcherFactory() {
-    DCHECK(!fake_url_fetcher_factory_);
-    DCHECK(!test_url_fetcher_factory_);
-    fake_url_fetcher_factory_ =
-        std::make_unique<net::FakeURLFetcherFactory>(nullptr);
-  }
-
-  // For tests which need a URL fetcher that does nothing, just hangs.
-  void UseTestUrlFetcherFactory() {
-    DCHECK(!fake_url_fetcher_factory_);
-    DCHECK(!test_url_fetcher_factory_);
-    test_url_fetcher_factory_ = std::make_unique<net::TestURLFetcherFactory>();
-  }
-
-  void SetUrlFetcherResponse(net::HttpStatusCode http_code,
-                             net::URLRequestStatus::Status request_status) {
-    DCHECK(fake_url_fetcher_factory_);
+  void SetURLLoaderResponse(net::HttpStatusCode http_code, int net_error) {
+    DCHECK(test_shared_url_loader_factory_);
     const std::string kResponseId = "ec1ed029734b8f7e";  // Arbitrary.
-    fake_url_fetcher_factory_->SetFakeResponse(
-        GURL(WebRtcEventLogUploaderImpl::kUploadURL), kResponseId, http_code,
-        request_status);
+    test_url_loader_factory_.AddResponse(
+        GURL(WebRtcEventLogUploaderImpl::kUploadURL),
+        network::CreateResourceResponseHead(http_code), kResponseId,
+        network::URLLoaderCompletionStatus(net_error));
   }
 
   void StartAndWaitForUpload(
       BrowserContextId browser_context_id = BrowserContextId(),
       base::Time last_modified_time = base::Time()) {
-    DCHECK(fake_url_fetcher_factory_);
+    DCHECK(test_shared_url_loader_factory_);
+
+    if (last_modified_time.is_null()) {
+      last_modified_time = kReasonableTime;
+    }
 
     const WebRtcLogFileInfo log_file_info(browser_context_id, log_file_,
                                           last_modified_time);
@@ -164,7 +147,11 @@ class WebRtcEventLogUploaderImplTest : public ::testing::Test {
       size_t max_log_size_bytes,
       BrowserContextId browser_context_id = BrowserContextId(),
       base::Time last_modified_time = base::Time()) {
-    DCHECK(fake_url_fetcher_factory_);
+    DCHECK(test_shared_url_loader_factory_);
+
+    if (last_modified_time.is_null()) {
+      last_modified_time = kReasonableTime;
+    }
 
     const WebRtcLogFileInfo log_file_info(browser_context_id, log_file_,
                                           last_modified_time);
@@ -178,7 +165,11 @@ class WebRtcEventLogUploaderImplTest : public ::testing::Test {
   void StartUploadThatWillNotTerminate(
       BrowserContextId browser_context_id = BrowserContextId(),
       base::Time last_modified_time = base::Time()) {
-    DCHECK(test_url_fetcher_factory_);
+    DCHECK(test_shared_url_loader_factory_);
+
+    if (last_modified_time.is_null()) {
+      last_modified_time = kReasonableTime;
+    }
 
     const WebRtcLogFileInfo log_file_info(browser_context_id, log_file_,
                                           last_modified_time);
@@ -192,7 +183,13 @@ class WebRtcEventLogUploaderImplTest : public ::testing::Test {
   }
 
   content::TestBrowserThreadBundle test_browser_thread_bundle_;
-  scoped_refptr<net::TestURLRequestContextGetter> url_request_context_getter_;
+
+  base::Time kReasonableTime;
+
+  network::TestURLLoaderFactory test_url_loader_factory_;
+  scoped_refptr<network::SharedURLLoaderFactory>
+      test_shared_url_loader_factory_;
+
   base::RunLoop observer_run_loop_;
 
   base::ScopedTempDir profiles_dir_;
@@ -202,9 +199,6 @@ class WebRtcEventLogUploaderImplTest : public ::testing::Test {
 
   base::FilePath log_file_;
 
-  std::unique_ptr<net::FakeURLFetcherFactory> fake_url_fetcher_factory_;
-  std::unique_ptr<net::TestURLFetcherFactory> test_url_fetcher_factory_;
-
   StrictMock<UploadObserver> observer_;
 
   // These (uploader-factory and uploader) are the units under test.
@@ -213,9 +207,7 @@ class WebRtcEventLogUploaderImplTest : public ::testing::Test {
 };
 
 TEST_F(WebRtcEventLogUploaderImplTest, SuccessfulUploadReportedToObserver) {
-  UseFakeUrlFetcherFactory();
-
-  SetUrlFetcherResponse(net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+  SetURLLoaderResponse(net::HTTP_OK, net::OK);
   EXPECT_CALL(observer_, CompletionCallback(log_file_, true)).Times(1);
   StartAndWaitForUpload();
   EXPECT_FALSE(base::PathExists(log_file_));
@@ -226,9 +218,7 @@ TEST_F(WebRtcEventLogUploaderImplTest, SuccessfulUploadReportedToObserver) {
 // Due to the simplicitly of both tests, this also tests the scenario
 // FileDeletedAfterUnsuccessfulUpload, rather than giving each its own test.
 TEST_F(WebRtcEventLogUploaderImplTest, UnsuccessfulUploadReportedToObserver1) {
-  UseFakeUrlFetcherFactory();
-
-  SetUrlFetcherResponse(net::HTTP_NOT_FOUND, net::URLRequestStatus::SUCCESS);
+  SetURLLoaderResponse(net::HTTP_NOT_FOUND, net::OK);
   EXPECT_CALL(observer_, CompletionCallback(log_file_, false)).Times(1);
   StartAndWaitForUpload();
   EXPECT_FALSE(base::PathExists(log_file_));
@@ -237,9 +227,7 @@ TEST_F(WebRtcEventLogUploaderImplTest, UnsuccessfulUploadReportedToObserver1) {
 // Version #2 - request reported as failed; HTTP return code ignored, even
 // if it's a purported success.
 TEST_F(WebRtcEventLogUploaderImplTest, UnsuccessfulUploadReportedToObserver2) {
-  UseFakeUrlFetcherFactory();
-
-  SetUrlFetcherResponse(net::HTTP_OK, net::URLRequestStatus::FAILED);
+  SetURLLoaderResponse(net::HTTP_NOT_FOUND, net::ERR_FAILED);
   EXPECT_CALL(observer_, CompletionCallback(log_file_, false)).Times(1);
   StartAndWaitForUpload();
   EXPECT_FALSE(base::PathExists(log_file_));
@@ -247,10 +235,9 @@ TEST_F(WebRtcEventLogUploaderImplTest, UnsuccessfulUploadReportedToObserver2) {
 
 #if defined(OS_POSIX)
 TEST_F(WebRtcEventLogUploaderImplTest, FailureToReadFileReportedToObserver) {
-  UseFakeUrlFetcherFactory();
-
-  // Show the failure was independent of the URLFetcher's primed return value.
-  SetUrlFetcherResponse(net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+  // Show the failure was independent of the URLLoaderFactory's primed return
+  // value.
+  SetURLLoaderResponse(net::HTTP_OK, net::OK);
 
   RemoveReadPermissions(log_file_);
   EXPECT_CALL(observer_, CompletionCallback(log_file_, false)).Times(1);
@@ -258,60 +245,31 @@ TEST_F(WebRtcEventLogUploaderImplTest, FailureToReadFileReportedToObserver) {
 }
 
 TEST_F(WebRtcEventLogUploaderImplTest, NonExistentFileReportedToObserver) {
-  UseFakeUrlFetcherFactory();
-
-  // Show the failure was independent of the URLFetcher's primed return value.
-  SetUrlFetcherResponse(net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+  // Show the failure was independent of the URLLoaderFactory's primed return
+  // value.
+  SetURLLoaderResponse(net::HTTP_OK, net::OK);
 
   log_file_ = log_file_.Append(FILE_PATH_LITERAL("garbage"));
   EXPECT_CALL(observer_, CompletionCallback(log_file_, false)).Times(1);
   StartAndWaitForUpload();
 }
-
-TEST_F(WebRtcEventLogUploaderImplTest, FailureToDeleteFileHandledGracefully) {
-  UseFakeUrlFetcherFactory();
-
-  const base::FilePath logs_dir =
-      GetRemoteBoundWebRtcEventLogsDir(testing_profile_->GetPath());
-
-  // Prepare for end of test cleanup.
-  int permissions;
-  ASSERT_TRUE(base::GetPosixFilePermissions(logs_dir, &permissions));
-
-  // The uploader won't be able to delete the file, but it would be able to
-  // read and upload it.
-  RemoveWritePermissions(logs_dir);
-  SetUrlFetcherResponse(net::HTTP_OK, net::URLRequestStatus::SUCCESS);
-  EXPECT_CALL(observer_, CompletionCallback(log_file_, true)).Times(1);
-  StartAndWaitForUpload();
-
-  // Sanity over the test itself - the file really could not be deleted.
-  ASSERT_TRUE(base::PathExists(log_file_));
-
-  // Cleaup
-  ASSERT_TRUE(base::SetPosixFilePermissions(logs_dir, permissions));
-}
 #endif  // defined(OS_POSIX)
 
 TEST_F(WebRtcEventLogUploaderImplTest, FilesUpToMaxSizeUploaded) {
-  UseFakeUrlFetcherFactory();
-
   int64_t log_file_size_bytes;
   ASSERT_TRUE(base::GetFileSize(log_file_, &log_file_size_bytes));
 
-  SetUrlFetcherResponse(net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+  SetURLLoaderResponse(net::HTTP_OK, net::OK);
   EXPECT_CALL(observer_, CompletionCallback(log_file_, true)).Times(1);
   StartAndWaitForUploadWithCustomMaxSize(log_file_size_bytes);
   EXPECT_FALSE(base::PathExists(log_file_));
 }
 
 TEST_F(WebRtcEventLogUploaderImplTest, ExcessivelyLargeFilesNotUploaded) {
-  UseFakeUrlFetcherFactory();
-
   int64_t log_file_size_bytes;
   ASSERT_TRUE(base::GetFileSize(log_file_, &log_file_size_bytes));
 
-  SetUrlFetcherResponse(net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+  SetURLLoaderResponse(net::HTTP_OK, net::OK);
   EXPECT_CALL(observer_, CompletionCallback(log_file_, false)).Times(1);
   StartAndWaitForUploadWithCustomMaxSize(log_file_size_bytes - 1);
   EXPECT_FALSE(base::PathExists(log_file_));
@@ -319,8 +277,6 @@ TEST_F(WebRtcEventLogUploaderImplTest, ExcessivelyLargeFilesNotUploaded) {
 
 TEST_F(WebRtcEventLogUploaderImplTest,
        CancelBeforeUploadCompletionReturnsTrue) {
-  UseTestUrlFetcherFactory();
-
   const base::Time last_modified = base::Time::Now();
   StartUploadThatWillNotTerminate(browser_context_id_, last_modified);
 
@@ -328,8 +284,6 @@ TEST_F(WebRtcEventLogUploaderImplTest,
 }
 
 TEST_F(WebRtcEventLogUploaderImplTest, CancelOnCancelledUploadReturnsFalse) {
-  UseTestUrlFetcherFactory();
-
   const base::Time last_modified = base::Time::Now();
   StartUploadThatWillNotTerminate(browser_context_id_, last_modified);
 
@@ -339,9 +293,7 @@ TEST_F(WebRtcEventLogUploaderImplTest, CancelOnCancelledUploadReturnsFalse) {
 
 TEST_F(WebRtcEventLogUploaderImplTest,
        CancelAfterUploadCompletionReturnsFalse) {
-  UseFakeUrlFetcherFactory();
-
-  SetUrlFetcherResponse(net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+  SetURLLoaderResponse(net::HTTP_OK, net::OK);
   EXPECT_CALL(observer_, CompletionCallback(log_file_, true)).Times(1);
   StartAndWaitForUpload();
 
@@ -349,10 +301,9 @@ TEST_F(WebRtcEventLogUploaderImplTest,
 }
 
 TEST_F(WebRtcEventLogUploaderImplTest, CancelOnAbortedUploadReturnsFalse) {
-  UseFakeUrlFetcherFactory();
-
-  // Show the failure was independent of the URLFetcher's primed return value.
-  SetUrlFetcherResponse(net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+  // Show the failure was independent of the URLLoaderFactory's primed return
+  // value.
+  SetURLLoaderResponse(net::HTTP_OK, net::OK);
 
   log_file_ = log_file_.Append(FILE_PATH_LITERAL("garbage"));
   EXPECT_CALL(observer_, CompletionCallback(log_file_, false)).Times(1);
@@ -362,8 +313,6 @@ TEST_F(WebRtcEventLogUploaderImplTest, CancelOnAbortedUploadReturnsFalse) {
 }
 
 TEST_F(WebRtcEventLogUploaderImplTest, CancelOnOngoingUploadDeletesFile) {
-  UseTestUrlFetcherFactory();
-
   const base::Time last_modified = base::Time::Now();
   StartUploadThatWillNotTerminate(browser_context_id_, last_modified);
   ASSERT_TRUE(uploader_->Cancel());
@@ -373,8 +322,6 @@ TEST_F(WebRtcEventLogUploaderImplTest, CancelOnOngoingUploadDeletesFile) {
 
 TEST_F(WebRtcEventLogUploaderImplTest,
        GetWebRtcLogFileInfoReturnsCorrectInfoBeforeUploadDone) {
-  UseTestUrlFetcherFactory();
-
   const base::Time last_modified = base::Time::Now();
   StartUploadThatWillNotTerminate(browser_context_id_, last_modified);
 
@@ -382,13 +329,14 @@ TEST_F(WebRtcEventLogUploaderImplTest,
   EXPECT_EQ(info.browser_context_id, browser_context_id_);
   EXPECT_EQ(info.path, log_file_);
   EXPECT_EQ(info.last_modified, last_modified);
+
+  // Test tear-down.
+  ASSERT_TRUE(uploader_->Cancel());
 }
 
 TEST_F(WebRtcEventLogUploaderImplTest,
        GetWebRtcLogFileInfoReturnsCorrectInfoAfterUploadSucceeded) {
-  UseFakeUrlFetcherFactory();
-
-  SetUrlFetcherResponse(net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+  SetURLLoaderResponse(net::HTTP_OK, net::OK);
   EXPECT_CALL(observer_, CompletionCallback(log_file_, true)).Times(1);
 
   const base::Time last_modified = base::Time::Now();
@@ -402,8 +350,6 @@ TEST_F(WebRtcEventLogUploaderImplTest,
 
 TEST_F(WebRtcEventLogUploaderImplTest,
        GetWebRtcLogFileInfoReturnsCorrectInfoWhenCalledOnCancelledUpload) {
-  UseTestUrlFetcherFactory();
-
   const base::Time last_modified = base::Time::Now();
   StartUploadThatWillNotTerminate(browser_context_id_, last_modified);
   ASSERT_TRUE(uploader_->Cancel());
@@ -416,3 +362,5 @@ TEST_F(WebRtcEventLogUploaderImplTest,
 
 // TODO(crbug.com/775415): Add a unit test that shows that files with
 // non-ASCII filenames are discard. (Or, alternatively, add support for them.)
+
+}  // namespace webrtc_event_logging

@@ -5,6 +5,8 @@
 #include "chrome/browser/vr/testapp/vr_test_context.h"
 
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "base/i18n/icu_util.h"
 #include "base/numerics/ranges.h"
@@ -13,11 +15,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "chrome/browser/vr/assets_load_status.h"
-#include "chrome/browser/vr/graphics_delegate.h"
+#include "chrome/browser/vr/compositor_delegate.h"
+#include "chrome/browser/vr/gl_texture_location.h"
 #include "chrome/browser/vr/model/assets.h"
 #include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/model/omnibox_suggestions.h"
 #include "chrome/browser/vr/model/toolbar_state.h"
+#include "chrome/browser/vr/render_info.h"
 #include "chrome/browser/vr/speech_recognizer.h"
 #include "chrome/browser/vr/test/constants.h"
 #include "chrome/browser/vr/testapp/assets_component_version.h"
@@ -33,6 +37,7 @@
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/security_state/core/security_state.h"
 #include "components/toolbar/vector_icons.h"
+#include "components/vector_icons/vector_icons.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -97,7 +102,9 @@ InputEventList CreateScrollGestureEventList(InputEvent::Type type,
 
 }  // namespace
 
-VrTestContext::VrTestContext() : view_scale_factor_(kDefaultViewScaleFactor) {
+VrTestContext::VrTestContext(CompositorDelegate* compositor_delegate)
+    : view_scale_factor_(kDefaultViewScaleFactor),
+      compositor_delegate_(compositor_delegate) {
   base::FilePath pak_path;
   base::PathService::Get(base::DIR_MODULE, &pak_path);
   ui::ResourceBundle::InitSharedInstanceWithPakPath(
@@ -105,26 +112,21 @@ VrTestContext::VrTestContext() : view_scale_factor_(kDefaultViewScaleFactor) {
 
   base::i18n::InitializeICU();
 
-  text_input_delegate_ = std::make_unique<TextInputDelegate>();
-  keyboard_delegate_ = std::make_unique<TestKeyboardDelegate>();
+  auto text_input_delegate = std::make_unique<TextInputDelegate>();
+  auto keyboard_delegate = std::make_unique<TestKeyboardDelegate>();
+  keyboard_delegate_ = keyboard_delegate.get();
+  text_input_delegate->SetUpdateInputCallback(
+      base::BindRepeating(&TestKeyboardDelegate::UpdateInput,
+                          base::Unretained(keyboard_delegate.get())));
 
   UiInitialState ui_initial_state;
   ui_initial_state.create_tabs_view = true;
-  ui_instance_ = std::make_unique<Ui>(this, nullptr, keyboard_delegate_.get(),
-                                      text_input_delegate_.get(), nullptr,
-                                      ui_initial_state);
+  ui_instance_ = std::make_unique<Ui>(
+      this, nullptr, std::move(keyboard_delegate),
+      std::move(text_input_delegate), nullptr, ui_initial_state);
   ui_ = ui_instance_.get();
 
   LoadAssets();
-
-  text_input_delegate_->SetRequestFocusCallback(base::BindRepeating(
-      &vr::UiInterface::RequestFocus, base::Unretained(ui_)));
-  text_input_delegate_->SetRequestUnfocusCallback(base::BindRepeating(
-      &vr::UiInterface::RequestUnfocus, base::Unretained(ui_)));
-  text_input_delegate_->SetUpdateInputCallback(
-      base::BindRepeating(&TestKeyboardDelegate::UpdateInput,
-                          base::Unretained(keyboard_delegate_.get())));
-  keyboard_delegate_->SetUiInterface(ui_instance_.get());
 
   touchpad_touch_position_ = kInitialTouchPosition;
 
@@ -134,12 +136,15 @@ VrTestContext::VrTestContext() : view_scale_factor_(kDefaultViewScaleFactor) {
   ui_->SetHistoryButtonsEnabled(true, true);
   ui_->SetLoading(true);
   ui_->SetLoadProgress(0.4);
-  CapturingStateModel capturing_state;
-  capturing_state.video_capture_potentially_enabled = true;
-  capturing_state.background_screen_capture_enabled = true;
-  capturing_state.bluetooth_connected = true;
-  capturing_state.location_access_enabled = true;
-  ui_->SetCapturingState(capturing_state);
+  CapturingStateModel active_capturing;
+  CapturingStateModel background_capturing;
+  CapturingStateModel potential_capturing;
+  potential_capturing.video_capture_enabled = true;
+  background_capturing.screen_capture_enabled = true;
+  active_capturing.bluetooth_connected = true;
+  active_capturing.location_access_enabled = true;
+  ui_->SetCapturingState(active_capturing, background_capturing,
+                         potential_capturing);
   ui_instance_->input_manager()->set_hit_test_strategy(
       UiInputManager::PROJECT_TO_LASER_ORIGIN_FOR_TEST);
   for (size_t i = 0; i < 5; i++) {
@@ -151,9 +156,22 @@ VrTestContext::VrTestContext() : view_scale_factor_(kDefaultViewScaleFactor) {
     ui_->AddOrUpdateTab(tab_id_++, true,
                         base::UTF8ToUTF16("VR - Google Search"));
   }
+
+  InitializeGl();
 }
 
 VrTestContext::~VrTestContext() = default;
+
+void VrTestContext::InitializeGl() {
+  unsigned int content_texture_id = CreateTexture(0xFF000080);
+  unsigned int ui_texture_id = CreateTexture(0xFF008000);
+  ui_->OnGlInitialized(content_texture_id, kGlTextureLocationLocal,
+                       content_texture_id, kGlTextureLocationLocal,
+                       ui_texture_id);
+  keyboard_delegate_->Initialize(
+      ui_instance_->scene()->SurfaceProviderForTesting(),
+      ui_instance_->ui_element_renderer());
+}
 
 void VrTestContext::DrawFrame() {
   base::TimeTicks current_time = base::TimeTicks::Now();
@@ -166,16 +184,16 @@ void VrTestContext::DrawFrame() {
 
   UpdateController(render_info, current_time);
 
-  graphics_delegate_->MakeSkiaContextCurrent();
-  ui_->UpdateSceneTextures();
-  graphics_delegate_->MakeMainContextCurrent();
+  compositor_delegate_->RunInSkiaContext(
+      base::BindOnce(&UiInterface::UpdateSceneTextures, base::Unretained(ui_)));
 
   auto load_progress = (current_time - page_load_start_).InMilliseconds() /
                        kPageLoadTimeMilliseconds;
   ui_->SetLoading(load_progress < 1.0f);
   ui_->SetLoadProgress(std::min(load_progress, 1.0f));
 
-  if (web_vr_mode_ && ui_->ShouldRenderWebVr() && webvr_frames_received_) {
+  if (web_vr_mode_ && model_->web_vr.state == kWebVrPresenting &&
+      webvr_frames_received_) {
     ui_->DrawWebVrOverlayForeground(render_info);
   } else {
     ui_->Draw(render_info);
@@ -212,9 +230,9 @@ void VrTestContext::HandleInput(ui::Event* event) {
         }
         break;
       case ui::DomCode::US_H:
-        handedness_ = handedness_ == PlatformController::kRightHanded
-                          ? PlatformController::kLeftHanded
-                          : PlatformController::kRightHanded;
+        handedness_ = handedness_ == ControllerModel::kRightHanded
+                          ? ControllerModel::kLeftHanded
+                          : ControllerModel::kRightHanded;
         break;
       case ui::DomCode::US_I:
         incognito_ = !incognito_;
@@ -240,11 +258,14 @@ void VrTestContext::HandleInput(ui::Event* event) {
         break;
       case ui::DomCode::US_R: {
         webvr_frames_received_ = true;
-        CapturingStateModel capturing_state;
-        capturing_state.bluetooth_connected = true;
-        capturing_state.location_access_enabled = true;
-        ui_->SetCapturingState(capturing_state);
-        ui_->OnWebVrFrameAvailable();
+        CapturingStateModel active_capturing;
+        CapturingStateModel background_capturing;
+        CapturingStateModel potential_capturing;
+        active_capturing.bluetooth_connected = true;
+        active_capturing.location_access_enabled = true;
+        ui_->SetCapturingState(active_capturing, background_capturing,
+                               potential_capturing);
+        ui_->OnWebXrFrameAvailable();
         break;
       }
       case ui::DomCode::US_O:
@@ -256,9 +277,6 @@ void VrTestContext::HandleInput(ui::Event* event) {
         break;
       case ui::DomCode::US_G:
         recentered_ = true;
-        break;
-      case ui::DomCode::US_X:
-        ui_->OnAppButtonClicked();
         break;
       case ui::DomCode::US_T:
         touching_touchpad_ = !touching_touchpad_;
@@ -324,10 +342,12 @@ void VrTestContext::HandleInput(ui::Event* event) {
 
   const ui::MouseEvent* mouse_event = event->AsMouseEvent();
 
-  if (mouse_event->IsMiddleMouseButton()) {
-    if (mouse_event->type() == ui::ET_MOUSE_RELEASED) {
-      ui_->OnAppButtonClicked();
-    }
+  if (mouse_event->IsMiddleMouseButton() &&
+      mouse_event->type() == ui::ET_MOUSE_RELEASED) {
+    InputEventList list;
+    list.push_back(
+        std::make_unique<InputEvent>(InputEvent::kMenuButtonClicked));
+    input_event_lists_.push(std::move(list));
   }
 
   // TODO(cjgrant): Figure out why, quite regularly, mouse click events do not
@@ -397,7 +417,8 @@ ControllerModel VrTestContext::UpdateController(const RenderInfo& render_info,
 
   ControllerModel controller_model;
   controller_model.touchpad_button_state =
-      touchpad_pressed_ ? UiInputManager::DOWN : UiInputManager::UP;
+      touchpad_pressed_ ? ControllerModel::ButtonState::kDown
+                        : ControllerModel::ButtonState::kUp;
   controller_model.touchpad_touch_position = touchpad_touch_position_;
   controller_model.touching_touchpad = touching_touchpad_;
   controller_model.recentered = recentered_;
@@ -421,9 +442,8 @@ ControllerModel VrTestContext::UpdateController(const RenderInfo& render_info,
     input_event_lists_.push(InputEventList());
   }
   ReticleModel reticle_model;
-  ui_instance_->input_manager()->HandleInput(current_time, render_info,
-                                             controller_model, &reticle_model,
-                                             &input_event_lists_.front());
+  ui_->HandleInput(current_time, render_info, controller_model, &reticle_model,
+                   &input_event_lists_.front());
   input_event_lists_.pop();
 
   // Now that we have accurate hit information, we use this to construct a
@@ -445,22 +465,6 @@ ControllerModel VrTestContext::UpdateController(const RenderInfo& render_info,
   ui_->OnControllerUpdated(controller_model, reticle_model);
 
   return controller_model;
-}
-
-void VrTestContext::OnGlInitialized(
-    std::unique_ptr<GraphicsDelegate> graphics_delegate) {
-  graphics_delegate_ = std::move(graphics_delegate);
-  unsigned int content_texture_id = CreateTexture(0xFF000080);
-  unsigned int ui_texture_id = CreateTexture(0xFF008000);
-
-  ui_->OnGlInitialized(content_texture_id,
-                       UiElementRenderer::kTextureLocationLocal,
-                       content_texture_id,
-                       UiElementRenderer::kTextureLocationLocal, ui_texture_id);
-
-  keyboard_delegate_->Initialize(
-      ui_instance_->scene()->SurfaceProviderForTesting(),
-      ui_instance_->ui_element_renderer());
 }
 
 unsigned int VrTestContext::CreateTexture(SkColor color) {
@@ -501,10 +505,10 @@ void VrTestContext::CycleWebVrModes() {
       break;
     }
     case kWebVrAwaitingFirstFrame:
-      ui_->OnWebVrTimeoutImminent();
+      ui_->OnWebXrTimeoutImminent();
       break;
     case kWebVrTimeoutImminent:
-      ui_->OnWebVrTimedOut();
+      ui_->OnWebXrTimedOut();
       break;
     case kWebVrTimedOut:
       ui_->SetWebVrMode(false);
@@ -661,14 +665,14 @@ void VrTestContext::StartAutocomplete(const AutocompleteRequest& request) {
       full_string.find(request.text) == 0) {
     result->suggestions.emplace_back(OmniboxSuggestion(
         full_string, base::string16(), ACMatchClassifications(),
-        ACMatchClassifications(), AutocompleteMatch::Type::VOICE_SUGGEST,
-        GURL(), request.text, full_string.substr(request.text.size())));
+        ACMatchClassifications(), &vector_icons::kSearchIcon, GURL(),
+        request.text, full_string.substr(request.text.size())));
   }
 
   // Supply a verbatim search match.
   result->suggestions.emplace_back(OmniboxSuggestion(
       request.text, base::string16(), ACMatchClassifications(),
-      ACMatchClassifications(), AutocompleteMatch::Type::VOICE_SUGGEST, GURL(),
+      ACMatchClassifications(), &vector_icons::kSearchIcon, GURL(),
       base::string16(), base::string16()));
 
   // Add a suggestion to exercise classification text styling.
@@ -683,7 +687,7 @@ void VrTestContext::StartAutocomplete(const AutocompleteRequest& request) {
           ACMatchClassification(15, ACMatchClassification::DIM),
           ACMatchClassification(19, ACMatchClassification::INVISIBLE),
       },
-      AutocompleteMatch::Type::VOICE_SUGGEST, GURL("http://www.test.com/"),
+      &vector_icons::kSearchIcon, GURL("http://www.test.com/"),
       base::string16(), base::string16()));
 
   while (result->suggestions.size() < 4) {
@@ -693,7 +697,7 @@ void VrTestContext::StartAutocomplete(const AutocompleteRequest& request) {
             "Very lengthy description of the suggestion that would wrap "
             "if not truncated through some other means."),
         ACMatchClassifications(), ACMatchClassifications(),
-        AutocompleteMatch::Type::VOICE_SUGGEST, GURL("http://www.test.com/"),
+        &vector_icons::kSearchIcon, GURL("http://www.test.com/"),
         base::string16(), base::string16()));
   }
 
@@ -720,7 +724,7 @@ void VrTestContext::CycleIndicators() {
 
   state = (state + 1) % (1 << (signals.size() + 1));
   for (size_t i = 0; i < signals.size(); ++i) {
-    model_->capturing_state.*signals[i] = state & (1 << i);
+    model_->active_capturing.*signals[i] = state & (1 << i);
   }
 }
 
@@ -794,7 +798,7 @@ RenderInfo VrTestContext::GetRenderInfo() const {
 
 gfx::Point3F VrTestContext::LaserOrigin() const {
   gfx::Point3F origin = kDefaultLaserOrigin;
-  if (handedness_ == PlatformController::kLeftHanded) {
+  if (handedness_ == ControllerModel::kLeftHanded) {
     origin.set_x(-origin.x());
   }
   return origin;

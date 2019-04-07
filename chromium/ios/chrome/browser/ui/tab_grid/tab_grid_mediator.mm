@@ -14,18 +14,20 @@
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/chrome_url_util.h"
 #include "ios/chrome/browser/experimental_flags.h"
-#include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache_factory.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_consumer.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_item.h"
+#include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #include "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_serialization.h"
 #include "ios/chrome/browser/web_state_list/web_state_opener.h"
+#import "ios/chrome/browser/web_state_list/web_usage_enabler/web_state_list_web_usage_enabler.h"
+#import "ios/chrome/browser/web_state_list/web_usage_enabler/web_state_list_web_usage_enabler_factory.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
@@ -103,6 +105,9 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
 @property(nonatomic, strong) SessionWindowIOS* closedSessionWindow;
 // The number of tabs closed when close all tabs is called.
 @property(nonatomic, assign) int closedTabsCount;
+// Short-term cache for grid thumbnails.
+@property(nonatomic, strong)
+    NSMutableDictionary<NSString*, UIImage*>* appearanceCache;
 @end
 
 @implementation TabGridMediator {
@@ -118,11 +123,13 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
 
 // Public properties.
 @synthesize tabModel = _tabModel;
+@synthesize tabRestoreService = _tabRestoreService;
 // Private properties.
 @synthesize webStateList = _webStateList;
 @synthesize consumer = _consumer;
 @synthesize closedSessionWindow = _closedSessionWindow;
 @synthesize closedTabsCount = _closedTabsCount;
+@synthesize appearanceCache = _appearanceCache;
 
 - (instancetype)initWithConsumer:(id<GridConsumer>)consumer {
   if (self = [super init]) {
@@ -137,6 +144,7 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
     _scopedWebStateObserver =
         std::make_unique<ScopedObserver<web::WebState, web::WebStateObserver>>(
             _webStateObserverBridge.get());
+    _appearanceCache = [[NSMutableDictionary alloc] init];
   }
   return self;
 }
@@ -298,13 +306,22 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
   if (!self.closedSessionWindow)
     return;
   DCHECK(self.tabModel.browserState);
+  // Don't trigger the initial load for these restored WebStates since the
+  // number of WKWebViews is unbounded and may lead to an OOM crash.
+  WebStateListWebUsageEnabler* webUsageEnabler =
+      WebStateListWebUsageEnablerFactory::GetInstance()->GetForBrowserState(
+          self.tabModel.browserState);
+  webUsageEnabler->SetTriggersInitialLoad(false);
   web::WebState::CreateParams createParams(self.tabModel.browserState);
   DeserializeWebStateList(
       self.webStateList, self.closedSessionWindow,
       base::BindRepeating(&web::WebState::CreateWithStorageSession,
                           createParams));
+  webUsageEnabler->SetTriggersInitialLoad(true);
+
   self.closedSessionWindow = nil;
   [self removeEntriesFromTabRestoreService];
+  self.closedTabsCount = 0;
   // Unmark all images for deletion since they are now active tabs again.
   ios::ChromeBrowserState* browserState = self.tabModel.browserState;
   [SnapshotCacheFactory::GetForBrowserState(browserState) unmarkAllImages];
@@ -325,6 +342,10 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
 
 - (void)snapshotForIdentifier:(NSString*)identifier
                    completion:(void (^)(UIImage*))completion {
+  if (self.appearanceCache[identifier]) {
+    completion(self.appearanceCache[identifier]);
+    return;
+  }
   web::WebState* webState = GetWebStateWithId(self.webStateList, identifier);
   if (webState) {
     SnapshotTabHelper::FromWebState(webState)->RetrieveColorSnapshot(
@@ -345,7 +366,7 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
     return;
   }
   UIImage* defaultFavicon;
-  if (experimental_flags::IsCollectionsUIRebootEnabled()) {
+  if (IsUIRefreshPhase1Enabled()) {
     if (webState->GetBrowserState()->IsOffTheRecord()) {
       defaultFavicon = [UIImage imageNamed:@"default_world_favicon_incognito"];
     } else {
@@ -365,6 +386,24 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
   }
 }
 
+- (void)preloadSnapshotsForVisibleGridSize:(int)gridSize {
+  int startIndex = std::max(self.webStateList->active_index() - gridSize, 0);
+  int endIndex = std::min(self.webStateList->active_index() + gridSize,
+                          self.webStateList->count() - 1);
+  for (int i = startIndex; i <= endIndex; i++) {
+    web::WebState* web_state = self.webStateList->GetWebStateAt(i);
+    NSString* identifier = TabIdTabHelper::FromWebState(web_state)->tab_id();
+    auto cacheImage = ^(UIImage* image) {
+      self.appearanceCache[identifier] = image;
+    };
+    [self snapshotForIdentifier:identifier completion:cacheImage];
+  }
+}
+
+- (void)clearPreloadedSnapshots {
+  [self.appearanceCache removeAllObjects];
+}
+
 #pragma mark - Private
 
 // Calls |-populateItems:selectedItemID:| on the consumer.
@@ -378,20 +417,19 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
 // Removes |self.closedTabsCount| most recent entries from the
 // TabRestoreService.
 - (void)removeEntriesFromTabRestoreService {
-  sessions::TabRestoreService* tabRestoreService =
-      IOSChromeTabRestoreServiceFactory::GetForBrowserState(
-          self.tabModel.browserState);
+  if (!self.tabRestoreService) {
+    return;
+  }
   std::vector<SessionID> identifiers;
-  auto iter = tabRestoreService->entries().begin();
-  auto end = tabRestoreService->entries().end();
+  auto iter = self.tabRestoreService->entries().begin();
+  auto end = self.tabRestoreService->entries().end();
   for (int i = 0; i < self.closedTabsCount && iter != end; i++) {
     identifiers.push_back(iter->get()->id);
     iter++;
   }
   for (const SessionID sessionID : identifiers) {
-    tabRestoreService->RemoveTabEntryById(sessionID);
+    self.tabRestoreService->RemoveTabEntryById(sessionID);
   }
-  self.closedTabsCount = 0;
 }
 
 @end

@@ -60,8 +60,7 @@ TestAutofillClient::GetSecurityLevelForUmaHistograms() {
   return security_level_;
 }
 
-void TestAutofillClient::ShowAutofillSettings() {
-}
+void TestAutofillClient::ShowAutofillSettings(bool show_credit_card_settings) {}
 
 void TestAutofillClient::ShowUnmaskPrompt(
     const CreditCard& card,
@@ -72,9 +71,16 @@ void TestAutofillClient::ShowUnmaskPrompt(
 void TestAutofillClient::OnUnmaskVerificationResult(PaymentsRpcResult result) {
 }
 
-void TestAutofillClient::ShowLocalCardMigrationPrompt(
-    base::OnceClosure closure) {
-  std::move(closure).Run();
+void TestAutofillClient::ShowLocalCardMigrationDialog(
+    base::OnceClosure show_migration_dialog_closure) {
+  std::move(show_migration_dialog_closure).Run();
+}
+
+void TestAutofillClient::ConfirmMigrateLocalCardToCloud(
+    std::unique_ptr<base::DictionaryValue> legal_message,
+    std::vector<MigratableCreditCard>& migratable_credit_cards,
+    base::OnceClosure start_migrating_cards_closure) {
+  std::move(start_migrating_cards_closure).Run();
 }
 
 void TestAutofillClient::ConfirmSaveAutofillProfile(

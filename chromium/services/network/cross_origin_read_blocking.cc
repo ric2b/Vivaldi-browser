@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <set>
 #include <string>
 #include <unordered_set>
 
@@ -15,6 +16,8 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
+#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "net/base/mime_sniffer.h"
@@ -153,19 +156,17 @@ SniffingResult MaybeSkipHtmlComment(StringPiece* data) {
   return CrossOriginReadBlocking::kYes;
 }
 
-// Headers from
-// https://fetch.spec.whatwg.org/#cors-safelisted-response-header-name.
+// Removes headers that should be blocked in cross-origin case.
 //
-// Note that XSDB doesn't block responses allowed through CORS - this means
+// Note that corbSanitizedResponse in https://fetch.spec.whatwg.org/#main-fetch
+// has an empty list of headers, but the code below doesn't remove all the
+// headers for improved user experience - for better error messages for CORS.
+// See also https://github.com/whatwg/fetch/pull/686#issuecomment-383711732 and
+// the http/tests/xmlhttprequest/origin-exact-matching/07.html layout test.
+//
+// Note that CORB doesn't block responses allowed through CORS - this means
 // that the list of allowed headers below doesn't have to consider header
 // names listed in the Access-Control-Expose-Headers header.
-const char* const kCorsSafelistedHeaders[] = {
-    "cache-control", "content-language", "content-type",
-    "expires",       "last-modified",    "pragma",
-};
-
-// Removes headers that should be blocked in cross-origin case.
-// See https://fetch.spec.whatwg.org/#cors-safelisted-response-header-name.
 void BlockResponseHeaders(
     const scoped_refptr<net::HttpResponseHeaders>& headers) {
   DCHECK(headers);
@@ -186,16 +187,16 @@ void BlockResponseHeaders(
       continue;
     }
 
-    // Remove all other headers (but note the final exclusion below).
+    // Remove all other headers.
     names_of_headers_to_remove.insert(base::ToLowerASCII(name));
   }
 
-  // Exclude from removals headers from
-  // https://fetch.spec.whatwg.org/#cors-safelisted-response-header-name.
-  for (const char* header : kCorsSafelistedHeaders)
-    names_of_headers_to_remove.erase(header);
-
   headers->RemoveHeaders(names_of_headers_to_remove);
+}
+
+std::set<int>& GetPluginProxyingProcesses() {
+  static base::NoDestructor<std::set<int>> set;
+  return *set;
 }
 
 }  // namespace
@@ -445,14 +446,6 @@ void CrossOriginReadBlocking::SanitizeBlockedResponse(
 }
 
 // static
-std::vector<std::string>
-CrossOriginReadBlocking::GetCorsSafelistedHeadersForTesting() {
-  return std::vector<std::string>(
-      kCorsSafelistedHeaders,
-      kCorsSafelistedHeaders + arraysize(kCorsSafelistedHeaders));
-}
-
-// static
 void CrossOriginReadBlocking::LogAction(Action action) {
   UMA_HISTOGRAM_ENUMERATION("SiteIsolation.XSD.Browser.Action", action);
 }
@@ -556,14 +549,12 @@ class CrossOriginReadBlocking::ResponseAnalyzer::FetchOnlyResourceSniffer
 
 CrossOriginReadBlocking::ResponseAnalyzer::ResponseAnalyzer(
     const net::URLRequest& request,
-    const ResourceResponse& response,
-    base::StringPiece excluded_initiator_scheme) {
+    const ResourceResponse& response) {
   content_length_ = response.head.content_length;
   http_response_code_ =
       response.head.headers ? response.head.headers->response_code() : 0;
 
-  should_block_based_on_headers_ =
-      ShouldBlockBasedOnHeaders(request, response, excluded_initiator_scheme);
+  should_block_based_on_headers_ = ShouldBlockBasedOnHeaders(request, response);
   if (should_block_based_on_headers_ == kNeedToSniffMore)
     CreateSniffers();
 }
@@ -573,8 +564,7 @@ CrossOriginReadBlocking::ResponseAnalyzer::~ResponseAnalyzer() = default;
 CrossOriginReadBlocking::ResponseAnalyzer::BlockingDecision
 CrossOriginReadBlocking::ResponseAnalyzer::ShouldBlockBasedOnHeaders(
     const net::URLRequest& request,
-    const ResourceResponse& response,
-    base::StringPiece excluded_initiator_scheme) {
+    const ResourceResponse& response) {
   // The checks in this method are ordered to rule out blocking in most cases as
   // quickly as possible.  Checks that are likely to lead to returning false or
   // that are inexpensive should be near the top.
@@ -602,14 +592,6 @@ CrossOriginReadBlocking::ResponseAnalyzer::ShouldBlockBasedOnHeaders(
   if (initiator.scheme() == url::kFileScheme)
     return kAllow;
 
-  // Give embedder a chance to skip document blocking of some initiator schemes
-  // (e.g. chrome-extension to avoid blocking requests initiated by content
-  // scripts).
-  if (!excluded_initiator_scheme.empty() &&
-      initiator.scheme() == excluded_initiator_scheme) {
-    return kAllow;
-  }
-
   // Allow the response through if it has valid CORS headers.
   std::string cors_header;
   response.head.headers->GetNormalizedHeader("access-control-allow-origin",
@@ -625,7 +607,7 @@ CrossOriginReadBlocking::ResponseAnalyzer::ShouldBlockBasedOnHeaders(
   // unless the initiator opted out of CORS / opted into receiving an opaque
   // response.  See also https://crbug.com/803672.
   if (response.head.was_fetched_via_service_worker) {
-    switch (response.head.response_type_via_service_worker) {
+    switch (response.head.response_type) {
       case network::mojom::FetchResponseType::kBasic:
       case network::mojom::FetchResponseType::kCORS:
       case network::mojom::FetchResponseType::kDefault:
@@ -883,6 +865,25 @@ void CrossOriginReadBlocking::ResponseAnalyzer::LogBlockedResponse() {
   }
 
   LogBytesReadForSniffing();
+}
+
+// static
+void CrossOriginReadBlocking::AddExceptionForPlugin(int process_id) {
+  std::set<int>& plugin_proxies = GetPluginProxyingProcesses();
+  plugin_proxies.insert(process_id);
+}
+
+// static
+bool CrossOriginReadBlocking::ShouldAllowForPlugin(int process_id) {
+  std::set<int>& plugin_proxies = GetPluginProxyingProcesses();
+  return base::ContainsKey(plugin_proxies, process_id);
+}
+
+// static
+void CrossOriginReadBlocking::RemoveExceptionForPlugin(int process_id) {
+  std::set<int>& plugin_proxies = GetPluginProxyingProcesses();
+  size_t number_of_elements_removed = plugin_proxies.erase(process_id);
+  DCHECK_EQ(1u, number_of_elements_removed);
 }
 
 }  // namespace network

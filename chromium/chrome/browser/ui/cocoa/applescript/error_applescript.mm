@@ -8,6 +8,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
+#include "app/vivaldi_apptools.h"
+
 void AppleScript::SetError(AppleScript::ErrorCode errorCode) {
   using l10n_util::GetNSString;
   NSScriptCommand* current_command = [NSScriptCommand currentCommand];
@@ -50,6 +52,10 @@ void AppleScript::SetError(AppleScript::ErrorCode errorCode) {
       error_string = GetNSString(IDS_WRONG_INDEX_ERROR_APPLESCRIPT_MAC);
       break;
     case errJavaScriptUnsupported:
+      if (vivaldi::IsVivaldiRunning()) {
+        error_string =
+          GetNSString(IDS_VIV_JAVASCRIPT_UNSUPPORTED_ERROR_APPLESCRIPT_MAC);
+      } else
       error_string =
           GetNSString(IDS_JAVASCRIPT_UNSUPPORTED_ERROR_APPLESCRIPT_MAC);
       break;

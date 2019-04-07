@@ -7,6 +7,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-ripple/paper-ripple.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-spinner/paper-spinner-lite.html">
+<link rel="import" href="../find_shortcut_behavior.html">
 <link rel="import" href="../icons.html">
 <link rel="import" href="../route.html">
 <link rel="import" href="settings_subpage_search.html">
@@ -38,8 +39,8 @@
 
       paper-icon-button-light {
         /* Centers the ripple on the icon with appropriate margin on right. */
-        -webkit-margin-end: 10px;
-        -webkit-margin-start: -10px;
+        margin-inline-end: 10px;
+        margin-inline-start: -10px;
       }
 
       paper-spinner-lite {
@@ -54,7 +55,7 @@
 
       settings-subpage-search {
         /* Keep normal icon spacing from subpage-title-extra controls. */
-        -webkit-margin-start: 16px;
+        margin-inline-start: 16px;
       }
     </style>
     <div class="settings-box first" id="headerLine">

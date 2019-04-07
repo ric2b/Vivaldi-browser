@@ -5,6 +5,7 @@
 #ifndef CONTENT_PUBLIC_TEST_WEB_CONTENTS_TESTER_H_
 #define CONTENT_PUBLIC_TEST_WEB_CONTENTS_TESTER_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -135,6 +136,10 @@ class WebContentsTester {
   // Sets the return value of GetLastCommittedUrl() of TestWebContents.
   virtual void SetLastCommittedURL(const GURL& url) = 0;
 
+  // Sets the return value of GetTitle() of TestWebContents. Once set, the real
+  // title will never be returned.
+  virtual void SetTitle(const base::string16& new_title) = 0;
+
   // Sets the return value of GetContentsMimeType().
   virtual void SetMainFrameMimeType(const std::string& mime_type) = 0;
 
@@ -144,6 +149,9 @@ class WebContentsTester {
 
   // Simulates an input event from the user.
   virtual void TestDidReceiveInputEvent(blink::WebInputEvent::Type type) = 0;
+
+  // Simulates successfully finishing a load.
+  virtual void TestDidFinishLoad(const GURL& url) = 0;
 
   // Simulates terminating an load with a network error.
   virtual void TestDidFailLoadWithError(

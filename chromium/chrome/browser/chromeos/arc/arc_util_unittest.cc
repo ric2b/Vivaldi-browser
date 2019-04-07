@@ -14,6 +14,7 @@
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/oobe_configuration.h"
 #include "chrome/browser/chromeos/login/supervised/supervised_user_creation_flow.h"
 #include "chrome/browser/chromeos/login/ui/fake_login_display_host.h"
@@ -23,14 +24,17 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
-#include "chrome/browser/chromeos/settings/install_attributes.h"
+#include "chrome/browser/chromeos/settings/stub_install_attributes.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/fake_oobe_configuration_client.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_prefs.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -153,22 +157,6 @@ class ScopedLogIn {
   DISALLOW_COPY_AND_ASSIGN(ScopedLogIn);
 };
 
-class FakeInstallAttributesManaged : public chromeos::InstallAttributes {
- public:
-  FakeInstallAttributesManaged() : chromeos::InstallAttributes(nullptr) {
-    device_locked_ = true;
-  }
-
-  ~FakeInstallAttributesManaged() {
-    policy::BrowserPolicyConnectorChromeOS::RemoveInstallAttributesForTesting();
-  }
-
-  void SetIsManaged(bool is_managed) {
-    registration_mode_ = is_managed ? policy::DEVICE_MODE_ENTERPRISE
-                                    : policy::DEVICE_MODE_CONSUMER;
-  }
-};
-
 bool IsArcAllowedForProfileOnFirstCall(const Profile* profile) {
   ResetArcAllowedCheckForTesting(profile);
   return IsArcAllowedForProfile(profile);
@@ -228,6 +216,7 @@ class ChromeArcUtilTest : public testing::Test {
  private:
   std::unique_ptr<base::test::ScopedCommandLine> command_line_;
   content::TestBrowserThreadBundle thread_bundle_;
+  chromeos::ScopedStubInstallAttributes test_install_attributes_;
   base::ScopedTempDir data_dir_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
@@ -600,6 +589,18 @@ TEST_F(ChromeArcUtilTest, IsAssistantAllowedForProfile_SupervisedUser) {
             IsAssistantAllowedForProfile(profile()));
 }
 
+TEST_F(ChromeArcUtilTest, IsAssistantAllowedForProfile_ChildUser) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported",
+       "--enable-voice-interaction"});
+  ScopedLogIn login(GetFakeUserManager(),
+                    AccountId::FromUserEmailGaiaId(
+                        profile()->GetProfileUserName(), kTestGaiaId));
+  profile()->SetSupervisedUserId(supervised_users::kChildAccountSUID);
+  EXPECT_EQ(ash::mojom::AssistantAllowedState::DISALLOWED_BY_CHILD_USER,
+            IsAssistantAllowedForProfile(profile()));
+}
+
 TEST_F(ChromeArcUtilTest, IsAssistantAllowedForProfile_Locale) {
   base::CommandLine::ForCurrentProcess()->InitFromArgv(
       {"", "--arc-availability=officially-supported",
@@ -638,6 +639,19 @@ TEST_F(ChromeArcUtilTest, IsAssistantAllowedForProfile_Managed) {
   profile()->GetTestingPrefService()->RemoveManagedPref(prefs::kArcEnabled);
 
   EXPECT_EQ(ash::mojom::AssistantAllowedState::ALLOWED,
+            IsAssistantAllowedForProfile(profile()));
+}
+
+TEST_F(ChromeArcUtilTest, IsAssistantAllowedForProfile_DemoMode) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported",
+       "--enable-voice-interaction"});
+  chromeos::DemoSession::SetDemoConfigForTesting(
+      chromeos::DemoSession::DemoModeConfig::kOnline);
+  ScopedLogIn login(GetFakeUserManager(),
+                    AccountId::FromUserEmail(profile()->GetProfileUserName()),
+                    user_manager::USER_TYPE_PUBLIC_ACCOUNT);
+  EXPECT_EQ(ash::mojom::AssistantAllowedState::DISALLOWED_BY_DEMO_MODE,
             IsAssistantAllowedForProfile(profile()));
 }
 
@@ -1011,14 +1025,17 @@ INSTANTIATE_TEST_CASE_P(
 
 class ArcOobeTest : public ChromeArcUtilTest {
  public:
-  ArcOobeTest()
-      : oobe_configuration_(std::make_unique<chromeos::OobeConfiguration>()) {}
+  ArcOobeTest() {
+    chromeos::DBusThreadManager::GetSetterForTesting();
+    oobe_configuration_ = std::make_unique<chromeos::OobeConfiguration>();
+  }
 
   ~ArcOobeTest() override {
     // Fake display host have to be shut down first, as it may access
     // configuration.
     fake_login_display_host_.reset();
     oobe_configuration_.reset();
+    chromeos::DBusThreadManager::Shutdown();
   }
 
  protected:

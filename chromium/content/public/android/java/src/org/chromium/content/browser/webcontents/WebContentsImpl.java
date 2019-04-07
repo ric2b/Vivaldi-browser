@@ -24,18 +24,14 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content.browser.AppWebMessagePort;
-import org.chromium.content.browser.Gamepad;
 import org.chromium.content.browser.MediaSessionImpl;
 import org.chromium.content.browser.RenderCoordinatesImpl;
-import org.chromium.content.browser.TapDisambiguator;
 import org.chromium.content.browser.ViewEventSinkImpl;
 import org.chromium.content.browser.WindowEventObserver;
 import org.chromium.content.browser.WindowEventObserverManager;
 import org.chromium.content.browser.accessibility.WebContentsAccessibilityImpl;
 import org.chromium.content.browser.framehost.RenderFrameHostDelegate;
 import org.chromium.content.browser.framehost.RenderFrameHostImpl;
-import org.chromium.content.browser.input.ImeAdapterImpl;
-import org.chromium.content.browser.input.SelectPopup;
 import org.chromium.content.browser.input.TextSuggestionHost;
 import org.chromium.content.browser.selection.SelectionPopupControllerImpl;
 import org.chromium.content_public.browser.AccessibilitySnapshotCallback;
@@ -48,7 +44,6 @@ import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.ViewEventSink.InternalAccessDelegate;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.WebContents.UserDataFactory;
 import org.chromium.content_public.browser.WebContentsInternals;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.OverscrollRefreshHandler;
@@ -116,6 +111,30 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
                 }
             };
 
+    /**
+     * Factory interface passed to {@link #getOrSetUserData()} for instantiation of
+     * class as user data.
+     *
+     * Constructor method reference comes handy for class Foo to provide the factory.
+     * Use lazy initialization to avoid having to generate too many anonymous references.
+     *
+     * <code>
+     * public class Foo {
+     *     static final class FoofactoryLazyHolder {
+     *         private static final UserDataFactory<Foo> INSTANCE = Foo::new;
+     *     }
+     *     ....
+     *
+     *     webContents.getOrsetUserData(Foo.class, FooFactoryLazyHolder.INSTANCE);
+     *
+     *     ....
+     * }
+     * </code>
+     *
+     * @param <T> Class to instantiate.
+     */
+    public interface UserDataFactory<T> { T create(WebContents webContents); }
+
     // Note this list may be incomplete. Frames that never had to initialize java side would
     // not have an entry here. This is here mainly to keep the java RenderFrameHosts alive, since
     // native side generally cannot safely hold strong references to them.
@@ -160,24 +179,14 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
 
     private EventForwarder mEventForwarder;
 
-    private static class DefaultInternalsHolder implements InternalsHolder {
-        private WebContentsInternals mInternals;
-
-        @Override
-        public void set(WebContentsInternals internals) {
-            mInternals = internals;
-        }
-
-        @Override
-        public WebContentsInternals get() {
-            return mInternals;
-        }
-    }
-
     // Cached copy of all positions and scales as reported by the renderer.
     private RenderCoordinatesImpl mRenderCoordinates;
 
     private InternalsHolder mInternalsHolder;
+
+    private String mProductVersion;
+
+    private boolean mInitialized;
 
     private static class WebContentsInternalsImpl implements WebContentsInternals {
         public HashMap<Class<?>, WebContentsUserData> userDataMap;
@@ -188,18 +197,6 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
             long nativeWebContentsAndroid, NavigationController navigationController) {
         mNativeWebContentsAndroid = nativeWebContentsAndroid;
         mNavigationController = navigationController;
-
-        // Initialize |mInternalsHolder| with a default one that keeps all the internals
-        // inside WebContentsImpl. It holds a strong reference until an embedder invokes
-        // |setInternalsHolder| to get the internals handed over to it.
-        WebContentsInternalsImpl internals = new WebContentsInternalsImpl();
-        internals.userDataMap = new HashMap<>();
-
-        mRenderCoordinates = new RenderCoordinatesImpl();
-        mRenderCoordinates.reset();
-
-        mInternalsHolder = new DefaultInternalsHolder();
-        mInternalsHolder.set(internals);
     }
 
     @CalledByNative
@@ -209,29 +206,44 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     }
 
     @Override
-    public void initialize(Context context, String productVersion, ViewAndroidDelegate viewDelegate,
-            InternalAccessDelegate internalDispatcher, WindowAndroid windowAndroid) {
+    public void initialize(String productVersion, ViewAndroidDelegate viewDelegate,
+            InternalAccessDelegate accessDelegate, WindowAndroid windowAndroid,
+            InternalsHolder internalsHolder) {
         // Makes sure |initialize| is not called more than once.
-        assert ViewEventSinkImpl.from(this) == null;
+        assert !mInitialized;
+        assert internalsHolder != null;
 
-        // TODO(jinsukkim): Consider creating objects using observer pattern so that WebContents
-        //     doesn't have to have direct references to them.
-        ViewEventSinkImpl.create(context, this);
+        mProductVersion = productVersion;
+
+        mInternalsHolder = internalsHolder;
+        WebContentsInternalsImpl internals = new WebContentsInternalsImpl();
+        internals.userDataMap = new HashMap<>();
+        mInternalsHolder.set(internals);
+
+        mRenderCoordinates = new RenderCoordinatesImpl();
+        mRenderCoordinates.reset();
+
+        mInitialized = true;
 
         setViewAndroidDelegate(viewDelegate);
         setTopLevelNativeWindow(windowAndroid);
 
-        ImeAdapterImpl.create(this, ImeAdapterImpl.createDefaultInputMethodManagerWrapper(context));
-        SelectionPopupControllerImpl.create(context, windowAndroid, this);
-        WebContentsAccessibilityImpl.create(
-                context, viewDelegate.getContainerView(), this, productVersion);
-        TapDisambiguator.create(context, this, viewDelegate.getContainerView());
-        TextSuggestionHost.create(context, this, windowAndroid);
-        SelectPopup.create(context, this);
-        Gamepad.create(context, this);
-
-        ViewEventSinkImpl.from(this).setAccessDelegate(internalDispatcher);
+        ViewEventSinkImpl.from(this).setAccessDelegate(accessDelegate);
         getRenderCoordinates().setDeviceScaleFactor(windowAndroid.getDisplay().getDipScale());
+        TextSuggestionHost.fromWebContents(this);
+    }
+
+    @Nullable
+    public Context getContext() {
+        assert mInitialized;
+
+        WindowAndroid window = getTopLevelNativeWindow();
+        return window != null ? window.getContext().get() : null;
+    }
+
+    public String getProductVersion() {
+        assert mInitialized;
+        return mProductVersion;
     }
 
     @CalledByNative
@@ -242,14 +254,6 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
             mObserverProxy.destroy();
             mObserverProxy = null;
         }
-    }
-
-    @Override
-    public void setInternalsHolder(InternalsHolder internalsHolder) {
-        // Ensure |setInternalsHolder()| is be called at most once.
-        assert mInternalsHolder instanceof DefaultInternalsHolder;
-        internalsHolder.set(mInternalsHolder.get());
-        mInternalsHolder = internalsHolder;
     }
 
     // =================== RenderFrameHostDelegate overrides ===================
@@ -615,24 +619,6 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         }
     }
 
-    /**
-     * @return The amount of the top controls height if controls are in the state
-     *    of shrinking Blink's view size, otherwise 0.
-     */
-    @VisibleForTesting
-    public int getTopControlsShrinkBlinkHeightForTesting() {
-        // TODO(jinsukkim): Let callsites provide with its own top controls height to remove
-        //                  the test-only method in content layer.
-        if (mNativeWebContentsAndroid == 0) return 0;
-        return nativeGetTopControlsShrinkBlinkHeightPixForTesting(mNativeWebContentsAndroid);
-    }
-
-    @VisibleForTesting
-    @Override
-    public boolean isSelectPopupVisibleForTesting() {
-        return SelectPopup.fromWebContents(this).isVisibleForTesting();
-    }
-
     // root node can be null if parsing fails.
     @CalledByNative
     private static void onAccessibilitySnapshot(AccessibilitySnapshotNode root,
@@ -805,8 +791,19 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         return mRenderCoordinates;
     }
 
-    @Override
+    /**
+     * Retrieves or stores a user data object for this WebContents.
+     * @param key Class instance of the object used as the key.
+     * @param userDataFactory Factory that creates an object of the generic class. A new object
+     *        is created if it hasn't been created and non-null factory is given.
+     * @return The created or retrieved user data object. Can be null if the object was
+     *         not created yet, or {@code userDataFactory} is null, or the internal data
+     *         storage is already garbage-collected.
+     */
     public <T> T getOrSetUserData(Class<T> key, UserDataFactory<T> userDataFactory) {
+        // For tests that go without calling |initialize|.
+        if (!mInitialized) return null;
+
         Map<Class<?>, WebContentsUserData> userDataMap = getUserDataMap();
 
         // Map can be null after WebView gets gc'ed on its way to destruction.
@@ -958,8 +955,6 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     private native int nativeGetWidth(long nativeWebContentsAndroid);
     private native int nativeGetHeight(long nativeWebContentsAndroid);
     private native EventForwarder nativeGetOrCreateEventForwarder(long nativeWebContentsAndroid);
-    private native int nativeGetTopControlsShrinkBlinkHeightPixForTesting(
-            long nativeWebContentsAndroid);
     private native void nativeSetViewAndroidDelegate(
             long nativeWebContentsAndroid, ViewAndroidDelegate viewDelegate);
     private native void nativeSendOrientationChangeEvent(

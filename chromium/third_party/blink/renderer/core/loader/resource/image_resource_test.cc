@@ -195,7 +195,6 @@ void TestThatReloadIsStartedThenServeReload(
     ImageResource* image_resource,
     ImageResourceContent* content,
     MockImageResourceObserver* observer,
-    mojom::FetchCacheMode cache_mode_for_reload,
     bool placeholder_before_reload) {
   const char* data = reinterpret_cast<const char*>(kJpegImage2);
   constexpr size_t kDataLength = sizeof(kJpegImage2);
@@ -209,8 +208,6 @@ void TestThatReloadIsStartedThenServeReload(
   EXPECT_EQ(placeholder_before_reload, image_resource->ShouldShowPlaceholder());
   EXPECT_EQ(g_null_atom,
             image_resource->GetResourceRequest().HttpHeaderField("range"));
-  EXPECT_EQ(cache_mode_for_reload,
-            image_resource->GetResourceRequest().GetCacheMode());
   EXPECT_EQ(content, image_resource->GetContent());
   EXPECT_FALSE(content->HasImage());
 
@@ -672,9 +669,9 @@ TEST_P(ImageResourceReloadTest, ReloadIfLoFiOrPlaceholderAfterFinished) {
                                                  Resource::kReloadAlways);
 
   EXPECT_EQ(3, observer->ImageChangedCount());
-  TestThatReloadIsStartedThenServeReload(
-      test_url, image_resource, image_resource->GetContent(), observer.get(),
-      mojom::FetchCacheMode::kBypassCache, false);
+  TestThatReloadIsStartedThenServeReload(test_url, image_resource,
+                                         image_resource->GetContent(),
+                                         observer.get(), false);
 }
 
 TEST_P(ImageResourceReloadTest,
@@ -718,9 +715,9 @@ TEST_P(ImageResourceReloadTest,
                                                  Resource::kReloadAlways);
 
   EXPECT_EQ(3, observer->ImageChangedCount());
-  TestThatReloadIsStartedThenServeReload(
-      test_url, image_resource, image_resource->GetContent(), observer.get(),
-      mojom::FetchCacheMode::kBypassCache, false);
+  TestThatReloadIsStartedThenServeReload(test_url, image_resource,
+                                         image_resource->GetContent(),
+                                         observer.get(), false);
 }
 
 TEST_P(ImageResourceReloadTest,
@@ -802,9 +799,8 @@ TEST_P(ImageResourceReloadTest, ReloadIfLoFiOrPlaceholderViaResourceFetcher) {
 
   EXPECT_EQ(3, observer->ImageChangedCount());
 
-  TestThatReloadIsStartedThenServeReload(
-      test_url, image_resource, content, observer.get(),
-      mojom::FetchCacheMode::kBypassCache, false);
+  TestThatReloadIsStartedThenServeReload(test_url, image_resource, content,
+                                         observer.get(), false);
 
   GetMemoryCache()->Remove(image_resource);
 }
@@ -836,9 +832,9 @@ TEST_P(ImageResourceReloadTest, ReloadIfLoFiOrPlaceholderBeforeResponse) {
   // image is still loading.
   EXPECT_FALSE(observer->ImageNotifyFinishedCalled());
 
-  TestThatReloadIsStartedThenServeReload(
-      test_url, image_resource, image_resource->GetContent(), observer.get(),
-      mojom::FetchCacheMode::kBypassCache, false);
+  TestThatReloadIsStartedThenServeReload(test_url, image_resource,
+                                         image_resource->GetContent(),
+                                         observer.get(), false);
 }
 
 TEST_P(ImageResourceReloadTest, ReloadIfLoFiOrPlaceholderDuringResponse) {
@@ -887,9 +883,9 @@ TEST_P(ImageResourceReloadTest, ReloadIfLoFiOrPlaceholderDuringResponse) {
   // image is still loading.
   EXPECT_FALSE(observer->ImageNotifyFinishedCalled());
 
-  TestThatReloadIsStartedThenServeReload(
-      test_url, image_resource, image_resource->GetContent(), observer.get(),
-      mojom::FetchCacheMode::kBypassCache, false);
+  TestThatReloadIsStartedThenServeReload(test_url, image_resource,
+                                         image_resource->GetContent(),
+                                         observer.get(), false);
 }
 
 TEST_P(ImageResourceReloadTest, ReloadIfLoFiOrPlaceholderForPlaceholder) {
@@ -901,7 +897,7 @@ TEST_P(ImageResourceReloadTest, ReloadIfLoFiOrPlaceholderForPlaceholder) {
   params.SetAllowImagePlaceholder();
   ImageResource* image_resource = ImageResource::Fetch(params, fetcher);
   EXPECT_EQ(FetchParameters::kAllowPlaceholder,
-            params.GetPlaceholderImageRequestType());
+            params.GetImageRequestOptimization());
   std::unique_ptr<MockImageResourceObserver> observer =
       MockImageResourceObserver::Create(image_resource->GetContent());
 
@@ -911,9 +907,9 @@ TEST_P(ImageResourceReloadTest, ReloadIfLoFiOrPlaceholderForPlaceholder) {
   image_resource->ReloadIfLoFiOrPlaceholderImage(fetcher,
                                                  Resource::kReloadAlways);
 
-  TestThatReloadIsStartedThenServeReload(
-      test_url, image_resource, image_resource->GetContent(), observer.get(),
-      mojom::FetchCacheMode::kBypassCache, false);
+  TestThatReloadIsStartedThenServeReload(test_url, image_resource,
+                                         image_resource->GetContent(),
+                                         observer.get(), false);
 }
 
 TEST_P(ImageResourceReloadTest, ReloadLoFiImagesWithDuplicateURLs) {
@@ -926,14 +922,14 @@ TEST_P(ImageResourceReloadTest, ReloadLoFiImagesWithDuplicateURLs) {
   ImageResource* placeholder_resource =
       ImageResource::Fetch(placeholder_params, fetcher);
   EXPECT_EQ(FetchParameters::kAllowPlaceholder,
-            placeholder_params.GetPlaceholderImageRequestType());
+            placeholder_params.GetImageRequestOptimization());
   EXPECT_TRUE(placeholder_resource->ShouldShowPlaceholder());
 
   FetchParameters full_image_params{ResourceRequest(test_url)};
   ImageResource* full_image_resource =
       ImageResource::Fetch(full_image_params, fetcher);
-  EXPECT_EQ(FetchParameters::kDisallowPlaceholder,
-            full_image_params.GetPlaceholderImageRequestType());
+  EXPECT_EQ(FetchParameters::kNone,
+            full_image_params.GetImageRequestOptimization());
   EXPECT_FALSE(full_image_resource->ShouldShowPlaceholder());
 
   // The |placeholder_resource| should not be reused for the
@@ -1353,8 +1349,7 @@ TEST(ImageResourceTest, FetchDisallowPlaceholder) {
 
   FetchParameters params{ResourceRequest(test_url)};
   ImageResource* image_resource = ImageResource::Fetch(params, CreateFetcher());
-  EXPECT_EQ(FetchParameters::kDisallowPlaceholder,
-            params.GetPlaceholderImageRequestType());
+  EXPECT_EQ(FetchParameters::kNone, params.GetImageRequestOptimization());
   std::unique_ptr<MockImageResourceObserver> observer =
       MockImageResourceObserver::Create(image_resource->GetContent());
 
@@ -1369,8 +1364,7 @@ TEST(ImageResourceTest, FetchAllowPlaceholderDataURL) {
   FetchParameters params{ResourceRequest(test_url)};
   params.SetAllowImagePlaceholder();
   ImageResource* image_resource = ImageResource::Fetch(params, CreateFetcher());
-  EXPECT_EQ(FetchParameters::kDisallowPlaceholder,
-            params.GetPlaceholderImageRequestType());
+  EXPECT_EQ(FetchParameters::kNone, params.GetImageRequestOptimization());
   EXPECT_EQ(g_null_atom,
             image_resource->GetResourceRequest().HttpHeaderField("range"));
   EXPECT_FALSE(image_resource->ShouldShowPlaceholder());
@@ -1384,8 +1378,7 @@ TEST(ImageResourceTest, FetchAllowPlaceholderPostRequest) {
   FetchParameters params(resource_request);
   params.SetAllowImagePlaceholder();
   ImageResource* image_resource = ImageResource::Fetch(params, CreateFetcher());
-  EXPECT_EQ(FetchParameters::kDisallowPlaceholder,
-            params.GetPlaceholderImageRequestType());
+  EXPECT_EQ(FetchParameters::kNone, params.GetImageRequestOptimization());
   EXPECT_EQ(g_null_atom,
             image_resource->GetResourceRequest().HttpHeaderField("range"));
   EXPECT_FALSE(image_resource->ShouldShowPlaceholder());
@@ -1401,8 +1394,7 @@ TEST(ImageResourceTest, FetchAllowPlaceholderExistingRangeHeader) {
   FetchParameters params(resource_request);
   params.SetAllowImagePlaceholder();
   ImageResource* image_resource = ImageResource::Fetch(params, CreateFetcher());
-  EXPECT_EQ(FetchParameters::kDisallowPlaceholder,
-            params.GetPlaceholderImageRequestType());
+  EXPECT_EQ(FetchParameters::kNone, params.GetImageRequestOptimization());
   EXPECT_EQ("bytes=128-255",
             image_resource->GetResourceRequest().HttpHeaderField("range"));
   EXPECT_FALSE(image_resource->ShouldShowPlaceholder());
@@ -1418,7 +1410,7 @@ TEST(ImageResourceTest, FetchAllowPlaceholderSuccessful) {
   params.SetAllowImagePlaceholder();
   ImageResource* image_resource = ImageResource::Fetch(params, CreateFetcher());
   EXPECT_EQ(FetchParameters::kAllowPlaceholder,
-            params.GetPlaceholderImageRequestType());
+            params.GetImageRequestOptimization());
   std::unique_ptr<MockImageResourceObserver> observer =
       MockImageResourceObserver::Create(image_resource->GetContent());
 
@@ -1434,7 +1426,7 @@ TEST(ImageResourceTest, FetchAllowPlaceholderUnsuccessful) {
   params.SetAllowImagePlaceholder();
   ImageResource* image_resource = ImageResource::Fetch(params, CreateFetcher());
   EXPECT_EQ(FetchParameters::kAllowPlaceholder,
-            params.GetPlaceholderImageRequestType());
+            params.GetImageRequestOptimization());
   EXPECT_EQ("bytes=0-2047",
             image_resource->GetResourceRequest().HttpHeaderField("range"));
   EXPECT_TRUE(image_resource->ShouldShowPlaceholder());
@@ -1461,9 +1453,9 @@ TEST(ImageResourceTest, FetchAllowPlaceholderUnsuccessful) {
   EXPECT_EQ(2, observer->ImageChangedCount());
   EXPECT_FALSE(image_resource->ShouldShowPlaceholder());
 
-  TestThatReloadIsStartedThenServeReload(
-      test_url, image_resource, image_resource->GetContent(), observer.get(),
-      mojom::FetchCacheMode::kBypassCache, false);
+  TestThatReloadIsStartedThenServeReload(test_url, image_resource,
+                                         image_resource->GetContent(),
+                                         observer.get(), false);
 }
 
 TEST(ImageResourceTest, FetchAllowPlaceholderUnsuccessfulClientLoFi) {
@@ -1476,7 +1468,7 @@ TEST(ImageResourceTest, FetchAllowPlaceholderUnsuccessfulClientLoFi) {
   params.SetAllowImagePlaceholder();
   ImageResource* image_resource = ImageResource::Fetch(params, CreateFetcher());
   EXPECT_EQ(FetchParameters::kAllowPlaceholder,
-            params.GetPlaceholderImageRequestType());
+            params.GetImageRequestOptimization());
   EXPECT_EQ("bytes=0-2047",
             image_resource->GetResourceRequest().HttpHeaderField("range"));
   EXPECT_TRUE(image_resource->ShouldShowPlaceholder());
@@ -1502,9 +1494,9 @@ TEST(ImageResourceTest, FetchAllowPlaceholderUnsuccessfulClientLoFi) {
   EXPECT_FALSE(observer->ImageNotifyFinishedCalled());
   EXPECT_EQ(2, observer->ImageChangedCount());
 
-  TestThatReloadIsStartedThenServeReload(
-      test_url, image_resource, image_resource->GetContent(), observer.get(),
-      mojom::FetchCacheMode::kBypassCache, true);
+  TestThatReloadIsStartedThenServeReload(test_url, image_resource,
+                                         image_resource->GetContent(),
+                                         observer.get(), true);
 
   EXPECT_FALSE(image_resource->GetContent()->GetImage()->IsBitmapImage());
   EXPECT_TRUE(image_resource->ShouldShowPlaceholder());
@@ -1537,7 +1529,7 @@ TEST(ImageResourceTest, FetchAllowPlaceholderPartialContentWithoutDimensions) {
     ImageResource* image_resource =
         ImageResource::Fetch(params, CreateFetcher());
     EXPECT_EQ(FetchParameters::kAllowPlaceholder,
-              params.GetPlaceholderImageRequestType());
+              params.GetImageRequestOptimization());
     EXPECT_EQ("bytes=0-2047",
               image_resource->GetResourceRequest().HttpHeaderField("range"));
     EXPECT_TRUE(image_resource->ShouldShowPlaceholder());
@@ -1572,7 +1564,7 @@ TEST(ImageResourceTest, FetchAllowPlaceholderPartialContentWithoutDimensions) {
 
     TestThatReloadIsStartedThenServeReload(
         test_url, image_resource, image_resource->GetContent(), observer.get(),
-        mojom::FetchCacheMode::kBypassCache, test.placeholder_before_reload);
+        test.placeholder_before_reload);
 
     EXPECT_EQ(test.expected_reload_previews_state,
               image_resource->GetResourceRequest().GetPreviewsState());
@@ -1687,7 +1679,7 @@ TEST(ImageResourceTest, FetchAllowPlaceholderFullResponseDecodeSuccess) {
     ImageResource* image_resource =
         ImageResource::Fetch(params, CreateFetcher());
     EXPECT_EQ(FetchParameters::kAllowPlaceholder,
-              params.GetPlaceholderImageRequestType());
+              params.GetImageRequestOptimization());
     EXPECT_EQ("bytes=0-2047",
               image_resource->GetResourceRequest().HttpHeaderField("range"));
     EXPECT_TRUE(image_resource->ShouldShowPlaceholder());
@@ -1746,7 +1738,7 @@ TEST(ImageResourceTest,
     ImageResource* image_resource =
         ImageResource::Fetch(params, CreateFetcher());
     EXPECT_EQ(FetchParameters::kAllowPlaceholder,
-              params.GetPlaceholderImageRequestType());
+              params.GetImageRequestOptimization());
     EXPECT_EQ("bytes=0-2047",
               image_resource->GetResourceRequest().HttpHeaderField("range"));
     EXPECT_TRUE(image_resource->ShouldShowPlaceholder());
@@ -1778,7 +1770,7 @@ TEST(ImageResourceTest,
     ImageResource* image_resource =
         ImageResource::Fetch(params, CreateFetcher());
     EXPECT_EQ(FetchParameters::kAllowPlaceholder,
-              params.GetPlaceholderImageRequestType());
+              params.GetImageRequestOptimization());
     EXPECT_EQ("bytes=0-2047",
               image_resource->GetResourceRequest().HttpHeaderField("range"));
     EXPECT_TRUE(image_resource->ShouldShowPlaceholder());
@@ -1798,13 +1790,16 @@ TEST(ImageResourceTest,
 
     // The dimensions could not be extracted, and the response code was a 4xx
     // error, so the full original image should be loading.
-    TestThatReloadIsStartedThenServeReload(
-        test_url, image_resource, image_resource->GetContent(), observer.get(),
-        mojom::FetchCacheMode::kBypassCache, false);
+    TestThatReloadIsStartedThenServeReload(test_url, image_resource,
+                                           image_resource->GetContent(),
+                                           observer.get(), false);
   }
 }
 
 TEST(ImageResourceTest, PeriodicFlushTest) {
+  ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
+      platform;
+
   EmptyChromeClient* chrome_client = new EmptyChromeClient();
   Page::PageClients clients;
   FillWithEmptyClients(clients);
@@ -1812,8 +1807,6 @@ TEST(ImageResourceTest, PeriodicFlushTest) {
   std::unique_ptr<DummyPageHolder> page_holder = DummyPageHolder::Create(
       IntSize(800, 600), &clients, EmptyLocalFrameClient::Create(), nullptr);
 
-  ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
-      platform;
   KURL test_url(kTestURL);
   ScopedMockedURLLoad scoped_mocked_url_load(test_url, GetTestFilePath());
 

@@ -10,7 +10,6 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "build/buildflag.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -19,10 +18,10 @@
 #include "chrome/browser/ui/global_error/global_error.h"
 #include "chrome/browser/ui/global_error/global_error_service.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
-#include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/elevation_icon_setter.h"
 #include "chrome/browser/ui/views/frame/app_menu_button.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/browser/ui/views_mode_controller.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -37,18 +36,16 @@
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/window/dialog_client_view.h"
 
-#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
-#include "chrome/browser/ui/views/frame/browser_view.h"
+#if defined(OS_MACOSX)
+#include "chrome/browser/ui/cocoa/bubble_anchor_helper_views.h"
 #endif
 
 namespace {
 
 const int kMaxBubbleViewWidth = 362;
 
-#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
-
 views::View* GetGlobalErrorBubbleAnchorView(Browser* browser) {
-#if BUILDFLAG(MAC_VIEWS_BROWSER)
+#if defined(OS_MACOSX)
   if (views_mode_controller::IsViewsBrowserCocoa())
     return nullptr;
 #endif
@@ -57,20 +54,17 @@ views::View* GetGlobalErrorBubbleAnchorView(Browser* browser) {
 }
 
 gfx::Rect GetGlobalErrorBubbleAnchorRect(Browser* browser) {
-#if BUILDFLAG(MAC_VIEWS_BROWSER)
+#if defined(OS_MACOSX)
   if (views_mode_controller::IsViewsBrowserCocoa())
     return bubble_anchor_util::GetAppMenuAnchorRectCocoa(browser);
 #endif
   return gfx::Rect();
 }
 
-#endif
-
 }  // namespace
 
 // GlobalErrorBubbleViewBase ---------------------------------------------------
 
-#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
 // static
 GlobalErrorBubbleViewBase* GlobalErrorBubbleViewBase::ShowStandardBubbleView(
     Browser* browser,
@@ -83,9 +77,12 @@ GlobalErrorBubbleViewBase* GlobalErrorBubbleViewBase::ShowStandardBubbleView(
       anchor_view, anchor_rect, views::BubbleBorder::TOP_RIGHT, browser, error);
   views::BubbleDialogDelegateView::CreateBubble(bubble_view);
   bubble_view->GetWidget()->Show();
+#if defined(OS_MACOSX)
+  if (views_mode_controller::IsViewsBrowserCocoa())
+    KeepBubbleAnchored(bubble_view);
+#endif
   return bubble_view;
 }
-#endif  // !OS_MACOSX || MAC_VIEWS_BROWSER
 
 // GlobalErrorBubbleView -------------------------------------------------------
 
@@ -135,10 +132,6 @@ void GlobalErrorBubbleView::WindowClosing() {
 void GlobalErrorBubbleView::Init() {
   // |error_| is assumed to be valid, and stay valid, at least until Init()
   // returns.
-
-  // Compensate for built-in vertical padding in the anchor view's image.
-  set_anchor_view_insets(gfx::Insets(
-      GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
 
   std::vector<base::string16> message_strings(error_->GetBubbleViewMessages());
   std::vector<views::Label*> message_labels;

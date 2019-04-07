@@ -51,8 +51,6 @@ class HTMLFrameSetElement final : public HTMLElement {
 
   bool HasNonInBodyInsertionMode() const override { return true; }
 
-  LocalDOMWindow* AnonymousNamedGetter(const AtomicString&);
-
   DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(blur);
   DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(error);
   DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(focus);
@@ -75,9 +73,9 @@ class HTMLFrameSetElement final : public HTMLElement {
   bool LayoutObjectIsNeeded(const ComputedStyle&) const override;
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
 
-  void DefaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event&) override;
 
-  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
+  InsertionNotificationRequest InsertedInto(ContainerNode&) override;
   void WillRecalcStyle(StyleRecalcChange) override;
 
   Vector<HTMLDimension> row_lengths_;

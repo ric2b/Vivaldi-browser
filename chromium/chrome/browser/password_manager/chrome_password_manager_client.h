@@ -59,8 +59,9 @@ class ChromePasswordManagerClient
   bool IsSavingAndFillingEnabledForCurrentPage() const override;
   bool IsFillingEnabledForCurrentPage() const override;
   bool IsFillingFallbackEnabledForCurrentPage() const override;
-  void PostHSTSQueryForHost(const GURL& origin,
-                            const HSTSCallback& callback) const override;
+  void PostHSTSQueryForHost(
+      const GURL& origin,
+      password_manager::HSTSCallback callback) const override;
   bool OnCredentialManagerUsed() override;
   bool PromptUserToSaveOrUpdatePassword(
       std::unique_ptr<password_manager::PasswordFormManagerForUI> form_to_save,
@@ -145,7 +146,7 @@ class ChromePasswordManagerClient
 #endif
 
   ukm::SourceId GetUkmSourceId() override;
-  password_manager::PasswordManagerMetricsRecorder& GetMetricsRecorder()
+  password_manager::PasswordManagerMetricsRecorder* GetMetricsRecorder()
       override;
 
   static void CreateForWebContentsWithAutofillClient(
@@ -204,9 +205,6 @@ class ChromePasswordManagerClient
                                const gfx::RectF& bounds) override;
   void RecordSavePasswordProgress(const std::string& log) override;
   void UserModifiedPasswordField() override;
-  void SaveGenerationFieldDetectedByClassifier(
-      const autofill::PasswordForm& password_form,
-      const base::string16& generation_field) override;
   void CheckSafeBrowsingReputation(const GURL& form_action,
                                    const GURL& frame_url) override;
   void FocusedInputChanged(bool is_fillable, bool is_password_field) override;

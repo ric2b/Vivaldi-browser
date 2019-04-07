@@ -70,6 +70,16 @@ HostResolverMojo::HostResolverMojo(Impl* impl)
 
 HostResolverMojo::~HostResolverMojo() = default;
 
+std::unique_ptr<HostResolver::ResolveHostRequest>
+HostResolverMojo::CreateRequest(
+    const HostPortPair& host,
+    const NetLogWithSource& source_net_log,
+    const base::Optional<ResolveHostParameters>& optional_parameters) {
+  // TODO(crbug.com/821021): Implement.
+  NOTIMPLEMENTED();
+  return nullptr;
+}
+
 int HostResolverMojo::Resolve(const RequestInfo& info,
                               RequestPriority priority,
                               AddressList* addresses,

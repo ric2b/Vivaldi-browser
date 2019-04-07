@@ -16,6 +16,7 @@
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/passwords/password_form_filler.h"
 #import "ios/chrome/browser/ui/activity_services/activities/bookmark_activity.h"
+#import "ios/chrome/browser/ui/activity_services/activities/find_in_page_activity.h"
 #import "ios/chrome/browser/ui/activity_services/activities/print_activity.h"
 #import "ios/chrome/browser/ui/activity_services/activities/request_desktop_or_mobile_site_activity.h"
 #import "ios/chrome/browser/ui/activity_services/activity_type_util.h"
@@ -210,6 +211,7 @@ class ActivityServiceControllerTest : public PlatformTest {
                                         title:@""
                               isOriginalTitle:YES
                               isPagePrintable:YES
+                             isPageSearchable:YES
                                     userAgent:web::UserAgentType::MOBILE
                            thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   }
@@ -352,32 +354,6 @@ TEST_F(ActivityServiceControllerTest, PresentAndDismissController) {
   EXPECT_TRUE(provider.activityServiceDidEndPresentingWasCalled);
 }
 
-// Verifies that an UIActivityImageSource is sent to the
-// UIActivityViewController if and only if the ShareToData contains an image.
-TEST_F(ActivityServiceControllerTest, ActivityItemsForData) {
-  ActivityServiceController* activityController =
-      [[ActivityServiceController alloc] init];
-
-  // ShareToData does not contain an image, so the result items array will not
-  // contain an image source.
-  ShareToData* data =
-      [[ShareToData alloc] initWithShareURL:GURL("https://chromium.org")
-                                 visibleURL:GURL("https://chromium.org")
-                                      title:@"foo"
-                            isOriginalTitle:YES
-                            isPagePrintable:YES
-                                  userAgent:web::UserAgentType::DESKTOP
-                         thumbnailGenerator:DummyThumbnailGeneratorBlock()];
-  NSArray* items = [activityController activityItemsForData:data];
-  EXPECT_FALSE(ArrayContainsImageSource(items));
-
-  // Adds an image to the ShareToData object and call -activityItemsForData:
-  // again. Verifies that the result items array contains an image source.
-  [data setImage:[UIImage imageNamed:@"activity_services_print"]];
-  items = [activityController activityItemsForData:data];
-  EXPECT_TRUE(ArrayContainsImageSource(items));
-}
-
 // Verifies that when App Extension support is enabled, the URL string is
 // passed in a dictionary as part of the Activity Items to the App Extension.
 TEST_F(ActivityServiceControllerTest, ActivityItemsForDataWithPasswordAppEx) {
@@ -389,6 +365,7 @@ TEST_F(ActivityServiceControllerTest, ActivityItemsForDataWithPasswordAppEx) {
                    title:@"kung fu fighting"
          isOriginalTitle:YES
          isPagePrintable:YES
+        isPageSearchable:YES
                userAgent:web::UserAgentType::DESKTOP
       thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   NSArray* items = [activityController activityItemsForData:data];
@@ -452,6 +429,7 @@ TEST_F(ActivityServiceControllerTest,
                    title:@"kung fu fighting"
          isOriginalTitle:YES
          isPagePrintable:YES
+        isPageSearchable:YES
                userAgent:web::UserAgentType::DESKTOP
       thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   NSArray* items = [activityController activityItemsForData:data];
@@ -555,6 +533,7 @@ TEST_F(ActivityServiceControllerTest, ApplicationActivitiesForData) {
                    title:@"bar"
          isOriginalTitle:YES
          isPagePrintable:YES
+        isPageSearchable:YES
                userAgent:web::UserAgentType::NONE
       thumbnailGenerator:DummyThumbnailGeneratorBlock()];
 
@@ -562,7 +541,7 @@ TEST_F(ActivityServiceControllerTest, ApplicationActivitiesForData) {
       [activityController applicationActivitiesForData:data
                                             dispatcher:nil
                                          bookmarkModel:bookmark_model_];
-  ASSERT_EQ(IsUIRefreshPhase1Enabled() ? 4U : 2U, [items count]);
+  ASSERT_EQ(IsUIRefreshPhase1Enabled() ? 5U : 3U, [items count]);
   BOOL foundPrintActivity = NO;
   for (id item in items) {
     if ([item class] == [PrintActivity class]) {
@@ -579,12 +558,13 @@ TEST_F(ActivityServiceControllerTest, ApplicationActivitiesForData) {
                    title:@"baz"
          isOriginalTitle:YES
          isPagePrintable:NO
+        isPageSearchable:YES
                userAgent:web::UserAgentType::NONE
       thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   items = [activityController applicationActivitiesForData:data
                                                 dispatcher:nil
                                              bookmarkModel:bookmark_model_];
-  EXPECT_EQ(IsUIRefreshPhase1Enabled() ? 3U : 1U, [items count]);
+  EXPECT_EQ(IsUIRefreshPhase1Enabled() ? 4U : 2U, [items count]);
   foundPrintActivity = NO;
   for (id item in items) {
     if ([item class] == [PrintActivity class]) {
@@ -611,6 +591,7 @@ TEST_F(ActivityServiceControllerTest, HTTPActivities) {
                                       title:@"bar"
                             isOriginalTitle:YES
                             isPagePrintable:YES
+                           isPageSearchable:YES
                                   userAgent:web::UserAgentType::MOBILE
                          thumbnailGenerator:DummyThumbnailGeneratorBlock()];
 
@@ -618,7 +599,7 @@ TEST_F(ActivityServiceControllerTest, HTTPActivities) {
       [activityController applicationActivitiesForData:data
                                             dispatcher:nil
                                          bookmarkModel:bookmark_model_];
-  ASSERT_EQ(5U, [items count]);
+  ASSERT_EQ(6U, [items count]);
 
   // Verify non-HTTP URL.
   data = [[ShareToData alloc] initWithShareURL:GURL("chrome://chromium.org/")
@@ -626,12 +607,13 @@ TEST_F(ActivityServiceControllerTest, HTTPActivities) {
                                          title:@"baz"
                                isOriginalTitle:YES
                                isPagePrintable:YES
+                              isPageSearchable:YES
                                      userAgent:web::UserAgentType::MOBILE
                             thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   items = [activityController applicationActivitiesForData:data
                                                 dispatcher:nil
                                              bookmarkModel:bookmark_model_];
-  ASSERT_EQ(1U, [items count]);
+  ASSERT_EQ(2U, [items count]);
 }
 
 // Verifies that the Bookmark Activity is correct on bookmarked pages.
@@ -649,6 +631,7 @@ TEST_F(ActivityServiceControllerTest, BookmarkActivities) {
                                       title:@"bar"
                             isOriginalTitle:YES
                             isPagePrintable:YES
+                           isPageSearchable:YES
                                   userAgent:web::UserAgentType::NONE
                          thumbnailGenerator:DummyThumbnailGeneratorBlock()];
 
@@ -656,8 +639,8 @@ TEST_F(ActivityServiceControllerTest, BookmarkActivities) {
       [activityController applicationActivitiesForData:data
                                             dispatcher:nil
                                          bookmarkModel:bookmark_model_];
-  ASSERT_EQ(4U, [items count]);
-  UIActivity* activity = [items objectAtIndex:1];
+  ASSERT_EQ(5U, [items count]);
+  UIActivity* activity = [items objectAtIndex:2];
   EXPECT_EQ([BookmarkActivity class], [activity class]);
   NSString* addToBookmarkString =
       l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_ADD_TO_BOOKMARKS);
@@ -675,13 +658,14 @@ TEST_F(ActivityServiceControllerTest, BookmarkActivities) {
                    title:@"baz"
          isOriginalTitle:YES
          isPagePrintable:YES
+        isPageSearchable:YES
                userAgent:web::UserAgentType::NONE
       thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   items = [activityController applicationActivitiesForData:data
                                                 dispatcher:nil
                                              bookmarkModel:bookmark_model_];
-  ASSERT_EQ(4U, [items count]);
-  activity = [items objectAtIndex:1];
+  ASSERT_EQ(5U, [items count]);
+  activity = [items objectAtIndex:2];
   EXPECT_EQ([BookmarkActivity class], [activity class]);
   NSString* editBookmark =
       l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_EDIT_BOOKMARK);
@@ -706,6 +690,7 @@ TEST_F(ActivityServiceControllerTest, RequestMobileDesktopSite) {
                                       title:@"bar"
                             isOriginalTitle:YES
                             isPagePrintable:YES
+                           isPageSearchable:YES
                                   userAgent:web::UserAgentType::MOBILE
                          thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   id mockDispatcher = OCMProtocolMock(@protocol(BrowserCommands));
@@ -714,8 +699,8 @@ TEST_F(ActivityServiceControllerTest, RequestMobileDesktopSite) {
       [activityController applicationActivitiesForData:data
                                             dispatcher:mockDispatcher
                                          bookmarkModel:bookmark_model_];
-  ASSERT_EQ(5U, [items count]);
-  UIActivity* activity = [items objectAtIndex:3];
+  ASSERT_EQ(6U, [items count]);
+  UIActivity* activity = [items objectAtIndex:4];
   EXPECT_EQ([RequestDesktopOrMobileSiteActivity class], [activity class]);
   NSString* requestDesktopSiteString =
       l10n_util::GetNSString(IDS_IOS_SHARE_MENU_REQUEST_DESKTOP_SITE);
@@ -730,6 +715,7 @@ TEST_F(ActivityServiceControllerTest, RequestMobileDesktopSite) {
                                          title:@"bar"
                                isOriginalTitle:YES
                                isPagePrintable:YES
+                              isPageSearchable:YES
                                      userAgent:web::UserAgentType::DESKTOP
                             thumbnailGenerator:DummyThumbnailGeneratorBlock()];
   mockDispatcher = OCMProtocolMock(@protocol(BrowserCommands));
@@ -737,8 +723,8 @@ TEST_F(ActivityServiceControllerTest, RequestMobileDesktopSite) {
   items = [activityController applicationActivitiesForData:data
                                                 dispatcher:mockDispatcher
                                              bookmarkModel:bookmark_model_];
-  ASSERT_EQ(5U, [items count]);
-  activity = [items objectAtIndex:3];
+  ASSERT_EQ(6U, [items count]);
+  activity = [items objectAtIndex:4];
   EXPECT_EQ([RequestDesktopOrMobileSiteActivity class], [activity class]);
   NSString* requestMobileSiteString =
       l10n_util::GetNSString(IDS_IOS_SHARE_MENU_REQUEST_MOBILE_SITE);
@@ -831,6 +817,64 @@ TEST_F(ActivityServiceControllerTest, TestShareDidCompleteWithError) {
   EXPECT_NSEQ(error_title, provider.latestErrorAlertTitle);
   EXPECT_NSEQ(error_message, provider.latestErrorAlertMessage);
   EXPECT_FALSE(provider.latestSnackbarMessage);
+}
+
+// Verifies that the FindInPageActivity is sent to the UIActivityViewController
+// if and only if the activity is "searchable".
+TEST_F(ActivityServiceControllerTest, FindInPageActivity) {
+  if (!IsUIRefreshPhase1Enabled())
+    return;
+
+  ActivityServiceController* activityController =
+      [[ActivityServiceController alloc] init];
+
+  // Verify searchable data.
+  ShareToData* data = [[ShareToData alloc]
+        initWithShareURL:GURL("https://chromium.org/printable")
+              visibleURL:GURL("https://chromium.org/printable")
+                   title:@"bar"
+         isOriginalTitle:YES
+         isPagePrintable:YES
+        isPageSearchable:YES
+               userAgent:web::UserAgentType::NONE
+      thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+
+  NSArray* items =
+      [activityController applicationActivitiesForData:data
+                                            dispatcher:nil
+                                         bookmarkModel:bookmark_model_];
+  ASSERT_EQ(5U, [items count]);
+  BOOL foundFindInPageActivity = NO;
+  for (id item in items) {
+    if ([item class] == [FindInPageActivity class]) {
+      foundFindInPageActivity = YES;
+      break;
+    }
+  }
+  EXPECT_TRUE(foundFindInPageActivity);
+
+  // Verify non-searchable data.
+  data = [[ShareToData alloc]
+        initWithShareURL:GURL("https://chromium.org/unprintable")
+              visibleURL:GURL("https://chromium.org/unprintable")
+                   title:@"baz"
+         isOriginalTitle:YES
+         isPagePrintable:YES
+        isPageSearchable:NO
+               userAgent:web::UserAgentType::NONE
+      thumbnailGenerator:DummyThumbnailGeneratorBlock()];
+  items = [activityController applicationActivitiesForData:data
+                                                dispatcher:nil
+                                             bookmarkModel:bookmark_model_];
+  EXPECT_EQ(4U, [items count]);
+  foundFindInPageActivity = NO;
+  for (id item in items) {
+    if ([item class] == [FindInPageActivity class]) {
+      foundFindInPageActivity = YES;
+      break;
+    }
+  }
+  EXPECT_FALSE(foundFindInPageActivity);
 }
 
 }  // namespace

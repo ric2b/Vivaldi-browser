@@ -28,10 +28,11 @@
 
 #if defined(TOOLKIT_VIEWS)
 #include "chrome/browser/ui/views/chrome_constrained_window_views_client.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "components/constrained_window/constrained_window_views.h"
 
 #if defined(OS_CHROMEOS)
+#include "ash/test/ash_test_views_delegate.h"
 #include "chrome/test/base/ash_test_environment_chrome.h"
 #else
 #include "ui/views/test/test_views_delegate.h"
@@ -80,6 +81,7 @@ void BrowserWithTestWindowTest::SetUp() {
   testing::Test::SetUp();
 #if defined(OS_CHROMEOS)
   ash_test_helper_->SetUp(true);
+  ash_test_helper_->SetRunningOutsideAsh();
 #elif defined(TOOLKIT_VIEWS)
   views_test_helper_.reset(new views::ScopedViewsTestHelper());
 #endif

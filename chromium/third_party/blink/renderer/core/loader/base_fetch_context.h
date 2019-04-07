@@ -21,6 +21,7 @@ namespace blink {
 
 class ConsoleMessage;
 class KURL;
+class PreviewsResourceLoadingHints;
 class SecurityOrigin;
 class SubresourceFilter;
 class WebSocketHandshakeThrottle;
@@ -37,7 +38,6 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       const KURL&,
       const ResourceLoaderOptions&,
       SecurityViolationReportingPolicy,
-      FetchParameters::OriginRestriction,
       ResourceRequest::RedirectStatus) const override;
   base::Optional<ResourceRequestBlockedReason> CheckCSPForRequest(
       WebURLRequest::RequestContext,
@@ -52,6 +52,8 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       const = 0;
   virtual KURL GetSiteForCookies() const = 0;
   virtual SubresourceFilter* GetSubresourceFilter() const = 0;
+  virtual PreviewsResourceLoadingHints* GetPreviewsResourceLoadingHints()
+      const = 0;
   virtual void CountUsage(WebFeature) const = 0;
   virtual void CountDeprecation(WebFeature) const = 0;
   virtual bool ShouldBlockWebSocketByMixedContentCheck(const KURL&) const = 0;
@@ -59,6 +61,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   CreateWebSocketHandshakeThrottle() = 0;
 
   void AddInfoConsoleMessage(const String&, LogSource) const override;
+  void AddWarningConsoleMessage(const String&, LogSource) const override;
   void AddErrorConsoleMessage(const String&, LogSource) const override;
   bool IsAdResource(const KURL&,
                     Resource::Type,
@@ -104,7 +107,6 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       const KURL&,
       const ResourceLoaderOptions&,
       SecurityViolationReportingPolicy,
-      FetchParameters::OriginRestriction,
       ResourceRequest::RedirectStatus) const;
 
   base::Optional<ResourceRequestBlockedReason> CheckCSPForRequestInternal(

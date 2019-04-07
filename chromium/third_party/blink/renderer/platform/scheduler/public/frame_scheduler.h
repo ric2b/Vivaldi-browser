@@ -9,6 +9,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "base/single_thread_task_runner.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/mojom/loader/pause_subresource_loading_handle.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/web_resource_loading_task_runner_handle.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -17,12 +18,24 @@
 #include "third_party/blink/renderer/platform/scheduler/public/frame_or_worker_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
+namespace ukm {
+class UkmRecorder;
+}
+
 namespace blink {
 
 class PageScheduler;
 
 class FrameScheduler : public FrameOrWorkerScheduler {
  public:
+  class PLATFORM_EXPORT Delegate {
+   public:
+    virtual ~Delegate() = default;
+
+    virtual ukm::UkmRecorder* GetUkmRecorder() = 0;
+    virtual ukm::SourceId GetUkmSourceId() = 0;
+  };
+
   ~FrameScheduler() override = default;
 
   // Represents the type of frame: main (top-level) vs not.
@@ -134,6 +147,9 @@ class FrameScheduler : public FrameOrWorkerScheduler {
   // use GetPageScheduler()->IsExemptFromBudgetBasedThrottling for the status
   // of the page.
   virtual bool IsExemptFromBudgetBasedThrottling() const = 0;
+
+  // Returns UKM source id for recording metrics associated with this frame.
+  virtual ukm::SourceId GetUkmSourceId() = 0;
 
   FrameScheduler* ToFrameScheduler() override { return this; }
 

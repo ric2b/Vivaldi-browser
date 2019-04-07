@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service.h"
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service_factory.h"
@@ -109,10 +110,8 @@ ExtensionFunction::ResponseAction CloudPrintPrivateGetPrintersFunction::Run() {
   if (!service)
     return RespondNow(Error(kErrorIncognito));
 
-  // TODO(https://crbug.com/845250): CloudPrintProxyService::GetPrinters() may
-  // not invoke the callback, which means this function may never respond.
   service->GetPrinters(
-      base::Bind(&CloudPrintPrivateGetPrintersFunction::SendResults, this));
+      base::BindOnce(&CloudPrintPrivateGetPrintersFunction::SendResults, this));
   return RespondLater();
 }
 

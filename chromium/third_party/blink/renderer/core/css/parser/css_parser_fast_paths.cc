@@ -583,7 +583,10 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       return value_id == CSSValueTop || value_id == CSSValueBottom;
     case CSSPropertyClear:
       return value_id == CSSValueNone || value_id == CSSValueLeft ||
-             value_id == CSSValueRight || value_id == CSSValueBoth;
+             value_id == CSSValueRight || value_id == CSSValueBoth ||
+             (RuntimeEnabledFeatures::CSSLogicalEnabled() &&
+              (value_id == CSSValueInlineStart ||
+               value_id == CSSValueInlineEnd));
     case CSSPropertyClipRule:
     case CSSPropertyFillRule:
       return value_id == CSSValueNonzero || value_id == CSSValueEvenodd;
@@ -592,8 +595,8 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       return value_id == CSSValueAuto || value_id == CSSValueSRGB ||
              value_id == CSSValueLinearRGB;
     case CSSPropertyColorRendering:
-      return value_id == CSSValueAuto || value_id == CSSValueOptimizeSpeed ||
-             value_id == CSSValueOptimizeQuality;
+      return value_id == CSSValueAuto || value_id == CSSValueOptimizespeed ||
+             value_id == CSSValueOptimizequality;
     case CSSPropertyDirection:
       return value_id == CSSValueLtr || value_id == CSSValueRtl;
     case CSSPropertyDisplay:
@@ -601,8 +604,7 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
              value_id == CSSValueWebkitFlex ||
              value_id == CSSValueWebkitInlineFlex || value_id == CSSValueNone ||
              value_id == CSSValueGrid || value_id == CSSValueInlineGrid ||
-             (RuntimeEnabledFeatures::CSSDisplayContentsEnabled() &&
-              value_id == CSSValueContents);
+             value_id == CSSValueContents;
     case CSSPropertyDominantBaseline:
       return value_id == CSSValueAuto || value_id == CSSValueAlphabetic ||
              value_id == CSSValueMiddle ||
@@ -612,6 +614,9 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       return value_id == CSSValueShow || value_id == CSSValueHide;
     case CSSPropertyFloat:
       return value_id == CSSValueLeft || value_id == CSSValueRight ||
+             (RuntimeEnabledFeatures::CSSLogicalEnabled() &&
+              (value_id == CSSValueInlineStart ||
+               value_id == CSSValueInlineEnd)) ||
              value_id == CSSValueNone;
     case CSSPropertyImageRendering:
       return value_id == CSSValueAuto ||
@@ -669,14 +674,16 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
     case CSSPropertyResize:
       return value_id == CSSValueNone || value_id == CSSValueBoth ||
              value_id == CSSValueHorizontal || value_id == CSSValueVertical ||
+             (RuntimeEnabledFeatures::CSSLogicalEnabled() &&
+              (value_id == CSSValueBlock || value_id == CSSValueInline)) ||
              value_id == CSSValueAuto;
     case CSSPropertyScrollBehavior:
       DCHECK(RuntimeEnabledFeatures::CSSOMSmoothScrollEnabled());
       return value_id == CSSValueAuto || value_id == CSSValueSmooth;
     case CSSPropertyShapeRendering:
-      return value_id == CSSValueAuto || value_id == CSSValueOptimizeSpeed ||
-             value_id == CSSValueCrispEdges ||
-             value_id == CSSValueGeometricPrecision;
+      return value_id == CSSValueAuto || value_id == CSSValueOptimizespeed ||
+             value_id == CSSValueCrispedges ||
+             value_id == CSSValueGeometricprecision;
     case CSSPropertySpeak:
       return value_id == CSSValueNone || value_id == CSSValueNormal ||
              value_id == CSSValueSpellOut || value_id == CSSValueDigits ||
@@ -723,9 +730,9 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
     case CSSPropertyTextOverflow:
       return value_id == CSSValueClip || value_id == CSSValueEllipsis;
     case CSSPropertyTextRendering:
-      return value_id == CSSValueAuto || value_id == CSSValueOptimizeSpeed ||
-             value_id == CSSValueOptimizeLegibility ||
-             value_id == CSSValueGeometricPrecision;
+      return value_id == CSSValueAuto || value_id == CSSValueOptimizespeed ||
+             value_id == CSSValueOptimizelegibility ||
+             value_id == CSSValueGeometricprecision;
     case CSSPropertyTextTransform:  // capitalize | uppercase | lowercase | none
       return (value_id >= CSSValueCapitalize &&
               value_id <= CSSValueLowercase) ||

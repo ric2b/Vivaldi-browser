@@ -11,12 +11,26 @@
 namespace blink {
 namespace features {
 
+BLINK_COMMON_EXPORT extern const base::Feature kAutofillPreviewStyleExperiment;
 BLINK_COMMON_EXPORT extern const base::Feature
     kEagerCacheStorageSetupForServiceWorkers;
 BLINK_COMMON_EXPORT extern const base::Feature kLayoutNG;
 BLINK_COMMON_EXPORT extern const base::Feature kMojoBlobURLs;
+BLINK_COMMON_EXPORT extern const base::Feature
+    kServiceWorkerImportedScriptUpdateCheck;
 BLINK_COMMON_EXPORT extern const base::Feature kServiceWorkerServicification;
 BLINK_COMMON_EXPORT extern const base::Feature kNestedWorkers;
+BLINK_COMMON_EXPORT extern const base::Feature kRecordAnchorMetricsClicked;
+BLINK_COMMON_EXPORT extern const base::Feature kRecordAnchorMetricsVisible;
+BLINK_COMMON_EXPORT extern const base::Feature kPortals;
+BLINK_COMMON_EXPORT extern const base::Feature kStopInBackground;
+BLINK_COMMON_EXPORT extern const base::Feature kStopNonTimersInBackground;
+BLINK_COMMON_EXPORT extern const base::Feature kWritableFilesAPI;
+
+BLINK_COMMON_EXPORT extern const char
+    kAutofillPreviewStyleExperimentBgColorParameterName[];
+BLINK_COMMON_EXPORT extern const char
+    kAutofillPreviewStyleExperimentColorParameterName[];
 
 }  // namespace features
 }  // namespace blink

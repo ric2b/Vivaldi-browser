@@ -366,7 +366,7 @@ public class SyncCustomizationFragment extends PreferenceFragment
         boolean syncEverything = mSyncEverything.isChecked();
         mProfileSyncService.setPreferredDataTypes(syncEverything, getSelectedModelTypes());
         // Update the invalidation listener with the set of types we are enabling.
-        InvalidationController invController = InvalidationController.get(getActivity());
+        InvalidationController invController = InvalidationController.get();
         invController.ensureStartedAndUpdateRegisteredTypes();
     }
 
@@ -436,8 +436,10 @@ public class SyncCustomizationFragment extends PreferenceFragment
      */
     @Override
     public boolean onPassphraseEntered(String passphrase) {
-        if (!mProfileSyncService.isEngineInitialized()) {
-            // If the engine was shut down since the dialog was opened, do nothing.
+        if (!mProfileSyncService.isEngineInitialized()
+                || !mProfileSyncService.isPassphraseRequiredForDecryption()) {
+            // If the engine was shut down since the dialog was opened, or the passphrase isn't
+            // required anymore, do nothing.
             return false;
         }
         return handleDecryption(passphrase);

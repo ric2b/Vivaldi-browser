@@ -78,10 +78,13 @@ int TrayItemView::GetAnimationDurationMS() {
 gfx::Size TrayItemView::CalculatePreferredSize() const {
   DCHECK_EQ(1, child_count());
   gfx::Size inner_size = views::View::CalculatePreferredSize();
-  if (image_view_)
-    inner_size = gfx::Size(kTrayIconSize, kTrayIconSize);
+  if (image_view_) {
+    inner_size = gfx::Size(TrayConstants::GetTrayIconSize(),
+                           TrayConstants::GetTrayIconSize());
+  }
   gfx::Rect rect(inner_size);
-  rect.Inset(gfx::Insets(-kTrayImageItemPadding));
+  if (label_)
+    rect.Inset(gfx::Insets(-kTrayImageItemPadding));
   gfx::Size size = rect.size();
   if (!animation_.get() || !animation_->is_animating())
     return size;

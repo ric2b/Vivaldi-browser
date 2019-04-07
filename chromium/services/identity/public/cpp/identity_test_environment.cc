@@ -41,8 +41,8 @@ class IdentityTestEnvironmentInternal {
   sync_preferences::TestingPrefServiceSyncable pref_service_;
   AccountTrackerService account_tracker_;
   TestSigninClient signin_client_;
-  SigninManagerForTest signin_manager_;
   FakeProfileOAuth2TokenService token_service_;
+  SigninManagerForTest signin_manager_;
   FakeGaiaCookieManagerService gaia_cookie_manager_service_;
   std::unique_ptr<IdentityManager> identity_manager_;
 
@@ -51,6 +51,7 @@ class IdentityTestEnvironmentInternal {
 
 IdentityTestEnvironmentInternal::IdentityTestEnvironmentInternal()
     : signin_client_(&pref_service_),
+      token_service_(&pref_service_),
 #if defined(OS_CHROMEOS)
       signin_manager_(&signin_client_, &account_tracker_),
 #else
@@ -78,7 +79,7 @@ IdentityTestEnvironmentInternal::IdentityTestEnvironmentInternal()
   SigninManagerBase::RegisterProfilePrefs(pref_service_.registry());
   SigninManagerBase::RegisterPrefs(pref_service_.registry());
 
-  account_tracker_.Initialize(&signin_client_);
+  account_tracker_.Initialize(&pref_service_, base::FilePath());
 
   identity_manager_.reset(new IdentityManager(&signin_manager_, &token_service_,
                                               &account_tracker_,
@@ -146,9 +147,10 @@ AccountInfo IdentityTestEnvironment::MakePrimaryAccountAvailable(
       internals_->identity_manager(), email);
 }
 
-void IdentityTestEnvironment::ClearPrimaryAccount() {
+void IdentityTestEnvironment::ClearPrimaryAccount(
+    ClearPrimaryAccountPolicy policy) {
   identity::ClearPrimaryAccount(internals_->signin_manager(),
-                                internals_->identity_manager());
+                                internals_->identity_manager(), policy);
 }
 
 AccountInfo IdentityTestEnvironment::MakeAccountAvailable(
@@ -185,22 +187,51 @@ void IdentityTestEnvironment::
     WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
         const std::string& token,
         const base::Time& expiration) {
-  WaitForAccessTokenRequestIfNecessary();
+  WaitForAccessTokenRequestIfNecessary(base::nullopt);
   internals_->token_service()->IssueTokenForAllPendingRequests(token,
                                                                expiration);
 }
 
 void IdentityTestEnvironment::
+    WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
+        const std::string& account_id,
+        const std::string& token,
+        const base::Time& expiration) {
+  WaitForAccessTokenRequestIfNecessary(account_id);
+  internals_->token_service()->IssueAllTokensForAccount(account_id, token,
+                                                        expiration);
+}
+
+void IdentityTestEnvironment::
     WaitForAccessTokenRequestIfNecessaryAndRespondWithError(
         const GoogleServiceAuthError& error) {
-  WaitForAccessTokenRequestIfNecessary();
+  WaitForAccessTokenRequestIfNecessary(base::nullopt);
   internals_->token_service()->IssueErrorForAllPendingRequests(error);
+}
+
+void IdentityTestEnvironment::
+    WaitForAccessTokenRequestIfNecessaryAndRespondWithError(
+        const std::string& account_id,
+        const GoogleServiceAuthError& error) {
+  WaitForAccessTokenRequestIfNecessary(account_id);
+  internals_->token_service()->IssueErrorForAllPendingRequestsForAccount(
+      account_id, error);
 }
 
 void IdentityTestEnvironment::SetCallbackForNextAccessTokenRequest(
     base::OnceClosure callback) {
   on_access_token_requested_callback_ = std::move(callback);
 }
+
+IdentityTestEnvironment::AccessTokenRequestState::AccessTokenRequestState() =
+    default;
+IdentityTestEnvironment::AccessTokenRequestState::~AccessTokenRequestState() =
+    default;
+IdentityTestEnvironment::AccessTokenRequestState::AccessTokenRequestState(
+    AccessTokenRequestState&& other) = default;
+IdentityTestEnvironment::AccessTokenRequestState&
+IdentityTestEnvironment::AccessTokenRequestState::operator=(
+    AccessTokenRequestState&& other) = default;
 
 void IdentityTestEnvironment::OnAccessTokenRequested(
     const std::string& account_id,
@@ -214,18 +245,61 @@ void IdentityTestEnvironment::OnAccessTokenRequested(
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(&IdentityTestEnvironment::HandleOnAccessTokenRequested,
-                     base::Unretained(this)));
+                     base::Unretained(this), account_id));
 }
 
-void IdentityTestEnvironment::HandleOnAccessTokenRequested() {
-  if (on_access_token_requested_callback_)
+void IdentityTestEnvironment::HandleOnAccessTokenRequested(
+    std::string account_id) {
+  if (on_access_token_requested_callback_) {
     std::move(on_access_token_requested_callback_).Run();
+    return;
+  }
+
+  for (auto it = requesters_.begin(); it != requesters_.end(); ++it) {
+    if (!it->account_id || (it->account_id.value() == account_id)) {
+      if (it->state == AccessTokenRequestState::kAvailable)
+        return;
+      if (it->on_available)
+        std::move(it->on_available).Run();
+      requesters_.erase(it);
+      return;
+    }
+  }
+
+  // A requests came in for a request for which we are not waiting. Record that
+  // it's available.
+  requesters_.emplace_back();
+  requesters_.back().state = AccessTokenRequestState::kAvailable;
+  requesters_.back().account_id = account_id;
 }
 
-void IdentityTestEnvironment::WaitForAccessTokenRequestIfNecessary() {
-  DCHECK(!on_access_token_requested_callback_);
+void IdentityTestEnvironment::WaitForAccessTokenRequestIfNecessary(
+    base::Optional<std::string> account_id) {
+  // Handle HandleOnAccessTokenRequested getting called before
+  // WaitForAccessTokenRequestIfNecessary.
+  if (account_id) {
+    for (auto it = requesters_.begin(); it != requesters_.end(); ++it) {
+      if (it->account_id && it->account_id.value() == account_id.value()) {
+        // Can't wait twice for same thing.
+        DCHECK_EQ(AccessTokenRequestState::kAvailable, it->state);
+        requesters_.erase(it);
+        return;
+      }
+    }
+  } else {
+    for (auto it = requesters_.begin(); it != requesters_.end(); ++it) {
+      if (it->state == AccessTokenRequestState::kAvailable) {
+        requesters_.erase(it);
+        return;
+      }
+    }
+  }
+
   base::RunLoop run_loop;
-  on_access_token_requested_callback_ = run_loop.QuitClosure();
+  requesters_.emplace_back();
+  requesters_.back().state = AccessTokenRequestState::kPending;
+  requesters_.back().account_id = std::move(account_id);
+  requesters_.back().on_available = run_loop.QuitClosure();
   run_loop.Run();
 }
 

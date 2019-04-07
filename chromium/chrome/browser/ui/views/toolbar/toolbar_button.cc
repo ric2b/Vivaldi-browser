@@ -13,8 +13,8 @@
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/harmony/chrome_typography.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/material_design/material_design_controller.h"
@@ -25,7 +25,6 @@
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
-#include "ui/views/style/platform_style.h"
 #include "ui/views/widget/widget.h"
 
 ToolbarButton::ToolbarButton(views::ButtonListener* listener)
@@ -33,17 +32,18 @@ ToolbarButton::ToolbarButton(views::ButtonListener* listener)
 
 ToolbarButton::ToolbarButton(views::ButtonListener* listener,
                              std::unique_ptr<ui::MenuModel> model,
-                             TabStripModel* tab_strip_model)
+                             TabStripModel* tab_strip_model,
+                             bool trigger_menu_on_long_press)
     : views::LabelButton(listener, base::string16(), CONTEXT_TOOLBAR_BUTTON),
       model_(std::move(model)),
       tab_strip_model_(tab_strip_model),
+      trigger_menu_on_long_press_(trigger_menu_on_long_press),
       layout_insets_(GetLayoutInsets(TOOLBAR_BUTTON)),
       show_menu_factory_(this) {
   set_has_ink_drop_action_on_click(true);
   set_context_menu_controller(this);
   SetInkDropMode(InkDropMode::ON);
   SetFocusPainter(nullptr);
-  SetInstallFocusRingOnFocus(views::PlatformStyle::kPreferFocusRings);
 
   // Make sure icons are flipped by default so that back, forward, etc. follows
   // UI direction.
@@ -127,9 +127,25 @@ void ToolbarButton::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   LabelButton::OnBoundsChanged(previous_bounds);
 }
 
+gfx::Rect ToolbarButton::GetAnchorBoundsInScreen() const {
+  gfx::Rect bounds = GetBoundsInScreen();
+  gfx::Insets insets =
+      GetInkDropInsets(this, gfx::Insets(0, leading_margin_, 0, 0));
+  // If the button is extended, don't inset the leading edge. The anchored menu
+  // should extend to the screen edge as well so the menu is easier to hit
+  // (Fitts's law).
+  // TODO(pbos): Make sure the button is aware of that it is being extended or
+  // not (leading_margin_ cannot be used as it can be 0 in fullscreen on Touch).
+  // When this is implemented, use 0 as a replacement for leading_margin_ in
+  // fullscreen only. Always keep the rest.
+  insets.Set(insets.top(), 0, insets.bottom(), 0);
+  bounds.Inset(insets);
+  return bounds;
+}
+
 bool ToolbarButton::OnMousePressed(const ui::MouseEvent& event) {
-  if (IsTriggerableEvent(event) && enabled() && ShouldShowMenu() &&
-      HitTestPoint(event.location())) {
+  if (trigger_menu_on_long_press_ && IsTriggerableEvent(event) && enabled() &&
+      ShouldShowMenu() && HitTestPoint(event.location())) {
     // Store the y pos of the mouse coordinates so we can use them later to
     // determine if the user dragged the mouse down (which should pop up the
     // drag down menu immediately, instead of waiting for the timer)
@@ -151,7 +167,7 @@ bool ToolbarButton::OnMousePressed(const ui::MouseEvent& event) {
 bool ToolbarButton::OnMouseDragged(const ui::MouseEvent& event) {
   bool result = LabelButton::OnMouseDragged(event);
 
-  if (show_menu_factory_.HasWeakPtrs()) {
+  if (trigger_menu_on_long_press_ && show_menu_factory_.HasWeakPtrs()) {
     // If the mouse is dragged to a y position lower than where it was when
     // clicked then we should not wait for the menu to appear but show
     // it immediately.
@@ -260,16 +276,7 @@ void ToolbarButton::ShowDropDownMenu(ui::MenuSourceType source_type) {
   if (!ShouldShowMenu())
     return;
 
-  gfx::Rect lb = GetLocalBounds();
-
-  // Both the menu position and the menu anchor type change if the UI layout
-  // is right-to-left.
-  gfx::Point menu_position(lb.origin());
-  menu_position.Offset(0, lb.height() - 1);
-  if (base::i18n::IsRTL())
-    menu_position.Offset(lb.width() - 1, 0);
-
-  View::ConvertPointToScreen(this, &menu_position);
+  gfx::Rect menu_anchor_bounds = GetAnchorBoundsInScreen();
 
 #if defined(OS_CHROMEOS)
   // A window won't overlap between displays on ChromeOS.
@@ -287,8 +294,8 @@ void ToolbarButton::ShowDropDownMenu(ui::MenuSourceType source_type) {
       screen->GetDisplayNearestPoint(screen->GetCursorScreenPoint());
   int left_bound = display.bounds().x();
 #endif
-  if (menu_position.x() < left_bound)
-    menu_position.set_x(left_bound);
+  if (menu_anchor_bounds.x() < left_bound)
+    menu_anchor_bounds.set_x(left_bound);
 
   // Make the button look depressed while the menu is open.
   SetState(STATE_PRESSED);
@@ -312,8 +319,7 @@ void ToolbarButton::ShowDropDownMenu(ui::MenuSourceType source_type) {
   menu_model_adapter_->set_triggerable_event_flags(triggerable_event_flags());
   menu_runner_ = std::make_unique<views::MenuRunner>(
       menu_model_adapter_->CreateMenu(), views::MenuRunner::HAS_MNEMONICS);
-  menu_runner_->RunMenuAt(GetWidget(), nullptr,
-                          gfx::Rect(menu_position, gfx::Size(0, 0)),
+  menu_runner_->RunMenuAt(GetWidget(), nullptr, menu_anchor_bounds,
                           views::MENU_ANCHOR_TOPLEFT, source_type);
 }
 

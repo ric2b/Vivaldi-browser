@@ -7,15 +7,15 @@
 
 #include <memory>
 #include <queue>
+#include <utility>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/version.h"
 #include "chrome/browser/vr/assets_load_status.h"
 #include "chrome/browser/vr/browser_ui_interface.h"
-#include "chrome/browser/vr/keyboard_ui_interface.h"
 #include "chrome/browser/vr/model/tab_model.h"
-#include "chrome/browser/vr/platform_controller.h"
 #include "chrome/browser/vr/ui_element_renderer.h"
 #include "chrome/browser/vr/ui_initial_state.h"
 #include "chrome/browser/vr/ui_interface.h"
@@ -46,20 +46,20 @@ struct ReticleModel;
 
 // This class manages all GLThread owned objects and GL rendering for VrShell.
 // It is not threadsafe and must only be used on the GL thread.
-class VR_EXPORT Ui : public UiInterface, public KeyboardUiInterface {
+class VR_UI_EXPORT Ui : public UiInterface {
  public:
   Ui(UiBrowserInterface* browser,
      PlatformInputHandler* content_input_forwarder,
-     KeyboardDelegate* keyboard_delegate,
-     TextInputDelegate* text_input_delegate,
-     AudioDelegate* audio_delegate,
+     std::unique_ptr<KeyboardDelegate> keyboard_delegate,
+     std::unique_ptr<TextInputDelegate> text_input_delegate,
+     std::unique_ptr<AudioDelegate> audio_delegate,
      const UiInitialState& ui_initial_state);
 
   Ui(UiBrowserInterface* browser,
      std::unique_ptr<ContentInputDelegate> content_input_delegate,
-     KeyboardDelegate* keyboard_delegate,
-     TextInputDelegate* text_input_delegate,
-     AudioDelegate* audio_delegate,
+     std::unique_ptr<KeyboardDelegate> keyboard_delegate,
+     std::unique_ptr<TextInputDelegate> text_input_delegate,
+     std::unique_ptr<AudioDelegate> audio_delegate,
      const UiInitialState& ui_initial_state);
 
   ~Ui() override;
@@ -91,7 +91,10 @@ class VR_EXPORT Ui : public UiInterface, public KeyboardUiInterface {
   void SetLoadProgress(float progress) override;
   void SetIsExiting() override;
   void SetHistoryButtonsEnabled(bool can_go_back, bool can_go_forward) override;
-  void SetCapturingState(const CapturingStateModel& state) override;
+  void SetCapturingState(
+      const CapturingStateModel& active_capturing,
+      const CapturingStateModel& background_capturing,
+      const CapturingStateModel& potential_capturing) override;
   void ShowExitVrPrompt(UiUnsupportedMode reason) override;
   void SetSpeechRecognitionEnabled(bool enabled) override;
   void SetRecognitionResult(const base::string16& result) override;
@@ -117,7 +120,6 @@ class VR_EXPORT Ui : public UiInterface, public KeyboardUiInterface {
 
   // UiInterface
   base::WeakPtr<BrowserUiInterface> GetBrowserUiWeakPtr() override;
-  bool CanSendWebVrVSync() override;
   void SetAlertDialogEnabled(bool enabled,
                              PlatformUiInputDelegate* delegate,
                              float width,
@@ -133,37 +135,18 @@ class VR_EXPORT Ui : public UiInterface, public KeyboardUiInterface {
   void SetDialogFloating(bool floating) override;
   void ShowPlatformToast(const base::string16& text) override;
   void CancelPlatformToast() override;
-  bool ShouldRenderWebVr() override;
-  void OnGlInitialized(
-      unsigned int content_texture_id,
-      UiElementRenderer::TextureLocation content_location,
-      unsigned int content_overlay_texture_id,
-      UiElementRenderer::TextureLocation content_overlay_location,
-      unsigned int ui_texture_id) override;
 
   void OnPause() override;
-  void OnAppButtonClicked() override;
-  void OnAppButtonSwipePerformed(
-      PlatformController::SwipeDirection direction) override;
   void OnControllerUpdated(const ControllerModel& controller_model,
                            const ReticleModel& reticle_model) override;
   void OnProjMatrixChanged(const gfx::Transform& proj_matrix) override;
-  void OnWebVrFrameAvailable() override;
-  void OnWebVrTimedOut() override;
-  void OnWebVrTimeoutImminent() override;
-  bool IsControllerVisible() const override;
-  bool IsAppButtonLongPressed() const override;
-  bool SkipsRedrawWhenNotDirty() const override;
   void OnSwapContents(int new_content_id) override;
   void OnContentBoundsChanged(int width, int height) override;
 
   void AcceptDoffPromptForTesting() override;
-  void PerformControllerActionForTesting(
-      ControllerTestInput controller_input,
-      std::queue<ControllerModel>& controller_model_queue) override;
-
+  gfx::Point3F GetTargetPointForTesting(UserFriendlyElementName element_name,
+                                        const gfx::PointF& position) override;
   bool IsContentVisibleAndOpaque() override;
-  bool IsContentOverlayTextureEmpty() override;
   void SetContentUsesQuadLayer(bool uses_quad_buffers) override;
   gfx::Transform GetContentWorldSpaceTransform() override;
 
@@ -171,14 +154,13 @@ class VR_EXPORT Ui : public UiInterface, public KeyboardUiInterface {
   bool SceneHasDirtyTextures() const override;
   void UpdateSceneTextures() override;
   void Draw(const RenderInfo& render_info) override;
-  void DrawWebVr(int texture_data_handle,
-                 const float (&uv_transform)[16],
-                 float xborder,
-                 float yborder) override;
+  void DrawContent(const float (&uv_transform)[16],
+                   float xborder,
+                   float yborder) override;
+  void DrawWebXr(int texture_data_handle,
+                 const float (&uv_transform)[16]) override;
   void DrawWebVrOverlayForeground(const RenderInfo& render_info) override;
-  UiScene::Elements GetWebVrOverlayElementsToDraw() override;
-  gfx::Rect CalculatePixelSpaceRect(const gfx::Size& texture_size,
-                                    const gfx::RectF& texture_rect) override;
+  bool HasWebXrOverlayElementsToDraw() override;
 
   void HandleInput(base::TimeTicks current_time,
                    const RenderInfo& render_info,
@@ -186,13 +168,24 @@ class VR_EXPORT Ui : public UiInterface, public KeyboardUiInterface {
                    ReticleModel* reticle_model,
                    InputEventList* input_event_list) override;
 
-  FovRectangle GetMinimalFov(const gfx::Transform& view_matrix,
-                             const std::vector<const UiElement*>& elements,
-                             const FovRectangle& fov_recommended,
-                             float z_near) override;
+  void HandleMenuButtonEvents(InputEventList* input_event_list) override;
 
-  void RequestFocus(int element_id) override;
-  void RequestUnfocus(int element_id) override;
+  std::pair<FovRectangle, FovRectangle> GetMinimalFovForWebXrOverlayElements(
+      const gfx::Transform& left_view,
+      const FovRectangle& fov_recommended_left,
+      const gfx::Transform& right_view,
+      const FovRectangle& fov_recommended_right,
+      float z_near) override;
+
+  // CompositorUiInterface
+  void OnGlInitialized(unsigned int content_texture_id,
+                       GlTextureLocation content_location,
+                       unsigned int content_overlay_texture_id,
+                       GlTextureLocation content_overlay_location,
+                       unsigned int ui_texture_id) override;
+  void OnWebXrFrameAvailable() override;
+  void OnWebXrTimedOut() override;
+  void OnWebXrTimeoutImminent() override;
 
   // KeyboardUiInterface
   void OnInputEdited(const EditedText& info) override;
@@ -200,11 +193,18 @@ class VR_EXPORT Ui : public UiInterface, public KeyboardUiInterface {
   void OnKeyboardHidden() override;
 
  private:
+  void RequestFocus(int element_id);
+  void RequestUnfocus(int element_id);
+  void OnMenuButtonClicked();
   void OnSpeechRecognitionEnded();
   void InitializeModel(const UiInitialState& ui_initial_state);
   UiBrowserInterface* browser_;
   ContentElement* GetContentElement();
   std::vector<TabModel>::iterator FindTab(int id, std::vector<TabModel>* tabs);
+  FovRectangle GetMinimalFov(const gfx::Transform& view_matrix,
+                             const std::vector<const UiElement*>& elements,
+                             const FovRectangle& fov_recommended,
+                             float z_near);
 
   // This state may be further abstracted into a SkiaUi object.
   std::unique_ptr<UiScene> scene_;
@@ -219,12 +219,41 @@ class VR_EXPORT Ui : public UiInterface, public KeyboardUiInterface {
   // frame.
   ContentElement* content_element_ = nullptr;
 
-  AudioDelegate* audio_delegate_ = nullptr;
+  std::unique_ptr<KeyboardDelegate> keyboard_delegate_;
+  std::unique_ptr<TextInputDelegate> text_input_delegate_;
+  std::unique_ptr<AudioDelegate> audio_delegate_;
 
   base::WeakPtrFactory<Ui> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(Ui);
 };
+
+#if defined(FEATURE_MODULES)
+
+extern "C" {
+// The factory function obtained from the UI module library via dlsym() when
+// preparing to instantiate a UI instance.
+VR_UI_EXPORT Ui* CreateUi(
+    UiBrowserInterface* browser,
+    PlatformInputHandler* content_input_forwarder,
+    std::unique_ptr<KeyboardDelegate> keyboard_delegate,
+    std::unique_ptr<TextInputDelegate> text_input_delegate,
+    std::unique_ptr<AudioDelegate> audio_delegate,
+    const UiInitialState& ui_initial_state);
+}
+
+// After obtaining a void pointer to CreateUi() via dlsym, the resulting pointer
+// should be cast to this type.  Hence, the arguments to this type must exactly
+// match the method above.
+typedef Ui* CreateUiFunction(
+    UiBrowserInterface* browser,
+    PlatformInputHandler* content_input_forwarder,
+    std::unique_ptr<KeyboardDelegate> keyboard_delegate,
+    std::unique_ptr<TextInputDelegate> text_input_delegate,
+    std::unique_ptr<AudioDelegate> audio_delegate,
+    const UiInitialState& ui_initial_state);
+
+#endif  // defined(FEATURE_MODULES)
 
 }  // namespace vr
 

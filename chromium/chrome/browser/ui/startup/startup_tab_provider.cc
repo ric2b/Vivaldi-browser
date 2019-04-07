@@ -28,8 +28,7 @@
 #endif  // defined(OS_WIN)
 
 #if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
-#include "components/nux_google_apps/constants.h"
-#include "components/nux_google_apps/google_apps_handler.h"
+#include "components/nux/constants.h"
 #endif  // defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
 
 #include "app/vivaldi_apptools.h"
@@ -66,6 +65,11 @@ bool ProfileHasOtherTabbedBrowser(Profile* profile) {
 
 }  // namespace
 
+StartupTabProviderImpl::StandardOnboardingTabsParams::
+    StandardOnboardingTabsParams() = default;
+StartupTabProviderImpl::StandardOnboardingTabsParams::
+    ~StandardOnboardingTabsParams() = default;
+
 StartupTabs StartupTabProviderImpl::GetOnboardingTabs(Profile* profile) const {
 // Onboarding content has not been launched on Chrome OS.
 #if defined(OS_CHROMEOS)
@@ -90,10 +94,24 @@ StartupTabs StartupTabProviderImpl::GetOnboardingTabs(Profile* profile) const {
 
 #if defined(OS_WIN)
 #if defined(GOOGLE_CHROME_BUILD)
-  if (base::FeatureList::IsEnabled(nux_google_apps::kNuxGoogleAppsFeature)) {
+  // To avoid diluting data collection, existing users should not be assigned
+  // an NUX group. So, the kOnboardDuringNUX flag is used to short-circuit the
+  // feature checks below.
+  bool onboard_during_nux =
+      prefs && prefs->GetBoolean(prefs::kOnboardDuringNUX);
+
+  if (onboard_during_nux &&
+      base::FeatureList::IsEnabled(nux::kNuxGoogleAppsFeature)) {
     standard_params.is_apps_promo_allowed = true;
     standard_params.has_seen_apps_promo =
         prefs && prefs->GetBoolean(prefs::kHasSeenGoogleAppsPromoPage);
+  }
+
+  if (onboard_during_nux &&
+      base::FeatureList::IsEnabled(nux::kNuxEmailFeature)) {
+    standard_params.is_email_promo_allowed = true;
+    standard_params.has_seen_email_promo =
+        prefs && prefs->GetBoolean(prefs::kHasSeenEmailPromoPage);
   }
 #endif  // defined(GOOGLE_CHROME_BUILD)
 
@@ -243,8 +261,12 @@ StartupTabs StartupTabProviderImpl::GetStandardOnboardingTabsForState(
   // Should be shown before any other new user experience.
   if (ShouldShowNewUserExperience(params.is_apps_promo_allowed,
                                   params.has_seen_apps_promo)) {
-    return StartupTabs(
-        {StartupTab(GURL(nux_google_apps::kNuxGoogleAppsUrl), false)});
+    return StartupTabs({StartupTab(GURL(nux::kNuxGoogleAppsUrl), false)});
+  }
+
+  if (ShouldShowNewUserExperience(params.is_email_promo_allowed,
+                                  params.has_seen_email_promo)) {
+    return StartupTabs({StartupTab(GURL(nux::kNuxEmailUrl), false)});
   }
 #endif  // defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
 
@@ -286,8 +308,12 @@ StartupTabs StartupTabProviderImpl::GetWin10OnboardingTabsForState(
   // Should be shown before any other new user experience.
   if (ShouldShowNewUserExperience(standard_params.is_apps_promo_allowed,
                                   standard_params.has_seen_apps_promo)) {
-    return StartupTabs(
-        {StartupTab(GURL(nux_google_apps::kNuxGoogleAppsUrl), false)});
+    return StartupTabs({StartupTab(GURL(nux::kNuxGoogleAppsUrl), false)});
+  }
+
+  if (ShouldShowNewUserExperience(standard_params.is_email_promo_allowed,
+                                  standard_params.has_seen_email_promo)) {
+    return StartupTabs({StartupTab(GURL(nux::kNuxEmailUrl), false)});
   }
 #endif  // defined(GOOGLE_CHROME_BUILD)
 
@@ -304,10 +330,9 @@ StartupTabs StartupTabProviderImpl::GetWin10OnboardingTabsForState(
 
 #if defined(GOOGLE_CHROME_BUILD)
 // static
-bool StartupTabProviderImpl::ShouldShowNewUserExperience(
-    bool is_apps_promo_allowed,
-    bool has_seen_apps_promo) {
-  return is_apps_promo_allowed && !has_seen_apps_promo;
+bool StartupTabProviderImpl::ShouldShowNewUserExperience(bool is_promo_allowed,
+                                                         bool has_seen_promo) {
+  return is_promo_allowed && !has_seen_promo;
 }
 #endif  // defined(GOOGLE_CHROME_BUILD)
 #endif  // defined(OS_WIN)

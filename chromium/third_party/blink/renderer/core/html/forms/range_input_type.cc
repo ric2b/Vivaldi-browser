@@ -154,12 +154,12 @@ bool RangeInputType::IsSteppable() const {
   return true;
 }
 
-void RangeInputType::HandleMouseDownEvent(MouseEvent* event) {
+void RangeInputType::HandleMouseDownEvent(MouseEvent& event) {
   if (GetElement().IsDisabledFormControl())
     return;
 
-  Node* target_node = event->target()->ToNode();
-  if (event->button() !=
+  Node* target_node = event.target()->ToNode();
+  if (event.button() !=
           static_cast<short>(WebPointerProperties::Button::kLeft) ||
       !target_node)
     return;
@@ -170,14 +170,14 @@ void RangeInputType::HandleMouseDownEvent(MouseEvent* event) {
   SliderThumbElement* thumb = GetSliderThumbElement();
   if (target_node == thumb)
     return;
-  thumb->DragFrom(LayoutPoint(event->AbsoluteLocation()));
+  thumb->DragFrom(LayoutPoint(event.AbsoluteLocation()));
 }
 
-void RangeInputType::HandleKeydownEvent(KeyboardEvent* event) {
+void RangeInputType::HandleKeydownEvent(KeyboardEvent& event) {
   if (GetElement().IsDisabledFormControl())
     return;
 
-  const String& key = event->key();
+  const String& key = event.key();
 
   const Decimal current = ParseToNumberOrNaN(GetElement().value());
   DCHECK(current.IsFinite());
@@ -236,7 +236,7 @@ void RangeInputType::HandleKeydownEvent(KeyboardEvent* event) {
       cache->HandleValueChanged(&GetElement());
   }
 
-  event->SetDefaultHandled();
+  event.SetDefaultHandled();
 }
 
 void RangeInputType::CreateShadowSubtree() {
@@ -340,10 +340,8 @@ inline Element* RangeInputType::SliderTrackElement() const {
 
 void RangeInputType::ListAttributeTargetChanged() {
   tick_mark_values_dirty_ = true;
-  if (GetElement().GetLayoutObject())
-    GetElement()
-        .GetLayoutObject()
-        ->SetShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
+  if (auto* object = GetElement().GetLayoutObject())
+    object->SetSubtreeShouldDoFullPaintInvalidation();
   Element* slider_track_element = SliderTrackElement();
   if (slider_track_element->GetLayoutObject())
     slider_track_element->GetLayoutObject()->SetNeedsLayout(

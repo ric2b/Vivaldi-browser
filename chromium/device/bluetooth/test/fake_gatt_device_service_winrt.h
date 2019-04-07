@@ -11,10 +11,16 @@
 
 #include <stdint.h>
 
+#include <vector>
+
 #include "base/macros.h"
 #include "base/strings/string_piece_forward.h"
 
 namespace device {
+
+class BluetoothTestWinrt;
+class FakeBluetoothLEDeviceWinrt;
+class FakeGattCharacteristicWinrt;
 
 class FakeGattDeviceServiceWinrt
     : public Microsoft::WRL::RuntimeClass<
@@ -25,7 +31,11 @@ class FakeGattDeviceServiceWinrt
           ABI::Windows::Devices::Bluetooth::GenericAttributeProfile::
               IGattDeviceService3> {
  public:
-  FakeGattDeviceServiceWinrt(uint16_t attribute_handle, base::StringPiece uuid);
+  FakeGattDeviceServiceWinrt(
+      BluetoothTestWinrt* bluetooth_test_winrt,
+      Microsoft::WRL::ComPtr<FakeBluetoothLEDeviceWinrt> fake_device,
+      base::StringPiece uuid,
+      uint16_t attribute_handle);
   ~FakeGattDeviceServiceWinrt() override;
 
   // IGattDeviceService:
@@ -104,9 +114,17 @@ class FakeGattDeviceServiceWinrt
           ABI::Windows::Devices::Bluetooth::GenericAttributeProfile::
               GattDeviceServicesResult*>** operation) override;
 
+  void SimulateGattCharacteristic(base::StringPiece uuid, int proporties);
+
  private:
-  uint16_t attribute_handle_;
+  BluetoothTestWinrt* bluetooth_test_winrt_;
+  Microsoft::WRL::ComPtr<FakeBluetoothLEDeviceWinrt> fake_device_;
   GUID uuid_;
+  uint16_t attribute_handle_;
+
+  std::vector<Microsoft::WRL::ComPtr<FakeGattCharacteristicWinrt>>
+      fake_characteristics_;
+  uint16_t characteristic_attribute_handle_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeGattDeviceServiceWinrt);
 };

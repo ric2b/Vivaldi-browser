@@ -22,15 +22,16 @@
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#import "components/password_manager/ios/js_password_manager.h"
+#import "components/password_manager/ios/password_controller_helper.h"
+#include "components/password_manager/ios/test_helpers.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/security_state/ios/ssl_status_input_event_data.h"
-#import "ios/chrome/browser/autofill/form_input_accessory_view_controller.h"
 #import "ios/chrome/browser/autofill/form_suggestion_controller.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/passwords/js_password_manager.h"
 #import "ios/chrome/browser/passwords/password_form_filler.h"
-#include "ios/chrome/browser/passwords/test_helpers.h"
+#import "ios/chrome/browser/ui/autofill/form_input_accessory_mediator.h"
 #include "ios/chrome/browser/web/chrome_web_client.h"
 #import "ios/chrome/browser/web/chrome_web_test.h"
 #import "ios/web/public/navigation_item.h"
@@ -146,25 +147,28 @@ ACTION(InvokeEmptyConsumerWithForms) {
 @interface PasswordController (
     Testing)<CRWWebStateObserver, FormSuggestionProvider>
 
-- (void)findPasswordFormsWithCompletionHandler:
-    (void (^)(const std::vector<PasswordForm>&))completionHandler;
-
-- (void)extractSubmittedPasswordForm:(const std::string&)formName
-                   completionHandler:
-                       (void (^)(BOOL found,
-                                 const PasswordForm& form))completionHandler;
+// Provides access to common helper logic for testing with mocks.
+@property(readonly) PasswordControllerHelper* helper;
 
 - (void)fillPasswordForm:(const PasswordFormFillData&)formData
        completionHandler:(void (^)(BOOL))completionHandler;
 
 - (void)onNoSavedCredentials;
 
-- (BOOL)getPasswordForm:(PasswordForm*)form
-         fromDictionary:(const base::DictionaryValue*)dictionary
-                pageURL:(const GURL&)pageLocation;
+@end
+
+@interface PasswordControllerHelper (Testing)
 
 // Provides access to JavaScript Manager for testing with mocks.
-@property(readonly) JsPasswordManager* passwordJsManager;
+@property(readonly) JsPasswordManager* jsPasswordManager;
+
+- (void)extractSubmittedPasswordForm:(const std::string&)formName
+                   completionHandler:
+                       (void (^)(BOOL found,
+                                 const PasswordForm& form))completionHandler;
+
+- (void)findPasswordFormsWithCompletionHandler:
+    (void (^)(const std::vector<PasswordForm>&))completionHandler;
 
 @end
 
@@ -207,9 +211,12 @@ class PasswordControllerTest : public ChromeWebTest {
       suggestionController_ = [[PasswordsTestSuggestionController alloc]
           initWithWebState:web_state()
                  providers:@[ [passwordController_ suggestionProvider] ]];
-      accessoryViewController_ = [[FormInputAccessoryViewController alloc]
-          initWithWebState:web_state()
-                 providers:@[ [suggestionController_ accessoryViewProvider] ]];
+      accessoryMediator_ =
+          [[FormInputAccessoryMediator alloc] initWithConsumer:nil
+                                                  webStateList:NULL];
+      [accessoryMediator_ injectWebState:web_state()];
+      [accessoryMediator_
+          injectProviders:@[ [suggestionController_ accessoryViewProvider] ]];
     }
   }
 
@@ -244,7 +251,7 @@ class PasswordControllerTest : public ChromeWebTest {
   // |failure_count| reaches |target_failure_count|, stop the partial mock
   // and let the original JavaScript manager execute.
   void SetFillPasswordFormFailureCount(int target_failure_count) {
-    id original_manager = [passwordController_ passwordJsManager];
+    id original_manager = passwordController_.helper.jsPasswordManager;
     OCPartialMockObject* failing_manager =
         [OCMockObject partialMockForObject:original_manager];
     __block int failure_count = 0;
@@ -275,8 +282,8 @@ class PasswordControllerTest : public ChromeWebTest {
   // SuggestionController for testing.
   PasswordsTestSuggestionController* suggestionController_;
 
-  // FormInputAccessoryViewController for testing.
-  FormInputAccessoryViewController* accessoryViewController_;
+  // FormInputAccessoryMediatorfor testing.
+  FormInputAccessoryMediator* accessoryMediator_;
 
   // PasswordController for testing.
   PasswordController* passwordController_;
@@ -378,8 +385,8 @@ TEST_F(PasswordControllerTest, FLAKY_FindPasswordFormsInView) {
     LoadHtml(data.html_string);
     __block std::vector<PasswordForm> forms;
     __block BOOL block_was_called = NO;
-    [passwordController_ findPasswordFormsWithCompletionHandler:^(
-                             const std::vector<PasswordForm>& result) {
+    [passwordController_.helper findPasswordFormsWithCompletionHandler:^(
+                                    const std::vector<PasswordForm>& result) {
       block_was_called = YES;
       forms = result;
     }];
@@ -479,7 +486,7 @@ TEST_F(PasswordControllerTest, FLAKY_GetSubmittedPasswordForm) {
                   form.username_element);
       }
     };
-    [passwordController_
+    [passwordController_.helper
         extractSubmittedPasswordForm:FormName(data.number_of_forms_to_submit)
                    completionHandler:completion_handler];
     EXPECT_TRUE(
@@ -1156,7 +1163,6 @@ TEST_F(PasswordControllerTestSimple, SaveOnNonHTMLLandingPage) {
   web_state.SetContentIsHTML(false);
   web_state.SetCurrentURL(GURL("https://example.com"));
   [passwordController webState:&web_state didLoadPageWithSuccess:YES];
-  [passwordController detach];
 }
 
 // Tests that an HTTP page without a password field does not update the SSL

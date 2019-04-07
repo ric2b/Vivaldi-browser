@@ -67,6 +67,7 @@
 
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
+#include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "content/public/browser/render_frame_host.h"
 
@@ -785,6 +786,17 @@ void WebViewGuest::ShowRepostFormWarningDialog(WebContents* source) {
   TabModalConfirmDialog::Create(new RepostFormWarningController(source),
                                 source);
 }
+
+gfx::Size WebViewGuest::EnterPictureInPicture(const viz::SurfaceId& surface_id,
+                                              const gfx::Size& natural_size) {
+  return PictureInPictureWindowManager::GetInstance()->EnterPictureInPicture(
+      web_contents(), surface_id, natural_size);
+}
+
+void WebViewGuest::ExitPictureInPicture() {
+  PictureInPictureWindowManager::GetInstance()->ExitPictureInPicture();
+}
+
 
 bool WebViewGuest::HasOwnerShipOfContents() {
   if (web_contents_is_owned_by_this_ == false) {

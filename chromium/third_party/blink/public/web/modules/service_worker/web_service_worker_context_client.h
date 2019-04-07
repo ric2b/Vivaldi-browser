@@ -102,6 +102,10 @@ class WebServiceWorkerContextClient {
   // completed. Called on the main thread.
   virtual void WorkerContextFailedToStart() {}
 
+  // The worker started but it could not execute because loading the
+  // installed script failed.
+  virtual void FailedToLoadInstalledScript() {}
+
   // The worker script successfully loaded. Called on the main thread when the
   // script is served from ResourceLoader or on the worker thread when the
   // script is served via WebServiceWorkerInstalledScriptsManager.
@@ -186,9 +190,10 @@ class WebServiceWorkerContextClient {
       int event_id,
       mojom::ServiceWorkerEventStatus,
       double event_dispatch_time) {}
-  virtual void DidHandleBackgroundFetchedEvent(int event_id,
-                                               mojom::ServiceWorkerEventStatus,
-                                               double event_dispatch_time) {}
+  virtual void DidHandleBackgroundFetchSuccessEvent(
+      int event_id,
+      mojom::ServiceWorkerEventStatus,
+      double event_dispatch_time) {}
 
   // Called after 'cookiechange' events are handled by the service worker.
   virtual void DidHandleCookieChangeEvent(int event_id,

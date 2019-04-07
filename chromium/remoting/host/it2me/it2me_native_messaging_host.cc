@@ -66,6 +66,8 @@ const base::FilePath::CharType kElevatedHostBinaryName[] =
     FILE_PATH_LITERAL("remote_assistance_host_uiaccess.exe");
 #endif  // defined(OS_WIN)
 
+constexpr char kAnonymousUserName[] = "anonymous_user";
+
 // Helper functions to run |callback| asynchronously on the correct thread
 // using |task_runner|.
 void PolicyUpdateCallback(
@@ -227,95 +229,32 @@ void It2MeNativeMessagingHost::ProcessConnect(
     return;
   }
 
+  bool use_signaling_proxy = false;
+  message->GetBoolean("useSignalingProxy", &use_signaling_proxy);
+
   std::string username;
-  if (!message->GetString("userName", &username)) {
-    LOG(ERROR) << "'userName' not found in request.";
+  message->GetString("userName", &username);
+
+  bool no_dialogs = false;
+  message->GetBoolean("noDialogs", &no_dialogs);
+
+  std::unique_ptr<SignalStrategy> signal_strategy;
+  if (use_signaling_proxy) {
+    if (username.empty()) {
+      // Allow unauthenticated users for the delegated signal strategy case.
+      username = kAnonymousUserName;
+    }
+    signal_strategy = CreateDelegatedSignalStrategy(message.get());
+  } else {
+    signal_strategy = CreateXmppSignalStrategy(username, message.get());
+  }
+  if (!signal_strategy) {
     SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
     return;
   }
 
-  bool use_signaling_proxy = false;
-  message->GetBoolean("useSignalingProxy", &use_signaling_proxy);
-
-  const ServiceUrls* service_urls = ServiceUrls::GetInstance();
-  std::unique_ptr<SignalStrategy> signal_strategy;
-
-  if (!use_signaling_proxy) {
-    XmppSignalStrategy::XmppServerConfig xmpp_config;
-    xmpp_config.username = username;
-
-    const bool xmpp_server_valid =
-        net::ParseHostAndPort(service_urls->xmpp_server_address(),
-                              &xmpp_config.host, &xmpp_config.port);
-    DCHECK(xmpp_server_valid);
-    xmpp_config.use_tls = service_urls->xmpp_server_use_tls();
-
-    std::string auth_service_with_token;
-    if (!message->GetString("authServiceWithToken", &auth_service_with_token)) {
-      LOG(ERROR) << "'authServiceWithToken' not found in request.";
-      SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
-      return;
-    }
-
-    // For backward compatibility the webapp still passes OAuth service as part
-    // of the authServiceWithToken field. But auth service part is always
-    // expected to be set to oauth2.
-    const char kOAuth2ServicePrefix[] = "oauth2:";
-    if (!base::StartsWith(auth_service_with_token, kOAuth2ServicePrefix,
-                          base::CompareCase::SENSITIVE)) {
-      LOG(ERROR) << "Invalid 'authServiceWithToken': "
-                 << auth_service_with_token;
-      SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
-      return;
-    }
-
-    xmpp_config.auth_token =
-        auth_service_with_token.substr(strlen(kOAuth2ServicePrefix));
-
-#if !defined(NDEBUG)
-    std::string address;
-    if (!message->GetString("xmppServerAddress", &address)) {
-      LOG(ERROR) << "'xmppServerAddress' not found in request.";
-      SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
-      return;
-    }
-
-    if (!net::ParseHostAndPort(address, &xmpp_config.host, &xmpp_config.port)) {
-      LOG(ERROR) << "Invalid 'xmppServerAddress': " << address;
-      SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
-      return;
-    }
-
-    if (!message->GetBoolean("xmppServerUseTls", &xmpp_config.use_tls)) {
-      LOG(ERROR) << "'xmppServerUseTls' not found in request.";
-      SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
-      return;
-    }
-#endif  // !defined(NDEBUG)
-
-    signal_strategy.reset(new XmppSignalStrategy(
-        net::ClientSocketFactory::GetDefaultFactory(),
-        host_context_->url_request_context_getter(), xmpp_config));
-  } else {
-    std::string local_jid;
-
-    if (!message->GetString("localJid", &local_jid)) {
-      LOG(ERROR) << "'localJid' not found in request.";
-      SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
-      return;
-    }
-
-    auto delegating_signal_strategy =
-        std::make_unique<DelegatingSignalStrategy>(
-            SignalingAddress(local_jid), host_context_->network_task_runner(),
-            base::Bind(&It2MeNativeMessagingHost::SendOutgoingIq,
-                       weak_factory_.GetWeakPtr()));
-    incoming_message_callback_ =
-        delegating_signal_strategy->GetIncomingMessageCallback();
-    signal_strategy = std::move(delegating_signal_strategy);
-  }
-
-  std::string directory_bot_jid = service_urls->directory_bot_jid();
+  std::string directory_bot_jid =
+      ServiceUrls::GetInstance()->directory_bot_jid();
 
 #if !defined(NDEBUG)
   if (!message->GetString("directoryBotJid", &directory_bot_jid)) {
@@ -342,8 +281,12 @@ void It2MeNativeMessagingHost::ProcessConnect(
     return;
   }
 
-  // Create the It2Me host and start connecting.
+  // Create the It2Me host and start connecting. Note that disabling dialogs is
+  // only supported on ChromeOS.
   it2me_host_ = factory_->CreateIt2MeHost();
+#if defined(OS_CHROMEOS)
+  it2me_host_->set_enable_dialogs(!no_dialogs);
+#endif
   it2me_host_->Connect(host_context_->Copy(), std::move(policies),
                        std::make_unique<It2MeConfirmationDialogFactory>(),
                        weak_ptr_, std::move(signal_strategy), username,
@@ -575,6 +518,85 @@ void It2MeNativeMessagingHost::OnPolicyError() {
   }
 }
 
+std::unique_ptr<SignalStrategy>
+It2MeNativeMessagingHost::CreateDelegatedSignalStrategy(
+    const base::DictionaryValue* message) {
+  std::string local_jid;
+  if (!message->GetString("localJid", &local_jid)) {
+    LOG(ERROR) << "'localJid' not found in request.";
+    return nullptr;
+  }
+
+  auto delegating_signal_strategy = std::make_unique<DelegatingSignalStrategy>(
+      SignalingAddress(local_jid), host_context_->network_task_runner(),
+      base::BindRepeating(&It2MeNativeMessagingHost::SendOutgoingIq,
+                          weak_factory_.GetWeakPtr()));
+  incoming_message_callback_ =
+      delegating_signal_strategy->GetIncomingMessageCallback();
+  return delegating_signal_strategy;
+}
+
+std::unique_ptr<SignalStrategy>
+It2MeNativeMessagingHost::CreateXmppSignalStrategy(
+    const std::string& username,
+    const base::DictionaryValue* message) {
+  if (username.empty()) {
+    LOG(ERROR) << "'userName' not found in request.";
+    return nullptr;
+  }
+
+  XmppSignalStrategy::XmppServerConfig xmpp_config;
+  xmpp_config.username = username;
+
+  const ServiceUrls* service_urls = ServiceUrls::GetInstance();
+  const bool xmpp_server_valid =
+      net::ParseHostAndPort(service_urls->xmpp_server_address(),
+                            &xmpp_config.host, &xmpp_config.port);
+  DCHECK(xmpp_server_valid);
+  xmpp_config.use_tls = service_urls->xmpp_server_use_tls();
+
+  std::string auth_service_with_token;
+  if (!message->GetString("authServiceWithToken", &auth_service_with_token)) {
+    LOG(ERROR) << "'authServiceWithToken' not found in request.";
+    return nullptr;
+  }
+
+  // For backward compatibility the webapp still passes OAuth service as part
+  // of the authServiceWithToken field. But auth service part is always
+  // expected to be set to oauth2.
+  const char kOAuth2ServicePrefix[] = "oauth2:";
+  if (!base::StartsWith(auth_service_with_token, kOAuth2ServicePrefix,
+                        base::CompareCase::SENSITIVE)) {
+    LOG(ERROR) << "Invalid 'authServiceWithToken': " << auth_service_with_token;
+    return nullptr;
+  }
+
+  xmpp_config.auth_token =
+      auth_service_with_token.substr(strlen(kOAuth2ServicePrefix));
+
+#if !defined(NDEBUG)
+  std::string address;
+  if (!message->GetString("xmppServerAddress", &address)) {
+    LOG(ERROR) << "'xmppServerAddress' not found in request.";
+    return nullptr;
+  }
+
+  if (!net::ParseHostAndPort(address, &xmpp_config.host, &xmpp_config.port)) {
+    LOG(ERROR) << "Invalid 'xmppServerAddress': " << address;
+    return nullptr;
+  }
+
+  if (!message->GetBoolean("xmppServerUseTls", &xmpp_config.use_tls)) {
+    LOG(ERROR) << "'xmppServerUseTls' not found in request.";
+    return nullptr;
+  }
+#endif  // !defined(NDEBUG)
+
+  return std::make_unique<XmppSignalStrategy>(
+      net::ClientSocketFactory::GetDefaultFactory(),
+      host_context_->url_request_context_getter(), xmpp_config);
+}
+
 #if defined(OS_WIN)
 
 bool It2MeNativeMessagingHost::DelegateToElevatedHost(
@@ -597,7 +619,8 @@ bool It2MeNativeMessagingHost::DelegateToElevatedHost(
         /*host_timeout=*/base::TimeDelta(), client_));
   }
 
-  if (elevated_host_->EnsureElevatedHostCreated()) {
+  if (elevated_host_->EnsureElevatedHostCreated() ==
+      PROCESS_LAUNCH_RESULT_SUCCESS) {
     elevated_host_->SendMessage(std::move(message));
     return true;
   }

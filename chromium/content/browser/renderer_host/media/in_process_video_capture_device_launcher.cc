@@ -4,6 +4,10 @@
 
 #include "content/browser/renderer_host/media/in_process_video_capture_device_launcher.h"
 
+#include <utility>
+#include <vector>
+
+#include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
@@ -11,8 +15,12 @@
 #include "content/browser/renderer_host/media/video_capture_controller.h"
 #include "content/browser/renderer_host/media/video_capture_dependencies.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/desktop_media_id.h"
 #include "content/public/common/media_stream_request.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/media_switches.h"
+#include "media/capture/video/fake_video_capture_device.h"
+#include "media/capture/video/fake_video_capture_device_factory.h"
 #include "media/capture/video/video_capture_buffer_pool_impl.h"
 #include "media/capture/video/video_capture_buffer_tracker_factory_impl.h"
 #include "media/capture/video/video_capture_device_client.h"
@@ -22,7 +30,6 @@
 
 #if defined(ENABLE_SCREEN_CAPTURE)
 #include "content/browser/media/capture/desktop_capture_device_uma_types.h"
-#include "content/public/browser/desktop_media_id.h"
 #if defined(OS_ANDROID)
 #include "content/browser/media/capture/screen_capture_device_android.h"
 #else
@@ -123,7 +130,7 @@ void InProcessVideoCaptureDeviceLauncher::LaunchDeviceAsync(
 
 #if defined(ENABLE_SCREEN_CAPTURE)
 #if !defined(OS_ANDROID)
-    case MEDIA_TAB_VIDEO_CAPTURE:
+    case MEDIA_GUM_TAB_VIDEO_CAPTURE:
       start_capture_closure = base::BindOnce(
           &InProcessVideoCaptureDeviceLauncher::DoStartTabCaptureOnDeviceThread,
           base::Unretained(this), device_id, params, std::move(receiver),
@@ -131,12 +138,26 @@ void InProcessVideoCaptureDeviceLauncher::LaunchDeviceAsync(
       break;
 #endif  // !defined(OS_ANDROID)
 
-    case MEDIA_DESKTOP_VIDEO_CAPTURE: {
+    case MEDIA_GUM_DESKTOP_VIDEO_CAPTURE:
+      FALLTHROUGH;
+    case MEDIA_DISPLAY_VIDEO_CAPTURE: {
       const DesktopMediaID desktop_id = DesktopMediaID::Parse(device_id);
       if (desktop_id.is_null()) {
         DLOG(ERROR) << "Desktop media ID is null";
         start_capture_closure =
             base::BindOnce(std::move(after_start_capture_callback), nullptr);
+        break;
+      }
+
+      if (desktop_id.id == DesktopMediaID::kFakeId) {
+        start_capture_closure = base::BindOnce(
+            &InProcessVideoCaptureDeviceLauncher::
+                DoStartFakeDisplayCaptureOnDeviceThread,
+            base::Unretained(this), desktop_id, params,
+            CreateDeviceClient(media::VideoCaptureBufferType::kSharedMemory,
+                               kMaxNumberOfBuffers, std::move(receiver),
+                               std::move(receiver_on_io_thread)),
+            std::move(after_start_capture_callback));
         break;
       }
 
@@ -240,7 +261,9 @@ void InProcessVideoCaptureDeviceLauncher::OnDeviceStarted(
   if (!device) {
     switch (state_copy) {
       case State::DEVICE_START_IN_PROGRESS:
-        callbacks->OnDeviceLaunchFailed();
+        callbacks->OnDeviceLaunchFailed(
+            media::VideoCaptureError::
+                kInProcessDeviceLauncherFailedToCreateDeviceInstance);
         base::ResetAndReturn(&done_cb).Run();
         return;
       case State::DEVICE_START_ABORTING:
@@ -368,5 +391,41 @@ void InProcessVideoCaptureDeviceLauncher::DoStartDesktopCaptureOnDeviceThread(
 }
 
 #endif  // defined(ENABLE_SCREEN_CAPTURE)
+
+void InProcessVideoCaptureDeviceLauncher::
+    DoStartFakeDisplayCaptureOnDeviceThread(
+        const DesktopMediaID& desktop_id,
+        const media::VideoCaptureParams& params,
+        std::unique_ptr<media::VideoCaptureDeviceClient> device_client,
+        ReceiveDeviceCallback result_callback) {
+  DCHECK(device_task_runner_->BelongsToCurrentThread());
+  DCHECK_EQ(DesktopMediaID::kFakeId, desktop_id.id);
+
+  auto fake_device_factory =
+      std::make_unique<media::FakeVideoCaptureDeviceFactory>();
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  if (command_line &&
+      command_line->HasSwitch(switches::kUseFakeDeviceForMediaStream)) {
+    std::vector<media::FakeVideoCaptureDeviceSettings> config;
+    media::FakeVideoCaptureDeviceFactory::
+        ParseFakeDevicesConfigFromOptionsString(
+            command_line->GetSwitchValueASCII(
+                switches::kUseFakeDeviceForMediaStream),
+            &config);
+    fake_device_factory->SetToCustomDevicesConfig(config);
+  }
+  media::VideoCaptureDeviceDescriptors device_descriptors;
+  fake_device_factory->GetDeviceDescriptors(&device_descriptors);
+  if (device_descriptors.empty()) {
+    LOG(ERROR) << "Cannot start with no fake device config";
+    std::move(result_callback).Run(nullptr);
+    return;
+  }
+  auto video_capture_device =
+      fake_device_factory->CreateDevice(device_descriptors.front());
+  video_capture_device->AllocateAndStart(params, std::move(device_client));
+  std::move(result_callback).Run(std::move(video_capture_device));
+}
 
 }  // namespace content

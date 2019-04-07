@@ -13,7 +13,7 @@ std::string LocalSurfaceId::ToString() const {
                                 ? embed_token_.ToString()
                                 : embed_token_.ToString().substr(0, 4) + "...";
 
-  return base::StringPrintf("LocalSurfaceId(%d, %d, %s)",
+  return base::StringPrintf("LocalSurfaceId(%u, %u, %s)",
                             parent_sequence_number_, child_sequence_number_,
                             embed_token.c_str());
 }
@@ -21,10 +21,6 @@ std::string LocalSurfaceId::ToString() const {
 std::ostream& operator<<(std::ostream& out,
                          const LocalSurfaceId& local_surface_id) {
   return out << local_surface_id.ToString();
-}
-
-bool LocalSurfaceId::IsSameOrNewerThan(const LocalSurfaceId& other) const {
-  return IsNewerThan(other) || *this == other;
 }
 
 bool LocalSurfaceId::IsNewerThan(const LocalSurfaceId& other) const {
@@ -36,6 +32,10 @@ bool LocalSurfaceId::IsNewerThan(const LocalSurfaceId& other) const {
           (1u << 31)) &&
          (child_sequence_number_ != other.child_sequence_number_ ||
           parent_sequence_number_ != other.parent_sequence_number_);
+}
+
+bool LocalSurfaceId::IsSameOrNewerThan(const LocalSurfaceId& other) const {
+  return IsNewerThan(other) || *this == other;
 }
 
 }  // namespace viz

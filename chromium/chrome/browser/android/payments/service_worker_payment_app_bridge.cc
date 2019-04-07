@@ -21,7 +21,7 @@
 #include "content/public/browser/payment_app_provider.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/ServiceWorkerPaymentAppBridge_jni.h"
-#include "third_party/blink/public/platform/modules/payments/payment_app.mojom.h"
+#include "third_party/blink/public/mojom/payments/payment_app.mojom.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "url/origin.h"
 
@@ -91,9 +91,7 @@ void OnGotAllPaymentApps(
         app_info.second->name.empty()
             ? nullptr
             : ConvertUTF8ToJavaString(env, app_info.second->name),
-        nullptr,
-        ConvertUTF8ToJavaString(
-            env, url::Origin::Create(app_info.second->scope).host()),
+        nullptr, ConvertUTF8ToJavaString(env, app_info.second->scope.host()),
         app_info.second->icon == nullptr
             ? nullptr
             : gfx::ConvertToJavaBitmap(app_info.second->icon.get()),
@@ -139,7 +137,7 @@ void OnGetServiceWorkerPaymentAppsInfo(
   for (const auto& app_info : apps) {
     Java_ServiceWorkerPaymentAppBridge_addPaymentAppInfo(
         env, jappsInfo,
-        ConvertUTF8ToJavaString(env, app_info.second->scope.spec()),
+        ConvertUTF8ToJavaString(env, app_info.second->scope.host()),
         ConvertUTF8ToJavaString(env, app_info.second->name),
         app_info.second->icon == nullptr
             ? nullptr

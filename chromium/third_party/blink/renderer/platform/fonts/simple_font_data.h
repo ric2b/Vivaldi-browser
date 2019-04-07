@@ -54,6 +54,8 @@ namespace blink {
 // character.
 struct GlyphData {
   STACK_ALLOCATED();
+
+ public:
   GlyphData(
       Glyph g = 0,
       const SimpleFontData* f = nullptr,
@@ -110,6 +112,7 @@ class PLATFORM_EXPORT SimpleFontData : public FontData {
   }
 
   FloatRect BoundsForGlyph(Glyph) const;
+  void BoundsForGlyphs(const Vector<Glyph, 256>, Vector<FloatRect, 256>*) const;
   FloatRect PlatformBoundsForGlyph(Glyph) const;
   float WidthForGlyph(Glyph) const;
   float PlatformWidthForGlyph(Glyph) const;

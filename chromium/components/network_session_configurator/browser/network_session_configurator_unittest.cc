@@ -117,6 +117,7 @@ TEST_F(NetworkSessionConfiguratorTest, EnableQuicFromFieldTrialGroup) {
   EXPECT_FALSE(params_.quic_estimate_initial_rtt);
   EXPECT_FALSE(params_.quic_migrate_sessions_on_network_change_v2);
   EXPECT_FALSE(params_.quic_migrate_sessions_early_v2);
+  EXPECT_FALSE(params_.quic_go_away_on_path_degrading);
   EXPECT_FALSE(params_.quic_allow_server_migration);
   EXPECT_TRUE(params_.quic_host_whitelist.empty());
 
@@ -346,6 +347,18 @@ TEST_F(NetworkSessionConfiguratorTest,
 }
 
 TEST_F(NetworkSessionConfiguratorTest,
+       QuicGoawayOnPathDegradingFromFieldTrialParams) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["go_away_on_path_degrading"] = "true";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+
+  ParseFieldTrials();
+
+  EXPECT_TRUE(params_.quic_go_away_on_path_degrading);
+}
+
+TEST_F(NetworkSessionConfiguratorTest,
        QuicMaxTimeOnNonDefaultNetworkFromFieldTrialParams) {
   std::map<std::string, std::string> field_trial_params;
   field_trial_params["max_time_on_non_default_network_seconds"] = "10";
@@ -358,8 +371,24 @@ TEST_F(NetworkSessionConfiguratorTest,
             params_.quic_max_time_on_non_default_network);
 }
 
-TEST_F(NetworkSessionConfiguratorTest,
-       QuicMaxNumMigrationsToNonDefaultNetworkFromFieldTrialParams) {
+TEST_F(
+    NetworkSessionConfiguratorTest,
+    QuicMaxNumMigrationsToNonDefaultNetworkOnWriteErrorFromFieldTrialParams) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["max_migrations_to_non_default_network_on_write_error"] =
+      "3";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+
+  ParseFieldTrials();
+
+  EXPECT_EQ(3,
+            params_.quic_max_migrations_to_non_default_network_on_write_error);
+}
+
+TEST_F(
+    NetworkSessionConfiguratorTest,
+    QuicMaxNumMigrationsToNonDefaultNetworkOnPathDegradingFromFieldTrialParams) {
   std::map<std::string, std::string> field_trial_params;
   field_trial_params
       ["max_migrations_to_non_default_network_on_path_degrading"] = "4";
@@ -679,23 +708,10 @@ TEST_F(NetworkSessionConfiguratorTest, HostRules) {
 }
 
 TEST_F(NetworkSessionConfiguratorTest, TokenBindingDisabled) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(features::kTokenBinding);
-
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   ParseCommandLineAndFieldTrials(command_line);
 
   EXPECT_FALSE(params_.enable_token_binding);
-}
-
-TEST_F(NetworkSessionConfiguratorTest, TokenBindingEnabled) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kTokenBinding);
-
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  ParseCommandLineAndFieldTrials(command_line);
-
-  EXPECT_TRUE(params_.enable_token_binding);
 }
 
 TEST_F(NetworkSessionConfiguratorTest, ChannelIDEnabled) {

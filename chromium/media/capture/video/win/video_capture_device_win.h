@@ -105,10 +105,12 @@ class VideoCaptureDeviceWin : public VideoCaptureDevice,
                      int length,
                      const VideoCaptureFormat& format,
                      base::TimeDelta timestamp) override;
+  void FrameDropped(VideoCaptureFrameDropReason reason) override;
 
   bool CreateCapabilityMap();
   void SetAntiFlickerInCaptureFilter(const VideoCaptureParams& params);
-  void SetErrorState(const base::Location& from_here,
+  void SetErrorState(media::VideoCaptureError error,
+                     const base::Location& from_here,
                      const std::string& reason,
                      HRESULT hr);
 

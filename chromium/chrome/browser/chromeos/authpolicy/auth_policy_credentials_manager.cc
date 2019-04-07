@@ -11,7 +11,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -233,14 +233,14 @@ void AuthPolicyCredentialsManager::OnGetUserKerberosFilesCallback(
   if (kerberos_files.has_krb5cc()) {
     base::PostTaskWithTraits(
         FROM_HERE,
-        {base::MayBlock(), base::TaskPriority::BACKGROUND,
+        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
          base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
         base::BindOnce(&WriteFile, kKrb5CCFile, kerberos_files.krb5cc()));
   }
   if (kerberos_files.has_krb5conf()) {
     base::PostTaskWithTraits(
         FROM_HERE,
-        {base::MayBlock(), base::TaskPriority::BACKGROUND,
+        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
          base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
         base::BindOnce(
             &WriteFile, kKrb5ConfFile,
@@ -323,7 +323,7 @@ void AuthPolicyCredentialsManager::ShowNotification(int message_id) {
       message_center::Notification::CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
           l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_BUBBLE_VIEW_TITLE),
-          l10n_util::GetStringUTF16(message_id), gfx::Image(),
+          l10n_util::GetStringUTF16(message_id),
           l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_DISPLAY_SOURCE),
           GURL(notification_id), notifier_id, data, std::move(delegate),
           ash::kNotificationWarningIcon,

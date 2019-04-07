@@ -33,6 +33,7 @@ class AppListFolderItem;
 class AppListMainView;
 class AppsContainerView;
 class AppsGridView;
+class ExpandArrowView;
 class HorizontalPageContainer;
 class PaginationModel;
 class SearchBoxView;
@@ -121,6 +122,8 @@ class APP_LIST_EXPORT ContentsView : public views::View,
 
   AppListView* app_list_view() const { return app_list_view_; }
 
+  ExpandArrowView* expand_arrow_view() const { return expand_arrow_view_; }
+
   // Returns the pagination model for the ContentsView.
   const PaginationModel& pagination_model() { return pagination_model_; }
 
@@ -154,9 +157,6 @@ class APP_LIST_EXPORT ContentsView : public views::View,
   void TransitionChanged() override;
   void TransitionEnded() override;
 
-  // Returns the size of current work area.
-  gfx::Size GetWorkAreaSize() const;
-
   // Returns the size of current display.
   gfx::Size GetDisplaySize() const;
 
@@ -168,6 +168,9 @@ class APP_LIST_EXPORT ContentsView : public views::View,
 
   // Returns selected view in active page.
   views::View* GetSelectedView() const;
+
+  // Updates the opacity of the items in this view during dragging.
+  void UpdateOpacity();
 
  private:
   // Sets the active launcher page, accounting for whether the change is for
@@ -190,6 +193,15 @@ class APP_LIST_EXPORT ContentsView : public views::View,
                        ash::AppListState current_state,
                        ash::AppListState target_state);
 
+  // Updates the expand arrow's opacity based on the progress of transition from
+  // current state to target state.
+  void UpdateExpandArrowOpacity(double progress,
+                                ash::AppListState current_state,
+                                ash::AppListState target_state);
+
+  // Updates the expand arrow's focus behavior based on the current state.
+  void UpdateExpandArrowFocusBehavior(ash::AppListState current_state);
+
   // Adds |view| as a new page to the end of the list of launcher pages. The
   // view is inserted as a child of the ContentsView. There is no name
   // associated with the page. Returns the index of the new page.
@@ -211,6 +223,9 @@ class APP_LIST_EXPORT ContentsView : public views::View,
                         ash::AppListState current_state,
                         ash::AppListState target_state) const;
 
+  // Converts rect to widget without applying transform.
+  gfx::Rect ConvertRectToWidgetWithoutTransform(const gfx::Rect& rect);
+
   // Unowned pointer to application list model.
   AppListModel* model_ = nullptr;
 
@@ -226,6 +241,9 @@ class APP_LIST_EXPORT ContentsView : public views::View,
 
   // Owned by the views hierarchy.
   AppListView* const app_list_view_;
+
+  // Owned by the views hierarchy.
+  ExpandArrowView* expand_arrow_view_ = nullptr;
 
   // Maps State onto |view_model_| indices.
   std::map<ash::AppListState, int> state_to_view_;

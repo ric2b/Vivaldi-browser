@@ -21,6 +21,15 @@
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/canvas.h"
 
+namespace {
+FullscreenToolbarStyle GetUserPreferredToolbarStyle(
+    const PrefService* pref_service) {
+  return pref_service->GetBoolean(prefs::kShowFullscreenToolbar)
+             ? FullscreenToolbarStyle::TOOLBAR_PRESENT
+             : FullscreenToolbarStyle::TOOLBAR_HIDDEN;
+}
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserNonClientFrameViewMac, public:
 
@@ -30,8 +39,11 @@ BrowserNonClientFrameViewMac::BrowserNonClientFrameViewMac(
     : BrowserNonClientFrameView(frame, browser_view) {
   fullscreen_toolbar_controller_.reset([[FullscreenToolbarControllerViews alloc]
       initWithBrowserView:browser_view]);
+  PrefService* pref_service = browser_view->GetProfile()->GetPrefs();
+  [fullscreen_toolbar_controller_
+      setToolbarStyle:GetUserPreferredToolbarStyle(pref_service)];
 
-  pref_registrar_.Init(browser_view->GetProfile()->GetPrefs());
+  pref_registrar_.Init(pref_service);
   pref_registrar_.Add(
       prefs::kShowFullscreenToolbar,
       base::BindRepeating(&BrowserNonClientFrameViewMac::UpdateFullscreenTopUI,
@@ -50,6 +62,10 @@ void BrowserNonClientFrameViewMac::OnFullscreenStateChanged() {
   if (browser_view()->IsFullscreen()) {
     [fullscreen_toolbar_controller_ enterFullscreenMode];
   } else {
+    // Exiting tab fullscreen requires updating Top UI.
+    // Called from here so we can capture exiting tab fullscreen both by
+    // pressing 'ESC' key and by clicking green traffic light button.
+    UpdateFullscreenTopUI(true);
     [fullscreen_toolbar_controller_ exitFullscreenMode];
   }
   browser_view()->Layout();
@@ -138,24 +154,23 @@ void BrowserNonClientFrameViewMac::UpdateFullscreenTopUI(
       !is_exiting_fullscreen) {
     new_style = FullscreenToolbarStyle::TOOLBAR_NONE;
   } else {
-    PrefService* prefs = browser_view()->GetProfile()->GetPrefs();
-    new_style = prefs->GetBoolean(prefs::kShowFullscreenToolbar)
-                    ? FullscreenToolbarStyle::TOOLBAR_PRESENT
-                    : FullscreenToolbarStyle::TOOLBAR_HIDDEN;
+    new_style =
+        GetUserPreferredToolbarStyle(browser_view()->GetProfile()->GetPrefs());
   }
   [fullscreen_toolbar_controller_ setToolbarStyle:new_style];
 
-  if (old_style != new_style) {
-    // Notify browser that top ui state has been changed so that we can update
-    // the bookmark bar state as well.
-    browser_view()->browser()->FullscreenTopUIStateChanged();
+  if (is_exiting_fullscreen || old_style == new_style)
+    return;
 
-    // Re-layout if toolbar style changes in fullscreen mode.
-    if (frame()->IsFullscreen())
-      browser_view()->Layout();
+  // Notify browser that top ui state has been changed so that we can update
+  // the bookmark bar state as well.
+  browser_view()->browser()->FullscreenTopUIStateChanged();
 
-    [FullscreenToolbarController recordToolbarStyle:new_style];
-  }
+  // Re-layout if toolbar style changes in fullscreen mode.
+  if (frame()->IsFullscreen())
+    browser_view()->Layout();
+
+  [FullscreenToolbarController recordToolbarStyle:new_style];
 }
 
 bool BrowserNonClientFrameViewMac::ShouldHideTopUIForFullscreen() const {
@@ -278,9 +293,6 @@ void BrowserNonClientFrameViewMac::OnPaint(gfx::Canvas* canvas) {
 
   if (!GetThemeProvider()->UsingSystemTheme())
     PaintThemedFrame(canvas);
-
-  if (browser_view()->IsToolbarVisible())
-    PaintToolbarTopStroke(canvas);
 }
 
 // BrowserNonClientFrameView:

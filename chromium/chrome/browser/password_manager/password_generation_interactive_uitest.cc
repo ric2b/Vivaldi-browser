@@ -3,11 +3,12 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
-#include "chrome/browser/password_manager/password_manager_test_base.h"
+#include "chrome/browser/password_manager/password_manager_interactive_test_base.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -19,6 +20,7 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/password_manager/core/browser/password_generation_manager.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
@@ -33,29 +35,60 @@ namespace {
 
 class TestPopupObserver : public PasswordGenerationPopupObserver {
  public:
+  TestPopupObserver() = default;
+  ~TestPopupObserver() = default;
+
   void OnPopupShown(
       PasswordGenerationPopupController::GenerationState state) override {
     popup_showing_ = true;
     state_ = state;
+    MaybeQuitRunLoop();
   }
 
-  void OnPopupHidden() override { popup_showing_ = false; }
+  void OnPopupHidden() override {
+    popup_showing_ = false;
+    MaybeQuitRunLoop();
+  }
 
   bool popup_showing() const { return popup_showing_; }
   PasswordGenerationPopupController::GenerationState state() const {
     return state_;
   }
 
+  // Waits until the popup is either shown or hidden.
+  void WaitForStatusChange() {
+    base::RunLoop run_loop;
+    run_loop_ = &run_loop;
+    run_loop_->Run();
+  }
+
  private:
+  void MaybeQuitRunLoop() {
+    if (run_loop_) {
+      run_loop_->Quit();
+      run_loop_ = nullptr;
+    }
+  }
+
+  // The loop to be stopped after the popup state change.
+  base::RunLoop* run_loop_ = nullptr;
   bool popup_showing_ = false;
   PasswordGenerationPopupController::GenerationState state_ =
       PasswordGenerationPopupController::kOfferGeneration;
+
+  DISALLOW_COPY_AND_ASSIGN(TestPopupObserver);
+};
+
+enum ReturnCodes {  // Possible results of the JavaScript code.
+  RETURN_CODE_OK,
+  RETURN_CODE_NO_ELEMENT,
+  RETURN_CODE_INVALID,
 };
 
 }  // namespace
 
-class PasswordGenerationInteractiveTest :
-    public PasswordManagerBrowserTestBase {
+class PasswordGenerationInteractiveTest
+    : public PasswordManagerInteractiveTestBase {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     PasswordManagerBrowserTestBase::SetUpCommandLine(command_line);
@@ -94,15 +127,28 @@ class PasswordGenerationInteractiveTest :
     autofill::test::ReenableSystemServices();
   }
 
-  std::string GetFieldValue(const std::string& field_id) {
-    std::string value;
-    EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-        WebContents(),
-        "window.domAutomationController.send("
-        "    document.getElementById('" +
-            field_id + "').value);",
-        &value));
-    return value;
+  // Waits until the value of the field with id |field_id| becomes non-empty.
+  void WaitForNonEmptyFieldValue(const std::string& field_id) {
+    const std::string script = base::StringPrintf(
+        "element = document.getElementById('%s');"
+        "if (!element) {"
+        "  setTimeout(window.domAutomationController.send(%d), 0);"
+        "}"
+        "if (element.value) {"
+        "  setTimeout(window.domAutomationController.send(%d), 0); "
+        "} else {"
+        "  element.onchange = function() {"
+        "    if (element.value) {"
+        "      window.domAutomationController.send(%d);"
+        "    }"
+        "  }"
+        "}",
+        field_id.c_str(), RETURN_CODE_NO_ELEMENT, RETURN_CODE_OK,
+        RETURN_CODE_OK);
+    int return_value = RETURN_CODE_INVALID;
+    ASSERT_TRUE(content::ExecuteScriptWithoutUserGestureAndExtractInt(
+        RenderFrameHost(), script, &return_value));
+    EXPECT_EQ(RETURN_CODE_OK, return_value);
   }
 
   std::string GetFocusedElement() {
@@ -142,6 +188,8 @@ class PasswordGenerationInteractiveTest :
                PasswordGenerationPopupController::kEditGeneratedPassword;
   }
 
+  void WaitForPopupStatusChange() { observer_.WaitForStatusChange(); }
+
  private:
   TestPopupObserver observer_;
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -156,7 +204,7 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationInteractiveTest,
 
   // Selecting the password should fill the field and move focus to the
   // submit button.
-  EXPECT_FALSE(GetFieldValue("password_field").empty());
+  WaitForNonEmptyFieldValue("password_field");
   EXPECT_FALSE(GenerationPopupShowing());
   EXPECT_FALSE(EditingPopupShowing());
   EXPECT_EQ("input_submit_button", GetFocusedElement());
@@ -164,6 +212,53 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationInteractiveTest,
   // Re-focusing the password field should show the editing popup.
   FocusPasswordField();
   EXPECT_TRUE(EditingPopupShowing());
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordGenerationInteractiveTest,
+                       PopupShownAutomaticallyAndPasswordErased) {
+  FocusPasswordField();
+  EXPECT_TRUE(GenerationPopupShowing());
+  SendKeyToPopup(ui::VKEY_DOWN);
+  SendKeyToPopup(ui::VKEY_RETURN);
+
+  // Wait until the password is filled.
+  WaitForNonEmptyFieldValue("password_field");
+
+  // Re-focusing the password field should show the editing popup.
+  FocusPasswordField();
+  EXPECT_TRUE(EditingPopupShowing());
+
+  // Delete the password. The generation prompt should be visible.
+  SimulateUserDeletingFieldContent("password_field");
+  WaitForPopupStatusChange();
+  EXPECT_FALSE(EditingPopupShowing());
+  EXPECT_TRUE(GenerationPopupShowing());
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordGenerationInteractiveTest,
+                       PopupShownManuallyAndPasswordErased) {
+  NavigateToFile("/password/password_form.html");
+
+  FocusPasswordField();
+  // The same flow happens when user generates a password from the context menu.
+  password_manager_util::UserTriggeredManualGenerationFromContextMenu(
+      ChromePasswordManagerClient::FromWebContents(WebContents()));
+  EXPECT_TRUE(GenerationPopupShowing());
+  SendKeyToPopup(ui::VKEY_DOWN);
+  SendKeyToPopup(ui::VKEY_RETURN);
+
+  // Wait until the password is filled.
+  WaitForNonEmptyFieldValue("password_field");
+
+  // Re-focusing the password field should show the editing popup.
+  FocusPasswordField();
+  EXPECT_TRUE(EditingPopupShowing());
+
+  // Delete the password. The generation prompt should not be visible.
+  SimulateUserDeletingFieldContent("password_field");
+  WaitForPopupStatusChange();
+  EXPECT_FALSE(EditingPopupShowing());
+  EXPECT_FALSE(GenerationPopupShowing());
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordGenerationInteractiveTest,

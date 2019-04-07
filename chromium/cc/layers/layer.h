@@ -177,6 +177,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
   // Set and get the behaviour to be applied for compositor-thread scrolling of
   // this layer beyond the beginning or end of the layer's content.
+  // TODO(bokan): With blink-gen-property-trees this is stored on the
+  // ScrollNode and can be removed here.
   void SetOverscrollBehavior(const OverscrollBehavior& behavior);
   OverscrollBehavior overscroll_behavior() const {
     return inputs_.overscroll_behavior;
@@ -185,6 +187,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // Set and get the snapping behaviour for compositor-thread scrolling of
   // this layer. The default value of null means there is no snapping for the
   // layer.
+  // TODO(crbug.com/836884) With blink-gen-property-trees this is stored on the
+  // ScrollNode and can be removed here.
   void SetSnapContainerData(base::Optional<SnapContainerData> data);
   const base::Optional<SnapContainerData>& snap_container_data() const {
     return inputs_.snap_container_data;

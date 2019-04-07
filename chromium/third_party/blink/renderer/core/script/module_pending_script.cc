@@ -65,16 +65,9 @@ void ModulePendingScript::NotifyModuleTreeLoadFinished() {
   PendingScriptFinished();
 }
 
-Script* ModulePendingScript::GetSource(const KURL& document_url,
-                                       bool& error_occurred) const {
+Script* ModulePendingScript::GetSource(const KURL& document_url) const {
   CHECK(IsReady());
-  error_occurred = ErrorOccurred();
   return GetModuleScript();
-}
-
-bool ModulePendingScript::ErrorOccurred() const {
-  CHECK(IsReady());
-  return !GetModuleScript();
 }
 
 }  // namespace blink

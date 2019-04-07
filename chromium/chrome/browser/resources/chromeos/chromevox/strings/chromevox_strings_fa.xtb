@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fa">
 <translation id="100812568230599391">سبک نمایش را به جاگذاری تغییر دهید.</translation>
+<translation id="1011903154582639569">کلیدی را پیدا کنید، سپس سراغ تایپ کردن بروید</translation>
 <translation id="1012173283529841972">مورد فهرست</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1022586497894531524">‏اولین بار است که از بازخورد گفتاری ChromeVox استفاده می‌کنید؟ این آموزش گام‌به‌گام سریع، اصول اولیه شروع به کار با ChromeVox را توضیح می‌دهد.</translation>
@@ -15,6 +16,7 @@
 <translation id="1065552602950927991">ورودی نامعتبر</translation>
 <translation id="1080471004309605942">پایان ایتالیک</translation>
 <translation id="1082209053475788238">عنوان سطح ۶ قبلی وجود ندارد.</translation>
+<translation id="1087788677726983142">پنهان کردن فیلترهای جریان رویداد</translation>
 <translation id="1088219014394087294">عنوانی وجود ندارد.</translation>
 <translation id="1106741348836243114">بازخورد صوتی (نمادهای شنیداری) را روشن یا خاموش کنید.</translation>
 <translation id="1108651818222110612">زیرنویس</translation>
@@ -77,6 +79,7 @@
 <translation id="1618597272655350600">شرح کاملی از موقعیت کنونی را اعلام می‌کند</translation>
 <translation id="1639634871799530612">{COUNT,plural, =1{علامت بزرگ‌تر}one{# علامت بزرگ‌تر}other{# علامت بزرگ‌تر}}</translation>
 <translation id="1653266918374749391">عنوان قبلی سطح ۳</translation>
+<translation id="1657616855184033958">نمایش فیلترهای جریان رویداد</translation>
 <translation id="1659072772017912254">بررسی نشده</translation>
 <translation id="1669290819662866522">هفته</translation>
 <translation id="1674262202423278359">‏پیمایش ChromeVox</translation>
@@ -136,6 +139,7 @@
 <translation id="2267945578749931355">نویسه بعدی</translation>
 <translation id="2281234842553884450">اسلایدر قبلی</translation>
 <translation id="2294136146931447363">شروع ایتالیک</translation>
+<translation id="2311237334957139798">حرکت به قبلی با جزئیات</translation>
 <translation id="2318372665160196757">اصلی</translation>
 <translation id="2329324941084714723">پانل برگه</translation>
 <translation id="2344193891939537199">کنترل تاریخ زمان</translation>
@@ -156,12 +160,14 @@
 <translation id="2462626033734746142">گروه دکمه رادیویی</translation>
 <translation id="2471138580042810658">عنوان ۶</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{ستاره}one{# ستاره}other{# ستاره}}</translation>
+<translation id="249330843868392562">باز کردن تنظیمات نوشتار به گفتار</translation>
 <translation id="2523609930580546572">‏آموزش گام‌به‌گام ChromeVox</translation>
 <translation id="2525706221823668172">‏میان‌برهای صفحه‌کلید Chromebook</translation>
 <translation id="2549392850788122959">کلید <ph name="KEY" /> بازنشانی شد.</translation>
 <translation id="2553108862507765288">اشتباه دستوری</translation>
 <translation id="257674075312929031">گروه</translation>
 <translation id="2582407057977008361">جدا</translation>
+<translation id="2592212930811759050">برای شروع ویرایش، دو ضربه سریع بزنید</translation>
 <translation id="2606210917827248971">با {COUNT,plural, =1{# مورد}one{# مورد}other{# مورد}}</translation>
 <translation id="2614981083756825552">‏چیدمان ML ریاضی</translation>
 <translation id="2624431853467395961">باز کردن حالت یادگیری</translation>
@@ -409,6 +415,7 @@
 <translation id="4255943572433203166">‏از گزینه‌های زیر برای سفارشی کردن ChromeVox استفاده کنید. تغییرات بلافاصله اعمال می‌شوند.</translation>
 <translation id="4271220233568730077">عبارت ریاضی بعدی</translation>
 <translation id="4271521365602459209">نتیجه دیگری موجود نیست.</translation>
+<translation id="4275397969489577657">فعال کردن گزارش‌گیری از جریان رویداد</translation>
 <translation id="4287520460805643128">مقاله بعدی وجود ندارد.</translation>
 <translation id="4289540628985791613">مرور کلی</translation>
 <translation id="4300318234632215983">اعلان نشانی وب پشت یک پیوند</translation>
@@ -487,6 +494,7 @@
 <translation id="4973762002207131920">به کلید <ph name="KEY" /> تغییر داده شد.</translation>
 <translation id="4975416682604111799">میلی‌ثانیه</translation>
 <translation id="49787999531187221">‏ChromeVox اکنون غیرفعال است.</translation>
+<translation id="4979263087381759787">گزینه‌های برنامه‌نویس</translation>
 <translation id="4979404613699303341">دکمه قبلی</translation>
 <translation id="4982773647088557172"><ph name="VALUE" />، <ph name="NAME" />، کادر فهرست</translation>
 <translation id="4983588134362688868">رفتن به بالای صفحه</translation>
@@ -498,6 +506,7 @@
 <translation id="5000760171916499057">فرمی موجود نیست.</translation>
 <translation id="5005670136041063723">هیچ عنصر مشابه دیگری نیست.</translation>
 <translation id="501473567976723023">ژانویه</translation>
+<translation id="5020651427400641814">فعال کردن گزارش‌گیری از گفتار</translation>
 <translation id="5041394372352067729">انتقال صفحه‌نمایش بریل به بالای صفحه</translation>
 <translation id="5042770794184672516">افزایش میزان صدای گفتار</translation>
 <translation id="5050015258024679800">عنوان قبلی سطح ۴</translation>
@@ -512,6 +521,7 @@
 <translation id="5106547198195128110">چند تغییر جالب در این نسخه جدید ارائه داده‌ایم. موارد جدید در اینجا آمده‌اند:</translation>
 <translation id="5110983769041734144">فیلد فرم قبلی وجود ندارد.</translation>
 <translation id="5111640677200759579">عنوان ستون</translation>
+<translation id="5115892389597951922">‏گزارش ChromeVox</translation>
 <translation id="5136967254288895616">پیوند قبلی موجود نیست.</translation>
 <translation id="513774504516943387">lnk</translation>
 <translation id="5158275234811857234">جلد</translation>
@@ -545,6 +555,7 @@
 <translation id="5407530583102765689">{COUNT,plural, =1{نقطه ویرگول}one{# نقطه ویرگول}other{# نقطه ویرگول}}</translation>
 <translation id="5411891038905756502">هیچ نقطه پرش قبلی وجود ندارد.</translation>
 <translation id="5417034931411865818">مورد زیر کلید مسیریابی $1 را کلیک کنید</translation>
+<translation id="5435274640623994081">فعال کردن گزارش‌گیری از نماد شنیداری</translation>
 <translation id="5436105723448703439">{COUNT,plural, =1{علامت کوچک‌تر}one{# علامت کوچک‌تر}other{# علامت کوچک‌تر}}</translation>
 <translation id="5444587279251314700">(فعال)</translation>
 <translation id="5446809554778706307">‏هیچ موردی کانونی نشده است. برای باز کردن برگه جدید، Ctrl+T را فشار دهید.</translation>
@@ -678,6 +689,7 @@
 <translation id="6540201937398578274">‏در ChromeVox، کلید «جستجو» (Search) کلید تغییردهنده است. اکثر میان‌برهای ChromeVox با کلید «جستجو» شروع می‌شوند. از کلیدهای پیکان نیز برای پیمایش استفاده می‌کنید.</translation>
 <translation id="6550720799683018100">نقشه کلید کنونی را با انتخاب یک گزینه از فهرست زیر تغییر دهید.</translation>
 <translation id="6561818612645211875">رفتن به شروع ردیف کنونی</translation>
+<translation id="6583174818554398774">حرکت به بعدی با جزئیات</translation>
 <translation id="6587021927234520429">عنوان سطح ۴ بعدی وجود ندارد.</translation>
 <translation id="6601344353291556895">توضیحات طولانی را فعال کنید.</translation>
 <translation id="6615602925644411249">یافتن در صفحه.</translation>
@@ -753,6 +765,7 @@
 <translation id="7241683698754534149">باز کردن شرح طولانی در یک برگه جدید</translation>
 <translation id="7248671827512403053">برنامه کاربردی</translation>
 <translation id="725969808843520477">دکمه رادیویی بعدی</translation>
+<translation id="7261612856573623172">صدای سیستم نوشتار به گفتار</translation>
 <translation id="7269119382257320590">بدون علائم سجاوندی</translation>
 <translation id="7273174640290488576">خالی</translation>
 <translation id="7274770952766771364">مرجع یادداشت</translation>
@@ -893,6 +906,7 @@
 <translation id="8650576015643545550">فهرست قبلی موجود نیست.</translation>
 <translation id="8651481478098336970">بی‌صدا کردن</translation>
 <translation id="8653646212587894517">نمایش فهرست پیوندها</translation>
+<translation id="8656888282555543604">فعال کردن گزارش‌گیری بریل</translation>
 <translation id="8664519043722036194">ثانیه</translation>
 <translation id="867187640362843212">عنوان ۵</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{میله}one{# میله عمودی}other{# میله عمودی}}</translation>

@@ -37,13 +37,11 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_flags.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_text_blob.h"
-#include "third_party/blink/renderer/platform/layout_test_support.h"
 #include "third_party/blink/renderer/platform/layout_unit.h"
 #include "third_party/blink/renderer/platform/text/bidi_resolver.h"
 #include "third_party/blink/renderer/platform/text/character.h"
 #include "third_party/blink/renderer/platform/text/text_run.h"
 #include "third_party/blink/renderer/platform/text/text_run_iterator.h"
-#include "third_party/blink/renderer/platform/transforms/affine_transform.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
 #include "third_party/blink/renderer/platform/wtf/text/unicode.h"
@@ -505,6 +503,12 @@ Vector<CharacterRange> Font::IndividualCharacterRanges(
   // more popular platforms, and to protect users, we are using a CHECK here.
   CHECK_EQ(ranges.size(), run.length());
   return ranges;
+}
+
+Vector<double> Font::IndividualCharacterAdvances(const TextRun& run) const {
+  FontCachePurgePreventer purge_preventer;
+  CachingWordShaper shaper(*this);
+  return shaper.IndividualCharacterAdvances(run);
 }
 
 void Font::ExpandRangeToIncludePartialGlyphs(const TextRun& text_run,

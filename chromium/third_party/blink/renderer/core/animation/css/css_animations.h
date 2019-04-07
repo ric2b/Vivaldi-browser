@@ -165,6 +165,8 @@ class CSSAnimations final {
 
   struct TransitionUpdateState {
     STACK_ALLOCATED();
+
+   public:
     CSSAnimationUpdate& update;
     Member<const Element> animating_element;
     const ComputedStyle& old_style;
@@ -183,7 +185,8 @@ class CSSAnimations final {
   static void CalculateTransitionUpdateForStandardProperty(
       TransitionUpdateState&,
       const CSSTransitionData::TransitionProperty&,
-      size_t transition_index);
+      size_t transition_index,
+      const ComputedStyle&);
 
   static void CalculateTransitionUpdateForProperty(TransitionUpdateState&,
                                                    const PropertyHandle&,

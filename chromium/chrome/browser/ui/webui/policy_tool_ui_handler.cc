@@ -9,7 +9,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/policy/schema_registry_service.h"
@@ -404,7 +404,7 @@ void PolicyToolUIHandler::HandleUpdateSession(const base::ListValue* args) {
   std::string converted_values;
   base::JSONWriter::Write(*policy_values, &converted_values);
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&PolicyToolUIHandler::DoUpdateSession,
                      base::Unretained(this), converted_values),
       base::BindOnce(&PolicyToolUIHandler::OnSessionUpdated,
@@ -415,7 +415,7 @@ void PolicyToolUIHandler::HandleUpdateSession(const base::ListValue* args) {
 void PolicyToolUIHandler::HandleResetSession(const base::ListValue* args) {
   DCHECK_EQ(0U, args->GetSize());
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&PolicyToolUIHandler::DoUpdateSession,
                      base::Unretained(this), "{}"),
       base::BindOnce(&PolicyToolUIHandler::OnSessionUpdated,
@@ -472,7 +472,7 @@ void PolicyToolUIHandler::WriteSessionPolicyToFile(
   const std::string data = session_dict_for_exporting_;
   base::PostTaskWithTraits(
       FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
       base::BindOnce(&DoWriteSessionPolicyToFile, path, data));
 }

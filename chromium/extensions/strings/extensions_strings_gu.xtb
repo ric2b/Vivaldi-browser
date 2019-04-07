@@ -13,7 +13,6 @@
 <translation id="2350172092385603347">લૉકલાઇઝેશન વપરાયુ, પરંતુ default_locale નો ઉલ્લેખ મેનિફેસ્ટમાં નહોતો.</translation>
 <translation id="2576842806987913196">આ નામવાળી એક CRX ફાઇલ પહેલાથી જ અસ્તિત્વમાં છે.</translation>
 <translation id="2753617847762399167">ગેરકાયદેસર પાથ (નિરપેક્ષ અથવા '..' સાથે સંબંધિત): '<ph name="IMAGE_PATH" />'</translation>
-<translation id="27822970480436970">આ એક્સ્ટેંશન નેટવર્ક વિનંતીનું સંશોધન કરવામાં નિષ્ફળ રહ્યું છે કારણ કે સંશોધન બીજા એક્સ્ટેંશનથી વિરોધાભાસી છે.</translation>
 <translation id="2785530881066938471">કન્ટેન્ટ સ્ક્રિપ્ટ માટે '<ph name="RELATIVE_PATH" />' ફાઇલ લોડ કરી શકાઈ નથી. તે UTF-8 એન્કોડેડ નથી.</translation>
 <translation id="2903070246402204397"><ph name="EXTENSION_NAME" /> (એક્સ્ટેન્શન ID "<ph name="EXTENSION_ID" />")ને વ્યવસ્થાપક દ્વારા અવરોધિત કરવામાં આવેલ છે. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">પૅકેજ ઇન્સ્ટોલ કરી શકાયું નહીં: '<ph name="ERROR_CODE" />'</translation>
@@ -57,19 +56,16 @@
 <translation id="7003844668372540529"><ph name="VENDOR_NAME" /> નું અજાણ્યું ઉત્પાદન <ph name="PRODUCT_ID" /></translation>
 <translation id="7068383018033524534">મેનિફેસ્ટ ફાઇલ અમાન્ય છે</translation>
 <translation id="7217838517480956708">આ મશીનના વ્યવસ્થાપકને ઇન્સ્ટોલ કરવા માટે <ph name="EXTENSION_NAME" /> ની આવશ્કતા છે. તેને દૂર અથવા સંશોધિત કરી શકાશે નહીં.</translation>
+<translation id="7612608473764576263">ખાનગી કી માટેનું ઇનપુટ મૂલ્ય માન્ય ફૉર્મેટમાં હોવું જોઈએ (PKCS#8-ફૉર્મેટ PEM-એન્કોડેડ RSA કી).</translation>
 <translation id="7939686037314084444">એક્સ્ટેંશન યોગ્ય રીતે લોડ થવામાં નિષ્ફળ થયું. તે કદાચ નેટવર્ક વિનંતીઓને પકડી ન શકતું હોય.</translation>
 <translation id="7972881773422714442">વિકલ્પો: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">સામેનો કૅમેરો</translation>
 <translation id="8047248493720652249">આ એક્સટેન્શન "<ph name="ATTEMPTED_FILENAME" />" ને ડાઉનલોડ નામ આપવામાં નિષ્ફળ થયું કારણ કે અન્ય એક્સટેન્શન (<ph name="EXTENSION_NAME" />) એ એક જુદું ફાઇલનામ "<ph name="ACTUAL_FILENAME" />" નક્કી કર્યું છે.</translation>
 <translation id="8284835137979141223"><ph name="VENDOR_NAME" /> તરફથી <ph name="PRODUCT_NAME" /></translation>
-<translation id="8341840687457896278">આ એક્સટેન્શન એક નેટવર્ક વિનંતીને ઓળખપત્ર પ્રદાન કરવામાં નિષ્ફળ થયું કારણ કે અન્ય એક્સટેન્શન (<ph name="EXTENSION_NAME" />) એ વિવિધ ઓળખપત્ર પ્રદાન કર્યાં છે.</translation>
 <translation id="8517576857589387417">મેનિફેસ્ટ ફાઇલ ખૂટે છે અથવા સરળતાથી વાંચી શકાય તેવી નથી</translation>
 <translation id="8636666366616799973">પૅકેજ અમાન્ય છે. વિગતો: '<ph name="ERROR_MESSAGE" />'.</translation>
-<translation id="8670869118777164560">આ એક્સટેન્શન એક નેટવર્ક વિનંતીને <ph name="ATTEMPTED_REDIRECT_DESTINATION" /> પર રીડાયરેક્ટ કરવામાં નિષ્ફળ થયું કારણ કે અન્ય એક્સટેન્શન (<ph name="EXTENSION_NAME" />) એ તેને <ph name="ACTUAL_REDIRECT_DESTINATION" /> પર રીડાયરેક્ટ કર્યું છે.</translation>
 <translation id="8761756413268424715">"<ph name="APP_NAME" />", તમારા ઉપકરણો પૈકી એક પરની ઍક્સેસની વિનંતી કરી રહ્યું છે:</translation>
-<translation id="8825366169884721447">આ એક્સટેન્શન એક નેટવર્ક વિનંતીની વિનંતી હેડર "<ph name="HEADER_NAME" />" ને સંશોધિત કરવામાં નિષ્ફળ થયુ કારણ કે સંશોધિકરણ અન્ય એક્સટેન્શન (<ph name="EXTENSION_NAME" />) સાથે વિરોધાભાસી છે.</translation>
 <translation id="8885905466771744233">ઉલ્લેખિત એક્સટેન્શન માટે ખાનગી કી પહેલાંથી અસતિત્વમાં છે. તે કી ફરીથી વાપરો અથવા પહેલા તેને કાઢી નાખો.</translation>
 <translation id="907841381057066561">પૅકેજીંગ દરમિયાન અસ્થાયી ઝિપ ફાઇલ બનાવવામાં નિષ્ફળ.</translation>
-<translation id="9111791539553342076">આ એક્સટેન્શન એક નેટવર્ક વિનંતીની પ્રતિભાવ હેડર "<ph name="HEADER_NAME" />" ને સંશોધિત કરવામાં નિષ્ફળ થયું કારણ કે સંશોધિકરણ અન્ય એક્સટેન્શન (<ph name="EXTENSION_NAME" />) સાથે વિરોધાભાસી છે.</translation>
 <translation id="941543339607623937">અમાન્ય ખાનગી કી.</translation>
 </translationbundle>

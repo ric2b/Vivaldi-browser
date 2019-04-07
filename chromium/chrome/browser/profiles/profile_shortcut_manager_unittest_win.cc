@@ -9,8 +9,8 @@
 #include "base/location.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/test/scoped_path_override.h"
 #include "base/test/test_shortcut_win.h"
 #include "chrome/browser/profiles/profile.h"
@@ -22,6 +22,7 @@
 #include "chrome/browser/shell_integration_win.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/installer/util/browser_distribution.h"
+#include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/product.h"
 #include "chrome/installer/util/shell_util.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -148,7 +149,7 @@ class ProfileShortcutManagerTest : public testing::Test {
     expected_properties.set_app_id(
         shell_integration::win::GetChromiumModelIdForProfile(profile_path));
     expected_properties.set_target(GetExePath());
-    expected_properties.set_description(GetDistribution()->GetAppDescription());
+    expected_properties.set_description(InstallUtil::GetAppDescription());
     expected_properties.set_dual_mode(false);
     expected_properties.set_arguments(
         profiles::internal::CreateProfileShortcutFlags(profile_path));
@@ -173,7 +174,7 @@ class ProfileShortcutManagerTest : public testing::Test {
     expected_properties.set_target(GetExePath());
     expected_properties.set_arguments(base::string16());
     expected_properties.set_icon(GetExePath(), 0);
-    expected_properties.set_description(GetDistribution()->GetAppDescription());
+    expected_properties.set_description(InstallUtil::GetAppDescription());
     expected_properties.set_dual_mode(false);
     PostValidateShortcut(location, shortcut_path, expected_properties);
   }

@@ -174,7 +174,7 @@ interface Runnable {
 interface Executor {
   /**
    * Takes ownership of |command| and runs it synchronously or asynchronously.
-   * Destroys the |command| after execution.
+   * Destroys the |command| after execution, or if executor is shutting down.
    */
   Execute(Runnable command);
 };
@@ -241,21 +241,25 @@ enum RESULT {
    */
   ILLEGAL_STATE_REQUEST_NOT_INITIALIZED = -205,
   /**
+   * The request is already initialized
+   */
+  ILLEGAL_STATE_REQUEST_ALREADY_INITIALIZED = -206,
+  /**
    * The request is not started
    */
-  ILLEGAL_STATE_REQUEST_NOT_STARTED = -206,
+  ILLEGAL_STATE_REQUEST_NOT_STARTED = -207,
   /**
    * No redirect to follow
    */
-  ILLEGAL_STATE_UNEXPECTED_REDIRECT = -207,
+  ILLEGAL_STATE_UNEXPECTED_REDIRECT = -208,
   /**
    * Unexpected read attempt
    */
-  ILLEGAL_STATE_UNEXPECTED_READ = -208,
+  ILLEGAL_STATE_UNEXPECTED_READ = -209,
   /**
    * Unexpected read failure
    */
-  ILLEGAL_STATE_READ_FAILED = -209,
+  ILLEGAL_STATE_READ_FAILED = -210,
 
   /**
    * Null pointer or empty data
@@ -538,6 +542,14 @@ struct EngineParams {
    * https://www.chromium.org/Home/chromium-security/security-faq
    */
   bool enable_public_key_pinning_bypass_for_local_trust_anchors = true;
+
+  /**
+   * Optional network thread priority. NAN indicates unset, use default.
+   * On Android, corresponds to android.os.Process.setThreadPriority() values.
+   * On iOS, corresponds to NSThread::setThreadPriority values.
+   * Do not specify for other platforms.
+   */
+  double network_thread_priority = double.NAN;
 
   /**
    * JSON formatted experimental options to be used in Cronet Engine.
@@ -851,28 +863,29 @@ interface UploadDataSink {
   /**
    * Called by UploadDataProvider when a read succeeds.
    *
+   * @param bytes_read number of bytes read into buffer passed to read().
    * @param final_chunk For chunked uploads, |true| if this is the final
    *     read. It must be |false| for non-chunked uploads.
    */
-  OnReadSucceeded(bool final_chunk);
+  OnReadSucceeded(uint64 bytes_read, bool final_chunk);
 
   /**
    * Called by UploadDataProvider when a read fails.
-   * @param error to pass on to UrlRequestCallback.onFailed().
+   * @param error_message to pass on to UrlRequestCallback.onFailed().
    */
-  OnReadError(Error error);
+  OnReadError(string error_message);
 
   /**
    * Called by UploadDataProvider when a rewind succeeds.
    */
-  OnRewindSucceded();
+  OnRewindSucceeded();
 
   /**
    * Called by UploadDataProvider when a rewind fails, or if rewinding
    * uploads is not supported.
-   * @param error to pass on to UrlRequestCallback.onFailed().
+   * @param error_message to pass on to UrlRequestCallback.onFailed().
    */
-  OnRewindError(Error error);
+  OnRewindError(string error_message);
 };
 
 /**
@@ -894,9 +907,7 @@ interface UploadDataProvider {
   GetLength() => (int64 length);
 
   /**
-   * Reads upload data into |buffer|. Upon completion, the buffer's
-   * position is updated to the end of the bytes that were read. The buffer's
-   * limit is not changed. Each call of this method must be followed be a
+   * Reads upload data into |buffer|. Each call of this method must be followed be a
    * single call, either synchronous or asynchronous, to
    * UploadDataSink.onReadSucceeded() on success
    * or UploadDataSink.onReadError() on failure. Neither read nor rewind
@@ -906,8 +917,7 @@ interface UploadDataProvider {
    *
    * @param upload_data_sink The object to notify when the read has completed,
    *            successfully or otherwise.
-   * @param buffer The buffer to copy the read bytes into. Do not change
-   *            byteBuffer's limit.
+   * @param buffer The buffer to copy the read bytes into.
    */
   Read(UploadDataSink upload_data_sink, Buffer buffer);
 

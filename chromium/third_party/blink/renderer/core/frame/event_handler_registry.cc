@@ -69,6 +69,11 @@ bool EventHandlerRegistry::EventTypeToClass(
              event_type == EventTypeNames::touchmove) {
     *result = options.passive() ? kTouchStartOrMoveEventPassive
                                 : kTouchStartOrMoveEventBlocking;
+  } else if (event_type == EventTypeNames::pointerrawmove) {
+    // This will be used to avoid waking up the main thread to
+    // process pointerrawmove events and hit-test them when
+    // there is no listener on the page.
+    *result = kPointerRawMoveEvent;
   } else if (EventUtil::IsPointerEventType(event_type)) {
     // The pointer events never block scrolling and the compositor
     // only needs to know about the touch listeners.
@@ -271,6 +276,12 @@ void EventHandlerRegistry::NotifyHasHandlersChanged(
               HasEventHandlers(kTouchStartOrMoveEventPassive) ||
                   HasEventHandlers(kPointerEvent)));
       break;
+    case kPointerRawMoveEvent:
+      GetPage()->GetChromeClient().SetEventListenerProperties(
+          frame, cc::EventListenerClass::kPointerRawMove,
+          GetEventListenerProperties(false,
+                                     HasEventHandlers(kPointerRawMoveEvent)));
+      break;
     case kTouchEndOrCancelEventBlocking:
     case kTouchEndOrCancelEventPassive:
       GetPage()->GetChromeClient().SetEventListenerProperties(
@@ -292,8 +303,14 @@ void EventHandlerRegistry::NotifyHasHandlersChanged(
     if (handler_class == kTouchStartOrMoveEventBlocking ||
         handler_class == kTouchStartOrMoveEventBlockingLowLatency) {
       if (auto* node = target->ToNode()) {
-        if (auto* layout_object = node->GetLayoutObject())
+        if (auto* layout_object = node->GetLayoutObject()) {
           layout_object->MarkEffectiveWhitelistedTouchActionChanged();
+          auto* continuation = layout_object->VirtualContinuation();
+          while (continuation) {
+            continuation->MarkEffectiveWhitelistedTouchActionChanged();
+            continuation = continuation->VirtualContinuation();
+          }
+        }
       } else if (auto* dom_window = target->ToLocalDOMWindow()) {
         // This event handler is on a window. Ensure the layout view is
         // invalidated because the layout view tracks the window's blocking

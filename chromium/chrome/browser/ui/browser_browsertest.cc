@@ -121,6 +121,7 @@
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "chrome/browser/ui/cocoa/test/run_loop_testing.h"
+#include "ui/accelerated_widget_mac/ca_transaction_observer.h"
 #endif
 
 #if defined(OS_WIN)
@@ -986,11 +987,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, NullOpenerRedirectForksProcess) {
 // http://www.google.com/chrome/intl/en/webmasters-faq.html#newtab will not
 // fork a new renderer process.
 IN_PROC_BROWSER_TEST_F(BrowserTest, OtherRedirectsDontForkProcess) {
-  // TODO(lukasza): https://crbug.com/824962: Investigate why this test fails
-  // with --site-per-process.
-  if (content::AreAllSitesIsolatedForTesting())
-    return;
-
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kDisablePopupBlocking);
 
@@ -1008,8 +1004,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, OtherRedirectsDontForkProcess) {
   WebContents* oldtab = browser()->tab_strip_model()->GetActiveWebContents();
   content::RenderProcessHost* process = oldtab->GetMainFrame()->GetProcess();
 
-  // Now open a tab to a blank page, set its opener to null, and redirect it
-  // cross-site.
+  // Now open a tab to a blank page and redirect it cross-site.
   std::string dont_fork_popup = "w=window.open();";
   dont_fork_popup += "w.document.location=\"";
   dont_fork_popup += https_url.spec();
@@ -1035,10 +1030,14 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, OtherRedirectsDontForkProcess) {
   EXPECT_EQ(https_url.spec(),
             newtab->GetController().GetLastCommittedEntry()->GetURL().spec());
 
-  // Popup window should still be in the opener's process.
+  // Process of the (cross-site) popup window depends on whether
+  // site-per-process mode is enabled or not.
   content::RenderProcessHost* popup_process =
       newtab->GetMainFrame()->GetProcess();
-  EXPECT_EQ(process, popup_process);
+  if (content::AreAllSitesIsolatedForTesting())
+    EXPECT_NE(process, popup_process);
+  else
+    EXPECT_EQ(process, popup_process);
 
   // Same thing if the current tab tries to navigate itself.
   std::string navigate_str = "document.location=\"";
@@ -1055,10 +1054,18 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, OtherRedirectsDontForkProcess) {
   EXPECT_EQ(https_url.spec(),
             oldtab->GetController().GetLastCommittedEntry()->GetURL().spec());
 
-  // Original window should still be in the original process.
+  // Whether original stays in the original process (when navigating to a
+  // cross-site url) depends on whether site-per-process mode is enabled or not.
   content::RenderProcessHost* new_process =
       newtab->GetMainFrame()->GetProcess();
-  EXPECT_EQ(process, new_process);
+  if (content::AreAllSitesIsolatedForTesting()) {
+    EXPECT_NE(process, new_process);
+
+    // site-per-process should reuse the process for the https site.
+    EXPECT_EQ(popup_process, new_process);
+  } else {
+    EXPECT_EQ(process, new_process);
+  }
 }
 
 // Test that get_process_idle_time() returns reasonable values when compared
@@ -1386,10 +1393,10 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, OpenAppWindowLikeNtp) {
       WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_TEST));
   ASSERT_TRUE(app_window);
 
-  // Apps launched in a window from the NTP have an extensions tab helper but
-  // do not have extension_app set in it.
+  // Apps launched in a window from the NTP have an extensions tab helper with
+  // extension_app set.
   ASSERT_TRUE(extensions::TabHelper::FromWebContents(app_window));
-  EXPECT_FALSE(
+  EXPECT_TRUE(
       extensions::TabHelper::FromWebContents(app_window)->extension_app());
   EXPECT_EQ(extensions::AppLaunchInfo::GetFullLaunchURL(extension_app),
             app_window->GetURL());
@@ -1884,8 +1891,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_WindowOpenClose1) {
   EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
 }
 
-// Flaky on Chrome OS only. TODO(https://crbug.com/823043) fix it.
-#if defined(OS_CHROMEOS)
+// Flaky on Chrome OS, Linux and Windows. TODO(https://crbug.com/823043) fix it.
+#if defined(OS_CHROMEOS) || defined(OS_LINUX) || defined(OS_WIN)
 #define MAYBE_WindowOpenClose2 DISABLED_WindowOpenClose2
 #else
 #define MAYBE_WindowOpenClose2 WindowOpenClose2
@@ -1907,15 +1914,17 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_WindowOpenClose2) {
   EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
 }
 
-#if defined(OS_MACOSX) || (defined(OS_WIN) && !defined(NDEBUG))
+#if (defined(OS_WIN) && !defined(NDEBUG))
 // Times out on windows (dbg). https://crbug.com/753691.
-// Also times out on macOS (can be made to pass by lowering kPaintMsgTimeoutMS
-// in RenderWidgetHostImpl).
 #define MAYBE_WindowOpenClose3 DISABLED_WindowOpenClose3
 #else
 #define MAYBE_WindowOpenClose3 WindowOpenClose3
 #endif
 IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_WindowOpenClose3) {
+#if defined(OS_MACOSX)
+  // Ensure that tests don't wait for frames that will never come.
+  ui::CATransactionCoordinator::Get().DisableForTesting();
+#endif
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kDisablePopupBlocking);
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -2737,4 +2746,55 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, TestPopupBounds) {
     EXPECT_EQ(122, bounds.height());
     browser->window()->Close();
   }
+}
+
+// Makes sure showing dialogs drops fullscreen.
+IN_PROC_BROWSER_TEST_F(BrowserTest, DialogsDropFullscreen) {
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+
+  content::WebContentsDelegate* browser_as_wc_delegate =
+      static_cast<content::WebContentsDelegate*>(browser());
+  web_modal::WebContentsModalDialogManagerDelegate* browser_as_dialog_delegate =
+      static_cast<web_modal::WebContentsModalDialogManagerDelegate*>(browser());
+
+  // Simulate the tab requesting fullscreen.
+  browser_as_wc_delegate->EnterFullscreenModeForTab(
+      tab, GURL(), blink::WebFullscreenOptions());
+  EXPECT_TRUE(browser_as_wc_delegate->IsFullscreenForTabOrPending(tab));
+
+  // The tab gets a modal dialog.
+  browser_as_dialog_delegate->SetWebContentsBlocked(tab, true);
+
+  // The dialog should drop fullscreen.
+  EXPECT_FALSE(browser_as_wc_delegate->IsFullscreenForTabOrPending(tab));
+
+  browser_as_dialog_delegate->SetWebContentsBlocked(tab, false);
+}
+
+// Makes sure showing dialogs does NOT drop fullscreen when the browser is in
+// FullscreenWithinTab mode. This is an exception to the primary behavior tested
+// by BrowserTest.DialogsDropFullscreen above. See "FullscreenWithinTab note" in
+// FullscreenController's class-level comments for further details.
+IN_PROC_BROWSER_TEST_F(BrowserTest, DialogsAllowedInFullscreenWithinTabMode) {
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+
+  content::WebContentsDelegate* browser_as_wc_delegate =
+      static_cast<content::WebContentsDelegate*>(browser());
+  web_modal::WebContentsModalDialogManagerDelegate* browser_as_dialog_delegate =
+      static_cast<web_modal::WebContentsModalDialogManagerDelegate*>(browser());
+
+  // Simulate a screen-captured tab requesting fullscreen.
+  tab->IncrementCapturerCount(gfx::Size(1280, 720));
+  browser_as_wc_delegate->EnterFullscreenModeForTab(
+      tab, GURL(), blink::WebFullscreenOptions());
+  EXPECT_TRUE(browser_as_wc_delegate->IsFullscreenForTabOrPending(tab));
+
+  // The tab gets a modal dialog.
+  browser_as_dialog_delegate->SetWebContentsBlocked(tab, true);
+
+  // The dialog should NOT drop fullscreen.
+  EXPECT_TRUE(browser_as_wc_delegate->IsFullscreenForTabOrPending(tab));
+
+  browser_as_dialog_delegate->SetWebContentsBlocked(tab, false);
+  tab->DecrementCapturerCount();
 }

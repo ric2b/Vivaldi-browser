@@ -24,6 +24,7 @@
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_consumer.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #include "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/context_menu/context_menu_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/legacy_recent_tabs_table_view_controller_delegate.h"
@@ -89,9 +90,6 @@ int const kNumberOfSectionsBeforeSessions = 1;
 const CGFloat kEstimatedRowHeight = 56;
 // Separation space between sections.
 const CGFloat kSeparationSpaceBetweenSections = 9;
-// The UI displays relative time for up to this number of hours and then
-// switches to absolute values.
-const int kRelativeTimeMaxHours = 4;
 // Section index for recently closed tabs.
 const int kRecentlyClosedTabsSectionIndex = 0;
 
@@ -215,6 +213,8 @@ const int kRecentlyClosedTabsSectionIndex = 0;
       [[TableViewAccessoryItem alloc] initWithType:ItemTypeShowFullHistory];
   historyItem.title = l10n_util::GetNSString(IDS_HISTORY_SHOWFULLHISTORY_LINK);
   historyItem.image = [UIImage imageNamed:@"show_history"];
+  historyItem.cellAccessibilityIdentifier =
+      kRecentTabsShowFullHistoryCellAccessibilityIdentifier;
   [model addItem:historyItem
       toSectionWithIdentifier:SectionIdentifierRecentlyClosedTabs];
 }
@@ -829,16 +829,8 @@ const int kRecentlyClosedTabsSectionIndex = 0;
 
   if (last_used_delta.InMicroseconds() < base::Time::kMicrosecondsPerMinute) {
     timeString = l10n_util::GetNSString(IDS_IOS_OPEN_TABS_RECENTLY_SYNCED);
-    // This will return something similar to "Seconds ago mm/dd/yy"
-    return [NSString stringWithFormat:@"%@ %@", timeString, dateString];
-  }
-
-  if (last_used_delta.InHours() < kRelativeTimeMaxHours) {
-    timeString = base::SysUTF16ToNSString(
-        ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_ELAPSED,
-                               ui::TimeFormat::LENGTH_SHORT, last_used_delta));
-    // This will return something similar to "1 min/hour ago mm/dd/yy"
-    return [NSString stringWithFormat:@"%@ %@", timeString, dateString];
+    // This will return something similar to "Seconds ago"
+    return [NSString stringWithFormat:@"%@", timeString];
   }
 
   NSDate* date = [NSDate dateWithTimeIntervalSince1970:time.ToTimeT()];
@@ -846,6 +838,26 @@ const int kRecentlyClosedTabsSectionIndex = 0;
       [NSDateFormatter localizedStringFromDate:date
                                      dateStyle:NSDateFormatterNoStyle
                                      timeStyle:NSDateFormatterShortStyle];
+
+  NSInteger today = [[NSCalendar currentCalendar] component:NSCalendarUnitDay
+                                                   fromDate:[NSDate date]];
+  NSInteger dateDay =
+      [[NSCalendar currentCalendar] component:NSCalendarUnitDay fromDate:date];
+
+  if (today == dateDay) {
+    timeString = base::SysUTF16ToNSString(
+        ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_ELAPSED,
+                               ui::TimeFormat::LENGTH_SHORT, last_used_delta));
+    // This will return something similar to "1 min/hour ago"
+    return [NSString stringWithFormat:@"%@", timeString];
+  }
+
+  if (today - dateDay == 1) {
+    dateString = l10n_util::GetNSString(IDS_IOS_OPEN_TABS_SYNCED_YESTERDAY);
+    // This will return something similar to "H:MM Yesterday"
+    return [NSString stringWithFormat:@"%@ %@", timeString, dateString];
+  }
+
   // This will return something similar to "H:MM mm/dd/yy"
   return [NSString stringWithFormat:@"%@ %@", timeString, dateString];
 }
@@ -1024,11 +1036,14 @@ const int kRecentlyClosedTabsSectionIndex = 0;
   synced_sessions::DistantSession const* session =
       [self sessionForSection:section];
   for (auto const& tab : session->tabs) {
-    [self.loader webPageOrderedOpen:tab->virtual_url
-                           referrer:web::Referrer()
-                       inBackground:YES
-                        originPoint:CGPointZero
-                           appendTo:kLastTab];
+    OpenNewTabCommand* command =
+        [[OpenNewTabCommand alloc] initWithURL:tab->virtual_url
+                                      referrer:web::Referrer()
+                                   inIncognito:NO
+                                  inBackground:YES
+                                      appendTo:kLastTab];
+
+    [self.loader webPageOrderedOpen:command];
   }
   [self.presentationDelegate showActiveRegularTabFromRecentTabs];
 }
@@ -1089,12 +1104,9 @@ const int kRecentlyClosedTabsSectionIndex = 0;
   if ([self.tableViewModel sectionIsCollapsed:SectionIdentifierOtherDevices]) {
     return;
   }
-  // If the section is not collapsed and the identity has changed, reload the
-  // Cell.
-  if (identityChanged) {
-    [self.tableView reloadRowsAtIndexPaths:@[ indexPath ]
-                          withRowAnimation:UITableViewRowAnimationNone];
-  }
+  // After setting the new configurator to the item, reload the item's Cell.
+  [self reloadCellsForItems:@[ signInItem ]
+           withRowAnimation:UITableViewRowAnimationNone];
 }
 
 - (void)signinDidFinish {

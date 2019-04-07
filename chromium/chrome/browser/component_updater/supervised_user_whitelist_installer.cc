@@ -26,8 +26,8 @@
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/value_conversions.h"
 #include "base/values.h"
@@ -67,7 +67,7 @@ const char kExtensionIcons[] = "icons";
 const char kExtensionLargeIcon[] = "128";
 
 constexpr base::TaskTraits kTaskTraits = {
-    base::MayBlock(), base::TaskPriority::BACKGROUND,
+    base::MayBlock(), base::TaskPriority::BEST_EFFORT,
     base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN};
 
 base::string16 GetWhitelistTitle(const base::DictionaryValue& manifest) {

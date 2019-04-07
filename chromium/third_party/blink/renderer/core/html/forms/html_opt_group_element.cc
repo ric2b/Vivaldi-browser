@@ -88,17 +88,17 @@ bool HTMLOptGroupElement::MatchesEnabledPseudoClass() const {
 }
 
 Node::InsertionNotificationRequest HTMLOptGroupElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   HTMLElement::InsertedInto(insertion_point);
   if (HTMLSelectElement* select = OwnerSelectElement()) {
-    if (insertion_point == select)
+    if (&insertion_point == select)
       select->OptGroupInsertedOrRemoved(*this);
   }
   return kInsertionDone;
 }
 
-void HTMLOptGroupElement::RemovedFrom(ContainerNode* insertion_point) {
-  if (auto* select = ToHTMLSelectElementOrNull(*insertion_point)) {
+void HTMLOptGroupElement::RemovedFrom(ContainerNode& insertion_point) {
+  if (auto* select = ToHTMLSelectElementOrNull(insertion_point)) {
     if (!parentNode())
       select->OptGroupInsertedOrRemoved(*this);
   }

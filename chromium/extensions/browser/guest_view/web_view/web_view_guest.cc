@@ -61,12 +61,13 @@
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/canonical_cookie.h"
+#include "services/network/public/cpp/features.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "url/url_constants.h"
 
-
 #include "app/vivaldi_apptools.h"
+#include "chrome/browser/browser_about_handler.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -1062,13 +1063,24 @@ bool WebViewGuest::ClearData(base::Time remove_since,
     web_cache::WebCacheManager::GetInstance()->ClearCacheForProcess(
         render_process_id);
 
-    base::Closure cache_removal_done_callback = base::Bind(
+    base::OnceClosure cache_removal_done_callback = base::BindOnce(
         &WebViewGuest::ClearDataInternal, weak_ptr_factory_.GetWeakPtr(),
         remove_since, removal_mask, callback);
-    // components/, move |ClearCache| to WebViewGuest: http//crbug.com/471287.
-    partition->ClearHttpAndMediaCaches(remove_since, base::Time::Now(),
-                                       base::Callback<bool(const GURL&)>(),
-                                       cache_removal_done_callback);
+
+    // We cannot use |BrowsingDataRemover| here since it doesn't support
+    // non-default StoragePartition.
+    if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+      // Note that we've deprecated the concept of a media cache, and are now
+      // using a single cache for both purposes.
+      partition->GetNetworkContext()->ClearHttpCache(
+          remove_since, base::Time::Now(), nullptr /* ClearDataFilter */,
+          std::move(cache_removal_done_callback));
+    } else {
+      partition->ClearHttpAndMediaCaches(
+          remove_since, base::Time::Now(),
+          base::RepeatingCallback<bool(const GURL&)>(),
+          std::move(cache_removal_done_callback));
+    }
     return true;
   }
 
@@ -1318,9 +1330,9 @@ void WebViewGuest::RequestPointerLockPermission(
       callback);
 }
 
-void WebViewGuest::SignalWhenReady(const base::Closure& callback) {
+void WebViewGuest::SignalWhenReady(base::OnceClosure callback) {
   auto* manager = WebViewContentScriptManager::Get(browser_context());
-  manager->SignalOnScriptsLoaded(callback);
+  manager->SignalOnScriptsLoaded(std::move(callback));
 }
 
 void WebViewGuest::WillAttachToEmbedder() {
@@ -1763,6 +1775,11 @@ void WebViewGuest::LoadURLWithParams(
   if (!url.is_valid()) {
     LoadAbort(true /* is_top_level */, url, net::ERR_INVALID_URL);
     NavigateGuest(url::kAboutBlankURL, false /* force_navigation */);
+    return;
+  }
+
+  // Handle chrome://restart and chrome://quit urls.
+  if (IsVivaldiApp(owner_host()) && HandleNonNavigationAboutURL(url)) {
     return;
   }
 

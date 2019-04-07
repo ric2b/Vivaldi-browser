@@ -24,6 +24,19 @@ base::UnguessableToken BufferBacking::GetGUID() const {
   return base::UnguessableToken();
 }
 
+MemoryBufferBacking::MemoryBufferBacking(size_t size)
+    : memory_(new char[size]), size_(size) {}
+
+MemoryBufferBacking::~MemoryBufferBacking() = default;
+
+void* MemoryBufferBacking::GetMemory() const {
+  return memory_.get();
+}
+
+size_t MemoryBufferBacking::GetSize() const {
+  return size_;
+}
+
 SharedMemoryBufferBacking::SharedMemoryBufferBacking(
     base::UnsafeSharedMemoryRegion shared_memory_region,
     base::WritableSharedMemoryMapping shared_memory_mapping)
@@ -64,14 +77,14 @@ void* Buffer::GetDataAddress(uint32_t data_offset, uint32_t data_size) const {
   base::CheckedNumeric<uint32_t> end = data_offset;
   end += data_size;
   if (!end.IsValid() || end.ValueOrDie() > static_cast<uint32_t>(size_))
-    return NULL;
+    return nullptr;
   return static_cast<uint8_t*>(memory_) + data_offset;
 }
 
 void* Buffer::GetDataAddressAndSize(uint32_t data_offset,
                                     uint32_t* data_size) const {
   if (data_offset > static_cast<uint32_t>(size_))
-    return NULL;
+    return nullptr;
   *data_size = GetRemainingSize(data_offset);
   return static_cast<uint8_t*>(memory_) + data_offset;
 }

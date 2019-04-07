@@ -296,15 +296,13 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
     return GetDelegatedFrameHost()->HasPrimarySurface();
   }
 
-  bool HasFallbackSurface() const {
+  bool HasFallbackSurface() const override {
     return GetDelegatedFrameHost()->HasFallbackSurface();
   }
 
   void ReclaimResources(const std::vector<viz::ReturnedResource>& resources) {
     GetDelegatedFrameHost()->ReclaimResources(resources);
   }
-
-  void ResetCompositor() { GetDelegatedFrameHost()->ResetCompositor(); }
 
   const ui::MotionEventAura& pointer_state() {
     return event_handler()->pointer_state();
@@ -498,13 +496,16 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
   static void InstallDelegatedFrameHostClient(
       RenderWidgetHostViewAura* view,
       std::unique_ptr<DelegatedFrameHostClient> delegated_frame_host_client) {
+    // Follow RWHVAura code that does not create DelegateFrameHost when there is
+    // no valid frame sink id.
+    if (!view->frame_sink_id_.is_valid())
+      return;
+
     view->delegated_frame_host_client_ = std::move(delegated_frame_host_client);
-    const bool enable_viz =
-        base::FeatureList::IsEnabled(features::kVizDisplayCompositor);
     view->delegated_frame_host_ = nullptr;
     view->delegated_frame_host_ = std::make_unique<DelegatedFrameHost>(
         view->frame_sink_id_, view->delegated_frame_host_client_.get(),
-        enable_viz, false /* should_register_frame_sink_id */);
+        false /* should_register_frame_sink_id */);
   }
 
   FakeRenderWidgetHostViewAura* CreateView(bool is_guest_view_hack) {
@@ -2230,15 +2231,22 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchpadFlingStartResetsWheelPhaseState) {
   EXPECT_EQ(15U, gesture_event->data.scroll_update.delta_y);
 
   // A GFS is received showing that the user has lifted their fingers. This will
-  // reset the scroll state of the wheel phase handler.
+  // reset the scroll state of the wheel phase handler. The velocity should be
+  // big enough to make sure that fling is still active while sending the scroll
+  // event.
   ui::ScrollEvent fling_start(ui::ET_SCROLL_FLING_START, gfx::Point(2, 2),
-                              ui::EventTimeForNow(), 0, 0, 10, 0, 10, 2);
+                              ui::EventTimeForNow(), 0, 0, 1000, 0, 1000, 2);
   view_->OnScrollEvent(&fling_start);
   base::RunLoop().RunUntilIdle();
 
   events = GetAndResetDispatchedMessages();
-  // A GFS with touchpad source won't get dispatched to the renderer.
-  EXPECT_EQ(0U, events.size());
+  // A GFS with touchpad source won't get dispatched to the renderer. However,
+  // since progressFling is called right away after processing the GFS, it is
+  // possible that a progress event is sent if the time delta between GFS
+  // timestamp and the time that it gets processed is large enough.
+  bool progress_event_sent = events.size();
+  if (progress_event_sent)
+    EXPECT_EQ("MouseWheel GestureScrollUpdate", GetMessageNames(events));
 
   // Handling the next ui::ET_SCROLL event will generate a GFC which resets the
   // phase state. The fling controller processes GFC and generates a wheel event
@@ -2248,13 +2256,12 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchpadFlingStartResetsWheelPhaseState) {
                           ui::EventTimeForNow(), 0, 0, 15, 0, 15, 2);
   view_->OnScrollEvent(&scroll2);
   base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(widget_host_->FlingCancellationIsDeferred());
   events = GetAndResetDispatchedMessages();
-  EXPECT_EQ("MouseWheel GestureScrollEnd MouseWheel", GetMessageNames(events));
+  EXPECT_EQ("MouseWheel", GetMessageNames(events));
   wheel_event = static_cast<const WebMouseWheelEvent*>(
       events[0]->ToEvent()->Event()->web_event.get());
-  EXPECT_EQ(WebMouseWheelEvent::kPhaseEnded, wheel_event->momentum_phase);
-  wheel_event = static_cast<const WebMouseWheelEvent*>(
-      events[2]->ToEvent()->Event()->web_event.get());
   EXPECT_EQ(WebMouseWheelEvent::kPhaseBegan, wheel_event->phase);
 }
 
@@ -3035,7 +3042,7 @@ viz::CompositorFrame MakeDelegatedFrame(float scale_factor,
 // This test verifies that returned resources do not require a pending ack.
 TEST_F(RenderWidgetHostViewAuraTest, ReturnedResources) {
   // TODO: fix for mash.
-  if (!features::IsAshInBrowserProcess())
+  if (features::IsUsingWindowService())
     return;
 
   gfx::Size view_size(100, 100);
@@ -3069,7 +3076,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
   // TODO(jonross): Delete this test once Viz launches as it will be obsolete.
   // https://crbug.com/844469
   if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
-      !features::IsAshInBrowserProcess()) {
+      features::IsUsingWindowService()) {
     return;
   }
 
@@ -3211,7 +3218,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ZeroSizeStillGetsLocalSurfaceId) {
 
 TEST_F(RenderWidgetHostViewAuraTest, BackgroundColorMatchesCompositorFrame) {
   // TODO: fix for mash.
-  if (!features::IsAshInBrowserProcess())
+  if (features::IsUsingWindowService())
     return;
 
   gfx::Size frame_size(100, 100);
@@ -3376,7 +3383,7 @@ TEST_F(RenderWidgetHostViewAuraTest, OutputSurfaceIdChange) {
   // TODO(jonross): Delete this test once Viz launches as it will be obsolete.
   // https://crbug.com/844469
   if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
-      !features::IsAshInBrowserProcess()) {
+      features::IsUsingWindowService()) {
     return;
   }
 
@@ -3436,6 +3443,10 @@ TEST_F(RenderWidgetHostViewAuraTest, OutputSurfaceIdChange) {
 // then the fallback is dropped.
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        DropFallbackWhenHidden) {
+  // Early out because DelegatedFrameHost is not used in mash.
+  if (features::IsUsingWindowService())
+    return;
+
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
@@ -3460,6 +3471,10 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 // This test verifies that the primary SurfaceId is populated on resize and
 // the fallback SurfaceId is populated in OnFirstSurfaceActivation.
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest, SurfaceChanges) {
+  // Early out because DelegatedFrameHost is not used in mash.
+  if (features::IsUsingWindowService())
+    return;
+
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
@@ -3477,7 +3492,7 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest, SurfaceChanges) {
   // Resizing should update the primary SurfaceId.
   view_->SetSize(gfx::Size(400, 400));
   EXPECT_EQ(gfx::Size(400, 400), view_->window_->layer()->size());
-  EXPECT_FALSE(view_->window_->layer()->GetFallbackSurfaceId()->is_valid());
+  EXPECT_EQ(nullptr, view_->window_->layer()->GetFallbackSurfaceId());
   EXPECT_EQ(gfx::Size(400, 400),
             view_->delegated_frame_host_->CurrentFrameSizeInDipForTesting());
 
@@ -3496,7 +3511,7 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest, SurfaceChanges) {
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        DeviceScaleFactorChanges) {
   // TODO: fix for mash.
-  if (!features::IsAshInBrowserProcess())
+  if (features::IsUsingWindowService())
     return;
 
   view_->InitAsChild(nullptr);
@@ -3509,7 +3524,7 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
   EXPECT_EQ(gfx::Size(300, 300), view_->window_->layer()->size());
   viz::SurfaceId initial_surface_id =
       *view_->window_->layer()->GetPrimarySurfaceId();
-  EXPECT_FALSE(view_->window_->layer()->GetFallbackSurfaceId()->is_valid());
+  EXPECT_EQ(nullptr, view_->window_->layer()->GetFallbackSurfaceId());
 
   // Resizing should update the primary SurfaceId.
   aura_test_helper_->test_screen()->SetDeviceScaleFactor(2.0f);
@@ -3526,7 +3541,7 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
   // TODO(jonross): Delete this test once Viz launches as it will be obsolete.
   // https://crbug.com/844469
   if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
-      !features::IsAshInBrowserProcess()) {
+      features::IsUsingWindowService()) {
     return;
   }
 
@@ -3560,6 +3575,10 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 // RenderWidgetHostViewAuraTest.DiscardDelegatedFrame.
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        DiscardDelegatedFrames) {
+  // Early out because DelegatedFrameHost is not used in mash.
+  if (features::IsUsingWindowService())
+    return;
+
   view_->InitAsChild(nullptr);
 
   size_t max_renderer_frames =
@@ -3696,6 +3715,10 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 }
 
 TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithLocking) {
+  // Early out because DelegatedFrameHost is not used in mash.
+  if (features::IsUsingWindowService())
+    return;
+
   view_->InitAsChild(nullptr);
 
   size_t max_renderer_frames =
@@ -3766,6 +3789,10 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithLocking) {
 // Test that changing the memory pressure should delete saved frames. This test
 // only applies to ChromeOS.
 TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
+  // Early out because DelegatedFrameHost is not used in mash.
+  if (features::IsUsingWindowService())
+    return;
+
   view_->InitAsChild(nullptr);
 
   // The test logic below relies on having max_renderer_frames > 2.  By default,
@@ -3870,7 +3897,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardsBeginFrameAcks) {
   // TODO(jonross): Delete this test once Viz launches as it will be obsolete.
   // https://crbug.com/844469
   if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
-      !features::IsAshInBrowserProcess()) {
+      features::IsUsingWindowService()) {
     return;
   }
 
@@ -4244,13 +4271,19 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
 
   // Send a fling start, but with a small velocity, the fling controller handles
   // GFS with touchpad source and the event doesn't get queued in gesture event
-  // queue. The overscroll state doesn't get reset till the first ProgressFling
-  // call.
+  // queue. The overscroll state doesn't get reset till the fling progress sends
+  // the fling end event.
   SimulateGestureFlingStartEvent(0.f, 0.1f, blink::kWebGestureDeviceTouchpad);
   events = GetAndResetDispatchedMessages();
-  EXPECT_EQ(0U, events.size());
-  EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
-  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
+  bool fling_end_event_sent_ = events.size();
+  if (fling_end_event_sent_) {
+    EXPECT_EQ("MouseWheel GestureScrollEnd", GetMessageNames(events));
+    EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+    EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
+  } else {
+    EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+    EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
+  }
 
   base::TimeTicks progress_time =
       base::TimeTicks::Now() + base::TimeDelta::FromMilliseconds(17);
@@ -5699,9 +5732,33 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardMouseEvent) {
   view_ = nullptr;
 }
 
+class TouchpadRenderWidgetHostViewAuraTest
+    : public RenderWidgetHostViewAuraTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  TouchpadRenderWidgetHostViewAuraTest() {
+    if (GetParam()) {
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kTouchpadAsyncPinchEvents);
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(
+          features::kTouchpadAsyncPinchEvents);
+    }
+  }
+  ~TouchpadRenderWidgetHostViewAuraTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+  DISALLOW_COPY_AND_ASSIGN(TouchpadRenderWidgetHostViewAuraTest);
+};
+
+INSTANTIATE_TEST_CASE_P(,
+                        TouchpadRenderWidgetHostViewAuraTest,
+                        testing::Bool());
+
 // Test that we elide touchpad pinch gesture steams consisting of only begin
 // and end events.
-TEST_F(RenderWidgetHostViewAuraTest, ElideEmptyTouchpadPinchSequence) {
+TEST_P(TouchpadRenderWidgetHostViewAuraTest, ElideEmptyTouchpadPinchSequence) {
   ui::GestureEventDetails begin_details(ui::ET_GESTURE_PINCH_BEGIN);
   begin_details.set_device_type(ui::GestureDeviceType::DEVICE_TOUCHPAD);
   ui::GestureEvent begin_event(0, 0, 0, ui::EventTimeForNow(), begin_details);
@@ -5740,7 +5797,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ElideEmptyTouchpadPinchSequence) {
   // Since we have not sent any GesturePinchUpdates by the time we get to the
   // end of the pinch, the GesturePinchBegin and GesturePinchEnd events should
   // be elided.
-  EXPECT_EQ(0U, events.size());
+  EXPECT_EQ("MouseWheel", GetMessageNames(events));
 }
 
 TEST_F(RenderWidgetHostViewAuraTest, GestureTapFromStylusHasPointerType) {
@@ -5781,7 +5838,7 @@ TEST_F(RenderWidgetHostViewAuraTest, HitTestRegionListSubmitted) {
   // TODO(jonross): Delete this test once Viz launches as it will be obsolete.
   // https://crbug.com/844469
   if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
-      !features::IsAshInBrowserProcess()) {
+      features::IsUsingWindowService()) {
     return;
   }
 
@@ -5823,7 +5880,7 @@ TEST_F(RenderWidgetHostViewAuraTest, HitTestRegionListSubmitted) {
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        NewContentRenderingTimeout) {
   // TODO: fix for mash.
-  if (!features::IsAshInBrowserProcess())
+  if (features::IsUsingWindowService())
     return;
 
   constexpr base::TimeDelta kTimeout = base::TimeDelta::FromMicroseconds(10);
@@ -5849,15 +5906,8 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
         FROM_HERE, run_loop.QuitClosure(), 2 * kTimeout);
     run_loop.Run();
   }
-  if (base::FeatureList::IsEnabled(features::kEnableSurfaceSynchronization)) {
-    // When using surface sync, the timer should not fire, because the surface
-    // id did not change.
-    EXPECT_FALSE(widget_host_->new_content_rendering_timeout_fired());
-  } else {
-    // When not using surface sync, the timer will fire because the source id
-    // changed.
-    EXPECT_TRUE(widget_host_->new_content_rendering_timeout_fired());
-  }
+
+  EXPECT_TRUE(widget_host_->new_content_rendering_timeout_fired());
   widget_host_->reset_new_content_rendering_timeout_fired();
 
   // Start the timer. Verify that a new LocalSurfaceId is allocated.
@@ -5879,29 +5929,13 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
   }
   EXPECT_TRUE(widget_host_->new_content_rendering_timeout_fired());
   widget_host_->reset_new_content_rendering_timeout_fired();
-
-  // Start the timer again. A new LocalSurfaceId should be allocated.
-  widget_host_->DidNavigate(10);
-  viz::LocalSurfaceId id3 = view_->GetLocalSurfaceId();
-  EXPECT_LT(id2.parent_sequence_number(), id3.parent_sequence_number());
-
-  // Submit to |id3|. Timer should not fire.
-  view_->delegated_frame_host_->OnFirstSurfaceActivation(viz::SurfaceInfo(
-      viz::SurfaceId(view_->GetFrameSinkId(), id3), 1, gfx::Size(20, 20)));
-  {
-    base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), 2 * kTimeout);
-    run_loop.Run();
-  }
-  EXPECT_FALSE(widget_host_->new_content_rendering_timeout_fired());
 }
 
 // If a tab is evicted, allocate a new LocalSurfaceId next time it's shown.
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        AllocateLocalSurfaceIdOnEviction) {
   // TODO: fix for mash.
-  if (!features::IsAshInBrowserProcess())
+  if (features::IsUsingWindowService())
     return;
 
   view_->InitAsChild(nullptr);
@@ -5923,6 +5957,10 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 // visible we show blank.
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        DropFallbackIfResizedWhileHidden) {
+  // Early out because DelegatedFrameHost is not used in mash.
+  if (features::IsUsingWindowService())
+    return;
+
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
@@ -5935,13 +5973,17 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
   view_->Hide();
   view_->SetSize(gfx::Size(54, 32));
   view_->Show();
-  EXPECT_FALSE(view_->window_->layer()->GetFallbackSurfaceId()->is_valid());
+  EXPECT_EQ(nullptr, view_->window_->layer()->GetFallbackSurfaceId());
 }
 
 // If a tab is hidden and shown without being resized in the meantime, the
 // fallback SurfaceId has to be preserved.
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        DontDropFallbackIfNotResizedWhileHidden) {
+  // Early out because DelegatedFrameHost is not used in mash.
+  if (features::IsUsingWindowService())
+    return;
+
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
@@ -5960,6 +6002,10 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 // background color from the previous view to the new view.
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        TakeFallbackContent) {
+  // Early out because DelegatedFrameHost is not used in mash.
+  if (features::IsUsingWindowService())
+    return;
+
   // Initialize the first view.
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
@@ -6735,11 +6781,26 @@ class RenderWidgetHostViewAuraKeyboardTest
 };
 
 TEST_F(RenderWidgetHostViewAuraKeyboardTest, KeyboardObserverDestroyed) {
+  parent_view_->SetLastPointerType(ui::EventPointerType::POINTER_TYPE_TOUCH);
   parent_view_->FocusedNodeTouched(true);
   EXPECT_NE(parent_view_->keyboard_observer_.get(), nullptr);
   EXPECT_EQ(keyboard_controller_observer_count(), 1u);
   // Detach the RenderWidgetHostViewAura from the IME.
   parent_view_->DetachFromInputMethod();
+  EXPECT_EQ(parent_view_->keyboard_observer_.get(), nullptr);
+  EXPECT_EQ(keyboard_controller_observer_count(), 0u);
+}
+
+TEST_F(RenderWidgetHostViewAuraKeyboardTest,
+       KeyboardObserverForOnlyTouchInput) {
+  // Show virtual keyboard for touch inputs.
+  parent_view_->SetLastPointerType(ui::EventPointerType::POINTER_TYPE_TOUCH);
+  parent_view_->FocusedNodeTouched(true);
+  EXPECT_NE(parent_view_->keyboard_observer_.get(), nullptr);
+  EXPECT_EQ(keyboard_controller_observer_count(), 1u);
+  // Do not show virtual keyboard for mouse inputs.
+  parent_view_->SetLastPointerType(ui::EventPointerType::POINTER_TYPE_MOUSE);
+  parent_view_->FocusedNodeTouched(true);
   EXPECT_EQ(parent_view_->keyboard_observer_.get(), nullptr);
   EXPECT_EQ(keyboard_controller_observer_count(), 0u);
 }

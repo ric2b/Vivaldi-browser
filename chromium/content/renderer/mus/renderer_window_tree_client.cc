@@ -32,7 +32,7 @@ base::LazyInstance<ConnectionMap>::Leaky g_connections =
 
 // static
 void RendererWindowTreeClient::CreateIfNecessary(int routing_id) {
-  if (features::IsAshInBrowserProcess() || Get(routing_id))
+  if (!features::IsUsingWindowService() || Get(routing_id))
     return;
   RendererWindowTreeClient* connection =
       new RendererWindowTreeClient(routing_id);
@@ -53,7 +53,7 @@ RendererWindowTreeClient* RendererWindowTreeClient::Get(int routing_id) {
 }
 
 void RendererWindowTreeClient::Bind(
-    ui::mojom::WindowTreeClientRequest request,
+    ws::mojom::WindowTreeClientRequest request,
     mojom::RenderWidgetWindowTreeClientRequest
         render_widget_window_tree_client_request) {
   // Bind() may be called multiple times.
@@ -175,7 +175,7 @@ void RendererWindowTreeClient::Embed(uint32_t frame_routing_id,
 
 void RendererWindowTreeClient::OnEmbedFromToken(
     const base::UnguessableToken& token,
-    ui::mojom::WindowDataPtr root,
+    ws::mojom::WindowDataPtr root,
     int64_t display_id,
     const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
   // Renderers don't use ScheduleEmbedForExistingClient(), so this path should
@@ -188,10 +188,10 @@ void RendererWindowTreeClient::DestroyFrame(uint32_t frame_routing_id) {
 }
 
 void RendererWindowTreeClient::OnEmbed(
-    ui::mojom::WindowDataPtr root,
-    ui::mojom::WindowTreePtr tree,
+    ws::mojom::WindowDataPtr root,
+    ws::mojom::WindowTreePtr tree,
     int64_t display_id,
-    ui::Id focused_window_id,
+    ws::Id focused_window_id,
     bool drawn,
     const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
   const bool is_reembed = tree_.is_bound();
@@ -220,24 +220,24 @@ void RendererWindowTreeClient::OnEmbed(
   }
 }
 
-void RendererWindowTreeClient::OnEmbeddedAppDisconnected(ui::Id window_id) {
+void RendererWindowTreeClient::OnEmbeddedAppDisconnected(ws::Id window_id) {
   // TODO(sad): Embedded mus-client (oopif) is gone. Figure out what to do.
 }
 
-void RendererWindowTreeClient::OnUnembed(ui::Id window_id) {
+void RendererWindowTreeClient::OnUnembed(ws::Id window_id) {
   // At this point all operations will fail. We don't delete this as it would
   // mean all consumers have to null check (as would MusEmbeddedFrames).
 }
 
-void RendererWindowTreeClient::OnCaptureChanged(ui::Id new_capture_window_id,
-                                                ui::Id old_capture_window_id) {}
+void RendererWindowTreeClient::OnCaptureChanged(ws::Id new_capture_window_id,
+                                                ws::Id old_capture_window_id) {}
 
 void RendererWindowTreeClient::OnFrameSinkIdAllocated(
-    ui::Id window_id,
+    ws::Id window_id,
     const viz::FrameSinkId& frame_sink_id) {
   // When mus is not hosting viz FrameSinkIds come from the browser, so we
   // ignore them here.
-  if (features::IsAshInBrowserProcess())
+  if (!features::IsUsingWindowService())
     return;
 
   for (MusEmbeddedFrame* embedded_frame : embedded_frames_) {
@@ -251,7 +251,7 @@ void RendererWindowTreeClient::OnFrameSinkIdAllocated(
 
 void RendererWindowTreeClient::OnTopLevelCreated(
     uint32_t change_id,
-    ui::mojom::WindowDataPtr data,
+    ws::mojom::WindowDataPtr data,
     int64_t display_id,
     bool drawn,
     const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
@@ -259,65 +259,58 @@ void RendererWindowTreeClient::OnTopLevelCreated(
 }
 
 void RendererWindowTreeClient::OnWindowBoundsChanged(
-    ui::Id window_id,
+    ws::Id window_id,
     const gfx::Rect& old_bounds,
     const gfx::Rect& new_bounds,
     const base::Optional<viz::LocalSurfaceId>& local_surface_id) {}
 
 void RendererWindowTreeClient::OnWindowTransformChanged(
-    ui::Id window_id,
+    ws::Id window_id,
     const gfx::Transform& old_transform,
     const gfx::Transform& new_transform) {}
 
-void RendererWindowTreeClient::OnClientAreaChanged(
-    ui::Id window_id,
-    const gfx::Insets& new_client_area,
-    const std::vector<gfx::Rect>& new_additional_client_areas) {}
-
 void RendererWindowTreeClient::OnTransientWindowAdded(
-    ui::Id window_id,
-    ui::Id transient_window_id) {}
+    ws::Id window_id,
+    ws::Id transient_window_id) {}
 
 void RendererWindowTreeClient::OnTransientWindowRemoved(
-    ui::Id window_id,
-    ui::Id transient_window_id) {}
+    ws::Id window_id,
+    ws::Id transient_window_id) {}
 
 void RendererWindowTreeClient::OnWindowHierarchyChanged(
-    ui::Id window_id,
-    ui::Id old_parent_id,
-    ui::Id new_parent_id,
-    std::vector<ui::mojom::WindowDataPtr> windows) {}
+    ws::Id window_id,
+    ws::Id old_parent_id,
+    ws::Id new_parent_id,
+    std::vector<ws::mojom::WindowDataPtr> windows) {}
 
 void RendererWindowTreeClient::OnWindowReordered(
-    ui::Id window_id,
-    ui::Id relative_window_id,
-    ui::mojom::OrderDirection direction) {}
+    ws::Id window_id,
+    ws::Id relative_window_id,
+    ws::mojom::OrderDirection direction) {}
 
-void RendererWindowTreeClient::OnWindowDeleted(ui::Id window_id) {
+void RendererWindowTreeClient::OnWindowDeleted(ws::Id window_id) {
   // See comments on OnUnembed() for why we do nothing here.
 }
 
-void RendererWindowTreeClient::OnWindowVisibilityChanged(ui::Id window_id,
+void RendererWindowTreeClient::OnWindowVisibilityChanged(ws::Id window_id,
                                                          bool visible) {}
 
-void RendererWindowTreeClient::OnWindowOpacityChanged(ui::Id window_id,
+void RendererWindowTreeClient::OnWindowOpacityChanged(ws::Id window_id,
                                                       float old_opacity,
                                                       float new_opacity) {}
 
-void RendererWindowTreeClient::OnWindowParentDrawnStateChanged(ui::Id window_id,
+void RendererWindowTreeClient::OnWindowParentDrawnStateChanged(ws::Id window_id,
                                                                bool drawn) {}
 
 void RendererWindowTreeClient::OnWindowSharedPropertyChanged(
-    ui::Id window_id,
+    ws::Id window_id,
     const std::string& name,
     const base::Optional<std::vector<uint8_t>>& new_data) {}
 
 void RendererWindowTreeClient::OnWindowInputEvent(
     uint32_t event_id,
-    ui::Id window_id,
+    ws::Id window_id,
     int64_t display_id,
-    ui::Id display_root_window_id,
-    const gfx::PointF& event_location_in_screen_pixel_layout,
     std::unique_ptr<ui::Event> event,
     bool matches_pointer_watcher) {
   NOTREACHED();
@@ -325,20 +318,20 @@ void RendererWindowTreeClient::OnWindowInputEvent(
 
 void RendererWindowTreeClient::OnPointerEventObserved(
     std::unique_ptr<ui::Event> event,
-    ui::Id window_id,
+    ws::Id window_id,
     int64_t display_id) {
   NOTREACHED();
 }
 
-void RendererWindowTreeClient::OnWindowFocused(ui::Id focused_window_id) {}
+void RendererWindowTreeClient::OnWindowFocused(ws::Id focused_window_id) {}
 
-void RendererWindowTreeClient::OnWindowCursorChanged(ui::Id window_id,
+void RendererWindowTreeClient::OnWindowCursorChanged(ws::Id window_id,
                                                      ui::CursorData cursor) {}
 
 void RendererWindowTreeClient::OnWindowSurfaceChanged(
-    ui::Id window_id,
+    ws::Id window_id,
     const viz::SurfaceInfo& surface_info) {
-  DCHECK(!features::IsAshInBrowserProcess());
+  DCHECK(features::IsUsingWindowService());
   for (MusEmbeddedFrame* embedded_frame : embedded_frames_) {
     if (embedded_frame->window_id_ == window_id) {
       embedded_frame->delegate_->OnMusEmbeddedFrameSurfaceChanged(surface_info);
@@ -350,21 +343,21 @@ void RendererWindowTreeClient::OnWindowSurfaceChanged(
 void RendererWindowTreeClient::OnDragDropStart(
     const base::flat_map<std::string, std::vector<uint8_t>>& mime_data) {}
 
-void RendererWindowTreeClient::OnDragEnter(ui::Id window_id,
+void RendererWindowTreeClient::OnDragEnter(ws::Id window_id,
                                            uint32_t event_flags,
                                            const gfx::Point& position,
                                            uint32_t effect_bitmask,
                                            OnDragEnterCallback callback) {}
 
-void RendererWindowTreeClient::OnDragOver(ui::Id window_id,
+void RendererWindowTreeClient::OnDragOver(ws::Id window_id,
                                           uint32_t event_flags,
                                           const gfx::Point& position,
                                           uint32_t effect_bitmask,
                                           OnDragOverCallback callback) {}
 
-void RendererWindowTreeClient::OnDragLeave(ui::Id window_id) {}
+void RendererWindowTreeClient::OnDragLeave(ws::Id window_id) {}
 
-void RendererWindowTreeClient::OnCompleteDrop(ui::Id window_id,
+void RendererWindowTreeClient::OnCompleteDrop(ws::Id window_id,
                                               uint32_t event_flags,
                                               const gfx::Point& position,
                                               uint32_t effect_bitmask,
@@ -378,6 +371,9 @@ void RendererWindowTreeClient::OnPerformDragDropCompleted(
 
 void RendererWindowTreeClient::OnDragDropDone() {}
 
+void RendererWindowTreeClient::OnTopmostWindowChanged(
+    const std::vector<ws::Id>& topmost_ids) {}
+
 void RendererWindowTreeClient::OnChangeCompleted(uint32_t change_id,
                                                  bool success) {
   // Don't DCHECK success, as it's possible we'll try to do some operations
@@ -386,14 +382,9 @@ void RendererWindowTreeClient::OnChangeCompleted(uint32_t change_id,
   // controls the visibility of the root frame).
 }
 
-void RendererWindowTreeClient::RequestClose(ui::Id window_id) {}
-
-void RendererWindowTreeClient::GetWindowManager(
-    mojo::AssociatedInterfaceRequest<ui::mojom::WindowManager> internal) {
-  NOTREACHED();
-}
+void RendererWindowTreeClient::RequestClose(ws::Id window_id) {}
 
 void RendererWindowTreeClient::GetScreenProviderObserver(
-    ui::mojom::ScreenProviderObserverAssociatedRequest observer) {}
+    ws::mojom::ScreenProviderObserverAssociatedRequest observer) {}
 
 }  // namespace content

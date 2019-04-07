@@ -164,7 +164,7 @@ void BaseUIManager::OnBlockingPageDone(
     if (!resource.callback.is_null()) {
       DCHECK(resource.callback_thread);
       resource.callback_thread->PostTask(
-          FROM_HERE, base::Bind(resource.callback, proceed));
+          FROM_HERE, base::BindOnce(resource.callback, proceed));
     }
 
     GURL whitelist_url = GetWhitelistUrl(
@@ -197,8 +197,8 @@ void BaseUIManager::DisplayBlockingPage(
              ThreatPatternType::MALWARE_LANDING)) {
       if (!resource.callback.is_null()) {
         DCHECK(resource.callback_thread);
-        resource.callback_thread->PostTask(FROM_HERE,
-                                           base::Bind(resource.callback, true));
+        resource.callback_thread->PostTask(
+            FROM_HERE, base::BindOnce(resource.callback, true));
       }
 
       return;
@@ -221,13 +221,16 @@ void BaseUIManager::DisplayBlockingPage(
   if (IsWhitelisted(resource)) {
     if (!resource.callback.is_null()) {
       DCHECK(resource.callback_thread);
-      resource.callback_thread->PostTask(FROM_HERE,
-                                         base::Bind(resource.callback, true));
+      resource.callback_thread->PostTask(
+          FROM_HERE, base::BindOnce(resource.callback, true));
     }
     return;
   }
 
-  if (resource.threat_type != SB_THREAT_TYPE_SAFE) {
+  if (resource.threat_type != SB_THREAT_TYPE_SAFE &&
+      resource.threat_type != SB_THREAT_TYPE_BILLING) {
+    // TODO(vakh): crbug/883462: The reports for SB_THREAT_TYPE_BILLING should
+    // be disabled for M70 but enabled for a later release (M71?).
     CreateAndSendHitReport(resource);
   }
 

@@ -7,12 +7,18 @@
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 
+namespace history {
+
 using base::Time;
 using base::TimeDelta;
 
-const int64_t ThumbnailScore::kUpdateThumbnailTimeDays = 1;
+// static
 const double ThumbnailScore::kThumbnailMaximumBoringness = 0.94;
+// static
+const TimeDelta ThumbnailScore::kUpdateThumbnailTime = TimeDelta::FromDays(1);
+// static
 const double ThumbnailScore::kThumbnailDegradePerHour = 0.01;
+// static
 const double ThumbnailScore::kTooWideAspectRatio = 2.0;
 
 // Calculates a numeric score from traits about where a snapshot was
@@ -139,11 +145,13 @@ bool ThumbnailScore::ShouldConsiderUpdating() {
     return true;
 
   const TimeDelta time_elapsed = Time::Now() - time_at_snapshot;
-  if (time_elapsed < TimeDelta::FromDays(kUpdateThumbnailTimeDays) &&
-      good_clipping && at_top && load_completed) {
+  if (time_elapsed < kUpdateThumbnailTime && good_clipping && at_top &&
+      load_completed) {
     // The current thumbnail is new and has good properties.
     return false;
   }
   // The current thumbnail should be updated.
   return true;
 }
+
+}  // namespace history

@@ -30,7 +30,6 @@
 #include "build/build_config.h"
 #include "content/child/child_thread_impl.h"
 #include "content/child/memory/child_memory_coordinator_impl.h"
-#include "content/common/associated_interface_registry_impl.h"
 #include "content/common/content_export.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/frame_replication_state.h"
@@ -58,8 +57,9 @@
 #include "services/service_manager/public/cpp/bind_source_info.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/viz/public/interfaces/compositing/compositing_mode_watcher.mojom.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/mojom/dom_storage/storage_partition_service.mojom.h"
-#include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
+#include "third_party/blink/public/platform/scheduler/web_rail_mode_observer.h"
 #include "third_party/blink/public/platform/web_connection_type.h"
 #include "third_party/blink/public/web/web_memory_statistics.h"
 #include "ui/gfx/native_widget_types.h"
@@ -93,10 +93,6 @@ class SyntheticBeginFrameSource;
 class TaskGraphRunner;
 }
 
-namespace device {
-class Gamepads;
-}
-
 namespace discardable_memory {
 class ClientDiscardableSharedMemoryManager;
 }
@@ -113,11 +109,6 @@ namespace media {
 class GpuVideoAcceleratorFactories;
 }
 
-namespace ui {
-class ContextProviderCommandBuffer;
-class Gpu;
-}
-
 namespace v8 {
 class Extension;
 }
@@ -128,6 +119,11 @@ class RasterContextProvider;
 class SyntheticBeginFrameSource;
 }
 
+namespace ws {
+class ContextProviderCommandBuffer;
+class Gpu;
+}  // namespace ws
+
 namespace content {
 
 class AppCacheDispatcher;
@@ -136,7 +132,6 @@ class AudioRendererMixerManager;
 class BrowserPluginManager;
 class CategorizedWorkerPool;
 class DomStorageDispatcher;
-class FileSystemDispatcher;
 class FrameSwapMessageQueue;
 class GpuVideoAcceleratorFactoriesImpl;
 class IndexedDBDispatcher;
@@ -172,18 +167,12 @@ class StreamTextureFactory;
 class CONTENT_EXPORT RenderThreadImpl
     : public RenderThread,
       public ChildThreadImpl,
-      public blink::scheduler::WebThreadScheduler::RAILModeObserver,
+      public blink::scheduler::WebRAILModeObserver,
       public base::MemoryCoordinatorClient,
       public mojom::Renderer,
       public viz::mojom::CompositingModeWatcher,
       public CompositorDependencies {
  public:
-  static RenderThreadImpl* Create(const InProcessChildThreadParams& params,
-                                  base::MessageLoop* unowned_message_loop);
-  static RenderThreadImpl* Create(
-      std::unique_ptr<base::MessageLoop> main_message_loop,
-      std::unique_ptr<blink::scheduler::WebThreadScheduler>
-          main_thread_scheduler);
   static RenderThreadImpl* current();
   static mojom::RenderMessageFilter* current_render_message_filter();
   static RendererBlinkPlatformImpl* current_blink_platform_impl();
@@ -197,6 +186,11 @@ class CONTENT_EXPORT RenderThreadImpl
   static scoped_refptr<base::SingleThreadTaskRunner>
   DeprecatedGetMainTaskRunner();
 
+  explicit RenderThreadImpl(
+      std::unique_ptr<blink::scheduler::WebThreadScheduler> scheduler);
+  RenderThreadImpl(
+      const InProcessChildThreadParams& params,
+      std::unique_ptr<blink::scheduler::WebThreadScheduler> scheduler);
   ~RenderThreadImpl() override;
   void Shutdown() override;
   bool ShouldBeDestroyed() override;
@@ -236,7 +230,6 @@ class CONTENT_EXPORT RenderThreadImpl
   blink::WebString GetUserAgent() const override;
 
   // IPC::Listener implementation via ChildThreadImpl:
-  bool OnMessageReceived(const IPC::Message& msg) override;
   void OnAssociatedInterfaceRequest(
       const std::string& name,
       mojo::ScopedInterfaceEndpointHandle handle) override;
@@ -267,7 +260,7 @@ class CONTENT_EXPORT RenderThreadImpl
 
   bool IsThreadedAnimationEnabled();
 
-  // blink::scheduler::WebThreadScheduler::RAILModeObserver implementation.
+  // blink::scheduler::WebRAILModeObserver implementation.
   void OnRAILModeChanged(v8::RAILMode rail_mode) override;
 
   // viz::mojom::CompositingModeWatcher implementation.
@@ -346,10 +339,6 @@ class CONTENT_EXPORT RenderThreadImpl
     return dom_storage_dispatcher_.get();
   }
 
-  FileSystemDispatcher* file_system_dispatcher() const {
-    return file_system_dispatcher_.get();
-  }
-
   MidiMessageFilter* midi_message_filter() {
     return midi_message_filter_.get();
   }
@@ -410,6 +399,13 @@ class CONTENT_EXPORT RenderThreadImpl
   // A TaskRunner instance that runs tasks on the raster worker pool.
   base::TaskRunner* GetWorkerTaskRunner();
 
+  // Creates a ContextProvider if yet created, and returns it to be used for
+  // video frame compositing. The ContextProvider given as an argument is
+  // one that has been lost, and is a hint to the RenderThreadImpl to clear
+  // it's |video_frame_compositor_context_provider_| if it matches.
+  scoped_refptr<viz::ContextProvider> GetVideoFrameCompositorContextProvider(
+      scoped_refptr<viz::ContextProvider>);
+
   // Returns a worker context provider that will be bound on the compositor
   // thread.
   scoped_refptr<viz::RasterContextProvider>
@@ -422,7 +418,7 @@ class CONTENT_EXPORT RenderThreadImpl
 
   media::GpuVideoAcceleratorFactories* GetGpuFactories();
 
-  scoped_refptr<ui::ContextProviderCommandBuffer>
+  scoped_refptr<ws::ContextProviderCommandBuffer>
   SharedMainThreadContextProvider();
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -494,9 +490,6 @@ class CONTENT_EXPORT RenderThreadImpl
     return &histogram_customizer_;
   }
 
-  // Retrieve current gamepad data.
-  void SampleGamepads(device::Gamepads* data);
-
   // Called by a RenderWidget when it is created or destroyed. This
   // allows the process to know when there are no visible widgets.
   void WidgetCreated();
@@ -534,15 +527,8 @@ class CONTENT_EXPORT RenderThreadImpl
   // Sets the current pipeline rendering color space.
   void SetRenderingColorSpace(const gfx::ColorSpace& color_space);
 
- protected:
-  RenderThreadImpl(
-      const InProcessChildThreadParams& params,
-      std::unique_ptr<blink::scheduler::WebThreadScheduler> scheduler,
-      const scoped_refptr<base::SingleThreadTaskRunner>& resource_task_queue,
-      base::MessageLoop* unowned_message_loop);
-  RenderThreadImpl(
-      std::unique_ptr<base::MessageLoop> main_message_loop,
-      std::unique_ptr<blink::scheduler::WebThreadScheduler> scheduler);
+  scoped_refptr<base::SingleThreadTaskRunner>
+  CreateVideoFrameCompositorTaskRunner();
 
  private:
   void OnProcessFinalRelease() override;
@@ -562,14 +548,9 @@ class CONTENT_EXPORT RenderThreadImpl
 
   void RecordPurgeMemory(RendererMemoryMetrics before);
 
-  void Init(
-      const scoped_refptr<base::SingleThreadTaskRunner>& resource_task_queue);
-
+  void Init();
   void InitializeCompositorThread();
-
-  void InitializeWebKit(
-      const scoped_refptr<base::SingleThreadTaskRunner>& resource_task_queue,
-      service_manager::BinderRegistry* registry);
+  void InitializeWebKit(service_manager::BinderRegistry* registry);
 
   void OnTransferBitmap(const SkBitmap& bitmap, int resource_id);
   void OnGetAccessibilityTree();
@@ -648,7 +629,6 @@ class CONTENT_EXPORT RenderThreadImpl
   std::unique_ptr<blink::scheduler::WebThreadScheduler> main_thread_scheduler_;
   std::unique_ptr<RendererBlinkPlatformImpl> blink_platform_impl_;
   std::unique_ptr<ResourceDispatcher> resource_dispatcher_;
-  std::unique_ptr<FileSystemDispatcher> file_system_dispatcher_;
   std::unique_ptr<URLLoaderThrottleProvider> url_loader_throttle_provider_;
 
   // Used on the renderer and IPC threads.
@@ -713,15 +693,6 @@ class CONTENT_EXPORT RenderThreadImpl
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_;
   scoped_refptr<gpu::GpuChannelHost> forced_gpu_channel_;
 
-  // The message loop of the renderer main thread.
-  // This message loop should be destructed before the RenderThreadImpl
-  // shuts down Blink.
-  // Some test users (e.g. InProcessRenderThread) own the MessageLoop used by
-  // their RenderThreadImpls. |main_message_loop_| is always non-nulll,
-  // |owned_message_loop_| is non-null if handed in at creation.
-  const std::unique_ptr<base::MessageLoop> owned_message_loop_;
-  base::MessageLoop* const main_message_loop_;
-
   // May be null if overridden by ContentRendererClient.
   std::unique_ptr<blink::scheduler::WebThreadBase> compositor_thread_;
 
@@ -738,6 +709,10 @@ class CONTENT_EXPORT RenderThreadImpl
   // regardless of whether |compositor_thread_| is overriden.
   scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
 
+  // Task to run the VideoFrameCompositor on.
+  scoped_refptr<base::SingleThreadTaskRunner>
+      video_frame_compositor_task_runner_;
+
   // Pool of workers used for raster operations (e.g., tile rasterization).
   scoped_refptr<CategorizedWorkerPool> categorized_worker_pool_;
 
@@ -745,9 +720,11 @@ class CONTENT_EXPORT RenderThreadImpl
   scoped_refptr<StreamTextureFactory> stream_texture_factory_;
 #endif
 
-  scoped_refptr<ui::ContextProviderCommandBuffer> shared_main_thread_contexts_;
+  scoped_refptr<ws::ContextProviderCommandBuffer> shared_main_thread_contexts_;
 
-  base::ObserverList<RenderThreadObserver> observers_;
+  base::ObserverList<RenderThreadObserver>::Unchecked observers_;
+
+  scoped_refptr<viz::ContextProvider> video_frame_compositor_context_provider_;
 
   scoped_refptr<viz::RasterContextProvider> shared_worker_context_provider_;
 
@@ -761,7 +738,7 @@ class CONTENT_EXPORT RenderThreadImpl
   // memory saving mode.
   std::unique_ptr<LowMemoryModeController> low_memory_mode_controller_;
 
-  std::unique_ptr<ui::Gpu> gpu_;
+  std::unique_ptr<ws::Gpu> gpu_;
 
   scoped_refptr<base::SingleThreadTaskRunner>
       main_thread_compositor_task_runner_;
@@ -812,7 +789,7 @@ class CONTENT_EXPORT RenderThreadImpl
   blink::mojom::StoragePartitionServicePtr storage_partition_service_;
   mojom::RendererHostAssociatedPtr renderer_host_;
 
-  AssociatedInterfaceRegistryImpl associated_interfaces_;
+  blink::AssociatedInterfaceRegistry associated_interfaces_;
 
   mojo::AssociatedBinding<mojom::Renderer> renderer_binding_;
 

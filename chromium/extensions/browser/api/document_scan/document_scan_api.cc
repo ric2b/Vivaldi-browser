@@ -5,7 +5,7 @@
 #include "extensions/browser/api/document_scan/document_scan_api.h"
 
 #include "base/stl_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_system.h"
 
@@ -30,7 +30,7 @@ DocumentScanScanFunction::~DocumentScanScanFunction() {}
 
 bool DocumentScanScanFunction::Prepare() {
   set_work_task_runner(base::CreateSequencedTaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::BACKGROUND}));
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT}));
   params_ = document_scan::Scan::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;

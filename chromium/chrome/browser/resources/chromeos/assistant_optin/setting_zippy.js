@@ -16,7 +16,17 @@ Polymer({
       value: false,
     },
 
-    noZippy: {
+    expandStyle: {
+      type: Boolean,
+      value: false,
+    },
+
+    toggleStyle: {
+      type: Boolean,
+      value: false,
+    },
+
+    popupStyle: {
       type: Boolean,
       value: false,
     },
@@ -38,8 +48,8 @@ Polymer({
           margin: 0;
         }
         #icon {
-          width: 24px;
-          height: 24px;
+          width: 20px;
+          height: 20px;
         }
       </style>
     <body><img id='icon' src="` +

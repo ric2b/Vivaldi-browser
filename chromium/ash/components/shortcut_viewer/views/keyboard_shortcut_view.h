@@ -10,9 +10,14 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/timer/timer.h"
 #include "ui/chromeos/search_box/search_box_view_delegate.h"
 #include "ui/views/widget/widget_delegate.h"
+
+namespace aura {
+class Window;
+}
 
 namespace base {
 class TimeTicks;
@@ -41,16 +46,23 @@ class KeyboardShortcutView : public views::WidgetDelegateView,
   // 3. Close the window if it is open and active.
   // |start_time| is the time of the user gesture that caused the window to
   // show. Used for metrics.
-  static views::Widget* Toggle(base::TimeTicks start_time);
+  // |context| is used to determine which display to place the Window on.
+  // |context| is only necessary when called from within Chrome.
+  // TODO: remove |context|, it's not needed once KeyboardShortcutView is only
+  // launched as an app.
+  static views::Widget* Toggle(base::TimeTicks start_time,
+                               aura::Window* context);
 
   // views::View:
   const char* GetClassName() const override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   void Layout() override;
   gfx::Size CalculatePreferredSize() const override;
+  void OnPaint(gfx::Canvas* canvas) override;
 
   // search_box::SearchBoxViewDelegate:
   void QueryChanged(search_box::SearchBoxViewBase* sender) override;
+  void AssistantButtonPressed() override {}
   void BackButtonPressed() override;
   void ActiveChanged(search_box::SearchBoxViewBase* sender) override;
 
@@ -63,7 +75,10 @@ class KeyboardShortcutView : public views::WidgetDelegateView,
 
   // Initialize |categories_tabbed_pane_| with category tabs and containers of
   // |shortcut_views_|, called on construction and when exiting search mode.
-  void InitCategoriesTabbedPane();
+  // If |initial_category| has value, we will initialize the specified category,
+  // otherwise all the categories will be intialized.
+  void InitCategoriesTabbedPane(
+      base::Optional<ShortcutCategory> initial_category);
 
   // Update views' layout based on search box status.
   void UpdateViewsLayout(bool is_search_box_active);
@@ -113,6 +128,15 @@ class KeyboardShortcutView : public views::WidgetDelegateView,
 
   // Debounce for search queries.
   base::OneShotTimer debounce_timer_;
+
+  // Ture if need to initialize all the categories.
+  // False if only initialize the first category.
+  bool needs_init_all_categories_ = false;
+  // Indicates if recieved the first OnPaint event. Used to schedule
+  // initialization of background panes in the following frame.
+  bool did_first_paint_ = false;
+
+  base::WeakPtrFactory<KeyboardShortcutView> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(KeyboardShortcutView);
 };

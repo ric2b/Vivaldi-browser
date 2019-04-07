@@ -110,6 +110,23 @@ bool IsAddingUsernameToExistingMatch(
          match->second->password_value == credentials.password_value;
 }
 
+// Helper functions for character type classification. The built-in functions
+// depend on locale, platform and other stuff. To make the output more
+// predictable, the function are re-implemented here.
+bool IsNumeric(int c) {
+  return '0' <= c && c <= '9';
+}
+bool IsLowercaseLetter(int c) {
+  return 'a' <= c && c <= 'z';
+}
+bool IsUppercaseLetter(int c) {
+  return 'A' <= c && c <= 'Z';
+}
+bool IsSpecialSymbol(int c) {
+  return ('!' <= c && c <= '/') || (':' <= c && c <= '@') ||
+         ('[' <= c && c <= '`') || ('{' <= c && c <= '~');
+}
+
 }  // namespace
 
 VotesUploader::VotesUploader(PasswordManagerClient* client,
@@ -137,7 +154,7 @@ void VotesUploader::SendVotesOnSave(
     // values. Fill username field value with username to allow AutofillManager
     // to detect username autofill type.
     form_data.fields[0].value = pending_credentials->username_value;
-    SendSignInVote(form_data);
+    SendSignInVote(form_data, submitted_form.submission_event);
   }
 
   if (pending_credentials->times_used == 1 ||
@@ -219,6 +236,11 @@ bool VotesUploader::UploadPasswordVote(
   if (!has_autofill_vote && !has_password_generation_vote)
     return false;
 
+  if (form_to_upload.form_data.fields.empty()) {
+    // List of fields may be empty in tests.
+    return false;
+  }
+
   AutofillManager* autofill_manager = client_->GetAutofillManagerForMainFrame();
   if (!autofill_manager || !autofill_manager->download_manager())
     return false;
@@ -227,10 +249,7 @@ bool VotesUploader::UploadPasswordVote(
   // re-uses credentials, a vote about the saved form is sent. If the user saves
   // credentials, the observed and pending forms are the same.
   FormStructure form_structure(form_to_upload.form_data);
-  if (!autofill_manager->ShouldUploadForm(form_structure)) {
-    UMA_HISTOGRAM_BOOLEAN("PasswordGeneration.UploadStarted", false);
-    return false;
-  }
+  form_structure.set_submission_event(submitted_form.submission_event);
 
   ServerFieldTypeSet available_field_types;
   // A map from field names to field types.
@@ -262,8 +281,6 @@ bool VotesUploader::UploadPasswordVote(
     if (autofill_type != autofill::ACCOUNT_CREATION_PASSWORD) {
       if (generation_popup_was_shown_)
         AddGeneratedVote(&form_structure);
-      if (form_classifier_outcome_ != kNoOutcome)
-        AddFormClassifierVote(&form_structure);
       if (has_username_edited_vote_) {
         field_types[form_to_upload.username_element] = autofill::USERNAME;
         username_vote_type = AutofillUploadContents::Field::USERNAME_EDITED;
@@ -319,9 +336,13 @@ void VotesUploader::UploadFirstLoginVotes(
   if (!autofill_manager || !autofill_manager->download_manager())
     return;
 
-  FormStructure form_structure(form_to_upload.form_data);
-  if (!autofill_manager->ShouldUploadForm(form_structure))
+  if (form_to_upload.form_data.fields.empty()) {
+    // List of fields may be empty in tests.
     return;
+  }
+
+  FormStructure form_structure(form_to_upload.form_data);
+  form_structure.set_submission_event(form_to_upload.submission_event);
 
   FieldTypeMap field_types = {
       {form_to_upload.username_element, autofill::USERNAME}};
@@ -351,13 +372,15 @@ void VotesUploader::UploadFirstLoginVotes(
       std::string(), true /* observed_submission */);
 }
 
-void VotesUploader::SendSignInVote(const FormData& form_data) {
+void VotesUploader::SendSignInVote(
+    const FormData& form_data,
+    const PasswordForm::SubmissionIndicatorEvent& submission_event) {
   AutofillManager* autofill_manager = client_->GetAutofillManagerForMainFrame();
   if (!autofill_manager)
     return;
   std::unique_ptr<FormStructure> form_structure(new FormStructure(form_data));
+  form_structure->set_submission_event(submission_event);
   form_structure->set_is_signin_upload(true);
-  DCHECK(form_structure->ShouldBeUploaded());
   DCHECK_EQ(2u, form_structure->field_count());
   form_structure->field(1)->set_possible_types({autofill::PASSWORD});
   autofill_manager->MaybeStartVoteUploadProcess(std::move(form_structure),
@@ -408,23 +431,6 @@ void VotesUploader::AddGeneratedVote(FormStructure* form_structure) {
   }
 }
 
-void VotesUploader::AddFormClassifierVote(FormStructure* form_structure) {
-  DCHECK(form_structure);
-  DCHECK(form_classifier_outcome_ != kNoOutcome);
-
-  for (size_t i = 0; i < form_structure->field_count(); ++i) {
-    AutofillField* field = form_structure->field(i);
-    if (form_classifier_outcome_ == kFoundGenerationElement &&
-        field->name == generation_element_detected_by_classifier_) {
-      field->set_form_classifier_outcome(
-          AutofillUploadContents::Field::GENERATION_ELEMENT);
-    } else {
-      field->set_form_classifier_outcome(
-          AutofillUploadContents::Field::NON_GENERATION_ELEMENT);
-    }
-  }
-}
-
 void VotesUploader::SetKnownValueFlag(
     const PasswordForm& pending_credentials,
     const std::map<base::string16, const PasswordForm*>& best_matches,
@@ -449,13 +455,6 @@ void VotesUploader::SetKnownValueFlag(
       field->properties_mask |= autofill::FieldPropertiesFlags::KNOWN_VALUE;
     }
   }
-}
-
-void VotesUploader::SaveGenerationFieldDetectedByClassifier(
-    const base::string16& generation_field) {
-  form_classifier_outcome_ =
-      generation_field.empty() ? kNoGenerationElement : kFoundGenerationElement;
-  generation_element_detected_by_classifier_ = generation_field;
 }
 
 bool VotesUploader::FindUsernameInOtherPossibleUsernames(
@@ -498,26 +497,32 @@ bool VotesUploader::FindCorrectedUsernameElement(
 void VotesUploader::GeneratePasswordAttributesVote(
     const base::string16& password_value,
     FormStructure* form_structure) {
+  // Don't crowdsource password attributes for non-ascii passwords.
+  for (const auto& e : password_value)
+    if (!(IsUppercaseLetter(e) || IsLowercaseLetter(e) || IsNumeric(e) ||
+          IsSpecialSymbol(e)))
+      return;
+
   // Select a character class attribute to upload.
   int bucket = base::RandGenerator(9);
-  int (*predicate)(int c) = nullptr;
+  bool (*predicate)(int c) = nullptr;
   autofill::PasswordAttribute character_class_attribute =
       autofill::PasswordAttribute::kHasSpecialSymbol;
   if (bucket == 0) {
-    predicate = &islower;
+    predicate = &IsLowercaseLetter;
     character_class_attribute =
         autofill::PasswordAttribute::kHasLowercaseLetter;
   } else if (bucket == 1) {
-    predicate = &isupper;
+    predicate = &IsUppercaseLetter;
     character_class_attribute =
         autofill::PasswordAttribute::kHasUppercaseLetter;
   } else if (bucket == 2) {
-    predicate = &isdigit;
+    predicate = &IsNumeric;
     character_class_attribute = autofill::PasswordAttribute::kHasNumeric;
   } else {  //  3 <= bucket < 9
     // Upload symbols more often as 2/3rd of issues are because of missing
     // special symbols.
-    predicate = &ispunct;
+    predicate = &IsSpecialSymbol;
     character_class_attribute = autofill::PasswordAttribute::kHasSpecialSymbol;
   }
   bool actual_value_for_character_class =

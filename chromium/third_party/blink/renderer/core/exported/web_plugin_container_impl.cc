@@ -92,6 +92,8 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/scrolling/scrolling_coordinator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
+#include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_response.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
@@ -101,8 +103,6 @@
 #include "third_party/blink/renderer/platform/graphics/paint/foreign_layer_display_item.h"
 #include "third_party/blink/renderer/platform/keyboard_codes.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_animator_base.h"
-#include "third_party/blink/renderer/platform/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 
 namespace blink {
@@ -246,28 +246,28 @@ void WebPluginContainerImpl::Hide() {
   web_plugin_->UpdateVisibility(false);
 }
 
-void WebPluginContainerImpl::HandleEvent(Event* event) {
+void WebPluginContainerImpl::HandleEvent(Event& event) {
   // The events we pass are defined at:
   //    http://devedge-temp.mozilla.org/library/manuals/2002/plugin/1.0/structures5.html#1000000
   // Don't take the documentation as truth, however.  There are many cases
   // where mozilla behaves differently than the spec.
-  if (event->IsMouseEvent())
+  if (event.IsMouseEvent())
     HandleMouseEvent(ToMouseEvent(event));
-  else if (event->IsWheelEvent())
+  else if (event.IsWheelEvent())
     HandleWheelEvent(ToWheelEvent(event));
-  else if (event->IsKeyboardEvent())
+  else if (event.IsKeyboardEvent())
     HandleKeyboardEvent(ToKeyboardEvent(event));
-  else if (event->IsTouchEvent())
+  else if (event.IsTouchEvent())
     HandleTouchEvent(ToTouchEvent(event));
-  else if (event->IsGestureEvent())
+  else if (event.IsGestureEvent())
     HandleGestureEvent(ToGestureEvent(event));
-  else if (event->IsDragEvent() && web_plugin_->CanProcessDrag())
+  else if (event.IsDragEvent() && web_plugin_->CanProcessDrag())
     HandleDragEvent(ToDragEvent(event));
 
   // FIXME: it would be cleaner if EmbeddedContentView::HandleEvent returned
   // true/false and HTMLPluginElement called SetDefaultHandled or
   // DefaultEventHandler.
-  if (!event->DefaultHandled())
+  if (!event.DefaultHandled())
     element_->Node::DefaultEventHandler(event);
 }
 
@@ -310,8 +310,30 @@ void WebPluginContainerImpl::SetPlugin(WebPlugin* plugin) {
 void WebPluginContainerImpl::UsePluginAsFindHandler() {
   WebLocalFrameImpl* frame =
       WebLocalFrameImpl::FromFrame(element_->GetDocument().GetFrame());
-  if (frame)
-    frame->GetFindInPage()->SetPluginFindHandler(this);
+  if (!frame)
+    return;
+  frame->GetFindInPage()->SetPluginFindHandler(this);
+}
+
+void WebPluginContainerImpl::ReportFindInPageMatchCount(int identifier,
+                                                        int total,
+                                                        bool final_update) {
+  WebLocalFrameImpl* frame =
+      WebLocalFrameImpl::FromFrame(element_->GetDocument().GetFrame());
+  if (!frame)
+    return;
+  frame->GetFindInPage()->ReportFindInPageMatchCount(identifier, total,
+                                                     final_update);
+}
+
+void WebPluginContainerImpl::ReportFindInPageSelection(int identifier,
+                                                       int index) {
+  WebLocalFrameImpl* frame =
+      WebLocalFrameImpl::FromFrame(element_->GetDocument().GetFrame());
+  if (!frame)
+    return;
+  frame->GetFindInPage()->ReportFindInPageSelection(
+      identifier, index, blink::WebRect(), false /* final_update */);
 }
 
 float WebPluginContainerImpl::DeviceScaleFactor() {
@@ -453,14 +475,14 @@ void WebPluginContainerImpl::DispatchProgressEvent(const WebString& type,
     event = ResourceProgressEvent::Create(type, length_computable, loaded,
                                           total, url);
   }
-  element_->DispatchEvent(event);
+  element_->DispatchEvent(*event);
 }
 
 void WebPluginContainerImpl::EnqueueMessageEvent(
     const WebDOMMessageEvent& event) {
   if (!element_->GetExecutionContext())
     return;
-  element_->EnqueueEvent(event, TaskType::kInternalDefault);
+  element_->EnqueueEvent(*event, TaskType::kInternalDefault);
 }
 
 void WebPluginContainerImpl::Invalidate() {
@@ -786,7 +808,7 @@ void WebPluginContainerImpl::Trace(blink::Visitor* visitor) {
   ContextClient::Trace(visitor);
 }
 
-void WebPluginContainerImpl::HandleMouseEvent(MouseEvent* event) {
+void WebPluginContainerImpl::HandleMouseEvent(MouseEvent& event) {
   // We cache the parent LocalFrameView here as the plugin widget could be
   // deleted in the call to HandleEvent. See http://b/issue?id=1362948
   LocalFrameView& parent = ParentFrameView();
@@ -794,18 +816,18 @@ void WebPluginContainerImpl::HandleMouseEvent(MouseEvent* event) {
   // TODO(dtapuska): Move WebMouseEventBuilder into the anonymous namespace
   // in this class.
   WebMouseEventBuilder transformed_event(&parent, element_->GetLayoutObject(),
-                                         *event);
+                                         event);
   if (transformed_event.GetType() == WebInputEvent::kUndefined)
     return;
 
-  if (event->type() == EventTypeNames::mousedown)
+  if (event.type() == EventTypeNames::mousedown)
     FocusPlugin();
 
   WebCursorInfo cursor_info;
   if (web_plugin_ && web_plugin_->HandleInputEvent(
                          WebCoalescedInputEvent(transformed_event),
                          cursor_info) != WebInputEventResult::kNotHandled)
-    event->SetDefaultHandled();
+    event.SetDefaultHandled();
 
   // A windowless plugin can change the cursor in response to a mouse move
   // event.  We need to reflect the changed cursor in the frame view as the
@@ -817,61 +839,61 @@ void WebPluginContainerImpl::HandleMouseEvent(MouseEvent* event) {
       cursor_info, &parent.GetFrame().LocalFrameRoot());
 }
 
-void WebPluginContainerImpl::HandleDragEvent(MouseEvent* event) {
-  DCHECK(event->IsDragEvent());
+void WebPluginContainerImpl::HandleDragEvent(MouseEvent& event) {
+  DCHECK(event.IsDragEvent());
 
   WebDragStatus drag_status = kWebDragStatusUnknown;
-  if (event->type() == EventTypeNames::dragenter)
+  if (event.type() == EventTypeNames::dragenter)
     drag_status = kWebDragStatusEnter;
-  else if (event->type() == EventTypeNames::dragleave)
+  else if (event.type() == EventTypeNames::dragleave)
     drag_status = kWebDragStatusLeave;
-  else if (event->type() == EventTypeNames::dragover)
+  else if (event.type() == EventTypeNames::dragover)
     drag_status = kWebDragStatusOver;
-  else if (event->type() == EventTypeNames::drop)
+  else if (event.type() == EventTypeNames::drop)
     drag_status = kWebDragStatusDrop;
 
   if (drag_status == kWebDragStatusUnknown)
     return;
 
-  DataTransfer* data_transfer = event->getDataTransfer();
+  DataTransfer* data_transfer = event.getDataTransfer();
   WebDragData drag_data = data_transfer->GetDataObject()->ToWebDragData();
   WebDragOperationsMask drag_operation_mask =
       static_cast<WebDragOperationsMask>(data_transfer->SourceOperation());
-  WebFloatPoint drag_screen_location(event->screenX(), event->screenY());
+  WebFloatPoint drag_screen_location(event.screenX(), event.screenY());
   IntPoint location(FrameRect().Location());
-  WebFloatPoint drag_location(event->AbsoluteLocation().X() - location.X(),
-                              event->AbsoluteLocation().Y() - location.Y());
+  WebFloatPoint drag_location(event.AbsoluteLocation().X() - location.X(),
+                              event.AbsoluteLocation().Y() - location.Y());
 
   web_plugin_->HandleDragStatusUpdate(drag_status, drag_data,
                                       drag_operation_mask, drag_location,
                                       drag_screen_location);
 }
 
-void WebPluginContainerImpl::HandleWheelEvent(WheelEvent* event) {
-  WebFloatPoint absolute_location = event->NativeEvent().PositionInRootFrame();
+void WebPluginContainerImpl::HandleWheelEvent(WheelEvent& event) {
+  WebFloatPoint absolute_location = event.NativeEvent().PositionInRootFrame();
 
   // Translate the root frame position to content coordinates.
   absolute_location = ParentFrameView().ConvertFromRootFrame(absolute_location);
 
   FloatPoint local_point = element_->GetLayoutObject()->AbsoluteToLocal(
       absolute_location, kUseTransforms);
-  WebMouseWheelEvent translated_event = event->NativeEvent().FlattenTransform();
+  WebMouseWheelEvent translated_event = event.NativeEvent().FlattenTransform();
   translated_event.SetPositionInWidget(local_point.X(), local_point.Y());
 
   WebCursorInfo cursor_info;
   if (web_plugin_->HandleInputEvent(WebCoalescedInputEvent(translated_event),
                                     cursor_info) !=
       WebInputEventResult::kNotHandled)
-    event->SetDefaultHandled();
+    event.SetDefaultHandled();
 }
 
-void WebPluginContainerImpl::HandleKeyboardEvent(KeyboardEvent* event) {
-  WebKeyboardEventBuilder web_event(*event);
+void WebPluginContainerImpl::HandleKeyboardEvent(KeyboardEvent& event) {
+  WebKeyboardEventBuilder web_event(event);
   if (web_event.GetType() == WebInputEvent::kUndefined)
     return;
 
   if (HandleCutCopyPasteKeyboardEvent(web_event)) {
-    event->SetDefaultHandled();
+    event.SetDefaultHandled();
     return;
   }
 
@@ -885,7 +907,7 @@ void WebPluginContainerImpl::HandleKeyboardEvent(KeyboardEvent* event) {
   if (web_plugin_->HandleInputEvent(WebCoalescedInputEvent(web_event),
                                     cursor_info) !=
       WebInputEventResult::kNotHandled) {
-    event->SetDefaultHandled();
+    event.SetDefaultHandled();
   }
 }
 
@@ -967,25 +989,25 @@ WebCoalescedInputEvent WebPluginContainerImpl::TransformCoalescedTouchEvent(
   return transformed_event;
 }
 
-void WebPluginContainerImpl::HandleTouchEvent(TouchEvent* event) {
+void WebPluginContainerImpl::HandleTouchEvent(TouchEvent& event) {
   switch (touch_event_request_type_) {
     case kTouchEventRequestTypeNone:
       return;
     case kTouchEventRequestTypeRaw:
     case kTouchEventRequestTypeRawLowLatency: {
-      if (!event->NativeEvent())
+      if (!event.NativeEvent())
         return;
 
-      if (event->type() == EventTypeNames::touchstart)
+      if (event.type() == EventTypeNames::touchstart)
         FocusPlugin();
 
       WebCoalescedInputEvent transformed_event =
-          TransformCoalescedTouchEvent(*event->NativeEvent());
+          TransformCoalescedTouchEvent(*event.NativeEvent());
 
       WebCursorInfo cursor_info;
       if (web_plugin_->HandleInputEvent(transformed_event, cursor_info) !=
           WebInputEventResult::kNotHandled)
-        event->SetDefaultHandled();
+        event.SetDefaultHandled();
       // FIXME: Can a plugin change the cursor from a touch-event callback?
       return;
     }
@@ -995,17 +1017,17 @@ void WebPluginContainerImpl::HandleTouchEvent(TouchEvent* event) {
   }
 }
 
-void WebPluginContainerImpl::HandleGestureEvent(GestureEvent* event) {
-  if (event->NativeEvent().GetType() == WebInputEvent::kUndefined)
+void WebPluginContainerImpl::HandleGestureEvent(GestureEvent& event) {
+  if (event.NativeEvent().GetType() == WebInputEvent::kUndefined)
     return;
-  if (event->NativeEvent().GetType() == WebInputEvent::kGestureTapDown)
+  if (event.NativeEvent().GetType() == WebInputEvent::kGestureTapDown)
     FocusPlugin();
 
   // Take a copy of the event and translate it into the coordinate
   // system of the plugin.
-  WebGestureEvent translated_event = event->NativeEvent();
+  WebGestureEvent translated_event = event.NativeEvent();
   WebFloatPoint absolute_root_frame_location =
-      event->NativeEvent().PositionInRootFrame();
+      event.NativeEvent().PositionInRootFrame();
   FloatPoint local_point = element_->GetLayoutObject()->AbsoluteToLocal(
       absolute_root_frame_location, kUseTransforms);
   translated_event.FlattenTransform();
@@ -1015,16 +1037,16 @@ void WebPluginContainerImpl::HandleGestureEvent(GestureEvent* event) {
   if (web_plugin_->HandleInputEvent(WebCoalescedInputEvent(translated_event),
                                     cursor_info) !=
       WebInputEventResult::kNotHandled) {
-    event->SetDefaultHandled();
+    event.SetDefaultHandled();
     return;
   }
 
   // FIXME: Can a plugin change the cursor from a touch-event callback?
 }
 
-void WebPluginContainerImpl::SynthesizeMouseEventIfPossible(TouchEvent* event) {
+void WebPluginContainerImpl::SynthesizeMouseEventIfPossible(TouchEvent& event) {
   WebMouseEventBuilder web_event(&ParentFrameView(),
-                                 element_->GetLayoutObject(), *event);
+                                 element_->GetLayoutObject(), event);
   if (web_event.GetType() == WebInputEvent::kUndefined)
     return;
 
@@ -1032,7 +1054,7 @@ void WebPluginContainerImpl::SynthesizeMouseEventIfPossible(TouchEvent* event) {
   if (web_plugin_->HandleInputEvent(WebCoalescedInputEvent(web_event),
                                     cursor_info) !=
       WebInputEventResult::kNotHandled)
-    event->SetDefaultHandled();
+    event.SetDefaultHandled();
 }
 
 void WebPluginContainerImpl::FocusPlugin() {
@@ -1064,7 +1086,7 @@ void WebPluginContainerImpl::ComputeClipRectsForPlugin(
   // the containing view space, and rounded off.  See
   // LayoutEmbeddedContent::UpdateGeometry. To remove the lossy effect of
   // rounding off, use contentBoxRect directly.
-  LayoutRect unclipped_absolute_rect(box->ContentBoxRect());
+  LayoutRect unclipped_absolute_rect(box->PhysicalContentBoxRect());
   box->MapToVisualRectInAncestorSpace(root_view, unclipped_absolute_rect);
   unclipped_absolute_rect =
       box->View()->GetFrameView()->DocumentToFrame(unclipped_absolute_rect);

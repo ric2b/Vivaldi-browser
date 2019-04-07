@@ -10,7 +10,9 @@
 #include "base/optional.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
+#include "components/autofill/core/browser/payments/payments_customer_data.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/signin/core/browser/account_info.h"
 
 namespace autofill {
 
@@ -50,6 +52,8 @@ class TestPersonalDataManager : public PersonalDataManager {
   std::string CountryCodeForCurrentTimezone() const override;
   void ClearAllLocalData() override;
   bool IsDataLoaded() const override;
+  bool IsSyncFeatureEnabled() const override;
+  AccountInfo GetAccountInfoForPaymentsServer() const override;
 
   // Unique to TestPersonalDataManager:
 
@@ -100,6 +104,17 @@ class TestPersonalDataManager : public PersonalDataManager {
     autofill_wallet_import_enabled_ = autofill_wallet_import_enabled;
   }
 
+  void SetPaymentsCustomerData(
+      std::unique_ptr<PaymentsCustomerData> customer_data) {
+    payments_customer_data_ = std::move(customer_data);
+  }
+
+  void SetSyncFeatureEnabled(bool enabled) { sync_feature_enabled_ = enabled; }
+
+  void SetAccountInfoForPayments(const AccountInfo& account_info) {
+    account_info_ = account_info;
+  }
+
  private:
   std::string timezone_country_code_;
   std::string default_country_code_;
@@ -109,6 +124,8 @@ class TestPersonalDataManager : public PersonalDataManager {
   base::Optional<bool> autofill_profile_enabled_;
   base::Optional<bool> autofill_credit_card_enabled_;
   base::Optional<bool> autofill_wallet_import_enabled_;
+  bool sync_feature_enabled_;
+  AccountInfo account_info_;
 
   DISALLOW_COPY_AND_ASSIGN(TestPersonalDataManager);
 };

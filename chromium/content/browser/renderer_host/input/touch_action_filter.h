@@ -9,6 +9,7 @@
 #include "base/optional.h"
 #include "cc/input/touch_action.h"
 #include "content/common/content_export.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 
 namespace blink {
 class WebGestureEvent;
@@ -30,6 +31,7 @@ enum class FilterGestureEventResult {
 class CONTENT_EXPORT TouchActionFilter {
  public:
   TouchActionFilter();
+  ~TouchActionFilter();
 
   // Returns kFilterGestureEventFiltered if the supplied gesture event should be
   // dropped based on the current touch-action state. Otherwise returns
@@ -65,6 +67,11 @@ class CONTENT_EXPORT TouchActionFilter {
 
   void OnHasTouchEventHandlers(bool has_handlers);
 
+  void SetActiveTouchInProgress(bool active_touch_in_progress);
+
+  // Debugging only.
+  void AppendToGestureSequenceForDebugging(const char* str);
+
  private:
   friend class MockRenderWidgetHost;
   friend class TouchActionFilterTest;
@@ -91,13 +98,17 @@ class CONTENT_EXPORT TouchActionFilter {
   bool force_enable_zoom_;
 
   // Indicates whether this page has touch event handler or not. Set by
-  // InputRouterImpl::OnHasTouchEventHandler.
-  // TODO(https://crbug.com/850238): default to true or make it Optional.
+  // InputRouterImpl::OnHasTouchEventHandlers. Default to false because one
+  // could not scroll anyways when there is no content, and this is consistent
+  // with the default state committed after DocumentLoader::DidCommitNavigation.
   bool has_touch_event_handler_ = false;
 
-  // True if an active touch scroll gesture is in progress. i.e. after GSB and
+  // True if an active gesture sequence is in progress. i.e. after GTD and
   // before GSE.
-  bool touchscreen_scroll_in_progress_ = false;
+  bool gesture_sequence_in_progress_ = false;
+
+  // True at touch start and false at touch end.
+  bool active_touch_in_progress_ = false;
 
   // What touch actions are currently permitted.
   base::Optional<cc::TouchAction> allowed_touch_action_;
@@ -110,6 +121,9 @@ class CONTENT_EXPORT TouchActionFilter {
 
   // Whitelisted touch action received from the compositor.
   base::Optional<cc::TouchAction> white_listed_touch_action_;
+
+  // Debugging only.
+  std::string gesture_sequence_;
 
   DISALLOW_COPY_AND_ASSIGN(TouchActionFilter);
 };

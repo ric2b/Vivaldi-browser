@@ -28,7 +28,6 @@
 #include "ui/display/manager/display_manager_export.h"
 #include "ui/display/manager/display_manager_utilities.h"
 #include "ui/display/manager/managed_display_info.h"
-#include "ui/display/mojo/dev_display_controller.mojom.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/unified_desktop_utils.h"
 
@@ -148,11 +147,6 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
     return current_unified_desktop_matrix_;
   }
 
-  // Sets controller used to add/remove fake displays. If this is set then
-  // AddRemoveDisplay() will delegate out to |dev_display_controller_| instead
-  // of adding/removing a ManagedDisplayInfo.
-  void SetDevDisplayController(mojom::DevDisplayControllerPtr controller);
-
   // Initializes displays using command line flag. Returns false if no command
   // line flag was provided.
   bool InitFromCommandLine();
@@ -203,10 +197,6 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   void SetDisplayRotation(int64_t display_id,
                           Display::Rotation rotation,
                           Display::RotationSource source);
-
-  // Resets the UI scale of the display with |display_id| to the one defined in
-  // the default mode.
-  bool ResetDisplayToDefaultMode(int64_t display_id);
 
   // Sets the external display's configuration, including resolution change,
   // ui-scale change, and device scale factor change. Returns true if it changes
@@ -474,16 +464,10 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // test scenario.
   void UpdateInternalManagedDisplayModeListForTest();
 
-  // Zoom the internal display.
-  bool ZoomInternalDisplay(bool up);
-
   // Zooms the display identified by |display_id| by increasing or decreasing
   // its zoom factor value by 1 unit. Zooming in will have no effect on the
   // display if it is already at its maximum zoom. Vice versa for zooming out.
   bool ZoomDisplay(int64_t display_id, bool up);
-
-  // Reset the internal display zoom.
-  void ResetInternalDisplayZoom();
 
   // Resets the zoom value to 1 for the display identified by |display_id|.
   void ResetDisplayZoom(int64_t display_id);
@@ -671,9 +655,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   base::Closure created_mirror_window_;
 
-  base::ObserverList<DisplayObserver> observers_;
-
-  display::mojom::DevDisplayControllerPtr dev_display_controller_;
+  base::ObserverList<DisplayObserver>::Unchecked observers_;
 
   // Not empty if mixed mirror mode should be turned on (the specified source
   // display is mirrored to the specified destination displays). Empty if mixed

@@ -185,10 +185,6 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
                              std::make_unique<base::ListValue>());
 #endif
 
-#if defined(OS_ANDROID)
-  registry->RegisterBooleanPref(prefs::kDevToolsRemoteEnabled, false);
-#endif
-
   registry->RegisterBooleanPref(prefs::kDataSaverEnabled, false);
   data_reduction_proxy::RegisterSyncableProfilePrefs(registry);
 
@@ -257,9 +253,11 @@ bool Profile::ShouldPersistSessionCookies() {
   return false;
 }
 
-network::mojom::NetworkContextPtr Profile::CreateMainNetworkContext() {
+network::mojom::NetworkContextPtr Profile::CreateNetworkContext(
+    bool in_memory,
+    const base::FilePath& relative_partition_path) {
   return ProfileNetworkContextServiceFactory::GetForContext(this)
-      ->CreateMainNetworkContext();
+      ->CreateNetworkContext(in_memory, relative_partition_path);
 }
 
 bool Profile::IsNewProfile() {
@@ -273,7 +271,12 @@ bool Profile::IsNewProfile() {
 
 bool Profile::IsSyncAllowed() {
   if (ProfileSyncServiceFactory::HasProfileSyncService(this)) {
-    return ProfileSyncServiceFactory::GetForProfile(this)->IsSyncAllowed();
+    browser_sync::ProfileSyncService* sync_service =
+        ProfileSyncServiceFactory::GetForProfile(this);
+    return !sync_service->HasDisableReason(
+               syncer::SyncService::DISABLE_REASON_PLATFORM_OVERRIDE) &&
+           !sync_service->HasDisableReason(
+               syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
   }
 
   // No ProfileSyncService created yet - we don't want to create one, so just

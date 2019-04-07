@@ -21,31 +21,39 @@
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_mask.h"
-#include "ui/views/bubble/bubble_dialog_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/style/platform_style.h"
 
+namespace {
+
+bool ActivateButtonOnSpaceDown() {
+  return views::PlatformStyle::kKeyClickActionOnSpace ==
+         views::Button::KeyClickAction::CLICK_ON_KEY_PRESS;
+}
+
+}  // namespace
+
 void PageActionIconView::Init() {
-  AddChildView(image_);
-  image_->set_can_process_events_within_subtree(false);
-  image_->EnableCanvasFlippingForRTLUI(true);
+  AddChildView(image());
+  image()->set_can_process_events_within_subtree(false);
+  image()->EnableCanvasFlippingForRTLUI(true);
   SetInkDropMode(InkDropMode::ON);
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 }
 
 PageActionIconView::PageActionIconView(CommandUpdater* command_updater,
                                        int command_id,
-                                       PageActionIconView::Delegate* delegate)
-    : widget_observer_(this),
-      image_(new views::ImageView()),
+                                       PageActionIconView::Delegate* delegate,
+                                       const gfx::FontList& font_list)
+    : IconLabelBubbleView(font_list),
+      widget_observer_(this),
       icon_size_(GetLayoutConstant(LOCATION_BAR_ICON_SIZE)),
       command_updater_(command_updater),
       delegate_(delegate),
       command_id_(command_id),
       active_(false),
       suppress_mouse_released_action_(false) {
-  if (views::PlatformStyle::kPreferFocusRings)
-    focus_ring_ = views::FocusRing::Install(this);
   SetBorder(views::CreateEmptyBorder(
       GetLayoutInsets(LOCATION_BAR_ICON_INTERIOR_PADDING)));
   if (ui::MaterialDesignController::IsNewerMaterialUi()) {
@@ -63,18 +71,16 @@ bool PageActionIconView::IsBubbleShowing() const {
   return GetBubble() != nullptr;
 }
 
+SkColor PageActionIconView::GetTextColor() const {
+  // Returns the color of the label shown during animation.
+  return GetNativeTheme()->GetSystemColor(
+      ui::NativeTheme::kColorId_LabelDisabledColor);
+}
+
 bool PageActionIconView::SetCommandEnabled(bool enabled) const {
   DCHECK(command_updater_);
   command_updater_->UpdateCommandEnabled(command_id_, enabled);
   return command_updater_->IsCommandEnabled(command_id_);
-}
-
-void PageActionIconView::SetImage(const gfx::ImageSkia* image_skia) {
-  image_->SetImage(image_skia);
-}
-
-const gfx::ImageSkia& PageActionIconView::GetImage() const {
-  return image_->GetImage();
 }
 
 void PageActionIconView::SetHighlighted(bool bubble_visible) {
@@ -105,25 +111,6 @@ bool PageActionIconView::GetTooltipText(const gfx::Point& p,
     return false;
   *tooltip = GetTextForTooltipAndAccessibleName();
   return true;
-}
-
-gfx::Size PageActionIconView::CalculatePreferredSize() const {
-  gfx::Size image_rect(image_->GetPreferredSize());
-  image_rect.Enlarge(GetInsets().width(), GetInsets().height());
-  return image_rect;
-}
-
-void PageActionIconView::Layout() {
-  image_->SetBoundsRect(GetContentsBounds());
-  if (focus_ring_) {
-    focus_ring_->Layout();
-    if (LocationBarView::IsRounded()) {
-      SkPath path;
-      const float radius = height() / 2.f;
-      path.addRoundRect(gfx::RectToSkRect(GetLocalBounds()), radius, radius);
-      focus_ring_->SetPath(path);
-    }
-  }
 }
 
 bool PageActionIconView::OnMousePressed(const ui::MouseEvent& event) {
@@ -163,15 +150,18 @@ bool PageActionIconView::OnKeyPressed(const ui::KeyEvent& event) {
     return false;
 
   AnimateInkDrop(views::InkDropState::ACTIVATED, nullptr /* &event */);
-  // As with Button, return activates on key down and space activates on
-  // key up.
-  if (event.key_code() == ui::VKEY_RETURN)
+  // This behavior is duplicated from Button: on some platforms buttons activate
+  // on VKEY_SPACE keydown, and on some platforms they activate on VKEY_SPACE
+  // keyup. All platforms activate buttons on VKEY_RETURN keydown though.
+  if (ActivateButtonOnSpaceDown() || event.key_code() == ui::VKEY_RETURN)
     ExecuteCommand(EXECUTE_SOURCE_KEYBOARD);
   return true;
 }
 
 bool PageActionIconView::OnKeyReleased(const ui::KeyEvent& event) {
-  if (event.key_code() != ui::VKEY_SPACE)
+  // If buttons activate on VKEY_SPACE keydown, don't re-execute the command on
+  // keyup.
+  if (event.key_code() != ui::VKEY_SPACE || ActivateButtonOnSpaceDown())
     return false;
 
   ExecuteCommand(EXECUTE_SOURCE_KEYBOARD);
@@ -194,20 +184,20 @@ void PageActionIconView::OnThemeChanged() {
 }
 
 void PageActionIconView::AddInkDropLayer(ui::Layer* ink_drop_layer) {
-  image_->SetPaintToLayer();
-  image_->layer()->SetFillsBoundsOpaquely(false);
-  views::InkDropHostView::AddInkDropLayer(ink_drop_layer);
+  image()->SetPaintToLayer();
+  image()->layer()->SetFillsBoundsOpaquely(false);
+  IconLabelBubbleView::AddInkDropLayer(ink_drop_layer);
 }
 
 void PageActionIconView::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
-  views::InkDropHostView::RemoveInkDropLayer(ink_drop_layer);
-  image_->DestroyLayer();
+  IconLabelBubbleView::RemoveInkDropLayer(ink_drop_layer);
+  image()->DestroyLayer();
 }
 
 std::unique_ptr<views::InkDrop> PageActionIconView::CreateInkDrop() {
   std::unique_ptr<views::InkDropImpl> ink_drop =
       CreateDefaultFloodFillInkDropImpl();
-  ink_drop->SetShowHighlightOnFocus(!views::PlatformStyle::kPreferFocusRings);
+  ink_drop->SetShowHighlightOnFocus(!focus_ring());
   return std::move(ink_drop);
 }
 
@@ -267,7 +257,7 @@ void PageActionIconView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   views::BubbleDialogDelegateView* bubble = GetBubble();
   if (bubble)
     bubble->OnAnchorBoundsChanged();
-  InkDropHostView::OnBoundsChanged(previous_bounds);
+  IconLabelBubbleView::OnBoundsChanged(previous_bounds);
 }
 
 void PageActionIconView::SetIconColor(SkColor icon_color) {
@@ -281,8 +271,7 @@ void PageActionIconView::UpdateIconImage() {
                            ? theme->GetSystemColor(
                                  ui::NativeTheme::kColorId_ProminentButtonColor)
                            : icon_color_;
-  image_->SetImage(
-      gfx::CreateVectorIcon(GetVectorIcon(), icon_size_, icon_color));
+  SetImage(gfx::CreateVectorIcon(GetVectorIcon(), icon_size_, icon_color));
 }
 
 void PageActionIconView::SetActiveInternal(bool active) {

@@ -143,8 +143,9 @@ CrxInstaller::CrxInstaller(base::WeakPtr<ExtensionService> service_weak,
     approved_ = true;
     expected_manifest_check_level_ = approval->manifest_check_level;
     if (expected_manifest_check_level_ !=
-        WebstoreInstaller::MANIFEST_CHECK_LEVEL_NONE)
-      expected_manifest_.reset(approval->manifest->DeepCopy());
+        WebstoreInstaller::MANIFEST_CHECK_LEVEL_NONE) {
+      expected_manifest_ = approval->manifest->CreateDeepCopy();
+    }
     expected_id_ = approval->extension_id;
   }
   if (approval->minimum_version.get())
@@ -293,8 +294,9 @@ void CrxInstaller::UpdateExtensionFromUnpackedCrx(
 
 void CrxInstaller::ConvertWebAppOnFileThread(
     const WebApplicationInfo& web_app) {
-  scoped_refptr<Extension> extension(ConvertWebAppToExtension(
-      web_app, base::Time::Now(), install_directory_));
+  scoped_refptr<Extension> extension(
+      ConvertWebAppToExtension(web_app, base::Time::Now(), install_directory_,
+                               creation_flags_, install_source_));
   if (!extension.get()) {
     // Validation should have stopped any potential errors before getting here.
     NOTREACHED() << "Could not convert web app to extension.";

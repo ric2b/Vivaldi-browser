@@ -9,12 +9,10 @@
 #include "ash/login/ui/login_test_base.h"
 #include "ash/login/ui/login_test_utils.h"
 #include "ash/login/ui/login_user_view.h"
-#include "ash/strings/grit/ash_strings.h"
 #include "base/bind_helpers.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -53,6 +51,11 @@ class LoginAuthUserViewUnittest : public LoginTestBase {
     SetWidget(CreateWidgetWithContent(container_));
   }
 
+  void SetAuthMethods(uint32_t auth_methods) {
+    bool can_use_pin = (auth_methods & LoginAuthUserView::AUTH_PIN) != 0;
+    view_->SetAuthMethods(auth_methods, can_use_pin);
+  }
+
   mojom::LoginUserInfoPtr user_;
   views::View* container_ = nullptr;   // Owned by test widget view hierarchy.
   LoginAuthUserView* view_ = nullptr;  // Owned by test widget view hierarchy.
@@ -66,7 +69,7 @@ class LoginAuthUserViewUnittest : public LoginTestBase {
 // Verifies showing the PIN keyboard makes the user view grow.
 TEST_F(LoginAuthUserViewUnittest, ShowingPinExpandsView) {
   gfx::Size start_size = view_->size();
-  view_->SetAuthMethods(LoginAuthUserView::AUTH_PIN);
+  SetAuthMethods(LoginAuthUserView::AUTH_PIN);
   container_->Layout();
   gfx::Size expanded_size = view_->size();
   EXPECT_GT(expanded_size.height(), start_size.height());
@@ -86,11 +89,11 @@ TEST_F(LoginAuthUserViewUnittest, ShowingPasswordForcesOpaque) {
   EXPECT_FALSE(auth_test.user_view()->HasFocus());
 
   // If the user view is showing a password it must be opaque.
-  view_->SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD);
+  SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD);
   EXPECT_TRUE(user_test.is_opaque());
-  view_->SetAuthMethods(LoginAuthUserView::AUTH_NONE);
+  SetAuthMethods(LoginAuthUserView::AUTH_NONE);
   EXPECT_FALSE(user_test.is_opaque());
-  view_->SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD);
+  SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD);
   EXPECT_TRUE(user_test.is_opaque());
 }
 
@@ -103,7 +106,6 @@ TEST_F(LoginAuthUserViewUnittest, PressReturnWithTapToUnlockEnabled) {
 
   LoginAuthUserView::TestApi test_auth_user_view(view_);
   LoginPasswordView* password_view(test_auth_user_view.password_view());
-  LoginPasswordView::TestApi test_password_view(password_view);
   LoginUserView* user_view(test_auth_user_view.user_view());
 
   SetUserCount(1);
@@ -111,19 +113,12 @@ TEST_F(LoginAuthUserViewUnittest, PressReturnWithTapToUnlockEnabled) {
   EXPECT_CALL(
       *client,
       AttemptUnlock(user_view->current_user()->basic_user_info->account_id));
-  view_->SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD |
-                        LoginAuthUserView::AUTH_TAP);
+  SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD |
+                 LoginAuthUserView::AUTH_TAP);
   password_view->Clear();
 
   generator->PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
   base::RunLoop().RunUntilIdle();
-
-  // Verify the "Signing in" placeholder text was set.
-  base::string16 placeholder =
-      test_password_view.textfield()->GetPlaceholderText();
-  base::string16 expected_placeholder = l10n_util::GetStringUTF16(
-      IDS_ASH_LOGIN_POD_PASSWORD_SIGNING_IN_PLACEHOLDER);
-  EXPECT_EQ(expected_placeholder, placeholder);
 }
 
 TEST_F(LoginAuthUserViewUnittest, OnlineSignInMessage) {
@@ -137,7 +132,7 @@ TEST_F(LoginAuthUserViewUnittest, OnlineSignInMessage) {
 
   // When auth method is |AUTH_ONLINE_SIGN_IN|, the online sign-in message is
   // visible. The password field and PIN keyboard are invisible.
-  view_->SetAuthMethods(LoginAuthUserView::AUTH_ONLINE_SIGN_IN);
+  SetAuthMethods(LoginAuthUserView::AUTH_ONLINE_SIGN_IN);
   EXPECT_TRUE(online_sign_in_message->visible());
   EXPECT_FALSE(password_view->visible());
   EXPECT_FALSE(pin_view->visible());
@@ -154,13 +149,13 @@ TEST_F(LoginAuthUserViewUnittest, OnlineSignInMessage) {
   base::RunLoop().RunUntilIdle();
 
   // The online sign-in message is invisible for all other auth methods.
-  view_->SetAuthMethods(LoginAuthUserView::AUTH_NONE);
+  SetAuthMethods(LoginAuthUserView::AUTH_NONE);
   EXPECT_FALSE(online_sign_in_message->visible());
-  view_->SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD);
+  SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD);
   EXPECT_FALSE(online_sign_in_message->visible());
-  view_->SetAuthMethods(LoginAuthUserView::AUTH_PIN);
+  SetAuthMethods(LoginAuthUserView::AUTH_PIN);
   EXPECT_FALSE(online_sign_in_message->visible());
-  view_->SetAuthMethods(LoginAuthUserView::AUTH_TAP);
+  SetAuthMethods(LoginAuthUserView::AUTH_TAP);
   EXPECT_FALSE(online_sign_in_message->visible());
 }
 
@@ -173,20 +168,20 @@ TEST_F(LoginAuthUserViewUnittest,
   };
 
   // Set a password.
-  view_->SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD);
+  SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD);
   password_test.textfield()->SetText(base::ASCIIToUTF16("Hello"));
 
   // Enable some other auth method (PIN), password is not cleared.
   view_->CaptureStateForAnimationPreLayout();
-  view_->SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD |
-                        LoginAuthUserView::AUTH_PIN);
+  SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD |
+                 LoginAuthUserView::AUTH_PIN);
   EXPECT_TRUE(has_password());
   view_->ApplyAnimationPostLayout();
   EXPECT_TRUE(has_password());
 
   // Disable password, password is cleared.
   view_->CaptureStateForAnimationPreLayout();
-  view_->SetAuthMethods(LoginAuthUserView::AUTH_NONE);
+  SetAuthMethods(LoginAuthUserView::AUTH_NONE);
   EXPECT_TRUE(has_password());
   view_->ApplyAnimationPostLayout();
   EXPECT_FALSE(has_password());

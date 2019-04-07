@@ -17,22 +17,12 @@ ShellDelegateImpl::ShellDelegateImpl() = default;
 
 ShellDelegateImpl::~ShellDelegateImpl() = default;
 
-::service_manager::Connector* ShellDelegateImpl::GetShellConnector() const {
-  return nullptr;
-}
-
 bool ShellDelegateImpl::CanShowWindowForUser(aura::Window* window) const {
   return true;
 }
 
-void ShellDelegateImpl::PreInit() {}
-
 std::unique_ptr<keyboard::KeyboardUI> ShellDelegateImpl::CreateKeyboardUI() {
   return std::make_unique<TestKeyboardUI>();
-}
-
-NetworkingConfigDelegate* ShellDelegateImpl::GetNetworkingConfigDelegate() {
-  return nullptr;
 }
 
 std::unique_ptr<ash::ScreenshotDelegate>
@@ -44,7 +34,7 @@ AccessibilityDelegate* ShellDelegateImpl::CreateAccessibilityDelegate() {
   return new DefaultAccessibilityDelegate;
 }
 
-ui::InputDeviceControllerClient*
+ws::InputDeviceControllerClient*
 ShellDelegateImpl::GetInputDeviceControllerClient() {
   return nullptr;
 }

@@ -92,7 +92,9 @@ class CloseMessageSendingRenderViewVisitor : public RenderViewVisitor {
     // releasing the internal reference counts and destroying the internal
     // state.
     ViewMsg_Close msg(render_view->GetRoutingID());
-    static_cast<RenderViewImpl*>(render_view)->OnMessageReceived(msg);
+    RenderWidget* render_widget =
+        static_cast<RenderViewImpl*>(render_view)->GetWidget();
+    render_widget->OnMessageReceived(msg);
     return true;
   }
 
@@ -192,7 +194,7 @@ bool RenderViewTest::ExecuteJavaScriptAndReturnIntValue(
     return false;
 
   if (int_result)
-    *int_result = result->Int32Value();
+    *int_result = result.As<v8::Int32>()->Value();
 
   return true;
 }
@@ -207,7 +209,7 @@ bool RenderViewTest::ExecuteJavaScriptAndReturnNumberValue(
     return false;
 
   if (number_result)
-    *number_result = result->NumberValue();
+    *number_result = result.As<v8::Number>()->Value();
 
   return true;
 }
@@ -215,10 +217,8 @@ bool RenderViewTest::ExecuteJavaScriptAndReturnNumberValue(
 void RenderViewTest::LoadHTML(const char* html) {
   std::string url_string = "data:text/html;charset=utf-8,";
   url_string.append(net::EscapeQueryParamValue(html, false));
-  GURL url(url_string);
-  WebURLRequest request(url);
-  request.SetCheckForBrowserSideNavigation(false);
-  GetMainFrame()->StartNavigation(request);
+  GetMainFrame()->LoadHTMLString(std::string(html),
+                                 blink::WebURL(GURL(url_string)));
   // The load actually happens asynchronously, so we pump messages to process
   // the pending continuation.
   FrameLoadWaiter(view_->GetMainRenderFrame()).Wait();
@@ -275,7 +275,8 @@ void RenderViewTest::SetUp() {
   // Blink needs to be initialized before calling CreateContentRendererClient()
   // because it uses blink internally.
   blink_platform_impl_.Initialize();
-  blink::Initialize(blink_platform_impl_.Get(), &binder_registry_);
+  blink::Initialize(blink_platform_impl_.Get(), &binder_registry_,
+                    blink_platform_impl_.Get()->CurrentThread());
 
   content_client_.reset(CreateContentClient());
   content_browser_client_.reset(CreateContentBrowserClient());
@@ -372,12 +373,12 @@ void RenderViewTest::TearDown() {
   view_ = nullptr;
   mock_process_.reset();
 
-  RenderThreadImpl::SetRendererBlinkPlatformImplForTesting(nullptr);
-
   // After telling the view to close and resetting mock_process_ we may get
   // some new tasks which need to be processed before shutting down WebKit
   // (http://crbug.com/21508).
   base::RunLoop().RunUntilIdle();
+
+  RenderThreadImpl::SetRendererBlinkPlatformImplForTesting(nullptr);
 
 #if defined(OS_WIN)
   ClearDWriteFontProxySenderForTesting();
@@ -487,7 +488,7 @@ gfx::Rect RenderViewTest::GetElementBounds(const std::string& element_id) {
     v8::Local<v8::Value> value = array->Get(index);
     if (value.IsEmpty() || !value->IsInt32())
       return gfx::Rect();
-    coords.push_back(value->Int32Value());
+    coords.push_back(value.As<v8::Int32>()->Value());
   }
   return gfx::Rect(coords[0], coords[1], coords[2], coords[3]);
 }
@@ -665,7 +666,7 @@ void RenderViewTest::OnSameDocumentNavigation(blink::WebLocalFrame* frame,
 
 blink::WebWidget* RenderViewTest::GetWebWidget() {
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
-  return impl->GetWebWidget();
+  return impl->GetWidget()->GetWebWidget();
 }
 
 ContentClient* RenderViewTest::CreateContentClient() {

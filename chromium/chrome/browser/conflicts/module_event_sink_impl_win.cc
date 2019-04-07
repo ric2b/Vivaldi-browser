@@ -16,7 +16,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/conflicts/module_database_win.h"
 #include "chrome/common/conflicts/module_watcher_win.h"
 #include "content/public/browser/browser_thread.h"
@@ -166,7 +166,7 @@ void ModuleEventSinkImpl::OnModuleEvent(mojom::ModuleEventType event_type,
   // Handle the event on a background sequence.
   base::PostTaskWithTraits(
       FROM_HERE,
-      {base::TaskPriority::BACKGROUND,
+      {base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN, base::MayBlock()},
       base::BindOnce(&HandleModuleEvent, module_database_, process_.Duplicate(),
                      process_type_, event_type, load_address));

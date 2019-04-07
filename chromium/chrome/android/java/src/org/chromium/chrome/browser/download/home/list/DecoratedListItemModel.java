@@ -10,7 +10,11 @@ import org.chromium.chrome.browser.download.home.list.ListItem.ViewListItem;
 import org.chromium.chrome.browser.modelutil.ListObservable;
 import org.chromium.chrome.browser.modelutil.ListObservable.ListObserver;
 import org.chromium.chrome.browser.modelutil.ListObservableImpl;
+import org.chromium.chrome.browser.modelutil.PropertyModel;
 import org.chromium.chrome.browser.modelutil.SimpleList;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A wrapper class that adds decoration {@link ListItem}s to a {@link ListItemModel}.
@@ -20,7 +24,7 @@ class DecoratedListItemModel
         extends ListObservableImpl<Void> implements ListObserver<Void>, SimpleList<ListItem> {
     private final ListItemModel mModel;
 
-    private ViewListItem mHeaderItem;
+    private final List<ViewListItem> mHeaderItems = new ArrayList<>();
 
     /** Creates a {@link DecoratedListItemModel} instance that wraos {@code model}. */
     public DecoratedListItemModel(ListItemModel model) {
@@ -29,35 +33,26 @@ class DecoratedListItemModel
     }
 
     /** @see ListItemModel#getProperties() */
-    public ListPropertyModel getProperties() {
+    public PropertyModel getProperties() {
         return mModel.getProperties();
     }
 
-    /** Adds {@code item} as a header for the list.  Clears the header if it is {@code null}. */
-    public void setHeader(ViewListItem item) {
-        if (mHeaderItem == item) return;
-
-        ViewListItem oldHeaderItem = mHeaderItem;
-        mHeaderItem = item;
-
-        if (oldHeaderItem != null && item == null) {
-            notifyItemRemoved(0);
-        } else if (oldHeaderItem == null && item != null) {
-            notifyItemInserted(0);
-        } else {
-            notifyItemRangeChanged(0, 1);
-        }
+    /** Adds {@code item} as a header for the list. */
+    public void addHeader(ViewListItem item) {
+        int index = mHeaderItems.size();
+        mHeaderItems.add(item);
+        notifyItemInserted(index);
     }
 
     // SimpleList implementation.
     @Override
     public int size() {
-        return mModel.size() + (mHeaderItem == null ? 0 : 1);
+        return mModel.size() + mHeaderItems.size();
     }
 
     @Override
     public ListItem get(int index) {
-        if (index == 0 && mHeaderItem != null) return mHeaderItem;
+        if (index < mHeaderItems.size()) return mHeaderItems.get(index);
         return mModel.get(convertIndexForSource(index));
     }
 
@@ -80,10 +75,10 @@ class DecoratedListItemModel
     }
 
     private int convertIndexForSource(int index) {
-        return mHeaderItem == null ? index : index - 1;
+        return index - mHeaderItems.size();
     }
 
     private int convertIndexFromSource(int index) {
-        return mHeaderItem == null ? index : index + 1;
+        return index + mHeaderItems.size();
     }
 }

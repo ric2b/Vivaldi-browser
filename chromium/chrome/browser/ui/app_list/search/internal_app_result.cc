@@ -8,6 +8,7 @@
 
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/favicon/large_icon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_context_menu.h"
@@ -22,11 +23,26 @@
 
 namespace app_list {
 
+namespace {
+
+void RecordShowHistogram(InternalAppName name) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "Apps.AppListSearchResultInternalApp.Show", name);
+}
+
+void RecordOpenHistogram(InternalAppName name) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "Apps.AppListSearchResultInternalApp.Open", name);
+}
+
+}  // namespace
+
 InternalAppResult::InternalAppResult(Profile* profile,
                                      const std::string& app_id,
                                      AppListControllerDelegate* controller,
                                      bool is_recommendation)
-    : AppResult(profile, app_id, controller, is_recommendation) {
+    : AppResult(profile, app_id, controller, is_recommendation),
+      weak_factory_(this) {
   set_id(app_id);
   SetResultType(ResultType::kInternalApp);
   SetIcon(GetIconForResourceId(
@@ -38,6 +54,8 @@ InternalAppResult::InternalAppResult(Profile* profile,
         LargeIconServiceFactory::GetForBrowserContext(profile);
     UpdateContinueReadingFavicon(/*continue_to_google_server=*/true);
   }
+
+  RecordShowHistogram(GetInternalAppNameByAppId(app_id));
 }
 
 InternalAppResult::~InternalAppResult() = default;
@@ -50,6 +68,8 @@ void InternalAppResult::Open(int event_flags) {
   // Record the search metric if the result is not a suggested app.
   if (display_type() != DisplayType::kRecommendation)
     RecordHistogram(APP_SEARCH_RESULT);
+
+  RecordOpenHistogram(GetInternalAppNameByAppId(id()));
 
   if (id() == kInternalAppIdContinueReading &&
       url_for_continuous_reading_.is_valid()) {
@@ -82,7 +102,8 @@ void InternalAppResult::UpdateContinueReadingFavicon(
         url_for_continuous_reading_, min_source_size_in_pixel,
         desired_size_in_pixel,
         base::BindRepeating(&InternalAppResult::OnGetFaviconFromCacheFinished,
-                            base::Unretained(this), continue_to_google_server),
+                            weak_factory_.GetWeakPtr(),
+                            continue_to_google_server),
         &task_tracker_);
   }
 }
@@ -128,7 +149,7 @@ void InternalAppResult::OnGetFaviconFromCacheFinished(
           /*may_page_url_be_private=*/false, traffic_annotation,
           base::BindRepeating(
               &InternalAppResult::OnGetFaviconFromGoogleServerFinished,
-              base::Unretained(this)));
+              weak_factory_.GetWeakPtr()));
 }
 
 void InternalAppResult::OnGetFaviconFromGoogleServerFinished(

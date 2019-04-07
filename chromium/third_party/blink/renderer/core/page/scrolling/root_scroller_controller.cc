@@ -21,9 +21,9 @@
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
-#include "third_party/blink/renderer/platform/scroll/scrollable_area.h"
 
 namespace blink {
 
@@ -31,7 +31,7 @@ class RootFrameViewport;
 
 namespace {
 
-bool FillsViewport(const Element& element, bool check_location) {
+bool FillsViewport(const Element& element) {
   if (!element.GetLayoutObject())
     return false;
 
@@ -43,28 +43,24 @@ bool FillsViewport(const Element& element, bool check_location) {
     return false;
 
   FloatQuad quad = layout_object->LocalToAbsoluteQuad(
-      FloatRect(ToLayoutBox(layout_object)->PaddingBoxRect()));
+      FloatRect(ToLayoutBox(layout_object)->PhysicalPaddingBoxRect()));
 
   if (!quad.IsRectilinear())
     return false;
 
-  LayoutRect bounding_box(quad.BoundingBox());
+  IntRect bounding_box = EnclosingIntRect(quad.BoundingBox());
 
-  LayoutSize icb_size =
-      LayoutSize(top_document.GetLayoutView()->GetLayoutSize());
+  IntSize icb_size = top_document.GetLayoutView()->GetLayoutSize();
 
   float zoom = top_document.GetFrame()->PageZoomFactor();
-  LayoutSize controls_hidden_size = LayoutSize(
+  IntSize controls_hidden_size = ExpandedIntSize(
       top_document.View()->ViewportSizeForViewportUnits().ScaledBy(zoom));
 
   if (bounding_box.Size() != icb_size &&
       bounding_box.Size() != controls_hidden_size)
     return false;
 
-  if (!check_location)
-    return true;
-
-  return bounding_box.Location() == LayoutPoint::Zero();
+  return bounding_box.Location() == IntPoint::Zero();
 }
 
 // If the element is an iframe this grabs the ScrollableArea for the owned
@@ -90,6 +86,21 @@ PaintLayerScrollableArea* GetScrollableArea(const Element& element) {
 
   DCHECK(element.GetLayoutObject()->IsBox());
   return ToLayoutBox(element.GetLayoutObject())->GetScrollableArea();
+}
+
+bool ScrollsVerticalOverflow(LayoutView& layout_view) {
+  DCHECK(layout_view.GetScrollableArea());
+
+  if (layout_view.Size().IsZero() ||
+      !layout_view.GetScrollableArea()->HasVerticalOverflow() ||
+      !layout_view.ScrollsOverflowY())
+    return false;
+
+  ScrollbarMode h_mode;
+  ScrollbarMode v_mode;
+  layout_view.CalculateScrollbarModes(h_mode, v_mode);
+
+  return v_mode != kScrollbarAlwaysOff;
 }
 
 }  // namespace
@@ -215,6 +226,11 @@ void RootScrollerController::RecomputeEffectiveRootScroller() {
         }
       }
     }
+    if (auto* object = old_effective_root_scroller->GetLayoutObject())
+      object->SetIsEffectiveRootScroller(false);
+
+    if (auto* object = new_effective_root_scroller->GetLayoutObject())
+      object->SetIsEffectiveRootScroller(true);
   }
 
   ApplyRootScrollerProperties(*old_effective_root_scroller);
@@ -257,7 +273,7 @@ bool RootScrollerController::IsValidRootScroller(const Element& element) const {
       return false;
   }
 
-  if (!FillsViewport(element, true))
+  if (!FillsViewport(element))
     return false;
 
   return true;
@@ -369,9 +385,12 @@ void RootScrollerController::ProcessImplicitCandidates() {
   if (!document_->GetLayoutView())
     return;
 
-  // If the document has scrollable content, that's a good sign we shouldn't
-  // implicitly promote anything.
-  if (document_->GetLayoutView()->GetScrollableArea()->ScrollsOverflow())
+  if (!document_->GetFrame()->IsMainFrame())
+    return;
+
+  // If the main document has vertical scrolling, that's a good sign we
+  // shouldn't implicitly promote anything.
+  if (ScrollsVerticalOverflow(*document_->GetLayoutView()))
     return;
 
   Element* highest_z_element = nullptr;

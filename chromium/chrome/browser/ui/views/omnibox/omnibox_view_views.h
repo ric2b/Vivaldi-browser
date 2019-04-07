@@ -90,6 +90,7 @@ class OmniboxViewViews : public OmniboxView,
   // provider. For example, if Google is the default search provider, this shows
   // "Search Google or type a URL" when the Omnibox is empty and unfocused.
   void InstallPlaceholderText();
+  bool SelectionAtEnd();
 
   // OmniboxView:
   void EmphasizeURLComponents() override;
@@ -216,6 +217,10 @@ class OmniboxViewViews : public OmniboxView,
   void SetEmphasis(bool emphasize, const gfx::Range& range) override;
   void UpdateSchemeStyle(const gfx::Range& range) override;
 
+  // views::View
+  void OnMouseMoved(const ui::MouseEvent& event) override;
+  void OnMouseExited(const ui::MouseEvent& event) override;
+
   // views::Textfield:
   bool IsItemForCommandIdDynamic(int command_id) const override;
   base::string16 GetLabelForCommandId(int command_id) const override;
@@ -266,7 +271,6 @@ class OmniboxViewViews : public OmniboxView,
   void OnCompositingStarted(ui::Compositor* compositor,
                             base::TimeTicks start_time) override;
   void OnCompositingEnded(ui::Compositor* compositor) override;
-  void OnCompositingLockStateChanged(ui::Compositor* compositor) override;
   void OnCompositingChildResizing(ui::Compositor* compositor) override;
   void OnCompositingShuttingDown(ui::Compositor* compositor) override;
 

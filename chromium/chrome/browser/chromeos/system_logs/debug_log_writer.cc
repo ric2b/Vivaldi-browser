@@ -16,8 +16,8 @@
 #include "base/process/kill.h"
 #include "base/process/launch.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/lazy_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/lazy_task_runner.h"
+#include "base/task/post_task.h"
 #include "chrome/common/logging_chrome.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon_client.h"
@@ -36,7 +36,7 @@ const char kTarCommand[] = "/bin/tar";
 base::LazySequencedTaskRunner g_sequenced_task_runner =
     LAZY_SEQUENCED_TASK_RUNNER_INITIALIZER(
         base::TaskTraits(base::MayBlock(),
-                         base::TaskPriority::BACKGROUND,
+                         base::TaskPriority::BEST_EFFORT,
                          base::TaskShutdownBehavior::BLOCK_SHUTDOWN));
 
 // Called upon completion of |WriteDebugLogToFile|. Closes file
@@ -193,7 +193,7 @@ void OnSystemLogsAdded(const DebugLogWriter::StoreLogsCallback& callback,
       logging::GetSessionLogDir(*base::CommandLine::ForCurrentProcess());
 
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&AddUserLogsToArchive, user_log_dir, tar_file_path,
                  compressed_output_path, callback));
 }

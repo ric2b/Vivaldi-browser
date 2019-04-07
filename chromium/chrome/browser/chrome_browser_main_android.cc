@@ -10,7 +10,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/android/mojo/chrome_interface_registrar_android.h"
 #include "chrome/browser/android/preferences/clipboard_android.h"
@@ -35,8 +35,11 @@
 
 ChromeBrowserMainPartsAndroid::ChromeBrowserMainPartsAndroid(
     const content::MainFunctionParams& parameters,
-    std::unique_ptr<ui::DataPack> data_pack)
-    : ChromeBrowserMainParts(parameters, std::move(data_pack)) {}
+    std::unique_ptr<ui::DataPack> data_pack,
+    ChromeFeatureListCreator* chrome_feature_list_creator)
+    : ChromeBrowserMainParts(parameters,
+                             std::move(data_pack),
+                             chrome_feature_list_creator) {}
 
 ChromeBrowserMainPartsAndroid::~ChromeBrowserMainPartsAndroid() {
 }
@@ -127,7 +130,7 @@ void ChromeBrowserMainPartsAndroid::PostBrowserStart() {
   ChromeBrowserMainParts::PostBrowserStart();
 
   base::PostDelayedTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&ReportSeccompSupport), base::TimeDelta::FromMinutes(1));
 
   RegisterChromeJavaMojoInterfaces();

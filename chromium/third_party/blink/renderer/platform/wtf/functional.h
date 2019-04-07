@@ -208,7 +208,9 @@ struct CheckGCedTypeRestriction {
                 "WrapWeakPersistent, WrapCrossThreadPersistent or "
                 "WrapCrossThreadWeakPersistent.");
   static_assert(!WTF::IsGarbageCollectedType<T>::value,
-                "GCed type is forbidden as a bound parameters.");
+                "GCed types are forbidden as bound parameters.");
+  static_assert(!WTF::IsStackAllocatedType<T>::value,
+                "Stack allocated types are forbidden as bound parameters.");
 };
 
 template <typename Index, typename... Args>
@@ -247,6 +249,8 @@ class ThreadCheckingCallbackWrapper<CallbackType, R(Args...)> {
 
   bool IsCancelled() const { return callback_.IsCancelled(); }
 
+  bool MaybeValid() const { return callback_.MaybeValid(); }
+
  private:
   static R RunInternal(base::RepeatingCallback<R(Args...)>* callback,
                        Args&&... args) {
@@ -284,6 +288,13 @@ struct CallbackCancellationTraits<
                           const Receiver& receiver,
                           const RunArgs&...) {
     return receiver->IsCancelled();
+  }
+
+  template <typename Functor, typename Receiver, typename... RunArgs>
+  static bool MaybeValid(const Functor&,
+                         const Receiver& receiver,
+                         const RunArgs&...) {
+    return receiver->MaybeValid();
   }
 };
 
@@ -337,12 +348,12 @@ class CrossThreadFunction<R(Args...)> {
 // above for the correct usage of those.
 template <typename FunctionType, typename... BoundParameters>
 base::OnceCallback<base::MakeUnboundRunType<FunctionType, BoundParameters...>>
-Bind(FunctionType function, BoundParameters&&... bound_parameters) {
+Bind(FunctionType&& function, BoundParameters&&... bound_parameters) {
   static_assert(internal::CheckGCedTypeRestrictions<
                     std::index_sequence_for<BoundParameters...>,
                     std::decay_t<BoundParameters>...>::ok,
                 "A bound argument uses a bad pattern.");
-  auto cb = base::BindOnce(function,
+  auto cb = base::BindOnce(std::forward<FunctionType>(function),
                            std::forward<BoundParameters>(bound_parameters)...);
 #if DCHECK_IS_ON()
   using UnboundRunType =

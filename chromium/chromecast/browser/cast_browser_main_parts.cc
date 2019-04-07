@@ -64,6 +64,8 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "media/base/media.h"
 #include "media/base/media_switches.h"
+#include "services/media_session/public/cpp/switches.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/gl/gl_switches.h"
@@ -229,8 +231,8 @@ const DefaultCommandLineSwitch kDefaultSwitches[] = {
 #if !defined(OS_ANDROID)
     // GPU shader disk cache disabling is largely to conserve disk space.
     {switches::kDisableGpuShaderDiskCache, ""},
-    // Enable audio focus by default (even on non-Android platforms).
-    {switches::kEnableAudioFocus, ""},
+    // Enable media sessions by default (even on non-Android platforms).
+    {media_session::switches::kEnableInternalMediaSession, ""},
 #endif
 #if BUILDFLAG(IS_CAST_AUDIO_ONLY)
     {switches::kDisableGpu, ""},
@@ -263,7 +265,6 @@ const DefaultCommandLineSwitch kDefaultSwitches[] = {
     {switches::kEnableUseZoomForDSF, "false"},
     // TODO(halliwell): Revert after fix for b/63101386.
     {switches::kDisallowNonExactResourceReuse, ""},
-    {switches::kEnableMediaSuspend, ""},
     // Enable autoplay without requiring any user gesture.
     {switches::kAutoplayPolicy,
      switches::autoplay::kNoUserGestureRequiredPolicy},
@@ -486,6 +487,10 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
       base::Unretained(cast_browser_process_->browser_client())));
 #endif  // !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 
+#if defined(OS_ANDROID)
+  StartPeriodicCrashReportUpload();
+#endif  // defined(OS_ANDROID)
+
   cast_browser_process_->SetNetLog(net_log_.get());
   url_request_context_factory_->InitializeOnUIThread(net_log_.get());
 
@@ -508,7 +513,7 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
           cast_browser_process_->pref_service(),
           content::BrowserContext::GetDefaultStoragePartition(
               cast_browser_process_->browser_context())
-              ->GetURLRequestContext()));
+              ->GetURLLoaderFactoryForBrowserProcess()));
   cast_browser_process_->SetRemoteDebuggingServer(
       std::make_unique<RemoteDebuggingServer>(
           cast_browser_process_->browser_client()
@@ -535,8 +540,7 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
 
 #if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
   cast_browser_process_->SetAccessibilityManager(
-      std::make_unique<AccessibilityManager>(
-          window_manager_->window_tree_host()));
+      std::make_unique<AccessibilityManager>(window_manager_.get()));
 #endif  // BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
 
 #else   // defined(USE_AURA)
@@ -598,6 +602,22 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
 
   cast_browser_process_->cast_service()->Start();
 }
+
+#if defined(OS_ANDROID)
+void CastBrowserMainParts::StartPeriodicCrashReportUpload() {
+  OnStartPeriodicCrashReportUpload();
+  crash_reporter_timer_.reset(new base::RepeatingTimer());
+  crash_reporter_timer_->Start(
+      FROM_HERE, base::TimeDelta::FromMinutes(20), this,
+      &CastBrowserMainParts::OnStartPeriodicCrashReportUpload);
+}
+
+void CastBrowserMainParts::OnStartPeriodicCrashReportUpload() {
+  base::FilePath crash_dir;
+  CrashHandler::GetCrashDumpLocation(&crash_dir);
+  CrashHandler::UploadDumps(crash_dir, "", "");
+}
+#endif  // defined(OS_ANDROID)
 
 bool CastBrowserMainParts::MainMessageLoopRun(int* result_code) {
 #if defined(OS_ANDROID)

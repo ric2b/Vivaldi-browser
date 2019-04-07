@@ -23,6 +23,7 @@
 #include "ui/gfx/range/range.h"
 
 namespace blink {
+class WebMouseEvent;
 class WebMouseWheelEvent;
 class WebGestureEvent;
 }
@@ -89,6 +90,13 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   virtual KeyboardEventProcessingResult PreHandleKeyboardEvent(
       const NativeWebKeyboardEvent& event);
 
+  // Callback to give the browser a chance to handle the specified mouse
+  // event before sending it to the renderer.
+  // Returns true if the |event| was handled.
+  // TODO(carlosil, nasko): remove once committed interstitial pages are
+  // fully implemented.
+  virtual bool PreHandleMouseEvent(const blink::WebMouseEvent& event);
+
   // Callback to inform the browser that the renderer did not process the
   // specified events. This gives an opportunity to the browser to process the
   // event (used for keyboard shortcuts).
@@ -103,6 +111,9 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // widget.
   virtual void DidReceiveInputEvent(RenderWidgetHostImpl* render_widget_host,
                                     const blink::WebInputEvent::Type type) {}
+
+  // Asks whether the page is in a state of ignoring input events.
+  virtual bool ShouldIgnoreInputEvents();
 
   // Callback to give the browser a chance to handle the specified gesture
   // event before sending it to the renderer.
@@ -143,7 +154,8 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
 #if defined(OS_MACOSX)
   virtual void DidChangeTextSelection(const base::string16& text,
-                                      const gfx::Range& range) {}
+                                      const gfx::Range& range,
+                                      size_t offset) {}
 #endif
 
   // Request the renderer to Move the caret to the new position.
@@ -277,6 +289,7 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   // Get the UKM source ID for current content. This is used for providing
   // data about the content to the URL-keyed metrics service.
+  // Note: This is also exposed by the RenderFrameHostDelegate.
   virtual ukm::SourceId GetUkmSourceIdForLastCommittedSource() const;
 
   // Notifies the delegate that a focused editable element has been touched
@@ -287,9 +300,6 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Return this object cast to a WebContents, if it is one. If the object is
   // not a WebContents, returns nullptr.
   virtual WebContents* GetAsWebContents();
-
-  // Notifies that a CompositorFrame was received from the renderer.
-  virtual void DidReceiveCompositorFrame() {}
 
   // Gets the size set by a top-level frame with auto-resize enabled.
   virtual gfx::Size GetAutoResizeSize();

@@ -25,7 +25,6 @@
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worker_reporting_proxy.h"
 #include "third_party/blink/renderer/core/workers/worker_thread.h"
-#include "third_party/blink/renderer/core/workers/worker_thread_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/network/content_security_policy_parsers.h"
@@ -39,22 +38,6 @@
 #include "v8/include/v8.h"
 
 namespace blink {
-
-class MockWorkerThreadLifecycleObserver final
-    : public GarbageCollectedFinalized<MockWorkerThreadLifecycleObserver>,
-      public WorkerThreadLifecycleObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(MockWorkerThreadLifecycleObserver);
-
- public:
-  explicit MockWorkerThreadLifecycleObserver(
-      WorkerThreadLifecycleContext* context)
-      : WorkerThreadLifecycleObserver(context) {}
-
-  MOCK_METHOD1(ContextDestroyed, void(WorkerThreadLifecycleContext*));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockWorkerThreadLifecycleObserver);
-};
 
 class FakeWorkerGlobalScope : public WorkerGlobalScope {
  public:
@@ -85,9 +68,9 @@ class FakeWorkerGlobalScope : public WorkerGlobalScope {
 
 class WorkerThreadForTest : public WorkerThread {
  public:
-  WorkerThreadForTest(ThreadableLoadingContext* loading_context,
-                      WorkerReportingProxy& mock_worker_reporting_proxy)
-      : WorkerThread(loading_context, mock_worker_reporting_proxy),
+  explicit WorkerThreadForTest(
+      WorkerReportingProxy& mock_worker_reporting_proxy)
+      : WorkerThread(mock_worker_reporting_proxy),
         worker_backing_thread_(WorkerBackingThread::Create(
             WebThreadCreationParams(WebThreadType::kTestThread))) {}
 
@@ -109,7 +92,8 @@ class WorkerThreadForTest : public WorkerThread {
     auto creation_params = std::make_unique<GlobalScopeCreationParams>(
         script_url, ScriptType::kClassic, "fake user agent", headers,
         kReferrerPolicyDefault, security_origin,
-        false /* starter_secure_context */, worker_clients,
+        false /* starter_secure_context */,
+        CalculateHttpsState(security_origin), worker_clients,
         mojom::IPAddressSpace::kLocal, nullptr,
         base::UnguessableToken::Create(),
         std::make_unique<WorkerSettings>(Settings::Create().get()),

@@ -10,20 +10,19 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/logging.h"
-#include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/test/test_simple_task_runner.h"
+#include "base/test/mock_callback.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "base/threading/thread.h"
-#include "components/sync/device_info/local_device_info_provider_mock.h"
-#include "components/sync/driver/fake_sync_service.h"
-#include "components/sync/driver/sync_client_mock.h"
+#include "components/sync/driver/configure_context.h"
 #include "components/sync/engine/commit_queue.h"
 #include "components/sync/engine/data_type_activation_response.h"
 #include "components/sync/engine/fake_model_type_processor.h"
 #include "components/sync/engine/model_type_configurer.h"
 #include "components/sync/engine/model_type_processor_proxy.h"
+#include "components/sync/model/data_type_activation_request.h"
+#include "components/sync/model/sync_merge_result.h"
+#include "components/sync/model_impl/forwarding_model_type_controller_delegate.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -31,16 +30,24 @@ namespace syncer {
 
 namespace {
 
+using testing::NiceMock;
 using testing::_;
 
 const ModelType kTestModelType = AUTOFILL;
 const char kCacheGuid[] = "SomeCacheGuid";
 const char kAccountId[] = "SomeAccountId";
 
-void SetBool(bool* called, bool* out, bool in) {
-  *called = true;
-  *out = in;
-}
+class MockDelegate : public ModelTypeControllerDelegate {
+ public:
+  MOCK_METHOD2(OnSyncStarting,
+               void(const DataTypeActivationRequest& request,
+                    StartCallback callback));
+  MOCK_METHOD1(OnSyncStopping, void(SyncStopMetadataFate metadata_fate));
+  MOCK_METHOD1(GetAllNodesForDebugging, void(AllNodesCallback callback));
+  MOCK_METHOD1(GetStatusCountersForDebugging,
+               void(StatusCountersCallback callback));
+  MOCK_METHOD0(RecordMemoryUsageAndCountsHistograms, void());
+};
 
 // A simple processor that trackes connected state.
 class TestModelTypeProcessor
@@ -62,56 +69,6 @@ class TestModelTypeProcessor
   bool is_connected_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TestModelTypeProcessor);
-};
-
-// A delegate for testing that connects using a thread-jumping proxy, tracks
-// connected state, and counts DisableSync calls.
-class TestDelegate : public ModelTypeControllerDelegate,
-                     public base::SupportsWeakPtr<TestDelegate> {
- public:
-  TestDelegate() {}
-
-  void set_initial_sync_done(bool initial_sync_done) {
-    initial_sync_done_ = initial_sync_done;
-  }
-
-  bool is_processor_connected() const { return processor_.is_connected(); }
-
-  int cleared_metadata_count() const { return cleared_metadata_count_; }
-
-  // ModelTypeControllerDelegate overrides.
-  void OnSyncStarting(const DataTypeActivationRequest& request,
-                      StartCallback callback) override {
-    std::unique_ptr<DataTypeActivationResponse> activation_response =
-        std::make_unique<DataTypeActivationResponse>();
-    activation_response->model_type_state.set_initial_sync_done(
-        initial_sync_done_);
-    activation_response->type_processor =
-        std::make_unique<ModelTypeProcessorProxy>(
-            base::AsWeakPtr(&processor_),
-            base::SequencedTaskRunnerHandle::Get());
-    std::move(callback).Run(std::move(activation_response));
-  }
-
-  void OnSyncStopping(SyncStopMetadataFate metadata_fate) override {
-    if (metadata_fate == CLEAR_METADATA) {
-      cleared_metadata_count_++;
-    }
-  }
-
-  void GetAllNodesForDebugging(AllNodesCallback callback) override {}
-
-  void GetStatusCountersForDebugging(StatusCountersCallback callback) override {
-  }
-
-  void RecordMemoryUsageHistogram() override {}
-
- private:
-  int cleared_metadata_count_ = 0;
-  bool initial_sync_done_ = false;
-  TestModelTypeProcessor processor_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestDelegate);
 };
 
 // A ModelTypeConfigurer that just connects USS types.
@@ -163,138 +120,90 @@ class TestModelTypeConfigurer : public ModelTypeConfigurer {
   std::unique_ptr<ModelTypeProcessor> processor_;
 };
 
-class TestSyncService : public FakeSyncService {
- public:
-  TestSyncService() {
-    local_device_info_provider_.Initialize(kCacheGuid,
-                                           /*signin_scoped_device_id=*/"");
-  }
-
-  ~TestSyncService() override {}
-
-  const LocalDeviceInfoProvider* GetLocalDeviceInfoProvider() const override {
-    return &local_device_info_provider_;
-  }
-
- private:
-  LocalDeviceInfoProviderMock local_device_info_provider_;
-};
+ConfigureContext MakeConfigureContext() {
+  ConfigureContext context;
+  context.authenticated_account_id = kAccountId;
+  context.cache_guid = kCacheGuid;
+  return context;
+}
 
 }  // namespace
 
 class ModelTypeControllerTest : public testing::Test {
  public:
-  ModelTypeControllerTest() : model_thread_("modelthread") {
-    model_thread_.Start();
-
-    AccountInfo account_info;
-    account_info.account_id = kAccountId;
-    sync_service_.SetAuthenticatedAccountInfo(account_info);
-
-    ON_CALL(sync_client_mock_, GetSyncService())
-        .WillByDefault(testing::Return(&sync_service_));
-    ON_CALL(sync_client_mock_, GetControllerDelegateForModelType(_))
-        .WillByDefault(testing::Return(base::AsWeakPtr(&delegate_)));
-
-    controller_ = std::make_unique<ModelTypeController>(
-        kTestModelType, &sync_client_mock_, model_thread_.task_runner());
-  }
+  ModelTypeControllerTest()
+      : controller_(kTestModelType,
+                    std::make_unique<ForwardingModelTypeControllerDelegate>(
+                        &mock_delegate_)) {}
 
   ~ModelTypeControllerTest() {
-    PumpModelThread();
-    PumpUIThread();
+    // Since we use ModelTypeProcessorProxy, which posts tasks, make sure we
+    // don't have anything pending on teardown that would make a test fail or
+    // crash.
+    base::RunLoop().RunUntilIdle();
   }
 
-  void LoadModels() {
-    controller_->LoadModels(base::Bind(&ModelTypeControllerTest::LoadModelsDone,
-                                       base::Unretained(this)));
+  bool LoadModels(bool initial_sync_done = false) {
+    base::MockCallback<DataTypeController::ModelLoadCallback> load_models_done;
+
+    ModelTypeControllerDelegate::StartCallback start_callback;
+    EXPECT_CALL(mock_delegate_, OnSyncStarting(_, _))
+        .WillOnce([&](const DataTypeActivationRequest& request,
+                      ModelTypeControllerDelegate::StartCallback callback) {
+          start_callback = std::move(callback);
+        });
+
+    controller_.LoadModels(MakeConfigureContext(), load_models_done.Get());
+    if (!start_callback) {
+      return false;
+    }
+
+    // Prepare an activation response, which is the outcome of OnSyncStarting().
+    auto activation_response = std::make_unique<DataTypeActivationResponse>();
+    activation_response->model_type_state.set_initial_sync_done(
+        initial_sync_done);
+    activation_response->type_processor =
+        std::make_unique<ModelTypeProcessorProxy>(
+            base::AsWeakPtr(&processor_),
+            base::SequencedTaskRunnerHandle::Get());
+
+    // Mimic completion for OnSyncStarting().
+    EXPECT_CALL(load_models_done, Run(_, _));
+    std::move(start_callback).Run(std::move(activation_response));
+    return true;
   }
 
   void RegisterWithBackend(bool expect_downloaded) {
-    bool called = false;
-    bool downloaded;
-    controller_->RegisterWithBackend(base::Bind(&SetBool, &called, &downloaded),
-                                     &configurer_);
-    EXPECT_TRUE(called);
-    EXPECT_EQ(expect_downloaded, downloaded);
+    base::MockCallback<base::RepeatingCallback<void(bool)>> callback;
+    EXPECT_CALL(callback, Run(expect_downloaded));
+    controller_.RegisterWithBackend(callback.Get(), &configurer_);
+    // ModelTypeProcessorProxy does posting of tasks.
+    base::RunLoop().RunUntilIdle();
   }
 
   void StartAssociating() {
-    controller_->StartAssociating(base::Bind(
-        &ModelTypeControllerTest::AssociationDone, base::Unretained(this)));
-    // The callback is expected to be promptly called.
-    EXPECT_TRUE(association_callback_called_);
+    base::MockCallback<DataTypeController::StartCallback> callback;
+    EXPECT_CALL(callback, Run(DataTypeController::OK, _, _));
+    controller_.StartAssociating(callback.Get());
   }
 
   void DeactivateDataTypeAndStop(SyncStopMetadataFate metadata_fate) {
-    controller_->DeactivateDataType(&configurer_);
-    controller_->Stop(metadata_fate, base::DoNothing());
+    controller_.DeactivateDataType(&configurer_);
+    controller_.Stop(metadata_fate, base::DoNothing());
+    // ModelTypeProcessorProxy does posting of tasks.
+    base::RunLoop().RunUntilIdle();
   }
 
-  // These threads can ping-pong for a bit so we run the model thread twice.
-  void RunAllTasks() {
-    PumpModelThread();
-    PumpUIThread();
-    PumpModelThread();
-  }
-
-  // Runs any tasks posted on the model thread.
-  void PumpModelThread() {
-    base::RunLoop run_loop;
-    model_thread_.task_runner()->PostTaskAndReply(FROM_HERE, base::DoNothing(),
-                                                  run_loop.QuitClosure());
-    run_loop.Run();
-  }
-
-  void ExpectProcessorConnected(bool is_connected) {
-    if (model_thread_.task_runner()->BelongsToCurrentThread()) {
-      EXPECT_EQ(is_connected, delegate_.is_processor_connected());
-    } else {
-      model_thread_.task_runner()->PostTask(
-          FROM_HERE,
-          base::Bind(&ModelTypeControllerTest::ExpectProcessorConnected,
-                     base::Unretained(this), is_connected));
-      PumpModelThread();
-    }
-  }
-
-  void SetInitialSyncDone(bool initial_sync_done) {
-    delegate_.set_initial_sync_done(initial_sync_done);
-  }
-
-  DataTypeController* controller() { return controller_.get(); }
-  int load_models_done_count() { return load_models_done_count_; }
-  int cleared_metadata_count() { return delegate_.cleared_metadata_count(); }
-  SyncError load_models_last_error() { return load_models_last_error_; }
+  MockDelegate* delegate() { return &mock_delegate_; }
+  TestModelTypeProcessor* processor() { return &processor_; }
+  DataTypeController* controller() { return &controller_; }
 
  private:
-  // Runs any tasks posted on the UI thread.
-  void PumpUIThread() { base::RunLoop().RunUntilIdle(); }
-
-  void LoadModelsDone(ModelType type, const SyncError& error) {
-    load_models_done_count_++;
-    load_models_last_error_ = error;
-  }
-
-  void AssociationDone(DataTypeController::ConfigureResult result,
-                       const SyncMergeResult& local_merge_result,
-                       const SyncMergeResult& syncer_merge_result) {
-    EXPECT_FALSE(association_callback_called_);
-    EXPECT_EQ(DataTypeController::OK, result);
-    association_callback_called_ = true;
-  }
-
-  int load_models_done_count_ = 0;
-  bool association_callback_called_ = false;
-  SyncError load_models_last_error_;
-
   base::MessageLoop message_loop_;
-  base::Thread model_thread_;
-  TestDelegate delegate_;
-  TestSyncService sync_service_;
-  testing::NiceMock<SyncClientMock> sync_client_mock_;
+  NiceMock<MockDelegate> mock_delegate_;
   TestModelTypeConfigurer configurer_;
-  std::unique_ptr<ModelTypeController> controller_;
+  TestModelTypeProcessor processor_;
+  ModelTypeController controller_;
 };
 
 TEST_F(ModelTypeControllerTest, InitialState) {
@@ -303,40 +212,46 @@ TEST_F(ModelTypeControllerTest, InitialState) {
 }
 
 TEST_F(ModelTypeControllerTest, LoadModelsOnBackendThread) {
-  LoadModels();
+  base::MockCallback<DataTypeController::ModelLoadCallback> load_models_done;
+
+  ModelTypeControllerDelegate::StartCallback start_callback;
+  EXPECT_CALL(*delegate(), OnSyncStarting(_, _))
+      .WillOnce([&](const DataTypeActivationRequest& request,
+                    ModelTypeControllerDelegate::StartCallback callback) {
+        start_callback = std::move(callback);
+      });
+
+  controller()->LoadModels(MakeConfigureContext(), load_models_done.Get());
   EXPECT_EQ(DataTypeController::MODEL_STARTING, controller()->state());
-  RunAllTasks();
+  ASSERT_TRUE(start_callback);
+
+  // Mimic completion for OnSyncStarting().
+  EXPECT_CALL(load_models_done, Run(kTestModelType, _));
+  std::move(start_callback).Run(std::make_unique<DataTypeActivationResponse>());
   EXPECT_EQ(DataTypeController::MODEL_LOADED, controller()->state());
-  EXPECT_EQ(1, load_models_done_count());
-  EXPECT_FALSE(load_models_last_error().IsSet());
-  ExpectProcessorConnected(false);
 }
 
 TEST_F(ModelTypeControllerTest, Activate) {
-  LoadModels();
-  RunAllTasks();
+  ASSERT_TRUE(LoadModels());
   EXPECT_EQ(DataTypeController::MODEL_LOADED, controller()->state());
-  RegisterWithBackend(false);
-  ExpectProcessorConnected(true);
+  RegisterWithBackend(/*expect_downloaded=*/false);
+  EXPECT_TRUE(processor()->is_connected());
 
   StartAssociating();
   EXPECT_EQ(DataTypeController::RUNNING, controller()->state());
 }
 
 TEST_F(ModelTypeControllerTest, ActivateWithInitialSyncDone) {
-  SetInitialSyncDone(true);
-  LoadModels();
-  RunAllTasks();
+  ASSERT_TRUE(LoadModels(/*initial_sync_done=*/true));
   EXPECT_EQ(DataTypeController::MODEL_LOADED, controller()->state());
-  RegisterWithBackend(true);
-  ExpectProcessorConnected(true);
+  RegisterWithBackend(/*expect_downloaded=*/true);
+  EXPECT_TRUE(processor()->is_connected());
 }
 
 TEST_F(ModelTypeControllerTest, Stop) {
-  LoadModels();
-  RunAllTasks();
-  RegisterWithBackend(false);
-  ExpectProcessorConnected(true);
+  ASSERT_TRUE(LoadModels());
+  RegisterWithBackend(/*expect_downloaded=*/false);
+  EXPECT_TRUE(processor()->is_connected());
 
   StartAssociating();
 
@@ -346,43 +261,105 @@ TEST_F(ModelTypeControllerTest, Stop) {
 
 // Test emulates normal browser shutdown. Ensures that metadata was not cleared.
 TEST_F(ModelTypeControllerTest, StopWhenDatatypeEnabled) {
-  LoadModels();
-  RunAllTasks();
+  ASSERT_TRUE(LoadModels());
   StartAssociating();
 
-  DeactivateDataTypeAndStop(KEEP_METADATA);
-  RunAllTasks();
-  EXPECT_EQ(DataTypeController::NOT_RUNNING, controller()->state());
   // Ensures that metadata was not cleared.
-  EXPECT_EQ(0, cleared_metadata_count());
-  ExpectProcessorConnected(false);
+  EXPECT_CALL(*delegate(), OnSyncStopping(KEEP_METADATA));
+  DeactivateDataTypeAndStop(KEEP_METADATA);
+  EXPECT_EQ(DataTypeController::NOT_RUNNING, controller()->state());
+  EXPECT_FALSE(processor()->is_connected());
 }
 
 // Test emulates scenario when user disables datatype. Metadata should be
 // cleared.
 TEST_F(ModelTypeControllerTest, StopWhenDatatypeDisabled) {
-  LoadModels();
-  RunAllTasks();
+  ASSERT_TRUE(LoadModels());
   StartAssociating();
 
+  EXPECT_CALL(*delegate(), OnSyncStopping(CLEAR_METADATA));
   DeactivateDataTypeAndStop(CLEAR_METADATA);
-  RunAllTasks();
   EXPECT_EQ(DataTypeController::NOT_RUNNING, controller()->state());
-  // Ensures that metadata was cleared.
-  EXPECT_EQ(1, cleared_metadata_count());
-  ExpectProcessorConnected(false);
+  EXPECT_FALSE(processor()->is_connected());
 }
 
 // Test emulates disabling sync when datatype is not loaded yet. Metadata should
 // not be cleared as the delegate is potentially not ready to handle it.
 TEST_F(ModelTypeControllerTest, StopBeforeLoadModels) {
-  EXPECT_EQ(DataTypeController::NOT_RUNNING, controller()->state());
+  EXPECT_CALL(*delegate(), OnSyncStopping(CLEAR_METADATA)).Times(0);
+
+  ASSERT_EQ(DataTypeController::NOT_RUNNING, controller()->state());
 
   controller()->Stop(CLEAR_METADATA, base::DoNothing());
 
   EXPECT_EQ(DataTypeController::NOT_RUNNING, controller()->state());
-  // Ensure that DisableSync is not called.
-  EXPECT_EQ(0, cleared_metadata_count());
+}
+
+// Tests that StorageOption is honored when the controller has been constructed
+// with two delegates.
+TEST(ModelTypeControllerWithMultiDelegateTest, ToggleStorageOption) {
+  base::MessageLoop message_loop;
+  NiceMock<MockDelegate> delegate_on_disk;
+  NiceMock<MockDelegate> delegate_in_memory;
+
+  ModelTypeController controller(
+      kTestModelType,
+      std::make_unique<ForwardingModelTypeControllerDelegate>(
+          &delegate_on_disk),
+      std::make_unique<ForwardingModelTypeControllerDelegate>(
+          &delegate_in_memory));
+
+  ConfigureContext context;
+  context.authenticated_account_id = kAccountId;
+  context.cache_guid = kCacheGuid;
+
+  ModelTypeControllerDelegate::StartCallback start_callback;
+
+  // Start sync with STORAGE_IN_MEMORY.
+  EXPECT_CALL(delegate_on_disk, OnSyncStarting(_, _)).Times(0);
+  EXPECT_CALL(delegate_in_memory, OnSyncStarting(_, _))
+      .WillOnce([&](const DataTypeActivationRequest& request,
+                    ModelTypeControllerDelegate::StartCallback callback) {
+        start_callback = std::move(callback);
+      });
+  context.storage_option = ConfigureContext::STORAGE_IN_MEMORY;
+  controller.LoadModels(context, base::DoNothing());
+
+  ASSERT_EQ(DataTypeController::MODEL_STARTING, controller.state());
+  ASSERT_TRUE(start_callback);
+
+  // Mimic completion for OnSyncStarting().
+  std::move(start_callback).Run(std::make_unique<DataTypeActivationResponse>());
+  ASSERT_EQ(DataTypeController::MODEL_LOADED, controller.state());
+
+  // Stop sync.
+  EXPECT_CALL(delegate_on_disk, OnSyncStopping(_)).Times(0);
+  EXPECT_CALL(delegate_in_memory, OnSyncStopping(_));
+  controller.Stop(CLEAR_METADATA, base::DoNothing());
+  ASSERT_EQ(DataTypeController::NOT_RUNNING, controller.state());
+
+  // Start sync with STORAGE_ON_DISK.
+  EXPECT_CALL(delegate_in_memory, OnSyncStarting(_, _)).Times(0);
+  EXPECT_CALL(delegate_on_disk, OnSyncStarting(_, _))
+      .WillOnce([&](const DataTypeActivationRequest& request,
+                    ModelTypeControllerDelegate::StartCallback callback) {
+        start_callback = std::move(callback);
+      });
+  context.storage_option = ConfigureContext::STORAGE_ON_DISK;
+  controller.LoadModels(context, base::DoNothing());
+
+  ASSERT_EQ(DataTypeController::MODEL_STARTING, controller.state());
+  ASSERT_TRUE(start_callback);
+
+  // Mimic completion for OnSyncStarting().
+  std::move(start_callback).Run(std::make_unique<DataTypeActivationResponse>());
+  ASSERT_EQ(DataTypeController::MODEL_LOADED, controller.state());
+
+  // Stop sync.
+  EXPECT_CALL(delegate_in_memory, OnSyncStopping(_)).Times(0);
+  EXPECT_CALL(delegate_on_disk, OnSyncStopping(_));
+  controller.Stop(CLEAR_METADATA, base::DoNothing());
+  ASSERT_EQ(DataTypeController::NOT_RUNNING, controller.state());
 }
 
 }  // namespace syncer

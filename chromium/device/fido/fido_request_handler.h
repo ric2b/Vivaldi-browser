@@ -27,24 +27,18 @@ class FidoRequestHandler : public FidoRequestHandlerBase {
  public:
   using CompletionCallback =
       base::OnceCallback<void(FidoReturnCode status_code,
-                              base::Optional<Response> response_data)>;
+                              base::Optional<Response> response_data,
+                              FidoTransportProtocol transport_used)>;
 
-  FidoRequestHandler(service_manager::Connector* connector,
-                     const base::flat_set<FidoTransportProtocol>& transports,
-                     CompletionCallback completion_callback)
-      : FidoRequestHandler(connector,
-                           transports,
-                           std::move(completion_callback),
-                           AddPlatformAuthenticatorCallback()) {}
+  // The |available_transports| should be the intersection of transports
+  // supported by the client and allowed by the relying party.
   FidoRequestHandler(
       service_manager::Connector* connector,
-      const base::flat_set<FidoTransportProtocol>& transports,
-      CompletionCallback completion_callback,
-      AddPlatformAuthenticatorCallback add_platform_authenticator)
-      : FidoRequestHandlerBase(connector,
-                               transports,
-                               std::move(add_platform_authenticator)),
+      const base::flat_set<FidoTransportProtocol>& available_transports,
+      CompletionCallback completion_callback)
+      : FidoRequestHandlerBase(connector, available_transports),
         completion_callback_(std::move(completion_callback)) {}
+
   ~FidoRequestHandler() override {
     if (!is_complete())
       CancelOngoingTasks();
@@ -64,8 +58,9 @@ class FidoRequestHandler : public FidoRequestHandlerBase {
       return;
     }
 
-    const auto return_code = ConvertDeviceResponseCodeToFidoReturnCode(
-        device_response_code, response_data.has_value());
+    base::Optional<FidoReturnCode> return_code =
+        ConvertDeviceResponseCodeToFidoReturnCode(device_response_code,
+                                                  response_data.has_value());
 
     // Any authenticator response codes that do not result from user consent
     // imply that the authenticator should be dropped and that other on-going
@@ -78,7 +73,9 @@ class FidoRequestHandler : public FidoRequestHandlerBase {
     // Once response has been passed to the relying party, cancel all other on
     // going requests.
     CancelOngoingTasks(authenticator->GetId());
-    std::move(completion_callback_).Run(*return_code, std::move(response_data));
+    std::move(completion_callback_)
+        .Run(*return_code, std::move(response_data),
+             authenticator->AuthenticatorTransport());
   }
 
  private:
@@ -99,6 +96,12 @@ class FidoRequestHandler : public FidoRequestHandlerBase {
       case CtapDeviceResponseCode::kCtap2ErrNoCredentials:
         return FidoReturnCode::kUserConsentButCredentialNotRecognized;
 
+      // The user explicitly denied the operation. Touch ID returns this error
+      // when the user cancels the macOS prompt. External authenticators may
+      // return it e.g. after the user fails fingerprint verification.
+      case CtapDeviceResponseCode::kCtap2ErrOperationDenied:
+        return FidoReturnCode::kUserConsentDenied;
+
       // This error is returned by some authenticators (e.g. the "Yubico FIDO
       // 2" CTAP2 USB keys) during GetAssertion **before the user interacted
       // with the device**. The authenticator does this to avoid blinking (and
@@ -110,6 +113,8 @@ class FidoRequestHandler : public FidoRequestHandlerBase {
       case CtapDeviceResponseCode::kCtap2ErrInvalidCredential:
         return base::nullopt;
 
+      // For all other errors, the authenticator will be dropped, and other
+      // authenticators may continue.
       default:
         return base::nullopt;
     }

@@ -101,16 +101,12 @@ static void (*{{method.name}}MethodForPartialInterface)(const v8::FunctionCallba
 {# Methods #}
 {% from 'methods.cpp.tmpl' import generate_method, overload_resolution_method,
       origin_safe_method_getter, generate_constructor,
-      generate_post_message_impl, runtime_determined_length_method,
-      runtime_determined_maxarg_method
+      runtime_determined_length_method, runtime_determined_maxarg_method
       with context %}
 {% for method in methods %}
 {% for world_suffix in method.world_suffixes %}
-{% if not method.is_custom and not method.is_post_message and method.visible %}
+{% if not method.is_custom and method.visible %}
 {{generate_method(method, world_suffix)}}
-{% endif %}
-{% if method.is_post_message and not is_partial %}
-{{generate_post_message_impl(method)}}
 {% endif %}
 {% if method.overloads and method.overloads.visible %}
 {% if method.overloads.runtime_determined_lengths %}
@@ -374,27 +370,6 @@ static const V8DOMConfiguration::AttributeConfiguration {{v8_class}}Attributes[]
 {% endif %}
 {% endblock %}
 {##############################################################################}
-{% block install_lazy_data_attributes %}
-{% from 'attributes.cpp.tmpl' import attribute_configuration with context %}
-{% if lazy_data_attributes %}
-// Suppress warning: global constructors, because AttributeConfiguration is trivial
-// and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wglobal-constructors"
-#endif
-static const V8DOMConfiguration::AttributeConfiguration {{v8_class}}LazyDataAttributes[] = {
-    {% for data_attribute in lazy_data_attributes %}
-    {{attribute_configuration(data_attribute) | trim | indent(4)}},
-    {% endfor %}
-};
-#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
-#pragma clang diagnostic pop
-#endif
-
-{% endif %}
-{% endblock %}
-{##############################################################################}
 {% block install_accessors %}
 {% from 'attributes.cpp.tmpl' import accessor_configuration with context %}
 {% if accessors %}
@@ -495,11 +470,6 @@ static void install{{v8_class}}Template(
   V8DOMConfiguration::InstallAttributes(
       isolate, world, instanceTemplate, prototypeTemplate,
       {{'%sAttributes' % v8_class}}, {{'base::size(%sAttributes)' % v8_class}});
-  {% endif %}
-  {% if lazy_data_attributes %}
-  V8DOMConfiguration::InstallLazyDataAttributes(
-      isolate, world, instanceTemplate, prototypeTemplate,
-      {{'%sLazyDataAttributes' % v8_class}}, {{'base::size(%sLazyDataAttributes)' % v8_class}});
   {% endif %}
   {% if accessors %}
   V8DOMConfiguration::InstallAccessors(

@@ -15,7 +15,6 @@
 #include "chrome/browser/component_updater/vr_assets_component_installer.h"
 #include "chrome/browser/vr/assets_loader.h"
 #include "chrome/browser/vr/metrics/metrics_helper.h"
-#include "chrome/browser/vr/service/vr_device_manager.h"
 #include "chrome/browser/vr/service/vr_service_impl.h"
 #include "content/public/browser/webvr_service_provider.h"
 #include "device/vr/android/gvr/gvr_delegate_provider_factory.h"
@@ -175,7 +174,7 @@ void VrShellDelegate::RecordVrStartAction(
 
 void VrShellDelegate::OnPresentResult(
     device::mojom::VRDisplayInfoPtr display_info,
-    device::mojom::XRDeviceRuntimeSessionOptionsPtr options,
+    device::mojom::XRRuntimeSessionOptionsPtr options,
     base::OnceCallback<void(device::mojom::XRSessionPtr)> callback,
     bool success) {
   DVLOG(1) << __FUNCTION__ << ": success=" << success;
@@ -187,7 +186,7 @@ void VrShellDelegate::OnPresentResult(
 
   if (!vr_shell_) {
     // We have to wait until the GL thread is ready since we have to get the
-    // VRSubmitFrameClient.
+    // XRPresentationClient.
     pending_successful_present_request_ = true;
     on_present_result_callback_ = base::BindOnce(
         &VrShellDelegate::OnPresentResult, base::Unretained(this),
@@ -211,30 +210,15 @@ void VrShellDelegate::OnPresentResult(
 }
 
 void VrShellDelegate::SendRequestPresentReply(
-    bool success,
-    device::mojom::VRSubmitFrameClientRequest request,
-    device::mojom::VRPresentationProviderPtr provider,
-    device::mojom::VRDisplayFrameTransportOptionsPtr transport_options) {
+    device::mojom::XRSessionPtr session) {
   DVLOG(1) << __FUNCTION__;
   if (!request_present_response_callback_) {
     DLOG(ERROR) << __FUNCTION__ << ": ERROR: no callback";
     return;
   }
 
-  if (success) {
-    auto connection = device::mojom::XRPresentationConnection::New();
-    connection->client_request = std::move(request);
-    connection->provider = provider.PassInterface();
-    connection->transport_options = std::move(transport_options);
-
-    device::mojom::XRSessionPtr xr_session = device::mojom::XRSession::New();
-    xr_session->connection = std::move(connection);
-
-    base::ResetAndReturn(&request_present_response_callback_)
-        .Run(std::move(xr_session));
-  } else {
-    base::ResetAndReturn(&request_present_response_callback_).Run(nullptr);
-  }
+  base::ResetAndReturn(&request_present_response_callback_)
+      .Run(std::move(session));
 }
 
 void VrShellDelegate::DisplayActivate(JNIEnv* env,
@@ -287,7 +271,7 @@ bool VrShellDelegate::ShouldDisableGvrDevice() {
          VrSupportLevel::kVrNeedsUpdate;
 }
 
-void VrShellDelegate::SetDeviceId(unsigned int device_id) {
+void VrShellDelegate::SetDeviceId(device::mojom::XRDeviceId device_id) {
   device_id_ = device_id;
   if (vr_shell_) {
     device::GvrDevice* device = GetDevice();
@@ -301,7 +285,7 @@ void VrShellDelegate::SetDeviceId(unsigned int device_id) {
 
 void VrShellDelegate::StartWebXRPresentation(
     device::mojom::VRDisplayInfoPtr display_info,
-    device::mojom::XRDeviceRuntimeSessionOptionsPtr options,
+    device::mojom::XRRuntimeSessionOptionsPtr options,
     base::OnceCallback<void(device::mojom::XRSessionPtr)> callback) {
   if (!on_present_result_callback_.is_null() ||
       !request_present_response_callback_.is_null()) {
@@ -369,7 +353,7 @@ static void JNI_VrShellDelegate_OnLibraryAvailable(
 
 #if BUILDFLAG(ENABLE_ARCORE)
   // TODO(https://crbug.com/837965): Move this to an ARCore-specific location
-  // with similar timing (occurs before VRDeviceManager is initialized).
+  // with similar timing (occurs before XRRuntimeManager is initialized).
   device::ARCoreDeviceProviderFactory::Install(
       std::make_unique<ARCoreDeviceProviderFactoryImpl>());
 #endif

@@ -31,6 +31,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "base/win/registry.h"
+#include "base/win/win_util.h"
+#include "base/win/windows_version.h"
 #include "chrome/install_static/install_details.h"
 #include "chrome/install_static/install_modes.h"
 #include "chrome/install_static/install_util.h"
@@ -278,6 +280,8 @@ void AddChromeWorkItems(const InstallationState& original_state,
   // Install kVisualElementsManifest if it is present in |src_path|. No need to
   // make this a conditional work item as if the file is not there now, it will
   // never be.
+  // TODO(grt): Touch the Start Menu shortcut after putting the manifest in
+  // place to force the Start Menu to refresh Chrome's tile.
   if (base::PathExists(
           src_path.Append(installer::kVisualElementsManifest))) {
     install_list->AddMoveTreeWorkItem(
@@ -668,6 +672,52 @@ void AddVersionKeyWorkItems(HKEY root,
                                true);  // overwrite version
 }
 
+void AddUpdateBrandCodeWorkItem(const InstallerState& installer_state,
+                                WorkItemList* install_list) {
+  // Only update specific brand codes needed for enterprise.
+  base::string16 brand;
+  if (!GoogleUpdateSettings::GetBrand(&brand))
+    return;
+
+  base::string16 new_brand = GetUpdatedBrandCode(brand);
+  if (new_brand.empty())
+    return;
+
+  // Only update if this machine is:
+  // - domain joined, or
+  // - registered with MDM and is not windows home edition
+  bool is_enterprise_version =
+      base::win::OSInfo::GetInstance()->version_type() != base::win::SUITE_HOME;
+  if (!(base::win::IsEnrolledToDomain() ||
+      (base::win::IsDeviceRegisteredWithManagement() &&
+       is_enterprise_version))) {
+    return;
+  }
+
+  BrowserDistribution* browser_dist = installer_state.product().distribution();
+  DCHECK(browser_dist);
+  install_list->AddSetRegValueWorkItem(
+      installer_state.root_key(), browser_dist->GetStateKey(), KEY_WOW64_32KEY,
+      google_update::kRegRLZBrandField, new_brand, true);
+}
+
+base::string16 GetUpdatedBrandCode(const base::string16& brand_code) {
+  // Brand codes to be remapped on enterprise installs.
+  static constexpr struct EnterpriseBrandRemapping {
+    const wchar_t* old_brand;
+    const wchar_t* new_brand;
+  } kEnterpriseBrandRemapping[] = {
+      {L"GGLS", L"GCEU"},
+      {L"GGRV", L"GCEV"},
+  };
+
+  for (auto mapping : kEnterpriseBrandRemapping) {
+    if (brand_code == mapping.old_brand)
+      return mapping.new_brand;
+  }
+  return base::string16();
+}
+
 bool AppendPostInstallTasks(const InstallerState& installer_state,
                             const base::FilePath& setup_path,
                             const base::Version* current_version,
@@ -884,12 +934,13 @@ void AddInstallWorkItems(const InstallationState& original_state,
       installer_state.root_key(),
       GetNotificationHelperPath(target_path, new_version), install_list);
 
-  InstallUtil::AddUpdateDowngradeVersionItem(installer_state.system_install(),
-                                             current_version, new_version, dist,
-                                             install_list);
+  InstallUtil::AddUpdateDowngradeVersionItem(
+      installer_state.root_key(), current_version, new_version, install_list);
 
   // Migrate usagestats back to Chrome.
   AddMigrateUsageStatsWorkItems(installer_state, install_list);
+
+  AddUpdateBrandCodeWorkItem(installer_state, install_list);
 
   // Append the tasks that run after the installation.
   AppendPostInstallTasks(installer_state,

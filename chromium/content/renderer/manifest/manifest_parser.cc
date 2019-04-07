@@ -15,7 +15,6 @@
 #include "base/values.h"
 #include "content/public/common/manifest_util.h"
 #include "content/renderer/manifest/manifest_uma_util.h"
-#include "third_party/blink/public/common/manifest/manifest_share_target_util.h"
 #include "third_party/blink/public/platform/web_icon_sizes_parser.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -341,18 +340,15 @@ std::vector<blink::Manifest::ImageResource> ManifestParser::ParseIcons(
   return icons;
 }
 
-GURL ManifestParser::ParseShareTargetURLTemplate(
-    const base::DictionaryValue& share_target) {
-  GURL url_template = ParseURL(share_target, "url_template", manifest_url_,
-                               ParseURLOriginRestrictions::kSameOriginOnly);
-  if (!blink::ValidateWebShareUrlTemplate(url_template)) {
-    AddErrorInfo(
-        "property 'url_template' ignored. Placeholders have incorrect "
-        "syntax.");
-    return GURL();
-  }
-
-  return url_template;
+blink::Manifest::ShareTargetParams ManifestParser::ParseShareTargetParams(
+    const base::DictionaryValue& share_target_params) {
+  blink::Manifest::ShareTargetParams params;
+  // NOTE: These are key names for query parameters, which are filled with share
+  // data. As such, |params.url| is just a string.
+  params.text = ParseString(share_target_params, "text", Trim);
+  params.title = ParseString(share_target_params, "title", Trim);
+  params.url = ParseString(share_target_params, "url", Trim);
+  return params;
 }
 
 base::Optional<blink::Manifest::ShareTarget> ManifestParser::ParseShareTarget(
@@ -363,10 +359,25 @@ base::Optional<blink::Manifest::ShareTarget> ManifestParser::ParseShareTarget(
   blink::Manifest::ShareTarget share_target;
   const base::DictionaryValue* share_target_dict = nullptr;
   dictionary.GetDictionary("share_target", &share_target_dict);
-  share_target.url_template = ParseShareTargetURLTemplate(*share_target_dict);
-
-  if (share_target.url_template.is_empty())
+  share_target.action = ParseURL(*share_target_dict, "action", manifest_url_,
+                                 ParseURLOriginRestrictions::kSameOriginOnly);
+  if (!share_target.action.is_valid()) {
+    AddErrorInfo(
+        "property 'share_target' ignored. Property 'action' is "
+        "invalid.");
     return base::nullopt;
+  }
+
+  const base::DictionaryValue* share_target_params_dict = nullptr;
+  if (!share_target_dict->GetDictionary("params", &share_target_params_dict)) {
+    AddErrorInfo(
+        "property 'share_target' ignored. Property 'params' type "
+        "dictionary expected.");
+    return base::nullopt;
+  }
+
+  share_target.params = ParseShareTargetParams(*share_target_params_dict);
+
   return base::Optional<blink::Manifest::ShareTarget>(share_target);
 }
 

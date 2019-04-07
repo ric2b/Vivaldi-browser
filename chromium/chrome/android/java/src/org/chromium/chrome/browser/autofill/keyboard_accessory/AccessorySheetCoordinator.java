@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.autofill.keyboard_accessory;
 
 import android.support.annotation.Nullable;
+import android.support.annotation.Px;
 import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.view.ViewStub;
@@ -40,7 +41,7 @@ public class AccessorySheetCoordinator {
         model.addObserver(new PropertyModelChangeProcessor<>(model, stubHolder,
                 new LazyViewBinderAdapter<>(
                         new AccessorySheetViewBinder(), this::onViewInflated)));
-        KeyboardAccessoryMetricsRecorder.recordModelChanges(model);
+        KeyboardAccessoryMetricsRecorder.registerMetricsObserver(model);
         mMediator = new AccessorySheetMediator(model);
     }
 
@@ -92,6 +93,22 @@ public class AccessorySheetCoordinator {
     @Nullable
     public KeyboardAccessoryData.Tab getTab() {
         return mMediator.getTab();
+    }
+
+    /**
+     * Sets the height of the accessory sheet (i.e. adapts to keyboard heights).
+     * @param height The height of the sheet in pixels.
+     */
+    public void setHeight(@Px int height) {
+        mMediator.setHeight(height);
+    }
+
+    /**
+     * Gets the height of the accessory sheet (even if not visible).
+     * @return The height of the sheet in pixels.
+     */
+    public @Px int getHeight() {
+        return mMediator.getHeight();
     }
 
     /**

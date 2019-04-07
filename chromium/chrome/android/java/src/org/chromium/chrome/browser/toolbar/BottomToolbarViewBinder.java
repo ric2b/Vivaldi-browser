@@ -11,6 +11,9 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.scene_layer.ScrollingBottomViewSceneLayer;
 import org.chromium.chrome.browser.modelutil.PropertyKey;
 import org.chromium.chrome.browser.modelutil.PropertyModelChangeProcessor;
+import org.chromium.chrome.browser.toolbar.ToolbarButtonSlotData.ToolbarButtonData;
+import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.chrome.browser.widget.TintedImageButton;
 
 /**
  * This class is responsible for pushing updates to both the Android view and the compositor
@@ -31,11 +34,19 @@ public class BottomToolbarViewBinder
         /** A handle to the composited bottom toolbar layer. */
         public ScrollingBottomViewSceneLayer sceneLayer;
 
+        /** Cached {@link TintedImageButton} of the first button. */
+        public final TintedImageButton firstTintedImageButton;
+
+        /** Cached {@link TintedImageButton} of the second button. */
+        public final TintedImageButton secondTintedImageButton;
+
         /**
          * @param toolbarRootView The Android View based toolbar.
          */
         public ViewHolder(ScrollingBottomViewResourceFrameLayout toolbarRootView) {
             toolbarRoot = toolbarRootView;
+            firstTintedImageButton = toolbarRoot.findViewById(R.id.first_button);
+            secondTintedImageButton = toolbarRoot.findViewById(R.id.second_button);
         }
     }
 
@@ -58,10 +69,6 @@ public class BottomToolbarViewBinder
             view.sceneLayer.setIsVisible(
                     model.getValue(BottomToolbarModel.COMPOSITED_VIEW_VISIBLE));
             model.getValue(BottomToolbarModel.LAYOUT_MANAGER).requestUpdate();
-        } else if (BottomToolbarModel.SEARCH_ACCELERATOR_LISTENER == propertyKey) {
-            view.toolbarRoot.findViewById(R.id.search_button)
-                    .setOnClickListener(
-                            model.getValue(BottomToolbarModel.SEARCH_ACCELERATOR_LISTENER));
         } else if (BottomToolbarModel.LAYOUT_MANAGER == propertyKey) {
             assert view.sceneLayer == null;
             view.sceneLayer = new ScrollingBottomViewSceneLayer(
@@ -78,16 +85,44 @@ public class BottomToolbarViewBinder
                     .getDynamicResourceLoader()
                     .registerResource(
                             view.toolbarRoot.getId(), view.toolbarRoot.getResourceAdapter());
-        } else if (BottomToolbarModel.SEARCH_ACCELERATOR_VISIBLE == propertyKey) {
-            view.toolbarRoot.findViewById(R.id.search_button)
-                    .setVisibility(model.getValue(BottomToolbarModel.SEARCH_ACCELERATOR_VISIBLE)
-                                    ? View.VISIBLE
-                                    : View.INVISIBLE);
         } else if (BottomToolbarModel.TOOLBAR_SWIPE_HANDLER == propertyKey) {
             view.toolbarRoot.setSwipeDetector(
                     model.getValue(BottomToolbarModel.TOOLBAR_SWIPE_HANDLER));
+        } else if (BottomToolbarModel.FIRST_BUTTON_DATA == propertyKey) {
+            updateButton(view.firstTintedImageButton,
+                    model.getValue(BottomToolbarModel.FIRST_BUTTON_DATA), useLightIcons(model));
+        } else if (BottomToolbarModel.SECOND_BUTTON_DATA == propertyKey) {
+            updateButton(view.secondTintedImageButton,
+                    model.getValue(BottomToolbarModel.SECOND_BUTTON_DATA), useLightIcons(model));
+        } else if (BottomToolbarModel.PRIMARY_COLOR == propertyKey) {
+            final boolean useLightIcons = useLightIcons(model);
+            view.toolbarRoot.findViewById(R.id.bottom_sheet_toolbar)
+                    .setBackgroundColor(model.getValue(BottomToolbarModel.PRIMARY_COLOR));
+            updateButtonDrawable(view.firstTintedImageButton,
+                    model.getValue(BottomToolbarModel.FIRST_BUTTON_DATA), useLightIcons);
+            updateButtonDrawable(view.secondTintedImageButton,
+                    model.getValue(BottomToolbarModel.SECOND_BUTTON_DATA), useLightIcons);
         } else {
             assert false : "Unhandled property detected in BottomToolbarViewBinder!";
         }
+    }
+
+    private static boolean useLightIcons(BottomToolbarModel model) {
+        return ColorUtils.shouldUseLightForegroundOnBackground(
+                model.getValue(BottomToolbarModel.PRIMARY_COLOR));
+    }
+
+    private static void updateButton(
+            TintedImageButton button, ToolbarButtonData buttonData, boolean useLightIcons) {
+        if (buttonData == null) {
+            ToolbarButtonData.clearButton(button);
+        } else {
+            buttonData.updateButton(button, useLightIcons);
+        }
+    }
+
+    private static void updateButtonDrawable(
+            TintedImageButton button, ToolbarButtonData buttonData, boolean useLightIcons) {
+        if (buttonData != null) buttonData.updateButtonDrawable(button, useLightIcons);
     }
 }

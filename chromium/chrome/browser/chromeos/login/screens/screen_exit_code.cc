@@ -10,8 +10,8 @@ namespace chromeos {
 
 std::string ExitCodeToString(ScreenExitCode code) {
   switch (code) {
-    case ScreenExitCode::NETWORK_CONNECTED:
-      return "NETWORK_CONNECTED";
+    case ScreenExitCode::WELCOME_CONTINUED:
+      return "WELCOME_CONTINUED";
     case ScreenExitCode::HID_DETECTION_COMPLETED:
       return "HID_DETECTION_COMPLETED";
     case ScreenExitCode::CONNECTION_FAILED:
@@ -90,6 +90,16 @@ std::string ExitCodeToString(ScreenExitCode code) {
       return "ARC_TERMS_OF_SERVICE_BACK";
     case ScreenExitCode::DISCOVER_FINISHED:
       return "DISCOVER_FINISHED";
+    case ScreenExitCode::NETWORK_BACK:
+      return "NETWORK_BACK";
+    case ScreenExitCode::NETWORK_CONNECTED:
+      return "NETWORK_CONNECTED";
+    case ScreenExitCode::NETWORK_OFFLINE_DEMO_SETUP:
+      return "NETWORK_OFFLINE_DEMO_SETUP";
+    case ScreenExitCode::FINGERPRINT_SETUP_FINISHED:
+      return "FINGERPRINT_SETUP_FINISHED";
+    case ScreenExitCode::MARKETING_OPT_IN_FINISHED:
+      return "MARKETING_OPT_IN_FINISHED";
     case ScreenExitCode::EXIT_CODES_COUNT:
     default:
       NOTREACHED();

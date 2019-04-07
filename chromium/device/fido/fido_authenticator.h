@@ -10,9 +10,11 @@
 #include "base/callback_forward.h"
 #include "base/component_export.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "device/fido/authenticator_get_assertion_response.h"
 #include "device/fido/authenticator_make_credential_response.h"
+#include "device/fido/fido_transport_protocol.h"
 
 namespace device {
 
@@ -35,6 +37,10 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAuthenticator {
   FidoAuthenticator() = default;
   virtual ~FidoAuthenticator() = default;
 
+  // Sends GetInfo request to connected authenticator. Once response to GetInfo
+  // call is received, |callback| is invoked. Below MakeCredential() and
+  // GetAssertion() must only called after |callback| is invoked.
+  virtual void InitializeAuthenticator(base::OnceClosure callback) = 0;
   virtual void MakeCredential(
       CtapMakeCredentialRequest request,
       MakeCredentialCallback callback) = 0;
@@ -43,6 +49,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoAuthenticator {
   virtual void Cancel() = 0;
   virtual std::string GetId() const = 0;
   virtual const AuthenticatorSupportedOptions& Options() const = 0;
+  virtual FidoTransportProtocol AuthenticatorTransport() const = 0;
+  virtual base::WeakPtr<FidoAuthenticator> GetWeakPtr() = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FidoAuthenticator);

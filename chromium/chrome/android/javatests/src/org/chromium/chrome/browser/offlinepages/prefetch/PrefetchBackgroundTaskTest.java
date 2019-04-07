@@ -19,6 +19,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -235,6 +236,7 @@ public class PrefetchBackgroundTaskTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "crbug.com/875433")
     public void testReschedule() throws Exception {
         PrefetchBackgroundTask.skipConditionCheckingForTesting();
         scheduleTask(0);
@@ -283,6 +285,7 @@ public class PrefetchBackgroundTaskTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "https://crbug.com/870295")
     public void testSuspend() throws Exception {
         PrefetchBackgroundTask.skipConditionCheckingForTesting();
         scheduleTask(0);

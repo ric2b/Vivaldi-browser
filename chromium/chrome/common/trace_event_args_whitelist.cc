@@ -28,9 +28,11 @@ const WhitelistEntry kEventArgsWhitelist[] = {
     {"__metadata", "chrome_library_address", nullptr},
     {"__metadata", "stackFrames", nullptr},
     {"__metadata", "typeNames", nullptr},
+    {"ipc", "GpuChannelHost::Send", nullptr},
     {"ipc", "SyncChannel::Send", nullptr},
     {"toplevel", "*", nullptr},
     {"latencyInfo", "*", kInputLatencyAllowedArgs},
+    {"omnibox", "HistoryQuickProvider::Start", nullptr},
     // Redefined the string since MemoryDumpManager::kTraceCategory causes
     // static initialization of this struct.
     {TRACE_DISABLED_BY_DEFAULT("memory-infra"), "*", kMemoryDumpAllowedArgs},
@@ -50,6 +52,7 @@ const char* kMetadataWhitelist[] = {"chrome-library-name",
                                     "physical-memory",
                                     "product-version",
                                     "scenario_name",
+                                    "trace-config",
                                     "user-agent"};
 
 }  // namespace

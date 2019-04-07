@@ -122,16 +122,13 @@ class SVGCurrentTranslateTearOff : public SVGPointTearOff {
   }
 
   void CommitChange() override {
-    DCHECK(contextElement());
-    ToSVGSVGElement(contextElement())->UpdateUserTransform();
+    DCHECK(ContextElement());
+    ToSVGSVGElement(ContextElement())->UpdateUserTransform();
   }
 
  private:
   SVGCurrentTranslateTearOff(SVGSVGElement* context_element)
-      : SVGPointTearOff(context_element->translation_,
-                        context_element,
-                        kPropertyIsNotAnimVal,
-                        QualifiedName::Null()) {}
+      : SVGPointTearOff(context_element->translation_, context_element) {}
 };
 
 SVGPointTearOff* SVGSVGElement::currentTranslateFromJavascript() {
@@ -202,7 +199,7 @@ void SVGSVGElement::ParseAttribute(const AttributeModificationParams& params) {
         name == SVGNames::widthAttr ? width_ : height_;
     SVGParsingError parse_error;
     if (!value.IsNull())
-      parse_error = property->SetBaseValueAsString(value);
+      parse_error = property->AttributeChanged(value);
     if (parse_error != SVGParseStatus::kNoError || value.IsNull())
       property->SetDefaultValueAsString("100%");
     ReportAttributeParsingError(parse_error, name, value);
@@ -332,7 +329,7 @@ bool SVGSVGElement::CheckIntersectionOrEnclosure(
   LayoutObject* layout_object = element.GetLayoutObject();
   DCHECK(!layout_object || layout_object->Style());
   if (!layout_object ||
-      layout_object->Style()->PointerEvents() == EPointerEvents::kNone)
+      layout_object->StyleRef().PointerEvents() == EPointerEvents::kNone)
     return false;
 
   if (!IsIntersectionOrEnclosureTarget(layout_object))
@@ -523,10 +520,10 @@ LayoutObject* SVGSVGElement::CreateLayoutObject(const ComputedStyle&) {
 }
 
 Node::InsertionNotificationRequest SVGSVGElement::InsertedInto(
-    ContainerNode* root_parent) {
-  if (root_parent->isConnected()) {
+    ContainerNode& root_parent) {
+  if (root_parent.isConnected()) {
     UseCounter::Count(GetDocument(), WebFeature::kSVGSVGElementInDocument);
-    if (root_parent->GetDocument().IsXMLDocument())
+    if (root_parent.GetDocument().IsXMLDocument())
       UseCounter::Count(GetDocument(), WebFeature::kSVGSVGElementInXMLDocument);
 
     if (RuntimeEnabledFeatures::SMILEnabled()) {
@@ -544,8 +541,8 @@ Node::InsertionNotificationRequest SVGSVGElement::InsertedInto(
   return SVGGraphicsElement::InsertedInto(root_parent);
 }
 
-void SVGSVGElement::RemovedFrom(ContainerNode* root_parent) {
-  if (root_parent->isConnected()) {
+void SVGSVGElement::RemovedFrom(ContainerNode& root_parent) {
+  if (root_parent.isConnected()) {
     SVGDocumentExtensions& svg_extensions = GetDocument().AccessSVGExtensions();
     svg_extensions.RemoveTimeContainer(this);
     svg_extensions.RemoveSVGRootWithRelativeLengthDescendents(this);

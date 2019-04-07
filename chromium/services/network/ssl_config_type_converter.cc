@@ -13,6 +13,8 @@ net::TLS13Variant MojoTLS13VariantToNetTLS13Variant(
       return net::kTLS13VariantDraft23;
     case network::mojom::TLS13Variant::kDraft28:
       return net::kTLS13VariantDraft28;
+    case network::mojom::TLS13Variant::kFinal:
+      return net::kTLS13VariantFinal;
   }
   NOTREACHED();
   return net::kTLS13VariantDraft23;
@@ -43,15 +45,6 @@ TypeConverter<net::SSLConfig, network::mojom::SSLConfigPtr>::Convert(
   DCHECK(mojo_config);
 
   net::SSLConfig net_config;
-
-  net_config.rev_checking_enabled = mojo_config->rev_checking_enabled;
-  net_config.rev_checking_required_local_anchors =
-      mojo_config->rev_checking_required_local_anchors;
-
-  net_config.sha1_local_anchors_enabled =
-      mojo_config->sha1_local_anchors_enabled;
-  net_config.symantec_enforcement_disabled =
-      mojo_config->symantec_enforcement_disabled;
 
   net_config.version_min =
       MojoSSLVersionToNetSSLVersion(mojo_config->version_min);

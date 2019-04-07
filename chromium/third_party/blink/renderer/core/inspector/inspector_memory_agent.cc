@@ -33,6 +33,7 @@
 #include <cstdio>
 
 #include "base/debug/stack_trace.h"
+#include "base/sampling_heap_profiler/module_cache.h"
 #include "base/sampling_heap_profiler/sampling_heap_profiler.h"
 #include "build/build_config.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
@@ -41,17 +42,13 @@
 
 namespace blink {
 
-const unsigned kDefaultNativeMemorySamplingInterval = 128 * 1024;
-
-namespace MemoryAgentState {
-static const char samplingProfileInterval[] =
-    "memoryAgentSamplingProfileInterval";
-}  // namespace MemoryAgentState
+constexpr int kDefaultNativeMemorySamplingInterval = 128 * 1024;
 
 using protocol::Response;
 
 InspectorMemoryAgent::InspectorMemoryAgent(InspectedFrames* inspected_frames)
-    : frames_(inspected_frames) {}
+    : frames_(inspected_frames),
+      sampling_profile_interval_(&agent_state_, /*default_value=*/0) {}
 
 InspectorMemoryAgent::~InspectorMemoryAgent() = default;
 
@@ -72,11 +69,8 @@ void InspectorMemoryAgent::Trace(blink::Visitor* visitor) {
 }
 
 void InspectorMemoryAgent::Restore() {
-  int sampling_interval = 0;
-  state_->getInteger(MemoryAgentState::samplingProfileInterval,
-                     &sampling_interval);
   // The action below won't start sampling if the sampling_interval is zero.
-  startSampling(protocol::Maybe<int>(sampling_interval),
+  startSampling(protocol::Maybe<int>(sampling_profile_interval_.Get()),
                 protocol::Maybe<bool>());
 }
 
@@ -87,22 +81,19 @@ Response InspectorMemoryAgent::startSampling(
       in_sampling_interval.fromMaybe(kDefaultNativeMemorySamplingInterval);
   if (interval <= 0)
     return Response::Error("Invalid sampling rate.");
-  base::SamplingHeapProfiler::GetInstance()->SetSamplingInterval(interval);
-  state_->setInteger(MemoryAgentState::samplingProfileInterval, interval);
+  base::SamplingHeapProfiler::Get()->SetSamplingInterval(interval);
+  sampling_profile_interval_.Set(interval);
   if (in_suppressRandomness.fromMaybe(false))
-    base::SamplingHeapProfiler::GetInstance()->SuppressRandomnessForTest(true);
-  profile_id_ = base::SamplingHeapProfiler::GetInstance()->Start();
+    base::PoissonAllocationSampler::Get()->SuppressRandomnessForTest(true);
+  profile_id_ = base::SamplingHeapProfiler::Get()->Start();
   return Response::OK();
 }
 
 Response InspectorMemoryAgent::stopSampling() {
-  int sampling_interval = 0;
-  state_->getInteger(MemoryAgentState::samplingProfileInterval,
-                     &sampling_interval);
-  if (!sampling_interval)
+  if (sampling_profile_interval_.Get() == 0)
     return Response::Error("Sampling profiler is not started.");
-  base::SamplingHeapProfiler::GetInstance()->Stop();
-  state_->setInteger(MemoryAgentState::samplingProfileInterval, 0);
+  base::SamplingHeapProfiler::Get()->Stop();
+  sampling_profile_interval_.Clear();
   return Response::OK();
 }
 
@@ -120,15 +111,20 @@ Response InspectorMemoryAgent::getSamplingProfile(
 
 std::unique_ptr<protocol::Memory::SamplingProfile>
 InspectorMemoryAgent::GetSamplingProfileById(uint32_t id) {
+  base::ModuleCache module_cache;
   std::unique_ptr<protocol::Array<protocol::Memory::SamplingProfileNode>>
       samples =
           protocol::Array<protocol::Memory::SamplingProfileNode>::create();
   std::vector<base::SamplingHeapProfiler::Sample> raw_samples =
-      base::SamplingHeapProfiler::GetInstance()->GetSamples(id);
+      base::SamplingHeapProfiler::Get()->GetSamples(id);
 
   for (auto& it : raw_samples) {
     std::unique_ptr<protocol::Array<protocol::String>> stack =
         protocol::Array<protocol::String>::create();
+    for (const void* frame : it.stack) {
+      uintptr_t address = reinterpret_cast<uintptr_t>(frame);
+      module_cache.GetModuleForAddress(address);  // Populates module_cache.
+    }
     std::vector<std::string> source_stack = Symbolize(it.stack);
     for (auto& it2 : source_stack)
       stack->addItem(it2.c_str());
@@ -155,8 +151,21 @@ InspectorMemoryAgent::GetSamplingProfileById(uint32_t id) {
                          .build());
   }
 
+  std::unique_ptr<protocol::Array<protocol::Memory::Module>> modules =
+      protocol::Array<protocol::Memory::Module>::create();
+  for (const auto* module : module_cache.GetModules()) {
+    modules->addItem(
+        protocol::Memory::Module::create()
+            .setName(module->filename.value().c_str())
+            .setUuid(module->id.c_str())
+            .setBaseAddress(String::Format("0x%" PRIxPTR, module->base_address))
+            .setSize(static_cast<double>(module->size))
+            .build());
+  }
+
   return protocol::Memory::SamplingProfile::create()
       .setSamples(std::move(samples))
+      .setModules(std::move(modules))
       .build();
 }
 
@@ -185,21 +194,19 @@ std::vector<std::string> InspectorMemoryAgent::Symbolize(
         line.substr(space_pos == std::string::npos ? 0 : space_pos + 1);
     symbols_cache_.insert(addresses_to_symbolize[i], name);
   }
+#endif
 
-  std::vector<std::string> result;
-  for (void* address : addresses)
-    result.push_back(symbols_cache_.at(address));
-
-  return result;
-#else
   std::vector<std::string> result;
   for (void* address : addresses) {
     char buffer[20];
-    std::snprintf(buffer, sizeof(buffer), "%p", address);
-    result.push_back(buffer);
+    std::snprintf(buffer, sizeof(buffer), "0x%" PRIxPTR,
+                  reinterpret_cast<uintptr_t>(address));
+    if (symbols_cache_.Contains(address))
+      result.push_back(std::string(buffer) + " " + symbols_cache_.at(address));
+    else
+      result.push_back(buffer);
   }
   return result;
-#endif
 }
 
 }  // namespace blink

@@ -29,7 +29,6 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
-#include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
@@ -263,11 +262,11 @@ void HTMLFrameSetElement::AttachLayoutTree(AttachContext& context) {
   HTMLElement::AttachLayoutTree(context);
 }
 
-void HTMLFrameSetElement::DefaultEventHandler(Event* evt) {
-  if (evt->IsMouseEvent() && !noresize_ && GetLayoutObject() &&
+void HTMLFrameSetElement::DefaultEventHandler(Event& evt) {
+  if (evt.IsMouseEvent() && !noresize_ && GetLayoutObject() &&
       GetLayoutObject()->IsFrameSet()) {
     if (ToLayoutFrameSet(GetLayoutObject())->UserResize(ToMouseEvent(evt))) {
-      evt->SetDefaultHandled();
+      evt.SetDefaultHandled();
       return;
     }
   }
@@ -275,8 +274,8 @@ void HTMLFrameSetElement::DefaultEventHandler(Event* evt) {
 }
 
 Node::InsertionNotificationRequest HTMLFrameSetElement::InsertedInto(
-    ContainerNode* insertion_point) {
-  if (insertion_point->isConnected() && GetDocument().GetFrame()) {
+    ContainerNode& insertion_point) {
+  if (insertion_point.isConnected() && GetDocument().GetFrame()) {
     // A document using <frameset> likely won't literally have a body, but as
     // far as the client is concerned, the frameset is effectively the body.
     GetDocument().WillInsertBody();
@@ -290,25 +289,6 @@ void HTMLFrameSetElement::WillRecalcStyle(StyleRecalcChange) {
         LayoutInvalidationReason::kStyleChange);
     ClearNeedsStyleRecalc();
   }
-}
-
-LocalDOMWindow* HTMLFrameSetElement::AnonymousNamedGetter(
-    const AtomicString& name) {
-  Element* frame_element = Children()->namedItem(name);
-  if (!IsHTMLFrameElement(frame_element))
-    return nullptr;
-  Document* document = ToHTMLFrameElement(frame_element)->contentDocument();
-  if (!document || !document->GetFrame())
-    return nullptr;
-
-  LocalDOMWindow* window = document->domWindow();
-  if (window) {
-    UseCounter::Count(
-        *document, WebFeature::kHTMLFrameSetElementNonNullAnonymousNamedGetter);
-  }
-  Deprecation::CountDeprecation(
-      *document, WebFeature::kHTMLFrameSetElementAnonymousNamedGetter);
-  return window;
 }
 
 }  // namespace blink

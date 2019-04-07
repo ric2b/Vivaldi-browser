@@ -12,7 +12,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/safe_browsing/download_protection/two_phase_uploader.h"
 #include "components/safe_browsing/proto/csd.pb.h"
 #include "content/public/browser/browser_thread.h"
@@ -96,7 +96,7 @@ class DownloadFeedbackTest : public testing::Test {
  public:
   DownloadFeedbackTest()
       : file_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-            {base::MayBlock(), base::TaskPriority::BACKGROUND})),
+            {base::MayBlock(), base::TaskPriority::BEST_EFFORT})),
         io_task_runner_(content::BrowserThread::GetTaskRunnerForThread(
             content::BrowserThread::IO)),
         feedback_finish_called_(false) {

@@ -4,11 +4,11 @@
 
 #include "third_party/blink/renderer/core/paint/compositing/graphics_layer_tree_as_text.h"
 
+#include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/platform/geometry/geometry_as_json.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
 #include "third_party/blink/renderer/platform/graphics/logging_canvas.h"
 #include "third_party/blink/renderer/platform/json/json_values.h"
-#include "third_party/blink/renderer/platform/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_stream.h"
 
 namespace blink {
@@ -351,6 +351,24 @@ String GraphicsLayerTreeAsTextForTesting(const GraphicsLayer* layer,
                                          LayerTreeFlags flags) {
   return GraphicsLayerTreeAsJSON(layer, flags)->ToPrettyJSONString();
 }
+
+#if DCHECK_IS_ON()
+void VerboseLogGraphicsLayerTree(const GraphicsLayer* root) {
+  if (!VLOG_IS_ON(2))
+    return;
+
+  using GraphicsLayerTreeMap = HashMap<const GraphicsLayer*, String>;
+  DEFINE_STATIC_LOCAL(GraphicsLayerTreeMap, s_previous_trees, ());
+  LayerTreeFlags flags = VLOG_IS_ON(3) ? 0xffffffff : kOutputAsLayerTree;
+  String new_tree = GraphicsLayerTreeAsTextForTesting(root, flags);
+  auto it = s_previous_trees.find(root);
+  if (it == s_previous_trees.end() || it->value != new_tree) {
+    VLOG(2) << "GraphicsLayer tree:\n" << new_tree.Utf8().data();
+    s_previous_trees.Set(root, new_tree);
+    // For simplification, we don't remove deleted GraphicsLayers from the map.
+  }
+}
+#endif
 
 }  // namespace blink
 

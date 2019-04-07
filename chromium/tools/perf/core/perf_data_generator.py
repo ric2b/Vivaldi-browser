@@ -22,7 +22,8 @@ import sys
 import sets
 import tempfile
 
-
+from core import benchmark_utils
+from core import bot_platforms
 from core import path_util
 from core import undocumented_benchmarks as ub_module
 path_util.AddTelemetryToPath()
@@ -36,6 +37,7 @@ from py_utils import discover
 _UNSCHEDULED_TELEMETRY_BENCHMARKS = set([
   'experimental.startup.android.coldish',
   'experimental.startup.mobile',
+  'blink_perf.accessibility',
   ])
 
 # Additional compile targets to add to builders.
@@ -71,14 +73,6 @@ NEW_PERF_RECIPE_FYI_TESTERS = {
     'OBBS Mac 10.12 Perf': {
       'tests': [
         {
-          'isolate': 'performance_test_suite',
-          'extra_args': [
-            '--run-ref-build',
-            '--test-shard-map-filename=mac1012_5_shard_map.json',
-          ],
-          'num_shards': 5
-        },
-        {
           'isolate': 'net_perftests',
           'num_shards': 1,
           'telemetry': False,
@@ -87,6 +81,14 @@ NEW_PERF_RECIPE_FYI_TESTERS = {
           'isolate': 'views_perftests',
           'num_shards': 1,
           'telemetry': False,
+        },
+        {
+          'isolate': 'performance_test_suite',
+          'extra_args': [
+            '--run-ref-build',
+            '--test-shard-map-filename=mac1012_5_shard_map.json',
+          ],
+          'num_shards': 5
         }
       ],
       'platform': 'mac',
@@ -121,33 +123,12 @@ NEW_PERF_RECIPE_FYI_TESTERS = {
       },
       'testing': True,
     },
-    'Android Go': {
-      'tests': [
-        {
-          'name': 'performance_test_suite',
-          'isolate': 'performance_test_suite',
-          'extra_args': [
-            '--run-ref-build',
-            '--test-shard-map-filename=android_go_shard_map.json',
-          ],
-          'num_shards': 19
-        }
-      ],
-      'platform': 'android',
-      'dimension': {
-        'device_os': 'O',
-        'device_type': 'gobo',
-        'device_os_flavor': 'google',
-        'pool': 'chrome.tests.perf-fyi',
-        'os': 'Android',
-      },
-    },
     'android-pixel2_webview-perf': {
       'tests': [
         {
           'isolate': 'performance_webview_test_suite',
           'extra_args': [
-            '--test-shard-map-filename=pixel2_webview_7_shard_map.json',
+            '--test-shard-map-filename=android_pixel2_webview_shard_map.json',
           ],
           'num_shards': 7
         }
@@ -167,7 +148,7 @@ NEW_PERF_RECIPE_FYI_TESTERS = {
           'isolate': 'performance_test_suite',
           'extra_args': [
             '--run-ref-build',
-            '--test-shard-map-filename=pixel2_7_shard_map.json',
+            '--test-shard-map-filename=android_pixel2_shard_map.json',
           ],
           'num_shards': 7
         }
@@ -180,6 +161,25 @@ NEW_PERF_RECIPE_FYI_TESTERS = {
         'device_os': 'O',
         'device_os_flavor': 'google',
       },
+    },
+    'android-go_webview-perf': {
+      'tests': [
+        {
+          'isolate': 'performance_webview_test_suite',
+          'extra_args': [
+              '--test-shard-map-filename=android_go_webview_shard_map.json',
+          ],
+          'num_shards': 25
+        }
+      ],
+      'platform': 'android-webview',
+      'dimension': {
+        'pool': 'chrome.tests.perf-webview',
+        'os': 'Android',
+        'device_type': 'gobo',
+        'device_os': 'O',
+        'device_os_flavor': 'google',
+      },
     }
   }
 }
@@ -189,6 +189,27 @@ NEW_PERF_RECIPE_FYI_TESTERS = {
 # to generate the correct json for each tester
 NEW_PERF_RECIPE_MIGRATED_TESTERS = {
   'testers' : {
+    'android-go-perf': {
+      'tests': [
+        {
+          'name': 'performance_test_suite',
+          'isolate': 'performance_test_suite',
+          'extra_args': [
+            '--run-ref-build',
+            '--test-shard-map-filename=android_go_shard_map.json',
+          ],
+          'num_shards': 19
+        }
+      ],
+      'platform': 'android',
+      'dimension': {
+        'device_os': 'O',
+        'device_type': 'gobo',
+        'device_os_flavor': 'google',
+        'pool': 'chrome.tests.perf',
+        'os': 'Android',
+      },
+    },
     'android-nexus5x-perf': {
       'tests': [
         {
@@ -282,39 +303,12 @@ NEW_PERF_RECIPE_MIGRATED_TESTERS = {
         'device_os_flavor': 'google',
       },
     },
-    'Android One Perf': {
-      'tests': [
-        {
-          'isolate': 'performance_test_suite',
-          'num_shards': 16,
-          'extra_args': [
-              '--run-ref-build',
-              '--test-shard-map-filename=android_one_16_shard_map.json',
-              '--assert-gpu-compositing',
-          ],
-        },
-        {
-          'isolate': 'tracing_perftests',
-          'num_shards': 1,
-          'telemetry': False,
-        }
-      ],
-      'platform': 'android',
-      'dimension': {
-        'pool': 'chrome.tests.perf',
-        'os': 'Android',
-        'device_type': 'sprout',
-        'device_os': 'LMY47W',
-        'device_os_flavor': 'google',
-      },
-    },
     'Android Nexus5X WebView Perf': {
       'tests': [
         {
           'isolate': 'performance_webview_test_suite',
           'num_shards': 16,
           'extra_args': [
-              '--run-ref-build',
               '--test-shard-map-filename=android_nexus5x_webview_16_shard_map.json',
               '--assert-gpu-compositing',
           ],
@@ -335,7 +329,6 @@ NEW_PERF_RECIPE_MIGRATED_TESTERS = {
           'isolate': 'performance_webview_test_suite',
           'num_shards': 16,
           'extra_args': [
-              '--run-ref-build',
               '--test-shard-map-filename=android_nexus6_webview_shard_map.json',
               '--assert-gpu-compositing',
           ],
@@ -354,7 +347,7 @@ NEW_PERF_RECIPE_MIGRATED_TESTERS = {
       'tests': [
         {
           'isolate': 'performance_test_suite',
-          'num_shards': 5,
+          'num_shards': 26,
           'extra_args': [
               '--run-ref-build',
               '--test-shard-map-filename=win10_shard_map.json',
@@ -635,53 +628,57 @@ def update_all_tests(waterfall, file_path):
                                     get_all_waterfall_benchmarks_metadata())
 
 
-# not_scheduled means this test is not scheduled on any of the chromium.perf
-# waterfalls. Right now, all the below benchmarks are scheduled, but some other
-# benchmarks are not scheduled, because they're disabled on all platforms.
-BenchmarkMetadata = collections.namedtuple(
-    'BenchmarkMetadata', 'emails component documentation_url not_scheduled')
+class BenchmarkMetadata(object):
+  def __init__(self, emails, component='', documentation_url='', tags='',
+               not_scheduled=False):
+    self.emails = emails
+    self.component = component
+    self.documentation_url = documentation_url
+    self.tags = tags
+    # not_scheduled means this test is not scheduled on any of the chromium.perf
+    # waterfalls. Right now, all the below benchmarks are scheduled, but some
+    # other benchmarks are not scheduled, because they're disabled on all
+    # platforms.
+    # TODO(crbug.com/875232): remove this field
+    self.not_scheduled = not_scheduled
+
 NON_TELEMETRY_BENCHMARKS = {
     'angle_perftests': BenchmarkMetadata(
         'jmadill@chromium.org, chrome-gpu-perf-owners@chromium.org',
-        'Internals>GPU>ANGLE', None, False),
+        'Internals>GPU>ANGLE'),
     'validating_command_buffer_perftests': BenchmarkMetadata(
         'piman@chromium.org, chrome-gpu-perf-owners@chromium.org',
-        'Internals>GPU', None, False),
+        'Internals>GPU'),
     'passthrough_command_buffer_perftests': BenchmarkMetadata(
         'piman@chromium.org, chrome-gpu-perf-owners@chromium.org',
-        'Internals>GPU>ANGLE', None, False),
+        'Internals>GPU>ANGLE'),
     'net_perftests': BenchmarkMetadata(
-        'xunjieli@chromium.org', None, None, False),
+        'xunjieli@chromium.org'),
     'gpu_perftests': BenchmarkMetadata(
         'reveman@chromium.org, chrome-gpu-perf-owners@chromium.org',
-        'Internals>GPU', None, False),
+        'Internals>GPU'),
     'tracing_perftests': BenchmarkMetadata(
-        'kkraynov@chromium.org, primiano@chromium.org', None, None, False),
+        'kkraynov@chromium.org, primiano@chromium.org'),
     'load_library_perf_tests': BenchmarkMetadata(
         'xhwang@chromium.org, crouleau@chromium.org',
-        'Internals>Media>Encrypted', None, False),
-    'media_perftests': BenchmarkMetadata(
-        'crouleau@chromium.org', None, None, False),
-    'performance_browser_tests': BenchmarkMetadata(
-        'miu@chromium.org', None, None, False),
+        'Internals>Media>Encrypted'),
+    'media_perftests': BenchmarkMetadata('crouleau@chromium.org'),
+    'performance_browser_tests': BenchmarkMetadata('miu@chromium.org'),
     'views_perftests': BenchmarkMetadata(
-        'tapted@chromium.org', 'Internals>Views', None, False),
-    'components_perftests': BenchmarkMetadata(
-        'csharrison@chromium.org', None, None, False)
+        'tapted@chromium.org', 'Internals>Views'),
+    'components_perftests': BenchmarkMetadata('csharrison@chromium.org')
 }
 
 
 # If you change this dictionary, run tools/perf/generate_perf_data
 NON_WATERFALL_BENCHMARKS = {
-    'sizes (mac)': BenchmarkMetadata('tapted@chromium.org', None, None, False),
-    'sizes (win)': BenchmarkMetadata('grt@chromium.org', None, None, False),
-    'sizes (linux)': BenchmarkMetadata(
-        'thestig@chromium.org', None, None, False),
+    'sizes (mac)':
+        BenchmarkMetadata('tapted@chromium.org'),
+    'sizes (win)': BenchmarkMetadata('grt@chromium.org'),
+    'sizes (linux)': BenchmarkMetadata('thestig@chromium.org'),
     'resource_sizes': BenchmarkMetadata(
-        'agrieve@chromium.org, rnephew@chromium.org, perezju@chromium.org',
-        None, None, False),
-    'supersize_archive': BenchmarkMetadata(
-        'agrieve@chromium.org', None, None, False),
+        'agrieve@chromium.org, rnephew@chromium.org, perezju@chromium.org'),
+    'supersize_archive': BenchmarkMetadata('agrieve@chromium.org'),
 }
 
 
@@ -698,9 +695,11 @@ def get_all_benchmarks_metadata(metadata):
     emails = decorators.GetEmails(benchmark)
     if emails:
       emails = ', '.join(emails)
+    tags_set = benchmark_utils.GetStoryTags(benchmark())
     metadata[benchmark.Name()] = BenchmarkMetadata(
         emails, decorators.GetComponent(benchmark),
-        decorators.GetDocumentationLink(benchmark), False)
+        decorators.GetDocumentationLink(benchmark),
+        ','.join(tags_set), False)
   return metadata
 
 # With migration to new recipe tests are now listed in the shard maps
@@ -772,7 +771,7 @@ def verify_all_tests_in_benchmark_csv(tests, benchmark_metadata):
 def _verify_benchmark_owners(benchmark_metadata):
   unowned_benchmarks = set()
   for benchmark_name in benchmark_metadata:
-    if benchmark_metadata[benchmark_name].emails == None:
+    if benchmark_metadata[benchmark_name].emails is None:
       unowned_benchmarks.add(benchmark_name)
 
   assert not unowned_benchmarks, (
@@ -788,7 +787,8 @@ def update_benchmark_csv(file_path):
   """
   header_data = [['AUTOGENERATED FILE DO NOT EDIT'],
       ['See //tools/perf/generate_perf_data.py to make changes'],
-      ['Benchmark name', 'Individual owners', 'Component', 'Documentation']
+      ['Benchmark name', 'Individual owners', 'Component', 'Documentation',
+       'Tags']
   ]
 
   csv_data = []
@@ -806,6 +806,7 @@ def update_benchmark_csv(file_path):
         benchmark_metadata[benchmark_name].emails,
         benchmark_metadata[benchmark_name].component,
         benchmark_metadata[benchmark_name].documentation_url,
+        benchmark_metadata[benchmark_name].tags,
     ])
   if undocumented_benchmarks != ub_module.UNDOCUMENTED_BENCHMARKS:
     error_message = (
@@ -834,11 +835,35 @@ def update_benchmark_csv(file_path):
     writer.writerows(csv_data)
 
 
-def validate_tests(waterfall, waterfall_file, benchmark_file):
+def update_labs_docs_md(filepath):
+  configs = collections.defaultdict(list)
+  for tester in bot_platforms.ALL_PLATFORMS:
+    if not tester.is_fyi:
+      configs[tester.platform].append(tester)
+
+  with open(filepath, 'w') as f:
+    f.write("""
+[comment]: # (AUTOGENERATED FILE DO NOT EDIT)
+[comment]: # (See //tools/perf/generate_perf_data to make changes)
+
+# Platforms tested in the Performance Lab
+
+""")
+    for platform, testers in sorted(configs.iteritems()):
+      f.write('## %s\n\n' % platform.title())
+      testers.sort()
+      for tester in testers:
+        f.write(' * [{0.name}]({0.buildbot_url}): {0.description}.\n'.format(
+            tester))
+      f.write('\n')
+
+
+def validate_tests(waterfall, waterfall_file, benchmark_file, labs_docs_file):
   up_to_date = True
 
   waterfall_tempfile = tempfile.NamedTemporaryFile(delete=False).name
   benchmark_tempfile = tempfile.NamedTemporaryFile(delete=False).name
+  labs_docs_tempfile = tempfile.NamedTemporaryFile(delete=False).name
 
   try:
     update_all_tests(waterfall, waterfall_tempfile)
@@ -846,9 +871,13 @@ def validate_tests(waterfall, waterfall_file, benchmark_file):
 
     update_benchmark_csv(benchmark_tempfile)
     up_to_date &= filecmp.cmp(benchmark_file, benchmark_tempfile)
+
+    update_labs_docs_md(labs_docs_tempfile)
+    up_to_date &= filecmp.cmp(labs_docs_file, labs_docs_tempfile)
   finally:
     os.remove(waterfall_tempfile)
     os.remove(benchmark_tempfile)
+    os.remove(labs_docs_tempfile)
 
   return up_to_date
 
@@ -904,29 +933,34 @@ def generate_telemetry_args(tester_config):
 
   return test_args
 
-def generate_non_telemetry_args():
+def generate_non_telemetry_args(test_name):
+  # --gtest-benchmark-name so the benchmark name is consistent with the test
+  # step's name. This is not always the same as the test binary's name (see
+  # crbug.com/870692).
   # --non-telemetry tells run_performance_tests.py that this test needs
   #   to be executed differently
   # --migrated-test tells run_performance_test_wrapper that this has
   #   non-telemetry test has been migrated to the new recipe.
   return [
+    '--gtest-benchmark-name', test_name,
     '--non-telemetry=true',
     '--migrated-test=true'
   ]
 
 def generate_performance_test(tester_config, test):
-  if test.get('telemetry', True):
-    test_args = generate_telemetry_args(tester_config)
-  else:
-    test_args = generate_non_telemetry_args()
-  # Append any additional args specific to an isolate
-  test_args += test.get('extra_args', [])
   isolate_name = test['isolate']
 
   # Check to see if the name is different than the isolate
   test_suite = isolate_name
   if test.get('test_suite', False):
     test_suite = test['test_suite']
+
+  if test.get('telemetry', True):
+    test_args = generate_telemetry_args(tester_config)
+  else:
+    test_args = generate_non_telemetry_args(test_name=test_suite)
+  # Append any additional args specific to an isolate
+  test_args += test.get('extra_args', [])
 
   result = {
     'args': test_args,
@@ -945,7 +979,7 @@ def generate_performance_test(tester_config, test):
     # Always say this is true regardless of whether the tester
     # supports swarming. It doesn't hurt.
     'can_use_on_swarming_builders': True,
-    'expiration': 6 * 60 * 60, # 6 hours timeout
+    'expiration': 2 * 60 * 60, # 2 hours pending max
     'hard_timeout': 7 * 60 * 60, # 7 hours timeout for full suite
     'ignore_task_failure': False,
     'io_timeout': 30 * 60, # 30 minutes
@@ -972,11 +1006,20 @@ def load_and_update_fyi_json(fyi_waterfall_file):
 
 def generate_telemetry_tests(testers, tests):
   for tester, tester_config in testers['testers'].iteritems():
-    isolated_scripts = []
+    telemetry_tests = []
+    gtest_tests = []
     for test in tester_config['tests']:
-      isolated_scripts.append(generate_performance_test(tester_config, test))
+      generated_script = generate_performance_test(tester_config, test)
+      if test.get('telemetry', True):
+        telemetry_tests.append(generated_script)
+      else:
+        gtest_tests.append(generated_script)
+    telemetry_tests.sort(key=lambda x: x['name'])
+    gtest_tests.sort(key=lambda x: x['name'])
     tests[tester] = {
-      'isolated_scripts': sorted(isolated_scripts, key=lambda x: x['name'])
+      # Put Telemetry tests as the end since they tend to run longer to avoid
+      # starving gtests (see crbug.com/873389).
+      'isolated_scripts': gtest_tests + telemetry_tests
     }
 
 
@@ -1002,18 +1045,21 @@ def main(args):
   benchmark_file = os.path.join(
       path_util.GetChromiumSrcDir(), 'tools', 'perf', 'benchmark.csv')
 
+  labs_docs_file = os.path.join(
+      path_util.GetChromiumSrcDir(), 'docs', 'speed', 'perf_lab_platforms.md')
+
   if options.validate_only:
     if validate_tests(get_waterfall_builder_config(),
-                      waterfall_file, benchmark_file):
-      print 'All the perf JSON config files are up-to-date. \\o/'
+                      waterfall_file, benchmark_file, labs_docs_file):
+      print 'All the perf config files are up-to-date. \\o/'
       return 0
     else:
-      print ('The perf JSON config files are not up-to-date. Please run %s '
-             'without --validate-only flag to update the perf JSON '
-             'configs and benchmark.csv.') % sys.argv[0]
+      print ('Not all perf config files are up-to-date. Please run %s '
+             'to update them.') % sys.argv[0]
       return 1
   else:
     load_and_update_fyi_json(fyi_waterfall_file)
     update_all_tests(get_waterfall_builder_config(), waterfall_file)
     update_benchmark_csv(benchmark_file)
+    update_labs_docs_md(labs_docs_file)
   return 0

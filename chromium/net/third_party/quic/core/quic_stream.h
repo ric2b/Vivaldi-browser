@@ -59,6 +59,8 @@ class QUIC_EXPORT_PRIVATE QuicStream {
   // |is_static| is true, then the stream will be given precedence
   // over other streams when determing what streams should write next.
   QuicStream(QuicStreamId id, QuicSession* session, bool is_static);
+  QuicStream(const QuicStream&) = delete;
+  QuicStream& operator=(const QuicStream&) = delete;
 
   virtual ~QuicStream();
 
@@ -249,6 +251,10 @@ class QUIC_EXPORT_PRIVATE QuicStream {
                                     QuicByteCount data_length,
                                     bool fin);
 
+  // Sets deadline of this stream to be now + |ttl|, returns true if the setting
+  // succeeds.
+  bool MaybeSetTtl(QuicTime::Delta ttl);
+
   // Same as WritevData except data is provided in reference counted memory so
   // that data copy is avoided.
   QuicConsumedData WriteMemSlices(QuicMemSliceSpan span, bool fin);
@@ -312,6 +318,10 @@ class QUIC_EXPORT_PRIVATE QuicStream {
   // Writes pending retransmissions if any.
   virtual void WritePendingRetransmission();
 
+  // This is called when stream tries to retransmit data after deadline_. Make
+  // this virtual so that subclasses can implement their own logics.
+  virtual void OnDeadlinePassed();
+
   bool fin_buffered() const { return fin_buffered_; }
 
   const QuicSession* session() const { return session_; }
@@ -351,6 +361,9 @@ class QUIC_EXPORT_PRIVATE QuicStream {
   // Write buffered data in send buffer. TODO(fayang): Consider combine
   // WriteOrBufferData, Writev and WriteBufferedData.
   void WriteBufferedData();
+
+  // Returns true if deadline_ has passed.
+  bool HasDeadlinePassed() const;
 
   QuicStreamSequencer sequencer_;
   QuicStreamId id_;
@@ -434,7 +447,8 @@ class QUIC_EXPORT_PRIVATE QuicStream {
   // scheduling.
   const bool is_static_;
 
-  DISALLOW_COPY_AND_ASSIGN(QuicStream);
+  // If initialized, reset this stream at this deadline.
+  QuicTime deadline_;
 };
 
 }  // namespace quic

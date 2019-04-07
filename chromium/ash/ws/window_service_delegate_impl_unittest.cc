@@ -8,8 +8,8 @@
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "services/ui/ws2/test_window_tree_client.h"
-#include "services/ui/ws2/window_tree_test_helper.h"
+#include "services/ws/test_window_tree_client.h"
+#include "services/ws/window_tree_test_helper.h"
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/drag_drop_delegate.h"
 #include "ui/aura/window.h"
@@ -49,7 +49,7 @@ class WindowServiceDelegateImplTest : public AshTestBase {
   WindowServiceDelegateImplTest() = default;
   ~WindowServiceDelegateImplTest() override = default;
 
-  ui::Id GetTopLevelWindowId() {
+  ws::Id GetTopLevelWindowId() {
     return GetWindowTreeTestHelper()->TransportIdForWindow(top_level_.get());
   }
 
@@ -59,7 +59,7 @@ class WindowServiceDelegateImplTest : public AshTestBase {
         ->wm_toplevel_window_event_handler();
   }
 
-  std::vector<ui::ws2::Change>* GetWindowTreeClientChanges() {
+  std::vector<ws::Change>* GetWindowTreeClientChanges() {
     return GetTestWindowTreeClient()->tracker()->changes();
   }
 
@@ -98,7 +98,7 @@ class WindowServiceDelegateImplTest : public AshTestBase {
 
 TEST_F(WindowServiceDelegateImplTest, RunWindowMoveLoop) {
   GetWindowTreeTestHelper()->window_tree()->PerformWindowMove(
-      21, GetTopLevelWindowId(), ui::mojom::MoveLoopSource::MOUSE,
+      21, GetTopLevelWindowId(), ws::mojom::MoveLoopSource::MOUSE,
       gfx::Point());
   EXPECT_TRUE(event_handler()->is_drag_in_progress());
   GetEventGenerator()->MoveMouseTo(gfx::Point(5, 6));
@@ -114,7 +114,7 @@ TEST_F(WindowServiceDelegateImplTest, RunWindowMoveLoop) {
 
 TEST_F(WindowServiceDelegateImplTest, DeleteWindowWithInProgressRunLoop) {
   GetWindowTreeTestHelper()->window_tree()->PerformWindowMove(
-      29, GetTopLevelWindowId(), ui::mojom::MoveLoopSource::MOUSE,
+      29, GetTopLevelWindowId(), ws::mojom::MoveLoopSource::MOUSE,
       gfx::Point());
   EXPECT_TRUE(event_handler()->is_drag_in_progress());
   top_level_.reset();
@@ -126,7 +126,7 @@ TEST_F(WindowServiceDelegateImplTest, DeleteWindowWithInProgressRunLoop) {
 
 TEST_F(WindowServiceDelegateImplTest, CancelWindowMoveLoop) {
   GetWindowTreeTestHelper()->window_tree()->PerformWindowMove(
-      21, GetTopLevelWindowId(), ui::mojom::MoveLoopSource::MOUSE,
+      21, GetTopLevelWindowId(), ws::mojom::MoveLoopSource::MOUSE,
       gfx::Point());
   EXPECT_TRUE(event_handler()->is_drag_in_progress());
   GetEventGenerator()->MoveMouseTo(gfx::Point(5, 6));
@@ -245,6 +245,59 @@ TEST_F(WindowServiceDelegateImplTest, CancelDragDropAfterDragLoopRun) {
   EXPECT_TRUE(ContainsChange(
       *GetWindowTreeClientChanges(),
       "OnPerformDragDropCompleted id=21 success=false action=0"));
+}
+
+TEST_F(WindowServiceDelegateImplTest, ObserveTopmostWindow) {
+  std::unique_ptr<aura::Window> window2 =
+      CreateTestWindow(gfx::Rect(150, 100, 100, 100));
+  std::unique_ptr<aura::Window> window3(
+      CreateTestWindowInShell(SK_ColorRED, kShellWindowId_DefaultContainer,
+                              gfx::Rect(100, 150, 100, 100)));
+
+  // Left button is pressed on SetUp() -- release it first.
+  GetEventGenerator()->ReleaseLeftButton();
+  GetEventGenerator()->MoveMouseTo(gfx::Point(105, 105));
+  GetEventGenerator()->PressLeftButton();
+  GetWindowTreeClientChanges()->clear();
+
+  GetWindowTreeTestHelper()->window_tree()->ObserveTopmostWindow(
+      ws::mojom::MoveLoopSource::MOUSE, GetTopLevelWindowId());
+  EXPECT_TRUE(
+      ContainsChange(*GetWindowTreeClientChanges(),
+                     "TopmostWindowChanged window_id=0,1 window_id2=null"));
+  GetWindowTreeClientChanges()->clear();
+
+  GetEventGenerator()->MoveMouseTo(gfx::Point(155, 105));
+  EXPECT_TRUE(
+      ContainsChange(*GetWindowTreeClientChanges(),
+                     "TopmostWindowChanged window_id=0,1 window_id2=0,2"));
+  GetWindowTreeClientChanges()->clear();
+
+  GetEventGenerator()->MoveMouseTo(gfx::Point(155, 115));
+  EXPECT_FALSE(
+      ContainsChange(*GetWindowTreeClientChanges(),
+                     "TopmostWindowChanged window_id=0,1 window_id2=0,2"));
+  GetWindowTreeClientChanges()->clear();
+
+  GetEventGenerator()->MoveMouseTo(gfx::Point(155, 155));
+  EXPECT_TRUE(
+      ContainsChange(*GetWindowTreeClientChanges(),
+                     "TopmostWindowChanged window_id=0,1 window_id2=null"));
+  GetWindowTreeClientChanges()->clear();
+
+  window3.reset();
+  EXPECT_TRUE(
+      ContainsChange(*GetWindowTreeClientChanges(),
+                     "TopmostWindowChanged window_id=0,1 window_id2=0,2"));
+  GetWindowTreeClientChanges()->clear();
+
+  window2->Hide();
+  EXPECT_TRUE(
+      ContainsChange(*GetWindowTreeClientChanges(),
+                     "TopmostWindowChanged window_id=0,1 window_id2=null"));
+  GetWindowTreeClientChanges()->clear();
+
+  GetWindowTreeTestHelper()->window_tree()->StopObservingTopmostWindow();
 }
 
 }  // namespace ash

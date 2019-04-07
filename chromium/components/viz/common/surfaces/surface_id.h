@@ -59,6 +59,13 @@ class VIZ_COMMON_EXPORT SurfaceId {
 
   std::string ToString() const;
 
+  // Returns whether this SurfaceId was generated after |other|.
+  bool IsNewerThan(const SurfaceId& other) const;
+
+  // Compare this SurfaceId with |other| and returns the difference between the
+  // parent sequence numbers plus the difference between child sequence numbers.
+  uint32_t ManhattanDistanceTo(const SurfaceId& other) const;
+
   bool operator==(const SurfaceId& other) const {
     return frame_sink_id_ == other.frame_sink_id_ &&
            local_surface_id_ == other.local_surface_id_;

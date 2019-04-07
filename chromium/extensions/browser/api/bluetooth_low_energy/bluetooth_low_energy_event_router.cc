@@ -12,7 +12,6 @@
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "content/public/browser/browser_context.h"
@@ -122,7 +121,7 @@ void PopulateCharacteristic(
   if (value.empty())
     return;
 
-  out->value.reset(new std::vector<char>(value.begin(), value.end()));
+  out->value.reset(new std::vector<uint8_t>(value));
 }
 
 void PopulateDescriptor(const BluetoothRemoteGattDescriptor* descriptor,
@@ -140,7 +139,7 @@ void PopulateDescriptor(const BluetoothRemoteGattDescriptor* descriptor,
   if (value.empty())
     return;
 
-  out->value.reset(new std::vector<char>(value.begin(), value.end()));
+  out->value.reset(new std::vector<uint8_t>(value));
 }
 
 void PopulateDevice(const device::BluetoothDevice* device,
@@ -1131,8 +1130,7 @@ void BluetoothLowEnergyEventRouter::OnCharacteristicWriteRequest(
   request.request_id = StoreSentRequest(
       extension_id,
       std::make_unique<AttributeValueRequest>(callback, error_callback));
-  request.value =
-      std::make_unique<std::vector<char>>(value.begin(), value.end());
+  request.value = std::make_unique<std::vector<uint8_t>>(value);
   PopulateDevice(device, &request);
   DispatchEventToExtension(
       extension_id,
@@ -1207,8 +1205,7 @@ void BluetoothLowEnergyEventRouter::OnDescriptorWriteRequest(
   request.request_id = StoreSentRequest(
       extension_id,
       std::make_unique<AttributeValueRequest>(callback, error_callback));
-  request.value =
-      std::make_unique<std::vector<char>>(value.begin(), value.end());
+  request.value = std::make_unique<std::vector<uint8_t>>(value);
   PopulateDevice(device, &request);
   DispatchEventToExtension(
       extension_id,
@@ -1499,9 +1496,8 @@ void BluetoothLowEnergyEventRouter::DispatchEventToExtensionsWithPermission(
       continue;
 
     // Send the event.
-    std::unique_ptr<base::ListValue> args_copy(args->DeepCopy());
-    std::unique_ptr<Event> event(
-        new Event(histogram_value, event_name, std::move(args_copy)));
+    auto event = std::make_unique<Event>(histogram_value, event_name,
+                                         args->CreateDeepCopy());
     EventRouter::Get(browser_context_)
         ->DispatchEventToExtension(extension_id, std::move(event));
   }
@@ -1522,9 +1518,8 @@ void BluetoothLowEnergyEventRouter::DispatchEventToExtension(
     return;
 
   // Send the event.
-  std::unique_ptr<base::ListValue> args_copy(args->DeepCopy());
-  std::unique_ptr<Event> event(
-      new Event(histogram_value, event_name, std::move(args_copy)));
+  auto event = std::make_unique<Event>(histogram_value, event_name,
+                                       args->CreateDeepCopy());
   EventRouter::Get(browser_context_)
       ->DispatchEventToExtension(extension_id, std::move(event));
 }
@@ -1893,8 +1888,7 @@ size_t BluetoothLowEnergyEventRouter::StoreSentRequest(
   RequestIdToRequestMap* request_id_map = nullptr;
   const auto& iter = requests_.find(extension_id);
   if (iter == requests_.end()) {
-    std::unique_ptr<RequestIdToRequestMap> new_request_id_map =
-        base::WrapUnique(new RequestIdToRequestMap);
+    auto new_request_id_map = std::make_unique<RequestIdToRequestMap>();
     request_id_map = new_request_id_map.get();
     requests_[extension_id] = std::move(new_request_id_map);
   } else {

@@ -16,6 +16,19 @@ import "ui/gfx/mojo/transform.mojom";
 // WebXR interfaces
 //
 
+// TODO: Use EnableIf to only define values on platforms that have
+// implementations.
+enum XRDeviceId {
+  LAYOUT_TEST_DEVICE_ID = 0, // Fake device used by layout tests.
+  GVR_DEVICE_ID = 1,
+  OPENVR_DEVICE_ID = 2,
+  OCULUS_DEVICE_ID = 3,
+  ARCORE_DEVICE_ID = 4,
+  ORIENTATION_DEVICE_ID = 5,
+  FAKE_DEVICE_ID = 6, // Fake device used by unit tests.
+};
+
+
 enum XRHandedness {
   NONE = 0,
   LEFT = 1,
@@ -41,17 +54,35 @@ struct XRSessionOptions {
   bool use_legacy_webvr_render_path;
 };
 
-// TODO(offenwanger) Rearrange these two interfaces to merge duplicate
-// functionality.
+// This structure contains all the mojo interfaces for different kinds of
+// XRSession. The only interface required by all sessions is the
+// XRFrameDataProvider. It must always be present. Other interfaces are set as
+// apropriate based on the session creation options. (for example, an immersive
+// session ought to have a XRPresentationConnection to submit the frames to the
+// immersive environment).
+// The XRSessionClient request must be fulfilled for the session to get
+// information about the device it is connected to, such as focus and blur
+// events, changes to view or stage parameters, or exit present calls initiated
+// by the device.
 struct XRSession {
-  VRMagicWindowProvider? magic_window_provider;
-  XRPresentationConnection? connection;
+  XRFrameDataProvider data_provider;
+  // TODO(http://crbug.com/842025) Move where the client_request gets set to the
+  // device process then mark this as non-optional.
+  XRSessionClient&? client_request;
+  // TODO(http://crbug.com/842025) Move the information that is sent in display
+  // info to more sensible places so that this doesn't need to be sent here.
+  VRDisplayInfo display_info;
+  XRPresentationConnection? submit_frame_sink;
+  XREnvironmentIntegrationProvider? environment_provider;
 };
 
+// This structure contains the infomation and interfaces needed to create a two
+// way connection between the renderer and a device to synchronize and submit
+// frames to a sink outside of Chrome.
 struct XRPresentationConnection {
-  VRSubmitFrameClient& client_request;
-  VRPresentationProvider provider;
-  VRDisplayFrameTransportOptions transport_options;
+  XRPresentationProvider provider;
+  XRPresentationClient& client_request;
+  XRPresentationTransportOptions transport_options;
 };
 
 struct XRInputSourceDescription {
@@ -116,10 +147,8 @@ struct VRPose {
 };
 
 struct XRRay {
-  // TODO(https://crbug.com/845293): use Point3F and Vector3F from
-  // ui/gfx/geometry and inline directly in requestHitTest().
-  array<float, 3> origin;
-  array<float, 3> direction;
+  gfx.mojom.Point3F origin;
+  gfx.mojom.Vector3dF direction;
 };
 
 struct XRHitResult {
@@ -158,7 +187,7 @@ struct VRStageParameters {
 };
 
 struct VRDisplayInfo {
-  uint32 index;
+  XRDeviceId id;
   string displayName;
   VRDisplayCapabilities capabilities;
   VRStageParameters? stageParameters;
@@ -171,7 +200,7 @@ struct VRDisplayInfo {
 };
 
 // Frame transport method from the Renderer's point of view.
-enum VRDisplayFrameTransportMethod {
+enum XRPresentationTransportMethod {
   NONE = 0,
 
   // Renderer should create a new texture handle (Windows) or
@@ -185,10 +214,10 @@ enum VRDisplayFrameTransportMethod {
   DRAW_INTO_TEXTURE_MAILBOX = 3,
 };
 
-struct VRDisplayFrameTransportOptions {
-  VRDisplayFrameTransportMethod transport_method;
+struct XRPresentationTransportOptions {
+  XRPresentationTransportMethod transport_method;
 
-  // Booleans indicating which of the VRSubmitFrameClient callbacks
+  // Booleans indicating which of the XRPresentationClient callbacks
   // are in use. Default is false, the device implementation should set
   // the ones to true that it needs and can ignore the rest.
   bool wait_for_transfer_notification;
@@ -232,34 +261,124 @@ enum VRDisplayEventReason {
   UNMOUNTED = 3
 };
 
-// TODO(shaobo.yan@intel.com) : Add comments to describe these interfaces about
-// how to use and where they live.
+// Interface for requesting XRDevice interfaces and registering for
+// notifications that the XRDevice has changed
 interface VRService {
-  // TODO(shaobo.yan@intel.com, https://crbug.com/701027): Use a factory
-  // function which takes a VRServiceClient so we will never have a
-  // half-initialized VRService.
-  SetClient(VRServiceClient client) => ();
-  // Inform the service that the page is listening for vrdisplayactivate events.
-  // TODO(mthiesse): Move SetListeningForActivate onto VRDisplay.
-  SetListeningForActivate(bool listening);
+  // Returns the XRDevice interface which is used for creating XRSessions. This
+  // is not expected to be called once per renderer, unless the returned
+  // XRDevice is destroyed, then it might be called again to get another one.
+  RequestDevice() => (XRDevice? device);
+  // Optionally supply a VRServiceClient to listen for changes to the XRDevice.
+  // The last provided listener will have events called on it.
+  SetClient(VRServiceClient client);
+
+  // WebVR 1.1 functionality compatibility method. To stop listening pass a null
+  // client.
+  SetListeningForActivate(VRDisplayClient? client);
 };
 
+// The interface for the renderer to listen to top level XR events, events that
+// can be listened to and triggered without the renderer calling requestDevice.
 interface VRServiceClient {
-  OnDisplayConnected(VRDisplayHost display, VRDisplayClient& request,
-                     VRDisplayInfo display_info);
+  // Signals changes to the available physical device runtimes.
+  OnDeviceChanged();
 };
 
-// After submitting a frame, the VRPresentationProvider will notify the client
+// Supplies XRSessions and session support information. Implemented in the
+// browser process, consumed in the renderer process.
+interface XRDevice {
+  // Request to initialize a session in the browser process. If successful, the
+  // XRSession struct with the requisite interfaces will be returned.
+  RequestSession(
+    XRSessionOptions options,
+    bool triggered_by_displayactive) => (XRSession? session);
+  SupportsSession(XRSessionOptions options) => (bool supports_session);
+
+  // WebVR 1.1 functionality compatibility method. Returns VRDisplayInfo for an
+  // immersive session if immersive is supported. If (and only if) immersive is
+  // not supported, will return a nullptr. This call might cause device specific
+  // UI to appear.
+  GetImmersiveVRDisplayInfo() => (VRDisplayInfo? info);
+
+  ExitPresent();
+};
+
+// Provides the necessary functionality for a WebXR session to get data for
+// drawing frames. The kind of data it gets depends on what kind of session was
+// requested.
+// This interface is hosted in the Browser process, but will move to a sandboxed
+// utility process on Windows.  The render process communicates with it.
+interface XRFrameDataProvider {
+  // frame_data is optional and will not be set if and only if the call fails
+  // for some reason, such as device disconnection.
+  GetFrameData() => (XRFrameData? frame_data);
+};
+
+// Provides functionality for integrating environment information into an
+// XRSession. For example, some AR sessions would implement hit test to allow
+// developers to get the information about the world that its sensors supply.
+interface XREnvironmentIntegrationProvider {
+  // Different devices can have different native orientations - 0 is the native
+  // orientation, and then increments of 90 degrees from there. Session geometry
+  // is needed by the device when integrating environment image data, i.e.
+  // camera feeds, into a session.
+  UpdateSessionGeometry(
+      gfx.mojom.Size frame_size,
+      display.mojom.Rotation display_rotation);
+
+  // Performs a raycast into the scene and returns a list of XRHitResults sorted
+  // from closest to furthest hit from the ray. Each hit result contains a
+  // hit_matrix containing the transform of the hit where the rotation
+  // represents the normal of the surface hit.
+  // An empty result list means there were no hits. If a nullopt is returned,
+  // there was an error.
+  RequestHitTest(XRRay ray) => (array<XRHitResult>? results);
+};
+
+// Provides the necessary functionality for sending frames to a headset.
+// This interface is hosted in the Browser process, but will move to a sandboxed
+// utility process on Windows.  The render process communicates with it.
+interface XRPresentationProvider {
+  // This function tells the device which parts of the canvas should be rendered
+  // to which view.
+  UpdateLayerBounds(int16 frame_id, gfx.mojom.RectF left_bounds,
+                    gfx.mojom.RectF right_bounds, gfx.mojom.Size source_size);
+
+  // Call this if the animation loop exited without submitting a frame to
+  // ensure that every GetFrameData has a matching Submit call. This happens for
+  // WebXR if there were no drawing operations to the opaque framebuffer, and
+  // for WebVR 1.1 if the application didn't call SubmitFrame. Usable with any
+  // XRPresentationTransportMethod. This path does *not* call the
+  // SubmitFrameClient methods such as OnSubmitFrameTransferred. This is
+  // intended to help separate frames while presenting, it may or may not
+  // be called for the last animating frame when presentation ends.
+  SubmitFrameMissing(int16 frame_id, gpu.mojom.SyncToken sync_token);
+
+  // XRPresentationTransportMethod SUBMIT_AS_MAILBOX_HOLDER
+  SubmitFrame(int16 frame_id, gpu.mojom.MailboxHolder mailbox_holder,
+              mojo_base.mojom.TimeDelta time_waited);
+
+  // XRPresentationTransportMethod SUBMIT_AS_TEXTURE_HANDLE
+  // TODO(https://crbug.com/676224): Support preprocessing of mojom files, since
+  // this is Windows only.
+  SubmitFrameWithTextureHandle(int16 frameId, handle texture);
+
+  // XRPresentationTransportMethod DRAW_INTO_TEXTURE_MAILBOX
+  SubmitFrameDrawnIntoTexture(int16 frameId, gpu.mojom.SyncToken sync_token,
+                              mojo_base.mojom.TimeDelta time_waited);
+};
+
+// After submitting a frame, the XRPresentationProvider will notify the client
 // about several stages of the render pipeline.  This allows pipelining
-// efficiency.  Following VRPresentationProvider::Submit*, the submitted frame
+// efficiency.  Following XRPresentationProvider::Submit*, the submitted frame
 // will be transferred (read from, perhaps copied to another texture), and then
 // rendered (submitted to the underlying VR API).
-// The client lives in the render process, implemented by VRDisplay.
+// The client lives in the render process.
 //
-// See VRDisplayFrameTransportConfiguration which configures which of these
+// See XRPresentationTransportOptions which configures which of these
 // callbacks are in use.
-interface VRSubmitFrameClient {
-  // The VRPresentationProvider calls this to indicate that the submitted frame
+interface XRPresentationClient {
+  // The XRPresentationProvider calls this to indicate that the submitted frame
   // has been transferred, so the backing data (mailbox or GpuMemoryBuffer) can
   // be reused or discarded.  Note that this is a convenience/optimization
   // feature, not a security feature - if a site discards the data early we may
@@ -269,7 +388,7 @@ interface VRSubmitFrameClient {
   // for subsequent frames.
   OnSubmitFrameTransferred(bool success);
 
-  // The VRPresentationProvider calls this after the frame was handed off to the
+  // The XRPresentationProvider calls this after the frame was handed off to the
   // underlying VR API. This allows some pipelining of CPU/GPU work, while
   // delaying expensive tasks for a subsequent frame until the current frame has
   // completed.
@@ -282,95 +401,22 @@ interface VRSubmitFrameClient {
   OnSubmitFrameGpuFence(gfx.mojom.GpuFenceHandle gpu_fence_handle);
 };
 
-
-// Provides a communication channel from the renderer to the browser-side host
-// of a (device/) VrDisplayImpl.
-interface VRDisplayHost {
-  // Request to initialize a session in the browser process. The return value
-  // indicates if the session was successfully initialized or not.
-  // TODO(https://crbug.com/842025): Refactor VR device interfaces to better
-  // reflect WebXR.
-  RequestSession(
-    XRSessionOptions options,
-    bool triggered_by_displayactive) => (XRSession? session);
-  SupportsSession(XRSessionOptions options) => (bool supports_session);
-
-  ExitPresent();
-};
-
-// Provides the necessary functionality for a non-presenting WebXR session to
-// draw magic window content.
-// This interface is hosted in the Browser process, but will move to a sandboxed
-// utility process on Windows.  The render process communicates with it.
-// For AR displays (VRDisplayCapabilities.can_provide_pass_through_images
-// is true), clients can use GetFrameData to get images.
-// TODO(836478): rename VRMagicWindowProvider to NonImmersiveWindowProvider or
-// similar.
-interface VRMagicWindowProvider {
-  // frame_data is optional and will not be set if and only if the call fails
-  // for some reason, such as device disconnection.
-  GetFrameData() => (XRFrameData? frame_data);
-
-  // Different devices can have different native orientations - 0
-  // is the native orientation, and then increments of 90 degrees
-  // from there.
-  UpdateSessionGeometry(
-      gfx.mojom.Size frame_size,
-      display.mojom.Rotation display_rotation);
-
-  // Performs a raycast into the magic window scene and returns a list of
-  // XRHitResults sorted from closest to furthest hit from the ray. Each
-  // hit result contains a hit_matrix containing the transform of the hit
-  // where the rotation represents the normal of the surface hit.
-  // An empty result list means there were no hits. If a nullopt is returned,
-  // there was an error.
-  // TODO(https://crbug.com/842025): have one "session" type, merging
-  // VRMagicWindowProvider and VRPresentationProvider because RequestHitTest
-  // makes sense for both types of sessions.
-  RequestHitTest(XRRay ray) => (array<XRHitResult>? results);
-};
-
-// Provides the necessary functionality for a presenting WebVR page to draw
-// frames for a VrDisplay.
-// This interface is hosted in the Browser process, but will move to a sandboxed
-// utility process on Windows.  The render process communicates with it.
-interface VRPresentationProvider {
-  // frame_data is optional and will not be set if and only if the call fails
-  // for some reason, such as device disconnection.
-  GetFrameData() => (XRFrameData? frame_data);
-
-  UpdateLayerBounds(int16 frame_id, gfx.mojom.RectF left_bounds,
-                    gfx.mojom.RectF right_bounds, gfx.mojom.Size source_size);
-
-  // Call this if the animation loop exited without submitting a frame to
-  // ensure that every GetFrameData has a matching Submit call. This happens for
-  // WebXR if there were no drawing operations to the opaque framebuffer, and
-  // for WebVR 1.1 if the application didn't call SubmitFrame. Usable with any
-  // VRDisplayFrameTransportMethod. This path does *not* call the
-  // SubmitFrameClient methods such as OnSubmitFrameTransferred. This is
-  // intended to help separate frames while presenting, it may or may not
-  // be called for the last animating frame when presentation ends.
-  SubmitFrameMissing(int16 frame_id, gpu.mojom.SyncToken sync_token);
-
-  // VRDisplayFrameTransportMethod SUBMIT_AS_MAILBOX_HOLDER
-  SubmitFrame(int16 frame_id, gpu.mojom.MailboxHolder mailbox_holder,
-              mojo_base.mojom.TimeDelta time_waited);
-
-  // VRDisplayFrameTransportMethod SUBMIT_AS_TEXTURE_HANDLE
-  // TODO(https://crbug.com/676224): Support preprocessing of mojom files, since
-  // this is Windows only.
-  SubmitFrameWithTextureHandle(int16 frameId, handle texture);
-
-  // VRDisplayFrameTransportMethod DRAW_INTO_TEXTURE_MAILBOX
-  SubmitFrameDrawnIntoTexture(int16 frameId, gpu.mojom.SyncToken sync_token,
-                              mojo_base.mojom.TimeDelta time_waited);
-};
-
-interface VRDisplayClient {
+// Functions for pushing device information to the sessions.
+interface XRSessionClient {
   OnChanged(VRDisplayInfo display);
   OnExitPresent();
   OnBlur();
   OnFocus();
+};
+
+// Backwards compatibility events for WebVR 1.1. These are expected to not be
+// used for WebXR.
+interface VRDisplayClient {
+  // Inform the renderer that a headset has sent a signal indicating that the
+  // user has put it on. Returns an indicator of whether or not the page
+  // actually started a WebVR 1.1 presentation.
   OnActivate(VRDisplayEventReason reason) => (bool will_not_present);
+  // Inform the renderer that a headset has sent a signal indicating that the
+  // user stopped using a headset.
   OnDeactivate(VRDisplayEventReason reason);
 };

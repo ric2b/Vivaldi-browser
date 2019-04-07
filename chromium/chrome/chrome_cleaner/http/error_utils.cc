@@ -1,16 +1,15 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/chrome_cleaner/http/error_utils.h"
 
-#include <atlbase.h>
-#include <shlwapi.h>
-
 #include <string>
 
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
+#include "base/win/atl.h"
+#include "base/win/shlwapi.h"
 
 namespace common {
 

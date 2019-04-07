@@ -42,6 +42,7 @@ class AssistantSettingsManager;
 class Service : public service_manager::Service,
                 public chromeos::PowerManagerClient::Observer,
                 public ash::mojom::SessionActivationObserver,
+                public mojom::AssistantInteractionSubscriber,
                 public mojom::AssistantPlatform,
                 public ash::mojom::VoiceInteractionObserver {
  public:
@@ -86,12 +87,32 @@ class Service : public service_manager::Service,
   // ash::mojom::VoiceInteractionObserver:
   void OnVoiceInteractionStatusChanged(
       ash::mojom::VoiceInteractionState state) override {}
-  void OnVoiceInteractionSettingsEnabled(bool enabled) override {}
+  void OnVoiceInteractionSettingsEnabled(bool enabled) override;
   void OnVoiceInteractionContextEnabled(bool enabled) override {}
   void OnVoiceInteractionHotwordEnabled(bool enabled) override;
   void OnVoiceInteractionSetupCompleted(bool completed) override {}
   void OnAssistantFeatureAllowedChanged(
       ash::mojom::AssistantAllowedState state) override {}
+  void OnLocaleChanged(const std::string& locale) override {}
+
+  // chromeos::assistant::mojom::AssistantInteractionSubscriber:
+  void OnInteractionStarted(bool is_voice_interaction) override{};
+  void OnInteractionFinished(
+      mojom::AssistantInteractionResolution resolution) override;
+  void OnHtmlResponse(const std::string& response) override{};
+  void OnSuggestionsResponse(
+      std::vector<mojom::AssistantSuggestionPtr> response) override{};
+  void OnTextResponse(const std::string& response) override{};
+  void OnOpenUrlResponse(const GURL& url) override{};
+  void OnSpeechRecognitionStarted() override{};
+  void OnSpeechRecognitionIntermediateResult(
+      const std::string& high_confidence_text,
+      const std::string& low_confidence_text) override{};
+  void OnSpeechRecognitionEndOfUtterance() override{};
+  void OnSpeechRecognitionFinalResult(
+      const std::string& final_result) override{};
+  void OnSpeechLevelUpdated(float speech_level) override{};
+  void OnTtsStarted(bool due_to_error) override{};
 
   void BindAssistantSettingsManager(
       mojom::AssistantSettingsManagerRequest request);
@@ -143,11 +164,17 @@ class Service : public service_manager::Service,
   bool session_active_ = false;
   // Whether the lock screen is on.
   bool locked_ = false;
+  // Whether the assistant has been enabled in settings.
+  bool settings_enabled_ = false;
+  // Whether the hotword has been enabled.
+  bool hotword_enabled_ = false;
 
   ash::mojom::AssistantControllerPtr assistant_controller_;
   ash::mojom::VoiceInteractionControllerPtr voice_interaction_controller_;
   mojo::Binding<ash::mojom::VoiceInteractionObserver>
       voice_interaction_observer_binding_;
+  mojo::Binding<chromeos::assistant::mojom::AssistantInteractionSubscriber>
+      assistant_interaction_subscriber_binding_;
 
   base::WeakPtrFactory<Service> weak_ptr_factory_;
 

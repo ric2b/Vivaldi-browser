@@ -111,9 +111,9 @@ public class WebApkServiceConnectionManager {
             return;
         }
 
-        new AsyncTask<Void, Void, Connection>() {
+        new AsyncTask<Connection>() {
             @Override
-            protected Connection doInBackground(Void... params) {
+            protected Connection doInBackground() {
                 Connection newConnection = new Connection(WebApkServiceConnectionManager.this);
                 newConnection.addCallback(callback);
                 Intent intent = createConnectIntent(webApkPackage);
@@ -138,7 +138,8 @@ public class WebApkServiceConnectionManager {
                     mConnections.put(webApkPackage, connection);
                 }
             }
-        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        }
+                .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     /**
@@ -150,12 +151,13 @@ public class WebApkServiceConnectionManager {
     public void disconnectAll(final Context appContext) {
         if (mConnections.isEmpty()) return;
 
-        Connection[] values = mConnections.values().toArray(new Connection[mConnections.size()]);
+        final Connection[] values =
+                mConnections.values().toArray(new Connection[mConnections.size()]);
         mConnections.clear();
 
-        new AsyncTask<Connection, Void, Void>() {
+        new AsyncTask<Void>() {
             @Override
-            protected final Void doInBackground(Connection... values) {
+            protected final Void doInBackground() {
                 for (Connection connection : values) {
                     if (connection.getService() != null) {
                         appContext.unbindService(connection);
@@ -163,7 +165,8 @@ public class WebApkServiceConnectionManager {
                 }
                 return null;
             }
-        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, values);
+        }
+                .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     public WebApkServiceConnectionManager(String category, String action) {

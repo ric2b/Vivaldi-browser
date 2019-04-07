@@ -112,6 +112,10 @@ class CORE_EXPORT WorkerGlobalScope
   bool IsContextThread() const final;
   const KURL& BaseURL() const final { return url_; }
   String UserAgent() const final { return user_agent_; }
+  HttpsState GetHttpsState() const override { return https_state_; }
+  const base::UnguessableToken& GetAgentClusterID() const final {
+    return agent_cluster_id_;
+  }
 
   DOMTimerCoordinator* Timers() final { return &timers_; }
   SecurityContext& GetSecurityContext() final { return *this; }
@@ -150,7 +154,7 @@ class CORE_EXPORT WorkerGlobalScope
   // FontFaceSource on the IDL.
   FontFaceSet* fonts();
 
-  int requestAnimationFrame(V8FrameRequestCallback* callback);
+  int requestAnimationFrame(V8FrameRequestCallback* callback, ExceptionState&);
   void cancelAnimationFrame(int id);
 
   WorkerAnimationFrameProvider* GetAnimationFrameProvider() {
@@ -226,6 +230,10 @@ class CORE_EXPORT WorkerGlobalScope
   TraceWrapperMember<WorkerAnimationFrameProvider> animation_frame_provider_;
 
   service_manager::InterfaceProvider interface_provider_;
+
+  const base::UnguessableToken agent_cluster_id_;
+
+  HttpsState https_state_;
 };
 
 DEFINE_TYPE_CASTS(WorkerGlobalScope,

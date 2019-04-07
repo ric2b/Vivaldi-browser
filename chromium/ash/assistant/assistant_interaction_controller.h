@@ -57,17 +57,23 @@ class AssistantInteractionController
   // AssistantControllerObserver:
   void OnAssistantControllerConstructed() override;
   void OnAssistantControllerDestroying() override;
+  void OnDeepLinkReceived(
+      assistant::util::DeepLinkType type,
+      const std::map<std::string, std::string>& params) override;
 
   // AssistantInteractionModelObserver:
   void OnInteractionStateChanged(InteractionState interaction_state) override;
   void OnInputModalityChanged(InputModality input_modality) override;
-  void OnCommittedQueryChanged(const AssistantQuery& committed_query) override;
 
   // AssistantUiModelObserver:
-  void OnUiVisibilityChanged(bool visible, AssistantSource source) override;
+  void OnUiModeChanged(AssistantUiMode ui_mode) override;
+  void OnUiVisibilityChanged(AssistantVisibility new_visibility,
+                             AssistantVisibility old_visibility,
+                             AssistantSource source) override;
 
   // HighlighterController::Observer:
   void OnHighlighterEnabledChanged(HighlighterEnabledState state) override;
+  void OnHighlighterSelectionRecognized(const gfx::Rect& rect) override;
 
   // chromeos::assistant::mojom::AssistantInteractionSubscriber:
   void OnInteractionStarted(bool is_voice_interaction) override;
@@ -85,15 +91,18 @@ class AssistantInteractionController
   void OnSpeechRecognitionEndOfUtterance() override;
   void OnSpeechRecognitionFinalResult(const std::string& final_result) override;
   void OnSpeechLevelUpdated(float speech_level) override;
+  void OnTtsStarted(bool due_to_error) override;
 
   // DialogPlateObserver:
   void OnDialogPlateButtonPressed(DialogPlateButtonId id) override;
   void OnDialogPlateContentsCommitted(const std::string& text) override;
 
   // Invoked on suggestion chip pressed event.
-  void OnSuggestionChipPressed(int id);
+  void OnSuggestionChipPressed(const AssistantSuggestion* suggestion);
 
  private:
+  void StartMetalayerInteraction(const gfx::Rect& region);
+  void StartScreenContextInteraction();
   void StartTextInteraction(const std::string text);
   void StartVoiceInteraction();
   void StopActiveInteraction();

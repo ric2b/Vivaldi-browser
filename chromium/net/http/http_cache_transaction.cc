@@ -227,8 +227,9 @@ HttpCache::Transaction::Mode HttpCache::Transaction::mode() const {
   return mode_;
 }
 
-int HttpCache::Transaction::WriteMetadata(IOBuffer* buf, int buf_len,
-                                          const CompletionCallback& callback) {
+int HttpCache::Transaction::WriteMetadata(IOBuffer* buf,
+                                          int buf_len,
+                                          CompletionOnceCallback callback) {
   DCHECK(buf);
   DCHECK_GT(buf_len, 0);
   DCHECK(!callback.is_null());
@@ -240,7 +241,7 @@ int HttpCache::Transaction::WriteMetadata(IOBuffer* buf, int buf_len,
   // avoid writing again (it should be the same, right?), but let's allow the
   // caller to "update" the contents with something new.
   return entry_->disk_entry->WriteData(kMetadataIndex, 0, buf, buf_len,
-                                       callback, true);
+                                       std::move(callback), true);
 }
 
 LoadState HttpCache::Transaction::GetWriterLoadState() const {
@@ -1448,7 +1449,7 @@ int HttpCache::Transaction::DoCacheReadResponse() {
   TransitionToState(STATE_CACHE_READ_RESPONSE_COMPLETE);
 
   io_buf_len_ = entry_->disk_entry->GetDataSize(kResponseInfoIndex);
-  read_buf_ = new IOBuffer(io_buf_len_);
+  read_buf_ = base::MakeRefCounted<IOBuffer>(io_buf_len_);
 
   net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_READ_INFO);
   return entry_->disk_entry->ReadData(kResponseInfoIndex, 0, read_buf_.get(),
@@ -2129,8 +2130,8 @@ int HttpCache::Transaction::DoCacheReadMetadata() {
   DCHECK(!response_.metadata.get());
   TransitionToState(STATE_CACHE_READ_METADATA_COMPLETE);
 
-  response_.metadata =
-      new IOBufferWithSize(entry_->disk_entry->GetDataSize(kMetadataIndex));
+  response_.metadata = base::MakeRefCounted<IOBufferWithSize>(
+      entry_->disk_entry->GetDataSize(kMetadataIndex));
 
   net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_READ_INFO);
   return entry_->disk_entry->ReadData(kMetadataIndex, 0,
@@ -3025,18 +3026,21 @@ int HttpCache::Transaction::DoSetupEntryForRead() {
   return OK;
 }
 
-int HttpCache::Transaction::WriteToEntry(int index, int offset,
-                                         IOBuffer* data, int data_len,
-                                         const CompletionCallback& callback) {
+int HttpCache::Transaction::WriteToEntry(int index,
+                                         int offset,
+                                         IOBuffer* data,
+                                         int data_len,
+                                         CompletionOnceCallback callback) {
   if (!entry_)
     return data_len;
 
   int rv = 0;
   if (!partial_ || !data_len) {
-    rv = entry_->disk_entry->WriteData(index, offset, data, data_len, callback,
-                                       true);
+    rv = entry_->disk_entry->WriteData(index, offset, data, data_len,
+                                       std::move(callback), true);
   } else {
-    rv = partial_->CacheWrite(entry_->disk_entry, data, data_len, callback);
+    rv = partial_->CacheWrite(entry_->disk_entry, data, data_len,
+                              std::move(callback));
   }
   return rv;
 }

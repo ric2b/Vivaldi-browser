@@ -310,6 +310,14 @@ void ShillToONCTranslator::TranslateIPsec() {
   }
   onc_object_->SetKey(::onc::ipsec::kAuthenticationType,
                       base::Value(authentication_type));
+  if (authentication_type == ::onc::ipsec::kPSK) {
+    // If L2TPIPsec.PSKRequired is false, provide an empty PSK value to indicate
+    // that the PSK is saved but not known.
+    const base::Value* psk_required = shill_dictionary_->FindKeyOfType(
+        shill::kL2tpIpsecPskRequiredProperty, base::Value::Type::BOOLEAN);
+    if (psk_required && !psk_required->GetBool())
+      onc_object_->SetKey(::onc::ipsec::kPSK, base::Value(""));
+  }
 }
 
 void ShillToONCTranslator::TranslateThirdPartyVPN() {
@@ -623,14 +631,14 @@ void ShillToONCTranslator::TranslateNetworkWithState() {
   if (shill_dictionary_->GetStringWithoutPathExpansion(
           shill::kProxyConfigProperty, &proxy_config_str) &&
       !proxy_config_str.empty()) {
-    std::unique_ptr<base::DictionaryValue> proxy_config_value(
+    std::unique_ptr<base::Value> proxy_config_value(
         ReadDictionaryFromJson(proxy_config_str));
     if (proxy_config_value) {
-      std::unique_ptr<base::DictionaryValue> proxy_settings =
-          ConvertProxyConfigToOncProxySettings(std::move(proxy_config_value));
-      if (proxy_settings) {
-        onc_object_->SetWithoutPathExpansion(
-            ::onc::network_config::kProxySettings, std::move(proxy_settings));
+      base::Value proxy_settings =
+          ConvertProxyConfigToOncProxySettings(*proxy_config_value);
+      if (!proxy_settings.is_none()) {
+        onc_object_->SetKey(::onc::network_config::kProxySettings,
+                            std::move(proxy_settings));
       }
     }
   }

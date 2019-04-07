@@ -22,7 +22,7 @@
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
-#include "services/ui/common/switches.h"
+#include "services/ws/common/switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/env.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
@@ -103,8 +103,6 @@ class ServiceManagerConnection {
     MusClient::InitParams params;
     params.connector = GetConnector();
     params.identity = service_manager_identity_;
-    params.bind_test_ws_interfaces = true;
-    params.wtc_config = aura::WindowTreeClient::Config::kMus2;
     return std::make_unique<MusClient>(params);
   }
 
@@ -237,7 +235,7 @@ void ViewsMusTestSuite::Initialize() {
   // Let other services know that we're running in tests. Do this with a
   // command line flag to avoid making blocking calls to other processes for
   // setup for tests (e.g. to unlock the screen in the window manager).
-  EnsureCommandLineSwitch(ui::switches::kUseTestConfig);
+  EnsureCommandLineSwitch(ws::switches::kUseTestConfig);
 
   EnsureCommandLineSwitch(switches::kOverrideUseSoftwareGLForTests);
 

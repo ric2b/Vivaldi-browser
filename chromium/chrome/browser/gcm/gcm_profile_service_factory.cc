@@ -6,17 +6,14 @@
 #include <memory>
 
 #include "base/sequenced_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/offline_pages/buildflags/buildflags.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/browser_thread.h"
 
 #if !defined(OS_ANDROID)
@@ -37,6 +34,38 @@
 #endif
 
 namespace gcm {
+
+namespace {
+
+#if !defined(OS_ANDROID)
+// Requests a ProxyResolvingSocketFactoryPtr on the UI thread. Note that a
+// WeakPtr of GCMProfileService is needed to detect when the KeyedService shuts
+// down, and avoid calling into |profile| which might have also been destroyed.
+void RequestProxyResolvingSocketFactoryOnUIThread(
+    Profile* profile,
+    base::WeakPtr<GCMProfileService> service,
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  if (!service)
+    return;
+  network::mojom::NetworkContext* network_context =
+      content::BrowserContext::GetDefaultStoragePartition(profile)
+          ->GetNetworkContext();
+  network_context->CreateProxyResolvingSocketFactory(std::move(request));
+}
+
+// A thread-safe wrapper to request a ProxyResolvingSocketFactoryPtr.
+void RequestProxyResolvingSocketFactory(
+    Profile* profile,
+    base::WeakPtr<GCMProfileService> service,
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  content::BrowserThread::PostTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&RequestProxyResolvingSocketFactoryOnUIThread, profile,
+                     std::move(service), std::move(request)));
+}
+#endif
+
+}  // namespace
 
 // static
 GCMProfileService* GCMProfileServiceFactory::GetForProfile(
@@ -59,8 +88,6 @@ GCMProfileServiceFactory::GCMProfileServiceFactory()
         "GCMProfileService",
         BrowserContextDependencyManager::GetInstance()) {
   DependsOn(IdentityManagerFactory::GetInstance());
-  DependsOn(SigninManagerFactory::GetInstance());
-  DependsOn(ProfileOAuth2TokenServiceFactory::GetInstance());
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
   DependsOn(offline_pages::PrefetchServiceFactory::GetInstance());
 #endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
@@ -76,28 +103,27 @@ KeyedService* GCMProfileServiceFactory::BuildServiceInstanceFor(
 
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
   std::unique_ptr<GCMProfileService> service = nullptr;
 #if defined(OS_ANDROID)
   service = base::WrapUnique(
       new GCMProfileService(profile->GetPath(), blocking_task_runner));
 #else
-  service = base::WrapUnique(new GCMProfileService(
-      profile->GetPrefs(), profile->GetPath(), profile->GetRequestContext(),
+  service = std::make_unique<GCMProfileService>(
+      profile->GetPrefs(), profile->GetPath(),
+      base::BindRepeating(&RequestProxyResolvingSocketFactory, profile),
       content::BrowserContext::GetDefaultStoragePartition(profile)
           ->GetURLLoaderFactoryForBrowserProcess(),
       chrome::GetChannel(),
       gcm::GetProductCategoryForSubtypes(profile->GetPrefs()),
       IdentityManagerFactory::GetForProfile(profile),
-      SigninManagerFactory::GetForProfile(profile),
-      ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
       std::unique_ptr<GCMClientFactory>(new GCMClientFactory),
       content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::UI),
       content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::IO),
-      blocking_task_runner));
+      blocking_task_runner);
 #endif
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
   offline_pages::PrefetchService* prefetch_service =

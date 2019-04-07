@@ -20,6 +20,8 @@ using consent_auditor::Feature;
 using fake_server::FakeServer;
 using sync_pb::SyncEntity;
 using sync_pb::UserConsentSpecifics;
+using sync_pb::UserConsentTypes;
+using SyncConsent = sync_pb::UserConsentTypes::SyncConsent;
 
 namespace {
 
@@ -29,7 +31,7 @@ std::string GetAccountId() {
   // impossible to discover otherwise.
   return "user@gmail.com";
 #else
-  return "gaia-id-user@gmail.com";
+  return "gaia_id_for_user@gmail.com";
 #endif
 }
 
@@ -68,7 +70,7 @@ class UserConsentEqualityChecker : public SingleClientStatusChangeChecker {
       EXPECT_TRUE(expected_specifics_.end() != iter);
       if (expected_specifics_.end() == iter) {
         return false;
-      };
+      }
       EXPECT_EQ(iter->second.account_id(), server_specifics.account_id());
       expected_specifics_.erase(iter);
     }
@@ -122,15 +124,18 @@ IN_PROC_BROWSER_TEST_F(SingleClientUserConsentsSyncTest,
   UserConsentSpecifics specifics;
   specifics.set_confirmation_grd_id(1);
   specifics.set_account_id(GetAccountId());
-  consent_service->RecordGaiaConsent(
-      GetAccountId(), Feature::CHROME_SYNC, /*description_grd_ids=*/{},
-      /*confirmation_grd_id=*/1, ConsentStatus::GIVEN);
+
+  SyncConsent sync_consent;
+  sync_consent.set_confirmation_grd_id(1);
+  sync_consent.set_status(UserConsentTypes::GIVEN);
+
+  consent_service->RecordSyncConsent(GetAccountId(), sync_consent);
   EXPECT_TRUE(ExpectUserConsents({specifics}));
 }
 
 IN_PROC_BROWSER_TEST_F(
     SingleClientUserConsentsSyncTest,
-    ShouldPreserveConsentsOnDisableSyncAndResubmitWhenReneabled) {
+    ShouldPreserveConsentsOnDisableSyncAndResubmitWhenReenabled) {
   SetSyncUserConsentSeparateTypeFeature(true);
 
   UserConsentSpecifics specifics;
@@ -142,14 +147,58 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(SetupSync());
   consent_auditor::ConsentAuditor* consent_service =
       ConsentAuditorFactory::GetForProfile(GetProfile(0));
-  consent_service->RecordGaiaConsent(
-      GetAccountId(), Feature::CHROME_SYNC, /*description_grd_ids=*/{},
-      /*confirmation_grd_id=*/1, ConsentStatus::GIVEN);
+
+  SyncConsent sync_consent;
+  sync_consent.set_confirmation_grd_id(1);
+  sync_consent.set_status(UserConsentTypes::GIVEN);
+  consent_service->RecordSyncConsent(GetAccountId(), sync_consent);
 
   GetClient(0)->StopSyncService(syncer::SyncService::CLEAR_DATA);
   ASSERT_TRUE(GetClient(0)->StartSyncService());
 
   EXPECT_TRUE(ExpectUserConsents({specifics}));
 }
+
+// ChromeOS does not support late signin after profile creation, so the test
+// below does not apply, at least in the current form.
+#if !defined(OS_CHROMEOS)
+IN_PROC_BROWSER_TEST_F(SingleClientUserConsentsSyncTest,
+                       ShouldSubmitIfSignedInAlthoughFullSyncNotEnabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      // Enabled.
+      {switches::kSyncStandaloneTransport,
+       switches::kSyncUserConsentSeparateType},
+      // Disabled.
+      {});
+
+  // We avoid calling SetupSync(), because we don't want to turn on full sync,
+  // only sign in such that the standalone transport starts.
+  ASSERT_TRUE(SetupClients());
+  ASSERT_TRUE(GetClient(0)->SignIn());
+  ASSERT_TRUE(GetClient(0)->AwaitEngineInitialization());
+  ASSERT_TRUE(AwaitQuiescence());
+  ASSERT_FALSE(GetSyncService(0)->IsSyncActive())
+      << "Full sync should be disabled";
+  ASSERT_EQ(syncer::SyncService::TransportState::ACTIVE,
+            GetSyncService(0)->GetTransportState());
+  ASSERT_TRUE(
+      GetSyncService(0)->GetActiveDataTypes().Has(syncer::USER_CONSENTS));
+
+  SyncConsent sync_consent;
+  sync_consent.set_confirmation_grd_id(1);
+  sync_consent.set_status(UserConsentTypes::GIVEN);
+
+  ConsentAuditorFactory::GetForProfile(GetProfile(0))
+      ->RecordSyncConsent(GetAccountId(), sync_consent);
+
+  UserConsentSpecifics specifics;
+  specifics.set_confirmation_grd_id(1);
+  // Account id may be compared to the synced account, thus, we need them to
+  // match.
+  specifics.set_account_id(GetAccountId());
+  EXPECT_TRUE(ExpectUserConsents({specifics}));
+}
+#endif  // !defined(OS_CHROMEOS)
 
 }  // namespace

@@ -12,7 +12,9 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "components/viz/common/gpu/context_lost_observer.h"
 #include "components/viz/common/gpu/context_lost_reason.h"
 #include "components/viz/common/resources/platform_color.h"
@@ -39,15 +41,44 @@ namespace viz {
 
 namespace {
 
-gpu::ContextCreationAttribs CreateAttributes() {
+gpu::ContextCreationAttribs CreateAttributes(bool requires_alpha_channel) {
   gpu::ContextCreationAttribs attributes;
-  attributes.alpha_size = -1;
+  attributes.alpha_size = requires_alpha_channel ? 8 : -1;
   attributes.depth_size = 0;
+#if defined(OS_CHROMEOS)
+  // Chrome OS uses surfaceless when running on a real device and stencil
+  // buffers can then be added dynamically so supporting them does not have an
+  // impact on normal usage. If we are not running on a real Chrome OS device
+  // but instead on a workstation for development, then stencil support is
+  // useful as it allows the overdraw feedback debugging feature to be used.
   attributes.stencil_size = 8;
+#else
+  attributes.stencil_size = 0;
+#endif
   attributes.samples = 0;
   attributes.sample_buffers = 0;
-  attributes.fail_if_major_perf_caveat = false;
   attributes.bind_generates_resource = false;
+  attributes.fail_if_major_perf_caveat = false;
+  attributes.lose_context_when_out_of_memory = true;
+
+#if defined(OS_ANDROID)
+  // TODO(cblume): We should add wide gamut code here, setting
+  // attributes.color_space.
+
+  if (requires_alpha_channel) {
+    attributes.alpha_size = 8;
+  } else if (base::SysInfo::AmountOfPhysicalMemoryMB() <= 512) {
+    // See compositor_impl_android.cc for more information about this.
+    // It is inside GetCompositorContextAttributes().
+    attributes.alpha_size = 0;
+    attributes.red_size = 5;
+    attributes.green_size = 6;
+    attributes.blue_size = 5;
+  }
+
+  attributes.enable_swap_timestamps_if_supported = true;
+#endif  // defined(OS_ANDROID)
+
   return attributes;
 }
 
@@ -63,8 +94,9 @@ VizProcessContextProvider::VizProcessContextProvider(
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     gpu::ImageFactory* image_factory,
     gpu::GpuChannelManagerDelegate* gpu_channel_manager_delegate,
-    const gpu::SharedMemoryLimits& limits)
-    : attributes_(CreateAttributes()),
+    const gpu::SharedMemoryLimits& limits,
+    bool requires_alpha_channel)
+    : attributes_(CreateAttributes(requires_alpha_channel)),
       context_(std::make_unique<gpu::GLInProcessContext>()),
       context_result_(
           context_->Initialize(std::move(task_executor),

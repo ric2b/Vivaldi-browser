@@ -113,9 +113,7 @@ class PassthroughAnimationDecoder
 class LoginUserView::UserImage : public NonAccessibleView {
  public:
   UserImage(int size)
-      : NonAccessibleView(kLoginUserImageClassName),
-        size_(size),
-        weak_factory_(this) {
+      : NonAccessibleView(kLoginUserImageClassName), size_(size) {
     SetLayoutManager(std::make_unique<views::FillLayout>());
 
     image_ = new AnimatedRoundedImageView(gfx::Size(size_, size_), size_ / 2);
@@ -139,7 +137,11 @@ class LoginUserView::UserImage : public NonAccessibleView {
     }
   }
 
-  void SetAnimationEnabled(bool enable) { image_->SetAnimationEnabled(enable); }
+  void SetAnimationEnabled(bool enable) {
+    image_->SetAnimationPlayback(
+        enable ? AnimatedRoundedImageView::Playback::kRepeat
+               : AnimatedRoundedImageView::Playback::kFirstFrameOnly);
+  }
 
  private:
   void OnImageDecoded(AnimationFrames animation) {
@@ -149,14 +151,16 @@ class LoginUserView::UserImage : public NonAccessibleView {
       return;
     }
 
+    // Don't change the playback style which was set in SetAnimationEnabled.
     image_->SetAnimationDecoder(
-        std::make_unique<PassthroughAnimationDecoder>(animation));
+        std::make_unique<PassthroughAnimationDecoder>(animation),
+        image_->playback());
   }
 
   AnimatedRoundedImageView* image_ = nullptr;
   int size_;
 
-  base::WeakPtrFactory<UserImage> weak_factory_;
+  base::WeakPtrFactory<UserImage> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(UserImage);
 };
@@ -312,11 +316,11 @@ views::View* LoginUserView::TestApi::tap_button() const {
 }
 
 views::View* LoginUserView::TestApi::dropdown() const {
-  return view_->user_dropdown_;
+  return view_->dropdown_;
 }
 
 LoginBubble* LoginUserView::TestApi::menu() const {
-  return view_->user_menu_.get();
+  return view_->menu_.get();
 }
 
 bool LoginUserView::TestApi::is_opaque() const {
@@ -364,14 +368,14 @@ LoginUserView::LoginUserView(
       2 * (kDistanceBetweenUsernameAndDropdownDp + kDropdownIconSizeDp);
   user_label_ = new UserLabel(style, label_width);
   if (show_dropdown) {
-    user_dropdown_ = new LoginButton(this);
-    user_dropdown_->set_has_ink_drop_action_on_click(false);
-    user_dropdown_->SetPreferredSize(
+    dropdown_ = new LoginButton(this);
+    dropdown_->set_has_ink_drop_action_on_click(false);
+    dropdown_->SetPreferredSize(
         gfx::Size(kDropdownIconSizeDp, kDropdownIconSizeDp));
-    user_dropdown_->SetImage(
+    dropdown_->SetImage(
         views::Button::STATE_NORMAL,
         gfx::CreateVectorIcon(kLockScreenDropdownIcon, SK_ColorWHITE));
-    user_dropdown_->SetFocusBehavior(FocusBehavior::ALWAYS);
+    dropdown_->SetFocusBehavior(FocusBehavior::ALWAYS);
   }
   if (show_domain)
     user_domain_ = new UserDomainInfoView();
@@ -400,15 +404,15 @@ LoginUserView::LoginUserView(
   };
   setup_layer(user_image_);
   setup_layer(user_label_);
-  if (user_dropdown_)
-    setup_layer(user_dropdown_);
+  if (dropdown_)
+    setup_layer(dropdown_);
 
   if (user_domain_)
     setup_layer(user_domain_);
 
   hover_notifier_ = std::make_unique<HoverNotifier>(
       this, base::Bind(&LoginUserView::OnHover, base::Unretained(this)));
-  user_menu_ = std::make_unique<LoginBubble>();
+  menu_ = std::make_unique<LoginBubble>();
 }
 
 LoginUserView::~LoginUserView() = default;
@@ -457,8 +461,8 @@ void LoginUserView::UpdateForUser(const mojom::LoginUserInfoPtr& user,
         make_opacity_sequence());
     user_label_->layer()->GetAnimator()->StartAnimation(
         make_opacity_sequence());
-    if (user_dropdown_) {
-      user_dropdown_->layer()->GetAnimator()->StartAnimation(
+    if (dropdown_) {
+      dropdown_->layer()->GetAnimator()->StartAnimation(
           make_opacity_sequence());
     }
     if (user_domain_) {
@@ -511,18 +515,18 @@ void LoginUserView::RequestFocus() {
 void LoginUserView::ButtonPressed(views::Button* sender,
                                   const ui::Event& event) {
   // Handle click on the dropdown arrow.
-  if (sender == user_dropdown_) {
-    DCHECK(user_dropdown_);
-    if (!user_menu_->IsVisible()) {
-      user_menu_->ShowUserMenu(
+  if (sender == dropdown_) {
+    DCHECK(dropdown_);
+    if (!menu_->IsVisible()) {
+      menu_->ShowUserMenu(
           base::UTF8ToUTF16(current_user_->basic_user_info->display_name),
           base::UTF8ToUTF16(current_user_->basic_user_info->display_email),
           current_user_->basic_user_info->type, current_user_->is_device_owner,
-          user_dropdown_ /*anchor_view*/, user_dropdown_ /*bubble_opener*/,
+          dropdown_ /*anchor_view*/, dropdown_ /*bubble_opener*/,
           current_user_->can_remove /*show_remove_user*/,
           on_remove_warning_shown_, on_remove_);
     } else {
-      user_menu_->Close();
+      menu_->Close();
     }
 
     return;
@@ -539,8 +543,8 @@ void LoginUserView::OnHover(bool has_hover) {
 void LoginUserView::UpdateCurrentUserState() {
   auto email = base::UTF8ToUTF16(current_user_->basic_user_info->display_email);
   tap_button_->SetAccessibleName(email);
-  if (user_dropdown_) {
-    user_dropdown_->SetAccessibleName(l10n_util::GetStringFUTF16(
+  if (dropdown_) {
+    dropdown_->SetAccessibleName(l10n_util::GetStringFUTF16(
         IDS_ASH_LOGIN_POD_MENU_BUTTON_ACCESSIBLE_NAME, email));
   }
 
@@ -585,10 +589,10 @@ void LoginUserView::UpdateOpacity() {
       is_opaque_ ? kOpaqueUserViewOpacity : kTransparentUserViewOpacity;
   user_image_->layer()->SetOpacity(target_opacity);
   user_label_->layer()->SetOpacity(target_opacity);
-  if (user_dropdown_) {
-    std::unique_ptr<ui::ScopedLayerAnimationSettings> user_dropdown_settings =
-        build_settings(user_dropdown_);
-    user_dropdown_->layer()->SetOpacity(target_opacity);
+  if (dropdown_) {
+    std::unique_ptr<ui::ScopedLayerAnimationSettings> dropdown_settings =
+        build_settings(dropdown_);
+    dropdown_->layer()->SetOpacity(target_opacity);
   }
 
   if (user_domain_) {
@@ -606,8 +610,8 @@ void LoginUserView::SetLargeLayout() {
   AddChildView(user_image_);
   AddChildView(user_label_);
   AddChildView(tap_button_);
-  if (user_dropdown_)
-    AddChildView(user_dropdown_);
+  if (dropdown_)
+    AddChildView(dropdown_);
   if (user_domain_)
     AddChildView(user_domain_);
 
@@ -631,16 +635,16 @@ void LoginUserView::SetLargeLayout() {
     views::ColumnSet* label_dropdown =
         layout->AddColumnSet(kLabelDropdownColumnId);
     label_dropdown->AddPaddingColumn(1.0f /*resize_percent*/, 0 /*width*/);
-    if (user_dropdown_) {
+    if (dropdown_) {
       label_dropdown->AddPaddingColumn(
-          0 /*resize_percent*/, user_dropdown_->GetPreferredSize().width() +
+          0 /*resize_percent*/, dropdown_->GetPreferredSize().width() +
                                     kDistanceBetweenUsernameAndDropdownDp);
     }
     label_dropdown->AddColumn(views::GridLayout::CENTER,
                               views::GridLayout::CENTER, 0 /*resize_percent*/,
                               views::GridLayout::USE_PREF, 0 /*fixed_width*/,
                               0 /*min_width*/);
-    if (user_dropdown_) {
+    if (dropdown_) {
       label_dropdown->AddPaddingColumn(0 /*resize_percent*/,
                                        kDistanceBetweenUsernameAndDropdownDp);
       label_dropdown->AddColumn(views::GridLayout::CENTER,
@@ -673,8 +677,8 @@ void LoginUserView::SetLargeLayout() {
   // Label/dropdown.
   layout->StartRow(0 /*vertical_resize*/, kLabelDropdownColumnId);
   layout->AddView(user_label_);
-  if (user_dropdown_)
-    layout->AddView(user_dropdown_);
+  if (dropdown_)
+    layout->AddView(dropdown_);
 
   if (user_domain_) {
     add_padding(kVerticalSpacingBetweenUserNameAndDomainDp);

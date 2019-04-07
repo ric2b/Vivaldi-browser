@@ -28,12 +28,12 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
-#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_regexes.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/grit/components_scaled_resources.h"
@@ -46,8 +46,13 @@ using base::ASCIIToUTF16;
 
 namespace autofill {
 
-const base::char16 kMidlineEllipsis[] = {0x2022, 0x2006, 0x2022, 0x2006, 0x2022,
-                                         0x2006, 0x2022, 0x2006, 0};
+// Unicode characters used in card number obfuscation:
+//  - 0x2022 - Bullet.
+//  - 0x2006 - SIX-PER-EM SPACE (small space between bullets).
+//  - 0x2060 - WORD-JOINER (makes obfuscated string undivisible).
+const base::char16 kMidlineEllipsis[] = {
+    0x2022, 0x2060, 0x2006, 0x2060, 0x2022, 0x2060, 0x2006, 0x2060, 0x2022,
+    0x2060, 0x2006, 0x2060, 0x2022, 0x2060, 0x2006, 0x2060, 0};
 
 namespace {
 
@@ -798,7 +803,7 @@ base::string16 CreditCard::AbbreviatedExpirationDateForDisplay() const {
     return base::string16();
 
   return l10n_util::GetStringFUTF16(
-      IsAutofillSaveCardDialogUnlabeledExpirationDateEnabled()
+      features::IsAutofillSaveCardDialogUnlabeledExpirationDateEnabled()
           ? IDS_AUTOFILL_CREDIT_CARD_EXPIRATION_DATE_ABBR_V2
           : IDS_AUTOFILL_CREDIT_CARD_EXPIRATION_DATE_ABBR,
       month, year);

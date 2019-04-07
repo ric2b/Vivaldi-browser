@@ -85,6 +85,7 @@ class EncryptionScheme;
 class VideoDecodeStatsReporter;
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 class IPCDemuxer;
+class CoreAudioDemuxer;
 #endif
 class MediaLog;
 class UrlIndex;
@@ -146,6 +147,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
       blink::WebMediaPlayer::PipWindowOpenedCallback callback) override;
   void ExitPictureInPicture(
       blink::WebMediaPlayer::PipWindowClosedCallback callback) override;
+  void SetPictureInPictureCustomControls(
+      const std::vector<blink::PictureInPictureControlInfo>&) override;
   void RegisterPictureInPictureWindowResizeCallback(
       blink::WebMediaPlayer::PipWindowResizedCallback callback) override;
   void SetSinkId(const blink::WebString& sink_id,
@@ -203,8 +206,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   unsigned DecodedFrameCount() const override;
   unsigned DroppedFrameCount() const override;
-  size_t AudioDecodedByteCount() const override;
-  size_t VideoDecodedByteCount() const override;
+  uint64_t AudioDecodedByteCount() const override;
+  uint64_t VideoDecodedByteCount() const override;
 
   bool CopyVideoTextureToPlatformTexture(
       gpu::gles2::GLES2Interface* gl,
@@ -599,6 +602,12 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // The player MUST have a `client_` when this call happen.
   bool IsInPictureInPicture() const;
 
+  // Sets the UKM container name if needed.
+  void MaybeSetContainerName();
+
+  // Switch to SurfaceLayer, either initially or from VideoLayer.
+  void ActivateSurfaceLayerForVideo();
+
   blink::WebLocalFrame* const frame_;
 
   // The playback state last reported to |delegate_|, to avoid setting duplicate
@@ -719,6 +728,10 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   IPCMediaPipelineHost::Creator ipc_media_pipeline_host_creator_;
 
   IPCDemuxer* ipc_demuxer_ = nullptr;
+
+#if defined(OS_MACOSX)
+  CoreAudioDemuxer* audio_demuxer_ = nullptr;
+#endif
 
   ProtocolSniffer protocol_sniffer_;
 #endif
@@ -898,13 +911,14 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Whether embedded media experience is currently enabled.
   bool embedded_media_experience_enabled_ = false;
 
-  // Whether the use of a surface layer instead of a video layer is enabled.
+  // When should we use SurfaceLayer for video?
+  WebMediaPlayerParams::SurfaceLayerMode surface_layer_mode_ =
+      WebMediaPlayerParams::SurfaceLayerMode::kNever;
+
+  // Whether surface layer is currently in use to display frames.
   bool surface_layer_for_video_enabled_ = false;
 
-  base::OnceCallback<std::unique_ptr<blink::WebSurfaceLayerBridge>(
-      blink::WebSurfaceLayerBridgeObserver*,
-      cc::UpdateSubmissionStateCB)>
-      create_bridge_callback_;
+  CreateSurfaceLayerBridgeCB create_bridge_callback_;
 
   base::CancelableOnceCallback<void(base::TimeTicks)> frame_time_report_cb_;
 

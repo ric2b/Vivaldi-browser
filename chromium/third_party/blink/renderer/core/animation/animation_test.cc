@@ -32,7 +32,9 @@
 
 #include <memory>
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/core/animation/animatable/animatable_double.h"
 #include "third_party/blink/renderer/core/animation/animation_clock.h"
+#include "third_party/blink/renderer/core/animation/css_number_interpolation_type.h"
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
 #include "third_party/blink/renderer/core/animation/element_animations.h"
 #include "third_party/blink/renderer/core/animation/keyframe_effect.h"
@@ -73,6 +75,34 @@ class AnimationAnimationTest : public RenderingTest {
 
   void StartTimeline() { SimulateFrame(0); }
 
+  KeyframeEffectModelBase* MakeSimpleEffectModel() {
+    PropertyHandle PropertyHandleOpacity(GetCSSPropertyOpacity());
+    TransitionKeyframe* start_keyframe =
+        TransitionKeyframe::Create(PropertyHandleOpacity);
+    start_keyframe->SetValue(TypedInterpolationValue::Create(
+        CSSNumberInterpolationType(PropertyHandleOpacity),
+        InterpolableNumber::Create(1.0)));
+    start_keyframe->SetOffset(0.0);
+    // Egregious hack: Sideload the compositor value.
+    // This is usually set in a part of the rendering process SimulateFrame
+    // doesn't call.
+    start_keyframe->SetCompositorValue(AnimatableDouble::Create(1.0));
+    TransitionKeyframe* end_keyframe =
+        TransitionKeyframe::Create(PropertyHandleOpacity);
+    end_keyframe->SetValue(TypedInterpolationValue::Create(
+        CSSNumberInterpolationType(PropertyHandleOpacity),
+        InterpolableNumber::Create(0.0)));
+    end_keyframe->SetOffset(1.0);
+    // Egregious hack: Sideload the compositor value.
+    end_keyframe->SetCompositorValue(AnimatableDouble::Create(0.0));
+
+    TransitionKeyframeVector keyframes;
+    keyframes.push_back(start_keyframe);
+    keyframes.push_back(end_keyframe);
+
+    return TransitionKeyframeEffectModel::Create(keyframes);
+  }
+
   void ResetWithCompositedAnimation() {
     // Get rid of the default animation.
     animation->cancel();
@@ -85,11 +115,11 @@ class AnimationAnimationTest : public RenderingTest {
     Timing timing;
     timing.iteration_duration = 30;
 
-    scoped_refptr<StringKeyframe> start_keyframe = StringKeyframe::Create();
+    Persistent<StringKeyframe> start_keyframe = StringKeyframe::Create();
     start_keyframe->SetCSSPropertyValue(CSSPropertyOpacity, "1.0",
                                         SecureContextMode::kInsecureContext,
                                         nullptr);
-    scoped_refptr<StringKeyframe> end_keyframe = StringKeyframe::Create();
+    Persistent<StringKeyframe> end_keyframe = StringKeyframe::Create();
     end_keyframe->SetCSSPropertyValue(CSSPropertyOpacity, "0.0",
                                       SecureContextMode::kInsecureContext,
                                       nullptr);
@@ -115,11 +145,9 @@ class AnimationAnimationTest : public RenderingTest {
     return StringKeyframeEffectModel::Create(StringKeyframeVector());
   }
 
-  KeyframeEffect* MakeAnimation(double duration = 30,
-                                double playback_rate = 1) {
+  KeyframeEffect* MakeAnimation(double duration = 30) {
     Timing timing;
     timing.iteration_duration = duration;
-    timing.playback_rate = playback_rate;
     return KeyframeEffect::Create(nullptr, MakeEmptyEffectModel(), timing);
   }
 
@@ -860,25 +888,24 @@ TEST_F(AnimationAnimationTest, NoCompositeWithoutCompositedElementId) {
 
   Timing timing;
   timing.iteration_duration = 30;
-  timing.playback_rate = 1;
   KeyframeEffect* keyframe_effect_composited = KeyframeEffect::Create(
-      ToElement(object_composited->GetNode()), MakeEmptyEffectModel(), timing);
+      ToElement(object_composited->GetNode()), MakeSimpleEffectModel(), timing);
   Animation* animation_composited = timeline->Play(keyframe_effect_composited);
   KeyframeEffect* keyframe_effect_not_composited =
       KeyframeEffect::Create(ToElement(object_not_composited->GetNode()),
-                             MakeEmptyEffectModel(), timing);
+                             MakeSimpleEffectModel(), timing);
   Animation* animation_not_composited =
       timeline->Play(keyframe_effect_not_composited);
 
   SimulateFrame(0, composited_element_ids);
   EXPECT_TRUE(
-      animation_composited
-          ->CheckCanStartAnimationOnCompositorInternal(composited_element_ids)
-          .Ok());
-  EXPECT_FALSE(
-      animation_not_composited
-          ->CheckCanStartAnimationOnCompositorInternal(composited_element_ids)
-          .Ok());
+      animation_composited->CheckCanStartAnimationOnCompositorInternal().Ok());
+  EXPECT_TRUE(animation_composited
+                  ->CheckCanStartAnimationOnCompositor(composited_element_ids)
+                  .Ok());
+  EXPECT_FALSE(animation_not_composited
+                   ->CheckCanStartAnimationOnCompositor(composited_element_ids)
+                   .Ok());
 }
 
 // Regression test for http://crbug.com/819591 . If a compositable animation is
@@ -925,10 +952,10 @@ TEST_F(AnimationAnimationTest, SetKeyframesCausesCompositorPending) {
 
   // Now change the keyframes; this should mark the animation as compositor
   // pending as we need to sync the compositor side.
-  scoped_refptr<StringKeyframe> start_keyframe = StringKeyframe::Create();
+  Persistent<StringKeyframe> start_keyframe = StringKeyframe::Create();
   start_keyframe->SetCSSPropertyValue(
       CSSPropertyOpacity, "0.0", SecureContextMode::kInsecureContext, nullptr);
-  scoped_refptr<StringKeyframe> end_keyframe = StringKeyframe::Create();
+  Persistent<StringKeyframe> end_keyframe = StringKeyframe::Create();
   end_keyframe->SetCSSPropertyValue(
       CSSPropertyOpacity, "1.0", SecureContextMode::kInsecureContext, nullptr);
 

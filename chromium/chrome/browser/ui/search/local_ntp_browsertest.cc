@@ -84,8 +84,8 @@ class TestMostVisitedObserver : public InstantServiceObserver {
  private:
   void ThemeInfoChanged(const ThemeBackgroundInfo&) override {}
 
-  void MostVisitedItemsChanged(
-      const std::vector<InstantMostVisitedItem>& items) override {
+  void MostVisitedItemsChanged(const std::vector<InstantMostVisitedItem>& items,
+                               bool is_custom_links) override {
     items_ = items;
 
     if (quit_closure_ && items_.size() == expected_count_) {
@@ -545,7 +545,7 @@ class LocalNTPMDTest : public LocalNTPTest {
   LocalNTPMDTest()
       : LocalNTPTest(
             /*enabled_features=*/{features::kUseGoogleLocalNtp,
-                                  ntp_tiles::kNtpIcons},
+                                  features::kNtpIcons},
             /*disabled_features=*/{ntp_tiles::kNtpCustomLinks}) {}
 
  private:
@@ -598,7 +598,7 @@ class LocalNTPCustomLinksTest : public LocalNTPTest {
   LocalNTPCustomLinksTest()
       : LocalNTPTest(
             /*enabled_features=*/{features::kUseGoogleLocalNtp,
-                                  features::kNtpUIMd, ntp_tiles::kNtpIcons,
+                                  features::kNtpUIMd, features::kNtpIcons,
                                   ntp_tiles::kNtpCustomLinks},
             /*disabled_features=*/{}) {}
 
@@ -726,7 +726,7 @@ class LocalNTPNonMDTest : public LocalNTPTest {
             /*enabled_features=*/{features::kUseGoogleLocalNtp},
             /*disabled_features=*/{
                 features::kNtpUIMd, features::kNtpBackgrounds,
-                ntp_tiles::kNtpIcons, ntp_tiles::kNtpCustomLinks}) {}
+                features::kNtpIcons, ntp_tiles::kNtpCustomLinks}) {}
 };
 
 IN_PROC_BROWSER_TEST_F(LocalNTPNonMDTest, LoadsNonMDIframe) {

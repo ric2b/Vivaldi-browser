@@ -4,16 +4,16 @@
 
 #include "services/video_capture/device_factory_provider_impl.h"
 
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "media/capture/video/create_video_capture_device_factory.h"
 #include "media/capture/video/fake_video_capture_device_factory.h"
 #include "media/capture/video/video_capture_buffer_pool.h"
 #include "media/capture/video/video_capture_buffer_tracker.h"
 #include "media/capture/video/video_capture_system_impl.h"
-#include "services/ui/public/cpp/gpu/gpu.h"
 #include "services/video_capture/device_factory_media_to_mojo_adapter.h"
 #include "services/video_capture/virtual_device_enabled_device_factory.h"
+#include "services/ws/public/cpp/gpu/gpu.h"
 
 namespace video_capture {
 
@@ -26,7 +26,7 @@ class DeviceFactoryProviderImpl::GpuDependenciesContext {
  public:
   GpuDependenciesContext() : weak_factory_for_gpu_io_thread_(this) {
     gpu_io_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
-        {base::TaskPriority::BACKGROUND, base::MayBlock()});
+        {base::TaskPriority::BEST_EFFORT, base::MayBlock()});
   }
 
   ~GpuDependenciesContext() {
@@ -113,6 +113,8 @@ void DeviceFactoryProviderImpl::LazyInitializeDeviceFactory() {
   std::unique_ptr<media::VideoCaptureDeviceFactory> media_device_factory =
       media::CreateVideoCaptureDeviceFactory(
           base::ThreadTaskRunnerHandle::Get());
+  DCHECK(media_device_factory);
+
   auto video_capture_system = std::make_unique<media::VideoCaptureSystemImpl>(
       std::move(media_device_factory));
 

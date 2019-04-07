@@ -138,18 +138,25 @@ void V0InsertionPoint::RebuildDistributedChildrenLayoutTrees(
   }
 }
 
-void V0InsertionPoint::WillRecalcStyle(StyleRecalcChange change) {
-  StyleChangeType style_change_type = kNoStyleChange;
-
-  if (change > kInherit || GetStyleChangeType() > kLocalStyleChange)
-    style_change_type = kSubtreeStyleChange;
-  else if (change > kNoInherit)
-    style_change_type = kLocalStyleChange;
-  else
+void V0InsertionPoint::DidRecalcStyle(StyleRecalcChange change) {
+  if (!HasDistribution() || DistributedNodeAt(0)->parentNode() == this) {
+    // We either do not have distributed children or the distributed children
+    // are the fallback children. Fallback children have already been
+    // recalculated in ContainerNode::RecalcDescendantStyles().
     return;
+  }
+
+  StyleChangeType style_change_type =
+      change == kForce ? kSubtreeStyleChange : kLocalStyleChange;
 
   for (size_t i = 0; i < distributed_nodes_.size(); ++i) {
-    distributed_nodes_.at(i)->SetNeedsStyleRecalc(
+    Node* node = distributed_nodes_.at(i);
+    if (change == kReattach && node->IsElementNode()) {
+      if (node->ShouldCallRecalcStyle(kReattach))
+        ToElement(node)->RecalcStyle(kReattach);
+      continue;
+    }
+    node->SetNeedsStyleRecalc(
         style_change_type,
         StyleChangeReasonForTracing::Create(
             StyleChangeReason::kPropagateInheritChangeToDistributedNodes));
@@ -212,7 +219,7 @@ void V0InsertionPoint::ChildrenChanged(const ChildrenChange& change) {
 }
 
 Node::InsertionNotificationRequest V0InsertionPoint::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   HTMLElement::InsertedInto(insertion_point);
   if (ShadowRoot* root = ContainingShadowRoot()) {
     if (!root->IsV1()) {
@@ -220,7 +227,7 @@ Node::InsertionNotificationRequest V0InsertionPoint::InsertedInto(
             root->IsV1()))
         root->SetNeedsDistributionRecalc();
       if (CanBeActive() && !registered_with_shadow_root_ &&
-          insertion_point->GetTreeScope().RootNode() == root) {
+          insertion_point.GetTreeScope().RootNode() == root) {
         registered_with_shadow_root_ = true;
         root->V0().DidAddInsertionPoint(this);
         if (CanAffectSelector())
@@ -236,10 +243,10 @@ Node::InsertionNotificationRequest V0InsertionPoint::InsertedInto(
   return kInsertionDone;
 }
 
-void V0InsertionPoint::RemovedFrom(ContainerNode* insertion_point) {
+void V0InsertionPoint::RemovedFrom(ContainerNode& insertion_point) {
   ShadowRoot* root = ContainingShadowRoot();
   if (!root)
-    root = insertion_point->ContainingShadowRoot();
+    root = insertion_point.ContainingShadowRoot();
 
   if (root &&
       !(RuntimeEnabledFeatures::IncrementalShadowDOMEnabled() && root->IsV1()))
@@ -250,7 +257,7 @@ void V0InsertionPoint::RemovedFrom(ContainerNode* insertion_point) {
   ClearDistribution();
 
   if (registered_with_shadow_root_ &&
-      insertion_point->GetTreeScope().RootNode() == root) {
+      insertion_point.GetTreeScope().RootNode() == root) {
     DCHECK(root);
     registered_with_shadow_root_ = false;
     root->V0().DidRemoveInsertionPoint(this);

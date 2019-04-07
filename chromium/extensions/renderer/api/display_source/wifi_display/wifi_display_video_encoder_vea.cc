@@ -124,9 +124,9 @@ scoped_refptr<WiFiDisplayVideoEncoder>
 WiFiDisplayVideoEncoderVEA::InitOnMediaThread(const InitParameters& params) {
   media::VideoCodecProfile profile = (params.profile == wds::CHP)
       ? media::H264PROFILE_HIGH : media::H264PROFILE_BASELINE;
-  bool success =
-      vea_->Initialize(media::PIXEL_FORMAT_I420, params.frame_size,
-                       profile, params.bit_rate, this);
+  const media::VideoEncodeAccelerator::Config config(
+      media::PIXEL_FORMAT_I420, params.frame_size, profile, params.bit_rate);
+  bool success = vea_->Initialize(config, this);
   if (success)
     return this;
 
@@ -209,7 +209,7 @@ void WiFiDisplayVideoEncoderVEA::BitstreamBufferReady(
   if (!encoded_callback_.is_null()) {
     encoded_callback_.Run(
         std::unique_ptr<WiFiDisplayEncodedFrame>(new WiFiDisplayEncodedFrame(
-            std::string(reinterpret_cast<const char*>(output_buffer->memory()),
+            std::string(static_cast<const char*>(output_buffer->memory()),
                         payload_size),
             request.reference_time, base::TimeTicks::Now(), key_frame)));
   }

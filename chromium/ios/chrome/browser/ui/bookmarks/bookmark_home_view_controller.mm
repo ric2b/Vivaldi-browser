@@ -92,6 +92,18 @@ const CGFloat kFallbackIconDefaultBackgroundColor = 0xf1f3f4;
 // Grayscale fallback favicon light gray text color.
 const CGFloat kFallbackIconDefaultTextColorWhitePercentage = 0.66;
 
+// Estimated TableView row height.
+const CGFloat kEstimatedRowHeight = 65.0;
+
+// TableView rows that are hidden by the NavigationBar, causing them to be
+// "visible" for the tableView but not for the user. This is used to calculate
+// the top most visibile table view indexPath row.
+// TODO(crbug.com/879001): This value is aproximate based on the standard (no
+// dynamic type) height. If the dynamic font is too large or too small it will
+// result in a small offset on the cache, in order to prevent this we need to
+// calculate this value dynamically.
+const int kRowsHiddenByNavigationBar = 2;
+
 // NetworkTrafficAnnotationTag for fetching favicon from a Google server.
 const net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("bookmarks_get_large_icon", R"(
@@ -128,6 +140,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 const CGFloat kShadowOpacity = 0.12f;
 // Shadow radius for the NavigationController Toolbar.
 const CGFloat kShadowRadius = 12.0f;
+
 }  // namespace
 
 // An AlertCoordinator with the "Action Sheet" style that does not provide an
@@ -199,9 +212,9 @@ const CGFloat kShadowRadius = 12.0f;
 @property(nonatomic, assign) BookmarksContextBarState contextBarState;
 
 // When the view is first shown on the screen, this property represents the
-// cached value of the y of the content offset of the table view. This
+// cached value of the top most visible indexPath row of the table view. This
 // property is set to nil after it is used.
-@property(nonatomic, strong) NSNumber* cachedContentPosition;
+@property(nonatomic, assign) int cachedIndexPathRow;
 
 // Set to YES, only when this view controller instance is being created
 // from cached path. Once the view controller is shown, this is set to NO.
@@ -242,7 +255,7 @@ const CGFloat kShadowRadius = 12.0f;
 @synthesize homeDelegate = _homeDelegate;
 @synthesize contextBarState = _contextBarState;
 @synthesize dispatcher = _dispatcher;
-@synthesize cachedContentPosition = _cachedContentPosition;
+@synthesize cachedIndexPathRow = _cachedIndexPathRow;
 @synthesize isReconstructingFromCache = _isReconstructingFromCache;
 @synthesize sharedState = _sharedState;
 @synthesize mediator = _mediator;
@@ -311,15 +324,15 @@ const CGFloat kShadowRadius = 12.0f;
   [stack addObject:self];
 
   int64_t cachedFolderID;
-  double cachedScrollPosition;
+  int cachedIndexPathRow;
   // If cache is present then reconstruct the last visited bookmark from
   // cache.
   if (![BookmarkPathCache
-          getBookmarkUIPositionCacheWithPrefService:self.browserState
+          getBookmarkTopMostRowCacheWithPrefService:self.browserState
                                                         ->GetPrefs()
                                               model:self.bookmarks
                                            folderId:&cachedFolderID
-                                     scrollPosition:&cachedScrollPosition] ||
+                                         topMostRow:&cachedIndexPathRow] ||
       cachedFolderID == self.bookmarks->root_node()->id()) {
     return stack;
   }
@@ -351,9 +364,7 @@ const CGFloat kShadowRadius = 12.0f;
       [self setupNavigationForBookmarkHomeViewController:controller
                                        usingBookmarkNode:node];
     if (nodeID == cachedFolderID) {
-      [controller
-          setCachedContentPosition:[NSNumber
-                                       numberWithDouble:cachedScrollPosition]];
+      controller.cachedIndexPathRow = cachedIndexPathRow;
     }
     [stack addObject:controller];
   }
@@ -409,11 +420,16 @@ const CGFloat kShadowRadius = 12.0f;
 
 - (void)viewDidLayoutSubviews {
   [super viewDidLayoutSubviews];
-  // Set the content position after views are laid out, to ensure the right
-  // window of rows is shown. Once used, reset self.cachedContentPosition.
-  if (self.cachedContentPosition) {
-    [self setContentPosition:self.cachedContentPosition.floatValue];
-    self.cachedContentPosition = nil;
+  // Check that the tableView still contains as many rows, and that
+  // |self.cachedIndexPathRow| is not 0.
+  if (self.cachedIndexPathRow &&
+      [self.tableView numberOfRowsInSection:0] > self.cachedIndexPathRow) {
+    NSIndexPath* indexPath =
+        [NSIndexPath indexPathForRow:self.cachedIndexPathRow inSection:0];
+    [self.tableView scrollToRowAtIndexPath:indexPath
+                          atScrollPosition:UITableViewScrollPositionTop
+                                  animated:NO];
+    self.cachedIndexPathRow = 0;
   }
 }
 
@@ -456,10 +472,12 @@ const CGFloat kShadowRadius = 12.0f;
 
   // Configure the table view.
   self.sharedState.tableView.accessibilityIdentifier = @"bookmarksTableView";
-  self.sharedState.tableView.estimatedRowHeight =
-      [BookmarkHomeSharedState cellHeightPt];
+  self.sharedState.tableView.estimatedRowHeight = kEstimatedRowHeight;
   self.tableView.sectionHeaderHeight = 0;
-  self.tableView.sectionFooterHeight = 0;
+  // Setting a sectionFooterHeight of 0 will be the same as not having a
+  // footerView, which shows a cell separator for the last cell. Removing this
+  // line will also create a default footer of height 30.
+  self.tableView.sectionFooterHeight = 1;
   self.sharedState.tableView.allowsMultipleSelectionDuringEditing = YES;
   if (!experimental_flags::IsBookmarksUIRebootEnabled()) {
     self.sharedState.tableView.separatorStyle =
@@ -493,13 +511,13 @@ const CGFloat kShadowRadius = 12.0f;
   DCHECK([self isViewLoaded]);
 }
 
-- (void)cachePosition {
-  // Cache position for BookmarkTableView.
+- (void)cacheIndexPathRow {
+  // Cache IndexPathRow for BookmarkTableView.
+  int topMostVisibleIndexPathRow = [self topMostVisibleIndexPathRow];
   [BookmarkPathCache
-      cacheBookmarkUIPositionWithPrefService:self.browserState->GetPrefs()
+      cacheBookmarkTopMostRowWithPrefService:self.browserState->GetPrefs()
                                     folderId:_rootNode->id()
-                              scrollPosition:static_cast<double>(
-                                                 self.contentPosition)];
+                                  topMostRow:topMostVisibleIndexPathRow];
 }
 
 #pragma mark - BookmarkHomeConsumer
@@ -676,7 +694,7 @@ const CGFloat kShadowRadius = 12.0f;
 - (void)openAllNodes:(const std::vector<const bookmarks::BookmarkNode*>&)nodes
          inIncognito:(BOOL)inIncognito
               newTab:(BOOL)newTab {
-  [self cachePosition];
+  [self cacheIndexPathRow];
   std::vector<GURL> urls = GetUrlsToOpen(nodes);
   [self.homeDelegate bookmarkHomeViewControllerWantsDismissal:self
                                              navigationToUrls:urls
@@ -850,16 +868,16 @@ const CGFloat kShadowRadius = 12.0f;
     return;
 
   int64_t unusedFolderId;
-  double unusedScrollPosition;
+  int unusedIndexPathRow;
   // Bookmark Model is loaded after presenting Bookmarks,  we need to check
   // again here if restoring of cache position is needed.  It is to prevent
   // crbug.com/765503.
   if ([BookmarkPathCache
-          getBookmarkUIPositionCacheWithPrefService:self.browserState
+          getBookmarkTopMostRowCacheWithPrefService:self.browserState
                                                         ->GetPrefs()
                                               model:self.bookmarks
                                            folderId:&unusedFolderId
-                                     scrollPosition:&unusedScrollPosition]) {
+                                         topMostRow:&unusedIndexPathRow]) {
     self.isReconstructingFromCache = YES;
   }
 
@@ -992,7 +1010,7 @@ const CGFloat kShadowRadius = 12.0f;
 // Saves the current position and asks the delegate to open the url, if delegate
 // is set, otherwise opens the URL using loader.
 - (void)dismissWithURL:(const GURL&)url {
-  [self cachePosition];
+  [self cacheIndexPathRow];
   if (self.homeDelegate) {
     std::vector<GURL> urls;
     if (url.is_valid())
@@ -1120,23 +1138,27 @@ const CGFloat kShadowRadius = 12.0f;
   return self.sharedState.tableViewDisplayedRootNode != NULL;
 }
 
-- (CGFloat)contentPosition {
+- (int)topMostVisibleIndexPathRow {
+  // If on root node screen, return 0.
   if (self.sharedState.tableViewDisplayedRootNode ==
       self.sharedState.bookmarkModel->root_node()) {
     return 0;
   }
-  // Divided the scroll position by cell height so that it will stay correct in
-  // case the cell height is changed in future.
-  return self.sharedState.tableView.contentOffset.y /
-         [BookmarkHomeSharedState cellHeightPt];
-}
 
-- (void)setContentPosition:(CGFloat)position {
-  // The scroll position was divided by the cell height when stored.
-  [self.sharedState.tableView
-      setContentOffset:CGPointMake(
-                           0,
-                           position * [BookmarkHomeSharedState cellHeightPt])];
+  // If no rows in table, return 0.
+  NSArray* visibleIndexPaths = [self.tableView indexPathsForVisibleRows];
+  if (!visibleIndexPaths.count)
+    return 0;
+
+  // If the first row is still visible, return 0.
+  NSIndexPath* topMostIndexPath = [visibleIndexPaths objectAtIndex:0];
+  if (topMostIndexPath.row == 0)
+    return 0;
+
+  // Return the first visible row not covered by the NavigationBar.
+  topMostIndexPath =
+      [visibleIndexPaths objectAtIndex:kRowsHiddenByNavigationBar];
+  return topMostIndexPath.row;
 }
 
 - (void)navigateAway {
@@ -1259,6 +1281,8 @@ const CGFloat kShadowRadius = 12.0f;
     case BookmarksContextBarMixedSelection:
       // Delete clicked.
       [self deleteNodes:nodes];
+      base::RecordAction(
+          base::UserMetricsAction("MobileBookmarkManagerRemoveSelected"));
       break;
     case BookmarksContextBarNone:
     default:
@@ -1377,17 +1401,17 @@ const CGFloat kShadowRadius = 12.0f;
                            target:nil
                            action:nil];
 
-  // Set Select button.
-  titleString = l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_SELECT);
-  UIBarButtonItem* selectButton =
+  // Set Edit button.
+  titleString = l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_EDIT);
+  UIBarButtonItem* editButton =
       [[UIBarButtonItem alloc] initWithTitle:titleString
                                        style:UIBarButtonItemStylePlain
                                       target:self
                                       action:@selector(trailingButtonClicked)];
-  selectButton.accessibilityIdentifier = kBookmarkHomeTrailingButtonIdentifier;
-  selectButton.enabled = [self hasBookmarksOrFolders];
+  editButton.accessibilityIdentifier = kBookmarkHomeTrailingButtonIdentifier;
+  editButton.enabled = [self hasBookmarksOrFolders];
 
-  [self setToolbarItems:@[ newFolderButton, spaceButton, selectButton ]
+  [self setToolbarItems:@[ newFolderButton, spaceButton, editButton ]
                animated:NO];
 }
 
@@ -1821,6 +1845,8 @@ const CGFloat kShadowRadius = 12.0f;
     std::set<const BookmarkNode*> nodes;
     nodes.insert(node);
     [self handleSelectNodesForDeletion:nodes];
+    base::RecordAction(
+        base::UserMetricsAction("MobileBookmarkManagerEntryDeleted"));
   }
 }
 
@@ -1861,10 +1887,12 @@ const CGFloat kShadowRadius = 12.0f;
 
 - (CGFloat)tableView:(UITableView*)tableView
     heightForRowAtIndexPath:(NSIndexPath*)indexPath {
-  NSInteger sectionIdentifier = [self.sharedState.tableViewModel
-      sectionIdentifierForSection:indexPath.section];
-  if (sectionIdentifier == BookmarkHomeSectionIdentifierBookmarks) {
-    return [BookmarkHomeSharedState cellHeightPt];
+  if (!experimental_flags::IsBookmarksUIRebootEnabled()) {
+    NSInteger sectionIdentifier = [self.sharedState.tableViewModel
+        sectionIdentifierForSection:indexPath.section];
+    if (sectionIdentifier == BookmarkHomeSectionIdentifierBookmarks) {
+      return kEstimatedRowHeight;
+    }
   }
   return UITableViewAutomaticDimension;
 }

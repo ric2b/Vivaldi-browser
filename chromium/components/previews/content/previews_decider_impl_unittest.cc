@@ -27,6 +27,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/blacklist/opt_out_blacklist/opt_out_blacklist_data.h"
 #include "components/blacklist/opt_out_blacklist/opt_out_blacklist_delegate.h"
 #include "components/blacklist/opt_out_blacklist/opt_out_blacklist_item.h"
@@ -74,6 +75,8 @@ bool IsPreviewFieldTrialEnabled(PreviewsType type) {
       return params::IsNoScriptPreviewsEnabled();
     case PreviewsType::RESOURCE_LOADING_HINTS:
       return params::IsResourceLoadingHintsEnabled();
+    case previews::PreviewsType::LITE_PAGE_REDIRECT:
+      return params::IsLitePageServerPreviewsEnabled();
     case PreviewsType::NONE:
     case PreviewsType::UNSPECIFIED:
     case PreviewsType::LAST:
@@ -834,7 +837,7 @@ TEST_F(PreviewsDeciderImplTest, ClientLoFiObeysHostBlackListFromServer) {
   }
 }
 
-TEST_F(PreviewsDeciderImplTest, NoScriptDisallowedByDefault) {
+TEST_F(PreviewsDeciderImplTest, NoScriptFeatureDefaultBehavior) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(features::kPreviews);
   InitializeUIService();
@@ -848,13 +851,25 @@ TEST_F(PreviewsDeciderImplTest, NoScriptDisallowedByDefault) {
       previews::params::GetECTThresholdForPreview(
           previews::PreviewsType::NOSCRIPT),
       std::vector<std::string>(), false));
+#if defined(OS_ANDROID)
+  // Enabled by default on Android but no server whitelist.
+  histogram_tester.ExpectTotalCount("Previews.EligibilityReason.NoScript", 1);
+  histogram_tester.ExpectUniqueSample(
+      "Previews.EligibilityReason.NoScript",
+      static_cast<int>(
+          PreviewsEligibilityReason::HOST_NOT_WHITELISTED_BY_SERVER),
+      1);
+#else   // !defined(OS_ANDROID)
+  // Disabled by default on non-Android.
   histogram_tester.ExpectTotalCount("Previews.EligibilityReason.NoScript", 0);
+#endif  // defined(OS_ANDROID)
 }
 
 TEST_F(PreviewsDeciderImplTest, NoScriptAllowedByFeature) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {features::kPreviews, features::kNoScriptPreviews}, {});
+      {features::kPreviews, features::kNoScriptPreviews},
+      {features::kOptimizationHints});
   InitializeUIService();
 
   const struct {
@@ -974,7 +989,7 @@ TEST_F(PreviewsDeciderImplTest, NoScriptCommitTimeWhitelistCheck) {
 TEST_F(PreviewsDeciderImplTest, ResourceLoadingHintsDisallowedByDefault) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {features::kPreviews, features::kResourceLoadingHints}, {});
+      {features::kPreviews, features::kOptimizationHints}, {});
   InitializeUIService();
 
   network_quality_estimator()->set_effective_connection_type(
@@ -986,18 +1001,14 @@ TEST_F(PreviewsDeciderImplTest, ResourceLoadingHintsDisallowedByDefault) {
       previews::params::GetECTThresholdForPreview(
           previews::PreviewsType::RESOURCE_LOADING_HINTS),
       std::vector<std::string>(), false));
-  histogram_tester.ExpectUniqueSample(
-      "Previews.EligibilityReason.ResourceLoadingHints",
-      static_cast<int>(
-          PreviewsEligibilityReason::HOST_NOT_WHITELISTED_BY_SERVER),
-      1);
 }
 
 TEST_F(PreviewsDeciderImplTest,
        ResourceLoadingHintsDisallowedWithoutOptimizationHints) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {features::kPreviews, features::kResourceLoadingHints}, {});
+      {features::kPreviews, features::kResourceLoadingHints},
+      {features::kOptimizationHints});
   InitializeUIService();
 
   network_quality_estimator()->set_effective_connection_type(
@@ -1072,7 +1083,7 @@ TEST_F(PreviewsDeciderImplTest, ResourceLoadingHintsAllowedByFeature) {
 }
 
 TEST_F(PreviewsDeciderImplTest,
-       ResourceLoadingHintsAllowedByFeatureWithWhitelist) {
+       ResourceLoadingHintsAllowedByFeatureWithoutKnownHints) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
       {features::kPreviews, features::kResourceLoadingHints,
@@ -1085,23 +1096,9 @@ TEST_F(PreviewsDeciderImplTest,
 
   base::HistogramTester histogram_tester;
 
-  // First verify no preview for non-whitelisted url.
-  EXPECT_FALSE(previews_decider_impl()->ShouldAllowPreviewAtECT(
-      *CreateHttpsRequest(), PreviewsType::RESOURCE_LOADING_HINTS,
-      previews::params::GetECTThresholdForPreview(
-          previews::PreviewsType::RESOURCE_LOADING_HINTS),
-      std::vector<std::string>(), false));
-
-  histogram_tester.ExpectUniqueSample(
-      "Previews.EligibilityReason.ResourceLoadingHints",
-      static_cast<int>(
-          PreviewsEligibilityReason::HOST_NOT_WHITELISTED_BY_SERVER),
-      1);
-
-  // Now verify preview for whitelisted url.
+  // First verify preview allowed for url without known hints.
   EXPECT_TRUE(previews_decider_impl()->ShouldAllowPreviewAtECT(
-      *CreateRequestWithURL(GURL("https://whitelisted.example.com")),
-      PreviewsType::RESOURCE_LOADING_HINTS,
+      *CreateHttpsRequest(), PreviewsType::RESOURCE_LOADING_HINTS,
       previews::params::GetECTThresholdForPreview(
           previews::PreviewsType::RESOURCE_LOADING_HINTS),
       std::vector<std::string>(), false));
@@ -1146,48 +1143,6 @@ TEST_F(PreviewsDeciderImplTest, ResourceLoadingHintsCommitTimeWhitelistCheck) {
     histogram_tester.ExpectTotalCount(
         "Previews.EligibilityReason.ResourceLoadingHints", 0);
   }
-}
-
-TEST_F(PreviewsDeciderImplTest,
-       ResourceLoadingHintsAndNoScriptAllowedByFeatureWithWhitelist) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {features::kPreviews, features::kResourceLoadingHints,
-       features::kOptimizationHints, features::kNoScriptPreviews},
-      {});
-  InitializeUIService();
-
-  network_quality_estimator()->set_effective_connection_type(
-      net::EFFECTIVE_CONNECTION_TYPE_2G);
-
-  base::HistogramTester histogram_tester;
-
-  // Now verify preview for url that's whitelisted only for NoScript.
-  EXPECT_FALSE(previews_decider_impl()->ShouldAllowPreviewAtECT(
-      *CreateRequestWithURL(
-          GURL("https://noscript_only_whitelisted.example.com")),
-      PreviewsType::RESOURCE_LOADING_HINTS,
-      previews::params::GetECTThresholdForPreview(
-          previews::PreviewsType::RESOURCE_LOADING_HINTS),
-      std::vector<std::string>(), false));
-
-  histogram_tester.ExpectBucketCount(
-      "Previews.EligibilityReason.ResourceLoadingHints",
-      static_cast<int>(
-          PreviewsEligibilityReason::HOST_NOT_WHITELISTED_BY_SERVER),
-      1);
-
-  EXPECT_TRUE(previews_decider_impl()->ShouldAllowPreviewAtECT(
-      *CreateRequestWithURL(
-          GURL("https://noscript_only_whitelisted.example.com")),
-      PreviewsType::NOSCRIPT,
-      previews::params::GetECTThresholdForPreview(
-          previews::PreviewsType::NOSCRIPT),
-      std::vector<std::string>(), false));
-
-  histogram_tester.ExpectBucketCount(
-      "Previews.EligibilityReason.NoScript",
-      static_cast<int>(PreviewsEligibilityReason::ALLOWED), 1);
 }
 
 TEST_F(PreviewsDeciderImplTest, LogPreviewNavigationPassInCorrectParams) {
@@ -1312,7 +1267,8 @@ TEST_F(PreviewsDeciderImplTest, LogDecisionMadeBlacklistStatusesDefault) {
 TEST_F(PreviewsDeciderImplTest, IsURLAllowedForPreviewBlacklistStatuses) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {features::kPreviews, features::kNoScriptPreviews}, {});
+      {features::kPreviews, features::kNoScriptPreviews},
+      {features::kOptimizationHints});
   InitializeUIService();
   auto expected_type = PreviewsType::NOSCRIPT;
 

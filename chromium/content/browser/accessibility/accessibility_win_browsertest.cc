@@ -683,7 +683,7 @@ void AccessibilityWinBrowserTest::AccessibleChecker::CheckIA2Role(
   Microsoft::WRL::ComPtr<IAccessible2> accessible2;
   HRESULT hr = QueryIAccessible2(accessible, accessible2.GetAddressOf());
   ASSERT_EQ(S_OK, hr);
-  long ia2_role = 0;
+  LONG ia2_role = 0;
   hr = accessible2->role(&ia2_role);
   ASSERT_EQ(S_OK, hr);
   EXPECT_EQ(ia2_role_, ia2_role)
@@ -771,14 +771,14 @@ class NativeWinEventWaiter {
   NativeWinEventWaiter(BrowserAccessibilityManager* manager,
                        const std::string& match_pattern)
       : event_recorder_(
-            AccessibilityEventRecorder::Create(manager,
-                                               base::GetCurrentProcId())),
+            AccessibilityEventRecorder::GetInstance(manager,
+                                                    base::GetCurrentProcId())),
         match_pattern_(match_pattern) {
-    event_recorder_->ListenToEvents(base::BindRepeating(
+    event_recorder_.ListenToEvents(base::BindRepeating(
         &NativeWinEventWaiter::OnEvent, base::Unretained(this)));
   }
 
-  void OnEvent(std::string event_str) {
+  void OnEvent(const std::string& event_str) {
     DLOG(INFO) << "Got event " + event_str;
     if (base::MatchPattern(event_str, match_pattern_))
       run_loop_.QuitClosure().Run();
@@ -787,7 +787,7 @@ class NativeWinEventWaiter {
   void Wait() { run_loop_.Run(); }
 
  private:
-  std::unique_ptr<AccessibilityEventRecorder> event_recorder_;
+  AccessibilityEventRecorder& event_recorder_;
   std::string match_pattern_;
   base::RunLoop run_loop_;
 };
@@ -1290,16 +1290,12 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
       EXPECT_EQ(previous_height, height) << "at offset " << offset;
     }
 
-    // Vertically offscreen objects should have a height of 1px so that if an
-    // assistive aid ignores the offscreen state, they will still be too small
-    // to be visible and thus not appear outside the window. Note that a height
-    // of 0 is not used because it signifies an invalid size.
     EXPECT_HRESULT_SUCCEEDED(editable_container->get_characterExtents(
         last_line_start, coordinate_type, &x, &y, &width, &height));
     EXPECT_LT(0, x) << "at offset " << last_line_start;
     EXPECT_LT(previous_y, y) << "at offset " << last_line_start;
     EXPECT_LT(1, width) << "at offset " << last_line_start;
-    EXPECT_EQ(1, height) << "at offset " << last_line_start;
+    EXPECT_EQ(previous_height, height) << "at offset " << last_line_start;
 
     for (LONG offset = last_line_start + 1; offset < n_characters; ++offset) {
       previous_x = x;
@@ -1310,7 +1306,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
       EXPECT_LT(previous_x, x) << "at offset " << offset;
       EXPECT_EQ(previous_y, y) << "at offset " << offset;
       EXPECT_LT(1, width) << "at offset " << offset;
-      EXPECT_EQ(1, height) << "at offset " << offset;
+      EXPECT_EQ(previous_height, height) << "at offset " << offset;
     }
   }
 }
@@ -1334,21 +1330,13 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
        coordinate <= IA2_COORDTYPE_PARENT_RELATIVE; ++coordinate) {
     auto coordinate_type = static_cast<IA2CoordinateType>(coordinate);
 
-    // Horizontally offscreen objects should have a width of 1px so that if an
-    // assistive aid ignores the offscreen state, they will still be too small
-    // to be visible and thus not appear outside the window. Note that a width
-    // of 0 is not used because it signifies an invalid size.
     EXPECT_HRESULT_SUCCEEDED(input_text->get_characterExtents(
         0, coordinate_type, &x, &y, &width, &height));
-    EXPECT_LT(0, x + width) << "at offset 0";
+    EXPECT_GT(0, x + width) << "at offset 0";
     EXPECT_LT(0, y) << "at offset 0";
-    EXPECT_EQ(1, width) << "at offset 0";
+    EXPECT_LT(1, width) << "at offset 0";
     EXPECT_LT(1, height) << "at offset 0";
 
-    // Test that characters at the start of the input field are offscreen by
-    // checking that their x coordinate is at the start of the field and their
-    // width is 1.
-    // Exclude the character that is partly visible.
     for (LONG offset = 1; offset < (visible_characters_start - 1); ++offset) {
       previous_x = x;
       previous_y = y;
@@ -1356,9 +1344,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 
       EXPECT_HRESULT_SUCCEEDED(input_text->get_characterExtents(
           offset, coordinate_type, &x, &y, &width, &height));
-      EXPECT_EQ(previous_x, x) << "at offset " << offset;
+      EXPECT_LT(previous_x, x) << "at offset " << offset;
       EXPECT_EQ(previous_y, y) << "at offset " << offset;
-      EXPECT_EQ(1, width) << "at offset " << offset;
+      EXPECT_LT(1, width) << "at offset " << offset;
       EXPECT_EQ(previous_height, height) << "at offset " << offset;
     }
 
@@ -1366,7 +1354,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
     // width that is greater than 1px.
     EXPECT_HRESULT_SUCCEEDED(input_text->get_characterExtents(
         visible_characters_start, coordinate_type, &x, &y, &width, &height));
-    EXPECT_EQ(previous_x, x) << "at offset " << visible_characters_start;
+    EXPECT_LT(previous_x, x) << "at offset " << visible_characters_start;
     EXPECT_EQ(previous_y, y) << "at offset " << visible_characters_start;
     EXPECT_LT(1, width) << "at offset " << visible_characters_start;
     EXPECT_EQ(previous_height, height)

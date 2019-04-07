@@ -23,7 +23,7 @@
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "content/app/strings/grit/content_strings.h"
 #include "content/browser/browser_main_loop.h"
@@ -98,6 +98,13 @@
 #if defined(OS_LINUX)
 #include "components/services/font/font_service_app.h"
 #include "components/services/font/public/interfaces/constants.mojom.h"
+#endif
+
+#if defined(OS_CHROMEOS)
+#include "chromeos/assistant/buildflags.h"  // nogncheck
+#if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
+#include "chromeos/services/assistant/public/mojom/constants.mojom.h"  // nogncheck
+#endif  // BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
 #endif
 
 namespace content {
@@ -298,7 +305,7 @@ class ServiceBinaryLauncherFactory
 bool ShouldEnableVizService() {
 #if defined(USE_AURA)
   // aura::Env can be null in tests.
-  return aura::Env::GetInstanceDontCreate() &&
+  return aura::Env::HasInstance() &&
          aura::Env::GetInstance()->mode() == aura::Env::Mode::MUS;
 #else
   return false;
@@ -508,7 +515,7 @@ ServiceManagerContext::ServiceManagerContext(
   // affinity on the clients. We therefore require a single-thread runner.
   scoped_refptr<base::SingleThreadTaskRunner> device_blocking_task_runner =
       base::CreateSingleThreadTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND});
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
 
 #if defined(OS_ANDROID)
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -567,7 +574,7 @@ ServiceManagerContext::ServiceManagerContext(
         base::CreateSingleThreadTaskRunnerWithTraits(
 #endif
             base::TaskTraits({base::MayBlock(), base::WithBaseSyncPrimitives(),
-                              base::TaskPriority::BACKGROUND}),
+                              base::TaskPriority::BEST_EFFORT}),
             base::SingleThreadTaskRunnerThreadMode::DEDICATED);
     packaged_services_connection_->AddEmbeddedService(
         video_capture::mojom::kServiceName, video_capture_info);
@@ -666,6 +673,15 @@ ServiceManagerContext::ServiceManagerContext(
       &base::ASCIIToUTF16, "Content Decryption Module Service");
 #endif
 
+#if defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
+  out_of_process_services
+      [chromeos::assistant::mojom::kAudioDecoderServiceName] =
+          base::BindRepeating(&base::ASCIIToUTF16,
+                              "Assistant Audio Decoder Service");
+#endif  // BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
+#endif
+
   if (ShouldEnableVizService()) {
     out_of_process_services[viz::mojom::kVizServiceName] =
         base::BindRepeating(&base::ASCIIToUTF16, "Visuals Service");
@@ -721,7 +737,7 @@ bool ServiceManagerContext::HasValidProcessForProcessGroup(
   auto iter = g_active_process_groups.Get().find(process_group_name);
   if (iter == g_active_process_groups.Get().end() || !iter->second)
     return false;
-  return iter->second->GetData().handle != base::kNullProcessHandle;
+  return iter->second->GetData().IsHandleValid();
 }
 
 // static

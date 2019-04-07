@@ -35,7 +35,6 @@
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/fake_auth_policy_client.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user_names.h"
@@ -230,8 +229,7 @@ IN_PROC_BROWSER_TEST_F(LoginGuestTest, GuestIsOTR) {
 }
 
 // Verifies the cursor is hidden at startup on login screen.
-// Flaky, see https://crbug.com/865520.
-IN_PROC_BROWSER_TEST_F(LoginCursorTest, DISABLED_CursorHidden) {
+IN_PROC_BROWSER_TEST_F(LoginCursorTest, CursorHidden) {
   // Login screen needs to be shown explicitly when running test.
   ShowLoginWizard(OobeScreen::SCREEN_SPECIAL_LOGIN);
 

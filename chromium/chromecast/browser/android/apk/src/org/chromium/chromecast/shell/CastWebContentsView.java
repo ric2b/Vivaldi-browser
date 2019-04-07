@@ -4,11 +4,12 @@
 
 package org.chromium.chromecast.shell;
 
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.drawable.ColorDrawable;
 import android.widget.FrameLayout;
 
-import org.chromium.chromecast.base.ScopeFactory;
+import org.chromium.chromecast.base.Observer;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.components.embedder_support.view.ContentViewRenderView;
 import org.chromium.content_public.browser.WebContents;
@@ -17,12 +18,24 @@ import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
 
 class CastWebContentsView {
-    public static ScopeFactory<WebContents> onLayout(
-            Context context, FrameLayout layout, int backgroundColor) {
+    public static Observer<WebContents> onLayoutActivity(
+            Activity activity, FrameLayout layout, int backgroundColor) {
         layout.setBackgroundColor(backgroundColor);
+        WindowAndroid window = new ActivityWindowAndroid(activity);
+        return onLayoutInternal(activity, layout, window, backgroundColor);
+    }
+
+    public static Observer<WebContents> onLayoutFragment(
+            Activity activity, FrameLayout layout, int backgroundColor) {
+        layout.setBackgroundColor(backgroundColor);
+        WindowAndroid window = new WindowAndroid(activity);
+        return onLayoutInternal(activity, layout, window, backgroundColor);
+    }
+
+    private static Observer<WebContents> onLayoutInternal(
+            Activity activity, FrameLayout layout, WindowAndroid window, int backgroundColor) {
         return (WebContents webContents) -> {
-            WindowAndroid window = new ActivityWindowAndroid(context);
-            ContentViewRenderView contentViewRenderView = new ContentViewRenderView(context) {
+            ContentViewRenderView contentViewRenderView = new ContentViewRenderView(activity) {
                 @Override
                 protected void onReadyToRender() {
                     setOverlayVideoMode(true);
@@ -34,10 +47,10 @@ class CastWebContentsView {
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
             layout.addView(contentViewRenderView, matchParent);
 
-            ContentView contentView = ContentView.createContentView(context, webContents);
+            ContentView contentView = ContentView.createContentView(activity, webContents);
             // TODO(derekjchow): productVersion
-            webContents.initialize(context, "",
-                    ViewAndroidDelegate.createBasicDelegate(contentView), contentView, window);
+            webContents.initialize("", ViewAndroidDelegate.createBasicDelegate(contentView),
+                    contentView, window, WebContents.createDefaultInternalsHolder());
 
             // Enable display of current webContents.
             webContents.onShow();
@@ -55,16 +68,22 @@ class CastWebContentsView {
         };
     }
 
-    public static ScopeFactory<WebContents> withoutLayout(Context context) {
+    public static Observer<WebContents> withoutLayout(Context context) {
         return (WebContents webContents) -> {
             WindowAndroid window = new WindowAndroid(context);
             ContentView contentView = ContentView.createContentView(context, webContents);
             // TODO(derekjchow): productVersion
-            webContents.initialize(context, "",
-                    ViewAndroidDelegate.createBasicDelegate(contentView), contentView, window);
+            webContents.initialize("", ViewAndroidDelegate.createBasicDelegate(contentView),
+                    contentView, window, WebContents.createDefaultInternalsHolder());
             // Enable display of current webContents.
             webContents.onShow();
-            return webContents::onHide;
+            return () -> {
+                if (!webContents.isDestroyed()) {
+                    // WebContents can be destroyed by the app before CastWebContentsComponent
+                    // unbinds, which is why we need this check.
+                    webContents.onHide();
+                }
+            };
         };
     }
 }

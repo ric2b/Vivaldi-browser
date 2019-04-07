@@ -80,7 +80,7 @@ class PLATFORM_EXPORT RawResource final : public Resource {
   }
 
   // Resource implementation
-  bool CanReuse(
+  MatchStatus CanReuse(
       const FetchParameters&,
       scoped_refptr<const SecurityOrigin> new_source_origin) const override;
   bool WillFollowRedirect(const ResourceRequest&,
@@ -90,8 +90,14 @@ class PLATFORM_EXPORT RawResource final : public Resource {
 
   // Used for code caching of scripts with source code inline in the HTML.
   // Returns a cache handler which can store multiple cache metadata entries,
-  // keyed by the source code of the script.
-  SourceKeyedCachedMetadataHandler* CacheHandler();
+  // keyed by the source code of the script. This is valid only if type is
+  // kMainResource.
+  SourceKeyedCachedMetadataHandler* InlineScriptCacheHandler();
+
+  // Used for code caching of fetched code resources. Returns a cache handler
+  // which can only store a single cache metadata entry. This is valid only if
+  // type is kRaw.
+  SingleCachedMetadataHandler* ScriptCacheHandler();
 
   scoped_refptr<BlobDataHandle> DownloadedBlob() const {
     return downloaded_blob_;

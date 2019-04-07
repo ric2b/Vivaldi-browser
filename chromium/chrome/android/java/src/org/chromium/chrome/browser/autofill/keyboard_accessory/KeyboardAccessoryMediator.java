@@ -7,15 +7,18 @@ package org.chromium.chrome.browser.autofill.keyboard_accessory;
 import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetTrigger.MANUAL_CLOSE;
 
 import android.support.annotation.Nullable;
+import android.support.annotation.Px;
 import android.support.design.widget.TabLayout;
 
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.autofill.AutofillKeyboardSuggestions;
 import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryCoordinator.VisibilityDelegate;
 import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryData.Action;
 import org.chromium.chrome.browser.modelutil.ListObservable;
 import org.chromium.chrome.browser.modelutil.PropertyObservable;
-import org.chromium.ui.base.WindowAndroid;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * This is the second part of the controller of the keyboard accessory component.
@@ -26,25 +29,18 @@ import org.chromium.ui.base.WindowAndroid;
  * callback to trigger when selecting them.
  */
 class KeyboardAccessoryMediator
-        implements WindowAndroid.KeyboardVisibilityListener, ListObservable.ListObserver<Void>,
+        implements ListObservable.ListObserver<Void>,
                    PropertyObservable.PropertyObserver<KeyboardAccessoryModel.PropertyKey>,
                    KeyboardAccessoryData.Observer<KeyboardAccessoryData.Action>,
                    TabLayout.OnTabSelectedListener {
     private final KeyboardAccessoryModel mModel;
-    private final WindowAndroid mWindowAndroid;
     private final VisibilityDelegate mVisibilityDelegate;
 
-    // TODO(fhorschig): Look for stronger signals than |keyboardVisibilityChanged|.
-    // This variable remembers the last state of |keyboardVisibilityChanged| which might not be
-    // sufficient for edge cases like hardware keyboards, floating keyboards, etc.
-    private boolean mIsKeyboardVisible;
+    private boolean mShowIfNotEmpty;
 
-    KeyboardAccessoryMediator(KeyboardAccessoryModel model, WindowAndroid windowAndroid,
-            VisibilityDelegate visibilityDelegate) {
+    KeyboardAccessoryMediator(KeyboardAccessoryModel model, VisibilityDelegate visibilityDelegate) {
         mModel = model;
-        mWindowAndroid = windowAndroid;
         mVisibilityDelegate = visibilityDelegate;
-        windowAndroid.addKeyboardVisibilityListener(this);
 
         // Add mediator as observer so it can use model changes as signal for accessory visibility.
         mModel.addObserver(this);
@@ -53,18 +49,29 @@ class KeyboardAccessoryMediator
         mModel.setTabSelectionCallbacks(this);
     }
 
-    void destroy() {
-        mWindowAndroid.removeKeyboardVisibilityListener(this);
+    @Override
+    public void onItemsAvailable(int typeId, KeyboardAccessoryData.Action[] actions) {
+        assert typeId != DEFAULT_TYPE : "Did not specify which Action type has been updated.";
+        // If there is a new list, retain all actions that are of a different type than the provided
+        // actions.
+        List<Action> retainedActions = new ArrayList<>();
+        for (Action a : mModel.getActionList()) {
+            if (a.getActionType() == typeId) continue;
+            retainedActions.add(a);
+        }
+        // Always append autofill suggestions to the very end.
+        int insertPos = typeId == AccessoryAction.AUTOFILL_SUGGESTION ? retainedActions.size() : 0;
+        retainedActions.addAll(insertPos, Arrays.asList(actions));
+        mModel.setActions(retainedActions.toArray(new Action[retainedActions.size()]));
     }
 
-    @Override
-    public void onItemsAvailable(KeyboardAccessoryData.Action[] actions) {
-        mModel.setActions(actions);
+    void requestShowing() {
+        mShowIfNotEmpty = true;
+        updateVisibility();
     }
 
-    @Override
-    public void keyboardVisibilityChanged(boolean isShowing) {
-        mIsKeyboardVisible = isShowing;
+    void close() {
+        mShowIfNotEmpty = false;
         updateVisibility();
     }
 
@@ -80,17 +87,9 @@ class KeyboardAccessoryMediator
         mModel.getTabList().set(tabs);
     }
 
-    void setSuggestions(AutofillKeyboardSuggestions suggestions) {
-        mModel.setAutofillSuggestions(suggestions);
-    }
-
     void dismiss() {
-        mModel.setActiveTab(null);
-        if (mModel.getAutofillSuggestions() != null) {
-            mModel.getAutofillSuggestions().dismiss();
-            mModel.setAutofillSuggestions(null);
-        }
-        updateVisibility();
+        closeActiveTab();
+        close();
     }
 
     void closeActiveTab() {
@@ -128,9 +127,11 @@ class KeyboardAccessoryMediator
         // Update the visibility only if we haven't set it just now.
         if (propertyKey == KeyboardAccessoryModel.PropertyKey.VISIBLE) {
             // When the accessory just (dis)appeared, there should be no active tab.
-            mModel.setActiveTab(null);
+            closeActiveTab();
+            mVisibilityDelegate.onBottomControlSpaceChanged();
             if (!mModel.isVisible()) {
-                mModel.setActions(new Action[0]);
+                // TODO(fhorschig|ioanap): Maybe the generation bridge should take care of that.
+                onItemsAvailable(AccessoryAction.GENERATE_PASSWORD_AUTOMATIC, new Action[0]);
             }
             return;
         }
@@ -138,17 +139,14 @@ class KeyboardAccessoryMediator
             Integer activeTab = mModel.activeTab();
             if (activeTab == null) {
                 mVisibilityDelegate.onCloseAccessorySheet();
+                updateVisibility();
                 return;
             }
             mVisibilityDelegate.onChangeAccessorySheet(activeTab);
-            mVisibilityDelegate.onOpenAccessorySheet();
             return;
         }
-        if (propertyKey == KeyboardAccessoryModel.PropertyKey.TAB_SELECTION_CALLBACKS) {
-            return;
-        }
-        if (propertyKey == KeyboardAccessoryModel.PropertyKey.SUGGESTIONS) {
-            updateVisibility();
+        if (propertyKey == KeyboardAccessoryModel.PropertyKey.BOTTOM_OFFSET
+                || propertyKey == KeyboardAccessoryModel.PropertyKey.TAB_SELECTION_CALLBACKS) {
             return;
         }
         assert false : "Every property update needs to be handled explicitly!";
@@ -169,18 +167,32 @@ class KeyboardAccessoryMediator
         } else {
             KeyboardAccessoryMetricsRecorder.recordSheetTrigger(
                     mModel.getTabList().get(mModel.activeTab()).getRecordingType(), MANUAL_CLOSE);
-            mModel.setActiveTab(null);
-            mVisibilityDelegate.onOpenKeyboard();
+            mVisibilityDelegate.onOpenKeyboard(); // This will close the active tab gently.
         }
     }
 
+    boolean hasContents() {
+        return mModel.getActionList().size() > 0 || mModel.getTabList().size() > 0;
+    }
+
     private boolean shouldShowAccessory() {
-        if (!mIsKeyboardVisible && mModel.activeTab() == null) return false;
-        return mModel.getAutofillSuggestions() != null || mModel.getActionList().size() > 0
-                || mModel.getTabList().size() > 0;
+        if (!mShowIfNotEmpty && mModel.activeTab() == null) return false;
+        return hasContents();
     }
 
     private void updateVisibility() {
         mModel.setVisible(shouldShowAccessory());
+    }
+
+    public void setBottomOffset(@Px int bottomOffset) {
+        mModel.setBottomOffset(bottomOffset);
+    }
+
+    public boolean isShown() {
+        return mModel.isVisible();
+    }
+
+    public boolean hasActiveTab() {
+        return mModel.isVisible() && mModel.activeTab() != null;
     }
 }

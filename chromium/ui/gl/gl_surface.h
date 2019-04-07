@@ -37,6 +37,7 @@ struct DCRendererLayerParams;
 namespace gl {
 
 class GLContext;
+class EGLTimestampClient;
 
 // Encapsulates a surface that can be rendered to with GL, hiding platform
 // specific management.
@@ -130,7 +131,15 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
   // FBO. Otherwise returns 0.
   virtual unsigned int GetBackingFramebufferObject();
 
-  using SwapCompletionCallback = base::Callback<void(gfx::SwapResult)>;
+  // The SwapCompletionCallback is used to receive notification about the
+  // completion of the swap operation from |SwapBuffersAsync|,
+  // |PostSubBufferAsync|, |CommitOverlayPlanesAsync|, etc. If a null gpu fence
+  // is returned, then the swap is guaranteed to have already completed. If a
+  // non-null gpu fence is returned, then the swap operation may still be in
+  // progress when this callback is invoked, and the signaling of the gpu fence
+  // will mark the completion of the swap operation.
+  using SwapCompletionCallback =
+      base::Callback<void(gfx::SwapResult, std::unique_ptr<gfx::GpuFence>)>;
   // Swaps front and back buffers. This has no effect for off-screen
   // contexts. On some platforms, we want to send SwapBufferAck only after the
   // surface is displayed on screen. The callback can be used to delay sending
@@ -283,14 +292,15 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
   virtual bool SupportsSwapTimestamps() const;
   virtual void SetEnableSwapTimestamps();
 
-  // Tells the surface to use the provided plane GPU fences when swapping
-  // buffers.
-  virtual void SetUsePlaneGpuFences();
+  virtual bool SupportsPlaneGpuFences() const;
 
   // Returns the number of buffers the surface uses in the swap chain. For
   // example, most surfaces are double-buffered, so this would return 2. For
   // triple-buffered surfaces this would return 3, etc.
   virtual int GetBufferCount() const;
+
+  // Return the interface used for querying EGL timestamps.
+  virtual EGLTimestampClient* GetEGLTimestampClient();
 
   static GLSurface* GetCurrent();
 
@@ -385,7 +395,7 @@ class GL_EXPORT GLSurfaceAdapter : public GLSurface {
   void SetRelyOnImplicitSync() override;
   bool SupportsSwapTimestamps() const override;
   void SetEnableSwapTimestamps() override;
-  void SetUsePlaneGpuFences() override;
+  bool SupportsPlaneGpuFences() const override;
   int GetBufferCount() const override;
 
   GLSurface* surface() const { return surface_.get(); }

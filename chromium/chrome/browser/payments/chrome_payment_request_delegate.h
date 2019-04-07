@@ -26,6 +26,7 @@ class ChromePaymentRequestDelegate : public ContentPaymentRequestDelegate {
 
   // PaymentRequestDelegate:
   void ShowDialog(PaymentRequest* request) override;
+  void RetryDialog() override;
   void CloseDialog() override;
   void ShowErrorMessage() override;
   void ShowProcessingSpinner() override;
@@ -57,21 +58,6 @@ class ChromePaymentRequestDelegate : public ContentPaymentRequestDelegate {
   // dialog will be destroyed. Owned by the views:: dialog machinery. Protected
   // for testing.
   PaymentRequestDialog* shown_dialog_;
-
-  // The instance of the dialog that was created but not shown yet. Since it
-  // hasn't been shown, it's still owned by it's creator. This is non null only
-  // when the current Payment Request supports skipping the payment sheet (see
-  // PaymentRequest::SatisfiesSkipUIConstraints) and is reset once the
-  // underlying pointer becomes owned by the views:: machinery (when the dialog
-  // is shown).
-  std::unique_ptr<PaymentRequestDialog> hidden_dialog_;
-
-  // Shows |hidden_dialog_| if the current Payment Request doesn't support the
-  // skip UI flow. This also transfer its ownership to the views dialog code and
-  // keep a reference to it in |shown_dialog_|.
-  // Otherwise, this calls Pay() on the current Payment Request to allow the
-  // skip UI flow to carry on.
-  void MaybeShowHiddenDialog(PaymentRequest* request);
 
  private:
   // Not owned but outlives the PaymentRequest object that owns this.

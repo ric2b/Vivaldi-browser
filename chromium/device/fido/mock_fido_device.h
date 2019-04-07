@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -17,15 +18,34 @@
 #include "base/time/time.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_device.h"
+#include "device/fido/fido_transport_protocol.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace device {
 
-class MockFidoDevice : public FidoDevice {
+class MockFidoDevice : public ::testing::StrictMock<FidoDevice> {
  public:
+  // MakeU2f returns a fully initialized U2F device. This represents the state
+  // after |DiscoverSupportedProtocolAndDeviceInfo| has been called by the
+  // FidoDiscovery.
   static std::unique_ptr<MockFidoDevice> MakeU2f();
+  // MakeCtap returns a fully initialized CTAP device. This represents the
+  // state after |DiscoverSupportedProtocolAndDeviceInfo| has been called by
+  // the FidoDiscovery.
   static std::unique_ptr<MockFidoDevice> MakeCtap(
       base::Optional<AuthenticatorGetInfoResponse> device_info = base::nullopt);
+  // MakeU2fWithDeviceInfoExpectation returns a uninitialized U2F device
+  // suitable for injecting into a FidoDiscovery, which will determine its
+  // protocol version by invoking |DiscoverSupportedProtocolAndDeviceInfo|.
+  static std::unique_ptr<MockFidoDevice> MakeU2fWithGetInfoExpectation();
+  // MakeCtapWithDeviceInfoExpectation returns a uninitialized CTAP device
+  // suitable for injecting into a FidoDiscovery, which will determine its
+  // protocol version by invoking |DiscoverSupportedProtocolAndDeviceInfo|. If a
+  // response is supplied, the mock will use that to reply; otherwise it will
+  // use |test_data::kTestAuthenticatorGetInfoResponse|.
+  static std::unique_ptr<MockFidoDevice> MakeCtapWithGetInfoExpectation(
+      base::Optional<base::span<const uint8_t>> get_info_response =
+          base::nullopt);
 
   MockFidoDevice();
   MockFidoDevice(ProtocolVersion protocol_version,
@@ -46,10 +66,19 @@ class MockFidoDevice : public FidoDevice {
   MOCK_METHOD2(DeviceTransactPtr,
                void(const std::vector<uint8_t>& command, DeviceCallback& cb));
   void DeviceTransact(std::vector<uint8_t> command, DeviceCallback cb) override;
+
+  // FidoDevice:
+  FidoTransportProtocol DeviceTransport() const override;
+  base::WeakPtr<FidoDevice> GetWeakPtr() override;
+
   void ExpectWinkedAtLeastOnce();
   void ExpectCtap2CommandAndRespondWith(
       CtapRequestCommand command,
       base::Optional<base::span<const uint8_t>> response,
+      base::TimeDelta delay = base::TimeDelta());
+  void ExpectCtap2CommandAndRespondWithError(
+      CtapRequestCommand command,
+      CtapDeviceResponseCode response_code,
       base::TimeDelta delay = base::TimeDelta());
   void ExpectRequestAndRespondWith(
       base::span<const uint8_t> request,
@@ -57,10 +86,12 @@ class MockFidoDevice : public FidoDevice {
       base::TimeDelta delay = base::TimeDelta());
   void ExpectCtap2CommandAndDoNotRespond(CtapRequestCommand command);
   void ExpectRequestAndDoNotRespond(base::span<const uint8_t> request);
-
-  base::WeakPtr<FidoDevice> GetWeakPtr() override;
+  void StubGetId();
+  void SetDeviceTransport(FidoTransportProtocol transport_protocol);
 
  private:
+  FidoTransportProtocol transport_protocol_ =
+      FidoTransportProtocol::kUsbHumanInterfaceDevice;
   base::WeakPtrFactory<FidoDevice> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MockFidoDevice);

@@ -8,53 +8,70 @@
   margin: auto;
 }
 
-#view-container,
-#more-container {
-  height: 372px;
-  overflow: hidden;
-  overflow-y: scroll;
-  padding: 48px 48px 0 48px;
-  position: absolute;
-  width: 480px;
+#intro-text {
+  padding: 0 8px 16px 0;
 }
 
-#view-container {
-  padding-top: 32px;
+#value-prop-container {
+  border-right: 1px solid rgb(218, 220, 224);
+  width: 50%;
 }
 
-.title {
-  font-size: 18px;
-  padding-bottom: 10px;
+#consents-container {
+  padding-left: 24px;
+  width: 50%;
 }
 
-.sub-title {
-  font-size: 12px;
-  padding: 8px 0 8px 0;
+#user-name {
+  color: #757575;
+  padding-left: 8px;
 }
 
-.content {
-  color: rgba(0, 0, 0, .54);
-  font-size: 11px;
-  padding-bottom: 10px;
+#footer-text {
+  color: #757575;
+  padding-top: 16px;
 }
 
-.line {
-  background-color: rgba(0, 0, 0, .14);
-  height: 1px;
-  margin: 8px 0 8px 0;
+#user-image {
+  border-radius: 50%;
+  height: 20px;
 }
 
-#footer {
-  color: rgba(0, 0, 0, .54);
-  font-size: 11px;
-  padding-top: 4px;
+.oobe-popup {
+  border-radius: 8px;
+  box-shadow: unset;
+  width: 512px;
 }
 
-#skip-button {
-  color: rgb(66, 133, 244);
+#overlay-text {
+  box-sizing: border-box;
+  font-size: 13px;
+  margin: auto;
+  min-height: 200px;
+  padding: 16px;
+  width: 100%;
 }
 
-#more-button,
-#next-button {
-  -webkit-margin-end: 18px;
+#overlay-title-text {
+  font-size: 15px;
+}
+
+#overlay-additional-info-text {
+  color: rgb(128, 134, 139);
+  line-height: 20px;
+  padding-top: 20px;
+}
+
+#overlay-close-button {
+  margin-right: 0;
+}
+
+#close-button-text {
+  padding: 0 16px 0 16px;
+}
+
+.button-strip {
+  display: flex;
+  justify-content: flex-end;
+  margin: 16px;
 }

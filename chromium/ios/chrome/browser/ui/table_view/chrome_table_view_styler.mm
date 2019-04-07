@@ -13,21 +13,30 @@
 namespace {
 // The width and height of the favicon ImageView.
 const int kTableViewBackgroundRGBColor = 0xF9F9F9;
+// The default color used to highlight tableview cells.
+const CGFloat kTableViewHighlightColorAlpha = 0.05;
+// The default cell separator color.
+const CGFloat kDefaultTableViewSeparatorColor = 0xC8C7CC;
 }
 
 @implementation ChromeTableViewStyler
+@synthesize cellSeparatorColor = _cellSeparatorColor;
 @synthesize tableViewSectionHeaderBlurEffect =
     _tableViewSectionHeaderBlurEffect;
 @synthesize tableViewBackgroundColor = _tableViewBackgroundColor;
 @synthesize cellTitleColor = _cellTitleColor;
 @synthesize headerFooterTitleColor = _headerFooterTitleColor;
+@synthesize cellHighlightColor = _cellHighlightColor;
 
 - (instancetype)init {
   if ((self = [super init])) {
     _tableViewBackgroundColor = UIColorFromRGB(kTableViewBackgroundRGBColor, 1);
-
+    _cellSeparatorColor = UIColorFromRGB(kDefaultTableViewSeparatorColor, 1);
     _tableViewSectionHeaderBlurEffect =
         [UIBlurEffect effectWithStyle:UIBlurEffectStyleExtraLight];
+
+    _cellHighlightColor =
+        [UIColor colorWithWhite:0 alpha:kTableViewHighlightColorAlpha];
   }
   return self;
 }

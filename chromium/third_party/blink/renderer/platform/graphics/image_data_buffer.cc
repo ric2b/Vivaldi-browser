@@ -37,7 +37,6 @@
 #include "base/memory/ptr_util.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/image-encoders/image_encoder.h"
-#include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -117,19 +116,19 @@ const unsigned char* ImageDataBuffer::Pixels() const {
   return static_cast<const unsigned char*>(pixmap_.addr());
 }
 
-bool ImageDataBuffer::EncodeImage(const String& mime_type,
+bool ImageDataBuffer::EncodeImage(const ImageEncodingMimeType mime_type,
                                   const double& quality,
                                   Vector<unsigned char>* encoded_image) const {
   return EncodeImageInternal(mime_type, quality, encoded_image, pixmap_);
 }
 
-bool ImageDataBuffer::EncodeImageInternal(const String& mime_type,
+bool ImageDataBuffer::EncodeImageInternal(const ImageEncodingMimeType mime_type,
                                           const double& quality,
                                           Vector<unsigned char>* encoded_image,
                                           const SkPixmap& pixmap) const {
   DCHECK(is_valid_);
 
-  if (mime_type == "image/jpeg") {
+  if (mime_type == kMimeTypeJpeg) {
     SkJpegEncoder::Options options;
     options.fQuality = ImageEncoder::ComputeJpegQuality(quality);
     options.fAlphaOption = SkJpegEncoder::AlphaOption::kBlendOnBlack;
@@ -139,22 +138,21 @@ bool ImageDataBuffer::EncodeImageInternal(const String& mime_type,
     return ImageEncoder::Encode(encoded_image, pixmap, options);
   }
 
-  if (mime_type == "image/webp") {
+  if (mime_type == kMimeTypeWebp) {
     SkWebpEncoder::Options options = ImageEncoder::ComputeWebpOptions(quality);
     return ImageEncoder::Encode(encoded_image, pixmap, options);
   }
 
-  DCHECK_EQ(mime_type, "image/png");
+  DCHECK_EQ(mime_type, kMimeTypePng);
   SkPngEncoder::Options options;
   options.fFilterFlags = SkPngEncoder::FilterFlag::kSub;
   options.fZLibLevel = 3;
   return ImageEncoder::Encode(encoded_image, pixmap, options);
 }
 
-String ImageDataBuffer::ToDataURL(const String& mime_type,
+String ImageDataBuffer::ToDataURL(const ImageEncodingMimeType mime_type,
                                   const double& quality) const {
   DCHECK(is_valid_);
-  DCHECK(MIMETypeRegistry::IsSupportedImageMIMETypeForEncoding(mime_type));
 
   // toDataURL always encodes in sRGB and does not include the color space
   // information.
@@ -173,7 +171,8 @@ String ImageDataBuffer::ToDataURL(const String& mime_type,
   if (!EncodeImageInternal(mime_type, quality, &result, pixmap))
     return "data:,";
 
-  return "data:" + mime_type + ";base64," + Base64Encode(result);
+  return "data:" + ImageEncodingMimeTypeName(mime_type) + ";base64," +
+         Base64Encode(result);
 }
 
 }  // namespace blink

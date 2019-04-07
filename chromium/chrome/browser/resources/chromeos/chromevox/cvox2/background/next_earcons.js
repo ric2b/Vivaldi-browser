@@ -11,6 +11,7 @@
 goog.provide('NextEarcons');
 
 goog.require('EarconEngine');
+goog.require('LogStore');
 goog.require('cvox.AbstractEarcons');
 
 
@@ -30,6 +31,15 @@ NextEarcons = function() {
    * @private
    */
   this.engine_ = new EarconEngine();
+
+  /** @private {boolean} */
+  this.shouldPan_ = true;
+
+  chrome.audio.getDevices(
+      {isActive: true, streamTypes: [chrome.audio.StreamType.OUTPUT]},
+      this.updateShouldPanForDevices_.bind(this));
+  chrome.audio.onDeviceListChanged.addListener(
+      this.updateShouldPanForDevices_.bind(this));
 };
 
 NextEarcons.prototype = {
@@ -47,13 +57,19 @@ NextEarcons.prototype = {
     if (!cvox.AbstractEarcons.enabled) {
       return;
     }
-    console.log('Earcon ' + earcon);
+    if (localStorage['enableEarconLogging'] == 'true') {
+      LogStore.getInstance().writeLog(earcon, LogStore.LogType.EARCON);
+      console.log('Earcon ' + earcon);
+    }
     if (ChromeVoxState.instance.currentRange &&
         ChromeVoxState.instance.currentRange.isValid()) {
       var node = ChromeVoxState.instance.currentRange.start.node;
       var rect = opt_location || node.location;
       var container = node.root.location;
-      this.engine_.setPositionForRect(rect, container);
+      if (this.shouldPan_)
+        this.engine_.setPositionForRect(rect, container);
+      else
+        this.engine_.resetPan();
     }
     switch (earcon) {
       case cvox.Earcon.ALERT_MODAL:
@@ -132,5 +148,18 @@ NextEarcons.prototype = {
         this.engine_.cancelProgress();
         break;
     }
+  },
+
+  /**
+   * Updates |this.shouldPan_| based on whether internal speakers are active or
+   * not.
+   * @param {Array<chrome.audio.AudioDeviceInfo>} devices
+   * @private
+   */
+  updateShouldPanForDevices_: function(devices) {
+    this.shouldPan_ = !devices.some((device) => {
+      return device.isActive &&
+          device.deviceType == chrome.audio.DeviceType.INTERNAL_SPEAKER;
+    });
   },
 };

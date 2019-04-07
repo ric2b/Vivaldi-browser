@@ -17,14 +17,21 @@ class AuthenticatorRequestSheetModel;
 // Defines the basic structure of sheets shown in the authenticator request
 // dialog. Each sheet corresponds to a given step of the authentication flow,
 // and encapsulates the controls above the Ok/Cancel buttons, namely:
+//  -- an optional progress-bar-style activity indicator (at the top),
 //  -- an optional `back icon`,
+//  -- a pretty illustration in the top half of the dialog,
 //  -- the title of the current step,
 //  -- the description of the current step, and
 //  -- an optional view with step-specific content, added by subclasses, filling
 //     the rest of the space.
 //
 // +-------------------------------------------------+
-// | (<-)  Title of the current step                 |
+// |*************************************************|
+// |. (<-). . . . . . . . . . . . . . . . . . . . . .|
+// |. . . . I L L U S T R A T I O N   H E R E . . . .|
+// |. . . . . . . . . . . . . . . . . . . . . . . . .|
+// |                                                 |
+// | Title of the current step                       |
 // |                                                 |
 // | Description text explaining to the user what    |
 // | this step is all about.                         |
@@ -49,9 +56,16 @@ class AuthenticatorRequestSheetView : public views::View,
       std::unique_ptr<AuthenticatorRequestSheetModel> model);
   ~AuthenticatorRequestSheetView() override;
 
-  // Creates the standard child views on this sheet, potentially including
-  // step-specific content if any.
-  void InitChildViews();
+  // Recreates the standard child views on this sheet, potentially including
+  // step-specific content if any. This is called once after this SheetView is
+  // constructed, and potentially multiple times afterwards when the SheetModel
+  // changes.
+  void ReInitChildViews();
+
+  // Returns the control on this sheet that should initially have focus instead
+  // of the OK/Cancel buttons on the dialog; or returns nullptr if the regular
+  // dialog button should have focus.
+  views::View* GetInitiallyFocusedView();
 
   AuthenticatorRequestSheetModel* model() { return model_.get(); }
 
@@ -63,12 +77,18 @@ class AuthenticatorRequestSheetView : public views::View,
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
  private:
-  // Creates the header row of the sheet, containing an optional back arrow,
-  // followed by the title of the sheet.
-  std::unique_ptr<views::View> CreateHeaderRow();
+  // Creates the upper half of the sheet, consisting of a pretty illustration
+  // overlayed with absolutely positioned controls (the activity indicator and
+  // the back button) rendered on top.
+  std::unique_ptr<views::View> CreateIllustrationWithOverlays();
+
+  // Creates the lower half of the sheet, consisting of the title, description,
+  // and step-specific content, if any.
+  std::unique_ptr<views::View> CreateContentsBelowIllustration();
 
   std::unique_ptr<AuthenticatorRequestSheetModel> model_;
   views::Button* back_arrow_button_ = nullptr;
+  views::View* step_specific_content_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(AuthenticatorRequestSheetView);
 };

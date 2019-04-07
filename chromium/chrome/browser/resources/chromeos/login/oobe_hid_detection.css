@@ -34,7 +34,7 @@
 
 #keyboard-tick,
 #mouse-tick {
-  -webkit-margin-start: -28px;
+  margin-inline-start: -28px;
   position: relative;
   top: 4px;
 }

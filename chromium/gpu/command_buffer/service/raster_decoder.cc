@@ -608,6 +608,7 @@ class RasterDecoderImpl final : public RasterDecoder,
   void DoTexParameteri(GLuint texture_id, GLenum pname, GLint param);
   void DoBindTexImage2DCHROMIUM(GLuint texture_id, GLint image_id);
   void DoTraceEndCHROMIUM();
+  void DoResetActiveURLCHROMIUM();
   void DoProduceTextureDirect(GLuint texture, const volatile GLbyte* key);
   void DoReleaseTexImage2DCHROMIUM(GLuint texture_id, GLint image_id);
   bool TexStorage2DImage(gles2::TextureRef* texture_ref,
@@ -799,7 +800,7 @@ class RasterDecoderImpl final : public RasterDecoder,
   bool gpu_debug_commands_ = false;
 
   // Raster helpers.
-  ServiceFontManager font_manager_;
+  scoped_refptr<ServiceFontManager> font_manager_;
   sk_sp<SkSurface> sk_surface_;
   std::unique_ptr<SkCanvas> raster_canvas_;
   uint32_t raster_color_space_id_;
@@ -895,7 +896,7 @@ RasterDecoderImpl::RasterDecoderImpl(
           group_->gpu_preferences().enable_gpu_service_logging_gpu),
       gpu_decoder_category_(TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
           TRACE_DISABLED_BY_DEFAULT("gpu_decoder"))),
-      font_manager_(this),
+      font_manager_(base::MakeRefCounted<ServiceFontManager>(this)),
       weak_ptr_factory_(this) {
   DCHECK(raster_decoder_context_state_);
 }
@@ -1089,7 +1090,7 @@ void RasterDecoderImpl::Destroy(bool have_context) {
 
   if (group_.get()) {
     group_->Destroy(this, have_context);
-    group_ = NULL;
+    group_ = nullptr;
   }
 
   // Destroy the surface before the context, some surface destructors make GL
@@ -1097,9 +1098,12 @@ void RasterDecoderImpl::Destroy(bool have_context) {
   surface_ = nullptr;
 
   if (context_.get()) {
-    context_->ReleaseCurrent(NULL);
-    context_ = NULL;
+    context_->ReleaseCurrent(nullptr);
+    context_ = nullptr;
   }
+
+  font_manager_->Destroy();
+  font_manager_.reset();
 }
 
 // Make this decoder's GL context current.
@@ -1632,10 +1636,10 @@ bool RasterDecoderImpl::GetHelper(GLenum pname,
 bool RasterDecoderImpl::GetNumValuesReturnedForGLGet(GLenum pname,
                                                      GLsizei* num_values) {
   *num_values = 0;
-  if (state_.GetStateAsGLint(pname, NULL, num_values)) {
+  if (state_.GetStateAsGLint(pname, nullptr, num_values)) {
     return true;
   }
-  return GetHelper(pname, NULL, num_values);
+  return GetHelper(pname, nullptr, num_values);
 }
 
 base::StringPiece RasterDecoderImpl::GetLogPrefix() {
@@ -2319,6 +2323,32 @@ void RasterDecoderImpl::DoTraceEndCHROMIUM() {
   }
 }
 
+error::Error RasterDecoderImpl::HandleSetActiveURLCHROMIUM(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  const volatile cmds::SetActiveURLCHROMIUM& c =
+      *static_cast<const volatile cmds::SetActiveURLCHROMIUM*>(cmd_data);
+  Bucket* url_bucket = GetBucket(c.url_bucket_id);
+  static constexpr size_t kMaxStrLen = 1024;
+  if (!url_bucket || url_bucket->size() == 0 ||
+      url_bucket->size() > kMaxStrLen + 1) {
+    return error::kInvalidArguments;
+  }
+
+  size_t size = url_bucket->size() - 1;
+  const char* url_str = url_bucket->GetDataAs<const char*>(0, size);
+  if (!url_str)
+    return error::kInvalidArguments;
+
+  GURL url(base::StringPiece(url_str, size));
+  client_->SetActiveURL(std::move(url));
+  return error::kNoError;
+}
+
+void RasterDecoderImpl::DoResetActiveURLCHROMIUM() {
+  client_->ResetActiveURL();
+}
+
 void RasterDecoderImpl::DoProduceTextureDirect(GLuint client_id,
                                                const volatile GLbyte* key) {
   TRACE_EVENT2("gpu", "RasterDecoderImpl::DoProduceTextureDirect", "context",
@@ -2973,6 +3003,13 @@ void RasterDecoderImpl::DoBeginRasterCHROMIUM(
   DCHECK(!raster_canvas_);
   raster_decoder_context_state_->need_context_state_reset = true;
 
+  if (texture->target() != GL_TEXTURE_2D &&
+      texture->target() != GL_TEXTURE_RECTANGLE_ARB) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glBeginRasterCHROMIUM",
+                       "invalid texture target");
+    return;
+  }
+
   // This function should look identical to
   // ResourceProvider::ScopedSkSurfaceProvider.
   GrGLTextureInfo texture_info;
@@ -2993,13 +3030,6 @@ void RasterDecoderImpl::DoBeginRasterCHROMIUM(
   }
   texture_info.fID = texture->service_id();
   texture_info.fTarget = texture->target();
-
-  if (texture->target() != GL_TEXTURE_2D &&
-      texture->target() != GL_TEXTURE_RECTANGLE_ARB) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glBeginRasterCHROMIUM",
-                       "invalid texture target");
-    return;
-  }
 
   // GetInternalFormat may return a base internal format but Skia requires a
   // sized internal format. So this may be adjusted below.
@@ -3129,8 +3159,8 @@ void RasterDecoderImpl::DoRasterCHROMIUM(GLuint raster_shm_id,
     }
 
     std::vector<SkDiscardableHandleId> new_locked_handles;
-    if (!font_manager_.Deserialize(font_buffer_memory, font_shm_size,
-                                   &new_locked_handles)) {
+    if (!font_manager_->Deserialize(font_buffer_memory, font_shm_size,
+                                    &new_locked_handles)) {
       LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glRasterCHROMIUM",
                          "Invalid font buffer.");
       return;
@@ -3151,10 +3181,10 @@ void RasterDecoderImpl::DoRasterCHROMIUM(GLuint raster_shm_id,
       cc::PaintOpBuffer::PaintOpAlign) char data[sizeof(cc::LargestPaintOp)];
 
   SkCanvas* canvas = raster_canvas_.get();
-  SkMatrix original_ctm;
-  cc::PlaybackParams playback_params(nullptr, original_ctm);
+  cc::PlaybackParams playback_params(nullptr, SkMatrix::I());
   TransferCacheDeserializeHelperImpl impl(raster_decoder_id_, transfer_cache());
-  cc::PaintOp::DeserializeOptions options(&impl, font_manager_.strike_client());
+  cc::PaintOp::DeserializeOptions options(&impl,
+                                          font_manager_->strike_client());
 
   int op_idx = 0;
   size_t paint_buffer_size = raster_shm_size;
@@ -3197,7 +3227,7 @@ void RasterDecoderImpl::DoEndRasterCHROMIUM() {
   // skia that access the glyph data.
   // TODO(khushalsagar): We just unlocked a bunch of handles, do we need to give
   // a call to skia to attempt to purge any unlocked handles?
-  if (!font_manager_.Unlock(locked_handles_)) {
+  if (!font_manager_->Unlock(locked_handles_)) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glRasterCHROMIUM",
                        "Invalid font discardable handle.");
   }

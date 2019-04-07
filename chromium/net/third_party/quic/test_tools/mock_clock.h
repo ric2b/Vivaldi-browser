@@ -5,10 +5,7 @@
 #ifndef NET_THIRD_PARTY_QUIC_TEST_TOOLS_MOCK_CLOCK_H_
 #define NET_THIRD_PARTY_QUIC_TEST_TOOLS_MOCK_CLOCK_H_
 
-#include "base/compiler_specific.h"
-#include "base/logging.h"
-#include "base/macros.h"
-#include "base/time/time.h"
+#include "net/third_party/quic/core/quic_time.h"
 #include "net/third_party/quic/platform/api/quic_clock.h"
 
 namespace quic {
@@ -16,6 +13,8 @@ namespace quic {
 class MockClock : public QuicClock {
  public:
   MockClock();
+  MockClock(const MockClock&) = delete;
+  MockClock& operator=(const MockClock&) = delete;
   ~MockClock() override;
 
   // QuicClock implementation:
@@ -26,13 +25,8 @@ class MockClock : public QuicClock {
   // Advances the current time by |delta|, which may be negative.
   void AdvanceTime(QuicTime::Delta delta);
 
-  // Returns the current time in ticks.
-  base::TimeTicks NowInTicks() const;
-
  private:
   QuicTime now_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockClock);
 };
 
 }  // namespace quic

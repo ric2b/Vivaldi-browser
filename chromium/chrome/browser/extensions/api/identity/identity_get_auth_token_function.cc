@@ -16,14 +16,16 @@
 #include "chrome/browser/extensions/api/identity/identity_constants.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
-#include "chrome/browser/signin/chrome_signin_client_factory.h"
+#include "chrome/browser/signin/chrome_device_id_helper.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/extensions/api/identity.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 #include "content/public/common/service_manager_connection.h"
 #include "extensions/common/extension_l10n_util.h"
 #include "google_apis/gaia/gaia_urls.h"
@@ -55,6 +57,10 @@ const char* const kPublicSessionAllowedOrigins[] = {
     // Chrome Remote Desktop - Official branding.
     "chrome-extension://gbchcmhmhahfdphkhkmpfmihenigjmpp/"};
 #endif
+
+bool IsBrowserSigninAllowed(Profile* profile) {
+  return profile->GetPrefs()->GetBoolean(prefs::kSigninAllowed);
+}
 
 }  // namespace
 
@@ -92,7 +98,8 @@ bool IdentityGetAuthTokenFunction::RunAsync() {
       *params->details->interactive;
 
   should_prompt_for_scopes_ = interactive_;
-  should_prompt_for_signin_ = interactive_;
+  should_prompt_for_signin_ =
+      interactive_ && IsBrowserSigninAllowed(GetProfile());
 
   const OAuth2Info& oauth2_info = OAuth2Info::GetOAuth2Info(extension());
 
@@ -203,7 +210,10 @@ void IdentityGetAuthTokenFunction::OnReceivedExtensionAccountInfo(
 
   if (!account_state.has_refresh_token) {
     if (!ShouldStartSigninFlow()) {
-      CompleteFunctionWithError(identity_constants::kUserNotSignedIn);
+      CompleteFunctionWithError(
+          IsBrowserSigninAllowed(GetProfile())
+              ? identity_constants::kUserNotSignedIn
+              : identity_constants::kBrowserSigninNotAllowed);
       return;
     }
     // Display a login prompt.
@@ -593,10 +603,10 @@ void IdentityGetAuthTokenFunction::OnGetAccessTokenComplete(
 #if defined(OS_CHROMEOS)
 void IdentityGetAuthTokenFunction::OnGetTokenSuccess(
     const OAuth2TokenService::Request* request,
-    const std::string& access_token,
-    const base::Time& expiration_time) {
+    const OAuth2AccessTokenConsumer::TokenResponse& token_response) {
   login_token_request_.reset();
-  OnGetAccessTokenComplete(access_token, expiration_time,
+  OnGetAccessTokenComplete(token_response.access_token,
+                           token_response.expiration_time,
                            GoogleServiceAuthError::AuthErrorNone());
 }
 
@@ -684,7 +694,7 @@ void IdentityGetAuthTokenFunction::StartGaiaRequest(
     const std::string& login_access_token) {
   DCHECK(!login_access_token.empty());
   mint_token_flow_.reset(CreateMintTokenFlow());
-  mint_token_flow_->Start(GetProfile()->GetRequestContext(),
+  mint_token_flow_->Start(GetProfile()->GetURLLoaderFactory(),
                           login_access_token);
 }
 
@@ -704,10 +714,8 @@ void IdentityGetAuthTokenFunction::ShowOAuthApprovalDialog(
 }
 
 OAuth2MintTokenFlow* IdentityGetAuthTokenFunction::CreateMintTokenFlow() {
-  SigninClient* signin_client =
-      ChromeSigninClientFactory::GetForProfile(GetProfile());
   std::string signin_scoped_device_id =
-      signin_client->GetSigninScopedDeviceId();
+      GetSigninScopedDeviceIdForProfile(GetProfile());
   OAuth2MintTokenFlow* mint_token_flow = new OAuth2MintTokenFlow(
       this,
       OAuth2MintTokenFlow::Parameters(

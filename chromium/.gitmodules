@@ -154,9 +154,6 @@
 [submodule "third_party/lss"]
 	path = third_party/lss
 	url = ../../linux-syscall-support.git
-[submodule "third_party/mesa/src"]
-	path = third_party/mesa/src
-	url = ../deps/mesa.git
 [submodule "third_party/minigbm/src"]
 	path = third_party/minigbm/src
 	url = ../../chromiumos/platform/minigbm.git
@@ -205,6 +202,9 @@
 [submodule "third_party/snappy/src"]
 	path = third_party/snappy/src
 	url = ../../external/github.com/google/snappy.git
+[submodule "third_party/spirv-headers/src"]
+	path = third_party/spirv-headers/src
+	url = ../../external/github.com/KhronosGroup/SPIRV-Headers.git
 [submodule "third_party/swiftshader"]
 	path = third_party/swiftshader
 	url = ../../swiftshader/SwiftShader.git
@@ -247,3 +247,6 @@
 [submodule "v8"]
 	path = v8
 	url = ../../v8/v8.git
+[submodule "third_party/libaom/source/libaom"]
+	path = third_party/libaom/source/libaom
+	url = ../../aomedia/aom.git

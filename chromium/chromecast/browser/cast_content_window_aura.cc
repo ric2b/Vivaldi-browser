@@ -67,48 +67,66 @@ class TouchBlocker : public ui::EventHandler, public aura::WindowObserver {
 
 // static
 std::unique_ptr<CastContentWindow> CastContentWindow::Create(
-    CastContentWindow::Delegate* delegate,
-    bool is_headless,
-    bool enable_touch_input) {
-  return base::WrapUnique(
-      new CastContentWindowAura(delegate, enable_touch_input));
+    const CastContentWindow::CreateParams& params) {
+  return base::WrapUnique(new CastContentWindowAura(params));
 }
 
 CastContentWindowAura::CastContentWindowAura(
-    CastContentWindow::Delegate* delegate,
-    bool is_touch_enabled)
-    : delegate_(delegate),
+    const CastContentWindow::CreateParams& params)
+    : delegate_(params.delegate),
       gesture_dispatcher_(std::make_unique<CastGestureDispatcher>(delegate_)),
-      is_touch_enabled_(is_touch_enabled) {
+      gesture_priority_(params.gesture_priority),
+      is_touch_enabled_(params.enable_touch_input),
+      window_(nullptr),
+      has_screen_access_(false) {
   DCHECK(delegate_);
 }
 
 CastContentWindowAura::~CastContentWindowAura() {
   if (window_manager_) {
-    window_manager_->RemoveGestureHandler(this);
+    window_manager_->RemoveGestureHandler(gesture_dispatcher_.get());
+  }
+  if (window_) {
+    window_->RemoveObserver(this);
   }
 }
 
 void CastContentWindowAura::CreateWindowForWebContents(
     content::WebContents* web_contents,
     CastWindowManager* window_manager,
-    bool is_visible,
     CastWindowManager::WindowId z_order,
     VisibilityPriority visibility_priority) {
   DCHECK(web_contents);
   window_manager_ = window_manager;
   DCHECK(window_manager_);
-  gfx::NativeView window = web_contents->GetNativeView();
-  window_manager_->SetWindowId(window, z_order);
-  window_manager_->AddWindow(window);
-  window_manager_->AddGestureHandler(this);
+  window_ = web_contents->GetNativeView();
+  if (!window_->HasObserver(this)) {
+    window_->AddObserver(this);
+  }
+  window_manager_->SetWindowId(window_, z_order);
+  window_manager_->AddWindow(window_);
+  window_manager_->AddGestureHandler(gesture_dispatcher_.get());
 
-  touch_blocker_ = std::make_unique<TouchBlocker>(window, !is_touch_enabled_);
+  touch_blocker_ = std::make_unique<TouchBlocker>(window_, !is_touch_enabled_);
 
-  if (is_visible) {
-    window->Show();
+  if (has_screen_access_) {
+    window_->Show();
   } else {
-    window->Hide();
+    window_->Hide();
+  }
+}
+
+void CastContentWindowAura::GrantScreenAccess() {
+  has_screen_access_ = true;
+  if (window_) {
+    window_->Show();
+  }
+}
+
+void CastContentWindowAura::RevokeScreenAccess() {
+  has_screen_access_ = false;
+  if (window_) {
+    window_->Hide();
   }
 }
 
@@ -128,35 +146,17 @@ void CastContentWindowAura::NotifyVisibilityChange(
 
 void CastContentWindowAura::RequestMoveOut(){};
 
-bool CastContentWindowAura::CanHandleSwipe(CastSideSwipeOrigin swipe_origin) {
-  return gesture_dispatcher_->CanHandleSwipe(swipe_origin);
+void CastContentWindowAura::OnWindowVisibilityChanged(aura::Window* window,
+                                                      bool visible) {
+  if (visible) {
+    gesture_dispatcher_->SetPriority(gesture_priority_);
+  } else {
+    gesture_dispatcher_->SetPriority(CastGestureHandler::Priority::NONE);
+  }
 }
 
-void CastContentWindowAura::HandleSideSwipeBegin(
-    CastSideSwipeOrigin swipe_origin,
-    const gfx::Point& touch_location) {
-  gesture_dispatcher_->HandleSideSwipeBegin(swipe_origin, touch_location);
-}
-
-void CastContentWindowAura::HandleSideSwipeContinue(
-    CastSideSwipeOrigin swipe_origin,
-    const gfx::Point& touch_location) {
-  gesture_dispatcher_->HandleSideSwipeContinue(swipe_origin, touch_location);
-}
-
-void CastContentWindowAura::HandleSideSwipeEnd(
-    CastSideSwipeOrigin swipe_origin,
-    const gfx::Point& touch_location) {
-  gesture_dispatcher_->HandleSideSwipeEnd(swipe_origin, touch_location);
-}
-
-void CastContentWindowAura::HandleTapDownGesture(
-    const gfx::Point& touch_location) {
-  gesture_dispatcher_->HandleTapDownGesture(touch_location);
-}
-
-void CastContentWindowAura::HandleTapGesture(const gfx::Point& touch_location) {
-  gesture_dispatcher_->HandleTapGesture(touch_location);
+void CastContentWindowAura::OnWindowDestroyed(aura::Window* window) {
+  window_ = nullptr;
 }
 
 }  // namespace shell

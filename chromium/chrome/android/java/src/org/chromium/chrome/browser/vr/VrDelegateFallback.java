@@ -148,5 +148,11 @@ import org.chromium.chrome.browser.ChromeActivity;
     }
 
     @Override
+    public boolean willChangeDensityInVr(ChromeActivity activity) {
+        assert false;
+        return false;
+    }
+
+    @Override
     public void onSaveInstanceState(Bundle outState) {}
 }

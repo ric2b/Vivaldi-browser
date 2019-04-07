@@ -93,62 +93,10 @@ test.localNtp.testMDNotApplied = function() {
   configData.isVoiceSearchEnabled = false;
 
   configData.isMDUIEnabled = false;
+  configData.isMDIconsEnabled = false;
+  configData.isCustomLinksEnabled = false;
   initLocalNTP(/*isGooglePage=*/true);
   assertFalse(document.body.classList.contains('md'));
-}
-
-/**
- * Tests that the edit custom background button is visible if both
- * the flag is enabled and no custom theme is being used.
- */
-test.localNtp.showEditCustomBackground = function() {
-  // Turn off voice search to avoid reinitializing the speech object
-  configData.isVoiceSearchEnabled = false;
-
-  configData.isCustomBackgroundsEnabled = true;
-  getThemeBackgroundInfo = () => {return {usingDefaultTheme: true};};
-  initLocalNTP(/*isGooglePage=*/true);
-  assertTrue(elementIsVisible($('edit-background')));
-}
-
-/**
- * Tests that the edit custom background button is not visible if
- * the flag is disabled.
- */
-test.localNtp.hideEditCustomBackgroundFlag = function() {
-  // Turn off voice search to avoid reinitializing the speech object
-  configData.isVoiceSearchEnabled = false;
-
-  configData.isCustomBackgroundsEnabled = false;
-  initLocalNTP(/*isGooglePage=*/true);
-  assertFalse(elementIsVisible($('edit-background')));
-}
-
-/**
- * Tests that the edit custom background button is not visible if
- * a custom theme is being used.
- */
-test.localNtp.hideEditCustomBackgroundTheme = function() {
-  // Turn off voice search to avoid reinitializing the speech object
-  configData.isVoiceSearchEnabled = false;
-
-  getThemeBackgroundInfo = () => {return {usingDefaultTheme: false};};
-  initLocalNTP(/*isGooglePage=*/true);
-  assertFalse(elementIsVisible($('edit-background')));
-}
-
-// ***************************** HELPER FUNCTIONS *****************************
-// Helper functions used in tests.
-
-
-/**
- * Creates and initializes a LocalNTP object.
- * @param {boolean} isGooglePage Whether to make it a Google-branded NTP.
- */
-function initLocalNTP(isGooglePage) {
-  configData.isGooglePage = isGooglePage;
-  var localNTP = LocalNTP();
-  localNTP.init();
 }
 
 

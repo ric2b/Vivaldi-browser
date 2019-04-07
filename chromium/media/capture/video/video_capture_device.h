@@ -208,8 +208,11 @@ class CAPTURE_EXPORT VideoCaptureDevice
 
     // An error has occurred that cannot be handled and VideoCaptureDevice must
     // be StopAndDeAllocate()-ed. |reason| is a text description of the error.
-    virtual void OnError(const base::Location& from_here,
+    virtual void OnError(VideoCaptureError error,
+                         const base::Location& from_here,
                          const std::string& reason) = 0;
+
+    virtual void OnFrameDropped(VideoCaptureFrameDropReason reason) = 0;
 
     // VideoCaptureDevice requests the |message| to be logged.
     virtual void OnLog(const std::string& message) {}

@@ -419,15 +419,15 @@ The list of all `deps_info['java_sources_file']` entries for all library
 dependencies for this APK. Note: this is a list of files, where each file
 contains a list of Java source files. This is used for JNI registration.
 
-* `deps_info['proguard_all_configs"]`:
+* `deps_info['proguard_all_configs']`:
 The collection of all 'deps_info['proguard_configs']` values from this target
 and all its dependencies.
 
-* `deps_info['proguard_all_extra_jars"]`:
+* `deps_info['proguard_classpath_jars']`:
 The collection of all 'deps_info['extra_classpath_jars']` values from all
 dependencies.
 
-* `deps_info['proguard_under_test_mapping"]`:
+* `deps_info['proguard_under_test_mapping']`:
 Applicable to apks with proguard enabled that have an apk_under_test. This is
 the path to the apk_under_test's output proguard .mapping file.
 
@@ -495,6 +495,10 @@ The classpath listing the jars used for annotation processors. I.e. sent as
 The list of annotation processor main classes. I.e. sent as `-processor' when
 invoking `javac`.
 
+## <a name="android_app_bundle">Target type `android_app_bundle`</a>:
+
+This type corresponds to an Android app bundle (`.aab` file).
+
 --------------- END_MARKDOWN ---------------------------------------------------
 """
 
@@ -508,8 +512,8 @@ import xml.dom.minidom
 from util import build_utils
 
 # Types that should never be used as a dependency of another build config.
-_ROOT_TYPES = ('android_apk', 'java_binary',
-               'java_annotation_processor', 'junit_binary', 'resource_rewriter')
+_ROOT_TYPES = ('android_apk', 'java_binary', 'java_annotation_processor',
+               'junit_binary', 'resource_rewriter', 'android_app_bundle')
 # Types that should not allow code deps to pass through.
 _RESOURCE_TYPES = ('android_assets', 'android_resources', 'system_java_library')
 
@@ -825,15 +829,22 @@ def main(argv):
   parser.add_option('--shared-libraries-runtime-deps',
                     help='Path to file containing runtime deps for shared '
                          'libraries.')
+  parser.add_option('--native-libs',
+                    action='append',
+                    help='GN-list of native libraries for primary '
+                         'android-abi. Can be specified multiple times.',
+                    default=[])
   parser.add_option('--secondary-abi-shared-libraries-runtime-deps',
                     help='Path to file containing runtime deps for secondary '
                          'abi shared libraries.')
+  parser.add_option('--secondary-native-libs',
+                    action='append',
+                    help='GN-list of native libraries for secondary '
+                         'android-abi. Can be specified multiple times.',
+                    default=[])
   parser.add_option('--uncompress-shared-libraries', default=False,
                     action='store_true',
                     help='Whether to store native libraries uncompressed')
-  parser.add_option('--extra-shared-libraries',
-                    help='GN-list of paths to extra native libraries stored '
-                    'in the APK.')
   # apk options
   parser.add_option('--apk-path', help='Path to the target\'s apk output.')
   parser.add_option('--incremental-apk-path',
@@ -846,7 +857,7 @@ def main(argv):
       help='Path to the build config of the tested apk (for an instrumentation '
       'test apk).')
   parser.add_option('--proguard-enabled', action='store_true',
-      help='Whether proguard is enabled for this apk.')
+      help='Whether proguard is enabled for this apk or bundle module.')
   parser.add_option('--proguard-configs',
       help='GN-list of proguard flag files to use in final apk.')
   parser.add_option('--proguard-output-jar-path',
@@ -883,6 +894,8 @@ def main(argv):
   required_options_map = {
       'android_apk': ['build_config', 'dex_path', 'final_dex_path'] + \
           jar_path_options,
+      'android_app_bundle_module': ['build_config', 'dex_path',
+          'final_dex_path'] + jar_path_options,
       'android_assets': ['build_config'],
       'android_resources': ['build_config', 'resources_zip'],
       'dist_aar': ['build_config'],
@@ -894,6 +907,7 @@ def main(argv):
       'junit_binary': ['build_config'],
       'resource_rewriter': ['build_config'],
       'system_java_library': ['build_config'],
+      'android_app_bundle': ['build_config'],
   }
   required_options = required_options_map.get(options.type)
   if not required_options:
@@ -902,14 +916,18 @@ def main(argv):
   build_utils.CheckOptions(options, parser, required_options)
 
   if options.apk_proto_resources:
-    if options.type != 'android_apk':
+    if options.type != 'android_app_bundle_module':
       raise Exception('--apk-proto-resources can only be used with '
-                      '--type=android_apk')
+                      '--type=android_app_bundle_module')
+
+  is_apk_or_module_target = options.type in ('android_apk',
+      'android_app_bundle_module')
 
   if options.uncompress_shared_libraries:
-    if options.type != 'android_apk':
+    if not is_apk_or_module_target:
       raise Exception('--uncompressed-shared-libraries can only be used '
-                      'with --type=android_apk')
+                      'with --type=android_apk or '
+                      '--type=android_app_bundle_module')
 
   if options.jar_path and options.supports_android and not options.dex_path:
     raise Exception('java_library that supports Android requires a dex path.')
@@ -925,7 +943,7 @@ def main(argv):
   is_java_target = options.type in (
       'java_binary', 'junit_binary', 'java_annotation_processor',
       'java_library', 'android_apk', 'dist_aar', 'dist_jar',
-      'system_java_library')
+      'system_java_library', 'android_app_bundle_module')
 
   deps = _DepsFromPaths(
       build_utils.ParseGnList(options.deps_configs), options.type)
@@ -996,7 +1014,10 @@ def main(argv):
       else:
         gradle['dependent_java_projects'].append(c['path'])
 
-  if options.type == 'android_apk':
+  # TODO(tiborg): Remove creation of JNI info for type group and java_library
+  # once we can generate the JNI registration based on APK / module targets as
+  # opposed to groups and libraries.
+  if is_apk_or_module_target or options.type in ('group', 'java_library'):
     config['jni'] = {}
     all_java_sources = [c['java_sources_file'] for c in all_library_deps
                         if 'java_sources_file' in c]
@@ -1115,7 +1136,7 @@ def main(argv):
 
   if options.type in (
       'android_resources', 'android_apk', 'junit_binary', 'resource_rewriter',
-      'dist_aar'):
+      'dist_aar', 'android_app_bundle_module'):
     config['resources'] = {}
     config['resources']['dependency_zips'] = [
         c['resources_zip'] for c in all_resources_deps]
@@ -1130,7 +1151,7 @@ def main(argv):
     config['resources']['extra_package_names'] = extra_package_names
     config['resources']['extra_r_text_files'] = extra_r_text_files
 
-  if options.type == 'android_apk':
+  if is_apk_or_module_target:
     deps_dex_files = [c['dex_path'] for c in all_library_deps]
 
   if is_java_target:
@@ -1149,48 +1170,95 @@ def main(argv):
     # The classpath used for bytecode-rewritting.
     javac_full_classpath = [
         c['unprocessed_jar_path'] for c in all_library_deps]
-    # The classpath to use to run this target (or as an input to ProGuard).
-    java_full_classpath = []
-    if options.jar_path:
-      java_full_classpath.append(options.jar_path)
-    java_full_classpath.extend(c['jar_path'] for c in all_library_deps)
 
     # Deps to add to the compile-time classpath (but not the runtime classpath).
     # TODO(agrieve): Might be less confusing to fold these into bootclasspath.
-    extra_jars = [c['unprocessed_jar_path']
+    javac_extra_jars = [c['unprocessed_jar_path']
+                  for c in classpath_deps.Direct('java_library')]
+    extra_jars = [c['jar_path']
                   for c in classpath_deps.Direct('java_library')]
 
     if options.extra_classpath_jars:
       # These are .jars to add to javac classpath but not to runtime classpath.
+      javac_extra_jars.extend(
+          build_utils.ParseGnList(options.extra_classpath_jars))
       extra_jars.extend(build_utils.ParseGnList(options.extra_classpath_jars))
 
-    extra_jars = [p for p in extra_jars if p not in javac_classpath]
-    javac_classpath.extend(extra_jars)
-    javac_interface_classpath.extend(extra_jars)
-    javac_full_interface_classpath.extend(
-        p for p in extra_jars if p not in javac_full_classpath)
-    javac_full_classpath.extend(
-        p for p in extra_jars if p not in javac_full_classpath)
     if extra_jars:
       deps_info['extra_classpath_jars'] = extra_jars
+
+    javac_extra_jars = [p for p in javac_extra_jars if p not in javac_classpath]
+    javac_classpath.extend(javac_extra_jars)
+    javac_interface_classpath.extend(javac_extra_jars)
+    javac_full_interface_classpath.extend(
+        p for p in javac_extra_jars if p not in javac_full_classpath)
+    javac_full_classpath.extend(
+        p for p in javac_extra_jars if p not in javac_full_classpath)
+
+  if is_java_target or options.type == 'android_app_bundle':
+    # The classpath to use to run this target (or as an input to ProGuard).
+    java_full_classpath = []
+    if is_java_target and options.jar_path:
+      java_full_classpath.append(options.jar_path)
+    java_full_classpath.extend(c['jar_path'] for c in all_library_deps)
+    if options.type == 'android_app_bundle':
+      for d in deps.Direct('android_app_bundle_module'):
+        java_full_classpath.extend(
+            c for c in d.get('java_runtime_classpath', [])
+            if c not in java_full_classpath)
+
+  system_jars = [c['jar_path'] for c in system_library_deps]
+  system_interface_jars = [c['interface_jar_path'] for c in system_library_deps]
+  if system_library_deps:
+    config['android'] = {}
+    config['android']['sdk_interface_jars'] = system_interface_jars
+    config['android']['sdk_jars'] = system_jars
+    gradle['bootclasspath'] = system_jars
 
   if options.proguard_configs:
     deps_info['proguard_configs'] = (
         build_utils.ParseGnList(options.proguard_configs))
 
-  if options.type in ('android_apk', 'dist_aar', 'dist_jar'):
+  if options.type in ('android_apk', 'dist_aar',
+      'dist_jar', 'android_app_bundle_module', 'android_app_bundle'):
     all_configs = deps_info.get('proguard_configs', [])
-    extra_jars = []
+    extra_jars = list()
     for c in all_library_deps:
       all_configs.extend(
           p for p in c.get('proguard_configs', []) if p not in all_configs)
       extra_jars.extend(
           p for p in c.get('extra_classpath_jars', []) if p not in extra_jars)
+    if options.type == 'android_app_bundle':
+      for c in deps.Direct('android_app_bundle_module'):
+        all_configs.extend(
+            p for p in c.get('proguard_configs', []) if p not in all_configs)
     deps_info['proguard_all_configs'] = all_configs
-    deps_info['proguard_all_extra_jars'] = extra_jars
-    deps_info['proguard_enabled'] = options.proguard_enabled
-    if options.proguard_output_jar_path:
-      deps_info['proguard_output_jar_path'] = options.proguard_output_jar_path
+    if options.type == 'android_app_bundle':
+      for d in deps.Direct('android_app_bundle_module'):
+        extra_jars.extend(
+            c for c in d.get('proguard_classpath_jars', [])
+            if c not in extra_jars)
+    deps_info['proguard_classpath_jars'] = extra_jars
+
+    if options.type == 'android_app_bundle':
+      deps_proguard_enabled = []
+      deps_proguard_disabled = []
+      for d in deps.Direct('android_app_bundle_module'):
+        if not d['java_runtime_classpath']:
+          # We don't care about modules that have no Java code for proguarding.
+          continue
+        if d['proguard_enabled']:
+          deps_proguard_enabled.append(d['name'])
+        else:
+          deps_proguard_disabled.append(d['name'])
+      if deps_proguard_enabled and deps_proguard_disabled:
+        raise Exception('Deps %s have proguard enabled while deps %s have '
+                        'proguard disabled' % (deps_proguard_enabled,
+                                               deps_proguard_disabled))
+    else:
+      deps_info['proguard_enabled'] = bool(options.proguard_enabled)
+      if options.proguard_output_jar_path:
+        deps_info['proguard_output_jar_path'] = options.proguard_output_jar_path
 
   # The java code for an instrumentation test apk is assembled differently for
   # ProGuard vs. non-ProGuard.
@@ -1215,7 +1283,7 @@ def main(argv):
       # Mutating lists, so no need to explicitly re-assign to dict.
       all_configs.extend(p for p in tested_apk_config['proguard_all_configs']
                          if p not in all_configs)
-      extra_jars.extend(p for p in tested_apk_config['proguard_all_extra_jars']
+      extra_jars.extend(p for p in tested_apk_config['proguard_classpath_jars']
                         if p not in extra_jars)
       tested_apk_config = GetDepConfig(options.tested_apk_config)
       deps_info['proguard_under_test_mapping'] = (
@@ -1258,19 +1326,11 @@ def main(argv):
         p for p in deps_dex_files if not p in tested_apk_deps_dex_files]
 
   # Dependencies for the final dex file of an apk.
-  if options.type == 'android_apk':
+  if is_apk_or_module_target:
     config['final_dex'] = {}
     dex_config = config['final_dex']
     dex_config['dependency_dex_files'] = deps_dex_files
     dex_config['path'] = options.final_dex_path
-
-  system_jars = [c['jar_path'] for c in system_library_deps]
-  system_interface_jars = [c['interface_jar_path'] for c in system_library_deps]
-  if system_library_deps:
-    config['android'] = {}
-    config['android']['sdk_interface_jars'] = system_interface_jars
-    config['android']['sdk_jars'] = system_jars
-    gradle['bootclasspath'] = system_jars
 
   if is_java_target:
     config['javac']['bootclasspath'] = system_jars
@@ -1285,9 +1345,9 @@ def main(argv):
     deps_info['javac_full_classpath'] = javac_full_classpath
     deps_info['javac_full_interface_classpath'] = javac_full_interface_classpath
 
-    if options.type in (
-        'android_apk', 'dist_jar', 'java_binary', 'junit_binary'):
-      deps_info['java_runtime_classpath'] = java_full_classpath
+  if options.type in ('android_apk', 'dist_jar', 'java_binary', 'junit_binary',
+      'android_app_bundle_module', 'android_app_bundle'):
+    deps_info['java_runtime_classpath'] = java_full_classpath
 
   if options.type in ('android_apk', 'dist_jar'):
     all_interface_jars = []
@@ -1299,7 +1359,7 @@ def main(argv):
       'all_interface_jars': all_interface_jars,
     }
 
-  if options.type == 'android_apk':
+  if is_apk_or_module_target:
     manifest = AndroidManifest(options.android_manifest)
     deps_info['package_name'] = manifest.GetPackageName()
     if not options.tested_apk_config and manifest.GetInstrumentationElements():
@@ -1323,9 +1383,12 @@ def main(argv):
           secondary_abi_runtime_deps_files)
       secondary_abi_java_libraries_list = _CreateJavaLibrariesList(
           secondary_abi_library_paths)
+    for gn_list in options.secondary_native_libs:
+      secondary_abi_library_paths.extend(build_utils.ParseGnList(gn_list))
 
-    extra_shared_libraries = build_utils.ParseGnList(
-        options.extra_shared_libraries)
+    extra_shared_libraries = []
+    for gn_list in options.native_libs:
+      extra_shared_libraries.extend(build_utils.ParseGnList(gn_list))
 
     all_inputs.extend(runtime_deps_files)
     config['native'] = {

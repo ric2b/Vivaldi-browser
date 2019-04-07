@@ -190,6 +190,7 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillWalletSpecifics& proto) {
   VISIT_ENUM(type);
   VISIT(masked_card);
   VISIT(address);
+  VISIT(customer_data);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::BookmarkSpecifics& proto) {
@@ -637,6 +638,8 @@ VISIT_PROTO_FIELDS(const sync_pb::NigoriSpecifics& proto) {
   VISIT(keystore_decryptor_token);
   VISIT(keystore_migration_time);
   VISIT(custom_passphrase_time);
+  VISIT(custom_passphrase_key_derivation_method);
+  VISIT(custom_passphrase_key_derivation_salt);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecifics& proto) {
@@ -808,6 +811,7 @@ VISIT_PROTO_FIELDS(
   VISIT(reuse_detected);
   VISIT(reuse_lookup);
   VISIT(dialog_interaction);
+  // TODO(markusheintz): Remove.
   VISIT(password_captured);
 }
 
@@ -836,9 +840,15 @@ VISIT_PROTO_FIELDS(
   VISIT(verdict_token);
 }
 
+// TODO(markusheintz): Remove.
 VISIT_PROTO_FIELDS(
     const sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordCaptured&
         proto) {
+  VISIT_ENUM(event_trigger);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::UserEventSpecifics::GaiaPasswordCaptured& proto) {
   VISIT_ENUM(event_trigger);
 }
 
@@ -988,6 +998,7 @@ VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics& proto) {
   VISIT(translation_event);
   VISIT(user_consent);
   VISIT(gaia_password_reuse_event);
+  VISIT(gaia_password_captured_event);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics::Test& proto) {}
@@ -1028,6 +1039,10 @@ VISIT_PROTO_FIELDS(const sync_pb::WalletPostalAddress& proto) {
   VISIT(country_code);
   VISIT(phone_number);
   VISIT(language_code);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::PaymentsCustomerData& proto) {
+  VISIT(id);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WalletSyncFlags& proto) {

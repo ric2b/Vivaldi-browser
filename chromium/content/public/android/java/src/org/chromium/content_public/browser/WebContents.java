@@ -4,10 +4,10 @@
 
 package org.chromium.content_public.browser;
 
-import android.content.Context;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Parcelable;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 
 import org.chromium.base.Callback;
@@ -60,50 +60,36 @@ public interface WebContents extends Parcelable {
     }
 
     /**
-     * Factory interface passed to {@link #setUserData()} for instantiation of
-     * class as user data.
-     *
-     * Constructor method reference comes handy for class Foo to provide the factory.
-     * Use lazy initialization to avoid having to generate too many anonymous reference.
-     *
-     * <code>
-     * public class Foo {
-     *     static final class FoofactoryLazyHolder {
-     *         private static final UserDataFactory<Foo> INSTANCE = Foo::new;
-     *     }
-     *     ....
-     *
-     *     webContents.setUserData(Foo.class, FooFactoryLazyHolder.INSTANCE);
-     *
-     *     ....
-     * }
-     * </code>
-     *
-     * @param <T> Class to instantiate.
+     * @return a default implementation of {@link InternalsHolder} that holds a reference to
+     * {@link WebContentsInternals} object owned by {@link WebContents} instance.
      */
-    public interface UserDataFactory<T> { T create(WebContents webContents); }
+    public static InternalsHolder createDefaultInternalsHolder() {
+        return new InternalsHolder() {
+            private WebContentsInternals mInternals;
 
-    /**
-     * Sets holder of the objects used internally by WebContents for various features.
-     * This transfers the ownership of the objects to the caller since they will have the same
-     * lifecycle as that of the caller. The caller doesn't have to care about the objects inside
-     * the holder but should hold a reference to it and manage its lifetime.
-     *
-     * @param holder {@link #InternalsHolder} used to transfer the internal objects
-     *        from WebContents to the caller.
-     */
-    void setInternalsHolder(InternalsHolder holder);
+            @Override
+            public void set(WebContentsInternals internals) {
+                mInternals = internals;
+            }
+
+            @Override
+            public WebContentsInternals get() {
+                return mInternals;
+            }
+        };
+    }
 
     /**
      * Initialize various content objects of {@link WebContents} lifetime.
-     * @param context The context used to create this object.
      * @param productVersion Product version for accessibility.
      * @param viewDelegate Delegate to add/remove anchor views.
      * @param accessDelegate Handles dispatching all hidden or super methods to the containerView.
      * @param windowAndroid An instance of the WindowAndroid.
+     * @param internalsHolder A holder of objects used internally by WebContents.
      */
-    void initialize(Context context, String productVersion, ViewAndroidDelegate viewDelegate,
-            ViewEventSink.InternalAccessDelegate accessDelegate, WindowAndroid windowAndroid);
+    void initialize(String productVersion, ViewAndroidDelegate viewDelegate,
+            ViewEventSink.InternalAccessDelegate accessDelegate, WindowAndroid windowAndroid,
+            @NonNull InternalsHolder internalsHolder);
 
     /**
      * @return The top level WindowAndroid associated with this WebContents.  This can be null.
@@ -133,17 +119,6 @@ public interface WebContents extends Parcelable {
      * @return Whether or not the native object associated with this WebContent is destroyed.
      */
     boolean isDestroyed();
-
-    /**
-     * Retrieves or stores a user data object for this WebContents.
-     * @param key Class instance of the object used as the key.
-     * @param userDataFactory Factory that creates an object of the generic class. A new object
-     *        is created if it hasn't been created and non-null factory is given.
-     * @return The created or retrieved user data object. Can be null if the object was
-     *         not created yet, or {@code userDataFactory} is null, or the internal data
-     *         storage is already garbage-collected.
-     */
-    public <T> T getOrSetUserData(Class<T> key, UserDataFactory<T> userDataFactory);
 
     /**
      * @return The navigation controller associated with this WebContents.
@@ -472,12 +447,6 @@ public interface WebContents extends Parcelable {
      *                        (e.g. renderer for the currently selected tab)
      */
     void simulateRendererKilledForTesting(boolean wasOomProtected);
-
-    /**
-     * @return {@code true} if select popup is being shown.
-     */
-    @VisibleForTesting
-    boolean isSelectPopupVisibleForTesting();
 
     /**
      * Notifies the WebContents about the new persistent video status. It should be called whenever

@@ -74,10 +74,11 @@ typedef enum Cronet_RESULT {
   Cronet_RESULT_ILLEGAL_STATE_ENGINE_ALREADY_STARTED = -203,
   Cronet_RESULT_ILLEGAL_STATE_REQUEST_ALREADY_STARTED = -204,
   Cronet_RESULT_ILLEGAL_STATE_REQUEST_NOT_INITIALIZED = -205,
-  Cronet_RESULT_ILLEGAL_STATE_REQUEST_NOT_STARTED = -206,
-  Cronet_RESULT_ILLEGAL_STATE_UNEXPECTED_REDIRECT = -207,
-  Cronet_RESULT_ILLEGAL_STATE_UNEXPECTED_READ = -208,
-  Cronet_RESULT_ILLEGAL_STATE_READ_FAILED = -209,
+  Cronet_RESULT_ILLEGAL_STATE_REQUEST_ALREADY_INITIALIZED = -206,
+  Cronet_RESULT_ILLEGAL_STATE_REQUEST_NOT_STARTED = -207,
+  Cronet_RESULT_ILLEGAL_STATE_UNEXPECTED_REDIRECT = -208,
+  Cronet_RESULT_ILLEGAL_STATE_UNEXPECTED_READ = -209,
+  Cronet_RESULT_ILLEGAL_STATE_READ_FAILED = -210,
   Cronet_RESULT_NULL_POINTER = -300,
   Cronet_RESULT_NULL_POINTER_HOSTNAME = -301,
   Cronet_RESULT_NULL_POINTER_SHA256_PINS = -302,
@@ -467,34 +468,36 @@ Cronet_UploadDataSink_GetClientContext(Cronet_UploadDataSinkPtr self);
 // The app calls them to manipulate Cronet_UploadDataSink.
 CRONET_EXPORT
 void Cronet_UploadDataSink_OnReadSucceeded(Cronet_UploadDataSinkPtr self,
+                                           uint64_t bytes_read,
                                            bool final_chunk);
 CRONET_EXPORT
 void Cronet_UploadDataSink_OnReadError(Cronet_UploadDataSinkPtr self,
-                                       Cronet_ErrorPtr error);
+                                       Cronet_String error_message);
 CRONET_EXPORT
-void Cronet_UploadDataSink_OnRewindSucceded(Cronet_UploadDataSinkPtr self);
+void Cronet_UploadDataSink_OnRewindSucceeded(Cronet_UploadDataSinkPtr self);
 CRONET_EXPORT
 void Cronet_UploadDataSink_OnRewindError(Cronet_UploadDataSinkPtr self,
-                                         Cronet_ErrorPtr error);
+                                         Cronet_String error_message);
 // Concrete interface Cronet_UploadDataSink is implemented by Cronet.
 // The app can implement these for testing / mocking.
 typedef void (*Cronet_UploadDataSink_OnReadSucceededFunc)(
     Cronet_UploadDataSinkPtr self,
+    uint64_t bytes_read,
     bool final_chunk);
 typedef void (*Cronet_UploadDataSink_OnReadErrorFunc)(
     Cronet_UploadDataSinkPtr self,
-    Cronet_ErrorPtr error);
-typedef void (*Cronet_UploadDataSink_OnRewindSuccededFunc)(
+    Cronet_String error_message);
+typedef void (*Cronet_UploadDataSink_OnRewindSucceededFunc)(
     Cronet_UploadDataSinkPtr self);
 typedef void (*Cronet_UploadDataSink_OnRewindErrorFunc)(
     Cronet_UploadDataSinkPtr self,
-    Cronet_ErrorPtr error);
+    Cronet_String error_message);
 // Concrete interface Cronet_UploadDataSink is implemented by Cronet.
 // The app can use this for testing / mocking.
 CRONET_EXPORT Cronet_UploadDataSinkPtr Cronet_UploadDataSink_CreateWith(
     Cronet_UploadDataSink_OnReadSucceededFunc OnReadSucceededFunc,
     Cronet_UploadDataSink_OnReadErrorFunc OnReadErrorFunc,
-    Cronet_UploadDataSink_OnRewindSuccededFunc OnRewindSuccededFunc,
+    Cronet_UploadDataSink_OnRewindSucceededFunc OnRewindSucceededFunc,
     Cronet_UploadDataSink_OnRewindErrorFunc OnRewindErrorFunc);
 
 ///////////////////////
@@ -742,6 +745,10 @@ void Cronet_EngineParams_enable_public_key_pinning_bypass_for_local_trust_anchor
     Cronet_EngineParamsPtr self,
     bool enable_public_key_pinning_bypass_for_local_trust_anchors);
 CRONET_EXPORT
+void Cronet_EngineParams_network_thread_priority_set(
+    Cronet_EngineParamsPtr self,
+    double network_thread_priority);
+CRONET_EXPORT
 void Cronet_EngineParams_experimental_options_set(
     Cronet_EngineParamsPtr self,
     Cronet_String experimental_options);
@@ -785,6 +792,9 @@ CRONET_EXPORT
 void Cronet_EngineParams_public_key_pins_clear(Cronet_EngineParamsPtr self);
 CRONET_EXPORT
 bool Cronet_EngineParams_enable_public_key_pinning_bypass_for_local_trust_anchors_get(
+    Cronet_EngineParamsPtr self);
+CRONET_EXPORT
+double Cronet_EngineParams_network_thread_priority_get(
     Cronet_EngineParamsPtr self);
 CRONET_EXPORT
 Cronet_String Cronet_EngineParams_experimental_options_get(

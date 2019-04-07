@@ -8,7 +8,7 @@
 
 #include "base/feature_list.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "content/child/child_thread_impl.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/common/content_constants_internal.h"
@@ -19,6 +19,8 @@
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/renderer/url_loader_throttle_provider.h"
 #include "content/public/renderer/websocket_handshake_throttle_provider.h"
+#include "content/renderer/loader/code_cache_loader_impl.h"
+#include "content/renderer/loader/frame_request_blocker.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/loader/resource_dispatcher.h"
 #include "content/renderer/loader/web_url_loader_impl.h"
@@ -147,6 +149,7 @@ class WebWorkerFetchContextImpl::Factory : public blink::WebURLLoaderFactory {
 
 WebWorkerFetchContextImpl::WebWorkerFetchContextImpl(
     RendererPreferences renderer_preferences,
+    mojom::RendererPreferenceWatcherRequest preference_watcher_request,
     mojom::ServiceWorkerWorkerClientRequest service_worker_client_request,
     mojom::ServiceWorkerWorkerClientRegistryPtrInfo
         service_worker_worker_client_registry_info,
@@ -168,6 +171,8 @@ WebWorkerFetchContextImpl::WebWorkerFetchContextImpl(
       fallback_factory_info_(std::move(fallback_factory_info)),
       thread_safe_sender_(thread_safe_sender),
       renderer_preferences_(std::move(renderer_preferences)),
+      preference_watcher_binding_(this),
+      preference_watcher_request_(std::move(preference_watcher_request)),
       throttle_provider_(std::move(throttle_provider)),
       websocket_handshake_throttle_provider_(
           std::move(websocket_handshake_throttle_provider)),
@@ -200,8 +205,10 @@ WebWorkerFetchContextImpl::CloneForNestedWorker() {
         mojo::MakeRequest(&host_ptr_info));
   }
 
+  mojom::RendererPreferenceWatcherPtr preference_watcher;
   auto new_context = std::make_unique<WebWorkerFetchContextImpl>(
-      renderer_preferences_, std::move(service_worker_client_request),
+      renderer_preferences_, mojo::MakeRequest(&preference_watcher),
+      std::move(service_worker_client_request),
       std::move(service_worker_worker_client_registry_ptr_info),
       std::move(host_ptr_info), loader_factory_->Clone(),
       fallback_factory_->Clone(),
@@ -215,13 +222,18 @@ WebWorkerFetchContextImpl::CloneForNestedWorker() {
       is_controlled_by_service_worker_;
   new_context->is_on_sub_frame_ = is_on_sub_frame_;
   new_context->ancestor_frame_id_ = ancestor_frame_id_;
+  new_context->frame_request_blocker_ = frame_request_blocker_;
   new_context->appcache_host_id_ = appcache_host_id_;
+
+  child_preference_watchers_.AddPtr(std::move(preference_watcher));
+
   return new_context;
 }
 
 void WebWorkerFetchContextImpl::InitializeOnWorkerThread() {
   DCHECK(!resource_dispatcher_);
   DCHECK(!binding_.is_bound());
+  DCHECK(!preference_watcher_binding_.is_bound());
   resource_dispatcher_ = std::make_unique<ResourceDispatcher>();
   resource_dispatcher_->set_terminate_sync_load_event(
       terminate_sync_load_event_);
@@ -235,6 +247,9 @@ void WebWorkerFetchContextImpl::InitializeOnWorkerThread() {
 
   service_worker_worker_client_registry_.Bind(
       std::move(service_worker_worker_client_registry_info_));
+
+  if (preference_watcher_request_.is_pending())
+    preference_watcher_binding_.Bind(std::move(preference_watcher_request_));
 
   if (blink::ServiceWorkerUtils::IsServicificationEnabled()) {
     service_worker_container_host_.Bind(
@@ -274,6 +289,11 @@ WebWorkerFetchContextImpl::WrapURLLoaderFactory(
               network::mojom::URLLoaderFactory::Version_)));
 }
 
+std::unique_ptr<blink::CodeCacheLoader>
+WebWorkerFetchContextImpl::CreateCodeCacheLoader() {
+  return std::make_unique<CodeCacheLoaderImpl>(terminate_sync_load_event_);
+}
+
 void WebWorkerFetchContextImpl::WillSendRequest(blink::WebURLRequest& request) {
   if (renderer_preferences_.enable_do_not_track) {
     request.SetHTTPHeaderField(blink::WebString::FromUTF8(kDoNotTrackHeader),
@@ -283,6 +303,7 @@ void WebWorkerFetchContextImpl::WillSendRequest(blink::WebURLRequest& request) {
   auto extra_data = std::make_unique<RequestExtraData>();
   extra_data->set_service_worker_provider_id(service_worker_provider_id_);
   extra_data->set_render_frame_id(ancestor_frame_id_);
+  extra_data->set_frame_request_blocker(frame_request_blocker_);
   extra_data->set_initiated_in_secure_context(is_secure_context_);
   if (throttle_provider_) {
     extra_data->set_url_loader_throttles(throttle_provider_->CreateThrottles(
@@ -374,6 +395,11 @@ void WebWorkerFetchContextImpl::set_ancestor_frame_id(int id) {
   ancestor_frame_id_ = id;
 }
 
+void WebWorkerFetchContextImpl::set_frame_request_blocker(
+    scoped_refptr<FrameRequestBlocker> frame_request_blocker) {
+  frame_request_blocker_ = frame_request_blocker;
+}
+
 void WebWorkerFetchContextImpl::set_site_for_cookies(
     const blink::WebURL& site_for_cookies) {
   site_for_cookies_ = site_for_cookies;
@@ -437,6 +463,15 @@ void WebWorkerFetchContextImpl::ResetServiceWorkerURLLoaderFactory() {
           mojo::MakeRequest(&service_worker_url_loader_factory), task_runner));
   web_loader_factory_->SetServiceWorkerURLLoaderFactory(
       std::move(service_worker_url_loader_factory));
+}
+
+void WebWorkerFetchContextImpl::NotifyUpdate(
+    const RendererPreferences& new_prefs) {
+  renderer_preferences_ = new_prefs;
+  child_preference_watchers_.ForAllPtrs(
+      [&new_prefs](mojom::RendererPreferenceWatcher* watcher) {
+        watcher->NotifyUpdate(new_prefs);
+      });
 }
 
 }  // namespace content

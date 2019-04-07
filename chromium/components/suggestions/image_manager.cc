@@ -9,8 +9,8 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "components/image_fetcher/core/image_fetcher.h"
 #include "components/suggestions/image_encoder.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -83,8 +83,8 @@ ImageManager::ImageManager(
       weak_ptr_factory_(this) {
   database_->Init(kDatabaseUMAClientName, database_dir,
                   leveldb_proto::CreateSimpleOptions(),
-                  base::Bind(&ImageManager::OnDatabaseInit,
-                             weak_ptr_factory_.GetWeakPtr()));
+                  base::BindOnce(&ImageManager::OnDatabaseInit,
+                                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 ImageManager::~ImageManager() {}
@@ -241,8 +241,8 @@ void ImageManager::SaveImage(const std::string& url, const SkBitmap& bitmap) {
   entries_to_save->push_back(std::make_pair(data.url(), data));
   database_->UpdateEntries(std::move(entries_to_save),
                            std::move(keys_to_remove),
-                           base::Bind(&ImageManager::OnDatabaseSave,
-                                      weak_ptr_factory_.GetWeakPtr()));
+                           base::BindOnce(&ImageManager::OnDatabaseSave,
+                                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ImageManager::OnDatabaseInit(bool success) {
@@ -252,8 +252,8 @@ void ImageManager::OnDatabaseInit(bool success) {
     ServePendingCacheRequests();
     return;
   }
-  database_->LoadEntries(base::Bind(&ImageManager::OnDatabaseLoad,
-                                    weak_ptr_factory_.GetWeakPtr()));
+  database_->LoadEntries(base::BindOnce(&ImageManager::OnDatabaseLoad,
+                                        weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ImageManager::OnDatabaseLoad(bool success,

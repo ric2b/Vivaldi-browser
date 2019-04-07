@@ -1,6 +1,7 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
 
 #include <string>
@@ -39,8 +40,11 @@ constexpr size_t kMaxIconPngSize = 64 * 1024;  // 64 kb
 class ArcAppWindowLauncherController::AppWindowInfo {
  public:
   explicit AppWindowInfo(const arc::ArcAppShelfId& app_shelf_id,
-                         const std::string& launch_intent)
-      : app_shelf_id_(app_shelf_id), launch_intent_(launch_intent) {}
+                         const std::string& launch_intent,
+                         const std::string& package_name)
+      : app_shelf_id_(app_shelf_id),
+        launch_intent_(launch_intent),
+        package_name_(package_name) {}
   ~AppWindowInfo() = default;
 
   void SetDescription(const std::string& title,
@@ -68,6 +72,8 @@ class ArcAppWindowLauncherController::AppWindowInfo {
 
   const std::string& launch_intent() { return launch_intent_; }
 
+  const std::string& package_name() { return package_name_; }
+
   const std::string& title() const { return title_; }
 
   const std::vector<uint8_t>& icon_data_png() const { return icon_data_png_; }
@@ -75,6 +81,7 @@ class ArcAppWindowLauncherController::AppWindowInfo {
  private:
   const arc::ArcAppShelfId app_shelf_id_;
   const std::string launch_intent_;
+  const std::string package_name_;
   // Keeps overridden window title.
   std::string title_;
   // Keeps overridden window icon.
@@ -244,6 +251,8 @@ void ArcAppWindowLauncherController::AttachControllerToWindowIfNeeded(
   DCHECK(info->app_window()->controller());
   const ash::ShelfID shelf_id(info->app_window()->shelf_id());
   window->SetProperty(ash::kShelfIDKey, new std::string(shelf_id.Serialize()));
+  window->SetProperty(ash::kArcPackageNameKey,
+                      new std::string(info->package_name()));
 }
 
 void ArcAppWindowLauncherController::OnAppStatesChanged(
@@ -287,7 +296,7 @@ void ArcAppWindowLauncherController::OnTaskCreated(
   const arc::ArcAppShelfId arc_app_shelf_id =
       arc::ArcAppShelfId::FromIntentAndAppId(intent, arc_app_id);
   task_id_to_app_window_info_[task_id] =
-      std::make_unique<AppWindowInfo>(arc_app_shelf_id, intent);
+      std::make_unique<AppWindowInfo>(arc_app_shelf_id, intent, package_name);
   // Don't create shelf icon for non-primary user.
   if (observed_profile_ != owner()->profile())
     return;
@@ -431,9 +440,8 @@ void ArcAppWindowLauncherController::OnWindowActivated(
 }
 
 void ArcAppWindowLauncherController::StartObserving(Profile* profile) {
-  aura::Env* env = aura::Env::GetInstanceDontCreate();
-  if (env)
-    env->AddObserver(this);
+  if (aura::Env::HasInstance())
+    aura::Env::GetInstance()->AddObserver(this);
   ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile);
   DCHECK(prefs);
   prefs->AddObserver(this);
@@ -444,9 +452,8 @@ void ArcAppWindowLauncherController::StopObserving(Profile* profile) {
     window->RemoveObserver(this);
   ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile);
   prefs->RemoveObserver(this);
-  aura::Env* env = aura::Env::GetInstanceDontCreate();
-  if (env)
-    env->RemoveObserver(this);
+  if (aura::Env::HasInstance())
+    aura::Env::GetInstance()->RemoveObserver(this);
 }
 
 ArcAppWindowLauncherItemController*

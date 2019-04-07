@@ -16,7 +16,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/metrics/user_metrics.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
 #include "components/metrics/serialization/metric_sample.h"
 #include "components/metrics/serialization/serialization_utils.h"
@@ -158,7 +158,7 @@ void ExternalMetrics::CollectEventsAndReschedule() {
 
 void ExternalMetrics::ScheduleCollector() {
   base::PostDelayedTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&chromeos::ExternalMetrics::CollectEventsAndReschedule,
                      this),
       kExternalMetricsCollectionInterval);

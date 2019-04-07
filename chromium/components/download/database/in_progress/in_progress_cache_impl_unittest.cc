@@ -10,8 +10,8 @@
 #include "base/bind_helpers.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
+#include "base/task/post_task.h"
 #include "base/task_runner.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/test/scoped_task_environment.h"
 #include "components/download/public/common/download_url_parameters.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -43,7 +43,7 @@ class InProgressCacheImplTest : public testing::Test {
     base::FilePath file_path(kInProgressCachePath);
     scoped_refptr<base::SequencedTaskRunner> task_runner =
         base::CreateSequencedTaskRunnerWithTraits(
-            {base::MayBlock(), base::TaskPriority::BACKGROUND,
+            {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
              base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
     cache_ = std::make_unique<InProgressCacheImpl>(file_path, task_runner);
   }

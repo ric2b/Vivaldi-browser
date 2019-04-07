@@ -19,6 +19,7 @@
 #include "extensions/browser/app_window/size_constraints.h"
 #include "extensions/common/draggable_region.h"
 #include "ui/base/accelerators/accelerator_manager.h"
+#include "ui/cocoa/vivaldi_fullscreen_menubar_tracker.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_native_app_window.h"
@@ -133,6 +134,9 @@ class VivaldiNativeAppWindowCocoa : public VivaldiNativeAppWindow {
   // Need access to WebContents() which is private.
   content::WebContents* VivaldiWebContents() const { return WebContents(); }
 
+  // For updating UI when menubar dropdown is shown in fullscreen
+  void DispatchFullscreenMenubarChangedEvent(bool shown);
+
  protected:
   // NativeAppWindow implementation.
   void SetFullscreen(int fullscreen_types) override;
@@ -240,6 +244,8 @@ class VivaldiNativeAppWindowCocoa : public VivaldiNativeAppWindow {
   bool thumbnail_window_;
 
   ui::WindowShowState initial_show_state_;
+
+  base::scoped_nsobject<VivaldiFullscreenMenubarTracker> menubarTracker_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiNativeAppWindowCocoa);
 };

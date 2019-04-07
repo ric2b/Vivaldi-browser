@@ -20,7 +20,6 @@
 #include "base/debug/crash_logging.h"
 #include "base/debug/debugger.h"
 #include "base/debug/leak_annotations.h"
-#include "base/deferred_sequenced_task_runner.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -32,15 +31,13 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/sequenced_task_runner.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
@@ -57,6 +54,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_browser_field_trials.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
+#include "chrome/browser/chrome_feature_list_creator.h"
 #include "chrome/browser/component_updater/crl_set_component_installer.h"
 #include "chrome/browser/component_updater/file_type_policies_component_installer.h"
 #include "chrome/browser/component_updater/mei_preload_component_installer.h"
@@ -130,7 +128,7 @@
 #include "components/component_updater/crl_set_remover.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/language/content/browser/geo_language_provider.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/language/core/common/language_experiments.h"
@@ -309,7 +307,8 @@
 #include "ui/aura/env.h"
 #endif
 
-#if BUILDFLAG(ENABLE_SIMPLE_BROWSER_SERVICE)
+#if BUILDFLAG(ENABLE_SIMPLE_BROWSER_SERVICE_IN_PROCESS) || \
+    BUILDFLAG(ENABLE_SIMPLE_BROWSER_SERVICE_OUT_OF_PROCESS)
 #include "services/content/simple_browser/public/mojom/constants.mojom.h"
 #endif
 
@@ -350,7 +349,7 @@ void AddFirstRunNewTabs(StartupBrowserCreator* browser_creator,
 }
 #endif  // !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 
-void InitializeLocalState(base::SequencedTaskRunner* local_state_task_runner) {
+void InitializeLocalState() {
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::InitializeLocalState")
 
   // Load local state.  This includes the application locale so we know which
@@ -406,10 +405,9 @@ void InitializeLocalState(base::SequencedTaskRunner* local_state_task_runner) {
       registry->RegisterStringPref(language::prefs::kApplicationLocale,
                                    std::string());
       const std::unique_ptr<PrefService> parent_local_state =
-          chrome_prefs::CreateLocalState(parent_profile,
-                                         local_state_task_runner,
-                                         g_browser_process->policy_service(),
-                                         std::move(registry), false, nullptr);
+          chrome_prefs::CreateLocalState(
+              parent_profile, g_browser_process->policy_service(),
+              std::move(registry), false, nullptr, nullptr);
       // Right now, we only inherit the locale setting from the parent profile.
       local_state->SetString(
           language::prefs::kApplicationLocale,
@@ -691,20 +689,6 @@ bool IsWebDriverOverridingPolicy(PrefService* local_state) {
                 prefs::kWebDriverOverridesIncompatiblePolicies)));
 }
 
-// The initial read is done synchronously, the TaskPriority is thus only used
-// for flushes to disks and BACKGROUND is therefore appropriate. Priority of
-// remaining BACKGROUND+BLOCK_SHUTDOWN tasks is bumped by the TaskScheduler on
-// shutdown. However, some shutdown use cases happen without
-// TaskScheduler::Shutdown() (e.g. ChromeRestartRequest::Start() and
-// BrowserProcessImpl::EndSession()) and we must thus unfortunately make this
-// USER_VISIBLE until we solve https://crbug.com/747495 to allow bumping
-// priority of a sequence on demand.
-scoped_refptr<base::SequencedTaskRunner> CreateLocalStateTaskRunner() {
-  return base::CreateSequencedTaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-       base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
-}
-
 // Initializes the shared instance of ResourceBundle and returns the locale. An
 // empty string return value indicates failure.
 std::string InitResourceBundleAndDetermineLocale(
@@ -787,6 +771,14 @@ bool WaitUntilMachineLevelUserCloudPolicyEnrollmentFinished(
 #endif
 }
 
+// Sets up the ThreadProfiler for the browser process, runs it, and returns the
+// profiler.
+std::unique_ptr<ThreadProfiler> CreateAndStartBrowserMainThreadProfiler() {
+  ThreadProfiler::SetBrowserProcessReceiverCallback(base::BindRepeating(
+      &metrics::CallStackProfileMetricsProvider::ReceiveCompletedProfile));
+  return ThreadProfiler::CreateAndStartOnMainThread();
+}
+
 }  // namespace
 
 namespace chrome_browser {
@@ -809,16 +801,19 @@ const char kMissingLocaleDataMessage[] =
 
 ChromeBrowserMainParts::ChromeBrowserMainParts(
     const content::MainFunctionParams& parameters,
-    std::unique_ptr<ui::DataPack> data_pack)
+    std::unique_ptr<ui::DataPack> data_pack,
+    ChromeFeatureListCreator* chrome_feature_list_creator)
     : parameters_(parameters),
       parsed_command_line_(parameters.command_line),
       result_code_(service_manager::RESULT_CODE_NORMAL_EXIT),
-      ui_thread_profiler_(ThreadProfiler::CreateAndStartOnMainThread()),
+      ui_thread_profiler_(CreateAndStartBrowserMainThreadProfiler()),
       should_call_pre_main_loop_start_startup_on_variations_service_(
           !parameters.ui_task),
       profile_(NULL),
       run_message_loop_(true),
-      service_manifest_data_pack_(std::move(data_pack)) {
+      service_manifest_data_pack_(std::move(data_pack)),
+      chrome_feature_list_creator_(chrome_feature_list_creator) {
+  DCHECK(chrome_feature_list_creator_);
   // If we're running tests (ui_task is non-null).
   if (parameters.ui_task)
     browser_defaults::enable_help_app = false;
@@ -1018,14 +1013,12 @@ int ChromeBrowserMainParts::PreEarlyInitialization() {
 
   // Create BrowserProcess in PreEarlyInitialization() so that we can load
   // field trials (and all it depends upon).
-  scoped_refptr<base::SequencedTaskRunner> local_state_task_runner =
-      CreateLocalStateTaskRunner();
-  browser_process_ =
-      std::make_unique<BrowserProcessImpl>(local_state_task_runner.get());
+  browser_process_ = std::make_unique<BrowserProcessImpl>(
+      chrome_feature_list_creator_->GetPrefStore());
 
   bool failed_to_load_resource_bundle = false;
-  const int load_local_state_result = LoadLocalState(
-      local_state_task_runner.get(), &failed_to_load_resource_bundle);
+  const int load_local_state_result =
+      LoadLocalState(&failed_to_load_resource_bundle);
   if (load_local_state_result == chrome::RESULT_CODE_MISSING_DATA &&
       failed_to_load_resource_bundle) {
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -1100,13 +1093,12 @@ int ChromeBrowserMainParts::PreCreateThreads() {
 }
 
 int ChromeBrowserMainParts::LoadLocalState(
-    base::SequencedTaskRunner* local_state_task_runner,
     bool* failed_to_load_resource_bundle) {
   *failed_to_load_resource_bundle = false;
   if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir_))
     return chrome::RESULT_CODE_MISSING_DATA;
 
-  InitializeLocalState(local_state_task_runner);
+  InitializeLocalState();
 
   ConvertFlagsToSwitches();
 
@@ -1758,12 +1750,14 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 
   TranslateService::Initialize();
   if (base::FeatureList::IsEnabled(features::kGeoLanguage) ||
+      base::FeatureList::IsEnabled(language::kExplicitLanguageAsk) ||
       language::GetOverrideLanguageModel() ==
           language::OverrideLanguageModel::GEO) {
     language::GeoLanguageProvider::GetInstance()->StartUp(
         content::ServiceManagerConnection::GetForProcess()
             ->GetConnector()
-            ->Clone());
+            ->Clone(),
+        browser_process_->local_state());
   }
 
   // Needs to be done before PostProfileInit, since login manager on CrOS is
@@ -2058,13 +2052,15 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
                       base::TimeTicks::Now() - start_time_step3);
 #endif  // !defined(OS_ANDROID)
 
-#if BUILDFLAG(ENABLE_SIMPLE_BROWSER_SERVICE)
-  const char kLaunchSimpleBrowserSwitch[] = "launch-simple-browser";
-  if (parsed_command_line().HasSwitch(kLaunchSimpleBrowserSwitch)) {
+#if BUILDFLAG(ENABLE_SIMPLE_BROWSER_SERVICE_OUT_OF_PROCESS) || \
+    BUILDFLAG(ENABLE_SIMPLE_BROWSER_SERVICE_IN_PROCESS)
+  if (parsed_command_line().HasSwitch(switches::kLaunchSimpleBrowserSwitch) ||
+      parsed_command_line().HasSwitch(
+          switches::kLaunchInProcessSimpleBrowserSwitch)) {
     content::BrowserContext::GetConnectorFor(profile_)->StartService(
         service_manager::Identity(simple_browser::mojom::kServiceName));
   }
-#endif  // BUILDFLAG(ENABLE_SIMPLE_BROWSER_SERVICE)
+#endif
 
   return result_code_;
 }
@@ -2093,8 +2089,6 @@ bool ChromeBrowserMainParts::MainMessageLoopRun(int* result_code) {
   DCHECK(base::MessageLoopForUI::IsCurrent());
 
   performance_monitor::PerformanceMonitor::GetInstance()->StartGatherCycle();
-
-  resource_coordinator::RenderProcessProbe::GetInstance()->StartGatherCycle();
 
   metrics::MetricsService::SetExecutionPhase(
       metrics::ExecutionPhase::MAIN_MESSAGE_LOOP_RUN,
@@ -2147,7 +2141,7 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
 
 void ChromeBrowserMainParts::PreShutdown() {
   metrics::CallStackProfileBuilder::SetProcessMilestone(
-      metrics::CallStackProfileMetricsProvider::SHUTDOWN_START);
+      metrics::CallStackProfileBuilder::SHUTDOWN_START);
 }
 
 void ChromeBrowserMainParts::PostDestroyThreads() {

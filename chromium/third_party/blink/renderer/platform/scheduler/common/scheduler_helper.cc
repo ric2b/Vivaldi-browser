@@ -10,7 +10,6 @@
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
-#include "third_party/blink/renderer/platform/scheduler/child/task_queue_with_task_type.h"
 
 namespace blink {
 namespace scheduler {
@@ -33,7 +32,7 @@ void SchedulerHelper::InitDefaultQueues(
   control_task_queue->SetQueuePriority(TaskQueue::kControlPriority);
 
   default_task_runner_ =
-      TaskQueueWithTaskType::Create(default_task_queue, default_task_type);
+      default_task_queue->CreateTaskRunner(static_cast<int>(default_task_type));
 
   DCHECK(sequence_manager_);
   sequence_manager_->SetDefaultTaskRunner(default_task_runner_);
@@ -136,7 +135,9 @@ void SchedulerHelper::OnExitNestedRunLoop() {
 }
 
 const base::TickClock* SchedulerHelper::GetClock() const {
-  return sequence_manager_->GetTickClock();
+  if (sequence_manager_)
+    return sequence_manager_->GetTickClock();
+  return nullptr;
 }
 
 base::TimeTicks SchedulerHelper::NowTicks() const {
@@ -144,6 +145,10 @@ base::TimeTicks SchedulerHelper::NowTicks() const {
     return sequence_manager_->NowTicks();
   // We may need current time for tracing when shutting down worker thread.
   return base::TimeTicks::Now();
+}
+
+void SchedulerHelper::SetTimerSlack(base::TimerSlack timer_slack) {
+  sequence_manager_->SetTimerSlack(timer_slack);
 }
 
 double SchedulerHelper::GetSamplingRateForRecordingCPUTime() const {

@@ -14,13 +14,11 @@
 #include <mdmregistration.h>
 #include <objbase.h>
 #include <propkey.h>
-#include <propvarutil.h>
 #include <psapi.h>
 #include <roapi.h>
 #include <sddl.h>
 #include <setupapi.h>
 #include <shellscalingapi.h>
-#include <shlwapi.h>
 #include <signal.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -45,11 +43,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/win/core_winrt_util.h"
+#include "base/win/propvarutil.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_co_mem.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/scoped_hstring.h"
 #include "base/win/scoped_propvariant.h"
+#include "base/win/shlwapi.h"
 #include "base/win/win_client_metrics.h"
 #include "base/win/windows_version.h"
 
@@ -119,6 +119,36 @@ bool SetProcessDpiAwarenessWrapper(PROCESS_DPI_AWARENESS value) {
                                              "should be available on all "
                                              "platforms >= Windows 8.1";
   return false;
+}
+
+bool* GetDomainEnrollmentStateStorage() {
+  static bool state = IsOS(OS_DOMAINMEMBER);
+  return &state;
+}
+
+bool* GetRegisteredWithManagementStateStorage() {
+  static bool state = []() {
+    ScopedNativeLibrary library(
+        FilePath(FILE_PATH_LITERAL("MDMRegistration.dll")));
+    if (!library.is_valid())
+      return false;
+
+    using IsDeviceRegisteredWithManagementFunction =
+        decltype(&::IsDeviceRegisteredWithManagement);
+    IsDeviceRegisteredWithManagementFunction
+        is_device_registered_with_management_function =
+            reinterpret_cast<IsDeviceRegisteredWithManagementFunction>(
+                library.GetFunctionPointer("IsDeviceRegisteredWithManagement"));
+    if (!is_device_registered_with_management_function)
+      return false;
+
+    BOOL is_managed = FALSE;
+    HRESULT hr =
+        is_device_registered_with_management_function(&is_managed, 0, nullptr);
+    return SUCCEEDED(hr) && is_managed;
+  }();
+
+  return &state;
 }
 
 }  // namespace
@@ -529,44 +559,12 @@ bool IsDeviceUsedAsATablet(std::string* reason) {
   return is_tablet;
 }
 
-enum DomainEnrollmentState {UNKNOWN = -1, NOT_ENROLLED, ENROLLED};
-static volatile long int g_domain_state = UNKNOWN;
-
 bool IsEnrolledToDomain() {
-  // Doesn't make any sense to retry inside a user session because joining a
-  // domain will only kick in on a restart.
-  if (g_domain_state == UNKNOWN) {
-    ::InterlockedCompareExchange(&g_domain_state,
-                                 IsOS(OS_DOMAINMEMBER) ?
-                                     ENROLLED : NOT_ENROLLED,
-                                 UNKNOWN);
-  }
-
-  return g_domain_state == ENROLLED;
+  return *GetDomainEnrollmentStateStorage();
 }
 
 bool IsDeviceRegisteredWithManagement() {
-  static bool is_device_registered_with_management = []() {
-    ScopedNativeLibrary library(
-        FilePath(FILE_PATH_LITERAL("MDMRegistration.dll")));
-    if (!library.is_valid())
-      return false;
-
-    using IsDeviceRegisteredWithManagementFunction =
-        decltype(&::IsDeviceRegisteredWithManagement);
-    IsDeviceRegisteredWithManagementFunction
-        is_device_registered_with_management_function =
-            reinterpret_cast<IsDeviceRegisteredWithManagementFunction>(
-                library.GetFunctionPointer("IsDeviceRegisteredWithManagement"));
-    if (!is_device_registered_with_management_function)
-      return false;
-
-    BOOL is_managed = false;
-    HRESULT hr =
-        is_device_registered_with_management_function(&is_managed, 0, nullptr);
-    return SUCCEEDED(hr) && is_managed;
-  }();
-  return is_device_registered_with_management;
+  return *GetRegisteredWithManagementStateStorage();
 }
 
 bool IsEnterpriseManaged() {
@@ -577,10 +575,6 @@ bool IsEnterpriseManaged() {
   // However, for now it is decided to collect some UMA metrics about
   // IsDeviceRegisteredWithMdm() before changing chrome's behavior.
   return IsEnrolledToDomain();
-}
-
-void SetDomainStateForTesting(bool state) {
-  g_domain_state = state ? ENROLLED : NOT_ENROLLED;
 }
 
 bool IsUser32AndGdi32Available() {
@@ -703,6 +697,26 @@ void EnableHighDPISupport() {
     BOOL result = ::SetProcessDPIAware();
     DCHECK(result) << "SetProcessDPIAware failed.";
   }
+}
+
+ScopedDomainStateForTesting::ScopedDomainStateForTesting(bool state)
+    : initial_state_(IsEnrolledToDomain()) {
+  *GetDomainEnrollmentStateStorage() = state;
+}
+
+ScopedDomainStateForTesting::~ScopedDomainStateForTesting() {
+  *GetDomainEnrollmentStateStorage() = initial_state_;
+}
+
+ScopedDeviceRegisteredWithManagementForTesting::
+    ScopedDeviceRegisteredWithManagementForTesting(bool state)
+    : initial_state_(IsDeviceRegisteredWithManagement()) {
+  *GetRegisteredWithManagementStateStorage() = state;
+}
+
+ScopedDeviceRegisteredWithManagementForTesting::
+    ~ScopedDeviceRegisteredWithManagementForTesting() {
+  *GetRegisteredWithManagementStateStorage() = initial_state_;
 }
 
 }  // namespace win

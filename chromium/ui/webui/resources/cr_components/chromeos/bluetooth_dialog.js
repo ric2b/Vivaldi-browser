@@ -238,6 +238,9 @@ Polymer({
 
   /** @private */
   pairingChanged_: function() {
+    if (this.pairingDevice === undefined)
+      return;
+
     // Auto-close the dialog when pairing completes.
     if (this.pairingDevice.paired && !this.pairingDevice.connecting &&
         this.pairingDevice.connected) {
@@ -258,7 +261,7 @@ Polymer({
       message = 'bluetoothStartConnecting';
     else
       message = this.getEventDesc_(this.pairingEvent_.pairing);
-    return this.i18n(message, this.pairingDevice.name);
+    return this.i18n(message, this.pairingDevice.name || '');
   },
 
   /**

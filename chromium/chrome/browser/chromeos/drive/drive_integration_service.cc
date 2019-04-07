@@ -5,15 +5,21 @@
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 
 #include <memory>
+#include <set>
+#include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/md5.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
+#include "base/timer/timer.h"
+#include "base/unguessable_token.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/drive/debug_info_collector.h"
@@ -35,6 +41,7 @@
 #include "chromeos/chromeos_features.h"
 #include "components/drive/chromeos/file_cache.h"
 #include "components/drive/chromeos/file_system.h"
+#include "components/drive/chromeos/file_system_observer.h"
 #include "components/drive/chromeos/resource_metadata.h"
 #include "components/drive/drive_api_util.h"
 #include "components/drive/drive_app_registry.h"
@@ -56,7 +63,9 @@
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/user_agent.h"
 #include "google_apis/drive/auth_service.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
+#include "net/base/network_change_notifier.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/device/public/mojom/constants.mojom.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
@@ -97,7 +106,8 @@ std::string GetDriveUserAgent() {
   // This part is <client_name>/<version>.
   const char kLibraryInfo[] = "chrome-cc/none";
 
-  const std::string os_cpu_info = content::BuildOSCpuInfo();
+  const std::string os_cpu_info =
+      content::BuildOSCpuInfo(false /* include_android_build_number */);
 
   // Add "gzip" to receive compressed data from the server.
   // (see https://developers.google.com/drive/performance)
@@ -206,10 +216,15 @@ FileError InitializeMetadata(
   return error;
 }
 
+void ResetCacheDone(base::OnceCallback<void(bool)> callback, FileError error) {
+  std::move(callback).Run(error == FILE_ERROR_OK);
+}
+
 }  // namespace
 
 // Observes drive disable Preference's change.
-class DriveIntegrationService::PreferenceWatcher {
+class DriveIntegrationService::PreferenceWatcher
+    : public net::NetworkChangeNotifier::NetworkChangeObserver {
  public:
   explicit PreferenceWatcher(PrefService* pref_service)
       : pref_service_(pref_service),
@@ -219,12 +234,29 @@ class DriveIntegrationService::PreferenceWatcher {
     pref_change_registrar_.Init(pref_service);
     pref_change_registrar_.Add(
         prefs::kDisableDrive,
-        base::Bind(&PreferenceWatcher::OnPreferenceChanged,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindRepeating(&PreferenceWatcher::OnPreferenceChanged,
+                            weak_ptr_factory_.GetWeakPtr()));
+    pref_change_registrar_.Add(
+        prefs::kDisableDriveOverCellular,
+        base::BindRepeating(&PreferenceWatcher::UpdateSyncPauseState,
+                            weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  ~PreferenceWatcher() override {
+    if (integration_service_ && integration_service_->drivefs_holder_) {
+      net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
+    }
   }
 
   void set_integration_service(DriveIntegrationService* integration_service) {
     integration_service_ = integration_service;
+    if (integration_service_->drivefs_holder_) {
+      net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
+    }
+  }
+
+  void UpdateSyncPauseState() {
+    OnNetworkChanged(net::NetworkChangeNotifier::GetConnectionType());
   }
 
  private:
@@ -232,6 +264,18 @@ class DriveIntegrationService::PreferenceWatcher {
     DCHECK(integration_service_);
     integration_service_->SetEnabled(
         !pref_service_->GetBoolean(prefs::kDisableDrive));
+  }
+
+  // net::NetworkChangeNotifier::NetworkChangeObserver
+  void OnNetworkChanged(
+      net::NetworkChangeNotifier::ConnectionType type) override {
+    if (!integration_service_->GetDriveFsInterface())
+      return;
+
+    integration_service_->GetDriveFsInterface()->UpdateNetworkState(
+        net::NetworkChangeNotifier::IsConnectionCellular(type) &&
+            pref_service_->GetBoolean(prefs::kDisableDriveOverCellular),
+        type == net::NetworkChangeNotifier::CONNECTION_NONE);
   }
 
   PrefService* pref_service_;
@@ -256,14 +300,17 @@ class DriveIntegrationService::DriveFsHolder
         on_drivefs_unmounted_(std::move(on_drivefs_unmounted)),
         test_drivefs_mojo_connection_delegate_factory_(
             std::move(test_drivefs_mojo_connection_delegate_factory)),
-        drivefs_host_(profile_->GetPath(), this) {}
+        drivefs_host_(profile_->GetPath(),
+                      this,
+                      std::make_unique<base::OneShotTimer>()) {}
 
   drivefs::DriveFsHost* drivefs_host() { return &drivefs_host_; }
 
  private:
   // drivefs::DriveFsHost::Delegate:
-  net::URLRequestContextGetter* GetRequestContext() override {
-    return profile_->GetRequestContext();
+  scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory()
+      override {
+    return profile_->GetURLLoaderFactory();
   }
 
   service_manager::Connector* GetConnector() override {
@@ -276,6 +323,11 @@ class DriveIntegrationService::DriveFsHolder
         ->GetAccountId();
   }
 
+  std::string GetObfuscatedAccountId() override {
+    return base::MD5String(GetProfileSalt() + "-" +
+                           GetAccountId().GetAccountIdKey());
+  }
+
   void OnMountFailed(base::Optional<base::TimeDelta> remount_delay) override {
     on_drivefs_unmounted_.Run(std::move(remount_delay));
   }
@@ -286,6 +338,19 @@ class DriveIntegrationService::DriveFsHolder
 
   void OnUnmounted(base::Optional<base::TimeDelta> remount_delay) override {
     on_drivefs_unmounted_.Run(std::move(remount_delay));
+  }
+
+  const std::string& GetProfileSalt() {
+    if (!profile_salt_.empty()) {
+      return profile_salt_;
+    }
+    PrefService* prefs = profile_->GetPrefs();
+    profile_salt_ = prefs->GetString(prefs::kDriveFsProfileSalt);
+    if (profile_salt_.empty()) {
+      profile_salt_ = base::UnguessableToken::Create().ToString();
+      prefs->SetString(prefs::kDriveFsProfileSalt, profile_salt_);
+    }
+    return profile_salt_;
   }
 
   std::unique_ptr<drivefs::DriveFsHost::MojoConnectionDelegate>
@@ -307,7 +372,34 @@ class DriveIntegrationService::DriveFsHolder
 
   drivefs::DriveFsHost drivefs_host_;
 
+  std::string profile_salt_;
+
   DISALLOW_COPY_AND_ASSIGN(DriveFsHolder);
+};
+
+class DriveIntegrationService::NotificationManager : public FileSystemObserver {
+ public:
+  // TODO(slangley): Allow for testing of DriveNotificationManager by using
+  // dependency injection.
+  explicit NotificationManager(Profile* profile) : profile_(profile) {}
+  ~NotificationManager() override = default;
+
+  void OnTeamDrivesUpdated(
+      const std::set<std::string>& added_team_drive_ids,
+      const std::set<std::string>& removed_team_drive_ids) override {
+    DriveNotificationManager* drive_notification_manager =
+        DriveNotificationManagerFactory::FindForBrowserContext(profile_);
+
+    if (drive_notification_manager) {
+      drive_notification_manager->UpdateTeamDriveIds(added_team_drive_ids,
+                                                     removed_team_drive_ids);
+    }
+  }
+
+ private:
+  Profile* const profile_;  // Not Owned
+
+  DISALLOW_COPY_AND_ASSIGN(NotificationManager);
 };
 
 DriveIntegrationService::DriveIntegrationService(
@@ -413,6 +505,11 @@ DriveIntegrationService::DriveIntegrationService(
   debug_info_collector_ = std::make_unique<DebugInfoCollector>(
       resource_metadata_.get(), file_system(), blocking_task_runner_.get());
 
+  notification_manager_ =
+      std::make_unique<DriveIntegrationService::NotificationManager>(profile);
+
+  file_system_->AddObserver(notification_manager_.get());
+
   SetEnabled(drive::util::IsDriveEnabledForProfile(profile));
 }
 
@@ -431,6 +528,7 @@ void DriveIntegrationService::Shutdown() {
     drive_notification_manager->RemoveObserver(this);
 
   RemoveDriveMountPoint();
+  notification_manager_.reset();
   debug_info_collector_.reset();
   download_handler_.reset();
   file_system_.reset();
@@ -496,6 +594,13 @@ base::FilePath DriveIntegrationService::GetMountPointPath() const {
                          : drive::util::GetDriveMountPointPath(profile_);
 }
 
+base::FilePath DriveIntegrationService::GetDriveFsLogPath() const {
+  return drivefs_holder_
+             ? drivefs_holder_->drivefs_host()->GetDataPath().Append(
+                   "Logs/drivefs.txt")
+             : base::FilePath();
+}
+
 bool DriveIntegrationService::GetRelativeDrivePath(
     const base::FilePath& local_path,
     base::FilePath* drive_path) const {
@@ -525,9 +630,17 @@ void DriveIntegrationService::RemoveObserver(
   observers_.RemoveObserver(observer);
 }
 
-void DriveIntegrationService::OnNotificationReceived() {
+void DriveIntegrationService::OnNotificationReceived(
+    const std::set<std::string>& ids) {
   logger_->Log(logging::LOG_INFO,
                "Received Drive update notification. Will check for update.");
+  file_system_->CheckForUpdates(ids);
+  drive_app_registry_->Update();
+}
+
+void DriveIntegrationService::OnNotificationTimerFired() {
+  logger_->Log(logging::LOG_INFO,
+               "Drive notification timer erpired. Will check all for update.");
   file_system_->CheckForUpdates();
   drive_app_registry_->Update();
 }
@@ -545,9 +658,13 @@ void DriveIntegrationService::ClearCacheAndRemountFileSystem(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(callback);
 
-  // TODO(crbug.com/845393): Implement for DriveFS.
-  if (state_ != INITIALIZED || drivefs_holder_) {
+  if (state_ != INITIALIZED) {
     callback.Run(false);
+    return;
+  } else if (drivefs_holder_) {
+    GetDriveFsInterface()->ResetCache(
+        mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+            base::BindOnce(&ResetCacheDone, callback), FILE_ERROR_ABORT));
     return;
   }
 
@@ -614,10 +731,11 @@ void DriveIntegrationService::AddDriveMountPointAfterMounted() {
   storage::ExternalMountPoints* const mount_points =
       storage::ExternalMountPoints::GetSystemInstance();
   DCHECK(mount_points);
+  drivefs_consecutive_failures_count_ = 0;
 
   bool success = mount_points->RegisterFileSystem(
       mount_point_name_,
-      drivefs_holder_ ? storage::kFileSystemTypeNativeLocal
+      drivefs_holder_ ? storage::kFileSystemTypeDriveFs
                       : storage::kFileSystemTypeDrive,
       storage::FileSystemMountOption(), drive_mount_point);
 
@@ -625,6 +743,10 @@ void DriveIntegrationService::AddDriveMountPointAfterMounted() {
     logger_->Log(logging::LOG_INFO, "Drive mount point is added");
     for (auto& observer : observers_)
       observer.OnFileSystemMounted();
+  }
+
+  if (drivefs_holder_ && preference_watcher_) {
+    preference_watcher_->UpdateSyncPauseState();
   }
 }
 
@@ -637,15 +759,13 @@ void DriveIntegrationService::RemoveDriveMountPoint() {
     if (!drivefs_holder_)
       job_list()->CancelAllJobs();
 
-    for (auto& observer : observers_)
-      observer.OnFileSystemBeingUnmounted();
-
-    storage::ExternalMountPoints* const mount_points =
-        storage::ExternalMountPoints::GetSystemInstance();
-    DCHECK(mount_points);
-
-    mount_points->RevokeFileSystem(mount_point_name_);
-    logger_->Log(logging::LOG_INFO, "Drive mount point is removed");
+    if (storage::ExternalMountPoints::GetSystemInstance()->RevokeFileSystem(
+            mount_point_name_)) {
+      for (auto& observer : observers_) {
+        observer.OnFileSystemBeingUnmounted();
+      }
+      logger_->Log(logging::LOG_INFO, "Drive mount point is removed");
+    }
   }
   if (drivefs_holder_)
     drivefs_holder_->drivefs_host()->Unmount();
@@ -657,13 +777,32 @@ void DriveIntegrationService::MaybeRemountFileSystem(
 
   RemoveDriveMountPoint();
 
-  if (remount_delay) {
-    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&DriveIntegrationService::AddDriveMountPoint,
-                       weak_ptr_factory_.GetWeakPtr()),
-        remount_delay.value());
+  if (!remount_delay) {
+    // If DriveFs didn't specify retry time it's likely unexpected error, e.g.
+    // crash. Use limited exponential backoff for retry.
+    ++drivefs_consecutive_failures_count_;
+    ++drivefs_total_failures_count_;
+    if (drivefs_total_failures_count_ > 10) {
+      logger_->Log(logging::LOG_ERROR,
+                   "DriveFs is too crashy. Leaving it alone.");
+      return;
+    }
+    if (drivefs_consecutive_failures_count_ > 3) {
+      logger_->Log(logging::LOG_ERROR,
+                   "DriveFs keeps failing at start. Giving up.");
+      return;
+    }
+    remount_delay = base::TimeDelta::FromSeconds(
+        5 * (1 << (drivefs_consecutive_failures_count_ - 1)));
+    logger_->Log(logging::LOG_WARNING, "DriveFs died, retry in %d seconds",
+                 static_cast<int>(remount_delay.value().InSeconds()));
   }
+
+  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&DriveIntegrationService::AddDriveMountPoint,
+                     weak_ptr_factory_.GetWeakPtr()),
+      remount_delay.value());
 }
 
 void DriveIntegrationService::Initialize() {

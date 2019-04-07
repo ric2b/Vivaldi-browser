@@ -13,7 +13,6 @@
 <translation id="2350172092385603347">Lokalisering anvendt, men default_locale blev ikke angivet i manifestet.</translation>
 <translation id="2576842806987913196">Der findes allerede en CRX-fil med dette navn.</translation>
 <translation id="2753617847762399167">Ugyldig sti (absolut eller relativ med '..'): '<ph name="IMAGE_PATH" /> '</translation>
-<translation id="27822970480436970">Denne udvidelse kunne ikke ændre en netværksanmodning, fordi ændringen var i strid med en anden udvidelse.</translation>
 <translation id="2785530881066938471">Filen '<ph name="RELATIVE_PATH" />' til indholdsscript kunne ikke indlæses. Det er ikke UTF-8-kodet.</translation>
 <translation id="2903070246402204397"><ph name="EXTENSION_NAME" /> (udvidelses-id "<ph name="EXTENSION_ID" />") er blokeret af administrator. <ph name="ADMIN_INFO" /></translation>
 <translation id="2988488679308982380">Pakken kunne ikke installeres: "<ph name="ERROR_CODE" />"</translation>
@@ -57,19 +56,16 @@
 <translation id="7003844668372540529">Ukendt produkt, <ph name="PRODUCT_ID" />, fra <ph name="VENDOR_NAME" /></translation>
 <translation id="7068383018033524534">Manifestfilen er ugyldig</translation>
 <translation id="7217838517480956708">Administratoren af denne computer kræver, at <ph name="EXTENSION_NAME" /> skal installeres. Den kan ikke fjernes eller ændres.</translation>
+<translation id="7612608473764576263">Den indtastede værdi for den private nøgle skal være et gyldigt format (PEM-kodet RSA-nøgle i PKCS#8-format).</translation>
 <translation id="7939686037314084444">Udvidelsen kunne ikke indlæses korrekt. Den kan muligvis ikke opfange netværksanmodninger.</translation>
 <translation id="7972881773422714442">Valgmuligheder: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Frontkamera</translation>
 <translation id="8047248493720652249">Denne udvidelse har ikke navngivet downloaden "<ph name="ATTEMPTED_FILENAME" />", fordi en anden udvidelse (<ph name="EXTENSION_NAME" />) har fastlagt et andet filnavn "<ph name="ACTUAL_FILENAME" />".</translation>
 <translation id="8284835137979141223"><ph name="PRODUCT_NAME" /> fra <ph name="VENDOR_NAME" /></translation>
-<translation id="8341840687457896278">Denne udvidelse kunne ikke angive legitimationsoplysninger til en netværksanmodning, fordi en anden udvidelse (<ph name="EXTENSION_NAME" />) angav andre legitimationsoplysninger.</translation>
 <translation id="8517576857589387417">Manifestfilen mangler eller kan ikke læses</translation>
 <translation id="8636666366616799973">Pakken er ugyldig. Oplysninger: "<ph name="ERROR_MESSAGE" />".</translation>
-<translation id="8670869118777164560">Denne udvidelse kunne ikke omdirigere en netværksanmodning til <ph name="ATTEMPTED_REDIRECT_DESTINATION" />, fordi en anden udvidelse (<ph name="EXTENSION_NAME" />) omdirigerede den til <ph name="ACTUAL_REDIRECT_DESTINATION" />.</translation>
 <translation id="8761756413268424715">"<ph name="APP_NAME" />" anmoder om adgang til en af dine enheder:</translation>
-<translation id="8825366169884721447">Denne udvidelse kunne ikke ændre anmodningsheaderen "<ph name="HEADER_NAME" />" for en netværksanmodning, fordi ændringen var i strid med en anden udvidelse. (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="8885905466771744233">Der findes allerede en personlig nøgle til den angivne udvidelse. Genbrug denne nøgle, eller slet den først.</translation>
 <translation id="907841381057066561">Den midlertidige zip-fil kunne ikke oprettes under pakning.</translation>
-<translation id="9111791539553342076">Denne udvidelse kunne ikke ændre anmodningsheaderen "<ph name="HEADER_NAME" />" for en netværksanmodning, fordi ændringen var i strid med en anden udvidelse. (<ph name="EXTENSION_NAME" />).</translation>
 <translation id="941543339607623937">Ugyldig personlig nøgle.</translation>
 </translationbundle>

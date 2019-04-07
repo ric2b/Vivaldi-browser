@@ -193,6 +193,50 @@
         }
       }
     },
+    "quick_commands": {
+      "open_url_in_new_tab": {
+        "description": "Open QC links in a new tab, overriding global setting",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "match_nickname": {
+        "description": "Launch QC bookmark on its nickname match",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "show_bookmarks": {
+        "description": "Include bookmarks in QC search results",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "show_history": {
+        "description": "Include history in QC search results",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "show_notes": {
+        "description": "Include notes in QC search results",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "show_page_actions": {
+        "description": "Include page actions in QC search results",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "limit_results": {
+        "description": "Limit number of QC search results to 20 per category",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      }
+    },
     "settings": {
       "size": {
         "width": {
@@ -293,6 +337,12 @@
       }
     },
     "webpages": {
+      "access_keys": {
+        "type": "boolean",
+        "default": true,
+        "description": "Allows web pages to use access keys if turned on, otherwise blocks them.",
+        "syncable": true
+      },
       "capture": {
         "directory": {
           "description": "The location where captured pages are stored",
@@ -378,6 +428,14 @@
         "syncable": false
       }
     },
+    "rss": {
+      "settings": {
+        "type": "list",
+        "default": [],
+        "description": "List of settings for RSS feeds",
+        "syncable": false
+      }
+    },
     "windows": {
       "use_native_decoration": {
         "type": "boolean",
@@ -433,6 +491,7 @@
   },
 
   "chromium": {
+    "kAllowJavascriptAppleEvents": "browser.allow_javascript_apple_events",
     "kCredentialsEnableService": "credentials_enable_service",
     "kDownloadDefaultDirectory": "download.default_directory",
     "kEnableDoNotTrack": "enable_do_not_track",

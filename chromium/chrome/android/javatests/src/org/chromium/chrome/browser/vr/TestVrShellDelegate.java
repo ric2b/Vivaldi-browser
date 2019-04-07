@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.vr;
 
 import android.graphics.PointF;
+import android.os.Build;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -12,8 +13,8 @@ import org.chromium.chrome.browser.ChromeActivity;
 /**
  * Class for accessing VrShellDelegate internals for testing purposes.
  * This does two things:
- * - Prevents us from needing @VisibleForTesting annotations everywhere in production code
- * - Allows us to have test-specific behavior if necessary without changing production code
+ * - Prevents us from needing @VisibleForTesting annotations everywhere in production code.
+ * - Allows us to have test-specific behavior if necessary without changing production code.
  */
 public class TestVrShellDelegate extends VrShellDelegate {
     private Runnable mOnVSyncPausedCallback;
@@ -24,12 +25,8 @@ public class TestVrShellDelegate extends VrShellDelegate {
     private Boolean mAllow2dIntents;
 
     public static void createTestVrShellDelegate(final ChromeActivity activity) {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                sInstance = new TestVrShellDelegate(activity);
-            }
-        });
+        if (sInstance != null) return;
+        ThreadUtils.runOnUiThreadBlocking(() -> { sInstance = new TestVrShellDelegate(activity); });
     }
 
     public static TestVrShellDelegate getInstance() {
@@ -42,6 +39,14 @@ public class TestVrShellDelegate extends VrShellDelegate {
 
     public static boolean isDisplayingUrlForTesting() {
         return TestVrShellDelegate.getInstance().getVrShell().isDisplayingUrlForTesting();
+    }
+
+    public static boolean isOnStandalone() {
+        return Build.DEVICE.equals("vega");
+    }
+
+    public static void enableTestVrShellDelegateOnStartupForTesting() {
+        VrShellDelegate.enableTestVrShellDelegateOnStartupForTesting();
     }
 
     protected TestVrShellDelegate(ChromeActivity activity) {
@@ -152,8 +157,7 @@ public class TestVrShellDelegate extends VrShellDelegate {
     protected boolean createVrShell() {
         boolean result = super.createVrShell();
         if (result && mOnVSyncPausedCallback != null) {
-            ((VrShellImpl) getVrShellForTesting())
-                    .setOnVSyncPausedForTesting(mOnVSyncPausedCallback);
+            getVrShellForTesting().setOnVSyncPausedForTesting(mOnVSyncPausedCallback);
         }
         return result;
     }

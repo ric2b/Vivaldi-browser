@@ -179,6 +179,10 @@ void ArcBridgeHostImpl::OnOemCryptoInstanceReady(
   OnInstanceReady(arc_bridge_service_->oemcrypto(), std::move(oemcrypto_ptr));
 }
 
+void ArcBridgeHostImpl::OnPipInstanceReady(mojom::PipInstancePtr pip_ptr) {
+  OnInstanceReady(arc_bridge_service_->pip(), std::move(pip_ptr));
+}
+
 void ArcBridgeHostImpl::OnPolicyInstanceReady(
     mojom::PolicyInstancePtr policy_ptr) {
   OnInstanceReady(arc_bridge_service_->policy(), std::move(policy_ptr));
@@ -197,6 +201,11 @@ void ArcBridgeHostImpl::OnPrintInstanceReady(
 void ArcBridgeHostImpl::OnProcessInstanceReady(
     mojom::ProcessInstancePtr process_ptr) {
   OnInstanceReady(arc_bridge_service_->process(), std::move(process_ptr));
+}
+
+void ArcBridgeHostImpl::OnPropertyInstanceReady(
+    mojom::PropertyInstancePtr property_ptr) {
+  OnInstanceReady(arc_bridge_service_->property(), std::move(property_ptr));
 }
 
 void ArcBridgeHostImpl::OnRotationLockInstanceReady(

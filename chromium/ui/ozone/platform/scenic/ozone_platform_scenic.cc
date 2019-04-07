@@ -29,9 +29,11 @@ namespace ui {
 
 namespace {
 
-constexpr OzonePlatform::PlatformProperties kScenicPlatformProperties = {
+const OzonePlatform::PlatformProperties kScenicPlatformProperties(
     /*needs_view_owner_request=*/true,
-};
+    /*custom_frame_pref_default=*/false,
+    /*use_system_title_bar=*/false,
+    std::vector<gfx::BufferFormat>());
 
 class ScenicPlatformEventSource : public ui::PlatformEventSource {
  public:
@@ -95,6 +97,10 @@ class OzonePlatformScenic : public OzonePlatform {
       override {
     NOTIMPLEMENTED();
     return std::make_unique<display::FakeDisplayDelegate>();
+  }
+
+  std::unique_ptr<PlatformScreen> CreateScreen() override {
+    return window_manager_.CreateScreen();
   }
 
   void InitializeUI(const InitParams& params) override {

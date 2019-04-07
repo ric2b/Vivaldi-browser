@@ -5,15 +5,21 @@
 #ifndef CHROME_BROWSER_CHROMEOS_ARC_INPUT_METHOD_MANAGER_ARC_INPUT_METHOD_MANAGER_BRIDGE_IMPL_H_
 #define CHROME_BROWSER_CHROMEOS_ARC_INPUT_METHOD_MANAGER_ARC_INPUT_METHOD_MANAGER_BRIDGE_IMPL_H_
 
+#include <string>
+#include <vector>
+
 #include "base/macros.h"
 #include "chrome/browser/chromeos/arc/input_method_manager/arc_input_method_manager_bridge.h"
+#include "components/arc/connection_observer.h"
 
 namespace arc {
 
 class ArcBridgeService;
 
-class ArcInputMethodManagerBridgeImpl : public ArcInputMethodManagerBridge,
-                                        public mojom::InputMethodManagerHost {
+class ArcInputMethodManagerBridgeImpl
+    : public ArcInputMethodManagerBridge,
+      public ConnectionObserver<mojom::InputMethodManagerInstance>,
+      public mojom::InputMethodManagerHost {
  public:
   ArcInputMethodManagerBridgeImpl(Delegate* delegate,
                                   ArcBridgeService* bridge_service);
@@ -26,8 +32,12 @@ class ArcInputMethodManagerBridgeImpl : public ArcInputMethodManagerBridge,
   void SendSwitchImeTo(const std::string& ime_id,
                        SwitchImeToCallback callback) override;
 
+  // ConnectionObserver<mojom::InputMethodManagerInstance> overrides:
+  void OnConnectionClosed() override;
+
   // mojom::InputMethodManagerHost overrides:
   void OnActiveImeChanged(const std::string& ime_id) override;
+  void OnImeDisabled(const std::string& ime_id) override;
   void OnImeInfoChanged(std::vector<mojom::ImeInfoPtr> ime_info_array) override;
 
  private:

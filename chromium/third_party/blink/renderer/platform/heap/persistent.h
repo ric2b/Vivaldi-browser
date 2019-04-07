@@ -7,6 +7,7 @@
 
 #include "base/bind.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/heap_compact.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/heap/persistent_node.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
@@ -115,6 +116,9 @@ class PersistentBase {
     return *raw_;
   }
   explicit operator bool() const { return raw_; }
+  // TODO(https://crbug.com/653394): Consider returning a thread-safe best
+  // guess of validity.
+  bool MaybeValid() const { return true; }
   operator T*() const {
     CheckPointer();
     return raw_;
@@ -182,7 +186,7 @@ class PersistentBase {
         crossThreadnessConfiguration == kCrossThreadPersistentConfiguration,
         "This Persistent does not require the cross-thread lock.");
 #if DCHECK_IS_ON()
-    DCHECK(ProcessHeap::CrossThreadPersistentMutex().Locked());
+    ProcessHeap::CrossThreadPersistentMutex().AssertAcquired();
 #endif
     raw_ = nullptr;
     CrossThreadPersistentRegion& region =
@@ -338,7 +342,7 @@ class PersistentBase {
                      kWeakPersistentConfiguration,
                      kCrossThreadPersistentConfiguration>* persistent) {
 #if DCHECK_IS_ON()
-    DCHECK(ProcessHeap::CrossThreadPersistentMutex().Locked());
+    ProcessHeap::CrossThreadPersistentMutex().AssertAcquired();
 #endif
     persistent->ClearWithLockHeld();
   }
@@ -683,6 +687,11 @@ class PersistentHeapCollectionBase : public Collection {
 #if DCHECK_IS_ON()
     DCHECK_EQ(state_, state);
 #endif
+    HeapCompact* compactor = state->Heap().Compaction();
+    if (compactor->IsCompacting()) {
+      compactor->RemoveSlot(
+          reinterpret_cast<MovableReference*>(this->GetBufferSlot()));
+    }
     state->FreePersistentNode(state->GetPersistentRegion(), persistent_node_);
     persistent_node_ = nullptr;
   }
@@ -719,7 +728,7 @@ class PersistentHeapLinkedHashSet
           HeapLinkedHashSet<ValueArg, HashArg, TraitsArg>> {};
 
 template <typename ValueArg,
-          size_t inlineCapacity = 0,
+          wtf_size_t inlineCapacity = 0,
           typename HashArg = typename DefaultHash<ValueArg>::Hash>
 class PersistentHeapListHashSet
     : public PersistentHeapCollectionBase<
@@ -732,13 +741,13 @@ class PersistentHeapHashCountedSet
     : public PersistentHeapCollectionBase<
           HeapHashCountedSet<ValueArg, HashFunctions, Traits>> {};
 
-template <typename T, size_t inlineCapacity = 0>
+template <typename T, wtf_size_t inlineCapacity = 0>
 class PersistentHeapVector
     : public PersistentHeapCollectionBase<HeapVector<T, inlineCapacity>> {
  public:
   PersistentHeapVector() { InitializeUnusedSlots(); }
 
-  explicit PersistentHeapVector(size_t size)
+  explicit PersistentHeapVector(wtf_size_t size)
       : PersistentHeapCollectionBase<HeapVector<T, inlineCapacity>>(size) {
     InitializeUnusedSlots();
   }
@@ -748,7 +757,7 @@ class PersistentHeapVector
     InitializeUnusedSlots();
   }
 
-  template <size_t otherCapacity>
+  template <wtf_size_t otherCapacity>
   PersistentHeapVector(const HeapVector<T, otherCapacity>& other)
       : PersistentHeapCollectionBase<HeapVector<T, inlineCapacity>>(other) {
     InitializeUnusedSlots();
@@ -759,19 +768,19 @@ class PersistentHeapVector
     // The PersistentHeapVector is allocated off heap along with its
     // inline buffer (if any.) Maintain the invariant that unused
     // slots are cleared for the off-heap inline buffer also.
-    size_t unused_slots = this->capacity() - this->size();
+    wtf_size_t unused_slots = this->capacity() - this->size();
     if (unused_slots)
       this->ClearUnusedSlots(this->end(), this->end() + unused_slots);
   }
 };
 
-template <typename T, size_t inlineCapacity = 0>
+template <typename T, wtf_size_t inlineCapacity = 0>
 class PersistentHeapDeque
     : public PersistentHeapCollectionBase<HeapDeque<T, inlineCapacity>> {
  public:
   PersistentHeapDeque() = default;
 
-  template <size_t otherCapacity>
+  template <wtf_size_t otherCapacity>
   PersistentHeapDeque(const HeapDeque<T, otherCapacity>& other)
       : PersistentHeapCollectionBase<HeapDeque<T, inlineCapacity>>(other) {}
 };

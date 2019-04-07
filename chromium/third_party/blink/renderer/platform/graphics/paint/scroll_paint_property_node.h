@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_PAINT_SCROLL_PAINT_PROPERTY_NODE_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_PAINT_SCROLL_PAINT_PROPERTY_NODE_H_
 
+#include "base/optional.h"
 #include "third_party/blink/renderer/platform/geometry/float_point.h"
 #include "third_party/blink/renderer/platform/geometry/float_size.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
@@ -12,6 +13,8 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_property_node.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/scroll/main_thread_scrolling_reason.h"
+#include "third_party/blink/renderer/platform/scroll/overscroll_behavior.h"
+#include "third_party/blink/renderer/platform/scroll/scroll_snap_data.h"
 
 namespace blink {
 
@@ -44,9 +47,12 @@ class PLATFORM_EXPORT ScrollPaintPropertyNode
     bool max_scroll_offset_affected_by_page_scale = false;
     MainThreadScrollingReasons main_thread_scrolling_reasons =
         MainThreadScrollingReason::kNotScrollingOnMain;
-    // The scrolling element id is stored directly on the scroll node and not on
-    // the associated TransformPaintPropertyNode used for scroll offset.
+    // The scrolling element id is stored directly on the scroll node and not
+    // on the associated TransformPaintPropertyNode used for scroll offset.
     CompositorElementId compositor_element_id;
+    OverscrollBehavior overscroll_behavior = blink::OverscrollBehavior(
+        blink::OverscrollBehavior::kOverscrollBehaviorTypeAuto);
+    base::Optional<SnapContainerData> snap_container_data;
 
     bool operator==(const State& o) const {
       return container_rect == o.container_rect &&
@@ -58,7 +64,9 @@ class PLATFORM_EXPORT ScrollPaintPropertyNode
              max_scroll_offset_affected_by_page_scale ==
                  o.max_scroll_offset_affected_by_page_scale &&
              main_thread_scrolling_reasons == o.main_thread_scrolling_reasons &&
-             compositor_element_id == o.compositor_element_id;
+             compositor_element_id == o.compositor_element_id &&
+             overscroll_behavior == o.overscroll_behavior &&
+             snap_container_data == o.snap_container_data;
     }
   };
 
@@ -81,6 +89,18 @@ class PLATFORM_EXPORT ScrollPaintPropertyNode
     state_ = std::move(state);
     Validate();
     return true;
+  }
+
+  OverscrollBehavior::OverscrollBehaviorType OverscrollBehaviorX() const {
+    return state_.overscroll_behavior.x;
+  }
+
+  OverscrollBehavior::OverscrollBehaviorType OverscrollBehaviorY() const {
+    return state_.overscroll_behavior.y;
+  }
+
+  base::Optional<SnapContainerData> SnapContainerData() const {
+    return state_.snap_container_data;
   }
 
   // Rect of the container area that the contents scrolls in, in the space of

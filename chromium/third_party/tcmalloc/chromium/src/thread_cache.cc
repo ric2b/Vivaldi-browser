@@ -77,6 +77,7 @@ pthread_key_t ThreadCache::heap_key_;
 
 void ThreadCache::Init(pthread_t tid) {
   size_ = 0;
+  total_bytes_allocated_ = 0;
 
   max_size_ = 0;
   IncreaseCacheLimitLocked();
@@ -133,7 +134,10 @@ void* ThreadCache::FetchFromCentralCache(uint32 cl, int32_t byte_size,
 
   if (--fetch_count >= 0) {
     size_ += byte_size * fetch_count;
-    list->PushRange(fetch_count, SLL_Next(start), end);
+    // Pop the top of the list and add the rest to the freelist.
+    void* second = start;
+    start = FL_Pop(&second);
+    list->PushRange(fetch_count, second, end);
   }
 
   // Increase max length slowly up to batch_size.  After that,
@@ -279,6 +283,11 @@ void ThreadCache::IncreaseCacheLimitLocked() {
 
 int ThreadCache::GetSamplePeriod() {
   return sampler_.GetSamplePeriod();
+}
+
+// static
+unsigned int ThreadCache::GetBytesAllocatedOnCurrentThread() {
+  return ThreadCache::GetThreadHeap()->GetTotalBytesAllocated();
 }
 
 void ThreadCache::InitModule() {

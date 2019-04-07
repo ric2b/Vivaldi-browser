@@ -14,12 +14,12 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task/cancelable_task_tracker.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/history/core/browser/top_sites_database.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -36,12 +36,13 @@ TopSitesBackend::TopSitesBackend()
 void TopSitesBackend::Init(const base::FilePath& path) {
   db_path_ = path;
   db_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&TopSitesBackend::InitDBOnDBThread, this, path));
+      FROM_HERE,
+      base::BindOnce(&TopSitesBackend::InitDBOnDBThread, this, path));
 }
 
 void TopSitesBackend::Shutdown() {
   db_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&TopSitesBackend::ShutdownDBOnDBThread, this));
+      FROM_HERE, base::BindOnce(&TopSitesBackend::ShutdownDBOnDBThread, this));
 }
 
 void TopSitesBackend::GetMostVisitedThumbnails(
@@ -50,31 +51,30 @@ void TopSitesBackend::GetMostVisitedThumbnails(
   scoped_refptr<MostVisitedThumbnails> thumbnails = new MostVisitedThumbnails();
   tracker->PostTaskAndReply(
       db_task_runner_.get(), FROM_HERE,
-      base::Bind(&TopSitesBackend::GetMostVisitedThumbnailsOnDBThread, this,
-                 thumbnails),
-      base::Bind(callback, thumbnails));
+      base::BindOnce(&TopSitesBackend::GetMostVisitedThumbnailsOnDBThread, this,
+                     thumbnails),
+      base::BindOnce(callback, thumbnails));
 }
 
 void TopSitesBackend::UpdateTopSites(const TopSitesDelta& delta,
                                      const RecordHistogram record_or_not) {
   db_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&TopSitesBackend::UpdateTopSitesOnDBThread, this, delta,
-                 record_or_not));
+      FROM_HERE, base::BindOnce(&TopSitesBackend::UpdateTopSitesOnDBThread,
+                                this, delta, record_or_not));
 }
 
 void TopSitesBackend::SetPageThumbnail(const MostVisitedURL& url,
                                        int url_rank,
                                        const Images& thumbnail) {
   db_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&TopSitesBackend::SetPageThumbnailOnDBThread, this,
-                            url, url_rank, thumbnail));
+      FROM_HERE, base::BindOnce(&TopSitesBackend::SetPageThumbnailOnDBThread,
+                                this, url, url_rank, thumbnail));
 }
 
 void TopSitesBackend::ResetDatabase() {
   db_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&TopSitesBackend::ResetDatabaseOnDBThread, this, db_path_));
+      FROM_HERE, base::BindOnce(&TopSitesBackend::ResetDatabaseOnDBThread, this,
+                                db_path_));
 }
 
 void TopSitesBackend::DoEmptyRequest(const base::Closure& reply,
@@ -143,7 +143,7 @@ void TopSitesBackend::ResetDatabaseOnDBThread(const base::FilePath& file_path) {
     db_->DeleteDataExceptBookmarkThumbnails();
   } else {
   db_.reset(nullptr);
-  sql::Connection::Delete(db_path_);
+  sql::Database::Delete(db_path_);
   db_.reset(new TopSitesDatabase());
   InitDBOnDBThread(db_path_);
   }

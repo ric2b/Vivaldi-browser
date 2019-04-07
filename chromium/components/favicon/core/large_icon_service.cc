@@ -20,8 +20,8 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "base/task_runner.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/favicon/core/favicon_server_fetcher_params.h"
@@ -48,8 +48,7 @@ const base::Feature kLargeIconServiceFetchingFeature{
     "LargeIconServiceFetching", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const char kGoogleServerV2RequestFormat[] =
-    "https://t0.gstatic.com/faviconV2?"
-    "client=chrome&drop_404_icon=true&%s"
+    "https://t0.gstatic.com/faviconV2?client=chrome&nfrp=2&%s"
     "size=%d&min_size=%d&max_size=%d&fallback_opts=TYPE,SIZE,URL&url=%s";
 const char kGoogleServerV2RequestFormatParam[] = "request_format";
 
@@ -336,7 +335,7 @@ LargeIconWorker::LargeIconWorker(
       raw_bitmap_callback_(raw_bitmap_callback),
       image_callback_(image_callback),
       background_task_runner_(base::CreateTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       tracker_(tracker),
       fallback_icon_style_(
@@ -350,13 +349,13 @@ void LargeIconWorker::OnIconLookupComplete(
   LogSuspiciousURLMismatches(page_url, db_result);
   tracker_->PostTaskAndReply(
       background_task_runner_.get(), FROM_HERE,
-      base::Bind(&ProcessIconOnBackgroundThread, db_result,
-                 min_source_size_in_pixel_, desired_size_in_pixel_,
-                 raw_bitmap_callback_ ? &raw_bitmap_result_ : nullptr,
-                 image_callback_ ? &bitmap_result_ : nullptr,
-                 image_callback_ ? &icon_url_ : nullptr,
-                 fallback_icon_style_.get()),
-      base::Bind(&LargeIconWorker::OnIconProcessingComplete, this));
+      base::BindOnce(&ProcessIconOnBackgroundThread, db_result,
+                     min_source_size_in_pixel_, desired_size_in_pixel_,
+                     raw_bitmap_callback_ ? &raw_bitmap_result_ : nullptr,
+                     image_callback_ ? &bitmap_result_ : nullptr,
+                     image_callback_ ? &icon_url_ : nullptr,
+                     fallback_icon_style_.get()),
+      base::BindOnce(&LargeIconWorker::OnIconProcessingComplete, this));
 }
 
 void LargeIconWorker::OnIconProcessingComplete() {

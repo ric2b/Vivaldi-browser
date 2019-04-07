@@ -72,7 +72,7 @@ class CORE_EXPORT SpinButtonElement final : public HTMLDivElement,
   bool WillRespondToMouseMoveEvents() override;
   bool WillRespondToMouseClickEvents() override;
 
-  void ForwardEvent(Event*);
+  void ForwardEvent(Event&);
 
   void Trace(blink::Visitor*) override;
 
@@ -86,7 +86,7 @@ class CORE_EXPORT SpinButtonElement final : public HTMLDivElement,
   }
   bool MatchesReadOnlyPseudoClass() const override;
   bool MatchesReadWritePseudoClass() const override;
-  void DefaultEventHandler(Event*) override;
+  void DefaultEventHandler(Event&) override;
   void WillOpenPopup() override;
   void DoStepAction(int);
   void StartRepeatingTimer();

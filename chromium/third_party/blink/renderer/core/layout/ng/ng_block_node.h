@@ -18,6 +18,7 @@ class NGConstraintSpace;
 class NGFragmentBuilder;
 class NGLayoutResult;
 class NGPhysicalBoxFragment;
+class NGPhysicalContainerFragment;
 class NGPhysicalFragment;
 struct MinMaxSize;
 struct NGBaselineRequest;
@@ -57,7 +58,7 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
                                const MinMaxSizeInput&,
                                const NGConstraintSpace* = nullptr);
 
-  MinMaxSize ComputeMinMaxSizeFromLegacy() const;
+  MinMaxSize ComputeMinMaxSizeFromLegacy(NGMinMaxSizeType) const;
 
   NGBoxStrut GetScrollbarSizes() const;
 
@@ -96,10 +97,21 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   String ToString() const;
 
  private:
+  void PrepareForLayout();
+
+  void FinishLayout(const NGConstraintSpace&,
+                    NGBreakToken*,
+                    scoped_refptr<NGLayoutResult>);
+
   // After we run the layout algorithm, this function copies back the geometry
   // data to the layout box.
   void CopyFragmentDataToLayoutBox(const NGConstraintSpace&,
                                    const NGLayoutResult&);
+  void CopyFragmentDataToLayoutBoxForInlineChildren(
+      const NGPhysicalContainerFragment& container,
+      LayoutUnit initial_container_width,
+      bool initial_container_is_flipped,
+      NGPhysicalOffset offset = {});
   void PlaceChildrenInLayoutBox(const NGConstraintSpace&,
                                 const NGPhysicalBoxFragment&,
                                 const NGPhysicalOffset& offset_from_start);
@@ -107,6 +119,7 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
                                  const NGPhysicalBoxFragment&);
   void CopyChildFragmentPosition(
       const NGPhysicalFragment& fragment,
+      const NGPhysicalOffset& fragment_offset,
       const NGPhysicalOffset& additional_offset = NGPhysicalOffset());
 
   void CopyBaselinesFromOldLayout(const NGConstraintSpace&, NGFragmentBuilder*);

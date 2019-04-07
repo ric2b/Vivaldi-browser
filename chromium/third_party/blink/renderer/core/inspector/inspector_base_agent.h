@@ -33,6 +33,7 @@
 
 #include "third_party/blink/renderer/core/CoreProbeSink.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/inspector/inspector_session_state.h"
 #include "third_party/blink/renderer/core/inspector/protocol/Protocol.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -55,7 +56,7 @@ class CORE_EXPORT InspectorAgent
 
   virtual void Init(CoreProbeSink*,
                     protocol::UberDispatcher*,
-                    protocol::DictionaryValue*) = 0;
+                    InspectorSessionState*) = 0;
   virtual void Dispose() = 0;
 };
 
@@ -67,19 +68,13 @@ class InspectorBaseAgent : public InspectorAgent,
 
   void Init(CoreProbeSink* instrumenting_agents,
             protocol::UberDispatcher* dispatcher,
-            protocol::DictionaryValue* state) override {
+            InspectorSessionState* session_state) override {
     instrumenting_agents_ = instrumenting_agents;
     frontend_.reset(
         new typename DomainMetainfo::FrontendClass(dispatcher->channel()));
     DomainMetainfo::DispatcherClass::wire(dispatcher, this);
 
-    state_ = state->getObject(DomainMetainfo::domainName);
-    if (!state_) {
-      std::unique_ptr<protocol::DictionaryValue> new_state =
-          protocol::DictionaryValue::create();
-      state_ = new_state.get();
-      state->setObject(DomainMetainfo::domainName, std::move(new_state));
-    }
+    agent_state_.InitFrom(session_state);
   }
 
   protocol::Response disable() override { return protocol::Response::OK(); }
@@ -87,7 +82,6 @@ class InspectorBaseAgent : public InspectorAgent,
   void Dispose() override {
     disable();
     frontend_.reset();
-    state_ = nullptr;
     instrumenting_agents_ = nullptr;
   }
 
@@ -97,13 +91,13 @@ class InspectorBaseAgent : public InspectorAgent,
   }
 
  protected:
-  InspectorBaseAgent() = default;
+  InspectorBaseAgent() : agent_state_(DomainMetainfo::domainName) {}
 
   typename DomainMetainfo::FrontendClass* GetFrontend() const {
     return frontend_.get();
   }
   Member<CoreProbeSink> instrumenting_agents_;
-  protocol::DictionaryValue* state_;
+  InspectorAgentState agent_state_;
 
  private:
   std::unique_ptr<typename DomainMetainfo::FrontendClass> frontend_;

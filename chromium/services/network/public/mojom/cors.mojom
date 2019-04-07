@@ -4,6 +4,8 @@
 
 module network.mojom;
 
+// TODO(crbug.com/875759): Rename to Cors* rather than CORS*.
+
 // A policy to decide if CORS-preflight fetch should be performed.
 enum CORSPreflightPolicy {
   kConsiderPreflight,
@@ -36,6 +38,9 @@ enum CORSError {
   // Invalid value was found in Access-Control-Allow-Credentials response
   // header.
   kInvalidAllowCredentials,
+
+  // The scheme is not for CORS.
+  kCORSDisabledScheme,
 
   // Preflight:
   // Failed to check HTTP response ok status in a CORS-preflight response.
@@ -87,7 +92,6 @@ enum CORSError {
   // Not allowed by Access-Control-Allow-Headers in CORS-preflight response.
   kHeaderDisallowedByPreflightResponse,
 
-  // Redirect
-  kRedirectDisallowedScheme,
+  // Cross origin redirect location contains credentials such as 'user:pass'.
   kRedirectContainsCredentials,
 };

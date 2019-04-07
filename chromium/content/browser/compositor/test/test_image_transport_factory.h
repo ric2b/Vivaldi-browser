@@ -21,7 +21,6 @@
 #include "ui/compositor/compositor.h"
 
 namespace viz {
-class GLHelper;
 class FrameSinkManagerImpl;
 class ServerSharedBitmapManager;
 class TestFrameSinkManagerImpl;
@@ -87,7 +86,6 @@ class TestImageTransportFactory : public ui::ContextFactory,
   bool IsGpuCompositingDisabled() override;
   ui::ContextFactory* GetContextFactory() override;
   ui::ContextFactoryPrivate* GetContextFactoryPrivate() override;
-  viz::GLHelper* GetGLHelper() override;
 
  private:
   const bool enable_viz_;
@@ -98,13 +96,12 @@ class TestImageTransportFactory : public ui::ContextFactory,
   viz::RendererSettings renderer_settings_;
   viz::FrameSinkIdAllocator frame_sink_id_allocator_;
   scoped_refptr<viz::ContextProvider> shared_main_context_provider_;
-  base::ObserverList<ui::ContextFactoryObserver> observer_list_;
+  base::ObserverList<ui::ContextFactoryObserver>::Unchecked observer_list_;
   viz::HostFrameSinkManager host_frame_sink_manager_;
 
   // Objects that exist if |enable_viz_| is false.
   std::unique_ptr<viz::ServerSharedBitmapManager> shared_bitmap_manager_;
   std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_impl_;
-  std::unique_ptr<viz::GLHelper> gl_helper_;
 
   // Objects that exist if |enable_viz_| is true.
   std::unique_ptr<viz::TestFrameSinkManagerImpl> test_frame_sink_manager_impl_;

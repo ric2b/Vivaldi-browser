@@ -7,6 +7,7 @@ import("//mojo/public/tools/bindings/mojom.gni")
 mojom("mojom") {
   sources = [
     "assistant.mojom",
+    "assistant_audio_decoder.mojom",
     "constants.mojom",
     "settings.mojom",
   ]

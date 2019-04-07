@@ -62,8 +62,6 @@ jumbo_static_library("test_support") {
   sources = [
     "browser/api/declarative/test_rules_registry.cc",
     "browser/api/declarative/test_rules_registry.h",
-    "browser/api/dns/mock_host_resolver_creator.cc",
-    "browser/api/dns/mock_host_resolver_creator.h",
     "browser/api/storage/settings_test_util.cc",
     "browser/api/storage/settings_test_util.h",
     "browser/api_test_utils.cc",
@@ -145,8 +143,8 @@ jumbo_static_library("test_support") {
     "//content/test:test_support",
     "//extensions/browser",
     "//extensions/browser:test_support",
-    "//extensions/browser/api:api_registration",
     "//extensions/common",
+    "//extensions/common:core_api_provider",
     "//extensions/common/api",
     "//extensions/common/api:extensions_features",
     "//net:test_support",
@@ -229,7 +227,7 @@ test("extensions_unittests") {
   ]
 
   data_deps = [
-    "//third_party/mesa:osmesa",
+    "//third_party/mesa_headers",
   ]
 }
 
@@ -238,7 +236,7 @@ test("extensions_browsertests") {
     "//extensions/test/data/",
     "//net/tools/testserver/",
     "//third_party/pyftpdlib/",
-    "//third_party/pywebsocket/",
+    "//third_party/pywebsocket/src/mod_pywebsocket/",
     "//third_party/tlslite/",
     "$root_out_dir/extensions_shell_and_test.pak",
   ]
@@ -249,7 +247,7 @@ test("extensions_browsertests") {
   ]
 
   data_deps = [
-    "//third_party/mesa:osmesa",
+    "//third_party/mesa_headers",
   ]
 }
 

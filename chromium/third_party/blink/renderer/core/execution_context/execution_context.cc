@@ -152,7 +152,7 @@ bool ExecutionContext::DispatchErrorEventInternal(
 
   DCHECK(!in_dispatch_error_event_);
   in_dispatch_error_event_ = true;
-  target->DispatchEvent(error_event);
+  target->DispatchEvent(*error_event);
   in_dispatch_error_event_ = false;
   return error_event->defaultPrevented();
 }
@@ -257,6 +257,16 @@ void ExecutionContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(pending_exceptions_);
   ContextLifecycleNotifier::Trace(visitor);
   Supplementable<ExecutionContext>::Trace(visitor);
+}
+
+bool ExecutionContext::IsSameAgentCluster(
+    const base::UnguessableToken& other_id) const {
+  base::UnguessableToken this_id = GetAgentClusterID();
+  // If the AgentClusterID is empty then it should never be the same (e.g.
+  // currently for worklets).
+  if (this_id.is_empty() || other_id.is_empty())
+    return false;
+  return this_id == other_id;
 }
 
 }  // namespace blink

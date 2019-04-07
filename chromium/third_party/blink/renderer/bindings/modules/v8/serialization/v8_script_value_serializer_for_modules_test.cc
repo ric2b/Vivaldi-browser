@@ -157,7 +157,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripRTCCertificate) {
   V8TestingScope scope;
 
   // Make a certificate with the existing key above.
-  std::unique_ptr<WebRTCCertificate> web_certificate =
+  rtc::scoped_refptr<rtc::RTCCertificate> web_certificate =
       certificate_generator->FromPEM(
           WebString::FromUTF8(kEcdsaPrivateKey, sizeof(kEcdsaPrivateKey)),
           WebString::FromUTF8(kEcdsaCertificate, sizeof(kEcdsaCertificate)));
@@ -171,9 +171,9 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripRTCCertificate) {
   ASSERT_TRUE(V8RTCCertificate::hasInstance(result, scope.GetIsolate()));
   RTCCertificate* new_certificate =
       V8RTCCertificate::ToImpl(result.As<v8::Object>());
-  WebRTCCertificatePEM pem = new_certificate->Certificate().ToPEM();
-  EXPECT_EQ(kEcdsaPrivateKey, pem.PrivateKey());
-  EXPECT_EQ(kEcdsaCertificate, pem.Certificate());
+  rtc::RTCCertificatePEM pem = new_certificate->Certificate()->ToPEM();
+  EXPECT_EQ(kEcdsaPrivateKey, pem.private_key());
+  EXPECT_EQ(kEcdsaCertificate, pem.certificate());
 }
 
 TEST(V8ScriptValueSerializerForModulesTest, DecodeRTCCertificate) {
@@ -198,9 +198,9 @@ TEST(V8ScriptValueSerializerForModulesTest, DecodeRTCCertificate) {
   ASSERT_TRUE(V8RTCCertificate::hasInstance(result, scope.GetIsolate()));
   RTCCertificate* new_certificate =
       V8RTCCertificate::ToImpl(result.As<v8::Object>());
-  WebRTCCertificatePEM pem = new_certificate->Certificate().ToPEM();
-  EXPECT_EQ(kEcdsaPrivateKey, pem.PrivateKey());
-  EXPECT_EQ(kEcdsaCertificate, pem.Certificate());
+  rtc::RTCCertificatePEM pem = new_certificate->Certificate()->ToPEM();
+  EXPECT_EQ(kEcdsaPrivateKey, pem.private_key());
+  EXPECT_EQ(kEcdsaCertificate, pem.certificate());
 }
 
 TEST(V8ScriptValueSerializerForModulesTest, DecodeInvalidRTCCertificate) {
@@ -874,6 +874,16 @@ TEST(V8ScriptValueSerializerForModulesTest, DecodeCryptoKeyInvalid) {
                                          0x0e, 0x01, 0x01, 0x4b, 0x00, 0x00}))
           .Deserialize()
           ->IsNull());
+
+  // Public RSA key with invalid key data.
+  // The key data is a single byte (0x00), which is not a valid SPKI.
+  EXPECT_TRUE(
+      V8ScriptValueDeserializerForModules(
+          script_state, SerializedValue({0xff, 0x09, 0x3f, 0x00, 0x4b, 0x04,
+                                         0x0d, 0x01, 0x80, 0x08, 0x03, 0x01,
+                                         0x00, 0x01, 0x06, 0x11, 0x01, 0x00}))
+          .Deserialize()
+          ->IsNull());
 }
 
 TEST(V8ScriptValueSerializerForModulesTest, RoundTripDOMFileSystem) {
@@ -881,7 +891,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripDOMFileSystem) {
 
   DOMFileSystem* fs = DOMFileSystem::Create(
       scope.GetExecutionContext(), "http_example.com_0:Persistent",
-      kFileSystemTypePersistent,
+      mojom::blink::FileSystemType::kPersistent,
       KURL("filesystem:http://example.com/persistent/"));
   // At time of writing, this can only happen for filesystems from PPAPI.
   fs->MakeClonable();
@@ -891,7 +901,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripDOMFileSystem) {
   ASSERT_TRUE(V8DOMFileSystem::hasInstance(result, scope.GetIsolate()));
   DOMFileSystem* new_fs = V8DOMFileSystem::ToImpl(result.As<v8::Object>());
   EXPECT_EQ("http_example.com_0:Persistent", new_fs->name());
-  EXPECT_EQ(kFileSystemTypePersistent, new_fs->GetType());
+  EXPECT_EQ(mojom::blink::FileSystemType::kPersistent, new_fs->GetType());
   EXPECT_EQ("filesystem:http://example.com/persistent/",
             new_fs->RootURL().GetString());
 }
@@ -904,7 +914,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripDOMFileSystemNotClonable) {
 
   DOMFileSystem* fs = DOMFileSystem::Create(
       scope.GetExecutionContext(), "http_example.com_0:Persistent",
-      kFileSystemTypePersistent,
+      mojom::blink::FileSystemType::kPersistent,
       KURL("filesystem:http://example.com/persistent/0/"));
   ASSERT_FALSE(fs->Clonable());
   v8::Local<v8::Value> wrapper = ToV8(fs, scope.GetScriptState());
@@ -934,7 +944,7 @@ TEST(V8ScriptValueSerializerForModulesTest, DecodeDOMFileSystem) {
   ASSERT_TRUE(V8DOMFileSystem::hasInstance(result, scope.GetIsolate()));
   DOMFileSystem* new_fs = V8DOMFileSystem::ToImpl(result.As<v8::Object>());
   EXPECT_EQ("http_example.com_0:Persistent", new_fs->name());
-  EXPECT_EQ(kFileSystemTypePersistent, new_fs->GetType());
+  EXPECT_EQ(mojom::blink::FileSystemType::kPersistent, new_fs->GetType());
   EXPECT_EQ("filesystem:http://example.com/persistent/",
             new_fs->RootURL().GetString());
 }

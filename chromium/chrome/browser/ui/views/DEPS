@@ -1,9 +1,7 @@
 include_rules = [
  "+chrome/browser/ui/views",
- "+components/constrained_window",
  "+mash/common",
- "+services/ui/public/cpp",
- "+components/user_manager",
+ "+services/ws/public/cpp",
  "+third_party/libaddressinput",
 ]
 

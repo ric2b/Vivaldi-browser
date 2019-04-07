@@ -402,7 +402,6 @@ def interface_context(interface, interfaces):
         # Elements in attributes are broken in following members.
         'accessors': v8_attributes.filter_accessors(attributes),
         'data_attributes': v8_attributes.filter_data_attributes(attributes),
-        'lazy_data_attributes': v8_attributes.filter_lazy_data_attributes(attributes),
         'runtime_enabled_attributes': v8_attributes.filter_runtime_enabled(attributes),
     })
 
@@ -682,7 +681,8 @@ def methods_context(interface):
 
                     # void forEach(Function callback, [Default=Undefined] optional any thisArg)
                     generated_method(IdlType('void'), 'forEach',
-                                     arguments=[generated_argument(IdlType('Function'), 'callback'),
+                                     # TODO(yukishiino): |callback| should be type of Function.
+                                     arguments=[generated_argument(IdlType('CallbackFunctionTreatedAsScriptValue'), 'callback'),
                                                 generated_argument(IdlType('any'), 'thisArg',
                                                                    is_optional=True,
                                                                    extended_attributes={'Default': 'Undefined'})],

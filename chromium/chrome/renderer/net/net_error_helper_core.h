@@ -13,9 +13,14 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "components/error_page/common/error.h"
+#include "components/error_page/common/localized_error.h"
 #include "components/error_page/common/net_error_info.h"
 #include "net/base/net_errors.h"
 #include "url/gurl.h"
+
+#if defined(OS_ANDROID)
+#include "chrome/renderer/net/available_offline_content_helper.h"
+#endif
 
 namespace error_page {
 struct ErrorPageParams;
@@ -62,6 +67,8 @@ class NetErrorHelperCore {
         bool* show_saved_copy_button_shown,
         bool* show_cached_copy_button_shown,
         bool* download_button_shown,
+        error_page::LocalizedError::OfflineContentOnNetErrorFeatureState*
+            offline_content_feature_state,
         std::string* html) const = 0;
 
     // Loads the given HTML in the frame for use as an error page.
@@ -110,6 +117,14 @@ class NetErrorHelperCore {
 
     // Inform that download button is being shown in the error page.
     virtual void SetIsShowingDownloadButton(bool show) = 0;
+
+    // Signals that offline content is available.
+    virtual void OfflineContentAvailable(
+        const std::string& offline_content_json) = 0;
+
+    // Signals that offline content summary is available.
+    virtual void OfflineContentSummaryAvailable(
+        const std::string& offline_content_summary_json) = 0;
 
    protected:
     virtual ~Delegate() {}
@@ -207,6 +222,12 @@ class NetErrorHelperCore {
   // the same tracking ID are ignored.
   void TrackClick(int tracking_id);
 
+  // Opens a suggested offline item.
+  void LaunchOfflineItem(const std::string& id, const std::string& name_space);
+
+  // Shows all available offline content.
+  void LaunchDownloadsPage();
+
  private:
   struct ErrorPageInfo;
 
@@ -287,6 +308,10 @@ class NetErrorHelperCore {
   // the error page.  It is used to detect when such navigations result
   // in errors.
   Button navigation_from_button_;
+
+#if defined(OS_ANDROID)
+  AvailableOfflineContentHelper available_content_helper_;
+#endif
 };
 
 #endif  // CHROME_RENDERER_NET_NET_ERROR_HELPER_CORE_H_

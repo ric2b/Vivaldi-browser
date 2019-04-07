@@ -49,6 +49,11 @@ constexpr int kSearchRatingStarSize = 12;
 constexpr int kSearchRatingStarHorizontalSpacing = 1;
 constexpr int kSearchRatingStarVerticalSpacing = 2;
 
+// Delta applied to the font size of SearchResultTile rating.
+constexpr int kSearchRatingTextSizeDelta = 1;
+// Delta applied to the font size of SearchResultTile price.
+constexpr int kSearchPriceTextSizeDelta = 1;
+
 constexpr int kIconSelectedSize = 56;
 constexpr int kIconSelectedCornerRadius = 4;
 // Icon selected color, #000 8%.
@@ -88,11 +93,13 @@ class BadgeBackgroundImageSource : public gfx::CanvasImageSource {
 
 SearchResultTileItemView::SearchResultTileItemView(
     AppListViewDelegate* view_delegate,
-    PaginationModel* pagination_model)
+    PaginationModel* pagination_model,
+    bool show_in_apps_page)
     : view_delegate_(view_delegate),
       pagination_model_(pagination_model),
       is_play_store_app_search_enabled_(
           features::IsPlayStoreAppSearchEnabled()),
+      show_in_apps_page_(show_in_apps_page),
       weak_ptr_factory_(this) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
 
@@ -181,29 +188,60 @@ void SearchResultTileItemView::SetSearchResult(SearchResult* item) {
   SetPrice(item_->formatted_price());
 
   const gfx::FontList& font = AppListConfig::instance().app_title_font();
-  if (IsSuggestedAppTile()) {
+  if (IsSuggestedAppTileShownInAppPage()) {
     title_->SetFontList(font);
     title_->SetLineHeight(font.GetHeight());
     title_->SetEnabledColor(AppListConfig::instance().grid_title_color());
   } else {
-    DCHECK_EQ(ash::SearchResultDisplayType::kTile, item_->display_type());
     // Set solid color background to avoid broken text. See crbug.com/746563.
     if (rating_) {
       rating_->SetBackground(
           views::CreateSolidBackground(kCardBackgroundColor));
+      if (!IsSuggestedAppTile()) {
+        // App search results use different fonts than AppList apps.
+        rating_->SetFontList(
+            ui::ResourceBundle::GetSharedInstance()
+                .GetFontList(kSearchResultTitleFontStyle)
+                .DeriveWithSizeDelta(kSearchRatingTextSizeDelta));
+        rating_->SetLineHeight(rating_->font_list().GetHeight());
+      } else {
+        rating_->SetFontList(font);
+        rating_->SetLineHeight(font.GetHeight());
+      }
     }
     if (price_) {
       price_->SetBackground(views::CreateSolidBackground(kCardBackgroundColor));
+      if (!IsSuggestedAppTile()) {
+        // App search results use different fonts than AppList apps.
+        price_->SetFontList(
+            ui::ResourceBundle::GetSharedInstance()
+                .GetFontList(kSearchResultTitleFontStyle)
+                .DeriveWithSizeDelta(kSearchPriceTextSizeDelta));
+        price_->SetLineHeight(price_->font_list().GetHeight());
+      } else {
+        price_->SetFontList(font);
+        price_->SetLineHeight(font.GetHeight());
+      }
     }
     title_->SetBackground(views::CreateSolidBackground(kCardBackgroundColor));
-    title_->SetFontList(font);
-    title_->SetLineHeight(font.GetHeight());
+    if (!IsSuggestedAppTile()) {
+      // App search results use different fonts than AppList apps.
+      title_->SetFontList(
+          ui::ResourceBundle::GetSharedInstance()
+              .GetFontList(kSearchResultTitleFontStyle)
+              .DeriveWithSizeDelta(kSearchResultTitleTextSizeDelta));
+      title_->SetLineHeight(title_->font_list().GetHeight());
+    } else {
+      title_->SetFontList(font);
+      title_->SetLineHeight(font.GetHeight());
+    }
     title_->SetEnabledColor(kSearchTitleColor);
   }
 
   title_->SetMaxLines(2);
   title_->SetMultiLine(
-      item_->display_type() == ash::SearchResultDisplayType::kTile &&
+      (item_->display_type() == ash::SearchResultDisplayType::kTile ||
+       (IsSuggestedAppTile() && !show_in_apps_page_)) &&
       item_->result_type() == ash::SearchResultType::kInstalledApp);
 
   // If the new icon is null, it's being decoded asynchronously. Not updating it
@@ -280,7 +318,7 @@ void SearchResultTileItemView::OnFocus() {
       view_delegate_->GetModel()->state() == ash::AppListState::kStateApps) {
     // Go back to first page when app in suggestions container is focused.
     pagination_model_->SelectPage(0, false);
-  } else if (!IsSuggestedAppTile()) {
+  } else {
     ScrollRectToVisible(GetLocalBounds());
   }
   SetBackgroundHighlighted(true);
@@ -305,14 +343,13 @@ void SearchResultTileItemView::PaintButtonContents(gfx::Canvas* canvas) {
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
   flags.setStyle(cc::PaintFlags::kFill_Style);
-  if (IsSuggestedAppTile()) {
+  if (IsSuggestedAppTileShownInAppPage()) {
     rect.ClampToCenteredSize(AppListConfig::instance().grid_focus_size());
     flags.setColor(kGridSelectedColor);
     canvas->DrawRoundRect(gfx::RectF(rect),
                           AppListConfig::instance().grid_focus_corner_radius(),
                           flags);
   } else {
-    DCHECK(item_->display_type() == ash::SearchResultDisplayType::kTile);
     const int kLeftRightPadding = (rect.width() - kIconSelectedSize) / 2;
     rect.Inset(kLeftRightPadding, 0);
     rect.set_height(kIconSelectedSize);
@@ -435,6 +472,7 @@ void SearchResultTileItemView::SetBadgeIcon(const gfx::ImageSkia& badge_icon) {
 
 void SearchResultTileItemView::SetTitle(const base::string16& title) {
   title_->SetText(title);
+  title_->NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
 }
 
 void SearchResultTileItemView::SetRating(float rating) {
@@ -492,6 +530,10 @@ bool SearchResultTileItemView::IsSuggestedAppTile() const {
          item_->display_type() == ash::SearchResultDisplayType::kRecommendation;
 }
 
+bool SearchResultTileItemView::IsSuggestedAppTileShownInAppPage() const {
+  return IsSuggestedAppTile() && show_in_apps_page_;
+}
+
 void SearchResultTileItemView::LogAppLaunch() const {
   // Only log the app launch if the class is being used as a suggested app.
   if (!IsSuggestedAppTile())
@@ -515,13 +557,12 @@ void SearchResultTileItemView::Layout() {
   if (rect.IsEmpty() || !item_)
     return;
 
-  if (IsSuggestedAppTile()) {
+  if (IsSuggestedAppTileShownInAppPage()) {
     icon_->SetBoundsRect(AppListItemView::GetIconBoundsForTargetViewBounds(
         rect, icon_->GetImage().size()));
     title_->SetBoundsRect(AppListItemView::GetTitleBoundsForTargetViewBounds(
         rect, title_->GetPreferredSize()));
   } else {
-    DCHECK(item_->display_type() == ash::SearchResultDisplayType::kTile);
     rect.Inset(0, kSearchTileTopPadding, 0, 0);
     icon_->SetBoundsRect(rect);
 
@@ -582,12 +623,11 @@ gfx::Size SearchResultTileItemView::CalculatePreferredSize() const {
   if (!item_)
     return gfx::Size();
 
-  if (IsSuggestedAppTile()) {
+  if (IsSuggestedAppTileShownInAppPage()) {
     return gfx::Size(AppListConfig::instance().grid_tile_width(),
                      AppListConfig::instance().grid_tile_height());
   }
 
-  DCHECK(item_->display_type() == ash::SearchResultDisplayType::kTile);
   return gfx::Size(kSearchTileWidth, kSearchTileHeight);
 }
 

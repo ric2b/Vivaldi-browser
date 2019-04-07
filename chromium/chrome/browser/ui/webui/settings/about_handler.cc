@@ -20,7 +20,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -30,14 +30,14 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/upgrade_detector.h"
+#include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/policy_constants.h"
 #include "components/strings/grit/components_chromium_strings.h"
@@ -284,11 +284,9 @@ AboutHandler* AboutHandler::Create(content::WebUIDataSource* html_source,
                                         ? IDS_VERSION_UI_OFFICIAL
                                         : IDS_VERSION_UI_UNOFFICIAL),
           base::UTF8ToUTF16(chrome::GetChannelName()),
-#if defined(ARCH_CPU_64_BITS)
-          l10n_util::GetStringUTF16(IDS_VERSION_UI_64BIT)));
-#else
-          l10n_util::GetStringUTF16(IDS_VERSION_UI_32BIT)));
-#endif
+          l10n_util::GetStringUTF16(sizeof(void*) == 8
+                                        ? IDS_VERSION_UI_64BIT
+                                        : IDS_VERSION_UI_32BIT)));
 
   html_source->AddString(
       "aboutProductCopyright",

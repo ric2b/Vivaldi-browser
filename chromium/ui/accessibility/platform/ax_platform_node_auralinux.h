@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef UI_ACCESSIBILITY_AX_PLATFORM_NODE_AURALINUX_H_
-#define UI_ACCESSIBILITY_AX_PLATFORM_NODE_AURALINUX_H_
+#ifndef UI_ACCESSIBILITY_PLATFORM_AX_PLATFORM_NODE_AURALINUX_H_
+#define UI_ACCESSIBILITY_PLATFORM_AX_PLATFORM_NODE_AURALINUX_H_
 
 #include <atk/atk.h>
+
+#include <string>
 
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
@@ -57,6 +59,7 @@ class AXPlatformNodeAuraLinux : public AXPlatformNodeBase {
   bool GrabFocus();
   bool DoDefaultAction();
   const gchar* GetDefaultActionName();
+  AtkAttributeSet* GetAtkAttributes();
 
   void SetExtentsRelativeToAtkCoordinateType(
       gint* x, gint* y, gint* width, gint* height,
@@ -82,6 +85,17 @@ class AXPlatformNodeAuraLinux : public AXPlatformNodeBase {
   // AXPlatformNodeBase overrides.
   void Init(AXPlatformNodeDelegate* delegate) override;
   int GetIndexInParent() override;
+
+  std::string GetTextForATK();
+
+  AX_EXPORT void UpdateHypertext();
+
+ protected:
+  AXHypertext hypertext_;
+
+  void AddAttributeToList(const char* name,
+                          const char* value,
+                          PlatformAttributeList* attributes) override;
 
  private:
   enum AtkInterfaces {
@@ -124,4 +138,4 @@ class AXPlatformNodeAuraLinux : public AXPlatformNodeBase {
 
 }  // namespace ui
 
-#endif  // UI_ACCESSIBILITY_AX_PLATFORM_NODE_AURALINUX_H_
+#endif  // UI_ACCESSIBILITY_PLATFORM_AX_PLATFORM_NODE_AURALINUX_H_

@@ -16,7 +16,7 @@
 #include "sql/statement.h"
 
 namespace sql {
-class Connection;
+class Database;
 }
 
 namespace calendar {
@@ -44,7 +44,7 @@ class RecurrrenceTable {
   bool DeleteRecurrence(RecurrenceID recurrence_id);
 
  protected:
-  virtual sql::Connection& GetDB() = 0;
+  virtual sql::Database& GetDB() = 0;
   void FillRecurrenceRow(const sql::Statement& statement,
                          RecurrenceRow* recurrence_row);
 

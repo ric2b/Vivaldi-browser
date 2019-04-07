@@ -43,6 +43,7 @@
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fetch/global_fetch.h"
+#include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/worker_inspector_controller.h"
@@ -135,8 +136,7 @@ void ServiceWorkerGlobalScope::EvaluateClassicScript(
     InstalledScriptsManager::ScriptStatus status =
         installed_scripts_manager->GetScriptData(script_url, &script_data);
     if (status == InstalledScriptsManager::ScriptStatus::kFailed) {
-      // This eventually terminates the worker thread.
-      ReportingProxy().DidEvaluateClassicScript(false);
+      close();
       return;
     }
 
@@ -159,10 +159,7 @@ void ServiceWorkerGlobalScope::EvaluateClassicScript(
         script_data.CreateOriginTrialTokens();
     OriginTrialContext::AddTokens(this, origin_trial_tokens.get());
 
-    // This may block until CSP and referrer policy are set on the main
-    // thread.
-    ReportingProxy().DidLoadInstalledScript(
-        content_security_policy_raw_headers.value(), referrer_policy);
+    ReportingProxy().DidLoadInstalledScript();
   }
 
   WorkerGlobalScope::EvaluateClassicScript(script_url, source_code,
@@ -290,7 +287,7 @@ void ServiceWorkerGlobalScope::DispatchExtendableEvent(
     Event* event,
     WaitUntilObserver* observer) {
   observer->WillDispatchEvent();
-  DispatchEvent(event);
+  DispatchEvent(*event);
 
   // Check if the worker thread is forcibly terminated during the event
   // because of timeout etc.
@@ -303,7 +300,7 @@ void ServiceWorkerGlobalScope::DispatchExtendableEventWithRespondWith(
     RespondWithObserver* respond_with_observer) {
   wait_until_observer->WillDispatchEvent();
   respond_with_observer->WillDispatchEvent();
-  DispatchEventResult dispatch_result = DispatchEvent(event);
+  DispatchEventResult dispatch_result = DispatchEvent(*event);
   respond_with_observer->DidDispatchEvent(dispatch_result);
   // false is okay because waitUntil() for events with respondWith() doesn't
   // care about the promise rejection or an uncaught runtime script error.
@@ -331,6 +328,8 @@ void ServiceWorkerGlobalScope::importScripts(const Vector<String>& urls,
         !installed_scripts_manager->IsScriptInstalled(completed_url)) {
       DCHECK(installed_scripts_manager->IsScriptInstalled(Url()));
       CountFeature(WebFeature::kServiceWorkerImportScriptNotInstalled);
+      Deprecation::CountDeprecation(
+          this, WebFeature::kServiceWorkerImportScriptNotInstalled);
     }
     // Bust the MemoryCache to ensure script requests reach the browser-side
     // and get added to and retrieved from the ServiceWorker's script cache.

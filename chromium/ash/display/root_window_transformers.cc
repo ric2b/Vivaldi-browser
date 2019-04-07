@@ -36,21 +36,22 @@ gfx::Transform CreateRootWindowRotationTransform(
     const display::Display& display) {
   display::ManagedDisplayInfo info =
       Shell::Get()->display_manager()->GetDisplayInfo(display.id());
+  gfx::SizeF size(display.GetSizeInPixel());
+  // Use SizeF so that the origin of translated layer will be
+  // aligned when scaled back at pixels.
+  size.Scale(1.f / display.device_scale_factor());
   return CreateRotationTransform(display::Display::ROTATE_0,
-                                 info.GetActiveRotation(), display.bounds());
+                                 info.GetActiveRotation(), size);
 }
 
 gfx::Transform CreateInsetsAndScaleTransform(const gfx::Insets& insets,
-                                             float device_scale_factor,
-                                             float ui_scale) {
+                                             float device_scale_factor) {
   gfx::Transform transform;
   if (insets.top() != 0 || insets.left() != 0) {
     float x_offset = insets.left() / device_scale_factor;
     float y_offset = insets.top() / device_scale_factor;
     transform.Translate(x_offset, y_offset);
   }
-  float inverted_scale = 1.0f / ui_scale;
-  transform.Scale(inverted_scale, inverted_scale);
   return transform;
 }
 
@@ -70,11 +71,9 @@ class AshRootWindowTransformer : public RootWindowTransformer {
     display::ManagedDisplayInfo info =
         display_manager->GetDisplayInfo(display.id());
     host_insets_ = info.GetOverscanInsetsInPixel();
-    root_window_ui_scale_ = info.GetEffectiveUIScale();
     root_window_bounds_transform_ =
         CreateInsetsAndScaleTransform(host_insets_,
-                                      display.device_scale_factor(),
-                                      root_window_ui_scale_) *
+                                      display.device_scale_factor()) *
         CreateRootWindowRotationTransform(root, display);
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kAshEnableMirroredScreen)) {
@@ -104,11 +103,6 @@ class AshRootWindowTransformer : public RootWindowTransformer {
     bounds = ui::ConvertRectToDIP(root_window_->layer(), bounds);
     gfx::RectF new_bounds(bounds);
     root_window_bounds_transform_.TransformRect(&new_bounds);
-    // Apply |root_window_scale_| twice as the downscaling
-    // is already applied once in |SetTransformInternal()|.
-    // TODO(oshima): This is a bit ugly. Consider specifying
-    // the pseudo host resolution instead.
-    new_bounds.Scale(root_window_ui_scale_ * root_window_ui_scale_);
     // Ignore the origin because RootWindow's insets are handled by
     // the transform.
     // Floor the size because the bounds is no longer aligned to
@@ -133,10 +127,6 @@ class AshRootWindowTransformer : public RootWindowTransformer {
   // The transform of the root window bounds. This is used to calculate
   // the size of root window.
   gfx::Transform root_window_bounds_transform_;
-
-  // The scale of the root window. See |display_info::ui_scale_|
-  // for more info.
-  float root_window_ui_scale_;
 
   gfx::Insets host_insets_;
 
@@ -165,9 +155,9 @@ class MirrorRootWindowTransformer : public RootWindowTransformer {
     if (should_undo_rotation) {
       // Calculate the transform to undo the rotation and apply it to the
       // source display.
-      rotation_transform =
-          CreateRotationTransform(source_display_info.GetActiveRotation(),
-                                  display::Display::ROTATE_0, root_bounds_);
+      rotation_transform = CreateRotationTransform(
+          source_display_info.GetActiveRotation(), display::Display::ROTATE_0,
+          gfx::SizeF(root_bounds_.size()));
       gfx::RectF rotated_bounds(root_bounds_);
       rotation_transform.TransformRect(&rotated_bounds);
       root_bounds_ = gfx::ToNearestRect(rotated_bounds);

@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "chromecast/base/bind_to_task_runner.h"
+#include "chromecast/device/bluetooth/bluetooth_util.h"
 #include "chromecast/device/bluetooth/le/gatt_client_manager_impl.h"
 #include "chromecast/device/bluetooth/le/remote_characteristic_impl.h"
 #include "chromecast/device/bluetooth/le/remote_descriptor_impl.h"
@@ -50,6 +51,9 @@ namespace bluetooth {
     EXEC_CB_AND_RET(cb, ret);             \
   } while (0)
 
+// static
+constexpr base::TimeDelta RemoteDeviceImpl::kCommandTimeout;
+
 RemoteDeviceImpl::RemoteDeviceImpl(
     const bluetooth_v2_shlib::Addr& addr,
     base::WeakPtr<GattClientManagerImpl> gatt_client_manager,
@@ -75,6 +79,8 @@ void RemoteDeviceImpl::Connect(StatusCallback cb) {
 
 bool RemoteDeviceImpl::ConnectSync() {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
+  LOG(INFO) << "Connect(" << util::AddrLastByteString(addr_) << ")";
+
   if (!gatt_client_manager_) {
     LOG(ERROR) << __func__ << " failed: Destroyed";
     return false;
@@ -85,11 +91,10 @@ bool RemoteDeviceImpl::ConnectSync() {
   }
 
   gatt_client_manager_->NotifyConnect(addr_);
-  if (!gatt_client_manager_->gatt_client()->Connect(addr_)) {
-    LOG(ERROR) << __func__ << " failed";
-    return false;
-  }
+
   connect_pending_ = true;
+  gatt_client_manager_->EnqueueConnectRequest(addr_);
+
   return true;
 }
 
@@ -105,6 +110,7 @@ void RemoteDeviceImpl::Disconnect(StatusCallback cb) {
 
 bool RemoteDeviceImpl::DisconnectSync() {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
+  LOG(INFO) << "Disconnect(" << util::AddrLastByteString(addr_) << ")";
   if (!gatt_client_manager_) {
     LOG(ERROR) << __func__ << " failed: Destroyed";
     return false;
@@ -135,16 +141,16 @@ void RemoteDeviceImpl::ReadRemoteRssi(RssiCallback cb) {
     LOG(ERROR) << "Read remote RSSI already pending";
     EXEC_CB_AND_RET(cb, false, 0);
   }
-  if (!gatt_client_manager_->gatt_client()->ReadRemoteRssi(addr_)) {
-    LOG(ERROR) << __func__ << " failed";
-    EXEC_CB_AND_RET(cb, false, 0);
-  }
+
   rssi_pending_ = true;
   rssi_cb_ = std::move(cb);
+  gatt_client_manager_->EnqueueReadRemoteRssiRequest(addr_);
 }
 
 void RemoteDeviceImpl::RequestMtu(int mtu, StatusCallback cb) {
   MAKE_SURE_IO_THREAD(RequestMtu, mtu, BindToCurrentSequence(std::move(cb)));
+  LOG(INFO) << "RequestMtu(" << util::AddrLastByteString(addr_) << ", " << mtu
+            << ")";
   DCHECK(cb);
   if (!gatt_client_manager_) {
     LOG(ERROR) << __func__ << " failed: Destroyed";
@@ -153,7 +159,7 @@ void RemoteDeviceImpl::RequestMtu(int mtu, StatusCallback cb) {
   CHECK_CONNECTED(cb);
   mtu_callbacks_.push(std::move(cb));
   EnqueueOperation(
-      base::BindOnce(&RemoteDeviceImpl::RequestMtuImpl, this, mtu));
+      __func__, base::BindOnce(&RemoteDeviceImpl::RequestMtuImpl, this, mtu));
 }
 
 void RemoteDeviceImpl::ConnectionParameterUpdate(int min_interval,
@@ -163,6 +169,9 @@ void RemoteDeviceImpl::ConnectionParameterUpdate(int min_interval,
                                                  StatusCallback cb) {
   MAKE_SURE_IO_THREAD(ConnectionParameterUpdate, min_interval, max_interval,
                       latency, timeout, BindToCurrentSequence(std::move(cb)));
+  LOG(INFO) << "ConnectionParameterUpdate(" << util::AddrLastByteString(addr_)
+            << ", " << min_interval << ", " << max_interval << ", " << latency
+            << ", " << timeout << ")";
   if (!gatt_client_manager_) {
     LOG(ERROR) << __func__ << " failed: Destroyed";
     EXEC_CB_AND_RET(cb, false);
@@ -219,8 +228,9 @@ void RemoteDeviceImpl::ReadCharacteristic(
   handle_to_characteristic_read_cbs_[characteristic->handle()].push(
       std::move(cb));
 
-  EnqueueOperation(base::BindOnce(&RemoteDeviceImpl::ReadCharacteristicImpl,
-                                  this, std::move(characteristic), auth_req));
+  EnqueueOperation(
+      __func__, base::BindOnce(&RemoteDeviceImpl::ReadCharacteristicImpl, this,
+                               std::move(characteristic), auth_req));
 }
 
 void RemoteDeviceImpl::WriteCharacteristic(
@@ -232,9 +242,10 @@ void RemoteDeviceImpl::WriteCharacteristic(
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   handle_to_characteristic_write_cbs_[characteristic->handle()].push(
       std::move(cb));
-  EnqueueOperation(base::BindOnce(&RemoteDeviceImpl::WriteCharacteristicImpl,
-                                  this, std::move(characteristic), auth_req,
-                                  write_type, std::move(value)));
+  EnqueueOperation(
+      __func__, base::BindOnce(&RemoteDeviceImpl::WriteCharacteristicImpl, this,
+                               std::move(characteristic), auth_req, write_type,
+                               std::move(value)));
 }
 
 void RemoteDeviceImpl::ReadDescriptor(
@@ -244,7 +255,8 @@ void RemoteDeviceImpl::ReadDescriptor(
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   handle_to_descriptor_read_cbs_[descriptor->handle()].push(std::move(cb));
 
-  EnqueueOperation(base::BindOnce(&RemoteDeviceImpl::ReadDescriptorImpl, this,
+  EnqueueOperation(__func__,
+                   base::BindOnce(&RemoteDeviceImpl::ReadDescriptorImpl, this,
                                   std::move(descriptor), auth_req));
 }
 
@@ -255,9 +267,10 @@ void RemoteDeviceImpl::WriteDescriptor(
     RemoteDescriptor::StatusCallback cb) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   handle_to_descriptor_write_cbs_[descriptor->handle()].push(std::move(cb));
-  EnqueueOperation(base::BindOnce(&RemoteDeviceImpl::WriteDescriptorImpl, this,
-                                  std::move(descriptor), auth_req,
-                                  std::move(value)));
+  EnqueueOperation(
+      __func__,
+      base::BindOnce(&RemoteDeviceImpl::WriteDescriptorImpl, this,
+                     std::move(descriptor), auth_req, std::move(value)));
 }
 
 scoped_refptr<RemoteService> RemoteDeviceImpl::GetServiceByUuidSync(
@@ -443,7 +456,7 @@ void RemoteDeviceImpl::OnReadRemoteRssiComplete(bool status, int rssi) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   rssi_pending_ = false;
   if (rssi_cb_) {
-    std::move(rssi_cb_).Run(true, rssi);
+    std::move(rssi_cb_).Run(status, rssi);
   }
 }
 
@@ -457,14 +470,15 @@ void RemoteDeviceImpl::ConnectComplete(bool success) {
   }
 }
 
-void RemoteDeviceImpl::EnqueueOperation(base::OnceClosure op) {
+void RemoteDeviceImpl::EnqueueOperation(const std::string& name,
+                                        base::OnceClosure op) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
-  command_queue_.push_back(std::move(op));
+  command_queue_.emplace_back(name, std::move(op));
 
   // Run the operation if this is the only operation in the queue. Otherwise, it
   // will be executed when the current operation completes.
   if (command_queue_.size() == 1) {
-    std::move(command_queue_.front()).Run();
+    RunNextOperation();
   }
 }
 
@@ -472,11 +486,23 @@ void RemoteDeviceImpl::NotifyQueueOperationComplete() {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   DCHECK(!command_queue_.empty());
   command_queue_.pop_front();
+  command_timeout_timer_.Stop();
 
   // Run the next operation if there is one in the queue.
   if (!command_queue_.empty()) {
-    std::move(command_queue_.front()).Run();
+    RunNextOperation();
   }
+}
+
+void RemoteDeviceImpl::RunNextOperation() {
+  DCHECK(io_task_runner_->BelongsToCurrentThread());
+  DCHECK(!command_queue_.empty());
+  auto& front = command_queue_.front();
+  command_timeout_timer_.Start(
+      FROM_HERE, kCommandTimeout,
+      base::BindRepeating(&RemoteDeviceImpl::OnCommandTimeout, this,
+                          front.first));
+  std::move(front.second).Run();
 }
 
 void RemoteDeviceImpl::RequestMtuImpl(int mtu) {
@@ -576,6 +602,7 @@ void RemoteDeviceImpl::ClearServices() {
   uuid_to_service_.clear();
   handle_to_characteristic_.clear();
   command_queue_.clear();
+  command_timeout_timer_.Stop();
 
   while (!mtu_callbacks_.empty()) {
     LOG(ERROR) << "RequestMtu failed: disconnected";
@@ -622,6 +649,13 @@ void RemoteDeviceImpl::ClearServices() {
     }
   }
   handle_to_descriptor_write_cbs_.clear();
+}
+
+void RemoteDeviceImpl::OnCommandTimeout(const std::string& name) {
+  DCHECK(io_task_runner_->BelongsToCurrentThread());
+  LOG(ERROR) << name << "(" << util::AddrLastByteString(addr_) << ")"
+             << " timed out. Disconnecting";
+  Disconnect(base::DoNothing());
 }
 
 }  // namespace bluetooth

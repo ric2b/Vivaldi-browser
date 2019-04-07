@@ -15,9 +15,8 @@
 #include "chrome/browser/shell_integration_win.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/views/apps/glass_app_window_frame_view_win.h"
-#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
-#include "chrome/browser/web_applications/web_app.h"
-#include "chrome/browser/web_applications/web_app_win.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_shortcut.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -82,7 +81,7 @@ void VivaldiNativeAppWindowViewsWin::InitializeDefaultWindow(
   vivaldi::StartPinShortcutToTaskbar(window());
 
   std::string app_name =
-      web_app::GenerateApplicationNameFromExtensionId(extension->id());
+      web_app::GenerateApplicationNameFromAppId(extension->id());
   base::string16 app_name_wide = base::UTF8ToWide(app_name);
   HWND hwnd = GetNativeAppWindowHWND();
   Profile* profile = window()->GetProfile();

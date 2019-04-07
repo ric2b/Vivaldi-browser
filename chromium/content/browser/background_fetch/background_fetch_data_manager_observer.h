@@ -5,8 +5,16 @@
 #ifndef CONTENT_BROWSER_BACKGROUND_FETCH_BACKGROUND_FETCH_DATA_MANAGER_OBSERVER_H_
 #define CONTENT_BROWSER_BACKGROUND_FETCH_BACKGROUND_FETCH_DATA_MANAGER_OBSERVER_H_
 
+#include <memory>
+
+#include "base/optional.h"
+
+class SkBitmap;
+
 namespace content {
 
+struct BackgroundFetchOptions;
+struct BackgroundFetchRegistration;
 class BackgroundFetchRegistrationId;
 
 // Observer interface for objects that would like to be notified about changes
@@ -14,14 +22,27 @@ class BackgroundFetchRegistrationId;
 // will be invoked on the IO thread.
 class BackgroundFetchDataManagerObserver {
  public:
-  // Called when the |title| for the Background Fetch |registration_id| has been
-  // updated in the data store.
+  // Called when the Background Fetch |registration| has been created.
+  virtual void OnRegistrationCreated(
+      const BackgroundFetchRegistrationId& registration_id,
+      const BackgroundFetchRegistration& registration,
+      const BackgroundFetchOptions& options,
+      const SkBitmap& icon,
+      int num_requests) = 0;
+
+  // Called when the UI options for the Background Fetch |registration_id| have
+  // been updated in the data store.
   virtual void OnUpdatedUI(const BackgroundFetchRegistrationId& registration_id,
-                           const std::string& title) = 0;
+                           const base::Optional<std::string>& title,
+                           const base::Optional<SkBitmap>& icon) = 0;
 
   // Called if corrupted data is found in the Service Worker database.
   virtual void OnServiceWorkerDatabaseCorrupted(
       int64_t service_worker_registration_id) = 0;
+
+  // Called if the origin is out of quota during the fetch.
+  virtual void OnQuotaExceeded(
+      const BackgroundFetchRegistrationId& registration_id) = 0;
 
   virtual ~BackgroundFetchDataManagerObserver() {}
 };

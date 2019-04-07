@@ -105,10 +105,10 @@ bool HTMLFormElement::IsValidElement() {
 }
 
 Node::InsertionNotificationRequest HTMLFormElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   HTMLElement::InsertedInto(insertion_point);
   LogAddElementIfIsolatedWorldAndInDocument("form", methodAttr, actionAttr);
-  if (insertion_point->isConnected())
+  if (insertion_point.isConnected())
     GetDocument().DidAssociateFormControl(this);
   return kInsertionDone;
 }
@@ -119,7 +119,7 @@ void NotifyFormRemovedFromTree(const T& elements, Node& root) {
     element->FormRemovedFromTree(root);
 }
 
-void HTMLFormElement::RemovedFrom(ContainerNode* insertion_point) {
+void HTMLFormElement::RemovedFrom(ContainerNode& insertion_point) {
   // We don't need to take care of form association by 'form' content
   // attribute becuse IdTargetObserver handles it.
   if (has_elements_associated_by_parser_) {
@@ -130,7 +130,7 @@ void HTMLFormElement::RemovedFrom(ContainerNode* insertion_point) {
     } else {
       ListedElement::List elements;
       CollectListedElements(
-          NodeTraversal::HighestAncestorOrSelf(*insertion_point), elements);
+          NodeTraversal::HighestAncestorOrSelf(insertion_point), elements);
       NotifyFormRemovedFromTree(elements, root);
       CollectListedElements(root, elements);
       NotifyFormRemovedFromTree(elements, root);
@@ -142,7 +142,7 @@ void HTMLFormElement::RemovedFrom(ContainerNode* insertion_point) {
     } else {
       HeapVector<Member<HTMLImageElement>> images;
       CollectImageElements(
-          NodeTraversal::HighestAncestorOrSelf(*insertion_point), images);
+          NodeTraversal::HighestAncestorOrSelf(insertion_point), images);
       NotifyFormRemovedFromTree(images, root);
       CollectImageElements(root, images);
       NotifyFormRemovedFromTree(images, root);
@@ -177,7 +177,7 @@ HTMLElement* HTMLFormElement::item(unsigned index) {
   return elements()->item(index);
 }
 
-void HTMLFormElement::SubmitImplicitly(Event* event,
+void HTMLFormElement::SubmitImplicitly(Event& event,
                                        bool from_implicit_submission_trigger) {
   int submission_trigger_count = 0;
   bool seen_default_button = false;
@@ -189,7 +189,7 @@ void HTMLFormElement::SubmitImplicitly(Event* event,
       if (from_implicit_submission_trigger)
         seen_default_button = true;
       if (control->IsSuccessfulSubmitButton()) {
-        control->DispatchSimulatedClick(event);
+        control->DispatchSimulatedClick(&event);
         return;
       }
       if (from_implicit_submission_trigger) {
@@ -249,7 +249,7 @@ bool HTMLFormElement::ValidateInteractively() {
 }
 
 void HTMLFormElement::PrepareForSubmission(
-    Event* event,
+    Event& event,
     HTMLFormControlElement* submit_button) {
   LocalFrame* frame = GetDocument().GetFrame();
   if (!frame || is_submitting_ || in_user_js_submit_event_)
@@ -289,14 +289,13 @@ void HTMLFormElement::PrepareForSubmission(
                 "the end of the file. Please add an explicit end tag "
                 "('</" +
                 tag_name + ">')"));
-        DispatchEvent(Event::Create(EventTypeNames::error));
+        DispatchEvent(*Event::Create(EventTypeNames::error));
         return;
       }
     }
   }
 
   bool skip_validation = !GetDocument().GetPage() || NoValidate();
-  DCHECK(event);
   if (submit_button && submit_button->FormNoValidate())
     skip_validation = true;
 
@@ -311,12 +310,12 @@ void HTMLFormElement::PrepareForSubmission(
                                                      true);
     frame->Client()->DispatchWillSendSubmitEvent(this);
     should_submit =
-        DispatchEvent(Event::CreateCancelableBubble(EventTypeNames::submit)) ==
+        DispatchEvent(*Event::CreateCancelableBubble(EventTypeNames::submit)) ==
         DispatchEventResult::kNotCanceled;
   }
   if (should_submit) {
     planned_navigation_ = nullptr;
-    Submit(event, submit_button);
+    Submit(&event, submit_button);
   }
   if (!planned_navigation_)
     return;
@@ -409,7 +408,7 @@ void HTMLFormElement::ConstructFormDataSet(
   // TODO(tkent): We might move the event dispatching later than the
   // ListedElements iteration.
   if (RuntimeEnabledFeatures::FormDataEventEnabled())
-    DispatchEvent(FormDataEvent::Create(form_data));
+    DispatchEvent(*FormDataEvent::Create(form_data));
 
   if (submit_button)
     submit_button->SetActivatedSubmit(true);
@@ -502,7 +501,7 @@ void HTMLFormElement::reset() {
 
   is_in_reset_function_ = true;
 
-  if (DispatchEvent(Event::CreateCancelableBubble(EventTypeNames::reset)) !=
+  if (DispatchEvent(*Event::CreateCancelableBubble(EventTypeNames::reset)) !=
       DispatchEventResult::kNotCanceled) {
     is_in_reset_function_ = false;
     return;

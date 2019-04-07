@@ -9,6 +9,7 @@
 <translation id="1293699935367580298">Esc</translation>
 <translation id="1306549533752902673">РЕКОМЕНДУЕМЫЕ ПРИЛОЖЕНИЯ</translation>
 <translation id="1368832886055348810">Слева направо</translation>
+<translation id="1383876407941801731">Поиск</translation>
 <translation id="1398853756734560583">Развернуть</translation>
 <translation id="1413622004203049571">Отключить уведомления от <ph name="NOTIFIER_NAME" /></translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 минута }one{# минута }few{# минуты }many{# минут }other{# минуты }}</translation>
@@ -40,6 +41,7 @@
 <translation id="24452542372838207">Развернуть уведомление</translation>
 <translation id="2482878487686419369">Уведомления</translation>
 <translation id="2497284189126895209">Все файлы</translation>
+<translation id="2515586267016047495">Alt</translation>
 <translation id="2522350507219695259">Калибровка завершена</translation>
 <translation id="252373100621549798">Неизвестный дисплей</translation>
 <translation id="2583543531130364912">Откалибруйте сенсорный экран</translation>
@@ -63,6 +65,7 @@
 <translation id="3660179305079774227">Стрелка вверх</translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> ГБ/с</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> ГБ</translation>
+<translation id="3842239759367498783">Продолжить чтение с мобильного устройства "<ph name="TITLE" />"</translation>
 <translation id="385051799172605136">Назад</translation>
 <translation id="3889424535448813030">Стрелка вправо</translation>
 <translation id="3892641579809465218">Встроенный дисплей</translation>
@@ -78,14 +81,12 @@
 <translation id="4724120544754982507">Центр уведомлений. Непрочитанных: <ph name="UNREAD_NOTIFICATION_COUNT" />.</translation>
 <translation id="4730374152663651037">ЧАСТО ИСПОЛЬЗУЕМЫЕ</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{остался 1 месяц}one{остался # месяц}few{осталось # месяца}many{осталось # месяцев}other{осталось # месяца}}</translation>
-<translation id="4820616160060340806">Command + <ph name="KEY_COMBO_NAME" /></translation>
 <translation id="4841881773802181781">Вставка</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 секунда}one{# секунда}few{# секунды}many{# секунд}other{# секунды}}</translation>
 <translation id="4971687151119236543">Предыдущий трек</translation>
-<translation id="4999762576397546063">Ctrl+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="5046499563572181734">Нажмите здесь</translation>
 <translation id="5076340679995252485">&amp;Вставить</translation>
-<translation id="5120799197269191491">Поиск + <ph name="KEY_COMBO_NAME" /></translation>
+<translation id="5137751499640340777">Запустить Google Ассистента</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> ПБ</translation>
 <translation id="5266161281976477809">Треугольник развертывания</translation>
 <translation id="528468243742722775">Завершить</translation>
@@ -100,7 +101,6 @@
 <translation id="5906667377645263094">{SECONDS,plural, =1{Осталась 1 секунда}one{Осталась # секунда}few{Осталось # секунды}many{Осталось # секунд}other{Осталось # секунды}}</translation>
 <translation id="5941711191222866238">Свернуть</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 час}one{# час}few{# часа}many{# часов}other{# часа}}</translation>
-<translation id="5948410903763073882">Alt+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="6012623610530968780">Страница <ph name="SELECTED_PAGE" /> из <ph name="TOTAL_PAGE_NUM" /></translation>
 <translation id="6022924867608035986">Удалить текст из окна поиска</translation>
 <translation id="6040143037577758943">Закрыть</translation>
@@ -149,6 +149,8 @@
 <translation id="7814458197256864873">&amp;Копировать</translation>
 <translation id="7879499977785298635">Не блокировать</translation>
 <translation id="7907591526440419938">Открытие файла</translation>
+<translation id="7969046989155602842">Command</translation>
+<translation id="8087772101393322318"><ph name="KEY_MODIFIER_NAME" /> + <ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{1 час назад}one{# час назад}few{# часа назад}many{# часов назад}other{# часа назад}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{Осталась 1 сек.}one{Осталась # сек.}few{Осталось # сек.}many{Осталось # сек.}other{Осталось # сек.}}</translation>
 <translation id="815598010540052116">Прокрутка вниз</translation>
@@ -161,7 +163,6 @@
 <translation id="838869780401515933">поставить галочку</translation>
 <translation id="8393700583063109961">Отправить сообщение</translation>
 <translation id="8394908167088220973">Воспроизведение/пауза</translation>
-<translation id="8400147561352026160">Shift+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8458811141851741261">{YEARS,plural, =1{1 г.}one{# г.}few{# г.}many{# л.}other{# г.}}</translation>
 <translation id="8602707065186045623">Файл <ph name="SAVEAS_EXTENSION_TYPE" /> (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> КБ/с</translation>

@@ -33,7 +33,7 @@
 namespace blink {
 
 class Element;
-class LayoutObject;
+class LayoutText;
 class LayoutTextFragment;
 
 class CORE_EXPORT FirstLetterPseudoElement final : public PseudoElement {
@@ -44,7 +44,7 @@ class CORE_EXPORT FirstLetterPseudoElement final : public PseudoElement {
 
   ~FirstLetterPseudoElement() override;
 
-  static LayoutObject* FirstLetterTextLayoutObject(const Element&);
+  static LayoutText* FirstLetterTextLayoutObject(const Element&);
   static unsigned FirstLetterLength(const String&);
 
   void SetRemainingTextLayoutObject(LayoutTextFragment*);
@@ -60,10 +60,10 @@ class CORE_EXPORT FirstLetterPseudoElement final : public PseudoElement {
  private:
   explicit FirstLetterPseudoElement(Element*);
 
+  scoped_refptr<ComputedStyle> CustomStyleForLayoutObject() override;
   void DidRecalcStyle(StyleRecalcChange) override;
 
-  void AttachFirstLetterTextLayoutObjects();
-  ComputedStyle* StyleForFirstLetter(LayoutObject*);
+  void AttachFirstLetterTextLayoutObjects(LayoutText* first_letter_text);
 
   LayoutTextFragment* remaining_text_layout_object_;
   DISALLOW_COPY_AND_ASSIGN(FirstLetterPseudoElement);

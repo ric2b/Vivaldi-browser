@@ -22,7 +22,8 @@ TypeConverter<blink::BackgroundFetchRegistration*,
   return new blink::BackgroundFetchRegistration(
       mojo_registration->developer_id, mojo_registration->unique_id,
       mojo_registration->upload_total, mojo_registration->uploaded,
-      mojo_registration->download_total, mojo_registration->downloaded);
+      mojo_registration->download_total, mojo_registration->downloaded,
+      mojo_registration->state, mojo_registration->failure_reason);
 }
 
 blink::mojom::blink::BackgroundFetchOptionsPtr TypeConverter<
@@ -42,7 +43,7 @@ blink::mojom::blink::BackgroundFetchOptionsPtr TypeConverter<
 
   mojo_options->icons = std::move(mojo_icons);
   mojo_options->download_total = options.downloadTotal();
-  mojo_options->title = options.title();
+  mojo_options->title = options.hasTitle() ? options.title() : "";
 
   return mojo_options;
 }

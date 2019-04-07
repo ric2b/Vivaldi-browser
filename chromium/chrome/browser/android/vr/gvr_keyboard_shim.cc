@@ -17,31 +17,39 @@
 namespace {
 
 // Run CALL macro for every function defined in the API.
-#define FOR_EACH_API_FN                                         \
-  CALL(gvr_keyboard_initialize)                                 \
-  CALL(gvr_keyboard_create)                                     \
-  CALL(gvr_keyboard_get_input_mode)                             \
-  CALL(gvr_keyboard_set_input_mode)                             \
-  CALL(gvr_keyboard_get_recommended_world_from_keyboard_matrix) \
-  CALL(gvr_keyboard_set_world_from_keyboard_matrix)             \
-  CALL(gvr_keyboard_show)                                       \
-  CALL(gvr_keyboard_update_button_state)                        \
-  CALL(gvr_keyboard_update_controller_ray)                      \
-  CALL(gvr_keyboard_get_text)                                   \
-  CALL(gvr_keyboard_set_text)                                   \
-  CALL(gvr_keyboard_get_selection_indices)                      \
-  CALL(gvr_keyboard_set_selection_indices)                      \
-  CALL(gvr_keyboard_get_composing_indices)                      \
-  CALL(gvr_keyboard_set_composing_indices)                      \
-  CALL(gvr_keyboard_set_frame_time)                             \
-  CALL(gvr_keyboard_set_eye_from_world_matrix)                  \
-  CALL(gvr_keyboard_set_projection_matrix)                      \
-  CALL(gvr_keyboard_set_viewport)                               \
-  CALL(gvr_keyboard_advance_frame)                              \
-  CALL(gvr_keyboard_render)                                     \
-  CALL(gvr_keyboard_hide)                                       \
-  CALL(gvr_keyboard_destroy)                                    \
-  CALL(gvr_keyboard_update_controller_touch)
+#define FOR_EACH_API_FN                                             \
+  CALL(gvr_keyboard_initialize)                                     \
+  CALL(gvr_keyboard_create)                                         \
+  CALL(gvr_keyboard_get_input_mode)                                 \
+  CALL(gvr_keyboard_set_input_mode)                                 \
+  CALL(gvr_keyboard_get_recommended_world_from_keyboard_matrix)     \
+  CALL(gvr_keyboard_set_world_from_keyboard_matrix)                 \
+  CALL(gvr_keyboard_show)                                           \
+  CALL(gvr_keyboard_update_button_state)                            \
+  CALL(gvr_keyboard_update_controller_ray)                          \
+  CALL(gvr_keyboard_update_controller_touch)                        \
+  CALL(gvr_keyboard_get_text)                                       \
+  CALL(gvr_keyboard_set_text)                                       \
+  CALL(gvr_keyboard_get_selection_indices)                          \
+  CALL(gvr_keyboard_set_selection_indices)                          \
+  CALL(gvr_keyboard_get_composing_indices)                          \
+  CALL(gvr_keyboard_set_composing_indices)                          \
+  CALL(gvr_keyboard_set_frame_time)                                 \
+  CALL(gvr_keyboard_set_eye_from_world_matrix)                      \
+  CALL(gvr_keyboard_set_projection_matrix)                          \
+  CALL(gvr_keyboard_set_viewport)                                   \
+  CALL(gvr_keyboard_advance_frame)                                  \
+  CALL(gvr_keyboard_render)                                         \
+  CALL(gvr_keyboard_hide)                                           \
+  CALL(gvr_keyboard_destroy)                                        \
+  OPTIONAL_CALL(gvr_keyboard_set_anti_alias_enabled)                \
+  OPTIONAL_CALL(gvr_keyboard_set_voice_input_enabled)               \
+  OPTIONAL_CALL(gvr_keyboard_set_voice_permission_callback_enabled) \
+  OPTIONAL_CALL(gvr_keyboard_request_voice_permission)              \
+  OPTIONAL_CALL(gvr_keyboard_set_multiview_enabled)                 \
+  OPTIONAL_CALL(gvr_keyboard_multiview_set_viewport)                \
+  OPTIONAL_CALL(gvr_keyboard_multiview_render)                      \
+  OPTIONAL_CALL(gvr_keyboard_get_hit_normal)
 
 // The min API version that is guaranteed to exists on the user's device if they
 // have some version of the Daydream keyboard installed.
@@ -55,6 +63,7 @@ constexpr int64_t kSelectionSupportApiVersion = 2;
 constexpr char kSelectionSymbol[] = "gvr_keyboard_update_controller_touch";
 
 #define CALL(fn) decltype(&fn) impl_##fn = nullptr;
+#define OPTIONAL_CALL(fn) decltype(&fn) impl_##fn = nullptr;
 struct KeyboardApi {
   explicit KeyboardApi(int64_t version) : min_version(version) {}
 
@@ -64,18 +73,20 @@ struct KeyboardApi {
   FOR_EACH_API_FN
 };
 #undef CALL
+#undef OPTIONAL_CALL
 
 static void* sdk_handle = nullptr;
 
 static KeyboardApi* keyboard_api = nullptr;
 
 template <typename Fn>
-void LoadFunction(void* handle, const char* function_name, Fn* fn_out) {
+bool LoadFunction(void* handle, const char* function_name, Fn* fn_out) {
   void* fn = dlsym(handle, function_name);
   if (!fn)
-    return;
+    return false;
 
   *fn_out = reinterpret_cast<Fn>(fn);
+  return true;
 }
 
 void CloseSdk() {
@@ -90,8 +101,10 @@ void CloseSdk() {
 
 // Null all the function pointers.
 #define CALL(fn) keyboard_api->impl_##fn = nullptr;
+#define OPTIONAL_CALL(fn) keyboard_api->impl_##fn = nullptr;
   FOR_EACH_API_FN
 #undef CALL
+#undef OPTIONAL_CALL
 
   sdk_handle = nullptr;
   keyboard_api = nullptr;
@@ -130,10 +143,17 @@ bool LoadSdk(void* closure, gvr_keyboard_callback callback) {
   DCHECK(!keyboard_api);
   keyboard_api = new KeyboardApi(min_api_version);
 
+  bool success = true;
 // Load all function pointers from SDK.
-#define CALL(fn) LoadFunction(sdk_handle, #fn, &keyboard_api->impl_##fn);
+#define CALL(fn) \
+  success &= LoadFunction(sdk_handle, #fn, &keyboard_api->impl_##fn);
+#define OPTIONAL_CALL(fn) \
+  LoadFunction(sdk_handle, #fn, &keyboard_api->impl_##fn);
   FOR_EACH_API_FN
 #undef CALL
+#undef OPTIONAL_CALL
+
+  DCHECK(success);
 
   gvr_keyboard_initialize(env, context_wrapper.obj(),
                           remote_class_loader.obj());
@@ -155,6 +175,46 @@ gvr_keyboard_context* gvr_keyboard_create(void* closure,
     return nullptr;
   }
   return keyboard_api->impl_gvr_keyboard_create(closure, callback);
+}
+
+bool gvr_keyboard_set_anti_alias_enabled(bool enabled) {
+  if (keyboard_api->impl_gvr_keyboard_set_anti_alias_enabled) {
+    keyboard_api->impl_gvr_keyboard_set_anti_alias_enabled(enabled);
+    return true;
+  }
+  return false;
+}
+
+bool gvr_keyboard_set_voice_input_enabled(bool enabled) {
+  if (keyboard_api->impl_gvr_keyboard_set_voice_input_enabled) {
+    keyboard_api->impl_gvr_keyboard_set_voice_input_enabled(enabled);
+    return true;
+  }
+  return false;
+}
+
+bool gvr_keyboard_set_voice_permission_callback_enabled(bool enabled) {
+  if (keyboard_api->impl_gvr_keyboard_set_voice_permission_callback_enabled) {
+    keyboard_api->impl_gvr_keyboard_set_voice_permission_callback_enabled(
+        enabled);
+    return true;
+  }
+  return false;
+}
+
+bool gvr_keyboard_request_voice_permission(gvr_keyboard_context* context) {
+  if (keyboard_api->impl_gvr_keyboard_request_voice_permission) {
+    return keyboard_api->impl_gvr_keyboard_request_voice_permission(context);
+  }
+  return false;
+}
+
+bool gvr_keyboard_set_multiview_enabled(bool enabled) {
+  if (keyboard_api->impl_gvr_keyboard_set_multiview_enabled) {
+    keyboard_api->impl_gvr_keyboard_set_multiview_enabled(enabled);
+    return true;
+  }
+  return false;
 }
 
 void gvr_keyboard_destroy(gvr_keyboard_context** context) {
@@ -201,6 +261,14 @@ bool gvr_keyboard_update_controller_ray(gvr_keyboard_context* context,
                                         gvr_vec3f* hit) {
   return keyboard_api->impl_gvr_keyboard_update_controller_ray(context, start,
                                                                end, hit);
+}
+
+bool gvr_keyboard_get_hit_normal(gvr_keyboard_context* context,
+                                 gvr_vec3f* normal) {
+  if (keyboard_api->impl_gvr_keyboard_get_hit_normal) {
+    return keyboard_api->impl_gvr_keyboard_get_hit_normal(context, normal);
+  }
+  return false;
 }
 
 void gvr_keyboard_update_controller_touch(gvr_keyboard_context* context,
@@ -264,6 +332,13 @@ void gvr_keyboard_set_projection_matrix(gvr_keyboard_context* context,
                                                         projection);
 }
 
+void gvr_keyboard_multiview_set_viewport(gvr_keyboard_context* context,
+                                         const gvr_recti* viewport) {
+  if (keyboard_api->impl_gvr_keyboard_multiview_set_viewport) {
+    keyboard_api->impl_gvr_keyboard_multiview_set_viewport(context, viewport);
+  }
+}
+
 void gvr_keyboard_set_viewport(gvr_keyboard_context* context,
                                int32_t eye_type,
                                const gvr_recti* viewport) {
@@ -278,6 +353,11 @@ void gvr_keyboard_render(gvr_keyboard_context* context, int32_t eye_type) {
   keyboard_api->impl_gvr_keyboard_render(context, eye_type);
 }
 
+void gvr_keyboard_multiview_render(gvr_keyboard_context* context) {
+  if (keyboard_api->impl_gvr_keyboard_multiview_render) {
+    keyboard_api->impl_gvr_keyboard_multiview_render(context);
+  }
+}
 void gvr_keyboard_hide(gvr_keyboard_context* context) {
   keyboard_api->impl_gvr_keyboard_hide(context);
 }

@@ -14,6 +14,7 @@
 #include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -37,17 +38,14 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_fetcher_delegate.h"
-#include "net/url_request/url_request_context_getter.h"
-#include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/settings/device_settings_service.h"
+#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #endif  // defined(OS_CHROMEOS)
 
 using ::testing::Field;
@@ -66,8 +64,6 @@ const char kCacheDir[] = "cache";
 const char kExtensionId[] = "ldnnhddmnhbkjipkidpdiheffobcpfmf";
 const char kExtensionUpdateManifest[] =
     "extensions/good_v1_update_manifest.xml";
-const char kExtensionCRXSourceDir[] = "extensions";
-const char kExtensionCRXFile[] = "good.crx";
 const char kExtensionCRXVersion[] = "1.0.0.0";
 
 class MockExternalPolicyProviderVisitor
@@ -98,6 +94,62 @@ MockExternalPolicyProviderVisitor::MockExternalPolicyProviderVisitor() {
 MockExternalPolicyProviderVisitor::~MockExternalPolicyProviderVisitor() {
 }
 
+// A simple wrapper around a SingleThreadTaskRunner. When a task is posted
+// through it, increments a counter which is decremented when the task is run.
+class TrackingProxyTaskRunner : public base::SingleThreadTaskRunner {
+ public:
+  TrackingProxyTaskRunner(
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+      : wrapped_task_runner_(std::move(task_runner)) {}
+
+  bool PostDelayedTask(const base::Location& from_here,
+                       base::OnceClosure task,
+                       base::TimeDelta delay) override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    ++pending_task_count_;
+    return wrapped_task_runner_->PostDelayedTask(
+        from_here,
+        base::BindOnce(&TrackingProxyTaskRunner::RunTask, this,
+                       std::move(task)),
+        delay);
+  }
+
+  bool PostNonNestableDelayedTask(const base::Location& from_here,
+                                  base::OnceClosure task,
+                                  base::TimeDelta delay) override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    ++pending_task_count_;
+    return wrapped_task_runner_->PostNonNestableDelayedTask(
+        from_here,
+        base::BindOnce(&TrackingProxyTaskRunner::RunTask, this,
+                       std::move(task)),
+        delay);
+  }
+
+  bool RunsTasksInCurrentSequence() const override {
+    return wrapped_task_runner_->RunsTasksInCurrentSequence();
+  }
+
+  bool has_pending_tasks() const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return pending_task_count_ != 0;
+  }
+
+ private:
+  ~TrackingProxyTaskRunner() override = default;
+
+  void RunTask(base::OnceClosure task) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    DCHECK_GT(pending_task_count_, 0);
+    --pending_task_count_;
+    std::move(task).Run();
+  }
+
+  scoped_refptr<base::SingleThreadTaskRunner> wrapped_task_runner_;
+  SEQUENCE_CHECKER(sequence_checker_);
+  int pending_task_count_ = 0;
+};
+
 }  // namespace
 
 class DeviceLocalAccountExternalPolicyLoaderTest : public testing::Test {
@@ -111,11 +163,20 @@ class DeviceLocalAccountExternalPolicyLoaderTest : public testing::Test {
   void VerifyAndResetVisitorCallExpectations();
   void SetForceInstallListPolicy();
 
+  network::TestURLLoaderFactory::PendingRequest* GetPendingRequest(
+      size_t index = 0) {
+    if (index >= test_url_loader_factory_.pending_requests()->size())
+      return nullptr;
+    return &test_url_loader_factory_.pending_requests()->at(index);
+  }
+
   content::TestBrowserThreadBundle thread_bundle_;
   base::ScopedTempDir temp_dir_;
   base::FilePath cache_dir_;
   policy::MockCloudPolicyStore store_;
-  scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
+  scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
+      test_shared_loader_factory_;
   base::FilePath test_dir_;
 
   scoped_refptr<DeviceLocalAccountExternalPolicyLoader> loader_;
@@ -125,15 +186,16 @@ class DeviceLocalAccountExternalPolicyLoaderTest : public testing::Test {
   content::InProcessUtilityThreadHelper in_process_utility_thread_helper_;
 
 #if defined(OS_CHROMEOS)
-  chromeos::ScopedTestDeviceSettingsService test_device_settings_service_;
-  chromeos::ScopedTestCrosSettings test_cros_settings_;
+  chromeos::ScopedCrosSettingsTestHelper cros_settings_test_helper_;
 #endif // defined(OS_CHROMEOS)
 };
 
 DeviceLocalAccountExternalPolicyLoaderTest::
     DeviceLocalAccountExternalPolicyLoaderTest()
-    : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP) {
-}
+    : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
+      test_shared_loader_factory_(
+          base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+              &test_url_loader_factory_)) {}
 
 DeviceLocalAccountExternalPolicyLoaderTest::
     ~DeviceLocalAccountExternalPolicyLoaderTest() {
@@ -143,10 +205,8 @@ void DeviceLocalAccountExternalPolicyLoaderTest::SetUp() {
   ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
   cache_dir_ = temp_dir_.GetPath().Append(kCacheDir);
   ASSERT_TRUE(base::CreateDirectoryAndGetError(cache_dir_, NULL));
-  request_context_getter_ =
-      new net::TestURLRequestContextGetter(base::ThreadTaskRunnerHandle::Get());
-  TestingBrowserProcess::GetGlobal()->SetSystemRequestContext(
-      request_context_getter_.get());
+  TestingBrowserProcess::GetGlobal()->SetSharedURLLoaderFactory(
+      test_shared_loader_factory_);
   ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_dir_));
 
   loader_ = new DeviceLocalAccountExternalPolicyLoader(&store_, cache_dir_);
@@ -162,7 +222,7 @@ void DeviceLocalAccountExternalPolicyLoaderTest::SetUp() {
 }
 
 void DeviceLocalAccountExternalPolicyLoaderTest::TearDown() {
-  TestingBrowserProcess::GetGlobal()->SetSystemRequestContext(NULL);
+  TestingBrowserProcess::GetGlobal()->SetSharedURLLoaderFactory(nullptr);
 }
 
 void DeviceLocalAccountExternalPolicyLoaderTest::
@@ -236,29 +296,28 @@ TEST_F(DeviceLocalAccountExternalPolicyLoaderTest, ForceInstallListSet) {
   SetForceInstallListPolicy();
 
   // Start the cache.
-  loader_->StartCache(base::ThreadTaskRunnerHandle::Get());
+  auto cache_task_runner = base::MakeRefCounted<TrackingProxyTaskRunner>(
+      base::ThreadTaskRunnerHandle::Get());
+  loader_->StartCache(cache_task_runner);
 
   // Spin the loop, allowing the loader to process the force-install list.
   // Verify that the loader announces an empty extension list.
-  net::TestURLFetcherFactory factory;
   EXPECT_CALL(visitor_, OnExternalProviderReady(provider_.get()))
       .Times(1);
   base::RunLoop().RunUntilIdle();
 
   // Verify that a downloader has started and is attempting to download an
   // update manifest.
-  net::TestURLFetcher* fetcher = factory.GetFetcherByID(
-      extensions::ExtensionDownloader::kManifestFetcherId);
-  ASSERT_TRUE(fetcher);
-  ASSERT_TRUE(fetcher->delegate());
+  EXPECT_EQ(1, test_url_loader_factory_.NumPending());
 
   // Return a manifest to the downloader.
   std::string manifest;
   EXPECT_TRUE(base::ReadFileToString(test_dir_.Append(kExtensionUpdateManifest),
                                      &manifest));
-  fetcher->set_response_code(200);
-  fetcher->SetResponseString(manifest);
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+
+  auto* pending_request = GetPendingRequest();
+  test_url_loader_factory_.AddResponse(pending_request->request.url.spec(),
+                                       manifest);
 
   // Wait for the manifest to be parsed.
   content::WindowedNotificationObserver(
@@ -266,18 +325,12 @@ TEST_F(DeviceLocalAccountExternalPolicyLoaderTest, ForceInstallListSet) {
       content::NotificationService::AllSources()).Wait();
 
   // Verify that the downloader is attempting to download a CRX file.
-  fetcher = factory.GetFetcherByID(
-      extensions::ExtensionDownloader::kExtensionFetcherId);
-  ASSERT_TRUE(fetcher);
-  ASSERT_TRUE(fetcher->delegate());
+  EXPECT_EQ(1, test_url_loader_factory_.NumPending());
 
-  // Create a temporary CRX file and return its path to the downloader.
-  EXPECT_TRUE(base::CopyFile(
-      test_dir_.Append(kExtensionCRXSourceDir).Append(kExtensionCRXFile),
-      temp_dir_.GetPath().Append(kExtensionCRXFile)));
-  fetcher->set_response_code(200);
-  fetcher->SetResponseFilePath(temp_dir_.GetPath().Append(kExtensionCRXFile));
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  // Trigger downloading of the temporary CRX file.
+  pending_request = GetPendingRequest();
+  test_url_loader_factory_.AddResponse(pending_request->request.url.spec(),
+                                       "Content is irrelevant.");
 
   // Spin the loop. Verify that the loader announces the presence of a new CRX
   // file, served from the cache directory.
@@ -298,12 +351,6 @@ TEST_F(DeviceLocalAccountExternalPolicyLoaderTest, ForceInstallListSet) {
   cache_run_loop.Run();
   VerifyAndResetVisitorCallExpectations();
 
-  // Verify that the CRX file actually exists in the cache directory and its
-  // contents matches the file returned to the downloader.
-  EXPECT_TRUE(base::ContentsEqual(
-      test_dir_.Append(kExtensionCRXSourceDir).Append(kExtensionCRXFile),
-      cached_crx_path));
-
   // Stop the cache. Verify that the loader announces an empty extension list.
   EXPECT_CALL(visitor_, OnExternalProviderReady(provider_.get()))
       .Times(1);
@@ -314,7 +361,7 @@ TEST_F(DeviceLocalAccountExternalPolicyLoaderTest, ForceInstallListSet) {
   // Spin the loop until the cache shutdown callback is invoked. Verify that at
   // that point, no further file I/O tasks are pending.
   shutdown_run_loop.Run();
-  EXPECT_TRUE(base::MessageLoopCurrent::Get()->IsIdleForTesting());
+  EXPECT_FALSE(cache_task_runner->has_pending_tasks());
 }
 
 }  // namespace chromeos

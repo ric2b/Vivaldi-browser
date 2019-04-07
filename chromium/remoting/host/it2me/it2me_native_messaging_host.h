@@ -27,6 +27,14 @@ class Value;
 class SingleThreadTaskRunner;
 }  // namespace base
 
+namespace net {
+class URLRequestContextGetter;
+}  // namespace net
+
+namespace policy {
+class PolicyService;
+}  // namespace policy
+
 namespace remoting {
 
 class ChromotingHostContext;
@@ -63,6 +71,16 @@ class It2MeNativeMessagingHost : public It2MeHost::Observer,
 
   static std::string HostStateToString(It2MeHostState host_state);
 
+#if defined(OS_CHROMEOS)
+  // Creates native messaging host on ChromeOS. Must be called on the UI thread
+  // of the browser process.
+  static std::unique_ptr<extensions::NativeMessageHost> CreateForChromeOS(
+      net::URLRequestContextGetter* system_request_context,
+      scoped_refptr<base::SingleThreadTaskRunner> io_runnner,
+      scoped_refptr<base::SingleThreadTaskRunner> ui_runnner,
+      policy::PolicyService* policy_service);
+#endif  // defined(OS_CHROMEOS)
+
  private:
   // These "Process.." methods handle specific request types. The |response|
   // dictionary is pre-filled by ProcessMessage() with the parts of the
@@ -91,6 +109,17 @@ class It2MeNativeMessagingHost : public It2MeHost::Observer,
 
   // Returns whether the request was successfully sent to the elevated host.
   bool DelegateToElevatedHost(std::unique_ptr<base::DictionaryValue> message);
+
+  // Creates a delegated signal strategy from the values stored in |message|.
+  // Returns nullptr on failure.
+  std::unique_ptr<SignalStrategy> CreateDelegatedSignalStrategy(
+      const base::DictionaryValue* message);
+
+  // Creates an XMPP signal strategy from the values stored in |message| along
+  // with |user_name|.  Returns nullptr on failure.
+  std::unique_ptr<SignalStrategy> CreateXmppSignalStrategy(
+      const std::string& user_name,
+      const base::DictionaryValue* message);
 
   // Used to determine whether to create and pass messages to an elevated host.
   bool needs_elevation_ = false;

@@ -4,13 +4,16 @@
 
 #include "chrome/browser/ui/views/ime_driver/ime_driver_mus.h"
 
+#include <memory>
+#include <utility>
+
 #include "chrome/browser/ui/views/ime_driver/remote_text_input_client.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/service_manager_connection.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/interfaces/constants.mojom.h"
-#include "services/ui/public/interfaces/ime/ime.mojom.h"
+#include "services/ws/public/mojom/constants.mojom.h"
+#include "services/ws/public/mojom/ime/ime.mojom.h"
 #include "ui/base/ime/ime_bridge.h"
 
 #if defined(OS_CHROMEOS)
@@ -28,21 +31,21 @@ IMEDriver::~IMEDriver() {}
 // static
 void IMEDriver::Register() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  ui::mojom::IMEDriverPtr ime_driver_ptr;
+  ws::mojom::IMEDriverPtr ime_driver_ptr;
   mojo::MakeStrongBinding(std::make_unique<IMEDriver>(),
                           MakeRequest(&ime_driver_ptr));
-  ui::mojom::IMERegistrarPtr ime_registrar;
+  ws::mojom::IMERegistrarPtr ime_registrar;
   content::ServiceManagerConnection::GetForProcess()
       ->GetConnector()
-      ->BindInterface(ui::mojom::kServiceName, &ime_registrar);
+      ->BindInterface(ws::mojom::kServiceName, &ime_registrar);
   ime_registrar->RegisterDriver(std::move(ime_driver_ptr));
 }
 
-void IMEDriver::StartSession(ui::mojom::StartSessionDetailsPtr details) {
+void IMEDriver::StartSession(ws::mojom::StartSessionDetailsPtr details) {
 #if defined(OS_CHROMEOS)
   std::unique_ptr<RemoteTextInputClient> remote_client =
       std::make_unique<RemoteTextInputClient>(
-          ui::mojom::TextInputClientPtr(std::move(details->client)),
+          ws::mojom::TextInputClientPtr(std::move(details->client)),
           details->text_input_type, details->text_input_mode,
           details->text_direction, details->text_input_flags,
           details->caret_bounds);

@@ -25,6 +25,7 @@ import org.chromium.base.FileUtils;
 import org.chromium.base.Log;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
@@ -38,6 +39,7 @@ import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactor
 import org.chromium.chrome.browser.download.ui.DownloadFilter;
 import org.chromium.chrome.browser.download.ui.DownloadHistoryItemWrapper;
 import org.chromium.chrome.browser.download.ui.DownloadHistoryItemWrapper.OfflineItemWrapper;
+import org.chromium.chrome.browser.feature_engagement.ScreenshotTabObserver;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.media.MediaViewerUtils;
 import org.chromium.chrome.browser.offlinepages.DownloadUiActionFlags;
@@ -56,6 +58,7 @@ import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.FailState;
+import org.chromium.components.offline_items_collection.LaunchLocation;
 import org.chromium.components.offline_items_collection.LegacyHelpers;
 import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.OfflineItem.Progress;
@@ -125,12 +128,12 @@ public class DownloadUtils {
     /**
      * Possible sizes of type-based icons.
      */
-    @IntDef({ICON_SIZE_24_DP, ICON_SIZE_36_DP})
+    @IntDef({IconSize.DP_24, IconSize.DP_36})
     @Retention(RetentionPolicy.SOURCE)
-    public @interface IconSize {}
-
-    public static final int ICON_SIZE_24_DP = 24;
-    public static final int ICON_SIZE_36_DP = 36;
+    public @interface IconSize {
+        int DP_24 = 24;
+        int DP_36 = 36;
+    }
 
     /**
      * Displays the download manager UI. Note the UI is different on tablets and on phones.
@@ -340,6 +343,17 @@ public class DownloadUtils {
 
         String intentMimeType = "";
         String[] intentMimeParts = {"", ""};
+
+        Activity activity = ApplicationStatus.getLastTrackedFocusedActivity();
+        if (activity != null && activity instanceof ChromeTabbedActivity) {
+            ChromeTabbedActivity chromeActivity = ((ChromeTabbedActivity) activity);
+            ScreenshotTabObserver tabObserver =
+                    ScreenshotTabObserver.from(chromeActivity.getActivityTab());
+            if (tabObserver != null) {
+                tabObserver.onActionPerformedAfterScreenshot(
+                        ScreenshotTabObserver.SCREENSHOT_ACTION_SHARE);
+            }
+        }
 
         for (int i = 0; i < items.size(); i++) {
             DownloadHistoryItemWrapper wrappedItem  = items.get(i);
@@ -577,6 +591,15 @@ public class DownloadUtils {
         return uri;
     }
 
+    @CalledByNative
+    private static String getUriStringForPath(String filePath) {
+        Uri uri = null;
+        File file = new File(filePath);
+        uri = getUriForItem(file);
+
+        return uri != null ? uri.toString() : new String();
+    }
+
     /**
      * Utility method to open an {@link OfflineItem}, which can be a chrome download, offline page.
      * Falls back to open download home.
@@ -586,7 +609,7 @@ public class DownloadUtils {
             @DownloadMetrics.DownloadOpenSource int source) {
         if (LegacyHelpers.isLegacyOfflinePage(contentId)) {
             OfflineContentAggregatorFactory.forProfile(Profile.getLastUsedProfile())
-                    .openItem(contentId);
+                    .openItem(LaunchLocation.PROGRESS_BAR, contentId);
         } else {
             DownloadManagerService.getDownloadManagerService().openDownload(
                     contentId, isOffTheRecord, source);
@@ -1066,23 +1089,23 @@ public class DownloadUtils {
         // TODO(huayinz): Make image view size same as icon size so that 36dp icons can be removed.
         switch (fileType) {
             case DownloadFilter.Type.PAGE:
-                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_globe_24dp
-                                                   : R.drawable.ic_globe_36dp;
+                return iconSize == IconSize.DP_24 ? R.drawable.ic_globe_24dp
+                                                  : R.drawable.ic_globe_36dp;
             case DownloadFilter.Type.VIDEO:
-                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_videocam_24dp
-                                                   : R.drawable.ic_videocam_36dp;
+                return iconSize == IconSize.DP_24 ? R.drawable.ic_videocam_24dp
+                                                  : R.drawable.ic_videocam_36dp;
             case DownloadFilter.Type.AUDIO:
-                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_music_note_24dp
-                                                   : R.drawable.ic_music_note_36dp;
+                return iconSize == IconSize.DP_24 ? R.drawable.ic_music_note_24dp
+                                                  : R.drawable.ic_music_note_36dp;
             case DownloadFilter.Type.IMAGE:
-                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_drive_image_24dp
-                                                   : R.drawable.ic_drive_image_36dp;
+                return iconSize == IconSize.DP_24 ? R.drawable.ic_drive_image_24dp
+                                                  : R.drawable.ic_drive_image_36dp;
             case DownloadFilter.Type.DOCUMENT:
-                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_drive_document_24dp
-                                                   : R.drawable.ic_drive_document_36dp;
+                return iconSize == IconSize.DP_24 ? R.drawable.ic_drive_document_24dp
+                                                  : R.drawable.ic_drive_document_36dp;
             default:
-                return iconSize == ICON_SIZE_24_DP ? R.drawable.ic_drive_file_24dp
-                                                   : R.drawable.ic_drive_file_36dp;
+                return iconSize == IconSize.DP_24 ? R.drawable.ic_drive_file_24dp
+                                                  : R.drawable.ic_drive_file_36dp;
         }
     }
 

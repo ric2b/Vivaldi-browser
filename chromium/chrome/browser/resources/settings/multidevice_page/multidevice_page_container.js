@@ -18,28 +18,19 @@ cr.exportPath('settings');
 Polymer({
   is: 'settings-multidevice-page-container',
 
-  behaviors: [WebUIListenerBehavior],
+  behaviors: [MultiDeviceFeatureBehavior, WebUIListenerBehavior],
 
   properties: {
-    /** SettingsPrefsElement 'prefs' Object reference. See prefs.js. */
-    prefs: {
-      type: Object,
-      notify: true,
-    },
-
     /**
-     * Whether a phone was found on the account that is either connected to the
-     * Chromebook or has the potential to be.
+     * Whether the Chromebook is capable of enabling Better Together features.
      * @type {boolean}
      */
-    doesPotentialConnectedPhoneExist: {
+    doesChromebookSupportMultiDeviceFeatures: {
       type: Boolean,
-      computed: 'computeDoesPotentialConnectedPhoneExist(pageContentData_)',
+      computed:
+          'computeDoesChromebookSupportMultiDeviceFeatures(pageContentData)',
       notify: true,
     },
-
-    /** @private {MultiDevicePageContentData} */
-    pageContentData_: Object,
   },
 
   /** @private {?settings.MultiDeviceBrowserProxy} */
@@ -66,13 +57,13 @@ Polymer({
       console.error('Invalid status change');
       return;
     }
-    this.pageContentData_ = newData;
+    this.pageContentData = newData;
   },
 
   /**
    * If the new mode corresponds to no eligible host or unset potential hosts
-   * (i.e. NO_ELIGIBLE_HOSTS or NO_HOST_SET), then newHostDevice should be null
-   * or undefined. Otherwise it should be defined and non-null.
+   * (i.e. NO_ELIGIBLE_HOSTS or NO_HOST_SET), then newHostDeviceName should be
+   * falsy. Otherwise it should be truthy.
    * @param {!MultiDevicePageContentData} newData
    * @private
    */
@@ -81,16 +72,16 @@ Polymer({
       settings.MultiDeviceSettingsMode.NO_ELIGIBLE_HOSTS,
       settings.MultiDeviceSettingsMode.NO_HOST_SET,
     ];
-    return !newData.hostDevice == noHostModes.includes(newData.mode);
+    return !newData.hostDeviceName === noHostModes.includes(newData.mode);
   },
 
   /**
    * @return {boolean}
    * @private
    */
-  computeDoesPotentialConnectedPhoneExist: function() {
-    return !!this.pageContentData_ &&
-        this.pageContentData_.mode !=
-        settings.MultiDeviceSettingsMode.NO_ELIGIBLE_HOSTS;
+  computeDoesChromebookSupportMultiDeviceFeatures: function() {
+    return !!this.pageContentData &&
+        this.isFeatureSupported(
+            settings.MultiDeviceFeature.BETTER_TOGETHER_SUITE);
   },
 });

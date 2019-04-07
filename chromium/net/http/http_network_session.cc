@@ -25,8 +25,8 @@
 #include "net/http/http_stream_factory.h"
 #include "net/http/url_security_manager.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
-#include "net/quic/chromium/quic_crypto_client_stream_factory.h"
-#include "net/quic/chromium/quic_stream_factory.h"
+#include "net/quic/quic_crypto_client_stream_factory.h"
+#include "net/quic/quic_stream_factory.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/client_socket_pool_manager_impl.h"
 #include "net/socket/next_proto.h"
@@ -128,8 +128,12 @@ HttpNetworkSession::Params::Params()
           quic::kInitialIdleTimeoutSecs),
       quic_migrate_sessions_on_network_change_v2(false),
       quic_migrate_sessions_early_v2(false),
+      quic_retry_on_alternate_network_before_handshake(false),
+      quic_go_away_on_path_degrading(false),
       quic_max_time_on_non_default_network(
           base::TimeDelta::FromSeconds(kMaxTimeOnNonDefaultNetworkSecs)),
+      quic_max_migrations_to_non_default_network_on_write_error(
+          kMaxMigrationsToNonDefaultNetworkOnWriteError),
       quic_max_migrations_to_non_default_network_on_path_degrading(
           kMaxMigrationsToNonDefaultNetworkOnPathDegrading),
       quic_allow_server_migration(false),
@@ -217,7 +221,10 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
           params.quic_max_idle_time_before_crypto_handshake_seconds,
           params.quic_migrate_sessions_on_network_change_v2,
           params.quic_migrate_sessions_early_v2,
+          params.quic_retry_on_alternate_network_before_handshake,
+          params.quic_go_away_on_path_degrading,
           params.quic_max_time_on_non_default_network,
+          params.quic_max_migrations_to_non_default_network_on_write_error,
           params.quic_max_migrations_to_non_default_network_on_path_degrading,
           params.quic_allow_server_migration,
           params.quic_race_cert_verification,
@@ -378,8 +385,15 @@ std::unique_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
                    params_.quic_migrate_sessions_on_network_change_v2);
   dict->SetBoolean("migrate_sessions_early_v2",
                    params_.quic_migrate_sessions_early_v2);
+  dict->SetBoolean("retry_on_alternate_network_before_handshake",
+                   params_.quic_retry_on_alternate_network_before_handshake);
+  dict->SetBoolean("go_away_on_path_degrading",
+                   params_.quic_go_away_on_path_degrading);
   dict->SetInteger("max_time_on_non_default_network_seconds",
                    params_.quic_max_time_on_non_default_network.InSeconds());
+  dict->SetInteger(
+      "max_num_migrations_to_non_default_network_on_write_error",
+      params_.quic_max_migrations_to_non_default_network_on_write_error);
   dict->SetInteger(
       "max_num_migrations_to_non_default_network_on_path_degrading",
       params_.quic_max_migrations_to_non_default_network_on_path_degrading);

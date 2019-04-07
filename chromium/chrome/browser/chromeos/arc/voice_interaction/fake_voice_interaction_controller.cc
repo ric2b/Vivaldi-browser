@@ -44,6 +44,15 @@ void FakeVoiceInteractionController::NotifyFeatureAllowed(
   assistant_allowed_state_ = state;
 }
 
+void FakeVoiceInteractionController::NotifyNotificationEnabled(bool enabled) {
+  voice_interaction_notification_enabled_ = enabled;
+}
+
+void FakeVoiceInteractionController::NotifyLocaleChanged(
+    const std::string& locale) {
+  locale_ = locale;
+}
+
 void FakeVoiceInteractionController::IsSettingEnabled(
     IsSettingEnabledCallback callback) {
   std::move(callback).Run(voice_interaction_settings_enabled_);
@@ -52,6 +61,11 @@ void FakeVoiceInteractionController::IsSettingEnabled(
 void FakeVoiceInteractionController::IsSetupCompleted(
     IsSetupCompletedCallback callback) {
   std::move(callback).Run(voice_interaction_setup_completed_);
+}
+
+void FakeVoiceInteractionController::IsContextEnabled(
+    IsContextEnabledCallback callback) {
+  std::move(callback).Run(voice_interaction_context_enabled_);
 }
 
 void FakeVoiceInteractionController::IsHotwordEnabled(

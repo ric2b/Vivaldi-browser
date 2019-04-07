@@ -64,6 +64,7 @@
 #if defined(OS_ANDROID)
 #include "base/android/apk_assets.h"
 #include "base/posix/global_descriptors.h"
+#include "content/public/test/nested_message_pump_android.h"
 #include "content/shell/android/shell_descriptors.h"
 #endif
 
@@ -92,6 +93,12 @@
 #endif  // OS_FUCHSIA
 
 namespace {
+
+#if defined(OS_ANDROID)
+std::unique_ptr<base::MessagePump> CreateMessagePumpForUI() {
+  return std::make_unique<content::NestedMessagePumpAndroid>();
+}
+#endif
 
 #if !defined(OS_FUCHSIA)
 base::LazyInstance<content::ShellCrashReporterClient>::Leaky
@@ -248,6 +255,7 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
     command_line.AppendSwitch(switches::kEnablePreciseMemoryInfo);
 
     command_line.AppendSwitchASCII(network::switches::kHostResolverRules,
+                                   "MAP nonexistent.*.test ~NOTFOUND,"
                                    "MAP *.test 127.0.0.1");
 
     command_line.AppendSwitch(switches::kEnablePartialRaster);
@@ -406,8 +414,16 @@ void ShellMainDelegate::InitializeResourceBundle() {
 #endif
 }
 
-void ShellMainDelegate::PreContentInitialization() {
-#if defined(OS_MACOSX)
+void ShellMainDelegate::PreCreateMainMessageLoop() {
+#if defined(OS_ANDROID)
+  base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
+  if (command_line.HasSwitch(switches::kRunWebTests) ||
+      command_line.HasSwitch(switches::kCheckLayoutTestSysDeps)) {
+    bool success =
+        base::MessageLoop::InitMessagePumpForUIFactory(&CreateMessagePumpForUI);
+    CHECK(success) << "Unable to initialize the message pump for Android";
+  }
+#elif defined(OS_MACOSX)
   RegisterShellCrApp();
 #endif
 }

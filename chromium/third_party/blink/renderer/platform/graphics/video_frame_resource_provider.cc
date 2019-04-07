@@ -6,6 +6,7 @@
 
 #include <memory>
 #include "base/bind.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
 #include "components/viz/client/client_resource_provider.h"
 #include "components/viz/common/gpu/context_provider.h"
@@ -19,8 +20,9 @@
 namespace blink {
 
 VideoFrameResourceProvider::VideoFrameResourceProvider(
-    const cc::LayerTreeSettings& settings)
-    : settings_(settings) {}
+    const cc::LayerTreeSettings& settings,
+    bool use_sync_primitives)
+    : settings_(settings), use_sync_primitives_(use_sync_primitives) {}
 
 VideoFrameResourceProvider::~VideoFrameResourceProvider() {
   // Drop all resources before closing the ClientResourceProvider.
@@ -92,7 +94,20 @@ void VideoFrameResourceProvider::AppendQuads(
       break;
   }
 
-  resource_updater_->ObtainFrameResources(frame);
+  // When obtaining frame resources, we end up having to wait. See
+  // https://crbug/878070.
+  // Unfortunately, we have no idea if blocking is allowed on the current thread
+  // or not.  If we're on the cc impl thread, the answer is yes, and further
+  // the thread is marked as not allowing blocking primitives.  On the various
+  // media threads, however, blocking is not allowed but the blocking scopes
+  // are.  So, we use ScopedAllow only if we're told that we should do so.
+  if (use_sync_primitives_) {
+    base::ScopedAllowBaseSyncPrimitives allow_base_sync_primitives;
+    resource_updater_->ObtainFrameResources(frame);
+  } else {
+    resource_updater_->ObtainFrameResources(frame);
+  }
+
   // TODO(lethalantidote) : update with true value;
   gfx::Rect visible_layer_rect = gfx::Rect(rotated_size);
   gfx::Rect clip_rect = gfx::Rect(frame->coded_size());

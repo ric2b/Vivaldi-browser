@@ -5,7 +5,7 @@
 #include "components/sync/device_info/local_device_info_provider_impl.h"
 
 #include "base/bind.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "components/sync/base/get_session_name.h"
 #include "components/sync/driver/sync_util.h"
@@ -80,7 +80,7 @@ void LocalDeviceInfoProviderImpl::Initialize(
 
   GetSessionName(
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}),
       base::Bind(&LocalDeviceInfoProviderImpl::InitializeContinuation,
                  weak_factory_.GetWeakPtr(), cache_guid,

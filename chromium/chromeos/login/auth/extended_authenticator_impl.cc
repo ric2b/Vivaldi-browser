@@ -44,18 +44,34 @@ void RecordEndMarker(const std::string& marker) {
 
 }  // namespace
 
+// static
+scoped_refptr<ExtendedAuthenticatorImpl> ExtendedAuthenticatorImpl::Create(
+    NewAuthStatusConsumer* consumer) {
+  auto extended_authenticator =
+      base::WrapRefCounted(new ExtendedAuthenticatorImpl(consumer));
+  SystemSaltGetter::Get()->GetSystemSalt(base::Bind(
+      &ExtendedAuthenticatorImpl::OnSaltObtained, extended_authenticator));
+  return extended_authenticator;
+}
+
+// static
+scoped_refptr<ExtendedAuthenticatorImpl> ExtendedAuthenticatorImpl::Create(
+    AuthStatusConsumer* consumer) {
+  auto extended_authenticator =
+      base::WrapRefCounted(new ExtendedAuthenticatorImpl(consumer));
+  SystemSaltGetter::Get()->GetSystemSalt(base::Bind(
+      &ExtendedAuthenticatorImpl::OnSaltObtained, extended_authenticator));
+  return extended_authenticator;
+}
+
 ExtendedAuthenticatorImpl::ExtendedAuthenticatorImpl(
     NewAuthStatusConsumer* consumer)
     : salt_obtained_(false), consumer_(consumer), old_consumer_(NULL) {
-  SystemSaltGetter::Get()->GetSystemSalt(
-      base::Bind(&ExtendedAuthenticatorImpl::OnSaltObtained, this));
 }
 
 ExtendedAuthenticatorImpl::ExtendedAuthenticatorImpl(
     AuthStatusConsumer* consumer)
     : salt_obtained_(false), consumer_(NULL), old_consumer_(consumer) {
-  SystemSaltGetter::Get()->GetSystemSalt(
-      base::Bind(&ExtendedAuthenticatorImpl::OnSaltObtained, this));
 }
 
 void ExtendedAuthenticatorImpl::SetConsumer(AuthStatusConsumer* consumer) {
@@ -158,7 +174,8 @@ void ExtendedAuthenticatorImpl::DoAuthenticateToMount(
   RecordStartMarker("MountEx");
   const Key* const key = user_context.GetKey();
   DBusThreadManager::Get()->GetCryptohomeClient()->MountEx(
-      cryptohome::Identification(user_context.GetAccountId()),
+      cryptohome::CreateAccountIdentifierFromAccountId(
+          user_context.GetAccountId()),
       cryptohome::CreateAuthorizationRequest(key->GetLabel(), key->GetSecret()),
       cryptohome::MountRequest(),
       base::BindOnce(&ExtendedAuthenticatorImpl::OnMountComplete, this,

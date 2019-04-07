@@ -25,7 +25,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "device/bluetooth/bluez/bluetooth_service_attribute_value_bluez.h"
@@ -318,7 +318,8 @@ FakeBluetoothDeviceClient::FakeBluetoothDeviceClient()
       connection_rssi_(kUnkownPower),
       transmit_power_(kUnkownPower),
       max_transmit_power_(kUnkownPower),
-      delay_start_discovery_(false) {
+      delay_start_discovery_(false),
+      should_leave_connections_pending_(false) {
   std::unique_ptr<Properties> properties(new Properties(
       base::Bind(&FakeBluetoothDeviceClient::OnPropertyChanged,
                  base::Unretained(this), dbus::ObjectPath(kPairedDevicePath))));
@@ -366,6 +367,10 @@ FakeBluetoothDeviceClient::FakeBluetoothDeviceClient()
 }
 
 FakeBluetoothDeviceClient::~FakeBluetoothDeviceClient() = default;
+
+void FakeBluetoothDeviceClient::LeaveConnectionsPending() {
+  should_leave_connections_pending_ = true;
+}
 
 void FakeBluetoothDeviceClient::Init(
     dbus::Bus* bus,
@@ -417,6 +422,9 @@ void FakeBluetoothDeviceClient::Connect(const dbus::ObjectPath& object_path,
     callback.Run();
     return;
   }
+
+  if (should_leave_connections_pending_)
+    return;
 
   if (properties->paired.value() != true &&
       object_path != dbus::ObjectPath(kConnectUnpairablePath) &&

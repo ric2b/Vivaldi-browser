@@ -33,6 +33,12 @@ class FakeBackgroundFetchDelegate : public BackgroundFetchDelegate {
       BackgroundFetchDelegate::GetIconDisplaySizeCallback callback) override {
     std::move(callback).Run(gfx::Size(kIconDisplaySize, kIconDisplaySize));
   }
+  void GetPermissionForOrigin(
+      const url::Origin& origin,
+      const ResourceRequestInfo::WebContentsGetter& wc_getter,
+      GetPermissionForOriginCallback callback) override {
+    std::move(callback).Run(true /* has_permission */);
+  }
   void CreateDownloadJob(
       std::unique_ptr<BackgroundFetchDescription> fetch_description) override {}
   void DownloadUrl(const std::string& job_unique_id,
@@ -63,15 +69,16 @@ class FakeBackgroundFetchDelegate : public BackgroundFetchDelegate {
   }
 
   void UpdateUI(const std::string& job_unique_id,
-                const std::string& title) override {
-    ++title_update_count_;
+                const base::Optional<std::string>& title,
+                const base::Optional<SkBitmap>& icon) override {
+    ++ui_update_count_;
   }
 
   void set_complete_downloads(bool complete_downloads) {
     complete_downloads_ = complete_downloads;
   }
 
-  int title_update_count_ = 0;
+  int ui_update_count_ = 0;
 
  private:
   void CompleteDownload(const std::string& job_unique_id,
@@ -163,7 +170,8 @@ TEST_F(BackgroundFetchDelegateProxyTest, StartRequest) {
       0 /* completed_parts_size */, 0 /* total_parts_size */,
       std::vector<std::string>());
   delegate_proxy_.CreateDownloadJob(controller.weak_ptr_factory_.GetWeakPtr(),
-                                    std::move(fetch_description));
+                                    std::move(fetch_description),
+                                    {} /* active_fetch_requests */);
 
   delegate_proxy_.StartRequest(kExampleUniqueId, url::Origin(), request);
   base::RunLoop().RunUntilIdle();
@@ -187,7 +195,8 @@ TEST_F(BackgroundFetchDelegateProxyTest, StartRequest_NotCompleted) {
       0 /* completed_parts_size */, 0 /* total_parts_size */,
       std::vector<std::string>());
   delegate_proxy_.CreateDownloadJob(controller.weak_ptr_factory_.GetWeakPtr(),
-                                    std::move(fetch_description));
+                                    std::move(fetch_description),
+                                    {} /* active_fetch_requests */);
 
   delegate_proxy_.StartRequest(kExampleUniqueId, url::Origin(), request);
   base::RunLoop().RunUntilIdle();
@@ -215,7 +224,8 @@ TEST_F(BackgroundFetchDelegateProxyTest, Abort) {
       0 /* completed_parts_size */, 0 /* total_parts_size */,
       std::vector<std::string>());
   delegate_proxy_.CreateDownloadJob(controller.weak_ptr_factory_.GetWeakPtr(),
-                                    std::move(fetch_description1));
+                                    std::move(fetch_description1),
+                                    {} /* active_fetch_requests */);
 
   auto fetch_description2 = std::make_unique<BackgroundFetchDescription>(
       kExampleUniqueId2, "Job 2", url::Origin(), SkBitmap(),
@@ -223,7 +233,8 @@ TEST_F(BackgroundFetchDelegateProxyTest, Abort) {
       0 /* completed_parts_size */, 0 /* total_parts_size */,
       std::vector<std::string>());
   delegate_proxy_.CreateDownloadJob(controller2.weak_ptr_factory_.GetWeakPtr(),
-                                    std::move(fetch_description2));
+                                    std::move(fetch_description2),
+                                    {} /* active_fetch_requests */);
 
   delegate_proxy_.StartRequest(kExampleUniqueId, url::Origin(), request);
   delegate_proxy_.StartRequest(kExampleUniqueId2, url::Origin(), request2);
@@ -259,7 +270,8 @@ TEST_F(BackgroundFetchDelegateProxyTest, UpdateUI) {
       std::vector<std::string>());
 
   delegate_proxy_.CreateDownloadJob(controller.weak_ptr_factory_.GetWeakPtr(),
-                                    std::move(fetch_description));
+                                    std::move(fetch_description),
+                                    {} /* active_fetch_requests */);
 
   delegate_proxy_.StartRequest(kExampleUniqueId, url::Origin(), request);
   base::RunLoop().RunUntilIdle();
@@ -267,9 +279,9 @@ TEST_F(BackgroundFetchDelegateProxyTest, UpdateUI) {
   EXPECT_TRUE(controller.request_started_);
   EXPECT_TRUE(controller.request_completed_);
 
-  delegate_proxy_.UpdateUI(kExampleUniqueId, "Job 1 Complete!");
+  delegate_proxy_.UpdateUI(kExampleUniqueId, "Job 1 Complete!", base::nullopt);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(delegate_.title_update_count_, 1);
+  EXPECT_EQ(delegate_.ui_update_count_, 1);
 }
 
 }  // namespace content

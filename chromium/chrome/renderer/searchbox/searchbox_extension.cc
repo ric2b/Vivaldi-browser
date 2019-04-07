@@ -44,6 +44,8 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/text_constants.h"
+#include "ui/gfx/text_elider.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 #include "v8/include/v8.h"
@@ -88,6 +90,9 @@ const char kThemeAttributionFormat[] = "-webkit-image-set("
 
 const char kLTRHtmlTextDirection[] = "ltr";
 const char kRTLHtmlTextDirection[] = "rtl";
+
+// Max character limit for custom link titles.
+const size_t kMaxCustomLinkTitleLength = 150;
 
 void Dispatch(blink::WebLocalFrame* frame, const blink::WebString& script) {
   if (!frame)
@@ -169,8 +174,6 @@ v8::Local<v8::Object> GenerateMostVisitedItemData(
       .Set("thumbnailUrl", thumbnail_url)
       .Set("tileTitleSource", static_cast<int>(mv_item.title_source))
       .Set("tileSource", static_cast<int>(mv_item.source))
-      .Set("isCustomLink",
-           mv_item.source == ntp_tiles::TileSource::CUSTOM_LINKS)
       .Set("title", title)
       .Set("domain", mv_item.url.host())
       .Set("direction", base::StringPiece(direction))
@@ -605,6 +608,7 @@ class NewTabPageBindings : public gin::Wrappable<NewTabPageBindings> {
   static v8::Local<v8::Value> GetMostVisited(v8::Isolate* isolate);
   static bool GetMostVisitedAvailable(v8::Isolate* isolate);
   static v8::Local<v8::Value> GetThemeBackgroundInfo(v8::Isolate* isolate);
+  static bool GetIsCustomLinks();
 
   // Handlers for JS functions visible to all NTPs.
   static void CheckIsUserSignedInToChromeAs(const std::string& identity);
@@ -624,6 +628,7 @@ class NewTabPageBindings : public gin::Wrappable<NewTabPageBindings> {
                                const std::string& title);
   static void UndoCustomLinkAction();
   static void ResetCustomLinks();
+  static std::string FixupAndValidateUrl(const std::string& url);
   static void LogEvent(int event);
   static void LogMostVisitedImpression(
       int position,
@@ -663,6 +668,7 @@ gin::ObjectTemplateBuilder NewTabPageBindings::GetObjectTemplateBuilder(
                    &NewTabPageBindings::GetMostVisitedAvailable)
       .SetProperty("themeBackgroundInfo",
                    &NewTabPageBindings::GetThemeBackgroundInfo)
+      .SetProperty("isCustomLinks", &NewTabPageBindings::GetIsCustomLinks)
       .SetMethod("checkIsUserSignedIntoChromeAs",
                  &NewTabPageBindings::CheckIsUserSignedInToChromeAs)
       .SetMethod("checkIsUserSyncingHistory",
@@ -679,6 +685,8 @@ gin::ObjectTemplateBuilder NewTabPageBindings::GetObjectTemplateBuilder(
       .SetMethod("undoCustomLinkAction",
                  &NewTabPageBindings::UndoCustomLinkAction)
       .SetMethod("resetCustomLinks", &NewTabPageBindings::ResetCustomLinks)
+      .SetMethod("fixupAndValidateUrl",
+                 &NewTabPageBindings::FixupAndValidateUrl)
       .SetMethod("logEvent", &NewTabPageBindings::LogEvent)
       .SetMethod("logMostVisitedImpression",
                  &NewTabPageBindings::LogMostVisitedImpression)
@@ -754,6 +762,15 @@ v8::Local<v8::Value> NewTabPageBindings::GetThemeBackgroundInfo(
     return v8::Null(isolate);
   const ThemeBackgroundInfo& theme_info = search_box->GetThemeBackgroundInfo();
   return GenerateThemeBackgroundInfo(isolate, theme_info);
+}
+
+// static
+bool NewTabPageBindings::GetIsCustomLinks() {
+  const SearchBox* search_box = GetSearchBoxForCurrentContext();
+  if (!search_box || !HasOrigin(GURL(chrome::kChromeSearchMostVisitedUrl)))
+    return false;
+
+  return search_box->IsCustomLinks();
 }
 
 // static
@@ -846,20 +863,26 @@ void NewTabPageBindings::UpdateCustomLink(int rid,
   if (!search_box || !HasOrigin(GURL(chrome::kChromeSearchMostVisitedUrl)))
     return;
 
+  // Limit the title to |kMaxCustomLinkTitleLength| characters. If truncated,
+  // adds an ellipsis.
+  base::string16 truncated_title =
+      gfx::TruncateString(base::UTF8ToUTF16(title), kMaxCustomLinkTitleLength,
+                          gfx::CHARACTER_BREAK);
+
   const GURL gurl(url);
   // If rid is -1, adds a new link. Otherwise, updates the existing link
   // indicated by the rid (empty fields will passed as empty strings). This will
   // initialize custom links if they have not already been initialized.
   if (rid == -1) {
-    if (!gurl.is_valid() || title.empty())
+    if (!gurl.is_valid() || truncated_title.empty())
       return;
-    search_box->AddCustomLink(gurl, title);
+    search_box->AddCustomLink(gurl, base::UTF16ToUTF8(truncated_title));
     search_box->LogEvent(NTPLoggingEventType::NTP_CUSTOMIZE_SHORTCUT_ADD);
   } else {
     // Check that the URL, if provided, is valid.
     if (!url.empty() && !gurl.is_valid())
       return;
-    search_box->UpdateCustomLink(rid, gurl, title);
+    search_box->UpdateCustomLink(rid, gurl, base::UTF16ToUTF8(truncated_title));
     search_box->LogEvent(NTPLoggingEventType::NTP_CUSTOMIZE_SHORTCUT_UPDATE);
   }
 }
@@ -884,6 +907,14 @@ void NewTabPageBindings::ResetCustomLinks() {
     return;
   search_box->ResetCustomLinks();
   search_box->LogEvent(NTPLoggingEventType::NTP_CUSTOMIZE_SHORTCUT_RESTORE_ALL);
+}
+
+// static
+std::string NewTabPageBindings::FixupAndValidateUrl(const std::string& url) {
+  SearchBox* search_box = GetSearchBoxForCurrentContext();
+  if (!search_box || !HasOrigin(GURL(chrome::kChromeSearchMostVisitedUrl)))
+    return std::string();
+  return search_box->FixupAndValidateUrl(url);
 }
 
 // static

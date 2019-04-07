@@ -108,6 +108,9 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceResponseInfo {
   // Remote address of the socket which fetched this resource.
   net::HostPortPair socket_address;
 
+  // True if the response came from cache.
+  bool was_fetched_via_cache = false;
+
   // True if the response was delivered through a proxy.
   bool was_fetched_via_proxy;
 
@@ -124,9 +127,8 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceResponseInfo {
   // ServiceWorkerResponseInfo::url_list_via_service_worker().
   std::vector<GURL> url_list_via_service_worker;
 
-  // The type of the response, if it was returned by a service worker. This is
-  // kDefault if the response was not returned by a service worker.
-  mojom::FetchResponseType response_type_via_service_worker;
+  // https://fetch.spec.whatwg.org/#concept-response-type
+  mojom::FetchResponseType response_type;
 
   // The time immediately before starting ServiceWorker. If the response is not
   // provided by the ServiceWorker, kept empty.
@@ -145,12 +147,6 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceResponseInfo {
   // The cache name of the CacheStorage from where the response is served via
   // the ServiceWorker. Empty if the response isn't from the CacheStorage.
   std::string cache_storage_cache_name;
-
-  // A bitmask of potentially several Previews optimizations that the resource
-  // could have requested.
-  // TODO(rdsmith, reillyg): Only used by DRP; should be removed as part of DRP
-  // servicification.
-  int previews_state;
 
   // Effective connection type when the resource was fetched. This is populated
   // only for responses that correspond to main frame requests.
@@ -184,6 +180,10 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceResponseInfo {
   // True if this resource is stale and needs async revalidation. Will only
   // possibly be set if the load_flags indicated SUPPORT_ASYNC_REVALIDATION.
   bool async_revalidation_requested;
+
+  // True if mime sniffing has been done. In that case, we don't need to do
+  // mime sniffing anymore.
+  bool did_mime_sniff;
 
   // NOTE: When adding or changing fields here, also update
   // ResourceResponse::DeepCopy in resource_response.cc.

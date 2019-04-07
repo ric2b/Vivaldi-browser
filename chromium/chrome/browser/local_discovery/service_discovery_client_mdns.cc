@@ -13,7 +13,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/local_discovery/service_discovery_client_impl.h"
@@ -408,7 +408,7 @@ void ServiceDiscoveryClientMdns::StartNewClient() {
   mdns_ = net::MDnsClient::CreateDefault();
   client_ = std::make_unique<ServiceDiscoveryClientImpl>(mdns_.get());
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
+      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
       base::BindOnce(&net::GetMDnsInterfacesToBind),
       base::BindOnce(&ServiceDiscoveryClientMdns::OnInterfaceListReady,
                      weak_ptr_factory_.GetWeakPtr()));

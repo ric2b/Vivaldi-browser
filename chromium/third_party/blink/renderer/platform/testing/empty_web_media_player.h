@@ -30,6 +30,8 @@ class EmptyWebMediaPlayer : public WebMediaPlayer {
   void SetVolume(double) override {}
   void EnterPictureInPicture(PipWindowOpenedCallback) override {}
   void ExitPictureInPicture(PipWindowClosedCallback) override {}
+  void SetPictureInPictureCustomControls(
+      const std::vector<PictureInPictureControlInfo>&) override {}
   void RegisterPictureInPictureWindowResizeCallback(
       PipWindowResizedCallback) override {}
   WebTimeRanges Buffered() const override;
@@ -56,8 +58,8 @@ class EmptyWebMediaPlayer : public WebMediaPlayer {
   };
   unsigned DecodedFrameCount() const override { return 0; }
   unsigned DroppedFrameCount() const override { return 0; }
-  size_t AudioDecodedByteCount() const override { return 0; }
-  size_t VideoDecodedByteCount() const override { return 0; }
+  uint64_t AudioDecodedByteCount() const override { return 0; }
+  uint64_t VideoDecodedByteCount() const override { return 0; }
   void Paint(cc::PaintCanvas*,
              const WebRect&,
              cc::PaintFlags&,

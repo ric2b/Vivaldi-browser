@@ -15,7 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/observer_list.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "ui/gfx/win/singleton_hwnd.h"
 #include "ui/gfx/win/singleton_hwnd_observer.h"
 #include "ui/views/views_delegate.h"
@@ -98,7 +98,8 @@ class WindowsSessionChangeObserver::WtsRegistrationNotificationManager {
       observer.ClearCallback();
   }
 
-  base::ObserverList<WindowsSessionChangeObserver, true> observer_list_;
+  base::ObserverList<WindowsSessionChangeObserver, true>::Unchecked
+      observer_list_;
   std::unique_ptr<gfx::SingletonHwndObserver> singleton_hwnd_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(WtsRegistrationNotificationManager);

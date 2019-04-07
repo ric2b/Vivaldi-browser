@@ -5,11 +5,16 @@
 #ifndef DEVICE_FIDO_MAC_AUTHENTICATOR_H_
 #define DEVICE_FIDO_MAC_AUTHENTICATOR_H_
 
+#include <memory>
+#include <string>
+
 #include "base/component_export.h"
 #include "base/mac/availability.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece_forward.h"
 #include "device/fido/fido_authenticator.h"
+#include "device/fido/fido_transport_protocol.h"
 #include "device/fido/mac/operation.h"
 
 namespace device {
@@ -21,6 +26,11 @@ class COMPONENT_EXPORT(DEVICE_FIDO) TouchIdAuthenticator
  public:
   // IsAvailable returns whether Touch ID is available and enrolled on the
   // current device.
+  //
+  // Note that this may differ from the result of
+  // AuthenticatorImpl::IsUserVerifyingPlatformAuthenticatorAvailable, which
+  // also checks whether the embedder supports this authenticator, and if the
+  // request occurs from an off-the-record/incognito context.
   static bool IsAvailable();
 
   // CreateIfAvailable returns a TouchIdAuthenticator if IsAvailable() returns
@@ -35,15 +45,20 @@ class COMPONENT_EXPORT(DEVICE_FIDO) TouchIdAuthenticator
 
   ~TouchIdAuthenticator() override;
 
+  bool HasCredentialForGetAssertionRequest(
+      const CtapGetAssertionRequest& request);
+
   // FidoAuthenticator
-  void MakeCredential(
-      CtapMakeCredentialRequest request,
-      MakeCredentialCallback callback) override;
+  void InitializeAuthenticator(base::OnceClosure callback) override;
+  void MakeCredential(CtapMakeCredentialRequest request,
+                      MakeCredentialCallback callback) override;
   void GetAssertion(CtapGetAssertionRequest request,
                     GetAssertionCallback callback) override;
   void Cancel() override;
   std::string GetId() const override;
   const AuthenticatorSupportedOptions& Options() const override;
+  FidoTransportProtocol AuthenticatorTransport() const override;
+  base::WeakPtr<FidoAuthenticator> GetWeakPtr() override;
 
  private:
   TouchIdAuthenticator(std::string keychain_access_group,
@@ -60,6 +75,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) TouchIdAuthenticator
   std::string metadata_secret_;
 
   std::unique_ptr<Operation> operation_;
+
+  base::WeakPtrFactory<TouchIdAuthenticator> weak_factory_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TouchIdAuthenticator);

@@ -79,12 +79,23 @@ class TemplateURLRef {
       ContextualSearchParams();
       // Modern constructor, used when the content is sent in the HTTP header
       // instead of as CGI parameters.
+      // The |version| tell the server which version of the client is making
+      // this request.
+      // The |contextual_cards_version| tells the server which version of
+      // contextual cards integration is being used by the client.
       // The |home_country| is an ISO country code for the country that the user
       // considers their permanent home (which may be different from the country
       // they are currently visiting).  Pass an empty string if none available.
+      // The |previous_event_id| is an identifier previously returned by the
+      // server to identify that user interaction.
+      // The |previous_event_results| are the results of the user-interaction of
+      // that previous request.
+      // The "previous_xyz" parameters are documented in go/cs-sanitized.
       ContextualSearchParams(int version,
                              int contextual_cards_version,
-                             const std::string& home_country);
+                             const std::string& home_country,
+                             int64_t previous_event_id,
+                             int previous_event_results);
       ContextualSearchParams(const ContextualSearchParams& other);
       ~ContextualSearchParams();
 
@@ -103,6 +114,14 @@ class TemplateURLRef {
       // or an empty string if not available.  This indicates where the user
       // resides, not where they currently are.
       std::string home_country;
+
+      // An EventID from a previous interaction (sent by server, recorded by
+      // client).
+      int64_t previous_event_id;
+
+      // An encoded set of booleans that represent the interaction results from
+      // the previous event.
+      int previous_event_results;
     };
 
     // Estimates dynamic memory usage.
@@ -147,8 +166,8 @@ class TemplateURLRef {
     std::string prefetch_query;
     std::string prefetch_query_type;
 
-    // Additional query params provided by the suggest server.
-    std::string suggest_query_params;
+    // Additional query params to append to the request.
+    std::string additional_query_params;
 
     // If set, ReplaceSearchTerms() will automatically append any extra query
     // params specified via the --extra-search-query-params command-line
@@ -157,7 +176,7 @@ class TemplateURLRef {
     // about the query portion of the URL.  Since neither TemplateURLRef nor
     // indeed TemplateURL know whether a TemplateURL is the default search
     // engine, callers instead must set this manually.
-    bool append_extra_query_params;
+    bool append_extra_query_params_from_command_line;
 
     // The raw content of an image thumbnail that will be used as a query for
     // search-by-image frontend.

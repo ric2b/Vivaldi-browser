@@ -21,7 +21,7 @@
 #include "net/http/http_auth_controller.h"
 #include "net/http/proxy_client_socket.h"
 #include "net/log/net_log_with_source.h"
-#include "net/quic/chromium/quic_stream_factory.h"
+#include "net/quic/quic_stream_factory.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/ssl_client_socket_pool.h"
@@ -115,6 +115,10 @@ class NET_EXPORT_PRIVATE HttpProxyClientSocketWrapper
   int Read(IOBuffer* buf,
            int buf_len,
            CompletionOnceCallback callback) override;
+  int ReadIfReady(IOBuffer* buf,
+                  int buf_len,
+                  CompletionOnceCallback callback) override;
+  int CancelReadIfReady() override;
   int Write(IOBuffer* buf,
             int buf_len,
             CompletionOnceCallback callback,

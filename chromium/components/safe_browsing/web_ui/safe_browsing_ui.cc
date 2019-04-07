@@ -17,24 +17,28 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/grit/components_resources.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/password_manager/core/browser/hash_password_manager.h"
+#include "components/safe_browsing/browser/referrer_chain_provider.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/features.h"
 #include "components/safe_browsing/web_ui/constants.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/web_contents.h"
 
 #if SAFE_BROWSING_DB_LOCAL
 #include "components/safe_browsing/db/v4_local_database_manager.h"
 #endif
 
 using base::Time;
+using PasswordCaptured = sync_pb::UserEventSpecifics::GaiaPasswordCaptured;
 using PasswordReuseLookup =
     sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordReuseLookup;
 using PasswordReuseDetected =
@@ -150,18 +154,33 @@ void WebUIInfoSingleton::ClearPGPings() {
   std::map<int, LoginReputationClientResponse>().swap(pg_responses_);
 }
 
+void WebUIInfoSingleton::LogMessage(const std::string& message) {
+  if (webui_instances_.empty())
+    return;
+
+  base::Time timestamp = base::Time::Now();
+  log_messages_.push_back(std::make_pair(timestamp, message));
+
+  for (auto* webui_listener : webui_instances_)
+    webui_listener->NotifyLogMessageJsListener(timestamp, message);
+}
+
+void WebUIInfoSingleton::ClearLogMessages() {
+  std::vector<std::pair<base::Time, std::string>>().swap(log_messages_);
+}
+
 void WebUIInfoSingleton::RegisterWebUIInstance(SafeBrowsingUIHandler* webui) {
   webui_instances_.push_back(webui);
 }
 
 void WebUIInfoSingleton::UnregisterWebUIInstance(SafeBrowsingUIHandler* webui) {
-  webui_instances_.erase(
-      std::remove(webui_instances_.begin(), webui_instances_.end(), webui),
-      webui_instances_.end());
+  base::Erase(webui_instances_, webui);
   if (webui_instances_.empty()) {
     ClearCSBRRsSent();
     ClearClientDownloadRequestsSent();
     ClearPGEvents();
+    ClearPGPings();
+    ClearLogMessages();
   }
 }
 
@@ -330,6 +349,84 @@ std::string AddFullHashCacheInfo(
 
 #endif
 
+base::Value SerializeReferrer(const ReferrerChainEntry& referrer) {
+  base::DictionaryValue referrer_dict;
+  referrer_dict.SetKey("url", base::Value(referrer.url()));
+  referrer_dict.SetKey("main_frame_url",
+                       base::Value(referrer.main_frame_url()));
+
+  std::string url_type;
+  switch (referrer.type()) {
+    case ReferrerChainEntry::EVENT_URL:
+      url_type = "EVENT_URL";
+      break;
+    case ReferrerChainEntry::LANDING_PAGE:
+      url_type = "LANDING_PAGE";
+      break;
+    case ReferrerChainEntry::LANDING_REFERRER:
+      url_type = "LANDING_REFERRER";
+      break;
+    case ReferrerChainEntry::CLIENT_REDIRECT:
+      url_type = "CLIENT_REDIRECT";
+      break;
+    case ReferrerChainEntry::DEPRECATED_SERVER_REDIRECT:
+      url_type = "DEPRECATED_SERVER_REDIRECT";
+      break;
+    case ReferrerChainEntry::RECENT_NAVIGATION:
+      url_type = "RECENT_NAVIGATION";
+      break;
+  }
+  referrer_dict.SetKey("type", base::Value(url_type));
+
+  base::ListValue ip_addresses;
+  for (const std::string& ip_address : referrer.ip_addresses()) {
+    ip_addresses.GetList().push_back(base::Value(ip_address));
+  }
+  referrer_dict.SetKey("ip_addresses", std::move(ip_addresses));
+
+  referrer_dict.SetKey("referrer_url", base::Value(referrer.referrer_url()));
+
+  referrer_dict.SetKey("referrer_main_frame_url",
+                       base::Value(referrer.referrer_main_frame_url()));
+
+  referrer_dict.SetKey("is_retargeting",
+                       base::Value(referrer.is_retargeting()));
+
+  referrer_dict.SetKey("navigation_time_msec",
+                       base::Value(referrer.navigation_time_msec()));
+
+  base::ListValue server_redirects;
+  for (const ReferrerChainEntry::ServerRedirect& server_redirect :
+       referrer.server_redirect_chain()) {
+    server_redirects.GetList().push_back(base::Value(server_redirect.url()));
+  }
+  referrer_dict.SetKey("server_redirect_chain", std::move(server_redirects));
+
+  std::string navigation_initiation;
+  switch (referrer.navigation_initiation()) {
+    case ReferrerChainEntry::UNDEFINED:
+      navigation_initiation = "UNDEFINED";
+      break;
+    case ReferrerChainEntry::BROWSER_INITIATED:
+      navigation_initiation = "BROWSER_INITIATED";
+      break;
+    case ReferrerChainEntry::RENDERER_INITIATED_WITHOUT_USER_GESTURE:
+      navigation_initiation = "RENDERER_INITIATED_WITHOUT_USER_GESTURE";
+      break;
+    case ReferrerChainEntry::RENDERER_INITIATED_WITH_USER_GESTURE:
+      navigation_initiation = "RENDERER_INITIATED_WITH_USER_GESTURE";
+      break;
+  }
+  referrer_dict.SetKey("navigation_initiation",
+                       base::Value(navigation_initiation));
+
+  referrer_dict.SetKey(
+      "maybe_launched_by_external_application",
+      base::Value(referrer.maybe_launched_by_external_application()));
+
+  return std::move(referrer_dict);
+}
+
 std::string SerializeClientDownloadRequest(const ClientDownloadRequest& cdr) {
   base::DictionaryValue dict;
   if (cdr.has_url())
@@ -354,9 +451,18 @@ std::string SerializeClientDownloadRequest(const ClientDownloadRequest& cdr) {
                                        archived_binary.download_type());
     if (archived_binary.has_length())
       dict_archived_binary->SetInteger("length", archived_binary.length());
+    if (archived_binary.is_encrypted())
+      dict_archived_binary->SetBoolean("is_encrypted", true);
     archived_binaries->Append(std::move(dict_archived_binary));
   }
   dict.SetList("archived_binary", std::move(archived_binaries));
+
+  auto referrer_chain = std::make_unique<base::ListValue>();
+  for (const auto& referrer_chain_entry : cdr.referrer_chain()) {
+    referrer_chain->GetList().push_back(
+        SerializeReferrer(referrer_chain_entry));
+  }
+  dict.SetList("referrer_chain", std::move(referrer_chain));
 
   base::Value* request_tree = &dict;
   std::string request_serialized;
@@ -371,22 +477,22 @@ std::string SerializeClientDownloadResponse(const ClientDownloadResponse& cdr) {
 
   switch (cdr.verdict()) {
     case ClientDownloadResponse::SAFE:
-      dict.SetPath({"verdict"}, base::Value("SAFE"));
+      dict.SetKey("verdict", base::Value("SAFE"));
       break;
     case ClientDownloadResponse::DANGEROUS:
-      dict.SetPath({"verdict"}, base::Value("DANGEROUS"));
+      dict.SetKey("verdict", base::Value("DANGEROUS"));
       break;
     case ClientDownloadResponse::UNCOMMON:
-      dict.SetPath({"verdict"}, base::Value("UNCOMMON"));
+      dict.SetKey("verdict", base::Value("UNCOMMON"));
       break;
     case ClientDownloadResponse::POTENTIALLY_UNWANTED:
-      dict.SetPath({"verdict"}, base::Value("POTENTIALLY_UNWANTED"));
+      dict.SetKey("verdict", base::Value("POTENTIALLY_UNWANTED"));
       break;
     case ClientDownloadResponse::DANGEROUS_HOST:
-      dict.SetPath({"verdict"}, base::Value("DANGEROUS_HOST"));
+      dict.SetKey("verdict", base::Value("DANGEROUS_HOST"));
       break;
     case ClientDownloadResponse::UNKNOWN:
-      dict.SetPath({"verdict"}, base::Value("UNKNOWN"));
+      dict.SetKey("verdict", base::Value("UNKNOWN"));
       break;
   }
 
@@ -397,11 +503,11 @@ std::string SerializeClientDownloadResponse(const ClientDownloadResponse& cdr) {
   }
 
   if (cdr.has_token()) {
-    dict.SetPath({"token"}, base::Value(cdr.token()));
+    dict.SetKey("token", base::Value(cdr.token()));
   }
 
   if (cdr.has_upload()) {
-    dict.SetPath({"upload"}, base::Value(cdr.upload()));
+    dict.SetKey("upload", base::Value(cdr.upload()));
   }
 
   base::Value* request_tree = &dict;
@@ -452,6 +558,29 @@ base::DictionaryValue SerializePGEvent(
   result.SetDouble("time", timestamp.ToJsTime());
 
   base::DictionaryValue event_dict;
+
+  // Nominally only one of the following if() statements would be true.
+  // Note that top-level path is either password_captured, or one of the fields
+  // under GaiaPasswordReuse (ie. we've flattened the namespace for simplicity).
+
+  if (event.has_gaia_password_captured_event()) {
+    std::string event_trigger;
+
+    switch (event.gaia_password_captured_event().event_trigger()) {
+      case PasswordCaptured::UNSPECIFIED:
+        event_trigger = "UNSPECIFIED";
+        break;
+      case PasswordCaptured::USER_LOGGED_IN:
+        event_trigger = "USER_LOGGED_IN";
+        break;
+      case PasswordCaptured::EXPIRED_28D_TIMER:
+        event_trigger = "EXPIRED_28D_TIMER";
+        break;
+    }
+
+    event_dict.SetPath({"password_captured", "event_trigger"},
+                       base::Value(event_trigger));
+  }
 
   sync_pb::UserEventSpecifics::GaiaPasswordReuse reuse =
       event.gaia_password_reuse_event();
@@ -546,6 +675,9 @@ base::DictionaryValue SerializePGEvent(
       case PasswordReuseDialogInteraction::WARNING_UI_IGNORED:
         interaction_result = "WARNING_UI_IGNORED";
         break;
+      case PasswordReuseDialogInteraction::WARNING_ACTION_TAKEN_ON_SETTINGS:
+        interaction_result = "WARNING_ACTION_TAKEN_ON_SETTINGS";
+        break;
     }
     event_dict.SetPath({"dialog_interaction", "interaction_result"},
                        base::Value(interaction_result));
@@ -557,84 +689,6 @@ base::DictionaryValue SerializePGEvent(
   serializer.Serialize(event_dict);
   result.SetString("message", event_serialized);
   return result;
-}
-
-base::Value SerializeReferrer(const ReferrerChainEntry& referrer) {
-  base::DictionaryValue referrer_dict;
-  referrer_dict.SetKey("url", base::Value(referrer.url()));
-  referrer_dict.SetKey("main_frame_url",
-                       base::Value(referrer.main_frame_url()));
-
-  std::string url_type;
-  switch (referrer.type()) {
-    case ReferrerChainEntry::EVENT_URL:
-      url_type = "EVENT_URL";
-      break;
-    case ReferrerChainEntry::LANDING_PAGE:
-      url_type = "LANDING_PAGE";
-      break;
-    case ReferrerChainEntry::LANDING_REFERRER:
-      url_type = "LANDING_REFERRER";
-      break;
-    case ReferrerChainEntry::CLIENT_REDIRECT:
-      url_type = "CLIENT_REDIRECT";
-      break;
-    case ReferrerChainEntry::DEPRECATED_SERVER_REDIRECT:
-      url_type = "DEPRECATED_SERVER_REDIRECT";
-      break;
-    case ReferrerChainEntry::RECENT_NAVIGATION:
-      url_type = "RECENT_NAVIGATION";
-      break;
-  }
-  referrer_dict.SetKey("type", base::Value(url_type));
-
-  base::ListValue ip_addresses;
-  for (const std::string& ip_address : referrer.ip_addresses()) {
-    ip_addresses.GetList().push_back(base::Value(ip_address));
-  }
-  referrer_dict.SetKey("ip_addresses", std::move(ip_addresses));
-
-  referrer_dict.SetKey("referrer_url", base::Value(referrer.referrer_url()));
-
-  referrer_dict.SetKey("referrer_main_frame_url",
-                       base::Value(referrer.referrer_main_frame_url()));
-
-  referrer_dict.SetKey("is_retargeting",
-                       base::Value(referrer.is_retargeting()));
-
-  referrer_dict.SetKey("navigation_time_msec",
-                       base::Value(referrer.navigation_time_msec()));
-
-  base::ListValue server_redirects;
-  for (const ReferrerChainEntry::ServerRedirect& server_redirect :
-       referrer.server_redirect_chain()) {
-    server_redirects.GetList().push_back(base::Value(server_redirect.url()));
-  }
-  referrer_dict.SetKey("server_redirect_chain", std::move(server_redirects));
-
-  std::string navigation_initiation;
-  switch (referrer.navigation_initiation()) {
-    case ReferrerChainEntry::UNDEFINED:
-      navigation_initiation = "UNDEFINED";
-      break;
-    case ReferrerChainEntry::BROWSER_INITIATED:
-      navigation_initiation = "BROWSER_INITIATED";
-      break;
-    case ReferrerChainEntry::RENDERER_INITIATED_WITHOUT_USER_GESTURE:
-      navigation_initiation = "RENDERER_INITIATED_WITHOUT_USER_GESTURE";
-      break;
-    case ReferrerChainEntry::RENDERER_INITIATED_WITH_USER_GESTURE:
-      navigation_initiation = "RENDERER_INITIATED_WITH_USER_GESTURE";
-      break;
-  }
-  referrer_dict.SetKey("navigation_initiation",
-                       base::Value(navigation_initiation));
-
-  referrer_dict.SetKey(
-      "maybe_launched_by_external_application",
-      base::Value(referrer.maybe_launched_by_external_application()));
-
-  return std::move(referrer_dict);
 }
 
 base::Value SerializeFrame(const LoginReputationClientRequest::Frame& frame) {
@@ -729,7 +783,7 @@ base::Value SerializeChromeUserPopulation(
   std::string user_population;
   switch (population.user_population()) {
     case ChromeUserPopulation::UNKNOWN_USER_POPULATION:
-      user_population = "REUSED_PASSWORD_TYPE_UNKNOWN";
+      user_population = "UNKNOWN_USER_POPULATION";
       break;
     case ChromeUserPopulation::SAFE_BROWSING:
       user_population = "SAFE_BROWSING";
@@ -766,6 +820,9 @@ base::Value SerializeChromeUserPopulation(
   }
   population_dict.SetKey("profile_management_status",
                          base::Value(management_status));
+  population_dict.SetKey(
+      "is_under_advanced_protection",
+      base::Value(population.is_under_advanced_protection()));
 
   return std::move(population_dict);
 }
@@ -843,6 +900,14 @@ std::string SerializePGResponse(const LoginReputationClientResponse& response) {
   serializer.set_pretty_print(true);
   serializer.Serialize(response_dict);
   return response_serialized;
+}
+
+base::Value SerializeLogMessage(const base::Time& timestamp,
+                                const std::string& message) {
+  base::DictionaryValue result;
+  result.SetDouble("time", timestamp.ToJsTime());
+  result.SetString("message", message);
+  return std::move(result);
 }
 
 }  // namespace
@@ -1056,6 +1121,56 @@ void SafeBrowsingUIHandler::GetPGResponses(const base::ListValue* args) {
   ResolveJavascriptCallback(base::Value(callback_id), responses_sent);
 }
 
+void SafeBrowsingUIHandler::GetReferrerChain(const base::ListValue* args) {
+  std::string url_string;
+  args->GetString(1, &url_string);
+
+  ReferrerChainProvider* provider =
+      WebUIInfoSingleton::GetInstance()->referrer_chain_provider();
+
+  std::string callback_id;
+  args->GetString(0, &callback_id);
+
+  if (!provider) {
+    AllowJavascript();
+    ResolveJavascriptCallback(base::Value(callback_id), base::Value(""));
+  }
+
+  ReferrerChain referrer_chain;
+  provider->IdentifyReferrerChainByEventURL(
+      GURL(url_string), SessionID::InvalidValue(), 2, &referrer_chain);
+
+  base::ListValue referrer_list;
+  for (const ReferrerChainEntry& entry : referrer_chain) {
+    referrer_list.GetList().push_back(SerializeReferrer(entry));
+  }
+
+  std::string referrer_chain_serialized;
+  JSONStringValueSerializer serializer(&referrer_chain_serialized);
+  serializer.set_pretty_print(true);
+  serializer.Serialize(referrer_list);
+
+  AllowJavascript();
+  ResolveJavascriptCallback(base::Value(callback_id),
+                            base::Value(referrer_chain_serialized));
+}
+
+void SafeBrowsingUIHandler::GetLogMessages(const base::ListValue* args) {
+  const std::vector<std::pair<base::Time, std::string>>& log_messages =
+      WebUIInfoSingleton::GetInstance()->log_messages();
+
+  base::ListValue messages_received;
+  for (const auto& message : log_messages) {
+    messages_received.GetList().push_back(
+        base::Value(SerializeLogMessage(message.first, message.second)));
+  }
+
+  AllowJavascript();
+  std::string callback_id;
+  args->GetString(0, &callback_id);
+  ResolveJavascriptCallback(base::Value(callback_id), messages_received);
+}
+
 void SafeBrowsingUIHandler::NotifyClientDownloadRequestJsListener(
     ClientDownloadRequest* client_download_request) {
   AllowJavascript();
@@ -1106,6 +1221,14 @@ void SafeBrowsingUIHandler::NotifyPGResponseJsListener(
   FireWebUIListener("pg-responses-update", response_list);
 }
 
+void SafeBrowsingUIHandler::NotifyLogMessageJsListener(
+    const base::Time& timestamp,
+    const std::string& message) {
+  AllowJavascript();
+  FireWebUIListener("log-messages-update",
+                    base::Value(SerializeLogMessage(timestamp, message)));
+}
+
 void SafeBrowsingUIHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "getExperiments",
@@ -1145,6 +1268,24 @@ void SafeBrowsingUIHandler::RegisterMessages() {
       "getPGResponses",
       base::BindRepeating(&SafeBrowsingUIHandler::GetPGResponses,
                           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getLogMessages",
+      base::BindRepeating(&SafeBrowsingUIHandler::GetLogMessages,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getReferrerChain",
+      base::BindRepeating(&SafeBrowsingUIHandler::GetReferrerChain,
+                          base::Unretained(this)));
+}
+
+void SafeBrowsingUIHandler::SetWebUIForTesting(content::WebUI* web_ui) {
+  set_web_ui(web_ui);
+}
+
+CrSBLogMessage::CrSBLogMessage() {}
+
+CrSBLogMessage::~CrSBLogMessage() {
+  WebUIInfoSingleton::GetInstance()->LogMessage(stream_.str());
 }
 
 }  // namespace safe_browsing

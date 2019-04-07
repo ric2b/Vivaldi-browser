@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "ash/metrics/user_metrics_recorder.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_view_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
@@ -21,7 +22,6 @@
 #include "ash/system/network/network_info.h"
 #include "ash/system/network/network_row_title_view.h"
 #include "ash/system/network/network_state_list_detailed_view.h"
-#include "ash/system/networking_config_delegate.h"
 #include "ash/system/power/power_status.h"
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/system_menu_button.h"
@@ -30,6 +30,7 @@
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tri_view.h"
+#include "ash/system/unified/top_shortcut_button.h"
 #include "base/i18n/number_formatting.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
@@ -45,6 +46,7 @@
 #include "chromeos/network/proxy/ui_proxy_config_service.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/onc/onc_constants.h"
+#include "components/vector_icons/vector_icons.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -165,7 +167,12 @@ class NetworkListView::SectionHeaderRowView : public views::View,
   void InitializeLayout() {
     TrayPopupUtils::ConfigureAsStickyHeader(this);
     SetLayoutManager(std::make_unique<views::FillLayout>());
-    container_ = TrayPopupUtils::CreateSubHeaderRowView(false);
+    bool show_spacing = features::IsSystemTrayUnifiedEnabled();
+    container_ = TrayPopupUtils::CreateSubHeaderRowView(show_spacing);
+    if (show_spacing) {
+      container_->AddView(TriView::Container::START,
+                          TrayPopupUtils::CreateMainImageView());
+    }
     AddChildView(container_);
 
     network_row_title_view_ = new NetworkRowTitleView(title_id_);
@@ -446,11 +453,20 @@ class WifiHeaderRowView : public NetworkListView::SectionHeaderRowView {
     gfx::ImageSkia disabled_image = network_icon::GetImageForNewWifiNetwork(
         SkColorSetA(prominent_color, kDisabledJoinIconAlpha),
         SkColorSetA(prominent_color, kDisabledJoinBadgeAlpha));
-    join_button_ = new SystemMenuButton(this, normal_image, disabled_image,
-                                        IDS_ASH_STATUS_TRAY_OTHER_WIFI);
-    join_button_->SetInkDropColor(prominent_color);
-    join_button_->SetEnabled(enabled);
-    container()->AddView(TriView::Container::END, join_button_);
+    if (features::IsSystemTrayUnifiedEnabled()) {
+      auto* join_button = new TopShortcutButton(
+          this, vector_icons::kWifiAddIcon, IDS_ASH_STATUS_TRAY_OTHER_WIFI);
+      join_button->SetEnabled(enabled);
+      container()->AddView(TriView::Container::END, join_button);
+      join_button_ = join_button;
+    } else {
+      auto* join_button = new SystemMenuButton(
+          this, normal_image, disabled_image, IDS_ASH_STATUS_TRAY_OTHER_WIFI);
+      join_button->SetInkDropColor(prominent_color);
+      join_button->SetEnabled(enabled);
+      container()->AddView(TriView::Container::END, join_button);
+      join_button_ = join_button;
+    }
   }
 
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {
@@ -478,7 +494,7 @@ class WifiHeaderRowView : public NetworkListView::SectionHeaderRowView {
   static constexpr int kDisabledJoinIconAlpha = 0x1D;
 
   // A button to invoke "Join Wi-Fi network" dialog.
-  SystemMenuButton* join_button_;
+  views::Button* join_button_;
 
   DISALLOW_COPY_AND_ASSIGN(WifiHeaderRowView);
 };
@@ -559,13 +575,7 @@ void NetworkListView::UpdateNetworkIcons() {
         handler->GetNetworkStateFromGuid(info->guid);
     if (!network)
       continue;
-    bool prohibited_by_policy =
-        Shell::Get()->session_controller()->IsActiveUserSessionStarted() &&
-        NetworkHandler::Get()
-            ->managed_network_configuration_handler()
-            ->IsNetworkBlockedByPolicy(network->type(), network->guid(),
-                                       network->profile_path(),
-                                       network->GetHexSsid());
+    bool prohibited_by_policy = network->blocked_by_policy();
     info->label = network_icon::GetLabelForNetwork(
         network, network_icon::ICON_TYPE_MENU_LIST);
     info->image =
@@ -645,7 +655,7 @@ NetworkListView::UpdateNetworkListEntries() {
   // TODO(jamescook): Create UIProxyConfigService under mash. This will require
   // the mojo pref service to work with prefs in Local State.
   // http://crbug.com/718072
-  if (::features::IsAshInBrowserProcess()) {
+  if (!::features::IsMultiProcessMash()) {
     using_proxy = NetworkHandler::Get()
                       ->ui_proxy_config_service()
                       ->HasDefaultNetworkProxyConfigured();
@@ -807,14 +817,7 @@ views::View* NetworkListView::CreatePolicyView(const NetworkInfo& info) {
   const chromeos::NetworkState* network =
       NetworkHandler::Get()->network_state_handler()->GetNetworkStateFromGuid(
           info.guid);
-  if (!network)
-    return nullptr;
-  const base::DictionaryValue* policy =
-      NetworkHandler::Get()
-          ->managed_network_configuration_handler()
-          ->FindPolicyByGuidAndProfile(network->guid(), network->profile_path(),
-                                       nullptr /* onc_source */);
-  if (!policy)
+  if (!network || !network->IsManagedByPolicy())
     return nullptr;
 
   views::ImageView* controlled_icon = TrayPopupUtils::CreateMainImageView();
@@ -825,14 +828,10 @@ views::View* NetworkListView::CreatePolicyView(const NetworkInfo& info) {
 
 views::View* NetworkListView::CreateControlledByExtensionView(
     const NetworkInfo& info) {
-  NetworkingConfigDelegate* networking_config_delegate =
-      Shell::Get()->shell_delegate()->GetNetworkingConfigDelegate();
-  if (!networking_config_delegate)
-    return nullptr;
-  std::unique_ptr<const NetworkingConfigDelegate::ExtensionInfo>
-      extension_info =
-          networking_config_delegate->LookUpExtensionForNetwork(info.guid);
-  if (!extension_info)
+  const chromeos::NetworkState* network =
+      NetworkHandler::Get()->network_state_handler()->GetNetworkStateFromGuid(
+          info.guid);
+  if (!network || !network->captive_portal_provider())
     return nullptr;
 
   views::ImageView* controlled_icon = TrayPopupUtils::CreateMainImageView();
@@ -840,7 +839,7 @@ views::View* NetworkListView::CreateControlledByExtensionView(
       gfx::CreateVectorIcon(kCaptivePortalIcon, kMenuIconColor));
   controlled_icon->SetTooltipText(l10n_util::GetStringFUTF16(
       IDS_ASH_STATUS_TRAY_EXTENSION_CONTROLLED_WIFI,
-      base::UTF8ToUTF16(extension_info->extension_name)));
+      base::UTF8ToUTF16(network->captive_portal_provider()->name)));
   controlled_icon->set_id(VIEW_ID_EXTENSION_CONTROLLED_WIFI);
   return controlled_icon;
 }
@@ -965,8 +964,10 @@ TriView* NetworkListView::CreateConnectionWarning() {
   // Set up layout and apply sticky row property.
   TriView* connection_warning = TrayPopupUtils::CreateDefaultRowView();
   TrayPopupUtils::ConfigureAsStickyHeader(connection_warning);
-  connection_warning->SetBackground(
-      views::CreateSolidBackground(kHeaderBackgroundColor));
+  if (!features::IsSystemTrayUnifiedEnabled()) {
+    connection_warning->SetBackground(
+        views::CreateSolidBackground(kHeaderBackgroundColor));
+  }
 
   // Set 'info' icon on left side.
   views::ImageView* image_view = TrayPopupUtils::CreateMainImageView();

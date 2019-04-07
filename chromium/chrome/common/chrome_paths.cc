@@ -19,6 +19,7 @@
 #include "chrome/common/chrome_paths_internal.h"
 #include "media/cdm/cdm_paths.h"
 #include "media/media_buildflags.h"
+#include "third_party/widevine/cdm/widevine_cdm_common.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/path_utils.h"
@@ -54,9 +55,6 @@ const base::FilePath::CharType kPepperFlashSystemBaseDirectory[] =
     FILE_PATH_LITERAL("Internet Plug-Ins/PepperFlashPlayer");
 #endif
 
-const base::FilePath::CharType kInternalNaClPluginFileName[] =
-    FILE_PATH_LITERAL("internal-nacl-plugin");
-
 #if defined(OS_LINUX)
 // The path to the external extension <id>.json files.
 // /usr/share seems like a good choice, see: http://www.pathname.com/fhs/
@@ -78,6 +76,8 @@ const base::FilePath::CharType kChromeOSComponentFlash[] = FILE_PATH_LITERAL(
     "/run/imageloader/PepperFlashPlayer/libpepflashplayer.so");
 const base::FilePath::CharType kChromeOSTPMFirmwareUpdateLocation[] =
     FILE_PATH_LITERAL("/run/tpm_firmware_update_location");
+const base::FilePath::CharType kChromeOSTPMFirmwareUpdateSRKVulnerableROCA[] =
+    FILE_PATH_LITERAL("/run/tpm_firmware_update_srk_vulnerable_roca");
 #endif  // defined(OS_CHROMEOS)
 
 static base::LazyInstance<base::FilePath>::DestructorAtExit
@@ -339,14 +339,6 @@ bool PathProvider(int key, base::FilePath* result) {
         return false;
       cur = cur.Append(chrome::kPepperFlashPluginFilename);
       break;
-    // TODO(teravest): Remove this case once the internal NaCl plugin is gone.
-    // We currently need a path here to look up whether the plugin is disabled
-    // and what its permissions are.
-    case chrome::FILE_NACL_PLUGIN:
-      if (!GetInternalPluginsDirectory(&cur))
-        return false;
-      cur = cur.Append(kInternalNaClPluginFileName);
-      break;
     // PNaCl is currenly installable via the component updater or by being
     // simply built-in.  DIR_PNACL_BASE is used as the base directory for
     // installation via component updater.  DIR_PNACL_COMPONENT will be
@@ -594,6 +586,10 @@ bool PathProvider(int key, base::FilePath* result) {
       break;
     case chrome::FILE_CHROME_OS_TPM_FIRMWARE_UPDATE_LOCATION:
       cur = base::FilePath(kChromeOSTPMFirmwareUpdateLocation);
+      create_dir = false;
+      break;
+    case chrome::FILE_CHROME_OS_TPM_FIRMWARE_UPDATE_SRK_VULNERABLE_ROCA:
+      cur = base::FilePath(kChromeOSTPMFirmwareUpdateSRKVulnerableROCA);
       create_dir = false;
       break;
 #endif  // defined(OS_CHROMEOS)

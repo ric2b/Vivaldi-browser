@@ -27,11 +27,11 @@
 
 #include "base/atomic_sequence_num.h"
 #include "base/optional.h"
+#include "third_party/blink/public/common/indexeddb/web_idb_types.h"
 #include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_callbacks.h"
 #include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_exception.h"
 #include "third_party/blink/public/platform/modules/indexeddb/web_idb_key_path.h"
 #include "third_party/blink/public/platform/modules/indexeddb/web_idb_observation.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_binding_for_modules.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_idb_observer_callback.h"
@@ -265,7 +265,6 @@ IDBObjectStore* IDBDatabase::createObjectStore(
     bool auto_increment,
     ExceptionState& exception_state) {
   IDB_TRACE("IDBDatabase::createObjectStore");
-  RecordApiCallsHistogram(kIDBCreateObjectStoreCall);
 
   if (!version_change_transaction_) {
     exception_state.ThrowDOMException(
@@ -331,7 +330,6 @@ IDBObjectStore* IDBDatabase::createObjectStore(
 void IDBDatabase::deleteObjectStore(const String& name,
                                     ExceptionState& exception_state) {
   IDB_TRACE("IDBDatabase::deleteObjectStore");
-  RecordApiCallsHistogram(kIDBDeleteObjectStoreCall);
   if (!version_change_transaction_) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
@@ -371,7 +369,6 @@ IDBTransaction* IDBDatabase::transaction(
     const String& mode_string,
     ExceptionState& exception_state) {
   IDB_TRACE("IDBDatabase::transaction");
-  RecordApiCallsHistogram(kIDBTransactionCall);
 
   HashSet<String> scope;
   if (store_names.IsString()) {
@@ -500,19 +497,19 @@ void IDBDatabase::OnVersionChange(int64_t old_version, int64_t new_version) {
 void IDBDatabase::EnqueueEvent(Event* event) {
   DCHECK(GetExecutionContext());
   event->SetTarget(this);
-  event_queue_->EnqueueEvent(FROM_HERE, event);
+  event_queue_->EnqueueEvent(FROM_HERE, *event);
 }
 
-DispatchEventResult IDBDatabase::DispatchEventInternal(Event* event) {
+DispatchEventResult IDBDatabase::DispatchEventInternal(Event& event) {
   IDB_TRACE("IDBDatabase::dispatchEvent");
   if (!GetExecutionContext())
     return DispatchEventResult::kCanceledBeforeDispatch;
-  DCHECK(event->type() == EventTypeNames::versionchange ||
-         event->type() == EventTypeNames::close);
+  DCHECK(event.type() == EventTypeNames::versionchange ||
+         event.type() == EventTypeNames::close);
 
   DispatchEventResult dispatch_result =
       EventTarget::DispatchEventInternal(event);
-  if (event->type() == EventTypeNames::versionchange && !close_pending_ &&
+  if (event.type() == EventTypeNames::versionchange && !close_pending_ &&
       backend_)
     backend_->VersionChangeIgnored();
   return dispatch_result;
@@ -596,13 +593,6 @@ const AtomicString& IDBDatabase::InterfaceName() const {
 
 ExecutionContext* IDBDatabase::GetExecutionContext() const {
   return ContextLifecycleObserver::GetExecutionContext();
-}
-
-void IDBDatabase::RecordApiCallsHistogram(IndexedDatabaseMethods method) {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(
-      EnumerationHistogram, api_calls_histogram,
-      ("WebCore.IndexedDB.FrontEndAPICalls", kIDBMethodsMax));
-  api_calls_histogram.Count(method);
 }
 
 STATIC_ASSERT_ENUM(kWebIDBDatabaseExceptionUnknownError,

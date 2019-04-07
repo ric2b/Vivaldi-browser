@@ -14,8 +14,8 @@
 #include "base/sequence_checker.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
+#include "components/invalidation/impl/deprecated_invalidator_registrar.h"
 #include "components/invalidation/impl/invalidation_logger.h"
-#include "components/invalidation/impl/invalidator_registrar.h"
 #include "components/invalidation/impl/ticl_settings_provider.h"
 #include "components/invalidation/public/identity_provider.h"
 #include "components/invalidation/public/invalidation_handler.h"
@@ -61,7 +61,7 @@ class TiclInvalidationService : public InvalidationService,
 
   TiclInvalidationService(
       const std::string& user_agent,
-      std::unique_ptr<IdentityProvider> identity_provider,
+      IdentityProvider* identity_provider,
       std::unique_ptr<TiclSettingsProvider> settings_provider,
       gcm::GCMDriver* gcm_driver,
       const scoped_refptr<net::URLRequestContextGetter>& request_context,
@@ -127,10 +127,11 @@ class TiclInvalidationService : public InvalidationService,
 
   const std::string user_agent_;
 
-  std::unique_ptr<IdentityProvider> identity_provider_;
+  IdentityProvider* identity_provider_;
   std::unique_ptr<TiclSettingsProvider> settings_provider_;
 
-  std::unique_ptr<syncer::InvalidatorRegistrar> invalidator_registrar_;
+  std::unique_ptr<syncer::DeprecatedInvalidatorRegistrar>
+      invalidator_registrar_;
   std::unique_ptr<syncer::InvalidationStateTracker> invalidation_state_tracker_;
   std::unique_ptr<syncer::Invalidator> invalidator_;
 

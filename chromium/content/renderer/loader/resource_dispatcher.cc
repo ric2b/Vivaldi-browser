@@ -18,16 +18,18 @@
 #include "base/rand_util.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/common/inter_process_time_ticks_converter.h"
+#include "content/common/mime_sniffing_throttle.h"
 #include "content/common/navigation_params.h"
 #include "content/common/net/record_load_histograms.h"
 #include "content/common/throttling_url_loader.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/resource_load_info.mojom.h"
 #include "content/public/common/resource_type.h"
+#include "content/public/common/url_utils.h"
 #include "content/public/renderer/fixed_received_data.h"
 #include "content/public/renderer/request_peer.h"
 #include "content/public/renderer/resource_dispatcher_delegate.h"
@@ -45,6 +47,7 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
+#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 
 namespace content {
 
@@ -222,6 +225,22 @@ int GetInitialRequestID() {
   return base::RandInt(kMin, kMax);
 }
 
+// Determines if the loader should be restarted on a redirect using
+// ThrottlingURLLoader::FollowRedirectForcingRestart.
+bool RedirectRequiresLoaderRestart(const GURL& original_url,
+                                   const GURL& redirect_url) {
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return false;
+
+  // Restart is needed if the URL is no longer handled by network service.
+  if (IsURLHandledByNetworkService(original_url))
+    return !IsURLHandledByNetworkService(redirect_url);
+
+  // If URL wasn't originally handled by network service, restart is needed if
+  // schemes are different.
+  return original_url.scheme_piece() != redirect_url.scheme_piece();
+}
+
 }  // namespace
 
 // static
@@ -274,6 +293,18 @@ void ResourceDispatcher::OnReceivedResponse(
   ToResourceResponseInfo(*request_info, initial_response_head,
                          &renderer_response_info);
   request_info->load_timing_info = renderer_response_info.load_timing;
+
+  if (renderer_response_info.network_accessed) {
+    if (request_info->resource_type == RESOURCE_TYPE_MAIN_FRAME) {
+      UMA_HISTOGRAM_ENUMERATION("Net.ConnectionInfo.MainFrame",
+                                renderer_response_info.connection_info,
+                                net::HttpResponseInfo::NUM_OF_CONNECTION_INFOS);
+    } else {
+      UMA_HISTOGRAM_ENUMERATION("Net.ConnectionInfo.SubResource",
+                                renderer_response_info.connection_info,
+                                net::HttpResponseInfo::NUM_OF_CONNECTION_INFOS);
+    }
+  }
 
   network::ResourceResponseHead response_head;
   std::unique_ptr<NavigationResponseOverrideParameters> response_override =
@@ -348,8 +379,23 @@ void ResourceDispatcher::OnReceivedRedirect(
   PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
   if (!request_info)
     return;
+  if (!request_info->url_loader && request_info->should_follow_redirect) {
+    // This is a redirect that synchronously came as the loader is being
+    // constructed, due to a URLLoaderThrottle that changed the starting
+    // URL. Handle this in a posted task, as we don't have the loader
+    // pointer yet.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&ResourceDispatcher::OnReceivedRedirect,
+                                  weak_factory_.GetWeakPtr(), request_id,
+                                  redirect_info, response_head, task_runner));
+    return;
+  }
+
   request_info->local_response_start = base::TimeTicks::Now();
   request_info->remote_request_start = response_head.load_timing.request_start;
+  request_info->redirect_requires_loader_restart =
+      RedirectRequiresLoaderRestart(request_info->response_url,
+                                    redirect_info.new_url);
 
   network::ResourceResponseInfo renderer_response_info;
   ToResourceResponseInfo(*request_info, response_head, &renderer_response_info);
@@ -390,7 +436,13 @@ void ResourceDispatcher::FollowPendingRedirect(
     request_info->has_pending_redirect = false;
     // net::URLRequest clears its request_start on redirect, so should we.
     request_info->local_request_start = base::TimeTicks::Now();
-    request_info->url_loader->FollowRedirect(base::nullopt);
+    // Redirect URL may not be handled by the network service, so force a
+    // restart in case another URLLoaderFactory should handle the URL.
+    if (request_info->redirect_requires_loader_restart) {
+      request_info->url_loader->FollowRedirectForcingRestart();
+    } else {
+      request_info->url_loader->FollowRedirect(base::nullopt);
+    }
   }
 }
 
@@ -676,9 +728,12 @@ int ResourceDispatcher::StartAsync(
       request->referrer, std::move(response_override_params));
 
   if (override_url_loader) {
+    // Redirect checks are handled by NavigationURLLoaderImpl, so it's safe to
+    // pass true for |bypass_redirect_checks|.
     pending_requests_[request_id]->url_loader_client =
-        std::make_unique<URLLoaderClientImpl>(request_id, this,
-                                              loading_task_runner);
+        std::make_unique<URLLoaderClientImpl>(
+            request_id, this, loading_task_runner,
+            true /* bypass_redirect_checks */, request->url);
 
     DCHECK(continue_navigation_function);
     *continue_navigation_function =
@@ -687,8 +742,9 @@ int ResourceDispatcher::StartAsync(
     return request_id;
   }
 
-  std::unique_ptr<URLLoaderClientImpl> client(
-      new URLLoaderClientImpl(request_id, this, loading_task_runner));
+  std::unique_ptr<URLLoaderClientImpl> client(new URLLoaderClientImpl(
+      request_id, this, loading_task_runner,
+      url_loader_factory->BypassRedirectChecks(), request->url));
 
   if (pass_response_pipe_to_peer)
     client->SetPassResponsePipeToDispatcher(true);
@@ -696,10 +752,11 @@ int ResourceDispatcher::StartAsync(
   uint32_t options = network::mojom::kURLLoadOptionNone;
   // TODO(jam): use this flag for ResourceDispatcherHost code path once
   // MojoLoading is the only IPC code path.
-  if (base::FeatureList::IsEnabled(network::features::kNetworkService) &&
-      request->fetch_request_context_type != REQUEST_CONTEXT_TYPE_FETCH) {
+  if (request->fetch_request_context_type != REQUEST_CONTEXT_TYPE_FETCH) {
     // MIME sniffing should be disabled for a request initiated by fetch().
     options |= network::mojom::kURLLoadOptionSniffMimeType;
+    if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+      throttles.push_back(std::make_unique<MimeSniffingThrottle>());
   }
   if (is_sync) {
     options |= network::mojom::kURLLoadOptionSynchronous;

@@ -61,31 +61,22 @@ namespace blink {
 namespace {
 
 // Converts the composite property of a BasePropertyIndexedKeyframe into a
-// vector of EffectModel::CompositeOperation enums.
+// vector of base::Optional<EffectModel::CompositeOperation> enums.
 Vector<base::Optional<EffectModel::CompositeOperation>> ParseCompositeProperty(
     const BasePropertyIndexedKeyframe& keyframe) {
-  const CompositeOperationOrCompositeOperationOrNullSequence& composite =
+  const CompositeOperationOrAutoOrCompositeOperationOrAutoSequence& composite =
       keyframe.composite();
 
-  // This handles the case where we have 'composite: null'. The null value is
-  // lifted to the union level in the bindings code.
-  if (composite.IsNull())
-    return {base::nullopt};
-
-  if (composite.IsCompositeOperation()) {
+  if (composite.IsCompositeOperationOrAuto()) {
     return {EffectModel::StringToCompositeOperation(
-        composite.GetAsCompositeOperation())};
+        composite.GetAsCompositeOperationOrAuto())};
   }
 
   Vector<base::Optional<EffectModel::CompositeOperation>> result;
   for (const String& composite_operation_string :
-       composite.GetAsCompositeOperationOrNullSequence()) {
-    if (composite_operation_string.IsNull()) {
-      result.push_back(base::nullopt);
-    } else {
-      result.push_back(
-          EffectModel::StringToCompositeOperation(composite_operation_string));
-    }
+       composite.GetAsCompositeOperationOrAutoSequence()) {
+    result.push_back(
+        EffectModel::StringToCompositeOperation(composite_operation_string));
   }
   return result;
 }
@@ -186,7 +177,7 @@ bool ValidatePartialKeyframes(const StringKeyframeVector& keyframes) {
 // StringKeyframe and the current runtime flags.
 EffectModel::CompositeOperation ResolveCompositeOperationForKeyframe(
     EffectModel::CompositeOperation composite,
-    const scoped_refptr<StringKeyframe>& keyframe) {
+    StringKeyframe* keyframe) {
   if (!RuntimeEnabledFeatures::CSSAdditiveAnimationsEnabled() &&
       keyframe->HasCssProperty() && composite == EffectModel::kCompositeAdd) {
     return EffectModel::kCompositeReplace;
@@ -354,7 +345,7 @@ StringKeyframeVector ConvertArrayForm(Element* element,
     // Now we create the actual Keyframe object. We start by assigning the
     // offset and composite values; conceptually these were actually added in
     // step 5 above but we didn't have a keyframe object then.
-    scoped_refptr<StringKeyframe> keyframe = StringKeyframe::Create();
+    StringKeyframe* keyframe = StringKeyframe::Create();
     if (processed_keyframe.base_keyframe.hasOffset()) {
       keyframe->SetOffset(processed_keyframe.base_keyframe.offset());
     }
@@ -363,15 +354,16 @@ StringKeyframeVector ConvertArrayForm(Element* element,
     // using the syntax specified for that property.
     for (const auto& pair : processed_keyframe.property_value_pairs) {
       // TODO(crbug.com/777971): Make parsing of property values spec-compliant.
-      SetKeyframeValue(element, document, *keyframe.get(), pair.first,
-                       pair.second, execution_context);
+      SetKeyframeValue(element, document, *keyframe, pair.first, pair.second,
+                       execution_context);
     }
 
-    if (processed_keyframe.base_keyframe.hasComposite()) {
-      keyframe->SetComposite(ResolveCompositeOperationForKeyframe(
-          EffectModel::StringToCompositeOperation(
-              processed_keyframe.base_keyframe.composite()),
-          keyframe));
+    base::Optional<EffectModel::CompositeOperation> composite =
+        EffectModel::StringToCompositeOperation(
+            processed_keyframe.base_keyframe.composite());
+    if (composite) {
+      keyframe->SetComposite(
+          ResolveCompositeOperationForKeyframe(composite.value(), keyframe));
     }
 
     // 8.2. Let the timing function of frame be the result of parsing the
@@ -489,7 +481,7 @@ StringKeyframeVector ConvertObjectForm(Element* element,
   //
   // This is equivalent to just keeping a hashmap from computed offset to a
   // single keyframe, which simplifies the parsing logic.
-  HashMap<double, scoped_refptr<StringKeyframe>> keyframes;
+  HeapHashMap<double, Member<StringKeyframe>> keyframes;
 
   // By spec, we must sort the properties in "ascending order by the Unicode
   // codepoints that define each property name."
@@ -530,8 +522,8 @@ StringKeyframeVector ConvertObjectForm(Element* element,
       if (result.is_new_entry)
         result.stored_value->value = StringKeyframe::Create();
 
-      SetKeyframeValue(element, document, *result.stored_value->value.get(),
-                       property, values[i], execution_context);
+      SetKeyframeValue(element, document, *result.stored_value->value, property,
+                       values[i], execution_context);
     }
   }
 
@@ -734,7 +726,7 @@ EffectModel::CompositeOperation EffectInput::ResolveCompositeOperation(
     EffectModel::CompositeOperation composite,
     const StringKeyframeVector& keyframes) {
   EffectModel::CompositeOperation result = composite;
-  for (const scoped_refptr<StringKeyframe>& keyframe : keyframes) {
+  for (const Member<StringKeyframe>& keyframe : keyframes) {
     // Replace is always supported, so we can early-exit if and when we have
     // that as our composite value.
     if (result == EffectModel::kCompositeReplace)

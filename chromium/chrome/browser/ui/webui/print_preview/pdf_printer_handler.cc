@@ -11,9 +11,10 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/i18n/file_util_icu.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -93,8 +94,7 @@ std::unique_ptr<base::DictionaryValue> GetPdfCapabilities(
   Media default_media("", "", default_media_size.width(),
                       default_media_size.height());
   if (!default_media.MatchBySize() ||
-      std::find(kPdfMedia, kPdfMedia + arraysize(kPdfMedia),
-                default_media.type) == kPdfMedia + arraysize(kPdfMedia)) {
+      !base::ContainsValue(kPdfMedia, default_media.type)) {
     default_media = Media(locale == "en-US" ? NA_LETTER : ISO_A4);
   }
   MediaCapability media;
@@ -325,7 +325,7 @@ void PdfPrinterHandler::SelectFile(const base::FilePath& default_filename,
   // returns and eventually FileSelected() gets called.
   if (!prompt_user) {
     base::PostTaskWithTraitsAndReplyWithResult(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
         base::Bind(&GetUniquePath, path.Append(default_filename)),
         base::Bind(&PdfPrinterHandler::OnGotUniqueFileName,
                    weak_ptr_factory_.GetWeakPtr()));
@@ -343,7 +343,7 @@ void PdfPrinterHandler::SelectFile(const base::FilePath& default_filename,
   // save directory does not exist.
   base::FilePath default_path = download_prefs->DownloadPath();
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&SelectSaveDirectory, path, default_path),
       base::BindOnce(&PdfPrinterHandler::OnDirectorySelected,
                      weak_ptr_factory_.GetWeakPtr(), default_filename));
@@ -351,7 +351,7 @@ void PdfPrinterHandler::SelectFile(const base::FilePath& default_filename,
 
 void PdfPrinterHandler::PostPrintToPdfTask() {
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&PrintToPdfCallback, print_data_, print_to_pdf_path_,
                      pdf_file_saved_closure_));
   print_to_pdf_path_.clear();

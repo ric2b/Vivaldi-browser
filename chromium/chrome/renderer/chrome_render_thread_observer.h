@@ -35,7 +35,14 @@ class ChromeRenderThreadObserver : public content::RenderThreadObserver,
   ~ChromeRenderThreadObserver() override;
 
   static bool is_incognito_process() { return is_incognito_process_; }
-  static bool is_signed_in() { return is_signed_in_; }
+  static bool force_safe_search() { return force_safe_search_; }
+  static int32_t youtube_restrict() { return youtube_restrict_; }
+  static const std::string& allowed_domains_for_apps() {
+    return *allowed_domains_for_apps_;
+  }
+  static const std::string& variation_ids_header() {
+    return *variation_ids_header_;
+  }
 
   // Returns a pointer to the content setting rules owned by
   // |ChromeRenderThreadObserver|.
@@ -54,7 +61,10 @@ class ChromeRenderThreadObserver : public content::RenderThreadObserver,
 
   // chrome::mojom::RendererConfiguration:
   void SetInitialConfiguration(bool is_incognito_process) override;
-  void SetIsSignedIn(bool is_signed_in) override;
+  void SetConfiguration(bool force_safe_search,
+                        int32_t youtube_restrict,
+                        const std::string& allowed_domains_for_apps,
+                        const std::string& variation_ids_header) override;
   void SetContentSettingRules(
       const RendererContentSettingRules& rules) override;
   void SetFieldTrialGroup(const std::string& trial_name,
@@ -64,7 +74,10 @@ class ChromeRenderThreadObserver : public content::RenderThreadObserver,
       chrome::mojom::RendererConfigurationAssociatedRequest request);
 
   static bool is_incognito_process_;
-  static bool is_signed_in_;
+  static bool force_safe_search_;
+  static int32_t youtube_restrict_;
+  static std::string* allowed_domains_for_apps_;
+  static std::string* variation_ids_header_;
   std::unique_ptr<content::ResourceDispatcherDelegate> resource_delegate_;
   RendererContentSettingRules content_setting_rules_;
 

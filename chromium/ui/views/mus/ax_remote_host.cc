@@ -11,13 +11,19 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_event.h"
 #include "ui/accessibility/platform/ax_unique_id.h"
+#include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/window.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/views/accessibility/ax_aura_obj_wrapper.h"
 #include "ui/views/mus/ax_tree_source_mus.h"
 #include "ui/views/mus/mus_client.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
+
+using display::Display;
+using display::Screen;
 
 namespace views {
 
@@ -51,7 +57,8 @@ void AXRemoteHost::StartMonitoringWidget(Widget* widget) {
   // Check if we're already tracking a widget.
   // TODO(jamescook): Support multiple widgets.
   if (widget_)
-    return;
+    StopMonitoringWidget();
+
   widget_ = widget;
   widget_->AddObserver(this);
 
@@ -67,12 +74,17 @@ void AXRemoteHost::StartMonitoringWidget(Widget* widget) {
   tree_source_ = std::make_unique<AXTreeSourceMus>(contents_wrapper);
   tree_serializer_ = std::make_unique<AuraAXTreeSerializer>(tree_source_.get());
 
+  // Inform the serializer of the display device scale factor.
+  UpdateDeviceScaleFactor();
+  Screen::GetScreen()->AddObserver(this);
+
   SendEvent(contents_wrapper, ax::mojom::Event::kLoadComplete);
 }
 
 void AXRemoteHost::StopMonitoringWidget() {
   DCHECK(widget_);
   DCHECK(widget_->HasObserver(this));
+  Screen::GetScreen()->RemoveObserver(this);
   widget_->RemoveObserver(this);
   AXAuraObjCache* cache = AXAuraObjCache::GetInstance();
   cache->OnRootWindowObjDestroyed(widget_->GetNativeWindow());
@@ -100,20 +112,47 @@ void AXRemoteHost::OnAutomationEnabled(bool enabled) {
     Disable();
 }
 
-void AXRemoteHost::PerformAction(const ui::AXActionData& action) {
-  // TODO(jamescook): Support ax::mojom::Action::kHitTest.
-  tree_source_->HandleAccessibleAction(action);
+void AXRemoteHost::PerformAction(const ui::AXActionData& action_data) {
+  if (!enabled_)
+    return;
+
+  // A hit test requires determining the node to perform the action on first.
+  if (action_data.action == ax::mojom::Action::kHitTest) {
+    PerformHitTest(action_data);
+    return;
+  }
+
+  tree_source_->HandleAccessibleAction(action_data);
 }
 
-void AXRemoteHost::OnWidgetDestroying(Widget* widget) {
+void AXRemoteHost::OnWidgetClosing(Widget* widget) {
+  // In the typical case, clean up early during widget close. Waiting until
+  // widget destroy can sometimes lead to crashes due to AX window visibility
+  // events being triggered during close. https://crbug.com/869608
   DCHECK_EQ(widget_, widget);
   StopMonitoringWidget();
 }
 
+void AXRemoteHost::OnWidgetDestroying(Widget* widget) {
+  // Widgets can be deleted without being closed, which is common in tests
+  // and possible in production.
+  DCHECK_EQ(widget_, widget);
+  StopMonitoringWidget();
+}
+
+void AXRemoteHost::OnDisplayMetricsChanged(const Display& display,
+                                           uint32_t metrics) {
+  if (metrics & display::DisplayObserver::DISPLAY_METRIC_DEVICE_SCALE_FACTOR) {
+    UpdateDeviceScaleFactor();
+    SendEvent(tree_source_->GetRoot(), ax::mojom::Event::kLocationChanged);
+  }
+}
+
 void AXRemoteHost::OnChildWindowRemoved(AXAuraObjWrapper* parent) {
-  if (!enabled_)
+  if (!enabled_ || !widget_)
     return;
 
+  DCHECK(tree_source_);
   if (!parent)
     parent = tree_source_->GetRoot();
 
@@ -136,24 +175,25 @@ void AXRemoteHost::BindAndSetRemote() {
 }
 
 void AXRemoteHost::Enable() {
-  // Extensions can send multiple enable events.
-  if (enabled_)
-    return;
+  // Don't early-exit if already enabled. AXRemoteHost can start up in the
+  // "enabled" state even if ChromeVox is on at the moment the app launches.
+  // Turning on ChromeVox later will generate another OnAutomationEnabled()
+  // call and we need to serialize the node tree again. This is similar to
+  // AutomationManagerAura's behavior. https://crbug.com/876407
   enabled_ = true;
 
   std::set<aura::Window*> roots =
       MusClient::Get()->window_tree_client()->GetRoots();
-  if (roots.empty()) {
-    // Client hasn't opened any widgets yet.
-    return;
+  for (aura::Window* root : roots) {
+    Widget* widget = Widget::GetWidgetForNativeWindow(root);
+    // Typically it's only tests that create Windows (the WindowTreeHost
+    // backing the root Window) in such a way that there is no associated
+    // widget.
+    if (widget) {
+      // TODO(jamescook): Support multiple roots.
+      StartMonitoringWidget(widget);
+    }
   }
-
-  // TODO(jamescook): Support multiple roots.
-  aura::Window* root_window = *roots.begin();
-  DCHECK(root_window);
-  Widget* root_widget = Widget::GetWidgetForNativeWindow(root_window);
-  DCHECK(root_widget);
-  StartMonitoringWidget(root_widget);
 }
 
 void AXRemoteHost::Disable() {
@@ -165,8 +205,12 @@ void AXRemoteHost::Disable() {
 
 void AXRemoteHost::SendEvent(AXAuraObjWrapper* aura_obj,
                              ax::mojom::Event event_type) {
-  if (!enabled_ || !tree_serializer_)
+  DCHECK(aura_obj);
+  if (!enabled_ || !widget_)
     return;
+
+  DCHECK(tree_source_);
+  DCHECK(tree_serializer_);
 
   ui::AXTreeUpdate update;
   if (!tree_serializer_->SerializeChanges(aura_obj, &update)) {
@@ -191,6 +235,30 @@ void AXRemoteHost::SendEvent(AXAuraObjWrapper* aura_obj,
   // Other fields are not used.
 
   ax_host_ptr_->HandleAccessibilityEvent(kRemoteAXTreeID, updates, event);
+}
+
+void AXRemoteHost::PerformHitTest(const ui::AXActionData& action) {
+  DCHECK(enabled_);
+  DCHECK_EQ(action.action, ax::mojom::Action::kHitTest);
+
+  // If the widget isn't open yet there's nothing to hit.
+  if (!widget_)
+    return;
+
+  views::View* hit_view =
+      widget_->GetRootView()->GetEventHandlerForPoint(action.target_point);
+  if (hit_view)
+    hit_view->NotifyAccessibilityEvent(action.hit_test_event_to_fire, true);
+}
+
+void AXRemoteHost::UpdateDeviceScaleFactor() {
+  DCHECK(widget_);
+  DCHECK(tree_source_);
+
+  // Use the scale factor for the widget's window's current display.
+  Display display =
+      Screen::GetScreen()->GetDisplayNearestWindow(widget_->GetNativeWindow());
+  tree_source_->set_device_scale_factor(display.device_scale_factor());
 }
 
 }  // namespace views

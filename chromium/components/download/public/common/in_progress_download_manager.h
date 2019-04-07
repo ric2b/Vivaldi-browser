@@ -147,6 +147,11 @@ class COMPONENTS_DOWNLOAD_EXPORT InProgressDownloadManager
 
   void set_delegate(Delegate* delegate) { delegate_ = delegate; }
 
+  void set_is_origin_secure_cb(
+      const IsOriginSecureCallback& is_origin_secure_cb) {
+    is_origin_secure_cb_ = is_origin_secure_cb;
+  }
+
  private:
   void Initialize(const base::FilePath& metadata_cache_dir);
 
@@ -160,8 +165,12 @@ class COMPONENTS_DOWNLOAD_EXPORT InProgressDownloadManager
   void OnUrlDownloadHandlerCreated(
       UrlDownloadHandler::UniqueUrlDownloadHandlerPtr downloader) override;
 
+  // Called when |download_metadata_cache_| is initialized.
+  void OnMetadataCacheInitialized(const base::FilePath& metadata_cache_dir);
+
   // Called when the object is initialized.
-  void OnInitialized(std::unique_ptr<std::vector<DownloadDBEntry>> entries);
+  void OnInitialized(bool success,
+                     std::unique_ptr<std::vector<DownloadDBEntry>> entries);
 
   // Start a DownloadItemImpl.
   void StartDownloadWithItem(

@@ -4,7 +4,11 @@
 
 #include "content/public/common/url_utils.h"
 
+#include <set>
+#include <string>
+
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "build/build_config.h"
 #include "content/common/url_schemes.h"
 #include "content/public/common/browser_side_navigation_policy.h"
@@ -90,6 +94,11 @@ bool IsRendererDebugURL(const GURL& url) {
   }
 #endif
 
+#if defined(OS_WIN)
+  if (url == kChromeUIHeapCorruptionCrashURL)
+    return true;
+#endif
+
 #if DCHECK_IS_ON()
   if (url == kChromeUICrashDcheckURL)
     return true;
@@ -102,6 +111,25 @@ bool IsRendererDebugURL(const GURL& url) {
   }
 #endif
 
+  return false;
+}
+
+bool IsSafeRedirectTarget(const GURL& from_url, const GURL& to_url) {
+  static base::NoDestructor<std::set<std::string>> kUnsafeSchemes(
+      std::set<std::string>({
+          url::kAboutScheme, url::kDataScheme, url::kFileScheme,
+          url::kFileSystemScheme,
+      }));
+  if (HasWebUIScheme(to_url))
+    return false;
+  if (kUnsafeSchemes->find(to_url.scheme()) == kUnsafeSchemes->end())
+    return true;
+  if (from_url.is_empty())
+    return false;
+  if (from_url.SchemeIsFile() && to_url.SchemeIsFile())
+    return true;
+  if (from_url.SchemeIsFileSystem() && to_url.SchemeIsFileSystem())
+    return true;
   return false;
 }
 

@@ -5,81 +5,86 @@
 package org.chromium.chrome.browser.feed;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
 
 import com.google.android.libraries.feed.api.scope.FeedProcessScope;
 import com.google.android.libraries.feed.api.scope.FeedStreamScope;
-import com.google.android.libraries.feed.api.stream.ScrollListener;
+import com.google.android.libraries.feed.api.stream.NonDismissibleHeader;
 import com.google.android.libraries.feed.api.stream.Stream;
+import com.google.android.libraries.feed.common.functional.Consumer;
+import com.google.android.libraries.feed.host.action.ActionApi;
+import com.google.android.libraries.feed.host.offlineindicator.OfflineIndicatorApi;
 import com.google.android.libraries.feed.host.stream.CardConfiguration;
 import com.google.android.libraries.feed.host.stream.SnackbarApi;
 import com.google.android.libraries.feed.host.stream.StreamConfiguration;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.NativePageHost;
 import org.chromium.chrome.browser.feed.action.FeedActionHandler;
+import org.chromium.chrome.browser.native_page.NativePageHost;
 import org.chromium.chrome.browser.ntp.ContextMenuManager;
-import org.chromium.chrome.browser.ntp.ContextMenuManager.TouchEnabledDelegate;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.ntp.NewTabPageLayout;
 import org.chromium.chrome.browser.ntp.SnapScrollHelper;
 import org.chromium.chrome.browser.ntp.snippets.SectionHeaderView;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
+import org.chromium.chrome.browser.snackbar.Snackbar;
+import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.suggestions.SuggestionsNavigationDelegateImpl;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.util.ViewUtils;
+import org.chromium.chrome.browser.widget.displaystyle.HorizontalDisplayStyle;
+import org.chromium.chrome.browser.widget.displaystyle.MarginResizer;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Provides a new tab page that displays an interest feed rendered list of content suggestions.
  */
-public class FeedNewTabPage
-        extends NewTabPage implements TouchEnabledDelegate, NewTabPageLayout.ScrollDelegate {
+public class FeedNewTabPage extends NewTabPage {
     private final FeedNewTabPageMediator mMediator;
     private final StreamLifecycleManager mStreamLifecycleManager;
     private final Stream mStream;
-    private final ScrollListener mStreamScrollListener;
-    private final SnapScrollHelper mSnapScrollHelper;
 
+    private UiConfig mUiConfig;
     private FrameLayout mRootView;
     private SectionHeaderView mSectionHeaderView;
     private FeedImageLoader mImageLoader;
 
-    private static class DummySnackbarApi implements SnackbarApi {
-        // TODO: implement snackbar functionality.
+    private class BasicSnackbarApi implements SnackbarApi {
         @Override
-        public void show(String message) {}
+        public void show(String message) {
+            mNewTabPageManager.getSnackbarManager().showSnackbar(
+                    Snackbar.make(message, new SnackbarManager.SnackbarController() {},
+                            Snackbar.TYPE_ACTION, Snackbar.UMA_FEED_NTP_STREAM));
+        }
     }
 
     private static class BasicStreamConfiguration implements StreamConfiguration {
-        private final Resources mResources;
-        private final int mPadding;
-
-        public BasicStreamConfiguration(Resources resources) {
-            mResources = resources;
-            mPadding = mResources.getDimensionPixelSize(
-                    R.dimen.content_suggestions_card_modern_margin);
-        }
+        public BasicStreamConfiguration() {}
 
         @Override
         public int getPaddingStart() {
-            return mPadding;
+            return 0;
         }
         @Override
         public int getPaddingEnd() {
-            return mPadding;
+            return 0;
         }
         @Override
         public int getPaddingTop() {
@@ -93,18 +98,23 @@ public class FeedNewTabPage
 
     private static class BasicCardConfiguration implements CardConfiguration {
         private final Resources mResources;
+        private final UiConfig mUiConfig;
         private final int mCornerRadius;
         private final Drawable mCardBackground;
-        private final int mCardMarginBottom;
+        private final int mCardMargin;
+        private final int mCardWideMargin;
 
-        public BasicCardConfiguration(Resources resources) {
+        public BasicCardConfiguration(Resources resources, UiConfig uiConfig) {
             mResources = resources;
+            mUiConfig = uiConfig;
             mCornerRadius = mResources.getDimensionPixelSize(
                     R.dimen.content_suggestions_card_modern_corner_radius);
             mCardBackground = ApiCompatibilityUtils.getDrawable(
                     mResources, R.drawable.content_card_modern_background);
-            mCardMarginBottom = mResources.getDimensionPixelSize(
+            mCardMargin = mResources.getDimensionPixelSize(
                     R.dimen.content_suggestions_card_modern_margin);
+            mCardWideMargin =
+                    mResources.getDimensionPixelSize(R.dimen.ntp_wide_card_lateral_margins);
         }
 
         @Override
@@ -119,7 +129,56 @@ public class FeedNewTabPage
 
         @Override
         public int getCardBottomMargin() {
-            return mCardMarginBottom;
+            return mCardMargin;
+        }
+
+        @Override
+        public int getCardStartMargin() {
+            return mUiConfig.getCurrentDisplayStyle().horizontal == HorizontalDisplayStyle.WIDE
+                    ? mCardWideMargin
+                    : mCardMargin;
+        }
+
+        @Override
+        public int getCardEndMargin() {
+            return mUiConfig.getCurrentDisplayStyle().horizontal == HorizontalDisplayStyle.WIDE
+                    ? mCardWideMargin
+                    : mCardMargin;
+        }
+    }
+
+    private static class StubOfflineIndicatorApi implements OfflineIndicatorApi {
+        @Override
+        public void getOfflineStatus(
+                List<String> urlsToRetrieve, Consumer<List<String>> urlListConsumer) {
+            urlListConsumer.accept(Collections.emptyList());
+        }
+
+        @Override
+        public void addOfflineStatusListener(OfflineStatusListener offlineStatusListener) {}
+
+        @Override
+        public void removeOfflineStatusListener(OfflineStatusListener offlineStatusListener) {}
+    }
+
+    /**
+     * Provides the additional capabilities needed for the {@link FeedNewTabPage} container view.
+     */
+    private class RootView extends FrameLayout {
+        public RootView(Context context) {
+            super(context);
+        }
+
+        @Override
+        protected void onConfigurationChanged(Configuration newConfig) {
+            super.onConfigurationChanged(newConfig);
+            mUiConfig.updateDisplayStyle();
+        }
+
+        @Override
+        public boolean onInterceptTouchEvent(MotionEvent ev) {
+            return !mMediator.getTouchEnabled() || mFakeboxDelegate.isUrlBarFocused()
+                    || super.onInterceptTouchEvent(ev);
         }
     }
 
@@ -141,78 +200,71 @@ public class FeedNewTabPage
         SuggestionsNavigationDelegateImpl navigationDelegate =
                 new SuggestionsNavigationDelegateImpl(
                         activity, profile, nativePageHost, tabModelSelector);
+        ActionApi actionApi = new FeedActionHandler(navigationDelegate,
+                () -> FeedProcessScopeFactory.getFeedSchedulerBridge().onSuggestionConsumed());
         FeedStreamScope streamScope =
                 feedProcessScope
-                        .createFeedStreamScopeBuilder(activity, mImageLoader,
-                                new FeedActionHandler(navigationDelegate),
-                                new BasicStreamConfiguration(activity.getResources()),
-                                new BasicCardConfiguration(activity.getResources()),
-                                new DummySnackbarApi())
+                        .createFeedStreamScopeBuilder(activity, mImageLoader, actionApi,
+                                new BasicStreamConfiguration(),
+                                new BasicCardConfiguration(activity.getResources(), mUiConfig),
+                                new BasicSnackbarApi(), new FeedBasicLogging(),
+                                new StubOfflineIndicatorApi())
                         .build();
 
         mStream = streamScope.getStream();
         mStreamLifecycleManager = new StreamLifecycleManager(mStream, activity, tab);
-        mSnapScrollHelper =
-                new SnapScrollHelper(mNewTabPageManager, mNewTabPageLayout, mStream.getView());
-        mSectionHeaderView = (SectionHeaderView) LayoutInflater.from(activity).inflate(
+
+        LayoutInflater inflater = LayoutInflater.from(activity);
+        mNewTabPageLayout = (NewTabPageLayout) inflater.inflate(R.layout.new_tab_page_layout, null);
+        mSectionHeaderView = (SectionHeaderView) inflater.inflate(
                 R.layout.new_tab_page_snippets_expandable_header, null);
-        mMediator = new FeedNewTabPageMediator(this);
 
-        mStream.getView().setBackgroundColor(Color.WHITE);
-        mRootView.addView(mStream.getView());
+        // TODO(huayinz): Add MarginResizer for sign-in promo under issue 860051 or 860043,
+        // depending on which one lands first.
+        Resources resources = mSectionHeaderView.getResources();
+        int defaultMargin =
+                resources.getDimensionPixelSize(R.dimen.content_suggestions_card_modern_margin);
+        int wideMargin = resources.getDimensionPixelSize(R.dimen.ntp_wide_card_lateral_margins);
+        MarginResizer.createAndAttach(mSectionHeaderView, mUiConfig, defaultMargin, wideMargin);
 
-        mStream.setHeaderViews(Arrays.asList(mNewTabPageLayout, mSectionHeaderView));
-
-        // Listen for layout changes on the NewTabPageView itself to catch changes in scroll
-        // position that are due to layout changes after e.g. device rotation. This contrasts with
-        // regular scrolling, which is observed through an OnScrollListener.
-        mRootView.addOnLayoutChangeListener(
-                (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
-                    mSnapScrollHelper.handleScroll();
-                });
-
-        mStreamScrollListener = new ScrollListener() {
-            @Override
-            public void onScrollStateChanged(int state) {}
-
-            @Override
-            public void onScrolled(int dx, int dy) {
-                mSnapScrollHelper.handleScroll();
-            }
-        };
-        mStream.addScrollListener(mStreamScrollListener);
-    }
-
-    @Override
-    protected void initializeMainView(Context context) {
-        int topPadding = context.getResources().getDimensionPixelOffset(R.dimen.tab_strip_height);
-        mRootView = new FrameLayout(context);
-        mRootView.setLayoutParams(new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        mRootView.setPadding(0, topPadding, 0, 0);
+        mMediator = new FeedNewTabPageMediator(this,
+                new SnapScrollHelper(mNewTabPageManager, mNewTabPageLayout, mStream.getView()));
 
         // Don't store a direct reference to the activity, because it might change later if the tab
         // is reparented.
         // TODO(twellington): Move this somewhere it can be shared with NewTabPageView?
         Runnable closeContextMenuCallback = () -> mTab.getActivity().closeContextMenu();
         ContextMenuManager contextMenuManager =
-                new ContextMenuManager(mNewTabPageManager.getNavigationDelegate(),
-                        this::setTouchEnabled, closeContextMenuCallback, false);
+                new ContextMenuManager(mNewTabPageManager.getNavigationDelegate(), mMediator,
+                        closeContextMenuCallback, false);
         mTab.getWindowAndroid().addContextMenuCloseListener(contextMenuManager);
 
-        LayoutInflater inflater = LayoutInflater.from(context);
-        mNewTabPageLayout = (NewTabPageLayout) inflater.inflate(R.layout.new_tab_page_layout, null);
         mNewTabPageLayout.initialize(mNewTabPageManager, mTab, mTileGroupDelegate,
                 mSearchProviderHasLogo,
-                TemplateUrlService.getInstance().isDefaultSearchEngineGoogle(), this,
-                contextMenuManager, new UiConfig(mRootView));
+                TemplateUrlService.getInstance().isDefaultSearchEngineGoogle(), mMediator,
+                contextMenuManager, mUiConfig);
+
+        mStream.getView().setBackgroundColor(Color.WHITE);
+        mRootView.addView(mStream.getView());
+
+        mStream.setHeaderViews(Arrays.asList(new NonDismissibleHeader(mNewTabPageLayout),
+                new NonDismissibleHeader(mSectionHeaderView)));
+    }
+
+    @Override
+    protected void initializeMainView(Context context) {
+        int topPadding = context.getResources().getDimensionPixelOffset(R.dimen.tab_strip_height);
+        mRootView = new RootView(context);
+        mRootView.setLayoutParams(new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        mRootView.setPadding(0, topPadding, 0, 0);
+        mUiConfig = new UiConfig(mRootView);
     }
 
     @Override
     public void destroy() {
         super.destroy();
         mMediator.destroy();
-        mStream.removeScrollListener(mStreamScrollListener);
         mImageLoader.destroy();
         mStreamLifecycleManager.destroy();
     }
@@ -223,8 +275,8 @@ public class FeedNewTabPage
     }
 
     @Override
-    protected void restoreLastScrollPosition() {
-        // This behavior is handled by the Feed library.
+    protected void saveLastScrollPosition() {
+        // This behavior is handled by the StreamLifecycleManager and the Feed library.
     }
 
     @Override
@@ -234,15 +286,14 @@ public class FeedNewTabPage
 
     @Override
     public boolean shouldCaptureThumbnail() {
-        // TODO(twellington): add more logic to this method that also takes into account other
-        // UI changes that should trigger a thumbnail capture.
-        return mNewTabPageLayout.shouldCaptureThumbnail();
+        return mNewTabPageLayout.shouldCaptureThumbnail() || mMediator.shouldCaptureThumbnail();
     }
 
     @Override
     public void captureThumbnail(Canvas canvas) {
         mNewTabPageLayout.onPreCaptureThumbnail();
         ViewUtils.captureBitmap(mRootView, canvas);
+        mMediator.onThumbnailCaptured();
     }
 
     /** @return The {@link Stream} that this class holds. */
@@ -255,46 +306,19 @@ public class FeedNewTabPage
         return mSectionHeaderView;
     }
 
-    // TouchEnabledDelegate interface.
-
-    @Override
-    public void setTouchEnabled(boolean enabled) {
-        // TODO(twellington): implement this method.
-    }
-
-    // ScrollDelegate interface.
-
-    @Override
-    public boolean isScrollViewInitialized() {
-        // During startup the view may not be fully initialized, so we check to see if some basic
-        // view properties (height of the RecyclerView) are sane.
-        return mStream != null && mStream.getView().getHeight() > 0;
-    }
-
-    @Override
-    public int getVerticalScrollOffset() {
-        // This method returns a valid vertical scroll offset only when the first header view in the
-        // Stream is visible. In all other cases, this returns 0.
-        if (!isScrollViewInitialized()) return 0;
-
-        int firstChildTop = mStream.getChildTopAt(0);
-        return firstChildTop != Stream.POSITION_NOT_KNOWN ? -firstChildTop : 0;
-    }
-
-    @Override
-    public boolean isChildVisibleAtPosition(int position) {
-        return isScrollViewInitialized() && mStream.isChildAtPositionVisible(position);
-    }
-
-    @Override
-    public void snapScroll() {
-        if (!isScrollViewInitialized()) return;
-
-        int initialScroll = getVerticalScrollOffset();
-        int scrollTo = mSnapScrollHelper.calculateSnapPosition(initialScroll);
-
-        // Calculating the snap position should be idempotent.
-        assert scrollTo == mSnapScrollHelper.calculateSnapPosition(scrollTo);
-        mStream.smoothScrollBy(0, scrollTo - initialScroll);
+    /**
+     * Configures the {@link FeedNewTabPage} for testing.
+     * @param inTestMode Whether test mode is enabled. If true, test implementations of Feed
+     *                   interfaces will be used to create the {@link FeedProcessScope}. If false,
+     *                   the FeedProcessScope will be reset.
+     */
+    @VisibleForTesting
+    public static void setInTestMode(boolean inTestMode) {
+        if (inTestMode) {
+            FeedProcessScopeFactory.createFeedProcessScopeForTesting(
+                    new TestFeedScheduler(), new TestNetworkClient());
+        } else {
+            FeedProcessScopeFactory.clearFeedProcessScopeForTesting();
+        }
     }
 }

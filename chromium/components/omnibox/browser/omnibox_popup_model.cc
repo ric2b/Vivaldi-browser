@@ -11,6 +11,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/omnibox_client.h"
 #include "components/omnibox/browser/omnibox_edit_controller.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
@@ -302,8 +303,8 @@ gfx::Image OmniboxPopupModel::GetMatchIcon(const AutocompleteMatch& match,
     // costly, we can optimize away the redundant extra callbacks.
     gfx::Image favicon = edit_model_->client()->GetFaviconForPageUrl(
         match.destination_url,
-        base::Bind(&OmniboxPopupModel::OnFaviconFetched,
-                   weak_factory_.GetWeakPtr(), match.destination_url));
+        base::BindOnce(&OmniboxPopupModel::OnFaviconFetched,
+                       weak_factory_.GetWeakPtr(), match.destination_url));
 
     // Extension icons are the correct size for non-touch UI but need to be
     // adjusted to be the correct size for touch mode.
@@ -312,7 +313,9 @@ gfx::Image OmniboxPopupModel::GetMatchIcon(const AutocompleteMatch& match,
   }
 
   const auto& vector_icon_type = AutocompleteMatch::TypeToVectorIcon(
-      match.type, IsStarredMatch(match), match.has_tab_match);
+      match.type, IsStarredMatch(match), match.has_tab_match,
+      match.document_type);
+
   return edit_model_->client()->GetSizedIcon(vector_icon_type,
                                              vector_icon_color);
 }
@@ -320,7 +323,7 @@ gfx::Image OmniboxPopupModel::GetMatchIcon(const AutocompleteMatch& match,
 
 bool OmniboxPopupModel::SelectedLineHasTabMatch() {
   return selected_line_ != kNoMatch &&
-         result().match_at(selected_line_).has_tab_match;
+         result().match_at(selected_line_).ShouldShowTabMatch();
 }
 
 void OmniboxPopupModel::OnFaviconFetched(const GURL& page_url,

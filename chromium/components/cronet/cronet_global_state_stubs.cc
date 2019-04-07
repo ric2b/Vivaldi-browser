@@ -6,8 +6,8 @@
 
 #include "base/at_exit.h"
 #include "base/feature_list.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_scheduler.h"
+#include "base/task/post_task.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "net/proxy_resolution/proxy_config_service.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
 #include "url/url_util.h"
@@ -79,6 +79,10 @@ std::unique_ptr<net::ProxyResolutionService> CreateProxyResolutionService(
 
 std::string CreateDefaultUserAgent(const std::string& partial_user_agent) {
   return partial_user_agent;
+}
+
+void SetNetworkThreadPriorityOnNetworkThread(double priority) {
+  NOTIMPLEMENTED();
 }
 
 }  // namespace cronet

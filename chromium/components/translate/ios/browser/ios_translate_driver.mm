@@ -13,7 +13,6 @@
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/common/language_detection_details.h"
 #include "components/translate/core/common/translate_constants.h"
-#include "components/translate/core/common/translate_errors.h"
 #include "components/translate/core/common/translate_metrics.h"
 #import "components/translate/ios/browser/js_language_detection_manager.h"
 #import "components/translate/ios/browser/js_translate_manager.h"
@@ -37,11 +36,6 @@
 namespace translate {
 
 namespace {
-// The delay we wait in milliseconds before checking whether the translation has
-// finished.
-// Note: This should be kept in sync with the constant of the same name in
-// translate_ios.js.
-const int kTranslateStatusCheckDelayMs = 400;
 // Language name passed to the Translate element for it to detect the language.
 const char kAutoDetectionLanguage[] = "auto";
 
@@ -225,15 +219,6 @@ void IOSTranslateDriver::TranslationDidSucceed(
                                      translate_errors);
 }
 
-void IOSTranslateDriver::CheckTranslateStatus(
-    const std::string& source_language,
-    const std::string& target_language,
-    int page_seq_no) {
-  if (!IsPageValid(page_seq_no))
-    return;
-  translate_controller_->CheckTranslateStatus();
-}
-
 bool IOSTranslateDriver::IsPageValid(int page_seq_no) const {
   bool user_navigated_away = page_seq_no != page_seq_no_;
   return !user_navigated_away && web_state_;
@@ -241,15 +226,16 @@ bool IOSTranslateDriver::IsPageValid(int page_seq_no) const {
 
 // TranslateController::Observer implementation.
 
-void IOSTranslateDriver::OnTranslateScriptReady(bool success,
-                                                double load_time,
-                                                double ready_time) {
+void IOSTranslateDriver::OnTranslateScriptReady(
+    TranslateErrors::Type error_type,
+    double load_time,
+    double ready_time) {
   if (!IsPageValid(pending_page_seq_no_))
     return;
 
-  if (!success) {
+  if (error_type != TranslateErrors::NONE) {
     translate_manager_->PageTranslated(source_language_, target_language_,
-                                       TranslateErrors::INITIALIZATION_ERROR);
+                                       error_type);
     return;
   }
 
@@ -260,25 +246,18 @@ void IOSTranslateDriver::OnTranslateScriptReady(bool success,
                            ? source_language_
                            : kAutoDetectionLanguage;
   translate_controller_->StartTranslation(source_language_, target_language_);
-  // Check the status of the translation -- after a delay.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&IOSTranslateDriver::CheckTranslateStatus,
-                            weak_method_factory_.GetWeakPtr(), source_language_,
-                            target_language_, pending_page_seq_no_),
-      base::TimeDelta::FromMilliseconds(kTranslateStatusCheckDelayMs));
 }
 
 void IOSTranslateDriver::OnTranslateComplete(
-    bool success,
+    TranslateErrors::Type error_type,
     const std::string& original_language,
     double translation_time) {
   if (!IsPageValid(pending_page_seq_no_))
     return;
 
-  if (!success) {
-    // TODO(toyoshim): Check |errorCode| of translate.js and notify it here.
+  if (error_type != TranslateErrors::NONE) {
     translate_manager_->PageTranslated(source_language_, target_language_,
-                                       TranslateErrors::TRANSLATION_ERROR);
+                                       error_type);
   }
 
   TranslationDidSucceed(source_language_, target_language_,

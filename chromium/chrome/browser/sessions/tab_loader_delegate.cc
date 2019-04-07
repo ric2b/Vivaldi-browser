@@ -7,12 +7,12 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/resource_coordinator/session_restore_policy.h"
 #include "chrome/browser/resource_coordinator/tab_manager_features.h"
 #include "chrome/browser/sessions/session_restore_observer.h"
 #include "components/variations/variations_associated_data.h"
-#include "content/public/browser/network_connection_tracker.h"
+#include "content/public/browser/network_service_instance.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 
 namespace {
 
@@ -28,9 +28,11 @@ static const int kInitialDelayTimerMS = 1500;
 // first paint and interactivity of the foreground tab.
 static const int kFirstTabLoadTimeoutMS = 60000;
 
+resource_coordinator::SessionRestorePolicy* g_testing_policy = nullptr;
+
 class TabLoaderDelegateImpl
     : public TabLoaderDelegate,
-      public content::NetworkConnectionTracker::NetworkConnectionObserver {
+      public network::NetworkConnectionTracker::NetworkConnectionObserver {
  public:
   explicit TabLoaderDelegateImpl(TabLoaderCallback* callback);
   ~TabLoaderDelegateImpl() override;
@@ -47,23 +49,28 @@ class TabLoaderDelegateImpl
 
   // TabLoaderDelegate:
   size_t GetMaxSimultaneousTabLoads() const override {
-    return policy_.simultaneous_tab_loads();
+    return policy_->simultaneous_tab_loads();
   }
 
   // TabLoaderDelegate:
   bool ShouldLoad(content::WebContents* contents) const override {
-    return policy_.ShouldLoad(contents);
+    return policy_->ShouldLoad(contents);
   }
 
   // TabLoaderDelegate:
-  void NotifyTabLoadStarted() override { policy_.NotifyTabLoadStarted(); }
+  void NotifyTabLoadStarted() override { policy_->NotifyTabLoadStarted(); }
 
-  // content::NetworkConnectionTracker::NetworkConnectionObserver:
+  // network::NetworkConnectionTracker::NetworkConnectionObserver:
   void OnConnectionChanged(network::mojom::ConnectionType type) override;
 
  private:
-  // The policy engine used to implement ShouldLoad.
-  resource_coordinator::SessionRestorePolicy policy_;
+  // The default policy engine used to implement ShouldLoad.
+  resource_coordinator::SessionRestorePolicy default_policy_;
+
+  // The policy engine used to implement ShouldLoad. By default this is simply
+  // a pointer to |default_policy_|, but it can also point to externally
+  // injected policy engine for testing.
+  resource_coordinator::SessionRestorePolicy* policy_;
 
   // The function to call when the connection type changes.
   TabLoaderCallback* callback_;
@@ -78,11 +85,10 @@ class TabLoaderDelegateImpl
 };
 
 TabLoaderDelegateImpl::TabLoaderDelegateImpl(TabLoaderCallback* callback)
-    : callback_(callback), weak_factory_(this) {
-  g_browser_process->network_connection_tracker()->AddNetworkConnectionObserver(
-      this);
+    : policy_(&default_policy_), callback_(callback), weak_factory_(this) {
+  content::GetNetworkConnectionTracker()->AddNetworkConnectionObserver(this);
   auto type = network::mojom::ConnectionType::CONNECTION_UNKNOWN;
-  g_browser_process->network_connection_tracker()->GetConnectionType(
+  content::GetNetworkConnectionTracker()->GetConnectionType(
       &type, base::BindOnce(&TabLoaderDelegateImpl::OnConnectionChanged,
                             weak_factory_.GetWeakPtr()));
   if (type == network::mojom::ConnectionType::CONNECTION_NONE) {
@@ -95,11 +101,15 @@ TabLoaderDelegateImpl::TabLoaderDelegateImpl(TabLoaderCallback* callback)
 
   first_timeout_ = base::TimeDelta::FromMilliseconds(kFirstTabLoadTimeoutMS);
   timeout_ = base::TimeDelta::FromMilliseconds(kInitialDelayTimerMS);
+
+  // Override |policy_| if a testing policy has been set.
+  if (g_testing_policy) {
+    policy_ = g_testing_policy;
+  }
 }
 
 TabLoaderDelegateImpl::~TabLoaderDelegateImpl() {
-  g_browser_process->network_connection_tracker()
-      ->RemoveNetworkConnectionObserver(this);
+  content::GetNetworkConnectionTracker()->RemoveNetworkConnectionObserver(this);
 }
 
 void TabLoaderDelegateImpl::OnConnectionChanged(
@@ -115,4 +125,10 @@ std::unique_ptr<TabLoaderDelegate> TabLoaderDelegate::Create(
     TabLoaderCallback* callback) {
   return std::unique_ptr<TabLoaderDelegate>(
       new TabLoaderDelegateImpl(callback));
+}
+
+// static
+void TabLoaderDelegate::SetSessionRestorePolicyForTesting(
+    resource_coordinator::SessionRestorePolicy* policy) {
+  g_testing_policy = policy;
 }

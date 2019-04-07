@@ -38,7 +38,6 @@ CHROMEOS_EXPORT extern const char kArcPackagesCacheMode[];
 CHROMEOS_EXPORT extern const char kArcStartMode[];
 CHROMEOS_EXPORT extern const char kArcTransitionMigrationRequired[];
 CHROMEOS_EXPORT extern const char kArtifactsDir[];
-CHROMEOS_EXPORT extern const char kAshWebUIInit[];
 CHROMEOS_EXPORT extern const char kCellularFirst[];
 CHROMEOS_EXPORT extern const char kChildWallpaperLarge[];
 CHROMEOS_EXPORT extern const char kChildWallpaperSmall[];
@@ -91,17 +90,17 @@ CHROMEOS_EXPORT extern const char kEnableArc[];
 CHROMEOS_EXPORT extern const char kEnableArcOobeOptinNoSkip[];
 CHROMEOS_EXPORT extern const char kEnableCaptivePortalRandomUrl[];
 CHROMEOS_EXPORT extern const char kEnableCastReceiver[];
+CHROMEOS_EXPORT extern const char kEnableChromevoxDeveloperOption[];
 CHROMEOS_EXPORT extern const char kEnableConsumerKiosk[];
 CHROMEOS_EXPORT extern const char kEnableDataSaverPrompt[];
-CHROMEOS_EXPORT extern const char kEnableDemoMode[];
 CHROMEOS_EXPORT extern const char kEnableEncryptionMigration[];
 CHROMEOS_EXPORT extern const char kEnableExperimentalAccessibilityFeatures[];
 CHROMEOS_EXPORT extern const char kEnableExtensionAssetsSharing[];
 CHROMEOS_EXPORT extern const char kEnableFileManagerTouchMode[];
 CHROMEOS_EXPORT extern const char kEnableFirstRunUITransitions[];
+CHROMEOS_EXPORT extern const char kEnableMarketingOptInScreen[];
 CHROMEOS_EXPORT extern const char kEnableNetworkPortalNotification[];
 CHROMEOS_EXPORT extern const char kEnableOfflineDemoMode[];
-CHROMEOS_EXPORT extern const char kEnableOobeRecommendAppsScreen[];
 CHROMEOS_EXPORT extern const char kEnablePhysicalKeyboardAutocorrect[];
 CHROMEOS_EXPORT extern const char kEnableRequestTabletSite[];
 CHROMEOS_EXPORT extern const char kEnableScreenshotTestingWithMode[];
@@ -145,7 +144,6 @@ CHROMEOS_EXPORT extern const char kNaturalScrollDefault[];
 CHROMEOS_EXPORT extern const char kNeedArcMigrationPolicyCheck[];
 CHROMEOS_EXPORT extern const char kNoteTakingAppIds[];
 CHROMEOS_EXPORT extern const char kOobeBootstrappingMaster[];
-CHROMEOS_EXPORT extern const char kOobeConfiguration[];
 CHROMEOS_EXPORT extern const char kOobeForceShowScreen[];
 CHROMEOS_EXPORT extern const char kOobeGuestSession[];
 CHROMEOS_EXPORT extern const char kOobeSkipPostLogin[];
@@ -154,7 +152,6 @@ CHROMEOS_EXPORT extern const char kOobeTimerInterval[];
 CHROMEOS_EXPORT extern const char kProfileRequiresPolicy[];
 CHROMEOS_EXPORT extern const char kRlzPingDelay[];
 CHROMEOS_EXPORT extern const char kShelfHoverPreviews[];
-CHROMEOS_EXPORT extern const char kShelfNewUi[];
 CHROMEOS_EXPORT extern const char kShowAndroidFilesInFilesApp[];
 CHROMEOS_EXPORT extern const char kFilesAppDisableMyFilesNavigation[];
 CHROMEOS_EXPORT extern const char kShowLoginDevOverlay[];
@@ -168,7 +165,10 @@ CHROMEOS_EXPORT extern const char kWakeOnWifiPacket[];
 // Controls whether to enable Chrome OS Account Manager.
 CHROMEOS_EXPORT extern const base::Feature kAccountManager;
 
-// Controls whether enable Google Assistant feature.
+// Controls whether to enable the new shelf UI.
+CHROMEOS_EXPORT extern const base::Feature kEnableShelfNewUi;
+
+// Controls whether to enable Google Assistant feature.
 CHROMEOS_EXPORT extern const base::Feature kAssistantFeature;
 
 // Returns true if the system should wake in response to wifi traffic.

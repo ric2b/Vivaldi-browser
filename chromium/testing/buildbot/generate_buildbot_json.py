@@ -576,6 +576,11 @@ class BBJSONGenerator(object):
     result['isolate_name'] = 'telemetry_gpu_integration_test'
     args = result.get('args', [])
     test_to_run = result.pop('telemetry_test_name', test_name)
+
+    # These tests upload and download results from cloud storage and therefore
+    # aren't idempotent yet. https://crbug.com/549140.
+    result['swarming']['idempotent'] = False
+
     args = [
       test_to_run,
       '--show-stdout',
@@ -710,14 +715,22 @@ class BBJSONGenerator(object):
   def get_valid_bot_names(self):
     # Extract bot names from infra/config/global/luci-milo.cfg.
     bot_names = set()
-    for l in self.read_file(os.path.join(
-        '..', '..', 'infra', 'config', 'global', 'luci-milo.cfg')).splitlines():
-      if (not 'name: "buildbucket/luci.chromium.' in l and
-          not 'name: "buildbot/chromium.' in l):
-        continue
-      # l looks like `name: "buildbucket/luci.chromium.try/win_chromium_dbg_ng"`
-      # Extract win_chromium_dbg_ng part.
-      bot_names.add(l[l.rindex('/') + 1:l.rindex('"')])
+    infra_config_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__),
+                     '..', '..', 'infra', 'config', 'global'))
+    milo_configs = [
+        os.path.join(infra_config_dir, 'luci-milo.cfg'),
+        os.path.join(infra_config_dir, 'luci-milo-dev.cfg'),
+    ]
+    for c in milo_configs:
+      for l in self.read_file(c).splitlines():
+        if (not 'name: "buildbucket/luci.chromium.' in l and
+            not 'name: "buildbot/chromium.' in l):
+          continue
+        # l looks like
+        # `name: "buildbucket/luci.chromium.try/win_chromium_dbg_ng"`
+        # Extract win_chromium_dbg_ng part.
+        bot_names.add(l[l.rindex('/') + 1:l.rindex('"')])
     return bot_names
 
   def get_bots_that_do_not_actually_exist(self):
@@ -748,6 +761,9 @@ class BBJSONGenerator(object):
       'WebKit Linux layout_ng Dummy Builder',
       'WebKit Linux root_layer_scrolls Dummy Builder',
       'WebKit Linux slimming_paint_v2 Dummy Builder',
+      # chromium, due to https://crbug.com/878915
+      'win-dbg',
+      'win32-dbg',
     ]
 
   def check_input_file_consistency(self):
@@ -816,6 +832,8 @@ class BBJSONGenerator(object):
       for removal in removals:
         if removal not in all_bots:
           missing_bots.add(removal)
+
+    missing_bots = missing_bots - set(bots_that_dont_exist)
     if missing_bots:
       raise BBGenErr('The following nonexistent machines were referenced in '
                      'the test suite exceptions: ' + str(missing_bots))

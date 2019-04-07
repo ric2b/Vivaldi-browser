@@ -9,7 +9,7 @@
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/ipc/common/gpu_messages.h"
-#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
+#include "services/ws/public/cpp/gpu/context_provider_command_buffer.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace content {
@@ -80,12 +80,12 @@ void StreamTextureProxy::ForwardStreamTextureForSurfaceRequest(
 
 // static
 scoped_refptr<StreamTextureFactory> StreamTextureFactory::Create(
-    scoped_refptr<ui::ContextProviderCommandBuffer> context_provider) {
+    scoped_refptr<ws::ContextProviderCommandBuffer> context_provider) {
   return new StreamTextureFactory(std::move(context_provider));
 }
 
 StreamTextureFactory::StreamTextureFactory(
-    scoped_refptr<ui::ContextProviderCommandBuffer> context_provider)
+    scoped_refptr<ws::ContextProviderCommandBuffer> context_provider)
     : context_provider_(std::move(context_provider)),
       channel_(context_provider_->GetCommandBufferProxy()->channel()) {
   DCHECK(channel_);

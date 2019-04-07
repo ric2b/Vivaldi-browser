@@ -75,10 +75,10 @@ class TeamDriveListLoader {
                              FileError error);
 
   void OnTeamDrivesRemoved(ResourceEntryVector remote_resources,
-                           const TeamDriveUpdateData& team_drive_updates,
+                           TeamDriveUpdateData team_drive_updates,
                            FileError error);
 
-  void OnAddOrUpdateTeamDrives(const TeamDriveUpdateData& team_drive_updates,
+  void OnAddOrUpdateTeamDrives(TeamDriveUpdateData team_drive_updates,
                                FileError error);
 
   void OnTeamDriveListLoadComplete(FileError error);
@@ -89,7 +89,7 @@ class TeamDriveListLoader {
   std::vector<std::unique_ptr<ChangeList>> change_lists_;
   std::vector<FileOperationCallback> pending_load_callbacks_;
   bool loaded_ = false;
-  base::ObserverList<TeamDriveListObserver> observers_;
+  base::ObserverList<TeamDriveListObserver>::Unchecked observers_;
 
   ResourceMetadata* resource_metadata_;  // Not owned.
   JobScheduler* scheduler_;              // Not owned.

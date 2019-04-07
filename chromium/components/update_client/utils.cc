@@ -17,6 +17,7 @@
 #include "base/files/file_util.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/json/json_file_value_serializer.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -31,8 +32,6 @@
 #include "crypto/sha2.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "net/url_request/url_fetcher.h"
-#include "net/url_request/url_request_status.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "url/gurl.h"
@@ -93,38 +92,6 @@ std::unique_ptr<network::SimpleURLLoader> SendProtocolRequest(
   simple_loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
       url_loader_factory.get(), std::move(callback));
   return simple_loader;
-}
-
-bool FetchSuccess(const net::URLFetcher& fetcher) {
-  return GetFetchError(fetcher) == 0;
-}
-
-int GetFetchError(const net::URLFetcher& fetcher) {
-  const net::URLRequestStatus::Status status(fetcher.GetStatus().status());
-  switch (status) {
-    case net::URLRequestStatus::IO_PENDING:
-    case net::URLRequestStatus::CANCELED:
-      // Network status is a small positive number.
-      return status;
-
-    case net::URLRequestStatus::SUCCESS: {
-      // Response codes are positive numbers, greater than 100.
-      const int response_code(fetcher.GetResponseCode());
-      if (response_code == 200)
-        return 0;
-      else
-        return response_code ? response_code : -1;
-    }
-
-    case net::URLRequestStatus::FAILED: {
-      // Network errors are small negative numbers.
-      const int error = fetcher.GetStatus().error();
-      return error ? error : -1;
-    }
-
-    default:
-      return -1;
-  }
 }
 
 bool HasDiffUpdate(const Component& component) {
@@ -224,10 +191,8 @@ bool IsValidInstallerAttribute(const InstallerAttribute& attr) {
 
 void RemoveUnsecureUrls(std::vector<GURL>* urls) {
   DCHECK(urls);
-  urls->erase(std::remove_if(
-                  urls->begin(), urls->end(),
-                  [](const GURL& url) { return !url.SchemeIsCryptographic(); }),
-              urls->end());
+  base::EraseIf(*urls,
+                [](const GURL& url) { return !url.SchemeIsCryptographic(); });
 }
 
 CrxInstaller::Result InstallFunctionWrapper(

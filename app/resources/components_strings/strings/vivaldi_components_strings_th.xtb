@@ -79,7 +79,6 @@
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ใช้เวลาตอบกลับนานเกินไป</translation>
 <translation id="8740359287975076522">ไม่พบ&lt;abbr id="dnsDefinition"&gt;ที่อยู่ DNS&lt;/abbr&gt; ของ <ph name="HOST_NAME" /> กำลังวินิจฉัยปัญหา</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> ใช้โปรโตคอลที่ไม่รองรับ</translation>
-<translation id="933612690413056017">ไม่มีการเชื่อมต่ออินเทอร์เน็ต</translation>
 <translation id="969892804517981540">รุ่นที่เป็นทางการ</translation>
 <translation id="988159990683914416">รุ่นนักพัฒนา</translation>
 </translationbundle>

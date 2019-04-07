@@ -22,13 +22,6 @@
 namespace ash {
 namespace accelerators {
 
-bool IsInternalDisplayZoomEnabled() {
-  display::DisplayManager* display_manager = Shell::Get()->display_manager();
-  return display_manager->IsDisplayUIScalingEnabled() ||
-         display_manager->IsInUnifiedMode() ||
-         features::IsDisplayZoomSettingEnabled();
-}
-
 bool ZoomDisplay(bool up) {
   if (up)
     base::RecordAction(base::UserMetricsAction("Accel_Scale_Ui_Up"));
@@ -36,11 +29,6 @@ bool ZoomDisplay(bool up) {
     base::RecordAction(base::UserMetricsAction("Accel_Scale_Ui_Down"));
 
   display::DisplayManager* display_manager = Shell::Get()->display_manager();
-
-  if (display_manager->IsInUnifiedMode() ||
-      !features::IsDisplayZoomSettingEnabled()) {
-    return display_manager->ZoomInternalDisplay(up);
-  }
 
   gfx::Point point = display::Screen::GetScreen()->GetCursorScreenPoint();
   display::Display display =
@@ -51,15 +39,10 @@ bool ZoomDisplay(bool up) {
 void ResetDisplayZoom() {
   base::RecordAction(base::UserMetricsAction("Accel_Scale_Ui_Reset"));
   display::DisplayManager* display_manager = Shell::Get()->display_manager();
-  if (features::IsDisplayZoomSettingEnabled() &&
-      !display_manager->IsInUnifiedMode()) {
-    gfx::Point point = display::Screen::GetScreen()->GetCursorScreenPoint();
-    display::Display display =
-        display::Screen::GetScreen()->GetDisplayNearestPoint(point);
-    display_manager->ResetDisplayZoom(display.id());
-  } else {
-    display_manager->ResetInternalDisplayZoom();
-  }
+  gfx::Point point = display::Screen::GetScreen()->GetCursorScreenPoint();
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestPoint(point);
+  display_manager->ResetDisplayZoom(display.id());
 }
 
 bool ToggleMinimized() {

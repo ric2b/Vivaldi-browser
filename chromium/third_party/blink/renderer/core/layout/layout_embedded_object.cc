@@ -34,7 +34,6 @@
 #include "third_party/blink/renderer/core/layout/layout_analyzer.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/core/paint/embedded_object_paint_invalidator.h"
 #include "third_party/blink/renderer/core/paint/embedded_object_painter.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 
@@ -83,34 +82,10 @@ bool LayoutEmbeddedObject::ShowsUnavailablePluginIndicator() const {
   return plugin_availability_ != kPluginAvailable;
 }
 
-void LayoutEmbeddedObject::PaintContents(
-    const PaintInfo& paint_info,
-    const LayoutPoint& paint_offset) const {
-  Element* element = ToElement(GetNode());
-  if (!IsHTMLPlugInElement(element))
-    return;
-
-  LayoutEmbeddedContent::PaintContents(paint_info, paint_offset);
-}
-
-void LayoutEmbeddedObject::Paint(const PaintInfo& paint_info) const {
-  if (ShowsUnavailablePluginIndicator()) {
-    LayoutReplaced::Paint(paint_info);
-    return;
-  }
-
-  LayoutEmbeddedContent::Paint(paint_info);
-}
-
 void LayoutEmbeddedObject::PaintReplaced(
     const PaintInfo& paint_info,
     const LayoutPoint& paint_offset) const {
   EmbeddedObjectPainter(*this).PaintReplaced(paint_info, paint_offset);
-}
-
-PaintInvalidationReason LayoutEmbeddedObject::InvalidatePaint(
-    const PaintInvalidatorContext& context) const {
-  return EmbeddedObjectPaintInvalidator(*this, context).InvalidatePaint();
 }
 
 void LayoutEmbeddedObject::UpdateLayout() {
@@ -143,7 +118,7 @@ void LayoutEmbeddedObject::ComputeIntrinsicSizingInfo(
   if (frame_view && frame_view->GetIntrinsicSizingInfo(intrinsic_sizing_info)) {
     // Handle zoom & vertical writing modes here, as the embedded document
     // doesn't know about them.
-    intrinsic_sizing_info.size.Scale(Style()->EffectiveZoom());
+    intrinsic_sizing_info.size.Scale(StyleRef().EffectiveZoom());
 
     if (!IsHorizontalWritingMode())
       intrinsic_sizing_info.Transpose();

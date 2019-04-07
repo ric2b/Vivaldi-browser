@@ -10,9 +10,27 @@ source_set("safe_search_api") {
 
   deps = [
     "//base",
-    "//components/google/core/browser",
+    "//components/google/core/common",
     "//google_apis",
     "//net",
+    "//services/network/public/cpp",
+    "//url",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "stub_url_checker.cc",
+    "stub_url_checker.h",
+  ]
+  deps = [
+    ":safe_search_api",
+    "//base",
+    "//base/test:test_support",
+    "//net",
+    "//net/traffic_annotation:test_support",
+    "//services/network:test_support",
     "//services/network/public/cpp",
     "//url",
   ]
@@ -25,12 +43,10 @@ source_set("unit_tests") {
   ]
   deps = [
     ":safe_search_api",
+    ":test_support",
     "//base",
     "//base/test:test_support",
     "//net",
-    "//net/traffic_annotation:test_support",
-    "//services/network:test_support",
-    "//services/network/public/cpp",
     "//testing/gmock",
     "//testing/gtest",
     "//url",

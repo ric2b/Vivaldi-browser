@@ -11,9 +11,9 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "content/public/browser/network_connection_tracker.h"
 #include "google_apis/gaia/oauth2_token_service.h"
 #include "net/base/backoff_entry.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 
 class Profile;
 class SigninManager;
@@ -27,19 +27,19 @@ extern const char kForceSigninVerificationFailureTimeMetricsName[];
 // error.
 class ForceSigninVerifier
     : public OAuth2TokenService::Consumer,
-      public content::NetworkConnectionTracker::NetworkConnectionObserver {
+      public network::NetworkConnectionTracker::NetworkConnectionObserver {
  public:
   explicit ForceSigninVerifier(Profile* profile);
   ~ForceSigninVerifier() override;
 
   // override OAuth2TokenService::Consumer
-  void OnGetTokenSuccess(const OAuth2TokenService::Request* request,
-                         const std::string& access_token,
-                         const base::Time& expiration_time) override;
+  void OnGetTokenSuccess(
+      const OAuth2TokenService::Request* request,
+      const OAuth2AccessTokenConsumer::TokenResponse& token_response) override;
   void OnGetTokenFailure(const OAuth2TokenService::Request* request,
                          const GoogleServiceAuthError& error) override;
 
-  // override content::NetworkConnectionTracker::NetworkConnectionObserver
+  // override network::NetworkConnectionTracker::NetworkConnectionObserver
   void OnConnectionChanged(network::mojom::ConnectionType type) override;
 
   // Cancel any pending or ongoing verification.
@@ -56,6 +56,11 @@ class ForceSigninVerifier
   //   - The profile has signed in.
   //
   void SendRequest();
+
+  // Send the request if |network_type| is not CONNECTION_NONE and
+  // ShouldSendRequest returns true.
+  void SendRequestIfNetworkAvailable(
+      network::mojom::ConnectionType network_type);
 
   virtual bool ShouldSendRequest();
 

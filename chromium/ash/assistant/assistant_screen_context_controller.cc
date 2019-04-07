@@ -9,18 +9,21 @@
 #include "ash/assistant/assistant_ui_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
+#include "ash/public/interfaces/voice_interaction_controller.mojom.h"
 #include "ash/shell.h"
+#include "ash/voice_interaction/voice_interaction_controller.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/stl_util.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/skbitmap_operations.h"
 #include "ui/snapshot/snapshot.h"
 #include "ui/snapshot/snapshot_aura.h"
+#include "ui/wm/core/focus_controller.h"
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
@@ -65,6 +68,23 @@ std::unique_ptr<ui::LayerTreeOwner> CreateLayerForAssistantSnapshot(
 
   if (overlay_container)
     excluded_layers.insert(overlay_container->layer());
+
+  aura::Window* always_on_top_container = ash::Shell::GetContainer(
+      root_window, kShellWindowId_AlwaysOnTopContainer);
+
+  // Ignore windows in always on top container. This will prevent assistant
+  // window from being snapshot.
+  // TODO(muyuanli): We can add Ash property to indicate specific windows to
+  //                 be excluded from snapshot (e.g. assistant window itself).
+  if (always_on_top_container)
+    excluded_layers.insert(always_on_top_container->layer());
+
+  aura::Window* app_list_container =
+      ash::Shell::GetContainer(root_window, kShellWindowId_AppListContainer);
+
+  // Ignore app list to prevent interfering with app list animations.
+  if (app_list_container)
+    excluded_layers.insert(app_list_container->layer());
 
   MruWindowTracker::WindowList windows =
       Shell::Get()->mru_window_tracker()->BuildMruWindowList();
@@ -111,17 +131,15 @@ AssistantScreenContextController::AssistantScreenContextController(
     : assistant_controller_(assistant_controller),
       screen_context_request_factory_(this) {
   assistant_controller_->AddObserver(this);
-  Shell::Get()->highlighter_controller()->AddObserver(this);
 }
 
 AssistantScreenContextController::~AssistantScreenContextController() {
-  Shell::Get()->highlighter_controller()->RemoveObserver(this);
   assistant_controller_->RemoveObserver(this);
 }
 
 void AssistantScreenContextController::SetAssistant(
     chromeos::assistant::mojom::Assistant* assistant) {
-  assistant_ = std::move(assistant);
+  assistant_ = assistant;
 }
 
 void AssistantScreenContextController::AddModelObserver(
@@ -137,8 +155,7 @@ void AssistantScreenContextController::RemoveModelObserver(
 void AssistantScreenContextController::RequestScreenshot(
     const gfx::Rect& rect,
     mojom::AssistantController::RequestScreenshotCallback callback) {
-  // TODO(muyuanli): Handle multi-display when Assistant's behavior is defined.
-  aura::Window* root_window = Shell::GetPrimaryRootWindow();
+  aura::Window* root_window = Shell::Get()->GetRootWindowForNewWindows();
 
   std::unique_ptr<ui::LayerTreeOwner> layer_owner =
       CreateLayerForAssistantSnapshot(root_window);
@@ -162,21 +179,6 @@ void AssistantScreenContextController::RequestScreenshot(
                           base::Passed(std::move(layer_owner))));
 }
 
-void AssistantScreenContextController::RequestScreenContext(
-    const gfx::Rect& rect) {
-  // Abort any request in progress and update request state.
-  screen_context_request_factory_.InvalidateWeakPtrs();
-  assistant_screen_context_model_.SetRequestState(
-      ScreenContextRequestState::kInProgress);
-
-  // Request screen context for the entire screen.
-  assistant_->RequestScreenContext(
-      gfx::Rect(),
-      base::BindOnce(
-          &AssistantScreenContextController::OnScreenContextRequestFinished,
-          screen_context_request_factory_.GetWeakPtr()));
-}
-
 void AssistantScreenContextController::OnAssistantControllerConstructed() {
   assistant_controller_->ui_controller()->AddModelObserver(this);
 }
@@ -186,11 +188,12 @@ void AssistantScreenContextController::OnAssistantControllerDestroying() {
 }
 
 void AssistantScreenContextController::OnUiVisibilityChanged(
-    bool visible,
+    AssistantVisibility new_visibility,
+    AssistantVisibility old_visibility,
     AssistantSource source) {
-  // We don't initiate a contextual query for caching if the UI is being hidden.
-  // Instead, we abort any requests in progress and reset state.
-  if (!visible) {
+  // We only initiate a contextual query for caching if the UI is being shown.
+  // Otherwise, we abort any requests in progress and reset state.
+  if (new_visibility != AssistantVisibility::kVisible) {
     screen_context_request_factory_.InvalidateWeakPtrs();
     assistant_screen_context_model_.SetRequestState(
         ScreenContextRequestState::kIdle);
@@ -201,19 +204,19 @@ void AssistantScreenContextController::OnUiVisibilityChanged(
                                      ->model()
                                      ->input_modality();
 
-  // We don't initiate a contextual query for caching if we are using stylus
-  // input modality because we will do so on metalayer session complete.
+  // We don't initiate a cache request if we are using stylus input modality.
   if (input_modality == InputModality::kStylus)
     return;
 
-  // Request screen context for the entire screen.
-  RequestScreenContext(gfx::Rect());
-}
+  // Abort any request in progress and update request state.
+  screen_context_request_factory_.InvalidateWeakPtrs();
+  assistant_screen_context_model_.SetRequestState(
+      ScreenContextRequestState::kInProgress);
 
-void AssistantScreenContextController::OnHighlighterSelectionRecognized(
-    const gfx::Rect& rect) {
-  // Request screen context for the selected region.
-  RequestScreenContext(rect);
+  // Cache screen context for the entire screen.
+  assistant_->CacheScreenContext(base::BindOnce(
+      &AssistantScreenContextController::OnScreenContextRequestFinished,
+      screen_context_request_factory_.GetWeakPtr()));
 }
 
 void AssistantScreenContextController::OnScreenContextRequestFinished() {

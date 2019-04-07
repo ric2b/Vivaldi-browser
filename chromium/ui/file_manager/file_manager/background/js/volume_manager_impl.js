@@ -199,10 +199,6 @@ VolumeManagerImpl.prototype.onMountCompleted_ = function(event) {
       case 'unmount':
         var volumeId = event.volumeMetadata.volumeId;
         var status = event.status;
-        if (status === VolumeManagerCommon.VolumeError.PATH_UNMOUNTED) {
-          console.warn('Volume already unmounted: ', volumeId);
-          status = 'success';
-        }
         var requestKey = this.makeRequestKey_('unmount', volumeId);
         var requested = requestKey in this.requests_;
         var volumeInfoIndex =
@@ -294,7 +290,7 @@ VolumeManagerImpl.prototype.getLocationInfo = function(entry) {
 
   if (util.isFakeEntry(entry)) {
     return new EntryLocationImpl(
-        volumeInfo, entry.rootType,
+        volumeInfo, assert(entry.rootType),
         true /* the entry points a root directory. */,
         true /* fake entries are read only. */);
   }
@@ -342,35 +338,8 @@ VolumeManagerImpl.prototype.getLocationInfo = function(entry) {
       return null;
     }
   } else {
-    switch (volumeInfo.volumeType) {
-      case VolumeManagerCommon.VolumeType.DOWNLOADS:
-        rootType = VolumeManagerCommon.RootType.DOWNLOADS;
-        break;
-      case VolumeManagerCommon.VolumeType.REMOVABLE:
-        rootType = VolumeManagerCommon.RootType.REMOVABLE;
-        break;
-      case VolumeManagerCommon.VolumeType.ARCHIVE:
-        rootType = VolumeManagerCommon.RootType.ARCHIVE;
-        break;
-      case VolumeManagerCommon.VolumeType.MTP:
-        rootType = VolumeManagerCommon.RootType.MTP;
-        break;
-      case VolumeManagerCommon.VolumeType.PROVIDED:
-        rootType = VolumeManagerCommon.RootType.PROVIDED;
-        break;
-      case VolumeManagerCommon.VolumeType.MEDIA_VIEW:
-        rootType = VolumeManagerCommon.RootType.MEDIA_VIEW;
-        break;
-      case VolumeManagerCommon.VolumeType.CROSTINI:
-        rootType = VolumeManagerCommon.RootType.CROSTINI;
-        break;
-      case VolumeManagerCommon.VolumeType.ANDROID_FILES:
-        rootType = VolumeManagerCommon.RootType.ANDROID_FILES;
-        break;
-      default:
-        // Programming error, throw an exception.
-        throw new Error('Invalid volume type: ' + volumeInfo.volumeType);
-    }
+    rootType =
+        VolumeManagerCommon.getRootTypeFromVolumeType(volumeInfo.volumeType);
     isRootEntry = util.isSameEntry(entry, volumeInfo.fileSystem.root);
     // Although "Play files" root directory is writable in file system level,
     // we prohibit write operations on it in the UI level to avoid confusion.

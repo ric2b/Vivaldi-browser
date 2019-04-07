@@ -6,11 +6,9 @@
 
 #include "base/bind_helpers.h"
 #include "base/run_loop.h"
-#include "base/test/scoped_feature_list.h"
 #include "content/browser/permissions/permission_controller_impl.h"
 #include "content/public/browser/permission_controller.h"
 #include "content/public/browser/permission_type.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/test/mock_permission_manager.h"
 #include "content/public/test/navigation_simulator.h"
@@ -27,7 +25,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
 
-using base::test::ScopedFeatureList;
 using blink::mojom::PermissionStatus;
 using device::mojom::GeolocationPtr;
 using device::mojom::GeopositionPtr;
@@ -155,9 +152,6 @@ class GeolocationServiceTest : public RenderViewHostImplTestHarness {
 
 TEST_F(GeolocationServiceTest, PermissionGrantedPolicyViolation) {
   // The embedded frame is not whitelisted.
-  ScopedFeatureList feature_list;
-  feature_list.InitFromCommandLine(
-      features::kUseFeaturePolicyForPermissions.name, std::string());
   CreateEmbeddedFrameAndGeolocationService(/*allow_via_feature_policy=*/false);
 
   permission_manager()->SetRequestCallback(
@@ -178,9 +172,6 @@ TEST_F(GeolocationServiceTest, PermissionGrantedPolicyViolation) {
 
 TEST_F(GeolocationServiceTest, PermissionGrantedNoPolicyViolation) {
   // Whitelist the embedded frame.
-  ScopedFeatureList feature_list;
-  feature_list.InitFromCommandLine(
-      features::kUseFeaturePolicyForPermissions.name, std::string());
   CreateEmbeddedFrameAndGeolocationService(/*allow_via_feature_policy=*/true);
 
   permission_manager()->SetRequestCallback(

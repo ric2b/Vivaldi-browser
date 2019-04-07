@@ -9,7 +9,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
-#include "components/google/core/browser/google_util.h"
+#include "components/google/core/common/google_util.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/search_engines/util.h"
@@ -18,6 +18,7 @@
 #include "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#include "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
@@ -27,6 +28,7 @@
 #import "ios/chrome/browser/ui/location_bar/location_bar_mediator.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_url_loader.h"
 #include "ios/chrome/browser/ui/location_bar/location_bar_view_controller.h"
+#import "ios/chrome/browser/ui/ntp/ntp_util.h"
 #include "ios/chrome/browser/ui/omnibox/location_bar_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_coordinator.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
@@ -64,6 +66,8 @@ const int kLocationAuthorizationStatusCount = 4;
   // Observer that updates |viewController| for fullscreen events.
   std::unique_ptr<FullscreenControllerObserver> _fullscreenObserver;
 }
+// Whether the coordinator is started.
+@property(nonatomic, assign, getter=isStarted) BOOL started;
 // Coordinator for the omnibox popup.
 @property(nonatomic, strong) OmniboxPopupCoordinator* omniboxPopupCoordinator;
 // Coordinator for the omnibox.
@@ -76,6 +80,7 @@ const int kLocationAuthorizationStatusCount = 4;
 @implementation LocationBarCoordinator
 @synthesize commandDispatcher = _commandDispatcher;
 @synthesize viewController = _viewController;
+@synthesize started = _started;
 @synthesize mediator = _mediator;
 @synthesize browserState = _browserState;
 @synthesize dispatcher = _dispatcher;
@@ -94,6 +99,9 @@ const int kLocationAuthorizationStatusCount = 4;
 
 - (void)start {
   DCHECK(self.commandDispatcher);
+
+  if (self.started)
+    return;
 
   [self.commandDispatcher startDispatchingToTarget:self
                                        forProtocol:@protocol(OmniboxFocuser)];
@@ -147,9 +155,13 @@ const int kLocationAuthorizationStatusCount = 4;
   FullscreenControllerFactory::GetInstance()
       ->GetForBrowserState(self.browserState)
       ->AddObserver(_fullscreenObserver.get());
+
+  self.started = YES;
 }
 
 - (void)stop {
+  if (!self.started)
+    return;
   [self.commandDispatcher stopDispatchingToTarget:self];
   // The popup has to be destroyed before the location bar.
   [self.omniboxPopupCoordinator stop];
@@ -159,6 +171,11 @@ const int kLocationAuthorizationStatusCount = 4;
   self.viewController = nil;
   [self.mediator disconnect];
   self.mediator = nil;
+
+  FullscreenControllerFactory::GetInstance()
+      ->GetForBrowserState(self.browserState)
+      ->RemoveObserver(_fullscreenObserver.get());
+  self.started = NO;
 }
 
 - (BOOL)omniboxPopupHasAutocompleteResults {
@@ -191,7 +208,7 @@ const int kLocationAuthorizationStatusCount = 4;
   if (immediately) {
     [self loadURLForQuery:sanitizedQuery];
   } else {
-    [self focusOmnibox];
+    [self.omniboxCoordinator focusOmnibox];
     [self.omniboxCoordinator
         insertTextToOmnibox:base::SysUTF16ToNSString(sanitizedQuery)];
   }
@@ -236,8 +253,19 @@ const int kLocationAuthorizationStatusCount = 4;
   [self focusOmnibox];
 }
 
-- (void)focusOmnibox {
+- (void)focusOmniboxFromFakebox {
   [self.omniboxCoordinator focusOmnibox];
+}
+
+- (void)focusOmnibox {
+  // When the NTP and fakebox are visible, make the fakebox animates into place
+  // before focusing the omnibox.
+  if (IsVisibleUrlNewTabPage([self webState]) &&
+      !self.browserState->IsOffTheRecord()) {
+    [self.viewController.dispatcher focusFakebox];
+  } else {
+    [self.omniboxCoordinator focusOmnibox];
+  }
 }
 
 - (void)cancelOmniboxEdit {
@@ -269,16 +297,7 @@ const int kLocationAuthorizationStatusCount = 4;
 #pragma mark - LocationBarViewControllerDelegate
 
 - (void)locationBarSteadyViewTapped {
-  FullscreenController* fullscreenController =
-      FullscreenControllerFactory::GetInstance()->GetForBrowserState(
-          _browserState);
-  if (fullscreenController->GetProgress() < 1) {
-    // The first tap should exit fullscreen.
-    fullscreenController->ResetModel();
-  } else {
-    // The toolbar is fully visible, focus the omnibox.
-    [self focusOmnibox];
-  }
+  [self focusOmnibox];
 }
 
 - (void)locationBarCopyTapped {

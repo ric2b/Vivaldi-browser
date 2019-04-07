@@ -168,6 +168,7 @@ IN_PROC_BROWSER_TEST_P(FindRequestManagerTest, MAYBE(Basic)) {
     MakeChildFrameCrossProcess();
 
   blink::WebFindOptions options;
+  options.run_synchronously_for_testing = true;
   Find("result", options);
   delegate()->WaitForFinalReply();
 
@@ -251,6 +252,7 @@ IN_PROC_BROWSER_TEST_P(FindRequestManagerTest, ScrollAndZoomIntoView) {
 
   // Search for a result further down in the iframe.
   blink::WebFindOptions options;
+  options.run_synchronously_for_testing = true;
   Find("result 17", options);
   delegate()->WaitForFinalReply();
 
@@ -312,6 +314,7 @@ IN_PROC_BROWSER_TEST_P(FindRequestManagerTest, MAYBE(CharacterByCharacter)) {
     MakeChildFrameCrossProcess();
 
   blink::WebFindOptions default_options;
+  default_options.run_synchronously_for_testing = true;
   Find("r", default_options);
   Find("re", default_options);
   Find("res", default_options);
@@ -336,6 +339,7 @@ IN_PROC_BROWSER_TEST_P(FindRequestManagerTest, DISABLED_RapidFire) {
     MakeChildFrameCrossProcess();
 
   blink::WebFindOptions options;
+  options.run_synchronously_for_testing = true;
   Find("result", options);
 
   options.find_next = true;
@@ -356,6 +360,7 @@ IN_PROC_BROWSER_TEST_P(FindRequestManagerTest, DISABLED_RemoveFrame) {
   LoadMultiFramePage(2 /* height */, GetParam() /* cross_process */);
 
   blink::WebFindOptions options;
+  options.run_synchronously_for_testing = true;
   Find("result", options);
   delegate()->WaitForFinalReply();
   options.find_next = true;
@@ -389,6 +394,7 @@ IN_PROC_BROWSER_TEST_P(FindRequestManagerTest, DISABLED_AddFrame) {
   LoadMultiFramePage(2 /* height */, GetParam() /* cross_process */);
 
   blink::WebFindOptions options;
+  options.run_synchronously_for_testing = true;
   Find("result", options);
   options.find_next = true;
   Find("result", options);
@@ -428,6 +434,7 @@ IN_PROC_BROWSER_TEST_F(FindRequestManagerTest, MAYBE(AddFrameAfterNoMatches)) {
   EXPECT_TRUE(navigation_observer.last_navigation_succeeded());
 
   blink::WebFindOptions default_options;
+  default_options.run_synchronously_for_testing = true;
   Find("result", default_options);
   delegate()->WaitForFinalReply();
 
@@ -460,6 +467,7 @@ IN_PROC_BROWSER_TEST_P(FindRequestManagerTest, MAYBE(NavigateFrame)) {
   LoadMultiFramePage(2 /* height */, GetParam() /* cross_process */);
 
   blink::WebFindOptions options;
+  options.run_synchronously_for_testing = true;
   Find("result", options);
   options.find_next = true;
   options.forward = false;
@@ -508,6 +516,7 @@ IN_PROC_BROWSER_TEST_F(FindRequestManagerTest, MAYBE(HiddenFrame)) {
   LoadAndWait("/find_in_hidden_frame.html");
 
   blink::WebFindOptions default_options;
+  default_options.run_synchronously_for_testing = true;
   Find("hello", default_options);
   delegate()->WaitForFinalReply();
   FindResults results = delegate()->GetFindResults();
@@ -522,6 +531,7 @@ IN_PROC_BROWSER_TEST_P(FindRequestManagerTest, MAYBE(FindNewMatches)) {
   LoadAndWait("/find_in_dynamic_page.html");
 
   blink::WebFindOptions options;
+  options.run_synchronously_for_testing = true;
   Find("result", options);
   options.find_next = true;
   Find("result", options);
@@ -548,7 +558,8 @@ IN_PROC_BROWSER_TEST_P(FindRequestManagerTest, MAYBE(FindNewMatches)) {
 
 // TODO(crbug.com/615291): These tests frequently fail on Android.
 // TODO(crbug.com/779912): Flaky timeout on Win7 (dbg).
-#if defined(OS_ANDROID) || (defined(OS_WIN) && !defined(NDEBUG))
+// TODO(crbug.com/875306): Flaky on Win10.
+#if defined(OS_ANDROID) || defined(OS_WIN)
 #define MAYBE_FindInPage_Issue627799 DISABLED_FindInPage_Issue627799
 #else
 #define MAYBE_FindInPage_Issue627799 FindInPage_Issue627799
@@ -558,6 +569,7 @@ IN_PROC_BROWSER_TEST_F(FindRequestManagerTest, MAYBE_FindInPage_Issue627799) {
   LoadAndWait("/find_in_long_page.html");
 
   blink::WebFindOptions options;
+  options.run_synchronously_for_testing = true;
   Find("42", options);
   delegate()->WaitForFinalReply();
 
@@ -589,6 +601,7 @@ IN_PROC_BROWSER_TEST_F(FindRequestManagerTest, MAYBE(FindInPage_Issue644448)) {
   EXPECT_TRUE(navigation_observer.last_navigation_succeeded());
 
   blink::WebFindOptions default_options;
+  default_options.run_synchronously_for_testing = true;
   Find("result", default_options);
   delegate()->WaitForFinalReply();
 
@@ -617,6 +630,7 @@ IN_PROC_BROWSER_TEST_F(FindRequestManagerTest, MAYBE(FindMatchRects)) {
   LoadAndWait("/find_in_page.html");
 
   blink::WebFindOptions default_options;
+  default_options.run_synchronously_for_testing = true;
   Find("result", default_options);
   delegate()->WaitForFinalReply();
   EXPECT_EQ(19, delegate()->GetFindResults().number_of_matches);
@@ -699,6 +713,7 @@ IN_PROC_BROWSER_TEST_F(FindRequestManagerTest,
   LoadAndWait("/find_in_page.html");
 
   blink::WebFindOptions default_options;
+  default_options.run_synchronously_for_testing = true;
   Find("result", default_options);
   delegate()->WaitForFinalReply();
   EXPECT_EQ(19, delegate()->GetFindResults().number_of_matches);

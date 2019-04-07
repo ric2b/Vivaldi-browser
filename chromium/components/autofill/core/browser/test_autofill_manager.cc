@@ -26,8 +26,7 @@ TestAutofillManager::TestAutofillManager(AutofillDriver* driver,
       client_(client) {
   set_payments_client(new payments::PaymentsClient(
       url_loader_factory_, client->GetPrefs(), client->GetIdentityManager(),
-      /*unmask_delegate=*/this,
-      /*save_delegate=*/nullptr));
+      personal_data));
 }
 
 TestAutofillManager::TestAutofillManager(
@@ -150,8 +149,8 @@ void TestAutofillManager::AddSeenForm(
 
 void TestAutofillManager::AddSeenFormStructure(
     std::unique_ptr<FormStructure> form_structure) {
-  form_structure->set_form_parsed_timestamp(base::TimeTicks::Now());
-  mutable_form_structures()->push_back(std::move(form_structure));
+  const auto signature = form_structure->form_signature();
+  (*mutable_form_structures())[signature] = std::move(form_structure);
 }
 
 void TestAutofillManager::ClearFormStructures() {

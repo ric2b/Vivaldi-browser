@@ -428,21 +428,27 @@ class NavigationOrSwapObserver : public WebContentsObserver,
   }
 
   // TabStripModelObserver implementation:
-  void TabReplacedAt(TabStripModel* tab_strip_model,
-                     WebContents* old_contents,
-                     WebContents* new_contents,
-                     int index) override {
-    if (old_contents != web_contents())
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override {
+    if (change.type() != TabStripModelChange::kReplaced)
       return;
-    // Switch to observing the new WebContents.
-    Observe(new_contents);
-    if (new_contents->IsLoading()) {
-      // If the new WebContents is still loading, wait for it to complete. Only
-      // one load post-swap is supported.
-      did_start_loading_ = true;
-      number_of_loads_ = 1;
-    } else {
-      loop_.Quit();
+
+    for (const auto& delta : change.deltas()) {
+      if (delta.replace.old_contents != web_contents())
+        continue;
+
+      // Switch to observing the new WebContents.
+      Observe(delta.replace.new_contents);
+      if (delta.replace.new_contents->IsLoading()) {
+        // If the new WebContents is still loading, wait for it to complete.
+        // Only one load post-swap is supported.
+        did_start_loading_ = true;
+        number_of_loads_ = 1;
+      } else {
+        loop_.Quit();
+      }
     }
   }
 
@@ -1430,8 +1436,9 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderNaClPluginDisabled) {
 // http://crbug.com/100514
 #define MAYBE_PrerenderIframeDelayLoadPlugin \
         DISABLED_PrerenderIframeDelayLoadPlugin
-#elif defined(OS_WIN) && defined(ARCH_CPU_X86_64)
-// TODO(jschuh): Failing plugin tests. crbug.com/244653
+#elif defined(OS_WIN)
+// TODO(jschuh): Failing plugin tests. https://crbug.com/244653,
+// https://crbug.com/876872
 #define MAYBE_PrerenderIframeDelayLoadPlugin \
         DISABLED_PrerenderIframeDelayLoadPlugin
 #else
@@ -2410,7 +2417,13 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderUnload) {
 // Checks that a beforeunload handler is executed on the referring page when a
 // prerendered page is swapped in. Also checks that the WebContents of the
 // referring page is destroyed.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderBeforeUnload) {
+// Disabled on Windows. See https://crbug.com/875404.
+#if defined(OS_WIN)
+#define MAYBE_PrerenderBeforeUnload DISABLED_PrerenderBeforeUnload
+#else
+#define MAYBE_PrerenderBeforeUnload PrerenderBeforeUnload
+#endif
+IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, MAYBE_PrerenderBeforeUnload) {
   set_loader_path("/prerender/prerender_loader_with_beforeunload.html");
   PrerenderTestURL("/prerender/prerender_page.html", FINAL_STATUS_USED, 1);
   WebContentsDestructionObserver destruction_observer(GetActiveWebContents());

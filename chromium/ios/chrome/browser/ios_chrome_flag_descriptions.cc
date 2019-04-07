@@ -17,6 +17,11 @@ const char kAutofillCacheQueryResponsesDescription[] =
     "When enabled, autofill will cache the responses it receives from the "
     "crowd-sourced field type prediction server.";
 
+const char kAutofillEnableCompanyNameName[] =
+    "Enable Autofill Company Name field";
+const char kAutofillEnableCompanyNameDescription[] =
+    "When enabled, Company Name fields will be auto filled";
+
 const char kAutofillCreditCardUploadName[] =
     "Offers uploading Autofilled credit cards";
 const char kAutofillCreditCardUploadDescription[] =
@@ -39,9 +44,28 @@ const char kSyncSandboxName[] = "Use Chrome Sync sandbox";
 const char kSyncSandboxDescription[] =
     "Connects to the testing server for Chrome Sync.";
 
+const char kSyncStandaloneTransportName[] = "Allow Sync standalone transport";
+const char kSyncStandaloneTransportDescription[] =
+    "If enabled, allows Chrome Sync to start in standalone transport mode. In "
+    "this mode, the Sync machinery can start without user opt-in, but only a "
+    "subset of data types are supported.";
+
+const char kSyncSupportSecondaryAccountName[] =
+    "Support secondary accounts for Sync standalone transport";
+const char kSyncSupportSecondaryAccountDescription[] =
+    "If enabled, allows Chrome Sync to start in standalone transport mode for "
+    "a signed-in account that has not been chosen as Chrome's primary account. "
+    "This only has an effect if sync-standalone-transport is also enabled.";
+
 const char kWalletServiceUseSandboxName[] = "Use Google Payments sandbox";
 const char kWalletServiceUseSandboxDescription[] =
     "Uses the sandbox service for Google Payments API calls.";
+
+const char kAppLauncherRefreshName[] = "Enable the new AppLauncher logic";
+const char kAppLauncherRefreshDescription[] =
+    "AppLauncher will always prompt if there is no direct link navigation, "
+    "also Apps will launch asynchronously and there will be no logic that"
+    "depends on the success or the failure of launching an app.";
 
 const char kAutofillDynamicFormsName[] = "Autofill dynamic forms";
 const char kAutofillDynamicFormsDescription[] =
@@ -105,26 +129,20 @@ const char kBrowserTaskScheduler[] = "Task Scheduler";
 const char kBrowserTaskSchedulerDescription[] =
     "Enables redirection of some task posting APIs to the task scheduler.";
 
-const char kCaptivePortalName[] = "Captive Portal";
-const char kCaptivePortalDescription[] =
-    "When enabled, the Captive Portal landing page will be displayed if it is "
-    "detected that the user is connected to a Captive Portal network.";
-
 const char kCaptivePortalMetricsName[] = "Captive Portal Metrics";
 const char kCaptivePortalMetricsDescription[] =
     "When enabled, some network issues will trigger a test to check if a "
     "Captive Portal network is the cause of the issue.";
 
+// TODO(crbug.com/893314) : Remove this flag.
+const char kClosingLastIncognitoTabName[] = "Closing Last Incognito Tab";
+const char kClosingLastIncognitoTabDescription[] =
+    "Automatically switches to the regular tabs panel in the tab grid after "
+    "closing the last incognito tab";
+
 const char kContextualSearch[] = "Contextual Search";
 const char kContextualSearchDescription[] =
     "Whether or not Contextual Search is enabled.";
-
-const char kContextMenuElementPostMessageName[] =
-    "Context Menu Element Post Message";
-const char kContextMenuElementPostMessageDescription[] =
-    "When enabled, the DOM element for the Context Menu is returned using a "
-    "webkit postMessage call instead of directly returned from the JavaScript "
-    "function.";
 
 const char kCopyImageName[] = "Copy Image";
 const char kCopyImageDescription[] =
@@ -192,6 +210,11 @@ const char kOmniboxUIElideSuggestionUrlAfterHostDescription[] =
     "Elides the path, query, and ref of suggested URLs in the omnibox "
     "dropdown.";
 
+const char kOutOfWebFullscreenName[] = "Fullscreen implementation out of web";
+const char kOutOfWebFullscreenDescription[] =
+    "Use the fullscreen implementation living outside of web. Disable the one "
+    "in web.";
+
 const char kPasswordExportName[] = "Password Export";
 const char kPasswordExportDescription[] =
     "Enables password exporting functionality in password settings.";
@@ -205,19 +228,10 @@ const char kInfobarsUIRebootName[] = "Infobars UI Reboot";
 const char kInfobarsUIRebootDescription[] =
     "When enabled, Infobars will use the new UI Reboot layout.";
 
-const char kCollectionsUIRebootName[] = "Collections UI Reboot";
-const char kCollectionsUIRebootDescription[] =
-    "When enabled, Collections will use the new UI Reboot stack.";
-
 const char kSlimNavigationManagerName[] = "Use Slim Navigation Manager";
 const char kSlimNavigationManagerDescription[] =
     "When enabled, uses the experimental slim navigation manager that provides "
     "better compatibility with HTML navigation spec.";
-
-const char kNewFileDownloadName[] = "Use new Download Manager UI and backend";
-const char kNewFileDownloadDescription[] =
-    "When enabled, uses new Download Manager UI and ios/web Download API as "
-    "backend.";
 
 const char kWebErrorPagesName[] =
     "Present load errors in web contents area, instead of using "
@@ -246,11 +260,21 @@ const char kUIRefreshPhase1Name[] = "UI Refresh Phase 1";
 const char kUIRefreshPhase1Description[] =
     "When enabled, the first phase of the iOS UI refresh will be displayed.";
 
+const char kToolbarContainerCustomViewName[] =
+    "Use custom toolbar container view.";
+const char kToolbarContainerCustomViewDescription[] =
+    "Use the custom toolbar container view fix for crbug.com/889884.";
+
 const char kUnifiedConsentName[] = "Unified Consent";
 const char kUnifiedConsentDescription[] =
     "Enables a unified management of user consent for privacy-related "
     "features. This includes new confirmation screens and improved settings "
     "pages.";
+
+const char kForceUnifiedConsentBumpName[] = "Force Unified Consent Bump";
+const char kForceUnifiedConsentBumpDescription[] =
+    "Force the unified consent bump UI to be shown on every start-up. This "
+    "flag is for debug purpose, to test the UI.";
 
 const char kUseDdljsonApiName[] = "Use new ddljson API for Doodles";
 const char kUseDdljsonApiDescription[] =

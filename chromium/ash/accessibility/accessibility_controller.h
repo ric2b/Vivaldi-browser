@@ -22,10 +22,6 @@ class PrefChangeRegistrar;
 class PrefRegistrySimple;
 class PrefService;
 
-namespace service_manager {
-class Connector;
-}
-
 namespace ash {
 
 class AccessibilityHighlightController;
@@ -45,7 +41,7 @@ class ASH_EXPORT AccessibilityController
       public SessionObserver,
       public TabletModeObserver {
  public:
-  explicit AccessibilityController(service_manager::Connector* connector);
+  AccessibilityController();
   ~AccessibilityController() override;
 
   // See Shell::RegisterProfilePrefs().
@@ -162,7 +158,11 @@ class ASH_EXPORT AccessibilityController
   void SetDarkenScreen(bool darken) override;
   void BrailleDisplayStateChanged(bool connected) override;
   void SetFocusHighlightRect(const gfx::Rect& bounds_in_screen) override;
-  void SetAccessibilityPanelFullscreen(bool fullscreen) override;
+  void SetCaretBounds(const gfx::Rect& bounds_in_screen) override;
+  void SetAccessibilityPanelAlwaysVisible(bool always_visible) override;
+  void SetAccessibilityPanelBounds(
+      const gfx::Rect& bounds,
+      mojom::AccessibilityPanelState state) override;
   void SetSelectToSpeakState(mojom::SelectToSpeakState state) override;
 
   // SessionObserver:
@@ -195,8 +195,6 @@ class ASH_EXPORT AccessibilityController
   void UpdateStickyKeysFromPref();
   void UpdateVirtualKeyboardFromPref();
   void UpdateAccessibilityHighlightingFromPrefs();
-
-  service_manager::Connector* connector_ = nullptr;
 
   // The pref service of the currently active user or the signin profile before
   // user logs in. Can be null in ash_unittests.
@@ -236,7 +234,7 @@ class ASH_EXPORT AccessibilityController
   // Used to force the backlights off to darken the screen.
   std::unique_ptr<ScopedBacklightsForcedOff> scoped_backlights_forced_off_;
 
-  base::ObserverList<AccessibilityObserver> observers_;
+  base::ObserverList<AccessibilityObserver>::Unchecked observers_;
 
   DISALLOW_COPY_AND_ASSIGN(AccessibilityController);
 };

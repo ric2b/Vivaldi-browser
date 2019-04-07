@@ -36,7 +36,7 @@
 #include "crypto/rsa_private_key.h"
 #include "crypto/signature_creator.h"
 #include "net/base/address_list.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_address.h"
@@ -137,8 +137,8 @@ class FakeDataChannel {
       return ERR_IO_PENDING;
     }
     // This function returns synchronously, so make a copy of the buffer.
-    data_.push(new DrainableIOBuffer(
-        new StringIOBuffer(std::string(buf->data(), buf_len)),
+    data_.push(base::MakeRefCounted<DrainableIOBuffer>(
+        base::MakeRefCounted<StringIOBuffer>(std::string(buf->data(), buf_len)),
         buf_len));
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&FakeDataChannel::DoReadCallback,
@@ -316,17 +316,20 @@ TEST(FakeSocketTest, DataTransfer) {
   const char kTestData[] = "testing123";
   const int kTestDataSize = strlen(kTestData);
   const int kReadBufSize = 1024;
-  scoped_refptr<IOBuffer> write_buf = new StringIOBuffer(kTestData);
-  scoped_refptr<IOBuffer> read_buf = new IOBuffer(kReadBufSize);
+  scoped_refptr<IOBuffer> write_buf =
+      base::MakeRefCounted<StringIOBuffer>(kTestData);
+  scoped_refptr<IOBuffer> read_buf =
+      base::MakeRefCounted<IOBuffer>(kReadBufSize);
 
   // Write then read.
   int written =
-      server.Write(write_buf.get(), kTestDataSize, CompletionCallback(),
+      server.Write(write_buf.get(), kTestDataSize, CompletionOnceCallback(),
                    TRAFFIC_ANNOTATION_FOR_TESTS);
   EXPECT_GT(written, 0);
   EXPECT_LE(written, kTestDataSize);
 
-  int read = client.Read(read_buf.get(), kReadBufSize, CompletionCallback());
+  int read =
+      client.Read(read_buf.get(), kReadBufSize, CompletionOnceCallback());
   EXPECT_GT(read, 0);
   EXPECT_LE(read, written);
   EXPECT_EQ(0, memcmp(kTestData, read_buf->data(), read));
@@ -336,8 +339,9 @@ TEST(FakeSocketTest, DataTransfer) {
   EXPECT_EQ(ERR_IO_PENDING,
             server.Read(read_buf.get(), kReadBufSize, callback.callback()));
 
-  written = client.Write(write_buf.get(), kTestDataSize, CompletionCallback(),
-                         TRAFFIC_ANNOTATION_FOR_TESTS);
+  written =
+      client.Write(write_buf.get(), kTestDataSize, CompletionOnceCallback(),
+                   TRAFFIC_ANNOTATION_FOR_TESTS);
   EXPECT_GT(written, 0);
   EXPECT_LE(written, kTestDataSize);
 
@@ -917,9 +921,10 @@ TEST_F(SSLServerSocketTest, DataTransfer) {
 
   const int kReadBufSize = 1024;
   scoped_refptr<StringIOBuffer> write_buf =
-      new StringIOBuffer("testing123");
+      base::MakeRefCounted<StringIOBuffer>("testing123");
   scoped_refptr<DrainableIOBuffer> read_buf =
-      new DrainableIOBuffer(new IOBuffer(kReadBufSize), kReadBufSize);
+      base::MakeRefCounted<DrainableIOBuffer>(
+          base::MakeRefCounted<IOBuffer>(kReadBufSize), kReadBufSize);
 
   // Write then read.
   TestCompletionCallback write_callback;
@@ -951,7 +956,7 @@ TEST_F(SSLServerSocketTest, DataTransfer) {
   EXPECT_EQ(0, memcmp(write_buf->data(), read_buf->data(), write_buf->size()));
 
   // Read then write.
-  write_buf = new StringIOBuffer("hello123");
+  write_buf = base::MakeRefCounted<StringIOBuffer>("hello123");
   server_ret = server_socket_->Read(
       read_buf.get(), read_buf->BytesRemaining(), read_callback.callback());
   EXPECT_TRUE(server_ret > 0 || server_ret == ERR_IO_PENDING);
@@ -1001,7 +1006,8 @@ TEST_F(SSLServerSocketTest, ClientWriteAfterServerClose) {
   server_ret = handshake_callback.GetResult(server_ret);
   ASSERT_THAT(server_ret, IsOk());
 
-  scoped_refptr<StringIOBuffer> write_buf = new StringIOBuffer("testing123");
+  scoped_refptr<StringIOBuffer> write_buf =
+      base::MakeRefCounted<StringIOBuffer>("testing123");
 
   // The server closes the connection. The server needs to write some
   // data first so that the client's Read() calls from the transport

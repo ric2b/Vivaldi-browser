@@ -10,7 +10,7 @@
 
 namespace {
 
-constexpr char kJsScreenPath[] = "AssistantValuePropScreen";
+constexpr char kJsScreenPath[] = "assistant.ValuePropScreen";
 
 constexpr char kUserActionSkipPressed[] = "skip-pressed";
 constexpr char kUserActionNextPressed[] = "next-pressed";
@@ -38,16 +38,19 @@ void ValuePropScreenHandler::DeclareLocalizedValues(
                IDS_VOICE_INTERACTION_VALUE_PROP_LOAD_ERROR_TITLE);
   builder->Add("assistantOptinLoadErrorMessage",
                IDS_VOICE_INTERACTION_VALUE_PROP_LOAD_ERROR_MESSAGE);
+  builder->Add("assistantOptinSkipButton",
+               IDS_VOICE_INTERACTION_VALUE_PROP_SKIP_BUTTON);
   builder->Add("assistantOptinRetryButton",
                IDS_VOICE_INTERACTION_VALUE_PROP_RETRY_BUTTON);
-  builder->Add("assistantOptinMoreButton",
-               IDS_VOICE_INTERACTION_VALUE_PROP_MORE_BUTTION);
+  builder->Add("assistantOptinOKButton", IDS_OOBE_OK_BUTTON_TEXT);
   builder->Add("back", IDS_EULA_BACK_BUTTON);
   builder->Add("next", IDS_EULA_NEXT_BUTTON);
 }
 
 void ValuePropScreenHandler::RegisterMessages() {
   AddPrefixedCallback("userActed", &ValuePropScreenHandler::HandleUserAction);
+  AddPrefixedCallback("screenShown",
+                      &ValuePropScreenHandler::HandleScreenShown);
 }
 
 void ValuePropScreenHandler::Initialize() {}
@@ -60,6 +63,10 @@ void ValuePropScreenHandler::HandleUserAction(const std::string& action) {
   else if (action == kUserActionNextPressed)
     std::move(exit_callback_)
         .Run(AssistantOptInScreenExitCode::VALUE_PROP_ACCEPTED);
+}
+
+void ValuePropScreenHandler::HandleScreenShown() {
+  RecordAssistantOptInStatus(ACTIVITY_CONTROL_SHOWN);
 }
 
 }  // namespace chromeos

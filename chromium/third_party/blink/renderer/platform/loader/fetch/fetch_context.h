@@ -37,6 +37,7 @@
 #include "base/single_thread_task_runner.h"
 #include "services/network/public/mojom/request_context_frame_type.mojom-shared.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom-blink.h"
+#include "third_party/blink/public/platform/code_cache_loader.h"
 #include "third_party/blink/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/resource_request_blocked_reason.h"
@@ -184,7 +185,6 @@ class PLATFORM_EXPORT FetchContext
       const KURL&,
       const ResourceLoaderOptions&,
       SecurityViolationReportingPolicy,
-      FetchParameters::OriginRestriction,
       ResourceRequest::RedirectStatus) const {
     return ResourceRequestBlockedReason::kOther;
   }
@@ -214,6 +214,7 @@ class PLATFORM_EXPORT FetchContext
   }
 
   virtual void AddInfoConsoleMessage(const String&, LogSource) const;
+  virtual void AddWarningConsoleMessage(const String&, LogSource) const;
   virtual void AddErrorConsoleMessage(const String&, LogSource) const;
 
   virtual const SecurityOrigin* GetSecurityOrigin() const { return nullptr; }
@@ -237,6 +238,11 @@ class PLATFORM_EXPORT FetchContext
       const ResourceLoaderOptions&) {
     NOTREACHED();
     return nullptr;
+  }
+
+  // Create a default code cache loader to fetch data from code caches.
+  virtual std::unique_ptr<CodeCacheLoader> CreateCodeCacheLoader() {
+    return Platform::Current()->CreateCodeCacheLoader();
   }
 
   // Returns the initial throttling policy used by the associated

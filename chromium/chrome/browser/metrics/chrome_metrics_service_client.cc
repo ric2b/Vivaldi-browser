@@ -26,8 +26,8 @@
 #include "base/rand_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -46,7 +46,6 @@
 #include "chrome/browser/metrics/subprocess_metrics_provider.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/safe_browsing/certificate_reporting_metrics_provider.h"
-#include "chrome/browser/signin/unified_consent_helper.h"
 #include "chrome/browser/sync/chrome_sync_client.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/translate/translate_ranker_metrics_provider.h"
@@ -85,7 +84,6 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/device_info/device_count_metrics_provider.h"
-#include "components/ukm/content/debug_page/debug_page.h"
 #include "components/ukm/ukm_service.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
@@ -93,6 +91,7 @@
 #include "content/public/browser/notification_service.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
@@ -151,6 +150,10 @@
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 #include "chrome/browser/metrics/upgrade_metrics_provider.h"
 #endif  //  !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+
+#if defined(OS_MACOSX)
+#include "chrome/browser/metrics/power_metrics_provider_mac.h"
+#endif
 
 namespace {
 
@@ -221,7 +224,7 @@ void RegisterOrRemovePreviousRunMetricsFile(
     // deleted in order to preserve user privacy.
     base::PostTaskWithTraits(
         FROM_HERE,
-        {base::MayBlock(), base::TaskPriority::BACKGROUND,
+        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
          base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
         base::BindOnce(base::IgnoreResult(&base::DeleteFile), metrics_file,
                        /*recursive=*/false));
@@ -275,7 +278,7 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
       // deleted in order to preserve user privacy.
       base::PostTaskWithTraits(
           FROM_HERE,
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
           base::BindOnce(base::IgnoreResult(&base::DeleteFile),
                          std::move(browser_metrics_upload_dir),
@@ -314,7 +317,7 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
     } else {
       base::PostTaskWithTraits(
           FROM_HERE,
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
           base::BindOnce(base::IgnoreResult(&base::DeleteFile),
                          std::move(notification_helper_metrics_upload_dir),
@@ -343,13 +346,6 @@ void GetExecutableVersionDetails(base::string16* product_name,
       channel_name);
 }
 #endif  // OS_WIN
-
-ukm::UkmService* BindableGetUkmService(
-    base::WeakPtr<ChromeMetricsServiceClient> weak_ptr) {
-  if (!weak_ptr)
-    return nullptr;
-  return weak_ptr->GetUkmService();
-}
 
 #if defined(OS_ANDROID)
 class AndroidIncognitoObserver : public TabModelListObserver {
@@ -536,7 +532,7 @@ ChromeMetricsServiceClient::CreateUploader(
     metrics::MetricsLogUploader::MetricServiceType service_type,
     const metrics::MetricsLogUploader::UploadCallback& on_upload_complete) {
   return std::make_unique<metrics::NetMetricsLogUploader>(
-      g_browser_process->system_request_context(), server_url,
+      g_browser_process->shared_url_loader_factory(), server_url,
       insecure_server_url, mime_type, service_type, on_upload_complete);
 }
 
@@ -723,6 +719,11 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<UpgradeMetricsProvider>());
 #endif  //! defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+
+#if defined(OS_MACOSX)
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<PowerMetricsProvider>());
+#endif
 }
 
 void ChromeMetricsServiceClient::RegisterUKMProviders() {
@@ -889,10 +890,6 @@ bool ChromeMetricsServiceClient::RegisterForNotifications() {
 }
 
 bool ChromeMetricsServiceClient::RegisterForProfileEvents(Profile* profile) {
-  // Register chrome://ukm handler
-  content::URLDataSource::Add(
-      profile, new ukm::debug::DebugPage(base::Bind(
-                   &BindableGetUkmService, weak_ptr_factory_.GetWeakPtr())));
 #if defined(OS_CHROMEOS)
   // Ignore the signin and lock screen app profile for sync disables / history
   // deletion.
@@ -924,8 +921,7 @@ bool ChromeMetricsServiceClient::RegisterForProfileEvents(Profile* profile) {
   if (!sync) {
     return false;
   }
-  ObserveServiceForSyncDisables(sync, profile->GetPrefs(),
-                                IsUnifiedConsentEnabled(profile));
+  ObserveServiceForSyncDisables(sync, profile->GetPrefs());
   return true;
 }
 

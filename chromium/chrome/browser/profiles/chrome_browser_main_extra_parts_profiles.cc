@@ -32,12 +32,13 @@
 #include "chrome/browser/google/google_search_domain_mixing_metrics_emitter_factory.h"
 #include "chrome/browser/google/google_url_tracker_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
-#include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
+#include "chrome/browser/invalidation/deprecated_profile_invalidation_provider_factory.h"
 #include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/language/url_language_histogram_factory.h"
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/media/media_engagement_service_factory.h"
 #include "chrome/browser/media/router/media_router_factory.h"
+#include "chrome/browser/media/webrtc/webrtc_event_log_manager_keyed_service_factory.h"
 #include "chrome/browser/media_galleries/media_galleries_preferences_factory.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_profile_session_durations_service_factory.h"
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service_factory.h"
@@ -57,6 +58,7 @@
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/prerender/prerender_message_filter.h"
 #include "chrome/browser/profiles/gaia_info_update_service_factory.h"
+#include "chrome/browser/profiles/renderer_updater_factory.h"
 #include "chrome/browser/safe_browsing/certificate_reporting_service_factory.h"
 #include "chrome/browser/search/suggestions/suggestions_service_factory.h"
 #include "chrome/browser/search_engines/template_url_fetcher_factory.h"
@@ -98,11 +100,12 @@
 #include "chrome/browser/resource_coordinator/local_site_characteristics_data_store_factory.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
-#include "chrome/browser/ui/webui/media_router/media_router_ui_service_factory.h"
+#include "chrome/browser/ui/media_router/media_router_ui_service_factory.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/android_sms/android_sms_service_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_registry_service_factory.h"
 #include "chrome/browser/chromeos/cryptauth/chrome_cryptauth_service_factory.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
@@ -167,6 +170,11 @@
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #endif
 
+#if defined(FULL_SAFE_BROWSING)
+#include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
+#include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
+#endif
+
 namespace chrome {
 
 void AddProfilesExtraParts(ChromeBrowserMainParts* main_parts) {
@@ -224,6 +232,7 @@ void ChromeBrowserMainExtraPartsProfiles::
   ChromeBrowsingDataRemoverDelegateFactory::GetInstance();
 #if defined(OS_CHROMEOS)
   chromeos::ChromeCryptAuthServiceFactory::GetInstance();
+  chromeos::android_sms::AndroidSmsServiceFactory::GetInstance();
 #endif
   ChromeSigninClientFactory::GetInstance();
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OS_CHROMEOS)
@@ -273,13 +282,14 @@ void ChromeBrowserMainExtraPartsProfiles::
   HistoryServiceFactory::GetInstance();
   HostContentSettingsMapFactory::GetInstance();
   InMemoryURLIndexFactory::GetInstance();
-  invalidation::ProfileInvalidationProviderFactory::GetInstance();
+  invalidation::DeprecatedProfileInvalidationProviderFactory::GetInstance();
 #if !defined(OS_ANDROID)
   InstantServiceFactory::GetInstance();
 #endif
 #if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
   cloud_print::PrivetNotificationServiceFactory::GetInstance();
 #endif
+  RendererUpdaterFactory::GetInstance();
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   SupervisedUserServiceFactory::GetInstance();
 #endif
@@ -347,6 +357,10 @@ void ChromeBrowserMainExtraPartsProfiles::
 #if !defined(OS_ANDROID)
   resource_coordinator::LocalSiteCharacteristicsDataStoreFactory::GetInstance();
 #endif
+#if defined(FULL_SAFE_BROWSING)
+  if (safe_browsing::AdvancedProtectionStatusManager::IsEnabled())
+    safe_browsing::AdvancedProtectionStatusManagerFactory::GetInstance();
+#endif
 #if defined(OS_ANDROID)
   SearchPermissionsService::Factory::GetInstance();
 #endif
@@ -381,6 +395,7 @@ void ChromeBrowserMainExtraPartsProfiles::
   web_app::WebAppProviderFactory::GetInstance();
 #endif
   WebDataServiceFactory::GetInstance();
+  webrtc_event_logging::WebRtcEventLogManagerKeyedServiceFactory::GetInstance();
 }
 
 void ChromeBrowserMainExtraPartsProfiles::PreProfileInit() {

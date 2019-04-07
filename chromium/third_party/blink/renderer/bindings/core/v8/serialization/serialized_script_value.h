@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/transferables.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/mojo/mojo_handle.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
@@ -59,6 +60,7 @@ class UnpackedSerializedScriptValue;
 class WebBlobInfo;
 
 typedef HashMap<String, scoped_refptr<BlobDataHandle>> BlobDataHandleMap;
+typedef Vector<mojo::ScopedHandle> MojoScopedHandleArray;
 typedef Vector<WebBlobInfo> WebBlobInfoArray;
 typedef HeapVector<Member<DOMSharedArrayBuffer>> SharedArrayBufferArray;
 
@@ -113,13 +115,15 @@ class CORE_EXPORT SerializedScriptValue
   };
 
   struct SerializeOptions {
+    STACK_ALLOCATED();
+
+   public:
     enum WasmSerializationPolicy {
       kUnspecified,  // Invalid value, used as default initializer.
       kTransfer,     // In-memory transfer without (necessarily) serializing.
       kSerialize,    // Serialize to a byte stream.
       kBlockedInNonSecureContext  // Block transfer or serialization.
     };
-    STACK_ALLOCATED();
 
     SerializeOptions() = default;
     explicit SerializeOptions(StoragePolicy for_storage)
@@ -159,6 +163,8 @@ class CORE_EXPORT SerializedScriptValue
   // case of failure.
   struct DeserializeOptions {
     STACK_ALLOCATED();
+
+   public:
     MessagePortArray* message_ports = nullptr;
     const WebBlobInfoArray* blob_info = nullptr;
     bool read_wasm_from_stream = false;
@@ -235,6 +241,7 @@ class CORE_EXPORT SerializedScriptValue
     return shared_array_buffers_contents_;
   }
   BlobDataHandleMap& BlobDataHandles() { return blob_data_handles_; }
+  MojoScopedHandleArray& MojoHandles() { return mojo_handles_; }
   ArrayBufferContentsArray& GetArrayBufferContentsArray() {
     return array_buffer_contents_array_;
   }
@@ -245,6 +252,11 @@ class CORE_EXPORT SerializedScriptValue
     return image_bitmap_contents_array_;
   }
   void SetImageBitmapContentsArray(ImageBitmapContentsArray contents);
+
+  bool IsLockedToAgentCluster() const {
+    return !wasm_modules_.IsEmpty() ||
+           !shared_array_buffers_contents_.IsEmpty();
+  }
 
  private:
   friend class ScriptValueSerializer;
@@ -287,6 +299,7 @@ class CORE_EXPORT SerializedScriptValue
   // These do not have one-use transferred contents, like the above.
   TransferredWasmModulesArray wasm_modules_;
   BlobDataHandleMap blob_data_handles_;
+  MojoScopedHandleArray mojo_handles_;
   SharedArrayBufferContentsArray shared_array_buffers_contents_;
 
   bool has_registered_external_allocation_;

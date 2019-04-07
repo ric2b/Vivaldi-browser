@@ -49,7 +49,6 @@
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
-#include "third_party/blink/renderer/core/loader/threadable_loading_context.h"
 #include "third_party/blink/renderer/core/loader/worker_fetch_context.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/script/script.h"
@@ -129,13 +128,13 @@ void WebSharedWorkerImpl::OnShadowPageInitialized() {
       network::mojom::FetchRequestMode::kSameOrigin;
   network::mojom::FetchCredentialsMode fetch_credentials_mode =
       network::mojom::FetchCredentialsMode::kSameOrigin;
-  if ((static_cast<KURL>(url_)).ProtocolIsData()) {
+  if ((static_cast<KURL>(script_request_url_)).ProtocolIsData()) {
     fetch_request_mode = network::mojom::FetchRequestMode::kNoCORS;
     fetch_credentials_mode = network::mojom::FetchCredentialsMode::kInclude;
   }
 
-  main_script_loader_->LoadAsynchronously(
-      *shadow_page_->GetDocument(), url_,
+  main_script_loader_->LoadTopLevelScriptAsynchronously(
+      *shadow_page_->GetDocument(), script_request_url_,
       WebURLRequest::kRequestContextSharedWorker, fetch_request_mode,
       fetch_credentials_mode, creation_address_space_,
       Bind(&WebSharedWorkerImpl::DidReceiveScriptLoaderResponse,
@@ -152,7 +151,7 @@ void WebSharedWorkerImpl::ResumeStartup() {
   is_paused_on_start_ = false;
   if (is_paused_on_start) {
     // We'll continue in OnShadowPageInitialized().
-    shadow_page_->Initialize(url_);
+    shadow_page_->Initialize(script_request_url_);
   }
 }
 
@@ -205,11 +204,11 @@ void WebSharedWorkerImpl::ConnectTaskOnWorkerThread(
   MessagePort* port = MessagePort::Create(*worker_global_scope);
   port->Entangle(std::move(channel));
   SECURITY_DCHECK(worker_global_scope->IsSharedWorkerGlobalScope());
-  worker_global_scope->DispatchEvent(CreateConnectEvent(port));
+  worker_global_scope->DispatchEvent(*CreateConnectEvent(port));
 }
 
 void WebSharedWorkerImpl::StartWorkerContext(
-    const WebURL& url,
+    const WebURL& script_request_url,
     const WebString& name,
     const WebString& content_security_policy,
     WebContentSecurityPolicyType policy_type,
@@ -220,7 +219,7 @@ void WebSharedWorkerImpl::StartWorkerContext(
     mojo::ScopedMessagePipeHandle content_settings_handle,
     mojo::ScopedMessagePipeHandle interface_provider) {
   DCHECK(IsMainThread());
-  url_ = url;
+  script_request_url_ = script_request_url;
   name_ = name;
   creation_address_space_ = creation_address_space;
   // Chrome doesn't use interface versioning.
@@ -245,7 +244,7 @@ void WebSharedWorkerImpl::StartWorkerContext(
   }
 
   // We'll continue in OnShadowPageInitialized().
-  shadow_page_->Initialize(url_);
+  shadow_page_->Initialize(script_request_url_);
 }
 
 void WebSharedWorkerImpl::DidReceiveScriptLoaderResponse() {
@@ -320,7 +319,7 @@ void WebSharedWorkerImpl::ContinueOnScriptLoaderFinished() {
                                     std::move(web_worker_fetch_context));
 
   ContentSecurityPolicy* content_security_policy =
-      main_script_loader_->ReleaseContentSecurityPolicy();
+      main_script_loader_->GetContentSecurityPolicy();
   ReferrerPolicy referrer_policy = kReferrerPolicyDefault;
   if (!main_script_loader_->GetReferrerPolicy().IsNull()) {
     SecurityPolicy::ReferrerPolicyFromHeaderValue(
@@ -334,13 +333,19 @@ void WebSharedWorkerImpl::ContinueOnScriptLoaderFinished() {
   // (https://crbug.com/824646)
   ScriptType script_type = ScriptType::kClassic;
 
+  const KURL script_response_url = main_script_loader_->ResponseURL();
+  DCHECK(static_cast<KURL>(script_request_url_) == script_response_url ||
+         SecurityOrigin::AreSameSchemeHostPort(script_request_url_,
+                                               script_response_url));
+
   auto global_scope_creation_params =
       std::make_unique<GlobalScopeCreationParams>(
-          url_, script_type, document->UserAgent(),
+          script_response_url, script_type, document->UserAgent(),
           content_security_policy ? content_security_policy->Headers()
                                   : Vector<CSPHeaderAndType>(),
           referrer_policy, starter_origin, starter_secure_context,
-          worker_clients, main_script_loader_->ResponseAddressSpace(),
+          document->GetHttpsState(), worker_clients,
+          main_script_loader_->ResponseAddressSpace(),
           main_script_loader_->OriginTrialTokens(), devtools_worker_token_,
           std::move(worker_settings), kV8CacheOptionsDefault,
           nullptr /* worklet_module_response_map */,
@@ -349,8 +354,8 @@ void WebSharedWorkerImpl::ContinueOnScriptLoaderFinished() {
 
   reporting_proxy_ = new SharedWorkerReportingProxy(
       this, parent_execution_context_task_runners_);
-  worker_thread_ = std::make_unique<SharedWorkerThread>(
-      name_, ThreadableLoadingContext::Create(*document), *reporting_proxy_);
+  worker_thread_ =
+      std::make_unique<SharedWorkerThread>(name_, *reporting_proxy_);
   probe::scriptImported(document, main_script_loader_->Identifier(),
                         main_script_loader_->SourceText());
   main_script_loader_ = nullptr;
@@ -364,9 +369,9 @@ void WebSharedWorkerImpl::ContinueOnScriptLoaderFinished() {
       worker_inspector_proxy_->ShouldPauseOnWorkerStart(document),
       parent_execution_context_task_runners_);
   worker_inspector_proxy_->WorkerThreadCreated(document, GetWorkerThread(),
-                                               url_);
+                                               script_response_url);
   // TODO(nhiroki): Support module workers (https://crbug.com/680046).
-  GetWorkerThread()->EvaluateClassicScript(url_, source_code,
+  GetWorkerThread()->EvaluateClassicScript(script_response_url, source_code,
                                            nullptr /* cached_meta_data */,
                                            v8_inspector::V8StackTraceId());
   client_->WorkerScriptLoaded();

@@ -32,8 +32,8 @@
 #include "content/test/did_commit_provisional_load_interceptor.h"
 #include "device/base/features.h"
 #include "device/fido/fake_fido_discovery.h"
-#include "device/fido/fake_hid_impl_for_testing.h"
 #include "device/fido/fido_test_data.h"
+#include "device/fido/hid/fake_hid_impl_for_testing.h"
 #include "device/fido/mock_fido_device.h"
 #include "device/fido/scoped_virtual_fido_device.h"
 #include "device/fido/test_callback_receiver.h"
@@ -42,7 +42,7 @@
 #include "services/service_manager/public/cpp/connector.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/modules/webauth/authenticator.mojom.h"
+#include "third_party/blink/public/platform/modules/webauthn/authenticator.mojom.h"
 
 namespace content {
 

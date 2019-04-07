@@ -17,6 +17,7 @@ class TabletModeObserver;
 }
 
 namespace aura {
+class env;
 class Window;
 namespace client {
 class CursorClient;
@@ -58,12 +59,14 @@ class WMHelper : public aura::client::DragDropDelegate {
     virtual ~DragDropObserver() {}
   };
 
-  WMHelper();
+  explicit WMHelper(aura::Env* env);
   ~WMHelper() override;
 
   static void SetInstance(WMHelper* helper);
   static WMHelper* GetInstance();
   static bool HasInstance();
+
+  aura::Env* env() { return env_; }
 
   void AddActivationObserver(wm::ActivationChangeObserver* observer);
   void RemoveActivationObserver(wm::ActivationChangeObserver* observer);
@@ -97,7 +100,6 @@ class WMHelper : public aura::client::DragDropDelegate {
   void RemovePostTargetHandler(ui::EventHandler* handler);
   bool IsTabletModeWindowManagerEnabled() const;
   double GetDefaultDeviceScaleFactor() const;
-  bool AreVerifiedSyncTokensNeeded() const;
 
   // Overridden from aura::client::DragDropDelegate:
   void OnDragEntered(const ui::DropTargetEvent& event) override;
@@ -106,12 +108,13 @@ class WMHelper : public aura::client::DragDropDelegate {
   int OnPerformDrop(const ui::DropTargetEvent& event) override;
 
  private:
-  base::ObserverList<DragDropObserver> drag_drop_observers_;
+  base::ObserverList<DragDropObserver>::Unchecked drag_drop_observers_;
 
   // The most recently cached VSync parameters, sent to observers on addition.
   base::TimeTicks vsync_timebase_;
   base::TimeDelta vsync_interval_;
   scoped_refptr<ui::CompositorVSyncManager> vsync_manager_;
+  aura::Env* const env_;
 
   DISALLOW_COPY_AND_ASSIGN(WMHelper);
 };

@@ -8,7 +8,7 @@
 
 #include "base/callback_forward.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/client/drag_drop_client_observer.h"
 #include "ui/aura/client/drag_drop_delegate.h"
@@ -16,29 +16,30 @@
 #include "ui/aura/mus/window_mus.h"
 #include "ui/aura/test/aura_mus_test_base.h"
 #include "ui/aura/test/mus/test_window_tree.h"
+#include "ui/aura/window.h"
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/events/event_utils.h"
 
 namespace aura {
 namespace {
 
-class DragDropControllerMusTest : public test::AuraMusWmTestBase {
+class DragDropControllerMusTest : public test::AuraMusClientTestBase {
  public:
   DragDropControllerMusTest() = default;
 
-  // test::AuraMusWmTestBase
+  // test::AuraMusClientTestBase:
   void SetUp() override {
-    AuraMusWmTestBase::SetUp();
+    AuraMusClientTestBase::SetUp();
     controller_ = std::make_unique<DragDropControllerMus>(&controller_host_,
                                                           window_tree());
-    window_ = std::unique_ptr<aura::Window>(
-        CreateNormalWindow(0, root_window(), nullptr));
+    window_ =
+        std::unique_ptr<Window>(CreateNormalWindow(0, root_window(), nullptr));
   }
 
   void TearDown() override {
     window_.reset();
     controller_.reset();
-    AuraMusWmTestBase::TearDown();
+    AuraMusClientTestBase::TearDown();
   }
 
  protected:
@@ -58,7 +59,7 @@ class DragDropControllerMusTest : public test::AuraMusWmTestBase {
   }
 
   std::unique_ptr<DragDropControllerMus> controller_;
-  std::unique_ptr<aura::Window> window_;
+  std::unique_ptr<Window> window_;
 
  private:
   void DragMoveAndDrop() {
@@ -127,7 +128,7 @@ TEST_F(DragDropControllerMusTest, EventTarget) {
 
   class TestDelegate : public client::DragDropDelegate {
    public:
-    TestDelegate(aura::Window* window) : window_(window) {}
+    explicit TestDelegate(Window* window) : window_(window) {}
     State state() const { return state_; }
 
     // Overrides from client::DragDropClientObserver:
@@ -152,7 +153,7 @@ TEST_F(DragDropControllerMusTest, EventTarget) {
     }
 
    private:
-    aura::Window* const window_;
+    Window* const window_;
     State state_{State::kNotInvoked};
 
     DISALLOW_COPY_AND_ASSIGN(TestDelegate);

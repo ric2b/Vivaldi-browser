@@ -13,11 +13,8 @@
 namespace install_static {
 
 const wchar_t kCompanyPathName[] = L"";
-#if defined(VIVALDI_BUILD)
-const wchar_t kProductPathName[] = L"Vivaldi";
-#else
+
 const wchar_t kProductPathName[] = L"Chromium";
-#endif
 
 const size_t kProductPathNameLength = _countof(kProductPathName) - 1;
 
@@ -25,6 +22,8 @@ const size_t kProductPathNameLength = _countof(kProductPathName) - 1;
 const wchar_t kBinariesAppGuid[] = L"";
 
 const wchar_t kBinariesPathName[] = L"Chromium Binaries";
+
+const char kSafeBrowsingName[] = "chromium";
 
 const InstallConstants kInstallModes[] = {
     // The primary (and only) install mode for Chromium.

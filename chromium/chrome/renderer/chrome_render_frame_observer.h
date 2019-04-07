@@ -14,6 +14,7 @@
 #include "mojo/public/cpp/bindings/associated_binding_set.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 
 namespace gfx {
 class Size;
@@ -36,6 +37,9 @@ class ChromeRenderFrameObserver : public content::RenderFrameObserver,
   ~ChromeRenderFrameObserver() override;
 
   service_manager::BinderRegistry* registry() { return &registry_; }
+  blink::AssociatedInterfaceRegistry* associated_interfaces() {
+    return &associated_interfaces_;
+  }
 
  private:
   enum TextCaptureType { PRELIMINARY_CAPTURE, FINAL_CAPTURE };
@@ -44,6 +48,9 @@ class ChromeRenderFrameObserver : public content::RenderFrameObserver,
   void OnInterfaceRequestForFrame(
       const std::string& interface_name,
       mojo::ScopedMessagePipeHandle* interface_pipe) override;
+  bool OnAssociatedInterfaceRequestForFrame(
+      const std::string& interface_name,
+      mojo::ScopedInterfaceEndpointHandle* handle) override;
   bool OnMessageReceived(const IPC::Message& message) override;
   void DidStartProvisionalLoad(blink::WebDocumentLoader* loader) override;
   void DidFinishLoad() override;
@@ -72,11 +79,10 @@ class ChromeRenderFrameObserver : public content::RenderFrameObserver,
       int32_t thumbnail_min_area_pixels,
       const gfx::Size& thumbnail_max_size_pixels,
       chrome::mojom::ImageFormat image_format,
-      const RequestThumbnailForContextNodeCallback& callback) override;
+      RequestThumbnailForContextNodeCallback callback) override;
   void RequestReloadImageForContextNode() override;
   void SetClientSidePhishingDetection(bool enable_phishing_detection) override;
-  void GetWebApplicationInfo(
-      const GetWebApplicationInfoCallback& callback) override;
+  void GetWebApplicationInfo(GetWebApplicationInfoCallback callback) override;
 #if defined(OS_ANDROID)
   void UpdateBrowserControlsState(content::BrowserControlsState constraints,
                                   content::BrowserControlsState current,
@@ -109,6 +115,7 @@ class ChromeRenderFrameObserver : public content::RenderFrameObserver,
   mojo::AssociatedBindingSet<chrome::mojom::ChromeRenderFrame> bindings_;
 
   service_manager::BinderRegistry registry_;
+  blink::AssociatedInterfaceRegistry associated_interfaces_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeRenderFrameObserver);
 };

@@ -221,8 +221,6 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
   DCHECK(params_.parent_window);
   DCHECK(anchor_widget());  // Computed by BubbleDialogDelegateView().
   bubble_border_->set_use_theme_background_color(!init_params.bg_color);
-  bubble_border_->set_alignment(BubbleBorder::ALIGN_EDGE_TO_ANCHOR_EDGE);
-  bubble_border_->set_paint_arrow(BubbleBorder::PAINT_NONE);
   if (init_params.corner_radius)
     bubble_border_->SetCornerRadius(init_params.corner_radius.value());
   set_parent_window(params_.parent_window);
@@ -421,7 +419,7 @@ void TrayBubbleView::OnMouseEntered(const ui::MouseEvent& event) {
     // cannot see a lag.
     mouse_watcher_->set_notify_on_exit_time(
         base::TimeDelta::FromMilliseconds(kFrameTimeInMS));
-    mouse_watcher_->Start();
+    mouse_watcher_->Start(GetWidget()->GetNativeWindow());
   }
 }
 

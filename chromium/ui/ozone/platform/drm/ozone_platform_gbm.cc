@@ -26,12 +26,12 @@
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_generator.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_manager.h"
+#include "ui/ozone/platform/drm/gpu/drm_framebuffer.h"
 #include "ui/ozone/platform/drm/gpu/drm_gpu_display_manager.h"
 #include "ui/ozone/platform/drm/gpu/drm_thread_message_proxy.h"
 #include "ui/ozone/platform/drm/gpu/drm_thread_proxy.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surface_factory.h"
 #include "ui/ozone/platform/drm/gpu/proxy_helpers.h"
-#include "ui/ozone/platform/drm/gpu/scanout_buffer.h"
 #include "ui/ozone/platform/drm/gpu/screen_manager.h"
 #include "ui/ozone/platform/drm/host/drm_cursor.h"
 #include "ui/ozone/platform/drm/host/drm_device_connector.h"
@@ -266,16 +266,14 @@ class OzonePlatformGbm : public OzonePlatform {
     // BlockingStartDrmDevice API.
     // TODO(rjkroege): In a future when we have completed splitting Viz, it will
     // be possible to simplify this logic.
-    if (using_mojo_ && single_process_) {
-      CHECK(host_drm_device_)
-          << "Mojo single-process mode requires a HostDrmDevice.";
+    if (using_mojo_ && single_process_ &&
+        host_thread_ == base::PlatformThread::CurrentRef()) {
+      CHECK(host_drm_device_) << "Mojo single-thread mode requires "
+                                 "InitializeUI to be called first.";
 
-      // Wait here if host and gpu are one and the same thread.
-      if (host_thread_ == base::PlatformThread::CurrentRef()) {
-        // One-thread exection does not permit use of the sandbox.
-        AfterSandboxEntry();
-        host_drm_device_->BlockingStartDrmDevice();
-      }
+      // One-thread execution does not permit use of the sandbox.
+      AfterSandboxEntry();
+      host_drm_device_->BlockingStartDrmDevice();
     }
   }
 

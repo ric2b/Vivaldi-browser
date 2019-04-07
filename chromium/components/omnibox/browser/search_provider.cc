@@ -664,14 +664,10 @@ void SearchProvider::DoHistoryQuery(bool minimal_changes) {
   int num_matches = kMaxMatches * 5;
   const TemplateURL* default_url = providers_.GetDefaultProviderURL();
   if (default_url) {
-    const base::TimeTicks start_time = base::TimeTicks::Now();
     url_db->GetMostRecentKeywordSearchTerms(default_url->id(),
                                             input_.text(),
                                             num_matches,
                                             &raw_default_history_results_);
-    UMA_HISTOGRAM_TIMES(
-        "Omnibox.SearchProvider.GetMostRecentKeywordTermsDefaultProviderTime",
-        base::TimeTicks::Now() - start_time);
   }
   const TemplateURL* keyword_url = providers_.GetKeywordProviderURL();
   if (keyword_url) {
@@ -743,11 +739,9 @@ void SearchProvider::StartOrStopSuggestQuery(bool minimal_changes) {
     Run(query_is_private);
     return;
   }
-  timer_.Start(FROM_HERE,
-               delay,
-               base::Bind(&SearchProvider::Run,
-                          base::Unretained(this),
-                          query_is_private));
+  timer_.Start(FROM_HERE, delay,
+               base::BindOnce(&SearchProvider::Run, base::Unretained(this),
+                              query_is_private));
 }
 
 void SearchProvider::CancelLoader(
@@ -973,7 +967,6 @@ std::unique_ptr<network::SimpleURLLoader> SearchProvider::CreateSuggestLoader(
 void SearchProvider::ConvertResultsToAutocompleteMatches() {
   // Convert all the results to matches and add them to a map, so we can keep
   // the most relevant match for each result.
-  base::TimeTicks start_time(base::TimeTicks::Now());
   MatchMap map;
   int did_not_accept_keyword_suggestion =
       keyword_results_.suggest_results.empty() ?
@@ -996,7 +989,8 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
     // verbatim, and if so, copy over answer contents.
     base::string16 answer_contents;
     base::string16 answer_type;
-    std::unique_ptr<SuggestionAnswer> answer;
+    SuggestionAnswer answer;
+    bool has_answer = false;
     base::string16 trimmed_verbatim_lower =
         base::i18n::ToLower(trimmed_verbatim);
     for (ACMatches::iterator it = matches_.begin(); it != matches_.end();
@@ -1005,7 +999,8 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
           base::i18n::ToLower(it->fill_into_edit) == trimmed_verbatim_lower) {
         answer_contents = it->answer_contents;
         answer_type = it->answer_type;
-        answer = SuggestionAnswer::copy(it->answer.get());
+        answer = *it->answer;
+        has_answer = true;
         break;
       }
     }
@@ -1013,17 +1008,11 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
     SearchSuggestionParser::SuggestResult verbatim(
         /*suggestion=*/trimmed_verbatim,
         AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED,
-        /*subtype_identifier=*/0,
-        /*match_contents=*/trimmed_verbatim,
-        /*match_contents_prefix=*/base::string16(),
-        /*annotation=*/base::string16(), answer_contents, answer_type,
-        std::move(answer), /*suggest_query_params=*/std::string(),
-        /*deletion_url=*/std::string(),
-        /*image_dominant_color=*/std::string(),
-        /*image_url=*/std::string(),
-        /*from_keyword_provider=*/false, verbatim_relevance,
-        relevance_from_server, /*should_prefetch=*/false,
+        /*subtype_identifier=*/0, /*from_keyword_provider=*/false,
+        verbatim_relevance, relevance_from_server,
         /*input_text=*/trimmed_verbatim);
+    if (has_answer)
+      verbatim.SetAnswer(answer_contents, answer_type, answer);
     AddMatchToMap(verbatim, std::string(), did_not_accept_default_suggestion,
                   false, keyword_url != nullptr, &map);
   }
@@ -1045,20 +1034,8 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
         SearchSuggestionParser::SuggestResult verbatim(
             /*suggestion=*/trimmed_verbatim,
             AutocompleteMatchType::SEARCH_OTHER_ENGINE,
-            /*subtype_identifier=*/0,
-            /*match_contents=*/trimmed_verbatim,
-            /*match_contents_prefix=*/base::string16(),
-            /*annotation=*/base::string16(),
-            /*answer_contents=*/base::string16(),
-            /*answer_type=*/base::string16(),
-            /*answer=*/nullptr,
-            /*suggest_query_params=*/std::string(),
-            /*deletion_url=*/std::string(),
-            /*image_dominant_color=*/std::string(),
-            /*image_url=*/std::string(),
-            /*from_keyword_provider=*/true, keyword_verbatim_relevance,
-            keyword_relevance_from_server,
-            /*should_prefetch=*/false,
+            /*subtype_identifier=*/0, /*from_keyword_provider=*/true,
+            keyword_verbatim_relevance, keyword_relevance_from_server,
             /*input_text=*/trimmed_verbatim);
         AddMatchToMap(verbatim, std::string(),
                       did_not_accept_keyword_suggestion, false, true, &map);
@@ -1133,8 +1110,6 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
 
     matches_.push_back(*i);
   }
-  UMA_HISTOGRAM_TIMES("Omnibox.SearchProvider.ConvertResultsTime",
-                      base::TimeTicks::Now() - start_time);
 }
 
 void SearchProvider::RemoveExtraAnswers(ACMatches* matches) {
@@ -1243,19 +1218,8 @@ SearchProvider::ScoreHistoryResultsHelper(const HistoryResults& results,
     SearchSuggestionParser::SuggestResult history_suggestion(
         /*suggestion=*/trimmed_suggestion,
         AutocompleteMatchType::SEARCH_HISTORY,
-        /*subtype_identifier=*/0,
-        /*match_contents=*/trimmed_suggestion,
-        /*match_contents_prefix=*/base::string16(),
-        /*annotation=*/base::string16(),
-        /*answer_contents=*/base::string16(),
-        /*answer_type=*/base::string16(),
-        /*answer=*/nullptr,
-        /*suggest_query_params=*/std::string(),
-        /*deletion_url=*/std::string(),
-        /*image_dominant_color=*/std::string(),
-        /*image_url=*/std::string(), is_keyword, relevance,
-        /*relevance_from_server=*/false,
-        /*should_prefetch=*/false, /*input_text=*/trimmed_input);
+        /*subtype_identifier=*/0, is_keyword, relevance,
+        /*relevance_from_server=*/false, /*input_text=*/trimmed_input);
     // History results are synchronous; they are received on the last keystroke.
     history_suggestion.set_received_after_last_keystroke(false);
     scored_results.insert(insertion_position, history_suggestion);
@@ -1624,9 +1588,8 @@ void SearchProvider::PrefetchImages(SearchSuggestionParser::Results* results) {
     if (!image_url.empty())
       prefetch_image_urls.push_back(GURL(image_url));
 
-    const SuggestionAnswer* answer = suggestion.answer();
-    if (answer)
-      answer->AddImageURLsTo(&prefetch_image_urls);
+    if (suggestion.answer())
+      suggestion.answer()->AddImageURLsTo(&prefetch_image_urls);
   }
 
   for (const GURL& url : prefetch_image_urls)

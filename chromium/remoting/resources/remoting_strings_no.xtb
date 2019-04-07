@@ -102,11 +102,11 @@ Du kan finne informasjon om personvern i Googles personvernregler (http://goo.gl
 <translation id="3171922709365450819">Denne enheten støttes ikke av denne klienten fordi den krever tredjepartsautentisering.</translation>
 <translation id="3194245623920924351">Chrome Eksternt skrivebord</translation>
 <translation id="3197730452537982411">Eksternt skrivebord</translation>
+<translation id="3212472844831225214">• Støtte for Android 9.0 Pie er lagt til.</translation>
 <translation id="324272851072175193">Send disse instruksjonene på e-post</translation>
 <translation id="3258789396564295715">Du kan få sikker tilgang til denne datamaskinen ved å bruke Chrome Eksternt skrivebord.</translation>
 <translation id="3286521253923406898">Kontroller for Chromoting-vert</translation>
 <translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> vil gjøre endringer.</translation>
-<translation id="331779822864701136">• Lagt til støtte for Android 8.0 Oreo.</translation>
 <translation id="332624996707057614">Rediger datamaskinnavnet</translation>
 <translation id="3339299787263251426">Få sikker tilgang til datamaskinen din via Internett</translation>
 <translation id="3360306038446926262">Vinduer</translation>
@@ -122,8 +122,9 @@ Du kan finne informasjon om personvern i Googles personvernregler (http://goo.gl
 <translation id="369442766917958684">Utenfor nettet.</translation>
 <translation id="3695446226812920698">Sånn gjør du det</translation>
 <translation id="3718805989288361841">Det er noe feil med innstillingene for retningslinjene for Chrome Eksternt skrivebord. Kontakt systemadministratoren din for å få hjelp.</translation>
-<translation id="3759645055923345178">Når konfigureringen er fullført, kan du bruke datamaskinen fra denne siden ved å skrive inn PIN- eller tilgangskoden</translation>
 <translation id="3776024066357219166">Chrome Eksternt skrivebord-økten din er avsluttet.</translation>
+<translation id="3846148461359626420">• Bedre panorering og zooming på iPhone X.
+• Stabilitetsforbedringer og feilrettinger.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Bekreft kontoen og PIN-koden din nedenfor for å tillate tilgang via Chrome Eksternt skrivebord.</translation>
 <translation id="3897092660631435901">Meny</translation>
@@ -137,6 +138,7 @@ Du kan finne informasjon om personvern i Googles personvernregler (http://goo.gl
 <translation id="405887016757208221">Den eksterne datamaskinen kunne ikke initialisere økten. Hvis problemet vedvarer, kan du prøve å konfigurere verten på nytt.</translation>
 <translation id="4068946408131579958">Alle tilkoblinger</translation>
 <translation id="409800995205263688">MERK: I henhold til lokale retningslinjer er tilkobling tillatt bare mellom datamaskiner i nettverket ditt.</translation>
+<translation id="4126409073460786861">Når konfigureringen er fullført, laster du inn denne siden på nytt, så kan du bruke datamaskinen ved å velge enhet og skrive inn PIN-koden.</translation>
 <translation id="4145029455188493639">Logget på som <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Det mangler noen nødvendige komponenter. Kontrollér at du kjører den nyeste versjonen av programvaren, og prøv på nytt.</translation>
 <translation id="4156740505453712750">For å beskytte tilgangen til denne datamaskinen må du velge en PIN-kode bestående av <ph name="BOLD_START" />minst seks tall<ph name="BOLD_END" />. Denne PIN-koden kreves når man kobler til fra en annen posisjon.</translation>
@@ -145,7 +147,6 @@ Du kan finne informasjon om personvern i Googles personvernregler (http://goo.gl
 <translation id="4207623512727273241">Kjør installasjonsprogrammet før du fortsetter.</translation>
 <translation id="4227991223508142681">Verktøy for vertsidentitetshåndtering</translation>
 <translation id="4240294130679914010">Avinstalleringsprogram for Chromoting-vert</translation>
-<translation id="4249741460382919890">Generelle rettinger og stabilitetsforbedringer.</translation>
 <translation id="4277463233460010382">Denne datamaskinen er konfigurer for å la én eller flere klienter koble til uten å skrive inn noen PIN-kode.</translation>
 <translation id="4277736576214464567">Tilgangskoden er ugyldig. Prøv på nytt.</translation>
 <translation id="4361728918881830843">For å muliggjøre ekstern tilkobling til en annen datamaskin må du installere Chrome Eksternt skrivebord på maskinen, og klikke på «<ph name="BUTTON_NAME" />».</translation>
@@ -271,6 +272,7 @@ PC</translation>
 <translation id="6998989275928107238">Til</translation>
 <translation id="7019153418965365059">Ukjent vertsfeil: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Fjernhjelp</translation>
+<translation id="7026930240735156896">Følg instruksjonene for å konfigurere datamaskinen din for ekstern tilgang.</translation>
 <translation id="7038683108611689168">Hjelp oss med å gjøre Chromoting bedre ved å samle inn bruksstatistikk og programstopprapporter.</translation>
 <translation id="7067321367069083429">Skjermen fungerer som en berøringsskjerm</translation>
 <translation id="7116737094673640201">Velkommen til Chrome Eksternt skrivebord</translation>
@@ -296,7 +298,6 @@ PC</translation>
 <translation id="7782471917492991422">Kontrollér datamaskinens strøminnstillinger og sørg for at den ikke er konfigurert til å gå i dvale når den ikke er i bruk.</translation>
 <translation id="7810127880729796595">Vis statistikk (tilkobling: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Det mangler noen nødvendige komponenter. Kontrollér at du kjører den nyeste versjonen av Chrome, og prøv på nytt.</translation>
-<translation id="7850909060902317210">Installer Chrome Eksternt skrivebord-programvaren, og følg veiledningen for å fullføre konfigureringen</translation>
 <translation id="7868137160098754906">Skriv inn PIN-koden for den eksterne datamaskinen.</translation>
 <translation id="7869445566579231750">Du har ikke tillatelse til å kjøre dette programmet.</translation>
 <translation id="7895403300744144251">Sikkerhetsinnstillingene på den eksterne datamaskinen tillater ikke tilkoblinger fra kontoen din.</translation>

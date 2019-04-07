@@ -5,8 +5,8 @@
 #include "ash/frame/wide_frame_view.h"
 
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
-#include "ash/frame/custom_frame_view_ash.h"
 #include "ash/frame/header_view.h"
+#include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/public/cpp/ash_layout_constants.h"
 #include "ash/public/cpp/immersive/immersive_fullscreen_controller.h"
 #include "ash/public/cpp/window_properties.h"
@@ -24,7 +24,8 @@ namespace {
 
 class WideFrameTargeter : public aura::WindowTargeter {
  public:
-  WideFrameTargeter(HeaderView* header_view) : header_view_(header_view) {}
+  explicit WideFrameTargeter(HeaderView* header_view)
+      : header_view_(header_view) {}
   ~WideFrameTargeter() override = default;
 
   // aura::WindowTargeter:
@@ -177,6 +178,7 @@ void WideFrameView::OnImmersiveFullscreenExited() {
   header_view_->OnImmersiveFullscreenExited();
   if (target_)
     GetTargetHeaderView()->OnImmersiveFullscreenExited();
+  Layout();
 }
 
 void WideFrameView::SetVisibleFraction(double visible_fraction) {
@@ -195,7 +197,7 @@ void WideFrameView::OnOverviewModeEnded() {
 }
 
 HeaderView* WideFrameView::GetTargetHeaderView() {
-  auto* frame_view = static_cast<CustomFrameViewAsh*>(
+  auto* frame_view = static_cast<NonClientFrameViewAsh*>(
       target_->non_client_view()->frame_view());
   return static_cast<HeaderView*>(frame_view->GetHeaderView());
 }

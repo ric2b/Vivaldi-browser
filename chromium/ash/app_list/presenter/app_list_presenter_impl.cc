@@ -21,17 +21,38 @@
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_element.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/gfx/presentation_feedback.h"
+#include "ui/keyboard/keyboard_controller.h"
 #include "ui/views/widget/widget.h"
 
 namespace app_list {
 namespace {
 
+// The y offset for app list animation when overview mode toggles.
+constexpr int kOverviewAnimationYOffset = 100;
+
+// The duration in milliseconds for app list animation when overview mode
+// toggles.
+constexpr base::TimeDelta kOverviewAnimationDuration =
+    base::TimeDelta::FromMilliseconds(250);
+
 inline ui::Layer* GetLayer(views::Widget* widget) {
   return widget->GetNativeView()->layer();
+}
+
+void UpdateOverviewSettings(ui::AnimationMetricsReporter* reporter,
+                            ui::ScopedLayerAnimationSettings* settings) {
+  settings->SetTransitionDuration(kOverviewAnimationDuration);
+  settings->SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN);
+  settings->SetPreemptionStrategy(
+      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+
+  DCHECK(reporter);
+  settings->SetAnimationMetricsReporter(reporter);
 }
 
 class StateAnimationMetricsReporter : public ui::AnimationMetricsReporter {
@@ -107,9 +128,7 @@ void AppListPresenterImpl::Show(int64_t display_id,
   is_visible_ = true;
   RequestPresentationTime(display_id, event_time_stamp);
 
-  if (view_) {
-    ScheduleAnimation();
-  } else {
+  if (!view_) {
     // Note |delegate_| outlives the AppListView. For Ash, the view
     // is destroyed when dismissed.
     AppListView* view = new AppListView(delegate_->GetAppListViewDelegate());
@@ -147,14 +166,14 @@ void AppListPresenterImpl::Dismiss(base::TimeTicks event_time_stamp) {
   base::RecordAction(base::UserMetricsAction("Launcher_Dismiss"));
 }
 
-bool AppListPresenterImpl::Back() {
+bool AppListPresenterImpl::CloseOpenedPage() {
   if (!is_visible_)
     return false;
 
   // If the app list is currently visible, there should be an existing view.
   DCHECK(view_);
 
-  return view_->app_list_main_view()->contents_view()->Back();
+  return view_->CloseOpenedPage();
 }
 
 void AppListPresenterImpl::ToggleAppList(int64_t display_id,
@@ -200,6 +219,48 @@ void AppListPresenterImpl::EndDragFromShelf(
 void AppListPresenterImpl::ProcessMouseWheelOffset(int y_scroll_offset) {
   if (view_)
     view_->HandleScroll(y_scroll_offset, ui::ET_MOUSEWHEEL);
+}
+
+void AppListPresenterImpl::UpdateYPositionAndOpacityForHomeLauncher(
+    int y_position_in_screen,
+    float opacity,
+    UpdateHomeLauncherAnimationSettingsCallback callback) {
+  if (!GetTargetVisibility())
+    return;
+
+  const gfx::Transform translation(1.f, 0.f, 0.f, 1.f, 0.f,
+                                   static_cast<float>(y_position_in_screen));
+  // We want to animate the expand arrow, suggestion chips and apps grid in
+  // app_list_main_view, and the search box.
+  std::vector<ui::Layer*> animation_layers = {
+      view_->app_list_main_view()->layer(),
+      view_->search_box_widget()->GetNativeWindow()->layer()};
+  for (auto* layer : animation_layers) {
+    layer->GetAnimator()->StopAnimating();
+    std::unique_ptr<ui::ScopedLayerAnimationSettings> settings;
+    if (!callback.is_null()) {
+      settings = std::make_unique<ui::ScopedLayerAnimationSettings>(
+          layer->GetAnimator());
+      callback.Run(settings.get());
+    }
+    layer->SetOpacity(opacity);
+    layer->SetTransform(translation);
+  }
+}
+
+void AppListPresenterImpl::ScheduleOverviewModeAnimation(bool start,
+                                                         bool animate) {
+  // If animating, set the source parameters.
+  if (animate) {
+    UpdateYPositionAndOpacityForHomeLauncher(
+        start ? 0 : kOverviewAnimationYOffset, start ? 1.f : 0.f,
+        base::NullCallback());
+  }
+  UpdateYPositionAndOpacityForHomeLauncher(
+      start ? kOverviewAnimationYOffset : 0, start ? 0.f : 1.f,
+      animate ? base::BindRepeating(&UpdateOverviewSettings,
+                                    state_animation_metrics_reporter_.get())
+              : base::NullCallback());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -311,6 +372,14 @@ void AppListPresenterImpl::OnWindowFocused(aura::Window* gained_focus,
         !delegate_->IsHomeLauncherEnabledInTabletMode()) {
       Dismiss(base::TimeTicks());
     }
+    if (applist_container->Contains(gained_focus) &&
+        keyboard::KeyboardController::HasInstance()) {
+      auto* const keyboard_controller = keyboard::KeyboardController::Get();
+      if (keyboard_controller->enabled() &&
+          keyboard_controller->IsKeyboardVisible()) {
+        keyboard_controller->HideKeyboardImplicitlyBySystem();
+      }
+    }
   }
 }
 
@@ -318,10 +387,11 @@ void AppListPresenterImpl::OnWindowFocused(aura::Window* gained_focus,
 // AppListPresenterImpl, ui::ImplicitAnimationObserver implementation:
 
 void AppListPresenterImpl::OnImplicitAnimationsCompleted() {
-  if (is_visible_)
+  if (is_visible_) {
     view_->GetWidget()->Activate();
-  else
+  } else {
     view_->GetWidget()->Close();
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -60,7 +60,7 @@ class CORE_EXPORT HTMLScriptElement final : public HTMLElement,
   HTMLScriptElement(Document&, const CreateElementFlags);
 
   void ParseAttribute(const AttributeModificationParams&) override;
-  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
+  InsertionNotificationRequest InsertedInto(ContainerNode&) override;
   void DidNotifySubtreeInsertionsToDocument() override;
   void ChildrenChanged(const ChildrenChange&) override;
   void DidMoveToNewDocument(Document& old_document) override;
@@ -79,6 +79,7 @@ class CORE_EXPORT HTMLScriptElement final : public HTMLElement,
   String EventAttributeValue() const override;
   String CrossOriginAttributeValue() const override;
   String IntegrityAttributeValue() const override;
+  String ReferrerPolicyAttributeValue() const override;
   String TextFromChildren() override;
   bool AsyncAttributeValue() const override;
   bool DeferAttributeValue() const override;

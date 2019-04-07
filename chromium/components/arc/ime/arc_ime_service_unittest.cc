@@ -18,6 +18,7 @@
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/dummy_input_method.h"
 #include "ui/events/event.h"
+#include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/keyboard/keyboard_controller.h"
 
@@ -124,11 +125,9 @@ class FakeArcWindowDelegate : public ArcImeService::ArcWindowDelegate {
   explicit FakeArcWindowDelegate(ui::InputMethod* input_method)
       : next_id_(0), test_input_method_(input_method) {}
 
-  bool IsExoWindow(const aura::Window* window) const override {
-    return IsArcWindow(window);
-  }
-
-  bool IsArcWindow(const aura::Window* window) const override {
+  bool IsInArcAppWindow(const aura::Window* window) const override {
+    if (!window)
+      return false;
     return arc_window_id_.count(window->id());
   }
 
@@ -260,12 +259,12 @@ TEST_F(ArcImeServiceTest, InsertChar) {
 
   // When text input type is NONE, the event is not forwarded.
   instance_->OnTextInputTypeChanged(ui::TEXT_INPUT_TYPE_NONE, false);
-  instance_->InsertChar(ui::KeyEvent('a', ui::VKEY_A, 0));
+  instance_->InsertChar(ui::KeyEvent('a', ui::VKEY_A, ui::DomCode::NONE, 0));
   EXPECT_EQ(0, fake_arc_ime_bridge_->count_send_insert_text());
 
   // When the bridge is accepting text inputs, forward the event.
   instance_->OnTextInputTypeChanged(ui::TEXT_INPUT_TYPE_TEXT, true);
-  instance_->InsertChar(ui::KeyEvent('a', ui::VKEY_A, 0));
+  instance_->InsertChar(ui::KeyEvent('a', ui::VKEY_A, ui::DomCode::NONE, 0));
   EXPECT_EQ(1, fake_arc_ime_bridge_->count_send_insert_text());
 }
 
@@ -353,9 +352,9 @@ TEST_F(ArcImeServiceTest, OnKeyboardAppearanceChanged) {
   EXPECT_FALSE(fake_arc_ime_bridge_->last_keyboard_availability());
 
   const gfx::Rect keyboard_bounds(0, 480, 1200, 320);
-  keyboard::KeyboardStateDescriptor desc1{true, false, keyboard_bounds,
-                                          keyboard_bounds, keyboard_bounds};
-  instance_->OnKeyboardAppearanceChanged(desc1);
+  keyboard::KeyboardStateDescriptor desc{true, keyboard_bounds, keyboard_bounds,
+                                         keyboard_bounds};
+  instance_->OnKeyboardAppearanceChanged(desc);
   EXPECT_EQ(keyboard_bounds, fake_arc_ime_bridge_->last_keyboard_bounds());
   EXPECT_TRUE(fake_arc_ime_bridge_->last_keyboard_availability());
 
@@ -367,7 +366,7 @@ TEST_F(ArcImeServiceTest, OnKeyboardAppearanceChanged) {
   instance_->SetOverrideDefaultDeviceScaleFactorForTesting(new_scale_factor);
 
   // Keyboard bounds passed to Android should be changed.
-  instance_->OnKeyboardAppearanceChanged(desc1);
+  instance_->OnKeyboardAppearanceChanged(desc);
   EXPECT_EQ(new_keyboard_bounds, fake_arc_ime_bridge_->last_keyboard_bounds());
   EXPECT_TRUE(fake_arc_ime_bridge_->last_keyboard_availability());
 }

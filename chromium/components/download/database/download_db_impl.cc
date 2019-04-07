@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "components/download/database/download_db_conversions.h"
 #include "components/download/database/download_db_entry.h"
 #include "components/download/database/proto/download_entry.pb.h"
@@ -17,6 +17,8 @@
 namespace download {
 
 namespace {
+
+const int kMaxNumInitializeAttempts = 3;
 
 const char kDatabaseClientName[] = "DownloadDB";
 using ProtoKeyVector = std::vector<std::string>;
@@ -36,6 +38,12 @@ bool IsUnderNameSpace(DownloadNamespace download_namespace,
                           base::CompareCase::INSENSITIVE_ASCII);
 }
 
+void OnUpdateDone(bool success) {
+  // TODO(qinmin): add UMA for this.
+  if (!success)
+    LOG(ERROR) << "Update Download DB failed.";
+}
+
 }  // namespace
 
 DownloadDBImpl::DownloadDBImpl(DownloadNamespace download_namespace,
@@ -46,7 +54,7 @@ DownloadDBImpl::DownloadDBImpl(DownloadNamespace download_namespace,
           std::make_unique<
               leveldb_proto::ProtoDatabaseImpl<download_pb::DownloadDBEntry>>(
               base::CreateSequencedTaskRunnerWithTraits(
-                  {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                  {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                    base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN}))) {}
 
 DownloadDBImpl::DownloadDBImpl(
@@ -58,6 +66,7 @@ DownloadDBImpl::DownloadDBImpl(
       db_(std::move(db)),
       is_initialized_(false),
       download_namespace_(download_namespace),
+      num_initialize_attempts_(0),
       weak_factory_(this) {}
 
 DownloadDBImpl::~DownloadDBImpl() = default;
@@ -66,8 +75,9 @@ bool DownloadDBImpl::IsInitialized() {
   return is_initialized_;
 }
 
-void DownloadDBImpl::Initialize(InitializeCallback callback) {
+void DownloadDBImpl::Initialize(DownloadDBCallback callback) {
   DCHECK(!IsInitialized());
+
   // These options reduce memory consumption.
   leveldb_env::Options options = leveldb_proto::CreateSimpleOptions();
   options.reuse_logs = false;
@@ -78,18 +88,20 @@ void DownloadDBImpl::Initialize(InitializeCallback callback) {
   // TODO(qinmin): migrate all the data from InProgressCache into this database.
 }
 
-void DownloadDBImpl::DestroyAndReinitialize(InitializeCallback callback) {
+void DownloadDBImpl::DestroyAndReinitialize(DownloadDBCallback callback) {
   is_initialized_ = false;
   db_->Destroy(base::BindOnce(&DownloadDBImpl::OnDatabaseDestroyed,
                               weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void DownloadDBImpl::AddOrReplace(const DownloadDBEntry& entry) {
-  AddOrReplaceEntries(std::vector<DownloadDBEntry>{entry});
+  AddOrReplaceEntries(std::vector<DownloadDBEntry>{entry},
+                      base::BindOnce(&OnUpdateDone));
 }
 
 void DownloadDBImpl::AddOrReplaceEntries(
-    const std::vector<DownloadDBEntry>& entries) {
+    const std::vector<DownloadDBEntry>& entries,
+    DownloadDBCallback callback) {
   DCHECK(IsInitialized());
   auto entries_to_save = std::make_unique<ProtoKeyEntryVector>();
   for (const auto& entry : entries) {
@@ -99,9 +111,7 @@ void DownloadDBImpl::AddOrReplaceEntries(
                                   std::move(proto));
   }
   db_->UpdateEntries(std::move(entries_to_save),
-                     std::make_unique<ProtoKeyVector>(),
-                     base::BindOnce(&DownloadDBImpl::OnUpdateDone,
-                                    weak_factory_.GetWeakPtr()));
+                     std::make_unique<ProtoKeyVector>(), std::move(callback));
 }
 
 void DownloadDBImpl::LoadEntries(LoadEntriesCallback callback) {
@@ -142,26 +152,28 @@ void DownloadDBImpl::OnAllEntriesLoaded(
   std::move(callback).Run(success, std::move(result));
 }
 
-void DownloadDBImpl::OnDatabaseInitialized(InitializeCallback callback,
+void DownloadDBImpl::OnDatabaseInitialized(DownloadDBCallback callback,
                                            bool success) {
+  if (!success) {
+    DestroyAndReinitialize(std::move(callback));
+    return;
+  }
   is_initialized_ = success;
   std::move(callback).Run(success);
 }
 
-void DownloadDBImpl::OnDatabaseDestroyed(InitializeCallback callback,
+void DownloadDBImpl::OnDatabaseDestroyed(DownloadDBCallback callback,
                                          bool success) {
   if (!success) {
     std::move(callback).Run(success);
     return;
   }
 
-  Initialize(std::move(callback));
-}
-
-void DownloadDBImpl::OnUpdateDone(bool success) {
-  // TODO(qinmin): add UMA for this.
-  if (!success)
-    LOG(ERROR) << "Update Download DB failed.";
+  num_initialize_attempts_++;
+  if (num_initialize_attempts_ >= kMaxNumInitializeAttempts)
+    std::move(callback).Run(false);
+  else
+    Initialize(std::move(callback));
 }
 
 void DownloadDBImpl::OnRemoveDone(bool success) {

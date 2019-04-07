@@ -10,6 +10,7 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
+#include "chrome/browser/invalidation/deprecated_profile_invalidation_provider_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -18,8 +19,8 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/browser_sync/profile_sync_test_util.h"
+#include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/sync/driver/signin_manager_wrapper.h"
 #include "components/sync/driver/startup_controller.h"
 #include "components/sync/driver/sync_api_component_factory_mock.h"
 #include "content/public/browser/browser_context.h"
@@ -47,15 +48,16 @@ ProfileSyncService::InitParams CreateProfileSyncServiceParamsForTest(
     Profile* profile) {
   ProfileSyncService::InitParams init_params;
 
-  init_params.signin_wrapper = std::make_unique<SigninManagerWrapper>(
-      IdentityManagerFactory::GetForProfile(profile),
-      SigninManagerFactory::GetForProfile(profile));
+  init_params.identity_manager = IdentityManagerFactory::GetForProfile(profile);
   init_params.signin_scoped_device_id_callback =
       base::BindRepeating([]() { return std::string(); });
   init_params.start_behavior = ProfileSyncService::MANUAL_START;
   init_params.sync_client = std::move(sync_client);
   init_params.network_time_update_callback = base::DoNothing();
-  init_params.url_request_context = profile->GetRequestContext();
+  init_params.invalidations_identity_provider =
+      invalidation::DeprecatedProfileInvalidationProviderFactory::GetForProfile(
+          profile)
+          ->GetIdentityProvider();
   init_params.url_loader_factory =
       content::BrowserContext::GetDefaultStoragePartition(profile)
           ->GetURLLoaderFactoryForBrowserProcess();

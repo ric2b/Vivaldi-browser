@@ -43,7 +43,21 @@ namespace blink {
 // Must be called on the thread that will be the main thread before
 // using any other public APIs. The provided Platform; must be
 // non-null and must remain valid until the current thread calls shutdown.
-BLINK_EXPORT void Initialize(Platform*, service_manager::BinderRegistry*);
+BLINK_EXPORT void Initialize(Platform*,
+                             service_manager::BinderRegistry*,
+                             WebThread* main_thread);
+
+// The same as above, but this only supports simple single-threaded execution
+// environment. The main thread WebThread object is owned by Platform when this
+// version is used. This version is mainly for tests and other components
+// requiring only the simple environment.
+//
+// When this version is used, your Platform implementation needs to follow
+// a certain convention on CurrentThread(); see the comments at
+// Platform::CreateMainThreadAndInitialize().
+BLINK_EXPORT void CreateMainThreadAndInitialize(
+    Platform*,
+    service_manager::BinderRegistry*);
 
 // Get the V8 Isolate for the main thread.
 // initialize must have been called first.

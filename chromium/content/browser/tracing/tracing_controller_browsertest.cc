@@ -23,6 +23,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/test_content_browser_client.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/tracing/public/cpp/trace_event_agent.h"
 
 using base::trace_event::RECORD_CONTINUOUSLY;
@@ -104,7 +105,7 @@ class TracingTestBrowserClient : public TestContentBrowserClient {
   class TestTracingDelegate : public TracingDelegate {
    public:
     std::unique_ptr<TraceUploader> GetTraceUploader(
-        net::URLRequestContextGetter* request_context) override {
+        scoped_refptr<network::SharedURLLoaderFactory>) override {
       return nullptr;
     }
     MetadataFilterPredicate GetMetadataFilterPredicate() override {
@@ -161,7 +162,7 @@ class TracingControllerTest : public ContentBrowserTest {
                                             const base::FilePath& file_path) {
     disable_recording_done_callback_count_++;
     {
-      base::ThreadRestrictions::ScopedAllowIO allow_io_for_test_verifications;
+      base::ScopedAllowBlockingForTesting allow_blocking;
       EXPECT_TRUE(PathExists(file_path));
       int64_t file_size;
       base::GetFileSize(file_path, &file_size);
@@ -357,7 +358,13 @@ class TracingControllerTest : public ContentBrowserTest {
   std::string last_data_;
 };
 
-IN_PROC_BROWSER_TEST_F(TracingControllerTest, GetCategories) {
+// TODO(crbug.com/871770): Disabled for failing on ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_GetCategories DISABLED_GetCategories
+#else
+#define MAYBE_GetCategories GetCategories
+#endif
+IN_PROC_BROWSER_TEST_F(TracingControllerTest, MAYBE_GetCategories) {
   Navigate(shell());
 
   TracingController* controller = TracingController::GetInstance();
@@ -372,11 +379,25 @@ IN_PROC_BROWSER_TEST_F(TracingControllerTest, GetCategories) {
   EXPECT_EQ(get_categories_done_callback_count(), 1);
 }
 
-IN_PROC_BROWSER_TEST_F(TracingControllerTest, EnableAndStopTracing) {
+// TODO(crbug.com/871770): Disabled for failing on ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_EnableAndStopTracing DISABLED_EnableAndStopTracing
+#else
+#define MAYBE_EnableAndStopTracing EnableAndStopTracing
+#endif
+IN_PROC_BROWSER_TEST_F(TracingControllerTest, MAYBE_EnableAndStopTracing) {
   TestStartAndStopTracingString();
 }
 
-IN_PROC_BROWSER_TEST_F(TracingControllerTest, DisableRecordingStoresMetadata) {
+// TODO(crbug.com/871770): Disabled for failing on ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_DisableRecordingStoresMetadata \
+  DISABLED_DisableRecordingStoresMetadata
+#else
+#define MAYBE_DisableRecordingStoresMetadata DisableRecordingStoresMetadata
+#endif
+IN_PROC_BROWSER_TEST_F(TracingControllerTest,
+                       MAYBE_DisableRecordingStoresMetadata) {
   TestStartAndStopTracingString();
   // Check that a number of important keys exist in the metadata dictionary. The
   // values are not checked to ensure the test is robust.
@@ -434,24 +455,47 @@ IN_PROC_BROWSER_TEST_F(TracingControllerTest,
   EXPECT_TRUE(last_data().find("this_not_found") == std::string::npos);
 }
 
+// TODO(crbug.com/871770): Disabled for failing on ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_EnableAndStopTracingWithFilePath \
+  DISABLED_EnableAndStopTracingWithFilePath
+#else
+#define MAYBE_EnableAndStopTracingWithFilePath EnableAndStopTracingWithFilePath
+#endif
 IN_PROC_BROWSER_TEST_F(TracingControllerTest,
-                       EnableAndStopTracingWithFilePath) {
+                       MAYBE_EnableAndStopTracingWithFilePath) {
   base::FilePath file_path;
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io_for_creating_test_file;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     base::CreateTemporaryFile(&file_path);
   }
   TestStartAndStopTracingFile(file_path);
   EXPECT_EQ(file_path.value(), last_actual_recording_file_path().value());
 }
 
+// TODO(crbug.com/871770): Disabled for failing on ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_EnableAndStopTracingWithCompression \
+  DISABLED_EnableAndStopTracingWithCompression
+#else
+#define MAYBE_EnableAndStopTracingWithCompression \
+  EnableAndStopTracingWithCompression
+#endif
 IN_PROC_BROWSER_TEST_F(TracingControllerTest,
-                       EnableAndStopTracingWithCompression) {
+                       MAYBE_EnableAndStopTracingWithCompression) {
   TestStartAndStopTracingCompressed();
 }
 
+// TODO(crbug.com/871770): Disabled for failing on ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_EnableAndStopTracingWithEmptyFile \
+  DISABLED_EnableAndStopTracingWithEmptyFile
+#else
+#define MAYBE_EnableAndStopTracingWithEmptyFile \
+  EnableAndStopTracingWithEmptyFile
+#endif
 IN_PROC_BROWSER_TEST_F(TracingControllerTest,
-                       EnableAndStopTracingWithEmptyFile) {
+                       MAYBE_EnableAndStopTracingWithEmptyFile) {
   Navigate(shell());
 
   base::RunLoop run_loop;
@@ -470,7 +514,13 @@ IN_PROC_BROWSER_TEST_F(TracingControllerTest,
   run_loop.Run();
 }
 
-IN_PROC_BROWSER_TEST_F(TracingControllerTest, DoubleStopTracing) {
+// TODO(crbug.com/871770): Disabled for failing on ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_DoubleStopTracing DISABLED_DoubleStopTracing
+#else
+#define MAYBE_DoubleStopTracing DoubleStopTracing
+#endif
+IN_PROC_BROWSER_TEST_F(TracingControllerTest, MAYBE_DoubleStopTracing) {
   Navigate(shell());
 
   base::RunLoop run_loop;

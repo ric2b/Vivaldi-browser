@@ -44,7 +44,6 @@
 #include "third_party/blink/renderer/platform/heap/marking_visitor.h"
 #include "third_party/blink/renderer/platform/heap/page_memory.h"
 #include "third_party/blink/renderer/platform/heap/page_pool.h"
-#include "third_party/blink/renderer/platform/heap/safe_point.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
@@ -199,25 +198,16 @@ HeapCompact* ThreadHeap::Compaction() {
 }
 
 void ThreadHeap::RegisterMovingObjectReference(MovableReference* slot) {
-  DCHECK(slot);
-  DCHECK(*slot);
   Compaction()->RegisterMovingObjectReference(slot);
 }
 
-void ThreadHeap::RegisterMovingObjectCallback(MovableReference reference,
+void ThreadHeap::RegisterMovingObjectCallback(MovableReference* slot,
                                               MovingObjectCallback callback,
                                               void* callback_data) {
-  DCHECK(reference);
-  Compaction()->RegisterMovingObjectCallback(reference, callback,
-                                             callback_data);
+  Compaction()->RegisterMovingObjectCallback(slot, callback, callback_data);
 }
 
-void ThreadHeap::ProcessMarkingStack(Visitor* visitor) {
-  bool complete = AdvanceMarkingStackProcessing(visitor, TimeTicks::Max());
-  CHECK(complete);
-}
-
-void ThreadHeap::MarkNotFullyConstructedObjects(Visitor* visitor) {
+void ThreadHeap::MarkNotFullyConstructedObjects(MarkingVisitor* visitor) {
   DCHECK(!thread_state_->IsIncrementalMarking());
   ThreadHeapStatsCollector::Scope stats_scope(
       stats_collector(),
@@ -227,8 +217,7 @@ void ThreadHeap::MarkNotFullyConstructedObjects(Visitor* visitor) {
   while (
       not_fully_constructed_worklist_->Pop(WorklistTaskId::MainThread, &item)) {
     BasePage* const page = PageFromObject(item);
-    reinterpret_cast<MarkingVisitor*>(visitor)->ConservativelyMarkAddress(
-        page, reinterpret_cast<Address>(item));
+    visitor->ConservativelyMarkAddress(page, reinterpret_cast<Address>(item));
   }
 }
 
@@ -256,8 +245,7 @@ void ThreadHeap::InvokeEphemeronCallbacks(Visitor* visitor) {
   ephemeron_callbacks_ = std::move(final_set);
 }
 
-bool ThreadHeap::AdvanceMarkingStackProcessing(Visitor* visitor,
-                                               TimeTicks deadline) {
+bool ThreadHeap::AdvanceMarking(MarkingVisitor* visitor, TimeTicks deadline) {
   const size_t kDeadlineCheckInterval = 2500;
   size_t processed_callback_count = 0;
   // Ephemeron fixed point loop.
@@ -324,25 +312,7 @@ size_t ThreadHeap::ObjectPayloadSizeForTesting() {
   return object_payload_size;
 }
 
-void ThreadHeap::VisitPersistentRoots(Visitor* visitor) {
-  ThreadHeapStatsCollector::Scope stats_scope(
-      stats_collector(), ThreadHeapStatsCollector::kVisitPersistentRoots);
-  DCHECK(thread_state_->InAtomicMarkingPause());
-  thread_state_->VisitPersistents(visitor);
-}
-
-void ThreadHeap::VisitStackRoots(MarkingVisitor* visitor) {
-  ThreadHeapStatsCollector::Scope stats_scope(
-      stats_collector(), ThreadHeapStatsCollector::kVisitStackRoots);
-  DCHECK(thread_state_->InAtomicMarkingPause());
-  address_cache_->FlushIfDirty();
-  address_cache_->EnableLookup();
-  thread_state_->VisitStack(visitor);
-  address_cache_->DisableLookup();
-}
-
 BasePage* ThreadHeap::LookupPageForAddress(Address address) {
-  DCHECK(thread_state_->InAtomicMarkingPause());
   if (PageMemoryRegion* region = region_tree_->Lookup(address)) {
     return region->PageFromAddress(address);
   }
@@ -430,8 +400,8 @@ int ThreadHeap::ArenaIndexOfVectorArenaLeastRecentlyExpanded(
   return arena_index_with_min_arena_age;
 }
 
-BaseArena* ThreadHeap::ExpandedVectorBackingArena(size_t gc_info_index) {
-  size_t entry_index = gc_info_index & kLikelyToBePromptlyFreedArrayMask;
+BaseArena* ThreadHeap::ExpandedVectorBackingArena(uint32_t gc_info_index) {
+  uint32_t entry_index = gc_info_index & kLikelyToBePromptlyFreedArrayMask;
   --likely_to_be_promptly_freed_[entry_index];
   int arena_index = vector_backing_arena_index_;
   arena_ages_[arena_index] = ++current_arena_ages_;
@@ -448,9 +418,9 @@ void ThreadHeap::AllocationPointAdjusted(int arena_index) {
   }
 }
 
-void ThreadHeap::PromptlyFreed(size_t gc_info_index) {
+void ThreadHeap::PromptlyFreed(uint32_t gc_info_index) {
   DCHECK(thread_state_->CheckThread());
-  size_t entry_index = gc_info_index & kLikelyToBePromptlyFreedArrayMask;
+  uint32_t entry_index = gc_info_index & kLikelyToBePromptlyFreedArrayMask;
   // See the comment in vectorBackingArena() for why this is +3.
   likely_to_be_promptly_freed_[entry_index] += 3;
 }
@@ -550,7 +520,7 @@ void ThreadHeap::TakeSnapshot(SnapshotType type) {
   size_t total_dead_count = 0;
   size_t total_live_size = 0;
   size_t total_dead_size = 0;
-  for (size_t gc_info_index = 1;
+  for (uint32_t gc_info_index = 1;
        gc_info_index <= GCInfoTable::Get().GcInfoIndex(); ++gc_info_index) {
     total_live_count += info.live_count[gc_info_index];
     total_dead_count += info.dead_count[gc_info_index];

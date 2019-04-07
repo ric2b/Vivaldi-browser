@@ -154,7 +154,7 @@ class ChromePluginTest : public InProcessBrowserTest {
       if (iter.GetData().process_type != content::PROCESS_TYPE_PPAPI_PLUGIN)
         continue;
       base::Process process = base::Process::DeprecatedGetProcessFromHandle(
-          iter.GetData().handle);
+          iter.GetData().GetHandle());
       process.Terminate(0, true);
       found = true;
     }
@@ -218,12 +218,9 @@ IN_PROC_BROWSER_TEST_F(ChromePluginTest, DISABLED_Flash) {
 // Verify that the official builds have the known set of plugins.
 IN_PROC_BROWSER_TEST_F(ChromePluginTest, InstalledPlugins) {
   const char* expected[] = {
-    "Chromium PDF Viewer",
-  // Vivaldi does not ship with Flash or native client, remote desktopyet
-#if !defined(VIVALDI_BUILD)
+    "Chrome PDF Viewer",
     "Shockwave Flash",
     "Native Client",
-#endif
   };
 
   std::vector<content::WebPluginInfo> plugins = GetPlugins();

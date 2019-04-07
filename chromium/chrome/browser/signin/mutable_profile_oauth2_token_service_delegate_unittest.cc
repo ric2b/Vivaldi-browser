@@ -10,15 +10,18 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "components/os_crypt/os_crypt_mocker.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/signin/core/browser/device_id_helper.h"
 #include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_buildflags.h"
@@ -28,13 +31,15 @@
 #include "components/signin/core/browser/test_signin_client.h"
 #include "components/signin/core/browser/webdata/token_web_data.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/webdata/common/web_data_service_base.h"
+#include "components/webdata/common/web_database_service.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "google_apis/gaia/oauth2_access_token_consumer.h"
 #include "google_apis/gaia/oauth2_token_service_test_util.h"
 #include "net/http/http_status_code.h"
-#include "net/url_request/test_url_fetcher_factory.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -69,22 +74,13 @@ AccountInfo CreateTestAccountInfo(const std::string& name,
 }
 #endif
 
-class TestSigninClientWithDeviceId : public TestSigninClient {
- public:
-  explicit TestSigninClientWithDeviceId(PrefService* prefs)
-      : TestSigninClient(prefs) {}
-
-  std::string GetSigninScopedDeviceId() override {
-    return GetOrCreateScopedDeviceIdPref(GetPrefs());
-  }
-};
-
 }  // namespace
 
 class MutableProfileOAuth2TokenServiceDelegateTest
     : public testing::Test,
       public OAuth2AccessTokenConsumer,
-      public OAuth2TokenService::Observer {
+      public OAuth2TokenService::Observer,
+      public WebDataServiceConsumer {
  public:
   MutableProfileOAuth2TokenServiceDelegateTest()
       : signin_error_controller_(
@@ -111,19 +107,33 @@ class MutableProfileOAuth2TokenServiceDelegateTest
         prefs::kAccountIdMigrationState,
         AccountTrackerService::MIGRATION_NOT_STARTED);
     SigninManagerBase::RegisterProfilePrefs(pref_service_.registry());
-    client_.reset(new TestSigninClientWithDeviceId(&pref_service_));
-    client_->SetURLRequestContext(new net::TestURLRequestContextGetter(
-        base::ThreadTaskRunnerHandle::Get()));
+    client_.reset(new TestSigninClient(&pref_service_));
     client_->test_url_loader_factory()->AddResponse(
         GaiaUrls::GetInstance()->oauth2_revoke_url().spec(), "");
-    client_->LoadTokenDatabase();
-    account_tracker_service_.Initialize(client_.get());
+    LoadTokenDatabase();
+    account_tracker_service_.Initialize(&pref_service_, base::FilePath());
   }
 
   void TearDown() override {
+    base::RunLoop().RunUntilIdle();
     oauth2_service_delegate_->RemoveObserver(this);
     oauth2_service_delegate_->Shutdown();
     OSCryptMocker::TearDown();
+  }
+
+  void LoadTokenDatabase() {
+    ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+    base::FilePath path = temp_dir_.GetPath().AppendASCII("TestWebDB");
+    scoped_refptr<WebDatabaseService> web_database =
+        new WebDatabaseService(path, base::ThreadTaskRunnerHandle::Get(),
+                               base::ThreadTaskRunnerHandle::Get());
+    web_database->AddTable(std::make_unique<TokenServiceTable>());
+    web_database->LoadDatabase();
+    token_web_data_ =
+        new TokenWebData(web_database, base::ThreadTaskRunnerHandle::Get(),
+                         base::ThreadTaskRunnerHandle::Get(),
+                         WebDataServiceBase::ProfileErrorCallback());
+    token_web_data_->Init();
   }
 
   void AddSuccessfulOAuhTokenResponse() {
@@ -136,7 +146,8 @@ class MutableProfileOAuth2TokenServiceDelegateTest
       signin::AccountConsistencyMethod account_consistency) {
     oauth2_service_delegate_.reset(new MutableProfileOAuth2TokenServiceDelegate(
         client_.get(), &signin_error_controller_, &account_tracker_service_,
-        account_consistency, revoke_all_tokens_on_load_));
+        token_web_data_, account_consistency, revoke_all_tokens_on_load_,
+        true /* can_revoke_credantials */));
     // Make sure PO2TS has a chance to load itself before continuing.
     base::RunLoop().RunUntilIdle();
     oauth2_service_delegate_->AddObserver(this);
@@ -144,14 +155,23 @@ class MutableProfileOAuth2TokenServiceDelegateTest
 
   void AddAuthTokenManually(const std::string& service,
                             const std::string& value) {
-    scoped_refptr<TokenWebData> token_web_data = client_->GetDatabase();
-    if (token_web_data.get())
-      token_web_data->SetTokenForService(service, value);
+    if (token_web_data_)
+      token_web_data_->SetTokenForService(service, value);
+  }
+
+  // WebDataServiceConsumer implementation
+  void OnWebDataServiceRequestDone(
+      WebDataServiceBase::Handle h,
+      std::unique_ptr<WDTypedResult> result) override {
+    DCHECK(!token_web_data_result_);
+    DCHECK_EQ(TOKEN_RESULT, result->GetType());
+    token_web_data_result_.reset(
+        static_cast<WDResult<TokenResult>*>(result.release()));
   }
 
   // OAuth2AccessTokenConusmer implementation
-  void OnGetTokenSuccess(const std::string& access_token,
-                         const base::Time& expiration_time) override {
+  void OnGetTokenSuccess(
+      const OAuth2AccessTokenConsumer::TokenResponse& token_response) override {
     ++access_token_success_count_;
   }
 
@@ -216,7 +236,8 @@ class MutableProfileOAuth2TokenServiceDelegateTest
   }
 
  protected:
-  base::MessageLoop message_loop_;
+  content::TestBrowserThreadBundle thread_bundle_;
+  base::ScopedTempDir temp_dir_;
   std::unique_ptr<TestSigninClient> client_;
   std::unique_ptr<MutableProfileOAuth2TokenServiceDelegate>
       oauth2_service_delegate_;
@@ -224,6 +245,8 @@ class MutableProfileOAuth2TokenServiceDelegateTest
   SigninErrorController signin_error_controller_;
   sync_preferences::TestingPrefServiceSyncable pref_service_;
   AccountTrackerService account_tracker_service_;
+  scoped_refptr<TokenWebData> token_web_data_;
+  std::unique_ptr<WDResult<TokenResult>> token_web_data_result_;
   int access_token_success_count_;
   int access_token_failure_count_;
   GoogleServiceAuthError access_token_failure_;
@@ -306,46 +329,6 @@ TEST_F(MutableProfileOAuth2TokenServiceDelegateTest, PersistenceDBUpgrade) {
   EXPECT_EQ(2, end_batch_changes_);
 }
 
-#if !defined(OS_CHROMEOS)
-TEST_F(MutableProfileOAuth2TokenServiceDelegateTest, DeviceID) {
-  CreateOAuth2ServiceDelegate(signin::AccountConsistencyMethod::kDisabled);
-  // Ensure DB is clean.
-  oauth2_service_delegate_->RevokeAllCredentials();
-
-  std::string device_id = client_->GetSigninScopedDeviceId();
-  ASSERT_FALSE(device_id.empty());
-
-  oauth2_service_delegate_->LoadCredentials("");
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS,
-            oauth2_service_delegate_->GetLoadCredentialsState());
-
-  // Loading empty accounts list recreates the device ID.
-  EXPECT_NE(device_id, client_->GetSigninScopedDeviceId());
-  device_id = client_->GetSigninScopedDeviceId();
-
-  std::string account_id_1 = "account_id_1";
-  std::string refresh_token_1 = "refresh_token_1";
-  std::string account_id_2 = "account_id_2";
-  std::string refresh_token_2 = "refresh_token_2";
-  oauth2_service_delegate_->UpdateCredentials(account_id_1, refresh_token_1);
-  oauth2_service_delegate_->UpdateCredentials(account_id_2, refresh_token_2);
-  oauth2_service_delegate_->UpdateAuthError(
-      account_id_2,
-      GoogleServiceAuthError(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS));
-
-  EXPECT_EQ(device_id, client_->GetSigninScopedDeviceId());
-
-  // Revoking one account does not recreate the device ID.
-  oauth2_service_delegate_->RevokeCredentials(account_id_1);
-  EXPECT_EQ(device_id, client_->GetSigninScopedDeviceId());
-
-  // The device ID is recreated when the last token is revoked.
-  oauth2_service_delegate_->RevokeCredentials(account_id_2);
-  EXPECT_NE(device_id, client_->GetSigninScopedDeviceId());
-}
-#endif
-
 TEST_F(MutableProfileOAuth2TokenServiceDelegateTest,
        PersistenceRevokeCredentials) {
   CreateOAuth2ServiceDelegate(signin::AccountConsistencyMethod::kDisabled);
@@ -394,6 +377,7 @@ TEST_F(MutableProfileOAuth2TokenServiceDelegateTest,
   EXPECT_EQ(OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_NOT_STARTED,
             oauth2_service_delegate_->GetLoadCredentialsState());
   oauth2_service_delegate_->LoadCredentials("");
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS,
             oauth2_service_delegate_->GetLoadCredentialsState());
 }
@@ -587,40 +571,6 @@ TEST_F(MutableProfileOAuth2TokenServiceDelegateTest,
   EXPECT_FALSE(pref_service_.GetBoolean(prefs::kTokenServiceDiceCompatible));
 }
 
-// Tests that Dice migration does not happen in "PrepareMigration" state.
-TEST_F(MutableProfileOAuth2TokenServiceDelegateTest, DiceMigrationNotEnabled) {
-  ASSERT_EQ(AccountTrackerService::MIGRATION_DONE,
-            account_tracker_service_.GetMigrationState());
-  ASSERT_FALSE(pref_service_.GetBoolean(prefs::kTokenServiceDiceCompatible));
-  CreateOAuth2ServiceDelegate(
-      signin::AccountConsistencyMethod::kDicePrepareMigration);
-  oauth2_service_delegate_->RevokeAllCredentials();
-
-  // Add account info to the account tracker.
-  AccountInfo primary_account = CreateTestAccountInfo(
-      "primary_account", false /* is_hosted_domain*/, true /* is_valid*/);
-  account_tracker_service_.SeedAccountInfo(primary_account);
-
-  ResetObserverCounts();
-  AddAuthTokenManually("AccountId-" + primary_account.account_id,
-                       "refresh_token");
-  oauth2_service_delegate_->LoadCredentials(primary_account.account_id);
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_EQ(1, tokens_loaded_count_);
-  EXPECT_EQ(1, token_available_count_);
-  EXPECT_EQ(0, token_revoked_count_);
-  EXPECT_EQ(1, start_batch_changes_);
-  EXPECT_EQ(1, end_batch_changes_);
-  EXPECT_EQ(1, auth_error_changed_count_);
-  EXPECT_TRUE(oauth2_service_delegate_->RefreshTokenIsAvailable(
-      primary_account.account_id));
-  EXPECT_EQ(OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS,
-            oauth2_service_delegate_->GetLoadCredentialsState());
-
-  EXPECT_FALSE(pref_service_.GetBoolean(prefs::kTokenServiceDiceCompatible));
-}
-
 // Tests that the migration happened after loading consummer accounts.
 TEST_F(MutableProfileOAuth2TokenServiceDelegateTest,
        DiceMigrationConsummerAccounts) {
@@ -749,6 +699,34 @@ TEST_F(MutableProfileOAuth2TokenServiceDelegateTest,
 }
 
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+
+#if !defined(OS_CHROMEOS)
+TEST_F(MutableProfileOAuth2TokenServiceDelegateTest,
+       LoadCredentialsClearsTokenDBWhenNoPrimaryAccount_DiceDisabled) {
+  // Populate DB with 2 valid tokens.
+  AddAuthTokenManually("AccountId-12345", "refresh_token");
+  AddAuthTokenManually("AccountId-67890", "refresh_token");
+
+  CreateOAuth2ServiceDelegate(
+      signin::AccountConsistencyMethod::kDiceFixAuthErrors);
+  oauth2_service_delegate_->LoadCredentials(/*primary_account_id=*/"");
+  base::RunLoop().RunUntilIdle();
+
+  // No tokens were loaded.
+  EXPECT_EQ(1, tokens_loaded_count_);
+  EXPECT_EQ(1, start_batch_changes_);
+  EXPECT_EQ(0, token_available_count_);
+  EXPECT_EQ(2, token_revoked_count_);
+  EXPECT_EQ(1, end_batch_changes_);
+  EXPECT_EQ(0U, oauth2_service_delegate_->refresh_tokens_.size());
+
+  // Handle to the request reading tokens from database.
+  token_web_data_->GetAllTokens(this);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(token_web_data_result_.get());
+  ASSERT_EQ(0u, token_web_data_result_->GetValue().tokens.size());
+}
+#endif  // !defined(OS_CHROMEOS)
 
 // Tests that calling UpdateCredentials revokes the old token, without sending
 // the notification.
@@ -978,7 +956,7 @@ TEST_F(MutableProfileOAuth2TokenServiceDelegateTest, RetryBackoff) {
   EXPECT_EQ(1, access_token_failure_count_);
   // Expect a positive backoff time.
   EXPECT_GT(oauth2_service_delegate_->backoff_entry_.GetTimeUntilRelease(),
-            TimeDelta());
+            base::TimeDelta());
 
   // Pretend that backoff has expired and try again.
   oauth2_service_delegate_->backoff_entry_.SetCustomReleaseTime(
@@ -1108,7 +1086,7 @@ TEST_F(MutableProfileOAuth2TokenServiceDelegateTest, GaiaIdMigration) {
     dict->SetString("gaia", base::UTF8ToUTF16(gaia_id));
     update->Append(std::move(dict));
     account_tracker_service_.Shutdown();
-    account_tracker_service_.Initialize(client_.get());
+    account_tracker_service_.Initialize(&pref_service_, base::FilePath());
 
     AddAuthTokenManually("AccountId-" + email, "refresh_token");
     oauth2_service_delegate_->LoadCredentials(gaia_id);
@@ -1171,7 +1149,7 @@ TEST_F(MutableProfileOAuth2TokenServiceDelegateTest,
     dict->SetString("gaia", base::UTF8ToUTF16(gaia_id2));
     update->Append(std::move(dict));
     account_tracker_service_.Shutdown();
-    account_tracker_service_.Initialize(client_.get());
+    account_tracker_service_.Initialize(&pref_service_, base::FilePath());
 
     AddAuthTokenManually("AccountId-" + email1, "refresh_token");
     AddAuthTokenManually("AccountId-" + email2, "refresh_token");

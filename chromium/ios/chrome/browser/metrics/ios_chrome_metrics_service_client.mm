@@ -59,9 +59,9 @@
 #include "ios/chrome/browser/tab_parenting_global_observer.h"
 #import "ios/chrome/browser/tabs/tab_model_list.h"
 #include "ios/chrome/browser/translate/translate_ranker_metrics_provider.h"
-#include "ios/chrome/browser/unified_consent/feature.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/web/public/web_thread.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -158,7 +158,7 @@ IOSChromeMetricsServiceClient::CreateUploader(
     metrics::MetricsLogUploader::MetricServiceType service_type,
     const metrics::MetricsLogUploader::UploadCallback& on_upload_complete) {
   return std::make_unique<metrics::NetMetricsLogUploader>(
-      GetApplicationContext()->GetSystemURLRequestContext(), server_url,
+      GetApplicationContext()->GetSharedURLLoaderFactory(), server_url,
       insecure_server_url, mime_type, service_type, on_upload_complete);
 }
 
@@ -293,8 +293,7 @@ bool IOSChromeMetricsServiceClient::RegisterForBrowserStateEvents(
       ProfileSyncServiceFactory::GetInstance()->GetForBrowserState(
           browser_state);
   ObserveServiceForSyncDisables(static_cast<syncer::SyncService*>(sync),
-                                browser_state->GetPrefs(),
-                                IsUnifiedConsentEnabled());
+                                browser_state->GetPrefs());
   return (history_service != nullptr && sync != nullptr);
 }
 

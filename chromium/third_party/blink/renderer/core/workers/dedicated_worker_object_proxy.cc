@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/user_activation.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/thread_debugger.h"
 #include "third_party/blink/renderer/core/workers/dedicated_worker_messaging_proxy.h"
@@ -64,31 +65,34 @@ std::unique_ptr<DedicatedWorkerObjectProxy> DedicatedWorkerObjectProxy::Create(
 DedicatedWorkerObjectProxy::~DedicatedWorkerObjectProxy() = default;
 
 void DedicatedWorkerObjectProxy::PostMessageToWorkerObject(
-    scoped_refptr<SerializedScriptValue> message,
-    Vector<MessagePortChannel> channels,
-    const v8_inspector::V8StackTraceId& stack_id) {
+    BlinkTransferableMessage message) {
   PostCrossThreadTask(
       *GetParentExecutionContextTaskRunners()->Get(TaskType::kPostedMessage),
       FROM_HERE,
       CrossThreadBind(&DedicatedWorkerMessagingProxy::PostMessageToWorkerObject,
-                      messaging_proxy_weak_ptr_, std::move(message),
-                      WTF::Passed(std::move(channels)), stack_id));
+                      messaging_proxy_weak_ptr_,
+                      WTF::Passed(std::move(message))));
 }
 
 void DedicatedWorkerObjectProxy::ProcessMessageFromWorkerObject(
-    scoped_refptr<SerializedScriptValue> message,
-    Vector<MessagePortChannel> channels,
-    WorkerThread* worker_thread,
-    const v8_inspector::V8StackTraceId& stack_id) {
+    BlinkTransferableMessage message,
+    WorkerThread* worker_thread) {
   WorkerGlobalScope* global_scope =
       ToWorkerGlobalScope(worker_thread->GlobalScope());
   MessagePortArray* ports =
-      MessagePort::EntanglePorts(*global_scope, std::move(channels));
+      MessagePort::EntanglePorts(*global_scope, std::move(message.ports));
 
   ThreadDebugger* debugger = ThreadDebugger::From(worker_thread->GetIsolate());
-  debugger->ExternalAsyncTaskStarted(stack_id);
-  global_scope->DispatchEvent(MessageEvent::Create(ports, std::move(message)));
-  debugger->ExternalAsyncTaskFinished(stack_id);
+  debugger->ExternalAsyncTaskStarted(message.sender_stack_trace_id);
+  UserActivation* user_activation = nullptr;
+  if (message.user_activation) {
+    user_activation =
+        new UserActivation(message.user_activation->has_been_active,
+                           message.user_activation->was_active);
+  }
+  global_scope->DispatchEvent(*MessageEvent::Create(
+      ports, std::move(message.message), user_activation));
+  debugger->ExternalAsyncTaskFinished(message.sender_stack_trace_id);
 }
 
 void DedicatedWorkerObjectProxy::ProcessUnhandledException(
@@ -111,12 +115,6 @@ void DedicatedWorkerObjectProxy::ReportException(
                       WTF::Passed(location->Clone()), exception_id));
 }
 
-void DedicatedWorkerObjectProxy::DidCreateWorkerGlobalScope(
-    WorkerOrWorkletGlobalScope* global_scope) {
-  DCHECK(!worker_global_scope_);
-  worker_global_scope_ = ToWorkerGlobalScope(global_scope);
-}
-
 void DedicatedWorkerObjectProxy::DidEvaluateClassicScript(bool success) {
   PostCrossThreadTask(
       *GetParentExecutionContextTaskRunners()->Get(TaskType::kInternalDefault),
@@ -131,10 +129,6 @@ void DedicatedWorkerObjectProxy::DidEvaluateModuleScript(bool success) {
       FROM_HERE,
       CrossThreadBind(&DedicatedWorkerMessagingProxy::DidEvaluateScript,
                       messaging_proxy_weak_ptr_, success));
-}
-
-void DedicatedWorkerObjectProxy::WillDestroyWorkerGlobalScope() {
-  worker_global_scope_ = nullptr;
 }
 
 DedicatedWorkerObjectProxy::DedicatedWorkerObjectProxy(

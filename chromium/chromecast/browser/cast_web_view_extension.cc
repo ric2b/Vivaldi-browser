@@ -11,6 +11,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "extensions/browser/extension_system.h"
 #include "net/base/net_errors.h"
+#include "ui/aura/window.h"
 
 namespace chromecast {
 
@@ -21,9 +22,7 @@ CastWebViewExtension::CastWebViewExtension(
     const extensions::Extension* extension,
     const GURL& initial_url)
     : delegate_(params.delegate),
-      window_(shell::CastContentWindow::Create(params.delegate,
-                                               params.is_headless,
-                                               params.enable_touch_input)),
+      window_(shell::CastContentWindow::Create(params.window_params)),
       extension_host_(std::make_unique<CastExtensionHost>(
           browser_context,
           params.delegate,
@@ -35,6 +34,7 @@ CastWebViewExtension::CastWebViewExtension(
           shell::CastBrowserProcess::GetInstance()->remote_debugging_server()) {
   DCHECK(delegate_);
   content::WebContentsObserver::Observe(web_contents());
+  web_contents()->GetNativeView()->SetName(params.activity_id);
   // If this CastWebView is enabled for development, start the remote debugger.
   if (params.enabled_for_dev) {
     LOG(INFO) << "Enabling dev console for " << web_contents()->GetVisibleURL();
@@ -62,12 +62,19 @@ void CastWebViewExtension::ClosePage(const base::TimeDelta& shutdown_delay) {}
 
 void CastWebViewExtension::InitializeWindow(
     CastWindowManager* window_manager,
-    bool is_visible,
     CastWindowManager::WindowId z_order,
     VisibilityPriority initial_priority) {
-  window_->CreateWindowForWebContents(web_contents(), window_manager,
-                                      is_visible, z_order, initial_priority);
+  window_->CreateWindowForWebContents(web_contents(), window_manager, z_order,
+                                      initial_priority);
   web_contents()->Focus();
+}
+
+void CastWebViewExtension::GrantScreenAccess() {
+  window_->GrantScreenAccess();
+}
+
+void CastWebViewExtension::RevokeScreenAccess() {
+  window_->RevokeScreenAccess();
 }
 
 void CastWebViewExtension::WebContentsDestroyed() {

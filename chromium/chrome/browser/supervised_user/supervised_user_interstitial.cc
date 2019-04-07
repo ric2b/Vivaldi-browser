@@ -110,8 +110,6 @@ class TabCloser : public content::WebContentsUserData<TabCloser> {
 
 }  // namespace
 
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(TabCloser);
-
 const content::InterstitialPageDelegate::TypeID
     SupervisedUserInterstitial::kTypeForTesting =
         &SupervisedUserInterstitial::kTypeForTesting;
@@ -352,8 +350,10 @@ void SupervisedUserInterstitial::OnAccessRequestAdded(bool success) {
           << (success ? " successfully" : " unsuccessfully");
   std::string jsFunc =
       base::StringPrintf("setRequestStatus(%s);", success ? "true" : "false");
-  interstitial_page_->GetMainFrame()->ExecuteJavaScript(
-      base::ASCIIToUTF16(jsFunc));
+  if (interstitial_page_->GetMainFrame()) {
+    interstitial_page_->GetMainFrame()->ExecuteJavaScript(
+        base::ASCIIToUTF16(jsFunc));
+  }
 }
 
 bool SupervisedUserInterstitial::ShouldProceed() {

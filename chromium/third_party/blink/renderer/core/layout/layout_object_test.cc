@@ -264,6 +264,22 @@ TEST_F(LayoutObjectTest, FloatUnderBlock) {
   EXPECT_EQ(container, floating->ContainingBlock());
 }
 
+TEST_F(LayoutObjectTest, InlineFloatMismatch) {
+  SetBodyInnerHTML(R"HTML(
+    <span id=span style='position: relative; left: 40px; width: 100px; height: 100px'>
+      <div id=float_obj style='float: left; margin-left: 10px;'>
+      </div>
+    </span>
+  )HTML");
+
+  LayoutObject* float_obj =
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("float_obj"));
+  LayoutObject* span =
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("span"));
+  // 10px for margin, -40px because float is to the left of the span.
+  EXPECT_EQ(LayoutSize(-30, 0), float_obj->OffsetFromAncestor(span));
+}
+
 TEST_F(LayoutObjectTest, FloatUnderInline) {
   SetBodyInnerHTML(R"HTML(
     <div id='layered-div' style='position: absolute'>
@@ -303,10 +319,10 @@ TEST_F(LayoutObjectTest, MutableForPaintingClearPaintFlags) {
   object->SetShouldDoFullPaintInvalidation();
   EXPECT_TRUE(object->ShouldDoFullPaintInvalidation());
   EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
-  object->SetMayNeedPaintInvalidation();
-  EXPECT_TRUE(object->MayNeedPaintInvalidation());
-  object->SetMayNeedPaintInvalidationSubtree();
-  EXPECT_TRUE(object->MayNeedPaintInvalidationSubtree());
+  object->SetShouldCheckForPaintInvalidation();
+  EXPECT_TRUE(object->ShouldCheckForPaintInvalidation());
+  object->SetSubtreeShouldCheckForPaintInvalidation();
+  EXPECT_TRUE(object->SubtreeShouldCheckForPaintInvalidation());
   object->SetMayNeedPaintInvalidationAnimatedBackgroundImage();
   EXPECT_TRUE(object->MayNeedPaintInvalidationAnimatedBackgroundImage());
   object->SetShouldInvalidateSelection();
@@ -323,8 +339,8 @@ TEST_F(LayoutObjectTest, MutableForPaintingClearPaintFlags) {
   object->GetMutableForPainting().ClearPaintFlags();
 
   EXPECT_FALSE(object->ShouldDoFullPaintInvalidation());
-  EXPECT_FALSE(object->MayNeedPaintInvalidation());
-  EXPECT_FALSE(object->MayNeedPaintInvalidationSubtree());
+  EXPECT_FALSE(object->ShouldCheckForPaintInvalidation());
+  EXPECT_FALSE(object->SubtreeShouldCheckForPaintInvalidation());
   EXPECT_FALSE(object->MayNeedPaintInvalidationAnimatedBackgroundImage());
   EXPECT_FALSE(object->ShouldInvalidateSelection());
   EXPECT_FALSE(object->BackgroundChangedSinceLastPaintInvalidation());
@@ -353,55 +369,55 @@ TEST_F(LayoutObjectTest, NeedsPaintOffsetAndVisualRectUpdate) {
   object->SetShouldDoFullPaintInvalidation();
   EXPECT_TRUE(object->ShouldDoFullPaintInvalidation());
   EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
-  EXPECT_TRUE(parent->MayNeedPaintInvalidation());
+  EXPECT_TRUE(parent->ShouldCheckForPaintInvalidation());
   EXPECT_TRUE(parent->NeedsPaintOffsetAndVisualRectUpdate());
   object->ClearPaintInvalidationFlags();
   EXPECT_FALSE(object->ShouldDoFullPaintInvalidation());
   EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
   parent->ClearPaintInvalidationFlags();
-  EXPECT_FALSE(parent->MayNeedPaintInvalidation());
+  EXPECT_FALSE(parent->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
 
-  object->SetMayNeedPaintInvalidation();
-  EXPECT_TRUE(object->MayNeedPaintInvalidation());
+  object->SetShouldCheckForPaintInvalidation();
+  EXPECT_TRUE(object->ShouldCheckForPaintInvalidation());
   EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
-  EXPECT_TRUE(parent->MayNeedPaintInvalidation());
+  EXPECT_TRUE(parent->ShouldCheckForPaintInvalidation());
   EXPECT_TRUE(parent->NeedsPaintOffsetAndVisualRectUpdate());
   object->ClearPaintInvalidationFlags();
-  EXPECT_FALSE(object->MayNeedPaintInvalidation());
+  EXPECT_FALSE(object->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
   parent->ClearPaintInvalidationFlags();
-  EXPECT_FALSE(parent->MayNeedPaintInvalidation());
+  EXPECT_FALSE(parent->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
 
   object->SetShouldDoFullPaintInvalidationWithoutGeometryChange();
   EXPECT_TRUE(object->ShouldDoFullPaintInvalidation());
   EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
-  EXPECT_TRUE(parent->MayNeedPaintInvalidation());
+  EXPECT_TRUE(parent->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
-  object->SetMayNeedPaintInvalidation();
+  object->SetShouldCheckForPaintInvalidation();
   EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
   EXPECT_TRUE(parent->NeedsPaintOffsetAndVisualRectUpdate());
   object->ClearPaintInvalidationFlags();
-  EXPECT_FALSE(object->MayNeedPaintInvalidation());
+  EXPECT_FALSE(object->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
   parent->ClearPaintInvalidationFlags();
-  EXPECT_FALSE(parent->MayNeedPaintInvalidation());
+  EXPECT_FALSE(parent->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
 
-  object->SetMayNeedPaintInvalidationWithoutGeometryChange();
-  EXPECT_TRUE(object->MayNeedPaintInvalidation());
+  object->SetShouldCheckForPaintInvalidationWithoutGeometryChange();
+  EXPECT_TRUE(object->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
-  EXPECT_TRUE(parent->MayNeedPaintInvalidation());
+  EXPECT_TRUE(parent->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
-  object->SetMayNeedPaintInvalidation();
+  object->SetShouldCheckForPaintInvalidation();
   EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
   EXPECT_TRUE(parent->NeedsPaintOffsetAndVisualRectUpdate());
   object->ClearPaintInvalidationFlags();
-  EXPECT_FALSE(object->MayNeedPaintInvalidation());
+  EXPECT_FALSE(object->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
   parent->ClearPaintInvalidationFlags();
-  EXPECT_FALSE(parent->MayNeedPaintInvalidation());
+  EXPECT_FALSE(parent->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
 }
 
@@ -829,6 +845,36 @@ TEST_F(LayoutObjectSimTest, TouchActionUpdatesSubframeEventHandler) {
   // We should remove the handler if touch action is removed on main frame.
   container->setAttribute("style", "touch-action: auto");
   EXPECT_FALSE(DocumentHasTouchActionRegion(registry));
+}
+
+TEST_F(LayoutObjectSimTest, HitTestForOcclusionInIframe) {
+  SimRequest main_resource("https://example.com/test.html", "text/html");
+  SimRequest frame_resource("https://example.com/frame.html", "text/html");
+
+  LoadURL("https://example.com/test.html");
+  main_resource.Complete(R"HTML(
+    <iframe style='width:300px;height:150px;' src=frame.html></iframe>
+    <div id='occluder' style='will-change:transform;width:100px;height:100px;'>
+    </div>
+  )HTML");
+  frame_resource.Complete(R"HTML(
+    <div id='target'>target</div>
+  )HTML");
+
+  GetDocument().View()->UpdateAllLifecyclePhases();
+  Element* iframe_element = GetDocument().QuerySelector("iframe");
+  HTMLFrameOwnerElement* frame_owner_element =
+      ToHTMLFrameOwnerElement(iframe_element);
+  Document* iframe_doc = frame_owner_element->contentDocument();
+  Element* target = iframe_doc->getElementById("target");
+  HitTestResult result = target->GetLayoutObject()->HitTestForOcclusion();
+  EXPECT_TRUE(result.InnerNode() == target);
+
+  Element* occluder = GetDocument().getElementById("occluder");
+  occluder->SetInlineStyleProperty(CSSPropertyMarginTop, "-150px");
+  GetDocument().View()->UpdateAllLifecyclePhases();
+  result = target->GetLayoutObject()->HitTestForOcclusion();
+  EXPECT_TRUE(result.InnerNode() == occluder);
 }
 
 }  // namespace blink

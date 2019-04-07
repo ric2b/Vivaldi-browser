@@ -120,20 +120,26 @@ void PrintAllHelp() {
 
   OutputString("\n");
 
-  if (is_markdown)
-    OutputString("## <a name=\"commands\"></a>Commands\n\n");
+  if (is_markdown) {
+    OutputString("## <a name=\"commands\"></a>Commands\n\n", DECORATION_NONE,
+                 NO_ESCAPING);
+  }
   for (const auto& c : commands::GetCommands())
     PrintLongHelp(c.second.help);
 
-  if (is_markdown)
-    OutputString("## <a name=\"targets\"></a>Target declarations\n\n");
+  if (is_markdown) {
+    OutputString("## <a name=\"targets\"></a>Target declarations\n\n",
+                 DECORATION_NONE, NO_ESCAPING);
+  }
   for (const auto& f : functions::GetFunctions()) {
     if (f.second.is_target)
       PrintLongHelp(f.second.help);
   }
 
-  if (is_markdown)
-    OutputString("## <a name=\"functions\"></a>Buildfile functions\n\n");
+  if (is_markdown) {
+    OutputString("## <a name=\"functions\"></a>Buildfile functions\n\n",
+                 DECORATION_NONE, NO_ESCAPING);
+  }
   for (const auto& f : functions::GetFunctions()) {
     if (!f.second.is_target)
       PrintLongHelp(f.second.help);
@@ -142,7 +148,8 @@ void PrintAllHelp() {
   if (is_markdown) {
     OutputString(
         "## <a name=\"predefined_variables\"></a>"
-        "Built-in predefined variables\n\n");
+        "Built-in predefined variables\n\n",
+        DECORATION_NONE, NO_ESCAPING);
   }
   for (const auto& v : variables::GetBuiltinVariables())
     PrintLongHelp(v.second.help);
@@ -150,13 +157,16 @@ void PrintAllHelp() {
   if (is_markdown) {
     OutputString(
         "## <a name=\"target_variables\"></a>"
-        "Variables you set in targets\n\n");
+        "Variables you set in targets\n\n",
+        DECORATION_NONE, NO_ESCAPING);
   }
   for (const auto& v : variables::GetTargetVariables())
     PrintLongHelp(v.second.help);
 
-  if (is_markdown)
-    OutputString("## <a name=\"other\"></a>Other help topics\n\n");
+  if (is_markdown) {
+    OutputString("## <a name=\"other\"></a>Other help topics\n\n",
+                 DECORATION_NONE, NO_ESCAPING);
+  }
   PrintLongHelp(kBuildArgs_Help, "buildargs");
   PrintLongHelp(kDotfile_Help, "dotfile");
   PrintLongHelp(kExecution_Help, "execution");
@@ -170,8 +180,10 @@ void PrintAllHelp() {
   PrintLongHelp(kRuntimeDeps_Help, "runtime_deps");
   PrintLongHelp(kSourceExpansion_Help, "source_expansion");
 
-  if (is_markdown)
-    OutputString("## <a name=\"switches\"></a>Command Line Switches\n\n");
+  if (is_markdown) {
+    OutputString("## <a name=\"switches\"></a>Command Line Switches\n\n",
+                 DECORATION_NONE, NO_ESCAPING);
+  }
   PrintSwitchHelp();
 }
 

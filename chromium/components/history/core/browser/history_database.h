@@ -17,7 +17,7 @@
 #include "components/history/core/browser/url_database.h"
 #include "components/history/core/browser/visit_database.h"
 #include "components/history/core/browser/visitsegment_database.h"
-#include "sql/connection.h"
+#include "sql/database.h"
 #include "sql/init_status.h"
 #include "sql/meta_table.h"
 
@@ -77,8 +77,7 @@ class HistoryDatabase : public DownloadDatabase,
 
   // Call before Init() to set the error callback to be used for the
   // underlying database connection.
-  void set_error_callback(
-      const sql::Connection::ErrorCallback& error_callback) {
+  void set_error_callback(const sql::Database::ErrorCallback& error_callback) {
     db_.set_error_callback(error_callback);
   }
 
@@ -176,7 +175,7 @@ class HistoryDatabase : public DownloadDatabase,
 
   // Overridden from URLDatabase, DownloadDatabase, VisitDatabase,
   // VisitSegmentDatabase and TypedURLSyncMetadataDatabase.
-  sql::Connection& GetDB() override;
+  sql::Database& GetDB() override;
 
   // Overridden from TypedURLSyncMetadataDatabase.
   sql::MetaTable& GetMetaTable() override;
@@ -199,7 +198,7 @@ class HistoryDatabase : public DownloadDatabase,
 
   // ---------------------------------------------------------------------------
 
-  sql::Connection db_;
+  sql::Database db_;
   sql::MetaTable meta_table_;
 
   base::Time cached_early_expiration_threshold_;

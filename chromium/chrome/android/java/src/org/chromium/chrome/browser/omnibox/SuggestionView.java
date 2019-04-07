@@ -316,7 +316,10 @@ class SuggestionView extends ViewGroup {
                 .getDimension(R.dimen.omnibox_suggestion_second_line_text_size));
 
         mRefineViewOffsetPx = useModernDesign ? mRefineViewModernEndPadding : 0;
-        mSuggestionViewStartOffset = useModernDesign ? mSuggestionListModernOffset : 0;
+        mSuggestionViewStartOffset =
+                useModernDesign && !mLocationBar.mustQueryUrlBarLocationForSuggestions()
+                ? mSuggestionListModernOffset
+                : 0;
 
         // Suggestions with attached answers are rendered with rich results regardless of which
         // suggestion type they are.
@@ -332,8 +335,8 @@ class SuggestionView extends ViewGroup {
             mContentsView.mTextLine2.setSingleLine();
         }
 
-        boolean sameAsTyped =
-                suggestionItem.getMatchedQuery().equalsIgnoreCase(mSuggestion.getDisplayText());
+        boolean sameAsTyped = suggestionItem.getMatchedQuery().trim().equalsIgnoreCase(
+                mSuggestion.getDisplayText());
         int suggestionType = mSuggestion.getType();
         if (mSuggestion.isUrlSuggestion()) {
             if (mSuggestion.isStarred()) {

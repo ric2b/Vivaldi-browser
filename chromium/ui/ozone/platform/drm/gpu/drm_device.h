@@ -19,7 +19,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/overlay_transform.h"
-#include "ui/ozone/common/linux/gbm_device_linux.h"
+#include "ui/ozone/common/linux/gbm_device.h"
 #include "ui/ozone/platform/drm/common/scoped_drm_types.h"
 #include "ui/ozone/platform/drm/gpu/page_flip_request.h"
 
@@ -56,8 +56,7 @@ using ScopedDrmPropertyBlob = std::unique_ptr<DrmPropertyBlobMetadata>;
 // Wraps DRM calls into a nice interface. Used to provide different
 // implementations of the DRM calls. For the actual implementation the DRM API
 // would be called. In unit tests this interface would be stubbed.
-class DrmDevice : public GbmDeviceLinux,
-                  public base::RefCountedThreadSafe<DrmDevice> {
+class DrmDevice : public base::RefCountedThreadSafe<DrmDevice> {
  public:
   using PageFlipCallback =
       base::OnceCallback<void(unsigned int /* frame */,
@@ -74,13 +73,14 @@ class DrmDevice : public GbmDeviceLinux,
 
   DrmDevice(const base::FilePath& device_path,
             base::File file,
-            bool is_primary_device);
+            bool is_primary_device,
+            std::unique_ptr<GbmDevice> gbm_device);
 
   bool is_primary_device() const { return is_primary_device_; }
 
-  bool allow_addfb2_modifiers() const { return allow_addfb2_modifiers_; }
+  bool is_atomic() const { return is_atomic_; }
 
-  const GbmDeviceLinux* AsGbmDeviceLinux() const { return this; }
+  bool allow_addfb2_modifiers() const { return allow_addfb2_modifiers_; }
 
   // Open device.
   virtual bool Initialize();
@@ -249,10 +249,12 @@ class DrmDevice : public GbmDeviceLinux,
 
   HardwareDisplayPlaneManager* plane_manager() { return plane_manager_.get(); }
 
+  GbmDevice* gbm_device() const { return gbm_.get(); }
+
  protected:
   friend class base::RefCountedThreadSafe<DrmDevice>;
 
-  ~DrmDevice() override;
+  virtual ~DrmDevice();
 
   std::unique_ptr<HardwareDisplayPlaneManager> plane_manager_;
 
@@ -273,7 +275,11 @@ class DrmDevice : public GbmDeviceLinux,
 
   bool is_primary_device_;
 
-  bool allow_addfb2_modifiers_;
+  bool is_atomic_ = false;
+
+  bool allow_addfb2_modifiers_ = false;
+
+  std::unique_ptr<GbmDevice> gbm_;
 
   DISALLOW_COPY_AND_ASSIGN(DrmDevice);
 };

@@ -51,7 +51,13 @@ DecoderBuffer::DecoderBuffer(std::unique_ptr<UnalignedSharedMemory> shm,
       shm_(std::move(shm)),
       is_key_frame_(false) {}
 
-DecoderBuffer::~DecoderBuffer() = default;
+DecoderBuffer::~DecoderBuffer() {
+  // TODO(crbug.com/794740). As a lot of the crashes have |side_data_size_|
+  // == 0 yet |side_data| is not null, check that here hoping to get better
+  // minidumps. This check verifies that size == 0 and |side_data_| is null,
+  // or size != 0 and |side_data_| not null.
+  CHECK_EQ(!!side_data_size_, !!side_data_);
+}
 
 void DecoderBuffer::Initialize() {
   data_.reset(AllocateFFmpegSafeBlock(size_));
@@ -132,9 +138,9 @@ std::string DecoderBuffer::AsHumanReadableString() const {
     << " duration=" << duration_.InMicroseconds() << " size=" << size_
     << " side_data_size=" << side_data_size_
     << " is_key_frame=" << is_key_frame_
-    << " encrypted=" << (decrypt_config_ != NULL) << " discard_padding (ms)=("
-    << discard_padding_.first.InMilliseconds() << ", "
-    << discard_padding_.second.InMilliseconds() << ")";
+    << " encrypted=" << (decrypt_config_ != NULL) << " discard_padding (us)=("
+    << discard_padding_.first.InMicroseconds() << ", "
+    << discard_padding_.second.InMicroseconds() << ")";
 
   if (decrypt_config_)
     s << " decrypt=" << (*decrypt_config_);

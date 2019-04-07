@@ -104,7 +104,7 @@ std::unique_ptr<VdaVideoDecoder, std::default_delete<VideoDecoder>>
 VdaVideoDecoder::Create(
     scoped_refptr<base::SingleThreadTaskRunner> parent_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner,
-    MediaLog* media_log,
+    std::unique_ptr<MediaLog> media_log,
     const gfx::ColorSpace& target_color_space,
     const gpu::GpuPreferences& gpu_preferences,
     const gpu::GpuDriverBugWorkarounds& gpu_workarounds,
@@ -114,8 +114,9 @@ VdaVideoDecoder::Create(
   // TODO(sandersd): Extend base::WrapUnique() to handle this.
   std::unique_ptr<VdaVideoDecoder, std::default_delete<VideoDecoder>> ptr(
       new VdaVideoDecoder(
-          std::move(parent_task_runner), std::move(gpu_task_runner), media_log,
-          target_color_space, base::BindOnce(&PictureBufferManager::Create),
+          std::move(parent_task_runner), std::move(gpu_task_runner),
+          std::move(media_log), target_color_space,
+          base::BindOnce(&PictureBufferManager::Create),
           base::BindOnce(&CreateCommandBufferHelper, std::move(get_stub_cb)),
           base::BindOnce(&CreateAndInitializeVda, gpu_preferences,
                          gpu_workarounds),
@@ -128,7 +129,7 @@ VdaVideoDecoder::Create(
 VdaVideoDecoder::VdaVideoDecoder(
     scoped_refptr<base::SingleThreadTaskRunner> parent_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner,
-    MediaLog* media_log,
+    std::unique_ptr<MediaLog> media_log,
     const gfx::ColorSpace& target_color_space,
     CreatePictureBufferManagerCB create_picture_buffer_manager_cb,
     CreateCommandBufferHelperCB create_command_buffer_helper_cb,
@@ -136,7 +137,7 @@ VdaVideoDecoder::VdaVideoDecoder(
     const VideoDecodeAccelerator::Capabilities& vda_capabilities)
     : parent_task_runner_(std::move(parent_task_runner)),
       gpu_task_runner_(std::move(gpu_task_runner)),
-      media_log_(media_log),
+      media_log_(std::move(media_log)),
       target_color_space_(target_color_space),
       create_command_buffer_helper_cb_(
           std::move(create_command_buffer_helper_cb)),
@@ -184,6 +185,7 @@ void VdaVideoDecoder::DestroyOnGpuThread() {
   // don't call back into |vda_| during its destruction.
   gpu_weak_vda_factory_ = nullptr;
   vda_ = nullptr;
+  media_log_ = nullptr;
 
   delete this;
 }
@@ -308,7 +310,7 @@ void VdaVideoDecoder::InitializeOnGpuThread() {
 
   // Create and initialize the VDA.
   vda_ = std::move(create_and_initialize_vda_cb_)
-             .Run(command_buffer_helper, this, this, vda_config);
+             .Run(command_buffer_helper, this, media_log_.get(), vda_config);
   if (!vda_) {
     parent_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&VdaVideoDecoder::InitializeDone,
@@ -393,7 +395,8 @@ void VdaVideoDecoder::Reset(const base::RepeatingClosure& reset_cb) {
   DVLOG(2) << __func__;
   DCHECK(parent_task_runner_->BelongsToCurrentThread());
   DCHECK(init_cb_.is_null());
-  // Note: |flush_cb_| may not be null.
+  // Note: |flush_cb_| may be non-null. If so, the flush can be completed by
+  // NotifyResetDone().
   DCHECK(reset_cb_.is_null());
 
   if (has_error_) {
@@ -503,6 +506,8 @@ void VdaVideoDecoder::PictureReady(const Picture& picture) {
   DCHECK(vda_initialized_);
 
   if (parent_task_runner_->BelongsToCurrentThread()) {
+    if (!parent_weak_this_)
+      return;
     // Note: This optimization is only correct if the output callback does not
     // reentrantly call Decode(). MojoVideoDecoderService is safe, but there is
     // no guarantee in the media::VideoDecoder interface definition.
@@ -553,6 +558,8 @@ void VdaVideoDecoder::NotifyEndOfBitstreamBuffer(int32_t bitstream_buffer_id) {
   DCHECK(vda_initialized_);
 
   if (parent_task_runner_->BelongsToCurrentThread()) {
+    if (!parent_weak_this_)
+      return;
     // Note: This optimization is only correct if the decode callback does not
     // reentrantly call Decode(). MojoVideoDecoderService is safe, but there is
     // no guarantee in the media::VideoDecoder interface definition.
@@ -603,6 +610,10 @@ void VdaVideoDecoder::NotifyFlushDoneOnParentThread() {
   DCHECK(parent_task_runner_->BelongsToCurrentThread());
 
   if (has_error_)
+    return;
+
+  // Protect against incorrect calls from the VDA.
+  if (flush_cb_.is_null())
     return;
 
   DCHECK(decode_cbs_.empty());
@@ -682,29 +693,6 @@ void VdaVideoDecoder::ReusePictureBuffer(int32_t picture_buffer_id) {
     return;
 
   vda_->ReusePictureBuffer(picture_buffer_id);
-}
-
-void VdaVideoDecoder::AddEvent(std::unique_ptr<MediaLogEvent> event) {
-  DVLOG(1) << __func__;
-
-  if (parent_task_runner_->BelongsToCurrentThread()) {
-    AddEventOnParentThread(std::move(event));
-    return;
-  }
-
-  // Hop to the parent thread to be sure we don't call into |media_log_| after
-  // Destroy() returns.
-  parent_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&VdaVideoDecoder::AddEventOnParentThread,
-                                parent_weak_this_, std::move(event)));
-}
-
-void VdaVideoDecoder::AddEventOnParentThread(
-    std::unique_ptr<MediaLogEvent> event) {
-  DVLOG(1) << __func__;
-  DCHECK(parent_task_runner_->BelongsToCurrentThread());
-
-  media_log_->AddEvent(std::move(event));
 }
 
 void VdaVideoDecoder::EnterErrorState() {

@@ -2,10 +2,6 @@ import("//build/config/jumbo.gni")
 
 jumbo_static_library("ui") {
   sources = [
-    "lazy_load_service_factory.cc",
-    "lazy_load_service_factory.h",
-    "lazy_load_service.cc",
-    "lazy_load_service.h",
     "views/vivaldi_pin_shortcut.cpp",
     "views/vivaldi_pin_shortcut.h",
     "webgui/notes_ui.cpp",
@@ -29,6 +25,10 @@ jumbo_static_library("ui") {
   ]
   if (!is_android) {
     sources += [
+      "lazy_load_service_factory.cc",
+      "lazy_load_service_factory.h",
+      "lazy_load_service.cc",
+      "lazy_load_service.h",
       "devtools/devtools_connector.cc",
       "devtools/devtools_connector.h",
       "dragging/drag_tab_handler.cc",
@@ -36,7 +36,7 @@ jumbo_static_library("ui") {
     ]
     deps += [
       "//chrome/browser/extensions:extensions",
-      "//vivaldi/extensions/schema:api"
+      "//vivaldi/extensions/schema"
     ]
   }
 }

@@ -102,11 +102,11 @@ Jei reikia informacijos apie privatumą, žr. „Google“ privatumo politiką (
 <translation id="3171922709365450819">Šis klientas nepalaiko šio įrenginio, nes reikalingas trečiosios šalies autentifikavimas.</translation>
 <translation id="3194245623920924351">Nuotolinis kompiut. valdymas</translation>
 <translation id="3197730452537982411">Nuot. k. vald.</translation>
+<translation id="3212472844831225214">• Pridėtas 9.0 („Pie“) versijos „Android“ palaikymas.</translation>
 <translation id="324272851072175193">Siųsti šias instrukcijas el. paštu</translation>
 <translation id="3258789396564295715">Galite saugiai pasiekti kompiuterį naudodami „Chrome“ nuotolinį kompiuterio valdymą.</translation>
 <translation id="3286521253923406898">„Chrome“ nuotolinio ryšio prieglobos valdymo priemonė</translation>
 <translation id="3305934114213025800">„<ph name="PRODUCT_NAME" />“ nori atlikti pakeitimų.</translation>
-<translation id="331779822864701136">• Pridėtas 8.0 („Oreo“) versijos „Android“ palaikymas.</translation>
 <translation id="332624996707057614">Redaguoti kompiuterio pavadinimą</translation>
 <translation id="3339299787263251426">Saugiai pasiekite kompiuterį internetu</translation>
 <translation id="3360306038446926262">Windows</translation>
@@ -122,8 +122,9 @@ Jei reikia informacijos apie privatumą, žr. „Google“ privatumo politiką (
 <translation id="369442766917958684">Neprisijungus.</translation>
 <translation id="3695446226812920698">Sužinokite kaip</translation>
 <translation id="3718805989288361841">Įvyko „Chrome“ nuotolinio kompiuterio valdymo politikos nustatymų klaida. Kreipkitės pagalbos į sistemos administratorių.</translation>
-<translation id="3759645055923345178">Kai sąranka bus baigta, galėsite pasiekti kompiuterį iš šio puslapio įvedę PIN kodą ar prieigos kodą</translation>
 <translation id="3776024066357219166">Baigėsi „Chrome“ nuotolinio kompiuterio valdymo sesija.</translation>
+<translation id="3846148461359626420">• Geriau stumdoma ir keičiamas mastelis „iPhone X“.
+• Stabilumo patobulinimai ir riktų pataisymai.</translation>
 <translation id="3870154837782082782">„Google Inc.“</translation>
 <translation id="3884839335308961732">Kad leistumėte prieigą naudojant „Chrome“ nuotolinį kompiuterio valdymą, toliau patvirtinkite savo paskyrą ir PIN kodą.</translation>
 <translation id="3897092660631435901">Meniu</translation>
@@ -137,6 +138,7 @@ Jei reikia informacijos apie privatumą, žr. „Google“ privatumo politiką (
 <translation id="405887016757208221">Nuotoliniam kompiuteriui nepavyko inicijuoti sesijos. Jei problema išlieka, pabandykite dar kartą sukonfigūruoti prieglobą.</translation>
 <translation id="4068946408131579958">Visi ryšiai</translation>
 <translation id="409800995205263688">PASTABA: pagal politikos nustatymus leidžiama užmegzti ryšį tik tarp tinkle esančių kompiuterių.</translation>
+<translation id="4126409073460786861">Kai sąranka bus baigta, atnaujinkite šį puslapį, tada galėsite pasiekti kompiuterį pasirinkę įrenginį ir įvedę PIN kodą</translation>
 <translation id="4145029455188493639">Prisijungta kaip <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Trūksta kai kurių būtinų komponentų. Įsitikinkite, kad įdiegėte naujausios versijos programinę įrangą, ir bandykite dar kartą.</translation>
 <translation id="4156740505453712750">Jei norite apsaugoti prieigą prie šio kompiuterio, pasirinkite <ph name="BOLD_START" />bent šešių skaitmenų<ph name="BOLD_END" /> PIN kodą. Šio PIN kodo reikės prisijungiant iš kitos vietos.</translation>
@@ -145,7 +147,6 @@ Jei reikia informacijos apie privatumą, žr. „Google“ privatumo politiką (
 <translation id="4207623512727273241">Paleiskite diegimo programą prieš tęsdami.</translation>
 <translation id="4227991223508142681">Prieglobos aprūpinimo paslaugų programa</translation>
 <translation id="4240294130679914010">„Chrome“ nuotolinio ryšio prieglobos pašalinimo priemonė</translation>
-<translation id="4249741460382919890">Bendrieji pataisymai ir stabilumo patobulinimai.</translation>
 <translation id="4277463233460010382">Šis kompiuteris sukonfigūruotas leisti vienam ar keliems klientams prisijungti neįvedus PIN kodo.</translation>
 <translation id="4277736576214464567">Netinkamas prieigos kodas. Bandykite dar kartą.</translation>
 <translation id="4361728918881830843">Jei norite įgalinti nuotolinį ryšį su kitu kompiuteriu, jame įdiekite „Chrome“ nuotolinį kompiuterio valdymą ir spustelėkite „<ph name="BUTTON_NAME" />“.</translation>
@@ -271,6 +272,7 @@ AK</translation>
 <translation id="6998989275928107238">Kam</translation>
 <translation id="7019153418965365059">Neatpažinta prieglobos klaida: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Nuotolinė pagalba</translation>
+<translation id="7026930240735156896">Vadovaudamiesi instrukcijomis nustatykite nuotolinę kompiuterio prieigą</translation>
 <translation id="7038683108611689168">Leidę mums kaupti naudojimo statistiką ir strigčių ataskaitas, padėsite tobulinti „Chrome“ nuotolinį ryšį.</translation>
 <translation id="7067321367069083429">Ekranas veikia kaip jutiklinis ekranas</translation>
 <translation id="7116737094673640201">Sveiki, tai – „Chrome“ nuotolinis kompiuterio valdymas!</translation>
@@ -296,7 +298,6 @@ AK</translation>
 <translation id="7782471917492991422">Patikrinkite kompiuterio galios tvarkymo nustatymus ir įsitikinkite, kad jis nėra sukonfigūruotas užmigti neveikos būsenos.</translation>
 <translation id="7810127880729796595">Rodyti statistiką (ryšys: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Trūksta kai kurių būtinų komponentų. Įsitikinkite, kad naudojate naujausios versijos „Chrome“, ir bandykite dar kartą.</translation>
-<translation id="7850909060902317210">Įdiekite „Chrome“ nuotolinio kompiuterio valdymo programinę įrangą ir vadovaudamiesi instrukcijomis užbaikite sąranką</translation>
 <translation id="7868137160098754906">Įveskite nuotolinio kompiuterio PIN kodą.</translation>
 <translation id="7869445566579231750">Neturite leidimo paleisti šią programą.</translation>
 <translation id="7895403300744144251">Pagal nuotolinio kompiuterio saugos politiką neleidžiama prisijungti naudojant jūsų paskyrą.</translation>

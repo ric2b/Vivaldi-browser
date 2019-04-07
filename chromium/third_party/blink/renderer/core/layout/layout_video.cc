@@ -52,7 +52,7 @@ void LayoutVideo::IntrinsicSizeChanged() {
 
 void LayoutVideo::UpdateIntrinsicSize() {
   LayoutSize size = CalculateIntrinsicSize();
-  size.Scale(Style()->EffectiveZoom());
+  size.Scale(StyleRef().EffectiveZoom());
 
   // Never set the element size to zero when in a media document.
   if (size.IsEmpty() && GetNode()->ownerDocument() &&
@@ -70,6 +70,11 @@ void LayoutVideo::UpdateIntrinsicSize() {
 
 LayoutSize LayoutVideo::CalculateIntrinsicSize() {
   HTMLVideoElement* video = VideoElement();
+  DCHECK(video);
+
+  if (RuntimeEnabledFeatures::ExperimentalProductivityFeaturesEnabled() &&
+      !video->GetOverriddenIntrinsicSize().IsEmpty())
+    return LayoutSize(video->GetOverriddenIntrinsicSize());
 
   // Spec text from 4.8.6
   //
@@ -171,10 +176,7 @@ LayoutRect LayoutVideo::ReplacedContentRect() const {
   if (ShouldDisplayVideo()) {
     // Video codecs may need to restart from an I-frame when the output is
     // resized. Round size in advance to avoid 1px snap difference.
-    // TODO(trchen): The way of rounding is different from LayoutEmbeddedContent
-    // just to match existing behavior. This is probably a bug and We should
-    // unify it with LayoutEmbeddedContent.
-    return LayoutRect(PixelSnappedIntRect(ComputeObjectFit()));
+    return PreSnappedRectForPersistentSizing(ComputeObjectFit());
   }
   // If we are displaying the poster image no pre-rounding is needed, but the
   // size of the image should be used for fitting instead.

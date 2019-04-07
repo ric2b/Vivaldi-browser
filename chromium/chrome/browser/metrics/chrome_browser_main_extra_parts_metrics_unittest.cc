@@ -16,7 +16,7 @@
 #include "ui/gfx/geometry/size.h"
 
 #if defined(USE_OZONE) || defined(USE_X11)
-#include "services/ui/public/cpp/input_devices/input_device_client_test_api.h"
+#include "services/ws/public/cpp/input_devices/input_device_client_test_api.h"
 #endif
 
 namespace {
@@ -33,7 +33,7 @@ class ChromeBrowserMainExtraPartsMetricsTest : public testing::Test {
 
  protected:
 #if defined(USE_OZONE) || defined(USE_X11)
-  ui::InputDeviceClientTestApi input_device_client_test_api_;
+  ws::InputDeviceClientTestApi input_device_client_test_api_;
 #endif
 
  private:

@@ -79,7 +79,7 @@ void WebContentsViewGuest::OnGuestAttached(WebContentsView* parent_view) {
   // access embedder_web_contents(). Therefore, we do it here.
   // NOTE(jarle@vivaldi.com): Check for null pointer here as the GetNativeView()
   // method(s) can very well return null. Ref. VB-41021.
-  if (features::IsAshInBrowserProcess() &&
+  if (!features::IsUsingWindowService() &&
       parent_view->GetNativeView() && platform_view_->GetNativeView())
     parent_view->GetNativeView()->AddChild(platform_view_->GetNativeView());
 #endif  // defined(USE_AURA)
@@ -87,7 +87,7 @@ void WebContentsViewGuest::OnGuestAttached(WebContentsView* parent_view) {
 
 void WebContentsViewGuest::OnGuestDetached(WebContentsView* old_parent_view) {
 #if defined(USE_AURA)
-  if (features::IsAshInBrowserProcess()) {
+  if (!features::IsUsingWindowService()) {
     old_parent_view->GetNativeView()->RemoveChild(
         platform_view_->GetNativeView());
   }

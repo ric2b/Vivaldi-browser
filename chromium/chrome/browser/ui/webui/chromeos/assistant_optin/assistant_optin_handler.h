@@ -46,8 +46,8 @@ class AssistantOptInHandler
   void SendGetSettingsRequest();
 
   // Send message and consent data to the page.
-  void ReloadContent(const base::DictionaryValue& dict);
-  void AddSettingZippy(const std::string& type, const base::ListValue& data);
+  void ReloadContent(const base::Value& dict);
+  void AddSettingZippy(const std::string& type, const base::Value& data);
 
   // Handle response from the settings manager.
   void OnGetSettingsResponse(const std::string& settings);
@@ -55,15 +55,23 @@ class AssistantOptInHandler
 
   // Handler for JS WebUI message.
   void HandleInitialized();
+  void HandleHotwordResult(bool enable_hotword);
+  void HandleFlowFinished();
 
   // Consent token used to complete the opt-in.
   std::string consent_token_;
+
+  // An opaque token for audit record.
+  std::string ui_audit_key_;
 
   // Whether activity control is needed for user.
   bool activity_control_needed_ = true;
 
   // Whether email optin is needed for user.
   bool email_optin_needed_ = false;
+
+  // Whether user chose to enable hotword.
+  bool enable_hotword_ = true;
 
   assistant::mojom::AssistantSettingsManagerPtr settings_manager_;
   base::WeakPtrFactory<AssistantOptInHandler> weak_factory_;

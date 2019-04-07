@@ -14,6 +14,7 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_job_factory.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 
 class ChromeURLRequestContextFactory;
 class Profile;
@@ -28,11 +29,6 @@ struct StoragePartitionDescriptor;
 // the destructor and GetURLRequestContext().
 class ChromeURLRequestContextGetter : public net::URLRequestContextGetter {
  public:
-  // Constructs a ChromeURLRequestContextGetter that will use |factory| to
-  // create the URLRequestContext.
-  explicit ChromeURLRequestContextGetter(
-      ChromeURLRequestContextFactory* factory);
-
   // Note that GetURLRequestContext() can only be called from the IO
   // thread (it will assert otherwise).
   // GetIOTaskRunner however can be called from any thread.
@@ -44,7 +40,7 @@ class ChromeURLRequestContextGetter : public net::URLRequestContextGetter {
 
   // Create an instance for use with an 'original' (non-OTR) profile. This is
   // expected to get called on the UI thread.
-  static ChromeURLRequestContextGetter* Create(
+  static scoped_refptr<ChromeURLRequestContextGetter> Create(
       Profile* profile,
       const ProfileIOData* profile_io_data,
       content::ProtocolHandlerMap* protocol_handlers,
@@ -53,28 +49,32 @@ class ChromeURLRequestContextGetter : public net::URLRequestContextGetter {
   // Create an instance for an original profile for media. This is expected to
   // get called on UI thread. This method takes a profile and reuses the
   // 'original' net::URLRequestContext for common files.
-  static ChromeURLRequestContextGetter* CreateForMedia(
-      Profile* profile, const ProfileIOData* profile_io_data);
+  static scoped_refptr<ChromeURLRequestContextGetter> CreateForMedia(
+      Profile* profile,
+      const ProfileIOData* profile_io_data);
 
   // Create an instance for an original profile for extensions. This is expected
   // to get called on UI thread.
-  static ChromeURLRequestContextGetter* CreateForExtensions(
-      Profile* profile, const ProfileIOData* profile_io_data);
+  static scoped_refptr<ChromeURLRequestContextGetter> CreateForExtensions(
+      Profile* profile,
+      const ProfileIOData* profile_io_data);
 
   // Create an instance for an original profile for an app with isolated
   // storage. This is expected to get called on UI thread.
-  static ChromeURLRequestContextGetter* CreateForIsolatedApp(
+  static scoped_refptr<ChromeURLRequestContextGetter> CreateForIsolatedApp(
       Profile* profile,
       const ProfileIOData* profile_io_data,
       const StoragePartitionDescriptor& partition_descriptor,
       std::unique_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>
           protocol_handler_interceptor,
       content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors);
+      content::URLRequestInterceptorScopedVector request_interceptors,
+      network::mojom::NetworkContextRequest network_context_request,
+      network::mojom::NetworkContextParamsPtr network_context_params);
 
   // Create an instance for an original profile for media with isolated
   // storage. This is expected to get called on UI thread.
-  static ChromeURLRequestContextGetter* CreateForIsolatedMedia(
+  static scoped_refptr<ChromeURLRequestContextGetter> CreateForIsolatedMedia(
       Profile* profile,
       ChromeURLRequestContextGetter* app_context,
       const ProfileIOData* profile_io_data,
@@ -85,15 +85,21 @@ class ChromeURLRequestContextGetter : public net::URLRequestContextGetter {
   void NotifyContextShuttingDown();
 
  private:
+  ChromeURLRequestContextGetter();
   ~ChromeURLRequestContextGetter() override;
 
-  // Deferred logic for creating a URLRequestContext.
-  // Access only from the IO thread.
-  std::unique_ptr<ChromeURLRequestContextFactory> factory_;
+  // Called on IO thread. Calls |factory's| Create method and populates
+  // |url_request_context_|, which is actually owned by the ProfileIOData.
+  void Init(std::unique_ptr<ChromeURLRequestContextFactory> factory);
+
+  // Should be used instead of constructor. Both creates object and triggers
+  // initialization on the IO thread.
+  static scoped_refptr<ChromeURLRequestContextGetter> CreateAndInit(
+      std::unique_ptr<ChromeURLRequestContextFactory> factory);
 
   // NULL before initialization and after invalidation.
-  // Otherwise, it is the URLRequestContext instance that
-  // was lazily created by GetURLRequestContext().
+  // Otherwise, it is the URLRequestContext instance that was created by the
+  // |factory| used by Init(). The object is owned by the ProfileIOData.
   // Access only from the IO thread.
   net::URLRequestContext* url_request_context_;
 

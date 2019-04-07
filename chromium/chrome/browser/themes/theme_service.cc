@@ -17,7 +17,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -519,7 +519,7 @@ SkColor ThemeService::GetDefaultColor(int id, bool incognito) const {
       if (UsingDefaultTheme())
         break;
       return GetColor(ThemeProperties::COLOR_BOOKMARK_TEXT, incognito);
-    case ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR:
+    case ThemeProperties::COLOR_TOOLBAR_CONTENT_AREA_SEPARATOR:
       if (UsingDefaultTheme())
         break;
       return GetColor(ThemeProperties::COLOR_LOCATION_BAR_BORDER, incognito);
@@ -995,7 +995,9 @@ void ThemeService::OnThemeBuiltFromExtension(
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 bool ThemeService::IsSupervisedUser() const {
-  return profile_->IsSupervised();
+  // Do not treat child users as supervised users, so they get the same theme as the parent account
+  // instead of getting the default theme.
+  return profile_->IsLegacySupervised();
 }
 
 void ThemeService::SetSupervisedUserTheme() {

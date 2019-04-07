@@ -216,7 +216,7 @@ void ScopedStyleResolver::KeyframesRulesAdded(const TreeScope& tree_scope) {
 
 void ScopedStyleResolver::CollectMatchingAuthorRules(
     ElementRuleCollector& collector,
-    CascadeOrder cascade_order) {
+    ShadowV0CascadeOrder cascade_order) {
   size_t sheet_index = 0;
   for (auto sheet : author_style_sheets_) {
     if (!RuntimeEnabledFeatures::ConstructableStylesheetsEnabled())
@@ -229,7 +229,7 @@ void ScopedStyleResolver::CollectMatchingAuthorRules(
 
 void ScopedStyleResolver::CollectMatchingShadowHostRules(
     ElementRuleCollector& collector,
-    CascadeOrder cascade_order) {
+    ShadowV0CascadeOrder cascade_order) {
   size_t sheet_index = 0;
   for (auto sheet : author_style_sheets_) {
     if (!RuntimeEnabledFeatures::ConstructableStylesheetsEnabled())
@@ -242,7 +242,7 @@ void ScopedStyleResolver::CollectMatchingShadowHostRules(
 
 void ScopedStyleResolver::CollectMatchingSlottedRules(
     ElementRuleCollector& collector,
-    CascadeOrder cascade_order) {
+    ShadowV0CascadeOrder cascade_order) {
   if (!slotted_rule_set_)
     return;
 
@@ -255,7 +255,7 @@ void ScopedStyleResolver::CollectMatchingSlottedRules(
 
 void ScopedStyleResolver::CollectMatchingTreeBoundaryCrossingRules(
     ElementRuleCollector& collector,
-    CascadeOrder cascade_order) {
+    ShadowV0CascadeOrder cascade_order) {
   if (!tree_boundary_crossing_rule_set_)
     return;
 
@@ -269,7 +269,7 @@ void ScopedStyleResolver::CollectMatchingTreeBoundaryCrossingRules(
 void ScopedStyleResolver::CollectMatchingPartPseudoRules(
     ElementRuleCollector& collector,
     PartNames& part_names,
-    CascadeOrder cascade_order) {
+    ShadowV0CascadeOrder cascade_order) {
   if (!RuntimeEnabledFeatures::CSSPartPseudoElementEnabled())
     return;
   size_t sheet_index = 0;
@@ -383,28 +383,6 @@ void ScopedStyleResolver::AddSlottedRules(const RuleSet& author_rules,
     slotted_rule_set_ = new CSSStyleSheetRuleSubSet();
   slotted_rule_set_->push_back(
       RuleSubSet::Create(parent_style_sheet, sheet_index, slotted_rule_set));
-}
-
-bool ScopedStyleResolver::HaveSameStyles(const ScopedStyleResolver* first,
-                                         const ScopedStyleResolver* second) {
-  // This method will return true if the two resolvers are either both empty, or
-  // if they contain the same active stylesheets by sharing the same
-  // StyleSheetContents. It is used to check if we can share ComputedStyle
-  // between two shadow hosts. This typically works when we have multiple
-  // instantiations of the same web component where the style elements are in
-  // the same order and contain the exact same source string in which case we
-  // will get a cache hit for sharing StyleSheetContents.
-
-  size_t first_count = first ? first->author_style_sheets_.size() : 0;
-  size_t second_count = second ? second->author_style_sheets_.size() : 0;
-  if (first_count != second_count)
-    return false;
-  while (first_count--) {
-    if (first->author_style_sheets_[first_count]->Contents() !=
-        second->author_style_sheets_[first_count]->Contents())
-      return false;
-  }
-  return true;
 }
 
 void ScopedStyleResolver::RuleSubSet::Trace(blink::Visitor* visitor) {

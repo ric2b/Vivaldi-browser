@@ -7,10 +7,7 @@
 
 #include "third_party/blink/renderer/core/dom/tree_ordered_map.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
-#include "third_party/blink/renderer/platform/wtf/text/atomic_string_hash.h"
 
 namespace blink {
 
@@ -25,7 +22,7 @@ class SlotAssignment final : public GarbageCollected<SlotAssignment> {
   }
 
   // Relevant DOM Standard: https://dom.spec.whatwg.org/#find-a-slot
-  HTMLSlotElement* FindSlot(const Node&) const;
+  HTMLSlotElement* FindSlot(const Node&);
   HTMLSlotElement* FindSlotByName(const AtomicString& slot_name) const;
 
   // DOM Standaard defines these two procedures:
@@ -46,6 +43,8 @@ class SlotAssignment final : public GarbageCollected<SlotAssignment> {
                                   const AtomicString& new_value);
 
   bool FindHostChildBySlotName(const AtomicString& slot_name) const;
+  void CallSlotChangeIfNeeded(HTMLSlotElement& slot);
+  HTMLSlotElement* FindSlotChange(HTMLSlotElement& slot, Node& child);
 
   void Trace(blink::Visitor*);
 
@@ -67,11 +66,14 @@ class SlotAssignment final : public GarbageCollected<SlotAssignment> {
 
   HTMLSlotElement* FindSlotInUserAgentShadow(const Node&) const;
 
+  HTMLSlotElement* FindFirstAssignedSlot(Node&);
+
   void CollectSlots();
   HTMLSlotElement* GetCachedFirstSlotWithoutAccessingNodeTree(
       const AtomicString& slot_name);
 
   void DidAddSlotInternal(HTMLSlotElement&);
+  void DidAddSlotInternalInManualMode(HTMLSlotElement&);
   void DidRemoveSlotInternal(HTMLSlotElement&,
                              const AtomicString& slot_name,
                              SlotMutationType);

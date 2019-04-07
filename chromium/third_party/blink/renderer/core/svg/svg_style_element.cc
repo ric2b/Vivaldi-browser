@@ -103,7 +103,7 @@ void SVGStyleElement::FinishParsingChildren() {
 }
 
 Node::InsertionNotificationRequest SVGStyleElement::InsertedInto(
-    ContainerNode* insertion_point) {
+    ContainerNode& insertion_point) {
   SVGElement::InsertedInto(insertion_point);
   if (isConnected()) {
     if (StyleElement::ProcessStyleSheet(GetDocument(), *this) ==
@@ -115,9 +115,9 @@ Node::InsertionNotificationRequest SVGStyleElement::InsertedInto(
   return kInsertionDone;
 }
 
-void SVGStyleElement::RemovedFrom(ContainerNode* insertion_point) {
+void SVGStyleElement::RemovedFrom(ContainerNode& insertion_point) {
   SVGElement::RemovedFrom(insertion_point);
-  StyleElement::RemovedFrom(*this, insertion_point);
+  StyleElement::RemovedFrom(*this, &insertion_point);
 }
 
 void SVGStyleElement::ChildrenChanged(const ChildrenChange& change) {
@@ -139,7 +139,7 @@ void SVGStyleElement::NotifyLoadedSheetAndAllCriticalSubresources(
 }
 
 void SVGStyleElement::DispatchPendingEvent() {
-  DispatchEvent(Event::Create(EventTypeNames::error));
+  DispatchEvent(*Event::Create(EventTypeNames::error));
 }
 
 void SVGStyleElement::Trace(blink::Visitor* visitor) {

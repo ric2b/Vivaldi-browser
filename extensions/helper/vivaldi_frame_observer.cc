@@ -10,8 +10,6 @@
 #include "content/public/browser/render_view_host.h"
 #include "renderer/vivaldi_render_messages.h"
 
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(vivaldi::VivaldiFrameObserver);
-
 namespace vivaldi {
 
 VivaldiFrameObserver::VivaldiFrameObserver(content::WebContents* web_contents)

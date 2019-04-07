@@ -6,8 +6,8 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "components/ukm/ukm_source.h"
 #include "content/public/test/test_renderer_host.h"
+#include "services/metrics/public/cpp/ukm_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -21,8 +21,8 @@ class AppSourceUrlRecorderTest : public content::RenderViewHostTestHarness {
   }
 
  protected:
-  SourceId GetSourceIdForApp(AppType type, const std::string& id) {
-    return AppSourceUrlRecorder::GetSourceIdForApp(type, id);
+  SourceId GetSourceIdForArc(const std::string& package_name) {
+    return AppSourceUrlRecorder::GetSourceIdForArc(package_name);
   }
 
   SourceId GetSourceIdForPWA(const GURL& url) {
@@ -33,20 +33,20 @@ class AppSourceUrlRecorderTest : public content::RenderViewHostTestHarness {
   TestAutoSetUkmRecorder test_ukm_recorder_;
 };
 
-TEST_F(AppSourceUrlRecorderTest, CheckPlay) {
-  SourceId id_play =
-      GetSourceIdForApp(AppType::kArc, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+TEST_F(AppSourceUrlRecorderTest, CheckArc) {
+  SourceId id = GetSourceIdForArc("com.google.play");
 
-  GURL expected_url_play("app://play/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  std::string com_google_play_hash("pjhgmeephkiehhlkfcoginnkbphkdang");
+  GURL expected_url("app://play/" + com_google_play_hash);
 
   const auto& sources = test_ukm_recorder_.GetSources();
-  EXPECT_EQ(1ul, sources.size());
+  ASSERT_EQ(1ul, sources.size());
 
-  ASSERT_NE(kInvalidSourceId, id_play);
-  auto it = sources.find(id_play);
+  ASSERT_NE(kInvalidSourceId, id);
+  auto it = sources.find(id);
   ASSERT_NE(sources.end(), it);
-  EXPECT_EQ(expected_url_play, it->second->url());
-  EXPECT_TRUE(it->second->initial_url().is_empty());
+  EXPECT_EQ(expected_url, it->second->url());
+  EXPECT_EQ(1u, it->second->urls().size());
 }
 
 TEST_F(AppSourceUrlRecorderTest, CheckPWA) {
@@ -54,13 +54,13 @@ TEST_F(AppSourceUrlRecorderTest, CheckPWA) {
   SourceId id = GetSourceIdForPWA(url);
 
   const auto& sources = test_ukm_recorder_.GetSources();
-  EXPECT_EQ(1ul, sources.size());
+  ASSERT_EQ(1ul, sources.size());
 
   ASSERT_NE(kInvalidSourceId, id);
   auto it = sources.find(id);
   ASSERT_NE(sources.end(), it);
   EXPECT_EQ(url, it->second->url());
-  EXPECT_TRUE(it->second->initial_url().is_empty());
+  EXPECT_EQ(1u, it->second->urls().size());
 }
 
 }  // namespace ukm

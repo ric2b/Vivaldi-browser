@@ -54,7 +54,7 @@
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/unified/unified_system_tray.h"
-#include "ash/touch/touch_hud_debug.h"
+#include "ash/touch/touch_observer_hud.h"
 #include "ash/utility/screenshot_controller.h"
 #include "ash/voice_interaction/voice_interaction_controller.h"
 #include "ash/wm/mru_window_tracker.h"
@@ -111,6 +111,7 @@ using message_center::SystemNotificationWarningLevel;
 const char kSecondaryUserToastId[] = "voice_interaction_secondary_user";
 const char kUnsupportedLocaleToastId[] = "voice_interaction_locale_unsupported";
 const char kPolicyDisabledToastId[] = "voice_interaction_policy_disabled";
+const char kDemoModeToastId[] = "demo_mode";
 const int kToastDurationMs = 2500;
 
 // Ensures that there are no word breaks at the "+"s in the shortcut texts such
@@ -167,7 +168,7 @@ void ShowDeprecatedAcceleratorNotification(const char* const notification_id,
       message_center::Notification::CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
           l10n_util::GetStringUTF16(IDS_DEPRECATED_SHORTCUT_TITLE), message,
-          gfx::Image(), base::string16(), GURL(),
+          base::string16(), GURL(),
           message_center::NotifierId(
               message_center::NotifierId::SYSTEM_COMPONENT,
               kNotifierAccelerator),
@@ -413,30 +414,12 @@ void HandleTakeScreenshot() {
 
 bool CanHandleToggleMessageCenterBubble() {
   if (features::IsSystemTrayUnifiedEnabled())
-    return false;
+    return true;
   aura::Window* target_root = Shell::GetRootWindowForNewWindows();
   StatusAreaWidget* status_area_widget =
       Shelf::ForWindow(target_root)->shelf_widget()->status_area_widget();
   return status_area_widget &&
          status_area_widget->notification_tray()->visible();
-}
-
-void HandleToggleMessageCenterBubble() {
-  base::RecordAction(UserMetricsAction("Accel_Toggle_Message_Center_Bubble"));
-  aura::Window* target_root = Shell::GetRootWindowForNewWindows();
-  StatusAreaWidget* status_area_widget =
-      Shelf::ForWindow(target_root)->shelf_widget()->status_area_widget();
-  if (!status_area_widget)
-    return;
-  NotificationTray* notification_tray = status_area_widget->notification_tray();
-  if (!notification_tray->visible())
-    return;
-  if (notification_tray->IsMessageCenterVisible()) {
-    notification_tray->CloseBubble();
-  } else {
-    notification_tray->ShowBubble(false /* show_by_click */);
-    notification_tray->ActivateBubble();
-  }
 }
 
 void HandleToggleSystemTrayBubble() {
@@ -461,6 +444,28 @@ void HandleToggleSystemTrayBubble() {
       tray->ShowDefaultView(BUBBLE_CREATE_NEW, false /* show_by_click */);
       tray->ActivateBubble();
     }
+  }
+}
+
+void HandleToggleMessageCenterBubble() {
+  base::RecordAction(UserMetricsAction("Accel_Toggle_Message_Center_Bubble"));
+  if (features::IsSystemTrayUnifiedEnabled()) {
+    HandleToggleSystemTrayBubble();
+    return;
+  }
+  aura::Window* target_root = Shell::GetRootWindowForNewWindows();
+  StatusAreaWidget* status_area_widget =
+      Shelf::ForWindow(target_root)->shelf_widget()->status_area_widget();
+  if (!status_area_widget)
+    return;
+  NotificationTray* notification_tray = status_area_widget->notification_tray();
+  if (!notification_tray->visible())
+    return;
+  if (notification_tray->IsMessageCenterVisible()) {
+    notification_tray->CloseBubble();
+  } else {
+    notification_tray->ShowBubble(false /* show_by_click */);
+    notification_tray->ActivateBubble();
   }
 }
 
@@ -698,9 +703,17 @@ void HandleToggleVoiceInteraction(const ui::Accelerator& accelerator) {
                 l10n_util::GetStringUTF16(
                     IDS_ASH_VOICE_INTERACTION_DISABLED_BY_POLICY_MESSAGE));
       return;
+    case mojom::AssistantAllowedState::DISALLOWED_BY_DEMO_MODE:
+      // Show a toast if voice interaction is disabled due to being in Demo
+      // Mode.
+      ShowToast(kDemoModeToastId,
+                l10n_util::GetStringUTF16(
+                    IDS_ASH_VOICE_INTERACTION_DISABLED_IN_DEMO_MODE_MESSAGE));
+      return;
     case mojom::AssistantAllowedState::DISALLOWED_BY_ARC_DISALLOWED:
     case mojom::AssistantAllowedState::DISALLOWED_BY_FLAG:
     case mojom::AssistantAllowedState::DISALLOWED_BY_SUPERVISED_USER:
+    case mojom::AssistantAllowedState::DISALLOWED_BY_CHILD_USER:
     case mojom::AssistantAllowedState::DISALLOWED_BY_INCOGNITO:
       // TODO(xiaohuic): show a specific toast.
       return;
@@ -808,7 +821,7 @@ void CreateAndShowStickyNotification(const int title_id,
       Notification::CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
           l10n_util::GetStringUTF16(title_id),
-          l10n_util::GetStringUTF16(message_id), gfx::Image(),
+          l10n_util::GetStringUTF16(message_id),
           base::string16() /* display source */, GURL(),
           message_center::NotifierId(
               message_center::NotifierId::SYSTEM_COMPONENT,
@@ -1013,31 +1026,17 @@ void HandleActiveMagnifierZoom(int delta_index) {
 }
 
 bool CanHandleTouchHud() {
-  // TODO(crbug.com/612331): Mash support.
-  if (Shell::GetAshConfig() == Config::MASH_DEPRECATED)
-    return false;
-
-  return RootWindowController::ForTargetRootWindow()->touch_hud_debug();
+  return RootWindowController::ForTargetRootWindow()->touch_observer_hud();
 }
 
 void HandleTouchHudClear() {
-  // TODO(crbug.com/612331): Mash support.
-  if (Shell::GetAshConfig() == Config::MASH_DEPRECATED) {
-    NOTIMPLEMENTED();
-    return;
-  }
-  RootWindowController::ForTargetRootWindow()->touch_hud_debug()->Clear();
+  RootWindowController::ForTargetRootWindow()->touch_observer_hud()->Clear();
 }
 
 void HandleTouchHudModeChange() {
-  // TODO(crbug.com/612331): Mash support.
-  if (Shell::GetAshConfig() == Config::MASH_DEPRECATED) {
-    NOTIMPLEMENTED();
-    return;
-  }
-  RootWindowController* controller =
-      RootWindowController::ForTargetRootWindow();
-  controller->touch_hud_debug()->ChangeToNextMode();
+  RootWindowController::ForTargetRootWindow()
+      ->touch_observer_hud()
+      ->ChangeToNextMode();
 }
 
 }  // namespace
@@ -1319,7 +1318,7 @@ bool AcceleratorController::CanPerformAction(
     case SCALE_UI_DOWN:
     case SCALE_UI_RESET:
     case SCALE_UI_UP:
-      return accelerators::IsInternalDisplayZoomEnabled();
+      return true;
     case SHOW_STYLUS_TOOLS:
       return CanHandleShowStylusTools();
     case START_VOICE_INTERACTION:

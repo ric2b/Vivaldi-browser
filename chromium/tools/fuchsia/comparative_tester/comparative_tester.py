@@ -23,7 +23,20 @@ import test_results
 
 
 def RunCommand(command: List[str], msg: str) -> str:
-  "One-shot start and complete command with useful default kwargs"
+  """Runs a command and returns the standard output.
+
+  Args:
+    command (List[str]): The list of command chunks to use in subprocess.run.
+        ex: ['git', 'grep', 'cat'] to find all instances of cat in a repo.
+    msg (str): An error message in case the subprocess fails for some reason.
+
+  Raises:
+    subprocess.SubprocessError: Raises this with the command that failed in the
+        event that the return code of the process is non-zero.
+
+  Returns:
+    str: the standard output of the subprocess.
+  """
   command = [piece for piece in command if piece != ""]
   proc = subprocess.run(
       command,
@@ -41,9 +54,23 @@ def RunCommand(command: List[str], msg: str) -> str:
 
 
 # TODO(crbug.com/848465): replace with --test-launcher-filter-file directly
-def ParseFilterFile(filepath: str) -> str:
-  positive_filters = []
-  negative_filters = []
+def ParseFilterFile(filepath: str,
+                    p_filts: List[str],
+                    n_filts: List[str]) -> str:
+  """Takes a path to a filter file, parses it, and constructs a gtest_filter
+  string for test execution.
+
+  Args:
+    filepath (str): The path to the filter file to be parsed into a
+        --gtest_filter flag.
+    p_filts (List[str]): An initial set of positive filters passed in a flag.
+    n_filts (List[str]): An initial set of negative filters passed in a flag.
+
+  Returns:
+    str: The properly-joined together gtest_filter flag.
+  """
+  positive_filters = p_filts
+  negative_filters = n_filts
   with open(filepath, "r") as file:
     for line in file:
       # Only take the part of a line before a # sign
@@ -65,7 +92,7 @@ class TestTarget(object):
   Linux and Fuchsia.
   """
 
-  def __init__(self, target: str) -> None:
+  def __init__(self, target: str, p_filts: List[str], n_filts: List[str]):
     self._target = target
     self._name = target.split(":")[-1]
     self._filter_file = "testing/buildbot/filters/fuchsia.{}.filter".format(
@@ -74,17 +101,39 @@ class TestTarget(object):
       self._filter_flag = ""
       self._filter_file = ""
     else:
-      self._filter_flag = ParseFilterFile(self._filter_file)
+      self._filter_flag = ParseFilterFile(self._filter_file, p_filts, n_filts)
 
   def ExecFuchsia(self, out_dir: str, run_locally: bool) -> str:
+    """Execute this test target's test on Fuchsia, either with QEMU or on actual
+    hardware.
+
+    Args:
+      out_dir (str): The Fuchsia output directory.
+      run_locally (bool): Whether to use QEMU(true) or a physical device(false)
+
+    Returns:
+      str: The standard output of the test process.
+    """
+
     runner_name = "{}/bin/run_{}".format(out_dir, self._name)
     command = [runner_name, self._filter_flag, "--exclude-system-logs"]
     if not run_locally:
       command.append("-d")
     return RunCommand(command,
-                      "Test {} failed on fuchsia!".format(self._target))
+                      "Test {} failed on Fuchsia!".format(self._target))
 
   def ExecLinux(self, out_dir: str, run_locally: bool) -> str:
+    """Execute this test target's test on Linux, either with QEMU or on actual
+    hardware.
+
+    Args:
+      out_dir (str): The Linux output directory.
+      run_locally (bool): Whether to use the host machine(true) or a physical
+          device(false)
+
+    Returns:
+      str: The standard output of the test process.
+    """
     command = []  # type: List[str]
     user = target_spec.linux_device_user
     ip = target_spec.linux_device_ip
@@ -102,6 +151,14 @@ class TestTarget(object):
     return RunCommand(command, "Test {} failed on linux!".format(self._target))
 
   def TransferDependencies(self, out_dir: str, host: str):
+    """Transfer the dependencies of this target to the machine to execute the
+    test.
+
+    Args:
+      out_dir (str): The output directory to find the dependencies in.
+      host (str): The IP address of the host to receive the dependencies.
+    """
+
     gn_desc = ["gn", "desc", out_dir, self._target, "runtime_deps"]
     out = RunCommand(
         gn_desc, "Failed to get dependencies of target {}".format(self._target))
@@ -152,6 +209,17 @@ class TestTarget(object):
 
 
 def RunTest(target: TestTarget, run_locally: bool = False) -> None:
+  """Run the given TestTarget on both Linux and Fuchsia
+
+  Args:
+    target (TestTarget): The TestTarget to run.
+    run_locally (bool, optional): Defaults to False. Whether the test should be
+        run on the host machine, or sent to remote devices for execution.
+
+  Returns:
+    None: Technically an IO (), as it writes to the results files
+  """
+
   linux_out = target.ExecLinux(target_spec.linux_out_dir, run_locally)
   linux_result = test_results.TargetResultFromStdout(linux_out.splitlines(),
                                                      target._name)
@@ -168,6 +236,19 @@ def RunTest(target: TestTarget, run_locally: bool = False) -> None:
 
 
 def RunGnForDirectory(dir_name: str, target_os: str, is_debug: bool) -> None:
+  """Create the output directory for test builds for an operating system.
+
+  Args:
+    dir_name (str): The name to use for the output directory. This will be
+        created if it does not exist.
+    target_os (str): The operating system to initialize this directory for.
+    is_debug (bool): Whether or not this is a debug build of the tests in
+        question.
+
+  Returns:
+    None: It has a side effect of replacing args.gn
+  """
+
   if not os.path.exists(dir_name):
     os.makedirs(dir_name)
 
@@ -184,19 +265,37 @@ def RunGnForDirectory(dir_name: str, target_os: str, is_debug: bool) -> None:
 
 
 def GenerateTestData(do_config: bool, do_build: bool, num_reps: int,
-                     is_debug: bool):
+                     is_debug: bool, filter_flag: str):
+  """Initializes directories, builds test targets, and repeatedly executes them
+  on both operating systems
+
+  Args:
+    do_config (bool): Whether or not to run GN for the output directories
+    do_build (bool): Whether or not to run ninja for the test targets.
+    num_reps (int): How many times to run each test on a given device.
+    is_debug (bool): Whether or not this should be a debug build of the tests.
+    filter_flag (str): The --gtest_filter flag, to be parsed as such.
+  """
+  # Find and make the necessary directories
   DIR_SOURCE_ROOT = os.path.abspath(
       os.path.join(os.path.dirname(__file__), *([os.pardir] * 3)))
   os.chdir(DIR_SOURCE_ROOT)
   os.makedirs(target_spec.results_dir, exist_ok=True)
   os.makedirs(target_spec.raw_linux_dir, exist_ok=True)
   os.makedirs(target_spec.raw_fuchsia_dir, exist_ok=True)
+
   # Grab parameters from config file.
   linux_dir = target_spec.linux_out_dir
   fuchsia_dir = target_spec.fuchsia_out_dir
+
+  # Parse filters passed in by flag
+  pos_filter_chunk, neg_filter_chunk = filter_flag.split("-", 1)
+  pos_filters = pos_filter_chunk.split(":")
+  neg_filters = neg_filter_chunk.split(":")
+
   test_input = []  # type: List[TestTarget]
   for target in target_spec.test_targets:
-    test_input.append(TestTarget(target))
+    test_input.append(TestTarget(target, pos_filters, neg_filters))
   print("Test targets collected:\n{}".format(",".join(
       [test._target for test in test_input])))
   if do_config:
@@ -248,9 +347,15 @@ def main() -> int:
       type=int,
       default=1,
       help="The number of times to execute each test target.")
+  cmd_flags.add_argument(
+      "--gtest_filter",
+      type=str,
+      default="",
+  )
   cmd_flags.parse_args()
   GenerateTestData(cmd_flags.do_config, cmd_flags.do_build,
-                   cmd_flags.num_repetitions, cmd_flags.is_debug)
+                   cmd_flags.num_repetitions, cmd_flags.is_debug,
+                   cmd_flags.gtest_filter)
   return 0
 
 

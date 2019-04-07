@@ -51,6 +51,8 @@ const char* MainThreadTaskQueue::NameForQueueType(
       return "input_tq";
     case MainThreadTaskQueue::QueueType::kDetached:
       return "detached_tq";
+    case MainThreadTaskQueue::QueueType::kCleanup:
+      return "cleanup_tq";
     case MainThreadTaskQueue::QueueType::kOther:
       return "other_tq";
     case MainThreadTaskQueue::QueueType::kCount:
@@ -70,6 +72,7 @@ MainThreadTaskQueue::QueueClass MainThreadTaskQueue::QueueClassForQueueType(
     case QueueType::kTest:
     case QueueType::kV8:
     case QueueType::kIPC:
+    case QueueType::kCleanup:
       return QueueClass::kNone;
     case QueueType::kFrameLoading:
     case QueueType::kFrameLoadingControl:
@@ -176,6 +179,16 @@ void MainThreadTaskQueue::DetachFromFrameScheduler() {
 void MainThreadTaskQueue::SetFrameSchedulerForTest(
     FrameSchedulerImpl* frame_scheduler) {
   frame_scheduler_ = frame_scheduler;
+}
+
+void MainThreadTaskQueue::SetNetRequestPriority(
+    net::RequestPriority net_request_priority) {
+  net_request_priority_ = net_request_priority;
+}
+
+base::Optional<net::RequestPriority> MainThreadTaskQueue::net_request_priority()
+    const {
+  return net_request_priority_;
 }
 
 }  // namespace scheduler

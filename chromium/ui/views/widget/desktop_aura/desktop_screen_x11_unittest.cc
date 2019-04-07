@@ -9,7 +9,7 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -315,7 +315,7 @@ TEST_F(DesktopScreenX11Test, DoubleClickHeaderMaximizes) {
 
   aura::Window* window = widget->GetNativeWindow();
   window->SetProperty(aura::client::kResizeBehaviorKey,
-                      ui::mojom::kResizeBehaviorCanMaximize);
+                      ws::mojom::kResizeBehaviorCanMaximize);
 
   // Cast to superclass as DesktopWindowTreeHostX11 hide IsMaximized
   DesktopWindowTreeHost* rwh =
@@ -341,7 +341,7 @@ TEST_F(DesktopScreenX11Test, DoubleClickTwoDifferentTargetsDoesntMaximizes) {
 
   aura::Window* window = widget->GetNativeWindow();
   window->SetProperty(aura::client::kResizeBehaviorKey,
-                      ui::mojom::kResizeBehaviorCanMaximize);
+                      ws::mojom::kResizeBehaviorCanMaximize);
 
   // Cast to superclass as DesktopWindowTreeHostX11 hide IsMaximized
   DesktopWindowTreeHost* rwh =
@@ -371,7 +371,7 @@ TEST_F(DesktopScreenX11Test, RightClickDuringDoubleClickDoesntMaximize) {
 
   aura::Window* window = widget->GetNativeWindow();
   window->SetProperty(aura::client::kResizeBehaviorKey,
-                      ui::mojom::kResizeBehaviorCanMaximize);
+                      ws::mojom::kResizeBehaviorCanMaximize);
 
   // Cast to superclass as DesktopWindowTreeHostX11 hide IsMaximized
   DesktopWindowTreeHost* rwh = static_cast<DesktopWindowTreeHost*>(

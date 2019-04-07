@@ -9,12 +9,15 @@
 
 #include "base/message_loop/message_loop.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
+#include "build/build_config.h"
+#include "components/autofill/core/common/autofill_prefs.h"
+#include "components/contextual_search/core/browser/contextual_search_preference.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/driver/fake_sync_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/unified_consent/pref_names.h"
 #include "components/unified_consent/scoped_unified_consent.h"
+#include "components/unified_consent/unified_consent_metrics.h"
 #include "components/unified_consent/unified_consent_service_client.h"
 #include "services/identity/public/cpp/identity_test_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -28,8 +31,8 @@ class TestSyncService : public syncer::FakeSyncService {
       : pref_service_(pref_service) {}
 
   int GetDisableReasons() const override { return DISABLE_REASON_NONE; }
+  TransportState GetTransportState() const override { return state_; }
   bool IsFirstSetupComplete() const override { return true; }
-  bool IsEngineInitialized() const override { return engine_initialized_; }
   void AddObserver(syncer::SyncServiceObserver* observer) override {
     observer_ = observer;
   }
@@ -47,15 +50,11 @@ class TestSyncService : public syncer::FakeSyncService {
   bool IsUsingSecondaryPassphrase() const override {
     return is_using_passphrase_;
   }
-  SyncService::State GetState() const override { return state_; }
 
-  void SetEngineInitialized(bool engine_initialized) {
-    engine_initialized_ = engine_initialized;
-  }
+  void SetTransportState(TransportState state) { state_ = state; }
   void SetIsUsingPassphrase(bool using_passphrase) {
     is_using_passphrase_ = using_passphrase;
   }
-  void SetState(SyncService::State state) { state_ = state; }
 
   void FireStateChanged() {
     if (observer_)
@@ -64,9 +63,8 @@ class TestSyncService : public syncer::FakeSyncService {
 
  private:
   syncer::SyncServiceObserver* observer_ = nullptr;
-  bool engine_initialized_ = true;
+  TransportState state_ = TransportState::ACTIVE;
   syncer::ModelTypeSet chosen_types_ = syncer::UserSelectableTypes();
-  SyncService::State state_ = SyncService::State::ACTIVE;
   bool is_using_passphrase_ = false;
   PrefService* pref_service_;
 };
@@ -136,6 +134,10 @@ class UnifiedConsentServiceTest : public testing::Test {
     syncer::SyncPrefs::RegisterProfilePrefs(pref_service_.registry());
     pref_service_.registry()->RegisterBooleanPref(kSpellCheckDummyEnabled,
                                                   false);
+#if defined(OS_ANDROID)
+    pref_service_.registry()->RegisterStringPref(
+        contextual_search::GetPrefName(), "");
+#endif  // defined(OS_ANDROID)
   }
 
   void TearDown() override {
@@ -164,6 +166,10 @@ class UnifiedConsentServiceTest : public testing::Test {
         identity_test_environment_.identity_manager(), &sync_service_);
     service_client_ = (FakeUnifiedConsentServiceClient*)
                           consent_service_->service_client_.get();
+
+    sync_service_.FireStateChanged();
+    // Run until idle so the migration can finish.
+    base::RunLoop().RunUntilIdle();
   }
 
   void SetUnifiedConsentFeatureState(
@@ -220,6 +226,9 @@ TEST_F(UnifiedConsentServiceTest, EnableUnfiedConsent) {
   pref_service_.SetBoolean(prefs::kUnifiedConsentGiven, true);
   EXPECT_TRUE(pref_service_.GetBoolean(prefs::kUnifiedConsentGiven));
   EXPECT_TRUE(AreAllNonPersonalizedServicesEnabled());
+#if defined(OS_ANDROID)
+  EXPECT_TRUE(contextual_search::IsEnabled(pref_service_));
+#endif  // defined(OS_ANDROID)
 
   // Disable unified consent does not disable any of the non-personalized
   // features.
@@ -262,10 +271,11 @@ TEST_F(UnifiedConsentServiceTest, EnableUnfiedConsent_SyncNotActive) {
   EXPECT_FALSE(consent_service_->IsUnifiedConsentGiven());
 
   // Make sure sync is not active.
-  sync_service_.SetEngineInitialized(false);
+  sync_service_.SetTransportState(
+      syncer::SyncService::TransportState::INITIALIZING);
   EXPECT_FALSE(sync_service_.IsEngineInitialized());
-  sync_service_.SetState(syncer::SyncService::State::INITIALIZING);
-  EXPECT_NE(sync_service_.GetState(), syncer::SyncService::State::ACTIVE);
+  EXPECT_NE(sync_service_.GetTransportState(),
+            syncer::SyncService::TransportState::ACTIVE);
 
   // Opt into unified consent.
   consent_service_->SetUnifiedConsentGiven(true);
@@ -275,16 +285,17 @@ TEST_F(UnifiedConsentServiceTest, EnableUnfiedConsent_SyncNotActive) {
   EXPECT_FALSE(sync_prefs.HasKeepEverythingSynced());
 
   // Initalize sync engine and therefore activate sync.
-  sync_service_.SetEngineInitialized(true);
-  sync_service_.SetState(syncer::SyncService::State::ACTIVE);
-  EXPECT_EQ(sync_service_.GetState(), syncer::SyncService::State::ACTIVE);
+  sync_service_.SetTransportState(syncer::SyncService::TransportState::ACTIVE);
   sync_service_.FireStateChanged();
+  base::RunLoop().RunUntilIdle();
 
   // UnifiedConsentService starts syncing everything.
   EXPECT_TRUE(sync_prefs.HasKeepEverythingSynced());
 }
 
 TEST_F(UnifiedConsentServiceTest, EnableUnfiedConsent_WithCustomPassphrase) {
+  base::HistogramTester histogram_tester;
+
   CreateConsentService();
   identity_test_environment_.SetPrimaryAccount("testaccount");
   EXPECT_FALSE(consent_service_->IsUnifiedConsentGiven());
@@ -301,11 +312,16 @@ TEST_F(UnifiedConsentServiceTest, EnableUnfiedConsent_WithCustomPassphrase) {
 
   // Setting a custom passphrase forces off unified consent given.
   EXPECT_FALSE(consent_service_->IsUnifiedConsentGiven());
+  histogram_tester.ExpectUniqueSample(
+      "UnifiedConsent.RevokeReason",
+      metrics::UnifiedConsentRevokeReason::kCustomPassphrase, 1);
 }
 
 // Test whether unified consent is disabled when any of its dependent services
 // gets disabled.
 TEST_F(UnifiedConsentServiceTest, DisableUnfiedConsentWhenServiceIsDisabled) {
+  base::HistogramTester histogram_tester;
+
   CreateConsentService();
   identity_test_environment_.SetPrimaryAccount("testaccount");
   EXPECT_FALSE(pref_service_.GetBoolean(prefs::kUnifiedConsentGiven));
@@ -322,6 +338,9 @@ TEST_F(UnifiedConsentServiceTest, DisableUnfiedConsentWhenServiceIsDisabled) {
   pref_service_.SetBoolean(kSpellCheckDummyEnabled, false);
   EXPECT_FALSE(AreAllNonPersonalizedServicesEnabled());
   EXPECT_FALSE(pref_service_.GetBoolean(prefs::kUnifiedConsentGiven));
+  histogram_tester.ExpectUniqueSample(
+      "UnifiedConsent.RevokeReason",
+      metrics::UnifiedConsentRevokeReason::kServiceWasDisabled, 1);
 }
 
 // Test whether unified consent is disabled when any of its dependent services
@@ -364,11 +383,11 @@ TEST_F(UnifiedConsentServiceTest, Migration_SyncingEverythingAndAllServicesOn) {
   syncer::SyncPrefs sync_prefs(&pref_service_);
   EXPECT_TRUE(sync_prefs.HasKeepEverythingSynced());
   EXPECT_FALSE(pref_service_.GetBoolean(prefs::kUnifiedConsentGiven));
-  sync_service_.SetState(
-      syncer::SyncService::State::PENDING_DESIRED_CONFIGURATION);
+  sync_service_.SetTransportState(
+      syncer::SyncService::TransportState::PENDING_DESIRED_CONFIGURATION);
   EXPECT_FALSE(sync_service_.IsSyncActive());
 
-  CreateConsentService(true /* client services on by default */);
+  CreateConsentService(true /* client_services_on_by_default */);
   EXPECT_TRUE(AreAllNonPersonalizedServicesEnabled());
   // After the creation of the consent service, the profile started to migrate
   // (but waiting for sync init) and |ShouldShowConsentBump| should return true.
@@ -380,8 +399,10 @@ TEST_F(UnifiedConsentServiceTest, Migration_SyncingEverythingAndAllServicesOn) {
   EXPECT_TRUE(sync_prefs.HasKeepEverythingSynced());
 
   // When sync is active, the migration should continue and finish.
-  sync_service_.SetState(syncer::SyncService::State::ACTIVE);
+  sync_service_.SetTransportState(syncer::SyncService::TransportState::ACTIVE);
   sync_service_.FireStateChanged();
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_FALSE(sync_prefs.HasKeepEverythingSynced());
 
   // No metric for the consent bump suppress reason should have been recorded at
@@ -472,6 +493,8 @@ TEST_F(UnifiedConsentServiceTest, Migration_UpdateSettings) {
 
 #if !defined(OS_CHROMEOS)
 TEST_F(UnifiedConsentServiceTest, ClearPrimaryAccountDisablesSomeServices) {
+  base::HistogramTester histogram_tester;
+
   CreateConsentService();
   identity_test_environment_.SetPrimaryAccount("testaccount");
 
@@ -483,6 +506,9 @@ TEST_F(UnifiedConsentServiceTest, ClearPrimaryAccountDisablesSomeServices) {
   // non-personalized services.
   identity_test_environment_.ClearPrimaryAccount();
   EXPECT_FALSE(pref_service_.GetBoolean(prefs::kUnifiedConsentGiven));
+  histogram_tester.ExpectUniqueSample(
+      "UnifiedConsent.RevokeReason",
+      metrics::UnifiedConsentRevokeReason::kUserSignedOut, 1);
   EXPECT_FALSE(AreAllNonPersonalizedServicesEnabled());
   EXPECT_FALSE(pref_service_.GetBoolean(
       prefs::kUrlKeyedAnonymizedDataCollectionEnabled));
@@ -491,6 +517,9 @@ TEST_F(UnifiedConsentServiceTest, ClearPrimaryAccountDisablesSomeServices) {
   EXPECT_EQ(
       service_client_->GetServiceState(Service::kSafeBrowsingExtendedReporting),
       ServiceState::kDisabled);
+#if defined(OS_ANDROID)
+  EXPECT_FALSE(contextual_search::IsEnabled(pref_service_));
+#endif  // defined(OS_ANDROID)
 
   // Consent is not revoked for the following services.
   EXPECT_EQ(service_client_->GetServiceState(Service::kAlternateErrorPages),
@@ -528,12 +557,13 @@ TEST_F(UnifiedConsentServiceTest, Rollback_WasSyncingEverything) {
   EXPECT_TRUE(sync_prefs.HasKeepEverythingSynced());
 
   // Migrate
-  CreateConsentService(true /* client services on by default */);
+  CreateConsentService();
   // Check expectations after migration.
   EXPECT_FALSE(sync_prefs.HasKeepEverythingSynced());
   EXPECT_FALSE(pref_service_.GetBoolean(prefs::kUnifiedConsentGiven));
   EXPECT_EQ(unified_consent::MigrationState::kCompleted, GetMigrationState());
-  EXPECT_TRUE(consent_service_->ShouldShowConsentBump());
+  EXPECT_TRUE(
+      pref_service_.GetBoolean(prefs::kHadEverythingSyncedBeforeMigration));
 
   consent_service_->Shutdown();
   consent_service_.reset();
@@ -541,10 +571,14 @@ TEST_F(UnifiedConsentServiceTest, Rollback_WasSyncingEverything) {
 
   // Rollback
   UnifiedConsentService::RollbackIfNeeded(&pref_service_, &sync_service_);
+  base::RunLoop().RunUntilIdle();
+
   // Unified consent prefs should be cleared.
   EXPECT_FALSE(pref_service_.GetBoolean(prefs::kUnifiedConsentGiven));
   EXPECT_EQ(unified_consent::MigrationState::kNotInitialized,
             GetMigrationState());
+  EXPECT_FALSE(
+      pref_service_.GetBoolean(prefs::kHadEverythingSyncedBeforeMigration));
   // Sync everything should be back on.
   EXPECT_TRUE(sync_prefs.HasKeepEverythingSynced());
 
@@ -568,6 +602,8 @@ TEST_F(UnifiedConsentServiceTest, Rollback_WasNotSyncingEverything) {
   EXPECT_FALSE(sync_prefs.HasKeepEverythingSynced());
   EXPECT_FALSE(pref_service_.GetBoolean(prefs::kUnifiedConsentGiven));
   EXPECT_EQ(unified_consent::MigrationState::kCompleted, GetMigrationState());
+  EXPECT_FALSE(
+      pref_service_.GetBoolean(prefs::kHadEverythingSyncedBeforeMigration));
 
   consent_service_->Shutdown();
   consent_service_.reset();
@@ -640,6 +676,111 @@ TEST_F(UnifiedConsentServiceTest, SettingsHistogram_NoUnifiedConsentGiven) {
   histogram_tester.ExpectUniqueSample(
       "UnifiedConsent.SyncAndGoogleServicesSettings",
       SettingsHistogramValue::kSpellCheck, 1);
+}
+
+TEST_F(UnifiedConsentServiceTest, ConsentBump_EligibleOnSecondStartup) {
+  base::HistogramTester histogram_tester;
+
+  identity_test_environment_.SetPrimaryAccount("testaccount");
+  sync_service_.OnUserChoseDatatypes(true, syncer::UserSelectableTypes());
+  syncer::SyncPrefs sync_prefs(&pref_service_);
+  EXPECT_TRUE(sync_prefs.HasKeepEverythingSynced());
+
+  // First time creation of the service migrates the profile and initializes the
+  // consent bump pref.
+  CreateConsentService(true /* client_services_on_by_default */);
+  EXPECT_TRUE(AreAllNonPersonalizedServicesEnabled());
+  EXPECT_TRUE(consent_service_->ShouldShowConsentBump());
+  histogram_tester.ExpectTotalCount("UnifiedConsent.ConsentBump.SuppressReason",
+                                    0);
+  histogram_tester.ExpectUniqueSample(
+      "UnifiedConsent.ConsentBump.EligibleAtStartup", true, 1);
+
+  // Simulate shutdown.
+  consent_service_->Shutdown();
+  consent_service_.reset();
+
+  // After the second startup, the user should still be eligible.
+  CreateConsentService(true /* client_services_on_by_default */);
+  EXPECT_TRUE(AreAllNonPersonalizedServicesEnabled());
+  EXPECT_TRUE(consent_service_->ShouldShowConsentBump());
+  histogram_tester.ExpectTotalCount("UnifiedConsent.ConsentBump.SuppressReason",
+                                    0);
+  histogram_tester.ExpectUniqueSample(
+      "UnifiedConsent.ConsentBump.EligibleAtStartup", true, 2);
+}
+
+TEST_F(UnifiedConsentServiceTest,
+       ConsentBump_NotEligibleOnSecondStartup_DisabledSyncDatatype) {
+  base::HistogramTester histogram_tester;
+
+  identity_test_environment_.SetPrimaryAccount("testaccount");
+  sync_service_.OnUserChoseDatatypes(true, syncer::UserSelectableTypes());
+  syncer::SyncPrefs sync_prefs(&pref_service_);
+  EXPECT_TRUE(sync_prefs.HasKeepEverythingSynced());
+
+  // First time creation of the service migrates the profile and initializes the
+  // consent bump pref.
+  CreateConsentService(true /* client_services_on_by_default */);
+  EXPECT_TRUE(AreAllNonPersonalizedServicesEnabled());
+  EXPECT_TRUE(consent_service_->ShouldShowConsentBump());
+  histogram_tester.ExpectTotalCount("UnifiedConsent.ConsentBump.SuppressReason",
+                                    0);
+  histogram_tester.ExpectUniqueSample(
+      "UnifiedConsent.ConsentBump.EligibleAtStartup", true, 1);
+
+  // Simulate shutdown.
+  consent_service_->Shutdown();
+  consent_service_.reset();
+
+  // User disables BOOKMARKS.
+  auto data_types = sync_service_.GetPreferredDataTypes();
+  data_types.RetainAll(syncer::UserSelectableTypes());
+  data_types.Remove(syncer::BOOKMARKS);
+  sync_service_.OnUserChoseDatatypes(false, data_types);
+
+  // After the second startup, the user should not be eligible anymore.
+  CreateConsentService(true /* client_services_on_by_default */);
+  EXPECT_FALSE(consent_service_->ShouldShowConsentBump());
+  histogram_tester.ExpectBucketCount(
+      "UnifiedConsent.ConsentBump.SuppressReason",
+      unified_consent::ConsentBumpSuppressReason::kUserTurnedSyncDatatypeOff,
+      1);
+  histogram_tester.ExpectBucketCount(
+      "UnifiedConsent.ConsentBump.EligibleAtStartup", true, 1);
+  histogram_tester.ExpectBucketCount(
+      "UnifiedConsent.ConsentBump.EligibleAtStartup", false, 1);
+}
+
+TEST_F(UnifiedConsentServiceTest,
+       ConsentBump_NotEligibleOnSecondStartup_DisabledPrivacySetting) {
+  base::HistogramTester histogram_tester;
+
+  identity_test_environment_.SetPrimaryAccount("testaccount");
+  sync_service_.OnUserChoseDatatypes(true, syncer::UserSelectableTypes());
+  syncer::SyncPrefs sync_prefs(&pref_service_);
+  EXPECT_TRUE(sync_prefs.HasKeepEverythingSynced());
+
+  // First time creation of the service migrates the profile and initializes the
+  // consent bump pref.
+  CreateConsentService(true /* client_services_on_by_default */);
+  EXPECT_TRUE(AreAllNonPersonalizedServicesEnabled());
+  EXPECT_TRUE(consent_service_->ShouldShowConsentBump());
+  histogram_tester.ExpectTotalCount("UnifiedConsent.ConsentBump.SuppressReason",
+                                    0);
+
+  // Simulate shutdown.
+  consent_service_->Shutdown();
+  consent_service_.reset();
+
+  // Privacy settings are disabled. After the second startup, the user should
+  // not be eligible anymore.
+  CreateConsentService(false /* client_services_on_by_default */);
+  EXPECT_FALSE(consent_service_->ShouldShowConsentBump());
+  histogram_tester.ExpectBucketCount(
+      "UnifiedConsent.ConsentBump.SuppressReason",
+      unified_consent::ConsentBumpSuppressReason::kUserTurnedPrivacySettingOff,
+      1);
 }
 
 }  // namespace unified_consent

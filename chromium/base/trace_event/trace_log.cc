@@ -28,7 +28,7 @@
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_id_name_manager.h"
@@ -325,9 +325,13 @@ void TraceLog::ThreadLocalEventBuffer::FlushWhileLocked() {
 }
 
 void TraceLog::SetAddTraceEventOverride(
-    const AddTraceEventOverrideCallback& override) {
+    const AddTraceEventOverrideCallback& override,
+    const OnFlushCallback& on_flush_callback) {
   subtle::NoBarrier_Store(&trace_event_override_,
                           reinterpret_cast<subtle::AtomicWord>(override));
+  subtle::NoBarrier_Store(
+      &on_flush_callback_,
+      reinterpret_cast<subtle::AtomicWord>(on_flush_callback));
 }
 
 struct TraceLog::RegisteredAsyncObserver {
@@ -371,6 +375,7 @@ TraceLog::TraceLog()
       generation_(0),
       use_worker_thread_(false),
       trace_event_override_(0),
+      on_flush_callback_(0),
       filter_factory_for_testing_(nullptr) {
   CategoryRegistry::Initialize();
 
@@ -620,7 +625,11 @@ void TraceLog::SetEnabled(const TraceConfig& trace_config,
     if (!(modes_to_enable & RECORDING_MODE) || already_recording)
       return;
 
-    if (new_options != old_options) {
+    // Discard events if new trace options are different. Reducing trace buffer
+    // size is not supported while already recording, so only replace trace
+    // buffer if we were not already recording.
+    if (new_options != old_options ||
+        (trace_config_.GetTraceBufferSizeInEvents() && !already_recording)) {
       subtle::NoBarrier_Store(&trace_options_, new_options);
       UseNextTraceBuffer();
     }
@@ -765,6 +774,13 @@ void TraceLog::RemoveEnabledStateObserver(EnabledStateObserver* listener) {
                 enabled_state_observer_list_.end(), listener);
   if (it != enabled_state_observer_list_.end())
     enabled_state_observer_list_.erase(it);
+}
+
+void TraceLog::AddOwnedEnabledStateObserver(
+    std::unique_ptr<EnabledStateObserver> listener) {
+  AutoLock lock(lock_);
+  enabled_state_observer_list_.push_back(listener.get());
+  owned_enabled_state_observer_copy_.push_back(std::move(listener));
 }
 
 bool TraceLog::HasEnabledStateObserver(EnabledStateObserver* listener) const {
@@ -965,7 +981,7 @@ void TraceLog::FinishFlush(int generation, bool discard_events) {
   if (use_worker_thread_) {
     base::PostTaskWithTraits(
         FROM_HERE,
-        {MayBlock(), TaskPriority::BACKGROUND,
+        {MayBlock(), TaskPriority::BEST_EFFORT,
          TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
         BindOnce(&TraceLog::ConvertTraceEventsToTraceFormat,
                  std::move(previous_logged_events), flush_output_callback,
@@ -990,6 +1006,12 @@ void TraceLog::FlushCurrentThread(int generation, bool discard_events) {
 
   // This will flush the thread local buffer.
   delete thread_local_event_buffer_.Get();
+
+  auto on_flush_callback = reinterpret_cast<OnFlushCallback>(
+      subtle::NoBarrier_Load(&on_flush_callback_));
+  if (on_flush_callback) {
+    on_flush_callback();
+  }
 
   // Scheduler uses TRACE_EVENT macros when posting a task, which can lead
   // to acquiring a tracing lock. Given that posting a task requires grabbing
@@ -1523,65 +1545,86 @@ uint64_t TraceLog::MangleEventId(uint64_t id) {
   return id ^ process_id_hash_;
 }
 
+template <typename T>
+void TraceLog::AddMetadataEventWhileLocked(int thread_id,
+                                           const char* metadata_name,
+                                           const char* arg_name,
+                                           const T& value) {
+  auto trace_event_override = reinterpret_cast<AddTraceEventOverrideCallback>(
+      subtle::NoBarrier_Load(&trace_event_override_));
+  if (trace_event_override) {
+    TraceEvent trace_event;
+    InitializeMetadataEvent(&trace_event, thread_id, metadata_name, arg_name,
+                            value);
+    trace_event_override(trace_event);
+  } else {
+    InitializeMetadataEvent(
+        AddEventToThreadSharedChunkWhileLocked(nullptr, false), thread_id,
+        metadata_name, arg_name, value);
+  }
+}
+
 void TraceLog::AddMetadataEventsWhileLocked() {
   lock_.AssertAcquired();
 
+  auto trace_event_override = reinterpret_cast<AddTraceEventOverrideCallback>(
+      subtle::NoBarrier_Load(&trace_event_override_));
+
   // Move metadata added by |AddMetadataEvent| into the trace log.
-  while (!metadata_events_.empty()) {
-    TraceEvent* event = AddEventToThreadSharedChunkWhileLocked(nullptr, false);
-    event->MoveFrom(std::move(metadata_events_.back()));
-    metadata_events_.pop_back();
+  if (trace_event_override) {
+    while (!metadata_events_.empty()) {
+      trace_event_override(*metadata_events_.back());
+      metadata_events_.pop_back();
+    }
+  } else {
+    while (!metadata_events_.empty()) {
+      TraceEvent* event =
+          AddEventToThreadSharedChunkWhileLocked(nullptr, false);
+      event->MoveFrom(std::move(metadata_events_.back()));
+      metadata_events_.pop_back();
+    }
   }
 
 #if !defined(OS_NACL)  // NaCl shouldn't expose the process id.
-  InitializeMetadataEvent(
-      AddEventToThreadSharedChunkWhileLocked(nullptr, false), 0, "num_cpus",
-      "number", base::SysInfo::NumberOfProcessors());
+  AddMetadataEventWhileLocked(0, "num_cpus", "number",
+                              base::SysInfo::NumberOfProcessors());
 #endif
 
   int current_thread_id = static_cast<int>(base::PlatformThread::CurrentId());
   if (process_sort_index_ != 0) {
-    InitializeMetadataEvent(
-        AddEventToThreadSharedChunkWhileLocked(nullptr, false),
-        current_thread_id, "process_sort_index", "sort_index",
-        process_sort_index_);
+    AddMetadataEventWhileLocked(current_thread_id, "process_sort_index",
+                                "sort_index", process_sort_index_);
   }
 
   if (!process_name_.empty()) {
-    InitializeMetadataEvent(
-        AddEventToThreadSharedChunkWhileLocked(nullptr, false),
-        current_thread_id, "process_name", "name", process_name_);
+    AddMetadataEventWhileLocked(current_thread_id, "process_name", "name",
+                                process_name_);
   }
 
   TimeDelta process_uptime = TRACE_TIME_NOW() - process_creation_time_;
-  InitializeMetadataEvent(
-      AddEventToThreadSharedChunkWhileLocked(nullptr, false), current_thread_id,
-      "process_uptime_seconds", "uptime", process_uptime.InSeconds());
+  AddMetadataEventWhileLocked(current_thread_id, "process_uptime_seconds",
+                              "uptime", process_uptime.InSeconds());
 
 #if defined(OS_ANDROID)
-  InitializeMetadataEvent(
-      AddEventToThreadSharedChunkWhileLocked(nullptr, false), current_thread_id,
-      "chrome_library_address", "start_address",
-      base::StringPrintf("%p", &__executable_start));
+  AddMetadataEventWhileLocked(current_thread_id, "chrome_library_address",
+                              "start_address",
+                              base::StringPrintf("%p", &__executable_start));
 #endif
 
   if (!process_labels_.empty()) {
     std::vector<base::StringPiece> labels;
     for (const auto& it : process_labels_)
       labels.push_back(it.second);
-    InitializeMetadataEvent(
-        AddEventToThreadSharedChunkWhileLocked(nullptr, false),
-        current_thread_id, "process_labels", "labels",
-        base::JoinString(labels, ","));
+    AddMetadataEventWhileLocked(current_thread_id, "process_labels", "labels",
+                                base::JoinString(labels, ","));
   }
 
   // Thread sort indices.
   for (const auto& it : thread_sort_indices_) {
     if (it.second == 0)
       continue;
-    InitializeMetadataEvent(
-        AddEventToThreadSharedChunkWhileLocked(nullptr, false), it.first,
-        "thread_sort_index", "sort_index", it.second);
+    AddMetadataEventWhileLocked(it.first, "thread_sort_index", "sort_index",
+                                it.second);
   }
 
   // Thread names.
@@ -1589,17 +1632,14 @@ void TraceLog::AddMetadataEventsWhileLocked() {
   for (const auto& it : thread_names_) {
     if (it.second.empty())
       continue;
-    InitializeMetadataEvent(
-        AddEventToThreadSharedChunkWhileLocked(nullptr, false), it.first,
-        "thread_name", "name", it.second);
+    AddMetadataEventWhileLocked(it.first, "thread_name", "name", it.second);
   }
 
   // If buffer is full, add a metadata record to report this.
   if (!buffer_limit_reached_timestamp_.is_null()) {
-    InitializeMetadataEvent(
-        AddEventToThreadSharedChunkWhileLocked(nullptr, false),
-        current_thread_id, "trace_buffer_overflowed", "overflowed_at_ts",
-        buffer_limit_reached_timestamp_);
+    AddMetadataEventWhileLocked(current_thread_id, "trace_buffer_overflowed",
+                                "overflowed_at_ts",
+                                buffer_limit_reached_timestamp_);
   }
 }
 
@@ -1689,20 +1729,26 @@ void TraceLog::SetCurrentThreadBlocksMessageLoop() {
 TraceBuffer* TraceLog::CreateTraceBuffer() {
   HEAP_PROFILER_SCOPED_IGNORE;
   InternalTraceOptions options = trace_options();
+  const size_t config_buffer_chunks =
+      trace_config_.GetTraceBufferSizeInEvents() / kTraceBufferChunkSize;
   if (options & kInternalRecordContinuously) {
     return TraceBuffer::CreateTraceBufferRingBuffer(
-        kTraceEventRingBufferChunks);
+        config_buffer_chunks > 0 ? config_buffer_chunks
+                                 : kTraceEventRingBufferChunks);
   }
   if (options & kInternalEchoToConsole) {
     return TraceBuffer::CreateTraceBufferRingBuffer(
-        kEchoToConsoleTraceEventBufferChunks);
+        config_buffer_chunks > 0 ? config_buffer_chunks
+                                 : kEchoToConsoleTraceEventBufferChunks);
   }
   if (options & kInternalRecordAsMuchAsPossible) {
     return TraceBuffer::CreateTraceBufferVectorOfSize(
-        kTraceEventVectorBigBufferChunks);
+        config_buffer_chunks > 0 ? config_buffer_chunks
+                                 : kTraceEventVectorBigBufferChunks);
   }
   return TraceBuffer::CreateTraceBufferVectorOfSize(
-      kTraceEventVectorBufferChunks);
+      config_buffer_chunks > 0 ? config_buffer_chunks
+                               : kTraceEventVectorBufferChunks);
 }
 
 #if defined(OS_WIN)

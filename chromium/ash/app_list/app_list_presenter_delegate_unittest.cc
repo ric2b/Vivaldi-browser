@@ -10,6 +10,7 @@
 #include "ash/app_list/views/app_list_main_view.h"
 #include "ash/app_list/views/app_list_view.h"
 #include "ash/app_list/views/search_box_view.h"
+#include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/app_list_switches.h"
 #include "ash/public/cpp/ash_switches.h"
@@ -23,7 +24,7 @@
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
+#include "ash/shell_test_api.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wallpaper/wallpaper_controller_test_api.h"
 #include "ash/wm/overview/window_selector_controller.h"
@@ -32,10 +33,12 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm/workspace_controller_test_api.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
 #include "ui/display/display.h"
@@ -134,6 +137,26 @@ class AppListPresenterDelegateTest : public AshTestBase,
 // Instantiate the Boolean which is used to toggle mouse and touch events in
 // the parameterized tests.
 INSTANTIATE_TEST_CASE_P(, AppListPresenterDelegateTest, testing::Bool());
+
+// Test a variety of behaviors in tablet mode when home launcher is not enabled.
+class AppListPresenterDelegateNonHomeLauncherTest
+    : public AppListPresenterDelegateTest {
+ public:
+  AppListPresenterDelegateNonHomeLauncherTest() = default;
+  ~AppListPresenterDelegateNonHomeLauncherTest() override = default;
+
+  // testing::Test:
+  void SetUp() override {
+    scoped_feature_list_.InitWithFeatures(
+        {}, {app_list::features::kEnableHomeLauncher});
+    AppListPresenterDelegateTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(AppListPresenterDelegateNonHomeLauncherTest);
+};
 
 // Tests that app list hides when focus moves to a normal window.
 TEST_F(AppListPresenterDelegateTest, HideOnFocusOut) {
@@ -288,7 +311,7 @@ TEST_F(AppListPresenterDelegateTest, TabletModeTextStateTransitions) {
 
 // Tests that the app list state responds correctly to tablet mode being
 // enabled while the app list is being shown.
-TEST_F(AppListPresenterDelegateTest,
+TEST_F(AppListPresenterDelegateNonHomeLauncherTest,
        PeekingToFullscreenWhenTabletModeIsActive) {
   // TODO(newcomer): Investigate mash failures crbug.com/726838
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
@@ -411,7 +434,7 @@ TEST_F(AppListPresenterDelegateTest, AppListViewDragHandler) {
 }
 
 // Tests that the app list view handles drag properly in tablet mode.
-TEST_F(AppListPresenterDelegateTest,
+TEST_F(AppListPresenterDelegateNonHomeLauncherTest,
        AppListViewDragHandlerTabletModeFromAllApps) {
   // TODO(newcomer): Investigate mash failures crbug.com/726838
   EnableTabletMode(true);
@@ -430,7 +453,7 @@ TEST_F(AppListPresenterDelegateTest,
 
 // Tests that the state of the app list changes properly with drag input from
 // fullscreen search.
-TEST_F(AppListPresenterDelegateTest,
+TEST_F(AppListPresenterDelegateNonHomeLauncherTest,
        AppListViewDragHandlerTabletModeFromSearch) {
   // TODO(newcomer): Investigate mash failures crbug.com/726838
   EnableTabletMode(true);
@@ -463,6 +486,40 @@ TEST_F(AppListPresenterDelegateTest,
           ->shelf_layout_manager();
   EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_APP_LIST,
             shelf_layout_manager->GetShelfBackgroundType());
+}
+
+// Tests the shelf background type is as expected when in tablet mode.
+TEST_F(AppListPresenterDelegateTest, ShelfBackgroundWithHomeLauncher) {
+  // Enter tablet mode to display the home launcher.
+  GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
+  EnableTabletMode(true);
+  ShelfLayoutManager* shelf_layout_manager =
+      Shelf::ForWindow(Shell::GetRootWindowForDisplayId(GetPrimaryDisplayId()))
+          ->shelf_layout_manager();
+  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_DEFAULT,
+            shelf_layout_manager->GetShelfBackgroundType());
+
+  // Add a window. It should be maximized because it is in tablet mode.
+  auto window = CreateTestWindow();
+  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_MAXIMIZED,
+            shelf_layout_manager->GetShelfBackgroundType());
+}
+
+// Tests that the bottom shelf is auto hidden when a window is fullscreened in
+// tablet mode (home launcher is shown behind).
+TEST_F(AppListPresenterDelegateTest, ShelfAutoHiddenWhenFullscreen) {
+  GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
+  EnableTabletMode(true);
+  Shelf* shelf =
+      Shelf::ForWindow(Shell::GetRootWindowForDisplayId(GetPrimaryDisplayId()));
+  EXPECT_EQ(ShelfVisibilityState::SHELF_VISIBLE, shelf->GetVisibilityState());
+
+  // Create and fullscreen a window. The shelf should be auto hidden.
+  auto window = CreateTestWindow();
+  window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_FULLSCREEN);
+  EXPECT_EQ(ShelfVisibilityState::SHELF_AUTO_HIDE, shelf->GetVisibilityState());
+  EXPECT_EQ(ShelfAutoHideState::SHELF_AUTO_HIDE_HIDDEN,
+            shelf->GetAutoHideState());
 }
 
 // Tests that the peeking app list closes if the user taps or clicks outside
@@ -1129,12 +1186,12 @@ TEST_F(AppListPresenterDelegateHomeLauncherTest, BackgroundOpacity) {
   // 70%.
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
   ui::Layer* background_layer =
-      GetAppListView()->app_list_background_shield_for_test()->layer();
+      GetAppListView()->GetAppListBackgroundShieldForTest()->layer();
   EXPECT_EQ(0.7f, background_layer->opacity());
 
   // Turn on tablet mode. The background sheild opacity should be 10%.
   EnableTabletMode(true);
-  EXPECT_EQ(0.1f, background_layer->opacity());
+  EXPECT_EQ(0.4f, background_layer->opacity());
 }
 
 // Tests that the background blur is disabled for the app list.
@@ -1142,7 +1199,7 @@ TEST_F(AppListPresenterDelegateHomeLauncherTest, BackgroundBlur) {
   // Show app list in non-tablet mode. The background blur should be enabled.
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
   ui::Layer* background_layer =
-      GetAppListView()->app_list_background_shield_for_test()->layer();
+      GetAppListView()->GetAppListBackgroundShieldForTest()->layer();
   EXPECT_GT(background_layer->background_blur(), 0.0f);
 
   // Turn on tablet mode. The background blur should be disabled.
@@ -1280,8 +1337,8 @@ TEST_F(AppListPresenterDelegateHomeLauncherTest, MouseScrollToDismiss) {
   GetAppListTestHelper()->CheckVisibility(true);
 }
 
-// Tests the app list visibility in overview mode.
-TEST_F(AppListPresenterDelegateHomeLauncherTest, VisibilityInOverviewMode) {
+// Tests the app list opacity in overview mode.
+TEST_F(AppListPresenterDelegateHomeLauncherTest, OpacityInOverviewMode) {
   // Show app list in tablet mode.
   EnableTabletMode(true);
   GetAppListTestHelper()->CheckVisibility(true);
@@ -1291,12 +1348,13 @@ TEST_F(AppListPresenterDelegateHomeLauncherTest, VisibilityInOverviewMode) {
       Shell::Get()->window_selector_controller();
   window_selector_controller->ToggleOverview();
   EXPECT_TRUE(window_selector_controller->IsSelecting());
-  EXPECT_FALSE(GetAppListView()->GetWidget()->IsVisible());
+  ui::Layer* layer = GetAppListView()->app_list_main_view()->layer();
+  EXPECT_EQ(0.0f, layer->opacity());
 
   // Disable overview mode.
   window_selector_controller->ToggleOverview();
   EXPECT_FALSE(window_selector_controller->IsSelecting());
-  GetAppListTestHelper()->CheckVisibility(true);
+  EXPECT_EQ(1.0f, layer->opacity());
 }
 
 // Tests the app list visibility during wallpaper preview.
@@ -1365,13 +1423,14 @@ TEST_F(AppListPresenterDelegateHomeLauncherTest, DragFromShelf) {
 
   // Enable overview mode to hide the app list.
   Shell::Get()->window_selector_controller()->ToggleOverview();
-  EXPECT_FALSE(GetAppListView()->GetWidget()->IsVisible());
+  ui::Layer* layer = GetAppListView()->app_list_main_view()->layer();
+  EXPECT_EQ(0.0f, layer->opacity());
 
   // Drag from the shelf.
   generator->GestureScrollSequence(gfx::Point(540, 890), gfx::Point(540, 0),
                                    base::TimeDelta::FromMilliseconds(100), 10);
   GetAppListTestHelper()->WaitUntilIdle();
-  EXPECT_FALSE(GetAppListView()->GetWidget()->IsVisible());
+  EXPECT_EQ(0.0f, layer->opacity());
 }
 
 // Tests that the app list button will minimize all windows.
@@ -1470,6 +1529,128 @@ TEST_F(AppListPresenterDelegateHomeLauncherTest, WallpaperContextMenu) {
   generator->PressLeftButton();
   GetAppListTestHelper()->WaitUntilIdle();
   EXPECT_FALSE(root_window_controller->IsContextMenuShown());
+}
+
+// Tests app list visibility when switching to tablet mode during dragging from
+// shelf.
+TEST_F(AppListPresenterDelegateHomeLauncherTest,
+       SwitchToTabletModeDuringDraggingFromShelf) {
+  UpdateDisplay("1080x900");
+  GetAppListTestHelper()->CheckVisibility(false);
+
+  // Drag from the shelf to show the app list.
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  const int x = 540;
+  const int closed_y = 890;
+  const int fullscreen_y = 0;
+  generator->MoveTouch(gfx::Point(x, closed_y));
+  generator->PressTouch();
+  generator->MoveTouch(gfx::Point(x, fullscreen_y));
+  GetAppListTestHelper()->CheckVisibility(true);
+
+  // Drag to shelf to close app list.
+  generator->MoveTouch(gfx::Point(x, closed_y));
+  generator->ReleaseTouch();
+  GetAppListTestHelper()->WaitUntilIdle();
+  GetAppListTestHelper()->CheckVisibility(false);
+
+  // Drag from the shelf to show the app list.
+  generator->MoveTouch(gfx::Point(x, closed_y));
+  generator->PressTouch();
+  generator->MoveTouch(gfx::Point(x, fullscreen_y));
+  GetAppListTestHelper()->CheckVisibility(true);
+
+  // Switch to tablet mode.
+  EnableTabletMode(true);
+  GetAppListTestHelper()->CheckVisibility(true);
+
+  // Drag to shelf to try to close app list.
+  generator->MoveTouch(gfx::Point(x, closed_y));
+  generator->ReleaseTouch();
+  GetAppListTestHelper()->WaitUntilIdle();
+  GetAppListTestHelper()->CheckVisibility(true);
+}
+
+// Tests app list visibility when switching to tablet mode during dragging to
+// close app list.
+TEST_F(AppListPresenterDelegateHomeLauncherTest,
+       SwitchToTabletModeDuringDraggingToClose) {
+  UpdateDisplay("1080x900");
+
+  // Open app list.
+  GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
+  GetAppListTestHelper()->CheckVisibility(true);
+
+  // Drag to shelf to close app list.
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  const int x = 540;
+  const int peeking_height =
+      900 - app_list::AppListConfig::instance().peeking_app_list_height();
+  const int closed_y = 890;
+  generator->MoveTouch(gfx::Point(x, peeking_height));
+  generator->PressTouch();
+  generator->MoveTouch(gfx::Point(x, closed_y));
+  generator->ReleaseTouch();
+  GetAppListTestHelper()->WaitUntilIdle();
+  GetAppListTestHelper()->CheckVisibility(false);
+
+  // Open app list.
+  GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
+  GetAppListTestHelper()->CheckVisibility(true);
+
+  // Drag to shelf to close app list, meanwhile switch to tablet mode.
+  generator->MoveTouch(gfx::Point(x, peeking_height));
+  generator->PressTouch();
+  generator->MoveTouch(gfx::Point(x, peeking_height + 10));
+  EnableTabletMode(true);
+  generator->MoveTouch(gfx::Point(x, closed_y));
+  generator->ReleaseTouch();
+  GetAppListTestHelper()->WaitUntilIdle();
+  GetAppListTestHelper()->CheckVisibility(true);
+}
+
+// Test backdrop exists for active non-fullscreen window in tablet mode.
+TEST_F(AppListPresenterDelegateHomeLauncherTest, BackdropTest) {
+  WorkspaceControllerTestApi test_helper(
+      ShellTestApi(Shell::Get()).workspace_controller());
+  EnableTabletMode(true);
+  GetAppListTestHelper()->CheckVisibility(true);
+  EXPECT_FALSE(test_helper.GetBackdropWindow());
+
+  std::unique_ptr<aura::Window> non_fullscreen_window(
+      CreateTestWindow(gfx::Rect(0, 0, 100, 100)));
+  non_fullscreen_window->Show();
+  GetAppListTestHelper()->CheckVisibility(true);
+  EXPECT_TRUE(test_helper.GetBackdropWindow());
+}
+
+// Tests that app list is not active when switching to tablet mode if an active
+// window exists.
+TEST_F(AppListPresenterDelegateHomeLauncherTest,
+       NotActivateAppListWindowWhenActiveWindowExists) {
+  // No window is active.
+  EXPECT_EQ(nullptr, wm::GetActiveWindow());
+
+  // Show app list in tablet mode. It should become active.
+  EnableTabletMode(true);
+  GetAppListTestHelper()->CheckVisibility(true);
+  EXPECT_EQ(GetAppListView()->GetWidget()->GetNativeWindow(),
+            wm::GetActiveWindow());
+
+  // End tablet mode.
+  EnableTabletMode(false);
+  GetAppListTestHelper()->CheckVisibility(false);
+  EXPECT_EQ(nullptr, wm::GetActiveWindow());
+
+  // Activate a window.
+  std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithId(0));
+  wm::GetWindowState(window.get())->Activate();
+  EXPECT_EQ(window.get(), wm::GetActiveWindow());
+
+  // Show app list in tablet mode. It should not be active.
+  EnableTabletMode(true);
+  GetAppListTestHelper()->CheckVisibility(true);
+  EXPECT_EQ(window.get(), wm::GetActiveWindow());
 }
 
 }  // namespace ash

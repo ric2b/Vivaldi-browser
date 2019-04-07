@@ -617,6 +617,21 @@ virtual void GenVertexArraysOES(GLsizei n, GLuint* arrays) = 0;
 virtual void DeleteVertexArraysOES(GLsizei n, const GLuint* arrays) = 0;
 virtual GLboolean IsVertexArrayOES(GLuint array) = 0;
 virtual void BindVertexArrayOES(GLuint array) = 0;
+virtual void FramebufferParameteri(GLenum target,
+                                   GLenum pname,
+                                   GLint param) = 0;
+virtual void BindImageTexture(GLuint unit,
+                              GLuint texture,
+                              GLint level,
+                              GLboolean layered,
+                              GLint layer,
+                              GLenum access,
+                              GLenum format) = 0;
+virtual void DispatchCompute(GLuint num_groups_x,
+                             GLuint num_groups_y,
+                             GLuint num_groups_z) = 0;
+virtual void MemoryBarrierEXT(GLbitfield barriers) = 0;
+virtual void MemoryBarrierByRegion(GLbitfield barriers) = 0;
 virtual void SwapBuffers(GLuint64 swap_id, GLbitfield flags = 0) = 0;
 virtual GLuint GetMaxValueInBufferCHROMIUM(GLuint buffer_id,
                                            GLsizei count,
@@ -937,4 +952,10 @@ virtual GLuint CreateClientGpuFenceCHROMIUM(ClientGpuFence source) = 0;
 virtual void WaitGpuFenceCHROMIUM(GLuint gpu_fence_id) = 0;
 virtual void DestroyGpuFenceCHROMIUM(GLuint gpu_fence_id) = 0;
 virtual void InvalidateReadbackBufferShadowDataCHROMIUM(GLuint buffer_id) = 0;
+virtual void FramebufferTextureMultiviewLayeredANGLE(GLenum target,
+                                                     GLenum attachment,
+                                                     GLuint texture,
+                                                     GLint level,
+                                                     GLint baseViewIndex,
+                                                     GLsizei numViews) = 0;
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_INTERFACE_AUTOGEN_H_

@@ -9,13 +9,13 @@
 #include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/test_rappor_service.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "components/ukm/ukm_source.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/test/test_content_browser_client.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
+#include "services/metrics/public/cpp/ukm_source.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -1270,6 +1270,25 @@ TEST_F(RenderWidgetHostLatencyTrackerTest, WheelDuringMultiFingerTouch) {
   EXPECT_THAT(histogram_tester().GetAllSamples(
                   "Event.Latency.QueueingTime.MouseWheelDefaultAllowed"),
               ElementsAre(Bucket(14, 1)));
+}
+
+TEST_F(RenderWidgetHostLatencyTrackerTest, TouchpadPinchEvents) {
+  ui::LatencyInfo latency;
+  latency.set_trace_id(kTraceEventId);
+  latency.set_source_event_type(ui::SourceEventType::TOUCHPAD);
+  latency.AddLatencyNumberWithTimestamp(
+      ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT,
+      base::TimeTicks() + base::TimeDelta::FromMilliseconds(1), 1);
+  latency.AddLatencyNumberWithTimestamp(
+      ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT,
+      base::TimeTicks() + base::TimeDelta::FromMilliseconds(3), 1);
+  AddFakeComponentsWithTimeStamp(
+      *tracker(), &latency,
+      base::TimeTicks() + base::TimeDelta::FromMilliseconds(5));
+  viz_tracker()->OnGpuSwapBuffersCompleted(latency);
+
+  EXPECT_TRUE(HistogramSizeEq("Event.Latency.EventToRender.TouchpadPinch", 1));
+  EXPECT_TRUE(HistogramSizeEq("Event.Latency.EndToEnd.TouchpadPinch", 1));
 }
 
 }  // namespace content

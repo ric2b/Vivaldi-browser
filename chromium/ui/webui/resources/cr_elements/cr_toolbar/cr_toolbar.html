@@ -1,8 +1,8 @@
-<link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="../../html/polymer.html">
 
-<link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
-<link rel="import" href="chrome://resources/cr_elements/cr_toolbar/cr_toolbar_search_field.html">
-<link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
+<link rel="import" href="../cr_icons_css.html">
+<link rel="import" href="../cr_toolbar/cr_toolbar_search_field.html">
+<link rel="import" href="../hidden_style_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-media-query/iron-media-query.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 
@@ -19,26 +19,26 @@
       }
 
       h1 {
-        -webkit-margin-start: 6px;
-        -webkit-padding-end: 12px;
         flex: 1;
         font-size: 123%;
         font-weight: 400;
         letter-spacing: .25px;
         line-height: normal;
+        margin-inline-start: 6px;
+        padding-inline-end: 12px;
       }
 
       #leftContent {
         /* margin-start here must match margin-end on #rightContent. */
-        -webkit-margin-start: 12px;
+        margin-inline-start: 12px;
         position: relative;
         transition: opacity 100ms;
       }
 
       #leftSpacer {
-        -webkit-margin-start: 6px;
         align-items: center;
         display: flex;
+        margin-inline-start: 6px;
       }
 
       #menuButtonContainer {
@@ -55,7 +55,7 @@
       }
 
       #rightContent {
-        -webkit-margin-end: 12px;
+        margin-inline-end: 12px;
       }
 
       :host([narrow]) #centeredContent {
@@ -82,8 +82,6 @@
       }
 
       #menuPromo {
-        -webkit-padding-end: 12px;
-        -webkit-padding-start: 8px;
         align-items: center;
         background: #616161;
         border-radius: 2px;
@@ -93,6 +91,8 @@
         font-weight: 500;
         opacity: 0;
         padding-bottom: 6px;
+        padding-inline-end: 12px;
+        padding-inline-start: 8px;
         padding-top: 6px;
         position: absolute;
         top: var(--cr-toolbar-height);
@@ -120,12 +120,12 @@
 
       #closePromo {
         -webkit-appearance: none;
-        -webkit-margin-start: 12px;
         background: none;
         border: none;
         color: inherit;
         font-size: 20px;  /* Shouldn't change if default font-size changes. */
         line-height: 20px;
+        margin-inline-start: 12px;
         padding: 0;
         width: 20px;
       }

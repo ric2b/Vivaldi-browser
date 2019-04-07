@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "components/invalidation/impl/fake_invalidation_handler.h"
 #include "components/invalidation/impl/invalidator_test_template.h"
+#include "components/invalidation/public/topic_invalidation_map.h"
 #include "google/cacheinvalidation/types.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -17,18 +18,16 @@ namespace syncer {
 
 namespace {
 
-// We test InvalidatorRegistrar by wrapping it in an Invalidator and
+// We test DeprecatedInvalidatorRegistrar by wrapping it in an Invalidator and
 // running the usual Invalidator tests.
 
-// Thin Invalidator wrapper around InvalidatorRegistrar.
+// Thin Invalidator wrapper around DeprecatedInvalidatorRegistrar.
 class RegistrarInvalidator : public Invalidator {
  public:
   RegistrarInvalidator() {}
   ~RegistrarInvalidator() override {}
 
-  InvalidatorRegistrar* GetRegistrar() {
-    return &registrar_;
-  }
+  InvalidatorRegistrar* GetRegistrar() { return &registrar_; }
 
   // Invalidator implementation.
   void RegisterHandler(InvalidationHandler* handler) override {
@@ -37,7 +36,16 @@ class RegistrarInvalidator : public Invalidator {
 
   bool UpdateRegisteredIds(InvalidationHandler* handler,
                            const ObjectIdSet& ids) override {
-    return registrar_.UpdateRegisteredIds(handler, ids);
+    TopicSet topics;
+    for (const auto& id : ids)
+      topics.insert(id.name());
+    return registrar_.UpdateRegisteredTopics(handler, topics);
+  }
+
+  bool UpdateRegisteredIds(InvalidationHandler* handler,
+                           const TopicSet& ids) override {
+    NOTREACHED();
+    return false;
   }
 
   void UnregisterHandler(InvalidationHandler* handler) override {
@@ -68,26 +76,19 @@ class RegistrarInvalidatorTestDelegate {
  public:
   RegistrarInvalidatorTestDelegate() {}
 
-  ~RegistrarInvalidatorTestDelegate() {
-    DestroyInvalidator();
-  }
+  ~RegistrarInvalidatorTestDelegate() { DestroyInvalidator(); }
 
-  void CreateInvalidator(
-      const std::string& invalidator_client_id,
-      const std::string& initial_state,
-      const base::WeakPtr<InvalidationStateTracker>&
-          invalidation_state_tracker) {
+  void CreateInvalidator(const std::string& invalidator_client_id,
+                         const std::string& initial_state,
+                         const base::WeakPtr<InvalidationStateTracker>&
+                             invalidation_state_tracker) {
     DCHECK(!invalidator_);
     invalidator_.reset(new RegistrarInvalidator());
   }
 
-  RegistrarInvalidator* GetInvalidator() {
-    return invalidator_.get();
-  }
+  RegistrarInvalidator* GetInvalidator() { return invalidator_.get(); }
 
-  void DestroyInvalidator() {
-    invalidator_.reset();
-  }
+  void DestroyInvalidator() { invalidator_.reset(); }
 
   void WaitForInvalidator() {
     // Do nothing.
@@ -99,17 +100,23 @@ class RegistrarInvalidatorTestDelegate {
 
   void TriggerOnIncomingInvalidation(
       const ObjectIdInvalidationMap& invalidation_map) {
-    invalidator_->GetRegistrar()->DispatchInvalidationsToHandlers(
-        invalidation_map);
+    TopicInvalidationMap topics_map;
+    std::vector<syncer::Invalidation> invalidations;
+    invalidation_map.GetAllInvalidations(&invalidations);
+    for (const auto& invalidation : invalidations) {
+      topics_map.Insert(invalidation);
+    }
+
+    invalidator_->GetRegistrar()->DispatchInvalidationsToHandlers(topics_map);
   }
 
  private:
   std::unique_ptr<RegistrarInvalidator> invalidator_;
 };
 
-INSTANTIATE_TYPED_TEST_CASE_P(
-    RegistrarInvalidatorTest, InvalidatorTest,
-    RegistrarInvalidatorTestDelegate);
+INSTANTIATE_TYPED_TEST_CASE_P(RegistrarInvalidatorTest,
+                              InvalidatorTest,
+                              RegistrarInvalidatorTestDelegate);
 
 }  // namespace
 

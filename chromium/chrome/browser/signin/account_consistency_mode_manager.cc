@@ -4,12 +4,15 @@
 
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
 
+#include <string>
+
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/pref_names.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -20,13 +23,11 @@
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/google_api_keys.h"
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
-#include "ui/base/ui_base_features.h"
+#if defined(OS_CHROMEOS)
+#include "chromeos/chromeos_switches.h"
 #endif
 
-#if defined(OS_CHROMEOS)
-#include "components/signin/core/browser/signin_pref_names.h"
-#endif
+#include "app/vivaldi_apptools.h"
 
 using signin::AccountConsistencyMethod;
 
@@ -36,8 +37,6 @@ const char kAccountConsistencyFeatureMethodParameter[] = "method";
 const char kAccountConsistencyFeatureMethodMirror[] = "mirror";
 const char kAccountConsistencyFeatureMethodDiceFixAuthErrors[] =
     "dice_fix_auth_errors";
-const char kAccountConsistencyFeatureMethodDicePrepareMigration[] =
-    "dice_prepare_migration_new_endpoint";
 const char kAccountConsistencyFeatureMethodDiceMigration[] = "dice_migration";
 const char kAccountConsistencyFeatureMethodDice[] = "dice";
 
@@ -125,6 +124,17 @@ AccountConsistencyModeManager::AccountConsistencyModeManager(Profile* profile)
       account_consistency_initialized_(false) {
   DCHECK(profile_);
   DCHECK(!profile_->IsOffTheRecord());
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  PrefService* prefs = profile->GetPrefs();
+  // Propagate settings changes from the previous launch to the signin-allowed
+  // pref.
+  bool signin_allowed = prefs->GetBoolean(prefs::kSigninAllowedOnNextStartup);
+  prefs->SetBoolean(prefs::kSigninAllowed, signin_allowed);
+
+  UMA_HISTOGRAM_BOOLEAN("Signin.SigninAllowed", signin_allowed);
+#endif
+
   account_consistency_ = ComputeAccountConsistencyMethod(profile_);
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -164,6 +174,7 @@ void AccountConsistencyModeManager::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kAccountConsistencyMirrorRequired,
                                 false);
 #endif
+  registry->RegisterBooleanPref(prefs::kSigninAllowedOnNextStartup, true);
 }
 
 // static
@@ -234,6 +245,10 @@ AccountConsistencyModeManager::GetAccountConsistencyMethod() {
 signin::AccountConsistencyMethod
 AccountConsistencyModeManager::ComputeAccountConsistencyMethod(
     Profile* profile) {
+  // Necessary in order to completely disable Account consistency
+  if (vivaldi::IsVivaldiRunning())
+    return AccountConsistencyMethod::kDisabled;
+
   if (profile->GetProfileType() != Profile::ProfileType::REGULAR_PROFILE) {
     DCHECK_EQ(Profile::ProfileType::GUEST_PROFILE, profile->GetProfileType());
     return GetMethodForNonRegularProfile();
@@ -247,6 +262,11 @@ AccountConsistencyModeManager::ComputeAccountConsistencyMethod(
       kAccountConsistencyFeature, kAccountConsistencyFeatureMethodParameter);
 
 #if defined(OS_CHROMEOS)
+  if (chromeos::switches::IsAccountManagerEnabled())
+    return AccountConsistencyMethod::kMirror;
+
+  // TODO(sinhak): Clean this up. When Account Manager is released, Chrome OS
+  // will always have Mirror enabled for regular profiles.
   return (method_value == kAccountConsistencyFeatureMethodMirror ||
           profile->GetPrefs()->GetBoolean(
               prefs::kAccountConsistencyMirrorRequired))
@@ -255,18 +275,10 @@ AccountConsistencyModeManager::ComputeAccountConsistencyMethod(
 #endif
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  AccountConsistencyMethod method =
-      AccountConsistencyMethod::kDicePrepareMigration;
-
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
-  if (base::FeatureList::IsEnabled(features::kExperimentalUi))
-    method = AccountConsistencyMethod::kDiceMigration;
-#endif
+  AccountConsistencyMethod method = AccountConsistencyMethod::kDiceMigration;
 
   if (method_value == kAccountConsistencyFeatureMethodDiceFixAuthErrors)
     method = AccountConsistencyMethod::kDiceFixAuthErrors;
-  else if (method_value == kAccountConsistencyFeatureMethodDicePrepareMigration)
-    method = AccountConsistencyMethod::kDicePrepareMigration;
   else if (method_value == kAccountConsistencyFeatureMethodDiceMigration)
     method = AccountConsistencyMethod::kDiceMigration;
   else if (method_value == kAccountConsistencyFeatureMethodDice)
@@ -276,7 +288,7 @@ AccountConsistencyModeManager::ComputeAccountConsistencyMethod(
     return method;
 
   DCHECK(signin::DiceMethodGreaterOrEqual(
-      method, AccountConsistencyMethod::kDicePrepareMigration));
+      method, AccountConsistencyMethod::kDiceMigration));
 
   // Legacy supervised users cannot get Dice.
   // TODO(droger): remove this once legacy supervised users are no longer
@@ -289,6 +301,12 @@ AccountConsistencyModeManager::ComputeAccountConsistencyMethod(
   if (!can_enable_dice_for_build) {
     LOG(WARNING) << "Desktop Identity Consistency cannot be enabled as no "
                     "OAuth client ID and client secret have been configured.";
+    return AccountConsistencyMethod::kDiceFixAuthErrors;
+  }
+
+  if (!profile->GetPrefs()->GetBoolean(prefs::kSigninAllowed)) {
+    VLOG(1) << "Desktop Identity Consistency disabled as sign-in to Chrome"
+               "is not allowed";
     return AccountConsistencyMethod::kDiceFixAuthErrors;
   }
 

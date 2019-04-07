@@ -149,6 +149,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       base::Optional<viz::HitTestRegionList> hit_test_region_list) override;
   void OnDidNotProduceFrame(const viz::BeginFrameAck& ack) override;
   void ClearCompositorFrame() override;
+  void ResetFallbackToFirstNavigationSurface() override;
   bool RequestRepaintForTesting() override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
       BrowserAccessibilityDelegate* delegate, bool for_root_frame) override;
@@ -308,6 +309,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       const ui::LatencyInfo& latency_info,
       const std::vector<EditCommand>& commands) override;
   void RouteOrProcessMouseEvent(const blink::WebMouseEvent& web_event) override;
+  void RouteOrProcessTouchEvent(const blink::WebTouchEvent& web_event) override;
   void RouteOrProcessWheelEvent(
       const blink::WebMouseWheelEvent& web_event) override;
   void ForwardMouseEvent(const blink::WebMouseEvent& web_event) override;
@@ -339,6 +341,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       bool skip_in_browser,
       const std::vector<EditCommand>& commands) override;
   void RouteOrProcessMouseEvent(std::unique_ptr<InputEvent> event) override;
+  void RouteOrProcessTouchEvent(std::unique_ptr<InputEvent> event) override;
   void RouteOrProcessWheelEvent(std::unique_ptr<InputEvent> event) override;
   void ForwardMouseEvent(std::unique_ptr<InputEvent> event) override;
   void ForwardWheelEvent(std::unique_ptr<InputEvent> event) override;
@@ -394,7 +397,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   SkColor BrowserCompositorMacGetGutterColor() const override;
   void BrowserCompositorMacOnBeginFrame(base::TimeTicks frame_time) override;
   void OnFrameTokenChanged(uint32_t frame_token) override;
-  void DidReceiveFirstFrameAfterNavigation() override;
   void DestroyCompositorForShutdown() override;
   bool SynchronizeVisualProperties(
       const base::Optional<viz::LocalSurfaceId>&
@@ -490,6 +492,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
 
   // RenderWidgetHostViewBase:
   void UpdateBackgroundColor() override;
+  bool HasFallbackSurface() const override;
 
   // Gets a textual view of the page's contents, and passes it to the callback
   // provided.
@@ -536,11 +539,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
 
   // Display link for getting vsync info.
   scoped_refptr<ui::DisplayLinkMac> display_link_;
-
-  // The current VSync timebase and interval. This is zero until the first call
-  // to SendVSyncParametersToRenderer(), and refreshed regularly thereafter.
-  base::TimeTicks vsync_timebase_;
-  base::TimeDelta vsync_interval_;
 
   // Whether a request for begin frames has been issued.
   bool needs_begin_frames_;

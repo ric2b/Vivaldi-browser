@@ -476,6 +476,13 @@ field **WiFi** must be set to an object of type [WiFi](#WiFi-type).
       provided by the system. If the network is not in range this field will
       be set to '0' or not present.
 
+* **TetheringState**
+    * (optional, read-only, defaults to "NotDetected") - **string**
+    * The tethering state of the WiFi connection. If the connection is
+      tethered the value is "Confirmed". If the connection is suspected to be
+      tethered the value is "Suspected". In all other cases it's
+      "NotDetected".
+
 ---
   * At least one of the fields **HexSSID** or **SSID** must be present.
   * If both **HexSSID** and **SSID** are set, the values must be consistent.
@@ -587,8 +594,9 @@ field **VPN** must be set to an object of type [VPN](#VPN-type).
 * **PSK**
     * (optional if **AuthenticationType** is *PSK*, otherwise ignored)
       - **string**
-    * Pre-Shared Key. If not specified, user is prompted at time of
-        connection.
+    * Pre-Shared Key. If not specified, the user is prompted when connecting.
+      If the value is saved but not known, this may be set to an empty value,
+      indicating that the UI does not need to provide it.
 
 * **SaveCredentials**
     * (optional if **AuthenticationType**

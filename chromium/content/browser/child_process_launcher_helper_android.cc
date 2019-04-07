@@ -223,7 +223,8 @@ void ChildProcessLauncherHelper::SetProcessPriorityOnLauncherThread(
   return Java_ChildProcessLauncherHelperImpl_setPriority(
       env, java_peer_, process.Handle(), priority.visible,
       priority.has_media_stream, priority.frame_depth,
-      priority.boost_for_pending_views, static_cast<jint>(priority.importance));
+      priority.intersects_viewport, priority.boost_for_pending_views,
+      static_cast<jint>(priority.importance));
 }
 
 // static

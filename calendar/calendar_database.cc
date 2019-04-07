@@ -140,7 +140,7 @@ bool CalendarDatabase::Raze() {
   return db_.Raze();
 }
 
-sql::Connection& CalendarDatabase::GetDB() {
+sql::Database& CalendarDatabase::GetDB() {
   return db_;
 }
 

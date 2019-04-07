@@ -6,7 +6,7 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "device/vr/openvr/openvr_api_wrapper.h"
-#include "device/vr/openvr/openvr_gamepad_data_fetcher.h"
+#include "device/vr/openvr/openvr_gamepad_helper.h"
 #include "device/vr/openvr/openvr_type_converters.h"
 #include "ui/gfx/geometry/angle_conversions.h"
 #include "ui/gfx/transform.h"
@@ -45,12 +45,12 @@ gfx::Transform HmdMatrix34ToTransform(const vr::HmdMatrix34_t& mat) {
 
 }  // namespace
 
-OpenVRRenderLoop::OpenVRRenderLoop(
-    base::RepeatingCallback<void(OpenVRGamepadState)> update_gamepad)
+OpenVRRenderLoop::OpenVRRenderLoop()
     : base::Thread("OpenVRRenderLoop"),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      update_gamepad_(std::move(update_gamepad)),
-      binding_(this),
+      presentation_binding_(this),
+      frame_data_binding_(this),
+      gamepad_provider_(this),
       weak_ptr_factory_(this) {
   DCHECK(main_thread_task_runner_);
 }
@@ -148,7 +148,15 @@ void OpenVRRenderLoop::SubmitFrameWithTextureHandle(
 
 void OpenVRRenderLoop::CleanUp() {
   submit_client_ = nullptr;
-  binding_.Close();
+  presentation_binding_.Close();
+  frame_data_binding_.Close();
+  gamepad_provider_.Close();
+}
+
+void OpenVRRenderLoop::RequestGamepadProvider(
+    mojom::IsolatedXRGamepadProviderRequest request) {
+  gamepad_provider_.Close();
+  gamepad_provider_.Bind(std::move(request));
 }
 
 void OpenVRRenderLoop::UpdateLayerBounds(int16_t frame_id,
@@ -166,18 +174,18 @@ void OpenVRRenderLoop::UpdateLayerBounds(int16_t frame_id,
 
 void OpenVRRenderLoop::RequestSession(
     base::OnceCallback<void()> on_presentation_ended,
-    mojom::XRDeviceRuntimeSessionOptionsPtr options,
+    mojom::XRRuntimeSessionOptionsPtr options,
     RequestSessionCallback callback) {
   DCHECK(options->immersive);
-  binding_.Close();
+  presentation_binding_.Close();
+  frame_data_binding_.Close();
 
   if (!openvr_) {
     openvr_ = std::make_unique<OpenVRWrapper>(true);
     if (!openvr_->IsInitialized()) {
       openvr_ = nullptr;
       main_thread_task_runner_->PostTask(
-          FROM_HERE, base::BindOnce(std::move(callback), false, nullptr,
-                                    nullptr, nullptr));
+          FROM_HERE, base::BindOnce(std::move(callback), false, nullptr));
       return;
     }
 
@@ -193,20 +201,22 @@ void OpenVRRenderLoop::RequestSession(
       !texture_helper_.EnsureInitialized()) {
     openvr_ = nullptr;
     main_thread_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback), false, nullptr, nullptr, nullptr));
+        FROM_HERE, base::BindOnce(std::move(callback), false, nullptr));
     return;
   }
 #endif
   DCHECK(!on_presentation_ended_);
   on_presentation_ended_ = std::move(on_presentation_ended);
-  device::mojom::VRPresentationProviderPtr provider;
-  binding_.Bind(mojo::MakeRequest(&provider));
 
-  device::mojom::VRDisplayFrameTransportOptionsPtr transport_options =
-      device::mojom::VRDisplayFrameTransportOptions::New();
+  device::mojom::XRPresentationProviderPtr presentation_provider;
+  device::mojom::XRFrameDataProviderPtr frame_data_provider;
+  presentation_binding_.Bind(mojo::MakeRequest(&presentation_provider));
+  frame_data_binding_.Bind(mojo::MakeRequest(&frame_data_provider));
+
+  device::mojom::XRPresentationTransportOptionsPtr transport_options =
+      device::mojom::XRPresentationTransportOptions::New();
   transport_options->transport_method =
-      device::mojom::VRDisplayFrameTransportMethod::SUBMIT_AS_TEXTURE_HANDLE;
+      device::mojom::XRPresentationTransportMethod::SUBMIT_AS_TEXTURE_HANDLE;
   // Only set boolean options that we need. Default is false, and we should be
   // able to safely ignore ones that our implementation doesn't care about.
   transport_options->wait_for_transfer_notification = true;
@@ -220,11 +230,17 @@ void OpenVRRenderLoop::RequestSession(
     input_active_state.controller_role = vr::TrackedControllerRole_Invalid;
   }
 
+  auto submit_frame_sink = device::mojom::XRPresentationConnection::New();
+  submit_frame_sink->provider = presentation_provider.PassInterface();
+  submit_frame_sink->client_request = mojo::MakeRequest(&submit_client_);
+  submit_frame_sink->transport_options = std::move(transport_options);
+
+  auto session = device::mojom::XRSession::New();
+  session->data_provider = frame_data_provider.PassInterface();
+  session->submit_frame_sink = std::move(submit_frame_sink);
+
   main_thread_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(std::move(callback), true,
-                     mojo::MakeRequest(&submit_client_),
-                     provider.PassInterface(), std::move(transport_options)));
+      FROM_HERE, base::BindOnce(std::move(callback), true, std::move(session)));
   is_presenting_ = true;
   openvr_->GetCompositor()->SuspendRendering(false);
 
@@ -247,7 +263,8 @@ void OpenVRRenderLoop::RequestSession(
 
 void OpenVRRenderLoop::ExitPresent() {
   is_presenting_ = false;
-  binding_.Close();
+  presentation_binding_.Close();
+  frame_data_binding_.Close();
   submit_client_ = nullptr;
   if (openvr_)
     openvr_->GetCompositor()->SuspendRendering(true);
@@ -266,37 +283,29 @@ void OpenVRRenderLoop::ExitPresent() {
 }
 
 void OpenVRRenderLoop::UpdateControllerState() {
-  OpenVRGamepadState state = {};
-
-  if (openvr_) {
-    vr::IVRSystem* vr_system = openvr_->GetSystem();
-    vr_system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseSeated, 0.0f,
-                                               state.tracked_devices_poses,
-                                               vr::k_unMaxTrackedDeviceCount);
-
-    for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
-      state.device_class[i] = vr_system->GetTrackedDeviceClass(i);
-      if (state.device_class[i] == vr::TrackedDeviceClass_Controller) {
-        state.have_controller_state[i] = vr_system->GetControllerState(
-            i, &(state.controller_state[i]), sizeof(state.controller_state[i]));
-        if (state.have_controller_state[i]) {
-          state.hand[i] = vr_system->GetControllerRoleForTrackedDeviceIndex(i);
-          state.supported_buttons[i] =
-              vr_system->GetUint64TrackedDeviceProperty(
-                  i, vr::Prop_SupportedButtons_Uint64);
-
-          for (int j = 0; j < vr::k_unControllerStateAxisCount; ++j) {
-            state.axis_type[i][j] = vr_system->GetInt32TrackedDeviceProperty(
-                i, static_cast<vr::TrackedDeviceProperty>(
-                       vr::Prop_Axis0Type_Int32 + j));
-          }
-        }
-      }
-    }
+  if (!gamepad_callback_) {
+    // Nobody is listening to updates, so bail early.
+    return;
   }
 
-  main_thread_task_runner_->PostTask(FROM_HERE,
-                                     base::BindOnce(update_gamepad_, state));
+  if (!openvr_) {
+    std::move(gamepad_callback_).Run(nullptr);
+    return;
+  }
+
+  std::move(gamepad_callback_)
+      .Run(OpenVRGamepadHelper::GetGamepadData(openvr_->GetSystem()));
+}
+
+void OpenVRRenderLoop::RequestUpdate(
+    mojom::IsolatedXRGamepadProvider::RequestUpdateCallback callback) {
+  // Save the callback to resolve next time we update (typically on vsync).
+  gamepad_callback_ = std::move(callback);
+
+  // If we aren't presenting, reply now saying that we have no controllers.
+  if (!is_presenting_) {
+    UpdateControllerState();
+  }
 }
 
 mojom::VRPosePtr OpenVRRenderLoop::GetPose() {
@@ -325,7 +334,7 @@ base::WeakPtr<OpenVRRenderLoop> OpenVRRenderLoop::GetWeakPtr() {
 }
 
 void OpenVRRenderLoop::GetFrameData(
-    mojom::VRPresentationProvider::GetFrameDataCallback callback) {
+    mojom::XRFrameDataProvider::GetFrameDataCallback callback) {
   DCHECK(is_presenting_);
 
   if (has_outstanding_frame_) {

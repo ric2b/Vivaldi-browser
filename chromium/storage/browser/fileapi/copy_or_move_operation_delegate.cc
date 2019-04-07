@@ -224,7 +224,7 @@ class SnapshotCopyOrMoveImpl
       return;
     }
 
-    // |validator_| is NULL when the destination filesystem does not do
+    // |validator_| is nullptr when the destination filesystem does not do
     // validation.
     if (!validator_) {
       // No validation is needed.
@@ -661,7 +661,8 @@ void CopyOrMoveOperationDelegate::StreamCopyHelper::DidRead(
     return;
   }
 
-  Write(callback, new net::DrainableIOBuffer(io_buffer_.get(), result));
+  Write(callback,
+        base::MakeRefCounted<net::DrainableIOBuffer>(io_buffer_, result));
 }
 
 void CopyOrMoveOperationDelegate::StreamCopyHelper::Write(

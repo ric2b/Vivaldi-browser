@@ -23,6 +23,18 @@
   <message name="IDS_AUTOFILL_CREDIT_CARD_SIGNIN_PROMO" desc="Promo text shown alongside credit card suggestions to get people to sign in.">
     To use cards from your Google Account, sign in to Chrome
   </message>
+  <message name="IDS_AUTOFILL_SIGNIN_PROMO_MESSAGE" desc="Promo message for Sign-in Promo bubble (shown after a local save) to get people to sign in.">
+    To use your cards on all devices, sign in and turn on sync.
+  </message>
+  <message name="IDS_AUTOFILL_SYNC_PROMO_MESSAGE" desc="Promo message for Sign-in Promo bubble (shown after a local save) to get people to sync.">
+    To use your cards on all devices, turn on sync.
+  </message>
+  <message name="IDS_AUTOFILL_SIGNIN_PROMO_MESSAGE_DICE_DISABLED" desc="Text of the sign in promo bubble and manage cards footnote.">
+    To use your cards on all your devices, <ph name="SIGN_IN_LINK">$1<ex>sign in</ex></ph>.
+  </message>
+  <message name="IDS_AUTOFILL_SIGNIN_PROMO_LINK_DICE_DISABLED" desc="Text of the link to sign in from the save card sync promo.">
+    sign in to Chrome
+  </message>
   <if expr="_google_chrome">
     <message name="IDS_AUTOFILL_DELETE_AUTOCOMPLETE_SUGGESTION_CONFIRMATION_BODY" desc="Text in a dialog to confirm that the user wants to delete an autocomplete form history suggestion.">
       Remove form suggestion from Chrome?
@@ -183,6 +195,9 @@
   <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_CONFIRM" desc="Text to show for the Autofill upload save credit card prompt accept button when more information (e.g., CVC) was needed in order to save the card and was entered.">
     Confirm
   </message>
+  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_LOCAL" desc="Title text for the Autofill save card prompt when the card is to be saved locally. The prompt can be either a bubble or an infobar.">
+    Save card?
+  </message>
   <if expr="is_linux and not chromeos">
     <then>
       <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD" desc="Title text for the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally. The prompt can be either a bubble or an infobar.">
@@ -198,45 +213,36 @@
   <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD_V3" desc="Title text for the Autofill save card prompt when the card is to be saved by uploading it to Google Payments, according to January 2018 UI guidelines. The prompt can be either a bubble or an infobar.">
     Save card?
   </message>
+  <message name="IDS_AUTOFILL_CARD_SAVED" desc="Title text for the Autofill save card manager bubble when the card has been saved either locally or to Google Payments. Also label for icon animation.">
+    Card saved
+  </message>
+  <message name="IDS_AUTOFILL_MANAGE_CARDS" desc="Text to show for the button in the save card manager bubble when the card has been saved either locally or to Google Payments.">
+    Manage cards
+  </message>
+  <message name="IDS_AUTOFILL_DONE" desc="Text to show for the button in the save card manager bubble when the card has been saved either locally or to Google Payments.">
+    Done
+  </message>
   <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally. The prompt can be either a bubble or an infobar.">
     Pay quickly on sites and apps across devices using cards you have saved with Google.
   </message>
-  <if expr="is_linux and not chromeos">
-    <then>
-      <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V2" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments, according to June 2017 UI guidelines. The prompt will be shown in a bubble below the omnibox.">
-        To pay faster next time, save this card to your Google Account.
-      </message>
-    </then>
-    <else>
-      <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V2" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally, according to June 2017 UI guidelines. The prompt can be either a bubble or an infobar.">
-        To pay faster next time, save this card to your Google Account and to this device.
-      </message>
-    </else>
-  </if>
-  <if expr="is_linux and not chromeos">
-    <then>
-      <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V3" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments, according to April 2018 UI guidelines. The prompt will be shown in a bubble below the omnibox.">
-        To pay faster next time, save your card and billing address to your Google Account.
-      </message>
-    </then>
-    <else>
-      <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V3" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally, according to April 2018 UI guidelines. The prompt can be either a bubble or an infobar.">
-        To pay faster next time, save your card and billing address to your Google Account and to this device.
-      </message>
-    </else>
-  </if>
-  <if expr="is_linux and not chromeos">
-    <then>
-      <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V3_WITH_NAME" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments, according to April 2018 UI guidelines. The prompt will be shown in a bubble below the omnibox.">
-        To pay faster next time, save your card, name, and billing address to your Google Account.
-      </message>
-    </then>
-    <else>
-      <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V3_WITH_NAME" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally, according to April 2018 UI guidelines. The prompt can be either a bubble or an infobar.">
-        To pay faster next time, save your card, name, and billing address to your Google Account and to this device.
-      </message>
-    </else>
-  </if>
+  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V2" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments, according to June 2017 UI guidelines. The prompt will be shown in a bubble below the omnibox.">
+    To pay faster next time, save this card to your Google Account.
+  </message>
+  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V2_WITH_DEVICE" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally, according to June 2017 UI guidelines. The prompt can be either a bubble or an infobar.">
+    To pay faster next time, save this card to your Google Account and to this device.
+  </message>
+  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V3" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments, according to April 2018 UI guidelines. The prompt will be shown in a bubble below the omnibox.">
+    To pay faster next time, save your card and billing address to your Google Account.
+  </message>
+  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V3_WITH_DEVICE" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally, according to April 2018 UI guidelines. The prompt can be either a bubble or an infobar.">
+    To pay faster next time, save your card and billing address to your Google Account and to this device.
+  </message>
+  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V3_WITH_NAME" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments, according to April 2018 UI guidelines. The prompt will be shown in a bubble below the omnibox.">
+    To pay faster next time, save your card, name, and billing address to your Google Account.
+  </message>
+  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V3_WITH_NAME_AND_DEVICE" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally, according to April 2018 UI guidelines. The prompt can be either a bubble or an infobar.">
+    To pay faster next time, save your card, name, and billing address to your Google Account and to this device.
+  </message>
   <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_CARDHOLDER_NAME" desc="The label text for the cardholder name textfield.">
     Cardholder name
   </message>
@@ -244,13 +250,47 @@
     This name is from your Google Account.
   </message>
 
-  <!-- Autofill Local card migration bubble or prompt -->
+  <!-- Autofill Local card migration bubble or dialog -->
   <if expr="not is_ios and not is_android">
-    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_BUBBLE_TITLE" desc="Text to show in the Autofill local card migration intermediate bubble.">
-      Do you want to have all your cards in one place?
+    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_BUBBLE_TITLE" desc="The title text for a bubble that offers users to start the process of migrating local cards to cloud.">
+      Save all your cards in one place?
     </message>
-    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_BUBBLE_BUTTON_LABEL" desc="Text to show in the Autofill local card migration intermediate bubble button.">
+    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_BUBBLE_BUTTON_LABEL" desc="The text in the OK button of a bubble that offers users to start the process of migration local cards to cloud.">
       Continue
+    </message>
+    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_DIALOG_TITLE_OFFER" desc="The title text for a dialog that offers to migrate local cards into the cloud.">
+      All your cards in one place
+    </message>
+    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_DIALOG_TITLE_DONE" desc="The title text for a dialog shown after the user accepts another dialog that offers to migrate local cards into the cloud and all cards are successfully migrated.">
+      You're all set!
+    </message>
+    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_DIALOG_TITLE_FIX" desc="The title text for a dialog shown after the user accepts another dialog that offers to migrate local cards into the cloud but there are errors with the cards that they need to address.">
+      Almost done
+    </message>
+    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_DIALOG_MESSAGE_OFFER" desc="The body text for a dialog that offers to migrate local cards into the cloud. [ICU Syntax]">
+      {NUM_CARDS, plural,
+      =1 {This card will be saved to your Google Account for faster checkout across devices.}
+      other {These cards will be saved to your Google Account for faster checkout across devices.}}
+    </message>
+    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_DIALOG_MESSAGE_DONE" desc="The body text for a dialog shown after the user accepts another dialog that offers to migrate local cards into the cloud and all cards are successfully migrated. [ICU Syntax]">
+      {NUM_CARDS, plural,
+      =1 {This card has been added to your Google Account. You can now use it from any signed-in device.}
+      other {These cards have been added to your Google Account. You can now use them from any signed-in device.}}
+    </message>
+    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_DIALOG_MESSAGE_FIX" desc="The body text shown on a dialog after the user accepts another dialog that offers to migrate local cards into the cloud but there are errors with the cards that they need to address.">
+      Please check the info below and fix any errors, if necessary
+    </message>
+    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_DIALOG_BUTTON_LABEL_SAVE" desc="The text in the OK button of a dialog that offers to migrate local cards into the cloud.">
+      Save
+    </message>
+    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_DIALOG_BUTTON_LABEL_CANCEL" desc="The text in the cancel button of a dialog that offers to migrate local cards into the cloud.">
+      Cancel
+    </message>
+    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_DIALOG_BUTTON_LABEL_DONE" desc="The text in the OK button a dialog shown after the user accepts another dialog that offers to migrate local cards into the cloud.">
+      Done
+    </message>
+    <message name="IDS_AUTOFILL_LOCAL_CARD_MIGRATION_DIALOG_BUTTON_LABEL_VIEW_CARDS" desc="The text in the cancel button a dialog shown after the user accepts another dialog that offers to migrate local cards into the cloud.">
+      View cards
     </message>
   </if>
 
@@ -258,7 +298,7 @@
   <message name="IDS_AUTOFILL_CREDIT_CARD_EXPIRATION_DATE_ABBR" desc="Abbreviated label for credit card expiration date. [CHAR-LIMIT=32]">
     Exp: <ph name="EXPIRATION_MONTH">$1<ex>06</ex></ph>/<ph name="EXPIRATION_YEAR">$2<ex>17</ex></ph>
   </message>
-  <message name="IDS_AUTOFILL_CREDIT_CARD_EXPIRATION_DATE_ABBR_V2" desc="Abbreviated label for credit card expiration date. This will be presented as either YY/MM or MM/YY depending on how credit card expiration dates are more commonly presented in the locale. [CHAR-LIMIT=32]" meaning="Label for credit card expiration date for the save card dialog.">
+  <message name="IDS_AUTOFILL_CREDIT_CARD_EXPIRATION_DATE_ABBR_V2" desc="Abbreviated label for credit card expiration date. Please translate the date as either YY/MM or MM/YY depending on how credit card expiration dates are more commonly presented in your locale. [CHAR-LIMIT=32]" meaning="Label for credit card expiration date for the save card dialog.">
     <ph name="EXPIRATION_MONTH">$1<ex>06</ex></ph>/<ph name="EXPIRATION_YEAR">$2<ex>17</ex></ph>
   </message>
 
@@ -373,7 +413,7 @@
   <message name="IDS_AUTOFILL_CARD_UNMASK_NEW_CARD_LINK" desc="Text for link that prompts user to update their credit card after it may have been re-issued." formatter_data="android_java">
     Update card
   </message>
-  <message name="IDS_AUTOFILL_DIALOG_PLACEHOLDER_CVC" desc="The placeholder/label text for credit card verification code in the requestAutocomplete dialog.">
+  <message name="IDS_AUTOFILL_DIALOG_PLACEHOLDER_CVC" desc="The placeholder/label text for credit card verification code in the requestAutocomplete dialog. The text field where this is presented can be very narrow, so please prefer to translate this to the most common abbreviated form. [CHAR-LIMIT=4]" meaning="Placeholder label for a very narrow CVC field that should preferably be translated to an abbreviated form.">
     CVC
   </message>
   <message name="IDS_AUTOFILL_LOADING_REGIONS" desc="The string to display in the regions combobox while loading the region data.">
@@ -389,7 +429,60 @@
     No saved addresses
   </message>
 
+  <!-- Autofill settings -->
+  <message name="IDS_AUTOFILL_ADDRESSES" desc="Title for the list of addresses that chrome has saved for use in filling in forms.">
+    Addresses
+  </message>
+  <message name="IDS_AUTOFILL_ENABLE_PROFILES_TOGGLE_SUBLABEL" desc="Sublabel for a toggle that allows users to control whether addresses should be saved and forms should be autofilled with them." formatter_data="android_java">
+    Includes information like phone numbers, email addresses, and shipping addresses
+  </message>
+  <message name="IDS_AUTOFILL_ENABLE_CREDIT_CARDS_TOGGLE_SUBLABEL" desc="Sublabel for a toggle that allows users to control whether credit cards should be saved and forms should be autofilled with it." formatter_data="android_java">
+    Makes it faster to pay for things online
+  </message>
+  <if expr="not is_ios">
+    <then>
+      <message name="IDS_AUTOFILL_ADDRESSES_SETTINGS_TITLE" desc="Title for the Autofill settings page that allows user to manage their list of saved addresses and Autofill preferences for addresses. Sentence-Cased." formatter_data="android_java">
+        Addresses and more
+      </message>
+      <message name="IDS_AUTOFILL_PAYMENT_METHODS" desc="Title for the list of saved payment methods that can be used to fill in forms. Also used as the title for the Autofill settings page that allows user to manage their list of saved payment methods and Autofill preferences for payment methods. Sentence-Cased." formatter_data="android_java">
+        Payment methods
+      </message>
+      <message name="IDS_AUTOFILL_ENABLE_PROFILES_TOGGLE_LABEL" desc="Label for a toggle that allows users to control whether addresses should be saved and forms should be autofilled with them. Sentence-Cased." formatter_data="android_java">
+        Save and fill addresses
+      </message>
+      <message name="IDS_AUTOFILL_ENABLE_CREDIT_CARDS_TOGGLE_LABEL" desc="Label for a toggle that allows users to control whether credit cards should be saved and forms should be autofilled with it. Sentence-Cased." formatter_data="android_java">
+        Save and fill payment methods
+      </message>
+    </then>
+    <else>
+      <message name="IDS_AUTOFILL_ADDRESSES_SETTINGS_TITLE" desc="Title for the Autofill settings page that allows user to manage their list of saved addresses and Autofill preferences for addresses. Title-Cased.">
+        Addresses and More
+      </message>
+      <message name="IDS_AUTOFILL_PAYMENT_METHODS" desc="Title for the list of saved payment methods that can be used to fill in forms. Also used as the title for the Autofill settings page that allows user to manage their list of saved payment methods and Autofill preferences for payment methods. Title-Cased.">
+        Payment Methods
+      </message>
+      <message name="IDS_AUTOFILL_ENABLE_PROFILES_TOGGLE_LABEL" desc="Label for a toggle that allows users to control whether addresses should be saved and forms should be autofilled with them. Title-Cased.">
+        Save and Fill Addresses
+      </message>
+      <message name="IDS_AUTOFILL_ENABLE_CREDIT_CARDS_TOGGLE_LABEL" desc="Label for a toggle that allows users to control whether credit cards should be saved and forms should be autofilled with it. Title-Cased.">
+        Save and Fill Payment Methods
+      </message>
+    </else>
+  </if>
+
   <!-- Autofill/Wallet integration preferences -->
+  <if expr="not is_ios">
+    <then>
+      <message name="IDS_AUTOFILL_ENABLE_PAYMENTS_INTEGRATION_CHECKBOX_LABEL" desc="Label for the checkbox that controls the Autofill/Payments integration feature used for Autofill Home. 'Google Pay' should not be translated as it is the product name. Sentence-Cased.">
+        Payment methods and addresses using Google Pay
+      </message>
+    </then>
+    <else>
+      <message name="IDS_AUTOFILL_ENABLE_PAYMENTS_INTEGRATION_CHECKBOX_LABEL" desc="Label for the checkbox that controls the Autofill/Payments integration feature used for Autofill Home. 'Google Pay' should not be translated as it is the product name. Title-Cased.">
+        Payment Methods and Addresses Using Google Pay
+      </message>
+    </else>
+  </if>
   <message name="IDS_AUTOFILL_WALLET_MANAGEMENT_LINK_TEXT" desc="Text for link that allows users to see and edit their Wallet information." formatter_data="android_java">
     Edit
   </message>

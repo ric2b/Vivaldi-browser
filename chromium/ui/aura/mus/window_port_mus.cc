@@ -77,7 +77,7 @@ void WindowPortMus::SetCursor(const ui::CursorData& cursor) {
 }
 
 void WindowPortMus::SetEventTargetingPolicy(
-    ui::mojom::EventTargetingPolicy policy) {
+    ws::mojom::EventTargetingPolicy policy) {
   window_tree_client_->SetEventTargetingPolicy(this, policy);
 }
 
@@ -85,20 +85,13 @@ void WindowPortMus::SetCanAcceptDrops(bool can_accept_drops) {
   window_tree_client_->SetCanAcceptDrops(this, can_accept_drops);
 }
 
-void WindowPortMus::SetExtendedHitRegionForChildren(
-    const gfx::Insets& mouse_insets,
-    const gfx::Insets& touch_insets) {
-  window_tree_client_->SetExtendedHitRegionForChildren(window_, mouse_insets,
-                                                       touch_insets);
+void WindowPortMus::SetHitTestMask(const base::Optional<gfx::Rect>& mask) {
+  window_tree_client_->SetHitTestMask(this, mask);
 }
 
-void WindowPortMus::SetHitTestMask(const base::Optional<gfx::Rect>& rect) {
-  window_tree_client_->SetHitTestMask(this, rect);
-}
-
-void WindowPortMus::Embed(ui::mojom::WindowTreeClientPtr client,
+void WindowPortMus::Embed(ws::mojom::WindowTreeClientPtr client,
                           uint32_t flags,
-                          ui::mojom::WindowTree::EmbedCallback callback) {
+                          ws::mojom::WindowTree::EmbedCallback callback) {
   window_tree_client_->Embed(window_, std::move(client), flags,
                              std::move(callback));
 }
@@ -106,7 +99,7 @@ void WindowPortMus::Embed(ui::mojom::WindowTreeClientPtr client,
 void WindowPortMus::EmbedUsingToken(
     const base::UnguessableToken& token,
     uint32_t flags,
-    ui::mojom::WindowTree::EmbedCallback callback) {
+    ws::mojom::WindowTree::EmbedCallback callback) {
   window_tree_client_->EmbedUsingToken(window_, token, flags,
                                        std::move(callback));
 }
@@ -244,7 +237,7 @@ void WindowPortMus::RemoveChildFromServer(WindowMus* child) {
 
 void WindowPortMus::ReorderFromServer(WindowMus* child,
                                       WindowMus* relative,
-                                      ui::mojom::OrderDirection direction) {
+                                      ws::mojom::OrderDirection direction) {
   // Keying off solely the id isn't entirely accurate, in so far as if Window
   // does some other reordering then the server and client are out of sync.
   // But we assume only one client can make changes to a particular window at
@@ -252,7 +245,7 @@ void WindowPortMus::ReorderFromServer(WindowMus* child,
   ServerChangeData data;
   data.child_id = child->server_id();
   ScopedServerChange change(this, ServerChangeType::REORDER, data);
-  if (direction == ui::mojom::OrderDirection::BELOW)
+  if (direction == ws::mojom::OrderDirection::BELOW)
     window_->StackChildBelow(child->GetWindow(), relative->GetWindow());
   else
     window_->StackChildAbove(child->GetWindow(), relative->GetWindow());
@@ -312,8 +305,7 @@ void WindowPortMus::SetPropertyFromServer(
 
 void WindowPortMus::SetFrameSinkIdFromServer(
     const viz::FrameSinkId& frame_sink_id) {
-  DCHECK(window_mus_type() == WindowMusType::TOP_LEVEL_IN_WM ||
-         window_mus_type() == WindowMusType::EMBED_IN_OWNER);
+  DCHECK(window_mus_type() == WindowMusType::EMBED_IN_OWNER);
   window_->SetEmbedFrameSinkId(frame_sink_id);
   UpdatePrimarySurfaceId();
 }
@@ -491,8 +483,6 @@ void WindowPortMus::OnDeviceScaleFactorChanged(float old_device_scale_factor,
     local_surface_id_ = parent_local_surface_id_allocator_.GenerateId();
     local_layer_tree_frame_sink_->SetLocalSurfaceId(local_surface_id_);
   }
-  window_tree_client_->OnWindowMusDeviceScaleFactorChanged(
-      this, old_device_scale_factor, new_device_scale_factor);
 
   if (window_->delegate()) {
     window_->delegate()->OnDeviceScaleFactorChanged(old_device_scale_factor,
@@ -610,9 +600,7 @@ bool WindowPortMus::ShouldRestackTransientChildren() {
 }
 
 void WindowPortMus::UpdatePrimarySurfaceId() {
-  if (window_mus_type() != WindowMusType::TOP_LEVEL_IN_WM &&
-      window_mus_type() != WindowMusType::EMBED_IN_OWNER &&
-      window_mus_type() != WindowMusType::DISPLAY_MANUALLY_CREATED &&
+  if (window_mus_type() != WindowMusType::EMBED_IN_OWNER &&
       window_mus_type() != WindowMusType::LOCAL) {
     return;
   }
@@ -626,27 +614,18 @@ void WindowPortMus::UpdatePrimarySurfaceId() {
 }
 
 void WindowPortMus::UpdateClientSurfaceEmbedder() {
-  if (window_mus_type() != WindowMusType::TOP_LEVEL_IN_WM &&
-      window_mus_type() != WindowMusType::EMBED_IN_OWNER &&
-      window_mus_type() != WindowMusType::DISPLAY_MANUALLY_CREATED &&
+  if (window_mus_type() != WindowMusType::EMBED_IN_OWNER &&
       window_mus_type() != WindowMusType::LOCAL) {
     return;
   }
 
   if (!client_surface_embedder_) {
     client_surface_embedder_ = std::make_unique<ClientSurfaceEmbedder>(
-        window_, window_mus_type() == WindowMusType::TOP_LEVEL_IN_WM,
-        window_tree_client_->normal_client_area_insets_);
+        window_, /* inject_gutter */ false, gfx::Insets());
   }
 
   client_surface_embedder_->SetPrimarySurfaceId(primary_surface_id_);
   client_surface_embedder_->SetFallbackSurfaceInfo(fallback_surface_info_);
-}
-
-void WindowPortMus::OnSurfaceChanged(const viz::SurfaceInfo& surface_info) {
-  // TODO(fsamuel): Rename OnFirstSurfaceActivation() and set primary earlier
-  // based on feedback from LayerTreeFrameSinkLocal.
-  NOTREACHED();
 }
 
 }  // namespace aura

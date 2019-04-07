@@ -34,7 +34,6 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/events/event_listener.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
-#include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_v8_reference.h"
 #include "third_party/blink/renderer/platform/heap/self_keep_alive.h"
 #include "v8/include/v8.h"
@@ -43,7 +42,6 @@ namespace blink {
 
 class Event;
 class EventTarget;
-class WorkerOrWorkletGlobalScope;
 
 // There are two kinds of event listeners: HTML or non-HMTL. onload,
 // onfocus, etc (attributes) are always HTML event handler type; Event
@@ -84,6 +82,11 @@ class CORE_EXPORT V8AbstractEventListener : public EventListener {
   // Returns the listener object, either a function or an object, or the empty
   // handle if the user script is not compilable.  No exception will be thrown
   // even if the user script is not compilable.
+  v8::Local<v8::Object> GetListenerObjectForInspector(
+      ExecutionContext* execution_context) final {
+    return GetListenerObjectInternal(execution_context);
+  }
+
   v8::Local<v8::Object> GetListenerObject(ExecutionContext* execution_context) {
     return GetListenerObjectInternal(execution_context);
   }
@@ -107,7 +110,7 @@ class CORE_EXPORT V8AbstractEventListener : public EventListener {
   bool IsAttribute() const final { return is_attribute_; }
 
   v8::Isolate* GetIsolate() const { return isolate_; }
-  DOMWrapperWorld& World() const { return *world_; }
+  DOMWrapperWorld* GetWorldForInspector() const final { return world_.get(); }
 
   void Trace(blink::Visitor*) override;
 
@@ -119,12 +122,15 @@ class CORE_EXPORT V8AbstractEventListener : public EventListener {
     return GetExistingListenerObject();
   }
 
-  void SetListenerObject(v8::Local<v8::Object>);
+  void SetListenerObject(ScriptState*,
+                         v8::Local<v8::Object>,
+                         const V8PrivateProperty::Symbol&);
 
   void InvokeEventHandler(ScriptState*, Event*, v8::Local<v8::Value>);
 
   // Get the receiver object to use for event listener call.
   v8::Local<v8::Object> GetReceiverObject(ScriptState*, Event*);
+  DOMWrapperWorld& World() const { return *world_; }
 
  private:
   // This could return an empty handle and callers need to check return value.
@@ -132,7 +138,7 @@ class CORE_EXPORT V8AbstractEventListener : public EventListener {
   virtual v8::Local<v8::Value>
   CallListenerFunction(ScriptState*, v8::Local<v8::Value> jsevent, Event*) = 0;
 
-  virtual bool ShouldPreventDefault(v8::Local<v8::Value> return_value);
+  virtual bool ShouldPreventDefault(v8::Local<v8::Value> return_value, Event*);
 
   static void WrapperCleared(
       const v8::WeakCallbackInfo<V8AbstractEventListener>&);
@@ -144,11 +150,6 @@ class CORE_EXPORT V8AbstractEventListener : public EventListener {
 
   scoped_refptr<DOMWrapperWorld> world_;
   v8::Isolate* isolate_;
-
-  // nullptr unless this listener belongs to a worker or worklet.
-  Member<WorkerOrWorkletGlobalScope> worker_or_worklet_global_scope_;
-
-  SelfKeepAlive<V8AbstractEventListener> keep_alive_;
 };
 
 }  // namespace blink

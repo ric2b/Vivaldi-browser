@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/driver/sync_service_observer.h"
 #include "components/unified_consent/unified_consent_service_client.h"
 #include "services/identity/public/cpp/identity_manager.h"
@@ -40,15 +41,27 @@ enum class MigrationState : int {
 // Used in histograms. Do not change existing values, append new values at the
 // end.
 enum class ConsentBumpSuppressReason {
+  // There is no suppress reason. The consent bump was shown.
   kNone,
+  // The user wasn't signed in during the migration.
   kNotSignedIn,
+  // The user wasn't syncing everything during the migration.
   kSyncEverythingOff,
+  // The user didn't have all on-by-default privacy settings enabled during
+  // migration.
   kPrivacySettingOff,
   kSettingsOptIn,
+  // The user was eligible for seeing the consent bump, but then signed out.
   kUserSignedOut,
   kSyncPaused,
+  // The user was eligible for seeing the consent bump, but turned an individual
+  // sync data type off.
+  kUserTurnedSyncDatatypeOff,
+  // The user was eligible for seeing the consent bump, but turned an
+  // on-by-default privacy setting off.
+  kUserTurnedPrivacySettingOff,
 
-  kMaxValue = kSyncPaused
+  kMaxValue = kUserTurnedPrivacySettingOff
 };
 
 // Google services that can be toggled in user settings.
@@ -119,13 +132,29 @@ class UnifiedConsentService : public KeyedService,
   // syncer::SyncServiceObserver:
   void OnStateChanged(syncer::SyncService* sync) override;
 
+  // Updates the sync settings if sync isn't disabled and the sync engine is
+  // initialized.
+  // When |sync_everything| is false:
+  //  - All sync data types in |enable_data_types| will be enabled.
+  //  - All sync data types in |disable_data_types| will be disabled.
+  //  - All data types in neither of the two sets will remain in the same state.
+  // When |sync_everything| is true, |enable_data_types| and
+  // |disable_data_types| will be ignored.
+  void UpdateSyncSettingsIfPossible(
+      bool sync_everything,
+      syncer::ModelTypeSet enable_data_types = syncer::ModelTypeSet(),
+      syncer::ModelTypeSet disable_data_types = syncer::ModelTypeSet());
+
+  // Posts a task to call |UpdateSyncSettingsIfPossible|.
+  void PostTaskToUpdateSyncSettings(
+      bool sync_everything,
+      syncer::ModelTypeSet enable_data_types = syncer::ModelTypeSet(),
+      syncer::ModelTypeSet disable_data_types = syncer::ModelTypeSet());
+
   // Called when |prefs::kUnifiedConsentGiven| pref value changes.
   // When set to true, it enables syncing of all data types and it enables all
   // non-personalized services. Otherwise it does nothing.
   void OnUnifiedConsentGivenPrefChanged();
-
-  // Enables/disables syncing everything if the sync engine is initialized.
-  void SetSyncEverythingIfPossible(bool sync_everything);
 
   // Migration helpers.
   MigrationState GetMigrationState();
@@ -145,13 +174,15 @@ class UnifiedConsentService : public KeyedService,
   // Checks if all on-by-default non-personalized services are on.
   bool AreAllOnByDefaultPrivacySettingsOn();
 
-  // Helper that checks whether it's okay to call
-  // |SyncService::OnUserChoseDatatypes|.
-  bool IsSyncConfigurable();
-
   // Records a sample for each bucket enabled by the user (except kNone).
   // kNone is recorded when none of the other buckets are recorded.
   void RecordSettingsHistogram();
+
+  // This method is called on startup to check the eligibility criteria for
+  // showing the consent bump. The check is only done when the profile was
+  // eligible before. If the user is not eligible anymore, the
+  // kShouldShowUnifiedConsentBump pref is set to false.
+  void CheckConsentBumpEligibility();
 
   std::unique_ptr<UnifiedConsentServiceClient> service_client_;
   PrefService* pref_service_;
@@ -159,6 +190,8 @@ class UnifiedConsentService : public KeyedService,
   syncer::SyncService* sync_service_;
 
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
+
+  base::WeakPtrFactory<UnifiedConsentService> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(UnifiedConsentService);
 };

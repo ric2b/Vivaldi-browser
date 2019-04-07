@@ -14,24 +14,26 @@
 #include "base/message_loop/message_loop_current.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "ui/ozone/platform/wayland/wayland_buffer_manager.h"
 #include "ui/ozone/platform/wayland/wayland_object.h"
 #include "ui/ozone/platform/wayland/wayland_window.h"
 
 static_assert(XDG_SHELL_VERSION_CURRENT == 5, "Unsupported xdg-shell version");
 
 namespace ui {
+
 namespace {
 const uint32_t kMaxCompositorVersion = 4;
+const uint32_t kMaxLinuxDmabufVersion = 1;
 const uint32_t kMaxSeatVersion = 4;
 const uint32_t kMaxShmVersion = 1;
 const uint32_t kMaxXdgShellVersion = 1;
 }  // namespace
 
-WaylandConnection::WaylandConnection() : controller_(FROM_HERE) {}
+WaylandConnection::WaylandConnection()
+    : controller_(FROM_HERE), binding_(this) {}
 
-WaylandConnection::~WaylandConnection() {
-  DCHECK(window_map_.empty());
-}
+WaylandConnection::~WaylandConnection() = default;
 
 bool WaylandConnection::Initialize() {
   static const wl_registry_listener registry_listener = {
@@ -147,6 +149,39 @@ int WaylandConnection::GetKeyboardModifiers() {
   return modifiers;
 }
 
+void WaylandConnection::CreateZwpLinuxDmabuf(
+    base::File file,
+    uint32_t width,
+    uint32_t height,
+    const std::vector<uint32_t>& strides,
+    const std::vector<uint32_t>& offsets,
+    uint32_t format,
+    const std::vector<uint64_t>& modifiers,
+    uint32_t planes_count,
+    uint32_t buffer_id) {
+  DCHECK(base::MessageLoopForUI::IsCurrent());
+  if (!buffer_manager_->CreateBuffer(std::move(file), width, height, strides,
+                                     offsets, format, modifiers, planes_count,
+                                     buffer_id)) {
+    TerminateGpuProcess(buffer_manager_->error_message());
+  }
+}
+
+void WaylandConnection::DestroyZwpLinuxDmabuf(uint32_t buffer_id) {
+  DCHECK(base::MessageLoopForUI::IsCurrent());
+  if (!buffer_manager_->DestroyBuffer(buffer_id)) {
+    TerminateGpuProcess(buffer_manager_->error_message());
+  }
+}
+
+void WaylandConnection::ScheduleBufferSwap(gfx::AcceleratedWidget widget,
+                                           uint32_t buffer_id) {
+  DCHECK(base::MessageLoopForUI::IsCurrent());
+  if (!buffer_manager_->SwapBuffer(widget, buffer_id)) {
+    TerminateGpuProcess(buffer_manager_->error_message());
+  }
+}
+
 ClipboardDelegate* WaylandConnection::GetClipboardDelegate() {
   return this;
 }
@@ -177,6 +212,26 @@ void WaylandConnection::RequestClipboardData(
 
 bool WaylandConnection::IsSelectionOwner() {
   return !!data_source_;
+}
+
+ozone::mojom::WaylandConnectionPtr WaylandConnection::BindInterface() {
+  // This mustn't be called twice or when the zwp_linux_dmabuf interface is not
+  // available.
+  DCHECK(!binding_.is_bound() || buffer_manager_);
+  ozone::mojom::WaylandConnectionPtr ptr;
+  binding_.Bind(MakeRequest(&ptr));
+  return ptr;
+}
+
+std::vector<gfx::BufferFormat> WaylandConnection::GetSupportedBufferFormats() {
+  if (buffer_manager_)
+    return buffer_manager_->supported_buffer_formats();
+  return std::vector<gfx::BufferFormat>();
+}
+
+void WaylandConnection::SetTerminateGpuCallback(
+    base::OnceCallback<void(std::string)> terminate_callback) {
+  terminate_gpu_cb_ = std::move(terminate_callback);
 }
 
 void WaylandConnection::GetAvailableMimeTypes(
@@ -225,6 +280,12 @@ void WaylandConnection::OnFileCanReadWithoutBlocking(int fd) {
 }
 
 void WaylandConnection::OnFileCanWriteWithoutBlocking(int fd) {}
+
+void WaylandConnection::TerminateGpuProcess(std::string reason) {
+  std::move(terminate_gpu_cb_).Run(std::move(reason));
+  binding_.Unbind();
+  buffer_manager_->ClearState();
+}
 
 const std::vector<std::unique_ptr<WaylandOutput>>&
 WaylandConnection::GetOutputList() const {
@@ -330,6 +391,13 @@ void WaylandConnection::Global(void* data,
     connection->data_device_manager_.reset(
         new WaylandDataDeviceManager(data_device_manager.release()));
     connection->data_device_manager_->set_connection(connection);
+  } else if (!connection->buffer_manager_ &&
+             (strcmp(interface, "zwp_linux_dmabuf_v1") == 0)) {
+    wl::Object<zwp_linux_dmabuf_v1> zwp_linux_dmabuf =
+        wl::Bind<zwp_linux_dmabuf_v1>(
+            registry, name, std::min(version, kMaxLinuxDmabufVersion));
+    connection->buffer_manager_.reset(
+        new WaylandBufferManager(zwp_linux_dmabuf.release(), connection));
   }
 
   connection->ScheduleFlush();

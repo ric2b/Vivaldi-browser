@@ -36,7 +36,6 @@ jumbo_component("aura") {
     "input_state_lookup.h",
     "input_state_lookup_win.h",
     "layout_manager.h",
-    "local/layer_tree_frame_sink_local.h",
     "local/window_port_local.h",
     "mus/capture_synchronizer.h",
     "mus/capture_synchronizer_delegate.h",
@@ -59,8 +58,8 @@ jumbo_component("aura") {
     "mus/property_utils.h",
     "mus/system_input_injector_mus.h",
     "mus/text_input_client_impl.h",
+    "mus/topmost_window_tracker.h",
     "mus/user_activity_forwarder.h",
-    "mus/window_manager_delegate.h",
     "mus/window_mus.h",
     "mus/window_port_mus.h",
     "mus/window_tree_client.h",
@@ -70,6 +69,7 @@ jumbo_component("aura") {
     "mus/window_tree_host_mus.h",
     "mus/window_tree_host_mus_delegate.h",
     "mus/window_tree_host_mus_init_params.h",
+    "null_window_targeter.h",
     "scoped_keyboard_hook.h",
     "scoped_simple_keyboard_hook.h",
     "scoped_window_targeter.h",
@@ -110,7 +110,6 @@ jumbo_component("aura") {
     "input_state_lookup.cc",
     "input_state_lookup_win.cc",
     "layout_manager.cc",
-    "local/layer_tree_frame_sink_local.cc",
     "local/window_port_local.cc",
     "mouse_location_manager.cc",
     "mouse_location_manager.h",
@@ -128,13 +127,14 @@ jumbo_component("aura") {
     "mus/property_utils.cc",
     "mus/system_input_injector_mus.cc",
     "mus/text_input_client_impl.cc",
+    "mus/topmost_window_tracker.cc",
     "mus/user_activity_forwarder.cc",
-    "mus/window_manager_delegate.cc",
     "mus/window_port_mus.cc",
     "mus/window_tree_client.cc",
     "mus/window_tree_client_delegate.cc",
     "mus/window_tree_host_mus.cc",
     "mus/window_tree_host_mus_init_params.cc",
+    "null_window_targeter.cc",
     "scoped_keyboard_hook.cc",
     "scoped_simple_keyboard_hook.cc",
     "scoped_window_targeter.cc",
@@ -169,9 +169,9 @@ jumbo_component("aura") {
     "//mojo/public/cpp/system",
     "//net",
     "//services/service_manager/public/cpp",
-    "//services/ui/common:mus_common",
-    "//services/ui/public/cpp",
-    "//services/ui/public/interfaces",
+    "//services/ws/common",
+    "//services/ws/public/cpp",
+    "//services/ws/public/mojom",
     "//skia",
     "//ui/base",
     "//ui/base/ime",
@@ -209,14 +209,9 @@ jumbo_component("aura") {
   }
 
   if (use_ozone) {
-    deps += [
-      "//ui/events/ozone:events_ozone_layout",
-      "//ui/ozone",
-    ]
-    sources += [
-      "mus/platform_event_source_mus_ozone.cc",
-      "mus/platform_event_source_mus_ozone.h",
-    ]
+    deps += [ "//ui/ozone" ]
+    public += [ "screen_ozone.h" ]
+    sources += [ "screen_ozone.cc" ]
   }
 
   if (is_android) {
@@ -249,10 +244,6 @@ jumbo_static_library("test_support") {
     "test/mus/change_completion_waiter.cc",
     "test/mus/change_completion_waiter.h",
     "test/mus/input_method_mus_test_api.h",
-    "test/mus/test_window_manager_client.cc",
-    "test/mus/test_window_manager_client.h",
-    "test/mus/test_window_manager_delegate.cc",
-    "test/mus/test_window_manager_delegate.h",
     "test/mus/test_window_tree.cc",
     "test/mus/test_window_tree.h",
     "test/mus/test_window_tree_client_delegate.cc",
@@ -289,7 +280,7 @@ jumbo_static_library("test_support") {
 
   public_deps = [
     ":aura",
-    "//services/ui/common:mus_common",
+    "//services/ws/common",
 
     # Must be public as headers include ui_features.h.
     "//ui/base:ui_features",
@@ -299,8 +290,8 @@ jumbo_static_library("test_support") {
     "//cc:test_support",
     "//components/viz/test:test_support",
     "//services/service_manager/public/cpp",
-    "//services/ui/public/cpp/input_devices",
-    "//services/ui/public/interfaces",
+    "//services/ws/public/cpp/input_devices",
+    "//services/ws/public/mojom",
     "//skia",
     "//testing/gtest",
     "//ui/base:test_support",
@@ -382,7 +373,6 @@ test("aura_unittests") {
     "mus/input_method_mus_unittest.cc",
     "mus/os_exchange_data_provider_mus_unittest.cc",
     "mus/property_converter_unittest.cc",
-    "mus/system_input_injector_mus_unittest.cc",
     "mus/user_activity_forwarder_unittest.cc",
     "mus/window_port_mus_unittest.cc",
     "mus/window_tree_client_unittest.cc",
@@ -403,8 +393,8 @@ test("aura_unittests") {
     "//components/viz/client",
     "//mojo/core/embedder",
     "//net",
-    "//services/ui/common:task_runner_test_base",
-    "//services/ui/public/cpp",
+    "//services/ws/common:task_runner_test_base",
+    "//services/ws/public/cpp",
     "//skia",
     "//testing/gtest",
     "//ui/aura_extra",
@@ -422,11 +412,7 @@ test("aura_unittests") {
     "//ui/wm",
   ]
 
-  if (is_linux) {
-    deps += [ "//third_party/mesa" ]
-  }
-
   data_deps = [
-    "//third_party/mesa:osmesa",
+    "//third_party/mesa_headers",
   ]
 }

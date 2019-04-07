@@ -14,8 +14,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/sync/model/sync_change_processor.h"
 #include "components/sync/model/sync_error.h"
 #include "components/sync/model/sync_error_factory_mock.h"
@@ -451,6 +453,10 @@ TEST_F(PasswordSyncableServiceTest, MergeDataAndPushBack) {
               FillAutofillableLogins(_)).WillOnce(AppendForm(form2));
   EXPECT_CALL(*other_service_wrapper.password_store(), FillBlacklistLogins(_))
       .WillOnce(Return(true));
+  // This method reads all passwords from the database. Make sure that the
+  // database is not read twice if there was no problem getting all the
+  // passwords during the first read.
+  EXPECT_CALL(*password_store(), DeleteUndecryptableLogins()).Times(0);
 
   EXPECT_CALL(*password_store(), AddLoginImpl(PasswordIs(form2)));
   EXPECT_CALL(*other_service_wrapper.password_store(),
@@ -492,8 +498,11 @@ TEST_F(PasswordSyncableServiceTest, FailedReadFromPasswordStore) {
   syncer::SyncError error(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
                           "Failed to get passwords from store.",
                           syncer::PASSWORDS);
+  EXPECT_CALL(*password_store(), DeleteUndecryptableLogins())
+      .WillOnce(Return(DatabaseCleanupResult::kSuccess));
   EXPECT_CALL(*password_store(), FillAutofillableLogins(_))
-      .WillOnce(Return(false));
+      .Times(2)
+      .WillRepeatedly(Return(false));
   EXPECT_CALL(*error_factory, CreateAndUploadError(_, _))
       .WillOnce(Return(error));
   // ActOnPasswordStoreChanges() below shouldn't generate any changes for Sync.
@@ -509,6 +518,73 @@ TEST_F(PasswordSyncableServiceTest, FailedReadFromPasswordStore) {
   PasswordStoreChangeList list;
   list.push_back(PasswordStoreChange(PasswordStoreChange::ADD, form));
   service()->ActOnPasswordStoreChanges(list);
+}
+
+// Disable feature for deleting undecryptable logins.
+TEST_F(PasswordSyncableServiceTest, DeleteUndecryptableLoginsDisabled) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      features::kDeleteUndecryptableLogins);
+  auto error_factory = std::make_unique<syncer::SyncErrorFactoryMock>();
+  syncer::SyncError error(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
+                          "Failed to get passwords from store.",
+                          syncer::PASSWORDS);
+  EXPECT_CALL(*error_factory, CreateAndUploadError(_, _))
+      .WillOnce(Return(error));
+
+  EXPECT_CALL(*password_store(), FillAutofillableLogins(_))
+      .WillOnce(Return(false));
+  EXPECT_CALL(*password_store(), DeleteUndecryptableLogins()).Times(0);
+
+  syncer::SyncMergeResult result = service()->MergeDataAndStartSyncing(
+      syncer::PASSWORDS, SyncDataList(), std::move(processor_),
+      std::move(error_factory));
+  EXPECT_TRUE(result.error().IsSet());
+}
+
+// Enable feature for deleting undecryptable logins.
+TEST_F(PasswordSyncableServiceTest, DeleteUndecryptableLoginsEnabled) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kDeleteUndecryptableLogins);
+
+  EXPECT_CALL(*processor_, ProcessSyncChanges(_, IsEmpty()));
+  EXPECT_CALL(*password_store(), FillAutofillableLogins(_))
+      .Times(2)
+      .WillOnce(Return(false))
+      .WillOnce(Return(true));
+  EXPECT_CALL(*password_store(), DeleteUndecryptableLogins())
+      .WillOnce(Return(DatabaseCleanupResult::kSuccess));
+  EXPECT_CALL(*password_store(), FillBlacklistLogins(_))
+      .WillOnce(Return(true));
+
+  syncer::SyncMergeResult result = service()->MergeDataAndStartSyncing(
+      syncer::PASSWORDS, SyncDataList(), std::move(processor_), nullptr);
+  EXPECT_FALSE(result.error().IsSet());
+}
+
+// Database cleanup fails because encryption is unavailable.
+TEST_F(PasswordSyncableServiceTest, FailedDeleteUndecryptableLogins) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kDeleteUndecryptableLogins);
+  auto error_factory = std::make_unique<syncer::SyncErrorFactoryMock>();
+  syncer::SyncError error(
+      FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
+      "Failed to get encryption key during database cleanup.",
+      syncer::PASSWORDS);
+  EXPECT_CALL(*error_factory, CreateAndUploadError(_, _))
+      .WillOnce(Return(error));
+
+  EXPECT_CALL(*password_store(), FillAutofillableLogins(_))
+      .WillOnce(Return(false));
+  EXPECT_CALL(*password_store(), DeleteUndecryptableLogins())
+      .WillOnce(Return(DatabaseCleanupResult::kEncryptionUnavailable));
+
+  syncer::SyncMergeResult result = service()->MergeDataAndStartSyncing(
+      syncer::PASSWORDS, SyncDataList(), std::move(processor_),
+      std::move(error_factory));
+  EXPECT_TRUE(result.error().IsSet());
 }
 
 // Start syncing with an error in ProcessSyncChanges. Subsequent password store

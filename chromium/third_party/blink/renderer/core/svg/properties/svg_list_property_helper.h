@@ -137,6 +137,8 @@ class SVGListPropertyHelper : public SVGPropertyHelper<Derived> {
                               float percentage,
                               AnimationMode);
 
+  String SerializeList() const;
+
   virtual ItemPropertyType* CreatePaddingItem() const {
     return ItemPropertyType::Create();
   }
@@ -224,17 +226,6 @@ ItemProperty* SVGListPropertyHelper<Derived, ItemProperty>::ReplaceItem(
   if (!CheckIndexBound(index, exception_state))
     return nullptr;
 
-  if (values_.IsEmpty()) {
-    // 'newItem' already lived in our list, we removed it, and now we're empty,
-    // which means there's nothing to replace.
-    // TODO(fs): This should not cause us to throw an exception.
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kIndexSizeError,
-        String::Format("Failed to replace the provided item at index %zu.",
-                       index));
-    return nullptr;
-  }
-
   // Update the value at the desired position 'index'.
   Member<ItemPropertyType>& position = values_[index];
   DCHECK_EQ(position->OwnerList(), this);
@@ -251,8 +242,8 @@ bool SVGListPropertyHelper<Derived, ItemProperty>::CheckIndexBound(
   if (index >= values_.size()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kIndexSizeError,
-        ExceptionMessages::IndexExceedsMaximumBound("index", index,
-                                                    values_.size()));
+        ExceptionMessages::IndexExceedsMaximumBound(
+            "index", index, static_cast<size_t>(values_.size())));
     return false;
   }
   return true;
@@ -294,6 +285,24 @@ bool SVGListPropertyHelper<Derived, ItemProperty>::AdjustFromToListValues(
     Append(CreatePaddingItem());
 
   return true;
+}
+
+template <typename Derived, typename ItemProperty>
+String SVGListPropertyHelper<Derived, ItemProperty>::SerializeList() const {
+  if (values_.IsEmpty())
+    return String();
+
+  StringBuilder builder;
+
+  auto it = values_.begin();
+  auto it_end = values_.end();
+  while (it != it_end) {
+    builder.Append((*it)->ValueAsString());
+    ++it;
+    if (it != it_end)
+      builder.Append(' ');
+  }
+  return builder.ToString();
 }
 
 }  // namespace blink

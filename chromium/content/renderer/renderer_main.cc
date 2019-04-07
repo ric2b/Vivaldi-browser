@@ -84,10 +84,9 @@ int RendererMain(const MainFunctionParams& parameters) {
 
   const base::CommandLine& command_line = parameters.command_line;
 
-  base::SamplingHeapProfiler::InitTLSSlot();
+  base::SamplingHeapProfiler::Init();
   if (command_line.HasSwitch(switches::kSamplingHeapProfiler)) {
-    base::SamplingHeapProfiler* profiler =
-        base::SamplingHeapProfiler::GetInstance();
+    base::SamplingHeapProfiler* profiler = base::SamplingHeapProfiler::Get();
     unsigned sampling_interval = 0;
     bool parsed = base::StringToUint(
         command_line.GetSwitchValueASCII(switches::kSamplingHeapProfiler),
@@ -182,9 +181,10 @@ int RendererMain(const MainFunctionParams& parameters) {
     }
 #endif
 
-    auto render_process = RenderProcessImpl::Create();
-    RenderThreadImpl::Create(std::move(main_message_loop),
-                             std::move(main_thread_scheduler));
+    std::unique_ptr<RenderProcess> render_process = RenderProcessImpl::Create();
+    // It's not a memory leak since RenderThread has the same lifetime
+    // as a renderer process.
+    new RenderThreadImpl(std::move(main_thread_scheduler));
 
     if (need_sandbox)
       run_loop = platform.EnableSandbox();

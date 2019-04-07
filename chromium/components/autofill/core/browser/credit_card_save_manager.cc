@@ -31,12 +31,12 @@
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
+#include "components/autofill/core/browser/payments/payments_util.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_util.h"
-#include "components/prefs/pref_service.h"
 #include "services/identity/public/cpp/identity_manager.h"
 #include "url/gurl.h"
 
@@ -78,11 +78,7 @@ CreditCardSaveManager::CreditCardSaveManager(
       payments_client_(payments_client),
       app_locale_(app_locale),
       personal_data_manager_(personal_data_manager),
-      weak_ptr_factory_(this) {
-  if (payments_client_) {
-    payments_client_->SetSaveDelegate(this);
-  }
-}
+      weak_ptr_factory_(this) {}
 
 CreditCardSaveManager::~CreditCardSaveManager() {}
 
@@ -104,7 +100,6 @@ void CreditCardSaveManager::AttemptToOfferCardUploadSave(
   // Abort the uploading if |payments_client_| is nullptr.
   if (!payments_client_)
     return;
-  payments_client_->SetSaveDelegate(this);
   upload_request_ = payments::PaymentsClient::UploadRequestDetails();
   upload_request_.card = card;
   uploading_local_card_ = uploading_local_card;
@@ -156,34 +151,59 @@ void CreditCardSaveManager::AttemptToOfferCardUploadSave(
   }
 
   // Add active experiments to the request payload.
-  if (IsAutofillUpstreamSendPanFirstSixExperimentEnabled()) {
+  if (features::IsAutofillUpstreamSendPanFirstSixExperimentEnabled()) {
     upload_request_.active_experiments.push_back(
-        kAutofillUpstreamSendPanFirstSix.name);
+        features::kAutofillUpstreamSendPanFirstSix.name);
   }
-  if (IsAutofillUpstreamUpdatePromptExplanationExperimentEnabled()) {
+  if (features::IsAutofillUpstreamUpdatePromptExplanationExperimentEnabled()) {
     upload_request_.active_experiments.push_back(
-        kAutofillUpstreamUpdatePromptExplanation.name);
+        features::kAutofillUpstreamUpdatePromptExplanation.name);
   }
 
-  int detected_values = GetDetectedValues();
+  // We store the detected values in the upload request, because the addresses
+  // are being possibly modified in the next code block, and we want the
+  // detected values to reflect addresses *before* they are modified.
+  upload_request_.detected_values = GetDetectedValues();
   // If the user must provide cardholder name, log it and set
   // |should_request_name_from_user_| so the offer-to-save dialog know to ask
   // for it.
   should_request_name_from_user_ = false;
-  if (detected_values & DetectedValue::USER_PROVIDED_NAME) {
+  if (upload_request_.detected_values & DetectedValue::USER_PROVIDED_NAME) {
     upload_decision_metrics_ |=
         AutofillMetrics::USER_REQUESTED_TO_PROVIDE_CARDHOLDER_NAME;
     should_request_name_from_user_ = true;
+  }
+
+  // If the relevant feature is enabled, only send the country of the
+  // recently-used addresses. We make a copy here to avoid modifying
+  // |upload_request_.profiles|, which should always have full addresses even
+  // after this function goes out of scope.
+  bool send_only_country_in_addresses = base::FeatureList::IsEnabled(
+      features::kAutofillSendOnlyCountryInGetUploadDetails);
+  std::vector<AutofillProfile> country_only_profiles;
+  if (send_only_country_in_addresses) {
+    for (const AutofillProfile& address : upload_request_.profiles) {
+      AutofillProfile country_only;
+      country_only.SetInfo(ADDRESS_HOME_COUNTRY,
+                           address.GetInfo(ADDRESS_HOME_COUNTRY, app_locale_),
+                           app_locale_);
+      country_only_profiles.emplace_back(std::move(country_only));
+    }
   }
 
   // All required data is available, start the upload process.
   if (observer_for_testing_)
     observer_for_testing_->OnDecideToRequestUploadSave();
   payments_client_->GetUploadDetails(
-      upload_request_.profiles, detected_values,
+      send_only_country_in_addresses ? country_only_profiles
+                                     : upload_request_.profiles,
+      upload_request_.detected_values,
       base::UTF16ToASCII(CreditCard::StripSeparators(card.number()))
           .substr(0, 6),
-      upload_request_.active_experiments, app_locale_);
+      upload_request_.active_experiments, app_locale_,
+      base::BindOnce(&CreditCardSaveManager::OnDidGetUploadDetails,
+                     weak_ptr_factory_.GetWeakPtr()),
+      payments::kUploadCardBillableServiceNumber);
 }
 
 bool CreditCardSaveManager::IsCreditCardUploadEnabled() {
@@ -192,7 +212,7 @@ bool CreditCardSaveManager::IsCreditCardUploadEnabled() {
   return observer_for_testing_ ||
          ::autofill::IsCreditCardUploadEnabled(
              client_->GetPrefs(), client_->GetSyncService(),
-             client_->GetIdentityManager()->GetPrimaryAccountInfo().email);
+             personal_data_manager_->GetAccountInfoForPaymentsServer().email);
 }
 
 bool CreditCardSaveManager::IsUploadEnabledForNetwork(
@@ -221,7 +241,8 @@ void CreditCardSaveManager::OnDidUploadCard(
   // upload succeeds and we can store unmasked cards on this OS, we will keep a
   // copy of the card as a full server card on the device.
   if (result == AutofillClient::SUCCESS && !server_id.empty() &&
-      OfferStoreUnmaskedCards()) {
+      OfferStoreUnmaskedCards() &&
+      !IsAutofillNoLocalSaveOnUploadSuccessExperimentEnabled()) {
     upload_request_.card.set_record_type(CreditCard::FULL_SERVER_CARD);
     upload_request_.card.SetServerStatus(CreditCard::OK);
     upload_request_.card.set_server_id(server_id);
@@ -261,20 +282,20 @@ void CreditCardSaveManager::OnDidGetUploadDetails(
   } else {
     // If the upload details request failed and we *know* we have all possible
     // information (card number, expiration, cvc, name, and address), fall back
-    // to a local save. It indicates that "Payments doesn't want this card" or
-    // "Payments doesn't currently support this country", in which case the
-    // upload details request will consistently fail and if we don't fall back
-    // to a local save, the user will never be offered *any* kind of credit card
-    // save. (Note that this could intermittently backfire if there's a network
-    // breakdown or Payments outage, resulting in sometimes showing upload and
-    // sometimes offering local save, but such cases should be rare.)
-    int detected_values = GetDetectedValues();
+    // to a local save (for new cards only). It indicates that "Payments doesn't
+    // want this card" or "Payments doesn't currently support this country", in
+    // which case the upload details request will consistently fail and if we
+    // don't fall back to a local save, the user will never be offered *any*
+    // kind of credit card save. (Note that this could intermittently backfire
+    // if there's a network breakdown or Payments outage, resulting in sometimes
+    // showing upload and sometimes offering local save, but such cases should
+    // be rare.)
     bool found_name_and_postal_code_and_cvc =
-        (detected_values & DetectedValue::CARDHOLDER_NAME ||
-         detected_values & DetectedValue::ADDRESS_NAME) &&
-        detected_values & DetectedValue::POSTAL_CODE &&
-        detected_values & DetectedValue::CVC;
-    if (found_name_and_postal_code_and_cvc)
+        (upload_request_.detected_values & DetectedValue::CARDHOLDER_NAME ||
+         upload_request_.detected_values & DetectedValue::ADDRESS_NAME) &&
+        upload_request_.detected_values & DetectedValue::POSTAL_CODE &&
+        upload_request_.detected_values & DetectedValue::CVC;
+    if (found_name_and_postal_code_and_cvc && !uploading_local_card_)
       OfferCardLocalSave(upload_request_.card);
     upload_decision_metrics_ |=
         AutofillMetrics::UPLOAD_NOT_OFFERED_GET_UPLOAD_DETAILS_FAILED;
@@ -387,20 +408,6 @@ void CreditCardSaveManager::SetProfilesForCreditCardUpload(
   if (verified_zip.empty() && !candidate_profiles.empty())
     upload_decision_metrics_ |= AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ZIP_CODE;
 
-  // If the relevant feature is enabled, only send the country of the
-  // recently-used addresses.
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillSendOnlyCountryInGetUploadDetails)) {
-    for (size_t i = 0; i < candidate_profiles.size(); i++) {
-      AutofillProfile country_only;
-      country_only.SetInfo(
-          ADDRESS_HOME_COUNTRY,
-          candidate_profiles[i].GetInfo(ADDRESS_HOME_COUNTRY, app_locale_),
-          app_locale_);
-      candidate_profiles[i] = std::move(country_only);
-    }
-  }
-
   // Set up |upload_request->profiles|.
   upload_request->profiles.assign(candidate_profiles.begin(),
                                   candidate_profiles.end());
@@ -461,13 +468,14 @@ int CreditCardSaveManager::GetDetectedValues() const {
     }
   }
 
-  // If the billing_customer_number Priority Preference is non-zero, it means
-  // the user has a Google Payments account. Include a bit for existence of this
-  // account (NOT the id itself), as it will help determine if a new Payments
-  // customer might need to be created when save is accepted.
-  if (static_cast<int64_t>(payments_client_->GetPrefService()->GetDouble(
-          prefs::kAutofillBillingCustomerNumber)) != 0)
+  // If the billing_customer_number is non-zero, it means the user has a Google
+  // Payments account. Include a bit for existence of this account (NOT the id
+  // itself), as it will help determine if a new Payments customer might need to
+  // be created when save is accepted.
+  if (payments::GetBillingCustomerId(personal_data_manager_,
+                                     payments_client_->GetPrefService()) != 0) {
     detected_values |= DetectedValue::HAS_GOOGLE_PAYMENTS_ACCOUNT;
+  }
 
   // If one of the following is true, signal that cardholder name will be
   // explicitly requested in the offer-to-save bubble:
@@ -478,8 +486,9 @@ int CreditCardSaveManager::GetDetectedValues() const {
   if ((!(detected_values & DetectedValue::CARDHOLDER_NAME) &&
        !(detected_values & DetectedValue::ADDRESS_NAME) &&
        !(detected_values & DetectedValue::HAS_GOOGLE_PAYMENTS_ACCOUNT) &&
-       IsAutofillUpstreamEditableCardholderNameExperimentEnabled()) ||
-      IsAutofillUpstreamAlwaysRequestCardholderNameExperimentEnabled()) {
+       features::IsAutofillUpstreamEditableCardholderNameExperimentEnabled()) ||
+      features::
+          IsAutofillUpstreamAlwaysRequestCardholderNameExperimentEnabled()) {
     detected_values |= DetectedValue::USER_PROVIDED_NAME;
   }
 
@@ -519,15 +528,16 @@ void CreditCardSaveManager::SendUploadCardRequest() {
   if (observer_for_testing_)
     observer_for_testing_->OnSentUploadCardRequest();
   upload_request_.app_locale = app_locale_;
-  upload_request_.billing_customer_number =
-      static_cast<int64_t>(payments_client_->GetPrefService()->GetDouble(
-          prefs::kAutofillBillingCustomerNumber));
+  upload_request_.billing_customer_number = payments::GetBillingCustomerId(
+      personal_data_manager_, payments_client_->GetPrefService());
 
   AutofillMetrics::LogUploadAcceptedCardOriginMetric(
       uploading_local_card_
           ? AutofillMetrics::USER_ACCEPTED_UPLOAD_OF_LOCAL_CARD
           : AutofillMetrics::USER_ACCEPTED_UPLOAD_OF_NEW_CARD);
-  payments_client_->UploadCard(upload_request_);
+  payments_client_->UploadCard(
+      upload_request_, base::BindOnce(&CreditCardSaveManager::OnDidUploadCard,
+                                      weak_ptr_factory_.GetWeakPtr()));
 }
 
 AutofillMetrics::CardUploadDecisionMetric

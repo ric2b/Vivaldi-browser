@@ -554,15 +554,10 @@ void StoreCurrentDisplayProperties(PrefService* pref_service) {
                                static_cast<int>(info.GetRotation(
                                    display::Display::RotationSource::USER)));
 
-    // If display zoom mode is enabled, we store a negative ui scale to let us
-    // know the next time we boot that it is not the first boot with display
-    // zoom mode enabled.
-    if (features::IsDisplayZoomSettingEnabled()) {
-      property_value->SetInteger("ui-scale", -1000);
-    } else {
-      property_value->SetInteger(
-          "ui-scale", static_cast<int>(info.configured_ui_scale() * 1000));
-    }
+    // We store a negative ui scale to let us know the next time we boot that it
+    // is not the first boot with display zoom mode enabled.
+    // TODO(oshima|malaykeshav): Remove this in m71.
+    property_value->SetInteger("ui-scale", -1000);
 
     display::ManagedDisplayMode mode;
     if (!display.IsInternal() &&
@@ -898,15 +893,22 @@ void DisplayPrefs::LoadDisplayPreferences() {
   LoadDisplayMixedMirrorModeParams(local_state);
   LoadDisplayRotationState(local_state);
   LoadDisplayTouchAssociations(local_state);
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+
+  // Ensure that we have a reasonable initial display power state if
+  // powerd fails to send us one over D-Bus. Otherwise, we won't restore
+  // displays correctly after retaking control when changing virtual terminals.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kFirstExecAfterBoot)) {
-    // Restore DisplayPowerState:
-    std::string value =
-        local_state->Get(prefs::kDisplayPowerState)->GetString();
-    chromeos::DisplayPowerState power_state;
-    if (GetDisplayPowerStateFromString(value, &power_state))
-      Shell::Get()->display_configurator()->SetInitialDisplayPower(power_state);
+    Shell::Get()->display_configurator()->InitializeDisplayPowerState();
+    return;
   }
+
+  // Restore DisplayPowerState:
+  const std::string value =
+      local_state->Get(prefs::kDisplayPowerState)->GetString();
+  chromeos::DisplayPowerState power_state;
+  if (GetDisplayPowerStateFromString(value, &power_state))
+    Shell::Get()->display_configurator()->SetInitialDisplayPower(power_state);
 }
 
 void DisplayPrefs::StoreDisplayRotationPrefsForTest(

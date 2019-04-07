@@ -256,7 +256,9 @@ TEST_F(RenderFrameImplTest, FrameWasShownAfterWidgetClose) {
 
   ViewMsg_WasShown was_shown_message(0, true, base::TimeTicks());
   // Test passes if this does not crash.
-  static_cast<RenderViewImpl*>(view_)->OnMessageReceived(was_shown_message);
+  RenderWidget* render_widget =
+      static_cast<RenderViewImpl*>(view_)->GetWidget();
+  render_widget->OnMessageReceived(was_shown_message);
 }
 
 // Test that LoFi state only updates for new main frame documents. Subframes
@@ -301,7 +303,7 @@ TEST_F(RenderFrameImplTest, LoFiNotUpdatedOnSubframeCommits) {
   GetMainRenderFrame()->DidCommitProvisionalLoad(
       item, blink::kWebStandardCommit,
       blink::WebGlobalObjectReusePolicy::kCreateNew);
-  EXPECT_EQ(PREVIEWS_OFF, GetMainRenderFrame()->GetPreviewsState());
+  EXPECT_EQ(PREVIEWS_UNSPECIFIED, GetMainRenderFrame()->GetPreviewsState());
   // The subframe would be deleted here after a cross-document navigation. It
   // happens to be left around in this test because this does not simulate the
   // frame detach.
@@ -480,8 +482,7 @@ TEST_F(RenderFrameImplTest, ZoomLimit) {
 TEST_F(RenderFrameImplTest, NoCrashWhenDeletingFrameDuringFind) {
   blink::WebFindOptions options;
   options.force = true;
-  FrameMsg_Find find_message(0, 1, base::ASCIIToUTF16("foo"), options);
-  frame()->OnMessageReceived(find_message);
+  frame()->GetWebFrame()->Find(1, "foo", options, false);
 
   FrameMsg_Delete delete_message(0);
   frame()->OnMessageReceived(delete_message);

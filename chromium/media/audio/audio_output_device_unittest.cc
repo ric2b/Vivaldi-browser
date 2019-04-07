@@ -77,9 +77,11 @@ class MockAudioOutputIPC : public AudioOutputIPC {
                void(AudioOutputIPCDelegate* delegate,
                     int session_id,
                     const std::string& device_id));
-  MOCK_METHOD2(CreateStream,
-               void(AudioOutputIPCDelegate* delegate,
-                    const AudioParameters& params));
+  MOCK_METHOD3(
+      CreateStream,
+      void(AudioOutputIPCDelegate* delegate,
+           const AudioParameters& params,
+           const base::Optional<base::UnguessableToken>& processing_id));
   MOCK_METHOD0(PlayStream, void());
   MOCK_METHOD0(PauseStream, void());
   MOCK_METHOD0(CloseStream, void());
@@ -138,9 +140,9 @@ void AudioOutputDeviceTest::CreateDevice(const std::string& device_id) {
     StopAudioDevice();
 
   audio_output_ipc_ = new NiceMock<MockAudioOutputIPC>();
-  audio_device_ = new AudioOutputDevice(base::WrapUnique(audio_output_ipc_),
-                                        task_env_.GetMainThreadTaskRunner(), 0,
-                                        device_id, kAuthTimeout);
+  audio_device_ = new AudioOutputDevice(
+      base::WrapUnique(audio_output_ipc_), task_env_.GetMainThreadTaskRunner(),
+      AudioSinkParameters(0, device_id), kAuthTimeout);
 }
 
 void AudioOutputDeviceTest::SetDevice(const std::string& device_id) {
@@ -178,7 +180,7 @@ void AudioOutputDeviceTest::ReceiveAuthorization(OutputDeviceStatus status) {
 
 void AudioOutputDeviceTest::StartAudioDevice() {
   if (device_status_ == OUTPUT_DEVICE_STATUS_OK)
-    EXPECT_CALL(*audio_output_ipc_, CreateStream(audio_device_.get(), _));
+    EXPECT_CALL(*audio_output_ipc_, CreateStream(audio_device_.get(), _, _));
   else
     EXPECT_CALL(callback_, OnRenderError());
 
@@ -294,9 +296,9 @@ TEST_F(AudioOutputDeviceTest, AuthorizationFailsBeforeInitialize_NoError) {
   // Clear audio device set by fixture.
   StopAudioDevice();
   audio_output_ipc_ = new NiceMock<MockAudioOutputIPC>();
-  audio_device_ = new AudioOutputDevice(base::WrapUnique(audio_output_ipc_),
-                                        task_env_.GetMainThreadTaskRunner(), 0,
-                                        kDefaultDeviceId, kAuthTimeout);
+  audio_device_ = new AudioOutputDevice(
+      base::WrapUnique(audio_output_ipc_), task_env_.GetMainThreadTaskRunner(),
+      AudioSinkParameters(0, kDefaultDeviceId), kAuthTimeout);
   EXPECT_CALL(
       *audio_output_ipc_,
       RequestDeviceAuthorization(audio_device_.get(), 0, kDefaultDeviceId));
@@ -380,8 +382,8 @@ TEST_F(AudioOutputDeviceTest, VerifyDataFlow) {
   TestEnvironment env(params);
   auto* ipc = new MockAudioOutputIPC();  // owned by |audio_device|.
   auto audio_device = base::MakeRefCounted<AudioOutputDevice>(
-      base::WrapUnique(ipc), task_env_.GetMainThreadTaskRunner(), 0,
-      kDefaultDeviceId, kAuthTimeout);
+      base::WrapUnique(ipc), task_env_.GetMainThreadTaskRunner(),
+      AudioSinkParameters(0, kDefaultDeviceId), kAuthTimeout);
 
   // Start a stream.
   audio_device->RequestDeviceAuthorization();
@@ -389,7 +391,7 @@ TEST_F(AudioOutputDeviceTest, VerifyDataFlow) {
   audio_device->Start();
   EXPECT_CALL(*ipc, RequestDeviceAuthorization(audio_device.get(), 0,
                                                kDefaultDeviceId));
-  EXPECT_CALL(*ipc, CreateStream(audio_device.get(), _));
+  EXPECT_CALL(*ipc, CreateStream(audio_device.get(), _, _));
   EXPECT_CALL(*ipc, PlayStream());
   task_env_.RunUntilIdle();
   Mock::VerifyAndClear(ipc);
@@ -442,15 +444,15 @@ TEST_F(AudioOutputDeviceTest, CreateNondefaultDevice) {
   TestEnvironment env(params);
   auto* ipc = new MockAudioOutputIPC();  // owned by |audio_device|.
   auto audio_device = base::MakeRefCounted<AudioOutputDevice>(
-      base::WrapUnique(ipc), task_env_.GetMainThreadTaskRunner(), 0,
-      kNonDefaultDeviceId, kAuthTimeout);
+      base::WrapUnique(ipc), task_env_.GetMainThreadTaskRunner(),
+      AudioSinkParameters(0, kNonDefaultDeviceId), kAuthTimeout);
 
   audio_device->RequestDeviceAuthorization();
   audio_device->Initialize(params, &env.callback);
   audio_device->Start();
   EXPECT_CALL(*ipc, RequestDeviceAuthorization(audio_device.get(), 0,
                                                kNonDefaultDeviceId));
-  EXPECT_CALL(*ipc, CreateStream(audio_device.get(), _));
+  EXPECT_CALL(*ipc, CreateStream(audio_device.get(), _, _));
   EXPECT_CALL(*ipc, PlayStream());
   task_env_.RunUntilIdle();
   Mock::VerifyAndClear(ipc);
@@ -477,8 +479,8 @@ TEST_F(AudioOutputDeviceTest, CreateBitStreamStream) {
   TestEnvironment env(params);
   auto* ipc = new MockAudioOutputIPC();  // owned by |audio_device|.
   auto audio_device = base::MakeRefCounted<AudioOutputDevice>(
-      base::WrapUnique(ipc), task_env_.GetMainThreadTaskRunner(), 0,
-      kNonDefaultDeviceId, kAuthTimeout);
+      base::WrapUnique(ipc), task_env_.GetMainThreadTaskRunner(),
+      AudioSinkParameters(0, kNonDefaultDeviceId), kAuthTimeout);
 
   // Start a stream.
   audio_device->RequestDeviceAuthorization();
@@ -486,7 +488,7 @@ TEST_F(AudioOutputDeviceTest, CreateBitStreamStream) {
   audio_device->Start();
   EXPECT_CALL(*ipc, RequestDeviceAuthorization(audio_device.get(), 0,
                                                kNonDefaultDeviceId));
-  EXPECT_CALL(*ipc, CreateStream(audio_device.get(), _));
+  EXPECT_CALL(*ipc, CreateStream(audio_device.get(), _, _));
   EXPECT_CALL(*ipc, PlayStream());
   task_env_.RunUntilIdle();
   Mock::VerifyAndClear(ipc);

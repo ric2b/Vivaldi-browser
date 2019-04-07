@@ -16,6 +16,7 @@
 #include "ash/public/cpp/config.h"
 #include "ash/root_window_settings.h"
 #include "ash/shell.h"
+#include "ash/window_factory.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/client/capture_client.h"
@@ -122,6 +123,10 @@ int64_t GetCurrentReflectingSourceId() {
   return display::kInvalidDisplayId;
 }
 
+ui::ContextFactoryPrivate* GetContextFactoryPrivate() {
+  return Shell::Get()->aura_env()->context_factory_private();
+}
+
 }  // namespace
 
 struct MirrorWindowController::MirroringHostInfo {
@@ -177,7 +182,6 @@ void MirrorWindowController::UpdateWindow(
       init_params.mirroring_delegate = this;
       init_params.mirroring_unified = display_manager->IsInUnifiedMode();
       init_params.device_scale_factor = display_info.device_scale_factor();
-      init_params.ui_scale_factor = display_info.configured_ui_scale();
       MirroringHostInfo* host_info = new MirroringHostInfo;
       host_info->ash_host = AshWindowTreeHost::Create(init_params);
       mirroring_host_info_map_[display_info.id()] = host_info;
@@ -213,28 +217,22 @@ void MirrorWindowController::UpdateWindow(
       host->Show();
 
       aura::Window* mirror_window = host_info->mirror_window =
-          new aura::Window(nullptr);
+          window_factory::NewWindow().release();
       mirror_window->Init(ui::LAYER_SOLID_COLOR);
       host->window()->AddChild(mirror_window);
       host_info->ash_host->SetRootWindowTransformer(std::move(transformer));
       mirror_window->SetBounds(host->window()->bounds());
       mirror_window->Show();
-      // The classic config creates the accelerated widget synchronously. Mus
-      // (without viz) creates the reflector in OnAcceleratedWidgetOverridden.
-      if (host->GetAcceleratedWidget() != gfx::kNullAcceleratedWidget) {
-        DCHECK_EQ(Shell::GetAshConfig(), Config::CLASSIC);
-        if (reflector_) {
-          reflector_->AddMirroringLayer(mirror_window->layer());
-        } else if (aura::Env::GetInstance()->context_factory_private()) {
-          reflector_ =
-              aura::Env::GetInstance()
-                  ->context_factory_private()
-                  ->CreateReflector(
-                      Shell::GetRootWindowForDisplayId(reflecting_source_id_)
-                          ->GetHost()
-                          ->compositor(),
-                      mirror_window->layer());
-        }
+      // The accelerated widget is created synchronously.
+      DCHECK_NE(gfx::kNullAcceleratedWidget, host->GetAcceleratedWidget());
+      if (reflector_) {
+        reflector_->AddMirroringLayer(mirror_window->layer());
+      } else if (GetContextFactoryPrivate()) {
+        reflector_ = GetContextFactoryPrivate()->CreateReflector(
+            Shell::GetRootWindowForDisplayId(reflecting_source_id_)
+                ->GetHost()
+                ->compositor(),
+            mirror_window->layer());
       }
     } else {
       AshWindowTreeHost* ash_host =
@@ -264,8 +262,7 @@ void MirrorWindowController::UpdateWindow(
 
   if (mirroring_host_info_map_.empty() && reflector_) {
     // Close the mirror window if all displays are disconnected.
-    aura::Env::GetInstance()->context_factory_private()->RemoveReflector(
-        reflector_.get());
+    GetContextFactoryPrivate()->RemoveReflector(reflector_.get());
     reflector_.reset();
   }
 }
@@ -304,8 +301,7 @@ void MirrorWindowController::CloseIfNotNecessary() {
 
 void MirrorWindowController::Close(bool delay_host_deletion) {
   if (reflector_) {
-    aura::Env::GetInstance()->context_factory_private()->RemoveReflector(
-        reflector_.get());
+    GetContextFactoryPrivate()->RemoveReflector(reflector_.get());
     reflector_.reset();
   }
 
@@ -331,22 +327,6 @@ void MirrorWindowController::OnHostResized(aura::WindowTreeHost* host) {
           ->UpdateLocation();
       return;
     }
-  }
-}
-
-void MirrorWindowController::OnAcceleratedWidgetOverridden(
-    aura::WindowTreeHost* host) {
-  DCHECK_NE(host->GetAcceleratedWidget(), gfx::kNullAcceleratedWidget);
-  DCHECK_NE(Shell::GetAshConfig(), Config::CLASSIC);
-  DCHECK(!base::FeatureList::IsEnabled(features::kMashDeprecated));
-  MirroringHostInfo* info = mirroring_host_info_map_[host->GetDisplayId()];
-  if (reflector_) {
-    reflector_->AddMirroringLayer(info->mirror_window->layer());
-  } else if (aura::Env::GetInstance()->context_factory_private()) {
-    reflector_ =
-        aura::Env::GetInstance()->context_factory_private()->CreateReflector(
-            Shell::GetPrimaryRootWindow()->GetHost()->compositor(),
-            info->mirror_window->layer());
   }
 }
 

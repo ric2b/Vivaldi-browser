@@ -42,8 +42,6 @@ class APP_LIST_MODEL_EXPORT FolderImage : public AppListItemListObserver,
   // Number of the top items in a folder, which are shown inside the folder icon
   // and animated when opening and closing a folder.
   static const size_t kNumFolderTopItems;
-  // Color of the folder ink bubble, 12% white..
-  static const SkColor kFolderBubbleColor;
 
   explicit FolderImage(AppListItemList* item_list);
   ~FolderImage() override;
@@ -52,13 +50,17 @@ class APP_LIST_MODEL_EXPORT FolderImage : public AppListItemListObserver,
   // and notifies observers that the icon has changed.
   void UpdateIcon();
 
+  // Given an AppListItem currently being dragged, updates |dragged_item_| then
+  // executes an ordinary run of UpdateIcon()
+  void UpdateDraggedItem(const AppListItem* dragged_item);
+
   const gfx::ImageSkia& icon() const { return icon_; }
 
   // Calculates the top item icons' bounds inside |folder_icon_bounds|.
-  // Returns the bounds of top item icons in sequence of top left, top right,
-  // bottom left, bottom right.
+  // Returns the bounds of top item icons based on total number of items.
   static std::vector<gfx::Rect> GetTopIconsBounds(
-      const gfx::Rect& folder_icon_bounds);
+      const gfx::Rect& folder_icon_bounds,
+      size_t num_items);
 
   // Returns the target icon bounds for |item| to fly back to its parent folder
   // icon in animation UI. If |item| is one of the top item icon, this will
@@ -89,16 +91,23 @@ class APP_LIST_MODEL_EXPORT FolderImage : public AppListItemListObserver,
   // only be called if the |item_list_| has not been changed (see UpdateIcon).
   void RedrawIconAndNotify();
 
-  // The icon image.
+  // The unclipped icon image. This will be clipped in AppListItemView before
+  // being shown in apps grid.
   gfx::ImageSkia icon_;
 
   // List of top-level app list items (to display small in the icon).
   AppListItemList* item_list_;
 
+  // Item being dragged, if any.
+  const AppListItem* dragged_item_ = nullptr;
+
   // Top items for generating folder icon.
   std::vector<AppListItem*> top_items_;
 
-  base::ObserverList<FolderImageObserver> observers_;
+  // True if new style launcher feature is enabled.
+  const bool is_new_style_launcher_enabled_;
+
+  base::ObserverList<FolderImageObserver>::Unchecked observers_;
 };
 
 }  // namespace app_list

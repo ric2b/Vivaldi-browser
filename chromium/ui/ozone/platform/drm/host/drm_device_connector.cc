@@ -7,7 +7,7 @@
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/interfaces/constants.mojom.h"
+#include "services/ws/public/mojom/constants.mojom.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/ozone/platform/drm/host/host_drm_device.h"
 #include "ui/ozone/public/gpu_platform_support_host.h"
@@ -42,9 +42,6 @@ DrmDeviceConnector::DrmDeviceConnector(
       ws_runner_(base::ThreadTaskRunnerHandle::IsSet()
                      ? base::ThreadTaskRunnerHandle::Get()
                      : nullptr) {
-  // Invariant: we only have a runner at startup if executing in mash mode.
-  DCHECK((ws_runner_ && !features::IsAshInBrowserProcess()) ||
-         (!ws_runner_ && features::IsAshInBrowserProcess()));
 }
 
 DrmDeviceConnector::~DrmDeviceConnector() {}
@@ -64,7 +61,8 @@ void DrmDeviceConnector::OnChannelDestroyed(int host_id) {
 void DrmDeviceConnector::OnGpuServiceLaunched(
     scoped_refptr<base::SingleThreadTaskRunner> ui_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_runner,
-    GpuHostBindInterfaceCallback binder) {
+    GpuHostBindInterfaceCallback binder,
+    GpuHostTerminateCallback terminate_callback) {
   // We need to preserve |binder| to let us bind interfaces later.
   binder_callback_ = std::move(binder);
   if (am_running_in_ws_mode()) {
@@ -116,7 +114,7 @@ void DrmDeviceConnector::OnMessageReceived(const IPC::Message& message) {
 void DrmDeviceConnector::BindInterfaceDrmDevice(
     ui::ozone::mojom::DrmDevicePtr* drm_device_ptr) const {
   if (connector_) {
-    connector_->BindInterface(ui::mojom::kServiceName, drm_device_ptr);
+    connector_->BindInterface(ws::mojom::kServiceName, drm_device_ptr);
   } else {
     auto request = mojo::MakeRequest(drm_device_ptr);
     BindInterfaceInGpuProcess(std::move(request), binder_callback_);
@@ -126,7 +124,7 @@ void DrmDeviceConnector::BindInterfaceDrmDevice(
 void DrmDeviceConnector::BindInterfaceDeviceCursor(
     ui::ozone::mojom::DeviceCursorPtr* cursor_ptr) const {
   if (connector_) {
-    connector_->BindInterface(ui::mojom::kServiceName, cursor_ptr);
+    connector_->BindInterface(ws::mojom::kServiceName, cursor_ptr);
   } else {
     auto request = mojo::MakeRequest(cursor_ptr);
     BindInterfaceInGpuProcess(std::move(request), binder_callback_);

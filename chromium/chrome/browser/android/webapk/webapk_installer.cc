@@ -22,8 +22,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/timer/elapsed_timer.h"
 #include "chrome/browser/android/color_helpers.h"
@@ -214,10 +214,17 @@ std::unique_ptr<std::string> BuildProtoInBackground(
   std::string* scope = web_app_manifest->add_scopes();
   scope->assign(GetScope(shortcut_info).spec());
 
-  if (!shortcut_info.share_target_url_template.is_empty()) {
+  if (shortcut_info.share_target) {
     webapk::ShareTarget* share_target = web_app_manifest->add_share_targets();
-    share_target->set_url_template(
-        shortcut_info.share_target_url_template.spec());
+    share_target->set_action(shortcut_info.share_target->action.spec());
+    webapk::ShareTargetParams* share_target_params =
+        share_target->mutable_params();
+    share_target_params->set_title(
+        base::UTF16ToUTF8(shortcut_info.share_target->params.title));
+    share_target_params->set_text(
+        base::UTF16ToUTF8(shortcut_info.share_target->params.text));
+    share_target_params->set_url(
+        base::UTF16ToUTF8(shortcut_info.share_target->params.url));
   }
 
   if (shortcut_info.best_primary_icon_url.is_empty()) {
@@ -295,7 +302,7 @@ std::unique_ptr<std::string> ReadFileInBackground(const base::FilePath& file) {
 // Returns task runner for running background tasks.
 scoped_refptr<base::TaskRunner> GetBackgroundTaskRunner() {
   return base::CreateTaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 
@@ -647,8 +654,7 @@ void WebApkInstaller::SendRequest(
       net::URLFetcher::Create(server_url_, net::URLFetcher::POST, this);
   url_fetcher_->SetRequestContext(GetRequestContext(browser_context_));
   url_fetcher_->SetUploadData(kProtoMimeType, *serialized_proto);
-  url_fetcher_->SetLoadFlags(
-      net::LOAD_DISABLE_CACHE | net::LOAD_DO_NOT_SEND_COOKIES |
-      net::LOAD_DO_NOT_SAVE_COOKIES | net::LOAD_DO_NOT_SEND_AUTH_DATA);
+  url_fetcher_->SetLoadFlags(net::LOAD_DISABLE_CACHE);
+  url_fetcher_->SetAllowCredentials(false);
   url_fetcher_->Start();
 }

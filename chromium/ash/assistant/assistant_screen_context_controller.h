@@ -11,11 +11,8 @@
 #include "ash/assistant/assistant_controller_observer.h"
 #include "ash/assistant/model/assistant_screen_context_model.h"
 #include "ash/assistant/model/assistant_ui_model_observer.h"
-#include "ash/highlighter/highlighter_controller.h"
 #include "ash/public/interfaces/assistant_controller.mojom.h"
 #include "base/macros.h"
-#include "base/observer_list.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace ui {
@@ -29,8 +26,7 @@ class AssistantScreenContextModelObserver;
 
 class ASH_EXPORT AssistantScreenContextController
     : public AssistantControllerObserver,
-      public AssistantUiModelObserver,
-      public HighlighterController::Observer {
+      public AssistantUiModelObserver {
  public:
   explicit AssistantScreenContextController(
       AssistantController* assistant_controller);
@@ -48,9 +44,9 @@ class ASH_EXPORT AssistantScreenContextController
   void AddModelObserver(AssistantScreenContextModelObserver* observer);
   void RemoveModelObserver(AssistantScreenContextModelObserver* observer);
 
-  // Requests a screenshot for the region defined by |rect|. If an empty rect is
-  // supplied, the entire screen is captured. Upon screenshot completion, the
-  // specified |callback| is run.
+  // Requests a screenshot for the region defined by |rect| (given in DP). If
+  // an empty rect is supplied, the entire screen is captured. Upon screenshot
+  // completion, the specified |callback| is run.
   void RequestScreenshot(
       const gfx::Rect& rect,
       mojom::AssistantController::RequestScreenshotCallback callback);
@@ -60,10 +56,9 @@ class ASH_EXPORT AssistantScreenContextController
   void OnAssistantControllerDestroying() override;
 
   // AssistantUiModelObserver:
-  void OnUiVisibilityChanged(bool visible, AssistantSource source) override;
-
-  // HighlighterController::Observer:
-  void OnHighlighterSelectionRecognized(const gfx::Rect& rect) override;
+  void OnUiVisibilityChanged(AssistantVisibility new_visibility,
+                             AssistantVisibility old_visibility,
+                             AssistantSource source) override;
 
   // Invoked on screen context request finished event.
   void OnScreenContextRequestFinished();
@@ -71,8 +66,6 @@ class ASH_EXPORT AssistantScreenContextController
   std::unique_ptr<ui::LayerTreeOwner> CreateLayerForAssistantSnapshotForTest();
 
  private:
-  void RequestScreenContext(const gfx::Rect& rect);
-
   AssistantController* const assistant_controller_;  // Owned by Shell.
 
   // Owned by AssistantController.

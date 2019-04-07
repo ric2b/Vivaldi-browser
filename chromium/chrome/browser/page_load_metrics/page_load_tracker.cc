@@ -643,11 +643,10 @@ void PageLoadTracker::UpdateFeaturesUsage(
   }
 }
 
-void PageLoadTracker::UpdateDataUse(
-    const mojom::PageLoadDataUse& new_data_use) {
+void PageLoadTracker::UpdateResourceDataUse(
+    const std::vector<mojom::ResourceDataUpdatePtr>& resources) {
   for (const auto& observer : observers_) {
-    observer->OnDataUseObserved(new_data_use.received_data_length,
-                                new_data_use.data_reduction_proxy_bytes_saved);
+    observer->OnResourceDataUseObserved(resources);
   }
 }
 

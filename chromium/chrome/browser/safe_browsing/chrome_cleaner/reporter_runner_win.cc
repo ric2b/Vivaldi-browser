@@ -27,9 +27,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/task_scheduler/task_traits.h"
 #include "base/win/registry.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
@@ -486,6 +486,8 @@ ChromeCleanerController* GetCleanerController() {
 // external that could be shut down beforehand.
 int LaunchAndWaitForExitOnBackgroundThread(
     const SwReporterInvocation& invocation) {
+  TRACE_EVENT0("safe_browsing",
+               "ReporterRunner::LaunchAndWaitForExitOnBackgroundThread");
   if (g_testing_delegate_)
     return g_testing_delegate_->LaunchReporter(invocation);
 
@@ -968,7 +970,7 @@ class ReporterRunner {
           // LaunchAndWaitForExitOnBackgroundThread() creates (MayBlock()) and
           // joins (WithBaseSyncPrimitives()) a process.
           {base::MayBlock(), base::WithBaseSyncPrimitives(),
-           base::TaskPriority::BACKGROUND,
+           base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
 
   SwReporterInvocationType invocation_type_;

@@ -25,10 +25,10 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/ukm/persisted_logs_metrics_impl.h"
 #include "components/ukm/ukm_pref_names.h"
-#include "components/ukm/ukm_source.h"
 #include "components/variations/variations_associated_data.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_entry_builder.h"
+#include "services/metrics/public/cpp/ukm_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/ukm/report.pb.h"
 #include "third_party/metrics_proto/ukm/source.pb.h"
@@ -59,6 +59,11 @@ class TestRecordingHelper {
 
   void UpdateSourceURL(SourceId source_id, const GURL& url) {
     recorder_->UpdateSourceURL(source_id, url);
+  }
+
+  void RecordNavigation(SourceId source_id,
+                        const UkmSource::NavigationData& navigation_data) {
+    recorder_->RecordNavigation(source_id, navigation_data);
   }
 
  private:
@@ -253,10 +258,12 @@ TEST_F(UkmServiceTest, SourceSerialization) {
   service.EnableRecording(/*extensions=*/false);
   service.EnableReporting();
 
+  UkmSource::NavigationData navigation_data;
+  navigation_data.urls = {GURL("https://google.com/initial"),
+                          GURL("https://google.com/final")};
+
   ukm::SourceId id = GetWhitelistedSourceId(0);
-  recorder.UpdateSourceURL(id, GURL("https://google.com/initial"));
-  recorder.UpdateSourceURL(id, GURL("https://google.com/intermediate"));
-  recorder.UpdateSourceURL(id, GURL("https://google.com/foobar"));
+  recorder.RecordNavigation(id, navigation_data);
 
   service.Flush();
   EXPECT_EQ(GetPersistedLogCount(), 1);
@@ -267,7 +274,7 @@ TEST_F(UkmServiceTest, SourceSerialization) {
   const Source& proto_source = proto_report.sources(0);
 
   EXPECT_EQ(id, proto_source.id());
-  EXPECT_EQ(GURL("https://google.com/foobar").spec(), proto_source.url());
+  EXPECT_EQ(GURL("https://google.com/final").spec(), proto_source.url());
   EXPECT_FALSE(proto_source.has_initial_url());
 }
 
@@ -442,9 +449,10 @@ TEST_F(UkmServiceTest, RecordInitialUrl) {
     service.EnableReporting();
 
     ukm::SourceId id = GetWhitelistedSourceId(0);
-    recorder.UpdateSourceURL(id, GURL("https://google.com/initial"));
-    recorder.UpdateSourceURL(id, GURL("https://google.com/intermediate"));
-    recorder.UpdateSourceURL(id, GURL("https://google.com/foobar"));
+    UkmSource::NavigationData navigation_data;
+    navigation_data.urls = {GURL("https://google.com/initial"),
+                            GURL("https://google.com/final")};
+    recorder.RecordNavigation(id, navigation_data);
 
     service.Flush();
     EXPECT_EQ(GetPersistedLogCount(), 1);
@@ -454,7 +462,7 @@ TEST_F(UkmServiceTest, RecordInitialUrl) {
     const Source& proto_source = proto_report.sources(0);
 
     EXPECT_EQ(id, proto_source.id());
-    EXPECT_EQ(GURL("https://google.com/foobar").spec(), proto_source.url());
+    EXPECT_EQ(GURL("https://google.com/final").spec(), proto_source.url());
     EXPECT_EQ(should_record_initial_url, proto_source.has_initial_url());
     if (should_record_initial_url) {
       EXPECT_EQ(GURL("https://google.com/initial").spec(),

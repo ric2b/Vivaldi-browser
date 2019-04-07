@@ -41,7 +41,7 @@
 #include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/predictors/loading_predictor_tab_helper.h"
 #include "chrome/browser/prerender/prerender_tab_helper.h"
-#include "chrome/browser/previews/previews_infobar_tab_helper.h"
+#include "chrome/browser/previews/previews_ui_tab_helper.h"
 #include "chrome/browser/previews/resource_loading_hints/resource_loading_hints_web_contents_observer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/tab_helper.h"
@@ -62,6 +62,7 @@
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
 #include "chrome/browser/ui/javascript_dialogs/javascript_dialog_tab_helper.h"
 #include "chrome/browser/ui/navigation_correction_tab_observer.h"
+#include "chrome/browser/ui/omnibox/lookalike_url_navigation_observer.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/pdf/chrome_pdf_web_contents_helper_client.h"
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
@@ -251,7 +252,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
       web_contents, base::DefaultTickClock::GetInstance());
   PrefsTabHelper::CreateForWebContents(web_contents);
   prerender::PrerenderTabHelper::CreateForWebContents(web_contents);
-  PreviewsInfoBarTabHelper::CreateForWebContents(web_contents);
+  PreviewsUITabHelper::CreateForWebContents(web_contents);
   RecentlyAudibleHelper::CreateForWebContents(web_contents);
   ResourceLoadingHintsWebContentsObserver::CreateForWebContents(web_contents);
   safe_browsing::TriggerCreator::MaybeCreateTriggersForWebContents(
@@ -301,6 +302,10 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   FramebustBlockTabHelper::CreateForWebContents(web_contents);
   HungPluginTabHelper::CreateForWebContents(web_contents);
   JavaScriptDialogTabHelper::CreateForWebContents(web_contents);
+  if (base::FeatureList::IsEnabled(
+          features::kLookalikeUrlNavigationSuggestions)) {
+    LookalikeUrlNavigationObserver::CreateForWebContents(web_contents);
+  }
   ManagePasswordsUIController::CreateForWebContents(web_contents);
   pdf::PDFWebContentsHelper::CreateForWebContentsWithClient(
       web_contents, std::unique_ptr<pdf::PDFWebContentsHelperClient>(

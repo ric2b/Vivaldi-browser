@@ -7,7 +7,7 @@
 #include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/hats/hats_dialog.h"
 #include "chrome/browser/chromeos/hats/hats_finch_helper.h"
@@ -87,7 +87,7 @@ const char HatsNotificationController::kNotificationId[] = "hats_notification";
 HatsNotificationController::HatsNotificationController(Profile* profile)
     : profile_(profile), weak_pointer_factory_(this) {
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::Bind(&IsNewDevice, kHatsNewDeviceThresholdDays),
       base::Bind(&HatsNotificationController::Initialize,
                  weak_pointer_factory_.GetWeakPtr()));
@@ -193,7 +193,7 @@ void HatsNotificationController::OnPortalDetectionCompleted(
       message_center::Notification::CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId,
           l10n_util::GetStringUTF16(IDS_HATS_NOTIFICATION_TITLE),
-          l10n_util::GetStringUTF16(IDS_HATS_NOTIFICATION_BODY), gfx::Image(),
+          l10n_util::GetStringUTF16(IDS_HATS_NOTIFICATION_BODY),
           l10n_util::GetStringUTF16(IDS_MESSAGE_CENTER_NOTIFIER_HATS_NAME),
           GURL(kNotificationOriginUrl),
           message_center::NotifierId(

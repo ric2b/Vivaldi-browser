@@ -874,12 +874,12 @@ inline jclass ${JAVA_CLASS}_clazz(JNIEnv* env) {
 """
     if declare_only:
       template = Template("""\
-extern base::subtle::AtomicWord g_${JAVA_CLASS}_clazz;
+extern std::atomic<jclass> g_${JAVA_CLASS}_clazz;
 """ + class_getter)
     else:
       template = Template("""\
 // Leaking this jclass as we cannot use LazyInstance from some threads.
-JNI_REGISTRATION_EXPORT base::subtle::AtomicWord g_${JAVA_CLASS}_clazz = 0;
+JNI_REGISTRATION_EXPORT std::atomic<jclass> g_${JAVA_CLASS}_clazz(nullptr);
 """ + class_getter)
 
     for full_clazz in classes.itervalues():
@@ -1218,7 +1218,7 @@ ${FUNCTION_SIGNATURE} {""")
 ${FUNCTION_SIGNATURE} __attribute__ ((unused));
 ${FUNCTION_SIGNATURE} {""")
     template = Template("""
-static base::subtle::AtomicWord g_${JAVA_CLASS}_${METHOD_ID_VAR_NAME} = 0;
+static std::atomic<jmethodID> g_${JAVA_CLASS}_${METHOD_ID_VAR_NAME}(nullptr);
 ${FUNCTION_HEADER}
   CHECK_CLAZZ(env, ${FIRST_PARAM_IN_CALL},
       ${JAVA_CLASS}_clazz(env)${OPTIONAL_ERROR_RETURN});
@@ -1347,7 +1347,6 @@ declarations and print the header file to stdout (or a file).
 See SampleForTests.java for more details.
   """
   option_parser = optparse.OptionParser(usage=usage)
-  build_utils.AddDepfileOption(option_parser)
 
   option_parser.add_option('-j', '--jar_file', dest='jar_file',
                            help='Extract the list of input files from'
@@ -1400,9 +1399,6 @@ See SampleForTests.java for more details.
     root_name = os.path.splitext(os.path.basename(input_file))[0]
     output_file = os.path.join(options.output_dir, root_name) + '_jni.h'
   GenerateJNIHeader(input_file, output_file, options)
-
-  if options.depfile:
-    build_utils.WriteDepfile(options.depfile, output_file)
 
 
 if __name__ == '__main__':

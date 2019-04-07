@@ -10,8 +10,10 @@
 #include <limits>
 #include <utility>
 
+#include "base/debug/alias.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
@@ -53,15 +55,20 @@ class OneCopyRasterBufferProvider::OneCopyGpuBacking
       gl->DeleteTextures(1, &texture_id);
   }
 
-  base::trace_event::MemoryAllocatorDumpGuid MemoryDumpGuid(
-      uint64_t tracing_process_id) override {
+  void OnMemoryDump(
+      base::trace_event::ProcessMemoryDump* pmd,
+      const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
+      uint64_t tracing_process_id,
+      int importance) const override {
     if (!storage_allocated)
-      return {};
-    return gl::GetGLTextureClientGUIDForTracing(
+      return;
+
+    auto texture_tracing_guid = gl::GetGLTextureClientGUIDForTracing(
         compositor_context_provider->ContextSupport()->ShareGroupTracingGUID(),
         texture_id);
+    pmd->CreateSharedGlobalAllocatorDump(texture_tracing_guid);
+    pmd->AddOwnershipEdge(buffer_dump_guid, texture_tracing_guid, importance);
   }
-  base::UnguessableToken SharedMemoryGuid() override { return {}; }
 
   // The ContextProvider used to clean up the texture id.
   viz::ContextProvider* compositor_context_provider = nullptr;
@@ -108,7 +115,8 @@ void OneCopyRasterBufferProvider::RasterBufferImpl::Playback(
     const gfx::Rect& raster_dirty_rect,
     uint64_t new_content_id,
     const gfx::AxisTransform2d& transform,
-    const RasterSource::PlaybackSettings& playback_settings) {
+    const RasterSource::PlaybackSettings& playback_settings,
+    const GURL& url) {
   TRACE_EVENT0("cc", "OneCopyRasterBuffer::Playback");
   // The |before_raster_sync_token_| passed in here was created on the
   // compositor thread, or given back with the texture for reuse. This call
@@ -347,6 +355,17 @@ void OneCopyRasterBufferProvider::PlaybackToStagingBuffer(
     DCHECK(buffer->memory(0));
     // RasterBufferProvider::PlaybackToMemory only supports unsigned strides.
     DCHECK_GE(buffer->stride(0), 0);
+
+    // TODO(https://crbug.com/870663): Temporary diagnostics.
+    base::debug::Alias(&playback_rect);
+    base::debug::Alias(&full_rect_size);
+    base::debug::Alias(&rv);
+    void* buffer_memory = buffer->memory(0);
+    base::debug::Alias(&buffer_memory);
+    gfx::Size staging_buffer_size = staging_buffer->size;
+    base::debug::Alias(&staging_buffer_size);
+    gfx::Size buffer_size = buffer->GetSize();
+    base::debug::Alias(&buffer_size);
 
     DCHECK(!playback_rect.IsEmpty())
         << "Why are we rastering a tile that's not dirty?";

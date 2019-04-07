@@ -38,19 +38,15 @@ static uint32_t accelerated_widget_count = 1;
 // WindowTreeHostMus, public:
 
 WindowTreeHostMus::WindowTreeHostMus(WindowTreeHostMusInitParams init_params)
-    : WindowTreeHostPlatform(std::move(init_params.window_port)),
+    : WindowTreeHostPlatform(
+          std::make_unique<Window>(nullptr,
+                                   std::move(init_params.window_port))),
       display_id_(init_params.display_id),
       delegate_(init_params.window_tree_client) {
   gfx::Rect bounds_in_pixels;
-  display_init_params_ = std::move(init_params.display_init_params);
-  if (display_init_params_) {
-    bounds_in_pixels = display_init_params_->viewport_metrics.bounds_in_pixels;
-    if (display_init_params_->display)
-      DCHECK_EQ(display_id_, display_init_params_->display->id());
-  }
   window()->SetProperty(kWindowTreeHostMusKey, this);
-  // TODO(sky): find a cleaner way to set this! Better solution is to likely
-  // have constructor take aura::Window.
+  // TODO(sky): find a cleaner way to set this! Revisit this now that
+  // constructor takes a Window.
   WindowPortMus* window_mus = WindowPortMus::Get(window());
   window_mus->window_ = window();
   // Apply the properties before initializing the window, that way the server
@@ -62,8 +58,7 @@ WindowTreeHostMus::WindowTreeHostMus(WindowTreeHostMusInitParams init_params)
   // context_factory_private().
   const bool force_software_compositor = false;
   const bool external_begin_frames_enabled = false;
-  const bool are_events_in_pixels =
-      init_params.window_tree_client->is_using_pixels();
+  const bool are_events_in_pixels = false;
   CreateCompositor(window_mus->GenerateFrameSinkIdFromServerId(),
                    force_software_compositor, external_begin_frames_enabled,
                    are_events_in_pixels);
@@ -77,8 +72,7 @@ WindowTreeHostMus::WindowTreeHostMus(WindowTreeHostMusInitParams init_params)
   accelerated_widget =
       static_cast<gfx::AcceleratedWidget>(accelerated_widget_count++);
 #endif
-  OnAcceleratedWidgetAvailable(accelerated_widget,
-                               GetDisplay().device_scale_factor());
+  OnAcceleratedWidgetAvailable(accelerated_widget);
 
   delegate_->OnWindowTreeHostCreated(this);
 
@@ -157,7 +151,7 @@ void WindowTreeHostMus::PerformWmAction(const std::string& action) {
 }
 
 void WindowTreeHostMus::PerformWindowMove(
-    ui::mojom::MoveLoopSource mus_source,
+    ws::mojom::MoveLoopSource mus_source,
     const gfx::Point& cursor_location,
     const base::Callback<void(bool)>& callback) {
   delegate_->OnWindowTreeHostPerformWindowMove(
@@ -168,35 +162,10 @@ void WindowTreeHostMus::CancelWindowMove() {
   delegate_->OnWindowTreeHostCancelWindowMove(this);
 }
 
-void WindowTreeHostMus::ConfineCursorToBounds(
-    const gfx::Rect& bounds_in_pixels) {
-  delegate_->OnWindowTreeHostConfineCursorToBounds(bounds_in_pixels,
-                                                   display_id_);
-}
-
 display::Display WindowTreeHostMus::GetDisplay() const {
   display::Display display;
   display::Screen::GetScreen()->GetDisplayWithDisplayId(display_id_, &display);
   return display;
-}
-
-void WindowTreeHostMus::OverrideAcceleratedWidget(
-    gfx::AcceleratedWidget widget) {
-  bool was_visible = compositor()->IsVisible();
-  if (was_visible)
-    compositor()->SetVisible(false);
-  compositor()->ReleaseAcceleratedWidget();
-  OnAcceleratedWidgetAvailable(widget, GetDisplay().device_scale_factor());
-  if (was_visible)
-    compositor()->SetVisible(true);
-
-  for (WindowTreeHostObserver& observer : observers())
-    observer.OnAcceleratedWidgetOverridden(this);
-}
-
-std::unique_ptr<DisplayInitParams>
-WindowTreeHostMus::ReleaseDisplayInitParams() {
-  return std::move(display_init_params_);
 }
 
 void WindowTreeHostMus::HideImpl() {
@@ -230,27 +199,6 @@ void WindowTreeHostMus::OnActivationChanged(bool active) {
 
 void WindowTreeHostMus::OnCloseRequest() {
   OnHostCloseRequested();
-}
-
-void WindowTreeHostMus::MoveCursorToScreenLocationInPixels(
-    const gfx::Point& location_in_pixels) {
-  // |location_in_pixels| is relative to the display.
-  delegate_->OnWindowTreeHostMoveCursorToDisplayLocation(location_in_pixels,
-                                                         display_id_);
-}
-
-gfx::Transform WindowTreeHostMus::GetRootTransformForLocalEventCoordinates()
-    const {
-  if (WindowMus::Get(window())->window_mus_type() !=
-      WindowMusType::DISPLAY_MANUALLY_CREATED) {
-    return WindowTreeHost::GetRootTransformForLocalEventCoordinates();
-  }
-  // Local events already have the transform set on the window applied, so
-  // don't apply it again.
-  gfx::Transform transform;
-  const float scale = window()->layer()->device_scale_factor();
-  transform.Scale(scale, scale);
-  return transform;
 }
 
 int64_t WindowTreeHostMus::GetDisplayId() {

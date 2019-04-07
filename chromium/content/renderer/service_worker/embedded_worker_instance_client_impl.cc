@@ -16,6 +16,7 @@
 #include "content/renderer/service_worker/web_service_worker_installed_scripts_manager_impl.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_installed_scripts_manager.h"
+#include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_url.h"
@@ -75,7 +76,8 @@ void EmbeddedWorkerInstanceClientImpl::StartWorker(
       std::move(params->service_worker_request),
       std::move(params->controller_request), std::move(params->instance_host),
       std::move(params->provider_info), std::move(temporal_self_),
-      std::move(start_timing),
+      std::move(start_timing), std::move(params->preference_watcher_request),
+      std::move(params->subresource_loader_factories),
       RenderThreadImpl::current()
           ->GetWebMainThreadScheduler()
           ->DefaultTaskRunner());

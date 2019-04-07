@@ -58,6 +58,7 @@ class MockLoginDisplayHost : public LoginDisplayHost {
                     const base::Optional<AccountId>& prefilled_account));
   MOCK_METHOD0(HideOobeDialog, void());
   MOCK_METHOD2(UpdateOobeDialogSize, void(int width, int height));
+  MOCK_METHOD1(UpdateOobeDialogState, void(ash::mojom::OobeDialogState state));
   MOCK_METHOD0(GetUsers, const user_manager::UserList(void));
 
   MOCK_METHOD1(CompleteLogin, void(const UserContext&));
@@ -72,9 +73,10 @@ class MockLoginDisplayHost : public LoginDisplayHost {
   MOCK_METHOD1(MigrateUserData, void(const std::string&));
   MOCK_METHOD0(ResyncUserData, void());
   MOCK_METHOD0(ShowFeedback, void());
+  MOCK_METHOD0(ShowResetScreen, void());
+  MOCK_METHOD0(ShowAccountAccessHelpApp, void());
   MOCK_METHOD0(OnCancelPasswordChangedFlow, void());
-  MOCK_METHOD0(ShowDialogForCaptivePortal, void());
-  MOCK_METHOD0(HideDialogForCaptivePortal, void());
+  MOCK_METHOD0(HandleDisplayCaptivePortal, void());
   MOCK_METHOD0(UpdateAddUserButtonStatus, void());
 
  private:

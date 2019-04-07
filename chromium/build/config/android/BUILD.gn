@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/android/config.gni")
+import("//build/config/compiler/compiler.gni")
 import("//build/config/c++/c++.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 
@@ -81,12 +82,6 @@ config("compiler") {
         rebase_path("$android_ndk_root/sysroot/usr/include/$abi_target",
                     root_build_dir),
     "-D__ANDROID_API__=$compile_api_level",
-
-    # Temporary workaround for third party dependencies requiring this to be
-    # defined.
-    # TODO(crbug.com/771171): Remove this once the third party deps have been
-    # fixed to be compatible with newer NDK versions
-    "-D__NDK_FPABI__=",
   ]
   ldflags += [ "--target=$abi_target" ]
 
@@ -194,12 +189,14 @@ config("executable_config") {
 
 config("hide_all_but_jni_onload") {
   ldflags = [ "-Wl,--version-script=" + rebase_path(
-                  "//build/android/android_only_explicit_jni_exports.lst") ]
+                  "//build/android/android_only_explicit_jni_exports.lst",
+                  root_build_dir) ]
 }
 
 config("hide_all_but_jni") {
   ldflags = [ "-Wl,--version-script=" +
-              rebase_path("//build/android/android_only_jni_exports.lst") ]
+              rebase_path("//build/android/android_only_jni_exports.lst",
+                          root_build_dir) ]
 }
 
 config("lld_pack_relocations") {
@@ -210,5 +207,10 @@ config("lld_pack_relocations") {
 config("default_orderfile_instrumentation") {
   if (use_order_profiling) {
     cflags = [ "-finstrument-function-entry-bare" ]
+    if (use_thin_lto) {
+      # TODO(pcc): This should not be necessary. Remove once
+      # https://reviews.llvm.org/D50017 lands and gets rolled in.
+      ldflags = [ "-Wl,-u,__cyg_profile_func_enter_bare" ]
+    }
   }
 }

@@ -22,8 +22,8 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "components/viz/common/switches.h"
@@ -141,7 +141,6 @@ base::FilePath GetSSLKeyLogFile(const base::CommandLine* command_line) {
 
 HeadlessShell::HeadlessShell()
     : browser_(nullptr),
-      devtools_client_(HeadlessDevToolsClient::Create()),
 #if !defined(CHROME_MULTIPLE_DLL_CHILD)
       web_contents_(nullptr),
       browser_context_(nullptr),
@@ -155,8 +154,9 @@ HeadlessShell::~HeadlessShell() = default;
 #if !defined(CHROME_MULTIPLE_DLL_CHILD)
 void HeadlessShell::OnStart(HeadlessBrowser* browser) {
   browser_ = browser;
+  devtools_client_ = HeadlessDevToolsClient::Create();
   file_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
-      {base::MayBlock(), base::TaskPriority::BACKGROUND});
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
 
   HeadlessBrowserContext::Builder context_builder =
       browser_->CreateBrowserContextBuilder();

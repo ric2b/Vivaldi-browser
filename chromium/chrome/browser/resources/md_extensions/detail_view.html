@@ -13,7 +13,6 @@
 <link rel="import" href="chrome://resources/html/action_link_css.html">
 <link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/html/cr/ui/focus_without_ink.html">
-<link rel="import" href="chrome://resources/html/md_select_css.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
@@ -22,12 +21,13 @@
 <link rel="import" href="item_behavior.html">
 <link rel="import" href="item_util.html">
 <link rel="import" href="navigation_helper.html">
+<link rel="import" href="runtime_host_permissions.html">
 <link rel="import" href="strings.html">
 <link rel="import" href="toggle_row.html">
 
 <dom-module id="extensions-detail-view">
   <template>
-    <style include="iron-flex cr-shared-style cr-icons action-link md-select paper-button-style">
+    <style include="iron-flex cr-shared-style cr-icons action-link paper-button-style">
       :host {
         --iron-icon-fill-color: var(--google-grey-refresh-700);
         display: block;
@@ -39,7 +39,7 @@
       }
 
       #enable-section cr-tooltip-icon {
-        -webkit-margin-end: 20px;
+        margin-inline-end: 20px;
       }
 
       #enable-section span {
@@ -74,9 +74,9 @@
       }
 
       #icon {
-        -webkit-margin-end: 12px;
-        -webkit-margin-start: 16px;
         height: 24px;
+        margin-inline-end: 12px;
+        margin-inline-start: 16px;
         width: 24px;
       }
 
@@ -124,11 +124,6 @@
         color: var(--cr-secondary-text-color);
       }
 
-      .mid-section-header {
-        color: var(--cr-primary-text-color);
-        margin-top: 12px;
-      }
-
       .actionable {
         cursor: pointer;
       }
@@ -155,21 +150,15 @@
 
       .warning-icon {
         --iron-icon-fill-color: var(--google-red-700);
-        -webkit-margin-end: 8px;
         flex-shrink: 0;
         height: 18px;
+        margin-inline-end: 8px;
         width: 18px;
       }
 
       ul {
-        -webkit-padding-start: 20px;
         margin: 0;
-      }
-
-      #runtime-host-permissions-mode {
-        align-items: center;
-        display: flex;
-        justify-content: space-between;
+        padding-inline-start: 20px;
       }
 
       #options-section .control-line:first-child {
@@ -340,35 +329,11 @@
               </template>
             </ul>
             <template is="dom-if" if="[[showRuntimeHostPermissions_(data.*)]]">
-              <div id="runtime-host-permissions">
-                <div id="runtime-host-permissions-mode">
-                  <div class="mid-section-header">
-                    $i18n{itemHostPermissionsHeading}
-                  </div>
-                  <select id="host-access" class="md-select"
-                      value="[[data.permissions.hostAccess]]"
-                      on-change="onHostAccessChanged_">
-                    <option value$="[[HostAccess_.ON_CLICK]]">
-                      $i18n{itemHostAccessOnClick}
-                    </option>
-                    <option value$="[[HostAccess_.ON_SPECIFIC_SITES]]">
-                      $i18n{itemHostAccessOnSpecificSites}
-                    </option>
-                    <option value$="[[HostAccess_.ON_ALL_SITES]]">
-                      $i18n{itemHostAccessOnAllSites}
-                    </option>
-                  </select>
-                </div>
-                <template is="dom-if" if="[[showSpecificSites_(data.*)]]">
-                  <div class="mid-section-header">$i18n{itemAllowedHosts}</div>
-                  <ul id="runtime-hosts">
-                    <template is="dom-repeat"
-                        items="[[data.permissions.runtimeHostPermissions]]">
-                      <li>[[item]]</li>
-                    </template>
-                  </ul>
-                </template>
-              </div>
+              <extensions-runtime-host-permissions
+                  permissions="[[data.permissions]]"
+                  delegate="[[delegate]]"
+                  item-id="[[data.id]]">
+              </extensions-runtime-host-permissions>
             </template>
           </div>
         </div>

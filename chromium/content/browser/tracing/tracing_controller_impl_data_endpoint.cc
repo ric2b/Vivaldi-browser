@@ -10,7 +10,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/pattern.h"
-#include "base/task_scheduler/post_task.h"
+#include "base/task/post_task.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/tracing_controller.h"
@@ -118,7 +118,7 @@ class FileTraceDataEndpoint : public TracingController::TraceDataEndpoint {
   FILE* file_;
   const scoped_refptr<base::SequencedTaskRunner> background_task_runner_ =
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND});
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
 
   DISALLOW_COPY_AND_ASSIGN(FileTraceDataEndpoint);
 };
@@ -132,7 +132,7 @@ class CompressedTraceDataEndpoint
         already_tried_open_(false),
         background_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
             {compress_with_background_priority
-                 ? base::TaskPriority::BACKGROUND
+                 ? base::TaskPriority::BEST_EFFORT
                  : base::TaskPriority::USER_VISIBLE})) {}
 
   void ReceiveTraceChunk(std::unique_ptr<std::string> chunk) override {

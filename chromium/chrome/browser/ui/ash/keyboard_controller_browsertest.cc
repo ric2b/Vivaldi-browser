@@ -226,13 +226,9 @@ IN_PROC_BROWSER_TEST_F(VirtualKeyboardAppWindowTest,
   int screen_height = ash::Shell::GetPrimaryRootWindow()->bounds().height();
   gfx::Rect test_bounds(0, 0, 0, screen_height - ime_window_visible_height + 1);
   auto* controller = keyboard::KeyboardController::Get();
-  controller->ShowKeyboard(true);
-  controller->ui()->GetKeyboardWindow()->SetBounds(test_bounds);
+  controller->ShowKeyboard(false /* locked */);
   controller->NotifyKeyboardWindowLoaded();
-
-  gfx::Rect keyboard_bounds = controller->GetKeyboardWindow()->bounds();
-  // Starts overscroll.
-  controller->NotifyKeyboardBoundsChanging(keyboard_bounds);
+  controller->GetKeyboardWindow()->SetBounds(test_bounds);
 
   // Non ime window should have smaller visible view port due to overlap with
   // virtual keyboard.
@@ -308,4 +304,18 @@ IN_PROC_BROWSER_TEST_F(VirtualKeyboardStateTest, OpenAndCloseAndOpen) {
   // The extension already has been loaded. Hence SHOWING.
   EXPECT_EQ(controller->GetStateForTest(),
             keyboard::KeyboardControllerState::SHOWN);
+}
+
+// See crbug.com/755354.
+IN_PROC_BROWSER_TEST_F(VirtualKeyboardStateTest,
+                       DisablingKeyboardGoesToInitialState) {
+  auto* controller = keyboard::KeyboardController::Get();
+
+  controller->LoadKeyboardWindowInBackground();
+  EXPECT_EQ(controller->GetStateForTest(),
+            keyboard::KeyboardControllerState::LOADING_EXTENSION);
+
+  controller->DisableKeyboard();
+  EXPECT_EQ(controller->GetStateForTest(),
+            keyboard::KeyboardControllerState::INITIAL);
 }

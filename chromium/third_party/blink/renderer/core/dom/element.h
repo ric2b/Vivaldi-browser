@@ -36,9 +36,9 @@
 #include "third_party/blink/renderer/core/html/focus_options.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/resize_observer/resize_observer.h"
+#include "third_party/blink/renderer/core/scroll/scroll_customization.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_customization.h"
 #include "third_party/blink/renderer/platform/scroll/scroll_types.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
@@ -121,6 +121,7 @@ enum class NamedItemType {
 struct FocusParams {
   STACK_ALLOCATED();
 
+ public:
   FocusParams() = default;
   FocusParams(SelectionBehaviorOnFocus selection,
               WebFocusType focus_type,
@@ -315,6 +316,12 @@ class CORE_EXPORT Element : public ContainerNode {
   AccessibleNode* ExistingAccessibleNode() const;
   AccessibleNode* accessibleNode();
 
+  const AtomicString& invisible() const;
+  void setInvisible(const AtomicString&);
+  void DispatchActivateInvisibleEventIfNeeded();
+
+  void DefaultEventHandler(Event&) override;
+
   void DidMoveToNewDocument(Document&) override;
 
   void removeAttribute(const AtomicString& name);
@@ -421,6 +428,8 @@ class CORE_EXPORT Element : public ContainerNode {
   enum class AttributeModificationReason { kDirectly, kByParser, kByCloning };
   struct AttributeModificationParams {
     STACK_ALLOCATED();
+
+   public:
     AttributeModificationParams(const QualifiedName& qname,
                                 const AtomicString& old_value,
                                 const AtomicString& new_value,
@@ -511,7 +520,8 @@ class CORE_EXPORT Element : public ContainerNode {
   }
   ShadowRoot& CreateUserAgentShadowRoot();
   ShadowRoot& AttachShadowRootInternal(ShadowRootType,
-                                       bool delegates_focus = false);
+                                       bool delegates_focus = false,
+                                       bool manual_slotting = false);
 
   // Returns the shadow root attached to this element if it is a shadow host.
   ShadowRoot* GetShadowRoot() const;
@@ -653,7 +663,8 @@ class CORE_EXPORT Element : public ContainerNode {
       Element* new_focused_element,
       InputDeviceCapabilities* source_capabilities = nullptr);
 
-  virtual String innerText();
+  // The implementation of |innerText()| is found in "element_inner_text.cc".
+  String innerText();
   String outerText();
   String InnerHTMLAsString() const;
   String OuterHTMLAsString() const;
@@ -894,8 +905,8 @@ class CORE_EXPORT Element : public ContainerNode {
                                                CSSPropertyID,
                                                const CSSValue&);
 
-  InsertionNotificationRequest InsertedInto(ContainerNode*) override;
-  void RemovedFrom(ContainerNode*) override;
+  InsertionNotificationRequest InsertedInto(ContainerNode&) override;
+  void RemovedFrom(ContainerNode&) override;
   void ChildrenChanged(const ChildrenChange&) override;
 
   virtual void WillRecalcStyle(StyleRecalcChange);
@@ -964,6 +975,8 @@ class CORE_EXPORT Element : public ContainerNode {
   void InlineStyleChanged();
   void SetInlineStyleFromString(const AtomicString&);
 
+  void InvisibleAttributeChanged();
+
   // If the only inherited changes in the parent element are independent,
   // these changes can be directly propagated to this element (the child).
   // If these conditions are met, propagates the changes to the current style
@@ -977,12 +990,20 @@ class CORE_EXPORT Element : public ContainerNode {
   bool ShouldCallRecalcStyleForChildren(StyleRecalcChange);
 
   void RebuildPseudoElementLayoutTree(PseudoId, WhitespaceAttacher&);
+  void RebuildFirstLetterLayoutTree();
   void RebuildShadowRootLayoutTree(WhitespaceAttacher&);
   inline void CheckForEmptyStyleChange(const Node* node_before_change,
                                        const Node* node_after_change);
 
   void UpdatePseudoElement(PseudoId, StyleRecalcChange);
-  bool UpdateFirstLetter(Element*);
+
+  enum class StyleUpdatePhase {
+    kRecalc,
+    kRebuildLayoutTree,
+    kAttachLayoutTree,
+  };
+
+  void UpdateFirstLetterPseudoElement(StyleUpdatePhase);
 
   inline PseudoElement* CreatePseudoElementIfNeeded(PseudoId);
   void AttachPseudoElement(PseudoId, AttachContext&);

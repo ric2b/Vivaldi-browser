@@ -45,7 +45,7 @@
                     android:textAppearance="@style/BlackHeadline1"
                     android:text="@string/sign_in_to_chrome"/>
 
-                <View style="@style/Divider"/>
+                <View style="@style/HorizontalDivider"/>
 
                 <TextView
                     android:id="@+id/signin_choice_description"
@@ -106,13 +106,12 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="16dp"
-                        android:textColor="@color/descriptive_text_color"
-                        android:textSize="@dimen/text_size_medium"
+                        android:textAppearance="@style/BlackBody"
                         android:ellipsize="end"
                         android:maxLines="1"/>
                 </LinearLayout>
 
-                <View style="@style/Divider"/>
+                <View style="@style/HorizontalDivider"/>
 
                 <TextView
                     android:id="@+id/signin_sync_title"
@@ -134,11 +133,10 @@
                     android:paddingStart="56dp"
                     android:paddingEnd="16dp"
                     android:lineSpacingMultiplier="1.4"
-                    android:textColor="@color/descriptive_text_color"
-                    android:textSize="@dimen/text_size_medium" />
+                    android:textAppearance="@style/BlackBody" />
 
                 <View
-                    style="@style/Divider"
+                    style="@style/HorizontalDivider"
                     android:layout_marginStart="56dp"
                     android:layout_marginEnd="16dp"/>
 
@@ -162,8 +160,7 @@
                     android:paddingStart="56dp"
                     android:paddingEnd="16dp"
                     android:lineSpacingMultiplier="1.4"
-                    android:textColor="@color/descriptive_text_color"
-                    android:textSize="@dimen/text_size_medium"/>
+                    android:textAppearance="@style/BlackBody" />
 
                 <org.chromium.ui.widget.TextViewWithClickableSpans
                     android:id="@+id/signin_settings_control"
@@ -173,8 +170,7 @@
                     android:paddingEnd="16dp"
                     android:paddingBottom="36dp"
                     android:lineSpacingMultiplier="1.4"
-                    android:textColor="@color/descriptive_text_color"
-                    android:textSize="@dimen/text_size_medium" />
+                    android:textAppearance="@style/BlackBody" />
             </LinearLayout>
         </org.chromium.chrome.browser.signin.AccountSigninConfirmationView>
     </FrameLayout>

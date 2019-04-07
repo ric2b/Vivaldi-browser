@@ -65,12 +65,12 @@
 #include "ui/base/ui_base_switches.h"
 
 #if defined(OS_WIN)
-#include <atlbase.h>
 #include <malloc.h>
 
 #include <algorithm>
 
 #include "base/debug/close_handle_hook_win.h"
+#include "base/win/atl.h"
 #include "chrome/browser/downgrade/user_data_downgrade.h"
 #include "chrome/child/v8_breakpad_support_win.h"
 #include "chrome/common/child_process_logging.h"
@@ -515,8 +515,7 @@ void RecordMainStartupMetrics(base::TimeTicks exe_entry_point_ticks) {
 // from the Java side until it has initialized the JNI. See
 // ChromeMainDelegateAndroid.
 #if !defined(OS_ANDROID)
-  startup_metric_utils::RecordMainEntryPointTime(base::Time::Now(),
-                                                 base::TimeTicks::Now());
+  startup_metric_utils::RecordMainEntryPointTime(base::TimeTicks::Now());
 #endif
 }
 #endif  // !defined(CHROME_MULTIPLE_DLL_CHILD)
@@ -538,6 +537,13 @@ ChromeMainDelegate::ChromeMainDelegate(base::TimeTicks exe_entry_point_ticks) {
 
 ChromeMainDelegate::~ChromeMainDelegate() {
 }
+
+#if !defined(CHROME_MULTIPLE_DLL_CHILD)
+void ChromeMainDelegate::PostEarlyInitialization() {
+  DCHECK(chrome_feature_list_creator_);
+  chrome_feature_list_creator_->CreateFeatureList();
+}
+#endif
 
 bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
 #if defined(OS_CHROMEOS)
@@ -822,8 +828,14 @@ void ChromeMainDelegate::PreSandboxStartup() {
 
   // Register component_updater PathProvider after DIR_USER_DATA overidden by
   // command line flags. Maybe move the chrome PathProvider down here also?
+  int alt_preinstalled_components_dir =
+#if defined(OS_CHROMEOS)
+      chromeos::DIR_PREINSTALLED_COMPONENTS;
+#else
+      chrome::DIR_INTERNAL_PLUGINS;
+#endif
   component_updater::RegisterPathProvider(chrome::DIR_COMPONENTS,
-                                          chrome::DIR_INTERNAL_PLUGINS,
+                                          alt_preinstalled_components_dir,
                                           chrome::DIR_USER_DATA);
 
 #if !defined(OS_ANDROID) && !defined(OS_WIN)
@@ -1082,9 +1094,13 @@ ChromeMainDelegate::CreateContentBrowserClient() {
 #else
   if (chrome_content_browser_client_ == nullptr) {
     DCHECK(service_manifest_data_pack_);
+    DCHECK(!chrome_feature_list_creator_);
+    chrome_feature_list_creator_ = std::make_unique<ChromeFeatureListCreator>();
+
     chrome_content_browser_client_ =
         std::make_unique<ChromeContentBrowserClient>(
-            std::move(service_manifest_data_pack_));
+            std::move(service_manifest_data_pack_),
+            chrome_feature_list_creator_.get());
   }
   return chrome_content_browser_client_.get();
 #endif
@@ -1167,7 +1183,7 @@ service_manager::ProcessType ChromeMainDelegate::OverrideProcessType() {
   return service_manager::ProcessType::kDefault;
 }
 
-void ChromeMainDelegate::PreContentInitialization() {
+void ChromeMainDelegate::PreCreateMainMessageLoop() {
 #if defined(OS_MACOSX)
   // Tell Cocoa to finish its initialization, which we want to do manually
   // instead of calling NSApplicationMain(). The primary reason is that NSAM()

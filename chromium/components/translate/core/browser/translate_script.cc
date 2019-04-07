@@ -59,7 +59,8 @@ TranslateScript::TranslateScript()
 TranslateScript::~TranslateScript() {
 }
 
-void TranslateScript::Request(const RequestCallback& callback) {
+void TranslateScript::Request(const RequestCallback& callback,
+                              bool is_incognito) {
   script_fetch_start_time_ = base::Time::Now().ToJsTime();
 
   DCHECK(data_.empty()) << "Do not fetch the script if it is already fetched";
@@ -73,11 +74,12 @@ void TranslateScript::Request(const RequestCallback& callback) {
 
   GURL translate_script_url = GetTranslateScriptURL();
 
-  fetcher_.reset(new TranslateURLFetcher);
+  fetcher_ = std::make_unique<TranslateURLFetcher>();
   fetcher_->set_extra_request_header(kRequestHeader);
   fetcher_->Request(translate_script_url,
                     base::BindOnce(&TranslateScript::OnScriptFetchComplete,
-                                   base::Unretained(this)));
+                                   base::Unretained(this)),
+                    is_incognito);
 }
 
 // static
@@ -156,12 +158,29 @@ void TranslateScript::OnScriptFetchComplete(bool success,
     base::StringAppendF(
         &data_, "var securityOrigin = '%s';", security_origin.spec().c_str());
 
-    // Append embedded translate.js and a remote element library.
+    // Load embedded translate.js.
     base::StringPiece str =
         ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
             IDR_TRANSLATE_JS);
     str.AppendToString(&data_);
-    data_ += data;
+
+#if defined(OS_IOS)
+    // Append snippet to install callbacks on translate.js if available.
+    const char* install_callbacks =
+        "if (installTranslateCallbacks) {"
+        "  installTranslateCallbacks();"
+        "}";
+    base::StringPiece(install_callbacks).AppendToString(&data_);
+#endif  // defined(OS_IOS)
+
+    // Wrap |data| in try/catch block to handle unexpected script errors.
+    const char* format =
+        "try {"
+        "  %s;"
+        "} catch (error) {"
+        "  cr.googleTranslate.onTranslateElementError(error);"
+        "};";
+    base::StringAppendF(&data_, format, data.c_str());
 
     // We'll expire the cached script after some time, to make sure long
     // running browsers still get fixes that might get pushed with newer
